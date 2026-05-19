@@ -1,6 +1,7 @@
 const mock = require('../../utils/mock-data')
 const storage = require('../../utils/storage')
 const i18n = require('../../utils/i18n')
+const api = require('../../utils/api')
 
 Page({
   data: {
@@ -18,10 +19,10 @@ Page({
     if (this.serviceId) this.refresh()
   },
 
-  refresh() {
+  async refresh() {
     const lang = i18n.getLang()
     i18n.applyTabBar(lang)
-    const service = i18n.localizeService(mock.findService(this.serviceId), lang)
+    const service = i18n.localizeService(await api.getService(this.serviceId, lang), lang)
     if (!service) {
       wx.showToast({ title: i18n.pageCopy('booking', lang).missing, icon: 'none' })
       setTimeout(() => wx.navigateBack(), 600)
@@ -47,6 +48,8 @@ Page({
         date: storage.tomorrow(),
         time: '10:00',
         duration: service.duration,
+        technicianId: 'tech-mia',
+        technicianName: 'Mia Chen',
         addOns: [],
         referenceImages: [],
         remark: ''

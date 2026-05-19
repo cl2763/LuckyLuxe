@@ -1,6 +1,7 @@
 const mock = require('../../utils/mock-data')
 const storage = require('../../utils/storage')
 const i18n = require('../../utils/i18n')
+const api = require('../../utils/api')
 
 Page({
   data: {
@@ -49,13 +50,25 @@ Page({
     this.setData({ remark: event.detail.value })
   },
 
-  submitOrder() {
+  async submitOrder() {
     if (!this.data.items.length) {
       wx.showToast({ title: this.data.t.noItems, icon: 'none' })
       return
     }
     const now = Date.now()
     const first = this.data.items[0]
+    const backendBookings = []
+    try {
+      for (let index = 0; index < this.data.items.length; index += 1) {
+        const created = await api.createBooking(this.data.items[index], this.data.remark)
+        const paid = created && created.id ? await api.confirmMockPayment(created.id) : created
+        backendBookings.push(paid)
+      }
+    } catch (error) {
+      wx.showToast({ title: error.message || '后端暂不可用，已使用演示订单', icon: 'none' })
+    }
+    const firstBackendBooking = backendBookings[0]
+    const technicianName = firstBackendBooking && firstBackendBooking.technician ? firstBackendBooking.technician.name : (first.appointmentInfo.technicianName || 'Mia Chen')
     const order = {
       _id: `order_${now}`,
       orderNo: `LL${now}`,
@@ -72,8 +85,10 @@ Page({
         serviceType: first.service.type,
         duration: first.service.duration,
         depositAmount: first.service.depositAmount,
-        technicianName: 'Mia Chen'
+        technicianName
       },
+      backendBookingId: firstBackendBooking ? firstBackendBooking.id : '',
+      backendBookingIds: backendBookings.map((item) => item.id),
       appointment: first.appointmentInfo,
       store: this.data.store,
       couponId: '',

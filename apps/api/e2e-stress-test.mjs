@@ -27,7 +27,24 @@ function bookingBody(date, time, technicianId = 'tech-mia', serviceId = 'nail-fr
   }
 }
 
+function openBusinessDates(count, startOffsetDays) {
+  const dates = []
+  let offset = startOffsetDays
+  while (dates.length < count) {
+    const candidate = new Date(Date.now() + offset * 24 * 60 * 60 * 1000)
+    const day = candidate.getUTCDay()
+    if (day !== 1) dates.push(candidate.toISOString().slice(0, 10))
+    offset += 1
+  }
+  return dates
+}
+
 const stamp = Date.now()
+const testDates = openBusinessDates(8, 90)
+const availabilityDate = testDates[0]
+const singleDate = testDates[1]
+const conflictDate = testDates[2]
+const dates = testDates.slice(3, 8)
 const results = {}
 
 results.health = await get('/health')
@@ -41,9 +58,11 @@ results.googleAuth = await post('/auth/google/demo', {
 })
 results.services = await get('/services?type=nail&lang=en')
 results.stores = await get('/stores')
-results.availability = await get('/availability?storeId=store-ontario-01&serviceId=nail-french-01&date=2026-08-05&technicianId=tech-mia')
+results.availability = await get(
+  `/availability?storeId=store-ontario-01&serviceId=nail-french-01&date=${availabilityDate}&technicianId=tech-mia`
+)
 
-const single = await post('/bookings', bookingBody('2026-08-12', '10:00', 'tech-lina', 'lash-natural-01'))
+const single = await post('/bookings', bookingBody(singleDate, '10:00', 'tech-lina', 'lash-natural-01'))
 results.createSingle = {
   status: single.status,
   bookingStatus: single.body.booking?.status,
@@ -62,7 +81,7 @@ results.cancelSingle = {
   fee: cancelled.body.refundPolicy?.cancellationFeeCents
 }
 
-const conflictPayload = bookingBody('2026-08-11', '10:00', 'tech-mia', 'nail-french-01')
+const conflictPayload = bookingBody(conflictDate, '10:00', 'tech-mia', 'nail-french-01')
 const conflictResponses = await Promise.all(Array.from({ length: 20 }, () => post('/bookings', conflictPayload)))
 results.conflict20 = {
   total: conflictResponses.length,
@@ -73,7 +92,6 @@ results.conflict20 = {
     .map((item) => ({ status: item.status, error: item.body.error }))
 }
 
-const dates = ['2026-08-05', '2026-08-06', '2026-08-07', '2026-08-08', '2026-08-09']
 const times = ['10:00', '12:00', '14:00', '16:00']
 const bulkPayloads = []
 for (const date of dates) {

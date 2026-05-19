@@ -1,5 +1,6 @@
 const mock = require('../../utils/mock-data')
 const i18n = require('../../utils/i18n')
+const api = require('../../utils/api')
 
 Page({
   data: {
@@ -18,16 +19,18 @@ Page({
     this.refreshLanguage()
   },
 
-  refreshLanguage() {
+  async refreshLanguage() {
     const lang = i18n.getLang()
     i18n.applyTabBar(lang)
     i18n.setTitle('Lucky Luxe')
+    const nailServices = await api.getServices('nail', lang)
+    const lashServices = await api.getServices('lash', lang)
     this.setData({
       lang,
       t: i18n.pageCopy('home', lang),
       store: i18n.localizeStore(mock.store, lang),
-      recommendedNail: i18n.localizeServices(mock.getRecommended('nail'), lang),
-      recommendedLash: i18n.localizeServices(mock.getRecommended('lash'), lang)
+      recommendedNail: i18n.localizeServices(nailServices.filter((item) => item.isRecommended), lang),
+      recommendedLash: i18n.localizeServices(lashServices.filter((item) => item.isRecommended), lang)
     })
   },
 

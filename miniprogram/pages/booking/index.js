@@ -1,6 +1,7 @@
 const mock = require('../../utils/mock-data')
 const storage = require('../../utils/storage')
 const i18n = require('../../utils/i18n')
+const api = require('../../utils/api')
 
 Page({
   data: {
@@ -28,11 +29,11 @@ Page({
     if (this.serviceId) this.refresh({ id: this.serviceId, cartId: this.cartId })
   },
 
-  refresh(options) {
+  async refresh(options) {
     const lang = i18n.getLang()
     i18n.applyTabBar(lang)
     i18n.setTitle(i18n.pageCopy('booking', lang).title)
-    const service = i18n.localizeService(mock.findService(options.id), lang)
+    const service = i18n.localizeService(await api.getService(options.id, lang), lang)
     if (!service) {
       wx.showToast({ title: i18n.pageCopy('booking', lang).missing, icon: 'none' })
       setTimeout(() => wx.navigateBack(), 600)
@@ -58,10 +59,12 @@ Page({
         checked: selectedAddOns.indexOf(item.id) >= 0
       }))
     })
+    this.refreshAvailability()
   },
 
   bindDateChange(event) {
     this.setData({ appointmentDate: event.detail.value })
+    this.refreshAvailability()
   },
 
   chooseTime(event) {
@@ -79,6 +82,20 @@ Page({
       addOns: this.data.addOns.map((item) => Object.assign({}, item, {
         checked: selected.indexOf(item.id) >= 0
       }))
+    })
+    this.refreshAvailability()
+  },
+
+  async refreshAvailability() {
+    if (!this.data.service || !this.data.appointmentDate) return
+    const availability = await api.getAvailability(this.data.service._id, this.data.appointmentDate, this.data.selectedAddOns)
+    const slots = availability.slots.length ? availability.slots : mock.timeSlots
+    const nextTime = slots.indexOf(this.data.appointmentTime) >= 0 ? this.data.appointmentTime : slots[0]
+    this.setData({
+      timeSlots: slots,
+      appointmentTime: nextTime,
+      service: Object.assign({}, this.data.service, { duration: availability.durationMin || this.data.service.duration }),
+      technician: availability.technician
     })
   },
 
@@ -121,6 +138,8 @@ Page({
         date: this.data.appointmentDate,
         time: this.data.appointmentTime,
         duration: service.duration,
+        technicianId: this.data.technician ? this.data.technician.id : 'tech-mia',
+        technicianName: this.data.technician ? this.data.technician.name : 'Mia Chen',
         addOns: this.data.selectedAddOns,
         referenceImages: this.data.referenceImages,
         remark: this.data.remark

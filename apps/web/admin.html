@@ -31,6 +31,35 @@
             <h1>Bookings</h1>
             <span class="subtle">Live local backend data</span>
           </div>
+          <div class="admin-tabs">
+            <button class="admin-tab active" data-admin-view="today" type="button">Today</button>
+            <button class="admin-tab" data-admin-view="all" type="button">All Bookings</button>
+            <button class="admin-tab" data-admin-view="calendar" type="button">Calendar</button>
+          </div>
+          <div class="filter-row" id="bookingFilters">
+            <label>
+              <span>Date</span>
+              <input id="filterDate" type="date">
+            </label>
+            <label>
+              <span>Status</span>
+              <select id="filterStatus">
+                <option value="active">Active attention</option>
+                <option value="all">All statuses</option>
+                <option value="PENDING_PAYMENT">Pending payment</option>
+                <option value="CONFIRMED">Confirmed</option>
+                <option value="COMPLETED">Completed</option>
+                <option value="CANCELLED">Cancelled</option>
+                <option value="EXPIRED">Expired</option>
+              </select>
+            </label>
+            <button class="ghost" id="clearFilters" type="button">Clear</button>
+          </div>
+          <div class="calendar-controls hidden" id="calendarControls">
+            <button class="ghost" id="prevMonth" type="button">←</button>
+            <strong id="calendarTitle"></strong>
+            <button class="ghost" id="nextMonth" type="button">→</button>
+          </div>
           <div class="admin-list" id="bookingList"></div>
         </div>
 
