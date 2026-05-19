@@ -1,0 +1,46 @@
+.detail-card {
+  padding: 34rpx;
+}
+
+.order-cover {
+  display: block;
+  width: 100%;
+  height: 260rpx;
+  margin-top: 24rpx;
+  border-radius: 16rpx;
+}
+
+.status-line {
+  color: #c6a27e;
+  font-size: 25rpx;
+  font-weight: 700;
+}
+
+.service-name {
+  margin: 14rpx 0;
+  font-size: 40rpx;
+  font-weight: 800;
+}
+
+.info-card {
+  padding: 8rpx 26rpx;
+}
+
+.info-row {
+  display: flex;
+  justify-content: space-between;
+  gap: 24rpx;
+  padding: 22rpx 0;
+  border-bottom: 1rpx solid #f0e8e1;
+  color: #5e514b;
+}
+
+.info-row:last-child {
+  border-bottom: none;
+}
+
+.info-row text:last-child {
+  max-width: 420rpx;
+  text-align: right;
+  color: #3a2e2a;
+}

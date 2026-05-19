@@ -1,0 +1,95 @@
+<view class="page home-page">
+  <view class="language-switch">
+    <button class="lang-option {{lang === 'zh' ? 'active' : ''}}" bindtap="switchLanguage" data-lang="zh">中文</button>
+    <button class="lang-option {{lang === 'en' ? 'active' : ''}}" bindtap="switchLanguage" data-lang="en">EN</button>
+  </view>
+
+  <view class="hero">
+    <view class="hero-copy">
+      <view class="brand-mark">LL</view>
+      <view class="eyebrow">Nail & Lash Atelier</view>
+      <view class="hero-title">Lucky Luxe</view>
+      <view class="hero-text">{{t.heroText}}</view>
+      <view class="hero-actions">
+        <button class="btn btn-primary hero-btn" bindtap="goServices" data-type="nail">{{t.bookNow}}</button>
+        <button class="btn btn-ghost hero-btn" bindtap="goStore">{{t.storeAction}}</button>
+      </view>
+    </view>
+    <image class="hero-visual" src="/assets/images/store-cover.png" mode="aspectFill"></image>
+  </view>
+
+  <view class="quick-grid section">
+    <button class="quick-item card" bindtap="goServices" data-type="nail">
+      <text class="quick-icon">N</text>
+      <text>{{t.quickNail}}</text>
+    </button>
+    <button class="quick-item card" bindtap="goServices" data-type="lash">
+      <text class="quick-icon">L</text>
+      <text>{{t.quickLash}}</text>
+    </button>
+    <button class="quick-item card" bindtap="goStore">
+      <text class="quick-icon">S</text>
+      <text>{{t.quickStore}}</text>
+    </button>
+    <button class="quick-item card" bindtap="goMe">
+      <text class="quick-icon">M</text>
+      <text>{{t.quickMember}}</text>
+    </button>
+  </view>
+
+  <view class="section">
+    <view class="section-head">
+      <view class="section-title">{{t.popularNail}}</view>
+      <view class="section-note">Popular nail</view>
+    </view>
+    <scroll-view class="service-scroll" scroll-x>
+      <block wx:for="{{recommendedNail}}" wx:key="_id">
+        <button class="recommend-card card" bindtap="goDetail" data-id="{{item._id}}">
+          <image class="recommend-visual" src="{{item.image}}" mode="aspectFill"></image>
+          <view class="recommend-name">{{item.name}}</view>
+          <view class="recommend-meta">
+            <text class="price">CAD ${{item.price}}</text>
+            <text>{{item.duration}}{{t.minutes}}</text>
+          </view>
+        </button>
+      </block>
+    </scroll-view>
+  </view>
+
+  <view class="section">
+    <view class="section-head">
+      <view class="section-title">{{t.popularLash}}</view>
+      <view class="section-note">Popular lash</view>
+    </view>
+    <scroll-view class="service-scroll" scroll-x>
+      <block wx:for="{{recommendedLash}}" wx:key="_id">
+        <button class="recommend-card card" bindtap="goDetail" data-id="{{item._id}}">
+          <image class="recommend-visual" src="{{item.image}}" mode="aspectFill"></image>
+          <view class="recommend-name">{{item.name}}</view>
+          <view class="recommend-meta">
+            <text class="price">CAD ${{item.price}}</text>
+            <text>{{item.duration}}{{t.minutes}}</text>
+          </view>
+        </button>
+      </block>
+    </scroll-view>
+  </view>
+
+  <view class="section">
+    <view class="section-head">
+      <view class="section-title">{{t.storeTitle}}</view>
+      <view class="section-note">Store</view>
+    </view>
+    <view class="store-card card">
+      <image class="store-visual" src="/assets/images/store-cover.png" mode="aspectFill"></image>
+      <view class="store-info">
+        <view class="store-name">{{store.storeName}}</view>
+        <view class="muted">{{store.description}}</view>
+        <view class="store-row">{{t.hours}}：{{store.businessHours}}</view>
+        <view class="store-row">{{t.phone}}：{{store.phone}}</view>
+        <view class="store-row">{{t.address}}：{{store.address}}</view>
+        <button class="btn btn-dark store-btn" bindtap="goStore">{{t.viewStore}}</button>
+      </view>
+    </view>
+  </view>
+</view>

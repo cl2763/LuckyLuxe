@@ -1,0 +1,61 @@
+.store-hero {
+  width: 100%;
+  height: 360rpx;
+  display: block;
+  border-radius: 18rpx;
+}
+
+.store-card {
+  margin-top: 22rpx;
+  padding: 30rpx;
+}
+
+.store-name {
+  font-size: 38rpx;
+  font-weight: 800;
+}
+
+.store-desc {
+  margin-top: 14rpx;
+  color: #8a7f78;
+  line-height: 1.55;
+}
+
+.info-row {
+  display: flex;
+  justify-content: space-between;
+  gap: 24rpx;
+  padding: 22rpx 0;
+  border-bottom: 1rpx solid #f0e8e1;
+}
+
+.info-row:last-child {
+  border-bottom: none;
+}
+
+.info-row text:first-child {
+  color: #8a7f78;
+}
+
+.info-row text:last-child {
+  max-width: 440rpx;
+  text-align: right;
+}
+
+.action-grid {
+  display: grid;
+  grid-template-columns: 1fr;
+  gap: 16rpx;
+  margin-top: 24rpx;
+}
+
+.map-placeholder {
+  height: 260rpx;
+  margin-top: 24rpx;
+  display: flex;
+  flex-direction: column;
+  gap: 14rpx;
+  align-items: center;
+  justify-content: center;
+  color: #3a2e2a;
+}

@@ -1,0 +1,80 @@
+<view class="page checkout-page">
+  <view class="section-head first-head">
+    <view class="section-title">{{t.confirm}}</view>
+    <view class="section-note">{{t.mockPay}}</view>
+  </view>
+
+  <block wx:for="{{items}}" wx:key="_id">
+    <view class="checkout-item card">
+      <view class="checkout-info">
+        <view class="checkout-title-row">
+          <text class="checkout-title">{{item.service.name}}</text>
+          <text class="checkout-status">{{t.statusPendingPayment}}</text>
+        </view>
+        <view class="checkout-time-row">
+          <text>{{item.appointmentInfo.date}}</text>
+          <text>{{item.appointmentInfo.time}}</text>
+          <text>{{item.service.duration}}{{t.minutes}}</text>
+        </view>
+        <view class="checkout-meta">
+          <text class="price">{{t.deposit}} CAD ${{item.service.depositAmount}}</text>
+          <text>{{t.servicePrice}} CAD ${{item.service.price}}</text>
+        </view>
+      </view>
+      <image class="mini-visual" src="{{item.service.image}}" mode="aspectFill"></image>
+    </view>
+  </block>
+
+  <view class="section">
+    <view class="section-head">
+      <view class="section-title">{{t.discount}}</view>
+    </view>
+    <view class="cost-card card">
+      <view class="cost-row">
+        <text>{{t.appointmentDeposit}}</text>
+        <text>CAD ${{serviceDeposit}}</text>
+      </view>
+      <view class="cost-row">
+        <text>{{t.coupon}}</text>
+        <text>-CAD ${{couponDiscount}}</text>
+      </view>
+      <view class="cost-row switch-row">
+        <view>
+          <view>{{t.balance}}</view>
+          <view class="muted">{{t.balanceHint}}</view>
+        </view>
+        <switch color="#C6A27E" checked="{{useBalance}}" bindchange="toggleBalance"></switch>
+      </view>
+      <view wx:if="{{balanceDeduction}}" class="cost-row">
+        <text>{{t.balanceDeduction}}</text>
+        <text>-CAD ${{balanceDeduction}}</text>
+      </view>
+    </view>
+  </view>
+
+  <view class="section">
+    <view class="section-head">
+      <view class="section-title">{{t.store}}</view>
+    </view>
+    <view class="store-box card">
+      <view class="store-name">{{store.storeName}}</view>
+      <view class="muted">{{store.address}}</view>
+      <view class="muted">{{store.phone}} · {{store.businessHours}}</view>
+    </view>
+  </view>
+
+  <view class="section">
+    <view class="section-head">
+      <view class="section-title">{{t.orderRemark}}</view>
+    </view>
+    <textarea class="remark card" maxlength="100" placeholder="{{t.remarkPlaceholder}}" value="{{remark}}" bindinput="inputRemark"></textarea>
+  </view>
+
+  <view class="bottom-bar">
+    <view class="bottom-fill">
+      <view class="muted">{{t.payable}}</view>
+      <view class="price">CAD ${{payableAmount}}</view>
+    </view>
+    <button class="btn btn-primary pay-btn" bindtap="submitOrder">{{t.payAction}}</button>
+  </view>
+</view>

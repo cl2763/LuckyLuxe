@@ -1,0 +1,76 @@
+<view wx:if="{{service}}" class="page booking-page">
+  <view class="booking-service card">
+    <image class="mini-visual" src="{{service.image}}" mode="aspectFill"></image>
+    <view class="booking-service-info">
+      <view class="service-name">{{service.name}}</view>
+      <view class="muted">{{service.duration}}{{t.minutes}} · {{t.deposit}} CAD ${{service.depositAmount}}</view>
+    </view>
+  </view>
+
+  <view class="section">
+    <view class="section-head">
+      <view class="section-title">{{t.time}}</view>
+    </view>
+    <view class="form-card card">
+      <picker mode="date" value="{{appointmentDate}}" start="{{minDate}}" bindchange="bindDateChange">
+        <view class="picker-row">
+          <text>{{t.date}}</text>
+          <text class="picker-value">{{appointmentDate}}</text>
+        </view>
+      </picker>
+      <view class="slot-grid">
+        <block wx:for="{{timeSlots}}" wx:key="*this">
+          <button class="slot {{appointmentTime === item ? 'active' : ''}}" bindtap="chooseTime" data-time="{{item}}">{{item}}</button>
+        </block>
+      </view>
+    </view>
+  </view>
+
+  <view class="section">
+    <view class="section-head">
+      <view class="section-title">{{t.addOns}}</view>
+      <view class="section-note">{{t.optional}}</view>
+    </view>
+    <view class="addon-grid">
+      <block wx:for="{{addOns}}" wx:key="id">
+        <button class="addon card {{item.checked ? 'active' : ''}}" bindtap="toggleAddon" data-id="{{item.id}}">
+          <text>{{item.name}}</text>
+          <text class="muted">+CAD ${{item.price}}</text>
+        </button>
+      </block>
+    </view>
+  </view>
+
+  <view class="section">
+    <view class="section-head">
+      <view class="section-title">{{t.reference}}</view>
+      <view class="section-note">{{referenceImages.length}}/3</view>
+    </view>
+    <view class="image-list">
+      <block wx:for="{{referenceImages}}" wx:key="*this">
+        <view class="image-wrap">
+          <image class="ref-image" src="{{item}}" mode="aspectFill"></image>
+          <button class="remove-image" bindtap="removeImage" data-index="{{index}}">×</button>
+        </view>
+      </block>
+      <button class="upload-box card" bindtap="chooseImage">{{t.upload}}</button>
+    </view>
+  </view>
+
+  <view class="section">
+    <view class="section-head">
+      <view class="section-title">{{t.remark}}</view>
+      <view class="section-note">{{remark.length}}/100</view>
+    </view>
+    <textarea class="remark card" maxlength="100" placeholder="{{t.remarkPlaceholder}}" value="{{remark}}" bindinput="inputRemark"></textarea>
+  </view>
+
+  <view class="bottom-bar">
+    <view class="summary">
+      <text class="muted">{{t.requiredDeposit}}</text>
+      <text class="price">CAD ${{service.depositAmount}}</text>
+    </view>
+    <button class="btn btn-ghost" bindtap="addToCart">{{cartId ? t.save : t.addToCart}}</button>
+    <button class="btn btn-primary" bindtap="checkoutNow">{{t.checkout}}</button>
+  </view>
+</view>

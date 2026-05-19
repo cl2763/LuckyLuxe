@@ -1,0 +1,33 @@
+<view class="page assets-page">
+  <view class="asset-card dark">
+    <view>
+      <view class="asset-label">{{t.balance}}</view>
+      <view class="asset-value">CAD ${{member.balance}}</view>
+    </view>
+    <view class="asset-note">Stored Card</view>
+  </view>
+
+  <view class="asset-grid">
+    <view class="asset-card card">
+      <view class="asset-label">{{t.points}}</view>
+      <view class="asset-value">{{member.points}}</view>
+      <view class="muted">{{t.pointsHint}}</view>
+    </view>
+    <view class="asset-card card">
+      <view class="asset-label">{{t.coupons}}</view>
+      <view class="asset-value">{{member.couponCount}}</view>
+      <view class="muted">{{t.couponsHint}}</view>
+    </view>
+  </view>
+
+  <view class="section">
+    <view class="section-head">
+      <view class="section-title">{{t.giftCard}}</view>
+      <view class="section-note">{{t.later}}</view>
+    </view>
+    <view class="gift-card card">
+      <view>{{t.noGift}}</view>
+      <view class="muted">{{t.giftHint}}</view>
+    </view>
+  </view>
+</view>

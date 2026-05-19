@@ -1,0 +1,70 @@
+<view wx:if="{{order}}" class="page order-detail-page">
+  <view class="detail-card card">
+    <view class="status-line">{{order.statusText}}</view>
+    <view class="service-name">{{order.serviceInfo.serviceName}}</view>
+    <view class="muted">{{t.orderNo}} {{order.orderNo}}</view>
+    <image class="order-cover" src="{{order.serviceImage}}" mode="aspectFill"></image>
+  </view>
+
+  <view class="section">
+    <view class="section-head">
+      <view class="section-title">{{t.bookingInfo}}</view>
+    </view>
+    <view class="info-card card">
+      <view class="info-row">
+        <text>{{t.arrival}}</text>
+        <text>{{order.appointment.date}} {{order.appointment.time}}</text>
+      </view>
+      <view class="info-row">
+        <text>{{t.duration}}</text>
+        <text>{{order.serviceInfo.duration}}{{t.minutes}}</text>
+      </view>
+      <view class="info-row">
+        <text>{{t.technician}}</text>
+        <text>{{order.serviceInfo.technicianName}}</text>
+      </view>
+      <view class="info-row">
+        <text>{{t.store}}</text>
+        <text>{{order.store.storeName}}</text>
+      </view>
+      <view class="info-row">
+        <text>{{t.address}}</text>
+        <text>{{order.store.address}}</text>
+      </view>
+      <view class="info-row">
+        <text>{{t.remark}}</text>
+        <text>{{order.appointment.remark || t.none}}</text>
+      </view>
+    </view>
+  </view>
+
+  <view class="section">
+    <view class="section-head">
+      <view class="section-title">{{t.payment}}</view>
+    </view>
+    <view class="info-card card">
+      <view class="info-row">
+        <text>{{t.paymentStatus}}</text>
+        <text>{{t.paid}}</text>
+      </view>
+      <view class="info-row">
+        <text>{{t.coupon}}</text>
+        <text>-CAD ${{order.couponDiscount}}</text>
+      </view>
+      <view class="info-row">
+        <text>{{t.balance}}</text>
+        <text>-CAD ${{order.balanceDeduction}}</text>
+      </view>
+      <view class="info-row">
+        <text>{{t.paidDeposit}}</text>
+        <text class="price">CAD ${{order.payableAmount}}</text>
+      </view>
+    </view>
+  </view>
+
+  <view wx:if="{{order.status === 'pending_service'}}" class="bottom-bar">
+    <button class="btn btn-ghost bottom-fill" bindtap="callStore">{{t.support}}</button>
+    <button class="btn btn-ghost bottom-fill" bindtap="openLocation">{{t.nav}}</button>
+    <button class="btn btn-primary bottom-fill" bindtap="cancelOrder">{{t.cancel}}</button>
+  </view>
+</view>

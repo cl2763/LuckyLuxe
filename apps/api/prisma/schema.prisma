@@ -1,0 +1,193 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "sqlite"
+  url      = env("DATABASE_URL")
+}
+
+enum ServiceType {
+  NAIL
+  LASH
+}
+
+enum BookingStatus {
+  PENDING_PAYMENT
+  CONFIRMED
+  COMPLETED
+  CANCELLED
+  EXPIRED
+}
+
+enum PaymentProvider {
+  MOCK
+  WECHAT_PAY
+  STRIPE
+  EMT
+  OFFLINE
+}
+
+enum PaymentStatus {
+  REQUIRES_PAYMENT
+  PAID
+  FAILED
+  REFUNDED
+  PARTIALLY_REFUNDED
+}
+
+model User {
+  id           String    @id @default(cuid())
+  displayName String
+  phone        String?
+  email        String?
+  wechatOpenId String?   @unique
+  googleId     String?   @unique
+  createdAt    DateTime  @default(now())
+  bookings     Booking[]
+}
+
+model Store {
+  id          String    @id @default(cuid())
+  name        String
+  address     String?
+  phone       String?
+  timezone    String    @default("America/Toronto")
+  currency    String    @default("CAD")
+  isActive    Boolean   @default(true)
+  createdAt   DateTime  @default(now())
+  technicians Technician[]
+  hours       BusinessHour[]
+  bookings    Booking[]
+}
+
+model Technician {
+  id        String    @id @default(cuid())
+  storeId   String
+  name      String
+  title     String?
+  isActive  Boolean   @default(true)
+  store     Store     @relation(fields: [storeId], references: [id])
+  services  TechnicianService[]
+  schedules TechnicianSchedule[]
+  bookings  Booking[]
+  slots     BookingSlot[]
+}
+
+model Service {
+  id             String      @id
+  type           ServiceType
+  category       String
+  nameZh         String
+  nameEn         String
+  descriptionZh  String
+  descriptionEn  String
+  imageUrl       String?
+  priceCents     Int
+  depositCents   Int         @default(5000)
+  baseDurationMin Int
+  isActive       Boolean     @default(true)
+  sortOrder      Int         @default(0)
+  processJson    String
+  noticeJson     String
+  technicians    TechnicianService[]
+  bookings       Booking[]
+}
+
+model TechnicianService {
+  id           String     @id @default(cuid())
+  technicianId String
+  serviceId    String
+  technician   Technician @relation(fields: [technicianId], references: [id], onDelete: Cascade)
+  service      Service    @relation(fields: [serviceId], references: [id], onDelete: Cascade)
+
+  @@unique([technicianId, serviceId])
+}
+
+model BusinessHour {
+  id        String  @id @default(cuid())
+  storeId   String
+  weekday   Int
+  openTime  String
+  closeTime String
+  isClosed  Boolean @default(false)
+  store     Store   @relation(fields: [storeId], references: [id], onDelete: Cascade)
+
+  @@unique([storeId, weekday])
+}
+
+model TechnicianSchedule {
+  id           String     @id @default(cuid())
+  technicianId String
+  date         String
+  startTime    String
+  endTime      String
+  isWorking    Boolean    @default(true)
+  technician   Technician @relation(fields: [technicianId], references: [id], onDelete: Cascade)
+
+  @@unique([technicianId, date])
+}
+
+model Booking {
+  id               String        @id @default(cuid())
+  publicCode       String        @unique
+  userId           String?
+  storeId          String
+  technicianId     String
+  serviceId        String
+  status           BookingStatus @default(PENDING_PAYMENT)
+  appointmentStart DateTime
+  appointmentEnd   DateTime
+  addOnsJson       String        @default("[]")
+  notes            String?
+  servicePriceCents Int
+  depositCents      Int
+  finalDueCents     Int
+  totalDurationMin  Int
+  paymentExpiresAt  DateTime?
+  cancelledAt       DateTime?
+  cancellationFeeCents Int?
+  createdAt         DateTime      @default(now())
+  updatedAt         DateTime      @updatedAt
+  user              User?         @relation(fields: [userId], references: [id])
+  store             Store         @relation(fields: [storeId], references: [id])
+  technician        Technician    @relation(fields: [technicianId], references: [id])
+  service           Service       @relation(fields: [serviceId], references: [id])
+  slots             BookingSlot[]
+  payments          Payment[]
+  history           BookingStatusHistory[]
+}
+
+model BookingSlot {
+  id           String     @id @default(cuid())
+  bookingId    String
+  technicianId String
+  startsAt     DateTime
+  booking      Booking    @relation(fields: [bookingId], references: [id], onDelete: Cascade)
+  technician   Technician @relation(fields: [technicianId], references: [id], onDelete: Cascade)
+
+  @@unique([technicianId, startsAt])
+}
+
+model Payment {
+  id            String          @id @default(cuid())
+  bookingId     String
+  provider      PaymentProvider
+  status        PaymentStatus   @default(REQUIRES_PAYMENT)
+  amountCents   Int
+  currency      String          @default("CAD")
+  transactionId String?
+  createdAt     DateTime        @default(now())
+  updatedAt     DateTime        @updatedAt
+  booking       Booking         @relation(fields: [bookingId], references: [id], onDelete: Cascade)
+}
+
+model BookingStatusHistory {
+  id        String        @id @default(cuid())
+  bookingId String
+  fromStatus BookingStatus?
+  toStatus   BookingStatus
+  note       String?
+  createdAt  DateTime      @default(now())
+  booking    Booking       @relation(fields: [bookingId], references: [id], onDelete: Cascade)
+}

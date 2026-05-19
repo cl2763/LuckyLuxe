@@ -1,0 +1,12 @@
+.DS_Store
+node_modules/
+*.log
+.env
+apps/api/.env
+
+# Local demo database/runtime data
+apps/api/local-data/
+
+# Local IDE/private WeChat DevTools settings
+project.private.config.json
+miniprogram/project.private.config.json

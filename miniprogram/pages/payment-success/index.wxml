@@ -1,0 +1,35 @@
+<view class="page success-page">
+  <view class="success-panel card">
+    <view class="success-icon">✓</view>
+    <view class="success-title">{{t.title}}</view>
+    <view class="muted">{{t.subtitle}}</view>
+  </view>
+
+  <view wx:if="{{order}}" class="summary-card card">
+    <view class="summary-row">
+      <text>{{t.orderNo}}</text>
+      <text>{{order.orderNo}}</text>
+    </view>
+    <view class="summary-row">
+      <text>{{t.service}}</text>
+      <text>{{order.serviceInfo.serviceName}}</text>
+    </view>
+    <view class="summary-row">
+      <text>{{t.arrival}}</text>
+      <text>{{order.appointment.date}} {{order.appointment.time}}</text>
+    </view>
+    <view class="summary-row">
+      <text>{{t.address}}</text>
+      <text>{{order.store.address}}</text>
+    </view>
+    <view class="summary-row">
+      <text>{{t.paidDeposit}}</text>
+      <text class="price">CAD ${{order.payableAmount}}</text>
+    </view>
+  </view>
+
+  <view class="success-actions">
+    <button class="btn btn-primary" bindtap="goOrders">{{t.viewOrders}}</button>
+    <button class="btn btn-ghost" bindtap="goHome">{{t.home}}</button>
+  </view>
+</view>

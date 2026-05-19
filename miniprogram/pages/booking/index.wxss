@@ -1,0 +1,149 @@
+.booking-page {
+  padding-bottom: 240rpx;
+}
+
+.booking-service {
+  display: flex;
+  gap: 20rpx;
+  padding: 16rpx;
+}
+
+.mini-visual {
+  width: 150rpx;
+  height: 124rpx;
+  flex: none;
+  display: block;
+  border-radius: 14rpx;
+}
+
+.booking-service-info {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+}
+
+.service-name {
+  margin-bottom: 14rpx;
+  font-size: 32rpx;
+  font-weight: 750;
+}
+
+.form-card {
+  padding: 24rpx;
+}
+
+.picker-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  min-height: 68rpx;
+  font-weight: 650;
+}
+
+.picker-value {
+  color: #c6a27e;
+}
+
+.slot-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 14rpx;
+  margin-top: 22rpx;
+}
+
+.slot {
+  min-width: 0;
+  height: 70rpx;
+  border: 1rpx solid #eadfd7;
+  border-radius: 14rpx;
+  background: #fff;
+  color: #5e514b;
+  font-size: 30rpx;
+  font-weight: 750;
+}
+
+.slot.active {
+  border-color: #c6a27e;
+  background: #f4ebe4;
+  color: #8a684c;
+  font-weight: 700;
+}
+
+.addon-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 14rpx;
+}
+
+.addon {
+  min-width: 0;
+  min-height: 104rpx;
+  padding: 20rpx;
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  justify-content: center;
+  gap: 10rpx;
+  text-align: left;
+  font-size: 28rpx;
+  font-weight: 780;
+}
+
+.addon.active {
+  border-color: #c6a27e;
+  background: #fffaf5;
+}
+
+.image-list {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 14rpx;
+}
+
+.image-wrap,
+.upload-box {
+  position: relative;
+  width: 150rpx;
+  height: 150rpx;
+}
+
+.ref-image {
+  width: 100%;
+  height: 100%;
+  border-radius: 16rpx;
+}
+
+.remove-image {
+  position: absolute;
+  top: -12rpx;
+  right: -12rpx;
+  width: 42rpx;
+  height: 42rpx;
+  border-radius: 50%;
+  background: #2b2b2b;
+  color: #fff;
+}
+
+.upload-box {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: #8a7f78;
+}
+
+.remark {
+  width: 100%;
+  height: 170rpx;
+  padding: 22rpx;
+  line-height: 1.5;
+}
+
+.summary {
+  flex: 1;
+  min-width: 150rpx;
+  display: flex;
+  flex-direction: column;
+  gap: 8rpx;
+}

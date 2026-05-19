@@ -1,0 +1,46 @@
+.asset-card {
+  min-height: 190rpx;
+  padding: 30rpx;
+  border-radius: 18rpx;
+}
+
+.asset-card.dark {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  background: #2b2b2b;
+  color: #fff;
+}
+
+.asset-label {
+  color: #8a7f78;
+  font-size: 25rpx;
+}
+
+.dark .asset-label,
+.dark .asset-note {
+  color: rgba(255, 255, 255, 0.68);
+}
+
+.asset-value {
+  margin-top: 12rpx;
+  font-size: 48rpx;
+  font-weight: 850;
+}
+
+.asset-note {
+  color: #ead8cc;
+  font-size: 24rpx;
+}
+
+.asset-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 16rpx;
+  margin-top: 18rpx;
+}
+
+.gift-card {
+  padding: 30rpx;
+  line-height: 1.7;
+}

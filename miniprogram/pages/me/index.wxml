@@ -1,0 +1,132 @@
+<view class="page me-page">
+  <view class="page-title">Lucky Luxe</view>
+
+  <view class="member-card">
+    <view class="member-top">
+      <image class="avatar" src="/assets/images/member-profile.png" mode="aspectFill"></image>
+      <view>
+        <view class="nickname">{{member.nickname}}</view>
+        <view class="level">{{member.memberLevel}}</view>
+      </view>
+    </view>
+
+    <view class="growth-block">
+      <view class="growth-head">
+        <text>{{t.growth}}</text>
+        <text>{{member.growthValue}} / {{member.nextLevelValue}}</text>
+      </view>
+      <view class="growth-track">
+        <view class="growth-fill" style="width: {{growthPercent}}%;"></view>
+      </view>
+      <view class="growth-note">{{t.growthNote}} {{member.nextLevelValue - member.growthValue}}</view>
+    </view>
+
+    <view class="member-assets">
+      <view>
+        <text>{{member.points}}</text>
+        <text>{{t.points}}</text>
+      </view>
+      <view>
+        <text>{{member.couponCount}}</text>
+        <text>{{t.coupons}}</text>
+      </view>
+      <view>
+        <text>CAD ${{member.balance}}</text>
+        <text>{{t.balance}}</text>
+      </view>
+    </view>
+
+    <view class="member-extra">
+      <view>{{t.totalSpent}} CAD ${{member.totalSpent}}</view>
+      <view>{{t.visits}} {{member.visits}} {{t.times}}</view>
+    </view>
+  </view>
+
+  <view class="section">
+    <view class="section-head">
+      <view class="section-title">{{t.orders}}</view>
+      <button class="section-note" bindtap="goOrders" data-status="all">{{t.all}}</button>
+    </view>
+    <view class="order-entry card">
+      <button bindtap="goOrders" data-status="pending_service">
+        <text>{{counts.pending_service}}</text>
+        <text>{{t.statusPendingService}}</text>
+      </button>
+      <button bindtap="goOrders" data-status="completed">
+        <text>{{counts.completed}}</text>
+        <text>{{t.statusCompleted}}</text>
+      </button>
+      <button bindtap="goOrders" data-status="cancelled">
+        <text>{{counts.cancelled}}</text>
+        <text>{{t.statusCancelled}}</text>
+      </button>
+      <button bindtap="goOrders" data-status="after_sales">
+        <text>{{counts.after_sales}}</text>
+        <text>{{t.statusAfterSales}}</text>
+      </button>
+    </view>
+  </view>
+
+  <view class="section">
+    <view class="section-head">
+      <view class="section-title">{{t.recent}}</view>
+      <view class="section-note">Records</view>
+    </view>
+    <view class="recent-list">
+      <block wx:for="{{recentOrders}}" wx:key="_id">
+        <button class="recent-card card" bindtap="goOrderDetail" data-id="{{item._id}}">
+          <image class="recent-image" src="{{item.serviceImage}}" mode="aspectFill"></image>
+          <view class="recent-info">
+            <view class="recent-top">
+              <text>{{item.serviceName}}</text>
+              <text>{{item.statusText}}</text>
+            </view>
+            <view class="recent-meta">
+              <text>{{item.appointment.date}}</text>
+              <text>{{item.appointment.time}}</text>
+            </view>
+            <view class="recent-pay">{{t.paidDeposit}} CAD ${{item.payableAmount}}</view>
+          </view>
+        </button>
+      </block>
+    </view>
+  </view>
+
+  <view class="section">
+    <view class="section-head">
+      <view class="section-title">{{t.functions}}</view>
+    </view>
+    <view class="menu-grid">
+      <button class="menu-card card" bindtap="goAssets">
+        <image class="menu-icon" src="/assets/images/nail-luxe.png" mode="aspectFill"></image>
+        <view class="menu-title">{{t.assets}}</view>
+        <view class="menu-desc">{{t.assetsDesc}}</view>
+      </button>
+      <button class="menu-card card" bindtap="goStore">
+        <image class="menu-icon" src="/assets/images/store-cover.png" mode="aspectFill"></image>
+        <view class="menu-title">{{t.store}}</view>
+        <view class="menu-desc">{{t.storeDesc}}</view>
+      </button>
+      <button class="menu-card card">
+        <image class="menu-icon" src="/assets/images/nail-french.png" mode="aspectFill"></image>
+        <view class="menu-title">{{t.coupons}}</view>
+        <view class="menu-desc">{{t.couponsDesc}}</view>
+      </button>
+      <button class="menu-card card">
+        <image class="menu-icon" src="/assets/images/lash-volume.png" mode="aspectFill"></image>
+        <view class="menu-title">{{t.giftCard}}</view>
+        <view class="menu-desc">{{t.later}}</view>
+      </button>
+      <button class="menu-card card">
+        <image class="menu-icon" src="/assets/images/nail-jp.png" mode="aspectFill"></image>
+        <view class="menu-title">{{t.pointsMall}}</view>
+        <view class="menu-desc">{{t.comingSoon}}</view>
+      </button>
+      <button class="menu-card card">
+        <image class="menu-icon" src="/assets/images/lash-natural.png" mode="aspectFill"></image>
+        <view class="menu-title">{{t.settings}}</view>
+        <view class="menu-desc">{{t.demoOnly}}</view>
+      </button>
+    </view>
+  </view>
+</view>

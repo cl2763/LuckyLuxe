@@ -1,0 +1,32 @@
+<view class="page orders-page">
+  <scroll-view class="tabs" scroll-x>
+    <block wx:for="{{tabs}}" wx:key="key">
+      <button class="tab {{activeStatus === item.key ? 'active' : ''}}" bindtap="switchStatus" data-status="{{item.key}}">{{item.label}}</button>
+    </block>
+  </scroll-view>
+
+  <block wx:if="{{orders.length}}">
+    <block wx:for="{{orders}}" wx:key="_id">
+      <button class="order-card card" bindtap="goDetail" data-id="{{item._id}}">
+        <view class="order-head">
+          <text>{{item.serviceName}}</text>
+          <text class="status">{{item.statusText}}</text>
+        </view>
+        <view class="order-body">
+          <image class="mini-visual" src="{{item.serviceImage}}" mode="aspectFill"></image>
+          <view class="order-info">
+            <view class="order-time">{{item.appointment.date}} {{item.appointment.time}}</view>
+            <view class="muted">{{item.store.storeName}}</view>
+            <view class="price">{{t.paidDeposit}} CAD ${{item.payableAmount}}</view>
+          </view>
+        </view>
+      </button>
+    </block>
+  </block>
+
+  <view wx:else class="empty">
+    <view class="empty-title">{{t.emptyTitle}}</view>
+    <view>{{t.emptyText}}</view>
+    <button class="btn btn-primary empty-btn" bindtap="goServices">{{t.book}}</button>
+  </view>
+</view>

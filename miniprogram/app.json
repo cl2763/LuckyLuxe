@@ -1,0 +1,48 @@
+{
+  "pages": [
+    "pages/home/index",
+    "pages/services/index",
+    "pages/service-detail/index",
+    "pages/booking/index",
+    "pages/cart/index",
+    "pages/checkout/index",
+    "pages/payment-success/index",
+    "pages/me/index",
+    "pages/orders/index",
+    "pages/order-detail/index",
+    "pages/store-location/index",
+    "pages/assets/index"
+  ],
+  "window": {
+    "navigationBarTitleText": "Lucky Luxe",
+    "navigationBarBackgroundColor": "#F7F3EF",
+    "navigationBarTextStyle": "black",
+    "backgroundColor": "#F7F3EF"
+  },
+  "tabBar": {
+    "color": "#8A7F78",
+    "selectedColor": "#C6A27E",
+    "backgroundColor": "#FFFFFF",
+    "borderStyle": "white",
+    "list": [
+      {
+        "pagePath": "pages/home/index",
+        "text": "首页"
+      },
+      {
+        "pagePath": "pages/services/index",
+        "text": "服务"
+      },
+      {
+        "pagePath": "pages/cart/index",
+        "text": "购物车"
+      },
+      {
+        "pagePath": "pages/me/index",
+        "text": "我的"
+      }
+    ]
+  },
+  "style": "v2",
+  "sitemapLocation": "sitemap.json"
+}

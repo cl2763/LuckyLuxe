@@ -1,0 +1,43 @@
+<!doctype html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Lucky Luxe</title>
+    <link rel="stylesheet" href="/web/styles.css">
+  </head>
+  <body>
+    <main class="shell web-app-shell">
+      <header class="topbar">
+        <a class="brand" href="/">
+          <span class="brand-mark">LL</span>
+          <span>
+            <strong>Lucky Luxe</strong>
+            <small>Nail & Lash Atelier</small>
+          </span>
+        </a>
+        <nav class="top-actions">
+          <a class="ghost-link" href="/admin">Owner Admin</a>
+          <button class="toggle active" id="langZh" type="button">中文</button>
+          <button class="toggle" id="langEn" type="button">EN</button>
+        </nav>
+      </header>
+
+      <section id="authView" class="auth-layout"></section>
+
+      <section id="appView" class="app-view hidden">
+        <nav class="web-tabs" aria-label="Lucky Luxe navigation">
+          <button class="web-tab active" data-view="home" type="button">首页 Home</button>
+          <button class="web-tab" data-view="services" type="button">服务 Services</button>
+          <button class="web-tab" data-view="cart" type="button">购物车 Cart <span id="cartBadge">0</span></button>
+          <button class="web-tab" data-view="me" type="button">我的 Me</button>
+        </nav>
+
+        <div id="screen"></div>
+      </section>
+    </main>
+
+    <div class="toast" id="toast"></div>
+    <script src="/web/customer.js"></script>
+  </body>
+</html>

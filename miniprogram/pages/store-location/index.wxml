@@ -1,0 +1,31 @@
+<view class="page store-page">
+  <image class="store-hero" src="/assets/images/store-cover.png" mode="aspectFill"></image>
+
+  <view class="store-card card">
+    <view class="store-name">{{store.storeName}}</view>
+    <view class="store-desc">{{store.description}}</view>
+    <view class="info-row">
+      <text>{{t.address}}</text>
+      <text>{{store.address}}</text>
+    </view>
+    <view class="info-row">
+      <text>{{t.phone}}</text>
+      <text>{{store.phone}}</text>
+    </view>
+    <view class="info-row">
+      <text>{{t.hours}}</text>
+      <text>{{store.businessHours}}</text>
+    </view>
+  </view>
+
+  <view class="action-grid">
+    <button class="btn btn-primary" bindtap="openLocation">{{t.nav}}</button>
+    <button class="btn btn-ghost" bindtap="callStore">{{t.call}}</button>
+    <button class="btn btn-ghost" bindtap="copyAddress">{{t.copy}}</button>
+  </view>
+
+  <view class="map-placeholder card">
+    <view>{{t.map}}</view>
+    <view class="muted">{{t.mapHint}}</view>
+  </view>
+</view>

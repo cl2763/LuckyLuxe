@@ -1,0 +1,76 @@
+<!doctype html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Lucky Luxe Admin</title>
+    <link rel="stylesheet" href="/web/styles.css">
+  </head>
+  <body>
+    <main class="shell admin-shell">
+      <header class="topbar">
+        <a class="brand" href="/">
+          <span class="brand-mark">LL</span>
+          <span>
+            <strong>Lucky Luxe Admin</strong>
+            <small>Owner Console</small>
+          </span>
+        </a>
+        <nav class="top-actions">
+          <a class="ghost-link" href="/">Customer App</a>
+          <input class="token-input" id="tokenInput" value="owner-demo-token" aria-label="Owner token">
+          <button class="primary slim" id="reloadButton" type="button">Reload</button>
+        </nav>
+      </header>
+
+      <section class="metric-grid" id="metricGrid"></section>
+
+      <section class="admin-layout">
+        <div class="admin-main">
+          <div class="section-row">
+            <h1>Bookings</h1>
+            <span class="subtle">Live local backend data</span>
+          </div>
+          <div class="admin-list" id="bookingList"></div>
+        </div>
+
+        <aside class="admin-side">
+          <section class="admin-card">
+            <h2>Technician Schedule</h2>
+            <label>
+              <span>Technician</span>
+              <select id="scheduleTech"></select>
+            </label>
+            <label>
+              <span>Date</span>
+              <input id="scheduleDate" type="date">
+            </label>
+            <div class="form-grid tight">
+              <label>
+                <span>Start</span>
+                <input id="scheduleStart" value="10:00">
+              </label>
+              <label>
+                <span>End</span>
+                <input id="scheduleEnd" value="19:00">
+              </label>
+            </div>
+            <label class="check-row">
+              <input id="scheduleWorking" type="checkbox" checked>
+              <span>Working day</span>
+            </label>
+            <button class="primary full" id="saveSchedule" type="button">Save Schedule</button>
+          </section>
+
+          <section class="admin-card">
+            <h2>Services</h2>
+            <div class="service-admin-list" id="serviceAdminList"></div>
+          </section>
+        </aside>
+      </section>
+    </main>
+
+    <div class="toast" id="toast"></div>
+    <script src="/web/admin.js"></script>
+  </body>
+</html>

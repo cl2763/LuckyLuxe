@@ -1,0 +1,129 @@
+.detail-page {
+  padding: 18rpx 28rpx 260rpx;
+}
+
+.detail-visual {
+  display: block;
+  width: calc(100% + 56rpx);
+  height: 350rpx;
+  border-radius: 0;
+  margin: 0 -28rpx;
+}
+
+.detail-tag {
+  position: relative;
+  z-index: 1;
+  padding: 14rpx 22rpx;
+  border-radius: 999rpx;
+  background: rgba(255, 255, 255, 0.72);
+  color: #3a2e2a;
+  font-size: 25rpx;
+  font-weight: 760;
+}
+
+.detail-main {
+  margin-top: 22rpx;
+  padding: 32rpx;
+  border-radius: 18rpx;
+}
+
+.detail-title {
+  color: #342b28;
+  font-size: 42rpx;
+  font-weight: 850;
+  line-height: 1.2;
+}
+
+.detail-desc {
+  margin-top: 16rpx;
+  color: #8a7f78;
+  font-size: 28rpx;
+  font-weight: 600;
+  line-height: 1.55;
+}
+
+.detail-price-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-top: 28rpx;
+}
+
+.deposit {
+  padding: 14rpx 20rpx;
+  border-radius: 999rpx;
+  background: #f3ebe4;
+  color: #8a684c;
+  font-size: 25rpx;
+  font-weight: 700;
+}
+
+.detail-tags {
+  display: flex;
+  flex-direction: column;
+  gap: 12rpx;
+  margin-top: 24rpx;
+  color: #5e514b;
+  font-size: 27rpx;
+  font-weight: 600;
+  line-height: 1.45;
+}
+
+.list-card {
+  padding: 8rpx 28rpx;
+  border-radius: 18rpx;
+}
+
+.list-row,
+.notice-row {
+  display: flex;
+  align-items: center;
+  min-height: 86rpx;
+  border-bottom: 1rpx solid #f0e8e1;
+  color: #342b28;
+  font-size: 29rpx;
+  font-weight: 700;
+}
+
+.list-row:last-child,
+.notice-row:last-child {
+  border-bottom: none;
+}
+
+.step {
+  width: 44rpx;
+  height: 44rpx;
+  margin-right: 20rpx;
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: #f3ebe4;
+  color: #c6a27e;
+  font-size: 22rpx;
+  font-weight: 700;
+}
+
+.notice-row {
+  color: #5e514b;
+  font-size: 27rpx;
+  font-weight: 600;
+  line-height: 1.45;
+}
+
+.reference-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 16rpx;
+}
+
+.reference-image {
+  height: 210rpx;
+  width: 100%;
+  display: block;
+  border-radius: 16rpx;
+}
+
+.detail-bottom-space {
+  height: 120rpx;
+}

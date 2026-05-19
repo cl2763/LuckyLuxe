@@ -1,0 +1,64 @@
+<view wx:if="{{service}}" class="page detail-page">
+  <view class="page-title">{{service.name}}</view>
+
+  <image class="detail-visual" src="{{service.image}}" mode="aspectFill"></image>
+
+  <view class="detail-main card">
+    <view class="detail-title">{{service.name}}</view>
+    <view class="detail-desc">{{service.description}}</view>
+    <view class="detail-price-row">
+      <view>
+        <text class="price">CAD ${{service.price}}</text>
+        <text class="muted"> / {{t.servicePrice}}</text>
+      </view>
+      <view class="deposit">{{t.deposit}} CAD ${{service.depositAmount}}</view>
+    </view>
+    <view class="detail-tags">
+      <text>{{service.duration}}{{t.minutes}}</text>
+      <text>{{service.suitableFor}}</text>
+    </view>
+  </view>
+
+  <view class="section">
+    <view class="section-head">
+      <view class="section-title">{{t.process}}</view>
+    </view>
+    <view class="card list-card">
+      <block wx:for="{{service.process}}" wx:key="*this">
+        <view class="list-row">
+          <text class="step">{{index + 1}}</text>
+          <text>{{item}}</text>
+        </view>
+      </block>
+    </view>
+  </view>
+
+  <view class="section">
+    <view class="section-head">
+      <view class="section-title">{{t.notice}}</view>
+    </view>
+    <view class="card list-card">
+      <block wx:for="{{service.notice}}" wx:key="*this">
+        <view class="notice-row">{{item}}</view>
+      </block>
+    </view>
+  </view>
+
+  <view class="section">
+    <view class="section-head">
+      <view class="section-title">{{t.reference}}</view>
+      <view class="section-note">Placeholder</view>
+    </view>
+    <view class="reference-grid">
+      <image class="reference-image" src="{{service.image}}" mode="aspectFill"></image>
+      <image class="reference-image" src="{{service.image}}" mode="aspectFill"></image>
+    </view>
+  </view>
+
+  <view class="detail-bottom-space"></view>
+
+  <view class="bottom-bar">
+    <button class="btn btn-ghost bottom-fill" bindtap="addDraftToCart">{{t.addToCart}}</button>
+    <button class="btn btn-primary bottom-fill" bindtap="goBooking">{{t.bookNow}}</button>
+  </view>
+</view>
