@@ -18,10 +18,30 @@
         </a>
         <nav class="top-actions">
           <a class="ghost-link" href="/">Customer App</a>
-          <input class="token-input" id="tokenInput" value="owner-demo-token" aria-label="Owner token">
+          <input class="token-input" id="tokenInput" value="" aria-label="Owner token" placeholder="Owner token fallback">
           <button class="primary slim" id="reloadButton" type="button">Reload</button>
         </nav>
       </header>
+
+      <section class="admin-card owner-login-card" id="ownerLogin">
+        <div>
+          <p class="eyebrow">Owner Access</p>
+          <h2>Owner Login</h2>
+          <p class="subtle">Use your approved owner email. The token field remains only as a staging fallback.</p>
+        </div>
+        <form class="auth-form owner-login-form" id="ownerLoginForm">
+          <label>
+            <span>Email</span>
+            <input name="email" type="email" autocomplete="username">
+          </label>
+          <label>
+            <span>Password</span>
+            <input name="password" type="password" autocomplete="current-password">
+          </label>
+          <button class="primary slim" type="submit">Login</button>
+          <button class="ghost slim" id="ownerLogout" type="button">Log out</button>
+        </form>
+      </section>
 
       <section class="metric-grid" id="metricGrid"></section>
 

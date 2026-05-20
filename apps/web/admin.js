@@ -1,5 +1,6 @@
 const owner = {
-  token: localStorage.getItem('lucky-owner-token') || 'owner-demo-token',
+  token: localStorage.getItem('lucky-owner-token') || '',
+  auth: readJson('lucky-owner-auth'),
   bookings: [],
   services: [],
   technicians: [],
@@ -9,6 +10,9 @@ const owner = {
 
 const els = {
   tokenInput: document.querySelector('#tokenInput'),
+  ownerLogin: document.querySelector('#ownerLogin'),
+  ownerLoginForm: document.querySelector('#ownerLoginForm'),
+  ownerLogout: document.querySelector('#ownerLogout'),
   reloadButton: document.querySelector('#reloadButton'),
   metricGrid: document.querySelector('#metricGrid'),
   bookingList: document.querySelector('#bookingList'),
@@ -56,11 +60,23 @@ function toast(message) {
   setTimeout(() => els.toast.classList.remove('show'), 2200)
 }
 
+function readJson(key) {
+  try {
+    return JSON.parse(localStorage.getItem(key) || 'null')
+  } catch {
+    return null
+  }
+}
+
+function ownerBearer() {
+  return owner.auth?.accessToken || owner.token || 'owner-demo-token'
+}
+
 async function request(path, options = {}) {
   const response = await fetch(path, {
     headers: {
       'content-type': 'application/json',
-      authorization: `Bearer ${owner.token}`,
+      authorization: `Bearer ${ownerBearer()}`,
       ...(options.headers || {})
     },
     ...options
@@ -83,7 +99,7 @@ function statusLabel(status) {
 
 async function loadAll() {
   owner.token = els.tokenInput.value.trim()
-  localStorage.setItem('lucky-owner-token', owner.token)
+  if (owner.token) localStorage.setItem('lucky-owner-token', owner.token)
   const [bookingData, serviceData, techData] = await Promise.all([
     request('/admin/bookings'),
     request('/admin/services'),
@@ -93,6 +109,32 @@ async function loadAll() {
   owner.services = serviceData.services
   owner.technicians = techData.technicians
   render()
+}
+
+async function ownerLogin(event) {
+  event.preventDefault()
+  const form = new FormData(event.target)
+  const data = await request('/admin/auth/login', {
+    method: 'POST',
+    headers: {},
+    body: JSON.stringify({
+      email: form.get('email'),
+      password: form.get('password')
+    })
+  })
+  owner.auth = data.auth
+  localStorage.setItem('lucky-owner-auth', JSON.stringify(owner.auth))
+  toast('Owner login successful.')
+  await loadAll()
+}
+
+function ownerLogout() {
+  owner.auth = null
+  owner.token = ''
+  els.tokenInput.value = ''
+  localStorage.removeItem('lucky-owner-auth')
+  localStorage.removeItem('lucky-owner-token')
+  toast('Logged out.')
 }
 
 function render() {
@@ -302,6 +344,8 @@ async function saveSchedule() {
 }
 
 els.reloadButton.addEventListener('click', () => loadAll().catch((error) => toast(error.message)))
+els.ownerLoginForm.addEventListener('submit', (event) => ownerLogin(event).catch((error) => toast(error.message)))
+els.ownerLogout.addEventListener('click', ownerLogout)
 els.adminTabs.forEach((tab) => {
   tab.addEventListener('click', () => {
     owner.adminView = tab.dataset.adminView

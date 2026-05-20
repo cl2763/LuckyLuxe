@@ -15,9 +15,14 @@ const assetRoot = join(workspaceRoot, 'miniprogram', 'assets')
 const PORT = Number(process.env.PORT || 4000)
 const HOST = process.env.HOST || '0.0.0.0'
 const OWNER_TOKEN = process.env.OWNER_DEMO_TOKEN || 'owner-demo-token'
+const OWNER_EMAILS = (process.env.OWNER_EMAILS || '').split(',').map((email) => email.trim().toLowerCase()).filter(Boolean)
 const HOLD_MINUTES = Number(process.env.BOOKING_HOLD_MINUTES || 15)
 const SLOT_MINUTES = 30
 const DATABASE_URL = process.env.DATABASE_URL
+const SUPABASE_URL = (process.env.SUPABASE_URL || '').replace(/\/$/, '')
+const SUPABASE_ANON_KEY = process.env.SUPABASE_ANON_KEY || ''
+const STRIPE_SECRET_KEY = process.env.STRIPE_SECRET_KEY || ''
+const APP_PUBLIC_URL = (process.env.APP_PUBLIC_URL || '').replace(/\/$/, '')
 
 if (!DATABASE_URL || !DATABASE_URL.startsWith('postgresql://')) {
   throw new Error('Supabase server requires DATABASE_URL to be a PostgreSQL connection string.')
@@ -90,8 +95,17 @@ function apiError(status, code, message) {
   return error
 }
 
-function requireOwner(req) {
-  if (req.headers.authorization !== `Bearer ${OWNER_TOKEN}`) throw apiError(401, 'UNAUTHORIZED', 'Owner token is required.')
+async function requireOwner(req) {
+  const auth = req.headers.authorization || ''
+  if (auth === `Bearer ${OWNER_TOKEN}`) return { provider: 'demo-token' }
+  const token = auth.startsWith('Bearer ') ? auth.slice(7) : ''
+  if (!token || !isSupabaseConfigured()) throw apiError(401, 'UNAUTHORIZED', 'Owner login is required.')
+  const authUser = await getSupabaseUser(token)
+  const email = String(authUser.email || '').toLowerCase()
+  if (!OWNER_EMAILS.length || !OWNER_EMAILS.includes(email)) {
+    throw apiError(403, 'FORBIDDEN', 'This account is not allowed to access owner admin.')
+  }
+  return { provider: 'supabase', email }
 }
 
 function cents(centsValue) {
@@ -252,6 +266,14 @@ function iso(date) {
   return new Date(date).toISOString()
 }
 
+function isSupabaseConfigured() {
+  return Boolean(SUPABASE_URL && SUPABASE_ANON_KEY)
+}
+
+function isStripeConfigured() {
+  return Boolean(STRIPE_SECRET_KEY)
+}
+
 function query(text, params = []) {
   return pool.query(text, params)
 }
@@ -274,6 +296,115 @@ async function withTransaction(fn) {
 async function getService(id, client = pool) {
   const result = await client.query('SELECT * FROM services WHERE id = $1', [id])
   return result.rows[0]
+}
+
+async function supabaseFetch(path, options = {}) {
+  if (!isSupabaseConfigured()) throw apiError(503, 'AUTH_NOT_CONFIGURED', 'Supabase Auth is not configured.')
+  const response = await fetch(`${SUPABASE_URL}${path}`, {
+    ...options,
+    headers: {
+      apikey: SUPABASE_ANON_KEY,
+      'content-type': 'application/json',
+      ...(options.headers || {})
+    }
+  })
+  const data = await response.json().catch(() => ({}))
+  if (!response.ok) throw apiError(response.status, data.error_code || data.code || 'SUPABASE_AUTH_ERROR', data.msg || data.message || 'Supabase Auth request failed.')
+  return data
+}
+
+async function getSupabaseUser(accessToken) {
+  return supabaseFetch('/auth/v1/user', {
+    headers: { authorization: `Bearer ${accessToken}` }
+  })
+}
+
+function authUserName(authUser, fallback = 'Lucky Member') {
+  return authUser.user_metadata?.display_name || authUser.user_metadata?.full_name || authUser.user_metadata?.name || authUser.email?.split('@')[0] || fallback
+}
+
+async function upsertAuthUser(authUser, provider = 'email') {
+  const authId = authUser.id
+  const email = String(authUser.email || '').trim().toLowerCase()
+  if (!authId || !email) throw apiError(400, 'BAD_AUTH_USER', 'Authenticated user is missing id or email.')
+  const existing = await query('SELECT * FROM users WHERE supabase_auth_id = $1 OR email = $2 ORDER BY created_at ASC LIMIT 1', [authId, email])
+  if (existing.rows[0]) {
+    await query('UPDATE users SET supabase_auth_id = $1, display_name = $2, email = $3, google_id = COALESCE(google_id, $4) WHERE id = $5',
+      [authId, authUserName(authUser), email, provider === 'google' ? authId : null, existing.rows[0].id])
+    const updated = await query('SELECT * FROM users WHERE id = $1', [existing.rows[0].id])
+    return serializeUser(updated.rows[0])
+  }
+  const id = randomId('user')
+  await query('INSERT INTO users (id, supabase_auth_id, display_name, email, google_id) VALUES ($1, $2, $3, $4, $5)',
+    [id, authId, authUserName(authUser), email, provider === 'google' ? authId : null])
+  const created = await query('SELECT * FROM users WHERE id = $1', [id])
+  return serializeUser(created.rows[0])
+}
+
+function authPayload(data) {
+  return {
+    accessToken: data.access_token,
+    refreshToken: data.refresh_token,
+    expiresIn: data.expires_in,
+    tokenType: data.token_type
+  }
+}
+
+async function signUpEmailUser(body) {
+  const email = String(body.email || '').trim().toLowerCase()
+  const password = String(body.password || '')
+  const displayName = String(body.displayName || '').trim() || email.split('@')[0] || 'Lucky Member'
+  if (!email || !email.includes('@')) throw apiError(400, 'BAD_REQUEST', 'A valid email is required.')
+  if (!isSupabaseConfigured()) return { user: await registerEmailUser(body), auth: null, mode: 'demo' }
+  if (password.length < 6) throw apiError(400, 'BAD_REQUEST', 'Password must be at least 6 characters.')
+  const data = await supabaseFetch('/auth/v1/signup', {
+    method: 'POST',
+    body: JSON.stringify({
+      email,
+      password,
+      data: { display_name: displayName }
+    })
+  })
+  const authUser = data.user
+  const user = authUser ? await upsertAuthUser({ ...authUser, email, user_metadata: { ...(authUser.user_metadata || {}), display_name: displayName } }, 'email') : null
+  return {
+    user,
+    auth: data.session ? authPayload(data.session) : null,
+    needsEmailConfirmation: Boolean(!data.session),
+    mode: 'supabase'
+  }
+}
+
+async function signInEmailUser(body) {
+  const email = String(body.email || '').trim().toLowerCase()
+  const password = String(body.password || '')
+  if (!email || !password) throw apiError(400, 'BAD_REQUEST', 'Email and password are required.')
+  if (!isSupabaseConfigured()) return { user: await registerEmailUser({ email, displayName: body.displayName }), auth: null, mode: 'demo' }
+  const data = await supabaseFetch('/auth/v1/token?grant_type=password', {
+    method: 'POST',
+    body: JSON.stringify({ email, password })
+  })
+  const user = await upsertAuthUser(data.user, 'email')
+  return { user, auth: authPayload(data), mode: 'supabase' }
+}
+
+async function syncSupabaseSession(body) {
+  const accessToken = String(body.accessToken || '')
+  if (!accessToken) throw apiError(400, 'BAD_REQUEST', 'accessToken is required.')
+  const authUser = await getSupabaseUser(accessToken)
+  const provider = authUser.app_metadata?.provider || 'email'
+  const user = await upsertAuthUser(authUser, provider)
+  return { user, auth: { accessToken }, mode: 'supabase' }
+}
+
+function googleAuthUrl(redirectTo) {
+  if (!isSupabaseConfigured()) throw apiError(503, 'AUTH_NOT_CONFIGURED', 'Supabase Auth is not configured.')
+  const target = redirectTo || `${APP_PUBLIC_URL || ''}/`
+  const params = new URLSearchParams({
+    provider: 'google',
+    redirect_to: target
+  })
+  return `${SUPABASE_URL}/auth/v1/authorize?${params.toString()}`
 }
 
 async function expireOldHolds() {
@@ -452,6 +583,86 @@ async function confirmMockPayment(body) {
   return serializeBooking(row.rows[0])
 }
 
+async function confirmPaidBooking(bookingId, provider, transactionId, note) {
+  const existing = await query('SELECT * FROM bookings WHERE id = $1', [bookingId])
+  const booking = existing.rows[0]
+  if (!booking) throw apiError(404, 'NOT_FOUND', 'Booking not found.')
+  if (booking.status === 'CONFIRMED') return serializeBooking(booking)
+  if (booking.status !== 'PENDING_PAYMENT') throw apiError(400, 'BAD_REQUEST', 'Only pending bookings can be paid.')
+  if (new Date(booking.payment_expires_at) < new Date()) throw apiError(400, 'BAD_REQUEST', 'Payment hold has expired.')
+
+  await withTransaction(async (client) => {
+    await client.query('UPDATE payments SET provider = $1, status = $2, transaction_id = $3, updated_at = now() WHERE booking_id = $4 AND status = $5',
+      [provider, 'PAID', transactionId, bookingId, 'REQUIRES_PAYMENT'])
+    await client.query("UPDATE bookings SET status = 'CONFIRMED', updated_at = now() WHERE id = $1", [bookingId])
+    await client.query('INSERT INTO booking_status_history (id, booking_id, from_status, to_status, note) VALUES ($1, $2, $3, $4, $5)',
+      [randomId('hist'), bookingId, 'PENDING_PAYMENT', 'CONFIRMED', note])
+  })
+  const row = await query('SELECT * FROM bookings WHERE id = $1', [bookingId])
+  return serializeBooking(row.rows[0])
+}
+
+async function stripeRequest(path, options = {}) {
+  if (!isStripeConfigured()) throw apiError(503, 'STRIPE_NOT_CONFIGURED', 'Stripe is not configured.')
+  const response = await fetch(`https://api.stripe.com/v1${path}`, {
+    ...options,
+    headers: {
+      authorization: `Bearer ${STRIPE_SECRET_KEY}`,
+      ...(options.headers || {})
+    }
+  })
+  const data = await response.json().catch(() => ({}))
+  if (!response.ok) throw apiError(response.status, data.error?.code || 'STRIPE_ERROR', data.error?.message || 'Stripe request failed.')
+  return data
+}
+
+async function createStripeCheckout(body, req) {
+  await expireOldHolds()
+  const bookingId = body.bookingId
+  if (!bookingId) throw apiError(400, 'BAD_REQUEST', 'bookingId is required.')
+  if (!isStripeConfigured()) {
+    return { provider: 'mock', booking: await confirmMockPayment({ bookingId }) }
+  }
+  const row = await query('SELECT * FROM bookings WHERE id = $1', [bookingId])
+  const booking = row.rows[0]
+  if (!booking) throw apiError(404, 'NOT_FOUND', 'Booking not found.')
+  if (booking.status !== 'PENDING_PAYMENT') throw apiError(400, 'BAD_REQUEST', 'Only pending bookings can be paid.')
+  const service = await getService(booking.service_id)
+  const origin = APP_PUBLIC_URL || `${req.headers['x-forwarded-proto'] || 'https'}://${req.headers.host}`
+  const params = new URLSearchParams()
+  params.set('mode', 'payment')
+  params.set('client_reference_id', bookingId)
+  params.set('success_url', `${origin}/?payment=success&session_id={CHECKOUT_SESSION_ID}`)
+  params.set('cancel_url', `${origin}/?payment=cancelled&booking_id=${encodeURIComponent(bookingId)}`)
+  params.set('line_items[0][quantity]', '1')
+  params.set('line_items[0][price_data][currency]', 'cad')
+  params.set('line_items[0][price_data][unit_amount]', String(booking.deposit_cents))
+  params.set('line_items[0][price_data][product_data][name]', `${service?.name_en || 'Lucky Luxe'} deposit`)
+  params.set('line_items[0][price_data][product_data][description]', `Booking ${booking.public_code}`)
+  params.set('metadata[bookingId]', bookingId)
+  params.set('metadata[publicCode]', booking.public_code)
+  const session = await stripeRequest('/checkout/sessions', {
+    method: 'POST',
+    headers: { 'content-type': 'application/x-www-form-urlencoded' },
+    body: params
+  })
+  await query('UPDATE payments SET provider = $1, transaction_id = $2, updated_at = now() WHERE booking_id = $3 AND status = $4',
+    ['STRIPE', session.id, bookingId, 'REQUIRES_PAYMENT'])
+  return { provider: 'stripe', checkoutUrl: session.url, sessionId: session.id, bookingId }
+}
+
+async function confirmStripeSession(body) {
+  const sessionId = String(body.sessionId || '')
+  if (!sessionId) throw apiError(400, 'BAD_REQUEST', 'sessionId is required.')
+  const session = await stripeRequest(`/checkout/sessions/${encodeURIComponent(sessionId)}`, { method: 'GET' })
+  if (session.payment_status !== 'paid') throw apiError(400, 'PAYMENT_NOT_PAID', 'Stripe session is not paid yet.')
+  const bookingId = session.metadata?.bookingId || session.client_reference_id
+  return {
+    booking: await confirmPaidBooking(bookingId, 'STRIPE', session.payment_intent || session.id, 'Stripe deposit payment confirmed.'),
+    sessionId: session.id
+  }
+}
+
 async function cancelBooking(id, body) {
   const existing = await query('SELECT * FROM bookings WHERE id = $1', [id])
   const booking = existing.rows[0]
@@ -487,9 +698,18 @@ async function route(req, res) {
   if (req.method === 'GET' && path.startsWith('/web/')) return serveFile(res, webRoot, path.replace('/web/', ''))
   if (req.method === 'GET' && path.startsWith('/assets/')) return serveFile(res, assetRoot, path.replace('/assets/', ''))
 
-  if (req.method === 'GET' && path === '/health') return json(res, 200, { ok: true, service: 'lucky-luxe-api-supabase', db: 'supabase-postgres', time: iso(new Date()) })
-  if (req.method === 'POST' && path === '/auth/email/register') return json(res, 201, { user: await registerEmailUser(await readBody(req)) })
+  if (req.method === 'GET' && path === '/health') return json(res, 200, { ok: true, service: 'lucky-luxe-api-supabase', db: 'supabase-postgres', auth: isSupabaseConfigured() ? 'supabase' : 'demo', stripe: isStripeConfigured() ? 'configured' : 'mock', time: iso(new Date()) })
+  if (req.method === 'GET' && path === '/auth/config') return json(res, 200, { supabaseAuth: isSupabaseConfigured(), googleAuth: isSupabaseConfigured(), stripe: isStripeConfigured() })
+  if (req.method === 'GET' && path === '/auth/google/start') return json(res, 200, { url: googleAuthUrl(queryParams.redirectTo) })
+  if (req.method === 'POST' && path === '/auth/session') return json(res, 200, await syncSupabaseSession(await readBody(req)))
+  if (req.method === 'POST' && path === '/auth/email/register') return json(res, 201, await signUpEmailUser(await readBody(req)))
+  if (req.method === 'POST' && path === '/auth/email/login') return json(res, 200, await signInEmailUser(await readBody(req)))
   if (req.method === 'POST' && path === '/auth/google/demo') return json(res, 201, { user: await registerGoogleDemoUser(await readBody(req)) })
+  if (req.method === 'POST' && path === '/admin/auth/login') {
+    const auth = await signInEmailUser(await readBody(req))
+    if (!OWNER_EMAILS.includes(String(auth.user.email || '').toLowerCase())) throw apiError(403, 'FORBIDDEN', 'This account is not allowed to access owner admin.')
+    return json(res, 200, auth)
+  }
   if (req.method === 'GET' && path.startsWith('/users/')) {
     const user = await query('SELECT * FROM users WHERE id = $1', [path.split('/')[2]])
     if (!user.rows[0]) throw apiError(404, 'NOT_FOUND', 'User not found.')
@@ -532,6 +752,8 @@ async function route(req, res) {
   }
   if (req.method === 'POST' && path === '/bookings') return json(res, 201, { booking: await createBooking(await readBody(req)) })
   if (req.method === 'POST' && path === '/payments/mock/confirm') return json(res, 200, { booking: await confirmMockPayment(await readBody(req)) })
+  if (req.method === 'POST' && path === '/payments/stripe/create-checkout') return json(res, 200, await createStripeCheckout(await readBody(req), req))
+  if (req.method === 'POST' && path === '/payments/stripe/confirm-session') return json(res, 200, await confirmStripeSession(await readBody(req)))
   if (req.method === 'GET' && path.startsWith('/bookings/')) {
     const id = path.split('/')[2]
     const booking = await query('SELECT * FROM bookings WHERE id = $1', [id])
@@ -541,7 +763,7 @@ async function route(req, res) {
   if (req.method === 'POST' && path.startsWith('/bookings/') && path.endsWith('/cancel')) {
     return json(res, 200, await cancelBooking(path.split('/')[2], await readBody(req)))
   }
-  if (path.startsWith('/admin/')) requireOwner(req)
+  if (path.startsWith('/admin/')) await requireOwner(req)
   if (req.method === 'GET' && path === '/admin/bookings') {
     const rows = await query('SELECT * FROM bookings ORDER BY appointment_start DESC')
     return json(res, 200, { bookings: await Promise.all(rows.rows.map((booking) => serializeBooking(booking))) })
@@ -603,6 +825,7 @@ async function route(req, res) {
 }
 
 await pool.query('SELECT 1')
+await pool.query('ALTER TABLE users ADD COLUMN IF NOT EXISTS supabase_auth_id text UNIQUE')
 
 createServer((req, res) => {
   route(req, res).catch((error) => {

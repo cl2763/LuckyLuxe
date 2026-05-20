@@ -3,9 +3,11 @@ const storeId = 'store-ontario-01'
 const copy = {
   zh: {
     registerTitle: '创建 Lucky Luxe 账号',
-    registerText: '网页版需要账号后才能预约，演示版支持邮箱注册和 Google 注册入口。',
-    emailRegister: '邮箱注册',
-    googleRegister: '使用 Google 注册',
+    registerText: '网页版需要账号后才能预约，支持邮箱登录和 Google 登录。',
+    emailRegister: '创建账号',
+    emailLogin: '邮箱登录',
+    password: '密码',
+    googleRegister: '使用 Google 登录',
     enter: '进入',
     home: '首页',
     services: '服务',
@@ -43,7 +45,7 @@ const copy = {
     pendingCheckout: '待结算',
     selectedDeposit: '已选定金',
     confirmOrder: '确认订单',
-    mockPay: '演示版 Mock 支付',
+    mockPay: 'Stripe 测试支付 / Mock 备用',
     discount: '优惠与储值',
     coupon: '新人券',
     balance: '储值余额',
@@ -85,13 +87,17 @@ const copy = {
     noSlots: '当天暂无可预约时间',
     created: '已加入购物车',
     paidDone: '定金已支付，预约已确认',
-    needLogin: '请先完成注册/登录'
+    needLogin: '请先完成注册/登录',
+    confirmEmail: '请检查邮箱完成验证，然后再登录。',
+    paymentRedirect: '正在跳转到 Stripe 测试支付...'
   },
   en: {
     registerTitle: 'Create your Lucky Luxe account',
-    registerText: 'The web app requires an account before booking. This demo supports email and Google registration.',
-    emailRegister: 'Email Register',
-    googleRegister: 'Register with Google',
+    registerText: 'The web app requires an account before booking. Email and Google sign-in are supported.',
+    emailRegister: 'Create Account',
+    emailLogin: 'Email Login',
+    password: 'Password',
+    googleRegister: 'Continue with Google',
     enter: 'Enter',
     home: 'Home',
     services: 'Services',
@@ -129,7 +135,7 @@ const copy = {
     pendingCheckout: 'Pending checkout',
     selectedDeposit: 'Selected deposit',
     confirmOrder: 'Confirm Order',
-    mockPay: 'Mock payment demo',
+    mockPay: 'Stripe test payment / mock fallback',
     discount: 'Discount & Balance',
     coupon: 'New member coupon',
     balance: 'Stored balance',
@@ -171,13 +177,16 @@ const copy = {
     noSlots: 'No available times',
     created: 'Added to cart',
     paidDone: 'Deposit paid. Booking confirmed.',
-    needLogin: 'Please register or sign in first'
+    needLogin: 'Please register or sign in first',
+    confirmEmail: 'Please verify your email, then sign in.',
+    paymentRedirect: 'Redirecting to Stripe test payment...'
   }
 }
 
 const state = {
   lang: localStorage.getItem('lucky-web-lang') || 'zh',
   user: readJson('lucky-web-user'),
+  auth: readJson('lucky-web-auth'),
   view: 'home',
   type: 'nail',
   category: 'all',
@@ -248,7 +257,11 @@ function toast(message) {
 
 async function request(path, options = {}) {
   const response = await fetch(path, {
-    headers: { 'content-type': 'application/json', ...(options.headers || {}) },
+    headers: {
+      'content-type': 'application/json',
+      ...(state.auth?.accessToken ? { authorization: `Bearer ${state.auth.accessToken}` } : {}),
+      ...(options.headers || {})
+    },
     ...options
   })
   const data = await response.json()
@@ -286,8 +299,40 @@ function recommended(type) {
 async function bootstrap() {
   bindGlobalEvents()
   await Promise.all([loadServices(), loadStores(), loadAddOns()])
+  await handleAuthRedirect()
+  await handleStripeReturn()
   if (state.user) showApp()
   else renderAuth()
+}
+
+async function handleAuthRedirect() {
+  const hash = new URLSearchParams(window.location.hash.replace(/^#/, ''))
+  const accessToken = hash.get('access_token')
+  if (!accessToken) return
+  const data = await request('/auth/session', {
+    method: 'POST',
+    body: JSON.stringify({ accessToken })
+  })
+  state.user = data.user
+  state.auth = data.auth
+  writeJson('lucky-web-user', state.user)
+  writeJson('lucky-web-auth', state.auth)
+  history.replaceState(null, '', window.location.pathname)
+}
+
+async function handleStripeReturn() {
+  const params = new URLSearchParams(window.location.search)
+  if (params.get('payment') !== 'success' || !params.get('session_id')) return
+  const data = await request('/payments/stripe/confirm-session', {
+    method: 'POST',
+    body: JSON.stringify({ sessionId: params.get('session_id') })
+  })
+  state.orders = [data.booking, ...state.orders.filter((order) => order.id !== data.booking.id)]
+  writeJson('lucky-web-orders', state.orders)
+  localStorage.removeItem('lucky-web-pending-checkout')
+  toast(t('paidDone'))
+  state.view = 'me'
+  history.replaceState(null, '', window.location.pathname)
 }
 
 async function loadServices() {
@@ -353,7 +398,12 @@ function renderAuth() {
           <span>Email</span>
           <input name="email" type="email" value="member@luckyluxe.demo">
         </label>
-        <button class="primary full" type="submit">${t('emailRegister')}</button>
+        <label>
+          <span>${t('password')}</span>
+          <input name="password" type="password" value="" minlength="6" autocomplete="current-password">
+        </label>
+        <button class="primary full" data-auth-action="register" type="submit">${t('emailRegister')}</button>
+        <button class="ghost full" data-auth-action="login" type="submit">${t('emailLogin')}</button>
       </form>
       <button class="google-btn" id="googleRegister" type="button">
         <span>G</span>
@@ -369,29 +419,29 @@ function renderAuth() {
 async function registerEmail(event) {
   event.preventDefault()
   const form = new FormData(event.target)
-  const data = await request('/auth/email/register', {
+  const action = event.submitter?.dataset.authAction || 'register'
+  const data = await request(action === 'login' ? '/auth/email/login' : '/auth/email/register', {
     method: 'POST',
     body: JSON.stringify({
       displayName: form.get('displayName'),
-      email: form.get('email')
+      email: form.get('email'),
+      password: form.get('password')
     })
   })
+  if (data.needsEmailConfirmation) {
+    toast(t('confirmEmail'))
+    return
+  }
   state.user = data.user
+  state.auth = data.auth
   writeJson('lucky-web-user', state.user)
+  writeJson('lucky-web-auth', state.auth)
   showApp()
 }
 
 async function registerGoogle() {
-  const data = await request('/auth/google/demo', {
-    method: 'POST',
-    body: JSON.stringify({
-      displayName: 'Google Member',
-      email: 'google.member@luckyluxe.demo'
-    })
-  })
-  state.user = data.user
-  writeJson('lucky-web-user', state.user)
-  showApp()
+  const data = await request(`/auth/google/start?redirectTo=${encodeURIComponent(window.location.origin + window.location.pathname)}`)
+  window.location.href = data.url
 }
 
 function showApp() {
@@ -756,11 +806,17 @@ async function submitPayment() {
         notes: item.remark
       })
     })
-    const paid = await request('/payments/mock/confirm', {
+    const checkout = await request('/payments/stripe/create-checkout', {
       method: 'POST',
       body: JSON.stringify({ bookingId: bookingData.booking.id })
     })
-    completed.push(paid.booking)
+    if (checkout.checkoutUrl) {
+      writeJson('lucky-web-pending-checkout', { bookingId: bookingData.booking.id, cartItemId: item.id })
+      toast(t('paymentRedirect'))
+      window.location.href = checkout.checkoutUrl
+      return
+    }
+    completed.push(checkout.booking)
   }
   const selectedIds = new Set(selected.map((item) => item.id))
   state.cart = state.cart.filter((item) => !selectedIds.has(item.id))
@@ -1091,7 +1147,9 @@ async function handleScreenClick(event) {
   }
   if (event.target.closest('[data-logout]')) {
     state.user = null
+    state.auth = null
     localStorage.removeItem('lucky-web-user')
+    localStorage.removeItem('lucky-web-auth')
     renderAuth()
   }
 }

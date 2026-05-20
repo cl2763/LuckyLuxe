@@ -50,7 +50,8 @@ const results = {}
 results.health = await get('/health')
 results.emailAuth = await post('/auth/email/register', {
   displayName: 'E2E Member',
-  email: `e2e-${stamp}@luckyluxe.demo`
+  email: `e2e-${stamp}@luckyluxe.demo`,
+  password: `Lucky${stamp}!`
 })
 results.googleAuth = await post('/auth/google/demo', {
   displayName: 'Google E2E',
