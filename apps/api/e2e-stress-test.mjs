@@ -1,4 +1,4 @@
-const base = 'http://127.0.0.1:4000'
+const base = process.env.API_BASE || 'http://127.0.0.1:4000'
 
 async function post(path, body) {
   const response = await fetch(base + path, {

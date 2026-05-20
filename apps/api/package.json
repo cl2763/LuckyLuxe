@@ -5,7 +5,10 @@
   "description": "Local backend API for Lucky Luxe mini program and future web app.",
   "scripts": {
     "dev": "tsx watch src/main.ts",
+    "dev:local": "node local-server.mjs",
+    "dev:supabase": "node supabase-server.mjs",
     "start": "tsx src/main.ts",
+    "start:supabase": "node supabase-server.mjs",
     "build": "tsc --noEmit",
     "db:generate": "prisma generate",
     "db:push": "prisma db push",
@@ -15,8 +18,9 @@
   "dependencies": {
     "@prisma/client": "^5.22.0",
     "cors": "^2.8.5",
-    "dotenv": "^16.4.7",
+    "dotenv": "^16.6.1",
     "express": "^5.1.0",
+    "pg": "^8.21.0",
     "zod": "^3.24.1"
   },
   "devDependencies": {
