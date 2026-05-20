@@ -13,6 +13,7 @@ const workspaceRoot = join(__dirname, '..', '..')
 const webRoot = join(workspaceRoot, 'apps', 'web')
 const assetRoot = join(workspaceRoot, 'miniprogram', 'assets')
 const PORT = Number(process.env.PORT || 4000)
+const HOST = process.env.HOST || '0.0.0.0'
 const OWNER_TOKEN = process.env.OWNER_DEMO_TOKEN || 'owner-demo-token'
 const HOLD_MINUTES = Number(process.env.BOOKING_HOLD_MINUTES || 15)
 const SLOT_MINUTES = 30
@@ -614,7 +615,7 @@ createServer((req, res) => {
       }
     })
   })
-}).listen(PORT, '127.0.0.1', () => {
-  console.log(`Lucky Luxe Supabase API running at http://localhost:${PORT}`)
+}).listen(PORT, HOST, () => {
+  console.log(`Lucky Luxe Supabase API running at http://${HOST}:${PORT}`)
   console.log(`Owner API token: ${OWNER_TOKEN}`)
 })
