@@ -40,7 +40,7 @@ function openBusinessDates(count, startOffsetDays) {
 }
 
 const stamp = Date.now()
-const testDates = openBusinessDates(8, 90)
+const testDates = openBusinessDates(8, 180 + Math.floor(Math.random() * 5000))
 const availabilityDate = testDates[0]
 const singleDate = testDates[1]
 const conflictDate = testDates[2]

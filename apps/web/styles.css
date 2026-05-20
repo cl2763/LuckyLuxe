@@ -1346,7 +1346,7 @@ textarea:focus {
 
 .order-entry {
   display: grid;
-  grid-template-columns: repeat(2, 1fr);
+  grid-template-columns: repeat(4, 1fr);
   gap: 10px;
   padding: 12px;
 }
@@ -1380,6 +1380,11 @@ textarea:focus {
   grid-template-columns: 124px 1fr;
   gap: 14px;
   padding: 12px;
+  width: 100%;
+  border: 1px solid var(--line);
+  background: #fff;
+  color: inherit;
+  text-align: left;
 }
 
 .recent-card-web img {
@@ -1424,6 +1429,197 @@ textarea:focus {
 
 .logout-btn {
   margin-top: 18px;
+}
+
+.section-note-btn {
+  border: 0;
+  background: transparent;
+  color: var(--muted);
+  font-weight: 800;
+}
+
+.web-member-extra {
+  display: flex;
+  justify-content: space-between;
+  gap: 12px;
+  margin-top: 18px;
+  color: #ead7c7;
+  font-weight: 750;
+}
+
+.order-tabs-web {
+  display: flex;
+  gap: 8px;
+  overflow-x: auto;
+  padding-bottom: 8px;
+}
+
+.order-tabs-web button {
+  min-height: 42px;
+  border: 1px solid var(--line);
+  border-radius: 999px;
+  background: #fff;
+  color: var(--muted);
+  padding: 8px 14px;
+  font-weight: 800;
+  white-space: nowrap;
+}
+
+.order-tabs-web button.active {
+  background: var(--black);
+  border-color: var(--black);
+  color: #fff;
+}
+
+.order-list-web,
+.assets-web-page,
+.orders-web-page,
+.order-detail-web,
+.store-web-page,
+.placeholder-web {
+  display: grid;
+  gap: 14px;
+}
+
+.order-card-web {
+  width: 100%;
+  border: 1px solid var(--line);
+  background: #fff;
+  padding: 14px;
+  color: inherit;
+  text-align: left;
+}
+
+.order-head-web,
+.info-card-web p {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 14px;
+}
+
+.order-head-web span {
+  color: var(--accent-dark);
+  font-weight: 850;
+}
+
+.order-body-web {
+  display: grid;
+  grid-template-columns: 118px 1fr;
+  gap: 14px;
+  margin-top: 12px;
+}
+
+.order-body-web img,
+.detail-card-web img,
+.store-hero-web,
+.placeholder-card img {
+  width: 100%;
+  object-fit: cover;
+  border-radius: 8px;
+  background: var(--soft);
+}
+
+.order-body-web img {
+  height: 104px;
+}
+
+.order-body-web p,
+.info-card-web p,
+.store-info-web p,
+.placeholder-card p {
+  margin: 0;
+  color: var(--muted);
+  font-weight: 750;
+}
+
+.order-body-web p + p,
+.info-card-web p + p,
+.store-info-web p + p {
+  margin-top: 8px;
+}
+
+.detail-card-web,
+.info-card-web,
+.store-info-web,
+.placeholder-card {
+  padding: 16px;
+}
+
+.detail-card-web h1,
+.store-info-web h1,
+.placeholder-card h1 {
+  margin: 8px 0;
+}
+
+.detail-card-web img {
+  height: 260px;
+  margin-top: 12px;
+}
+
+.info-card-web strong {
+  text-align: right;
+}
+
+.asset-card-web {
+  border-radius: 8px;
+  padding: 18px;
+}
+
+.asset-card-web.dark {
+  display: flex;
+  align-items: end;
+  justify-content: space-between;
+  min-height: 128px;
+  background: var(--black);
+  color: #f2dfcf;
+}
+
+.asset-card-web span,
+.asset-card-web small,
+.gift-card-web span {
+  color: var(--muted);
+  font-weight: 750;
+}
+
+.asset-card-web.dark span {
+  color: #ead7c7;
+}
+
+.asset-card-web strong {
+  display: block;
+  margin-top: 6px;
+  font-size: 30px;
+}
+
+.asset-grid-web {
+  display: grid;
+  grid-template-columns: repeat(2, 1fr);
+  gap: 12px;
+}
+
+.asset-grid-web button,
+.gift-card-web {
+  width: 100%;
+  border: 1px solid var(--line);
+  background: #fff;
+  color: inherit;
+  text-align: left;
+}
+
+.gift-card-web {
+  display: grid;
+  gap: 6px;
+  padding: 18px;
+}
+
+.store-hero-web {
+  height: 280px;
+}
+
+.placeholder-card img {
+  height: 220px;
+  margin-bottom: 12px;
 }
 
 @media (max-width: 920px) {
@@ -1506,6 +1702,9 @@ textarea:focus {
   .store-card-wide,
   .cart-card-web,
   .checkout-item-web,
+  .order-entry,
+  .asset-grid-web,
+  .order-body-web,
   .recent-card-web {
     grid-template-columns: 1fr;
   }

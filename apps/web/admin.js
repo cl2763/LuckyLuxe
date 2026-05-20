@@ -46,6 +46,10 @@ function money(cents) {
   return `CAD $${Number(cents / 100).toFixed(0)}`
 }
 
+function cents(value) {
+  return Number(value / 100).toFixed(0)
+}
+
 function toast(message) {
   els.toast.textContent = message
   els.toast.classList.add('show')
@@ -103,18 +107,18 @@ function renderMetrics() {
   const pending = owner.bookings.filter((item) => item.status === 'PENDING_PAYMENT').length
   const revenue = owner.bookings
     .filter((item) => ['CONFIRMED', 'COMPLETED'].includes(item.status))
-    .reduce((total, item) => total + item.depositCents, 0)
+    .reduce((total, item) => total + (item.status === 'COMPLETED' ? item.servicePriceCents : item.depositCents), 0)
   els.metricGrid.innerHTML = `
     <div class="metric"><span class="subtle">Confirmed</span><strong>${confirmed}</strong></div>
     <div class="metric"><span class="subtle">Pending</span><strong>${pending}</strong></div>
-    <div class="metric"><span class="subtle">Deposit Revenue</span><strong>${money(revenue)}</strong></div>
+    <div class="metric"><span class="subtle">Revenue</span><strong>${money(revenue)}</strong></div>
     <div class="metric"><span class="subtle">Services</span><strong>${owner.services.length}</strong></div>
   `
 }
 
 function renderBookings() {
   els.adminTabs.forEach((tab) => tab.classList.toggle('active', tab.dataset.adminView === owner.adminView))
-  els.bookingFilters.classList.toggle('hidden', owner.adminView === 'calendar')
+  els.bookingFilters.classList.toggle('hidden', owner.adminView === 'today')
   els.calendarControls.classList.toggle('hidden', owner.adminView !== 'calendar')
 
   if (owner.adminView === 'calendar') {
@@ -212,8 +216,14 @@ function renderCalendar() {
 function renderCalendarCell(date) {
   if (!date) return '<div class="calendar-cell muted-cell"></div>'
   const key = formatDate(date)
+  const status = els.filterStatus.value
   const dayBookings = owner.bookings
-    .filter((booking) => booking.appointmentDate === key && activeStatuses().includes(booking.status))
+    .filter((booking) => booking.appointmentDate === key)
+    .filter((booking) => {
+      if (status === 'all') return true
+      if (status === 'active') return activeStatuses().includes(booking.status)
+      return booking.status === status
+    })
     .sort((a, b) => a.appointmentTime.localeCompare(b.appointmentTime))
   return `
     <button class="calendar-cell ${key === formatDate(new Date()) ? 'today-cell' : ''}" data-calendar-date="${key}" type="button">
@@ -236,8 +246,8 @@ function renderServices() {
         <p>${service.nameEn} · ${service.type} · ${money(service.priceCents)} · ${service.durationMin} min</p>
         <div class="inline-edit">
           <label>
-            <span>Price cents</span>
-            <input value="${service.priceCents}" data-price="${service.id}">
+            <span>Price CAD</span>
+            <input value="${cents(service.priceCents)}" data-price="${service.id}" inputmode="decimal">
           </label>
           <label>
             <span>Duration min</span>
@@ -267,7 +277,7 @@ async function updateBookingStatus(id, status) {
 }
 
 async function saveService(id) {
-  const price = Number(document.querySelector(`[data-price="${id}"]`).value)
+  const price = Math.round(Number(document.querySelector(`[data-price="${id}"]`).value) * 100)
   const duration = Number(document.querySelector(`[data-duration="${id}"]`).value)
   await request(`/admin/services/${id}`, {
     method: 'PATCH',
@@ -301,11 +311,18 @@ els.adminTabs.forEach((tab) => {
     } else if (owner.adminView === 'all') {
       els.filterDate.value = ''
       els.filterStatus.value = 'active'
+    } else if (owner.adminView === 'calendar' && els.filterDate.value) {
+      owner.calendarDate = new Date(`${els.filterDate.value}T12:00:00`)
     }
     renderBookings()
   })
 })
-els.filterDate.addEventListener('change', renderBookings)
+els.filterDate.addEventListener('change', () => {
+  if (owner.adminView === 'calendar' && els.filterDate.value) {
+    owner.calendarDate = new Date(`${els.filterDate.value}T12:00:00`)
+  }
+  renderBookings()
+})
 els.filterStatus.addEventListener('change', renderBookings)
 els.clearFilters.addEventListener('click', () => {
   els.filterDate.value = ''

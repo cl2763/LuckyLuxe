@@ -59,6 +59,27 @@ const copy = {
     functions: '常用功能',
     assets: '我的资产',
     settings: '设置',
+    giftCard: '礼品卡',
+    pointsMall: '积分商城',
+    completed: '已完成',
+    cancelled: '已取消',
+    afterSales: '售后',
+    all: '全部',
+    orderNo: '订单号',
+    bookingInfo: '预约信息',
+    payment: '支付信息',
+    arrival: '到店时间',
+    duration: '服务时长',
+    technician: '服务人员',
+    address: '地址',
+    none: '无',
+    paidDeposit: '实付定金',
+    finalDue: '到店尾款',
+    totalSpent: '累计消费',
+    visits: '到店次数',
+    times: '次',
+    comingSoon: '占位功能',
+    back: '返回',
     logout: '退出登录',
     completeFlow: '完整预约流程',
     noSlots: '当天暂无可预约时间',
@@ -124,6 +145,27 @@ const copy = {
     functions: 'Common Tools',
     assets: 'My Assets',
     settings: 'Settings',
+    giftCard: 'Gift Card',
+    pointsMall: 'Points Mall',
+    completed: 'Completed',
+    cancelled: 'Cancelled',
+    afterSales: 'After-sales',
+    all: 'All',
+    orderNo: 'Order No.',
+    bookingInfo: 'Booking Info',
+    payment: 'Payment',
+    arrival: 'Arrival',
+    duration: 'Duration',
+    technician: 'Technician',
+    address: 'Address',
+    none: 'None',
+    paidDeposit: 'Paid Deposit',
+    finalDue: 'Final Due',
+    totalSpent: 'Total Spent',
+    visits: 'Visits',
+    times: 'times',
+    comingSoon: 'Placeholder',
+    back: 'Back',
     logout: 'Log out',
     completeFlow: 'Full booking flow',
     noSlots: 'No available times',
@@ -151,7 +193,9 @@ const state = {
   selectedAddOns: new Set(),
   remark: '',
   cart: readJson('lucky-web-cart') || [],
-  orders: readJson('lucky-web-orders') || []
+  orders: readJson('lucky-web-orders') || [],
+  orderFilter: 'all',
+  selectedOrderId: ''
 }
 
 const els = {
@@ -369,6 +413,14 @@ function render() {
   if (state.view === 'cart') renderCart()
   if (state.view === 'checkout') renderCheckout()
   if (state.view === 'me') renderMe()
+  if (state.view === 'orders') renderOrdersWeb()
+  if (state.view === 'orderDetail') renderOrderDetailWeb()
+  if (state.view === 'assets') renderAssetsWeb()
+  if (state.view === 'store') renderStoreWeb()
+  if (state.view === 'coupons') renderPlaceholderWeb(t('coupons'), state.lang === 'zh' ? '优惠券列表和使用规则将在真实会员系统接入后同步。' : 'Coupon list and rules will sync after the real member system is connected.')
+  if (state.view === 'giftCard') renderPlaceholderWeb(t('giftCard'), state.lang === 'zh' ? '礼品卡售卖与兑换功能保留为下一阶段。' : 'Gift card purchase and redemption is reserved for the next phase.')
+  if (state.view === 'pointsMall') renderPlaceholderWeb(t('pointsMall'), state.lang === 'zh' ? '积分商城规则目前使用占位，后续可按会员规则兑换。' : 'The points mall currently uses placeholder rules.')
+  if (state.view === 'settings') renderPlaceholderWeb(t('settings'), state.lang === 'zh' ? '语言、通知、账号安全等设置将在真实登录后接入。' : 'Language, notifications, and account security settings will connect after real auth.')
 }
 
 function renderHome() {
@@ -724,7 +776,9 @@ function renderMe() {
   const user = state.user
   const counts = {
     pending: state.orders.filter((item) => item.status === 'CONFIRMED').length,
-    completed: state.orders.filter((item) => item.status === 'COMPLETED').length
+    completed: state.orders.filter((item) => item.status === 'COMPLETED').length,
+    cancelled: state.orders.filter((item) => item.status === 'CANCELLED').length,
+    afterSales: 0
   }
   els.screen.innerHTML = `
     <section class="me-web">
@@ -742,26 +796,32 @@ function renderMe() {
           <div><strong>${user.couponCount}</strong><span>${t('coupons')}</span></div>
           <div><strong>${money(user.balanceCents)}</strong><span>${t('balance')}</span></div>
         </div>
+        <div class="member-extra web-member-extra">
+          <div>${t('totalSpent')} ${money(user.totalSpentCents || 0)}</div>
+          <div>${t('visits')} ${user.visits || 0} ${t('times')}</div>
+        </div>
       </div>
       <section class="section">
-        <div class="section-row"><h2>${t('orders')}</h2><span class="subtle">All</span></div>
+        <div class="section-row"><h2>${t('orders')}</h2><button class="section-note-btn" data-order-filter="all" type="button">${t('all')}</button></div>
         <div class="order-entry card">
-          <button type="button"><strong>${counts.pending}</strong><span>${t('paid')}</span></button>
-          <button type="button"><strong>${counts.completed}</strong><span>Completed</span></button>
+          <button data-order-filter="CONFIRMED" type="button"><strong>${counts.pending}</strong><span>${t('paid')}</span></button>
+          <button data-order-filter="COMPLETED" type="button"><strong>${counts.completed}</strong><span>${t('completed')}</span></button>
+          <button data-order-filter="CANCELLED" type="button"><strong>${counts.cancelled}</strong><span>${t('cancelled')}</span></button>
+          <button data-order-filter="AFTER_SALES" type="button"><strong>${counts.afterSales}</strong><span>${t('afterSales')}</span></button>
         </div>
       </section>
       <section class="section">
         <div class="section-row"><h2>${t('recent')}</h2><span class="subtle">Records</span></div>
         <div class="recent-list-web">
           ${state.orders.length ? state.orders.map((order) => `
-            <article class="recent-card-web card">
+            <button class="recent-card-web card" data-order-id="${order.id}" type="button">
               <img src="${order.service.imageUrl}" alt="${order.service.name}">
               <div>
-                <div class="recent-top"><strong>${order.service.name}</strong><span>${t('paid')}</span></div>
+                <div class="recent-top"><strong>${order.service.name}</strong><span>${statusLabel(order.status)}</span></div>
                 <p>${order.appointmentDate} ${order.appointmentTime} · ${order.technician.name}</p>
-                <p>${t('deposit')} ${money(order.depositCents)}</p>
+                <p>${t('paidDeposit')} ${money(order.depositCents)}</p>
               </div>
-            </article>
+            </button>
           `).join('') : `<div class="empty-state">${state.lang === 'zh' ? '暂无消费记录' : 'No records yet'}</div>`}
         </div>
       </section>
@@ -769,11 +829,13 @@ function renderMe() {
         <div class="section-row"><h2>${t('functions')}</h2></div>
         <div class="menu-grid-web">
           ${[
-            [t('assets'), '/assets/images/nail-luxe.png'],
-            [t('store'), '/assets/images/store-cover.png'],
-            [t('coupons'), '/assets/images/nail-french.png'],
-            [t('settings'), '/assets/images/lash-natural.png']
-          ].map(([label, image]) => `<button class="menu-card card" type="button"><img src="${image}" alt="${label}"><strong>${label}</strong><span>Demo</span></button>`).join('')}
+            [t('assets'), '/assets/images/nail-luxe.png', 'assets'],
+            [t('store'), '/assets/images/store-cover.png', 'store'],
+            [t('coupons'), '/assets/images/nail-french.png', 'coupons'],
+            [t('giftCard'), '/assets/images/lash-volume.png', 'giftCard'],
+            [t('pointsMall'), '/assets/images/nail-jp.png', 'pointsMall'],
+            [t('settings'), '/assets/images/lash-natural.png', 'settings']
+          ].map(([label, image, target]) => `<button class="menu-card card" data-me-target="${target}" type="button"><img src="${image}" alt="${label}"><strong>${label}</strong><span>${t('comingSoon')}</span></button>`).join('')}
         </div>
       </section>
       <button class="ghost logout-btn" data-logout type="button">${t('logout')}</button>
@@ -781,7 +843,174 @@ function renderMe() {
   `
 }
 
+function statusLabel(status) {
+  const zh = {
+    all: t('all'),
+    PENDING_PAYMENT: t('pending'),
+    CONFIRMED: t('paid'),
+    COMPLETED: t('completed'),
+    CANCELLED: t('cancelled'),
+    EXPIRED: 'Expired',
+    AFTER_SALES: t('afterSales')
+  }
+  return zh[status] || status
+}
+
+function filteredOrders() {
+  if (state.orderFilter === 'all') return state.orders
+  return state.orders.filter((order) => order.status === state.orderFilter)
+}
+
+function renderOrdersWeb() {
+  const tabs = [
+    ['all', t('all')],
+    ['CONFIRMED', t('paid')],
+    ['COMPLETED', t('completed')],
+    ['CANCELLED', t('cancelled')],
+    ['AFTER_SALES', t('afterSales')]
+  ]
+  const orders = filteredOrders()
+  els.screen.innerHTML = `
+    <section class="orders-web-page">
+      <button class="ghost back-btn" data-view-target="me" type="button">← ${t('me')}</button>
+      <div class="section-row"><h1>${t('orders')}</h1><span class="subtle">${statusLabel(state.orderFilter)}</span></div>
+      <div class="order-tabs-web">
+        ${tabs.map(([key, label]) => `<button class="${state.orderFilter === key ? 'active' : ''}" data-order-filter="${key}" type="button">${label}</button>`).join('')}
+      </div>
+      <div class="order-list-web">
+        ${orders.length ? orders.map((order) => `
+          <button class="order-card-web card" data-order-id="${order.id}" type="button">
+            <div class="order-head-web"><strong>${order.service.name}</strong><span>${statusLabel(order.status)}</span></div>
+            <div class="order-body-web">
+              <img src="${order.service.imageUrl}" alt="${order.service.name}">
+              <div>
+                <p>${order.appointmentDate} ${order.appointmentTime}</p>
+                <p>${order.technician.name} · ${order.store.name}</p>
+                <p class="price">${t('paidDeposit')} ${money(order.depositCents)}</p>
+              </div>
+            </div>
+          </button>
+        `).join('') : `<div class="empty-state tall"><strong>${state.lang === 'zh' ? '暂无订单' : 'No orders yet'}</strong><span>${state.lang === 'zh' ? '预约完成后会在这里看到记录。' : 'Your bookings will appear here.'}</span><button class="primary" data-view-target="services" type="button">${t('chooseService')}</button></div>`}
+      </div>
+    </section>
+  `
+}
+
+function selectedOrder() {
+  return state.orders.find((order) => order.id === state.selectedOrderId)
+}
+
+function renderOrderDetailWeb() {
+  const order = selectedOrder()
+  if (!order) {
+    state.view = 'orders'
+    renderOrdersWeb()
+    return
+  }
+  els.screen.innerHTML = `
+    <section class="order-detail-web">
+      <button class="ghost back-btn" data-view-target="orders" type="button">← ${t('orders')}</button>
+      <div class="detail-card-web card">
+        <span class="status">${statusLabel(order.status)}</span>
+        <h1>${order.service.name}</h1>
+        <p class="subtle">${t('orderNo')} ${order.publicCode}</p>
+        <img src="${order.service.imageUrl}" alt="${order.service.name}">
+      </div>
+      <section class="section">
+        <div class="section-row"><h2>${t('bookingInfo')}</h2></div>
+        <div class="info-card-web card">
+          <p><span>${t('arrival')}</span><strong>${order.appointmentDate} ${order.appointmentTime}</strong></p>
+          <p><span>${t('duration')}</span><strong>${order.totalDurationMin}${t('minutes')}</strong></p>
+          <p><span>${t('technician')}</span><strong>${order.technician.name}</strong></p>
+          <p><span>${t('store')}</span><strong>${order.store.name}</strong></p>
+          <p><span>${t('address')}</span><strong>${order.store.address || 'Address TBD'}</strong></p>
+          <p><span>${t('remark')}</span><strong>${order.notes || t('none')}</strong></p>
+        </div>
+      </section>
+      <section class="section">
+        <div class="section-row"><h2>${t('payment')}</h2></div>
+        <div class="info-card-web card">
+          <p><span>${t('payment')}</span><strong>${statusLabel(order.status)}</strong></p>
+          <p><span>${t('paidDeposit')}</span><strong class="price">${money(order.depositCents)}</strong></p>
+          <p><span>${t('finalDue')}</span><strong>${money(order.finalDueCents)}</strong></p>
+          <p><span>${t('servicePrice')}</span><strong>${money(order.servicePriceCents)}</strong></p>
+        </div>
+      </section>
+    </section>
+  `
+}
+
+function renderAssetsWeb() {
+  const user = state.user
+  els.screen.innerHTML = `
+    <section class="assets-web-page">
+      <button class="ghost back-btn" data-view-target="me" type="button">← ${t('me')}</button>
+      <div class="asset-card-web dark">
+        <div><span>${t('balance')}</span><strong>${money(user.balanceCents || 0)}</strong></div>
+        <span>Stored Card</span>
+      </div>
+      <div class="asset-grid-web">
+        <button class="asset-card-web card" data-me-target="pointsMall" type="button"><span>${t('points')}</span><strong>${user.points}</strong><small>${state.lang === 'zh' ? '积分商城后续接入' : 'Points mall coming later'}</small></button>
+        <button class="asset-card-web card" data-me-target="coupons" type="button"><span>${t('coupons')}</span><strong>${user.couponCount}</strong><small>${state.lang === 'zh' ? '含新人体验券' : 'Includes new member coupon'}</small></button>
+      </div>
+      <section class="section">
+        <div class="section-row"><h2>${t('giftCard')}</h2><span class="subtle">${t('comingSoon')}</span></div>
+        <button class="gift-card-web card" data-me-target="giftCard" type="button"><strong>${state.lang === 'zh' ? '暂无礼品卡' : 'No gift cards yet'}</strong><span>${state.lang === 'zh' ? '真实售卖功能可在下一阶段接入。' : 'Real purchase flow can be added next.'}</span></button>
+      </section>
+    </section>
+  `
+}
+
+function renderStoreWeb() {
+  const store = state.stores[0] || {}
+  els.screen.innerHTML = `
+    <section class="store-web-page">
+      <button class="ghost back-btn" data-view-target="me" type="button">← ${t('me')}</button>
+      <img class="store-hero-web" src="/assets/images/store-cover.png" alt="Lucky Luxe Ontario">
+      <div class="store-info-web card">
+        <h1>${store.name || 'Lucky Luxe Ontario'}</h1>
+        <p>${store.address || 'Address TBD'}</p>
+        <p>${store.phone || 'Phone TBD'}</p>
+        <p>Tuesday-Sunday 10:00-19:00 · Monday closed</p>
+      </div>
+    </section>
+  `
+}
+
+function renderPlaceholderWeb(title, text) {
+  els.screen.innerHTML = `
+    <section class="placeholder-web">
+      <button class="ghost back-btn" data-view-target="me" type="button">← ${t('me')}</button>
+      <div class="placeholder-card card">
+        <img src="/assets/images/store-cover.png" alt="${title}">
+        <h1>${title}</h1>
+        <p>${text}</p>
+      </div>
+    </section>
+  `
+}
+
 async function handleScreenClick(event) {
+  const orderFilter = event.target.closest('[data-order-filter]')
+  if (orderFilter) {
+    state.orderFilter = orderFilter.dataset.orderFilter
+    state.view = 'orders'
+    render()
+    return
+  }
+  const orderButton = event.target.closest('[data-order-id]')
+  if (orderButton) {
+    state.selectedOrderId = orderButton.dataset.orderId
+    state.view = 'orderDetail'
+    render()
+    return
+  }
+  const meTarget = event.target.closest('[data-me-target]')
+  if (meTarget) {
+    state.view = meTarget.dataset.meTarget
+    render()
+    return
+  }
   const serviceButton = event.target.closest('[data-service-id]')
   if (serviceButton) {
     state.service = state.services.find((service) => service.id === serviceButton.dataset.serviceId)
