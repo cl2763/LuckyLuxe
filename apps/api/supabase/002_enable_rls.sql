@@ -1,0 +1,11 @@
+alter table stores enable row level security;
+alter table business_hours enable row level security;
+alter table technicians enable row level security;
+alter table services enable row level security;
+alter table technician_services enable row level security;
+alter table users enable row level security;
+alter table technician_schedules enable row level security;
+alter table bookings enable row level security;
+alter table booking_slots enable row level security;
+alter table payments enable row level security;
+alter table booking_status_history enable row level security;
