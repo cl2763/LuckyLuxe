@@ -840,5 +840,4 @@ createServer((req, res) => {
   })
 }).listen(PORT, HOST, () => {
   console.log(`Lucky Luxe Supabase API running at http://${HOST}:${PORT}`)
-  console.log(`Owner API token: ${OWNER_TOKEN}`)
 })
