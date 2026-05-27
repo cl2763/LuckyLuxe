@@ -100,6 +100,10 @@ async function requireOwner(req) {
   const auth = req.headers.authorization || ''
   if (ALLOW_OWNER_DEMO_TOKEN && OWNER_TOKEN && auth === `Bearer ${OWNER_TOKEN}`) return { provider: 'demo-token' }
   const token = auth.startsWith('Bearer ') ? auth.slice(7) : ''
+  if (!isSupabaseConfigured()) {
+    const email = demoEmailFromToken(token, 'owner')
+    if (email && OWNER_EMAILS.includes(email)) return { provider: 'demo-owner', email }
+  }
   if (!token || !isSupabaseConfigured()) throw apiError(401, 'UNAUTHORIZED', 'Owner login is required.')
   const authUser = await getSupabaseUser(token)
   const email = String(authUser.email || '').toLowerCase()
@@ -112,6 +116,10 @@ async function requireOwner(req) {
 async function requireCustomer(req) {
   const auth = req.headers.authorization || ''
   const token = auth.startsWith('Bearer ') ? auth.slice(7) : ''
+  if (!isSupabaseConfigured()) {
+    const email = demoEmailFromToken(token, 'customer')
+    if (email) return registerEmailUser({ email, displayName: email.split('@')[0] })
+  }
   if (!token || !isSupabaseConfigured()) throw apiError(401, 'UNAUTHORIZED', 'Customer login is required before booking or payment.')
   const authUser = await getSupabaseUser(token)
   const provider = authUser.app_metadata?.provider || 'email'
@@ -280,6 +288,21 @@ function isSupabaseConfigured() {
   return Boolean(SUPABASE_URL && SUPABASE_ANON_KEY)
 }
 
+function demoAuthFor(email, scope = 'customer') {
+  return {
+    accessToken: `demo-${scope}:${encodeURIComponent(email)}`,
+    refreshToken: null,
+    expiresIn: 3600,
+    tokenType: 'bearer'
+  }
+}
+
+function demoEmailFromToken(token, scope = 'customer') {
+  const prefix = `demo-${scope}:`
+  if (!token.startsWith(prefix)) return ''
+  return decodeURIComponent(token.slice(prefix.length)).trim().toLowerCase()
+}
+
 function isStripeConfigured() {
   return Boolean(STRIPE_SECRET_KEY)
 }
@@ -365,7 +388,7 @@ async function signUpEmailUser(body) {
   const password = String(body.password || '')
   const displayName = String(body.displayName || '').trim() || email.split('@')[0] || 'Lucky Member'
   if (!email || !email.includes('@')) throw apiError(400, 'BAD_REQUEST', 'A valid email is required.')
-  if (!isSupabaseConfigured()) return { user: await registerEmailUser(body), auth: null, mode: 'demo' }
+  if (!isSupabaseConfigured()) return { user: await registerEmailUser(body), auth: demoAuthFor(email), mode: 'demo' }
   if (password.length < 6) throw apiError(400, 'BAD_REQUEST', 'Password must be at least 6 characters.')
   const data = await supabaseFetch('/auth/v1/signup', {
     method: 'POST',
@@ -389,7 +412,7 @@ async function signInEmailUser(body) {
   const email = String(body.email || '').trim().toLowerCase()
   const password = String(body.password || '')
   if (!email || !password) throw apiError(400, 'BAD_REQUEST', 'Email and password are required.')
-  if (!isSupabaseConfigured()) return { user: await registerEmailUser({ email, displayName: body.displayName }), auth: null, mode: 'demo' }
+  if (!isSupabaseConfigured()) return { user: await registerEmailUser({ email, displayName: body.displayName }), auth: demoAuthFor(email), mode: 'demo' }
   const data = await supabaseFetch('/auth/v1/token?grant_type=password', {
     method: 'POST',
     body: JSON.stringify({ email, password })
@@ -719,6 +742,7 @@ async function route(req, res) {
   if (req.method === 'POST' && path === '/admin/auth/login') {
     const auth = await signInEmailUser(await readBody(req))
     if (!OWNER_EMAILS.includes(String(auth.user.email || '').toLowerCase())) throw apiError(403, 'FORBIDDEN', 'This account is not allowed to access owner admin.')
+    if (!isSupabaseConfigured()) auth.auth = demoAuthFor(auth.user.email, 'owner')
     return json(res, 200, auth)
   }
   if (req.method === 'POST' && path === '/admin/auth/register') {
@@ -726,6 +750,7 @@ async function route(req, res) {
     const email = String(body.email || '').trim().toLowerCase()
     if (!OWNER_EMAILS.includes(email)) throw apiError(403, 'FORBIDDEN', 'This email is not approved for owner admin.')
     const auth = await signUpEmailUser(body)
+    if (!isSupabaseConfigured()) auth.auth = demoAuthFor(email, 'owner')
     return json(res, 201, auth)
   }
   if (req.method === 'GET' && path === '/admin/auth/me') {
