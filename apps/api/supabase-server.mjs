@@ -14,8 +14,9 @@ const webRoot = join(workspaceRoot, 'apps', 'web')
 const assetRoot = join(workspaceRoot, 'miniprogram', 'assets')
 const PORT = Number(process.env.PORT || 4000)
 const HOST = process.env.HOST || '0.0.0.0'
-const OWNER_TOKEN = process.env.OWNER_DEMO_TOKEN || 'owner-demo-token'
-const OWNER_EMAILS = (process.env.OWNER_EMAILS || '').split(',').map((email) => email.trim().toLowerCase()).filter(Boolean)
+const OWNER_TOKEN = process.env.OWNER_DEMO_TOKEN || ''
+const ALLOW_OWNER_DEMO_TOKEN = process.env.ALLOW_OWNER_DEMO_TOKEN === 'true'
+const OWNER_EMAILS = (process.env.OWNER_EMAILS || 'nini3131254931@gmail.com').split(',').map((email) => email.trim().toLowerCase()).filter(Boolean)
 const HOLD_MINUTES = Number(process.env.BOOKING_HOLD_MINUTES || 15)
 const SLOT_MINUTES = 30
 const DATABASE_URL = process.env.DATABASE_URL
@@ -97,15 +98,24 @@ function apiError(status, code, message) {
 
 async function requireOwner(req) {
   const auth = req.headers.authorization || ''
-  if (auth === `Bearer ${OWNER_TOKEN}`) return { provider: 'demo-token' }
+  if (ALLOW_OWNER_DEMO_TOKEN && OWNER_TOKEN && auth === `Bearer ${OWNER_TOKEN}`) return { provider: 'demo-token' }
   const token = auth.startsWith('Bearer ') ? auth.slice(7) : ''
   if (!token || !isSupabaseConfigured()) throw apiError(401, 'UNAUTHORIZED', 'Owner login is required.')
   const authUser = await getSupabaseUser(token)
   const email = String(authUser.email || '').toLowerCase()
-  if (!OWNER_EMAILS.length || !OWNER_EMAILS.includes(email)) {
+  if (!OWNER_EMAILS.includes(email)) {
     throw apiError(403, 'FORBIDDEN', 'This account is not allowed to access owner admin.')
   }
   return { provider: 'supabase', email }
+}
+
+async function requireCustomer(req) {
+  const auth = req.headers.authorization || ''
+  const token = auth.startsWith('Bearer ') ? auth.slice(7) : ''
+  if (!token || !isSupabaseConfigured()) throw apiError(401, 'UNAUTHORIZED', 'Customer login is required before booking or payment.')
+  const authUser = await getSupabaseUser(token)
+  const provider = authUser.app_metadata?.provider || 'email'
+  return upsertAuthUser(authUser, provider)
 }
 
 function cents(centsValue) {
@@ -531,9 +541,10 @@ async function registerGoogleDemoUser(body) {
   return serializeUser(created.rows[0])
 }
 
-async function createBooking(body) {
+async function createBooking(body, customer = null) {
   await expireOldHolds()
   const input = validateBookingInput(body)
+  if (customer) input.userId = customer.id
   const bookingId = randomId('booking')
   await withTransaction(async (client) => {
     const { service, durationMin, start, end } = await assertBookable(input, client)
@@ -710,6 +721,17 @@ async function route(req, res) {
     if (!OWNER_EMAILS.includes(String(auth.user.email || '').toLowerCase())) throw apiError(403, 'FORBIDDEN', 'This account is not allowed to access owner admin.')
     return json(res, 200, auth)
   }
+  if (req.method === 'POST' && path === '/admin/auth/register') {
+    const body = await readBody(req)
+    const email = String(body.email || '').trim().toLowerCase()
+    if (!OWNER_EMAILS.includes(email)) throw apiError(403, 'FORBIDDEN', 'This email is not approved for owner admin.')
+    const auth = await signUpEmailUser(body)
+    return json(res, 201, auth)
+  }
+  if (req.method === 'GET' && path === '/admin/auth/me') {
+    const owner = await requireOwner(req)
+    return json(res, 200, { owner })
+  }
   if (req.method === 'GET' && path.startsWith('/users/')) {
     const user = await query('SELECT * FROM users WHERE id = $1', [path.split('/')[2]])
     if (!user.rows[0]) throw apiError(404, 'NOT_FOUND', 'User not found.')
@@ -750,10 +772,19 @@ async function route(req, res) {
     await expireOldHolds()
     return json(res, 200, await getAvailability(queryParams))
   }
-  if (req.method === 'POST' && path === '/bookings') return json(res, 201, { booking: await createBooking(await readBody(req)) })
-  if (req.method === 'POST' && path === '/payments/mock/confirm') return json(res, 200, { booking: await confirmMockPayment(await readBody(req)) })
-  if (req.method === 'POST' && path === '/payments/stripe/create-checkout') return json(res, 200, await createStripeCheckout(await readBody(req), req))
-  if (req.method === 'POST' && path === '/payments/stripe/confirm-session') return json(res, 200, await confirmStripeSession(await readBody(req)))
+  if (req.method === 'POST' && path === '/bookings') return json(res, 201, { booking: await createBooking(await readBody(req), await requireCustomer(req)) })
+  if (req.method === 'POST' && path === '/payments/mock/confirm') {
+    await requireCustomer(req)
+    return json(res, 200, { booking: await confirmMockPayment(await readBody(req)) })
+  }
+  if (req.method === 'POST' && path === '/payments/stripe/create-checkout') {
+    await requireCustomer(req)
+    return json(res, 200, await createStripeCheckout(await readBody(req), req))
+  }
+  if (req.method === 'POST' && path === '/payments/stripe/confirm-session') {
+    await requireCustomer(req)
+    return json(res, 200, await confirmStripeSession(await readBody(req)))
+  }
   if (req.method === 'GET' && path.startsWith('/bookings/')) {
     const id = path.split('/')[2]
     const booking = await query('SELECT * FROM bookings WHERE id = $1', [id])

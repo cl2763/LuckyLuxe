@@ -1,5 +1,5 @@
 const owner = {
-  token: localStorage.getItem('lucky-owner-token') || '',
+  token: '',
   auth: readJson('lucky-owner-auth'),
   bookings: [],
   services: [],
@@ -15,6 +15,7 @@ const els = {
   ownerLogout: document.querySelector('#ownerLogout'),
   reloadButton: document.querySelector('#reloadButton'),
   metricGrid: document.querySelector('#metricGrid'),
+  adminLayout: document.querySelector('#adminLayout'),
   bookingList: document.querySelector('#bookingList'),
   adminTabs: [...document.querySelectorAll('.admin-tab')],
   bookingFilters: document.querySelector('#bookingFilters'),
@@ -69,16 +70,19 @@ function readJson(key) {
 }
 
 function ownerBearer() {
-  return owner.auth?.accessToken || owner.token || 'owner-demo-token'
+  return owner.auth?.accessToken || owner.token || ''
 }
 
 async function request(path, options = {}) {
+  const bearer = ownerBearer()
+  const headers = {
+    'content-type': 'application/json',
+    ...(bearer && !options.public ? { authorization: `Bearer ${bearer}` } : {}),
+    ...(options.headers || {})
+  }
+  delete options.public
   const response = await fetch(path, {
-    headers: {
-      'content-type': 'application/json',
-      authorization: `Bearer ${ownerBearer()}`,
-      ...(options.headers || {})
-    },
+    headers,
     ...options
   })
   const data = await response.json()
@@ -100,6 +104,10 @@ function statusLabel(status) {
 async function loadAll() {
   owner.token = els.tokenInput.value.trim()
   if (owner.token) localStorage.setItem('lucky-owner-token', owner.token)
+  if (!ownerBearer()) {
+    setLocked(true)
+    return
+  }
   const [bookingData, serviceData, techData] = await Promise.all([
     request('/admin/bookings'),
     request('/admin/services'),
@@ -108,23 +116,29 @@ async function loadAll() {
   owner.bookings = bookingData.bookings
   owner.services = serviceData.services
   owner.technicians = techData.technicians
+  setLocked(false)
   render()
 }
 
 async function ownerLogin(event) {
   event.preventDefault()
   const form = new FormData(event.target)
-  const data = await request('/admin/auth/login', {
+  const action = event.submitter?.dataset.authAction || 'login'
+  const data = await request(action === 'register' ? '/admin/auth/register' : '/admin/auth/login', {
     method: 'POST',
-    headers: {},
+    public: true,
     body: JSON.stringify({
       email: form.get('email'),
       password: form.get('password')
     })
   })
+  if (data.needsEmailConfirmation) {
+    toast('Check your email to confirm the owner account, then log in.')
+    return
+  }
   owner.auth = data.auth
   localStorage.setItem('lucky-owner-auth', JSON.stringify(owner.auth))
-  toast('Owner login successful.')
+  toast(action === 'register' ? 'Owner account created.' : 'Owner login successful.')
   await loadAll()
 }
 
@@ -134,7 +148,25 @@ function ownerLogout() {
   els.tokenInput.value = ''
   localStorage.removeItem('lucky-owner-auth')
   localStorage.removeItem('lucky-owner-token')
+  owner.bookings = []
+  owner.services = []
+  owner.technicians = []
+  setLocked(true)
   toast('Logged out.')
+}
+
+function setLocked(locked) {
+  els.metricGrid.classList.toggle('hidden', locked)
+  els.adminLayout.classList.toggle('hidden', locked)
+  els.reloadButton.classList.toggle('hidden', locked)
+  els.tokenInput.classList.add('hidden')
+  els.ownerLogout.classList.toggle('hidden', locked)
+  if (locked) {
+    els.bookingList.innerHTML = ''
+    els.metricGrid.innerHTML = ''
+    els.serviceAdminList.innerHTML = ''
+    els.scheduleTech.innerHTML = ''
+  }
 }
 
 function render() {
@@ -402,4 +434,16 @@ els.serviceAdminList.addEventListener('click', (event) => {
   saveService(button.dataset.saveService).catch((error) => toast(error.message))
 })
 
-loadAll().catch((error) => toast(error.message))
+async function initAdmin() {
+  setLocked(true)
+  if (!owner.auth?.accessToken) return
+  try {
+    await request('/admin/auth/me')
+    await loadAll()
+  } catch (error) {
+    ownerLogout()
+    toast(error.message)
+  }
+}
+
+initAdmin().catch((error) => toast(error.message))

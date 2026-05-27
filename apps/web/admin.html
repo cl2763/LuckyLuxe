@@ -18,8 +18,8 @@
         </a>
         <nav class="top-actions">
           <a class="ghost-link" href="/">Customer App</a>
-          <input class="token-input" id="tokenInput" value="" aria-label="Owner token" placeholder="Owner token fallback">
-          <button class="primary slim" id="reloadButton" type="button">Reload</button>
+          <input class="token-input hidden" id="tokenInput" value="" aria-label="Owner token" placeholder="Owner token fallback">
+          <button class="primary slim hidden" id="reloadButton" type="button">Reload</button>
         </nav>
       </header>
 
@@ -27,7 +27,7 @@
         <div>
           <p class="eyebrow">Owner Access</p>
           <h2>Owner Login</h2>
-          <p class="subtle">Use your approved owner email. The token field remains only as a staging fallback.</p>
+          <p class="subtle">Use your approved owner email. Admin data is hidden until login succeeds.</p>
         </div>
         <form class="auth-form owner-login-form" id="ownerLoginForm">
           <label>
@@ -38,14 +38,15 @@
             <span>Password</span>
             <input name="password" type="password" autocomplete="current-password">
           </label>
-          <button class="primary slim" type="submit">Login</button>
+          <button class="primary slim" data-auth-action="login" type="submit">Login</button>
+          <button class="ghost slim" data-auth-action="register" type="submit">Register Owner</button>
           <button class="ghost slim" id="ownerLogout" type="button">Log out</button>
         </form>
       </section>
 
-      <section class="metric-grid" id="metricGrid"></section>
+      <section class="metric-grid hidden" id="metricGrid"></section>
 
-      <section class="admin-layout">
+      <section class="admin-layout hidden" id="adminLayout">
         <div class="admin-main">
           <div class="section-row">
             <h1>Bookings</h1>

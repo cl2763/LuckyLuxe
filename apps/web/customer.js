@@ -3,11 +3,14 @@ const storeId = 'store-ontario-01'
 const copy = {
   zh: {
     registerTitle: '创建 Lucky Luxe 账号',
-    registerText: '网页版需要账号后才能预约，支持邮箱登录和 Google 登录。',
+    registerText: '你可以先以游客身份浏览。预约、购物车结算和会员档案需要登录。',
     emailRegister: '创建账号',
     emailLogin: '邮箱登录',
+    displayName: '姓名',
+    email: '邮箱',
     password: '密码',
     googleRegister: '使用 Google 登录',
+    continueGuest: '继续游客浏览',
     enter: '进入',
     home: '首页',
     services: '服务',
@@ -87,17 +90,20 @@ const copy = {
     noSlots: '当天暂无可预约时间',
     created: '已加入购物车',
     paidDone: '定金已支付，预约已确认',
-    needLogin: '请先完成注册/登录',
+    needLogin: '请先完成注册/登录后继续',
     confirmEmail: '请检查邮箱完成验证，然后再登录。',
     paymentRedirect: '正在跳转到 Stripe 测试支付...'
   },
   en: {
     registerTitle: 'Create your Lucky Luxe account',
-    registerText: 'The web app requires an account before booking. Email and Google sign-in are supported.',
+    registerText: 'You can browse as a guest. Booking, checkout, and member pages require sign-in.',
     emailRegister: 'Create Account',
     emailLogin: 'Email Login',
+    displayName: 'Name',
+    email: 'Email',
     password: 'Password',
     googleRegister: 'Continue with Google',
+    continueGuest: 'Continue as Guest',
     enter: 'Enter',
     home: 'Home',
     services: 'Services',
@@ -177,7 +183,7 @@ const copy = {
     noSlots: 'No available times',
     created: 'Added to cart',
     paidDone: 'Deposit paid. Booking confirmed.',
-    needLogin: 'Please register or sign in first',
+    needLogin: 'Please register or sign in to continue',
     confirmEmail: 'Please verify your email, then sign in.',
     paymentRedirect: 'Redirecting to Stripe test payment...'
   }
@@ -204,7 +210,8 @@ const state = {
   cart: readJson('lucky-web-cart') || [],
   orders: readJson('lucky-web-orders') || [],
   orderFilter: 'all',
-  selectedOrderId: ''
+  selectedOrderId: '',
+  pendingAuth: readJson('lucky-web-pending-auth')
 }
 
 const els = {
@@ -269,10 +276,28 @@ async function request(path, options = {}) {
   return data
 }
 
+function privateViews() {
+  return new Set(['booking', 'cart', 'checkout', 'me', 'orders', 'orderDetail', 'assets', 'coupons', 'giftCard', 'pointsMall', 'settings'])
+}
+
+function requiresAuth(view) {
+  return privateViews().has(view)
+}
+
+function requireLogin(pending = {}) {
+  state.pendingAuth = {
+    view: pending.view || state.view || 'home',
+    serviceId: pending.serviceId || state.service?.id || '',
+    bookingMode: pending.bookingMode || ''
+  }
+  writeJson('lucky-web-pending-auth', state.pendingAuth)
+  toast(t('needLogin'))
+  renderAuth()
+}
+
 function setView(view) {
-  if (!state.user) {
-    toast(t('needLogin'))
-    renderAuth()
+  if (requiresAuth(view) && !state.user) {
+    requireLogin({ view })
     return
   }
   state.view = view
@@ -300,9 +325,12 @@ async function bootstrap() {
   bindGlobalEvents()
   await Promise.all([loadServices(), loadStores(), loadAddOns()])
   await handleAuthRedirect()
+  if (state.user && !state.auth?.accessToken) {
+    state.user = null
+    localStorage.removeItem('lucky-web-user')
+  }
   await handleStripeReturn()
-  if (state.user) showApp()
-  else renderAuth()
+  await showApp()
 }
 
 async function handleAuthRedirect() {
@@ -360,6 +388,11 @@ function bindGlobalEvents() {
   els.authView.addEventListener('submit', registerEmail)
   els.authView.addEventListener('click', (event) => {
     if (event.target.closest('#googleRegister')) registerGoogle().catch((error) => toast(error.message))
+    if (event.target.closest('#continueGuest')) {
+      state.pendingAuth = null
+      localStorage.removeItem('lucky-web-pending-auth')
+      showApp().catch((error) => toast(error.message))
+    }
   })
   els.screen.addEventListener('click', handleScreenClick)
   els.screen.addEventListener('change', handleScreenChange)
@@ -374,7 +407,7 @@ async function switchLang(lang) {
   await loadServices()
   if (state.service) state.service = state.services.find((item) => item.id === state.service.id) || state.service
   render()
-  if (!state.user) renderAuth()
+  if (!els.authView.classList.contains('hidden')) renderAuth()
 }
 
 function renderAuth() {
@@ -391,12 +424,12 @@ function renderAuth() {
       </div>
       <form class="auth-form" id="emailForm">
         <label>
-          <span>Name</span>
-          <input name="displayName" value="Lucky Member">
+          <span>${t('displayName')}</span>
+          <input name="displayName" autocomplete="name">
         </label>
         <label>
-          <span>Email</span>
-          <input name="email" type="email" value="member@luckyluxe.demo">
+          <span>${t('email')}</span>
+          <input name="email" type="email" autocomplete="email">
         </label>
         <label>
           <span>${t('password')}</span>
@@ -409,6 +442,7 @@ function renderAuth() {
         <span>G</span>
         ${t('googleRegister')}
       </button>
+      <button class="ghost full" id="continueGuest" type="button">${t('continueGuest')}</button>
     </div>
     <div class="auth-visual">
       <img src="/assets/images/store-cover.png" alt="Lucky Luxe">
@@ -436,7 +470,7 @@ async function registerEmail(event) {
   state.auth = data.auth
   writeJson('lucky-web-user', state.user)
   writeJson('lucky-web-auth', state.auth)
-  showApp()
+  await showApp()
 }
 
 async function registerGoogle() {
@@ -444,12 +478,23 @@ async function registerGoogle() {
   window.location.href = data.url
 }
 
-function showApp() {
+async function showApp() {
   els.authView.classList.add('hidden')
   els.appView.classList.remove('hidden')
-  state.view = 'home'
   els.langZh.classList.toggle('active', state.lang === 'zh')
   els.langEn.classList.toggle('active', state.lang === 'en')
+  const pending = state.user ? state.pendingAuth : null
+  if (pending) {
+    state.pendingAuth = null
+    localStorage.removeItem('lucky-web-pending-auth')
+    if (pending.serviceId) state.service = state.services.find((item) => item.id === pending.serviceId) || state.service
+    if (pending.bookingMode && state.service) {
+      await prepareBooking(pending.bookingMode, { skipAuth: true })
+      return
+    }
+    state.view = pending.view || state.view || 'home'
+  }
+  if (requiresAuth(state.view) && !state.user) state.view = 'home'
   render()
 }
 
@@ -616,7 +661,11 @@ function renderListCard(title, items) {
   `
 }
 
-async function prepareBooking(mode) {
+async function prepareBooking(mode, options = {}) {
+  if (!state.user && !options.skipAuth) {
+    requireLogin({ view: 'booking', serviceId: state.service?.id, bookingMode: mode })
+    return
+  }
   state.bookingMode = mode
   state.selectedAddOns = new Set()
   state.remark = ''
@@ -790,6 +839,10 @@ function renderCheckout() {
 }
 
 async function submitPayment() {
+  if (!state.user) {
+    requireLogin({ view: 'checkout' })
+    return
+  }
   const selected = state.cart.filter((item) => item.selected)
   const completed = []
   for (const item of selected) {
@@ -1049,6 +1102,10 @@ function renderPlaceholderWeb(title, text) {
 async function handleScreenClick(event) {
   const orderFilter = event.target.closest('[data-order-filter]')
   if (orderFilter) {
+    if (!state.user) {
+      requireLogin({ view: 'orders' })
+      return
+    }
     state.orderFilter = orderFilter.dataset.orderFilter
     state.view = 'orders'
     render()
@@ -1056,6 +1113,10 @@ async function handleScreenClick(event) {
   }
   const orderButton = event.target.closest('[data-order-id]')
   if (orderButton) {
+    if (!state.user) {
+      requireLogin({ view: 'orders' })
+      return
+    }
     state.selectedOrderId = orderButton.dataset.orderId
     state.view = 'orderDetail'
     render()
@@ -1063,8 +1124,7 @@ async function handleScreenClick(event) {
   }
   const meTarget = event.target.closest('[data-me-target]')
   if (meTarget) {
-    state.view = meTarget.dataset.meTarget
-    render()
+    setView(meTarget.dataset.meTarget)
     return
   }
   const serviceButton = event.target.closest('[data-service-id]')
@@ -1083,8 +1143,7 @@ async function handleScreenClick(event) {
   }
   const target = event.target.closest('[data-view-target]')
   if (target) {
-    state.view = target.dataset.viewTarget
-    render()
+    setView(target.dataset.viewTarget)
     return
   }
   const type = event.target.closest('[data-type]')
@@ -1120,10 +1179,18 @@ async function handleScreenClick(event) {
     return
   }
   if (event.target.closest('[data-save-cart]')) {
+    if (!state.user) {
+      requireLogin({ view: 'booking', serviceId: state.service?.id, bookingMode: state.bookingMode || 'cart' })
+      return
+    }
     saveCurrentToCart(false)
     return
   }
   if (event.target.closest('[data-checkout-now]')) {
+    if (!state.user) {
+      requireLogin({ view: 'booking', serviceId: state.service?.id, bookingMode: state.bookingMode || 'checkout' })
+      return
+    }
     saveCurrentToCart(true)
     return
   }
@@ -1150,7 +1217,8 @@ async function handleScreenClick(event) {
     state.auth = null
     localStorage.removeItem('lucky-web-user')
     localStorage.removeItem('lucky-web-auth')
-    renderAuth()
+    state.view = 'home'
+    render()
   }
 }
 
