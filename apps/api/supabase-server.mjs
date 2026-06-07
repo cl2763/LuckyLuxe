@@ -144,6 +144,35 @@ function bool(value) {
   return value === true || value === 1 || value === '1'
 }
 
+function serviceIdFrom(body) {
+  const source = String(body.nameEn || body.nameZh || `service-${Date.now()}`)
+    .trim()
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, '-')
+    .replace(/^-+|-+$/g, '')
+    .slice(0, 42) || `service-${Date.now()}`
+  return `${String(body.type || 'NAIL').toLowerCase()}-${source}-${Date.now().toString(36)}`
+}
+
+function servicePayload(body, current = {}) {
+  return {
+    type: String(body.type ?? current.type ?? 'NAIL').toUpperCase(),
+    category: body.category ?? current.category ?? '未分类',
+    nameZh: body.nameZh ?? current.name_zh ?? '',
+    nameEn: body.nameEn ?? current.name_en ?? '',
+    descriptionZh: body.descriptionZh ?? current.description_zh ?? '',
+    descriptionEn: body.descriptionEn ?? current.description_en ?? '',
+    imageUrl: body.imageUrl ?? current.image_url ?? '/assets/images/nail-addon.png',
+    priceCents: Number(body.priceCents ?? current.price_cents ?? 0),
+    depositCents: Number(body.depositCents ?? current.deposit_cents ?? 5000),
+    baseDurationMin: Number(body.baseDurationMin ?? current.base_duration_min ?? 120),
+    sortOrder: Number(body.sortOrder ?? current.sort_order ?? 0),
+    isActive: body.isActive === undefined ? (current.is_active ?? true) : Boolean(body.isActive),
+    processJson: body.process ?? current.process_json ?? [],
+    noticeJson: body.notice ?? current.notice_json ?? []
+  }
+}
+
 function serializeService(row, lang = 'zh') {
   return {
     id: row.id,
@@ -849,6 +878,37 @@ async function route(req, res) {
     const services = await query('SELECT * FROM services ORDER BY type ASC, sort_order ASC')
     return json(res, 200, { services: services.rows.map((service) => serializeService(service)) })
   }
+  if (req.method === 'POST' && path === '/admin/services') {
+    const payload = servicePayload(await readBody(req))
+    if (!['NAIL', 'LASH'].includes(payload.type)) throw apiError(400, 'BAD_REQUEST', 'Service type must be NAIL or LASH.')
+    if (!payload.nameZh || !payload.nameEn) throw apiError(400, 'BAD_REQUEST', 'Service name is required.')
+    const id = serviceIdFrom(payload)
+    await query(`INSERT INTO services
+      (id, type, category, name_zh, name_en, description_zh, description_en, image_url, price_cents, deposit_cents, base_duration_min, sort_order, is_active, process_json, notice_json)
+      VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14::jsonb, $15::jsonb)`, [
+      id,
+      payload.type,
+      payload.category,
+      payload.nameZh,
+      payload.nameEn,
+      payload.descriptionZh,
+      payload.descriptionEn,
+      payload.imageUrl,
+      payload.priceCents,
+      payload.depositCents,
+      payload.baseDurationMin,
+      payload.sortOrder,
+      payload.isActive,
+      JSON.stringify(payload.processJson),
+      JSON.stringify(payload.noticeJson)
+    ])
+    const technicians = await query('SELECT id FROM technicians WHERE is_active = true')
+    await Promise.all(technicians.rows.map((tech) => query(
+      'INSERT INTO technician_services (technician_id, service_id) VALUES ($1, $2) ON CONFLICT DO NOTHING',
+      [tech.id, id]
+    )))
+    return json(res, 201, { service: serializeService(await getService(id)) })
+  }
   if (req.method === 'GET' && path === '/admin/technicians') {
     const technicians = await query('SELECT * FROM technicians ORDER BY name ASC')
     return json(res, 200, { technicians: technicians.rows })
@@ -858,17 +918,26 @@ async function route(req, res) {
     const body = await readBody(req)
     const current = await getService(id)
     if (!current) throw apiError(404, 'NOT_FOUND', 'Service not found.')
+    const payload = servicePayload(body, current)
     await query(`UPDATE services SET
-      name_zh = $1, name_en = $2, description_zh = $3, description_en = $4, price_cents = $5, base_duration_min = $6, is_active = $7, sort_order = $8
-      WHERE id = $9`, [
-      body.nameZh ?? current.name_zh,
-      body.nameEn ?? current.name_en,
-      body.descriptionZh ?? current.description_zh,
-      body.descriptionEn ?? current.description_en,
-      body.priceCents ?? current.price_cents,
-      body.baseDurationMin ?? current.base_duration_min,
-      body.isActive === undefined ? current.is_active : Boolean(body.isActive),
-      body.sortOrder ?? current.sort_order,
+      type = $1, category = $2, name_zh = $3, name_en = $4, description_zh = $5, description_en = $6,
+      image_url = $7, price_cents = $8, deposit_cents = $9, base_duration_min = $10, is_active = $11,
+      sort_order = $12, process_json = $13::jsonb, notice_json = $14::jsonb
+      WHERE id = $15`, [
+      payload.type,
+      payload.category,
+      payload.nameZh,
+      payload.nameEn,
+      payload.descriptionZh,
+      payload.descriptionEn,
+      payload.imageUrl,
+      payload.priceCents,
+      payload.depositCents,
+      payload.baseDurationMin,
+      payload.isActive,
+      payload.sortOrder,
+      JSON.stringify(payload.processJson),
+      JSON.stringify(payload.noticeJson),
       id
     ])
     return json(res, 200, { service: serializeService(await getService(id)) })

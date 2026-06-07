@@ -38,7 +38,7 @@ const copy = {
     addOns: '附加服务',
     optional: '可选',
     remark: '备注',
-    upload: '上传占位',
+    upload: '上传参考图',
     checkout: '去结算',
     saveCart: '保存到购物车',
     requiredDeposit: '需付定金',
@@ -131,7 +131,7 @@ const copy = {
     addOns: 'Add-ons',
     optional: 'Optional',
     remark: 'Notes',
-    upload: 'Upload Placeholder',
+    upload: 'Upload Reference',
     checkout: 'Checkout',
     saveCart: 'Save to Cart',
     requiredDeposit: 'Deposit due',
@@ -206,6 +206,7 @@ const state = {
   selectedSlot: '',
   addOns: [],
   selectedAddOns: new Set(),
+  referenceImages: [],
   remark: '',
   cart: readJson('lucky-web-cart') || [],
   orders: readJson('lucky-web-orders') || [],
@@ -668,6 +669,7 @@ async function prepareBooking(mode, options = {}) {
   }
   state.bookingMode = mode
   state.selectedAddOns = new Set()
+  state.referenceImages = []
   state.remark = ''
   await loadTechnicians()
   await loadAvailability()
@@ -727,8 +729,20 @@ function renderBookingForm() {
         `).join('')}</div>
       </section>
       <section class="section">
-        <div class="section-row"><h2>${t('reference')}</h2><span class="subtle">0/3</span></div>
-        <button class="upload-box-web card" type="button">${t('upload')}</button>
+        <div class="section-row"><h2>${t('reference')}</h2><span class="subtle">${state.referenceImages.length}/3</span></div>
+        <div class="reference-upload-grid">
+          <label class="upload-box-web card">
+            <input data-reference-input type="file" accept="image/*" multiple>
+            <span>${t('upload')}</span>
+            <small>${state.lang === 'zh' ? '最多 3 张，可选设计或灵感图' : 'Up to 3 design or inspiration images'}</small>
+          </label>
+          ${state.referenceImages.map((image, index) => `
+            <div class="reference-thumb card">
+              <img src="${image}" alt="${t('reference')} ${index + 1}">
+              <button class="ghost mini-remove" data-remove-reference="${index}" type="button">×</button>
+            </div>
+          `).join('')}
+        </div>
       </section>
       <label class="notes"><span>${t('remark')}</span><textarea data-field="remark" rows="3">${state.remark}</textarea></label>
       <div class="summary-bar">
@@ -751,6 +765,7 @@ function buildCartItem() {
     date: state.date,
     time: state.selectedSlot,
     addOns: selectedAddOns,
+    referenceImages: [...state.referenceImages],
     remark: state.remark,
     servicePriceCents: state.service.priceCents + addonTotal,
     depositCents: state.service.depositCents,
@@ -793,6 +808,7 @@ function renderCartItem(item) {
         <div class="cart-title-row"><h2>${item.service.name}</h2><span class="status">${t('pendingCheckout')}</span></div>
         <p>${item.date} · ${item.time} · ${item.technician.name}</p>
         <p><strong>${t('deposit')} ${money(item.depositCents)}</strong> · ${t('servicePrice')} ${money(item.servicePriceCents)}</p>
+        ${item.referenceImages?.length ? `<div class="cart-reference-row">${item.referenceImages.map((image, index) => `<img src="${image}" alt="${t('reference')} ${index + 1}">`).join('')}</div>` : ''}
       </div>
       <img src="${item.service.imageUrl}" alt="${item.service.name}">
       <button class="ghost" data-remove-cart="${item.id}" type="button">Remove</button>
@@ -814,6 +830,7 @@ function renderCheckout() {
             <h2>${item.service.name}</h2>
             <p>${item.date} · ${item.time} · ${item.technician.name}</p>
             <p><strong>${t('deposit')} ${money(item.depositCents)}</strong> · ${t('servicePrice')} ${money(item.servicePriceCents)}</p>
+            ${item.referenceImages?.length ? `<div class="cart-reference-row">${item.referenceImages.map((image, index) => `<img src="${image}" alt="${t('reference')} ${index + 1}">`).join('')}</div>` : ''}
           </div>
           <img src="${item.service.imageUrl}" alt="${item.service.name}">
         </article>
@@ -1178,6 +1195,12 @@ async function handleScreenClick(event) {
     renderBookingForm()
     return
   }
+  const removeReference = event.target.closest('[data-remove-reference]')
+  if (removeReference) {
+    state.referenceImages.splice(Number(removeReference.dataset.removeReference), 1)
+    renderBookingForm()
+    return
+  }
   if (event.target.closest('[data-save-cart]')) {
     if (!state.user) {
       requireLogin({ view: 'booking', serviceId: state.service?.id, bookingMode: state.bookingMode || 'cart' })
@@ -1223,6 +1246,11 @@ async function handleScreenClick(event) {
 }
 
 async function handleScreenChange(event) {
+  if (event.target.matches('[data-reference-input]')) {
+    await handleReferenceFiles(event.target.files)
+    renderBookingForm()
+    return
+  }
   const field = event.target.dataset.field
   if (field === 'tech') {
     state.selectedTechId = event.target.value
@@ -1238,6 +1266,37 @@ async function handleScreenChange(event) {
 
 function handleScreenInput(event) {
   if (event.target.dataset.field === 'remark') state.remark = event.target.value
+}
+
+async function handleReferenceFiles(files) {
+  const remaining = 3 - state.referenceImages.length
+  if (remaining <= 0) return
+  const selected = [...files].slice(0, remaining)
+  const images = await Promise.all(selected.map(readCompressedImage))
+  state.referenceImages.push(...images)
+}
+
+function readCompressedImage(file) {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader()
+    reader.onload = () => {
+      const image = new Image()
+      image.onload = () => {
+        const maxSize = 1000
+        const scale = Math.min(1, maxSize / Math.max(image.width, image.height))
+        const canvas = document.createElement('canvas')
+        canvas.width = Math.max(1, Math.round(image.width * scale))
+        canvas.height = Math.max(1, Math.round(image.height * scale))
+        const context = canvas.getContext('2d')
+        context.drawImage(image, 0, 0, canvas.width, canvas.height)
+        resolve(canvas.toDataURL('image/jpeg', 0.78))
+      }
+      image.onerror = reject
+      image.src = reader.result
+    }
+    reader.onerror = () => reject(reader.error)
+    reader.readAsDataURL(file)
+  })
 }
 
 bootstrap().catch((error) => toast(error.message))

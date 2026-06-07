@@ -264,6 +264,35 @@ function parseJson(value) {
   }
 }
 
+function serviceIdFrom(body) {
+  const source = String(body.nameEn || body.nameZh || `service-${Date.now()}`)
+    .trim()
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, '-')
+    .replace(/^-+|-+$/g, '')
+    .slice(0, 42) || `service-${Date.now()}`
+  return `${String(body.type || 'NAIL').toLowerCase()}-${source}-${Date.now().toString(36)}`
+}
+
+function servicePayload(body, current = {}) {
+  return {
+    type: String(body.type ?? current.type ?? 'NAIL').toUpperCase(),
+    category: body.category ?? current.category ?? '未分类',
+    nameZh: body.nameZh ?? current.name_zh ?? '',
+    nameEn: body.nameEn ?? current.name_en ?? '',
+    descriptionZh: body.descriptionZh ?? current.description_zh ?? '',
+    descriptionEn: body.descriptionEn ?? current.description_en ?? '',
+    imageUrl: body.imageUrl ?? current.image_url ?? '/assets/images/nail-addon.png',
+    priceCents: Number(body.priceCents ?? current.price_cents ?? 0),
+    depositCents: Number(body.depositCents ?? current.deposit_cents ?? 5000),
+    baseDurationMin: Number(body.baseDurationMin ?? current.base_duration_min ?? 120),
+    sortOrder: Number(body.sortOrder ?? current.sort_order ?? 0),
+    isActive: body.isActive === undefined ? (current.is_active ?? 1) : Number(Boolean(body.isActive)),
+    processJson: body.process ?? parseJson(current.process_json),
+    noticeJson: body.notice ?? parseJson(current.notice_json)
+  }
+}
+
 function serializeService(row, lang = 'zh') {
   return {
     id: row.id,
@@ -679,6 +708,18 @@ async function route(req, res) {
   if (req.method === 'GET' && path === '/admin/services') {
     return json(res, 200, { services: db.prepare('SELECT * FROM services ORDER BY type ASC, sort_order ASC').all().map(serializeService) })
   }
+  if (req.method === 'POST' && path === '/admin/services') {
+    const payload = servicePayload(await readBody(req))
+    if (!['NAIL', 'LASH'].includes(payload.type)) throw apiError(400, 'BAD_REQUEST', 'Service type must be NAIL or LASH.')
+    if (!payload.nameZh || !payload.nameEn) throw apiError(400, 'BAD_REQUEST', 'Service name is required.')
+    const id = serviceIdFrom(payload)
+    db.prepare(`INSERT INTO services
+      (id, type, category, name_zh, name_en, description_zh, description_en, image_url, price_cents, deposit_cents, base_duration_min, sort_order, is_active, process_json, notice_json)
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`).run(id, payload.type, payload.category, payload.nameZh, payload.nameEn, payload.descriptionZh, payload.descriptionEn, payload.imageUrl, payload.priceCents, payload.depositCents, payload.baseDurationMin, payload.sortOrder, payload.isActive, JSON.stringify(payload.processJson), JSON.stringify(payload.noticeJson))
+    const assign = db.prepare('INSERT OR IGNORE INTO technician_services (technician_id, service_id) VALUES (?, ?)')
+    for (const tech of db.prepare('SELECT id FROM technicians WHERE is_active = 1').all()) assign.run(tech.id, id)
+    return json(res, 201, { service: serializeService(getService(id)) })
+  }
   if (req.method === 'GET' && path === '/admin/technicians') {
     return json(res, 200, { technicians: db.prepare('SELECT * FROM technicians ORDER BY name ASC').all() })
   }
@@ -687,9 +728,11 @@ async function route(req, res) {
     const body = await readBody(req)
     const current = getService(id)
     if (!current) throw apiError(404, 'NOT_FOUND', 'Service not found.')
+    const payload = servicePayload(body, current)
     db.prepare(`UPDATE services SET
-      name_zh = ?, name_en = ?, description_zh = ?, description_en = ?, price_cents = ?, base_duration_min = ?, is_active = ?, sort_order = ?
-      WHERE id = ?`).run(body.nameZh ?? current.name_zh, body.nameEn ?? current.name_en, body.descriptionZh ?? current.description_zh, body.descriptionEn ?? current.description_en, body.priceCents ?? current.price_cents, body.baseDurationMin ?? current.base_duration_min, body.isActive === undefined ? current.is_active : Number(Boolean(body.isActive)), body.sortOrder ?? current.sort_order, id)
+      type = ?, category = ?, name_zh = ?, name_en = ?, description_zh = ?, description_en = ?, image_url = ?,
+      price_cents = ?, deposit_cents = ?, base_duration_min = ?, is_active = ?, sort_order = ?, process_json = ?, notice_json = ?
+      WHERE id = ?`).run(payload.type, payload.category, payload.nameZh, payload.nameEn, payload.descriptionZh, payload.descriptionEn, payload.imageUrl, payload.priceCents, payload.depositCents, payload.baseDurationMin, payload.isActive, payload.sortOrder, JSON.stringify(payload.processJson), JSON.stringify(payload.noticeJson), id)
     return json(res, 200, { service: serializeService(getService(id)) })
   }
   if (req.method === 'PATCH' && path.startsWith('/admin/technicians/') && path.endsWith('/schedule')) {

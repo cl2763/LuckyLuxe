@@ -12,12 +12,16 @@
         <a class="brand" href="/">
           <span class="brand-mark">LL</span>
           <span>
-            <strong>Lucky Luxe Admin</strong>
-            <small>Owner Console</small>
+            <strong id="adminBrandTitle">Lucky Luxe Admin</strong>
+            <small id="adminBrandSubtitle">Owner Console</small>
           </span>
         </a>
         <nav class="top-actions">
-          <a class="ghost-link" href="/">Customer App</a>
+          <div class="admin-lang-toggle" aria-label="Language">
+            <button class="toggle active" id="adminLangZh" type="button">中文</button>
+            <button class="toggle" id="adminLangEn" type="button">EN</button>
+          </div>
+          <a class="ghost-link" id="customerAppLink" href="/">Customer App</a>
           <input class="token-input hidden" id="tokenInput" value="" aria-label="Owner token" placeholder="Owner token fallback">
           <button class="primary slim hidden" id="reloadButton" type="button">Reload</button>
         </nav>
@@ -25,21 +29,21 @@
 
       <section class="admin-card owner-login-card" id="ownerLogin">
         <div>
-          <p class="eyebrow">Owner Access</p>
-          <h2>Owner Login</h2>
-          <p class="subtle">Use your approved owner email. Admin data is hidden until login succeeds.</p>
+          <p class="eyebrow" id="ownerAccessEyebrow">Owner Access</p>
+          <h2 id="ownerLoginTitle">Owner Login</h2>
+          <p class="subtle" id="ownerLoginText">Use your approved owner email. Admin data is hidden until login succeeds.</p>
         </div>
         <form class="auth-form owner-login-form" id="ownerLoginForm">
           <label>
-            <span>Email</span>
+            <span id="ownerEmailLabel">Email</span>
             <input name="email" type="email" autocomplete="username">
           </label>
           <label>
-            <span>Password</span>
+            <span id="ownerPasswordLabel">Password</span>
             <input name="password" type="password" autocomplete="current-password">
           </label>
-          <button class="primary slim" data-auth-action="login" type="submit">Login</button>
-          <button class="ghost slim" data-auth-action="register" type="submit">Register Owner</button>
+          <button class="primary slim" id="ownerLoginButton" data-auth-action="login" type="submit">Login</button>
+          <button class="ghost slim" id="ownerRegisterButton" data-auth-action="register" type="submit">Register Owner</button>
           <button class="ghost slim" id="ownerLogout" type="button">Log out</button>
         </form>
       </section>
@@ -49,21 +53,21 @@
       <section class="admin-layout hidden" id="adminLayout">
         <div class="admin-main">
           <div class="section-row">
-            <h1>Bookings</h1>
-            <span class="subtle">Live local backend data</span>
+            <h1 id="bookingsTitle">Bookings</h1>
+            <span class="subtle" id="bookingsSubtitle">Live backend data</span>
           </div>
           <div class="admin-tabs">
-            <button class="admin-tab active" data-admin-view="today" type="button">Today</button>
-            <button class="admin-tab" data-admin-view="all" type="button">All Bookings</button>
-            <button class="admin-tab" data-admin-view="calendar" type="button">Calendar</button>
+            <button class="admin-tab active" id="todayTab" data-admin-view="today" type="button">Today</button>
+            <button class="admin-tab" id="allTab" data-admin-view="all" type="button">All Bookings</button>
+            <button class="admin-tab" id="calendarTab" data-admin-view="calendar" type="button">Calendar</button>
           </div>
           <div class="filter-row" id="bookingFilters">
             <label>
-              <span>Date</span>
+              <span id="filterDateLabel">Date</span>
               <input id="filterDate" type="date">
             </label>
             <label>
-              <span>Status</span>
+              <span id="filterStatusLabel">Status</span>
               <select id="filterStatus">
                 <option value="active">Active attention</option>
                 <option value="all">All statuses</option>
@@ -86,34 +90,38 @@
 
         <aside class="admin-side">
           <section class="admin-card">
-            <h2>Technician Schedule</h2>
+            <h2 id="scheduleTitle">Technician Schedule</h2>
             <label>
-              <span>Technician</span>
+              <span id="scheduleTechLabel">Technician</span>
               <select id="scheduleTech"></select>
             </label>
             <label>
-              <span>Date</span>
+              <span id="scheduleDateLabel">Date</span>
               <input id="scheduleDate" type="date">
             </label>
             <div class="form-grid tight">
               <label>
-                <span>Start</span>
+                <span id="scheduleStartLabel">Start</span>
                 <input id="scheduleStart" value="10:00">
               </label>
               <label>
-                <span>End</span>
+                <span id="scheduleEndLabel">End</span>
                 <input id="scheduleEnd" value="19:00">
               </label>
             </div>
             <label class="check-row">
               <input id="scheduleWorking" type="checkbox" checked>
-              <span>Working day</span>
+              <span id="scheduleWorkingLabel">Working day</span>
             </label>
             <button class="primary full" id="saveSchedule" type="button">Save Schedule</button>
           </section>
 
           <section class="admin-card">
-            <h2>Services</h2>
+            <div class="section-row compact-row">
+              <h2 id="servicesTitle">Services</h2>
+              <button class="primary slim" id="addServiceButton" type="button">Add Service</button>
+            </div>
+            <div id="serviceEditor"></div>
             <div class="service-admin-list" id="serviceAdminList"></div>
           </section>
         </aside>

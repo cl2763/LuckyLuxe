@@ -1,31 +1,61 @@
 const owner = {
   token: '',
   auth: readJson('lucky-owner-auth'),
+  lang: localStorage.getItem('lucky-admin-lang') || 'zh',
   bookings: [],
   services: [],
   technicians: [],
   adminView: 'today',
-  calendarDate: new Date()
+  calendarDate: new Date(),
+  serviceEditor: null
 }
 
 const els = {
+  adminBrandTitle: document.querySelector('#adminBrandTitle'),
+  adminBrandSubtitle: document.querySelector('#adminBrandSubtitle'),
+  adminLangZh: document.querySelector('#adminLangZh'),
+  adminLangEn: document.querySelector('#adminLangEn'),
+  customerAppLink: document.querySelector('#customerAppLink'),
   tokenInput: document.querySelector('#tokenInput'),
   ownerLogin: document.querySelector('#ownerLogin'),
   ownerLoginForm: document.querySelector('#ownerLoginForm'),
+  ownerAccessEyebrow: document.querySelector('#ownerAccessEyebrow'),
+  ownerLoginTitle: document.querySelector('#ownerLoginTitle'),
+  ownerLoginText: document.querySelector('#ownerLoginText'),
+  ownerEmailLabel: document.querySelector('#ownerEmailLabel'),
+  ownerPasswordLabel: document.querySelector('#ownerPasswordLabel'),
+  ownerLoginButton: document.querySelector('#ownerLoginButton'),
+  ownerRegisterButton: document.querySelector('#ownerRegisterButton'),
   ownerLogout: document.querySelector('#ownerLogout'),
   reloadButton: document.querySelector('#reloadButton'),
   metricGrid: document.querySelector('#metricGrid'),
   adminLayout: document.querySelector('#adminLayout'),
+  bookingsTitle: document.querySelector('#bookingsTitle'),
+  bookingsSubtitle: document.querySelector('#bookingsSubtitle'),
   bookingList: document.querySelector('#bookingList'),
   adminTabs: [...document.querySelectorAll('.admin-tab')],
+  todayTab: document.querySelector('#todayTab'),
+  allTab: document.querySelector('#allTab'),
+  calendarTab: document.querySelector('#calendarTab'),
   bookingFilters: document.querySelector('#bookingFilters'),
   calendarControls: document.querySelector('#calendarControls'),
   calendarTitle: document.querySelector('#calendarTitle'),
   filterDate: document.querySelector('#filterDate'),
   filterStatus: document.querySelector('#filterStatus'),
+  filterDateLabel: document.querySelector('#filterDateLabel'),
+  filterStatusLabel: document.querySelector('#filterStatusLabel'),
   clearFilters: document.querySelector('#clearFilters'),
   prevMonth: document.querySelector('#prevMonth'),
   nextMonth: document.querySelector('#nextMonth'),
+  scheduleTitle: document.querySelector('#scheduleTitle'),
+  scheduleTechLabel: document.querySelector('#scheduleTechLabel'),
+  scheduleDateLabel: document.querySelector('#scheduleDateLabel'),
+  scheduleStartLabel: document.querySelector('#scheduleStartLabel'),
+  scheduleEndLabel: document.querySelector('#scheduleEndLabel'),
+  scheduleWorkingLabel: document.querySelector('#scheduleWorkingLabel'),
+  servicesTitle: document.querySelector('#servicesTitle'),
+  addServiceButton: document.querySelector('#addServiceButton'),
+  serviceEditor: document.querySelector('#serviceEditor'),
   serviceAdminList: document.querySelector('#serviceAdminList'),
   scheduleTech: document.querySelector('#scheduleTech'),
   scheduleDate: document.querySelector('#scheduleDate'),
@@ -34,6 +64,147 @@ const els = {
   scheduleWorking: document.querySelector('#scheduleWorking'),
   saveSchedule: document.querySelector('#saveSchedule'),
   toast: document.querySelector('#toast')
+}
+
+const copy = {
+  zh: {
+    adminTitle: 'Lucky Luxe 后台',
+    ownerConsole: '店主控制台',
+    customerApp: '客户网页',
+    reload: '刷新',
+    ownerAccess: '店主权限',
+    ownerLogin: '店主登录',
+    ownerLoginText: '请使用已批准的 owner 邮箱登录。登录成功前后台数据不会显示。',
+    email: '邮箱',
+    password: '密码',
+    login: '登录',
+    registerOwner: '注册 Owner',
+    logout: '退出',
+    bookings: '预约',
+    bookingsSubtitle: '实时后端数据',
+    today: '今天',
+    allBookings: '全部预约',
+    calendar: '日历',
+    date: '日期',
+    status: '状态',
+    clear: '清除',
+    schedule: '技师排班',
+    technician: '技师',
+    start: '开始',
+    end: '结束',
+    workingDay: '工作日',
+    saveSchedule: '保存排班',
+    confirmed: '已确认',
+    pending: '待支付',
+    completed: '已完成',
+    cancelled: '已取消',
+    expired: '已过期',
+    activeAttention: '需关注',
+    allStatuses: '全部状态',
+    services: '服务',
+    addService: '添加服务',
+    modify: '修改',
+    save: '保存',
+    cancel: '取消',
+    active: '上架',
+    hidden: '隐藏',
+    serviceEditor: '服务编辑',
+    type: '类型',
+    category: '分类',
+    nameZh: '中文名',
+    nameEn: '英文名',
+    descriptionZh: '中文描述',
+    descriptionEn: '英文描述',
+    imageUrl: '图片路径',
+    priceCad: '价格 CAD',
+    depositCad: '定金 CAD',
+    durationMin: '时长分钟',
+    sortOrder: '排序',
+    noBookings: '没有找到预约',
+    adjustFilters: '请调整日期或状态筛选。',
+    noServices: '暂无服务',
+    needsAttention: '定金、排班或服务完成前需要关注。',
+    finalDue: '尾款',
+    revenue: '收入',
+    serviceSaved: '服务已保存。',
+    serviceCreated: '服务已添加。',
+    scheduleSaved: '排班已保存。',
+    loggedOut: '已退出。',
+    loginSuccess: 'Owner 登录成功。',
+    ownerCreated: 'Owner 账号已创建。',
+    checkEmail: '请检查邮箱验证 owner 账号，然后再登录。'
+  },
+  en: {
+    adminTitle: 'Lucky Luxe Admin',
+    ownerConsole: 'Owner Console',
+    customerApp: 'Customer App',
+    reload: 'Reload',
+    ownerAccess: 'Owner Access',
+    ownerLogin: 'Owner Login',
+    ownerLoginText: 'Use your approved owner email. Admin data is hidden until login succeeds.',
+    email: 'Email',
+    password: 'Password',
+    login: 'Login',
+    registerOwner: 'Register Owner',
+    logout: 'Log out',
+    bookings: 'Bookings',
+    bookingsSubtitle: 'Live backend data',
+    today: 'Today',
+    allBookings: 'All Bookings',
+    calendar: 'Calendar',
+    date: 'Date',
+    status: 'Status',
+    clear: 'Clear',
+    schedule: 'Technician Schedule',
+    technician: 'Technician',
+    start: 'Start',
+    end: 'End',
+    workingDay: 'Working day',
+    saveSchedule: 'Save Schedule',
+    confirmed: 'Confirmed',
+    pending: 'Pending',
+    completed: 'Completed',
+    cancelled: 'Cancelled',
+    expired: 'Expired',
+    activeAttention: 'Active attention',
+    allStatuses: 'All statuses',
+    services: 'Services',
+    addService: 'Add Service',
+    modify: 'Modify',
+    save: 'Save',
+    cancel: 'Cancel',
+    active: 'Active',
+    hidden: 'Hidden',
+    serviceEditor: 'Service Editor',
+    type: 'Type',
+    category: 'Category',
+    nameZh: 'Chinese Name',
+    nameEn: 'English Name',
+    descriptionZh: 'Chinese Description',
+    descriptionEn: 'English Description',
+    imageUrl: 'Image URL',
+    priceCad: 'Price CAD',
+    depositCad: 'Deposit CAD',
+    durationMin: 'Duration min',
+    sortOrder: 'Sort order',
+    noBookings: 'No bookings found',
+    adjustFilters: 'Adjust the date or status filter.',
+    noServices: 'No services yet',
+    needsAttention: 'Needs attention until deposit, schedule, or completion is settled.',
+    finalDue: 'Final due',
+    revenue: 'Revenue',
+    serviceSaved: 'Service saved.',
+    serviceCreated: 'Service created.',
+    scheduleSaved: 'Schedule saved.',
+    loggedOut: 'Logged out.',
+    loginSuccess: 'Owner login successful.',
+    ownerCreated: 'Owner account created.',
+    checkEmail: 'Check your email to confirm the owner account, then log in.'
+  }
+}
+
+function t(key) {
+  return copy[owner.lang][key] || key
 }
 
 els.tokenInput.value = owner.token
@@ -53,6 +224,31 @@ function money(cents) {
 
 function cents(value) {
   return Number(value / 100).toFixed(0)
+}
+
+function dollarsToCents(value) {
+  return Math.round(Number(value || 0) * 100)
+}
+
+function escapeHtml(value = '') {
+  return String(value)
+    .replaceAll('&', '&amp;')
+    .replaceAll('<', '&lt;')
+    .replaceAll('>', '&gt;')
+    .replaceAll('"', '&quot;')
+    .replaceAll("'", '&#039;')
+}
+
+function technicianColor(id = '') {
+  const palette = [
+    ['#8a5a44', '#f4e8df'],
+    ['#47735f', '#e7f0ea'],
+    ['#7b5f91', '#efe7f4'],
+    ['#9b7655', '#f7eadc'],
+    ['#4f6f8f', '#e8eef6']
+  ]
+  const sum = [...id].reduce((total, char) => total + char.charCodeAt(0), 0)
+  return palette[sum % palette.length]
 }
 
 function toast(message) {
@@ -92,13 +288,60 @@ async function request(path, options = {}) {
 
 function statusLabel(status) {
   const labels = {
-    PENDING_PAYMENT: 'Pending',
-    CONFIRMED: 'Confirmed',
-    COMPLETED: 'Completed',
-    CANCELLED: 'Cancelled',
-    EXPIRED: 'Expired'
+    PENDING_PAYMENT: t('pending'),
+    CONFIRMED: t('confirmed'),
+    COMPLETED: t('completed'),
+    CANCELLED: t('cancelled'),
+    EXPIRED: t('expired')
   }
   return labels[status] || status
+}
+
+function applyLanguage() {
+  const currentStatus = els.filterStatus.value || 'active'
+  document.documentElement.lang = owner.lang === 'zh' ? 'zh-CN' : 'en'
+  els.adminLangZh.classList.toggle('active', owner.lang === 'zh')
+  els.adminLangEn.classList.toggle('active', owner.lang === 'en')
+  els.adminBrandTitle.textContent = t('adminTitle')
+  els.adminBrandSubtitle.textContent = t('ownerConsole')
+  els.customerAppLink.textContent = t('customerApp')
+  els.reloadButton.textContent = t('reload')
+  els.ownerAccessEyebrow.textContent = t('ownerAccess')
+  els.ownerLoginTitle.textContent = t('ownerLogin')
+  els.ownerLoginText.textContent = t('ownerLoginText')
+  els.ownerEmailLabel.textContent = t('email')
+  els.ownerPasswordLabel.textContent = t('password')
+  els.ownerLoginButton.textContent = t('login')
+  els.ownerRegisterButton.textContent = t('registerOwner')
+  els.ownerLogout.textContent = t('logout')
+  els.bookingsTitle.textContent = t('bookings')
+  els.bookingsSubtitle.textContent = t('bookingsSubtitle')
+  els.todayTab.textContent = t('today')
+  els.allTab.textContent = t('allBookings')
+  els.calendarTab.textContent = t('calendar')
+  els.filterDateLabel.textContent = t('date')
+  els.filterStatusLabel.textContent = t('status')
+  els.clearFilters.textContent = t('clear')
+  els.scheduleTitle.textContent = t('schedule')
+  els.scheduleTechLabel.textContent = t('technician')
+  els.scheduleDateLabel.textContent = t('date')
+  els.scheduleStartLabel.textContent = t('start')
+  els.scheduleEndLabel.textContent = t('end')
+  els.scheduleWorkingLabel.textContent = t('workingDay')
+  els.saveSchedule.textContent = t('saveSchedule')
+  els.servicesTitle.textContent = t('services')
+  els.addServiceButton.textContent = t('addService')
+  els.filterStatus.innerHTML = `
+    <option value="active">${t('activeAttention')}</option>
+    <option value="all">${t('allStatuses')}</option>
+    <option value="PENDING_PAYMENT">${t('pending')}</option>
+    <option value="CONFIRMED">${t('confirmed')}</option>
+    <option value="COMPLETED">${t('completed')}</option>
+    <option value="CANCELLED">${t('cancelled')}</option>
+    <option value="EXPIRED">${t('expired')}</option>
+  `
+  els.filterStatus.value = currentStatus
+  if (!els.filterStatus.value) els.filterStatus.value = 'active'
 }
 
 async function loadAll() {
@@ -133,12 +376,12 @@ async function ownerLogin(event) {
     })
   })
   if (data.needsEmailConfirmation) {
-    toast('Check your email to confirm the owner account, then log in.')
+    toast(t('checkEmail'))
     return
   }
   owner.auth = data.auth
   localStorage.setItem('lucky-owner-auth', JSON.stringify(owner.auth))
-  toast(action === 'register' ? 'Owner account created.' : 'Owner login successful.')
+  toast(action === 'register' ? t('ownerCreated') : t('loginSuccess'))
   await loadAll()
 }
 
@@ -151,8 +394,9 @@ function ownerLogout() {
   owner.bookings = []
   owner.services = []
   owner.technicians = []
+  owner.serviceEditor = null
   setLocked(true)
-  toast('Logged out.')
+  toast(t('loggedOut'))
 }
 
 function setLocked(locked) {
@@ -165,11 +409,13 @@ function setLocked(locked) {
     els.bookingList.innerHTML = ''
     els.metricGrid.innerHTML = ''
     els.serviceAdminList.innerHTML = ''
+    els.serviceEditor.innerHTML = ''
     els.scheduleTech.innerHTML = ''
   }
 }
 
 function render() {
+  applyLanguage()
   renderMetrics()
   renderBookings()
   renderServices()
@@ -183,10 +429,10 @@ function renderMetrics() {
     .filter((item) => ['CONFIRMED', 'COMPLETED'].includes(item.status))
     .reduce((total, item) => total + (item.status === 'COMPLETED' ? item.servicePriceCents : item.depositCents), 0)
   els.metricGrid.innerHTML = `
-    <div class="metric"><span class="subtle">Confirmed</span><strong>${confirmed}</strong></div>
-    <div class="metric"><span class="subtle">Pending</span><strong>${pending}</strong></div>
-    <div class="metric"><span class="subtle">Revenue</span><strong>${money(revenue)}</strong></div>
-    <div class="metric"><span class="subtle">Services</span><strong>${owner.services.length}</strong></div>
+    <div class="metric"><span class="subtle">${t('confirmed')}</span><strong>${confirmed}</strong></div>
+    <div class="metric"><span class="subtle">${t('pending')}</span><strong>${pending}</strong></div>
+    <div class="metric"><span class="subtle">${t('revenue')}</span><strong>${money(revenue)}</strong></div>
+    <div class="metric"><span class="subtle">${t('services')}</span><strong>${owner.services.length}</strong></div>
   `
 }
 
@@ -202,7 +448,7 @@ function renderBookings() {
 
   const bookings = filteredBookings()
   if (!bookings.length) {
-    els.bookingList.innerHTML = '<div class="empty-state"><strong>No bookings found</strong><span>Adjust the date or status filter.</span></div>'
+    els.bookingList.innerHTML = `<div class="empty-state"><strong>${t('noBookings')}</strong><span>${t('adjustFilters')}</span></div>`
     return
   }
   const grouped = groupByDate(bookings)
@@ -241,7 +487,7 @@ function groupByDate(bookings) {
 
 function dateHeading(date) {
   const today = formatDate(new Date())
-  return date === today ? `Today · ${date}` : date
+  return date === today ? `${t('today')} · ${date}` : date
 }
 
 function renderBookingCard(booking) {
@@ -254,12 +500,12 @@ function renderBookingCard(booking) {
         <h3>${booking.service.name}</h3>
         <p>${booking.appointmentDate} ${booking.appointmentTime}-${booking.appointmentEndTime}</p>
         <p>${booking.technician.name} · ${booking.store.name}</p>
-        <p>Deposit ${money(booking.depositCents)} · Final due ${money(booking.finalDueCents)} · ${booking.publicCode}</p>
-        ${needsAttention ? '<p class="attention-note">Needs attention until deposit and service completion are settled.</p>' : ''}
+        <p>${t('depositCad')} ${money(booking.depositCents)} · ${t('finalDue')} ${money(booking.finalDueCents)} · ${booking.publicCode}</p>
+        ${needsAttention ? `<p class="attention-note">${t('needsAttention')}</p>` : ''}
       </div>
       <div class="booking-actions">
-        <button class="ghost" data-status="COMPLETED" data-booking="${booking.id}" type="button">Complete</button>
-        <button class="ghost" data-status="CANCELLED" data-booking="${booking.id}" type="button">Cancel</button>
+        <button class="ghost" data-status="COMPLETED" data-booking="${booking.id}" type="button">${t('completed')}</button>
+        <button class="ghost" data-status="CANCELLED" data-booking="${booking.id}" type="button">${t('cancelled')}</button>
       </div>
     </article>
   `
@@ -268,7 +514,7 @@ function renderBookingCard(booking) {
 function renderCalendar() {
   const year = owner.calendarDate.getFullYear()
   const month = owner.calendarDate.getMonth()
-  els.calendarTitle.textContent = owner.calendarDate.toLocaleString('en-CA', { month: 'long', year: 'numeric' })
+  els.calendarTitle.textContent = owner.calendarDate.toLocaleString(owner.lang === 'zh' ? 'zh-CN' : 'en-CA', { month: 'long', year: 'numeric' })
   const first = new Date(year, month, 1)
   const daysInMonth = new Date(year, month + 1, 0).getDate()
   const leading = first.getDay()
@@ -279,7 +525,7 @@ function renderCalendar() {
 
   els.bookingList.innerHTML = `
     <div class="calendar-grid calendar-weekdays">
-      ${['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'].map((day) => `<strong>${day}</strong>`).join('')}
+      ${(owner.lang === 'zh' ? ['日', '一', '二', '三', '四', '五', '六'] : ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat']).map((day) => `<strong>${day}</strong>`).join('')}
     </div>
     <div class="calendar-grid">
       ${cells.map((date) => renderCalendarCell(date)).join('')}
@@ -302,17 +548,24 @@ function renderCalendarCell(date) {
   return `
     <button class="calendar-cell ${key === formatDate(new Date()) ? 'today-cell' : ''}" data-calendar-date="${key}" type="button">
       <span class="calendar-day">${date.getDate()}</span>
-      ${dayBookings.slice(0, 4).map((booking) => `
-        <span class="calendar-event ${booking.status}">
-          ${booking.appointmentTime} ${booking.service.name}
+      ${dayBookings.slice(0, 4).map((booking) => {
+        const [color, bg] = technicianColor(booking.technician?.id)
+        return `
+        <span class="calendar-event ${booking.status}" style="--tech-color:${color};--tech-bg:${bg}">
+          ${booking.appointmentTime} · ${booking.technician?.name || ''} · ${booking.service.name}
         </span>
-      `).join('')}
+      `}).join('')}
       ${dayBookings.length > 4 ? `<span class="calendar-more">+${dayBookings.length - 4} more</span>` : ''}
     </button>
   `
 }
 
 function renderServices() {
+  renderServiceEditor()
+  if (!owner.services.length) {
+    els.serviceAdminList.innerHTML = `<div class="empty-state"><strong>${t('noServices')}</strong></div>`
+    return
+  }
   els.serviceAdminList.innerHTML = owner.services.map((service) => `
     <div class="service-admin-row">
       <div>
@@ -320,19 +573,94 @@ function renderServices() {
         <p>${service.nameEn} · ${service.type} · ${money(service.priceCents)} · ${service.durationMin} min</p>
         <div class="inline-edit">
           <label>
-            <span>Price CAD</span>
+            <span>${t('priceCad')}</span>
             <input value="${cents(service.priceCents)}" data-price="${service.id}" inputmode="decimal">
           </label>
           <label>
-            <span>Duration min</span>
+            <span>${t('durationMin')}</span>
             <input value="${service.durationMin}" data-duration="${service.id}">
           </label>
-          <button class="primary slim" data-save-service="${service.id}" type="button">Save</button>
+          <button class="primary slim" data-save-service="${service.id}" type="button">${t('save')}</button>
+          <button class="ghost slim" data-edit-service="${service.id}" type="button">${t('modify')}</button>
         </div>
       </div>
-      <span class="status ${service.isActive ? 'CONFIRMED' : 'CANCELLED'}">${service.isActive ? 'Active' : 'Hidden'}</span>
+      <span class="status ${service.isActive ? 'CONFIRMED' : 'CANCELLED'}">${service.isActive ? t('active') : t('hidden')}</span>
     </div>
   `).join('')
+}
+
+function blankServiceEditor() {
+  return {
+    mode: 'create',
+    id: '',
+    type: 'NAIL',
+    category: '',
+    nameZh: '',
+    nameEn: '',
+    descriptionZh: '',
+    descriptionEn: '',
+    imageUrl: '/assets/images/nail-addon.png',
+    price: '0',
+    deposit: '50',
+    duration: '120',
+    sortOrder: String(owner.services.length + 1),
+    isActive: true
+  }
+}
+
+function editorFromService(service) {
+  return {
+    mode: 'edit',
+    id: service.id,
+    type: String(service.type || 'nail').toUpperCase(),
+    category: service.category || '',
+    nameZh: service.nameZh || '',
+    nameEn: service.nameEn || '',
+    descriptionZh: service.descriptionZh || '',
+    descriptionEn: service.descriptionEn || '',
+    imageUrl: service.imageUrl || '/assets/images/nail-addon.png',
+    price: cents(service.priceCents),
+    deposit: cents(service.depositCents),
+    duration: String(service.durationMin || 120),
+    sortOrder: String(service.sortOrder || 0),
+    isActive: Boolean(service.isActive)
+  }
+}
+
+function renderServiceEditor() {
+  if (!owner.serviceEditor) {
+    els.serviceEditor.innerHTML = ''
+    return
+  }
+  const service = owner.serviceEditor
+  els.serviceEditor.innerHTML = `
+    <form class="service-editor-card card" id="serviceEditorForm">
+      <div class="section-row compact-row">
+        <h3>${t('serviceEditor')}</h3>
+        <button class="ghost slim" data-cancel-service-editor type="button">${t('cancel')}</button>
+      </div>
+      <div class="form-grid">
+        <label><span>${t('type')}</span><select name="type"><option value="NAIL" ${service.type === 'NAIL' ? 'selected' : ''}>NAIL</option><option value="LASH" ${service.type === 'LASH' ? 'selected' : ''}>LASH</option></select></label>
+        <label><span>${t('category')}</span><input name="category" value="${escapeHtml(service.category)}"></label>
+        <label><span>${t('nameZh')}</span><input name="nameZh" value="${escapeHtml(service.nameZh)}"></label>
+        <label><span>${t('nameEn')}</span><input name="nameEn" value="${escapeHtml(service.nameEn)}"></label>
+      </div>
+      <label><span>${t('descriptionZh')}</span><textarea name="descriptionZh" rows="2">${escapeHtml(service.descriptionZh)}</textarea></label>
+      <label><span>${t('descriptionEn')}</span><textarea name="descriptionEn" rows="2">${escapeHtml(service.descriptionEn)}</textarea></label>
+      <label><span>${t('imageUrl')}</span><input name="imageUrl" value="${escapeHtml(service.imageUrl)}"></label>
+      <div class="form-grid">
+        <label><span>${t('priceCad')}</span><input name="price" inputmode="decimal" value="${escapeHtml(service.price)}"></label>
+        <label><span>${t('depositCad')}</span><input name="deposit" inputmode="decimal" value="${escapeHtml(service.deposit)}"></label>
+        <label><span>${t('durationMin')}</span><input name="duration" inputmode="numeric" value="${escapeHtml(service.duration)}"></label>
+        <label><span>${t('sortOrder')}</span><input name="sortOrder" inputmode="numeric" value="${escapeHtml(service.sortOrder)}"></label>
+      </div>
+      <label class="check-row">
+        <input name="isActive" type="checkbox" ${service.isActive ? 'checked' : ''}>
+        <span>${t('active')}</span>
+      </label>
+      <button class="primary full" data-save-service-editor type="submit">${t('save')}</button>
+    </form>
+  `
 }
 
 function renderTechnicians() {
@@ -346,7 +674,7 @@ async function updateBookingStatus(id, status) {
     method: 'PATCH',
     body: JSON.stringify({ status })
   })
-  toast(`Booking marked ${status.toLowerCase()}.`)
+  toast(`${t('status')}: ${statusLabel(status)}`)
   await loadAll()
 }
 
@@ -357,7 +685,34 @@ async function saveService(id) {
     method: 'PATCH',
     body: JSON.stringify({ priceCents: price, baseDurationMin: duration })
   })
-  toast('Service saved.')
+  toast(t('serviceSaved'))
+  await loadAll()
+}
+
+async function saveServiceEditor(event) {
+  event.preventDefault()
+  const form = new FormData(event.target)
+  const body = {
+    type: form.get('type'),
+    category: form.get('category'),
+    nameZh: form.get('nameZh'),
+    nameEn: form.get('nameEn'),
+    descriptionZh: form.get('descriptionZh'),
+    descriptionEn: form.get('descriptionEn'),
+    imageUrl: form.get('imageUrl'),
+    priceCents: dollarsToCents(form.get('price')),
+    depositCents: dollarsToCents(form.get('deposit')),
+    baseDurationMin: Number(form.get('duration')),
+    sortOrder: Number(form.get('sortOrder')),
+    isActive: form.get('isActive') === 'on'
+  }
+  const isCreate = owner.serviceEditor.mode === 'create'
+  await request(isCreate ? '/admin/services' : `/admin/services/${owner.serviceEditor.id}`, {
+    method: isCreate ? 'POST' : 'PATCH',
+    body: JSON.stringify(body)
+  })
+  owner.serviceEditor = null
+  toast(isCreate ? t('serviceCreated') : t('serviceSaved'))
   await loadAll()
 }
 
@@ -372,9 +727,11 @@ async function saveSchedule() {
       isWorking: els.scheduleWorking.checked
     })
   })
-  toast('Schedule saved.')
+  toast(t('scheduleSaved'))
 }
 
+els.adminLangZh.addEventListener('click', () => switchAdminLang('zh'))
+els.adminLangEn.addEventListener('click', () => switchAdminLang('en'))
 els.reloadButton.addEventListener('click', () => loadAll().catch((error) => toast(error.message)))
 els.ownerLoginForm.addEventListener('submit', (event) => ownerLogin(event).catch((error) => toast(error.message)))
 els.ownerLogout.addEventListener('click', ownerLogout)
@@ -428,13 +785,41 @@ els.bookingList.addEventListener('click', (event) => {
   if (!button) return
   updateBookingStatus(button.dataset.booking, button.dataset.status).catch((error) => toast(error.message))
 })
+els.addServiceButton.addEventListener('click', () => {
+  owner.serviceEditor = blankServiceEditor()
+  renderServices()
+})
+els.serviceEditor.addEventListener('click', (event) => {
+  if (event.target.closest('[data-cancel-service-editor]')) {
+    owner.serviceEditor = null
+    renderServices()
+  }
+})
+els.serviceEditor.addEventListener('submit', (event) => {
+  if (!event.target.matches('#serviceEditorForm')) return
+  saveServiceEditor(event).catch((error) => toast(error.message))
+})
 els.serviceAdminList.addEventListener('click', (event) => {
+  const editButton = event.target.closest('[data-edit-service]')
+  if (editButton) {
+    const service = owner.services.find((item) => item.id === editButton.dataset.editService)
+    owner.serviceEditor = editorFromService(service)
+    renderServices()
+    return
+  }
   const button = event.target.closest('[data-save-service]')
   if (!button) return
   saveService(button.dataset.saveService).catch((error) => toast(error.message))
 })
 
+function switchAdminLang(lang) {
+  owner.lang = lang
+  localStorage.setItem('lucky-admin-lang', lang)
+  render()
+}
+
 async function initAdmin() {
+  applyLanguage()
   setLocked(true)
   if (!owner.auth?.accessToken) return
   try {
