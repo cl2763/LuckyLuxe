@@ -476,7 +476,19 @@ async function syncSupabaseSession(body) {
   const authUser = await getSupabaseUser(accessToken)
   const provider = authUser.app_metadata?.provider || 'email'
   const user = await upsertAuthUser(authUser, provider)
-  return { user, auth: { accessToken }, mode: 'supabase' }
+  return { user, auth: { accessToken, refreshToken: body.refreshToken || null }, mode: 'supabase' }
+}
+
+async function refreshSupabaseSession(body) {
+  const refreshToken = String(body.refreshToken || '')
+  if (!refreshToken) throw apiError(400, 'BAD_REQUEST', 'refreshToken is required.')
+  if (!isSupabaseConfigured()) throw apiError(503, 'AUTH_NOT_CONFIGURED', 'Supabase Auth is not configured.')
+  const data = await supabaseFetch('/auth/v1/token?grant_type=refresh_token', {
+    method: 'POST',
+    body: JSON.stringify({ refresh_token: refreshToken })
+  })
+  const user = await upsertAuthUser(data.user, data.user?.app_metadata?.provider || 'email')
+  return { user, auth: authPayload(data), mode: 'supabase' }
 }
 
 function googleAuthUrl(redirectTo) {
@@ -785,6 +797,7 @@ async function route(req, res) {
   if (req.method === 'GET' && path === '/auth/config') return json(res, 200, { supabaseAuth: isSupabaseConfigured(), googleAuth: isSupabaseConfigured(), stripe: isStripeConfigured() })
   if (req.method === 'GET' && path === '/auth/google/start') return json(res, 200, { url: googleAuthUrl(queryParams.redirectTo) })
   if (req.method === 'POST' && path === '/auth/session') return json(res, 200, await syncSupabaseSession(await readBody(req)))
+  if (req.method === 'POST' && path === '/auth/refresh') return json(res, 200, await refreshSupabaseSession(await readBody(req)))
   if (req.method === 'POST' && path === '/auth/email/register') return json(res, 201, await signUpEmailUser(await readBody(req)))
   if (req.method === 'POST' && path === '/auth/email/resend-confirmation') return json(res, 200, await resendSignupConfirmation(await readBody(req)))
   if (req.method === 'POST' && path === '/auth/email/login') return json(res, 200, await signInEmailUser(await readBody(req)))

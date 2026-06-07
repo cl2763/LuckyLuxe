@@ -92,7 +92,8 @@ const copy = {
     paidDone: '定金已支付，预约已确认',
     needLogin: '请先完成注册/登录后继续',
     confirmEmail: '请检查邮箱完成验证，然后再登录。',
-    paymentRedirect: '正在跳转到 Stripe 测试支付...'
+    paymentRedirect: '正在跳转到 Stripe 测试支付...',
+    sessionExpired: '登录已过期，请重新登录后继续支付。'
   },
   en: {
     registerTitle: 'Create your Lucky Luxe account',
@@ -185,7 +186,8 @@ const copy = {
     paidDone: 'Deposit paid. Booking confirmed.',
     needLogin: 'Please register or sign in to continue',
     confirmEmail: 'Please verify your email, then sign in.',
-    paymentRedirect: 'Redirecting to Stripe test payment...'
+    paymentRedirect: 'Redirecting to Stripe test payment...',
+    sessionExpired: 'Your session expired. Please sign in again to continue payment.'
   }
 }
 
@@ -264,6 +266,8 @@ function toast(message) {
 }
 
 async function request(path, options = {}) {
+  const skipAuthRefresh = options.skipAuthRefresh
+  delete options.skipAuthRefresh
   const response = await fetch(path, {
     headers: {
       'content-type': 'application/json',
@@ -273,8 +277,46 @@ async function request(path, options = {}) {
     ...options
   })
   const data = await response.json()
-  if (!response.ok) throw new Error(data.error?.message || 'Request failed')
+  if (!response.ok) {
+    if (!skipAuthRefresh && response.status === 401 && state.auth?.refreshToken && isAuthExpiredMessage(data.error?.message)) {
+      const refreshed = await refreshAuth()
+      if (refreshed) return request(path, { ...options, skipAuthRefresh: true })
+    }
+    const error = new Error(data.error?.message || 'Request failed')
+    if (response.status === 401 && isAuthExpiredMessage(error.message)) error.code = 'AUTH_EXPIRED'
+    throw error
+  }
   return data
+}
+
+function isAuthExpiredMessage(message = '') {
+  const normalized = String(message).toLowerCase()
+  return normalized.includes('jwt') || normalized.includes('expired') || normalized.includes('invalid claims')
+}
+
+function clearCustomerAuth() {
+  state.user = null
+  state.auth = null
+  localStorage.removeItem('lucky-web-user')
+  localStorage.removeItem('lucky-web-auth')
+}
+
+async function refreshAuth() {
+  try {
+    const data = await request('/auth/refresh', {
+      method: 'POST',
+      skipAuthRefresh: true,
+      body: JSON.stringify({ refreshToken: state.auth?.refreshToken })
+    })
+    state.user = data.user
+    state.auth = data.auth
+    writeJson('lucky-web-user', state.user)
+    writeJson('lucky-web-auth', state.auth)
+    return true
+  } catch {
+    clearCustomerAuth()
+    return false
+  }
 }
 
 function privateViews() {
@@ -337,10 +379,11 @@ async function bootstrap() {
 async function handleAuthRedirect() {
   const hash = new URLSearchParams(window.location.hash.replace(/^#/, ''))
   const accessToken = hash.get('access_token')
+  const refreshToken = hash.get('refresh_token')
   if (!accessToken) return
   const data = await request('/auth/session', {
     method: 'POST',
-    body: JSON.stringify({ accessToken })
+    body: JSON.stringify({ accessToken, refreshToken })
   })
   state.user = data.user
   state.auth = data.auth
@@ -1232,14 +1275,19 @@ async function handleScreenClick(event) {
     return
   }
   if (event.target.closest('[data-submit-payment]')) {
-    submitPayment().catch((error) => toast(error.message))
+    submitPayment().catch((error) => {
+      if (error.code === 'AUTH_EXPIRED') {
+        clearCustomerAuth()
+        requireLogin({ view: 'checkout' })
+        toast(t('sessionExpired'))
+        return
+      }
+      toast(error.message)
+    })
     return
   }
   if (event.target.closest('[data-logout]')) {
-    state.user = null
-    state.auth = null
-    localStorage.removeItem('lucky-web-user')
-    localStorage.removeItem('lucky-web-auth')
+    clearCustomerAuth()
     state.view = 'home'
     render()
   }
