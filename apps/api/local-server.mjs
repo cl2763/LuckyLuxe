@@ -225,7 +225,11 @@ function serveFile(res, baseDir, requestPath, fallback = 'index.html') {
   const candidate = join(baseDir, cleaned)
   const filePath = existsSync(candidate) && statSync(candidate).isFile() ? candidate : join(baseDir, fallback)
   if (!existsSync(filePath)) return false
-  res.writeHead(200, { 'content-type': contentType(filePath) })
+  const type = contentType(filePath)
+  res.writeHead(200, {
+    'content-type': type,
+    ...(type.startsWith('text/') || type.includes('javascript') ? { 'cache-control': 'no-store' } : {})
+  })
   res.end(readFileSync(filePath))
   return true
 }

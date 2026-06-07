@@ -278,12 +278,13 @@ async function request(path, options = {}) {
   })
   const data = await response.json()
   if (!response.ok) {
-    if (!skipAuthRefresh && response.status === 401 && state.auth?.refreshToken && isAuthExpiredMessage(data.error?.message)) {
+    const authExpired = isAuthExpiredMessage(data.error?.message)
+    if (!skipAuthRefresh && authExpired && state.auth?.refreshToken) {
       const refreshed = await refreshAuth()
       if (refreshed) return request(path, { ...options, skipAuthRefresh: true })
     }
     const error = new Error(data.error?.message || 'Request failed')
-    if (response.status === 401 && isAuthExpiredMessage(error.message)) error.code = 'AUTH_EXPIRED'
+    if (authExpired) error.code = 'AUTH_EXPIRED'
     throw error
   }
   return data
@@ -566,7 +567,7 @@ function renderHome() {
   els.screen.innerHTML = `
     <section class="web-hero">
       <div class="web-hero-copy">
-        <span class="brand-mark">LL</span>
+        <span class="brand-mark hero-logo-mark"><img src="/assets/images/brand-logo.png" alt="Lucky Luxe"></span>
         <p class="eyebrow">Nail & Lash Atelier</p>
         <h1>Lucky Luxe</h1>
         <p>${state.lang === 'zh' ? '预约美甲与美睫，在线支付定金，到店完成尾款。' : 'Book nail and lash services online, pay the deposit, and settle the balance in store.'}</p>
@@ -869,13 +870,16 @@ function renderCheckout() {
       <div class="section-row"><h1>${t('confirmOrder')}</h1><span class="subtle">${t('mockPay')}</span></div>
       ${selected.length ? selected.map((item) => `
         <article class="checkout-item-web card">
-          <div>
+          <div class="checkout-copy-web">
             <h2>${item.service.name}</h2>
-            <p>${item.date} · ${item.time} · ${item.technician.name}</p>
-            <p><strong>${t('deposit')} ${money(item.depositCents)}</strong> · ${t('servicePrice')} ${money(item.servicePriceCents)}</p>
+            <div class="checkout-meta-web">
+              <span>${item.date}</span>
+              <span>${item.time}</span>
+              <span>${item.technician.name}</span>
+            </div>
+            <p><strong>${t('deposit')} ${money(item.depositCents)}</strong><span>${t('servicePrice')} ${money(item.servicePriceCents)}</span></p>
             ${item.referenceImages?.length ? `<div class="cart-reference-row">${item.referenceImages.map((image, index) => `<img src="${image}" alt="${t('reference')} ${index + 1}">`).join('')}</div>` : ''}
           </div>
-          <img src="${item.service.imageUrl}" alt="${item.service.name}">
         </article>
       `).join('') : `<div class="empty-state">${t('emptyCart')}</div>`}
       <section class="section">
