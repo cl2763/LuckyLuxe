@@ -307,6 +307,10 @@ function isStripeConfigured() {
   return Boolean(STRIPE_SECRET_KEY)
 }
 
+function publicAppUrl() {
+  return (APP_PUBLIC_URL || 'https://www.luckyluxeatelier.com').replace(/\/$/, '')
+}
+
 function query(text, params = []) {
   return pool.query(text, params)
 }
@@ -390,7 +394,8 @@ async function signUpEmailUser(body) {
   if (!email || !email.includes('@')) throw apiError(400, 'BAD_REQUEST', 'A valid email is required.')
   if (!isSupabaseConfigured()) return { user: await registerEmailUser(body), auth: demoAuthFor(email), mode: 'demo' }
   if (password.length < 6) throw apiError(400, 'BAD_REQUEST', 'Password must be at least 6 characters.')
-  const data = await supabaseFetch('/auth/v1/signup', {
+  const params = new URLSearchParams({ redirect_to: `${publicAppUrl()}/` })
+  const data = await supabaseFetch(`/auth/v1/signup?${params.toString()}`, {
     method: 'POST',
     body: JSON.stringify({
       email,
@@ -406,6 +411,21 @@ async function signUpEmailUser(body) {
     needsEmailConfirmation: Boolean(!data.session),
     mode: 'supabase'
   }
+}
+
+async function resendSignupConfirmation(body) {
+  const email = String(body.email || '').trim().toLowerCase()
+  if (!email || !email.includes('@')) throw apiError(400, 'BAD_REQUEST', 'A valid email is required.')
+  if (!isSupabaseConfigured()) return { sent: true, mode: 'demo' }
+  await supabaseFetch('/auth/v1/resend', {
+    method: 'POST',
+    body: JSON.stringify({
+      type: 'signup',
+      email,
+      options: { email_redirect_to: `${publicAppUrl()}/` }
+    })
+  })
+  return { sent: true, mode: 'supabase' }
 }
 
 async function signInEmailUser(body) {
@@ -737,6 +757,7 @@ async function route(req, res) {
   if (req.method === 'GET' && path === '/auth/google/start') return json(res, 200, { url: googleAuthUrl(queryParams.redirectTo) })
   if (req.method === 'POST' && path === '/auth/session') return json(res, 200, await syncSupabaseSession(await readBody(req)))
   if (req.method === 'POST' && path === '/auth/email/register') return json(res, 201, await signUpEmailUser(await readBody(req)))
+  if (req.method === 'POST' && path === '/auth/email/resend-confirmation') return json(res, 200, await resendSignupConfirmation(await readBody(req)))
   if (req.method === 'POST' && path === '/auth/email/login') return json(res, 200, await signInEmailUser(await readBody(req)))
   if (req.method === 'POST' && path === '/auth/google/demo') return json(res, 201, { user: await registerGoogleDemoUser(await readBody(req)) })
   if (req.method === 'POST' && path === '/admin/auth/login') {
