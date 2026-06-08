@@ -635,13 +635,13 @@ textarea:focus {
 
 .service-admin-row {
   display: grid;
-  grid-template-columns: 1fr 92px;
-  gap: 10px;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 14px;
   align-items: center;
   border: 1px solid var(--line);
   border-radius: 8px;
   background: #fff;
-  padding: 10px;
+  padding: 14px;
 }
 
 .compact-row {
@@ -663,10 +663,20 @@ textarea:focus {
 
 .inline-edit {
   display: grid;
-  grid-template-columns: 1fr 1fr auto auto;
-  gap: 8px;
+  grid-template-columns: minmax(96px, 124px) minmax(96px, 124px) auto auto;
+  gap: 10px;
   align-items: end;
   margin-top: 10px;
+}
+
+.inline-edit label {
+  min-width: 0;
+}
+
+.inline-edit input {
+  min-width: 96px;
+  width: 100%;
+  text-align: center;
 }
 
 .service-editor-card {
@@ -1238,16 +1248,37 @@ textarea:focus {
 
 .detail-web .detail-main {
   margin-top: 12px;
+  padding: 24px;
 }
 
 .detail-web h1 {
   margin: 0 0 10px;
   font-size: 42px;
+  line-height: 1.1;
 }
 
 .detail-web p {
   color: var(--muted);
   line-height: 1.55;
+}
+
+.detail-price-row,
+.detail-tags {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px 14px;
+  align-items: center;
+  margin-top: 12px;
+}
+
+.detail-price-row {
+  color: var(--ink);
+  font-weight: 800;
+}
+
+.detail-tags {
+  color: var(--muted);
+  font-weight: 750;
 }
 
 .detail-columns {
@@ -1258,18 +1289,24 @@ textarea:focus {
 }
 
 .list-card-web h2 {
-  margin: 0 0 12px;
+  margin: 0;
+  padding: 20px 22px;
+  border-bottom: 1px solid var(--line);
 }
 
 .list-card-web p {
   display: flex;
   gap: 12px;
   align-items: center;
-  border-top: 1px solid var(--line);
   margin: 0;
-  padding: 12px 0;
+  padding: 16px 22px;
   color: var(--ink);
   font-weight: 800;
+  line-height: 1.45;
+}
+
+.list-card-web p + p {
+  border-top: 1px solid var(--line);
 }
 
 .list-card-web p span {
@@ -1914,6 +1951,31 @@ textarea:focus {
   .detail-panel {
     order: 1;
   }
+
+  .admin-shell {
+    width: min(100vw - 24px, 760px);
+  }
+
+  .service-admin-row {
+    grid-template-columns: 1fr;
+    align-items: stretch;
+  }
+
+  .service-admin-row > .status {
+    justify-self: start;
+  }
+
+  .detail-visual-web {
+    height: 300px;
+  }
+
+  .detail-web h1 {
+    font-size: 34px;
+  }
+
+  .reference-grid-web {
+    grid-template-columns: 1fr;
+  }
 }
 
 @media (max-width: 640px) {
@@ -1935,6 +1997,14 @@ textarea:focus {
 
   .panel-heading h1 {
     font-size: 26px;
+  }
+
+  .brand strong {
+    font-size: 20px;
+  }
+
+  .brand small {
+    font-size: 12px;
   }
 
   .segment {
@@ -1961,12 +2031,19 @@ textarea:focus {
   }
 
   .form-grid,
-  .inline-edit,
   .reference-upload-grid,
   .booking-detail-grid,
   .admin-reference-grid,
   .customer-work-grid {
     grid-template-columns: 1fr;
+  }
+
+  .inline-edit {
+    grid-template-columns: repeat(2, minmax(112px, 1fr));
+  }
+
+  .inline-edit button {
+    min-height: 46px;
   }
 
   .summary-bar {
@@ -1994,12 +2071,88 @@ textarea:focus {
     grid-template-columns: repeat(2, 1fr);
   }
 
+  .service-web-page,
+  .detail-web,
+  .booking-flow,
+  .cart-page-web,
+  .checkout-page-web,
+  .me-web {
+    padding: 12px;
+  }
+
+  .service-toolbar {
+    display: grid;
+    gap: 12px;
+  }
+
+  .service-toolbar h1 {
+    font-size: 28px;
+  }
+
   .web-service-card {
     grid-template-columns: 112px 1fr;
+    gap: 12px;
+    padding: 10px;
   }
 
   .web-service-card img {
     height: 120px;
+  }
+
+  .web-service-card h2 {
+    font-size: 22px;
+  }
+
+  .web-service-card p {
+    font-size: 14px;
+  }
+
+  .detail-visual-web {
+    height: 230px;
+  }
+
+  .detail-web .detail-main {
+    padding: 18px;
+  }
+
+  .detail-web h1 {
+    font-size: 30px;
+  }
+
+  .detail-price-row,
+  .detail-tags {
+    display: grid;
+  }
+
+  .list-card-web h2 {
+    padding: 16px 18px;
+    font-size: 24px;
+  }
+
+  .list-card-web p {
+    padding: 14px 18px;
+    font-size: 16px;
+  }
+
+  .reference-grid-web img {
+    height: 180px;
+  }
+
+  .bottom-action-web {
+    position: sticky;
+    right: 0;
+    bottom: 0;
+    z-index: 5;
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    margin: 18px -12px -12px;
+    border-top: 1px solid var(--line);
+    background: rgba(251, 248, 245, 0.96);
+    padding: 10px 12px;
+  }
+
+  .bottom-action-web button {
+    min-height: 48px;
   }
 
   .auth-visual,
@@ -2009,5 +2162,95 @@ textarea:focus {
 
   .web-hero > img {
     min-height: 260px;
+  }
+}
+
+@media (max-width: 430px) {
+  .shell,
+  .admin-shell {
+    width: min(100vw - 16px, 430px);
+    padding-top: 10px;
+  }
+
+  .topbar {
+    gap: 10px;
+  }
+
+  .top-actions .ghost,
+  .top-actions .admin-lang-toggle button {
+    min-height: 38px;
+    padding-inline: 12px;
+  }
+
+  .service-web-page,
+  .detail-web,
+  .booking-flow,
+  .cart-page-web,
+  .checkout-page-web,
+  .me-web {
+    padding: 8px;
+  }
+
+  .category-rail {
+    grid-template-columns: 1fr 1fr;
+    gap: 6px;
+  }
+
+  .category-rail button {
+    min-height: 44px;
+    padding: 8px;
+    font-size: 14px;
+  }
+
+  .web-service-card {
+    grid-template-columns: 96px 1fr;
+  }
+
+  .web-service-card img {
+    height: 104px;
+  }
+
+  .web-service-card h2 {
+    font-size: 20px;
+  }
+
+  .web-service-card .meta {
+    gap: 6px;
+    font-size: 13px;
+  }
+
+  .detail-visual-web {
+    height: 200px;
+  }
+
+  .detail-web .detail-main {
+    padding: 16px;
+  }
+
+  .detail-web h1 {
+    font-size: 28px;
+  }
+
+  .list-card-web h2 {
+    padding: 15px 16px;
+  }
+
+  .list-card-web p {
+    gap: 10px;
+    padding: 13px 16px;
+  }
+
+  .list-card-web p span {
+    width: 28px;
+    height: 28px;
+    flex: 0 0 28px;
+  }
+
+  .inline-edit {
+    grid-template-columns: 1fr 1fr;
+  }
+
+  .inline-edit input {
+    min-width: 0;
   }
 }
