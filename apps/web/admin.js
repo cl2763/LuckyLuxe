@@ -11,7 +11,8 @@ const owner = {
   calendarDate: new Date(),
   serviceEditor: null,
   selectedBookingId: '',
-  finance: null
+  finance: null,
+  dashboardDetail: 'today'
 }
 
 const els = {
@@ -34,8 +35,16 @@ const els = {
   reloadButton: document.querySelector('#reloadButton'),
   metricGrid: document.querySelector('#metricGrid'),
   adminLayout: document.querySelector('#adminLayout'),
+  adminSidebar: document.querySelector('#adminSidebar'),
+  sidebarLinks: [...document.querySelectorAll('.sidebar-link')],
+  sidebarDashboard: document.querySelector('#sidebarDashboard'),
+  sidebarBookings: document.querySelector('#sidebarBookings'),
+  sidebarSchedule: document.querySelector('#sidebarSchedule'),
+  sidebarServices: document.querySelector('#sidebarServices'),
+  sidebarCustomers: document.querySelector('#sidebarCustomers'),
   adminDashboard: document.querySelector('#adminDashboard'),
-  adminNavGrid: document.querySelector('#adminNavGrid'),
+  dashboardCharts: document.querySelector('#dashboardCharts'),
+  dashboardDetailPanel: document.querySelector('#dashboardDetailPanel'),
   dashboardEyebrow: document.querySelector('#dashboardEyebrow'),
   dashboardTitle: document.querySelector('#dashboardTitle'),
   dashboardSubtitle: document.querySelector('#dashboardSubtitle'),
@@ -100,8 +109,8 @@ const copy = {
     logout: '退出',
     bookings: '预约',
     dashboard: '后台首页',
-    dashboardSubtitle: '选择需要管理的业务板块',
-    monthlyRevenue: '月收入',
+    dashboardSubtitle: '当天运营、本月趋势、财务与预约完成度总览',
+    monthlyRevenue: '待验证月收入',
     monthServices: '月服务',
     totalServices: '总服务',
     openFinance: '查看财务',
@@ -114,6 +123,22 @@ const copy = {
     navSchedule: '排班管理',
     navServices: '服务管理',
     navCustomers: '客户档案',
+    todayOverview: '今日运营',
+    monthOverview: '本月趋势',
+    bookingLoad: '预约完成度',
+    customerTraffic: '客户流量',
+    todayBookings: '今日预约',
+    activeBookings: '进行中预约',
+    totalCustomers: '客户总数',
+    recentCustomers: '最近到店',
+    dashboardDetails: '数据明细',
+    viewDetails: '查看明细',
+    noDetailItems: '暂无对应明细',
+    financeLockedHint: '点击月收入后输入财务密码，可查看总收入。',
+    pendingServices: '待支付服务',
+    confirmedServices: '已确认服务',
+    monthServiceDetails: '本月已完成服务',
+    totalServiceDetails: '全部已完成服务',
     customers: '客户档案',
     customerSortAlpha: '按首字母',
     customerSortVisits: '按到店次数',
@@ -203,8 +228,8 @@ const copy = {
     logout: 'Log out',
     bookings: 'Bookings',
     dashboard: 'Admin Home',
-    dashboardSubtitle: 'Choose a workspace to manage',
-    monthlyRevenue: 'Monthly Revenue',
+    dashboardSubtitle: 'Today, month, finance, traffic, and completion overview',
+    monthlyRevenue: 'Verified Month Revenue',
     monthServices: 'Monthly Services',
     totalServices: 'Total Services',
     openFinance: 'View Finance',
@@ -217,6 +242,22 @@ const copy = {
     navSchedule: 'Schedule',
     navServices: 'Services',
     navCustomers: 'Customer Profiles',
+    todayOverview: 'Today Overview',
+    monthOverview: 'Month Trend',
+    bookingLoad: 'Booking Completion',
+    customerTraffic: 'Customer Traffic',
+    todayBookings: 'Today Bookings',
+    activeBookings: 'Active Bookings',
+    totalCustomers: 'Total Customers',
+    recentCustomers: 'Recent Visits',
+    dashboardDetails: 'Data Details',
+    viewDetails: 'View Details',
+    noDetailItems: 'No matching details',
+    financeLockedHint: 'Open monthly revenue and enter the finance password to view total revenue.',
+    pendingServices: 'Pending Payment Services',
+    confirmedServices: 'Confirmed Services',
+    monthServiceDetails: 'Completed This Month',
+    totalServiceDetails: 'All Completed Services',
     customers: 'Customer Profiles',
     customerSortAlpha: 'A-Z',
     customerSortVisits: 'Visits',
@@ -409,6 +450,11 @@ function applyLanguage() {
   els.dashboardEyebrow.textContent = t('dashboard')
   els.dashboardTitle.textContent = t('dashboard')
   els.dashboardSubtitle.textContent = t('dashboardSubtitle')
+  els.sidebarDashboard.textContent = t('dashboard')
+  els.sidebarBookings.textContent = t('navBookings')
+  els.sidebarSchedule.textContent = t('navSchedule')
+  els.sidebarServices.textContent = t('navServices')
+  els.sidebarCustomers.textContent = t('navCustomers')
   els.bookingsTitle.textContent = t('bookings')
   els.bookingsSubtitle.textContent = t('bookingsSubtitle')
   els.customersEyebrow.textContent = t('customers')
@@ -504,6 +550,7 @@ function ownerLogout() {
   owner.selectedBookingId = ''
   owner.finance = null
   owner.adminPage = 'dashboard'
+  owner.dashboardDetail = 'today'
   setLocked(true)
   toast(t('loggedOut'))
 }
@@ -521,6 +568,8 @@ function setLocked(locked) {
     els.serviceEditor.innerHTML = ''
     els.scheduleTech.innerHTML = ''
     els.customerList.innerHTML = ''
+    els.dashboardCharts.innerHTML = ''
+    els.dashboardDetailPanel.innerHTML = ''
     els.financePanel.innerHTML = ''
   }
 }
@@ -538,20 +587,13 @@ function render() {
 }
 
 function renderMetrics() {
-  const confirmed = owner.bookings.filter((item) => item.status === 'CONFIRMED').length
-  const pending = owner.bookings.filter((item) => item.status === 'PENDING_PAYMENT').length
-  const monthBookings = owner.bookings.filter((item) => isCurrentMonth(item.appointmentDate))
-  const monthRevenue = monthBookings
-    .filter((item) => ['CONFIRMED', 'COMPLETED'].includes(item.status))
-    .reduce((total, item) => total + (item.status === 'COMPLETED' ? item.servicePriceCents : item.depositCents), 0)
-  const monthServices = monthBookings.filter((item) => item.status === 'COMPLETED').length
-  const totalServices = owner.bookings.filter((item) => item.status === 'COMPLETED').length
+  const stats = dashboardStats()
   els.metricGrid.innerHTML = `
-    <button class="metric" data-admin-page="bookings" type="button"><span class="subtle">${t('confirmed')}</span><strong>${confirmed}</strong></button>
-    <button class="metric" data-admin-page="bookings" type="button"><span class="subtle">${t('pending')}</span><strong>${pending}</strong></button>
-    <button class="metric revenue-metric" data-open-finance type="button"><span class="subtle">${t('monthlyRevenue')}</span><strong>${money(monthRevenue)}</strong></button>
-    <button class="metric" data-admin-page="bookings" type="button"><span class="subtle">${t('monthServices')}</span><strong>${monthServices}</strong></button>
-    <button class="metric" data-admin-page="services" type="button"><span class="subtle">${t('totalServices')}</span><strong>${totalServices}</strong></button>
+    <button class="metric" data-dashboard-detail="confirmed" type="button"><span class="subtle">${t('confirmed')}</span><strong>${stats.confirmed}</strong></button>
+    <button class="metric" data-dashboard-detail="pending" type="button"><span class="subtle">${t('pending')}</span><strong>${stats.pending}</strong></button>
+    <button class="metric revenue-metric" data-dashboard-detail="finance" data-open-finance type="button"><span class="subtle">${t('monthlyRevenue')}</span><strong>${money(stats.monthRevenue)}</strong></button>
+    <button class="metric" data-dashboard-detail="monthServices" type="button"><span class="subtle">${t('monthServices')}</span><strong>${stats.monthServices}</strong></button>
+    <button class="metric" data-dashboard-detail="totalServices" type="button"><span class="subtle">${t('totalServices')}</span><strong>${stats.totalServices}</strong></button>
   `
 }
 
@@ -560,6 +602,35 @@ function isCurrentMonth(dateString) {
   const date = new Date(`${dateString}T12:00:00`)
   const now = new Date()
   return date.getFullYear() === now.getFullYear() && date.getMonth() === now.getMonth()
+}
+
+function isToday(dateString) {
+  return dateString === formatDate(new Date())
+}
+
+function dashboardStats() {
+  const confirmed = owner.bookings.filter((item) => item.status === 'CONFIRMED').length
+  const pending = owner.bookings.filter((item) => item.status === 'PENDING_PAYMENT').length
+  const completed = owner.bookings.filter((item) => item.status === 'COMPLETED').length
+  const cancelled = owner.bookings.filter((item) => ['CANCELLED', 'EXPIRED'].includes(item.status)).length
+  const monthBookings = owner.bookings.filter((item) => isCurrentMonth(item.appointmentDate))
+  const todayBookings = owner.bookings.filter((item) => isToday(item.appointmentDate))
+  const monthRevenue = monthBookings
+    .filter((item) => ['CONFIRMED', 'COMPLETED'].includes(item.status))
+    .reduce((total, item) => total + (item.status === 'COMPLETED' ? item.servicePriceCents : item.depositCents), 0)
+  const monthServices = monthBookings.filter((item) => item.status === 'COMPLETED').length
+  return {
+    confirmed,
+    pending,
+    completed,
+    cancelled,
+    monthBookings,
+    todayBookings,
+    monthRevenue,
+    monthServices,
+    totalServices: completed,
+    active: confirmed + pending
+  }
 }
 
 function renderAdminPages() {
@@ -572,21 +643,147 @@ function renderAdminPages() {
   }
   Object.entries(pages).forEach(([key, element]) => element.classList.toggle('hidden', owner.adminPage !== key))
   els.metricGrid.classList.toggle('hidden', owner.adminPage !== 'dashboard')
+  els.sidebarLinks.forEach((link) => link.classList.toggle('active', link.dataset.adminPage === owner.adminPage))
 }
 
 function renderDashboard() {
-  els.adminNavGrid.innerHTML = [
-    ['bookings', t('navBookings'), t('bookingsSubtitle')],
-    ['schedule', t('navSchedule'), t('schedule')],
-    ['services', t('navServices'), t('services')],
-    ['customers', t('navCustomers'), t('customers')]
-  ].map(([page, title, subtitle]) => `
-    <button class="admin-nav-card card" data-admin-page="${page}" type="button">
-      <span>${title}</span>
-      <strong>${page === 'bookings' ? owner.bookings.length : page === 'services' ? owner.services.length : page === 'customers' ? owner.customers.length : owner.technicians.length}</strong>
-      <small>${subtitle}</small>
+  const stats = dashboardStats()
+  const maxBooking = Math.max(stats.confirmed, stats.pending, stats.completed, stats.cancelled, 1)
+  const visitRows = sortedCustomers().slice(0, 4)
+  els.dashboardCharts.innerHTML = `
+    <article class="dashboard-chart-card card">
+      <div class="section-row compact-row">
+        <div>
+          <p class="eyebrow">${t('todayOverview')}</p>
+          <h2>${stats.todayBookings.length}</h2>
+        </div>
+        <button class="ghost slim" data-dashboard-detail="today" type="button">${t('viewDetails')}</button>
+      </div>
+      <div class="chart-stat-row">
+        <span>${t('activeBookings')}</span>
+        <strong>${stats.todayBookings.filter((item) => activeStatuses().includes(item.status)).length}</strong>
+      </div>
+      <div class="chart-stat-row">
+        <span>${t('confirmed')}</span>
+        <strong>${stats.todayBookings.filter((item) => item.status === 'CONFIRMED').length}</strong>
+      </div>
+    </article>
+    <article class="dashboard-chart-card card">
+      <div class="section-row compact-row">
+        <div>
+          <p class="eyebrow">${t('monthOverview')}</p>
+          <h2>${stats.monthBookings.length}</h2>
+        </div>
+        <button class="ghost slim" data-dashboard-detail="monthServices" type="button">${t('viewDetails')}</button>
+      </div>
+      ${chartBar(t('monthServices'), stats.monthServices, Math.max(stats.monthBookings.length, 1))}
+      ${chartBar(t('pending'), stats.monthBookings.filter((item) => item.status === 'PENDING_PAYMENT').length, Math.max(stats.monthBookings.length, 1))}
+      ${chartBar(t('revenue'), money(stats.monthRevenue), Math.max(stats.monthBookings.length, 1), 100)}
+    </article>
+    <article class="dashboard-chart-card card">
+      <div class="section-row compact-row">
+        <div>
+          <p class="eyebrow">${t('bookingLoad')}</p>
+          <h2>${Math.round((stats.completed / Math.max(owner.bookings.length, 1)) * 100)}%</h2>
+        </div>
+        <button class="ghost slim" data-dashboard-detail="confirmed" type="button">${t('viewDetails')}</button>
+      </div>
+      ${chartBar(t('confirmed'), stats.confirmed, maxBooking)}
+      ${chartBar(t('pending'), stats.pending, maxBooking)}
+      ${chartBar(t('completed'), stats.completed, maxBooking)}
+      ${chartBar(t('cancelled'), stats.cancelled, maxBooking)}
+    </article>
+    <article class="dashboard-chart-card card">
+      <div class="section-row compact-row">
+        <div>
+          <p class="eyebrow">${t('customerTraffic')}</p>
+          <h2>${owner.customers.length}</h2>
+        </div>
+        <button class="ghost slim" data-dashboard-detail="customers" type="button">${t('viewDetails')}</button>
+      </div>
+      ${visitRows.length ? visitRows.map((customer) => `
+        <button class="traffic-row" data-admin-page="customers" type="button">
+          <span>${escapeHtml(customerName(customer))}</span>
+          <strong>${customer.visitCount || 0}</strong>
+        </button>
+      `).join('') : `<div class="empty-state small-empty">${t('noCustomers')}</div>`}
+    </article>
+  `
+  renderDashboardDetail()
+}
+
+function chartBar(label, value, max, forcedPercent) {
+  const numeric = Number(value) || 0
+  const percent = forcedPercent || Math.max(8, Math.round((numeric / Math.max(max, 1)) * 100))
+  return `
+    <div class="chart-bar-row">
+      <div>
+        <span>${label}</span>
+        <strong>${value}</strong>
+      </div>
+      <i style="width:${Math.min(percent, 100)}%"></i>
+    </div>
+  `
+}
+
+function renderDashboardDetail() {
+  const detail = dashboardDetail()
+  els.dashboardDetailPanel.innerHTML = `
+    <div class="section-row compact-row">
+      <div>
+        <p class="eyebrow">${t('dashboardDetails')}</p>
+        <h2>${detail.title}</h2>
+      </div>
+      ${detail.type === 'finance' ? `<span class="subtle">${t('financeLockedHint')}</span>` : ''}
+    </div>
+    ${detail.items.length ? `
+      <div class="dashboard-detail-list">
+        ${detail.items.map((item) => detail.type === 'customers' ? renderCustomerMini(item) : renderBookingMini(item)).join('')}
+      </div>
+    ` : `<div class="empty-state small-empty">${t('noDetailItems')}</div>`}
+  `
+}
+
+function dashboardDetail() {
+  const type = owner.dashboardDetail || 'today'
+  const month = owner.bookings.filter((item) => isCurrentMonth(item.appointmentDate))
+  const details = {
+    today: [t('todayBookings'), owner.bookings.filter((item) => isToday(item.appointmentDate))],
+    pending: [t('pendingServices'), owner.bookings.filter((item) => item.status === 'PENDING_PAYMENT')],
+    confirmed: [t('confirmedServices'), owner.bookings.filter((item) => item.status === 'CONFIRMED')],
+    monthServices: [t('monthServiceDetails'), month.filter((item) => item.status === 'COMPLETED')],
+    totalServices: [t('totalServiceDetails'), owner.bookings.filter((item) => item.status === 'COMPLETED')],
+    finance: [t('monthlyRevenue'), month.filter((item) => ['CONFIRMED', 'COMPLETED'].includes(item.status))],
+    customers: [t('recentCustomers'), sortedCustomers().slice(0, 8)]
+  }
+  const [title, items] = details[type] || details.today
+  return { title, items, type }
+}
+
+function renderBookingMini(booking) {
+  return `
+    <button class="dashboard-detail-card" data-admin-page="bookings" data-view-booking="${booking.id}" type="button">
+      <img src="${booking.service.imageUrl}" alt="${booking.service.name}">
+      <span>
+        <strong>${escapeHtml(booking.service.name)}</strong>
+        <small>${booking.appointmentDate} · ${booking.appointmentTime} · ${escapeHtml(booking.technician?.name || '-')}</small>
+        <small>${statusLabel(booking.status)} · ${money(booking.depositCents)} · ${booking.publicCode}</small>
+      </span>
     </button>
-  `).join('')
+  `
+}
+
+function renderCustomerMini(customer) {
+  return `
+    <button class="dashboard-detail-card" data-admin-page="customers" type="button">
+      <span class="mini-avatar">${customerName(customer).slice(0, 1).toUpperCase()}</span>
+      <span>
+        <strong>${escapeHtml(customerName(customer))}</strong>
+        <small>${t('visits')} ${customer.visitCount || 0} · ${t('lastVisit')} ${dateOnly(customer.lastVisitAt)}</small>
+        <small>${escapeHtml(customer.email || '-')}</small>
+      </span>
+    </button>
+  `
 }
 
 function renderBookings() {
@@ -1099,6 +1296,24 @@ els.reloadButton.addEventListener('click', () => loadAll().catch((error) => toas
 els.ownerLoginForm.addEventListener('submit', (event) => ownerLogin(event).catch((error) => toast(error.message)))
 els.ownerLogout.addEventListener('click', ownerLogout)
 els.adminLayout.addEventListener('click', (event) => {
+  const detailButton = event.target.closest('[data-dashboard-detail]')
+  if (detailButton) {
+    owner.dashboardDetail = detailButton.dataset.dashboardDetail
+    if (detailButton.hasAttribute('data-open-finance')) {
+      els.financePanel.classList.remove('hidden')
+      renderFinancePanel()
+    }
+    renderDashboardDetail()
+    return
+  }
+  const bookingDetailButton = event.target.closest('[data-view-booking]')
+  if (bookingDetailButton) {
+    owner.selectedBookingId = bookingDetailButton.dataset.viewBooking
+    owner.adminPage = 'bookings'
+    owner.adminView = 'all'
+    render()
+    return
+  }
   const pageButton = event.target.closest('[data-admin-page]')
   if (pageButton) {
     owner.adminPage = pageButton.dataset.adminPage

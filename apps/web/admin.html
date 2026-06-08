@@ -49,114 +49,125 @@
       </section>
 
       <section class="hidden admin-app" id="adminLayout">
-        <section class="metric-grid" id="metricGrid"></section>
+        <aside class="admin-sidebar" id="adminSidebar" aria-label="Admin navigation">
+          <button class="sidebar-link active" data-admin-page="dashboard" id="sidebarDashboard" type="button">后台首页</button>
+          <button class="sidebar-link" data-admin-page="bookings" id="sidebarBookings" type="button">预约管理</button>
+          <button class="sidebar-link" data-admin-page="schedule" id="sidebarSchedule" type="button">排班管理</button>
+          <button class="sidebar-link" data-admin-page="services" id="sidebarServices" type="button">服务管理</button>
+          <button class="sidebar-link" data-admin-page="customers" id="sidebarCustomers" type="button">客户档案</button>
+        </aside>
 
-        <section class="admin-dashboard-page" id="adminDashboard">
-          <div class="section-row">
-            <div>
-              <p class="eyebrow" id="dashboardEyebrow">Dashboard</p>
-              <h1 id="dashboardTitle">Admin Home</h1>
+        <section class="admin-workspace" id="adminWorkspace">
+          <section class="metric-grid" id="metricGrid"></section>
+
+          <section class="admin-dashboard-page" id="adminDashboard">
+            <div class="section-row">
+              <div>
+                <p class="eyebrow" id="dashboardEyebrow">Dashboard</p>
+                <h1 id="dashboardTitle">Admin Home</h1>
+              </div>
+              <span class="subtle" id="dashboardSubtitle">Today and month overview</span>
             </div>
-            <span class="subtle" id="dashboardSubtitle">Choose a workspace</span>
-          </div>
-          <div class="admin-nav-grid" id="adminNavGrid"></div>
-          <div class="finance-panel card hidden" id="financePanel"></div>
-        </section>
+            <div class="dashboard-chart-grid" id="dashboardCharts"></div>
+            <div class="dashboard-detail-panel card" id="dashboardDetailPanel"></div>
+            <div class="finance-panel card hidden" id="financePanel"></div>
+          </section>
 
-        <section class="admin-page hidden" id="bookingsPage">
-          <button class="ghost back-btn" data-admin-page="dashboard" type="button">← Dashboard</button>
-          <div class="section-row">
-            <h1 id="bookingsTitle">Bookings</h1>
-            <span class="subtle" id="bookingsSubtitle">Live backend data</span>
-          </div>
-          <div class="admin-tabs">
-            <button class="admin-tab active" id="todayTab" data-admin-view="today" type="button">Today</button>
-            <button class="admin-tab" id="allTab" data-admin-view="all" type="button">All Bookings</button>
-            <button class="admin-tab" id="calendarTab" data-admin-view="calendar" type="button">Calendar</button>
-          </div>
-          <div class="filter-row" id="bookingFilters">
-            <label>
-              <span id="filterDateLabel">Date</span>
-              <input id="filterDate" type="date">
-            </label>
-            <label>
-              <span id="filterStatusLabel">Status</span>
-              <select id="filterStatus">
-                <option value="active">Active attention</option>
-                <option value="all">All statuses</option>
-                <option value="PENDING_PAYMENT">Pending payment</option>
-                <option value="CONFIRMED">Confirmed</option>
-                <option value="COMPLETED">Completed</option>
-                <option value="CANCELLED">Cancelled</option>
-                <option value="EXPIRED">Expired</option>
+          <section class="admin-page hidden" id="bookingsPage">
+            <button class="ghost back-btn" data-admin-page="dashboard" type="button">← Dashboard</button>
+            <div class="section-row">
+              <h1 id="bookingsTitle">Bookings</h1>
+              <span class="subtle" id="bookingsSubtitle">Live backend data</span>
+            </div>
+            <div class="admin-tabs">
+              <button class="admin-tab active" id="todayTab" data-admin-view="today" type="button">Today</button>
+              <button class="admin-tab" id="allTab" data-admin-view="all" type="button">All Bookings</button>
+              <button class="admin-tab" id="calendarTab" data-admin-view="calendar" type="button">Calendar</button>
+            </div>
+            <div class="filter-row" id="bookingFilters">
+              <label>
+                <span id="filterDateLabel">Date</span>
+                <input id="filterDate" type="date">
+              </label>
+              <label>
+                <span id="filterStatusLabel">Status</span>
+                <select id="filterStatus">
+                  <option value="active">Active attention</option>
+                  <option value="all">All statuses</option>
+                  <option value="PENDING_PAYMENT">Pending payment</option>
+                  <option value="CONFIRMED">Confirmed</option>
+                  <option value="COMPLETED">Completed</option>
+                  <option value="CANCELLED">Cancelled</option>
+                  <option value="EXPIRED">Expired</option>
+                </select>
+              </label>
+              <button class="ghost" id="clearFilters" type="button">Clear</button>
+            </div>
+            <div class="calendar-controls hidden" id="calendarControls">
+              <button class="ghost" id="prevMonth" type="button">←</button>
+              <strong id="calendarTitle"></strong>
+              <button class="ghost" id="nextMonth" type="button">→</button>
+            </div>
+            <div class="admin-list" id="bookingList"></div>
+          </section>
+
+          <section class="admin-page hidden" id="schedulePage">
+            <button class="ghost back-btn" data-admin-page="dashboard" type="button">← Dashboard</button>
+            <section class="admin-card">
+              <h2 id="scheduleTitle">Technician Schedule</h2>
+              <label>
+                <span id="scheduleTechLabel">Technician</span>
+                <select id="scheduleTech"></select>
+              </label>
+              <label>
+                <span id="scheduleDateLabel">Date</span>
+                <input id="scheduleDate" type="date">
+              </label>
+              <div class="form-grid tight">
+                <label>
+                  <span id="scheduleStartLabel">Start</span>
+                  <input id="scheduleStart" value="10:00">
+                </label>
+                <label>
+                  <span id="scheduleEndLabel">End</span>
+                  <input id="scheduleEnd" value="19:00">
+                </label>
+              </div>
+              <label class="check-row">
+                <input id="scheduleWorking" type="checkbox" checked>
+                <span id="scheduleWorkingLabel">Working day</span>
+              </label>
+              <button class="primary full" id="saveSchedule" type="button">Save Schedule</button>
+            </section>
+          </section>
+
+          <section class="admin-page hidden" id="servicesPage">
+            <button class="ghost back-btn" data-admin-page="dashboard" type="button">← Dashboard</button>
+            <section class="admin-card">
+              <div class="section-row compact-row">
+                <h2 id="servicesTitle">Services</h2>
+                <button class="primary slim" id="addServiceButton" type="button">Add Service</button>
+              </div>
+              <div id="serviceEditor"></div>
+              <div class="service-admin-list" id="serviceAdminList"></div>
+            </section>
+          </section>
+
+          <section class="admin-page hidden" id="customersPage">
+            <button class="ghost back-btn" data-admin-page="dashboard" type="button">← Dashboard</button>
+            <div class="section-row">
+              <div>
+                <p class="eyebrow" id="customersEyebrow">Customers</p>
+                <h1 id="customersTitle">Customer Profiles</h1>
+              </div>
+              <select id="customerSort">
+                <option value="alpha">A-Z</option>
+                <option value="visits">Visits</option>
+                <option value="recent">Recent visit</option>
               </select>
-            </label>
-            <button class="ghost" id="clearFilters" type="button">Clear</button>
-          </div>
-          <div class="calendar-controls hidden" id="calendarControls">
-            <button class="ghost" id="prevMonth" type="button">←</button>
-            <strong id="calendarTitle"></strong>
-            <button class="ghost" id="nextMonth" type="button">→</button>
-          </div>
-          <div class="admin-list" id="bookingList"></div>
-        </section>
-
-        <section class="admin-page hidden" id="schedulePage">
-          <button class="ghost back-btn" data-admin-page="dashboard" type="button">← Dashboard</button>
-          <section class="admin-card">
-            <h2 id="scheduleTitle">Technician Schedule</h2>
-            <label>
-              <span id="scheduleTechLabel">Technician</span>
-              <select id="scheduleTech"></select>
-            </label>
-            <label>
-              <span id="scheduleDateLabel">Date</span>
-              <input id="scheduleDate" type="date">
-            </label>
-            <div class="form-grid tight">
-              <label>
-                <span id="scheduleStartLabel">Start</span>
-                <input id="scheduleStart" value="10:00">
-              </label>
-              <label>
-                <span id="scheduleEndLabel">End</span>
-                <input id="scheduleEnd" value="19:00">
-              </label>
             </div>
-            <label class="check-row">
-              <input id="scheduleWorking" type="checkbox" checked>
-              <span id="scheduleWorkingLabel">Working day</span>
-            </label>
-            <button class="primary full" id="saveSchedule" type="button">Save Schedule</button>
+            <div class="admin-list" id="customerList"></div>
           </section>
-        </section>
-
-        <section class="admin-page hidden" id="servicesPage">
-          <button class="ghost back-btn" data-admin-page="dashboard" type="button">← Dashboard</button>
-          <section class="admin-card">
-            <div class="section-row compact-row">
-              <h2 id="servicesTitle">Services</h2>
-              <button class="primary slim" id="addServiceButton" type="button">Add Service</button>
-            </div>
-            <div id="serviceEditor"></div>
-            <div class="service-admin-list" id="serviceAdminList"></div>
-          </section>
-        </section>
-
-        <section class="admin-page hidden" id="customersPage">
-          <button class="ghost back-btn" data-admin-page="dashboard" type="button">← Dashboard</button>
-          <div class="section-row">
-            <div>
-              <p class="eyebrow" id="customersEyebrow">Customers</p>
-              <h1 id="customersTitle">Customer Profiles</h1>
-            </div>
-            <select id="customerSort">
-              <option value="alpha">A-Z</option>
-              <option value="visits">Visits</option>
-              <option value="recent">Recent visit</option>
-            </select>
-          </div>
-          <div class="admin-list" id="customerList"></div>
         </section>
       </section>
     </main>
