@@ -353,6 +353,13 @@ function setView(view) {
   state.view = view
   els.tabs.forEach((tab) => tab.classList.toggle('active', tab.dataset.view === view))
   render()
+  if (['me', 'orders'].includes(view) && state.user) {
+    loadUserOrders()
+      .then(() => {
+        if (state.view === view) render()
+      })
+      .catch((error) => toast(error.message))
+  }
 }
 
 function categories() {
@@ -430,6 +437,13 @@ async function loadStores() {
 async function loadAddOns() {
   const data = await request('/add-ons')
   state.addOns = data.addOns
+}
+
+async function loadUserOrders() {
+  if (!state.user) return
+  const data = await request(`/bookings?lang=${state.lang}`)
+  state.orders = data.bookings || []
+  writeJson('lucky-web-orders', state.orders)
 }
 
 function bindGlobalEvents() {
@@ -534,6 +548,13 @@ async function showApp() {
   els.appView.classList.remove('hidden')
   els.langZh.classList.toggle('active', state.lang === 'zh')
   els.langEn.classList.toggle('active', state.lang === 'en')
+  if (state.user) {
+    try {
+      await loadUserOrders()
+    } catch (error) {
+      toast(error.message)
+    }
+  }
   const pending = state.user ? state.pendingAuth : null
   if (pending) {
     state.pendingAuth = null

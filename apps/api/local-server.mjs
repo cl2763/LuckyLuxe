@@ -713,6 +713,16 @@ async function route(req, res) {
     return json(res, 200, getAvailability(query))
   }
   if (req.method === 'POST' && path === '/bookings') return json(res, 201, { booking: createBooking(await readBody(req)) })
+  if (req.method === 'GET' && path === '/bookings') {
+    const args = []
+    let sql = 'SELECT * FROM bookings'
+    if (query.userId) {
+      sql += ' WHERE user_id = ?'
+      args.push(query.userId)
+    }
+    sql += ' ORDER BY appointment_start DESC'
+    return json(res, 200, { bookings: db.prepare(sql).all(...args).map((booking) => serializeBooking(booking, query.lang || 'zh')) })
+  }
   if (req.method === 'POST' && path === '/payments/mock/confirm') return json(res, 200, { booking: confirmMockPayment(await readBody(req)) })
   if (req.method === 'GET' && path.startsWith('/bookings/')) {
     const id = path.split('/')[2]

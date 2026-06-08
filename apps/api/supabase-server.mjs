@@ -882,6 +882,11 @@ async function route(req, res) {
     return json(res, 200, await getAvailability(queryParams))
   }
   if (req.method === 'POST' && path === '/bookings') return json(res, 201, { booking: await createBooking(await readBody(req), await requireCustomer(req)) })
+  if (req.method === 'GET' && path === '/bookings') {
+    const customer = await requireCustomer(req)
+    const rows = await query('SELECT * FROM bookings WHERE user_id = $1 ORDER BY appointment_start DESC', [customer.id])
+    return json(res, 200, { bookings: await Promise.all(rows.rows.map((booking) => serializeBooking(booking, queryParams.lang || 'zh'))) })
+  }
   if (req.method === 'POST' && path === '/payments/mock/confirm') {
     await requireCustomer(req)
     return json(res, 200, { booking: await confirmMockPayment(await readBody(req)) })
