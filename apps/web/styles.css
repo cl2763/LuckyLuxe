@@ -592,6 +592,9 @@ textarea:focus {
 
 .metric-grid {
   margin-bottom: 18px;
+  display: grid;
+  grid-template-columns: repeat(5, minmax(150px, 1fr));
+  gap: 12px;
 }
 
 .metric {
@@ -599,10 +602,93 @@ textarea:focus {
   min-height: 96px;
   align-content: center;
   gap: 4px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: #fff;
+  color: inherit;
+  padding: 16px;
+  text-align: left;
 }
 
 .metric strong {
   font-size: 30px;
+}
+
+.metric.revenue-metric {
+  background: #fffaf6;
+  border-color: #d7bea5;
+}
+
+.admin-app,
+.admin-page,
+.admin-dashboard-page {
+  display: grid;
+  gap: 18px;
+}
+
+.admin-nav-grid {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(180px, 1fr));
+  gap: 14px;
+}
+
+.admin-nav-card {
+  display: grid;
+  min-height: 150px;
+  align-content: space-between;
+  gap: 12px;
+  padding: 18px;
+  color: inherit;
+  text-align: left;
+}
+
+.admin-nav-card span {
+  color: var(--muted);
+  font-weight: 850;
+}
+
+.admin-nav-card strong {
+  font-size: 34px;
+}
+
+.admin-nav-card small {
+  color: var(--muted);
+  font-weight: 750;
+}
+
+.finance-panel {
+  padding: 18px;
+}
+
+.finance-form {
+  display: grid;
+  gap: 14px;
+}
+
+.finance-grid {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(140px, 1fr));
+  gap: 12px;
+}
+
+.finance-grid p {
+  display: grid;
+  gap: 6px;
+  margin: 0;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: #fff;
+  padding: 14px;
+}
+
+.finance-grid span,
+.customer-stats span {
+  color: var(--muted);
+  font-weight: 800;
+}
+
+.finance-grid strong {
+  font-size: 24px;
 }
 
 .admin-layout {
@@ -827,6 +913,55 @@ textarea:focus {
 .booking-date-group h2 {
   margin: 0 0 10px;
   font-size: 22px;
+}
+
+.customer-profile-card {
+  display: grid;
+  grid-template-columns: 58px minmax(0, 1fr) minmax(260px, auto);
+  gap: 14px;
+  align-items: center;
+  padding: 14px;
+}
+
+.customer-avatar {
+  display: grid;
+  width: 58px;
+  height: 58px;
+  place-items: center;
+  border-radius: 50%;
+  background: var(--black);
+  color: #f2dfcf;
+  font-size: 22px;
+  font-weight: 900;
+}
+
+.customer-profile-card h3 {
+  margin: 0 0 6px;
+}
+
+.customer-profile-card p {
+  margin: 3px 0;
+  color: var(--muted);
+  font-weight: 750;
+}
+
+.customer-stats {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(88px, 1fr));
+  gap: 8px;
+}
+
+.customer-stats span {
+  display: grid;
+  gap: 4px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: #fffaf6;
+  padding: 10px;
+}
+
+.customer-stats strong {
+  color: var(--ink);
 }
 
 .attention-note {
@@ -1976,6 +2111,20 @@ textarea:focus {
   .reference-grid-web {
     grid-template-columns: 1fr;
   }
+
+  .metric-grid,
+  .admin-nav-grid,
+  .finance-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .customer-profile-card {
+    grid-template-columns: 58px 1fr;
+  }
+
+  .customer-stats {
+    grid-column: 1 / -1;
+  }
 }
 
 @media (max-width: 640px) {
@@ -2052,6 +2201,9 @@ textarea:focus {
   }
 
   .web-tabs,
+  .metric-grid,
+  .admin-nav-grid,
+  .finance-grid,
   .quick-grid,
   .recommend-strip,
   .menu-grid-web,
@@ -2063,6 +2215,14 @@ textarea:focus {
   .asset-grid-web,
   .order-body-web,
   .recent-card-web {
+    grid-template-columns: 1fr;
+  }
+
+  .customer-profile-card {
+    grid-template-columns: 1fr;
+  }
+
+  .customer-stats {
     grid-template-columns: 1fr;
   }
 

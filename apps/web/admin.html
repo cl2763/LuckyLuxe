@@ -24,6 +24,7 @@
           <a class="ghost-link" id="customerAppLink" href="/">Customer App</a>
           <input class="token-input hidden" id="tokenInput" value="" aria-label="Owner token" placeholder="Owner token fallback">
           <button class="primary slim hidden" id="reloadButton" type="button">Reload</button>
+          <button class="ghost slim hidden" id="ownerLogout" type="button">Log out</button>
         </nav>
       </header>
 
@@ -44,14 +45,26 @@
           </label>
           <button class="primary slim" id="ownerLoginButton" data-auth-action="login" type="submit">Login</button>
           <button class="ghost slim" id="ownerRegisterButton" data-auth-action="register" type="submit">Register Owner</button>
-          <button class="ghost slim" id="ownerLogout" type="button">Log out</button>
         </form>
       </section>
 
-      <section class="metric-grid hidden" id="metricGrid"></section>
+      <section class="hidden admin-app" id="adminLayout">
+        <section class="metric-grid" id="metricGrid"></section>
 
-      <section class="admin-layout hidden" id="adminLayout">
-        <div class="admin-main">
+        <section class="admin-dashboard-page" id="adminDashboard">
+          <div class="section-row">
+            <div>
+              <p class="eyebrow" id="dashboardEyebrow">Dashboard</p>
+              <h1 id="dashboardTitle">Admin Home</h1>
+            </div>
+            <span class="subtle" id="dashboardSubtitle">Choose a workspace</span>
+          </div>
+          <div class="admin-nav-grid" id="adminNavGrid"></div>
+          <div class="finance-panel card hidden" id="financePanel"></div>
+        </section>
+
+        <section class="admin-page hidden" id="bookingsPage">
+          <button class="ghost back-btn" data-admin-page="dashboard" type="button">← Dashboard</button>
           <div class="section-row">
             <h1 id="bookingsTitle">Bookings</h1>
             <span class="subtle" id="bookingsSubtitle">Live backend data</span>
@@ -86,9 +99,10 @@
             <button class="ghost" id="nextMonth" type="button">→</button>
           </div>
           <div class="admin-list" id="bookingList"></div>
-        </div>
+        </section>
 
-        <aside class="admin-side">
+        <section class="admin-page hidden" id="schedulePage">
+          <button class="ghost back-btn" data-admin-page="dashboard" type="button">← Dashboard</button>
           <section class="admin-card">
             <h2 id="scheduleTitle">Technician Schedule</h2>
             <label>
@@ -115,7 +129,10 @@
             </label>
             <button class="primary full" id="saveSchedule" type="button">Save Schedule</button>
           </section>
+        </section>
 
+        <section class="admin-page hidden" id="servicesPage">
+          <button class="ghost back-btn" data-admin-page="dashboard" type="button">← Dashboard</button>
           <section class="admin-card">
             <div class="section-row compact-row">
               <h2 id="servicesTitle">Services</h2>
@@ -124,7 +141,23 @@
             <div id="serviceEditor"></div>
             <div class="service-admin-list" id="serviceAdminList"></div>
           </section>
-        </aside>
+        </section>
+
+        <section class="admin-page hidden" id="customersPage">
+          <button class="ghost back-btn" data-admin-page="dashboard" type="button">← Dashboard</button>
+          <div class="section-row">
+            <div>
+              <p class="eyebrow" id="customersEyebrow">Customers</p>
+              <h1 id="customersTitle">Customer Profiles</h1>
+            </div>
+            <select id="customerSort">
+              <option value="alpha">A-Z</option>
+              <option value="visits">Visits</option>
+              <option value="recent">Recent visit</option>
+            </select>
+          </div>
+          <div class="admin-list" id="customerList"></div>
+        </section>
       </section>
     </main>
 

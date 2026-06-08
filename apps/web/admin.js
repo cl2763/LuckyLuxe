@@ -5,10 +5,13 @@ const owner = {
   bookings: [],
   services: [],
   technicians: [],
+  customers: [],
   adminView: 'today',
+  adminPage: 'dashboard',
   calendarDate: new Date(),
   serviceEditor: null,
-  selectedBookingId: ''
+  selectedBookingId: '',
+  finance: null
 }
 
 const els = {
@@ -31,6 +34,20 @@ const els = {
   reloadButton: document.querySelector('#reloadButton'),
   metricGrid: document.querySelector('#metricGrid'),
   adminLayout: document.querySelector('#adminLayout'),
+  adminDashboard: document.querySelector('#adminDashboard'),
+  adminNavGrid: document.querySelector('#adminNavGrid'),
+  dashboardEyebrow: document.querySelector('#dashboardEyebrow'),
+  dashboardTitle: document.querySelector('#dashboardTitle'),
+  dashboardSubtitle: document.querySelector('#dashboardSubtitle'),
+  financePanel: document.querySelector('#financePanel'),
+  bookingsPage: document.querySelector('#bookingsPage'),
+  schedulePage: document.querySelector('#schedulePage'),
+  servicesPage: document.querySelector('#servicesPage'),
+  customersPage: document.querySelector('#customersPage'),
+  customersEyebrow: document.querySelector('#customersEyebrow'),
+  customersTitle: document.querySelector('#customersTitle'),
+  customerSort: document.querySelector('#customerSort'),
+  customerList: document.querySelector('#customerList'),
   bookingsTitle: document.querySelector('#bookingsTitle'),
   bookingsSubtitle: document.querySelector('#bookingsSubtitle'),
   bookingList: document.querySelector('#bookingList'),
@@ -82,6 +99,29 @@ const copy = {
     registerOwner: '注册 Owner',
     logout: '退出',
     bookings: '预约',
+    dashboard: '后台首页',
+    dashboardSubtitle: '选择需要管理的业务板块',
+    monthlyRevenue: '月收入',
+    monthServices: '月服务',
+    totalServices: '总服务',
+    openFinance: '查看财务',
+    financeLogin: '财务登录',
+    financeText: '总收入和完整财务数据需要二次验证后查看。',
+    financePassword: '财务密码',
+    totalRevenue: '总收入',
+    financeUnlocked: '财务信息已解锁。',
+    navBookings: '预约管理',
+    navSchedule: '排班管理',
+    navServices: '服务管理',
+    navCustomers: '客户档案',
+    customers: '客户档案',
+    customerSortAlpha: '按首字母',
+    customerSortVisits: '按到店次数',
+    customerSortRecent: '最近到店',
+    visits: '到店次数',
+    lastVisit: '最近到店',
+    totalSpent: '累计消费',
+    noCustomers: '暂无客户档案',
     bookingsSubtitle: '实时后端数据',
     today: '今天',
     allBookings: '全部预约',
@@ -162,6 +202,29 @@ const copy = {
     registerOwner: 'Register Owner',
     logout: 'Log out',
     bookings: 'Bookings',
+    dashboard: 'Admin Home',
+    dashboardSubtitle: 'Choose a workspace to manage',
+    monthlyRevenue: 'Monthly Revenue',
+    monthServices: 'Monthly Services',
+    totalServices: 'Total Services',
+    openFinance: 'View Finance',
+    financeLogin: 'Finance Login',
+    financeText: 'Total revenue and full finance data require a second verification.',
+    financePassword: 'Finance Password',
+    totalRevenue: 'Total Revenue',
+    financeUnlocked: 'Finance unlocked.',
+    navBookings: 'Bookings',
+    navSchedule: 'Schedule',
+    navServices: 'Services',
+    navCustomers: 'Customer Profiles',
+    customers: 'Customer Profiles',
+    customerSortAlpha: 'A-Z',
+    customerSortVisits: 'Visits',
+    customerSortRecent: 'Recent Visit',
+    visits: 'Visits',
+    lastVisit: 'Last Visit',
+    totalSpent: 'Total Spent',
+    noCustomers: 'No customer profiles',
     bookingsSubtitle: 'Live backend data',
     today: 'Today',
     allBookings: 'All Bookings',
@@ -327,6 +390,7 @@ function statusLabel(status) {
 
 function applyLanguage() {
   const currentStatus = els.filterStatus.value || 'active'
+  const currentCustomerSort = els.customerSort.value || 'alpha'
   document.documentElement.lang = owner.lang === 'zh' ? 'zh-CN' : 'en'
   els.adminLangZh.classList.toggle('active', owner.lang === 'zh')
   els.adminLangEn.classList.toggle('active', owner.lang === 'en')
@@ -342,8 +406,19 @@ function applyLanguage() {
   els.ownerLoginButton.textContent = t('login')
   els.ownerRegisterButton.textContent = t('registerOwner')
   els.ownerLogout.textContent = t('logout')
+  els.dashboardEyebrow.textContent = t('dashboard')
+  els.dashboardTitle.textContent = t('dashboard')
+  els.dashboardSubtitle.textContent = t('dashboardSubtitle')
   els.bookingsTitle.textContent = t('bookings')
   els.bookingsSubtitle.textContent = t('bookingsSubtitle')
+  els.customersEyebrow.textContent = t('customers')
+  els.customersTitle.textContent = t('customers')
+  els.customerSort.innerHTML = `
+    <option value="alpha">${t('customerSortAlpha')}</option>
+    <option value="visits">${t('customerSortVisits')}</option>
+    <option value="recent">${t('customerSortRecent')}</option>
+  `
+  els.customerSort.value = currentCustomerSort
   els.todayTab.textContent = t('today')
   els.allTab.textContent = t('allBookings')
   els.calendarTab.textContent = t('calendar')
@@ -379,14 +454,16 @@ async function loadAll() {
     setLocked(true)
     return
   }
-  const [bookingData, serviceData, techData] = await Promise.all([
+  const [bookingData, serviceData, techData, customerData] = await Promise.all([
     request('/admin/bookings'),
     request('/admin/services'),
-    request('/admin/technicians')
+    request('/admin/technicians'),
+    request('/admin/customers')
   ])
   owner.bookings = bookingData.bookings
   owner.services = serviceData.services
   owner.technicians = techData.technicians
+  owner.customers = customerData.customers
   setLocked(false)
   render()
 }
@@ -422,15 +499,18 @@ function ownerLogout() {
   owner.bookings = []
   owner.services = []
   owner.technicians = []
+  owner.customers = []
   owner.serviceEditor = null
   owner.selectedBookingId = ''
+  owner.finance = null
+  owner.adminPage = 'dashboard'
   setLocked(true)
   toast(t('loggedOut'))
 }
 
 function setLocked(locked) {
-  els.metricGrid.classList.toggle('hidden', locked)
   els.adminLayout.classList.toggle('hidden', locked)
+  els.ownerLogin.classList.toggle('hidden', !locked)
   els.reloadButton.classList.toggle('hidden', locked)
   els.tokenInput.classList.add('hidden')
   els.ownerLogout.classList.toggle('hidden', locked)
@@ -440,29 +520,73 @@ function setLocked(locked) {
     els.serviceAdminList.innerHTML = ''
     els.serviceEditor.innerHTML = ''
     els.scheduleTech.innerHTML = ''
+    els.customerList.innerHTML = ''
+    els.financePanel.innerHTML = ''
   }
 }
 
 function render() {
   applyLanguage()
   renderMetrics()
+  renderAdminPages()
+  renderDashboard()
   renderBookings()
   renderServices()
   renderTechnicians()
+  renderCustomers()
+  renderFinancePanel()
 }
 
 function renderMetrics() {
   const confirmed = owner.bookings.filter((item) => item.status === 'CONFIRMED').length
   const pending = owner.bookings.filter((item) => item.status === 'PENDING_PAYMENT').length
-  const revenue = owner.bookings
+  const monthBookings = owner.bookings.filter((item) => isCurrentMonth(item.appointmentDate))
+  const monthRevenue = monthBookings
     .filter((item) => ['CONFIRMED', 'COMPLETED'].includes(item.status))
     .reduce((total, item) => total + (item.status === 'COMPLETED' ? item.servicePriceCents : item.depositCents), 0)
+  const monthServices = monthBookings.filter((item) => item.status === 'COMPLETED').length
+  const totalServices = owner.bookings.filter((item) => item.status === 'COMPLETED').length
   els.metricGrid.innerHTML = `
-    <div class="metric"><span class="subtle">${t('confirmed')}</span><strong>${confirmed}</strong></div>
-    <div class="metric"><span class="subtle">${t('pending')}</span><strong>${pending}</strong></div>
-    <div class="metric"><span class="subtle">${t('revenue')}</span><strong>${money(revenue)}</strong></div>
-    <div class="metric"><span class="subtle">${t('services')}</span><strong>${owner.services.length}</strong></div>
+    <button class="metric" data-admin-page="bookings" type="button"><span class="subtle">${t('confirmed')}</span><strong>${confirmed}</strong></button>
+    <button class="metric" data-admin-page="bookings" type="button"><span class="subtle">${t('pending')}</span><strong>${pending}</strong></button>
+    <button class="metric revenue-metric" data-open-finance type="button"><span class="subtle">${t('monthlyRevenue')}</span><strong>${money(monthRevenue)}</strong></button>
+    <button class="metric" data-admin-page="bookings" type="button"><span class="subtle">${t('monthServices')}</span><strong>${monthServices}</strong></button>
+    <button class="metric" data-admin-page="services" type="button"><span class="subtle">${t('totalServices')}</span><strong>${totalServices}</strong></button>
   `
+}
+
+function isCurrentMonth(dateString) {
+  if (!dateString) return false
+  const date = new Date(`${dateString}T12:00:00`)
+  const now = new Date()
+  return date.getFullYear() === now.getFullYear() && date.getMonth() === now.getMonth()
+}
+
+function renderAdminPages() {
+  const pages = {
+    dashboard: els.adminDashboard,
+    bookings: els.bookingsPage,
+    schedule: els.schedulePage,
+    services: els.servicesPage,
+    customers: els.customersPage
+  }
+  Object.entries(pages).forEach(([key, element]) => element.classList.toggle('hidden', owner.adminPage !== key))
+  els.metricGrid.classList.toggle('hidden', owner.adminPage !== 'dashboard')
+}
+
+function renderDashboard() {
+  els.adminNavGrid.innerHTML = [
+    ['bookings', t('navBookings'), t('bookingsSubtitle')],
+    ['schedule', t('navSchedule'), t('schedule')],
+    ['services', t('navServices'), t('services')],
+    ['customers', t('navCustomers'), t('customers')]
+  ].map(([page, title, subtitle]) => `
+    <button class="admin-nav-card card" data-admin-page="${page}" type="button">
+      <span>${title}</span>
+      <strong>${page === 'bookings' ? owner.bookings.length : page === 'services' ? owner.services.length : page === 'customers' ? owner.customers.length : owner.technicians.length}</strong>
+      <small>${subtitle}</small>
+    </button>
+  `).join('')
 }
 
 function renderBookings() {
@@ -768,6 +892,101 @@ function renderTechnicians() {
   `).join('')
 }
 
+function sortedCustomers() {
+  const mode = els.customerSort.value || 'alpha'
+  return [...owner.customers].sort((a, b) => {
+    if (mode === 'visits') return (b.visitCount || 0) - (a.visitCount || 0) || customerName(a).localeCompare(customerName(b))
+    if (mode === 'recent') return new Date(b.lastVisitAt || 0) - new Date(a.lastVisitAt || 0)
+    return customerName(a).localeCompare(customerName(b))
+  })
+}
+
+function customerName(customer) {
+  return customer.displayName || customer.email || 'Lucky Member'
+}
+
+function dateOnly(value) {
+  if (!value) return '-'
+  return new Date(value).toISOString().slice(0, 10)
+}
+
+function renderCustomers() {
+  const customers = sortedCustomers()
+  if (!customers.length) {
+    els.customerList.innerHTML = `<div class="empty-state"><strong>${t('noCustomers')}</strong></div>`
+    return
+  }
+  els.customerList.innerHTML = customers.map((customer) => `
+    <article class="customer-profile-card card">
+      <div class="customer-avatar">${customerName(customer).slice(0, 1).toUpperCase()}</div>
+      <div>
+        <h3>${escapeHtml(customerName(customer))}</h3>
+        <p>${escapeHtml(customer.email || '-')}</p>
+        <p>${escapeHtml(customer.phone || '-')}</p>
+      </div>
+      <div class="customer-stats">
+        <span>${t('visits')} <strong>${customer.visitCount || 0}</strong></span>
+        <span>${t('lastVisit')} <strong>${dateOnly(customer.lastVisitAt)}</strong></span>
+        <span>${t('totalSpent')} <strong>${money(customer.totalSpentCents || 0)}</strong></span>
+      </div>
+    </article>
+  `).join('')
+}
+
+function renderFinancePanel() {
+  if (els.financePanel.classList.contains('hidden')) return
+  if (owner.finance) {
+    els.financePanel.innerHTML = `
+      <div class="section-row compact-row">
+        <div>
+          <p class="eyebrow">${t('financeLogin')}</p>
+          <h2>${t('totalRevenue')}</h2>
+        </div>
+        <button class="ghost slim" data-close-finance type="button">${t('close')}</button>
+      </div>
+      <div class="finance-grid">
+        <p><span>${t('totalRevenue')}</span><strong>${money(owner.finance.total_revenue_cents || 0)}</strong></p>
+        <p><span>${t('monthlyRevenue')}</span><strong>${money(owner.finance.month_revenue_cents || 0)}</strong></p>
+        <p><span>${t('totalServices')}</span><strong>${owner.finance.completed_services || 0}</strong></p>
+        <p><span>${t('monthServices')}</span><strong>${owner.finance.month_completed_services || 0}</strong></p>
+      </div>
+    `
+    return
+  }
+  els.financePanel.innerHTML = `
+    <form class="finance-form" id="financeForm">
+      <div class="section-row compact-row">
+        <div>
+          <p class="eyebrow">${t('openFinance')}</p>
+          <h2>${t('financeLogin')}</h2>
+          <p class="subtle">${t('financeText')}</p>
+        </div>
+        <button class="ghost slim" data-close-finance type="button">${t('close')}</button>
+      </div>
+      <div class="form-grid">
+        <label><span>${t('email')}</span><input name="email" type="email" autocomplete="username"></label>
+        <label><span>${t('financePassword')}</span><input name="password" type="password" autocomplete="current-password"></label>
+      </div>
+      <button class="primary slim" type="submit">${t('login')}</button>
+    </form>
+  `
+}
+
+async function unlockFinance(event) {
+  event.preventDefault()
+  const form = new FormData(event.target)
+  const data = await request('/admin/finance/summary', {
+    method: 'POST',
+    body: JSON.stringify({
+      email: form.get('email'),
+      password: form.get('password')
+    })
+  })
+  owner.finance = data.finance
+  toast(t('financeUnlocked'))
+  renderFinancePanel()
+}
+
 async function updateBookingStatus(id, status) {
   await request(`/admin/bookings/${id}/status`, {
     method: 'PATCH',
@@ -879,6 +1098,28 @@ els.adminLangEn.addEventListener('click', () => switchAdminLang('en'))
 els.reloadButton.addEventListener('click', () => loadAll().catch((error) => toast(error.message)))
 els.ownerLoginForm.addEventListener('submit', (event) => ownerLogin(event).catch((error) => toast(error.message)))
 els.ownerLogout.addEventListener('click', ownerLogout)
+els.adminLayout.addEventListener('click', (event) => {
+  const pageButton = event.target.closest('[data-admin-page]')
+  if (pageButton) {
+    owner.adminPage = pageButton.dataset.adminPage
+    if (owner.adminPage === 'bookings') owner.adminView = 'today'
+    render()
+    return
+  }
+  if (event.target.closest('[data-open-finance]')) {
+    els.financePanel.classList.remove('hidden')
+    renderFinancePanel()
+    return
+  }
+  if (event.target.closest('[data-close-finance]')) {
+    els.financePanel.classList.add('hidden')
+  }
+})
+els.financePanel.addEventListener('submit', (event) => {
+  if (!event.target.matches('#financeForm')) return
+  unlockFinance(event).catch((error) => toast(error.message))
+})
+els.customerSort.addEventListener('change', renderCustomers)
 els.adminTabs.forEach((tab) => {
   tab.addEventListener('click', () => {
     owner.adminView = tab.dataset.adminView

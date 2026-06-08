@@ -16,6 +16,8 @@ mkdirSync(dataDir, { recursive: true })
 const db = new DatabaseSync(join(dataDir, 'lucky-luxe.sqlite'))
 const PORT = Number(process.env.PORT || 4000)
 const OWNER_TOKEN = process.env.OWNER_DEMO_TOKEN || 'owner-demo-token'
+const FINANCE_EMAILS = (process.env.FINANCE_EMAILS || 'nini3131254931@gmail.com').split(',').map((email) => email.trim().toLowerCase()).filter(Boolean)
+const FINANCE_PASSWORD = process.env.FINANCE_PASSWORD || ''
 const HOLD_MINUTES = Number(process.env.BOOKING_HOLD_MINUTES || 15)
 const SLOT_MINUTES = 30
 
@@ -663,6 +665,48 @@ function cancelBooking(id, body) {
   }
 }
 
+function getAdminCustomers() {
+  return db.prepare(`
+    SELECT
+      u.id,
+      u.display_name,
+      u.phone,
+      u.email,
+      NULL AS created_at,
+      COUNT(b.id) AS visit_count,
+      MAX(b.appointment_start) AS last_visit_at,
+      COALESCE(SUM(CASE WHEN b.status = 'COMPLETED' THEN b.service_price_cents ELSE 0 END), 0) AS total_spent_cents
+    FROM users u
+    LEFT JOIN bookings b ON b.user_id = u.id
+    GROUP BY u.id
+    ORDER BY LOWER(u.display_name) ASC
+  `).all().map((row) => ({
+    id: row.id,
+    displayName: row.display_name,
+    phone: row.phone,
+    email: row.email,
+    createdAt: row.created_at,
+    visitCount: row.visit_count,
+    lastVisitAt: row.last_visit_at,
+    totalSpentCents: row.total_spent_cents
+  }))
+}
+
+function getFinanceSummary(body) {
+  const email = String(body.email || '').trim().toLowerCase()
+  const password = String(body.password || '')
+  if (!FINANCE_PASSWORD) throw apiError(403, 'FINANCE_NOT_CONFIGURED', 'Finance password is not configured yet.')
+  if (!FINANCE_EMAILS.includes(email) || password !== FINANCE_PASSWORD) throw apiError(403, 'FORBIDDEN', 'Finance login failed.')
+  return db.prepare(`
+    SELECT
+      COALESCE(SUM(CASE WHEN status = 'COMPLETED' THEN service_price_cents WHEN status = 'CONFIRMED' THEN deposit_cents ELSE 0 END), 0) AS total_revenue_cents,
+      COALESCE(SUM(CASE WHEN appointment_start >= datetime('now', 'start of month') AND status = 'COMPLETED' THEN service_price_cents WHEN appointment_start >= datetime('now', 'start of month') AND status = 'CONFIRMED' THEN deposit_cents ELSE 0 END), 0) AS month_revenue_cents,
+      COUNT(CASE WHEN status = 'COMPLETED' THEN 1 END) AS completed_services,
+      COUNT(CASE WHEN appointment_start >= datetime('now', 'start of month') AND status = 'COMPLETED' THEN 1 END) AS month_completed_services
+    FROM bookings
+  `).get()
+}
+
 async function route(req, res) {
   if (req.method === 'OPTIONS') return json(res, 204, {})
   const url = new URL(req.url, `http://${req.headers.host}`)
@@ -737,6 +781,12 @@ async function route(req, res) {
   if (req.method === 'GET' && path === '/admin/bookings') {
     const rows = db.prepare('SELECT * FROM bookings ORDER BY appointment_start DESC').all()
     return json(res, 200, { bookings: rows.map((booking) => serializeBooking(booking)) })
+  }
+  if (req.method === 'GET' && path === '/admin/customers') {
+    return json(res, 200, { customers: getAdminCustomers() })
+  }
+  if (req.method === 'POST' && path === '/admin/finance/summary') {
+    return json(res, 200, { finance: getFinanceSummary(await readBody(req)) })
   }
   if (req.method === 'GET' && path === '/admin/services') {
     return json(res, 200, { services: db.prepare('SELECT * FROM services ORDER BY type ASC, sort_order ASC').all().map(serializeService) })

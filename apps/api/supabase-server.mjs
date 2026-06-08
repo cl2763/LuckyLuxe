@@ -17,6 +17,8 @@ const HOST = process.env.HOST || '0.0.0.0'
 const OWNER_TOKEN = process.env.OWNER_DEMO_TOKEN || ''
 const ALLOW_OWNER_DEMO_TOKEN = process.env.ALLOW_OWNER_DEMO_TOKEN === 'true'
 const OWNER_EMAILS = (process.env.OWNER_EMAILS || 'nini3131254931@gmail.com').split(',').map((email) => email.trim().toLowerCase()).filter(Boolean)
+const FINANCE_EMAILS = (process.env.FINANCE_EMAILS || '').split(',').map((email) => email.trim().toLowerCase()).filter(Boolean)
+const FINANCE_PASSWORD = process.env.FINANCE_PASSWORD || ''
 const HOLD_MINUTES = Number(process.env.BOOKING_HOLD_MINUTES || 15)
 const SLOT_MINUTES = 30
 const DATABASE_URL = process.env.DATABASE_URL
@@ -803,6 +805,51 @@ async function cancelBooking(id, body) {
   }
 }
 
+async function getAdminCustomers() {
+  const rows = await query(`
+    SELECT
+      u.id,
+      u.display_name,
+      u.phone,
+      u.email,
+      u.created_at,
+      COUNT(b.id)::int AS visit_count,
+      MAX(b.appointment_start) AS last_visit_at,
+      COALESCE(SUM(CASE WHEN b.status = 'COMPLETED' THEN b.service_price_cents ELSE 0 END), 0)::int AS total_spent_cents
+    FROM users u
+    LEFT JOIN bookings b ON b.user_id = u.id
+    GROUP BY u.id
+    ORDER BY LOWER(u.display_name) ASC
+  `)
+  return rows.rows.map((row) => ({
+    id: row.id,
+    displayName: row.display_name,
+    phone: row.phone,
+    email: row.email,
+    createdAt: row.created_at ? iso(row.created_at) : null,
+    visitCount: row.visit_count,
+    lastVisitAt: row.last_visit_at ? iso(row.last_visit_at) : null,
+    totalSpentCents: row.total_spent_cents
+  }))
+}
+
+async function getFinanceSummary(body) {
+  const email = String(body.email || '').trim().toLowerCase()
+  const password = String(body.password || '')
+  const allowedEmails = FINANCE_EMAILS.length ? FINANCE_EMAILS : OWNER_EMAILS
+  if (!FINANCE_PASSWORD) throw apiError(403, 'FINANCE_NOT_CONFIGURED', 'Finance password is not configured yet.')
+  if (!allowedEmails.includes(email) || password !== FINANCE_PASSWORD) throw apiError(403, 'FORBIDDEN', 'Finance login failed.')
+  const summary = await query(`
+    SELECT
+      COALESCE(SUM(CASE WHEN status = 'COMPLETED' THEN service_price_cents WHEN status = 'CONFIRMED' THEN deposit_cents ELSE 0 END), 0)::int AS total_revenue_cents,
+      COALESCE(SUM(CASE WHEN appointment_start >= date_trunc('month', now()) AND status = 'COMPLETED' THEN service_price_cents WHEN appointment_start >= date_trunc('month', now()) AND status = 'CONFIRMED' THEN deposit_cents ELSE 0 END), 0)::int AS month_revenue_cents,
+      COUNT(CASE WHEN status = 'COMPLETED' THEN 1 END)::int AS completed_services,
+      COUNT(CASE WHEN appointment_start >= date_trunc('month', now()) AND status = 'COMPLETED' THEN 1 END)::int AS month_completed_services
+    FROM bookings
+  `)
+  return summary.rows[0]
+}
+
 async function route(req, res) {
   if (req.method === 'OPTIONS') return json(res, 204, {})
   const url = new URL(req.url, `http://${req.headers.host}`)
@@ -912,6 +959,12 @@ async function route(req, res) {
   if (req.method === 'GET' && path === '/admin/bookings') {
     const rows = await query('SELECT * FROM bookings ORDER BY appointment_start DESC')
     return json(res, 200, { bookings: await Promise.all(rows.rows.map((booking) => serializeBooking(booking))) })
+  }
+  if (req.method === 'GET' && path === '/admin/customers') {
+    return json(res, 200, { customers: await getAdminCustomers() })
+  }
+  if (req.method === 'POST' && path === '/admin/finance/summary') {
+    return json(res, 200, { finance: await getFinanceSummary(await readBody(req)) })
   }
   if (req.method === 'GET' && path === '/admin/services') {
     const services = await query('SELECT * FROM services ORDER BY type ASC, sort_order ASC')
