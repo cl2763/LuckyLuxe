@@ -84,6 +84,8 @@ create table if not exists bookings (
   appointment_start timestamptz not null,
   appointment_end timestamptz not null,
   addons_json jsonb not null default '[]'::jsonb,
+  reference_images_json jsonb not null default '[]'::jsonb,
+  work_images_json jsonb not null default '[]'::jsonb,
   notes text,
   service_price_cents integer not null check (service_price_cents >= 0),
   deposit_cents integer not null check (deposit_cents >= 0),

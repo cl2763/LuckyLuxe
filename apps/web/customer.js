@@ -73,6 +73,9 @@ const copy = {
     orderNo: '订单号',
     bookingInfo: '预约信息',
     payment: '支付信息',
+    workArchive: '服务留档',
+    finalPhotos: '完工作品',
+    noWorkImages: '服务完成后会在这里看到作品照片。',
     arrival: '到店时间',
     duration: '服务时长',
     technician: '服务人员',
@@ -167,6 +170,9 @@ const copy = {
     orderNo: 'Order No.',
     bookingInfo: 'Booking Info',
     payment: 'Payment',
+    workArchive: 'Service Archive',
+    finalPhotos: 'Finished Work',
+    noWorkImages: 'Finished photos will appear here after the service.',
     arrival: 'Arrival',
     duration: 'Duration',
     technician: 'Technician',
@@ -920,6 +926,7 @@ async function submitPayment() {
         date: item.date,
         time: item.time,
         addOns: item.addOns,
+        referenceImages: item.referenceImages || [],
         notes: item.remark
       })
     })
@@ -988,11 +995,12 @@ function renderMe() {
         <div class="recent-list-web">
           ${state.orders.length ? state.orders.map((order) => `
             <button class="recent-card-web card" data-order-id="${order.id}" type="button">
-              <img src="${order.service.imageUrl}" alt="${order.service.name}">
+              <img src="${order.status === 'COMPLETED' && order.workImages?.[0] ? order.workImages[0] : order.service.imageUrl}" alt="${order.service.name}">
               <div>
                 <div class="recent-top"><strong>${order.service.name}</strong><span>${statusLabel(order.status)}</span></div>
                 <p>${order.appointmentDate} ${order.appointmentTime} · ${order.technician.name}</p>
                 <p>${t('paidDeposit')} ${money(order.depositCents)}</p>
+                ${order.status === 'COMPLETED' && order.workImages?.length ? `<p>${t('finalPhotos')} · ${order.workImages.length}</p>` : ''}
               </div>
             </button>
           `).join('') : `<div class="empty-state">${state.lang === 'zh' ? '暂无消费记录' : 'No records yet'}</div>`}
@@ -1029,6 +1037,16 @@ function statusLabel(status) {
   return zh[status] || status
 }
 
+async function refreshOrder(id) {
+  try {
+    const data = await request(`/bookings/${id}?lang=${state.lang}`)
+    state.orders = [data.booking, ...state.orders.filter((order) => order.id !== data.booking.id)]
+    writeJson('lucky-web-orders', state.orders)
+  } catch (error) {
+    toast(error.message)
+  }
+}
+
 function filteredOrders() {
   if (state.orderFilter === 'all') return state.orders
   return state.orders.filter((order) => order.status === state.orderFilter)
@@ -1051,15 +1069,16 @@ function renderOrdersWeb() {
         ${tabs.map(([key, label]) => `<button class="${state.orderFilter === key ? 'active' : ''}" data-order-filter="${key}" type="button">${label}</button>`).join('')}
       </div>
       <div class="order-list-web">
-        ${orders.length ? orders.map((order) => `
+          ${orders.length ? orders.map((order) => `
           <button class="order-card-web card" data-order-id="${order.id}" type="button">
             <div class="order-head-web"><strong>${order.service.name}</strong><span>${statusLabel(order.status)}</span></div>
             <div class="order-body-web">
-              <img src="${order.service.imageUrl}" alt="${order.service.name}">
+              <img src="${order.status === 'COMPLETED' && order.workImages?.[0] ? order.workImages[0] : order.service.imageUrl}" alt="${order.service.name}">
               <div>
                 <p>${order.appointmentDate} ${order.appointmentTime}</p>
                 <p>${order.technician.name} · ${order.store.name}</p>
                 <p class="price">${t('paidDeposit')} ${money(order.depositCents)}</p>
+                ${order.status === 'COMPLETED' && order.workImages?.length ? `<p>${t('finalPhotos')} · ${order.workImages.length}</p>` : ''}
               </div>
             </div>
           </button>
@@ -1080,6 +1099,7 @@ function renderOrderDetailWeb() {
     renderOrdersWeb()
     return
   }
+  const workImages = order.workImages || []
   els.screen.innerHTML = `
     <section class="order-detail-web">
       <button class="ghost back-btn" data-view-target="orders" type="button">← ${t('orders')}</button>
@@ -1098,6 +1118,18 @@ function renderOrderDetailWeb() {
           <p><span>${t('store')}</span><strong>${order.store.name}</strong></p>
           <p><span>${t('address')}</span><strong>${order.store.address || 'Address TBD'}</strong></p>
           <p><span>${t('remark')}</span><strong>${order.notes || t('none')}</strong></p>
+        </div>
+      </section>
+      <section class="section">
+        <div class="section-row"><h2>${t('workArchive')}</h2><span class="subtle">${order.technician.name}</span></div>
+        <div class="archive-card-web card">
+          <p><span>${t('technician')}</span><strong>${order.technician.name}</strong></p>
+          <p><span>${t('finalPhotos')}</span><strong>${workImages.length}/6</strong></p>
+          ${workImages.length ? `
+            <div class="customer-work-grid">
+              ${workImages.map((image, index) => `<a href="${image}" target="_blank" rel="noreferrer"><img src="${image}" alt="${t('finalPhotos')} ${index + 1}"></a>`).join('')}
+            </div>
+          ` : `<div class="empty-state small-empty">${t('noWorkImages')}</div>`}
         </div>
       </section>
       <section class="section">
@@ -1182,6 +1214,7 @@ async function handleScreenClick(event) {
       return
     }
     state.selectedOrderId = orderButton.dataset.orderId
+    await refreshOrder(state.selectedOrderId)
     state.view = 'orderDetail'
     render()
     return

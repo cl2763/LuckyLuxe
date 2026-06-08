@@ -7,7 +7,8 @@ const owner = {
   technicians: [],
   adminView: 'today',
   calendarDate: new Date(),
-  serviceEditor: null
+  serviceEditor: null,
+  selectedBookingId: ''
 }
 
 const els = {
@@ -132,7 +133,20 @@ const copy = {
     loggedOut: '已退出。',
     loginSuccess: 'Owner 登录成功。',
     ownerCreated: 'Owner 账号已创建。',
-    checkEmail: '请检查邮箱验证 owner 账号，然后再登录。'
+    checkEmail: '请检查邮箱验证 owner 账号，然后再登录。',
+    details: '详情',
+    bookingDetails: '订单详情',
+    customer: '顾客',
+    orderCode: '订单号',
+    notes: '备注',
+    referenceImages: '参考图',
+    workImages: '作品留档',
+    uploadWorkImages: '上传完工作品',
+    noWorkImages: '暂无完工作品图',
+    workImagesSaved: '作品图已保存。',
+    noNotes: '暂无备注',
+    noImages: '暂无参考图',
+    close: '关闭'
   },
   en: {
     adminTitle: 'Lucky Luxe Admin',
@@ -199,7 +213,20 @@ const copy = {
     loggedOut: 'Logged out.',
     loginSuccess: 'Owner login successful.',
     ownerCreated: 'Owner account created.',
-    checkEmail: 'Check your email to confirm the owner account, then log in.'
+    checkEmail: 'Check your email to confirm the owner account, then log in.',
+    details: 'Details',
+    bookingDetails: 'Booking Details',
+    customer: 'Customer',
+    orderCode: 'Order Code',
+    notes: 'Notes',
+    referenceImages: 'Reference Images',
+    workImages: 'Work Archive',
+    uploadWorkImages: 'Upload Finished Work',
+    noWorkImages: 'No finished work photos',
+    workImagesSaved: 'Work photos saved.',
+    noNotes: 'No notes',
+    noImages: 'No reference images',
+    close: 'Close'
   }
 }
 
@@ -292,7 +319,8 @@ function statusLabel(status) {
     CONFIRMED: t('confirmed'),
     COMPLETED: t('completed'),
     CANCELLED: t('cancelled'),
-    EXPIRED: t('expired')
+    EXPIRED: t('expired'),
+    AFTER_SALES: t('activeAttention')
   }
   return labels[status] || status
 }
@@ -395,6 +423,7 @@ function ownerLogout() {
   owner.services = []
   owner.technicians = []
   owner.serviceEditor = null
+  owner.selectedBookingId = ''
   setLocked(true)
   toast(t('loggedOut'))
 }
@@ -447,17 +476,24 @@ function renderBookings() {
   }
 
   const bookings = filteredBookings()
+  const selectedBooking = selectedBookingDetail()
   if (!bookings.length) {
-    els.bookingList.innerHTML = `<div class="empty-state"><strong>${t('noBookings')}</strong><span>${t('adjustFilters')}</span></div>`
+    els.bookingList.innerHTML = `
+      ${selectedBooking ? renderBookingDetail(selectedBooking) : ''}
+      <div class="empty-state"><strong>${t('noBookings')}</strong><span>${t('adjustFilters')}</span></div>
+    `
     return
   }
   const grouped = groupByDate(bookings)
-  els.bookingList.innerHTML = Object.keys(grouped).sort().map((date) => `
+  els.bookingList.innerHTML = `
+    ${selectedBooking ? renderBookingDetail(selectedBooking) : ''}
+    ${Object.keys(grouped).sort().map((date) => `
     <section class="booking-date-group">
       <h2>${dateHeading(date)}</h2>
       ${grouped[date].map(renderBookingCard).join('')}
     </section>
-  `).join('')
+  `).join('')}
+  `
 }
 
 function activeStatuses() {
@@ -504,10 +540,73 @@ function renderBookingCard(booking) {
         ${needsAttention ? `<p class="attention-note">${t('needsAttention')}</p>` : ''}
       </div>
       <div class="booking-actions">
+        <button class="ghost" data-view-booking="${booking.id}" type="button">${t('details')}</button>
         <button class="ghost" data-status="COMPLETED" data-booking="${booking.id}" type="button">${t('completed')}</button>
         <button class="ghost" data-status="CANCELLED" data-booking="${booking.id}" type="button">${t('cancelled')}</button>
       </div>
     </article>
+  `
+}
+
+function selectedBookingDetail() {
+  return owner.bookings.find((booking) => booking.id === owner.selectedBookingId)
+}
+
+function renderBookingDetail(booking) {
+  const images = booking.referenceImages || []
+  const workImages = booking.workImages || []
+  return `
+    <section class="booking-detail-panel card">
+      <div class="section-row compact-row">
+        <div>
+          <p class="eyebrow">${t('bookingDetails')}</p>
+          <h2>${booking.service.name}</h2>
+        </div>
+        <button class="ghost slim" data-close-booking-detail type="button">${t('close')}</button>
+      </div>
+      <div class="booking-detail-grid">
+        <p><span>${t('orderCode')}</span><strong>${booking.publicCode}</strong></p>
+        <p><span>${t('status')}</span><strong>${statusLabel(booking.status)}</strong></p>
+        <p><span>${t('date')}</span><strong>${booking.appointmentDate} ${booking.appointmentTime}-${booking.appointmentEndTime}</strong></p>
+        <p><span>${t('technician')}</span><strong>${booking.technician.name}</strong></p>
+        <p><span>${t('customer')}</span><strong>${booking.user?.display_name || booking.user?.email || '-'}</strong></p>
+        <p><span>${t('depositCad')}</span><strong>${money(booking.depositCents)}</strong></p>
+      </div>
+      <section class="booking-detail-section">
+        <h3>${t('notes')}</h3>
+        <div class="booking-notes-box">${escapeHtml(booking.notes || t('noNotes'))}</div>
+      </section>
+      <section class="booking-detail-section">
+        <div class="section-row compact-row">
+          <h3>${t('referenceImages')}</h3>
+          <span class="subtle">${images.length}/3</span>
+        </div>
+        ${images.length ? `
+          <div class="admin-reference-grid">
+            ${images.map((image, index) => `<a href="${image}" target="_blank" rel="noreferrer"><img src="${image}" alt="${t('referenceImages')} ${index + 1}"></a>`).join('')}
+          </div>
+        ` : `<div class="empty-state small-empty">${t('noImages')}</div>`}
+      </section>
+      <section class="booking-detail-section">
+        <div class="section-row compact-row">
+          <h3>${t('workImages')}</h3>
+          <span class="subtle">${workImages.length}/6</span>
+        </div>
+        <div class="reference-upload-grid compact-upload-grid">
+          <label class="upload-box-web card">
+            <input data-work-image-input="${booking.id}" type="file" accept="image/*" multiple>
+            <span>${t('uploadWorkImages')}</span>
+          </label>
+          ${workImages.map((image, index) => `
+            <div class="reference-thumb card">
+              <img src="${image}" alt="${t('workImages')} ${index + 1}">
+              <button class="ghost mini-remove" data-remove-work-image="${index}" data-work-booking="${booking.id}" type="button">×</button>
+            </div>
+          `).join('')}
+        </div>
+        ${workImages.length ? '' : `<div class="empty-state small-empty">${t('noWorkImages')}</div>`}
+      </section>
+    </section>
   `
 }
 
@@ -678,6 +777,51 @@ async function updateBookingStatus(id, status) {
   await loadAll()
 }
 
+async function saveWorkImages(id, images) {
+  const data = await request(`/admin/bookings/${id}/work-images`, {
+    method: 'PATCH',
+    body: JSON.stringify({ workImages: images })
+  })
+  owner.bookings = owner.bookings.map((booking) => booking.id === id ? data.booking : booking)
+  owner.selectedBookingId = id
+  toast(t('workImagesSaved'))
+  render()
+}
+
+async function handleWorkImageFiles(id, files) {
+  const booking = owner.bookings.find((item) => item.id === id)
+  if (!booking) return
+  const current = booking.workImages || []
+  const remaining = 6 - current.length
+  if (remaining <= 0) return
+  const selected = [...files].slice(0, remaining)
+  const images = await Promise.all(selected.map(readCompressedImage))
+  await saveWorkImages(id, [...current, ...images])
+}
+
+function readCompressedImage(file) {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader()
+    reader.onload = () => {
+      const image = new Image()
+      image.onload = () => {
+        const maxSize = 1200
+        const scale = Math.min(1, maxSize / Math.max(image.width, image.height))
+        const canvas = document.createElement('canvas')
+        canvas.width = Math.max(1, Math.round(image.width * scale))
+        canvas.height = Math.max(1, Math.round(image.height * scale))
+        const context = canvas.getContext('2d')
+        context.drawImage(image, 0, 0, canvas.width, canvas.height)
+        resolve(canvas.toDataURL('image/jpeg', 0.8))
+      }
+      image.onerror = reject
+      image.src = reader.result
+    }
+    reader.onerror = () => reject(reader.error)
+    reader.readAsDataURL(file)
+  })
+}
+
 async function saveService(id) {
   const price = Math.round(Number(document.querySelector(`[data-price="${id}"]`).value) * 100)
   const duration = Number(document.querySelector(`[data-duration="${id}"]`).value)
@@ -773,6 +917,26 @@ els.nextMonth.addEventListener('click', () => {
 })
 els.saveSchedule.addEventListener('click', () => saveSchedule().catch((error) => toast(error.message)))
 els.bookingList.addEventListener('click', (event) => {
+  if (event.target.closest('[data-close-booking-detail]')) {
+    owner.selectedBookingId = ''
+    renderBookings()
+    return
+  }
+  const detailButton = event.target.closest('[data-view-booking]')
+  if (detailButton) {
+    owner.selectedBookingId = detailButton.dataset.viewBooking
+    renderBookings()
+    return
+  }
+  const removeWorkImage = event.target.closest('[data-remove-work-image]')
+  if (removeWorkImage) {
+    const booking = owner.bookings.find((item) => item.id === removeWorkImage.dataset.workBooking)
+    if (!booking) return
+    const images = [...(booking.workImages || [])]
+    images.splice(Number(removeWorkImage.dataset.removeWorkImage), 1)
+    saveWorkImages(booking.id, images).catch((error) => toast(error.message))
+    return
+  }
   const dateCell = event.target.closest('[data-calendar-date]')
   if (dateCell) {
     owner.adminView = 'all'
@@ -784,6 +948,10 @@ els.bookingList.addEventListener('click', (event) => {
   const button = event.target.closest('[data-booking]')
   if (!button) return
   updateBookingStatus(button.dataset.booking, button.dataset.status).catch((error) => toast(error.message))
+})
+els.bookingList.addEventListener('change', (event) => {
+  if (!event.target.matches('[data-work-image-input]')) return
+  handleWorkImageFiles(event.target.dataset.workImageInput, event.target.files).catch((error) => toast(error.message))
 })
 els.addServiceButton.addEventListener('click', () => {
   owner.serviceEditor = blankServiceEditor()

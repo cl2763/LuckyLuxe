@@ -116,6 +116,8 @@ function setupDatabase() {
       appointment_start TEXT NOT NULL,
       appointment_end TEXT NOT NULL,
       addons_json TEXT NOT NULL,
+      reference_images_json TEXT NOT NULL DEFAULT '[]',
+      work_images_json TEXT NOT NULL DEFAULT '[]',
       notes TEXT,
       service_price_cents INTEGER NOT NULL,
       deposit_cents INTEGER NOT NULL,
@@ -268,6 +270,20 @@ function parseJson(value) {
   }
 }
 
+function normalizeReferenceImages(value) {
+  if (!Array.isArray(value)) return []
+  return value
+    .filter((item) => typeof item === 'string' && item.startsWith('data:image/'))
+    .slice(0, 3)
+}
+
+function normalizeWorkImages(value) {
+  if (!Array.isArray(value)) return []
+  return value
+    .filter((item) => typeof item === 'string' && item.startsWith('data:image/'))
+    .slice(0, 6)
+}
+
 function serviceIdFrom(body) {
   const source = String(body.nameEn || body.nameZh || `service-${Date.now()}`)
     .trim()
@@ -336,6 +352,8 @@ function serializeBooking(row, lang = 'zh') {
     appointmentTime: startLocal.time,
     appointmentEndTime: endLocal.time,
     addOns: parseJson(row.addons_json),
+    referenceImages: parseJson(row.reference_images_json),
+    workImages: parseJson(row.work_images_json),
     notes: row.notes,
     servicePrice: cents(row.service_price_cents),
     servicePriceCents: row.service_price_cents,
@@ -487,6 +505,7 @@ function validateBookingInput(body) {
     date: body.date,
     time: body.time,
     addOns: Array.isArray(body.addOns) ? body.addOns : [],
+    referenceImages: normalizeReferenceImages(body.referenceImages),
     notes: body.notes || null
   }
 }
@@ -573,9 +592,9 @@ function createBooking(body) {
   try {
     db.prepare(`
       INSERT INTO bookings
-      (id, public_code, user_id, store_id, technician_id, service_id, status, appointment_start, appointment_end, addons_json, notes, service_price_cents, deposit_cents, final_due_cents, total_duration_min, payment_expires_at, created_at, updated_at)
-      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-    `).run(bookingId, publicCode(), input.userId, input.storeId, input.technicianId, input.serviceId, 'PENDING_PAYMENT', iso(start), iso(end), JSON.stringify(input.addOns), input.notes, servicePriceCents, depositCents, servicePriceCents - depositCents, durationMin, iso(addMinutes(new Date(), HOLD_MINUTES)), now, now)
+      (id, public_code, user_id, store_id, technician_id, service_id, status, appointment_start, appointment_end, addons_json, reference_images_json, notes, service_price_cents, deposit_cents, final_due_cents, total_duration_min, payment_expires_at, created_at, updated_at)
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+    `).run(bookingId, publicCode(), input.userId, input.storeId, input.technicianId, input.serviceId, 'PENDING_PAYMENT', iso(start), iso(end), JSON.stringify(input.addOns), JSON.stringify(input.referenceImages), input.notes, servicePriceCents, depositCents, servicePriceCents - depositCents, durationMin, iso(addMinutes(new Date(), HOLD_MINUTES)), now, now)
 
     const slotStmt = db.prepare('INSERT INTO booking_slots (id, booking_id, technician_id, starts_at) VALUES (?, ?, ?, ?)')
     for (const slot of slots) slotStmt.run(randomId('slot'), bookingId, input.technicianId, iso(slot))
@@ -753,17 +772,35 @@ async function route(req, res) {
     const id = path.split('/')[3]
     const body = await readBody(req)
     const status = body.status
-    if (!['PENDING_PAYMENT', 'CONFIRMED', 'COMPLETED', 'CANCELLED', 'EXPIRED'].includes(status)) throw apiError(400, 'BAD_REQUEST', 'Invalid status.')
+    if (!['PENDING_PAYMENT', 'CONFIRMED', 'COMPLETED', 'CANCELLED', 'EXPIRED', 'AFTER_SALES'].includes(status)) throw apiError(400, 'BAD_REQUEST', 'Invalid status.')
     const booking = db.prepare('SELECT * FROM bookings WHERE id = ?').get(id)
     if (!booking) throw apiError(404, 'NOT_FOUND', 'Booking not found.')
     if (['CANCELLED', 'EXPIRED'].includes(status)) db.prepare('DELETE FROM booking_slots WHERE booking_id = ?').run(id)
     db.prepare('UPDATE bookings SET status = ?, updated_at = ? WHERE id = ?').run(status, iso(new Date()), id)
     return json(res, 200, { booking: serializeBooking(db.prepare('SELECT * FROM bookings WHERE id = ?').get(id)) })
   }
+  if (req.method === 'PATCH' && path.startsWith('/admin/bookings/') && path.endsWith('/work-images')) {
+    const id = path.split('/')[3]
+    const body = await readBody(req)
+    const booking = db.prepare('SELECT * FROM bookings WHERE id = ?').get(id)
+    if (!booking) throw apiError(404, 'NOT_FOUND', 'Booking not found.')
+    db.prepare('UPDATE bookings SET work_images_json = ?, updated_at = ? WHERE id = ?').run(JSON.stringify(normalizeWorkImages(body.workImages)), iso(new Date()), id)
+    return json(res, 200, { booking: serializeBooking(db.prepare('SELECT * FROM bookings WHERE id = ?').get(id)) })
+  }
   throw apiError(404, 'NOT_FOUND', 'Endpoint not found.')
 }
 
 setupDatabase()
+try {
+  db.exec("ALTER TABLE bookings ADD COLUMN reference_images_json TEXT NOT NULL DEFAULT '[]'")
+} catch (error) {
+  if (!String(error.message || '').includes('duplicate column')) throw error
+}
+try {
+  db.exec("ALTER TABLE bookings ADD COLUMN work_images_json TEXT NOT NULL DEFAULT '[]'")
+} catch (error) {
+  if (!String(error.message || '').includes('duplicate column')) throw error
+}
 seedDatabase()
 
 createServer((req, res) => {

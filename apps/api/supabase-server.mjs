@@ -144,6 +144,20 @@ function parseJson(value) {
   }
 }
 
+function normalizeReferenceImages(value) {
+  if (!Array.isArray(value)) return []
+  return value
+    .filter((item) => typeof item === 'string' && item.startsWith('data:image/'))
+    .slice(0, 3)
+}
+
+function normalizeWorkImages(value) {
+  if (!Array.isArray(value)) return []
+  return value
+    .filter((item) => typeof item === 'string' && item.startsWith('data:image/'))
+    .slice(0, 6)
+}
+
 function bool(value) {
   return value === true || value === 1 || value === '1'
 }
@@ -241,6 +255,8 @@ async function serializeBooking(row, lang = 'zh') {
     appointmentTime: startLocal.time,
     appointmentEndTime: endLocal.time,
     addOns: parseJson(row.addons_json),
+    referenceImages: parseJson(row.reference_images_json),
+    workImages: parseJson(row.work_images_json),
     notes: row.notes,
     servicePrice: cents(row.service_price_cents),
     servicePriceCents: row.service_price_cents,
@@ -533,6 +549,7 @@ function validateBookingInput(body) {
     date: body.date,
     time: body.time,
     addOns: Array.isArray(body.addOns) ? body.addOns : [],
+    referenceImages: normalizeReferenceImages(body.referenceImages),
     notes: body.notes || null
   }
 }
@@ -643,9 +660,9 @@ async function createBooking(body, customer = null) {
 
     await client.query(`
       INSERT INTO bookings
-      (id, public_code, user_id, store_id, technician_id, service_id, status, appointment_start, appointment_end, addons_json, notes, service_price_cents, deposit_cents, final_due_cents, total_duration_min, payment_expires_at)
-      VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10::jsonb, $11, $12, $13, $14, $15, now() + ($16::int * interval '1 minute'))
-    `, [bookingId, publicCode(), input.userId, input.storeId, input.technicianId, input.serviceId, 'PENDING_PAYMENT', iso(start), iso(end), JSON.stringify(input.addOns), input.notes, servicePriceCents, depositCents, servicePriceCents - depositCents, durationMin, HOLD_MINUTES])
+      (id, public_code, user_id, store_id, technician_id, service_id, status, appointment_start, appointment_end, addons_json, reference_images_json, notes, service_price_cents, deposit_cents, final_due_cents, total_duration_min, payment_expires_at)
+      VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10::jsonb, $11::jsonb, $12, $13, $14, $15, $16, now() + ($17::int * interval '1 minute'))
+    `, [bookingId, publicCode(), input.userId, input.storeId, input.technicianId, input.serviceId, 'PENDING_PAYMENT', iso(start), iso(end), JSON.stringify(input.addOns), JSON.stringify(input.referenceImages), input.notes, servicePriceCents, depositCents, servicePriceCents - depositCents, durationMin, HOLD_MINUTES])
 
     for (const slot of slots) {
       await client.query('INSERT INTO booking_slots (id, booking_id, technician_id, starts_at) VALUES ($1, $2, $3, $4)', [randomId('slot'), bookingId, input.technicianId, iso(slot)])
@@ -984,11 +1001,23 @@ async function route(req, res) {
     const updated = await query('SELECT * FROM bookings WHERE id = $1', [id])
     return json(res, 200, { booking: await serializeBooking(updated.rows[0]) })
   }
+  if (req.method === 'PATCH' && path.startsWith('/admin/bookings/') && path.endsWith('/work-images')) {
+    const id = path.split('/')[3]
+    const body = await readBody(req)
+    const images = normalizeWorkImages(body.workImages)
+    const booking = await query('SELECT * FROM bookings WHERE id = $1', [id])
+    if (!booking.rows[0]) throw apiError(404, 'NOT_FOUND', 'Booking not found.')
+    await query('UPDATE bookings SET work_images_json = $1::jsonb, updated_at = now() WHERE id = $2', [JSON.stringify(images), id])
+    const updated = await query('SELECT * FROM bookings WHERE id = $1', [id])
+    return json(res, 200, { booking: await serializeBooking(updated.rows[0]) })
+  }
   throw apiError(404, 'NOT_FOUND', 'Endpoint not found.')
 }
 
 await pool.query('SELECT 1')
 await pool.query('ALTER TABLE users ADD COLUMN IF NOT EXISTS supabase_auth_id text UNIQUE')
+await pool.query("ALTER TABLE bookings ADD COLUMN IF NOT EXISTS reference_images_json jsonb NOT NULL DEFAULT '[]'::jsonb")
+await pool.query("ALTER TABLE bookings ADD COLUMN IF NOT EXISTS work_images_json jsonb NOT NULL DEFAULT '[]'::jsonb")
 
 createServer((req, res) => {
   route(req, res).catch((error) => {
