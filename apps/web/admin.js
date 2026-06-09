@@ -1568,7 +1568,7 @@ function fallbackSocialCopy(booking, platform) {
 }
 
 function shareUrlFor(bookingId, index, platform) {
-  return `${window.location.origin}/share?bookingId=${encodeURIComponent(bookingId)}&image=${encodeURIComponent(index)}&platform=${encodeURIComponent(platform)}`
+  return `${window.location.origin}/web/share.html?bookingId=${encodeURIComponent(bookingId)}&image=${encodeURIComponent(index)}&platform=${encodeURIComponent(platform)}`
 }
 
 function renderSocialCopy(copy, key = '') {
