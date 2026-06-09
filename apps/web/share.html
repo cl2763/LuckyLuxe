@@ -1,0 +1,62 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Lucky Luxe Share</title>
+  <link rel="stylesheet" href="/web/styles.css">
+</head>
+<body>
+  <main class="share-shell">
+    <header class="share-header">
+      <div class="brand">
+        <span class="brand-mark">LL</span>
+        <span>
+          <strong>Lucky Luxe</strong>
+          <small>Nail & Lash Atelier</small>
+        </span>
+      </div>
+      <div class="language-toggle">
+        <button class="active" id="shareZh" type="button">中文</button>
+        <button id="shareEn" type="button">EN</button>
+      </div>
+    </header>
+
+    <section class="share-card card">
+      <p class="eyebrow" id="shareEyebrow">作品分享</p>
+      <h1 id="shareTitle">Lucky Luxe 作品留档</h1>
+      <p class="subtle" id="shareSubtitle">选择平台，复制文案后即可发布。</p>
+
+      <div class="share-photo-layout">
+        <div class="share-main-photo">
+          <img id="shareMainImage" src="/assets/images/nail-french.png" alt="Lucky Luxe work">
+        </div>
+        <div class="share-photo-strip" id="sharePhotoStrip"></div>
+      </div>
+
+      <div class="share-original-grid" id="shareOriginalGrid"></div>
+    </section>
+
+    <section class="share-card card">
+      <div class="section-row compact-row">
+        <div>
+          <p class="eyebrow" id="platformEyebrow">发布平台</p>
+          <h2 id="platformTitle">平台文案</h2>
+        </div>
+        <select id="platformSelect">
+          <option value="xiaohongshu">小红书</option>
+          <option value="douyin">抖音</option>
+          <option value="instagram">Instagram</option>
+        </select>
+      </div>
+      <div class="ai-copy-box share-copy-box" id="shareCopyBox"></div>
+      <div class="share-actions">
+        <button class="primary slim" id="copyShareCaption" type="button">复制文案</button>
+        <a class="ghost slim" id="openPlatform" href="https://www.xiaohongshu.com/" target="_blank" rel="noreferrer">打开平台</a>
+      </div>
+    </section>
+  </main>
+  <div class="toast" id="shareToast"></div>
+  <script src="/web/share.js"></script>
+</body>
+</html>

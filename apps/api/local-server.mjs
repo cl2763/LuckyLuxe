@@ -716,6 +716,7 @@ async function route(req, res) {
 
   if (req.method === 'GET' && path === '/') return serveFile(res, webRoot, 'index.html')
   if (req.method === 'GET' && path === '/admin') return serveFile(res, webRoot, 'admin.html')
+  if (req.method === 'GET' && path === '/share') return serveFile(res, webRoot, 'share.html')
   if (req.method === 'GET' && path.startsWith('/web/')) return serveFile(res, webRoot, path.replace('/web/', ''))
   if (req.method === 'GET' && path.startsWith('/assets/')) return serveFile(res, assetRoot, path.replace('/assets/', ''))
 
@@ -781,6 +782,12 @@ async function route(req, res) {
   if (req.method === 'POST' && path === '/ai/reference-analysis') {
     const body = await readBody(req)
     return json(res, 200, { analysis: await analyzeReferenceImage(body) })
+  }
+  if (req.method === 'POST' && path === '/ai/social-copy') {
+    const body = await readBody(req)
+    const row = body.bookingId ? db.prepare('SELECT * FROM bookings WHERE id = ?').get(body.bookingId) : null
+    const booking = row ? serializeBooking(row, body.lang || 'zh') : body.booking
+    return json(res, 200, { copy: await createSocialCopy({ lang: body.lang || 'zh', image: body.image || '', booking, platform: body.platform || 'xiaohongshu' }) })
   }
   if (path.startsWith('/admin/')) requireOwner(req)
   if (req.method === 'GET' && path === '/admin/bookings') {

@@ -198,20 +198,41 @@ export async function createSocialCopy({ lang = 'zh', image = '', booking = {}, 
     altTextEn: 'string'
   }
   return aiJson({
-    system: 'You create tasteful bilingual social media copy for a nail and lash atelier. Avoid medical claims and exaggerated promises.',
+    system: 'You create tasteful bilingual social media copy for a nail and lash atelier. Adapt tone to each platform: RED should be experience-led and searchable, Douyin should be short with a strong hook, Instagram should be polished and visual-first. Avoid medical claims and exaggerated promises.',
     user: `Create ${platform} copy for this finished work. Booking:\n${jsonBlock(booking)}\n${imageHints(image ? [image] : [])}`,
     schema,
     images: image ? [image] : [],
     fallback: () => {
       const serviceName = booking?.service?.name || 'Lucky Luxe'
+      const category = booking?.service?.category || 'soft luxury'
+      const variants = {
+        xiaohongshu: {
+          titleZh: `${serviceName}｜温柔高级感可以直接抄作业`,
+          captionZh: `这组作品重点是干净、耐看、显手/眼神状态更柔和。\n\n适合想要“精致但不夸张”的客人。到店可以带参考图，我们会根据肤色、手型或眼型调整细节，让效果更贴近日常。\n\n收藏给下次预约用。`,
+          titleEn: `${serviceName} | Soft Luxe Reference`,
+          captionEn: 'A clean, wearable Lucky Luxe reference with soft detail and everyday polish. Save it for your next appointment.',
+          hashtags: ['#多伦多美甲', '#美睫分享', '#小红书美甲', '#温柔高级感', '#LuckyLuxe']
+        },
+        douyin: {
+          titleZh: `${serviceName} 这组真的很适合日常`,
+          captionZh: `不夸张，但很显精致。\n\n近看有细节，远看很干净。喜欢自然高级感的可以保存这一组，预约时直接给技师看。`,
+          titleEn: `${serviceName} | Clean Everyday Finish`,
+          captionEn: 'A quick look at a clean, refined finish. Subtle detail, easy to wear, ready to save as a reference.',
+          hashtags: ['#今日美甲', '#美睫款式', '#同城美甲', '#变美日记', '#LuckyLuxe']
+        },
+        instagram: {
+          titleZh: `${serviceName}｜Lucky Luxe 作品留档`,
+          captionZh: `Soft, clean, and refined from every angle.\n\n一组适合日常，也适合镜头记录的 Lucky Luxe 完工作品。`,
+          titleEn: `${serviceName} | Lucky Luxe Archive`,
+          captionEn: 'Soft, clean, and refined from every angle. A polished Lucky Luxe finish made for everyday wear and a beautiful close-up.',
+          hashtags: ['#LuckyLuxeAtelier', '#nailarchive', '#lashstudio', '#torontobeauty', '#softluxury']
+        }
+      }
+      const item = variants[platform] || variants.xiaohongshu
       return {
         platform,
-        styleTags: [booking?.service?.category || 'soft luxury', 'clean', 'atelier'],
-        titleZh: `${serviceName}｜温柔高级感`,
-        captionZh: `这组作品保留了干净、精致和日常高级感。适合喜欢低调但有质感效果的客人。\n\n预约前可以带参考图，我们会根据手型、肤色和日常习惯调整细节。`,
-        titleEn: `${serviceName} | Soft Luxe Finish`,
-        captionEn: 'A clean, polished look with a soft luxury finish. Bring your reference image and we will adjust the details to your hands, tone, and lifestyle.',
-        hashtags: ['#LuckyLuxe', '#nailatelier', '#naildesign', '#lashartist', '#torontobeauty'],
+        styleTags: [category, 'clean', platform],
+        ...item,
         altTextZh: `${serviceName} 完工作品图`,
         altTextEn: `${serviceName} finished work image`
       }

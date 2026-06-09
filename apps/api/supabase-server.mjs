@@ -859,6 +859,7 @@ async function route(req, res) {
 
   if (req.method === 'GET' && path === '/') return serveFile(res, webRoot, 'index.html')
   if (req.method === 'GET' && path === '/admin') return serveFile(res, webRoot, 'admin.html')
+  if (req.method === 'GET' && path === '/share') return serveFile(res, webRoot, 'share.html')
   if (req.method === 'GET' && path.startsWith('/web/')) return serveFile(res, webRoot, path.replace('/web/', ''))
   if (req.method === 'GET' && path.startsWith('/assets/')) return serveFile(res, assetRoot, path.replace('/assets/', ''))
 
@@ -958,6 +959,12 @@ async function route(req, res) {
   }
   if (req.method === 'POST' && path === '/ai/reference-analysis') {
     return json(res, 200, { analysis: await analyzeReferenceImage(await readBody(req)) })
+  }
+  if (req.method === 'POST' && path === '/ai/social-copy') {
+    const body = await readBody(req)
+    const row = body.bookingId ? await query('SELECT * FROM bookings WHERE id = $1', [body.bookingId]) : { rows: [] }
+    const booking = row.rows[0] ? await serializeBooking(row.rows[0], body.lang || 'zh') : body.booking
+    return json(res, 200, { copy: await createSocialCopy({ lang: body.lang || 'zh', image: body.image || '', booking, platform: body.platform || 'xiaohongshu' }) })
   }
   if (path.startsWith('/admin/')) await requireOwner(req)
   if (req.method === 'GET' && path === '/admin/bookings') {

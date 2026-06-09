@@ -11,6 +11,7 @@ const owner = {
   calendarDate: new Date(),
   serviceEditor: null,
   selectedBookingId: '',
+  galleryOpenId: '',
   finance: null,
   dashboardDetail: 'today',
   aiBrief: null,
@@ -151,6 +152,19 @@ const copy = {
     instagram: 'Instagram',
     aiNoWork: '暂无完工作品图，技师上传后会进入图库。',
     copyCaption: '复制文案',
+    aiStatusUploaded: '已上传',
+    aiStatusProcessing: 'AI 处理中',
+    aiStatusReview: '待确认',
+    aiStatusReady: '可发布',
+    originalImage: '原图',
+    editedImage: 'AI 修图版',
+    shareLink: '转发链接',
+    openShare: '打开分享页',
+    showImages: '查看多图',
+    hideImages: '收起图片',
+    mainImage: '主图',
+    mockGallery: '演示图库',
+    platformLinks: '发布平台',
     todayOverview: '今日运营',
     monthOverview: '本月趋势',
     bookingLoad: '预约完成度',
@@ -295,6 +309,19 @@ const copy = {
     instagram: 'Instagram',
     aiNoWork: 'No finished work yet. Uploaded work photos will appear here.',
     copyCaption: 'Copy Caption',
+    aiStatusUploaded: 'Uploaded',
+    aiStatusProcessing: 'AI Processing',
+    aiStatusReview: 'Needs Review',
+    aiStatusReady: 'Publish Ready',
+    originalImage: 'Original',
+    editedImage: 'AI Edited',
+    shareLink: 'Share Link',
+    openShare: 'Open Share Page',
+    showImages: 'View Images',
+    hideImages: 'Hide Images',
+    mainImage: 'Main Image',
+    mockGallery: 'Demo Gallery',
+    platformLinks: 'Publish Platforms',
     todayOverview: 'Today Overview',
     monthOverview: 'Month Trend',
     bookingLoad: 'Booking Completion',
@@ -964,17 +991,14 @@ function renderBookings() {
   }
 
   const bookings = filteredBookings()
-  const selectedBooking = selectedBookingDetail()
   if (!bookings.length) {
     els.bookingList.innerHTML = `
-      ${selectedBooking ? renderBookingDetail(selectedBooking) : ''}
       <div class="empty-state"><strong>${t('noBookings')}</strong><span>${t('adjustFilters')}</span></div>
     `
     return
   }
   const grouped = groupByDate(bookings)
   els.bookingList.innerHTML = `
-    ${selectedBooking ? renderBookingDetail(selectedBooking) : ''}
     ${Object.keys(grouped).sort().map((date) => `
     <section class="booking-date-group">
       <h2>${dateHeading(date)}</h2>
@@ -1016,6 +1040,7 @@ function dateHeading(date) {
 
 function renderBookingCard(booking) {
   const needsAttention = activeStatuses().includes(booking.status)
+  const isOpen = owner.selectedBookingId === booking.id
   return `
     <article class="booking-item">
       <img class="booking-image" src="${booking.service.imageUrl}" alt="${booking.service.name}">
@@ -1033,11 +1058,8 @@ function renderBookingCard(booking) {
         <button class="ghost" data-status="CANCELLED" data-booking="${booking.id}" type="button">${t('cancelled')}</button>
       </div>
     </article>
+    ${isOpen ? renderBookingDetail(booking) : ''}
   `
-}
-
-function selectedBookingDetail() {
-  return owner.bookings.find((booking) => booking.id === owner.selectedBookingId)
 }
 
 function renderBookingDetail(booking) {
@@ -1350,50 +1372,206 @@ function renderCustomerInsight(insight) {
   `
 }
 
-function galleryItems() {
-  return owner.bookings
+function galleryGroups() {
+  const realGroups = owner.bookings
     .filter((booking) => booking.workImages?.length)
-    .flatMap((booking) => booking.workImages.map((image, index) => ({ booking, image, index })))
-    .sort((a, b) => `${b.booking.appointmentDate} ${b.index}`.localeCompare(`${a.booking.appointmentDate} ${a.index}`))
+    .map((booking) => ({
+      id: booking.id,
+      booking,
+      images: booking.workImages,
+      isMock: false
+    }))
+    .sort((a, b) => `${b.booking.appointmentDate} ${b.booking.appointmentTime}`.localeCompare(`${a.booking.appointmentDate} ${a.booking.appointmentTime}`))
+  if (realGroups.length >= 3) return realGroups
+  return [...realGroups, ...mockGalleryGroups().slice(0, 3 - realGroups.length)]
+}
+
+function mockGalleryGroups() {
+  const baseDate = formatDate(new Date())
+  const mocks = [
+    {
+      id: 'mock-gallery-french',
+      service: { name: owner.lang === 'en' ? 'Classic Cream French' : '经典奶油法式', category: owner.lang === 'en' ? 'French' : '法式', imageUrl: '/assets/images/nail-french.png' },
+      images: ['/assets/images/nail-french.png', '/assets/images/nail-luxe.png', '/assets/images/nail-jp.png'],
+      technician: { name: 'Lina Zhou' },
+      date: baseDate
+    },
+    {
+      id: 'mock-gallery-lash',
+      service: { name: owner.lang === 'en' ? 'Bare Natural Lash' : '裸感自然睫', category: owner.lang === 'en' ? 'Natural Lash' : '自然款', imageUrl: '/assets/images/lash-natural.png' },
+      images: ['/assets/images/lash-natural.png', '/assets/images/lash-volume.png'],
+      technician: { name: 'Mia Chen' },
+      date: baseDate
+    },
+    {
+      id: 'mock-gallery-soft',
+      service: { name: owner.lang === 'en' ? 'Soft Volume Lash' : '轻盈浓密睫', category: owner.lang === 'en' ? 'Volume Lash' : '浓密款', imageUrl: '/assets/images/lash-volume.png' },
+      images: ['/assets/images/lash-volume.png', '/assets/images/lash-lower.png'],
+      technician: { name: 'Ava Lin' },
+      date: baseDate
+    }
+  ]
+  return mocks.map((mock) => ({
+    id: mock.id,
+    isMock: true,
+    images: mock.images,
+    booking: {
+      id: mock.id,
+      appointmentDate: mock.date,
+      appointmentTime: '14:30',
+      technician: mock.technician,
+      service: mock.service,
+      publicCode: 'DEMO',
+      workImages: mock.images
+    }
+  }))
 }
 
 function renderAiGallery() {
-  const items = galleryItems()
-  if (!items.length) {
+  const groups = galleryGroups()
+  if (!groups.length) {
     els.aiGalleryList.innerHTML = `<div class="empty-state"><strong>${t('aiNoWork')}</strong></div>`
     return
   }
-  els.aiGalleryList.innerHTML = items.map(({ booking, image, index }) => {
-    const key = socialKey(booking.id, index, 'xiaohongshu')
-    const copy = owner.aiResults[key]?.data || owner.aiResults[key]
+  if (!owner.galleryOpenId && groups[0]) owner.galleryOpenId = groups[0].id
+  els.aiGalleryList.innerHTML = groups.map((group) => {
+    const { booking } = group
+    const images = group.images || []
+    const status = galleryStatus(group)
+    const mainImage = images[0] || booking.service.imageUrl
+    const isOpen = owner.galleryOpenId === group.id
+    const defaultPlatform = 'xiaohongshu'
+    const key = socialKey(booking.id, 0, defaultPlatform)
+    const copy = resolveSocialCopy(booking, 0, defaultPlatform, group.isMock)
     return `
-      <article class="ai-gallery-card card">
-        <img src="${image}" alt="${t('workImages')} ${index + 1}">
-        <div>
+      <article class="ai-gallery-row card">
+        <button class="gallery-main-button" data-gallery-toggle="${group.id}" type="button" aria-label="${t('showImages')}">
+          <img src="${mainImage}" alt="${t('mainImage')}">
+          <span>${t('mainImage')}</span>
+        </button>
+        <div class="gallery-row-body">
           <div class="section-row compact-row">
             <div>
               <h3>${escapeHtml(booking.service.name)}</h3>
-              <p>${booking.appointmentDate} · ${escapeHtml(booking.technician?.name || '')}</p>
+              <p>${booking.appointmentDate} ${booking.appointmentTime || ''} · ${escapeHtml(booking.technician?.name || '')} · ${images.length} ${t('workImages')}</p>
             </div>
-            <span class="status COMPLETED">${escapeHtml(booking.service.category || '')}</span>
+            <div class="gallery-status-stack">
+              ${group.isMock ? `<span class="status">${t('mockGallery')}</span>` : ''}
+              <span class="gallery-status ${status.className}">${status.label}</span>
+            </div>
+          </div>
+          <div class="gallery-strip">
+            ${images.map((image, index) => `<img src="${image}" alt="${t('workImages')} ${index + 1}">`).join('')}
           </div>
           <div class="ai-platform-row">
-            <button class="ghost slim" data-ai-social="${booking.id}" data-image-index="${index}" data-platform="xiaohongshu" type="button">${t('xiaohongshu')}</button>
-            <button class="ghost slim" data-ai-social="${booking.id}" data-image-index="${index}" data-platform="douyin" type="button">${t('douyin')}</button>
-            <button class="ghost slim" data-ai-social="${booking.id}" data-image-index="${index}" data-platform="instagram" type="button">${t('instagram')}</button>
+            <button class="ghost slim" data-ai-social="${booking.id}" data-image-index="0" data-platform="xiaohongshu" type="button">${t('xiaohongshu')}</button>
+            <button class="ghost slim" data-ai-social="${booking.id}" data-image-index="0" data-platform="douyin" type="button">${t('douyin')}</button>
+            <button class="ghost slim" data-ai-social="${booking.id}" data-image-index="0" data-platform="instagram" type="button">${t('instagram')}</button>
+            <button class="ghost slim" data-gallery-toggle="${group.id}" type="button">${isOpen ? t('hideImages') : t('showImages')}</button>
+            <a class="ghost slim share-link-button" href="${escapeHtml(shareUrlFor(booking.id, 0, defaultPlatform))}" target="_blank" rel="noreferrer">${t('openShare')}</a>
           </div>
-          ${copy ? renderSocialCopy(copy) : `<p class="subtle">${t('aiSocialCopy')}</p>`}
+          ${copy ? renderSocialCopy(copy, key) : `<p class="subtle">${t('aiSocialCopy')}</p>`}
+          ${isOpen ? renderGalleryExpanded(group) : ''}
         </div>
       </article>
     `
   }).join('')
 }
 
+function galleryStatus(group) {
+  if (owner.aiLoading.startsWith(`social:${group.booking.id}:`)) return { className: 'processing', label: t('aiStatusProcessing') }
+  const hasCopy = ['xiaohongshu', 'douyin', 'instagram'].some((platform) => owner.aiResults[socialKey(group.booking.id, 0, platform)])
+  if (hasCopy) return { className: 'ready', label: t('aiStatusReady') }
+  if (group.isMock) return { className: 'review', label: t('aiStatusReview') }
+  return { className: 'uploaded', label: t('aiStatusUploaded') }
+}
+
+function renderGalleryExpanded(group) {
+  const { booking } = group
+  const images = group.images || []
+  return `
+    <div class="gallery-expanded">
+      <div class="gallery-image-pairs">
+        ${images.map((image, index) => `
+          <div class="gallery-image-pair">
+            <figure>
+              <img src="${image}" alt="${t('originalImage')} ${index + 1}">
+              <figcaption>${t('originalImage')} ${index + 1}</figcaption>
+            </figure>
+            <figure>
+              <img class="edited-preview" src="${image}" alt="${t('editedImage')} ${index + 1}">
+              <figcaption>${t('editedImage')} ${index + 1}</figcaption>
+            </figure>
+          </div>
+        `).join('')}
+      </div>
+      <div class="gallery-share-grid">
+        ${['xiaohongshu', 'douyin', 'instagram'].map((platform) => {
+          const copy = resolveSocialCopy(booking, 0, platform, group.isMock)
+          const key = socialKey(booking.id, 0, platform)
+          return `
+            <section class="gallery-platform-card">
+              <div class="section-row compact-row">
+                <strong>${t(platform)}</strong>
+                <a href="${escapeHtml(shareUrlFor(booking.id, 0, platform))}" target="_blank" rel="noreferrer">${t('shareLink')}</a>
+              </div>
+              ${renderSocialCopy(copy, key)}
+            </section>
+          `
+        }).join('')}
+      </div>
+    </div>
+  `
+}
+
 function socialKey(bookingId, index, platform) {
   return `social:${bookingId}:${index}:${platform}`
 }
 
-function renderSocialCopy(copy) {
+function resolveSocialCopy(booking, index, platform, isMock = false) {
+  const saved = owner.aiResults[socialKey(booking.id, index, platform)]
+  if (saved) return saved.data || saved
+  return isMock ? fallbackSocialCopy(booking, platform) : null
+}
+
+function fallbackSocialCopy(booking, platform) {
+  const serviceName = booking.service?.name || 'Lucky Luxe'
+  const zh = {
+    xiaohongshu: {
+      title: `${serviceName}｜干净又显贵的细节`,
+      caption: `今天这组是偏日常耐看的精致感，近看有细节，远看很干净。\n\n适合喜欢低调、通勤、约会都能搭的客人。到店可以带参考图，我们会根据手型、肤色和日常习惯微调。`,
+      hashtags: ['#多伦多美甲', '#美甲分享', '#通勤美甲', '#LuckyLuxe']
+    },
+    douyin: {
+      title: `${serviceName} 到店前后质感变化`,
+      caption: `想要高级但不夸张的效果，可以参考这组。\n\n镜头里看是干净的，实际手上会更温柔。保存给下次预约用。`,
+      hashtags: ['#今日美甲', '#美甲款式', '#同城美甲', '#LuckyLuxe']
+    },
+    instagram: {
+      title: `${serviceName} | Soft Luxe Archive`,
+      caption: `Soft, clean, and wearable from every angle.\n\nA polished Lucky Luxe finish for clients who love subtle details and a refined daily look.`,
+      hashtags: ['#LuckyLuxeAtelier', '#nailarchive', '#lashstudio', '#torontobeauty']
+    }
+  }
+  const item = zh[platform] || zh.xiaohongshu
+  return {
+    platform,
+    styleTags: [booking.service?.category || 'soft luxury', 'clean', platform],
+    titleZh: item.title,
+    captionZh: item.caption,
+    titleEn: platform === 'instagram' ? item.title : `${serviceName} | Soft Luxe Archive`,
+    captionEn: platform === 'instagram' ? item.caption : 'A clean, polished Lucky Luxe finish with subtle detail and everyday wearability.',
+    hashtags: item.hashtags,
+    altTextZh: `${serviceName} 完工作品图`,
+    altTextEn: `${serviceName} finished work archive`
+  }
+}
+
+function shareUrlFor(bookingId, index, platform) {
+  return `${window.location.origin}/share?bookingId=${encodeURIComponent(bookingId)}&image=${encodeURIComponent(index)}&platform=${encodeURIComponent(platform)}`
+}
+
+function renderSocialCopy(copy, key = '') {
   const title = owner.lang === 'en' ? copy.titleEn : copy.titleZh
   const caption = owner.lang === 'en' ? copy.captionEn : copy.captionZh
   return `
@@ -1401,8 +1579,22 @@ function renderSocialCopy(copy) {
       <strong>${escapeHtml(title || '')}</strong>
       <p>${escapeHtml(caption || '')}</p>
       <small>${(copy.hashtags || []).map(escapeHtml).join(' ')}</small>
+      ${key ? `<button class="ghost slim" data-copy-caption="${key}" type="button">${t('copyCaption')}</button>` : ''}
     </div>
   `
+}
+
+async function copyCaptionByKey(key) {
+  const [, bookingId, imageIndex, platform] = key.split(':')
+  const group = galleryGroups().find((item) => item.booking.id === bookingId)
+  if (!group) return
+  const copy = resolveSocialCopy(group.booking, Number(imageIndex), platform, group.isMock)
+  if (!copy) return
+  const title = owner.lang === 'en' ? copy.titleEn : copy.titleZh
+  const caption = owner.lang === 'en' ? copy.captionEn : copy.captionZh
+  const text = [title, caption, (copy.hashtags || []).join(' ')].filter(Boolean).join('\n\n')
+  await navigator.clipboard.writeText(text)
+  toast(t('copyCaption'))
 }
 
 function renderFinancePanel() {
@@ -1613,16 +1805,17 @@ async function generateCustomerInsight(id) {
 }
 
 async function generateSocialCopy(bookingId, index, platform) {
-  const booking = owner.bookings.find((item) => item.id === bookingId)
+  const group = galleryGroups().find((item) => item.booking.id === bookingId)
+  const booking = group?.booking
   if (!booking) return
-  const image = booking.workImages?.[Number(index)]
+  const image = group.images?.[Number(index)] || booking.workImages?.[Number(index)]
   const key = socialKey(bookingId, index, platform)
   owner.aiLoading = key
   renderAiGallery()
   try {
     const data = await request('/admin/ai/social-copy', {
       method: 'POST',
-      body: JSON.stringify({ lang: owner.lang, bookingId, image, platform })
+      body: JSON.stringify({ lang: owner.lang, bookingId, booking, image, platform })
     })
     owner.aiResults[key] = data.copy
   } finally {
@@ -1762,6 +1955,17 @@ els.customerList.addEventListener('click', (event) => {
   generateCustomerInsight(aiCustomer.dataset.aiCustomer).catch((error) => toast(error.message))
 })
 els.aiGalleryList.addEventListener('click', (event) => {
+  const toggle = event.target.closest('[data-gallery-toggle]')
+  if (toggle) {
+    owner.galleryOpenId = owner.galleryOpenId === toggle.dataset.galleryToggle ? '' : toggle.dataset.galleryToggle
+    renderAiGallery()
+    return
+  }
+  const copyButton = event.target.closest('[data-copy-caption]')
+  if (copyButton) {
+    copyCaptionByKey(copyButton.dataset.copyCaption).catch((error) => toast(error.message))
+    return
+  }
   const social = event.target.closest('[data-ai-social]')
   if (!social) return
   generateSocialCopy(social.dataset.aiSocial, social.dataset.imageIndex, social.dataset.platform).catch((error) => toast(error.message))
