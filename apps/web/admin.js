@@ -43,6 +43,7 @@ const els = {
   sidebarServices: document.querySelector('#sidebarServices'),
   sidebarCustomers: document.querySelector('#sidebarCustomers'),
   adminDashboard: document.querySelector('#adminDashboard'),
+  dashboardDetailPage: document.querySelector('#dashboardDetailPage'),
   dashboardCharts: document.querySelector('#dashboardCharts'),
   dashboardDetailPanel: document.querySelector('#dashboardDetailPanel'),
   dashboardEyebrow: document.querySelector('#dashboardEyebrow'),
@@ -53,8 +54,8 @@ const els = {
   schedulePage: document.querySelector('#schedulePage'),
   servicesPage: document.querySelector('#servicesPage'),
   customersPage: document.querySelector('#customersPage'),
-  customersEyebrow: document.querySelector('#customersEyebrow'),
   customersTitle: document.querySelector('#customersTitle'),
+  customerFilterSummary: document.querySelector('#customerFilterSummary'),
   customerSort: document.querySelector('#customerSort'),
   customerList: document.querySelector('#customerList'),
   bookingsTitle: document.querySelector('#bookingsTitle'),
@@ -80,6 +81,9 @@ const els = {
   scheduleStartLabel: document.querySelector('#scheduleStartLabel'),
   scheduleEndLabel: document.querySelector('#scheduleEndLabel'),
   scheduleWorkingLabel: document.querySelector('#scheduleWorkingLabel'),
+  techPerformanceEyebrow: document.querySelector('#techPerformanceEyebrow'),
+  techPerformanceTitle: document.querySelector('#techPerformanceTitle'),
+  technicianPerformance: document.querySelector('#technicianPerformance'),
   servicesTitle: document.querySelector('#servicesTitle'),
   addServiceButton: document.querySelector('#addServiceButton'),
   serviceEditor: document.querySelector('#serviceEditor'),
@@ -127,6 +131,15 @@ const copy = {
     monthOverview: '本月趋势',
     bookingLoad: '预约完成度',
     customerTraffic: '客户流量',
+    channelTraffic: '渠道来源',
+    technicianPerformance: '技师业绩',
+    techStatus: '当前状态',
+    servingNow: '服务中',
+    scheduledToday: '今日有预约',
+    available: '可安排',
+    monthPeople: '本月人数',
+    monthAmount: '本月金额',
+    monthCompletedAmount: '本月已完成金额',
     todayBookings: '今日预约',
     activeBookings: '进行中预约',
     totalCustomers: '客户总数',
@@ -143,6 +156,7 @@ const copy = {
     customerSortAlpha: '按首字母',
     customerSortVisits: '按到店次数',
     customerSortRecent: '最近到店',
+    filter: '筛选',
     visits: '到店次数',
     lastVisit: '最近到店',
     totalSpent: '累计消费',
@@ -181,7 +195,8 @@ const copy = {
     nameEn: '英文名',
     descriptionZh: '中文描述',
     descriptionEn: '英文描述',
-    imageUrl: '图片路径',
+    imageUrl: '服务图片',
+    uploadImage: '上传图片',
     priceCad: '价格 CAD',
     depositCad: '定金 CAD',
     durationMin: '时长分钟',
@@ -246,6 +261,15 @@ const copy = {
     monthOverview: 'Month Trend',
     bookingLoad: 'Booking Completion',
     customerTraffic: 'Customer Traffic',
+    channelTraffic: 'Channel Sources',
+    technicianPerformance: 'Technician Performance',
+    techStatus: 'Current Status',
+    servingNow: 'Serving',
+    scheduledToday: 'Booked Today',
+    available: 'Available',
+    monthPeople: 'Month Guests',
+    monthAmount: 'Month Amount',
+    monthCompletedAmount: 'Completed Amount',
     todayBookings: 'Today Bookings',
     activeBookings: 'Active Bookings',
     totalCustomers: 'Total Customers',
@@ -262,6 +286,7 @@ const copy = {
     customerSortAlpha: 'A-Z',
     customerSortVisits: 'Visits',
     customerSortRecent: 'Recent Visit',
+    filter: 'Filter',
     visits: 'Visits',
     lastVisit: 'Last Visit',
     totalSpent: 'Total Spent',
@@ -300,7 +325,8 @@ const copy = {
     nameEn: 'English Name',
     descriptionZh: 'Chinese Description',
     descriptionEn: 'English Description',
-    imageUrl: 'Image URL',
+    imageUrl: 'Service Image',
+    uploadImage: 'Upload Image',
     priceCad: 'Price CAD',
     depositCad: 'Deposit CAD',
     durationMin: 'Duration min',
@@ -457,8 +483,8 @@ function applyLanguage() {
   els.sidebarCustomers.textContent = t('navCustomers')
   els.bookingsTitle.textContent = t('bookings')
   els.bookingsSubtitle.textContent = t('bookingsSubtitle')
-  els.customersEyebrow.textContent = t('customers')
   els.customersTitle.textContent = t('customers')
+  els.customerFilterSummary.textContent = t('filter')
   els.customerSort.innerHTML = `
     <option value="alpha">${t('customerSortAlpha')}</option>
     <option value="visits">${t('customerSortVisits')}</option>
@@ -472,6 +498,8 @@ function applyLanguage() {
   els.filterStatusLabel.textContent = t('status')
   els.clearFilters.textContent = t('clear')
   els.scheduleTitle.textContent = t('schedule')
+  els.techPerformanceEyebrow.textContent = t('monthOverview')
+  els.techPerformanceTitle.textContent = t('technicianPerformance')
   els.scheduleTechLabel.textContent = t('technician')
   els.scheduleDateLabel.textContent = t('date')
   els.scheduleStartLabel.textContent = t('start')
@@ -567,6 +595,7 @@ function setLocked(locked) {
     els.serviceAdminList.innerHTML = ''
     els.serviceEditor.innerHTML = ''
     els.scheduleTech.innerHTML = ''
+    els.technicianPerformance.innerHTML = ''
     els.customerList.innerHTML = ''
     els.dashboardCharts.innerHTML = ''
     els.dashboardDetailPanel.innerHTML = ''
@@ -582,6 +611,7 @@ function render() {
   renderBookings()
   renderServices()
   renderTechnicians()
+  renderTechnicianPerformance()
   renderCustomers()
   renderFinancePanel()
 }
@@ -636,6 +666,7 @@ function dashboardStats() {
 function renderAdminPages() {
   const pages = {
     dashboard: els.adminDashboard,
+    dashboardDetail: els.dashboardDetailPage,
     bookings: els.bookingsPage,
     schedule: els.schedulePage,
     services: els.servicesPage,
@@ -643,21 +674,26 @@ function renderAdminPages() {
   }
   Object.entries(pages).forEach(([key, element]) => element.classList.toggle('hidden', owner.adminPage !== key))
   els.metricGrid.classList.toggle('hidden', owner.adminPage !== 'dashboard')
-  els.sidebarLinks.forEach((link) => link.classList.toggle('active', link.dataset.adminPage === owner.adminPage))
+  els.sidebarLinks.forEach((link) => {
+    const activePage = owner.adminPage === 'dashboardDetail' ? 'dashboard' : owner.adminPage
+    link.classList.toggle('active', link.dataset.adminPage === activePage)
+  })
 }
 
 function renderDashboard() {
   const stats = dashboardStats()
-  const maxBooking = Math.max(stats.confirmed, stats.pending, stats.completed, stats.cancelled, 1)
-  const visitRows = sortedCustomers().slice(0, 4)
+  const channelRows = trafficChannels()
+  const techRows = technicianPerformanceRows()
+  const maxChannel = Math.max(...channelRows.map((item) => item.count), 1)
+  const maxTech = Math.max(...techRows.map((item) => item.completed), 1)
   els.dashboardCharts.innerHTML = `
-    <article class="dashboard-chart-card card">
+    <button class="dashboard-chart-card card" data-dashboard-detail="today" type="button">
       <div class="section-row compact-row">
         <div>
           <p class="eyebrow">${t('todayOverview')}</p>
           <h2>${stats.todayBookings.length}</h2>
         </div>
-        <button class="ghost slim" data-dashboard-detail="today" type="button">${t('viewDetails')}</button>
+        <span class="dashboard-card-cue">${t('viewDetails')}</span>
       </div>
       <div class="chart-stat-row">
         <span>${t('activeBookings')}</span>
@@ -667,47 +703,39 @@ function renderDashboard() {
         <span>${t('confirmed')}</span>
         <strong>${stats.todayBookings.filter((item) => item.status === 'CONFIRMED').length}</strong>
       </div>
-    </article>
-    <article class="dashboard-chart-card card">
+    </button>
+    <button class="dashboard-chart-card card" data-dashboard-detail="monthServices" type="button">
       <div class="section-row compact-row">
         <div>
           <p class="eyebrow">${t('monthOverview')}</p>
           <h2>${stats.monthBookings.length}</h2>
         </div>
-        <button class="ghost slim" data-dashboard-detail="monthServices" type="button">${t('viewDetails')}</button>
+        <span class="dashboard-card-cue">${t('viewDetails')}</span>
       </div>
       ${chartBar(t('monthServices'), stats.monthServices, Math.max(stats.monthBookings.length, 1))}
       ${chartBar(t('pending'), stats.monthBookings.filter((item) => item.status === 'PENDING_PAYMENT').length, Math.max(stats.monthBookings.length, 1))}
       ${chartBar(t('revenue'), money(stats.monthRevenue), Math.max(stats.monthBookings.length, 1), 100)}
-    </article>
-    <article class="dashboard-chart-card card">
+    </button>
+    <button class="dashboard-chart-card card" data-dashboard-detail="technicians" type="button">
       <div class="section-row compact-row">
         <div>
-          <p class="eyebrow">${t('bookingLoad')}</p>
-          <h2>${Math.round((stats.completed / Math.max(owner.bookings.length, 1)) * 100)}%</h2>
+          <p class="eyebrow">${t('technicianPerformance')}</p>
+          <h2>${techRows.reduce((sum, item) => sum + item.completed, 0)}</h2>
         </div>
-        <button class="ghost slim" data-dashboard-detail="confirmed" type="button">${t('viewDetails')}</button>
+        <span class="dashboard-card-cue">${t('viewDetails')}</span>
       </div>
-      ${chartBar(t('confirmed'), stats.confirmed, maxBooking)}
-      ${chartBar(t('pending'), stats.pending, maxBooking)}
-      ${chartBar(t('completed'), stats.completed, maxBooking)}
-      ${chartBar(t('cancelled'), stats.cancelled, maxBooking)}
-    </article>
-    <article class="dashboard-chart-card card">
+      ${techRows.map((tech) => chartBar(`${tech.name} · ${tech.status}`, tech.completed, maxTech)).join('')}
+    </button>
+    <button class="dashboard-chart-card card" data-dashboard-detail="channels" type="button">
       <div class="section-row compact-row">
         <div>
           <p class="eyebrow">${t('customerTraffic')}</p>
-          <h2>${owner.customers.length}</h2>
+          <h2>${channelRows.reduce((sum, item) => sum + item.count, 0)}</h2>
         </div>
-        <button class="ghost slim" data-dashboard-detail="customers" type="button">${t('viewDetails')}</button>
+        <span class="dashboard-card-cue">${t('viewDetails')}</span>
       </div>
-      ${visitRows.length ? visitRows.map((customer) => `
-        <button class="traffic-row" data-admin-page="customers" type="button">
-          <span>${escapeHtml(customerName(customer))}</span>
-          <strong>${customer.visitCount || 0}</strong>
-        </button>
-      `).join('') : `<div class="empty-state small-empty">${t('noCustomers')}</div>`}
-    </article>
+      ${channelRows.map((channel) => chartBar(channel.name, channel.count, maxChannel)).join('')}
+    </button>
   `
   renderDashboardDetail()
 }
@@ -726,6 +754,36 @@ function chartBar(label, value, max, forcedPercent) {
   `
 }
 
+function trafficChannels() {
+  const total = Math.max(owner.customers.length, owner.bookings.length, 10)
+  const channels = owner.lang === 'zh'
+    ? ['大众点评', '美团', '小红书', '抖音', '微信']
+    : ['Dianping', 'Meituan', 'RED', 'Douyin', 'WeChat']
+  const weights = [0.18, 0.16, 0.28, 0.14, 0.24]
+  return channels.map((name, index) => ({
+    name,
+    count: Math.max(1, Math.round(total * weights[index]))
+  }))
+}
+
+function technicianPerformanceRows() {
+  return owner.technicians.map((tech) => {
+    const monthBookings = owner.bookings.filter((booking) => booking.technician?.id === tech.id && isCurrentMonth(booking.appointmentDate))
+    const completed = monthBookings.filter((booking) => booking.status === 'COMPLETED')
+    const activeToday = owner.bookings.find((booking) => booking.technician?.id === tech.id && isToday(booking.appointmentDate) && activeStatuses().includes(booking.status))
+    const hasToday = owner.bookings.some((booking) => booking.technician?.id === tech.id && isToday(booking.appointmentDate))
+    return {
+      id: tech.id,
+      name: tech.name,
+      title: tech.title,
+      completed: completed.length,
+      amount: completed.reduce((sum, booking) => sum + booking.servicePriceCents, 0),
+      people: new Set(monthBookings.map((booking) => booking.user?.id || booking.user?.email || booking.publicCode)).size,
+      status: activeToday ? t('servingNow') : hasToday ? t('scheduledToday') : t('available')
+    }
+  })
+}
+
 function renderDashboardDetail() {
   const detail = dashboardDetail()
   els.dashboardDetailPanel.innerHTML = `
@@ -738,7 +796,12 @@ function renderDashboardDetail() {
     </div>
     ${detail.items.length ? `
       <div class="dashboard-detail-list">
-        ${detail.items.map((item) => detail.type === 'customers' ? renderCustomerMini(item) : renderBookingMini(item)).join('')}
+        ${detail.items.map((item) => {
+          if (detail.type === 'customers') return renderCustomerMini(item)
+          if (detail.type === 'channels') return renderChannelMini(item)
+          if (detail.type === 'technicians') return renderTechnicianMini(item)
+          return renderBookingMini(item)
+        }).join('')}
       </div>
     ` : `<div class="empty-state small-empty">${t('noDetailItems')}</div>`}
   `
@@ -754,7 +817,9 @@ function dashboardDetail() {
     monthServices: [t('monthServiceDetails'), month.filter((item) => item.status === 'COMPLETED')],
     totalServices: [t('totalServiceDetails'), owner.bookings.filter((item) => item.status === 'COMPLETED')],
     finance: [t('monthlyRevenue'), month.filter((item) => ['CONFIRMED', 'COMPLETED'].includes(item.status))],
-    customers: [t('recentCustomers'), sortedCustomers().slice(0, 8)]
+    customers: [t('recentCustomers'), sortedCustomers().slice(0, 8)],
+    channels: [t('channelTraffic'), trafficChannels()],
+    technicians: [t('technicianPerformance'), technicianPerformanceRows()]
   }
   const [title, items] = details[type] || details.today
   return { title, items, type }
@@ -783,6 +848,32 @@ function renderCustomerMini(customer) {
         <small>${escapeHtml(customer.email || '-')}</small>
       </span>
     </button>
+  `
+}
+
+function renderChannelMini(channel) {
+  return `
+    <article class="dashboard-detail-card info-detail-card">
+      <span class="mini-avatar">${escapeHtml(channel.name.slice(0, 1))}</span>
+      <span>
+        <strong>${escapeHtml(channel.name)}</strong>
+        <small>${t('customerTraffic')} · ${channel.count}</small>
+        <small>${t('viewDetails')}</small>
+      </span>
+    </article>
+  `
+}
+
+function renderTechnicianMini(tech) {
+  return `
+    <article class="dashboard-detail-card info-detail-card">
+      <span class="mini-avatar">${escapeHtml(tech.name.slice(0, 1))}</span>
+      <span>
+        <strong>${escapeHtml(tech.name)} · ${escapeHtml(tech.status)}</strong>
+        <small>${t('monthPeople')} ${tech.people} · ${t('monthServices')} ${tech.completed}</small>
+        <small>${t('monthAmount')} ${money(tech.amount)}</small>
+      </span>
+    </article>
   `
 }
 
@@ -1067,7 +1158,13 @@ function renderServiceEditor() {
       </div>
       <label><span>${t('descriptionZh')}</span><textarea name="descriptionZh" rows="2">${escapeHtml(service.descriptionZh)}</textarea></label>
       <label><span>${t('descriptionEn')}</span><textarea name="descriptionEn" rows="2">${escapeHtml(service.descriptionEn)}</textarea></label>
-      <label><span>${t('imageUrl')}</span><input name="imageUrl" value="${escapeHtml(service.imageUrl)}"></label>
+      <label class="service-image-field">
+        <span>${t('imageUrl')}</span>
+        <img src="${escapeHtml(service.imageUrl)}" alt="${t('imageUrl')}">
+        <input name="imageUrl" type="hidden" value="${escapeHtml(service.imageUrl)}">
+        <input name="imageFile" type="file" accept="image/*">
+        <small>${t('uploadImage')}</small>
+      </label>
       <div class="form-grid">
         <label><span>${t('priceCad')}</span><input name="price" inputmode="decimal" value="${escapeHtml(service.price)}"></label>
         <label><span>${t('depositCad')}</span><input name="deposit" inputmode="decimal" value="${escapeHtml(service.deposit)}"></label>
@@ -1086,6 +1183,27 @@ function renderServiceEditor() {
 function renderTechnicians() {
   els.scheduleTech.innerHTML = owner.technicians.map((tech) => `
     <option value="${tech.id}">${tech.name} · ${tech.title}</option>
+  `).join('')
+}
+
+function renderTechnicianPerformance() {
+  const rows = technicianPerformanceRows()
+  if (!rows.length) {
+    els.technicianPerformance.innerHTML = `<div class="empty-state small-empty">${t('noDetailItems')}</div>`
+    return
+  }
+  els.technicianPerformance.innerHTML = rows.map((tech) => `
+    <article class="technician-performance-card">
+      <div>
+        <h3>${escapeHtml(tech.name)}</h3>
+        <p>${escapeHtml(tech.title || '')} · ${t('techStatus')} ${escapeHtml(tech.status)}</p>
+      </div>
+      <div class="performance-numbers">
+        <span>${t('monthPeople')} <strong>${tech.people}</strong></span>
+        <span>${t('monthServices')} <strong>${tech.completed}</strong></span>
+        <span>${t('monthAmount')} <strong>${money(tech.amount)}</strong></span>
+      </div>
+    </article>
   `).join('')
 }
 
@@ -1252,6 +1370,8 @@ async function saveService(id) {
 async function saveServiceEditor(event) {
   event.preventDefault()
   const form = new FormData(event.target)
+  const imageFile = form.get('imageFile')
+  const imageUrl = imageFile && imageFile.size ? await readCompressedImage(imageFile) : form.get('imageUrl')
   const body = {
     type: form.get('type'),
     category: form.get('category'),
@@ -1259,7 +1379,7 @@ async function saveServiceEditor(event) {
     nameEn: form.get('nameEn'),
     descriptionZh: form.get('descriptionZh'),
     descriptionEn: form.get('descriptionEn'),
-    imageUrl: form.get('imageUrl'),
+    imageUrl,
     priceCents: dollarsToCents(form.get('price')),
     depositCents: dollarsToCents(form.get('deposit')),
     baseDurationMin: Number(form.get('duration')),
@@ -1299,11 +1419,8 @@ els.adminLayout.addEventListener('click', (event) => {
   const detailButton = event.target.closest('[data-dashboard-detail]')
   if (detailButton) {
     owner.dashboardDetail = detailButton.dataset.dashboardDetail
-    if (detailButton.hasAttribute('data-open-finance')) {
-      els.financePanel.classList.remove('hidden')
-      renderFinancePanel()
-    }
-    renderDashboardDetail()
+    owner.adminPage = 'dashboardDetail'
+    render()
     return
   }
   const bookingDetailButton = event.target.closest('[data-view-booking]')
@@ -1418,6 +1535,15 @@ els.serviceEditor.addEventListener('click', (event) => {
     owner.serviceEditor = null
     renderServices()
   }
+})
+els.serviceEditor.addEventListener('change', (event) => {
+  const input = event.target.closest('input[name="imageFile"]')
+  if (!input || !input.files?.[0]) return
+  readCompressedImage(input.files[0]).then((image) => {
+    const form = input.closest('form')
+    form.querySelector('input[name="imageUrl"]').value = image
+    form.querySelector('.service-image-field img').src = image
+  }).catch((error) => toast(error.message))
 })
 els.serviceEditor.addEventListener('submit', (event) => {
   if (!event.target.matches('#serviceEditorForm')) return

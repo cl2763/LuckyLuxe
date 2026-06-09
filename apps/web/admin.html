@@ -69,8 +69,12 @@
               <span class="subtle" id="dashboardSubtitle">Today and month overview</span>
             </div>
             <div class="dashboard-chart-grid" id="dashboardCharts"></div>
-            <div class="dashboard-detail-panel card" id="dashboardDetailPanel"></div>
             <div class="finance-panel card hidden" id="financePanel"></div>
+          </section>
+
+          <section class="admin-page hidden" id="dashboardDetailPage">
+            <button class="ghost back-btn" data-admin-page="dashboard" type="button">← Dashboard</button>
+            <div class="dashboard-detail-panel card" id="dashboardDetailPanel"></div>
           </section>
 
           <section class="admin-page hidden" id="bookingsPage">
@@ -81,8 +85,8 @@
             </div>
             <div class="admin-tabs">
               <button class="admin-tab active" id="todayTab" data-admin-view="today" type="button">Today</button>
-              <button class="admin-tab" id="allTab" data-admin-view="all" type="button">All Bookings</button>
               <button class="admin-tab" id="calendarTab" data-admin-view="calendar" type="button">Calendar</button>
+              <button class="admin-tab" id="allTab" data-admin-view="all" type="button">All Bookings</button>
             </div>
             <div class="filter-row" id="bookingFilters">
               <label>
@@ -113,6 +117,15 @@
 
           <section class="admin-page hidden" id="schedulePage">
             <button class="ghost back-btn" data-admin-page="dashboard" type="button">← Dashboard</button>
+            <section class="admin-card">
+              <div class="section-row compact-row">
+                <div>
+                  <p class="eyebrow" id="techPerformanceEyebrow">This Month</p>
+                  <h2 id="techPerformanceTitle">Technician Performance</h2>
+                </div>
+              </div>
+              <div class="technician-performance-grid" id="technicianPerformance"></div>
+            </section>
             <section class="admin-card">
               <h2 id="scheduleTitle">Technician Schedule</h2>
               <label>
@@ -157,14 +170,16 @@
             <button class="ghost back-btn" data-admin-page="dashboard" type="button">← Dashboard</button>
             <div class="section-row">
               <div>
-                <p class="eyebrow" id="customersEyebrow">Customers</p>
                 <h1 id="customersTitle">Customer Profiles</h1>
               </div>
-              <select id="customerSort">
-                <option value="alpha">A-Z</option>
-                <option value="visits">Visits</option>
-                <option value="recent">Recent visit</option>
-              </select>
+              <details class="filter-dropdown">
+                <summary id="customerFilterSummary">筛选</summary>
+                <select id="customerSort">
+                  <option value="alpha">A-Z</option>
+                  <option value="visits">Visits</option>
+                  <option value="recent">Recent visit</option>
+                </select>
+              </details>
             </div>
             <div class="admin-list" id="customerList"></div>
           </section>

@@ -673,12 +673,33 @@ textarea:focus {
   align-content: start;
   gap: 12px;
   min-height: 230px;
+  width: 100%;
+  border: 1px solid var(--line);
   padding: 18px;
+  color: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+
+.dashboard-chart-card:hover,
+.metric:hover,
+.dashboard-detail-card:hover {
+  border-color: #c9a47d;
+  transform: translateY(-1px);
 }
 
 .dashboard-chart-card h2 {
   margin: 0;
   font-size: 38px;
+}
+
+.dashboard-card-cue {
+  border-radius: 999px;
+  background: var(--soft);
+  color: var(--accent-dark);
+  padding: 8px 12px;
+  font-size: 13px;
+  font-weight: 900;
 }
 
 .chart-stat-row,
@@ -788,6 +809,57 @@ textarea:focus {
 .dashboard-detail-card small {
   color: var(--muted);
   font-weight: 800;
+}
+
+.info-detail-card {
+  cursor: default;
+}
+
+.technician-performance-grid {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(190px, 1fr));
+  gap: 12px;
+}
+
+.technician-performance-card {
+  display: grid;
+  gap: 12px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: #fff;
+  padding: 14px;
+}
+
+.technician-performance-card h3 {
+  margin: 0 0 6px;
+}
+
+.technician-performance-card p {
+  margin: 0;
+  color: var(--muted);
+  font-weight: 800;
+}
+
+.performance-numbers {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 8px;
+}
+
+.performance-numbers span {
+  display: grid;
+  gap: 4px;
+  border-radius: 8px;
+  background: var(--soft);
+  padding: 10px;
+  color: var(--muted);
+  font-size: 12px;
+  font-weight: 800;
+}
+
+.performance-numbers strong {
+  color: var(--ink);
+  font-size: 18px;
 }
 
 .finance-panel {
@@ -917,6 +989,31 @@ textarea:focus {
   resize: vertical;
 }
 
+.service-image-field {
+  display: grid;
+  gap: 10px;
+}
+
+.service-image-field img {
+  width: min(320px, 100%);
+  aspect-ratio: 16 / 9;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  object-fit: cover;
+}
+
+.service-image-field input[type='file'] {
+  min-height: auto;
+  border-style: dashed;
+  background: #fff;
+  padding: 12px;
+}
+
+.service-image-field small {
+  color: var(--muted);
+  font-weight: 800;
+}
+
 .admin-tabs,
 .filter-row,
 .calendar-controls {
@@ -941,6 +1038,39 @@ textarea:focus {
   background: var(--black);
   border-color: var(--black);
   color: #fff;
+}
+
+.filter-dropdown {
+  position: relative;
+}
+
+.filter-dropdown summary {
+  display: grid;
+  min-width: 104px;
+  min-height: 42px;
+  place-items: center;
+  border: 1px solid var(--line);
+  border-radius: 999px;
+  background: #fff;
+  color: var(--muted);
+  padding: 0 16px;
+  font-weight: 900;
+  cursor: pointer;
+  list-style: none;
+}
+
+.filter-dropdown summary::-webkit-details-marker {
+  display: none;
+}
+
+.filter-dropdown[open] select {
+  position: absolute;
+  top: calc(100% + 8px);
+  right: 0;
+  width: 190px;
+  min-height: 44px;
+  z-index: 3;
+  box-shadow: var(--shadow-soft);
 }
 
 .filter-row label {
@@ -1071,6 +1201,10 @@ textarea:focus {
 
 .customer-profile-card h3 {
   margin: 0 0 6px;
+}
+
+#customersTitle {
+  white-space: nowrap;
 }
 
 .customer-profile-card p {
@@ -2264,6 +2398,7 @@ textarea:focus {
   .metric-grid,
   .dashboard-chart-grid,
   .dashboard-detail-list,
+  .technician-performance-grid,
   .finance-grid {
     grid-template-columns: repeat(2, minmax(0, 1fr));
   }
@@ -2354,6 +2489,7 @@ textarea:focus {
   .metric-grid,
   .dashboard-chart-grid,
   .dashboard-detail-list,
+  .technician-performance-grid,
   .finance-grid,
   .quick-grid,
   .recommend-strip,
@@ -2374,6 +2510,10 @@ textarea:focus {
   }
 
   .customer-stats {
+    grid-template-columns: 1fr;
+  }
+
+  .performance-numbers {
     grid-template-columns: 1fr;
   }
 
