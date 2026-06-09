@@ -1374,11 +1374,11 @@ function renderCustomerInsight(insight) {
 
 function galleryGroups() {
   const realGroups = owner.bookings
-    .filter((booking) => booking.workImages?.length)
+    .filter((booking) => Array.isArray(booking.workImages) && booking.workImages.length)
     .map((booking) => ({
       id: booking.id,
       booking,
-      images: booking.workImages,
+      images: booking.workImages.filter(Boolean),
       isMock: false
     }))
     .sort((a, b) => `${b.booking.appointmentDate} ${b.booking.appointmentTime}`.localeCompare(`${a.booking.appointmentDate} ${a.booking.appointmentTime}`))
@@ -1436,9 +1436,9 @@ function renderAiGallery() {
   if (!owner.galleryOpenId && groups[0]) owner.galleryOpenId = groups[0].id
   els.aiGalleryList.innerHTML = groups.map((group) => {
     const { booking } = group
-    const images = group.images || []
+    const images = Array.isArray(group.images) ? group.images.filter(Boolean) : []
     const status = galleryStatus(group)
-    const mainImage = images[0] || booking.service.imageUrl
+    const mainImage = images[0] || booking.service?.imageUrl || '/assets/images/nail-french.png'
     const isOpen = owner.galleryOpenId === group.id
     const defaultPlatform = 'xiaohongshu'
     const key = socialKey(booking.id, 0, defaultPlatform)
@@ -1452,7 +1452,7 @@ function renderAiGallery() {
         <div class="gallery-row-body">
           <div class="section-row compact-row">
             <div>
-              <h3>${escapeHtml(booking.service.name)}</h3>
+              <h3>${escapeHtml(booking.service?.name || 'Lucky Luxe')}</h3>
               <p>${booking.appointmentDate} ${booking.appointmentTime || ''} · ${escapeHtml(booking.technician?.name || '')} · ${images.length} ${t('workImages')}</p>
             </div>
             <div class="gallery-status-stack">
@@ -1488,7 +1488,7 @@ function galleryStatus(group) {
 
 function renderGalleryExpanded(group) {
   const { booking } = group
-  const images = group.images || []
+  const images = Array.isArray(group.images) ? group.images.filter(Boolean) : []
   return `
     <div class="gallery-expanded">
       <div class="gallery-image-pairs">
@@ -1515,7 +1515,7 @@ function renderGalleryExpanded(group) {
                 <strong>${t(platform)}</strong>
                 <a href="${escapeHtml(shareUrlFor(booking.id, 0, platform))}" target="_blank" rel="noreferrer">${t('shareLink')}</a>
               </div>
-              ${renderSocialCopy(copy, key)}
+              ${copy ? renderSocialCopy(copy, key) : `<p class="subtle">${t('aiSocialCopy')}</p>`}
             </section>
           `
         }).join('')}
@@ -1572,6 +1572,7 @@ function shareUrlFor(bookingId, index, platform) {
 }
 
 function renderSocialCopy(copy, key = '') {
+  if (!copy) return `<p class="subtle">${t('aiSocialCopy')}</p>`
   const title = owner.lang === 'en' ? copy.titleEn : copy.titleZh
   const caption = owner.lang === 'en' ? copy.captionEn : copy.captionZh
   return `
