@@ -21,6 +21,11 @@ const copy = {
     quickNail: '美甲服务',
     quickLash: '美睫服务',
     quickMember: '会员档案',
+    technicianWorks: '技师作品',
+    technicianPortfolio: '技师作品集',
+    portfolioIntro: '浏览每位技师已确认入库的真实作品。',
+    noPortfolio: '暂无已确认作品，作品确认后会自动出现在这里。',
+    viewWork: '查看作品',
     popularNail: '人气美甲',
     popularLash: '人气美睫',
     nail: '美甲 Nail',
@@ -124,6 +129,11 @@ const copy = {
     quickNail: 'Nail Services',
     quickLash: 'Lash Services',
     quickMember: 'Member Profile',
+    technicianWorks: 'Artist Work',
+    technicianPortfolio: 'Artist Portfolio',
+    portfolioIntro: 'Browse approved finished work by each artist.',
+    noPortfolio: 'No approved work yet. Approved photos will appear here automatically.',
+    viewWork: 'View Work',
     popularNail: 'Popular Nail',
     popularLash: 'Popular Lash',
     nail: 'Nail',
@@ -220,6 +230,7 @@ const state = {
   stores: [],
   service: null,
   technicians: [],
+  portfolios: [],
   selectedTechId: '',
   date: defaultDate(),
   slotsByTech: [],
@@ -403,7 +414,7 @@ function recommended(type) {
 
 async function bootstrap() {
   bindGlobalEvents()
-  await Promise.all([loadServices(), loadStores(), loadAddOns()])
+  await Promise.all([loadServices(), loadStores(), loadAddOns(), loadPortfolio()])
   await handleAuthRedirect()
   if (state.user && !state.auth?.accessToken) {
     state.user = null
@@ -462,6 +473,11 @@ async function loadAddOns() {
   state.addOns = data.addOns
 }
 
+async function loadPortfolio() {
+  const data = await request('/portfolio')
+  state.portfolios = data.portfolios || []
+}
+
 async function loadUserOrders() {
   if (!state.user) return
   const data = await request(`/bookings?lang=${state.lang}`)
@@ -493,6 +509,7 @@ async function switchLang(lang) {
   els.langZh.classList.toggle('active', lang === 'zh')
   els.langEn.classList.toggle('active', lang === 'en')
   await loadServices()
+  await loadPortfolio()
   if (state.service) state.service = state.services.find((item) => item.id === state.service.id) || state.service
   render()
   if (!els.authView.classList.contains('hidden')) renderAuth()
@@ -607,6 +624,7 @@ function render() {
   if (state.view === 'orderDetail') renderOrderDetailWeb()
   if (state.view === 'assets') renderAssetsWeb()
   if (state.view === 'store') renderStoreWeb()
+  if (state.view === 'portfolio') renderPortfolio()
   if (state.view === 'coupons') renderPlaceholderWeb(t('coupons'), state.lang === 'zh' ? '优惠券列表和使用规则将在真实会员系统接入后同步。' : 'Coupon list and rules will sync after the real member system is connected.')
   if (state.view === 'giftCard') renderPlaceholderWeb(t('giftCard'), state.lang === 'zh' ? '礼品卡售卖与兑换功能保留为下一阶段。' : 'Gift card purchase and redemption is reserved for the next phase.')
   if (state.view === 'pointsMall') renderPlaceholderWeb(t('pointsMall'), state.lang === 'zh' ? '积分商城规则目前使用占位，后续可按会员规则兑换。' : 'The points mall currently uses placeholder rules.')
@@ -631,8 +649,19 @@ function renderHome() {
     <section class="quick-grid section">
       <button class="quick-item card" data-go-services="nail" type="button"><span class="quick-icon">N</span><span>${t('quickNail')}</span></button>
       <button class="quick-item card" data-go-services="lash" type="button"><span class="quick-icon">L</span><span>${t('quickLash')}</span></button>
+      <button class="quick-item card" data-view-target="portfolio" type="button"><span class="quick-icon">P</span><span>${t('technicianWorks')}</span></button>
       <button class="quick-item card" data-view-target="cart" type="button"><span class="quick-icon">C</span><span>${t('cart')}</span></button>
       <button class="quick-item card" data-view-target="me" type="button"><span class="quick-icon">M</span><span>${t('quickMember')}</span></button>
+    </section>
+    <section class="section portfolio-preview-section">
+      <div class="section-row">
+        <div>
+          <h2>${t('technicianPortfolio')}</h2>
+          <span class="subtle">${t('portfolioIntro')}</span>
+        </div>
+        <button class="ghost slim" data-view-target="portfolio" type="button">${t('viewWork')}</button>
+      </div>
+      ${renderPortfolioPreview()}
     </section>
     ${renderRecommendSection(t('popularNail'), 'nail')}
     ${renderRecommendSection(t('popularLash'), 'lash')}
@@ -663,6 +692,60 @@ function renderRecommendSection(title, type) {
           </button>
         `).join('')}
       </div>
+    </section>
+  `
+}
+
+function portfolioImages() {
+  return state.portfolios.flatMap((portfolio) => (portfolio.images || []).map((image) => ({
+    image,
+    technician: portfolio.technician
+  })))
+}
+
+function renderPortfolioPreview() {
+  const images = portfolioImages().slice(0, 8)
+  if (!images.length) return `<div class="empty-state small-empty">${t('noPortfolio')}</div>`
+  return `
+    <div class="portfolio-preview-grid">
+      ${images.map((item) => `
+        <button class="portfolio-preview-card" data-view-target="portfolio" type="button">
+          <img src="${item.image}" alt="${item.technician?.name || 'Lucky Luxe'}">
+        </button>
+      `).join('')}
+    </div>
+  `
+}
+
+function renderPortfolio() {
+  els.screen.innerHTML = `
+    <section class="portfolio-page-web">
+      <button class="ghost back-btn" data-view-target="home" type="button">← ${t('home')}</button>
+      <div class="section-row">
+        <div>
+          <p class="eyebrow">Lucky Luxe</p>
+          <h1>${t('technicianPortfolio')}</h1>
+          <span class="subtle">${t('portfolioIntro')}</span>
+        </div>
+      </div>
+      ${state.portfolios.length ? state.portfolios.map((portfolio) => `
+        <section class="technician-portfolio-section card">
+          <div class="section-row compact-row">
+            <div>
+              <h2>${portfolio.technician?.name || 'Lucky Luxe'}</h2>
+              <p>${portfolio.technician?.title || (state.lang === 'zh' ? '美甲 / 美睫技师' : 'Nail / Lash Artist')}</p>
+            </div>
+            <span class="subtle">${portfolio.images?.length || 0} ${t('finalPhotos')}</span>
+          </div>
+          <div class="technician-work-grid">
+            ${(portfolio.images || []).map((image, index) => `
+              <a href="${image}" target="_blank" rel="noreferrer">
+                <img src="${image}" alt="${portfolio.technician?.name || 'Lucky Luxe'} ${index + 1}">
+              </a>
+            `).join('')}
+          </div>
+        </section>
+      `).join('') : `<div class="empty-state tall"><strong>${t('noPortfolio')}</strong></div>`}
     </section>
   `
 }

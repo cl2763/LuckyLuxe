@@ -260,6 +260,9 @@ async function serializeBooking(row, lang = 'zh') {
     addOns: parseJson(row.addons_json),
     referenceImages: parseJson(row.reference_images_json),
     workImages: parseJson(row.work_images_json),
+    approvedWorkImages: parseJson(row.approved_work_images_json),
+    galleryStatus: row.gallery_status || 'draft',
+    galleryLockedAt: row.gallery_locked_at ? iso(row.gallery_locked_at) : null,
     notes: row.notes,
     servicePrice: cents(row.service_price_cents),
     servicePriceCents: row.service_price_cents,
@@ -925,6 +928,28 @@ async function route(req, res) {
     const technicians = await query(sql, params)
     return json(res, 200, { technicians: technicians.rows })
   }
+  if (req.method === 'GET' && path === '/portfolio') {
+    const rows = await query(`
+      SELECT b.*, t.name AS tech_name, t.title AS tech_title
+      FROM bookings b
+      JOIN technicians t ON t.id = b.technician_id
+      WHERE b.gallery_status = 'approved'
+      ORDER BY b.gallery_locked_at DESC NULLS LAST, b.appointment_start DESC
+    `)
+    const grouped = new Map()
+    for (const row of rows.rows) {
+      const images = parseJson(row.approved_work_images_json).filter(Boolean)
+      if (!images.length) continue
+      if (!grouped.has(row.technician_id)) {
+        grouped.set(row.technician_id, {
+          technician: { id: row.technician_id, name: row.tech_name, title: row.tech_title },
+          images: []
+        })
+      }
+      grouped.get(row.technician_id).images.push(...images)
+    }
+    return json(res, 200, { portfolios: [...grouped.values()] })
+  }
   if (req.method === 'GET' && path === '/add-ons') return json(res, 200, { addOns })
   if (req.method === 'GET' && path === '/availability') {
     await expireOldHolds()
@@ -1107,7 +1132,21 @@ async function route(req, res) {
     const images = normalizeWorkImages(body.workImages)
     const booking = await query('SELECT * FROM bookings WHERE id = $1', [id])
     if (!booking.rows[0]) throw apiError(404, 'NOT_FOUND', 'Booking not found.')
+    if (booking.rows[0].gallery_status === 'approved') throw apiError(409, 'GALLERY_LOCKED', 'This gallery has been approved and locked.')
     await query('UPDATE bookings SET work_images_json = $1::jsonb, updated_at = now() WHERE id = $2', [JSON.stringify(images), id])
+    const updated = await query('SELECT * FROM bookings WHERE id = $1', [id])
+    return json(res, 200, { booking: await serializeBooking(updated.rows[0]) })
+  }
+  if (req.method === 'PATCH' && path.startsWith('/admin/bookings/') && path.endsWith('/gallery-approval')) {
+    const id = path.split('/')[3]
+    const body = await readBody(req)
+    const booking = await query('SELECT * FROM bookings WHERE id = $1', [id])
+    if (!booking.rows[0]) throw apiError(404, 'NOT_FOUND', 'Booking not found.')
+    if (booking.rows[0].gallery_status === 'approved') throw apiError(409, 'GALLERY_LOCKED', 'This gallery has already been approved and locked.')
+    const current = parseJson(booking.rows[0].work_images_json)
+    const selected = normalizeWorkImages(body.images).filter((image) => current.includes(image))
+    if (!selected.length) throw apiError(400, 'BAD_REQUEST', 'Select at least one uploaded work image.')
+    await query("UPDATE bookings SET work_images_json = $1::jsonb, approved_work_images_json = $1::jsonb, gallery_status = 'approved', gallery_locked_at = now(), updated_at = now() WHERE id = $2", [JSON.stringify(selected), id])
     const updated = await query('SELECT * FROM bookings WHERE id = $1', [id])
     return json(res, 200, { booking: await serializeBooking(updated.rows[0]) })
   }
@@ -1118,6 +1157,9 @@ await pool.query('SELECT 1')
 await pool.query('ALTER TABLE users ADD COLUMN IF NOT EXISTS supabase_auth_id text UNIQUE')
 await pool.query("ALTER TABLE bookings ADD COLUMN IF NOT EXISTS reference_images_json jsonb NOT NULL DEFAULT '[]'::jsonb")
 await pool.query("ALTER TABLE bookings ADD COLUMN IF NOT EXISTS work_images_json jsonb NOT NULL DEFAULT '[]'::jsonb")
+await pool.query("ALTER TABLE bookings ADD COLUMN IF NOT EXISTS approved_work_images_json jsonb NOT NULL DEFAULT '[]'::jsonb")
+await pool.query("ALTER TABLE bookings ADD COLUMN IF NOT EXISTS gallery_status text NOT NULL DEFAULT 'draft'")
+await pool.query("ALTER TABLE bookings ADD COLUMN IF NOT EXISTS gallery_locked_at timestamptz")
 
 createServer((req, res) => {
   route(req, res).catch((error) => {
