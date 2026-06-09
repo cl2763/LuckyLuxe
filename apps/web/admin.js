@@ -12,7 +12,10 @@ const owner = {
   serviceEditor: null,
   selectedBookingId: '',
   finance: null,
-  dashboardDetail: 'today'
+  dashboardDetail: 'today',
+  aiBrief: null,
+  aiLoading: '',
+  aiResults: {}
 }
 
 const els = {
@@ -42,6 +45,7 @@ const els = {
   sidebarSchedule: document.querySelector('#sidebarSchedule'),
   sidebarServices: document.querySelector('#sidebarServices'),
   sidebarCustomers: document.querySelector('#sidebarCustomers'),
+  sidebarAiGallery: document.querySelector('#sidebarAiGallery'),
   adminDashboard: document.querySelector('#adminDashboard'),
   dashboardDetailPage: document.querySelector('#dashboardDetailPage'),
   dashboardCharts: document.querySelector('#dashboardCharts'),
@@ -49,11 +53,17 @@ const els = {
   dashboardEyebrow: document.querySelector('#dashboardEyebrow'),
   dashboardTitle: document.querySelector('#dashboardTitle'),
   dashboardSubtitle: document.querySelector('#dashboardSubtitle'),
+  aiBriefPanel: document.querySelector('#aiBriefPanel'),
   financePanel: document.querySelector('#financePanel'),
   bookingsPage: document.querySelector('#bookingsPage'),
   schedulePage: document.querySelector('#schedulePage'),
   servicesPage: document.querySelector('#servicesPage'),
   customersPage: document.querySelector('#customersPage'),
+  aiGalleryPage: document.querySelector('#aiGalleryPage'),
+  aiGalleryEyebrow: document.querySelector('#aiGalleryEyebrow'),
+  aiGalleryTitle: document.querySelector('#aiGalleryTitle'),
+  aiGallerySubtitle: document.querySelector('#aiGallerySubtitle'),
+  aiGalleryList: document.querySelector('#aiGalleryList'),
   customersTitle: document.querySelector('#customersTitle'),
   customerFilterSummary: document.querySelector('#customerFilterSummary'),
   customerSort: document.querySelector('#customerSort'),
@@ -127,6 +137,20 @@ const copy = {
     navSchedule: '排班管理',
     navServices: '服务管理',
     navCustomers: '客户档案',
+    navAiGallery: 'AI 图库',
+    aiDailyBrief: 'AI 今日简报',
+    generateBrief: '生成简报',
+    aiGallery: 'AI 图库',
+    aiGallerySubtitle: '完工作品、AI 文案与可发布素材',
+    aiBookingSummary: 'AI 订单摘要',
+    aiCustomerInsight: 'AI 客户洞察',
+    aiSocialCopy: '生成社媒文案',
+    aiProcessing: 'AI 处理中...',
+    xiaohongshu: '小红书',
+    douyin: '抖音',
+    instagram: 'Instagram',
+    aiNoWork: '暂无完工作品图，技师上传后会进入图库。',
+    copyCaption: '复制文案',
     todayOverview: '今日运营',
     monthOverview: '本月趋势',
     bookingLoad: '预约完成度',
@@ -257,6 +281,20 @@ const copy = {
     navSchedule: 'Schedule',
     navServices: 'Services',
     navCustomers: 'Customer Profiles',
+    navAiGallery: 'AI Gallery',
+    aiDailyBrief: 'AI Daily Brief',
+    generateBrief: 'Generate Brief',
+    aiGallery: 'AI Gallery',
+    aiGallerySubtitle: 'Finished work, AI captions, and publish-ready assets',
+    aiBookingSummary: 'AI Booking Summary',
+    aiCustomerInsight: 'AI Customer Insight',
+    aiSocialCopy: 'Generate Social Copy',
+    aiProcessing: 'AI working...',
+    xiaohongshu: 'RED',
+    douyin: 'Douyin',
+    instagram: 'Instagram',
+    aiNoWork: 'No finished work yet. Uploaded work photos will appear here.',
+    copyCaption: 'Copy Caption',
     todayOverview: 'Today Overview',
     monthOverview: 'Month Trend',
     bookingLoad: 'Booking Completion',
@@ -481,10 +519,14 @@ function applyLanguage() {
   els.sidebarSchedule.textContent = t('navSchedule')
   els.sidebarServices.textContent = t('navServices')
   els.sidebarCustomers.textContent = t('navCustomers')
+  els.sidebarAiGallery.textContent = t('navAiGallery')
   els.bookingsTitle.textContent = t('bookings')
   els.bookingsSubtitle.textContent = t('bookingsSubtitle')
   els.customersTitle.textContent = t('customers')
   els.customerFilterSummary.textContent = t('filter')
+  els.aiGalleryEyebrow.textContent = t('aiDailyBrief')
+  els.aiGalleryTitle.textContent = t('aiGallery')
+  els.aiGallerySubtitle.textContent = t('aiGallerySubtitle')
   els.customerSort.innerHTML = `
     <option value="alpha">${t('customerSortAlpha')}</option>
     <option value="visits">${t('customerSortVisits')}</option>
@@ -599,6 +641,8 @@ function setLocked(locked) {
     els.customerList.innerHTML = ''
     els.dashboardCharts.innerHTML = ''
     els.dashboardDetailPanel.innerHTML = ''
+    els.aiBriefPanel.innerHTML = ''
+    els.aiGalleryList.innerHTML = ''
     els.financePanel.innerHTML = ''
   }
 }
@@ -613,6 +657,8 @@ function render() {
   renderTechnicians()
   renderTechnicianPerformance()
   renderCustomers()
+  renderAiBrief()
+  renderAiGallery()
   renderFinancePanel()
 }
 
@@ -670,7 +716,8 @@ function renderAdminPages() {
     bookings: els.bookingsPage,
     schedule: els.schedulePage,
     services: els.servicesPage,
-    customers: els.customersPage
+    customers: els.customersPage,
+    aiGallery: els.aiGalleryPage
   }
   Object.entries(pages).forEach(([key, element]) => element.classList.toggle('hidden', owner.adminPage !== key))
   els.metricGrid.classList.toggle('hidden', owner.adminPage !== 'dashboard')
@@ -738,6 +785,35 @@ function renderDashboard() {
     </button>
   `
   renderDashboardDetail()
+}
+
+function renderAiBrief() {
+  const data = owner.aiBrief?.data || owner.aiBrief
+  els.aiBriefPanel.innerHTML = `
+    <div class="section-row compact-row">
+      <div>
+        <p class="eyebrow">${t('aiDailyBrief')}</p>
+        <h2>${data ? escapeHtml(owner.lang === 'en' ? data.headlineEn : data.headlineZh) : t('aiDailyBrief')}</h2>
+      </div>
+      <button class="ghost slim" data-ai-brief type="button">${owner.aiLoading === 'brief' ? t('aiProcessing') : t('generateBrief')}</button>
+    </div>
+    ${data ? `
+      <div class="ai-brief-grid">
+        ${renderAiList(owner.lang === 'en' ? 'Actions' : '建议行动', owner.lang === 'en' ? data.actionsEn : data.actionsZh)}
+        ${renderAiList(owner.lang === 'en' ? 'Opportunities' : '机会', owner.lang === 'en' ? data.opportunitiesEn : data.opportunitiesZh)}
+        ${renderAiList(owner.lang === 'en' ? 'Risks' : '风险', owner.lang === 'en' ? data.risksEn : data.risksZh)}
+      </div>
+    ` : `<p class="subtle">${owner.lang === 'zh' ? '点击生成后，AI 会根据预约、客户和服务数据给出今日运营建议。' : 'Generate an AI brief from bookings, customers, and services.'}</p>`}
+  `
+}
+
+function renderAiList(title, items = []) {
+  return `
+    <div class="ai-list-card">
+      <strong>${title}</strong>
+      ${(items || []).map((item) => `<p>${escapeHtml(item)}</p>`).join('')}
+    </div>
+  `
 }
 
 function chartBar(label, value, max, forcedPercent) {
@@ -974,8 +1050,12 @@ function renderBookingDetail(booking) {
           <p class="eyebrow">${t('bookingDetails')}</p>
           <h2>${booking.service.name}</h2>
         </div>
-        <button class="ghost slim" data-close-booking-detail type="button">${t('close')}</button>
+        <div class="inline-actions">
+          <button class="ghost slim" data-ai-booking="${booking.id}" type="button">${owner.aiLoading === `booking:${booking.id}` ? t('aiProcessing') : t('aiBookingSummary')}</button>
+          <button class="ghost slim" data-close-booking-detail type="button">${t('close')}</button>
+        </div>
       </div>
+      ${owner.aiResults[`booking:${booking.id}`] ? renderBookingAiSummary(owner.aiResults[`booking:${booking.id}`].data || owner.aiResults[`booking:${booking.id}`]) : ''}
       <div class="booking-detail-grid">
         <p><span>${t('orderCode')}</span><strong>${booking.publicCode}</strong></p>
         <p><span>${t('status')}</span><strong>${statusLabel(booking.status)}</strong></p>
@@ -1019,6 +1099,16 @@ function renderBookingDetail(booking) {
         ${workImages.length ? '' : `<div class="empty-state small-empty">${t('noWorkImages')}</div>`}
       </section>
     </section>
+  `
+}
+
+function renderBookingAiSummary(summary) {
+  return `
+    <div class="ai-result-box">
+      <p><span>${t('aiBookingSummary')}</span><strong>${escapeHtml(owner.lang === 'en' ? summary.headlineEn : summary.headlineZh)}</strong></p>
+      ${renderAiList(owner.lang === 'en' ? 'Preparation' : '准备事项', owner.lang === 'en' ? summary.preparationEn : summary.preparationZh)}
+      ${renderAiList(owner.lang === 'en' ? 'Risks' : '风险', owner.lang === 'en' ? summary.risksEn : summary.risksZh)}
+    </div>
   `
 }
 
@@ -1238,14 +1328,81 @@ function renderCustomers() {
         <h3>${escapeHtml(customerName(customer))}</h3>
         <p>${escapeHtml(customer.email || '-')}</p>
         <p>${escapeHtml(customer.phone || '-')}</p>
+        <button class="ghost slim" data-ai-customer="${customer.id}" type="button">${owner.aiLoading === `customer:${customer.id}` ? t('aiProcessing') : t('aiCustomerInsight')}</button>
       </div>
       <div class="customer-stats">
         <span>${t('visits')} <strong>${customer.visitCount || 0}</strong></span>
         <span>${t('lastVisit')} <strong>${dateOnly(customer.lastVisitAt)}</strong></span>
         <span>${t('totalSpent')} <strong>${money(customer.totalSpentCents || 0)}</strong></span>
       </div>
+      ${owner.aiResults[`customer:${customer.id}`] ? renderCustomerInsight(owner.aiResults[`customer:${customer.id}`].data || owner.aiResults[`customer:${customer.id}`]) : ''}
     </article>
   `).join('')
+}
+
+function renderCustomerInsight(insight) {
+  return `
+    <div class="ai-result-box customer-ai-result">
+      <p><span>${t('aiCustomerInsight')}</span><strong>${escapeHtml(owner.lang === 'en' ? insight.summaryEn : insight.summaryZh)}</strong></p>
+      <p><span>${owner.lang === 'en' ? 'Recommendation' : '推荐'}</span><strong>${escapeHtml(owner.lang === 'en' ? insight.nextRecommendationEn : insight.nextRecommendationZh)}</strong></p>
+      <small>${escapeHtml(owner.lang === 'en' ? insight.retentionActionEn : insight.retentionActionZh)}</small>
+    </div>
+  `
+}
+
+function galleryItems() {
+  return owner.bookings
+    .filter((booking) => booking.workImages?.length)
+    .flatMap((booking) => booking.workImages.map((image, index) => ({ booking, image, index })))
+    .sort((a, b) => `${b.booking.appointmentDate} ${b.index}`.localeCompare(`${a.booking.appointmentDate} ${a.index}`))
+}
+
+function renderAiGallery() {
+  const items = galleryItems()
+  if (!items.length) {
+    els.aiGalleryList.innerHTML = `<div class="empty-state"><strong>${t('aiNoWork')}</strong></div>`
+    return
+  }
+  els.aiGalleryList.innerHTML = items.map(({ booking, image, index }) => {
+    const key = socialKey(booking.id, index, 'xiaohongshu')
+    const copy = owner.aiResults[key]?.data || owner.aiResults[key]
+    return `
+      <article class="ai-gallery-card card">
+        <img src="${image}" alt="${t('workImages')} ${index + 1}">
+        <div>
+          <div class="section-row compact-row">
+            <div>
+              <h3>${escapeHtml(booking.service.name)}</h3>
+              <p>${booking.appointmentDate} · ${escapeHtml(booking.technician?.name || '')}</p>
+            </div>
+            <span class="status COMPLETED">${escapeHtml(booking.service.category || '')}</span>
+          </div>
+          <div class="ai-platform-row">
+            <button class="ghost slim" data-ai-social="${booking.id}" data-image-index="${index}" data-platform="xiaohongshu" type="button">${t('xiaohongshu')}</button>
+            <button class="ghost slim" data-ai-social="${booking.id}" data-image-index="${index}" data-platform="douyin" type="button">${t('douyin')}</button>
+            <button class="ghost slim" data-ai-social="${booking.id}" data-image-index="${index}" data-platform="instagram" type="button">${t('instagram')}</button>
+          </div>
+          ${copy ? renderSocialCopy(copy) : `<p class="subtle">${t('aiSocialCopy')}</p>`}
+        </div>
+      </article>
+    `
+  }).join('')
+}
+
+function socialKey(bookingId, index, platform) {
+  return `social:${bookingId}:${index}:${platform}`
+}
+
+function renderSocialCopy(copy) {
+  const title = owner.lang === 'en' ? copy.titleEn : copy.titleZh
+  const caption = owner.lang === 'en' ? copy.captionEn : copy.captionZh
+  return `
+    <div class="ai-copy-box">
+      <strong>${escapeHtml(title || '')}</strong>
+      <p>${escapeHtml(caption || '')}</p>
+      <small>${(copy.hashtags || []).map(escapeHtml).join(' ')}</small>
+    </div>
+  `
 }
 
 function renderFinancePanel() {
@@ -1410,12 +1567,80 @@ async function saveSchedule() {
   toast(t('scheduleSaved'))
 }
 
+async function generateDailyBrief() {
+  owner.aiLoading = 'brief'
+  renderAiBrief()
+  try {
+    const data = await request('/admin/ai/daily-brief', {
+      method: 'POST',
+      body: JSON.stringify({ lang: owner.lang })
+    })
+    owner.aiBrief = data.brief
+  } finally {
+    owner.aiLoading = ''
+    renderAiBrief()
+  }
+}
+
+async function generateBookingSummary(id) {
+  owner.aiLoading = `booking:${id}`
+  renderBookings()
+  try {
+    const data = await request('/admin/ai/booking-summary', {
+      method: 'POST',
+      body: JSON.stringify({ lang: owner.lang, bookingId: id })
+    })
+    owner.aiResults[`booking:${id}`] = data.summary
+  } finally {
+    owner.aiLoading = ''
+    renderBookings()
+  }
+}
+
+async function generateCustomerInsight(id) {
+  owner.aiLoading = `customer:${id}`
+  renderCustomers()
+  try {
+    const data = await request('/admin/ai/customer-insight', {
+      method: 'POST',
+      body: JSON.stringify({ lang: owner.lang, customerId: id })
+    })
+    owner.aiResults[`customer:${id}`] = data.insight
+  } finally {
+    owner.aiLoading = ''
+    renderCustomers()
+  }
+}
+
+async function generateSocialCopy(bookingId, index, platform) {
+  const booking = owner.bookings.find((item) => item.id === bookingId)
+  if (!booking) return
+  const image = booking.workImages?.[Number(index)]
+  const key = socialKey(bookingId, index, platform)
+  owner.aiLoading = key
+  renderAiGallery()
+  try {
+    const data = await request('/admin/ai/social-copy', {
+      method: 'POST',
+      body: JSON.stringify({ lang: owner.lang, bookingId, image, platform })
+    })
+    owner.aiResults[key] = data.copy
+  } finally {
+    owner.aiLoading = ''
+    renderAiGallery()
+  }
+}
+
 els.adminLangZh.addEventListener('click', () => switchAdminLang('zh'))
 els.adminLangEn.addEventListener('click', () => switchAdminLang('en'))
 els.reloadButton.addEventListener('click', () => loadAll().catch((error) => toast(error.message)))
 els.ownerLoginForm.addEventListener('submit', (event) => ownerLogin(event).catch((error) => toast(error.message)))
 els.ownerLogout.addEventListener('click', ownerLogout)
 els.adminLayout.addEventListener('click', (event) => {
+  if (event.target.closest('[data-ai-brief]')) {
+    generateDailyBrief().catch((error) => toast(error.message))
+    return
+  }
   const detailButton = event.target.closest('[data-dashboard-detail]')
   if (detailButton) {
     owner.dashboardDetail = detailButton.dataset.dashboardDetail
@@ -1501,6 +1726,11 @@ els.bookingList.addEventListener('click', (event) => {
     renderBookings()
     return
   }
+  const aiBooking = event.target.closest('[data-ai-booking]')
+  if (aiBooking) {
+    generateBookingSummary(aiBooking.dataset.aiBooking).catch((error) => toast(error.message))
+    return
+  }
   const removeWorkImage = event.target.closest('[data-remove-work-image]')
   if (removeWorkImage) {
     const booking = owner.bookings.find((item) => item.id === removeWorkImage.dataset.workBooking)
@@ -1525,6 +1755,16 @@ els.bookingList.addEventListener('click', (event) => {
 els.bookingList.addEventListener('change', (event) => {
   if (!event.target.matches('[data-work-image-input]')) return
   handleWorkImageFiles(event.target.dataset.workImageInput, event.target.files).catch((error) => toast(error.message))
+})
+els.customerList.addEventListener('click', (event) => {
+  const aiCustomer = event.target.closest('[data-ai-customer]')
+  if (!aiCustomer) return
+  generateCustomerInsight(aiCustomer.dataset.aiCustomer).catch((error) => toast(error.message))
+})
+els.aiGalleryList.addEventListener('click', (event) => {
+  const social = event.target.closest('[data-ai-social]')
+  if (!social) return
+  generateSocialCopy(social.dataset.aiSocial, social.dataset.imageIndex, social.dataset.platform).catch((error) => toast(error.message))
 })
 els.addServiceButton.addEventListener('click', () => {
   owner.serviceEditor = blankServiceEditor()

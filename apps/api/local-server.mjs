@@ -3,6 +3,7 @@ import { DatabaseSync } from 'node:sqlite'
 import { existsSync, mkdirSync, readFileSync, statSync } from 'node:fs'
 import { dirname, extname, join, normalize } from 'node:path'
 import { fileURLToPath } from 'node:url'
+import { analyzeReferenceImage, createBookingSummary, createCustomerInsight, createDailyBrief, createSocialCopy } from './ai-utils.mjs'
 
 process.env.TZ = process.env.APP_TIMEZONE || 'America/Toronto'
 
@@ -777,6 +778,10 @@ async function route(req, res) {
   if (req.method === 'POST' && path.startsWith('/bookings/') && path.endsWith('/cancel')) {
     return json(res, 200, cancelBooking(path.split('/')[2], await readBody(req)))
   }
+  if (req.method === 'POST' && path === '/ai/reference-analysis') {
+    const body = await readBody(req)
+    return json(res, 200, { analysis: await analyzeReferenceImage(body) })
+  }
   if (path.startsWith('/admin/')) requireOwner(req)
   if (req.method === 'GET' && path === '/admin/bookings') {
     const rows = db.prepare('SELECT * FROM bookings ORDER BY appointment_start DESC').all()
@@ -787,6 +792,30 @@ async function route(req, res) {
   }
   if (req.method === 'POST' && path === '/admin/finance/summary') {
     return json(res, 200, { finance: getFinanceSummary(await readBody(req)) })
+  }
+  if (req.method === 'POST' && path === '/admin/ai/daily-brief') {
+    const bookings = db.prepare('SELECT * FROM bookings ORDER BY appointment_start DESC LIMIT 60').all().map((booking) => serializeBooking(booking))
+    const services = db.prepare('SELECT * FROM services ORDER BY type ASC, sort_order ASC').all().map(serializeService)
+    return json(res, 200, { brief: await createDailyBrief({ ...(await readBody(req)), bookings, customers: getAdminCustomers(), services }) })
+  }
+  if (req.method === 'POST' && path === '/admin/ai/booking-summary') {
+    const body = await readBody(req)
+    const row = db.prepare('SELECT * FROM bookings WHERE id = ?').get(body.bookingId)
+    if (!row) throw apiError(404, 'NOT_FOUND', 'Booking not found.')
+    return json(res, 200, { summary: await createBookingSummary({ lang: body.lang || 'zh', booking: serializeBooking(row, body.lang || 'zh') }) })
+  }
+  if (req.method === 'POST' && path === '/admin/ai/customer-insight') {
+    const body = await readBody(req)
+    const customer = getAdminCustomers().find((item) => item.id === body.customerId)
+    if (!customer) throw apiError(404, 'NOT_FOUND', 'Customer not found.')
+    const bookings = db.prepare('SELECT * FROM bookings WHERE user_id = ? ORDER BY appointment_start DESC LIMIT 12').all(customer.id).map((booking) => serializeBooking(booking, body.lang || 'zh'))
+    return json(res, 200, { insight: await createCustomerInsight({ lang: body.lang || 'zh', customer, bookings }) })
+  }
+  if (req.method === 'POST' && path === '/admin/ai/social-copy') {
+    const body = await readBody(req)
+    const row = body.bookingId ? db.prepare('SELECT * FROM bookings WHERE id = ?').get(body.bookingId) : null
+    const booking = row ? serializeBooking(row, body.lang || 'zh') : body.booking
+    return json(res, 200, { copy: await createSocialCopy({ lang: body.lang || 'zh', image: body.image || '', booking, platform: body.platform || 'xiaohongshu' }) })
   }
   if (req.method === 'GET' && path === '/admin/services') {
     return json(res, 200, { services: db.prepare('SELECT * FROM services ORDER BY type ASC, sort_order ASC').all().map(serializeService) })

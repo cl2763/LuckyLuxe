@@ -55,6 +55,7 @@
           <button class="sidebar-link" data-admin-page="schedule" id="sidebarSchedule" type="button">排班管理</button>
           <button class="sidebar-link" data-admin-page="services" id="sidebarServices" type="button">服务管理</button>
           <button class="sidebar-link" data-admin-page="customers" id="sidebarCustomers" type="button">客户档案</button>
+          <button class="sidebar-link" data-admin-page="aiGallery" id="sidebarAiGallery" type="button">AI 图库</button>
         </aside>
 
         <section class="admin-workspace" id="adminWorkspace">
@@ -69,6 +70,7 @@
               <span class="subtle" id="dashboardSubtitle">Today and month overview</span>
             </div>
             <div class="dashboard-chart-grid" id="dashboardCharts"></div>
+            <div class="ai-panel card" id="aiBriefPanel"></div>
             <div class="finance-panel card hidden" id="financePanel"></div>
           </section>
 
@@ -182,6 +184,18 @@
               </details>
             </div>
             <div class="admin-list" id="customerList"></div>
+          </section>
+
+          <section class="admin-page hidden" id="aiGalleryPage">
+            <button class="ghost back-btn" data-admin-page="dashboard" type="button">← Dashboard</button>
+            <div class="section-row">
+              <div>
+                <p class="eyebrow" id="aiGalleryEyebrow">AI Workflow</p>
+                <h1 id="aiGalleryTitle">AI Gallery</h1>
+              </div>
+              <span class="subtle" id="aiGallerySubtitle">Finished work, captions, and publish-ready assets</span>
+            </div>
+            <div class="admin-list" id="aiGalleryList"></div>
           </section>
         </section>
       </section>

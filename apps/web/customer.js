@@ -39,6 +39,12 @@ const copy = {
     optional: '可选',
     remark: '备注',
     upload: '上传参考图',
+    aiAnalyze: 'AI 分析参考图',
+    aiAnalyzing: 'AI 正在分析...',
+    aiReferenceTitle: 'AI 款式建议',
+    aiComplexity: '复杂度',
+    aiExtraTime: '建议额外时间',
+    aiTechNote: '给技师的备注',
     checkout: '去结算',
     saveCart: '保存到购物车',
     requiredDeposit: '需付定金',
@@ -136,6 +142,12 @@ const copy = {
     optional: 'Optional',
     remark: 'Notes',
     upload: 'Upload Reference',
+    aiAnalyze: 'AI Analyze Reference',
+    aiAnalyzing: 'AI is analyzing...',
+    aiReferenceTitle: 'AI Style Suggestion',
+    aiComplexity: 'Complexity',
+    aiExtraTime: 'Suggested extra time',
+    aiTechNote: 'Note for technician',
     checkout: 'Checkout',
     saveCart: 'Save to Cart',
     requiredDeposit: 'Deposit due',
@@ -215,6 +227,8 @@ const state = {
   addOns: [],
   selectedAddOns: new Set(),
   referenceImages: [],
+  referenceAnalysis: null,
+  isAnalyzingReference: false,
   remark: '',
   cart: readJson('lucky-web-cart') || [],
   orders: readJson('lucky-web-orders') || [],
@@ -263,6 +277,15 @@ function t(key) {
 
 function money(cents) {
   return `CAD $${Number(cents / 100).toFixed(0)}`
+}
+
+function escapeHtml(value = '') {
+  return String(value)
+    .replaceAll('&', '&amp;')
+    .replaceAll('<', '&lt;')
+    .replaceAll('>', '&gt;')
+    .replaceAll('"', '&quot;')
+    .replaceAll("'", '&#039;')
 }
 
 function toast(message) {
@@ -741,6 +764,8 @@ async function prepareBooking(mode, options = {}) {
   state.bookingMode = mode
   state.selectedAddOns = new Set()
   state.referenceImages = []
+  state.referenceAnalysis = null
+  state.isAnalyzingReference = false
   state.remark = ''
   await loadTechnicians()
   await loadAvailability()
@@ -814,6 +839,14 @@ function renderBookingForm() {
             </div>
           `).join('')}
         </div>
+        <div class="ai-reference-panel card">
+          <div>
+            <strong>${t('aiReferenceTitle')}</strong>
+            <p>${state.lang === 'zh' ? '上传参考图后，可让 AI 初步判断款式复杂度和加项建议。' : 'After uploading references, AI can estimate complexity and add-on suggestions.'}</p>
+          </div>
+          <button class="ghost slim" data-ai-reference type="button" ${state.referenceImages.length ? '' : 'disabled'}>${state.isAnalyzingReference ? t('aiAnalyzing') : t('aiAnalyze')}</button>
+          ${state.referenceAnalysis ? renderReferenceAnalysis() : ''}
+        </div>
       </section>
       <label class="notes"><span>${t('remark')}</span><textarea data-field="remark" rows="3">${state.remark}</textarea></label>
       <div class="summary-bar">
@@ -825,10 +858,27 @@ function renderBookingForm() {
   `
 }
 
+function renderReferenceAnalysis() {
+  const result = state.referenceAnalysis?.data || state.referenceAnalysis || {}
+  const clientMessage = state.lang === 'en' ? result.clientMessageEn : result.clientMessageZh
+  const techNote = state.lang === 'en' ? result.technicianNotesEn : result.technicianNotesZh
+  return `
+    <div class="ai-result-box">
+      <p><span>${t('aiComplexity')}</span><strong>${result.complexity || '-'}</strong></p>
+      <p><span>${t('aiExtraTime')}</span><strong>${result.estimatedExtraMinutes || 0}${t('minutes')}</strong></p>
+      <p><span>${t('aiTechNote')}</span><strong>${escapeHtml(techNote || '')}</strong></p>
+      <small>${escapeHtml(clientMessage || '')}</small>
+    </div>
+  `
+}
+
 function buildCartItem() {
   const selectedAddOns = state.addOns.filter((item) => state.selectedAddOns.has(item.id))
   const tech = state.technicians.find((item) => item.id === state.selectedTechId)
   const addonTotal = selectedAddOns.reduce((total, item) => total + item.priceCents, 0)
+  const aiNote = state.referenceAnalysis?.data
+    ? (state.lang === 'en' ? state.referenceAnalysis.data.technicianNotesEn : state.referenceAnalysis.data.technicianNotesZh)
+    : ''
   return {
     id: `cart_${Date.now()}`,
     service: state.service,
@@ -837,7 +887,8 @@ function buildCartItem() {
     time: state.selectedSlot,
     addOns: selectedAddOns,
     referenceImages: [...state.referenceImages],
-    remark: state.remark,
+    remark: [state.remark, aiNote ? `AI: ${aiNote}` : ''].filter(Boolean).join('\n'),
+    referenceAnalysis: state.referenceAnalysis,
     servicePriceCents: state.service.priceCents + addonTotal,
     depositCents: state.service.depositCents,
     selected: true
@@ -1299,7 +1350,12 @@ async function handleScreenClick(event) {
   const removeReference = event.target.closest('[data-remove-reference]')
   if (removeReference) {
     state.referenceImages.splice(Number(removeReference.dataset.removeReference), 1)
+    state.referenceAnalysis = null
     renderBookingForm()
+    return
+  }
+  if (event.target.closest('[data-ai-reference]')) {
+    await analyzeReferenceImages().catch((error) => toast(error.message))
     return
   }
   if (event.target.closest('[data-save-cart]')) {
@@ -1380,6 +1436,28 @@ async function handleReferenceFiles(files) {
   const selected = [...files].slice(0, remaining)
   const images = await Promise.all(selected.map(readCompressedImage))
   state.referenceImages.push(...images)
+  state.referenceAnalysis = null
+}
+
+async function analyzeReferenceImages() {
+  if (!state.referenceImages.length) return
+  state.isAnalyzingReference = true
+  renderBookingForm()
+  try {
+    const data = await request('/ai/reference-analysis', {
+      method: 'POST',
+      body: JSON.stringify({
+        lang: state.lang,
+        images: state.referenceImages,
+        service: state.service,
+        notes: state.remark
+      })
+    })
+    state.referenceAnalysis = data.analysis
+  } finally {
+    state.isAnalyzingReference = false
+    renderBookingForm()
+  }
 }
 
 function readCompressedImage(file) {
