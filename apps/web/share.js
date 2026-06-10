@@ -71,6 +71,11 @@ function platformUrl(platform) {
   }[platform] || 'https://www.xiaohongshu.com/'
 }
 
+function shareVisibleImages() {
+  if (state.booking?.galleryStatus !== 'approved') return []
+  return Array.isArray(state.booking?.approvedWorkImages) ? state.booking.approvedWorkImages : []
+}
+
 function toast(message) {
   els.toast.textContent = message
   els.toast.classList.add('show')
@@ -100,7 +105,8 @@ function applyLanguage() {
 }
 
 function renderImages() {
-  const images = state.booking?.workImages?.length ? state.booking.workImages : [state.booking?.service?.imageUrl || '/assets/images/nail-french.png']
+  const approvedImages = shareVisibleImages()
+  const images = approvedImages.length ? approvedImages : [state.booking?.service?.imageUrl || '/assets/images/nail-french.png']
   const safeIndex = Math.min(Math.max(0, state.selectedImage), images.length - 1)
   state.selectedImage = safeIndex
   els.mainImage.src = images[safeIndex]
@@ -137,7 +143,7 @@ function renderCopy() {
 }
 
 async function loadCopy() {
-  const images = state.booking?.workImages || []
+  const images = shareVisibleImages()
   const image = images[state.selectedImage] || state.booking?.service?.imageUrl || ''
   const data = await request('/ai/social-copy', {
     method: 'POST',
@@ -162,7 +168,8 @@ async function loadShare() {
     state.booking = {
       id: 'demo',
       service: { name: 'Lucky Luxe Archive', imageUrl: '/assets/images/nail-french.png' },
-      workImages: ['/assets/images/nail-french.png', '/assets/images/nail-luxe.png']
+      galleryStatus: 'approved',
+      approvedWorkImages: ['/assets/images/nail-french.png', '/assets/images/nail-luxe.png']
     }
   }
   els.title.textContent = state.booking.service?.name || 'Lucky Luxe'

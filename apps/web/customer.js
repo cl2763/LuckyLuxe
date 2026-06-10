@@ -87,6 +87,14 @@ const copy = {
     workArchive: '服务留档',
     finalPhotos: '完工作品',
     noWorkImages: '服务完成后会在这里看到作品照片。',
+    downloadImage: '下载图片',
+    oneClickShare: '一键分享',
+    shareReady: '分享文案与链接',
+    shareTo: '分享平台',
+    shareLink: '分享链接',
+    copyCaption: '复制文案',
+    openPlatform: '打开平台',
+    captionCopied: '文案已复制',
     arrival: '到店时间',
     duration: '服务时长',
     technician: '服务人员',
@@ -195,6 +203,14 @@ const copy = {
     workArchive: 'Service Archive',
     finalPhotos: 'Finished Work',
     noWorkImages: 'Finished photos will appear here after the service.',
+    downloadImage: 'Download',
+    oneClickShare: 'Share',
+    shareReady: 'Share copy and links',
+    shareTo: 'Platform',
+    shareLink: 'Share link',
+    copyCaption: 'Copy caption',
+    openPlatform: 'Open platform',
+    captionCopied: 'Caption copied',
     arrival: 'Arrival',
     duration: 'Duration',
     technician: 'Technician',
@@ -246,6 +262,9 @@ const state = {
   orders: readJson('lucky-web-orders') || [],
   orderFilter: 'all',
   selectedOrderId: '',
+  shareOrderId: '',
+  sharePlatform: 'xiaohongshu',
+  shareCopyByOrder: {},
   pendingAuth: readJson('lucky-web-pending-auth')
 }
 
@@ -298,6 +317,27 @@ function escapeHtml(value = '') {
     .replaceAll('>', '&gt;')
     .replaceAll('"', '&quot;')
     .replaceAll("'", '&#039;')
+}
+
+function customerVisibleWorkImages(order) {
+  if (order?.galleryStatus !== 'approved') return []
+  return Array.isArray(order.approvedWorkImages) ? order.approvedWorkImages : []
+}
+
+function platformUrl(platform) {
+  return {
+    xiaohongshu: 'https://www.xiaohongshu.com/',
+    douyin: 'https://www.douyin.com/',
+    instagram: 'https://www.instagram.com/'
+  }[platform] || 'https://www.xiaohongshu.com/'
+}
+
+function shareUrlForOrder(orderId, imageIndex = 0, platform = state.sharePlatform) {
+  const url = new URL('/web/share.html', window.location.origin)
+  url.searchParams.set('bookingId', orderId)
+  url.searchParams.set('image', String(imageIndex))
+  url.searchParams.set('platform', platform)
+  return url.toString()
 }
 
 function toast(message) {
@@ -647,10 +687,16 @@ function renderHome() {
       </div>
       <img src="/assets/images/store-cover.png" alt="Lucky Luxe">
     </section>
-    <section class="quick-grid section">
-      <button class="quick-item card" data-go-services="nail" type="button"><span class="quick-icon">N</span><span>${t('quickNail')}</span></button>
-      <button class="quick-item card" data-go-services="lash" type="button"><span class="quick-icon">L</span><span>${t('quickLash')}</span></button>
-      <button class="quick-item card" data-view-target="portfolio" type="button"><span class="quick-icon">P</span><span>${t('technicianWorks')}</span></button>
+    <section class="home-actions section">
+      <div class="service-shortcut-row">
+        <button class="quick-item card" data-go-services="nail" type="button"><span class="quick-icon">N</span><span>${t('quickNail')}</span></button>
+        <button class="quick-item card" data-go-services="lash" type="button"><span class="quick-icon">L</span><span>${t('quickLash')}</span></button>
+      </div>
+      <button class="portfolio-wide-button card" data-view-target="portfolio" type="button">
+        <span class="quick-icon">P</span>
+        <span><strong>${t('technicianWorks')}</strong><small>${t('portfolioIntro')}</small></span>
+        <span class="portfolio-arrow">→</span>
+      </button>
     </section>
     ${renderRecommendSection(t('popularNail'), 'nail')}
     ${renderRecommendSection(t('popularLash'), 'lash')}
@@ -1153,12 +1199,12 @@ function renderMe() {
         <div class="recent-list-web">
           ${state.orders.length ? state.orders.map((order) => `
             <button class="recent-card-web card" data-order-id="${order.id}" type="button">
-              <img src="${order.status === 'COMPLETED' && order.workImages?.[0] ? order.workImages[0] : order.service.imageUrl}" alt="${order.service.name}">
+              <img src="${order.status === 'COMPLETED' && customerVisibleWorkImages(order)[0] ? customerVisibleWorkImages(order)[0] : order.service.imageUrl}" alt="${order.service.name}">
               <div>
                 <div class="recent-top"><strong>${order.service.name}</strong><span>${statusLabel(order.status)}</span></div>
                 <p>${order.appointmentDate} ${order.appointmentTime} · ${order.technician.name}</p>
                 <p>${t('paidDeposit')} ${money(order.depositCents)}</p>
-                ${order.status === 'COMPLETED' && order.workImages?.length ? `<p>${t('finalPhotos')} · ${order.workImages.length}</p>` : ''}
+                ${order.status === 'COMPLETED' && customerVisibleWorkImages(order).length ? `<p>${t('finalPhotos')} · ${customerVisibleWorkImages(order).length}</p>` : ''}
               </div>
             </button>
           `).join('') : `<div class="empty-state">${state.lang === 'zh' ? '暂无消费记录' : 'No records yet'}</div>`}
@@ -1205,6 +1251,23 @@ async function refreshOrder(id) {
   }
 }
 
+async function generateCustomerShareCopy(order, platform = state.sharePlatform) {
+  const images = customerVisibleWorkImages(order)
+  const data = await request('/ai/social-copy', {
+    method: 'POST',
+    body: JSON.stringify({
+      lang: state.lang,
+      bookingId: order.id,
+      image: images[0] || order.service?.imageUrl || '',
+      platform
+    })
+  })
+  state.shareCopyByOrder[order.id] = {
+    ...(state.shareCopyByOrder[order.id] || {}),
+    [platform]: data.copy?.data || data.copy
+  }
+}
+
 function filteredOrders() {
   if (state.orderFilter === 'all') return state.orders
   return state.orders.filter((order) => order.status === state.orderFilter)
@@ -1231,12 +1294,12 @@ function renderOrdersWeb() {
           <button class="order-card-web card" data-order-id="${order.id}" type="button">
             <div class="order-head-web"><strong>${order.service.name}</strong><span>${statusLabel(order.status)}</span></div>
             <div class="order-body-web">
-              <img src="${order.status === 'COMPLETED' && order.workImages?.[0] ? order.workImages[0] : order.service.imageUrl}" alt="${order.service.name}">
+              <img src="${order.status === 'COMPLETED' && customerVisibleWorkImages(order)[0] ? customerVisibleWorkImages(order)[0] : order.service.imageUrl}" alt="${order.service.name}">
               <div>
                 <p>${order.appointmentDate} ${order.appointmentTime}</p>
                 <p>${order.technician.name} · ${order.store.name}</p>
                 <p class="price">${t('paidDeposit')} ${money(order.depositCents)}</p>
-                ${order.status === 'COMPLETED' && order.workImages?.length ? `<p>${t('finalPhotos')} · ${order.workImages.length}</p>` : ''}
+                ${order.status === 'COMPLETED' && customerVisibleWorkImages(order).length ? `<p>${t('finalPhotos')} · ${customerVisibleWorkImages(order).length}</p>` : ''}
               </div>
             </div>
           </button>
@@ -1250,6 +1313,50 @@ function selectedOrder() {
   return state.orders.find((order) => order.id === state.selectedOrderId)
 }
 
+function customerShareCopy(order) {
+  const cached = state.shareCopyByOrder[order.id]?.[state.sharePlatform]
+  if (!cached) return null
+  const title = state.lang === 'en' ? cached.titleEn : cached.titleZh
+  const caption = state.lang === 'en' ? cached.captionEn : cached.captionZh
+  return {
+    title: title || '',
+    caption: caption || '',
+    hashtags: cached.hashtags || []
+  }
+}
+
+function renderCustomerSharePanel(order, images) {
+  if (state.shareOrderId !== order.id) return ''
+  const platforms = [
+    ['xiaohongshu', state.lang === 'zh' ? '小红书' : 'Xiaohongshu'],
+    ['douyin', state.lang === 'zh' ? '抖音' : 'Douyin'],
+    ['instagram', 'Instagram']
+  ]
+  const shareCopy = customerShareCopy(order)
+  const shareUrl = shareUrlForOrder(order.id, 0, state.sharePlatform)
+  return `
+    <div class="customer-share-panel">
+      <div class="section-row compact"><h3>${t('shareReady')}</h3><span class="subtle">${t('shareTo')}</span></div>
+      <div class="customer-platform-row">
+        ${platforms.map(([key, label]) => `<button class="${state.sharePlatform === key ? 'active' : ''}" data-order-share-platform="${key}" type="button">${label}</button>`).join('')}
+      </div>
+      ${shareCopy ? `
+        <div class="customer-share-copy">
+          <strong>${escapeHtml(shareCopy.title)}</strong>
+          <p>${escapeHtml(shareCopy.caption)}</p>
+          <small>${shareCopy.hashtags.map(escapeHtml).join(' ')}</small>
+        </div>
+      ` : `<div class="empty-state small-empty">${state.lang === 'zh' ? '选择平台后会生成对应文案。' : 'Choose a platform to generate a caption.'}</div>`}
+      <div class="customer-share-actions">
+        <button class="ghost" data-copy-order-caption="${order.id}" type="button" ${shareCopy ? '' : 'disabled'}>${t('copyCaption')}</button>
+        <a class="ghost button-link" href="${shareUrl}" target="_blank" rel="noreferrer">${t('shareLink')}</a>
+        <a class="primary button-link" href="${platformUrl(state.sharePlatform)}" target="_blank" rel="noreferrer">${t('openPlatform')}</a>
+      </div>
+      ${images.length ? `<small class="subtle">${state.lang === 'zh' ? '分享页只展示已确认入库的作品。' : 'The share page only shows approved archive photos.'}</small>` : ''}
+    </div>
+  `
+}
+
 function renderOrderDetailWeb() {
   const order = selectedOrder()
   if (!order) {
@@ -1257,7 +1364,7 @@ function renderOrderDetailWeb() {
     renderOrdersWeb()
     return
   }
-  const workImages = order.workImages || []
+  const workImages = customerVisibleWorkImages(order)
   els.screen.innerHTML = `
     <section class="order-detail-web">
       <button class="ghost back-btn" data-view-target="orders" type="button">← ${t('orders')}</button>
@@ -1285,8 +1392,15 @@ function renderOrderDetailWeb() {
           <p><span>${t('finalPhotos')}</span><strong>${workImages.length}/6</strong></p>
           ${workImages.length ? `
             <div class="customer-work-grid">
-              ${workImages.map((image, index) => `<a href="${image}" target="_blank" rel="noreferrer"><img src="${image}" alt="${t('finalPhotos')} ${index + 1}"></a>`).join('')}
+              ${workImages.map((image, index) => `
+                <figure class="customer-work-item">
+                  <a href="${image}" target="_blank" rel="noreferrer"><img src="${image}" alt="${t('finalPhotos')} ${index + 1}"></a>
+                  <a class="ghost mini-download" href="${image}" download="Lucky-Luxe-${order.publicCode || order.id}-${index + 1}.jpg">${t('downloadImage')}</a>
+                </figure>
+              `).join('')}
             </div>
+            <button class="primary slim" data-order-share="${order.id}" type="button">${t('oneClickShare')}</button>
+            ${renderCustomerSharePanel(order, workImages)}
           ` : `<div class="empty-state small-empty">${t('noWorkImages')}</div>`}
         </div>
       </section>
@@ -1384,9 +1498,41 @@ async function handleScreenClick(event) {
       return
     }
     state.selectedOrderId = orderButton.dataset.orderId
+    state.shareOrderId = ''
     await refreshOrder(state.selectedOrderId)
     state.view = 'orderDetail'
     render()
+    return
+  }
+  const orderShare = event.target.closest('[data-order-share]')
+  if (orderShare) {
+    const order = state.orders.find((item) => item.id === orderShare.dataset.orderShare)
+    if (!order) return
+    state.shareOrderId = state.shareOrderId === order.id ? '' : order.id
+    if (state.shareOrderId && !state.shareCopyByOrder[order.id]?.[state.sharePlatform]) {
+      await generateCustomerShareCopy(order)
+    }
+    render()
+    return
+  }
+  const sharePlatform = event.target.closest('[data-order-share-platform]')
+  if (sharePlatform) {
+    const order = selectedOrder()
+    if (!order) return
+    state.sharePlatform = sharePlatform.dataset.orderSharePlatform
+    if (!state.shareCopyByOrder[order.id]?.[state.sharePlatform]) {
+      await generateCustomerShareCopy(order, state.sharePlatform)
+    }
+    render()
+    return
+  }
+  const copyCaption = event.target.closest('[data-copy-order-caption]')
+  if (copyCaption) {
+    const order = state.orders.find((item) => item.id === copyCaption.dataset.copyOrderCaption)
+    const shareCopy = order ? customerShareCopy(order) : null
+    if (!shareCopy) return
+    await navigator.clipboard.writeText([shareCopy.title, shareCopy.caption, shareCopy.hashtags.join(' ')].filter(Boolean).join('\n\n'))
+    toast(t('captionCopied'))
     return
   }
   const meTarget = event.target.closest('[data-me-target]')
