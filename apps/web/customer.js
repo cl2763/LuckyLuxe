@@ -278,6 +278,7 @@ const state = {
   sharePlatform: 'xiaohongshu',
   shareCopyByOrder: {},
   shareCopyHistory: readJson('lucky-social-copy-history') || {},
+  memberCodeOpen: false,
   pendingAuth: readJson('lucky-web-pending-auth')
 }
 
@@ -1216,9 +1217,34 @@ function renderMe() {
     <section class="me-web">
       <div class="member-card web-member-card">
         <div class="member-top">
-          <img class="avatar" src="/assets/images/member-profile.png" alt="${user.displayName}">
-          <div><h1>${user.displayName}</h1><p>${user.memberLevel} · ${user.provider}</p></div>
+          <div class="member-identity">
+            <img class="avatar" src="/assets/images/member-profile.png" alt="${user.displayName}">
+            <div><h1>${user.displayName}</h1><p>${user.memberLevel} · ${user.provider}</p></div>
+          </div>
+          <button class="member-code-chip" data-toggle-member-code type="button" aria-label="${t('memberCode')} ${memberCode}">
+            <span class="mini-qr">
+              ${Array.from({ length: 25 }, (_, index) => `<i class="${(index + memberCode.charCodeAt(index % memberCode.length)) % 3 === 0 ? 'on' : ''}"></i>`).join('')}
+            </span>
+            <small>${t('memberCode')}</small>
+          </button>
         </div>
+        ${state.memberCodeOpen ? `
+          <div class="member-code-detail">
+            <div>
+              <p class="eyebrow">${t('memberCode')}</p>
+              <h2>${memberCode}</h2>
+              <p>${t('memberCodeHint')}</p>
+              <div class="member-code-meta">
+                <span>${t('staffScan')}</span>
+                <strong>${referralCode}</strong>
+              </div>
+            </div>
+            <div class="member-referral-row">
+              <code>${referralUrl}</code>
+              <button class="primary slim" data-copy-member-link type="button">${t('copyMemberLink')}</button>
+            </div>
+          </div>
+        ` : ''}
         <div class="growth-block">
           <div class="growth-head"><span>${t('memberGrowth')}</span><span>${user.growthValue} / ${user.nextLevelValue}</span></div>
           <div class="growth-track"><div class="growth-fill" style="width:${Math.round(user.growthValue / user.nextLevelValue * 100)}%"></div></div>
@@ -1233,27 +1259,6 @@ function renderMe() {
           <div>${t('visits')} ${user.visits || 0} ${t('times')}</div>
         </div>
       </div>
-      <section class="member-code-card card">
-        <div class="member-code-copy">
-          <p class="eyebrow">${t('memberCode')}</p>
-          <h2>${memberCode}</h2>
-          <p>${t('memberCodeHint')}</p>
-          <div class="member-code-meta">
-            <span>${t('staffScan')}</span>
-            <strong>${referralCode}</strong>
-          </div>
-        </div>
-        <div class="member-qr-block" aria-label="${t('memberCode')} ${memberCode}">
-          <div class="qr-mock">
-            ${Array.from({ length: 49 }, (_, index) => `<span class="${(index + memberCode.charCodeAt(index % memberCode.length)) % 3 === 0 ? 'on' : ''}"></span>`).join('')}
-          </div>
-          <small>${t('referralLink')}</small>
-        </div>
-        <div class="member-referral-row">
-          <code>${referralUrl}</code>
-          <button class="primary slim" data-copy-member-link type="button">${t('copyMemberLink')}</button>
-        </div>
-      </section>
       <section class="section">
         <div class="section-row"><h2>${t('orders')}</h2><button class="section-note-btn" data-order-filter="all" type="button">${t('all')}</button></div>
         <div class="order-entry card">
@@ -1612,6 +1617,11 @@ async function handleScreenClick(event) {
   if (event.target.closest('[data-copy-member-link]')) {
     await navigator.clipboard.writeText(referralUrlFor(state.user))
     toast(t('memberCodeCopied'))
+    return
+  }
+  if (event.target.closest('[data-toggle-member-code]')) {
+    state.memberCodeOpen = !state.memberCodeOpen
+    render()
     return
   }
   const meTarget = event.target.closest('[data-me-target]')

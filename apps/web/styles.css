@@ -2508,6 +2508,14 @@ textarea:focus {
 .member-top {
   display: flex;
   align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+}
+
+.member-identity {
+  display: flex;
+  min-width: 0;
+  align-items: center;
   gap: 16px;
 }
 
@@ -2527,6 +2535,76 @@ textarea:focus {
   margin: 0;
   color: #ead7c7;
   font-weight: 800;
+}
+
+.member-code-chip {
+  display: grid;
+  min-width: 78px;
+  justify-items: center;
+  gap: 6px;
+  border: 1px solid rgba(234, 215, 199, 0.32);
+  border-radius: 8px;
+  background: rgba(255, 255, 255, 0.08);
+  color: #ead7c7;
+  padding: 9px;
+}
+
+.member-code-chip small {
+  font-size: 12px;
+  font-weight: 850;
+}
+
+.mini-qr {
+  display: grid;
+  grid-template-columns: repeat(5, 7px);
+  gap: 2px;
+  border: 5px solid #f7efe8;
+  border-radius: 6px;
+  background: #f7efe8;
+}
+
+.mini-qr i {
+  width: 7px;
+  height: 7px;
+  border-radius: 1px;
+  background: rgba(43, 41, 39, 0.14);
+}
+
+.mini-qr i.on {
+  background: var(--black);
+}
+
+.member-code-detail {
+  display: grid;
+  gap: 12px;
+  margin-top: 18px;
+  border: 1px solid rgba(234, 215, 199, 0.22);
+  border-radius: 8px;
+  background: rgba(255, 255, 255, 0.07);
+  padding: 14px;
+}
+
+.member-code-detail h2 {
+  margin: 4px 0 8px;
+  font-size: 24px;
+  color: #fff;
+}
+
+.member-code-detail p {
+  margin: 0;
+  color: #ead7c7;
+  font-weight: 750;
+  line-height: 1.55;
+}
+
+.member-code-detail .eyebrow {
+  color: var(--accent);
+}
+
+.member-code-detail .member-referral-row code {
+  border-color: rgba(234, 215, 199, 0.28);
+  background: rgba(255, 255, 255, 0.08);
+  color: #ead7c7;
 }
 
 .growth-block {
