@@ -2674,6 +2674,100 @@ textarea:focus {
   font-weight: 750;
 }
 
+.member-code-card {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 16px;
+  align-items: center;
+  margin-top: 16px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: #fff;
+  padding: 18px;
+}
+
+.member-code-copy h2 {
+  margin: 4px 0 8px;
+  font-size: 28px;
+  letter-spacing: 0;
+}
+
+.member-code-copy p {
+  margin: 0;
+  color: var(--muted);
+  font-weight: 750;
+  line-height: 1.55;
+}
+
+.member-code-meta {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  align-items: center;
+  margin-top: 12px;
+}
+
+.member-code-meta span,
+.member-code-meta strong {
+  border-radius: 999px;
+  background: var(--soft);
+  padding: 7px 12px;
+  color: var(--accent-dark);
+  font-weight: 850;
+}
+
+.member-qr-block {
+  display: grid;
+  justify-items: center;
+  gap: 8px;
+}
+
+.member-qr-block small {
+  color: var(--muted);
+  font-weight: 800;
+}
+
+.qr-mock {
+  display: grid;
+  grid-template-columns: repeat(7, 9px);
+  gap: 3px;
+  border: 8px solid #fff;
+  border-radius: 8px;
+  background: var(--soft);
+  box-shadow: inset 0 0 0 1px var(--line), var(--shadow);
+  padding: 8px;
+}
+
+.qr-mock span {
+  width: 9px;
+  height: 9px;
+  border-radius: 2px;
+  background: rgba(43, 41, 39, 0.14);
+}
+
+.qr-mock span.on {
+  background: var(--black);
+}
+
+.member-referral-row {
+  grid-column: 1 / -1;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 10px;
+  align-items: center;
+}
+
+.member-referral-row code {
+  overflow: hidden;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: var(--soft);
+  padding: 12px;
+  color: var(--muted);
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
 .order-tabs-web {
   display: flex;
   gap: 8px;
@@ -3158,6 +3252,15 @@ textarea:focus {
 
   .customer-profile-card {
     grid-template-columns: 1fr;
+  }
+
+  .member-code-card,
+  .member-referral-row {
+    grid-template-columns: 1fr;
+  }
+
+  .member-qr-block {
+    justify-items: start;
   }
 
   .customer-stats {

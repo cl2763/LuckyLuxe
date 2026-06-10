@@ -220,6 +220,7 @@ function serializeService(row, lang = 'zh') {
 
 function serializeUser(user) {
   if (!user) return null
+  const memberCode = `LL-${String(user.id).replace(/[^a-z0-9]/gi, '').slice(-8).toUpperCase().padStart(8, '0')}`
   return {
     id: user.id,
     displayName: user.display_name,
@@ -233,7 +234,10 @@ function serializeUser(user) {
     couponCount: 2,
     balanceCents: 30000,
     totalSpentCents: 86000,
-    visits: 6
+    visits: 6,
+    memberCode,
+    referralCode: memberCode.replace('LL-', 'REF-'),
+    referralUrl: `${publicAppUrl()}/?ref=${encodeURIComponent(memberCode.replace('LL-', 'REF-'))}`
   }
 }
 
@@ -989,7 +993,7 @@ async function route(req, res) {
     const body = await readBody(req)
     const row = body.bookingId ? await query('SELECT * FROM bookings WHERE id = $1', [body.bookingId]) : { rows: [] }
     const booking = row.rows[0] ? await serializeBooking(row.rows[0], body.lang || 'zh') : body.booking
-    return json(res, 200, { copy: await createSocialCopy({ lang: body.lang || 'zh', image: body.image || '', booking, platform: body.platform || 'xiaohongshu' }) })
+    return json(res, 200, { copy: await createSocialCopy({ lang: body.lang || 'zh', image: body.image || '', booking, platform: body.platform || 'xiaohongshu', audience: body.audience || 'customer', avoidCaptions: body.avoidCaptions || [], variantSeed: body.variantSeed || '' }) })
   }
   if (path.startsWith('/admin/')) await requireOwner(req)
   if (req.method === 'GET' && path === '/admin/bookings') {
@@ -1031,7 +1035,7 @@ async function route(req, res) {
     const body = await readBody(req)
     const row = body.bookingId ? await query('SELECT * FROM bookings WHERE id = $1', [body.bookingId]) : { rows: [] }
     const booking = row.rows[0] ? await serializeBooking(row.rows[0], body.lang || 'zh') : body.booking
-    return json(res, 200, { copy: await createSocialCopy({ lang: body.lang || 'zh', image: body.image || '', booking, platform: body.platform || 'xiaohongshu' }) })
+    return json(res, 200, { copy: await createSocialCopy({ lang: body.lang || 'zh', image: body.image || '', booking, platform: body.platform || 'xiaohongshu', audience: body.audience || 'staff', avoidCaptions: body.avoidCaptions || [], variantSeed: body.variantSeed || '' }) })
   }
   if (req.method === 'GET' && path === '/admin/services') {
     const services = await query('SELECT * FROM services ORDER BY type ASC, sort_order ASC')

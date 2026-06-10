@@ -384,6 +384,7 @@ function serializeBooking(row, lang = 'zh') {
 
 function serializeUser(user) {
   if (!user) return null
+  const memberCode = `LL-${String(user.id).replace(/[^a-z0-9]/gi, '').slice(-8).toUpperCase().padStart(8, '0')}`
   return {
     id: user.id,
     displayName: user.display_name,
@@ -397,7 +398,10 @@ function serializeUser(user) {
     couponCount: 2,
     balanceCents: 30000,
     totalSpentCents: 86000,
-    visits: 6
+    visits: 6,
+    memberCode,
+    referralCode: memberCode.replace('LL-', 'REF-'),
+    referralUrl: `https://www.luckyluxeatelier.com/?ref=${encodeURIComponent(memberCode.replace('LL-', 'REF-'))}`
   }
 }
 
@@ -815,7 +819,7 @@ async function route(req, res) {
     const body = await readBody(req)
     const row = body.bookingId ? db.prepare('SELECT * FROM bookings WHERE id = ?').get(body.bookingId) : null
     const booking = row ? serializeBooking(row, body.lang || 'zh') : body.booking
-    return json(res, 200, { copy: await createSocialCopy({ lang: body.lang || 'zh', image: body.image || '', booking, platform: body.platform || 'xiaohongshu' }) })
+    return json(res, 200, { copy: await createSocialCopy({ lang: body.lang || 'zh', image: body.image || '', booking, platform: body.platform || 'xiaohongshu', audience: body.audience || 'customer', avoidCaptions: body.avoidCaptions || [], variantSeed: body.variantSeed || '' }) })
   }
   if (path.startsWith('/admin/')) requireOwner(req)
   if (req.method === 'GET' && path === '/admin/bookings') {
@@ -850,7 +854,7 @@ async function route(req, res) {
     const body = await readBody(req)
     const row = body.bookingId ? db.prepare('SELECT * FROM bookings WHERE id = ?').get(body.bookingId) : null
     const booking = row ? serializeBooking(row, body.lang || 'zh') : body.booking
-    return json(res, 200, { copy: await createSocialCopy({ lang: body.lang || 'zh', image: body.image || '', booking, platform: body.platform || 'xiaohongshu' }) })
+    return json(res, 200, { copy: await createSocialCopy({ lang: body.lang || 'zh', image: body.image || '', booking, platform: body.platform || 'xiaohongshu', audience: body.audience || 'staff', avoidCaptions: body.avoidCaptions || [], variantSeed: body.variantSeed || '' }) })
   }
   if (req.method === 'GET' && path === '/admin/services') {
     return json(res, 200, { services: db.prepare('SELECT * FROM services ORDER BY type ASC, sort_order ASC').all().map(serializeService) })

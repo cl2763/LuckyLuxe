@@ -68,6 +68,12 @@ const copy = {
     paid: '已确认',
     pending: '待支付',
     memberGrowth: '会员成长值',
+    memberCode: '会员码',
+    staffScan: '店员扫码',
+    referralLink: '分享推荐链接',
+    copyMemberLink: '复制推荐链接',
+    memberCodeCopied: '推荐链接已复制',
+    memberCodeHint: '店员扫码可用于识别客户；分享链接可用于后续推荐返佣追踪。',
     points: '积分',
     coupons: '优惠券',
     orders: '我的订单',
@@ -184,6 +190,12 @@ const copy = {
     paid: 'Confirmed',
     pending: 'Pending payment',
     memberGrowth: 'Member growth',
+    memberCode: 'Member Code',
+    staffScan: 'Staff Scan',
+    referralLink: 'Referral Link',
+    copyMemberLink: 'Copy Referral Link',
+    memberCodeCopied: 'Referral link copied',
+    memberCodeHint: 'Staff can scan this to identify the client; the referral link can track future rewards.',
     points: 'Points',
     coupons: 'Coupons',
     orders: 'My Orders',
@@ -265,6 +277,7 @@ const state = {
   shareOrderId: '',
   sharePlatform: 'xiaohongshu',
   shareCopyByOrder: {},
+  shareCopyHistory: readJson('lucky-social-copy-history') || {},
   pendingAuth: readJson('lucky-web-pending-auth')
 }
 
@@ -338,6 +351,38 @@ function shareUrlForOrder(orderId, imageIndex = 0, platform = state.sharePlatfor
   url.searchParams.set('image', String(imageIndex))
   url.searchParams.set('platform', platform)
   return url.toString()
+}
+
+function compactUserCode(user) {
+  return `LL-${String(user?.id || user?.email || 'member').replace(/[^a-z0-9]/gi, '').slice(-8).toUpperCase().padStart(8, '0')}`
+}
+
+function referralCodeFor(user) {
+  return user?.referralCode || compactUserCode(user).replace('LL-', 'REF-')
+}
+
+function referralUrlFor(user) {
+  return user?.referralUrl || `${window.location.origin}/?ref=${encodeURIComponent(referralCodeFor(user))}`
+}
+
+function copyFingerprint(copyData) {
+  if (!copyData) return ''
+  return [copyData.titleZh, copyData.captionZh, copyData.titleEn, copyData.captionEn].filter(Boolean).join('\n')
+}
+
+function copyHistoryKey(scope, bookingId, platform) {
+  return `${scope}:${bookingId}:${platform}`
+}
+
+function usedCopyHistory(scope, bookingId, platform) {
+  return state.shareCopyHistory[copyHistoryKey(scope, bookingId, platform)] || []
+}
+
+function rememberCopyHistory(scope, bookingId, platform, copyData) {
+  const key = copyHistoryKey(scope, bookingId, platform)
+  const next = [...new Set([...(state.shareCopyHistory[key] || []), copyFingerprint(copyData)].filter(Boolean))].slice(-20)
+  state.shareCopyHistory[key] = next
+  writeJson('lucky-social-copy-history', state.shareCopyHistory)
 }
 
 function toast(message) {
@@ -1158,6 +1203,9 @@ async function submitPayment() {
 
 function renderMe() {
   const user = state.user
+  const memberCode = user.memberCode || compactUserCode(user)
+  const referralCode = referralCodeFor(user)
+  const referralUrl = referralUrlFor(user)
   const counts = {
     pending: state.orders.filter((item) => item.status === 'CONFIRMED').length,
     completed: state.orders.filter((item) => item.status === 'COMPLETED').length,
@@ -1185,6 +1233,27 @@ function renderMe() {
           <div>${t('visits')} ${user.visits || 0} ${t('times')}</div>
         </div>
       </div>
+      <section class="member-code-card card">
+        <div class="member-code-copy">
+          <p class="eyebrow">${t('memberCode')}</p>
+          <h2>${memberCode}</h2>
+          <p>${t('memberCodeHint')}</p>
+          <div class="member-code-meta">
+            <span>${t('staffScan')}</span>
+            <strong>${referralCode}</strong>
+          </div>
+        </div>
+        <div class="member-qr-block" aria-label="${t('memberCode')} ${memberCode}">
+          <div class="qr-mock">
+            ${Array.from({ length: 49 }, (_, index) => `<span class="${(index + memberCode.charCodeAt(index % memberCode.length)) % 3 === 0 ? 'on' : ''}"></span>`).join('')}
+          </div>
+          <small>${t('referralLink')}</small>
+        </div>
+        <div class="member-referral-row">
+          <code>${referralUrl}</code>
+          <button class="primary slim" data-copy-member-link type="button">${t('copyMemberLink')}</button>
+        </div>
+      </section>
       <section class="section">
         <div class="section-row"><h2>${t('orders')}</h2><button class="section-note-btn" data-order-filter="all" type="button">${t('all')}</button></div>
         <div class="order-entry card">
@@ -1259,13 +1328,18 @@ async function generateCustomerShareCopy(order, platform = state.sharePlatform) 
       lang: state.lang,
       bookingId: order.id,
       image: images[0] || order.service?.imageUrl || '',
-      platform
+      platform,
+      audience: 'customer',
+      variantSeed: `${Date.now()}:${Math.random()}`,
+      avoidCaptions: usedCopyHistory('customer', order.id, platform)
     })
   })
+  const copyData = data.copy?.data || data.copy
   state.shareCopyByOrder[order.id] = {
     ...(state.shareCopyByOrder[order.id] || {}),
-    [platform]: data.copy?.data || data.copy
+    [platform]: copyData
   }
+  rememberCopyHistory('customer', order.id, platform, copyData)
 }
 
 function filteredOrders() {
@@ -1533,6 +1607,11 @@ async function handleScreenClick(event) {
     if (!shareCopy) return
     await navigator.clipboard.writeText([shareCopy.title, shareCopy.caption, shareCopy.hashtags.join(' ')].filter(Boolean).join('\n\n'))
     toast(t('captionCopied'))
+    return
+  }
+  if (event.target.closest('[data-copy-member-link]')) {
+    await navigator.clipboard.writeText(referralUrlFor(state.user))
+    toast(t('memberCodeCopied'))
     return
   }
   const meTarget = event.target.closest('[data-me-target]')

@@ -20,7 +20,8 @@ const owner = {
   dashboardDetail: 'today',
   aiBrief: null,
   aiLoading: '',
-  aiResults: {}
+  aiResults: {},
+  aiCopyHistory: readJson('lucky-admin-social-copy-history') || {}
 }
 
 const els = {
@@ -503,6 +504,10 @@ function readJson(key) {
   } catch {
     return null
   }
+}
+
+function writeJson(key, value) {
+  localStorage.setItem(key, JSON.stringify(value))
 }
 
 function ownerBearer() {
@@ -1602,6 +1607,26 @@ function socialKey(bookingId, index, platform) {
   return `social:${bookingId}:${index}:${platform}`
 }
 
+function copyFingerprint(copyData) {
+  const data = copyData?.data || copyData
+  if (!data) return ''
+  return [data.titleZh, data.captionZh, data.titleEn, data.captionEn].filter(Boolean).join('\n')
+}
+
+function socialHistoryKey(audience, bookingId, index, platform) {
+  return `${audience}:${bookingId}:${index}:${platform}`
+}
+
+function usedSocialHistory(audience, bookingId, index, platform) {
+  return owner.aiCopyHistory[socialHistoryKey(audience, bookingId, index, platform)] || []
+}
+
+function rememberSocialHistory(audience, bookingId, index, platform, copyData) {
+  const key = socialHistoryKey(audience, bookingId, index, platform)
+  owner.aiCopyHistory[key] = [...new Set([...(owner.aiCopyHistory[key] || []), copyFingerprint(copyData)].filter(Boolean))].slice(-20)
+  writeJson('lucky-admin-social-copy-history', owner.aiCopyHistory)
+}
+
 function resolveSocialCopy(booking, index, platform, isMock = false) {
   const saved = owner.aiResults[socialKey(booking.id, index, platform)]
   if (saved) return saved.data || saved
@@ -1890,9 +1915,19 @@ async function generateSocialCopy(bookingId, index, platform) {
   try {
     const data = await request('/admin/ai/social-copy', {
       method: 'POST',
-      body: JSON.stringify({ lang: owner.lang, bookingId, booking, image, platform })
+      body: JSON.stringify({
+        lang: owner.lang,
+        bookingId,
+        booking,
+        image,
+        platform,
+        audience: 'staff',
+        variantSeed: `${Date.now()}:${Math.random()}`,
+        avoidCaptions: usedSocialHistory('staff', bookingId, index, platform)
+      })
     })
     owner.aiResults[key] = data.copy
+    rememberSocialHistory('staff', bookingId, index, platform, data.copy)
   } finally {
     owner.aiLoading = ''
     renderAiGallery()

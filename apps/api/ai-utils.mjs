@@ -20,7 +20,7 @@ function imageHints(images = []) {
   return `${images.length} image(s) were provided. The first image data length is ${String(images[0] || '').length}.`
 }
 
-async function callOpenAICompatible({ system, user, schema, images = [] }) {
+async function callOpenAICompatible({ system, user, schema, images = [], temperature = 0.4 }) {
   if (!AI_API_KEY) return null
   const content = [{ type: 'text', text: `${user}\n\nReturn compact JSON only. Schema:\n${jsonBlock(schema)}` }]
   for (const image of images.slice(0, 3)) {
@@ -36,7 +36,7 @@ async function callOpenAICompatible({ system, user, schema, images = [] }) {
     },
     body: JSON.stringify({
       model: DEFAULT_MODEL,
-      temperature: 0.4,
+      temperature,
       response_format: { type: 'json_object' },
       messages: [
         { role: 'system', content: system },
@@ -53,16 +53,36 @@ async function callOpenAICompatible({ system, user, schema, images = [] }) {
   return JSON.parse(text)
 }
 
-async function aiJson({ system, user, schema, images, fallback }) {
+async function aiJson({ system, user, schema, images, fallback, temperature }) {
   if (DEFAULT_PROVIDER !== 'mock') {
     try {
-      const data = await callOpenAICompatible({ system, user, schema, images })
+      const data = await callOpenAICompatible({ system, user, schema, images, temperature })
       if (data) return { provider: DEFAULT_PROVIDER, model: DEFAULT_MODEL, data }
     } catch (error) {
       return { provider: `${DEFAULT_PROVIDER}-fallback`, model: DEFAULT_MODEL, data: fallback(String(error.message || error)) }
     }
   }
   return { provider: 'mock', model: DEFAULT_MODEL, data: fallback() }
+}
+
+function hashSeed(value = '') {
+  let hash = 0
+  for (const char of String(value)) hash = ((hash << 5) - hash + char.charCodeAt(0)) | 0
+  return Math.abs(hash)
+}
+
+function includesUsedCopy(variant, used = []) {
+  const combined = `${variant.titleZh || ''}\n${variant.captionZh || ''}\n${variant.titleEn || ''}\n${variant.captionEn || ''}`.toLowerCase()
+  return used.some((item) => {
+    const text = String(item || '').toLowerCase().trim()
+    return text && (combined.includes(text.slice(0, 80)) || text.includes(String(variant.titleZh || '').toLowerCase()))
+  })
+}
+
+function pickUniqueVariant(variants, seed, used = []) {
+  const available = variants.filter((variant) => !includesUsedCopy(variant, used))
+  const pool = available.length ? available : variants
+  return pool[hashSeed(seed || Date.now()) % pool.length]
 }
 
 export async function analyzeReferenceImage({ lang = 'zh', images = [], service = {}, notes = '' }) {
@@ -185,7 +205,7 @@ export async function createDailyBrief({ lang = 'zh', bookings = [], customers =
   })
 }
 
-export async function createSocialCopy({ lang = 'zh', image = '', booking = {}, platform = 'xiaohongshu' }) {
+export async function createSocialCopy({ lang = 'zh', image = '', booking = {}, platform = 'xiaohongshu', audience = 'customer', avoidCaptions = [], variantSeed = '' }) {
   const schema = {
     platform: 'string',
     styleTags: ['string'],
@@ -198,37 +218,88 @@ export async function createSocialCopy({ lang = 'zh', image = '', booking = {}, 
     altTextEn: 'string'
   }
   return aiJson({
-    system: 'You create tasteful bilingual social media copy for a nail and lash atelier. Adapt tone to each platform: RED should be experience-led and searchable, Douyin should be short with a strong hook, Instagram should be polished and visual-first. Avoid medical claims and exaggerated promises.',
-    user: `Create ${platform} copy for this finished work. Booking:\n${jsonBlock(booking)}\n${imageHints(image ? [image] : [])}`,
+    system: 'You create tasteful bilingual social media copy for a nail and lash atelier. Adapt tone to each platform: RED should be experience-led and searchable, Douyin should be short with a strong hook, Instagram should be polished and visual-first. Avoid medical claims and exaggerated promises. Never repeat prior captions. Customer-facing copy should feel easy to share; staff-facing copy should help technicians or owners post efficiently.',
+    user: `Create ${platform} copy for this finished work. Audience: ${audience}. Unique request seed: ${variantSeed || Date.now()}.\nAvoid reusing these prior captions or title angles:\n${jsonBlock((avoidCaptions || []).slice(-12))}\nBooking:\n${jsonBlock(booking)}\n${imageHints(image ? [image] : [])}`,
     schema,
     images: image ? [image] : [],
+    temperature: 0.82,
     fallback: () => {
       const serviceName = booking?.service?.name || 'Lucky Luxe'
       const category = booking?.service?.category || 'soft luxury'
+      const techName = booking?.technician?.name || booking?.technicianName || 'Lucky Luxe artist'
+      const date = booking?.appointmentDate || ''
       const variants = {
-        xiaohongshu: {
-          titleZh: `${serviceName}｜温柔高级感可以直接抄作业`,
-          captionZh: `这组作品重点是干净、耐看、显手/眼神状态更柔和。\n\n适合想要“精致但不夸张”的客人。到店可以带参考图，我们会根据肤色、手型或眼型调整细节，让效果更贴近日常。\n\n收藏给下次预约用。`,
-          titleEn: `${serviceName} | Soft Luxe Reference`,
-          captionEn: 'A clean, wearable Lucky Luxe reference with soft detail and everyday polish. Save it for your next appointment.',
-          hashtags: ['#多伦多美甲', '#美睫分享', '#小红书美甲', '#温柔高级感', '#LuckyLuxe']
-        },
-        douyin: {
-          titleZh: `${serviceName} 这组真的很适合日常`,
-          captionZh: `不夸张，但很显精致。\n\n近看有细节，远看很干净。喜欢自然高级感的可以保存这一组，预约时直接给技师看。`,
-          titleEn: `${serviceName} | Clean Everyday Finish`,
-          captionEn: 'A quick look at a clean, refined finish. Subtle detail, easy to wear, ready to save as a reference.',
-          hashtags: ['#今日美甲', '#美睫款式', '#同城美甲', '#变美日记', '#LuckyLuxe']
-        },
-        instagram: {
-          titleZh: `${serviceName}｜Lucky Luxe 作品留档`,
-          captionZh: `Soft, clean, and refined from every angle.\n\n一组适合日常，也适合镜头记录的 Lucky Luxe 完工作品。`,
-          titleEn: `${serviceName} | Lucky Luxe Archive`,
-          captionEn: 'Soft, clean, and refined from every angle. A polished Lucky Luxe finish made for everyday wear and a beautiful close-up.',
-          hashtags: ['#LuckyLuxeAtelier', '#nailarchive', '#lashstudio', '#torontobeauty', '#softluxury']
-        }
+        xiaohongshu: [
+          {
+            titleZh: `${serviceName}｜温柔高级感可以直接抄作业`,
+            captionZh: `这组作品重点是干净、耐看，细节不会抢日常穿搭。\n\n${audience === 'staff' ? `${techName} 完成于 ${date || '本次预约'}，发布时可以强调“自然高级、可日常复制”。` : '喜欢精致但不夸张的客人可以先收藏，预约时直接给技师看。'}\n\n到店会根据肤色、手型或眼型再微调。`,
+            titleEn: `${serviceName} | Soft Luxe Reference`,
+            captionEn: 'Clean, wearable, and softly detailed. Save this Lucky Luxe look as a reference for your next appointment.',
+            hashtags: ['#多伦多美甲', '#美睫分享', '#小红书美甲', '#温柔高级感', '#LuckyLuxe']
+          },
+          {
+            titleZh: `${serviceName}｜低调但很显精致`,
+            captionZh: `这类效果最适合想要“看起来很干净，但近看有细节”的客人。\n\n${audience === 'staff' ? '发帖时可以把重点放在质感、留档图和适合人群，减少夸张承诺。' : '如果你平时穿搭偏简约，这组会很适合做长期参考。'}\n\n收藏后下次预约直接带图沟通。`,
+            titleEn: `${serviceName} | Quiet Detail`,
+            captionEn: 'A refined look with quiet detail. Easy to wear, easy to save, and easy to personalize in studio.',
+            hashtags: ['#美甲灵感', '#多伦多美睫', '#通勤美甲', '#LuckyLuxe', '#自然高级']
+          },
+          {
+            titleZh: `${serviceName}｜本次完工留档`,
+            captionZh: `完成后越看越耐看的一组。\n\n${audience === 'staff' ? `建议 ${techName} 发布时搭配细节图，突出款式层次和到店调整空间。` : '适合第一次尝试轻奢自然风格、又不想太高调的客人。'}\n\n预约时可以带参考图，我们会根据实际状态调整。`,
+            titleEn: `${serviceName} | Finished Archive`,
+            captionEn: 'A finished archive with soft detail and a balanced everyday look. Bring it in as a reference and we can tailor the details.',
+            hashtags: ['#LuckyLuxeAtelier', '#小红书美甲', '#美甲参考', '#轻奢感', '#TorontoBeauty']
+          }
+        ],
+        douyin: [
+          {
+            titleZh: `${serviceName} 这组很适合日常`,
+            captionZh: `不夸张，但很显精致。\n\n${audience === 'staff' ? '短视频标题可以用“近看有细节，远看很干净”。' : '喜欢自然高级感的可以保存这一组，预约时直接给技师看。'}`,
+            titleEn: `${serviceName} | Clean Everyday Finish`,
+            captionEn: 'Subtle detail, clean finish, and easy everyday wear. Save this as your next reference.',
+            hashtags: ['#今日美甲', '#美睫款式', '#同城美甲', '#变美日记', '#LuckyLuxe']
+          },
+          {
+            titleZh: `${serviceName} 近看细节更好看`,
+            captionZh: `镜头里是干净的，实际手上/眼部会更柔和。\n\n${audience === 'staff' ? '适合做前后对比或完工细节短视频。' : '如果你想要自然但有变化，这组可以先收藏。'}`,
+            titleEn: `${serviceName} | Detail Close-up`,
+            captionEn: 'Clean on camera, softer in person. A simple Lucky Luxe detail worth saving.',
+            hashtags: ['#美甲日常', '#美睫分享', '#质感变美', '#LuckyLuxe', '#同城探店']
+          },
+          {
+            titleZh: `${serviceName} 一眼干净的款式`,
+            captionZh: `${audience === 'staff' ? '发布时建议把第一秒放在完工主图，文案保持短、干净、直接。' : '想要干净耐看的效果，可以从这一组开始参考。'}\n\n到店后可按个人状态微调。`,
+            titleEn: `${serviceName} | Clean First Look`,
+            captionEn: 'A clean first look with soft polish. Simple, refined, and ready to save.',
+            hashtags: ['#美甲款式', '#美睫日记', '#干净感', '#LuckyLuxe', '#TorontoSalon']
+          }
+        ],
+        instagram: [
+          {
+            titleZh: `${serviceName}｜Lucky Luxe 作品留档`,
+            captionZh: `Soft, clean, and refined from every angle.\n\n${audience === 'staff' ? '可搭配 carousel 发布，第一张主图，后面放细节图。' : '适合日常，也适合镜头记录的一组完工作品。'}`,
+            titleEn: `${serviceName} | Lucky Luxe Archive`,
+            captionEn: 'Soft, clean, and refined from every angle. A polished Lucky Luxe finish made for everyday wear and a beautiful close-up.',
+            hashtags: ['#LuckyLuxeAtelier', '#nailarchive', '#lashstudio', '#torontobeauty', '#softluxury']
+          },
+          {
+            titleZh: `${serviceName}｜Soft Detail`,
+            captionZh: `Clean lines, soft mood, polished finish.\n\n${audience === 'staff' ? 'Instagram 文案可突出作品质感和技师审美。' : 'A quiet kind of beauty for your next save.'}`,
+            titleEn: `${serviceName} | Soft Detail`,
+            captionEn: 'Clean lines, soft mood, polished finish. A quiet kind of beauty for your next save.',
+            hashtags: ['#LuckyLuxe', '#torontonails', '#lashartist', '#beautyarchive', '#minimalbeauty']
+          },
+          {
+            titleZh: `${serviceName}｜Artist Pick`,
+            captionZh: `${techName} 的本次作品留档。\n\n${audience === 'staff' ? '适合放进技师作品集，作为同风格客户的预约参考。' : 'Save this artist pick for your next Lucky Luxe visit.'}`,
+            titleEn: `${serviceName} | Artist Pick`,
+            captionEn: `${techName}'s finished archive. Save this artist pick for your next Lucky Luxe visit.`,
+            hashtags: ['#LuckyLuxeAtelier', '#artistpick', '#nailinspo', '#lashinspo', '#torontobeauty']
+          }
+        ]
       }
-      const item = variants[platform] || variants.xiaohongshu
+      const item = pickUniqueVariant(variants[platform] || variants.xiaohongshu, `${variantSeed}:${booking?.id}:${platform}:${audience}:${Date.now()}`, avoidCaptions)
       return {
         platform,
         styleTags: [category, 'clean', platform],
