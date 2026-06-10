@@ -1155,6 +1155,18 @@ textarea:focus {
   gap: 8px;
 }
 
+.gallery-platform-list {
+  display: grid;
+  gap: 10px;
+}
+
+.gallery-platform-row {
+  display: grid;
+  grid-template-columns: minmax(120px, 180px) minmax(120px, 1fr);
+  gap: 10px;
+  align-items: center;
+}
+
 .active-pill {
   background: var(--ink);
   color: #fff;
@@ -1201,6 +1213,10 @@ textarea:focus {
 .technician-portfolio-section {
   display: grid;
   gap: 16px;
+}
+
+.portfolio-page-web > .technician-work-grid {
+  grid-template-columns: repeat(4, minmax(0, 1fr));
 }
 
 .ai-platform-row,
@@ -2904,7 +2920,8 @@ textarea:focus {
 
   .gallery-review-grid,
   .portfolio-preview-grid,
-  .technician-work-grid {
+  .technician-work-grid,
+  .portfolio-page-web > .technician-work-grid {
     grid-template-columns: repeat(2, minmax(0, 1fr));
   }
 
@@ -3046,8 +3063,13 @@ textarea:focus {
   }
 
   .portfolio-preview-grid,
-  .technician-work-grid {
+  .technician-work-grid,
+  .portfolio-page-web > .technician-work-grid {
     grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .gallery-platform-row {
+    grid-template-columns: 1fr;
   }
 
   .gallery-image-pair img {

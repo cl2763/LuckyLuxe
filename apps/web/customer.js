@@ -231,6 +231,7 @@ const state = {
   service: null,
   technicians: [],
   portfolios: [],
+  selectedPortfolioTechId: '',
   selectedTechId: '',
   date: defaultDate(),
   slotsByTech: [],
@@ -650,18 +651,6 @@ function renderHome() {
       <button class="quick-item card" data-go-services="nail" type="button"><span class="quick-icon">N</span><span>${t('quickNail')}</span></button>
       <button class="quick-item card" data-go-services="lash" type="button"><span class="quick-icon">L</span><span>${t('quickLash')}</span></button>
       <button class="quick-item card" data-view-target="portfolio" type="button"><span class="quick-icon">P</span><span>${t('technicianWorks')}</span></button>
-      <button class="quick-item card" data-view-target="cart" type="button"><span class="quick-icon">C</span><span>${t('cart')}</span></button>
-      <button class="quick-item card" data-view-target="me" type="button"><span class="quick-icon">M</span><span>${t('quickMember')}</span></button>
-    </section>
-    <section class="section portfolio-preview-section">
-      <div class="section-row">
-        <div>
-          <h2>${t('technicianPortfolio')}</h2>
-          <span class="subtle">${t('portfolioIntro')}</span>
-        </div>
-        <button class="ghost slim" data-view-target="portfolio" type="button">${t('viewWork')}</button>
-      </div>
-      ${renderPortfolioPreview()}
     </section>
     ${renderRecommendSection(t('popularNail'), 'nail')}
     ${renderRecommendSection(t('popularLash'), 'lash')}
@@ -697,55 +686,69 @@ function renderRecommendSection(title, type) {
 }
 
 function portfolioImages() {
-  return state.portfolios.flatMap((portfolio) => (portfolio.images || []).map((image) => ({
+  return effectivePortfolios().flatMap((portfolio) => (portfolio.images || []).map((image) => ({
     image,
     technician: portfolio.technician
   })))
 }
 
-function renderPortfolioPreview() {
-  const images = portfolioImages().slice(0, 8)
-  if (!images.length) return `<div class="empty-state small-empty">${t('noPortfolio')}</div>`
-  return `
-    <div class="portfolio-preview-grid">
-      ${images.map((item) => `
-        <button class="portfolio-preview-card" data-view-target="portfolio" type="button">
-          <img src="${item.image}" alt="${item.technician?.name || 'Lucky Luxe'}">
-        </button>
-      `).join('')}
-    </div>
-  `
+function effectivePortfolios() {
+  if (state.portfolios.length) return state.portfolios
+  return [
+    {
+      technician: { id: 'tech-lina-demo', name: 'Lina Zhou', title: state.lang === 'zh' ? '法式 / 日式微闪 / 轻奢设计' : 'French / Japanese Shimmer / Soft Luxe' },
+      images: ['/assets/images/nail-french.png', '/assets/images/nail-luxe.png', '/assets/images/nail-jp.png', '/assets/images/nail-addon.png']
+    },
+    {
+      technician: { id: 'tech-mia-demo', name: 'Mia Chen', title: state.lang === 'zh' ? '自然美睫 / 裸感款 / 轻盈浓密' : 'Natural Lash / Bare Look / Soft Volume' },
+      images: ['/assets/images/lash-natural.png', '/assets/images/lash-volume.png', '/assets/images/lash-lower.png', '/assets/images/lash-remove.png']
+    },
+    {
+      technician: { id: 'tech-ava-demo', name: 'Ava Lin', title: state.lang === 'zh' ? '基础护理 / 短甲显白 / 日常维护' : 'Care / Short Nails / Daily Maintenance' },
+      images: ['/assets/images/nail-care.png', '/assets/images/nail-jp.png', '/assets/images/nail-french.png']
+    }
+  ]
 }
 
 function renderPortfolio() {
+  const portfolios = effectivePortfolios()
+  const selected = portfolios.find((portfolio) => portfolio.technician?.id === state.selectedPortfolioTechId)
   els.screen.innerHTML = `
     <section class="portfolio-page-web">
-      <button class="ghost back-btn" data-view-target="home" type="button">← ${t('home')}</button>
+      <button class="ghost back-btn" ${selected ? 'data-portfolio-back' : 'data-view-target="home"'} type="button">← ${selected ? t('technicianPortfolio') : t('home')}</button>
       <div class="section-row">
         <div>
           <p class="eyebrow">Lucky Luxe</p>
-          <h1>${t('technicianPortfolio')}</h1>
-          <span class="subtle">${t('portfolioIntro')}</span>
+          <h1>${selected ? selected.technician?.name : t('technicianPortfolio')}</h1>
+          <span class="subtle">${selected ? selected.technician?.title : t('portfolioIntro')}</span>
         </div>
       </div>
-      ${state.portfolios.length ? state.portfolios.map((portfolio) => `
+      ${selected ? `
+        <div class="technician-work-grid">
+          ${(selected.images || []).map((image, index) => `
+            <a href="${image}" target="_blank" rel="noreferrer">
+              <img src="${image}" alt="${selected.technician?.name || 'Lucky Luxe'} ${index + 1}">
+            </a>
+          `).join('')}
+        </div>
+      ` : portfolios.map((portfolio) => `
         <section class="technician-portfolio-section card">
           <div class="section-row compact-row">
             <div>
               <h2>${portfolio.technician?.name || 'Lucky Luxe'}</h2>
               <p>${portfolio.technician?.title || (state.lang === 'zh' ? '美甲 / 美睫技师' : 'Nail / Lash Artist')}</p>
             </div>
-            <span class="subtle">${portfolio.images?.length || 0} ${t('finalPhotos')}</span>
+            <button class="ghost slim" data-portfolio-tech="${portfolio.technician?.id || ''}" type="button">${t('viewWork')}</button>
           </div>
-          <div class="technician-work-grid">
-            ${(portfolio.images || []).map((image, index) => `
-              <a href="${image}" target="_blank" rel="noreferrer">
+          <div class="portfolio-preview-grid">
+            ${(portfolio.images || []).slice(0, 4).map((image, index) => `
+              <button class="portfolio-preview-card" data-portfolio-tech="${portfolio.technician?.id || ''}" type="button">
                 <img src="${image}" alt="${portfolio.technician?.name || 'Lucky Luxe'} ${index + 1}">
-              </a>
+              </button>
             `).join('')}
           </div>
         </section>
-      `).join('') : `<div class="empty-state tall"><strong>${t('noPortfolio')}</strong></div>`}
+      `).join('')}
     </section>
   `
 }
@@ -1351,6 +1354,18 @@ function renderPlaceholderWeb(title, text) {
 }
 
 async function handleScreenClick(event) {
+  if (event.target.closest('[data-portfolio-back]')) {
+    state.selectedPortfolioTechId = ''
+    renderPortfolio()
+    return
+  }
+  const portfolioTech = event.target.closest('[data-portfolio-tech]')
+  if (portfolioTech) {
+    state.selectedPortfolioTechId = portfolioTech.dataset.portfolioTech
+    state.view = 'portfolio'
+    renderPortfolio()
+    return
+  }
   const orderFilter = event.target.closest('[data-order-filter]')
   if (orderFilter) {
     if (!state.user) {
