@@ -4,7 +4,7 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Lucky Luxe Admin</title>
-    <link rel="stylesheet" href="/web/styles.css?v=20260610-member-code-fix6">
+    <link rel="stylesheet" href="/web/styles.css?v=20260612-admin-dashboard-fix7">
   </head>
   <body>
     <main class="shell admin-shell">
@@ -51,7 +51,7 @@
       <section class="hidden admin-app" id="adminLayout">
         <aside class="admin-sidebar" id="adminSidebar" aria-label="Admin navigation">
           <button class="sidebar-link active" data-admin-page="dashboard" id="sidebarDashboard" type="button">后台首页</button>
-          <button class="sidebar-link" data-admin-page="bookings" id="sidebarBookings" type="button">预约管理</button>
+          <button class="sidebar-link" data-admin-page="bookings" id="sidebarBookings" type="button">订单管理</button>
           <button class="sidebar-link" data-admin-page="schedule" id="sidebarSchedule" type="button">排班管理</button>
           <button class="sidebar-link" data-admin-page="services" id="sidebarServices" type="button">服务管理</button>
           <button class="sidebar-link" data-admin-page="customers" id="sidebarCustomers" type="button">客户档案</button>
@@ -82,8 +82,8 @@
           <section class="admin-page hidden" id="bookingsPage">
             <button class="ghost back-btn" data-admin-page="dashboard" type="button">← Dashboard</button>
             <div class="section-row">
-              <h1 id="bookingsTitle">Bookings</h1>
-              <span class="subtle" id="bookingsSubtitle">Live backend data</span>
+              <h1 id="bookingsTitle">订单管理</h1>
+              <span class="subtle" id="bookingsSubtitle">全部订单数据，状态变化不会隐藏订单</span>
             </div>
             <div class="admin-tabs">
               <button class="admin-tab active" id="todayTab" data-admin-view="today" type="button">Today</button>
@@ -202,6 +202,6 @@
     </main>
 
     <div class="toast" id="toast"></div>
-    <script src="/web/admin.js?v=20260610-member-code-fix6"></script>
+    <script src="/web/admin.js?v=20260612-admin-dashboard-fix7"></script>
   </body>
 </html>

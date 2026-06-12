@@ -86,6 +86,10 @@ create table if not exists bookings (
   addons_json jsonb not null default '[]'::jsonb,
   reference_images_json jsonb not null default '[]'::jsonb,
   work_images_json jsonb not null default '[]'::jsonb,
+  approved_work_images_json jsonb not null default '[]'::jsonb,
+  gallery_status text not null default 'draft',
+  gallery_locked_at timestamptz,
+  source_channel text,
   notes text,
   service_price_cents integer not null check (service_price_cents >= 0),
   deposit_cents integer not null check (deposit_cents >= 0),
@@ -132,6 +136,13 @@ create index if not exists idx_bookings_store_start on bookings(store_id, appoin
 create index if not exists idx_bookings_technician_start on bookings(technician_id, appointment_start);
 create index if not exists idx_booking_slots_booking_id on booking_slots(booking_id);
 create index if not exists idx_payments_booking_id on payments(booking_id);
+
+alter table bookings add column if not exists reference_images_json jsonb not null default '[]'::jsonb;
+alter table bookings add column if not exists work_images_json jsonb not null default '[]'::jsonb;
+alter table bookings add column if not exists approved_work_images_json jsonb not null default '[]'::jsonb;
+alter table bookings add column if not exists gallery_status text not null default 'draft';
+alter table bookings add column if not exists gallery_locked_at timestamptz;
+alter table bookings add column if not exists source_channel text;
 
 insert into stores (id, name, address, phone, timezone, currency, is_active)
 values ('store-ontario-01', 'Lucky Luxe Ontario', 'Address TBD', 'Phone TBD', 'America/Toronto', 'CAD', true)

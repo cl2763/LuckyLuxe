@@ -124,6 +124,7 @@ function setupDatabase() {
       approved_work_images_json TEXT NOT NULL DEFAULT '[]',
       gallery_status TEXT NOT NULL DEFAULT 'draft',
       gallery_locked_at TEXT,
+      source_channel TEXT,
       notes TEXT,
       service_price_cents INTEGER NOT NULL,
       deposit_cents INTEGER NOT NULL,
@@ -363,6 +364,7 @@ function serializeBooking(row, lang = 'zh') {
     approvedWorkImages: parseJson(row.approved_work_images_json),
     galleryStatus: row.gallery_status || 'draft',
     galleryLockedAt: row.gallery_locked_at,
+    sourceChannel: row.source_channel || null,
     notes: row.notes,
     servicePrice: cents(row.service_price_cents),
     servicePriceCents: row.service_price_cents,
@@ -519,6 +521,7 @@ function validateBookingInput(body) {
     time: body.time,
     addOns: Array.isArray(body.addOns) ? body.addOns : [],
     referenceImages: normalizeReferenceImages(body.referenceImages),
+    sourceChannel: body.sourceChannel || body.source || body.channel || null,
     notes: body.notes || null
   }
 }
@@ -605,9 +608,9 @@ function createBooking(body) {
   try {
     db.prepare(`
       INSERT INTO bookings
-      (id, public_code, user_id, store_id, technician_id, service_id, status, appointment_start, appointment_end, addons_json, reference_images_json, notes, service_price_cents, deposit_cents, final_due_cents, total_duration_min, payment_expires_at, created_at, updated_at)
-      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-    `).run(bookingId, publicCode(), input.userId, input.storeId, input.technicianId, input.serviceId, 'PENDING_PAYMENT', iso(start), iso(end), JSON.stringify(input.addOns), JSON.stringify(input.referenceImages), input.notes, servicePriceCents, depositCents, servicePriceCents - depositCents, durationMin, iso(addMinutes(new Date(), HOLD_MINUTES)), now, now)
+      (id, public_code, user_id, store_id, technician_id, service_id, status, appointment_start, appointment_end, addons_json, reference_images_json, source_channel, notes, service_price_cents, deposit_cents, final_due_cents, total_duration_min, payment_expires_at, created_at, updated_at)
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+    `).run(bookingId, publicCode(), input.userId, input.storeId, input.technicianId, input.serviceId, 'PENDING_PAYMENT', iso(start), iso(end), JSON.stringify(input.addOns), JSON.stringify(input.referenceImages), input.sourceChannel, input.notes, servicePriceCents, depositCents, servicePriceCents - depositCents, durationMin, iso(addMinutes(new Date(), HOLD_MINUTES)), now, now)
 
     const slotStmt = db.prepare('INSERT INTO booking_slots (id, booking_id, technician_id, starts_at) VALUES (?, ?, ?, ?)')
     for (const slot of slots) slotStmt.run(randomId('slot'), bookingId, input.technicianId, iso(slot))
@@ -956,6 +959,11 @@ try {
 }
 try {
   db.exec("ALTER TABLE bookings ADD COLUMN gallery_locked_at TEXT")
+} catch (error) {
+  if (!String(error.message || '').includes('duplicate column')) throw error
+}
+try {
+  db.exec('ALTER TABLE bookings ADD COLUMN source_channel TEXT')
 } catch (error) {
   if (!String(error.message || '').includes('duplicate column')) throw error
 }

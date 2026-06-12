@@ -267,6 +267,7 @@ async function serializeBooking(row, lang = 'zh') {
     approvedWorkImages: parseJson(row.approved_work_images_json),
     galleryStatus: row.gallery_status || 'draft',
     galleryLockedAt: row.gallery_locked_at ? iso(row.gallery_locked_at) : null,
+    sourceChannel: row.source_channel || null,
     notes: row.notes,
     servicePrice: cents(row.service_price_cents),
     servicePriceCents: row.service_price_cents,
@@ -560,6 +561,7 @@ function validateBookingInput(body) {
     time: body.time,
     addOns: Array.isArray(body.addOns) ? body.addOns : [],
     referenceImages: normalizeReferenceImages(body.referenceImages),
+    sourceChannel: body.sourceChannel || body.source || body.channel || null,
     notes: body.notes || null
   }
 }
@@ -670,9 +672,9 @@ async function createBooking(body, customer = null) {
 
     await client.query(`
       INSERT INTO bookings
-      (id, public_code, user_id, store_id, technician_id, service_id, status, appointment_start, appointment_end, addons_json, reference_images_json, notes, service_price_cents, deposit_cents, final_due_cents, total_duration_min, payment_expires_at)
-      VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10::jsonb, $11::jsonb, $12, $13, $14, $15, $16, now() + ($17::int * interval '1 minute'))
-    `, [bookingId, publicCode(), input.userId, input.storeId, input.technicianId, input.serviceId, 'PENDING_PAYMENT', iso(start), iso(end), JSON.stringify(input.addOns), JSON.stringify(input.referenceImages), input.notes, servicePriceCents, depositCents, servicePriceCents - depositCents, durationMin, HOLD_MINUTES])
+      (id, public_code, user_id, store_id, technician_id, service_id, status, appointment_start, appointment_end, addons_json, reference_images_json, source_channel, notes, service_price_cents, deposit_cents, final_due_cents, total_duration_min, payment_expires_at)
+      VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10::jsonb, $11::jsonb, $12, $13, $14, $15, $16, $17, now() + ($18::int * interval '1 minute'))
+    `, [bookingId, publicCode(), input.userId, input.storeId, input.technicianId, input.serviceId, 'PENDING_PAYMENT', iso(start), iso(end), JSON.stringify(input.addOns), JSON.stringify(input.referenceImages), input.sourceChannel, input.notes, servicePriceCents, depositCents, servicePriceCents - depositCents, durationMin, HOLD_MINUTES])
 
     for (const slot of slots) {
       await client.query('INSERT INTO booking_slots (id, booking_id, technician_id, starts_at) VALUES ($1, $2, $3, $4)', [randomId('slot'), bookingId, input.technicianId, iso(slot)])
@@ -1164,6 +1166,7 @@ await pool.query("ALTER TABLE bookings ADD COLUMN IF NOT EXISTS work_images_json
 await pool.query("ALTER TABLE bookings ADD COLUMN IF NOT EXISTS approved_work_images_json jsonb NOT NULL DEFAULT '[]'::jsonb")
 await pool.query("ALTER TABLE bookings ADD COLUMN IF NOT EXISTS gallery_status text NOT NULL DEFAULT 'draft'")
 await pool.query("ALTER TABLE bookings ADD COLUMN IF NOT EXISTS gallery_locked_at timestamptz")
+await pool.query('ALTER TABLE bookings ADD COLUMN IF NOT EXISTS source_channel text')
 
 createServer((req, res) => {
   route(req, res).catch((error) => {

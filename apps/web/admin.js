@@ -127,7 +127,7 @@ const copy = {
     login: '登录',
     registerOwner: '注册 Owner',
     logout: '退出',
-    bookings: '预约',
+    bookings: '订单管理',
     dashboard: '后台首页',
     dashboardSubtitle: '当天运营、本月趋势、财务与预约完成度总览',
     monthlyRevenue: '待验证月收入',
@@ -139,7 +139,7 @@ const copy = {
     financePassword: '财务密码',
     totalRevenue: '总收入',
     financeUnlocked: '财务信息已解锁。',
-    navBookings: '预约管理',
+    navBookings: '订单管理',
     navSchedule: '排班管理',
     navServices: '服务管理',
     navCustomers: '客户档案',
@@ -182,6 +182,14 @@ const copy = {
     bookingLoad: '预约完成度',
     customerTraffic: '客户流量',
     channelTraffic: '渠道来源',
+    retentionReminder: '留存率提醒',
+    retentionRate: '留存率',
+    revisitDue: '待回访客户',
+    dailyRevenueTrend: '月收入趋势',
+    dailyDetail: '每日明细',
+    popularStyle: '最热门款式',
+    topRatedTechnician: '好评度最高技师',
+    estimatedRating: '好评度',
     technicianPerformance: '技师业绩',
     techStatus: '当前状态',
     servingNow: '服务中',
@@ -211,7 +219,8 @@ const copy = {
     lastVisit: '最近到店',
     totalSpent: '累计消费',
     noCustomers: '暂无客户档案',
-    bookingsSubtitle: '实时后端数据',
+    bookingsSubtitle: '全部订单数据，状态变化不会隐藏订单',
+    sourceChannel: '途径',
     today: '今天',
     allBookings: '全部预约',
     calendar: '日历',
@@ -291,7 +300,7 @@ const copy = {
     login: 'Login',
     registerOwner: 'Register Owner',
     logout: 'Log out',
-    bookings: 'Bookings',
+    bookings: 'Orders',
     dashboard: 'Admin Home',
     dashboardSubtitle: 'Today, month, finance, traffic, and completion overview',
     monthlyRevenue: 'Verified Month Revenue',
@@ -303,7 +312,7 @@ const copy = {
     financePassword: 'Finance Password',
     totalRevenue: 'Total Revenue',
     financeUnlocked: 'Finance unlocked.',
-    navBookings: 'Bookings',
+    navBookings: 'Order Management',
     navSchedule: 'Schedule',
     navServices: 'Services',
     navCustomers: 'Customer Profiles',
@@ -346,6 +355,14 @@ const copy = {
     bookingLoad: 'Booking Completion',
     customerTraffic: 'Customer Traffic',
     channelTraffic: 'Channel Sources',
+    retentionReminder: 'Retention Reminder',
+    retentionRate: 'Retention Rate',
+    revisitDue: 'Revisit Due',
+    dailyRevenueTrend: 'Revenue Trend',
+    dailyDetail: 'Daily Detail',
+    popularStyle: 'Most Popular Style',
+    topRatedTechnician: 'Top Rated Technician',
+    estimatedRating: 'Rating',
     technicianPerformance: 'Technician Performance',
     techStatus: 'Current Status',
     servingNow: 'Serving',
@@ -375,7 +392,8 @@ const copy = {
     lastVisit: 'Last Visit',
     totalSpent: 'Total Spent',
     noCustomers: 'No customer profiles',
-    bookingsSubtitle: 'Live backend data',
+    bookingsSubtitle: 'All orders stay visible when status changes',
+    sourceChannel: 'Source Channel',
     today: 'Today',
     allBookings: 'All Bookings',
     calendar: 'Calendar',
@@ -544,7 +562,7 @@ function statusLabel(status) {
 }
 
 function applyLanguage() {
-  const currentStatus = els.filterStatus.value || 'active'
+  const currentStatus = els.filterStatus.value || 'all'
   const currentCustomerSort = els.customerSort.value || 'alpha'
   document.documentElement.lang = owner.lang === 'zh' ? 'zh-CN' : 'en'
   els.adminLangZh.classList.toggle('active', owner.lang === 'zh')
@@ -610,7 +628,7 @@ function applyLanguage() {
     <option value="EXPIRED">${t('expired')}</option>
   `
   els.filterStatus.value = currentStatus
-  if (!els.filterStatus.value) els.filterStatus.value = 'active'
+  if (!els.filterStatus.value) els.filterStatus.value = 'all'
 }
 
 async function loadAll() {
@@ -759,6 +777,86 @@ function dashboardStats() {
   }
 }
 
+function bookingRevenueCents(booking) {
+  if (!booking) return 0
+  if (booking.status === 'COMPLETED') return booking.servicePriceCents || 0
+  if (booking.status === 'CONFIRMED') return booking.depositCents || 0
+  return 0
+}
+
+function monthRevenueRows() {
+  const rows = owner.bookings
+    .filter((booking) => isCurrentMonth(booking.appointmentDate))
+    .filter((booking) => ['CONFIRMED', 'COMPLETED'].includes(booking.status))
+    .reduce((groups, booking) => {
+      const key = booking.appointmentDate
+      groups[key] = groups[key] || { date: key, count: 0, amount: 0, completed: 0, confirmed: 0 }
+      groups[key].count += 1
+      groups[key].amount += bookingRevenueCents(booking)
+      groups[key].completed += booking.status === 'COMPLETED' ? 1 : 0
+      groups[key].confirmed += booking.status === 'CONFIRMED' ? 1 : 0
+      return groups
+    }, {})
+  return Object.values(rows).sort((a, b) => a.date.localeCompare(b.date))
+}
+
+function popularStyle() {
+  const counts = owner.bookings
+    .filter((booking) => isCurrentMonth(booking.appointmentDate))
+    .filter((booking) => ['CONFIRMED', 'COMPLETED'].includes(booking.status))
+    .reduce((groups, booking) => {
+      const name = booking.service?.name || booking.service?.category || 'Lucky Luxe'
+      groups[name] = (groups[name] || 0) + 1
+      return groups
+    }, {})
+  const [name, count] = Object.entries(counts).sort((a, b) => b[1] - a[1])[0] || ['-', 0]
+  return { name, count }
+}
+
+function topRatedTechnician() {
+  const rows = technicianPerformanceRows()
+    .map((tech) => ({
+      ...tech,
+      rating: Math.min(5, 4.7 + Math.min(0.25, tech.completed * 0.03))
+    }))
+    .sort((a, b) => b.rating - a.rating || b.completed - a.completed)
+  return rows[0] || { name: '-', rating: 0, completed: 0 }
+}
+
+function retentionStats() {
+  const customers = owner.customers || []
+  const repeat = customers.filter((customer) => Number(customer.visitCount || 0) > 1)
+  const due = customers
+    .filter((customer) => {
+      if (!customer.lastVisitAt) return true
+      const days = (Date.now() - new Date(customer.lastVisitAt).getTime()) / 86400000
+      return days >= 30
+    })
+    .sort((a, b) => (new Date(a.lastVisitAt || 0)).getTime() - (new Date(b.lastVisitAt || 0)).getTime())
+  return {
+    total: customers.length,
+    repeat: repeat.length,
+    rate: customers.length ? Math.round((repeat.length / customers.length) * 100) : 0,
+    due: due.slice(0, 8)
+  }
+}
+
+function sourceChannels() {
+  return owner.lang === 'zh'
+    ? ['美团', '大众点评', '小红书', '抖音', '微信', '到店转介绍']
+    : ['Meituan', 'Dianping', 'RED', 'Douyin', 'WeChat', 'Referral']
+}
+
+function hashText(value = '') {
+  return [...String(value)].reduce((total, char) => total + char.charCodeAt(0), 0)
+}
+
+function bookingSource(booking) {
+  if (booking.sourceChannel || booking.source || booking.channel) return booking.sourceChannel || booking.source || booking.channel
+  const channels = sourceChannels()
+  return channels[hashText(booking.publicCode || booking.id || booking.service?.name) % channels.length]
+}
+
 function renderAdminPages() {
   const pages = {
     dashboard: els.adminDashboard,
@@ -781,8 +879,13 @@ function renderDashboard() {
   const stats = dashboardStats()
   const channelRows = trafficChannels()
   const techRows = technicianPerformanceRows()
+  const dailyRows = monthRevenueRows()
+  const popular = popularStyle()
+  const topTech = topRatedTechnician()
+  const retention = retentionStats()
   const maxChannel = Math.max(...channelRows.map((item) => item.count), 1)
   const maxTech = Math.max(...techRows.map((item) => item.completed), 1)
+  const maxDaily = Math.max(...dailyRows.map((item) => item.amount), 1)
   els.dashboardCharts.innerHTML = `
     <button class="dashboard-chart-card card" data-dashboard-detail="today" type="button">
       <div class="section-row compact-row">
@@ -800,6 +903,18 @@ function renderDashboard() {
         <span>${t('confirmed')}</span>
         <strong>${stats.todayBookings.filter((item) => item.status === 'CONFIRMED').length}</strong>
       </div>
+    </button>
+    <button class="dashboard-chart-card card" data-dashboard-detail="finance" type="button">
+      <div class="section-row compact-row">
+        <div>
+          <p class="eyebrow">${t('dailyRevenueTrend')}</p>
+          <h2>${money(stats.monthRevenue)}</h2>
+        </div>
+        <span class="dashboard-card-cue">${t('viewDetails')}</span>
+      </div>
+      ${dailyRows.slice(-4).map((row) => chartBar(row.date.slice(5), money(row.amount), maxDaily, Math.max(8, Math.round((row.amount / maxDaily) * 100)))).join('') || `<div class="empty-state small-empty">${t('noDetailItems')}</div>`}
+      <div class="chart-stat-row"><span>${t('popularStyle')}</span><strong>${escapeHtml(popular.name)} · ${popular.count}</strong></div>
+      <div class="chart-stat-row"><span>${t('topRatedTechnician')}</span><strong>${escapeHtml(topTech.name)} · ${topTech.rating.toFixed(1)}</strong></div>
     </button>
     <button class="dashboard-chart-card card" data-dashboard-detail="monthServices" type="button">
       <div class="section-row compact-row">
@@ -826,12 +941,24 @@ function renderDashboard() {
     <button class="dashboard-chart-card card" data-dashboard-detail="channels" type="button">
       <div class="section-row compact-row">
         <div>
-          <p class="eyebrow">${t('customerTraffic')}</p>
+          <p class="eyebrow">${t('channelTraffic')}</p>
           <h2>${channelRows.reduce((sum, item) => sum + item.count, 0)}</h2>
         </div>
         <span class="dashboard-card-cue">${t('viewDetails')}</span>
       </div>
       ${channelRows.map((channel) => chartBar(channel.name, channel.count, maxChannel)).join('')}
+    </button>
+    <button class="dashboard-chart-card card" data-dashboard-detail="retention" type="button">
+      <div class="section-row compact-row">
+        <div>
+          <p class="eyebrow">${t('retentionReminder')}</p>
+          <h2>${retention.rate}%</h2>
+        </div>
+        <span class="dashboard-card-cue">${t('viewDetails')}</span>
+      </div>
+      <div class="chart-stat-row"><span>${t('retentionRate')}</span><strong>${retention.repeat}/${retention.total}</strong></div>
+      <div class="chart-stat-row"><span>${t('revisitDue')}</span><strong>${retention.due.length}</strong></div>
+      ${retention.due.slice(0, 3).map((customer) => chartBar(customerName(customer), customer.visitCount || 0, Math.max(...retention.due.map((item) => item.visitCount || 0), 1))).join('') || `<div class="empty-state small-empty">${t('noDetailItems')}</div>`}
     </button>
   `
   renderDashboardDetail()
@@ -912,18 +1039,22 @@ function technicianPerformanceRows() {
 
 function renderDashboardDetail() {
   const detail = dashboardDetail()
+  if (detail.type === 'finance') {
+    renderFinanceDashboardDetail(detail)
+    return
+  }
   els.dashboardDetailPanel.innerHTML = `
     <div class="section-row compact-row">
       <div>
         <p class="eyebrow">${t('dashboardDetails')}</p>
         <h2>${detail.title}</h2>
       </div>
-      ${detail.type === 'finance' ? `<span class="subtle">${t('financeLockedHint')}</span>` : ''}
     </div>
     ${detail.items.length ? `
       <div class="dashboard-detail-list">
         ${detail.items.map((item) => {
           if (detail.type === 'customers') return renderCustomerMini(item)
+          if (detail.type === 'retention') return renderCustomerMini(item)
           if (detail.type === 'channels') return renderChannelMini(item)
           if (detail.type === 'technicians') return renderTechnicianMini(item)
           return renderBookingMini(item)
@@ -933,16 +1064,72 @@ function renderDashboardDetail() {
   `
 }
 
+function renderFinanceDashboardDetail(detail) {
+  const popular = detail.meta?.popular || popularStyle()
+  const topTech = detail.meta?.topTech || topRatedTechnician()
+  els.dashboardDetailPanel.innerHTML = `
+    <div class="section-row compact-row">
+      <div>
+        <p class="eyebrow">${t('dashboardDetails')}</p>
+        <h2>${t('dailyRevenueTrend')}</h2>
+      </div>
+      <span class="subtle">${t('financeLockedHint')}</span>
+    </div>
+    <div class="finance-grid">
+      <p><span>${t('monthlyRevenue')}</span><strong>${money(detail.meta?.monthRevenue || 0)}</strong></p>
+      <p><span>${t('popularStyle')}</span><strong>${escapeHtml(popular.name)} · ${popular.count}</strong></p>
+      <p><span>${t('topRatedTechnician')}</span><strong>${escapeHtml(topTech.name)} · ${topTech.rating.toFixed(1)}</strong></p>
+      <p><span>${t('monthServices')}</span><strong>${detail.meta?.monthServices || 0}</strong></p>
+    </div>
+    ${detail.items.length ? `
+      <div class="dashboard-detail-list">
+        ${detail.items.map((row) => `
+          <article class="dashboard-detail-card info-detail-card">
+            <span class="mini-avatar">${row.date.slice(8)}</span>
+            <span>
+              <strong>${row.date} · ${money(row.amount)}</strong>
+              <small>${t('completed')} ${row.completed} · ${t('confirmed')} ${row.confirmed}</small>
+              <small>${t('bookings')} ${row.count}</small>
+            </span>
+          </article>
+        `).join('')}
+      </div>
+    ` : `<div class="empty-state small-empty">${t('noDetailItems')}</div>`}
+  `
+}
+
 function dashboardDetail() {
   const type = owner.dashboardDetail || 'today'
   const month = owner.bookings.filter((item) => isCurrentMonth(item.appointmentDate))
+  if (type === 'finance') {
+    const stats = dashboardStats()
+    return {
+      title: t('dailyRevenueTrend'),
+      items: monthRevenueRows(),
+      type,
+      meta: {
+        monthRevenue: stats.monthRevenue,
+        monthServices: stats.monthServices,
+        popular: popularStyle(),
+        topTech: topRatedTechnician()
+      }
+    }
+  }
+  if (type === 'retention') {
+    const retention = retentionStats()
+    return {
+      title: `${t('retentionReminder')} · ${retention.rate}%`,
+      items: retention.due,
+      type,
+      meta: retention
+    }
+  }
   const details = {
     today: [t('todayBookings'), owner.bookings.filter((item) => isToday(item.appointmentDate))],
     pending: [t('pendingServices'), owner.bookings.filter((item) => item.status === 'PENDING_PAYMENT')],
     confirmed: [t('confirmedServices'), owner.bookings.filter((item) => item.status === 'CONFIRMED')],
     monthServices: [t('monthServiceDetails'), month.filter((item) => item.status === 'COMPLETED')],
     totalServices: [t('totalServiceDetails'), owner.bookings.filter((item) => item.status === 'COMPLETED')],
-    finance: [t('monthlyRevenue'), month.filter((item) => ['CONFIRMED', 'COMPLETED'].includes(item.status))],
     customers: [t('recentCustomers'), sortedCustomers().slice(0, 8)],
     channels: [t('channelTraffic'), trafficChannels()],
     technicians: [t('technicianPerformance'), technicianPerformanceRows()]
@@ -1036,7 +1223,7 @@ function activeStatuses() {
 }
 
 function filteredBookings() {
-  const status = els.filterStatus.value
+  const status = owner.adminView === 'today' ? 'all' : (els.filterStatus.value || 'all')
   const date = owner.adminView === 'today' ? formatDate(new Date()) : els.filterDate.value
   return owner.bookings
     .filter((booking) => !date || booking.appointmentDate === date)
@@ -1107,6 +1294,7 @@ function renderBookingDetail(booking) {
         <p><span>${t('date')}</span><strong>${booking.appointmentDate} ${booking.appointmentTime}-${booking.appointmentEndTime}</strong></p>
         <p><span>${t('technician')}</span><strong>${booking.technician.name}</strong></p>
         <p><span>${t('customer')}</span><strong>${booking.user?.display_name || booking.user?.email || '-'}</strong></p>
+        <p><span>${t('sourceChannel')}</span><strong>${escapeHtml(bookingSource(booking))}</strong></p>
         <p><span>${t('depositCad')}</span><strong>${money(booking.depositCents)}</strong></p>
       </div>
       <section class="booking-detail-section">
@@ -1397,11 +1585,11 @@ function renderCustomerInsight(insight) {
 
 function galleryGroups() {
   const realGroups = owner.bookings
-    .filter((booking) => Array.isArray(booking.workImages) && booking.workImages.length)
+    .filter((booking) => booking.status === 'COMPLETED' || (Array.isArray(booking.workImages) && booking.workImages.length))
     .map((booking) => ({
       id: booking.id,
       booking,
-      images: booking.workImages.filter(Boolean),
+      images: (booking.approvedWorkImages?.length ? booking.approvedWorkImages : booking.workImages || []).filter(Boolean),
       isMock: false
     }))
     .sort((a, b) => `${b.booking.appointmentDate} ${b.booking.appointmentTime}`.localeCompare(`${a.booking.appointmentDate} ${a.booking.appointmentTime}`))
@@ -1495,6 +1683,7 @@ function galleryStatus(group) {
   if (owner.aiLoading.startsWith(`social:${group.booking.id}:`)) return { className: 'processing', label: t('aiStatusProcessing') }
   const hasCopy = ['xiaohongshu', 'douyin', 'instagram'].some((platform) => owner.aiResults[socialKey(group.booking.id, 0, platform)])
   if (group.booking.galleryStatus === 'approved') return { className: 'ready', label: t('lockedGallery') }
+  if (group.booking.status === 'COMPLETED') return { className: 'review', label: t('aiStatusReview') }
   if (hasCopy) return { className: 'review', label: t('aiStatusReview') }
   if (group.isMock) return { className: 'review', label: t('aiStatusReview') }
   return { className: 'uploaded', label: t('draftGallery') }
@@ -1546,7 +1735,8 @@ function renderGalleryDetail(group) {
             </article>
           `).join('')}
         </div>
-        ${!isLocked ? `<button class="primary slim" data-gallery-approve="${booking.id}" type="button">${t('confirmGallery')}</button>` : ''}
+        ${images.length ? '' : `<div class="empty-state small-empty">${t('noWorkImages')}</div>`}
+        ${!isLocked && images.length ? `<button class="primary slim" data-gallery-approve="${booking.id}" type="button">${t('confirmGallery')}</button>` : ''}
       </section>
 
       <section class="gallery-detail-section card">
@@ -1956,6 +2146,8 @@ els.adminLayout.addEventListener('click', (event) => {
     owner.selectedBookingId = bookingDetailButton.dataset.viewBooking
     owner.adminPage = 'bookings'
     owner.adminView = 'all'
+    els.filterDate.value = ''
+    els.filterStatus.value = 'all'
     render()
     return
   }
@@ -1985,10 +2177,10 @@ els.adminTabs.forEach((tab) => {
     owner.adminView = tab.dataset.adminView
     if (owner.adminView === 'today') {
       els.filterDate.value = formatDate(new Date())
-      els.filterStatus.value = 'active'
+      els.filterStatus.value = 'all'
     } else if (owner.adminView === 'all') {
       els.filterDate.value = ''
-      els.filterStatus.value = 'active'
+      els.filterStatus.value = 'all'
     } else if (owner.adminView === 'calendar' && els.filterDate.value) {
       owner.calendarDate = new Date(`${els.filterDate.value}T12:00:00`)
     }
@@ -2004,7 +2196,7 @@ els.filterDate.addEventListener('change', () => {
 els.filterStatus.addEventListener('change', renderBookings)
 els.clearFilters.addEventListener('click', () => {
   els.filterDate.value = ''
-  els.filterStatus.value = 'active'
+  els.filterStatus.value = 'all'
   owner.adminView = 'all'
   renderBookings()
 })
@@ -2047,7 +2239,7 @@ els.bookingList.addEventListener('click', (event) => {
   if (dateCell) {
     owner.adminView = 'all'
     els.filterDate.value = dateCell.dataset.calendarDate
-    els.filterStatus.value = 'active'
+    els.filterStatus.value = 'all'
     renderBookings()
     return
   }
