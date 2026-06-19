@@ -7,6 +7,7 @@ const owner = {
   services: [],
   technicians: [],
   customers: [],
+  selectedCustomerId: '',
   adminView: 'today',
   adminPage: 'dashboard',
   calendarDate: new Date(),
@@ -221,6 +222,12 @@ const copy = {
     customerSortRecent: '最近到店',
     filter: '筛选',
     visits: '到店次数',
+    viewCustomerFile: '查看档案',
+    customerRecords: '到店记录',
+    backToCustomers: '返回客户列表',
+    noCustomerRecords: '暂无到店记录',
+    recordImages: '图片记录',
+    customerSince: '建档时间',
     lastVisit: '最近到店',
     totalSpent: '累计消费',
     noCustomers: '暂无客户档案',
@@ -263,6 +270,7 @@ const copy = {
     uploadImage: '上传图片',
     priceCad: '价格 CAD',
     depositCad: '定金 CAD',
+    depositLabel: '定金',
     durationMin: '时长分钟',
     sortOrder: '排序',
     noBookings: '没有找到预约',
@@ -400,6 +408,12 @@ const copy = {
     customerSortRecent: 'Recent Visit',
     filter: 'Filter',
     visits: 'Visits',
+    viewCustomerFile: 'Open Profile',
+    customerRecords: 'Visit Records',
+    backToCustomers: 'Back to Customers',
+    noCustomerRecords: 'No visit records yet',
+    recordImages: 'Image Records',
+    customerSince: 'Profile Since',
     lastVisit: 'Last Visit',
     totalSpent: 'Total Spent',
     noCustomers: 'No customer profiles',
@@ -442,6 +456,7 @@ const copy = {
     uploadImage: 'Upload Image',
     priceCad: 'Price CAD',
     depositCad: 'Deposit CAD',
+    depositLabel: 'Deposit',
     durationMin: 'Duration min',
     sortOrder: 'Sort order',
     noBookings: 'No bookings found',
@@ -1299,7 +1314,7 @@ function renderBookingCard(booking) {
         <h3>${booking.service.name}</h3>
         <p>${booking.appointmentDate} ${booking.appointmentTime}-${booking.appointmentEndTime}</p>
         <p>${booking.technician.name} · ${booking.store.name}</p>
-        <p>${t('depositCad')} ${money(booking.depositCents)} · ${t('finalDue')} ${money(booking.finalDueCents)} · ${booking.publicCode}</p>
+        <p>${t('depositLabel')} ${money(booking.depositCents)} · ${t('finalDue')} ${money(booking.finalDueCents)} · ${booking.publicCode}</p>
         ${needsAttention ? `<p class="attention-note">${t('needsAttention')}</p>` : ''}
       </div>
       <div class="booking-actions">
@@ -1591,6 +1606,10 @@ function dateOnly(value) {
 }
 
 function renderCustomers() {
+  if (owner.selectedCustomerId) {
+    renderCustomerDetail()
+    return
+  }
   const customers = sortedCustomers()
   if (!customers.length) {
     els.customerList.innerHTML = `<div class="empty-state"><strong>${t('noCustomers')}</strong></div>`
@@ -1603,7 +1622,10 @@ function renderCustomers() {
         <h3>${escapeHtml(customerName(customer))}</h3>
         <p>${escapeHtml(customer.email || '-')}</p>
         <p>${escapeHtml(customer.phone || '-')}</p>
-        <button class="ghost slim" data-ai-customer="${customer.id}" type="button">${owner.aiLoading === `customer:${customer.id}` ? t('aiProcessing') : t('aiCustomerInsight')}</button>
+        <div class="inline-actions compact-actions">
+          <button class="ghost slim" data-customer-detail="${customer.id}" type="button">${t('viewCustomerFile')}</button>
+          <button class="ghost slim" data-ai-customer="${customer.id}" type="button">${owner.aiLoading === `customer:${customer.id}` ? t('aiProcessing') : t('aiCustomerInsight')}</button>
+        </div>
       </div>
       <div class="customer-stats">
         <span>${t('visits')} <strong>${customer.visitCount || 0}</strong></span>
@@ -1613,6 +1635,70 @@ function renderCustomers() {
       ${owner.aiResults[`customer:${customer.id}`] ? renderCustomerInsight(owner.aiResults[`customer:${customer.id}`].data || owner.aiResults[`customer:${customer.id}`]) : ''}
     </article>
   `).join('')
+}
+
+function customerBookings(customerId) {
+  return owner.bookings
+    .filter((booking) => booking.user?.id === customerId)
+    .sort((a, b) => `${b.appointmentDate} ${b.appointmentTime}`.localeCompare(`${a.appointmentDate} ${a.appointmentTime}`))
+}
+
+function renderCustomerDetail() {
+  const customer = owner.customers.find((item) => item.id === owner.selectedCustomerId)
+  if (!customer) {
+    owner.selectedCustomerId = ''
+    renderCustomers()
+    return
+  }
+  const bookings = customerBookings(customer.id)
+  els.customerList.innerHTML = `
+    <section class="customer-detail-page">
+      <button class="ghost slim" data-customer-back type="button">← ${t('backToCustomers')}</button>
+      <article class="customer-detail-hero card">
+        <div class="customer-avatar large">${customerName(customer).slice(0, 1).toUpperCase()}</div>
+        <div>
+          <p class="eyebrow">${t('customers')}</p>
+          <h2>${escapeHtml(customerName(customer))}</h2>
+          <p>${escapeHtml(customer.email || '-')}</p>
+          <p>${escapeHtml(customer.phone || '-')}</p>
+        </div>
+        <div class="customer-stats">
+          <span>${t('visits')} <strong>${customer.visitCount || 0}</strong></span>
+          <span>${t('lastVisit')} <strong>${dateOnly(customer.lastVisitAt)}</strong></span>
+          <span>${t('totalSpent')} <strong>${money(customer.totalSpentCents || 0)}</strong></span>
+        </div>
+      </article>
+      <section class="customer-records card">
+        <div class="section-row compact-row">
+          <div>
+            <p class="eyebrow">${t('customerRecords')}</p>
+            <h2>${escapeHtml(customerName(customer))}</h2>
+          </div>
+          <button class="ghost slim" data-ai-customer="${customer.id}" type="button">${owner.aiLoading === `customer:${customer.id}` ? t('aiProcessing') : t('aiCustomerInsight')}</button>
+        </div>
+        ${owner.aiResults[`customer:${customer.id}`] ? renderCustomerInsight(owner.aiResults[`customer:${customer.id}`].data || owner.aiResults[`customer:${customer.id}`]) : ''}
+        ${bookings.length ? bookings.map(renderCustomerRecord).join('') : `<div class="empty-state small-empty">${t('noCustomerRecords')}</div>`}
+      </section>
+    </section>
+  `
+}
+
+function renderCustomerRecord(booking) {
+  const imageCount = (booking.referenceImages || []).length + (booking.workImages || []).length + (booking.approvedWorkImages || []).length
+  return `
+    <article class="customer-record-row">
+      <img src="${booking.service?.imageUrl || '/assets/images/store-cover.png'}" alt="${booking.service?.name || 'Lucky Luxe'}">
+      <div>
+        <span class="status ${booking.status}">${statusLabel(booking.status)}</span>
+        <h3>${escapeHtml(booking.service?.name || '-')}</h3>
+        <p>${booking.appointmentDate} ${booking.appointmentTime}-${booking.appointmentEndTime} · ${escapeHtml(booking.technician?.name || '-')}</p>
+        <p>${t('sourceChannel')} ${escapeHtml(bookingSource(booking))} · ${t('recordImages')} ${imageCount}</p>
+        <p>${t('depositLabel')} ${money(booking.depositCents)} · ${t('finalDue')} ${money(booking.finalDueCents)} · ${booking.publicCode}</p>
+      </div>
+      <button class="ghost slim" data-view-booking="${booking.id}" type="button">${t('details')}</button>
+    </article>
+    ${owner.selectedBookingId === booking.id ? renderBookingDetail(booking) : ''}
+  `
 }
 
 function renderCustomerInsight(insight) {
@@ -2294,6 +2380,36 @@ els.bookingList.addEventListener('change', (event) => {
   handleWorkImageFiles(event.target.dataset.workImageInput, event.target.files).catch((error) => toast(error.message))
 })
 els.customerList.addEventListener('click', (event) => {
+  const back = event.target.closest('[data-customer-back]')
+  if (back) {
+    owner.selectedCustomerId = ''
+    owner.selectedBookingId = ''
+    renderCustomers()
+    return
+  }
+  const customerDetail = event.target.closest('[data-customer-detail]')
+  if (customerDetail) {
+    owner.selectedCustomerId = customerDetail.dataset.customerDetail
+    owner.selectedBookingId = ''
+    renderCustomers()
+    return
+  }
+  const viewBooking = event.target.closest('[data-view-booking]')
+  if (viewBooking) {
+    owner.selectedBookingId = owner.selectedBookingId === viewBooking.dataset.viewBooking ? '' : viewBooking.dataset.viewBooking
+    renderCustomers()
+    return
+  }
+  if (event.target.closest('[data-close-booking-detail]')) {
+    owner.selectedBookingId = ''
+    renderCustomers()
+    return
+  }
+  const aiBooking = event.target.closest('[data-ai-booking]')
+  if (aiBooking) {
+    generateBookingSummary(aiBooking.dataset.aiBooking).catch((error) => toast(error.message))
+    return
+  }
   const aiCustomer = event.target.closest('[data-ai-customer]')
   if (!aiCustomer) return
   generateCustomerInsight(aiCustomer.dataset.aiCustomer).catch((error) => toast(error.message))

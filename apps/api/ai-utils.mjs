@@ -217,6 +217,107 @@ export async function createDailyBrief({ lang = 'zh', bookings = [], customers =
   })
 }
 
+export async function createCustomerServiceReply({ lang = 'zh', message = '', history = [], customer = null, bookings = [], services = [], stores = [] }) {
+  const schema = {
+    intent: 'booking|pricing|policy|order|store|portfolio|handoff|unknown',
+    answerZh: 'string',
+    answerEn: 'string',
+    handoffRequired: false,
+    handoffReasonZh: 'string',
+    handoffReasonEn: 'string',
+    suggestedActions: ['string'],
+    suggestedQuestionsZh: ['string'],
+    suggestedQuestionsEn: ['string']
+  }
+  const activeServices = services.slice(0, 20).map((service) => ({
+    id: service.id,
+    type: service.type,
+    name: service.name,
+    category: service.category,
+    priceLabelZh: service.priceLabelZh,
+    priceLabelEn: service.priceLabelEn,
+    quoteHintZh: service.quoteHintZh,
+    quoteHintEn: service.quoteHintEn,
+    depositCents: service.depositCents,
+    durationMin: service.durationMin,
+    requiresManualQuote: service.requiresManualQuote
+  }))
+  return aiJson({
+    system: [
+      'You are Lucky Luxe AI customer service for a nail and lash atelier in Ontario.',
+      'Answer in the user language. Be concise, warm, and operationally accurate.',
+      'Business rules: currency is CAD; every booking pays CAD $50 deposit online; balance is paid in store; default hours are Tue-Sun 10:00-19:00 and Monday closed; one booking contains one service only; nail designs have base prices and complex/reference-image designs require manual quote; lash services use fixed prices plus explicit add-ons; changes/cancellations more than 24h before appointment can refund deposit, within 24h changes are allowed but only half deposit refund applies.',
+      'Do not promise final nail pricing from an image. If the user asks for exact custom nail quote, mark handoffRequired true.',
+      'Do not process real payment or create bookings in this reply. Suggest the next app action instead.'
+    ].join('\\n'),
+    user: `Incoming message: ${clip(message, 1200)}\nRecent chat:\n${jsonBlock((history || []).slice(-8))}\nCustomer:\n${jsonBlock(customer || {})}\nRecent bookings:\n${jsonBlock((bookings || []).slice(0, 6))}\nServices:\n${jsonBlock(activeServices)}\nStores:\n${jsonBlock((stores || []).slice(0, 3))}`,
+    schema,
+    temperature: 0.55,
+    fallback: () => {
+      const text = String(message || '').toLowerCase()
+      const asksPrice = /价|钱|报价|price|quote|cost|how much/.test(text)
+      const asksBooking = /预约|book|appointment|slot|time/.test(text)
+      const asksPolicy = /取消|改期|退款|cancel|reschedule|refund/.test(text)
+      const asksStore = /地址|电话|营业|时间|where|address|hour|phone/.test(text)
+      const asksOrder = /订单|order|booking|my appointment/.test(text)
+      const nailServices = activeServices.filter((service) => service.type === 'nail')
+      const lashServices = activeServices.filter((service) => service.type === 'lash')
+      const firstStore = stores[0] || {}
+      let answerZh = '我可以帮你查询服务、预约流程、定金规则、取消改期和作品集。你也可以直接告诉我想做美甲还是美睫。'
+      let answerEn = 'I can help with services, booking flow, deposit rules, cancellation/reschedule policy, and portfolio questions. You can tell me whether you want nails or lashes.'
+      let intent = 'unknown'
+      let handoffRequired = false
+      let handoffReasonZh = ''
+      let handoffReasonEn = ''
+      const suggestedActions = []
+      if (asksPrice) {
+        intent = 'pricing'
+        handoffRequired = /图|款式|复杂|手绘|延长|reference|design|custom/.test(text)
+        handoffReasonZh = handoffRequired ? '美甲复杂款式需要根据参考图、材料和加项人工确认最终报价。' : ''
+        handoffReasonEn = handoffRequired ? 'Custom nail designs need staff confirmation based on reference, materials, and add-ons.' : ''
+        answerZh = `美甲显示基础价，复杂款式、手绘、延长、卸甲或特殊材料需要联系客服确认最终报价。美睫是固定价格，选择加项后就是最终报价。所有预约都需要线上支付 CAD $50 定金。`
+        answerEn = 'Nail services show base prices; complex designs, hand painting, extensions, removal, or special materials need a staff quote. Lash services use fixed pricing, and selected add-ons make the final total. Every booking requires a CAD $50 online deposit.'
+        suggestedActions.push('open_services')
+      } else if (asksBooking) {
+        intent = 'booking'
+        answerZh = '你可以先选择美甲或美睫服务，再选择日期、时间和技师。一个预约只能包含一个服务；如果同时做美甲和美睫，需要分开下两个订单。结算时需要线上支付 CAD $50 定金。'
+        answerEn = 'Choose a nail or lash service, then select date, time, and artist. One booking contains one service only; nails and lashes need separate bookings. Checkout requires a CAD $50 online deposit.'
+        suggestedActions.push('open_services')
+      } else if (asksPolicy) {
+        intent = 'policy'
+        answerZh = '预约开始 24 小时以前可以改期或取消，定金可退；24 小时以内可以改时间，但定金只退一半。'
+        answerEn = 'More than 24 hours before the appointment, you can reschedule or cancel with deposit refund. Within 24 hours, rescheduling is allowed, but only half of the deposit is refundable.'
+      } else if (asksStore) {
+        intent = 'store'
+        answerZh = `${firstStore.name || 'Lucky Luxe Ontario'} 默认营业时间为周二到周日 10:00-19:00，周一休息。地址和电话目前仍是 TBD 占位。`
+        answerEn = `${firstStore.name || 'Lucky Luxe Ontario'} default hours are Tue-Sun 10:00-19:00 and Monday closed. Address and phone are currently TBD placeholders.`
+      } else if (asksOrder) {
+        intent = 'order'
+        if (customer && bookings.length) {
+          const latest = bookings[0]
+          answerZh = `我看到你最近的预约是 ${latest.service?.name || '服务'}，时间 ${latest.appointmentDate || ''} ${latest.appointmentTime || ''}，状态是 ${latest.status || '-' }。`
+          answerEn = `Your latest booking is ${latest.service?.name || 'service'} on ${latest.appointmentDate || ''} ${latest.appointmentTime || ''}, status ${latest.status || '-'}.`
+        } else {
+          answerZh = '订单查询需要先登录账号。登录后我可以根据你的预约记录回答。'
+          answerEn = 'Order lookup requires sign-in. After login, I can answer based on your booking records.'
+          suggestedActions.push('login')
+        }
+      }
+      return {
+        intent,
+        answerZh,
+        answerEn,
+        handoffRequired,
+        handoffReasonZh,
+        handoffReasonEn,
+        suggestedActions,
+        suggestedQuestionsZh: ['美甲复杂款怎么报价？', '怎么预约？', '取消和改期规则是什么？'],
+        suggestedQuestionsEn: ['How are custom nail designs quoted?', 'How do I book?', 'What is the cancellation policy?']
+      }
+    }
+  })
+}
+
 export async function createSocialCopy({ lang = 'zh', image = '', booking = {}, platform = 'xiaohongshu', audience = 'customer', avoidCaptions = [], variantSeed = '' }) {
   const schema = {
     platform: 'string',

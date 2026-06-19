@@ -4,7 +4,7 @@ import { existsSync, readFileSync, statSync } from 'node:fs'
 import { dirname, extname, join, normalize } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import pg from 'pg'
-import { analyzeReferenceImage, createBookingSummary, createCustomerInsight, createDailyBrief, createSocialCopy } from './ai-utils.mjs'
+import { analyzeReferenceImage, createBookingSummary, createCustomerInsight, createCustomerServiceReply, createDailyBrief, createSocialCopy } from './ai-utils.mjs'
 
 process.env.TZ = process.env.APP_TIMEZONE || 'America/Toronto'
 
@@ -887,6 +887,29 @@ async function getAdminCustomers() {
   }))
 }
 
+async function buildCustomerServiceContext(req, lang = 'zh') {
+  const [serviceRows, storeRows] = await Promise.all([
+    query('SELECT * FROM services WHERE is_active = true ORDER BY type ASC, sort_order ASC'),
+    query('SELECT * FROM stores WHERE is_active = true ORDER BY name ASC')
+  ])
+  let customer = null
+  let bookings = []
+  try {
+    customer = await requireCustomer(req)
+    const bookingRows = await query('SELECT * FROM bookings WHERE user_id = $1 ORDER BY appointment_start DESC LIMIT 8', [customer.id])
+    bookings = await Promise.all(bookingRows.rows.map((booking) => serializeBooking(booking, lang)))
+  } catch {
+    customer = null
+    bookings = []
+  }
+  return {
+    customer,
+    bookings,
+    services: serviceRows.rows.map((service) => serializeService(service, lang)),
+    stores: storeRows.rows
+  }
+}
+
 async function getFinanceSummary(body) {
   const email = String(body.email || '').trim().toLowerCase()
   const password = String(body.password || '')
@@ -1054,6 +1077,17 @@ async function route(req, res) {
     const row = body.bookingId ? await query('SELECT * FROM bookings WHERE id = $1', [body.bookingId]) : { rows: [] }
     const booking = row.rows[0] ? await serializeBooking(row.rows[0], body.lang || 'zh') : body.booking
     return json(res, 200, { copy: await createSocialCopy({ lang: body.lang || 'zh', image: body.image || '', booking, platform: body.platform || 'xiaohongshu', audience: body.audience || 'customer', avoidCaptions: body.avoidCaptions || [], variantSeed: body.variantSeed || '' }) })
+  }
+  if (req.method === 'POST' && path === '/ai/customer-service') {
+    const body = await readBody(req)
+    const context = await buildCustomerServiceContext(req, body.lang || 'zh')
+    const reply = await createCustomerServiceReply({
+      lang: body.lang || 'zh',
+      message: body.message || '',
+      history: body.history || [],
+      ...context
+    })
+    return json(res, 200, { reply })
   }
   let adminSession = null
   if (path.startsWith('/admin/')) adminSession = await requireAdmin(req)

@@ -21,6 +21,40 @@
 - Admin should have a conversation history page showing solved conversations, transferred cases, customer intent, source channel, and booking conversion.
 - AI should never invent prices. It must read service pricing from the system and mark custom nail designs as manual quote required when uncertain.
 
+## Current Architecture Started
+
+- Shared AI core:
+  - `createCustomerServiceReply()` in `apps/api/ai-utils.mjs`.
+  - Uses the same provider switch as the other AI tools: mock mode by default, real OpenAI-compatible model when `AI_PROVIDER`, `AI_MODEL`, and `AI_API_KEY` are configured.
+  - Returns structured fields: intent, bilingual answer, handoff flag, handoff reason, suggested actions, and suggested follow-up questions.
+- Shared backend endpoint:
+  - `POST /ai/customer-service`.
+  - Public visitor context includes active services and stores.
+  - Logged-in customer context also includes the customer's recent bookings.
+  - The endpoint does not create bookings or charge payment directly. It only replies and suggests the next app action.
+- Web customer entry:
+  - Floating AI concierge widget in the customer web app.
+  - Supports quick prompts, free-text questions, local conversation memory, and handoff notice for manual quote cases.
+- Admin customer tracking:
+  - Customer profiles now open into a detail view.
+  - The detail view shows every booking record tied to that customer, including service, date/time, technician, source channel, image count, deposit/final due, status, and order detail expansion.
+
+## WeChat Customer Service Adapter Plan
+
+- Keep one AI brain:
+  - Web chat and WeChat chat should both call the same `/ai/customer-service` core.
+  - The WeChat layer should only translate WeChat messages into the internal AI request format and translate the AI reply back into WeChat messages.
+- WeChat Mini Program path:
+  - Use the Mini Program's customer service message capability after the AppID and required merchant/account setup are available.
+  - Map `openid`/unionid to Lucky Luxe user records before exposing personal order data.
+  - If the visitor is unknown, only answer public service, price-boundary, policy, and store questions.
+- Manual handoff:
+  - If `handoffRequired` is true, the WeChat adapter should mark the thread for owner/staff follow-up.
+  - Handoff triggers include exact custom nail quote, complaint/refund dispute, payment issue, unclear medical/safety question, or any request outside approved business rules.
+- Data privacy boundary:
+  - The AI can see only the minimum context needed for the answer.
+  - Staff/owner-only finance, other customers' records, and internal notes should never be sent to customer-facing AI.
+
 ## Future AI Workflow Ideas To Revisit
 
 - AI customer support in web and Mini Program.

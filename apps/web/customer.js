@@ -131,6 +131,16 @@ const copy = {
     confirmEmail: '请检查邮箱完成验证，然后再登录。',
     paymentRedirect: '正在跳转到 Stripe 测试支付...',
     sessionExpired: '登录已过期，请重新登录后继续支付。'
+    ,
+    aiAssistant: 'AI 客服',
+    aiAssistantIntro: '我可以回答预约、价格、定金、取消改期和订单相关问题。',
+    aiAssistantPlaceholder: '输入你的问题...',
+    aiSend: '发送',
+    aiHandoff: '建议转人工',
+    aiHandoffHint: '这个问题需要人工确认，我可以先帮你整理要问的信息。',
+    aiQuickPrice: '美甲复杂款怎么报价？',
+    aiQuickBooking: '怎么预约？',
+    aiQuickPolicy: '取消改期规则？'
   },
   en: {
     registerTitle: 'Create your Lucky Luxe account',
@@ -261,7 +271,16 @@ const copy = {
     needLogin: 'Please register or sign in to continue',
     confirmEmail: 'Please verify your email, then sign in.',
     paymentRedirect: 'Redirecting to Stripe test payment...',
-    sessionExpired: 'Your session expired. Please sign in again to continue payment.'
+    sessionExpired: 'Your session expired. Please sign in again to continue payment.',
+    aiAssistant: 'AI Concierge',
+    aiAssistantIntro: 'I can help with booking, pricing, deposits, cancellation policy, and order questions.',
+    aiAssistantPlaceholder: 'Type your question...',
+    aiSend: 'Send',
+    aiHandoff: 'Staff recommended',
+    aiHandoffHint: 'This needs staff confirmation. I can help organize the question first.',
+    aiQuickPrice: 'How are custom nails quoted?',
+    aiQuickBooking: 'How do I book?',
+    aiQuickPolicy: 'Cancellation policy?'
   }
 }
 
@@ -298,6 +317,10 @@ const state = {
   shareCopyByOrder: {},
   shareCopyHistory: readJson('lucky-social-copy-history') || {},
   memberCodeOpen: false,
+  aiAssistantOpen: false,
+  aiAssistantLoading: false,
+  aiAssistantDraft: '',
+  aiAssistantMessages: readJson('lucky-ai-assistant-messages') || [],
   pendingAuth: readJson('lucky-web-pending-auth')
 }
 
@@ -311,6 +334,7 @@ const els = {
   cartBadge: document.querySelector('#cartBadge'),
   langZh: document.querySelector('#langZh'),
   langEn: document.querySelector('#langEn'),
+  aiAssistantWidget: document.querySelector('#aiAssistantWidget'),
   toast: document.querySelector('#toast')
 }
 
@@ -628,6 +652,11 @@ function bindGlobalEvents() {
   els.screen.addEventListener('click', handleScreenClick)
   els.screen.addEventListener('change', handleScreenChange)
   els.screen.addEventListener('input', handleScreenInput)
+  els.aiAssistantWidget.addEventListener('click', handleAssistantClick)
+  els.aiAssistantWidget.addEventListener('submit', handleAssistantSubmit)
+  els.aiAssistantWidget.addEventListener('input', (event) => {
+    if (event.target.matches('[data-ai-assistant-input]')) state.aiAssistantDraft = event.target.value
+  })
 }
 
 async function switchLang(lang) {
@@ -757,6 +786,7 @@ function render() {
   if (state.view === 'giftCard') renderPlaceholderWeb(t('giftCard'), state.lang === 'zh' ? '礼品卡售卖与兑换功能保留为下一阶段。' : 'Gift card purchase and redemption is reserved for the next phase.')
   if (state.view === 'pointsMall') renderPlaceholderWeb(t('pointsMall'), state.lang === 'zh' ? '积分商城规则目前使用占位，后续可按会员规则兑换。' : 'The points mall currently uses placeholder rules.')
   if (state.view === 'settings') renderPlaceholderWeb(t('settings'), state.lang === 'zh' ? '语言、通知、账号安全等设置将在真实登录后接入。' : 'Language, notifications, and account security settings will connect after real auth.')
+  renderAiAssistantWidget()
 }
 
 function heroSlides() {
@@ -822,6 +852,102 @@ function renderHome() {
     </section>
   `
   startHeroCarousel()
+}
+
+function renderAiAssistantWidget() {
+  if (!els.aiAssistantWidget) return
+  els.aiAssistantWidget.classList.remove('hidden')
+  if (!state.aiAssistantOpen) {
+    els.aiAssistantWidget.innerHTML = `
+      <button class="ai-assistant-fab" data-ai-assistant-toggle type="button">
+        <span>AI</span>
+        <strong>${t('aiAssistant')}</strong>
+      </button>
+    `
+    return
+  }
+  const messages = state.aiAssistantMessages.length ? state.aiAssistantMessages : [{
+    role: 'assistant',
+    content: t('aiAssistantIntro'),
+    meta: ''
+  }]
+  els.aiAssistantWidget.innerHTML = `
+    <section class="ai-assistant-panel">
+      <div class="ai-assistant-head">
+        <div>
+          <p class="eyebrow">Lucky Luxe</p>
+          <h2>${t('aiAssistant')}</h2>
+        </div>
+        <button class="ghost slim" data-ai-assistant-toggle type="button">×</button>
+      </div>
+      <div class="ai-assistant-messages">
+        ${messages.map((message) => `
+          <article class="ai-message ${message.role}">
+            <p>${escapeHtml(message.content)}</p>
+            ${message.handoffRequired ? `<small>${t('aiHandoff')} · ${escapeHtml(message.handoffReason || t('aiHandoffHint'))}</small>` : ''}
+          </article>
+        `).join('')}
+      </div>
+      <div class="ai-assistant-quick">
+        <button type="button" data-ai-quick="${t('aiQuickPrice')}">${t('aiQuickPrice')}</button>
+        <button type="button" data-ai-quick="${t('aiQuickBooking')}">${t('aiQuickBooking')}</button>
+        <button type="button" data-ai-quick="${t('aiQuickPolicy')}">${t('aiQuickPolicy')}</button>
+      </div>
+      <form class="ai-assistant-form">
+        <input data-ai-assistant-input value="${escapeHtml(state.aiAssistantDraft)}" placeholder="${t('aiAssistantPlaceholder')}" ${state.aiAssistantLoading ? 'disabled' : ''}>
+        <button class="primary slim" type="submit" ${state.aiAssistantLoading ? 'disabled' : ''}>${state.aiAssistantLoading ? '...' : t('aiSend')}</button>
+      </form>
+    </section>
+  `
+}
+
+function handleAssistantClick(event) {
+  if (event.target.closest('[data-ai-assistant-toggle]')) {
+    state.aiAssistantOpen = !state.aiAssistantOpen
+    renderAiAssistantWidget()
+    return
+  }
+  const quick = event.target.closest('[data-ai-quick]')
+  if (quick) {
+    state.aiAssistantDraft = quick.dataset.aiQuick
+    sendAiAssistantMessage().catch((error) => toast(error.message))
+  }
+}
+
+function handleAssistantSubmit(event) {
+  event.preventDefault()
+  sendAiAssistantMessage().catch((error) => toast(error.message))
+}
+
+async function sendAiAssistantMessage() {
+  const message = state.aiAssistantDraft.trim()
+  if (!message || state.aiAssistantLoading) return
+  state.aiAssistantMessages.push({ role: 'user', content: message })
+  state.aiAssistantDraft = ''
+  state.aiAssistantLoading = true
+  renderAiAssistantWidget()
+  try {
+    const data = await request('/ai/customer-service', {
+      method: 'POST',
+      body: JSON.stringify({
+        lang: state.lang,
+        message,
+        history: state.aiAssistantMessages.slice(-10)
+      })
+    })
+    const reply = data.reply?.data || data.reply || {}
+    state.aiAssistantMessages.push({
+      role: 'assistant',
+      content: state.lang === 'en' ? reply.answerEn : reply.answerZh,
+      handoffRequired: Boolean(reply.handoffRequired),
+      handoffReason: state.lang === 'en' ? reply.handoffReasonEn : reply.handoffReasonZh
+    })
+    state.aiAssistantMessages = state.aiAssistantMessages.slice(-12)
+    writeJson('lucky-ai-assistant-messages', state.aiAssistantMessages)
+  } finally {
+    state.aiAssistantLoading = false
+    renderAiAssistantWidget()
+  }
 }
 
 function startHeroCarousel() {
