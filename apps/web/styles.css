@@ -30,6 +30,72 @@
   gap: 10px;
 }
 
+.wechat-session-group-title {
+  margin-top: 8px;
+  color: var(--muted);
+  font-size: 12px;
+  font-weight: 900;
+  text-transform: uppercase;
+}
+
+.wechat-status-card,
+.wechat-mock-inject {
+  display: grid;
+  gap: 12px;
+  padding: 16px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: #fffaf6;
+}
+
+.wechat-status-card label,
+.wechat-mock-inject label {
+  display: grid;
+  gap: 6px;
+  color: var(--muted);
+  font-size: 12px;
+  font-weight: 900;
+}
+
+.wechat-status-card input,
+.wechat-mock-inject input,
+.wechat-mock-inject textarea {
+  width: 100%;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  padding: 10px;
+  background: #fff;
+  color: var(--ink);
+  font: inherit;
+  font-size: 13px;
+  font-weight: 800;
+}
+
+.wechat-check-grid {
+  display: grid;
+  gap: 6px;
+}
+
+.wechat-check-grid span {
+  display: flex;
+  justify-content: space-between;
+  gap: 8px;
+  padding: 7px 10px;
+  border-radius: 999px;
+  background: #fff;
+  color: var(--muted);
+  font-size: 12px;
+  font-weight: 900;
+}
+
+.wechat-check-grid .ok {
+  color: #47735f;
+}
+
+.wechat-check-grid .missing {
+  color: #9b7655;
+}
+
 .wechat-session-card {
   display: grid;
   gap: 8px;

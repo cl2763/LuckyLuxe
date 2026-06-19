@@ -131,11 +131,29 @@ create table if not exists booking_status_history (
   created_at timestamptz not null default now()
 );
 
+create table if not exists wechat_conversations (
+  id text primary key,
+  provider text not null,
+  external_user_id text not null,
+  open_kfid text,
+  source_channel text,
+  status text not null default 'open',
+  last_intent text,
+  last_message text,
+  ai_reply_json jsonb not null default '{}'::jsonb,
+  transcript_json jsonb not null default '[]'::jsonb,
+  raw_event_json jsonb not null default '{}'::jsonb,
+  created_at timestamptz not null default now(),
+  updated_at timestamptz not null default now()
+);
+
 create index if not exists idx_bookings_user_id on bookings(user_id);
 create index if not exists idx_bookings_store_start on bookings(store_id, appointment_start);
 create index if not exists idx_bookings_technician_start on bookings(technician_id, appointment_start);
 create index if not exists idx_booking_slots_booking_id on booking_slots(booking_id);
 create index if not exists idx_payments_booking_id on payments(booking_id);
+create index if not exists idx_wechat_conversations_updated on wechat_conversations(updated_at desc);
+create index if not exists idx_wechat_conversations_external_user on wechat_conversations(external_user_id);
 
 alter table bookings add column if not exists reference_images_json jsonb not null default '[]'::jsonb;
 alter table bookings add column if not exists work_images_json jsonb not null default '[]'::jsonb;

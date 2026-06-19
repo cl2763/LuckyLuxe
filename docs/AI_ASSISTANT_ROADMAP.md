@@ -135,6 +135,21 @@
 - This mock is frontend-only and does not require real WeChat, WeCom, Mini Program, or model API credentials yet.
 - The mock page is intentionally available to both owner and staff accounts because technicians need to see quote tasks, while owner-only finance/customer data remains restricted elsewhere.
 
+## Real WeCom Integration Scaffold
+
+- Backend routes added:
+  - `GET /wechat/customer-service/webhook` for WeCom callback URL verification.
+  - `POST /wechat/customer-service/webhook` for inbound customer-service message events.
+  - `GET /admin/wechat/status` for owner/staff to see configured credentials and callback URL.
+  - `GET /admin/wechat/conversations` for the admin workbench conversation queue.
+  - `POST /admin/wechat/mock-message` for end-to-end testing before official WeCom credentials are ready.
+- Database table added:
+  - `wechat_conversations` stores external user id, customer-service account id, source channel, last intent, last message, AI reply JSON, transcript, and raw event payload.
+- Current limitation:
+  - Plain/mock JSON and simple XML payloads are accepted.
+  - Official encrypted callback decrypt/reply-send still requires the real `Token`, `EncodingAESKey`, `Secret`, `CorpID`, and `open_kfid` values from the WeCom / WeChat Customer Service console.
+  - Once credentials are available, the next step is to wire AES decrypt, access-token refresh, and outbound reply/send-message API calls.
+
 ## Real API Inputs Needed Later
 
 - For real WeCom / WeChat Customer Service integration, Lucky Luxe will need to provide:

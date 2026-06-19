@@ -25,7 +25,9 @@ const owner = {
   aiResults: {},
   aiCopyHistory: readJson('lucky-admin-social-copy-history') || {},
   wechatMockSessionId: 'wechat-quote-01',
-  wechatMockOverrides: readJson('lucky-wechat-mock-overrides') || {}
+  wechatMockOverrides: readJson('lucky-wechat-mock-overrides') || {},
+  wechatStatus: null,
+  wechatConversations: []
 }
 
 const els = {
@@ -192,6 +194,18 @@ const copy = {
     handoffRoute: '人工路由',
     expectedReplyTime: '预计 10 分钟内回价',
     noWechatSession: '暂无会话',
+    wechatConnectionStatus: '真实接入状态',
+    wechatWebhookUrl: '企业微信回调 URL',
+    wechatConfigReady: '凭证已就绪',
+    wechatConfigPending: '等待企业微信凭证',
+    liveConversations: '真实/测试会话',
+    sendMockInbound: '发送模拟微信消息',
+    mockCustomerMessage: '客户消息',
+    mockSource: '来源',
+    injectMock: '注入测试消息',
+    missingCredentials: '缺少配置',
+    configured: '已配置',
+    noLiveConversations: '暂无真实或测试会话。你可以先发送一条模拟微信消息。',
     aiDailyBrief: 'AI 今日简报',
     generateBrief: '生成简报',
     aiGallery: 'AI 图库',
@@ -411,6 +425,18 @@ const copy = {
     handoffRoute: 'Handoff Route',
     expectedReplyTime: 'Expected within 10 minutes',
     noWechatSession: 'No sessions',
+    wechatConnectionStatus: 'Real Integration Status',
+    wechatWebhookUrl: 'WeCom callback URL',
+    wechatConfigReady: 'Credentials ready',
+    wechatConfigPending: 'Waiting for WeCom credentials',
+    liveConversations: 'Live/Test Conversations',
+    sendMockInbound: 'Send mock WeChat message',
+    mockCustomerMessage: 'Customer message',
+    mockSource: 'Source',
+    injectMock: 'Inject Test Message',
+    missingCredentials: 'Missing config',
+    configured: 'Configured',
+    noLiveConversations: 'No live or test conversations yet. Send a mock WeChat message first.',
     aiDailyBrief: 'AI Daily Brief',
     generateBrief: 'Generate Brief',
     aiGallery: 'AI Gallery',
@@ -766,6 +792,12 @@ async function loadAll() {
   owner.services = serviceData.services
   owner.technicians = techData.technicians
   owner.customers = customerData.customers
+  const [wechatStatus, wechatConversations] = await Promise.allSettled([
+    request('/admin/wechat/status'),
+    request('/admin/wechat/conversations')
+  ])
+  owner.wechatStatus = wechatStatus.status === 'fulfilled' ? wechatStatus.value.wechat : null
+  owner.wechatConversations = wechatConversations.status === 'fulfilled' ? wechatConversations.value.conversations : []
   if (!isOwnerRole() && !['bookings', 'schedule', 'wechatMock', 'aiGallery'].includes(owner.adminPage)) owner.adminPage = 'bookings'
   setLocked(false)
   render()
@@ -1230,6 +1262,10 @@ function wechatMockState(session) {
 }
 
 function selectedWechatSession() {
+  if (String(owner.wechatMockSessionId || '').startsWith('live:')) {
+    const id = owner.wechatMockSessionId.slice(5)
+    return owner.wechatConversations.find((conversation) => conversation.id === id) || null
+  }
   const sessions = wechatMockSessions()
   return sessions.find((session) => session.id === owner.wechatMockSessionId) || sessions[0]
 }
@@ -1247,24 +1283,99 @@ function wechatStatusLabel(session, state = wechatMockState(session)) {
 function renderWechatMock() {
   if (!els.wechatSessionList || !els.wechatMockDetail) return
   const sessions = wechatMockSessions()
+  const liveConversations = owner.wechatConversations || []
   if (!sessions.length) {
     els.wechatSessionList.innerHTML = `<div class="empty-state small-empty">${t('noWechatSession')}</div>`
     els.wechatMockDetail.innerHTML = ''
     return
   }
   const selected = selectedWechatSession()
-  els.wechatSessionList.innerHTML = sessions.map((session) => {
+  els.wechatSessionList.innerHTML = `
+    ${renderWechatConnectionStatus()}
+    <div class="wechat-mock-inject">
+      <strong>${t('sendMockInbound')}</strong>
+      <label>
+        <span>${t('mockCustomerMessage')}</span>
+        <textarea id="wechatMockInboundMessage" rows="3">${owner.lang === 'zh' ? '你好，我想做一款带珍珠的法式美甲，可以帮我看一下价格吗？' : 'Hi, I want a French nail set with pearls. Can you help check the price?'}</textarea>
+      </label>
+      <label>
+        <span>${t('mockSource')}</span>
+        <input id="wechatMockInboundSource" value="${owner.lang === 'zh' ? '小红书' : 'Instagram'}">
+      </label>
+      <button class="primary slim" data-wechat-inject-mock type="button">${t('injectMock')}</button>
+    </div>
+    <div class="wechat-session-group-title">${t('liveConversations')}</div>
+    ${liveConversations.length ? liveConversations.map((conversation) => `
+      <button class="wechat-session-card ${owner.wechatMockSessionId === `live:${conversation.id}` ? 'active' : ''}" data-wechat-live="${escapeHtml(conversation.id)}" type="button">
+        <span class="pill muted">${escapeHtml(conversation.sourceChannel || conversation.provider || 'WeChat')}</span>
+        <strong>${escapeHtml(conversation.externalUserId)}</strong>
+        <small>${escapeHtml(conversation.lastMessage || '-')}</small>
+        <em>${escapeHtml(conversation.status || 'open')}</em>
+      </button>
+    `).join('') : `<div class="empty-state small-empty">${t('noLiveConversations')}</div>`}
+    <div class="wechat-session-group-title">${t('mockOnly')}</div>
+    ${sessions.map((session) => {
     const state = wechatMockState(session)
     return `
-      <button class="wechat-session-card ${session.id === selected.id ? 'active' : ''}" data-wechat-session="${session.id}" type="button">
+      <button class="wechat-session-card ${session.id === selected?.id ? 'active' : ''}" data-wechat-session="${session.id}" type="button">
         <span class="pill muted">${escapeHtml(session.source)}</span>
         <strong>${escapeHtml(session.customer)}</strong>
         <small>${escapeHtml(session.intent)}</small>
         <em>${escapeHtml(wechatStatusLabel(session, state))}</em>
       </button>
     `
-  }).join('')
-  renderWechatMockDetail(selected)
+  }).join('')}
+  `
+  if (selected?.provider === 'wecom_customer_service') {
+    renderWechatLiveDetail(selected)
+  } else {
+    renderWechatMockDetail(selected || sessions[0])
+  }
+}
+
+function renderWechatConnectionStatus() {
+  const status = owner.wechatStatus
+  if (!status) return `<div class="wechat-status-card"><strong>${t('wechatConnectionStatus')}</strong><span>${t('wechatConfigPending')}</span></div>`
+  return `
+    <div class="wechat-status-card">
+      <div class="section-row compact-row">
+        <strong>${t('wechatConnectionStatus')}</strong>
+        <span class="mock-state-pill">${status.mode === 'ready' ? t('wechatConfigReady') : t('wechatConfigPending')}</span>
+      </div>
+      <label>
+        <span>${t('wechatWebhookUrl')}</span>
+        <input readonly value="${escapeHtml(status.webhookUrl || '')}">
+      </label>
+      <div class="wechat-check-grid">
+        ${(status.checks || []).map((item) => `<span class="${item.ok ? 'ok' : 'missing'}">${escapeHtml(item.label)} · ${item.ok ? t('configured') : t('missingCredentials')}</span>`).join('')}
+      </div>
+    </div>
+  `
+}
+
+function renderWechatLiveDetail(conversation) {
+  const transcript = conversation.transcript || []
+  els.wechatMockDetail.innerHTML = `
+    <div class="wechat-detail-head">
+      <div>
+        <p class="eyebrow">${t('liveConversations')}</p>
+        <h2>${escapeHtml(conversation.externalUserId)}</h2>
+        <p class="subtle">${escapeHtml(conversation.sourceChannel || conversation.provider)} · ${escapeHtml(conversation.lastIntent || 'unknown')}</p>
+      </div>
+      <span class="mock-state-pill">${escapeHtml(conversation.status || 'open')}</span>
+    </div>
+    <section class="wechat-timeline-section">
+      <h3>${t('customerTimeline')}</h3>
+      <div class="wechat-timeline">
+        ${transcript.map((message) => `
+          <div class="wechat-bubble ${message.role === 'customer' ? 'customer' : 'assistant'}">
+            <span>${message.role === 'customer' ? escapeHtml(conversation.externalUserId) : 'Lucky Luxe 预约助手'}</span>
+            <p>${escapeHtml(message.content || '')}</p>
+          </div>
+        `).join('')}
+      </div>
+    </section>
+  `
 }
 
 function renderWechatMockDetail(session) {
@@ -2610,6 +2721,16 @@ els.adminLayout.addEventListener('click', (event) => {
   }
 })
 els.wechatMockPage.addEventListener('click', (event) => {
+  if (event.target.closest('[data-wechat-inject-mock]')) {
+    injectWechatMockMessage().catch((error) => toast(error.message))
+    return
+  }
+  const liveButton = event.target.closest('[data-wechat-live]')
+  if (liveButton) {
+    owner.wechatMockSessionId = `live:${liveButton.dataset.wechatLive}`
+    renderWechatMock()
+    return
+  }
   const sessionButton = event.target.closest('[data-wechat-session]')
   if (sessionButton) {
     owner.wechatMockSessionId = sessionButton.dataset.wechatSession
@@ -2659,6 +2780,25 @@ function updateWechatMock(sessionId, patch) {
     ...patch
   }
   writeJson('lucky-wechat-mock-overrides', owner.wechatMockOverrides)
+  renderWechatMock()
+}
+
+async function injectWechatMockMessage() {
+  const message = document.querySelector('#wechatMockInboundMessage')?.value.trim()
+  if (!message) return
+  const sourceChannel = document.querySelector('#wechatMockInboundSource')?.value.trim()
+  const data = await request('/admin/wechat/mock-message', {
+    method: 'POST',
+    body: JSON.stringify({
+      message,
+      sourceChannel,
+      lang: owner.lang,
+      externalUserId: `mock-wechat-${Date.now().toString().slice(-6)}`
+    })
+  })
+  const list = await request('/admin/wechat/conversations')
+  owner.wechatConversations = list.conversations || []
+  owner.wechatMockSessionId = `live:${data.conversationId}`
   renderWechatMock()
 }
 els.financePanel.addEventListener('submit', (event) => {

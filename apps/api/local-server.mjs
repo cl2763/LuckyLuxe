@@ -1,5 +1,6 @@
 import { createServer } from 'node:http'
 import { DatabaseSync } from 'node:sqlite'
+import { createDecipheriv, createHash } from 'node:crypto'
 import { existsSync, mkdirSync, readFileSync, statSync } from 'node:fs'
 import { dirname, extname, join, normalize } from 'node:path'
 import { fileURLToPath } from 'node:url'
@@ -28,6 +29,12 @@ const FINANCE_EMAILS = (process.env.FINANCE_EMAILS || 'nini3131254931@gmail.com'
 const FINANCE_PASSWORD = process.env.FINANCE_PASSWORD || ''
 const HOLD_MINUTES = Number(process.env.BOOKING_HOLD_MINUTES || 15)
 const SLOT_MINUTES = 30
+const APP_PUBLIC_URL = (process.env.APP_PUBLIC_URL || 'https://www.luckyluxeatelier.com').replace(/\/$/, '')
+const WECOM_CORP_ID = process.env.WECOM_CORP_ID || ''
+const WECOM_CUSTOMER_SERVICE_SECRET = process.env.WECOM_CUSTOMER_SERVICE_SECRET || ''
+const WECOM_CUSTOMER_SERVICE_TOKEN = process.env.WECOM_CUSTOMER_SERVICE_TOKEN || ''
+const WECOM_CUSTOMER_SERVICE_AES_KEY = process.env.WECOM_CUSTOMER_SERVICE_AES_KEY || ''
+const WECOM_OPEN_KFID = process.env.WECOM_OPEN_KFID || ''
 
 const addOns = [
   { id: 'remove', name: '卸甲/卸睫', priceCents: 3000, durationMin: 30 },
@@ -177,6 +184,21 @@ function setupDatabase() {
       created_at TEXT NOT NULL,
       FOREIGN KEY (booking_id) REFERENCES bookings(id) ON DELETE CASCADE
     );
+    CREATE TABLE IF NOT EXISTS wechat_conversations (
+      id TEXT PRIMARY KEY,
+      provider TEXT NOT NULL,
+      external_user_id TEXT NOT NULL,
+      open_kfid TEXT,
+      source_channel TEXT,
+      status TEXT NOT NULL DEFAULT 'open',
+      last_intent TEXT,
+      last_message TEXT,
+      ai_reply_json TEXT NOT NULL DEFAULT '{}',
+      transcript_json TEXT NOT NULL DEFAULT '[]',
+      raw_event_json TEXT NOT NULL DEFAULT '{}',
+      created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+      updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
+    );
   `)
 }
 
@@ -261,6 +283,12 @@ async function readBody(req) {
   }
 }
 
+async function readRawBody(req) {
+  let body = ''
+  for await (const chunk of req) body += chunk
+  return body
+}
+
 function apiError(status, code, message) {
   const error = new Error(message)
   error.status = status
@@ -308,6 +336,167 @@ function parseJson(value) {
   } catch {
     return []
   }
+}
+
+function publicAppUrl() {
+  return APP_PUBLIC_URL || 'https://www.luckyluxeatelier.com'
+}
+
+function wechatWebhookUrl() {
+  return `${publicAppUrl()}/wechat/customer-service/webhook`
+}
+
+function sha1Signature(parts = []) {
+  return createHash('sha1')
+    .update(parts.map((part) => String(part ?? '')).sort().join(''))
+    .digest('hex')
+}
+
+function verifyWecomSignature({ signature, timestamp, nonce, payload }) {
+  if (!WECOM_CUSTOMER_SERVICE_TOKEN) return false
+  return sha1Signature([WECOM_CUSTOMER_SERVICE_TOKEN, timestamp, nonce, payload]) === signature
+}
+
+function decryptWecomPayload(encrypted) {
+  if (!WECOM_CUSTOMER_SERVICE_AES_KEY) throw apiError(501, 'WECHAT_AES_KEY_MISSING', 'EncodingAESKey is required to decrypt WeChat callback payload.')
+  const aesKey = Buffer.from(`${WECOM_CUSTOMER_SERVICE_AES_KEY}=`, 'base64')
+  if (aesKey.length !== 32) throw apiError(500, 'WECHAT_AES_KEY_INVALID', 'EncodingAESKey must decode to 32 bytes.')
+  const decipher = createDecipheriv('aes-256-cbc', aesKey, aesKey.subarray(0, 16))
+  decipher.setAutoPadding(false)
+  const decrypted = Buffer.concat([decipher.update(encrypted, 'base64'), decipher.final()])
+  const pad = decrypted[decrypted.length - 1]
+  const unpadded = decrypted.subarray(0, decrypted.length - pad)
+  const msgLength = unpadded.readUInt32BE(16)
+  const message = unpadded.subarray(20, 20 + msgLength).toString('utf8')
+  const receiverId = unpadded.subarray(20 + msgLength).toString('utf8')
+  if (WECOM_CORP_ID && receiverId && receiverId !== WECOM_CORP_ID) throw apiError(403, 'WECHAT_RECEIVER_MISMATCH', 'WeChat callback receiver id does not match configured CorpID.')
+  return message
+}
+
+function xmlValue(xml, tag) {
+  const match = String(xml || '').match(new RegExp(`<${tag}>(?:<!\\[CDATA\\[)?([\\s\\S]*?)(?:\\]\\]>)?</${tag}>`, 'i'))
+  return match ? match[1].trim() : ''
+}
+
+function normalizeWecomInbound(body = {}, queryParams = {}, rawBody = '') {
+  const xmlContent = rawBody && rawBody.trim().startsWith('<') ? {
+    externalUserId: xmlValue(rawBody, 'FromUserName'),
+    openKfid: xmlValue(rawBody, 'ToUserName') || queryParams.open_kfid,
+    msgType: xmlValue(rawBody, 'MsgType') || 'text',
+    content: xmlValue(rawBody, 'Content') || xmlValue(rawBody, 'Event') || '',
+    messageId: xmlValue(rawBody, 'MsgId') || xmlValue(rawBody, 'MsgID') || randomId('wxmsg')
+  } : {}
+  const content = body.content || body.text || body.message || xmlContent.content || ''
+  return {
+    provider: 'wecom_customer_service',
+    externalUserId: body.externalUserId || body.external_userid || body.fromUserName || body.openid || xmlContent.externalUserId || 'mock-customer',
+    openKfid: body.openKfid || body.open_kfid || xmlContent.openKfid || WECOM_OPEN_KFID || 'mock-open-kfid',
+    msgType: body.msgType || body.msgtype || xmlContent.msgType || 'text',
+    content,
+    messageId: body.messageId || body.msgid || xmlContent.messageId || randomId('wxmsg'),
+    sourceChannel: body.sourceChannel || body.source || '',
+    lang: body.lang || (/^[\x00-\x7F]*$/.test(content) ? 'en' : 'zh'),
+    raw: body.raw || body || rawBody || {}
+  }
+}
+
+function wecomConfigStatus() {
+  const checks = [
+    { key: 'WECOM_CORP_ID', label: 'CorpID', ok: Boolean(WECOM_CORP_ID) },
+    { key: 'WECOM_CUSTOMER_SERVICE_SECRET', label: 'Customer Service Secret', ok: Boolean(WECOM_CUSTOMER_SERVICE_SECRET) },
+    { key: 'WECOM_CUSTOMER_SERVICE_TOKEN', label: 'Webhook Token', ok: Boolean(WECOM_CUSTOMER_SERVICE_TOKEN) },
+    { key: 'WECOM_CUSTOMER_SERVICE_AES_KEY', label: 'EncodingAESKey', ok: Boolean(WECOM_CUSTOMER_SERVICE_AES_KEY) },
+    { key: 'WECOM_OPEN_KFID', label: 'open_kfid', ok: Boolean(WECOM_OPEN_KFID) }
+  ]
+  return {
+    provider: 'wecom_customer_service',
+    mode: checks.every((item) => item.ok) ? 'ready' : 'pending_credentials',
+    webhookUrl: wechatWebhookUrl(),
+    checks
+  }
+}
+
+function recordWecomConversation(inbound, reply, status = 'ai_replied') {
+  const conversationId = `wecom:${inbound.externalUserId}`
+  const current = db.prepare('SELECT transcript_json FROM wechat_conversations WHERE id = ?').get(conversationId)
+  const transcript = parseJson(current?.transcript_json)
+  const replyData = reply?.data || reply || {}
+  transcript.push({
+    role: 'customer',
+    content: inbound.content,
+    messageId: inbound.messageId,
+    msgType: inbound.msgType,
+    at: iso(new Date())
+  })
+  if (reply) {
+    transcript.push({
+      role: 'assistant',
+      content: replyData.answerZh || replyData.answerEn || '',
+      intent: replyData.intent,
+      handoffRequired: Boolean(replyData.handoffRequired),
+      at: iso(new Date())
+    })
+  }
+  db.prepare(`
+    INSERT INTO wechat_conversations
+      (id, provider, external_user_id, open_kfid, source_channel, status, last_intent, last_message, ai_reply_json, transcript_json, raw_event_json, created_at, updated_at)
+    VALUES
+      (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+    ON CONFLICT(id) DO UPDATE SET
+      open_kfid = excluded.open_kfid,
+      source_channel = COALESCE(NULLIF(excluded.source_channel, ''), wechat_conversations.source_channel),
+      status = excluded.status,
+      last_intent = excluded.last_intent,
+      last_message = excluded.last_message,
+      ai_reply_json = excluded.ai_reply_json,
+      transcript_json = excluded.transcript_json,
+      raw_event_json = excluded.raw_event_json,
+      updated_at = excluded.updated_at
+  `).run(
+    conversationId,
+    inbound.provider,
+    inbound.externalUserId,
+    inbound.openKfid,
+    inbound.sourceChannel,
+    replyData.handoffRequired ? 'needs_human' : status,
+    replyData.intent || 'unknown',
+    inbound.content,
+    JSON.stringify(reply || {}),
+    JSON.stringify(transcript),
+    JSON.stringify(inbound.raw || {}),
+    iso(new Date()),
+    iso(new Date())
+  )
+  return conversationId
+}
+
+async function handleWecomInbound(inbound, req) {
+  const context = buildCustomerServiceContext(req, inbound.lang || 'zh')
+  const reply = await createCustomerServiceReply({
+    lang: inbound.lang || 'zh',
+    message: inbound.content || '',
+    history: [],
+    ...context
+  })
+  const conversationId = recordWecomConversation(inbound, reply)
+  return { conversationId, inbound, reply }
+}
+
+function getWecomConversations() {
+  return db.prepare('SELECT * FROM wechat_conversations ORDER BY updated_at DESC LIMIT 80').all().map((row) => ({
+    id: row.id,
+    provider: row.provider,
+    externalUserId: row.external_user_id,
+    openKfid: row.open_kfid,
+    sourceChannel: row.source_channel,
+    status: row.status,
+    lastIntent: row.last_intent,
+    lastMessage: row.last_message,
+    aiReply: parseJson(row.ai_reply_json),
+    transcript: parseJson(row.transcript_json),
+    createdAt: row.created_at,
+    updatedAt: row.updated_at
+  }))
 }
 
 function normalizeReferenceImages(value) {
@@ -815,6 +1004,38 @@ async function route(req, res) {
   if (req.method === 'GET' && path.startsWith('/assets/')) return serveFile(res, assetRoot, path.replace('/assets/', ''))
 
   if (req.method === 'GET' && path === '/health') return json(res, 200, { ok: true, service: 'lucky-luxe-api-local', time: iso(new Date()) })
+  if (req.method === 'GET' && path === '/wechat/customer-service/webhook') {
+    const valid = verifyWecomSignature({
+      signature: query.msg_signature || query.signature,
+      timestamp: query.timestamp,
+      nonce: query.nonce,
+      payload: query.echostr
+    })
+    if (!valid) throw apiError(403, 'WECHAT_SIGNATURE_INVALID', 'WeChat callback signature verification failed or token is not configured.')
+    res.writeHead(200, { 'content-type': 'text/plain; charset=utf-8' })
+    res.end(WECOM_CUSTOMER_SERVICE_AES_KEY ? decryptWecomPayload(query.echostr || '') : (query.echostr || ''))
+    return
+  }
+  if (req.method === 'POST' && path === '/wechat/customer-service/webhook') {
+    const rawBody = await readRawBody(req)
+    const contentTypeHeader = req.headers['content-type'] || ''
+    const body = contentTypeHeader.includes('application/json') && rawBody ? JSON.parse(rawBody) : {}
+    const encryptedPayload = xmlValue(rawBody, 'Encrypt')
+    if (encryptedPayload && WECOM_CUSTOMER_SERVICE_TOKEN) {
+      const valid = verifyWecomSignature({
+        signature: query.msg_signature || query.signature,
+        timestamp: query.timestamp,
+        nonce: query.nonce,
+        payload: encryptedPayload
+      })
+      if (!valid) throw apiError(403, 'WECHAT_SIGNATURE_INVALID', 'WeChat callback signature verification failed.')
+    }
+    const decryptedBody = encryptedPayload && WECOM_CUSTOMER_SERVICE_AES_KEY ? decryptWecomPayload(encryptedPayload) : rawBody
+    const inbound = normalizeWecomInbound(body, query, decryptedBody)
+    if (encryptedPayload) inbound.raw = { encrypted: true, body: rawBody }
+    const result = await handleWecomInbound(inbound, req)
+    return json(res, 200, { ok: true, ...result })
+  }
   if (req.method === 'POST' && path === '/auth/email/register') {
     const body = await readBody(req)
     const user = registerEmailUser(body)
@@ -944,6 +1165,24 @@ async function route(req, res) {
   }
   let adminSession = null
   if (path.startsWith('/admin/')) adminSession = requireAdmin(req)
+  if (req.method === 'GET' && path === '/admin/wechat/status') {
+    return json(res, 200, { wechat: wecomConfigStatus() })
+  }
+  if (req.method === 'GET' && path === '/admin/wechat/conversations') {
+    return json(res, 200, { conversations: getWecomConversations() })
+  }
+  if (req.method === 'POST' && path === '/admin/wechat/mock-message') {
+    const body = await readBody(req)
+    const inbound = normalizeWecomInbound({
+      externalUserId: body.externalUserId || `mock-${Date.now()}`,
+      openKfid: body.openKfid || WECOM_OPEN_KFID || 'mock-open-kfid',
+      content: body.message || body.content || '',
+      sourceChannel: body.sourceChannel || body.source || 'mock',
+      lang: body.lang || 'zh',
+      raw: { mock: true, ...body }
+    })
+    return json(res, 201, await handleWecomInbound(inbound, req))
+  }
   if (req.method === 'GET' && path === '/admin/bookings') {
     const rows = adminSession.role === 'staff'
       ? db.prepare('SELECT * FROM bookings WHERE technician_id = ? ORDER BY appointment_start DESC').all(adminSession.technicianId)
