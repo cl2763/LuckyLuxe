@@ -119,6 +119,36 @@
   - Do not build the product around a personal WeChat bot. It is fragile and hard to sell safely.
   - Build around official WeCom / WeChat Customer Service adapters so another salon can authorize their own account and use the same system with their own staff.
 
+## Mock Implementation Status
+
+- Admin now includes a `WeChat Mock` workbench for the `Lucky Luxe 预约助手` flow.
+- The mock workbench previews:
+  - inbound customer source capture,
+  - AI welcome and channel question,
+  - custom nail reference-image quote triage,
+  - staff quote return,
+  - AI-polished customer reply,
+  - booking draft creation,
+  - 10-minute payment reminder,
+  - 30-minute draft release,
+  - reschedule/manual takeover routing.
+- This mock is frontend-only and does not require real WeChat, WeCom, Mini Program, or model API credentials yet.
+- The mock page is intentionally available to both owner and staff accounts because technicians need to see quote tasks, while owner-only finance/customer data remains restricted elsewhere.
+
+## Real API Inputs Needed Later
+
+- For real WeCom / WeChat Customer Service integration, Lucky Luxe will need to provide:
+  - WeCom company account or WeChat Customer Service account access.
+  - `CorpID` if using WeCom.
+  - customer-service `Secret` / API credential.
+  - customer-service account identifier such as `open_kfid`.
+  - webhook `Token` and `EncodingAESKey` generated in the WeChat admin console.
+  - approved callback URL, likely under `https://www.luckyluxeatelier.com`.
+  - staff accounts to receive quote tasks and manual takeover.
+  - Mini Program `AppID` and target draft-booking page path after the Mini Program account is approved.
+  - final service price table and quote rules for model grounding.
+- For the current mock version, no new credential is required from the owner.
+
 ## Future AI Workflow Ideas To Revisit
 
 - AI customer support in web and Mini Program.

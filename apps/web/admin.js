@@ -23,7 +23,9 @@ const owner = {
   aiBrief: null,
   aiLoading: '',
   aiResults: {},
-  aiCopyHistory: readJson('lucky-admin-social-copy-history') || {}
+  aiCopyHistory: readJson('lucky-admin-social-copy-history') || {},
+  wechatMockSessionId: 'wechat-quote-01',
+  wechatMockOverrides: readJson('lucky-wechat-mock-overrides') || {}
 }
 
 const els = {
@@ -53,6 +55,7 @@ const els = {
   sidebarSchedule: document.querySelector('#sidebarSchedule'),
   sidebarServices: document.querySelector('#sidebarServices'),
   sidebarCustomers: document.querySelector('#sidebarCustomers'),
+  sidebarWechatMock: document.querySelector('#sidebarWechatMock'),
   sidebarAiGallery: document.querySelector('#sidebarAiGallery'),
   adminDashboard: document.querySelector('#adminDashboard'),
   dashboardDetailPage: document.querySelector('#dashboardDetailPage'),
@@ -67,6 +70,14 @@ const els = {
   schedulePage: document.querySelector('#schedulePage'),
   servicesPage: document.querySelector('#servicesPage'),
   customersPage: document.querySelector('#customersPage'),
+  wechatMockPage: document.querySelector('#wechatMockPage'),
+  wechatMockEyebrow: document.querySelector('#wechatMockEyebrow'),
+  wechatMockTitle: document.querySelector('#wechatMockTitle'),
+  wechatMockSubtitle: document.querySelector('#wechatMockSubtitle'),
+  wechatSessionTitle: document.querySelector('#wechatSessionTitle'),
+  wechatMockBadge: document.querySelector('#wechatMockBadge'),
+  wechatSessionList: document.querySelector('#wechatSessionList'),
+  wechatMockDetail: document.querySelector('#wechatMockDetail'),
   aiGalleryPage: document.querySelector('#aiGalleryPage'),
   aiGalleryEyebrow: document.querySelector('#aiGalleryEyebrow'),
   aiGalleryTitle: document.querySelector('#aiGalleryTitle'),
@@ -147,7 +158,40 @@ const copy = {
     navStaffPerformance: '技师业绩',
     navServices: '服务管理',
     navCustomers: '客户档案',
+    navWechatMock: '微信客服 Mock',
     navAiGallery: 'AI 图库',
+    wechatMockEyebrow: '企微 / 微信客服',
+    wechatMockTitle: 'Lucky Luxe 预约助手 Mock',
+    wechatMockSubtitle: '预演客户进线、AI 问答、技师报价、预约草稿与提醒释放。',
+    wechatSessionTitle: '进线会话',
+    mockOnly: 'Mock 预演',
+    aiReception: 'AI 接待',
+    customerTimeline: '客户对话流',
+    staffQuoteWorkbench: '技师报价工作台',
+    sourceChannelQuestion: '渠道来源询问',
+    quoteTask: '报价任务',
+    waitingArtistQuote: '等待技师报价',
+    quoteReturned: '技师已回价',
+    draftPending: '草稿待确认',
+    draftCreated: '预约草稿已创建',
+    reminderSent: '10 分钟提醒已发送',
+    draftReleased: '30 分钟已释放',
+    paidConfirmed: '定金已支付',
+    artistReply: '技师回价',
+    canDo: '可做',
+    cannotDo: '不可做',
+    quotePriceCad: '报价 CAD',
+    quoteDurationMin: '预计时长分钟',
+    quoteNotes: '注意事项 / 缺失元素',
+    aiPolishReply: 'AI 润色并回复',
+    createDraft: '创建预约草稿',
+    sendPaymentReminder: '发送 10 分钟提醒',
+    releaseDraft: '释放 30 分钟草稿',
+    miniProgramLink: '小程序草稿链接',
+    quoteElements: '参考图要素',
+    handoffRoute: '人工路由',
+    expectedReplyTime: '预计 10 分钟内回价',
+    noWechatSession: '暂无会话',
     aiDailyBrief: 'AI 今日简报',
     generateBrief: '生成简报',
     aiGallery: 'AI 图库',
@@ -333,7 +377,40 @@ const copy = {
     navStaffPerformance: 'My Performance',
     navServices: 'Services',
     navCustomers: 'Customer Profiles',
+    navWechatMock: 'WeChat Mock',
     navAiGallery: 'AI Gallery',
+    wechatMockEyebrow: 'WeCom / WeChat Service',
+    wechatMockTitle: 'Lucky Luxe Booking Assistant Mock',
+    wechatMockSubtitle: 'Preview inbound chats, AI replies, staff quotes, booking drafts, reminders, and release flow.',
+    wechatSessionTitle: 'Inbound Sessions',
+    mockOnly: 'Mock Preview',
+    aiReception: 'AI Reception',
+    customerTimeline: 'Customer Timeline',
+    staffQuoteWorkbench: 'Staff Quote Workbench',
+    sourceChannelQuestion: 'Source Channel Question',
+    quoteTask: 'Quote Task',
+    waitingArtistQuote: 'Waiting for staff quote',
+    quoteReturned: 'Quote Returned',
+    draftPending: 'Draft Pending',
+    draftCreated: 'Booking Draft Created',
+    reminderSent: '10-min Reminder Sent',
+    draftReleased: '30-min Draft Released',
+    paidConfirmed: 'Deposit Paid',
+    artistReply: 'Artist Reply',
+    canDo: 'Can do',
+    cannotDo: 'Cannot do',
+    quotePriceCad: 'Quote CAD',
+    quoteDurationMin: 'Estimated Duration Min',
+    quoteNotes: 'Notes / Missing Elements',
+    aiPolishReply: 'AI Polish & Reply',
+    createDraft: 'Create Booking Draft',
+    sendPaymentReminder: 'Send 10-min Reminder',
+    releaseDraft: 'Release 30-min Draft',
+    miniProgramLink: 'Mini Program Draft Link',
+    quoteElements: 'Reference Elements',
+    handoffRoute: 'Handoff Route',
+    expectedReplyTime: 'Expected within 10 minutes',
+    noWechatSession: 'No sessions',
     aiDailyBrief: 'AI Daily Brief',
     generateBrief: 'Generate Brief',
     aiGallery: 'AI Gallery',
@@ -619,7 +696,13 @@ function applyLanguage() {
   els.sidebarSchedule.textContent = isOwnerRole() ? t('navSchedule') : t('navStaffPerformance')
   els.sidebarServices.textContent = t('navServices')
   els.sidebarCustomers.textContent = t('navCustomers')
+  els.sidebarWechatMock.textContent = t('navWechatMock')
   els.sidebarAiGallery.textContent = t('navAiGallery')
+  els.wechatMockEyebrow.textContent = t('wechatMockEyebrow')
+  els.wechatMockTitle.textContent = t('wechatMockTitle')
+  els.wechatMockSubtitle.textContent = t('wechatMockSubtitle')
+  els.wechatSessionTitle.textContent = t('wechatSessionTitle')
+  els.wechatMockBadge.textContent = t('mockOnly')
   els.bookingsTitle.textContent = t('bookings')
   els.bookingsSubtitle.textContent = t('bookingsSubtitle')
   els.customersTitle.textContent = t('customers')
@@ -683,7 +766,7 @@ async function loadAll() {
   owner.services = serviceData.services
   owner.technicians = techData.technicians
   owner.customers = customerData.customers
-  if (!isOwnerRole() && !['bookings', 'schedule', 'aiGallery'].includes(owner.adminPage)) owner.adminPage = 'bookings'
+  if (!isOwnerRole() && !['bookings', 'schedule', 'wechatMock', 'aiGallery'].includes(owner.adminPage)) owner.adminPage = 'bookings'
   setLocked(false)
   render()
 }
@@ -750,6 +833,8 @@ function setLocked(locked) {
     els.dashboardDetailPanel.innerHTML = ''
     els.aiBriefPanel.innerHTML = ''
     els.aiGalleryList.innerHTML = ''
+    els.wechatSessionList.innerHTML = ''
+    els.wechatMockDetail.innerHTML = ''
     els.financePanel.innerHTML = ''
   }
 }
@@ -765,6 +850,7 @@ function render() {
   renderTechnicianPerformance()
   renderCustomers()
   renderAiBrief()
+  renderWechatMock()
   renderAiGallery()
   renderFinancePanel()
 }
@@ -920,6 +1006,7 @@ function renderAdminPages() {
     schedule: els.schedulePage,
     services: els.servicesPage,
     customers: els.customersPage,
+    wechatMock: els.wechatMockPage,
     aiGallery: els.aiGalleryPage
   }
   Object.entries(pages).forEach(([key, element]) => element.classList.toggle('hidden', owner.adminPage !== key))
@@ -1046,6 +1133,233 @@ function renderAiList(title, items = []) {
       ${(items || []).map((item) => `<p>${escapeHtml(item)}</p>`).join('')}
     </div>
   `
+}
+
+function wechatMockSessions() {
+  const zhGreeting = '您好欢迎来到 Lucky Luxe，我是您的预约助手，您有任何问题可以随时向我咨询，可以帮您了解美甲/美睫服务、价格规则、预约时间、定金和护理说明。如果是复杂美甲款式，也可以先发参考图，我会帮您整理需求并转给技师确认报价。'
+  const enGreeting = 'Hi, welcome to Lucky Luxe. I am your booking assistant. I can help with nail and lash services, price rules, booking time, deposit policy, and after-care. For custom nail designs, you can send a reference image and I will organize the request for a technician quote.'
+  return [
+    {
+      id: 'wechat-quote-01',
+      customer: owner.lang === 'zh' ? 'Mia · 微信新客' : 'Mia · WeChat New Guest',
+      source: owner.lang === 'zh' ? '小红书' : 'RED',
+      intent: owner.lang === 'zh' ? '复杂美甲参考图报价' : 'Custom nail reference quote',
+      serviceType: 'nail',
+      status: 'waiting_quote',
+      draftStatus: '',
+      route: owner.lang === 'zh' ? '美甲师 Lina Zhou' : 'Nail artist Lina Zhou',
+      expected: t('expectedReplyTime'),
+      elements: owner.lang === 'zh'
+        ? ['需要延长：是', '卸甲：不确定，需追问', '断甲修补：否', '饰品：珍珠与小钻', '复杂度：中高']
+        : ['Extension: yes', 'Removal: unclear, ask follow-up', 'Repair: no', 'Decor: pearls and small rhinestones', 'Complexity: medium-high'],
+      messages: [
+        ['assistant', zhGreeting, enGreeting],
+        ['assistant', '请问您是从哪个渠道关注到我们的？可以选择：小红书、抖音、大众点评/美团、朋友推荐、其他。', 'May I ask where you found us? Options: Google, Instagram, WeChat, TikTok, Friend referral, or Other.'],
+        ['customer', '小红书。我想做这个法式加珍珠，可以帮我看价格吗？我也想预约周五下午。', 'I found you on RED. I want this French style with pearls. Could you check the price? I also want Friday afternoon.'],
+        ['assistant', '可以的。我会先帮您整理参考图要素并转给技师确认报价。正常 10 分钟内给您回复，确认后我可以帮您创建预约草稿。', 'Of course. I will organize the reference details and send them to a technician for a quote. Usually we reply within 10 minutes, then I can create a booking draft for you.']
+      ],
+      defaultReply: {
+        canDo: 'yes',
+        price: '228',
+        duration: '150',
+        notes: owner.lang === 'zh' ? '可做，建议预留 2.5 小时。珍珠数量如果很多需现场微调，卸甲另算。' : 'Can do. Reserve about 2.5 hours. Heavy pearls may be adjusted on site. Removal is extra.'
+      }
+    },
+    {
+      id: 'wechat-lash-02',
+      customer: owner.lang === 'zh' ? 'Olivia · 英文咨询' : 'Olivia · English inquiry',
+      source: owner.lang === 'zh' ? 'Instagram' : 'Instagram',
+      intent: owner.lang === 'zh' ? '美睫固定价预约' : 'Fixed-price lash booking',
+      serviceType: 'lash',
+      status: 'draft_created',
+      draftStatus: 'created',
+      route: owner.lang === 'zh' ? 'AI 自动处理' : 'AI handled',
+      expected: owner.lang === 'zh' ? '无需人工报价' : 'No manual quote needed',
+      elements: owner.lang === 'zh'
+        ? ['自然款美睫', '固定价格 CAD $198', '时长 120 分钟', '定金 CAD $50']
+        : ['Natural lash set', 'Fixed price CAD $198', 'Duration 120 min', 'Deposit CAD $50'],
+      messages: [
+        ['assistant', zhGreeting, enGreeting],
+        ['customer', 'Hi, how much is a natural lash set?', 'Hi, how much is a natural lash set?'],
+        ['assistant', '自然款美睫是固定价格 CAD $198，时长约 120 分钟，预约定金 CAD $50。价格已包含基础嫁接服务，不需要人工报价。', 'A natural lash set is CAD $198, about 120 minutes, with a CAD $50 booking deposit. This is a fixed lash price and does not need a manual quote.'],
+        ['assistant', '我已为您生成预约草稿，请在小程序中确认时间并支付定金。', 'I created a booking draft for you. Please confirm the time and pay the deposit in the Mini Program.']
+      ],
+      defaultReply: {
+        canDo: 'yes',
+        price: '198',
+        duration: '120',
+        notes: owner.lang === 'zh' ? '固定价美睫项目，价格无需人工确认。' : 'Fixed-price lash service. No manual quote required.'
+      }
+    },
+    {
+      id: 'wechat-reschedule-03',
+      customer: owner.lang === 'zh' ? 'Nina · 已预约客户' : 'Nina · Existing guest',
+      source: owner.lang === 'zh' ? '朋友推荐' : 'Friend referral',
+      intent: owner.lang === 'zh' ? '改期请求' : 'Reschedule request',
+      serviceType: 'nail',
+      status: 'handoff',
+      draftStatus: '',
+      route: owner.lang === 'zh' ? '转给对应技师' : 'Route to assigned technician',
+      expected: owner.lang === 'zh' ? 'AI 停止自动回复，等待人工接管' : 'AI paused until human returns control',
+      elements: owner.lang === 'zh'
+        ? ['取消/改期属于人工接管范围', '需确认 24 小时规则', '需查看原预约技师排班']
+        : ['Cancellation/reschedule requires human takeover', 'Check 24-hour policy', 'Confirm original technician schedule'],
+      messages: [
+        ['assistant', zhGreeting, enGreeting],
+        ['customer', '我明天的预约想改到周末，可以吗？', 'Can I move my appointment tomorrow to the weekend?'],
+        ['assistant', '改期需要帮您转给对应技师确认排班与定金规则。我会先暂停自动回复，技师接管后会继续处理。', 'Rescheduling needs the assigned technician to confirm schedule and deposit policy. I will pause automatic replies and route this to staff.']
+      ],
+      defaultReply: {
+        canDo: 'no',
+        price: '',
+        duration: '',
+        notes: owner.lang === 'zh' ? '改期请求，需人工接管。' : 'Reschedule request, human takeover required.'
+      }
+    }
+  ]
+}
+
+function wechatMockState(session) {
+  const override = owner.wechatMockOverrides[session.id] || {}
+  return {
+    quoteStatus: session.status,
+    draftStatus: session.draftStatus,
+    artistReply: session.defaultReply,
+    ...override
+  }
+}
+
+function selectedWechatSession() {
+  const sessions = wechatMockSessions()
+  return sessions.find((session) => session.id === owner.wechatMockSessionId) || sessions[0]
+}
+
+function wechatStatusLabel(session, state = wechatMockState(session)) {
+  if (session.status === 'handoff') return t('handoffRoute')
+  if (state.draftStatus === 'paid') return t('paidConfirmed')
+  if (state.draftStatus === 'released') return t('draftReleased')
+  if (state.draftStatus === 'reminded') return t('reminderSent')
+  if (state.draftStatus === 'created') return t('draftCreated')
+  if (state.quoteStatus === 'quoted') return t('quoteReturned')
+  return t('waitingArtistQuote')
+}
+
+function renderWechatMock() {
+  if (!els.wechatSessionList || !els.wechatMockDetail) return
+  const sessions = wechatMockSessions()
+  if (!sessions.length) {
+    els.wechatSessionList.innerHTML = `<div class="empty-state small-empty">${t('noWechatSession')}</div>`
+    els.wechatMockDetail.innerHTML = ''
+    return
+  }
+  const selected = selectedWechatSession()
+  els.wechatSessionList.innerHTML = sessions.map((session) => {
+    const state = wechatMockState(session)
+    return `
+      <button class="wechat-session-card ${session.id === selected.id ? 'active' : ''}" data-wechat-session="${session.id}" type="button">
+        <span class="pill muted">${escapeHtml(session.source)}</span>
+        <strong>${escapeHtml(session.customer)}</strong>
+        <small>${escapeHtml(session.intent)}</small>
+        <em>${escapeHtml(wechatStatusLabel(session, state))}</em>
+      </button>
+    `
+  }).join('')
+  renderWechatMockDetail(selected)
+}
+
+function renderWechatMockDetail(session) {
+  const state = wechatMockState(session)
+  const reply = state.artistReply || session.defaultReply
+  const canDo = reply.canDo !== 'no'
+  const aiReply = canDo
+    ? (owner.lang === 'zh'
+      ? `技师确认这款可以做，预估价格 CAD $${reply.price || '待确认'}，预计 ${reply.duration || '待确认'} 分钟。${reply.notes || ''} 如果您想继续，我可以先为您创建预约草稿，最后需要您在小程序里确认时间并支付 CAD $50 定金。`
+      : `The technician confirmed this style can be done. Estimated price is CAD $${reply.price || 'TBD'} and estimated duration is ${reply.duration || 'TBD'} minutes. ${reply.notes || ''} If you would like to continue, I can create a booking draft for you. Final confirmation and CAD $50 deposit payment happen in the Mini Program.`)
+    : (owner.lang === 'zh'
+      ? `技师看过后认为这次需要人工进一步确认：${reply.notes || '目前信息不足。'} 我会先为您转人工处理。`
+      : `The technician needs human follow-up for this request: ${reply.notes || 'More information is needed.'} I will route this to a staff member.`)
+  els.wechatMockDetail.innerHTML = `
+    <div class="wechat-detail-head">
+      <div>
+        <p class="eyebrow">${t('aiReception')}</p>
+        <h2>${escapeHtml(session.customer)}</h2>
+        <p class="subtle">${escapeHtml(session.intent)} · ${escapeHtml(session.source)}</p>
+      </div>
+      <span class="mock-state-pill">${escapeHtml(wechatStatusLabel(session, state))}</span>
+    </div>
+    <div class="wechat-info-grid">
+      <div>
+        <strong>${t('quoteElements')}</strong>
+        ${session.elements.map((item) => `<span>${escapeHtml(item)}</span>`).join('')}
+      </div>
+      <div>
+        <strong>${t('handoffRoute')}</strong>
+        <span>${escapeHtml(session.route)}</span>
+        <span>${escapeHtml(session.expected)}</span>
+      </div>
+    </div>
+    <section class="wechat-timeline-section">
+      <h3>${t('customerTimeline')}</h3>
+      <div class="wechat-timeline">
+        ${session.messages.map(([speaker, zh, en]) => `
+          <div class="wechat-bubble ${speaker}">
+            <span>${speaker === 'assistant' ? 'Lucky Luxe 预约助手' : escapeHtml(session.customer)}</span>
+            <p>${escapeHtml(owner.lang === 'zh' ? zh : en)}</p>
+          </div>
+        `).join('')}
+        ${state.quoteStatus === 'quoted' ? `
+          <div class="wechat-bubble assistant">
+            <span>${t('aiPolishReply')}</span>
+            <p>${escapeHtml(aiReply)}</p>
+          </div>
+        ` : ''}
+        ${state.draftStatus ? `
+          <div class="wechat-bubble assistant">
+            <span>${t('miniProgramLink')}</span>
+            <p>${escapeHtml(owner.lang === 'zh' ? `预约草稿：${draftMockLink(session)}。状态：${wechatStatusLabel(session, state)}。` : `Booking draft: ${draftMockLink(session)}. Status: ${wechatStatusLabel(session, state)}.`)}</p>
+          </div>
+        ` : ''}
+      </div>
+    </section>
+    <section class="quote-workbench">
+      <div class="section-row compact-row">
+        <h3>${t('staffQuoteWorkbench')}</h3>
+        <span class="pill muted">${t('mockOnly')}</span>
+      </div>
+      <div class="form-grid tight">
+        <label>
+          <span>${t('artistReply')}</span>
+          <select id="wechatQuoteCanDo">
+            <option value="yes" ${reply.canDo !== 'no' ? 'selected' : ''}>${t('canDo')}</option>
+            <option value="no" ${reply.canDo === 'no' ? 'selected' : ''}>${t('cannotDo')}</option>
+          </select>
+        </label>
+        <label>
+          <span>${t('quotePriceCad')}</span>
+          <input id="wechatQuotePrice" inputmode="decimal" value="${escapeHtml(reply.price || '')}">
+        </label>
+        <label>
+          <span>${t('quoteDurationMin')}</span>
+          <input id="wechatQuoteDuration" inputmode="numeric" value="${escapeHtml(reply.duration || '')}">
+        </label>
+      </div>
+      <label>
+        <span>${t('quoteNotes')}</span>
+        <textarea id="wechatQuoteNotes" rows="3">${escapeHtml(reply.notes || '')}</textarea>
+      </label>
+      <div class="action-row wrap">
+        <button class="primary slim" data-mock-quote-return="${session.id}" type="button">${t('aiPolishReply')}</button>
+        <button class="ghost slim" data-mock-draft-create="${session.id}" type="button">${t('createDraft')}</button>
+        <button class="ghost slim" data-mock-reminder="${session.id}" type="button">${t('sendPaymentReminder')}</button>
+        <button class="ghost slim" data-mock-release="${session.id}" type="button">${t('releaseDraft')}</button>
+      </div>
+      <p class="subtle">${t('miniProgramLink')}: ${escapeHtml(draftMockLink(session))}</p>
+    </section>
+  `
+}
+
+function draftMockLink(session) {
+  return `/miniapp/booking-draft/${session.id}?deposit=50CAD`
 }
 
 function chartBar(label, value, max, forcedPercent) {
@@ -2295,6 +2609,58 @@ els.adminLayout.addEventListener('click', (event) => {
     els.financePanel.classList.add('hidden')
   }
 })
+els.wechatMockPage.addEventListener('click', (event) => {
+  const sessionButton = event.target.closest('[data-wechat-session]')
+  if (sessionButton) {
+    owner.wechatMockSessionId = sessionButton.dataset.wechatSession
+    renderWechatMock()
+    return
+  }
+  const quoteButton = event.target.closest('[data-mock-quote-return]')
+  if (quoteButton) {
+    updateWechatMock(quoteButton.dataset.mockQuoteReturn, {
+      quoteStatus: 'quoted',
+      artistReply: currentWechatQuoteForm()
+    })
+    toast(t('quoteReturned'))
+    return
+  }
+  const draftButton = event.target.closest('[data-mock-draft-create]')
+  if (draftButton) {
+    updateWechatMock(draftButton.dataset.mockDraftCreate, { quoteStatus: 'quoted', draftStatus: 'created' })
+    toast(t('draftCreated'))
+    return
+  }
+  const reminderButton = event.target.closest('[data-mock-reminder]')
+  if (reminderButton) {
+    updateWechatMock(reminderButton.dataset.mockReminder, { draftStatus: 'reminded' })
+    toast(t('reminderSent'))
+    return
+  }
+  const releaseButton = event.target.closest('[data-mock-release]')
+  if (releaseButton) {
+    updateWechatMock(releaseButton.dataset.mockRelease, { draftStatus: 'released' })
+    toast(t('draftReleased'))
+  }
+})
+
+function currentWechatQuoteForm() {
+  return {
+    canDo: document.querySelector('#wechatQuoteCanDo')?.value || 'yes',
+    price: document.querySelector('#wechatQuotePrice')?.value.trim() || '',
+    duration: document.querySelector('#wechatQuoteDuration')?.value.trim() || '',
+    notes: document.querySelector('#wechatQuoteNotes')?.value.trim() || ''
+  }
+}
+
+function updateWechatMock(sessionId, patch) {
+  owner.wechatMockOverrides[sessionId] = {
+    ...(owner.wechatMockOverrides[sessionId] || {}),
+    ...patch
+  }
+  writeJson('lucky-wechat-mock-overrides', owner.wechatMockOverrides)
+  renderWechatMock()
+}
 els.financePanel.addEventListener('submit', (event) => {
   if (!event.target.matches('#financeForm')) return
   unlockFinance(event).catch((error) => toast(error.message))

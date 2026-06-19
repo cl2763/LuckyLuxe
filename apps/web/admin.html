@@ -4,7 +4,7 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Lucky Luxe Admin</title>
-    <link rel="stylesheet" href="/web/styles.css?v=20260619-customer-ai-concierge">
+    <link rel="stylesheet" href="/web/styles.css?v=20260619-wechat-mock">
   </head>
   <body>
     <main class="shell admin-shell">
@@ -55,6 +55,7 @@
           <button class="sidebar-link" data-admin-page="schedule" id="sidebarSchedule" type="button">排班管理</button>
           <button class="sidebar-link" data-admin-page="services" id="sidebarServices" type="button">服务管理</button>
           <button class="sidebar-link" data-admin-page="customers" id="sidebarCustomers" type="button">客户档案</button>
+          <button class="sidebar-link" data-admin-page="wechatMock" id="sidebarWechatMock" type="button">微信客服 Mock</button>
           <button class="sidebar-link" data-admin-page="aiGallery" id="sidebarAiGallery" type="button">AI 图库</button>
         </aside>
 
@@ -197,11 +198,34 @@
             </div>
             <div class="admin-list" id="aiGalleryList"></div>
           </section>
+
+          <section class="admin-page hidden" id="wechatMockPage">
+            <button class="ghost back-btn" data-admin-page="dashboard" type="button">← Dashboard</button>
+            <div class="section-row">
+              <div>
+                <p class="eyebrow" id="wechatMockEyebrow">Mock Workflow</p>
+                <h1 id="wechatMockTitle">微信客服 Mock</h1>
+              </div>
+              <span class="subtle" id="wechatMockSubtitle">Lucky Luxe 预约助手流程预演</span>
+            </div>
+            <div class="wechat-mock-grid">
+              <section class="admin-card wechat-session-panel">
+                <div class="section-row compact-row">
+                  <h2 id="wechatSessionTitle">进线会话</h2>
+                  <span class="pill muted" id="wechatMockBadge">Mock</span>
+                </div>
+                <div class="wechat-session-list" id="wechatSessionList"></div>
+              </section>
+              <section class="admin-card wechat-detail-panel">
+                <div id="wechatMockDetail"></div>
+              </section>
+            </div>
+          </section>
         </section>
       </section>
     </main>
 
     <div class="toast" id="toast"></div>
-    <script src="/web/admin.js?v=20260619-customer-ai-concierge"></script>
+    <script src="/web/admin.js?v=20260619-wechat-mock"></script>
   </body>
 </html>
