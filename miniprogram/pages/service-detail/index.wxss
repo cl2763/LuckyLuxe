@@ -58,6 +58,35 @@
   font-weight: 700;
 }
 
+.price-boundary {
+  margin-top: 22rpx;
+  padding: 22rpx;
+  border-radius: 16rpx;
+  background: #faf6f1;
+  border: 1rpx solid #eadfd5;
+}
+
+.price-boundary-title {
+  color: #342b28;
+  font-size: 27rpx;
+  font-weight: 800;
+}
+
+.price-boundary-text {
+  margin-top: 10rpx;
+  color: #6f625b;
+  font-size: 25rpx;
+  font-weight: 560;
+  line-height: 1.55;
+}
+
+.price-boundary-hint {
+  margin-top: 12rpx;
+  color: #b08b65;
+  font-size: 24rpx;
+  font-weight: 800;
+}
+
 .detail-tags {
   display: flex;
   flex-direction: column;

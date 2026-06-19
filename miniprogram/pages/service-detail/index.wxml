@@ -8,10 +8,14 @@
     <view class="detail-desc">{{service.description}}</view>
     <view class="detail-price-row">
       <view>
-        <text class="price">CAD ${{service.price}}</text>
-        <text class="muted"> / {{t.servicePrice}}</text>
+        <text class="price">{{service.priceLabel}}</text>
       </view>
       <view class="deposit">{{t.deposit}} CAD ${{service.depositAmount}}</view>
+    </view>
+    <view class="price-boundary" wx:if="{{service.priceExplanation}}">
+      <view class="price-boundary-title">{{lang === 'en' ? 'Pricing Guide' : '价格说明'}}</view>
+      <view class="price-boundary-text">{{service.priceExplanation}}</view>
+      <view class="price-boundary-hint">{{service.quoteHint}}</view>
     </view>
     <view class="detail-tags">
       <text>{{service.duration}}{{t.minutes}}</text>

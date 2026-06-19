@@ -279,6 +279,43 @@ button {
   color: var(--accent-dark);
 }
 
+.quote-hint {
+  display: block;
+  margin-top: 8px;
+  color: var(--accent-dark);
+  font-size: 13px;
+  font-weight: 850;
+  line-height: 1.35;
+}
+
+.price-boundary-box {
+  display: grid;
+  gap: 6px;
+  margin-top: 16px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: var(--soft);
+  padding: 14px;
+}
+
+.price-boundary-box strong {
+  color: var(--ink);
+  font-size: 15px;
+}
+
+.price-boundary-box p {
+  margin: 0;
+  color: var(--muted);
+  font-size: 14px;
+  font-weight: 680;
+  line-height: 1.55;
+}
+
+.price-boundary-box small {
+  color: var(--accent-dark);
+  font-weight: 850;
+}
+
 .visual-hero {
   min-height: 260px;
   position: relative;

@@ -18,6 +18,8 @@ const HOST = process.env.HOST || '0.0.0.0'
 const OWNER_TOKEN = process.env.OWNER_DEMO_TOKEN || ''
 const ALLOW_OWNER_DEMO_TOKEN = process.env.ALLOW_OWNER_DEMO_TOKEN === 'true'
 const OWNER_EMAILS = (process.env.OWNER_EMAILS || 'nini3131254931@gmail.com').split(',').map((email) => email.trim().toLowerCase()).filter(Boolean)
+const STAFF_EMAILS = (process.env.STAFF_EMAILS || 'staff@luckyluxeatelier.com,employee@luckyluxeatelier.com').split(',').map((email) => email.trim().toLowerCase()).filter(Boolean)
+const STAFF_DEMO_PASSWORD = process.env.STAFF_DEMO_PASSWORD || 'LuckyluxeStaff0312'
 const FINANCE_EMAILS = (process.env.FINANCE_EMAILS || '').split(',').map((email) => email.trim().toLowerCase()).filter(Boolean)
 const FINANCE_PASSWORD = process.env.FINANCE_PASSWORD || ''
 const HOLD_MINUTES = Number(process.env.BOOKING_HOLD_MINUTES || 15)
@@ -104,20 +106,29 @@ function apiError(status, code, message) {
 }
 
 async function requireOwner(req) {
+  const admin = await requireAdmin(req)
+  if (admin.role !== 'owner') throw apiError(403, 'FORBIDDEN', 'Owner permission is required.')
+  return admin
+}
+
+async function requireAdmin(req) {
   const auth = req.headers.authorization || ''
-  if (ALLOW_OWNER_DEMO_TOKEN && OWNER_TOKEN && auth === `Bearer ${OWNER_TOKEN}`) return { provider: 'demo-token' }
+  if (ALLOW_OWNER_DEMO_TOKEN && OWNER_TOKEN && auth === `Bearer ${OWNER_TOKEN}`) return { provider: 'demo-token', role: 'owner' }
   const token = auth.startsWith('Bearer ') ? auth.slice(7) : ''
+  const ownerEmail = demoEmailFromToken(token, 'owner')
+  if (ownerEmail && OWNER_EMAILS.includes(ownerEmail)) return { provider: 'demo-owner', email: ownerEmail, role: 'owner' }
+  const staffEmail = demoEmailFromToken(token, 'staff')
+  if (staffEmail && STAFF_EMAILS.includes(staffEmail)) return { provider: 'demo-staff', email: staffEmail, role: 'staff' }
   if (!isSupabaseConfigured()) {
-    const email = demoEmailFromToken(token, 'owner')
-    if (email && OWNER_EMAILS.includes(email)) return { provider: 'demo-owner', email }
+    if (ownerEmail && OWNER_EMAILS.includes(ownerEmail)) return { provider: 'demo-owner', email: ownerEmail, role: 'owner' }
+    if (staffEmail && STAFF_EMAILS.includes(staffEmail)) return { provider: 'demo-staff', email: staffEmail, role: 'staff' }
   }
-  if (!token || !isSupabaseConfigured()) throw apiError(401, 'UNAUTHORIZED', 'Owner login is required.')
+  if (!token || !isSupabaseConfigured()) throw apiError(401, 'UNAUTHORIZED', 'Admin login is required.')
   const authUser = await getSupabaseUser(token)
   const email = String(authUser.email || '').toLowerCase()
-  if (!OWNER_EMAILS.includes(email)) {
-    throw apiError(403, 'FORBIDDEN', 'This account is not allowed to access owner admin.')
-  }
-  return { provider: 'supabase', email }
+  if (OWNER_EMAILS.includes(email)) return { provider: 'supabase', email, role: 'owner' }
+  if (STAFF_EMAILS.includes(email)) return { provider: 'supabase', email, role: 'staff' }
+  throw apiError(403, 'FORBIDDEN', 'This account is not allowed to access admin.')
 }
 
 async function requireCustomer(req) {
@@ -195,9 +206,17 @@ function servicePayload(body, current = {}) {
 }
 
 function serializeService(row, lang = 'zh') {
+  const type = String(row.type || '').toLowerCase()
+  const isNail = type === 'nail'
+  const priceExplanationZh = isNail
+    ? '显示价格为基础服务价。纯色、基础护理、基础法式等可按基础价执行；复杂手绘、延长、卸甲、特殊材料、3D 装饰、大面积钻饰或参考图差异较大的款式需要人工报价。'
+    : '美睫款式为固定报价。页面价格已包含该款式标准嫁接服务；如有卸除、补睫、特殊敏感处理等附加需求，会在加项中明确显示，确认后即为最终报价。'
+  const priceExplanationEn = isNail
+    ? 'Displayed price is the base service price. Solid color, basic care, and basic French designs can follow the base price. Complex hand painting, extensions, removal, special materials, 3D charms, heavy rhinestones, or designs that differ from the reference require manual quotation.'
+    : 'Lash services use fixed pricing. The listed price includes the standard application for this style. Any removal, refill, or special sensitivity add-on will be shown clearly before checkout, and the confirmed total is the final quote.'
   return {
     id: row.id,
-    type: row.type.toLowerCase(),
+    type,
     category: row.category,
     name: lang === 'en' ? row.name_en : row.name_zh,
     nameZh: row.name_zh,
@@ -213,6 +232,14 @@ function serializeService(row, lang = 'zh') {
     durationMin: row.base_duration_min,
     process: parseJson(row.process_json),
     notice: parseJson(row.notice_json),
+    requiresManualQuote: isNail,
+    pricingType: isNail ? 'base_plus_quote' : 'fixed_final',
+    priceLabelZh: isNail ? `基础价 CAD $${cents(row.price_cents)}` : `固定价 CAD $${cents(row.price_cents)}`,
+    priceLabelEn: isNail ? `Base price CAD $${cents(row.price_cents)}` : `Fixed price CAD $${cents(row.price_cents)}`,
+    quoteHintZh: isNail ? '详细价格请联系客服获取报价' : '加项确认后即为最终报价',
+    quoteHintEn: isNail ? 'Contact us for detailed custom quote' : 'Add-ons confirmed before checkout are final',
+    priceExplanationZh,
+    priceExplanationEn,
     sortOrder: row.sort_order,
     isActive: bool(row.is_active)
   }
@@ -882,9 +909,22 @@ async function route(req, res) {
   if (req.method === 'POST' && path === '/auth/email/login') return json(res, 200, await signInEmailUser(await readBody(req)))
   if (req.method === 'POST' && path === '/auth/google/demo') return json(res, 201, { user: await registerGoogleDemoUser(await readBody(req)) })
   if (req.method === 'POST' && path === '/admin/auth/login') {
-    const auth = await signInEmailUser(await readBody(req))
-    if (!OWNER_EMAILS.includes(String(auth.user.email || '').toLowerCase())) throw apiError(403, 'FORBIDDEN', 'This account is not allowed to access owner admin.')
-    if (!isSupabaseConfigured()) auth.auth = demoAuthFor(auth.user.email, 'owner')
+    const body = await readBody(req)
+    const email = String(body.email || '').trim().toLowerCase()
+    if (STAFF_EMAILS.includes(email) && String(body.password || '') === STAFF_DEMO_PASSWORD) {
+      return json(res, 200, {
+        user: await registerEmailUser({ email, displayName: body.displayName || 'Lucky Luxe Staff' }),
+        auth: demoAuthFor(email, 'staff'),
+        admin: { role: 'staff', email },
+        mode: 'demo-staff'
+      })
+    }
+    const auth = await signInEmailUser(body)
+    const loginEmail = String(auth.user.email || '').toLowerCase()
+    const role = OWNER_EMAILS.includes(loginEmail) ? 'owner' : STAFF_EMAILS.includes(loginEmail) ? 'staff' : ''
+    if (!role) throw apiError(403, 'FORBIDDEN', 'This account is not allowed to access admin.')
+    if (!isSupabaseConfigured()) auth.auth = demoAuthFor(auth.user.email, role)
+    auth.admin = { role, email: loginEmail }
     return json(res, 200, auth)
   }
   if (req.method === 'POST' && path === '/admin/auth/register') {
@@ -896,8 +936,8 @@ async function route(req, res) {
     return json(res, 201, auth)
   }
   if (req.method === 'GET' && path === '/admin/auth/me') {
-    const owner = await requireOwner(req)
-    return json(res, 200, { owner })
+    const admin = await requireAdmin(req)
+    return json(res, 200, { admin })
   }
   if (req.method === 'GET' && path.startsWith('/users/')) {
     const user = await query('SELECT * FROM users WHERE id = $1', [path.split('/')[2]])
@@ -997,15 +1037,18 @@ async function route(req, res) {
     const booking = row.rows[0] ? await serializeBooking(row.rows[0], body.lang || 'zh') : body.booking
     return json(res, 200, { copy: await createSocialCopy({ lang: body.lang || 'zh', image: body.image || '', booking, platform: body.platform || 'xiaohongshu', audience: body.audience || 'customer', avoidCaptions: body.avoidCaptions || [], variantSeed: body.variantSeed || '' }) })
   }
-  if (path.startsWith('/admin/')) await requireOwner(req)
+  let adminSession = null
+  if (path.startsWith('/admin/')) adminSession = await requireAdmin(req)
   if (req.method === 'GET' && path === '/admin/bookings') {
     const rows = await query('SELECT * FROM bookings ORDER BY appointment_start DESC')
     return json(res, 200, { bookings: await Promise.all(rows.rows.map((booking) => serializeBooking(booking))) })
   }
   if (req.method === 'GET' && path === '/admin/customers') {
+    if (adminSession.role !== 'owner') throw apiError(403, 'FORBIDDEN', 'Owner permission is required.')
     return json(res, 200, { customers: await getAdminCustomers() })
   }
   if (req.method === 'POST' && path === '/admin/finance/summary') {
+    if (adminSession.role !== 'owner') throw apiError(403, 'FORBIDDEN', 'Owner permission is required.')
     return json(res, 200, { finance: await getFinanceSummary(await readBody(req)) })
   }
   if (req.method === 'POST' && path === '/admin/ai/daily-brief') {
@@ -1040,10 +1083,12 @@ async function route(req, res) {
     return json(res, 200, { copy: await createSocialCopy({ lang: body.lang || 'zh', image: body.image || '', booking, platform: body.platform || 'xiaohongshu', audience: body.audience || 'staff', avoidCaptions: body.avoidCaptions || [], variantSeed: body.variantSeed || '' }) })
   }
   if (req.method === 'GET' && path === '/admin/services') {
+    if (adminSession.role !== 'owner') throw apiError(403, 'FORBIDDEN', 'Owner permission is required.')
     const services = await query('SELECT * FROM services ORDER BY type ASC, sort_order ASC')
     return json(res, 200, { services: services.rows.map((service) => serializeService(service)) })
   }
   if (req.method === 'POST' && path === '/admin/services') {
+    if (adminSession.role !== 'owner') throw apiError(403, 'FORBIDDEN', 'Owner permission is required.')
     const payload = servicePayload(await readBody(req))
     if (!['NAIL', 'LASH'].includes(payload.type)) throw apiError(400, 'BAD_REQUEST', 'Service type must be NAIL or LASH.')
     if (!payload.nameZh || !payload.nameEn) throw apiError(400, 'BAD_REQUEST', 'Service name is required.')
@@ -1079,6 +1124,7 @@ async function route(req, res) {
     return json(res, 200, { technicians: technicians.rows })
   }
   if (req.method === 'PATCH' && path.startsWith('/admin/services/')) {
+    if (adminSession.role !== 'owner') throw apiError(403, 'FORBIDDEN', 'Owner permission is required.')
     const id = path.split('/')[3]
     const body = await readBody(req)
     const current = await getService(id)
@@ -1108,6 +1154,7 @@ async function route(req, res) {
     return json(res, 200, { service: serializeService(await getService(id)) })
   }
   if (req.method === 'PATCH' && path.startsWith('/admin/technicians/') && path.endsWith('/schedule')) {
+    if (adminSession.role !== 'owner') throw apiError(403, 'FORBIDDEN', 'Owner permission is required.')
     const technicianId = path.split('/')[3]
     const body = await readBody(req)
     if (!body.date) throw apiError(400, 'BAD_REQUEST', 'date is required.')

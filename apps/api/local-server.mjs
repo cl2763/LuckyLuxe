@@ -17,6 +17,9 @@ mkdirSync(dataDir, { recursive: true })
 const db = new DatabaseSync(join(dataDir, 'lucky-luxe.sqlite'))
 const PORT = Number(process.env.PORT || 4000)
 const OWNER_TOKEN = process.env.OWNER_DEMO_TOKEN || 'owner-demo-token'
+const OWNER_EMAILS = (process.env.OWNER_EMAILS || 'nini3131254931@gmail.com').split(',').map((email) => email.trim().toLowerCase()).filter(Boolean)
+const STAFF_EMAILS = (process.env.STAFF_EMAILS || 'staff@luckyluxeatelier.com,employee@luckyluxeatelier.com').split(',').map((email) => email.trim().toLowerCase()).filter(Boolean)
+const STAFF_DEMO_PASSWORD = process.env.STAFF_DEMO_PASSWORD || 'LuckyluxeStaff0312'
 const FINANCE_EMAILS = (process.env.FINANCE_EMAILS || 'nini3131254931@gmail.com').split(',').map((email) => email.trim().toLowerCase()).filter(Boolean)
 const FINANCE_PASSWORD = process.env.FINANCE_PASSWORD || ''
 const HOLD_MINUTES = Number(process.env.BOOKING_HOLD_MINUTES || 15)
@@ -262,7 +265,20 @@ function apiError(status, code, message) {
 }
 
 function requireOwner(req) {
-  if (req.headers.authorization !== `Bearer ${OWNER_TOKEN}`) throw apiError(401, 'UNAUTHORIZED', 'Owner token is required.')
+  const admin = requireAdmin(req)
+  if (admin.role !== 'owner') throw apiError(403, 'FORBIDDEN', 'Owner permission is required.')
+  return admin
+}
+
+function requireAdmin(req) {
+  const auth = req.headers.authorization || ''
+  if (auth === `Bearer ${OWNER_TOKEN}`) return { role: 'owner', provider: 'demo-token' }
+  const token = auth.startsWith('Bearer ') ? auth.slice(7) : ''
+  const ownerEmail = demoEmailFromToken(token, 'owner')
+  if (ownerEmail && OWNER_EMAILS.includes(ownerEmail)) return { role: 'owner', email: ownerEmail, provider: 'demo-owner' }
+  const staffEmail = demoEmailFromToken(token, 'staff')
+  if (staffEmail && STAFF_EMAILS.includes(staffEmail)) return { role: 'staff', email: staffEmail, provider: 'demo-staff' }
+  throw apiError(401, 'UNAUTHORIZED', 'Admin login is required.')
 }
 
 function cents(centsValue) {
@@ -321,9 +337,17 @@ function servicePayload(body, current = {}) {
 }
 
 function serializeService(row, lang = 'zh') {
+  const type = String(row.type || '').toLowerCase()
+  const isNail = type === 'nail'
+  const priceExplanationZh = isNail
+    ? '显示价格为基础服务价。纯色、基础护理、基础法式等可按基础价执行；复杂手绘、延长、卸甲、特殊材料、3D 装饰、大面积钻饰或参考图差异较大的款式需要人工报价。'
+    : '美睫款式为固定报价。页面价格已包含该款式标准嫁接服务；如有卸除、补睫、特殊敏感处理等附加需求，会在加项中明确显示，确认后即为最终报价。'
+  const priceExplanationEn = isNail
+    ? 'Displayed price is the base service price. Solid color, basic care, and basic French designs can follow the base price. Complex hand painting, extensions, removal, special materials, 3D charms, heavy rhinestones, or designs that differ from the reference require manual quotation.'
+    : 'Lash services use fixed pricing. The listed price includes the standard application for this style. Any removal, refill, or special sensitivity add-on will be shown clearly before checkout, and the confirmed total is the final quote.'
   return {
     id: row.id,
-    type: row.type.toLowerCase(),
+    type,
     category: row.category,
     name: lang === 'en' ? row.name_en : row.name_zh,
     nameZh: row.name_zh,
@@ -339,6 +363,14 @@ function serializeService(row, lang = 'zh') {
     durationMin: row.base_duration_min,
     process: parseJson(row.process_json),
     notice: parseJson(row.notice_json),
+    requiresManualQuote: isNail,
+    pricingType: isNail ? 'base_plus_quote' : 'fixed_final',
+    priceLabelZh: isNail ? `基础价 CAD $${cents(row.price_cents)}` : `固定价 CAD $${cents(row.price_cents)}`,
+    priceLabelEn: isNail ? `Base price CAD $${cents(row.price_cents)}` : `Fixed price CAD $${cents(row.price_cents)}`,
+    quoteHintZh: isNail ? '详细价格请联系客服获取报价' : '加项确认后即为最终报价',
+    quoteHintEn: isNail ? 'Contact us for detailed custom quote' : 'Add-ons confirmed before checkout are final',
+    priceExplanationZh,
+    priceExplanationEn,
     sortOrder: row.sort_order,
     isActive: Boolean(row.is_active)
   }
@@ -484,6 +516,21 @@ function publicCode() {
 
 function randomId(prefix) {
   return `${prefix}_${Date.now().toString(36)}_${Math.random().toString(36).slice(2, 8)}`
+}
+
+function demoAuthFor(email, scope = 'customer') {
+  return {
+    accessToken: `demo-${scope}:${encodeURIComponent(email)}`,
+    refreshToken: null,
+    expiresIn: 3600,
+    tokenType: 'bearer'
+  }
+}
+
+function demoEmailFromToken(token, scope = 'customer') {
+  const prefix = `demo-${scope}:`
+  if (!String(token || '').startsWith(prefix)) return ''
+  return decodeURIComponent(token.slice(prefix.length)).trim().toLowerCase()
 }
 
 function iso(date) {
@@ -734,8 +781,34 @@ async function route(req, res) {
   if (req.method === 'GET' && path.startsWith('/assets/')) return serveFile(res, assetRoot, path.replace('/assets/', ''))
 
   if (req.method === 'GET' && path === '/health') return json(res, 200, { ok: true, service: 'lucky-luxe-api-local', time: iso(new Date()) })
-  if (req.method === 'POST' && path === '/auth/email/register') return json(res, 201, { user: registerEmailUser(await readBody(req)) })
+  if (req.method === 'POST' && path === '/auth/email/register') {
+    const body = await readBody(req)
+    const user = registerEmailUser(body)
+    return json(res, 201, { user, auth: demoAuthFor(user.email || body.email), mode: 'demo' })
+  }
+  if (req.method === 'POST' && path === '/auth/email/login') {
+    const body = await readBody(req)
+    const user = registerEmailUser(body)
+    return json(res, 200, { user, auth: demoAuthFor(user.email || body.email), mode: 'demo' })
+  }
   if (req.method === 'POST' && path === '/auth/google/demo') return json(res, 201, { user: registerGoogleDemoUser(await readBody(req)) })
+  if (req.method === 'POST' && path === '/admin/auth/login') {
+    const body = await readBody(req)
+    const email = String(body.email || '').trim().toLowerCase()
+    const role = OWNER_EMAILS.includes(email) ? 'owner' : STAFF_EMAILS.includes(email) ? 'staff' : ''
+    if (!role) throw apiError(403, 'FORBIDDEN', 'This account is not allowed to access admin.')
+    if (role === 'staff' && String(body.password || '') !== STAFF_DEMO_PASSWORD) throw apiError(403, 'FORBIDDEN', 'Staff demo password is incorrect.')
+    const user = registerEmailUser({ email, displayName: role === 'staff' ? 'Lucky Luxe Staff' : 'Lucky Luxe Owner' })
+    return json(res, 200, { user, auth: demoAuthFor(email, role), admin: { role, email }, mode: `demo-${role}` })
+  }
+  if (req.method === 'POST' && path === '/admin/auth/register') {
+    const body = await readBody(req)
+    const email = String(body.email || '').trim().toLowerCase()
+    if (!OWNER_EMAILS.includes(email)) throw apiError(403, 'FORBIDDEN', 'This email is not approved for owner admin.')
+    const user = registerEmailUser({ email, displayName: 'Lucky Luxe Owner' })
+    return json(res, 201, { user, auth: demoAuthFor(email, 'owner'), admin: { role: 'owner', email }, mode: 'demo-owner' })
+  }
+  if (req.method === 'GET' && path === '/admin/auth/me') return json(res, 200, { admin: requireAdmin(req) })
   if (req.method === 'GET' && path.startsWith('/users/')) {
     const user = db.prepare('SELECT * FROM users WHERE id = ?').get(path.split('/')[2])
     if (!user) throw apiError(404, 'NOT_FOUND', 'User not found.')
@@ -824,15 +897,18 @@ async function route(req, res) {
     const booking = row ? serializeBooking(row, body.lang || 'zh') : body.booking
     return json(res, 200, { copy: await createSocialCopy({ lang: body.lang || 'zh', image: body.image || '', booking, platform: body.platform || 'xiaohongshu', audience: body.audience || 'customer', avoidCaptions: body.avoidCaptions || [], variantSeed: body.variantSeed || '' }) })
   }
-  if (path.startsWith('/admin/')) requireOwner(req)
+  let adminSession = null
+  if (path.startsWith('/admin/')) adminSession = requireAdmin(req)
   if (req.method === 'GET' && path === '/admin/bookings') {
     const rows = db.prepare('SELECT * FROM bookings ORDER BY appointment_start DESC').all()
     return json(res, 200, { bookings: rows.map((booking) => serializeBooking(booking)) })
   }
   if (req.method === 'GET' && path === '/admin/customers') {
+    if (adminSession.role !== 'owner') throw apiError(403, 'FORBIDDEN', 'Owner permission is required.')
     return json(res, 200, { customers: getAdminCustomers() })
   }
   if (req.method === 'POST' && path === '/admin/finance/summary') {
+    if (adminSession.role !== 'owner') throw apiError(403, 'FORBIDDEN', 'Owner permission is required.')
     return json(res, 200, { finance: getFinanceSummary(await readBody(req)) })
   }
   if (req.method === 'POST' && path === '/admin/ai/daily-brief') {
@@ -860,9 +936,11 @@ async function route(req, res) {
     return json(res, 200, { copy: await createSocialCopy({ lang: body.lang || 'zh', image: body.image || '', booking, platform: body.platform || 'xiaohongshu', audience: body.audience || 'staff', avoidCaptions: body.avoidCaptions || [], variantSeed: body.variantSeed || '' }) })
   }
   if (req.method === 'GET' && path === '/admin/services') {
+    if (adminSession.role !== 'owner') throw apiError(403, 'FORBIDDEN', 'Owner permission is required.')
     return json(res, 200, { services: db.prepare('SELECT * FROM services ORDER BY type ASC, sort_order ASC').all().map(serializeService) })
   }
   if (req.method === 'POST' && path === '/admin/services') {
+    if (adminSession.role !== 'owner') throw apiError(403, 'FORBIDDEN', 'Owner permission is required.')
     const payload = servicePayload(await readBody(req))
     if (!['NAIL', 'LASH'].includes(payload.type)) throw apiError(400, 'BAD_REQUEST', 'Service type must be NAIL or LASH.')
     if (!payload.nameZh || !payload.nameEn) throw apiError(400, 'BAD_REQUEST', 'Service name is required.')
@@ -878,6 +956,7 @@ async function route(req, res) {
     return json(res, 200, { technicians: db.prepare('SELECT * FROM technicians ORDER BY name ASC').all() })
   }
   if (req.method === 'PATCH' && path.startsWith('/admin/services/')) {
+    if (adminSession.role !== 'owner') throw apiError(403, 'FORBIDDEN', 'Owner permission is required.')
     const id = path.split('/')[3]
     const body = await readBody(req)
     const current = getService(id)
@@ -890,6 +969,7 @@ async function route(req, res) {
     return json(res, 200, { service: serializeService(getService(id)) })
   }
   if (req.method === 'PATCH' && path.startsWith('/admin/technicians/') && path.endsWith('/schedule')) {
+    if (adminSession.role !== 'owner') throw apiError(403, 'FORBIDDEN', 'Owner permission is required.')
     const technicianId = path.split('/')[3]
     const body = await readBody(req)
     if (!body.date) throw apiError(400, 'BAD_REQUEST', 'date is required.')

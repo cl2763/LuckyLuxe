@@ -1,6 +1,7 @@
 const owner = {
   token: '',
   auth: readJson('lucky-owner-auth'),
+  role: readJson('lucky-owner-auth')?.admin?.role || 'owner',
   lang: localStorage.getItem('lucky-admin-lang') || 'zh',
   bookings: [],
   services: [],
@@ -117,11 +118,12 @@ const copy = {
   zh: {
     adminTitle: 'Lucky Luxe 后台',
     ownerConsole: '店主控制台',
+    staffConsole: '员工工作台',
     customerApp: '客户网页',
     reload: '刷新',
-    ownerAccess: '店主权限',
-    ownerLogin: '店主登录',
-    ownerLoginText: '请使用已批准的 owner 邮箱登录。登录成功前后台数据不会显示。',
+    ownerAccess: '后台权限',
+    ownerLogin: '后台登录',
+    ownerLoginText: '请使用已批准的 owner 或员工邮箱登录。系统会根据账号权限显示对应功能。',
     email: '邮箱',
     password: '密码',
     login: '登录',
@@ -270,9 +272,11 @@ const copy = {
     serviceCreated: '服务已添加。',
     scheduleSaved: '排班已保存。',
     loggedOut: '已退出。',
-    loginSuccess: 'Owner 登录成功。',
+    loginSuccess: '后台登录成功。',
     ownerCreated: 'Owner 账号已创建。',
-    checkEmail: '请检查邮箱验证 owner 账号，然后再登录。',
+    checkEmail: '请检查邮箱验证账号，然后再登录。',
+    staffMode: '员工模式',
+    restrictedForStaff: '员工账号仅显示订单、技师状态与 AI 图库工作流。',
     details: '详情',
     bookingDetails: '订单详情',
     customer: '顾客',
@@ -290,11 +294,12 @@ const copy = {
   en: {
     adminTitle: 'Lucky Luxe Admin',
     ownerConsole: 'Owner Console',
+    staffConsole: 'Staff Console',
     customerApp: 'Customer App',
     reload: 'Reload',
-    ownerAccess: 'Owner Access',
-    ownerLogin: 'Owner Login',
-    ownerLoginText: 'Use your approved owner email. Admin data is hidden until login succeeds.',
+    ownerAccess: 'Admin Access',
+    ownerLogin: 'Admin Login',
+    ownerLoginText: 'Use an approved owner or staff email. The system shows features based on account role.',
     email: 'Email',
     password: 'Password',
     login: 'Login',
@@ -443,9 +448,11 @@ const copy = {
     serviceCreated: 'Service created.',
     scheduleSaved: 'Schedule saved.',
     loggedOut: 'Logged out.',
-    loginSuccess: 'Owner login successful.',
+    loginSuccess: 'Admin login successful.',
     ownerCreated: 'Owner account created.',
-    checkEmail: 'Check your email to confirm the owner account, then log in.',
+    checkEmail: 'Check your email to confirm the account, then log in.',
+    staffMode: 'Staff Mode',
+    restrictedForStaff: 'Staff accounts only show orders, technician status, and AI gallery workflow.',
     details: 'Details',
     bookingDetails: 'Booking Details',
     customer: 'Customer',
@@ -532,6 +539,10 @@ function ownerBearer() {
   return owner.auth?.accessToken || owner.token || ''
 }
 
+function isOwnerRole() {
+  return owner.role === 'owner'
+}
+
 async function request(path, options = {}) {
   const bearer = ownerBearer()
   const headers = {
@@ -568,7 +579,7 @@ function applyLanguage() {
   els.adminLangZh.classList.toggle('active', owner.lang === 'zh')
   els.adminLangEn.classList.toggle('active', owner.lang === 'en')
   els.adminBrandTitle.textContent = t('adminTitle')
-  els.adminBrandSubtitle.textContent = t('ownerConsole')
+  els.adminBrandSubtitle.textContent = isOwnerRole() ? t('ownerConsole') : t('staffConsole')
   els.customerAppLink.textContent = t('customerApp')
   els.reloadButton.textContent = t('reload')
   els.ownerAccessEyebrow.textContent = t('ownerAccess')
@@ -638,16 +649,20 @@ async function loadAll() {
     setLocked(true)
     return
   }
-  const [bookingData, serviceData, techData, customerData] = await Promise.all([
+  const [meData, bookingData, techData] = await Promise.all([
+    request('/admin/auth/me'),
     request('/admin/bookings'),
-    request('/admin/services'),
-    request('/admin/technicians'),
-    request('/admin/customers')
+    request('/admin/technicians')
   ])
+  owner.role = meData.admin?.role || owner.auth?.admin?.role || 'owner'
+  const [serviceData, customerData] = isOwnerRole()
+    ? await Promise.all([request('/admin/services'), request('/admin/customers')])
+    : [{ services: [] }, { customers: [] }]
   owner.bookings = bookingData.bookings
   owner.services = serviceData.services
   owner.technicians = techData.technicians
   owner.customers = customerData.customers
+  if (!isOwnerRole() && !['bookings', 'schedule', 'aiGallery'].includes(owner.adminPage)) owner.adminPage = 'bookings'
   setLocked(false)
   render()
 }
@@ -669,6 +684,8 @@ async function ownerLogin(event) {
     return
   }
   owner.auth = data.auth
+  owner.auth.admin = data.admin || owner.auth.admin || {}
+  owner.role = owner.auth.admin.role || 'owner'
   localStorage.setItem('lucky-owner-auth', JSON.stringify(owner.auth))
   toast(action === 'register' ? t('ownerCreated') : t('loginSuccess'))
   await loadAll()
@@ -676,6 +693,7 @@ async function ownerLogin(event) {
 
 function ownerLogout() {
   owner.auth = null
+  owner.role = 'owner'
   owner.token = ''
   els.tokenInput.value = ''
   localStorage.removeItem('lucky-owner-auth')
@@ -731,6 +749,18 @@ function render() {
 }
 
 function renderMetrics() {
+  if (!isOwnerRole()) {
+    const todayCount = owner.bookings.filter((item) => isToday(item.appointmentDate)).length
+    const activeCount = owner.bookings.filter((item) => activeStatuses().includes(item.status)).length
+    const reviewCount = galleryGroups().filter((group) => group.booking.galleryStatus !== 'approved').length
+    els.metricGrid.innerHTML = `
+      <button class="metric" data-admin-page="bookings" type="button"><span class="subtle">${t('todayBookings')}</span><strong>${todayCount}</strong></button>
+      <button class="metric" data-admin-page="bookings" type="button"><span class="subtle">${t('activeBookings')}</span><strong>${activeCount}</strong></button>
+      <button class="metric" data-admin-page="aiGallery" type="button"><span class="subtle">${t('aiStatusReview')}</span><strong>${reviewCount}</strong></button>
+      <button class="metric" data-admin-page="schedule" type="button"><span class="subtle">${t('staffMode')}</span><strong>${owner.technicians.length}</strong></button>
+    `
+    return
+  }
   const stats = dashboardStats()
   els.metricGrid.innerHTML = `
     <button class="metric" data-dashboard-detail="confirmed" type="button"><span class="subtle">${t('confirmed')}</span><strong>${stats.confirmed}</strong></button>
@@ -858,6 +888,10 @@ function bookingSource(booking) {
 }
 
 function renderAdminPages() {
+  els.sidebarDashboard.classList.toggle('hidden', !isOwnerRole())
+  els.sidebarServices.classList.toggle('hidden', !isOwnerRole())
+  els.sidebarCustomers.classList.toggle('hidden', !isOwnerRole())
+  if (!isOwnerRole() && ['dashboard', 'dashboardDetail', 'services', 'customers'].includes(owner.adminPage)) owner.adminPage = 'bookings'
   const pages = {
     dashboard: els.adminDashboard,
     dashboardDetail: els.dashboardDetailPage,

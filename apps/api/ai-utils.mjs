@@ -91,6 +91,10 @@ export async function analyzeReferenceImage({ lang = 'zh', images = [], service 
     styleTags: ['string'],
     complexity: 'low|medium|high',
     estimatedExtraMinutes: 0,
+    estimatedPriceCents: 0,
+    manualQuoteRequired: false,
+    priceMessageZh: 'string',
+    priceMessageEn: 'string',
     recommendedServiceNames: ['string'],
     addOnSuggestions: ['string'],
     clientMessageZh: 'string',
@@ -108,6 +112,14 @@ export async function analyzeReferenceImage({ lang = 'zh', images = [], service 
       styleTags: service.category ? [service.category, bilingual('自然高级', 'soft luxury', lang)] : [bilingual('自然高级', 'soft luxury', lang)],
       complexity: images.length > 1 ? 'medium' : 'low',
       estimatedExtraMinutes: images.length > 1 ? 30 : 0,
+      estimatedPriceCents: Number(service.priceCents || 0) + (String(service.type || '').toLowerCase() === 'nail' && images.length > 1 ? 3000 : 0),
+      manualQuoteRequired: String(service.type || '').toLowerCase() === 'nail' && images.length > 1,
+      priceMessageZh: String(service.type || '').toLowerCase() === 'nail'
+        ? (images.length > 1 ? 'AI 认为该款式可能涉及复杂度或加项，建议联系客服人工确认最终报价。' : 'AI 初步判断可从基础价开始，最终是否加项需到店或人工确认。')
+        : '美睫为固定报价，当前款式价格加明确加项后即为最终报价。',
+      priceMessageEn: String(service.type || '').toLowerCase() === 'nail'
+        ? (images.length > 1 ? 'AI suggests this design may need add-ons or manual quote confirmation.' : 'AI suggests this can start from the base price; final add-ons should be confirmed in store or by staff.')
+        : 'Lash pricing is fixed. The style price plus selected add-ons is the final quote.',
       recommendedServiceNames: [service.name || service.nameZh || bilingual('推荐同类服务', 'Recommended matching service', lang)],
       addOnSuggestions: images.length > 1 ? [bilingual('建议预留延长服务时间', 'Reserve extra service time', lang)] : [bilingual('到店后由技师确认细节', 'Technician confirms details in store', lang)],
       clientMessageZh: 'AI 初步判断该参考图适合当前服务。最终款式、耗时和加项请以到店沟通为准。',

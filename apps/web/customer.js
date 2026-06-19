@@ -33,6 +33,13 @@ const copy = {
     minutes: '分钟',
     deposit: '定金',
     servicePrice: '服务价',
+    basePrice: '基础价',
+    fixedPrice: '固定价',
+    detailedQuote: '详细价格请联系客服获取报价',
+    finalPriceGuide: '加项确认后即为最终报价',
+    priceBoundary: '价格说明',
+    aiPriceSuggestion: 'AI 价格建议',
+    manualQuote: '联系人工报价',
     process: '服务流程',
     notice: '注意事项',
     reference: '参考图',
@@ -155,6 +162,13 @@ const copy = {
     minutes: 'min',
     deposit: 'Deposit',
     servicePrice: 'Service price',
+    basePrice: 'Base price',
+    fixedPrice: 'Fixed price',
+    detailedQuote: 'Contact us for a detailed quote',
+    finalPriceGuide: 'Confirmed add-ons make the final quote',
+    priceBoundary: 'Pricing Guide',
+    aiPriceSuggestion: 'AI Price Suggestion',
+    manualQuote: 'Contact staff for quote',
     process: 'Service Process',
     notice: 'Notice',
     reference: 'Reference',
@@ -322,6 +336,25 @@ function t(key) {
 
 function money(cents) {
   return `CAD $${Number(cents / 100).toFixed(0)}`
+}
+
+function isNailService(service) {
+  return String(service?.type || '').toLowerCase() === 'nail'
+}
+
+function priceLabel(service) {
+  if (state.lang === 'en') return service.priceLabelEn || `${isNailService(service) ? t('basePrice') : t('fixedPrice')} ${money(service.priceCents)}`
+  return service.priceLabelZh || `${isNailService(service) ? t('basePrice') : t('fixedPrice')} ${money(service.priceCents)}`
+}
+
+function quoteHint(service) {
+  if (state.lang === 'en') return service.quoteHintEn || (isNailService(service) ? t('detailedQuote') : t('finalPriceGuide'))
+  return service.quoteHintZh || (isNailService(service) ? t('detailedQuote') : t('finalPriceGuide'))
+}
+
+function priceExplanation(service) {
+  if (state.lang === 'en') return service.priceExplanationEn || ''
+  return service.priceExplanationZh || ''
 }
 
 function escapeHtml(value = '') {
@@ -878,10 +911,11 @@ function renderServiceCard(service) {
         <h2>${service.name}</h2>
         <p>${service.description}</p>
         <span class="meta">
-          <span class="price">${money(service.priceCents)}</span>
+          <span class="price">${priceLabel(service)}</span>
           <span>${service.durationMin}${t('minutes')}</span>
           <span>${t('deposit')} ${money(service.depositCents)}</span>
         </span>
+        <small class="quote-hint">${quoteHint(service)}</small>
       </span>
     </button>
   `
@@ -898,8 +932,13 @@ function renderDetail() {
         <h1>${service.name}</h1>
         <p>${service.description}</p>
         <div class="detail-price-row">
-          <span><strong class="price">${money(service.priceCents)}</strong> / ${t('servicePrice')}</span>
+          <span><strong class="price">${priceLabel(service)}</strong></span>
           <span class="deposit">${t('deposit')} ${money(service.depositCents)}</span>
+        </div>
+        <div class="price-boundary-box">
+          <strong>${t('priceBoundary')}</strong>
+          <p>${escapeHtml(priceExplanation(service))}</p>
+          <small>${escapeHtml(quoteHint(service))}</small>
         </div>
         <div class="detail-tags">
           <span>${service.durationMin}${t('minutes')}</span>
@@ -1044,8 +1083,10 @@ function renderReferenceAnalysis() {
     <div class="ai-result-box">
       <p><span>${t('aiComplexity')}</span><strong>${result.complexity || '-'}</strong></p>
       <p><span>${t('aiExtraTime')}</span><strong>${result.estimatedExtraMinutes || 0}${t('minutes')}</strong></p>
+      <p><span>${t('aiPriceSuggestion')}</span><strong>${result.estimatedPriceCents ? money(result.estimatedPriceCents) : '-'}</strong></p>
+      ${result.manualQuoteRequired ? `<p><span>${t('manualQuote')}</span><strong>${state.lang === 'zh' ? '建议人工确认' : 'Recommended'}</strong></p>` : ''}
       <p><span>${t('aiTechNote')}</span><strong>${escapeHtml(techNote || '')}</strong></p>
-      <small>${escapeHtml(clientMessage || '')}</small>
+      <small>${escapeHtml((state.lang === 'en' ? result.priceMessageEn : result.priceMessageZh) || clientMessage || '')}</small>
     </div>
   `
 }
