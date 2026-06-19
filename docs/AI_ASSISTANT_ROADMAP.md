@@ -55,6 +55,70 @@
   - The AI can see only the minimum context needed for the answer.
   - Staff/owner-only finance, other customers' records, and internal notes should never be sent to customer-facing AI.
 
+## Confirmed WeChat Reception Flow
+
+- Public assistant name: `Lucky Luxe 预约助手`.
+- Default greeting:
+  - `您好欢迎来到 Lucky Luxe，我是您的预约助手，您有任何问题可以随时向我咨询，可以帮您了解美甲/美睫服务、价格规则、预约时间、定金和护理说明。如果是复杂美甲款式，也可以先发参考图，我会帮您整理需求并转给技师确认报价。`
+- After the greeting, send a separate channel-source question:
+  - Chinese options: `小红书`, `抖音`, `大众点评/美团`, `朋友推荐`, `其他`.
+  - English options: `Google`, `Instagram`, `WeChat`, `TikTok`, `Friend referral`, `Other`.
+- Nail quote flow:
+  - AI asks for and receives reference images.
+  - AI extracts quote elements: extension needed, removal needed, broken nail repair, charms/rhinestones/decoration, complexity level, missing information.
+  - AI creates an internal quote task for a nail artist. This is not a customer-facing manual handoff.
+  - The artist returns rough keywords: can/cannot do, price, estimated duration, missing elements, and notes.
+  - AI rewrites the artist response into a warm professional customer-facing reply.
+  - AI asks whether the customer wants an appointment draft.
+  - If yes, AI creates a draft and sends a Mini Program deep link for final confirmation and CAD $50 deposit payment.
+- Draft lifecycle:
+  - 10 minutes without deposit: send one payment reminder.
+  - 30 minutes without deposit: release and expire the draft.
+  - Deposit paid: send an appointment-confirmed message in the chat.
+- Quote timeout:
+  - Tell the customer the quote is being checked and is expected within 10 minutes.
+  - If no artist reply within 10 minutes, send a polite waiting notice: the artist is currently serving a client, and the customer will be notified as soon as there is a reply.
+- Human takeover:
+  - Cancellation/reschedule goes to the relevant technician.
+  - Complaints, refunds, payment issues, allergy/health questions, and complex disputes go to owner.
+  - When a human fully takes over, AI stops replying to the customer until the human explicitly transfers the conversation back to AI.
+- Follow-up:
+  - 7 days after service: ask about retention/current condition, fallout/discomfort, and whether care advice is needed.
+  - 3-4 weeks after service: refill/rebalance/rebooking reminder.
+  - When AI gallery work is ready: notify the customer to check finished photos.
+
+## Productized Packaging Direction
+
+- The system should be designed as a reusable beauty-service AI front desk, not a Lucky-Luxe-only custom script.
+- Recommended commercial packaging path:
+  - Use WeCom / WeChat Customer Service as the default China-WeChat adapter.
+  - Keep the AI brain, booking workflow, quote workflow, and reminder workflow platform-agnostic.
+  - Treat WeChat, web chat, future Instagram/WhatsApp/SMS, and Mini Program as replaceable channel adapters.
+- Multi-tenant principles:
+  - Each salon has its own tenant config: brand name, greeting, service menu, price rules, staff list, store locations, booking policy, channel options, AI tone, and handoff rules.
+  - Secrets and WeChat credentials must be tenant-scoped.
+  - Customer data, bookings, chat summaries, and finance data must be isolated per tenant.
+- White-label settings to avoid hard-coding:
+  - Assistant display name.
+  - Greeting text.
+  - Source-channel options by language.
+  - Service categories and price-boundary rules.
+  - Deposit amount and draft expiry policy.
+  - Handoff routing rules.
+  - Follow-up schedule.
+  - Mini Program/app deep-link targets.
+- Sales-friendly product modules:
+  - AI front desk.
+  - Reference-image quote triage.
+  - Staff quote task workflow.
+  - Booking draft and deposit reminder.
+  - AI gallery and customer photo delivery.
+  - Retention follow-up.
+  - Owner dashboard and customer profile tracking.
+- Important packaging decision:
+  - Do not build the product around a personal WeChat bot. It is fragile and hard to sell safely.
+  - Build around official WeCom / WeChat Customer Service adapters so another salon can authorize their own account and use the same system with their own staff.
+
 ## Future AI Workflow Ideas To Revisit
 
 - AI customer support in web and Mini Program.
