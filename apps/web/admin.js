@@ -143,6 +143,7 @@ const copy = {
     financeUnlocked: '财务信息已解锁。',
     navBookings: '订单管理',
     navSchedule: '排班管理',
+    navStaffPerformance: '技师业绩',
     navServices: '服务管理',
     navCustomers: '客户档案',
     navAiGallery: 'AI 图库',
@@ -193,6 +194,8 @@ const copy = {
     topRatedTechnician: '好评度最高技师',
     estimatedRating: '好评度',
     technicianPerformance: '技师业绩',
+    myTechnicianPerformance: '我的技师业绩',
+    staffPerformanceHint: '这里只显示当前登录技师的本月人数、服务次数、金额和当前状态。',
     techStatus: '当前状态',
     servingNow: '服务中',
     scheduledToday: '今日有预约',
@@ -319,6 +322,7 @@ const copy = {
     financeUnlocked: 'Finance unlocked.',
     navBookings: 'Order Management',
     navSchedule: 'Schedule',
+    navStaffPerformance: 'My Performance',
     navServices: 'Services',
     navCustomers: 'Customer Profiles',
     navAiGallery: 'AI Gallery',
@@ -369,6 +373,8 @@ const copy = {
     topRatedTechnician: 'Top Rated Technician',
     estimatedRating: 'Rating',
     technicianPerformance: 'Technician Performance',
+    myTechnicianPerformance: 'My Technician Performance',
+    staffPerformanceHint: 'Only your own monthly guests, services, revenue, and current status are shown here.',
     techStatus: 'Current Status',
     servingNow: 'Serving',
     scheduledToday: 'Booked Today',
@@ -595,7 +601,7 @@ function applyLanguage() {
   els.dashboardSubtitle.textContent = t('dashboardSubtitle')
   els.sidebarDashboard.textContent = t('dashboard')
   els.sidebarBookings.textContent = t('navBookings')
-  els.sidebarSchedule.textContent = t('navSchedule')
+  els.sidebarSchedule.textContent = isOwnerRole() ? t('navSchedule') : t('navStaffPerformance')
   els.sidebarServices.textContent = t('navServices')
   els.sidebarCustomers.textContent = t('navCustomers')
   els.sidebarAiGallery.textContent = t('navAiGallery')
@@ -619,8 +625,8 @@ function applyLanguage() {
   els.filterStatusLabel.textContent = t('status')
   els.clearFilters.textContent = t('clear')
   els.scheduleTitle.textContent = t('schedule')
-  els.techPerformanceEyebrow.textContent = t('monthOverview')
-  els.techPerformanceTitle.textContent = t('technicianPerformance')
+  els.techPerformanceEyebrow.textContent = isOwnerRole() ? t('monthOverview') : t('staffMode')
+  els.techPerformanceTitle.textContent = isOwnerRole() ? t('technicianPerformance') : t('myTechnicianPerformance')
   els.scheduleTechLabel.textContent = t('technician')
   els.scheduleDateLabel.textContent = t('date')
   els.scheduleStartLabel.textContent = t('start')
@@ -1538,6 +1544,8 @@ function renderServiceEditor() {
 }
 
 function renderTechnicians() {
+  const scheduleEditorCard = els.scheduleTitle?.closest('.admin-card')
+  scheduleEditorCard?.classList.toggle('hidden', !isOwnerRole())
   els.scheduleTech.innerHTML = owner.technicians.map((tech) => `
     <option value="${tech.id}">${tech.name} · ${tech.title}</option>
   `).join('')
@@ -1561,7 +1569,7 @@ function renderTechnicianPerformance() {
         <span>${t('monthAmount')} <strong>${money(tech.amount)}</strong></span>
       </div>
     </article>
-  `).join('')
+  `).join('') + (!isOwnerRole() ? `<p class="staff-performance-note">${t('staffPerformanceHint')}</p>` : '')
 }
 
 function sortedCustomers() {

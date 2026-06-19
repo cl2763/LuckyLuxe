@@ -20,6 +20,10 @@ const ALLOW_OWNER_DEMO_TOKEN = process.env.ALLOW_OWNER_DEMO_TOKEN === 'true'
 const OWNER_EMAILS = (process.env.OWNER_EMAILS || 'nini3131254931@gmail.com').split(',').map((email) => email.trim().toLowerCase()).filter(Boolean)
 const STAFF_EMAILS = (process.env.STAFF_EMAILS || 'staff@luckyluxeatelier.com,employee@luckyluxeatelier.com').split(',').map((email) => email.trim().toLowerCase()).filter(Boolean)
 const STAFF_DEMO_PASSWORD = process.env.STAFF_DEMO_PASSWORD || 'LuckyluxeStaff0312'
+const STAFF_TECH_MAP = Object.fromEntries((process.env.STAFF_TECH_MAP || 'staff@luckyluxeatelier.com:tech-mia,employee@luckyluxeatelier.com:tech-ava')
+  .split(',')
+  .map((pair) => pair.split(':').map((value) => value.trim().toLowerCase()))
+  .filter(([email, technicianId]) => email && technicianId))
 const FINANCE_EMAILS = (process.env.FINANCE_EMAILS || '').split(',').map((email) => email.trim().toLowerCase()).filter(Boolean)
 const FINANCE_PASSWORD = process.env.FINANCE_PASSWORD || ''
 const HOLD_MINUTES = Number(process.env.BOOKING_HOLD_MINUTES || 15)
@@ -113,22 +117,35 @@ async function requireOwner(req) {
 
 async function requireAdmin(req) {
   const auth = req.headers.authorization || ''
-  if (ALLOW_OWNER_DEMO_TOKEN && OWNER_TOKEN && auth === `Bearer ${OWNER_TOKEN}`) return { provider: 'demo-token', role: 'owner' }
+  if (ALLOW_OWNER_DEMO_TOKEN && OWNER_TOKEN && auth === `Bearer ${OWNER_TOKEN}`) return { provider: 'demo-token', role: 'owner', technicianId: null }
   const token = auth.startsWith('Bearer ') ? auth.slice(7) : ''
   const ownerEmail = demoEmailFromToken(token, 'owner')
-  if (ownerEmail && OWNER_EMAILS.includes(ownerEmail)) return { provider: 'demo-owner', email: ownerEmail, role: 'owner' }
+  if (ownerEmail && OWNER_EMAILS.includes(ownerEmail)) return adminForEmail(ownerEmail, 'demo-owner')
   const staffEmail = demoEmailFromToken(token, 'staff')
-  if (staffEmail && STAFF_EMAILS.includes(staffEmail)) return { provider: 'demo-staff', email: staffEmail, role: 'staff' }
+  if (staffEmail && STAFF_EMAILS.includes(staffEmail)) return adminForEmail(staffEmail, 'demo-staff')
   if (!isSupabaseConfigured()) {
-    if (ownerEmail && OWNER_EMAILS.includes(ownerEmail)) return { provider: 'demo-owner', email: ownerEmail, role: 'owner' }
-    if (staffEmail && STAFF_EMAILS.includes(staffEmail)) return { provider: 'demo-staff', email: staffEmail, role: 'staff' }
+    if (ownerEmail && OWNER_EMAILS.includes(ownerEmail)) return adminForEmail(ownerEmail, 'demo-owner')
+    if (staffEmail && STAFF_EMAILS.includes(staffEmail)) return adminForEmail(staffEmail, 'demo-staff')
   }
   if (!token || !isSupabaseConfigured()) throw apiError(401, 'UNAUTHORIZED', 'Admin login is required.')
   const authUser = await getSupabaseUser(token)
   const email = String(authUser.email || '').toLowerCase()
-  if (OWNER_EMAILS.includes(email)) return { provider: 'supabase', email, role: 'owner' }
-  if (STAFF_EMAILS.includes(email)) return { provider: 'supabase', email, role: 'staff' }
+  const admin = adminForEmail(email, 'supabase')
+  if (admin) return admin
   throw apiError(403, 'FORBIDDEN', 'This account is not allowed to access admin.')
+}
+
+function adminForEmail(email, provider) {
+  const normalized = String(email || '').toLowerCase()
+  if (OWNER_EMAILS.includes(normalized)) return { provider, email: normalized, role: 'owner', technicianId: null }
+  if (STAFF_EMAILS.includes(normalized)) return { provider, email: normalized, role: 'staff', technicianId: STAFF_TECH_MAP[normalized] || 'tech-mia' }
+  return null
+}
+
+function assertStaffCanAccessBooking(admin, booking) {
+  if (admin.role === 'staff' && booking.technician_id !== admin.technicianId) {
+    throw apiError(403, 'FORBIDDEN', 'Staff can only access their own bookings.')
+  }
 }
 
 async function requireCustomer(req) {
@@ -912,10 +929,11 @@ async function route(req, res) {
     const body = await readBody(req)
     const email = String(body.email || '').trim().toLowerCase()
     if (STAFF_EMAILS.includes(email) && String(body.password || '') === STAFF_DEMO_PASSWORD) {
+      const admin = adminForEmail(email, 'demo-staff')
       return json(res, 200, {
         user: await registerEmailUser({ email, displayName: body.displayName || 'Lucky Luxe Staff' }),
         auth: demoAuthFor(email, 'staff'),
-        admin: { role: 'staff', email },
+        admin,
         mode: 'demo-staff'
       })
     }
@@ -924,7 +942,7 @@ async function route(req, res) {
     const role = OWNER_EMAILS.includes(loginEmail) ? 'owner' : STAFF_EMAILS.includes(loginEmail) ? 'staff' : ''
     if (!role) throw apiError(403, 'FORBIDDEN', 'This account is not allowed to access admin.')
     if (!isSupabaseConfigured()) auth.auth = demoAuthFor(auth.user.email, role)
-    auth.admin = { role, email: loginEmail }
+    auth.admin = adminForEmail(loginEmail, 'supabase')
     return json(res, 200, auth)
   }
   if (req.method === 'POST' && path === '/admin/auth/register') {
@@ -1040,7 +1058,9 @@ async function route(req, res) {
   let adminSession = null
   if (path.startsWith('/admin/')) adminSession = await requireAdmin(req)
   if (req.method === 'GET' && path === '/admin/bookings') {
-    const rows = await query('SELECT * FROM bookings ORDER BY appointment_start DESC')
+    const rows = adminSession.role === 'staff'
+      ? await query('SELECT * FROM bookings WHERE technician_id = $1 ORDER BY appointment_start DESC', [adminSession.technicianId])
+      : await query('SELECT * FROM bookings ORDER BY appointment_start DESC')
     return json(res, 200, { bookings: await Promise.all(rows.rows.map((booking) => serializeBooking(booking))) })
   }
   if (req.method === 'GET' && path === '/admin/customers') {
@@ -1054,9 +1074,11 @@ async function route(req, res) {
   if (req.method === 'POST' && path === '/admin/ai/daily-brief') {
     const body = await readBody(req)
     const [bookingRows, serviceRows, customers] = await Promise.all([
-      query('SELECT * FROM bookings ORDER BY appointment_start DESC LIMIT 60'),
+      adminSession.role === 'staff'
+        ? query('SELECT * FROM bookings WHERE technician_id = $1 ORDER BY appointment_start DESC LIMIT 60', [adminSession.technicianId])
+        : query('SELECT * FROM bookings ORDER BY appointment_start DESC LIMIT 60'),
       query('SELECT * FROM services ORDER BY type ASC, sort_order ASC'),
-      getAdminCustomers()
+      adminSession.role === 'owner' ? getAdminCustomers() : []
     ])
     const bookings = await Promise.all(bookingRows.rows.map((booking) => serializeBooking(booking, body.lang || 'zh')))
     return json(res, 200, { brief: await createDailyBrief({ ...body, bookings, customers, services: serviceRows.rows.map((service) => serializeService(service, body.lang || 'zh')) }) })
@@ -1065,9 +1087,11 @@ async function route(req, res) {
     const body = await readBody(req)
     const row = await query('SELECT * FROM bookings WHERE id = $1', [body.bookingId])
     if (!row.rows[0]) throw apiError(404, 'NOT_FOUND', 'Booking not found.')
+    assertStaffCanAccessBooking(adminSession, row.rows[0])
     return json(res, 200, { summary: await createBookingSummary({ lang: body.lang || 'zh', booking: await serializeBooking(row.rows[0], body.lang || 'zh') }) })
   }
   if (req.method === 'POST' && path === '/admin/ai/customer-insight') {
+    if (adminSession.role !== 'owner') throw apiError(403, 'FORBIDDEN', 'Owner permission is required.')
     const body = await readBody(req)
     const customers = await getAdminCustomers()
     const customer = customers.find((item) => item.id === body.customerId)
@@ -1079,6 +1103,7 @@ async function route(req, res) {
   if (req.method === 'POST' && path === '/admin/ai/social-copy') {
     const body = await readBody(req)
     const row = body.bookingId ? await query('SELECT * FROM bookings WHERE id = $1', [body.bookingId]) : { rows: [] }
+    if (row.rows[0]) assertStaffCanAccessBooking(adminSession, row.rows[0])
     const booking = row.rows[0] ? await serializeBooking(row.rows[0], body.lang || 'zh') : body.booking
     return json(res, 200, { copy: await createSocialCopy({ lang: body.lang || 'zh', image: body.image || '', booking, platform: body.platform || 'xiaohongshu', audience: body.audience || 'staff', avoidCaptions: body.avoidCaptions || [], variantSeed: body.variantSeed || '' }) })
   }
@@ -1120,7 +1145,9 @@ async function route(req, res) {
     return json(res, 201, { service: serializeService(await getService(id)) })
   }
   if (req.method === 'GET' && path === '/admin/technicians') {
-    const technicians = await query('SELECT * FROM technicians ORDER BY name ASC')
+    const technicians = adminSession.role === 'staff'
+      ? await query('SELECT * FROM technicians WHERE id = $1 ORDER BY name ASC', [adminSession.technicianId])
+      : await query('SELECT * FROM technicians ORDER BY name ASC')
     return json(res, 200, { technicians: technicians.rows })
   }
   if (req.method === 'PATCH' && path.startsWith('/admin/services/')) {
@@ -1172,6 +1199,7 @@ async function route(req, res) {
     if (!['PENDING_PAYMENT', 'CONFIRMED', 'COMPLETED', 'CANCELLED', 'EXPIRED', 'AFTER_SALES'].includes(status)) throw apiError(400, 'BAD_REQUEST', 'Invalid status.')
     const booking = await query('SELECT * FROM bookings WHERE id = $1', [id])
     if (!booking.rows[0]) throw apiError(404, 'NOT_FOUND', 'Booking not found.')
+    assertStaffCanAccessBooking(adminSession, booking.rows[0])
     await withTransaction(async (client) => {
       if (['CANCELLED', 'EXPIRED'].includes(status)) await client.query('DELETE FROM booking_slots WHERE booking_id = $1', [id])
       await client.query('UPDATE bookings SET status = $1, updated_at = now() WHERE id = $2', [status, id])
@@ -1185,6 +1213,7 @@ async function route(req, res) {
     const images = normalizeWorkImages(body.workImages)
     const booking = await query('SELECT * FROM bookings WHERE id = $1', [id])
     if (!booking.rows[0]) throw apiError(404, 'NOT_FOUND', 'Booking not found.')
+    assertStaffCanAccessBooking(adminSession, booking.rows[0])
     if (booking.rows[0].gallery_status === 'approved') throw apiError(409, 'GALLERY_LOCKED', 'This gallery has been approved and locked.')
     await query('UPDATE bookings SET work_images_json = $1::jsonb, updated_at = now() WHERE id = $2', [JSON.stringify(images), id])
     const updated = await query('SELECT * FROM bookings WHERE id = $1', [id])
@@ -1195,6 +1224,7 @@ async function route(req, res) {
     const body = await readBody(req)
     const booking = await query('SELECT * FROM bookings WHERE id = $1', [id])
     if (!booking.rows[0]) throw apiError(404, 'NOT_FOUND', 'Booking not found.')
+    assertStaffCanAccessBooking(adminSession, booking.rows[0])
     if (booking.rows[0].gallery_status === 'approved') throw apiError(409, 'GALLERY_LOCKED', 'This gallery has already been approved and locked.')
     const current = parseJson(booking.rows[0].work_images_json)
     const selected = normalizeWorkImages(body.images).filter((image) => current.includes(image))

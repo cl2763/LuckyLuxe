@@ -54,6 +54,8 @@ const copy = {
     aiAnalyze: 'AI 分析参考图',
     aiAnalyzing: 'AI 正在分析...',
     aiReferenceTitle: 'AI 款式建议',
+    aiMockBadge: '演示分析',
+    aiMockNotice: '当前是 mock 价格建议，仅用于流程测试；复杂款式和最终报价仍需人工确认。',
     aiComplexity: '复杂度',
     aiExtraTime: '建议额外时间',
     aiTechNote: '给技师的备注',
@@ -183,6 +185,8 @@ const copy = {
     aiAnalyze: 'AI Analyze Reference',
     aiAnalyzing: 'AI is analyzing...',
     aiReferenceTitle: 'AI Style Suggestion',
+    aiMockBadge: 'Demo Analysis',
+    aiMockNotice: 'This is a mock pricing suggestion for flow testing only. Complex designs and final quotes still require staff confirmation.',
     aiComplexity: 'Complexity',
     aiExtraTime: 'Suggested extra time',
     aiTechNote: 'Note for technician',
@@ -273,6 +277,7 @@ const state = {
   service: null,
   technicians: [],
   portfolios: [],
+  heroSlide: 0,
   selectedPortfolioTechId: '',
   selectedTechId: '',
   date: defaultDate(),
@@ -295,6 +300,8 @@ const state = {
   memberCodeOpen: false,
   pendingAuth: readJson('lucky-web-pending-auth')
 }
+
+let heroTimer = null
 
 const els = {
   authView: document.querySelector('#authView'),
@@ -733,6 +740,7 @@ async function showApp() {
 function render() {
   els.cartBadge.textContent = state.cart.length
   els.tabs.forEach((tab) => tab.classList.toggle('active', tab.dataset.view === state.view))
+  if (state.view !== 'home') stopHeroCarousel()
   if (state.view === 'home') renderHome()
   if (state.view === 'services') renderServices()
   if (state.view === 'detail') renderDetail()
@@ -751,7 +759,18 @@ function render() {
   if (state.view === 'settings') renderPlaceholderWeb(t('settings'), state.lang === 'zh' ? '语言、通知、账号安全等设置将在真实登录后接入。' : 'Language, notifications, and account security settings will connect after real auth.')
 }
 
+function heroSlides() {
+  return [
+    { image: '/assets/images/hero-carousel-interior.jpg', label: state.lang === 'zh' ? 'Lucky Luxe 店内氛围' : 'Lucky Luxe studio mood' },
+    { image: '/assets/images/hero-carousel-nail.jpg', label: state.lang === 'zh' ? '精致美甲细节' : 'Premium nail detail' },
+    { image: '/assets/images/hero-carousel-lash.jpg', label: state.lang === 'zh' ? '美睫服务细节' : 'Lash service detail' }
+  ]
+}
+
 function renderHome() {
+  const slides = heroSlides()
+  const activeSlide = ((state.heroSlide % slides.length) + slides.length) % slides.length
+  state.heroSlide = activeSlide
   els.screen.innerHTML = `
     <section class="web-hero">
       <div class="web-hero-copy">
@@ -764,7 +783,18 @@ function renderHome() {
           <button class="ghost" data-view-target="me" type="button">${t('quickMember')}</button>
         </div>
       </div>
-      <img src="/assets/images/store-cover.png" alt="Lucky Luxe">
+      <div class="hero-carousel" aria-label="Lucky Luxe">
+        <div class="hero-slide-track">
+          ${slides.map((slide, index) => `
+            <img class="hero-slide ${index === activeSlide ? 'active' : ''}" src="${slide.image}" alt="${slide.label}">
+          `).join('')}
+        </div>
+        <button class="hero-carousel-btn prev" data-hero-slide-prev type="button" aria-label="Previous">‹</button>
+        <button class="hero-carousel-btn next" data-hero-slide-next type="button" aria-label="Next">›</button>
+        <div class="hero-carousel-dots">
+          ${slides.map((slide, index) => `<button class="${index === activeSlide ? 'active' : ''}" data-hero-slide="${index}" type="button" aria-label="${slide.label}"></button>`).join('')}
+        </div>
+      </div>
     </section>
     <section class="home-actions section">
       <div class="service-shortcut-row">
@@ -791,6 +821,21 @@ function renderHome() {
       </div>
     </section>
   `
+  startHeroCarousel()
+}
+
+function startHeroCarousel() {
+  stopHeroCarousel()
+  heroTimer = window.setInterval(() => {
+    state.heroSlide = (state.heroSlide + 1) % heroSlides().length
+    if (state.view === 'home') renderHome()
+  }, 5200)
+}
+
+function stopHeroCarousel() {
+  if (!heroTimer) return
+  window.clearInterval(heroTimer)
+  heroTimer = null
 }
 
 function renderRecommendSection(title, type) {
@@ -1077,10 +1122,13 @@ function renderBookingForm() {
 
 function renderReferenceAnalysis() {
   const result = state.referenceAnalysis?.data || state.referenceAnalysis || {}
+  const provider = state.referenceAnalysis?.provider || ''
+  const isMock = !provider || provider.includes('mock') || String(state.referenceAnalysis?.model || '').includes('mock')
   const clientMessage = state.lang === 'en' ? result.clientMessageEn : result.clientMessageZh
   const techNote = state.lang === 'en' ? result.technicianNotesEn : result.technicianNotesZh
   return `
     <div class="ai-result-box">
+      ${isMock ? `<div class="ai-mock-banner"><strong>${t('aiMockBadge')}</strong><span>${t('aiMockNotice')}</span></div>` : ''}
       <p><span>${t('aiComplexity')}</span><strong>${result.complexity || '-'}</strong></p>
       <p><span>${t('aiExtraTime')}</span><strong>${result.estimatedExtraMinutes || 0}${t('minutes')}</strong></p>
       <p><span>${t('aiPriceSuggestion')}</span><strong>${result.estimatedPriceCents ? money(result.estimatedPriceCents) : '-'}</strong></p>
@@ -1588,6 +1636,22 @@ function renderPlaceholderWeb(title, text) {
 }
 
 async function handleScreenClick(event) {
+  const heroSlide = event.target.closest('[data-hero-slide]')
+  if (heroSlide) {
+    state.heroSlide = Number(heroSlide.dataset.heroSlide || 0)
+    renderHome()
+    return
+  }
+  if (event.target.closest('[data-hero-slide-prev]')) {
+    state.heroSlide = (state.heroSlide - 1 + heroSlides().length) % heroSlides().length
+    renderHome()
+    return
+  }
+  if (event.target.closest('[data-hero-slide-next]')) {
+    state.heroSlide = (state.heroSlide + 1) % heroSlides().length
+    renderHome()
+    return
+  }
   if (event.target.closest('[data-portfolio-back]')) {
     state.selectedPortfolioTechId = ''
     renderPortfolio()

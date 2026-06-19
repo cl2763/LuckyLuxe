@@ -912,6 +912,24 @@ textarea:focus {
   line-height: 1.45;
 }
 
+.ai-mock-banner {
+  display: grid;
+  gap: 4px;
+  border-radius: 8px;
+  background: #fff7e8;
+  padding: 10px;
+}
+
+.ai-mock-banner strong {
+  color: var(--accent-dark);
+  font-size: 13px;
+}
+
+.ai-mock-banner span {
+  color: var(--muted);
+  line-height: 1.45;
+}
+
 .customer-ai-result {
   grid-column: 1 / -1;
 }
@@ -1357,6 +1375,14 @@ textarea:focus {
   margin: 0;
   color: var(--muted);
   font-weight: 800;
+}
+
+.staff-performance-note {
+  grid-column: 1 / -1;
+  margin: 0;
+  color: var(--muted);
+  font-weight: 800;
+  line-height: 1.5;
 }
 
 .performance-numbers {
@@ -1912,7 +1938,6 @@ textarea:focus {
 }
 
 .auth-visual img,
-.web-hero > img,
 .store-card-wide img,
 .recommend-card img,
 .detail-visual-web,
@@ -1972,6 +1997,91 @@ textarea:focus {
   display: grid;
   grid-template-columns: 0.9fr 1.1fr;
   overflow: hidden;
+}
+
+.hero-carousel {
+  position: relative;
+  min-height: 520px;
+  overflow: hidden;
+  background: var(--soft);
+}
+
+.hero-slide-track,
+.hero-slide {
+  width: 100%;
+  height: 100%;
+}
+
+.hero-slide {
+  position: absolute;
+  inset: 0;
+  object-fit: cover;
+  opacity: 0;
+  transform: scale(1.02);
+  transition: opacity 420ms ease, transform 520ms ease;
+}
+
+.hero-slide.active {
+  opacity: 1;
+  transform: scale(1);
+}
+
+.hero-carousel::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  background: linear-gradient(90deg, rgba(251, 248, 245, 0.16), rgba(0, 0, 0, 0.06));
+}
+
+.hero-carousel-btn {
+  position: absolute;
+  top: 50%;
+  z-index: 2;
+  display: grid;
+  width: 42px;
+  height: 42px;
+  place-items: center;
+  border: 1px solid rgba(255, 255, 255, 0.64);
+  border-radius: 50%;
+  background: rgba(255, 255, 255, 0.74);
+  color: var(--ink);
+  font-size: 30px;
+  font-weight: 800;
+  transform: translateY(-50%);
+  backdrop-filter: blur(8px);
+}
+
+.hero-carousel-btn.prev {
+  left: 14px;
+}
+
+.hero-carousel-btn.next {
+  right: 14px;
+}
+
+.hero-carousel-dots {
+  position: absolute;
+  right: 18px;
+  bottom: 18px;
+  z-index: 2;
+  display: flex;
+  gap: 8px;
+}
+
+.hero-carousel-dots button {
+  width: 9px;
+  height: 9px;
+  min-height: 0;
+  border: 0;
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.72);
+  padding: 0;
+}
+
+.hero-carousel-dots button.active {
+  width: 28px;
+  background: var(--black);
 }
 
 .web-hero-copy {
@@ -3534,7 +3644,7 @@ textarea:focus {
     min-height: auto;
   }
 
-  .web-hero > img {
+  .hero-carousel {
     min-height: 260px;
   }
 

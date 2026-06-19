@@ -20,6 +20,10 @@ const OWNER_TOKEN = process.env.OWNER_DEMO_TOKEN || 'owner-demo-token'
 const OWNER_EMAILS = (process.env.OWNER_EMAILS || 'nini3131254931@gmail.com').split(',').map((email) => email.trim().toLowerCase()).filter(Boolean)
 const STAFF_EMAILS = (process.env.STAFF_EMAILS || 'staff@luckyluxeatelier.com,employee@luckyluxeatelier.com').split(',').map((email) => email.trim().toLowerCase()).filter(Boolean)
 const STAFF_DEMO_PASSWORD = process.env.STAFF_DEMO_PASSWORD || 'LuckyluxeStaff0312'
+const STAFF_TECH_MAP = Object.fromEntries((process.env.STAFF_TECH_MAP || 'staff@luckyluxeatelier.com:tech-mia,employee@luckyluxeatelier.com:tech-ava')
+  .split(',')
+  .map((pair) => pair.split(':').map((value) => value.trim().toLowerCase()))
+  .filter(([email, technicianId]) => email && technicianId))
 const FINANCE_EMAILS = (process.env.FINANCE_EMAILS || 'nini3131254931@gmail.com').split(',').map((email) => email.trim().toLowerCase()).filter(Boolean)
 const FINANCE_PASSWORD = process.env.FINANCE_PASSWORD || ''
 const HOLD_MINUTES = Number(process.env.BOOKING_HOLD_MINUTES || 15)
@@ -272,13 +276,26 @@ function requireOwner(req) {
 
 function requireAdmin(req) {
   const auth = req.headers.authorization || ''
-  if (auth === `Bearer ${OWNER_TOKEN}`) return { role: 'owner', provider: 'demo-token' }
+  if (auth === `Bearer ${OWNER_TOKEN}`) return { role: 'owner', provider: 'demo-token', technicianId: null }
   const token = auth.startsWith('Bearer ') ? auth.slice(7) : ''
   const ownerEmail = demoEmailFromToken(token, 'owner')
-  if (ownerEmail && OWNER_EMAILS.includes(ownerEmail)) return { role: 'owner', email: ownerEmail, provider: 'demo-owner' }
+  if (ownerEmail && OWNER_EMAILS.includes(ownerEmail)) return adminForEmail(ownerEmail, 'demo-owner')
   const staffEmail = demoEmailFromToken(token, 'staff')
-  if (staffEmail && STAFF_EMAILS.includes(staffEmail)) return { role: 'staff', email: staffEmail, provider: 'demo-staff' }
+  if (staffEmail && STAFF_EMAILS.includes(staffEmail)) return adminForEmail(staffEmail, 'demo-staff')
   throw apiError(401, 'UNAUTHORIZED', 'Admin login is required.')
+}
+
+function adminForEmail(email, provider) {
+  const normalized = String(email || '').toLowerCase()
+  if (OWNER_EMAILS.includes(normalized)) return { role: 'owner', email: normalized, provider, technicianId: null }
+  if (STAFF_EMAILS.includes(normalized)) return { role: 'staff', email: normalized, provider, technicianId: STAFF_TECH_MAP[normalized] || 'tech-mia' }
+  return null
+}
+
+function assertStaffCanAccessBooking(admin, booking) {
+  if (admin.role === 'staff' && booking.technician_id !== admin.technicianId) {
+    throw apiError(403, 'FORBIDDEN', 'Staff can only access their own bookings.')
+  }
 }
 
 function cents(centsValue) {
@@ -799,7 +816,7 @@ async function route(req, res) {
     if (!role) throw apiError(403, 'FORBIDDEN', 'This account is not allowed to access admin.')
     if (role === 'staff' && String(body.password || '') !== STAFF_DEMO_PASSWORD) throw apiError(403, 'FORBIDDEN', 'Staff demo password is incorrect.')
     const user = registerEmailUser({ email, displayName: role === 'staff' ? 'Lucky Luxe Staff' : 'Lucky Luxe Owner' })
-    return json(res, 200, { user, auth: demoAuthFor(email, role), admin: { role, email }, mode: `demo-${role}` })
+    return json(res, 200, { user, auth: demoAuthFor(email, role), admin: adminForEmail(email, `demo-${role}`), mode: `demo-${role}` })
   }
   if (req.method === 'POST' && path === '/admin/auth/register') {
     const body = await readBody(req)
@@ -900,7 +917,9 @@ async function route(req, res) {
   let adminSession = null
   if (path.startsWith('/admin/')) adminSession = requireAdmin(req)
   if (req.method === 'GET' && path === '/admin/bookings') {
-    const rows = db.prepare('SELECT * FROM bookings ORDER BY appointment_start DESC').all()
+    const rows = adminSession.role === 'staff'
+      ? db.prepare('SELECT * FROM bookings WHERE technician_id = ? ORDER BY appointment_start DESC').all(adminSession.technicianId)
+      : db.prepare('SELECT * FROM bookings ORDER BY appointment_start DESC').all()
     return json(res, 200, { bookings: rows.map((booking) => serializeBooking(booking)) })
   }
   if (req.method === 'GET' && path === '/admin/customers') {
@@ -912,17 +931,21 @@ async function route(req, res) {
     return json(res, 200, { finance: getFinanceSummary(await readBody(req)) })
   }
   if (req.method === 'POST' && path === '/admin/ai/daily-brief') {
-    const bookings = db.prepare('SELECT * FROM bookings ORDER BY appointment_start DESC LIMIT 60').all().map((booking) => serializeBooking(booking))
+    const bookings = adminSession.role === 'staff'
+      ? db.prepare('SELECT * FROM bookings WHERE technician_id = ? ORDER BY appointment_start DESC LIMIT 60').all(adminSession.technicianId).map((booking) => serializeBooking(booking))
+      : db.prepare('SELECT * FROM bookings ORDER BY appointment_start DESC LIMIT 60').all().map((booking) => serializeBooking(booking))
     const services = db.prepare('SELECT * FROM services ORDER BY type ASC, sort_order ASC').all().map(serializeService)
-    return json(res, 200, { brief: await createDailyBrief({ ...(await readBody(req)), bookings, customers: getAdminCustomers(), services }) })
+    return json(res, 200, { brief: await createDailyBrief({ ...(await readBody(req)), bookings, customers: adminSession.role === 'owner' ? getAdminCustomers() : [], services }) })
   }
   if (req.method === 'POST' && path === '/admin/ai/booking-summary') {
     const body = await readBody(req)
     const row = db.prepare('SELECT * FROM bookings WHERE id = ?').get(body.bookingId)
     if (!row) throw apiError(404, 'NOT_FOUND', 'Booking not found.')
+    assertStaffCanAccessBooking(adminSession, row)
     return json(res, 200, { summary: await createBookingSummary({ lang: body.lang || 'zh', booking: serializeBooking(row, body.lang || 'zh') }) })
   }
   if (req.method === 'POST' && path === '/admin/ai/customer-insight') {
+    if (adminSession.role !== 'owner') throw apiError(403, 'FORBIDDEN', 'Owner permission is required.')
     const body = await readBody(req)
     const customer = getAdminCustomers().find((item) => item.id === body.customerId)
     if (!customer) throw apiError(404, 'NOT_FOUND', 'Customer not found.')
@@ -932,6 +955,7 @@ async function route(req, res) {
   if (req.method === 'POST' && path === '/admin/ai/social-copy') {
     const body = await readBody(req)
     const row = body.bookingId ? db.prepare('SELECT * FROM bookings WHERE id = ?').get(body.bookingId) : null
+    if (row) assertStaffCanAccessBooking(adminSession, row)
     const booking = row ? serializeBooking(row, body.lang || 'zh') : body.booking
     return json(res, 200, { copy: await createSocialCopy({ lang: body.lang || 'zh', image: body.image || '', booking, platform: body.platform || 'xiaohongshu', audience: body.audience || 'staff', avoidCaptions: body.avoidCaptions || [], variantSeed: body.variantSeed || '' }) })
   }
@@ -953,7 +977,10 @@ async function route(req, res) {
     return json(res, 201, { service: serializeService(getService(id)) })
   }
   if (req.method === 'GET' && path === '/admin/technicians') {
-    return json(res, 200, { technicians: db.prepare('SELECT * FROM technicians ORDER BY name ASC').all() })
+    const technicians = adminSession.role === 'staff'
+      ? db.prepare('SELECT * FROM technicians WHERE id = ? ORDER BY name ASC').all(adminSession.technicianId)
+      : db.prepare('SELECT * FROM technicians ORDER BY name ASC').all()
+    return json(res, 200, { technicians })
   }
   if (req.method === 'PATCH' && path.startsWith('/admin/services/')) {
     if (adminSession.role !== 'owner') throw apiError(403, 'FORBIDDEN', 'Owner permission is required.')
@@ -986,6 +1013,7 @@ async function route(req, res) {
     if (!['PENDING_PAYMENT', 'CONFIRMED', 'COMPLETED', 'CANCELLED', 'EXPIRED', 'AFTER_SALES'].includes(status)) throw apiError(400, 'BAD_REQUEST', 'Invalid status.')
     const booking = db.prepare('SELECT * FROM bookings WHERE id = ?').get(id)
     if (!booking) throw apiError(404, 'NOT_FOUND', 'Booking not found.')
+    assertStaffCanAccessBooking(adminSession, booking)
     if (['CANCELLED', 'EXPIRED'].includes(status)) db.prepare('DELETE FROM booking_slots WHERE booking_id = ?').run(id)
     db.prepare('UPDATE bookings SET status = ?, updated_at = ? WHERE id = ?').run(status, iso(new Date()), id)
     return json(res, 200, { booking: serializeBooking(db.prepare('SELECT * FROM bookings WHERE id = ?').get(id)) })
@@ -995,6 +1023,7 @@ async function route(req, res) {
     const body = await readBody(req)
     const booking = db.prepare('SELECT * FROM bookings WHERE id = ?').get(id)
     if (!booking) throw apiError(404, 'NOT_FOUND', 'Booking not found.')
+    assertStaffCanAccessBooking(adminSession, booking)
     if (booking.gallery_status === 'approved') throw apiError(409, 'GALLERY_LOCKED', 'This gallery has been approved and locked.')
     db.prepare('UPDATE bookings SET work_images_json = ?, updated_at = ? WHERE id = ?').run(JSON.stringify(normalizeWorkImages(body.workImages)), iso(new Date()), id)
     return json(res, 200, { booking: serializeBooking(db.prepare('SELECT * FROM bookings WHERE id = ?').get(id)) })
@@ -1004,6 +1033,7 @@ async function route(req, res) {
     const body = await readBody(req)
     const booking = db.prepare('SELECT * FROM bookings WHERE id = ?').get(id)
     if (!booking) throw apiError(404, 'NOT_FOUND', 'Booking not found.')
+    assertStaffCanAccessBooking(adminSession, booking)
     if (booking.gallery_status === 'approved') throw apiError(409, 'GALLERY_LOCKED', 'This gallery has already been approved and locked.')
     const current = parseJson(booking.work_images_json)
     const selected = normalizeWorkImages(body.images).filter((image) => current.includes(image))
