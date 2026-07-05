@@ -1,6 +1,13 @@
 // 构建号:每次交付递增。侧栏可见,排查"改了没生效"时先对版本。
-const ADMIN_BUILD = '20260706-staffp2'
+const ADMIN_BUILD = '20260706-walk3'
 console.log(`[admin] build ${ADMIN_BUILD}`)
+
+// "今天"必须按门店时区算(服务器同样钉在此时区),否则老板人在别的时区时全站日期错位一天。
+// TODO(多租户): 时区改为从租户配置读取。
+const STORE_TZ = 'America/Toronto'
+function storeToday() {
+  return new Intl.DateTimeFormat('en-CA', { timeZone: STORE_TZ, year: 'numeric', month: '2-digit', day: '2-digit' }).format(new Date())
+}
 
 function readStoredAuth() {
   try {
@@ -752,7 +759,7 @@ function t(key) {
 }
 
 els.tokenInput.value = owner.token
-els.filterDate.value = formatDate(new Date())
+els.filterDate.value = storeToday()
 
 function formatDate(date) {
   const year = date.getFullYear()
@@ -1308,13 +1315,11 @@ function renderTodayTasksCard() {
 
 function isCurrentMonth(dateString) {
   if (!dateString) return false
-  const date = new Date(`${dateString}T12:00:00`)
-  const now = new Date()
-  return date.getFullYear() === now.getFullYear() && date.getMonth() === now.getMonth()
+  return String(dateString).slice(0, 7) === storeToday().slice(0, 7)
 }
 
 function isToday(dateString) {
-  return dateString === formatDate(new Date())
+  return dateString === storeToday()
 }
 
 function dashboardStats() {
@@ -1389,6 +1394,8 @@ function retentionStats() {
   const repeat = customers.filter((customer) => Number(customer.visitCount || 0) > 1)
   const due = customers
     .filter((customer) => {
+      // 从没来过店的(测试残留/纯注册用户)不算"待回访",避免一排 0 的噪音
+      if (!Number(customer.visitCount || 0)) return false
       if (!customer.lastVisitAt) return true
       const days = (Date.now() - new Date(customer.lastVisitAt).getTime()) / 86400000
       return days >= 30
@@ -1420,6 +1427,8 @@ function bookingSource(booking) {
 
 function renderAdminPages() {
   els.sidebarDashboard.classList.toggle('hidden', !isOwnerRole())
+  // 员工端没有首页,"← Dashboard"返回按钮一并隐藏
+  document.querySelectorAll('.back-btn').forEach((btn) => btn.classList.toggle('hidden', !isOwnerRole()))
   els.sidebarServices.classList.toggle('hidden', !isOwnerRole())
   els.sidebarCustomers.classList.toggle('hidden', !isOwnerRole())
   els.sidebarStoreSettings.classList.toggle('hidden', !isOwnerRole())
@@ -1506,7 +1515,7 @@ function renderDashboard() {
       </div>
       ${chartBar(t('monthServices'), stats.monthServices, Math.max(stats.monthBookings.length, 1))}
       ${chartBar(t('pending'), stats.monthBookings.filter((item) => item.status === 'PENDING_PAYMENT').length, Math.max(stats.monthBookings.length, 1))}
-      ${chartBar(t('revenue'), money(stats.monthRevenue), Math.max(stats.monthBookings.length, 1), 100)}
+      ${owner.financeKey ? chartBar(t('revenue'), money(stats.monthRevenue), Math.max(stats.monthBookings.length, 1), 100) : ''}
     </button>
     <button class="dashboard-chart-card card" data-dashboard-detail="technicians" type="button">
       <div class="section-row compact-row">
@@ -3613,7 +3622,7 @@ function activeStatuses() {
 
 function filteredBookings() {
   const status = owner.adminView === 'today' ? 'all' : (els.filterStatus.value || 'all')
-  const date = owner.adminView === 'today' ? formatDate(new Date()) : els.filterDate.value
+  const date = owner.adminView === 'today' ? storeToday() : els.filterDate.value
   const search = (owner.bookingSearch || '').trim().toLowerCase()
   return owner.bookings
     .filter((booking) => !date || booking.appointmentDate === date)
@@ -3642,7 +3651,7 @@ function groupByDate(bookings) {
 }
 
 function dateHeading(date) {
-  const today = formatDate(new Date())
+  const today = storeToday()
   return date === today ? `${t('today')} · ${date}` : date
 }
 
@@ -3823,7 +3832,7 @@ function renderCalendarCell(date) {
     })
     .sort((a, b) => a.appointmentTime.localeCompare(b.appointmentTime))
   return `
-    <button class="calendar-cell ${key === formatDate(new Date()) ? 'today-cell' : ''}" data-calendar-date="${key}" type="button">
+    <button class="calendar-cell ${key === storeToday() ? 'today-cell' : ''}" data-calendar-date="${key}" type="button">
       <span class="calendar-day">${date.getDate()}</span>
       ${dayBookings.slice(0, 4).map((booking) => {
         const [color, bg] = technicianColor(booking.technician?.id)
@@ -3973,7 +3982,7 @@ function mondayOf(date) {
 }
 
 async function loadScheduleWeek(from) {
-  owner.scheduleWeekFrom = from || owner.scheduleWeekFrom || mondayOf(new Date())
+  owner.scheduleWeekFrom = from || owner.scheduleWeekFrom || mondayOf(new Date(`${storeToday()}T12:00:00`))
   const data = await request(`/admin/schedule-week?from=${owner.scheduleWeekFrom}`)
   owner.scheduleWeek = data
   owner.scheduleWeekFrom = data.weekStart
@@ -4003,7 +4012,7 @@ function renderScheduleWeek() {
   }
   const zh = owner.lang === 'zh'
   const weekdayNames = zh ? ['日', '一', '二', '三', '四', '五', '六'] : ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat']
-  const today = formatDate(new Date())
+  const today = storeToday()
   const countFor = (techId, date) => (week.bookingCounts || []).find((row) => row.technicianId === techId && row.date === date)?.count || 0
   const techs = (week.technicians || []).filter((tech) => tech.isActive)
   const header = `<div class="swg-row swg-head">
@@ -4485,7 +4494,7 @@ function galleryGroups() {
 }
 
 function mockGalleryGroups() {
-  const baseDate = formatDate(new Date())
+  const baseDate = storeToday()
   const mocks = [
     {
       id: 'mock-gallery-french',
@@ -5468,7 +5477,7 @@ els.adminTabs.forEach((tab) => {
   tab.addEventListener('click', () => {
     owner.adminView = tab.dataset.adminView
     if (owner.adminView === 'today') {
-      els.filterDate.value = formatDate(new Date())
+      els.filterDate.value = storeToday()
       els.filterStatus.value = 'all'
     } else if (owner.adminView === 'all') {
       els.filterDate.value = ''
@@ -5504,8 +5513,8 @@ els.schedulePage.addEventListener('click', (event) => {
   const weekNav = event.target.closest('[data-week-nav]')
   if (weekNav) {
     const step = Number(weekNav.dataset.weekNav)
-    const from = step === 0 ? mondayOf(new Date()) : (() => {
-      const d = new Date(`${owner.scheduleWeekFrom || mondayOf(new Date())}T12:00:00`)
+    const from = step === 0 ? mondayOf(new Date(`${storeToday()}T12:00:00`)) : (() => {
+      const d = new Date(`${owner.scheduleWeekFrom || mondayOf(new Date(`${storeToday()}T12:00:00`))}T12:00:00`)
       d.setDate(d.getDate() + step * 7)
       return formatDate(d)
     })()

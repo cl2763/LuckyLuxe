@@ -7153,3 +7153,24 @@ section.card > .section-row:first-child { margin-top: 0; }
 }
 .staff-day-chip:hover { border-color: var(--accent-dark); }
 .staff-day-chip.chip-warn { background: #faf3dd; border-color: #e3cba9; color: #9a7b1f; font-weight: 600; }
+
+/* F4: 技师卡管理按钮不再挤成竖排字 */
+.tech-manage-row { flex-wrap: wrap; align-items: center; }
+.tech-manage-row .ghost.slim { white-space: nowrap; flex-shrink: 0; }
+.tech-account-name { white-space: nowrap; }
+
+/* ===== 走查修复批2:窄屏(手机)员工端/工作台 ===== */
+@media (max-width: 760px) {
+  .cs-workbench-grid { grid-template-columns: 1fr; }
+  .cs-session-col { height: 46vh; }
+  .cs-chat-col { height: 64vh; }
+  .cs-chat-head { flex-wrap: wrap; }
+  .cs-chat-head-main { flex-wrap: wrap; min-width: 0; }
+  .cs-chat-head .pill,
+  .cs-chat-head .ghost.slim,
+  .cs-chat-head .primary.slim { white-space: nowrap; flex-shrink: 0; }
+  .technician-performance-grid.single-card .performance-numbers { grid-template-columns: repeat(2, 1fr); }
+  .technician-performance-grid.single-card .performance-numbers strong { font-size: 19px; }
+  .sidebar-link { min-width: 108px; white-space: nowrap; flex-shrink: 0; }
+  .section-row > .subtle { min-width: 0; }
+}
