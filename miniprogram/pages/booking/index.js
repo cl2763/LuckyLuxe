@@ -14,8 +14,16 @@ Page({
     appointmentTime: '',
     timeSlots: mock.timeSlots,
     addOns: mock.addOns,
+    technicians: [],
+    technicianIndex: 0,
+    technician: null,
     selectedAddOns: [],
     referenceImages: [],
+    referenceDataImages: [],
+    referenceAnalysis: null,
+    referencePriceText: '',
+    referenceMessage: '',
+    isAnalyzingReference: false,
     remark: ''
   },
 
@@ -44,6 +52,11 @@ Page({
       : null
     const appointment = cartItem ? cartItem.appointmentInfo : null
     const selectedAddOns = appointment ? appointment.addOns : []
+    const [addOns, technicians] = await Promise.all([
+      api.getAddOns(),
+      api.getTechnicians(service._id)
+    ])
+    const technicianIndex = Math.max(0, technicians.findIndex((tech) => appointment && tech.id === appointment.technicianId))
     this.setData({
       service,
       lang,
@@ -52,12 +65,32 @@ Page({
       minDate: storage.today(),
       appointmentDate: appointment ? appointment.date : storage.tomorrow(),
       appointmentTime: appointment ? appointment.time : mock.timeSlots[0],
+      technicians,
+      technicianIndex,
+      technician: technicians[technicianIndex] || technicians[0] || null,
       selectedAddOns,
       referenceImages: appointment ? appointment.referenceImages : [],
+      referenceDataImages: appointment ? (appointment.referenceDataImages || []) : [],
+      referenceAnalysis: appointment ? appointment.referenceAnalysis : null,
+      referencePriceText: appointment && appointment.referenceAnalysis && appointment.referenceAnalysis.estimatedPriceCents
+        ? `CAD $${Math.round(appointment.referenceAnalysis.estimatedPriceCents / 100)}`
+        : '',
+      referenceMessage: appointment && appointment.referenceAnalysis
+        ? (lang === 'en' ? appointment.referenceAnalysis.clientMessageEn : appointment.referenceAnalysis.clientMessageZh)
+        : '',
       remark: appointment ? appointment.remark : '',
-      addOns: i18n.localizeAddOns(mock.addOns, lang).map((item) => Object.assign({}, item, {
+      addOns: i18n.localizeAddOns(addOns, lang).map((item) => Object.assign({}, item, {
         checked: selectedAddOns.indexOf(item.id) >= 0
       }))
+    })
+    this.refreshAvailability()
+  },
+
+  bindTechnicianChange(event) {
+    const index = Number(event.detail.value || 0)
+    this.setData({
+      technicianIndex: index,
+      technician: this.data.technicians[index] || this.data.technicians[0] || null
     })
     this.refreshAvailability()
   },
@@ -88,14 +121,25 @@ Page({
 
   async refreshAvailability() {
     if (!this.data.service || !this.data.appointmentDate) return
-    const availability = await api.getAvailability(this.data.service._id, this.data.appointmentDate, this.data.selectedAddOns)
-    const slots = availability.slots.length ? availability.slots : mock.timeSlots
+    const availability = await api.getAvailability(
+      this.data.service._id,
+      this.data.appointmentDate,
+      this.data.selectedAddOns,
+      this.data.technician ? this.data.technician.id : ''
+    )
+    const tech = this.data.technician || availability.technician
+    const techEntry = availability.slotsByTech
+      ? availability.slotsByTech.find((item) => item.technician.id === tech.id)
+      : null
+    const slots = (techEntry && techEntry.slots && techEntry.slots.length)
+      ? techEntry.slots
+      : availability.slots && availability.slots.length ? availability.slots : mock.timeSlots
     const nextTime = slots.indexOf(this.data.appointmentTime) >= 0 ? this.data.appointmentTime : slots[0]
     this.setData({
       timeSlots: slots,
       appointmentTime: nextTime,
       service: Object.assign({}, this.data.service, { duration: availability.durationMin || this.data.service.duration }),
-      technician: availability.technician
+      technician: tech || availability.technician
     })
   },
 
@@ -105,15 +149,37 @@ Page({
       wx.showToast({ title: this.data.t.imageLimit, icon: 'none' })
       return
     }
+    const handlePaths = (paths) => {
+        const fileSystem = wx.getFileSystemManager()
+        const dataImages = []
+      paths.forEach((filePath) => {
+          try {
+            const base64 = fileSystem.readFileSync(filePath, 'base64')
+            dataImages.push(`data:image/jpeg;base64,${base64}`)
+          } catch (error) {
+            dataImages.push(filePath)
+          }
+        })
+        this.setData({
+        referenceImages: this.data.referenceImages.concat(paths).slice(0, 3),
+          referenceDataImages: this.data.referenceDataImages.concat(dataImages).slice(0, 3)
+        })
+      }
+    if (wx.chooseMedia) {
+      wx.chooseMedia({
+        count: left,
+        mediaType: ['image'],
+        sourceType: ['album', 'camera'],
+        sizeType: ['compressed'],
+        success: (res) => handlePaths((res.tempFiles || []).map((item) => item.tempFilePath))
+      })
+      return
+    }
     wx.chooseImage({
       count: left,
       sizeType: ['compressed'],
       sourceType: ['album', 'camera'],
-      success: (res) => {
-        this.setData({
-          referenceImages: this.data.referenceImages.concat(res.tempFilePaths).slice(0, 3)
-        })
-      }
+      success: (res) => handlePaths(res.tempFilePaths || [])
     })
   },
 
@@ -121,7 +187,32 @@ Page({
     const index = event.currentTarget.dataset.index
     const images = this.data.referenceImages.slice()
     images.splice(index, 1)
-    this.setData({ referenceImages: images })
+    const dataImages = this.data.referenceDataImages.slice()
+    dataImages.splice(index, 1)
+    this.setData({ referenceImages: images, referenceDataImages: dataImages, referenceAnalysis: null })
+  },
+
+  async analyzeReference() {
+    if (!this.data.referenceDataImages.length || this.data.isAnalyzingReference) return
+    this.setData({ isAnalyzingReference: true })
+    try {
+      const result = await api.analyzeReference({
+        lang: this.data.lang,
+        serviceId: this.data.service._id,
+        image: this.data.referenceDataImages[0],
+        images: this.data.referenceDataImages
+      })
+      const analysis = result.data || result
+      this.setData({
+        referenceAnalysis: analysis,
+        referencePriceText: analysis.estimatedPriceCents ? `CAD $${Math.round(analysis.estimatedPriceCents / 100)}` : (this.data.lang === 'en' ? 'Manual quote' : '需人工报价'),
+        referenceMessage: this.data.lang === 'en' ? (analysis.clientMessageEn || analysis.priceMessageEn || '') : (analysis.clientMessageZh || analysis.priceMessageZh || '')
+      })
+    } catch (error) {
+      wx.showToast({ title: error.message || 'AI 分析暂不可用', icon: 'none' })
+    } finally {
+      this.setData({ isAnalyzingReference: false })
+    }
   },
 
   inputRemark(event) {
@@ -142,6 +233,8 @@ Page({
         technicianName: this.data.technician ? this.data.technician.name : 'Mia Chen',
         addOns: this.data.selectedAddOns,
         referenceImages: this.data.referenceImages,
+        referenceDataImages: this.data.referenceDataImages,
+        referenceAnalysis: this.data.referenceAnalysis,
         remark: this.data.remark
       }
     }

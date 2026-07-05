@@ -1,38 +1,39 @@
 <view class="page services-page">
-  <view class="page-title">Lucky Luxe</view>
-
   <view class="type-switch">
     <button class="type-tab {{activeType === 'nail' ? 'active' : ''}}" bindtap="switchType" data-type="nail">{{t.nail}}</button>
     <button class="type-tab {{activeType === 'lash' ? 'active' : ''}}" bindtap="switchType" data-type="lash">{{t.lash}}</button>
   </view>
 
   <view class="service-layout">
-    <scroll-view class="category-list" scroll-y>
+    <scroll-view class="category-list" scroll-y enhanced show-scrollbar="{{false}}">
       <block wx:for="{{categories}}" wx:key="*this">
-        <button class="category-item {{activeCategory === item.key ? 'active' : ''}}" bindtap="switchCategory" data-category="{{item.key}}">
+        <view class="category-item {{activeCategory === item.key ? 'active' : ''}}" bindtap="switchCategory" data-category="{{item.key}}">
           <text>{{item.label}}</text>
-        </button>
+        </view>
       </block>
     </scroll-view>
 
     <scroll-view class="service-list" scroll-y>
-      <block wx:if="{{serviceList.length}}">
-        <block wx:for="{{serviceList}}" wx:key="_id">
-          <button class="service-card card" bindtap="goDetail" data-id="{{item._id}}">
-            <image class="service-visual" src="{{item.image}}" mode="aspectFill"></image>
-            <view class="service-info">
-              <view class="service-name">{{item.name}}</view>
-              <view class="service-desc">{{item.description}}</view>
-              <view class="service-meta">
-                <text class="price">CAD ${{item.price}}</text>
-                <text>{{item.duration}}{{t.minutes}}</text>
-                <text>{{t.deposit}} CAD ${{item.depositAmount}}</text>
+      <view class="service-list-inner">
+        <block wx:if="{{serviceList.length}}">
+          <block wx:for="{{serviceList}}" wx:key="_id">
+            <view class="service-card card" bindtap="goDetail" data-id="{{item._id}}">
+              <image class="service-visual" src="{{item.image}}" mode="aspectFill"></image>
+              <view class="service-info">
+                <view class="service-name">{{item.name}}</view>
+                <view class="service-desc">{{item.description}}</view>
+                <view class="service-meta">
+                  <text class="price">{{lang === 'en' ? item.priceLabelEn : item.priceLabelZh}}</text>
+                  <text>{{item.duration}}{{t.minutes}}</text>
+                  <text>{{t.deposit}} CAD ${{item.depositAmount}}</text>
+                </view>
+                <view class="quote-hint">{{lang === 'en' ? item.quoteHintEn : item.quoteHintZh}}</view>
               </view>
             </view>
-          </button>
+          </block>
         </block>
-      </block>
-      <view wx:else class="empty">{{t.empty}}</view>
+        <view wx:else class="empty">{{t.empty}}</view>
+      </view>
     </scroll-view>
   </view>
 </view>

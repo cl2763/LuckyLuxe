@@ -1,11 +1,29 @@
 .orders-page {
+  width: 100%;
   padding-left: 24rpx;
   padding-right: 24rpx;
+  box-sizing: border-box;
 }
 
 .tabs {
+  width: 100%;
   margin-bottom: 22rpx;
   white-space: nowrap;
+  box-sizing: border-box;
+}
+
+.orders-list {
+  display: flex;
+  flex-direction: column;
+  align-items: stretch;
+  justify-content: flex-start;
+  gap: 18rpx;
+  width: 100%;
+  min-width: 100%;
+  max-width: 100%;
+  margin: 0;
+  padding: 0;
+  box-sizing: border-box;
 }
 
 .tab {
@@ -28,10 +46,14 @@
 .order-card {
   display: block;
   width: 100%;
-  margin-bottom: 18rpx;
+  min-width: 100%;
+  max-width: 100%;
+  margin: 0;
   padding: 22rpx;
   border-radius: 16rpx;
   text-align: left;
+  line-height: 1.2;
+  box-sizing: border-box;
 }
 
 .order-head {
@@ -62,19 +84,23 @@
 }
 
 .order-body {
-  display: flex;
+  display: grid;
+  grid-template-columns: 216rpx minmax(0, 1fr);
   gap: 18rpx;
+  width: 100%;
+  box-sizing: border-box;
 }
 
 .mini-visual {
-  width: 164rpx;
-  height: 136rpx;
+  width: 216rpx;
+  height: 150rpx;
   flex: none;
   display: block;
   border-radius: 14rpx;
 }
 
 .order-info {
+  min-width: 0;
   display: flex;
   flex-direction: column;
   justify-content: center;

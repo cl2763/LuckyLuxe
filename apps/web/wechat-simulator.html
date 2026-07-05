@@ -1,0 +1,131 @@
+<!doctype html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>Lucky Luxe 客服模拟器</title>
+    <link rel="stylesheet" href="/web/styles.css?v=20260702-unified-stage1">
+  </head>
+  <body class="simulator-body">
+    <main class="simulator-shell">
+      <header class="simulator-topbar">
+        <a class="brand" href="/admin">
+          <span class="brand-mark">LL</span>
+          <span>
+            <strong>Lucky Luxe 客服模拟器</strong>
+            <small>顾客连续对话、图片上传、AI 学习反馈</small>
+          </span>
+        </a>
+        <div class="top-actions">
+          <a class="ghost" href="/admin" target="_blank" rel="noreferrer">打开 Admin</a>
+          <button class="ghost" id="refreshSimulator" type="button">刷新会话</button>
+        </div>
+      </header>
+
+      <section class="simulator-layout">
+        <aside class="simulator-control-card">
+          <div class="section-row compact-row">
+            <div>
+              <p class="eyebrow">Customer Simulator</p>
+              <h1>模拟顾客</h1>
+            </div>
+            <span class="mock-state-pill" id="simulatorStatus">new</span>
+          </div>
+
+          <label>
+            <span>顾客 ID</span>
+            <input id="simCustomerId" value="sim-customer-001">
+          </label>
+          <div class="form-grid tight">
+            <label>
+              <span>来源渠道</span>
+              <select id="simSourceChannel">
+                <option>小红书</option>
+                <option>抖音</option>
+                <option>大众点评/美团</option>
+                <option>朋友推荐</option>
+                <option>Instagram</option>
+                <option>Google</option>
+                <option>WeChat</option>
+              </select>
+            </label>
+          </div>
+          <div class="form-grid tight">
+            <label>
+              <span>顾客类型</span>
+              <select id="simCustomerType">
+                <option value="new">新客</option>
+                <option value="returning">老客</option>
+              </select>
+            </label>
+            <label>
+              <span>会员等级</span>
+              <select id="simMemberTier">
+                <option value="silver">Silver Member</option>
+                <option value="gold">Gold Member</option>
+                <option value="platinum">Platinum Member</option>
+                <option value="diamond">Diamond Member</option>
+              </select>
+            </label>
+          </div>
+
+          <button class="primary" id="newSimCustomer" type="button">新建顾客会话</button>
+          <p class="simulator-help">这里只设置新顾客身份和来源；阶段由真实聊天内容与工作流自动判断，传图、AI 学习都在右侧底部输入栏完成。</p>
+          <details class="simulator-logic-note">
+            <summary>记录客服逻辑/知识库缺口</summary>
+            <p>当你发现 AI 的流程判断不对，不是单句文案问题，就写在这里。它会进入待审核规则池，后续可固化为正式知识库。</p>
+            <textarea id="simLogicNote" rows="5" placeholder="例如：老客已经有消费记录时，不要先问是否需要报价；应先判断款式可做性，再引导预约或转技师确认。"></textarea>
+            <button class="primary slim" id="saveSimLogicNote" type="button">保存为待固化规则</button>
+          </details>
+          <div class="simulator-test-card">
+            <strong>建议测试顺序</strong>
+            <ol>
+              <li>新客问候：确认欢迎语、渠道识别和语气。</li>
+              <li>发参考图但只问“可以做吗”：AI 只确认可做边界，不立刻报价。</li>
+              <li>分多句回答本甲/延长、是否卸甲、断甲、饰品：理解面板应逐项记住。</li>
+              <li>顾客明确问价格：后台生成待技师报价，并带历史图片。</li>
+              <li>Admin 填写人工回价：聊天框收到 AI 润色后的报价。</li>
+              <li>Admin 创建草稿链接：顾客打开链接进入 checkout 并 mock 支付。</li>
+              <li>支付后同一技师时间段被占用，web 和小程序读取同一后端。</li>
+              <li>改写不满意 AI 回复：保存后相似问题应参考满意版本。</li>
+            </ol>
+          </div>
+        </aside>
+
+        <section class="simulator-chat-card">
+          <div class="simulator-chat-head">
+            <div>
+              <p class="eyebrow">Live Conversation</p>
+              <h2 id="simConversationTitle">sim-customer-001</h2>
+            </div>
+            <span id="simConversationMeta">等待发送第一条消息</span>
+          </div>
+          <div class="simulator-conversation-strip" id="simConversationStrip"></div>
+          <div class="simulator-state-panel" id="simStatePanel"></div>
+          <div class="simulator-thread" id="simTranscript"></div>
+          <div class="simulator-composer">
+            <div id="simImagePreview"></div>
+            <div class="simulator-compose-row">
+              <label class="sim-upload-button" for="simReferenceImages">
+                <input id="simReferenceImages" type="file" accept="image/*" multiple>
+                上传图片
+              </label>
+              <textarea id="simMessage" rows="2" placeholder="像真实顾客一样连续输入消息，按发送后 AI 会回复。"></textarea>
+              <button class="primary" id="sendSimMessage" type="button">发送</button>
+            </div>
+            <div class="simulator-compose-tools">
+              <label class="inline-toggle">
+                <input id="simAutoAiReply" type="checkbox" checked>
+                <span>测试模式：20 秒聚合连续消息；人工接管时不会自动触发 AI</span>
+              </label>
+              <button class="ghost slim" id="forceSimAi" type="button">交回 AI 回复</button>
+            </div>
+          </div>
+        </section>
+      </section>
+    </main>
+
+    <div class="toast" id="simToast"></div>
+    <script src="/web/wechat-simulator.js?v=20260705-timeout"></script>
+  </body>
+</html>

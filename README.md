@@ -1,6 +1,6 @@
 # Lucky Luxe 小程序演示版
 
-这是一个基于需求文档实现的微信小程序原生演示项目，当前版本使用本地 Mock 数据和本地缓存，不依赖 AppID、云开发环境或真实微信支付。
+这是一个基于需求文档实现的 Lucky Luxe 微信小程序与网页版演示项目。小程序客户端已接入后端 API；微信登录需要在线上后端配置小程序 AppID/AppSecret 环境变量后才能真实测试。
 
 ## 打开方式
 
@@ -22,7 +22,8 @@
 
 - 门店地址、电话、营业时间为“待补充”。
 - 服务项目为演示数据。
-- 微信登录、云数据库、云函数、真实支付暂未接入。
+- 微信登录接口已接入，需在 Railway/后端环境变量中配置 `WECHAT_MINI_APPID`、`WECHAT_MINI_SECRET`、`WECHAT_MINI_TOKEN_SECRET`。
+- 真实微信支付暂未接入，等待微信支付商户号。
 
 ## 本地后端
 
@@ -44,4 +45,12 @@ http://localhost:4000
 
 ```text
 Authorization: Bearer owner-demo-token
+```
+
+微信小程序登录所需后端环境变量：
+
+```text
+WECHAT_MINI_APPID=wx9ef73918f91c8a3d
+WECHAT_MINI_SECRET=<只放在后端环境变量的新 AppSecret>
+WECHAT_MINI_TOKEN_SECRET=<openssl rand -hex 32 生成>
 ```

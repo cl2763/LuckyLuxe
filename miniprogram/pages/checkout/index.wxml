@@ -6,6 +6,7 @@
 
   <block wx:for="{{items}}" wx:key="_id">
     <view class="checkout-item card">
+      <image class="mini-visual" src="{{item.service.image}}" mode="aspectFill"></image>
       <view class="checkout-info">
         <view class="checkout-title-row">
           <text class="checkout-title">{{item.service.name}}</text>
@@ -21,7 +22,6 @@
           <text>{{t.servicePrice}} CAD ${{item.service.price}}</text>
         </view>
       </view>
-      <image class="mini-visual" src="{{item.service.image}}" mode="aspectFill"></image>
     </view>
   </block>
 
@@ -33,6 +33,10 @@
       <view class="cost-row">
         <text>{{t.appointmentDeposit}}</text>
         <text>CAD ${{serviceDeposit}}</text>
+      </view>
+      <view wx:if="{{depositWaived}}" class="cost-row">
+        <text>{{lang === 'en' ? 'Member deposit waiver' : '会员定金减免'}}</text>
+        <text>-CAD ${{depositWaivedAmount}}</text>
       </view>
       <view class="cost-row">
         <text>{{t.coupon}}</text>
@@ -60,6 +64,13 @@
       <view class="store-name">{{store.storeName}}</view>
       <view class="muted">{{store.address}}</view>
       <view class="muted">{{store.phone}} · {{store.businessHours}}</view>
+    </view>
+  </view>
+
+  <view class="section">
+    <view class="deposit-policy card">
+      <view class="deposit-policy-title">{{t.depositPolicyTitle}}</view>
+      <view class="deposit-policy-text">{{t.depositPolicyText}}</view>
     </view>
   </view>
 

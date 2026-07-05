@@ -13,7 +13,24 @@ function getCart() {
 }
 
 function setCart(cart) {
-  return write('lucky_cart', cart)
+  const next = write('lucky_cart', cart)
+  syncCartBadge(next)
+  return next
+}
+
+function syncCartBadge(cart) {
+  const items = Array.isArray(cart) ? cart : getCart()
+  const count = items.length
+  if (typeof wx === 'undefined' || !wx.setTabBarBadge) return
+  if (count > 0) {
+    wx.setTabBarBadge({
+      index: 2,
+      text: count > 99 ? '99+' : String(count),
+      fail() {}
+    })
+  } else if (wx.removeTabBarBadge) {
+    wx.removeTabBarBadge({ index: 2, fail() {} })
+  }
 }
 
 function addCartItem(item) {
@@ -107,6 +124,7 @@ function tomorrow() {
 module.exports = {
   getCart,
   setCart,
+  syncCartBadge,
   addCartItem,
   updateCartItem,
   removeCartItem,

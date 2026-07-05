@@ -25,6 +25,7 @@ apps/api/local-data/lucky-luxe.sqlite
 ## Important Endpoints
 
 - `GET /health`
+- `POST /auth/wechat/mini-login`
 - `GET /stores`
 - `GET /services?type=nail|lash&lang=zh|en`
 - `GET /technicians?storeId=store-ontario-01&serviceId=nail-french-01`
@@ -40,6 +41,30 @@ Owner endpoints use:
 Authorization: Bearer owner-demo-token
 ```
 
+## WeChat Mini Program Login
+
+The mini program calls `wx.login()` and sends the temporary code to:
+
+```text
+POST /auth/wechat/mini-login
+```
+
+Configure these server-side environment variables before testing real WeChat login:
+
+```bash
+WECHAT_MINI_APPID="wx9ef73918f91c8a3d"
+WECHAT_MINI_SECRET="<new AppSecret from WeChat Mini Program admin>"
+WECHAT_MINI_TOKEN_SECRET="<random server-only signing secret>"
+```
+
+Generate `WECHAT_MINI_TOKEN_SECRET` locally with:
+
+```bash
+openssl rand -hex 32
+```
+
+Never commit the AppSecret or put it in mini program client code.
+
 ## Scheduling Rules In This Version
 
 - Store hours: Tuesday to Sunday, 10:00 to 19:00.
@@ -48,7 +73,7 @@ Authorization: Bearer owner-demo-token
 - Nail services occupy at least 120 minutes and can extend with add-ons.
 - One booking contains one service only.
 - The online deposit is fixed at CAD 50.
-- Pending payment holds reserve the technician's slots for 15 minutes.
+- Pending payment holds reserve the technician's slots for 30 minutes.
 - Slot conflicts are handled by a database unique constraint on `(technician_id, starts_at)`, so Redis is not needed for this traffic level.
 
 ## Production Direction

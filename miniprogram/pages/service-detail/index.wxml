@@ -1,6 +1,4 @@
 <view wx:if="{{service}}" class="page detail-page">
-  <view class="page-title">{{service.name}}</view>
-
   <image class="detail-visual" src="{{service.image}}" mode="aspectFill"></image>
 
   <view class="detail-main card">

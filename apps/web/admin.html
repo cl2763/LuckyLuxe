@@ -4,7 +4,7 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Lucky Luxe Admin</title>
-    <link rel="stylesheet" href="/web/styles.css?v=20260619-wecom-real-scaffold">
+    <link rel="stylesheet" href="/web/styles.css?v=20260706-staffp2">
   </head>
   <body>
     <main class="shell admin-shell">
@@ -31,17 +31,25 @@
       <section class="admin-card owner-login-card" id="ownerLogin">
         <div>
           <p class="eyebrow" id="ownerAccessEyebrow">Owner Access</p>
+          <div class="login-role-tabs">
+            <button class="login-role-tab active" id="loginTabOwner" data-login-role="owner" type="button">老板登录</button>
+            <button class="login-role-tab" id="loginTabStaff" data-login-role="staff" type="button">员工登录</button>
+          </div>
           <h2 id="ownerLoginTitle">Owner Login</h2>
           <p class="subtle" id="ownerLoginText">Use your approved owner email. Admin data is hidden until login succeeds.</p>
         </div>
         <form class="auth-form owner-login-form" id="ownerLoginForm">
           <label>
-            <span id="ownerEmailLabel">Email</span>
-            <input name="email" type="email" autocomplete="username">
+            <span id="ownerEmailLabel">账号(用户名或邮箱)</span>
+            <input name="email" type="text" autocomplete="username">
           </label>
           <label>
             <span id="ownerPasswordLabel">Password</span>
             <input name="password" type="password" autocomplete="current-password">
+          </label>
+          <label class="check-row login-remember-row">
+            <input id="loginRemember" type="checkbox" checked>
+            <span id="loginRememberLabel">保持登录 30 天</span>
           </label>
           <button class="primary slim" id="ownerLoginButton" data-auth-action="login" type="submit">Login</button>
           <button class="ghost slim" id="ownerRegisterButton" data-auth-action="register" type="submit">Register Owner</button>
@@ -52,24 +60,29 @@
         <aside class="admin-sidebar" id="adminSidebar" aria-label="Admin navigation">
           <button class="sidebar-link active" data-admin-page="dashboard" id="sidebarDashboard" type="button">后台首页</button>
           <button class="sidebar-link" data-admin-page="bookings" id="sidebarBookings" type="button">订单管理</button>
+          <button class="sidebar-link" data-admin-page="finance" id="sidebarFinance" type="button">财务</button>
+          <button class="sidebar-link" data-admin-page="customers" id="sidebarCustomers" type="button">客户档案</button>
           <button class="sidebar-link" data-admin-page="schedule" id="sidebarSchedule" type="button">排班管理</button>
           <button class="sidebar-link" data-admin-page="services" id="sidebarServices" type="button">服务管理</button>
-          <button class="sidebar-link" data-admin-page="customers" id="sidebarCustomers" type="button">客户档案</button>
-          <button class="sidebar-link" data-admin-page="wechatMock" id="sidebarWechatMock" type="button">微信客服 Mock</button>
+          <button class="sidebar-link" data-admin-page="wechatMock" id="sidebarWechatMock" type="button"><span id="sidebarWechatMockLabel">客服工作台</span><span class="sidebar-badge hidden" id="wechatNeedsHumanBadge"></span></button>
           <button class="sidebar-link" data-admin-page="aiGallery" id="sidebarAiGallery" type="button">AI 图库</button>
+          <button class="sidebar-link" data-admin-page="storeSettings" id="sidebarStoreSettings" type="button">门店设置</button>
+          <span class="sidebar-version" id="sidebarVersion"></span>
         </aside>
 
         <section class="admin-workspace" id="adminWorkspace">
-          <section class="metric-grid" id="metricGrid"></section>
-
           <section class="admin-dashboard-page" id="adminDashboard">
             <div class="section-row">
               <div>
                 <p class="eyebrow" id="dashboardEyebrow">Dashboard</p>
                 <h1 id="dashboardTitle">Admin Home</h1>
               </div>
-              <span class="subtle" id="dashboardSubtitle">Today and month overview</span>
+              <div class="dashboard-title-actions">
+                <span class="subtle" id="dashboardSubtitle">Today and month overview</span>
+                <button class="ghost slim" id="fullDemoSeed" type="button">演示数据</button>
+              </div>
             </div>
+            <section class="metric-grid" id="metricGrid"></section>
             <div class="dashboard-chart-grid" id="dashboardCharts"></div>
             <div class="ai-panel card" id="aiBriefPanel"></div>
             <div class="finance-panel card hidden" id="financePanel"></div>
@@ -86,10 +99,11 @@
               <h1 id="bookingsTitle">订单管理</h1>
               <span class="subtle" id="bookingsSubtitle">全部订单数据，状态变化不会隐藏订单</span>
             </div>
-            <div class="admin-tabs">
+            <div class="admin-tabs booking-tabs-row">
               <button class="admin-tab active" id="todayTab" data-admin-view="today" type="button">Today</button>
               <button class="admin-tab" id="calendarTab" data-admin-view="calendar" type="button">Calendar</button>
               <button class="admin-tab" id="allTab" data-admin-view="all" type="button">All Bookings</button>
+              <input class="booking-search" id="bookingSearch" placeholder="搜顾客名 / 手机号 / 订单号…">
             </div>
             <div class="filter-row" id="bookingFilters">
               <label>
@@ -121,39 +135,40 @@
           <section class="admin-page hidden" id="schedulePage">
             <button class="ghost back-btn" data-admin-page="dashboard" type="button">← Dashboard</button>
             <section class="admin-card">
+              <div class="section-row compact-row schedule-week-header">
+                <div>
+                  <p class="eyebrow" id="scheduleWeekEyebrow">Week</p>
+                  <h2 id="scheduleTitle">Technician Schedule</h2>
+                </div>
+                <div class="schedule-week-nav">
+                  <button class="ghost slim" data-week-nav="-1" type="button">‹</button>
+                  <button class="ghost slim" data-week-nav="0" id="scheduleThisWeek" type="button">本周</button>
+                  <button class="ghost slim" data-week-nav="1" type="button">›</button>
+                </div>
+              </div>
+              <div class="schedule-week-toolbar" id="scheduleWeekToolbar">
+                <label class="schedule-default-times">
+                  <span id="scheduleDefaultLabel">上班默认时段</span>
+                  <input id="scheduleStart" type="time" value="10:00">
+                  <span>–</span>
+                  <input id="scheduleEnd" type="time" value="19:00">
+                </label>
+                <button class="ghost slim" id="applyWeekPattern" type="button">本周模式应用到未来 4 周</button>
+              </div>
+              <div class="schedule-week-grid-wrap">
+                <div id="scheduleWeekGrid"></div>
+              </div>
+              <p class="subtle" id="scheduleGridHint">点格子切换上班/休息;上班格显示当天时段与已约单数;店休日排班会黄色提醒。</p>
+            </section>
+            <section class="admin-card">
               <div class="section-row compact-row">
                 <div>
                   <p class="eyebrow" id="techPerformanceEyebrow">This Month</p>
                   <h2 id="techPerformanceTitle">Technician Performance</h2>
                 </div>
+                <button class="ghost slim" id="addTechnicianButton" type="button">＋ 添加技师</button>
               </div>
               <div class="technician-performance-grid" id="technicianPerformance"></div>
-            </section>
-            <section class="admin-card">
-              <h2 id="scheduleTitle">Technician Schedule</h2>
-              <label>
-                <span id="scheduleTechLabel">Technician</span>
-                <select id="scheduleTech"></select>
-              </label>
-              <label>
-                <span id="scheduleDateLabel">Date</span>
-                <input id="scheduleDate" type="date">
-              </label>
-              <div class="form-grid tight">
-                <label>
-                  <span id="scheduleStartLabel">Start</span>
-                  <input id="scheduleStart" value="10:00">
-                </label>
-                <label>
-                  <span id="scheduleEndLabel">End</span>
-                  <input id="scheduleEnd" value="19:00">
-                </label>
-              </div>
-              <label class="check-row">
-                <input id="scheduleWorking" type="checkbox" checked>
-                <span id="scheduleWorkingLabel">Working day</span>
-              </label>
-              <button class="primary full" id="saveSchedule" type="button">Save Schedule</button>
             </section>
           </section>
 
@@ -175,14 +190,17 @@
               <div>
                 <h1 id="customersTitle">Customer Profiles</h1>
               </div>
-              <details class="filter-dropdown">
-                <summary id="customerFilterSummary">筛选</summary>
-                <select id="customerSort">
-                  <option value="alpha">A-Z</option>
-                  <option value="visits">Visits</option>
-                  <option value="recent">Recent visit</option>
-                </select>
-              </details>
+              <div class="customer-toolbar">
+                <input class="customer-search" id="customerSearch" placeholder="搜姓名 / 手机 / 会员码…">
+                <details class="filter-dropdown">
+                  <summary id="customerFilterSummary">筛选</summary>
+                  <select id="customerSort">
+                    <option value="alpha">A-Z</option>
+                    <option value="visits">Visits</option>
+                    <option value="recent">Recent visit</option>
+                  </select>
+                </details>
+              </div>
             </div>
             <div class="admin-list" id="customerList"></div>
           </section>
@@ -199,6 +217,158 @@
             <div class="admin-list" id="aiGalleryList"></div>
           </section>
 
+          <section class="admin-page hidden" id="financePage">
+            <button class="ghost back-btn" data-admin-page="dashboard" type="button">← Dashboard</button>
+            <div class="section-row">
+              <div>
+                <p class="eyebrow" id="financeEyebrow">Finance</p>
+                <div class="fin-title-row">
+                  <h1 id="financePageTitle">财务</h1>
+                  <button class="ghost slim fin-mini-btn" data-fin-guide="all" type="button" id="financeGuideButton">使用指南</button>
+                  <button class="ghost slim fin-mini-btn" data-fin-demo-seed type="button" id="financeDemoButton">演示数据</button>
+                </div>
+              </div>
+              <input id="financeMonth" type="month">
+            </div>
+            <div class="finance-metrics" id="financeMetrics"></div>
+            <div id="financeProgress"></div>
+            <div class="fin-layout-grid">
+              <nav class="fin-nav" id="financeNav">
+                <button class="fin-nav-btn active" data-fin-tab="quick" type="button" id="finNavQuick">✎ 记一笔</button>
+                <button class="fin-nav-btn" data-fin-tab="storedValue" type="button" id="finNavStored">💳 储值卡</button>
+                <button class="fin-nav-btn" data-fin-tab="txns" type="button" id="finNavTxns">☰ 流水</button>
+                <button class="fin-nav-btn" data-fin-tab="settings" type="button" id="finNavSettings">⚙ 财务设置</button>
+                <button class="fin-nav-btn fin-nav-ai" data-fin-insights type="button" id="finNavInsights">✦ AI 解读</button>
+              </nav>
+              <div class="fin-tab-content">
+            <section class="admin-card finance-quick-card" data-fin-panel="quick">
+              <div class="section-row compact-row">
+                <h2 id="financeQuickTitle">记一笔 <button class="fin-info" data-fin-guide="quick" type="button" aria-label="填写指南">ⓘ</button></h2>
+                <span class="subtle" id="financeQuickHint">日常收支随手记，三秒入账</span>
+              </div>
+              <div id="financeQuickBody"></div>
+            </section>
+            <section class="admin-card" data-fin-panel="storedValue">
+              <div class="section-row compact-row">
+                <h2 id="storedValueTitle">储值卡 <button class="fin-info" data-fin-guide="storedValue" type="button" aria-label="填写指南">ⓘ</button></h2>
+                <span class="subtle" id="storedValueHint">卡上的钱是欠顾客的服务；耗卡才是收入</span>
+              </div>
+              <div id="storedValueBody"></div>
+            </section>
+            <section class="admin-card settings-list-card" data-fin-panel="settings">
+              <div class="section-row compact-row">
+                <h2 id="financeSettingsGroupTitle">财务设置</h2>
+                <span class="subtle" id="financeSettingsGroupHint">固定项与规则，设一次长期生效</span>
+              </div>
+              <details class="settings-item">
+                <summary>
+                  <span class="settings-item-title" id="financeRecurringTitle">固定支出 <button class="fin-info" data-fin-guide="recurring" type="button" aria-label="填写指南">ⓘ</button></span>
+                  <span class="settings-item-value" id="financeRecurringSummary"></span>
+                </summary>
+                <div class="settings-item-body" id="financeRecurringBody"></div>
+              </details>
+              <details class="settings-item">
+                <summary>
+                  <span class="settings-item-title" id="financeTargetsTitle">目标设置 <button class="fin-info" data-fin-guide="targets" type="button" aria-label="填写指南">ⓘ</button></span>
+                  <span class="settings-item-value" id="financeTargetsSummary"></span>
+                </summary>
+                <div class="settings-item-body" id="financeTargetsBody"></div>
+              </details>
+              <details class="settings-item" id="financePayrollItem">
+                <summary>
+                  <span class="settings-item-title" id="financePayrollTitle">员工工资（月结） <button class="fin-info" data-fin-guide="payroll" type="button" aria-label="填写指南">ⓘ</button></span>
+                  <span class="settings-item-value" id="financePayrollSummary"></span>
+                </summary>
+                <div class="settings-item-body" id="financePayrollBody"></div>
+              </details>
+              <details class="settings-item">
+                <summary>
+                  <span class="settings-item-title" id="financeLedgerTitle">账本安全 <button class="fin-info" data-fin-guide="ledger" type="button" aria-label="填写指南">ⓘ</button></span>
+                  <span class="settings-item-value" id="financeLedgerSummary"></span>
+                </summary>
+                <div class="settings-item-body" id="financeLedgerBody"></div>
+              </details>
+              <details class="settings-item">
+                <summary>
+                  <span class="settings-item-title" id="financePasswordTitle">修改财务密码</span>
+                  <span class="settings-item-value" id="financePasswordSummary"></span>
+                </summary>
+                <div class="settings-item-body">
+                  <div class="fin-change-pass-grid">
+                    <label><span id="finOldPassLabel">旧密码（忘记时填 Owner Token）</span><input id="finOldPass" type="password" autocomplete="off"></label>
+                    <label><span id="finNewPassLabel">新密码（至少 4 位）</span><input id="finNewPass" type="password" autocomplete="off"></label>
+                    <label><span id="finNewPass2Label">再输入一次新密码</span><input id="finNewPass2" type="password" autocomplete="off"></label>
+                  </div>
+                  <button class="primary slim" data-fin-change-password type="button" id="finChangePassButton">确认修改</button>
+                </div>
+              </details>
+            </section>
+            <section class="admin-card" data-fin-panel="txns">
+              <div class="section-row compact-row">
+                <h2 id="financeTxnTitle">流水</h2>
+                <div class="finance-filters-row">
+                  <div class="finance-filters" id="financeFilters"></div>
+                  <button class="ghost slim" id="financeExportCsv" type="button">导出 CSV</button>
+                </div>
+              </div>
+              <div id="financeTxnList"></div>
+            </section>
+              </div>
+            </div>
+          </section>
+
+          <section class="admin-page hidden" id="storeSettingsPage">
+            <button class="ghost back-btn" data-admin-page="dashboard" type="button">← Dashboard</button>
+            <div class="section-row">
+              <div>
+                <p class="eyebrow" id="storeSettingsEyebrow">Store Settings</p>
+                <h1 id="storeSettingsTitle">门店设置</h1>
+              </div>
+              <span class="subtle" id="storeSettingsSubtitle">商家自助设置，保存后 AI 回答与预约空位立即生效</span>
+            </div>
+            <section class="admin-card settings-list-card">
+              <details class="settings-item">
+                <summary>
+                  <span class="settings-item-title" id="storeProfileTitle">门店信息（名称 / 地址 / 电话）</span>
+                  <span class="settings-item-value" id="storeProfileSummary"></span>
+                </summary>
+                <div class="settings-item-body" id="storeProfileBody"></div>
+              </details>
+              <details class="settings-item">
+                <summary>
+                  <span class="settings-item-title" id="businessHoursTitle">营业时间</span>
+                  <span class="settings-item-value" id="businessHoursSummary"></span>
+                </summary>
+                <div class="settings-item-body">
+                  <div id="businessHoursEditor"></div>
+                  <span class="subtle" id="businessHoursUpdated"></span>
+                  <button class="primary full" id="saveBusinessHours" type="button">保存营业时间</button>
+                </div>
+              </details>
+              <details class="settings-item">
+                <summary>
+                  <span class="settings-item-title" id="kbTitle">AI 知识库（店规 / FAQ）</span>
+                  <span class="settings-item-value" id="kbSummary"></span>
+                </summary>
+                <div class="settings-item-body" id="kbDetailBody"></div>
+              </details>
+              <details class="settings-item">
+                <summary>
+                  <span class="settings-item-title" id="planTitle">当前套餐</span>
+                  <span class="settings-item-value" id="planSummary"></span>
+                </summary>
+                <div class="settings-item-body" id="planDetailBody"></div>
+              </details>
+              <details class="settings-item">
+                <summary>
+                  <span class="settings-item-title" id="storeInfoTitle">店铺信息（技术支持用）</span>
+                  <span class="settings-item-value" id="storeInfoSummary"></span>
+                </summary>
+                <div class="settings-item-body" id="storeInfoBody"></div>
+              </details>
+            </section>
+          </section>
+
           <section class="admin-page hidden" id="wechatMockPage">
             <button class="ghost back-btn" data-admin-page="dashboard" type="button">← Dashboard</button>
             <div class="section-row">
@@ -208,24 +378,27 @@
               </div>
               <span class="subtle" id="wechatMockSubtitle">Lucky Luxe 预约助手流程预演</span>
             </div>
-            <div class="wechat-mock-grid">
-              <section class="admin-card wechat-session-panel">
+            <div class="cs-toolbar" id="wechatFilterBar"></div>
+            <div class="cs-workbench-grid">
+              <section class="admin-card cs-col cs-session-col">
                 <div class="section-row compact-row">
                   <h2 id="wechatSessionTitle">进线会话</h2>
-                  <span class="pill muted" id="wechatMockBadge">Mock</span>
+                  <span class="pill muted hidden" id="wechatMockBadge">Mock</span>
                 </div>
                 <div class="wechat-session-list" id="wechatSessionList"></div>
               </section>
-              <section class="admin-card wechat-detail-panel">
+              <section class="admin-card cs-col cs-chat-col">
                 <div id="wechatMockDetail"></div>
               </section>
+              <aside class="cs-col cs-context-col" id="wechatContextPanel"></aside>
             </div>
+            <div class="cs-workflow-full" id="wechatWorkflowPanel"></div>
           </section>
         </section>
       </section>
     </main>
 
     <div class="toast" id="toast"></div>
-    <script src="/web/admin.js?v=20260619-wecom-real-scaffold"></script>
+    <script src="/web/admin.js?v=20260706-staffp2"></script>
   </body>
 </html>

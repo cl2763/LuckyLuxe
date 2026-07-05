@@ -1,6 +1,7 @@
 const storage = require('../../utils/storage')
 const mock = require('../../utils/mock-data')
 const i18n = require('../../utils/i18n')
+const api = require('../../utils/api')
 
 const tabs = [
   { key: 'all', labelKey: 'all' },
@@ -32,18 +33,34 @@ Page({
     this.refresh()
   },
 
-  refresh() {
+  async refresh() {
     const lang = i18n.getLang()
     const t = i18n.pageCopy('orders', lang)
     i18n.applyTabBar(lang)
     i18n.setTitle(t.title)
-    const orders = storage.getOrders().map((item) => {
-      const service = mock.findService(item.serviceInfo.serviceId) || {}
+    if (!api.isLoggedIn()) {
+      this.setData({
+        lang,
+        t,
+        tabs: tabs.map((item) => Object.assign({}, item, { label: t[item.labelKey] })),
+        orders: []
+      })
+      return
+    }
+    let sourceOrders = []
+    try {
+      sourceOrders = await api.getBookings(lang)
+      if (sourceOrders.length) storage.setOrders(sourceOrders)
+    } catch (error) {
+      sourceOrders = storage.getOrders()
+    }
+    const orders = sourceOrders.map((item) => {
+      const service = item.service || mock.findService(item.serviceInfo.serviceId) || {}
       const localizedService = i18n.localizeService(service, lang)
       return Object.assign({}, item, {
         statusText: i18n.statusText(item.status, lang),
         serviceName: localizedService.name || item.serviceInfo.serviceName,
-        serviceImage: service.image || '/assets/images/store-cover.png'
+        serviceImage: service.image || item.serviceImage || '/assets/images/store-cover.jpg'
       })
     })
     this.setData({

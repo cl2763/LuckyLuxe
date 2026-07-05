@@ -1,0 +1,125 @@
+.portfolio-page {
+  padding: 24rpx 24rpx 180rpx;
+}
+
+.back-button {
+  width: 100%;
+  height: 70rpx;
+  margin-bottom: 18rpx;
+  border: 1rpx solid #eadfd7;
+  border-radius: 999rpx;
+  background: #fff;
+  color: #5e514b;
+  font-size: 26rpx;
+  font-weight: 700;
+}
+
+.portfolio-head {
+  padding: 28rpx 0 10rpx;
+}
+
+.eyebrow {
+  color: #c6a27e;
+  font-size: 22rpx;
+  font-weight: 800;
+  text-transform: uppercase;
+}
+
+.portfolio-title {
+  margin-top: 8rpx;
+  color: #241f1d;
+  font-size: 48rpx;
+  font-weight: 880;
+  line-height: 1.15;
+}
+
+.portfolio-intro {
+  margin-top: 12rpx;
+  color: #8a7f78;
+  font-size: 26rpx;
+  font-weight: 600;
+  line-height: 1.45;
+}
+
+.tech-list {
+  display: grid;
+  gap: 18rpx;
+  margin-top: 22rpx;
+}
+
+.tech-card {
+  position: relative;
+  padding: 22rpx;
+  border-radius: 18rpx;
+}
+
+.tech-info {
+  padding-right: 160rpx;
+}
+
+.tech-name {
+  color: #342b28;
+  font-size: 34rpx;
+  font-weight: 850;
+}
+
+.tech-title {
+  margin-top: 8rpx;
+  color: #8a7f78;
+  font-size: 24rpx;
+  font-weight: 650;
+  line-height: 1.35;
+}
+
+.view-work {
+  position: absolute;
+  right: 22rpx;
+  top: 22rpx;
+  min-width: 130rpx;
+  height: 56rpx;
+  padding: 0 20rpx;
+  border-radius: 999rpx;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: #2b2b2b;
+  color: #fff;
+  font-size: 23rpx;
+  font-weight: 760;
+  line-height: 1;
+}
+
+.preview-row {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 10rpx;
+  margin-top: 22rpx;
+}
+
+.preview-image,
+.work-image {
+  width: 100%;
+  display: block;
+  border-radius: 14rpx;
+}
+
+.preview-image {
+  height: 126rpx;
+}
+
+.work-grid {
+  display: grid;
+  grid-template-columns: repeat(2, 1fr);
+  gap: 14rpx;
+  margin-top: 24rpx;
+}
+
+.work-image-wrap {
+  height: 310rpx;
+  overflow: hidden;
+  border-radius: 16rpx;
+}
+
+.work-image {
+  height: 100%;
+}

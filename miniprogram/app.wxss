@@ -4,6 +4,7 @@ page {
   color: #3a2e2a;
   font-family: -apple-system, BlinkMacSystemFont, "Helvetica Neue", Helvetica, Arial, sans-serif;
   font-size: 28rpx;
+  overflow-x: hidden;
 }
 
 view,
@@ -29,8 +30,10 @@ button::after {
 }
 
 .page {
+  width: 100%;
   min-height: 100vh;
   padding: 28rpx 28rpx 160rpx;
+  overflow-x: hidden;
 }
 
 .page-title {
@@ -120,10 +123,12 @@ button::after {
   padding: 18rpx 28rpx calc(18rpx + env(safe-area-inset-bottom));
   border-top: 1rpx solid #eee6df;
   background: rgba(255, 255, 255, 0.96);
+  box-sizing: border-box;
 }
 
 .bottom-fill {
   flex: 1;
+  min-width: 0;
 }
 
 .empty {

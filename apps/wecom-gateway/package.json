@@ -1,0 +1,10 @@
+{
+  "name": "lucky-luxe-wecom-gateway",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "description": "Fixed-IP WeCom Customer Service gateway for Lucky Luxe OS.",
+  "scripts": {
+    "start": "node server.mjs"
+  }
+}

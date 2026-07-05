@@ -1,0 +1,93 @@
+<view class="page admin-page">
+  <view class="admin-head">
+    <view>
+      <view class="eyebrow">{{roleLabel}}</view>
+      <view class="admin-title">{{lang === 'en' ? 'Mobile Dashboard' : '移动后台'}}</view>
+    </view>
+    <button class="logout" bindtap="logout">{{lang === 'en' ? 'Logout' : '退出'}}</button>
+  </view>
+
+  <view class="metric-grid">
+    <button class="metric card" bindtap="switchPanel" data-panel="today">
+      <text>{{lang === 'en' ? 'Today' : '今日预约'}}</text>
+      <text>{{metrics.today}}</text>
+    </button>
+    <button class="metric card" bindtap="switchPanel" data-panel="active">
+      <text>{{lang === 'en' ? 'Active' : '待处理订单'}}</text>
+      <text>{{metrics.active}}</text>
+    </button>
+    <button class="metric card" bindtap="switchPanel" data-panel="gallery">
+      <text>{{lang === 'en' ? 'Gallery Review' : '图库待确认'}}</text>
+      <text>{{metrics.galleryReview}}</text>
+    </button>
+    <button class="metric card" bindtap="switchPanel" data-panel="services">
+      <text>{{lang === 'en' ? 'Services' : '服务项目'}}</text>
+      <text>{{metrics.services}}</text>
+    </button>
+  </view>
+
+  <view class="nav-grid">
+    <button class="nav-card {{panel === 'today' ? 'active' : ''}}" bindtap="switchPanel" data-panel="today">{{lang === 'en' ? 'Orders' : '订单管理'}}</button>
+    <button class="nav-card {{panel === 'schedule' ? 'active' : ''}}" bindtap="switchPanel" data-panel="schedule">{{lang === 'en' ? 'Performance' : '技师业绩'}}</button>
+    <button wx:if="{{isOwner}}" class="nav-card {{panel === 'services' ? 'active' : ''}}" bindtap="switchPanel" data-panel="services">{{lang === 'en' ? 'Services' : '服务管理'}}</button>
+    <button wx:if="{{isOwner}}" class="nav-card {{panel === 'customers' ? 'active' : ''}}" bindtap="switchPanel" data-panel="customers">{{lang === 'en' ? 'Customers' : '客户档案'}}</button>
+  </view>
+
+  <view class="section">
+    <view class="section-head">
+      <view class="section-title">{{panelTitle}}</view>
+      <button class="section-note" bindtap="refresh">{{lang === 'en' ? 'Refresh' : '刷新'}}</button>
+    </view>
+
+    <view wx:if="{{panel === 'today' || panel === 'active' || panel === 'gallery'}}" class="list">
+      <block wx:for="{{visibleBookings}}" wx:key="id">
+        <view class="admin-booking card">
+          <view class="booking-main">
+            <view class="booking-title">{{item.service.name}}</view>
+            <view class="booking-meta">{{item.appointmentDate}} · {{item.appointmentTime}} · {{item.technician.name}}</view>
+            <view class="booking-meta">{{item.user.displayName || item.user.email || 'Lucky Member'}}</view>
+            <view class="booking-route">{{lang === 'en' ? 'Channel' : '途径'}}：{{item.sourceChannel || 'wechat_miniprogram'}}</view>
+          </view>
+          <view class="status-pill">{{item.status}}</view>
+        </view>
+      </block>
+      <view wx:if="{{!visibleBookings.length}}" class="empty">{{lang === 'en' ? 'No orders here yet.' : '暂无对应订单。'}}</view>
+    </view>
+
+    <view wx:elif="{{panel === 'schedule'}}" class="list">
+      <block wx:for="{{technicianRows}}" wx:key="id">
+        <view class="tech-row card">
+          <view>
+            <view class="tech-name">{{item.name}}</view>
+            <view class="booking-meta">{{item.title}}</view>
+          </view>
+          <view class="tech-stats">
+            <text>{{item.count}}{{lang === 'en' ? ' orders' : '单'}}</text>
+            <text>CAD ${{item.revenue}}</text>
+          </view>
+        </view>
+      </block>
+    </view>
+
+    <view wx:elif="{{panel === 'services'}}" class="list">
+      <block wx:for="{{services}}" wx:key="id">
+        <view class="service-row card">
+          <view>
+            <view class="tech-name">{{item.name}}</view>
+            <view class="booking-meta">{{item.type}} · CAD ${{item.price}} · {{item.durationMin}} min</view>
+          </view>
+          <view class="status-pill">{{item.isActive ? (lang === 'en' ? 'Live' : '上架') : (lang === 'en' ? 'Hidden' : '隐藏')}}</view>
+        </view>
+      </block>
+    </view>
+
+    <view wx:elif="{{panel === 'customers'}}" class="list">
+      <block wx:for="{{customers}}" wx:key="id">
+        <view class="customer-row card">
+          <view class="tech-name">{{item.displayName || item.email || 'Lucky Member'}}</view>
+          <view class="booking-meta">{{lang === 'en' ? 'Visits' : '到店次数'}} {{item.visits || 0}} · {{lang === 'en' ? 'Points' : '积分'}} {{item.points || 0}}</view>
+        </view>
+      </block>
+    </view>
+  </view>
+</view>

@@ -64,6 +64,21 @@ create table if not exists users (
   created_at timestamptz not null default now()
 );
 
+create table if not exists user_identities (
+  id text primary key,
+  user_id text not null references users(id) on delete cascade,
+  provider text not null,
+  provider_user_id text not null,
+  union_id text,
+  email text,
+  phone text,
+  created_at timestamptz not null default now(),
+  updated_at timestamptz not null default now(),
+  unique (provider, provider_user_id)
+);
+
+create index if not exists idx_user_identities_user_id on user_identities(user_id);
+
 create table if not exists technician_schedules (
   technician_id text not null references technicians(id) on delete cascade,
   date date not null,
@@ -93,6 +108,10 @@ create table if not exists bookings (
   notes text,
   service_price_cents integer not null check (service_price_cents >= 0),
   deposit_cents integer not null check (deposit_cents >= 0),
+  deposit_required_cents integer not null default 5000 check (deposit_required_cents >= 0),
+  deposit_waived_cents integer not null default 0 check (deposit_waived_cents >= 0),
+  deposit_waive_reason text,
+  member_level_at_booking text,
   final_due_cents integer not null check (final_due_cents >= 0),
   total_duration_min integer not null check (total_duration_min > 0),
   payment_expires_at timestamptz,
@@ -147,6 +166,70 @@ create table if not exists wechat_conversations (
   updated_at timestamptz not null default now()
 );
 
+create table if not exists ai_response_feedback (
+  id text primary key,
+  conversation_id text references wechat_conversations(id) on delete set null,
+  message_index integer,
+  customer_message text not null,
+  original_reply text not null,
+  corrected_reply text not null,
+  notes text,
+  lang text not null default 'zh',
+  source_channel text,
+  intent text,
+  status text not null default 'approved',
+  created_by text,
+  created_at timestamptz not null default now(),
+  updated_at timestamptz not null default now()
+);
+
+create table if not exists quote_requests (
+  id text primary key,
+  conversation_id text references wechat_conversations(id) on delete set null,
+  user_id text references users(id) on delete set null,
+  source_channel text,
+  service_type text not null default 'nail',
+  service_id text references services(id) on delete set null,
+  technician_id text references technicians(id) on delete set null,
+  status text not null default 'PENDING_STAFF',
+  customer_message text,
+  customer_lang text not null default 'zh',
+  reference_images_json jsonb not null default '[]'::jsonb,
+  style_elements_json jsonb not null default '{}'::jsonb,
+  missing_questions_json jsonb not null default '[]'::jsonb,
+  extension_needed text not null default 'unknown',
+  removal_needed text not null default 'unknown',
+  repair_needed text not null default 'unknown',
+  charms_needed text not null default 'unknown',
+  lower_lash_requested text not null default 'unknown',
+  health_check_clear text not null default 'unknown',
+  staff_can_do boolean,
+  staff_price_cents integer,
+  staff_duration_min integer,
+  staff_notes text,
+  ai_reply_json jsonb not null default '{}'::jsonb,
+  draft_booking_id text references bookings(id) on delete set null,
+  expires_at timestamptz,
+  created_at timestamptz not null default now(),
+  updated_at timestamptz not null default now()
+);
+
+create table if not exists reminder_tasks (
+  id text primary key,
+  user_id text references users(id) on delete set null,
+  booking_id text references bookings(id) on delete set null,
+  quote_request_id text references quote_requests(id) on delete set null,
+  conversation_id text references wechat_conversations(id) on delete set null,
+  type text not null,
+  channel text not null default 'mock',
+  status text not null default 'PENDING',
+  scheduled_at timestamptz not null,
+  sent_at timestamptz,
+  payload_json jsonb not null default '{}'::jsonb,
+  created_at timestamptz not null default now(),
+  updated_at timestamptz not null default now()
+);
+
 create index if not exists idx_bookings_user_id on bookings(user_id);
 create index if not exists idx_bookings_store_start on bookings(store_id, appointment_start);
 create index if not exists idx_bookings_technician_start on bookings(technician_id, appointment_start);
@@ -154,6 +237,11 @@ create index if not exists idx_booking_slots_booking_id on booking_slots(booking
 create index if not exists idx_payments_booking_id on payments(booking_id);
 create index if not exists idx_wechat_conversations_updated on wechat_conversations(updated_at desc);
 create index if not exists idx_wechat_conversations_external_user on wechat_conversations(external_user_id);
+create index if not exists idx_ai_response_feedback_status on ai_response_feedback(status, updated_at desc);
+create index if not exists idx_quote_requests_status on quote_requests(status, updated_at desc);
+create index if not exists idx_quote_requests_technician on quote_requests(technician_id, updated_at desc);
+create index if not exists idx_reminder_tasks_due on reminder_tasks(status, scheduled_at);
+create index if not exists idx_reminder_tasks_quote on reminder_tasks(quote_request_id);
 
 alter table bookings add column if not exists reference_images_json jsonb not null default '[]'::jsonb;
 alter table bookings add column if not exists work_images_json jsonb not null default '[]'::jsonb;

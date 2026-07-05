@@ -10,6 +10,9 @@ Page({
     t: i18n.pageCopy('checkout', 'zh'),
     store: mock.store,
     serviceDeposit: 0,
+    depositRequired: 0,
+    depositWaived: false,
+    depositWaivedAmount: 0,
     couponDiscount: 0,
     useBalance: false,
     balanceDeduction: 0,
@@ -35,10 +38,20 @@ Page({
   },
 
   calculate() {
-    const serviceDeposit = this.data.items.reduce((sum, item) => sum + item.service.depositAmount * item.quantity, 0)
+    const member = wx.getStorageSync('lucky_member') || {}
+    const depositWaived = Boolean(member.depositWaived)
+    const depositRequired = this.data.items.reduce((sum, item) => sum + item.service.depositAmount * item.quantity, 0)
+    const serviceDeposit = depositWaived ? 0 : depositRequired
     const balanceDeduction = 0
     const payableAmount = serviceDeposit
-    this.setData({ serviceDeposit, balanceDeduction, payableAmount })
+    this.setData({
+      serviceDeposit,
+      depositRequired,
+      depositWaived,
+      depositWaivedAmount: depositWaived ? depositRequired : 0,
+      balanceDeduction,
+      payableAmount
+    })
   },
 
   toggleBalance(event) {
@@ -50,9 +63,28 @@ Page({
     this.setData({ remark: event.detail.value })
   },
 
+  promptLogin() {
+    wx.showModal({
+      title: this.data.lang === 'en' ? 'Sign in required' : '需要登录',
+      content: this.data.lang === 'en'
+        ? 'Please sign in with WeChat before submitting this booking.'
+        : '提交预约和支付定金前需要先完成微信登录。',
+      confirmText: this.data.lang === 'en' ? 'Go sign in' : '去登录',
+      cancelText: this.data.lang === 'en' ? 'Cancel' : '取消',
+      confirmColor: '#C6A27E',
+      success: (res) => {
+        if (res.confirm) wx.switchTab({ url: '/pages/me/index' })
+      }
+    })
+  },
+
   async submitOrder() {
     if (!this.data.items.length) {
       wx.showToast({ title: this.data.t.noItems, icon: 'none' })
+      return
+    }
+    if (!api.isLoggedIn()) {
+      this.promptLogin()
       return
     }
     const now = Date.now()
@@ -61,10 +93,16 @@ Page({
     try {
       for (let index = 0; index < this.data.items.length; index += 1) {
         const created = await api.createBooking(this.data.items[index], this.data.remark)
-        const paid = created && created.id ? await api.confirmMockPayment(created.id) : created
+        const paid = created && created.id && created.status === 'PENDING_PAYMENT' && created.depositCents > 0
+          ? await api.confirmMockPayment(created.id)
+          : created
         backendBookings.push(paid)
       }
     } catch (error) {
+      if (error.code === 'AUTH_REQUIRED') {
+        this.promptLogin()
+        return
+      }
       wx.showToast({ title: error.message || '后端暂不可用，已使用演示订单', icon: 'none' })
     }
     const firstBackendBooking = backendBookings[0]

@@ -1,12 +1,23 @@
 .DS_Store
 node_modules/
 *.log
+__pycache__/
+*.pyc
 .env
 apps/api/.env
 
-# Local demo database/runtime data
+# Local demo database/runtime data (真实经营数据/初始密码文件,绝不入库)
 apps/api/local-data/
+apps/api/data/
+backups/
+tmp/
 
 # Local IDE/private WeChat DevTools settings
 project.private.config.json
 miniprogram/project.private.config.json
+
+# Generated video transcript/audio outputs
+tools/video-transcript/outputs/
+tmp/video-transcript-test/
+tmp/video-transcript-test-xhs/
+tmp/video-transcript-login-small/

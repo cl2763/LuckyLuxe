@@ -1,0 +1,37 @@
+<view class="page portfolio-page">
+  <button wx:if="{{selected}}" class="back-button" bindtap="backToList">← {{title}}</button>
+
+  <view class="portfolio-head">
+    <view class="portfolio-title">{{selected ? selected.technician.name : title}}</view>
+    <view class="portfolio-intro">{{selected ? selected.technician.title : intro}}</view>
+  </view>
+
+  <block wx:if="{{selected}}">
+    <view class="work-grid">
+      <block wx:for="{{selected.images}}" wx:key="*this">
+        <button class="work-image-wrap" bindtap="previewImage" data-url="{{item}}">
+          <image class="work-image" src="{{item}}" mode="aspectFill"></image>
+        </button>
+      </block>
+    </view>
+  </block>
+
+  <block wx:else>
+    <view class="tech-list">
+      <block wx:for="{{portfolios}}" wx:key="technician.id">
+        <view class="tech-card card">
+          <view class="tech-info">
+            <view class="tech-name">{{item.technician.name}}</view>
+            <view class="tech-title">{{item.technician.title}}</view>
+          </view>
+          <button class="view-work" bindtap="openTech" data-id="{{item.technician.id}}">{{viewWork}}</button>
+          <view class="preview-row">
+            <block wx:for="{{item.images}}" wx:for-item="image" wx:for-index="imageIndex" wx:key="*this">
+              <image wx:if="{{imageIndex < 4}}" class="preview-image" src="{{image}}" mode="aspectFill"></image>
+            </block>
+          </view>
+        </view>
+      </block>
+    </view>
+  </block>
+</view>

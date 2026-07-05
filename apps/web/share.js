@@ -106,7 +106,7 @@ function applyLanguage() {
 
 function renderImages() {
   const approvedImages = shareVisibleImages()
-  const images = approvedImages.length ? approvedImages : [state.booking?.service?.imageUrl || '/assets/images/nail-french.png']
+  const images = approvedImages.length ? approvedImages : [state.booking?.service?.imageUrl || '/assets/images/nail-french.jpg']
   const safeIndex = Math.min(Math.max(0, state.selectedImage), images.length - 1)
   state.selectedImage = safeIndex
   els.mainImage.src = images[safeIndex]
@@ -167,9 +167,9 @@ async function loadShare() {
   } else {
     state.booking = {
       id: 'demo',
-      service: { name: 'Lucky Luxe Archive', imageUrl: '/assets/images/nail-french.png' },
+      service: { name: 'Lucky Luxe Archive', imageUrl: '/assets/images/nail-french.jpg' },
       galleryStatus: 'approved',
-      approvedWorkImages: ['/assets/images/nail-french.png', '/assets/images/nail-luxe.png']
+      approvedWorkImages: ['/assets/images/nail-french.jpg', '/assets/images/nail-luxe.jpg']
     }
   }
   els.title.textContent = state.booking.service?.name || 'Lucky Luxe'

@@ -2,24 +2,31 @@
   <block wx:if="{{cart.length}}">
     <block wx:for="{{cart}}" wx:key="_id">
       <view class="cart-card card">
-        <button class="check {{item.selected ? 'checked' : ''}}" bindtap="toggleItem" data-id="{{item._id}}">{{item.selected ? '✓' : ''}}</button>
+        <view class="cart-check {{item.selected ? 'checked' : ''}}" bindtap="toggleItem" data-id="{{item._id}}">
+          <text wx:if="{{item.selected}}">✓</text>
+        </view>
         <view class="cart-main">
-          <view class="cart-info">
-            <view class="cart-title-row">
-              <text class="cart-title">{{item.service.name}}</text>
-              <text class="cart-status">{{t.pendingCheckout}}</text>
-            </view>
-            <view class="cart-time-row">
-              <text>{{item.appointmentInfo.date}}</text>
-              <text>{{item.appointmentInfo.time}}</text>
-              <text>{{item.service.duration}}{{t.minutes}}</text>
-            </view>
-            <view class="cart-meta">
-              <text>{{t.deposit}} <text class="price">CAD ${{item.service.depositAmount}}</text></text>
-              <text>{{t.servicePrice}} CAD ${{item.service.price}}</text>
+          <view class="cart-content">
+            <image class="cart-visual" src="{{item.service.image}}" mode="aspectFill"></image>
+            <view class="cart-info">
+              <view class="cart-title-row">
+                <text class="cart-title">{{item.service.name}}</text>
+                <text class="cart-status">{{t.pendingCheckout}}</text>
+              </view>
+              <view class="cart-time-row">
+                <text>{{item.appointmentInfo.date}}</text>
+                <text>{{item.appointmentInfo.time}}</text>
+              </view>
+              <view class="cart-time-row subtle-row">
+                <text>{{item.appointmentInfo.technicianName || 'Mia Chen'}}</text>
+                <text>{{item.service.duration}}{{t.minutes}}</text>
+              </view>
+              <view class="cart-meta">
+                <text>{{t.deposit}} <text class="price">CAD ${{item.service.depositAmount}}</text></text>
+                <text>{{t.servicePrice}} CAD ${{item.service.price}}</text>
+              </view>
             </view>
           </view>
-          <image class="cart-visual" src="{{item.service.image}}" mode="aspectFill"></image>
           <view class="cart-actions">
             <button bindtap="editBooking" data-service-id="{{item.serviceId}}" data-id="{{item._id}}">{{t.edit}}</button>
             <button bindtap="removeItem" data-id="{{item._id}}">{{t.remove}}</button>
@@ -37,7 +44,7 @@
 
   <view wx:if="{{cart.length}}" class="bottom-bar">
     <button class="all-check" bindtap="toggleAll">
-      <text class="check mini {{allSelected ? 'checked' : ''}}">{{allSelected ? '✓' : ''}}</text>
+      <text class="mini-check {{allSelected ? 'checked' : ''}}">{{allSelected ? '✓' : ''}}</text>
       <text>{{t.selectAll}}</text>
     </button>
     <view class="bottom-fill">

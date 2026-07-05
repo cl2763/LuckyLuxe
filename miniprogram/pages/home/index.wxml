@@ -1,87 +1,105 @@
 <view class="page home-page">
-  <view class="language-switch">
-    <button class="lang-option {{lang === 'zh' ? 'active' : ''}}" bindtap="switchLanguage" data-lang="zh">中文</button>
-    <button class="lang-option {{lang === 'en' ? 'active' : ''}}" bindtap="switchLanguage" data-lang="en">EN</button>
-  </view>
-
-  <view class="hero">
-    <view class="hero-copy">
-      <view class="brand-mark">LL</view>
-      <view class="eyebrow">Nail & Lash Atelier</view>
-      <view class="hero-title">Lucky Luxe</view>
-      <view class="hero-text">{{t.heroText}}</view>
-      <view class="hero-actions">
-        <button class="btn btn-primary hero-btn" bindtap="goServices" data-type="nail">{{t.bookNow}}</button>
-        <button class="btn btn-ghost hero-btn" bindtap="goStore">{{t.storeAction}}</button>
+  <view class="home-landing">
+    <view class="top-row">
+      <view class="brand-lockup">
+        <image class="brand-logo" src="/assets/images/brand-logo.png" mode="aspectFit"></image>
+        <view>
+          <view class="brand-name">Lucky Luxe</view>
+          <view class="brand-sub">Nail & Lash Atelier</view>
+        </view>
+      </view>
+      <view class="language-switch">
+        <button class="lang-option {{lang === 'zh' ? 'active' : ''}}" bindtap="switchLanguage" data-lang="zh">中文</button>
+        <button class="lang-option {{lang === 'en' ? 'active' : ''}}" bindtap="switchLanguage" data-lang="en">EN</button>
       </view>
     </view>
-    <image class="hero-visual" src="/assets/images/store-cover.png" mode="aspectFill"></image>
+
+    <view class="hero home-section-container">
+      <view class="hero-copy">
+        <view class="eyebrow">Ontario · CAD</view>
+        <view class="hero-title">Lucky Luxe</view>
+        <view class="hero-text">{{lang === 'en' ? 'Book nail and lash services online, pay the deposit, and settle the balance in store.' : '预约美甲与美睫，在线支付定金，到店完成尾款。'}}</view>
+        <view class="hero-actions">
+          <button class="btn btn-primary hero-btn" bindtap="goServices" data-type="nail">{{t.bookNow}}</button>
+          <button class="btn btn-ghost hero-btn" bindtap="goMe">{{t.quickMember}}</button>
+        </view>
+      </view>
+      <swiper class="hero-swiper" indicator-dots circular autoplay interval="4600" current="{{activeHero}}" bindchange="onHeroChange">
+        <block wx:for="{{heroSlides}}" wx:key="image">
+          <swiper-item>
+            <image class="hero-visual" src="{{item.image}}" mode="aspectFill"></image>
+          </swiper-item>
+        </block>
+      </swiper>
+    </view>
+
+    <view class="quick-section home-section-container">
+      <view class="quick-row">
+        <button class="quick-item card" bindtap="goServices" data-type="nail">
+          <text class="quick-icon">N</text>
+          <text>{{t.quickNail}}</text>
+        </button>
+        <button class="quick-item card" bindtap="goServices" data-type="lash">
+          <text class="quick-icon">L</text>
+          <text>{{t.quickLash}}</text>
+        </button>
+      </view>
+      <button class="portfolio-button card" bindtap="goPortfolio">
+        <text class="quick-icon">P</text>
+        <view class="portfolio-copy">
+          <text>{{technicianWorks}}</text>
+          <text>{{portfolioIntro}}</text>
+        </view>
+        <text class="portfolio-arrow">›</text>
+      </button>
+    </view>
   </view>
 
-  <view class="quick-grid section">
-    <button class="quick-item card" bindtap="goServices" data-type="nail">
-      <text class="quick-icon">N</text>
-      <text>{{t.quickNail}}</text>
-    </button>
-    <button class="quick-item card" bindtap="goServices" data-type="lash">
-      <text class="quick-icon">L</text>
-      <text>{{t.quickLash}}</text>
-    </button>
-    <button class="quick-item card" bindtap="goStore">
-      <text class="quick-icon">S</text>
-      <text>{{t.quickStore}}</text>
-    </button>
-    <button class="quick-item card" bindtap="goMe">
-      <text class="quick-icon">M</text>
-      <text>{{t.quickMember}}</text>
-    </button>
-  </view>
-
-  <view class="section">
+  <view class="section home-section-container">
     <view class="section-head">
       <view class="section-title">{{t.popularNail}}</view>
       <view class="section-note">Popular nail</view>
     </view>
-    <scroll-view class="service-scroll" scroll-x>
+    <view class="recommend-grid">
       <block wx:for="{{recommendedNail}}" wx:key="_id">
-        <button class="recommend-card card" bindtap="goDetail" data-id="{{item._id}}">
+        <view class="recommend-card card" bindtap="goDetail" data-id="{{item._id}}">
           <image class="recommend-visual" src="{{item.image}}" mode="aspectFill"></image>
           <view class="recommend-name">{{item.name}}</view>
           <view class="recommend-meta">
             <text class="price">CAD ${{item.price}}</text>
             <text>{{item.duration}}{{t.minutes}}</text>
           </view>
-        </button>
+        </view>
       </block>
-    </scroll-view>
+    </view>
   </view>
 
-  <view class="section">
+  <view class="section home-section-container">
     <view class="section-head">
       <view class="section-title">{{t.popularLash}}</view>
       <view class="section-note">Popular lash</view>
     </view>
-    <scroll-view class="service-scroll" scroll-x>
+    <view class="recommend-grid">
       <block wx:for="{{recommendedLash}}" wx:key="_id">
-        <button class="recommend-card card" bindtap="goDetail" data-id="{{item._id}}">
+        <view class="recommend-card card" bindtap="goDetail" data-id="{{item._id}}">
           <image class="recommend-visual" src="{{item.image}}" mode="aspectFill"></image>
           <view class="recommend-name">{{item.name}}</view>
           <view class="recommend-meta">
             <text class="price">CAD ${{item.price}}</text>
             <text>{{item.duration}}{{t.minutes}}</text>
           </view>
-        </button>
+        </view>
       </block>
-    </scroll-view>
+    </view>
   </view>
 
-  <view class="section">
+  <view class="section home-section-container">
     <view class="section-head">
       <view class="section-title">{{t.storeTitle}}</view>
       <view class="section-note">Store</view>
     </view>
     <view class="store-card card">
-      <image class="store-visual" src="/assets/images/store-cover.png" mode="aspectFill"></image>
+      <image class="store-visual" src="/assets/images/store-cover.jpg" mode="aspectFill"></image>
       <view class="store-info">
         <view class="store-name">{{store.storeName}}</view>
         <view class="muted">{{store.description}}</view>

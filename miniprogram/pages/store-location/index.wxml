@@ -1,5 +1,5 @@
 <view class="page store-page">
-  <image class="store-hero" src="/assets/images/store-cover.png" mode="aspectFill"></image>
+  <image class="store-hero" src="/assets/images/store-cover.jpg" mode="aspectFill"></image>
 
   <view class="store-card card">
     <view class="store-name">{{store.storeName}}</view>

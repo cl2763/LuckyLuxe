@@ -1,6 +1,7 @@
 const mock = require('../../utils/mock-data')
 const i18n = require('../../utils/i18n')
 const api = require('../../utils/api')
+const tabbar = require('../../utils/tabbar')
 
 Page({
   data: {
@@ -13,6 +14,7 @@ Page({
   },
 
   onShow() {
+    tabbar.update(this, 1)
     const lang = i18n.getLang()
     i18n.applyTabBar(lang)
     i18n.setTitle(i18n.pageCopy('services', lang).title)

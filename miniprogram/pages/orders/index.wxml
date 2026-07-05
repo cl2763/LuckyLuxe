@@ -6,22 +6,24 @@
   </scroll-view>
 
   <block wx:if="{{orders.length}}">
-    <block wx:for="{{orders}}" wx:key="_id">
-      <button class="order-card card" bindtap="goDetail" data-id="{{item._id}}">
-        <view class="order-head">
-          <text>{{item.serviceName}}</text>
-          <text class="status">{{item.statusText}}</text>
-        </view>
-        <view class="order-body">
-          <image class="mini-visual" src="{{item.serviceImage}}" mode="aspectFill"></image>
-          <view class="order-info">
-            <view class="order-time">{{item.appointment.date}} {{item.appointment.time}}</view>
-            <view class="muted">{{item.store.storeName}}</view>
-            <view class="price">{{t.paidDeposit}} CAD ${{item.payableAmount}}</view>
+    <view class="orders-list">
+      <block wx:for="{{orders}}" wx:key="_id">
+        <view class="order-card card" bindtap="goDetail" data-id="{{item._id}}">
+          <view class="order-head">
+            <text>{{item.serviceName}}</text>
+            <text class="status">{{item.statusText}}</text>
+          </view>
+          <view class="order-body">
+            <image class="mini-visual" src="{{item.serviceImage}}" mode="aspectFill"></image>
+            <view class="order-info">
+              <view class="order-time">{{item.appointment.date}} {{item.appointment.time}}</view>
+              <view class="muted">{{item.store.storeName}}</view>
+              <view class="price">{{t.paidDeposit}} CAD ${{item.payableAmount}}</view>
+            </view>
           </view>
         </view>
-      </button>
-    </block>
+      </block>
+    </view>
   </block>
 
   <view wx:else class="empty">

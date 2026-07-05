@@ -1,5 +1,5 @@
 .booking-page {
-  padding-bottom: 240rpx;
+  padding: 24rpx 24rpx 320rpx;
 }
 
 .booking-service {
@@ -31,19 +31,61 @@
 }
 
 .form-card {
-  padding: 24rpx;
+  padding: 20rpx;
 }
 
 .picker-row {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  min-height: 68rpx;
+  min-height: 96rpx;
+  padding: 18rpx 20rpx;
+  border: 1rpx solid #eadfd7;
+  border-radius: 16rpx;
+  background: #fffaf6;
   font-weight: 650;
+}
+
+.technician-row {
+  margin-bottom: 14rpx;
+}
+
+.picker-label,
+.picker-value {
+  display: block;
+}
+
+.picker-label {
+  color: #342b28;
+  font-size: 28rpx;
+  font-weight: 850;
+}
+
+.picker-sub {
+  display: block;
+  margin-top: 8rpx;
+  color: #9a8e87;
+  font-size: 22rpx;
+  font-weight: 600;
+}
+
+.picker-right {
+  display: flex;
+  align-items: center;
+  gap: 10rpx;
+  min-width: 0;
 }
 
 .picker-value {
   color: #c6a27e;
+  font-size: 27rpx;
+  font-weight: 850;
+}
+
+.chevron {
+  color: #c6a27e;
+  font-size: 42rpx;
+  line-height: 1;
 }
 
 .slot-grid {
@@ -54,14 +96,18 @@
 }
 
 .slot {
+  display: flex;
+  align-items: center;
+  justify-content: center;
   min-width: 0;
-  height: 70rpx;
+  height: 74rpx;
   border: 1rpx solid #eadfd7;
   border-radius: 14rpx;
   background: #fff;
   color: #5e514b;
   font-size: 30rpx;
   font-weight: 750;
+  line-height: 1;
 }
 
 .slot.active {
@@ -79,8 +125,8 @@
 
 .addon {
   min-width: 0;
-  min-height: 104rpx;
-  padding: 20rpx;
+  min-height: 108rpx;
+  padding: 20rpx 22rpx;
   display: flex;
   flex-direction: column;
   align-items: flex-start;
@@ -130,7 +176,68 @@
   display: flex;
   align-items: center;
   justify-content: center;
+  flex-direction: column;
+  gap: 8rpx;
+  border: 2rpx dashed #d8cabf;
+  background: #fffaf6;
   color: #8a7f78;
+  font-size: 24rpx;
+  font-weight: 800;
+}
+
+.upload-plus {
+  color: #c6a27e;
+  font-size: 46rpx;
+  font-weight: 500;
+  line-height: 1;
+}
+
+.ai-reference-card {
+  margin-top: 16rpx;
+  padding: 22rpx;
+}
+
+.ai-title {
+  color: #342b28;
+  font-size: 27rpx;
+  font-weight: 850;
+}
+
+.ai-text {
+  margin-top: 8rpx;
+  color: #8a7f78;
+  font-size: 23rpx;
+  font-weight: 600;
+  line-height: 1.4;
+}
+
+.ai-btn {
+  height: 58rpx;
+  margin-top: 16rpx;
+  padding: 0 24rpx;
+  border-radius: 999rpx;
+  background: #2b2b2b;
+  color: #fff;
+  font-size: 23rpx;
+  font-weight: 760;
+}
+
+.ai-btn[disabled] {
+  background: #e6ddd5;
+  color: #958982;
+}
+
+.ai-result {
+  display: grid;
+  gap: 8rpx;
+  margin-top: 16rpx;
+  padding: 16rpx;
+  border-radius: 14rpx;
+  background: #faf6f1;
+  color: #5e514b;
+  font-size: 23rpx;
+  font-weight: 650;
+  line-height: 1.4;
 }
 
 .remark {
@@ -142,8 +249,21 @@
 
 .summary {
   flex: 1;
-  min-width: 150rpx;
+  min-width: 126rpx;
   display: flex;
   flex-direction: column;
   gap: 8rpx;
+}
+
+.bottom-bar {
+  gap: 12rpx;
+  padding-right: 24rpx;
+  padding-left: 24rpx;
+}
+
+.bottom-bar .btn {
+  width: 210rpx;
+  min-width: 0;
+  padding: 0 16rpx;
+  font-size: 27rpx;
 }

@@ -1,13 +1,14 @@
 .detail-page {
-  padding: 18rpx 28rpx 260rpx;
+  padding: 0 24rpx 260rpx;
+  overflow-x: hidden;
 }
 
 .detail-visual {
   display: block;
-  width: calc(100% + 56rpx);
-  height: 350rpx;
-  border-radius: 0;
-  margin: 0 -28rpx;
+  width: calc(100% + 48rpx);
+  height: 330rpx;
+  border-radius: 0 0 24rpx 24rpx;
+  margin: 0 -24rpx;
 }
 
 .detail-tag {
@@ -23,13 +24,13 @@
 
 .detail-main {
   margin-top: 22rpx;
-  padding: 32rpx;
+  padding: 28rpx 26rpx;
   border-radius: 18rpx;
 }
 
 .detail-title {
   color: #342b28;
-  font-size: 42rpx;
+  font-size: 38rpx;
   font-weight: 850;
   line-height: 1.2;
 }
@@ -37,7 +38,7 @@
 .detail-desc {
   margin-top: 16rpx;
   color: #8a7f78;
-  font-size: 28rpx;
+  font-size: 26rpx;
   font-weight: 600;
   line-height: 1.55;
 }
@@ -46,7 +47,9 @@
   display: flex;
   align-items: center;
   justify-content: space-between;
+  gap: 18rpx;
   margin-top: 28rpx;
+  flex-wrap: wrap;
 }
 
 .deposit {
@@ -99,7 +102,7 @@
 }
 
 .list-card {
-  padding: 8rpx 28rpx;
+  padding: 10rpx 24rpx;
   border-radius: 18rpx;
 }
 
@@ -107,10 +110,10 @@
 .notice-row {
   display: flex;
   align-items: center;
-  min-height: 86rpx;
+  min-height: 88rpx;
   border-bottom: 1rpx solid #f0e8e1;
   color: #342b28;
-  font-size: 29rpx;
+  font-size: 27rpx;
   font-weight: 700;
 }
 
@@ -135,7 +138,8 @@
 
 .notice-row {
   color: #5e514b;
-  font-size: 27rpx;
+  padding: 18rpx 0;
+  font-size: 25rpx;
   font-weight: 600;
   line-height: 1.45;
 }

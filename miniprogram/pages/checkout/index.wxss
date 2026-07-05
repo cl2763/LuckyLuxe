@@ -3,21 +3,25 @@
 }
 
 .checkout-item {
-  display: block;
+  display: flex;
+  gap: 18rpx;
+  align-items: flex-start;
   padding: 16rpx;
   margin-bottom: 18rpx;
+  box-sizing: border-box;
 }
 
 .mini-visual {
-  width: 100%;
-  height: 238rpx;
-  margin-top: 16rpx;
+  width: 150rpx;
+  height: 150rpx;
+  flex: none;
   display: block;
   border-radius: 14rpx;
 }
 
 .checkout-info {
-  width: 100%;
+  flex: 1;
+  min-width: 0;
 }
 
 .checkout-title {
@@ -47,12 +51,11 @@
 
 .checkout-time-row,
 .checkout-meta {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 16rpx;
+  display: grid;
+  gap: 6rpx;
   margin-top: 12rpx;
   color: #8a7f78;
-  font-size: 25rpx;
+  font-size: 23rpx;
   font-weight: 700;
 }
 
@@ -87,6 +90,24 @@
   margin-top: 10rpx;
 }
 
+.deposit-policy {
+  padding: 24rpx;
+}
+
+.deposit-policy-title {
+  color: #342b28;
+  font-size: 30rpx;
+  font-weight: 850;
+}
+
+.deposit-policy-text {
+  margin-top: 12rpx;
+  color: #8a7f78;
+  font-size: 24rpx;
+  font-weight: 720;
+  line-height: 1.55;
+}
+
 .remark {
   width: 100%;
   height: 160rpx;
@@ -95,5 +116,6 @@
 }
 
 .pay-btn {
-  width: 310rpx;
+  width: 240rpx;
+  min-width: 0;
 }

@@ -77,6 +77,15 @@ const copy = {
     paid: '已确认',
     pending: '待支付',
     memberGrowth: '会员成长值',
+    memberBenefits: '会员权益',
+    viewMemberBenefits: '查看会员权益',
+    memberBenefitsIntro: '查看不同会员等级的升级门槛、定金规则与可享权益。',
+    lifetimeSpend: '累计消费',
+    depositRule: '定金规则',
+    depositWaived: '预约免定金',
+    depositRequired: '预约需支付 CAD $50 定金',
+    upgradeGift: '升级礼包',
+    currentTier: '当前等级',
     memberCode: '会员码',
     staffScan: '店员扫码',
     referralLink: '分享推荐链接',
@@ -130,8 +139,11 @@ const copy = {
     needLogin: '请先完成注册/登录后继续',
     confirmEmail: '请检查邮箱完成验证，然后再登录。',
     paymentRedirect: '正在跳转到 Stripe 测试支付...',
-    sessionExpired: '登录已过期，请重新登录后继续支付。'
-    ,
+    sessionExpired: '登录已过期，请重新登录后继续支付。',
+    draftLoaded: '已载入预约草稿，请确认后支付定金。',
+    draftUnavailable: '预约草稿暂不可用',
+    depositPolicyTitle: '定金退改规则',
+    depositPolicyText: '预约定金用于锁定技师时间。到店前 24 小时以上取消或改期，定金可退或可转；24 小时内取消或临时改期，定金会扣除一半；临时爽约定金不退。',
     aiAssistant: 'AI 客服',
     aiAssistantIntro: '我可以回答预约、价格、定金、取消改期和订单相关问题。',
     aiAssistantPlaceholder: '输入你的问题...',
@@ -218,6 +230,15 @@ const copy = {
     paid: 'Confirmed',
     pending: 'Pending payment',
     memberGrowth: 'Member growth',
+    memberBenefits: 'Member Benefits',
+    viewMemberBenefits: 'View Benefits',
+    memberBenefitsIntro: 'See tier thresholds, booking deposit rules, and member perks.',
+    lifetimeSpend: 'Lifetime spend',
+    depositRule: 'Deposit rule',
+    depositWaived: 'Deposit waived',
+    depositRequired: 'CAD $50 booking deposit required',
+    upgradeGift: 'Upgrade gift',
+    currentTier: 'Current tier',
     memberCode: 'Member Code',
     staffScan: 'Staff Scan',
     referralLink: 'Referral Link',
@@ -272,6 +293,10 @@ const copy = {
     confirmEmail: 'Please verify your email, then sign in.',
     paymentRedirect: 'Redirecting to Stripe test payment...',
     sessionExpired: 'Your session expired. Please sign in again to continue payment.',
+    draftLoaded: 'Booking draft loaded. Please confirm and pay the deposit.',
+    draftUnavailable: 'Booking draft is unavailable.',
+    depositPolicyTitle: 'Deposit Cancellation Policy',
+    depositPolicyText: 'The deposit holds your technician time. Cancellations or rescheduling more than 24 hours before the appointment can be refunded or transferred. Within 24 hours, half of the deposit is kept. No-shows are non-refundable.',
     aiAssistant: 'AI Concierge',
     aiAssistantIntro: 'I can help with booking, pricing, deposits, cancellation policy, and order questions.',
     aiAssistantPlaceholder: 'Type your question...',
@@ -422,6 +447,66 @@ function compactUserCode(user) {
   return `LL-${String(user?.id || user?.email || 'member').replace(/[^a-z0-9]/gi, '').slice(-8).toUpperCase().padStart(8, '0')}`
 }
 
+function userWaivesDeposit(user = state.user) {
+  return Boolean(user?.depositWaived || ['gold', 'platinum', 'diamond'].includes(String(user?.memberTier || '').toLowerCase()) || ['Gold', 'Gold Member', 'Platinum', 'Platinum Member', 'Diamond', 'Diamond Member'].includes(user?.memberLevel))
+}
+
+const MEMBER_TIERS = [
+  { key: 'silver', label: 'Silver Member', minSpend: 0, nextSpend: 500, depositWaived: false },
+  { key: 'gold', label: 'Gold Member', minSpend: 500, nextSpend: 1200, depositWaived: true },
+  { key: 'platinum', label: 'Platinum Member', minSpend: 1200, nextSpend: 2500, depositWaived: true },
+  { key: 'diamond', label: 'Diamond Member', minSpend: 2500, nextSpend: null, depositWaived: true }
+]
+
+function memberTierInfo(user = state.user) {
+  const spend = Math.round(Number(user?.growthValue ?? ((user?.totalSpentCents || 0) / 100)) || 0)
+  const tierKey = String(user?.memberTier || '').toLowerCase() || 'silver'
+  const index = Math.max(0, MEMBER_TIERS.findIndex((item) => item.key === tierKey))
+  const tier = MEMBER_TIERS[index] || MEMBER_TIERS[0]
+  const nextTier = MEMBER_TIERS[index + 1] || null
+  const nextValue = user?.nextLevelValue || tier.nextSpend || spend
+  const amountToNext = user?.amountToNextLevel === undefined
+    ? (nextTier ? Math.max(0, nextTier.minSpend - spend) : 0)
+    : user.amountToNextLevel
+  return {
+    tier,
+    nextTier,
+    spend,
+    nextValue,
+    amountToNext,
+    progress: nextValue ? Math.min(100, Math.round((spend / nextValue) * 100)) : 100,
+    note: nextTier
+      ? (state.lang === 'zh' ? `距离 ${nextTier.label} 还差 CAD $${amountToNext}` : `CAD $${amountToNext} to ${nextTier.label}`)
+      : (state.lang === 'zh' ? '已达到最高等级，预约定金减免已生效。' : 'Highest tier reached. Deposit waiver is active.')
+  }
+}
+
+function tierBenefits(tier) {
+  const benefits = {
+    zh: {
+      silver: ['会员档案与订单留存', '服务后护理提醒', '累计消费计入成长值', '预约需支付 CAD $50 定金'],
+      gold: ['预约免定金', '生日月权益', '护理与复购提醒', '推荐奖励追踪'],
+      platinum: ['预约免定金', '热门时段优先提醒', '完整作品留档', '季节护理建议'],
+      diamond: ['预约免定金', '最高等级标识', '优先排班提醒', '专属复购跟进']
+    },
+    en: {
+      silver: ['Member file and order archive', 'After-care reminders', 'Spend counts toward growth', 'CAD $50 booking deposit required'],
+      gold: ['Deposit waived', 'Birthday-month perks', 'Care and rebooking reminders', 'Referral reward tracking'],
+      platinum: ['Deposit waived', 'Priority reminders for popular slots', 'Full work archive', 'Seasonal care suggestions'],
+      diamond: ['Deposit waived', 'Highest-tier badge', 'Priority scheduling reminders', 'Dedicated rebooking follow-up']
+    }
+  }
+  return benefits[state.lang]?.[tier.key] || benefits.en[tier.key] || []
+}
+
+function tierShortName(tier) {
+  return tier.label.replace(' Member', '')
+}
+
+function payableDepositFor(item, user = state.user) {
+  return userWaivesDeposit(user) ? 0 : Number(item.depositCents || 0)
+}
+
 function referralCodeFor(user) {
   return user?.referralCode || compactUserCode(user).replace('LL-', 'REF-')
 }
@@ -512,7 +597,7 @@ async function refreshAuth() {
 }
 
 function privateViews() {
-  return new Set(['booking', 'cart', 'checkout', 'me', 'orders', 'orderDetail', 'assets', 'coupons', 'giftCard', 'pointsMall', 'settings'])
+  return new Set(['booking', 'cart', 'checkout', 'me', 'orders', 'orderDetail', 'assets', 'memberBenefits', 'coupons', 'giftCard', 'pointsMall', 'settings'])
 }
 
 function requiresAuth(view) {
@@ -572,6 +657,7 @@ async function bootstrap() {
     localStorage.removeItem('lucky-web-user')
   }
   await handleStripeReturn()
+  await handleBookingDraftParam()
   await showApp()
 }
 
@@ -604,6 +690,44 @@ async function handleStripeReturn() {
   toast(t('paidDone'))
   state.view = 'me'
   history.replaceState(null, '', window.location.pathname)
+}
+
+async function handleBookingDraftParam() {
+  const params = new URLSearchParams(window.location.search)
+  const draftId = params.get('bookingDraft')
+  if (!draftId) return
+  try {
+    const data = await request(`/booking-drafts/${encodeURIComponent(draftId)}?lang=${state.lang}`)
+    const draft = data.bookingDraft
+    if (!draft?.service || !draft?.technician) {
+      toast(t('draftUnavailable'))
+      return
+    }
+    const item = {
+      id: `draft_${draft.id}`,
+      bookingDraftId: draft.id,
+      selected: true,
+      service: draft.service,
+      technician: draft.technician,
+      date: draft.date,
+      time: draft.time,
+      addOns: draft.addOns || [],
+      referenceImages: draft.referenceImages || [],
+      remark: draft.notes || '',
+      sourceChannel: draft.sourceChannel || 'ai_booking_draft',
+      servicePriceCents: Number(draft.service.priceCents ?? draft.service.price_cents ?? 0),
+      depositCents: Number(draft.service.depositCents ?? draft.service.deposit_cents ?? 5000)
+    }
+    state.cart = [item, ...state.cart.filter((cartItem) => cartItem.bookingDraftId !== draft.id)]
+    writeJson('lucky-web-cart', state.cart)
+    state.view = 'checkout'
+    toast(t('draftLoaded'))
+    const cleanUrl = new URL(window.location.href)
+    cleanUrl.searchParams.delete('bookingDraft')
+    history.replaceState(null, '', `${cleanUrl.pathname}${cleanUrl.search}${cleanUrl.hash}`)
+  } catch (error) {
+    toast(error.message || t('draftUnavailable'))
+  }
 }
 
 async function loadServices() {
@@ -706,7 +830,7 @@ function renderAuth() {
       <button class="ghost full" id="continueGuest" type="button">${t('continueGuest')}</button>
     </div>
     <div class="auth-visual">
-      <img src="/assets/images/store-cover.png" alt="Lucky Luxe">
+      <img src="/assets/images/store-cover.jpg" alt="Lucky Luxe">
     </div>
   `
 }
@@ -762,7 +886,7 @@ async function showApp() {
     }
     state.view = pending.view || state.view || 'home'
   }
-  if (requiresAuth(state.view) && !state.user) state.view = 'home'
+  if (requiresAuth(state.view) && !state.user && !(state.view === 'checkout' && state.cart.length)) state.view = 'home'
   render()
 }
 
@@ -780,6 +904,7 @@ function render() {
   if (state.view === 'orders') renderOrdersWeb()
   if (state.view === 'orderDetail') renderOrderDetailWeb()
   if (state.view === 'assets') renderAssetsWeb()
+  if (state.view === 'memberBenefits') renderMemberBenefitsWeb()
   if (state.view === 'store') renderStoreWeb()
   if (state.view === 'portfolio') renderPortfolio()
   if (state.view === 'coupons') renderPlaceholderWeb(t('coupons'), state.lang === 'zh' ? '优惠券列表和使用规则将在真实会员系统接入后同步。' : 'Coupon list and rules will sync after the real member system is connected.')
@@ -842,7 +967,7 @@ function renderHome() {
     <section class="section">
       <div class="section-row"><h2>${t('store')}</h2><span class="subtle">Ontario · CAD</span></div>
       <div class="store-card-wide card">
-        <img src="/assets/images/store-cover.png" alt="Store">
+        <img src="/assets/images/store-cover.jpg" alt="Store">
         <div>
           <h3>Lucky Luxe Ontario</h3>
           <p>Tuesday-Sunday 10:00-19:00 · Monday closed</p>
@@ -993,15 +1118,15 @@ function effectivePortfolios() {
   return [
     {
       technician: { id: 'tech-lina-demo', name: 'Lina Zhou', title: state.lang === 'zh' ? '法式 / 日式微闪 / 轻奢设计' : 'French / Japanese Shimmer / Soft Luxe' },
-      images: ['/assets/images/nail-french.png', '/assets/images/nail-luxe.png', '/assets/images/nail-jp.png', '/assets/images/nail-addon.png']
+      images: ['/assets/images/nail-french.jpg', '/assets/images/nail-luxe.jpg', '/assets/images/nail-jp.jpg', '/assets/images/nail-addon.jpg']
     },
     {
       technician: { id: 'tech-mia-demo', name: 'Mia Chen', title: state.lang === 'zh' ? '自然美睫 / 裸感款 / 轻盈浓密' : 'Natural Lash / Bare Look / Soft Volume' },
-      images: ['/assets/images/lash-natural.png', '/assets/images/lash-volume.png', '/assets/images/lash-lower.png', '/assets/images/lash-remove.png']
+      images: ['/assets/images/lash-natural.jpg', '/assets/images/lash-volume.jpg', '/assets/images/lash-lower.jpg', '/assets/images/lash-remove.jpg']
     },
     {
       technician: { id: 'tech-ava-demo', name: 'Ava Lin', title: state.lang === 'zh' ? '基础护理 / 短甲显白 / 日常维护' : 'Care / Short Nails / Daily Maintenance' },
-      images: ['/assets/images/nail-care.png', '/assets/images/nail-jp.png', '/assets/images/nail-french.png']
+      images: ['/assets/images/nail-care.jpg', '/assets/images/nail-jp.jpg', '/assets/images/nail-french.jpg']
     }
   ]
 }
@@ -1299,7 +1424,7 @@ function saveCurrentToCart(goCheckout = false) {
 }
 
 function renderCart() {
-  const total = state.cart.filter((item) => item.selected).reduce((sum, item) => sum + item.depositCents, 0)
+  const total = state.cart.filter((item) => item.selected).reduce((sum, item) => sum + payableDepositFor(item), 0)
   els.screen.innerHTML = `
     <section class="cart-page-web">
       <div class="section-row"><h1>${t('cart')}</h1><span class="subtle">${t('pendingCheckout')}</span></div>
@@ -1322,7 +1447,8 @@ function renderCartItem(item) {
       <div class="cart-copy">
         <div class="cart-title-row"><h2>${item.service.name}</h2><span class="status">${t('pendingCheckout')}</span></div>
         <p>${item.date} · ${item.time} · ${item.technician.name}</p>
-        <p><strong>${t('deposit')} ${money(item.depositCents)}</strong> · ${t('servicePrice')} ${money(item.servicePriceCents)}</p>
+        <p><strong>${t('deposit')} ${money(payableDepositFor(item))}</strong> · ${t('servicePrice')} ${money(item.servicePriceCents)}</p>
+        ${userWaivesDeposit() ? `<p class="subtle">${state.lang === 'zh' ? '会员等级已减免预约定金' : 'Member tier deposit waiver applied'}</p>` : ''}
         ${item.referenceImages?.length ? `<div class="cart-reference-row">${item.referenceImages.map((image, index) => `<img src="${image}" alt="${t('reference')} ${index + 1}">`).join('')}</div>` : ''}
       </div>
       <img src="${item.service.imageUrl}" alt="${item.service.name}">
@@ -1333,7 +1459,9 @@ function renderCartItem(item) {
 
 function renderCheckout() {
   const selected = state.cart.filter((item) => item.selected)
-  const deposit = selected.reduce((sum, item) => sum + item.depositCents, 0)
+  const requiredDeposit = selected.reduce((sum, item) => sum + item.depositCents, 0)
+  const deposit = selected.reduce((sum, item) => sum + payableDepositFor(item), 0)
+  const waivedDeposit = Math.max(0, requiredDeposit - deposit)
   const coupon = 0
   const payable = deposit
   els.screen.innerHTML = `
@@ -1348,7 +1476,7 @@ function renderCheckout() {
               <span>${item.time}</span>
               <span>${item.technician.name}</span>
             </div>
-            <p><strong>${t('deposit')} ${money(item.depositCents)}</strong><span>${t('servicePrice')} ${money(item.servicePriceCents)}</span></p>
+            <p><strong>${t('deposit')} ${money(payableDepositFor(item))}</strong><span>${t('servicePrice')} ${money(item.servicePriceCents)}</span></p>
             ${item.referenceImages?.length ? `<div class="cart-reference-row">${item.referenceImages.map((image, index) => `<img src="${image}" alt="${t('reference')} ${index + 1}">`).join('')}</div>` : ''}
           </div>
         </article>
@@ -1357,8 +1485,15 @@ function renderCheckout() {
         <div class="section-row"><h2>${t('discount')}</h2></div>
         <div class="cost-card card">
           <p><span>${t('appointment')}</span><strong>${money(deposit)}</strong></p>
+          ${waivedDeposit ? `<p><span>${state.lang === 'zh' ? '会员定金减免' : 'Member deposit waiver'}</span><strong>-${money(waivedDeposit)}</strong></p>` : ''}
           <p><span>${t('coupon')}</span><strong>-${money(coupon)}</strong></p>
           <p><span>${t('balance')}</span><strong>CAD $300</strong></p>
+        </div>
+      </section>
+      <section class="section">
+        <div class="deposit-policy-card card">
+          <h2>${t('depositPolicyTitle')}</h2>
+          <p>${t('depositPolicyText')}</p>
         </div>
       </section>
       <section class="section">
@@ -1392,9 +1527,15 @@ async function submitPayment() {
         time: item.time,
         addOns: item.addOns,
         referenceImages: item.referenceImages || [],
-        notes: item.remark
+        sourceChannel: item.sourceChannel || 'web',
+        notes: item.remark || '',
+        bookingDraftId: item.bookingDraftId || item.draftId || null
       })
     })
+    if (bookingData.booking.status !== 'PENDING_PAYMENT' || bookingData.booking.depositCents <= 0) {
+      completed.push(bookingData.booking)
+      continue
+    }
     const checkout = await request('/payments/stripe/create-checkout', {
       method: 'POST',
       body: JSON.stringify({ bookingId: bookingData.booking.id })
@@ -1419,6 +1560,7 @@ async function submitPayment() {
 
 function renderMe() {
   const user = state.user
+  const tierInfo = memberTierInfo(user)
   const memberCode = user.memberCode || compactUserCode(user)
   const referralCode = referralCodeFor(user)
   const referralUrl = referralUrlFor(user)
@@ -1433,8 +1575,17 @@ function renderMe() {
       <div class="member-card web-member-card">
         <div class="member-top">
           <div class="member-identity">
-            <img class="avatar" src="/assets/images/member-profile.png" alt="${user.displayName}">
-            <div><h1>${user.displayName}</h1><p>${user.memberLevel} · ${user.provider}</p></div>
+            <img class="avatar" src="/assets/images/member-profile.jpg" alt="${user.displayName}">
+            <div class="member-copy">
+              <h1>${user.displayName}</h1>
+              <div class="member-level-line">
+                <button class="web-level-pill" data-me-target="memberBenefits" type="button">
+                  <span>${tierInfo.tier.label}</span>
+                  <small>${t('viewMemberBenefits')}</small>
+                </button>
+                <span class="member-provider">${user.provider}</span>
+              </div>
+            </div>
           </div>
           <button class="member-code-chip" data-toggle-member-code type="button" aria-label="${t('memberCode')} ${memberCode}">
             <span class="mini-qr">
@@ -1461,8 +1612,11 @@ function renderMe() {
           </div>
         ` : ''}
         <div class="growth-block">
-          <div class="growth-head"><span>${t('memberGrowth')}</span><span>${user.growthValue} / ${user.nextLevelValue}</span></div>
-          <div class="growth-track"><div class="growth-fill" style="width:${Math.round(user.growthValue / user.nextLevelValue * 100)}%"></div></div>
+          <div class="growth-head"><span>${t('memberGrowth')}</span><span>${tierInfo.spend} / ${tierInfo.nextValue}</span></div>
+          <div class="growth-track"><div class="growth-fill" style="width:${tierInfo.progress}%"></div></div>
+          <p class="growth-note">${tierInfo.note}</p>
+          <p class="deposit-rule-note">${userWaivesDeposit(user) ? (state.lang === 'zh' ? '当前会员等级：预约免定金' : 'Current tier: booking deposit waived') : (state.lang === 'zh' ? '当前会员等级：预约需支付 CAD $50 定金' : 'Current tier: CAD $50 booking deposit required')}</p>
+          <button class="member-benefits-link" data-me-target="memberBenefits" type="button">${t('memberBenefitsIntro')}</button>
         </div>
         <div class="member-assets">
           <div><strong>${user.points}</strong><span>${t('points')}</span></div>
@@ -1503,12 +1657,12 @@ function renderMe() {
         <div class="section-row"><h2>${t('functions')}</h2></div>
         <div class="menu-grid-web">
           ${[
-            [t('assets'), '/assets/images/nail-luxe.png', 'assets'],
-            [t('store'), '/assets/images/store-cover.png', 'store'],
-            [t('coupons'), '/assets/images/nail-french.png', 'coupons'],
-            [t('giftCard'), '/assets/images/lash-volume.png', 'giftCard'],
-            [t('pointsMall'), '/assets/images/nail-jp.png', 'pointsMall'],
-            [t('settings'), '/assets/images/lash-natural.png', 'settings']
+            [t('assets'), '/assets/images/nail-luxe.jpg', 'assets'],
+            [t('store'), '/assets/images/store-cover.jpg', 'store'],
+            [t('coupons'), '/assets/images/nail-french.jpg', 'coupons'],
+            [t('giftCard'), '/assets/images/lash-volume.jpg', 'giftCard'],
+            [t('pointsMall'), '/assets/images/nail-jp.jpg', 'pointsMall'],
+            [t('settings'), '/assets/images/lash-natural.jpg', 'settings']
           ].map(([label, image, target]) => `<button class="menu-card card" data-me-target="${target}" type="button"><img src="${image}" alt="${label}"><strong>${label}</strong><span>${t('comingSoon')}</span></button>`).join('')}
         </div>
       </section>
@@ -1732,12 +1886,61 @@ function renderAssetsWeb() {
   `
 }
 
+function renderMemberBenefitsWeb() {
+  const user = state.user
+  const tierInfo = memberTierInfo(user)
+  els.screen.innerHTML = `
+    <section class="member-benefits-web">
+      <button class="ghost back-btn" data-view-target="me" type="button">← ${t('me')}</button>
+      <section class="member-benefits-hero-web">
+        <div>
+          <p class="eyebrow">${t('memberBenefits')}</p>
+          <h1>${tierInfo.tier.label}</h1>
+          <p>${t('memberBenefitsIntro')}</p>
+        </div>
+        <div class="benefits-progress-card">
+          <span>${t('lifetimeSpend')}</span>
+          <strong>${money(user.totalSpentCents || 0)}</strong>
+          <small>${tierInfo.note}</small>
+          <div class="growth-track"><div class="growth-fill" style="width:${tierInfo.progress}%"></div></div>
+        </div>
+      </section>
+      <section class="tier-grid-web">
+        ${MEMBER_TIERS.map((tier) => {
+          const active = tier.key === tierInfo.tier.key
+          return `
+            <article class="tier-card-web ${active ? 'active' : ''}">
+              <div class="tier-card-head">
+                <span>${tierShortName(tier)}</span>
+                ${active ? `<strong>${t('currentTier')}</strong>` : ''}
+              </div>
+              <h2>${tier.label}</h2>
+              <p class="tier-threshold">${t('lifetimeSpend')} ${tier.minSpend ? `CAD $${tier.minSpend}+` : 'CAD $0+'}</p>
+              <p class="tier-deposit">${t('depositRule')}: <strong>${tier.depositWaived ? t('depositWaived') : t('depositRequired')}</strong></p>
+              <ul class="tier-benefit-list">
+                ${tierBenefits(tier).map((benefit) => `<li>${benefit}</li>`).join('')}
+              </ul>
+            </article>
+          `
+        }).join('')}
+      </section>
+      <section class="upgrade-gifts-web card">
+        <div>
+          <h2>${t('upgradeGift')}</h2>
+          <p>${state.lang === 'zh' ? '升级权益可用于后续优惠券、护理提醒、复购回访和会员专属活动。具体礼遇会在正式上线前由店主确认。' : 'Upgrade perks can later connect coupons, after-care reminders, rebooking follow-ups, and member-only events. Final benefits will be confirmed before launch.'}</p>
+        </div>
+        <button class="primary slim" data-view-target="services" type="button">${t('bookNow')}</button>
+      </section>
+    </section>
+  `
+}
+
 function renderStoreWeb() {
   const store = state.stores[0] || {}
   els.screen.innerHTML = `
     <section class="store-web-page">
       <button class="ghost back-btn" data-view-target="me" type="button">← ${t('me')}</button>
-      <img class="store-hero-web" src="/assets/images/store-cover.png" alt="Lucky Luxe Ontario">
+      <img class="store-hero-web" src="/assets/images/store-cover.jpg" alt="Lucky Luxe Ontario">
       <div class="store-info-web card">
         <h1>${store.name || 'Lucky Luxe Ontario'}</h1>
         <p>${store.address || 'Address TBD'}</p>
@@ -1753,7 +1956,7 @@ function renderPlaceholderWeb(title, text) {
     <section class="placeholder-web">
       <button class="ghost back-btn" data-view-target="me" type="button">← ${t('me')}</button>
       <div class="placeholder-card card">
-        <img src="/assets/images/store-cover.png" alt="${title}">
+        <img src="/assets/images/store-cover.jpg" alt="${title}">
         <h1>${title}</h1>
         <p>${text}</p>
       </div>

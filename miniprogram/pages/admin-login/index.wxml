@@ -1,0 +1,19 @@
+<view class="page admin-login-page">
+  <view class="login-card card">
+    <image class="login-logo" src="/assets/images/brand-logo.png" mode="aspectFit"></image>
+    <view class="login-title">{{lang === 'en' ? 'Owner / Staff Login' : '店主 / 员工登录'}}</view>
+    <view class="login-desc">{{lang === 'en' ? 'Use the same admin account as the web dashboard.' : '使用网页版后台相同的账号登录。'}}</view>
+
+    <view class="field">
+      <text>{{lang === 'en' ? 'Email' : '邮箱'}}</text>
+      <input value="{{email}}" placeholder="name@example.com" bindinput="inputEmail" />
+    </view>
+    <view class="field">
+      <text>{{lang === 'en' ? 'Password' : '密码'}}</text>
+      <input value="{{password}}" password placeholder="{{lang === 'en' ? 'Password' : '请输入密码'}}" bindinput="inputPassword" />
+    </view>
+
+    <button class="btn btn-primary login-btn" loading="{{loading}}" bindtap="login">{{lang === 'en' ? 'Sign in' : '登录后台'}}</button>
+    <view class="login-note">{{lang === 'en' ? 'Staff accounts only see their own work and active orders.' : '员工账号只展示自己的订单与业绩，店主账号可看完整后台。'}}</view>
+  </view>
+</view>

@@ -10,7 +10,7 @@ process.env.TZ = process.env.APP_TIMEZONE || 'America/Toronto'
 const prisma = new PrismaClient()
 const app = express()
 const port = Number(process.env.PORT || 4000)
-const holdMinutes = Number(process.env.BOOKING_HOLD_MINUTES || 15)
+const holdMinutes = Number(process.env.BOOKING_HOLD_MINUTES || 30)
 const ownerToken = process.env.OWNER_DEMO_TOKEN || 'owner-demo-token'
 
 app.use(cors())

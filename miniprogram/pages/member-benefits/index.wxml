@@ -1,0 +1,41 @@
+<view class="page benefits-page">
+  <view class="benefit-hero">
+    <swiper class="level-swiper" current="{{currentLevelIndex}}" bindchange="onLevelChange" previous-margin="28rpx" next-margin="28rpx">
+      <block wx:for="{{levels}}" wx:key="key">
+        <swiper-item>
+          <view class="level-card {{item.key}}">
+            <view class="level-tag">{{item.threshold}}</view>
+            <view class="level-title">{{item.name}}</view>
+            <view class="level-note">{{item.note}}</view>
+            <view class="benefit-progress">
+              <view style="width: {{item.progress}}%;"></view>
+            </view>
+            <view class="progress-copy">{{item.statusText}} · {{item.depositText}}</view>
+          </view>
+        </swiper-item>
+      </block>
+    </swiper>
+  </view>
+
+  <view class="benefit-section">
+    <view class="benefit-title">{{levels[currentLevelIndex].name}}{{lang === 'en' ? ' benefits' : '权益'}}</view>
+    <view class="benefit-grid">
+      <block wx:for="{{benefits}}" wx:key="title">
+        <view class="benefit-item">
+          <view class="benefit-icon">✓</view>
+          <text>{{item.title}}</text>
+        </view>
+      </block>
+    </view>
+  </view>
+
+  <view class="benefit-section">
+    <view class="benefit-title">{{lang === 'en' ? 'Upgrade gifts' : '升级礼包'}}</view>
+    <block wx:for="{{gifts}}" wx:key="title">
+      <view class="gift-card card">
+        <view>{{lang === 'en' ? 'Coupon x' : '兑换券 '}}{{item.count}}</view>
+        <text>{{item.title}}</text>
+      </view>
+    </block>
+  </view>
+</view>

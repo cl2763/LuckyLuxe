@@ -1,6 +1,7 @@
 const storage = require('../../utils/storage')
 const mock = require('../../utils/mock-data')
 const i18n = require('../../utils/i18n')
+const api = require('../../utils/api')
 
 Page({
   data: {
@@ -13,19 +14,33 @@ Page({
     this.load(options.id)
   },
 
-  load(id) {
-    const order = storage.getOrder(id)
+  async load(id) {
     const lang = i18n.getLang()
     const t = i18n.pageCopy('orderDetail', lang)
     i18n.applyTabBar(lang)
     i18n.setTitle(t.title)
+    if (!api.isLoggedIn()) {
+      this.setData({ order: null, lang, t })
+      return
+    }
+    let order = storage.getOrder(id)
+    if (!order) {
+      try {
+        const bookings = await api.getBookings(lang)
+        storage.setOrders(bookings)
+        order = bookings.find((item) => item._id === id || item.orderNo === id)
+      } catch (error) {
+        order = null
+      }
+    }
     if (order) {
-      const service = mock.findService(order.serviceInfo.serviceId) || {}
+      const service = order.service || mock.findService(order.serviceInfo.serviceId) || {}
       const localizedService = i18n.localizeService(service, lang)
       order.statusText = i18n.statusText(order.status, lang)
-      order.serviceImage = service.image || '/assets/images/store-cover.png'
+      order.serviceImage = service.image || order.serviceImage || '/assets/images/store-cover.jpg'
       order.serviceInfo.serviceName = localizedService.name || order.serviceInfo.serviceName
       order.serviceInfo.technicianName = order.serviceInfo.technicianName || this.defaultTechnician(order.serviceInfo.serviceType)
+      order.visibleWorkImages = order.status === 'completed' ? (order.workImages || []).slice(0, 6) : []
     }
     this.setData({ order, lang, t })
   },
@@ -58,5 +73,10 @@ Page({
 
   openLocation() {
     wx.showToast({ title: this.data.t.addressMissing, icon: 'none' })
+  },
+
+  previewWork(event) {
+    const url = event.currentTarget.dataset.url
+    wx.previewImage({ current: url, urls: this.data.order.visibleWorkImages })
   }
 })

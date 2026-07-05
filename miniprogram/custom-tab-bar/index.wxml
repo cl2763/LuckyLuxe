@@ -1,0 +1,10 @@
+<view class="custom-tabbar">
+  <block wx:for="{{list}}" wx:key="pagePath">
+    <view class="tabbar-item {{selected === index ? 'active' : ''}}" data-index="{{index}}" data-path="{{item.pagePath}}" bindtap="switchTab">
+      <view class="tabbar-pill">
+        <text class="tabbar-label">{{item.text}}</text>
+        <text wx:if="{{item.badge}}" class="tabbar-badge">{{item.badge}}</text>
+      </view>
+    </view>
+  </block>
+</view>

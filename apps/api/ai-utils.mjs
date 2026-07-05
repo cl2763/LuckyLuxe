@@ -2,6 +2,7 @@ const DEFAULT_MODEL = process.env.AI_MODEL || 'mock-affordable-ai'
 const DEFAULT_PROVIDER = process.env.AI_PROVIDER || (process.env.AI_API_KEY ? 'openai-compatible' : 'mock')
 const AI_BASE_URL = (process.env.AI_BASE_URL || 'https://api.openai.com/v1').replace(/\/$/, '')
 const AI_API_KEY = process.env.AI_API_KEY || process.env.OPENAI_API_KEY || ''
+const AI_REQUIRE_REAL = process.env.AI_REQUIRE_REAL === 'true'
 
 function clip(value, max = 800) {
   return String(value || '').slice(0, max)
@@ -13,6 +14,38 @@ function jsonBlock(value) {
 
 function bilingual(zh, en, lang = 'zh') {
   return lang === 'en' ? en : zh
+}
+
+function parseChineseNumber(value = '') {
+  const text = String(value || '').trim()
+  if (!text) return NaN
+  if (/^\d+(?:\.\d+)?$/.test(text)) return Number(text)
+  const digits = { 零: 0, 〇: 0, 一: 1, 二: 2, 两: 2, 三: 3, 四: 4, 五: 5, 六: 6, 七: 7, 八: 8, 九: 9 }
+  if (text === '十') return 10
+  const tenMatch = text.match(/^([一二两三四五六七八九])?十([一二三四五六七八九])?$/)
+  if (tenMatch) return (tenMatch[1] ? digits[tenMatch[1]] : 1) * 10 + (tenMatch[2] ? digits[tenMatch[2]] : 0)
+  if (text.length === 1 && text in digits) return digits[text]
+  return NaN
+}
+
+function parseDurationMinutesFromText(text = '') {
+  const raw = String(text || '')
+  const numericMinutes = raw.match(/(\d{2,3})\s*(?:分钟|min|mins|minutes)/i)
+  if (numericMinutes) return Number(numericMinutes[1])
+  const numericHours = raw.match(/(\d+(?:\.\d+)?)\s*(?:小时|个小时|h|hr|hrs|hour|hours)/i)
+  if (numericHours) return Math.round(Number(numericHours[1]) * 60)
+  const chineseHour = raw.match(/([一二两三四五六七八九十\d]+)\s*(?:个)?小时(?:半|([一二三四五六七八九十\d]+)\s*(?:分钟|分))?/)
+  if (chineseHour) {
+    const hours = parseChineseNumber(chineseHour[1])
+    const minutePart = chineseHour[2] ? parseChineseNumber(chineseHour[2]) : (/半/.test(chineseHour[0]) ? 30 : 0)
+    if (Number.isFinite(hours)) return Math.round(hours * 60 + (Number.isFinite(minutePart) ? minutePart : 0))
+  }
+  const chineseHalf = raw.match(/([一二两三四五六七八九十\d]+)\s*个?半\s*(?:小时)?/)
+  if (chineseHalf) {
+    const hours = parseChineseNumber(chineseHalf[1])
+    if (Number.isFinite(hours)) return Math.round(hours * 60 + 30)
+  }
+  return 0
 }
 
 function imageHints(images = []) {
@@ -59,8 +92,12 @@ async function aiJson({ system, user, schema, images, fallback, temperature }) {
       const data = await callOpenAICompatible({ system, user, schema, images, temperature })
       if (data) return { provider: DEFAULT_PROVIDER, model: DEFAULT_MODEL, data }
     } catch (error) {
+      if (AI_REQUIRE_REAL) throw error
       return { provider: `${DEFAULT_PROVIDER}-fallback`, model: DEFAULT_MODEL, data: fallback(String(error.message || error)) }
     }
+  }
+  if (AI_REQUIRE_REAL) {
+    throw new Error('AI_REQUIRE_REAL is true, but no real AI provider/API key is configured.')
   }
   return { provider: 'mock', model: DEFAULT_MODEL, data: fallback() }
 }
@@ -217,7 +254,95 @@ export async function createDailyBrief({ lang = 'zh', bookings = [], customers =
   })
 }
 
-export async function createCustomerServiceReply({ lang = 'zh', message = '', history = [], customer = null, bookings = [], services = [], stores = [] }) {
+function sampleTokens(value = '') {
+  return new Set(String(value || '')
+    .toLowerCase()
+    .replace(/[^\p{L}\p{N}]+/gu, ' ')
+    .split(/\s+/)
+    .filter((token) => token.length >= 2))
+}
+
+function messageSignals(value = '') {
+  const lower = String(value || '').toLowerCase()
+  return {
+    pricing: /价|钱|报价|价格|多少钱|price|quote|cost|how much/.test(lower),
+    reference: /图|图片|参考图|款式|复杂|手绘|延长|珍珠|饰品|卸甲|断甲|reference|design|custom|extension|removal|rhinestone|pearl/.test(lower),
+    booking: /预约|时间|技师|book|booking|appointment|slot|time|artist|technician/.test(lower),
+    policy: /取消|改期|退款|售后|迟到|cancel|reschedule|refund|late|after.?sales/.test(lower),
+    store: /地址|电话|营业|门店|where|address|hour|phone|location/.test(lower)
+  }
+}
+
+function hasSharedSignal(messageSignals, sampleSignals) {
+  return Object.keys(messageSignals).some((key) => messageSignals[key] && sampleSignals[key])
+}
+
+function isLowSignalMessage(value = '') {
+  const compact = String(value || '').trim().toLowerCase().replace(/\s+/g, '')
+  if (!compact) return true
+  if (/^(hi|hello|hey|哈喽|哈咯|你好|您好|嗨|在吗|hello呀|hi呀|早|早呀|晚上好|下午好)[。.!！?？]*$/.test(compact)) return true
+  return compact.length < 4 && !/[价钱图款约改退店址]/.test(compact)
+}
+
+function historyLine(item = {}) {
+  const role = item.role === 'assistant' ? 'AI' : item.role === 'staff' ? 'Staff' : 'Customer'
+  const content = String(item.content || '').trim()
+  return content ? `${role}: ${content}` : ''
+}
+
+function recentHistoryText(history = [], max = 8) {
+  return (history || [])
+    .slice(-max)
+    .map(historyLine)
+    .filter(Boolean)
+    .join('\n')
+}
+
+function lastCustomerText(history = []) {
+  for (let index = (history || []).length - 1; index >= 0; index -= 1) {
+    const item = history[index] || {}
+    if (item.role !== 'assistant' && String(item.content || '').trim()) return String(item.content || '').trim()
+  }
+  return ''
+}
+
+function isContextualFollowup(value = '') {
+  const compact = String(value || '').trim().toLowerCase().replace(/\s+/g, '')
+  if (!compact) return false
+  return /^(那|这个|这款|刚刚|上面|前面|它|她|他|可以吗|能做吗|多少钱|价格呢|怎么约|多久|需要定金吗|ok|好呀|好的|可以|yes|okey|howmuch|whataboutthis|canidoit)/.test(compact)
+}
+
+function bestOwnerApprovedSample(message = '', samples = []) {
+  if (isLowSignalMessage(message)) return null
+  const messageTokens = sampleTokens(message)
+  const currentSignals = messageSignals(message)
+  let best = null
+  let bestScore = 0
+  for (const sample of samples || []) {
+    const sampleText = `${sample.customerMessage || ''} ${sample.notes || ''}`
+    const sampleSignals = messageSignals(sampleText)
+    const tokens = sampleTokens(sampleText)
+    let score = 0
+    let signalScore = 0
+    for (const key of Object.keys(currentSignals)) {
+      if (currentSignals[key] && sampleSignals[key]) {
+        signalScore += 1
+        score += key === 'pricing' || key === 'reference' ? 3 : 2
+      }
+    }
+    for (const token of tokens) {
+      if (messageTokens.has(token)) score += 1
+    }
+    if (!signalScore && !hasSharedSignal(currentSignals, sampleSignals) && score < 5) continue
+    if (score > bestScore) {
+      best = sample
+      bestScore = score
+    }
+  }
+  return bestScore >= 6 ? best : null
+}
+
+export async function createCustomerServiceReply({ lang = 'zh', message = '', sampleMatchMessage = message, history = [], customer = null, bookings = [], services = [], stores = [], knowledgeContext = null }) {
   const schema = {
     intent: 'booking|pricing|policy|order|store|portfolio|handoff|unknown',
     answerZh: 'string',
@@ -242,24 +367,63 @@ export async function createCustomerServiceReply({ lang = 'zh', message = '', hi
     durationMin: service.durationMin,
     requiresManualQuote: service.requiresManualQuote
   }))
-  return aiJson({
+  const knowledgePrompt = knowledgeContext
+    ? (lang === 'en' ? knowledgeContext.promptTextEn : knowledgeContext.promptTextZh)
+    : ''
+  const recentChatText = recentHistoryText(history)
+  const previousCustomerText = lastCustomerText(history)
+  const result = await aiJson({
     system: [
       'You are Lucky Luxe AI customer service for a nail and lash atelier in Ontario.',
       'Answer in the user language. Be concise, warm, and operationally accurate.',
-      'Business rules: currency is CAD; every booking pays CAD $50 deposit online; balance is paid in store; default hours are Tue-Sun 10:00-19:00 and Monday closed; one booking contains one service only; nail designs have base prices and complex/reference-image designs require manual quote; lash services use fixed prices plus explicit add-ons; changes/cancellations more than 24h before appointment can refund deposit, within 24h changes are allowed but only half deposit refund applies.',
-      'Do not promise final nail pricing from an image. If the user asks for exact custom nail quote, mark handoffRequired true.',
+      'Always use Recent chat as short-term conversation memory. If the incoming message is a follow-up such as "那这个呢", "多少钱", "可以吗", or "怎么约", resolve it from the previous customer messages before answering.',
+      'If the incoming message includes "Working memory for this exact conversation", treat it as authoritative per-conversation state. Do not ask again for any intake field already marked yes/no/partial in that memory.',
+      'If a staff/manual reply appears in Recent chat or Working memory, remember it as part of the conversation and continue from that status after the handoff window.',
+      'Never infer facts from blank intake-form labels. If the customer sends "是否有断甲需要修补：" with no answer, that field is unknown, not yes. If images were already received in memory, do not say the customer has no reference image.',
+      'If Working memory says quoteStage is quoted or draft_created and the customer sends a date, time, confirmation, or follow-up question, continue the booking-time/draft flow. Do not restart the quote-intake template.',
+      'Use the provided knowledge context first. Platform preset knowledge is generic. Exact member rules, deposits, store policies, service prices, staff, and promotions are tenant-private and must not be treated as platform defaults.',
+      'Owner-approved examples are style and policy references only. Use them only when the customer message clearly matches the same intent and details; never copy a quote/pricing example for a greeting or low-information message.',
+      knowledgePrompt ? `Knowledge context:\n${knowledgePrompt}` : 'No structured knowledge context was provided; answer conservatively and route uncertain business-policy questions to human staff.',
+      'Nail pricing has two layers only for now: base price plus technician-confirmed quote, then possible in-store final adjustment. Never give a final AI nail price. For custom/reference-image nail requests, collect key elements and mark handoffRequired true for technician quotation.',
+      'For nail quote intake, collect: natural nail vs extension, removal needed, broken nail repair, charms/rhinestones/hand-painting, preferred color/style, reference images, preferred date/time, and notes.',
+      'Lash services use fixed prices plus explicit add-ons. Always ask whether lower lashes are needed, and ask about recent eye surgery within 3 months or current eye irritation/conjunctivitis before confirming suitability.',
+      'Reschedule/cancellation and after-sales issues must route to human staff. More than 24h before appointment can cancel/reschedule with deposit refund; same-day cancellation/reschedule is not supported in the final policy and deposit is not refunded. Use a gentle tone.',
+      'Quote workflow: after enough info is collected, tell the customer a technician normally replies within 10 minutes; once quoted, offer to create a booking draft; draft holds for 30 minutes, with a payment reminder before release.',
       'Do not process real payment or create bookings in this reply. Suggest the next app action instead.'
     ].join('\\n'),
-    user: `Incoming message: ${clip(message, 1200)}\nRecent chat:\n${jsonBlock((history || []).slice(-8))}\nCustomer:\n${jsonBlock(customer || {})}\nRecent bookings:\n${jsonBlock((bookings || []).slice(0, 6))}\nServices:\n${jsonBlock(activeServices)}\nStores:\n${jsonBlock((stores || []).slice(0, 3))}`,
+    user: `Incoming message: ${clip(message, 1200)}\nPrevious customer message: ${clip(previousCustomerText, 600)}\nRecent chat:\n${recentChatText || jsonBlock((history || []).slice(-8))}\nCustomer:\n${jsonBlock(customer || {})}\nRecent bookings:\n${jsonBlock((bookings || []).slice(0, 6))}\nServices:\n${jsonBlock(activeServices)}\nStores:\n${jsonBlock((stores || []).slice(0, 3))}`,
     schema,
     temperature: 0.55,
     fallback: () => {
-      const text = String(message || '').toLowerCase()
+      const approvedSample = bestOwnerApprovedSample(sampleMatchMessage, knowledgeContext?.ownerApprovedSamples || [])
+      if (approvedSample?.correctedReply) {
+        return {
+          intent: approvedSample.intent || 'unknown',
+          answerZh: approvedSample.correctedReply,
+          answerEn: approvedSample.correctedReply,
+          handoffRequired: /转|人工|技师|报价|确认|quote|staff|technician/i.test(approvedSample.correctedReply),
+          handoffReasonZh: approvedSample.notes || '',
+          handoffReasonEn: approvedSample.notes || '',
+          suggestedActions: [],
+          suggestedQuestionsZh: ['可以发参考图吗？', '可以帮我创建预约草稿吗？'],
+          suggestedQuestionsEn: ['Can I send a reference photo?', 'Can you create a booking draft?']
+        }
+      }
+      const text = String(sampleMatchMessage || message || '').toLowerCase()
+      const enrichedText = String(message || '').toLowerCase()
+      const memoryText = `${recentChatText}\n${previousCustomerText}\n${message}`.toLowerCase()
+      const contextualFollowup = isContextualFollowup(sampleMatchMessage || message)
+      const hasPriorReferenceImage = /customer_uploaded_reference_images|顾客已上传|参考图|图片|reference image|reference photo/.test(memoryText)
+      const hasReferenceImageContext = /顾客已上传|reference image|reference photo/.test(enrichedText) || (contextualFollowup && hasPriorReferenceImage)
       const asksPrice = /价|钱|报价|price|quote|cost|how much/.test(text)
       const asksBooking = /预约|book|appointment|slot|time/.test(text)
-      const asksPolicy = /取消|改期|退款|cancel|reschedule|refund/.test(text)
+      const asksPolicy = /取消|改期|改时间|换时间|退款|迟到|cancel|reschedule|refund|late/.test(text)
+      const asksDeposit = /定金|deposit/.test(text)
       const asksStore = /地址|电话|营业|时间|where|address|hour|phone/.test(text)
       const asksOrder = /订单|order|booking|my appointment/.test(text)
+      const memoryMentionsNail = /美甲|甲|nail|法式|贝母|渐变|延长|卸甲|断甲|手绘|饰品/.test(memoryText)
+      const memoryMentionsLash = /美睫|睫|lash|下睫毛|嫁接|浓密|自然睫/.test(memoryText)
+      const currentMentionsService = /美甲|美睫|nail|lash|法式|贝母|渐变|裸感|自然睫|浓密睫|款式|做这个|做这款/.test(text)
       const nailServices = activeServices.filter((service) => service.type === 'nail')
       const lashServices = activeServices.filter((service) => service.type === 'lash')
       const firstStore = stores[0] || {}
@@ -270,27 +434,55 @@ export async function createCustomerServiceReply({ lang = 'zh', message = '', hi
       let handoffReasonZh = ''
       let handoffReasonEn = ''
       const suggestedActions = []
-      if (asksPrice) {
+      if (asksPrice || hasReferenceImageContext || currentMentionsService) {
         intent = 'pricing'
-        handoffRequired = /图|款式|复杂|手绘|延长|reference|design|custom/.test(text)
+        handoffRequired = hasReferenceImageContext || (memoryMentionsNail && /图|图片|参考图|款式|复杂|手绘|延长|reference|design|custom|可以吗|能做吗/.test(`${text}\n${memoryText}`))
         handoffReasonZh = handoffRequired ? '美甲复杂款式需要根据参考图、材料和加项人工确认最终报价。' : ''
         handoffReasonEn = handoffRequired ? 'Custom nail designs need staff confirmation based on reference, materials, and add-ons.' : ''
-        answerZh = `美甲显示基础价，复杂款式、手绘、延长、卸甲或特殊材料需要联系客服确认最终报价。美睫是固定价格，选择加项后就是最终报价。所有预约都需要线上支付 CAD $50 定金。`
-        answerEn = 'Nail services show base prices; complex designs, hand painting, extensions, removal, or special materials need a staff quote. Lash services use fixed pricing, and selected add-ons make the final total. Every booking requires a CAD $50 online deposit.'
-        suggestedActions.push('open_services')
-      } else if (asksBooking) {
-        intent = 'booking'
-        answerZh = '你可以先选择美甲或美睫服务，再选择日期、时间和技师。一个预约只能包含一个服务；如果同时做美甲和美睫，需要分开下两个订单。结算时需要线上支付 CAD $50 定金。'
-        answerEn = 'Choose a nail or lash service, then select date, time, and artist. One booking contains one service only; nails and lashes need separate bookings. Checkout requires a CAD $50 online deposit.'
+        if (memoryMentionsLash && !memoryMentionsNail) {
+          answerZh = `我接着你前面说的美睫来回答：美睫是固定价格，选择款式和明确加项后就是最终报价；预约前还需要确认是否需要下睫毛，以及近 3 个月是否有眼部手术、当前是否有眼部不适或结膜炎。新客/Silver 会员预约定金为 CAD $50，Gold 及以上通常可免定金。`
+          answerEn = 'For the lash service you mentioned: lash pricing is fixed, and the selected style plus confirmed add-ons is the final quote. We also need to confirm whether you need lower lashes, and whether you had eye surgery in the last 3 months or have current irritation/conjunctivitis. Silver/new customers pay CAD $50 deposit; Gold and above usually have deposit waived.'
+        } else if (memoryMentionsNail || hasReferenceImageContext) {
+          answerZh = `我接着你前面说的美甲/参考图来回答：美甲可以先参考基础价，但复杂款式、手绘、延长、卸甲、断甲修补、特殊材料或参考图款式都需要技师确认报价，到店后细节仍可能微调。你可以把是否需要延长、卸甲、修补断甲、贴饰品/珍珠/手绘这些信息一起发我，我会整理给技师确认。新客/Silver 会员预约定金为 CAD $50，Gold 及以上通常可免定金。`
+          answerEn = 'For the nail/reference style you mentioned: nail services can start from a base price, but custom designs, hand painting, extensions, removal, repairs, special materials, or reference-image styles need a technician quote and may still be adjusted in store. You can tell me whether extensions, removal, broken-nail repair, charms/pearls/hand painting are needed, and I will organize it for the technician. Silver/new customers pay CAD $50 deposit; Gold and above usually have deposit waived.'
+        } else {
+          answerZh = `美甲可以先参考基础价，但复杂款式、手绘、延长、卸甲、断甲修补、特殊材料或参考图款式都需要技师确认报价，到店后细节仍可能微调。美睫是固定价格，加项确认后就是最终报价；请同时告诉我是否需要下睫毛。新客/Silver 会员预约定金为 CAD $50，Gold 及以上会员通常可免定金。`
+          answerEn = 'Nail services show base prices, but custom designs, hand painting, extensions, removal, repairs, special materials, or reference-image styles require a technician quote and may be adjusted in store. Lash services use fixed pricing plus selected add-ons; please also tell us whether you need lower lashes. Silver/new customers pay CAD $50 deposit; Gold and above usually have deposit waived.'
+        }
         suggestedActions.push('open_services')
       } else if (asksPolicy) {
         intent = 'policy'
-        answerZh = '预约开始 24 小时以前可以改期或取消，定金可退；24 小时以内可以改时间，但定金只退一半。'
-        answerEn = 'More than 24 hours before the appointment, you can reschedule or cancel with deposit refund. Within 24 hours, rescheduling is allowed, but only half of the deposit is refundable.'
+        handoffRequired = true
+        handoffReasonZh = '取消、改期和售后需要人工确认具体订单与技师排班。'
+        handoffReasonEn = 'Cancellation, rescheduling, and after-sales issues require staff confirmation.'
+        answerZh = '改期或取消需要帮您转人工确认订单和技师排班。一般规则是提前 24 小时以上可以免费改期/取消；预约当天不支持取消或改期，迟到 30 分钟会自动取消且定金不退。我会帮您转给工作人员确认。'
+        answerEn = 'Rescheduling or cancellation needs staff confirmation for your order and technician schedule. In general, more than 24 hours before the appointment can be changed/cancelled free of charge; same-day changes/cancellations are not supported, and being 30 minutes late cancels the booking with deposit non-refundable. I will route this to staff.'
+      } else if (asksDeposit) {
+        intent = 'deposit_policy'
+        const depositFacts = knowledgeContext?.tenantFacts || {}
+        const rawDeposit = depositFacts.depositAmount
+        const depositAmount = typeof rawDeposit === 'number' || /^\d+(\.\d+)?$/.test(String(rawDeposit || ''))
+          ? `${depositFacts.currency || 'CAD'} $${rawDeposit}`
+          : (rawDeposit || 'CAD $50')
+        answerZh = `预约需要支付定金哦：新客/Silver 会员定金为 ${depositAmount}，到店消费时可以抵扣尾款；Gold 及以上会员通常可以免定金。预约时间在定金支付成功（或满足免定金条件）后才会正式锁定。`
+        answerEn = `A booking deposit is required: new/Silver customers pay ${depositAmount}, which is deducted from the final balance in store; Gold members and above are usually deposit-free. Your slot is locked only after the deposit is paid or a valid waiver applies.`
+      } else if (asksBooking) {
+        intent = 'booking'
+        const serviceContextZh = memoryMentionsLash && !memoryMentionsNail ? '你前面提到的是美睫，' : memoryMentionsNail ? '你前面提到的是美甲，' : ''
+        const serviceContextEn = memoryMentionsLash && !memoryMentionsNail ? 'For the lash service you mentioned, ' : memoryMentionsNail ? 'For the nail service you mentioned, ' : ''
+        answerZh = `${serviceContextZh}你可以先选择对应服务，再选择日期、时间和技师。一个预约只能包含一个服务；如果同时做美甲和美睫，需要分开下两个订单。预约草稿会锁定 30 分钟；Silver/新客需要支付 CAD $50 定金，Gold 及以上通常可免定金。`
+        answerEn = `${serviceContextEn}choose the matching service, then select date, time, and artist. One booking contains one service only; nails and lashes need separate bookings. A booking draft holds for 30 minutes. Silver/new customers pay CAD $50 deposit; Gold and above usually have deposit waived.`
+        suggestedActions.push('open_services')
       } else if (asksStore) {
         intent = 'store'
-        answerZh = `${firstStore.name || 'Lucky Luxe Ontario'} 默认营业时间为周二到周日 10:00-19:00，周一休息。地址和电话目前仍是 TBD 占位。`
-        answerEn = `${firstStore.name || 'Lucky Luxe Ontario'} default hours are Tue-Sun 10:00-19:00 and Monday closed. Address and phone are currently TBD placeholders.`
+        const tenantFacts = knowledgeContext?.tenantFacts || {}
+        const storeAddressUsable = firstStore.address && !/tbd/i.test(firstStore.address) ? firstStore.address : ''
+        const address = tenantFacts.storeAddress || storeAddressUsable || firstStore.address || '136 veterans place'
+        const hoursFact = tenantFacts.defaultHours
+        const liveHoursZh = (hoursFact && typeof hoursFact === 'object' ? hoursFact.zh : hoursFact) || '周二至周日 10:00-19:00，周一休息'
+        const liveHoursEn = (hoursFact && typeof hoursFact === 'object' ? hoursFact.en : hoursFact) || 'Tuesday to Sunday 10:00-19:00, Monday closed'
+        answerZh = `${firstStore.name || 'Lucky Luxe Ontario'} 营业时间为${liveHoursZh}。当前门店地址先按 ${address}。`
+        answerEn = `${firstStore.name || 'Lucky Luxe Ontario'} business hours: ${liveHoursEn}. Current store address: ${address}.`
       } else if (asksOrder) {
         intent = 'order'
         if (customer && bookings.length) {
@@ -315,6 +507,98 @@ export async function createCustomerServiceReply({ lang = 'zh', message = '', hi
         suggestedQuestionsEn: ['How are custom nail designs quoted?', 'How do I book?', 'What is the cancellation policy?']
       }
     }
+  })
+  return { ...result, knowledgeContext }
+}
+
+export async function polishStaffQuoteReply({ lang = 'zh', quote = {}, staffMessage = '' }) {
+  const schema = {
+    canDo: true,
+    answerZh: 'string',
+    answerEn: 'string',
+    extractedPriceCad: 'string',
+    extractedDurationMin: 'string',
+    suggestedActions: ['string']
+  }
+  const referenceImageCount = Array.isArray(quote.referenceImages) ? quote.referenceImages.length : 0
+  return aiJson({
+    system: [
+      'You are Lucky Luxe AI customer service.',
+      'A technician has replied internally with a free-text note. Your ONLY job is to connect the technician\'s words into warm, fluent, complete sentences.',
+      'You must preserve every fact, number, price, duration, condition, and suggestion from the technician message verbatim. Never paraphrase away content, never change the meaning, never drop details, never add facts the technician did not mention.',
+      'If the technician says the style CANNOT be done, apologize gently, state it clearly (do not soften it into "needs more information"), and guide the customer to consider a similar or simpler alternative style and send a new reference photo.',
+      'If the technician needs more information, relay exactly what is missing.',
+      'If styleElements.quoteIntake already contains bookingDate and bookingTime, do NOT ask the customer to repeat the date/time; reference the time they already gave.',
+      'Final nail details may still be adjusted in store based on actual nail condition.'
+    ].join('\n'),
+    user: `Customer quote request:\n${jsonBlock({
+      quoteRequestId: quote.id,
+      serviceType: quote.serviceType,
+      sourceChannel: quote.sourceChannel,
+      customerMessage: quote.customerMessage,
+      referenceImageCount,
+      styleElements: quote.styleElements,
+      missingQuestions: quote.missingQuestions
+    })}\n\nTechnician internal message:\n${clip(staffMessage, 1200)}\n\nReturn customer-facing bilingual JSON.`,
+    schema,
+    // Quote polishing only needs the technician's text and quote metadata.
+    // Passing customer photos here makes this step slower and can fail when a
+    // stored image is too small or in a provider-specific unsupported format.
+    images: [],
+    temperature: 0.45,
+    fallback: () => {
+      const text = String(staffMessage || '').trim()
+      const canDo = !/(不能|不可|不做|做不了|无法|\bno\b|\bcannot\b|\bcan't\b|\bnot\s+available\b)/i.test(text)
+      const priceMatch = text.match(/(?:CAD\s*\$?\s*|\$\s*)(\d+(?:\.\d{1,2})?)|(\d+(?:\.\d{1,2})?)\s*(?:cad|加币|刀|块)/i)
+      const durationMin = parseDurationMinutesFromText(text)
+      const priceValue = priceMatch?.[1] || priceMatch?.[2] || ''
+      const priceText = priceValue ? `CAD $${priceValue}` : ''
+      const durationText = durationMin ? `${durationMin} 分钟` : ''
+      const detailNoteZh = /珍珠|钻|饰品|细节|颜色|到店|确认/.test(text)
+        ? '款式细节、饰品数量和实际甲面状态到店前会再帮您确认一次。'
+        : '最终细节会根据到店时的实际甲面/睫毛状态确认。'
+      const detailNoteEn = /pearl|rhinestone|charm|detail|color|confirm/i.test(text)
+        ? 'Design details, charm quantity, and actual nail/lash condition will be confirmed again before service.'
+        : 'Final details will be confirmed based on your actual nail/lash condition at the appointment.'
+      const answerZh = [
+        canDo ? '亲亲，技师确认这款可以做。' : '亲亲，技师确认这款暂时需要再补充信息后判断。',
+        priceText ? `参考报价是 ${priceText}。` : '',
+        durationText ? `预计服务时长约 ${durationText}。` : '',
+        detailNoteZh,
+        canDo ? '如果您想继续预约，请先把想约的日期和时间发我；确认时间后我再帮您生成预约草稿链接。' : '如果您愿意，也可以再发更清晰的参考图或调整需求，我再帮您整理给技师确认。'
+      ].filter(Boolean).join(' ')
+      const answerEn = [
+        canDo ? 'The technician has reviewed it and confirmed this style can be done.' : 'The technician reviewed it and this style needs more confirmation.',
+        priceText ? `Reference quote: ${priceText}.` : '',
+        durationMin ? `Estimated duration: about ${durationMin} min.` : '',
+        detailNoteEn,
+        canDo ? 'If you would like to continue, please send your preferred date and time first. Once the time is confirmed, I can create the booking draft link.' : 'You can send a clearer reference photo or adjust the request, and I will organize it for the technician again.'
+      ].filter(Boolean).join(' ')
+      return {
+        canDo,
+        answerZh,
+        answerEn,
+        extractedPriceCad: priceText,
+        extractedDurationMin: durationMin ? String(durationMin) : '',
+        suggestedActions: canDo ? ['create_quote_draft'] : ['request_more_info']
+      }
+    }
+  })
+}
+
+export async function extractKbEntriesFromDocument({ content = '', filename = '' }) {
+  return aiJson({
+    system: [
+      'You are a beauty-salon knowledge-base assistant.',
+      'The merchant uploaded a document (price list, service rules, FAQ, policies).',
+      'Extract self-contained Q&A entries a customer-service AI can answer with.',
+      'Each entry: question (short customer phrasing), keywords (comma separated trigger words), answerZh (use the document wording, do not invent), answerEn (translate).',
+      'Only extract facts explicitly present in the document. Skip anything ambiguous.'
+    ].join('\n'),
+    user: `Document filename: ${filename}\n\nDocument content:\n${clip(content, 6000)}\n\nReturn JSON.`,
+    schema: { entries: [{ question: 'string', keywords: 'string', answerZh: 'string', answerEn: 'string' }] },
+    temperature: 0.2,
+    fallback: () => null
   })
 }
 

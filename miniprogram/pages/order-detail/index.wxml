@@ -62,6 +62,27 @@
     </view>
   </view>
 
+  <view wx:if="{{order.status === 'completed'}}" class="section">
+    <view class="section-head">
+      <view class="section-title">{{lang === 'en' ? 'Service Archive' : '服务留档'}}</view>
+      <view class="section-note">{{order.serviceInfo.technicianName}}</view>
+    </view>
+    <view class="archive-card card">
+      <view class="info-row">
+        <text>{{lang === 'en' ? 'Final Photos' : '完工作品'}}</text>
+        <text>{{order.visibleWorkImages.length}}/6</text>
+      </view>
+      <view wx:if="{{order.visibleWorkImages.length}}" class="work-grid">
+        <block wx:for="{{order.visibleWorkImages}}" wx:key="*this">
+          <button class="work-thumb" bindtap="previewWork" data-url="{{item}}">
+            <image src="{{item}}" mode="aspectFill"></image>
+          </button>
+        </block>
+      </view>
+      <view wx:else class="archive-empty">{{lang === 'en' ? 'Final photos will appear after admin approval.' : 'admin 确认作品后会自动出现在这里。'}}</view>
+    </view>
+  </view>
+
   <view wx:if="{{order.status === 'pending_service'}}" class="bottom-bar">
     <button class="btn btn-ghost bottom-fill" bindtap="callStore">{{t.support}}</button>
     <button class="btn btn-ghost bottom-fill" bindtap="openLocation">{{t.nav}}</button>

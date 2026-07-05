@@ -12,10 +12,28 @@
       <view class="section-title">{{t.time}}</view>
     </view>
     <view class="form-card card">
+      <picker mode="selector" range="{{technicians}}" range-key="name" value="{{technicianIndex}}" bindchange="bindTechnicianChange">
+        <view class="picker-row technician-row">
+          <view>
+            <text class="picker-label">{{lang === 'en' ? 'Artist' : '服务技师'}}</text>
+            <text class="picker-sub">{{lang === 'en' ? 'Tap to select artist' : '点击选择服务人员'}}</text>
+          </view>
+          <view class="picker-right">
+            <text class="picker-value">{{technician.name || 'Mia Chen'}}</text>
+            <text class="chevron">›</text>
+          </view>
+        </view>
+      </picker>
       <picker mode="date" value="{{appointmentDate}}" start="{{minDate}}" bindchange="bindDateChange">
         <view class="picker-row">
-          <text>{{t.date}}</text>
-          <text class="picker-value">{{appointmentDate}}</text>
+          <view>
+            <text class="picker-label">{{t.date}}</text>
+            <text class="picker-sub">{{lang === 'en' ? 'Tap to choose date' : '点击选择到店日期'}}</text>
+          </view>
+          <view class="picker-right">
+            <text class="picker-value">{{appointmentDate}}</text>
+            <text class="chevron">›</text>
+          </view>
         </view>
       </picker>
       <view class="slot-grid">
@@ -53,7 +71,24 @@
           <button class="remove-image" bindtap="removeImage" data-index="{{index}}">×</button>
         </view>
       </block>
-      <button class="upload-box card" bindtap="chooseImage">{{t.upload}}</button>
+      <button class="upload-box card" bindtap="chooseImage">
+        <text class="upload-plus">＋</text>
+        <text>{{t.upload}}</text>
+      </button>
+    </view>
+    <view class="ai-reference-card card">
+      <view>
+        <view class="ai-title">{{lang === 'en' ? 'AI Style Suggestion' : 'AI 款式建议'}}</view>
+        <view class="ai-text">{{lang === 'en' ? 'AI can estimate complexity before artist confirmation.' : 'AI 可先判断参考图复杂度，最终美甲报价仍需人工确认。'}}</view>
+      </view>
+      <button class="ai-btn" bindtap="analyzeReference" disabled="{{!referenceImages.length || isAnalyzingReference}}">
+        {{isAnalyzingReference ? (lang === 'en' ? 'Analyzing' : '分析中') : (lang === 'en' ? 'Analyze' : 'AI 分析')}}
+      </button>
+      <view wx:if="{{referenceAnalysis}}" class="ai-result">
+        <view>{{lang === 'en' ? 'Complexity' : '复杂度'}}：{{referenceAnalysis.complexity || '-'}}</view>
+        <view>{{lang === 'en' ? 'Suggested price' : '价格建议'}}：{{referencePriceText}}</view>
+        <view>{{referenceMessage}}</view>
+      </view>
     </view>
   </view>
 

@@ -8,6 +8,8 @@
     "pages/checkout/index",
     "pages/payment-success/index",
     "pages/me/index",
+    "pages/member-benefits/index",
+    "pages/portfolio/index",
     "pages/orders/index",
     "pages/order-detail/index",
     "pages/store-location/index",
@@ -20,6 +22,7 @@
     "backgroundColor": "#F7F3EF"
   },
   "tabBar": {
+    "custom": true,
     "color": "#8A7F78",
     "selectedColor": "#C6A27E",
     "backgroundColor": "#FFFFFF",
@@ -44,5 +47,6 @@
     ]
   },
   "style": "v2",
+  "__usePrivacyCheck__": true,
   "sitemapLocation": "sitemap.json"
 }
