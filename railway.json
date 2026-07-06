@@ -2,10 +2,10 @@
   "$schema": "https://railway.com/railway.schema.json",
   "build": {
     "builder": "NIXPACKS",
-    "buildCommand": "cd apps/api && npm ci"
+    "buildCommand": "echo 'local-server.mjs is zero-dependency, no build needed'"
   },
   "deploy": {
-    "startCommand": "cd apps/api && npm run start:supabase",
+    "startCommand": "node --experimental-sqlite apps/api/local-server.mjs",
     "healthcheckPath": "/health",
     "healthcheckTimeout": 120,
     "restartPolicyType": "ON_FAILURE",
