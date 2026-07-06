@@ -1,0 +1,12 @@
+# railway up 快照排除清单(敏感/大文件绝不上云快照)
+.git/
+node_modules/
+local-data/
+apps/api/local-data/
+apps/api/data/*.sqlite
+backups/
+tmp/
+handoff/本机任务结果.md
+.env
+apps/api/.env
+.DS_Store
