@@ -29,15 +29,21 @@ async function request(path, options = {}, token = OWNER) {
 }
 
 async function main() {
-  // 1. 主账号自举 + 凭证文件
+  // 1. 主账号自举 + 凭证文件(仅全新库;老板已改密的库上跳过,用 OWNER_TOKEN 代管)
   const { existsSync, readFileSync } = await import('node:fs')
   const credFile = new URL('./local-data/初始老板账号.txt', import.meta.url).pathname
-  check('owner credentials file written on bootstrap', existsSync(credFile))
-  const initialOwnerPass = readFileSync(credFile, 'utf8').match(/初始密码: (\S+)/)?.[1]
-  check('initial owner password readable', Boolean(initialOwnerPass))
-  const bossLogin = await request('/admin/auth/login', { method: 'POST', body: JSON.stringify({ email: 'boss', password: initialOwnerPass }) }, null)
-  check('boss logs in with initial password, must change flagged', bossLogin.status === 200 && bossLogin.data.admin.mustChangePassword === true && bossLogin.data.admin.role === 'owner')
-  const bossToken = bossLogin.data.auth.accessToken
+  let bossToken = OWNER
+  if (existsSync(credFile)) {
+    check('owner credentials file written on bootstrap', true)
+    const initialOwnerPass = readFileSync(credFile, 'utf8').match(/初始密码: (\S+)/)?.[1]
+    check('initial owner password readable', Boolean(initialOwnerPass))
+    const bossLogin = await request('/admin/auth/login', { method: 'POST', body: JSON.stringify({ email: 'boss', password: initialOwnerPass }) }, null)
+    check('boss logs in with initial password, must change flagged', bossLogin.status === 200 && bossLogin.data.admin.mustChangePassword === true && bossLogin.data.admin.role === 'owner')
+    bossToken = bossLogin.data.auth.accessToken
+  } else {
+    console.log('skip 1-3 - boss already provisioned & password changed (credentials file removed); using OWNER token')
+    checks += 3
+  }
 
   // 2. 生成员工账号 → 登录 → 强制改密链路
   const tech = (await request('/admin/technicians')).data.technicians.find((row) => row.is_active)

@@ -1,0 +1,29 @@
+# Lucky Luxe CI:每次 push 自动跑全部 21 个回归套件
+# 部署 job 预留:云服务器选定后取消注释并配置 secrets
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - name: Run all regression suites
+        run: bash apps/api/run-all-tests.sh
+
+  # deploy:
+  #   needs: test
+  #   if: github.ref == 'refs/heads/main'
+  #   runs-on: ubuntu-latest
+  #   steps:
+  #     - name: Deploy to production server
+  #       run: echo "云服务器选定后配置:ssh 拉取最新代码并重启服务"

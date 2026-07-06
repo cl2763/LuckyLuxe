@@ -6566,13 +6566,21 @@ async function route(req, res) {
       const start = localDateTime(dstr(dayOffset), `${String(hour).padStart(2, '0')}:00`)
       const end = addMinutes(start, service.base_duration_min)
       const price = service.price_cents
-      insertBooking.run(
-        randomId('booking'), publicCode(), demoCustomers[userIdx % demoCustomers.length][0], storeId,
-        techs[techIdx % techs.length], service.id, status, iso(start), iso(end), channel, '演示订单',
-        price, price - 5000, service.base_duration_min,
-        status === 'PENDING_PAYMENT' ? iso(addMinutes(now, 60)) : null, iso(start), iso(start)
-      )
-      return price
+      // publicCode 同毫秒批量插入可能撞号,冲突就换号重试
+      for (let attempt = 0; attempt < 8; attempt += 1) {
+        try {
+          insertBooking.run(
+            randomId('booking'), `${publicCode()}${attempt ? Math.floor(Math.random() * 900 + 100) : ''}`, demoCustomers[userIdx % demoCustomers.length][0], storeId,
+            techs[techIdx % techs.length], service.id, status, iso(start), iso(end), channel, '演示订单',
+            price, price - 5000, service.base_duration_min,
+            status === 'PENDING_PAYMENT' ? iso(addMinutes(now, 60)) : null, iso(start), iso(start)
+          )
+          return price
+        } catch (error) {
+          if (!String(error.message || '').includes('public_code')) throw error
+        }
+      }
+      throw apiError(500, 'SEED_FAILED', '演示订单编号连续冲突。')
     }
     let seededRevenue = 0
     let bookingCount = 0
