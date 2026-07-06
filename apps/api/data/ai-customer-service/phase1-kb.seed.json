@@ -1,0 +1,281 @@
+{
+  "version": "2026-06-26.phase1",
+  "product": "Lucky Luxe AI Customer Service",
+  "tenantId": "luckyluxe",
+  "layers": {
+    "platformPreset": {
+      "description": "Reusable beauty-service knowledge shared across salons.",
+      "memberOperationsBoundary": "Platform preset may include generic membership-operation templates only. Exact tier names, thresholds, deposit waivers, coupons, and private benefits are tenant-specific knowledge.",
+      "categories": [
+        "nail_basics",
+        "lash_basics",
+        "booking_flow",
+        "cancellation_reschedule",
+        "after_sales",
+        "member_operations",
+        "tone_templates",
+        "handoff_rules"
+      ]
+    },
+    "tenantPrivate": {
+      "description": "Lucky Luxe specific operating knowledge. All concrete member rules in this file belong to Lucky Luxe only and must not be copied into platform defaults.",
+      "brandName": "Lucky Luxe",
+      "assistantName": "Lucky Luxe 预约助手",
+      "currency": "CAD",
+      "region": "Ontario",
+      "storeAddress": "136 veterans place",
+      "defaultHours": "Tue-Sun 10:00-19:00, Monday closed",
+      "depositAmount": 50,
+      "depositCurrency": "CAD",
+      "memberLevels": ["Silver", "Gold", "Platinum", "Diamond"],
+      "priceList": {
+        "nail": {
+          "policy": "美甲当前只给基础价和加项参考。参考图、复杂款、手绘、延长、卸甲、断甲修补、特殊饰品或材料，都需要技师结合图片和前置信息确认最终报价。",
+          "baseColorWithStructure": [
+            { "nameZh": "本甲", "priceCad": 65 },
+            { "nameZh": "二次利用延长", "priceCad": 75 },
+            { "nameZh": "正常延长（浅贴/甲模）", "priceCad": 85 },
+            { "nameZh": "超长延长（超过本甲 1.5 倍）", "priceCad": 95 }
+          ],
+          "designAddOns": [
+            { "nameZh": "赠粉/渐变/亮片/法式/腮红/猫眼", "priceCad": 20 },
+            { "nameZh": "手绘", "priceCadRange": "3-14/finger" },
+            { "nameZh": "水彩", "priceCadRange": "5-40/finger" },
+            { "nameZh": "贴纸", "priceCadRange": "2-10/finger" },
+            { "nameZh": "钻饰（华子/高碳钻）", "priceCadRange": "1-25" }
+          ],
+          "removalNonLuckyLuxe": [
+            { "nameZh": "本甲", "priceCad": 10 },
+            { "nameZh": "延长", "priceCad": 15 }
+          ]
+        },
+        "lash": {
+          "policy": "美睫为固定价格，款式价格加明确加项后就是最终报价。接待时需要询问是否需要下睫毛，并做眼部安全适配确认。",
+          "upperLash": [
+            { "nameZh": "单根自然款", "priceCad": 80 },
+            { "nameZh": "自然网红款（太阳花/仙子/清透小漫画/婴儿弯）", "priceCad": 95 },
+            { "nameZh": "浓密款（泰式漫画/欧美芭比等）", "priceCad": 105 },
+            { "nameZh": "中式设计款（狐系/落尾/龙女/兔系/C+婴儿弯/古风等）", "priceCad": 115 }
+          ],
+          "lowerLash": [
+            { "nameZh": "单根自然款", "priceCad": 10 },
+            { "nameZh": "浓密款", "priceCad": 15 }
+          ],
+          "removalAndRepair": [
+            { "nameZh": "卸除（非本店出品以及只卸不做）", "priceCad": 15 },
+            { "nameZh": "修补（7 天内）", "priceRuleZh": "原价 30%" },
+            { "nameZh": "修补（7-15 天）", "priceRuleZh": "原价 40%" }
+          ]
+        }
+      }
+    }
+  },
+  "variables": {
+    "customerTitle": {
+      "key": "customer_title",
+      "description": "Owner-configurable customer title replacing XXX in draft replies.",
+      "defaultZh": "您好",
+      "examplesZh": ["您好", "亲爱的", "宝贝", "小姐姐", ""],
+      "examplesEn": ["Hi", "Hello", "Dear client", ""]
+    }
+  },
+  "businessRules": [
+    {
+      "id": "deposit.silver",
+      "scope": "tenant",
+      "status": "confirmed",
+      "rule": "New customers are Silver members and pay CAD $50 deposit when confirming a booking."
+    },
+    {
+      "id": "deposit.waiver.gold_plus",
+      "scope": "tenant",
+      "status": "confirmed_pending_thresholds",
+      "rule": "Gold, Platinum, and Diamond members can normally waive deposit unless risk flags apply."
+    },
+    {
+      "id": "booking.one_service",
+      "scope": "platform",
+      "status": "confirmed",
+      "rule": "One booking contains one service only. Nail and lash services require separate bookings."
+    },
+    {
+      "id": "booking.nearest_available_slot",
+      "scope": "platform",
+      "status": "confirmed",
+      "rule": "When a customer asks for a specific appointment date or time and that exact slot is unavailable, do not simply reject. First offer the nearest available slot around the requested date/time, preferably within 30 minutes before or after. If no nearby slot exists on that date, ask whether the customer accepts another time on the same day, then nearby dates."
+    },
+    {
+      "id": "quote.nail.manual_required",
+      "scope": "tenant",
+      "status": "confirmed",
+      "rule": "Custom or reference-image nail services require technician quote confirmation. AI cannot provide final nail pricing."
+    },
+    {
+      "id": "quote.lash.fixed_price",
+      "scope": "tenant",
+      "status": "confirmed",
+      "rule": "Lash services use fixed prices plus explicit add-ons. AI can explain fixed pricing but must ask about lower lashes and safety suitability."
+    },
+    {
+      "id": "lash.first_time_notice",
+      "scope": "platform",
+      "status": "confirmed",
+      "rule": "If the customer clearly says this is their first lash appointment, after technician/staff quote is returned, AI must send a separate first-time lash notice. The notice should mention recent eye surgery, conjunctivitis/redness/inflammation/allergy or current eye discomfort, choosing a natural/lightweight first set, avoiding mascara or heavy eye makeup on appointment day, telling the technician immediately if there is stinging/fumes/tearing/discomfort, and aftercare for the first 6 and 24 hours. Do not add contact-lens or cosmetic-lens preparation advice unless the customer asks."
+    },
+    {
+      "id": "quote.intake.standard_form",
+      "scope": "platform",
+      "status": "confirmed",
+      "rule": "When a customer is asking about a nail or lash style that requires multiple details before quote or booking, send one concise structured intake form instead of repeatedly asking one question at a time. Use the collected answers across the whole conversation, not only the latest message. If more than half of the required information is complete, hand off to staff/technician; do not keep looping on missing fields."
+    },
+    {
+      "id": "quote.booking_after_staff_quote",
+      "scope": "platform",
+      "status": "confirmed",
+      "rule": "Do not create a booking draft before staff/technician has replied to a quote or feasibility check. After the staff quote is returned, if the customer says they want to book or confirms appointment intent, create a booking draft link and send it to the customer."
+    },
+    {
+      "id": "policy.exception_handoff",
+      "scope": "platform",
+      "status": "confirmed",
+      "rule": "Cancellation, reschedule, refund, illness, late arrival, health concern, complaint, payment issue, or technician change requests route to human."
+    },
+    {
+      "id": "after_sales.handoff_required",
+      "scope": "platform",
+      "status": "confirmed",
+      "rule": "After-sales, repair, lifting/open glue, fallout, color mismatch, discomfort/allergy, dissatisfaction, or technician complaint must route to staff/owner. AI may acknowledge, ask for current photo and service date, but must not promise refund, free redo, final compensation, or medical advice."
+    }
+  ],
+  "handoffRules": [
+    {
+      "id": "handoff.technician_quote",
+      "type": "technician",
+      "triggers": ["custom nail quote", "reference image nail quote", "uncertain duration", "color/material availability"],
+      "customerFacingLineZh": "我先帮您把款式需求整理给技师确认一下，这样报价会更准确。",
+      "customerFacingLineEn": "I will organize the design details for the technician first so we can confirm a more accurate quote."
+    },
+    {
+      "id": "handoff.owner_dispute",
+      "type": "owner",
+      "triggers": ["refund dispute", "complaint", "serious dissatisfaction", "health/allergy concern", "payment issue"],
+      "customerFacingLineZh": "我先帮您转给店主确认一下，这样能给您更准确的处理结果。",
+      "customerFacingLineEn": "I will route this to the owner first so we can handle it accurately."
+    },
+    {
+      "id": "handoff.frontdesk_schedule",
+      "type": "frontdesk",
+      "triggers": ["reschedule", "cancellation", "late arrival", "same-day change", "technician switch"],
+      "customerFacingLineZh": "我先帮您转给工作人员核对订单和排班。",
+      "customerFacingLineEn": "I will ask our staff to check your booking and schedule first."
+    },
+    {
+      "id": "handoff.after_sales_review",
+      "type": "frontdesk",
+      "triggers": ["售后", "返修", "开胶", "起翘", "翘边", "掉甲", "掉钻", "掉饰品", "掉色", "色差", "不满意", "掉睫", "睫毛掉", "after-sales", "repair", "lifting", "fallout"],
+      "customerFacingLineZh": "我先帮您转给工作人员核对服务记录和处理方式。",
+      "customerFacingLineEn": "I will route this to our staff to review your service record and next steps."
+    }
+  ],
+  "memoryModel": {
+    "sessionMemory": ["reference images", "requested style", "preferred date/time", "current quote state", "temporary customer notes"],
+    "customerMemory": ["member level", "order history", "preferred technician", "style preferences", "risk flags", "referral relationship"],
+    "tenantKnowledge": ["service menu", "prices", "hours", "staff", "booking policy", "active promotions", "member rules"],
+    "learningMemory": {
+      "policy": "Real conversations become reusable knowledge only after owner approval.",
+      "statuses": ["candidate", "approved", "rejected", "archived"]
+    }
+  },
+  "qaEntries": [
+    {
+      "id": "qa.nail.final_price_from_image",
+      "scope": "platform",
+      "intent": "pricing",
+      "customerQuestionZh": "我只想发一张图，你们能不能直接告诉我最终价格？不要让我等人工。",
+      "answerGuidanceZh": "先安抚并解释复杂美甲需要技师确认，避免直接最终报价；承诺整理需求并转技师确认。",
+      "handoffRequired": true,
+      "handoffType": "technician"
+    },
+    {
+      "id": "qa.nail.simple_image_quote",
+      "scope": "platform",
+      "intent": "pricing",
+      "customerQuestionZh": "这张图看起来很简单，为什么还需要美甲师报价？",
+      "answerGuidanceZh": "解释每张参考图涉及材料、颜色、手型、延长/卸甲/装饰差异，技师确认是为了避免不准确报价。",
+      "handoffRequired": true,
+      "handoffType": "technician"
+    },
+    {
+      "id": "qa.deposit.first_visit",
+      "scope": "tenant",
+      "intent": "deposit",
+      "customerQuestionZh": "我是第一次来，为什么必须付 CAD $50 定金？",
+      "answerGuidanceZh": "解释定金用于锁定服务时间、保障双方时间和服务质量，并会抵扣最终消费。",
+      "handoffRequired": false
+    },
+    {
+      "id": "qa.deposit.member_waiver",
+      "scope": "tenant",
+      "intent": "deposit",
+      "customerQuestionZh": "我是 Gold Member，为什么结账页还显示定金？",
+      "answerGuidanceZh": "说明最终结算会根据会员等级减免；如显示异常，转工作人员核查会员状态和订单。",
+      "handoffRequired": true,
+      "handoffType": "frontdesk"
+    },
+    {
+      "id": "qa.lash.lower_lash",
+      "scope": "platform",
+      "intent": "lash_intake",
+      "customerQuestionZh": "我想做下睫毛，你们所有款式都能加吗？",
+      "answerGuidanceZh": "询问参考图和期望效果，说明需确认眼型、原生睫毛状态和款式适配。",
+      "handoffRequired": true,
+      "handoffType": "technician"
+    },
+    {
+      "id": "qa.after_sales.nail_lifting_open_glue",
+      "scope": "platform",
+      "intent": "after_sales",
+      "customerQuestionZh": "我刚做完指甲开胶/起翘了怎么办？",
+      "answerGuidanceZh": "确认这是美甲售后/返修场景。先安抚并请顾客补当前状态照片和服务日期，转工作人员核对服务记录与处理方式；不要承诺免费返修、退款或最终补偿。",
+      "handoffRequired": true,
+      "handoffType": "frontdesk"
+    },
+    {
+      "id": "qa.after_sales.lash_fallout_discomfort",
+      "scope": "platform",
+      "intent": "after_sales",
+      "customerQuestionZh": "睫毛掉很多/眼睛红肿刺痛怎么办？",
+      "answerGuidanceZh": "确认这是美睫售后或眼部不适场景。请顾客补当前状态照片和服务日期；如有红肿、刺痛、过敏等不适，提醒先避免揉眼或自行处理，并优先转店主/工作人员处理；不要给医疗建议。",
+      "handoffRequired": true,
+      "handoffType": "owner"
+    },
+    {
+      "id": "qa.after_sales.dissatisfaction_or_color",
+      "scope": "platform",
+      "intent": "after_sales",
+      "customerQuestionZh": "我对这次效果不满意/颜色不对/饰品掉了怎么办？",
+      "answerGuidanceZh": "确认是质量或体验售后。请顾客补当前照片、服务日期和具体不满意点，转工作人员或店主核查；不要在 AI 端直接判责、承诺赔偿或承诺免费重做。",
+      "handoffRequired": true,
+      "handoffType": "frontdesk"
+    },
+    {
+      "id": "qa.after_sales.photo_delete",
+      "scope": "platform",
+      "intent": "privacy",
+      "customerQuestionZh": "我想让你们删掉我的照片，可以吗？",
+      "answerGuidanceZh": "尊重顾客隐私，确认要删除的是公开作品集、会员档案返图或社媒素材，并转工作人员处理。",
+      "handoffRequired": true,
+      "handoffType": "owner"
+    }
+  ],
+  "openQuestions": [
+    "Final service menu and prices",
+    "Lash add-on prices",
+    "Member upgrade thresholds",
+    "Exact deposit waiver exception rules",
+    "Warranty window and free after-sales definition",
+    "Preferred customer title variable",
+    "Staff routing map",
+    "Final privacy and consent wording"
+  ]
+}

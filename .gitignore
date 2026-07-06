@@ -7,8 +7,9 @@ __pycache__/
 apps/api/.env
 
 # Local demo database/runtime data (真实经营数据/初始密码文件,绝不入库)
+# 注意: apps/api/data/ 里的 AI 知识库种子(ai-customer-service/)必须入库,只挡数据库文件
 apps/api/local-data/
-apps/api/data/
+apps/api/data/*.sqlite
 backups/
 tmp/
 
