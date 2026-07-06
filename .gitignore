@@ -13,6 +13,9 @@ apps/api/data/*.sqlite
 backups/
 tmp/
 
+# 本机任务执行结果(临时交接文件,不留历史)
+handoff/本机任务结果.md
+
 # Local IDE/private WeChat DevTools settings
 project.private.config.json
 miniprogram/project.private.config.json
