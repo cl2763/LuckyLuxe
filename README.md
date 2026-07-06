@@ -1,5 +1,7 @@
 # Lucky Luxe 小程序演示版
 
+[![Deploy](https://img.shields.io/badge/deploy-Railway-blueviolet)](https://www.luckyluxeatelier.com) 生产环境经 Railway 自动部署（推送 `main` → GitHub Actions CI 通过后自动上线）。
+
 这是一个基于需求文档实现的 Lucky Luxe 微信小程序与网页版演示项目。小程序客户端已接入后端 API；微信登录需要在线上后端配置小程序 AppID/AppSecret 环境变量后才能真实测试。
 
 ## 打开方式
