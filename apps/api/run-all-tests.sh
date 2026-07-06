@@ -3,6 +3,7 @@
 # 用法: bash apps/api/run-all-tests.sh
 # 要求: Node 22+;在全新数据库上也能跑(自动填充演示数据)
 set -euo pipefail
+export ALLOW_DEMO_ADMIN_LOGIN=true  # 测试套件依赖演示登录路径(生产环境默认禁用)
 cd "$(dirname "$0")"
 
 cleanup() { pkill -f "local-server.mjs" 2>/dev/null || true; }

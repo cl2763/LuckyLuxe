@@ -1,7 +1,7 @@
 import { createServer } from 'node:http'
 import { DatabaseSync } from 'node:sqlite'
 import { createDecipheriv, createHash, createHmac } from 'node:crypto'
-import { existsSync, mkdirSync, readFileSync, statSync, unlinkSync, writeFileSync } from 'node:fs'
+import { copyFileSync, existsSync, mkdirSync, readdirSync, readFileSync, renameSync, statSync, unlinkSync, writeFileSync } from 'node:fs'
 import { dirname, extname, join, normalize } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { analyzeReferenceImage, createBookingSummary, createCustomerInsight, createCustomerServiceReply, createDailyBrief, createSocialCopy, extractKbEntriesFromDocument, polishStaffQuoteReply } from './ai-utils.mjs'
@@ -15,6 +15,17 @@ const webRoot = join(workspaceRoot, 'apps', 'web')
 const assetRoot = join(workspaceRoot, 'miniprogram', 'assets')
 const dataDir = join(__dirname, 'local-data')
 mkdirSync(dataDir, { recursive: true })
+
+// 数据迁移:发现待导入文件时,先给现库留底份,再原子替换(配合 /admin/ops/import-db)
+const pendingImportPath = join(dataDir, 'lucky-luxe.sqlite.pending')
+if (existsSync(pendingImportPath)) {
+  const mainDbPath = join(dataDir, 'lucky-luxe.sqlite')
+  if (existsSync(mainDbPath)) {
+    copyFileSync(mainDbPath, join(dataDir, `lucky-luxe.pre-import-${Date.now()}.sqlite`))
+  }
+  renameSync(pendingImportPath, mainDbPath)
+  console.log('[import] 已应用待导入数据库(原库已留底份 lucky-luxe.pre-import-*.sqlite)')
+}
 
 const db = new DatabaseSync(join(dataDir, 'lucky-luxe.sqlite'))
 const PORT = Number(process.env.PORT || 4000)
@@ -850,13 +861,15 @@ function requireAdmin(req) {
   const auth = req.headers.authorization || ''
   if (auth === `Bearer ${OWNER_TOKEN}`) return { role: 'owner', provider: 'demo-token', technicianId: null }
   const token = auth.startsWith('Bearer ') ? auth.slice(7) : ''
-  // 真实账号会话优先(sess_ 前缀);演示白名单保留兼容
+  // 真实账号会话优先(sess_ 前缀);演示白名单 token 仅在本地开发开关下有效
   const accountAdmin = adminFromSessionToken(token)
   if (accountAdmin) return accountAdmin
-  const ownerEmail = demoEmailFromToken(token, 'owner')
-  if (ownerEmail && OWNER_EMAILS.includes(ownerEmail)) return adminForEmail(ownerEmail, 'demo-owner')
-  const staffEmail = demoEmailFromToken(token, 'staff')
-  if (staffEmail && STAFF_EMAILS.includes(staffEmail)) return adminForEmail(staffEmail, 'demo-staff')
+  if (process.env.ALLOW_DEMO_ADMIN_LOGIN === 'true') {
+    const ownerEmail = demoEmailFromToken(token, 'owner')
+    if (ownerEmail && OWNER_EMAILS.includes(ownerEmail)) return adminForEmail(ownerEmail, 'demo-owner')
+    const staffEmail = demoEmailFromToken(token, 'staff')
+    if (staffEmail && STAFF_EMAILS.includes(staffEmail)) return adminForEmail(staffEmail, 'demo-staff')
+  }
   throw apiError(401, 'UNAUTHORIZED', 'Admin login is required.')
 }
 
@@ -5714,6 +5727,26 @@ async function route(req, res) {
   }
   if (req.method === 'POST' && path === '/auth/wechat/mini-login') return json(res, 200, await signInWechatMiniUser(await readBody(req)))
   if (req.method === 'POST' && path === '/auth/google/demo') return json(res, 201, { user: registerGoogleDemoUser(await readBody(req)) })
+  // 数据迁移入口:双重开关(ALLOW_DB_IMPORT 环境变量,迁移完立即关) + 强 token + 确认头 + 文件魔数校验
+  if (req.method === 'POST' && path === '/admin/ops/import-db') {
+    if (process.env.ALLOW_DB_IMPORT !== 'true') throw apiError(403, 'FORBIDDEN', 'DB import is disabled.')
+    const auth = req.headers.authorization || ''
+    if (auth !== `Bearer ${OWNER_TOKEN}`) throw apiError(401, 'UNAUTHORIZED', 'Owner token required.')
+    if (req.headers['x-confirm-import'] !== 'yes') throw apiError(400, 'BAD_REQUEST', 'x-confirm-import: yes header is required.')
+    const chunks = []
+    for await (const chunk of req) chunks.push(chunk)
+    const buffer = Buffer.concat(chunks)
+    if (buffer.length < 4096 || !buffer.subarray(0, 15).toString('utf8').startsWith('SQLite format 3')) {
+      throw apiError(400, 'BAD_REQUEST', '上传内容不是有效的 SQLite 数据库文件。')
+    }
+    writeFileSync(pendingImportPath, buffer)
+    json(res, 201, { staged: true, bytes: buffer.length, note: '已暂存。服务将在 2 秒后重启并应用导入(原库自动留底份)。' })
+    setTimeout(() => {
+      console.log('[import] 重启以应用导入的数据库')
+      process.exit(1)
+    }, 2000)
+    return
+  }
   if (req.method === 'POST' && path === '/admin/auth/login') {
     const body = await readBody(req)
     const loginId = String(body.email || body.username || '').trim().toLowerCase()
@@ -5740,7 +5773,10 @@ async function route(req, res) {
         mode: 'account'
       })
     }
-    // 2) 演示白名单兼容(正式切换后可移除)
+    // 2) 演示白名单兼容——仅本地开发开启(ALLOW_DEMO_ADMIN_LOGIN=true);云端默认禁用
+    if (process.env.ALLOW_DEMO_ADMIN_LOGIN !== 'true') {
+      throw apiError(403, 'FORBIDDEN', '账号不存在。请用正式账号登录(老板:boss;员工:老板发的账号)。')
+    }
     const role = OWNER_EMAILS.includes(loginId) ? 'owner' : STAFF_EMAILS.includes(loginId) ? 'staff' : ''
     if (!role) throw apiError(403, 'FORBIDDEN', 'This account is not allowed to access admin.')
     if (role === 'staff' && password !== STAFF_DEMO_PASSWORD) throw apiError(403, 'FORBIDDEN', 'Staff demo password is incorrect.')
@@ -5817,6 +5853,7 @@ async function route(req, res) {
     return json(res, 200, { username: account.username, status: nextStatus })
   }
   if (req.method === 'POST' && path === '/admin/auth/register') {
+    if (process.env.ALLOW_DEMO_ADMIN_LOGIN !== 'true') throw apiError(403, 'FORBIDDEN', '注册已停用。老板主账号由平台交付。')
     const body = await readBody(req)
     const email = String(body.email || '').trim().toLowerCase()
     if (!OWNER_EMAILS.includes(email)) throw apiError(403, 'FORBIDDEN', 'This email is not approved for owner admin.')
@@ -7416,7 +7453,36 @@ createServer((req, res) => {
       }
     })
   })
-}).listen(PORT, '127.0.0.1', () => {
+}).listen(PORT, process.env.HOST || '127.0.0.1', () => {
+  // 本机开发默认只绑 127.0.0.1(安全);云端(Railway 等)设 HOST=0.0.0.0 才对外可达
   console.log(`Lucky Luxe local API running at http://localhost:${PORT}`)
   console.log(`Owner API token: ${OWNER_TOKEN}`)
 })
+
+// ===== 生产环境每日自动备份(BACKUP_ENABLED=true 时开启;快照存进同一持久化卷,保留 30 天) =====
+if (process.env.BACKUP_ENABLED === 'true') {
+  const backupDir = join(dataDir, 'backups')
+  const runBackup = () => {
+    try {
+      mkdirSync(backupDir, { recursive: true })
+      const stamp = localParts(new Date()).date
+      const dest = join(backupDir, `lucky-luxe-${stamp}.sqlite`)
+      if (!existsSync(dest)) {
+        copyFileSync(join(dataDir, 'lucky-luxe.sqlite'), dest)
+        console.log(`[backup] 已生成快照 ${stamp}`)
+      }
+      const keepAfter = new Date(Date.now() - 30 * 86400000)
+      for (const file of readdirSync(backupDir)) {
+        const match = file.match(/^lucky-luxe-(\d{4}-\d{2}-\d{2})\.sqlite$/)
+        if (match && new Date(`${match[1]}T12:00:00`) < keepAfter) {
+          unlinkSync(join(backupDir, file))
+          console.log(`[backup] 已清理过期快照 ${file}`)
+        }
+      }
+    } catch (error) {
+      console.error('[backup] 备份失败:', error.message)
+    }
+  }
+  runBackup()
+  setInterval(runBackup, 6 * 3600 * 1000)
+}
