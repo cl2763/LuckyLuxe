@@ -1,0 +1,17 @@
+<view class="mtab">
+  <view class="tab {{active==='home'?'on':''}}" data-key="home" bindtap="go">
+    <image class="ic" src="/assets/icons/tab-home.svg" /><text class="tx">首页</text>
+  </view>
+  <view class="tab {{active==='orders'?'on':''}}" data-key="orders" bindtap="go">
+    <image class="ic" src="/assets/icons/tab-orders.svg" /><text class="tx">订单</text>
+  </view>
+  <view class="tab {{active==='workbench'?'on':''}}" data-key="workbench" bindtap="go">
+    <image class="ic" src="/assets/icons/tab-workbench.svg" /><text class="tx">工作台</text>
+  </view>
+  <view class="tab {{active==='gallery'?'on':''}}" data-key="gallery" bindtap="go">
+    <image class="ic" src="/assets/icons/tab-gallery.svg" /><text class="tx">图库</text>
+  </view>
+  <view class="tab {{active==='manage'?'on':''}}" data-key="manage" bindtap="go">
+    <image class="ic" src="/assets/icons/tab-manage.svg" /><text class="tx">管理</text>
+  </view>
+</view>

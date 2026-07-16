@@ -1,0 +1,42 @@
+<view class="page">
+  <view wx:if="{{loading}}" class="empty">加载中…</view>
+
+  <block wx:else>
+    <view class="gtitle">门店信息</view>
+    <view class="card">
+      <view class="row" data-key="name" bindtap="editField"><text class="k">名称</text><text class="v">{{name || '未设置'}}</text><text class="arr">›</text></view>
+      <view class="row" data-key="address" bindtap="editField"><text class="k">地址</text><text class="v">{{address || '未设置'}}</text><text class="arr">›</text></view>
+      <view class="row" data-key="phone" bindtap="editField"><text class="k">电话</text><text class="v">{{phone || '未设置'}}</text><text class="arr">›</text></view>
+    </view>
+    <view class="hint">地址/电话改后会同步到 AI 客服的回答口径。</view>
+
+    <view class="gtitle">营业时间</view>
+    <view class="card">
+      <view class="hrow" wx:for="{{hours}}" wx:key="weekday">
+        <text class="day">{{item.label}}</text>
+        <block wx:if="{{!item.isClosed}}">
+          <picker class="tp" mode="time" value="{{item.openTime}}" data-i="{{index}}" bindchange="onOpen"><view class="tpv">{{item.openTime}}</view></picker>
+          <text class="dash">-</text>
+          <picker class="tp" mode="time" value="{{item.closeTime}}" data-i="{{index}}" bindchange="onClose"><view class="tpv">{{item.closeTime}}</view></picker>
+        </block>
+        <text wx:else class="rest">休息</text>
+        <switch class="sw" checked="{{!item.isClosed}}" color="#c8a47e" data-i="{{index}}" bindtap="toggleDay" />
+      </view>
+    </view>
+
+    <view class="gtitle">特殊日期(节假日/临时)</view>
+    <view class="card">
+      <view class="srow" wx:for="{{specials}}" wx:key="date">
+        <view class="sinfo"><text class="sdate">{{item.date}}</text><text class="stext">{{item.text}}{{item.note ? ' · ' + item.note : ''}}</text></view>
+        <text class="del" data-date="{{item.date}}" bindtap="delSpecial">删除</text>
+      </view>
+      <view wx:if="{{!specials.length}}" class="none">暂无,按每周固定营业</view>
+      <view class="add" bindtap="addSpecial">＋ 新增休息日</view>
+    </view>
+
+    <view class="gtitle">预约规则</view>
+    <view class="card">
+      <view class="note">超时未付定金自动取消并释放时段;到点自动结单/提醒。规则细项在网页后台调整。</view>
+    </view>
+  </block>
+</view>

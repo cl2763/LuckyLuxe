@@ -1,0 +1,25 @@
+<view class="mlogin">
+  <view class="head">
+    <view class="title">商家管理登录</view>
+    <view class="sub">登录后自动识别老板 / 员工权限</view>
+  </view>
+
+  <view class="label">账号</view>
+  <view class="field">
+    <input class="inp" placeholder="boss / 员工账号" placeholder-class="ph" value="{{username}}" bindinput="onUser" />
+  </view>
+
+  <view class="label">密码</view>
+  <view class="field">
+    <input class="inp" password="{{hidePwd}}" placeholder="请输入密码" placeholder-class="ph" value="{{password}}" bindinput="onPass" />
+    <image class="eye" src="{{hidePwd ? '/assets/icons/eye-off.svg' : '/assets/icons/eye.svg'}}" bindtap="togglePwd" />
+  </view>
+
+  <view class="remember" bindtap="toggleRemember">
+    <view class="box {{remember ? 'on' : ''}}">{{remember ? '✓' : ''}}</view>
+    <text>保持登录 30 天</text>
+  </view>
+
+  <button class="btn" loading="{{loading}}" bindtap="login">登录</button>
+  <view class="hint" bindtap="toForgot">忘记密码</view>
+</view>

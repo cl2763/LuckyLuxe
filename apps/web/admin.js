@@ -1,5 +1,5 @@
 // 构建号:每次交付递增。侧栏可见,排查"改了没生效"时先对版本。
-const ADMIN_BUILD = '20260706-walk3'
+const ADMIN_BUILD = '20260716-member'
 console.log(`[admin] build ${ADMIN_BUILD}`)
 
 // "今天"必须按门店时区算(服务器同样钉在此时区),否则老板人在别的时区时全站日期错位一天。
@@ -104,6 +104,9 @@ const els = {
   bookingsPage: document.querySelector('#bookingsPage'),
   schedulePage: document.querySelector('#schedulePage'),
   servicesPage: document.querySelector('#servicesPage'),
+  membershipPage: document.querySelector('#membershipPage'),
+  packageAdminList: document.querySelector('#packageAdminList'),
+  couponAdminList: document.querySelector('#couponAdminList'),
   customersPage: document.querySelector('#customersPage'),
   wechatMockPage: document.querySelector('#wechatMockPage'),
   wechatMockEyebrow: document.querySelector('#wechatMockEyebrow'),
@@ -1433,13 +1436,14 @@ function renderAdminPages() {
   els.sidebarCustomers.classList.toggle('hidden', !isOwnerRole())
   els.sidebarStoreSettings.classList.toggle('hidden', !isOwnerRole())
   els.sidebarFinance.classList.toggle('hidden', !isOwnerRole())
-  if (!isOwnerRole() && ['dashboard', 'dashboardDetail', 'services', 'customers', 'storeSettings', 'finance'].includes(owner.adminPage)) owner.adminPage = 'bookings'
+  if (!isOwnerRole() && ['dashboard', 'dashboardDetail', 'services', 'membership', 'customers', 'storeSettings', 'finance'].includes(owner.adminPage)) owner.adminPage = 'bookings'
   const pages = {
     dashboard: els.adminDashboard,
     dashboardDetail: els.dashboardDetailPage,
     bookings: els.bookingsPage,
     schedule: els.schedulePage,
     services: els.servicesPage,
+    membership: els.membershipPage,
     customers: els.customersPage,
     wechatMock: els.wechatMockPage,
     aiGallery: els.aiGalleryPage,
@@ -5056,6 +5060,7 @@ els.adminLayout.addEventListener('click', (event) => {
     owner.adminPage = pageButton.dataset.adminPage
     if (owner.adminPage === 'bookings') owner.adminView = 'today'
     if (owner.adminPage === 'finance') loadFinancePage().catch((error) => toast(error.message))
+    if (owner.adminPage === 'membership') loadMembershipPage().catch((error) => toast(error.message))
     render()
     return
   }
@@ -6099,4 +6104,117 @@ async function initAdmin() {
   }
 }
 
+// ===== 会员套餐 / 次卡 / 优惠券(网页老板端,与小程序同后端 /admin/packages、/admin/coupons)=====
+let membershipData = { packages: [], coupons: [] }
+function mCents(v) { const n = Number(String(v).replace(/[^\d.]/g, '')); return Number.isFinite(n) ? Math.round(n * 100) : 0 }
+function mMoney(cents) { return '$' + (Math.round(cents || 0) / 100) }
+async function loadMembershipPage() {
+  const [p, c] = await Promise.all([request('/admin/packages'), request('/admin/coupons')])
+  membershipData = { packages: p.packages || [], coupons: c.coupons || [] }
+  renderMembership()
+}
+function renderMembership() {
+  if (!els.packageAdminList) return
+  const pkgs = membershipData.packages
+  els.packageAdminList.innerHTML = pkgs.length ? pkgs.map((p) => `
+    <div class="service-admin-item${p.isActive ? '' : ' inactive'}">
+      <div><strong>${escapeHtml(p.name)}</strong> <span class="subtle">${p.kind === 'times' ? '次卡' : '充值套餐'}${p.isActive ? '' : ' · 已下架'}</span>
+        <div class="subtle">${p.kind === 'times'
+          ? `售价 ${mMoney(p.priceCents)} · ${p.timesCount} 次${p.scope ? ' · ' + escapeHtml(p.scope) : ''}`
+          : `售价 ${mMoney(p.priceCents)}${p.bonusCents ? ' · 送 ' + mMoney(p.bonusCents) : ''}`}${p.benefits ? ' · ' + escapeHtml(p.benefits) : ''}</div>
+      </div>
+      <div class="row-actions">
+        <button class="ghost slim" data-pkg-edit="${p.id}" type="button">编辑</button>
+        <button class="ghost slim" data-pkg-toggle="${p.id}" type="button">${p.isActive ? '下架' : '上架'}</button>
+      </div>
+    </div>`).join('') : '<div class="empty-state">还没有套餐,点右上角新增</div>'
+  const cs = membershipData.coupons
+  els.couponAdminList.innerHTML = cs.length ? cs.map((c) => `
+    <div class="service-admin-item${c.isActive ? '' : ' inactive'}">
+      <div><strong>${escapeHtml(c.name)}</strong> <span class="subtle">${c.isActive ? '' : '已停用'}</span>
+        <div class="subtle">${c.discountType === 'percent' ? `立减 ${c.percentOff}%` : `减 ${mMoney(c.amountCents)}`} · ${c.minSpendCents ? '满 ' + mMoney(c.minSpendCents) : '无门槛'} · ${c.validDays}天${c.totalQty ? ' · 限 ' + c.totalQty + ' 张' : ''}</div>
+      </div>
+      <div class="row-actions">
+        <button class="ghost slim" data-cpn-edit="${c.id}" type="button">编辑</button>
+        <button class="ghost slim" data-cpn-toggle="${c.id}" type="button">${c.isActive ? '停用' : '启用'}</button>
+      </div>
+    </div>`).join('') : '<div class="empty-state">还没有优惠券,点右上角新增</div>'
+}
+async function savePackage(kind, existing) {
+  kind = kind || (existing && existing.kind) || 'recharge'
+  const name = window.prompt('套餐名称', existing ? existing.name : (kind === 'times' ? '纯色×5次卡' : '充1000送50'))
+  if (!name) return
+  const price = window.prompt('售价(加元)', existing ? String(existing.priceCents / 100) : '')
+  if (price === null) return
+  const body = { kind, name: name.trim(), priceCents: mCents(price) }
+  if (kind === 'recharge') {
+    const bonus = window.prompt('额外赠送(加元,可留空)', existing && existing.bonusCents ? String(existing.bonusCents / 100) : '')
+    body.bonusCents = mCents(bonus || 0)
+  } else {
+    const times = window.prompt('包含次数', existing && existing.timesCount ? String(existing.timesCount) : '5')
+    body.timesCount = Math.round(Number(times) || 0)
+    const scope = window.prompt('适用范围(可留空)', existing ? existing.scope || '' : '')
+    body.scope = (scope || '').trim()
+  }
+  const benefits = window.prompt('权益说明(可留空)', existing ? existing.benefits || '' : '')
+  body.benefits = (benefits || '').trim()
+  try {
+    if (existing) await request(`/admin/packages/${existing.id}`, { method: 'PATCH', body: JSON.stringify(body) })
+    else await request('/admin/packages', { method: 'POST', body: JSON.stringify(body) })
+    toast('已保存')
+    await loadMembershipPage()
+  } catch (error) { toast(error.message) }
+}
+async function saveCoupon(existing) {
+  const name = window.prompt('优惠券名称', existing ? existing.name : '满200减30')
+  if (!name) return
+  const typeIn = window.prompt('类型:输入 1=满减券,2=折扣券', existing ? (existing.discountType === 'percent' ? '2' : '1') : '1')
+  if (typeIn === null) return
+  const discountType = String(typeIn).trim() === '2' ? 'percent' : 'amount'
+  const body = { name: name.trim(), discountType }
+  if (discountType === 'amount') {
+    const amt = window.prompt('面额(减多少加元)', existing ? String(existing.amountCents / 100) : '30')
+    body.amountCents = mCents(amt)
+  } else {
+    const pct = window.prompt('立减折扣(%,如 10 表示立减10%)', existing ? String(existing.percentOff) : '10')
+    body.percentOff = Math.round(Number(pct) || 0)
+  }
+  const min = window.prompt('使用门槛(加元,0=无门槛)', existing ? String(existing.minSpendCents / 100) : '0')
+  body.minSpendCents = mCents(min || 0)
+  const days = window.prompt('有效天数', existing ? String(existing.validDays) : '30')
+  body.validDays = Math.round(Number(days) || 30)
+  const qty = window.prompt('发放总量(0=不限量)', existing && existing.totalQty ? String(existing.totalQty) : '0')
+  body.totalQty = Math.round(Number(qty) || 0)
+  try {
+    if (existing) await request(`/admin/coupons/${existing.id}`, { method: 'PATCH', body: JSON.stringify(body) })
+    else await request('/admin/coupons', { method: 'POST', body: JSON.stringify(body) })
+    toast('已保存')
+    await loadMembershipPage()
+  } catch (error) { toast(error.message) }
+}
+if (els.membershipPage) {
+  els.membershipPage.addEventListener('click', async (event) => {
+    const addR = event.target.closest('#addRechargeButton')
+    const addT = event.target.closest('#addTimesButton')
+    const addC = event.target.closest('#addCouponButton')
+    const pkgEdit = event.target.closest('[data-pkg-edit]')
+    const pkgTog = event.target.closest('[data-pkg-toggle]')
+    const cpnEdit = event.target.closest('[data-cpn-edit]')
+    const cpnTog = event.target.closest('[data-cpn-toggle]')
+    if (addR) return savePackage('recharge')
+    if (addT) return savePackage('times')
+    if (addC) return saveCoupon()
+    if (pkgEdit) return savePackage(undefined, membershipData.packages.find((p) => p.id === pkgEdit.dataset.pkgEdit))
+    if (cpnEdit) return saveCoupon(membershipData.coupons.find((c) => c.id === cpnEdit.dataset.cpnEdit))
+    if (pkgTog) {
+      const p = membershipData.packages.find((x) => x.id === pkgTog.dataset.pkgToggle)
+      try { await request(`/admin/packages/${p.id}`, { method: 'PATCH', body: JSON.stringify({ isActive: !p.isActive }) }); await loadMembershipPage() } catch (error) { toast(error.message) }
+      return
+    }
+    if (cpnTog) {
+      const c = membershipData.coupons.find((x) => x.id === cpnTog.dataset.cpnToggle)
+      try { await request(`/admin/coupons/${c.id}`, { method: 'PATCH', body: JSON.stringify({ isActive: !c.isActive }) }); await loadMembershipPage() } catch (error) { toast(error.message) }
+    }
+  })
+}
 initAdmin().catch((error) => toast(error.message))

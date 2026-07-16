@@ -1,0 +1,19 @@
+<view class="fp">
+  <view class="title">忘记密码怎么办</view>
+
+  <view class="card">
+    <view class="ct">员工忘记密码</view>
+    <view class="cb">找老板重置。老板在「管理 → 员工管理」里点你的账号「重置密码」,会生成一个新的初始密码发给你;你用新密码登录后按提示设置自己的新密码即可。</view>
+  </view>
+
+  <view class="card">
+    <view class="ct">老板忘记密码</view>
+    <view class="cb">联系平台重置主账号。平台会为你的 boss 主账号生成新的初始密码,你首次登录后需重新设置密码。</view>
+    <view class="contact">
+      <view class="crow"><text class="ck">平台客服微信</text><text class="cv">LuckyLuxe-Support</text></view>
+      <view class="crow"><text class="ck">邮箱</text><text class="cv">support@luckyluxeatelier.com</text></view>
+    </view>
+  </view>
+
+  <view class="note">为账号安全,密码重置一律由老板/平台线下核验身份后操作,系统不提供自助找回,避免账号被冒用。</view>
+</view>

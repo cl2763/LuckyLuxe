@@ -1,0 +1,20 @@
+<view class="page">
+  <view class="form">
+    <view class="frow"><text class="lb">套餐名称</text><input class="in" value="{{name}}" placeholder="{{kind==='times'?'如 纯色×5次卡':'如 充1000送50'}}" bindinput="onName" /></view>
+    <view class="frow"><text class="lb">售价 (CAD)</text><input class="in" type="digit" value="{{price}}" placeholder="顾客支付" bindinput="onPrice" /></view>
+
+    <block wx:if="{{kind==='recharge'}}">
+      <view class="frow"><text class="lb">额外赠送 (CAD)</text><input class="in" type="digit" value="{{bonus}}" placeholder="选填,如 50" bindinput="onBonus" /></view>
+    </block>
+    <block wx:else>
+      <view class="frow"><text class="lb">包含次数</text><input class="in" type="number" value="{{times}}" placeholder="如 5" bindinput="onTimes" /></view>
+      <view class="frow"><text class="lb">适用范围</text><input class="in" value="{{scope}}" placeholder="选填,如 纯色美甲" bindinput="onScope" /></view>
+    </block>
+
+    <view class="frow"><text class="lb">权益说明</text><input class="in" value="{{benefits}}" placeholder="选填,如 赠免费卸甲" bindinput="onBenefits" /></view>
+    <view class="frow"><text class="lb">上架(顾客可购)</text><switch checked="{{active}}" color="#c8a47e" bindchange="onActive" /></view>
+  </view>
+
+  <view class="btn {{saving?'off':''}}" bindtap="save">{{saving?'保存中…':(isNew?'新增':'保存')}}</view>
+  <view class="note">套餐售出、次卡核销等发生在顾客端;这里只做定义与上下架。</view>
+</view>

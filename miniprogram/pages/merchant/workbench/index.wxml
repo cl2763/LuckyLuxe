@@ -1,0 +1,21 @@
+<view class="page">
+  <view class="topbar">
+    <view class="h1">客服工作台</view>
+    <view class="stat">今日会话 {{stat.total}} · 待人工 {{stat.human}}</view>
+  </view>
+  <view class="srch">
+    <input class="inp" placeholder="搜会话 / 顾客" placeholder-class="ph" value="{{kw}}" bindinput="onKw" />
+  </view>
+
+  <view wx:if="{{!list.length}}" class="empty">暂无会话</view>
+  <view class="conv {{item.status==='needs_human'?'alert':''}}" wx:for="{{list}}" wx:key="id" data-id="{{item.id}}" bindtap="open">
+    <view class="conv-top">
+      <text class="conv-name">{{item.name}}</text>
+      <view class="tag {{item.cls}}">{{item.label}}</view>
+    </view>
+    <view class="conv-msg">{{item.msg}}</view>
+    <view class="conv-time" wx:if="{{item.time}}">{{item.time}}</view>
+  </view>
+
+  <merchant-tabbar active="workbench"></merchant-tabbar>
+</view>

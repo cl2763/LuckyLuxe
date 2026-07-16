@@ -1,6 +1,11 @@
 const mock = require('./mock-data')
 
-const API_BASE = 'https://www.luckyluxeatelier.com'
+// ===== 联调开关(店主用)=====
+// true  = 连你 Mac 本地沙盘(模拟数据,随便测,不影响线上;开发者工具模拟器用 127.0.0.1 即可)
+// false = 连线上生产(www.luckyluxeatelier.com,真实数据)
+// ⚠️ 正式上传/发布前,务必把这里改回 false!
+const USE_LOCAL_SANDBOX = true
+const API_BASE = USE_LOCAL_SANDBOX ? 'http://127.0.0.1:4128' : 'https://www.luckyluxeatelier.com'
 const DEMO_USER_ID = 'user-demo'
 const STORE_ID = 'store-ontario-01'
 const AUTH_KEY = 'lucky_mini_auth'
@@ -88,6 +93,8 @@ function adminRequest(path, method = 'GET', data) {
     const auth = getAdminAuth()
     const header = { 'content-type': 'application/json' }
     if (auth && auth.accessToken) header.authorization = `Bearer ${auth.accessToken}`
+    const fk = wx.getStorageSync('lucky_finance_key')
+    if (fk) header['x-finance-key'] = fk
     wx.request({
       url: `${API_BASE}${path}`,
       method,
@@ -447,15 +454,58 @@ async function analyzeReference(payload) {
   }
 }
 
-async function adminLogin(email, password) {
-  const data = await adminRequest('/admin/auth/login', 'POST', { email, password })
-  const auth = Object.assign({}, data.auth, { admin: data.admin || data.auth && data.auth.admin })
+async function adminLogin(email, password, remember = true) {
+  const data = await adminRequest('/admin/auth/login', 'POST', { email, password, remember })
+  const auth = Object.assign({}, data.auth, { admin: data.admin || (data.auth && data.auth.admin) })
+  const ttlMs = (data.auth && data.auth.expiresIn ? data.auth.expiresIn : 30 * 86400) * 1000
+  auth.expiresAt = Date.now() + ttlMs
   setAdminAuth(auth)
   return auth
 }
 
+// 保持登录:本地有未过期的商家会话即视为已登录
+function isAdminLoggedIn() {
+  const a = getAdminAuth()
+  return Boolean(a && a.accessToken && (!a.expiresAt || Date.now() < a.expiresAt - 60 * 1000))
+}
+
+async function adminChangePassword(oldPassword, newPassword, confirmPassword) {
+  return adminRequest('/admin/auth/change-password', 'POST', { oldPassword, newPassword, confirmPassword })
+}
+
+// 通用商家端接口封装:任意 /admin/* GET/POST
+function adminGet(path) {
+  return adminRequest(path)
+}
+function adminPost(path, data) {
+  return adminRequest(path, 'POST', data)
+}
+function adminPatch(path, data) {
+  return adminRequest(path, 'PATCH', data)
+}
+// 角色缓存(登录/adminMe 后写入),供页面同步判断
+function getCachedRole() { return wx.getStorageSync('lucky_admin_role') || '' }
+function isOwner() { return getCachedRole() === 'owner' }
+// owner-only 页面守卫:员工进入即弹回。返回 true=放行
+async function guardOwner() {
+  try { const m = await adminMe(); if (m && m.role === 'owner') return true } catch (e) { /* 网络异常时不误伤,继续 */ return true }
+  wx.showToast({ title: '仅老板可用', icon: 'none' })
+  setTimeout(() => wx.navigateBack({ fail: () => wx.reLaunch({ url: '/pages/merchant/home/index' }) }), 350)
+  return false
+}
+
+// 财务门禁:解锁后本地存 x-finance-key,后续财务请求自动带上
+function getFinanceKey() { return wx.getStorageSync('lucky_finance_key') || '' }
+function clearFinanceKey() { wx.removeStorageSync('lucky_finance_key') }
+async function financeUnlock(password, confirmPassword) {
+  const d = await adminRequest('/admin/finance/unlock', 'POST', { password, confirmPassword })
+  if (d && d.financeKey) wx.setStorageSync('lucky_finance_key', d.financeKey)
+  return d
+}
+
 async function adminMe() {
   const data = await adminRequest('/admin/auth/me')
+  if (data && data.admin && data.admin.role) wx.setStorageSync('lucky_admin_role', data.admin.role)
   return data.admin
 }
 
@@ -498,6 +548,19 @@ module.exports = {
   getAdminAuth,
   clearAdminAuth,
   adminLogin,
+  adminChangePassword,
+  isAdminLoggedIn,
+  adminMe,
+  adminGet,
+  adminPost,
+  adminPatch,
+  adminRequest,
+  getCachedRole,
+  isOwner,
+  guardOwner,
+  financeUnlock,
+  getFinanceKey,
+  clearFinanceKey,
   getAdminDashboardData,
   miniMember,
   getServices,

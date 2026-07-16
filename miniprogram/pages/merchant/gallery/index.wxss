@@ -1,0 +1,33 @@
+page{background:#fbf8f5}
+.page{padding:16rpx 26rpx 140rpx}
+.seg{display:flex;background:#f1e7df;border-radius:12rpx;padding:5rpx;margin-bottom:16rpx}
+.s{flex:1;text-align:center;font-size:24rpx;color:#8c8279;padding:14rpx 0;border-radius:9rpx}
+.s.on{background:#fff;color:#2d2826;font-weight:600}
+.empty{text-align:center;color:#8c8279;font-size:24rpx;padding:60rpx 20rpx}
+/* 展示图墙 */
+.grid{display:flex;flex-wrap:wrap;gap:12rpx}
+.gcell{width:calc(50% - 6rpx);position:relative;border-radius:14rpx;overflow:hidden;background:#f1e7df}
+.gimg{width:100%;height:300rpx;display:block}
+.gcount{position:absolute;top:12rpx;right:12rpx;background:rgba(45,40,38,.6);color:#fff;font-size:20rpx;border-radius:40rpx;padding:2rpx 12rpx}
+.gcap{position:absolute;left:0;right:0;bottom:0;background:linear-gradient(transparent,rgba(45,40,38,.62));color:#fff;font-size:22rpx;padding:20rpx 14rpx 12rpx}
+/* 作品管理 */
+.tipbar{display:flex;gap:12rpx;margin-bottom:14rpx}
+.tip1,.tip2{flex:1;text-align:center;font-size:22rpx;border-radius:12rpx;padding:14rpx 0}
+.tip1{background:#f6efe8;color:#9b7655;border:1rpx solid #eaded2}
+.tip2{background:#fbf4ee;color:#a3703f;border:1rpx solid #ecd9c6}
+.card{background:#fff;border:1rpx solid #e7ddd4;border-radius:16rpx;padding:18rpx;margin-bottom:14rpx}
+.head{display:flex;align-items:center;justify-content:space-between}
+.hinfo{flex:1;min-width:0}
+.hname{font-size:26rpx;font-weight:600;color:#2d2826}
+.hdate{font-size:21rpx;color:#8c8279;margin-top:5rpx}
+.badge{font-size:21rpx;border-radius:40rpx;padding:4rpx 14rpx;flex:0 0 auto}
+.badge.published{background:#e3eee8;color:#47735f}
+.badge.topublish{background:#fbf0e2;color:#a3703f}
+.badge.toupload{background:#fbf8f5;color:#8c8279;border:1rpx solid #e7ddd4}
+.thumbs{white-space:nowrap;margin-top:14rpx}
+.thumb{display:inline-block;width:150rpx;height:150rpx;border-radius:12rpx;margin-right:10rpx;background:#f1e7df}
+.noimg{margin-top:14rpx;font-size:22rpx;color:#b6a99b;background:#fbf8f5;border:1rpx dashed #e7ddd4;border-radius:12rpx;padding:26rpx 0;text-align:center}
+.acts{display:flex;gap:12rpx;margin-top:14rpx}
+.b{flex:1;text-align:center;font-size:24rpx;border-radius:12rpx;padding:16rpx 0;background:#fbf8f5;border:1rpx solid #e7ddd4;color:#8c8279}
+.b.p{background:#c8a47e;color:#fff;border-color:#c8a47e}
+.note{font-size:21rpx;color:#b6a99b;line-height:1.6;margin-top:18rpx}

@@ -1,0 +1,6 @@
+{
+  "navigationBarTitleText": "客服工作台",
+  "usingComponents": {
+    "merchant-tabbar": "/components/merchant-tabbar/index"
+  }
+}

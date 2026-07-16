@@ -1,0 +1,14 @@
+page{background:#fbf8f5}
+.page{padding:20rpx 26rpx 160rpx}
+.owner{display:flex;align-items:center;gap:14rpx;padding:8rpx 4rpx 18rpx}
+.oav{width:80rpx;height:80rpx;border-radius:50%;background:#f1e7df;color:#9b7655;display:flex;align-items:center;justify-content:center;font-weight:600;font-size:34rpx}
+.oname{font-size:30rpx;font-weight:600;color:#2d2826}
+.oplan{font-size:22rpx;color:#8c8279;margin-top:6rpx}
+.grp{font-size:22rpx;color:#8c8279;margin:16rpx 2rpx 10rpx}
+.row{display:flex;align-items:center;gap:14rpx;background:#fff;border:1rpx solid #e7ddd4;border-radius:14rpx;padding:14rpx 16rpx;margin-bottom:12rpx}
+.badge{width:60rpx;height:60rpx;border-radius:14rpx;background:#f1e7df;display:flex;align-items:center;justify-content:center;flex:0 0 auto}
+.bic{width:34rpx;height:34rpx}
+.rmain{flex:1;min-width:0}
+.rt{font-size:26rpx;font-weight:500;color:#2d2826}
+.rd{font-size:21rpx;color:#8c8279;margin-top:4rpx}
+.chev{color:#c7b9ab;font-size:34rpx;flex:0 0 auto}

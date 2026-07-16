@@ -1,0 +1,25 @@
+<view class="page">
+  <view class="srch"><input class="inp" placeholder="搜顾客名" placeholder-class="ph" value="{{kw}}" bindinput="onKw" /></view>
+
+  <scroll-view scroll-x class="chips">
+    <view wx:for="{{filters}}" wx:key="*this" class="chip {{filter===item?'on':''}}" data-f="{{item}}" bindtap="setFilter">
+      {{filterLabels[item]}}<text wx:if="{{item==='high'}}"> {{counts.high}}</text><text wx:elif="{{item==='dormant'}}"> {{counts.dormant}}</text><text wx:elif="{{item==='new'}}"> {{counts.new}}</text>
+    </view>
+  </scroll-view>
+
+  <view class="sortbar">
+    排序:
+    <text wx:for="{{sorts}}" wx:key="*this" class="sopt {{sort===item?'on':''}}" data-s="{{item}}" bindtap="setSort">{{sortLabels[item]}}</text>
+  </view>
+
+  <view wx:if="{{!list.length}}" class="empty">没有符合的客户</view>
+  <view class="cust" wx:for="{{list}}" wx:key="id" data-id="{{item.id}}" bindtap="open">
+    <view class="av">{{item.av}}</view>
+    <view class="cmain">
+      <view class="cname">{{item.name}} <text class="tier {{item.high?'hi':''}}">{{item.tier}}</text></view>
+      <view class="cmeta">累计{{item.spend}} · 最近到店{{item.last}} · 储值{{item.stored}}</view>
+      <view class="ctags" wx:if="{{item.tags.length}}"><text wx:for="{{item.tags}}" wx:for-item="tg" wx:key="*this" class="tg">{{tg}}</text></view>
+    </view>
+    <view class="chev">›</view>
+  </view>
+</view>

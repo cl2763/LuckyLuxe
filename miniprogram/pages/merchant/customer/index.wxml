@@ -1,0 +1,46 @@
+<view class="page" wx:if="{{c}}">
+  <view class="hero">
+    <view class="av">{{c.av}}</view>
+    <view class="hmain">
+      <view class="hname">{{c.name}} <text class="tier">{{c.tier}}</text></view>
+      <view class="hsub">{{c.memberCode}}{{c.phone ? ' · ' + c.phone : ''}}</view>
+    </view>
+  </view>
+
+  <view class="stats">
+    <view class="st"><view class="sv">{{c.visits}}</view><view class="sl">到店次数</view></view>
+    <view class="st"><view class="sv">{{c.spend}}</view><view class="sl">累计消费</view></view>
+    <view class="st"><view class="sv">{{c.stored}}</view><view class="sl">储值余额</view></view>
+    <view class="st"><view class="sv">{{c.last}}</view><view class="sl">最近到店</view></view>
+  </view>
+
+  <view class="card" wx:if="{{c.tags.length}}">
+    <view class="ct">标签</view>
+    <view class="tags"><text wx:for="{{c.tags}}" wx:key="*this" class="tg">{{item}}</text></view>
+  </view>
+
+  <view class="card" wx:if="{{c.notes}}">
+    <view class="ct">技师须知 / 备注</view>
+    <view class="notes">📌 {{c.notes}}</view>
+  </view>
+
+  <view class="card" wx:if="{{c.birthday}}">
+    <view class="row-sb"><text class="ck">生日</text><text>{{c.birthday}}</text></view>
+  </view>
+
+  <view class="card">
+    <view class="ct">订单历史 <text class="cnt">{{orders.length}}</text></view>
+    <view wx:if="{{!ordersLoaded}}" class="ohint">加载中…</view>
+    <view wx:elif="{{!orders.length}}" class="ohint">暂无订单</view>
+    <view class="orow" wx:for="{{orders}}" wx:key="id">
+      <view class="oi">
+        <view class="os">{{item.service}}</view>
+        <view class="od">{{item.date}}{{item.time ? ' ' + item.time : ''}}</view>
+      </view>
+      <view class="or">
+        <text class="op">{{item.price}}</text>
+        <text class="ost {{item.done ? 'done' : ''}}">{{item.statusLabel}}</text>
+      </view>
+    </view>
+  </view>
+</view>

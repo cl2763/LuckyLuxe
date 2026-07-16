@@ -1,0 +1,20 @@
+<view class="page">
+  <view class="owner">
+    <view class="oav">{{name[0]}}</view>
+    <view class="oinfo">
+      <view class="oname">{{name}}</view>
+      <view class="oplan">Lucky Luxe · {{isOwner ? '老板' : '员工'}}</view>
+    </view>
+  </view>
+
+  <block wx:for="{{groups}}" wx:key="title" wx:for-item="g">
+    <view class="grp">{{g.title}}</view>
+    <view class="row" wx:for="{{g.rows}}" wx:key="k" wx:for-item="r" data-k="{{r.k}}" bindtap="go">
+      <view class="badge"><image class="bic" src="/assets/icons/{{r.icon}}.svg" /></view>
+      <view class="rmain"><view class="rt">{{r.t}}</view><view class="rd">{{r.d}}</view></view>
+      <view class="chev">›</view>
+    </view>
+  </block>
+
+  <merchant-tabbar active="manage"></merchant-tabbar>
+</view>

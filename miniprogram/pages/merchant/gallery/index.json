@@ -1,0 +1,6 @@
+{
+  "navigationBarTitleText": "作品图库",
+  "usingComponents": {
+    "merchant-tabbar": "/components/merchant-tabbar/index"
+  }
+}

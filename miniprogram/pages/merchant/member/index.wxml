@@ -1,0 +1,46 @@
+<view class="page">
+  <view class="seg">
+    <text class="s {{seg===0?'on':''}}" data-i="0" bindtap="onSeg">充值套餐</text>
+    <text class="s {{seg===1?'on':''}}" data-i="1" bindtap="onSeg">会员次卡</text>
+    <text class="s {{seg===2?'on':''}}" data-i="2" bindtap="onSeg">优惠券</text>
+  </view>
+
+  <!-- 充值套餐 -->
+  <block wx:if="{{seg===0}}">
+    <view class="card" wx:for="{{recharges}}" wx:key="id">
+      <view class="crow" data-id="{{item.id}}" data-type="recharge" bindtap="edit">
+        <view class="ci"><view class="cn {{item.active?'':'off'}}">{{item.name}}</view><view class="cs">{{item.sub}}</view></view>
+        <switch class="sw" checked="{{item.active}}" color="#c8a47e" data-id="{{item.id}}" data-type="recharge" data-active="{{item.active}}" catchchange="toggle" />
+      </view>
+    </view>
+    <view wx:if="{{!recharges.length}}" class="empty">还没有充值套餐</view>
+  </block>
+
+  <!-- 会员次卡 -->
+  <block wx:elif="{{seg===1}}">
+    <view class="card" wx:for="{{timesCards}}" wx:key="id">
+      <view class="crow" data-id="{{item.id}}" data-type="times" bindtap="edit">
+        <view class="ci"><view class="cn {{item.active?'':'off'}}">{{item.name}}</view><view class="cs">{{item.sub}}</view></view>
+        <switch class="sw" checked="{{item.active}}" color="#c8a47e" data-id="{{item.id}}" data-type="times" data-active="{{item.active}}" catchchange="toggle" />
+      </view>
+    </view>
+    <view wx:if="{{!timesCards.length}}" class="empty">还没有会员次卡</view>
+  </block>
+
+  <!-- 优惠券 -->
+  <block wx:else>
+    <view class="card" wx:for="{{coupons}}" wx:key="id">
+      <view class="crow" data-id="{{item.id}}" data-type="coupon" bindtap="edit">
+        <view class="ci"><view class="cn {{item.active?'':'off'}}">{{item.name}}</view><view class="cs">{{item.sub}}</view></view>
+        <switch class="sw" checked="{{item.active}}" color="#c8a47e" data-id="{{item.id}}" data-type="coupon" data-active="{{item.active}}" catchchange="toggle" />
+      </view>
+    </view>
+    <view wx:if="{{!coupons.length}}" class="empty">还没有优惠券</view>
+  </block>
+
+  <view class="add" bindtap="add">＋ 新增{{segs[seg]}}</view>
+
+  <view class="divider"></view>
+  <view class="manual" bindtap="manualRecharge">给会员加储值(手动 / 线下)</view>
+  <view class="note"><text class="b">两种到账:</text>①顾客小程序在线直充(微信支付,自动到账,待上线);②线下 / 现金,老板在这里手动补录。均记为储值负债,耗卡时才确认收入。手动加储值需先在财务页解锁。</view>
+</view>

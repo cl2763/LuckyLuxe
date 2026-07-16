@@ -1,0 +1,90 @@
+<view class="page">
+  <view class="monthbar">
+    <view class="marrow" bindtap="prevMonth">‹</view>
+    <view class="mtext">{{monthText}}</view>
+    <view class="marrow" bindtap="nextMonth">›</view>
+  </view>
+  <view class="weekhead"><view wx:for="{{weekHead}}" wx:key="*this" class="wh">{{item}}</view></view>
+  <view class="calgrid">
+    <view wx:for="{{cells}}" wx:key="key" class="cell {{item.sel?'sel':''}} {{item.blank?'blank':''}} {{item.closed?'closed':''}}" data-d="{{item.date}}" bindtap="pickDay">
+      <block wx:if="{{!item.blank}}">
+        <view class="cd">{{item.day}}</view>
+        <view wx:if="{{item.closed}}" class="cc rest">休</view>
+        <view wx:elif="{{item.working}}" class="cc">{{item.working}}人</view>
+      </block>
+    </view>
+  </view>
+
+  <view class="dayhead">
+    <text class="dh-t">{{selText}}</text>
+    <view class="batchbtn" bindtap="openSheet" wx:if="{{role==='owner'}}">批量上/休</view>
+  </view>
+
+  <view wx:if="{{!rows.length}}" class="empty">暂无技师</view>
+  <view class="row" wx:for="{{rows}}" wx:key="techId">
+    <view class="rleft">
+      <view class="av">{{item.av}}</view>
+      <view class="rinfo">
+        <view class="rname">{{item.name}}</view>
+        <view class="rsub">{{item.isWorking ? item.startTime + '–' + item.endTime : (item.noRecord ? '未排班' : '休息')}}</view>
+      </view>
+    </view>
+    <view class="rright">
+      <block wx:if="{{item.isWorking && role==='owner'}}">
+        <picker mode="time" value="{{item.startTime}}" data-i="{{index}}" bindchange="onStart"><view class="tpick">{{item.startTime}}</view></picker>
+        <text class="dash">–</text>
+        <picker mode="time" value="{{item.endTime}}" data-i="{{index}}" bindchange="onEnd"><view class="tpick">{{item.endTime}}</view></picker>
+      </block>
+      <view class="tog {{item.isWorking?'on':''}}" data-i="{{index}}" bindtap="toggleWork">{{item.isWorking?'上班':'休息'}}</view>
+    </view>
+  </view>
+
+  <view class="bksec" wx:if="{{dayBookings.length}}">
+    <view class="bkhead">本日预约 <text class="bkn">{{dayBookings.length}}</text></view>
+    <view class="bkrow" wx:for="{{dayBookings}}" wx:key="id">
+      <view class="bktime">{{item.time}}</view>
+      <view class="bkmain">
+        <view class="bkname">{{item.customer}}<text class="bkcare" wx:if="{{item.care}}"> · {{item.care}}</text></view>
+        <view class="bksub">{{item.service}}{{item.tech ? ' · ' + item.tech : ''}}</view>
+      </view>
+      <view class="bktag">{{item.status}}</view>
+    </view>
+  </view>
+
+  <view class="applybtn" bindtap="applyFuture" wx:if="{{role==='owner'}}">本周模式套用未来 4 周</view>
+
+  <view class="reqsec" wx:if="{{requests.length}}">
+    <view class="reqhead">排班申请 <text class="reqn">{{requests.length}}</text></view>
+    <view class="reqcard" wx:for="{{requests}}" wx:key="id">
+      <view class="reqline">{{item.technicianName}} 申请 {{item.date}} 调整</view>
+      <view class="reqnote" wx:if="{{item.note}}">留言:{{item.note}}</view>
+      <view class="reqbtns" wx:if="{{role==='owner'}}">
+        <view class="rb p" data-id="{{item.id}}" data-action="set-off" bindtap="resolveReq">批准并设休息</view>
+        <view class="rb" data-id="{{item.id}}" data-action="handled" bindtap="resolveReq">已手动调整</view>
+        <view class="rb d" data-id="{{item.id}}" data-action="reject" bindtap="resolveReq">拒绝</view>
+      </view>
+    </view>
+  </view>
+
+  <view wx:if="{{sheet}}" class="mask" bindtap="closeSheet"></view>
+  <view wx:if="{{sheet}}" class="sheet">
+    <view class="sh-bar"></view>
+    <view class="sh-title">批量设置排班 · {{selText}}</view>
+    <view class="sh-techs">
+      <view wx:for="{{techs}}" wx:key="id" class="sh-tech {{sheetSel[item.id]?'on':''}}" data-id="{{item.id}}" bindtap="sheetToggleTech">
+        <view class="ck">{{sheetSel[item.id]?'✓':''}}</view><text>{{item.name}}</text>
+      </view>
+    </view>
+    <view class="sh-mode">
+      <view class="mopt {{sheetMode==='work'?'on':''}}" data-m="work" bindtap="sheetMode">上班</view>
+      <view class="mopt {{sheetMode==='off'?'on':''}}" data-m="off" bindtap="sheetMode">休息</view>
+    </view>
+    <view class="sh-time" wx:if="{{sheetMode==='work'}}">
+      <text class="sh-lb">时段</text>
+      <picker mode="time" value="{{sheetStart}}" bindchange="sheetStartChange"><view class="tpick">{{sheetStart}}</view></picker>
+      <text class="dash">–</text>
+      <picker mode="time" value="{{sheetEnd}}" bindchange="sheetEndChange"><view class="tpick">{{sheetEnd}}</view></picker>
+    </view>
+    <view class="sh-btns"><view class="sbtn" bindtap="closeSheet">取消</view><view class="sbtn p" bindtap="sheetApply">应用到选中</view></view>
+  </view>
+</view>

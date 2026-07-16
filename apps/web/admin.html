@@ -4,7 +4,7 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Lucky Luxe Admin</title>
-    <link rel="stylesheet" href="/web/styles.css?v=20260706-walk3">
+    <link rel="stylesheet" href="/web/styles.css?v=20260716-member">
   </head>
   <body>
     <main class="shell admin-shell">
@@ -64,6 +64,7 @@
           <button class="sidebar-link" data-admin-page="customers" id="sidebarCustomers" type="button">客户档案</button>
           <button class="sidebar-link" data-admin-page="schedule" id="sidebarSchedule" type="button">排班管理</button>
           <button class="sidebar-link" data-admin-page="services" id="sidebarServices" type="button">服务管理</button>
+          <button class="sidebar-link" data-admin-page="membership" id="sidebarMembership" type="button">会员套餐/券</button>
           <button class="sidebar-link" data-admin-page="wechatMock" id="sidebarWechatMock" type="button"><span id="sidebarWechatMockLabel">客服工作台</span><span class="sidebar-badge hidden" id="wechatNeedsHumanBadge"></span></button>
           <button class="sidebar-link" data-admin-page="aiGallery" id="sidebarAiGallery" type="button">AI 图库</button>
           <button class="sidebar-link" data-admin-page="storeSettings" id="sidebarStoreSettings" type="button">门店设置</button>
@@ -181,6 +182,29 @@
               </div>
               <div id="serviceEditor"></div>
               <div class="service-admin-list" id="serviceAdminList"></div>
+            </section>
+          </section>
+
+          <section class="admin-page hidden" id="membershipPage">
+            <button class="ghost back-btn" data-admin-page="dashboard" type="button">← Dashboard</button>
+            <section class="admin-card">
+              <div class="section-row compact-row">
+                <h2>充值套餐 / 会员次卡</h2>
+                <div>
+                  <button class="ghost slim" id="addRechargeButton" type="button">+ 充值套餐</button>
+                  <button class="ghost slim" id="addTimesButton" type="button">+ 次卡</button>
+                </div>
+              </div>
+              <p class="subtle" style="margin:2px 0 10px">套餐/次卡的定义(售价、赠送、次数)。顾客购买与核销在顾客小程序侧。</p>
+              <div class="service-admin-list" id="packageAdminList"></div>
+            </section>
+            <section class="admin-card">
+              <div class="section-row compact-row">
+                <h2>优惠券</h2>
+                <button class="primary slim" id="addCouponButton" type="button">新增优惠券</button>
+              </div>
+              <p class="subtle" style="margin:2px 0 10px">发券与到店核销在后续版本接入,这里先定义券。</p>
+              <div class="service-admin-list" id="couponAdminList"></div>
             </section>
           </section>
 
@@ -399,6 +423,6 @@
     </main>
 
     <div class="toast" id="toast"></div>
-    <script src="/web/admin.js?v=20260706-walk3"></script>
+    <script src="/web/admin.js?v=20260716-member"></script>
   </body>
 </html>

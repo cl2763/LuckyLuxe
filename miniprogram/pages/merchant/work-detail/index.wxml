@@ -1,0 +1,28 @@
+<view class="page">
+  <image class="hero" src="{{curImg}}" mode="aspectFill" bindtap="previewCur" />
+  <scroll-view wx:if="{{images.length>1}}" class="strip" scroll-x>
+    <image wx:for="{{images}}" wx:key="*this" class="sthumb {{curImg===item?'on':''}}" src="{{item}}" mode="aspectFill" data-img="{{item}}" bindtap="pickImg" />
+  </scroll-view>
+  <view class="wtitle">{{title}}</view>
+
+  <view class="seg">
+    <text class="s {{pIdx===index?'on':''}}" wx:for="{{platforms}}" wx:key="k" data-i="{{index}}" bindtap="onPlatform">{{item.label}}</text>
+  </view>
+
+  <view class="gen {{loading?'off':''}}" bindtap="generate">{{loading?'生成中…':(result?'换一版文案':'生成 AI 文案')}}</view>
+
+  <block wx:if="{{result}}">
+    <view class="card">
+      <view class="lab">标题</view><view class="ct">{{result.title}}</view>
+      <view class="lab">正文</view><view class="cp">{{result.caption}}</view>
+      <view class="lab">话题标签</view><view class="tg">{{result.hashtags}}</view>
+      <view wx:if="{{result.styleTags}}" class="style">风格:{{result.styleTags}}</view>
+    </view>
+    <view class="btns">
+      <view class="b p" bindtap="copyAll">复制文案</view>
+      <view class="b" bindtap="saveImage">保存图片</view>
+    </view>
+  </block>
+
+  <view class="note">生成后「复制文案 + 保存图片」,在微信一起发给顾客,让顾客/自己去小红书、抖音发布。不满意点「换一版文案」。</view>
+</view>

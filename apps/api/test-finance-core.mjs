@@ -39,6 +39,7 @@ async function main() {
   if (!FIN_KEY) throw new Error('finance unlock failed: ' + JSON.stringify(unlockRes.data))
   const created = []
   let ruleId = ''
+  let pendingBookingRestore = ''
   try {
     // 1. 手工记账 + 汇总数学
     const before = await summaryNow()
@@ -68,17 +69,25 @@ async function main() {
     check('double reversal rejected', doubleReverse.status === 400, String(doubleReverse.status))
 
     // 3. 订单完成自动入账 → 幂等 → 取消冲销归零
+    // 账本只追加:活库上同一订单可能带着往日测试留下的历史账目,断言只看本次运行新增的条目
     const bookings = (await request('/admin/bookings')).data.bookings || []
     const target = bookings.find((item) => ['CANCELLED', 'EXPIRED'].includes(item.status) && (item.servicePriceCents || 0) > 0)
     check('found a booking to exercise auto-ingest', Boolean(target), `bookings=${bookings.length}`)
+    const priorTxnIds = new Set(((await request('/admin/finance/transactions')).data.transactions || [])
+      .filter((item) => item.bookingId === target.id)
+      .map((item) => item.id))
+    const newTxnsForTarget = async () => ((await request('/admin/finance/transactions')).data.transactions || [])
+      .filter((item) => item.bookingId === target.id && !priorTxnIds.has(item.id))
+    pendingBookingRestore = target.id
     await request(`/admin/bookings/${target.id}/status`, { method: 'PATCH', body: JSON.stringify({ status: 'COMPLETED' }) })
-    let txns = (await request('/admin/finance/transactions')).data.transactions.filter((item) => item.bookingId === target.id && item.source === 'booking')
+    let txns = (await newTxnsForTarget()).filter((item) => item.source === 'booking')
     check('booking completion auto-creates income', txns.length === 1 && txns[0].amountCents === target.servicePriceCents, JSON.stringify(txns))
     await request(`/admin/bookings/${target.id}/status`, { method: 'PATCH', body: JSON.stringify({ status: 'COMPLETED' }) })
-    txns = (await request('/admin/finance/transactions')).data.transactions.filter((item) => item.bookingId === target.id && item.source === 'booking')
+    txns = (await newTxnsForTarget()).filter((item) => item.source === 'booking')
     check('repeat completion is idempotent', txns.length === 1, String(txns.length))
     await request(`/admin/bookings/${target.id}/status`, { method: 'PATCH', body: JSON.stringify({ status: 'CANCELLED' }) })
-    const allForBooking = (await request('/admin/finance/transactions')).data.transactions.filter((item) => item.bookingId === target.id)
+    pendingBookingRestore = ''
+    const allForBooking = await newTxnsForTarget()
     const bookingNet = allForBooking.reduce((sum, item) => sum + item.amountCents, 0)
     check('cancellation reverses income, booking net = 0', allForBooking.length >= 2 && bookingNet === 0, JSON.stringify({ count: allForBooking.length, bookingNet }))
 
@@ -116,6 +125,10 @@ async function main() {
 
     console.log(`[finance-core] all ${checks} checks passed`)
   } finally {
+    // 清理:若订单周期中途失败,先把订单退回取消态(服务器会自动冲销入账,账本净额归零)
+    if (pendingBookingRestore) {
+      await request(`/admin/bookings/${pendingBookingRestore}/status`, { method: 'PATCH', body: JSON.stringify({ status: 'CANCELLED' }) }).catch(() => {})
+    }
     // 清理:冲销测试产生的净影响,停用规则(冲销其生成的支出)
     const list = (await request('/admin/finance/transactions')).data.transactions || []
     for (const txn of list) {

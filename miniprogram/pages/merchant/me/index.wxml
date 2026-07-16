@@ -1,0 +1,27 @@
+<view class="page">
+  <view class="hero">
+    <view class="av">{{name ? name[0] : '店'}}</view>
+    <view class="info">
+      <view class="name">{{name || '店主'}}</view>
+      <view class="role">{{role}}</view>
+      <view class="acct" wx:if="{{account}}">账号 {{account}}</view>
+    </view>
+  </view>
+
+  <view class="group">
+    <view class="row" bindtap="changePwd">
+      <text class="t">修改密码</text><text class="arr">›</text>
+    </view>
+    <view class="row" bindtap="finance">
+      <text class="t">财务密码</text>
+      <text class="tag {{financeOn ? 'on' : ''}}">{{financeOn ? '本次已解锁' : '去财务页设置'}}</text>
+      <text class="arr">›</text>
+    </view>
+    <view class="row" bindtap="lang">
+      <text class="t">语言 / Language</text><text class="v">简体中文</text><text class="arr">›</text>
+    </view>
+  </view>
+
+  <view class="out" bindtap="logout">退出登录</view>
+  <view class="ver">Lucky Luxe 商家端</view>
+</view>

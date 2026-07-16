@@ -1,0 +1,24 @@
+<view class="page">
+  <view class="month">{{monthText}} · 本月完成 {{doneCount}} 单</view>
+
+  <view wx:if="{{loading}}" class="empty">加载中…</view>
+
+  <block wx:elif="{{hasComp}}">
+    <view class="hero">
+      <view class="hl">预估应发合计</view>
+      <view class="hv">{{e.total}}</view>
+      <view class="hn">底薪 + 提成,以老板月末核算为准</view>
+    </view>
+    <view class="rows">
+      <view class="r"><text class="k">本月个人营收</text><text class="v">{{e.revenue}}</text></view>
+      <view class="r"><text class="k">底薪</text><text class="v">{{e.base}}</text></view>
+      <view class="r"><text class="k">提成比例</text><text class="v">{{e.rate}}%</text></view>
+      <view class="r"><text class="k">提成估算</text><text class="v">{{e.commission}}</text></view>
+    </view>
+    <view class="note">仅显示你本人的业绩与薪酬估算,其他同事数据不可见。最终以门店月末结算为准。</view>
+  </block>
+
+  <block wx:else>
+    <view class="empty">老板还没为你配置薪酬方案。<view class="sub">配置后这里会显示本月营收、底薪与提成估算。</view></view>
+  </block>
+</view>

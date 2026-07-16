@@ -1,0 +1,6 @@
+.mtab{position:fixed;left:0;right:0;bottom:0;display:flex;background:#fff;border-top:1rpx solid #e7ddd4;padding:10rpx 0 calc(10rpx + env(safe-area-inset-bottom));z-index:50}
+.tab{flex:1;display:flex;flex-direction:column;align-items:center;gap:4rpx}
+.ic{width:44rpx;height:44rpx;opacity:.4}
+.tx{font-size:20rpx;color:#b6a99b}
+.tab.on .ic{opacity:1}
+.tab.on .tx{color:#9b7655}

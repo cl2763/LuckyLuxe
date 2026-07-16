@@ -1,0 +1,16 @@
+.entry{position:relative;width:100vw;height:100vh;overflow:hidden}
+.bg{position:absolute;top:0;left:0;width:100%;height:100%;filter:blur(6rpx);transform:scale(1.08)}
+.mask{position:absolute;top:0;left:0;right:0;bottom:0;background:linear-gradient(180deg,rgba(30,24,20,.22),rgba(30,24,20,.08) 42%,rgba(30,24,20,.58))}
+.wrap{position:absolute;top:0;left:0;right:0;bottom:0;display:flex;flex-direction:column;padding:0 0 100rpx}
+.content{flex:1;display:flex;flex-direction:column;align-items:center;justify-content:center}
+.brand{font-family:Georgia,"Times New Roman","Songti SC",serif;font-size:74rpx;letter-spacing:6rpx;color:#fff;text-shadow:0 4rpx 26rpx rgba(0,0,0,.78)}
+.slogan{margin-top:24rpx;font-size:26rpx;letter-spacing:8rpx;color:#fff;text-shadow:0 2rpx 16rpx rgba(0,0,0,.82)}
+.doors{display:flex;flex-direction:column;align-items:center}
+.door{width:452rpx;border-radius:26rpx;padding:26rpx;text-align:center;margin-bottom:24rpx}
+.dh{opacity:.9}
+.door.primary{background:rgba(255,255,255,.94)}
+.door.ghost{background:rgba(30,24,20,.60);border:1rpx solid rgba(255,255,255,.34)}
+.dt{font-size:30rpx;font-weight:600;color:#2d2826}
+.dt.light{color:#fff}
+.ds{font-size:22rpx;color:#8c8279;margin-top:8rpx}
+.ds.dim{color:#e8dccf}

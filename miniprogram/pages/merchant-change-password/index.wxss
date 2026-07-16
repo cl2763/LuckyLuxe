@@ -1,0 +1,12 @@
+page{background:#fbf8f5}
+.cp{padding:56rpx 44rpx}
+.head{margin-bottom:40rpx}
+.title{font-size:38rpx;font-weight:600;color:#2d2826}
+.sub{font-size:24rpx;color:#8c8279;margin-top:12rpx;line-height:1.5}
+.label{font-size:24rpx;color:#8c8279;margin:0 0 12rpx 4rpx}
+.field{height:92rpx;background:#fff;border:1rpx solid #e7ddd4;border-radius:18rpx;display:flex;align-items:center;padding:0 24rpx;margin-bottom:24rpx}
+.inp{flex:1;font-size:30rpx;color:#2d2826}
+.ph{color:#b6a99b}
+.btn{height:92rpx;line-height:92rpx;background:#c8a47e;color:#fff;font-size:32rpx;border-radius:18rpx;font-weight:500;margin-top:16rpx}
+.btn::after{border:none}
+.hint{text-align:center;font-size:23rpx;color:#8c8279;margin-top:24rpx}

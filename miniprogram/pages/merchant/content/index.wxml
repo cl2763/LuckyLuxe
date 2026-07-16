@@ -1,0 +1,33 @@
+<view class="page">
+  <view class="seg">
+    <text class="s {{pIdx===index?'on':''}}" wx:for="{{platforms}}" wx:key="k" data-i="{{index}}" bindtap="onPlatform">{{item.label}}</text>
+  </view>
+
+  <view class="pick" bindtap="pickWork">
+    <view class="pl">
+      <view class="pt">{{picked ? picked.label : '选一组完工作品(图库已有)'}}</view>
+      <view class="pd">按作品自动配文案 · 生成后自己复制去发</view>
+    </view>
+    <text class="arr">›</text>
+  </view>
+
+  <view class="gen {{loading?'off':''}}" bindtap="generate">{{loading ? '生成中…' : (result ? '换一版' : '生成文案')}}</view>
+
+  <block wx:if="{{result}}">
+    <view class="card">
+      <view class="lab">标题</view>
+      <view class="title">{{result.title}}</view>
+      <view class="lab">正文</view>
+      <view class="caption">{{result.caption}}</view>
+      <view class="lab">话题标签</view>
+      <view class="tags">{{result.hashtags}}</view>
+      <view wx:if="{{result.styleTags}}" class="style">风格:{{result.styleTags}}</view>
+    </view>
+    <view class="btns">
+      <view class="b p" bindtap="copyAll">复制全文</view>
+      <view class="b" bindtap="copyTags">只复制标签</view>
+    </view>
+  </block>
+
+  <view class="note">文案由 AI 按作品生成,不自动发布——复制后到小红书 / 抖音粘贴即可。不满意点「换一版」。</view>
+</view>

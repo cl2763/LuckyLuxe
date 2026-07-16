@@ -8,6 +8,20 @@ function assert(condition, message) {
   if (!condition) throw new Error(message)
 }
 
+// 与 local-server.mjs 的 dateFromMonthDay 同规则:按门店时区取"今天",
+// 客人只说月.日(如 7.6)时,若该日期今年已过则理解为明年。
+function expectedUpcomingDate(month, day) {
+  const today = new Intl.DateTimeFormat('en-CA', {
+    timeZone: 'America/Toronto',
+    year: 'numeric',
+    month: '2-digit',
+    day: '2-digit'
+  }).format(new Date())
+  const year = Number(today.slice(0, 4))
+  const candidate = `${year}-${String(month).padStart(2, '0')}-${String(day).padStart(2, '0')}`
+  return candidate < today ? `${year + 1}${candidate.slice(4)}` : candidate
+}
+
 async function request(path, options = {}) {
   const response = await fetch(`${BASE_URL}${path}`, {
     ...options,
@@ -307,7 +321,8 @@ async function main() {
   const looseDateQuote = await latestQuoteFor(looseDateCustomer)
   assert(looseDateQuote, 'loose month/day intake should create quote request')
   const looseIntake = looseDateQuote.styleElements?.quoteIntake || {}
-  assert(looseIntake.bookingDate === '2026-07-06', `loose 7.6 date should parse as 2026-07-06, got ${looseIntake.bookingDate}`)
+  const expectedLooseDate = expectedUpcomingDate(7, 6)
+  assert(looseIntake.bookingDate === expectedLooseDate, `loose 7.6 date should parse as ${expectedLooseDate}, got ${looseIntake.bookingDate}`)
   assert(looseIntake.bookingTime === '15:00', `loose 下午3点 should parse as 15:00, got ${looseIntake.bookingTime}`)
 
   const firstLashCustomer = `sim-test-firstlash-${RUN_ID}`

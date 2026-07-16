@@ -1,0 +1,56 @@
+<view class="page">
+  <view class="seg">
+    <text class="s {{seg===0?'on':''}}" data-i="0" bindtap="onSeg">展示图库</text>
+    <text class="s {{seg===1?'on':''}}" data-i="1" bindtap="onSeg">作品管理</text>
+  </view>
+
+  <view wx:if="{{loading}}" class="empty">加载中…</view>
+
+  <!-- 展示图库(对外):纯图墙,点开出文案 -->
+  <block wx:elif="{{seg===0}}">
+    <view wx:if="{{!showcase.length}}" class="empty">还没有已发布的作品,去「作品管理」上传发布</view>
+    <view class="grid">
+      <view class="gcell" wx:for="{{showcase}}" wx:key="id" data-id="{{item.id}}" bindtap="openWork">
+        <image class="gimg" src="{{item.cover}}" mode="aspectFill" />
+        <view wx:if="{{item.count>1}}" class="gcount">{{item.count}}图</view>
+        <view class="gcap">{{item.service}}{{item.tech ? ' · ' + item.tech : ''}}</view>
+      </view>
+    </view>
+    <view wx:if="{{showcase.length}}" class="note">点任意作品 → 生成 AI 文案,把「图 + 文案」发给顾客或自己去各平台发布。</view>
+  </block>
+
+  <!-- 作品管理:上传/审核/发布 -->
+  <block wx:else>
+    <view class="tipbar">
+      <text class="tip1">{{pendingUpload}} 单待上传作品图</text>
+      <text class="tip2">{{pendingPublish}} 单待审核发布</text>
+    </view>
+    <view wx:if="{{!items.length}}" class="empty">还没有已完成的订单</view>
+    <view class="card" wx:for="{{items}}" wx:key="id">
+      <view class="head">
+        <view class="hinfo">
+          <view class="hname">{{item.customer}} · {{item.service}}</view>
+          <view class="hdate">{{item.date}}</view>
+        </view>
+        <text class="badge {{item.state}}">{{item.state==='published'?'已发布':(item.state==='topublish'?'待发布':'待上传')}}</text>
+      </view>
+      <scroll-view wx:if="{{item.count}}" class="thumbs" scroll-x>
+        <image wx:for="{{item.images}}" wx:for-item="img" wx:key="*this" class="thumb" src="{{img}}" mode="aspectFill"
+          data-urls="{{item.images}}" data-cur="{{img}}" bindtap="preview" />
+      </scroll-view>
+      <view wx:else class="noimg">暂无作品图</view>
+      <view class="acts">
+        <block wx:if="{{item.state==='published'}}">
+          <view class="b p" data-id="{{item.id}}" bindtap="openWork">生成文案 / 对外展示</view>
+        </block>
+        <block wx:else>
+          <view class="b" data-id="{{item.id}}" bindtap="upload">{{item.count?'继续上传':'上传作品图'}}</view>
+          <view wx:if="{{item.count}}" class="b p" data-id="{{item.id}}" bindtap="publish">审核发布</view>
+        </block>
+      </view>
+    </view>
+    <view class="note">发布后作品进入「展示图库」并锁定,可点开生成文案发给顾客。正式环境作品图需接入图片存储,当前上传用于本机预览与流程演示。</view>
+  </block>
+
+  <merchant-tabbar active="gallery"></merchant-tabbar>
+</view>

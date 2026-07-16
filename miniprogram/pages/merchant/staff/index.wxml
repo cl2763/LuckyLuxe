@@ -1,0 +1,28 @@
+<view class="page">
+  <view class="topbar">
+    <text class="h1">员工管理</text>
+    <view class="addbtn" bindtap="addTech">＋ 新增员工</view>
+  </view>
+
+  <view wx:if="{{!list.length}}" class="empty">还没有技师</view>
+  <view class="card" wx:for="{{list}}" wx:key="id">
+    <view class="top">
+      <view class="av">{{item.av}}</view>
+      <view class="info">
+        <view class="name">{{item.name}} <text class="ttl" wx:if="{{item.title}}">{{item.title}}</text></view>
+        <view class="acct" wx:if="{{item.acct}}">账号 {{item.acct.username}}{{item.acct.disabled ? ' · 已停用' : ''}}</view>
+        <view class="acct none" wx:else>未开账号</view>
+      </view>
+      <view class="tag {{item.active ? 's' : 'n'}}">{{item.active ? '在职' : '已停用'}}</view>
+    </view>
+    <view class="btns">
+      <block wx:if="{{item.acct}}">
+        <view class="b" data-acctid="{{item.acct.id}}" bindtap="resetPwd">重置密码</view>
+        <view class="b {{item.acct.disabled ? 'p' : 'd'}}" data-acctid="{{item.acct.id}}" bindtap="toggleAcct">{{item.acct.disabled ? '启用账号' : '停用账号'}}</view>
+      </block>
+      <view wx:else class="b p full" data-id="{{item.id}}" bindtap="genAccount">生成登录账号</view>
+    </view>
+  </view>
+
+  <view class="note">「停用」保留排班/业绩历史,账号即刻失效(离职用);员工首次登录会强制改密。</view>
+</view>

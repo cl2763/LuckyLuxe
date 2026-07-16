@@ -1,0 +1,15 @@
+page{background:#fbf8f5}
+.page{padding:22rpx 26rpx 60rpx}
+.month{font-size:23rpx;color:#8c8279;margin:4rpx 4rpx 16rpx}
+.empty{text-align:center;color:#8c8279;font-size:25rpx;padding:70rpx 30rpx;line-height:1.7}
+.empty .sub{font-size:22rpx;color:#b6a99b;margin-top:10rpx}
+.hero{background:#2d2826;border-radius:18rpx;padding:34rpx 26rpx;color:#fff;text-align:center}
+.hl{font-size:23rpx;color:#d8c6b3}
+.hv{font-size:60rpx;font-weight:700;margin:10rpx 0 6rpx;color:#e7c9a4}
+.hn{font-size:21rpx;color:#b6a99b}
+.rows{background:#fff;border:1rpx solid #e7ddd4;border-radius:16rpx;margin-top:16rpx;overflow:hidden}
+.r{display:flex;justify-content:space-between;align-items:center;padding:24rpx 22rpx;border-bottom:1rpx solid #f1e7df}
+.r:last-child{border-bottom:none}
+.k{font-size:25rpx;color:#8c8279}
+.v{font-size:26rpx;color:#2d2826;font-weight:600}
+.note{font-size:21rpx;color:#b6a99b;line-height:1.6;margin-top:18rpx}

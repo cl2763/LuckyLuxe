@@ -1,0 +1,40 @@
+<view class="cpage">
+  <view class="cust">
+    <view class="prow">
+      <view class="tag {{cls}}">{{label}}</view>
+      <text class="cust-name">{{name}}</text>
+      <text class="bind" wx:if="{{!profile}}">未绑定会员</text>
+    </view>
+    <block wx:if="{{profile}}">
+      <view class="prow info">
+        <view class="tag g">{{profile.tier}}</view>
+        <text class="pi">到店{{profile.visits}}次</text>
+        <text class="pi">最近到店{{profile.lastText}}</text>
+        <text class="pi">储值${{profile.stored}}</text>
+        <text class="viewdoc" bindtap="viewProfile">查看档案 ›</text>
+      </view>
+      <view class="prow tags" wx:if="{{profile.tags.length || profile.note}}">
+        <view wx:for="{{profile.tags}}" wx:key="*this" class="ptag">{{item}}</view>
+        <text wx:if="{{profile.note}}" class="pnote">📌 {{profile.note}}</text>
+      </view>
+    </block>
+  </view>
+
+  <scroll-view scroll-y class="thread">
+    <view wx:for="{{transcript}}" wx:key="index" class="row {{item.side}}">
+      <view class="bub {{item.side}}">{{item.content}}</view>
+    </view>
+    <view wx:if="{{needsHuman}}" class="needbanner">此处需人工 · AI 已暂停</view>
+  </scroll-view>
+
+  <view class="bottom">
+    <view class="acts">
+      <view class="abtn {{isHuman?'ghost':'p'}}" bindtap="takeOver">接管</view>
+      <view class="abtn {{isHuman?'p':'ghost'}}" bindtap="release">归还 AI</view>
+    </view>
+    <view class="replybar">
+      <input class="rinp" placeholder="输入人工回复…" placeholder-class="ph" value="{{reply}}" bindinput="onReply" confirm-type="send" bindconfirm="send" />
+      <view class="send {{sending?'dim':''}}" bindtap="send">发送</view>
+    </view>
+  </view>
+</view>

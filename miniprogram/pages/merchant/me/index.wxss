@@ -1,0 +1,18 @@
+page{background:#fbf8f5}
+.page{padding:26rpx 26rpx 60rpx}
+.hero{display:flex;align-items:center;gap:20rpx;background:#fff;border:1rpx solid #e7ddd4;border-radius:18rpx;padding:26rpx 24rpx;margin-bottom:22rpx}
+.av{width:96rpx;height:96rpx;border-radius:50%;background:#f1e7df;color:#9b7655;display:flex;align-items:center;justify-content:center;font-size:40rpx;font-weight:600;flex:0 0 auto}
+.info{flex:1;min-width:0}
+.name{font-size:32rpx;font-weight:600;color:#2d2826}
+.role{font-size:23rpx;color:#9b7655;margin-top:6rpx}
+.acct{font-size:22rpx;color:#8c8279;margin-top:6rpx}
+.group{background:#fff;border:1rpx solid #e7ddd4;border-radius:18rpx;overflow:hidden;margin-bottom:30rpx}
+.row{display:flex;align-items:center;padding:26rpx 24rpx;border-bottom:1rpx solid #f1e7df}
+.row:last-child{border-bottom:none}
+.t{flex:1;font-size:27rpx;color:#2d2826}
+.v{font-size:24rpx;color:#8c8279;margin-right:10rpx}
+.tag{font-size:21rpx;color:#8c8279;background:#fbf8f5;border:1rpx solid #e7ddd4;border-radius:40rpx;padding:4rpx 14rpx;margin-right:10rpx}
+.tag.on{color:#47735f;background:#e3eee8;border-color:#cfe4d9}
+.arr{color:#c8b8a8;font-size:30rpx}
+.out{text-align:center;color:#a34c48;font-size:27rpx;background:#fff;border:1rpx solid #e7ddd4;border-radius:16rpx;padding:26rpx 0}
+.ver{text-align:center;color:#b6a99b;font-size:21rpx;margin-top:26rpx}

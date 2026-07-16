@@ -2,7 +2,7 @@ import { createServer } from 'node:http'
 import { DatabaseSync } from 'node:sqlite'
 import { createDecipheriv, createHash, createHmac } from 'node:crypto'
 import { copyFileSync, existsSync, mkdirSync, readdirSync, readFileSync, renameSync, statSync, unlinkSync, writeFileSync } from 'node:fs'
-import { dirname, extname, join, normalize } from 'node:path'
+import { dirname, extname, join, normalize, resolve } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { analyzeReferenceImage, createBookingSummary, createCustomerInsight, createCustomerServiceReply, createDailyBrief, createSocialCopy, extractKbEntriesFromDocument, polishStaffQuoteReply } from './ai-utils.mjs'
 import { buildKnowledgeContext } from './kb-utils.mjs'
@@ -13,7 +13,8 @@ const __dirname = dirname(fileURLToPath(import.meta.url))
 const workspaceRoot = join(__dirname, '..', '..')
 const webRoot = join(workspaceRoot, 'apps', 'web')
 const assetRoot = join(workspaceRoot, 'miniprogram', 'assets')
-const dataDir = join(__dirname, 'local-data')
+// DATA_DIR 环境变量可指定数据目录(测试跑临时库用);不设则维持原路径,本机/云端(Volume 挂载点)行为不变
+const dataDir = process.env.DATA_DIR ? resolve(process.env.DATA_DIR) : join(__dirname, 'local-data')
 mkdirSync(dataDir, { recursive: true })
 
 // 数据迁移:发现待导入文件时,先给现库留底份,再原子替换(配合 /admin/ops/import-db)
@@ -6190,6 +6191,114 @@ async function route(req, res) {
       WHERE id = ?`).run(payload.type, payload.category, payload.nameZh, payload.nameEn, payload.descriptionZh, payload.descriptionEn, payload.imageUrl, payload.priceCents, payload.depositCents, payload.baseDurationMin, payload.isActive, payload.sortOrder, JSON.stringify(payload.processJson), JSON.stringify(payload.noticeJson), id)
     return json(res, 200, { service: serializeService(getService(id)) })
   }
+  // ===== 会员套餐(充值套餐 / 会员次卡)定义 CRUD =====
+  if (req.method === 'GET' && path === '/admin/packages') {
+    if (adminSession.role !== 'owner') throw apiError(403, 'FORBIDDEN', 'Owner permission is required.')
+    return json(res, 200, { packages: db.prepare('SELECT * FROM membership_packages WHERE tenant_id = ? ORDER BY kind ASC, sort_order ASC, created_at ASC').all(currentTenantId()).map(serializeMembershipPackage) })
+  }
+  if (req.method === 'POST' && path === '/admin/packages') {
+    if (adminSession.role !== 'owner') throw apiError(403, 'FORBIDDEN', 'Owner permission is required.')
+    const body = await readBody(req)
+    const kind = body.kind === 'times' ? 'times' : 'recharge'
+    const name = String(body.name || '').trim()
+    if (!name) throw apiError(400, 'BAD_REQUEST', '套餐名称必填。')
+    const id = randomId('pkg')
+    db.prepare(`INSERT INTO membership_packages (id, tenant_id, kind, name, price_cents, bonus_cents, times_count, scope, benefits, is_active, sort_order, created_at)
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`).run(
+      id, currentTenantId(), kind, name,
+      Math.max(0, Math.round(Number(body.priceCents) || 0)),
+      Math.max(0, Math.round(Number(body.bonusCents) || 0)),
+      Math.max(0, Math.round(Number(body.timesCount) || 0)),
+      String(body.scope || '').slice(0, 200) || null,
+      String(body.benefits || '').slice(0, 400) || null,
+      body.isActive === false ? 0 : 1,
+      Math.round(Number(body.sortOrder) || 0), iso(new Date()))
+    return json(res, 201, { package: serializeMembershipPackage(db.prepare('SELECT * FROM membership_packages WHERE id = ?').get(id)) })
+  }
+  if (req.method === 'PATCH' && path.startsWith('/admin/packages/')) {
+    if (adminSession.role !== 'owner') throw apiError(403, 'FORBIDDEN', 'Owner permission is required.')
+    const id = path.split('/')[3]
+    const cur = db.prepare('SELECT * FROM membership_packages WHERE id = ? AND tenant_id = ?').get(id, currentTenantId())
+    if (!cur) throw apiError(404, 'NOT_FOUND', 'Package not found.')
+    const body = await readBody(req)
+    db.prepare(`UPDATE membership_packages SET kind = ?, name = ?, price_cents = ?, bonus_cents = ?, times_count = ?, scope = ?, benefits = ?, is_active = ?, sort_order = ? WHERE id = ?`).run(
+      body.kind === undefined ? cur.kind : (body.kind === 'times' ? 'times' : 'recharge'),
+      body.name === undefined ? cur.name : String(body.name).trim(),
+      body.priceCents === undefined ? cur.price_cents : Math.max(0, Math.round(Number(body.priceCents) || 0)),
+      body.bonusCents === undefined ? cur.bonus_cents : Math.max(0, Math.round(Number(body.bonusCents) || 0)),
+      body.timesCount === undefined ? cur.times_count : Math.max(0, Math.round(Number(body.timesCount) || 0)),
+      body.scope === undefined ? cur.scope : (String(body.scope).slice(0, 200) || null),
+      body.benefits === undefined ? cur.benefits : (String(body.benefits).slice(0, 400) || null),
+      body.isActive === undefined ? cur.is_active : (body.isActive ? 1 : 0),
+      body.sortOrder === undefined ? cur.sort_order : Math.round(Number(body.sortOrder) || 0), id)
+    return json(res, 200, { package: serializeMembershipPackage(db.prepare('SELECT * FROM membership_packages WHERE id = ?').get(id)) })
+  }
+  // ===== 优惠券 定义 CRUD =====
+  if (req.method === 'GET' && path === '/admin/coupons') {
+    if (adminSession.role !== 'owner') throw apiError(403, 'FORBIDDEN', 'Owner permission is required.')
+    return json(res, 200, { coupons: db.prepare('SELECT * FROM coupons WHERE tenant_id = ? ORDER BY created_at DESC').all(currentTenantId()).map(serializeCoupon) })
+  }
+  if (req.method === 'POST' && path === '/admin/coupons') {
+    if (adminSession.role !== 'owner') throw apiError(403, 'FORBIDDEN', 'Owner permission is required.')
+    const body = await readBody(req)
+    const name = String(body.name || '').trim()
+    if (!name) throw apiError(400, 'BAD_REQUEST', '优惠券名称必填。')
+    const discountType = body.discountType === 'percent' ? 'percent' : 'amount'
+    const id = randomId('cpn')
+    db.prepare(`INSERT INTO coupons (id, tenant_id, name, discount_type, amount_cents, percent_off, min_spend_cents, valid_days, total_qty, issued_qty, is_active, created_at)
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, 0, ?, ?)`).run(
+      id, currentTenantId(), name, discountType,
+      Math.max(0, Math.round(Number(body.amountCents) || 0)),
+      Math.max(0, Math.min(100, Math.round(Number(body.percentOff) || 0))),
+      Math.max(0, Math.round(Number(body.minSpendCents) || 0)),
+      Math.max(1, Math.round(Number(body.validDays) || 30)),
+      Math.max(0, Math.round(Number(body.totalQty) || 0)),
+      body.isActive === false ? 0 : 1, iso(new Date()))
+    return json(res, 201, { coupon: serializeCoupon(db.prepare('SELECT * FROM coupons WHERE id = ?').get(id)) })
+  }
+  if (req.method === 'PATCH' && path.startsWith('/admin/coupons/')) {
+    if (adminSession.role !== 'owner') throw apiError(403, 'FORBIDDEN', 'Owner permission is required.')
+    const id = path.split('/')[3]
+    const cur = db.prepare('SELECT * FROM coupons WHERE id = ? AND tenant_id = ?').get(id, currentTenantId())
+    if (!cur) throw apiError(404, 'NOT_FOUND', 'Coupon not found.')
+    const body = await readBody(req)
+    db.prepare(`UPDATE coupons SET name = ?, discount_type = ?, amount_cents = ?, percent_off = ?, min_spend_cents = ?, valid_days = ?, total_qty = ?, is_active = ? WHERE id = ?`).run(
+      body.name === undefined ? cur.name : String(body.name).trim(),
+      body.discountType === undefined ? cur.discount_type : (body.discountType === 'percent' ? 'percent' : 'amount'),
+      body.amountCents === undefined ? cur.amount_cents : Math.max(0, Math.round(Number(body.amountCents) || 0)),
+      body.percentOff === undefined ? cur.percent_off : Math.max(0, Math.min(100, Math.round(Number(body.percentOff) || 0))),
+      body.minSpendCents === undefined ? cur.min_spend_cents : Math.max(0, Math.round(Number(body.minSpendCents) || 0)),
+      body.validDays === undefined ? cur.valid_days : Math.max(1, Math.round(Number(body.validDays) || 30)),
+      body.totalQty === undefined ? cur.total_qty : Math.max(0, Math.round(Number(body.totalQty) || 0)),
+      body.isActive === undefined ? cur.is_active : (body.isActive ? 1 : 0), id)
+    return json(res, 200, { coupon: serializeCoupon(db.prepare('SELECT * FROM coupons WHERE id = ?').get(id)) })
+  }
+  // 展示图库(对外):所有技师已发布作品(owner+staff 均可读,不按角色过滤;带 bookingId 以便生成文案)
+  if (req.method === 'GET' && path === '/admin/published-works') {
+    const rows = db.prepare(`
+      SELECT b.id, b.appointment_start, b.approved_work_images_json, b.service_id, b.technician_id, t.name AS tech_name
+      FROM bookings b LEFT JOIN technicians t ON t.id = b.technician_id
+      WHERE b.gallery_status = 'approved'
+      ORDER BY b.gallery_locked_at DESC, b.appointment_start DESC
+    `).all()
+    const works = []
+    for (const row of rows) {
+      const images = parseJson(row.approved_work_images_json).filter(Boolean)
+      if (!images.length) continue
+      const svc = row.service_id ? getService(row.service_id) : null
+      works.push({
+        bookingId: row.id,
+        cover: images[0],
+        images,
+        count: images.length,
+        technicianId: row.technician_id,
+        technicianName: row.tech_name || '',
+        service: svc ? (svc.name_zh || svc.nameZh || '') : '',
+        date: localParts(row.appointment_start).date
+      })
+    }
+    return json(res, 200, { works })
+  }
   if (req.method === 'PATCH' && path.startsWith('/admin/technicians/') && path.endsWith('/schedule')) {
     if (adminSession.role !== 'owner') throw apiError(403, 'FORBIDDEN', 'Owner permission is required.')
     const technicianId = path.split('/')[3]
@@ -6251,9 +6360,8 @@ async function route(req, res) {
         specialNote: special?.note || (special ? (special.is_closed ? '特殊休息' : '特殊时段') : '')
       })
     }
-    const technicians = adminSession.role === 'staff'
-      ? db.prepare('SELECT * FROM technicians WHERE id = ?').all(adminSession.technicianId)
-      : db.prepare('SELECT * FROM technicians ORDER BY is_active DESC, name ASC').all()
+    // 排班为团队可见:员工也返回全部技师(只读),让"格子人数"与"当日名单"一致;写操作仍 owner-only
+    const technicians = db.prepare('SELECT * FROM technicians ORDER BY is_active DESC, name ASC').all()
     const dates = days.map((day) => day.date)
     const schedules = db.prepare(`SELECT technician_id, date, start_time, end_time, is_working FROM technician_schedules WHERE date IN (${dates.map(() => '?').join(',')})`)
       .all(...dates)
@@ -7300,6 +7408,69 @@ db.exec(`
     created_at TEXT NOT NULL
   );
 `)
+
+// ===== 会员套餐(充值套餐 / 会员次卡)+ 优惠券 定义 =====
+// 仅"定义"层:老板配置售卖内容。顾客购买/发券核销留待客户端阶段(另建 grants 表),此处不触碰财务与储值台账。
+db.exec(`
+  CREATE TABLE IF NOT EXISTS membership_packages (
+    id TEXT PRIMARY KEY,
+    tenant_id TEXT NOT NULL DEFAULT 'lucky-luxe',
+    kind TEXT NOT NULL DEFAULT 'recharge',
+    name TEXT NOT NULL,
+    price_cents INTEGER NOT NULL DEFAULT 0,
+    bonus_cents INTEGER NOT NULL DEFAULT 0,
+    times_count INTEGER NOT NULL DEFAULT 0,
+    scope TEXT,
+    benefits TEXT,
+    is_active INTEGER NOT NULL DEFAULT 1,
+    sort_order INTEGER NOT NULL DEFAULT 0,
+    created_at TEXT NOT NULL
+  );
+  CREATE TABLE IF NOT EXISTS coupons (
+    id TEXT PRIMARY KEY,
+    tenant_id TEXT NOT NULL DEFAULT 'lucky-luxe',
+    name TEXT NOT NULL,
+    discount_type TEXT NOT NULL DEFAULT 'amount',
+    amount_cents INTEGER NOT NULL DEFAULT 0,
+    percent_off INTEGER NOT NULL DEFAULT 0,
+    min_spend_cents INTEGER NOT NULL DEFAULT 0,
+    valid_days INTEGER NOT NULL DEFAULT 30,
+    total_qty INTEGER NOT NULL DEFAULT 0,
+    issued_qty INTEGER NOT NULL DEFAULT 0,
+    is_active INTEGER NOT NULL DEFAULT 1,
+    created_at TEXT NOT NULL
+  );
+`)
+
+function serializeMembershipPackage(row) {
+  return {
+    id: row.id,
+    kind: row.kind,
+    name: row.name,
+    priceCents: row.price_cents,
+    bonusCents: row.bonus_cents,
+    timesCount: row.times_count,
+    scope: row.scope || '',
+    benefits: row.benefits || '',
+    isActive: Boolean(row.is_active),
+    sortOrder: row.sort_order
+  }
+}
+
+function serializeCoupon(row) {
+  return {
+    id: row.id,
+    name: row.name,
+    discountType: row.discount_type,
+    amountCents: row.amount_cents,
+    percentOff: row.percent_off,
+    minSpendCents: row.min_spend_cents,
+    validDays: row.valid_days,
+    totalQty: row.total_qty,
+    issuedQty: row.issued_qty,
+    isActive: Boolean(row.is_active)
+  }
+}
 
 function adminPasswordHash(username, password) {
   return createHash('sha256').update(`admin:${String(username).toLowerCase()}:${String(password)}`).digest('hex')

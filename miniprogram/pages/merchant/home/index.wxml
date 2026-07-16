@@ -1,0 +1,33 @@
+<view class="page">
+  <view class="topbar">
+    <view>
+      <view class="greeting">{{greeting}}</view>
+      <view class="date">{{dateText}}</view>
+    </view>
+    <view class="rolechip">{{roleLabel}}</view>
+  </view>
+
+  <view class="ai">
+    <view class="ai-h"><text class="ai-dot">✦</text> AI 每日总结 · 自动</view>
+    <view class="ai-headline" wx:if="{{brief}}">{{brief}}</view>
+    <view class="bl" wx:for="{{actions}}" wx:key="*this"><text class="dot"></text><text class="bl-t">{{item}}</text></view>
+    <view class="ai-empty" wx:if="{{!brief && !actions.length}}">正在生成今日总结…</view>
+  </view>
+
+  <view class="todo">
+    <view class="chip {{todo.human?'alert':''}}" bindtap="goWorkbench"><view class="n {{todo.human?'nr':''}}">{{todo.human}}</view><view class="l">待人工</view></view>
+    <view class="chip" bindtap="goWorkbench"><view class="n ng">{{todo.quote}}</view><view class="l">待报价</view></view>
+    <view class="chip" bindtap="goOrders"><view class="n">{{todo.today}}</view><view class="l">今日预约</view></view>
+    <view wx:if="{{isOwner}}" class="chip {{todo.schedule?'alert':''}}" bindtap="goSchedule"><view class="n {{todo.schedule?'nr':''}}">{{todo.schedule}}</view><view class="l">排班申请</view></view>
+    <view wx:else class="chip" bindtap="goSchedule"><view class="n">班</view><view class="l">我的排班</view></view>
+    <view wx:if="{{isOwner}}" class="chip" bindtap="goFinance"><view class="n lock">🔒</view><view class="l">沉睡卡</view></view>
+    <view wx:if="{{isOwner}}" class="chip" bindtap="goFinance"><view class="n lock">🔒</view><view class="l">待结工资</view></view>
+  </view>
+
+  <view wx:if="{{isOwner}}" class="rev" bindtap="goFinance">
+    <view class="rev-l">本月营收 · 账本口径</view>
+    <view class="rev-lock">🔒 点开需财务密码</view>
+  </view>
+
+  <merchant-tabbar active="home"></merchant-tabbar>
+</view>

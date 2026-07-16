@@ -1,0 +1,20 @@
+<view class="entry">
+  <image class="bg" src="/assets/images/entry-bg.jpg" mode="aspectFill" />
+  <view class="mask"></view>
+  <view class="wrap">
+    <view class="content">
+      <view class="brand">Lucky Luxe</view>
+      <view class="slogan">AI 开启美业管理新时代</view>
+    </view>
+    <view class="doors">
+      <view class="door primary" hover-class="dh" bindtap="enterStore">
+        <view class="dt">进入小店</view>
+        <view class="ds">预约 · 会员 · 看作品</view>
+      </view>
+      <view class="door ghost" hover-class="dh" bindtap="toMerchantLogin">
+        <view class="dt light">商家管理登录</view>
+        <view class="ds dim">老板 / 员工</view>
+      </view>
+    </view>
+  </view>
+</view>

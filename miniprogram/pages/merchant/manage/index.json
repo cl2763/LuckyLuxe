@@ -1,0 +1,6 @@
+{
+  "navigationBarTitleText": "管理",
+  "usingComponents": {
+    "merchant-tabbar": "/components/merchant-tabbar/index"
+  }
+}

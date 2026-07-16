@@ -1,0 +1,23 @@
+<view class="page">
+  <view class="ai">
+    <text class="ai-ic">ⓘ</text>
+    <text class="ai-tx">此价目表 AI 客服实时引用,改价即生效</text>
+  </view>
+
+  <view wx:if="{{loading}}" class="empty">加载中…</view>
+  <view wx:elif="{{!groups.length}}" class="empty">还没有服务项目</view>
+
+  <block wx:for="{{groups}}" wx:key="key" wx:for-item="g">
+    <view class="gtitle">{{g.title}} · {{g.items.length}} 项</view>
+    <view class="row" wx:for="{{g.items}}" wx:key="id" wx:for-item="s" data-id="{{s.id}}" bindtap="edit">
+      <view class="main">
+        <view class="nm {{s.active ? '' : 'off'}}">{{s.name}}</view>
+        <view class="meta">{{s.meta}}</view>
+      </view>
+      <switch class="sw" checked="{{s.active}}" color="#c8a47e" data-id="{{s.id}}" data-active="{{s.active}}" catchchange="toggle" />
+    </view>
+  </block>
+
+  <view class="add" bindtap="add"><text class="plus">＋</text> 新增服务</view>
+  <view class="note">点服务行可改价 / 改名 / 改时长;右侧开关管上下架。图片图文详情请在网页后台编辑。</view>
+</view>

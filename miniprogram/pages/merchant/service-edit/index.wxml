@@ -1,0 +1,39 @@
+<view class="page">
+  <view class="ai">此价目表 AI 客服实时引用,保存后立即生效。美甲为基础价(复杂款仍人工报价),美睫为固定价。</view>
+
+  <view class="form">
+    <view class="frow">
+      <text class="lb">类型</text>
+      <picker class="pk" mode="selector" range="{{types}}" range-key="label" value="{{typeIdx}}" bindchange="onType">
+        <view class="pkv">{{types[typeIdx].label}} ›</view>
+      </picker>
+    </view>
+    <view class="frow">
+      <text class="lb">中文名</text>
+      <input class="in" value="{{nameZh}}" placeholder="如 正常延长(浅贴/甲模)" bindinput="onZh" />
+    </view>
+    <view class="frow">
+      <text class="lb">英文名</text>
+      <input class="in" value="{{nameEn}}" placeholder="选填,留空同中文名" bindinput="onEn" />
+    </view>
+    <view class="frow">
+      <text class="lb">分类</text>
+      <input class="in" value="{{category}}" placeholder="选填,如 延长 / 法式" bindinput="onCat" />
+    </view>
+    <view class="frow">
+      <text class="lb">价格 (CAD)</text>
+      <input class="in" type="digit" value="{{price}}" placeholder="如 85" bindinput="onPrice" />
+    </view>
+    <view class="frow">
+      <text class="lb">时长 (分钟)</text>
+      <input class="in" type="number" value="{{duration}}" placeholder="如 120" bindinput="onDur" />
+    </view>
+    <view class="frow">
+      <text class="lb">上架(顾客可见)</text>
+      <switch checked="{{active}}" color="#c8a47e" bindchange="onActive" />
+    </view>
+  </view>
+
+  <view class="btn {{saving ? 'off' : ''}}" bindtap="save">{{saving ? '保存中…' : (isNew ? '新增服务' : '保存')}}</view>
+  <view class="note">图片、服务流程、注意事项等更细的图文,请在网页后台编辑。</view>
+</view>

@@ -1,0 +1,48 @@
+<view class="page">
+  <!-- 门禁 -->
+  <view wx:if="{{!unlocked}}" class="gate">
+    <view class="gate-ic">🔒</view>
+    <view class="gate-t">{{configured ? '输入财务密码' : '首次设置财务密码'}}</view>
+    <view class="gate-s">财务数据受密码保护{{configured ? '' : ',请设置一个至少 4 位的密码'}}</view>
+    <input class="ginp" password placeholder="财务密码" placeholder-class="ph" value="{{pwd}}" bindinput="onPwd" />
+    <input wx:if="{{!configured}}" class="ginp" password placeholder="确认财务密码" placeholder-class="ph" value="{{pwd2}}" bindinput="onPwd2" />
+    <view class="gbtn" bindtap="unlock">{{setting ? '处理中…' : (configured ? '解锁' : '设置并进入')}}</view>
+    <view class="gate-hint">忘记密码可用启动服务器窗口里的 Owner Token 解锁,进入后在网页版重设</view>
+  </view>
+
+  <!-- 已解锁 -->
+  <block wx:else>
+    <view class="metrics">
+      <view class="mc"><view class="ml">今日已收</view><view class="mv">{{m.today}}</view></view>
+      <view class="mc"><view class="ml">本月营收</view><view class="mv">{{m.revenue}}</view></view>
+    </view>
+    <view class="mc wide"><view class="ml">本月净利 / 净利率</view><view class="mv">{{m.net}} · {{m.netRate}}%</view></view>
+
+    <view wx:if="{{target.has}}" class="card">
+      <view class="row-sb"><text class="ck">月目标进度</text><text class="cb">{{target.pct}}%</text></view>
+      <view class="bar"><view class="bar-in" style="width:{{target.pct}}%"></view></view>
+      <view class="sub">目标营收 {{target.targetRevenue}}</view>
+    </view>
+    <view wx:else class="hintcard">
+      <view class="hc-t">还没设月目标</view>
+      <view class="hc-s">营收/净利已自动汇总;设置目标后可看进度与预警(在网页后台设置)</view>
+    </view>
+
+    <view class="abtn p full" bindtap="toWeb">＋ 记一笔</view>
+    <view class="abtn full" bindtap="aiInsight">✦ AI 解读</view>
+    <view wx:if="{{insight}}" class="insight">{{insight}}</view>
+
+    <view class="t2">储值卡</view>
+    <view class="card">
+      <view class="row-sb"><text class="mut">储值总余额(负债)</text><text class="cb">{{sv.total}}</text></view>
+      <view class="row-sb"><text class="mut">本月充值 / 耗卡</text><text>{{sv.recharge}} / {{sv.consume}}</text></view>
+      <view class="divi" wx:if="{{sv.dormant}}"></view>
+      <view class="dormrow" wx:if="{{sv.dormant}}">
+        <view class="dorm-l"><text class="dorm-t">💤 沉睡卡</text><text class="dorm-s">{{sv.dormant}}</text></view>
+        <view class="wakebtn" bindtap="wakeSleep">唤醒</view>
+      </view>
+    </view>
+
+    <view class="weblink" bindtap="toWeb">流水明细 · 导出 · 目标设置 → 网页后台</view>
+  </block>
+</view>

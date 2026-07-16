@@ -6,8 +6,14 @@ set -euo pipefail
 export ALLOW_DEMO_ADMIN_LOGIN=true  # 测试套件依赖演示登录路径(生产环境默认禁用)
 cd "$(dirname "$0")"
 
+# 回归全程跑独立临时库(DATA_DIR),不碰 local-data 真实/演示库;结束时自动删除
+export DATA_DIR="$(mktemp -d /tmp/ll-ci-data.XXXXXX)"
+export TEST_DB_PATH="$DATA_DIR/lucky-luxe.sqlite"  # finance-core 直连库验证防篡改触发器时用
+echo "== 测试数据目录: $DATA_DIR =="
+
 cleanup() { pkill -f "local-server.mjs" 2>/dev/null || true; }
-trap cleanup EXIT
+finish() { cleanup; [ -n "${DATA_DIR:-}" ] && rm -rf "$DATA_DIR"; }
+trap finish EXIT
 cleanup; sleep 1
 
 echo "== 启动主服务器 (4128) =="

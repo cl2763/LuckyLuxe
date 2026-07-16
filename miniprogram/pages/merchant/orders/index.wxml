@@ -1,0 +1,78 @@
+<view class="page">
+  <view class="h1">订单</view>
+  <view class="seg">
+    <view class="seg-i {{mode==='today'?'on':''}}" data-m="today" bindtap="switchMode">今日</view>
+    <view class="seg-i {{mode==='calendar'?'on':''}}" data-m="calendar" bindtap="switchMode">日历</view>
+    <view class="seg-i {{mode==='all'?'on':''}}" data-m="all" bindtap="switchMode">全部</view>
+  </view>
+
+  <!-- 今日:时间轴 -->
+  <block wx:if="{{mode==='today'}}">
+    <view class="daytitle">{{todayText}}</view>
+    <view wx:if="{{!todayList.length}}" class="empty">今天暂无预约</view>
+    <view class="tlr" wx:for="{{todayList}}" wx:key="id">
+      <view class="tlt">{{item.time}}</view>
+      <view class="tll"><view class="tld"></view></view>
+      <view class="tlc">
+        <view class="ocard" data-id="{{item.id}}" data-status="{{item.status}}" bindtap="orderActions">
+          <view class="th"><image wx:if="{{item.thumb}}" class="thimg" src="{{item.thumb}}" mode="aspectFill" /><image wx:else class="thph" src="/assets/icons/tab-gallery.svg" /></view>
+          <view class="oc-main">
+            <view class="oc-name">{{item.customer}}</view>
+            <view class="oc-sub">{{item.line}}</view>
+          </view>
+          <view class="oc-right">
+            <view class="tag {{item.statusCls}}">{{item.statusLabel}}</view>
+            <view class="oc-tech" wx:if="{{item.tech}}">{{item.tech}}</view>
+          </view>
+        </view>
+      </view>
+    </view>
+  </block>
+
+  <!-- 日历 -->
+  <block wx:if="{{mode==='calendar'}}">
+    <view class="monthbar">
+      <view class="marrow" bindtap="prevMonth">‹</view>
+      <view class="mtext">{{monthText}}</view>
+      <view class="marrow" bindtap="nextMonth">›</view>
+    </view>
+    <view class="weekhead"><view wx:for="{{weekHead}}" wx:key="*this" class="wh">{{item}}</view></view>
+    <view class="calgrid">
+      <view wx:for="{{cells}}" wx:key="key" class="cell {{item.sel?'sel':''}} {{item.blank?'blank':''}}" data-d="{{item.date}}" bindtap="pickDay">
+        <block wx:if="{{!item.blank}}">
+          <view class="cd">{{item.day}}</view>
+          <view class="cc" wx:if="{{item.count}}">{{item.count}}</view>
+        </block>
+      </view>
+    </view>
+    <view class="daytitle">{{selectedText}}</view>
+    <view wx:if="{{!selectedList.length}}" class="empty">这天暂无预约</view>
+    <view class="tlr" wx:for="{{selectedList}}" wx:key="id">
+      <view class="tlt">{{item.time}}</view>
+      <view class="tll"><view class="tld"></view></view>
+      <view class="tlc"><view class="ocard" data-id="{{item.id}}" data-status="{{item.status}}" bindtap="orderActions">
+        <view class="th"><image wx:if="{{item.thumb}}" class="thimg" src="{{item.thumb}}" mode="aspectFill" /><image wx:else class="thph" src="/assets/icons/tab-gallery.svg" /></view>
+        <view class="oc-main"><view class="oc-name">{{item.customer}}</view><view class="oc-sub">{{item.line}}{{item.tech ? ' · '+item.tech : ''}}</view></view>
+        <view class="tag {{item.statusCls}}">{{item.statusLabel}}</view>
+      </view></view>
+    </view>
+  </block>
+
+  <!-- 全部 -->
+  <block wx:if="{{mode==='all'}}">
+    <scroll-view scroll-x class="filters">
+      <view wx:for="{{filters}}" wx:key="*this" class="fchip {{filter===item?'on':''}}" data-f="{{item}}" bindtap="setFilter">{{filterLabels[item]}}</view>
+    </scroll-view>
+    <view wx:if="{{!groups.length}}" class="empty">暂无订单</view>
+    <block wx:for="{{groups}}" wx:key="date" wx:for-item="g">
+      <view class="grp">{{g.title}}</view>
+      <view class="ocard flat" wx:for="{{g.items}}" wx:key="id" wx:for-item="it" data-id="{{it.id}}" data-status="{{it.status}}" bindtap="orderActions">
+        <view class="th"><image wx:if="{{it.thumb}}" class="thimg" src="{{it.thumb}}" mode="aspectFill" /><image wx:else class="thph" src="/assets/icons/tab-gallery.svg" /></view>
+        <view class="oc-main"><view class="oc-name"><text class="oc-time">{{it.time}}</text> {{it.customer}}</view><view class="oc-sub">{{it.line}}{{it.tech ? ' · '+it.tech : ''}}</view></view>
+        <view class="tag {{it.statusCls}}">{{it.statusLabel}}</view>
+      </view>
+    </block>
+  </block>
+
+  <merchant-tabbar active="orders"></merchant-tabbar>
+</view>

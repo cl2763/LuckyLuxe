@@ -1,0 +1,16 @@
+page{background:#fbf8f5}
+.mlogin{padding:56rpx 44rpx}
+.head{margin-bottom:44rpx}
+.title{font-size:40rpx;font-weight:600;color:#2d2826}
+.sub{font-size:24rpx;color:#8c8279;margin-top:12rpx}
+.label{font-size:24rpx;color:#8c8279;margin:0 0 12rpx 4rpx}
+.field{height:92rpx;background:#fff;border:1rpx solid #e7ddd4;border-radius:18rpx;display:flex;align-items:center;padding:0 24rpx;margin-bottom:28rpx}
+.inp{flex:1;font-size:30rpx;color:#2d2826}
+.ph{color:#b6a99b}
+.eye{width:42rpx;height:42rpx;margin-left:12rpx;flex:0 0 auto}
+.remember{display:flex;align-items:center;font-size:26rpx;color:#8c8279;margin:6rpx 0 40rpx 4rpx}
+.box{width:34rpx;height:34rpx;border:2rpx solid #c8a47e;border-radius:8rpx;margin-right:14rpx;display:flex;align-items:center;justify-content:center;color:#fff;font-size:22rpx}
+.box.on{background:#c8a47e}
+.btn{height:92rpx;line-height:92rpx;background:#c8a47e;color:#fff;font-size:32rpx;border-radius:18rpx;font-weight:500}
+.btn::after{border:none}
+.hint{text-align:center;font-size:24rpx;color:#9b7655;margin-top:32rpx;text-decoration:underline}

@@ -1,0 +1,18 @@
+<view class="cp">
+  <view class="head">
+    <view class="title">首次登录 · 设置新密码</view>
+    <view class="sub">为了账号安全,请设置一个新密码(至少 6 位)</view>
+  </view>
+
+  <view class="label">当前密码(刚才登录用的)</view>
+  <view class="field"><input class="inp" password placeholder="当前密码" placeholder-class="ph" value="{{oldPassword}}" bindinput="onOld" /></view>
+
+  <view class="label">新密码</view>
+  <view class="field"><input class="inp" password placeholder="至少 6 位" placeholder-class="ph" value="{{newPassword}}" bindinput="onNew" /></view>
+
+  <view class="label">确认新密码</view>
+  <view class="field"><input class="inp" password placeholder="再输入一次" placeholder-class="ph" value="{{confirmPassword}}" bindinput="onConfirm" /></view>
+
+  <button class="btn" loading="{{loading}}" bindtap="submit">确认并进入</button>
+  <view class="hint">改密后其他设备的登录会退出</view>
+</view>

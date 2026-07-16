@@ -1,0 +1,26 @@
+<view class="page">
+  <view class="form">
+    <view class="frow">
+      <text class="lb">类型</text>
+      <picker class="pk" mode="selector" range="{{types}}" range-key="label" value="{{typeIdx}}" bindchange="onType">
+        <view class="pkv">{{types[typeIdx].label}} ›</view>
+      </picker>
+    </view>
+    <view class="frow"><text class="lb">券名</text><input class="in" value="{{name}}" placeholder="如 满200减30" bindinput="onName" /></view>
+
+    <block wx:if="{{typeIdx===0}}">
+      <view class="frow"><text class="lb">面额 (CAD)</text><input class="in" type="digit" value="{{amount}}" placeholder="减多少,如 30" bindinput="onAmount" /></view>
+    </block>
+    <block wx:else>
+      <view class="frow"><text class="lb">立减折扣 (%)</text><input class="in" type="number" value="{{percent}}" placeholder="如 10 表示立减10%" bindinput="onPercent" /></view>
+    </block>
+
+    <view class="frow"><text class="lb">使用门槛 (CAD)</text><input class="in" type="digit" value="{{minSpend}}" placeholder="0 表示无门槛" bindinput="onMin" /></view>
+    <view class="frow"><text class="lb">有效天数</text><input class="in" type="number" value="{{validDays}}" placeholder="领取后 N 天内有效" bindinput="onDays" /></view>
+    <view class="frow"><text class="lb">发放总量</text><input class="in" type="number" value="{{totalQty}}" placeholder="0 表示不限量" bindinput="onQty" /></view>
+    <view class="frow"><text class="lb">启用</text><switch checked="{{active}}" color="#c8a47e" bindchange="onActive" /></view>
+  </view>
+
+  <view class="btn {{saving?'off':''}}" bindtap="save">{{saving?'保存中…':(isNew?'新增':'保存')}}</view>
+  <view class="note">这里定义券;发券给会员与到店核销在后续版本接入。</view>
+</view>

@@ -1,0 +1,31 @@
+<view class="page">
+  <view class="t2">一键出内容(AI 文案 + 作品图)</view>
+  <view class="content" bindtap="content">
+    <view class="crow">
+      <view class="cthumb">图</view>
+      <view class="cinfo"><view class="ct">从图库选一组作品图</view><view class="cd">自动配 AI 文案 · 一键发到渠道</view></view>
+    </view>
+    <view class="cquote">「这组重点是干净耐看,细节不抢日常穿搭…」<text class="cmut">— AI 生成 · 换一版</text></view>
+    <view class="cbtns"><text class="cb">小红书</text><text class="cb">抖音</text><text class="cb p">一键发布</text></view>
+  </view>
+
+  <view class="t2">按渠道的营销措施</view>
+  <view class="card">
+    <view class="lrow" bindtap="wakeSleep">
+      <view class="ic z">z</view>
+      <view class="li"><view class="lt">沉睡卡唤醒</view><view class="ld">有余额但久未到店 · 专属优惠召回</view></view>
+      <text class="tag g">{{sleepN}}</text>
+    </view>
+    <view class="lrow" bindtap="revisit">
+      <view class="ic c">↻</view>
+      <view class="li"><view class="lt">回访 / 补甲提醒</view><view class="ld">到期自动列名单 · AI 拟提示语</view></view>
+      <text class="tag n">{{revisitN}}</text>
+    </view>
+    <view class="lrow" bindtap="coupon">
+      <view class="ic d">%</view>
+      <view class="li"><view class="lt">优惠券 / 会员日</view><view class="ld">发券 → 到店核销 → 计入效果</view></view>
+      <text class="arr">›</text>
+    </view>
+  </view>
+  <view class="note">沉睡卡与回访名单按门店真实数据实时统计;推送渠道(订阅消息/短信)接入后即可一键触达。</view>
+</view>

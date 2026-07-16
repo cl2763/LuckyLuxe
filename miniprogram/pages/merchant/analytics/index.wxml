@@ -1,0 +1,39 @@
+<view class="page">
+  <view wx:if="{{loading}}" class="empty">加载中…</view>
+
+  <block wx:else>
+    <view class="t2">询价 → 成交 转化</view>
+    <view class="funnel">
+      <view class="fb" wx:for="{{funnel}}" wx:key="label" style="width:{{item.w}}%;background:{{item.c}}">
+        <text class="fl">{{item.label}}</text><text class="fn">{{item.n}}</text>
+      </view>
+    </view>
+    <view wx:if="{{empty}}" class="fnote">暂无数据,产生咨询/预约后这里会自动统计。</view>
+
+    <view class="mets">
+      <view class="met"><view class="ml">报价→成交</view><view class="mv">{{quoteToDeal}}</view></view>
+      <view class="met"><view class="ml">复购率</view><view class="mv">{{repurchase}}</view></view>
+      <view class="met"><view class="ml">客单价</view><view class="mv">{{avgTicket}}</view></view>
+    </view>
+
+    <view class="t2">爆款项目(按完成量)</view>
+    <view class="card">
+      <view class="brow" wx:for="{{hotItems}}" wx:key="name">
+        <text class="rank">{{index+1}}</text>
+        <text class="bname">{{item.name}}</text>
+        <text class="bn">{{item.n}} 单</text>
+      </view>
+      <view wx:if="{{!hotItems.length}}" class="none">暂无完成单</view>
+    </view>
+
+    <view class="t2">按渠道来源</view>
+    <view class="card">
+      <view class="brow" wx:for="{{channels}}" wx:key="label">
+        <text class="bname">{{item.label}}</text>
+        <text class="bn">{{item.n}} 单</text>
+      </view>
+      <view wx:if="{{!channels.length}}" class="none">暂无数据</view>
+    </view>
+    <view class="note">爆款按已完成订单实时统计;渠道来源依赖预约时记录的来源字段,顾客端接入后会更准。技师维度:{{techLine}}</view>
+  </block>
+</view>

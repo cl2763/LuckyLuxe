@@ -1,0 +1,11 @@
+page{background:#fbf8f5}
+.fp{padding:32rpx 30rpx}
+.title{font-size:34rpx;font-weight:600;color:#2d2826;margin-bottom:22rpx}
+.card{background:#fff;border:1rpx solid #e7ddd4;border-radius:18rpx;padding:22rpx 22rpx;margin-bottom:20rpx}
+.ct{font-size:28rpx;font-weight:600;color:#2d2826;margin-bottom:10rpx}
+.cb{font-size:25rpx;color:#5c4630;line-height:1.7}
+.contact{margin-top:16rpx;border-top:1rpx solid #f1e7df;padding-top:14rpx}
+.crow{display:flex;justify-content:space-between;margin-bottom:8rpx}
+.ck{font-size:24rpx;color:#8c8279}
+.cv{font-size:24rpx;color:#9b7655}
+.note{font-size:22rpx;color:#8c8279;line-height:1.6;margin-top:8rpx}
