@@ -69,10 +69,14 @@ function clearAdminAuth() {
   wx.removeStorageSync(ADMIN_AUTH_KEY)
 }
 
+function currentTenant() {
+  return wx.getStorageSync('lucky_tenant') || 'lucky-luxe'
+}
+
 function request(path, method = 'GET', data) {
   return new Promise((resolve, reject) => {
     const auth = getAuth()
-    const header = { 'content-type': 'application/json' }
+    const header = { 'content-type': 'application/json', 'x-tenant-id': currentTenant() }
     if (auth && auth.accessToken) header.authorization = `Bearer ${auth.accessToken}`
     wx.request({
       url: `${API_BASE}${path}`,
@@ -220,6 +224,7 @@ async function ensureLogin(options = {}) {
   const code = await wxLoginCode()
   const data = await request('/auth/wechat/mini-login', 'POST', {
     code,
+    tenantId: currentTenant(),
     displayName: options.displayName || '',
     avatarUrl: options.avatarUrl || '',
     phoneCode: options.phoneCode || '',
@@ -474,6 +479,34 @@ async function adminChangePassword(oldPassword, newPassword, confirmPassword) {
 }
 
 // 通用商家端接口封装:任意 /admin/* GET/POST
+// 商家入驻申请(公开,无需登录)
+function submitMerchantLead(data) {
+  return request('/merchant-leads', 'POST', data)
+}
+
+// 公开门店列表(兜底进店)
+function getShops() {
+  return request('/shops')
+}
+
+// 按"当前进的店"刷新会员数据(会员=用户×店:积分/储值/等级每店独立,切店后必须刷新)
+async function refreshMember() {
+  const auth = getAuth()
+  if (!auth || !auth.accessToken || !auth.user || !auth.user.id) return null
+  try {
+    const data = await request(`/users/${auth.user.id}`)
+    const fresh = miniMember(data.user)
+    const prev = wx.getStorageSync('lucky_member') || {}
+    // 头像/昵称/资料完善度是本机资料,保留;数字类(积分/储值/等级/消费)以当前店为准
+    wx.setStorageSync('lucky_member', Object.assign({}, fresh, {
+      nickname: prev.nickname || fresh.nickname,
+      avatarUrl: prev.avatarUrl || fresh.avatarUrl,
+      profileComplete: prev.profileComplete || fresh.profileComplete
+    }))
+    return fresh
+  } catch (e) { return null }
+}
+
 function adminGet(path) {
   return adminRequest(path)
 }
@@ -551,6 +584,9 @@ module.exports = {
   adminChangePassword,
   isAdminLoggedIn,
   adminMe,
+  submitMerchantLead,
+  getShops,
+  refreshMember,
   adminGet,
   adminPost,
   adminPatch,

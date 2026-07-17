@@ -1,0 +1,20 @@
+<view class="pg">
+  <view class="head">
+    <view class="ht">选择要进入的门店</view>
+    <view class="hd">扫店内小程序码可直接进店;也可在下方选择。</view>
+  </view>
+
+  <view class="scanbtn" bindtap="scan">扫码进店</view>
+
+  <view wx:if="{{loading}}" class="empty">加载中…</view>
+  <view wx:elif="{{!shops.length}}" class="empty">暂无可选门店</view>
+
+  <view class="shop" wx:for="{{shops}}" wx:key="tenantId" data-id="{{item.tenantId}}" data-name="{{item.name}}" bindtap="pick">
+    <view class="sav">{{item.name[0]}}</view>
+    <view class="sinfo">
+      <view class="sname">{{item.name}}</view>
+      <view class="saddr" wx:if="{{item.address}}">{{item.address}}</view>
+    </view>
+    <text class="chev">›</text>
+  </view>
+</view>

@@ -14,6 +14,7 @@ Page({
   toggleRemember() { this.setData({ remember: !this.data.remember }) },
   togglePwd() { this.setData({ hidePwd: !this.data.hidePwd }) },
   toForgot() { wx.navigateTo({ url: '/pages/merchant-forgot/index' }) },
+  toApply() { wx.navigateTo({ url: '/pages/merchant-apply/index' }) },
 
   async login() {
     if (this.data.loading) return

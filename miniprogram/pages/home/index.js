@@ -14,7 +14,8 @@ Page({
     portfolioIntro: '',
     technicianWorks: '',
     recommendedNail: [],
-    recommendedLash: []
+    recommendedLash: [],
+    shopName: ''
   },
 
   onLoad() {
@@ -22,9 +23,27 @@ Page({
   },
 
   onShow() {
+    // 多租户兜底:既没扫店码、也没进过任何店 → 引导选择门店
+    if (!wx.getStorageSync('lucky_tenant')) {
+      wx.navigateTo({ url: '/pages/shop-select/index' })
+      return
+    }
     tabbar.update(this, 0)
     this.refreshLanguage()
+    this.loadShopName()
   },
+
+  // 当前门店名(顶部门店条)
+  async loadShopName() {
+    try {
+      const tid = wx.getStorageSync('lucky_tenant') || 'lucky-luxe'
+      const r = await api.getShops()
+      const hit = (r.shops || []).find((s) => s.tenantId === tid)
+      this.setData({ shopName: (hit && hit.name) || 'Lucky Luxe' })
+    } catch (e) { this.setData({ shopName: 'Lucky Luxe' }) }
+  },
+
+  switchShop() { wx.navigateTo({ url: '/pages/shop-select/index' }) },
 
   async refreshLanguage() {
     const lang = i18n.getLang()

@@ -3,6 +3,7 @@ const api = require('../../utils/api')
 Page({
   data: { points: 0, records: [] },
   async onShow() {
+    await api.refreshMember()
     const m = wx.getStorageSync('lucky_member') || {}
     let records = []
     try {

@@ -14,6 +14,12 @@
       </view>
     </view>
 
+    <view class="shop-bar" bindtap="switchShop">
+      <text class="shop-dot"></text>
+      <text class="shop-name">当前门店 · {{shopName}}</text>
+      <text class="shop-switch">扫码/切换 ›</text>
+    </view>
+
     <view class="hero home-section-container">
       <view class="hero-copy">
         <view class="eyebrow">Ontario · CAD</view>

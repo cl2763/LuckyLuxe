@@ -1,6 +1,9 @@
+const api = require('../../utils/api')
+
 Page({
   data: { balance: 0, level: '', packages: [], txns: [] },
-  onShow() {
+  async onShow() {
+    await api.refreshMember()
     const m = wx.getStorageSync('lucky_member') || {}
     // 余额取真实会员数据;充值套餐为演示(待顾客端套餐接口);收支明细待顾客端储值流水接口
     const packages = [

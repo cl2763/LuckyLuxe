@@ -338,3 +338,38 @@
 .store-btn {
   margin-top: 24rpx;
 }
+
+.shop-bar {
+  display: flex;
+  align-items: center;
+  gap: 10rpx;
+  margin: 14rpx 0 4rpx;
+  padding: 14rpx 20rpx;
+  background: #fff;
+  border: 1rpx solid #e7ddd4;
+  border-radius: 40rpx;
+}
+
+.shop-dot {
+  width: 12rpx;
+  height: 12rpx;
+  border-radius: 50%;
+  background: #47735f;
+  flex: none;
+}
+
+.shop-name {
+  flex: 1;
+  font-size: 23rpx;
+  color: #2d2826;
+  font-weight: 600;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.shop-switch {
+  font-size: 22rpx;
+  color: #9b7655;
+  flex: none;
+}

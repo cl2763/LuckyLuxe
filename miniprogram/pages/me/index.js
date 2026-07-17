@@ -100,6 +100,7 @@ Page({
     const isLoggedIn = api.isLoggedIn()
     try {
       if (isLoggedIn) {
+        await api.refreshMember() // 多租户:按"当前进的店"刷新会员(积分/储值/等级每店独立)
         member = wx.getStorageSync('lucky_member') || member
         sourceOrders = await api.getBookings(lang)
         if (sourceOrders.length) storage.setOrders(sourceOrders)

@@ -37,6 +37,22 @@ function currentTenantId() {
   return DEFAULT_TENANT_ID
 }
 
+// 多租户:校验租户 id(存在且启用),否则回退默认。默认安全,现有单租户行为不变。
+function validTenantId(raw) {
+  const id = String(raw || '').trim()
+  if (id) {
+    try {
+      const t = db.prepare("SELECT id FROM tenants WHERE id = ? AND status = 'active'").get(id)
+      if (t) return t.id
+    } catch (e) { /* tenants 表异常时回退 */ }
+  }
+  return DEFAULT_TENANT_ID
+}
+// 从顾客请求解析"当前进的店"(x-tenant-id 头 或 ?tenantId=)。
+function resolveTenant(req, query) {
+  return validTenantId((req && req.headers && req.headers['x-tenant-id']) || (query && query.tenantId) || '')
+}
+
 // 套餐与功能开关（留接口纪律 #7）：套餐默认值 + 商户覆盖项（试用/加购）合并。
 function getEntitlements(tenantId = DEFAULT_TENANT_ID) {
   const tenant = db.prepare('SELECT * FROM tenants WHERE id = ?').get(tenantId)
@@ -4680,15 +4696,16 @@ function membershipForSpend(totalSpentCents = 0) {
   }
 }
 
-function userBookingStats(userId) {
-  if (!userId) return { totalSpentCents: 0, visits: 0 }
+function userBookingStats(userId, tenantId = DEFAULT_TENANT_ID) {
+  if (!userId) return { total_spent_cents: 0, visits: 0 }
+  // 每店独立会员:消费/到店只算这家店(tenant)
   return db.prepare(`
     SELECT
       COALESCE(SUM(CASE WHEN status = 'COMPLETED' THEN service_price_cents ELSE 0 END), 0) AS total_spent_cents,
       COALESCE(SUM(CASE WHEN status = 'COMPLETED' THEN 1 ELSE 0 END), 0) AS visits
     FROM bookings
-    WHERE user_id = ?
-  `).get(userId) || { total_spent_cents: 0, visits: 0 }
+    WHERE user_id = ? AND tenant_id = ?
+  `).get(userId, tenantId) || { total_spent_cents: 0, visits: 0 }
 }
 
 // 统一身份解析（留接口纪律 #4）：任何渠道身份 → 内部用户。未来微信客服/企微/网页渠道都走这两个函数。
@@ -4776,10 +4793,11 @@ function serializeBooking(row, lang = 'zh') {
   }
 }
 
-function serializeUser(user) {
+function serializeUser(user, tenantId = DEFAULT_TENANT_ID) {
   if (!user) return null
   const memberCode = memberCodeForUserId(user.id)
-  const stats = userBookingStats(user.id)
+  // 每店独立会员:消费/到店/积分/等级/储值都只算这家店(tenant)
+  const stats = userBookingStats(user.id, tenantId)
   const totalSpentCents = Number(stats.total_spent_cents || stats.totalSpentCents || 0)
   const membership = membershipForSpend(totalSpentCents)
   const displayName = isGenericDisplayName(user.display_name, user.id) ? memberCode : user.display_name
@@ -4802,7 +4820,7 @@ function serializeUser(user) {
     depositRule: membership.depositRule,
     points: Math.floor(totalSpentCents / 100),
     couponCount: 0,
-    balanceCents: storedValueBalanceCents(user.id),
+    balanceCents: storedValueBalanceCents(user.id, tenantId),
     totalSpentCents,
     visits: Number(stats.visits || 0),
     memberCode,
@@ -4828,12 +4846,12 @@ function registerEmailUser(body) {
 
 // 演示铺单:仅本地/演示开关下,给首次登录且无订单的顾客铺 2 完成 + 1 待到店 + 储值,
 // 让会员卡(积分/消费/成长/等级/储值)与订单一致、可直接体验。生产不启用。
-function seedDemoBookingsForUser(userId) {
+function seedDemoBookingsForUser(userId, tenantId = DEFAULT_TENANT_ID) {
   if (!userId) return
-  const store = db.prepare('SELECT id FROM stores WHERE is_active = 1 LIMIT 1').get()
-  const nail = db.prepare("SELECT * FROM services WHERE is_active = 1 AND UPPER(type) = 'NAIL' ORDER BY sort_order ASC LIMIT 1").get()
-  const lash = db.prepare("SELECT * FROM services WHERE is_active = 1 AND UPPER(type) = 'LASH' ORDER BY sort_order ASC LIMIT 1").get()
-  const techs = db.prepare('SELECT id FROM technicians WHERE is_active = 1 ORDER BY name ASC LIMIT 2').all()
+  const store = db.prepare('SELECT id FROM stores WHERE is_active = 1 AND tenant_id = ? LIMIT 1').get(tenantId)
+  const nail = db.prepare("SELECT * FROM services WHERE is_active = 1 AND tenant_id = ? AND UPPER(type) = 'NAIL' ORDER BY sort_order ASC LIMIT 1").get(tenantId)
+  const lash = db.prepare("SELECT * FROM services WHERE is_active = 1 AND tenant_id = ? AND UPPER(type) = 'LASH' ORDER BY sort_order ASC LIMIT 1").get(tenantId)
+  const techs = db.prepare('SELECT id FROM technicians WHERE is_active = 1 AND tenant_id = ? ORDER BY name ASC LIMIT 2').all(tenantId)
   if (!store || !nail || !techs.length) return
   const nowIso = iso(new Date())
   let seq = 0
@@ -4847,15 +4865,15 @@ function seedDemoBookingsForUser(userId) {
       const deposit = 5000
       const code = `LLD${Date.now().toString().slice(-7)}${seq}${Math.floor(Math.random() * 900 + 100)}`
       db.prepare(`INSERT INTO bookings
-        (id, public_code, user_id, store_id, technician_id, service_id, status, appointment_start, appointment_end, addons_json, reference_images_json, notes, service_price_cents, deposit_cents, deposit_required_cents, deposit_waived_cents, final_due_cents, total_duration_min, source_channel, created_at, updated_at)
-        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, '[]', '[]', '', ?, ?, ?, 0, ?, ?, 'demo-seed', ?, ?)`)
-        .run(randomId('booking'), code, userId, store.id, techId, svc.id, status, iso(start), iso(end), price, deposit, deposit, price - deposit, svc.base_duration_min || 120, nowIso, nowIso)
+        (id, tenant_id, public_code, user_id, store_id, technician_id, service_id, status, appointment_start, appointment_end, addons_json, reference_images_json, notes, service_price_cents, deposit_cents, deposit_required_cents, deposit_waived_cents, final_due_cents, total_duration_min, source_channel, created_at, updated_at)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, '[]', '[]', '', ?, ?, ?, 0, ?, ?, 'demo-seed', ?, ?)`)
+        .run(randomId('booking'), tenantId, code, userId, store.id, techId, svc.id, status, iso(start), iso(end), price, deposit, deposit, price - deposit, svc.base_duration_min || 120, nowIso, nowIso)
     } catch (e) { /* 单条失败不影响其它 */ }
   }
   mk(nail, techs[0].id, -24, 'COMPLETED')
   mk(lash, (techs[1] || techs[0]).id, -10, 'COMPLETED')
   mk(nail, techs[0].id, 3, 'CONFIRMED')
-  try { insertStoredValueTransaction({ userId, type: 'recharge', amountCents: 30000, payChannel: 'manual', note: '演示储值', createdBy: 'demo-seed' }) } catch (e) { /* 忽略 */ }
+  try { insertStoredValueTransaction({ userId, type: 'recharge', amountCents: 30000, payChannel: 'manual', note: '演示储值', createdBy: 'demo-seed', tenantId }) } catch (e) { /* 忽略 */ }
 }
 
 async function signInWechatMiniUser(body) {
@@ -4899,13 +4917,16 @@ async function signInWechatMiniUser(body) {
     unionId: data.unionid || '',
     phone
   })
-  // 演示环境:首次登录且无订单时铺演示数据(生产 ALLOW_DEMO_ADMIN_LOGIN 关闭,不启用)。任何异常都不得影响登录。
+  // 多租户:顾客登录时进的是哪家店(小程序传 tenantId);会员数据按这家店算
+  const loginTenant = validTenantId(body.tenantId)
+  // 演示环境:仅默认店(lucky-luxe)首登无单时铺演示数据;其它店首登保持 0,便于直观看到"每店独立会员"。生产开关关闭不启用。
   try {
-    if (process.env.ALLOW_DEMO_ADMIN_LOGIN === 'true' && !db.prepare('SELECT 1 FROM bookings WHERE user_id = ? LIMIT 1').get(user.id)) {
-      seedDemoBookingsForUser(user.id)
+    if (process.env.ALLOW_DEMO_ADMIN_LOGIN === 'true' && loginTenant === DEFAULT_TENANT_ID
+      && !db.prepare('SELECT 1 FROM bookings WHERE user_id = ? AND tenant_id = ? LIMIT 1').get(user.id, loginTenant)) {
+      seedDemoBookingsForUser(user.id, loginTenant)
     }
   } catch (e) { console.error('[demo-seed] failed:', e && e.message) }
-  const serialized = serializeUser(user)
+  const serialized = serializeUser(user, loginTenant)
   return {
     user: serialized,
     auth: miniAuthFor(serialized, data.openid),
@@ -5066,6 +5087,7 @@ function validateBookingInput(body) {
   if (!/^\d{2}:\d{2}$/.test(body.time)) throw apiError(400, 'BAD_REQUEST', 'time must be HH:mm.')
   return {
     userId: body.userId || null,
+    tenantId: body.tenantId || DEFAULT_TENANT_ID,
     storeId: body.storeId,
     serviceId: body.serviceId,
     technicianId: body.technicianId,
@@ -5166,7 +5188,7 @@ function createBooking(body) {
   const addOnTotal = input.addOns.reduce((total, item) => total + Number(item.priceCents || 0), 0)
   const servicePriceCents = service.price_cents + addOnTotal
   const user = input.userId ? db.prepare('SELECT * FROM users WHERE id = ?').get(input.userId) : null
-  const serializedUser = serializeUser(user)
+  const serializedUser = serializeUser(user, input.tenantId || DEFAULT_TENANT_ID)
   const depositRequiredCents = 5000
   const depositWaivedCents = serializedUser?.depositWaived ? depositRequiredCents : 0
   const depositCents = Math.max(0, depositRequiredCents - depositWaivedCents)
@@ -5178,9 +5200,9 @@ function createBooking(body) {
   try {
     db.prepare(`
       INSERT INTO bookings
-      (id, public_code, user_id, store_id, technician_id, service_id, status, appointment_start, appointment_end, addons_json, reference_images_json, source_channel, notes, service_price_cents, deposit_cents, deposit_required_cents, deposit_waived_cents, deposit_waive_reason, member_level_at_booking, final_due_cents, total_duration_min, payment_expires_at, created_at, updated_at)
-      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-    `).run(bookingId, publicCode(), input.userId, input.storeId, input.technicianId, input.serviceId, status, iso(start), iso(end), JSON.stringify(input.addOns), JSON.stringify(input.referenceImages), input.sourceChannel, input.notes, servicePriceCents, depositCents, depositRequiredCents, depositWaivedCents, waiveReason, serializedUser?.memberLevel || null, servicePriceCents - depositCents, durationMin, paymentExpiresAt, now, now)
+      (id, tenant_id, public_code, user_id, store_id, technician_id, service_id, status, appointment_start, appointment_end, addons_json, reference_images_json, source_channel, notes, service_price_cents, deposit_cents, deposit_required_cents, deposit_waived_cents, deposit_waive_reason, member_level_at_booking, final_due_cents, total_duration_min, payment_expires_at, created_at, updated_at)
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+    `).run(bookingId, input.tenantId || DEFAULT_TENANT_ID, publicCode(), input.userId, input.storeId, input.technicianId, input.serviceId, status, iso(start), iso(end), JSON.stringify(input.addOns), JSON.stringify(input.referenceImages), input.sourceChannel, input.notes, servicePriceCents, depositCents, depositRequiredCents, depositWaivedCents, waiveReason, serializedUser?.memberLevel || null, servicePriceCents - depositCents, durationMin, paymentExpiresAt, now, now)
 
     const slotStmt = db.prepare('INSERT INTO booking_slots (id, booking_id, technician_id, starts_at) VALUES (?, ?, ?, ?)')
     for (const slot of slots) slotStmt.run(randomId('slot'), bookingId, input.technicianId, iso(slot))
@@ -5616,18 +5638,18 @@ function requireFinanceKey(req) {
 }
 
 // ===== 储值卡（阶段3D）：充值=负债，耗卡=确认收入 =====
-function storedValueBalanceCents(userId) {
+function storedValueBalanceCents(userId, tenantId = currentTenantId()) {
   return db.prepare('SELECT COALESCE(SUM(amount_cents), 0) AS balance FROM stored_value_transactions WHERE tenant_id = ? AND user_id = ?')
-    .get(currentTenantId(), userId).balance
+    .get(tenantId, userId).balance
 }
 
-function insertStoredValueTransaction({ userId, type, amountCents, payChannel = 'unknown', note = '', createdBy = 'system', createdAt = null }) {
+function insertStoredValueTransaction({ userId, type, amountCents, payChannel = 'unknown', note = '', createdBy = 'system', createdAt = null, tenantId = currentTenantId() }) {
   const id = randomId('sv')
   const signed = type === 'recharge' ? Math.abs(amountCents) : (type === 'consume' ? -Math.abs(amountCents) : Math.round(amountCents))
   db.prepare(`
     INSERT INTO stored_value_transactions (id, tenant_id, user_id, type, amount_cents, pay_channel, note, created_by, created_at)
     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
-  `).run(id, currentTenantId(), userId, type, signed, payChannel, note, createdBy, createdAt || iso(new Date()))
+  `).run(id, tenantId, userId, type, signed, payChannel, note, createdBy, createdAt || iso(new Date()))
   return db.prepare('SELECT * FROM stored_value_transactions WHERE id = ?').get(id)
 }
 
@@ -5765,6 +5787,22 @@ async function route(req, res) {
     return json(res, 200, { user, auth: demoAuthFor(user.email || body.email), mode: 'demo' })
   }
   if (req.method === 'POST' && path === '/auth/wechat/mini-login') return json(res, 200, await signInWechatMiniUser(await readBody(req)))
+  // 商家入驻申请(公开表单,无需登录):留资给平台客服联系
+  if (req.method === 'POST' && path === '/merchant-leads') {
+    const body = await readBody(req)
+    const shopName = String(body.shopName || '').trim()
+    const phone = String(body.phone || '').trim()
+    if (!shopName) throw apiError(400, 'BAD_REQUEST', '店铺名称必填。')
+    if (!phone && !String(body.wechatId || '').trim()) throw apiError(400, 'BAD_REQUEST', '请至少留手机号或微信号。')
+    const id = randomId('lead')
+    const now = iso(new Date())
+    db.prepare(`INSERT INTO merchant_leads (id, shop_name, contact_name, phone, wechat_id, shop_type, city, note, status, created_at, updated_at)
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?, 'new', ?, ?)`).run(
+      id, shopName.slice(0, 60), String(body.contactName || '').slice(0, 40), phone.slice(0, 30),
+      String(body.wechatId || '').slice(0, 40), String(body.shopType || '').slice(0, 30),
+      String(body.city || '').slice(0, 40), String(body.note || '').slice(0, 300), now, now)
+    return json(res, 201, { ok: true })
+  }
   if (req.method === 'POST' && path === '/auth/google/demo') return json(res, 201, { user: registerGoogleDemoUser(await readBody(req)) })
   // 数据迁移入口:双重开关(ALLOW_DB_IMPORT 环境变量,迁移完立即关) + 强 token + 确认头 + 文件魔数校验
   if (req.method === 'POST' && path === '/admin/ops/import-db') {
@@ -5907,12 +5945,12 @@ async function route(req, res) {
     if (id !== customer.id) throw apiError(403, 'FORBIDDEN', 'You can only view your own profile.')
     const user = db.prepare('SELECT * FROM users WHERE id = ?').get(id)
     if (!user) throw apiError(404, 'NOT_FOUND', 'User not found.')
-    return json(res, 200, { user: serializeUser(user) })
+    return json(res, 200, { user: serializeUser(user, resolveTenant(req, query)) })
   }
-  if (req.method === 'GET' && path === '/stores') return json(res, 200, { stores: db.prepare('SELECT * FROM stores WHERE is_active = 1').all() })
+  if (req.method === 'GET' && path === '/stores') return json(res, 200, { stores: db.prepare('SELECT * FROM stores WHERE is_active = 1 AND tenant_id = ?').all(resolveTenant(req, query)) })
   if (req.method === 'GET' && path === '/services') {
-    const args = []
-    let sql = 'SELECT * FROM services WHERE is_active = 1'
+    const args = [resolveTenant(req, query)]
+    let sql = 'SELECT * FROM services WHERE is_active = 1 AND tenant_id = ?'
     if (query.type) {
       sql += ' AND type = ?'
       args.push(query.type.toUpperCase())
@@ -5921,8 +5959,8 @@ async function route(req, res) {
     return json(res, 200, { services: db.prepare(sql).all(...args).map((service) => serializeService(service, query.lang || 'zh')) })
   }
   if (req.method === 'GET' && path === '/technicians') {
-    const args = []
-    let sql = 'SELECT DISTINCT t.* FROM technicians t LEFT JOIN technician_services ts ON ts.technician_id = t.id WHERE t.is_active = 1'
+    const args = [resolveTenant(req, query)]
+    let sql = 'SELECT DISTINCT t.* FROM technicians t LEFT JOIN technician_services ts ON ts.technician_id = t.id WHERE t.is_active = 1 AND t.tenant_id = ?'
     if (query.storeId) {
       sql += ' AND t.store_id = ?'
       args.push(query.storeId)
@@ -5939,9 +5977,9 @@ async function route(req, res) {
       SELECT b.*, t.name AS tech_name, t.title AS tech_title
       FROM bookings b
       JOIN technicians t ON t.id = b.technician_id
-      WHERE b.gallery_status = 'approved'
+      WHERE b.gallery_status = 'approved' AND b.tenant_id = ?
       ORDER BY b.gallery_locked_at DESC, b.appointment_start DESC
-    `).all()
+    `).all(resolveTenant(req, query))
     const grouped = new Map()
     for (const row of rows) {
       const images = parseJson(row.approved_work_images_json).filter(Boolean)
@@ -5959,7 +5997,25 @@ async function route(req, res) {
   if (req.method === 'GET' && path === '/add-ons') return json(res, 200, { addOns })
   if (req.method === 'GET' && path === '/availability') {
     expireOldHolds()
+    // 多租户:storeId 必须属于"当前进的店",防止跨店查可约时段
+    const tid = resolveTenant(req, query)
+    if (query.storeId) {
+      const s = db.prepare('SELECT tenant_id FROM stores WHERE id = ?').get(query.storeId)
+      if (s && s.tenant_id !== tid) throw apiError(404, 'NOT_FOUND', 'Store not found in this shop.')
+    }
     return json(res, 200, getAvailability(query))
+  }
+  // 公开门店列表(兜底进店:顾客没带店标识时选择进入哪家)
+  if (req.method === 'GET' && path === '/shops') {
+    const rows = db.prepare(`
+      SELECT t.id, t.name AS tenant_name, s.name AS store_name, s.address, s.phone
+      FROM tenants t
+      JOIN stores s ON s.tenant_id = t.id AND s.is_active = 1
+      WHERE t.status = 'active'
+      GROUP BY t.id
+      ORDER BY t.name ASC
+    `).all()
+    return json(res, 200, { shops: rows.map((r) => ({ tenantId: r.id, name: r.tenant_name || r.store_name, storeName: r.store_name, address: r.address || '', phone: r.phone || '' })) })
   }
   if (req.method === 'GET' && path.startsWith('/booking-drafts/')) {
     const draft = getBookingDraftById(path.split('/')[2], query.lang || 'zh')
@@ -5971,13 +6027,15 @@ async function route(req, res) {
     const customer = requireCustomer(req)
     const body = await readBody(req)
     body.userId = customer.id
+    body.tenantId = resolveTenant(req, query) // 多租户:订单归属"当前进的店"
     return json(res, 201, { booking: createBooking(body) })
   }
   if (req.method === 'GET' && path === '/bookings') {
-    // 隐私+一致性:顾客端"我的订单"必须登录,且只返回本人订单(此前不带 userId 会返回全部人的单,已修)
+    // 隐私+一致性+多租户:必须登录,只返回本人在"当前进的店"的订单
     const customer = requireCustomer(req)
+    const tenantId = resolveTenant(req, query)
     return json(res, 200, {
-      bookings: db.prepare('SELECT * FROM bookings WHERE user_id = ? ORDER BY appointment_start DESC').all(customer.id)
+      bookings: db.prepare('SELECT * FROM bookings WHERE user_id = ? AND tenant_id = ? ORDER BY appointment_start DESC').all(customer.id, tenantId)
         .map((booking) => serializeBooking(booking, query.lang || 'zh'))
     })
   }
@@ -6332,6 +6390,22 @@ async function route(req, res) {
       body.totalQty === undefined ? cur.total_qty : Math.max(0, Math.round(Number(body.totalQty) || 0)),
       body.isActive === undefined ? cur.is_active : (body.isActive ? 1 : 0), id)
     return json(res, 200, { coupon: serializeCoupon(db.prepare('SELECT * FROM coupons WHERE id = ?').get(id)) })
+  }
+  // 平台运营:商家入驻线索(owner 可看/改状态)
+  if (req.method === 'GET' && path === '/admin/merchant-leads') {
+    if (adminSession.role !== 'owner') throw apiError(403, 'FORBIDDEN', 'Owner permission is required.')
+    return json(res, 200, { leads: db.prepare('SELECT * FROM merchant_leads ORDER BY created_at DESC').all().map(serializeMerchantLead) })
+  }
+  if (req.method === 'PATCH' && path.startsWith('/admin/merchant-leads/')) {
+    if (adminSession.role !== 'owner') throw apiError(403, 'FORBIDDEN', 'Owner permission is required.')
+    const id = path.split('/')[3]
+    const cur = db.prepare('SELECT * FROM merchant_leads WHERE id = ?').get(id)
+    if (!cur) throw apiError(404, 'NOT_FOUND', 'Lead not found.')
+    const body = await readBody(req)
+    const status = ['new', 'contacted', 'onboarded', 'rejected'].includes(body.status) ? body.status : cur.status
+    db.prepare('UPDATE merchant_leads SET status = ?, note = ?, updated_at = ? WHERE id = ?')
+      .run(status, body.note === undefined ? cur.note : String(body.note).slice(0, 300), iso(new Date()), id)
+    return json(res, 200, { lead: serializeMerchantLead(db.prepare('SELECT * FROM merchant_leads WHERE id = ?').get(id)) })
   }
   // 展示图库(对外):所有技师已发布作品(owner+staff 均可读,不按角色过滤;带 bookingId 以便生成文案)
   if (req.method === 'GET' && path === '/admin/published-works') {
@@ -7500,7 +7574,36 @@ db.exec(`
     is_active INTEGER NOT NULL DEFAULT 1,
     created_at TEXT NOT NULL
   );
+  CREATE TABLE IF NOT EXISTS merchant_leads (
+    id TEXT PRIMARY KEY,
+    shop_name TEXT NOT NULL,
+    contact_name TEXT,
+    phone TEXT,
+    wechat_id TEXT,
+    shop_type TEXT,
+    city TEXT,
+    note TEXT,
+    status TEXT NOT NULL DEFAULT 'new',
+    created_at TEXT NOT NULL,
+    updated_at TEXT NOT NULL
+  );
 `)
+
+function serializeMerchantLead(row) {
+  return {
+    id: row.id,
+    shopName: row.shop_name,
+    contactName: row.contact_name || '',
+    phone: row.phone || '',
+    wechatId: row.wechat_id || '',
+    shopType: row.shop_type || '',
+    city: row.city || '',
+    note: row.note || '',
+    status: row.status,
+    createdAt: row.created_at,
+    updatedAt: row.updated_at
+  }
+}
 
 function serializeMembershipPackage(row) {
   return {

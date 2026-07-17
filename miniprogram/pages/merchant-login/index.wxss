@@ -14,3 +14,6 @@ page{background:#fbf8f5}
 .btn{height:92rpx;line-height:92rpx;background:#c8a47e;color:#fff;font-size:32rpx;border-radius:18rpx;font-weight:500}
 .btn::after{border:none}
 .hint{text-align:center;font-size:24rpx;color:#9b7655;margin-top:32rpx;text-decoration:underline}
+.applybar{display:flex;align-items:center;justify-content:center;gap:8rpx;margin-top:48rpx;padding-top:28rpx;border-top:1rpx solid #ece3d9}
+.applytx{font-size:24rpx;color:#8c8279}
+.applylink{font-size:25rpx;color:#c8a47e;font-weight:600}

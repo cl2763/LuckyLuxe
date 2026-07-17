@@ -8,9 +8,31 @@ App({
     privacyReady: false
   },
 
-  onLaunch() {
+  onLaunch(options) {
+    this.resolveTenant(options)
     i18n.applyTabBar()
     this.initPrivacyBridge()
+  },
+
+  onShow(options) {
+    // 从别家店的码/分享再次进入时,更新"当前进的店"
+    this.resolveTenant(options)
+  },
+
+  // 多租户:从进入参数解析"当前进的店"(query.tenantId / query.merchant / scene),存 storage 供 api 带上;
+  // 没带就沿用上次进的店,再没有则默认 lucky-luxe。
+  resolveTenant(options) {
+    try {
+      const q = (options && options.query) || {}
+      let tid = String(q.tenantId || q.merchant || '').trim()
+      if (!tid && q.scene) { const s = decodeURIComponent(q.scene); const m = /(?:^|&)t=([^&]+)/.exec(s); if (m) tid = m[1] }
+      if (tid) {
+        wx.setStorageSync('lucky_tenant', tid)
+        this.globalData.tenantId = tid
+      } else {
+        this.globalData.tenantId = wx.getStorageSync('lucky_tenant') || 'lucky-luxe'
+      }
+    } catch (e) { this.globalData.tenantId = 'lucky-luxe' }
   },
 
   initPrivacyBridge() {

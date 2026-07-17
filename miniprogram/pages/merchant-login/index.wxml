@@ -22,4 +22,9 @@
 
   <button class="btn" loading="{{loading}}" bindtap="login">登录</button>
   <view class="hint" bindtap="toForgot">忘记密码</view>
+
+  <view class="applybar">
+    <text class="applytx">还不是入驻商家?</text>
+    <text class="applylink" bindtap="toApply">申请入驻 ›</text>
+  </view>
 </view>

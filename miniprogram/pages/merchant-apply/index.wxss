@@ -1,0 +1,23 @@
+page{background:#fbf8f5}
+.page{padding:24rpx 26rpx 60rpx}
+.intro{margin-bottom:20rpx}
+.it{font-size:34rpx;font-weight:600;color:#2d2826}
+.id{font-size:23rpx;color:#8c8279;line-height:1.6;margin-top:10rpx}
+.form{background:#fff;border:1rpx solid #e7ddd4;border-radius:18rpx;overflow:hidden}
+.frow{display:flex;align-items:center;padding:24rpx 24rpx;border-bottom:1rpx solid #f1e7df;gap:16rpx}
+.frow:last-child{border-bottom:none}
+.frow.col{flex-direction:column;align-items:stretch;gap:10rpx}
+.lb{font-size:25rpx;color:#2d2826;flex:0 0 150rpx}
+.in{flex:1;font-size:25rpx;color:#2d2826;text-align:right}
+.pk{flex:1;text-align:right}
+.pkv{font-size:25rpx;color:#9b7655}
+.ta{width:100%;height:150rpx;font-size:24rpx;color:#2d2826;background:#fbf8f5;border:1rpx solid #f1e7df;border-radius:12rpx;padding:16rpx;box-sizing:border-box}
+.frow.col .lb{flex:none}
+.btn{margin-top:26rpx;text-align:center;font-size:28rpx;color:#fff;background:#c8a47e;border-radius:16rpx;padding:26rpx 0;letter-spacing:2rpx}
+.btn.off{opacity:.55}
+.note{font-size:21rpx;color:#b6a99b;text-align:center;margin-top:16rpx}
+.ok{text-align:center;padding:80rpx 40rpx}
+.okic{width:110rpx;height:110rpx;border-radius:50%;background:#e3eee8;color:#47735f;font-size:56rpx;display:flex;align-items:center;justify-content:center;margin:0 auto 24rpx}
+.okt{font-size:32rpx;font-weight:600;color:#2d2826}
+.okd{font-size:24rpx;color:#8c8279;line-height:1.7;margin-top:12rpx}
+.ok .btn{background:#f1e7df;color:#9b7655;margin-top:40rpx}

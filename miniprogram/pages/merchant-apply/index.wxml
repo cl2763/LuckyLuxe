@@ -1,0 +1,32 @@
+<view class="page">
+  <block wx:if="{{!done}}">
+    <view class="intro">
+      <view class="it">把你的小店搬上小程序</view>
+      <view class="id">留下联系方式,平台客服会尽快加你微信,一对一帮你开通商家账号、导入服务与价格。</view>
+    </view>
+
+    <view class="form">
+      <view class="frow"><text class="lb">店铺名称</text><input class="in" value="{{shopName}}" placeholder="必填" bindinput="onShop" /></view>
+      <view class="frow"><text class="lb">店铺类型</text>
+        <picker class="pk" mode="selector" range="{{types}}" value="{{typeIdx}}" bindchange="onType"><view class="pkv">{{types[typeIdx]}} ›</view></picker>
+      </view>
+      <view class="frow"><text class="lb">联系人</text><input class="in" value="{{contactName}}" placeholder="老板/负责人称呼" bindinput="onContact" /></view>
+      <view class="frow"><text class="lb">手机号</text><input class="in" type="number" value="{{phone}}" placeholder="手机号 / 微信号至少留一个" bindinput="onPhone" /></view>
+      <view class="frow"><text class="lb">微信号</text><input class="in" value="{{wechatId}}" placeholder="方便客服加你" bindinput="onWechat" /></view>
+      <view class="frow"><text class="lb">城市</text><input class="in" value="{{city}}" placeholder="选填" bindinput="onCity" /></view>
+      <view class="frow col"><text class="lb">备注</text><textarea class="ta" value="{{note}}" placeholder="选填:门店规模、现有系统、想解决的问题…" bindinput="onNote" maxlength="300" /></view>
+    </view>
+
+    <view class="btn {{submitting?'off':''}}" bindtap="submit">{{submitting?'提交中…':'提交入驻申请'}}</view>
+    <view class="note">我们只用于入驻联系,不会对外泄露。</view>
+  </block>
+
+  <block wx:else>
+    <view class="ok">
+      <view class="okic">✓</view>
+      <view class="okt">申请已提交</view>
+      <view class="okd">平台客服会尽快通过手机号 / 微信号联系你,协助开通商家账号并导入服务。</view>
+      <view class="btn" bindtap="back">返回</view>
+    </view>
+  </block>
+</view>
