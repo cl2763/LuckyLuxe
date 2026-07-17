@@ -1,0 +1,407 @@
+<!DOCTYPE html>
+<html lang="zh">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Lucky Luxe · 平台运营</title>
+<style>
+  :root{--gold:#c8a47e;--bronze:#9b7655;--ink:#2d2826;--paper:#fbf8f5;--soft:#f1e7df;--line:#e7ddd4;--muted:#8c8279;--success:#47735f;--danger:#a34c48;--warn:#b5731f}
+  *{box-sizing:border-box;margin:0;padding:0}
+  body{background:var(--paper);color:var(--ink);font-family:-apple-system,"PingFang SC","Microsoft YaHei",sans-serif}
+  .layout{display:flex;min-height:100vh}
+  .side{width:200px;background:#fff;border-right:1px solid var(--line);padding:20px 12px;flex:none}
+  .brand{font-size:16px;font-weight:750;color:#5c4630;padding:0 10px 14px;border-bottom:1px solid var(--soft);margin-bottom:10px}
+  .brand small{display:block;font-weight:500;color:var(--muted);font-size:11px;margin-top:3px}
+  .navbtn{display:flex;align-items:center;gap:8px;width:100%;text-align:left;font-size:14px;padding:10px 11px;border:none;background:none;color:var(--ink);border-radius:9px;cursor:pointer;margin-bottom:3px}
+  .navbtn.on{background:var(--soft);color:var(--bronze);font-weight:650}
+  .navbtn:hover{background:var(--paper)}
+  .navbtn.dim{color:#c0b5a8;cursor:default}
+  .navbtn.dim:hover{background:none}
+  .navbtn .badge{margin-left:auto;font-size:10px;background:#fff4e6;color:var(--warn);border:1px solid #f0d9b8;border-radius:10px;padding:1px 7px}
+  .navbtn .fut{margin-left:auto;font-size:9.5px;color:#c0b5a8;border:1px solid var(--line);border-radius:8px;padding:1px 6px}
+  .side .foot{margin-top:20px;padding:0 10px}
+  .main{flex:1;padding:24px 30px;max-width:1040px}
+  h1{font-size:20px;font-weight:650;color:#5c4630;margin-bottom:16px}
+  h2{font-size:14.5px;margin-bottom:12px}
+  .card{background:#fff;border:1px solid var(--line);border-radius:14px;padding:16px;margin-bottom:16px}
+  .metrics{display:grid;grid-template-columns:repeat(4,1fr);gap:12px;margin-bottom:16px}
+  .met{background:#fff;border:1px solid var(--line);border-radius:12px;padding:14px}
+  .met .l{font-size:11.5px;color:var(--muted)}
+  .met .v{font-size:26px;font-weight:750;color:var(--bronze);margin-top:4px}
+  .met .v.warn{color:var(--warn)}
+  .met .s{font-size:11px;color:var(--muted);margin-top:2px}
+  input,select,textarea{font-size:13.5px;padding:8px 11px;border:1px solid var(--line);border-radius:8px;background:#fff;color:var(--ink);font-family:inherit}
+  input:focus,select:focus,textarea:focus{outline:none;border-color:var(--gold)}
+  textarea{width:100%;min-height:64px;resize:vertical}
+  button{font-size:13px;padding:8px 15px;border-radius:8px;border:1px solid var(--line);background:var(--soft);color:var(--bronze);cursor:pointer}
+  button.p{background:var(--gold);border-color:var(--gold);color:#fff}
+  button.d{border-color:#dcb3b0;color:var(--danger);background:#fff}
+  button.sm{font-size:12px;padding:5px 10px}
+  button:hover{filter:brightness(.97)}
+  table{width:100%;border-collapse:collapse;font-size:13px}
+  th,td{text-align:left;padding:9px 8px;border-bottom:1px solid var(--soft);vertical-align:middle}
+  th{color:var(--muted);font-weight:600;font-size:12px}
+  .tag{font-size:11px;border-radius:20px;padding:2px 10px;white-space:nowrap}
+  .tag.on{background:#e3eee8;color:var(--success)}
+  .tag.off{background:#f3e1df;color:var(--danger)}
+  .tag.new{background:#fff4e6;color:var(--warn)}
+  .tag.n{background:var(--soft);color:var(--bronze)}
+  .row{display:flex;gap:10px;flex-wrap:wrap;align-items:center}
+  .muted{color:var(--muted);font-size:12px}
+  .cred{background:#fff9ef;border:1px dashed var(--gold);border-radius:10px;padding:12px 14px;margin-top:12px;font-size:13px;line-height:1.8}
+  .hidden{display:none}
+  .toast{position:fixed;left:50%;transform:translateX(-50%);bottom:36px;background:var(--ink);color:#fff;font-size:13px;border-radius:10px;padding:10px 18px;opacity:0;transition:.25s;z-index:99}
+  .toast.show{opacity:1}
+  #loginWrap{max-width:440px;margin:110px auto;padding:0 20px}
+  .tabs{display:flex;gap:6px;margin-bottom:14px;flex-wrap:wrap}
+  .tab{font-size:13px;padding:8px 14px;border-radius:20px;border:1px solid var(--line);background:#fff;color:var(--muted);cursor:pointer}
+  .tab.on{background:var(--gold);border-color:var(--gold);color:#fff}
+  .selbar{display:flex;gap:10px;align-items:center;margin-bottom:14px}
+  .kbq{font-weight:600}
+  .kba{color:#5c4630;font-size:12.5px;white-space:pre-wrap}
+  .todo-item{display:flex;align-items:center;justify-content:space-between;padding:9px 4px;border-bottom:1px solid var(--soft);font-size:13px}
+  .todo-item:last-child{border-bottom:none}
+  .ni{width:15px;height:15px;fill:none;stroke:currentColor;stroke-width:1.8;stroke-linecap:round;stroke-linejoin:round;flex:none}
+</style>
+</head>
+<body>
+
+<div id="loginWrap">
+  <div class="card" style="padding:26px">
+    <div style="text-align:center;margin-bottom:16px">
+      <div style="font-size:19px;font-weight:750;color:#5c4630">Lucky Luxe</div>
+      <div class="muted" style="margin-top:3px">平台运营控制台 Platform Console</div>
+    </div>
+    <input id="tokenInput" type="password" placeholder="平台主钥匙(OWNER_TOKEN)" style="width:100%;margin-bottom:10px">
+    <button class="p" style="width:100%" onclick="login()">进入控制台</button>
+    <p class="muted" style="text-align:center;margin-top:10px">仅平台方使用 · 商家后台请访问 /admin</p>
+  </div>
+</div>
+
+<div id="app" class="layout hidden">
+  <aside class="side">
+    <div class="brand">Lucky Luxe<small>平台运营</small></div>
+    <button class="navbtn on" data-page="overview" onclick="nav('overview')"><svg class="ni" viewBox="0 0 16 16"><path d="M2 8l6-5 6 5v6H2z"/></svg>概览</button>
+    <button class="navbtn" data-page="merchants" onclick="nav('merchants')"><svg class="ni" viewBox="0 0 16 16"><rect x="2" y="3" width="12" height="10" rx="2"/><path d="M2 7h12"/></svg>商家管理</button>
+    <button class="navbtn" data-page="config" onclick="nav('config')"><svg class="ni" viewBox="0 0 16 16"><path d="M3 3h10v8H8l-3 3v-3H3z"/></svg>商家配置</button>
+    <button class="navbtn" data-page="leads" onclick="nav('leads')"><svg class="ni" viewBox="0 0 16 16"><path d="M2 4h12v8H2z"/><path d="M2 4l6 4 6-4"/></svg>入驻线索<span id="leadBadge" class="badge hidden"></span></button>
+    <button class="navbtn dim"><svg class="ni" viewBox="0 0 16 16"><circle cx="8" cy="8" r="6"/><path d="M8 5v3l2 2"/></svg>套餐计费<span class="fut">规划</span></button>
+    <button class="navbtn dim"><svg class="ni" viewBox="0 0 16 16"><path d="M2 13V8m4 5V5m4 8V9m4 4V3"/></svg>数据报表<span class="fut">规划</span></button>
+    <button class="navbtn dim"><svg class="ni" viewBox="0 0 16 16"><circle cx="8" cy="8" r="2.5"/><path d="M8 2v2m0 8v2M2 8h2m8 0h2"/></svg>平台设置<span class="fut">规划</span></button>
+    <div class="foot"><button style="width:100%" onclick="logout()">退出</button></div>
+  </aside>
+
+  <main class="main">
+    <!-- 概览 -->
+    <section id="page-overview">
+      <h1>概览</h1>
+      <div class="metrics">
+        <div class="met"><div class="l">入驻商家</div><div class="v" id="mTotal">-</div><div class="s" id="mTotalSub"></div></div>
+        <div class="met"><div class="l">新入驻线索</div><div class="v warn" id="mLeads">-</div><div class="s">待联系</div></div>
+        <div class="met"><div class="l">本月平台订单</div><div class="v" id="mMonth">-</div><div class="s">全部商家合计</div></div>
+        <div class="met"><div class="l">待配置商家</div><div class="v" id="mPending">-</div><div class="s">缺价目表</div></div>
+      </div>
+      <div class="card"><h2>待办</h2><div id="todoList"><div class="muted">暂无待办</div></div></div>
+      <div class="card">
+        <h2>商家速览</h2>
+        <table><thead><tr><th>商家</th><th>状态</th><th>累计订单</th><th>快捷</th></tr></thead><tbody id="quickRows"></tbody></table>
+      </div>
+    </section>
+
+    <!-- 商家管理 -->
+    <section id="page-merchants" class="hidden">
+      <h1>商家管理</h1>
+      <div class="card">
+        <h2>新建商家</h2>
+        <div class="row">
+          <input id="mName" placeholder="商家名称(必填)" style="width:190px">
+          <input id="mCity" placeholder="城市(选填)" style="width:130px">
+          <select id="mPlan"><option value="solo">个人版</option><option value="studio" selected>工作室版</option><option value="chain">连锁版</option></select>
+          <input id="mId" placeholder="租户id(选填)" style="width:160px">
+          <button class="p" onclick="createTenant()">创建(建店 + 老板账号)</button>
+        </div>
+        <div id="credBox" class="cred hidden"></div>
+      </div>
+      <div class="card">
+        <table>
+          <thead><tr><th>租户</th><th>名称</th><th>套餐</th><th>状态</th><th>门店</th><th>订单</th><th>老板账号</th><th>店码</th><th>操作</th></tr></thead>
+          <tbody id="tenantRows"></tbody>
+        </table>
+        <p class="muted" style="margin-top:8px">停用后:顾客端立即进不了该店;老板账号在多商户控制台开放前统一暂不可登录。</p>
+      </div>
+    </section>
+
+    <!-- 商家配置 -->
+    <section id="page-config" class="hidden">
+      <h1>商家配置</h1>
+      <div class="selbar">
+        <span class="muted">当前商家:</span>
+        <select id="cfgTenant" onchange="loadConfig()" style="min-width:230px"></select>
+        <span class="muted">改动即时生效到顾客端与 AI 客服</span>
+      </div>
+      <div class="tabs">
+        <button class="tab on" data-tab="store" onclick="tab('store')">门店信息</button>
+        <button class="tab" data-tab="hours" onclick="tab('hours')">营业时间</button>
+        <button class="tab" data-tab="services" onclick="tab('services')">服务价目</button>
+        <button class="tab" data-tab="techs" onclick="tab('techs')">技师</button>
+        <button class="tab" data-tab="kb" onclick="tab('kb')">AI 知识库</button>
+      </div>
+
+      <div id="tab-store" class="card" style="max-width:600px">
+        <h2>门店信息(保存后同步 AI 口径)</h2>
+        <div class="row" style="margin-bottom:10px"><label style="width:56px">名称</label><input id="stName" style="flex:1"></div>
+        <div class="row" style="margin-bottom:10px"><label style="width:56px">地址</label><input id="stAddr" style="flex:1"></div>
+        <div class="row" style="margin-bottom:12px"><label style="width:56px">电话</label><input id="stPhone" style="flex:1"></div>
+        <button class="p" onclick="saveStore()">保存门店信息</button>
+      </div>
+
+      <div id="tab-hours" class="card hidden" style="max-width:600px">
+        <h2>营业时间</h2>
+        <table><thead><tr><th>星期</th><th>营业</th><th>开门</th><th>关门</th></tr></thead><tbody id="hourRows"></tbody></table>
+        <div style="margin-top:12px"><button class="p" onclick="saveHours()">保存营业时间</button></div>
+      </div>
+
+      <div id="tab-services" class="card hidden">
+        <h2>服务价目表</h2>
+        <div class="row" style="margin-bottom:12px">
+          <select id="svcType"><option value="NAIL">美甲</option><option value="LASH">美睫</option></select>
+          <input id="svcName" placeholder="服务中文名" style="width:170px">
+          <input id="svcPrice" placeholder="价格$" type="number" style="width:90px">
+          <input id="svcDur" placeholder="分钟" type="number" style="width:80px">
+          <input id="svcCat" placeholder="分类(选填)" style="width:110px">
+          <button class="p" onclick="addService()">添加服务</button>
+        </div>
+        <table><thead><tr><th>服务</th><th>类型</th><th>价格</th><th>时长</th><th>状态</th><th>操作</th></tr></thead><tbody id="svcRows"></tbody></table>
+        <p class="muted" style="margin-top:8px">美甲为"基础价+复杂款人工报价"、美睫为固定价,口径与 AI 一致。</p>
+      </div>
+
+      <div id="tab-techs" class="card hidden" style="max-width:680px">
+        <h2>技师</h2>
+        <div class="row" style="margin-bottom:12px">
+          <input id="techName" placeholder="技师姓名" style="width:150px">
+          <input id="techTitle" placeholder="头衔(选填)" style="width:150px">
+          <button class="p" onclick="addTech()">添加技师</button>
+        </div>
+        <table><thead><tr><th>姓名</th><th>头衔</th><th>状态</th><th>操作</th></tr></thead><tbody id="techRows"></tbody></table>
+        <p class="muted" style="margin-top:8px">新技师自动可做该店全部在售服务;排班与员工账号由商家老板在商家端自管。</p>
+      </div>
+
+      <div id="tab-kb" class="hidden">
+        <div class="card" style="max-width:680px">
+          <h2>品牌事实(AI 客服口径)</h2>
+          <div class="row" style="margin-bottom:10px">
+            <label style="width:72px">品牌名</label><input id="kbBrand" style="width:200px">
+            <label style="width:72px;text-align:right">客服名</label><input id="kbAssistant" style="width:200px">
+          </div>
+          <div class="row" style="margin-bottom:12px">
+            <label style="width:72px">定金金额</label><input id="kbDeposit" style="width:200px" placeholder="如 50">
+            <label style="width:72px;text-align:right">币种</label><input id="kbCurrency" style="width:200px" placeholder="如 CAD">
+          </div>
+          <button class="p" onclick="saveFacts()">保存品牌事实</button>
+          <p class="muted" style="margin-top:8px">地址/电话在「门店信息」保存时自动同步进 AI。</p>
+        </div>
+        <div class="card">
+          <h2>常见问答(商家专属知识条目)</h2>
+          <div style="margin-bottom:10px">
+            <input id="kbQ" placeholder="顾客会问的问题,如:可以带小孩吗?" style="width:100%;margin-bottom:8px">
+            <textarea id="kbA" placeholder="AI 应回答的中文答案"></textarea>
+            <div class="row" style="margin-top:8px"><input id="kbKw" placeholder="触发关键词(逗号分隔,选填)" style="flex:1"><button class="p" onclick="addEntry()">添加问答</button></div>
+          </div>
+          <table><thead><tr><th style="width:56%">问答</th><th>状态</th><th>操作</th></tr></thead><tbody id="kbRows"></tbody></table>
+        </div>
+      </div>
+    </section>
+
+    <!-- 线索 -->
+    <section id="page-leads" class="hidden">
+      <h1>入驻线索</h1>
+      <div class="card">
+        <table>
+          <thead><tr><th>店铺</th><th>联系人</th><th>手机号</th><th>微信号</th><th>类型/城市</th><th>状态</th><th>备注</th><th>操作</th></tr></thead>
+          <tbody id="leadRows"></tbody>
+        </table>
+        <p class="muted" style="margin-top:8px">「转入驻→建店」会预填店名/城市跳到"新建商家",建完请回来把线索标为已入驻。</p>
+      </div>
+    </section>
+  </main>
+</div>
+
+<div id="toast" class="toast"></div>
+
+<script>
+let TOKEN = localStorage.getItem('ll-platform-token') || ''
+const $ = (id) => document.getElementById(id)
+const WK = ['周日','周一','周二','周三','周四','周五','周六']
+function toast(m){const t=$('toast');t.textContent=m;t.classList.add('show');setTimeout(()=>t.classList.remove('show'),2200)}
+function esc(s){return String(s??'').replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]))}
+async function api(p,o={}){const r=await fetch(p,{...o,headers:{'content-type':'application/json',authorization:'Bearer '+TOKEN,...(o.headers||{})}});const d=await r.json().catch(()=>null);if(!r.ok)throw new Error((d&&d.error&&d.error.message)||('HTTP '+r.status));return d}
+async function login(){TOKEN=$('tokenInput').value.trim();try{await api('/platform/tenants');localStorage.setItem('ll-platform-token',TOKEN);$('loginWrap').classList.add('hidden');$('app').classList.remove('hidden');refreshAll()}catch(e){toast('钥匙不对或服务不可用:'+e.message)}}
+function logout(){localStorage.removeItem('ll-platform-token');location.reload()}
+function nav(p){document.querySelectorAll('.navbtn[data-page]').forEach(b=>b.classList.toggle('on',b.dataset.page===p));['overview','merchants','config','leads'].forEach(x=>$('page-'+x).classList.toggle('hidden',x!==p));if(p==='overview')loadOverview();if(p==='leads')loadLeads();if(p==='config')initConfig()}
+async function refreshAll(){await loadTenants();await loadLeads();await loadOverview()}
+
+// ===== 数据缓存 =====
+let TENANTS=[], LEADS=[]
+
+// ===== 概览 =====
+async function loadOverview(){
+  try{
+    const [ov]=await Promise.all([api('/platform/overview'),loadTenants(),loadLeads()])
+    const act=TENANTS.filter(t=>t.status==='active').length
+    $('mTotal').textContent=TENANTS.length
+    $('mTotalSub').textContent=`营业中 ${act} · 停用 ${TENANTS.length-act}`
+    const newLeads=LEADS.filter(l=>l.status==='new')
+    $('mLeads').textContent=newLeads.length
+    $('mMonth').textContent=ov.monthBookings
+    $('mPending').textContent=(ov.pendingConfig||[]).length
+    // 待办
+    const todos=[]
+    newLeads.slice(0,3).forEach(l=>todos.push(`<div class="todo-item"><span>📥 新线索「${esc(l.shopName)}」${l.contactName?'('+esc(l.contactName)+')':''} 待联系</span><button class="sm p" onclick="nav('leads')">去处理</button></div>`))
+    ;(ov.pendingConfig||[]).forEach(t=>todos.push(`<div class="todo-item"><span>🛠 商家「${esc(t.name)}」已建店,价目表还没配</span><button class="sm" onclick="goConfig('${esc(t.id)}')">去配置</button></div>`))
+    $('todoList').innerHTML=todos.join('')||'<div class="muted">暂无待办</div>'
+    $('quickRows').innerHTML=TENANTS.map(t=>`<tr><td><b>${esc(t.name)}</b>${t.id==='lucky-luxe'?' <span class="muted">旗舰</span>':''}</td><td><span class="tag ${t.status==='active'?'on':'off'}">${t.status==='active'?'营业中':'已停用'}</span></td><td>${t.bookingCount}</td><td class="row"><button class="sm" onclick="goConfig('${esc(t.id)}')">配置</button><span class="muted">t=${esc(t.id)}</span></td></tr>`).join('')
+  }catch(e){toast(e.message)}
+}
+
+// ===== 商家管理 =====
+async function loadTenants(){
+  const d=await api('/platform/tenants');TENANTS=d.tenants||[]
+  $('tenantRows').innerHTML=TENANTS.map(t=>`<tr>
+    <td class="muted">${esc(t.id)}</td><td><b>${esc(t.name)}</b></td><td>${esc(t.plan)}</td>
+    <td><span class="tag ${t.status==='active'?'on':'off'}">${t.status==='active'?'营业中':'已停用'}</span></td>
+    <td>${t.storeCount}</td><td>${t.bookingCount}</td><td>${esc(t.ownerUsername)||'-'}</td>
+    <td class="muted">t=${esc(t.id)}</td>
+    <td class="row"><button class="sm" onclick="goConfig('${esc(t.id)}')">配置</button>${t.id==='lucky-luxe'?'<span class="muted">默认店</span>':`<button class="sm ${t.status==='active'?'d':'p'}" onclick="toggleTenant('${esc(t.id)}')">${t.status==='active'?'停用':'启用'}</button>`}</td>
+  </tr>`).join('')
+  return TENANTS
+}
+async function toggleTenant(id){if(!confirm('确认切换营业状态?停用后顾客端将无法进入该店。'))return;try{await api('/platform/tenants/'+id+'/toggle',{method:'POST',body:'{}'});toast('已切换');loadTenants()}catch(e){toast(e.message)}}
+async function createTenant(){
+  const name=$('mName').value.trim();if(!name){toast('商家名称必填');return}
+  try{
+    const d=await api('/platform/tenants',{method:'POST',body:JSON.stringify({name,city:$('mCity').value.trim(),plan:$('mPlan').value,id:$('mId').value.trim()})})
+    $('credBox').classList.remove('hidden')
+    $('credBox').innerHTML=`✅ <b>${esc(d.tenant.name)}</b>(${esc(d.tenant.id)})已创建<br>老板账号:<b>${esc(d.owner.username)}</b> 初始密码:<b>${esc(d.owner.initialPassword)}</b>(只显示一次;商家控制台开放前账号暂不可登录)<br>店码 scene:<b>${esc(d.shopEntry.scene)}</b> · <a href="javascript:void(0)" onclick="goConfig('${esc(d.tenant.id)}')">→ 去替商家配置资料</a>`
+    $('mName').value=$('mCity').value=$('mId').value=''
+    loadTenants()
+  }catch(e){toast(e.message)}
+}
+
+// ===== 线索 =====
+const LS={new:['新线索','new'],contacted:['已联系','n'],onboarded:['已入驻','on'],rejected:['已拒绝','off']}
+async function loadLeads(){
+  const d=await api('/platform/leads');LEADS=d.leads||[]
+  const newCount=LEADS.filter(l=>l.status==='new').length
+  $('leadBadge').textContent=newCount;$('leadBadge').classList.toggle('hidden',!newCount)
+  $('leadRows').innerHTML=LEADS.map(l=>{const s=LS[l.status]||[l.status,'n'];return `<tr>
+    <td><b>${esc(l.shopName)}</b></td><td>${esc(l.contactName)||'-'}</td>
+    <td>${esc(l.phone)||'-'}${l.phone?` <button class="sm" onclick="copyTxt('${esc(l.phone)}')">复制</button>`:''}</td>
+    <td>${esc(l.wechatId)||'-'}${l.wechatId?` <button class="sm" onclick="copyTxt('${esc(l.wechatId)}')">复制</button>`:''}</td>
+    <td class="muted">${esc(l.shopType)}${l.city?' · '+esc(l.city):''}</td>
+    <td><span class="tag ${s[1]}">${s[0]}</span></td><td class="muted">${esc(l.note)||''}</td>
+    <td class="row">
+      <button class="sm" onclick="leadStatus('${esc(l.id)}','contacted')">已联系</button>
+      <button class="sm p" onclick="leadToMerchant('${esc(l.id)}')">转入驻→建店</button>
+      <button class="sm d" onclick="leadStatus('${esc(l.id)}','rejected')">拒绝</button>
+    </td></tr>`}).join('')||'<tr><td colspan="8" class="muted">暂无线索</td></tr>'
+  return LEADS
+}
+function copyTxt(t){navigator.clipboard&&navigator.clipboard.writeText(t).then(()=>toast('已复制'))}
+async function leadStatus(id,st){try{await api('/platform/leads/'+id,{method:'PATCH',body:JSON.stringify({status:st})});toast('已更新');loadLeads()}catch(e){toast(e.message)}}
+function leadToMerchant(id){
+  const l=LEADS.find(x=>x.id===id);if(!l)return
+  nav('merchants')
+  $('mName').value=l.shopName||'';$('mCity').value=l.city||''
+  toast('已预填,创建后回线索页标记"已入驻"')
+  // 建店成功后可手动回线索页点「已入驻」;此处再帮一把:
+  window._pendingLead=id
+}
+// 建店成功时若有待转线索,自动标已入驻
+const _origCreate=createTenant
+createTenant=async function(){await _origCreate();if(window._pendingLead){try{await api('/platform/leads/'+window._pendingLead,{method:'PATCH',body:JSON.stringify({status:'onboarded'})});window._pendingLead=null;loadLeads();toast('线索已标记为已入驻')}catch(e){}}}
+
+// ===== 商家配置 =====
+let CFG_T=''
+function goConfig(tid){CFG_T=tid;nav('config')}
+function initConfig(){
+  const sel=$('cfgTenant')
+  sel.innerHTML=TENANTS.map(t=>`<option value="${esc(t.id)}" ${t.id===CFG_T?'selected':''}>${esc(t.name)}(${esc(t.id)})</option>`).join('')
+  if(!CFG_T&&TENANTS.length)CFG_T=TENANTS[0].id
+  loadConfig()
+}
+function tab(t){document.querySelectorAll('.tab').forEach(b=>b.classList.toggle('on',b.dataset.tab===t));['store','hours','services','techs','kb'].forEach(x=>$('tab-'+x).classList.toggle('hidden',x!==t))}
+async function loadConfig(){
+  CFG_T=$('cfgTenant').value||CFG_T
+  if(!CFG_T)return
+  try{
+    const [st,hr,sv,tc,kb]=await Promise.all([
+      api(`/platform/tenants/${CFG_T}/store`),api(`/platform/tenants/${CFG_T}/business-hours`),
+      api(`/platform/tenants/${CFG_T}/services`),api(`/platform/tenants/${CFG_T}/technicians`),api(`/platform/tenants/${CFG_T}/kb`)
+    ])
+    $('stName').value=st.store?st.store.name:'';$('stAddr').value=st.store?st.store.address:'';$('stPhone').value=st.store?st.store.phone:''
+    renderHours(hr.hours||[]);renderServices(sv.services||[]);renderTechs(tc.technicians||[]);renderKb(kb)
+  }catch(e){toast(e.message)}
+}
+async function saveStore(){try{await api(`/platform/tenants/${CFG_T}/store`,{method:'PUT',body:JSON.stringify({name:$('stName').value,address:$('stAddr').value,phone:$('stPhone').value})});toast('门店信息已保存并同步 AI')}catch(e){toast(e.message)}}
+function renderHours(hours){
+  const map={};hours.forEach(h=>map[h.weekday]=h)
+  $('hourRows').innerHTML=[1,2,3,4,5,6,0].map(w=>{const h=map[w]||{isClosed:w===1,openTime:'10:00',closeTime:'19:00'};return `<tr data-w="${w}">
+    <td>${WK[w]}</td><td><input type="checkbox" class="hopen" ${h.isClosed?'':'checked'}></td>
+    <td><input type="time" class="hstart" value="${h.openTime||'10:00'}" style="width:112px"></td>
+    <td><input type="time" class="hend" value="${h.closeTime||'19:00'}" style="width:112px"></td></tr>`}).join('')
+}
+async function saveHours(){
+  const hours=[...document.querySelectorAll('#hourRows tr')].map(tr=>({weekday:Number(tr.dataset.w),isClosed:!tr.querySelector('.hopen').checked,openTime:tr.querySelector('.hstart').value||'10:00',closeTime:tr.querySelector('.hend').value||'19:00'}))
+  try{await api(`/platform/tenants/${CFG_T}/business-hours`,{method:'PUT',body:JSON.stringify({hours})});toast('营业时间已保存')}catch(e){toast(e.message)}
+}
+function renderServices(list){
+  $('svcRows').innerHTML=list.map(s=>`<tr>
+    <td><b>${esc(s.nameZh)}</b></td><td>${s.type==='nail'?'美甲':'美睫'}</td><td>$${s.priceCents/100}</td><td>${s.durationMin}min</td>
+    <td><span class="tag ${s.isActive?'on':'off'}">${s.isActive?'在售':'下架'}</span></td>
+    <td class="row"><button class="sm" onclick="editPrice('${esc(s.id)}',${s.priceCents})">改价</button><button class="sm ${s.isActive?'d':'p'}" onclick="toggleSvc('${esc(s.id)}',${s.isActive})">${s.isActive?'下架':'上架'}</button></td>
+  </tr>`).join('')||'<tr><td colspan="6" class="muted">还没有服务,替商家把价目表加上吧</td></tr>'
+}
+async function addService(){
+  const name=$('svcName').value.trim(),price=Number($('svcPrice').value)
+  if(!name||!price){toast('服务名与价格必填');return}
+  try{await api(`/platform/tenants/${CFG_T}/services`,{method:'POST',body:JSON.stringify({type:$('svcType').value,nameZh:name,nameEn:name,priceCents:Math.round(price*100),baseDurationMin:Number($('svcDur').value)||90,category:$('svcCat').value.trim()||undefined})});toast('已添加');$('svcName').value=$('svcPrice').value=$('svcDur').value=$('svcCat').value='';loadConfig()}catch(e){toast(e.message)}
+}
+async function editPrice(id,cents){
+  const v=prompt('新价格(加元)',String(cents/100));if(v===null)return
+  const p=Number(v);if(!p||p<=0){toast('价格无效');return}
+  try{await api(`/platform/tenants/${CFG_T}/services/${id}`,{method:'PATCH',body:JSON.stringify({priceCents:Math.round(p*100)})});toast('已改价');loadConfig()}catch(e){toast(e.message)}
+}
+async function toggleSvc(id,active){try{await api(`/platform/tenants/${CFG_T}/services/${id}`,{method:'PATCH',body:JSON.stringify({isActive:!active})});loadConfig()}catch(e){toast(e.message)}}
+function renderTechs(list){
+  $('techRows').innerHTML=list.map(t=>`<tr>
+    <td><b>${esc(t.name)}</b></td><td>${esc(t.title)||'-'}</td>
+    <td><span class="tag ${t.is_active?'on':'off'}">${t.is_active?'在职':'停用'}</span></td>
+    <td><button class="sm ${t.is_active?'d':'p'}" onclick="toggleTech('${esc(t.id)}',${t.is_active?1:0})">${t.is_active?'停用':'启用'}</button></td>
+  </tr>`).join('')||'<tr><td colspan="4" class="muted">还没有技师</td></tr>'
+}
+async function addTech(){
+  const name=$('techName').value.trim();if(!name){toast('姓名必填');return}
+  try{await api(`/platform/tenants/${CFG_T}/technicians`,{method:'POST',body:JSON.stringify({name,title:$('techTitle').value.trim()})});toast('已添加');$('techName').value=$('techTitle').value='';loadConfig()}catch(e){toast(e.message)}
+}
+async function toggleTech(id,active){try{await api(`/platform/tenants/${CFG_T}/technicians/${id}`,{method:'PATCH',body:JSON.stringify({isActive:!active})});loadConfig()}catch(e){toast(e.message)}}
+function renderKb(kb){
+  const f=kb.facts||{}
+  $('kbBrand').value=f.brandName||'';$('kbAssistant').value=f.assistantName||'';$('kbDeposit').value=f.depositAmount||'';$('kbCurrency').value=f.currency||''
+  $('kbRows').innerHTML=(kb.entries||[]).map(e=>`<tr>
+    <td><div class="kbq">${esc(e.question)}</div><div class="kba">${esc(e.answerZh)}</div></td>
+    <td><span class="tag ${e.enabled?'on':'off'}">${e.enabled?'启用':'停用'}</span></td>
+    <td class="row"><button class="sm" onclick="toggleEntry('${esc(e.id)}',${e.enabled})">${e.enabled?'停用':'启用'}</button><button class="sm d" onclick="delEntry('${esc(e.id)}')">删除</button></td>
+  </tr>`).join('')||'<tr><td colspan="3" class="muted">还没有问答条目;把商家常被问的问题录进来,AI 客服会优先用它回答</td></tr>'
+}
+async function saveFacts(){try{await api(`/platform/tenants/${CFG_T}/kb`,{method:'PUT',body:JSON.stringify({facts:{brandName:$('kbBrand').value,assistantName:$('kbAssistant').value,depositAmount:$('kbDeposit').value,currency:$('kbCurrency').value}})});toast('品牌事实已保存')}catch(e){toast(e.message)}}
+async function addEntry(){
+  const q=$('kbQ').value.trim(),a=$('kbA').value.trim();if(!q||!a){toast('问题与答案必填');return}
+  try{await api(`/platform/tenants/${CFG_T}/kb`,{method:'POST',body:JSON.stringify({question:q,answerZh:a,keywords:$('kbKw').value.trim()})});toast('已添加');$('kbQ').value=$('kbA').value=$('kbKw').value='';loadConfig()}catch(e){toast(e.message)}
+}
+async function toggleEntry(id,en){try{await api(`/platform/tenants/${CFG_T}/kb/${id}`,{method:'PATCH',body:JSON.stringify({enabled:!en})});loadConfig()}catch(e){toast(e.message)}}
+async function delEntry(id){if(!confirm('删除该问答?'))return;try{await api(`/platform/tenants/${CFG_T}/kb/${id}`,{method:'DELETE'});loadConfig()}catch(e){toast(e.message)}}
+
+if(TOKEN){$('tokenInput').value=TOKEN;login()}
+</script>
+</body>
+</html>

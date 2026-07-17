@@ -5738,6 +5738,7 @@ async function route(req, res) {
 
   if (req.method === 'GET' && path === '/') return serveFile(res, webRoot, 'index.html')
   if (req.method === 'GET' && path === '/admin') return serveFile(res, webRoot, 'admin.html')
+  if (req.method === 'GET' && path === '/platform') return serveFile(res, webRoot, 'platform.html')
   if (req.method === 'GET' && path === '/wechat-simulator') return serveFile(res, webRoot, 'wechat-simulator.html')
   if (req.method === 'GET' && path === '/share') return serveFile(res, webRoot, 'share.html')
   if (req.method === 'GET' && path.startsWith('/web/')) return serveFile(res, webRoot, path.replace('/web/', ''))
@@ -5832,6 +5833,11 @@ async function route(req, res) {
     const account = db.prepare('SELECT * FROM admin_accounts WHERE LOWER(username) = ?').get(loginId)
     if (account) {
       if (account.status !== 'active') throw apiError(403, 'ACCOUNT_DISABLED', '该账号已被停用,请联系老板。')
+      // 多租户安全闸:商家端 /admin 尚未按租户贯通(currentTenantId 写死默认店),
+      // 在贯通完成前禁止非默认租户账号登录,防止新商家看到默认店数据。贯通后移除此闸。
+      if (account.tenant_id && account.tenant_id !== DEFAULT_TENANT_ID) {
+        throw apiError(403, 'TENANT_PORTAL_NOT_READY', '该商家的管理后台即将开放:账号已预生成,多商户控制台上线后即可登录。')
+      }
       if (adminPasswordHash(account.username, password) !== account.password_hash) {
         throw apiError(401, 'WRONG_PASSWORD', '密码不正确。员工忘记密码请找老板重置;老板忘记密码请联系平台。')
       }
@@ -6390,6 +6396,233 @@ async function route(req, res) {
       body.totalQty === undefined ? cur.total_qty : Math.max(0, Math.round(Number(body.totalQty) || 0)),
       body.isActive === undefined ? cur.is_active : (body.isActive ? 1 : 0), id)
     return json(res, 200, { coupon: serializeCoupon(db.prepare('SELECT * FROM coupons WHERE id = ?').get(id)) })
+  }
+  // ===== 平台超管端(platform.html):仅 OWNER_TOKEN 主钥匙可用 =====
+  const isPlatform = () => {
+    const auth = req.headers.authorization || ''
+    return auth === `Bearer ${OWNER_TOKEN}`
+  }
+  if (req.method === 'GET' && path === '/platform/overview') {
+    if (!isPlatform()) throw apiError(401, 'UNAUTHORIZED', 'Platform token required.')
+    const monthStart = `${localParts(new Date()).date.slice(0, 7)}-01`
+    const monthBookings = db.prepare('SELECT COUNT(*) AS n FROM bookings WHERE appointment_start >= ?').get(iso(localDateTime(monthStart, '00:00'))).n
+    const pendingConfig = db.prepare(`SELECT t.id, t.name FROM tenants t WHERE t.status = 'active'
+      AND NOT EXISTS (SELECT 1 FROM services s WHERE s.tenant_id = t.id AND s.is_active = 1)`).all()
+    return json(res, 200, { monthBookings, pendingConfig: pendingConfig.map((r) => ({ id: r.id, name: r.name })) })
+  }
+  if (req.method === 'GET' && path === '/platform/tenants') {
+    if (!isPlatform()) throw apiError(401, 'UNAUTHORIZED', 'Platform token required.')
+    const rows = db.prepare(`
+      SELECT t.id, t.name, t.plan, t.status, t.plan_expires_at,
+        (SELECT COUNT(*) FROM stores s WHERE s.tenant_id = t.id AND s.is_active = 1) AS store_count,
+        (SELECT COUNT(*) FROM bookings b WHERE b.tenant_id = t.id) AS booking_count,
+        (SELECT username FROM admin_accounts a WHERE a.tenant_id = t.id AND a.role = 'owner' LIMIT 1) AS owner_username
+      FROM tenants t ORDER BY t.rowid ASC
+    `).all()
+    return json(res, 200, { tenants: rows.map((r) => ({ id: r.id, name: r.name, plan: r.plan, status: r.status, planExpiresAt: r.plan_expires_at, storeCount: r.store_count, bookingCount: r.booking_count, ownerUsername: r.owner_username || '' })) })
+  }
+  if (req.method === 'POST' && path === '/platform/tenants') {
+    if (!isPlatform()) throw apiError(401, 'UNAUTHORIZED', 'Platform token required.')
+    const body = await readBody(req)
+    const name = String(body.name || '').trim()
+    if (!name) throw apiError(400, 'BAD_REQUEST', '商家名称必填。')
+    let id = String(body.id || '').trim().toLowerCase().replace(/[^a-z0-9-]/g, '')
+    if (!id) id = `shop-${Math.random().toString(36).slice(2, 8)}`
+    if (db.prepare('SELECT id FROM tenants WHERE id = ?').get(id)) throw apiError(409, 'DUPLICATE', `租户 id ${id} 已存在。`)
+    const plan = ['solo', 'studio', 'chain'].includes(body.plan) ? body.plan : 'studio'
+    db.prepare("INSERT INTO tenants (id, name, plan, status) VALUES (?, ?, ?, 'active')").run(id, name.slice(0, 60), plan)
+    db.prepare('INSERT INTO stores (id, name, address, phone, timezone, currency, is_active, tenant_id) VALUES (?, ?, ?, ?, ?, ?, 1, ?)')
+      .run(`store-${id}`, name.slice(0, 60), String(body.city || '').slice(0, 80), String(body.phone || '').slice(0, 30), 'America/Toronto', 'CAD', id)
+    // 老板账号:username 唯一,默认 boss-<id>
+    let username = String(body.username || `boss-${id}`).trim().toLowerCase().replace(/[^a-z0-9-]/g, '') || `boss-${id}`
+    let suffix = 1
+    while (db.prepare('SELECT id FROM admin_accounts WHERE LOWER(username) = ?').get(username)) { suffix += 1; username = `boss-${id}${suffix}` }
+    const initialPassword = randomPassword()
+    db.prepare(`INSERT INTO admin_accounts (id, tenant_id, username, display_name, role, technician_id, password_hash, must_change_password, status, created_at, updated_at)
+      VALUES (?, ?, ?, ?, 'owner', NULL, ?, 1, 'active', ?, ?)`)
+      .run(randomId('acct'), id, username, `${name} Owner`, adminPasswordHash(username, initialPassword), iso(new Date()), iso(new Date()))
+    return json(res, 201, {
+      tenant: { id, name, plan, status: 'active' },
+      owner: { username, initialPassword, note: '初始密码只显示这一次,请交付商家;首次登录强制改密。' },
+      shopEntry: { scene: `t=${id}`, note: '小程序发布后可用此 scene 生成该店专属小程序码。' }
+    })
+  }
+  if (req.method === 'POST' && path.startsWith('/platform/tenants/') && path.endsWith('/toggle')) {
+    if (!isPlatform()) throw apiError(401, 'UNAUTHORIZED', 'Platform token required.')
+    const id = path.split('/')[3]
+    if (id === DEFAULT_TENANT_ID) throw apiError(400, 'BAD_REQUEST', '默认租户不可停用。')
+    const cur = db.prepare('SELECT * FROM tenants WHERE id = ?').get(id)
+    if (!cur) throw apiError(404, 'NOT_FOUND', 'Tenant not found.')
+    const next = cur.status === 'active' ? 'suspended' : 'active'
+    db.prepare('UPDATE tenants SET status = ? WHERE id = ?').run(next, id)
+    return json(res, 200, { tenant: { id, status: next } })
+  }
+  // ---- 平台端·商家配置(替商家配好入驻资料):门店/营业时间/服务价目/技师/AI知识库 ----
+  const platTenantMatch = path.match(/^\/platform\/tenants\/([^/]+)\/(store|business-hours|services|technicians|kb)(?:\/([^/]+))?$/)
+  if (platTenantMatch) {
+    if (!isPlatform()) throw apiError(401, 'UNAUTHORIZED', 'Platform token required.')
+    const tenantId = platTenantMatch[1]
+    const section = platTenantMatch[2]
+    const subId = platTenantMatch[3] || null
+    if (!db.prepare('SELECT id FROM tenants WHERE id = ?').get(tenantId)) throw apiError(404, 'NOT_FOUND', 'Tenant not found.')
+    const tenantStore = () => db.prepare('SELECT * FROM stores WHERE tenant_id = ? ORDER BY rowid ASC LIMIT 1').get(tenantId)
+
+    if (section === 'store') {
+      const store = tenantStore()
+      if (req.method === 'GET') return json(res, 200, { store: store ? { id: store.id, name: store.name, address: store.address || '', phone: store.phone || '' } : null })
+      if (req.method === 'PUT') {
+        if (!store) throw apiError(404, 'NOT_FOUND', 'Store not found for tenant.')
+        const body = await readBody(req)
+        const name = String(body.name ?? store.name).trim() || store.name
+        const address = String(body.address ?? store.address ?? '').trim()
+        const phone = String(body.phone ?? store.phone ?? '').trim()
+        db.prepare('UPDATE stores SET name = ?, address = ?, phone = ? WHERE id = ?').run(name, address, phone, store.id)
+        // 同步进该租户 AI 知识事实(与商家端同规则,AI 回答与系统一致)
+        const factStmt = db.prepare(`INSERT INTO tenant_kb_facts (tenant_id, key, value, updated_by, updated_at) VALUES (?, ?, ?, 'platform', ?)
+          ON CONFLICT(tenant_id, key) DO UPDATE SET value = excluded.value, updated_by = 'platform', updated_at = excluded.updated_at`)
+        if (address) factStmt.run(tenantId, 'storeAddress', address, iso(new Date()))
+        if (phone) factStmt.run(tenantId, 'storePhone', phone, iso(new Date()))
+        return json(res, 200, { store: { id: store.id, name, address, phone } })
+      }
+    }
+
+    if (section === 'business-hours') {
+      const store = tenantStore()
+      if (!store) throw apiError(404, 'NOT_FOUND', 'Store not found for tenant.')
+      if (req.method === 'GET') return json(res, 200, { hours: getBusinessHoursRows(store.id).map(serializeBusinessHour) })
+      if (req.method === 'PUT') {
+        const body = await readBody(req)
+        const entries = Array.isArray(body.hours) ? body.hours : []
+        if (!entries.length) throw apiError(400, 'BAD_REQUEST', 'hours array is required.')
+        const stmt = db.prepare(`INSERT INTO business_hours (store_id, weekday, open_time, close_time, is_closed, updated_at, updated_by)
+          VALUES (?, ?, ?, ?, ?, ?, 'platform')
+          ON CONFLICT(store_id, weekday) DO UPDATE SET open_time = excluded.open_time, close_time = excluded.close_time, is_closed = excluded.is_closed, updated_at = excluded.updated_at, updated_by = 'platform'`)
+        for (const e of entries) stmt.run(store.id, Number(e.weekday), e.openTime || '10:00', e.closeTime || '19:00', e.isClosed ? 1 : 0, iso(new Date()))
+        return json(res, 200, { hours: getBusinessHoursRows(store.id).map(serializeBusinessHour) })
+      }
+    }
+
+    if (section === 'services') {
+      if (req.method === 'GET') {
+        return json(res, 200, { services: db.prepare('SELECT * FROM services WHERE tenant_id = ? ORDER BY type ASC, sort_order ASC').all(tenantId).map((s) => serializeService(s)) })
+      }
+      if (req.method === 'POST') {
+        const payload = servicePayload(await readBody(req))
+        if (!['NAIL', 'LASH'].includes(payload.type)) throw apiError(400, 'BAD_REQUEST', 'type must be NAIL or LASH.')
+        if (!payload.nameZh) throw apiError(400, 'BAD_REQUEST', '服务中文名必填。')
+        if (!payload.nameEn) payload.nameEn = payload.nameZh
+        const id = serviceIdFrom(payload)
+        db.prepare(`INSERT INTO services (id, tenant_id, type, category, name_zh, name_en, description_zh, description_en, image_url, price_cents, deposit_cents, base_duration_min, sort_order, is_active, process_json, notice_json)
+          VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`)
+          .run(id, tenantId, payload.type, payload.category, payload.nameZh, payload.nameEn, payload.descriptionZh, payload.descriptionEn, payload.imageUrl, payload.priceCents, payload.depositCents, payload.baseDurationMin, payload.sortOrder, payload.isActive, JSON.stringify(payload.processJson), JSON.stringify(payload.noticeJson))
+        // 该租户在职技师自动可做新服务(与商家端一致)
+        const assign = db.prepare('INSERT OR IGNORE INTO technician_services (technician_id, service_id) VALUES (?, ?)')
+        for (const tech of db.prepare('SELECT id FROM technicians WHERE is_active = 1 AND tenant_id = ?').all(tenantId)) assign.run(tech.id, id)
+        return json(res, 201, { service: serializeService(getService(id)) })
+      }
+      if (req.method === 'PATCH' && subId) {
+        const cur = db.prepare('SELECT * FROM services WHERE id = ? AND tenant_id = ?').get(subId, tenantId)
+        if (!cur) throw apiError(404, 'NOT_FOUND', 'Service not found in tenant.')
+        const payload = servicePayload(await readBody(req), cur)
+        db.prepare(`UPDATE services SET type = ?, category = ?, name_zh = ?, name_en = ?, description_zh = ?, description_en = ?, image_url = ?, price_cents = ?, deposit_cents = ?, base_duration_min = ?, is_active = ?, sort_order = ?, process_json = ?, notice_json = ? WHERE id = ?`)
+          .run(payload.type, payload.category, payload.nameZh, payload.nameEn, payload.descriptionZh, payload.descriptionEn, payload.imageUrl, payload.priceCents, payload.depositCents, payload.baseDurationMin, payload.isActive, payload.sortOrder, JSON.stringify(payload.processJson), JSON.stringify(payload.noticeJson), subId)
+        return json(res, 200, { service: serializeService(getService(subId)) })
+      }
+    }
+
+    if (section === 'technicians') {
+      if (req.method === 'GET') {
+        return json(res, 200, { technicians: db.prepare('SELECT * FROM technicians WHERE tenant_id = ? ORDER BY name ASC').all(tenantId) })
+      }
+      if (req.method === 'POST') {
+        const body = await readBody(req)
+        const name = String(body.name || '').trim()
+        if (!name) throw apiError(400, 'BAD_REQUEST', '技师姓名必填。')
+        const store = tenantStore()
+        if (!store) throw apiError(404, 'NOT_FOUND', 'Store not found for tenant.')
+        const id = `tech_${Date.now().toString(36)}_${Math.random().toString(36).slice(2, 8)}`
+        db.prepare('INSERT INTO technicians (id, store_id, name, title, is_active, tenant_id) VALUES (?, ?, ?, ?, 1, ?)')
+          .run(id, store.id, name.slice(0, 40), String(body.title || '').slice(0, 40), tenantId)
+        const assign = db.prepare('INSERT OR IGNORE INTO technician_services (technician_id, service_id) VALUES (?, ?)')
+        for (const svc of db.prepare('SELECT id FROM services WHERE tenant_id = ? AND is_active = 1').all(tenantId)) assign.run(id, svc.id)
+        return json(res, 201, { technician: db.prepare('SELECT * FROM technicians WHERE id = ?').get(id) })
+      }
+      if (req.method === 'PATCH' && subId) {
+        const cur = db.prepare('SELECT * FROM technicians WHERE id = ? AND tenant_id = ?').get(subId, tenantId)
+        if (!cur) throw apiError(404, 'NOT_FOUND', 'Technician not found in tenant.')
+        const body = await readBody(req)
+        db.prepare('UPDATE technicians SET name = ?, title = ?, is_active = ? WHERE id = ?')
+          .run(body.name === undefined ? cur.name : String(body.name).slice(0, 40), body.title === undefined ? cur.title : String(body.title).slice(0, 40), body.isActive === undefined ? cur.is_active : (body.isActive ? 1 : 0), subId)
+        return json(res, 200, { technician: db.prepare('SELECT * FROM technicians WHERE id = ?').get(subId) })
+      }
+    }
+
+    if (section === 'kb') {
+      if (req.method === 'GET') {
+        const facts = {}
+        for (const row of db.prepare('SELECT key, value FROM tenant_kb_facts WHERE tenant_id = ?').all(tenantId)) facts[row.key] = row.value
+        const entries = db.prepare('SELECT id, question, keywords, answer_zh, answer_en, enabled FROM tenant_kb_entries WHERE tenant_id = ? ORDER BY updated_at DESC').all(tenantId)
+          .map((r) => ({ id: r.id, question: r.question, keywords: r.keywords || '', answerZh: r.answer_zh, answerEn: r.answer_en || '', enabled: Boolean(r.enabled) }))
+        return json(res, 200, { facts, entries })
+      }
+      if (req.method === 'PUT') {
+        // 更新品牌事实(AI 口径):brandName/assistantName/storeAddress/depositAmount/currency
+        const body = await readBody(req)
+        const facts = body.facts && typeof body.facts === 'object' ? body.facts : {}
+        const allowed = ['brandName', 'assistantName', 'storeAddress', 'storePhone', 'depositAmount', 'currency']
+        const stmt = db.prepare(`INSERT INTO tenant_kb_facts (tenant_id, key, value, updated_by, updated_at) VALUES (?, ?, ?, 'platform', ?)
+          ON CONFLICT(tenant_id, key) DO UPDATE SET value = excluded.value, updated_by = 'platform', updated_at = excluded.updated_at`)
+        for (const key of allowed) if (facts[key] !== undefined) stmt.run(tenantId, key, String(facts[key]), iso(new Date()))
+        const out = {}
+        for (const row of db.prepare('SELECT key, value FROM tenant_kb_facts WHERE tenant_id = ?').all(tenantId)) out[row.key] = row.value
+        return json(res, 200, { facts: out })
+      }
+      if (req.method === 'POST') {
+        // 新增问答条目
+        const body = await readBody(req)
+        const question = String(body.question || '').trim()
+        const answerZh = String(body.answerZh || '').trim()
+        if (!question || !answerZh) throw apiError(400, 'BAD_REQUEST', '问题与中文答案必填。')
+        const id = randomId('kb')
+        db.prepare(`INSERT INTO tenant_kb_entries (id, tenant_id, question, keywords, answer_zh, answer_en, enabled, updated_by, created_at, updated_at)
+          VALUES (?, ?, ?, ?, ?, ?, 1, 'platform', ?, ?)`)
+          .run(id, tenantId, question.slice(0, 200), String(body.keywords || question).slice(0, 300), answerZh.slice(0, 2000), String(body.answerEn || '').slice(0, 2000), iso(new Date()), iso(new Date()))
+        return json(res, 201, { entry: { id, question, enabled: true } })
+      }
+      if (req.method === 'PATCH' && subId) {
+        const cur = db.prepare('SELECT * FROM tenant_kb_entries WHERE id = ? AND tenant_id = ?').get(subId, tenantId)
+        if (!cur) throw apiError(404, 'NOT_FOUND', 'KB entry not found.')
+        const body = await readBody(req)
+        db.prepare('UPDATE tenant_kb_entries SET question = ?, keywords = ?, answer_zh = ?, answer_en = ?, enabled = ?, updated_by = ?, updated_at = ? WHERE id = ?')
+          .run(body.question === undefined ? cur.question : String(body.question).slice(0, 200),
+            body.keywords === undefined ? cur.keywords : String(body.keywords).slice(0, 300),
+            body.answerZh === undefined ? cur.answer_zh : String(body.answerZh).slice(0, 2000),
+            body.answerEn === undefined ? cur.answer_en : String(body.answerEn).slice(0, 2000),
+            body.enabled === undefined ? cur.enabled : (body.enabled ? 1 : 0), 'platform', iso(new Date()), subId)
+        return json(res, 200, { ok: true })
+      }
+      if (req.method === 'DELETE' && subId) {
+        const r = db.prepare('DELETE FROM tenant_kb_entries WHERE id = ? AND tenant_id = ?').run(subId, tenantId)
+        if (!r.changes) throw apiError(404, 'NOT_FOUND', 'KB entry not found.')
+        return json(res, 200, { deleted: subId })
+      }
+    }
+    throw apiError(405, 'METHOD_NOT_ALLOWED', 'Unsupported method for this section.')
+  }
+  if (req.method === 'GET' && path === '/platform/leads') {
+    if (!isPlatform()) throw apiError(401, 'UNAUTHORIZED', 'Platform token required.')
+    return json(res, 200, { leads: db.prepare('SELECT * FROM merchant_leads ORDER BY created_at DESC').all().map(serializeMerchantLead) })
+  }
+  if (req.method === 'PATCH' && path.startsWith('/platform/leads/')) {
+    if (!isPlatform()) throw apiError(401, 'UNAUTHORIZED', 'Platform token required.')
+    const id = path.split('/')[3]
+    const cur = db.prepare('SELECT * FROM merchant_leads WHERE id = ?').get(id)
+    if (!cur) throw apiError(404, 'NOT_FOUND', 'Lead not found.')
+    const body = await readBody(req)
+    const status = ['new', 'contacted', 'onboarded', 'rejected'].includes(body.status) ? body.status : cur.status
+    db.prepare('UPDATE merchant_leads SET status = ?, note = ?, updated_at = ? WHERE id = ?')
+      .run(status, body.note === undefined ? cur.note : String(body.note).slice(0, 300), iso(new Date()), id)
+    return json(res, 200, { lead: serializeMerchantLead(db.prepare('SELECT * FROM merchant_leads WHERE id = ?').get(id)) })
   }
   // 平台运营:商家入驻线索(owner 可看/改状态)
   if (req.method === 'GET' && path === '/admin/merchant-leads') {
