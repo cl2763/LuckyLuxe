@@ -38,17 +38,17 @@
       </view>
 
       <view class="member-assets">
-        <view>
+        <view class="asset-tap" bindtap="goPoints">
           <text>{{member.points}}</text>
-          <text>{{t.points}}</text>
+          <text>{{t.points}} ›</text>
         </view>
-        <view>
+        <view class="asset-tap" bindtap="goCoupons">
           <text>{{member.couponCount}}</text>
-          <text>{{t.coupons}}</text>
+          <text>{{t.coupons}} ›</text>
         </view>
-        <view>
+        <view class="asset-tap" bindtap="goStored">
           <text>CAD ${{member.balance}}</text>
-          <text>{{t.balance}}</text>
+          <text>{{t.balance}} ›</text>
         </view>
       </view>
 
@@ -78,22 +78,22 @@
       <view class="section-note" bindtap="goOrders" data-status="all">{{t.all}}</view>
     </view>
     <view class="order-entry card me-module-card">
-      <button bindtap="goOrders" data-status="pending_service">
+      <view class="oe-item" bindtap="goOrders" data-status="pending_service">
         <text>{{counts.pending_service}}</text>
         <text>{{t.statusPendingService}}</text>
-      </button>
-      <button bindtap="goOrders" data-status="completed">
+      </view>
+      <view class="oe-item" bindtap="goOrders" data-status="completed">
         <text>{{counts.completed}}</text>
         <text>{{t.statusCompleted}}</text>
-      </button>
-      <button bindtap="goOrders" data-status="cancelled">
+      </view>
+      <view class="oe-item" bindtap="goOrders" data-status="cancelled">
         <text>{{counts.cancelled}}</text>
         <text>{{t.statusCancelled}}</text>
-      </button>
-      <button bindtap="goOrders" data-status="after_sales">
+      </view>
+      <view class="oe-item" bindtap="goOrders" data-status="after_sales">
         <text>{{counts.after_sales}}</text>
         <text>{{t.statusAfterSales}}</text>
-      </button>
+      </view>
     </view>
   </view>
 
@@ -116,7 +116,9 @@
                 <text>{{item.appointment.date}}</text>
                 <text>{{item.appointment.time}}</text>
               </view>
-              <view class="recent-pay">{{t.paidDeposit}} CAD ${{item.payableAmount}}</view>
+              <view class="recent-pay" wx:if="{{item.status === 'completed'}}">已结清 CAD ${{item.servicePrice}}</view>
+              <view class="recent-pay" wx:elif="{{item.status === 'cancelled' || item.status === 'after_sales'}}">总价 CAD ${{item.servicePrice}}</view>
+              <view class="recent-pay" wx:else>定金 ${{item.payableAmount}} 已付 · 到店应付 ${{item.finalDue}}</view>
             </view>
           </view>
         </block>
@@ -132,31 +134,30 @@
       <view class="section-title">{{t.functions}}</view>
     </view>
     <view class="menu-grid">
-      <button class="menu-card card" bindtap="goAssets">
-        <image class="menu-icon" src="/assets/images/nail-luxe.jpg" mode="aspectFill"></image>
+      <view class="menu-card card" bindtap="goMessages">
+        <view class="menu-badge"><image class="menu-ic" src="/assets/icons/c-message.svg"></image></view>
+        <view class="menu-title">{{lang === 'en' ? 'Messages' : '我的消息'}}</view>
+      </view>
+      <view class="menu-card card" bindtap="goAssets">
+        <view class="menu-badge"><image class="menu-ic" src="/assets/icons/c-wallet.svg"></image></view>
         <view class="menu-title">{{t.assets}}</view>
-        <view class="menu-desc">{{t.assetsDesc}}</view>
-      </button>
-      <button class="menu-card card" bindtap="goStore">
-        <image class="menu-icon" src="/assets/images/store-cover.jpg" mode="aspectFill"></image>
-        <view class="menu-title">{{t.store}}</view>
-        <view class="menu-desc">{{t.storeDesc}}</view>
-      </button>
-      <button class="menu-card card" bindtap="openProtectedFeature">
-        <image class="menu-icon" src="/assets/images/nail-french.jpg" mode="aspectFill"></image>
+      </view>
+      <view class="menu-card card" bindtap="goCoupons">
+        <view class="menu-badge"><image class="menu-ic" src="/assets/icons/c-ticket.svg"></image></view>
         <view class="menu-title">{{t.coupons}}</view>
-        <view class="menu-desc">{{t.couponsDesc}}</view>
-      </button>
-      <button class="menu-card card" bindtap="openProtectedFeature">
-        <image class="menu-icon" src="/assets/images/lash-volume.jpg" mode="aspectFill"></image>
-        <view class="menu-title">{{t.giftCard}}</view>
-        <view class="menu-desc">{{t.later}}</view>
-      </button>
-      <button class="menu-card card" bindtap="openProtectedFeature">
-        <image class="menu-icon" src="/assets/images/nail-jp.jpg" mode="aspectFill"></image>
+      </view>
+      <view class="menu-card card" bindtap="goStore">
+        <view class="menu-badge"><image class="menu-ic" src="/assets/icons/c-store.svg"></image></view>
+        <view class="menu-title">{{t.store}}</view>
+      </view>
+      <view class="menu-card card" bindtap="goMemberBenefits">
+        <view class="menu-badge"><image class="menu-ic" src="/assets/icons/c-crown.svg"></image></view>
+        <view class="menu-title">{{lang === 'en' ? 'Benefits' : '会员权益'}}</view>
+      </view>
+      <view class="menu-card card" bindtap="openProtectedFeature">
+        <view class="menu-badge"><image class="menu-ic" src="/assets/icons/c-gift.svg"></image></view>
         <view class="menu-title">{{t.pointsMall}}</view>
-        <view class="menu-desc">{{t.comingSoon}}</view>
-      </button>
+      </view>
     </view>
   </view>
 

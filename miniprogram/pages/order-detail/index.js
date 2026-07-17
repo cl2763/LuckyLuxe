@@ -41,6 +41,12 @@ Page({
       order.serviceInfo.serviceName = localizedService.name || order.serviceInfo.serviceName
       order.serviceInfo.technicianName = order.serviceInfo.technicianName || this.defaultTechnician(order.serviceInfo.serviceType)
       order.visibleWorkImages = order.status === 'completed' ? (order.workImages || []).slice(0, 6) : []
+      // 价格拆解:总价 / 定金 / 到店应付(不同来源字段不一,统一补算)
+      const price = order.servicePrice || (order.items || []).reduce((s, it) => s + (Number(it.price) || 0) * (it.quantity || 1), 0) || (service.price || 0)
+      const deposit = Number(order.payableAmount) || (order.serviceInfo && order.serviceInfo.depositAmount) || 0
+      order.servicePrice = price
+      order.payableAmount = deposit
+      order.finalDue = order.finalDue != null && order.finalDue !== '' ? order.finalDue : Math.max(0, price - deposit - (Number(order.balanceDeduction) || 0))
     }
     this.setData({ order, lang, t })
   },

@@ -561,6 +561,22 @@ Page({
     this.requireLogin(() => wx.navigateTo({ url: '/pages/assets/index' }))
   },
 
+  goPoints() {
+    this.requireLogin(() => wx.navigateTo({ url: '/pages/points/index' }))
+  },
+
+  goCoupons() {
+    this.requireLogin(() => wx.navigateTo({ url: '/pages/coupons/index' }))
+  },
+
+  goStored() {
+    this.requireLogin(() => wx.navigateTo({ url: '/pages/stored-value/index' }))
+  },
+
+  goMessages() {
+    this.requireLogin(() => wx.navigateTo({ url: '/pages/messages/index' }))
+  },
+
   goOrderDetail(event) {
     this.requireLogin(() => wx.navigateTo({ url: `/pages/order-detail/index?id=${event.currentTarget.dataset.id}` }))
   },

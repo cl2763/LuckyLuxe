@@ -38,14 +38,10 @@
         <text>{{lang === 'en' ? 'Member deposit waiver' : '会员定金减免'}}</text>
         <text>-CAD ${{depositWaivedAmount}}</text>
       </view>
-      <view class="cost-row">
-        <text>{{t.coupon}}</text>
-        <text>-CAD ${{couponDiscount}}</text>
-      </view>
       <view class="cost-row switch-row">
         <view>
           <view>{{t.balance}}</view>
-          <view class="muted">{{t.balanceHint}}</view>
+          <view class="muted">{{lang === 'en' ? ('Balance CAD $' + memberBalance + ', pay deposit from balance') : ('余额 CAD $' + memberBalance + ',用储值抵扣定金,充足时无需微信支付')}}</view>
         </view>
         <switch color="#C6A27E" checked="{{useBalance}}" bindchange="toggleBalance"></switch>
       </view>

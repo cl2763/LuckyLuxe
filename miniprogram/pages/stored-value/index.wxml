@@ -1,0 +1,23 @@
+<view class="pg">
+  <view class="hero">
+    <view class="row"><text class="hl">储值余额</text><text class="lv" wx:if="{{level}}">{{level}}</text></view>
+    <view class="hv">CAD ${{balance}}</view>
+    <view class="charge" bindtap="soon">在线充值(微信支付)</view>
+  </view>
+
+  <view class="t2">充值套餐 <text class="demo">示例</text></view>
+  <view class="card row sp" wx:for="{{packages}}" wx:key="id">
+    <view><view class="pn">{{item.name}}</view><view class="ps">{{item.sub}}</view></view>
+    <view class="buy" bindtap="soon">购买</view>
+  </view>
+
+  <view class="t2">收支明细</view>
+  <view wx:if="{{txns.length}}" class="list">
+    <view class="li" wx:for="{{txns}}" wx:key="id">
+      <view class="li-main"><view class="li-t">{{item.title}}</view><view class="li-d">{{item.date}}</view></view>
+      <text class="li-v {{item.up ? 'up' : 'down'}}">{{item.delta}}</text>
+    </view>
+  </view>
+  <view wx:else class="empty">暂无明细,充值 / 耗卡记录会显示在这里,与门店账本实时一致。</view>
+  <view class="note">余额与门店账本实时一致;耗卡即门店确认收入。在线充值上线前,可到店由老板手动为你充值。</view>
+</view>

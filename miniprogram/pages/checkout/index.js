@@ -16,6 +16,7 @@ Page({
     couponDiscount: 0,
     useBalance: false,
     balanceDeduction: 0,
+    memberBalance: 0,
     payableAmount: 0,
     remark: ''
   },
@@ -42,13 +43,16 @@ Page({
     const depositWaived = Boolean(member.depositWaived)
     const depositRequired = this.data.items.reduce((sum, item) => sum + item.service.depositAmount * item.quantity, 0)
     const serviceDeposit = depositWaived ? 0 : depositRequired
-    const balanceDeduction = 0
-    const payableAmount = serviceDeposit
+    const memberBalance = Number(member.balance) || 0
+    // 储值余额抵扣定金:开关打开时,从余额里扣(最多扣到定金金额);余额充足则无需微信支付
+    const balanceDeduction = this.data.useBalance ? Math.min(memberBalance, serviceDeposit) : 0
+    const payableAmount = Math.max(0, serviceDeposit - balanceDeduction)
     this.setData({
       serviceDeposit,
       depositRequired,
       depositWaived,
       depositWaivedAmount: depositWaived ? depositRequired : 0,
+      memberBalance,
       balanceDeduction,
       payableAmount
     })

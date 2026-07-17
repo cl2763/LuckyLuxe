@@ -18,7 +18,9 @@
             <view class="order-info">
               <view class="order-time">{{item.appointment.date}} {{item.appointment.time}}</view>
               <view class="muted">{{item.store.storeName}}</view>
-              <view class="price">{{t.paidDeposit}} CAD ${{item.payableAmount}}</view>
+              <view class="price" wx:if="{{item.status === 'completed'}}">已结清 CAD ${{item.servicePrice}}</view>
+              <view class="price" wx:elif="{{item.status === 'cancelled' || item.status === 'after_sales'}}">总价 CAD ${{item.servicePrice}}</view>
+              <view class="price" wx:else>定金 ${{item.payableAmount}} 已付 · 到店应付 ${{item.finalDue}}</view>
             </view>
           </view>
         </view>

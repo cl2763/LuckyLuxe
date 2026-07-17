@@ -1,0 +1,19 @@
+<view class="pg">
+  <view class="hero">
+    <view class="hl">可用积分</view>
+    <view class="hv">{{points}}</view>
+    <view class="hn">消费 $1 得 1 分,可抵现 / 兑换</view>
+  </view>
+  <view class="btns">
+    <view class="b p" bindtap="soon">去积分商城兑换</view>
+    <view class="b" bindtap="soon">积分规则</view>
+  </view>
+  <view class="t2">积分明细</view>
+  <view wx:if="{{records.length}}" class="list">
+    <view class="li" wx:for="{{records}}" wx:key="id">
+      <view class="li-main"><view class="li-t">{{item.title}}</view><view class="li-d">{{item.date}}</view></view>
+      <text class="li-v {{item.up ? 'up' : 'down'}}">{{item.delta}}</text>
+    </view>
+  </view>
+  <view wx:else class="empty">暂无积分记录,完成消费后自动累计。</view>
+</view>

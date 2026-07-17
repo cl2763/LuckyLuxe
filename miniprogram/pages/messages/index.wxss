@@ -1,0 +1,12 @@
+page{background:#fbf8f5}
+.pg{padding:22rpx 26rpx 60rpx}
+.demobar{font-size:20rpx;color:#b5731f;background:#fff4e6;border:1rpx solid #f0d9b8;border-radius:10rpx;padding:8rpx 12rpx;margin-bottom:14rpx;text-align:center}
+.li{display:flex;gap:14rpx;background:#fff;border:1rpx solid #e7ddd4;border-radius:14rpx;padding:18rpx 18rpx;margin-bottom:12rpx}
+.dot{width:14rpx;height:14rpx;border-radius:50%;background:#c8a47e;margin-top:8rpx;flex:0 0 auto}
+.mi{flex:1;min-width:0}
+.mt{font-size:25rpx;color:#2d2826}
+.mm{font-size:21rpx;color:#8c8279;margin-top:5rpx}
+.empty{background:#fff;border:1rpx solid #e7ddd4;border-radius:16rpx;padding:56rpx 34rpx;text-align:center}
+.et{font-size:26rpx;color:#8c8279}
+.ed{font-size:22rpx;color:#b6a99b;line-height:1.6;margin-top:12rpx}
+.note{font-size:21rpx;color:#b6a99b;line-height:1.6;margin-top:18rpx}

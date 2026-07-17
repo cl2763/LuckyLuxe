@@ -421,7 +421,8 @@
 .order-entry {
   display: grid;
   grid-template-columns: repeat(4, 1fr);
-  padding: 24rpx 0;
+  padding: 24rpx 8rpx;
+  box-sizing: border-box;
 }
 
 .me-module-card {
@@ -432,11 +433,13 @@
   box-sizing: border-box;
 }
 
-.order-entry button {
+.oe-item {
   display: flex;
   flex-direction: column;
   gap: 10rpx;
   align-items: center;
+  justify-content: center;
+  min-width: 0;
 }
 
 .order-entry text:first-child {
@@ -540,42 +543,48 @@
 
 .menu-grid {
   display: grid;
-  grid-template-columns: repeat(2, minmax(0, 1fr));
+  grid-template-columns: repeat(3, minmax(0, 1fr));
   gap: 14rpx;
   width: 100%;
+  box-sizing: border-box;
 }
 
 .menu-card {
   width: 100%;
-  min-height: 176rpx;
-  padding: 22rpx;
+  min-width: 0;
+  min-height: 150rpx;
+  margin: 0;
+  padding: 22rpx 10rpx;
   display: flex;
   flex-direction: column;
-  align-items: flex-start;
-  text-align: left;
+  align-items: center;
+  justify-content: center;
+  text-align: center;
   box-sizing: border-box;
 }
 
-.menu-icon {
-  width: 58rpx;
-  height: 58rpx;
-  margin-bottom: 18rpx;
-  border-radius: 16rpx;
+.menu-badge {
+  width: 72rpx;
+  height: 72rpx;
+  border-radius: 50%;
+  background: #f4ece3;
+  border: 1rpx solid #ecdfd0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  margin-bottom: 14rpx;
+}
+
+.menu-ic {
+  width: 40rpx;
+  height: 40rpx;
   display: block;
 }
 
 .menu-title {
   color: #342b28;
-  font-size: 28rpx;
-  font-weight: 800;
-}
-
-.menu-desc {
-  margin-top: 8rpx;
-  color: #8a7f78;
-  font-size: 23rpx;
-  font-weight: 600;
-  line-height: 1.35;
+  font-size: 25rpx;
+  font-weight: 700;
 }
 
 .auth-mask {

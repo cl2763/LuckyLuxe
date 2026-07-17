@@ -1,0 +1,39 @@
+<view class="pg">
+  <view class="seg">
+    <text class="s {{seg===0?'on':''}}" data-i="0" bindtap="onSeg">可用 {{count}}</text>
+    <text class="s {{seg===1?'on':''}}" data-i="1" bindtap="onSeg">已用</text>
+    <text class="s {{seg===2?'on':''}}" data-i="2" bindtap="onSeg">已过期</text>
+  </view>
+  <view class="demobar">演示数据 · 正式版由"我的券包"接口返回</view>
+
+  <block wx:if="{{groups[seg].length}}">
+    <view class="coupon {{seg>0 ? 'dead' : ''}}" wx:for="{{groups[seg]}}" wx:key="id">
+      <view class="amt"><text class="b">{{item.amt}}</text><text wx:if="{{item.unit}}" class="u">{{item.unit}}</text></view>
+      <view class="info">
+        <view class="cn">{{item.name}}</view>
+        <view class="ce">{{item.exp}}</view>
+      </view>
+      <view wx:if="{{seg===0}}" class="qrbtn" data-id="{{item.id}}" bindtap="showQr">
+        <view class="qricon"><view class="qd"></view><view class="qd"></view><view class="qd"></view><view class="qd"></view></view>
+        <text>核销码</text>
+      </view>
+    </view>
+  </block>
+  <view wx:else class="empty">
+    <view class="et">{{seg===0 ? '暂无可用券' : (seg===1 ? '暂无已用券' : '暂无过期券')}}</view>
+    <view class="ed">商家在后台发放优惠券后,你领取的券会显示在这里。</view>
+  </view>
+
+  <!-- 核销二维码 -->
+  <view wx:if="{{qr}}" class="mask" bindtap="closeQr">
+    <view class="qrcard" catchtap="noop">
+      <view class="qname">{{qr.name}}</view>
+      <view class="qtip">到店结账时出示,店员扫码核销</view>
+      <view class="qr">
+        <view class="qc {{item ? 'on' : ''}}" wx:for="{{qr.cells}}" wx:key="index"></view>
+      </view>
+      <view class="qcode">{{qr.code}}</view>
+      <view class="qclose" bindtap="closeQr">关闭</view>
+    </view>
+  </view>
+</view>

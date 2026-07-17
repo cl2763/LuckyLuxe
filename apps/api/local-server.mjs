@@ -4802,7 +4802,7 @@ function serializeUser(user) {
     depositRule: membership.depositRule,
     points: Math.floor(totalSpentCents / 100),
     couponCount: 0,
-    balanceCents: 0,
+    balanceCents: storedValueBalanceCents(user.id),
     totalSpentCents,
     visits: Number(stats.visits || 0),
     memberCode,
@@ -4824,6 +4824,38 @@ function registerEmailUser(body) {
   db.prepare('INSERT INTO users (id, display_name, email) VALUES (?, ?, ?)').run(id, displayName, email)
   upsertUserIdentity({ userId: id, provider: 'email', providerUserId: email, email })
   return serializeUser(db.prepare('SELECT * FROM users WHERE id = ?').get(id))
+}
+
+// 演示铺单:仅本地/演示开关下,给首次登录且无订单的顾客铺 2 完成 + 1 待到店 + 储值,
+// 让会员卡(积分/消费/成长/等级/储值)与订单一致、可直接体验。生产不启用。
+function seedDemoBookingsForUser(userId) {
+  if (!userId) return
+  const store = db.prepare('SELECT id FROM stores WHERE is_active = 1 LIMIT 1').get()
+  const nail = db.prepare("SELECT * FROM services WHERE is_active = 1 AND UPPER(type) = 'NAIL' ORDER BY sort_order ASC LIMIT 1").get()
+  const lash = db.prepare("SELECT * FROM services WHERE is_active = 1 AND UPPER(type) = 'LASH' ORDER BY sort_order ASC LIMIT 1").get()
+  const techs = db.prepare('SELECT id FROM technicians WHERE is_active = 1 ORDER BY name ASC LIMIT 2').all()
+  if (!store || !nail || !techs.length) return
+  const nowIso = iso(new Date())
+  let seq = 0
+  const mk = (svc, techId, dayOffset, status) => {
+    if (!svc) return
+    try {
+      seq += 1
+      const start = new Date(); start.setDate(start.getDate() + dayOffset); start.setHours(14, 0, 0, 0)
+      const end = new Date(start.getTime() + (svc.base_duration_min || 120) * 60000)
+      const price = svc.price_cents
+      const deposit = 5000
+      const code = `LLD${Date.now().toString().slice(-7)}${seq}${Math.floor(Math.random() * 900 + 100)}`
+      db.prepare(`INSERT INTO bookings
+        (id, public_code, user_id, store_id, technician_id, service_id, status, appointment_start, appointment_end, addons_json, reference_images_json, notes, service_price_cents, deposit_cents, deposit_required_cents, deposit_waived_cents, final_due_cents, total_duration_min, source_channel, created_at, updated_at)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, '[]', '[]', '', ?, ?, ?, 0, ?, ?, 'demo-seed', ?, ?)`)
+        .run(randomId('booking'), code, userId, store.id, techId, svc.id, status, iso(start), iso(end), price, deposit, deposit, price - deposit, svc.base_duration_min || 120, nowIso, nowIso)
+    } catch (e) { /* 单条失败不影响其它 */ }
+  }
+  mk(nail, techs[0].id, -24, 'COMPLETED')
+  mk(lash, (techs[1] || techs[0]).id, -10, 'COMPLETED')
+  mk(nail, techs[0].id, 3, 'CONFIRMED')
+  try { insertStoredValueTransaction({ userId, type: 'recharge', amountCents: 30000, payChannel: 'manual', note: '演示储值', createdBy: 'demo-seed' }) } catch (e) { /* 忽略 */ }
 }
 
 async function signInWechatMiniUser(body) {
@@ -4867,6 +4899,12 @@ async function signInWechatMiniUser(body) {
     unionId: data.unionid || '',
     phone
   })
+  // 演示环境:首次登录且无订单时铺演示数据(生产 ALLOW_DEMO_ADMIN_LOGIN 关闭,不启用)。任何异常都不得影响登录。
+  try {
+    if (process.env.ALLOW_DEMO_ADMIN_LOGIN === 'true' && !db.prepare('SELECT 1 FROM bookings WHERE user_id = ? LIMIT 1').get(user.id)) {
+      seedDemoBookingsForUser(user.id)
+    }
+  } catch (e) { console.error('[demo-seed] failed:', e && e.message) }
   const serialized = serializeUser(user)
   return {
     user: serialized,
@@ -5863,7 +5901,11 @@ async function route(req, res) {
   }
   if (req.method === 'GET' && path === '/admin/auth/me') return json(res, 200, { admin: requireAdmin(req) })
   if (req.method === 'GET' && path.startsWith('/users/')) {
-    const user = db.prepare('SELECT * FROM users WHERE id = ?').get(path.split('/')[2])
+    // 隐私:必须登录,且只能查自己的资料(此前任意 id 可读,已修)
+    const customer = requireCustomer(req)
+    const id = path.split('/')[2]
+    if (id !== customer.id) throw apiError(403, 'FORBIDDEN', 'You can only view your own profile.')
+    const user = db.prepare('SELECT * FROM users WHERE id = ?').get(id)
     if (!user) throw apiError(404, 'NOT_FOUND', 'User not found.')
     return json(res, 200, { user: serializeUser(user) })
   }
@@ -5924,18 +5966,30 @@ async function route(req, res) {
     if (!draft) throw apiError(404, 'NOT_FOUND', 'Booking draft not found.')
     return json(res, 200, { bookingDraft: draft })
   }
-  if (req.method === 'POST' && path === '/bookings') return json(res, 201, { booking: createBooking(await readBody(req)) })
-  if (req.method === 'GET' && path === '/bookings') {
-    const args = []
-    let sql = 'SELECT * FROM bookings'
-    if (query.userId) {
-      sql += ' WHERE user_id = ?'
-      args.push(query.userId)
-    }
-    sql += ' ORDER BY appointment_start DESC'
-    return json(res, 200, { bookings: db.prepare(sql).all(...args).map((booking) => serializeBooking(booking, query.lang || 'zh')) })
+  if (req.method === 'POST' && path === '/bookings') {
+    // 安全:必须登录,且强制以登录用户下单(此前不鉴权 + userId 取自请求体,可匿名/冒用他人下单)
+    const customer = requireCustomer(req)
+    const body = await readBody(req)
+    body.userId = customer.id
+    return json(res, 201, { booking: createBooking(body) })
   }
-  if (req.method === 'POST' && path === '/payments/mock/confirm') return json(res, 200, { booking: confirmMockPayment(await readBody(req)) })
+  if (req.method === 'GET' && path === '/bookings') {
+    // 隐私+一致性:顾客端"我的订单"必须登录,且只返回本人订单(此前不带 userId 会返回全部人的单,已修)
+    const customer = requireCustomer(req)
+    return json(res, 200, {
+      bookings: db.prepare('SELECT * FROM bookings WHERE user_id = ? ORDER BY appointment_start DESC').all(customer.id)
+        .map((booking) => serializeBooking(booking, query.lang || 'zh'))
+    })
+  }
+  if (req.method === 'POST' && path === '/payments/mock/confirm') {
+    // 安全:必须登录,且只能为自己的订单确认支付(此前无鉴权,可标记他人订单已付)。正式上线由微信支付回调(服务端验签)取代。
+    const customer = requireCustomer(req)
+    const body = await readBody(req)
+    const target = db.prepare('SELECT user_id FROM bookings WHERE id = ?').get(body.bookingId)
+    if (!target) throw apiError(404, 'NOT_FOUND', 'Booking not found.')
+    if (target.user_id !== customer.id) throw apiError(403, 'FORBIDDEN', 'You can only pay for your own booking.')
+    return json(res, 200, { booking: confirmMockPayment(body) })
+  }
   if (req.method === 'POST' && path === '/payments/stripe/create-checkout') {
     const body = await readBody(req)
     return json(res, 200, { provider: 'mock-stripe', booking: confirmMockPayment(body), bookingId: body.bookingId })
@@ -5950,7 +6004,13 @@ async function route(req, res) {
     return json(res, 200, { booking: serializeBooking(booking, query.lang || 'zh') })
   }
   if (req.method === 'POST' && path.startsWith('/bookings/') && path.endsWith('/cancel')) {
-    return json(res, 200, cancelBooking(path.split('/')[2], await readBody(req)))
+    // 安全:必须登录,且只能取消自己的订单(此前无鉴权,可取消任意订单)
+    const customer = requireCustomer(req)
+    const bid = path.split('/')[2]
+    const target = db.prepare('SELECT user_id FROM bookings WHERE id = ?').get(bid)
+    if (!target) throw apiError(404, 'NOT_FOUND', 'Booking not found.')
+    if (target.user_id !== customer.id) throw apiError(403, 'FORBIDDEN', 'You can only cancel your own booking.')
+    return json(res, 200, cancelBooking(bid, await readBody(req)))
   }
   if (req.method === 'POST' && path === '/ai/reference-analysis') {
     const body = await readBody(req)
