@@ -1,4 +1,5 @@
 import { createServer } from 'node:http'
+import { AsyncLocalStorage } from 'node:async_hooks'
 import { DatabaseSync } from 'node:sqlite'
 import { createDecipheriv, createHash, createHmac } from 'node:crypto'
 import { copyFileSync, existsSync, mkdirSync, readdirSync, readFileSync, renameSync, statSync, unlinkSync, writeFileSync } from 'node:fs'
@@ -31,10 +32,13 @@ if (existsSync(pendingImportPath)) {
 const db = new DatabaseSync(join(dataDir, 'lucky-luxe.sqlite'))
 const PORT = Number(process.env.PORT || 4000)
 const OWNER_TOKEN = process.env.OWNER_DEMO_TOKEN || 'owner-demo-token'
-// 多租户地基:当前单租户运行,一切数据归属默认租户;未来多商户时由请求上下文解析。
+// 多租户:请求级租户上下文。商家端 /admin 进入时按登录账号的租户 enterWith;
+// 顾客/公开路径不设上下文 → 回退默认租户(行为不变)。所有用 currentTenantId() 的模块自动按租户走。
 const DEFAULT_TENANT_ID = process.env.DEFAULT_TENANT_ID || 'lucky-luxe'
+const tenantContext = new AsyncLocalStorage()
 function currentTenantId() {
-  return DEFAULT_TENANT_ID
+  const store = tenantContext.getStore()
+  return (store && store.tenantId) || DEFAULT_TENANT_ID
 }
 
 // 多租户:校验租户 id(存在且启用),否则回退默认。默认安全,现有单租户行为不变。
@@ -584,7 +588,8 @@ const WEEKDAY_LABELS = {
 const WEEKDAY_ORDER = [1, 2, 3, 4, 5, 6, 0]
 
 function defaultStoreId() {
-  return db.prepare('SELECT id FROM stores WHERE is_active = 1 ORDER BY name ASC').get()?.id || null
+  // 租户感知:取"当前租户上下文"的门店(商家端=登录账号的店;无上下文=默认店)
+  return db.prepare('SELECT id FROM stores WHERE is_active = 1 AND tenant_id = ? ORDER BY name ASC').get(currentTenantId())?.id || null
 }
 
 function getBusinessHoursRows(storeId = null) {
@@ -876,7 +881,7 @@ function requireOwner(req) {
 
 function requireAdmin(req) {
   const auth = req.headers.authorization || ''
-  if (auth === `Bearer ${OWNER_TOKEN}`) return { role: 'owner', provider: 'demo-token', technicianId: null }
+  if (auth === `Bearer ${OWNER_TOKEN}`) return { role: 'owner', provider: 'demo-token', technicianId: null, tenantId: DEFAULT_TENANT_ID }
   const token = auth.startsWith('Bearer ') ? auth.slice(7) : ''
   // 真实账号会话优先(sess_ 前缀);演示白名单 token 仅在本地开发开关下有效
   const accountAdmin = adminFromSessionToken(token)
@@ -892,12 +897,16 @@ function requireAdmin(req) {
 
 function adminForEmail(email, provider) {
   const normalized = String(email || '').toLowerCase()
-  if (OWNER_EMAILS.includes(normalized)) return { role: 'owner', email: normalized, provider, technicianId: null }
-  if (STAFF_EMAILS.includes(normalized)) return { role: 'staff', email: normalized, provider, technicianId: STAFF_TECH_MAP[normalized] || 'tech-mia' }
+  if (OWNER_EMAILS.includes(normalized)) return { role: 'owner', email: normalized, provider, technicianId: null, tenantId: DEFAULT_TENANT_ID }
+  if (STAFF_EMAILS.includes(normalized)) return { role: 'staff', email: normalized, provider, technicianId: STAFF_TECH_MAP[normalized] || 'tech-mia', tenantId: DEFAULT_TENANT_ID }
   return null
 }
 
 function assertStaffCanAccessBooking(admin, booking) {
+  // 多租户:任何角色都只能操作本店订单
+  if (booking.tenant_id && booking.tenant_id !== currentTenantId()) {
+    throw apiError(404, 'NOT_FOUND', 'Booking not found.')
+  }
   if (admin.role === 'staff' && booking.technician_id !== admin.technicianId) {
     throw apiError(403, 'FORBIDDEN', 'Staff can only access their own bookings.')
   }
@@ -3578,7 +3587,7 @@ async function handleWecomInbound(inbound, req) {
 }
 
 function getWecomConversations() {
-  return db.prepare('SELECT * FROM wechat_conversations ORDER BY updated_at DESC LIMIT 80').all().map((row) => getWecomConversation(row.id)).filter(Boolean)
+  return db.prepare('SELECT * FROM wechat_conversations WHERE tenant_id = ? ORDER BY updated_at DESC LIMIT 80').all(currentTenantId()).map((row) => getWecomConversation(row.id)).filter(Boolean)
 }
 
 function saveManualReplyLearningSample(conversationId, correctedReply, adminSession = {}) {
@@ -4398,6 +4407,10 @@ function upsertActiveQuoteRequest(body = {}, customer = null) {
 }
 
 function assertStaffCanAccessQuote(admin, quote) {
+  // 多租户:只能访问本店的报价请求
+  if (quote.tenant_id && quote.tenant_id !== currentTenantId()) {
+    throw apiError(404, 'NOT_FOUND', 'Quote request not found.')
+  }
   if (admin.role === 'staff' && quote.technician_id && quote.technician_id !== admin.technicianId) {
     throw apiError(403, 'FORBIDDEN', 'Staff can only access quote requests assigned to them.')
   }
@@ -4405,8 +4418,8 @@ function assertStaffCanAccessQuote(admin, quote) {
 
 function getAdminQuoteRequests(admin) {
   const rows = admin.role === 'staff'
-    ? db.prepare('SELECT * FROM quote_requests WHERE technician_id = ? OR technician_id IS NULL ORDER BY updated_at DESC').all(admin.technicianId)
-    : db.prepare('SELECT * FROM quote_requests ORDER BY updated_at DESC LIMIT 120').all()
+    ? db.prepare('SELECT * FROM quote_requests WHERE tenant_id = ? AND (technician_id = ? OR technician_id IS NULL) ORDER BY updated_at DESC').all(currentTenantId(), admin.technicianId)
+    : db.prepare('SELECT * FROM quote_requests WHERE tenant_id = ? ORDER BY updated_at DESC LIMIT 120').all(currentTenantId())
   return rows.map(serializeQuoteRequest)
 }
 
@@ -4528,11 +4541,11 @@ function getAdminReminderTasks(admin) {
     ? db.prepare(`
       SELECT rt.* FROM reminder_tasks rt
       LEFT JOIN quote_requests qr ON qr.id = rt.quote_request_id
-      WHERE qr.technician_id = ? OR qr.technician_id IS NULL
+      WHERE rt.tenant_id = ? AND (qr.technician_id = ? OR qr.technician_id IS NULL)
       ORDER BY rt.scheduled_at ASC
       LIMIT 160
-    `).all(admin.technicianId)
-    : db.prepare('SELECT * FROM reminder_tasks ORDER BY scheduled_at ASC LIMIT 160').all()
+    `).all(currentTenantId(), admin.technicianId)
+    : db.prepare('SELECT * FROM reminder_tasks WHERE tenant_id = ? ORDER BY scheduled_at ASC LIMIT 160').all(currentTenantId())
   return rows.map((row) => ({
     id: row.id,
     userId: row.user_id,
@@ -5280,6 +5293,11 @@ function cancelBooking(id, body) {
 }
 
 function getAdminCustomers() {
+  const tid = currentTenantId()
+  // 多租户:统计只算本店订单;非默认店只列"在本店有订单或储值"的顾客(默认店保留全量,行为不变)
+  const activityFilter = tid === DEFAULT_TENANT_ID ? '' : `
+    WHERE EXISTS (SELECT 1 FROM bookings x WHERE x.user_id = u.id AND x.tenant_id = '${tid.replace(/'/g, "''")}')
+       OR EXISTS (SELECT 1 FROM stored_value_transactions s WHERE s.user_id = u.id AND s.tenant_id = '${tid.replace(/'/g, "''")}')`
   return db.prepare(`
     SELECT
       u.id,
@@ -5294,10 +5312,11 @@ function getAdminCustomers() {
       MAX(b.appointment_start) AS last_visit_at,
       COALESCE(SUM(CASE WHEN b.status = 'COMPLETED' THEN b.service_price_cents ELSE 0 END), 0) AS total_spent_cents
     FROM users u
-    LEFT JOIN bookings b ON b.user_id = u.id
+    LEFT JOIN bookings b ON b.user_id = u.id AND b.tenant_id = ?
+    ${activityFilter}
     GROUP BY u.id
     ORDER BY LOWER(u.display_name) ASC
-  `).all().map((row) => ({
+  `).all(tid).map((row) => ({
     id: row.id,
     displayName: row.display_name,
     phone: row.phone,
@@ -5624,15 +5643,18 @@ function financeLockConfigured() {
 
 function issueFinanceKey() {
   const key = randomId('finkey')
-  financeSessions.set(key, Date.now() + 12 * 60 * 60 * 1000)
+  // 多租户:钥匙绑定发放时的租户,跨店不可复用
+  financeSessions.set(key, { expires: Date.now() + 12 * 60 * 60 * 1000, tenantId: currentTenantId() })
   return key
 }
 
 function requireFinanceKey(req) {
   const key = req.headers['x-finance-key'] || ''
-  const expires = financeSessions.get(key)
-  if (!expires || expires < Date.now()) {
-    if (expires) financeSessions.delete(key)
+  const session = financeSessions.get(key)
+  const expires = session && (typeof session === 'object' ? session.expires : session)
+  const keyTenant = session && typeof session === 'object' ? session.tenantId : null
+  if (!expires || expires < Date.now() || (keyTenant && keyTenant !== currentTenantId())) {
+    if (expires && expires < Date.now()) financeSessions.delete(key)
     throw apiError(403, 'FINANCE_LOCKED', 'FINANCE_LOCKED')
   }
 }
@@ -5833,11 +5855,7 @@ async function route(req, res) {
     const account = db.prepare('SELECT * FROM admin_accounts WHERE LOWER(username) = ?').get(loginId)
     if (account) {
       if (account.status !== 'active') throw apiError(403, 'ACCOUNT_DISABLED', '该账号已被停用,请联系老板。')
-      // 多租户安全闸:商家端 /admin 尚未按租户贯通(currentTenantId 写死默认店),
-      // 在贯通完成前禁止非默认租户账号登录,防止新商家看到默认店数据。贯通后移除此闸。
-      if (account.tenant_id && account.tenant_id !== DEFAULT_TENANT_ID) {
-        throw apiError(403, 'TENANT_PORTAL_NOT_READY', '该商家的管理后台即将开放:账号已预生成,多商户控制台上线后即可登录。')
-      }
+      // 多租户已贯通(2026-07-17):登录后所有 /admin 请求按账号租户 scope,安全闸解除。
       if (adminPasswordHash(account.username, password) !== account.password_hash) {
         throw apiError(401, 'WRONG_PASSWORD', '密码不正确。员工忘记密码请找老板重置;老板忘记密码请联系平台。')
       }
@@ -5890,7 +5908,7 @@ async function route(req, res) {
   if (req.method === 'GET' && path === '/admin/staff-accounts') {
     const admin = requireAdmin(req)
     if (admin.role !== 'owner') throw apiError(403, 'FORBIDDEN', 'Owner permission is required.')
-    const rows = db.prepare("SELECT id, username, role, technician_id, status, must_change_password, last_login_at FROM admin_accounts WHERE role = 'staff' ORDER BY created_at ASC").all()
+    const rows = db.prepare("SELECT id, username, role, technician_id, status, must_change_password, last_login_at FROM admin_accounts WHERE role = 'staff' AND tenant_id = ? ORDER BY created_at ASC").all(currentTenantId())
     return json(res, 200, {
       accounts: rows.map((row) => ({
         id: row.id, username: row.username, technicianId: row.technician_id, status: row.status,
@@ -5902,7 +5920,7 @@ async function route(req, res) {
     const admin = requireAdmin(req)
     if (admin.role !== 'owner') throw apiError(403, 'FORBIDDEN', 'Owner permission is required.')
     const body = await readBody(req)
-    const tech = db.prepare('SELECT * FROM technicians WHERE id = ?').get(String(body.technicianId || ''))
+    const tech = db.prepare('SELECT * FROM technicians WHERE id = ? AND tenant_id = ?').get(String(body.technicianId || ''), currentTenantId())
     if (!tech) throw apiError(404, 'NOT_FOUND', 'Technician not found.')
     if (db.prepare('SELECT id FROM admin_accounts WHERE technician_id = ?').get(tech.id)) {
       throw apiError(409, 'DUPLICATE', '该技师已有登录账号,可重置密码或停用。')
@@ -5912,16 +5930,16 @@ async function route(req, res) {
     let suffix = 1
     while (db.prepare('SELECT id FROM admin_accounts WHERE LOWER(username) = ?').get(username)) { suffix += 1; username = `${base}${suffix}` }
     const initialPassword = randomPassword()
-    db.prepare(`INSERT INTO admin_accounts (id, username, display_name, role, technician_id, password_hash, must_change_password, status, created_at, updated_at)
-      VALUES (?, ?, ?, 'staff', ?, ?, 1, 'active', ?, ?)`)
-      .run(randomId('acct'), username, tech.name, tech.id, adminPasswordHash(username, initialPassword), iso(new Date()), iso(new Date()))
+    db.prepare(`INSERT INTO admin_accounts (id, tenant_id, username, display_name, role, technician_id, password_hash, must_change_password, status, created_at, updated_at)
+      VALUES (?, ?, ?, ?, 'staff', ?, ?, 1, 'active', ?, ?)`)
+      .run(randomId('acct'), currentTenantId(), username, tech.name, tech.id, adminPasswordHash(username, initialPassword), iso(new Date()), iso(new Date()))
     return json(res, 201, { username, initialPassword, note: '初始密码只显示这一次,请立即发给员工;员工首次登录会被要求改密。' })
   }
   const staffAcctMatch = path.match(/^\/admin\/staff-accounts\/([^/]+)\/(reset-password|toggle)$/)
   if (req.method === 'POST' && staffAcctMatch) {
     const admin = requireAdmin(req)
     if (admin.role !== 'owner') throw apiError(403, 'FORBIDDEN', 'Owner permission is required.')
-    const account = db.prepare("SELECT * FROM admin_accounts WHERE id = ? AND role = 'staff'").get(staffAcctMatch[1])
+    const account = db.prepare("SELECT * FROM admin_accounts WHERE id = ? AND role = 'staff' AND tenant_id = ?").get(staffAcctMatch[1], currentTenantId())
     if (!account) throw apiError(404, 'NOT_FOUND', 'Account not found.')
     if (staffAcctMatch[2] === 'reset-password') {
       const initialPassword = randomPassword()
@@ -6123,7 +6141,11 @@ async function route(req, res) {
     return json(res, 200, { reply })
   }
   let adminSession = null
-  if (path.startsWith('/admin/')) adminSession = requireAdmin(req)
+  if (path.startsWith('/admin/')) {
+    adminSession = requireAdmin(req)
+    // 多租户贯通:本请求内所有 currentTenantId() 都按登录账号的租户走(财务/KB/套餐/券/储值等自动隔离)
+    tenantContext.enterWith({ tenantId: adminSession.tenantId || DEFAULT_TENANT_ID })
+  }
   if (req.method === 'GET' && path === '/admin/wechat/status') {
     return json(res, 200, { wechat: wecomConfigStatus() })
   }
@@ -6226,8 +6248,8 @@ async function route(req, res) {
   }
   if (req.method === 'GET' && path === '/admin/bookings') {
     const rows = adminSession.role === 'staff'
-      ? db.prepare('SELECT * FROM bookings WHERE technician_id = ? ORDER BY appointment_start DESC').all(adminSession.technicianId)
-      : db.prepare('SELECT * FROM bookings ORDER BY appointment_start DESC').all()
+      ? db.prepare('SELECT * FROM bookings WHERE tenant_id = ? AND technician_id = ? ORDER BY appointment_start DESC').all(currentTenantId(), adminSession.technicianId)
+      : db.prepare('SELECT * FROM bookings WHERE tenant_id = ? ORDER BY appointment_start DESC').all(currentTenantId())
     // 服务安全:管理端订单随单携带顾客标签/备注(过敏史/忌讳),技师上钟前必看;不开放完整客户库
     const careStmt = db.prepare('SELECT tags_json, notes FROM users WHERE id = ?')
     return json(res, 200, {
@@ -6252,9 +6274,9 @@ async function route(req, res) {
   }
   if (req.method === 'POST' && path === '/admin/ai/daily-brief') {
     const bookings = adminSession.role === 'staff'
-      ? db.prepare('SELECT * FROM bookings WHERE technician_id = ? ORDER BY appointment_start DESC LIMIT 60').all(adminSession.technicianId).map((booking) => serializeBooking(booking))
-      : db.prepare('SELECT * FROM bookings ORDER BY appointment_start DESC LIMIT 60').all().map((booking) => serializeBooking(booking))
-    const services = db.prepare('SELECT * FROM services ORDER BY type ASC, sort_order ASC').all().map(serializeService)
+      ? db.prepare('SELECT * FROM bookings WHERE tenant_id = ? AND technician_id = ? ORDER BY appointment_start DESC LIMIT 60').all(currentTenantId(), adminSession.technicianId).map((booking) => serializeBooking(booking))
+      : db.prepare('SELECT * FROM bookings WHERE tenant_id = ? ORDER BY appointment_start DESC LIMIT 60').all(currentTenantId()).map((booking) => serializeBooking(booking))
+    const services = db.prepare('SELECT * FROM services WHERE tenant_id = ? ORDER BY type ASC, sort_order ASC').all(currentTenantId()).map(serializeService)
     return json(res, 200, { brief: await createDailyBrief({ ...(await readBody(req)), bookings, customers: adminSession.role === 'owner' ? getAdminCustomers() : [], services }) })
   }
   if (req.method === 'POST' && path === '/admin/ai/booking-summary') {
@@ -6281,7 +6303,7 @@ async function route(req, res) {
   }
   if (req.method === 'GET' && path === '/admin/services') {
     if (adminSession.role !== 'owner') throw apiError(403, 'FORBIDDEN', 'Owner permission is required.')
-    return json(res, 200, { services: db.prepare('SELECT * FROM services ORDER BY type ASC, sort_order ASC').all().map(serializeService) })
+    return json(res, 200, { services: db.prepare('SELECT * FROM services WHERE tenant_id = ? ORDER BY type ASC, sort_order ASC').all(currentTenantId()).map(serializeService) })
   }
   if (req.method === 'POST' && path === '/admin/services') {
     if (adminSession.role !== 'owner') throw apiError(403, 'FORBIDDEN', 'Owner permission is required.')
@@ -6290,16 +6312,16 @@ async function route(req, res) {
     if (!payload.nameZh || !payload.nameEn) throw apiError(400, 'BAD_REQUEST', 'Service name is required.')
     const id = serviceIdFrom(payload)
     db.prepare(`INSERT INTO services
-      (id, type, category, name_zh, name_en, description_zh, description_en, image_url, price_cents, deposit_cents, base_duration_min, sort_order, is_active, process_json, notice_json)
-      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`).run(id, payload.type, payload.category, payload.nameZh, payload.nameEn, payload.descriptionZh, payload.descriptionEn, payload.imageUrl, payload.priceCents, payload.depositCents, payload.baseDurationMin, payload.sortOrder, payload.isActive, JSON.stringify(payload.processJson), JSON.stringify(payload.noticeJson))
+      (id, tenant_id, type, category, name_zh, name_en, description_zh, description_en, image_url, price_cents, deposit_cents, base_duration_min, sort_order, is_active, process_json, notice_json)
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`).run(id, currentTenantId(), payload.type, payload.category, payload.nameZh, payload.nameEn, payload.descriptionZh, payload.descriptionEn, payload.imageUrl, payload.priceCents, payload.depositCents, payload.baseDurationMin, payload.sortOrder, payload.isActive, JSON.stringify(payload.processJson), JSON.stringify(payload.noticeJson))
     const assign = db.prepare('INSERT OR IGNORE INTO technician_services (technician_id, service_id) VALUES (?, ?)')
-    for (const tech of db.prepare('SELECT id FROM technicians WHERE is_active = 1').all()) assign.run(tech.id, id)
+    for (const tech of db.prepare('SELECT id FROM technicians WHERE is_active = 1 AND tenant_id = ?').all(currentTenantId())) assign.run(tech.id, id)
     return json(res, 201, { service: serializeService(getService(id)) })
   }
   if (req.method === 'GET' && path === '/admin/technicians') {
     const technicians = adminSession.role === 'staff'
-      ? db.prepare('SELECT * FROM technicians WHERE id = ? ORDER BY name ASC').all(adminSession.technicianId)
-      : db.prepare('SELECT * FROM technicians ORDER BY name ASC').all()
+      ? db.prepare('SELECT * FROM technicians WHERE tenant_id = ? AND id = ? ORDER BY name ASC').all(currentTenantId(), adminSession.technicianId)
+      : db.prepare('SELECT * FROM technicians WHERE tenant_id = ? ORDER BY name ASC').all(currentTenantId())
     return json(res, 200, { technicians })
   }
   if (req.method === 'PATCH' && path.startsWith('/admin/services/')) {
@@ -6307,7 +6329,7 @@ async function route(req, res) {
     const id = path.split('/')[3]
     const body = await readBody(req)
     const current = getService(id)
-    if (!current) throw apiError(404, 'NOT_FOUND', 'Service not found.')
+    if (!current || (current.tenant_id && current.tenant_id !== currentTenantId())) throw apiError(404, 'NOT_FOUND', 'Service not found.')
     const payload = servicePayload(body, current)
     db.prepare(`UPDATE services SET
       type = ?, category = ?, name_zh = ?, name_en = ?, description_zh = ?, description_en = ?, image_url = ?,
@@ -6624,13 +6646,13 @@ async function route(req, res) {
       .run(status, body.note === undefined ? cur.note : String(body.note).slice(0, 300), iso(new Date()), id)
     return json(res, 200, { lead: serializeMerchantLead(db.prepare('SELECT * FROM merchant_leads WHERE id = ?').get(id)) })
   }
-  // 平台运营:商家入驻线索(owner 可看/改状态)
+  // 平台运营:商家入驻线索(平台数据,仅默认租户 owner/主钥匙可见)
   if (req.method === 'GET' && path === '/admin/merchant-leads') {
-    if (adminSession.role !== 'owner') throw apiError(403, 'FORBIDDEN', 'Owner permission is required.')
+    if (adminSession.role !== 'owner' || currentTenantId() !== DEFAULT_TENANT_ID) throw apiError(403, 'FORBIDDEN', 'Platform permission is required.')
     return json(res, 200, { leads: db.prepare('SELECT * FROM merchant_leads ORDER BY created_at DESC').all().map(serializeMerchantLead) })
   }
   if (req.method === 'PATCH' && path.startsWith('/admin/merchant-leads/')) {
-    if (adminSession.role !== 'owner') throw apiError(403, 'FORBIDDEN', 'Owner permission is required.')
+    if (adminSession.role !== 'owner' || currentTenantId() !== DEFAULT_TENANT_ID) throw apiError(403, 'FORBIDDEN', 'Platform permission is required.')
     const id = path.split('/')[3]
     const cur = db.prepare('SELECT * FROM merchant_leads WHERE id = ?').get(id)
     if (!cur) throw apiError(404, 'NOT_FOUND', 'Lead not found.')
@@ -6640,14 +6662,14 @@ async function route(req, res) {
       .run(status, body.note === undefined ? cur.note : String(body.note).slice(0, 300), iso(new Date()), id)
     return json(res, 200, { lead: serializeMerchantLead(db.prepare('SELECT * FROM merchant_leads WHERE id = ?').get(id)) })
   }
-  // 展示图库(对外):所有技师已发布作品(owner+staff 均可读,不按角色过滤;带 bookingId 以便生成文案)
+  // 展示图库(对外):本店所有技师已发布作品(owner+staff 均可读;多租户按店)
   if (req.method === 'GET' && path === '/admin/published-works') {
     const rows = db.prepare(`
       SELECT b.id, b.appointment_start, b.approved_work_images_json, b.service_id, b.technician_id, t.name AS tech_name
       FROM bookings b LEFT JOIN technicians t ON t.id = b.technician_id
-      WHERE b.gallery_status = 'approved'
+      WHERE b.gallery_status = 'approved' AND b.tenant_id = ?
       ORDER BY b.gallery_locked_at DESC, b.appointment_start DESC
-    `).all()
+    `).all(currentTenantId())
     const works = []
     for (const row of rows) {
       const images = parseJson(row.approved_work_images_json).filter(Boolean)
@@ -6669,6 +6691,7 @@ async function route(req, res) {
   if (req.method === 'PATCH' && path.startsWith('/admin/technicians/') && path.endsWith('/schedule')) {
     if (adminSession.role !== 'owner') throw apiError(403, 'FORBIDDEN', 'Owner permission is required.')
     const technicianId = path.split('/')[3]
+    if (!db.prepare('SELECT id FROM technicians WHERE id = ? AND tenant_id = ?').get(technicianId, currentTenantId())) throw apiError(404, 'NOT_FOUND', 'Technician not found.')
     const body = await readBody(req)
     if (!body.date) throw apiError(400, 'BAD_REQUEST', 'date is required.')
     db.prepare(`INSERT INTO technician_schedules (technician_id, date, start_time, end_time, is_working)
@@ -6687,6 +6710,7 @@ async function route(req, res) {
       throw apiError(400, 'BAD_REQUEST', '调整时段需要提供 openTime/closeTime (HH:MM)。')
     }
     const storeId = body.storeId || defaultStoreId()
+    if (!db.prepare('SELECT id FROM stores WHERE id = ? AND tenant_id = ?').get(storeId, currentTenantId())) throw apiError(404, 'NOT_FOUND', 'Store not found.')
     db.prepare(`INSERT INTO store_special_dates (store_id, date, is_closed, open_time, close_time, note)
       VALUES (?, ?, ?, ?, ?, ?)
       ON CONFLICT(store_id, date) DO UPDATE SET is_closed = excluded.is_closed, open_time = excluded.open_time, close_time = excluded.close_time, note = excluded.note`)
@@ -6698,6 +6722,7 @@ async function route(req, res) {
     if (adminSession.role !== 'owner') throw apiError(403, 'FORBIDDEN', 'Owner permission is required.')
     const date = path.split('/')[3]
     const storeId = query.storeId || defaultStoreId()
+    if (!db.prepare('SELECT id FROM stores WHERE id = ? AND tenant_id = ?').get(storeId, currentTenantId())) throw apiError(404, 'NOT_FOUND', 'Store not found.')
     const result = db.prepare('DELETE FROM store_special_dates WHERE store_id = ? AND date = ?').run(storeId, date)
     if (!result.changes) throw apiError(404, 'NOT_FOUND', 'Special date not found.')
     return json(res, 200, { deleted: date })
@@ -6727,8 +6752,8 @@ async function route(req, res) {
         specialNote: special?.note || (special ? (special.is_closed ? '特殊休息' : '特殊时段') : '')
       })
     }
-    // 排班为团队可见:员工也返回全部技师(只读),让"格子人数"与"当日名单"一致;写操作仍 owner-only
-    const technicians = db.prepare('SELECT * FROM technicians ORDER BY is_active DESC, name ASC').all()
+    // 排班为团队可见:员工也返回本店全部技师(只读);多租户按店过滤
+    const technicians = db.prepare('SELECT * FROM technicians WHERE tenant_id = ? ORDER BY is_active DESC, name ASC').all(currentTenantId())
     const dates = days.map((day) => day.date)
     const schedules = db.prepare(`SELECT technician_id, date, start_time, end_time, is_working FROM technician_schedules WHERE date IN (${dates.map(() => '?').join(',')})`)
       .all(...dates)
@@ -6737,7 +6762,7 @@ async function route(req, res) {
     for (const day of days) {
       const dayStart = iso(localDateTime(day.date, '00:00'))
       const dayEnd = iso(addMinutes(localDateTime(day.date, '00:00'), 24 * 60))
-      const rows = db.prepare(`SELECT technician_id, COUNT(*) AS n FROM bookings WHERE status IN ('PENDING_PAYMENT','CONFIRMED') AND appointment_start >= ? AND appointment_start < ? GROUP BY technician_id`).all(dayStart, dayEnd)
+      const rows = db.prepare(`SELECT technician_id, COUNT(*) AS n FROM bookings WHERE tenant_id = ? AND status IN ('PENDING_PAYMENT','CONFIRMED') AND appointment_start >= ? AND appointment_start < ? GROUP BY technician_id`).all(currentTenantId(), dayStart, dayEnd)
       for (const row of rows) bookingCounts.push({ technicianId: row.technician_id, date: day.date, count: row.n })
     }
     return json(res, 200, {
@@ -6767,7 +6792,7 @@ async function route(req, res) {
   if (req.method === 'GET' && path === '/admin/schedule-requests') {
     const rows = adminSession.role === 'staff'
       ? db.prepare('SELECT r.*, t.name AS tech_name FROM schedule_change_requests r LEFT JOIN technicians t ON t.id = r.technician_id WHERE r.technician_id = ? ORDER BY r.created_at DESC LIMIT 40').all(adminSession.technicianId)
-      : db.prepare('SELECT r.*, t.name AS tech_name FROM schedule_change_requests r LEFT JOIN technicians t ON t.id = r.technician_id ORDER BY CASE r.status WHEN ? THEN 0 ELSE 1 END, r.created_at DESC LIMIT 60').all('pending')
+      : db.prepare('SELECT r.*, t.name AS tech_name FROM schedule_change_requests r JOIN technicians t ON t.id = r.technician_id AND t.tenant_id = ? ORDER BY CASE r.status WHEN ? THEN 0 ELSE 1 END, r.created_at DESC LIMIT 60').all(currentTenantId(), 'pending')
     return json(res, 200, {
       requests: rows.map((row) => ({
         id: row.id, technicianId: row.technician_id, technicianName: row.tech_name || row.technician_id,
@@ -6780,7 +6805,7 @@ async function route(req, res) {
   const schReqMatch = path.match(/^\/admin\/schedule-requests\/([^/]+)\/(set-off|handled|reject)$/)
   if (req.method === 'POST' && schReqMatch) {
     if (adminSession.role !== 'owner') throw apiError(403, 'FORBIDDEN', 'Owner permission is required.')
-    const row = db.prepare('SELECT * FROM schedule_change_requests WHERE id = ?').get(schReqMatch[1])
+    const row = db.prepare('SELECT r.* FROM schedule_change_requests r JOIN technicians t ON t.id = r.technician_id AND t.tenant_id = ? WHERE r.id = ?').get(currentTenantId(), schReqMatch[1])
     if (!row) throw apiError(404, 'NOT_FOUND', 'Request not found.')
     if (row.status !== 'pending') throw apiError(400, 'BAD_REQUEST', '该申请已处理过。')
     const action = schReqMatch[2]
@@ -6823,9 +6848,11 @@ async function route(req, res) {
     const stmt = db.prepare(`INSERT INTO technician_schedules (technician_id, date, start_time, end_time, is_working)
       VALUES (?, ?, ?, ?, ?)
       ON CONFLICT(technician_id, date) DO UPDATE SET start_time = excluded.start_time, end_time = excluded.end_time, is_working = excluded.is_working`)
+    const techOk = db.prepare('SELECT id FROM technicians WHERE id = ? AND tenant_id = ?')
     let applied = 0
     for (const entry of entries) {
       if (!entry.technicianId || !/^\d{4}-\d{2}-\d{2}$/.test(entry.date || '')) continue
+      if (!techOk.get(entry.technicianId, currentTenantId())) continue // 多租户:只排本店技师
       stmt.run(entry.technicianId, entry.date, entry.startTime || '10:00', entry.endTime || '19:00', Number(Boolean(entry.isWorking)))
       applied += 1
     }
@@ -6838,11 +6865,11 @@ async function route(req, res) {
     const name = String(body.name || '').trim()
     if (!name) throw apiError(400, 'BAD_REQUEST', 'Technician name is required.')
     const id = randomId('tech')
-    db.prepare('INSERT INTO technicians (id, store_id, name, title, is_active) VALUES (?, ?, ?, ?, 1)')
-      .run(id, body.storeId || defaultStoreId(), name, String(body.title || '').trim() || null)
-    // 默认可做所有在售服务(与新增服务时的自动指派保持一致)
+    db.prepare('INSERT INTO technicians (id, store_id, name, title, is_active, tenant_id) VALUES (?, ?, ?, ?, 1, ?)')
+      .run(id, body.storeId || defaultStoreId(), name, String(body.title || '').trim() || null, currentTenantId())
+    // 默认可做本店所有在售服务(与新增服务时的自动指派保持一致)
     const assign = db.prepare('INSERT OR IGNORE INTO technician_services (technician_id, service_id) VALUES (?, ?)')
-    for (const service of db.prepare('SELECT id FROM services WHERE is_active = 1').all()) assign.run(id, service.id)
+    for (const service of db.prepare('SELECT id FROM services WHERE is_active = 1 AND tenant_id = ?').all(currentTenantId())) assign.run(id, service.id)
     return json(res, 201, { technician: db.prepare('SELECT * FROM technicians WHERE id = ?').get(id) })
   }
   // 客户运营字段:标签/备注/生日
@@ -6865,7 +6892,7 @@ async function route(req, res) {
   if (req.method === 'PATCH' && path.startsWith('/admin/technicians/') && !path.endsWith('/schedule')) {
     if (adminSession.role !== 'owner') throw apiError(403, 'FORBIDDEN', 'Owner permission is required.')
     const technicianId = path.split('/')[3]
-    const current = db.prepare('SELECT * FROM technicians WHERE id = ?').get(technicianId)
+    const current = db.prepare('SELECT * FROM technicians WHERE id = ? AND tenant_id = ?').get(technicianId, currentTenantId())
     if (!current) throw apiError(404, 'NOT_FOUND', 'Technician not found.')
     const body = await readBody(req)
     const name = String(body.name ?? current.name).trim() || current.name
@@ -6988,7 +7015,7 @@ async function route(req, res) {
     return json(res, 200, { insight: { month, text: lines.join('\n'), generatedAt: iso(new Date()) } })
   }
   if (req.method === 'POST' && path === '/admin/demo/finance-seed') {
-    if (adminSession.role !== 'owner') throw apiError(403, 'FORBIDDEN', 'Owner permission is required.')
+    if (adminSession.role !== 'owner' || currentTenantId() !== DEFAULT_TENANT_ID) throw apiError(403, 'FORBIDDEN', 'Owner permission is required.')
     const marker = 'demo-seed'
     const already = db.prepare("SELECT id FROM finance_transactions WHERE tags = ? LIMIT 1").get(marker)
     if (already) return json(res, 200, { seeded: false, message: '演示数据已存在，无需重复填充。' })
@@ -7039,7 +7066,7 @@ async function route(req, res) {
   }
   // 全页面演示数据:客户/订单/会话/报价任务/储值,一键填充(幂等,正式上线前用重置数据.command清除)
   if (req.method === 'POST' && path === '/admin/demo/full-seed') {
-    if (adminSession.role !== 'owner') throw apiError(403, 'FORBIDDEN', 'Owner permission is required.')
+    if (adminSession.role !== 'owner' || currentTenantId() !== DEFAULT_TENANT_ID) throw apiError(403, 'FORBIDDEN', 'Owner permission is required.')
     if (db.prepare("SELECT id FROM users WHERE id = 'demo-cust-01'").get()) {
       return json(res, 200, { seeded: false, message: '全页面演示数据已存在,无需重复填充。' })
     }
@@ -7527,7 +7554,7 @@ async function route(req, res) {
     if (adminSession.role !== 'owner') throw apiError(403, 'FORBIDDEN', 'Owner permission is required.')
     const body = await readBody(req)
     const storeId = body.storeId || defaultStoreId()
-    const store = db.prepare('SELECT * FROM stores WHERE id = ?').get(storeId)
+    const store = db.prepare('SELECT * FROM stores WHERE id = ? AND tenant_id = ?').get(storeId, currentTenantId())
     if (!store) throw apiError(404, 'NOT_FOUND', 'Store not found.')
     const name = String(body.name ?? store.name).trim() || store.name
     const address = String(body.address ?? store.address ?? '').trim()
@@ -7543,7 +7570,7 @@ async function route(req, res) {
     return json(res, 200, { store: db.prepare('SELECT id, name, address, phone FROM stores WHERE id = ?').get(storeId) })
   }
   if (req.method === 'GET' && path === '/admin/business-hours') {
-    const stores = db.prepare('SELECT id, name, address, phone FROM stores WHERE is_active = 1 ORDER BY name ASC').all()
+    const stores = db.prepare('SELECT id, name, address, phone FROM stores WHERE is_active = 1 AND tenant_id = ? ORDER BY name ASC').all(currentTenantId())
     return json(res, 200, {
       stores: stores.map((store) => ({
         id: store.id,
@@ -7566,7 +7593,7 @@ async function route(req, res) {
     if (adminSession.role !== 'owner') throw apiError(403, 'FORBIDDEN', 'Owner permission is required.')
     const body = await readBody(req)
     const storeId = body.storeId || defaultStoreId()
-    const store = db.prepare('SELECT * FROM stores WHERE id = ?').get(storeId)
+    const store = db.prepare('SELECT * FROM stores WHERE id = ? AND tenant_id = ?').get(storeId, currentTenantId())
     if (!store) throw apiError(404, 'NOT_FOUND', 'Store not found.')
     const entries = Array.isArray(body.hours) ? body.hours : []
     if (!entries.length) throw apiError(400, 'BAD_REQUEST', 'hours array is required.')
@@ -7919,6 +7946,7 @@ function adminFromSessionToken(token) {
     provider: 'account',
     accountId: row.id,
     technicianId: row.technician_id || null,
+    tenantId: row.tenant_id || DEFAULT_TENANT_ID,
     mustChangePassword: Boolean(row.must_change_password)
   }
 }
