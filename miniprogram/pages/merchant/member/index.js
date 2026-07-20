@@ -68,6 +68,36 @@ Page({
     } catch (err) { wx.showToast({ title: (err && err.message) || '操作失败', icon: 'none' }) }
   },
 
+  // 核销顾客的券:扫码或手输核销码,一次性防重复
+  redeemCode() {
+    wx.showActionSheet({
+      itemList: ['扫顾客的核销码', '手动输入券码'],
+      success: (r) => {
+        if (r.tapIndex === 0) {
+          wx.scanCode({
+            success: (res) => this.doRedeem(String(res.result || '').trim()),
+            fail: () => {}
+          })
+        } else {
+          wx.showModal({
+            title: '核销券码', editable: true, placeholderText: '如 LL-XXXX-XXXX',
+            success: (m) => { if (m.confirm) this.doRedeem(String(m.content || '').trim()) }
+          })
+        }
+      }
+    })
+  },
+
+  async doRedeem(code) {
+    if (!code) return
+    try {
+      const r = await api.adminPost('/admin/coupons/redeem', { code })
+      wx.showModal({ title: '核销成功 ✓', content: `${r.redeemed.couponName}\n${r.redeemed.discountText} · ${r.redeemed.minSpendText}\n请在结账时抵扣`, showCancel: false })
+    } catch (err) {
+      wx.showModal({ title: '核销失败', content: (err && err.message) || '券码无效', showCancel: false })
+    }
+  },
+
   async manualRecharge() {
     if (!(api.getFinanceKey && api.getFinanceKey())) {
       wx.showModal({

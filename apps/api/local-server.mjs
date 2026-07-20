@@ -5336,8 +5336,9 @@ function getAdminCustomers() {
 }
 
 function buildCustomerServiceContext(req, lang = 'zh') {
-  const services = db.prepare('SELECT * FROM services WHERE is_active = 1 ORDER BY type ASC, sort_order ASC').all().map((service) => serializeService(service, lang))
-  const stores = db.prepare('SELECT * FROM stores WHERE is_active = 1 ORDER BY name ASC').all()
+  // 多租户:AI 上下文只含当前店的服务与门店
+  const services = db.prepare('SELECT * FROM services WHERE is_active = 1 AND tenant_id = ? ORDER BY type ASC, sort_order ASC').all(currentTenantId()).map((service) => serializeService(service, lang))
+  const stores = db.prepare('SELECT * FROM stores WHERE is_active = 1 AND tenant_id = ? ORDER BY name ASC').all(currentTenantId())
   let customer = null
   let bookings = []
   try {
@@ -6054,6 +6055,46 @@ async function route(req, res) {
     body.tenantId = resolveTenant(req, query) // 多租户:订单归属"当前进的店"
     return json(res, 201, { booking: createBooking(body) })
   }
+  // ===== 顾客侧"我的资产"(user × 当前店) =====
+  if (req.method === 'GET' && path === '/my/coupons') {
+    const customer = requireCustomer(req)
+    const tid = resolveTenant(req, query)
+    const nowIso = iso(new Date())
+    db.prepare("UPDATE coupon_grants SET status = 'expired' WHERE user_id = ? AND tenant_id = ? AND status = 'active' AND expires_at < ?").run(customer.id, tid, nowIso)
+    const rows = db.prepare(`SELECT g.id, g.code, g.status, g.expires_at, g.used_at, c.name, c.discount_type, c.amount_cents, c.percent_off, c.min_spend_cents
+      FROM coupon_grants g JOIN coupons c ON c.id = g.coupon_id
+      WHERE g.user_id = ? AND g.tenant_id = ? ORDER BY g.created_at DESC`).all(customer.id, tid)
+    return json(res, 200, {
+      coupons: rows.map((r) => ({
+        id: r.id, code: r.code, status: r.status, name: r.name,
+        discountType: r.discount_type, amountCents: r.amount_cents, percentOff: r.percent_off, minSpendCents: r.min_spend_cents,
+        expiresAt: r.expires_at, usedAt: r.used_at
+      }))
+    })
+  }
+  if (req.method === 'GET' && path === '/my/stored-value') {
+    const customer = requireCustomer(req)
+    const tid = resolveTenant(req, query)
+    const txns = db.prepare('SELECT type, amount_cents, pay_channel, note, created_at FROM stored_value_transactions WHERE user_id = ? AND tenant_id = ? ORDER BY created_at DESC LIMIT 50').all(customer.id, tid)
+    return json(res, 200, {
+      balanceCents: storedValueBalanceCents(customer.id, tid),
+      txns: txns.map((t) => ({ type: t.type, amountCents: t.amount_cents, payChannel: t.pay_channel, note: t.note || '', createdAt: t.created_at }))
+    })
+  }
+  if (req.method === 'GET' && path === '/my/points-history') {
+    const customer = requireCustomer(req)
+    const tid = resolveTenant(req, query)
+    // 积分台账(权威版):由本店已完成订单推导,消费 $1 = 1 分;兑换扣分待积分商城接入
+    const rows = db.prepare(`SELECT b.id, b.appointment_start, b.service_price_cents, s.name_zh AS service_name
+      FROM bookings b LEFT JOIN services s ON s.id = b.service_id
+      WHERE b.user_id = ? AND b.tenant_id = ? AND b.status = 'COMPLETED' ORDER BY b.appointment_start DESC LIMIT 50`).all(customer.id, tid)
+    return json(res, 200, {
+      records: rows.map((r) => ({
+        id: r.id, title: '消费获得 · ' + (r.service_name || '服务'),
+        date: localParts(r.appointment_start).date, delta: Math.floor((r.service_price_cents || 0) / 100)
+      }))
+    })
+  }
   if (req.method === 'GET' && path === '/bookings') {
     // 隐私+一致性+多租户:必须登录,只返回本人在"当前进的店"的订单
     const customer = requireCustomer(req)
@@ -6105,6 +6146,8 @@ async function route(req, res) {
     return json(res, 200, { copy: await createSocialCopy({ lang: body.lang || 'zh', image: body.image || '', booking, platform: body.platform || 'xiaohongshu', audience: body.audience || 'customer', avoidCaptions: body.avoidCaptions || [], variantSeed: body.variantSeed || '' }) })
   }
   if (req.method === 'POST' && path === '/ai/customer-service') {
+    // 多租户:AI 客服按"顾客当前进的店"取知识/服务/事实回答
+    tenantContext.enterWith({ tenantId: resolveTenant(req, query) })
     if (!checkEntitlement(currentTenantId(), 'ai_customer_service')) {
       return json(res, 200, {
         reply: {
@@ -6402,6 +6445,45 @@ async function route(req, res) {
       body.isActive === false ? 0 : 1, iso(new Date()))
     return json(res, 201, { coupon: serializeCoupon(db.prepare('SELECT * FROM coupons WHERE id = ?').get(id)) })
   }
+  // 发券:把某张券发给某会员(生成一次性核销码)
+  if (req.method === 'POST' && path.startsWith('/admin/coupons/') && path.endsWith('/grant')) {
+    if (adminSession.role !== 'owner') throw apiError(403, 'FORBIDDEN', 'Owner permission is required.')
+    const couponId = path.split('/')[3]
+    const coupon = db.prepare('SELECT * FROM coupons WHERE id = ? AND tenant_id = ?').get(couponId, currentTenantId())
+    if (!coupon) throw apiError(404, 'NOT_FOUND', 'Coupon not found.')
+    if (!coupon.is_active) throw apiError(400, 'BAD_REQUEST', '该券已停用。')
+    if (coupon.total_qty > 0 && coupon.issued_qty >= coupon.total_qty) throw apiError(400, 'BAD_REQUEST', '该券发放量已用完。')
+    const body = await readBody(req)
+    const user = db.prepare('SELECT id, display_name FROM users WHERE id = ?').get(String(body.userId || ''))
+    if (!user) throw apiError(404, 'NOT_FOUND', 'Member not found.')
+    const code = `LL-${Math.random().toString(36).slice(2, 6).toUpperCase()}-${Math.random().toString(36).slice(2, 6).toUpperCase()}`
+    const expiresAt = iso(new Date(Date.now() + (coupon.valid_days || 30) * 86400000))
+    db.prepare(`INSERT INTO coupon_grants (id, tenant_id, coupon_id, user_id, code, status, expires_at, created_at)
+      VALUES (?, ?, ?, ?, ?, 'active', ?, ?)`).run(randomId('grant'), currentTenantId(), couponId, user.id, code, expiresAt, iso(new Date()))
+    db.prepare('UPDATE coupons SET issued_qty = issued_qty + 1 WHERE id = ?').run(couponId)
+    return json(res, 201, { grant: { code, couponName: coupon.name, userName: user.display_name, expiresAt } })
+  }
+  // 核销:店员输码/扫码,一次性,防重复
+  if (req.method === 'POST' && path === '/admin/coupons/redeem') {
+    const body = await readBody(req)
+    const code = String(body.code || '').trim().toUpperCase()
+    if (!code) throw apiError(400, 'BAD_REQUEST', '请输入券码。')
+    const grant = db.prepare('SELECT g.*, c.name AS coupon_name, c.discount_type, c.amount_cents, c.percent_off, c.min_spend_cents FROM coupon_grants g JOIN coupons c ON c.id = g.coupon_id WHERE g.code = ? AND g.tenant_id = ?').get(code, currentTenantId())
+    if (!grant) throw apiError(404, 'NOT_FOUND', '券码不存在(或不属于本店)。')
+    if (grant.status === 'used') throw apiError(409, 'ALREADY_USED', `该券已于 ${String(grant.used_at || '').slice(0, 16).replace('T', ' ')} 核销过。`)
+    if (grant.expires_at && grant.expires_at < iso(new Date())) {
+      db.prepare("UPDATE coupon_grants SET status = 'expired' WHERE id = ?").run(grant.id)
+      throw apiError(400, 'EXPIRED', '该券已过期。')
+    }
+    db.prepare("UPDATE coupon_grants SET status = 'used', used_at = ? WHERE id = ?").run(iso(new Date()), grant.id)
+    return json(res, 200, {
+      redeemed: {
+        couponName: grant.coupon_name,
+        discountText: grant.discount_type === 'percent' ? `立减 ${grant.percent_off}%` : `减 $${grant.amount_cents / 100}`,
+        minSpendText: grant.min_spend_cents ? `满 $${grant.min_spend_cents / 100} 可用` : '无门槛'
+      }
+    })
+  }
   if (req.method === 'PATCH' && path.startsWith('/admin/coupons/')) {
     if (adminSession.role !== 'owner') throw apiError(403, 'FORBIDDEN', 'Owner permission is required.')
     const id = path.split('/')[3]
@@ -6434,14 +6516,16 @@ async function route(req, res) {
   }
   if (req.method === 'GET' && path === '/platform/tenants') {
     if (!isPlatform()) throw apiError(401, 'UNAUTHORIZED', 'Platform token required.')
+    const monthStartIso = iso(localDateTime(`${localParts(new Date()).date.slice(0, 7)}-01`, '00:00'))
     const rows = db.prepare(`
       SELECT t.id, t.name, t.plan, t.status, t.plan_expires_at,
         (SELECT COUNT(*) FROM stores s WHERE s.tenant_id = t.id AND s.is_active = 1) AS store_count,
         (SELECT COUNT(*) FROM bookings b WHERE b.tenant_id = t.id) AS booking_count,
+        (SELECT COUNT(*) FROM bookings b WHERE b.tenant_id = t.id AND b.appointment_start >= ?) AS month_booking_count,
         (SELECT username FROM admin_accounts a WHERE a.tenant_id = t.id AND a.role = 'owner' LIMIT 1) AS owner_username
       FROM tenants t ORDER BY t.rowid ASC
-    `).all()
-    return json(res, 200, { tenants: rows.map((r) => ({ id: r.id, name: r.name, plan: r.plan, status: r.status, planExpiresAt: r.plan_expires_at, storeCount: r.store_count, bookingCount: r.booking_count, ownerUsername: r.owner_username || '' })) })
+    `).all(monthStartIso)
+    return json(res, 200, { tenants: rows.map((r) => ({ id: r.id, name: r.name, plan: r.plan, status: r.status, planExpiresAt: r.plan_expires_at, storeCount: r.store_count, bookingCount: r.booking_count, monthBookingCount: r.month_booking_count, ownerUsername: r.owner_username || '' })) })
   }
   if (req.method === 'POST' && path === '/platform/tenants') {
     if (!isPlatform()) throw apiError(401, 'UNAUTHORIZED', 'Platform token required.')
@@ -7832,6 +7916,17 @@ db.exec(`
     total_qty INTEGER NOT NULL DEFAULT 0,
     issued_qty INTEGER NOT NULL DEFAULT 0,
     is_active INTEGER NOT NULL DEFAULT 1,
+    created_at TEXT NOT NULL
+  );
+  CREATE TABLE IF NOT EXISTS coupon_grants (
+    id TEXT PRIMARY KEY,
+    tenant_id TEXT NOT NULL DEFAULT 'lucky-luxe',
+    coupon_id TEXT NOT NULL,
+    user_id TEXT NOT NULL,
+    code TEXT NOT NULL UNIQUE,
+    status TEXT NOT NULL DEFAULT 'active',
+    expires_at TEXT,
+    used_at TEXT,
     created_at TEXT NOT NULL
   );
   CREATE TABLE IF NOT EXISTS merchant_leads (

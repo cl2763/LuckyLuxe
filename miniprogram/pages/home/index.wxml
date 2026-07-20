@@ -58,6 +58,14 @@
         </view>
         <text class="portfolio-arrow">›</text>
       </button>
+      <button class="portfolio-button card" bindtap="goAiChat">
+        <text class="quick-icon">✦</text>
+        <view class="portfolio-copy">
+          <text>AI 在线客服</text>
+          <text>{{lang === 'en' ? 'Prices, styles & booking — ask anytime' : '价格 · 款式 · 空位,随时问我'}}</text>
+        </view>
+        <text class="portfolio-arrow">›</text>
+      </button>
     </view>
   </view>
 

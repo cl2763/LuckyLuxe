@@ -29,6 +29,7 @@
 
   <!-- 优惠券 -->
   <block wx:else>
+    <view class="redeem" bindtap="redeemCode">扫码/输码 核销顾客的券</view>
     <view class="card" wx:for="{{coupons}}" wx:key="id">
       <view class="crow" data-id="{{item.id}}" data-type="coupon" bindtap="edit">
         <view class="ci"><view class="cn {{item.active?'':'off'}}">{{item.name}}</view><view class="cs">{{item.sub}}</view></view>

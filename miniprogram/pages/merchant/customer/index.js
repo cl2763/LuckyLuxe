@@ -33,6 +33,25 @@ Page({
       this.loadOrders()
     } catch (e) { wx.showToast({ title: '加载失败', icon: 'none' }) }
   },
+  // 发券给该会员:选一张在售券 → 生成核销码
+  async sendCoupon() {
+    try {
+      const r = await api.adminGet('/admin/coupons')
+      const list = (r.coupons || []).filter((c) => c.isActive)
+      if (!list.length) { wx.showToast({ title: '还没有可发的券,先到会员套餐里新增', icon: 'none' }); return }
+      wx.showActionSheet({
+        itemList: list.slice(0, 6).map((c) => c.name),
+        success: async (res) => {
+          const c = list[res.tapIndex]
+          try {
+            const g = await api.adminPost(`/admin/coupons/${encodeURIComponent(c.id)}/grant`, { userId: this.id })
+            wx.showModal({ title: '已发券', content: `「${g.grant.couponName}」已发给 ${g.grant.userName}\n核销码 ${g.grant.code}\n有效期至 ${String(g.grant.expiresAt).slice(0, 10)}\n顾客券包里也能看到`, showCancel: false })
+          } catch (err) { wx.showToast({ title: (err && err.message) || '发券失败', icon: 'none' }) }
+        }
+      })
+    } catch (e) { wx.showToast({ title: '加载券失败', icon: 'none' }) }
+  },
+
   async loadOrders() {
     try {
       const r = await api.adminGet('/admin/bookings')

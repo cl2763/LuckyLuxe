@@ -1,4 +1,11 @@
 <view wx:if="{{service}}" class="page booking-page">
+  <view wx:if="{{stylePreset}}" class="style-preset card">
+    <image class="sp-img" src="{{stylePreset.image}}" mode="aspectFill"></image>
+    <view class="sp-info">
+      <view class="sp-t">{{lang === 'en' ? 'Booking this style' : '预约同款'}}</view>
+      <view class="sp-d">{{lang === 'en' ? 'Reference photo attached' : '参考图已带上'}}{{stylePreset.techName ? (stylePreset.techMatched ? ' · 指定技师 ' + stylePreset.techName : ' · 原作者 ' + stylePreset.techName + '(该服务不可选,已用默认技师)') : ''}}</view>
+    </view>
+  </view>
   <view class="booking-service card">
     <image class="mini-visual" src="{{service.image}}" mode="aspectFill"></image>
     <view class="booking-service-info">

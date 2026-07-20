@@ -4,9 +4,9 @@
     <text class="s {{seg===1?'on':''}}" data-i="1" bindtap="onSeg">已用</text>
     <text class="s {{seg===2?'on':''}}" data-i="2" bindtap="onSeg">已过期</text>
   </view>
-  <view class="demobar">演示数据 · 正式版由"我的券包"接口返回</view>
+  <view wx:if="{{loading}}" class="empty"><view class="et">加载中…</view></view>
 
-  <block wx:if="{{groups[seg].length}}">
+  <block wx:if="{{!loading && groups[seg].length}}">
     <view class="coupon {{seg>0 ? 'dead' : ''}}" wx:for="{{groups[seg]}}" wx:key="id">
       <view class="amt"><text class="b">{{item.amt}}</text><text wx:if="{{item.unit}}" class="u">{{item.unit}}</text></view>
       <view class="info">
@@ -19,9 +19,9 @@
       </view>
     </view>
   </block>
-  <view wx:else class="empty">
+  <view wx:if="{{!loading && !groups[seg].length}}" class="empty">
     <view class="et">{{seg===0 ? '暂无可用券' : (seg===1 ? '暂无已用券' : '暂无过期券')}}</view>
-    <view class="ed">商家在后台发放优惠券后,你领取的券会显示在这里。</view>
+    <view class="ed">商家发券后会出现在这里;到店结账出示核销码即可使用。</view>
   </view>
 
   <!-- 核销二维码 -->

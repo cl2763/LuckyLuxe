@@ -104,7 +104,7 @@
       <div class="card"><h2>待办</h2><div id="todoList"><div class="muted">暂无待办</div></div></div>
       <div class="card">
         <h2>商家速览</h2>
-        <table><thead><tr><th>商家</th><th>状态</th><th>累计订单</th><th>快捷</th></tr></thead><tbody id="quickRows"></tbody></table>
+        <table><thead><tr><th>商家</th><th>状态</th><th>本月订单</th><th>累计订单</th><th>快捷</th></tr></thead><tbody id="quickRows"></tbody></table>
       </div>
     </section>
 
@@ -124,7 +124,7 @@
       </div>
       <div class="card">
         <table>
-          <thead><tr><th>租户</th><th>名称</th><th>套餐</th><th>状态</th><th>门店</th><th>订单</th><th>老板账号</th><th>店码</th><th>操作</th></tr></thead>
+          <thead><tr><th>租户</th><th>名称</th><th>套餐</th><th>状态</th><th>门店</th><th>本月/累计订单</th><th>老板账号</th><th>店码</th><th>操作</th></tr></thead>
           <tbody id="tenantRows"></tbody>
         </table>
         <p class="muted" style="margin-top:8px">停用后:顾客端立即进不了该店;老板账号在多商户控制台开放前统一暂不可登录。</p>
@@ -259,7 +259,7 @@ async function loadOverview(){
     newLeads.slice(0,3).forEach(l=>todos.push(`<div class="todo-item"><span>📥 新线索「${esc(l.shopName)}」${l.contactName?'('+esc(l.contactName)+')':''} 待联系</span><button class="sm p" onclick="nav('leads')">去处理</button></div>`))
     ;(ov.pendingConfig||[]).forEach(t=>todos.push(`<div class="todo-item"><span>🛠 商家「${esc(t.name)}」已建店,价目表还没配</span><button class="sm" onclick="goConfig('${esc(t.id)}')">去配置</button></div>`))
     $('todoList').innerHTML=todos.join('')||'<div class="muted">暂无待办</div>'
-    $('quickRows').innerHTML=TENANTS.map(t=>`<tr><td><b>${esc(t.name)}</b>${t.id==='lucky-luxe'?' <span class="muted">旗舰</span>':''}</td><td><span class="tag ${t.status==='active'?'on':'off'}">${t.status==='active'?'营业中':'已停用'}</span></td><td>${t.bookingCount}</td><td class="row"><button class="sm" onclick="goConfig('${esc(t.id)}')">配置</button><span class="muted">t=${esc(t.id)}</span></td></tr>`).join('')
+    $('quickRows').innerHTML=TENANTS.map(t=>`<tr><td><b>${esc(t.name)}</b>${t.id==='lucky-luxe'?' <span class="muted">旗舰</span>':''}</td><td><span class="tag ${t.status==='active'?'on':'off'}">${t.status==='active'?'营业中':'已停用'}</span></td><td>${t.monthBookingCount??'-'}</td><td>${t.bookingCount}</td><td class="row"><button class="sm" onclick="goConfig('${esc(t.id)}')">配置</button><span class="muted">t=${esc(t.id)}</span></td></tr>`).join('')
   }catch(e){toast(e.message)}
 }
 
@@ -269,7 +269,7 @@ async function loadTenants(){
   $('tenantRows').innerHTML=TENANTS.map(t=>`<tr>
     <td class="muted">${esc(t.id)}</td><td><b>${esc(t.name)}</b></td><td>${esc(t.plan)}</td>
     <td><span class="tag ${t.status==='active'?'on':'off'}">${t.status==='active'?'营业中':'已停用'}</span></td>
-    <td>${t.storeCount}</td><td>${t.bookingCount}</td><td>${esc(t.ownerUsername)||'-'}</td>
+    <td>${t.storeCount}</td><td>${t.monthBookingCount??'-'} / ${t.bookingCount}</td><td>${esc(t.ownerUsername)||'-'}</td>
     <td class="muted">t=${esc(t.id)}</td>
     <td class="row"><button class="sm" onclick="goConfig('${esc(t.id)}')">配置</button>${t.id==='lucky-luxe'?'<span class="muted">默认店</span>':`<button class="sm ${t.status==='active'?'d':'p'}" onclick="toggleTenant('${esc(t.id)}')">${t.status==='active'?'停用':'启用'}</button>`}</td>
   </tr>`).join('')

@@ -53,30 +53,53 @@ function imageHints(images = []) {
   return `${images.length} image(s) were provided. The first image data length is ${String(images[0] || '').length}.`
 }
 
+// 单次模型调用超时(毫秒):超时会抛错 → aiJson 落到 fallback,前端不再无限"生成中"
+const AI_TIMEOUT_MS = Number(process.env.AI_TIMEOUT_MS || 45000)
+// 附图上限:超大 base64(手机原图动辄数 MB)不塞给模型——文本模型处理不了且会拖死请求;
+// 文案生成有 imageHints 文字提示兜底,不影响产出。
+const AI_IMAGE_MAX_CHARS = 300000
+
 async function callOpenAICompatible({ system, user, schema, images = [], temperature = 0.4 }) {
   if (!AI_API_KEY) return null
   const content = [{ type: 'text', text: `${user}\n\nReturn compact JSON only. Schema:\n${jsonBlock(schema)}` }]
-  for (const image of images.slice(0, 3)) {
-    if (typeof image === 'string' && image.startsWith('data:image')) {
-      content.push({ type: 'image_url', image_url: { url: image } })
+  // 仅当模型支持视觉(AI_VISION_MODEL=true)才附图:当前 qwen3.6-plus 为纯文本模型,
+  // 附 image_url 会被直接拒绝/大图拖死请求;文字侧已有 imageHints 提示,不影响文案产出。
+  if (process.env.AI_VISION_MODEL === 'true') {
+    for (const image of images.slice(0, 3)) {
+      if (typeof image === 'string' && image.startsWith('data:image') && image.length <= AI_IMAGE_MAX_CHARS) {
+        content.push({ type: 'image_url', image_url: { url: image } })
+      }
     }
   }
-  const response = await fetch(`${AI_BASE_URL}/chat/completions`, {
-    method: 'POST',
-    headers: {
-      authorization: `Bearer ${AI_API_KEY}`,
-      'content-type': 'application/json'
-    },
-    body: JSON.stringify({
-      model: DEFAULT_MODEL,
-      temperature,
-      response_format: { type: 'json_object' },
-      messages: [
-        { role: 'system', content: system },
-        { role: 'user', content }
-      ]
+  const controller = new AbortController()
+  const timer = setTimeout(() => controller.abort(), AI_TIMEOUT_MS)
+  let response
+  try {
+    response = await fetch(`${AI_BASE_URL}/chat/completions`, {
+      method: 'POST',
+      signal: controller.signal,
+      headers: {
+        authorization: `Bearer ${AI_API_KEY}`,
+        'content-type': 'application/json'
+      },
+      body: JSON.stringify({
+        model: DEFAULT_MODEL,
+        temperature,
+        response_format: { type: 'json_object' },
+        // 思考型模型(qwen3 系列)默认会先输出长思考链,拖慢响应且烧 token;
+        // 客服/文案类任务不需要,显式关闭(AI_ENABLE_THINKING=true 可重新打开)
+        enable_thinking: process.env.AI_ENABLE_THINKING === 'true',
+        messages: [
+          { role: 'system', content: system },
+          { role: 'user', content }
+        ]
+      })
     })
-  })
+  } catch (error) {
+    throw new Error(error && error.name === 'AbortError' ? `AI provider timeout after ${AI_TIMEOUT_MS}ms` : (error.message || 'AI provider fetch failed'))
+  } finally {
+    clearTimeout(timer)
+  }
   if (!response.ok) {
     const detail = await response.text()
     throw new Error(`AI provider failed: ${response.status} ${detail.slice(0, 220)}`)

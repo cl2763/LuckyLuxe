@@ -11,6 +11,7 @@ page{background:#fbf8f5}
 .cs{font-size:22rpx;color:#8c8279;margin-top:6rpx}
 .sw{transform:scale(.8);flex:0 0 auto}
 .empty{text-align:center;color:#b6a99b;font-size:23rpx;padding:40rpx 0}
+.redeem{text-align:center;font-size:25rpx;color:#fff;background:#2d2826;border-radius:14rpx;padding:22rpx 0;margin-bottom:14rpx;letter-spacing:1rpx}
 .add{text-align:center;color:#9b7655;font-size:25rpx;border:1rpx dashed #d8c6b3;border-radius:14rpx;padding:22rpx 0;margin-top:4rpx}
 .divider{height:1rpx;background:#e7ddd4;margin:26rpx 0}
 .manual{text-align:center;font-size:27rpx;color:#fff;background:#2d2826;border-radius:16rpx;padding:26rpx 0;letter-spacing:1rpx}

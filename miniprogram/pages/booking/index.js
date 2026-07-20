@@ -56,7 +56,20 @@ Page({
       api.getAddOns(),
       api.getTechnicians(service._id)
     ])
-    const technicianIndex = Math.max(0, technicians.findIndex((tech) => appointment && tech.id === appointment.technicianId))
+    let technicianIndex = Math.max(0, technicians.findIndex((tech) => appointment && tech.id === appointment.technicianId))
+    // 预约同款:作品页带来的预设(参考图+指定技师)。
+    // 注意:onLoad 后 onShow 会再次 refresh,消费后的预设存页面实例,防止第二次刷新把横幅/参考图清掉。
+    let stylePreset = this._stylePreset || null
+    if (!appointment && !stylePreset) {
+      const preset = wx.getStorageSync('lucky_style_preset') || null
+      if (preset && preset.image) {
+        wx.removeStorageSync('lucky_style_preset')
+        const pi = technicians.findIndex((tech) => tech.id === preset.technicianId)
+        stylePreset = { image: preset.image, techName: preset.technicianName || '', techMatched: pi >= 0, techIndex: pi }
+        this._stylePreset = stylePreset
+      }
+    }
+    if (stylePreset && !appointment && stylePreset.techIndex >= 0) technicianIndex = stylePreset.techIndex
     this.setData({
       service,
       lang,
@@ -69,7 +82,10 @@ Page({
       technicianIndex,
       technician: technicians[technicianIndex] || technicians[0] || null,
       selectedAddOns,
-      referenceImages: appointment ? appointment.referenceImages : [],
+      stylePreset,
+      referenceImages: appointment
+        ? appointment.referenceImages
+        : ((this.data.referenceImages && this.data.referenceImages.length) ? this.data.referenceImages : (stylePreset ? [stylePreset.image] : [])),
       referenceDataImages: appointment ? (appointment.referenceDataImages || []) : [],
       referenceAnalysis: appointment ? appointment.referenceAnalysis : null,
       referencePriceText: appointment && appointment.referenceAnalysis && appointment.referenceAnalysis.estimatedPriceCents

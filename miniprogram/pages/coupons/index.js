@@ -1,3 +1,5 @@
+const api = require('../../utils/api')
+
 function genQr(seed) {
   const N = 21
   let s = 0
@@ -22,25 +24,40 @@ function genQr(seed) {
   return cells
 }
 
+function fmtCoupon(c) {
+  const amt = c.discountType === 'percent' ? `${c.percentOff > 0 ? (100 - c.percentOff) / 10 : 9}折` : `$${(c.amountCents || 0) / 100}`
+  return {
+    id: c.id, code: c.code, status: c.status, name: c.name,
+    amt: c.discountType === 'percent' ? `立减${c.percentOff}%` : `$${(c.amountCents || 0) / 100}`,
+    unit: c.minSpendCents ? `满$${c.minSpendCents / 100}` : '',
+    exp: c.status === 'used' ? `已于 ${String(c.usedAt || '').slice(0, 10)} 使用`
+      : c.status === 'expired' ? `已于 ${String(c.expiresAt || '').slice(0, 10)} 过期`
+        : `有效期至 ${String(c.expiresAt || '').slice(0, 10)}`
+  }
+}
+
 Page({
-  data: { seg: 0, count: 0, groups: [[], [], []], qr: null },
-  onShow() {
-    const m = wx.getStorageSync('lucky_member') || {}
-    // 演示数据:正式版由后端"我的券包"返回,券码由后端签发
-    const groups = [
-      [
-        { id: 1, amt: '$30', unit: '满$200', name: '满200减30', exp: '有效期至 08-15', code: 'LL-A3K9-2200' },
-        { id: 2, amt: '9折', unit: '', name: '会员9折券', exp: '积分兑换 · 至 07-31', code: 'LL-9F31-VIP0' },
-        { id: 3, amt: '免', unit: '卸甲', name: '免费卸甲券', exp: 'VIP年卡赠 · 至 12-31', code: 'LL-RM12-GIFT' }
-      ],
-      [ { id: 4, amt: '$20', unit: '满$150', name: '满150减20', exp: '已于 06-30 使用', code: 'LL-USED-0630' } ],
-      [ { id: 5, amt: '9折', unit: '', name: '新客9折券', exp: '已于 05-31 过期', code: 'LL-EXP-0531' } ]
-    ]
-    this.setData({ count: m.couponCount || groups[0].length, groups })
+  data: { seg: 0, count: 0, groups: [[], [], []], qr: null, loading: true },
+
+  async onShow() {
+    try {
+      const r = await api.getMyCoupons()
+      const all = (r.coupons || []).map(fmtCoupon)
+      const groups = [
+        all.filter((c) => c.status === 'active'),
+        all.filter((c) => c.status === 'used'),
+        all.filter((c) => c.status === 'expired')
+      ]
+      this.setData({ groups, count: groups[0].length, loading: false })
+    } catch (e) {
+      this.setData({ loading: false, groups: [[], [], []], count: 0 })
+    }
   },
+
   onSeg(e) { this.setData({ seg: Number(e.currentTarget.dataset.i) }) },
+
   showQr(e) {
-    const c = this.data.groups[0].find((x) => x.id === Number(e.currentTarget.dataset.id))
+    const c = this.data.groups[0].find((x) => x.id === e.currentTarget.dataset.id)
     if (!c) return
     this.setData({ qr: { name: c.name, code: c.code, cells: genQr(c.code) } })
   },

@@ -31,6 +31,7 @@
     "pages/merchant/store/index",
     "pages/home/index",
     "pages/shop-select/index",
+    "pages/ai-chat/index",
     "pages/services/index",
     "pages/service-detail/index",
     "pages/booking/index",

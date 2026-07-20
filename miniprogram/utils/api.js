@@ -489,6 +489,16 @@ function getShops() {
   return request('/shops')
 }
 
+// AI 客服(按当前店回答;登录时自动带顾客身份与订单上下文)
+function aiCustomerService(message, history) {
+  return request('/ai/customer-service', 'POST', { message, lang: 'zh', history: history || [] })
+}
+
+// 我的资产(user × 当前店)
+function getMyCoupons() { return request('/my/coupons') }
+function getMyStoredValue() { return request('/my/stored-value') }
+function getMyPointsHistory() { return request('/my/points-history') }
+
 // 按"当前进的店"刷新会员数据(会员=用户×店:积分/储值/等级每店独立,切店后必须刷新)
 async function refreshMember() {
   const auth = getAuth()
@@ -586,6 +596,10 @@ module.exports = {
   adminMe,
   submitMerchantLead,
   getShops,
+  aiCustomerService,
+  getMyCoupons,
+  getMyStoredValue,
+  getMyPointsHistory,
   refreshMember,
   adminGet,
   adminPost,

@@ -28,6 +28,8 @@
     <view class="row-sb"><text class="ck">生日</text><text>{{c.birthday}}</text></view>
   </view>
 
+  <view class="linkbtn" bindtap="sendCoupon">给她发一张优惠券</view>
+
   <view class="card">
     <view class="ct">订单历史 <text class="cnt">{{orders.length}}</text></view>
     <view wx:if="{{!ordersLoaded}}" class="ohint">加载中…</view>

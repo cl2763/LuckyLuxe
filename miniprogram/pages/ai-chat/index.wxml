@@ -1,0 +1,22 @@
+<view class="pg">
+  <scroll-view class="chat" scroll-y scroll-into-view="{{scrollTo}}" scroll-with-animation>
+    <view wx:for="{{msgs}}" wx:key="id" id="{{item.id}}" class="row {{item.side}}">
+      <view wx:if="{{item.side==='a'}}" class="av">AI</view>
+      <view class="bubble {{item.side}} {{item.handoff?'ho':''}}">{{item.text}}</view>
+    </view>
+    <view wx:if="{{sending}}" class="row a">
+      <view class="av">AI</view>
+      <view class="bubble a typing">正在输入…</view>
+    </view>
+    <view style="height:20rpx"></view>
+  </scroll-view>
+
+  <scroll-view class="quick" scroll-x>
+    <view class="chip" wx:for="{{quick}}" wx:key="*this" data-q="{{item}}" bindtap="tapQuick">{{item}}</view>
+  </scroll-view>
+
+  <view class="bar">
+    <input class="inp" value="{{input}}" placeholder="想做什么款式?直接问我" confirm-type="send" bindinput="onInput" bindconfirm="onConfirm" />
+    <view class="sendbtn {{sending?'off':''}}" bindtap="send">发送</view>
+  </view>
+</view>

@@ -45,6 +45,8 @@ Page({
 
   switchShop() { wx.navigateTo({ url: '/pages/shop-select/index' }) },
 
+  goAiChat() { wx.navigateTo({ url: '/pages/ai-chat/index' }) },
+
   async refreshLanguage() {
     const lang = i18n.getLang()
     i18n.applyTabBar(lang)
