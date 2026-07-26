@@ -4890,6 +4890,22 @@ function seedDemoBookingsForUser(userId, tenantId = DEFAULT_TENANT_ID) {
 }
 
 async function signInWechatMiniUser(body) {
+  // 演示旁路:本地/演示环境未配微信凭证时,直接以演示顾客登录当前门店,
+  // 让真机/模拟器无需真实微信授权即可演示"我的/会员/发券"等需登录页。
+  // 仅在 ALLOW_DEMO_ADMIN_LOGIN=true 且服务器没有微信凭证时启用;生产(配了凭证)永不走这里。
+  if (process.env.ALLOW_DEMO_ADMIN_LOGIN === 'true' && body.demoLogin === true) {
+    const demoTenant = validTenantId(body.tenantId)
+    const demoUser = db.prepare('SELECT * FROM users WHERE id = ?').get('demo-cust-01')
+      || db.prepare('SELECT * FROM users LIMIT 1').get()
+    try {
+      if (demoTenant === DEFAULT_TENANT_ID
+        && !db.prepare('SELECT 1 FROM bookings WHERE user_id = ? AND tenant_id = ? LIMIT 1').get(demoUser.id, demoTenant)) {
+        seedDemoBookingsForUser(demoUser.id, demoTenant)
+      }
+    } catch (e) { console.error('[demo-seed] failed:', e && e.message) }
+    const serializedDemo = serializeUser(demoUser, demoTenant)
+    return { user: serializedDemo, auth: miniAuthFor(serializedDemo, `demo-openid-${demoUser.id}`), mode: 'demo-mini' }
+  }
   if (!WECHAT_MINI_APPID || !WECHAT_MINI_SECRET) {
     throw apiError(503, 'WECHAT_MINI_NOT_CONFIGURED', 'WeChat Mini Program credentials are not configured on the server.')
   }
@@ -5067,7 +5083,11 @@ function customerFromMiniToken(token) {
   if (!payload || !signature || signMiniPayload(payload) !== signature) throw apiError(401, 'UNAUTHORIZED', 'Invalid mini program session.')
   const data = base64UrlDecode(payload)
   if (!data.exp || Date.now() > Number(data.exp)) throw apiError(401, 'UNAUTHORIZED', 'Mini program session expired.')
-  const user = db.prepare('SELECT * FROM users WHERE id = ? AND wechat_open_id = ?').get(data.sub, data.openid)
+  let user = db.prepare('SELECT * FROM users WHERE id = ? AND wechat_open_id = ?').get(data.sub, data.openid)
+  // 演示登录旁路:demo-openid 无真实 openid,仅在演示开关下按用户 id 回退(生产不触发)
+  if (!user && process.env.ALLOW_DEMO_ADMIN_LOGIN === 'true' && String(data.openid || '').startsWith('demo-openid-')) {
+    user = db.prepare('SELECT * FROM users WHERE id = ?').get(data.sub)
+  }
   if (!user) throw apiError(401, 'UNAUTHORIZED', 'Mini program user was not found.')
   return serializeUser(user)
 }
@@ -5972,7 +5992,12 @@ async function route(req, res) {
     if (!user) throw apiError(404, 'NOT_FOUND', 'User not found.')
     return json(res, 200, { user: serializeUser(user, resolveTenant(req, query)) })
   }
-  if (req.method === 'GET' && path === '/stores') return json(res, 200, { stores: db.prepare('SELECT * FROM stores WHERE is_active = 1 AND tenant_id = ?').all(resolveTenant(req, query)) })
+  if (req.method === 'GET' && path === '/stores') {
+    // 附带每周营业时间(hours),供顾客端首页店卡展示"今日营业时间/营业中"。加字段向后兼容。
+    const storeRows = db.prepare('SELECT * FROM stores WHERE is_active = 1 AND tenant_id = ?').all(resolveTenant(req, query))
+    const hourStmt = db.prepare('SELECT weekday, open_time, close_time, is_closed FROM business_hours WHERE store_id = ? ORDER BY weekday ASC')
+    return json(res, 200, { stores: storeRows.map((s) => Object.assign({}, s, { hours: hourStmt.all(s.id) })) })
+  }
   if (req.method === 'GET' && path === '/services') {
     const args = [resolveTenant(req, query)]
     let sql = 'SELECT * FROM services WHERE is_active = 1 AND tenant_id = ?'
@@ -5998,14 +6023,18 @@ async function route(req, res) {
     return json(res, 200, { technicians: db.prepare(sql).all(...args) })
   }
   if (req.method === 'GET' && path === '/portfolio') {
+    // 2026-07-20 方案B:除按技师分组(portfolios,保留兼容)外,平铺 works(带品类/技师)+ categories
+    // 品类来自作品所属订单的服务类型——该店没开的品类天然不会出现
     const rows = db.prepare(`
-      SELECT b.*, t.name AS tech_name, t.title AS tech_title
+      SELECT b.*, t.name AS tech_name, t.title AS tech_title, s.type AS service_type, s.name_zh AS service_name
       FROM bookings b
       JOIN technicians t ON t.id = b.technician_id
+      LEFT JOIN services s ON s.id = b.service_id
       WHERE b.gallery_status = 'approved' AND b.tenant_id = ?
       ORDER BY b.gallery_locked_at DESC, b.appointment_start DESC
     `).all(resolveTenant(req, query))
     const grouped = new Map()
+    const works = []
     for (const row of rows) {
       const images = parseJson(row.approved_work_images_json).filter(Boolean)
       if (!images.length) continue
@@ -6016,8 +6045,16 @@ async function route(req, res) {
         })
       }
       grouped.get(row.technician_id).images.push(...images)
+      images.forEach((image, idx) => works.push({
+        id: `${row.id}:${idx}`,
+        image,
+        technician: { id: row.technician_id, name: row.tech_name, title: row.tech_title },
+        serviceType: row.service_type || '',
+        serviceName: row.service_name || ''
+      }))
     }
-    return json(res, 200, { portfolios: [...grouped.values()] })
+    const categories = [...new Set(works.map((w) => w.serviceType).filter(Boolean))]
+    return json(res, 200, { portfolios: [...grouped.values()], works, categories })
   }
   if (req.method === 'GET' && path === '/add-ons') return json(res, 200, { addOns })
   if (req.method === 'GET' && path === '/availability') {
@@ -6855,6 +6892,76 @@ async function route(req, res) {
       technicians: technicians.map((tech) => ({ id: tech.id, name: tech.name, title: tech.title, isActive: Boolean(tech.is_active) })),
       schedules,
       bookingCounts
+    })
+  }
+  // 技师维度·日视图(2026-07-22 P0-①):某天每技师的预约明细,前端画时间轴色块
+  if (req.method === 'GET' && path === '/admin/schedule-day') {
+    const tid = currentTenantId()
+    const date = query.date && /^\d{4}-\d{2}-\d{2}$/.test(query.date) ? query.date : localParts(new Date()).date
+    const storeId = query.storeId || defaultStoreId()
+    const weekday = localDateTime(date, '12:00').getDay()
+    const hours = db.prepare('SELECT * FROM business_hours WHERE store_id = ? AND weekday = ?').get(storeId, weekday)
+    const special = specialDateFor(storeId, date)
+    const isClosed = special ? Boolean(special.is_closed) : (!hours || Boolean(hours.is_closed))
+    const openTime = (special && !special.is_closed && special.open_time) || hours?.open_time || '10:00'
+    const closeTime = (special && !special.is_closed && special.close_time) || hours?.close_time || '19:00'
+    const allTechs = db.prepare('SELECT id, name, title, is_active FROM technicians WHERE tenant_id = ? ORDER BY is_active DESC, name ASC').all(tid)
+    const dayStart = iso(localDateTime(date, '00:00'))
+    const dayEnd = iso(addMinutes(localDateTime(date, '00:00'), 24 * 60))
+    const rows = db.prepare(`SELECT * FROM bookings WHERE tenant_id = ? AND status IN ('PENDING_PAYMENT','CONFIRMED','COMPLETED')
+      AND appointment_start >= ? AND appointment_start < ? ORDER BY appointment_start ASC`).all(tid, dayStart, dayEnd)
+    // 服务分组(色相):足部美甲/护理由名称识别,其余按类型
+    const groupOf = (svc) => {
+      if (!svc) return 'hand'
+      const n = String(svc.name_zh || '') + String(svc.category || '')
+      if (/足|美足|pedicure/i.test(n)) return 'foot'
+      if (/护理|护|spa/i.test(n)) return 'care'
+      if (String(svc.type).toUpperCase() === 'LASH') return 'lash'
+      return 'hand'
+    }
+    const bookings = rows.map((row) => {
+      const svc = row.service_id ? getService(row.service_id) : null
+      const u = row.user_id ? db.prepare('SELECT id, display_name FROM users WHERE id = ?').get(row.user_id) : null
+      const startLocal = localParts(row.appointment_start)
+      const endLocal = localParts(row.appointment_end)
+      const arrivalState = row.status === 'COMPLETED' ? 'done' : (row.arrived_at ? 'active' : 'pending')
+      // 新客:该顾客在本店有没有更早的单(按 appointment_start)
+      const earlier = row.user_id
+        ? db.prepare(`SELECT 1 FROM bookings WHERE tenant_id = ? AND user_id = ? AND appointment_start < ?
+            AND status IN ('PENDING_PAYMENT','CONFIRMED','COMPLETED') LIMIT 1`).get(tid, row.user_id, row.appointment_start)
+        : null
+      const custName = u ? (isGenericDisplayName(u.display_name, u.id) ? memberCodeForUserId(u.id) : u.display_name) : '散客'
+      return {
+        id: row.id,
+        publicCode: row.public_code,
+        technicianId: row.technician_id,
+        status: row.status,
+        customerName: custName,
+        serviceName: svc ? svc.name_zh : '服务',
+        serviceType: svc ? svc.type : '',
+        group: groupOf(svc),
+        arrivalState,
+        startTime: startLocal.time,
+        endTime: endLocal.time,
+        durationMin: row.total_duration_min || Math.max(30, Math.round((new Date(row.appointment_end) - new Date(row.appointment_start)) / 60000)),
+        isNewCustomer: !earlier,
+        isDesignated: /指定|指名|点名/.test(String(row.notes || ''))
+      }
+    })
+    const bookingCount = {}
+    for (const b of bookings) bookingCount[b.technicianId] = (bookingCount[b.technicianId] || 0) + 1
+    // 只显示在岗技师 + 今天有单的技师(避免停用测试技师塞满表头)
+    const technicians = allTechs
+      .filter((t) => t.is_active || bookingCount[t.id])
+      .map((t) => ({ id: t.id, name: t.name, title: t.title, isActive: Boolean(t.is_active), bookingCount: bookingCount[t.id] || 0 }))
+    const activeCount = bookings.filter((b) => b.arrivalState === 'active').length
+    const pendingCount = bookings.filter((b) => b.arrivalState === 'pending').length
+    return json(res, 200, {
+      date, weekday, isClosed, openTime, closeTime,
+      specialNote: special?.note || '',
+      technicians,
+      bookings,
+      activeCount, pendingCount
     })
   }
   // 排班申请:员工发起(只能为自己),老板审批
@@ -7708,6 +7815,17 @@ async function route(req, res) {
       hoursText: { zh: businessHoursText(storeId, 'zh'), en: businessHoursText(storeId, 'en') }
     })
   }
+  // 到店打卡:排班台面"进行中"展示态。arrived=true 记到店时间;false 清除(改回未到店)。不改 status、不动财务。
+  if (req.method === 'PATCH' && path.startsWith('/admin/bookings/') && path.endsWith('/arrival')) {
+    const id = path.split('/')[3]
+    const body = await readBody(req)
+    const booking = db.prepare('SELECT * FROM bookings WHERE id = ?').get(id)
+    if (!booking) throw apiError(404, 'NOT_FOUND', 'Booking not found.')
+    assertStaffCanAccessBooking(adminSession, booking)
+    const arrivedAt = body.arrived === false ? null : iso(new Date())
+    db.prepare('UPDATE bookings SET arrived_at = ?, updated_at = ? WHERE id = ?').run(arrivedAt, iso(new Date()), id)
+    return json(res, 200, { booking: serializeBooking(db.prepare('SELECT * FROM bookings WHERE id = ?').get(id)) })
+  }
   if (req.method === 'PATCH' && path.startsWith('/admin/bookings/') && path.endsWith('/status')) {
     const id = path.split('/')[3]
     const body = await readBody(req)
@@ -7820,6 +7938,12 @@ try {
 }
 try {
   db.exec('ALTER TABLE bookings ADD COLUMN member_level_at_booking TEXT')
+} catch (error) {
+  if (!String(error.message || '').includes('duplicate column')) throw error
+}
+try {
+  // 到店打卡时间(2026-07-22):排班台面"进行中"展示态,不进主状态机、不碰财务
+  db.exec('ALTER TABLE bookings ADD COLUMN arrived_at TEXT')
 } catch (error) {
   if (!String(error.message || '').includes('duplicate column')) throw error
 }

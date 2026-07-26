@@ -5,7 +5,9 @@ const mock = require('./mock-data')
 // false = 连线上生产(www.luckyluxeatelier.com,真实数据)
 // ⚠️ 正式上传/发布前,务必把这里改回 false!
 const USE_LOCAL_SANDBOX = true
-const API_BASE = USE_LOCAL_SANDBOX ? 'http://127.0.0.1:4128' : 'https://www.luckyluxeatelier.com'
+// 本地沙盘地址:127.0.0.1 走开发者工具本机代理,模拟器与真机调试通用,换网络也不用改。
+const LOCAL_API = 'http://127.0.0.1:4128'
+const API_BASE = USE_LOCAL_SANDBOX ? LOCAL_API : 'https://www.luckyluxeatelier.com'
 const DEMO_USER_ID = 'user-demo'
 const STORE_ID = 'store-ontario-01'
 const AUTH_KEY = 'lucky_mini_auth'
@@ -149,6 +151,8 @@ function toMiniStore(store) {
     address: store.address || '门店地址待补充',
     phone: store.phone || '门店电话待补充',
     businessHours: store.businessHours || store.business_hours || 'Tue-Sun 10:00-19:00',
+    hours: store.hours || [],
+    timezone: store.timezone || 'America/Toronto',
     latitude: store.latitude,
     longitude: store.longitude,
     description: store.description || 'Lucky Luxe nail and lash atelier.'
@@ -224,6 +228,9 @@ async function ensureLogin(options = {}) {
   const code = await wxLoginCode()
   const data = await request('/auth/wechat/mini-login', 'POST', {
     code,
+    // 本地沙盘:走服务器演示登录旁路(无需真实微信授权即可演示登录后页面)。
+    // 上线前 USE_LOCAL_SANDBOX 置回 false 后此标记自动为 false,走真实微信登录。
+    demoLogin: USE_LOCAL_SANDBOX,
     tenantId: currentTenant(),
     displayName: options.displayName || '',
     avatarUrl: options.avatarUrl || '',
@@ -332,6 +339,19 @@ async function getAddOns() {
     }))
   } catch (error) {
     return mock.addOns
+  }
+}
+
+// 方案B作品墙:平铺作品+品类(旧 getPortfolio 保留给仍按技师分组的调用方)
+async function getPortfolioWall() {
+  try {
+    const data = await request('/portfolio')
+    return {
+      works: data.works || [],
+      categories: data.categories || []
+    }
+  } catch (error) {
+    return { works: [], categories: [] }
   }
 }
 
@@ -618,6 +638,7 @@ module.exports = {
   getStores,
   getAddOns,
   getPortfolio,
+  getPortfolioWall,
   getTechnicians,
   getAvailability,
   createBooking,

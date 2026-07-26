@@ -2,10 +2,11 @@
   <view class="home-landing">
     <view class="top-row">
       <view class="brand-lockup">
-        <image class="brand-logo" src="/assets/images/brand-logo.png" mode="aspectFit"></image>
+        <!-- 临时 logo(按店主提供设计稿绘制的近似版);正式源文件到位后直接替换此 png -->
+        <image class="brand-logo brand-logo-img" src="/assets/images/youji-logo.png" mode="aspectFit"></image>
         <view>
-          <view class="brand-name">Lucky Luxe</view>
-          <view class="brand-sub">Nail & Lash Atelier</view>
+          <view class="brand-name">有迹</view>
+          <view class="brand-sub">YOUJI</view>
         </view>
       </view>
       <view class="language-switch">
@@ -14,42 +15,41 @@
       </view>
     </view>
 
-    <view class="shop-bar" bindtap="switchShop">
-      <text class="shop-dot"></text>
-      <text class="shop-name">当前门店 · {{shopName}}</text>
-      <text class="shop-switch">扫码/切换 ›</text>
-    </view>
-
-    <view class="hero home-section-container">
-      <view class="hero-copy">
-        <view class="eyebrow">Ontario · CAD</view>
-        <view class="hero-title">Lucky Luxe</view>
-        <view class="hero-text">{{lang === 'en' ? 'Book nail and lash services online, pay the deposit, and settle the balance in store.' : '预约美甲与美睫，在线支付定金，到店完成尾款。'}}</view>
-        <view class="hero-actions">
-          <button class="btn btn-primary hero-btn" bindtap="goServices" data-type="nail">{{t.bookNow}}</button>
-          <button class="btn btn-ghost hero-btn" bindtap="goMe">{{t.quickMember}}</button>
-        </view>
-      </view>
-      <swiper class="hero-swiper" indicator-dots circular autoplay interval="4600" current="{{activeHero}}" bindchange="onHeroChange">
+    <!-- 一体店卡(方案A 2026-07-20 定稿):轮播为卡片封面,下接 店名/状态/地址/营业时间/电话 -->
+    <view class="shop-card card home-section-container">
+      <swiper class="shop-card-swiper" indicator-dots circular autoplay interval="4600" current="{{activeHero}}" bindchange="onHeroChange">
         <block wx:for="{{heroSlides}}" wx:key="image">
           <swiper-item>
-            <image class="hero-visual" src="{{item.image}}" mode="aspectFill"></image>
+            <image class="shop-card-visual" src="{{item.image}}" mode="aspectFill"></image>
           </swiper-item>
         </block>
       </swiper>
+      <view class="shop-card-info">
+        <view class="shop-card-title">
+          <text class="shop-card-name">{{shopName || store.storeName}}</text>
+          <text wx:if="{{hasHours}}" class="shop-status {{openNow ? 'open' : 'closed'}}">● {{openNow ? (lang === 'en' ? 'Open' : '营业中') : (lang === 'en' ? 'Closed' : '休息中')}}</text>
+          <text class="shop-card-switch" bindtap="switchShop">{{lang === 'en' ? 'Switch shop ›' : '扫码/切换门店 ›'}}</text>
+        </view>
+        <view class="shop-card-row" bindtap="copyAddress">
+          <text class="shop-row-icon">◉</text>
+          <text class="shop-row-text">{{store.address}}</text>
+          <text class="shop-row-act">{{lang === 'en' ? 'Map · Copy' : '导航 · 复制'}}</text>
+        </view>
+        <view class="shop-card-row" bindtap="goStore">
+          <text class="shop-row-icon">◷</text>
+          <text class="shop-row-text">{{todayHoursText || store.businessHours}}</text>
+          <text class="shop-row-act">{{lang === 'en' ? 'All hours ›' : '全部时间 ›'}}</text>
+        </view>
+        <view class="shop-card-row" bindtap="callStore">
+          <text class="shop-row-icon">✆</text>
+          <text class="shop-row-text">{{store.phone}}</text>
+          <text class="shop-row-act">{{lang === 'en' ? 'Call' : '一键拨打'}}</text>
+        </view>
+      </view>
     </view>
 
     <view class="quick-section home-section-container">
-      <view class="quick-row">
-        <button class="quick-item card" bindtap="goServices" data-type="nail">
-          <text class="quick-icon">N</text>
-          <text>{{t.quickNail}}</text>
-        </button>
-        <button class="quick-item card" bindtap="goServices" data-type="lash">
-          <text class="quick-icon">L</text>
-          <text>{{t.quickLash}}</text>
-        </button>
-      </view>
+      <!-- 美甲/美睫快捷按钮已删(2026-07-20 店主定:多商户下服务不一,预约走下方推荐或服务页) -->
       <button class="portfolio-button card" bindtap="goPortfolio">
         <text class="quick-icon">P</text>
         <view class="portfolio-copy">
@@ -107,21 +107,5 @@
     </view>
   </view>
 
-  <view class="section home-section-container">
-    <view class="section-head">
-      <view class="section-title">{{t.storeTitle}}</view>
-      <view class="section-note">Store</view>
-    </view>
-    <view class="store-card card">
-      <image class="store-visual" src="/assets/images/store-cover.jpg" mode="aspectFill"></image>
-      <view class="store-info">
-        <view class="store-name">{{store.storeName}}</view>
-        <view class="muted">{{store.description}}</view>
-        <view class="store-row">{{t.hours}}：{{store.businessHours}}</view>
-        <view class="store-row">{{t.phone}}：{{store.phone}}</view>
-        <view class="store-row">{{t.address}}：{{store.address}}</view>
-        <button class="btn btn-dark store-btn" bindtap="goStore">{{t.viewStore}}</button>
-      </view>
-    </view>
-  </view>
+  <!-- 门店展示区已并入首屏一体店卡(2026-07-20 店主定),不再重复展示 -->
 </view>

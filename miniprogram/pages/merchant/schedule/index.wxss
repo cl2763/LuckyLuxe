@@ -66,3 +66,75 @@ page{background:#fbf8f5}
 .sh-btns{display:flex;gap:14rpx}
 .sbtn{flex:1;text-align:center;padding:20rpx;border-radius:14rpx;border:1rpx solid #e7ddd4;color:#8c8279;font-size:28rpx}
 .sbtn.p{flex:2;background:#c8a47e;color:#fff;border-color:#c8a47e}
+
+/* ===== 视图切换 ===== */
+.viewseg{display:flex;background:#fff;border:1rpx solid #eadfd7;border-radius:999rpx;padding:4rpx;margin:16rpx 24rpx 8rpx}
+.vopt{flex:1;text-align:center;font-size:24rpx;padding:10rpx 0;border-radius:999rpx;color:#8a7f78}
+.vopt.on{background:#2d2826;color:#fff;font-weight:700}
+
+/* ===== 技师维度日视图 ===== */
+.dv-datebar{display:flex;align-items:center;gap:14rpx;padding:8rpx 24rpx}
+.dv-nav{width:44rpx;height:44rpx;border-radius:50%;background:#fff;border:1rpx solid #eadfd7;display:flex;align-items:center;justify-content:center;color:#8a7f78;font-size:26rpx}
+.dv-date{font-size:28rpx;font-weight:800;color:#5c4630}
+.dv-today{margin-left:auto;font-size:22rpx;color:#c8a47e;border:1rpx solid #c8a47e;border-radius:999rpx;padding:5rpx 18rpx}
+.dv-summary{display:flex;align-items:center;gap:12rpx;padding:6rpx 24rpx 12rpx}
+.dv-pill{font-size:22rpx;color:#5c4630;background:#fff;border:1rpx solid #eadfd7;border-radius:12rpx;padding:6rpx 14rpx}
+.dv-pill .b{color:#241f1d;font-weight:800}
+.dv-pill.live{background:#e3eee8;border-color:#cfe6d8}
+.dv-pill.live .b{color:#1f7a4d}
+.dv-share{margin-left:auto;font-size:22rpx;color:#c8a47e;font-weight:700}
+.dv-closed{margin:20rpx 24rpx;padding:40rpx;text-align:center;color:#9a8c7c;font-size:26rpx;background:#fff;border-radius:16rpx}
+
+.dv-grid{display:flex;margin:0 16rpx;background:#fff;border:1rpx solid #e9dccb;border-radius:20rpx;overflow:hidden}
+.dv-left{flex:none;width:64rpx;border-right:1rpx solid #e9dccb;background:#fbf8f5}
+.dv-corner{height:104rpx;border-bottom:1rpx solid #e9dccb}
+.dv-gutter{position:relative}
+.dv-hr{height:120rpx;font-size:19rpx;color:#9a8c7c;text-align:center;padding-top:4rpx;box-sizing:border-box}
+.dv-right{flex:1;min-width:0}
+.dv-rin{position:relative}
+.dv-heads{display:flex;height:104rpx;background:#fbf8f5;border-bottom:1rpx solid #e9dccb}
+.dv-th{flex:none;text-align:center;padding:10rpx 4rpx;border-right:1rpx solid #e9dccb;box-sizing:border-box;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:2rpx;overflow:hidden}
+.dv-nm{font-size:24rpx;font-weight:800;color:#241f1d}
+.dv-rl{font-size:17rpx;color:#9a8c7c;margin-top:1rpx;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.dv-st{font-size:17rpx;margin-top:3rpx;display:inline-block;padding:1rpx 12rpx;border-radius:999rpx;background:#fbe9d6;color:#b5731f}
+.dv-st.free{background:#e3eee8;color:#1f7a4d}
+.dv-cols{display:flex;position:relative}
+.dv-col{flex:none;border-right:1rpx solid #e9dccb;position:relative;box-sizing:border-box}
+.dv-line{height:120rpx;border-bottom:1rpx dashed #f2ebe1;box-sizing:border-box}
+.dv-blk{position:absolute;left:6rpx;right:6rpx;border-radius:12rpx;padding:7rpx 9rpx;overflow:hidden;box-shadow:0 1rpx 4rpx rgba(92,70,48,.12);box-sizing:border-box}
+.dv-bt{font-size:17rpx;opacity:.72;font-weight:600}
+.dv-bn{font-size:22rpx;font-weight:800;margin-top:2rpx}
+.dv-bs{font-size:18rpx;margin-top:1rpx;opacity:.85}
+.dv-tag{position:absolute;top:6rpx;right:6rpx;font-size:16rpx;border-radius:6rpx;padding:1rpx 7rpx;font-weight:700;color:#fff}
+.dv-tag.zhi{background:#5c4630}
+.dv-tag.xin{background:#b5731f}
+/* ===== 色相=服务类型 × 状态=到店进度 ===== */
+/* 未到店(默认):淡色 + 虚线边 */
+.dv-blk.hand{background:#f6ecdc;color:#9c8158;border:1rpx dashed rgba(122,90,46,.3)}
+.dv-blk.foot{background:#f7e5da;color:#a5764f;border:1rpx dashed rgba(138,80,48,.32)}
+.dv-blk.lash{background:#efe8f2;color:#8574a0;border:1rpx dashed rgba(91,67,112,.28)}
+.dv-blk.care{background:#e6efe9;color:#6a9078;border:1rpx dashed rgba(63,107,82,.28)}
+/* 到店·进行中:满色点亮 + 绿框 + 左绿条 */
+.dv-blk.active{border:none;box-shadow:0 0 0 3rpx rgba(31,122,77,.5),0 3rpx 10rpx rgba(92,70,48,.16);padding-left:16rpx}
+.dv-blk.active::before{content:'';position:absolute;left:0;top:0;bottom:0;width:8rpx;background:#1f9d57;border-radius:12rpx 0 0 12rpx}
+.dv-blk.hand.active{background:#e8d3b0;color:#7a5a2e}
+.dv-blk.foot.active{background:#e0b39a;color:#8a5030}
+.dv-blk.lash.active{background:#d9c8e0;color:#5b4370}
+.dv-blk.care.active{background:#cfe0d6;color:#3f6b52}
+/* 已完成:灰掉 + 勾 */
+.dv-blk.done{background:#efeae4 !important;color:#a79f95 !important;border:1rpx solid #e4ddd3}
+/* 时间行到店小标 */
+.dv-sdot{display:inline-block;margin-right:4rpx;font-size:16rpx}
+.dv-sdot.active{color:#1f9d57;font-weight:800}
+.dv-sdot.done{color:#8a8178}
+.dv-blk.free{background:repeating-linear-gradient(45deg,#faf6f0,#faf6f0 10rpx,#f3ece2 10rpx,#f3ece2 20rpx);border:1rpx dashed #dcc9ad;box-shadow:none;display:flex;align-items:center;justify-content:center}
+.dv-blk.free text{font-size:19rpx;color:#b39468}
+.dv-legend{display:flex;flex-wrap:wrap;gap:16rpx;justify-content:center;padding:12rpx 24rpx 0;font-size:18rpx;color:#9a8c7c}
+.dv-legend.top{margin-top:48rpx;padding-top:20rpx;border-top:1rpx dashed #e4dccf}
+.dv-legend-hd{width:100%;text-align:center;font-size:17rpx;color:#b8ab9c;margin-bottom:2rpx}
+.dv-legend .lg{display:inline-block;width:18rpx;height:18rpx;border-radius:4rpx;vertical-align:-2rpx;margin-right:5rpx}
+.dv-legend .lg.hand{background:#e8d3b0}
+.dv-legend .lg.foot{background:#e0b39a}
+.dv-legend .lg.lash{background:#d9c8e0}
+.dv-legend .lg.care{background:#cfe0d6}
+.dv-legend .lg.free{background:#f3ece2;border:1rpx dashed #dcc9ad}

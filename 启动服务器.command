@@ -8,6 +8,6 @@ sleep 1
 NODE_BIN="/Users/changliu/.cache/codex-runtimes/codex-primary-runtime/dependencies/node/bin/node"
 if [ ! -x "$NODE_BIN" ]; then NODE_BIN="node"; fi
 echo "正在启动 Lucky Luxe 服务器(自动重载模式,端口 4128)..."
-echo "访问: http://127.0.0.1:4128/admin"
+echo "访问: http://127.0.0.1:4128/admin  (真机调试用局域网IP,启动后另行查看)"
 echo "此窗口保持开着;按 Ctrl+C 停止服务器。"
-ALLOW_DEMO_ADMIN_LOGIN=true PORT=4128 "$NODE_BIN" --env-file-if-exists=apps/api/.env --watch apps/api/local-server.mjs
+ALLOW_DEMO_ADMIN_LOGIN=true HOST=0.0.0.0 PORT=4128 "$NODE_BIN" --env-file-if-exists=apps/api/.env --watch apps/api/local-server.mjs

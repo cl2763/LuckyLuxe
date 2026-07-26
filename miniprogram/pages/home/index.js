@@ -15,7 +15,10 @@ Page({
     technicianWorks: '',
     recommendedNail: [],
     recommendedLash: [],
-    shopName: ''
+    shopName: '',
+    todayHoursText: '',
+    openNow: false,
+    hasHours: false
   },
 
   onLoad() {
@@ -47,19 +50,70 @@ Page({
 
   goAiChat() { wx.navigateTo({ url: '/pages/ai-chat/index' }) },
 
+  // ===== 店卡:今日营业时间/营业状态(按门店时区算,不用手机本地时区) =====
+  computeTodayHours(store) {
+    const lang = i18n.getLang()
+    const hours = (store && store.hours) || []
+    if (!hours.length) return { todayHoursText: '', openNow: false, hasHours: false }
+    let now = new Date()
+    try {
+      // 部分低版本基础库不支持 timeZone,失败则退回手机本地时间
+      now = new Date(now.toLocaleString('en-US', { timeZone: store.timezone || 'America/Toronto' }))
+      if (isNaN(now.getTime())) now = new Date()
+    } catch (e) { now = new Date() }
+    const row = hours.find((h) => Number(h.weekday) === now.getDay())
+    if (!row || row.is_closed) {
+      return { todayHoursText: lang === 'en' ? 'Closed today' : '今日休息', openNow: false, hasHours: true }
+    }
+    const minutes = now.getHours() * 60 + now.getMinutes()
+    const toMin = (t) => { const p = String(t || '').split(':'); return Number(p[0]) * 60 + Number(p[1] || 0) }
+    const openNow = minutes >= toMin(row.open_time) && minutes < toMin(row.close_time)
+    return {
+      todayHoursText: (lang === 'en' ? 'Today ' : '今日 ') + row.open_time + ' – ' + row.close_time,
+      openNow,
+      hasHours: true
+    }
+  },
+
+  copyAddress() {
+    const store = this.data.store || {}
+    const itemList = this.data.lang === 'en' ? ['Open in Maps', 'Copy address'] : ['地图导航', '复制地址']
+    wx.showActionSheet({
+      itemList,
+      success: (res) => {
+        if (res.tapIndex === 0 && store.latitude && store.longitude) {
+          wx.openLocation({ latitude: Number(store.latitude), longitude: Number(store.longitude), name: store.storeName, address: store.address })
+        } else {
+          wx.setClipboardData({ data: store.address || '' })
+        }
+      }
+    })
+  },
+
+  callStore() {
+    const phone = String((this.data.store || {}).phone || '')
+    if (!phone || /待补充|TBD/i.test(phone)) {
+      wx.showToast({ title: this.data.lang === 'en' ? 'Phone not set yet' : '门店电话待补充', icon: 'none' })
+      return
+    }
+    wx.makePhoneCall({ phoneNumber: phone.replace(/[^\d+]/g, '') })
+  },
+
   async refreshLanguage() {
     const lang = i18n.getLang()
     i18n.applyTabBar(lang)
     storage.syncCartBadge()
     tabbar.update(this, 0)
-    i18n.setTitle('Lucky Luxe')
+    i18n.setTitle('有迹')
     const nailServices = await api.getServices('nail', lang)
     const lashServices = await api.getServices('lash', lang)
     const stores = await api.getStores()
-    this.setData({
+    const storeRaw = stores[0] || mock.store
+    const hoursInfo = this.computeTodayHours(storeRaw)
+    this.setData(Object.assign({}, hoursInfo, {
       lang,
       t: i18n.pageCopy('home', lang),
-      store: i18n.localizeStore(stores[0] || mock.store, lang),
+      store: i18n.localizeStore(storeRaw, lang),
       heroSlides: [
         { image: '/assets/images/hero-carousel-interior.jpg', label: lang === 'en' ? 'Lucky Luxe studio mood' : 'Lucky Luxe 店内氛围' },
         { image: '/assets/images/hero-carousel-nail.jpg', label: lang === 'en' ? 'Premium nail detail' : '精致美甲细节' },
@@ -69,7 +123,7 @@ Page({
       portfolioIntro: lang === 'en' ? 'Browse approved finished work by each artist.' : '浏览每位技师已确认入库的真实作品。',
       recommendedNail: i18n.localizeServices(nailServices.filter((item) => item.isRecommended), lang),
       recommendedLash: i18n.localizeServices(lashServices.filter((item) => item.isRecommended), lang)
-    })
+    }))
   },
 
   switchLanguage(event) {

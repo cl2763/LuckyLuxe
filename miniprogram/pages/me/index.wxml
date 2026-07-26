@@ -173,7 +173,7 @@
 
       <view wx:if="{{authModalMode === 'login'}}" class="simple-login-body">
         <image class="simple-login-avatar" src="/assets/images/member-profile.jpg" mode="aspectFill"></image>
-        <view class="simple-login-title">{{lang === 'en' ? 'Lucky Luxe' : 'Lucky Luxe'}}</view>
+        <view class="simple-login-title">{{lang === 'en' ? 'Youji 有迹' : '有迹'}}</view>
         <view class="simple-login-desc">{{lang === 'en' ? 'Sign in with WeChat to view orders and member benefits.' : '微信一键登录后可查看订单与会员权益。'}}</view>
       </view>
 
@@ -203,7 +203,7 @@
         <button wx:if="{{authModalMode === 'login'}}" class="privacy-check" open-type="agreePrivacyAuthorization" bindtap="onPrivacyTap" bindagreeprivacyauthorization="onAgreePrivacyAuthorization">
           <view class="privacy-box {{authProfile.privacyChecked ? 'checked' : ''}}">{{authProfile.privacyChecked ? '✓' : ''}}</view>
           <view class="privacy-copy">
-            <text class="privacy-main">{{lang === 'en' ? 'I have read and agree to the Lucky Luxe privacy policy.' : '我已阅读并同意 Lucky Luxe 隐私政策'}}</text>
+            <text class="privacy-main">{{lang === 'en' ? 'I have read and agree to the Youji privacy policy.' : '我已阅读并同意「有迹」隐私政策'}}</text>
             <text class="privacy-sub">{{lang === 'en' ? 'Authorize WeChat login for member services.' : '授权使用微信登录会员服务'}}</text>
           </view>
         </button>

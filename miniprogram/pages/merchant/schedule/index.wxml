@@ -1,4 +1,75 @@
 <view class="page">
+  <view class="viewseg">
+    <view class="vopt {{viewMode==='tech'?'on':''}}" data-m="tech" bindtap="switchView">技师维度</view>
+    <view class="vopt {{viewMode==='month'?'on':''}}" data-m="month" bindtap="switchView">月历排班</view>
+  </view>
+
+  <!-- ===== 技师维度 · 日视图(P0-①) ===== -->
+  <block wx:if="{{viewMode==='tech'}}">
+    <view class="dv-datebar">
+      <view class="dv-nav" bindtap="dvPrev">‹</view>
+      <text class="dv-date">{{dv.dateText}}</text>
+      <view class="dv-nav" bindtap="dvNext">›</view>
+      <view class="dv-today" bindtap="dvToday">今天</view>
+    </view>
+    <view class="dv-summary" wx:if="{{dv && !dv.isClosed}}">
+      <text class="dv-pill">今日 <text class="b">{{dv.total}}</text> 单</text>
+      <text class="dv-pill live" wx:if="{{dv.activeCount}}">在做 <text class="b">{{dv.activeCount}}</text> 人</text>
+      <text class="dv-pill">在岗 <text class="b">{{dv.working}}</text> 人</text>
+      <text class="dv-pill">空档 <text class="b">{{dv.freeHours}}</text> h</text>
+      <view class="dv-share" bindtap="shareSchedule">⤴ 分享</view>
+    </view>
+    <view wx:if="{{dv && dv.isClosed}}" class="dv-closed">本日休息{{dv.specialNote ? ' · ' + dv.specialNote : ''}}</view>
+    <view wx:elif="{{dv && !dv.cols.length}}" class="empty">本日无在岗技师</view>
+    <block wx:elif="{{dv}}">
+      <view class="dv-grid">
+        <view class="dv-left">
+          <view class="dv-corner"></view>
+          <view class="dv-gutter" style="height:{{dv.gridH}}rpx">
+            <view wx:for="{{dv.hours}}" wx:key="*this" class="dv-hr">{{item}}</view>
+          </view>
+        </view>
+        <scroll-view scroll-x class="dv-right" show-scrollbar="{{false}}">
+          <view class="dv-rin" style="width:{{dv.colW*dv.cols.length}}rpx">
+            <view class="dv-heads">
+              <view wx:for="{{dv.cols}}" wx:key="id" class="dv-th" style="width:{{dv.colW}}rpx">
+                <view class="dv-nm">{{item.name}}</view>
+                <view class="dv-rl">{{item.role}}</view>
+                <view class="dv-st {{item.busy?'busy':'free'}}">{{item.busy?'忙':'空'}}</view>
+              </view>
+            </view>
+            <view class="dv-cols" style="height:{{dv.gridH}}rpx">
+              <view wx:for="{{dv.cols}}" wx:key="id" wx:for-item="col" class="dv-col" style="width:{{dv.colW}}rpx">
+                <view wx:for="{{dv.hours}}" wx:key="*this" wx:for-item="hl" class="dv-line"></view>
+                <view wx:for="{{col.frees}}" wx:key="startTime" wx:for-item="f" class="dv-blk free" style="top:{{f.top}}rpx;height:{{f.height}}rpx" data-tech="{{col.id}}" data-time="{{f.startTime}}" bindtap="tapFree"><text>+ 空·约</text></view>
+                <view wx:for="{{col.blocks}}" wx:key="id" wx:for-item="b" class="dv-blk {{b.cls}}" style="top:{{b.top}}rpx;height:{{b.height}}rpx" data-id="{{b.id}}" bindtap="tapBlock">
+                  <view class="dv-bt"><text wx:if="{{b.stateGlyph}}" class="dv-sdot {{b.state}}">{{b.stateGlyph}}</text>{{b.startTime}}–{{b.endTime}}</view>
+                  <view class="dv-bn">{{b.customerName}}</view>
+                  <view class="dv-bs">{{b.serviceName}}</view>
+                  <text wx:if="{{b.isDesignated}}" class="dv-tag zhi">指定</text>
+                  <text wx:elif="{{b.isNewCustomer}}" class="dv-tag xin">新客</text>
+                </view>
+              </view>
+            </view>
+          </view>
+        </scroll-view>
+      </view>
+      <view class="dv-legend top">
+        <text class="dv-legend-hd">图例 · 平时不用看</text>
+        <text><text class="lg hand"></text>手部美甲</text>
+        <text><text class="lg foot"></text>足部美甲</text>
+        <text><text class="lg lash"></text>美睫</text>
+        <text><text class="lg care"></text>护理</text>
+        <text><text class="lg free"></text>空档·点约</text>
+      </view>
+      <view class="dv-legend">
+        <text>淡色=未到 · <text class="dv-sdot active">●</text>进行中 · <text class="dv-sdot done">✓</text>完成 · 指定/新客见右上角</text>
+      </view>
+    </block>
+  </block>
+
+  <!-- ===== 月历排班(原有) ===== -->
+  <block wx:if="{{viewMode==='month'}}">
   <view class="monthbar">
     <view class="marrow" bindtap="prevMonth">‹</view>
     <view class="mtext">{{monthText}}</view>
@@ -65,6 +136,7 @@
       </view>
     </view>
   </view>
+  </block>
 
   <view wx:if="{{sheet}}" class="mask" bindtap="closeSheet"></view>
   <view wx:if="{{sheet}}" class="sheet">

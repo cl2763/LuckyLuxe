@@ -1,37 +1,63 @@
 <view class="page portfolio-page">
-  <button wx:if="{{selected}}" class="back-button" bindtap="backToList">← {{title}}</button>
+  <!-- 方案B(2026-07-20 店主定稿):技师头像条 + 动态品类筛选 + 全店作品墙 -->
 
-  <view class="portfolio-head">
-    <view class="portfolio-title">{{selected ? selected.technician.name : title}}</view>
-    <view class="portfolio-intro">{{selected ? selected.technician.title : intro}}</view>
-  </view>
-
-  <block wx:if="{{selected}}">
-    <view class="work-grid">
-      <block wx:for="{{selected.images}}" wx:key="*this">
-        <button class="work-image-wrap" bindtap="previewImage" data-url="{{item}}">
-          <image class="work-image" src="{{item}}" mode="aspectFill"></image>
-        </button>
-      </block>
+  <!-- 技师头像条:第一格=全店,其余按作品数排序 -->
+  <scroll-view class="tech-strip" scroll-x enable-flick="{{true}}" show-scrollbar="{{false}}">
+    <view class="tech-cell {{activeTech === '' ? 'on' : ''}}" bindtap="tapTech" data-id="">
+      <view class="tech-avatar all">{{t.allShop}}</view>
+      <text class="tech-cell-name">{{t.all}}</text>
+      <text class="tech-cell-badge">{{works.length}}</text>
     </view>
-  </block>
+    <block wx:for="{{techs}}" wx:key="id">
+      <view class="tech-cell {{activeTech === item.id ? 'on' : ''}}" bindtap="tapTech" data-id="{{item.id}}">
+        <view class="tech-avatar">{{item.initial}}</view>
+        <text class="tech-cell-name">{{item.name}}</text>
+        <text class="tech-cell-badge">{{item.badge}}</text>
+      </view>
+    </block>
+  </scroll-view>
 
-  <block wx:else>
-    <view class="tech-list">
-      <block wx:for="{{portfolios}}" wx:key="technician.id">
-        <view class="tech-card card">
-          <view class="tech-info">
-            <view class="tech-name">{{item.technician.name}}</view>
-            <view class="tech-title">{{item.technician.title}}</view>
+  <!-- 品类筛选:该店实际有作品的品类才出现;只有一类时整栏隐藏 -->
+  <scroll-view wx:if="{{chips.length}}" class="chip-bar" scroll-x show-scrollbar="{{false}}">
+    <view class="chip {{activeType === '' ? 'on' : ''}}" bindtap="tapChip" data-value="">{{t.all}}</view>
+    <block wx:for="{{chips}}" wx:key="value">
+      <view class="chip {{activeType === item.value ? 'on' : ''}}" bindtap="tapChip" data-value="{{item.value}}">{{item.label}}</view>
+    </block>
+  </scroll-view>
+
+  <!-- 作品墙:双列瀑布流,每卡带品类角标+技师+同款直达 -->
+  <view wx:if="{{!empty}}" class="wall">
+    <view class="wall-col">
+      <block wx:for="{{col0}}" wx:key="id">
+        <view class="work-card">
+          <view class="work-visual-wrap" bindtap="onWork" data-id="{{item.id}}">
+            <image class="work-visual" src="{{item.image}}" mode="widthFix"></image>
+            <text wx:if="{{item.catLabel}}" class="work-cat">{{item.catLabel}}</text>
           </view>
-          <button class="view-work" bindtap="openTech" data-id="{{item.technician.id}}">{{viewWork}}</button>
-          <view class="preview-row">
-            <block wx:for="{{item.images}}" wx:for-item="image" wx:for-index="imageIndex" wx:key="*this">
-              <image wx:if="{{imageIndex < 4}}" class="preview-image" src="{{image}}" mode="aspectFill"></image>
-            </block>
+          <view class="work-meta">
+            <view class="work-tech-avatar">{{item.technician.name[0]}}</view>
+            <text class="work-tech-name">{{item.technician.name}}</text>
+            <text class="work-book" bindtap="bookStyle" data-id="{{item.id}}">{{lang === 'en' ? 'Book ›' : '同款 ›'}}</text>
           </view>
         </view>
       </block>
     </view>
-  </block>
+    <view class="wall-col">
+      <block wx:for="{{col1}}" wx:key="id">
+        <view class="work-card">
+          <view class="work-visual-wrap" bindtap="onWork" data-id="{{item.id}}">
+            <image class="work-visual" src="{{item.image}}" mode="widthFix"></image>
+            <text wx:if="{{item.catLabel}}" class="work-cat">{{item.catLabel}}</text>
+          </view>
+          <view class="work-meta">
+            <view class="work-tech-avatar">{{item.technician.name[0]}}</view>
+            <text class="work-tech-name">{{item.technician.name}}</text>
+            <text class="work-book" bindtap="bookStyle" data-id="{{item.id}}">{{lang === 'en' ? 'Book ›' : '同款 ›'}}</text>
+          </view>
+        </view>
+      </block>
+    </view>
+  </view>
+
+  <view wx:if="{{empty}}" class="wall-empty">{{t.emptyText}}</view>
 </view>

@@ -1,5 +1,5 @@
 // 构建号:每次交付递增。侧栏可见,排查"改了没生效"时先对版本。
-const ADMIN_BUILD = '20260716-member'
+const ADMIN_BUILD = '20260722-youji'
 console.log(`[admin] build ${ADMIN_BUILD}`)
 
 // "今天"必须按门店时区算(服务器同样钉在此时区),否则老板人在别的时区时全站日期错位一天。
@@ -208,7 +208,7 @@ const els = {
 
 const copy = {
   zh: {
-    adminTitle: 'Lucky Luxe 后台',
+    adminTitle: '有迹 · 商家后台',
     ownerConsole: '店主控制台',
     staffConsole: '员工工作台',
     customerApp: '客户网页',
@@ -482,7 +482,7 @@ const copy = {
     close: '关闭'
   },
   en: {
-    adminTitle: 'Lucky Luxe Admin',
+    adminTitle: 'Youji Merchant Admin',
     ownerConsole: 'Owner Console',
     staffConsole: 'Staff Console',
     customerApp: 'Customer App',

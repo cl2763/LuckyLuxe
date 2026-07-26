@@ -3,7 +3,7 @@ const LANG_KEY = 'lucky_lang'
 const copy = {
   common: {
     zh: {
-      appName: 'Lucky Luxe',
+      appName: '有迹',
       nail: '美甲 Nail',
       lash: '美睫 Lash',
       minutes: '分钟',
@@ -23,7 +23,7 @@ const copy = {
       none: '无'
     },
     en: {
-      appName: 'Lucky Luxe',
+      appName: '有迹',
       nail: 'Nails',
       lash: 'Lashes',
       minutes: 'min',

@@ -7,9 +7,14 @@ function addDays(dateStr, n) { const d = new Date(`${dateStr}T00:00:00`); d.setD
 function mondayOf(d) { const x = new Date(d); const wd = x.getDay(); const off = wd === 0 ? -6 : 1 - wd; x.setDate(x.getDate() + off); return x }
 const WK = ['日', '一', '二', '三', '四', '五', '六']
 
+const PX_PER_HOUR = 120 // 单位 rpx:与 wxss 中 .dv-hr / .dv-line 的 120rpx 对齐
+function toMin(t) { const p = String(t || '0:0').split(':'); return Number(p[0]) * 60 + Number(p[1] || 0) }
+function typeCls(t) { const u = String(t || '').toUpperCase(); return u === 'NAIL' ? 'nail' : u === 'LASH' ? 'lash' : 'care' }
+
 Page({
   data: {
     role: 'owner',
+    viewMode: 'tech', // 'tech' 技师维度日视图(默认) | 'month' 月历排班
     calYear: 0, calMonth: 0, monthText: '',
     weekHead: ['一', '二', '三', '四', '五', '六', '日'],
     cells: [],
@@ -18,12 +23,151 @@ Page({
     dayBookings: [],
     requests: [],
     schedMap: {}, dayInfo: {}, techs: [], allBookings: [],
-    sheet: false, sheetMode: 'work', sheetStart: '10:00', sheetEnd: '19:00', sheetSel: {}
+    sheet: false, sheetMode: 'work', sheetStart: '10:00', sheetEnd: '19:00', sheetSel: {},
+    dv: null // 技师维度日视图数据
   },
 
   onShow() {
-    if (this.data.calYear) { this.loadMonth(this.data.calYear, this.data.calMonth) }
-    else { const d = new Date(); this.loadMonth(d.getFullYear(), d.getMonth()) }
+    if (this.data.viewMode === 'tech') {
+      this.loadDayView(this.data.selDate || todayStr())
+    } else if (this.data.calYear) {
+      this.loadMonth(this.data.calYear, this.data.calMonth)
+    } else {
+      const d = new Date(); this.loadMonth(d.getFullYear(), d.getMonth())
+    }
+  },
+
+  switchView(e) {
+    const mode = e.currentTarget.dataset.m
+    if (mode === this.data.viewMode) return
+    this.setData({ viewMode: mode })
+    if (mode === 'tech') this.loadDayView(this.data.selDate || todayStr())
+    else { const d = this.data.selDate ? new Date(`${this.data.selDate}T00:00:00`) : new Date(); this.loadMonth(d.getFullYear(), d.getMonth()) }
+  },
+
+  // ===== 技师维度·日视图 =====
+  async loadDayView(date) {
+    try {
+      const me = await api.adminMe().catch(() => ({ role: 'owner' }))
+      const r = await api.adminGet(`/admin/schedule-day?date=${date}`)
+      const openMin = toMin(r.openTime || '10:00')
+      const closeMin = toMin(r.closeTime || '19:00')
+      const span = Math.max(60, closeMin - openMin)
+      const gridH = Math.round(span / 60 * PX_PER_HOUR)
+      // 时间刻度
+      const hours = []
+      for (let m = Math.floor(openMin / 60) * 60; m < closeMin; m += 60) {
+        hours.push(`${String(Math.floor(m / 60)).padStart(2, '0')}:00`)
+      }
+      const byTech = {}
+      ;(r.bookings || []).forEach((b) => { (byTech[b.technicianId] = byTech[b.technicianId] || []).push(b) })
+      let freeTotal = 0
+      const cols = (r.technicians || []).map((t) => {
+        const list = (byTech[t.id] || []).slice().sort((a, b) => toMin(a.startTime) - toMin(b.startTime))
+        const blocks = list.map((b) => {
+          const s = toMin(b.startTime); const e = Math.max(s + 20, toMin(b.endTime))
+          const group = b.group || typeCls(b.serviceType) // 色相:hand/foot/lash/care
+          const state = b.arrivalState || 'pending'         // 到店态:pending/active/done
+          return {
+            id: b.id,
+            cls: `${group} ${state}`, // 色相 + 到店态一起给 class
+            state,
+            stateGlyph: state === 'active' ? '●' : (state === 'done' ? '✓' : ''),
+            top: Math.round((s - openMin) / 60 * PX_PER_HOUR),
+            height: Math.max(34, Math.round((e - s) / 60 * PX_PER_HOUR)),
+            startTime: b.startTime, endTime: b.endTime,
+            customerName: b.customerName, serviceName: b.serviceName,
+            isNewCustomer: b.isNewCustomer, isDesignated: b.isDesignated
+          }
+        })
+        // 空档:营业时段内、预约之间的空隙(>=30min)
+        const frees = []
+        let cursor = openMin
+        list.forEach((b) => {
+          const s = toMin(b.startTime)
+          if (s - cursor >= 30) { frees.push({ startTime: `${String(Math.floor(cursor / 60)).padStart(2, '0')}:${String(cursor % 60).padStart(2, '0')}`, top: Math.round((cursor - openMin) / 60 * PX_PER_HOUR), height: Math.round((s - cursor) / 60 * PX_PER_HOUR) }); freeTotal += (s - cursor) }
+          cursor = Math.max(cursor, toMin(b.endTime))
+        })
+        if (closeMin - cursor >= 30) { frees.push({ startTime: `${String(Math.floor(cursor / 60)).padStart(2, '0')}:${String(cursor % 60).padStart(2, '0')}`, top: Math.round((cursor - openMin) / 60 * PX_PER_HOUR), height: Math.round((closeMin - cursor) / 60 * PX_PER_HOUR) }); freeTotal += (closeMin - cursor) }
+        return { id: t.id, name: t.name, role: t.title || '', busy: t.bookingCount > 0, count: t.bookingCount, blocks, frees }
+      })
+      const d = new Date(`${date}T00:00:00`)
+      this.setData({
+        role: me.role || 'owner', selDate: date,
+        dv: {
+          date, dateText: `${d.getMonth() + 1}月${d.getDate()}日 周${WK[d.getDay()]}`,
+          isClosed: r.isClosed, specialNote: r.specialNote || '',
+          openTime: r.openTime, closeTime: r.closeTime,
+          gridH, colW: 190, hours,
+          total: (r.bookings || []).length,
+          working: cols.length,
+          freeHours: Math.round(freeTotal / 60 * 10) / 10,
+          activeCount: r.activeCount || 0, // 在做人数(到店进行中)
+          cols
+        }
+      })
+    } catch (e) { wx.showToast({ title: '加载排班失败', icon: 'none' }) }
+  },
+
+  dvPrev() { this.loadDayView(addDays(this.data.selDate || todayStr(), -1)) },
+  dvNext() { this.loadDayView(addDays(this.data.selDate || todayStr(), 1)) },
+  dvToday() { this.loadDayView(todayStr()) },
+
+  tapBlock(e) {
+    const id = e.currentTarget.dataset.id
+    let b = null
+    ;(this.data.dv.cols || []).forEach((c) => { const hit = (c.blocks || []).find((x) => x.id === id); if (hit) b = Object.assign({}, hit, { tech: c.name }) })
+    if (!b) return
+    if (this.data.role !== 'owner') {
+      // 员工只看详情
+      wx.showModal({ title: b.customerName, content: `${b.startTime}–${b.endTime} · ${b.serviceName} · ${b.tech}`, showCancel: false, confirmText: '知道了' })
+      return
+    }
+    // 到店态动作单:随状态给不同选项
+    const items = []
+    const actions = []
+    if (b.state !== 'active') { items.push('✔ 标记到店(开始服务)'); actions.push('arrive') }
+    if (b.state !== 'done') { items.push('✓ 标记完成'); actions.push('complete') }
+    if (b.state === 'active') { items.push('↩ 改回未到店'); actions.push('unarrive') }
+    items.push('📄 查看订单详情'); actions.push('detail')
+    wx.showActionSheet({
+      itemList: items,
+      success: (res) => {
+        const act = actions[res.tapIndex]
+        if (act === 'arrive') this.setArrival(b.id, true)
+        else if (act === 'unarrive') this.setArrival(b.id, false)
+        else if (act === 'complete') this.setCompleted(b.id)
+        else if (act === 'detail') wx.switchTab({ url: '/pages/merchant/home/index' })
+      }
+    })
+  },
+
+  async setArrival(id, arrived) {
+    try {
+      await api.adminPatch(`/admin/bookings/${encodeURIComponent(id)}/arrival`, { arrived })
+      wx.showToast({ title: arrived ? '已到店' : '已改回未到', icon: 'none' })
+      this.loadDayView(this.data.selDate)
+    } catch (err) { wx.showToast({ title: (err && err.message) || '操作失败', icon: 'none' }) }
+  },
+
+  async setCompleted(id) {
+    try {
+      await api.adminPatch(`/admin/bookings/${encodeURIComponent(id)}/status`, { status: 'COMPLETED' })
+      wx.showToast({ title: '已完成', icon: 'none' })
+      this.loadDayView(this.data.selDate)
+    } catch (err) { wx.showToast({ title: (err && err.message) || '操作失败', icon: 'none' }) }
+  },
+
+  tapFree(e) {
+    const { tech, time } = e.currentTarget.dataset
+    wx.showToast({ title: `${time} 可约(建单开发中)`, icon: 'none' })
+  },
+
+  shareSchedule() {
+    wx.showModal({
+      title: '分享排班表', showCancel: false, confirmText: '知道了',
+      content: '把当前排满的排班表截屏,发朋友圈/群做宣传——满屏预约=火爆。\niPhone:侧边键+音量上;安卓:电源+音量下。'
+    })
   },
 
   async loadMonth(year, month) {

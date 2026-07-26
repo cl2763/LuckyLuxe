@@ -1,125 +1,174 @@
 .portfolio-page {
-  padding: 24rpx 24rpx 180rpx;
+  padding: 20rpx 24rpx 180rpx;
 }
 
-.back-button {
-  width: 100%;
-  height: 70rpx;
-  margin-bottom: 18rpx;
-  border: 1rpx solid #eadfd7;
-  border-radius: 999rpx;
-  background: #fff;
-  color: #5e514b;
+/* ===== 技师头像条 ===== */
+.tech-strip {
+  white-space: nowrap;
+  padding: 8rpx 0 6rpx;
+}
+
+.tech-cell {
+  display: inline-flex;
+  flex-direction: column;
+  align-items: center;
+  width: 116rpx;
+  margin-right: 6rpx;
+  vertical-align: top;
+}
+
+.tech-avatar {
+  width: 96rpx;
+  height: 96rpx;
+  border-radius: 50%;
+  background: linear-gradient(135deg, #e7c9a4, #c8a47e);
+  color: #fff;
+  font-size: 36rpx;
+  font-weight: 800;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border: 4rpx solid #fff;
+  box-shadow: 0 4rpx 14rpx rgba(92, 70, 48, 0.16);
+  box-sizing: border-box;
+}
+
+.tech-avatar.all {
+  background: #2d2826;
   font-size: 26rpx;
   font-weight: 700;
 }
 
-.portfolio-head {
-  padding: 28rpx 0 10rpx;
+.tech-cell.on .tech-avatar {
+  border-color: #c8a47e;
+  box-shadow: 0 0 0 4rpx rgba(200, 164, 126, 0.45);
 }
 
-.eyebrow {
-  color: #c6a27e;
+.tech-cell-name {
+  margin-top: 8rpx;
   font-size: 22rpx;
-  font-weight: 800;
-  text-transform: uppercase;
+  font-weight: 700;
+  color: #5c4630;
+  max-width: 112rpx;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
-.portfolio-title {
-  margin-top: 8rpx;
-  color: #241f1d;
-  font-size: 48rpx;
-  font-weight: 880;
-  line-height: 1.15;
+.tech-cell-badge {
+  font-size: 19rpx;
+  color: #9a8c7c;
 }
 
-.portfolio-intro {
-  margin-top: 12rpx;
-  color: #8a7f78;
-  font-size: 26rpx;
-  font-weight: 600;
-  line-height: 1.45;
+/* ===== 品类筛选 ===== */
+.chip-bar {
+  white-space: nowrap;
+  padding: 14rpx 0 6rpx;
 }
 
-.tech-list {
-  display: grid;
-  gap: 18rpx;
-  margin-top: 22rpx;
-}
-
-.tech-card {
-  position: relative;
-  padding: 22rpx;
-  border-radius: 18rpx;
-}
-
-.tech-info {
-  padding-right: 160rpx;
-}
-
-.tech-name {
-  color: #342b28;
-  font-size: 34rpx;
-  font-weight: 850;
-}
-
-.tech-title {
-  margin-top: 8rpx;
-  color: #8a7f78;
+.chip {
+  display: inline-block;
   font-size: 24rpx;
-  font-weight: 650;
-  line-height: 1.35;
+  padding: 10rpx 28rpx;
+  border-radius: 999rpx;
+  background: #fff;
+  color: #5c4630;
+  border: 1rpx solid #e9dccb;
+  margin-right: 14rpx;
 }
 
-.view-work {
+.chip.on {
+  background: #2d2826;
+  color: #fff;
+  border-color: #2d2826;
+  font-weight: 700;
+}
+
+/* ===== 作品墙(双列瀑布流) ===== */
+.wall {
+  display: flex;
+  gap: 16rpx;
+  margin-top: 14rpx;
+}
+
+.wall-col {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 16rpx;
+}
+
+.work-card {
+  background: #fff;
+  border-radius: 20rpx;
+  overflow: hidden;
+  box-shadow: 0 4rpx 14rpx rgba(92, 70, 48, 0.07);
+}
+
+.work-visual-wrap {
+  position: relative;
+  width: 100%;
+}
+
+.work-visual {
+  width: 100%;
+  display: block;
+}
+
+.work-cat {
   position: absolute;
-  right: 22rpx;
-  top: 22rpx;
-  min-width: 130rpx;
-  height: 56rpx;
-  padding: 0 20rpx;
+  left: 12rpx;
+  top: 12rpx;
+  background: rgba(45, 40, 38, 0.55);
+  color: #fff;
+  font-size: 19rpx;
+  padding: 4rpx 14rpx;
   border-radius: 999rpx;
+}
+
+.work-meta {
+  display: flex;
+  align-items: center;
+  gap: 8rpx;
+  padding: 10rpx 14rpx 12rpx;
+  min-width: 0;
+}
+
+.work-tech-avatar {
+  flex: none;
+  width: 34rpx;
+  height: 34rpx;
+  border-radius: 50%;
+  background: linear-gradient(135deg, #e7c9a4, #c8a47e);
+  color: #fff;
+  font-size: 20rpx;
+  font-weight: 700;
   display: flex;
   align-items: center;
   justify-content: center;
-  background: #2b2b2b;
-  color: #fff;
-  font-size: 23rpx;
-  font-weight: 760;
-  line-height: 1;
 }
 
-.preview-row {
-  display: grid;
-  grid-template-columns: repeat(4, 1fr);
-  gap: 10rpx;
-  margin-top: 22rpx;
-}
-
-.preview-image,
-.work-image {
-  width: 100%;
-  display: block;
-  border-radius: 14rpx;
-}
-
-.preview-image {
-  height: 126rpx;
-}
-
-.work-grid {
-  display: grid;
-  grid-template-columns: repeat(2, 1fr);
-  gap: 14rpx;
-  margin-top: 24rpx;
-}
-
-.work-image-wrap {
-  height: 310rpx;
+.work-tech-name {
+  font-size: 22rpx;
+  color: #5c4630;
   overflow: hidden;
-  border-radius: 16rpx;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
-.work-image {
-  height: 100%;
+.work-book {
+  margin-left: auto;
+  flex: none;
+  font-size: 21rpx;
+  color: #c8a47e;
+  font-weight: 700;
+  padding: 4rpx 0 4rpx 12rpx;
+}
+
+.wall-empty {
+  text-align: center;
+  color: #9a8c7c;
+  font-size: 25rpx;
+  padding: 120rpx 0;
 }

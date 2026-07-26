@@ -23,5 +23,5 @@
   </view>
 
   <view class="out" bindtap="logout">退出登录</view>
-  <view class="ver">Lucky Luxe 商家端</view>
+  <view class="ver">有迹商家端</view>
 </view>

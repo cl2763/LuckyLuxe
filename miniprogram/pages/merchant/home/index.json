@@ -1,5 +1,5 @@
 {
-  "navigationBarTitleText": "Lucky Luxe 商家端",
+  "navigationBarTitleText": "有迹商家端",
   "usingComponents": {
     "merchant-tabbar": "/components/merchant-tabbar/index"
   }

@@ -3,7 +3,7 @@
     <view class="oav">{{name[0]}}</view>
     <view class="oinfo">
       <view class="oname">{{name}}</view>
-      <view class="oplan">Lucky Luxe · {{isOwner ? '老板' : '员工'}}</view>
+      <view class="oplan">有迹 · {{isOwner ? '老板' : '员工'}}</view>
     </view>
   </view>
 

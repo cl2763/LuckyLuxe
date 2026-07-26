@@ -26,7 +26,7 @@ Page({
   onShow() {
     const lang = i18n.getLang()
     this.setData({ lang })
-    wx.setNavigationBarTitle({ title: lang === 'en' ? 'Lucky Luxe Admin' : 'Lucky Luxe 后台' })
+    wx.setNavigationBarTitle({ title: lang === 'en' ? 'Youji Admin' : '有迹后台' })
     this.refresh()
   },
 

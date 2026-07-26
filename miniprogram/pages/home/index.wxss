@@ -46,6 +46,14 @@
   flex: none;
 }
 
+/* 临时 logo(浅底,无需深色底) */
+.brand-logo-img {
+  background: #fff;
+  border: 1rpx solid #eadfd7;
+  padding: 6rpx;
+  box-sizing: border-box;
+}
+
 .brand-name {
   color: #241f1d;
   font-size: 32rpx;
@@ -58,6 +66,98 @@
   color: #8a7f78;
   font-size: 20rpx;
   font-weight: 600;
+}
+
+/* ===== 一体店卡(方案A) ===== */
+.shop-card {
+  border-radius: 28rpx;
+  overflow: hidden;
+  background: #fff;
+  box-shadow: 0 10rpx 30rpx rgba(92, 70, 48, 0.08);
+  margin-bottom: 24rpx;
+}
+
+.shop-card-swiper {
+  width: 100%;
+  height: 500rpx;
+}
+
+.shop-card-visual {
+  width: 100%;
+  height: 500rpx;
+}
+
+.shop-card-info {
+  padding: 24rpx 26rpx 26rpx;
+  display: flex;
+  flex-direction: column;
+  gap: 16rpx;
+}
+
+.shop-card-title {
+  display: flex;
+  align-items: center;
+  gap: 12rpx;
+  min-width: 0;
+}
+
+.shop-card-name {
+  font-size: 40rpx;
+  font-weight: 850;
+  color: #241f1d;
+  letter-spacing: 1rpx;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.shop-status {
+  flex: none;
+  font-size: 20rpx;
+  font-weight: 600;
+  padding: 4rpx 14rpx;
+  border-radius: 999rpx;
+}
+
+.shop-status.open { color: #1f7a4d; background: #e3eee8; }
+.shop-status.closed { color: #8a7f78; background: #f1ece7; }
+
+.shop-card-switch {
+  margin-left: auto;
+  flex: none;
+  font-size: 22rpx;
+  color: #c8a47e;
+  font-weight: 600;
+}
+
+.shop-card-row {
+  display: flex;
+  align-items: center;
+  gap: 10rpx;
+  min-width: 0;
+}
+
+.shop-row-icon {
+  flex: none;
+  width: 34rpx;
+  color: #c8a47e;
+  font-size: 24rpx;
+  text-align: center;
+}
+
+.shop-row-text {
+  font-size: 26rpx;
+  color: #5c4630;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.shop-row-act {
+  margin-left: auto;
+  flex: none;
+  font-size: 22rpx;
+  color: #c8a47e;
 }
 
 .language-switch {
