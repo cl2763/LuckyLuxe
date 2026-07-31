@@ -519,6 +519,9 @@ function aiCustomerService(message, history) {
 function getMyCoupons() { return request('/my/coupons') }
 function getMyStoredValue() { return request('/my/stored-value') }
 function getMyPointsHistory() { return request('/my/points-history') }
+// 积分商城
+function getPointsMall() { return request('/my/points-mall') }
+function redeemPrize(prizeId) { return request('/my/points-mall/redeem', 'POST', { prizeId }) }
 
 // 按"当前进的店"刷新会员数据(会员=用户×店:积分/储值/等级每店独立,切店后必须刷新)
 async function refreshMember() {
@@ -628,6 +631,8 @@ module.exports = {
   getMyCoupons,
   getMyStoredValue,
   getMyPointsHistory,
+  getPointsMall,
+  redeemPrize,
   refreshMember,
   adminGet,
   adminPost,

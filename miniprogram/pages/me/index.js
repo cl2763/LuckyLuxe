@@ -604,6 +604,11 @@ Page({
     this.requireLogin()
   },
 
+  // 积分商城:登录后直达(与积分资产同一页,含兑换)
+  openPointsMall() {
+    this.requireLogin(() => wx.navigateTo({ url: '/pages/points/index' }))
+  },
+
   onUnload() {
     if (this.smsTimer) clearInterval(this.smsTimer)
   }

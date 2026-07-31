@@ -4839,7 +4839,8 @@ function serializeUser(user, tenantId = DEFAULT_TENANT_ID) {
     memberTiers: membership.memberTiers,
     depositWaived: membership.depositWaived,
     depositRule: membership.depositRule,
-    points: Math.floor(totalSpentCents / 100),
+    // 积分=消费推导+台账(兑换扣减/冲正);与积分商城余额同口径
+    points: Math.floor(totalSpentCents / 100) + pointsLedgerSum(user.id, tenantId),
     couponCount: 0,
     balanceCents: storedValueBalanceCents(user.id, tenantId),
     totalSpentCents,
@@ -5297,6 +5298,30 @@ function getAvailability(query) {
   return { date, durationMin, slots: result }
 }
 
+// ===== 积分:赚分=完成单消费推导($1=1分,与既有展示口径一致);余额=赚分+台账(兑换负/冲正正) =====
+function earnedPoints(userId, tenantId = currentTenantId()) {
+  const row = db.prepare("SELECT COALESCE(SUM(service_price_cents), 0) AS s FROM bookings WHERE user_id = ? AND tenant_id = ? AND status = 'COMPLETED'").get(userId, tenantId)
+  return Math.floor((row.s || 0) / 100)
+}
+function pointsLedgerSum(userId, tenantId = currentTenantId()) {
+  return db.prepare('SELECT COALESCE(SUM(amount), 0) AS s FROM points_transactions WHERE user_id = ? AND tenant_id = ?').get(userId, tenantId).s
+}
+function pointsBalance(userId, tenantId = currentTenantId()) {
+  return earnedPoints(userId, tenantId) + pointsLedgerSum(userId, tenantId)
+}
+function serializePrize(r, couponsById) {
+  const c = couponsById ? couponsById[r.coupon_id] : db.prepare('SELECT * FROM coupons WHERE id = ?').get(r.coupon_id)
+  return {
+    id: r.id, couponId: r.coupon_id,
+    name: c ? c.name : '奖品',
+    discountType: c ? c.discount_type : 'amount', amountCents: c ? c.amount_cents : 0,
+    percentOff: c ? c.percent_off : 0, minSpendCents: c ? c.min_spend_cents : 0,
+    costPoints: r.cost_points, stock: r.stock, perUserLimit: r.per_user_limit,
+    validDays: r.valid_days || (c ? c.valid_days : 30),
+    isActive: Boolean(r.is_active), redeemedQty: r.redeemed_qty
+  }
+}
+
 function serializeAttendance(r) {
   if (!r) return null
   const inT = r.clock_in_at ? localParts(r.clock_in_at).time : ''
@@ -5363,18 +5388,24 @@ function computeSalaryEstimate(techId, month, tid) {
   const unit = plan.overtimeUnitMin === 60 ? 60 : 30
   const overtimeSegs = Math.floor(overtimeMin / unit)
   const overtimePayCents = overtimeSegs * (plan.overtimeRateCents || 0)
-  // 充值/耗卡归属技师的流水链路未建,金额先记 0(界面注明);建好归属字段后自动接入
-  const cardUseCents = 0
+  // 充值/耗卡提成:按储值流水的归属技师(operating 时选「经手技师」)在当月汇总
+  const cardUseCents = Math.abs(db.prepare(`SELECT COALESCE(SUM(amount_cents), 0) AS s FROM stored_value_transactions
+    WHERE tenant_id = ? AND technician_id = ? AND type = 'consume' AND created_at >= ? AND created_at < ?`).get(tid, techId, startIso, endIso).s)
   const cardCents = Math.round(cardUseCents * (plan.cardPct || 0) / 100)
-  const rechargeCents = 0
+  const rechargeCents = db.prepare(`SELECT COALESCE(SUM(amount_cents), 0) AS s FROM stored_value_transactions
+    WHERE tenant_id = ? AND technician_id = ? AND type = 'recharge' AND created_at >= ? AND created_at < ?`).get(tid, techId, startIso, endIso).s
   const rechargePayCents = Math.round(rechargeCents * (plan.rechargePct || 0) / 100)
+  // 手动调整(补贴+/扣款-,锁定前可改)
+  const adj = db.prepare('SELECT adjust_cents, note FROM salary_adjusts WHERE tenant_id = ? AND month = ? AND technician_id = ?').get(tid, month, techId)
+  const adjustCents = adj ? adj.adjust_cents : 0
   return {
     technicianId: techId, month, planSource: source, template: plan.template,
     perfCents, orderCount, overtimeMin, overtimeSegs, overtimeUnitMin: unit,
     pct, tierIndex, nextTier,
     baseSalaryCents: plan.baseSalaryCents || 0, handworkCents, commissionCents,
     cardUseCents, cardCents, rechargeCents, rechargePayCents, overtimePayCents,
-    totalCents: (plan.baseSalaryCents || 0) + handworkCents + commissionCents + cardCents + rechargePayCents + overtimePayCents
+    adjustCents, adjustNote: adj ? (adj.note || '') : '',
+    totalCents: (plan.baseSalaryCents || 0) + handworkCents + commissionCents + cardCents + rechargePayCents + overtimePayCents + adjustCents
   }
 }
 
@@ -5863,13 +5894,13 @@ function storedValueBalanceCents(userId, tenantId = currentTenantId()) {
     .get(tenantId, userId).balance
 }
 
-function insertStoredValueTransaction({ userId, type, amountCents, payChannel = 'unknown', note = '', createdBy = 'system', createdAt = null, tenantId = currentTenantId() }) {
+function insertStoredValueTransaction({ userId, type, amountCents, payChannel = 'unknown', note = '', createdBy = 'system', createdAt = null, tenantId = currentTenantId(), technicianId = null }) {
   const id = randomId('sv')
   const signed = type === 'recharge' ? Math.abs(amountCents) : (type === 'consume' ? -Math.abs(amountCents) : Math.round(amountCents))
   db.prepare(`
-    INSERT INTO stored_value_transactions (id, tenant_id, user_id, type, amount_cents, pay_channel, note, created_by, created_at)
-    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
-  `).run(id, tenantId, userId, type, signed, payChannel, note, createdBy, createdAt || iso(new Date()))
+    INSERT INTO stored_value_transactions (id, tenant_id, user_id, type, amount_cents, pay_channel, note, created_by, created_at, technician_id)
+    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+  `).run(id, tenantId, userId, type, signed, payChannel, note, createdBy, createdAt || iso(new Date()), technicianId || null)
   return db.prepare('SELECT * FROM stored_value_transactions WHERE id = ?').get(id)
 }
 
@@ -6178,7 +6209,10 @@ async function route(req, res) {
   if (req.method === 'GET' && path === '/services') {
     const args = [resolveTenant(req, query)]
     let sql = 'SELECT * FROM services WHERE is_active = 1 AND tenant_id = ?'
-    if (query.type) {
+    if (query.type === 'care') {
+      // 顾客端「护理·其他」tab:聚合 CARE + OTHER 两类
+      sql += " AND type IN ('CARE', 'OTHER')"
+    } else if (query.type) {
       sql += ' AND type = ?'
       args.push(query.type.toUpperCase())
     }
@@ -6294,6 +6328,67 @@ async function route(req, res) {
       balanceCents: storedValueBalanceCents(customer.id, tid),
       txns: txns.map((t) => ({ type: t.type, amountCents: t.amount_cents, payChannel: t.pay_channel, note: t.note || '', createdAt: t.created_at }))
     })
+  }
+  // ===== 积分商城(顾客) =====
+  if (req.method === 'GET' && path === '/my/points-mall') {
+    const customer = requireCustomer(req)
+    const tid = resolveTenant(req, query)
+    const balance = pointsBalance(customer.id, tid)
+    const prizes = db.prepare('SELECT * FROM points_prizes WHERE tenant_id = ? AND is_active = 1 ORDER BY cost_points ASC').all(tid)
+      .map((r) => {
+        const p = serializePrize(r)
+        const myCount = db.prepare("SELECT COUNT(*) AS c FROM points_transactions WHERE tenant_id = ? AND user_id = ? AND type = 'redeem' AND note LIKE ?").get(tid, customer.id, `%#${r.id}`).c
+        return Object.assign(p, {
+          soldOut: r.stock <= 0,
+          limitReached: r.per_user_limit > 0 && myCount >= r.per_user_limit,
+          canRedeem: balance >= r.cost_points && r.stock > 0 && !(r.per_user_limit > 0 && myCount >= r.per_user_limit)
+        })
+      })
+    // 明细:赚分(完成单推导)+ 台账(兑换/冲正)合并按时间倒序
+    const earns = db.prepare(`SELECT b.id, b.appointment_start AS at, b.service_price_cents AS cents, s.name_zh AS sname
+      FROM bookings b LEFT JOIN services s ON s.id = b.service_id
+      WHERE b.user_id = ? AND b.tenant_id = ? AND b.status = 'COMPLETED' ORDER BY b.appointment_start DESC LIMIT 20`).all(customer.id, tid)
+      .map((r) => ({ title: `到店消费 · ${r.sname || '服务'}`, at: r.at, delta: Math.floor((r.cents || 0) / 100) }))
+    const ledger = db.prepare('SELECT type, amount, note, created_at FROM points_transactions WHERE user_id = ? AND tenant_id = ? ORDER BY created_at DESC LIMIT 20').all(customer.id, tid)
+      .map((r) => ({ title: r.note || (r.type === 'redeem' ? '积分兑换' : '积分退回'), at: r.created_at, delta: r.amount }))
+    const history = earns.concat(ledger).sort((a, b) => String(b.at).localeCompare(String(a.at))).slice(0, 25)
+      .map((h) => ({ title: h.title.split(' #')[0], date: localParts(h.at).date, delta: h.delta }))
+    return json(res, 200, { balance, prizes, history })
+  }
+  if (req.method === 'POST' && path === '/my/points-mall/redeem') {
+    const customer = requireCustomer(req)
+    const tid = resolveTenant(req, query)
+    const body = await readBody(req)
+    const prize = db.prepare('SELECT * FROM points_prizes WHERE id = ? AND tenant_id = ?').get(String(body.prizeId || ''), tid)
+    if (!prize || !prize.is_active) throw apiError(404, 'NOT_FOUND', '该奖品已下架。')
+    const coupon = db.prepare('SELECT * FROM coupons WHERE id = ?').get(prize.coupon_id)
+    if (!coupon || !coupon.is_active) throw apiError(400, 'BAD_REQUEST', '该奖品对应的券已停用,请联系门店。')
+    db.exec('BEGIN IMMEDIATE')
+    try {
+      // 事务内复核:库存 / 每人限兑 / 余额
+      const fresh = db.prepare('SELECT * FROM points_prizes WHERE id = ?').get(prize.id)
+      if (fresh.stock <= 0) throw apiError(409, 'SOLD_OUT', '手慢了,已兑完。')
+      if (fresh.per_user_limit > 0) {
+        const my = db.prepare("SELECT COUNT(*) AS c FROM points_transactions WHERE tenant_id = ? AND user_id = ? AND type = 'redeem' AND note LIKE ?").get(tid, customer.id, `%#${prize.id}`).c
+        if (my >= fresh.per_user_limit) throw apiError(409, 'LIMIT', `该奖品每人限兑 ${fresh.per_user_limit} 次。`)
+      }
+      const balance = pointsBalance(customer.id, tid)
+      if (balance < fresh.cost_points) throw apiError(400, 'INSUFFICIENT', `积分不足:需 ${fresh.cost_points},当前 ${balance}。`)
+      // 发券(有效期:奖品覆盖 > 券模板)
+      const code = `LL-${Math.random().toString(36).slice(2, 6).toUpperCase()}-${Math.random().toString(36).slice(2, 6).toUpperCase()}`
+      const days = fresh.valid_days || coupon.valid_days || 30
+      const expiresAt = iso(new Date(Date.now() + days * 86400000))
+      const grantId = randomId('grant')
+      db.prepare(`INSERT INTO coupon_grants (id, tenant_id, coupon_id, user_id, code, status, expires_at, created_at)
+        VALUES (?, ?, ?, ?, ?, 'active', ?, ?)`).run(grantId, tid, coupon.id, customer.id, code, expiresAt, iso(new Date()))
+      db.prepare('UPDATE coupons SET issued_qty = issued_qty + 1 WHERE id = ?').run(coupon.id)
+      // 扣积分(台账只追加;note 末尾 #prizeId 供限兑统计与撤销回补)
+      db.prepare('INSERT INTO points_transactions (id, tenant_id, user_id, type, amount, ref_id, note, created_by, created_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)')
+        .run(randomId('pts'), tid, customer.id, 'redeem', -fresh.cost_points, grantId, `兑换 · ${coupon.name} #${prize.id}`, customer.id, iso(new Date()))
+      db.prepare('UPDATE points_prizes SET stock = stock - 1, redeemed_qty = redeemed_qty + 1, updated_at = ? WHERE id = ?').run(iso(new Date()), prize.id)
+      db.exec('COMMIT')
+      return json(res, 200, { ok: true, code, expiresAt, balance: pointsBalance(customer.id, tid), couponName: coupon.name })
+    } catch (error) { db.exec('ROLLBACK'); throw error }
   }
   if (req.method === 'GET' && path === '/my/points-history') {
     const customer = requireCustomer(req)
@@ -6565,7 +6660,7 @@ async function route(req, res) {
   if (req.method === 'POST' && path === '/admin/services') {
     if (adminSession.role !== 'owner') throw apiError(403, 'FORBIDDEN', 'Owner permission is required.')
     const payload = servicePayload(await readBody(req))
-    if (!['NAIL', 'LASH'].includes(payload.type)) throw apiError(400, 'BAD_REQUEST', 'Service type must be NAIL or LASH.')
+    if (!['NAIL', 'LASH', 'CARE', 'OTHER'].includes(payload.type)) throw apiError(400, 'BAD_REQUEST', '服务类型须为 美甲/美睫/护理/其他。')
     if (!payload.nameZh || !payload.nameEn) throw apiError(400, 'BAD_REQUEST', 'Service name is required.')
     const id = serviceIdFrom(payload)
     db.prepare(`INSERT INTO services
@@ -6671,7 +6766,10 @@ async function route(req, res) {
     const user = db.prepare('SELECT id, display_name FROM users WHERE id = ?').get(String(body.userId || ''))
     if (!user) throw apiError(404, 'NOT_FOUND', 'Member not found.')
     const code = `LL-${Math.random().toString(36).slice(2, 6).toUpperCase()}-${Math.random().toString(36).slice(2, 6).toUpperCase()}`
-    const expiresAt = iso(new Date(Date.now() + (coupon.valid_days || 30) * 86400000))
+    // 发放时可覆盖有效期(天);不传则按券模板的 valid_days
+    const days = Number.isFinite(Number(body.validDays)) && Number(body.validDays) > 0
+      ? Math.min(365, Math.round(Number(body.validDays))) : (coupon.valid_days || 30)
+    const expiresAt = iso(new Date(Date.now() + days * 86400000))
     db.prepare(`INSERT INTO coupon_grants (id, tenant_id, coupon_id, user_id, code, status, expires_at, created_at)
       VALUES (?, ?, ?, ?, ?, 'active', ?, ?)`).run(randomId('grant'), currentTenantId(), couponId, user.id, code, expiresAt, iso(new Date()))
     db.prepare('UPDATE coupons SET issued_qty = issued_qty + 1 WHERE id = ?').run(couponId)
@@ -6691,6 +6789,9 @@ async function route(req, res) {
     let granted = 0, skipped = 0
     let issued = coupon.issued_qty
     const nowIso2 = iso(new Date())
+    // 群发时可覆盖有效期(天);不传按券模板
+    const days = Number.isFinite(Number(body.validDays)) && Number(body.validDays) > 0
+      ? Math.min(365, Math.round(Number(body.validDays))) : (coupon.valid_days || 30)
     for (const uid of userIds) {
       if (coupon.total_qty > 0 && issued >= coupon.total_qty) { skipped += 1; continue }
       const user = db.prepare('SELECT id FROM users WHERE id = ?').get(String(uid))
@@ -6698,13 +6799,76 @@ async function route(req, res) {
       const has = db.prepare("SELECT 1 FROM coupon_grants WHERE tenant_id = ? AND coupon_id = ? AND user_id = ? AND status = 'active'").get(currentTenantId(), couponId, user.id)
       if (has) { skipped += 1; continue }
       const code = `LL-${Math.random().toString(36).slice(2, 6).toUpperCase()}-${Math.random().toString(36).slice(2, 6).toUpperCase()}`
-      const expiresAt = iso(new Date(Date.now() + (coupon.valid_days || 30) * 86400000))
+      const expiresAt = iso(new Date(Date.now() + days * 86400000))
       db.prepare(`INSERT INTO coupon_grants (id, tenant_id, coupon_id, user_id, code, status, expires_at, created_at)
         VALUES (?, ?, ?, ?, ?, 'active', ?, ?)`).run(randomId('grant'), currentTenantId(), couponId, user.id, code, expiresAt, nowIso2)
       issued += 1; granted += 1
     }
     db.prepare('UPDATE coupons SET issued_qty = ? WHERE id = ?').run(issued, couponId)
     return json(res, 201, { granted, skipped, couponName: coupon.name })
+  }
+  // ===== 积分商城 · 老板奖品管理 =====
+  if (req.method === 'GET' && path === '/admin/points-prizes') {
+    if (adminSession.role !== 'owner') throw apiError(403, 'FORBIDDEN', 'Owner permission is required.')
+    const rows = db.prepare('SELECT * FROM points_prizes WHERE tenant_id = ? ORDER BY created_at DESC').all(currentTenantId())
+    return json(res, 200, { prizes: rows.map((r) => serializePrize(r)) })
+  }
+  if (req.method === 'POST' && path === '/admin/points-prizes') {
+    if (adminSession.role !== 'owner') throw apiError(403, 'FORBIDDEN', 'Owner permission is required.')
+    const body = await readBody(req)
+    const coupon = db.prepare('SELECT * FROM coupons WHERE id = ? AND tenant_id = ?').get(String(body.couponId || ''), currentTenantId())
+    if (!coupon) throw apiError(404, 'NOT_FOUND', '券不存在,先到 会员套餐/券 里建一张。')
+    const cost = Math.max(1, Math.round(Number(body.costPoints) || 0))
+    const id = randomId('prize')
+    const now = iso(new Date())
+    db.prepare(`INSERT INTO points_prizes (id, tenant_id, coupon_id, cost_points, stock, per_user_limit, valid_days, is_active, created_at, updated_at)
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`).run(
+      id, currentTenantId(), coupon.id, cost,
+      Math.max(0, Math.round(Number(body.stock) || 0)),
+      Math.max(0, Math.round(Number(body.perUserLimit) || 0)),
+      Number(body.validDays) > 0 ? Math.min(365, Math.round(Number(body.validDays))) : null,
+      body.isActive === false ? 0 : 1, now, now)
+    return json(res, 201, { prize: serializePrize(db.prepare('SELECT * FROM points_prizes WHERE id = ?').get(id)) })
+  }
+  if (req.method === 'PATCH' && path.match(/^\/admin\/points-prizes\/[^/]+$/)) {
+    if (adminSession.role !== 'owner') throw apiError(403, 'FORBIDDEN', 'Owner permission is required.')
+    const id = path.split('/')[3]
+    const r = db.prepare('SELECT * FROM points_prizes WHERE id = ? AND tenant_id = ?').get(id, currentTenantId())
+    if (!r) throw apiError(404, 'NOT_FOUND', '奖品不存在。')
+    const body = await readBody(req)
+    const cost = body.costPoints != null ? Math.max(1, Math.round(Number(body.costPoints) || r.cost_points)) : r.cost_points
+    const stock = body.stock != null ? Math.max(0, Math.round(Number(body.stock) || 0)) : r.stock
+    const limit = body.perUserLimit != null ? Math.max(0, Math.round(Number(body.perUserLimit) || 0)) : r.per_user_limit
+    const vd = body.validDays !== undefined ? (Number(body.validDays) > 0 ? Math.min(365, Math.round(Number(body.validDays))) : null) : r.valid_days
+    const active = body.isActive != null ? (body.isActive ? 1 : 0) : r.is_active
+    db.prepare('UPDATE points_prizes SET cost_points = ?, stock = ?, per_user_limit = ?, valid_days = ?, is_active = ?, updated_at = ? WHERE id = ?')
+      .run(cost, stock, limit, vd, active, iso(new Date()), id)
+    return json(res, 200, { prize: serializePrize(db.prepare('SELECT * FROM points_prizes WHERE id = ?').get(id)) })
+  }
+  // 撤销兑换(误兑):券未核销 → 券作废 + 积分冲正退回 + 库存回补
+  if (req.method === 'POST' && path === '/admin/points-mall/revoke') {
+    if (adminSession.role !== 'owner') throw apiError(403, 'FORBIDDEN', 'Owner permission is required.')
+    const body = await readBody(req)
+    const code = String(body.code || '').trim().toUpperCase()
+    if (!code) throw apiError(400, 'BAD_REQUEST', '请输入券码。')
+    const grant = db.prepare('SELECT * FROM coupon_grants WHERE code = ? AND tenant_id = ?').get(code, currentTenantId())
+    if (!grant) throw apiError(404, 'NOT_FOUND', '券码不存在。')
+    if (grant.status !== 'active') throw apiError(409, 'NOT_REVOCABLE', `该券状态为 ${grant.status},已核销/失效的不能撤销。`)
+    const redeemTxn = db.prepare("SELECT * FROM points_transactions WHERE ref_id = ? AND type = 'redeem' AND tenant_id = ?").get(grant.id, currentTenantId())
+    if (!redeemTxn) throw apiError(400, 'BAD_REQUEST', '该券不是积分兑换所得(老板手动发的券直接停用即可)。')
+    db.exec('BEGIN IMMEDIATE')
+    try {
+      db.prepare("UPDATE coupon_grants SET status = 'revoked' WHERE id = ?").run(grant.id)
+      db.prepare('INSERT INTO points_transactions (id, tenant_id, user_id, type, amount, ref_id, note, created_by, created_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)')
+        .run(randomId('pts'), currentTenantId(), grant.user_id, 'reversal', Math.abs(redeemTxn.amount), grant.id, '撤销兑换 · 积分退回', adminSession.email || 'owner', iso(new Date()))
+      // 库存回补:兑换流水 note 末尾带 #prizeId;解析失败只跳过回补(积分退回不受影响)
+      const pid = String(redeemTxn.note || '').includes('#') ? String(redeemTxn.note).split('#').pop().trim() : ''
+      if (pid && db.prepare('SELECT 1 FROM points_prizes WHERE id = ?').get(pid)) {
+        db.prepare('UPDATE points_prizes SET stock = stock + 1, redeemed_qty = MAX(0, redeemed_qty - 1), updated_at = ? WHERE id = ?').run(iso(new Date()), pid)
+      }
+      db.exec('COMMIT')
+    } catch (error) { db.exec('ROLLBACK'); throw error }
+    return json(res, 200, { ok: true, refundedPoints: Math.abs(redeemTxn.amount) })
   }
   // 核销:店员输码/扫码,一次性,防重复
   if (req.method === 'POST' && path === '/admin/coupons/redeem') {
@@ -6857,7 +7021,7 @@ async function route(req, res) {
       }
       if (req.method === 'POST') {
         const payload = servicePayload(await readBody(req))
-        if (!['NAIL', 'LASH'].includes(payload.type)) throw apiError(400, 'BAD_REQUEST', 'type must be NAIL or LASH.')
+        if (!['NAIL', 'LASH', 'CARE', 'OTHER'].includes(payload.type)) throw apiError(400, 'BAD_REQUEST', '服务类型须为 美甲/美睫/护理/其他。')
         if (!payload.nameZh) throw apiError(400, 'BAD_REQUEST', '服务中文名必填。')
         if (!payload.nameEn) payload.nameEn = payload.nameZh
         const id = serviceIdFrom(payload)
@@ -7125,7 +7289,9 @@ async function route(req, res) {
       const n = String(svc.name_zh || '') + String(svc.category || '')
       if (/足|美足|pedicure/i.test(n)) return 'foot'
       if (/护理|护|spa/i.test(n)) return 'care'
-      if (String(svc.type).toUpperCase() === 'LASH') return 'lash'
+      const t = String(svc.type).toUpperCase()
+      if (t === 'LASH') return 'lash'
+      if (t === 'CARE' || t === 'OTHER') return 'care' // 新类型:台面用护理色相
       return 'hand'
     }
     const bookings = rows.map((row) => {
@@ -7367,13 +7533,19 @@ async function route(req, res) {
     if (!isRecharge && storedValueBalanceCents(userId) < amountCents) {
       throw apiError(400, 'INSUFFICIENT_BALANCE', '余额不足：耗卡金额不能超过该会员当前储值余额。')
     }
+    // 经手技师(可选):这笔充值/耗卡算谁促成,薪资的充值/耗卡提成据此计算
+    const svTech = String(body.technicianId || '').trim()
+    if (svTech && !db.prepare('SELECT 1 FROM technicians WHERE id = ? AND tenant_id = ?').get(svTech, currentTenantId())) {
+      throw apiError(404, 'NOT_FOUND', '经手技师不存在。')
+    }
     insertStoredValueTransaction({
       userId,
       type: isRecharge ? 'recharge' : 'consume',
       amountCents,
       payChannel: isRecharge ? String(body.payChannel || 'unknown') : 'stored_value',
       note: String(body.note || ''),
-      createdBy: adminSession.email || 'owner'
+      createdBy: adminSession.email || 'owner',
+      technicianId: svTech || null
     })
     if (!isRecharge) {
       // 耗卡即确认收入：支付方式=储值卡
@@ -8383,6 +8555,26 @@ async function route(req, res) {
       totalCents: rows.reduce((s, r) => s + (r.total || 0), 0)
     })
   }
+  // 工资手动调整(owner+财务钥匙):补贴+/扣款-,须备注;已锁定的月份不可改(先解锁)
+  if (req.method === 'PUT' && path === '/admin/salary/adjust') {
+    if (adminSession.role !== 'owner') throw apiError(403, 'FORBIDDEN', '仅老板可调整。')
+    requireFinanceKey(req)
+    const body = await readBody(req)
+    const tid = currentTenantId()
+    const month = /^\d{4}-\d{2}$/.test(body.month || '') ? body.month : ''
+    const techId = String(body.technicianId || '').trim()
+    if (!month || !techId) throw apiError(400, 'BAD_REQUEST', '缺少月份或技师。')
+    if (db.prepare('SELECT 1 FROM salary_payrolls WHERE tenant_id = ? AND month = ? LIMIT 1').get(tid, month)) {
+      throw apiError(409, 'ALREADY_LOCKED', `${month} 已锁定,先解锁再调整。`)
+    }
+    const cents = Math.round(Number(body.adjustCents) || 0)
+    const note = String(body.note || '').trim().slice(0, 100)
+    if (cents !== 0 && !note) throw apiError(400, 'BAD_REQUEST', '调整必须写备注(如:代班补贴/迟到扣款)。')
+    db.prepare(`INSERT INTO salary_adjusts (tenant_id, month, technician_id, adjust_cents, note, updated_at) VALUES (?, ?, ?, ?, ?, ?)
+      ON CONFLICT(tenant_id, month, technician_id) DO UPDATE SET adjust_cents = excluded.adjust_cents, note = excluded.note, updated_at = excluded.updated_at`)
+      .run(tid, month, techId, cents, note, iso(new Date()))
+    return json(res, 200, { ok: true, adjustCents: cents, note })
+  }
   // 员工:我的本月预估(自己的数据,无需财务钥匙);附工资表状态(已锁定/已发放)
   if (req.method === 'GET' && path === '/admin/salary/my-estimate') {
     if (!adminSession.technicianId) throw apiError(400, 'BAD_REQUEST', '当前账号未绑定技师。')
@@ -8880,6 +9072,24 @@ for (const col of ['paid_at TEXT', 'paid_by TEXT', 'txn_id TEXT']) {
     if (!String(error.message || '').includes('duplicate column')) throw error
   }
 }
+try {
+  // 储值流水归属技师(2026-08-01):这笔充值/这次耗卡算谁促成——薪资的充值/耗卡提成据此计算
+  db.exec('ALTER TABLE stored_value_transactions ADD COLUMN technician_id TEXT')
+} catch (error) {
+  if (!String(error.message || '').includes('duplicate column')) throw error
+}
+// 工资手动调整(锁定前填,锁定时定格进快照;补贴+/扣款-,须备注)
+db.exec(`
+  CREATE TABLE IF NOT EXISTS salary_adjusts (
+    tenant_id TEXT NOT NULL,
+    month TEXT NOT NULL,
+    technician_id TEXT NOT NULL,
+    adjust_cents INTEGER NOT NULL DEFAULT 0,
+    note TEXT,
+    updated_at TEXT,
+    PRIMARY KEY (tenant_id, month, technician_id)
+  );
+`)
 // ===== 租户级轻量设置(key-value,JSON 值):先用于客户分层规则,后续通用 =====
 db.exec(`
   CREATE TABLE IF NOT EXISTS tenant_settings (
@@ -8888,6 +9098,38 @@ db.exec(`
     value TEXT NOT NULL DEFAULT '{}',
     updated_at TEXT,
     PRIMARY KEY (tenant_id, key)
+  );
+`)
+// ===== 积分商城:积分台账(只追加,记兑换/冲正;赚分由完成单推导,余额=推导+台账)+ 奖品(=一张券+积分价) =====
+db.exec(`
+  CREATE TABLE IF NOT EXISTS points_transactions (
+    id TEXT PRIMARY KEY,
+    tenant_id TEXT NOT NULL DEFAULT 'lucky-luxe',
+    user_id TEXT NOT NULL,
+    type TEXT NOT NULL,
+    amount INTEGER NOT NULL,
+    ref_id TEXT,
+    note TEXT,
+    created_by TEXT,
+    created_at TEXT NOT NULL
+  );
+  CREATE INDEX IF NOT EXISTS idx_points_user ON points_transactions(tenant_id, user_id);
+  CREATE TRIGGER IF NOT EXISTS points_ledger_no_update BEFORE UPDATE ON points_transactions
+  BEGIN SELECT RAISE(ABORT, 'points ledger is append-only'); END;
+  CREATE TRIGGER IF NOT EXISTS points_ledger_no_delete BEFORE DELETE ON points_transactions
+  BEGIN SELECT RAISE(ABORT, 'points ledger is append-only'); END;
+  CREATE TABLE IF NOT EXISTS points_prizes (
+    id TEXT PRIMARY KEY,
+    tenant_id TEXT NOT NULL DEFAULT 'lucky-luxe',
+    coupon_id TEXT NOT NULL,
+    cost_points INTEGER NOT NULL,
+    stock INTEGER NOT NULL DEFAULT 0,
+    per_user_limit INTEGER NOT NULL DEFAULT 0,
+    valid_days INTEGER,
+    is_active INTEGER NOT NULL DEFAULT 1,
+    redeemed_qty INTEGER NOT NULL DEFAULT 0,
+    created_at TEXT NOT NULL,
+    updated_at TEXT NOT NULL
   );
 `)
 // ===== 真实账号体系:老板主账号 + 老板自管员工账号(替换演示白名单,白名单保留兼容) =====

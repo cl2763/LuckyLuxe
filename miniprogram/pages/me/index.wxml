@@ -154,7 +154,7 @@
         <view class="menu-badge"><image class="menu-ic" src="/assets/icons/c-crown.svg"></image></view>
         <view class="menu-title">{{lang === 'en' ? 'Benefits' : '会员权益'}}</view>
       </view>
-      <view class="menu-card card" bindtap="openProtectedFeature">
+      <view class="menu-card card" bindtap="openPointsMall">
         <view class="menu-badge"><image class="menu-ic" src="/assets/icons/c-gift.svg"></image></view>
         <view class="menu-title">{{t.pointsMall}}</view>
       </view>

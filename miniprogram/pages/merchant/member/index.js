@@ -117,19 +117,34 @@ Page({
   askAmount(cust) {
     wx.showModal({
       title: `给 ${cust.displayName || '会员'} 加储值`, editable: true, placeholderText: '输入到账金额(加元),如 1000',
-      success: async (r) => {
+      success: (r) => {
         if (!r.confirm) return
         const v = Number(String(r.content).replace(/[^\d.]/g, ''))
         if (!v || v <= 0) { wx.showToast({ title: '金额无效', icon: 'none' }); return }
-        try {
-          const resp = await api.adminPost('/admin/stored-value/recharge', {
-            userId: cust.id, amountCents: Math.round(v * 100), payChannel: 'manual', note: '线下手动补录'
-          })
-          const bal = resp && resp.balanceCents != null ? '$' + (resp.balanceCents / 100).toFixed(0) : ''
-          wx.showToast({ title: '已到账 ' + bal, icon: 'none' })
-          this.loadAll()
-        } catch (err) { wx.showToast({ title: (err && err.message) || '充值失败', icon: 'none' }) }
+        this.askRechargeTech(cust, v)
       }
     })
+  },
+
+  // 经手技师(可选):这笔充值算谁促成 → 计入该技师的「充值提成」
+  async askRechargeTech(cust, amount) {
+    let techs = []
+    try { const t = await api.adminGet('/admin/technicians'); techs = (t.technicians || []).filter((x) => x.is_active !== 0 && x.isActive !== false) } catch (e) { /* 忽略 */ }
+    const items = ['店里直收(不计提成)'].concat(techs.map((x) => `${x.name} 促成`))
+    wx.showActionSheet({
+      itemList: items.slice(0, 6),
+      success: (r) => this.doRecharge(cust, amount, r.tapIndex === 0 ? '' : techs[r.tapIndex - 1].id),
+      fail: () => this.doRecharge(cust, amount, '') // 点取消也照常入账,不挡钱
+    })
+  },
+  async doRecharge(cust, amount, technicianId) {
+    try {
+      const body = { userId: cust.id, amountCents: Math.round(amount * 100), payChannel: 'manual', note: '线下手动补录' }
+      if (technicianId) body.technicianId = technicianId
+      const resp = await api.adminPost('/admin/stored-value/recharge', body)
+      const bal = resp && resp.balanceCents != null ? '$' + (resp.balanceCents / 100).toFixed(0) : ''
+      wx.showToast({ title: '已到账 ' + bal, icon: 'none' })
+      this.loadAll()
+    } catch (err) { wx.showToast({ title: (err && err.message) || '充值失败', icon: 'none' }) }
   }
 })

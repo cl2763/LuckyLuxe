@@ -13,7 +13,8 @@ const ROUTES = {
   store: '/pages/merchant/store/index',
   myperf: '/pages/merchant/my-performance/index',
   attendance: '/pages/merchant/attendance/index',
-  salaryMonth: '/pages/merchant/salary-month/index'
+  salaryMonth: '/pages/merchant/salary-month/index',
+  pointsMall: '/pages/merchant/points-mall/index'
 }
 
 const E = {
@@ -31,7 +32,8 @@ const E = {
   myperf: { k: 'myperf', icon: 'm-analytics', t: '我的业绩', d: '本月营收 · 底薪 · 提成估算' },
   attendance: { k: 'attendance', icon: 'm-staff', t: '考勤打卡', d: '在岗看板 · 修正补卡 · 打卡 WiFi' },
   attendanceStaff: { k: 'attendance', icon: 'm-staff', t: '打卡', d: '上下班打卡 · 本周工时' },
-  salaryMonth: { k: 'salaryMonth', icon: 'm-finance', t: '工资试算', d: '全员月度工资明细 · 需财务密码' }
+  salaryMonth: { k: 'salaryMonth', icon: 'm-finance', t: '工资试算', d: '全员月度工资明细 · 需财务密码' },
+  pointsMall: { k: 'pointsMall', icon: 'm-member', t: '积分商城', d: '上架奖品 · 顾客用积分兑券' }
 }
 
 Page({
@@ -49,7 +51,7 @@ Page({
     } catch (e) { owner = api.isOwner() }
     const groups = owner ? [
       { title: '日常经营', rows: [E.schedule, E.attendance, E.finance, E.salaryMonth, E.customers] },
-      { title: '营销与会员', rows: [E.marketing, E.member, E.analytics] },
+      { title: '营销与会员', rows: [E.marketing, E.member, E.pointsMall, E.analytics] },
       { title: '店铺设置', rows: [E.services, E.store, E.staff, E.me] }
     ] : [
       { title: '日常', rows: [E.attendanceStaff, E.scheduleView, E.myperf] },

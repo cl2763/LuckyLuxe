@@ -2,10 +2,11 @@
   <view class="type-switch">
     <button class="type-tab {{activeType === 'nail' ? 'active' : ''}}" bindtap="switchType" data-type="nail">{{t.nail}}</button>
     <button class="type-tab {{activeType === 'lash' ? 'active' : ''}}" bindtap="switchType" data-type="lash">{{t.lash}}</button>
+    <button class="type-tab {{activeType === 'care' ? 'active' : ''}}" bindtap="switchType" data-type="care">{{lang === 'en' ? 'Care' : '护理·其他'}}</button>
   </view>
 
   <view class="service-layout">
-    <scroll-view class="category-list" scroll-y enhanced show-scrollbar="{{false}}">
+    <scroll-view class="category-list" scroll-y enhanced show-scrollbar="{{false}}" wx:if="{{categories.length}}">
       <block wx:for="{{categories}}" wx:key="*this">
         <view class="category-item {{activeCategory === item.key ? 'active' : ''}}" bindtap="switchCategory" data-category="{{item.key}}">
           <text>{{item.label}}</text>

@@ -1,5 +1,5 @@
 // 构建号:每次交付递增。侧栏可见,排查"改了没生效"时先对版本。
-const ADMIN_BUILD = '20260722-youji'
+const ADMIN_BUILD = '20260801-salary-web'
 console.log(`[admin] build ${ADMIN_BUILD}`)
 
 // "今天"必须按门店时区算(服务器同样钉在此时区),否则老板人在别的时区时全站日期错位一天。
@@ -2283,6 +2283,10 @@ function renderStoredValue() {
       <select id="svMember">${memberOptions || `<option value="">${owner.lang === 'zh' ? '暂无会员' : 'No members'}</option>`}</select>
       <input id="svAmount" type="number" min="0" step="0.01" placeholder="${owner.lang === 'zh' ? '金额' : 'Amount'}">
       <select id="svChannel">${FINANCE_PAY_CHANNELS.filter(([id]) => id !== 'stored_value').map(([id, label]) => `<option value="${id}">${label}</option>`).join('')}</select>
+      <select id="svTech" title="${owner.lang === 'zh' ? '经手技师:这笔算谁促成,计入其充值/耗卡提成' : 'Handled by'}">
+        <option value="">${owner.lang === 'zh' ? '经手:店里直收' : 'House'}</option>
+        ${(owner.technicians || []).map((t2) => `<option value="${escapeHtml(t2.id)}">${escapeHtml(t2.name)}</option>`).join('')}
+      </select>
       <button class="primary slim" data-sv-recharge type="button">${owner.lang === 'zh' ? '充值' : 'Recharge'}</button>
       <button class="ghost slim" data-sv-consume type="button">${owner.lang === 'zh' ? '耗卡' : 'Consume'}</button>
     </div>
@@ -2421,35 +2425,77 @@ function renderFinanceTargets() {
 }
 
 function renderFinancePayroll() {
+  // 2026-08-01 换新版薪资系统(与小程序同一套 API/口径):方案(底薪+手工费+阶梯+卡提成+加班费)→ 试算 → 调整 → 锁定 → 发放入账
   if (!els.financePayrollBody || !els.financePayrollItem) return
   const hasStaffPlan = Boolean(owner.tenantPlan?.features?.staff_schedule?.enabled)
   els.financePayrollItem.classList.toggle('hidden', !hasStaffPlan)
   if (!hasStaffPlan) return
-  const comp = owner.financeLedger.compensation || []
-  const payroll = owner.financeLedger.payroll
-  const pending = (payroll?.drafts || []).filter((item) => !item.settled)
-  els.financePayrollSummary.textContent = pending.length
-    ? (owner.lang === 'zh' ? `${pending.length} 人待结算 · ${cadText(pending.reduce((sum, item) => sum + item.totalCents, 0))}` : `${pending.length} pending`)
-    : (owner.lang === 'zh' ? '本月已结清' : 'Settled')
-  els.financePayrollBody.innerHTML = `
-    <strong class="kb-entry-list-title">${owner.lang === 'zh' ? '薪酬配置(底薪 + 业绩提成比例)' : 'Compensation config'}</strong>
-    ${comp.map((item) => `
-      <div class="finance-comp-row" data-comp-tech="${escapeHtml(item.technicianId)}">
-        <span class="finance-comp-name">${escapeHtml(item.technicianName)}</span>
-        <label><span>${owner.lang === 'zh' ? '底薪' : 'Base'}</span><input type="number" min="0" data-comp-base value="${item.baseSalaryCents / 100 || ''}"></label>
-        <label><span>${owner.lang === 'zh' ? '提成 %' : 'Rate %'}</span><input type="number" min="0" max="90" data-comp-rate value="${Math.round(item.commissionRate * 100) || ''}"></label>
-        <label class="check-row slim-check"><input type="checkbox" data-comp-active ${item.active ? 'checked' : ''}><span>${owner.lang === 'zh' ? '在职' : 'Active'}</span></label>
-        <button class="ghost slim" data-fin-comp-save="${escapeHtml(item.technicianId)}" type="button">${owner.lang === 'zh' ? '保存' : 'Save'}</button>
-      </div>`).join('')}
-    <strong class="kb-entry-list-title">${owner.lang === 'zh' ? `${payroll?.month || ''} 月结草稿(月底确认后才正式入账)` : 'Monthly settlement drafts'}</strong>
-    ${(payroll?.drafts || []).length ? (payroll.drafts || []).map((draft) => `
-      <div class="finance-rule-row ${draft.settled ? 'disabled' : ''}">
-        <span><strong>${escapeHtml(draft.technicianName)}</strong> · ${owner.lang === 'zh' ? '业绩' : 'Revenue'} ${cadText(draft.monthRevenueCents)} · ${owner.lang === 'zh' ? '底薪' : 'base'} ${cadText(draft.baseSalaryCents)} + ${owner.lang === 'zh' ? '提成' : 'comm.'} ${cadText(draft.commissionCents)} = <strong>${cadText(draft.totalCents)}</strong></span>
-        <span class="finance-txn-flag">${draft.settled ? (owner.lang === 'zh' ? '已入账' : 'settled') : (owner.lang === 'zh' ? '待确认' : 'pending')}</span>
-      </div>`).join('') : `<p class="subtle">${owner.lang === 'zh' ? '先在上方配置员工薪酬,这里会自动生成月结草稿。' : 'Configure compensation above to generate drafts.'}</p>`}
-    ${pending.length ? `<button class="primary slim" data-fin-payroll-confirm type="button">${owner.lang === 'zh' ? `确认结算本月工资(${pending.length} 人)` : 'Confirm payroll'}</button>` : ''}
-    <p class="subtle">${owner.lang === 'zh' ? '未确认的工资会以"预估净利"口径体现在上方进度区,确认后正式计入账本(不可修改,只能冲销)。' : 'Pending payroll shows as estimated net; confirming posts append-only ledger entries.'}</p>
-  `
+  const zh = owner.lang === 'zh'
+  const month = /^\d{4}-\d{2}$/.test(owner.financeLedger.month || '') ? owner.financeLedger.month : new Date().toISOString().slice(0, 7)
+  els.financePayrollBody.innerHTML = `<p class="subtle">${zh ? '加载工资试算…' : 'Loading payroll…'}</p>`
+  request(`/admin/salary/estimate?month=${month}`)
+    .then((data) => {
+      const rows = data.rows || []
+      const locked = Boolean(data.locked)
+      const paid = Boolean(data.paid)
+      const hasPlanRows = rows.filter((r) => !r.noPlan)
+      els.financePayrollSummary.textContent = `${cadText(data.totalCents || 0)} · ${paid ? (zh ? '已发放入账' : 'Paid') : locked ? (zh ? '已锁定' : 'Locked') : (zh ? '实时试算' : 'Estimate')}`
+      const rowHtml = (r) => {
+        if (r.noPlan) return `<div class="finance-rule-row disabled"><span><strong>${escapeHtml(r.name)}</strong> · ${zh ? '未配薪资方案(小程序 管理→员工管理→薪资方案 里配置)' : 'No plan'}</span></div>`
+        const bits = []
+        if (r.baseSalaryCents) bits.push(`${zh ? '底薪' : 'base'} ${cadText(r.baseSalaryCents)}`)
+        if (r.handworkCents) bits.push(`${zh ? '手工' : 'hand'} ${cadText(r.handworkCents)}`)
+        bits.push(`${zh ? '业绩' : 'perf'} ${cadText(r.perfCents)}×${r.pct || 0}% = ${cadText(r.commissionCents)}`)
+        if (r.rechargePayCents) bits.push(`${zh ? '充值提成' : 'recharge'} ${cadText(r.rechargePayCents)}`)
+        if (r.cardCents) bits.push(`${zh ? '耗卡提成' : 'card'} ${cadText(r.cardCents)}`)
+        if (r.overtimePayCents) bits.push(`${zh ? '加班' : 'OT'} ${cadText(r.overtimePayCents)}`)
+        if (r.adjustCents) bits.push(`${zh ? '调整' : 'adj'} ${cadText(r.adjustCents)}(${escapeHtml(r.adjustNote || '')})`)
+        return `<div class="finance-rule-row">
+          <span><strong>${escapeHtml(r.name)}</strong> · ${bits.join(' + ')} = <strong>${cadText(r.totalCents)}</strong></span>
+          ${!locked ? `<button class="ghost slim" data-sal-adjust="${escapeHtml(r.technicianId)}" data-sal-name="${escapeHtml(r.name)}" type="button">± ${zh ? '调整' : 'Adjust'}</button>` : ''}
+        </div>`
+      }
+      els.financePayrollBody.innerHTML = `
+        ${paid ? `<p class="subtle">💰 ${zh ? `已发放入账 · ${String(data.paidAt || '').slice(0, 16).replace('T', ' ')} · 账本可查(支出·工资);更正需红字冲销` : 'Paid into ledger'}</p>`
+          : locked ? `<p class="subtle">✅ ${zh ? `已锁定存档 · ${String(data.lockedAt || '').slice(0, 16).replace('T', ' ')}` : 'Locked'} <button class="ghost slim" data-sal-unlock type="button">${zh ? '解锁重算' : 'Unlock'}</button></p>` : ''}
+        ${rows.length ? rows.map(rowHtml).join('') : `<p class="subtle">${zh ? '本月暂无技师数据。' : 'No data.'}</p>`}
+        ${!locked && hasPlanRows.length ? `<button class="primary slim" data-sal-lock type="button">${zh ? `确认并锁定 ${month} 工资表` : 'Lock payroll'}</button>` : ''}
+        ${locked && !paid ? `<button class="primary slim" data-sal-payout type="button">${zh ? `记为已发放 · 入账本(${cadText(data.totalCents || 0)})` : 'Pay out'}</button>` : ''}
+        <p class="subtle">${zh ? '口径与小程序一致:底薪+手工费×单数+业绩落档提成+充值/耗卡提成(按储值流水的经手技师)+加班费(打卡考勤)±调整。方案在小程序 员工管理→薪资方案 配;锁定=快照防事后改数;发放=逐人写入账本「支出·工资」。' : 'Same engine as the mini app.'}</p>
+      `
+      els.financePayrollBody.querySelectorAll('[data-sal-adjust]').forEach((btn) => btn.addEventListener('click', async () => {
+        const tid = btn.dataset.salAdjust
+        const v = prompt(zh ? `调整 ${btn.dataset.salName} 的工资:金额$(可负,如 50 或 -20)` : 'Adjust amount $')
+        if (v === null) return
+        const n = Number(v)
+        if (!Number.isFinite(n) || n === 0) { toast(zh ? '金额无效' : 'Invalid amount'); return }
+        const note = prompt(zh ? '调整备注(必填,如:代班补贴 / 迟到扣款)' : 'Note (required)')
+        if (!note || !note.trim()) { toast(zh ? '备注必填' : 'Note required'); return }
+        try {
+          await request('/admin/salary/adjust', { method: 'PUT', body: JSON.stringify({ month, technicianId: tid, adjustCents: Math.round(n * 100), note: note.trim() }) })
+          toast(zh ? '已调整' : 'Adjusted'); renderFinancePayroll()
+        } catch (error) { toast(error.message) }
+      }))
+      const lockBtn = els.financePayrollBody.querySelector('[data-sal-lock]')
+      if (lockBtn) lockBtn.addEventListener('click', async () => {
+        if (!confirm(zh ? `按当前数字锁定 ${month} 工资表?锁定后业绩/考勤变动不影响本月工资。` : 'Lock payroll?')) return
+        try { await request('/admin/salary/lock', { method: 'POST', body: JSON.stringify({ month }) }); toast(zh ? '已锁定存档' : 'Locked'); renderFinancePayroll() } catch (error) { toast(error.message) }
+      })
+      const unlockBtn = els.financePayrollBody.querySelector('[data-sal-unlock]')
+      if (unlockBtn) unlockBtn.addEventListener('click', async () => {
+        if (!confirm(zh ? `删除 ${month} 锁定存档,回到实时试算?` : 'Unlock?')) return
+        try { await request('/admin/salary/unlock', { method: 'POST', body: JSON.stringify({ month }) }); toast(zh ? '已解锁' : 'Unlocked'); renderFinancePayroll() } catch (error) { toast(error.message) }
+      })
+      const payoutBtn = els.financePayrollBody.querySelector('[data-sal-payout]')
+      if (payoutBtn) payoutBtn.addEventListener('click', async () => {
+        if (!confirm(zh ? `确认发放 ${month} 工资?将按锁定工资表逐人写入账本(支出·工资),入账后不可解锁,发错需红字冲销。` : 'Pay out into ledger?')) return
+        try {
+          const r = await request('/admin/salary/payout', { method: 'POST', body: JSON.stringify({ month }) })
+          toast(zh ? `已入账 ${r.count} 人` : 'Paid'); renderFinancePayroll(); loadFinancePage()
+        } catch (error) { toast(error.message) }
+      })
+    })
+    .catch((error) => { els.financePayrollBody.innerHTML = `<p class="subtle">${escapeHtml(error.message || '加载失败')}</p>` })
 }
 
 function renderFinancePage() {
@@ -5717,9 +5763,10 @@ els.financePage.addEventListener('click', (event) => {
       toast(owner.lang === 'zh' ? '请选择会员并填写金额' : 'Select a member and amount')
       return
     }
+    const svTech = document.querySelector('#svTech')?.value || ''
     request(`/admin/stored-value/${isRecharge ? 'recharge' : 'consume'}`, {
       method: 'POST',
-      body: JSON.stringify({ userId, amount, payChannel: document.querySelector('#svChannel')?.value || 'unknown' })
+      body: JSON.stringify({ userId, amount, payChannel: document.querySelector('#svChannel')?.value || 'unknown', ...(svTech ? { technicianId: svTech } : {}) })
     }).then(loadFinancePage)
       .then(() => toast(isRecharge
         ? (owner.lang === 'zh' ? '充值成功（记为储值负债）' : 'Recharged')

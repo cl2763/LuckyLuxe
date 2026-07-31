@@ -19,6 +19,7 @@
     "pages/merchant/service-note/index",
     "pages/merchant/attendance/index",
     "pages/merchant/salary-plan/index",
+    "pages/merchant/points-mall/index",
     "pages/merchant/salary-month/index",
     "pages/merchant/customer-profile/index",
     "pages/merchant/manage/index",

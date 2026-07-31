@@ -30,7 +30,10 @@ Page({
         otText: x.overtimeMin ? `${fmtDur(x.overtimeMin)} → ${x.overtimeSegs} 段` : '无',
         otPayText: money(x.overtimePayCents),
         pctText: `${x.pct || 0}%${x.tierIndex >= 0 ? `(第${x.tierIndex + 1}档)` : ''}`,
-        srcText: x.planSource === 'custom' ? '专属方案' : (x.planSource === 'default' ? '默认方案' : '')
+        srcText: x.planSource === 'custom' ? '专属方案' : (x.planSource === 'default' ? '默认方案' : ''),
+        cardText: money(x.cardCents), cardUseText: money(x.cardUseCents),
+        rechText: money(x.rechargePayCents), rechUseText: money(x.rechargeCents),
+        adjText: (x.adjustCents > 0 ? '+' : '') + money(x.adjustCents).replace('$-', '-$')
       }))
       this.setData({
         rows, total: money(r.totalCents), keyMissing: false, loading: false,
@@ -110,6 +113,34 @@ Page({
   },
 
   goUnlock() { wx.navigateTo({ url: '/pages/merchant/finance/index' }) },
+
+  // 手动调整(锁定前):补贴填正数,扣款填负数,必须写备注
+  adjust(e) {
+    if (this.data.locked) { wx.showToast({ title: '已锁定,先解锁再调整', icon: 'none' }); return }
+    const { tid, name } = e.currentTarget.dataset
+    wx.showModal({
+      title: `调整 ${name} 的工资`, editable: true,
+      placeholderText: '金额$,可负,如 50 或 -20',
+      success: (r) => {
+        if (!r.confirm) return
+        const v = Number(String(r.content).replace(/[^\d.-]/g, ''))
+        if (!Number.isFinite(v) || v === 0) { wx.showToast({ title: '金额无效(填 0 以外的数)', icon: 'none' }); return }
+        wx.showModal({
+          title: '调整备注(必填)', editable: true, placeholderText: '如:代班补贴 / 迟到扣款',
+          success: async (m) => {
+            if (!m.confirm) return
+            const note = (m.content || '').trim()
+            if (!note) { wx.showToast({ title: '备注必填', icon: 'none' }); return }
+            try {
+              await api.adminRequest('/admin/salary/adjust', 'PUT', { month: this.data.month, technicianId: tid, adjustCents: Math.round(v * 100), note })
+              wx.showToast({ title: '已调整', icon: 'success' })
+              this.load()
+            } catch (err) { wx.showToast({ title: (err && err.message) || '调整失败', icon: 'none', duration: 2500 }) }
+          }
+        })
+      }
+    })
+  },
   goPlan(e) {
     const { tid, name } = e.currentTarget.dataset
     wx.navigateTo({ url: `/pages/merchant/salary-plan/index?technicianId=${encodeURIComponent(tid)}&name=${encodeURIComponent(name)}` })

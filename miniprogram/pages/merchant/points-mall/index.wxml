@@ -1,0 +1,61 @@
+<view class="page">
+  <view class="pt">积分商城</view>
+  <view class="ps">奖品=一张券:选券 → 定积分价 → 上架;顾客兑换自动扣分发券,到店照常核销</view>
+
+  <view class="addbtn" bindtap="openAdd">＋ 新增奖品</view>
+
+  <view wx:if="{{!prizes.length}}" class="empty">还没有奖品,点上面新增</view>
+  <view class="pcard {{item.isActive ? '' : 'off'}}" wx:for="{{prizes}}" wx:key="id" data-id="{{item.id}}" bindtap="openEdit">
+    <view class="pinfo">
+      <view class="pname">{{item.name}}<text wx:if="{{!item.isActive}}" class="offtag">已下架</text></view>
+      <view class="pmeta">{{item.desc}}</view>
+    </view>
+    <view class="pright">
+      <view class="pcost">{{item.costPoints}} 分</view>
+      <view class="ptog" data-id="{{item.id}}" catchtap="quickToggle">{{item.isActive ? '下架' : '上架'}}</view>
+    </view>
+  </view>
+
+  <view class="revoke" bindtap="revoke">↩ 撤销某次兑换(输券码,未核销可退积分)</view>
+
+  <!-- 新增/编辑弹层 -->
+  <view wx:if="{{sheet}}" class="mask" bindtap="closeSheet"></view>
+  <view wx:if="{{sheet}}" class="sheet">
+    <view class="sh-t">{{editId ? '编辑奖品' : '新增奖品'}}</view>
+
+    <block wx:if="{{!editId}}">
+      <view class="k">奖品内容(自己起名,想加什么加什么)</view>
+      <view class="modeseg">
+        <view class="mopt {{couponMode==='new'?'on':''}}" data-m="new" bindtap="setCouponMode">✏️ 新建一张券</view>
+        <view class="mopt {{couponMode==='pick'?'on':''}}" data-m="pick" bindtap="setCouponMode">用已有券</view>
+      </view>
+
+      <block wx:if="{{couponMode==='new'}}">
+        <view class="frow"><view class="fl">奖品名称</view><input class="txt" value="{{ncName}}" placeholder="如:手部护理券 / 小礼品一份" bindinput="onNcName" /></view>
+        <view class="k">类型</view>
+        <view class="typeseg">
+          <view wx:for="{{ncTypes}}" wx:key="k" class="topt {{ncTypeIdx===index?'on':''}}" data-i="{{index}}" bindtap="onNcTypeTap">{{item.label}}</view>
+        </view>
+        <view class="frow" wx:if="{{ncTypeIdx===0}}"><view class="fl">减免金额($)</view><input class="num" type="digit" value="{{ncAmount}}" placeholder="如 20" bindinput="onNcAmount" /></view>
+        <view class="frow" wx:if="{{ncTypeIdx===1}}"><view class="fl">折扣<text class="fs">80 = 8折</text></view><input class="num" type="digit" value="{{ncPercent}}" placeholder="80" bindinput="onNcPercent" /></view>
+        <view class="frow" wx:if="{{ncTypeIdx!==2}}"><view class="fl">最低消费($)<text class="fs">0 = 不限</text></view><input class="num" type="digit" value="{{ncMinSpend}}" placeholder="0" bindinput="onNcMinSpend" /></view>
+        <view class="freehint" wx:if="{{ncTypeIdx===2}}">免费项目/礼品:顾客凭券名到店核销即可,不参与金额计算</view>
+      </block>
+
+      <block wx:if="{{couponMode==='pick'}}">
+        <picker range="{{coupons}}" range-key="name" value="{{couponIdx}}" bindchange="onCoupon">
+          <view class="pick">{{coupons[couponIdx].name}} <text class="g">选 ›</text></view>
+        </picker>
+      </block>
+    </block>
+    <view wx:else class="pick dis">{{prizeName || '奖品券不可改,数字随意调'}}</view>
+
+    <view class="frow"><view class="fl">所需积分</view><input class="num" type="digit" value="{{cost}}" placeholder="如 800" bindinput="onCost" /></view>
+    <view class="frow"><view class="fl">库存<text class="fs">兑完自动显示已兑完,可回来补</text></view><input class="num" type="digit" value="{{stock}}" placeholder="10" bindinput="onStock" /></view>
+    <view class="frow"><view class="fl">每人限兑<text class="fs">0 = 不限</text></view><input class="num" type="digit" value="{{limit}}" placeholder="0" bindinput="onLimit" /></view>
+    <view class="frow"><view class="fl">兑换后有效期(天)<text class="fs">留空 = 跟券模板默认</text></view><input class="num" type="digit" value="{{validDays}}" placeholder="默认" bindinput="onDays" /></view>
+    <view class="frow"><view class="fl">上架</view><view class="tog {{active ? 'on' : ''}}" bindtap="toggleActive"><view class="dot"></view></view></view>
+
+    <view class="save {{saving ? 'dim' : ''}}" bindtap="save">{{saving ? '保存中…' : '保存'}}</view>
+  </view>
+</view>

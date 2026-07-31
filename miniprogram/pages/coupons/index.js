@@ -31,6 +31,7 @@ function fmtCoupon(c) {
     amt: c.discountType === 'percent' ? `立减${c.percentOff}%` : `$${(c.amountCents || 0) / 100}`,
     unit: c.minSpendCents ? `满$${c.minSpendCents / 100}` : '',
     exp: c.status === 'used' ? `已于 ${String(c.usedAt || '').slice(0, 10)} 使用`
+      : c.status === 'revoked' ? '已失效(兑换已撤销,积分退回)'
       : c.status === 'expired' ? `已于 ${String(c.expiresAt || '').slice(0, 10)} 过期`
         : `有效期至 ${String(c.expiresAt || '').slice(0, 10)}`
   }
@@ -46,7 +47,7 @@ Page({
       const groups = [
         all.filter((c) => c.status === 'active'),
         all.filter((c) => c.status === 'used'),
-        all.filter((c) => c.status === 'expired')
+        all.filter((c) => c.status === 'expired' || c.status === 'revoked')
       ]
       this.setData({ groups, count: groups[0].length, loading: false })
     } catch (e) {

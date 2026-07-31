@@ -30,7 +30,11 @@
         <view class="pline" wx:if="{{item.baseSalaryCents}}"><text class="m">底薪</text><text class="v">{{item.baseText}}</text></view>
         <view class="pline" wx:if="{{item.handworkCents}}"><text class="m">手工费 · 完成 {{item.orderCount}} 单</text><text class="v">{{item.handworkText}}</text></view>
         <view class="pline"><text class="m">业绩 {{item.perfText}} × {{item.pctText}}</text><text class="v">{{item.commText}}</text></view>
+        <view class="pline" wx:if="{{item.rechargeCents}}"><text class="m">充值提成 · 促成充值 {{item.rechUseText}}</text><text class="v">{{item.rechText}}</text></view>
+        <view class="pline" wx:if="{{item.cardUseCents}}"><text class="m">耗卡提成 · 经手耗卡 {{item.cardUseText}}</text><text class="v">{{item.cardText}}</text></view>
         <view class="pline hl" wx:if="{{item.overtimeMin}}"><text class="m">加班 {{item.otText}}</text><text class="v">{{item.otPayText}}</text></view>
+        <view class="pline" wx:if="{{item.adjustCents}}"><text class="m">调整 · {{item.adjustNote}}</text><text class="v">{{item.adjText}}</text></view>
+        <view class="pline" wx:if="{{!locked}}"><text class="m"></text><text class="adjbtn" data-tid="{{item.technicianId}}" data-name="{{item.name}}" catchtap="adjust">± 调整</text></view>
       </block>
       <view class="noplan" wx:else>未配置薪资方案 · <text class="lnk" data-tid="{{item.technicianId}}" data-name="{{item.name}}" catchtap="goPlan">去配置 ›</text></view>
     </view>

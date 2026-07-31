@@ -34,3 +34,4 @@ page{background:#fbf8f5}
 .lockbtn{margin-top:20rpx;background:#2d2826;color:#fff;text-align:center;padding:26rpx;border-radius:14rpx;font-size:28rpx;font-weight:800}
 .lockbtn.dim{opacity:.6}
 .lockhint{font-size:20rpx;color:#9a8c7c;text-align:center;margin-top:10rpx;line-height:1.6}
+.adjbtn{font-size:22rpx;font-weight:700;color:#b5885d;border:1rpx dashed #d9bf9f;border-radius:999rpx;padding:4rpx 18rpx}

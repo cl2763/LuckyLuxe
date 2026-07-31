@@ -1,19 +1,35 @@
 <view class="pg">
   <view class="hero">
-    <view class="hl">可用积分</view>
-    <view class="hv">{{points}}</view>
-    <view class="hn">消费 $1 得 1 分,可抵现 / 兑换</view>
+    <view class="hl">我的积分 · 消费 $1 = 1 分</view>
+    <view class="hv">{{balance}}</view>
+    <view class="hn">积分永不过期 · 可兑换下方奖品</view>
   </view>
-  <view class="btns">
-    <view class="b p" bindtap="soon">去积分商城兑换</view>
-    <view class="b" bindtap="soon">积分规则</view>
-  </view>
-  <view class="t2">积分明细</view>
-  <view wx:if="{{records.length}}" class="list">
-    <view class="li" wx:for="{{records}}" wx:key="id">
-      <view class="li-main"><view class="li-t">{{item.title}}</view><view class="li-d">{{item.date}}</view></view>
-      <text class="li-v {{item.up ? 'up' : 'down'}}">{{item.delta}}</text>
+
+  <block wx:if="{{!loggedIn}}">
+    <view class="empty">登录后可查看积分与兑换奖品</view>
+  </block>
+
+  <block wx:else>
+    <view class="t2">可兑换</view>
+    <view wx:if="{{!prizes.length}}" class="empty">老板还没上架奖品,敬请期待~</view>
+    <view class="prize" wx:for="{{prizes}}" wx:key="id">
+      <view class="pinfo">
+        <view class="pname">{{item.name}}</view>
+        <view class="pmeta">{{item.desc}}{{item.minText}} · 有效 {{item.validDays}} 天 · {{item.stockText}}</view>
+      </view>
+      <view class="pbtn">
+        <view class="pcost">{{item.costPoints}} 分</view>
+        <view class="pgo {{item.canRedeem ? '' : 'dis'}}" data-id="{{item.id}}" bindtap="redeem">{{item.btnText}}</view>
+      </view>
     </view>
-  </view>
-  <view wx:else class="empty">暂无积分记录,完成消费后自动累计。</view>
+
+    <view class="t2">积分明细</view>
+    <view wx:if="{{history.length}}" class="list">
+      <view class="li" wx:for="{{history}}" wx:key="index">
+        <view class="li-main"><view class="li-t">{{item.title}}</view><view class="li-d">{{item.date}}</view></view>
+        <text class="li-v {{item.up ? 'up' : 'down'}}">{{item.deltaText}}</text>
+      </view>
+    </view>
+    <view wx:else class="empty">暂无积分记录,完成消费后自动累计。</view>
+  </block>
 </view>

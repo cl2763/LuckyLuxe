@@ -9,7 +9,7 @@ Page({
     try {
       const r = await api.adminGet('/admin/services')
       const list = (r.services || [])
-      const label = { nail: '美甲', lash: '美睫' }
+      const label = { nail: '美甲', lash: '美睫', care: '护理', other: '其他' }
       const mk = (t) => list.filter((s) => s.type === t).map((s) => ({
         id: s.id,
         name: s.nameZh || s.name || '未命名',
@@ -20,7 +20,9 @@ Page({
       }))
       const groups = [
         { key: 'nail', title: '美甲', items: mk('nail') },
-        { key: 'lash', title: '美睫', items: mk('lash') }
+        { key: 'lash', title: '美睫', items: mk('lash') },
+        { key: 'care', title: '护理', items: mk('care') },
+        { key: 'other', title: '其他', items: mk('other') }
       ].filter((g) => g.items.length)
       this.setData({ groups, loading: false })
     } catch (e) {

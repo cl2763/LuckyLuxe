@@ -19,3 +19,15 @@ page{background:#fbf8f5}
 .li-v{font-size:26rpx;font-weight:600}
 .li-v.up{color:#47735f}
 .li-v.down{color:#a34c48}
+
+/* 积分商城奖品卡 */
+.prize{display:flex;align-items:center;gap:16rpx;background:#fff;border:1rpx solid #e7ddd4;border-radius:16rpx;padding:20rpx 20rpx;margin-bottom:12rpx}
+.pico{width:80rpx;height:80rpx;border-radius:16rpx;background:#fbf4ec;display:flex;align-items:center;justify-content:center;font-size:38rpx;flex:none}
+.pinfo{flex:1;min-width:0}
+.pname{font-size:27rpx;font-weight:700;color:#2d2826}
+.pmeta{font-size:20rpx;color:#8c8279;margin-top:4rpx}
+.pbtn{flex:none;text-align:center}
+.pcost{font-size:24rpx;font-weight:800;color:#b5885d}
+.pgo{margin-top:6rpx;font-size:23rpx;font-weight:700;color:#fff;background:#2d2826;border-radius:999rpx;padding:10rpx 26rpx}
+.pgo.dis{background:#e5ddd3;color:#a99a86}
+.li-v.down{color:#a34c48}

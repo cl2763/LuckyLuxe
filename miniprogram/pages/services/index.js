@@ -42,12 +42,14 @@ Page({
 
   async refresh() {
     const lang = i18n.getLang()
+    const isCare = this.data.activeType === 'care'
     const categoryKeys = this.data.activeType === 'nail' ? mock.nailCategories : mock.lashCategories
-    const categories = i18n.categories(categoryKeys, lang)
+    const categories = isCare ? [] : i18n.categories(categoryKeys, lang)
     const source = await api.getServices(this.data.activeType, lang)
-    const serviceList = i18n.localizeServices(source
-      .filter((item) => this.data.activeCategory === '热门推荐' ? item.isRecommended : item.category === this.data.activeCategory)
-      .sort((a, b) => a.sort - b.sort), lang)
+    // 护理·其他:数量少,不分类,全部平铺
+    const filtered = isCare ? source
+      : source.filter((item) => this.data.activeCategory === '热门推荐' ? item.isRecommended : item.category === this.data.activeCategory)
+    const serviceList = i18n.localizeServices(filtered.slice().sort((a, b) => a.sort - b.sort), lang)
     this.setData({ lang, t: i18n.pageCopy('services', lang), categories, serviceList })
   },
 

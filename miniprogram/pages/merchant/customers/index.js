@@ -157,16 +157,23 @@ Page({
     const id = e.currentTarget.dataset.id
     const c = this.data.coupons.find((x) => x.id === id)
     const n = this.data.list.length
+    const dftDays = (c && c.validDays) || 30
+    // 发放时可单独设本批有效期(不改券模板);留空=按券默认
     wx.showModal({
-      title: '群发券',
-      content: `把「${(c && c.name) || '该券'}」发给当前 ${n} 位客人?每人一张,已持有未用的自动跳过。`,
+      title: `群发「${(c && c.name) || '券'}」给 ${n} 人`,
+      editable: true, placeholderText: `本批有效期(天),默认 ${dftDays}`,
+      content: '',
+      confirmText: '确认发放',
       success: async (m) => {
         if (!m.confirm) return
+        const days = Number(m.content)
         this.setData({ granting: true })
         try {
-          const r = await api.adminPost(`/admin/coupons/${encodeURIComponent(id)}/grant-batch`, { userIds: this.data.list.map((x) => x.id) })
+          const body = { userIds: this.data.list.map((x) => x.id) }
+          if (Number.isFinite(days) && days > 0) body.validDays = Math.round(days)
+          const r = await api.adminPost(`/admin/coupons/${encodeURIComponent(id)}/grant-batch`, body)
           this.setData({ couponSheet: false })
-          wx.showModal({ title: '发放完成', content: `已发 ${r.granted} 张${r.skipped ? `,跳过 ${r.skipped} 人(已持有/超量)` : ''}。顾客打开小程序「券包」即可见。`, showCancel: false, confirmText: '好' })
+          wx.showModal({ title: '发放完成', content: `已发 ${r.granted} 张,有效期 ${body.validDays || dftDays} 天${r.skipped ? `;跳过 ${r.skipped} 人(已持有/超量)` : ''}。顾客打开小程序「券包」即可见。`, showCancel: false, confirmText: '好' })
         } catch (err) { wx.showToast({ title: (err && err.message) || '发放失败', icon: 'none' }) }
         this.setData({ granting: false })
       }

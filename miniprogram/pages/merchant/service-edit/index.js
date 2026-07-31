@@ -5,7 +5,7 @@ Page({
     id: '',
     isNew: true,
     typeIdx: 0,
-    types: [{ k: 'NAIL', label: '美甲' }, { k: 'LASH', label: '美睫' }],
+    types: [{ k: 'NAIL', label: '美甲' }, { k: 'LASH', label: '美睫' }, { k: 'CARE', label: '护理' }, { k: 'OTHER', label: '其他' }],
     nameZh: '', nameEn: '', category: '',
     price: '', duration: '', active: true,
     saving: false
@@ -26,8 +26,9 @@ Page({
       const r = await api.adminGet('/admin/services')
       const s = (r.services || []).find((x) => x.id === id)
       if (!s) { wx.showToast({ title: '未找到', icon: 'none' }); return }
+      const ti = this.data.types.findIndex((t) => t.k === String(s.type || 'NAIL').toUpperCase())
       this.setData({
-        typeIdx: s.type === 'lash' ? 1 : 0,
+        typeIdx: ti >= 0 ? ti : 0,
         nameZh: s.nameZh || '', nameEn: s.nameEn || '', category: s.category || '',
         price: String((s.priceCents || 0) / 100),
         duration: String(s.durationMin || ''),
