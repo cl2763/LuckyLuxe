@@ -4,7 +4,50 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>有迹 · 商家后台</title>
-    <link rel="stylesheet" href="/web/styles.css?v=20260801b-rfm-web">
+    <link rel="stylesheet" href="/web/styles.css?v=20260802g-web-b2">
+    <style>
+      /* 2026-08-02 财务指标显隐+动效(店主 v4 定稿):AI智能总结卡 / 目标进度条(带平衡线刻度) / 设目标引导与弹窗。
+         放这里不放 styles.css:本批约定只动 admin.js + admin.html 两个文件。 */
+      .fin-ai{position:relative;background:linear-gradient(135deg,#fdfaf6,#f7efe4);border:1px solid #e3d2ba;border-radius:14px;padding:12px 16px;margin:10px 0;overflow:hidden}
+      .fin-ai:before{content:"";position:absolute;inset:0;background:linear-gradient(110deg,transparent 40%,rgba(255,255,255,.6) 50%,transparent 60%);animation:finAiSheen 3.2s 1;pointer-events:none}
+      @keyframes finAiSheen{0%{transform:translateX(-100%)}100%{transform:translateX(100%)}}
+      .fin-ai-h{display:flex;align-items:center;gap:7px;font-size:12.5px;font-weight:800;color:#b5885d;margin-bottom:7px}
+      .fin-ai-spark{display:inline-block;animation:finAiPulse 2.2s infinite}
+      @keyframes finAiPulse{0%,100%{opacity:.55}50%{opacity:1}}
+      .fin-ai-li{position:relative;padding-left:14px;font-size:12.5px;color:#4a3c2c;margin-bottom:5px;opacity:0;transform:translateY(6px);transition:all .6s ease}
+      .fin-ai-li.show{opacity:1;transform:none}
+      .fin-ai-li:before{content:"";position:absolute;left:1px;top:8px;width:5px;height:5px;border-radius:50%;background:#b5885d}
+      .fin-ai-li b{color:#241f1d}
+      .fin-ai-li.warn b{color:#b0483c}
+      .fin-ai-li.good b{color:#1f7a4d}
+      .fin-goalbox{background:#fff;border:1px solid #eadfd7;border-radius:14px;padding:14px 16px;margin:0 0 10px}
+      .fin-goal-head{display:flex;justify-content:space-between;align-items:baseline;font-size:13px;font-weight:800;color:#241f1d;gap:8px;flex-wrap:wrap}
+      .fin-goal-head em{font-style:normal;font-size:11.5px;color:#9a8c7c;font-weight:500}
+      .fin-goal-edit{border:none;background:none;color:#b5885d;font-size:11.5px;font-weight:700;cursor:pointer;padding:0;text-decoration:underline}
+      .fin-gbar{height:12px;border-radius:999px;background:#f0e8de;margin:9px 0 6px;overflow:hidden;position:relative}
+      .fin-gbar i{display:block;height:100%;width:0;border-radius:999px;background:linear-gradient(90deg,#c8a47e,#e8c9a0);transition:width 1.4s cubic-bezier(.22,1,.36,1);position:relative}
+      .fin-gbar i:after{content:"";position:absolute;inset:0;background:linear-gradient(110deg,transparent 30%,rgba(255,255,255,.55) 50%,transparent 70%);animation:finBarShine 2.4s infinite}
+      @keyframes finBarShine{0%{transform:translateX(-100%)}60%,100%{transform:translateX(100%)}}
+      .fin-breakline{position:absolute;top:-3px;bottom:-3px;width:2px;background:#2d2826;opacity:.55;cursor:help}
+      .fin-goal-sub{display:flex;justify-content:space-between;font-size:11.5px;color:#9a8c7c;gap:8px;flex-wrap:wrap}
+      .fin-goal-sub b{color:#b5885d}
+      .fin-goal-guide{background:#fbf4ec;border:1px dashed #d9bf9f;border-radius:12px;padding:11px 14px;font-size:12.5px;color:#8a6f4d;display:flex;justify-content:space-between;align-items:center;gap:10px;margin:10px 0}
+      .fin-goal-guide b{color:#b5885d}
+      .fin-goal-go{font-size:12px;font-weight:800;color:#fff;background:#b5885d;border:none;border-radius:999px;padding:6px 14px;flex:none;cursor:pointer}
+      .fin-est-note{display:block;font-size:10.5px;color:#b5885d;font-weight:600;line-height:1.4;margin-top:3px}
+      .fin-goal-form{padding:4px 2px}
+      .fin-goal-lab{font-size:12px;color:#9a8c7c;font-weight:700;margin:12px 0 6px}
+      .fin-goal-form input{width:100%;border:1px solid #eadfd7;border-radius:12px;padding:11px 14px;font-size:15px;font-weight:700;color:#241f1d}
+      .seg-toggle{display:flex;background:#efe7dd;border-radius:12px;padding:3px}
+      .seg-toggle button{flex:1;text-align:center;font-size:13px;font-weight:800;padding:8px 0;border-radius:10px;color:#8a7d70;border:none;background:none;cursor:pointer}
+      .seg-toggle button.on{background:#fff;color:#b5885d;box-shadow:0 1px 4px rgba(0,0,0,.08)}
+      .fin-goal-raterow{display:flex;gap:8px;align-items:center}
+      .fin-goal-raterow input{flex:1}
+      .fin-suggest-btn{font-size:12px;font-weight:800;color:#fff;background:#2d2826;border:none;border-radius:999px;padding:9px 14px;flex:none;cursor:pointer;box-shadow:0 2px 6px rgba(45,40,38,.25)}
+      .fin-goal-tip{margin-top:6px}
+      .fin-goal-save{width:100%;margin-top:14px}
+      .fin-goal-skip{text-align:center;margin-top:8px}
+    </style>
   </head>
   <body>
     <main class="shell admin-shell">
@@ -62,7 +105,7 @@
           <button class="sidebar-link" data-admin-page="bookings" id="sidebarBookings" type="button">订单管理</button>
           <button class="sidebar-link" data-admin-page="finance" id="sidebarFinance" type="button">财务</button>
           <button class="sidebar-link" data-admin-page="customers" id="sidebarCustomers" type="button">客户档案</button>
-          <button class="sidebar-link" data-admin-page="schedule" id="sidebarSchedule" type="button">排班管理</button>
+          <button class="sidebar-link" data-admin-page="schedule" id="sidebarSchedule" type="button">员工管理</button>
           <button class="sidebar-link" data-admin-page="services" id="sidebarServices" type="button">服务管理</button>
           <button class="sidebar-link" data-admin-page="membership" id="sidebarMembership" type="button">会员套餐/券</button>
           <button class="sidebar-link" data-admin-page="wechatMock" id="sidebarWechatMock" type="button"><span id="sidebarWechatMockLabel">客服工作台</span><span class="sidebar-badge hidden" id="wechatNeedsHumanBadge"></span></button>
@@ -135,7 +178,11 @@
 
           <section class="admin-page hidden" id="schedulePage">
             <button class="ghost back-btn" data-admin-page="dashboard" type="button">← Dashboard</button>
-            <section class="admin-card">
+            <div class="admin-tabs" id="staffTabs">
+              <button class="admin-tab active" data-staff-tab="schedule" id="staffTabSchedule" type="button">📅 计时排班</button>
+              <button class="admin-tab" data-staff-tab="performance" id="staffTabPerformance" type="button">📈 技师业绩</button>
+            </div>
+            <section class="admin-card" data-staff-panel="schedule">
               <div class="section-row compact-row schedule-week-header">
                 <div>
                   <p class="eyebrow" id="scheduleWeekEyebrow">Week</p>
@@ -161,15 +208,25 @@
               </div>
               <p class="subtle" id="scheduleGridHint">点格子切换上班/休息;上班格显示当天时段与已约单数;店休日排班会黄色提醒。</p>
             </section>
-            <section class="admin-card">
+            <section class="admin-card hidden" data-staff-panel="performance">
               <div class="section-row compact-row">
                 <div>
                   <p class="eyebrow" id="techPerformanceEyebrow">This Month</p>
                   <h2 id="techPerformanceTitle">Technician Performance</h2>
                 </div>
-                <button class="ghost slim" id="addTechnicianButton" type="button">＋ 添加技师</button>
+                <div>
+                  <button class="ghost slim" id="salaryPlanButton" type="button">💰 薪资方案</button>
+                  <button class="ghost slim" id="addTechnicianButton" type="button">＋ 添加技师</button>
+                </div>
               </div>
               <div class="technician-performance-grid" id="technicianPerformance"></div>
+            </section>
+            <section class="admin-card hidden" data-staff-panel="performance" id="attendanceCard">
+              <div class="section-row compact-row">
+                <h2 id="attendanceTitle">🕐 打卡考勤（今日）</h2>
+                <span class="subtle" id="attendanceHint">与员工小程序打卡同一套数据；可修正/补卡</span>
+              </div>
+              <div id="attendanceBody"></div>
             </section>
           </section>
 
@@ -205,6 +262,17 @@
               </div>
               <p class="subtle" style="margin:2px 0 10px">发券与到店核销在后续版本接入,这里先定义券。</p>
               <div class="service-admin-list" id="couponAdminList"></div>
+            </section>
+            <section class="admin-card">
+              <div class="section-row compact-row">
+                <h2 id="pointsMallTitle">积分商城</h2>
+                <div>
+                  <button class="ghost slim" id="revokeRedeemButton" type="button">撤销兑换</button>
+                  <button class="primary slim" id="addPrizeButton" type="button">+ 新增奖品</button>
+                </div>
+              </div>
+              <p class="subtle" style="margin:2px 0 10px" id="pointsMallHint">奖品=用积分换券($1消费=1积分)。顾客在小程序「积分商城」兑换,到店报券码核销;误兑可用券码撤销。</p>
+              <div class="service-admin-list" id="pointsPrizeList"></div>
             </section>
           </section>
 
@@ -260,6 +328,7 @@
               <nav class="fin-nav" id="financeNav">
                 <button class="fin-nav-btn active" data-fin-tab="quick" type="button" id="finNavQuick">✎ 记一笔</button>
                 <button class="fin-nav-btn" data-fin-tab="storedValue" type="button" id="finNavStored">💳 储值卡</button>
+                <button class="fin-nav-btn" data-fin-tab="payroll" type="button" id="finNavPayroll">👥 员工工资</button>
                 <button class="fin-nav-btn" data-fin-tab="txns" type="button" id="finNavTxns">☰ 流水</button>
                 <button class="fin-nav-btn" data-fin-tab="settings" type="button" id="finNavSettings">⚙ 财务设置</button>
                 <button class="fin-nav-btn fin-nav-ai" data-fin-insights type="button" id="finNavInsights">✦ AI 解读</button>
@@ -279,6 +348,13 @@
               </div>
               <div id="storedValueBody"></div>
             </section>
+            <section class="admin-card" data-fin-panel="payroll">
+              <div class="section-row compact-row">
+                <h2 id="financePayrollTitle">员工工资（月结） <button class="fin-info" data-fin-guide="payroll" type="button" aria-label="填写指南">ⓘ</button></h2>
+                <span class="subtle" id="financePayrollHint">试算 → 业绩核查 → 锁定 → 发放入账；月份跟随上方财务月份</span>
+              </div>
+              <div id="financePayrollBody"></div>
+            </section>
             <section class="admin-card settings-list-card" data-fin-panel="settings">
               <div class="section-row compact-row">
                 <h2 id="financeSettingsGroupTitle">财务设置</h2>
@@ -297,13 +373,6 @@
                   <span class="settings-item-value" id="financeTargetsSummary"></span>
                 </summary>
                 <div class="settings-item-body" id="financeTargetsBody"></div>
-              </details>
-              <details class="settings-item" id="financePayrollItem">
-                <summary>
-                  <span class="settings-item-title" id="financePayrollTitle">员工工资（月结） <button class="fin-info" data-fin-guide="payroll" type="button" aria-label="填写指南">ⓘ</button></span>
-                  <span class="settings-item-value" id="financePayrollSummary"></span>
-                </summary>
-                <div class="settings-item-body" id="financePayrollBody"></div>
               </details>
               <details class="settings-item">
                 <summary>
@@ -423,6 +492,6 @@
     </main>
 
     <div class="toast" id="toast"></div>
-    <script src="/web/admin.js?v=20260801b-rfm-web"></script>
+    <script src="/web/admin.js?v=20260802g-web-b2"></script>
   </body>
 </html>

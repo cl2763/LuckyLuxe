@@ -1,5 +1,5 @@
 // 构建号:每次交付递增。侧栏可见,排查"改了没生效"时先对版本。
-const ADMIN_BUILD = '20260801b-rfm-web'
+const ADMIN_BUILD = '20260802g-web-b2'
 console.log(`[admin] build ${ADMIN_BUILD}`)
 
 // "今天"必须按门店时区算(服务器同样钉在此时区),否则老板人在别的时区时全站日期错位一天。
@@ -107,6 +107,7 @@ const els = {
   membershipPage: document.querySelector('#membershipPage'),
   packageAdminList: document.querySelector('#packageAdminList'),
   couponAdminList: document.querySelector('#couponAdminList'),
+  pointsPrizeList: document.querySelector('#pointsPrizeList'),
   customersPage: document.querySelector('#customersPage'),
   wechatMockPage: document.querySelector('#wechatMockPage'),
   wechatMockEyebrow: document.querySelector('#wechatMockEyebrow'),
@@ -156,9 +157,10 @@ const els = {
   storedValueBody: document.querySelector('#storedValueBody'),
   financeTargetsBody: document.querySelector('#financeTargetsBody'),
   financeTargetsSummary: document.querySelector('#financeTargetsSummary'),
-  financePayrollItem: document.querySelector('#financePayrollItem'),
+  finNavPayroll: document.querySelector('#finNavPayroll'),
   financePayrollBody: document.querySelector('#financePayrollBody'),
-  financePayrollSummary: document.querySelector('#financePayrollSummary'),
+  attendanceBody: document.querySelector('#attendanceBody'),
+  salaryPlanButton: document.querySelector('#salaryPlanButton'),
   aiGalleryPage: document.querySelector('#aiGalleryPage'),
   aiGalleryEyebrow: document.querySelector('#aiGalleryEyebrow'),
   aiGalleryTitle: document.querySelector('#aiGalleryTitle'),
@@ -234,7 +236,7 @@ const copy = {
     totalRevenue: '总收入',
     financeUnlocked: '财务信息已解锁。',
     navBookings: '订单管理',
-    navSchedule: '排班管理',
+    navSchedule: '员工管理',
     navStaffPerformance: '技师业绩',
     navServices: '服务管理',
     navCustomers: '客户档案',
@@ -508,7 +510,7 @@ const copy = {
     totalRevenue: 'Total Revenue',
     financeUnlocked: 'Finance unlocked.',
     navBookings: 'Order Management',
-    navSchedule: 'Schedule',
+    navSchedule: 'Staff',
     navStaffPerformance: 'My Performance',
     navServices: 'Services',
     navCustomers: 'Customer Profiles',
@@ -904,6 +906,14 @@ function applyLanguage() {
   els.sidebarDashboard.textContent = t('dashboard')
   els.sidebarBookings.textContent = t('navBookings')
   els.sidebarSchedule.textContent = isOwnerRole() ? t('navSchedule') : t('navStaffPerformance')
+  const staffTabScheduleBtn = document.querySelector('#staffTabSchedule')
+  if (staffTabScheduleBtn) staffTabScheduleBtn.textContent = owner.lang === 'zh' ? '📅 计时排班' : '📅 Schedule'
+  const staffTabPerformanceBtn = document.querySelector('#staffTabPerformance')
+  if (staffTabPerformanceBtn) staffTabPerformanceBtn.textContent = owner.lang === 'zh' ? '📈 技师业绩' : '📈 Performance'
+  const attendanceTitleEl = document.querySelector('#attendanceTitle')
+  if (attendanceTitleEl) attendanceTitleEl.textContent = owner.lang === 'zh' ? '🕐 打卡考勤（今日）' : '🕐 Attendance (today)'
+  const finNavPayrollEl = document.querySelector('#finNavPayroll')
+  if (finNavPayrollEl) finNavPayrollEl.textContent = owner.lang === 'zh' ? '👥 员工工资' : '👥 Payroll'
   els.sidebarServices.textContent = t('navServices')
   els.sidebarCustomers.textContent = t('navCustomers')
   els.sidebarWechatMockLabel.textContent = t('navWechatMock')
@@ -2306,57 +2316,105 @@ function renderStoredValue() {
   `
 }
 
-function financeRing(label, currentCents, targetCents, subText = '') {
-  const rawPct = targetCents > 0 ? Math.round((currentCents / targetCents) * 100) : 0
-  const shownPct = Math.max(0, Math.min(rawPct, 100))
-  const radius = 34
-  const circumference = 2 * Math.PI * radius
-  const offset = circumference * (1 - shownPct / 100)
-  return `
-    <div class="finance-ring ${rawPct >= 100 ? 'done' : ''}">
-      <svg viewBox="0 0 84 84" width="88" height="88" aria-hidden="true">
-        <circle cx="42" cy="42" r="${radius}" class="ring-track"></circle>
-        <circle cx="42" cy="42" r="${radius}" class="ring-fill" stroke-dasharray="${circumference.toFixed(1)}" stroke-dashoffset="${offset.toFixed(1)}" transform="rotate(-90 42 42)"></circle>
-        <text x="42" y="47" text-anchor="middle" class="ring-pct">${rawPct}%</text>
-      </svg>
-      <strong>${label}</strong>
-      <span>${cadText(currentCents)}</span>
-      <span class="ring-target">/ ${cadText(targetCents)}</span>
-      ${subText ? `<small>${subText}</small>` : ''}
-    </div>`
-}
-
+// 2026-08-02 指标显隐重构(店主 v4 定稿):四个真数永远显示;目标条/平衡线/年度 设了才出现;
+// 提示统一收进「✦ AI 智能总结」卡(模板即时生成,无 emoji;外观与将来接真 AI 一致);旧四环删除。
 function renderFinanceProgress() {
   if (!els.financeProgress) return
-  const progress = owner.financeLedger.progress
-  if (!progress || !progress.monthRevenueTargetCents) {
-    els.financeProgress.innerHTML = `<div class="finance-progress-card"><p class="subtle">${owner.lang === 'zh' ? '还没有设定目标。在下方"目标设置"里填一个月净利润目标，这里会出现每日/每月/年度进度。' : 'Set a target below to see daily/monthly/yearly progress here.'}</p></div>`
+  const zh = owner.lang === 'zh'
+  const p = owner.financeLedger.progress
+  if (!p) { els.financeProgress.innerHTML = ''; return }
+  const hasTarget = Number(p.targets?.monthTargetCents || 0) > 0
+  const hasFixed = Number(p.fixedCents || 0) > 0
+  const est = owner.salaryEstimateCache
+  const wagesPending = est && est.month === p.month && !est.paid && est.totalCents > 0 ? est.totalCents : 0
+  // —— AI 智能总结:按"有什么数据说什么话"逐条生成 ——
+  const bullets = []
+  if (p.businessDays?.elapsed > 0 && p.paceProjectionCents > 0) {
+    bullets.push({ tone: '', html: zh
+      ? `照这个节奏,月底预计收入 <b>${cadText(p.paceProjectionCents)}</b>(按已过营业天数推算)`
+      : `On current pace, month-end revenue ≈ <b>${cadText(p.paceProjectionCents)}</b>` })
+  }
+  if (hasTarget && hasFixed) {
+    if (p.revenueCents >= p.breakEvenRevenueCents) {
+      bullets.push({ tone: 'good', html: zh
+        ? `已越过收支平衡线 <b>${cadText(p.breakEvenRevenueCents)}</b>(估算),本月进入盈利区间`
+        : `Break-even <b>${cadText(p.breakEvenRevenueCents)}</b> (est.) crossed` })
+    } else {
+      bullets.push({ tone: '', html: zh
+        ? `距收支平衡线 ${cadText(p.breakEvenRevenueCents)}(估算)还差 <b>${cadText(p.breakEvenRevenueCents - p.revenueCents)}</b>`
+        : `<b>${cadText(p.breakEvenRevenueCents - p.revenueCents)}</b> to break-even (est.)` })
+    }
+  }
+  if (hasTarget) {
+    if (p.revenueCents >= p.monthRevenueTargetCents) {
+      bullets.push({ tone: 'good', html: zh ? `本月目标 ${cadText(p.monthRevenueTargetCents)} 已达成` : `Monthly target hit` })
+    } else if (p.businessDays?.elapsed >= 3 && p.paceProjectionCents > 0 && p.paceProjectionCents < p.monthRevenueTargetCents) {
+      const gap = p.monthRevenueTargetCents - p.paceProjectionCents
+      const remainDays = Math.max(1, (p.businessDays.total || 1) - (p.businessDays.elapsed || 0))
+      bullets.push({ tone: 'warn', html: zh
+        ? `按当前节奏月底约 ${cadText(p.paceProjectionCents)},距目标差 <b>${cadText(gap)}</b>,日均再多收 ${cadText(Math.ceil(gap / remainDays))} 可追上`
+        : `Pace ≈ ${cadText(p.paceProjectionCents)}, <b>${cadText(gap)}</b> short of target` })
+    }
+  }
+  if (wagesPending) {
+    bullets.push({ tone: '', html: zh
+      ? `本月工资试算 <b>${cadText(wagesPending)}</b> 待发,扣除后净赚约 <b>${cadText(p.netCents - wagesPending)}</b>`
+      : `Payroll estimate <b>${cadText(wagesPending)}</b> pending; net after ≈ <b>${cadText(p.netCents - wagesPending)}</b>` })
+  }
+  const aiHtml = bullets.length ? `
+    <div class="fin-ai">
+      <div class="fin-ai-h"><span class="fin-ai-spark">✦</span> ${zh ? 'AI 智能总结' : 'AI Summary'}</div>
+      ${bullets.map((b) => `<div class="fin-ai-li ${b.tone}">${b.html}</div>`).join('')}
+    </div>` : ''
+  if (!hasTarget) {
+    // 没设目标:不摆空进度环,只留一行淡引导(店主定稿:不逼人设目标)
+    els.financeProgress.innerHTML = `
+      ${aiHtml}
+      <div class="fin-goal-guide">
+        <span>${zh ? '想看 <b>目标进度 / 收支平衡线</b>?就 3 项,一分钟' : 'Want progress bars? A 3-field, one-minute setup'}</span>
+        <button class="fin-goal-go" data-goal-setup type="button">${zh ? '去设置 ›' : 'Set up ›'}</button>
+      </div>`
+    animateFinanceProgress()
     return
   }
-  const alertHtml = (progress.alerts || []).map((alert) => {
-    const texts = {
-      break_even_crossed: owner.lang === 'zh' ? '本月已越过收支平衡线 🎉' : 'Break-even crossed this month 🎉',
-      month_target_hit: owner.lang === 'zh' ? '月目标已达成！' : 'Monthly target hit!',
-      month_target_80: owner.lang === 'zh' ? '月目标已完成 80%+' : '80%+ of monthly target',
-      pace_behind: owner.lang === 'zh' ? `按当前节奏,月底预计差 ${cadText(alert.shortfallCents || 0)}` : `On current pace, projected shortfall ${cadText(alert.shortfallCents || 0)}`,
-      payroll_pending: owner.lang === 'zh' ? `有 ${alert.count} 位员工的工资待月结确认` : `${alert.count} payroll drafts pending`
-    }
-    return `<span class="finance-alert ${alert.level}">${texts[alert.code] || alert.code}</span>`
-  }).join('')
-  const pendingNote = progress.pendingPayrollCents > 0
-    ? `<span class="subtle">${owner.lang === 'zh' ? `预估净利(计提待结工资后): ${cadText(progress.estimatedNetCents)}` : `Estimated net after pending payroll: ${cadText(progress.estimatedNetCents)}`}</span>`
-    : ''
+  const pct = Math.min(100, Math.round((p.revenueCents / p.monthRevenueTargetCents) * 100))
+  const breakPct = hasFixed && p.breakEvenRevenueCents > 0 && p.breakEvenRevenueCents < p.monthRevenueTargetCents
+    ? Math.round((p.breakEvenRevenueCents / p.monthRevenueTargetCents) * 100) : null
+  const modeText = p.targets.targetMode === 'net_profit'
+    ? (zh ? `净利目标 ${cadText(p.targets.monthTargetCents)} 折算` : 'from net-profit target')
+    : (zh ? '营收目标' : 'revenue target')
+  const yearPct = p.targets?.yearTargetCents ? Math.min(100, Math.round((p.yearRevenueCents / p.yearTargetCents) * 100)) : null
   els.financeProgress.innerHTML = `
-    <div class="finance-progress-card">
-      ${alertHtml ? `<div class="finance-alerts">${alertHtml}</div>` : ''}
-      <div class="finance-ring-grid">
-        ${financeRing(owner.lang === 'zh' ? '今日' : 'Today', progress.todayRevenueCents, progress.dailyTargetCents)}
-        ${financeRing(owner.lang === 'zh' ? '本月' : 'Month', progress.revenueCents, progress.monthRevenueTargetCents, owner.lang === 'zh' ? `按节奏预计 ${cadText(progress.paceProjectionCents)}` : `pace ${cadText(progress.paceProjectionCents)}`)}
-        ${financeRing(owner.lang === 'zh' ? '收支平衡' : 'Break-even', progress.revenueCents, progress.breakEvenRevenueCents)}
-        ${financeRing(owner.lang === 'zh' ? '年度' : 'Year', progress.yearRevenueCents, progress.yearTargetCents)}
+    ${aiHtml}
+    <div class="fin-goalbox">
+      <div class="fin-goal-head">
+        <strong>${zh ? '本月目标' : 'Month target'} ${cadText(p.monthRevenueTargetCents)}</strong>
+        <em>${modeText} · ${zh ? '已完成' : 'done'} ${pct}% · <button class="fin-goal-edit" data-goal-setup type="button">${zh ? '改目标' : 'Edit'}</button></em>
       </div>
-      ${pendingNote}
-    </div>`
+      <div class="fin-gbar"><i data-w="${pct}"></i>${breakPct != null ? `<span class="fin-breakline" style="left:${breakPct}%" title="${zh ? `收支平衡线(估算)= 固定支出 ${cadText(p.fixedCents)} ÷ (1−变动成本率 ${Math.round((p.targets.variableCostRate || 0) * 100)}%);过线=固定成本都赚回来了` : 'Break-even (estimate)'}"></span>` : ''}</div>
+      <div class="fin-goal-sub">
+        <span>${zh ? '日均需收' : 'Daily'} <b>${cadText(p.dailyTargetCents)}</b> · ${zh ? '今日已收' : 'today'} ${cadText(p.todayRevenueCents)}</span>
+        ${breakPct != null ? `<span>▲ ${zh ? '平衡线' : 'Break-even'} ${cadText(p.breakEvenRevenueCents)}(${zh ? '估算' : 'est.'})</span>` : ''}
+      </div>
+    </div>
+    ${yearPct != null ? `
+    <div class="fin-goalbox">
+      <div class="fin-goal-head"><strong>${zh ? '年度目标' : 'Year target'} ${cadText(p.yearTargetCents)}</strong><em>${zh ? '已完成' : 'done'} ${yearPct}%</em></div>
+      <div class="fin-gbar"><i data-w="${yearPct}"></i></div>
+    </div>` : ''}`
+  animateFinanceProgress()
+}
+
+// 动效:进度条从 0 生长、AI 总结逐条浮现——只在渲染时播一次,不循环
+function animateFinanceProgress() {
+  document.querySelectorAll('#financeProgress .fin-gbar i').forEach((el) => {
+    const w = el.dataset.w
+    el.style.width = '0%'
+    setTimeout(() => { el.style.width = `${w}%` }, 100)
+  })
+  document.querySelectorAll('#financeProgress .fin-ai-li').forEach((el, i) => {
+    setTimeout(() => el.classList.add('show'), 350 + i * 220)
+  })
 }
 
 function applyFinanceTab() {
@@ -2401,6 +2459,85 @@ function showFinanceInsights() {
     })
 }
 
+// 2026-08-02 「设个目标」聚焦弹窗(店主 v4 定稿):仅 4 项——类型/金额/变动成本率(带智能建议值)/年目标;
+// 不是整个财务设置。建议率 =(上月总支出 − 固定支出)÷ 上月收入,上月没收入则不出现按钮。
+async function openGoalSetupModal() {
+  const zh = owner.lang === 'zh'
+  const t0 = owner.financeLedger.progress?.targets || { targetMode: 'net_profit', monthTargetCents: 0, variableCostRate: 0.25, yearTargetCents: null }
+  let suggestPct = null
+  try {
+    const cur = /^\d{4}-\d{2}$/.test(owner.financeLedger.month || '') ? owner.financeLedger.month : storeToday().slice(0, 7)
+    const [y, m] = cur.split('-').map(Number)
+    const prev = m === 1 ? `${y - 1}-12` : `${y}-${String(m - 1).padStart(2, '0')}`
+    const prevData = await request(`/admin/finance/transactions?month=${prev}`)
+    const inc = prevData.summary?.incomeCents || 0
+    const exp = prevData.summary?.expenseCents || 0
+    const fixed = owner.financeLedger.progress?.fixedCents || 0
+    if (inc > 0 && exp > fixed) suggestPct = Math.min(95, Math.max(1, Math.round(((exp - fixed) / inc) * 100)))
+  } catch { /* 拿不到上月账就只用默认值,不出建议按钮 */ }
+  const existing = document.querySelector('.cs-lightbox')
+  if (existing) existing.remove()
+  const overlay = document.createElement('div')
+  overlay.className = 'cs-lightbox'
+  const panel = document.createElement('div')
+  panel.className = 'fin-guide-panel'
+  panel.innerHTML = `
+    <div class="fin-guide-head">
+      <strong>${zh ? '设个目标' : 'Set a goal'}</strong>
+      <button class="ghost slim" data-goal-close type="button">${zh ? '关闭' : 'Close'}</button>
+    </div>
+    <div class="fin-goal-form">
+      <p class="fin-goal-lab">① ${zh ? '目标类型' : 'Target type'}</p>
+      <div class="seg-toggle">
+        <button class="${t0.targetMode !== 'revenue' ? 'on' : ''}" data-goal-mode="net_profit" type="button">${zh ? '每月想净赚' : 'Net profit'}</button>
+        <button class="${t0.targetMode === 'revenue' ? 'on' : ''}" data-goal-mode="revenue" type="button">${zh ? '每月想收到' : 'Revenue'}</button>
+      </div>
+      <p class="fin-goal-lab">② ${zh ? '目标金额($ / 月)' : 'Amount ($/month)'}</p>
+      <input id="goalMonth" type="number" min="0" step="100" value="${t0.monthTargetCents ? t0.monthTargetCents / 100 : ''}" placeholder="3500">
+      <p class="fin-goal-lab">③ ${zh ? '变动成本率(每营收100块中耗材和提成的占比)' : 'Variable cost % (materials + commission per $100 revenue)'}</p>
+      <div class="fin-goal-raterow">
+        <input id="goalRate" type="number" min="0" max="95" value="${Math.round((t0.variableCostRate || 0.25) * 100)}">
+        ${suggestPct != null ? `<button class="fin-suggest-btn" data-goal-suggest="${suggestPct}" type="button">${zh ? '使用智能建议值' : 'Use suggested value'}</button>` : ''}
+      </div>
+      <p class="subtle fin-goal-tip">${zh ? `新店没账时默认 25%(行业经验值);之后每个月会使用上个月的真实变动成本率作为智能建议值${suggestPct != null ? `(当前建议:${suggestPct}%)` : ''}。` : `Default 25%; the suggestion is derived from last month's real ledger${suggestPct != null ? ` (currently ${suggestPct}%)` : ''}.`}</p>
+      <p class="fin-goal-lab">④ ${zh ? '年目标($,可选,留空不显示年度进度)' : 'Year target ($, optional)'}</p>
+      <input id="goalYear" type="number" min="0" step="1000" value="${t0.yearTargetCents ? t0.yearTargetCents / 100 : ''}">
+      <button class="primary slim fin-goal-save" data-goal-save type="button">${zh ? '保存,点亮进度条' : 'Save'}</button>
+      <p class="subtle fin-goal-skip">${zh ? '先不设也没关系,四个真数永远都在' : 'Skipping is fine — the four base numbers always show'}</p>
+    </div>
+  `
+  panel.addEventListener('click', async (event) => {
+    event.stopPropagation()
+    if (event.target.closest('[data-goal-close]')) { overlay.remove(); return }
+    const mode = event.target.closest('[data-goal-mode]')
+    if (mode) {
+      panel.querySelectorAll('[data-goal-mode]').forEach((b) => b.classList.toggle('on', b === mode))
+      return
+    }
+    const sug = event.target.closest('[data-goal-suggest]')
+    if (sug) { panel.querySelector('#goalRate').value = sug.dataset.goalSuggest; return }
+    if (event.target.closest('[data-goal-save]')) {
+      const monthTarget = Number(panel.querySelector('#goalMonth')?.value || 0)
+      if (!monthTarget) { toast(zh ? '先填目标金额' : 'Enter an amount first'); return }
+      try {
+        await request('/admin/finance/targets', { method: 'PUT', body: JSON.stringify({
+          targetMode: panel.querySelector('[data-goal-mode].on')?.dataset.goalMode || 'net_profit',
+          monthTarget,
+          variableCostRate: Math.min(0.95, Math.max(0, Number(panel.querySelector('#goalRate')?.value || 25) / 100)),
+          yearTarget: panel.querySelector('#goalYear')?.value ? Number(panel.querySelector('#goalYear').value) : null
+        }) })
+        overlay.remove()
+        owner._finAnimAt = 0 // 保存后重播动效,进度条"点亮"
+        await loadFinancePage()
+        toast(zh ? '目标已保存,进度条点亮' : 'Targets saved')
+      } catch (error) { toast(error.message) }
+    }
+  })
+  overlay.addEventListener('click', () => overlay.remove())
+  overlay.appendChild(panel)
+  document.body.appendChild(overlay)
+}
+
 function renderFinanceTargets() {
   if (!els.financeTargetsBody) return
   const targets = owner.financeLedger.progress?.targets || { targetMode: 'net_profit', monthTargetCents: 0, variableCostRate: 0.25, yearTargetCents: null }
@@ -2416,7 +2553,7 @@ function renderFinanceTargets() {
         </select>
       </label>
       <label><span>${owner.lang === 'zh' ? '月目标 (CAD)' : 'Monthly target'}</span><input id="finTargetMonth" type="number" min="0" step="100" value="${(targets.monthTargetCents / 100) || ''}"></label>
-      <label><span>${owner.lang === 'zh' ? '变动成本率 %' : 'Variable cost %'}</span><input id="finTargetRate" type="number" min="0" max="95" value="${Math.round((targets.variableCostRate || 0.25) * 100)}"></label>
+      <label><span>${owner.lang === 'zh' ? '变动成本率 %(每营收100块中耗材和提成的占比)' : 'Variable cost %'}</span><input id="finTargetRate" type="number" min="0" max="95" value="${Math.round((targets.variableCostRate || 0.25) * 100)}"></label>
       <label><span>${owner.lang === 'zh' ? '年营收目标 (可选)' : 'Yearly target (optional)'}</span><input id="finTargetYear" type="number" min="0" step="1000" value="${targets.yearTargetCents ? targets.yearTargetCents / 100 : ''}"></label>
     </div>
     <button class="primary slim" data-fin-targets-save type="button">${owner.lang === 'zh' ? '保存目标' : 'Save targets'}</button>
@@ -2425,23 +2562,44 @@ function renderFinanceTargets() {
 }
 
 function renderFinancePayroll() {
-  // 2026-08-01 换新版薪资系统(与小程序同一套 API/口径):方案(底薪+手工费+阶梯+卡提成+加班费)→ 试算 → 调整 → 锁定 → 发放入账
-  if (!els.financePayrollBody || !els.financePayrollItem) return
+  // 2026-08-02 独立「👥 员工工资」tab(店主定:工资月月变,不属于"设置"):试算 → 业绩核查(归属备注+待写小记,融合在本页)→ 锁定 → 发放入账;月份跟随上方财务月份
+  if (!els.financePayrollBody) return
   const hasStaffPlan = Boolean(owner.tenantPlan?.features?.staff_schedule?.enabled)
-  els.financePayrollItem.classList.toggle('hidden', !hasStaffPlan)
+  els.finNavPayroll?.classList.toggle('hidden', !hasStaffPlan)
   if (!hasStaffPlan) return
   const zh = owner.lang === 'zh'
   const month = /^\d{4}-\d{2}$/.test(owner.financeLedger.month || '') ? owner.financeLedger.month : new Date().toISOString().slice(0, 7)
   els.financePayrollBody.innerHTML = `<p class="subtle">${zh ? '加载工资试算…' : 'Loading payroll…'}</p>`
-  request(`/admin/salary/estimate?month=${month}`)
-    .then((data) => {
+  Promise.allSettled([
+    request(`/admin/salary/estimate?month=${month}`),
+    request('/admin/service-notes/pending?days=14')
+  ])
+    .then(([estRes, pendRes]) => {
+      if (estRes.status === 'rejected') {
+        els.financePayrollBody.innerHTML = `<p class="subtle">${escapeHtml(estRes.reason?.message || '加载失败')}</p>`
+        return
+      }
+      const data = estRes.value
       const rows = data.rows || []
       const locked = Boolean(data.locked)
       const paid = Boolean(data.paid)
       const hasPlanRows = rows.filter((r) => !r.noPlan)
-      els.financePayrollSummary.textContent = `${cadText(data.totalCents || 0)} · ${paid ? (zh ? '已发放入账' : 'Paid') : locked ? (zh ? '已锁定' : 'Locked') : (zh ? '实时试算' : 'Estimate')}`
+      // 净赚"一实一虚"数据源:工资试算合计缓存给指标卡/AI总结用(替代旧薪酬表的失效计提)
+      owner.salaryEstimateCache = { month, totalCents: data.totalCents || 0, paid, locked }
+      renderFinanceMetrics()
+      renderFinanceProgress()
+      // 业绩核查数据:归属备注(estimate 未锁定时返回)+ 近14天完成单未写小记按人汇总
+      const notes = data.attributionNotes || []
+      const reviewedAt = localStorage.getItem(`lucky-salary-review-${month}`)
+      const pendItems = pendRes.status === 'fulfilled' ? (pendRes.value.items || []) : []
+      const pendByTech = {}
+      pendItems.forEach((item) => {
+        if (!item.technicianId) return
+        if (!pendByTech[item.technicianId]) pendByTech[item.technicianId] = { name: item.technicianName || '技师', count: 0 }
+        pendByTech[item.technicianId].count += 1
+      })
       const rowHtml = (r) => {
-        if (r.noPlan) return `<div class="finance-rule-row disabled"><span><strong>${escapeHtml(r.name)}</strong> · ${zh ? '未配薪资方案(小程序 管理→员工管理→薪资方案 里配置)' : 'No plan'}</span></div>`
+        if (r.noPlan) return `<div class="finance-rule-row disabled"><span><strong>${escapeHtml(r.name)}</strong> · ${zh ? '未配薪资方案(员工管理→技师业绩「薪资方案」里配置,与小程序同步)' : 'No plan'}</span></div>`
         const bits = []
         if (r.baseSalaryCents) bits.push(`${zh ? '底薪' : 'base'} ${cadText(r.baseSalaryCents)}`)
         if (r.handworkCents) bits.push(`${zh ? '手工' : 'hand'} ${cadText(r.handworkCents)}`)
@@ -2455,13 +2613,36 @@ function renderFinancePayroll() {
           ${!locked ? `<button class="ghost slim" data-sal-adjust="${escapeHtml(r.technicianId)}" data-sal-name="${escapeHtml(r.name)}" type="button">± ${zh ? '调整' : 'Adjust'}</button>` : ''}
         </div>`
       }
+      const reviewHtml = locked ? '' : `
+        <div style="margin:12px 0;padding:10px 12px;border:1px solid #eadfce;border-radius:10px">
+          <p class="subtle" style="margin:0 0 6px"><strong>${zh ? '② 业绩核查' : '② Performance review'}</strong>${reviewedAt ? ` · ✅ ${zh ? '已核查' : 'reviewed'} ${String(reviewedAt).slice(0, 16).replace('T', ' ')}` : ''}</p>
+          <p class="subtle" style="margin:0${notes.length ? ';color:#b0483c;font-weight:700' : ''}">${notes.length
+            ? `⚠ ${zh ? `本月有 ${notes.length} 条归属备注(实际谁做),核对后需要改数的用上方「± 调整」:` : `${notes.length} attribution note(s) to verify:`}`
+            : `✓ ${zh ? '本月没有归属备注(没人报"这单实际不是我做的")。' : 'No attribution notes this month.'}`}</p>
+          ${notes.map((n) => `
+          <div class="finance-rule-row" style="background:#fdf6ee;border-radius:8px;align-items:flex-start">
+            <span><strong>${escapeHtml(n.customerName || '顾客')}</strong> · ${cadText(n.amountCents || 0)} · ${zh ? '名下技师' : 'billed to'} ${escapeHtml(n.technicianName || '-')} · ${escapeHtml(n.code || '')}<br><span>${escapeHtml(n.note || '')}</span></span>
+          </div>`).join('')}
+          ${Object.keys(pendByTech).length ? `
+          <p class="subtle" style="margin:6px 0 0">📝 ${zh ? '近14天完成单还没写服务小记:' : 'Missing service notes (last 14 days):'}</p>
+          ${Object.entries(pendByTech).map(([techId, info]) => `
+          <div class="finance-rule-row">
+            <span><strong>${escapeHtml(info.name)}</strong> · ${info.count} ${zh ? '单未写小记' : 'orders without notes'}</span>
+            <button class="ghost slim" data-review-nudge="${escapeHtml(techId)}" data-review-name="${escapeHtml(info.name)}" type="button">${zh ? '提醒TA' : 'Nudge'}</button>
+          </div>`).join('')}` : ''}
+          ${reviewedAt
+            ? `<button class="ghost slim" data-sal-review-undo type="button">${zh ? '撤销核查' : 'Undo review'}</button>`
+            : `<button class="primary slim" data-sal-review type="button">✓ ${zh ? `完成 ${month} 业绩核查` : `Mark ${month} reviewed`}</button> <span class="subtle">${zh ? '核查完成后才能锁定工资表' : 'Required before locking'}</span>`}
+        </div>`
       els.financePayrollBody.innerHTML = `
         ${paid ? `<p class="subtle">💰 ${zh ? `已发放入账 · ${String(data.paidAt || '').slice(0, 16).replace('T', ' ')} · 账本可查(支出·工资);更正需红字冲销` : 'Paid into ledger'}</p>`
-          : locked ? `<p class="subtle">✅ ${zh ? `已锁定存档 · ${String(data.lockedAt || '').slice(0, 16).replace('T', ' ')}` : 'Locked'} <button class="ghost slim" data-sal-unlock type="button">${zh ? '解锁重算' : 'Unlock'}</button></p>` : ''}
+          : locked ? `<p class="subtle">✅ ${zh ? `已锁定存档 · ${String(data.lockedAt || '').slice(0, 16).replace('T', ' ')}` : 'Locked'} <button class="ghost slim" data-sal-unlock type="button">${zh ? '解锁重算' : 'Unlock'}</button></p>`
+          : `<p class="subtle" style="margin:0 0 6px"><strong>${zh ? '① 本月试算' : '① Estimate'}</strong> · ${cadText(data.totalCents || 0)}</p>`}
         ${rows.length ? rows.map(rowHtml).join('') : `<p class="subtle">${zh ? '本月暂无技师数据。' : 'No data.'}</p>`}
-        ${!locked && hasPlanRows.length ? `<button class="primary slim" data-sal-lock type="button">${zh ? `确认并锁定 ${month} 工资表` : 'Lock payroll'}</button>` : ''}
+        ${reviewHtml}
+        ${!locked && hasPlanRows.length ? `<button class="primary slim" data-sal-lock type="button"${reviewedAt ? '' : ' disabled style="opacity:.5"'}>${zh ? `③ 确认并锁定 ${month} 工资表${reviewedAt ? '' : '(先完成上方核查)'}` : 'Lock payroll'}</button>` : ''}
         ${locked && !paid ? `<button class="primary slim" data-sal-payout type="button">${zh ? `记为已发放 · 入账本(${cadText(data.totalCents || 0)})` : 'Pay out'}</button>` : ''}
-        <p class="subtle">${zh ? '口径与小程序一致:底薪+手工费×单数+业绩落档提成+充值/耗卡提成(按储值流水的经手技师)+加班费(打卡考勤)±调整。方案在小程序 员工管理→薪资方案 配;锁定=快照防事后改数;发放=逐人写入账本「支出·工资」。' : 'Same engine as the mini app.'}</p>
+        <p class="subtle">${zh ? '口径与小程序一致:底薪+手工费×单数+业绩落档提成+充值/耗卡提成(按储值流水的经手技师)+加班费(打卡考勤)±调整。方案在 员工管理→技师业绩「薪资方案」配(与小程序同步);锁定=快照防事后改数;发放=逐人写入账本「支出·工资」。' : 'Same engine as the mini app.'}</p>
       `
       els.financePayrollBody.querySelectorAll('[data-sal-adjust]').forEach((btn) => btn.addEventListener('click', async () => {
         const tid = btn.dataset.salAdjust
@@ -2478,9 +2659,37 @@ function renderFinancePayroll() {
       }))
       const lockBtn = els.financePayrollBody.querySelector('[data-sal-lock]')
       if (lockBtn) lockBtn.addEventListener('click', async () => {
+        // 2026-08-02 核查门槛(店主定):先点上方「✓ 完成业绩核查」才能锁定(按钮未核查时本就 disabled,这里兜底)
+        if (!localStorage.getItem(`lucky-salary-review-${month}`)) {
+          toast(zh ? '请先完成上方「② 业绩核查」再锁定' : 'Complete the performance review above first')
+          return
+        }
         if (!confirm(zh ? `按当前数字锁定 ${month} 工资表?锁定后业绩/考勤变动不影响本月工资。` : 'Lock payroll?')) return
         try { await request('/admin/salary/lock', { method: 'POST', body: JSON.stringify({ month }) }); toast(zh ? '已锁定存档' : 'Locked'); renderFinancePayroll() } catch (error) { toast(error.message) }
       })
+      els.financePayrollBody.querySelector('[data-sal-review]')?.addEventListener('click', () => {
+        const warn = notes.length
+          ? (zh ? `本月有 ${notes.length} 条归属备注,确认都已核对(需要修正的已用「± 调整」处理)?` : `${notes.length} attribution notes — all verified?`)
+          : (zh ? `确认完成 ${month} 业绩核查?` : `Mark ${month} as reviewed?`)
+        if (!confirm(warn)) return
+        localStorage.setItem(`lucky-salary-review-${month}`, new Date().toISOString())
+        toast(zh ? '核查完成,可以锁定工资表了' : 'Reviewed — you can lock now')
+        renderFinancePayroll()
+      })
+      els.financePayrollBody.querySelector('[data-sal-review-undo]')?.addEventListener('click', () => {
+        localStorage.removeItem(`lucky-salary-review-${month}`)
+        renderFinancePayroll()
+      })
+      els.financePayrollBody.querySelectorAll('[data-review-nudge]').forEach((btn) => btn.addEventListener('click', async () => {
+        try {
+          await request('/admin/staff-nudges', { method: 'POST', body: JSON.stringify({
+            technicianId: btn.dataset.reviewNudge,
+            type: 'service-note',
+            message: zh ? '你有已完成的订单还没写服务小记,记得在小程序里补一下哦~' : 'You have completed orders missing service notes — please add them in the mini app.'
+          }) })
+          toast(zh ? `已提醒 ${btn.dataset.reviewName}(员工小程序主页会显示横幅)` : 'Nudged')
+        } catch (error) { toast(error.message) }
+      }))
       const unlockBtn = els.financePayrollBody.querySelector('[data-sal-unlock]')
       if (unlockBtn) unlockBtn.addEventListener('click', async () => {
         if (!confirm(zh ? `删除 ${month} 锁定存档,回到实时试算?` : 'Unlock?')) return
@@ -2498,6 +2707,325 @@ function renderFinancePayroll() {
     .catch((error) => { els.financePayrollBody.innerHTML = `<p class="subtle">${escapeHtml(error.message || '加载失败')}</p>` })
 }
 
+function renderAttendanceBoard() {
+  // 2026-08-02 考勤看板(员工管理→技师业绩):与员工小程序打卡同一套 /admin/attendance API;修正/补卡不涉账
+  if (!els.attendanceBody || !isOwnerRole()) return
+  const zh = owner.lang === 'zh'
+  els.attendanceBody.innerHTML = `<p class="subtle">${zh ? '加载今日考勤…' : 'Loading attendance…'}</p>`
+  request('/admin/attendance/today')
+    .then((data) => {
+      const rows = data.rows || []
+      const stateText = (s) => ({
+        working: zh ? '在岗' : 'On duty',
+        overtime: zh ? '超时未走' : 'Overtime',
+        done: zh ? '已下班' : 'Done',
+        rest: zh ? '休息' : 'Rest',
+        none: zh ? '未上班' : 'Not in'
+      })[s] || s
+      const stateColor = { working: '#3f6b52', overtime: '#b0483c', done: '#8a8578', rest: '#a89d8c', none: '#a89d8c' }
+      const fmtMin = (m) => m >= 60 ? `${Math.floor(m / 60)}h${m % 60 ? `${m % 60}m` : ''}` : `${m}m`
+      const rowHtml = (r) => `
+        <div class="finance-rule-row${r.state === 'none' || r.state === 'rest' ? ' disabled' : ''}"${r.state === 'overtime' ? ' style="background:#fdf0ee;border-radius:8px"' : ''}>
+          <span>
+            <strong>${escapeHtml(r.name)}</strong>${r.title ? ` <span class="subtle">${escapeHtml(r.title)}</span>` : ''}
+            · <span style="font-weight:700;color:${stateColor[r.state] || '#8a8578'}">${stateText(r.state)}</span>
+            ${r.clockIn ? ` · ${r.clockIn}${r.clockOut ? `–${r.clockOut}` : ''}` : ''}
+            ${r.workedMin ? ` · ${zh ? '已工作' : 'worked'} ${fmtMin(r.workedMin)}` : ''}
+            ${r.overtimeMin > 0 ? ` · <strong style="color:#b0483c">${zh ? '加班' : 'OT'} ${fmtMin(r.overtimeMin)}</strong>` : ''}
+            ${r.adjusted ? ` · <span class="subtle">${zh ? '已修正' : 'adjusted'}</span>` : ''}
+          </span>
+          <button class="ghost slim" data-att-fix="${escapeHtml(r.technicianId)}" data-att-record="${escapeHtml(r.recordId || '')}" data-att-name="${escapeHtml(r.name)}" data-att-in="${escapeHtml(r.clockIn || '')}" data-att-out="${escapeHtml(r.clockOut || '')}" type="button">${r.recordId ? (zh ? '修正' : 'Fix') : (zh ? '补卡' : 'Add')}</button>
+        </div>`
+      els.attendanceBody.innerHTML = `
+        <div class="finance-metrics" style="margin-bottom:10px">
+          ${[[zh ? '在岗' : 'On duty', data.working || 0, 'good'], [zh ? '已下班' : 'Done', data.done || 0, ''], [zh ? '超时未走' : 'Overtime', data.overtime || 0, data.overtime ? 'bad' : '']]
+            .map(([label, v, tone]) => `<div class="finance-metric ${tone}"><span>${label}</span><strong>${v}</strong></div>`).join('')}
+        </div>
+        <p class="subtle">${escapeHtml(data.date || '')} · ${zh ? '门店现在' : 'store time'} ${escapeHtml(data.storeNow || '')} <button class="ghost slim" data-att-refresh type="button">${zh ? '↻ 刷新' : '↻ Refresh'}</button></p>
+        ${rows.length ? rows.map(rowHtml).join('') : `<p class="subtle">${zh ? '暂无在职技师。' : 'No active technicians.'}</p>`}
+        <p class="subtle">${zh
+          ? '打卡在员工小程序端(需连店内 WiFi 验证);这里可修正时刻或补卡,保存后自动重算加班,计入工资加班费。「设打卡 WiFi」需真机读取 WiFi 信息,请在小程序 管理→考勤 里操作。'
+          : 'Clock-in/out happens in the staff mini app (WiFi-verified). Fix times or add missing records here; overtime recalculates automatically.'}</p>
+      `
+      els.attendanceBody.querySelector('[data-att-refresh]')?.addEventListener('click', () => renderAttendanceBoard())
+      els.attendanceBody.querySelectorAll('[data-att-fix]').forEach((btn) => btn.addEventListener('click', async () => {
+        const recId = btn.dataset.attRecord
+        const clockIn = prompt(zh ? `${btn.dataset.attName} 上班时刻(HH:mm,24小时制,留空=不改)` : 'Clock-in HH:mm (blank = keep)', btn.dataset.attIn || '')
+        if (clockIn === null) return
+        const clockOut = prompt(zh ? `${btn.dataset.attName} 下班时刻(HH:mm,留空=不改)` : 'Clock-out HH:mm (blank = keep)', btn.dataset.attOut || '')
+        if (clockOut === null) return
+        const body = {}
+        if (clockIn.trim()) body.clockIn = clockIn.trim()
+        if (clockOut.trim()) body.clockOut = clockOut.trim()
+        if (!Object.keys(body).length) { toast(zh ? '没有要修正的内容' : 'Nothing to change'); return }
+        if (!/^\d{2}:\d{2}$/.test(body.clockIn || '00:00') || !/^\d{2}:\d{2}$/.test(body.clockOut || '00:00')) {
+          toast(zh ? '时刻格式应为 HH:mm,如 09:30' : 'Use HH:mm, e.g. 09:30')
+          return
+        }
+        if (!recId) { body.technicianId = btn.dataset.attFix; body.date = data.date }
+        try {
+          await request(`/admin/attendance/${recId || 'new'}`, { method: 'PATCH', body: JSON.stringify(body) })
+          toast(zh ? '已保存,加班已重算' : 'Saved')
+          renderAttendanceBoard()
+        } catch (error) { toast(error.message) }
+      }))
+    })
+    .catch((error) => { els.attendanceBody.innerHTML = `<p class="subtle">${escapeHtml(error.message || '加载失败')}</p>` })
+}
+
+// 2026-08-02 员工管理页两板块:📅计时排班 / 📈技师业绩(业绩卡+薪资方案+打卡考勤);月度业绩核查已并入 财务→👥员工工资
+function applyStaffTab() {
+  const tab = owner.staffTab || 'schedule'
+  document.querySelectorAll('#schedulePage [data-staff-panel]').forEach((panel) => {
+    const ownerOnly = panel.id === 'attendanceCard'
+    panel.classList.toggle('hidden', panel.dataset.staffPanel !== tab || (ownerOnly && !isOwnerRole()))
+  })
+  document.querySelectorAll('#staffTabs [data-staff-tab]').forEach((button) => {
+    button.classList.toggle('active', button.dataset.staffTab === tab)
+  })
+}
+
+// 2026-08-02 薪资方案配置(固定/浮动绩效)——入口在 员工管理→技师业绩,与小程序 员工管理→薪资方案 同逻辑同字段(/admin/salary-plans)
+let salaryPlanEditing = null // null=列表;{techId,name}=编辑中(techId 空串=全店默认)
+
+function openSalaryPlanPanel(techId, name) {
+  // techId == null → 列表总览;'' → 直接编辑全店默认;技师id → 直接编辑该技师
+  const zh = owner.lang === 'zh'
+  const existing = document.querySelector('.cs-lightbox')
+  if (existing) existing.remove()
+  const overlay = document.createElement('div')
+  overlay.className = 'cs-lightbox'
+  const panel = document.createElement('div')
+  panel.className = 'fin-guide-panel'
+  panel.innerHTML = `
+    <div class="fin-guide-head">
+      <strong>💰 ${zh ? '薪资方案(固定/浮动绩效)' : 'Salary Plans'}</strong>
+      <button class="ghost slim" data-sp-close type="button">${zh ? '关闭' : 'Close'}</button>
+    </div>
+    <div id="salaryPlanPanelBody"></div>
+  `
+  panel.addEventListener('click', (event) => {
+    event.stopPropagation()
+    if (event.target.closest('[data-sp-close]')) overlay.remove()
+  })
+  overlay.addEventListener('click', () => overlay.remove())
+  overlay.appendChild(panel)
+  document.body.appendChild(overlay)
+  salaryPlanEditing = techId == null ? null : { techId, name: name || '' }
+  if (salaryPlanEditing) renderSalaryPlanEditor()
+  else renderSalaryPlans()
+}
+const SP_TPL_TEXT = {
+  commission: ['纯提成', 'Commission only'],
+  base_ladder: ['底薪+阶梯提成(浮动绩效)', 'Base + tiered %'],
+  base_flat: ['底薪+固定提成', 'Base + flat %']
+}
+function spPlanBrief(p, zh) {
+  const bits = [SP_TPL_TEXT[p.template] ? SP_TPL_TEXT[p.template][zh ? 0 : 1] : p.template]
+  if (p.baseSalaryCents) bits.push(`${zh ? '底薪' : 'base'} ${cadText(p.baseSalaryCents)}`)
+  if (p.template === 'base_ladder') bits.push(`${(p.ladder || []).length} ${zh ? '档' : 'tiers'}`)
+  else if (p.flatPct) bits.push(`${p.flatPct}%`)
+  return bits.join(' · ')
+}
+
+function renderSalaryPlans() {
+  const body = document.querySelector('#salaryPlanPanelBody')
+  if (!body) return
+  const zh = owner.lang === 'zh'
+  if (salaryPlanEditing) { renderSalaryPlanEditor(); return }
+  body.innerHTML = `<p class="subtle">${zh ? '加载薪资方案…' : 'Loading plans…'}</p>`
+  request('/admin/salary-plans')
+    .then((data) => {
+      if (!document.body.contains(body)) return // 面板已被关闭
+      const dft = data.defaultPlan
+      const customs = data.plans || []
+      const byTech = {}; customs.forEach((p) => { byTech[p.technicianId] = p })
+      const activeTechs = (owner.technicians || []).filter((t2) => !(t2.is_active === 0 || t2.is_active === false))
+      body.innerHTML = `
+        <div class="finance-rule-row">
+          <span><strong>${zh ? '全店默认方案' : 'Store default'}</strong> · ${dft ? spPlanBrief(dft, zh) : `<span class="subtle">${zh ? '未设置(无方案的员工不参与工资试算)' : 'Not set'}</span>`}</span>
+          <button class="ghost slim" data-sp-edit="" data-sp-name="${zh ? '全店默认' : 'Store default'}" type="button">${dft ? (zh ? '编辑' : 'Edit') : (zh ? '设置' : 'Set up')}</button>
+        </div>
+        ${activeTechs.map((t2) => { const p = byTech[t2.id]; return `
+          <div class="finance-rule-row">
+            <span><strong>${escapeHtml(t2.name)}</strong> · ${p ? `${zh ? '专属:' : 'Custom: '}${spPlanBrief(p, zh)}` : `<span class="subtle">${zh ? '跟随全店默认' : 'Follows default'}</span>`}</span>
+            <span>
+              <button class="ghost slim" data-sp-edit="${escapeHtml(t2.id)}" data-sp-name="${escapeHtml(t2.name)}" type="button">${p ? (zh ? '编辑专属' : 'Edit') : (zh ? '设专属' : 'Override')}</button>
+              ${p ? `<button class="ghost slim" data-sp-reset="${escapeHtml(t2.id)}" data-sp-name="${escapeHtml(t2.name)}" type="button">${zh ? '恢复默认' : 'Reset'}</button>` : ''}
+            </span>
+          </div>`}).join('')}
+        <p class="subtle">${zh
+          ? '与小程序 员工管理→薪资方案 同一套配置,保存立即生效,当月试算自动按新方案。「底薪+阶梯」=浮动绩效:月业绩落到哪档整月按该档提成%;「底薪+固定提成」=固定绩效。'
+          : 'Same engine as the mini app. Tiered = floating commission by monthly performance; flat = fixed %.'}</p>
+      `
+      body.querySelectorAll('[data-sp-edit]').forEach((btn) => btn.addEventListener('click', () => {
+        salaryPlanEditing = { techId: btn.dataset.spEdit, name: btn.dataset.spName }
+        renderSalaryPlanEditor()
+      }))
+      body.querySelectorAll('[data-sp-reset]').forEach((btn) => btn.addEventListener('click', async () => {
+        if (!confirm(zh ? `删除 ${btn.dataset.spName} 的专属方案,改为跟随全店默认?` : 'Delete this override and follow store default?')) return
+        try {
+          await request(`/admin/salary-plans/${btn.dataset.spReset}`, { method: 'DELETE' })
+          toast(zh ? '已恢复跟随默认' : 'Reset to default')
+          renderSalaryPlans()
+          if (owner.financeKey) renderFinancePayroll() // 财务页已解锁时同步刷新试算
+        } catch (error) { toast(error.message) }
+      }))
+    })
+    .catch((error) => { if (document.body.contains(body)) body.innerHTML = `<p class="subtle">${escapeHtml(error.message || '加载失败')}</p>` })
+}
+
+function renderSalaryPlanEditor() {
+  const zh = owner.lang === 'zh'
+  const ed = salaryPlanEditing
+  if (!ed) { renderSalaryPlans(); return }
+  const body = document.querySelector('#salaryPlanPanelBody')
+  if (!body) return
+  body.innerHTML = `<p class="subtle">${zh ? '加载方案…' : 'Loading…'}</p>`
+  request(`/admin/salary-plans/effective?technicianId=${encodeURIComponent(ed.techId)}`)
+    .then((r) => {
+      if (!document.body.contains(body)) return // 面板已被关闭
+      const seed = r.plan || {} // 技师无专属时以默认方案为起点(与小程序一致)
+      const c2y = (c) => c ? String(Math.round(c) / 100) : ''
+      const y2c = (v) => { const n = Number(v); return Number.isFinite(n) && n > 0 ? Math.round(n * 100) : 0 }
+      let ladder = (seed.ladder && seed.ladder.length
+        ? seed.ladder
+        : [{ minCents: 0, maxCents: 800000, pct: 15 }, { minCents: 800000, maxCents: 1500000, pct: 20 }, { minCents: 1500000, maxCents: null, pct: 25 }])
+        .map((t2) => ({ min: c2y(t2.minCents) || '0', max: t2.maxCents == null ? '' : c2y(t2.maxCents), pct: String(t2.pct || 0) }))
+      const tplOpt = (k) => `<option value="${k}" ${(seed.template || 'base_ladder') === k ? 'selected' : ''}>${SP_TPL_TEXT[k][zh ? 0 : 1]}</option>`
+      body.innerHTML = `
+        <p class="subtle"><strong>${zh ? '编辑:' : 'Editing: '}${escapeHtml(ed.name || '')}</strong>${ed.techId && r.source !== 'custom' ? `(${zh ? '当前跟随默认,保存后变为专属方案' : 'currently follows default; saving creates an override'})` : ''}</p>
+        <div class="finance-quick-grid">
+          <label><span>${zh ? '模板' : 'Template'}</span><select id="spTpl">${['base_ladder', 'base_flat', 'commission'].map(tplOpt).join('')}</select></label>
+          <label id="spBaseWrap"><span>${zh ? '底薪 (CAD/月)' : 'Base (CAD/mo)'}</span><input id="spBase" type="number" min="0" step="50" value="${c2y(seed.baseSalaryCents)}"></label>
+          <label><span>${zh ? '手工费 (CAD/单,可空)' : 'Handwork (CAD/order)'}</span><input id="spHandwork" type="number" min="0" step="0.5" value="${c2y(seed.handworkFeeCents)}"></label>
+          <label id="spFlatWrap"><span>${zh ? '固定提成 %' : 'Flat %'}</span><input id="spFlatPct" type="number" min="0" max="100" value="${seed.flatPct || ''}"></label>
+          <label><span>${zh ? '耗卡提成 %(可空)' : 'Card %'}</span><input id="spCardPct" type="number" min="0" max="100" value="${seed.cardPct || ''}"></label>
+          <label><span>${zh ? '充值提成 %(可空)' : 'Recharge %'}</span><input id="spRechargePct" type="number" min="0" max="100" value="${seed.rechargePct || ''}"></label>
+          <label><span>${zh ? '加班费 (CAD/单位,可空)' : 'OT rate (CAD/unit)'}</span><input id="spOtRate" type="number" min="0" step="0.5" value="${c2y(seed.overtimeRateCents)}"></label>
+          <label><span>${zh ? '加班计费单位' : 'OT unit'}</span><select id="spOtUnit">
+            <option value="30" ${seed.overtimeUnitMin === 60 ? '' : 'selected'}>${zh ? '每30分钟' : 'per 30 min'}</option>
+            <option value="60" ${seed.overtimeUnitMin === 60 ? 'selected' : ''}>${zh ? '每60分钟' : 'per 60 min'}</option>
+          </select></label>
+        </div>
+        <div id="spLadderWrap">
+          <p class="subtle" style="margin:8px 0 4px">${zh ? '阶梯提成(浮动绩效):月业绩(完成单含加项)落到哪档,整月按该档 % 提成;上限留空=不封顶,最多 8 档。' : 'Tiers: monthly performance picks the tier; blank max = uncapped; up to 8 tiers.'}</p>
+          <div id="spLadderRows"></div>
+          <button class="ghost slim" id="spAddTier" type="button">＋ ${zh ? '加一档' : 'Add tier'}</button>
+        </div>
+        <div style="margin-top:10px">
+          <button class="primary slim" id="spSave" type="button">${zh ? '保存方案(立即生效)' : 'Save plan'}</button>
+          <button class="ghost slim" id="spCancel" type="button">${zh ? '← 返回列表' : '← Back'}</button>
+        </div>
+      `
+      const renderRows = () => {
+        const wrap = body.querySelector('#spLadderRows')
+        wrap.innerHTML = ladder.map((t2, i) => `
+          <div class="finance-rule-add" style="margin-bottom:6px">
+            <input data-lad="${i}" data-f="min" type="number" min="0" placeholder="${zh ? '起点 $' : 'min $'}" value="${t2.min}">
+            <input data-lad="${i}" data-f="max" type="number" min="0" placeholder="${zh ? '上限 $(空=不封顶)' : 'max $ (blank=∞)'}" value="${t2.max}">
+            <input data-lad="${i}" data-f="pct" type="number" min="0" max="100" placeholder="${zh ? '提成 %' : '%'}" value="${t2.pct}">
+            <button class="ghost slim" data-lad-del="${i}" type="button">✕</button>
+          </div>`).join('')
+        wrap.querySelectorAll('input[data-lad]').forEach((inp) => inp.addEventListener('input', () => { ladder[Number(inp.dataset.lad)][inp.dataset.f] = inp.value }))
+        wrap.querySelectorAll('[data-lad-del]').forEach((b) => b.addEventListener('click', () => {
+          if (ladder.length <= 1) { toast(zh ? '至少留一档' : 'Keep at least one tier'); return }
+          ladder.splice(Number(b.dataset.ladDel), 1); renderRows()
+        }))
+      }
+      renderRows()
+      body.querySelector('#spAddTier').addEventListener('click', () => {
+        if (ladder.length >= 8) { toast(zh ? '最多 8 档' : 'Max 8 tiers'); return }
+        const last = ladder[ladder.length - 1]
+        ladder.push({ min: (last && last.max) || '', max: '', pct: '' })
+        renderRows()
+      })
+      const applyTpl = () => {
+        const t2 = body.querySelector('#spTpl').value
+        body.querySelector('#spLadderWrap').classList.toggle('hidden', t2 !== 'base_ladder')
+        body.querySelector('#spFlatWrap').classList.toggle('hidden', t2 === 'base_ladder')
+        body.querySelector('#spBaseWrap').classList.toggle('hidden', t2 === 'commission')
+      }
+      applyTpl()
+      body.querySelector('#spTpl').addEventListener('change', applyTpl)
+      body.querySelector('#spCancel').addEventListener('click', () => { salaryPlanEditing = null; renderSalaryPlans() })
+      body.querySelector('#spSave').addEventListener('click', async () => {
+        const t2 = body.querySelector('#spTpl').value
+        if (t2 === 'base_ladder') {
+          if (!ladder.length) { toast(zh ? '至少留一档' : 'Need at least one tier'); return }
+          for (const row of ladder) {
+            if (row.pct === '' || !Number.isFinite(Number(row.pct)) || Number(row.pct) < 0) { toast(zh ? '每档都要填提成 %' : 'Each tier needs a %'); return }
+          }
+        }
+        try {
+          await request('/admin/salary-plans', { method: 'PUT', body: JSON.stringify({
+            technicianId: ed.techId,
+            template: t2,
+            baseSalaryCents: t2 === 'commission' ? 0 : y2c(body.querySelector('#spBase').value),
+            handworkFeeCents: y2c(body.querySelector('#spHandwork').value),
+            ladder: t2 === 'base_ladder' ? ladder.map((row) => ({ minCents: y2c(row.min), maxCents: row.max === '' ? null : y2c(row.max), pct: Number(row.pct) || 0 })) : [],
+            flatPct: t2 === 'base_ladder' ? 0 : (Number(body.querySelector('#spFlatPct').value) || 0),
+            cardPct: Number(body.querySelector('#spCardPct').value) || 0,
+            rechargePct: Number(body.querySelector('#spRechargePct').value) || 0,
+            overtimeRateCents: y2c(body.querySelector('#spOtRate').value),
+            overtimeUnitMin: Number(body.querySelector('#spOtUnit').value) === 60 ? 60 : 30
+          }) })
+          toast(zh ? '已保存,立即生效' : 'Saved')
+          salaryPlanEditing = null
+          renderSalaryPlans()
+          if (owner.financeKey) renderFinancePayroll() // 财务页已解锁时同步刷新试算
+        } catch (error) { toast(error.message) }
+      })
+    })
+    .catch((error) => { body.innerHTML = `<p class="subtle">${escapeHtml(error.message || '加载失败')}</p>` })
+}
+
+// 2026-08-02 指标卡(店主 v4 定稿):本日收款/本月收入/本月支出/本月净赚(已入账) 四个真数永远显示;
+// 净利率撤下常驻卡(AI 解读里讲人话);净赚"一实一虚"——工资未发放时小字给"扣待发工资后约 $X(预估)",取新工资试算实时值。
+function renderFinanceMetrics() {
+  if (!els.financeMetrics) return
+  const zh = owner.lang === 'zh'
+  const fin = owner.financeLedger
+  const summary = fin.data?.summary || { incomeCents: 0, expenseCents: 0, netCents: 0 }
+  const todayCents = fin.progress?.todayRevenueCents ?? null
+  const est = owner.salaryEstimateCache
+  const showEst = est && est.month === fin.month && !est.paid && est.totalCents > 0
+  els.financeMetrics.innerHTML = [
+    [zh ? '本日收款' : 'Today', todayCents, '', ''],
+    [zh ? '本月收入' : 'Income', summary.incomeCents, '', ''],
+    [zh ? '本月支出' : 'Expense', summary.expenseCents, '', ''],
+    [zh ? '本月净赚(已入账)' : 'Net (booked)', summary.netCents, summary.netCents >= 0 ? 'good' : 'bad',
+      showEst ? (zh ? `扣待发工资后约 ${cadText(summary.netCents - est.totalCents)}(预估)` : `≈ ${cadText(summary.netCents - est.totalCents)} after pending payroll`) : '']
+  ].map(([label, cents, tone, sub]) => `
+    <div class="finance-metric ${tone}">
+      <span>${label}</span>
+      <strong ${cents != null ? `data-fin-cents="${cents}"` : ''}>${cents == null ? '-' : cadText(cents)}</strong>
+      ${sub ? `<small class="fin-est-note">${sub}</small>` : ''}
+    </div>`).join('')
+  animateFinanceMetrics()
+}
+
+// 数字滚动动效:金额从 0 滚到实际值,约 1 秒;10 秒内重复渲染不重播,避免晃眼
+function animateFinanceMetrics() {
+  const now = Date.now()
+  if (owner._finAnimAt && now - owner._finAnimAt < 10000) return
+  owner._finAnimAt = now
+  document.querySelectorAll('#financeMetrics [data-fin-cents]').forEach((el) => {
+    const target = Number(el.dataset.finCents)
+    if (!Number.isFinite(target) || target === 0) return
+    let t0 = null
+    const step = (ts) => {
+      if (!t0) t0 = ts
+      const pRaw = Math.min(1, (ts - t0) / 1000)
+      const ease = 1 - Math.pow(1 - pRaw, 3)
+      el.textContent = cadText(Math.round(target * ease))
+      if (pRaw < 1) requestAnimationFrame(step)
+    }
+    el.textContent = cadText(0)
+    requestAnimationFrame(step)
+  })
+}
+
 function renderFinancePage() {
   if (!els.financeMetrics) return
   renderFinanceProgress()
@@ -2507,18 +3035,7 @@ function renderFinancePage() {
   applyFinanceTab()
   const fin = owner.financeLedger
   if (els.financeMonth && fin.month) els.financeMonth.value = fin.month
-  const summary = fin.data?.summary || { incomeCents: 0, expenseCents: 0, netCents: 0 }
-  const marginText = summary.incomeCents > 0 ? `${Math.round((summary.netCents / summary.incomeCents) * 1000) / 10}%` : '-'
-  els.financeMetrics.innerHTML = [
-    [owner.lang === 'zh' ? '本月收入' : 'Income', cadText(summary.incomeCents), ''],
-    [owner.lang === 'zh' ? '本月支出' : 'Expense', cadText(summary.expenseCents), ''],
-    [owner.lang === 'zh' ? '净利润' : 'Net profit', cadText(summary.netCents), summary.netCents >= 0 ? 'good' : 'bad'],
-    [owner.lang === 'zh' ? '净利率' : 'Net margin', marginText, '']
-  ].map(([label, value, tone]) => `
-    <div class="finance-metric ${tone}">
-      <span>${label}</span>
-      <strong>${value}</strong>
-    </div>`).join('')
+  renderFinanceMetrics()
   const incomeOptions = FINANCE_INCOME_CATEGORIES.map((cat) => `<option value="${cat}">${cat}</option>`).join('')
   const expenseOptions = financeExpenseCategories().map((cat) => `<option value="${cat}">${cat}</option>`).join('')
   const channelOptions = FINANCE_PAY_CHANNELS.map(([id, label]) => `<option value="${id}">${label}</option>`).join('')
@@ -3628,7 +4145,7 @@ function renderTechnicianMini(tech) {
       <span class="mini-avatar">${escapeHtml(tech.name.slice(0, 1))}</span>
       <span>
         <strong>${escapeHtml(tech.name)} · ${escapeHtml(tech.status)}</strong>
-        <small>${t('monthPeople')} ${tech.people} · ${t('monthServices')} ${tech.completed}</small>
+        <small>${owner.lang === 'zh' ? '本月服务' : 'Services'} ${tech.completed} ${owner.lang === 'zh' ? '单' : ''}</small>
         <small>${t('monthAmount')} ${money(tech.amount)}</small>
       </span>
     </article>
@@ -4233,6 +4750,8 @@ function renderTechnicianPerformance() {
   const zh = owner.lang === 'zh'
   const rows = technicianPerformanceRows()
   els.addTechnicianButton?.classList.toggle('hidden', !isOwnerRole())
+  els.salaryPlanButton?.classList.toggle('hidden', !isOwnerRole())
+  applyStaffTab() // 员工管理两板块可见性(含 考勤/核查 卡仅老板)
   // 单卡(员工端只看自己)时铺满整行,数据块均匀展开,不留大片空白
   els.technicianPerformance.classList.toggle('single-card', rows.length === 1)
   if (!rows.length) {
@@ -4249,17 +4768,19 @@ function renderTechnicianPerformance() {
         <p>${escapeHtml(tech.title || '')} ${inactive ? '' : `· ${t('techStatus')} ${escapeHtml(tech.status)}`}</p>
       </div>
       <div class="performance-numbers">
-        <span>${t('monthPeople')} <strong>${tech.people}</strong></span>
-        <span>${t('monthServices')} <strong>${tech.completed}</strong></span>
-        <span>${t('monthAmount')} <strong>${money(tech.amount)}</strong></span>
-        <span>${zh ? '好评率' : 'Rating'} <strong class="rating-placeholder" title="${zh ? '顾客点评功能上线后自动统计,不做估算值' : 'Shown once customer reviews launch; we do not fabricate estimates'}">${zh ? '待点评功能' : 'Pending reviews'}</strong></span>
+        <span>${zh ? '本月服务' : 'Services'} <strong>${tech.completed} ${zh ? '单' : ''}</strong></span>
+        <span>${zh ? '本月业绩' : 'Amount'} <strong>${money(tech.amount)}</strong></span>
         ${!isOwnerRole() && owner.myCompEstimate ? `
         <span>${zh ? '预计本月薪酬' : 'Est. pay'} <strong title="${zh ? `底薪 ${money(owner.myCompEstimate.baseSalaryCents)} + 提成 ${Math.round(owner.myCompEstimate.commissionRate * 100)}% × 业绩` : ''}">${money(owner.myCompEstimate.totalCents)}</strong></span>` : ''}
       </div>
       ${!isOwnerRole() && owner.myCompEstimate ? `<p class="subtle comp-estimate-note">${zh ? `底薪 ${money(owner.myCompEstimate.baseSalaryCents)} + 提成 ${money(owner.myCompEstimate.commissionCents)}(${Math.round(owner.myCompEstimate.commissionRate * 100)}%),以老板月结确认为准。` : 'Base + commission; final amount confirmed at monthly settlement.'}</p>` : ''}
       ${isOwnerRole() ? `
       <div class="tech-manage-row">
-        <button class="ghost slim" data-tech-edit="${escapeHtml(tech.id)}" type="button">${zh ? '编辑' : 'Edit'}</button>
+        ${inactive ? '' : `<button class="ghost slim" data-sp-plan="${escapeHtml(tech.id)}" data-sp-name="${escapeHtml(tech.name)}" type="button">💰 ${zh ? '薪资方案' : 'Salary plan'}</button>`}
+        <button class="ghost slim" data-tech-more="${escapeHtml(tech.id)}" type="button">⋯ ${zh ? '账号管理' : 'Account'}</button>
+      </div>
+      <div class="tech-manage-row hidden" data-tech-more-panel="${escapeHtml(tech.id)}">
+        <button class="ghost slim" data-tech-edit="${escapeHtml(tech.id)}" type="button">${zh ? '编辑资料' : 'Edit'}</button>
         <button class="ghost slim ${inactive ? '' : 'danger-ghost'}" data-tech-toggle="${escapeHtml(tech.id)}" type="button">${inactive ? (zh ? '恢复在职' : 'Reactivate') : (zh ? '停用' : 'Deactivate')}</button>
         ${renderTechAccountControls(tech.id, zh)}
       </div>` : ''}
@@ -4417,6 +4938,7 @@ function renderCustomers() {
         <div class="inline-actions compact-actions customer-card-actions">
           <button class="ghost slim" data-customer-detail="${customer.id}" type="button">${t('viewCustomerFile')}</button>
           <button class="ghost slim" data-ai-customer="${customer.id}" type="button">${owner.aiLoading === `customer:${customer.id}` ? t('aiProcessing') : t('aiCustomerInsight')}</button>
+          ${(() => { const tr = rfmTierOf(customer); return tr && tr.k === 's' ? `<button class="ghost slim" data-recall-copy="${customer.id}" type="button">✦ ${owner.lang === 'zh' ? 'AI 召回' : 'Recall'}</button>` : '' })()}
         </div>
       </div>
       <div class="customer-stats">
@@ -4504,6 +5026,16 @@ function renderCustomerDetail() {
           <button class="primary slim" data-customer-profile-save="${escapeHtml(customer.id)}" type="button">${owner.lang === 'zh' ? '保存运营信息' : 'Save'}</button>
         </div>
       </section>
+      <section class="customer-records card" id="customerNotesSection">
+        <div class="section-row compact-row">
+          <div>
+            <p class="eyebrow">${owner.lang === 'zh' ? '服务小记 · 画像' : 'Service Notes · Profile'}</p>
+            <h2>${owner.lang === 'zh' ? '技师小记与自动画像' : 'Notes & auto profile'}</h2>
+          </div>
+          ${(() => { const tr = rfmTierOf(customer); return tr && tr.k === 's' ? `<button class="ghost slim" data-recall-copy="${escapeHtml(customer.id)}" type="button">✦ ${owner.lang === 'zh' ? 'AI 召回话术' : 'AI recall message'}</button>` : '' })()}
+        </div>
+        <div id="customerNotesBody"><p class="subtle">${owner.lang === 'zh' ? '加载小记与画像…' : 'Loading…'}</p></div>
+      </section>
       <section class="customer-records card">
         <div class="section-row compact-row">
           <div>
@@ -4517,6 +5049,68 @@ function renderCustomerDetail() {
       </section>
     </section>
   `
+  loadCustomerNotes(customer.id)
+}
+
+// 2026-08-02 服务小记+画像(只读;与小程序画像页同一 /admin/customers/:id/notes 口径)
+function loadCustomerNotes(customerId) {
+  if (!document.querySelector('#customerNotesBody')) return
+  const zh = owner.lang === 'zh'
+  request(`/admin/customers/${customerId}/notes`)
+    .then((data) => {
+      const target = document.querySelector('#customerNotesBody')
+      if (!target || owner.selectedCustomerId !== customerId) return // 用户已切走,丢弃
+      const p = data.profile || {}
+      const tag = (text, danger) => `<span class="customer-tag"${danger ? ' style="background:#b0483c;color:#fff;font-weight:700"' : ''}>${escapeHtml(text)}</span>`
+      const groups = [
+        [zh ? '⚠ 安全' : '⚠ Safety', p.safetyFlags || [], true],
+        [zh ? '款式' : 'Styles', p.styles || [], false],
+        [zh ? '偏好' : 'Prefers', p.preferences || [], false],
+        [zh ? '性格' : 'Personality', p.personality || [], false],
+        [zh ? '同行' : 'Companions', p.companions || [], false]
+      ].filter((g) => g[1].length)
+      const stats = []
+      if (p.visitCount) stats.push(`${zh ? '到店' : 'visits'} ${p.visitCount}${zh ? ' 次' : ''}`)
+      if (p.avgIntervalDays) stats.push(`${zh ? '平均间隔' : 'avg interval'} ${p.avgIntervalDays}${zh ? ' 天' : 'd'}`)
+      if (p.topService) stats.push(`${zh ? '常做' : 'top'} ${escapeHtml(p.topService)}`)
+      const notes = data.notes || []
+      target.innerHTML = `
+        ${groups.length
+          ? `<div class="customer-tags" style="flex-wrap:wrap;gap:6px;margin-bottom:6px">${groups.map(([label, items, danger]) =>
+              `<span class="subtle" style="margin:0 2px 0 6px${danger ? ';color:#b0483c;font-weight:700' : ''}">${label}</span>${items.map((x) => tag(x, danger)).join('')}`).join('')}</div>`
+          : `<p class="subtle">${zh ? '还没有画像标签。技师在小程序完成订单时写服务小记,画像会自动生成。' : 'No profile yet — technicians add notes in the mini app when completing orders.'}</p>`}
+        ${stats.length ? `<p class="subtle">${stats.join(' · ')}</p>` : ''}
+        ${notes.length ? notes.map((n) => `
+          <div class="finance-rule-row" style="align-items:flex-start">
+            <span>
+              <strong>${escapeHtml(n.date || '')}</strong> · ${escapeHtml(n.serviceName || '-')}${n.technicianName ? ` · ${escapeHtml(n.technicianName)}` : ''}
+              <br><span>${escapeHtml(n.rawText || '')}</span>
+            </span>
+          </div>`).join('') : `<p class="subtle">${zh ? '暂无服务小记。' : 'No notes yet.'}</p>`}
+      `
+    })
+    .catch((error) => {
+      const target = document.querySelector('#customerNotesBody')
+      if (target) target.innerHTML = `<p class="subtle">${escapeHtml(error.message || '加载失败')}</p>`
+    })
+}
+
+// 2026-08-02 S层沉睡客一键 AI 召回话术(POST /admin/ai/recall-copy;AI 失败后端自动落模板)
+async function generateRecallCopy(customerId, btn) {
+  const zh = owner.lang === 'zh'
+  const original = btn ? btn.textContent : ''
+  if (btn) { btn.disabled = true; btn.textContent = zh ? 'AI 生成中…' : 'Generating…' }
+  try {
+    const data = await request('/admin/ai/recall-copy', { method: 'POST', body: JSON.stringify({ userIds: [customerId] }) })
+    const msg = data.messages?.[0]?.message || ''
+    if (!msg) throw new Error(zh ? '没有生成结果,稍后再试' : 'No result')
+    let copied = false
+    try { await navigator.clipboard.writeText(msg); copied = true } catch { /* 剪贴板被拒时降级为手动复制 */ }
+    if (!copied) window.prompt(zh ? '自动复制被浏览器拦截,请手动复制:' : 'Copy manually:', msg)
+    toast(copied ? (zh ? '召回话术已复制,粘贴到微信即可发' : 'Copied to clipboard') : (zh ? '已生成' : 'Generated'))
+  } finally {
+    if (btn && document.body.contains(btn)) { btn.disabled = false; btn.textContent = original }
+  }
 }
 
 function renderCustomerRecord(booking) {
@@ -5613,6 +6207,27 @@ els.schedulePage.addEventListener('click', (event) => {
     addTechnicianPrompt().catch((error) => toast(error.message))
     return
   }
+  const staffTab = event.target.closest('[data-staff-tab]')
+  if (staffTab) {
+    owner.staffTab = staffTab.dataset.staffTab
+    applyStaffTab()
+    if (owner.staffTab === 'performance' && isOwnerRole()) renderAttendanceBoard() // 切到业绩板块时拉最新考勤
+    return
+  }
+  const techMore = event.target.closest('[data-tech-more]')
+  if (techMore) {
+    document.querySelector(`[data-tech-more-panel="${techMore.dataset.techMore}"]`)?.classList.toggle('hidden')
+    return
+  }
+  if (event.target.closest('#salaryPlanButton')) {
+    openSalaryPlanPanel(null) // 列表总览:全店默认 + 每技师
+    return
+  }
+  const spPlan = event.target.closest('[data-sp-plan]')
+  if (spPlan) {
+    openSalaryPlanPanel(spPlan.dataset.spPlan, spPlan.dataset.spName) // 直接编辑该技师
+    return
+  }
   const techEdit = event.target.closest('[data-tech-edit]')
   if (techEdit) {
     editTechnicianPrompt(techEdit.dataset.techEdit).catch((error) => toast(error.message))
@@ -5650,6 +6265,10 @@ els.schedulePage.addEventListener('click', (event) => {
 })
 els.saveBusinessHours.addEventListener('click', () => saveBusinessHoursSettings().catch((error) => toast(error.message)))
 els.financePage.addEventListener('click', (event) => {
+  if (event.target.closest('[data-goal-setup]')) {
+    openGoalSetupModal().catch((error) => toast(error.message))
+    return
+  }
   if (event.target.closest('[data-fin-submit]')) {
     submitFinanceEntry().catch((error) => toast(error.message))
     return
@@ -6018,6 +6637,11 @@ els.customerList.addEventListener('click', (event) => {
     generateBookingSummary(aiBooking.dataset.aiBooking).catch((error) => toast(error.message))
     return
   }
+  const recallBtn = event.target.closest('[data-recall-copy]')
+  if (recallBtn) {
+    generateRecallCopy(recallBtn.dataset.recallCopy, recallBtn).catch((error) => toast(error.message))
+    return
+  }
   const aiCustomer = event.target.closest('[data-ai-customer]')
   if (!aiCustomer) return
   generateCustomerInsight(aiCustomer.dataset.aiCustomer).catch((error) => toast(error.message))
@@ -6170,12 +6794,16 @@ async function initAdmin() {
 }
 
 // ===== 会员套餐 / 次卡 / 优惠券(网页老板端,与小程序同后端 /admin/packages、/admin/coupons)=====
-let membershipData = { packages: [], coupons: [] }
+let membershipData = { packages: [], coupons: [], prizes: [] }
 function mCents(v) { const n = Number(String(v).replace(/[^\d.]/g, '')); return Number.isFinite(n) ? Math.round(n * 100) : 0 }
 function mMoney(cents) { return '$' + (Math.round(cents || 0) / 100) }
 async function loadMembershipPage() {
-  const [p, c] = await Promise.all([request('/admin/packages'), request('/admin/coupons')])
-  membershipData = { packages: p.packages || [], coupons: c.coupons || [] }
+  const [p, c, z] = await Promise.all([
+    request('/admin/packages'),
+    request('/admin/coupons'),
+    request('/admin/points-prizes').catch(() => ({ prizes: [] })) // 2026-08-02 积分商城奖品(owner-only,失败不拖垮整页)
+  ])
+  membershipData = { packages: p.packages || [], coupons: c.coupons || [], prizes: z.prizes || [] }
   renderMembership()
 }
 function renderMembership() {
@@ -6204,6 +6832,18 @@ function renderMembership() {
         <button class="ghost slim" data-cpn-toggle="${c.id}" type="button">${c.isActive ? '停用' : '启用'}</button>
       </div>
     </div>`).join('') : '<div class="empty-state">还没有优惠券,点右上角新增</div>'
+  // 2026-08-02 积分商城奖品(奖品=券;与小程序积分商城同后端 /admin/points-prizes)
+  const przs = membershipData.prizes || []
+  if (els.pointsPrizeList) els.pointsPrizeList.innerHTML = przs.length ? przs.map((z) => `
+    <div class="service-admin-item${z.isActive ? '' : ' inactive'}">
+      <div><strong>${escapeHtml(z.name || '奖品')}</strong> <span class="subtle">${z.discountType === 'percent' ? `立减 ${z.percentOff}%` : `减 ${mMoney(z.amountCents)}`}${z.minSpendCents ? ` · 满 ${mMoney(z.minSpendCents)}` : ''}${z.isActive ? '' : ' · 已下架'}</span>
+        <div class="subtle">${z.costPoints} 积分 · 库存 ${z.stock}${z.redeemedQty ? ` · 已兑 ${z.redeemedQty}` : ''}${z.perUserLimit ? ` · 每人限 ${z.perUserLimit}` : ''}${z.validDays ? ` · 兑后 ${z.validDays} 天有效` : ''}</div>
+      </div>
+      <div class="row-actions">
+        <button class="ghost slim" data-prz-edit="${z.id}" type="button">编辑</button>
+        <button class="ghost slim" data-prz-toggle="${z.id}" type="button">${z.isActive ? '下架' : '上架'}</button>
+      </div>
+    </div>`).join('') : '<div class="empty-state">还没有奖品。点「+ 新增奖品」,可选现有券或当场建一张新券。</div>'
 }
 async function savePackage(kind, existing) {
   kind = kind || (existing && existing.kind) || 'recharge'
@@ -6257,18 +6897,82 @@ async function saveCoupon(existing) {
     await loadMembershipPage()
   } catch (error) { toast(error.message) }
 }
+// 2026-08-02 积分商城:奖品增改(奖品=券,可当场建券,流程参考小程序 points-mall 的 save())
+async function savePrize(existing) {
+  let couponId = existing ? existing.couponId : ''
+  if (!existing) {
+    const actives = membershipData.coupons.filter((c) => c.isActive)
+    const menu = actives.map((c, i) => `${i + 1}. ${c.name}`).join('\n')
+    const pick = window.prompt(`奖品对应哪张券?输入序号;输入 0 当场建一张新券:\n${menu || '(还没有券,输入 0 新建)'}`, actives.length ? '1' : '0')
+    if (pick === null) return
+    const idx = Math.round(Number(pick))
+    if (idx === 0) {
+      const before = new Set(membershipData.coupons.map((c) => c.id))
+      await saveCoupon() // 内部保存成功后会刷新 membershipData
+      const created = membershipData.coupons.find((c) => !before.has(c.id))
+      if (!created) return // 建券被取消/失败,不继续
+      couponId = created.id
+    } else if (idx >= 1 && idx <= actives.length) {
+      couponId = actives[idx - 1].id
+    } else { toast('无效选择'); return }
+  }
+  const cost = window.prompt('兑换所需积分($1消费=1积分)', existing ? String(existing.costPoints) : '500')
+  if (cost === null) return
+  const stock = window.prompt('库存(可兑换份数)', existing ? String(existing.stock) : '10')
+  if (stock === null) return
+  const limit = window.prompt('每人限兑(0=不限)', existing ? String(existing.perUserLimit || 0) : '1')
+  if (limit === null) return
+  const days = window.prompt('兑换后有效天数(0=按券默认)', existing && existing.validDays ? String(existing.validDays) : '0')
+  if (days === null) return
+  const body = {
+    couponId,
+    costPoints: Math.round(Number(cost) || 0),
+    stock: Math.round(Number(stock) || 0),
+    perUserLimit: Math.round(Number(limit) || 0),
+    validDays: Math.round(Number(days) || 0)
+  }
+  try {
+    if (existing) await request(`/admin/points-prizes/${existing.id}`, { method: 'PATCH', body: JSON.stringify(body) })
+    else await request('/admin/points-prizes', { method: 'POST', body: JSON.stringify(body) })
+    toast('已保存,小程序积分商城立即可见')
+    await loadMembershipPage()
+  } catch (error) { toast(error.message) }
+}
+// 撤销误兑:券未核销才可撤;券作废+积分冲正退回+库存回补(后端事务)
+async function revokeRedeem() {
+  const code = window.prompt('输入要撤销的兑换券码(如 LL-XXXX-XXXX;仅未核销的可撤):')
+  if (!code || !code.trim()) return
+  if (!window.confirm(`确认撤销 ${code.trim().toUpperCase()}?券将作废,积分退回顾客,库存+1。`)) return
+  try {
+    const r = await request('/admin/points-mall/revoke', { method: 'POST', body: JSON.stringify({ code: code.trim() }) })
+    toast(`已撤销,退回 ${r.refundedPoints} 积分`)
+    await loadMembershipPage()
+  } catch (error) { toast(error.message) }
+}
 if (els.membershipPage) {
   els.membershipPage.addEventListener('click', async (event) => {
     const addR = event.target.closest('#addRechargeButton')
     const addT = event.target.closest('#addTimesButton')
     const addC = event.target.closest('#addCouponButton')
+    const addZ = event.target.closest('#addPrizeButton')
+    const revZ = event.target.closest('#revokeRedeemButton')
     const pkgEdit = event.target.closest('[data-pkg-edit]')
     const pkgTog = event.target.closest('[data-pkg-toggle]')
     const cpnEdit = event.target.closest('[data-cpn-edit]')
     const cpnTog = event.target.closest('[data-cpn-toggle]')
+    const przEdit = event.target.closest('[data-prz-edit]')
+    const przTog = event.target.closest('[data-prz-toggle]')
     if (addR) return savePackage('recharge')
     if (addT) return savePackage('times')
     if (addC) return saveCoupon()
+    if (addZ) return savePrize().catch((error) => toast(error.message))
+    if (revZ) return revokeRedeem()
+    if (przEdit) return savePrize(membershipData.prizes.find((z) => z.id === przEdit.dataset.przEdit)).catch((error) => toast(error.message))
+    if (przTog) {
+      const z = membershipData.prizes.find((x) => x.id === przTog.dataset.przToggle)
+      try { await request(`/admin/points-prizes/${z.id}`, { method: 'PATCH', body: JSON.stringify({ isActive: !z.isActive }) }); await loadMembershipPage() } catch (error) { toast(error.message) }
+      return
+    }
     if (pkgEdit) return savePackage(undefined, membershipData.packages.find((p) => p.id === pkgEdit.dataset.pkgEdit))
     if (cpnEdit) return saveCoupon(membershipData.coupons.find((c) => c.id === cpnEdit.dataset.cpnEdit))
     if (pkgTog) {
