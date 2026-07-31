@@ -21,3 +21,7 @@ page{background:#fbf8f5}
 .b.d{border-color:#dcb3b0;color:#a34c48}
 .b.full{flex:none;width:100%}
 .note{font-size:22rpx;color:#8c8279;line-height:1.6;margin-top:8rpx}
+.defplan{display:flex;justify-content:space-between;align-items:center;background:#fbf4ec;border:1rpx solid #e7d3ba;border-radius:16rpx;padding:20rpx 22rpx;margin-bottom:16rpx}
+.dp-t{font-size:26rpx;font-weight:700;color:#5c4630}
+.dp-d{font-size:21rpx;color:#b5885d;font-weight:600}
+.planbtn{margin-top:12rpx;text-align:center;font-size:23rpx;font-weight:700;color:#b5885d;background:#fbf8f5;border:1rpx dashed #e7d3ba;border-radius:12rpx;padding:12rpx 0}

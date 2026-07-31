@@ -4,30 +4,167 @@
       <view class="greeting">{{greeting}}</view>
       <view class="date">{{dateText}}</view>
     </view>
-    <view class="rolechip">{{roleLabel}}</view>
+    <view class="rolechip {{isOwner?'owner':''}}">{{roleLabel}}</view>
   </view>
 
-  <view class="ai">
-    <view class="ai-h"><text class="ai-dot">✦</text> AI 每日总结 · 自动</view>
-    <view class="ai-headline" wx:if="{{brief}}">{{brief}}</view>
-    <view class="bl" wx:for="{{actions}}" wx:key="*this"><text class="dot"></text><text class="bl-t">{{item}}</text></view>
-    <view class="ai-empty" wx:if="{{!brief && !actions.length}}">正在生成今日总结…</view>
-  </view>
+  <!-- ================= 员工端 ================= -->
+  <block wx:if="{{!isOwner}}">
+    <!-- 老板站内提醒横幅 -->
+    <view class="nudge" wx:for="{{nudges}}" wx:key="id">
+      <text class="nudge-ico">📣</text>
+      <view class="nudge-txt">{{item.message}}</view>
+      <view class="nudge-ok" data-id="{{item.id}}" catchtap="dismissNudge">知道了</view>
+    </view>
 
-  <view class="todo">
-    <view class="chip {{todo.human?'alert':''}}" bindtap="goWorkbench"><view class="n {{todo.human?'nr':''}}">{{todo.human}}</view><view class="l">待人工</view></view>
-    <view class="chip" bindtap="goWorkbench"><view class="n ng">{{todo.quote}}</view><view class="l">待报价</view></view>
-    <view class="chip" bindtap="goOrders"><view class="n">{{todo.today}}</view><view class="l">今日预约</view></view>
-    <view wx:if="{{isOwner}}" class="chip {{todo.schedule?'alert':''}}" bindtap="goSchedule"><view class="n {{todo.schedule?'nr':''}}">{{todo.schedule}}</view><view class="l">排班申请</view></view>
-    <view wx:else class="chip" bindtap="goSchedule"><view class="n">班</view><view class="l">我的排班</view></view>
-    <view wx:if="{{isOwner}}" class="chip" bindtap="goFinance"><view class="n lock">🔒</view><view class="l">沉睡卡</view></view>
-    <view wx:if="{{isOwner}}" class="chip" bindtap="goFinance"><view class="n lock">🔒</view><view class="l">待结工资</view></view>
-  </view>
+    <!-- ① 我的今日台面(置顶) -->
+    <view class="sec">我的今日台面 · 点击看全店</view>
+    <view class="board" bindtap="goOrders">
+      <view class="bitem"><view class="bn live">{{board.active}}</view><view class="bl">在做</view></view>
+      <view class="bdiv"></view>
+      <view class="bitem"><view class="bn wait">{{board.waiting}}</view><view class="bl">待到店</view></view>
+      <view class="bdiv"></view>
+      <view class="bitem"><view class="bn">{{board.done}}</view><view class="bl">已完成</view></view>
+      <view class="bdiv"></view>
+      <view class="bitem"><view class="bn go">›</view><view class="bl">看台面</view></view>
+    </view>
 
-  <view wx:if="{{isOwner}}" class="rev" bindtap="goFinance">
-    <view class="rev-l">本月营收 · 账本口径</view>
-    <view class="rev-lock">🔒 点开需财务密码</view>
-  </view>
+    <!-- ② 待办横条 -->
+    <view class="sec">待办</view>
+    <view class="rowcard">
+      <view class="rowhead" data-k="notes" bindtap="toggle">
+        <view class="rowico warn">📝</view>
+        <view class="rowt"><view class="rowname">服务小记</view><view class="rowhint">做完趁记忆写一句,画像越用越准</view></view>
+        <view class="nbadge {{notes.count?'warn':'mut'}}">{{notes.count}}</view>
+        <view class="chev {{expand==='notes'?'open':''}}">›</view>
+      </view>
+      <view class="rowbody" wx:if="{{expand==='notes'}}">
+        <view wx:if="{{!notes.items.length}}" class="subempty">今天没有待写的小记 ✓</view>
+        <view class="subrow" wx:for="{{notes.items}}" wx:key="bookingId">
+          <view class="av">{{item.av}}</view>
+          <view class="subinfo"><view class="subname">{{item.customerName}}</view><view class="submeta">{{item.serviceName}} · {{item.time}} 完成</view></view>
+          <view class="gobtn solid" data-bid="{{item.bookingId}}" data-uid="{{item.userId}}" data-name="{{item.customerName}}" data-service="{{item.serviceName}}" data-tech="{{item.technicianName}}" catchtap="writeNote">写小记</view>
+        </view>
+      </view>
+    </view>
+    <view class="rowcard">
+      <view class="rowhead" bindtap="goAttendance">
+        <view class="rowico">⏱</view>
+        <view class="rowt"><view class="rowname">打卡</view><view class="rowhint">上下班打卡 · 本周工时 · 超时算加班</view></view>
+        <view class="chev">›</view>
+      </view>
+    </view>
+    <view class="rowcard">
+      <view class="rowhead" bindtap="goSchedule">
+        <view class="rowico">📅</view>
+        <view class="rowt"><view class="rowname">我的排班</view><view class="rowhint">本周班表 · 申请调休</view></view>
+        <view class="chev">›</view>
+      </view>
+    </view>
+
+    <!-- ③ 快捷 -->
+    <view class="sec">快捷</view>
+    <view class="quick">
+      <view class="qcard" bindtap="goPerformance"><view class="qi">📈</view><view class="ql">我的业绩</view></view>
+      <view class="qcard" bindtap="goCustomers"><view class="qi">👥</view><view class="ql">我的客户</view></view>
+      <view class="qcard" bindtap="goGallery"><view class="qi">🖼</view><view class="ql">我的作品</view></view>
+    </view>
+  </block>
+
+  <!-- ================= 老板端:一屏横条 ================= -->
+  <block wx:else>
+    <view class="ai">
+      <view class="ai-h"><text class="ai-dot">✦</text> AI 每日总结 · 自动</view>
+      <block wx:if="{{brief}}">
+        <view class="ai-txt">{{brief}}</view>
+        <view class="ai-act" wx:for="{{briefActions}}" wx:key="*this"><text class="ai-adot"></text><text class="ai-atxt">{{item}}</text></view>
+      </block>
+      <view class="ai-txt dim" wx:elif="{{briefLoading}}">正在生成今日总结…</view>
+      <view class="ai-txt dim" wx:else>今日 {{board.total}} 单 · 在做 {{board.active}} · 完成 {{board.done}}{{notes.count ? ' · ' + notes.count + ' 单待写小记' : ''}}</view>
+    </view>
+
+    <!-- ① 今日预约 -->
+    <view class="rowcard">
+      <view class="rowhead" data-k="today" bindtap="toggle">
+        <view class="rowico">📅</view>
+        <view class="rowt"><view class="rowname">今日预约</view><view class="rowhint">{{board.techs}} 技师 · 在做 {{board.active}} · 完成 {{board.done}}</view></view>
+        <view class="nbadge">{{board.total}}</view>
+        <view class="chev {{expand==='today'?'open':''}}">›</view>
+      </view>
+      <view class="rowbody" wx:if="{{expand==='today'}}">
+        <view class="subrow">
+          <view class="subinfo"><view class="subname">在做 {{board.active}} 人 · 待到店 {{board.waiting}} · 已完成 {{board.done}}</view><view class="submeta">点开台面可标记到店/完成/直接排单</view></view>
+          <view class="gobtn solid" catchtap="goOrders">看台面 ›</view>
+        </view>
+      </view>
+    </view>
+
+    <!-- ② 客服工作台(待人工+待报价) -->
+    <view class="rowcard">
+      <view class="rowhead" data-k="cs" bindtap="toggle">
+        <view class="rowico warn">💬</view>
+        <view class="rowt"><view class="rowname">客服工作台</view><view class="rowhint">待人工 {{cs.human}} · 待报价 {{cs.quote}}</view></view>
+        <view class="nbadge {{cs.total?'warn':'mut'}}">{{cs.total}}</view>
+        <view class="chev {{expand==='cs'?'open':''}}">›</view>
+      </view>
+      <view class="rowbody" wx:if="{{expand==='cs'}}">
+        <view class="subrow">
+          <view class="subinfo"><view class="subname">待人工回复 {{cs.human}} 条</view><view class="submeta">AI 转来的、需要你拿主意</view></view>
+          <view class="gobtn solid" catchtap="goWorkbench">去处理 ›</view>
+        </view>
+        <view class="subrow">
+          <view class="subinfo"><view class="subname">待报价 {{cs.quote}} 条</view><view class="submeta">顾客发图问价,等你定</view></view>
+          <view class="gobtn solid" catchtap="goWorkbench">去处理 ›</view>
+        </view>
+      </view>
+    </view>
+
+    <!-- ③ 服务小记 -->
+    <view class="rowcard">
+      <view class="rowhead" data-k="notes" bindtap="toggle">
+        <view class="rowico">📝</view>
+        <view class="rowt"><view class="rowname">服务小记</view><view class="rowhint" wx:if="{{notes.count}}">{{notes.groups.length}} 位技师欠 {{notes.count}} 单 · 可一键提醒</view><view class="rowhint" wx:else>今天完成的单都写了 ✓</view></view>
+        <view class="nbadge {{notes.count?'warn':'mut'}}">{{notes.count}}</view>
+        <view class="chev {{expand==='notes'?'open':''}}">›</view>
+      </view>
+      <view class="rowbody" wx:if="{{expand==='notes'}}">
+        <view wx:if="{{!notes.groups.length}}" class="subempty">今天没有待写的小记 ✓</view>
+        <view class="subrow" wx:for="{{notes.groups}}" wx:key="name">
+          <view class="av">{{item.av}}</view>
+          <view class="subinfo"><view class="subname">{{item.name}} · 欠 {{item.count}} 单</view><view class="submeta">{{item.meta}}</view></view>
+          <view wx:if="{{item.reminded}}" class="gobtn done">已提醒 ✓</view>
+          <view wx:elif="{{item.sending}}" class="gobtn dim">发送中…</view>
+          <view wx:else class="gobtn" data-name="{{item.name}}" catchtap="remindTech">提醒 ›</view>
+        </view>
+        <view class="subrow center" wx:if="{{notes.groups.length}}">
+          <view class="gobtn solid gold {{remindingAll?'dim':''}}" catchtap="remindAll">{{remindingAll ? '发送中…' : '一键提醒全部 →'}}</view>
+        </view>
+      </view>
+    </view>
+
+    <!-- ④ 排班申请 -->
+    <view class="rowcard">
+      <view class="rowhead" data-k="sched" bindtap="toggle">
+        <view class="rowico">🗓</view>
+        <view class="rowt"><view class="rowname">排班申请</view><view class="rowhint">员工调休/换班审批</view></view>
+        <view class="nbadge {{sched.count?'warn':'mut'}}">{{sched.count}}</view>
+        <view class="chev {{expand==='sched'?'open':''}}">›</view>
+      </view>
+      <view class="rowbody" wx:if="{{expand==='sched'}}">
+        <view wx:if="{{!sched.items.length}}" class="subempty">暂无待审批的排班申请 ✓</view>
+        <view class="subrow" wx:for="{{sched.items}}" wx:key="id">
+          <view class="subinfo"><view class="subname">{{item.line}}</view><view class="submeta" wx:if="{{item.note}}">留言:{{item.note}}</view></view>
+          <view class="gobtn solid" catchtap="goSchedule">去处理 ›</view>
+        </view>
+      </view>
+    </view>
+
+    <!-- ⑤ 财务(锁) -->
+    <view class="lockrow" bindtap="goFinance">
+      <view class="rowico dark">🔒</view>
+      <view class="rowt"><view class="rowname">本月营收 · 沉睡卡 · 待结工资</view><view class="rowhint">账本口径 · 点开需财务密码</view></view>
+      <view class="chev">›</view>
+    </view>
+  </block>
 
   <merchant-tabbar active="home"></merchant-tabbar>
 </view>

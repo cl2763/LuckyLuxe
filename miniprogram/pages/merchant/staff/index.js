@@ -43,7 +43,12 @@ Page({
     const id = e.currentTarget.dataset.id
     try {
       const r = await api.adminPost('/admin/staff-accounts', { technicianId: id })
-      wx.showModal({ title: '账号已生成', content: `用户名:${r.username}\n初始密码:${r.initialPassword}\n(只显示这一次,请发给员工)`, showCancel: false })
+      const text = `用户名:${r.username}\n初始密码:${r.initialPassword}`
+      wx.showModal({
+        title: '账号已生成', content: `${text}\n(只显示这一次,点「复制」发给员工)`,
+        confirmText: '复制账号密码', cancelText: '知道了',
+        success: (m) => { if (m.confirm) wx.setClipboardData({ data: text, success: () => wx.showToast({ title: '已复制,去粘贴给员工', icon: 'none' }) }) }
+      })
       this.load()
     } catch (err) { wx.showToast({ title: (err && err.message) || '生成失败', icon: 'none' }) }
   },
@@ -52,8 +57,19 @@ Page({
     const id = e.currentTarget.dataset.acctid
     try {
       const r = await api.adminPost(`/admin/staff-accounts/${encodeURIComponent(id)}/reset-password`, {})
-      wx.showModal({ title: '密码已重置', content: `新初始密码:${r.initialPassword}\n员工下次登录需改密`, showCancel: false })
+      const text = `新初始密码:${r.initialPassword}`
+      wx.showModal({
+        title: '密码已重置', content: `${text}\n员工下次登录需改密`,
+        confirmText: '复制密码', cancelText: '知道了',
+        success: (m) => { if (m.confirm) wx.setClipboardData({ data: r.initialPassword, success: () => wx.showToast({ title: '已复制,去粘贴给员工', icon: 'none' }) }) }
+      })
     } catch (err) { wx.showToast({ title: (err && err.message) || '重置失败', icon: 'none' }) }
+  },
+
+  goDefaultPlan() { wx.navigateTo({ url: '/pages/merchant/salary-plan/index' }) },
+  goPlan(e) {
+    const { id, name } = e.currentTarget.dataset
+    wx.navigateTo({ url: `/pages/merchant/salary-plan/index?technicianId=${encodeURIComponent(id)}&name=${encodeURIComponent(name)}` })
   },
 
   async toggleAcct(e) {

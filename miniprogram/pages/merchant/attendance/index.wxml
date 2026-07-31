@@ -1,0 +1,82 @@
+<view class="page">
+
+  <!-- ===== 员工端:打卡 ===== -->
+  <block wx:if="{{!isOwner}}">
+    <view class="wifibar {{wifi.got ? 'ok' : 'warn'}}">
+      <text class="wb-ico">{{wifi.got ? '📶' : '⚠️'}}</text>
+      <text class="wb-txt">{{wifiTip}}</text>
+    </view>
+
+    <view class="clockcard">
+      <view class="cc-date">{{dateText}} · 现在 {{nowText}}</view>
+
+      <block wx:if="{{!today || !today.clockIn}}">
+        <view class="bigbtn {{clocking?'dim':''}}" data-a="in" bindtap="clock">上班打卡</view>
+        <view class="cc-hint">点一下即记录上班时间</view>
+      </block>
+
+      <block wx:elif="{{today.clockIn && !today.clockOut}}">
+        <view class="cc-state">已上班 <text class="b">{{today.clockIn}}</text> · 工作中</view>
+        <view class="bigbtn out {{clocking?'dim':''}}" data-a="out" bindtap="clock">下班打卡</view>
+        <view class="cc-hint">规定下班 {{scheduledEnd}} · 超时部分自动计入加班</view>
+      </block>
+
+      <block wx:else>
+        <view class="cc-state done">今日已完成 ✓</view>
+        <view class="cc-summary" wx:if="{{!today.abnormal}}">{{today.clockIn}} – {{today.clockOut}} · 工时 <text class="b2">{{today.workedText}}</text><text wx:if="{{today.overText}}" class="ot"> · 加班 {{today.overText}}</text></view>
+        <view class="cc-summary abn" wx:else>{{today.clockIn}} – {{today.clockOut}} · 时间异常,请老板在考勤里修正</view>
+      </block>
+    </view>
+
+    <view class="sec">本周打卡</view>
+    <view class="weekcard">
+      <view wx:if="{{!week.length}}" class="empty">本周暂无打卡记录</view>
+      <view class="wrow" wx:for="{{week}}" wx:key="id">
+        <view class="w-day">{{item.dayText}}</view>
+        <view class="w-time">{{item.clockIn ? item.clockIn + ' – ' + (item.clockOut || '进行中') : '—'}}</view>
+        <view class="w-dur">{{item.workedText}}<text wx:if="{{item.overText}}" class="ot"> {{item.overText}}</text></view>
+        <text wx:if="{{item.adjusted}}" class="w-adj">改</text>
+      </view>
+    </view>
+  </block>
+
+  <!-- ===== 老板端:今日考勤看板 ===== -->
+  <block wx:else>
+    <view class="boardhead">
+      <view class="bh-t">今日考勤 · {{dateText}}</view>
+      <view class="bh-wifi" bindtap="setWifi">📶 设当前 WiFi 为打卡 WiFi</view>
+    </view>
+    <view class="stats">
+      <view class="st"><view class="sn live">{{board.working}}</view><view class="sl">在岗</view></view>
+      <view class="stdiv"></view>
+      <view class="st"><view class="sn">{{board.done}}</view><view class="sl">已下班</view></view>
+      <view class="stdiv"></view>
+      <view class="st"><view class="sn warn">{{board.overtime}}</view><view class="sl">超时未走</view></view>
+    </view>
+
+    <view class="arow {{item.state==='overtime'?'hl':''}}" wx:for="{{board.rows}}" wx:key="technicianId" data-tid="{{item.technicianId}}" bindtap="openFix">
+      <view class="av">{{item.av}}</view>
+      <view class="ainfo">
+        <view class="aname">{{item.name}}<text wx:if="{{item.adjusted}}" class="w-adj">改</text></view>
+        <view class="ameta" wx:if="{{item.state==='done'}}">{{item.clockIn}} – {{item.clockOut}}{{item.overtimeMin ? ' · 加班 ' + item.overText : ''}}</view>
+        <view class="ameta" wx:elif="{{item.state==='working' || item.state==='overtime'}}">{{item.clockIn}} 上班 · 至今 {{item.workedText}}</view>
+        <view class="ameta" wx:elif="{{item.state==='rest'}}">今日休息</view>
+        <view class="ameta" wx:else>未上班 · 点击可补卡</view>
+      </view>
+      <view class="atag {{item.state}}">{{item.stateLabel}}<text wx:if="{{item.state==='overtime'}}"> +{{item.overText}}</text></view>
+    </view>
+    <view class="tip">点任意一行可修正/补卡 · 超时=超过排班或营业结束时间,自动计加班</view>
+  </block>
+
+  <!-- 老板修正弹层 -->
+  <view wx:if="{{fixSheet}}" class="mask" bindtap="closeFix"></view>
+  <view wx:if="{{fixSheet}}" class="fsheet">
+    <view class="fs-t">修正打卡 · {{fixRow.name}}</view>
+    <view class="fs-k">上班时间</view>
+    <picker mode="time" value="{{fixIn}}" bindchange="onFixIn"><view class="fs-time">{{fixIn}} <text class="g">改 ›</text></view></picker>
+    <view class="fs-k">下班时间(不填=仍在岗)</view>
+    <picker mode="time" value="{{fixOut || '19:00'}}" bindchange="onFixOut"><view class="fs-time">{{fixOut || '未打'}} <text class="g">改 ›</text></view></picker>
+    <view class="fs-save" bindtap="saveFix">保存修正(自动重算加班)</view>
+  </view>
+
+</view>

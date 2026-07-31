@@ -1,0 +1,38 @@
+<view class="pg">
+  <view class="pcard">
+    <view class="top">
+      <view class="av">{{customerName[0]}}</view>
+      <view><view class="nm">{{customerName}}</view><view class="st">到店 {{profile.visitCount}} 次{{profile.topService ? ' · 常做 ' + profile.topService : ''}}</view></view>
+    </view>
+    <view class="pstat">
+      <view class="s"><text class="b">{{profile.visitCount}}</text><text class="l">到店次数</text></view>
+      <view class="s"><text class="b">{{profile.avgIntervalDays || '—'}}{{profile.avgIntervalDays ? '天' : ''}}</text><text class="l">平均间隔</text></view>
+      <view class="s"><text class="b">{{profile.topService || '—'}}</text><text class="l">最常做</text></view>
+    </view>
+    <view class="ptags" wx:if="{{profile.safetyFlags.length || profile.personality.length || profile.preferences.length}}">
+      <view class="th">✦ AI 画像标签</view>
+      <view class="chips">
+        <text wx:for="{{profile.safetyFlags}}" wx:key="*this" class="chip warn">{{item}}</text>
+        <text wx:for="{{profile.personality}}" wx:key="*this" class="chip">{{item}}</text>
+        <text wx:for="{{profile.preferences}}" wx:key="*this" class="chip">{{item}}</text>
+        <text wx:for="{{profile.styles}}" wx:key="*this" class="chip">{{item}}</text>
+        <text wx:for="{{profile.companions}}" wx:key="*this" class="chip">{{item}}</text>
+      </view>
+    </view>
+  </view>
+
+  <view class="tlhead"><text>服务记录时间线</text><text class="add" bindtap="addNote">+ 写小记</text></view>
+  <view wx:if="{{!notes.length && !loading}}" class="empty">还没有服务小记,做完顾客随手记一条吧</view>
+  <view class="titem" wx:for="{{notes}}" wx:key="id">
+    <view class="tcard">
+      <view class="d">{{item.date}}{{item.technicianName ? ' · ' + item.technicianName : ''}}</view>
+      <view class="s" wx:if="{{item.serviceName}}">{{item.serviceName}}</view>
+      <view class="n">{{item.structured.summary || item.rawText}}</view>
+      <view class="mini">
+        <text wx:for="{{item.structured.safetyFlags}}" wx:for-item="t" wx:key="*this" class="c warn">{{t}}</text>
+        <text wx:for="{{item.structured.styles}}" wx:for-item="t" wx:key="*this" class="c">{{t}}</text>
+        <text wx:for="{{item.structured.preferences}}" wx:for-item="t" wx:key="*this" class="c">{{t}}</text>
+      </view>
+    </view>
+  </view>
+</view>

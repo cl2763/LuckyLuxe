@@ -1,78 +1,141 @@
 <view class="page">
-  <view class="h1">订单</view>
   <view class="seg">
-    <view class="seg-i {{mode==='today'?'on':''}}" data-m="today" bindtap="switchMode">今日</view>
-    <view class="seg-i {{mode==='calendar'?'on':''}}" data-m="calendar" bindtap="switchMode">日历</view>
-    <view class="seg-i {{mode==='all'?'on':''}}" data-m="all" bindtap="switchMode">全部</view>
+    <view class="seg-i {{mode==='today'?'on':''}}" data-m="today" bindtap="switchMode">今日台面</view>
+    <view class="seg-i {{mode==='all'?'on':''}}" data-m="all" bindtap="switchMode">全部订单</view>
+    <view class="seg-i {{mode==='aftersales'?'on':''}}" data-m="aftersales" bindtap="switchMode">售后订单</view>
   </view>
 
-  <!-- 今日:时间轴 -->
+  <!-- ===== 今日台面:技师维度日视图 ===== -->
   <block wx:if="{{mode==='today'}}">
-    <view class="daytitle">{{todayText}}</view>
-    <view wx:if="{{!todayList.length}}" class="empty">今天暂无预约</view>
-    <view class="tlr" wx:for="{{todayList}}" wx:key="id">
-      <view class="tlt">{{item.time}}</view>
-      <view class="tll"><view class="tld"></view></view>
-      <view class="tlc">
-        <view class="ocard" data-id="{{item.id}}" data-status="{{item.status}}" bindtap="orderActions">
-          <view class="th"><image wx:if="{{item.thumb}}" class="thimg" src="{{item.thumb}}" mode="aspectFill" /><image wx:else class="thph" src="/assets/icons/tab-gallery.svg" /></view>
-          <view class="oc-main">
-            <view class="oc-name">{{item.customer}}</view>
-            <view class="oc-sub">{{item.line}}</view>
-          </view>
-          <view class="oc-right">
-            <view class="tag {{item.statusCls}}">{{item.statusLabel}}</view>
-            <view class="oc-tech" wx:if="{{item.tech}}">{{item.tech}}</view>
+    <view class="dv-datebar">
+      <view class="dv-nav" bindtap="dvPrev">‹</view>
+      <text class="dv-date">{{dv.dateText}}</text>
+      <view class="dv-nav" bindtap="dvNext">›</view>
+      <view class="dv-today" bindtap="dvToday">今天</view>
+    </view>
+    <view class="dv-summary" wx:if="{{dv && !dv.isClosed}}">
+      <text class="dv-pill">今日 <text class="b">{{dv.total}}</text> 单</text>
+      <text class="dv-pill live" wx:if="{{dv.activeCount}}">在做 <text class="b">{{dv.activeCount}}</text> 人</text>
+      <text class="dv-pill">在岗 <text class="b">{{dv.working}}</text> 人</text>
+      <text class="dv-pill">空档 <text class="b">{{dv.freeHours}}</text> h</text>
+      <view class="dv-share" bindtap="shareSchedule">⤴ 分享</view>
+    </view>
+    <view wx:if="{{dv && dv.isClosed}}" class="dv-closed">本日休息{{dv.specialNote ? ' · ' + dv.specialNote : ''}}</view>
+    <view wx:elif="{{dv && !dv.cols.length}}" class="empty">本日无在岗技师</view>
+    <block wx:elif="{{dv}}">
+      <view class="dv-grid">
+        <view class="dv-left">
+          <view class="dv-corner"></view>
+          <view class="dv-gutter" style="height:{{dv.gridH}}rpx">
+            <view wx:for="{{dv.hours}}" wx:key="*this" class="dv-hr">{{item}}</view>
           </view>
         </view>
+        <scroll-view scroll-x class="dv-right" show-scrollbar="{{false}}">
+          <view class="dv-rin" style="width:{{dv.colW*dv.cols.length}}rpx">
+            <view class="dv-heads">
+              <view wx:for="{{dv.cols}}" wx:key="id" class="dv-th {{item.id===myTechId?'mine':''}}" style="width:{{dv.colW}}rpx">
+                <view class="dv-nm">{{item.name}}<text wx:if="{{item.id===myTechId}}" class="dv-me">我</text></view>
+                <view class="dv-rl">{{item.role}}</view>
+                <view class="dv-st {{item.busy?'busy':'free'}}">{{item.busy?'忙':'空'}}</view>
+              </view>
+            </view>
+            <view class="dv-cols" style="height:{{dv.gridH}}rpx">
+              <view wx:for="{{dv.cols}}" wx:key="id" wx:for-item="col" class="dv-col {{col.id===myTechId?'mine':''}}" style="width:{{dv.colW}}rpx">
+                <view wx:for="{{dv.hours}}" wx:key="*this" wx:for-item="hl" class="dv-line"></view>
+                <view wx:for="{{col.frees}}" wx:key="startTime" wx:for-item="f" class="dv-blk free" style="top:{{f.top}}rpx;height:{{f.height}}rpx" data-tech="{{col.id}}" data-time="{{f.startTime}}" bindtap="tapFree"><text>+ 直接排单</text></view>
+                <view wx:for="{{col.blocks}}" wx:key="id" wx:for-item="b" class="dv-blk {{b.cls}}" style="top:{{b.top}}rpx;height:{{b.height}}rpx" data-id="{{b.id}}" bindtap="tapBlock">
+                  <view class="dv-bt"><text wx:if="{{b.stateGlyph}}" class="dv-sdot {{b.state}}">{{b.stateGlyph}}</text>{{b.startTime}}–{{b.endTime}}</view>
+                  <view class="dv-bn">{{b.customerName}}</view>
+                  <view class="dv-bs">{{b.serviceName}}</view>
+                  <text wx:if="{{b.ownerDirect}}" class="dv-tag owner">老板排</text>
+                  <text wx:elif="{{b.isDesignated}}" class="dv-tag zhi">指定</text>
+                  <text wx:elif="{{b.isNewCustomer}}" class="dv-tag xin">新客</text>
+                  <text wx:if="{{b.depositUnpaid}}" class="dv-unpaid">未付定金</text>
+                </view>
+              </view>
+            </view>
+          </view>
+        </scroll-view>
       </view>
-    </view>
+      <view class="dv-legend top">
+        <text class="dv-legend-hd">图例 · 平时不用看</text>
+        <text><text class="lg hand"></text>手部美甲</text>
+        <text><text class="lg foot"></text>足部美甲</text>
+        <text><text class="lg lash"></text>美睫</text>
+        <text><text class="lg care"></text>护理</text>
+        <text><text class="lg free"></text>空档·点排</text>
+      </view>
+      <view class="dv-legend">
+        <text>淡色=未到 · <text class="dv-sdot active">●</text>进行中 · <text class="dv-sdot done">✓</text>完成 · 点空档=直接排单</text>
+      </view>
+    </block>
   </block>
 
-  <!-- 日历 -->
-  <block wx:if="{{mode==='calendar'}}">
-    <view class="monthbar">
-      <view class="marrow" bindtap="prevMonth">‹</view>
-      <view class="mtext">{{monthText}}</view>
-      <view class="marrow" bindtap="nextMonth">›</view>
-    </view>
-    <view class="weekhead"><view wx:for="{{weekHead}}" wx:key="*this" class="wh">{{item}}</view></view>
-    <view class="calgrid">
-      <view wx:for="{{cells}}" wx:key="key" class="cell {{item.sel?'sel':''}} {{item.blank?'blank':''}}" data-d="{{item.date}}" bindtap="pickDay">
-        <block wx:if="{{!item.blank}}">
-          <view class="cd">{{item.day}}</view>
-          <view class="cc" wx:if="{{item.count}}">{{item.count}}</view>
-        </block>
-      </view>
-    </view>
-    <view class="daytitle">{{selectedText}}</view>
-    <view wx:if="{{!selectedList.length}}" class="empty">这天暂无预约</view>
-    <view class="tlr" wx:for="{{selectedList}}" wx:key="id">
-      <view class="tlt">{{item.time}}</view>
-      <view class="tll"><view class="tld"></view></view>
-      <view class="tlc"><view class="ocard" data-id="{{item.id}}" data-status="{{item.status}}" bindtap="orderActions">
-        <view class="th"><image wx:if="{{item.thumb}}" class="thimg" src="{{item.thumb}}" mode="aspectFill" /><image wx:else class="thph" src="/assets/icons/tab-gallery.svg" /></view>
-        <view class="oc-main"><view class="oc-name">{{item.customer}}</view><view class="oc-sub">{{item.line}}{{item.tech ? ' · '+item.tech : ''}}</view></view>
-        <view class="tag {{item.statusCls}}">{{item.statusLabel}}</view>
-      </view></view>
-    </view>
-  </block>
-
-  <!-- 全部 -->
+  <!-- ===== 全部订单 ===== -->
   <block wx:if="{{mode==='all'}}">
     <scroll-view scroll-x class="filters">
       <view wx:for="{{filters}}" wx:key="*this" class="fchip {{filter===item?'on':''}}" data-f="{{item}}" bindtap="setFilter">{{filterLabels[item]}}</view>
     </scroll-view>
     <view wx:if="{{!groups.length}}" class="empty">暂无订单</view>
-    <block wx:for="{{groups}}" wx:key="date" wx:for-item="g">
-      <view class="grp">{{g.title}}</view>
-      <view class="ocard flat" wx:for="{{g.items}}" wx:key="id" wx:for-item="it" data-id="{{it.id}}" data-status="{{it.status}}" bindtap="orderActions">
-        <view class="th"><image wx:if="{{it.thumb}}" class="thimg" src="{{it.thumb}}" mode="aspectFill" /><image wx:else class="thph" src="/assets/icons/tab-gallery.svg" /></view>
-        <view class="oc-main"><view class="oc-name"><text class="oc-time">{{it.time}}</text> {{it.customer}}</view><view class="oc-sub">{{it.line}}{{it.tech ? ' · '+it.tech : ''}}</view></view>
-        <view class="tag {{it.statusCls}}">{{it.statusLabel}}</view>
+    <view class="ogroup" wx:for="{{groups}}" wx:key="date">
+      <view class="oghead">{{item.title}}</view>
+      <view class="orow" wx:for="{{item.items}}" wx:for-item="it" wx:key="id" data-id="{{it.id}}" data-status="{{it.status}}" data-userid="{{it.userId}}" data-customer="{{it.customer}}" data-service="{{it.serviceName}}" data-tech="{{it.tech}}" bindtap="orderActions">
+        <view class="otime">{{it.time}}</view>
+        <view class="omain"><view class="oname">{{it.customer}}<text class="ostatus {{it.statusCls}}">{{it.statusLabel}}</text></view><view class="oline">{{it.line}}{{it.tech ? ' · ' + it.tech : ''}}</view></view>
+        <text class="ochev">›</text>
       </view>
-    </block>
+    </view>
   </block>
 
-  <merchant-tabbar active="orders"></merchant-tabbar>
+  <!-- ===== 售后订单 ===== -->
+  <block wx:if="{{mode==='aftersales'}}">
+    <view wx:if="{{!aftersalesList.length}}" class="empty">暂无售后订单</view>
+    <view class="orow" wx:for="{{aftersalesList}}" wx:key="id">
+      <view class="otime">{{item.time}}</view>
+      <view class="omain"><view class="oname">{{item.customer}}<text class="ostatus d">售后</text></view><view class="oline">{{item.line}}{{item.tech ? ' · ' + item.tech : ''}} · {{item.date}}</view></view>
+    </view>
+  </block>
+
+  <!-- 直接排单弹窗 -->
+  <view wx:if="{{directSheet}}" class="mask" bindtap="closeDirect"></view>
+  <view wx:if="{{directSheet}}" class="dsheet">
+    <view class="ds-head">
+      <view class="ds-t">直接排单 · {{directTechName}}</view>
+      <view class="ds-x" bindtap="closeDirect">✕</view>
+    </view>
+    <scroll-view scroll-y class="ds-body">
+      <view class="ds-k">顾客 · 从客户库搜索,或直接输入新客名</view>
+      <input class="ds-inp" placeholder="姓名 / 手机号 / 新客名" value="{{custQuery}}" bindinput="onCustSearch" />
+      <view wx:if="{{selectedCustName}}" class="ds-picked">已选:{{selectedCustName}} <text class="ds-clear" bindtap="clearCust">✕</text></view>
+      <view wx:if="{{custMatches.length}}" class="ds-matches">
+        <view wx:for="{{custMatches}}" wx:key="id" class="ds-match" data-id="{{item.id}}" data-name="{{item.name}}" bindtap="pickCust">
+          <text class="ds-mn">{{item.name}}</text><text class="ds-mp" wx:if="{{item.phone}}">{{item.phone}}</text>
+        </view>
+      </view>
+      <view wx:elif="{{custQuery && !selectedCustId}}" class="ds-newhint">库中无匹配 → 将作为新客「{{custQuery}}」自动建档</view>
+
+      <view class="ds-k">时段 · 开始时间</view>
+      <picker mode="time" value="{{directTime}}" bindchange="onDirectTime"><view class="ds-time">{{directTime}} <text class="ds-cal">改 ›</text></view></picker>
+      <view class="ds-durrow">
+        <view class="ds-durbtn" bindtap="durMinus">−30分</view>
+        <view class="ds-durval">占用 {{directDurH}} 小时<text class="ds-durend" wx:if="{{directEndTime}}"> · 到 {{directEndTime}}</text></view>
+        <view class="ds-durbtn" bindtap="durPlus">＋30分</view>
+        <view class="ds-durstd" bindtap="durReset">标准</view>
+      </view>
+      <view class="ds-endhint">默认按所选服务时长;这次要多做/少做点上面调</view>
+
+      <view class="ds-k">服务</view>
+      <scroll-view scroll-x class="ds-svcs"><view wx:for="{{directServices}}" wx:key="id" class="ds-c {{directServiceId===item.id?'on':''}}" data-id="{{item.id}}" bindtap="pickDirectSvc">{{item.name}}</view></scroll-view>
+
+      <view class="ds-k">定金状态(成为订单标)</view>
+      <view class="ds-toggle">
+        <view class="ds-opt {{directDeposit?'on':''}}" data-v="paid" bindtap="setDeposit">已付定金</view>
+        <view class="ds-opt {{!directDeposit?'on warn':''}}" data-v="unpaid" bindtap="setDeposit">未付定金 · 到店收</view>
+      </view>
+      <view class="ds-hint">未付定金:仍占该时段,订单标「未付定金」提醒之后收</view>
+    </scroll-view>
+    <view class="ds-confirm" bindtap="submitDirect">确认排单 · 占用该时段</view>
+  </view>
+
+  <merchant-tabbar wx:if="{{!directSheet}}" active="orders"></merchant-tabbar>
 </view>

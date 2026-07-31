@@ -4,6 +4,11 @@
     <view class="addbtn" bindtap="addTech">＋ 新增员工</view>
   </view>
 
+  <view class="defplan" bindtap="goDefaultPlan">
+    <text class="dp-t">💰 全店默认薪资方案</text>
+    <text class="dp-d">没单独设的员工按这套算 ›</text>
+  </view>
+
   <view wx:if="{{!list.length}}" class="empty">还没有技师</view>
   <view class="card" wx:for="{{list}}" wx:key="id">
     <view class="top">
@@ -22,6 +27,7 @@
       </block>
       <view wx:else class="b p full" data-id="{{item.id}}" bindtap="genAccount">生成登录账号</view>
     </view>
+    <view class="planbtn" data-id="{{item.id}}" data-name="{{item.name}}" bindtap="goPlan">💰 薪资方案 ›</view>
   </view>
 
   <view class="note">「停用」保留排班/业绩历史,账号即刻失效(离职用);员工首次登录会强制改密。</view>

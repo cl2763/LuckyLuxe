@@ -1,0 +1,41 @@
+page{background:#fbf8f5}
+.page{padding:24rpx 26rpx 60rpx}
+.pt{font-size:32rpx;font-weight:800;color:#241f1d}
+.ps{font-size:22rpx;color:#9a8c7c;margin-top:6rpx}
+.lnk{color:#b5885d;font-weight:700}
+.k{font-size:23rpx;color:#9a8c7c;font-weight:700;margin:26rpx 2rpx 12rpx}
+
+/* 模板三选 */
+.tpl{display:flex;gap:12rpx}
+.tp{flex:1;background:#fff;border:2rpx solid #eadfd7;border-radius:16rpx;padding:18rpx 10rpx;text-align:center}
+.tp.on{border-color:#c8a47e;background:#fbf4ec}
+.tt{font-size:25rpx;font-weight:800;color:#241f1d}
+.td{font-size:18rpx;color:#9a8c7c;margin-top:4rpx;white-space:pre-line;line-height:1.4}
+
+/* 填空行:数字全部 input */
+.frow{display:flex;align-items:center;justify-content:space-between;background:#fff;border:1rpx solid #eadfd7;border-radius:14rpx;padding:18rpx 20rpx;margin-bottom:12rpx}
+.fl{font-size:26rpx;color:#241f1d;font-weight:600;flex:1}
+.fs{font-size:19rpx;color:#9a8c7c;font-weight:400;display:block;margin-top:2rpx}
+.fv{display:flex;align-items:center;gap:4rpx;flex:none}
+.u{font-size:24rpx;color:#9a8c7c;font-weight:700}
+.num{width:140rpx;height:64rpx;line-height:64rpx;background:#fbf8f5;border:1rpx solid #eadfd7;border-radius:10rpx;text-align:center;font-size:28rpx;font-weight:800;color:#b5885d}
+
+/* 阶梯表:每格都是 input */
+.ladder{background:#fff;border:1rpx solid #eadfd7;border-radius:14rpx;overflow:hidden}
+.lr{display:flex;align-items:center;gap:10rpx;padding:14rpx 16rpx;border-bottom:1rpx solid #f2ebe4}
+.lr.hd{background:#fbf8f5;padding:12rpx 16rpx}
+.lr.hd text{font-size:19rpx;color:#9a8c7c;font-weight:700}
+.c1{flex:3}.c2{flex:3}.c3{flex:2}.c4{flex:none;width:44rpx}
+.li{height:64rpx;line-height:64rpx;background:#fbf8f5;border:1rpx solid #eadfd7;border-radius:10rpx;text-align:center;font-size:26rpx;font-weight:700;color:#241f1d}
+.del{width:44rpx;height:44rpx;border-radius:50%;background:#fdeeea;color:#c0392b;display:flex;align-items:center;justify-content:center;font-size:22rpx}
+.addrow{text-align:center;font-size:24rpx;color:#b5885d;font-weight:700;padding:18rpx}
+
+/* 加班粒度 */
+.seg{display:flex;background:#fbf8f5;border:1rpx solid #eadfd7;border-radius:10rpx;padding:4rpx}
+.sopt{font-size:22rpx;padding:10rpx 18rpx;border-radius:8rpx;color:#8a7f78}
+.sopt.on{background:#2d2826;color:#fff;font-weight:700}
+
+.cardnote{font-size:20rpx;color:#9a8c7c;margin:2rpx 4rpx 0;line-height:1.5}
+.save{margin-top:30rpx;background:#2d2826;color:#fff;text-align:center;padding:26rpx;border-radius:14rpx;font-size:29rpx;font-weight:800}
+.save.dim{opacity:.6}
+.hint{font-size:20rpx;color:#9a8c7c;text-align:center;margin-top:14rpx;line-height:1.6}

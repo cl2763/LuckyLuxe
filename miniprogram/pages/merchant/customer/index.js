@@ -7,6 +7,14 @@ function lastText(iso) { if (!iso) return '—'; const d = Math.floor((Date.now(
 Page({
   data: { c: null, orders: [], ordersLoaded: false },
   onLoad(q) { this.id = decodeURIComponent((q && q.id) || '') },
+  writeNote() {
+    const nm = (this.data.c && this.data.c.name) || '顾客'
+    wx.navigateTo({ url: `/pages/merchant/service-note/index?userId=${encodeURIComponent(this.id)}&name=${encodeURIComponent(nm)}` })
+  },
+  viewProfile() {
+    const nm = (this.data.c && this.data.c.name) || '顾客'
+    wx.navigateTo({ url: `/pages/merchant/customer-profile/index?userId=${encodeURIComponent(this.id)}&name=${encodeURIComponent(nm)}` })
+  },
   async onShow() { if (!(await api.guardOwner())) return; this.load() },
   async load() {
     try {

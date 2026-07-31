@@ -1,0 +1,32 @@
+<view class="pg">
+  <view class="cust">
+    <view class="av">{{customerName[0]}}</view>
+    <view class="ci"><view class="nm">{{customerName}}</view><view class="mt">{{serviceName}}{{techName ? ' · ' + techName : ''}}</view></view>
+  </view>
+
+  <block wx:if="{{!result}}">
+    <view class="reccard">
+      <view class="hint">做完直接说一句,不用打字</view>
+      <textarea class="ta" placeholder="例:她安静怕疼下手轻,跟闺蜜来,不喜欢亮片喜欢素色…" value="{{text}}" bindinput="onInput" maxlength="500" auto-height></textarea>
+      <view class="voice" bindtap="voiceHint">🎙 用语音输入</view>
+    </view>
+    <view class="save {{saving?'ing':''}}" bindtap="save">{{saving ? 'AI 整理中…' : '保存小记 · AI 自动整理'}}</view>
+    <view class="tip">保存后 AI 自动拆成 款式/性格/偏好/同行/安全项,存入顾客画像永久留存</view>
+  </block>
+
+  <block wx:else>
+    <view class="done">✓ 已保存,AI 已整理</view>
+    <view class="rescard" wx:if="{{result.summary}}"><view class="rh">摘要</view><view class="rs">{{result.summary}}</view></view>
+    <view class="rescard">
+      <view class="field" wx:if="{{result.safetyFlags.length}}"><text class="k">安全</text><view class="chips"><text wx:for="{{result.safetyFlags}}" wx:key="*this" class="chip warn">{{item}}</text></view></view>
+      <view class="field" wx:if="{{result.styles.length}}"><text class="k">款式</text><view class="chips"><text wx:for="{{result.styles}}" wx:key="*this" class="chip">{{item}}</text></view></view>
+      <view class="field" wx:if="{{result.personality.length}}"><text class="k">性格</text><view class="chips"><text wx:for="{{result.personality}}" wx:key="*this" class="chip">{{item}}</text></view></view>
+      <view class="field" wx:if="{{result.preferences.length}}"><text class="k">偏好</text><view class="chips"><text wx:for="{{result.preferences}}" wx:key="*this" class="chip">{{item}}</text></view></view>
+      <view class="field" wx:if="{{result.companions.length}}"><text class="k">同行</text><view class="chips"><text wx:for="{{result.companions}}" wx:key="*this" class="chip">{{item}}</text></view></view>
+    </view>
+    <view class="row2">
+      <view class="btn ghost" bindtap="again">再记一条</view>
+      <view class="btn dark" bindtap="goProfile">看顾客画像</view>
+    </view>
+  </block>
+</view>

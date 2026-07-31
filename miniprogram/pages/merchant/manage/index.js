@@ -11,7 +11,9 @@ const ROUTES = {
   member: '/pages/merchant/member/index',
   analytics: '/pages/merchant/analytics/index',
   store: '/pages/merchant/store/index',
-  myperf: '/pages/merchant/my-performance/index'
+  myperf: '/pages/merchant/my-performance/index',
+  attendance: '/pages/merchant/attendance/index',
+  salaryMonth: '/pages/merchant/salary-month/index'
 }
 
 const E = {
@@ -26,7 +28,10 @@ const E = {
   store: { k: 'store', icon: 'm-store', t: '门店信息 / 营业时间', d: '地址 · 电话 · 特殊日期 · 预约规则' },
   staff: { k: 'staff', icon: 'm-staff', t: '员工管理', d: '新增/生成账号 · 业绩' },
   me: { k: 'me', icon: 'm-settings', t: '我的 / 账号', d: '改密 · 语言 · 财务密码' },
-  myperf: { k: 'myperf', icon: 'm-analytics', t: '我的业绩', d: '本月营收 · 底薪 · 提成估算' }
+  myperf: { k: 'myperf', icon: 'm-analytics', t: '我的业绩', d: '本月营收 · 底薪 · 提成估算' },
+  attendance: { k: 'attendance', icon: 'm-staff', t: '考勤打卡', d: '在岗看板 · 修正补卡 · 打卡 WiFi' },
+  attendanceStaff: { k: 'attendance', icon: 'm-staff', t: '打卡', d: '上下班打卡 · 本周工时' },
+  salaryMonth: { k: 'salaryMonth', icon: 'm-finance', t: '工资试算', d: '全员月度工资明细 · 需财务密码' }
 }
 
 Page({
@@ -43,11 +48,11 @@ Page({
       name = owner ? 'Chang' : ((m && m.displayName) || '员工')
     } catch (e) { owner = api.isOwner() }
     const groups = owner ? [
-      { title: '日常经营', rows: [E.schedule, E.finance, E.customers] },
+      { title: '日常经营', rows: [E.schedule, E.attendance, E.finance, E.salaryMonth, E.customers] },
       { title: '营销与会员', rows: [E.marketing, E.member, E.analytics] },
       { title: '店铺设置', rows: [E.services, E.store, E.staff, E.me] }
     ] : [
-      { title: '日常', rows: [E.scheduleView, E.myperf] },
+      { title: '日常', rows: [E.attendanceStaff, E.scheduleView, E.myperf] },
       { title: '账号', rows: [E.me] }
     ]
     this.setData({ isOwner: owner, name, groups })

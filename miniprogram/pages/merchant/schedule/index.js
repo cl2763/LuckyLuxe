@@ -14,7 +14,7 @@ function typeCls(t) { const u = String(t || '').toUpperCase(); return u === 'NAI
 Page({
   data: {
     role: 'owner',
-    viewMode: 'tech', // 'tech' 技师维度日视图(默认) | 'month' 月历排班
+    viewMode: 'month', // 排班页只留月历(技师维度日视图已搬到「订单/今日台面」);tech 分支保留但不再展示
     calYear: 0, calMonth: 0, monthText: '',
     weekHead: ['一', '二', '三', '四', '五', '六', '日'],
     cells: [],

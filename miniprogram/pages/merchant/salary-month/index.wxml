@@ -1,0 +1,40 @@
+<view class="page">
+  <view class="monthbar">
+    <view class="marrow" bindtap="prevMonth">‹</view>
+    <view class="mtext">{{monthText}} 工资试算</view>
+    <view class="marrow" bindtap="nextMonth">›</view>
+  </view>
+  <view class="ps">业绩=完成单口径 · 加班=打卡考勤 · 数字全自动;正式结算功能随财务账本后续接入</view>
+
+  <block wx:if="{{keyMissing}}">
+    <view class="lockcard">
+      <view class="li">🔒</view>
+      <view class="lt">工资数据在财务门禁内</view>
+      <view class="ld">先到财务页输入财务密码解锁,再回来看试算</view>
+      <view class="lbtn" bindtap="goUnlock">去财务解锁 ›</view>
+    </view>
+  </block>
+
+  <block wx:elif="{{!loading}}">
+    <view class="lockedbar" wx:if="{{locked}}">✅ 已锁定存档 · {{lockedAt}}<text class="unlk" bindtap="unlockMonth"> 解锁重算 ›</text></view>
+    <view class="totalbar"><text>全员合计{{locked ? '(存档)' : ''}}</text><text class="tb">{{total}}</text></view>
+
+    <view class="paycard" wx:for="{{rows}}" wx:key="technicianId">
+      <view class="ph">
+        <view class="av">{{item.av}}</view>
+        <view class="pn">{{item.name}}<text class="src" wx:if="{{item.srcText}}"> · {{item.srcText}}</text></view>
+        <view class="ptotal">{{item.totalText}}</view>
+      </view>
+      <block wx:if="{{!item.noPlan}}">
+        <view class="pline" wx:if="{{item.baseSalaryCents}}"><text class="m">底薪</text><text class="v">{{item.baseText}}</text></view>
+        <view class="pline" wx:if="{{item.handworkCents}}"><text class="m">手工费 · 完成 {{item.orderCount}} 单</text><text class="v">{{item.handworkText}}</text></view>
+        <view class="pline"><text class="m">业绩 {{item.perfText}} × {{item.pctText}}</text><text class="v">{{item.commText}}</text></view>
+        <view class="pline hl" wx:if="{{item.overtimeMin}}"><text class="m">加班 {{item.otText}}</text><text class="v">{{item.otPayText}}</text></view>
+      </block>
+      <view class="noplan" wx:else>未配置薪资方案 · <text class="lnk" data-tid="{{item.technicianId}}" data-name="{{item.name}}" catchtap="goPlan">去配置 ›</text></view>
+    </view>
+
+    <view wx:if="{{!locked && rows.length}}" class="lockbtn {{locking?'dim':''}}" bindtap="lockMonth">{{locking ? '锁定中…' : '确认并锁定 ' + monthText + ' 工资表'}}</view>
+    <view wx:if="{{!locked && rows.length}}" class="lockhint">锁定=按当前数字存档;之后业绩/考勤变动不影响本月工资,防事后改数</view>
+  </block>
+</view>

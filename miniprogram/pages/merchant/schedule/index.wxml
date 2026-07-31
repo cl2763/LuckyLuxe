@@ -1,5 +1,6 @@
 <view class="page">
-  <view class="viewseg">
+  <!-- 技师维度视图已搬到「订单/今日台面」;排班页只留月历(定技师基础上班时间) -->
+  <view class="viewseg" wx:if="{{false}}">
     <view class="vopt {{viewMode==='tech'?'on':''}}" data-m="tech" bindtap="switchView">技师维度</view>
     <view class="vopt {{viewMode==='month'?'on':''}}" data-m="month" bindtap="switchView">月历排班</view>
   </view>

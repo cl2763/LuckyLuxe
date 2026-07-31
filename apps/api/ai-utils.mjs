@@ -245,6 +245,45 @@ export async function createCustomerInsight({ lang = 'zh', customer, bookings = 
   })
 }
 
+// 服务小记结构化(P0-②):把员工随手说/写的一段话,拆成款式/性格/偏好/同行/安全项 + 一句摘要
+export async function createServiceNoteInsights({ rawText = '', serviceName = '', customerName = '' }) {
+  const schema = {
+    styles: ['string'],        // 款式/风格
+    personality: ['string'],   // 性格
+    preferences: ['string'],   // 偏好
+    companions: ['string'],    // 同行人
+    safetyFlags: ['string'],   // 安全项(怕疼/过敏/敏感等,需重点提醒)
+    other: ['string'],         // 其他备注
+    summary: 'string'          // 一句话摘要
+  }
+  return aiJson({
+    system: '你是美甲美睫店的顾客画像助手。把员工口语化的服务小记,提炼成结构化标签。标签要短(2-6字)、准确、不编造原文没有的信息。怕疼/过敏/敏感/孕期等涉及安全的一律放 safetyFlags。',
+    user: `顾客:${customerName || '顾客'}\n项目:${serviceName || '-'}\n员工小记原文:\n${clip(rawText, 500)}`,
+    schema,
+    fallback: () => ({
+      styles: [], personality: [], preferences: [], companions: [], safetyFlags: [], other: [],
+      summary: clip(rawText, 60)
+    })
+  })
+}
+
+// 沉睡客召回话术(P1-③):结合服务小记画像,一人一句,老板复制粘贴发微信
+export async function createRecallMessages({ customers = [], storeName = '' }) {
+  const schema = {
+    messages: [{ userId: 'string', message: 'string' }]
+  }
+  const fallbackFor = (c) => {
+    const like = (c.styles || [])[0] || c.topService || ''
+    return `${c.name}好久不见啦~${like ? `最近店里新到了适合你的${like},` : ''}这周约还有小惊喜,想你啦,回来做美美的!`
+  }
+  return aiJson({
+    system: `你是「${storeName || '美甲美睫店'}」的老板娘,要给好久没来的老顾客发微信召回。要求:每人一条,口吻亲切自然像朋友、不油腻不群发感;结合顾客偏好款式/画像点到具体项目;30-60字;带一个轻钩子(新品/小福利/本周有空位),不要写死折扣数字。`,
+    user: `给以下顾客各写一条召回微信(JSON 返回):\n${customers.map((c) => `- userId:${c.userId} 姓名:${c.name} 距上次到店:${c.lastVisitDays}天 常做:${c.topService || '-'} 偏好:${(c.styles || []).concat(c.preferences || []).join('/') || '-'} 注意:${(c.safetyFlags || []).join('/') || '-'}`).join('\n')}`,
+    schema,
+    fallback: () => ({ messages: customers.map((c) => ({ userId: c.userId, message: fallbackFor(c) })) })
+  })
+}
+
 export async function createDailyBrief({ lang = 'zh', bookings = [], customers = [], services = [] }) {
   const schema = {
     headlineZh: 'string',

@@ -20,3 +20,49 @@ page{background:#fbf8f5}
 .ctags{margin-top:8rpx}
 .tg{font-size:20rpx;color:#9b7655;background:#f1e7df;border-radius:40rpx;padding:2rpx 12rpx;margin-right:8rpx}
 .chev{color:#c7b9ab;font-size:34rpx;flex:0 0 auto}
+
+/* ===== RFM 分层 ===== */
+.sec{font-size:22rpx;color:#9a8c7c;font-weight:700;margin:4rpx 2rpx 12rpx}
+.tiers{display:flex;flex-wrap:wrap;gap:12rpx;margin-bottom:18rpx}
+.tcard{width:calc(50% - 6rpx);border-radius:20rpx;padding:20rpx 22rpx;color:#fff;position:relative;box-sizing:border-box}
+.tcard.sel{box-shadow:0 0 0 4rpx rgba(45,40,38,.35) inset}
+.tcard .tn{font-size:44rpx;font-weight:800;line-height:1.1}
+.tcard .tt{font-size:24rpx;font-weight:700;margin-top:2rpx}
+.tcard .td{font-size:18rpx;opacity:.85;margin-top:2rpx}
+.tcard.a{background:linear-gradient(135deg,#b5885d,#c8a47e)}
+.tcard.b{background:linear-gradient(135deg,#3f6b52,#5d8a70)}
+.tcard.n{background:linear-gradient(135deg,#3b6ea5,#6b95c4)}
+.tcard.s{background:linear-gradient(135deg,#8a5a52,#a5786f)}
+.tbadge{font-size:18rpx;font-weight:800;color:#fff;border-radius:8rpx;padding:2rpx 12rpx;margin-left:8rpx}
+.tbadge.a{background:#b5885d}
+.tbadge.b{background:#3f6b52}
+.tbadge.n{background:#3b6ea5}
+.tbadge.s{background:#8a5a52}
+.ops{display:flex;gap:12rpx;margin-bottom:10rpx}
+.op{flex:1;text-align:center;font-size:24rpx;font-weight:700;border-radius:14rpx;padding:18rpx 0}
+.op.o1{background:#fff;border:1rpx solid #e7ddd4;color:#5c4630}
+.op.o2{background:linear-gradient(135deg,#2d2826,#463d34);color:#e8c9a0}
+.op.dim{opacity:.6}
+.opshint{font-size:19rpx;color:#a5674c;margin-bottom:12rpx;line-height:1.5}
+.cm{flex:none;text-align:right}
+.cm .m1{font-size:26rpx;font-weight:800;color:#241f1d}
+.cm .m2{font-size:18rpx;color:#9a8c7c;margin-top:2rpx}
+.sechead{display:flex;justify-content:space-between;align-items:center;margin:4rpx 2rpx 12rpx}
+.sechead .sec{margin:0}
+.rulebtn{font-size:22rpx;color:#b5885d;font-weight:700;background:#fff;border:1rpx solid #e7ddd4;border-radius:999rpx;padding:6rpx 18rpx}
+
+/* 规则/发券弹层 */
+.mask{position:fixed;left:0;top:0;right:0;bottom:0;background:rgba(36,26,18,.45);z-index:1999}
+.rsheet{position:fixed;left:0;right:0;bottom:0;background:#fff;border-radius:24rpx 24rpx 0 0;padding:28rpx 28rpx calc(28rpx + env(safe-area-inset-bottom));z-index:2000;max-height:75vh;overflow-y:auto}
+.rs-t{font-size:30rpx;font-weight:800;color:#241f1d;margin-bottom:6rpx}
+.rs-k{font-size:22rpx;color:#9a8c7c;font-weight:700;margin:18rpx 0 8rpx}
+.rs-row{display:flex;align-items:center;gap:14rpx;background:#fbf8f5;border:1rpx solid #eadfd7;border-radius:12rpx;padding:14rpx 18rpx;margin-bottom:10rpx}
+.rl{font-size:25rpx;color:#241f1d;font-weight:600}
+.rn{flex:1;height:56rpx;line-height:56rpx;background:#fff;border:1rpx solid #eadfd7;border-radius:10rpx;text-align:center;font-size:27rpx;font-weight:800;color:#b5885d}
+.ru{font-size:23rpx;color:#9a8c7c;flex:none}
+.rs-note{font-size:20rpx;color:#9a8c7c;text-align:center;margin-top:10rpx;line-height:1.5}
+.rs-save{margin-top:20rpx;background:#2d2826;color:#fff;text-align:center;padding:24rpx;border-radius:14rpx;font-size:28rpx;font-weight:800}
+.cp-row{display:flex;align-items:center;justify-content:space-between;border:1rpx solid #eadfd7;border-radius:14rpx;padding:20rpx;margin-bottom:12rpx}
+.cp-n{font-size:27rpx;font-weight:700;color:#241f1d}
+.cp-d{font-size:21rpx;color:#9a8c7c;margin-top:3rpx}
+.cp-go{font-size:24rpx;font-weight:800;color:#fff;background:#c8a47e;border-radius:999rpx;padding:10rpx 26rpx}

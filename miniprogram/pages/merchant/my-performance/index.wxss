@@ -13,3 +13,5 @@ page{background:#fbf8f5}
 .k{font-size:25rpx;color:#8c8279}
 .v{font-size:26rpx;color:#2d2826;font-weight:600}
 .note{font-size:21rpx;color:#b6a99b;line-height:1.6;margin-top:18rpx}
+.v.hot{color:#c0392b}
+.nextcard{background:#fbf4ec;border:1rpx dashed #e7d3ba;border-radius:14rpx;padding:18rpx 20rpx;font-size:24rpx;color:#8a6a3f;font-weight:600;margin-top:14rpx}

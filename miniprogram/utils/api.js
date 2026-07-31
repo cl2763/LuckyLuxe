@@ -546,6 +546,13 @@ function adminPost(path, data) {
 function adminPatch(path, data) {
   return adminRequest(path, 'PATCH', data)
 }
+// 服务小记(P0-②)
+function saveServiceNote(data) {
+  return adminRequest('/admin/service-notes', 'POST', data)
+}
+function getCustomerNotes(userId) {
+  return adminRequest(`/admin/customers/${encodeURIComponent(userId)}/notes`)
+}
 // 角色缓存(登录/adminMe 后写入),供页面同步判断
 function getCachedRole() { return wx.getStorageSync('lucky_admin_role') || '' }
 function isOwner() { return getCachedRole() === 'owner' }
@@ -624,6 +631,8 @@ module.exports = {
   adminGet,
   adminPost,
   adminPatch,
+  saveServiceNote,
+  getCustomerNotes,
   adminRequest,
   getCachedRole,
   isOwner,
