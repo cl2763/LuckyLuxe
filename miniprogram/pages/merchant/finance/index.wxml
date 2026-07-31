@@ -12,23 +12,46 @@
 
   <!-- 已解锁 -->
   <block wx:else>
-    <view class="metrics">
-      <view class="mc"><view class="ml">今日已收</view><view class="mv">{{m.today}}</view></view>
-      <view class="mc"><view class="ml">本月营收</view><view class="mv">{{m.revenue}}</view></view>
+    <!-- hero:三真数 + 一实一虚 + 目标圆环(设了才有) -->
+    <view class="hero">
+      <view class="h-row">
+        <view class="h-item"><view class="h-l">本日收款</view><view class="h-n">{{m.today}}</view></view>
+        <view class="h-item"><view class="h-l">本月收入</view><view class="h-n">{{m.revenue}}</view></view>
+        <view class="h-item"><view class="h-l">净赚(已入账)</view><view class="h-n">{{m.net}}</view></view>
+      </view>
+      <view wx:if="{{estNote}}" class="h-est">{{estNote}}</view>
+      <block wx:if="{{goal.has}}">
+        <view class="rings">
+          <view class="ring" wx:for="{{goal.rings}}" wx:key="label">
+            <view class="ring-c" style="background:conic-gradient({{item.done ? '#8fd0a8' : '#e8c9a0'}} {{item.animPct}}%, #5b4f42 0)">
+              <view class="ring-i {{item.done ? 'done' : ''}}">{{item.pctText}}</view>
+            </view>
+            <view class="ring-l">{{item.label}}</view>
+            <view class="ring-s">{{item.sub}}</view>
+          </view>
+        </view>
+        <view class="h-daily">{{goal.daily}} · <text class="h-edit" bindtap="openGoal">改目标</text></view>
+      </block>
     </view>
-    <view class="mc wide"><view class="ml">本月净利 / 净利率</view><view class="mv">{{m.net}} · {{m.netRate}}%</view></view>
 
-    <view wx:if="{{target.has}}" class="card">
-      <view class="row-sb"><text class="ck">月目标进度</text><text class="cb">{{target.pct}}%</text></view>
-      <view class="bar"><view class="bar-in" style="width:{{target.pct}}%"></view></view>
-      <view class="sub">目标营收 {{target.targetRevenue}}</view>
-    </view>
-    <view wx:else class="hintcard">
-      <view class="hc-t">还没设月目标</view>
-      <view class="hc-s">营收/净利已自动汇总;设置目标后可看进度与预警(在网页后台设置)</view>
+    <!-- ✦ AI 智能总结 -->
+    <view wx:if="{{ai.length}}" class="aibox">
+      <view class="ai-h"><text class="ai-spark">✦</text> AI 智能总结</view>
+      <view class="ai-li {{item.tone}}" wx:for="{{ai}}" wx:key="text" style="animation-delay:{{index * 0.22 + 0.3}}s">{{item.text}}</view>
     </view>
 
-    <view class="abtn p full" bindtap="toWeb">＋ 记一笔</view>
+    <!-- 没设目标:只留一行淡引导,不摆空进度 -->
+    <view wx:if="{{!goal.has}}" class="guide" bindtap="openGoal">
+      <view class="guide-l"><text class="guide-b">想看目标进度 / 收支平衡线?</text><text class="guide-s">就 3 项,一分钟;先不设也没关系,上面的真数永远都在</text></view>
+      <view class="guide-go">去设置 ›</view>
+    </view>
+
+    <!-- 记一笔 / 本月流水 -->
+    <view class="entry2">
+      <view class="ebtn hl" bindtap="toEntry"><view class="ei">✎</view><view class="et">记一笔</view><view class="es">买耗材当场记,三秒入账</view></view>
+      <view class="ebtn" bindtap="toTxns"><view class="ei">☰</view><view class="et">本月流水</view><view class="es">查账 · 冲销纠错</view></view>
+    </view>
+
     <view class="abtn full" bindtap="aiInsight">✦ AI 解读</view>
     <view wx:if="{{insight}}" class="insight">{{insight}}</view>
 
@@ -55,6 +78,30 @@
       </view>
     </view>
 
-    <view class="weblink" bindtap="toWeb">流水明细 · 导出 · 目标设置 → 网页后台</view>
+    <view class="weblink">CSV 导出 · 固定支出规则 · 账本校验 → 网页后台</view>
   </block>
+
+  <!-- 「设个目标」弹窗 -->
+  <view wx:if="{{gm.show}}" class="mask" bindtap="closeGoal">
+    <view class="modal" catchtap="noop">
+      <view class="md-h"><text class="md-t">设个目标</text><text class="md-x" bindtap="closeGoal">✕</text></view>
+      <view class="md-lab">① 目标类型</view>
+      <view class="seg">
+        <view class="seg-b {{gm.mode === 'net_profit' ? 'on' : ''}}" data-mode="net_profit" bindtap="gmMode">每月想净赚</view>
+        <view class="seg-b {{gm.mode === 'revenue' ? 'on' : ''}}" data-mode="revenue" bindtap="gmMode">每月想收到</view>
+      </view>
+      <view class="md-lab">② 目标金额($ / 月)</view>
+      <input class="md-inp" type="digit" placeholder="3500" placeholder-class="ph" value="{{gm.monthVal}}" bindinput="gmMonth" />
+      <view class="md-lab">③ 变动成本率(每营收100块中耗材和提成的占比)</view>
+      <view class="raterow">
+        <input class="md-inp rate" type="digit" value="{{gm.rateVal}}" bindinput="gmRate" />
+        <view wx:if="{{gm.suggest != null}}" class="sug-btn" bindtap="gmUseSuggest">使用智能建议值</view>
+      </view>
+      <view class="md-tip">新店没账时默认 25%(行业经验值);之后每个月会使用上个月的真实变动成本率作为智能建议值{{gm.suggest != null ? '(当前建议:' + gm.suggest + '%)' : ''}}。</view>
+      <view class="md-lab">④ 年目标($,可选,留空不显示年度进度)</view>
+      <input class="md-inp" type="digit" placeholder="留空不显示" placeholder-class="ph" value="{{gm.yearVal}}" bindinput="gmYear" />
+      <view class="md-save" bindtap="gmSave">保存,点亮进度</view>
+      <view class="md-skip">先不设也没关系,真数永远都在</view>
+    </view>
+  </view>
 </view>

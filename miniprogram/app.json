@@ -14,6 +14,8 @@
     "pages/merchant/conversation/index",
     "pages/merchant/schedule/index",
     "pages/merchant/finance/index",
+    "pages/merchant/finance-entry/index",
+    "pages/merchant/finance-txns/index",
     "pages/merchant/customers/index",
     "pages/merchant/customer/index",
     "pages/merchant/service-note/index",

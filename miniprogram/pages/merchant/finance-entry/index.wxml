@@ -1,0 +1,33 @@
+<view class="page">
+  <view class="ps">日常收支随手记 · 服务收入完成单自动入账,不用手记</view>
+
+  <view class="seg">
+    <view class="seg-b {{type === 'expense' ? 'on out' : ''}}" data-type="expense" bindtap="setType">支出</view>
+    <view class="seg-b {{type === 'income' ? 'on in' : ''}}" data-type="income" bindtap="setType">收入</view>
+  </view>
+
+  <view class="amt">
+    <view class="amt-l">金额 (CAD)</view>
+    <view class="amt-row">
+      <text class="amt-sign">$</text>
+      <input class="amt-inp" type="digit" placeholder="0.00" placeholder-class="ph" value="{{amount}}" bindinput="onAmount" focus />
+    </view>
+  </view>
+
+  <view class="k">类别</view>
+  <view class="chips">
+    <view class="chip {{cat === item ? 'on' : ''}}" wx:for="{{cats}}" wx:key="*this" data-cat="{{item}}" bindtap="setCat">{{item}}</view>
+  </view>
+
+  <view class="k">支付方式 · 日期</view>
+  <picker mode="selector" range="{{channelNames}}" value="{{channelIdx}}" bindchange="onChannel">
+    <view class="inp"><text class="inp-l">支付方式</text><text class="inp-v">{{channelNames[channelIdx]}} ›</text></view>
+  </picker>
+  <picker mode="date" value="{{date}}" bindchange="onDate">
+    <view class="inp"><text class="inp-l">日期</text><text class="inp-v">{{date}} ›</text></view>
+  </picker>
+  <view class="inp"><text class="inp-l">备注(选填)</text><input class="note-inp" placeholder="例如:超市买棉片和酒精" placeholder-class="ph" value="{{note}}" bindinput="onNote" /></view>
+
+  <view class="save {{saving ? 'dis' : ''}}" bindtap="submit">{{saving ? '入账中…' : '记 账'}}</view>
+  <view class="tip">账本只追加:记错了不能改、不能删,到<text class="link" bindtap="toTxns">「本月流水」</text>里用红字冲销纠正——和店里账本一个规矩,查账永远对得上。</view>
+</view>
