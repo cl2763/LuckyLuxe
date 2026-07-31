@@ -141,6 +141,26 @@
       </view>
     </view>
 
+    <!-- ③b 沉睡召回周报(有沉睡客才出现,不占常驻位) -->
+    <view class="rowcard" wx:if="{{digest.count}}">
+      <view class="rowhead" data-k="digest" bindtap="toggle">
+        <view class="rowico">💤</view>
+        <view class="rowt"><view class="rowname">本周召回建议</view><view class="rowhint">{{digest.count}} 位沉睡老客 · 话术已备好,复制即发</view></view>
+        <view class="nbadge warn">{{digest.count}}</view>
+        <view class="chev {{expand==='digest'?'open':''}}">›</view>
+      </view>
+      <view class="rowbody" wx:if="{{expand==='digest'}}">
+        <view class="subrow" wx:for="{{digest.items}}" wx:key="userId">
+          <view class="av">{{item.av}}</view>
+          <view class="subinfo"><view class="subname">{{item.name}} · {{item.lastVisitDays}}天没来 · 累计{{item.spendText}}</view><view class="submeta wrap">{{item.message}}</view></view>
+        </view>
+        <view class="subrow center">
+          <view class="gobtn solid gold" catchtap="copyDigest">📋 复制全部话术</view>
+          <view class="gobtn" catchtap="goCustomersS">去客户库 ›</view>
+        </view>
+      </view>
+    </view>
+
     <!-- ④ 排班申请 -->
     <view class="rowcard">
       <view class="rowhead" data-k="sched" bindtap="toggle">

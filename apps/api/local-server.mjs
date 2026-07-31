@@ -8133,6 +8133,62 @@ async function route(req, res) {
       .run(currentTenantId(), JSON.stringify(rules), iso(new Date()))
     return json(res, 200, { rules })
   }
+  // ===== 沉睡召回周报:每周自动准备好「该召回谁+一人一句话术」;老板主页横条展示 =====
+  // 懒生成:本周(门店时区,周一为界)首次请求时算一次存 tenant_settings,当周内直接回缓存;通道自动直发待企微
+  if (req.method === 'GET' && path === '/admin/recall-digest') {
+    if (adminSession.role !== 'owner') throw apiError(403, 'FORBIDDEN', '仅老板可查看。')
+    const tid = currentTenantId()
+    // 本周一(门店时区)
+    const todayStr = localParts(new Date()).date
+    const dow = localDateTime(todayStr, '12:00').getDay() // 0=周日
+    const mondayOffset = dow === 0 ? -6 : 1 - dow
+    const weekOf = iso(addMinutes(localDateTime(todayStr, '00:00'), mondayOffset * 24 * 60)).slice(0, 10)
+    const cached = db.prepare("SELECT value FROM tenant_settings WHERE tenant_id = ? AND key = 'recall_digest'").get(tid)
+    const prev = cached ? parseJson2(cached.value) : null
+    if (prev && prev.weekOf === weekOf && query.force !== 'true') return json(res, 200, { digest: prev })
+    // 生成:按分层规则取沉睡客,按累计消费降序取前5,AI 一人一句(失败落模板)
+    const rulesRow = db.prepare("SELECT value FROM tenant_settings WHERE tenant_id = ? AND key = 'segment_rules'").get(tid)
+    const rules = Object.assign({ sDays: 60 }, rulesRow ? parseJson2(rulesRow.value) : {})
+    const nowMs = Date.now()
+    const sleepers = getAdminCustomers()
+      .filter((c) => c.completedCount > 0 && c.lastCompletedAt && (nowMs - new Date(c.lastCompletedAt).getTime()) / 86400000 > rules.sDays)
+      .sort((a, b) => (b.totalSpentCents || 0) - (a.totalSpentCents || 0))
+      .slice(0, 5)
+    let digest = { weekOf, generatedAt: iso(new Date()), count: 0, items: [] }
+    if (sleepers.length) {
+      const customers = sleepers.map((c) => {
+        const notes = db.prepare('SELECT structured_json FROM service_notes WHERE user_id = ? AND tenant_id = ?').all(c.id, tid)
+        const agg = { styles: new Set(), preferences: new Set(), safetyFlags: new Set() }
+        notes.forEach((n) => { const s = parseJson2(n.structured_json); ['styles', 'preferences', 'safetyFlags'].forEach((k) => (s[k] || []).forEach((t) => agg[k].add(t))) })
+        const svcRow = db.prepare(`SELECT s.name_zh AS n, COUNT(*) AS c FROM bookings b JOIN services s ON s.id = b.service_id
+          WHERE b.user_id = ? AND b.tenant_id = ? AND b.status = 'COMPLETED' GROUP BY b.service_id ORDER BY c DESC LIMIT 1`).get(c.id, tid)
+        return {
+          userId: c.id, name: c.displayName || '顾客',
+          lastVisitDays: Math.floor((nowMs - new Date(c.lastCompletedAt).getTime()) / 86400000),
+          topService: svcRow ? svcRow.n : '',
+          styles: [...agg.styles].slice(0, 4), preferences: [...agg.preferences].slice(0, 3), safetyFlags: [...agg.safetyFlags].slice(0, 2),
+          spendCents: c.totalSpentCents || 0, phone: c.phone || ''
+        }
+      })
+      const store = db.prepare('SELECT name FROM stores WHERE tenant_id = ? AND is_active = 1 LIMIT 1').get(tid)
+      let messages = []
+      try {
+        const aiRes = await createRecallMessages({ customers, storeName: store ? store.name : '' })
+        const data = (aiRes && aiRes.data) ? aiRes.data : aiRes
+        messages = (data && data.messages) || []
+      } catch (e) { messages = [] }
+      const byId = {}; messages.forEach((m) => { if (m && m.userId) byId[m.userId] = m.message })
+      digest.items = customers.map((c) => ({
+        userId: c.userId, name: c.name, phone: c.phone, lastVisitDays: c.lastVisitDays, spendCents: c.spendCents,
+        message: byId[c.userId] || `${c.name}好久不见啦~${(c.styles[0] || c.topService) ? `最近店里新到了适合你的${c.styles[0] || c.topService},` : ''}这周约还有小惊喜,回来做美美的!`
+      }))
+      digest.count = digest.items.length
+    }
+    db.prepare(`INSERT INTO tenant_settings (tenant_id, key, value, updated_at) VALUES (?, 'recall_digest', ?, ?)
+      ON CONFLICT(tenant_id, key) DO UPDATE SET value = excluded.value, updated_at = excluded.updated_at`)
+      .run(tid, JSON.stringify(digest), iso(new Date()))
+    return json(res, 200, { digest })
+  }
   // ===== 客户分层(P1-③):沉睡客 AI 召回话术 =====
   // 一次最多 6 人;每人结合服务小记画像(款式/偏好/安全项)+ 常做项目 + 距上次到店天数,生成一条可直接粘贴发微信的话术;AI 失败落模板
   if (req.method === 'POST' && path === '/admin/ai/recall-copy') {
@@ -8240,6 +8296,7 @@ async function route(req, res) {
       const rows = snap.map((r) => Object.assign(parseJson2(r.breakdown_json), { name: r.technician_name || '', totalCents: r.total_cents }))
       return json(res, 200, {
         month, locked: true, lockedAt: snap[0].locked_at, lockedBy: snap[0].locked_by || '',
+        paid: Boolean(snap[0].paid_at), paidAt: snap[0].paid_at || '',
         rows, totalCents: snap.reduce((s, r) => s + (r.total_cents || 0), 0)
       })
     }
@@ -8272,21 +8329,71 @@ async function route(req, res) {
     if (!count) throw apiError(400, 'BAD_REQUEST', '没有可锁定的记录:先给员工配置薪资方案。')
     return json(res, 201, { month, locked: true, lockedAt: now, count, totalCents: total })
   }
-  // 解锁重算(owner+财务钥匙):删除该月快照,回到实时试算
+  // 解锁重算(owner+财务钥匙):删除该月快照,回到实时试算。已入账的月份禁止解锁(账本只追加,先红字冲销)
   if (req.method === 'POST' && path === '/admin/salary/unlock') {
     if (adminSession.role !== 'owner') throw apiError(403, 'FORBIDDEN', '仅老板可解锁工资表。')
     requireFinanceKey(req)
     const body = await readBody(req)
     const month = /^\d{4}-\d{2}$/.test(body.month || '') ? body.month : ''
     if (!month) throw apiError(400, 'BAD_REQUEST', '缺少月份。')
+    const paid = db.prepare('SELECT 1 FROM salary_payrolls WHERE tenant_id = ? AND month = ? AND paid_at IS NOT NULL LIMIT 1').get(currentTenantId(), month)
+    if (paid) throw apiError(403, 'ALREADY_PAID', `${month} 工资已入账本,不能解锁;如需更正,先在财务里红字冲销对应支出。`)
     db.prepare('DELETE FROM salary_payrolls WHERE tenant_id = ? AND month = ?').run(currentTenantId(), month)
     return json(res, 200, { month, locked: false })
   }
-  // 员工:我的本月预估(自己的数据,无需财务钥匙)
+  // 发放入账(owner+财务钥匙):把已锁定的月度工资表逐人写入账本支出(category=工资,source=payroll);标记 paid。
+  // 账本只追加:发错走红字冲销;同月重复发放 409。
+  if (req.method === 'POST' && path === '/admin/salary/payout') {
+    if (adminSession.role !== 'owner') throw apiError(403, 'FORBIDDEN', '仅老板可发放工资。')
+    requireFinanceKey(req)
+    const body = await readBody(req)
+    const tid = currentTenantId()
+    const month = /^\d{4}-\d{2}$/.test(body.month || '') ? body.month : ''
+    if (!month) throw apiError(400, 'BAD_REQUEST', '缺少月份。')
+    const rows = db.prepare('SELECT * FROM salary_payrolls WHERE tenant_id = ? AND month = ? ORDER BY technician_name ASC').all(tid, month)
+    if (!rows.length) throw apiError(400, 'BAD_REQUEST', '该月工资表未锁定;先在工资试算里「确认并锁定」。')
+    if (rows.some((r) => r.paid_at)) throw apiError(409, 'ALREADY_PAID', `${month} 工资已发放入账过。`)
+    const now = iso(new Date())
+    const today = localParts(new Date()).date
+    db.exec('BEGIN IMMEDIATE')
+    try {
+      for (const r of rows) {
+        const txn = insertFinanceTransaction({
+          type: 'expense', source: 'payroll', category: '工资',
+          tags: r.id, amountCents: r.total_cents, payChannel: 'manual',
+          occurredOn: today, note: `${month} 工资 · ${r.technician_name || r.technician_id}(明细见工资表)`,
+          createdBy: adminSession.email || 'owner'
+        })
+        db.prepare('UPDATE salary_payrolls SET paid_at = ?, paid_by = ?, txn_id = ? WHERE id = ?')
+          .run(now, adminSession.email || 'owner', txn.id, r.id)
+      }
+      db.exec('COMMIT')
+    } catch (error) { db.exec('ROLLBACK'); throw error }
+    const total = rows.reduce((s, r) => s + (r.total_cents || 0), 0)
+    return json(res, 200, { month, paid: true, paidAt: now, count: rows.length, totalCents: total })
+  }
+  // 待结工资(owner+财务钥匙):已锁定未发放的各月合计(财务页卡片用)
+  if (req.method === 'GET' && path === '/admin/salary/pending-payout') {
+    if (adminSession.role !== 'owner') throw apiError(403, 'FORBIDDEN', '仅老板可查看。')
+    requireFinanceKey(req)
+    const rows = db.prepare(`SELECT month, COUNT(*) AS people, SUM(total_cents) AS total FROM salary_payrolls
+      WHERE tenant_id = ? AND paid_at IS NULL GROUP BY month ORDER BY month DESC`).all(currentTenantId())
+    return json(res, 200, {
+      months: rows.map((r) => ({ month: r.month, people: r.people, totalCents: r.total })),
+      totalCents: rows.reduce((s, r) => s + (r.total || 0), 0)
+    })
+  }
+  // 员工:我的本月预估(自己的数据,无需财务钥匙);附工资表状态(已锁定/已发放)
   if (req.method === 'GET' && path === '/admin/salary/my-estimate') {
     if (!adminSession.technicianId) throw apiError(400, 'BAD_REQUEST', '当前账号未绑定技师。')
     const month = /^\d{4}-\d{2}$/.test(query.month || '') ? query.month : localParts(new Date()).date.slice(0, 7)
-    return json(res, 200, { estimate: computeSalaryEstimate(adminSession.technicianId, month, currentTenantId()) })
+    const pr = db.prepare('SELECT total_cents, paid_at FROM salary_payrolls WHERE tenant_id = ? AND month = ? AND technician_id = ?')
+      .get(currentTenantId(), month, adminSession.technicianId)
+    return json(res, 200, {
+      estimate: computeSalaryEstimate(adminSession.technicianId, month, currentTenantId()),
+      payrollLocked: Boolean(pr), payrollPaid: Boolean(pr && pr.paid_at),
+      payrollTotalCents: pr ? pr.total_cents : null
+    })
   }
   // ===== 员工打卡考勤(P1-⑤) =====
   // 规定下班时间:当日技师排班 end_time > 门店当日营业 close_time > 19:00
@@ -8499,7 +8606,7 @@ async function route(req, res) {
         date: lp.date, time: lp.time
       }
     })
-    return json(res, 200, { count: items.length, items })
+    return json(res, 200, { count: items.length, date, items })
   }
   // 到店打卡:排班台面"进行中"展示态。arrived=true 记到店时间;false 清除(改回未到店)。不改 status、不动财务。
   if (req.method === 'PATCH' && path.startsWith('/admin/bookings/') && path.endsWith('/arrival')) {
@@ -8765,6 +8872,14 @@ db.exec(`
     UNIQUE (tenant_id, month, technician_id)
   );
 `)
+for (const col of ['paid_at TEXT', 'paid_by TEXT', 'txn_id TEXT']) {
+  try {
+    // 工资发放入账标记(2026-07-31 财务闭环):paid_at 非空=已写入账本支出;txn_id 关联 finance_transactions
+    db.exec(`ALTER TABLE salary_payrolls ADD COLUMN ${col}`)
+  } catch (error) {
+    if (!String(error.message || '').includes('duplicate column')) throw error
+  }
+}
 // ===== 租户级轻量设置(key-value,JSON 值):先用于客户分层规则,后续通用 =====
 db.exec(`
   CREATE TABLE IF NOT EXISTS tenant_settings (

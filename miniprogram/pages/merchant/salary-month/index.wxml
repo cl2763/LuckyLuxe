@@ -16,7 +16,8 @@
   </block>
 
   <block wx:elif="{{!loading}}">
-    <view class="lockedbar" wx:if="{{locked}}">✅ 已锁定存档 · {{lockedAt}}<text class="unlk" bindtap="unlockMonth"> 解锁重算 ›</text></view>
+    <view class="lockedbar paidbar" wx:if="{{locked && paid}}">💰 已发放入账 · {{paidAt}} · 账本可查(支出·工资)</view>
+    <view class="lockedbar" wx:elif="{{locked}}">✅ 已锁定存档 · {{lockedAt}}<text class="unlk" bindtap="unlockMonth"> 解锁重算 ›</text></view>
     <view class="totalbar"><text>全员合计{{locked ? '(存档)' : ''}}</text><text class="tb">{{total}}</text></view>
 
     <view class="paycard" wx:for="{{rows}}" wx:key="technicianId">
@@ -36,5 +37,7 @@
 
     <view wx:if="{{!locked && rows.length}}" class="lockbtn {{locking?'dim':''}}" bindtap="lockMonth">{{locking ? '锁定中…' : '确认并锁定 ' + monthText + ' 工资表'}}</view>
     <view wx:if="{{!locked && rows.length}}" class="lockhint">锁定=按当前数字存档;之后业绩/考勤变动不影响本月工资,防事后改数</view>
+    <view wx:if="{{locked && !paid}}" class="lockbtn pay {{paying?'dim':''}}" bindtap="payout">{{paying ? '入账中…' : '记为已发放 · 入账本(' + total + ')'}}</view>
+    <view wx:if="{{locked && !paid}}" class="lockhint">每人一条写入账本「支出·工资」;入账后不可解锁,发错需红字冲销</view>
   </block>
 </view>

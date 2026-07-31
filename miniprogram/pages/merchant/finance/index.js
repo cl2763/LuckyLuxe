@@ -15,6 +15,7 @@ Page({
     m: { today: '$0', revenue: '$0', net: '$0', netRate: 0 },
     target: { has: false, pct: 0, targetRevenue: '$0' },
     sv: { total: '$0', recharge: '$0', consume: '$0', dormant: '' },
+    payroll: { totalCents: 0, total: '$0', monthsText: '' },
     insight: ''
   },
 
@@ -75,6 +76,16 @@ Page({
           dormant: d ? `${d.displayName} ${money(d.balanceCents)}(${d.dormantDays || 0}天未动)` : ''
         }
       })
+      // 待结工资(已锁定未发放)
+      try {
+        const pp = await api.adminGet('/admin/salary/pending-payout')
+        this.setData({
+          payroll: {
+            totalCents: pp.totalCents || 0, total: money(pp.totalCents),
+            monthsText: (pp.months || []).map((x) => `${Number(x.month.slice(5, 7))}月${x.people}人`).join(' · ')
+          }
+        })
+      } catch (e) { /* 忽略 */ }
     } catch (err) {
       if (err && err.code === 'FINANCE_LOCKED') {
         api.clearFinanceKey()
@@ -97,6 +108,8 @@ Page({
       wx.hideLoading()
     }
   },
+
+  toSalary() { wx.navigateTo({ url: '/pages/merchant/salary-month/index' }) },
 
   toWeb() { wx.showToast({ title: '记一笔/流水/目标设置请在网页后台', icon: 'none' }) },
   wakeSleep() { wx.navigateTo({ url: '/pages/merchant/marketing/index' }) }

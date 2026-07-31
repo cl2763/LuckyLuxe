@@ -8,8 +8,8 @@ page{background:#fbf8f5}
 .ph{color:#b6a99b}
 .gbtn{height:88rpx;line-height:88rpx;background:#c8a47e;color:#fff;border-radius:16rpx;font-size:30rpx;font-weight:500;margin-top:24rpx}
 .gate-hint{font-size:21rpx;color:#8c8279;margin-top:20rpx;line-height:1.6}
-.metrics{display:flex;flex-wrap:wrap;gap:14rpx;margin-bottom:14rpx}
-.mc{width:calc(50% - 7rpx);background:#f1e7df;border-radius:14rpx;padding:16rpx 18rpx}
+.metrics{display:flex;flex-wrap:wrap;justify-content:space-between;margin-bottom:0}
+.mc{width:48.5%;margin-bottom:14rpx;background:#f1e7df;border-radius:14rpx;padding:16rpx 18rpx;box-sizing:border-box}
 .mc.wide{width:100%;margin-bottom:14rpx}
 .ml{font-size:22rpx;color:#8c8279}
 .mv{font-size:32rpx;font-weight:600;color:#2d2826;margin-top:6rpx}
@@ -36,3 +36,4 @@ page{background:#fbf8f5}
 .t2{font-size:26rpx;font-weight:600;color:#2d2826;margin:6rpx 0 10rpx}
 .divi{height:1rpx;background:#f1e7df;margin:10rpx 0}
 .weblink{text-align:center;font-size:24rpx;color:#9b7655;background:#f1e7df;border:1rpx solid #e7ddd4;border-radius:12rpx;padding:16rpx;margin-top:6rpx}
+.cb.warn2{color:#c0392b}

@@ -5,8 +5,8 @@ page{background:#fbf8f5}
 .hname{font-size:32rpx;font-weight:600;color:#2d2826}
 .tier{font-size:22rpx;color:#9b7655;background:#f1e7df;border-radius:40rpx;padding:2rpx 14rpx;margin-left:8rpx}
 .hsub{font-size:23rpx;color:#8c8279;margin-top:8rpx}
-.stats{display:flex;flex-wrap:wrap;gap:14rpx;margin-bottom:16rpx}
-.st{width:calc(50% - 7rpx);background:#f1e7df;border-radius:14rpx;padding:16rpx 18rpx}
+.stats{display:flex;flex-wrap:wrap;justify-content:space-between;margin-bottom:2rpx}
+.st{width:48.5%;margin-bottom:14rpx;background:#f1e7df;border-radius:14rpx;padding:16rpx 18rpx;box-sizing:border-box}
 .sv{font-size:28rpx;font-weight:600;color:#2d2826}
 .sl{font-size:22rpx;color:#8c8279;margin-top:6rpx}
 .card{background:#fff;border:1rpx solid #e7ddd4;border-radius:14rpx;padding:16rpx 18rpx;margin-bottom:14rpx}

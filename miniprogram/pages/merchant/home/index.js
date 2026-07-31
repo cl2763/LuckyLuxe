@@ -21,7 +21,9 @@ Page({
     // 服务小记(按单判断:完成未写=待写)
     notes: { count: 0, items: [], groups: [] }, // groups 仅老板:按技师分组
     // 排班申请(老板)
-    sched: { count: 0, items: [] }
+    sched: { count: 0, items: [] },
+    // 沉睡召回周报(老板;每周自动生成,有沉睡客才显示这一条)
+    digest: { count: 0, items: [] }
   },
 
   onShow() { this.load() },
@@ -47,7 +49,8 @@ Page({
     try {
       const reqs = [
         api.adminGet('/admin/schedule-day').catch(() => null),
-        api.adminGet('/admin/service-notes/pending').catch(() => ({ count: 0, items: [] })),
+        // 回看 7 天:补结束的旧单(如昨天忘点完成、今天补点)也会进待写提醒,不会漏
+        api.adminGet('/admin/service-notes/pending?days=7').catch(() => ({ count: 0, items: [] })),
         api.adminGet('/admin/wechat/conversations').catch(() => ({ conversations: [] })),
         api.adminGet('/admin/quote-requests').catch(() => ({ quoteRequests: [] }))
       ]
@@ -69,10 +72,13 @@ Page({
       }
 
       // 服务小记:员工=本人列表;老板=按技师分组
+      const anchor = pend.date || ''
       const items = (pend.items || []).map((it) => ({
         bookingId: it.bookingId, userId: it.userId,
         customerName: it.customerName, serviceName: it.serviceName,
-        technicianId: it.technicianId, technicianName: it.technicianName, time: it.time,
+        technicianId: it.technicianId, technicianName: it.technicianName,
+        // 非今天的单标上日期(如「7/29 10:00」),一眼看出是前几天补的
+        time: (it.date && anchor && it.date !== anchor) ? `${Number(it.date.slice(5, 7))}/${Number(it.date.slice(8, 10))} ${it.time}` : it.time,
         av: (it.customerName || '客')[0]
       }))
       const gmap = {}
@@ -104,6 +110,19 @@ Page({
         const r = await api.adminGet('/admin/staff-nudges/mine')
         this.setData({ nudges: r.nudges || [] })
       } catch (e) { /* 忽略 */ }
+    }
+
+    // 沉睡召回周报(老板;后端按周懒生成,可能含 AI 耗时,异步不阻塞主页)
+    if (isOwner) {
+      api.adminGet('/admin/recall-digest').then((r) => {
+        const d = (r && r.digest) || {}
+        this.setData({
+          digest: {
+            count: d.count || 0,
+            items: (d.items || []).map((x) => ({ ...x, av: (x.name || '客')[0], spendText: '$' + Math.round((x.spendCents || 0) / 100) }))
+          }
+        })
+      }).catch(() => { /* 静默 */ })
     }
 
     // AI 总结(老板:一句摘要 + 行动建议;慢/失败时卡片仍在,用本地数据兜底)
@@ -175,6 +194,15 @@ Page({
       success: () => wx.showToast({ title: ok ? `已提醒 ${ok} 位员工,群话术已复制` : '群话术已复制', icon: 'none', duration: 2200 })
     })
   },
+
+  // 召回周报:复制全部话术 / 去客户库
+  copyDigest() {
+    const items = this.data.digest.items
+    if (!items.length) return
+    const text = items.map((x) => `【${x.name}】${x.message}`).join('\n\n')
+    wx.setClipboardData({ data: text, success: () => wx.showToast({ title: `已复制 ${items.length} 条话术,粘微信逐个发`, icon: 'none', duration: 2200 }) })
+  },
+  goCustomersS() { wx.navigateTo({ url: '/pages/merchant/customers/index' }) },
 
   goOrders() { wx.redirectTo({ url: '/pages/merchant/orders/index' }) },
   goWorkbench() { wx.redirectTo({ url: '/pages/merchant/workbench/index' }) },

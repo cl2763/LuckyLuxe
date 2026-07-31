@@ -8,7 +8,9 @@
     <view class="hero">
       <view class="hl">本月预估到手</view>
       <view class="hv">≈ {{e.total}}</view>
-      <view class="hn">按门店薪资方案实时估算,月底以老板核算为准</view>
+      <view class="hn" wx:if="{{payState==='paid'}}">✅ 本月工资已发放入账{{payTotal ? ':' + payTotal : ''}}</view>
+      <view class="hn" wx:elif="{{payState==='locked'}}">🔒 老板已锁定本月工资表{{payTotal ? ':' + payTotal : ''}},待发放</view>
+      <view class="hn" wx:else>按门店薪资方案实时估算,月底以老板核算为准</view>
     </view>
     <view class="rows">
       <view class="r" wx:if="{{e.hasBase}}"><text class="k">底薪</text><text class="v">{{e.base}}</text></view>

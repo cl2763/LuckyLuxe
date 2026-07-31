@@ -17,6 +17,8 @@ Page({
       if (est && !est.noPlan) {
         this.setData({
           loading: false, mode: 'plan', doneCount: est.orderCount || 0,
+          payState: r.payrollPaid ? 'paid' : (r.payrollLocked ? 'locked' : ''),
+          payTotal: r.payrollTotalCents != null ? money(r.payrollTotalCents) : '',
           e: {
             total: money(est.totalCents),
             base: money(est.baseSalaryCents), hasBase: est.baseSalaryCents > 0,

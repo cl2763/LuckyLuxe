@@ -37,6 +37,10 @@ page{background:#fbf8f5}
 .boardhead{display:flex;justify-content:space-between;align-items:center;margin-bottom:18rpx}
 .bh-t{font-size:30rpx;font-weight:800;color:#241f1d}
 .bh-wifi{font-size:21rpx;color:#b5885d;font-weight:700}
+.wifibtn{background:linear-gradient(135deg,#c8a47e,#b5885d);border-radius:16rpx;padding:20rpx 24rpx;margin-bottom:18rpx;box-shadow:0 6rpx 16rpx rgba(181,136,93,.25)}
+.wifibtn:active{opacity:.85}
+.wb-l{font-size:27rpx;font-weight:800;color:#fff}
+.wb-d{font-size:20rpx;color:rgba(255,255,255,.85);margin-top:4rpx}
 .stats{display:flex;background:#fff;border:1rpx solid #eadfd7;border-radius:22rpx;padding:22rpx 0;margin-bottom:18rpx}
 .st{flex:1;text-align:center}
 .sn{font-size:44rpx;font-weight:800;color:#241f1d}

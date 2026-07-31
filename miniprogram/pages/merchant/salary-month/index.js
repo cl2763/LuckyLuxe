@@ -5,7 +5,7 @@ function fmtDur(min) { if (!min) return '0m'; const h = Math.floor(min / 60), m 
 function pad(n) { return `${n}`.padStart(2, '0') }
 
 Page({
-  data: { month: '', monthText: '', rows: [], total: '', locked: false, keyMissing: false, lockedAt: '', locking: false, loading: true },
+  data: { month: '', monthText: '', rows: [], total: '', locked: false, keyMissing: false, lockedAt: '', locking: false, loading: true, paid: false, paidAt: '', paying: false },
 
   async onShow() {
     if (!(await api.guardOwner())) return
@@ -35,7 +35,9 @@ Page({
       this.setData({
         rows, total: money(r.totalCents), keyMissing: false, loading: false,
         locked: Boolean(r.locked),
-        lockedAt: r.lockedAt ? String(r.lockedAt).slice(0, 16).replace('T', ' ') : ''
+        lockedAt: r.lockedAt ? String(r.lockedAt).slice(0, 16).replace('T', ' ') : '',
+        paid: Boolean(r.paid),
+        paidAt: r.paidAt ? String(r.paidAt).slice(0, 16).replace('T', ' ') : ''
       })
     } catch (err) {
       if (err && err.code === 'FINANCE_LOCKED') { this.setData({ keyMissing: true, loading: false }); return }
@@ -74,7 +76,26 @@ Page({
           await api.adminPost('/admin/salary/unlock', { month: this.data.month })
           wx.showToast({ title: '已解锁', icon: 'none' })
           this.load()
-        } catch (err) { wx.showToast({ title: (err && err.message) || '操作失败', icon: 'none' }) }
+        } catch (err) { wx.showToast({ title: (err && err.message) || '操作失败', icon: 'none', duration: 2600 }) }
+      }
+    })
+  },
+  // 发放入账:逐人写入账本支出(category=工资);账本只追加,发错走红字冲销
+  payout() {
+    if (this.data.paying) return
+    wx.showModal({
+      title: `发放 ${this.data.monthText} 工资`,
+      content: `将按锁定的工资表,把每人应发金额写入财务账本(支出·工资),合计 ${this.data.total}。入账后不可解锁,发错需红字冲销。确认发放?`,
+      confirmText: '确认发放入账',
+      success: async (r) => {
+        if (!r.confirm) return
+        this.setData({ paying: true })
+        try {
+          const res = await api.adminPost('/admin/salary/payout', { month: this.data.month })
+          wx.showToast({ title: `已入账 ${res.count} 人`, icon: 'success' })
+          this.load()
+        } catch (err) { wx.showToast({ title: (err && err.message) || '发放失败', icon: 'none', duration: 2600 }) }
+        this.setData({ paying: false })
       }
     })
   },

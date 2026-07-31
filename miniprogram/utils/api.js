@@ -6,7 +6,8 @@ const mock = require('./mock-data')
 // ⚠️ 正式上传/发布前,务必把这里改回 false!
 const USE_LOCAL_SANDBOX = true
 // 本地沙盘地址:127.0.0.1 走开发者工具本机代理,模拟器与真机调试通用,换网络也不用改。
-const LOCAL_API = 'http://127.0.0.1:4128'
+// 真机预览/体验版连本地沙盘:用电脑局域网 IP(手机与电脑须同一 WiFi);开发者工具上两者皆可。此行临时改动,不提交。
+const LOCAL_API = 'http://192.168.0.100:4128'
 const API_BASE = USE_LOCAL_SANDBOX ? LOCAL_API : 'https://www.luckyluxeatelier.com'
 const DEMO_USER_ID = 'user-demo'
 const STORE_ID = 'store-ontario-01'

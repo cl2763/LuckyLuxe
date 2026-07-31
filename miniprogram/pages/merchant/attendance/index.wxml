@@ -44,7 +44,10 @@
   <block wx:else>
     <view class="boardhead">
       <view class="bh-t">今日考勤 · {{dateText}}</view>
-      <view class="bh-wifi" bindtap="setWifi">📶 设当前 WiFi 为打卡 WiFi</view>
+    </view>
+    <view class="wifibtn" bindtap="setWifi">
+      <view class="wb-l">📶 设当前 WiFi 为打卡 WiFi</view>
+      <view class="wb-d">设置后员工须连店内 WiFi 才能打卡 · 点击即设</view>
     </view>
     <view class="stats">
       <view class="st"><view class="sn live">{{board.working}}</view><view class="sl">在岗</view></view>

@@ -23,8 +23,9 @@ page{background:#fbf8f5}
 
 /* ===== RFM 分层 ===== */
 .sec{font-size:22rpx;color:#9a8c7c;font-weight:700;margin:4rpx 2rpx 12rpx}
-.tiers{display:flex;flex-wrap:wrap;gap:12rpx;margin-bottom:18rpx}
-.tcard{width:calc(50% - 6rpx);border-radius:20rpx;padding:20rpx 22rpx;color:#fff;position:relative;box-sizing:border-box}
+/* 真机 WebView 对 calc+rpx 支持不稳,用百分比+space-between 保证 2×2 */
+.tiers{display:flex;flex-wrap:wrap;justify-content:space-between;margin-bottom:6rpx}
+.tcard{width:48.5%;margin-bottom:12rpx;border-radius:20rpx;padding:20rpx 22rpx;color:#fff;position:relative;box-sizing:border-box}
 .tcard.sel{box-shadow:0 0 0 4rpx rgba(45,40,38,.35) inset}
 .tcard .tn{font-size:44rpx;font-weight:800;line-height:1.1}
 .tcard .tt{font-size:24rpx;font-weight:700;margin-top:2rpx}

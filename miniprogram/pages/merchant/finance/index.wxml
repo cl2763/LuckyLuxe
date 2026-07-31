@@ -43,6 +43,18 @@
       </view>
     </view>
 
+    <view class="t2">待结工资</view>
+    <view class="card" bindtap="toSalary">
+      <view class="row-sb" wx:if="{{payroll.totalCents}}">
+        <text class="mut">已锁定待发放 · {{payroll.monthsText}}</text>
+        <text class="cb warn2">{{payroll.total}}</text>
+      </view>
+      <view class="row-sb" wx:else>
+        <text class="mut">暂无待发工资(月底到工资试算里锁定)</text>
+        <text class="cb">去试算 ›</text>
+      </view>
+    </view>
+
     <view class="weblink" bindtap="toWeb">流水明细 · 导出 · 目标设置 → 网页后台</view>
   </block>
 </view>
