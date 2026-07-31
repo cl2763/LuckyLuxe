@@ -40,7 +40,8 @@ Page({
         locked: Boolean(r.locked),
         lockedAt: r.lockedAt ? String(r.lockedAt).slice(0, 16).replace('T', ' ') : '',
         paid: Boolean(r.paid),
-        paidAt: r.paidAt ? String(r.paidAt).slice(0, 16).replace('T', ' ') : ''
+        paidAt: r.paidAt ? String(r.paidAt).slice(0, 16).replace('T', ' ') : '',
+        attrNotes: (r.attributionNotes || []).map((n) => ({ ...n, amountText: money(n.amountCents) }))
       })
     } catch (err) {
       if (err && err.code === 'FINANCE_LOCKED') { this.setData({ keyMissing: true, loading: false }); return }

@@ -8,10 +8,37 @@ Page({
     storeId: '', name: '', address: '', phone: '',
     hours: [], // [{weekday,label,isClosed,openTime,closeTime}]
     specials: [],
+    onlineDeposit: true,
     loading: true
   },
 
-  async onShow() { if (!(await api.guardOwner())) return; this.load() },
+  async onShow() { if (!(await api.guardOwner())) return; this.load(); this.loadRules() },
+
+  async loadRules() {
+    try {
+      const r = await api.adminGet('/admin/booking-rules')
+      this.setData({ onlineDeposit: r.rules ? r.rules.onlineDeposit !== false : true })
+    } catch (e) { /* 默认开 */ }
+  },
+
+  // 线上定金开关:关=顾客自约免定金直接确认(适配无支付商户号的商家)
+  toggleDeposit() {
+    const next = !this.data.onlineDeposit
+    wx.showModal({
+      title: next ? '开启线上定金' : '关闭线上定金',
+      content: next
+        ? '顾客预约需付定金锁位,超时未付自动释放时段。确认开启?'
+        : '顾客预约将免定金、直接确认占位,到店再收款。适合暂无支付商户号的门店。确认关闭?',
+      success: async (r) => {
+        if (!r.confirm) return
+        try {
+          await api.adminRequest('/admin/booking-rules', 'PUT', { onlineDeposit: next })
+          this.setData({ onlineDeposit: next })
+          wx.showToast({ title: next ? '已开启' : '已关闭,免定金直约', icon: 'none' })
+        } catch (err) { wx.showToast({ title: (err && err.message) || '保存失败', icon: 'none' }) }
+      }
+    })
+  },
 
   async load() {
     try {

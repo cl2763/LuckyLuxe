@@ -187,6 +187,7 @@ Page({
     if (b.state === 'active') { items.push('↩ 改回未到店'); actions.push('unarrive') }
     if (b.depositUnpaid) { items.push('💰 标记已收定金'); actions.push('paid') }
     items.push('📝 写服务小记'); actions.push('note')
+    items.push('✎ 归属备注(实际谁做)'); actions.push('attr')
     wx.showActionSheet({
       itemList: items,
       success: (res) => {
@@ -195,7 +196,22 @@ Page({
         else if (act === 'unarrive') this.setArrival(b.id, false)
         else if (act === 'complete') this.setCompleted(b)
         else if (act === 'note') this.goNote(b)
+        else if (act === 'attr') this.attrNote(b)
         else if (act === 'paid') wx.showToast({ title: '已标记已收(演示)', icon: 'none' })
+      }
+    })
+  },
+  // 归属备注:这单实际谁做/怎么分,月底工资试算集中显示,配合±调整用
+  attrNote(b) {
+    wx.showModal({
+      title: `归属备注 · ${b.customerName}`, editable: true,
+      placeholderText: '如:实际 Coco 做 / 我和Mia各半',
+      success: async (r) => {
+        if (!r.confirm || !r.content || !r.content.trim()) return
+        try {
+          await api.adminPost(`/admin/bookings/${encodeURIComponent(b.id)}/attribution-note`, { note: r.content.trim() })
+          wx.showToast({ title: '已记录,月底工资试算可见', icon: 'none', duration: 2200 })
+        } catch (err) { wx.showToast({ title: (err && err.message) || '保存失败', icon: 'none' }) }
       }
     })
   },

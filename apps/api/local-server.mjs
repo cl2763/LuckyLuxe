@@ -5420,7 +5420,15 @@ function createBooking(body, opts = {}) {
   const servicePriceCents = service.price_cents + addOnTotal
   const user = input.userId ? db.prepare('SELECT * FROM users WHERE id = ?').get(input.userId) : null
   const serializedUser = serializeUser(user, input.tenantId || DEFAULT_TENANT_ID)
-  const depositRequiredCents = 5000
+  // 线上定金开关(租户级,默认开):关闭=顾客自约免定金直接确认、到店收款——给没有/不想办支付商户号的商家用
+  const onlineDeposit = (() => {
+    try {
+      const row = db.prepare("SELECT value FROM tenant_settings WHERE tenant_id = ? AND key = 'booking_rules'").get(input.tenantId || DEFAULT_TENANT_ID)
+      const rules = row ? parseJson2(row.value) : {}
+      return rules.onlineDeposit !== false
+    } catch (e) { return true }
+  })()
+  const depositRequiredCents = onlineDeposit ? 5000 : 0
   const depositWaivedCents = serializedUser?.depositWaived ? depositRequiredCents : 0
   // 老板直接排单:一律 CONFIRMED、不走在线定金门、不设占位到期;记"未付定金"标(占位但提醒之后收)
   const directUnpaid = opts.adminDirect && !opts.depositPaid ? 1 : 0
@@ -5578,7 +5586,19 @@ function buildCustomerServiceContext(req, lang = 'zh') {
     customer = null
     bookings = []
   }
-  return { customer, bookings, services, stores }
+  // 免定金模式感知:仅当门店关闭线上定金时,注入一条事实,让 AI 不再引导付定金而是"确认即锁位,到店付款"。
+  // 默认开=不注入任何内容,已训练的 matrix 行为零变化。
+  let depositMode = null
+  try {
+    const row = db.prepare("SELECT value FROM tenant_settings WHERE tenant_id = ? AND key = 'booking_rules'").get(currentTenantId())
+    const rules = row ? parseJson2(row.value) : {}
+    if (rules.onlineDeposit === false) {
+      depositMode = lang === 'zh'
+        ? '本店预约无需线上支付定金:顾客确认时段后立即锁位,费用到店支付即可。不要引导顾客付定金或发送付款链接。'
+        : 'No online deposit required: the slot is locked upon confirmation; payment is collected in store. Do not ask customers to pay a deposit online.'
+    }
+  } catch (e) { /* 忽略 */ }
+  return depositMode ? { customer, bookings, services, stores, depositMode } : { customer, bookings, services, stores }
 }
 
 // ===== 财务记账底座（阶段3A/3B）=====
@@ -8283,6 +8303,20 @@ async function route(req, res) {
       notes
     })
   }
+  // ===== 预约规则(租户级):线上定金开关——关闭=顾客自约免定金直接确认,适配无支付商户号的商家 =====
+  if (req.method === 'GET' && path === '/admin/booking-rules') {
+    const row = db.prepare("SELECT value FROM tenant_settings WHERE tenant_id = ? AND key = 'booking_rules'").get(currentTenantId())
+    return json(res, 200, { rules: Object.assign({ onlineDeposit: true }, row ? parseJson2(row.value) : {}) })
+  }
+  if (req.method === 'PUT' && path === '/admin/booking-rules') {
+    if (adminSession.role !== 'owner') throw apiError(403, 'FORBIDDEN', '仅老板可改预约规则。')
+    const body = await readBody(req)
+    const rules = { onlineDeposit: body.onlineDeposit !== false }
+    db.prepare(`INSERT INTO tenant_settings (tenant_id, key, value, updated_at) VALUES (?, 'booking_rules', ?, ?)
+      ON CONFLICT(tenant_id, key) DO UPDATE SET value = excluded.value, updated_at = excluded.updated_at`)
+      .run(currentTenantId(), JSON.stringify(rules), iso(new Date()))
+    return json(res, 200, { rules })
+  }
   // ===== 客户分层(P1-③):分层规则(阈值可微调,存租户设置;默认值与前端一致) =====
   if (req.method === 'GET' && path === '/admin/segment-rules') {
     const row = db.prepare("SELECT value FROM tenant_settings WHERE tenant_id = ? AND key = 'segment_rules'").get(currentTenantId())
@@ -8475,7 +8509,17 @@ async function route(req, res) {
     const techs = db.prepare('SELECT id, name, title FROM technicians WHERE tenant_id = ? AND is_active = 1 ORDER BY name ASC').all(tid)
     const rows = techs.map((t) => Object.assign(computeSalaryEstimate(t.id, month, tid), { name: t.name, title: t.title || '' }))
     const totalCents = rows.reduce((s, r) => s + (r.totalCents || 0), 0)
-    return json(res, 200, { month, locked: false, rows, totalCents })
+    // 当月带归属备注的单:结算时对照,用±调整修正(不改业绩数字)
+    const [ay, am] = month.split('-').map(Number)
+    const aStart = iso(localDateTime(`${month}-01`, '00:00'))
+    const aEnd = iso(localDateTime(`${am === 12 ? `${ay + 1}-01` : `${ay}-${String(am + 1).padStart(2, '0')}`}-01`, '00:00'))
+    const attributionNotes = db.prepare(`SELECT b.public_code AS code, b.attribution_note AS note, b.service_price_cents AS cents,
+        (SELECT name FROM technicians WHERE id = b.technician_id) AS tech,
+        (SELECT display_name FROM users WHERE id = b.user_id) AS cust
+      FROM bookings b WHERE b.tenant_id = ? AND b.attribution_note IS NOT NULL AND b.appointment_start >= ? AND b.appointment_start < ?
+      ORDER BY b.appointment_start ASC`).all(tid, aStart, aEnd)
+      .map((r) => ({ code: r.code, note: r.note, amountCents: r.cents, technicianName: r.tech || '', customerName: r.cust || '' }))
+    return json(res, 200, { month, locked: false, rows, totalCents, attributionNotes })
   }
   // 确认并锁定当月工资表(owner+财务钥匙):按当下数据快照存档;锁定后 estimate 一律返回快照,防事后改数
   if (req.method === 'POST' && path === '/admin/salary/lock') {
@@ -8800,6 +8844,19 @@ async function route(req, res) {
     })
     return json(res, 200, { count: items.length, date, items })
   }
+  // 归属备注:技师/老板给某单记「实际谁做/怎么分」;员工限本人单。月底工资试算集中展示,配合±调整,不改业绩数字。
+  if (req.method === 'POST' && path.startsWith('/admin/bookings/') && path.endsWith('/attribution-note')) {
+    const id = path.split('/')[3]
+    const body = await readBody(req)
+    const booking = db.prepare('SELECT * FROM bookings WHERE id = ? AND tenant_id = ?').get(id, currentTenantId())
+    if (!booking) throw apiError(404, 'NOT_FOUND', '订单不存在。')
+    assertStaffCanAccessBooking(adminSession, booking)
+    const note = String(body.note || '').trim().slice(0, 120)
+    if (!note) throw apiError(400, 'BAD_REQUEST', '备注不能为空。')
+    const signed = `${note}(${adminSession.email || 'admin'} ${localParts(new Date()).date})`
+    db.prepare('UPDATE bookings SET attribution_note = ?, updated_at = ? WHERE id = ?').run(signed, iso(new Date()), id)
+    return json(res, 200, { ok: true, note: signed })
+  }
   // 到店打卡:排班台面"进行中"展示态。arrived=true 记到店时间;false 清除(改回未到店)。不改 status、不动财务。
   if (req.method === 'PATCH' && path.startsWith('/admin/bookings/') && path.endsWith('/arrival')) {
     const id = path.split('/')[3]
@@ -9075,6 +9132,12 @@ for (const col of ['paid_at TEXT', 'paid_by TEXT', 'txn_id TEXT']) {
 try {
   // 储值流水归属技师(2026-08-01):这笔充值/这次耗卡算谁促成——薪资的充值/耗卡提成据此计算
   db.exec('ALTER TABLE stored_value_transactions ADD COLUMN technician_id TEXT')
+} catch (error) {
+  if (!String(error.message || '').includes('duplicate column')) throw error
+}
+try {
+  // 归属备注(2026-08-02):完成单时随手记「这单实际谁做/怎么分」;月底工资试算集中展示,配合±调整用,不改业绩数字本身
+  db.exec('ALTER TABLE bookings ADD COLUMN attribution_note TEXT')
 } catch (error) {
   if (!String(error.message || '').includes('duplicate column')) throw error
 }

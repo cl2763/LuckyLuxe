@@ -25,3 +25,13 @@ page{background:#fbf8f5}
 .none{text-align:center;color:#b6a99b;font-size:22rpx;padding:24rpx 0}
 .add{text-align:center;color:#9b7655;font-size:24rpx;padding:22rpx 0;border-top:1rpx dashed #e7ddd4}
 .note{font-size:22rpx;color:#8c8279;line-height:1.6;padding:20rpx 22rpx}
+
+/* 预约规则:线上定金开关 */
+.rulerow{display:flex;align-items:center;gap:16rpx;padding:6rpx 0 14rpx}
+.ruleinfo{flex:1;min-width:0}
+.rulename{font-size:27rpx;font-weight:700;color:#2d2826}
+.ruledesc{font-size:21rpx;color:#8c8279;margin-top:4rpx;line-height:1.5}
+.rtog{width:88rpx;height:48rpx;border-radius:999rpx;background:#e5ddd3;position:relative;transition:.2s;flex:none}
+.rtog .rdot{position:absolute;left:6rpx;top:6rpx;width:36rpx;height:36rpx;border-radius:50%;background:#fff;transition:.2s}
+.rtog.on{background:#1f7a4d}
+.rtog.on .rdot{left:46rpx}

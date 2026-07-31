@@ -36,7 +36,14 @@
 
     <view class="gtitle">预约规则</view>
     <view class="card">
-      <view class="note">超时未付定金自动取消并释放时段;到点自动结单/提醒。规则细项在网页后台调整。</view>
+      <view class="rulerow">
+        <view class="ruleinfo">
+          <view class="rulename">线上定金</view>
+          <view class="ruledesc">{{onlineDeposit ? '开:顾客预约需付定金锁位,超时未付自动释放时段' : '关:顾客预约免定金直接确认,到店收款(适合暂无支付商户号)'}}</view>
+        </view>
+        <view class="rtog {{onlineDeposit ? 'on' : ''}}" bindtap="toggleDeposit"><view class="rdot"></view></view>
+      </view>
+      <view class="note">关闭定金后,记得同步更新 AI 客服的定金话术(门店信息/知识库);其余规则细项在网页后台调整。</view>
     </view>
   </block>
 </view>

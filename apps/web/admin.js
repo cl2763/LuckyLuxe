@@ -1,5 +1,5 @@
 // 构建号:每次交付递增。侧栏可见,排查"改了没生效"时先对版本。
-const ADMIN_BUILD = '20260801-salary-web'
+const ADMIN_BUILD = '20260801b-rfm-web'
 console.log(`[admin] build ${ADMIN_BUILD}`)
 
 // "今天"必须按门店时区算(服务器同样钉在此时区),否则老板人在别的时区时全站日期错位一天。
@@ -4373,6 +4373,18 @@ function memberTierBadge(customer) {
   return `<span class="member-tier-badge ${MEMBER_TIER_STYLES[tier] || 'tier-silver'}">${escapeHtml(tier)}</span>`
 }
 
+// RFM 分层(与小程序客户库同口径,默认阈值;详细微调在小程序「⚙ 规则」)
+function rfmTierOf(c) {
+  const visits = c.completedCount || 0
+  if (!visits) return null
+  const days = (iso2) => iso2 ? Math.floor((Date.now() - new Date(iso2).getTime()) / 86400000) : 9999
+  const lastD = days(c.lastCompletedAt)
+  if (lastD > 60) return { k: 's', label: owner.lang === 'zh' ? '沉睡S' : 'Dormant', color: '#8a5a52' }
+  if (lastD <= 45 && visits >= 3 && (c.totalSpentCents || 0) >= 50000) return { k: 'a', label: owner.lang === 'zh' ? '高价值A' : 'VIP', color: '#b5885d' }
+  if (days(c.firstVisitAt) <= 30) return { k: 'n', label: owner.lang === 'zh' ? '新客N' : 'New', color: '#3b6ea5' }
+  return { k: 'b', label: owner.lang === 'zh' ? '回头客B' : 'Repeat', color: '#3f6b52' }
+}
+
 function renderCustomers() {
   if (owner.selectedCustomerId) {
     renderCustomerDetail()
@@ -4388,11 +4400,17 @@ function renderCustomers() {
     els.customerList.innerHTML = `<div class="empty-state"><strong>${search ? (owner.lang === 'zh' ? '没有匹配的客户' : 'No matches') : t('noCustomers')}</strong></div>`
     return
   }
-  els.customerList.innerHTML = customers.map((customer) => `
+  // 分层汇总条(全量客户口径,不受搜索影响)
+  const tierCounts = { a: 0, b: 0, n: 0, s: 0 }
+  ;(owner.customers || []).forEach((c) => { const tr = rfmTierOf(c); if (tr) tierCounts[tr.k] += 1 })
+  const tierBar = `<div class="subtle" style="margin:0 0 10px 2px">${owner.lang === 'zh'
+    ? `客户分层:高价值A <strong>${tierCounts.a}</strong> · 回头客B <strong>${tierCounts.b}</strong> · 新客N <strong>${tierCounts.n}</strong> · 沉睡S <strong>${tierCounts.s}</strong>(自动按 最近到店/频率/累计消费;名单动作与阈值微调在小程序客户库)`
+    : `Tiers: VIP ${tierCounts.a} · Repeat ${tierCounts.b} · New ${tierCounts.n} · Dormant ${tierCounts.s}`}</div>`
+  els.customerList.innerHTML = tierBar + customers.map((customer) => `
     <article class="customer-profile-card card">
       <div class="customer-avatar">${customerName(customer).slice(0, 1).toUpperCase()}</div>
       <div>
-        <h3>${escapeHtml(customerName(customer))} ${memberTierBadge(customer)}</h3>
+        <h3>${escapeHtml(customerName(customer))} ${memberTierBadge(customer)}${(() => { const tr = rfmTierOf(customer); return tr ? ` <span style="font-size:11px;font-weight:800;color:#fff;background:${tr.color};border-radius:5px;padding:2px 8px;vertical-align:middle">${tr.label}</span>` : '' })()}</h3>
         <p class="subtle">${escapeHtml(customer.memberCode || '')}${customer.birthday ? ` · 🎂 ${escapeHtml(customer.birthday)}` : ''}</p>
         <p class="customer-contact">${escapeHtml([customer.phone, customer.email].filter(Boolean).join(' · ') || '-')}</p>
         ${(customer.tags || []).length ? `<div class="customer-tags">${customer.tags.slice(0, 3).map((tag) => `<span class="customer-tag">${escapeHtml(tag)}</span>`).join('')}${customer.tags.length > 3 ? `<span class="customer-tag">+${customer.tags.length - 3}</span>` : ''}</div>` : ''}

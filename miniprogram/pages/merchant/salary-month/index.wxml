@@ -20,6 +20,14 @@
     <view class="lockedbar" wx:elif="{{locked}}">✅ 已锁定存档 · {{lockedAt}}<text class="unlk" bindtap="unlockMonth"> 解锁重算 ›</text></view>
     <view class="totalbar"><text>全员合计{{locked ? '(存档)' : ''}}</text><text class="tb">{{total}}</text></view>
 
+    <view class="attrbox" wx:if="{{attrNotes.length && !locked}}">
+      <view class="attr-t">⚠ 本月有 {{attrNotes.length}} 条归属备注,锁定前核对(用下方「± 调整」修正):</view>
+      <view class="attr-row" wx:for="{{attrNotes}}" wx:key="code">
+        <text class="attr-m">{{item.customerName}} · {{item.amountText}} · 名下:{{item.technicianName}}</text>
+        <text class="attr-n">{{item.note}}</text>
+      </view>
+    </view>
+
     <view class="paycard" wx:for="{{rows}}" wx:key="technicianId">
       <view class="ph">
         <view class="av">{{item.av}}</view>

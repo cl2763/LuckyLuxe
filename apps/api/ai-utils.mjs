@@ -404,7 +404,7 @@ function bestOwnerApprovedSample(message = '', samples = []) {
   return bestScore >= 6 ? best : null
 }
 
-export async function createCustomerServiceReply({ lang = 'zh', message = '', sampleMatchMessage = message, history = [], customer = null, bookings = [], services = [], stores = [], knowledgeContext = null }) {
+export async function createCustomerServiceReply({ lang = 'zh', message = '', sampleMatchMessage = message, history = [], customer = null, bookings = [], services = [], stores = [], knowledgeContext = null, depositMode = null }) {
   const schema = {
     intent: 'booking|pricing|policy|order|store|portfolio|handoff|unknown',
     answerZh: 'string',
@@ -453,7 +453,7 @@ export async function createCustomerServiceReply({ lang = 'zh', message = '', sa
       'Quote workflow: after enough info is collected, tell the customer a technician normally replies within 10 minutes; once quoted, offer to create a booking draft; draft holds for 30 minutes, with a payment reminder before release.',
       'Do not process real payment or create bookings in this reply. Suggest the next app action instead.'
     ].join('\\n'),
-    user: `Incoming message: ${clip(message, 1200)}\nPrevious customer message: ${clip(previousCustomerText, 600)}\nRecent chat:\n${recentChatText || jsonBlock((history || []).slice(-8))}\nCustomer:\n${jsonBlock(customer || {})}\nRecent bookings:\n${jsonBlock((bookings || []).slice(0, 6))}\nServices:\n${jsonBlock(activeServices)}\nStores:\n${jsonBlock((stores || []).slice(0, 3))}`,
+    user: `Incoming message: ${clip(message, 1200)}\nPrevious customer message: ${clip(previousCustomerText, 600)}\nRecent chat:\n${recentChatText || jsonBlock((history || []).slice(-8))}\nCustomer:\n${jsonBlock(customer || {})}\nRecent bookings:\n${jsonBlock((bookings || []).slice(0, 6))}\nServices:\n${jsonBlock(activeServices)}\nStores:\n${jsonBlock((stores || []).slice(0, 3))}${depositMode ? `\nDeposit policy (MUST follow): ${depositMode}` : ''}`,
     schema,
     temperature: 0.55,
     fallback: () => {
