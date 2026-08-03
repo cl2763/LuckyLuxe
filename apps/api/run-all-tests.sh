@@ -16,9 +16,21 @@ finish() { cleanup; [ -n "${DATA_DIR:-}" ] && rm -rf "$DATA_DIR"; }
 trap finish EXIT
 cleanup; sleep 1
 
+# 等实例真正就绪再发请求:轮询 /health 取代固定 sleep。
+# 固定 sleep 在 CI 慢机器上会让测试抢跑(实例尚未 listen)→ tenant-isolation 报 "fetch failed"。
+wait_health() {
+  local port="$1" label="${2:-$1}" tries=60
+  for _ in $(seq 1 "$tries"); do
+    if curl -sf -o /dev/null --max-time 2 "http://127.0.0.1:${port}/health"; then return 0; fi
+    sleep 0.5
+  done
+  echo "!! 实例 ${label} (端口 ${port}) 在 30s 内未就绪,中止" >&2
+  return 1
+}
+
 echo "== 启动主服务器 (4128) =="
 PORT=4128 node local-server.mjs > /tmp/ll-ci-main.log 2>&1 &
-sleep 3
+wait_health 4128 "主服务器"
 # 全新库没有订单数据:填充演示数据(幂等,已有数据时自动跳过)
 curl -s -X POST -H "authorization: Bearer owner-demo-token" -H "content-type: application/json" \
   -d '{}' http://127.0.0.1:4128/admin/demo/full-seed > /dev/null || true
@@ -34,15 +46,15 @@ done
 echo "== 自动回归专用实例 (4129) =="
 cleanup; sleep 1
 PORT=4129 HUMAN_REPLY_COOLDOWN_MINUTES=0 node local-server.mjs > /tmp/ll-ci-4129.log 2>&1 &
-sleep 3
+wait_health 4129 "自动回归实例"
 TEST_BASE_URL=http://127.0.0.1:4129 node test-auto-return.mjs
 
 echo "== 租户隔离双实例 (4128+4131) =="
 cleanup; sleep 1
 PORT=4128 node local-server.mjs > /tmp/ll-ci-a.log 2>&1 &
-sleep 2
+wait_health 4128 "租户A"
 PORT=4131 DEFAULT_TENANT_ID=tenant-iso-b node local-server.mjs > /tmp/ll-ci-b.log 2>&1 &
-sleep 3
+wait_health 4131 "租户B"
 node test-tenant-isolation.mjs
 
 echo ""
