@@ -1030,6 +1030,111 @@ function wecomConfigStatus() {
   }
 }
 
+// ── 企微微信客服 出站链路(gettoken / sync_msg / send_msg)──
+// 密钥齐备(wecomConfigStatus=ready)时,回调事件触发真实拉取+AI回复发送;缺密钥时保持原 mock/测试路径不变。
+const WECOM_API_BASE = 'https://qyapi.weixin.qq.com/cgi-bin'
+let wecomTokenCache = { token: '', expiresAt: 0 }
+
+function wecomOutboundReady() {
+  return Boolean(WECOM_CORP_ID && WECOM_CUSTOMER_SERVICE_SECRET)
+}
+
+async function getWecomAccessToken(forceRefresh = false) {
+  if (!forceRefresh && wecomTokenCache.token && Date.now() < wecomTokenCache.expiresAt) return wecomTokenCache.token
+  const response = await fetch(`${WECOM_API_BASE}/gettoken?corpid=${encodeURIComponent(WECOM_CORP_ID)}&corpsecret=${encodeURIComponent(WECOM_CUSTOMER_SERVICE_SECRET)}`)
+  const data = await response.json()
+  if (data.errcode) throw apiError(502, 'WECOM_TOKEN_FAILED', `企微 access_token 获取失败:${data.errcode} ${data.errmsg}`)
+  wecomTokenCache = { token: data.access_token, expiresAt: Date.now() + Math.max(60, (data.expires_in || 7200) - 300) * 1000 }
+  return wecomTokenCache.token
+}
+
+async function wecomApiPost(pathName, payload) {
+  let token = await getWecomAccessToken()
+  let response = await fetch(`${WECOM_API_BASE}/${pathName}?access_token=${encodeURIComponent(token)}`, {
+    method: 'POST',
+    headers: { 'content-type': 'application/json' },
+    body: JSON.stringify(payload)
+  })
+  let data = await response.json()
+  if (data.errcode === 40014 || data.errcode === 42001) {
+    token = await getWecomAccessToken(true)
+    response = await fetch(`${WECOM_API_BASE}/${pathName}?access_token=${encodeURIComponent(token)}`, {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify(payload)
+    })
+    data = await response.json()
+  }
+  return data
+}
+
+function readWecomKfCursor(openKfid) {
+  const row = db.prepare('SELECT value FROM tenant_settings WHERE tenant_id = ? AND key = ?').get(currentTenantId(), `wecom_kf_cursor_${openKfid}`)
+  return row?.value || ''
+}
+
+function saveWecomKfCursor(openKfid, cursor) {
+  db.prepare(`INSERT INTO tenant_settings (tenant_id, key, value, updated_at) VALUES (?, ?, ?, ?)
+    ON CONFLICT(tenant_id, key) DO UPDATE SET value = excluded.value, updated_at = excluded.updated_at`)
+    .run(currentTenantId(), `wecom_kf_cursor_${openKfid}`, cursor || '', iso(new Date()))
+}
+
+async function sendWecomKfText(openKfid, externalUserId, content) {
+  const text = String(content || '').slice(0, 2000)
+  if (!text) return null
+  const data = await wecomApiPost('kf/send_msg', {
+    touser: externalUserId,
+    open_kfid: openKfid,
+    msgtype: 'text',
+    text: { content: text }
+  })
+  if (data.errcode) console.error(`[wecom] send_msg 失败 ${data.errcode} ${data.errmsg} (touser=${externalUserId})`)
+  return data
+}
+
+// 回调事件只是"有新消息"通知;真实消息用 sync_msg 拉取,逐条走既有 handleWecomInbound(AI/转人工逻辑复用),再把 AI 回复经 send_msg 发回顾客。
+async function syncAndProcessWecomKfMessages(openKfid, eventToken, req) {
+  const results = []
+  let cursor = readWecomKfCursor(openKfid)
+  for (let page = 0; page < 10; page += 1) {
+    const payload = { open_kfid: openKfid, limit: 100 }
+    if (cursor) payload.cursor = cursor
+    if (eventToken) payload.token = eventToken
+    const data = await wecomApiPost('kf/sync_msg', payload)
+    if (data.errcode) {
+      console.error(`[wecom] sync_msg 失败 ${data.errcode} ${data.errmsg}`)
+      break
+    }
+    cursor = data.next_cursor || cursor
+    saveWecomKfCursor(openKfid, cursor)
+    for (const msg of data.msg_list || []) {
+      if (msg.origin !== 3) continue // 3=顾客发来的消息;跳过系统/客服自己发的
+      let content = ''
+      if (msg.msgtype === 'text') content = msg.text?.content || ''
+      else if (msg.msgtype === 'image') content = '[顾客发来一张图片]'
+      else if (msg.msgtype === 'voice') content = '[顾客发来一条语音]'
+      else continue
+      const inbound = {
+        provider: 'wecom_customer_service',
+        externalUserId: msg.external_userid || '',
+        openKfid,
+        content,
+        lang: 'zh',
+        raw: { msgid: msg.msgid, msgtype: msg.msgtype }
+      }
+      try {
+        const result = await handleWecomInbound(inbound, req)
+        if (result?.reply?.content) await sendWecomKfText(openKfid, msg.external_userid, result.reply.content)
+        results.push({ msgid: msg.msgid, replied: Boolean(result?.reply?.content), status: result?.conversation?.status || null })
+      } catch (error) {
+        console.error(`[wecom] 处理消息失败 msgid=${msg.msgid}:`, error?.message || error)
+      }
+    }
+    if (!data.has_more) break
+  }
+  return results
+}
+
 function wecomConversationId(externalUserId = '') {
   return `wecom:${externalUserId || 'mock-guest'}`
 }
@@ -6043,6 +6148,17 @@ async function route(req, res) {
       if (!valid) throw apiError(403, 'WECHAT_SIGNATURE_INVALID', 'WeChat callback signature verification failed.')
     }
     const decryptedBody = encryptedPayload && WECOM_CUSTOMER_SERVICE_AES_KEY ? decryptWecomPayload(encryptedPayload) : rawBody
+    // 真实企微「微信客服」事件:回调仅是通知,立即 200 应答,异步拉取消息+AI回复发送(密钥齐备时)
+    const kfEventToken = xmlValue(decryptedBody, 'Token')
+    const kfEventOpenKfid = xmlValue(decryptedBody, 'OpenKfId') || WECOM_OPEN_KFID
+    if (encryptedPayload && kfEventToken && kfEventOpenKfid && wecomOutboundReady()) {
+      res.writeHead(200, { 'content-type': 'text/plain; charset=utf-8' })
+      res.end('success')
+      syncAndProcessWecomKfMessages(kfEventOpenKfid, kfEventToken, req).catch((error) => {
+        console.error('[wecom] 异步处理进线失败:', error?.message || error)
+      })
+      return
+    }
     const inbound = normalizeWecomInbound(body, query, decryptedBody)
     if (encryptedPayload) inbound.raw = { encrypted: true, body: rawBody }
     const result = await handleWecomInbound(inbound, req)
