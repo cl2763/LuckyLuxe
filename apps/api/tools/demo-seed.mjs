@@ -84,7 +84,15 @@ function insertRow(table, data, replace = true) {
   const cols = columnsOf(table)
   const names = cols.map((c) => c.name)
   const row = {}
-  for (const [k, v] of Object.entries(data)) if (names.includes(k) && v !== undefined) row[k] = v
+  for (const [k, v] of Object.entries(data)) {
+    if (v === undefined) continue
+    if (!names.includes(k)) {
+      // 字段名写错会被静默丢弃(曾导致 occurred_at/occurred_on 写空、财务页整页没数),这里必须吼出来
+      console.warn(`[warn] ${table} 无字段 "${k}",该值被丢弃 —— 检查字段名是否写错`)
+      continue
+    }
+    row[k] = v
+  }
   for (const c of cols) {
     if (c.pk) continue
     if (c.notnull && c.dflt_value === null && row[c.name] === undefined) {
@@ -197,9 +205,7 @@ function seedTenant(cfg) {
     insertRow('stores', {
       id: storeId, tenant_id: tenantId, name: storeName, is_active: 1,
       address: '演示地址 · 仅用于产品演示', phone: '000-0000-0000',
-      timezone: TZ, currency: 'CAD', business_hours: 'Tue-Sun 10:00-19:00',
-      description: '这是有迹的演示门店,数据均为虚构,可随时重置。',
-      created_at: now, updated_at: now
+      timezone: TZ, currency: 'CAD'
     })
 
     // 营业时间(周一休息,周二至周日 10:00-19:00)——不种这张表台面会显示「今日休息」
@@ -220,13 +226,13 @@ function seedTenant(cfg) {
       const id = `${tenantId}-svc-${i + 1}`
       svcIds.push({ id, name, price, dur, type })
       insertRow('services', {
-        id, tenant_id: tenantId, store_id: storeId,
-        name_zh: name, name_en: name, name,
-        type, category: cat, price_cents: price, price: price / 100,
-        duration_min: dur, is_active: 1, sort_order: i + 1,
-        suitable_for: fit, description_zh: `${name}:演示用项目说明。`,
-        description: `${name}:演示用项目说明。`, pricing_type: 'fixed',
-        created_at: now, updated_at: now
+        id, tenant_id: tenantId, name_zh: name, name_en: name,
+        type, category: cat, price_cents: price, deposit_cents: 0,
+        base_duration_min: dur, is_active: 1, sort_order: i + 1,
+        description_zh: `${fit}。${name}是店里的常做款,做完约可维持 3-4 周。`,
+        description_en: `${name} — a popular option at our studio.`,
+        process_json: JSON.stringify(['修型打磨', '底胶护理', '上色/嫁接', '封层与保养建议']),
+        notice_json: JSON.stringify(['请提前 10 分钟到店', '如需卸甲请预约时备注'])
       })
     })
 
@@ -237,8 +243,7 @@ function seedTenant(cfg) {
       techIds.push({ id, name })
       insertRow('technicians', {
         id, tenant_id: tenantId, store_id: storeId, name, is_active: 1,
-        level, sort_order: i + 1, specialty: i % 2 === 0 ? '美甲' : '美睫',
-        created_at: now, updated_at: now
+        title: level === 'senior' ? (i % 2 === 0 ? '资深美甲师' : '资深美睫师') : (i % 2 === 0 ? '美甲师' : '美睫师')
       })
     })
 
@@ -260,15 +265,16 @@ function seedTenant(cfg) {
         fresh: { visits: 1, lastDays: 3 + (i % 22), firstDays: 3 + (i % 22), spend: 28800 },
         normal: { visits: 2 + (i % 2), lastDays: 24 + (i % 28), firstDays: 120 + i * 3, spend: 52000 + i * 6000 }
       }[kind]
+      // 注意:消费额/会员等级/最近到店 都是从预约与账本**推导**出来的,users 表里没有这些列,
+      // 所以顾客的"分层长什么样"完全由下面生成的预约决定。
+      const tagPool = { sleep: ['需回访'], vip: ['高价值', '常客'], fresh: ['新客'], normal: [] }[kind]
       insertRow('users', {
-        id, tenant_id: tenantId, display_name: name, name,
+        id, tenant_id: tenantId, display_name: name,
         phone: `1380000${String(1000 + i).slice(-4)}`,
         email: `demo${i + 1}@example.invalid`,
-        total_spend_cents: profile.spend,
-        member_tier: profile.spend >= 250000 ? 'diamond' : profile.spend >= 120000 ? 'platinum' : profile.spend >= 50000 ? 'gold' : 'silver',
-        stored_value_balance_cents: kind === 'vip' && i % 2 === 0 ? 88000 : (i % 7 === 0 ? 30000 : 0),
-        points: 0,
-        created_at: iso(new Date(Date.now() - profile.firstDays * 86400000)), updated_at: now
+        tags_json: JSON.stringify(tagPool),
+        notes: kind === 'vip' ? '老客,喜欢安静的时段' : (kind === 'fresh' ? '朋友推荐来的' : ''),
+        birthday: i % 4 === 0 ? `${1990 + (i % 12)}-0${(i % 9) + 1}-1${i % 9}` : ''
       })
       custIds.push({ id, name, kind, ...profile })
     })
@@ -285,7 +291,7 @@ function seedTenant(cfg) {
         id, tenant_id: tenantId, store_id: storeId, user_id: cust.id,
         service_id: svc.id, technician_id: techId, status,
         appointment_start: start, appointment_end: plusMin(start, svc.dur),
-        service_price_cents: svc.price + addonCents, total_price_cents: svc.price + addonCents,
+        service_price_cents: svc.price + addonCents,
         final_due_cents: svc.price + addonCents,
         total_duration_min: svc.dur, deposit_cents: 0, deposit_required_cents: 0,
         addons_json: JSON.stringify(addons),
@@ -318,6 +324,37 @@ function seedTenant(cfg) {
     // 沉睡客不能有"今天/未来"的单——「最近到店」按最后一条预约算,一旦排了就会被算成活跃,分层演示不出来。
     const futureCands = custIds.filter((c) => c.kind !== 'sleep')
 
+    // 日常营业单:过去 100 天每个营业日 4-7 单。
+    // 没有这批,月收入撑不起房租/工资的成本结构,演示店会显示成一家在亏钱的店。
+    const dailyCount = withAi ? [5, 6, 7, 5, 6, 4] : [3, 4, 3, 4, 3, 2]
+    for (let d = 120; d >= 1; d -= 1) {
+      const date = dayOffset(-d)
+      const weekday = new Date(`${date}T12:00:00Z`).getUTCDay()
+      if (weekday === 1) continue // 周一休
+      const n = dailyCount[d % dailyCount.length]
+      for (let j = 0; j < n; j += 1) {
+        const cust = futureCands[(d * 3 + j * 7) % futureCands.length]
+        const svc = svcIds[(d + j * 3) % svcIds.length]
+        const techId = techIds[(d + j) % techIds.length].id
+        const hh = ['10:15', '11:45', '13:15', '14:45', '16:15', '17:45', '18:30'][j % 7]
+        done.push(mkBooking(date, hh, cust, svc, techId, 'COMPLETED'))
+      }
+    }
+    // 本月加密:月初演示时"本月收入"不能被月初就入账的房租压成负数,本月每天多排几单
+    {
+      const tm = storeToday().slice(0, 7)
+      const todayDom0 = Number(storeToday().slice(8, 10))
+      for (let dom = 1; dom <= todayDom0; dom += 1) {
+        const date = `${tm}-${String(dom).padStart(2, '0')}`
+        if (new Date(`${date}T12:00:00Z`).getUTCDay() === 1) continue
+        for (let j = 0; j < (withAi ? 4 : 2); j += 1) {
+          const cust = futureCands[(dom * 5 + j * 3) % futureCands.length]
+          done.push(mkBooking(date, ['09:45', '12:30', '15:00', '18:15'][j % 4], cust,
+            svcIds[(dom + j * 2) % svcIds.length], techIds[(dom + j) % techIds.length].id, 'COMPLETED'))
+        }
+      }
+    }
+
     // 今日台面:三种状态齐全(已完成 / 进行中 / 未到),外加一条未收定金的直排单
     const today = storeToday()
     const tc = (n) => futureCands[n % futureCands.length]
@@ -345,34 +382,70 @@ function seedTenant(cfg) {
     mkBooking(dayOffset(-11), '15:00', custIds[6], svcIds[2], techIds[1].id, 'CANCELLED')
 
     // 财务账本:每笔完成单记一条收入 + 每周若干支出
-    const mkTxn = (type, category, cents, occurredAt, note, tags) => {
+    // 账本字段是 occurred_on(YYYY-MM-DD 日期,不是时间戳),pay_channel/source 也要给对,否则报表分组不出来
+    const CHANNELS_PAY = ['card', 'wechat', 'cash', 'alipay']
+    const mkTxn = (type, category, cents, dateStr, note, opt = {}) => {
       insertRow('finance_transactions', {
-        id: uid(`${tenantId}-txn`), tenant_id: tenantId, type, category,
-        amount_cents: cents, occurred_at: occurredAt, note,
-        source: 'demo', tags: tags || '', created_at: occurredAt, created_by: 'demo-seed'
+        id: uid(`${tenantId}-txn`), tenant_id: tenantId, store_id: storeId,
+        type, source: opt.source || (type === 'income' ? 'booking' : 'manual'),
+        category, tags: opt.tags || '', amount_cents: cents,
+        pay_channel: opt.payChannel || CHANNELS_PAY[Math.floor(Math.random() * CHANNELS_PAY.length)],
+        occurred_on: dateStr, note, booking_id: opt.bookingId,
+        created_by: 'demo-seed', created_at: iso(new Date(`${dateStr}T12:00:00Z`))
       }, false)
     }
-    done.forEach((b) => mkTxn('income', '服务收入', b.svc.price, b.start, `${b.svc.name} · ${b.cust.name}`, b.techId))
-    // 支出:多类目,过去 4 个月每月都有,报表/趋势才好看
-    for (let m = 3; m >= 0; m -= 1) {
-      const base = -m * 30
-      mkTxn('expense', '房租', 260000, at(dayOffset(base - 1), '09:00'), '门店租金')
-      mkTxn('expense', '水电', 42000 + m * 1800, at(dayOffset(base - 8), '09:00'), '水电网费')
-      mkTxn('expense', '材料', 68000 + m * 5200, at(dayOffset(base - 12), '18:00'), '甲油胶/睫毛耗材采购')
-      mkTxn('expense', '材料', 31000 + m * 2400, at(dayOffset(base - 22), '18:00'), '工具与消耗品')
-      mkTxn('expense', '推广', 28000, at(dayOffset(base - 16), '11:00'), '小红书/朋友圈推广')
-      if (m > 0) mkTxn('expense', '工资', 980000 + m * 20000, at(dayOffset(base - 2), '10:00'), `${m} 月前员工工资发放`)
-    }
-    // 储值充值也计收入(和储值流水对得上)
+    const dayOf = (isoStr) => new Date(isoStr).toISOString().slice(0, 10)
+
+    // ① 每笔完成单 → 一条服务收入(带技师 tag 和 booking_id,业绩归属链路才对得上)
+    done.forEach((b) => mkTxn('income', '服务收入', b.svc.price, dayOf(b.start),
+      `${b.svc.name} · ${b.cust.name}`, { tags: b.techId, bookingId: b.id }))
+
+    // ② 储值充值收入(与储值流水金额一一对应)
     custIds.filter((c) => c.kind === 'vip').slice(0, 4).forEach((c, i) => {
-      mkTxn('income', '储值充值', [100000, 300000, 300000, 500000][i], at(dayOffset(-(20 + i * 9)), '15:00'), `${c.name} 储值卡充值`, techIds[i % techIds.length].id)
+      mkTxn('income', '储值充值', [100000, 300000, 300000, 500000][i], dayOffset(-(20 + i * 9)),
+        `${c.name} 储值卡充值`, { source: 'stored_value', tags: techIds[i % techIds.length].id })
     })
+
+    // ③ 零售/加项等杂项收入,让收入结构不止一种
+    for (let m = 5; m >= 0; m -= 1) {
+      const mBase = -m * 30
+      mkTxn('income', '产品零售', 12800 + m * 900, dayOffset(mBase - 6), '甲油/护手霜零售')
+      if (m % 2 === 0) mkTxn('income', '产品零售', 8800, dayOffset(mBase - 19), '睫毛清洁套装')
+    }
+
+    // ④ 支出:近 6 个月每月完整成本结构(房租/水电/材料/推广/工资/杂项),月度趋势与利润才算得出来
+    // 成本结构按"月收入的合理占比"设定,保证演示店是**盈利**的(美甲店毛利高,净利 35-45% 合理)
+    // 只做近 4 个月,和日常营业单的覆盖范围对齐——否则更早的月份会出现"有支出没收入"的假亏损
+    // 基础版是 2 技师小店(单量约为 AI 版的 1/3),成本要同比缩小,否则会显示成亏钱的店
+    const scale = withAi ? 1 : 0.32
+    for (let m = 3; m >= 0; m -= 1) {
+      const mBase = -m * 30
+      mkTxn('expense', '房租', Math.round(680000 * scale), dayOffset(mBase - 1), '门店租金', { payChannel: 'card' })
+      mkTxn('expense', '水电', Math.round((52000 + m * 2200) * scale), dayOffset(mBase - 8), '水电网费')
+      mkTxn('expense', '材料', Math.round((186000 + m * 9200) * scale), dayOffset(mBase - 12), '甲油胶/睫毛耗材采购')
+      mkTxn('expense', '材料', Math.round((74000 + m * 3600) * scale), dayOffset(mBase - 22), '工具与消耗品')
+      mkTxn('expense', '推广', Math.round(88000 * scale), dayOffset(mBase - 16), '小红书/朋友圈推广')
+      mkTxn('expense', '其他', Math.round(11500 * scale), dayOffset(mBase - 15), '软件订阅费')
+      // 工资:上月及更早已发放(本月还没发,正好演示「锁定工资表 → 发放入账」)
+      if (m > 0) mkTxn('expense', '工资', Math.round((1880000 + m * 40000) * scale), dayOffset(mBase - 2), '员工工资发放', { payChannel: 'card' })
+    }
+
+    // ⑤ 本月密度补强:确保"本月收入/支出/利润"三个数都饱满(演示第一眼看的就是这个)
+    const thisMonth = storeToday().slice(0, 7)
+    const dim = new Date(Number(thisMonth.slice(0, 4)), Number(thisMonth.slice(5, 7)), 0).getDate()
+    const todayDom = Number(storeToday().slice(8, 10))
+    for (let d = 1; d <= Math.min(todayDom, dim); d += 1) {
+      const date = `${thisMonth}-${String(d).padStart(2, '0')}`
+      if (d % 4 === 0) mkTxn('expense', '材料', 9800 + d * 260, date, '当日耗材补货')
+      if (d % 6 === 0) mkTxn('income', '产品零售', 6800 + d * 180, date, '门店零售')
+    }
 
     // 服务小记 + 结构化画像
     if (hasTable('service_notes')) {
-      // 覆盖大部分完成单,但**最近 6 天的完成单一律不写**——这样「服务小记」待办列表里始终有东西可演示
-      const cutoff = Date.now() - 6 * 86400000
-      done.filter((b, i) => new Date(b.start).getTime() < cutoff && i % 4 !== 3).forEach((b, i) => {
+      // 绝大多数完成单都写了小记(体现"这家店在好好用"),只留今天+昨天的几单没写,
+      // 让「服务小记」待办列表有 5-8 条可演示——太多会显得积压,太少就没得点。
+      const cutoff = Date.now() - 1.2 * 86400000
+      done.filter((b, i) => new Date(b.start).getTime() < cutoff && i % 15 !== 7).forEach((b, i) => {
         const structured = {
           styles: [NOTE_STYLES[i % NOTE_STYLES.length]],
           personality: [NOTE_PERSON[i % NOTE_PERSON.length]],
@@ -380,12 +453,14 @@ function seedTenant(cfg) {
           companions: i % 7 === 0 ? ['和闺蜜一起来'] : [],
           safetyFlags: i % 9 === 0 ? [NOTE_SAFE[i % NOTE_SAFE.length]] : []
         }
+        const techName = (techIds.find((t) => t.id === b.techId) || {}).name || ''
         insertRow('service_notes', {
           id: uid(`${tenantId}-note`), tenant_id: tenantId, user_id: b.userId,
-          booking_id: b.id, technician_id: b.techId,
-          content: `${structured.styles[0]};${structured.personality[0]};${structured.preferences[0]}`,
+          booking_id: b.id, technician_id: b.techId, technician_name: techName,
+          service_name: b.svc.name,
+          raw_text: `做的${structured.styles[0]},${structured.personality[0]}。${structured.preferences[0]}${structured.safetyFlags.length ? ',注意:' + structured.safetyFlags[0] : ''}。`,
           structured_json: JSON.stringify(structured),
-          created_at: b.start, updated_at: b.start
+          created_by: techName, created_at: b.start
         })
       })
     }
@@ -478,13 +553,14 @@ function seedTenant(cfg) {
       const rAt = at(dayOffset(-(20 + i * 9)), '15:00')
       insertRow('stored_value_transactions', {
         id: uid(`${tenantId}-sv`), tenant_id: tenantId, user_id: c.id, type: 'recharge',
-        amount_cents: [100000, 300000, 300000, 500000][i], bonus_cents: [10000, 45000, 45000, 90000][i],
-        balance_after_cents: 88000, technician_id: techIds[i % techIds.length].id,
-        note: '储值卡充值', created_at: rAt, created_by: 'demo-seed'
+        amount_cents: [100000, 300000, 300000, 500000][i],
+        pay_channel: ['wechat', 'card', 'cash', 'wechat'][i],
+        technician_id: techIds[i % techIds.length].id,
+        note: `储值卡充值(赠 ${[100, 450, 450, 900][i]} 元)`, created_at: rAt, created_by: 'demo-seed'
       }, false)
       insertRow('stored_value_transactions', {
         id: uid(`${tenantId}-sv`), tenant_id: tenantId, user_id: c.id, type: 'consume',
-        amount_cents: -[38800, 45800, 28800, 52800][i], balance_after_cents: 88000,
+        amount_cents: -[38800, 45800, 28800, 52800][i], pay_channel: 'stored_value',
         technician_id: techIds[(i + 1) % techIds.length].id,
         note: '耗卡消费', created_at: at(dayOffset(-(6 + i * 4)), '16:00'), created_by: 'demo-seed'
       }, false)
@@ -600,8 +676,9 @@ function seedTenant(cfg) {
        ['卸甲收费', '本店做的款式卸甲免费;他店款式卸甲 ¥30 起。'],
        ['停车', '门口有 2 小时免费路边停车位。']]
         .forEach(([q, a], i) => insertRow('tenant_kb_entries', {
-          id: `${tenantId}-kb-${i + 1}`, tenant_id: tenantId, question: q, answer: a,
-          kind: 'qa', is_active: 1, sort_order: i + 1, created_at: now, updated_at: now
+          id: `${tenantId}-kb-${i + 1}`, tenant_id: tenantId, question: q,
+          keywords: q, answer_zh: a, answer_en: '',
+          enabled: 1, updated_by: 'demo-seed', created_at: now, updated_at: now
         }))
     }
 
@@ -622,9 +699,9 @@ function seedTenant(cfg) {
     if (hasTable('tenant_entitlements')) {
       insertRow('tenant_entitlements', {
         id: `${tenantId}-ent-ai`, tenant_id: tenantId,
-        feature_key: 'ai_customer_service', enabled: withAi ? 1 : 0,
+        feature: 'ai_customer_service', enabled: withAi ? 1 : 0,
         note: withAi ? '演示店:AI 全开' : '演示店:无 AI 版本',
-        created_at: now, updated_at: now
+        updated_by: 'demo-seed', created_at: now, updated_at: now
       })
     }
 
