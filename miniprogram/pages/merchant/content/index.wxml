@@ -11,7 +11,8 @@
     <text class="arr">›</text>
   </view>
 
-  <view class="gen {{loading?'off':''}}" bindtap="generate">{{loading ? '生成中…' : (result ? '换一版' : '生成文案')}}</view>
+  <view wx:if="{{aiEnabled}}" class="gen {{loading?'off':''}}" bindtap="generate">{{loading ? '生成中…' : (result ? '换一版' : '生成文案')}}</view>
+  <view wx:else class="gen off">生成文案需开通 AI 智能包</view>
 
   <block wx:if="{{result}}">
     <view class="card">

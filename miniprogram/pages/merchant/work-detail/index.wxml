@@ -9,7 +9,7 @@
     <text class="s {{pIdx===index?'on':''}}" wx:for="{{platforms}}" wx:key="k" data-i="{{index}}" bindtap="onPlatform">{{item.label}}</text>
   </view>
 
-  <view class="gen {{loading?'off':''}}" bindtap="generate">{{loading?'生成中…':(result?'换一版文案':'生成 AI 文案')}}</view>
+  <view wx:if="{{aiEnabled}}" class="gen {{loading?'off':''}}" bindtap="generate">{{loading?'生成中…':(result?'换一版文案':'生成 AI 文案')}}</view>
 
   <block wx:if="{{result}}">
     <view class="card">

@@ -26,7 +26,13 @@ Page({
     digest: { count: 0, items: [] }
   },
 
-  onShow() { this.load() },
+  onShow() {
+    if (!api.guardMerchant()) return
+    this.setData({ aiEnabled: api.merchantHasAi() })
+    // 刷一次权限:没开通 AI 智能包就不显示 AI 每日总结 / 召回周报
+    api.refreshMerchantAi().then((on) => this.setData({ aiEnabled: on }))
+    this.load()
+  },
 
   async load() {
     const d = new Date()

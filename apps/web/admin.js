@@ -1,5 +1,5 @@
 // 构建号:每次交付递增。侧栏可见,排查"改了没生效"时先对版本。
-const ADMIN_BUILD = '20260802g-web-b2'
+const ADMIN_BUILD = '20260804a-web-sub2'
 console.log(`[admin] build ${ADMIN_BUILD}`)
 
 // "今天"必须按门店时区算(服务器同样钉在此时区),否则老板人在别的时区时全站日期错位一天。
@@ -124,6 +124,7 @@ const els = {
   wechatWorkflowPanel: document.querySelector('#wechatWorkflowPanel'),
   sidebarStoreSettings: document.querySelector('#sidebarStoreSettings'),
   storeSettingsPage: document.querySelector('#storeSettingsPage'),
+  subscriptionBadge: document.querySelector('#subscriptionBadge'),
   storeSettingsEyebrow: document.querySelector('#storeSettingsEyebrow'),
   storeSettingsTitle: document.querySelector('#storeSettingsTitle'),
   storeSettingsSubtitle: document.querySelector('#storeSettingsSubtitle'),
@@ -777,6 +778,22 @@ function money(cents) {
   return `CAD $${Number(cents / 100).toFixed(0)}`
 }
 
+// 本店是否开通 AI 智能包。2026-08-04 店主定:全部 AI 能力归智能包,前端据此隐藏纯 AI 入口。
+// 数据来自启动时拉的 /admin/tenant/entitlements(owner.tenantPlan),与后端 requireAi() 同一个判断依据。
+function hasAi() {
+  return Boolean(owner.tenantPlan?.features?.ai_customer_service?.enabled)
+}
+
+// 套餐与续费状态(渲染在「门店设置 → 当前套餐」里);声明放这里,防 renderTenantPlan 早于文件尾执行时踩死区
+const subState = { data: null, period: 'year', paying: false }
+const SUB_STATUS = {
+  active: { tag: '使用中', cls: 'ok' },
+  expiring: { tag: '即将到期', cls: 'warn' },
+  grace: { tag: '宽限期', cls: 'warn' },
+  suspended: { tag: '已停用', cls: 'warn' },
+  unlimited: { tag: '长期授权', cls: 'ok' }
+}
+
 function cents(value) {
   return Number(value / 100).toFixed(0)
 }
@@ -868,7 +885,17 @@ async function request(path, options = {}) {
   } catch {
     data = {}
   }
-  if (!response.ok) throw new Error(data.error?.message || `请求失败（HTTP ${response.status}）`)
+  if (!response.ok) {
+    // AI 智能包未开通:给一句人话 + 指路,而不是把后端英文原文弹给老板
+    if (data.error?.code === 'AI_ADDON_REQUIRED') {
+      const err = new Error('该功能属于 AI 智能包，去「门店设置 → 当前套餐」可申请试用或订阅')
+      err.code = 'AI_ADDON_REQUIRED'
+      throw err
+    }
+    const err = new Error(data.error?.message || `请求失败（HTTP ${response.status}）`)
+    err.code = data.error?.code
+    throw err
+  }
   return data
 }
 
@@ -1446,6 +1473,12 @@ function renderAdminPages() {
   els.sidebarCustomers.classList.toggle('hidden', !isOwnerRole())
   els.sidebarStoreSettings.classList.toggle('hidden', !isOwnerRole())
   els.sidebarFinance.classList.toggle('hidden', !isOwnerRole())
+  // 2026-08-04 店主定「全部 AI 归智能包」:没开通就把纯 AI 的入口收起来,别让人点了没反应。
+  // AI 图库整页只做 AI 文案,没 AI 就没意义;客服工作台保留(它是人工会话收件箱,没 AI 也要用)。
+  const hasAiAddon = hasAi()
+  els.sidebarAiGallery?.classList.toggle('hidden', !hasAiAddon)
+  document.querySelector('#finNavInsights')?.classList.toggle('hidden', !hasAiAddon)
+  if (!hasAiAddon && owner.adminPage === 'aiGallery') owner.adminPage = isOwnerRole() ? 'dashboard' : 'bookings'
   if (!isOwnerRole() && ['dashboard', 'dashboardDetail', 'services', 'membership', 'customers', 'storeSettings', 'finance'].includes(owner.adminPage)) owner.adminPage = 'bookings'
   const pages = {
     dashboard: els.adminDashboard,
@@ -1922,13 +1955,8 @@ function renderTenantPlan() {
   els.planSummary.textContent = `${planName} · ${expiryText}`
   els.planSummary.classList.toggle('plan-expired', Boolean(plan.planExpired))
   const limits = plan.limits || {}
-  const planOptions = [
-    ['solo', owner.lang === 'zh' ? '个人美甲师版' : 'Solo Artist'],
-    ['studio', owner.lang === 'zh' ? '小型工作室版' : 'Studio'],
-    ['chain', owner.lang === 'zh' ? '连锁门店版' : 'Chain'],
-    ['custom', owner.lang === 'zh' ? '定制企业版' : 'Custom Enterprise']
-  ]
-  const pendingRequest = plan.latestPlanRequest && plan.latestPlanRequest.status === 'PENDING' ? plan.latestPlanRequest : null
+  // 2026-08-04 店主指出重复:原来这里只有一个写死四档(solo/studio/chain/custom,其中 solo 早已废弃)的下拉,
+  // 左栏又另建了「套餐与续费」页。现合并——「当前套餐」展开即完整订阅管理,档位一律由后端下发。
   els.planDetailBody.innerHTML = `
     ${plan.planExpired ? `<p class="plan-expired-banner">${owner.lang === 'zh' ? '套餐已到期，AI 客服等功能已暂停。请续费恢复。' : 'Plan expired. AI features are paused until renewal.'}</p>` : ''}
     <div class="plan-feature-grid">
@@ -1940,29 +1968,9 @@ function renderTenantPlan() {
     <p class="subtle">${owner.lang === 'zh'
       ? `门店上限 ${limits.maxStores ?? '-'} · 员工上限 ${limits.maxStaff ?? '-'} · AI 消息 ${limits.aiMessagesPerMonth ?? '-'} 条/月`
       : `Stores up to ${limits.maxStores ?? '-'} · Staff up to ${limits.maxStaff ?? '-'} · AI messages ${limits.aiMessagesPerMonth ?? '-'}/month`}</p>
-    <div class="plan-renew-row">
-      <select id="planChangeTarget">
-        ${planOptions.map(([id, label]) => `<option value="${id}" ${id === plan.plan ? 'selected' : ''}>${escapeHtml(label)}</option>`).join('')}
-      </select>
-      <button class="primary slim" id="planChangeSubmit" type="button">${owner.lang === 'zh' ? '续费 / 升级' : 'Renew / Upgrade'}</button>
-    </div>
-    ${pendingRequest
-      ? `<p class="subtle">${owner.lang === 'zh'
-          ? `已提交${pendingRequest.requestType === 'renew' ? '续费' : '升级'}申请（${escapeHtml(pendingRequest.targetPlan)}），等待处理。商户版上线后此处接在线支付。`
-          : `${pendingRequest.requestType === 'renew' ? 'Renewal' : 'Upgrade'} request submitted (${escapeHtml(pendingRequest.targetPlan)}), pending. Online billing arrives with the merchant release.`}</p>`
-      : `<p class="subtle">${owner.lang === 'zh' ? '提交后申请会进入待处理队列；商户版上线后此入口直接接在线支付。' : 'Requests enter a pending queue; this entry will connect to online billing in the merchant release.'}</p>`}
+    <div class="sub-wrap">${subscriptionMarkup()}</div>
   `
-}
-
-async function submitPlanChangeRequest() {
-  const targetPlan = document.querySelector('#planChangeTarget')?.value || ''
-  const data = await request('/admin/tenant/plan/change-request', {
-    method: 'POST',
-    body: JSON.stringify({ targetPlan })
-  })
-  owner.tenantPlan = data.entitlements
-  renderTenantPlan()
-  toast(owner.lang === 'zh' ? '申请已提交，等待处理。' : 'Request submitted.')
+  playSubscriptionAnimation()
 }
 
 function renderTenantKb() {
@@ -5719,6 +5727,8 @@ els.adminLayout.addEventListener('click', (event) => {
     if (owner.adminPage === 'bookings') owner.adminView = 'today'
     if (owner.adminPage === 'finance') loadFinancePage().catch((error) => toast(error.message))
     if (owner.adminPage === 'membership') loadMembershipPage().catch((error) => toast(error.message))
+    // 套餐与续费并入「门店设置 → 当前套餐」,进页时取一次订阅数据
+    if (owner.adminPage === 'storeSettings') loadSubscriptionPage().catch((error) => toast(error.message))
     render()
     return
   }
@@ -6449,10 +6459,6 @@ els.storeSettingsPage.addEventListener('click', (event) => {
     deleteSpecialDate(specialDelete.dataset.specialDateDelete).catch((error) => toast(error.message))
     return
   }
-  if (event.target.closest('#planChangeSubmit')) {
-    submitPlanChangeRequest().catch((error) => toast(error.message))
-    return
-  }
   if (event.target.closest('[data-kb-save-facts]')) {
     saveKbFacts().catch((error) => toast(error.message))
     return
@@ -6987,3 +6993,240 @@ if (els.membershipPage) {
   })
 }
 initAdmin().catch((error) => toast(error.message))
+
+/* ===== 套餐与续费(网页版,2026-08-03;2026-08-04 并入「门店设置 → 当前套餐」)=====
+   与小程序 pages/merchant/subscription 同一套后端接口(/admin/subscription*),
+   档位名称与价格一律由后端 PLAN_PRICING 下发(Youji Pricing 口径),前端不写死任何价格。
+   注:subState / SUB_STATUS 声明在文件上方(renderTenantPlan 会用到,避免 const 暂时性死区)。 */
+
+function subMoney(cents) {
+  return '¥' + Math.round((cents || 0) / 100).toString().replace(/\B(?=(\d{3})+(?!\d))/g, ',')
+}
+
+function subDate(value) {
+  return value ? String(value).slice(0, 10) : ''
+}
+
+async function loadSubscriptionPage() {
+  subState.data = await request('/admin/subscription')
+  renderTenantPlan() // 订阅 UI 挂在「门店设置 → 当前套餐」展开区里
+}
+
+// 只重画订阅那一块(切换年付/月付、开关自动续费时用),不动上面的功能清单
+function renderSubscription() {
+  const box = els.planDetailBody?.querySelector('.sub-wrap')
+  if (!box) return renderTenantPlan()
+  box.innerHTML = subscriptionMarkup()
+  playSubscriptionAnimation()
+}
+
+function playSubscriptionAnimation() {
+  // 进度条动效:插入后下一帧再赋宽度,CSS transition 才会跑
+  requestAnimationFrame(() => {
+    const bar = els.planDetailBody?.querySelector('[data-sub-bar]')
+    if (bar) bar.style.width = `${bar.dataset.subBar || 0}%`
+  })
+  const d = subState.data
+  const needsAttention = Boolean(d) && ['expiring', 'grace', 'suspended'].includes(d.status)
+  els.subscriptionBadge?.classList.toggle('hidden', !needsAttention)
+  if (needsAttention && els.subscriptionBadge) els.subscriptionBadge.textContent = '!'
+}
+
+function subscriptionMarkup() {
+  const d = subState.data
+  if (!d) return '<p class="subtle">订阅信息加载中…</p>'
+  const st = SUB_STATUS[d.status] || SUB_STATUS.active
+  // 到期提醒:只有真到了临界点才出现,平时不打扰
+  const alertText = d.status === 'expiring' ? `套餐还有 ${d.daysLeft} 天到期。续费后到期日从原到期日顺延，不浪费已付的天数。`
+    : d.status === 'grace' ? '套餐已到期，目前处于宽限期。续费即恢复全部功能，数据不会丢失。'
+      : d.status === 'suspended' ? '套餐已停用，数据保留 90 天。续费后立即全量恢复。'
+        : ''
+  const noPrice = !d.prices || !d.prices.yearCents // 免费版与定制版都不走自助续费
+  const canRenew = !noPrice && d.status !== 'unlimited'
+  const req = d.latestPlanRequest
+  const pendingReq = req && req.status === 'PENDING'
+    ? `已提交${req.requestType === 'renew' ? '续费' : '档位变更'}申请（${subDate(req.createdAt)}），平台会尽快联系你。`
+    : ''
+  const barPct = d.daysLeft == null ? 100 : Math.max(2, Math.min(100, Math.round((d.daysLeft / 365) * 100)))
+  const payCents = d.prices ? (subState.period === 'month' ? d.prices.monthCents : d.prices.yearCents) : 0
+
+  return `
+    <div class="sub-grid">
+      <div style="display:flex;flex-direction:column;gap:16px">
+        <div class="sub-hero">
+          <p class="sub-eyebrow">当前套餐</p>
+          <h2>${escapeHtml(d.planName || '')}<span class="sub-tag ${st.cls}">${st.tag}</span></h2>
+          <p class="sub-exp">${d.expiresAt ? `有效期至 ${subDate(d.expiresAt)}${d.daysLeft != null ? `　·　剩余 ${d.daysLeft} 天` : ''}` : '长期授权，无需续费'}</p>
+          <div class="sub-bar"><i data-sub-bar="${barPct}" style="width:0"></i></div>
+        </div>
+        ${alertText ? `<div class="sub-alert">${alertText}</div>` : ''}
+        ${pendingReq ? `<div class="sub-alert info">${pendingReq}</div>` : ''}
+
+        ${canRenew ? `
+        <div class="sub-card">
+          <div class="sub-row">
+            <div><h3>续费</h3><p class="sub-note">年付更划算；续费按当前档位定价。</p></div>
+            <div class="sub-seg">
+              <button type="button" data-sub-period="year" class="${subState.period === 'year' ? 'on' : ''}">年付</button>
+              <button type="button" data-sub-period="month" class="${subState.period === 'month' ? 'on' : ''}">月付</button>
+            </div>
+          </div>
+          <button class="primary sub-pay" type="button" data-sub-renew>立即续费 ${subMoney(payCents)}</button>
+          <p class="sub-note" style="margin-top:10px">${d.mockPay ? '当前为本地沙盘模式，可模拟支付联调。' : '支付通道开通前，下单后由平台确认收款并顺延到期日。'}</p>
+        </div>` : `
+        <div class="sub-card">
+          <h3>续费</h3>
+          <p class="sub-note">${d.status === 'unlimited' ? '本店为长期授权，无需续费。' : '免费版永久免费；定制版为按需报价，续费请直接联系我们。'}</p>
+        </div>`}
+
+        <div class="sub-card">
+          <h3>AI 智能包（单独订阅）</h3>
+          <p class="sub-note">基础订阅功能齐全，但不含 AI。</p>
+          ${renderSubAi(d.aiAddon || {})}
+        </div>
+
+        ${(d.orders || []).length ? `
+        <div class="sub-card">
+          <h3>续费记录</h3>
+          <table class="sub-hist">
+            <thead><tr><th>项目</th><th>日期</th><th>金额</th><th>状态</th></tr></thead>
+            <tbody>${d.orders.map((o) => `<tr>
+              <td>${o.plan === 'ai_addon' ? 'AI 智能包' : '套餐续费'}　${o.period === 'month' ? '月付' : '年付'}</td>
+              <td>${subDate(o.paidAt || o.createdAt)}</td>
+              <td>${subMoney(o.amountCents)}</td>
+              <td class="${o.status === 'paid' ? '' : 'pend'}">${o.status === 'paid' ? '已支付' : '待支付'}</td>
+            </tr>`).join('')}</tbody>
+          </table>
+        </div>` : ''}
+      </div>
+
+      <div style="display:flex;flex-direction:column;gap:16px">
+        <div class="sub-card">
+          <div class="sub-row">
+            <div><h3>自动续费</h3><p class="sub-note">开启后到期前自动生成续费单并提醒；不会在未确认的情况下扣款。</p></div>
+            <button class="sub-switch" type="button" data-sub-auto aria-checked="${d.autoRenew ? 'true' : 'false'}"><i></i></button>
+          </div>
+        </div>
+        <div class="sub-card">
+          <h3>全部档位</h3>
+          <p class="sub-note" style="margin-bottom:12px">需要升级或降级，可直接提交申请，我们会联系你确认功能与费用，确认前现有服务不受影响。</p>
+          <div class="sub-tiers">
+            ${(d.tiers || []).map((tier) => `
+              <div class="sub-tier ${tier.current ? 'cur' : ''}">
+                ${tier.note ? `<span class="tbadge">${escapeHtml(tier.note)}</span>` : ''}
+                <div class="tname">${escapeHtml(tier.name)}</div>
+                <div class="tprice">${tier.yearCents ? `${subMoney(tier.yearCents)}/年` : (tier.monthCents === 0 ? '¥0' : '面议')}</div>
+                <div class="tsub">${tier.yearCents ? `或 ${subMoney(tier.monthCents)}/月` : '按需求报价'}</div>
+                <div class="tfit">${escapeHtml(tier.fit || '')}</div>
+                ${tier.current ? '<span class="tcur">✓ 当前档位</span>'
+                  : `<button class="ghost slim" type="button" data-sub-tier="${escapeHtml(tier.id)}" data-sub-tier-name="${escapeHtml(tier.name)}">申请变更</button>`}
+              </div>`).join('')}
+          </div>
+        </div>
+      </div>
+    </div>`
+}
+
+// AI 智能包卡片:套餐自带 / 试用中 / 已订阅 / 待开通(申请已提交) / 未开通
+function renderSubAi(a) {
+  const exp = subDate(a.expiresAt)
+  let badge = '未开通'
+  let badgeCls = ''
+  let expText = ''
+  if (a.includedInPlan) { badge = '套餐已含'; badgeCls = 'on'; expText = '当前套餐已包含 AI，无需单独订阅。' }
+  else if (a.enabled && a.source === 'trial') { badge = '试用中'; badgeCls = 'trial'; expText = `免费试用至 ${exp}，到期后可续订。` }
+  else if (a.enabled) { badge = '已订阅'; badgeCls = 'on'; expText = `AI 有效期至 ${exp}。` }
+  else if (a.trialPending) { badge = '待开通'; badgeCls = 'trial'; expText = `试用申请已提交（${subDate(a.trialPendingAt)}），我们会联系你确认门店信息后开通。` }
+  else if (exp) { expText = `已于 ${exp} 到期，续订后立即恢复。` }
+  const monthY = Math.round((a.monthCents || 9900) / 100)
+  const yearY = Math.round((a.yearCents || 99000) / 100)
+  return `
+    <div class="sub-ai-top" style="margin-top:12px">
+      <div>
+        <h3>AI 智能包<span class="sub-ai-badge ${badgeCls}">${badge}</span></h3>
+        <p class="sub-ai-desc">AI 接待 · 自动报价 · 话术生成</p>
+        ${expText ? `<p class="sub-ai-exp">${expText}</p>` : ''}
+      </div>
+      ${a.includedInPlan ? '' : `<div class="sub-ai-price">¥${monthY}/月<span>¥${yearY}/年</span></div>`}
+    </div>
+    ${a.includedInPlan ? '' : `<div class="sub-ai-btns">
+      ${a.trialPending ? '<div class="waiting">申请处理中</div>'
+        : (a.trialAvailable ? '<button class="primary slim" type="button" data-sub-ai-trial>申请免费试用 3 个月</button>' : '')}
+      <button class="ghost slim" type="button" data-sub-ai-sub="year">订阅一年 ¥${yearY}</button>
+      <button class="ghost slim" type="button" data-sub-ai-sub="month">按月 ¥${monthY}</button>
+    </div>`}`
+}
+
+// 订阅相关交互挂在门店设置页上(「当前套餐」展开区在这里面)
+if (els.storeSettingsPage) {
+  els.storeSettingsPage.addEventListener('click', async (event) => {
+    const periodBtn = event.target.closest('[data-sub-period]')
+    if (periodBtn) {
+      subState.period = periodBtn.dataset.subPeriod === 'month' ? 'month' : 'year'
+      renderSubscription()
+      return
+    }
+    const autoBtn = event.target.closest('[data-sub-auto]')
+    if (autoBtn) {
+      const next = !subState.data.autoRenew
+      try {
+        await request('/admin/subscription/auto-renew', { method: 'PATCH', body: JSON.stringify({ enabled: next }) })
+        subState.data.autoRenew = next
+        renderSubscription()
+        toast(next ? '已开启：到期前自动生成续费单并提醒' : '已关闭：到期仅提醒')
+      } catch (error) { toast(error.message) }
+      return
+    }
+    const tierBtn = event.target.closest('[data-sub-tier]')
+    if (tierBtn) {
+      const name = tierBtn.dataset.subTierName
+      if (!window.confirm(`申请把套餐变更为「${name}」？\n提交后我们会联系你确认功能与费用，确认前现有服务不受影响。`)) return
+      try {
+        await request('/admin/tenant/plan/change-request', { method: 'POST', body: JSON.stringify({ targetPlan: tierBtn.dataset.subTier, note: '网页端申请' }) })
+        toast('已提交，我们会尽快联系你')
+        await loadSubscriptionPage()
+      } catch (error) { toast(error.message) }
+      return
+    }
+    // 试用为申请制:不即时开通,生成申请落到平台后台,由我们联系商家配置后发放
+    if (event.target.closest('[data-sub-ai-trial]')) {
+      if (!window.confirm('AI 智能包需要按你门店的项目、价格和话术做一次配置。\n提交申请后我们会尽快联系你，配置完成即开通，试用期 3 个月不收费。')) return
+      try {
+        await request('/admin/subscription/ai-trial', { method: 'POST', body: '{}' })
+        toast('申请已提交，我们会尽快联系你')
+        await loadSubscriptionPage()
+      } catch (error) { toast(error.message) }
+      return
+    }
+    const aiSubBtn = event.target.closest('[data-sub-ai-sub]')
+    if (aiSubBtn) {
+      const period = aiSubBtn.dataset.subAiSub === 'month' ? 'month' : 'year'
+      try {
+        const r = await request('/admin/subscription/ai-subscribe', { method: 'POST', body: JSON.stringify({ period }) })
+        await settleSubOrder(r, 'ai')
+      } catch (error) { toast(error.message) }
+      return
+    }
+    if (event.target.closest('[data-sub-renew]')) {
+      if (subState.paying) return
+      subState.paying = true
+      try {
+        const r = await request('/admin/subscription/renew', { method: 'POST', body: JSON.stringify({ period: subState.period }) })
+        await settleSubOrder(r, 'plan')
+      } catch (error) { toast(error.message) } finally { subState.paying = false }
+    }
+  })
+}
+
+// 下单后的收尾:沙盘模式可模拟支付;生产未接支付则提示走平台确认收款
+async function settleSubOrder(r, kind) {
+  if (r.payment === 'mock') {
+    if (window.confirm(`模拟支付 ${subMoney(r.order.amountCents)}${kind === 'ai' ? ' 开通 AI 智能包' : ' 并顺延到期日'}？\n（本地沙盘，生产环境此处为微信支付）`)) {
+      const p = await request(`/admin/subscription/orders/${r.order.id}/mock-pay`, { method: 'POST', body: '{}' })
+      toast(kind === 'ai' ? `已开通至 ${subDate(p.aiExpiresAt)}` : `续费成功，有效期至 ${subDate(p.expiresAt)}`)
+    }
+  } else {
+    window.alert(`订单 ${subMoney(r.order.amountCents)} 已创建，平台确认收款后自动${kind === 'ai' ? '开通' : '顺延到期日'}。\n请联系我们完成付款，订单号：${r.order.id.slice(-8)}。`)
+  }
+  await loadSubscriptionPage()
+}

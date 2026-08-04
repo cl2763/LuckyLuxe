@@ -979,8 +979,16 @@ function renderHome() {
   startHeroCarousel()
 }
 
+// 2026-08-04 店主定:顾客端两个 AI 入口暂不上线。
+// ① AI 客服 —— 之后走企业微信外部客服,小程序/网页里这一环不需要了;
+// ② 参考图 AI 分析 —— 待升级后再放出,正式版先不显示。
+// 代码整段保留(改这两个开关即可复活),只是入口不渲染。
+const CUSTOMER_AI_CHAT_ENABLED = false
+const CUSTOMER_AI_REFERENCE_ENABLED = false
+
 function renderAiAssistantWidget() {
   if (!els.aiAssistantWidget) return
+  if (!CUSTOMER_AI_CHAT_ENABLED) { els.aiAssistantWidget.classList.add('hidden'); els.aiAssistantWidget.innerHTML = ''; return }
   els.aiAssistantWidget.classList.remove('hidden')
   if (!state.aiAssistantOpen) {
     els.aiAssistantWidget.innerHTML = `
@@ -1352,14 +1360,14 @@ function renderBookingForm() {
             </div>
           `).join('')}
         </div>
-        <div class="ai-reference-panel card">
+        ${CUSTOMER_AI_REFERENCE_ENABLED ? `<div class="ai-reference-panel card">
           <div>
             <strong>${t('aiReferenceTitle')}</strong>
             <p>${state.lang === 'zh' ? '上传参考图后，可让 AI 初步判断款式复杂度和加项建议。' : 'After uploading references, AI can estimate complexity and add-on suggestions.'}</p>
           </div>
           <button class="ghost slim" data-ai-reference type="button" ${state.referenceImages.length ? '' : 'disabled'}>${state.isAnalyzingReference ? t('aiAnalyzing') : t('aiAnalyze')}</button>
           ${state.referenceAnalysis ? renderReferenceAnalysis() : ''}
-        </div>
+        </div>` : ''}
       </section>
       <label class="notes"><span>${t('remark')}</span><textarea data-field="remark" rows="3">${state.remark}</textarea></label>
       <div class="summary-bar">

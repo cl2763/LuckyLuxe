@@ -52,7 +52,7 @@
       <view class="ebtn" bindtap="toTxns"><view class="ei">☰</view><view class="et">本月流水</view><view class="es">查账 · 冲销纠错</view></view>
     </view>
 
-    <view class="abtn full" bindtap="aiInsight">✦ AI 解读</view>
+    <view wx:if="{{aiEnabled}}" class="abtn full" bindtap="aiInsight">✦ AI 解读</view>
     <view wx:if="{{insight}}" class="insight">{{insight}}</view>
 
     <view class="t2">储值卡</view>

@@ -15,7 +15,7 @@ function hhmm(iso) {
 Page({
   data: { all: [], list: [], kw: '', stat: { total: 0, human: 0 } },
 
-  onShow() { this.load() },
+  onShow() { if (!api.guardMerchant()) return; this.load() },
 
   async load() {
     try {

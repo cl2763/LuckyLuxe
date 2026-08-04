@@ -72,7 +72,8 @@
 
   <!-- ================= 老板端:一屏横条 ================= -->
   <block wx:else>
-    <view class="ai">
+    <!-- AI 每日总结:未开通 AI 智能包时整卡不显示(下面的经营数字横条照常) -->
+    <view class="ai" wx:if="{{aiEnabled}}">
       <view class="ai-h"><text class="ai-dot">✦</text> AI 每日总结 · 自动</view>
       <block wx:if="{{brief}}">
         <view class="ai-txt">{{brief}}</view>
@@ -145,7 +146,7 @@
     <view class="rowcard" wx:if="{{digest.count}}">
       <view class="rowhead" data-k="digest" bindtap="toggle">
         <view class="rowico">💤</view>
-        <view class="rowt"><view class="rowname">本周召回建议</view><view class="rowhint">{{digest.count}} 位沉睡老客 · 话术已备好,复制即发</view></view>
+        <view class="rowt"><view class="rowname">本周召回建议</view><view class="rowhint">{{digest.count}} 位沉睡老客 · {{aiEnabled ? '话术已备好,复制即发' : '开通 AI 智能包可自动写话术'}}</view></view>
         <view class="nbadge warn">{{digest.count}}</view>
         <view class="chev {{expand==='digest'?'open':''}}">›</view>
       </view>

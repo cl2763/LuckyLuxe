@@ -9,7 +9,12 @@ Page({
     result: null, avoid: [], loading: false
   },
 
-  onLoad(opt) { this.id = decodeURIComponent((opt && opt.id) || ''); this.load() },
+  onLoad(opt) {
+    this.id = decodeURIComponent((opt && opt.id) || '')
+    this.setData({ aiEnabled: api.merchantHasAi() })
+    api.refreshMerchantAi().then((on) => this.setData({ aiEnabled: on }))
+    this.load()
+  },
 
   async load() {
     try {

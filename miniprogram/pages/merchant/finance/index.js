@@ -29,7 +29,12 @@ Page({
     gm: { show: false, mode: 'net_profit', monthVal: '', rateVal: '25', yearVal: '', suggest: null }
   },
 
-  async onShow() { if (!(await api.guardOwner())) return; this.init() },
+  async onShow() {
+    if (!(await api.guardOwner())) return
+    this.setData({ aiEnabled: api.merchantHasAi() })
+    api.refreshMerchantAi().then((on) => this.setData({ aiEnabled: on }))
+    this.init()
+  },
   onUnload() { clearInterval(this._rollT) },
   onHide() { clearInterval(this._rollT) },
 

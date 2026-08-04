@@ -70,8 +70,14 @@ function scoreKnowledgeItem(item, message, intents) {
   return score
 }
 
-function selectRules(kb, message, intents) {
-  const rules = kb.businessRules || []
+// 种子条目自带 scope 标记(platform=平台通用 / tenant=旗舰店私有),但原先没人读它,
+// 结果旗舰店的定金金额、会员等级等私有规则被发给了所有租户。非旗舰租户只保留 platform 层。
+function seedScopeFilter(allowSeedTenantLayer) {
+  return (item) => allowSeedTenantLayer || item.scope !== 'tenant'
+}
+
+function selectRules(kb, message, intents, allowSeedTenantLayer = false) {
+  const rules = (kb.businessRules || []).filter(seedScopeFilter(allowSeedTenantLayer))
   const alwaysRelevantIds = ['booking.one_service']
   const scored = rules
     .map((rule) => ({
@@ -84,8 +90,8 @@ function selectRules(kb, message, intents) {
   return scored.map(({ score, ...rule }) => rule)
 }
 
-function selectQaEntries(kb, message, intents) {
-  const entries = kb.qaEntries || []
+function selectQaEntries(kb, message, intents, allowSeedTenantLayer = false) {
+  const entries = (kb.qaEntries || []).filter(seedScopeFilter(allowSeedTenantLayer))
   return entries
     .map((entry) => ({ ...entry, score: scoreKnowledgeItem(entry, message, intents) }))
     .filter((entry) => entry.score > 0)
@@ -116,6 +122,25 @@ function selectHandoffRules(kb, message, intents, matchedQa) {
     .map(({ score, ...rule }) => rule)
 }
 
+// 静态种子里的 tenantPrivate 是旗舰店口径。非旗舰租户只认自己库里的实时值,
+// 宁可这一项留空(AI 会说"需要确认"),也不能把别家门店的价格/地区/会员方案念出去。
+function mergeTenantFacts(tenant, live) {
+  const seed = live.allowSeedFallback ? tenant : {}
+  return {
+    brandName: live.brandName || seed.brandName,
+    assistantName: live.assistantName || seed.assistantName,
+    currency: live.currency || seed.currency,
+    region: live.region || seed.region,
+    storeAddress: live.storeAddress || seed.storeAddress,
+    storePhone: live.storePhone || undefined,
+    defaultHours: live.defaultHours || seed.defaultHours,
+    depositAmount: live.depositAmount ?? seed.depositAmount,
+    memberLevels: live.memberLevels || seed.memberLevels,
+    priceList: live.priceList || seed.priceList,
+    technicians: live.technicians || undefined
+  }
+}
+
 function buildPromptText({ kb, intents, matchedRules, matchedQa, matchedHandoffRules, context }) {
   const tenant = kb.layers?.tenantPrivate || {}
   const platform = kb.layers?.platformPreset || {}
@@ -126,17 +151,7 @@ function buildPromptText({ kb, intents, matchedRules, matchedQa, matchedHandoffR
     version: kb.version,
     platformScope: platform.description,
     tenantId: kb.tenantId,
-    tenantFacts: {
-      brandName: live.brandName || tenant.brandName,
-      assistantName: live.assistantName || tenant.assistantName,
-      currency: live.currency || tenant.currency,
-      region: tenant.region,
-      storeAddress: live.storeAddress || tenant.storeAddress,
-      defaultHours: live.defaultHours || tenant.defaultHours,
-      depositAmount: live.depositAmount ?? tenant.depositAmount,
-      memberLevels: tenant.memberLevels,
-      priceList: tenant.priceList
-    },
+    tenantFacts: mergeTenantFacts(tenant, live),
     platformBoundaryZh: platformNoteZh,
     platformBoundaryEn: platformNoteEn,
     tenantDocuments: Array.isArray(context.tenantDocuments) && context.tenantDocuments.length
@@ -166,12 +181,27 @@ function buildPromptText({ kb, intents, matchedRules, matchedQa, matchedHandoffR
   }
 }
 
+// 平台通用层(上层)以数据库为准:平台后台改完立即生效;表为空时自动回落到静态种子。
+// 只替换 scope==='platform' 的条目,种子里 scope==='tenant' 的(旗舰店私有)原样保留,
+// 是否发给当前租户仍由下面的 seedScopeFilter 决定。
+function applyPlatformOverride(kb, override) {
+  if (!override) return kb
+  const keepTenant = (list) => (list || []).filter((e) => e.scope === 'tenant')
+  return {
+    ...kb,
+    qaEntries: [...(override.qaEntries || []), ...keepTenant(kb.qaEntries)],
+    businessRules: [...(override.businessRules || []), ...keepTenant(kb.businessRules)]
+  }
+}
+
 export function buildKnowledgeContext(input = {}) {
-  const kb = loadCustomerServiceKnowledgeBase()
+  const kb = applyPlatformOverride(loadCustomerServiceKnowledgeBase(), input.platformKb)
   const message = compactText(input.message || '')
   const intents = inferCustomerServiceIntents(message)
-  const matchedRules = selectRules(kb, message, intents)
-  const matchedQa = selectQaEntries(kb, message, intents)
+  // 只有旗舰店能吃种子里的 tenant 层(那本来就是它自己的资料)
+  const allowSeedTenantLayer = Boolean(input.liveTenantFacts && input.liveTenantFacts.allowSeedFallback)
+  const matchedRules = selectRules(kb, message, intents, allowSeedTenantLayer)
+  const matchedQa = selectQaEntries(kb, message, intents, allowSeedTenantLayer)
   const matchedHandoffRules = selectHandoffRules(kb, message, intents, matchedQa)
   const promptText = buildPromptText({
     kb,
@@ -190,17 +220,7 @@ export function buildKnowledgeContext(input = {}) {
       categories: kb.layers?.platformPreset?.categories || [],
       memberOperationsTemplateOnly: true
     },
-    tenantFacts: {
-      brandName: live.brandName || tenant.brandName,
-      assistantName: live.assistantName || tenant.assistantName,
-      currency: live.currency || tenant.currency,
-      region: tenant.region,
-      storeAddress: live.storeAddress || tenant.storeAddress,
-      defaultHours: live.defaultHours || tenant.defaultHours,
-      depositAmount: live.depositAmount ?? tenant.depositAmount,
-      memberLevels: tenant.memberLevels,
-      priceList: tenant.priceList
-    },
+    tenantFacts: mergeTenantFacts(tenant, live),
     intents,
     customerStage: input.customerStage || '',
     sourceChannel: input.sourceChannel || '',

@@ -37,17 +37,20 @@ const E = {
 }
 
 Page({
-  data: { name: '员工', isOwner: true, groups: [] },
+  data: { name: '员工', shopName: '', isOwner: true, groups: [] },
 
-  onShow() { this.loadMe() },
+  onShow() { if (!api.guardMerchant()) return; this.loadMe() },
 
   async loadMe() {
     let owner = true
     let name = '老板'
+    let shopName = ''
     try {
       const m = await api.adminMe()
       owner = m && m.role === 'owner'
-      name = owner ? 'Chang' : ((m && m.displayName) || '员工')
+      // 名字=账号自己设的显示名(原先硬编码 'Chang',别的商家登录会串);副标题=店铺名 · 角色
+      name = (m && m.displayName ? String(m.displayName).replace(/\s*Owner$/i, '') : '') || (owner ? '老板' : '员工')
+      shopName = `${(m && m.tenantName) || ''} · ${owner ? '老板' : '员工'}`
     } catch (e) { owner = api.isOwner() }
     const groups = owner ? [
       { title: '日常经营', rows: [E.schedule, E.attendance, E.finance, E.salaryMonth, E.customers] },
@@ -57,7 +60,7 @@ Page({
       { title: '日常', rows: [E.attendanceStaff, E.scheduleView, E.myperf] },
       { title: '账号', rows: [E.me] }
     ]
-    this.setData({ isOwner: owner, name, groups })
+    this.setData({ isOwner: owner, name, shopName, groups })
   },
 
   go(e) {

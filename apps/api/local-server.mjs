@@ -6,7 +6,7 @@ import { copyFileSync, existsSync, mkdirSync, readdirSync, readFileSync, renameS
 import { dirname, extname, join, normalize, resolve } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { analyzeReferenceImage, createBookingSummary, createCustomerInsight, createCustomerServiceReply, createDailyBrief, createRecallMessages, createServiceNoteInsights, createSocialCopy, extractKbEntriesFromDocument, polishStaffQuoteReply } from './ai-utils.mjs'
-import { buildKnowledgeContext } from './kb-utils.mjs'
+import { buildKnowledgeContext, loadCustomerServiceKnowledgeBase } from './kb-utils.mjs'
 
 process.env.TZ = process.env.APP_TIMEZONE || 'America/Toronto'
 
@@ -104,6 +104,137 @@ function getEntitlements(tenantId = DEFAULT_TENANT_ID) {
 function checkEntitlement(tenantId, feature) {
   return Boolean(getEntitlements(tenantId).features[feature]?.enabled)
 }
+
+// ===== AI 智能包总闸(2026-08-04 店主定:全部 AI 能力归智能包)=====
+// 之前只有「微信/在线客服自动回复」两处有闸门,其余 9 项 AI 能力所有商家免费在用。
+// hasAi():给「主功能照常、只跳过 AI 那一段」的混合接口用(小记保存、知识库导入、报价发送、召回周报)。
+// requireAi():给纯 AI 接口用,统一抛 AI_ADDON_REQUIRED,前端据此提示"去开通"而不是弹英文报错。
+function hasAi(tenantId = currentTenantId()) {
+  return checkEntitlement(tenantId, AI_ADDON.feature)
+}
+function requireAi(tenantId = currentTenantId()) {
+  if (!hasAi(tenantId)) throw apiError(403, 'AI_ADDON_REQUIRED', '该功能属于 AI 智能包,当前店铺未开通。')
+  requireAiQuota(tenantId)
+}
+
+// ===== AI 月用量与配额(2026-08-04)=====
+// 配额取「套餐自带条数」与「AI 智能包加购条数」的较大者,再加平台临时加量。
+// 加购包的条数写在 AI_ADDON.monthlyQuota(见下方常量),改一处即可调整。
+function aiMonthKey() { return localParts(new Date()).date.slice(0, 7) }
+
+function aiQuotaFor(tenantId) {
+  const ent = getEntitlements(tenantId)
+  const planQuota = Number(ent.limits?.aiMessagesPerMonth || 0)
+  // 有加购包(非套餐自带)时按加购包配额;套餐自带的按套餐配额;两者取大,互不吃亏
+  const addonQuota = hasAi(tenantId) ? AI_ADDON.monthlyQuota : 0
+  const row = db.prepare('SELECT bonus FROM ai_usage WHERE tenant_id = ? AND month = ?').get(tenantId, aiMonthKey())
+  return Math.max(planQuota, addonQuota) + Number(row?.bonus || 0)
+}
+
+function aiUsageOf(tenantId) {
+  const row = db.prepare('SELECT used, bonus FROM ai_usage WHERE tenant_id = ? AND month = ?').get(tenantId, aiMonthKey())
+  const used = Number(row?.used || 0)
+  const quota = aiQuotaFor(tenantId)
+  return { month: aiMonthKey(), used, quota, remaining: Math.max(0, quota - used), bonus: Number(row?.bonus || 0) }
+}
+
+function requireAiQuota(tenantId) {
+  const { used, quota } = aiUsageOf(tenantId)
+  if (quota > 0 && used >= quota) {
+    throw apiError(403, 'AI_QUOTA_EXCEEDED', `本月 AI 用量已达上限(${quota} 次),下月 1 日自动重置;需要提前恢复请联系平台。`)
+  }
+}
+
+// 真正发生一次 AI 调用后计数。只在「确实调了模型」之后加,跳过 AI 的降级路径不计。
+function countAiUsage(tenantId = currentTenantId(), n = 1) {
+  db.prepare(`INSERT INTO ai_usage (tenant_id, month, used, bonus, updated_at) VALUES (?, ?, ?, 0, ?)
+    ON CONFLICT(tenant_id, month) DO UPDATE SET used = used + excluded.used, updated_at = excluded.updated_at`)
+    .run(tenantId, aiMonthKey(), n, iso(new Date()))
+}
+
+// 订阅定价:**唯一口径 = Youji Pricing 定价页**(免费版/单店版/工作室版/连锁版/定制版)。
+// 纯订阅、不收搭建费、不抽客单佣金;年付约 8 折(月付≈年价÷10);AI 智能包单独订阅、前 3 个月免费。
+// custom=面议(null)。改价只改这里。
+const PLAN_PRICING = {
+  free: { monthCents: 0, yearCents: 0 },
+  single: { monthCents: 13800, yearCents: 138000 },
+  studio: { monthCents: 29800, yearCents: 298000 },
+  chain: { monthCents: 68000, yearCents: 680000 },
+  custom: null
+}
+const PLAN_FIT = {
+  free: '先上手,把顾客和作品搬上小程序',
+  single: '一家店的全部经营功能',
+  studio: '多技师团队,全套薪酬与进阶分析',
+  chain: '多店 / 总部统管,含 3 店起',
+  custom: '私有化 / 白标 / API,按需求报价'
+}
+const PLAN_NOTE = {
+  free: '永久免费 · 功能受限',
+  single: '最受欢迎',
+  studio: '',
+  chain: '含 3 店 · 超出 +¥1,200/店/年',
+  custom: '建议 ¥30,000 起 + 年维护'
+}
+// AI 智能包:独立于基础订阅的加购项(基础订阅功能齐全但不含 AI);前 3 个月免费试用,每店限一次
+// monthlyQuota:加购包自带的月调用上限。¥99/月对应 3000 次,平均单次成本约 3 分,留足毛利。
+// 改额度只改这一处;个别店要临时多批走平台后台的「加量」(写进 ai_usage.bonus,当月有效)。
+const AI_ADDON = { feature: 'ai_customer_service', monthCents: 9900, yearCents: 99000, trialDays: 90, monthlyQuota: 3000 }
+
+// AI 智能包当前状态:套餐自带 / 试用中 / 已订阅 / 未开通;试用是否还能领
+function aiAddonState(tenantId) {
+  const ent = getEntitlements(tenantId)
+  const f = ent.features[AI_ADDON.feature]
+  const row = db.prepare('SELECT * FROM tenant_entitlements WHERE tenant_id = ? AND feature = ?').get(tenantId, AI_ADDON.feature)
+  const trialRow = db.prepare("SELECT value FROM tenant_settings WHERE tenant_id = ? AND key = 'ai_trial_started_at'").get(tenantId)
+  // 试用不再自动开通:商家点「领取」只生成申请,落到平台后台由运营配置后才发放
+  const pendingTrial = db.prepare(`SELECT id, created_at AS createdAt FROM plan_change_requests
+    WHERE tenant_id = ? AND request_type = 'ai_trial' AND status = 'PENDING' ORDER BY created_at DESC LIMIT 1`).get(tenantId) || null
+  // 付费订阅与免费试用都带到期日,靠 note 区分(getEntitlements 一律标 trial)
+  const isPaid = String(row?.note || '').includes('订阅')
+  return {
+    enabled: Boolean(f?.enabled),
+    includedInPlan: f?.source === 'plan',
+    source: f?.source === 'plan' ? 'plan' : (row ? (isPaid ? 'paid' : 'trial') : 'none'),
+    expiresAt: row?.expires_at || null,
+    trialAvailable: !trialRow && !pendingTrial && f?.source !== 'plan',
+    trialPending: Boolean(pendingTrial),
+    trialPendingAt: pendingTrial?.createdAt || null,
+    trialDays: AI_ADDON.trialDays,
+    monthCents: AI_ADDON.monthCents,
+    yearCents: AI_ADDON.yearCents
+  }
+}
+
+// 平台后台确认后才真正发放试用(商家端只能发起申请)
+function grantAiTrial(tenantId) {
+  const until = new Date()
+  until.setDate(until.getDate() + AI_ADDON.trialDays)
+  const untilIso = iso(until)
+  const now = iso(new Date())
+  db.prepare(`INSERT INTO tenant_entitlements (id, tenant_id, feature, enabled, expires_at, note, updated_by, updated_at)
+    VALUES (?, ?, ?, 1, ?, 'AI 智能包免费试用', 'platform', ?)
+    ON CONFLICT(tenant_id, feature) DO UPDATE SET enabled = 1, expires_at = excluded.expires_at, note = excluded.note, updated_by = 'platform', updated_at = excluded.updated_at`)
+    .run(randomId('ent'), tenantId, AI_ADDON.feature, untilIso, now)
+  db.prepare("INSERT INTO tenant_settings (tenant_id, key, value, updated_at) VALUES (?, 'ai_trial_started_at', ?, ?) ON CONFLICT(tenant_id, key) DO NOTHING")
+    .run(tenantId, JSON.stringify({ at: now }), now)
+  return untilIso
+}
+
+// 顺延 AI 智能包到期日:以 max(原到期日, 今天) 为基准 + 周期
+function extendAiAddon(tenantId, period) {
+  const row = db.prepare('SELECT * FROM tenant_entitlements WHERE tenant_id = ? AND feature = ?').get(tenantId, AI_ADDON.feature)
+  const base = new Date(Math.max(Date.now(), row?.expires_at ? new Date(row.expires_at).getTime() : 0))
+  const next = new Date(base)
+  if (period === 'month') next.setMonth(next.getMonth() + 1)
+  else next.setFullYear(next.getFullYear() + 1)
+  const nextIso = iso(next)
+  db.prepare(`INSERT INTO tenant_entitlements (id, tenant_id, feature, enabled, expires_at, note, updated_by, updated_at)
+    VALUES (?, ?, ?, 1, ?, 'AI 智能包订阅', 'billing', ?)
+    ON CONFLICT(tenant_id, feature) DO UPDATE SET enabled = 1, expires_at = excluded.expires_at, note = excluded.note, updated_by = 'billing', updated_at = excluded.updated_at`)
+    .run(randomId('ent'), tenantId, AI_ADDON.feature, nextIso, iso(new Date()))
+  return nextIso
+}
 const OWNER_EMAILS = (process.env.OWNER_EMAILS || 'nini3131254931@gmail.com').split(',').map((email) => email.trim().toLowerCase()).filter(Boolean)
 const STAFF_EMAILS = (process.env.STAFF_EMAILS || 'staff@luckyluxeatelier.com,employee@luckyluxeatelier.com').split(',').map((email) => email.trim().toLowerCase()).filter(Boolean)
 const STAFF_DEMO_PASSWORD = process.env.STAFF_DEMO_PASSWORD || 'LuckyluxeStaff0312'
@@ -126,6 +257,9 @@ const WECOM_CUSTOMER_SERVICE_SECRET = process.env.WECOM_CUSTOMER_SERVICE_SECRET 
 const WECOM_CUSTOMER_SERVICE_TOKEN = process.env.WECOM_CUSTOMER_SERVICE_TOKEN || ''
 const WECOM_CUSTOMER_SERVICE_AES_KEY = process.env.WECOM_CUSTOMER_SERVICE_AES_KEY || ''
 const WECOM_OPEN_KFID = process.env.WECOM_OPEN_KFID || ''
+const WECOM_AGENT_ID = process.env.WECOM_AGENT_ID || ''
+// 转人工提醒推给谁(企微成员账号);默认 @all = 应用可见范围内全体
+const WECOM_NOTIFY_USERID = process.env.WECOM_NOTIFY_USERID || '@all'
 
 const addOns = [
   { id: 'remove', name: '卸甲/卸睫', priceCents: 3000, durationMin: 30 },
@@ -251,6 +385,33 @@ function setupDatabase() {
       answer_zh TEXT NOT NULL,
       answer_en TEXT,
       enabled INTEGER NOT NULL DEFAULT 1,
+      updated_by TEXT,
+      created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+      updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
+    );
+    -- AI 用量计量(2026-08-04):此前套餐里写着"连锁版 10 万条/月",但**代码里没有任何地方在数条数**,
+    -- 也没有用量表——买了包的和滥用的一视同仁。这张表按 门店×月份 累计真实发生的 AI 调用次数。
+    CREATE TABLE IF NOT EXISTS ai_usage (
+      tenant_id TEXT NOT NULL,
+      month TEXT NOT NULL,              -- YYYY-MM,按门店时区
+      used INTEGER NOT NULL DEFAULT 0,
+      bonus INTEGER NOT NULL DEFAULT 0, -- 平台临时加量(不改套餐的前提下给某店多批一些)
+      updated_at TEXT,
+      PRIMARY KEY (tenant_id, month)
+    );
+    -- 平台通用 AI 知识库(2026-08-04):原先只存在静态种子 phase1-kb.seed.json 里、没有后台可改。
+    -- 这是「两层知识库」的上层:所有商家共享的通用美业流程/话术/转人工边界。
+    -- 下层(店家私有)仍走 tenant_kb_entries / tenant_kb_facts,按租户隔离,互不影响。
+    CREATE TABLE IF NOT EXISTS platform_kb_entries (
+      id TEXT PRIMARY KEY,
+      kind TEXT NOT NULL DEFAULT 'qa',        -- qa=问答口径 / rule=通用规则
+      intent TEXT,                            -- 意图标签(pricing/booking/policy/after_sales...)
+      question TEXT,                          -- qa:顾客常见问法
+      content TEXT NOT NULL,                  -- qa:回答口径;rule:规则正文
+      handoff_required INTEGER NOT NULL DEFAULT 0,
+      handoff_type TEXT,                      -- technician/frontdesk/owner
+      enabled INTEGER NOT NULL DEFAULT 1,
+      sort_order INTEGER NOT NULL DEFAULT 0,
       updated_by TEXT,
       created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
       updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
@@ -667,18 +828,99 @@ function tenantKbFacts(tenantId = DEFAULT_TENANT_ID) {
   return facts
 }
 
+// ===== 平台通用知识库(上层):首次启动把种子里 scope='platform' 的条目导进表,之后一律以表为准 =====
+function seedPlatformKbIfEmpty() {
+  const n = db.prepare('SELECT COUNT(*) AS n FROM platform_kb_entries').get().n
+  if (n > 0) return
+  let seed = null
+  try { seed = loadCustomerServiceKnowledgeBase() } catch (e) { return }
+  const now = iso(new Date())
+  const ins = db.prepare(`INSERT INTO platform_kb_entries (id, kind, intent, question, content, handoff_required, handoff_type, enabled, sort_order, updated_by, created_at, updated_at)
+    VALUES (?, ?, ?, ?, ?, ?, ?, 1, ?, 'seed', ?, ?)`)
+  let order = 0
+  for (const qa of (seed.qaEntries || []).filter((e) => e.scope === 'platform')) {
+    ins.run(qa.id || randomId('pkb'), 'qa', qa.intent || null, qa.customerQuestionZh || '', qa.answerGuidanceZh || '',
+      qa.handoffRequired ? 1 : 0, qa.handoffType || null, order++, now, now)
+  }
+  for (const rule of (seed.businessRules || []).filter((e) => e.scope === 'platform')) {
+    ins.run(rule.id || randomId('pkb'), 'rule', null, '', rule.rule || '', 0, null, order++, now, now)
+  }
+}
+
+// 供 kb-utils 覆盖种子的 platform 层:表里有内容就用表的,表被清空则自动回落到种子
+function platformKbOverride() {
+  const rows = db.prepare('SELECT * FROM platform_kb_entries WHERE enabled = 1 ORDER BY sort_order ASC, rowid ASC').all()
+  if (!rows.length) return null
+  return {
+    qaEntries: rows.filter((r) => r.kind === 'qa').map((r) => ({
+      id: r.id,
+      scope: 'platform',
+      intent: r.intent || undefined,
+      customerQuestionZh: r.question || '',
+      answerGuidanceZh: r.content || '',
+      handoffRequired: Boolean(r.handoff_required),
+      handoffType: r.handoff_type || undefined
+    })),
+    businessRules: rows.filter((r) => r.kind === 'rule').map((r) => ({
+      id: r.id, scope: 'platform', status: 'confirmed', rule: r.content || ''
+    }))
+  }
+}
+
+// 静态种子知识库(phase1-kb.seed.json)是旗舰店 Lucky Luxe 的口径(安省/CAD/美甲价目表)。
+// 只有旗舰店本身允许回落到种子,其他租户一律用自己库里的实时数据,否则会把别家的价格/地区念给顾客听。
+const KB_SEED_TENANT_IDS = new Set(['lucky-luxe', 'luckyluxe'])
+
+// AI 每次回答都实时读这里:商家在小程序或网页改完基础信息,下一句回答就是新的,无需重新发布知识库。
 function liveTenantFacts() {
-  const facts = tenantKbFacts(currentTenantId())
+  const tid = currentTenantId()
+  const facts = tenantKbFacts(tid)
+  const store = db.prepare('SELECT address, phone, currency FROM stores WHERE tenant_id = ? AND is_active = 1 ORDER BY rowid ASC LIMIT 1').get(tid)
+  const currency = facts.currency || store?.currency || ''
+  const priceOf = (cents) => (cents || cents === 0 ? Number((cents / 100).toFixed(2)) : null)
+  // 价目表:直接由「服务项目」生成,商家改价即时生效
+  const services = db.prepare('SELECT name_zh, name_en, price_cents, deposit_cents, base_duration_min FROM services WHERE tenant_id = ? AND is_active = 1 ORDER BY sort_order ASC, rowid ASC').all(tid)
+  const priceList = services.length ? {
+    currency,
+    policy: '以下为门店当前在售项目的基础价;参考图、复杂款、加项与特殊材料需技师确认最终报价。',
+    items: services.map((s) => ({
+      nameZh: s.name_zh,
+      nameEn: s.name_en || undefined,
+      price: priceOf(s.price_cents),
+      deposit: priceOf(s.deposit_cents),
+      durationMin: s.base_duration_min || undefined
+    }))
+  } : null
+  // 会员/储值方案:同样实时读商家自己的配置
+  const packages = db.prepare('SELECT kind, name, price_cents, bonus_cents, times_count, benefits FROM membership_packages WHERE tenant_id = ? AND is_active = 1 ORDER BY sort_order ASC, rowid ASC').all(tid)
+  const memberLevels = packages.length ? packages.map((p) => ({
+    name: p.name,
+    kind: p.kind === 'times' ? '次卡' : '储值卡',
+    price: priceOf(p.price_cents),
+    bonus: p.bonus_cents ? priceOf(p.bonus_cents) : undefined,
+    times: p.times_count || undefined,
+    benefits: p.benefits || undefined
+  })) : null
+  // 技师名单:顾客问「有哪些技师/谁做美睫」时 AI 才答得上来
+  const technicians = db.prepare('SELECT name, title FROM technicians WHERE tenant_id = ? AND is_active = 1 ORDER BY rowid ASC').all(tid)
+    .map((t) => (t.title ? `${t.name}(${t.title})` : t.name))
   return {
     defaultHours: {
       zh: businessHoursText(null, 'zh'),
       en: businessHoursText(null, 'en')
     },
+    // 允许回落到静态种子的只有旗舰店;其他租户即使某项为空也不借用种子数据
+    allowSeedFallback: KB_SEED_TENANT_IDS.has(tid),
     ...(facts.brandName ? { brandName: facts.brandName } : {}),
     ...(facts.assistantName ? { assistantName: facts.assistantName } : {}),
-    ...(facts.storeAddress ? { storeAddress: facts.storeAddress } : {}),
+    ...(facts.storeAddress || store?.address ? { storeAddress: facts.storeAddress || store.address } : {}),
+    ...(facts.storePhone || store?.phone ? { storePhone: facts.storePhone || store.phone } : {}),
     ...(facts.depositAmount ? { depositAmount: Number(facts.depositAmount) || facts.depositAmount } : {}),
-    ...(facts.currency ? { currency: facts.currency } : {})
+    ...(currency ? { currency } : {}),
+    ...(facts.region ? { region: facts.region } : {}),
+    ...(priceList ? { priceList } : {}),
+    ...(memberLevels ? { memberLevels } : {}),
+    ...(technicians.length ? { technicians } : {})
   }
 }
 
@@ -753,10 +995,20 @@ function matchTenantKbEntry(text = '') {
 function seedDatabase() {
   db.prepare('INSERT OR IGNORE INTO tenants (id, name, plan, status) VALUES (?, ?, ?, ?)').run(DEFAULT_TENANT_ID, 'Lucky Luxe', 'chain', 'active')
   const planStmt = db.prepare('INSERT OR IGNORE INTO plans (id, name_zh, name_en, features_json, limits_json, sort_order) VALUES (?, ?, ?, ?, ?, ?)')
-  planStmt.run('solo', '个人美甲师版', 'Solo Artist', JSON.stringify(['booking', 'crm', 'gallery']), JSON.stringify({ maxStores: 1, maxStaff: 1, aiMessagesPerMonth: 0 }), 1)
-  planStmt.run('studio', '小型工作室版', 'Studio', JSON.stringify(['booking', 'crm', 'gallery', 'staff_schedule']), JSON.stringify({ maxStores: 1, maxStaff: 8, aiMessagesPerMonth: 0 }), 2)
-  planStmt.run('chain', '连锁门店版', 'Chain', JSON.stringify(['booking', 'crm', 'gallery', 'staff_schedule', 'multi_store', 'reports', 'ai_customer_service']), JSON.stringify({ maxStores: 10, maxStaff: 50, aiMessagesPerMonth: 100000 }), 3)
-  planStmt.run('custom', '定制企业版', 'Custom Enterprise', JSON.stringify(['booking', 'crm', 'gallery', 'staff_schedule', 'multi_store', 'reports', 'ai_customer_service', 'white_label']), JSON.stringify({ maxStores: 999, maxStaff: 999, aiMessagesPerMonth: 1000000 }), 4)
+  // 2026-08-03 档位=Youji Pricing 定价页(店主确认的唯一口径):免费版/单店版/工作室版/连锁版/定制版
+  planStmt.run('free', '免费版', 'Free', JSON.stringify(['booking', 'gallery']), JSON.stringify({ maxStores: 1, maxStaff: 1, maxServices: 20, maxOrdersPerMonth: 50, aiMessagesPerMonth: 0 }), 1)
+  planStmt.run('single', '单店版', 'Single Store', JSON.stringify(['booking', 'crm', 'gallery', 'membership', 'staff_schedule', 'reports']), JSON.stringify({ maxStores: 1, maxStaff: 3, aiMessagesPerMonth: 0 }), 2)
+  planStmt.run('studio', '工作室版', 'Studio', JSON.stringify(['booking', 'crm', 'gallery', 'membership', 'staff_schedule', 'reports', 'advanced_reports']), JSON.stringify({ maxStores: 1, maxStaff: 15, aiMessagesPerMonth: 0 }), 3)
+  planStmt.run('chain', '连锁版', 'Chain', JSON.stringify(['booking', 'crm', 'gallery', 'membership', 'staff_schedule', 'reports', 'advanced_reports', 'multi_store', 'ai_customer_service']), JSON.stringify({ maxStores: 10, maxStaff: 999, aiMessagesPerMonth: 100000 }), 4)
+  planStmt.run('custom', '定制版', 'Custom', JSON.stringify(['booking', 'crm', 'gallery', 'membership', 'staff_schedule', 'reports', 'advanced_reports', 'multi_store', 'ai_customer_service', 'white_label']), JSON.stringify({ maxStores: 999, maxStaff: 999, aiMessagesPerMonth: 1000000 }), 5)
+  // 老档位(solo/studio 旧义/member)对齐:已有租户平移到最接近的新档位,再清掉废弃档位行
+  db.prepare("UPDATE plans SET name_zh = '工作室版', name_en = 'Studio', features_json = ?, limits_json = ?, sort_order = 3 WHERE id = 'studio'")
+    .run(JSON.stringify(['booking', 'crm', 'gallery', 'membership', 'staff_schedule', 'reports', 'advanced_reports']), JSON.stringify({ maxStores: 1, maxStaff: 15, aiMessagesPerMonth: 0 }))
+  db.prepare("UPDATE plans SET name_zh = '连锁版', name_en = 'Chain', features_json = ?, limits_json = ?, sort_order = 4 WHERE id = 'chain'")
+    .run(JSON.stringify(['booking', 'crm', 'gallery', 'membership', 'staff_schedule', 'reports', 'advanced_reports', 'multi_store', 'ai_customer_service']), JSON.stringify({ maxStores: 10, maxStaff: 999, aiMessagesPerMonth: 100000 }))
+  db.prepare("UPDATE plans SET name_zh = '定制版', name_en = 'Custom', sort_order = 5 WHERE id = 'custom'").run()
+  db.prepare("UPDATE tenants SET plan = 'single' WHERE plan IN ('solo', 'member')").run()
+  db.prepare("DELETE FROM plans WHERE id IN ('solo', 'member')").run()
   // 租户私有事实种子（来自 phase1-kb tenantPrivate 层）：商家可在门店设置里自助修改，AI 实时读取。
   const kbFactStmt = db.prepare('INSERT OR IGNORE INTO tenant_kb_facts (tenant_id, key, value, updated_by, updated_at) VALUES (?, ?, ?, ?, ?)')
   for (const [key, value] of [
@@ -920,6 +1172,18 @@ function requireCustomer(req) {
   const email = demoEmailFromToken(token, 'customer')
   if (email) return registerEmailUser({ email, displayName: email.split('@')[0] })
   throw apiError(401, 'UNAUTHORIZED', 'Customer login is required before booking or payment.')
+}
+
+// 平台主钥匙(OWNER_TOKEN):用于「只有我能改」的接口——档位、权限开通等
+function isPlatformKey(req) {
+  return (req.headers.authorization || '') === `Bearer ${OWNER_TOKEN}`
+}
+
+// 顾客或商家皆可(顾客端 AI 入口用):挡住完全匿名的调用,防止有人拿域名循环烧 AI 额度
+function requireCustomerOrAdmin(req) {
+  try { return requireCustomer(req) } catch (e) { /* 不是顾客,再试商家 */ }
+  try { return requireAdmin(req) } catch (e) { /* 两者都不是 */ }
+  throw apiError(401, 'UNAUTHORIZED', '请先登录后再使用该功能。')
 }
 
 function cents(centsValue) {
@@ -1092,6 +1356,26 @@ async function sendWecomKfText(openKfid, externalUserId, content) {
   return data
 }
 
+// 转人工时给店主/接待人员的企业微信 App 推一条应用消息(官方应用消息,不受 48 小时会话窗口限制)。
+// 未配 AgentId 或出站未就绪时静默跳过——绝不因为通知失败影响主链路。
+async function notifyWecomStaff(text) {
+  if (!wecomOutboundReady() || !WECOM_AGENT_ID) return null
+  try {
+    const data = await wecomApiPost('message/send', {
+      touser: WECOM_NOTIFY_USERID,
+      msgtype: 'text',
+      agentid: Number(WECOM_AGENT_ID),
+      text: { content: String(text || '').slice(0, 2000) },
+      duplicate_check_interval: 300
+    })
+    if (data.errcode) console.error(`[wecom] 应用消息推送失败 ${data.errcode} ${data.errmsg}`)
+    return data
+  } catch (error) {
+    console.error('[wecom] 应用消息推送异常:', error?.message || error)
+    return null
+  }
+}
+
 // 回调事件只是"有新消息"通知;真实消息用 sync_msg 拉取,逐条走既有 handleWecomInbound(AI/转人工逻辑复用),再把 AI 回复经 send_msg 发回顾客。
 async function syncAndProcessWecomKfMessages(openKfid, eventToken, req) {
   const results = []
@@ -1108,7 +1392,35 @@ async function syncAndProcessWecomKfMessages(openKfid, eventToken, req) {
     cursor = data.next_cursor || cursor
     saveWecomKfCursor(openKfid, cursor)
     for (const msg of data.msg_list || []) {
-      if (msg.origin !== 3) continue // 3=顾客发来的消息;跳过系统/客服自己发的
+      // origin: 3=顾客发来 · 4=系统推送 · 5=接待人员(员工在企微客服工具里手动回的)
+      // 员工在企微里直接回的话也要落进同一份会话记录,否则小程序工作台看到的对话是残缺的。
+      if (msg.origin === 5) {
+        const staffText = msg.msgtype === 'text' ? (msg.text?.content || '') : `[员工发送了${msg.msgtype || '一条消息'}]`
+        if (!staffText || !msg.external_userid) continue
+        try {
+          const cid = wecomConversationId(msg.external_userid)
+          const existed = db.prepare('SELECT id FROM wechat_conversations WHERE id = ?').get(cid)
+          if (!existed) continue // 没有上下文的孤儿消息不建档
+          appendWecomConversationMessage(cid, {
+            role: 'staff',
+            content: staffText,
+            staffName: msg.servicer_userid || '企微接待',
+            intent: 'wecom_staff_reply'
+          }, {
+            status: 'human_active',
+            lastIntent: 'wecom_staff_reply',
+            lastMessage: staffText,
+            provider: 'wecom_customer_service',
+            externalUserId: msg.external_userid,
+            openKfid
+          })
+          results.push({ msgid: msg.msgid, staffRecorded: true })
+        } catch (error) {
+          console.error(`[wecom] 记录员工回复失败 msgid=${msg.msgid}:`, error?.message || error)
+        }
+        continue
+      }
+      if (msg.origin !== 3) continue // 系统消息不处理
       let content = ''
       if (msg.msgtype === 'text') content = msg.text?.content || ''
       else if (msg.msgtype === 'image') content = '[顾客发来一张图片]'
@@ -1133,6 +1445,24 @@ async function syncAndProcessWecomKfMessages(openKfid, eventToken, req) {
     if (!data.has_more) break
   }
   return results
+}
+
+// ── 触达规则(企微双通道边界)──
+// 设计:真人管家账号只负责"喊话"(提醒/回访/召回),所有对话必须回到客服窗口(可同步进工作台、AI 可接管)。
+// 手段:每条主动触达文案末尾自动追加客服入口 CTA。未配置链接时不追加,行为与旧版一致。
+const TOUCH_RULES_DEFAULT = { kfLink: '', ctaText: '点这里咨询/预约最快 👉', appendCta: true }
+
+function readTouchRules() {
+  const row = db.prepare("SELECT value FROM tenant_settings WHERE tenant_id = ? AND key = 'touch_rules'").get(currentTenantId())
+  return { ...TOUCH_RULES_DEFAULT, ...(row ? parseJson(row.value) : {}) }
+}
+
+function withTouchCta(message = '') {
+  const rules = readTouchRules()
+  const text = String(message || '')
+  if (!rules.appendCta || !rules.kfLink) return text
+  if (text.includes(rules.kfLink)) return text
+  return `${text}\n\n${rules.ctaText || TOUCH_RULES_DEFAULT.ctaText} ${rules.kfLink}`
 }
 
 function wecomConversationId(externalUserId = '') {
@@ -1198,7 +1528,16 @@ function appendWecomConversationMessage(conversationId, message, patch = {}) {
     current?.created_at || now,
     now
   )
-  return getWecomConversation(conversationId)
+  const saved = getWecomConversation(conversationId)
+  // 转人工的唯一收口:状态刚变成 needs_human 时,给店主的企业微信推一条提醒(不重复推)。
+  // fire-and-forget:通知失败绝不影响会话主链路。
+  if (saved?.status === 'needs_human' && current?.status !== 'needs_human') {
+    const who = saved.linkedUser?.name || saved.externalUserId || '顾客'
+    const gist = String(patch.lastMessage || message.content || '').slice(0, 60)
+    notifyWecomStaff(`【有迹·需要人工】${who} 的咨询 AI 接不住了${gist ? `\n最后一句:${gist}` : ''}\n打开有迹小程序 → 客服工作台 处理`)
+      .catch(() => {})
+  }
+  return saved
 }
 
 function getWecomConversation(conversationId) {
@@ -3615,8 +3954,10 @@ async function handleWecomInbound(inbound, req) {
       customerStage: normalizedCustomerStage === 'unified_test' ? '' : inbound.customerStage,
     referenceImages: inbound.referenceImages || [],
     liveTenantFacts: liveTenantFacts(),
+    platformKb: platformKbOverride(),
     tenantDocuments: tenantKbDocumentsForPrompt(currentTenantId())
   }), inbound.lang || 'zh')
+  countAiUsage()
   const baseReply = await createCustomerServiceReply({
     lang: inbound.lang || 'zh',
     message: enrichedMessage,
@@ -3796,7 +4137,7 @@ function setConversationHandoffOwner(conversationId, ownerRole = 'human', adminS
   return { conversation: getWecomConversation(conversationId) }
 }
 
-function appendManualWecomReply(conversationId, body = {}, adminSession = {}) {
+async function appendManualWecomReply(conversationId, body = {}, adminSession = {}) {
   const message = String(body.message || body.content || '').trim()
   if (!message) throw apiError(400, 'MESSAGE_REQUIRED', 'Manual reply message is required.')
   saveManualReplyLearningSample(conversationId, message, adminSession)
@@ -3827,7 +4168,22 @@ function appendManualWecomReply(conversationId, body = {}, adminSession = {}) {
     },
     summaryText: currentState?.summaryText || ''
   })
-  return { conversation: getWecomConversation(conversationId) }
+  const saved = getWecomConversation(conversationId)
+  // 真正把人工回复发到顾客微信(出站未就绪/非企微会话时静默跳过,行为与旧版一致)。
+  let delivered = false
+  if (wecomOutboundReady() && saved?.provider === 'wecom_customer_service') {
+    const openKfid = saved.openKfid || saved.open_kfid || WECOM_OPEN_KFID
+    const externalUserId = saved.externalUserId || saved.external_user_id
+    if (openKfid && externalUserId) {
+      try {
+        const sent = await sendWecomKfText(openKfid, externalUserId, message)
+        delivered = Boolean(sent && !sent.errcode)
+      } catch (error) {
+        console.error('[wecom] 人工回复发送失败:', error?.message || error)
+      }
+    }
+  }
+  return { conversation: saved, delivered }
 }
 
 function inferServiceTypeFromText(text = '', fallback = 'nail') {
@@ -4543,11 +4899,11 @@ async function respondQuoteRequest(id, body, admin) {
   const staffMessage = String(body.staffMessage || body.message || body.notes || body.staffNotes || '').trim()
   if (!staffMessage) throw apiError(400, 'STAFF_MESSAGE_REQUIRED', 'Technician reply message is required.')
   const quoteSnapshot = serializeQuoteRequest(current)
-  const polished = await polishStaffQuoteReply({
-    lang: quoteSnapshot.customerLang || 'zh',
-    quote: quoteSnapshot,
-    staffMessage
-  })
+  // 未开通 AI 智能包:技师的报价照常发出去,只是不经过 AI 润色(原文直发),不能因为没买 AI 就回不了顾客。
+  if (hasAi()) countAiUsage()
+  const polished = hasAi()
+    ? await polishStaffQuoteReply({ lang: quoteSnapshot.customerLang || 'zh', quote: quoteSnapshot, staffMessage })
+    : null
   const conversationStateForSlot = quoteSnapshot.conversationId
     ? (getConversationState(quoteSnapshot.conversationId)?.state || {})
     : {}
@@ -6134,6 +6490,10 @@ async function route(req, res) {
     return
   }
   if (req.method === 'POST' && path === '/wechat/customer-service/webhook') {
+    // 2026-08-04 修:此前这里没有设置租户上下文,handleWecomInbound 里的 AI 闸门会退回默认租户(旗舰店)
+    // 去判断——结果所有商家的微信进线都在拿旗舰店的权限做判断,要么全部白送 AI、要么全部被停。
+    // 现在按回调参数解析真实租户(缺省仍回落默认租户,保持既有单店部署行为不变)。
+    tenantContext.enterWith({ tenantId: resolveTenant(req, query) })
     const rawBody = await readRawBody(req)
     const contentTypeHeader = req.headers['content-type'] || ''
     const body = contentTypeHeader.includes('application/json') && rawBody ? JSON.parse(rawBody) : {}
@@ -6326,7 +6686,22 @@ async function route(req, res) {
     const user = registerEmailUser({ email, displayName: 'Lucky Luxe Owner' })
     return json(res, 201, { user, auth: demoAuthFor(email, 'owner'), admin: { role: 'owner', email }, mode: 'demo-owner' })
   }
-  if (req.method === 'GET' && path === '/admin/auth/me') return json(res, 200, { admin: requireAdmin(req) })
+  if (req.method === 'GET' && path === '/admin/auth/me') {
+    // 2026-08-03 附带店铺名:商家端「我的/管理」页顶部显示自己的店名(而非"老板"这类通用词)
+    const me = requireAdmin(req)
+    const t = db.prepare('SELECT name FROM tenants WHERE id = ?').get(me.tenantId || currentTenantId())
+    return json(res, 200, { admin: Object.assign({}, me, { tenantName: t?.name || '' }) })
+  }
+  if (req.method === 'PATCH' && path === '/admin/auth/display-name') {
+    // 2026-08-03 显示名自助修改(店主/员工都可改自己的):管理页顶部那行黑字
+    const me = requireAdmin(req)
+    if (!me.accountId) throw apiError(400, 'BAD_REQUEST', '演示 token 无法修改显示名,请用账号密码登录。')
+    const body = await readBody(req)
+    const displayName = String(body.displayName || '').trim().slice(0, 20)
+    if (!displayName) throw apiError(400, 'BAD_REQUEST', '显示名不能为空。')
+    db.prepare('UPDATE admin_accounts SET display_name = ?, updated_at = ? WHERE id = ?').run(displayName, iso(new Date()), me.accountId)
+    return json(res, 200, { displayName })
+  }
   if (req.method === 'GET' && path.startsWith('/users/')) {
     // 隐私:必须登录,且只能查自己的资料(此前任意 id 可读,已修)
     const customer = requireCustomer(req)
@@ -6338,9 +6713,15 @@ async function route(req, res) {
   }
   if (req.method === 'GET' && path === '/stores') {
     // 附带每周营业时间(hours),供顾客端首页店卡展示"今日营业时间/营业中"。加字段向后兼容。
-    const storeRows = db.prepare('SELECT * FROM stores WHERE is_active = 1 AND tenant_id = ?').all(resolveTenant(req, query))
+    const tid = resolveTenant(req, query)
+    const storeRows = db.prepare('SELECT * FROM stores WHERE is_active = 1 AND tenant_id = ?').all(tid)
     const hourStmt = db.prepare('SELECT weekday, open_time, close_time, is_closed FROM business_hours WHERE store_id = ? ORDER BY weekday ASC')
-    return json(res, 200, { stores: storeRows.map((s) => Object.assign({}, s, { hours: hourStmt.all(s.id) })) })
+    // aiEnabled:顾客端据此决定要不要显示「AI 在线客服」「AI 款式建议」入口。
+    // 没开通就别把按钮摆在顾客面前——点了没结果比没有按钮更伤体验。只暴露布尔值,不泄露套餐信息。
+    return json(res, 200, {
+      aiEnabled: checkEntitlement(tid, AI_ADDON.feature),
+      stores: storeRows.map((s) => Object.assign({}, s, { hours: hourStmt.all(s.id) }))
+    })
   }
   if (req.method === 'GET' && path === '/services') {
     const args = [resolveTenant(req, query)]
@@ -6580,27 +6961,44 @@ async function route(req, res) {
     if (target.user_id !== customer.id) throw apiError(403, 'FORBIDDEN', 'You can only cancel your own booking.')
     return json(res, 200, cancelBooking(bid, await readBody(req)))
   }
+  // 参考图分析:原先**无任何身份校验、无套餐闸门**,任何人拿到域名就能循环烧 AI 额度(单图 300KB、每次 3 张)。
+  // 现在:必须是登录顾客或商家 + 必须按顾客所在门店判断 AI 智能包。
   if (req.method === 'POST' && path === '/ai/reference-analysis') {
+    tenantContext.enterWith({ tenantId: resolveTenant(req, query) })
+    requireCustomerOrAdmin(req)
+    requireAi()
     const body = await readBody(req)
+    countAiUsage()
     return json(res, 200, { analysis: await analyzeReferenceImage(body) })
   }
+  // 社媒文案(顾客侧):同上,原先也是公开无闸门
   if (req.method === 'POST' && path === '/ai/social-copy') {
+    tenantContext.enterWith({ tenantId: resolveTenant(req, query) })
+    requireCustomerOrAdmin(req)
+    requireAi()
     const body = await readBody(req)
     const row = body.bookingId ? db.prepare('SELECT * FROM bookings WHERE id = ?').get(body.bookingId) : null
     const booking = row ? serializeBooking(row, body.lang || 'zh') : body.booking
+    countAiUsage()
     return json(res, 200, { copy: await createSocialCopy({ lang: body.lang || 'zh', image: body.image || '', booking, platform: body.platform || 'xiaohongshu', audience: body.audience || 'customer', avoidCaptions: body.avoidCaptions || [], variantSeed: body.variantSeed || '' }) })
   }
   if (req.method === 'POST' && path === '/ai/customer-service') {
     // 多租户:AI 客服按"顾客当前进的店"取知识/服务/事实回答
     tenantContext.enterWith({ tenantId: resolveTenant(req, query) })
     if (!checkEntitlement(currentTenantId(), 'ai_customer_service')) {
+      // 2026-08-04 修:原文案是「已为你转接人工，店员看到后会尽快回复」——但这里直接 return 了,
+      // 消息根本没写进会话库,商家的客服工作台是空的,顾客在等一个永远不会来的回复。
+      // 现在改成不撒谎:告诉顾客怎么真的联系到店(小程序自助预约 / 门店电话)。
+      const st = db.prepare('SELECT phone FROM stores WHERE tenant_id = ? AND is_active = 1 AND phone IS NOT NULL AND phone <> \'\' LIMIT 1').get(currentTenantId())
+      const tel = st?.phone ? `，或致电 ${st.phone} 联系门店` : ''
+      const telEn = st?.phone ? `, or call us at ${st.phone}` : ''
       return json(res, 200, {
         reply: {
           data: {
             intent: 'entitlement_disabled',
-            answerZh: '当前时段由人工客服为您服务，请稍等片刻，我们会尽快回复您。',
-            answerEn: 'A team member will assist you shortly. Thank you for your patience.',
-            handoffRequired: true
+            answerZh: `这边暂时不支持在线答复~你可以直接在小程序里选择项目预约${tel}，我们会尽快为你安排。`,
+            answerEn: `Online replies are unavailable here right now. You can book directly in the mini-program${telEn}, and we'll take care of you.`,
+            handoffRequired: false
           },
           source: 'entitlement_gate'
         }
@@ -6616,6 +7014,7 @@ async function route(req, res) {
       customerStage: body.customerStage || body.stage || '',
       referenceImages: body.referenceImages || body.images || [],
       liveTenantFacts: liveTenantFacts(),
+      platformKb: platformKbOverride(),
       tenantDocuments: tenantKbDocumentsForPrompt(currentTenantId())
     }), body.lang || 'zh')
     const reply = await createCustomerServiceReply({
@@ -6641,9 +7040,11 @@ async function route(req, res) {
     return json(res, 200, { conversations: getWecomConversations() })
   }
   if (req.method === 'GET' && path === '/admin/ai/customer-service/feedback') {
+    requireAi()
     return json(res, 200, { feedback: getAiResponseFeedback({ limit: Number(query.limit || 40), status: query.status || 'approved' }) })
   }
   if (req.method === 'POST' && path === '/admin/ai/customer-service/feedback') {
+    requireAi()
     return json(res, 201, saveAiResponseFeedback(await readBody(req), adminSession))
   }
   if (req.method === 'POST' && path === '/admin/ai/customer-service/logic-notes') {
@@ -6691,7 +7092,7 @@ async function route(req, res) {
   }
   const manualReplyMatch = path.match(/^\/admin\/wechat\/conversations\/(.+)\/manual-reply$/)
   if (req.method === 'POST' && manualReplyMatch) {
-    return json(res, 201, appendManualWecomReply(decodeURIComponent(manualReplyMatch[1]), await readBody(req), adminSession))
+    return json(res, 201, await appendManualWecomReply(decodeURIComponent(manualReplyMatch[1]), await readBody(req), adminSession))
   }
   const handoffOwnerMatch = path.match(/^\/admin\/wechat\/conversations\/(.+)\/(take-over|release-to-ai)$/)
   if (req.method === 'POST' && handoffOwnerMatch) {
@@ -6761,32 +7162,40 @@ async function route(req, res) {
     return json(res, 200, { finance: getFinanceSummary(await readBody(req)) })
   }
   if (req.method === 'POST' && path === '/admin/ai/daily-brief') {
+    requireAi()
     const bookings = adminSession.role === 'staff'
       ? db.prepare('SELECT * FROM bookings WHERE tenant_id = ? AND technician_id = ? ORDER BY appointment_start DESC LIMIT 60').all(currentTenantId(), adminSession.technicianId).map((booking) => serializeBooking(booking))
       : db.prepare('SELECT * FROM bookings WHERE tenant_id = ? ORDER BY appointment_start DESC LIMIT 60').all(currentTenantId()).map((booking) => serializeBooking(booking))
     const services = db.prepare('SELECT * FROM services WHERE tenant_id = ? ORDER BY type ASC, sort_order ASC').all(currentTenantId()).map(serializeService)
+    countAiUsage()
     return json(res, 200, { brief: await createDailyBrief({ ...(await readBody(req)), bookings, customers: adminSession.role === 'owner' ? getAdminCustomers() : [], services }) })
   }
   if (req.method === 'POST' && path === '/admin/ai/booking-summary') {
+    requireAi()
     const body = await readBody(req)
     const row = db.prepare('SELECT * FROM bookings WHERE id = ?').get(body.bookingId)
     if (!row) throw apiError(404, 'NOT_FOUND', 'Booking not found.')
     assertStaffCanAccessBooking(adminSession, row)
+    countAiUsage()
     return json(res, 200, { summary: await createBookingSummary({ lang: body.lang || 'zh', booking: serializeBooking(row, body.lang || 'zh') }) })
   }
   if (req.method === 'POST' && path === '/admin/ai/customer-insight') {
     if (adminSession.role !== 'owner') throw apiError(403, 'FORBIDDEN', 'Owner permission is required.')
+    requireAi()
     const body = await readBody(req)
     const customer = getAdminCustomers().find((item) => item.id === body.customerId)
     if (!customer) throw apiError(404, 'NOT_FOUND', 'Customer not found.')
     const bookings = db.prepare('SELECT * FROM bookings WHERE user_id = ? ORDER BY appointment_start DESC LIMIT 12').all(customer.id).map((booking) => serializeBooking(booking, body.lang || 'zh'))
+    countAiUsage()
     return json(res, 200, { insight: await createCustomerInsight({ lang: body.lang || 'zh', customer, bookings }) })
   }
   if (req.method === 'POST' && path === '/admin/ai/social-copy') {
+    requireAi()
     const body = await readBody(req)
     const row = body.bookingId ? db.prepare('SELECT * FROM bookings WHERE id = ?').get(body.bookingId) : null
     if (row) assertStaffCanAccessBooking(adminSession, row)
     const booking = row ? serializeBooking(row, body.lang || 'zh') : body.booking
+    countAiUsage()
     return json(res, 200, { copy: await createSocialCopy({ lang: body.lang || 'zh', image: body.image || '', booking, platform: body.platform || 'xiaohongshu', audience: body.audience || 'staff', avoidCaptions: body.avoidCaptions || [], variantSeed: body.variantSeed || '' }) })
   }
   if (req.method === 'GET' && path === '/admin/services') {
@@ -7057,6 +7466,205 @@ async function route(req, res) {
       AND NOT EXISTS (SELECT 1 FROM services s WHERE s.tenant_id = t.id AND s.is_active = 1)`).all()
     return json(res, 200, { monthBookings, pendingConfig: pendingConfig.map((r) => ({ id: r.id, name: r.name })) })
   }
+  // ===== 平台端·套餐计费(2026-08-03):档位/到期/订单/申请 一站管理;「标记已收款」=线下收款的正式路径 =====
+  if (req.method === 'GET' && path === '/platform/billing') {
+    if (!isPlatform()) throw apiError(401, 'UNAUTHORIZED', 'Platform token required.')
+    const now = Date.now()
+    const tenants = db.prepare('SELECT id, name, plan, status, plan_expires_at, auto_renew FROM tenants ORDER BY rowid ASC').all().map((t) => {
+      const ai = aiAddonState(t.id) // AI 智能包状态与基础套餐分开看:套餐自带 / 试用中 / 已订阅 / 待开通 / 未开通
+      return {
+        id: t.id,
+        name: t.name,
+        plan: t.plan,
+        status: t.status,
+        planExpiresAt: t.plan_expires_at,
+        autoRenew: Boolean(t.auto_renew),
+        daysLeft: t.plan_expires_at ? Math.ceil((new Date(t.plan_expires_at).getTime() - now) / 86400000) : null,
+        ai: {
+          source: ai.trialPending && ai.source === 'none' ? 'pending' : ai.source,
+          expiresAt: ai.expiresAt,
+          daysLeft: ai.expiresAt ? Math.ceil((new Date(ai.expiresAt).getTime() - now) / 86400000) : null,
+          trialAvailable: ai.trialAvailable,
+          usage: aiUsageOf(t.id) // 本月已用/配额/剩余,运营据此判断要不要加量或谈升级
+        }
+      }
+    })
+    const pendingOrders = db.prepare("SELECT o.*, t.name AS tenant_name FROM subscription_orders o JOIN tenants t ON t.id = o.tenant_id WHERE o.status = 'pending' ORDER BY o.created_at DESC").all()
+      .map((o) => ({ id: o.id, tenantId: o.tenant_id, tenantName: o.tenant_name, plan: o.plan, period: o.period, amountCents: o.amount_cents, createdAt: o.created_at }))
+    // 待处理申请:带上联系方式(门店电话 / 老板账号),AI 试用申请需要运营主动联系商家配置
+    const planRequests = db.prepare(`SELECT r.*, t.name AS tenant_name,
+        (SELECT s.phone FROM stores s WHERE s.tenant_id = r.tenant_id AND s.is_active = 1 AND s.phone IS NOT NULL AND s.phone <> '' LIMIT 1) AS store_phone,
+        (SELECT a.username FROM admin_accounts a WHERE a.tenant_id = r.tenant_id AND a.role = 'owner' LIMIT 1) AS owner_username
+      FROM plan_change_requests r JOIN tenants t ON t.id = r.tenant_id WHERE r.status = 'PENDING' ORDER BY r.created_at DESC`).all()
+      .map((r) => ({ id: r.id, tenantId: r.tenant_id, tenantName: r.tenant_name, currentPlan: r.current_plan, targetPlan: r.target_plan, requestType: r.request_type, note: r.note || '', createdAt: r.created_at, createdBy: r.created_by || '', storePhone: r.store_phone || '', ownerUsername: r.owner_username || '' }))
+    const plans = db.prepare('SELECT id, name_zh FROM plans ORDER BY sort_order').all()
+      .map((p) => ({ id: p.id, name: p.name_zh, pricing: PLAN_PRICING[p.id] || null, fit: PLAN_FIT[p.id] || '' }))
+    return json(res, 200, { tenants, pendingOrders, planRequests, plans })
+  }
+  if (req.method === 'POST' && /^\/platform\/tenants\/[^/]+\/billing$/.test(path)) {
+    if (!isPlatform()) throw apiError(401, 'UNAUTHORIZED', 'Platform token required.')
+    const tid = path.split('/')[3]
+    if (!db.prepare('SELECT 1 FROM tenants WHERE id = ?').get(tid)) throw apiError(404, 'NOT_FOUND', '租户不存在。')
+    const body = await readBody(req)
+    const updates = []
+    const args = []
+    if (body.plan !== undefined) {
+      if (!db.prepare('SELECT 1 FROM plans WHERE id = ?').get(String(body.plan))) throw apiError(400, 'BAD_REQUEST', '未知档位。')
+      updates.push('plan = ?'); args.push(String(body.plan))
+    }
+    if (body.planExpiresAt !== undefined) {
+      // null=长期授权;YYYY-MM-DD 存为当日门店时区 23:59
+      if (body.planExpiresAt === null || body.planExpiresAt === '') { updates.push('plan_expires_at = NULL') }
+      else if (/^\d{4}-\d{2}-\d{2}$/.test(String(body.planExpiresAt))) { updates.push('plan_expires_at = ?'); args.push(iso(localDateTime(String(body.planExpiresAt), '23:59'))) }
+      else throw apiError(400, 'BAD_REQUEST', '到期日格式应为 YYYY-MM-DD 或 null。')
+    }
+    if (body.autoRenew !== undefined) { updates.push('auto_renew = ?'); args.push(body.autoRenew ? 1 : 0) }
+    if (!updates.length) throw apiError(400, 'BAD_REQUEST', '没有要修改的内容。')
+    updates.push('updated_at = ?'); args.push(iso(new Date()), tid)
+    db.prepare(`UPDATE tenants SET ${updates.join(', ')} WHERE id = ?`).run(...args)
+    return json(res, 200, { ok: true })
+  }
+  // ===== 平台通用 AI 知识库(2026-08-04):两层知识库的上层,改完对所有商家立即生效 =====
+  if (req.method === 'GET' && path === '/platform/kb') {
+    if (!isPlatform()) throw apiError(401, 'UNAUTHORIZED', 'Platform token required.')
+    seedPlatformKbIfEmpty()
+    const rows = db.prepare('SELECT * FROM platform_kb_entries ORDER BY kind ASC, sort_order ASC, rowid ASC').all()
+    return json(res, 200, {
+      entries: rows.map((r) => ({
+        id: r.id,
+        kind: r.kind,
+        intent: r.intent || '',
+        question: r.question || '',
+        content: r.content || '',
+        handoffRequired: Boolean(r.handoff_required),
+        handoffType: r.handoff_type || '',
+        enabled: Boolean(r.enabled),
+        sortOrder: r.sort_order,
+        updatedAt: r.updated_at
+      })),
+      intents: ['pricing', 'booking', 'policy', 'after_sales', 'deposit', 'privacy', 'nail_quote', 'lash_intake'],
+      handoffTypes: ['technician', 'frontdesk', 'owner']
+    })
+  }
+  if (req.method === 'POST' && path === '/platform/kb') {
+    if (!isPlatform()) throw apiError(401, 'UNAUTHORIZED', 'Platform token required.')
+    const body = await readBody(req)
+    const kind = body.kind === 'rule' ? 'rule' : 'qa'
+    const content = String(body.content || '').trim()
+    if (!content) throw apiError(400, 'BAD_REQUEST', kind === 'rule' ? '规则正文必填。' : '回答口径必填。')
+    if (kind === 'qa' && !String(body.question || '').trim()) throw apiError(400, 'BAD_REQUEST', '顾客问法必填。')
+    const now = iso(new Date())
+    const maxOrder = db.prepare('SELECT COALESCE(MAX(sort_order), 0) AS n FROM platform_kb_entries').get().n
+    const id = randomId('pkb')
+    db.prepare(`INSERT INTO platform_kb_entries (id, kind, intent, question, content, handoff_required, handoff_type, enabled, sort_order, updated_by, created_at, updated_at)
+      VALUES (?, ?, ?, ?, ?, ?, ?, 1, ?, 'platform', ?, ?)`)
+      .run(id, kind, String(body.intent || '').trim() || null, String(body.question || '').trim(), content,
+        body.handoffRequired ? 1 : 0, String(body.handoffType || '').trim() || null, maxOrder + 1, now, now)
+    return json(res, 201, { ok: true, id })
+  }
+  if (req.method === 'PATCH' && /^\/platform\/kb\/[^/]+$/.test(path)) {
+    if (!isPlatform()) throw apiError(401, 'UNAUTHORIZED', 'Platform token required.')
+    const id = decodeURIComponent(path.split('/')[3])
+    const cur = db.prepare('SELECT * FROM platform_kb_entries WHERE id = ?').get(id)
+    if (!cur) throw apiError(404, 'NOT_FOUND', '条目不存在。')
+    const body = await readBody(req)
+    db.prepare(`UPDATE platform_kb_entries SET intent = ?, question = ?, content = ?, handoff_required = ?, handoff_type = ?, enabled = ?, updated_by = 'platform', updated_at = ? WHERE id = ?`)
+      .run(
+        body.intent === undefined ? cur.intent : (String(body.intent).trim() || null),
+        body.question === undefined ? cur.question : String(body.question),
+        body.content === undefined ? cur.content : String(body.content),
+        body.handoffRequired === undefined ? cur.handoff_required : (body.handoffRequired ? 1 : 0),
+        body.handoffType === undefined ? cur.handoff_type : (String(body.handoffType).trim() || null),
+        body.enabled === undefined ? cur.enabled : (body.enabled ? 1 : 0),
+        iso(new Date()), id)
+    return json(res, 200, { ok: true })
+  }
+  if (req.method === 'DELETE' && /^\/platform\/kb\/[^/]+$/.test(path)) {
+    if (!isPlatform()) throw apiError(401, 'UNAUTHORIZED', 'Platform token required.')
+    db.prepare('DELETE FROM platform_kb_entries WHERE id = ?').run(decodeURIComponent(path.split('/')[3]))
+    return json(res, 200, { ok: true })
+  }
+  if (req.method === 'POST' && path === '/platform/kb/reset') {
+    // 恢复出厂:清空后按种子重导(误删/改乱了的退路)
+    if (!isPlatform()) throw apiError(401, 'UNAUTHORIZED', 'Platform token required.')
+    db.prepare('DELETE FROM platform_kb_entries').run()
+    seedPlatformKbIfEmpty()
+    return json(res, 200, { ok: true, count: db.prepare('SELECT COUNT(*) AS n FROM platform_kb_entries').get().n })
+  }
+  // 平台端手动管理某商家的 AI 智能包:发放试用 / 顺延一个月或一年 / 关闭
+  if (req.method === 'POST' && /^\/platform\/tenants\/[^/]+\/ai-addon$/.test(path)) {
+    if (!isPlatform()) throw apiError(401, 'UNAUTHORIZED', 'Platform token required.')
+    const tid = path.split('/')[3]
+    if (!db.prepare('SELECT 1 FROM tenants WHERE id = ?').get(tid)) throw apiError(404, 'NOT_FOUND', '租户不存在。')
+    const body = await readBody(req)
+    const action = String(body.action || '')
+    if (action === 'grant_trial') {
+      const untilIso = grantAiTrial(tid)
+      return json(res, 200, { ok: true, expiresAt: untilIso, ai: aiAddonState(tid) })
+    }
+    if (action === 'extend') {
+      const untilIso = extendAiAddon(tid, body.period === 'month' ? 'month' : 'year')
+      return json(res, 200, { ok: true, expiresAt: untilIso, ai: aiAddonState(tid) })
+    }
+    if (action === 'revoke') {
+      db.prepare('DELETE FROM tenant_entitlements WHERE tenant_id = ? AND feature = ?').run(tid, AI_ADDON.feature)
+      return json(res, 200, { ok: true, ai: aiAddonState(tid) })
+    }
+    if (action === 'add_quota') {
+      // 本月临时加量:不动套餐、不动加购包,只给这一个月多批一些(写 ai_usage.bonus)
+      const n = Math.max(0, Math.min(100000, Math.round(Number(body.amount || 0))))
+      if (!n) throw apiError(400, 'BAD_REQUEST', '加量次数须为 1~100000。')
+      db.prepare(`INSERT INTO ai_usage (tenant_id, month, used, bonus, updated_at) VALUES (?, ?, 0, ?, ?)
+        ON CONFLICT(tenant_id, month) DO UPDATE SET bonus = bonus + excluded.bonus, updated_at = excluded.updated_at`)
+        .run(tid, aiMonthKey(), n, iso(new Date()))
+      return json(res, 200, { ok: true, usage: aiUsageOf(tid) })
+    }
+    throw apiError(400, 'BAD_REQUEST', 'action 应为 grant_trial / extend / revoke / add_quota。')
+  }
+  if (req.method === 'POST' && /^\/platform\/subscription-orders\/[^/]+\/mark-paid$/.test(path)) {
+    // 线下收款确认(转账/e-transfer 到账后平台点这里):标记已支付 + 到期日顺延 max(原到期日,今天)+周期
+    if (!isPlatform()) throw apiError(401, 'UNAUTHORIZED', 'Platform token required.')
+    const orderId = path.split('/')[3]
+    const order = db.prepare('SELECT * FROM subscription_orders WHERE id = ?').get(orderId)
+    if (!order) throw apiError(404, 'NOT_FOUND', '订单不存在。')
+    if (order.status === 'paid') return json(res, 200, { ok: true, alreadyPaid: true })
+    if (order.plan === 'ai_addon') { // AI 智能包订单:顺延 AI 到期日,不动基础套餐
+      const aiIso = extendAiAddon(order.tenant_id, order.period)
+      db.prepare('UPDATE subscription_orders SET status = ?, paid_at = ?, pay_channel = ?, expires_after = ? WHERE id = ?')
+        .run('paid', iso(new Date()), 'offline', aiIso, order.id)
+      return json(res, 200, { ok: true, aiExpiresAt: aiIso })
+    }
+    const tenant = db.prepare('SELECT * FROM tenants WHERE id = ?').get(order.tenant_id)
+    const base = new Date(Math.max(Date.now(), tenant?.plan_expires_at ? new Date(tenant.plan_expires_at).getTime() : 0))
+    const next = new Date(base)
+    if (order.period === 'month') next.setMonth(next.getMonth() + 1)
+    else next.setFullYear(next.getFullYear() + 1)
+    const nextIso = iso(next)
+    db.prepare('UPDATE subscription_orders SET status = ?, paid_at = ?, pay_channel = ?, expires_after = ? WHERE id = ?')
+      .run('paid', iso(new Date()), 'offline', nextIso, order.id)
+    db.prepare('UPDATE tenants SET plan_expires_at = ?, updated_at = ? WHERE id = ?').run(nextIso, iso(new Date()), order.tenant_id)
+    return json(res, 200, { ok: true, expiresAt: nextIso })
+  }
+  if (req.method === 'POST' && /^\/platform\/plan-requests\/[^/]+\/resolve$/.test(path)) {
+    if (!isPlatform()) throw apiError(401, 'UNAUTHORIZED', 'Platform token required.')
+    const reqId = path.split('/')[3]
+    const body = await readBody(req)
+    const status = body.status === 'REJECTED' ? 'REJECTED' : 'DONE'
+    const row = db.prepare('SELECT * FROM plan_change_requests WHERE id = ?').get(reqId)
+    if (!row) throw apiError(404, 'NOT_FOUND', '申请不存在。')
+    db.prepare('UPDATE plan_change_requests SET status = ? WHERE id = ?').run(status, reqId)
+    // AI 智能包试用申请:完成=发放 90 天权益并记「已用过试用」,不动基础档位
+    if (row.request_type === 'ai_trial') {
+      if (status !== 'DONE') return json(res, 200, { ok: true, status })
+      const aiIso = grantAiTrial(row.tenant_id)
+      return json(res, 200, { ok: true, status, aiExpiresAt: aiIso })
+    }
+    // 标记完成时若目标档位仍有效,同步改租户档位(到期日不动,由「标记已收款/顺延」另管)
+    if (status === 'DONE' && db.prepare('SELECT 1 FROM plans WHERE id = ?').get(row.target_plan)) {
+      db.prepare('UPDATE tenants SET plan = ?, updated_at = ? WHERE id = ?').run(row.target_plan, iso(new Date()), row.tenant_id)
+    }
+    return json(res, 200, { ok: true, status })
+  }
   if (req.method === 'GET' && path === '/platform/tenants') {
     if (!isPlatform()) throw apiError(401, 'UNAUTHORIZED', 'Platform token required.')
     const monthStartIso = iso(localDateTime(`${localParts(new Date()).date.slice(0, 7)}-01`, '00:00'))
@@ -7078,8 +7686,15 @@ async function route(req, res) {
     let id = String(body.id || '').trim().toLowerCase().replace(/[^a-z0-9-]/g, '')
     if (!id) id = `shop-${Math.random().toString(36).slice(2, 8)}`
     if (db.prepare('SELECT id FROM tenants WHERE id = ?').get(id)) throw apiError(409, 'DUPLICATE', `租户 id ${id} 已存在。`)
-    const plan = ['solo', 'studio', 'chain'].includes(body.plan) ? body.plan : 'studio'
-    db.prepare("INSERT INTO tenants (id, name, plan, status) VALUES (?, ?, ?, 'active')").run(id, name.slice(0, 60), plan)
+    const plan = ['free', 'single', 'studio', 'chain', 'custom'].includes(body.plan) ? body.plan : 'single'
+    // 首期订阅(2026-08-03 店主定):除内部旗舰店外,所有商家都有到期日——建店即设,默认年付;试用30天用于交付调试期
+    const initialTerm = ['trial30', 'month', 'year'].includes(body.initialTerm) ? body.initialTerm : 'year'
+    const expiry = new Date()
+    if (initialTerm === 'trial30') expiry.setDate(expiry.getDate() + 30)
+    else if (initialTerm === 'month') expiry.setMonth(expiry.getMonth() + 1)
+    else expiry.setFullYear(expiry.getFullYear() + 1)
+    const planExpiresAt = iso(expiry)
+    db.prepare("INSERT INTO tenants (id, name, plan, status, plan_expires_at) VALUES (?, ?, ?, 'active', ?)").run(id, name.slice(0, 60), plan, planExpiresAt)
     db.prepare('INSERT INTO stores (id, name, address, phone, timezone, currency, is_active, tenant_id) VALUES (?, ?, ?, ?, ?, ?, 1, ?)')
       .run(`store-${id}`, name.slice(0, 60), String(body.city || '').slice(0, 80), String(body.phone || '').slice(0, 30), 'America/Toronto', 'CAD', id)
     // 老板账号:username 唯一,默认 boss-<id>
@@ -7091,7 +7706,7 @@ async function route(req, res) {
       VALUES (?, ?, ?, ?, 'owner', NULL, ?, 1, 'active', ?, ?)`)
       .run(randomId('acct'), id, username, `${name} Owner`, adminPasswordHash(username, initialPassword), iso(new Date()), iso(new Date()))
     return json(res, 201, {
-      tenant: { id, name, plan, status: 'active' },
+      tenant: { id, name, plan, status: 'active', planExpiresAt },
       owner: { username, initialPassword, note: '初始密码只显示这一次,请交付商家;首次登录强制改密。' },
       shopEntry: { scene: `t=${id}`, note: '小程序发布后可用此 scene 生成该店专属小程序码。' }
     })
@@ -7701,6 +8316,7 @@ async function route(req, res) {
   }
   if (req.method === 'POST' && path === '/admin/finance/insights') {
     if (adminSession.role !== 'owner') throw apiError(403, 'FORBIDDEN', 'Owner permission is required.')
+    requireAi()
     const month = localParts(new Date()).date.slice(0, 7)
     const progress = computeFinanceProgress(month)
     const byCategory = db.prepare(`
@@ -7890,6 +8506,148 @@ async function route(req, res) {
       seeded: true,
       message: `全页面演示数据已填充:${demoCustomers.length} 位客户(含标签/生日/储值)、${bookingCount} 个订单(完成/今日/未来/待付/取消)、2 条会话(1条待人工+1条已绑定会员)、1 个待报价任务、近30天账本收入 ${(seededRevenue / 100).toFixed(0)} 加元。正式上线前用 重置数据.command 一键清除。`
     })
+  }
+  // ===== 套餐与续费(2026-08-03,店主确认设计稿后开工)=====
+  // SaaS 服务费:收款主体=平台运营公司(类目含软件/IT服务),与门店经营账分离。
+  // v1 支付:未配微信支付参数时订单停在 pending(引导联系客服);WXPAY_MOCK=1(仅本地沙盘)可模拟支付走通全流程。
+  if (req.method === 'GET' && path === '/admin/subscription') {
+    if (adminSession.role !== 'owner') throw apiError(403, 'FORBIDDEN', '仅老板可查看套餐。')
+    const tid = currentTenantId()
+    const ent = getEntitlements(tid)
+    const tenant = db.prepare('SELECT * FROM tenants WHERE id = ?').get(tid)
+    const expiresAt = tenant?.plan_expires_at || null
+    const now = Date.now()
+    let daysLeft = null
+    let status = 'active'
+    if (expiresAt) {
+      daysLeft = Math.ceil((new Date(expiresAt).getTime() - now) / 86400000)
+      if (daysLeft <= 0) status = daysLeft > -7 ? 'grace' : 'suspended'
+      else if (daysLeft <= 7) status = 'expiring'
+    } else {
+      status = 'unlimited' // 长期有效(自有/内部租户)
+    }
+    const orders = db.prepare('SELECT * FROM subscription_orders WHERE tenant_id = ? ORDER BY created_at DESC LIMIT 20').all(tid)
+      .map((o) => ({ id: o.id, plan: o.plan, period: o.period, amountCents: o.amount_cents, status: o.status, createdAt: o.created_at, paidAt: o.paid_at }))
+    return json(res, 200, {
+      plan: ent.plan,
+      planName: ent.planNameZh,
+      expiresAt,
+      daysLeft,
+      status,
+      autoRenew: Boolean(tenant?.auto_renew),
+      prices: PLAN_PRICING[ent.plan] || null, // 当前档位订阅价;custom/未知=null(续费走客服)
+      tiers: db.prepare('SELECT id, name_zh FROM plans ORDER BY sort_order').all().map((p) => ({
+        id: p.id,
+        name: p.name_zh,
+        monthCents: PLAN_PRICING[p.id]?.monthCents ?? null,
+        yearCents: PLAN_PRICING[p.id]?.yearCents ?? null,
+        fit: PLAN_FIT[p.id] || '',
+        note: PLAN_NOTE[p.id] || '',
+        current: p.id === ent.plan
+      })),
+      latestPlanRequest: ent.latestPlanRequest,
+      aiAddon: Object.assign({}, aiAddonState(tid), { usage: aiUsageOf(tid) }), // 商家能看到自己本月 AI 用了多少
+
+      mockPay: process.env.WXPAY_MOCK === '1',
+      orders
+    })
+  }
+  // AI 智能包:申请 3 个月免费试用(每店一次)。不自动开通——生成申请落到平台后台,由运营配置话术/知识库后再发放。
+  if (req.method === 'POST' && path === '/admin/subscription/ai-trial') {
+    if (adminSession.role !== 'owner') throw apiError(403, 'FORBIDDEN', '仅老板可申请。')
+    const tid = currentTenantId()
+    const st = aiAddonState(tid)
+    if (st.includedInPlan) throw apiError(400, 'BAD_REQUEST', '当前套餐已包含 AI 智能包。')
+    if (st.trialPending) throw apiError(400, 'BAD_REQUEST', '试用申请已提交,我们会尽快联系您开通。')
+    if (!st.trialAvailable) throw apiError(400, 'BAD_REQUEST', '免费试用每店限一次,已使用过。')
+    const body = await readBody(req).catch(() => ({}))
+    const contact = String(body.contact || '').trim().slice(0, 60)
+    const ent = getEntitlements(tid)
+    db.prepare(`INSERT INTO plan_change_requests (id, tenant_id, current_plan, target_plan, request_type, note, status, created_by, created_at)
+      VALUES (?, ?, ?, 'ai_addon', 'ai_trial', ?, 'PENDING', ?, ?)`)
+      .run(randomId('planreq'), tid, ent.plan, contact ? `申请 AI 智能包 ${AI_ADDON.trialDays} 天免费试用 · 联系方式:${contact}` : `申请 AI 智能包 ${AI_ADDON.trialDays} 天免费试用`,
+        adminSession.email || adminSession.username || 'owner', iso(new Date()))
+    return json(res, 200, { ok: true, pending: true, aiAddon: aiAddonState(tid) })
+  }
+  // AI 智能包:下单订阅(与基础套餐同一套订单表,plan='ai_addon';平台确认收款后顺延 AI 到期日)
+  if (req.method === 'POST' && path === '/admin/subscription/ai-subscribe') {
+    if (adminSession.role !== 'owner') throw apiError(403, 'FORBIDDEN', '仅老板可订阅。')
+    const tid = currentTenantId()
+    if (aiAddonState(tid).includedInPlan) throw apiError(400, 'BAD_REQUEST', '当前套餐已包含 AI 智能包。')
+    const body = await readBody(req)
+    const period = body.period === 'month' ? 'month' : 'year'
+    const amountCents = period === 'month' ? AI_ADDON.monthCents : AI_ADDON.yearCents
+    const id = randomId('sub')
+    db.prepare(`INSERT INTO subscription_orders (id, tenant_id, plan, period, amount_cents, status, created_at, expires_before)
+      VALUES (?, ?, 'ai_addon', ?, ?, 'pending', ?, ?)`)
+      .run(id, tid, period, amountCents, iso(new Date()), aiAddonState(tid).expiresAt)
+    return json(res, 200, {
+      order: { id, period, amountCents, status: 'pending', plan: 'ai_addon' },
+      payment: process.env.WXPAY_MOCK === '1' ? 'mock' : 'unconfigured'
+    })
+  }
+  if (req.method === 'PATCH' && path === '/admin/subscription/auto-renew') {
+    if (adminSession.role !== 'owner') throw apiError(403, 'FORBIDDEN', '仅老板可操作。')
+    const body = await readBody(req)
+    const enabled = body.enabled ? 1 : 0
+    db.prepare('UPDATE tenants SET auto_renew = ?, updated_at = ? WHERE id = ?').run(enabled, iso(new Date()), currentTenantId())
+    return json(res, 200, { autoRenew: Boolean(enabled) })
+  }
+  if (req.method === 'POST' && path === '/admin/subscription/renew') {
+    if (adminSession.role !== 'owner') throw apiError(403, 'FORBIDDEN', '仅老板可续费。')
+    const body = await readBody(req)
+    const period = body.period === 'month' ? 'month' : 'year'
+    const tid = currentTenantId()
+    const tenant = db.prepare('SELECT * FROM tenants WHERE id = ?').get(tid)
+    const pricing = PLAN_PRICING[tenant?.plan || '']
+    if (!pricing) throw apiError(400, 'BAD_REQUEST', '定制版为按需报价,续费请联系客服。')
+    const amountCents = period === 'month' ? pricing.monthCents : pricing.yearCents
+    if (!amountCents) throw apiError(400, 'BAD_REQUEST', '免费版无需续费。')
+    const order = {
+      id: randomId('sub'),
+      tenant_id: tid,
+      plan: tenant?.plan || 'chain',
+      period,
+      amount_cents: amountCents,
+      status: 'pending',
+      created_at: iso(new Date()),
+      expires_before: tenant?.plan_expires_at || null
+    }
+    db.prepare(`INSERT INTO subscription_orders (id, tenant_id, plan, period, amount_cents, status, created_at, expires_before)
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?)`)
+      .run(order.id, order.tenant_id, order.plan, order.period, order.amount_cents, order.status, order.created_at, order.expires_before)
+    // TODO(支付接入): 微信支付参数配置化(商户号/密钥),配好后此处返回 JSAPI payParams;当前返回 unconfigured 走客服引导。
+    return json(res, 200, {
+      order: { id: order.id, period, amountCents, status: 'pending' },
+      payment: process.env.WXPAY_MOCK === '1' ? 'mock' : 'unconfigured'
+    })
+  }
+  if (req.method === 'POST' && /^\/admin\/subscription\/orders\/[^/]+\/mock-pay$/.test(path)) {
+    // 仅本地沙盘联调用:WXPAY_MOCK=1 时模拟支付成功并顺延到期日;生产不配此变量,接口直接 403
+    if (adminSession.role !== 'owner') throw apiError(403, 'FORBIDDEN', '仅老板可操作。')
+    if (process.env.WXPAY_MOCK !== '1') throw apiError(403, 'FORBIDDEN', '支付通道尚未开通,请联系客服完成续费。')
+    const orderId = path.split('/')[4]
+    const tid = currentTenantId()
+    const order = db.prepare('SELECT * FROM subscription_orders WHERE id = ? AND tenant_id = ?').get(orderId, tid)
+    if (!order) throw apiError(404, 'NOT_FOUND', '订单不存在。')
+    if (order.status === 'paid') return json(res, 200, { ok: true, alreadyPaid: true })
+    if (order.plan === 'ai_addon') { // AI 智能包订单:顺延 AI 到期日,不动基础套餐
+      const aiIso = extendAiAddon(tid, order.period)
+      db.prepare('UPDATE subscription_orders SET status = ?, paid_at = ?, pay_channel = ?, expires_after = ? WHERE id = ?')
+        .run('paid', iso(new Date()), 'mock', aiIso, order.id)
+      return json(res, 200, { ok: true, aiExpiresAt: aiIso })
+    }
+    const tenant = db.prepare('SELECT * FROM tenants WHERE id = ?').get(tid)
+    // 顺延规则:以「原到期日」和「今天」的较晚者为基准,+1月/+1年——临期或宽限期内续费都不吃亏
+    const base = new Date(Math.max(Date.now(), tenant?.plan_expires_at ? new Date(tenant.plan_expires_at).getTime() : 0))
+    const next = new Date(base)
+    if (order.period === 'month') next.setMonth(next.getMonth() + 1)
+    else next.setFullYear(next.getFullYear() + 1)
+    const nextIso = iso(next)
+    db.prepare('UPDATE subscription_orders SET status = ?, paid_at = ?, pay_channel = ?, expires_after = ? WHERE id = ?')
+      .run('paid', iso(new Date()), 'mock', nextIso, order.id)
+    db.prepare('UPDATE tenants SET plan_expires_at = ?, updated_at = ? WHERE id = ?').run(nextIso, iso(new Date()), tid)
+    return json(res, 200, { ok: true, expiresAt: nextIso })
   }
   if (req.method === 'GET' && path === '/admin/finance/targets') {
     if (adminSession.role !== 'owner') throw apiError(403, 'FORBIDDEN', 'Owner permission is required.')
@@ -8139,8 +8897,9 @@ async function route(req, res) {
       for (const entry of parsed) insertEntry(entry)
       return json(res, 201, { mode: 'entries', imported: parsed.length })
     }
-    // 2) 自由文本：尝试 AI 拆条（需真实模型），拆不出则整篇存为知识文档供 AI 参考
-    const aiExtracted = await extractKbEntriesFromDocument({ content, filename }).catch(() => null)
+    // 2) 自由文本：尝试 AI 拆条（需真实模型且需开通 AI 智能包），拆不出则整篇存为知识文档供 AI 参考
+    if (hasAi()) countAiUsage()
+    const aiExtracted = hasAi() ? await extractKbEntriesFromDocument({ content, filename }).catch(() => null) : null
     const aiEntries = (aiExtracted?.entries || []).filter((entry) => entry?.question && entry?.answerZh)
     if (aiEntries.length) {
       for (const entry of aiEntries) insertEntry(entry)
@@ -8197,7 +8956,10 @@ async function route(req, res) {
     return json(res, 200, { entry: db.prepare('SELECT id, question, keywords, answer_zh AS answerZh, answer_en AS answerEn, enabled FROM tenant_kb_entries WHERE id = ?').get(id) })
   }
   if (req.method === 'PUT' && path === '/admin/tenant/plan') {
-    if (adminSession.role !== 'owner') throw apiError(403, 'FORBIDDEN', 'Owner permission is required.')
+    // 2026-08-04 安全:此前只判断"你是不是老板",于是任何商家老板都能把自己改成连锁版(自带 AI)、
+    // 或把到期日设成永久,整套申请/支付/平台开通全被绕过。现在只有平台主钥匙能改;
+    // 商家要变档位走 POST /admin/tenant/plan/change-request(申请制,平台审批)。
+    if (!isPlatformKey(req)) throw apiError(403, 'FORBIDDEN', '档位调整由平台处理,请在「套餐与续费」里提交申请。')
     const body = await readBody(req)
     const updates = []
     const args = []
@@ -8231,7 +8993,9 @@ async function route(req, res) {
     return json(res, 201, { entitlements: getEntitlements(currentTenantId()) })
   }
   if (req.method === 'PUT' && path === '/admin/tenant/entitlements') {
-    if (adminSession.role !== 'owner') throw apiError(403, 'FORBIDDEN', 'Owner permission is required.')
+    // 2026-08-04 安全:此前商家老板可以直接给自己写权限行,等于免费开通 AI 智能包等一切付费功能。
+    // 现在只有平台主钥匙能写;商家侧开通一律走订阅接口(试用申请 / 下单付款 / 平台开通)。
+    if (!isPlatformKey(req)) throw apiError(403, 'FORBIDDEN', '功能开通由平台处理,请在「套餐与续费」里申请或订阅。')
     const body = await readBody(req)
     const feature = String(body.feature || '').trim()
     if (!feature) throw apiError(400, 'BAD_REQUEST', 'feature is required.')
@@ -8370,12 +9134,18 @@ async function route(req, res) {
     const svc = booking && booking.service_id ? getService(booking.service_id) : null
     const tech = booking && booking.technician_id ? db.prepare('SELECT name FROM technicians WHERE id = ?').get(booking.technician_id) : null
     const u = db.prepare('SELECT display_name FROM users WHERE id = ?').get(userId)
-    // AI 结构化(失败自动 fallback,不阻塞保存)
-    let structured = {}
-    try {
-      const aiRes = await createServiceNoteInsights({ rawText, serviceName: svc ? svc.name_zh : (body.serviceName || ''), customerName: u ? u.display_name : '' })
-      structured = (aiRes && aiRes.data) ? aiRes.data : aiRes // 拆 aiJson 的 {data} 外壳
-    } catch (e) { structured = { summary: rawText.slice(0, 60), safetyFlags: [], styles: [], personality: [], preferences: [], companions: [], other: [] } }
+    // AI 结构化(失败自动 fallback,不阻塞保存)。未开通 AI 智能包时**跳过 AI、照常保存原文**——
+    // 小记本身是客户档案的地基,不能因为没买 AI 就写不了;只是不再自动拆成 款式/性格/偏好/同行/安全项。
+    const emptyStructured = () => ({ summary: rawText.slice(0, 60), safetyFlags: [], styles: [], personality: [], preferences: [], companions: [], other: [] })
+    let structured = emptyStructured()
+    const aiStructured = hasAi()
+    if (aiStructured) {
+      countAiUsage()
+      try {
+        const aiRes = await createServiceNoteInsights({ rawText, serviceName: svc ? svc.name_zh : (body.serviceName || ''), customerName: u ? u.display_name : '' })
+        structured = (aiRes && aiRes.data) ? aiRes.data : aiRes // 拆 aiJson 的 {data} 外壳
+      } catch (e) { structured = emptyStructured() }
+    }
     const id = randomId('snote')
     db.prepare(`INSERT INTO service_notes (id, tenant_id, user_id, booking_id, technician_id, technician_name, service_name, raw_text, structured_json, created_by, created_at)
       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`).run(
@@ -8493,12 +9263,17 @@ async function route(req, res) {
         }
       })
       const store = db.prepare('SELECT name FROM stores WHERE tenant_id = ? AND is_active = 1 LIMIT 1').get(tid)
+      // 未开通 AI 智能包:仍然告诉老板「该召回谁」(这是数据分层,不是 AI),只是话术落到通用模板
       let messages = []
-      try {
-        const aiRes = await createRecallMessages({ customers, storeName: store ? store.name : '' })
-        const data = (aiRes && aiRes.data) ? aiRes.data : aiRes
-        messages = (data && data.messages) || []
-      } catch (e) { messages = [] }
+      if (hasAi()) {
+        countAiUsage()
+        try {
+          const aiRes = await createRecallMessages({ customers, storeName: store ? store.name : '' })
+          const data = (aiRes && aiRes.data) ? aiRes.data : aiRes
+          messages = (data && data.messages) || []
+        } catch (e) { messages = [] }
+      }
+      digest.aiCopy = hasAi()
       const byId = {}; messages.forEach((m) => { if (m && m.userId) byId[m.userId] = m.message })
       digest.items = customers.map((c) => ({
         userId: c.userId, name: c.name, phone: c.phone, lastVisitDays: c.lastVisitDays, spendCents: c.spendCents,
@@ -8515,6 +9290,7 @@ async function route(req, res) {
   // 一次最多 6 人;每人结合服务小记画像(款式/偏好/安全项)+ 常做项目 + 距上次到店天数,生成一条可直接粘贴发微信的话术;AI 失败落模板
   if (req.method === 'POST' && path === '/admin/ai/recall-copy') {
     if (adminSession.role !== 'owner') throw apiError(403, 'FORBIDDEN', '仅老板可生成召回话术。')
+    requireAi()
     const body = await readBody(req)
     const tid = currentTenantId()
     const userIds = (Array.isArray(body.userIds) ? body.userIds : []).slice(0, 6)
@@ -8538,6 +9314,7 @@ async function route(req, res) {
     if (!customers.length) throw apiError(404, 'NOT_FOUND', '顾客不存在。')
     const store = db.prepare('SELECT name FROM stores WHERE tenant_id = ? AND is_active = 1 LIMIT 1').get(tid)
     let messages = []
+    countAiUsage()
     try {
       const aiRes = await createRecallMessages({ customers, storeName: store ? store.name : '' })
       const data = (aiRes && aiRes.data) ? aiRes.data : aiRes
@@ -8548,8 +9325,29 @@ async function route(req, res) {
     const out = customers.map((c) => ({
       userId: c.userId, name: c.name,
       message: byId[c.userId] || `${c.name}好久不见啦~${(c.styles[0] || c.topService) ? `最近店里新到了适合你的${c.styles[0] || c.topService},` : ''}这周约还有小惊喜,回来做美美的!`
-    }))
-    return json(res, 200, { messages: out })
+    })).map((m) => ({ ...m, message: withTouchCta(m.message) }))
+    return json(res, 200, { messages: out, cta: readTouchRules().ctaText || '' })
+  }
+  // ===== 触达规则(企微双通道:真人管家=喇叭 / 客服窗口=办事处)=====
+  // 每条主动触达文案自动带客服入口,防止顾客回到成员私聊(那条通道我们收不到、AI 接不了)。
+  if (req.method === 'GET' && path === '/admin/touch-rules') {
+    if (adminSession.role !== 'owner') throw apiError(403, 'FORBIDDEN', '仅老板可看触达设置。')
+    return json(res, 200, { rules: readTouchRules() })
+  }
+  if (req.method === 'PUT' && path === '/admin/touch-rules') {
+    if (adminSession.role !== 'owner') throw apiError(403, 'FORBIDDEN', '仅老板可改触达设置。')
+    const body = await readBody(req)
+    const current = readTouchRules()
+    const next = {
+      kfLink: body.kfLink !== undefined ? String(body.kfLink || '').trim().slice(0, 300) : current.kfLink,
+      ctaText: body.ctaText !== undefined ? String(body.ctaText || '').trim().slice(0, 120) : current.ctaText,
+      appendCta: body.appendCta !== undefined ? Boolean(body.appendCta) : current.appendCta
+    }
+    if (next.kfLink && !/^https?:\/\//i.test(next.kfLink)) throw apiError(400, 'BAD_REQUEST', '客服入口链接需以 http(s):// 开头。')
+    db.prepare(`INSERT INTO tenant_settings (tenant_id, key, value, updated_at) VALUES (?, 'touch_rules', ?, ?)
+      ON CONFLICT(tenant_id, key) DO UPDATE SET value = excluded.value, updated_at = excluded.updated_at`)
+      .run(currentTenantId(), JSON.stringify(next), iso(new Date()))
+    return json(res, 200, { rules: next })
   }
   // ===== 薪资方案(P1-④) =====
   // 方案列表(owner):全店默认 + 每技师覆盖情况
@@ -9257,6 +10055,29 @@ try {
 } catch (error) {
   if (!String(error.message || '').includes('duplicate column')) throw error
 }
+try {
+  // 套餐自动续费意向(2026-08-03):v1=到期前自动生成订单+提醒;真免密扣款待微信支付周期扣费资质,届时无缝升级
+  db.exec('ALTER TABLE tenants ADD COLUMN auto_renew INTEGER NOT NULL DEFAULT 0')
+} catch (error) {
+  if (!String(error.message || '').includes('duplicate column')) throw error
+}
+// 套餐续费订单(2026-08-03):SaaS 服务费,与门店经营账完全分离(不入 finance_transactions)
+db.exec(`
+  CREATE TABLE IF NOT EXISTS subscription_orders (
+    id TEXT PRIMARY KEY,
+    tenant_id TEXT NOT NULL,
+    plan TEXT NOT NULL,
+    period TEXT NOT NULL,
+    amount_cents INTEGER NOT NULL,
+    status TEXT NOT NULL DEFAULT 'pending',
+    pay_channel TEXT,
+    transaction_id TEXT,
+    created_at TEXT NOT NULL,
+    paid_at TEXT,
+    expires_before TEXT,
+    expires_after TEXT
+  );
+`)
 // 工资手动调整(锁定前填,锁定时定格进快照;补贴+/扣款-,须备注)
 db.exec(`
   CREATE TABLE IF NOT EXISTS salary_adjusts (

@@ -83,7 +83,9 @@
         <text>{{t.upload}}</text>
       </button>
     </view>
-    <view class="ai-reference-card card">
+    <!-- AI 款式建议:2026-08-04 店主定「待升级后再放出,正式版先不显示」,故 aiReferenceEnabled 恒 false。
+         之前的逻辑(按门店是否开通 AI 智能包显隐)保留在 aiEnabled 里,升级完把下面条件改回 aiEnabled 即可。 -->
+    <view class="ai-reference-card card" wx:if="{{aiReferenceEnabled}}">
       <view>
         <view class="ai-title">{{lang === 'en' ? 'AI Style Suggestion' : 'AI 款式建议'}}</view>
         <view class="ai-text">{{lang === 'en' ? 'AI can estimate complexity before artist confirmation.' : 'AI 可先判断参考图复杂度，最终美甲报价仍需人工确认。'}}</view>

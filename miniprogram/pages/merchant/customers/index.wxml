@@ -23,7 +23,7 @@
   <view class="ops" wx:if="{{filter!=='all'}}">
     <view class="op o1" bindtap="copyList">📋 名单</view>
     <view class="op o1" bindtap="openCoupons">🎫 群发券</view>
-    <view class="op o2 {{aiBusy?'dim':''}}" bindtap="aiRecall">✦ AI {{filter==='s' ? '召回' : '关怀'}}话术</view>
+    <view wx:if="{{aiEnabled}}" class="op o2 {{aiBusy?'dim':''}}" bindtap="aiRecall">✦ AI {{filter==='s' ? '召回' : '关怀'}}话术</view>
   </view>
   <view class="opshint" wx:if="{{filter==='s'}}">沉睡客已按「以前多能花」排序,先救最值钱的;AI 话术结合每人服务小记画像生成</view>
 

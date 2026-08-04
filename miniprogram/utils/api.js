@@ -60,11 +60,19 @@ function isLoggedIn() {
 }
 
 function getAdminAuth() {
-  return wx.getStorageSync(ADMIN_AUTH_KEY) || null
+  const auth = wx.getStorageSync(ADMIN_AUTH_KEY) || null
+  if (!auth) return null
+  // 会话是跟环境绑定的:本地沙盘发的 token 生产不认,反之亦然。
+  // 切了 USE_LOCAL_SANDBOX 之后旧 token 还留着,会造成"本地看着已登录、实际每个接口都 401、页面一片空白"。
+  if (auth.apiBase && auth.apiBase !== API_BASE) {
+    wx.removeStorageSync(ADMIN_AUTH_KEY)
+    return null
+  }
+  return auth
 }
 
 function setAdminAuth(auth) {
-  wx.setStorageSync(ADMIN_AUTH_KEY, auth)
+  wx.setStorageSync(ADMIN_AUTH_KEY, Object.assign({}, auth, { apiBase: API_BASE }))
   return auth
 }
 
@@ -74,6 +82,21 @@ function clearAdminAuth() {
 
 function currentTenant() {
   return wx.getStorageSync('lucky_tenant') || 'lucky-luxe'
+}
+
+// 会话失效时统一弹回登录页。多个接口并行 401 时只跳一次,避免路由打架。
+let kickingToLogin = false
+function kickToLogin(silent) {
+  if (kickingToLogin) return
+  kickingToLogin = true
+  clearAdminAuth()
+  if (!silent) wx.showToast({ title: '登录已过期,请重新登录', icon: 'none' })
+  setTimeout(() => {
+    wx.reLaunch({
+      url: '/pages/merchant-login/index',
+      complete: () => { setTimeout(() => { kickingToLogin = false }, 800) }
+    })
+  }, silent ? 0 : 500)
 }
 
 function request(path, method = 'GET', data) {
@@ -108,8 +131,14 @@ function adminRequest(path, method = 'GET', data) {
       data,
       header,
       success(res) {
-        if (res.statusCode >= 200 && res.statusCode < 300) resolve(res.data)
-        else reject(res.data && res.data.error ? res.data.error : new Error('Admin API request failed'))
+        if (res.statusCode >= 200 && res.statusCode < 300) return resolve(res.data)
+        // 把 HTTP 状态码带出去:调用方要能区分「没登录/没权限」和「网络不通」
+        const err = res.data && res.data.error ? res.data.error : new Error('Admin API request failed')
+        try { err.statusCode = res.statusCode } catch (e) { /* 冻结对象忽略 */ }
+        // 兜底:任何商家接口 401 都说明这个会话在当前后端不成立(过期、被顶、或换了环境),
+        // 一律清会话弹回登录页——页面各自 catch 掉错误就会停在空白页上,这里必须拦住。
+        if (res.statusCode === 401) kickToLogin()
+        reject(err)
       },
       fail: reject
     })
@@ -319,9 +348,14 @@ async function getServices(type, lang) {
   }
 }
 
+// 门店是否开通 AI 智能包。顾客端据此隐藏 AI 入口(未知时按"没有"处理,宁可少显示一个按钮,
+// 也不要让顾客点了一个没有结果的 AI)。由 /stores 顺带下发,不额外发请求。
+function getStoreAiEnabled() { return wx.getStorageSync('lucky_store_ai') === true }
+
 async function getStores() {
   try {
     const data = await request('/stores')
+    wx.setStorageSync('lucky_store_ai', data.aiEnabled === true)
     return (data.stores || []).map(toMiniStore)
   } catch (error) {
     return [mock.store]
@@ -444,40 +478,13 @@ async function getBookings(lang) {
   return (data.bookings || []).map(toMiniBooking)
 }
 
+// 2026-08-04 安全修复:这里原来有一段"假分析"回退——请求一失败就返回写死的
+// estimatedPriceCents(美甲 $238 / 美睫 $198)+ "已根据参考图生成初步建议"话术,
+// 界面上跟真 AI 结果长得一模一样。等于给顾客看一个跟他的图、跟门店价目表都无关的报价,
+// 还挂着商家的品牌。已删除:失败就如实抛错,由页面提示顾客走人工报价。
 async function analyzeReference(payload) {
-  try {
-    const data = await request('/ai/reference-analysis', 'POST', payload)
-    return data.analysis || data
-  } catch (error) {
-    const isNail = String(payload && payload.serviceId || '').indexOf('nail') === 0
-    const hasImages = payload && ((payload.images && payload.images.length) || payload.image)
-    return {
-      provider: 'mini-fallback',
-      data: {
-        complexity: isNail ? 'medium' : 'standard',
-        estimatedExtraMinutes: isNail ? 30 : 0,
-        estimatedPriceCents: isNail ? 23800 : 19800,
-        manualQuoteRequired: isNail,
-        detectedElements: isNail
-          ? ['参考图已收到', '可能包含延长/款式细节', '最终报价需技师确认']
-          : ['参考图已收到', '美睫款式可按固定价格预约'],
-        clientMessageZh: hasImages
-          ? (isNail
-            ? '已根据参考图生成初步建议：此类款式可能涉及延长、饰品或细节绘制，系统先给出基础价格区间，最终美甲报价需要技师人工确认。'
-            : '已收到参考图。美睫项目为固定价，若无特殊卸睫或修补需求，可按当前服务价格预约。')
-          : '请先上传参考图后再进行分析。',
-        clientMessageEn: hasImages
-          ? (isNail
-            ? 'Reference image received. This style may include extensions, charms, or detailed art. The system can estimate a base range, but the final nail quote requires technician confirmation.'
-            : 'Reference image received. Lash services use fixed pricing unless removal or repair is needed.')
-          : 'Please upload a reference image first.',
-        priceMessageZh: isNail ? '详细价格请联系客服获取报价' : '美睫为固定服务价',
-        priceMessageEn: isNail ? 'Please contact us for a confirmed quote' : 'Fixed lash service price',
-        technicianNotesZh: isNail ? '请技师确认延长、卸甲、断甲修补、饰品和复杂度。' : '请确认是否需要卸睫或调整款式。',
-        technicianNotesEn: isNail ? 'Technician should confirm extension, removal, repair, charms, and complexity.' : 'Please confirm if lash removal or style adjustment is needed.'
-      }
-    }
-  }
+  const data = await request('/ai/reference-analysis', 'POST', payload)
+  return data.analysis || data
 }
 
 async function adminLogin(email, password, remember = true) {
@@ -561,8 +568,35 @@ function getCustomerNotes(userId) {
 function getCachedRole() { return wx.getStorageSync('lucky_admin_role') || '' }
 function isOwner() { return getCachedRole() === 'owner' }
 // owner-only 页面守卫:员工进入即弹回。返回 true=放行
+// 未登录时跳回商家登录页(而不是把人放进一个没有数据的空白后台)
+function goMerchantLogin() {
+  kickToLogin(true)
+}
+
+// 商家区通用守卫(老板或员工都可):没登录就送回登录页,别让人停在没有数据的空壳页面上。
+// 只做本地会话判断,不发请求——放在 onShow 开头零成本。
+function guardMerchant() {
+  if (isAdminLoggedIn()) return true
+  goMerchantLogin()
+  return false
+}
+
 async function guardOwner() {
-  try { const m = await adminMe(); if (m && m.role === 'owner') return true } catch (e) { /* 网络异常时不误伤,继续 */ return true }
+  // 2026-08-04 修:原来这里 catch 到任何异常都 return true,401 也照放——
+  // 结果没登录也能进商家页,但每个接口都 401,页面一片空白,看起来像"不用密码就能登录"。
+  // 现在:本地压根没有有效会话 → 直接去登录页;会话失效(401/403)→ 清掉再去登录;
+  // 只有真的断网/超时才沿用旧的"不误伤"策略,放行让页面自己重试。
+  if (!isAdminLoggedIn()) { goMerchantLogin(); return false }
+  let me = null
+  try {
+    me = await adminMe()
+  } catch (e) {
+    const code = e && (e.statusCode || e.code)
+    // 401 已由 adminRequest 统一踢回登录页,这里只需要不放行
+    if (code === 401 || code === 403 || code === 'UNAUTHORIZED' || code === 'FORBIDDEN' || code === 'ACCOUNT_DISABLED') return false
+    return true // 断网/超时:不误伤
+  }
+  if (me && me.role === 'owner') return true
   wx.showToast({ title: '仅老板可用', icon: 'none' })
   setTimeout(() => wx.navigateBack({ fail: () => wx.reLaunch({ url: '/pages/merchant/home/index' }) }), 350)
   return false
@@ -582,6 +616,19 @@ async function adminMe() {
   if (data && data.admin && data.admin.role) wx.setStorageSync('lucky_admin_role', data.admin.role)
   return data.admin
 }
+
+// 商家端「本店有没有 AI 智能包」。小程序原先完全不读权限,所有 AI 按钮无差别显示;
+// 现在进商家页时取一次并缓存,页面用 merchantHasAi() 同步判断要不要显示 AI 入口。
+async function refreshMerchantAi() {
+  try {
+    const d = await adminRequest('/admin/tenant/entitlements')
+    const on = Boolean(d && d.entitlements && d.entitlements.features
+      && d.entitlements.features.ai_customer_service && d.entitlements.features.ai_customer_service.enabled)
+    wx.setStorageSync('lucky_merchant_ai', on)
+    return on
+  } catch (e) { return merchantHasAi() }
+}
+function merchantHasAi() { return wx.getStorageSync('lucky_merchant_ai') === true }
 
 async function getAdminDashboardData() {
   const [me, bookingsData, techniciansData] = await Promise.all([
@@ -643,6 +690,9 @@ module.exports = {
   getCachedRole,
   isOwner,
   guardOwner,
+  guardMerchant,
+  refreshMerchantAi,
+  merchantHasAi,
   financeUnlock,
   getFinanceKey,
   clearFinanceKey,
@@ -651,6 +701,7 @@ module.exports = {
   getServices,
   getService,
   getStores,
+  getStoreAiEnabled,
   getAddOns,
   getPortfolio,
   getPortfolioWall,

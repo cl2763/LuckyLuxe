@@ -13,6 +13,7 @@ page{background:#fbf8f5}
 .v{font-size:24rpx;color:#8c8279;margin-right:10rpx}
 .tag{font-size:21rpx;color:#8c8279;background:#fbf8f5;border:1rpx solid #e7ddd4;border-radius:40rpx;padding:4rpx 14rpx;margin-right:10rpx}
 .tag.on{color:#47735f;background:#e3eee8;border-color:#cfe4d9}
+.tag.warn{color:#c0392b;background:#fdeeea;border-color:#f0c9bf}
 .arr{color:#c8b8a8;font-size:30rpx}
 .out{text-align:center;color:#a34c48;font-size:27rpx;background:#fff;border:1rpx solid #e7ddd4;border-radius:16rpx;padding:26rpx 0}
 .ver{text-align:center;color:#b6a99b;font-size:21rpx;margin-top:26rpx}

@@ -28,6 +28,7 @@ Page({
   },
 
   onShow() {
+    if (!api.guardMerchant()) return
     if (this.data.viewMode === 'tech') {
       this.loadDayView(this.data.selDate || todayStr())
     } else if (this.data.calYear) {

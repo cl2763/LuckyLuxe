@@ -16,7 +16,11 @@ Page({
     loading: false
   },
 
-  onLoad() { this.loadWorks() },
+  onLoad() {
+    this.setData({ aiEnabled: api.merchantHasAi() })
+    api.refreshMerchantAi().then((on) => this.setData({ aiEnabled: on }))
+    this.loadWorks()
+  },
 
   async loadWorks() {
     try {

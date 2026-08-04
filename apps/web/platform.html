@@ -85,7 +85,8 @@
     <button class="navbtn" data-page="merchants" onclick="nav('merchants')"><svg class="ni" viewBox="0 0 16 16"><rect x="2" y="3" width="12" height="10" rx="2"/><path d="M2 7h12"/></svg>商家管理</button>
     <button class="navbtn" data-page="config" onclick="nav('config')"><svg class="ni" viewBox="0 0 16 16"><path d="M3 3h10v8H8l-3 3v-3H3z"/></svg>商家配置</button>
     <button class="navbtn" data-page="leads" onclick="nav('leads')"><svg class="ni" viewBox="0 0 16 16"><path d="M2 4h12v8H2z"/><path d="M2 4l6 4 6-4"/></svg>入驻线索<span id="leadBadge" class="badge hidden"></span></button>
-    <button class="navbtn dim"><svg class="ni" viewBox="0 0 16 16"><circle cx="8" cy="8" r="6"/><path d="M8 5v3l2 2"/></svg>套餐计费<span class="fut">规划</span></button>
+    <button class="navbtn" data-page="billing" onclick="nav('billing')"><svg class="ni" viewBox="0 0 16 16"><circle cx="8" cy="8" r="6"/><path d="M8 5v3l2 2"/></svg>套餐计费<span id="billBadge" class="badge hidden"></span></button>
+    <button class="navbtn" data-page="kb" onclick="nav('kb')"><svg class="ni" viewBox="0 0 16 16"><path d="M3 2h7l3 3v9H3z"/><path d="M5 7h6M5 10h4"/></svg>通用知识库</button>
     <button class="navbtn dim"><svg class="ni" viewBox="0 0 16 16"><path d="M2 13V8m4 5V5m4 8V9m4 4V3"/></svg>数据报表<span class="fut">规划</span></button>
     <button class="navbtn dim"><svg class="ni" viewBox="0 0 16 16"><circle cx="8" cy="8" r="2.5"/><path d="M8 2v2m0 8v2M2 8h2m8 0h2"/></svg>平台设置<span class="fut">规划</span></button>
     <div class="foot"><button style="width:100%" onclick="logout()">退出</button></div>
@@ -116,7 +117,8 @@
         <div class="row">
           <input id="mName" placeholder="商家名称(必填)" style="width:190px">
           <input id="mCity" placeholder="城市(选填)" style="width:130px">
-          <select id="mPlan"><option value="solo">个人版</option><option value="studio" selected>工作室版</option><option value="chain">连锁版</option></select>
+          <select id="mPlan"><option value="free">免费版 ¥0</option><option value="single" selected>单店版 ¥1,380/年</option><option value="studio">工作室版 ¥2,980/年</option><option value="chain">连锁版 ¥6,800/年起</option><option value="custom">定制版(面议)</option></select>
+          <select id="mTerm"><option value="year" selected>首期:年付(到期=今天+1年)</option><option value="month">首期:月付(+1月)</option><option value="trial30">试用 30 天(交付调试期)</option></select>
           <input id="mId" placeholder="租户id(选填)" style="width:160px">
           <button class="p" onclick="createTenant()">创建(建店 + 老板账号)</button>
         </div>
@@ -144,7 +146,7 @@
         <button class="tab" data-tab="hours" onclick="tab('hours')">营业时间</button>
         <button class="tab" data-tab="services" onclick="tab('services')">服务价目</button>
         <button class="tab" data-tab="techs" onclick="tab('techs')">技师</button>
-        <button class="tab" data-tab="kb" onclick="tab('kb')">AI 知识库</button>
+        <button class="tab" data-tab="kb" onclick="tab('kb')">AI 知识库（本店）</button>
       </div>
 
       <div id="tab-store" class="card" style="max-width:600px">
@@ -212,6 +214,53 @@
       </div>
     </section>
 
+    <!-- 套餐计费(2026-08-03):档位/到期/续费订单/变更申请;「标记已收款」=线下收款正式路径 -->
+    <section id="page-billing" class="hidden">
+      <h1>套餐计费</h1>
+      <div class="card">
+        <h2>待处理 <span class="muted" style="font-weight:400">(商家提交的续费订单、档位变更申请、AI 智能包试用申请)</span></h2>
+        <div id="billTodo"><div class="muted">暂无待处理</div></div>
+      </div>
+      <div class="card">
+        <h2>商家订阅总览</h2>
+        <table>
+          <thead><tr><th>商家</th><th>档位</th><th>到期日</th><th>剩余</th><th>AI 智能包</th><th>自动续费</th><th>操作</th></tr></thead>
+          <tbody id="billRows"></tbody>
+        </table>
+        <p class="muted" style="margin-top:8px">到期日留空=长期授权(内部/旗舰店)。顺延规则:以「原到期日」和「今天」较晚者为基准 +1月/+1年,商家早续不吃亏。定价(Youji Pricing 口径,纯订阅不收搭建费):免费版 ¥0 · 单店版 ¥1,380/年(¥138/月)· 工作室版 ¥2,980/年(¥298/月)· 连锁版 ¥6,800/年起(含3店,超出 +¥1,200/店/年)· 定制版面议。AI 智能包单独订阅、前 3 个月免费。</p>
+      </div>
+    </section>
+
+    <!-- 通用知识库(2026-08-04):两层知识库的「上层」,所有商家共享。下层=每家店自己的店规/FAQ,在「商家配置 → AI 知识库」里按店改。 -->
+    <section id="page-kb" class="hidden">
+      <h1>通用知识库 <span class="muted" style="font-size:13px;font-weight:400">平台层 · 所有商家共享</span></h1>
+      <div class="card">
+        <p class="muted" style="margin:0 0 10px">
+          这里放<b>通用美业流程、话术口径、转人工边界</b>——所有商家的 AI 都会读到，改完立即对全平台生效。<br>
+          <b>不要</b>把某一家店的价格、地址、会员等级写进来：那些属于店家层，在「商家配置 → AI 知识库」里按店维护，AI 回答时会自动优先用商家自己的数据。
+        </p>
+        <div class="row" style="gap:8px;flex-wrap:wrap;align-items:flex-end">
+          <label>类型<br><select id="kbpKind" onchange="kbpKindChanged()"><option value="qa">问答口径</option><option value="rule">通用规则</option></select></label>
+          <label>意图<br><select id="kbpIntent"><option value="">（不限）</option></select></label>
+          <label id="kbpQWrap" style="flex:1;min-width:220px">顾客问法<br><input id="kbpQuestion" placeholder="例:能不能直接告诉我最终价格？" style="width:100%"></label>
+          <label style="flex:2;min-width:280px"><span id="kbpContentLabel">回答口径</span><br><input id="kbpContent" placeholder="例:先安抚并解释复杂款需技师确认，避免直接给最终价" style="width:100%"></label>
+          <label id="kbpHandoffWrap">转人工<br><select id="kbpHandoff"><option value="">不需要</option><option value="technician">转技师</option><option value="frontdesk">转前台</option><option value="owner">转老板</option></select></label>
+          <button class="p" onclick="kbpAdd()">新增</button>
+        </div>
+      </div>
+      <div class="card">
+        <div class="row" style="justify-content:space-between;align-items:center">
+          <h2 style="margin:0">条目 <span class="muted" id="kbpCount"></span></h2>
+          <button class="sm" onclick="kbpReset()">恢复出厂内容</button>
+        </div>
+        <table>
+          <thead><tr><th style="width:82px">类型</th><th style="width:96px">意图</th><th>内容</th><th style="width:88px">转人工</th><th style="width:70px">启用</th><th style="width:130px">操作</th></tr></thead>
+          <tbody id="kbpRows"></tbody>
+        </table>
+        <p class="muted" style="margin-top:8px">停用=暂时不发给 AI（保留内容，随时可再启用）。删除不可撤销，但「恢复出厂内容」可以把整份平台层重置回随代码发布的初始版本。</p>
+      </div>
+    </section>
+
     <!-- 线索 -->
     <section id="page-leads" class="hidden">
       <h1>入驻线索</h1>
@@ -237,11 +286,159 @@ function esc(s){return String(s??'').replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt
 async function api(p,o={}){const r=await fetch(p,{...o,headers:{'content-type':'application/json',authorization:'Bearer '+TOKEN,...(o.headers||{})}});const d=await r.json().catch(()=>null);if(!r.ok)throw new Error((d&&d.error&&d.error.message)||('HTTP '+r.status));return d}
 async function login(){TOKEN=$('tokenInput').value.trim();try{await api('/platform/tenants');localStorage.setItem('ll-platform-token',TOKEN);$('loginWrap').classList.add('hidden');$('app').classList.remove('hidden');refreshAll()}catch(e){toast('钥匙不对或服务不可用:'+e.message)}}
 function logout(){localStorage.removeItem('ll-platform-token');location.reload()}
-function nav(p){document.querySelectorAll('.navbtn[data-page]').forEach(b=>b.classList.toggle('on',b.dataset.page===p));['overview','merchants','config','leads'].forEach(x=>$('page-'+x).classList.toggle('hidden',x!==p));if(p==='overview')loadOverview();if(p==='leads')loadLeads();if(p==='config')initConfig()}
+function nav(p){document.querySelectorAll('.navbtn[data-page]').forEach(b=>b.classList.toggle('on',b.dataset.page===p));['overview','merchants','config','leads','billing','kb'].forEach(x=>$('page-'+x).classList.toggle('hidden',x!==p));if(p==='overview')loadOverview();if(p==='leads')loadLeads();if(p==='config')initConfig();if(p==='billing')loadBilling();if(p==='kb')loadPlatformKb()}
 async function refreshAll(){await loadTenants();await loadLeads();await loadOverview()}
 
 // ===== 数据缓存 =====
-let TENANTS=[], LEADS=[]
+let TENANTS=[], LEADS=[], BILLPLANS=[]
+
+// ===== 套餐计费(2026-08-03)=====
+function moneyY(c){return '¥'+Math.round((c||0)/100).toString().replace(/\B(?=(\d{3})+(?!\d))/g,',')}
+async function loadBilling(){
+  try{
+    const d=await api('/platform/billing')
+    BILLPLANS=d.plans||[]
+    const planName=(id)=>{const p=BILLPLANS.find(x=>x.id===id);return p?p.name:id}
+    // 待处理:续费订单 + 档位变更申请
+    const todos=[]
+    ;(d.pendingOrders||[]).forEach(o=>todos.push(`<div class="todo-item"><span>💰 「${esc(o.tenantName)}」提交续费订单:${esc(planName(o.plan))} · ${o.period==='month'?'月付':'年付'} · <b>${moneyY(o.amountCents)}</b> · ${esc(String(o.createdAt).slice(0,10))}</span><button class="sm p" onclick="markPaid('${esc(o.id)}','${esc(o.tenantName)}',${o.amountCents})">已收款,顺延</button></div>`))
+    ;(d.planRequests||[]).forEach(r=>{
+      if(r.requestType==='ai_trial'){
+        // AI 智能包试用申请:商家端点「申请」只到这里,需运营联系商家、配置话术与知识库后再点开通
+        const contact=[r.storePhone?('电话 '+r.storePhone):'',r.ownerUsername?('账号 '+r.ownerUsername):''].filter(Boolean).join(' · ')
+        todos.push(`<div class="todo-item"><span>🤖 「${esc(r.tenantName)}」申请 <b>AI 智能包 3 个月免费试用</b>(当前 ${esc(planName(r.currentPlan))})${contact?' · '+esc(contact):''}<br><span class="muted">待办:联系商家 → 确认项目/价格/话术 → 配置知识库 → 点「配置好了,开通试用」</span></span><span class="row"><button class="sm p" onclick="resolveReq('${esc(r.id)}','DONE','ai_trial')">配置好了,开通试用</button><button class="sm d" onclick="resolveReq('${esc(r.id)}','REJECTED','ai_trial')">拒绝</button></span></div>`)
+      }else{
+        todos.push(`<div class="todo-item"><span>🔁 「${esc(r.tenantName)}」申请${r.requestType==='renew'?'续费':'变更档位'}:${esc(planName(r.currentPlan))} → <b>${esc(planName(r.targetPlan))}</b>${r.note?' · '+esc(r.note):''}</span><span class="row"><button class="sm p" onclick="resolveReq('${esc(r.id)}','DONE')">完成(改档)</button><button class="sm d" onclick="resolveReq('${esc(r.id)}','REJECTED')">拒绝</button></span></div>`)
+      }
+    })
+    $('billTodo').innerHTML=todos.join('')||'<div class="muted">暂无待处理</div>'
+    const n=(d.pendingOrders||[]).length+(d.planRequests||[]).length
+    $('billBadge').textContent=n;$('billBadge').classList.toggle('hidden',!n)
+    // 商家总览
+    const planOpts=(cur)=>BILLPLANS.map(p=>`<option value="${esc(p.id)}" ${p.id===cur?'selected':''}>${esc(p.name)}${p.pricing?(p.pricing.yearCents?` ${moneyY(p.pricing.yearCents)}/年`:' ¥0'):'(面议)'}</option>`).join('')
+    $('billRows').innerHTML=(d.tenants||[]).map(t=>{
+      const days=t.daysLeft
+      const left=t.planExpiresAt?(days<=0?`<span class="tag off">已到期 ${-days} 天</span>`:days<=7?`<span class="tag off">剩 ${days} 天</span>`:`剩 ${days} 天`):'<span class="muted">长期授权</span>'
+      const ai=t.ai||{}
+      const aiText={plan:'<span class="tag on">套餐已含</span>',paid:'<span class="tag on">已订阅</span>',trial:'<span class="tag on">试用中</span>',pending:'<span class="tag off">待开通(有申请)</span>',none:'<span class="muted">未开通</span>'}[ai.source]||'<span class="muted">未开通</span>'
+      const aiExp=ai.expiresAt&&ai.source!=='plan'?`<br><span class="muted">至 ${esc(String(ai.expiresAt).slice(0,10))}${ai.daysLeft!=null?(ai.daysLeft<=0?' · 已过期':' · 剩 '+ai.daysLeft+' 天'):''}</span>`:''
+      // 本月用量:快用完(≥80%)标红,好提前联系加量或谈升级
+      const u=ai.usage||{}
+      const pct=u.quota?Math.round((u.used/u.quota)*100):0
+      const aiUse=(ai.source==='none')?'':`<br><span class="${pct>=80?'tag off':'muted'}">本月 ${u.used||0}/${u.quota||0} 次${pct>=80?` · ${pct}%`:''}${u.bonus?` (含加量 ${u.bonus})`:''}</span>`
+      const aiBtns=ai.source==='plan'?`<div class="row" style="margin-top:4px"><button class="sm" onclick="setAi('${esc(t.id)}','add_quota')">加量</button></div>`:`<div class="row" style="margin-top:4px">${ai.trialAvailable?`<button class="sm" onclick="setAi('${esc(t.id)}','grant_trial')">开通试用</button>`:''}<button class="sm" onclick="setAi('${esc(t.id)}','extend','month')">+1月</button><button class="sm" onclick="setAi('${esc(t.id)}','extend','year')">+1年</button><button class="sm" onclick="setAi('${esc(t.id)}','add_quota')">加量</button>${ai.source==='none'?'':`<button class="sm d" onclick="setAi('${esc(t.id)}','revoke')">关闭</button>`}</div>`
+      return `<tr>
+      <td><b>${esc(t.name)}</b><br><span class="muted">t=${esc(t.id)}</span></td>
+      <td><select onchange="setPlan('${esc(t.id)}',this.value)">${planOpts(t.plan)}</select></td>
+      <td><input type="date" value="${t.planExpiresAt?esc(String(t.planExpiresAt).slice(0,10)):''}" onchange="setExpiry('${esc(t.id)}',this.value)" style="width:140px"></td>
+      <td>${left}</td>
+      <td>${aiText}${aiExp}${aiUse}${aiBtns}</td>
+      <td><span class="tag ${t.autoRenew?'on':'off'}">${t.autoRenew?'开':'关'}</span></td>
+      <td class="row"><button class="sm" onclick="extend('${esc(t.id)}','month')">+1月</button><button class="sm" onclick="extend('${esc(t.id)}','year')">+1年</button><button class="sm" onclick="setExpiry('${esc(t.id)}','')">设为长期</button></td>
+    </tr>`}).join('')
+    this._billTenants=d.tenants||[]
+  }catch(e){toast(e.message)}
+}
+async function setPlan(id,plan){try{await api('/platform/tenants/'+id+'/billing',{method:'POST',body:JSON.stringify({plan})});toast('档位已更新,功能开关即时生效');loadBilling()}catch(e){toast(e.message)}}
+async function setExpiry(id,date){
+  if(date===''&&!confirm('设为长期授权(不再到期)?一般只用于内部/旗舰店。'))return
+  try{await api('/platform/tenants/'+id+'/billing',{method:'POST',body:JSON.stringify({planExpiresAt:date||null})});toast(date?('到期日已设为 '+date):'已设为长期授权');loadBilling()}catch(e){toast(e.message)}
+}
+async function extend(id,period){
+  // 手工顺延(不走订单,适合口头约定/赠送):按 max(原到期日,今天)+周期
+  const t=(this._billTenants||[]).find(x=>x.id===id)
+  const base=t&&t.planExpiresAt?new Date(Math.max(Date.now(),new Date(t.planExpiresAt).getTime())):new Date()
+  const next=new Date(base);if(period==='month')next.setMonth(next.getMonth()+1);else next.setFullYear(next.getFullYear()+1)
+  const dateStr=next.toISOString().slice(0,10)
+  if(!confirm(`顺延到 ${dateStr}?(赠送/口头约定用;正式收款请走商家提交的订单点"已收款")`))return
+  try{await api('/platform/tenants/'+id+'/billing',{method:'POST',body:JSON.stringify({planExpiresAt:dateStr})});toast('已顺延到 '+dateStr);loadBilling()}catch(e){toast(e.message)}
+}
+async function markPaid(orderId,name,cents){
+  if(!confirm(`确认已收到「${name}」的 ${moneyY(cents)}?标记后到期日自动顺延,不可撤销。`))return
+  try{const r=await api('/platform/subscription-orders/'+orderId+'/mark-paid',{method:'POST',body:'{}'});toast('已入账,有效期至 '+String(r.expiresAt||r.aiExpiresAt||'').slice(0,10));loadBilling()}catch(e){toast(e.message)}
+}
+async function resolveReq(id,status,kind){
+  // AI 试用申请走「发放权益」分支(不动基础档位);其余按目标档位改档
+  if(kind==='ai_trial'){
+    if(status==='DONE'&&!confirm('确认已联系商家并配置好 AI(项目/价格/话术/知识库)?点确定即为该商家开通 3 个月免费试用。'))return
+    if(status==='REJECTED'&&!confirm('拒绝这条试用申请?商家端会恢复为「可申请试用」。'))return
+  }else if(status==='DONE'&&!confirm('标记完成将同步把该商家档位改为目标档位(到期日不变),确认?'))return
+  try{const r=await api('/platform/plan-requests/'+id+'/resolve',{method:'POST',body:JSON.stringify({status})});toast(status!=='DONE'?'已拒绝':(r.aiExpiresAt?'AI 试用已开通,有效期至 '+String(r.aiExpiresAt).slice(0,10):'已完成并改档'));loadBilling()}catch(e){toast(e.message)}
+}
+// 平台侧直接调 AI 智能包:发放试用 / 顺延 / 关闭
+async function setAi(id,action,period){
+  // 加量:只给本月多批一些次数,不动套餐也不动加购包,下月自动归零
+  if(action==='add_quota'){
+    const v=prompt('本月临时加多少次 AI 调用?(只对当月有效,下月自动归零)','1000')
+    if(v===null)return
+    const amount=Math.round(Number(v))
+    if(!amount||amount<1){toast('请输入正整数');return}
+    try{const r=await api('/platform/tenants/'+id+'/ai-addon',{method:'POST',body:JSON.stringify({action,amount})});toast(`已加量,本月 ${r.usage.used}/${r.usage.quota} 次`);loadBilling()}catch(e){toast(e.message)}
+    return
+  }
+  const txt={grant_trial:'为该商家开通 3 个月 AI 免费试用?(会占用该店唯一一次试用名额)',extend:`AI 智能包顺延 ${period==='month'?'1 个月':'1 年'}?`,revoke:'关闭该商家的 AI 智能包?关闭后小程序/网页端 AI 功能立即不可用。'}[action]
+  if(!confirm(txt))return
+  try{const r=await api('/platform/tenants/'+id+'/ai-addon',{method:'POST',body:JSON.stringify({action,period})});toast(action==='revoke'?'已关闭 AI 智能包':'AI 有效期至 '+String(r.expiresAt||'').slice(0,10));loadBilling()}catch(e){toast(e.message)}
+}
+
+// ===== 通用知识库(平台层,2026-08-04)=====
+// 这一层原先只在静态种子文件里、没有后台可改;现在存 platform_kb_entries 表,改完对全平台立即生效。
+const KB_INTENT_LABEL={pricing:'报价',booking:'预约',policy:'店规',after_sales:'售后',deposit:'定金',privacy:'隐私',nail_quote:'美甲报价',lash_intake:'美睫问诊'}
+const KB_HANDOFF_LABEL={technician:'转技师',frontdesk:'转前台',owner:'转老板'}
+function kbpKindChanged(){
+  const isRule=$('kbpKind').value==='rule'
+  $('kbpQWrap').style.display=isRule?'none':''
+  $('kbpHandoffWrap').style.display=isRule?'none':''
+  $('kbpContentLabel').textContent=isRule?'规则正文':'回答口径'
+  $('kbpContent').placeholder=isRule?'例:一单只含一个服务项目，美甲与美睫需分开预约':'例:先安抚并解释复杂款需技师确认，避免直接给最终价'
+}
+async function loadPlatformKb(){
+  try{
+    const d=await api('/platform/kb')
+    const sel=$('kbpIntent')
+    const keep=sel.value
+    sel.innerHTML='<option value="">（不限）</option>'+(d.intents||[]).map(i=>`<option value="${esc(i)}">${esc(KB_INTENT_LABEL[i]||i)}</option>`).join('')
+    sel.value=keep
+    const rows=d.entries||[]
+    $('kbpCount').textContent=`共 ${rows.length} 条 · 启用 ${rows.filter(e=>e.enabled).length} 条`
+    $('kbpRows').innerHTML=rows.map(e=>`<tr${e.enabled?'':' style="opacity:.5"'}>
+      <td><span class="tag ${e.kind==='rule'?'off':'on'}">${e.kind==='rule'?'规则':'问答'}</span></td>
+      <td>${e.intent?esc(KB_INTENT_LABEL[e.intent]||e.intent):'<span class="muted">—</span>'}</td>
+      <td>${e.kind==='qa'&&e.question?`<div class="muted" style="margin-bottom:3px">顾客问：${esc(e.question)}</div>`:''}<div>${esc(e.content)}</div></td>
+      <td>${e.handoffType?esc(KB_HANDOFF_LABEL[e.handoffType]||e.handoffType):'<span class="muted">—</span>'}</td>
+      <td><span class="tag ${e.enabled?'on':'off'}">${e.enabled?'启用':'停用'}</span></td>
+      <td class="row"><button class="sm" onclick="kbpEdit('${esc(e.id)}')">改</button><button class="sm" onclick="kbpToggle('${esc(e.id)}',${e.enabled?0:1})">${e.enabled?'停用':'启用'}</button><button class="sm d" onclick="kbpDel('${esc(e.id)}')">删</button></td>
+    </tr>`).join('')||'<tr><td colspan="6" class="muted">暂无条目</td></tr>'
+    PKB=rows
+  }catch(e){toast(e.message)}
+}
+let PKB=[]
+async function kbpAdd(){
+  const kind=$('kbpKind').value
+  const body={kind,intent:$('kbpIntent').value,content:$('kbpContent').value.trim()}
+  if(kind==='qa'){body.question=$('kbpQuestion').value.trim();body.handoffType=$('kbpHandoff').value;body.handoffRequired=Boolean($('kbpHandoff').value)}
+  if(!body.content){toast(kind==='rule'?'规则正文必填':'回答口径必填');return}
+  if(kind==='qa'&&!body.question){toast('顾客问法必填');return}
+  try{await api('/platform/kb',{method:'POST',body:JSON.stringify(body)});$('kbpQuestion').value='';$('kbpContent').value='';toast('已新增，全平台 AI 立即生效');loadPlatformKb()}catch(e){toast(e.message)}
+}
+async function kbpEdit(id){
+  const e=PKB.find(x=>x.id===id);if(!e)return
+  const content=prompt(e.kind==='rule'?'规则正文：':'回答口径：',e.content);if(content===null)return
+  const body={content}
+  if(e.kind==='qa'){const q=prompt('顾客问法：',e.question);if(q===null)return;body.question=q}
+  try{await api('/platform/kb/'+encodeURIComponent(id),{method:'PATCH',body:JSON.stringify(body)});toast('已保存');loadPlatformKb()}catch(err){toast(err.message)}
+}
+async function kbpToggle(id,enabled){
+  try{await api('/platform/kb/'+encodeURIComponent(id),{method:'PATCH',body:JSON.stringify({enabled:Boolean(enabled)})});loadPlatformKb()}catch(e){toast(e.message)}
+}
+async function kbpDel(id){
+  if(!confirm('删除这条通用知识？所有商家的 AI 都会立即不再读到它。'))return
+  try{await api('/platform/kb/'+encodeURIComponent(id),{method:'DELETE'});toast('已删除');loadPlatformKb()}catch(e){toast(e.message)}
+}
+async function kbpReset(){
+  if(!confirm('恢复出厂内容？会清空当前平台层的全部条目，用随代码发布的初始版本重建。你手工加的内容会丢失，不可撤销。'))return
+  try{const r=await api('/platform/kb/reset',{method:'POST',body:'{}'});toast(`已恢复 ${r.count} 条`);loadPlatformKb()}catch(e){toast(e.message)}
+}
 
 // ===== 概览 =====
 async function loadOverview(){
@@ -279,9 +476,9 @@ async function toggleTenant(id){if(!confirm('确认切换营业状态?停用后�
 async function createTenant(){
   const name=$('mName').value.trim();if(!name){toast('商家名称必填');return}
   try{
-    const d=await api('/platform/tenants',{method:'POST',body:JSON.stringify({name,city:$('mCity').value.trim(),plan:$('mPlan').value,id:$('mId').value.trim()})})
+    const d=await api('/platform/tenants',{method:'POST',body:JSON.stringify({name,city:$('mCity').value.trim(),plan:$('mPlan').value,initialTerm:$('mTerm').value,id:$('mId').value.trim()})})
     $('credBox').classList.remove('hidden')
-    $('credBox').innerHTML=`✅ <b>${esc(d.tenant.name)}</b>(${esc(d.tenant.id)})已创建<br>老板账号:<b>${esc(d.owner.username)}</b> 初始密码:<b>${esc(d.owner.initialPassword)}</b>(只显示一次;商家控制台开放前账号暂不可登录)<br>店码 scene:<b>${esc(d.shopEntry.scene)}</b> · <a href="javascript:void(0)" onclick="goConfig('${esc(d.tenant.id)}')">→ 去替商家配置资料</a>`
+    $('credBox').innerHTML=`✅ <b>${esc(d.tenant.name)}</b>(${esc(d.tenant.id)})已创建,订阅到期日 <b>${esc(String(d.tenant.planExpiresAt||'').slice(0,10))}</b>(套餐计费页可改)<br>老板账号:<b>${esc(d.owner.username)}</b> 初始密码:<b>${esc(d.owner.initialPassword)}</b>(只显示一次;商家控制台开放前账号暂不可登录)<br>店码 scene:<b>${esc(d.shopEntry.scene)}</b> · <a href="javascript:void(0)" onclick="goConfig('${esc(d.tenant.id)}')">→ 去替商家配置资料</a>`
     $('mName').value=$('mCity').value=$('mId').value=''
     loadTenants()
   }catch(e){toast(e.message)}

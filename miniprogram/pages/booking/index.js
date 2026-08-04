@@ -39,6 +39,9 @@ Page({
 
   async refresh(options) {
     const lang = i18n.getLang()
+    // aiEnabled = 门店是否开通 AI 智能包(值由 /stores 下发并缓存)
+    // aiReferenceEnabled = 参考图 AI 分析是否上线;2026-08-04 店主定暂不上线,升级完改回 api.getStoreAiEnabled()
+    this.setData({ aiEnabled: api.getStoreAiEnabled(), aiReferenceEnabled: false })
     i18n.applyTabBar(lang)
     i18n.setTitle(i18n.pageCopy('booking', lang).title)
     const service = i18n.localizeService(await api.getService(options.id, lang), lang)
@@ -225,7 +228,13 @@ Page({
         referenceMessage: this.data.lang === 'en' ? (analysis.clientMessageEn || analysis.priceMessageEn || '') : (analysis.clientMessageZh || analysis.priceMessageZh || '')
       })
     } catch (error) {
-      wx.showToast({ title: error.message || 'AI 分析暂不可用', icon: 'none' })
+      // 不再返回假分析(原来失败会给一个写死的 $238/$198 报价);如实告诉顾客走人工报价
+      const code = error && (error.code || error.statusCode)
+      const msg = (code === 'AI_ADDON_REQUIRED' || code === 403)
+        ? (this.data.lang === 'en' ? 'Style analysis is unavailable; the artist will quote for you.' : '本店未开通款式分析，技师会为你人工报价')
+        : (this.data.lang === 'en' ? 'Analysis unavailable, please try again later.' : 'AI 分析暂不可用，稍后再试或直接提交预约')
+      wx.showToast({ title: msg, icon: 'none', duration: 2600 })
+      this.setData({ referenceAnalysis: null })
     } finally {
       this.setData({ isAnalyzingReference: false })
     }

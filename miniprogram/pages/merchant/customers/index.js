@@ -63,7 +63,12 @@ Page({
     couponSheet: false, coupons: [], granting: false
   },
 
-  async onShow() { if (!(await api.guardOwner())) return; this.load() },
+  async onShow() {
+    if (!(await api.guardOwner())) return
+    this.setData({ aiEnabled: api.merchantHasAi() })
+    api.refreshMerchantAi().then((on) => this.setData({ aiEnabled: on }))
+    this.load()
+  },
 
   async load() {
     try {

@@ -32,6 +32,8 @@ Page({
       return
     }
     tabbar.update(this, 0)
+    // 门店没开通 AI 智能包就不显示「AI 在线客服」入口(值由 /stores 下发并缓存)
+    this.setData({ aiEnabled: api.getStoreAiEnabled() })
     this.refreshLanguage()
     this.loadShopName()
   },
@@ -48,7 +50,8 @@ Page({
 
   switchShop() { wx.navigateTo({ url: '/pages/shop-select/index' }) },
 
-  goAiChat() { wx.navigateTo({ url: '/pages/ai-chat/index' }) },
+  // AI 在线客服入口已下线(2026-08-04),页面保留备用;此处留空避免有残留调用导致跳转报错
+  goAiChat() { /* 入口已下线,改走企业微信外部客服 */ },
 
   // ===== 店卡:今日营业时间/营业状态(按门店时区算,不用手机本地时区) =====
   computeTodayHours(store) {

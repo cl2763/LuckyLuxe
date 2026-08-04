@@ -8,6 +8,21 @@ import pg from 'pg'
 import { analyzeReferenceImage, createBookingSummary, createCustomerInsight, createCustomerServiceReply, createDailyBrief, createSocialCopy } from './ai-utils.mjs'
 import { buildKnowledgeContext } from './kb-utils.mjs'
 
+// ⚠⚠⚠ 停用中,请勿部署 ⚠⚠⚠
+// 这是早期的 Supabase/Postgres 版后端,**没有任何套餐与权限逻辑**:
+//   · 没有 checkEntitlement / getEntitlements / tenant_entitlements
+//   · AI 客服、参考图分析、社媒文案、每日简报、订单摘要、客户洞察等 8 个 AI 接口全部无闸门
+// 生产实际运行的是 apps/api/local-server.mjs(见 railway.json 的 startCommand),
+// AI 智能包的收费闸门、用量配额、租户隔离修复统统只做在那一边。
+// 如果哪天真要启用这个文件,必须先把 local-server.mjs 里的 hasAi()/requireAi()/requireAiQuota()/
+// countAiUsage()/租户上下文 全部移植过来,否则等于把 AI 免费敞开给所有人。
+// —— 2026-08-04
+if (process.env.ALLOW_SUPABASE_SERVER !== 'true') {
+  console.error('[supabase-server] 已停用:该后端缺少套餐/权限闸门,禁止部署。生产请用 apps/api/local-server.mjs。')
+  console.error('[supabase-server] 确需本地调试请设 ALLOW_SUPABASE_SERVER=true 后重试。')
+  process.exit(1)
+}
+
 process.env.TZ = process.env.APP_TIMEZONE || 'America/Toronto'
 
 const { Pool } = pg

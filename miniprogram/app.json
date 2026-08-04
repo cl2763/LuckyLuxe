@@ -30,6 +30,7 @@
     "pages/merchant/services/index",
     "pages/merchant/service-edit/index",
     "pages/merchant/me/index",
+    "pages/merchant/subscription/index",
     "pages/merchant/marketing/index",
     "pages/merchant/member/index",
     "pages/merchant/package-edit/index",

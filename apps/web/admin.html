@@ -4,7 +4,7 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>有迹 · 商家后台</title>
-    <link rel="stylesheet" href="/web/styles.css?v=20260802g-web-b2">
+    <link rel="stylesheet" href="/web/styles.css?v=20260804a-web-sub2">
     <style>
       /* 2026-08-02 财务指标显隐+动效(店主 v4 定稿):AI智能总结卡 / 目标进度条(带平衡线刻度) / 设目标引导与弹窗。
          放这里不放 styles.css:本批约定只动 admin.js + admin.html 两个文件。 */
@@ -47,6 +47,62 @@
       .fin-goal-tip{margin-top:6px}
       .fin-goal-save{width:100%;margin-top:14px}
       .fin-goal-skip{text-align:center;margin-top:8px}
+
+      /* ===== 套餐与续费(网页版,与小程序同构)===== */
+      .sub-grid{display:grid;grid-template-columns:minmax(0,1.35fr) minmax(0,1fr);gap:16px;align-items:start}
+      @media (max-width:980px){.sub-grid{grid-template-columns:1fr}}
+      .sub-hero{background:linear-gradient(135deg,#2d2826,#4a3f39);color:#fff;border-radius:18px;padding:22px 24px}
+      .sub-hero .sub-eyebrow{font-size:12px;letter-spacing:.08em;text-transform:uppercase;opacity:.65;margin:0}
+      .sub-hero h2{margin:6px 0 0;font-size:28px;font-weight:800;display:flex;align-items:center;gap:10px;flex-wrap:wrap}
+      .sub-tag{font-size:12px;font-weight:700;border-radius:999px;padding:4px 12px;background:rgba(255,255,255,.16)}
+      .sub-tag.ok{background:#2f7d5c}
+      .sub-tag.warn{background:#c0603a}
+      .sub-exp{margin:10px 0 0;font-size:13px;opacity:.82}
+      .sub-bar{margin-top:14px;height:7px;border-radius:999px;background:rgba(255,255,255,.18);overflow:hidden}
+      .sub-bar i{display:block;height:100%;border-radius:999px;background:#e9c9a4;width:0;transition:width .9s cubic-bezier(.22,.9,.3,1)}
+      .sub-alert{margin-top:14px;background:#fff5ec;border:1px solid #f0d8bf;border-radius:12px;padding:12px 14px;font-size:13px;color:#8a5a2b;line-height:1.6}
+      .sub-alert.info{background:#f2f5fa;border-color:#dbe3ef;color:#4a5a72}
+      .sub-card{background:#fff;border:1px solid #ece3da;border-radius:16px;padding:18px 20px}
+      .sub-card h3{margin:0 0 4px;font-size:15px;font-weight:800;color:#2d2826}
+      .sub-card .sub-note{margin:0;font-size:12px;color:#8c8279;line-height:1.6}
+      .sub-row{display:flex;align-items:center;justify-content:space-between;gap:16px}
+      .sub-switch{position:relative;width:52px;height:30px;border-radius:999px;background:#ded4ca;border:none;cursor:pointer;flex:none;transition:background .25s}
+      .sub-switch[aria-checked="true"]{background:#2f7d5c}
+      .sub-switch i{position:absolute;top:3px;left:3px;width:24px;height:24px;border-radius:50%;background:#fff;transition:transform .25s;box-shadow:0 1px 3px rgba(0,0,0,.2)}
+      .sub-switch[aria-checked="true"] i{transform:translateX(22px)}
+      .sub-seg{display:inline-flex;background:#f3ede6;border-radius:999px;padding:4px;gap:4px}
+      .sub-seg button{border:none;background:transparent;border-radius:999px;padding:8px 20px;font-size:13px;font-weight:700;color:#8c8279;cursor:pointer;transition:all .2s}
+      .sub-seg button.on{background:#2d2826;color:#fff;box-shadow:0 2px 6px rgba(45,40,38,.22)}
+      .sub-pay{width:100%;margin-top:14px;font-size:15px;font-weight:800}
+      .sub-tiers{display:grid;grid-template-columns:repeat(auto-fill,minmax(210px,1fr));gap:12px;margin-top:4px}
+      .sub-tier{border:1px solid #ece3da;border-radius:14px;padding:15px 16px;background:#fff;position:relative;transition:border-color .2s,box-shadow .2s}
+      .sub-tier:hover{border-color:#d9bf9f;box-shadow:0 4px 14px rgba(45,40,38,.07)}
+      .sub-tier.cur{border-color:#2d2826;box-shadow:0 4px 16px rgba(45,40,38,.12)}
+      .sub-tier .tname{font-size:15px;font-weight:800;color:#2d2826}
+      .sub-tier .tprice{font-size:20px;font-weight:800;color:#8a5a44;margin-top:6px}
+      .sub-tier .tsub{font-size:12px;color:#8c8279;margin-top:2px}
+      .sub-tier .tfit{font-size:12px;color:#6f665e;margin-top:8px;line-height:1.55;min-height:34px}
+      .sub-tier .tbadge{position:absolute;top:-9px;right:12px;font-size:11px;font-weight:700;background:#8a5a44;color:#fff;border-radius:999px;padding:3px 10px}
+      .sub-tier .tcur{display:inline-block;margin-top:10px;font-size:12px;font-weight:700;color:#2f7d5c}
+      .sub-tier button{margin-top:10px;width:100%}
+      .sub-ai{border:1px solid #ece3da;border-radius:16px;background:#fff;padding:18px 20px}
+      .sub-ai-top{display:flex;justify-content:space-between;gap:16px;align-items:flex-start}
+      .sub-ai h3{margin:0;font-size:15px;font-weight:800;color:#2d2826;display:flex;align-items:center;gap:8px}
+      .sub-ai-badge{font-size:11px;font-weight:700;border-radius:999px;padding:3px 10px;background:#f2ebe4;color:#8c8279}
+      .sub-ai-badge.on{background:#e3eee8;color:#2f7d5c}
+      .sub-ai-badge.trial{background:#fdeeea;color:#b8452f}
+      .sub-ai-desc{margin:6px 0 0;font-size:12px;color:#8c8279;line-height:1.6}
+      .sub-ai-exp{margin:8px 0 0;font-size:12px;font-weight:700;color:#8a5a44;line-height:1.6}
+      .sub-ai-price{flex:none;text-align:right;font-size:19px;font-weight:800;color:#8a5a44}
+      .sub-ai-price span{display:block;font-size:12px;font-weight:600;color:#8c8279}
+      .sub-ai-btns{display:flex;gap:10px;margin-top:14px;flex-wrap:wrap}
+      .sub-ai-btns button{flex:1;min-width:150px}
+      .sub-ai-btns .waiting{flex:1;min-width:150px;text-align:center;font-size:13px;font-weight:700;color:#a08a6d;background:#f6efe6;border:1px solid #e7d9c6;border-radius:999px;padding:10px 8px}
+      .sub-hist{width:100%;border-collapse:collapse;font-size:13px}
+      .sub-hist th{text-align:left;font-size:12px;color:#8c8279;font-weight:600;padding:8px 10px;border-bottom:1px solid #ece3da}
+      .sub-hist td{padding:10px;border-bottom:1px solid #f5f0ea;color:#2d2826}
+      .sub-hist tr:last-child td{border-bottom:none}
+      .sub-hist .pend{color:#b8452f;font-weight:700}
     </style>
   </head>
   <body>
@@ -110,7 +166,7 @@
           <button class="sidebar-link" data-admin-page="membership" id="sidebarMembership" type="button">会员套餐/券</button>
           <button class="sidebar-link" data-admin-page="wechatMock" id="sidebarWechatMock" type="button"><span id="sidebarWechatMockLabel">客服工作台</span><span class="sidebar-badge hidden" id="wechatNeedsHumanBadge"></span></button>
           <button class="sidebar-link" data-admin-page="aiGallery" id="sidebarAiGallery" type="button">AI 图库</button>
-          <button class="sidebar-link" data-admin-page="storeSettings" id="sidebarStoreSettings" type="button">门店设置</button>
+          <button class="sidebar-link" data-admin-page="storeSettings" id="sidebarStoreSettings" type="button">门店设置<span class="sidebar-badge hidden" id="subscriptionBadge"></span></button>
           <span class="sidebar-version" id="sidebarVersion"></span>
         </aside>
 
@@ -492,6 +548,6 @@
     </main>
 
     <div class="toast" id="toast"></div>
-    <script src="/web/admin.js?v=20260802g-web-b2"></script>
+    <script src="/web/admin.js?v=20260804a-web-sub2"></script>
   </body>
 </html>

@@ -64,6 +64,7 @@ Page({
   },
 
   onShow() {
+    if (!api.guardMerchant()) return
     if (this.data.mode === 'today') this.loadDayView(this.data.selDate || todayStr())
     else this.loadList()
   },
