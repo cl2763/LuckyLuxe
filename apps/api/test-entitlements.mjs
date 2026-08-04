@@ -60,7 +60,11 @@ async function main() {
     check('customer message still recorded and marked needs_human', blocked.data?.conversation?.status === 'needs_human', blocked.data?.conversation?.status)
 
     const webBlocked = await request('/ai/customer-service', { method: 'POST', body: JSON.stringify({ lang: 'zh', message: '营业时间？' }) })
-    check('web channel returns human notice when disabled', /人工客服/.test(webBlocked.data?.reply?.data?.answerZh || ''), JSON.stringify(webBlocked.data).slice(0, 200))
+    // 2026-08-04 店主批准的口径变更:原断言要求兜底文案含「人工客服」,但 AI 关闭时消息并不入会话库,
+    // 承诺"人工会回复"是假的;新口径 = 给顾客一条真能走通的路(小程序自助预约/门店电话),且不暴露商家订阅状态。
+    check('web channel returns actionable notice when disabled',
+      webBlocked.data?.reply?.data?.intent === 'entitlement_disabled' && /预约/.test(webBlocked.data?.reply?.data?.answerZh || ''),
+      JSON.stringify(webBlocked.data).slice(0, 200))
 
     // 3. 试用过期 → 拦;试用未过期 → 放
     await setAi({ enabled: true, expiresAt: '2020-01-01T00:00:00.000Z' })
