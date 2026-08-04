@@ -617,6 +617,30 @@ function seedTenant(cfg) {
       }, false)
     })
 
+    // ── 作品图库:挑 4 单标记为已授权展示 ──
+    // 图片用内联 SVG data-uri(几百字节),不走 base64 照片,避免把生产库撑大;演示时视觉上是 4 张美甲色卡。
+    const artwork = (c1, c2, label) => `data:image/svg+xml;utf8,${encodeURIComponent(
+      `<svg xmlns="http://www.w3.org/2000/svg" width="600" height="800" viewBox="0 0 600 800">` +
+      `<defs><linearGradient id="g" x1="0" y1="0" x2="1" y2="1">` +
+      `<stop offset="0" stop-color="${c1}"/><stop offset="1" stop-color="${c2}"/></linearGradient></defs>` +
+      `<rect width="600" height="800" fill="url(#g)"/>` +
+      `<circle cx="300" cy="330" r="120" fill="#ffffff" opacity="0.18"/>` +
+      `<circle cx="300" cy="330" r="72" fill="#ffffff" opacity="0.22"/>` +
+      `<text x="300" y="620" font-family="PingFang SC,sans-serif" font-size="44" fill="#ffffff" text-anchor="middle" opacity="0.92">${label}</text>` +
+      `<text x="300" y="676" font-family="PingFang SC,sans-serif" font-size="24" fill="#ffffff" text-anchor="middle" opacity="0.6">演示作品</text></svg>`
+    )}`
+    const gallerySet = [
+      ['#d9a7a0', '#8c5a52', '奶油法式'],
+      ['#7d6a94', '#3d2f52', '猫眼酒红'],
+      ['#c8a47e', '#8a6a3f', '裸色简约'],
+      ['#88a8a0', '#3f6058', '雾面豆沙']
+    ]
+    done.slice(-4).forEach((b, i) => {
+      const [c1, c2, label] = gallerySet[i % gallerySet.length]
+      db.prepare(`UPDATE bookings SET gallery_status='approved', approved_work_images_json=?, work_images_json=?, gallery_locked_at=? WHERE id=?`)
+        .run(JSON.stringify([artwork(c1, c2, label)]), JSON.stringify([artwork(c1, c2, label)]), b.start, b.id)
+    })
+
     // ── 站内提醒(老板催员工写小记)──
     if (hasTable('staff_nudges')) {
       insertRow('staff_nudges', {
