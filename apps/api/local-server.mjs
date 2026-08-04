@@ -4140,6 +4140,9 @@ function setConversationHandoffOwner(conversationId, ownerRole = 'human', adminS
 async function appendManualWecomReply(conversationId, body = {}, adminSession = {}) {
   const message = String(body.message || body.content || '').trim()
   if (!message) throw apiError(400, 'MESSAGE_REQUIRED', 'Manual reply message is required.')
+  // 回复一个不存在的会话没有意义:以前会 upsert 出一条空壳会话,污染客服工作台(老板会看到凭空冒出来的对话)。
+  const existing = db.prepare('SELECT id FROM wechat_conversations WHERE id = ?').get(conversationId)
+  if (!existing) throw apiError(404, 'CONVERSATION_NOT_FOUND', '会话不存在。')
   saveManualReplyLearningSample(conversationId, message, adminSession)
   const currentState = getConversationState(conversationId)
   const quoteSignal = manualReplyQuoteSignal(message, currentState)
