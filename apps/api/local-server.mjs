@@ -6800,15 +6800,22 @@ async function route(req, res) {
   }
   // 公开门店列表(兜底进店:顾客没带店标识时选择进入哪家)
   if (req.method === 'GET' && path === '/shops') {
+    // 默认不返回演示门店(顾客看不到);店主在小程序里开「演示模式」时带 ?include=demo 才返回。
+    const includeDemo = String(query.include || '') === 'demo' ? 1 : 0
     const rows = db.prepare(`
       SELECT t.id, t.name AS tenant_name, s.name AS store_name, s.address, s.phone
       FROM tenants t
       JOIN stores s ON s.tenant_id = t.id AND s.is_active = 1
-      WHERE t.status = 'active'
+      WHERE t.status = 'active' AND (t.id NOT LIKE 'demo-%' OR ? = 1)
       GROUP BY t.id
       ORDER BY t.name ASC
-    `).all()
-    return json(res, 200, { shops: rows.map((r) => ({ tenantId: r.id, name: r.tenant_name || r.store_name, storeName: r.store_name, address: r.address || '', phone: r.phone || '' })) })
+    `).all(includeDemo)
+    return json(res, 200, {
+      shops: rows.map((r) => ({
+        tenantId: r.id, name: r.tenant_name || r.store_name, storeName: r.store_name,
+        address: r.address || '', phone: r.phone || '', isDemo: String(r.id).startsWith('demo-')
+      }))
+    })
   }
   if (req.method === 'GET' && path.startsWith('/booking-drafts/')) {
     const draft = getBookingDraftById(path.split('/')[2], query.lang || 'zh')
@@ -10372,7 +10379,10 @@ try {
   if (!String(error.message || '').includes('duplicate column')) throw error
 }
 // 回填历史行的哈希链(需先移除触发器才能 UPDATE,回填后立即重建)
-db.exec('DROP TRIGGER IF EXISTS finance_txn_no_update; DROP TRIGGER IF EXISTS finance_txn_no_delete;')
+// 演示租户(id 以 demo- 开头)的账本要能整体销毁,所以旧的无条件触发器一律重建为带 WHEN 条件的版本。
+db.exec(`DROP TRIGGER IF EXISTS finance_txn_no_update; DROP TRIGGER IF EXISTS finance_txn_no_delete;
+  DROP TRIGGER IF EXISTS stored_value_no_update; DROP TRIGGER IF EXISTS stored_value_no_delete;
+  DROP TRIGGER IF EXISTS points_ledger_no_update; DROP TRIGGER IF EXISTS points_ledger_no_delete;`)
 {
   const unhashed = db.prepare('SELECT COUNT(*) AS n FROM finance_transactions WHERE row_hash IS NULL').get()
   if (unhashed.n > 0) {
@@ -10387,16 +10397,28 @@ db.exec('DROP TRIGGER IF EXISTS finance_txn_no_update; DROP TRIGGER IF EXISTS fi
     }
   }
 }
-// 数据库层强制只追加:任何 UPDATE/DELETE 直接拒绝,纠错只能走红字冲销/调整分录
+// 数据库层强制只追加:任何 UPDATE/DELETE 直接拒绝,纠错只能走红字冲销/调整分录。
+// 唯一豁免:演示租户(tenant_id 以 'demo-' 开头)——它们的数据本来就是给店主演示用的、要能一键销毁重建,
+// 真实商户(lucky-luxe 及未来所有正式租户)的只追加保证完全不变。
 db.exec(`
   CREATE TRIGGER finance_txn_no_update BEFORE UPDATE ON finance_transactions
+  WHEN OLD.tenant_id NOT LIKE 'demo-%'
   BEGIN SELECT RAISE(ABORT, 'finance ledger is append-only'); END;
   CREATE TRIGGER finance_txn_no_delete BEFORE DELETE ON finance_transactions
+  WHEN OLD.tenant_id NOT LIKE 'demo-%'
   BEGIN SELECT RAISE(ABORT, 'finance ledger is append-only'); END;
-  CREATE TRIGGER IF NOT EXISTS stored_value_no_update BEFORE UPDATE ON stored_value_transactions
+  CREATE TRIGGER stored_value_no_update BEFORE UPDATE ON stored_value_transactions
+  WHEN OLD.tenant_id NOT LIKE 'demo-%'
   BEGIN SELECT RAISE(ABORT, 'stored value ledger is append-only'); END;
-  CREATE TRIGGER IF NOT EXISTS stored_value_no_delete BEFORE DELETE ON stored_value_transactions
+  CREATE TRIGGER stored_value_no_delete BEFORE DELETE ON stored_value_transactions
+  WHEN OLD.tenant_id NOT LIKE 'demo-%'
   BEGIN SELECT RAISE(ABORT, 'stored value ledger is append-only'); END;
+  CREATE TRIGGER points_ledger_no_update BEFORE UPDATE ON points_transactions
+  WHEN OLD.tenant_id NOT LIKE 'demo-%'
+  BEGIN SELECT RAISE(ABORT, 'points ledger is append-only'); END;
+  CREATE TRIGGER points_ledger_no_delete BEFORE DELETE ON points_transactions
+  WHEN OLD.tenant_id NOT LIKE 'demo-%'
+  BEGIN SELECT RAISE(ABORT, 'points ledger is append-only'); END;
 `)
 
 // 统一身份回填:早期用户只有 users 表字段、没有 user_identities 记录,补齐映射。

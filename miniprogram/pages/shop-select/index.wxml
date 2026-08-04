@@ -1,7 +1,8 @@
 <view class="pg">
   <view class="head">
-    <view class="ht">选择要进入的门店</view>
+    <view class="ht" bindtap="tapTitle">选择要进入的门店</view>
     <view class="hd">扫店内小程序码可直接进店;也可在下方选择。</view>
+    <view class="demotip" wx:if="{{demoMode}}">演示模式已开启 · 列表含演示门店(顾客看不到)</view>
   </view>
 
   <view class="scanbtn" bindtap="scan">扫码进店</view>
@@ -12,7 +13,7 @@
   <view class="shop" wx:for="{{shops}}" wx:key="tenantId" data-id="{{item.tenantId}}" data-name="{{item.name}}" bindtap="pick">
     <view class="sav">{{item.name[0]}}</view>
     <view class="sinfo">
-      <view class="sname">{{item.name}}</view>
+      <view class="sname">{{item.name}}<text class="dtag" wx:if="{{item.isDemo}}">演示</text></view>
       <view class="saddr" wx:if="{{item.address}}">{{item.address}}</view>
     </view>
     <text class="chev">›</text>

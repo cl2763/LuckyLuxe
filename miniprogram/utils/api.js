@@ -513,8 +513,9 @@ function submitMerchantLead(data) {
 }
 
 // 公开门店列表(兜底进店)
-function getShops() {
-  return request('/shops')
+// includeDemo=true 时返回演示门店(店主在选店页开「演示模式」才会传;顾客永远看不到)
+function getShops(includeDemo) {
+  return request(includeDemo ? '/shops?include=demo' : '/shops')
 }
 
 // AI 客服(按当前店回答;登录时自动带顾客身份与订单上下文)
