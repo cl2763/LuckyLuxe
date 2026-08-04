@@ -50,6 +50,7 @@ const uid = (p) => `${p}-${randomUUID().slice(0, 8)}`
 const adminPasswordHash = (username, password) =>
   createHash('sha256').update(`admin:${String(username).toLowerCase()}:${String(password)}`).digest('hex')
 const DEMO_PASSWORD = 'demo1234'
+const DEMO_FINANCE_PW = '886688' // 演示店财务密码(固定,方便演示;真实商户各自设置不受影响)
 
 // ── 门店时区下的"今天",预约全部按相对日期生成,演示永远不会变成一屏死数据 ──
 function storeToday() {
@@ -193,10 +194,13 @@ function seedTenant(cfg) {
   db.exec('BEGIN IMMEDIATE')
   try {
     // 租户 + 套餐(AI 版给连锁档自带 AI,基础版给单店档无 AI)
+    // 财务密码固定为 DEMO_FINANCE_PW,否则财务页进不去(演示时最尴尬的一环)。
+    // 哈希算法必须与 local-server.mjs 的 financePasswordHash 一致:sha256("finance:<tenantId>:<password>")
     insertRow('tenants', {
       id: tenantId, name: tenantName, status: 'active',
       plan: withAi ? 'chain' : 'single',
       plan_expires_at: iso(new Date(Date.now() + 365 * 86400000)),
+      finance_password_hash: createHash('sha256').update(`finance:${tenantId}:${DEMO_FINANCE_PW}`).digest('hex'),
       created_at: now, updated_at: now
     })
 
