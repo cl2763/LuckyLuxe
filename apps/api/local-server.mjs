@@ -1938,13 +1938,14 @@ function serializeAiResponseFeedback(row) {
   }
 }
 
-function getAiResponseFeedback({ limit = 40, status = 'approved' } = {}) {
+function getAiResponseFeedback({ limit = 40, status = 'approved', tenantId = currentTenantId() } = {}) {
+  // 2026-08-07:必须按租户过滤——这些样本会进 AI 提示词,跨店混用等于把 A 店的话术和价格教给 B 店的顾客
   return db.prepare(`
     SELECT * FROM ai_response_feedback
-    WHERE (? = '' OR status = ?)
+    WHERE tenant_id = ? AND (? = '' OR status = ?)
     ORDER BY updated_at DESC
     LIMIT ?
-  `).all(status || '', status || '', Number(limit) || 40).map(serializeAiResponseFeedback)
+  `).all(tenantId, status || '', status || '', Number(limit) || 40).map(serializeAiResponseFeedback)
 }
 
 function ownerApprovedReplyPrompt(lang = 'zh', samples = getAiResponseFeedback({ limit: 10, status: 'approved' })) {
@@ -2020,10 +2021,11 @@ function saveAiResponseFeedback(body = {}, adminSession = {}) {
   }
   db.prepare(`
     INSERT INTO ai_response_feedback
-      (id, conversation_id, message_index, customer_message, original_reply, corrected_reply, notes, lang, source_channel, intent, status, created_by, created_at, updated_at)
-    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+      (id, tenant_id, conversation_id, message_index, customer_message, original_reply, corrected_reply, notes, lang, source_channel, intent, status, created_by, created_at, updated_at)
+    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
   `).run(
     id,
+    currentTenantId(),
     conversationId,
     messageIndex,
     customerMessage,
@@ -2042,9 +2044,10 @@ function saveAiResponseFeedback(body = {}, adminSession = {}) {
   db.prepare(`
     INSERT INTO ai_learning_examples
       (id, tenant_id, conversation_id, feedback_id, source, customer_message, original_reply, corrected_reply, context_json, tags_json, status, created_at, updated_at)
-    VALUES (?, 'lucky-luxe', ?, ?, 'owner_feedback', ?, ?, ?, ?, ?, ?, ?, ?)
+    VALUES (?, ?, ?, ?, 'owner_feedback', ?, ?, ?, ?, ?, ?, ?, ?)
   `).run(
     learningId,
+    currentTenantId(),
     conversationId,
     id,
     customerMessage,
@@ -4118,10 +4121,11 @@ function saveManualReplyLearningSample(conversationId, correctedReply, adminSess
   const now = iso(new Date())
   db.prepare(`
     INSERT INTO ai_response_feedback
-      (id, conversation_id, message_index, customer_message, original_reply, corrected_reply, notes, lang, status, created_by, created_at, updated_at)
-    VALUES (?, ?, ?, ?, ?, ?, ?, ?, 'approved', ?, ?, ?)
+      (id, tenant_id, conversation_id, message_index, customer_message, original_reply, corrected_reply, notes, lang, status, created_by, created_at, updated_at)
+    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, 'approved', ?, ?, ?)
   `).run(
     feedbackId,
+    currentTenantId(),
     conversationId,
     Math.max(0, transcript.length - 1),
     lastCustomer.content,
@@ -4136,9 +4140,10 @@ function saveManualReplyLearningSample(conversationId, correctedReply, adminSess
   db.prepare(`
     INSERT INTO ai_learning_examples
       (id, tenant_id, conversation_id, feedback_id, source, customer_message, original_reply, corrected_reply, context_json, tags_json, status, created_at, updated_at)
-    VALUES (?, 'lucky-luxe', ?, ?, 'manual_staff_reply', ?, ?, ?, ?, ?, 'approved', ?, ?)
+    VALUES (?, ?, ?, ?, 'manual_staff_reply', ?, ?, ?, ?, ?, 'approved', ?, ?)
   `).run(
     randomId('learn'),
+    currentTenantId(),
     conversationId,
     feedbackId,
     lastCustomer.content,
@@ -11217,6 +11222,22 @@ db.exec(`
   SELECT 'identity-bf-' || lower(hex(randomblob(6))), id, 'phone', phone, phone, datetime('now'), datetime('now')
   FROM users WHERE phone IS NOT NULL AND phone != '';
 `)
+// ===== AI 纠偏样本的租户归属(2026-08-07)=====
+// ai_response_feedback 一直没有 tenant_id,而 ownerApprovedReplyPrompt 会把「最近 10 条已批准样本」
+// 无差别塞进每一家店的提示词——旗舰店训练出来的话术(含 CAD 定价、本店政策)因此串到了所有商家。
+// 生产实测:小婕店(CNY)问价被真实模型答成「CAD $368」。加列 + 按租户过滤即可,
+// DEFAULT 'lucky-luxe' 让存量行自动归旗舰店(它们本来就都是旗舰店产生的),旗舰店行为一字不变。
+for (const sql of [
+  "ALTER TABLE ai_response_feedback ADD COLUMN tenant_id TEXT NOT NULL DEFAULT 'lucky-luxe'"
+]) {
+  try {
+    db.exec(sql)
+  } catch (error) {
+    if (!String(error.message || '').includes('duplicate column')) throw error
+  }
+}
+db.exec('CREATE INDEX IF NOT EXISTS idx_ai_response_feedback_tenant ON ai_response_feedback(tenant_id, status, updated_at)')
+
 // ===== P0 多价位价格模型(2026-08-06)=====
 // 背景:美业真实门店一个项目有多个价位(原价/分享价/会员价/疗程价),还有「按指计费」「足部加收」等行业规则。
 // 纪律:services.price_cents 语义不变 = 原价(tier_key='list'),老小程序的 /services、/stores 字段一个不动;
