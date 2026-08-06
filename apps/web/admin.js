@@ -1,5 +1,5 @@
 // 构建号:每次交付递增。侧栏可见,排查"改了没生效"时先对版本。
-const ADMIN_BUILD = '20260804a-web-sub2'
+const ADMIN_BUILD = '20260806a-p0-pricing'
 console.log(`[admin] build ${ADMIN_BUILD}`)
 
 // "今天"必须按门店时区算(服务器同样钉在此时区),否则老板人在别的时区时全站日期错位一天。
@@ -104,6 +104,19 @@ const els = {
   bookingsPage: document.querySelector('#bookingsPage'),
   schedulePage: document.querySelector('#schedulePage'),
   servicesPage: document.querySelector('#servicesPage'),
+  pricingPage: document.querySelector('#pricingPage'),
+  pricingTabs: document.querySelector('#pricingTabs'),
+  pricingCategoriesPanel: document.querySelector('#pricingCategoriesPanel'),
+  pricingItemsPanel: document.querySelector('#pricingItemsPanel'),
+  pricingRulesPanel: document.querySelector('#pricingRulesPanel'),
+  pricingCategoryList: document.querySelector('#pricingCategoryList'),
+  pricingItemList: document.querySelector('#pricingItemList'),
+  pricingItemEditor: document.querySelector('#pricingItemEditor'),
+  pricingRuleList: document.querySelector('#pricingRuleList'),
+  pricingPreviewBox: document.querySelector('#pricingPreviewBox'),
+  sidebarPricing: document.querySelector('#sidebarPricing'),
+  membershipSettingsSummary: document.querySelector('#membershipSettingsSummary'),
+  membershipSettingsBody: document.querySelector('#membershipSettingsBody'),
   membershipPage: document.querySelector('#membershipPage'),
   packageAdminList: document.querySelector('#packageAdminList'),
   couponAdminList: document.querySelector('#couponAdminList'),
@@ -1473,19 +1486,21 @@ function renderAdminPages() {
   els.sidebarCustomers.classList.toggle('hidden', !isOwnerRole())
   els.sidebarStoreSettings.classList.toggle('hidden', !isOwnerRole())
   els.sidebarFinance.classList.toggle('hidden', !isOwnerRole())
+  els.sidebarPricing?.classList.toggle('hidden', !isOwnerRole())
   // 2026-08-04 店主定「全部 AI 归智能包」:没开通就把纯 AI 的入口收起来,别让人点了没反应。
   // AI 图库整页只做 AI 文案,没 AI 就没意义;客服工作台保留(它是人工会话收件箱,没 AI 也要用)。
   const hasAiAddon = hasAi()
   els.sidebarAiGallery?.classList.toggle('hidden', !hasAiAddon)
   document.querySelector('#finNavInsights')?.classList.toggle('hidden', !hasAiAddon)
   if (!hasAiAddon && owner.adminPage === 'aiGallery') owner.adminPage = isOwnerRole() ? 'dashboard' : 'bookings'
-  if (!isOwnerRole() && ['dashboard', 'dashboardDetail', 'services', 'membership', 'customers', 'storeSettings', 'finance'].includes(owner.adminPage)) owner.adminPage = 'bookings'
+  if (!isOwnerRole() && ['dashboard', 'dashboardDetail', 'services', 'pricing', 'membership', 'customers', 'storeSettings', 'finance'].includes(owner.adminPage)) owner.adminPage = 'bookings'
   const pages = {
     dashboard: els.adminDashboard,
     dashboardDetail: els.dashboardDetailPage,
     bookings: els.bookingsPage,
     schedule: els.schedulePage,
     services: els.servicesPage,
+    pricing: els.pricingPage,
     membership: els.membershipPage,
     customers: els.customersPage,
     wechatMock: els.wechatMockPage,
@@ -3256,6 +3271,7 @@ async function saveStoreProfile() {
 
 function renderStoreSettings() {
   if (!els.businessHoursEditor) return
+  renderMembershipSettings()
   renderTenantPlan()
   renderTenantKb()
   renderStoreInfo()
@@ -5727,8 +5743,10 @@ els.adminLayout.addEventListener('click', (event) => {
     if (owner.adminPage === 'bookings') owner.adminView = 'today'
     if (owner.adminPage === 'finance') loadFinancePage().catch((error) => toast(error.message))
     if (owner.adminPage === 'membership') loadMembershipPage().catch((error) => toast(error.message))
+    if (owner.adminPage === 'pricing') loadPricingPage().catch((error) => toast(error.message))
     // 套餐与续费并入「门店设置 → 当前套餐」,进页时取一次订阅数据
     if (owner.adminPage === 'storeSettings') loadSubscriptionPage().catch((error) => toast(error.message))
+    if (owner.adminPage === 'storeSettings') loadMembershipSettings().catch((error) => toast(error.message))
     render()
     return
   }
@@ -7229,4 +7247,460 @@ async function settleSubOrder(r, kind) {
     window.alert(`订单 ${subMoney(r.order.amountCents)} 已创建，平台确认收款后自动${kind === 'ai' ? '开通' : '顺延到期日'}。\n请联系我们完成付款，订单号：${r.order.id.slice(-8)}。`)
   }
   await loadSubscriptionPage()
+}
+
+/* ===== 价目表管理(2026-08-06 P0)=====
+   三个 tab:大类 / 项目与加项(原价·分享价·会员价·疗程价) / 计价规则(四条 + 试算器)。
+   与后端 /admin/pricing/* 一一对应;list 档就是 services.price_cents(后端双写),所以「服务管理」页看到的价格 = 这里的原价。 */
+let pricingState = { tab: 'categories', categories: [], items: [], rules: {}, editing: null, preview: null }
+
+const pzh = () => owner.lang === 'zh'
+function pMoney(c) { return (c === null || c === undefined) ? '—' : `${Math.round(c) / 100}` }
+function pCents(v) {
+  const text = String(v ?? '').trim()
+  if (!text) return null
+  const n = Number(text.replace(/[^\d.]/g, ''))
+  return Number.isFinite(n) ? Math.round(n * 100) : null
+}
+const PRICING_UNITS = [['once', '单次 / once'], ['per_finger', '按指 / per finger'], ['per_session', '按次 / per session']]
+const PRICING_RULE_META = {
+  foot_surcharge: { zh: '足部加收', en: 'Foot surcharge', descZh: '足部项目在最终金额上整单加收(各价格档算完后加,不分档)', field: 'amountCents', fieldZh: '加收金额', money: true },
+  single_finger: { zh: '单指计费', en: 'Single finger', descZh: '单指价 = 该单所用价格档的延长类主项目价 × 百分比 × 指数', field: 'pct', fieldZh: '百分比(%)', money: false },
+  tip_reuse: { zh: '甲片重利用', en: 'Tip reuse', descZh: '固定金额,不分价格档', field: 'amountCents', fieldZh: '固定金额', money: true },
+  removal_free_if_in_store: { zh: '本店免卸', en: 'Free removal in store', descZh: '本店做过的顾客卸甲 0 元;非本店做的技师可手动勾选免', field: null, fieldZh: '', money: false }
+}
+
+async function loadPricingPage() {
+  const [c, i, r] = await Promise.all([
+    request('/admin/pricing/categories'),
+    request('/admin/pricing/items'),
+    request('/admin/pricing/rules')
+  ])
+  pricingState.categories = c.categories || []
+  pricingState.items = i.items || []
+  pricingState.rules = r.rules || {}
+  renderPricing()
+}
+
+function renderPricing() {
+  if (!els.pricingPage) return
+  document.querySelectorAll('[data-pricing-tab]').forEach((btn) => btn.classList.toggle('active', btn.dataset.pricingTab === pricingState.tab))
+  els.pricingCategoriesPanel?.classList.toggle('hidden', pricingState.tab !== 'categories')
+  els.pricingItemsPanel?.classList.toggle('hidden', pricingState.tab !== 'items')
+  els.pricingRulesPanel?.classList.toggle('hidden', pricingState.tab !== 'rules')
+  renderPricingCategories()
+  renderPricingItems()
+  renderPricingRules()
+}
+
+function renderPricingCategories() {
+  if (!els.pricingCategoryList) return
+  const rows = pricingState.categories
+  els.pricingCategoryList.innerHTML = rows.length ? rows.map((cat) => `
+    <div class="service-admin-item">
+      <div>
+        <strong>${escapeHtml(cat.name)}</strong>
+        <span class="subtle">${escapeHtml(cat.key)} · ${pzh() ? `${cat.itemCount} 个项目` : `${cat.itemCount} items`}${cat.isBookable ? '' : (pzh() ? ' · 不可预约' : ' · not bookable')}</span>
+        ${cat.note ? `<div class="subtle">${escapeHtml(cat.note)}</div>` : ''}
+      </div>
+      <div class="row-actions">
+        <label class="subtle"><input type="checkbox" data-cat-bookable="${cat.id}" ${cat.isBookable ? 'checked' : ''}> ${pzh() ? '可预约' : 'Bookable'}</label>
+        <input class="pricing-sort" type="number" value="${cat.sortOrder}" data-cat-sort="${cat.id}" title="${pzh() ? '排序' : 'Sort'}">
+        <button class="ghost slim" data-cat-rename="${cat.id}" type="button">${pzh() ? '改名' : 'Rename'}</button>
+        <button class="ghost slim" data-cat-delete="${cat.id}" type="button">${pzh() ? '删除' : 'Delete'}</button>
+      </div>
+    </div>`).join('') : `<div class="empty-state">${pzh() ? '还没有大类。先建「美甲单色 / 美睫 / 卸甲」这类大类,再往里放项目。' : 'No categories yet.'}</div>`
+}
+
+function renderPricingItems() {
+  if (!els.pricingItemList) return
+  const catName = (id) => pricingState.categories.find((c) => c.id === id)?.name || (pzh() ? '未分类' : 'Uncategorized')
+  const group = (kind) => pricingState.items.filter((i) => i.itemKind === kind)
+  const rowHtml = (item) => `
+    <div class="service-admin-item${item.isActive ? '' : ' inactive'}">
+      <div>
+        <strong>${escapeHtml(item.nameZh)}</strong>
+        <span class="subtle">${escapeHtml(catName(item.categoryId))}${item.unit === 'per_finger' ? (pzh() ? ' · 按指' : ' · per finger') : ''}${item.isActive ? '' : (pzh() ? ' · 已下架' : ' · hidden')}</span>
+        <div class="subtle">${pzh() ? '原价' : 'List'} ${pMoney(item.listPriceCents)}
+          · ${pzh() ? '分享价' : 'Share'} ${pMoney(item.sharePriceCents)}
+          · ${pzh() ? '会员价' : 'Member'} ${pMoney(item.memberPriceCents)}
+          ${item.coursePriceCents ? ` · ${pzh() ? '疗程' : 'Course'} ${pMoney(item.coursePriceCents)}/${item.courseTimes}${pzh() ? '次' : 'x'}` : ''}
+          ${item.baseDurationMin ? ` · ${item.baseDurationMin}min` : ''}
+          ${item.priceRule === 'pct_of_tier_price' ? ` · ${pzh() ? '按主项目比例' : 'pct of main'} ${item.priceRuleValue || '默认'}%` : ''}</div>
+      </div>
+      <div class="row-actions">
+        <button class="ghost slim" data-item-edit="${item.id}" type="button">${pzh() ? '编辑' : 'Edit'}</button>
+        <button class="ghost slim" data-item-toggle="${item.id}" type="button">${item.isActive ? (pzh() ? '下架' : 'Hide') : (pzh() ? '上架' : 'Show')}</button>
+        <button class="ghost slim" data-item-delete="${item.id}" type="button">${pzh() ? '删除' : 'Delete'}</button>
+      </div>
+    </div>`
+  const mains = group('main')
+  const addons = group('addon')
+  els.pricingItemList.innerHTML = `
+    <h3 class="pricing-group-title">${pzh() ? `主项目(${mains.length})` : `Main items (${mains.length})`}</h3>
+    ${mains.length ? mains.map(rowHtml).join('') : `<div class="empty-state">${pzh() ? '还没有主项目' : 'No main items'}</div>`}
+    <h3 class="pricing-group-title">${pzh() ? `加项(${addons.length})` : `Add-ons (${addons.length})`}</h3>
+    ${addons.length ? addons.map(rowHtml).join('') : `<div class="empty-state">${pzh() ? '还没有加项(卸甲、贴片、单指补甲都算加项)' : 'No add-ons'}</div>`}`
+  renderPricingItemEditor()
+}
+
+function renderPricingItemEditor() {
+  if (!els.pricingItemEditor) return
+  const draft = pricingState.editing
+  if (!draft) { els.pricingItemEditor.innerHTML = ''; return }
+  const isAddon = draft.itemKind === 'addon'
+  els.pricingItemEditor.innerHTML = `
+    <div class="pricing-editor">
+      <div class="kb-facts-grid">
+        <label><span>${pzh() ? '项目名称' : 'Name'}</span><input id="piName" value="${escapeHtml(draft.nameZh || '')}"></label>
+        <label><span>${pzh() ? '英文名(选填)' : 'English name'}</span><input id="piNameEn" value="${escapeHtml(draft.nameEn || '')}"></label>
+        <label><span>${pzh() ? '大类' : 'Category'}</span><select id="piCategory">
+          ${pricingState.categories.map((c) => `<option value="${c.id}" ${c.id === draft.categoryId ? 'selected' : ''}>${escapeHtml(c.name)}</option>`).join('')}
+        </select></label>
+        <label><span>${pzh() ? '计费单位' : 'Unit'}</span><select id="piUnit">
+          ${PRICING_UNITS.map(([v, label]) => `<option value="${v}" ${v === (draft.unit || 'once') ? 'selected' : ''}>${label}</option>`).join('')}
+        </select></label>
+        <label><span>${pzh() ? '原价' : 'List price'}</span><input id="piList" inputmode="decimal" value="${draft.listPriceCents ? draft.listPriceCents / 100 : ''}"></label>
+        <label><span>${pzh() ? '分享价' : 'Share price'}</span><input id="piShare" inputmode="decimal" value="${draft.sharePriceCents ? draft.sharePriceCents / 100 : ''}"></label>
+        <label><span>${pzh() ? '会员价' : 'Member price'}</span><input id="piMember" inputmode="decimal" value="${draft.memberPriceCents ? draft.memberPriceCents / 100 : ''}"></label>
+        <label><span>${pzh() ? '疗程价(选填)' : 'Course price'}</span><input id="piCourse" inputmode="decimal" value="${draft.coursePriceCents ? draft.coursePriceCents / 100 : ''}"></label>
+        <label><span>${pzh() ? '疗程次数' : 'Course times'}</span><input id="piCourseTimes" inputmode="numeric" value="${draft.courseTimes || ''}"></label>
+        <label><span>${pzh() ? '时长(分钟)' : 'Duration (min)'}</span><input id="piDuration" inputmode="numeric" value="${draft.baseDurationMin ?? (isAddon ? 0 : 60)}"></label>
+      </div>
+      ${isAddon ? `
+      <div class="pricing-addon-block">
+        <label class="subtle"><input type="checkbox" id="piPctRule" ${draft.priceRule === 'pct_of_tier_price' ? 'checked' : ''}>
+          ${pzh() ? '单指价按主项目该档价的百分比算(留空用规则默认 10%)' : 'Derive per-finger price from main item price'}</label>
+        <input id="piPct" class="pricing-sort" inputmode="decimal" placeholder="%" value="${draft.priceRuleValue || ''}">
+        <div class="subtle" style="margin-top:8px">${pzh() ? '适用大类(这个加项能配在哪些大类的项目上)' : 'Applies to categories'}</div>
+        <div class="pricing-scope">
+          ${pricingState.categories.map((c) => `<label class="subtle"><input type="checkbox" data-scope="${c.id}" ${(draft.addonScope || []).includes(c.id) ? 'checked' : ''}> ${escapeHtml(c.name)}</label>`).join('')}
+        </div>
+      </div>` : ''}
+      <div class="action-row wrap">
+        <button class="primary slim" id="piSave" type="button">${pzh() ? '保存' : 'Save'}</button>
+        <button class="ghost slim" id="piCancel" type="button">${pzh() ? '取消' : 'Cancel'}</button>
+        <span class="subtle">${pzh() ? '原价会同步写回「服务管理」的价格,小程序与 AI 报价立即一致。' : 'List price syncs to the service catalogue used by the mini program and AI.'}</span>
+      </div>
+    </div>`
+}
+
+function collectPricingItemForm() {
+  const body = {
+    nameZh: document.querySelector('#piName')?.value.trim(),
+    nameEn: document.querySelector('#piNameEn')?.value.trim(),
+    categoryId: document.querySelector('#piCategory')?.value || null,
+    unit: document.querySelector('#piUnit')?.value || 'once',
+    itemKind: pricingState.editing.itemKind,
+    type: pricingState.editing.type || 'OTHER',
+    listPriceCents: pCents(document.querySelector('#piList')?.value) ?? 0,
+    sharePriceCents: pCents(document.querySelector('#piShare')?.value),
+    memberPriceCents: pCents(document.querySelector('#piMember')?.value),
+    coursePriceCents: pCents(document.querySelector('#piCourse')?.value),
+    courseTimes: Number(document.querySelector('#piCourseTimes')?.value || 0) || null,
+    baseDurationMin: Number(document.querySelector('#piDuration')?.value || 0)
+  }
+  if (pricingState.editing.itemKind === 'addon') {
+    body.priceRule = document.querySelector('#piPctRule')?.checked ? 'pct_of_tier_price' : 'fixed'
+    body.priceRuleValue = Number(document.querySelector('#piPct')?.value || 0) || 0
+    body.addonScope = Array.from(document.querySelectorAll('[data-scope]')).filter((el) => el.checked).map((el) => el.dataset.scope)
+  }
+  return body
+}
+
+function renderPricingRules() {
+  if (!els.pricingRuleList) return
+  els.pricingRuleList.innerHTML = Object.entries(PRICING_RULE_META).map(([key, meta]) => {
+    const rule = pricingState.rules[key] || { isActive: false, config: {} }
+    const value = meta.field ? rule.config[meta.field] : null
+    return `
+      <div class="service-admin-item${rule.isActive ? '' : ' inactive'}">
+        <div>
+          <strong>${pzh() ? meta.zh : meta.en}</strong>
+          <div class="subtle">${escapeHtml(meta.descZh)}</div>
+        </div>
+        <div class="row-actions">
+          ${meta.field ? `<label class="subtle">${meta.fieldZh}<input class="pricing-sort" data-rule-value="${key}" inputmode="decimal" value="${meta.money ? (value || 0) / 100 : (value ?? '')}"></label>` : ''}
+          <label class="subtle"><input type="checkbox" data-rule-active="${key}" ${rule.isActive ? 'checked' : ''}> ${pzh() ? '启用' : 'On'}</label>
+        </div>
+      </div>`
+  }).join('') + `<div class="action-row wrap"><button class="primary slim" id="pricingRulesSave" type="button">${pzh() ? '保存规则' : 'Save rules'}</button></div>`
+
+  // 试算器:选主项目 + 价格档 + 加项,直接调后端 preview,所见即所得
+  const mains = pricingState.items.filter((i) => i.itemKind === 'main' && i.isActive)
+  const addons = pricingState.items.filter((i) => i.itemKind === 'addon' && i.isActive)
+  const q = pricingState.preview
+  els.pricingPreviewBox.innerHTML = `
+    <h3 class="pricing-group-title">${pzh() ? '试算器(和技师现场报价同一套引擎)' : 'Quote preview'}</h3>
+    <div class="kb-facts-grid">
+      <label><span>${pzh() ? '主项目' : 'Main item'}</span><select id="pvService">${mains.map((i) => `<option value="${i.id}">${escapeHtml(i.nameZh)}</option>`).join('')}</select></label>
+      <label><span>${pzh() ? '价格档' : 'Tier'}</span><select id="pvTier">
+        <option value="list">${pzh() ? '原价' : 'List'}</option>
+        <option value="share">${pzh() ? '分享价' : 'Share'}</option>
+        <option value="member">${pzh() ? '会员价' : 'Member'}</option>
+        <option value="course">${pzh() ? '疗程价' : 'Course'}</option>
+      </select></label>
+      <label><span>${pzh() ? '加项' : 'Add-on'}</span><select id="pvAddon"><option value="">${pzh() ? '(不加)' : '(none)'}</option>${addons.map((i) => `<option value="${i.id}">${escapeHtml(i.nameZh)}</option>`).join('')}</select></label>
+      <label><span>${pzh() ? '指数(按指加项用)' : 'Fingers'}</span><input id="pvFingers" inputmode="numeric" value="1"></label>
+    </div>
+    <div class="action-row wrap">
+      <label class="subtle"><input type="checkbox" id="pvFoot"> ${pzh() ? '足部' : 'Foot'}</label>
+      <label class="subtle"><input type="checkbox" id="pvTip"> ${pzh() ? '甲片重利用' : 'Tip reuse'}</label>
+      <label class="subtle"><input type="checkbox" id="pvManualFree"> ${pzh() ? '技师手动免卸' : 'Manual free removal'}</label>
+      <button class="primary slim" id="pvRun" type="button">${pzh() ? '试算' : 'Preview'}</button>
+    </div>
+    ${q ? `
+      <div class="pricing-quote">
+        ${q.lines.map((line) => `<div class="pricing-quote-line"><span>${escapeHtml(line.name)}${line.fingers ? ` × ${line.fingers}${pzh() ? '指' : 'f'}` : ''}${line.freeReason ? (pzh() ? `(免:${line.freeReason === 'system' ? '本店做的' : '技师手动'})` : ' (free)') : ''}</span><b>${pMoney(line.amountCents)}</b></div>`).join('')}
+        ${q.rulesApplied.filter((r) => r.key === 'foot_surcharge').map((r) => `<div class="pricing-quote-line"><span>${escapeHtml(r.label)}</span><b>+${pMoney(r.amountCents)}</b></div>`).join('')}
+        <div class="pricing-quote-line total"><span>${pzh() ? '合计' : 'Total'}</span><b>${pMoney(q.totalCents)}</b></div>
+        ${q.courseTimes ? `<div class="subtle">${pzh() ? `疗程包含 ${q.courseTimes} 次` : `${q.courseTimes} sessions`}</div>` : ''}
+      </div>` : ''}`
+}
+
+async function savePricingRules() {
+  const rules = {}
+  for (const [key, meta] of Object.entries(PRICING_RULE_META)) {
+    const isActive = document.querySelector(`[data-rule-active="${key}"]`)?.checked || false
+    const config = {}
+    if (meta.field) {
+      const raw = document.querySelector(`[data-rule-value="${key}"]`)?.value
+      config[meta.field] = meta.money ? (pCents(raw) ?? 0) : (Number(raw) || 0)
+    } else {
+      config.enabled = isActive
+    }
+    rules[key] = { isActive, config }
+  }
+  const res = await request('/admin/pricing/rules', { method: 'PUT', body: JSON.stringify({ rules }) })
+  pricingState.rules = res.rules || {}
+  renderPricingRules()
+  toast(pzh() ? '计价规则已保存,AI 与技师报价同步生效' : 'Pricing rules saved')
+}
+
+async function runPricingPreview() {
+  const addonId = document.querySelector('#pvAddon')?.value
+  const body = {
+    serviceId: document.querySelector('#pvService')?.value,
+    tierKey: document.querySelector('#pvTier')?.value || 'list',
+    addons: addonId ? [{ serviceId: addonId, fingers: Number(document.querySelector('#pvFingers')?.value || 1) }] : [],
+    applyFootSurcharge: document.querySelector('#pvFoot')?.checked || false,
+    applyTipReuse: document.querySelector('#pvTip')?.checked || false,
+    manualFreeRemoval: document.querySelector('#pvManualFree')?.checked || false
+  }
+  if (!body.serviceId) { toast(pzh() ? '先建一个主项目' : 'Add a main item first'); return }
+  const res = await request('/admin/pricing/preview', { method: 'POST', body: JSON.stringify(body) })
+  pricingState.preview = res.quote
+  renderPricingRules()
+}
+
+if (els.pricingPage) {
+  els.pricingPage.addEventListener('click', async (event) => {
+    const tab = event.target.closest('[data-pricing-tab]')
+    if (tab) { pricingState.tab = tab.dataset.pricingTab; renderPricing(); return }
+    try {
+      if (event.target.closest('#addPricingCategory')) {
+        const name = window.prompt(pzh() ? '大类名称(如:美甲单色)' : 'Category name')
+        if (!name) return
+        const key = window.prompt(pzh() ? '英文标识(小写字母/数字/短横,如 nail_solid;卸甲类请用 removal)' : 'Key', '')
+        await request('/admin/pricing/categories', { method: 'POST', body: JSON.stringify({ name: name.trim(), key: (key || '').trim() }) })
+        await loadPricingPage()
+        toast(pzh() ? '大类已新增' : 'Category added')
+        return
+      }
+      const rename = event.target.closest('[data-cat-rename]')
+      if (rename) {
+        const cat = pricingState.categories.find((c) => c.id === rename.dataset.catRename)
+        const name = window.prompt(pzh() ? '大类名称' : 'Category name', cat.name)
+        if (!name) return
+        await request(`/admin/pricing/categories/${cat.id}`, { method: 'PATCH', body: JSON.stringify({ name: name.trim() }) })
+        await loadPricingPage()
+        return
+      }
+      const delCat = event.target.closest('[data-cat-delete]')
+      if (delCat) {
+        const cat = pricingState.categories.find((c) => c.id === delCat.dataset.catDelete)
+        if (!window.confirm(pzh() ? `删除大类「${cat.name}」?` : `Delete ${cat.name}?`)) return
+        await request(`/admin/pricing/categories/${cat.id}`, { method: 'DELETE' })
+        await loadPricingPage()
+        toast(pzh() ? '已删除' : 'Deleted')
+        return
+      }
+      if (event.target.closest('#addPricingMain') || event.target.closest('#addPricingAddon')) {
+        const isAddon = Boolean(event.target.closest('#addPricingAddon'))
+        if (!pricingState.categories.length) { toast(pzh() ? '先建至少一个大类' : 'Create a category first'); return }
+        pricingState.editing = { itemKind: isAddon ? 'addon' : 'main', categoryId: pricingState.categories[0].id, unit: 'once', type: 'OTHER', addonScope: [] }
+        pricingState.tab = 'items'
+        renderPricing()
+        return
+      }
+      const editItem = event.target.closest('[data-item-edit]')
+      if (editItem) {
+        pricingState.editing = { ...pricingState.items.find((i) => i.id === editItem.dataset.itemEdit) }
+        renderPricingItemEditor()
+        return
+      }
+      if (event.target.closest('#piCancel')) { pricingState.editing = null; renderPricingItemEditor(); return }
+      if (event.target.closest('#piSave')) {
+        const body = collectPricingItemForm()
+        if (!body.nameZh) { toast(pzh() ? '项目名称必填' : 'Name required'); return }
+        const editingId = pricingState.editing.id
+        if (editingId) await request(`/admin/pricing/items/${editingId}`, { method: 'PATCH', body: JSON.stringify(body) })
+        else await request('/admin/pricing/items', { method: 'POST', body: JSON.stringify(body) })
+        pricingState.editing = null
+        await loadPricingPage()
+        toast(pzh() ? '已保存,AI 报价立即生效' : 'Saved')
+        return
+      }
+      const togItem = event.target.closest('[data-item-toggle]')
+      if (togItem) {
+        const item = pricingState.items.find((i) => i.id === togItem.dataset.itemToggle)
+        await request(`/admin/pricing/items/${item.id}`, { method: 'PATCH', body: JSON.stringify({ isActive: !item.isActive }) })
+        await loadPricingPage()
+        return
+      }
+      const delItem = event.target.closest('[data-item-delete]')
+      if (delItem) {
+        const item = pricingState.items.find((i) => i.id === delItem.dataset.itemDelete)
+        if (!window.confirm(pzh() ? `删除「${item.nameZh}」?有历史订单的项目会自动改为下架。` : `Delete ${item.nameZh}?`)) return
+        const res = await request(`/admin/pricing/items/${item.id}`, { method: 'DELETE' })
+        await loadPricingPage()
+        toast(res.deleted ? (pzh() ? '已删除' : 'Deleted') : (res.reason || (pzh() ? '已下架' : 'Hidden')))
+        return
+      }
+      if (event.target.closest('#pricingRulesSave')) return savePricingRules()
+      if (event.target.closest('#pvRun')) return runPricingPreview()
+    } catch (error) { toast(error.message) }
+  })
+  els.pricingPage.addEventListener('change', async (event) => {
+    const bookable = event.target.closest('[data-cat-bookable]')
+    const sort = event.target.closest('[data-cat-sort]')
+    try {
+      if (bookable) {
+        await request(`/admin/pricing/categories/${bookable.dataset.catBookable}`, { method: 'PATCH', body: JSON.stringify({ isBookable: bookable.checked }) })
+        await loadPricingPage()
+      } else if (sort) {
+        await request(`/admin/pricing/categories/${sort.dataset.catSort}`, { method: 'PATCH', body: JSON.stringify({ sortOrder: Number(sort.value) || 0 }) })
+        await loadPricingPage()
+      }
+    } catch (error) { toast(error.message) }
+  })
+}
+
+/* ===== 门店设置 → 会员与储值设置(2026-08-06 P0)===== */
+let membershipSettings = { config: null, tiers: [] }
+const MEMBER_QUALIFY_LABELS = {
+  any_recharge: { zh: '充过值就是会员', en: 'Any recharge' },
+  balance_gt_0: { zh: '余额大于 0 才是会员', en: 'Balance > 0' },
+  total_spend: { zh: '累计消费达到门槛', en: 'Total spend threshold' },
+  manual: { zh: '老板手动打「会员」标签', en: 'Manual tag' }
+}
+
+async function loadMembershipSettings() {
+  const [c, t] = await Promise.all([
+    request('/admin/membership/config'),
+    request('/admin/recharge-tiers').catch(() => ({ tiers: [] }))
+  ])
+  membershipSettings = { config: c.config, tiers: t.tiers || [] }
+  renderMembershipSettings()
+}
+
+function renderMembershipSettings() {
+  if (!els.membershipSettingsBody) return
+  const config = membershipSettings.config
+  if (!config) { els.membershipSettingsBody.innerHTML = ''; return }
+  const label = MEMBER_QUALIFY_LABELS[config.memberQualify] || MEMBER_QUALIFY_LABELS.any_recharge
+  if (els.membershipSettingsSummary) {
+    els.membershipSettingsSummary.textContent = `${pzh() ? label.zh : label.en} · ${pzh() ? `${membershipSettings.tiers.length} 个充值档位` : `${membershipSettings.tiers.length} tiers`}`
+  }
+  els.membershipSettingsBody.innerHTML = `
+    <div class="kb-facts-grid">
+      <label><span>${pzh() ? '会员资格' : 'Member qualification'}</span><select id="msQualify">
+        ${Object.entries(MEMBER_QUALIFY_LABELS).map(([key, l]) => `<option value="${key}" ${key === config.memberQualify ? 'selected' : ''}>${pzh() ? l.zh : l.en}</option>`).join('')}
+      </select></label>
+      <label><span>${pzh() ? '消费门槛(仅「累计消费」模式)' : 'Spend threshold'}</span><input id="msQualifyValue" inputmode="decimal" value="${config.qualifyValueCents ? config.qualifyValueCents / 100 : ''}"></label>
+      <label><span>${pzh() ? '会员有效期(天,留空=永久)' : 'Expiry (days)'}</span><input id="msExpire" inputmode="numeric" value="${config.expireDays ?? ''}"></label>
+      <label><span>${pzh() ? '启用会员等级' : 'Enable tiers'}</span><select id="msTiersEnabled">
+        <option value="0" ${config.tiersEnabled ? '' : 'selected'}>${pzh() ? '不分等级' : 'Off'}</option>
+        <option value="1" ${config.tiersEnabled ? 'selected' : ''}>${pzh() ? '分等级' : 'On'}</option>
+      </select></label>
+    </div>
+    ${config.tiersEnabled ? `
+      <div class="pricing-scope">
+        <textarea id="msTiers" rows="3" placeholder='[{"key":"silver","name":"银卡","minSpendCents":100000}]'>${escapeHtml(JSON.stringify(config.tiers || [], null, 0))}</textarea>
+        <p class="subtle">${pzh() ? '等级表用 JSON 描述(key / name / minSpendCents),暂由平台侧协助配置。' : 'Tier table as JSON.'}</p>
+      </div>` : ''}
+    <button class="primary slim" id="msSave" type="button">${pzh() ? '保存会员设置' : 'Save membership settings'}</button>
+    <p class="subtle">${pzh() ? '会员价在「价目表」里逐项设置;这里决定「谁算会员」。' : 'Member prices are set per item in the price list; this decides who counts as a member.'}</p>
+    <div class="kb-entry-list">
+      <strong class="kb-entry-list-title">${pzh() ? '充值档位(顾客充值时可选的金额与赠送)' : 'Recharge tiers'}</strong>
+      ${membershipSettings.tiers.length ? membershipSettings.tiers.map((tier) => `
+        <div class="service-admin-item${tier.isActive ? '' : ' inactive'}">
+          <div><strong>${pMoney(tier.amountCents)}</strong>
+            <span class="subtle">${describeGift(tier.gift)}${tier.isActive ? '' : (pzh() ? ' · 已停用' : ' · off')}</span></div>
+          <div class="row-actions">
+            <button class="ghost slim" data-tier-toggle="${tier.id}" type="button">${tier.isActive ? (pzh() ? '停用' : 'Off') : (pzh() ? '启用' : 'On')}</button>
+            <button class="ghost slim" data-tier-delete="${tier.id}" type="button">${pzh() ? '删除' : 'Delete'}</button>
+          </div>
+        </div>`).join('') : `<p class="subtle">${pzh() ? '还没有充值档位。' : 'No recharge tiers yet.'}</p>`}
+      <button class="ghost slim" id="msAddTier" type="button">${pzh() ? '+ 新增充值档位' : '+ Add tier'}</button>
+    </div>`
+}
+
+function describeGift(gift = {}) {
+  if (!gift || !gift.type) return pzh() ? '无赠送' : 'No gift'
+  if (gift.type === 'percent') return pzh() ? `赠 ${gift.value}% 金额` : `+${gift.value}%`
+  if (gift.type === 'amount') return pzh() ? `赠 ${pMoney(gift.value)}` : `+${pMoney(gift.value)}`
+  if (gift.type === 'coupon') return pzh() ? `赠券 ${gift.couponId || ''}` : `Coupon ${gift.couponId || ''}`
+  if (gift.type === 'service') return pzh() ? `赠项目券 ${gift.serviceId || ''}` : `Service ${gift.serviceId || ''}`
+  return pzh() ? '自定义赠送' : 'Custom gift'
+}
+
+if (els.storeSettingsPage) {
+  els.storeSettingsPage.addEventListener('click', async (event) => {
+    try {
+      if (event.target.closest('#msSave')) {
+        let tiers
+        if (document.querySelector('#msTiers')) {
+          try { tiers = JSON.parse(document.querySelector('#msTiers').value || '[]') } catch { toast(pzh() ? '等级表 JSON 格式不对' : 'Invalid tier JSON'); return }
+        }
+        await request('/admin/membership/config', {
+          method: 'PUT',
+          body: JSON.stringify({
+            config: {
+              memberQualify: document.querySelector('#msQualify').value,
+              qualifyValueCents: pCents(document.querySelector('#msQualifyValue').value) ?? 0,
+              expireDays: document.querySelector('#msExpire').value.trim() === '' ? null : Number(document.querySelector('#msExpire').value),
+              tiersEnabled: document.querySelector('#msTiersEnabled').value === '1',
+              ...(tiers ? { tiers } : {})
+            }
+          })
+        })
+        await loadMembershipSettings()
+        toast(pzh() ? '会员设置已保存' : 'Saved')
+        return
+      }
+      if (event.target.closest('#msAddTier')) {
+        const amount = window.prompt(pzh() ? '充值金额' : 'Recharge amount', '1000')
+        if (!amount) return
+        const giftPct = window.prompt(pzh() ? '赠送比例(%,留空=不送)' : 'Gift percent', '')
+        const gift = giftPct && Number(giftPct) ? { type: 'percent', value: Number(giftPct) } : {}
+        await request('/admin/recharge-tiers', { method: 'POST', body: JSON.stringify({ amountCents: pCents(amount) ?? 0, gift }) })
+        await loadMembershipSettings()
+        return
+      }
+      const tog = event.target.closest('[data-tier-toggle]')
+      if (tog) {
+        const tier = membershipSettings.tiers.find((x) => x.id === tog.dataset.tierToggle)
+        await request(`/admin/recharge-tiers/${tier.id}`, { method: 'PATCH', body: JSON.stringify({ isActive: !tier.isActive }) })
+        await loadMembershipSettings()
+        return
+      }
+      const del = event.target.closest('[data-tier-delete]')
+      if (del) {
+        if (!window.confirm(pzh() ? '删除这个充值档位?' : 'Delete this tier?')) return
+        await request(`/admin/recharge-tiers/${del.dataset.tierDelete}`, { method: 'DELETE' })
+        await loadMembershipSettings()
+      }
+    } catch (error) { toast(error.message) }
+  })
 }

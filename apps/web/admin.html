@@ -4,7 +4,7 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>有迹 · 商家后台</title>
-    <link rel="stylesheet" href="/web/styles.css?v=20260804a-web-sub2">
+    <link rel="stylesheet" href="/web/styles.css?v=20260806a-p0-pricing">
     <style>
       /* 2026-08-02 财务指标显隐+动效(店主 v4 定稿):AI智能总结卡 / 目标进度条(带平衡线刻度) / 设目标引导与弹窗。
          放这里不放 styles.css:本批约定只动 admin.js + admin.html 两个文件。 */
@@ -103,6 +103,29 @@
       .sub-hist td{padding:10px;border-bottom:1px solid #f5f0ea;color:#2d2826}
       .sub-hist tr:last-child td{border-bottom:none}
       .sub-hist .pend{color:#b8452f;font-weight:700}
+
+      /* ===== 价目表管理(2026-08-06 P0)===== */
+      .pricing-tabs{display:flex;gap:8px;margin:10px 0 14px;flex-wrap:wrap}
+      .pricing-tab{border:1px solid #e7ddd4;background:#fff;color:#8c8279;border-radius:999px;padding:8px 18px;font-size:13px;font-weight:700;cursor:pointer}
+      .pricing-tab.active{background:#2d2826;border-color:#2d2826;color:#fff}
+      .pricing-group-title{font-size:13px;font-weight:800;color:#8a7d70;margin:16px 0 8px}
+      .pricing-sort{width:84px;padding:5px 8px;border:1px solid #e7ddd4;border-radius:8px;font-size:12.5px}
+      .pricing-editor{background:#fbf8f5;border:1px solid #eadfd7;border-radius:14px;padding:14px 16px;margin-bottom:14px}
+      .pricing-addon-block{margin-top:10px;padding-top:10px;border-top:1px dashed #e7ddd4}
+      .pricing-scope{display:flex;flex-wrap:wrap;gap:10px;margin-top:6px}
+      .pricing-scope textarea{width:100%;border:1px solid #e7ddd4;border-radius:10px;padding:8px 10px;font-family:inherit;font-size:12.5px}
+      .pricing-preview{margin-top:18px;padding-top:14px;border-top:1px solid #eadfd7}
+      .pricing-quote{margin-top:12px;background:#fff;border:1px solid #eadfd7;border-radius:12px;padding:12px 14px}
+      .pricing-quote-line{display:flex;justify-content:space-between;gap:12px;font-size:13px;padding:4px 0;color:#4a3c2c}
+      .pricing-quote-line.total{border-top:1px solid #eadfd7;margin-top:6px;padding-top:8px;font-weight:800;color:#241f1d;font-size:15px}
+      /* 行内控件不继承全局大号 input 样式,否则复选框会撑成方块、操作区会换行 */
+      #pricingPage .service-admin-item{display:flex;justify-content:space-between;align-items:center;gap:14px;flex-wrap:wrap}
+      #pricingPage .row-actions{display:flex;align-items:center;gap:10px;flex-wrap:wrap}
+      #pricingPage .row-actions label,#pricingPage .pricing-scope label,#pricingPage .action-row label,#membershipSettingsBody .row-actions{display:inline-flex;align-items:center;gap:5px;white-space:nowrap}
+      #pricingPage .action-row{display:flex;align-items:center;gap:14px;flex-wrap:wrap;margin-top:12px}
+      #pricingPage input[type="checkbox"],#membershipSettingsBody input[type="checkbox"]{width:16px;height:16px;min-width:0;flex:none;margin:0;padding:0}
+      #pricingPage .row-actions .pricing-sort{margin:0}
+      #membershipSettingsBody .service-admin-item{display:flex;justify-content:space-between;align-items:center;gap:14px;flex-wrap:wrap}
     </style>
   </head>
   <body>
@@ -163,6 +186,7 @@
           <button class="sidebar-link" data-admin-page="customers" id="sidebarCustomers" type="button">客户档案</button>
           <button class="sidebar-link" data-admin-page="schedule" id="sidebarSchedule" type="button">员工管理</button>
           <button class="sidebar-link" data-admin-page="services" id="sidebarServices" type="button">服务管理</button>
+          <button class="sidebar-link" data-admin-page="pricing" id="sidebarPricing" type="button">价目表</button>
           <button class="sidebar-link" data-admin-page="membership" id="sidebarMembership" type="button">会员套餐/券</button>
           <button class="sidebar-link" data-admin-page="wechatMock" id="sidebarWechatMock" type="button"><span id="sidebarWechatMockLabel">客服工作台</span><span class="sidebar-badge hidden" id="wechatNeedsHumanBadge"></span></button>
           <button class="sidebar-link" data-admin-page="aiGallery" id="sidebarAiGallery" type="button">AI 图库</button>
@@ -295,6 +319,46 @@
               </div>
               <div id="serviceEditor"></div>
               <div class="service-admin-list" id="serviceAdminList"></div>
+            </section>
+          </section>
+
+          <!-- 价目表管理(2026-08-06 P0):大类 / 项目与加项(三档价+疗程) / 计价规则+试算器 -->
+          <section class="admin-page hidden" id="pricingPage">
+            <button class="ghost back-btn" data-admin-page="dashboard" type="button">← Dashboard</button>
+            <div class="section-row">
+              <div>
+                <p class="eyebrow" id="pricingEyebrow">Price List</p>
+                <h1 id="pricingTitle">价目表管理</h1>
+              </div>
+              <span class="subtle" id="pricingSubtitle">原价 / 分享价 / 会员价 / 疗程价 —— 改完 AI 报价立即跟着变</span>
+            </div>
+            <div class="pricing-tabs" id="pricingTabs">
+              <button class="pricing-tab active" data-pricing-tab="categories" type="button">大类</button>
+              <button class="pricing-tab" data-pricing-tab="items" type="button">项目与加项</button>
+              <button class="pricing-tab" data-pricing-tab="rules" type="button">计价规则</button>
+            </div>
+            <section class="admin-card" id="pricingCategoriesPanel">
+              <div class="section-row compact-row">
+                <h2 id="pricingCatTitle">服务大类</h2>
+                <button class="primary slim" id="addPricingCategory" type="button">+ 新增大类</button>
+              </div>
+              <div id="pricingCategoryList"></div>
+            </section>
+            <section class="admin-card hidden" id="pricingItemsPanel">
+              <div class="section-row compact-row">
+                <h2 id="pricingItemsTitle">项目与加项</h2>
+                <div>
+                  <button class="ghost slim" id="addPricingMain" type="button">+ 主项目</button>
+                  <button class="ghost slim" id="addPricingAddon" type="button">+ 加项</button>
+                </div>
+              </div>
+              <div id="pricingItemEditor"></div>
+              <div id="pricingItemList"></div>
+            </section>
+            <section class="admin-card hidden" id="pricingRulesPanel">
+              <h2 id="pricingRulesTitle">计价规则</h2>
+              <div id="pricingRuleList"></div>
+              <div class="pricing-preview" id="pricingPreviewBox"></div>
             </section>
           </section>
 
@@ -503,6 +567,13 @@
               </details>
               <details class="settings-item">
                 <summary>
+                  <span class="settings-item-title" id="membershipSettingsTitle">会员与储值设置</span>
+                  <span class="settings-item-value" id="membershipSettingsSummary"></span>
+                </summary>
+                <div class="settings-item-body" id="membershipSettingsBody"></div>
+              </details>
+              <details class="settings-item">
+                <summary>
                   <span class="settings-item-title" id="planTitle">当前套餐</span>
                   <span class="settings-item-value" id="planSummary"></span>
                 </summary>
@@ -548,6 +619,6 @@
     </main>
 
     <div class="toast" id="toast"></div>
-    <script src="/web/admin.js?v=20260804a-web-sub2"></script>
+    <script src="/web/admin.js?v=20260806a-p0-pricing"></script>
   </body>
 </html>

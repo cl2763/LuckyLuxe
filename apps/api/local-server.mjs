@@ -879,18 +879,59 @@ function liveTenantFacts() {
   const currency = facts.currency || store?.currency || ''
   const priceOf = (cents) => (cents || cents === 0 ? Number((cents / 100).toFixed(2)) : null)
   // 价目表:直接由「服务项目」生成,商家改价即时生效
-  const services = db.prepare('SELECT name_zh, name_en, price_cents, deposit_cents, base_duration_min FROM services WHERE tenant_id = ? AND is_active = 1 ORDER BY sort_order ASC, rowid ASC').all(tid)
+  // 2026-08-06 P0:多价位模型上线后,每项带上三档价与疗程价,AI 回答分享价/会员价才不会瞎编
+  const categoryById = {}
+  for (const cat of db.prepare('SELECT * FROM service_categories WHERE tenant_id = ?').all(tid)) categoryById[cat.id] = cat
+  const tierPrices = (serviceId) => {
+    const map = servicePriceMap(serviceId)
+    return {
+      sharePrice: map.share ? priceOf(map.share.priceCents) : undefined,
+      memberPrice: map.member ? priceOf(map.member.priceCents) : undefined,
+      coursePrice: map.course ? priceOf(map.course.priceCents) : undefined,
+      courseTimes: map.course ? (map.course.courseTimes || undefined) : undefined
+    }
+  }
+  const allItems = db.prepare("SELECT id, name_zh, name_en, price_cents, deposit_cents, base_duration_min, item_kind, category_id, unit, addon_scope_json FROM services WHERE tenant_id = ? AND is_active = 1 ORDER BY sort_order ASC, rowid ASC").all(tid)
+  const services = allItems.filter((s) => (s.item_kind || 'main') !== 'addon')
+  const addons = allItems.filter((s) => (s.item_kind || 'main') === 'addon')
   const priceList = services.length ? {
     currency,
     policy: '以下为门店当前在售项目的基础价;参考图、复杂款、加项与特殊材料需技师确认最终报价。',
     items: services.map((s) => ({
       nameZh: s.name_zh,
       nameEn: s.name_en || undefined,
+      category: s.category_id && categoryById[s.category_id] ? categoryById[s.category_id].name : undefined,
       price: priceOf(s.price_cents),
       deposit: priceOf(s.deposit_cents),
-      durationMin: s.base_duration_min || undefined
+      durationMin: s.base_duration_min || undefined,
+      ...tierPrices(s.id)
     }))
   } : null
+  // 加项目录:顾客问「卸甲多少钱」「补一根多少钱」时 AI 才答得上来,并知道这个加项能配在哪些大类上
+  const addonList = addons.length ? {
+    currency,
+    policy: '加项在主项目之外单独计费;单指类按指数计费。',
+    items: addons.map((s) => {
+      let scope = []
+      try { scope = JSON.parse(s.addon_scope_json || '[]') } catch { scope = [] }
+      return {
+        nameZh: s.name_zh,
+        nameEn: s.name_en || undefined,
+        unit: s.unit === 'per_finger' ? '按指' : (s.unit === 'per_session' ? '按次' : '单次'),
+        price: priceOf(s.price_cents),
+        appliesTo: scope.map((catId) => categoryById[catId]?.name).filter(Boolean),
+        ...tierPrices(s.id)
+      }
+    })
+  } : null
+  // 计价规则摘要:用自然语言写进事实,AI 就不会把「足部加收」「本店免卸」答错
+  const ruleState = getPricingRules(tid)
+  const ruleTexts = []
+  if (ruleState.foot_surcharge.isActive) ruleTexts.push(`足部项目在最终金额上整单加收 ${priceOf(ruleState.foot_surcharge.config.amountCents)}(任何价格档都一样加)。`)
+  if (ruleState.single_finger.isActive) ruleTexts.push(`单指计费:按该单所用价格档的延长类主项目价的 ${ruleState.single_finger.config.pct || 10}% 每指计算。`)
+  if (ruleState.tip_reuse.isActive) ruleTexts.push(`甲片重利用固定收 ${priceOf(ruleState.tip_reuse.config.amountCents)},不分价格档。`)
+  if (ruleState.removal_free_if_in_store.isActive && ruleState.removal_free_if_in_store.config.enabled !== false) ruleTexts.push('本店做的甲免费卸;非本店做的按卸甲价目收费(技师可酌情免)。')
+  const pricingRules = ruleTexts.length ? ruleTexts : null
   // 会员/储值方案:同样实时读商家自己的配置
   const packages = db.prepare('SELECT kind, name, price_cents, bonus_cents, times_count, benefits FROM membership_packages WHERE tenant_id = ? AND is_active = 1 ORDER BY sort_order ASC, rowid ASC').all(tid)
   const memberLevels = packages.length ? packages.map((p) => ({
@@ -919,6 +960,8 @@ function liveTenantFacts() {
     ...(currency ? { currency } : {}),
     ...(facts.region ? { region: facts.region } : {}),
     ...(priceList ? { priceList } : {}),
+    ...(addonList ? { addonList } : {}),
+    ...(pricingRules ? { pricingRules } : {}),
     ...(memberLevels ? { memberLevels } : {}),
     ...(technicians.length ? { technicians } : {})
   }
@@ -1054,7 +1097,7 @@ function json(res, statusCode, body) {
   res.writeHead(statusCode, {
     'content-type': 'application/json; charset=utf-8',
     'access-control-allow-origin': '*',
-    'access-control-allow-methods': 'GET,POST,PATCH,OPTIONS',
+    'access-control-allow-methods': 'GET,POST,PATCH,PUT,DELETE,OPTIONS',
     'access-control-allow-headers': 'content-type,authorization'
   })
   res.end(JSON.stringify(body))
@@ -1133,7 +1176,12 @@ function requireOwner(req) {
 
 function requireAdmin(req) {
   const auth = req.headers.authorization || ''
-  if (auth === `Bearer ${OWNER_TOKEN}`) return { role: 'owner', provider: 'demo-token', technicianId: null, tenantId: DEFAULT_TENANT_ID }
+  if (auth === `Bearer ${OWNER_TOKEN}`) {
+    // 平台主钥匙可显式指定要操作哪个租户(平台侧运维脚本用:体验店种子注入、代商家配价目表)。
+    // 不带这个头时行为与以前完全一致(=默认租户),所以对现有调用零影响;主钥匙本来就是最高信任根。
+    const asTenant = validTenantId(req.headers['x-admin-tenant-id'] || '')
+    return { role: 'owner', provider: 'demo-token', technicianId: null, tenantId: asTenant }
+  }
   const token = auth.startsWith('Bearer ') ? auth.slice(7) : ''
   // 真实账号会话优先(sess_ 前缀);演示白名单 token 仅在本地开发开关下有效
   const accountAdmin = adminFromSessionToken(token)
@@ -6465,6 +6513,495 @@ function getFinanceSummary(body) {
   `).get()
 }
 
+/* ===== P0 多价位计价引擎(2026-08-06,店主定稿口径,勿改语义)=====
+   四档价:list 原价 / share 分享价 / member 会员价 / course 疗程价(course 另带次数)。
+   四条行业规则:
+     foot_surcharge          足部加收——整单最终金额 +amountCents(各档算完后加,不分档)
+     single_finger           单指价——按「该单所用价格档」的延长类主项目价 ÷10(pct) × 指数
+     tip_reuse               甲片重利用——固定 amountCents,无档
+     removal_free_if_in_store 本店做的免卸——有本店历史完成单自动免;否则技师可手动勾选免
+   注:tip_reuse 计入小计(它是一项服务费);foot_surcharge 在小计之外整单加收。 */
+const PRICE_TIERS = ['list', 'share', 'member', 'course']
+const PRICING_RULE_KEYS = ['foot_surcharge', 'single_finger', 'tip_reuse', 'removal_free_if_in_store']
+const DEFAULT_PRICING_RULES = {
+  foot_surcharge: { amountCents: 10000 },
+  single_finger: { pct: 10 },
+  tip_reuse: { amountCents: 10000 },
+  removal_free_if_in_store: { enabled: true }
+}
+const MEMBER_QUALIFY_MODES = ['any_recharge', 'balance_gt_0', 'total_spend', 'manual']
+const DEFAULT_MEMBERSHIP_CONFIG = {
+  tiersEnabled: false,
+  memberQualify: 'any_recharge',
+  qualifyValueCents: 0,
+  expireDays: null,
+  tiers: []
+}
+
+function getPricingRules(tenantId = currentTenantId()) {
+  const rows = db.prepare('SELECT * FROM pricing_rules WHERE tenant_id = ?').all(tenantId)
+  const byKey = {}
+  for (const row of rows) byKey[row.key] = row
+  const out = {}
+  for (const key of PRICING_RULE_KEYS) {
+    const row = byKey[key]
+    let config = { ...DEFAULT_PRICING_RULES[key] }
+    if (row) {
+      try { config = { ...config, ...JSON.parse(row.config_json || '{}') } } catch { /* 配置损坏时退回默认 */ }
+    }
+    out[key] = {
+      key,
+      // 没配过的规则默认关闭(存量商户行为零变化);配过才按 is_active 走
+      isActive: row ? Boolean(row.is_active) : false,
+      config,
+      updatedAt: row?.updated_at || null
+    }
+  }
+  return out
+}
+
+function putPricingRule(tenantId, key, { isActive, config }) {
+  if (!PRICING_RULE_KEYS.includes(key)) throw apiError(400, 'BAD_REQUEST', `未知计价规则:${key}`)
+  const merged = { ...DEFAULT_PRICING_RULES[key], ...(config && typeof config === 'object' ? config : {}) }
+  db.prepare(`INSERT INTO pricing_rules (tenant_id, key, config_json, is_active, updated_at) VALUES (?, ?, ?, ?, ?)
+    ON CONFLICT(tenant_id, key) DO UPDATE SET config_json = excluded.config_json, is_active = excluded.is_active, updated_at = excluded.updated_at`)
+    .run(tenantId, key, JSON.stringify(merged), isActive === false ? 0 : 1, iso(new Date()))
+}
+
+function getMembershipConfig(tenantId = currentTenantId()) {
+  const row = db.prepare("SELECT value FROM tenant_settings WHERE tenant_id = ? AND key = 'membership_config'").get(tenantId)
+  let stored = {}
+  if (row) {
+    try { stored = JSON.parse(row.value || '{}') } catch { stored = {} }
+  }
+  const merged = { ...DEFAULT_MEMBERSHIP_CONFIG, ...stored }
+  if (!MEMBER_QUALIFY_MODES.includes(merged.memberQualify)) merged.memberQualify = 'any_recharge'
+  merged.tiersEnabled = Boolean(merged.tiersEnabled)
+  merged.qualifyValueCents = Math.max(0, Math.round(Number(merged.qualifyValueCents) || 0))
+  merged.expireDays = merged.expireDays === null || merged.expireDays === undefined || merged.expireDays === ''
+    ? null
+    : Math.max(0, Math.round(Number(merged.expireDays) || 0)) || null
+  merged.tiers = Array.isArray(merged.tiers) ? merged.tiers : []
+  // 等级未开启时不下发等级字段,避免前端/AI 误以为门店有等级体系
+  if (!merged.tiersEnabled) delete merged.tiers
+  return merged
+}
+
+function setMembershipConfig(tenantId, input = {}) {
+  const current = getMembershipConfig(tenantId)
+  const next = {
+    tiersEnabled: input.tiersEnabled === undefined ? Boolean(current.tiersEnabled) : Boolean(input.tiersEnabled),
+    memberQualify: MEMBER_QUALIFY_MODES.includes(input.memberQualify) ? input.memberQualify : current.memberQualify,
+    qualifyValueCents: input.qualifyValueCents === undefined
+      ? current.qualifyValueCents
+      : Math.max(0, Math.round(Number(input.qualifyValueCents) || 0)),
+    expireDays: input.expireDays === undefined
+      ? (current.expireDays ?? null)
+      : (input.expireDays === null || input.expireDays === '' ? null : Math.max(0, Math.round(Number(input.expireDays) || 0)) || null),
+    tiers: Array.isArray(input.tiers) ? input.tiers.slice(0, 20) : (current.tiers || [])
+  }
+  db.prepare(`INSERT INTO tenant_settings (tenant_id, key, value, updated_at) VALUES (?, 'membership_config', ?, ?)
+    ON CONFLICT(tenant_id, key) DO UPDATE SET value = excluded.value, updated_at = excluded.updated_at`)
+    .run(tenantId, JSON.stringify(next), iso(new Date()))
+  return getMembershipConfig(tenantId)
+}
+
+// 储值余额分桶:legacy = 老平台迁移过来的期初余额(不是本店收的钱),normal = 本系统内真实充值
+function storedValueBalanceDetail(userId, tenantId = currentTenantId()) {
+  const row = db.prepare(`SELECT
+      COALESCE(SUM(amount_cents), 0) AS total,
+      COALESCE(SUM(CASE WHEN bucket = 'legacy' THEN amount_cents ELSE 0 END), 0) AS legacy
+    FROM stored_value_transactions WHERE tenant_id = ? AND user_id = ?`).get(tenantId, userId)
+  const totalCents = row.total || 0
+  const legacyCents = row.legacy || 0
+  return { totalCents, legacyCents, normalCents: totalCents - legacyCents }
+}
+
+// 首充判定 = 该顾客从未有过任何 recharge 流水(不是「余额为 0」——清零复充不算首充)
+function isFirstRecharge(userId, tenantId = currentTenantId()) {
+  const row = db.prepare("SELECT 1 AS hit FROM stored_value_transactions WHERE tenant_id = ? AND user_id = ? AND type = 'recharge' LIMIT 1")
+    .get(tenantId, userId)
+  return !row
+}
+
+// 顾客累计消费:本系统内完成单的实收 + 迁移带过来的历史累计(只用于会员判定,不进财务)
+function customerTotalSpendCents(userId, tenantId = currentTenantId(), sinceIso = null) {
+  const booked = sinceIso
+    ? db.prepare("SELECT COALESCE(SUM(final_due_cents), 0) AS spent FROM bookings WHERE tenant_id = ? AND user_id = ? AND status = 'COMPLETED' AND appointment_start >= ?").get(tenantId, userId, sinceIso)
+    : db.prepare("SELECT COALESCE(SUM(final_due_cents), 0) AS spent FROM bookings WHERE tenant_id = ? AND user_id = ? AND status = 'COMPLETED'").get(tenantId, userId)
+  const legacy = sinceIso ? 0 : (db.prepare('SELECT legacy_total_spend_cents AS c FROM users WHERE id = ?').get(userId)?.c || 0)
+  return (booked?.spent || 0) + legacy
+}
+
+// 会员判定:四种资格模式由商家在「会员与储值设置」里选
+function isMemberOf(userId, tenantId = currentTenantId()) {
+  if (!userId) return false
+  const config = getMembershipConfig(tenantId)
+  const sinceIso = config.expireDays ? iso(new Date(Date.now() - config.expireDays * 86400000)) : null
+  if (config.memberQualify === 'balance_gt_0') return storedValueBalanceDetail(userId, tenantId).totalCents > 0
+  if (config.memberQualify === 'total_spend') {
+    return customerTotalSpendCents(userId, tenantId, sinceIso) >= config.qualifyValueCents
+  }
+  if (config.memberQualify === 'manual') {
+    const row = db.prepare('SELECT tags_json FROM users WHERE id = ? AND tenant_id = ?').get(userId, tenantId)
+    let tags = []
+    try { tags = JSON.parse(row?.tags_json || '[]') } catch { tags = [] }
+    return tags.some((tag) => /会员|member/i.test(String(tag)))
+  }
+  // any_recharge:充过值就是会员。迁移期初(migrate_opening)本质是老店的充值,同样算数。
+  const sql = sinceIso
+    ? "SELECT 1 AS hit FROM stored_value_transactions WHERE tenant_id = ? AND user_id = ? AND type IN ('recharge', 'migrate_opening') AND created_at >= ? LIMIT 1"
+    : "SELECT 1 AS hit FROM stored_value_transactions WHERE tenant_id = ? AND user_id = ? AND type IN ('recharge', 'migrate_opening') LIMIT 1"
+  const row = sinceIso ? db.prepare(sql).get(tenantId, userId, sinceIso) : db.prepare(sql).get(tenantId, userId)
+  return Boolean(row)
+}
+
+function pricingCategories(tenantId = currentTenantId()) {
+  return db.prepare('SELECT * FROM service_categories WHERE tenant_id = ? ORDER BY sort_order ASC, rowid ASC').all(tenantId)
+}
+
+// 单个项目的某档价格:缺档回落 list 档,再回落 services.price_cents(老数据零配置也能报价)
+function servicePriceCents(service, tierKey = 'list') {
+  if (!service) return { priceCents: 0, courseTimes: null, tierUsed: tierKey, fallback: true }
+  const pick = (tier) => db.prepare('SELECT * FROM service_prices WHERE service_id = ? AND tier_key = ?').get(service.id, tier)
+  const row = pick(tierKey) || (tierKey === 'list' ? null : pick('list'))
+  if (row) return { priceCents: row.price_cents || 0, courseTimes: row.course_times || null, tierUsed: row.tier_key, fallback: row.tier_key !== tierKey }
+  return { priceCents: service.price_cents || 0, courseTimes: null, tierUsed: 'list', fallback: true }
+}
+
+function servicePriceMap(serviceId) {
+  const out = {}
+  for (const row of db.prepare('SELECT * FROM service_prices WHERE service_id = ?').all(serviceId)) {
+    out[row.tier_key] = { priceCents: row.price_cents || 0, courseTimes: row.course_times || null }
+  }
+  return out
+}
+
+// 卸甲行识别:大类 key = removal(标准) 或项目名含「卸」(商家自建大类时的兜底)
+function isRemovalItem(service, categoryById) {
+  if (!service) return false
+  const cat = service.category_id ? categoryById[service.category_id] : null
+  if (cat && String(cat.key || '').toLowerCase() === 'removal') return true
+  return /卸/.test(String(service.name_zh || '')) || /remov/i.test(String(service.name_en || ''))
+}
+
+/* 纯函数计价:入参 { tenantId, serviceId, tierKey, addons:[{serviceId, qty, fingers}], applyFootSurcharge,
+   applyTipReuse, userId, manualFreeRemoval } → { lines, subtotalCents, rulesApplied, totalCents, freeRemovalBy } */
+function quotePrice(input = {}) {
+  const tenantId = input.tenantId || currentTenantId()
+  const tierKey = PRICE_TIERS.includes(input.tierKey) ? input.tierKey : 'list'
+  const rules = getPricingRules(tenantId)
+  const categoryById = {}
+  for (const cat of pricingCategories(tenantId)) categoryById[cat.id] = cat
+  const getSvc = (id) => db.prepare('SELECT * FROM services WHERE id = ? AND tenant_id = ?').get(id, tenantId)
+
+  const main = input.serviceId ? getSvc(input.serviceId) : null
+  if (input.serviceId && !main) throw apiError(404, 'NOT_FOUND', '本店没有这个项目(或不属于当前门店)。')
+  const mainPrice = main ? servicePriceCents(main, tierKey) : { priceCents: 0, courseTimes: null }
+
+  // 免卸判定:本店有历史完成单 → 系统自动免;没有 → 技师可手动勾选免
+  const userId = input.userId || ''
+  const removalRule = rules.removal_free_if_in_store
+  const removalRuleOn = removalRule.isActive && removalRule.config.enabled !== false
+  const hasStoreHistory = Boolean(userId && db.prepare("SELECT 1 AS hit FROM bookings WHERE tenant_id = ? AND user_id = ? AND status = 'COMPLETED' LIMIT 1").get(tenantId, userId))
+  let freeRemovalBy = null
+  if (removalRuleOn) {
+    if (hasStoreHistory) freeRemovalBy = 'system'
+    else if (input.manualFreeRemoval) freeRemovalBy = 'manual'
+  }
+
+  const lines = []
+  const rulesApplied = []
+  const noteRule = (key, amountCents, label) => {
+    if (!rulesApplied.some((item) => item.key === key)) rulesApplied.push({ key, label, amountCents })
+  }
+
+  const pushItemLine = (service, { kind, qty, fingers, unitCents, note }) => {
+    const removal = isRemovalItem(service, categoryById)
+    const count = fingers || qty || 1
+    let amountCents = unitCents * count
+    let freeReason = null
+    if (removal && freeRemovalBy) {
+      amountCents = 0
+      freeReason = freeRemovalBy
+      noteRule('removal_free_if_in_store', 0, freeRemovalBy === 'system' ? '本店做的,卸甲免费' : '技师手动免卸')
+    }
+    lines.push({
+      kind,
+      serviceId: service.id,
+      name: service.name_zh,
+      nameEn: service.name_en || '',
+      unit: service.unit || 'once',
+      qty: service.unit === 'per_finger' ? 1 : count,
+      fingers: service.unit === 'per_finger' ? count : 0,
+      unitCents,
+      amountCents,
+      isRemoval: removal,
+      freeReason,
+      note: note || ''
+    })
+  }
+
+  if (main) {
+    pushItemLine(main, { kind: 'main', qty: 1, unitCents: mainPrice.priceCents })
+  }
+
+  for (const raw of Array.isArray(input.addons) ? input.addons : []) {
+    const svc = getSvc(raw && raw.serviceId)
+    if (!svc) throw apiError(404, 'NOT_FOUND', '本店没有这个加项(或不属于当前门店)。')
+    const unit = svc.unit || 'once'
+    if (unit === 'per_finger') {
+      const fingers = Math.max(1, Math.round(Number(raw.fingers ?? raw.qty ?? 1) || 1))
+      let unitCents = servicePriceCents(svc, tierKey).priceCents
+      let note = ''
+      // 单指价按比例挂靠主项目(延长类)时:单指价 = 主项目该档价 × pct%(默认 10%,即 ÷10)
+      if (svc.price_rule === 'pct_of_tier_price' && rules.single_finger.isActive) {
+        const pct = Number(svc.price_rule_value) > 0 ? Number(svc.price_rule_value) : Number(rules.single_finger.config.pct || 10)
+        unitCents = Math.round(mainPrice.priceCents * pct / 100)
+        note = `按主项目${tierKey}档价 ${pct}%/指`
+        noteRule('single_finger', unitCents * fingers, '单指计费')
+      }
+      pushItemLine(svc, { kind: 'addon', fingers, unitCents, note })
+    } else {
+      const qty = Math.max(1, Math.round(Number(raw.qty ?? 1) || 1))
+      pushItemLine(svc, { kind: 'addon', qty, unitCents: servicePriceCents(svc, tierKey).priceCents })
+    }
+  }
+
+  // 甲片重利用:固定金额,不分档
+  if ((input.applyTipReuse || input.tipReuse) && rules.tip_reuse.isActive) {
+    const amountCents = Math.max(0, Math.round(Number(rules.tip_reuse.config.amountCents ?? 10000)))
+    lines.push({ kind: 'rule', serviceId: null, name: '甲片重利用', nameEn: 'Tip reuse', unit: 'once', qty: 1, fingers: 0, unitCents: amountCents, amountCents, isRemoval: false, freeReason: null, note: '固定价,不分档' })
+    noteRule('tip_reuse', amountCents, '甲片重利用')
+  }
+
+  const subtotalCents = lines.reduce((sum, line) => sum + line.amountCents, 0)
+  let totalCents = subtotalCents
+  // 足部加收:整单最终 +amountCents(各档算完后加,任何价格档都一样加)
+  if (input.applyFootSurcharge && rules.foot_surcharge.isActive) {
+    const amountCents = Math.max(0, Math.round(Number(rules.foot_surcharge.config.amountCents ?? 10000)))
+    totalCents += amountCents
+    noteRule('foot_surcharge', amountCents, '足部加收')
+  }
+  return {
+    tenantId,
+    tierKey,
+    courseTimes: mainPrice.courseTimes || null,
+    lines,
+    subtotalCents,
+    rulesApplied,
+    totalCents,
+    freeRemovalBy,
+    hasStoreHistory
+  }
+}
+
+function upsertServicePrice(tenantId, serviceId, tierKey, priceCents, courseTimes = null) {
+  const cents = Math.max(0, Math.round(Number(priceCents) || 0))
+  db.prepare(`INSERT INTO service_prices (id, tenant_id, service_id, tier_key, price_cents, course_times)
+    VALUES (?, ?, ?, ?, ?, ?)
+    ON CONFLICT(service_id, tier_key) DO UPDATE SET price_cents = excluded.price_cents, course_times = excluded.course_times, tenant_id = excluded.tenant_id`)
+    .run(randomId('sp'), tenantId, serviceId, tierKey, cents,
+      tierKey === 'course' ? (Math.max(0, Math.round(Number(courseTimes) || 0)) || null) : null)
+}
+
+function writePricingItemPrices(tenantId, serviceId, body = {}, listCents = 0) {
+  const clear = (tier) => db.prepare('DELETE FROM service_prices WHERE service_id = ? AND tier_key = ?').run(serviceId, tier)
+  upsertServicePrice(tenantId, serviceId, 'list', listCents) // list 档 = services.price_cents,永远双写
+  for (const [field, tier] of [['sharePriceCents', 'share'], ['memberPriceCents', 'member']]) {
+    if (body[field] === undefined) continue
+    if (body[field] === null || body[field] === '') clear(tier)
+    else upsertServicePrice(tenantId, serviceId, tier, body[field])
+  }
+  if (body.coursePriceCents !== undefined) {
+    if (body.coursePriceCents === null || body.coursePriceCents === '') clear('course')
+    else upsertServicePrice(tenantId, serviceId, 'course', body.coursePriceCents, body.courseTimes)
+  }
+}
+
+function pricingItemShape(body = {}, cur = {}, tenantId = currentTenantId()) {
+  const itemKind = body.itemKind === undefined ? (cur.item_kind || 'main') : (body.itemKind === 'addon' ? 'addon' : 'main')
+  const categoryId = body.categoryId === undefined ? (cur.category_id || null) : (String(body.categoryId || '').trim() || null)
+  let categoryName = cur.category || '未分类'
+  if (categoryId) {
+    const cat = db.prepare('SELECT * FROM service_categories WHERE id = ? AND tenant_id = ?').get(categoryId, tenantId)
+    if (!cat) throw apiError(400, 'BAD_REQUEST', '大类不存在或不属于本店。')
+    categoryName = cat.name
+  } else if (body.category !== undefined) {
+    categoryName = String(body.category || '未分类')
+  }
+  const type = String(body.type || cur.type || 'OTHER').toUpperCase()
+  let addonScope = []
+  if (Array.isArray(body.addonScope)) addonScope = body.addonScope.map((item) => String(item))
+  else { try { addonScope = JSON.parse(cur.addon_scope_json || '[]') } catch { addonScope = [] } }
+  return {
+    itemKind,
+    categoryId,
+    categoryName,
+    unit: ['once', 'per_finger', 'per_session'].includes(body.unit) ? body.unit : (cur.unit || 'once'),
+    priceRule: ['fixed', 'pct_of_tier_price'].includes(body.priceRule) ? body.priceRule : (cur.price_rule || 'fixed'),
+    priceRuleValue: body.priceRuleValue === undefined ? (cur.price_rule_value || 0) : (Number(body.priceRuleValue) || 0),
+    addonScope,
+    type: ['NAIL', 'LASH', 'CARE', 'OTHER'].includes(type) ? type : 'OTHER'
+  }
+}
+
+function serializePricingCategory(row) {
+  return {
+    id: row.id,
+    key: row.key,
+    name: row.name,
+    sortOrder: row.sort_order,
+    isBookable: Boolean(row.is_bookable),
+    note: row.note || '',
+    itemCount: db.prepare('SELECT COUNT(*) AS n FROM services WHERE tenant_id = ? AND category_id = ?').get(row.tenant_id, row.id).n
+  }
+}
+
+function serializePricingItem(row) {
+  const prices = servicePriceMap(row.id)
+  let addonScope = []
+  try { addonScope = JSON.parse(row.addon_scope_json || '[]') } catch { addonScope = [] }
+  return {
+    id: row.id,
+    nameZh: row.name_zh,
+    nameEn: row.name_en || '',
+    type: row.type,
+    itemKind: row.item_kind || 'main',
+    categoryId: row.category_id || null,
+    category: row.category,
+    unit: row.unit || 'once',
+    priceRule: row.price_rule || 'fixed',
+    priceRuleValue: row.price_rule_value || 0,
+    addonScope,
+    baseDurationMin: row.base_duration_min,
+    depositCents: row.deposit_cents,
+    sortOrder: row.sort_order,
+    isActive: Boolean(row.is_active),
+    priceCents: row.price_cents,
+    listPriceCents: prices.list ? prices.list.priceCents : row.price_cents,
+    sharePriceCents: prices.share ? prices.share.priceCents : null,
+    memberPriceCents: prices.member ? prices.member.priceCents : null,
+    coursePriceCents: prices.course ? prices.course.priceCents : null,
+    courseTimes: prices.course ? prices.course.courseTimes : null
+  }
+}
+
+function serializeRechargeTier(row) {
+  let gift = {}
+  try { gift = JSON.parse(row.gift_json || '{}') } catch { gift = {} }
+  return {
+    id: row.id,
+    amountCents: row.amount_cents,
+    gift,
+    sortOrder: row.sort_order,
+    isActive: Boolean(row.is_active),
+    createdAt: row.created_at
+  }
+}
+
+/* ===== P0 顾客批量导入(平台代商家迁移老顾客与期初余额)=====
+   口径:手机号是唯一主键;期初余额进 legacy 桶(是老店欠顾客的服务,不是本店的收入,永远不进财务账本);
+   历史累计消费只写 users.legacy_total_spend_cents,仅用于会员资格判定。 */
+function normalizeImportPhone(raw) {
+  return String(raw || '').replace(/[\s\-()（）]/g, '').trim().slice(0, 30)
+}
+
+function importTenantCustomers(tenantId, body = {}) {
+  const rows = Array.isArray(body.rows) ? body.rows : []
+  if (!rows.length) throw apiError(400, 'BAD_REQUEST', '没有可导入的数据行。')
+  if (rows.length > 5000) throw apiError(400, 'BAD_REQUEST', '单次导入上限 5000 行,请分批。')
+  const dryRun = body.dryRun !== false
+  const seenPhones = new Set()
+  const report = { toCreate: 0, toUpdate: 0, conflicts: [], skipped: [], balanceSumCents: 0, rowCount: rows.length }
+  const actions = []
+  rows.forEach((raw, index) => {
+    const line = index + 1
+    const source = raw && typeof raw === 'object' ? raw : {}
+    const name = String(source.name || source.displayName || '').trim()
+    const nickname = String(source.nickname || '').trim()
+    const phone = normalizeImportPhone(source.phone)
+    if (!phone) {
+      report.skipped.push({ line, name, reason: '缺手机号,无法去重,已跳过' })
+      return
+    }
+    if (seenPhones.has(phone)) {
+      report.skipped.push({ line, name, phone, reason: '同一文件内手机号重复,只取第一条' })
+      return
+    }
+    seenPhones.add(phone)
+    const balanceCents = Math.max(0, Math.round(Number(source.balanceCents) || 0))
+    const totalSpendCents = Math.max(0, Math.round(Number(source.totalSpendCents) || 0))
+    const existing = db.prepare('SELECT * FROM users WHERE tenant_id = ? AND phone = ? ORDER BY rowid ASC LIMIT 1').get(tenantId, phone)
+    if (existing && name && String(existing.display_name || '').trim() && String(existing.display_name).trim() !== name) {
+      report.conflicts.push({ line, phone, existingName: existing.display_name, incomingName: name, reason: '同手机号已存在但姓名不同,不自动合并,请人工确认' })
+      return
+    }
+    report.balanceSumCents += balanceCents
+    if (existing) report.toUpdate += 1
+    else report.toCreate += 1
+    actions.push({ mode: existing ? 'update' : 'create', userId: existing?.id || null, name, nickname, phone, balanceCents, totalSpendCents, source })
+  })
+  if (dryRun) return { dryRun: true, tenantId, ...report }
+  // 执行前的最后一道闸:平台端必须把试跑报告里的期初余额总额原样回传,数额对不上直接拒绝
+  if (body.confirmBalanceCents !== undefined && Math.round(Number(body.confirmBalanceCents) || 0) !== report.balanceSumCents) {
+    throw apiError(400, 'BALANCE_CONFIRM_MISMATCH', `期初余额总额与试跑报告不一致(试跑 ${report.balanceSumCents} 分,确认 ${body.confirmBalanceCents} 分),请重新试跑。`)
+  }
+  const now = iso(new Date())
+  let created = 0
+  let updated = 0
+  let openingWrittenCents = 0
+  const writtenUsers = []
+  db.exec('BEGIN IMMEDIATE')
+  try {
+    for (const action of actions) {
+      let userId = action.userId
+      const tags = Array.isArray(action.source.tags)
+        ? action.source.tags.map((tag) => String(tag).trim()).filter(Boolean)
+        : String(action.source.tags || '').split(/[,，、|]/).map((tag) => tag.trim()).filter(Boolean)
+      const noteParts = [String(action.source.note || '').trim()]
+      if (action.nickname && action.nickname !== action.name) noteParts.push(`昵称:${action.nickname}`)
+      const note = noteParts.filter(Boolean).join(' · ').slice(0, 400) || null
+      const birthday = String(action.source.birthday || '').trim() || null
+      if (action.mode === 'create') {
+        userId = randomId('user')
+        db.prepare(`INSERT INTO users (id, display_name, phone, tenant_id, tags_json, notes, birthday, is_migrated, legacy_total_spend_cents)
+          VALUES (?, ?, ?, ?, ?, ?, ?, 1, ?)`).run(userId, action.name || action.nickname || action.phone, action.phone, tenantId,
+          JSON.stringify(tags), note, birthday, action.totalSpendCents)
+        db.prepare(`INSERT OR IGNORE INTO user_identities (id, user_id, provider, provider_user_id, phone, created_at, updated_at, tenant_id)
+          VALUES (?, ?, 'phone', ?, ?, ?, ?, ?)`).run(randomId('identity'), userId, action.phone, action.phone, now, now, tenantId)
+        created += 1
+      } else {
+        const cur = db.prepare('SELECT * FROM users WHERE id = ?').get(userId)
+        let curTags = []
+        try { curTags = JSON.parse(cur.tags_json || '[]') } catch { curTags = [] }
+        const mergedTags = Array.from(new Set([...curTags, ...tags]))
+        db.prepare(`UPDATE users SET display_name = ?, tags_json = ?, notes = ?, birthday = ?, is_migrated = 1, legacy_total_spend_cents = ? WHERE id = ?`).run(
+          String(cur.display_name || '').trim() || action.name || action.nickname || action.phone,
+          JSON.stringify(mergedTags),
+          note || cur.notes || null,
+          birthday || cur.birthday || null,
+          Math.max(cur.legacy_total_spend_cents || 0, action.totalSpendCents),
+          userId)
+        updated += 1
+      }
+      if (action.balanceCents > 0) {
+        db.prepare(`INSERT INTO stored_value_transactions (id, tenant_id, user_id, type, amount_cents, pay_channel, note, created_by, created_at, bucket)
+          VALUES (?, ?, ?, 'migrate_opening', ?, 'migration', ?, 'platform-import', ?, 'legacy')`).run(
+          randomId('sv'), tenantId, userId, action.balanceCents,
+          `老系统迁移期初余额(${action.phone})`, now)
+        openingWrittenCents += action.balanceCents
+      }
+      writtenUsers.push({ userId, phone: action.phone, mode: action.mode, balanceCents: action.balanceCents })
+    }
+    db.exec('COMMIT')
+  } catch (error) {
+    db.exec('ROLLBACK')
+    throw error
+  }
+  return { dryRun: false, tenantId, created, updated, openingWrittenCents, users: writtenUsers, ...report }
+}
+
 async function route(req, res) {
   if (req.method === 'OPTIONS') return json(res, 204, {})
   const url = new URL(req.url, `http://${req.headers.host}`)
@@ -7244,6 +7781,204 @@ async function route(req, res) {
       WHERE id = ?`).run(payload.type, payload.category, payload.nameZh, payload.nameEn, payload.descriptionZh, payload.descriptionEn, payload.imageUrl, payload.priceCents, payload.depositCents, payload.baseDurationMin, payload.isActive, payload.sortOrder, JSON.stringify(payload.processJson), JSON.stringify(payload.noticeJson), id)
     return json(res, 200, { service: serializeService(getService(id)) })
   }
+  /* ===== P0 价目表管理(大类 / 项目与加项 / 计价规则 / 试算)=====
+     全部 owner-only + 租户隔离;写库时 services.price_cents 与 service_prices(list) 双写保持一致。 */
+  if (path.startsWith('/admin/pricing/') || path.startsWith('/admin/membership/') || path.startsWith('/admin/recharge-tiers')) {
+    if (adminSession.role !== 'owner') throw apiError(403, 'FORBIDDEN', 'Owner permission is required.')
+  }
+  if (path === '/admin/pricing/categories' || path.startsWith('/admin/pricing/categories/')) {
+    const tid = currentTenantId()
+    const catId = path.split('/')[4] || null
+    if (req.method === 'GET' && !catId) {
+      return json(res, 200, { categories: pricingCategories(tid).map(serializePricingCategory) })
+    }
+    if (req.method === 'POST' && !catId) {
+      const body = await readBody(req)
+      const name = String(body.name || '').trim()
+      if (!name) throw apiError(400, 'BAD_REQUEST', '大类名称必填。')
+      const key = String(body.key || '').trim().toLowerCase().replace(/[^a-z0-9_-]/g, '') || `cat-${Math.random().toString(36).slice(2, 8)}`
+      if (db.prepare('SELECT id FROM service_categories WHERE tenant_id = ? AND key = ?').get(tid, key)) throw apiError(409, 'DUPLICATE', `大类标识 ${key} 已存在。`)
+      const id = randomId('cat')
+      db.prepare(`INSERT INTO service_categories (id, tenant_id, key, name, sort_order, is_bookable, note, created_at)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?)`).run(id, tid, key, name.slice(0, 40),
+        Math.round(Number(body.sortOrder) || 0), body.isBookable === false ? 0 : 1, String(body.note || '').slice(0, 200) || null, iso(new Date()))
+      return json(res, 201, { category: serializePricingCategory(db.prepare('SELECT * FROM service_categories WHERE id = ?').get(id)) })
+    }
+    if (req.method === 'PATCH' && catId) {
+      const cur = db.prepare('SELECT * FROM service_categories WHERE id = ? AND tenant_id = ?').get(catId, tid)
+      if (!cur) throw apiError(404, 'NOT_FOUND', 'Category not found.')
+      const body = await readBody(req)
+      db.prepare('UPDATE service_categories SET name = ?, sort_order = ?, is_bookable = ?, note = ? WHERE id = ?').run(
+        body.name === undefined ? cur.name : String(body.name).trim().slice(0, 40) || cur.name,
+        body.sortOrder === undefined ? cur.sort_order : Math.round(Number(body.sortOrder) || 0),
+        body.isBookable === undefined ? cur.is_bookable : (body.isBookable ? 1 : 0),
+        body.note === undefined ? cur.note : (String(body.note).slice(0, 200) || null), catId)
+      return json(res, 200, { category: serializePricingCategory(db.prepare('SELECT * FROM service_categories WHERE id = ?').get(catId)) })
+    }
+    if (req.method === 'DELETE' && catId) {
+      const cur = db.prepare('SELECT * FROM service_categories WHERE id = ? AND tenant_id = ?').get(catId, tid)
+      if (!cur) throw apiError(404, 'NOT_FOUND', 'Category not found.')
+      const used = db.prepare('SELECT COUNT(*) AS n FROM services WHERE tenant_id = ? AND category_id = ?').get(tid, catId).n
+      if (used > 0) throw apiError(409, 'CATEGORY_IN_USE', `该大类下还有 ${used} 个项目,请先移走或删除项目。`)
+      db.prepare('DELETE FROM service_categories WHERE id = ?').run(catId)
+      return json(res, 200, { deleted: true })
+    }
+  }
+  if (path === '/admin/pricing/items' || path.startsWith('/admin/pricing/items/')) {
+    const tid = currentTenantId()
+    const itemId = path.split('/')[4] || null
+    if (req.method === 'GET' && !itemId) {
+      const rows = db.prepare('SELECT * FROM services WHERE tenant_id = ? ORDER BY item_kind ASC, sort_order ASC, rowid ASC').all(tid)
+      return json(res, 200, { items: rows.map(serializePricingItem) })
+    }
+    if (req.method === 'POST' && !itemId) {
+      const body = await readBody(req)
+      const nameZh = String(body.nameZh || body.name || '').trim()
+      if (!nameZh) throw apiError(400, 'BAD_REQUEST', '项目名称必填。')
+      const id = serviceIdFrom({ type: body.type || 'OTHER', nameEn: body.nameEn, nameZh })
+      const shape = pricingItemShape(body, {}, tid)
+      const listCents = Math.max(0, Math.round(Number(body.listPriceCents ?? body.priceCents ?? 0) || 0))
+      db.prepare(`INSERT INTO services
+        (id, tenant_id, type, category, name_zh, name_en, description_zh, description_en, image_url, price_cents, deposit_cents, base_duration_min, sort_order, is_active, process_json, notice_json,
+         item_kind, category_id, unit, price_rule, price_rule_value, addon_scope_json)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`).run(
+        id, tid, shape.type, shape.categoryName, nameZh, String(body.nameEn || nameZh), String(body.descriptionZh || ''), String(body.descriptionEn || ''),
+        String(body.imageUrl || '/assets/images/nail-addon.jpg'), listCents,
+        Math.max(0, Math.round(Number(body.depositCents ?? 0) || 0)),
+        Math.max(0, Math.round(Number(body.baseDurationMin ?? 60) || 0)),
+        Math.round(Number(body.sortOrder) || 0), body.isActive === false ? 0 : 1, '[]', '[]',
+        shape.itemKind, shape.categoryId, shape.unit, shape.priceRule, shape.priceRuleValue, JSON.stringify(shape.addonScope))
+      writePricingItemPrices(tid, id, body, listCents)
+      // 主项目自动分配给全部在职技师(与 /admin/services 同规则);加项不占技师能力位
+      if (shape.itemKind === 'main') {
+        const assign = db.prepare('INSERT OR IGNORE INTO technician_services (technician_id, service_id) VALUES (?, ?)')
+        for (const tech of db.prepare('SELECT id FROM technicians WHERE is_active = 1 AND tenant_id = ?').all(tid)) assign.run(tech.id, id)
+      }
+      return json(res, 201, { item: serializePricingItem(db.prepare('SELECT * FROM services WHERE id = ?').get(id)) })
+    }
+    if (req.method === 'PATCH' && itemId) {
+      const cur = db.prepare('SELECT * FROM services WHERE id = ? AND tenant_id = ?').get(itemId, tid)
+      if (!cur) throw apiError(404, 'NOT_FOUND', 'Item not found.')
+      const body = await readBody(req)
+      const shape = pricingItemShape(body, cur, tid)
+      const listCents = body.listPriceCents === undefined && body.priceCents === undefined
+        ? cur.price_cents
+        : Math.max(0, Math.round(Number(body.listPriceCents ?? body.priceCents) || 0))
+      db.prepare(`UPDATE services SET type = ?, category = ?, name_zh = ?, name_en = ?, price_cents = ?, deposit_cents = ?, base_duration_min = ?,
+        sort_order = ?, is_active = ?, item_kind = ?, category_id = ?, unit = ?, price_rule = ?, price_rule_value = ?, addon_scope_json = ? WHERE id = ?`).run(
+        shape.type, shape.categoryName,
+        body.nameZh === undefined ? cur.name_zh : String(body.nameZh).trim().slice(0, 60) || cur.name_zh,
+        body.nameEn === undefined ? cur.name_en : String(body.nameEn).trim().slice(0, 80),
+        listCents,
+        body.depositCents === undefined ? cur.deposit_cents : Math.max(0, Math.round(Number(body.depositCents) || 0)),
+        body.baseDurationMin === undefined ? cur.base_duration_min : Math.max(0, Math.round(Number(body.baseDurationMin) || 0)),
+        body.sortOrder === undefined ? cur.sort_order : Math.round(Number(body.sortOrder) || 0),
+        body.isActive === undefined ? cur.is_active : (body.isActive ? 1 : 0),
+        shape.itemKind, shape.categoryId, shape.unit, shape.priceRule, shape.priceRuleValue, JSON.stringify(shape.addonScope), itemId)
+      writePricingItemPrices(tid, itemId, body, listCents)
+      return json(res, 200, { item: serializePricingItem(db.prepare('SELECT * FROM services WHERE id = ?').get(itemId)) })
+    }
+    if (req.method === 'DELETE' && itemId) {
+      const cur = db.prepare('SELECT * FROM services WHERE id = ? AND tenant_id = ?').get(itemId, tid)
+      if (!cur) throw apiError(404, 'NOT_FOUND', 'Item not found.')
+      // 有历史订单引用的项目不能物理删(会断掉订单溯源),改为下架
+      const used = db.prepare('SELECT COUNT(*) AS n FROM bookings WHERE service_id = ?').get(itemId).n
+      if (used > 0) {
+        db.prepare('UPDATE services SET is_active = 0 WHERE id = ?').run(itemId)
+        return json(res, 200, { deleted: false, disabled: true, reason: `该项目有 ${used} 笔历史订单,已改为下架而非删除。` })
+      }
+      db.prepare('DELETE FROM service_prices WHERE service_id = ?').run(itemId)
+      db.prepare('DELETE FROM technician_services WHERE service_id = ?').run(itemId)
+      db.prepare('DELETE FROM services WHERE id = ?').run(itemId)
+      return json(res, 200, { deleted: true })
+    }
+  }
+  if (path === '/admin/pricing/rules') {
+    const tid = currentTenantId()
+    if (req.method === 'GET') return json(res, 200, { rules: getPricingRules(tid) })
+    if (req.method === 'PUT') {
+      const body = await readBody(req)
+      const incoming = body.rules && typeof body.rules === 'object' ? body.rules : body
+      for (const key of PRICING_RULE_KEYS) {
+        if (incoming[key] === undefined) continue
+        const entry = incoming[key] || {}
+        putPricingRule(tid, key, { isActive: entry.isActive, config: entry.config })
+      }
+      return json(res, 200, { rules: getPricingRules(tid) })
+    }
+  }
+  if (req.method === 'POST' && path === '/admin/pricing/preview') {
+    const body = await readBody(req)
+    return json(res, 200, { quote: quotePrice({ ...body, tenantId: currentTenantId() }) })
+  }
+  // 会员判定结果读接口:老板端「会员与储值」列表用,也是 isMemberOf / isFirstRecharge / 分桶余额的对外口径
+  if (req.method === 'GET' && path === '/admin/membership/members') {
+    const tid = currentTenantId()
+    const one = String(query.userId || '').trim()
+    const rows = one
+      ? db.prepare('SELECT id, display_name, phone, is_migrated, legacy_total_spend_cents FROM users WHERE id = ? AND tenant_id = ?').all(one, tid)
+      : db.prepare('SELECT id, display_name, phone, is_migrated, legacy_total_spend_cents FROM users WHERE tenant_id = ? ORDER BY rowid DESC LIMIT 500').all(tid)
+    return json(res, 200, {
+      config: getMembershipConfig(tid),
+      members: rows.map((row) => {
+        const balance = storedValueBalanceDetail(row.id, tid)
+        return {
+          userId: row.id,
+          name: row.display_name,
+          phone: row.phone || '',
+          isMember: isMemberOf(row.id, tid),
+          isFirstRecharge: isFirstRecharge(row.id, tid),
+          isMigrated: Boolean(row.is_migrated),
+          balanceCents: balance.totalCents,
+          legacyBalanceCents: balance.legacyCents,
+          normalBalanceCents: balance.normalCents,
+          totalSpendCents: customerTotalSpendCents(row.id, tid)
+        }
+      })
+    })
+  }
+  if (path === '/admin/membership/config') {
+    const tid = currentTenantId()
+    if (req.method === 'GET') return json(res, 200, { config: getMembershipConfig(tid), qualifyModes: MEMBER_QUALIFY_MODES })
+    if (req.method === 'PUT') {
+      const body = await readBody(req)
+      return json(res, 200, { config: setMembershipConfig(tid, body.config && typeof body.config === 'object' ? body.config : body) })
+    }
+  }
+  if (path === '/admin/recharge-tiers' || path.startsWith('/admin/recharge-tiers/')) {
+    const tid = currentTenantId()
+    const tierId = path.split('/')[3] || null
+    if (req.method === 'GET' && !tierId) {
+      return json(res, 200, { tiers: db.prepare('SELECT * FROM recharge_tiers WHERE tenant_id = ? ORDER BY sort_order ASC, amount_cents ASC').all(tid).map(serializeRechargeTier) })
+    }
+    if (req.method === 'POST' && !tierId) {
+      const body = await readBody(req)
+      const amountCents = Math.max(0, Math.round(Number(body.amountCents) || 0))
+      if (!amountCents) throw apiError(400, 'BAD_REQUEST', '充值金额必填且大于 0。')
+      const id = randomId('rt')
+      db.prepare('INSERT INTO recharge_tiers (id, tenant_id, amount_cents, gift_json, sort_order, is_active, created_at) VALUES (?, ?, ?, ?, ?, ?, ?)')
+        .run(id, tid, amountCents, JSON.stringify(body.gift && typeof body.gift === 'object' ? body.gift : {}),
+          Math.round(Number(body.sortOrder) || 0), body.isActive === false ? 0 : 1, iso(new Date()))
+      return json(res, 201, { tier: serializeRechargeTier(db.prepare('SELECT * FROM recharge_tiers WHERE id = ?').get(id)) })
+    }
+    if (req.method === 'PATCH' && tierId) {
+      const cur = db.prepare('SELECT * FROM recharge_tiers WHERE id = ? AND tenant_id = ?').get(tierId, tid)
+      if (!cur) throw apiError(404, 'NOT_FOUND', 'Recharge tier not found.')
+      const body = await readBody(req)
+      db.prepare('UPDATE recharge_tiers SET amount_cents = ?, gift_json = ?, sort_order = ?, is_active = ? WHERE id = ?').run(
+        body.amountCents === undefined ? cur.amount_cents : Math.max(0, Math.round(Number(body.amountCents) || 0)),
+        body.gift === undefined ? cur.gift_json : JSON.stringify(body.gift && typeof body.gift === 'object' ? body.gift : {}),
+        body.sortOrder === undefined ? cur.sort_order : Math.round(Number(body.sortOrder) || 0),
+        body.isActive === undefined ? cur.is_active : (body.isActive ? 1 : 0), tierId)
+      return json(res, 200, { tier: serializeRechargeTier(db.prepare('SELECT * FROM recharge_tiers WHERE id = ?').get(tierId)) })
+    }
+    if (req.method === 'DELETE' && tierId) {
+      const cur = db.prepare('SELECT * FROM recharge_tiers WHERE id = ? AND tenant_id = ?').get(tierId, tid)
+      if (!cur) throw apiError(404, 'NOT_FOUND', 'Recharge tier not found.')
+      db.prepare('DELETE FROM recharge_tiers WHERE id = ?').run(tierId)
+      return json(res, 200, { deleted: true })
+    }
+  }
   // ===== 会员套餐(充值套餐 / 会员次卡)定义 CRUD =====
   if (req.method === 'GET' && path === '/admin/packages') {
     if (adminSession.role !== 'owner') throw apiError(403, 'FORBIDDEN', 'Owner permission is required.')
@@ -7731,6 +8466,15 @@ async function route(req, res) {
     db.prepare('UPDATE tenants SET status = ? WHERE id = ?').run(next, id)
     return json(res, 200, { tenant: { id, status: next } })
   }
+  /* ---- 平台端·顾客批量导入(从美团/大众/老系统迁过来的顾客与期初余额)----
+     dryRun 只出报告不写库;执行时以手机号为主键去重,期初余额记 legacy 桶(不进本店财务收入)。 */
+  if (req.method === 'POST' && path.startsWith('/platform/tenants/') && path.endsWith('/import/customers')) {
+    if (!isPlatform()) throw apiError(401, 'UNAUTHORIZED', 'Platform token required.')
+    const tenantId = path.split('/')[3]
+    if (!db.prepare('SELECT id FROM tenants WHERE id = ?').get(tenantId)) throw apiError(404, 'NOT_FOUND', 'Tenant not found.')
+    const body = await readBody(req)
+    return json(res, 200, importTenantCustomers(tenantId, body))
+  }
   // ---- 平台端·商家配置(替商家配好入驻资料):门店/营业时间/服务价目/技师/AI知识库 ----
   const platTenantMatch = path.match(/^\/platform\/tenants\/([^/]+)\/(store|business-hours|services|technicians|kb)(?:\/([^/]+))?$/)
   if (platTenantMatch) {
@@ -7743,20 +8487,22 @@ async function route(req, res) {
 
     if (section === 'store') {
       const store = tenantStore()
-      if (req.method === 'GET') return json(res, 200, { store: store ? { id: store.id, name: store.name, address: store.address || '', phone: store.phone || '' } : null })
+      if (req.method === 'GET') return json(res, 200, { store: store ? { id: store.id, name: store.name, address: store.address || '', phone: store.phone || '', currency: store.currency || '' } : null })
       if (req.method === 'PUT') {
         if (!store) throw apiError(404, 'NOT_FOUND', 'Store not found for tenant.')
         const body = await readBody(req)
         const name = String(body.name ?? store.name).trim() || store.name
         const address = String(body.address ?? store.address ?? '').trim()
         const phone = String(body.phone ?? store.phone ?? '').trim()
-        db.prepare('UPDATE stores SET name = ?, address = ?, phone = ? WHERE id = ?').run(name, address, phone, store.id)
+        // 币种(2026-08-06):境内体验店是 CNY,加拿大店是 CAD;不传就保持原值
+        const currency = String(body.currency ?? store.currency ?? 'CAD').trim().toUpperCase().slice(0, 6) || store.currency
+        db.prepare('UPDATE stores SET name = ?, address = ?, phone = ?, currency = ? WHERE id = ?').run(name, address, phone, currency, store.id)
         // 同步进该租户 AI 知识事实(与商家端同规则,AI 回答与系统一致)
         const factStmt = db.prepare(`INSERT INTO tenant_kb_facts (tenant_id, key, value, updated_by, updated_at) VALUES (?, ?, ?, 'platform', ?)
           ON CONFLICT(tenant_id, key) DO UPDATE SET value = excluded.value, updated_by = 'platform', updated_at = excluded.updated_at`)
         if (address) factStmt.run(tenantId, 'storeAddress', address, iso(new Date()))
         if (phone) factStmt.run(tenantId, 'storePhone', phone, iso(new Date()))
-        return json(res, 200, { store: { id: store.id, name, address, phone } })
+        return json(res, 200, { store: { id: store.id, name, address, phone, currency } })
       }
     }
 
@@ -8872,6 +9618,9 @@ async function route(req, res) {
   if (req.method === 'GET' && path === '/admin/kb') {
     return json(res, 200, {
       facts: tenantKbFacts(currentTenantId()),
+      // 2026-08-06:把"AI 实际拿到的实时事实"一并下发(价目三档价/加项目录/计价规则摘要),
+      // 商家与运营可据此核对 AI 口径;只增字段,老前端不受影响。
+      liveFacts: liveTenantFacts(),
       entries: db.prepare('SELECT id, question, keywords, answer_zh AS answerZh, answer_en AS answerEn, enabled, updated_at AS updatedAt FROM tenant_kb_entries WHERE tenant_id = ? ORDER BY created_at DESC').all(currentTenantId())
         .map((row) => ({ ...row, enabled: Boolean(row.enabled) })),
       documents: db.prepare('SELECT id, title, length(content) AS size, created_at AS createdAt FROM tenant_kb_documents WHERE tenant_id = ? ORDER BY created_at DESC').all(currentTenantId())
@@ -10436,6 +11185,73 @@ db.exec(`
   SELECT 'identity-bf-' || lower(hex(randomblob(6))), id, 'phone', phone, phone, datetime('now'), datetime('now')
   FROM users WHERE phone IS NOT NULL AND phone != '';
 `)
+// ===== P0 多价位价格模型(2026-08-06)=====
+// 背景:美业真实门店一个项目有多个价位(原价/分享价/会员价/疗程价),还有「按指计费」「足部加收」等行业规则。
+// 纪律:services.price_cents 语义不变 = 原价(tier_key='list'),老小程序的 /services、/stores 字段一个不动;
+//       新能力全部走增量列 + 新表 + 新端点。
+db.exec(`
+  CREATE TABLE IF NOT EXISTS service_categories (
+    id TEXT PRIMARY KEY,
+    tenant_id TEXT NOT NULL DEFAULT 'lucky-luxe',
+    key TEXT NOT NULL,
+    name TEXT NOT NULL,
+    sort_order INTEGER NOT NULL DEFAULT 0,
+    is_bookable INTEGER NOT NULL DEFAULT 1,
+    note TEXT,
+    created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
+  );
+  CREATE UNIQUE INDEX IF NOT EXISTS idx_service_categories_key ON service_categories(tenant_id, key);
+  CREATE TABLE IF NOT EXISTS service_prices (
+    id TEXT PRIMARY KEY,
+    tenant_id TEXT NOT NULL DEFAULT 'lucky-luxe',
+    service_id TEXT NOT NULL,
+    tier_key TEXT NOT NULL,
+    price_cents INTEGER NOT NULL DEFAULT 0,
+    course_times INTEGER,
+    UNIQUE (service_id, tier_key)
+  );
+  CREATE INDEX IF NOT EXISTS idx_service_prices_tenant ON service_prices(tenant_id, service_id);
+  CREATE TABLE IF NOT EXISTS pricing_rules (
+    tenant_id TEXT NOT NULL,
+    key TEXT NOT NULL,
+    config_json TEXT NOT NULL DEFAULT '{}',
+    is_active INTEGER NOT NULL DEFAULT 1,
+    updated_at TEXT,
+    PRIMARY KEY (tenant_id, key)
+  );
+  CREATE TABLE IF NOT EXISTS recharge_tiers (
+    id TEXT PRIMARY KEY,
+    tenant_id TEXT NOT NULL DEFAULT 'lucky-luxe',
+    amount_cents INTEGER NOT NULL DEFAULT 0,
+    gift_json TEXT NOT NULL DEFAULT '{}',
+    sort_order INTEGER NOT NULL DEFAULT 0,
+    is_active INTEGER NOT NULL DEFAULT 1,
+    created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
+  );
+  CREATE INDEX IF NOT EXISTS idx_recharge_tiers_tenant ON recharge_tiers(tenant_id, sort_order);
+`)
+for (const sql of [
+  "ALTER TABLE services ADD COLUMN item_kind TEXT NOT NULL DEFAULT 'main'",
+  'ALTER TABLE services ADD COLUMN category_id TEXT',
+  "ALTER TABLE services ADD COLUMN unit TEXT NOT NULL DEFAULT 'once'",
+  "ALTER TABLE services ADD COLUMN price_rule TEXT NOT NULL DEFAULT 'fixed'",
+  'ALTER TABLE services ADD COLUMN price_rule_value REAL NOT NULL DEFAULT 0',
+  "ALTER TABLE services ADD COLUMN addon_scope_json TEXT NOT NULL DEFAULT '[]'",
+  // 储值分桶:legacy = 从老平台迁移过来的期初余额(不进本店财务收入),normal = 本系统内真实充值
+  "ALTER TABLE stored_value_transactions ADD COLUMN bucket TEXT NOT NULL DEFAULT 'normal'",
+  'ALTER TABLE users ADD COLUMN is_migrated INTEGER NOT NULL DEFAULT 0',
+  'ALTER TABLE users ADD COLUMN legacy_total_spend_cents INTEGER NOT NULL DEFAULT 0'
+]) {
+  try {
+    db.exec(sql)
+  } catch (error) {
+    if (!String(error.message || '').includes('duplicate column')) throw error
+  }
+}
+// 存量项目的原价回填成 list 档,保证「services.price_cents === service_prices(list)」双写口径从第一天成立
+db.exec(`INSERT OR IGNORE INTO service_prices (id, tenant_id, service_id, tier_key, price_cents)
+  SELECT 'sp-list-' || id, tenant_id, id, 'list', price_cents FROM services`)
+
 seedDatabase()
 // 演示环境:铺一批顾客服务小记,让「有小记/无小记」两态在老板端+员工端都能直接看到
 if (process.env.ALLOW_DEMO_ADMIN_LOGIN === 'true') {

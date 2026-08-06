@@ -84,6 +84,7 @@
     <button class="navbtn on" data-page="overview" onclick="nav('overview')"><svg class="ni" viewBox="0 0 16 16"><path d="M2 8l6-5 6 5v6H2z"/></svg>概览</button>
     <button class="navbtn" data-page="merchants" onclick="nav('merchants')"><svg class="ni" viewBox="0 0 16 16"><rect x="2" y="3" width="12" height="10" rx="2"/><path d="M2 7h12"/></svg>商家管理</button>
     <button class="navbtn" data-page="config" onclick="nav('config')"><svg class="ni" viewBox="0 0 16 16"><path d="M3 3h10v8H8l-3 3v-3H3z"/></svg>商家配置</button>
+    <button class="navbtn" data-page="import" onclick="nav('import')"><svg class="ni" viewBox="0 0 16 16"><path d="M8 2v8"/><path d="M5 7l3 3 3-3"/><path d="M2 13h12"/></svg>顾客导入</button>
     <button class="navbtn" data-page="leads" onclick="nav('leads')"><svg class="ni" viewBox="0 0 16 16"><path d="M2 4h12v8H2z"/><path d="M2 4l6 4 6-4"/></svg>入驻线索<span id="leadBadge" class="badge hidden"></span></button>
     <button class="navbtn" data-page="billing" onclick="nav('billing')"><svg class="ni" viewBox="0 0 16 16"><circle cx="8" cy="8" r="6"/><path d="M8 5v3l2 2"/></svg>套餐计费<span id="billBadge" class="badge hidden"></span></button>
     <button class="navbtn" data-page="kb" onclick="nav('kb')"><svg class="ni" viewBox="0 0 16 16"><path d="M3 2h7l3 3v9H3z"/><path d="M5 7h6M5 10h4"/></svg>通用知识库</button>
@@ -262,6 +263,47 @@
     </section>
 
     <!-- 线索 -->
+    <!-- 顾客导入(2026-08-06 P0):把商家在美团/大众/老系统里的顾客与期初余额搬进来 -->
+    <section id="page-import" class="hidden">
+      <h1>顾客导入</h1>
+      <div class="selbar">
+        <span class="muted">导入到商家:</span>
+        <select id="impTenant" style="min-width:230px"></select>
+        <span class="muted">期初余额记「历史桶」,不进商家财务收入</span>
+      </div>
+      <div class="card">
+        <h2>1. 粘贴或上传 CSV</h2>
+        <p class="muted" style="margin-bottom:8px">表头(第一行)支持中英文:<code>姓名,手机号,昵称,生日,标签,备注,余额,累计消费</code> 或 <code>name,phone,nickname,birthday,tags,note,balance,totalSpend</code>。金额按元填写(如 1280 表示 ¥1280)。手机号是去重主键,必填。</p>
+        <div class="row" style="margin-bottom:10px">
+          <input type="file" id="impFile" accept=".csv,.txt" onchange="loadImportFile(event)">
+          <button class="sm" onclick="fillImportSample()">填个示例看看格式</button>
+        </div>
+        <textarea id="impCsv" style="min-height:150px;font-family:ui-monospace,Menlo,monospace;font-size:12.5px" placeholder="姓名,手机号,余额,累计消费&#10;林小雅,13800001111,1280,5600"></textarea>
+        <div class="row" style="margin-top:10px">
+          <button class="p" onclick="runImportDry()">2. 试跑(不写库,只出报告)</button>
+          <span class="muted" id="impParsed"></span>
+        </div>
+      </div>
+      <div class="card hidden" id="impReportCard">
+        <h2>3. 试跑报告</h2>
+        <div id="impReport"></div>
+        <div class="cred" style="margin-top:12px">
+          <label class="row" style="gap:8px;align-items:flex-start">
+            <input type="checkbox" id="impConfirm" style="width:16px;height:16px;margin-top:3px">
+            <span id="impConfirmText">商家已书面确认期初余额总额</span>
+          </label>
+        </div>
+        <div class="row" style="margin-top:12px">
+          <button class="p" onclick="runImportExec()">4. 确认执行导入</button>
+          <span class="muted">执行后期初余额以 migrate_opening 流水写入(只追加,不可改);冲突行不会写入。</span>
+        </div>
+      </div>
+      <div class="card hidden" id="impResultCard">
+        <h2>执行结果</h2>
+        <div id="impResult"></div>
+      </div>
+    </section>
+
     <section id="page-leads" class="hidden">
       <h1>入驻线索</h1>
       <div class="card">
@@ -286,7 +328,7 @@ function esc(s){return String(s??'').replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt
 async function api(p,o={}){const r=await fetch(p,{...o,headers:{'content-type':'application/json',authorization:'Bearer '+TOKEN,...(o.headers||{})}});const d=await r.json().catch(()=>null);if(!r.ok)throw new Error((d&&d.error&&d.error.message)||('HTTP '+r.status));return d}
 async function login(){TOKEN=$('tokenInput').value.trim();try{await api('/platform/tenants');localStorage.setItem('ll-platform-token',TOKEN);$('loginWrap').classList.add('hidden');$('app').classList.remove('hidden');refreshAll()}catch(e){toast('钥匙不对或服务不可用:'+e.message)}}
 function logout(){localStorage.removeItem('ll-platform-token');location.reload()}
-function nav(p){document.querySelectorAll('.navbtn[data-page]').forEach(b=>b.classList.toggle('on',b.dataset.page===p));['overview','merchants','config','leads','billing','kb'].forEach(x=>$('page-'+x).classList.toggle('hidden',x!==p));if(p==='overview')loadOverview();if(p==='leads')loadLeads();if(p==='config')initConfig();if(p==='billing')loadBilling();if(p==='kb')loadPlatformKb()}
+function nav(p){document.querySelectorAll('.navbtn[data-page]').forEach(b=>b.classList.toggle('on',b.dataset.page===p));['overview','merchants','config','import','leads','billing','kb'].forEach(x=>$('page-'+x).classList.toggle('hidden',x!==p));if(p==='overview')loadOverview();if(p==='leads')loadLeads();if(p==='config')initConfig();if(p==='import')initImport();if(p==='billing')loadBilling();if(p==='kb')loadPlatformKb()}
 async function refreshAll(){await loadTenants();await loadLeads();await loadOverview()}
 
 // ===== 数据缓存 =====
@@ -597,6 +639,103 @@ async function addEntry(){
 }
 async function toggleEntry(id,en){try{await api(`/platform/tenants/${CFG_T}/kb/${id}`,{method:'PATCH',body:JSON.stringify({enabled:!en})});loadConfig()}catch(e){toast(e.message)}}
 async function delEntry(id){if(!confirm('删除该问答?'))return;try{await api(`/platform/tenants/${CFG_T}/kb/${id}`,{method:'DELETE'});loadConfig()}catch(e){toast(e.message)}}
+
+// ===== 顾客导入(2026-08-06 P0)=====
+// 手机号是去重主键;期初余额写 legacy 桶(migrate_opening 流水,只追加),不进商家财务收入。
+let IMP_ROWS=[], IMP_REPORT=null
+function initImport(){
+  const sel=$('impTenant')
+  sel.innerHTML=TENANTS.map(t=>`<option value="${esc(t.id)}">${esc(t.name)}(${esc(t.id)})</option>`).join('')
+  $('impReportCard').classList.add('hidden'); $('impResultCard').classList.add('hidden')
+}
+function fillImportSample(){
+  $('impCsv').value='姓名,手机号,昵称,生日,标签,备注,余额,累计消费\n林小雅,13800001111,小雅,03-14,VIP;怕痛,手部敏感,1280,5600\n王梦琪,13800002222,,08-16,,,0,300'
+  parseImportCsv()
+}
+function loadImportFile(ev){
+  const f=ev.target.files&&ev.target.files[0]
+  if(!f)return
+  const reader=new FileReader()
+  reader.onload=()=>{$('impCsv').value=String(reader.result||'');parseImportCsv()}
+  reader.readAsText(f,'utf-8')
+}
+const IMP_FIELDS=[
+  ['name',/姓名|名字|客户名|name/i],['phone',/手机|电话|phone|mobile/i],['nickname',/昵称|nick/i],
+  ['birthday',/生日|birth/i],['tags',/标签|tag/i],['note',/备注|note|remark/i],
+  ['balanceCents',/余额|储值|balance/i],['totalSpendCents',/累计消费|累计|消费总额|totalspend|total_spend/i]
+]
+function splitCsvLine(line){
+  const out=[];let cur='';let quoted=false
+  for(let i=0;i<line.length;i+=1){
+    const ch=line[i]
+    if(quoted){ if(ch==='"'&&line[i+1]==='"'){cur+='"';i+=1} else if(ch==='"'){quoted=false} else cur+=ch }
+    else if(ch==='"'){quoted=true}
+    else if(ch===','||ch==='\t'||ch==='，'){out.push(cur);cur=''}
+    else cur+=ch
+  }
+  out.push(cur)
+  return out.map(v=>v.trim())
+}
+function parseImportCsv(){
+  const text=$('impCsv').value.replace(/\r\n/g,'\n').trim()
+  IMP_ROWS=[]
+  if(!text){$('impParsed').textContent='';return}
+  const lines=text.split('\n').filter(l=>l.trim())
+  if(lines.length<2){$('impParsed').textContent='至少要有表头 + 1 行数据';return}
+  const header=splitCsvLine(lines[0])
+  const idx={}
+  IMP_FIELDS.forEach(([key,re])=>{ const i=header.findIndex(h=>re.test(h)); if(i>=0)idx[key]=i })
+  if(idx.phone===undefined){$('impParsed').textContent='⚠ 表头里找不到「手机号」列,无法去重';return}
+  const money=(v)=>{const n=Number(String(v||'').replace(/[^\d.]/g,''));return Number.isFinite(n)?Math.round(n*100):0}
+  for(const line of lines.slice(1)){
+    const cells=splitCsvLine(line)
+    const pick=(k)=>idx[k]===undefined?'':(cells[idx[k]]||'')
+    IMP_ROWS.push({
+      name:pick('name'),phone:pick('phone'),nickname:pick('nickname'),birthday:pick('birthday'),
+      tags:pick('tags'),note:pick('note'),
+      balanceCents:money(pick('balanceCents')),totalSpendCents:money(pick('totalSpendCents'))
+    })
+  }
+  $('impParsed').textContent=`已解析 ${IMP_ROWS.length} 行`
+}
+function moneyC(c){return '¥'+((c||0)/100).toFixed(2)}
+async function runImportDry(){
+  parseImportCsv()
+  if(!IMP_ROWS.length){toast('没有解析到数据行');return}
+  const tid=$('impTenant').value
+  try{
+    const r=await api(`/platform/tenants/${tid}/import/customers`,{method:'POST',body:JSON.stringify({rows:IMP_ROWS,dryRun:true})})
+    IMP_REPORT=r
+    $('impReport').innerHTML=`
+      <div class="row" style="gap:22px;margin-bottom:10px">
+        <div><div class="muted">新建顾客</div><b style="font-size:20px">${r.toCreate}</b></div>
+        <div><div class="muted">更新已有</div><b style="font-size:20px">${r.toUpdate}</b></div>
+        <div><div class="muted">冲突(不写库)</div><b style="font-size:20px;color:${r.conflicts.length?'var(--danger)':'inherit'}">${r.conflicts.length}</b></div>
+        <div><div class="muted">跳过</div><b style="font-size:20px">${r.skipped.length}</b></div>
+        <div><div class="muted">期初余额总额</div><b style="font-size:20px;color:var(--bronze)">${moneyC(r.balanceSumCents)}</b></div>
+      </div>
+      ${r.conflicts.length?`<table><thead><tr><th>行</th><th>手机号</th><th>库里姓名</th><th>文件姓名</th><th>说明</th></tr></thead><tbody>
+        ${r.conflicts.map(c=>`<tr><td>${c.line}</td><td>${esc(c.phone)}</td><td>${esc(c.existingName)}</td><td>${esc(c.incomingName)}</td><td class="muted">${esc(c.reason)}</td></tr>`).join('')}
+      </tbody></table>`:''}
+      ${r.skipped.length?`<p class="muted" style="margin-top:8px">跳过:${r.skipped.map(s=>`第 ${s.line} 行(${esc(s.reason)})`).join('、')}</p>`:''}`
+    $('impConfirmText').textContent=`商家已书面确认期初余额总额 ${moneyC(r.balanceSumCents)}`
+    $('impConfirm').checked=false
+    $('impReportCard').classList.remove('hidden')
+    $('impResultCard').classList.add('hidden')
+  }catch(e){toast(e.message)}
+}
+async function runImportExec(){
+  if(!IMP_REPORT){toast('先试跑一次');return}
+  if(!$('impConfirm').checked){toast('请先勾选「商家已书面确认期初余额总额」');return}
+  const tid=$('impTenant').value
+  if(!confirm(`确认把 ${IMP_REPORT.toCreate} 个新顾客 + ${IMP_REPORT.toUpdate} 个已有顾客写入「${tid}」,期初余额合计 ${moneyC(IMP_REPORT.balanceSumCents)}?`))return
+  try{
+    const r=await api(`/platform/tenants/${tid}/import/customers`,{method:'POST',body:JSON.stringify({rows:IMP_ROWS,dryRun:false,confirmBalanceCents:IMP_REPORT.balanceSumCents})})
+    $('impResult').innerHTML=`<p>新建 <b>${r.created}</b> 人 · 更新 <b>${r.updated}</b> 人 · 期初余额写入 <b>${moneyC(r.openingWrittenCents)}</b>(历史桶,不计入商家收入)${r.conflicts.length?` · 冲突 <b style="color:var(--danger)">${r.conflicts.length}</b> 条未写入`:''}</p>`
+    $('impResultCard').classList.remove('hidden')
+    toast('导入完成')
+  }catch(e){toast(e.message)}
+}
 
 if(TOKEN){$('tokenInput').value=TOKEN;login()}
 </script>
