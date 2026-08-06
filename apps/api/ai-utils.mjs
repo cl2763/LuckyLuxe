@@ -496,20 +496,31 @@ export async function createCustomerServiceReply({ lang = 'zh', message = '', sa
       let handoffReasonZh = ''
       let handoffReasonEn = ''
       const suggestedActions = []
+      // 2026-08-07:定金文案按「本店事实」算,不再写死 CAD $50——
+      // 境内店(CNY)以前会被答成加币定金。旗舰店的事实就是 depositAmount=50 / currency=CAD,
+      // 所以它的输出与改动前逐字一致(matrix 66 项不受影响)。
+      const depositFactsAll = knowledgeContext?.tenantFacts || {}
+      const rawDepositAll = depositFactsAll.depositAmount
+      // 没配定金事实的店(比如刚开的体验店)就别报数字——以前一律回落成 CAD $50,对境内店是错的
+      const depositLabel = typeof rawDepositAll === 'number' || /^\d+(\.\d+)?$/.test(String(rawDepositAll || ''))
+        ? `${depositFactsAll.currency || 'CAD'} $${rawDepositAll}`
+        : (rawDepositAll || '')
+      const depositZh = depositLabel ? `新客/Silver 会员预约定金为 ${depositLabel}` : '新客/Silver 会员预约定金以门店确认为准'
+      const depositEn = depositLabel ? `Silver/new customers pay ${depositLabel} deposit` : 'The deposit for Silver/new customers is confirmed by the store'
       if (asksPrice || hasReferenceImageContext || currentMentionsService) {
         intent = 'pricing'
         handoffRequired = hasReferenceImageContext || (memoryMentionsNail && /图|图片|参考图|款式|复杂|手绘|延长|reference|design|custom|可以吗|能做吗/.test(`${text}\n${memoryText}`))
         handoffReasonZh = handoffRequired ? '美甲复杂款式需要根据参考图、材料和加项人工确认最终报价。' : ''
         handoffReasonEn = handoffRequired ? 'Custom nail designs need staff confirmation based on reference, materials, and add-ons.' : ''
         if (memoryMentionsLash && !memoryMentionsNail) {
-          answerZh = `我接着你前面说的美睫来回答：美睫是固定价格，选择款式和明确加项后就是最终报价；预约前还需要确认是否需要下睫毛，以及近 3 个月是否有眼部手术、当前是否有眼部不适或结膜炎。新客/Silver 会员预约定金为 CAD $50，Gold 及以上通常可免定金。`
-          answerEn = 'For the lash service you mentioned: lash pricing is fixed, and the selected style plus confirmed add-ons is the final quote. We also need to confirm whether you need lower lashes, and whether you had eye surgery in the last 3 months or have current irritation/conjunctivitis. Silver/new customers pay CAD $50 deposit; Gold and above usually have deposit waived.'
+          answerZh = `我接着你前面说的美睫来回答：美睫是固定价格，选择款式和明确加项后就是最终报价；预约前还需要确认是否需要下睫毛，以及近 3 个月是否有眼部手术、当前是否有眼部不适或结膜炎。${depositZh}，Gold 及以上通常可免定金。`
+          answerEn = `For the lash service you mentioned: lash pricing is fixed, and the selected style plus confirmed add-ons is the final quote. We also need to confirm whether you need lower lashes, and whether you had eye surgery in the last 3 months or have current irritation/conjunctivitis. ${depositEn}; Gold and above usually have deposit waived.`
         } else if (memoryMentionsNail || hasReferenceImageContext) {
-          answerZh = `我接着你前面说的美甲/参考图来回答：美甲可以先参考基础价，但复杂款式、手绘、延长、卸甲、断甲修补、特殊材料或参考图款式都需要技师确认报价，到店后细节仍可能微调。你可以把是否需要延长、卸甲、修补断甲、贴饰品/珍珠/手绘这些信息一起发我，我会整理给技师确认。新客/Silver 会员预约定金为 CAD $50，Gold 及以上通常可免定金。`
-          answerEn = 'For the nail/reference style you mentioned: nail services can start from a base price, but custom designs, hand painting, extensions, removal, repairs, special materials, or reference-image styles need a technician quote and may still be adjusted in store. You can tell me whether extensions, removal, broken-nail repair, charms/pearls/hand painting are needed, and I will organize it for the technician. Silver/new customers pay CAD $50 deposit; Gold and above usually have deposit waived.'
+          answerZh = `我接着你前面说的美甲/参考图来回答：美甲可以先参考基础价，但复杂款式、手绘、延长、卸甲、断甲修补、特殊材料或参考图款式都需要技师确认报价，到店后细节仍可能微调。你可以把是否需要延长、卸甲、修补断甲、贴饰品/珍珠/手绘这些信息一起发我，我会整理给技师确认。${depositZh}，Gold 及以上通常可免定金。`
+          answerEn = `For the nail/reference style you mentioned: nail services can start from a base price, but custom designs, hand painting, extensions, removal, repairs, special materials, or reference-image styles need a technician quote and may still be adjusted in store. You can tell me whether extensions, removal, broken-nail repair, charms/pearls/hand painting are needed, and I will organize it for the technician. ${depositEn}; Gold and above usually have deposit waived.`
         } else {
-          answerZh = `美甲可以先参考基础价，但复杂款式、手绘、延长、卸甲、断甲修补、特殊材料或参考图款式都需要技师确认报价，到店后细节仍可能微调。美睫是固定价格，加项确认后就是最终报价；请同时告诉我是否需要下睫毛。新客/Silver 会员预约定金为 CAD $50，Gold 及以上会员通常可免定金。`
-          answerEn = 'Nail services show base prices, but custom designs, hand painting, extensions, removal, repairs, special materials, or reference-image styles require a technician quote and may be adjusted in store. Lash services use fixed pricing plus selected add-ons; please also tell us whether you need lower lashes. Silver/new customers pay CAD $50 deposit; Gold and above usually have deposit waived.'
+          answerZh = `美甲可以先参考基础价，但复杂款式、手绘、延长、卸甲、断甲修补、特殊材料或参考图款式都需要技师确认报价，到店后细节仍可能微调。美睫是固定价格，加项确认后就是最终报价；请同时告诉我是否需要下睫毛。${depositZh}，Gold 及以上会员通常可免定金。`
+          answerEn = `Nail services show base prices, but custom designs, hand painting, extensions, removal, repairs, special materials, or reference-image styles require a technician quote and may be adjusted in store. Lash services use fixed pricing plus selected add-ons; please also tell us whether you need lower lashes. ${depositEn}; Gold and above usually have deposit waived.`
         }
         suggestedActions.push('open_services')
       } else if (asksPolicy) {
@@ -521,30 +532,26 @@ export async function createCustomerServiceReply({ lang = 'zh', message = '', sa
         answerEn = 'Rescheduling or cancellation needs staff confirmation for your order and technician schedule. In general, more than 24 hours before the appointment can be changed/cancelled free of charge; same-day changes/cancellations are not supported, and being 30 minutes late cancels the booking with deposit non-refundable. I will route this to staff.'
       } else if (asksDeposit) {
         intent = 'deposit_policy'
-        const depositFacts = knowledgeContext?.tenantFacts || {}
-        const rawDeposit = depositFacts.depositAmount
-        const depositAmount = typeof rawDeposit === 'number' || /^\d+(\.\d+)?$/.test(String(rawDeposit || ''))
-          ? `${depositFacts.currency || 'CAD'} $${rawDeposit}`
-          : (rawDeposit || 'CAD $50')
-        answerZh = `预约需要支付定金哦：新客/Silver 会员定金为 ${depositAmount}，到店消费时可以抵扣尾款；Gold 及以上会员通常可以免定金。预约时间在定金支付成功（或满足免定金条件）后才会正式锁定。`
-        answerEn = `A booking deposit is required: new/Silver customers pay ${depositAmount}, which is deducted from the final balance in store; Gold members and above are usually deposit-free. Your slot is locked only after the deposit is paid or a valid waiver applies.`
+        answerZh = `预约需要支付定金哦：${depositLabel ? `新客/Silver 会员定金为 ${depositLabel}` : '新客/Silver 会员定金金额以门店确认为准'}，到店消费时可以抵扣尾款；Gold 及以上会员通常可以免定金。预约时间在定金支付成功（或满足免定金条件）后才会正式锁定。`
+        answerEn = `A booking deposit is required: ${depositLabel ? `new/Silver customers pay ${depositLabel}` : 'the deposit for new/Silver customers is confirmed by the store'}, which is deducted from the final balance in store; Gold members and above are usually deposit-free. Your slot is locked only after the deposit is paid or a valid waiver applies.`
       } else if (asksBooking) {
         intent = 'booking'
         const serviceContextZh = memoryMentionsLash && !memoryMentionsNail ? '你前面提到的是美睫，' : memoryMentionsNail ? '你前面提到的是美甲，' : ''
         const serviceContextEn = memoryMentionsLash && !memoryMentionsNail ? 'For the lash service you mentioned, ' : memoryMentionsNail ? 'For the nail service you mentioned, ' : ''
-        answerZh = `${serviceContextZh}你可以先选择对应服务，再选择日期、时间和技师。一个预约只能包含一个服务；如果同时做美甲和美睫，需要分开下两个订单。预约草稿会锁定 30 分钟；Silver/新客需要支付 CAD $50 定金，Gold 及以上通常可免定金。`
-        answerEn = `${serviceContextEn}choose the matching service, then select date, time, and artist. One booking contains one service only; nails and lashes need separate bookings. A booking draft holds for 30 minutes. Silver/new customers pay CAD $50 deposit; Gold and above usually have deposit waived.`
+        answerZh = `${serviceContextZh}你可以先选择对应服务，再选择日期、时间和技师。一个预约只能包含一个服务；如果同时做美甲和美睫，需要分开下两个订单。预约草稿会锁定 30 分钟；${depositLabel ? `Silver/新客需要支付 ${depositLabel} 定金` : 'Silver/新客需要支付定金(金额以门店确认为准)'}，Gold 及以上通常可免定金。`
+        answerEn = `${serviceContextEn}choose the matching service, then select date, time, and artist. One booking contains one service only; nails and lashes need separate bookings. A booking draft holds for 30 minutes. ${depositEn}; Gold and above usually have deposit waived.`
         suggestedActions.push('open_services')
       } else if (asksStore) {
         intent = 'store'
         const tenantFacts = knowledgeContext?.tenantFacts || {}
         const storeAddressUsable = firstStore.address && !/tbd/i.test(firstStore.address) ? firstStore.address : ''
-        const address = tenantFacts.storeAddress || storeAddressUsable || firstStore.address || '136 veterans place'
+        // 2026-08-07:没有地址就不要编——以前会回落到旗舰店的真实街道地址,等于把别人的店址报给这家店的顾客
+        const address = tenantFacts.storeAddress || storeAddressUsable || ''
         const hoursFact = tenantFacts.defaultHours
         const liveHoursZh = (hoursFact && typeof hoursFact === 'object' ? hoursFact.zh : hoursFact) || '周二至周日 10:00-19:00，周一休息'
         const liveHoursEn = (hoursFact && typeof hoursFact === 'object' ? hoursFact.en : hoursFact) || 'Tuesday to Sunday 10:00-19:00, Monday closed'
-        answerZh = `${firstStore.name || 'Lucky Luxe Ontario'} 营业时间为${liveHoursZh}。当前门店地址先按 ${address}。`
-        answerEn = `${firstStore.name || 'Lucky Luxe Ontario'} business hours: ${liveHoursEn}. Current store address: ${address}.`
+        answerZh = `${firstStore.name || 'Lucky Luxe Ontario'} 营业时间为${liveHoursZh}。${address ? `当前门店地址先按 ${address}。` : '门店详细地址请向门店确认。'}`
+        answerEn = `${firstStore.name || 'Lucky Luxe Ontario'} business hours: ${liveHoursEn}.${address ? ` Current store address: ${address}.` : ' Please confirm the exact address with the store.'}`
       } else if (asksOrder) {
         intent = 'order'
         if (customer && bookings.length) {

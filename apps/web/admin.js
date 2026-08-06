@@ -1,5 +1,5 @@
 // 构建号:每次交付递增。侧栏可见,排查"改了没生效"时先对版本。
-const ADMIN_BUILD = '20260806a-p0-pricing'
+const ADMIN_BUILD = '20260807a-jics-plan'
 console.log(`[admin] build ${ADMIN_BUILD}`)
 
 // "今天"必须按门店时区算(服务器同样钉在此时区),否则老板人在别的时区时全站日期错位一天。
@@ -7152,6 +7152,7 @@ function renderSubAi(a) {
   let badgeCls = ''
   let expText = ''
   if (a.includedInPlan) { badge = '套餐已含'; badgeCls = 'on'; expText = '当前套餐已包含 AI，无需单独订阅。' }
+  else if (a.enabled && a.unlimited) { badge = '长期开通'; badgeCls = 'on'; expText = 'AI 智能包长期有效，无到期时间。' }
   else if (a.enabled && a.source === 'trial') { badge = '试用中'; badgeCls = 'trial'; expText = `免费试用至 ${exp}，到期后可续订。` }
   else if (a.enabled) { badge = '已订阅'; badgeCls = 'on'; expText = `AI 有效期至 ${exp}。` }
   else if (a.trialPending) { badge = '待开通'; badgeCls = 'trial'; expText = `试用申请已提交（${subDate(a.trialPendingAt)}），我们会联系你确认门店信息后开通。` }

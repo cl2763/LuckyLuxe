@@ -12,6 +12,7 @@ const BASE_URL = (process.env.BASE_URL || 'http://127.0.0.1:4128').replace(/\/$/
 const OWNER_TOKEN = process.env.OWNER_TOKEN || 'owner-demo-token'
 const TENANT_ID = process.env.SEED_TENANT_ID || 'jics-nail'
 const TENANT_NAME = "Jic's Nail 小婕"
+const STORE_TIMEZONE = process.env.SEED_TIMEZONE || 'Asia/Shanghai' // 小婕店在境内
 
 const log = (...args) => console.log(...args)
 
@@ -97,15 +98,20 @@ async function main() {
   } else {
     const created = await api('/platform/tenants', {
       method: 'POST',
-      body: JSON.stringify({ id: TENANT_ID, name: TENANT_NAME, plan: 'single', initialTerm: 'year', city: '' })
+      body: JSON.stringify({ id: TENANT_ID, name: TENANT_NAME, plan: 'single', initialTerm: 'year', city: '', currency: 'CNY', timezone: STORE_TIMEZONE })
     })
     credentials = created.owner
     log(`+ 建店成功;老板账号 ${credentials.username}(初始密码只显示这一次)`)
   }
 
-  // 2. 门店币种:境内含税价,CNY
-  await api(`/platform/tenants/${TENANT_ID}/store`, { method: 'PUT', body: JSON.stringify({ name: TENANT_NAME, currency: 'CNY' }) })
-  log('- 门店币种设为 CNY')
+  // 2. 门店币种与时区:境内含税价 CNY;时区 Asia/Shanghai(2026-08-07 修:首版误种成 America/Toronto)
+  // 这一步每次都跑,所以对已存在的店同样会把时区/币种纠正过来 —— 幂等复跑即修复。
+  const storeRes = await api(`/platform/tenants/${TENANT_ID}/store`, {
+    method: 'PUT',
+    body: JSON.stringify({ name: TENANT_NAME, currency: 'CNY', timezone: STORE_TIMEZONE })
+  })
+  log(`- 门店币种 ${storeRes.store.currency} · 时区 ${storeRes.store.timezone}`)
+  if (storeRes.store.timezone !== STORE_TIMEZONE) throw new Error(`时区没写进去(实际 ${storeRes.store.timezone})`)
 
   // 3. 会员与储值:不开等级,充过值即会员,不设有效期
   await T('/admin/membership/config', {

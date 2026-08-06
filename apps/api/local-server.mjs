@@ -32,6 +32,8 @@ if (existsSync(pendingImportPath)) {
 const db = new DatabaseSync(join(dataDir, 'lucky-luxe.sqlite'))
 const PORT = Number(process.env.PORT || 4000)
 const OWNER_TOKEN = process.env.OWNER_DEMO_TOKEN || 'owner-demo-token'
+// 生产判定(Railway 会注入 RAILWAY_ENVIRONMENT):用于「日志里不许出现主钥匙」这类只在云端生效的收紧
+const IS_PRODUCTION = process.env.NODE_ENV === 'production' || Boolean(process.env.RAILWAY_ENVIRONMENT)
 // 多租户:请求级租户上下文。商家端 /admin 进入时按登录账号的租户 enterWith;
 // 顾客/公开路径不设上下文 → 回退默认租户(行为不变)。所有用 currentTenantId() 的模块自动按租户走。
 const DEFAULT_TENANT_ID = process.env.DEFAULT_TENANT_ID || 'lucky-luxe'
@@ -192,10 +194,13 @@ function aiAddonState(tenantId) {
     WHERE tenant_id = ? AND request_type = 'ai_trial' AND status = 'PENDING' ORDER BY created_at DESC LIMIT 1`).get(tenantId) || null
   // 付费订阅与免费试用都带到期日,靠 note 区分(getEntitlements 一律标 trial)
   const isPaid = String(row?.note || '').includes('订阅')
+  // 2026-08-07:有权限行但没有到期日 = 长期开通(体验店/内部店),既不是试用也不是付费订阅
+  const isUnlimited = Boolean(row) && !row.expires_at && Boolean(row.enabled)
   return {
     enabled: Boolean(f?.enabled),
     includedInPlan: f?.source === 'plan',
-    source: f?.source === 'plan' ? 'plan' : (row ? (isPaid ? 'paid' : 'trial') : 'none'),
+    unlimited: isUnlimited,
+    source: f?.source === 'plan' ? 'plan' : (row ? (isUnlimited ? 'unlimited' : (isPaid ? 'paid' : 'trial')) : 'none'),
     expiresAt: row?.expires_at || null,
     trialAvailable: !trialRow && !pendingTrial && f?.source !== 'plan',
     trialPending: Boolean(pendingTrial),
@@ -219,6 +224,17 @@ function grantAiTrial(tenantId) {
   db.prepare("INSERT INTO tenant_settings (tenant_id, key, value, updated_at) VALUES (?, 'ai_trial_started_at', ?, ?) ON CONFLICT(tenant_id, key) DO NOTHING")
     .run(tenantId, JSON.stringify({ at: now }), now)
   return untilIso
+}
+
+// 不限期开通 AI 智能包(expires_at = NULL):体验店/内部店用。
+// getEntitlements 对 expires_at 为空的覆盖项一律视为「永不过期」,所以这就是长期有效。
+function grantAiAddonUnlimited(tenantId) {
+  const now = iso(new Date())
+  db.prepare(`INSERT INTO tenant_entitlements (id, tenant_id, feature, enabled, expires_at, note, updated_by, updated_at)
+    VALUES (?, ?, ?, 1, NULL, 'AI 智能包长期开通(不限期)', 'platform', ?)
+    ON CONFLICT(tenant_id, feature) DO UPDATE SET enabled = 1, expires_at = NULL, note = excluded.note, updated_by = 'platform', updated_at = excluded.updated_at`)
+    .run(randomId('ent'), tenantId, AI_ADDON.feature, now)
+  return null
 }
 
 // 顺延 AI 智能包到期日:以 max(原到期日, 今天) 为基准 + 周期
@@ -8230,6 +8246,8 @@ async function route(req, res) {
         daysLeft: t.plan_expires_at ? Math.ceil((new Date(t.plan_expires_at).getTime() - now) / 86400000) : null,
         ai: {
           source: ai.trialPending && ai.source === 'none' ? 'pending' : ai.source,
+          enabled: ai.enabled,       // 2026-08-07:平台页此前只给 source,判断「到底开没开」要靠猜
+          unlimited: ai.unlimited,   // 长期开通(无到期日)
           expiresAt: ai.expiresAt,
           daysLeft: ai.expiresAt ? Math.ceil((new Date(ai.expiresAt).getTime() - now) / 86400000) : null,
           trialAvailable: ai.trialAvailable,
@@ -8351,6 +8369,12 @@ async function route(req, res) {
       return json(res, 200, { ok: true, expiresAt: untilIso, ai: aiAddonState(tid) })
     }
     if (action === 'extend') {
+      // 2026-08-07:period='unlimited'(或显式 expiresAt:null)= 不限期开通,给体验店/内部店用。
+      // 老语义(month/year 顺延)一字未动,不传 period 仍是按年顺延。
+      if (body.period === 'unlimited' || (Object.prototype.hasOwnProperty.call(body, 'expiresAt') && body.expiresAt === null)) {
+        grantAiAddonUnlimited(tid)
+        return json(res, 200, { ok: true, expiresAt: null, unlimited: true, ai: aiAddonState(tid) })
+      }
       const untilIso = extendAiAddon(tid, body.period === 'month' ? 'month' : 'year')
       return json(res, 200, { ok: true, expiresAt: untilIso, ai: aiAddonState(tid) })
     }
@@ -8367,7 +8391,7 @@ async function route(req, res) {
         .run(tid, aiMonthKey(), n, iso(new Date()))
       return json(res, 200, { ok: true, usage: aiUsageOf(tid) })
     }
-    throw apiError(400, 'BAD_REQUEST', 'action 应为 grant_trial / extend / revoke / add_quota。')
+    throw apiError(400, 'BAD_REQUEST', 'action 应为 grant_trial / extend(period: month|year|unlimited) / revoke / add_quota。')
   }
   if (req.method === 'POST' && /^\/platform\/subscription-orders\/[^/]+\/mark-paid$/.test(path)) {
     // 线下收款确认(转账/e-transfer 到账后平台点这里):标记已支付 + 到期日顺延 max(原到期日,今天)+周期
@@ -8444,7 +8468,8 @@ async function route(req, res) {
     const planExpiresAt = iso(expiry)
     db.prepare("INSERT INTO tenants (id, name, plan, status, plan_expires_at) VALUES (?, ?, ?, 'active', ?)").run(id, name.slice(0, 60), plan, planExpiresAt)
     db.prepare('INSERT INTO stores (id, name, address, phone, timezone, currency, is_active, tenant_id) VALUES (?, ?, ?, ?, ?, ?, 1, ?)')
-      .run(`store-${id}`, name.slice(0, 60), String(body.city || '').slice(0, 80), String(body.phone || '').slice(0, 30), 'America/Toronto', 'CAD', id)
+      .run(`store-${id}`, name.slice(0, 60), String(body.city || '').slice(0, 80), String(body.phone || '').slice(0, 30),
+        String(body.timezone || 'America/Toronto').slice(0, 64), String(body.currency || 'CAD').toUpperCase().slice(0, 6), id)
     // 老板账号:username 唯一,默认 boss-<id>
     let username = String(body.username || `boss-${id}`).trim().toLowerCase().replace(/[^a-z0-9-]/g, '') || `boss-${id}`
     let suffix = 1
@@ -8490,7 +8515,7 @@ async function route(req, res) {
 
     if (section === 'store') {
       const store = tenantStore()
-      if (req.method === 'GET') return json(res, 200, { store: store ? { id: store.id, name: store.name, address: store.address || '', phone: store.phone || '', currency: store.currency || '' } : null })
+      if (req.method === 'GET') return json(res, 200, { store: store ? { id: store.id, name: store.name, address: store.address || '', phone: store.phone || '', currency: store.currency || '', timezone: store.timezone || '' } : null })
       if (req.method === 'PUT') {
         if (!store) throw apiError(404, 'NOT_FOUND', 'Store not found for tenant.')
         const body = await readBody(req)
@@ -8499,13 +8524,15 @@ async function route(req, res) {
         const phone = String(body.phone ?? store.phone ?? '').trim()
         // 币种(2026-08-06):境内体验店是 CNY,加拿大店是 CAD;不传就保持原值
         const currency = String(body.currency ?? store.currency ?? 'CAD').trim().toUpperCase().slice(0, 6) || store.currency
-        db.prepare('UPDATE stores SET name = ?, address = ?, phone = ?, currency = ? WHERE id = ?').run(name, address, phone, currency, store.id)
+        // 时区(2026-08-07):门店所在地时区,境内店是 Asia/Shanghai;不传就保持原值
+        const timezone = String(body.timezone ?? store.timezone ?? 'America/Toronto').trim().slice(0, 64) || store.timezone
+        db.prepare('UPDATE stores SET name = ?, address = ?, phone = ?, currency = ?, timezone = ? WHERE id = ?').run(name, address, phone, currency, timezone, store.id)
         // 同步进该租户 AI 知识事实(与商家端同规则,AI 回答与系统一致)
         const factStmt = db.prepare(`INSERT INTO tenant_kb_facts (tenant_id, key, value, updated_by, updated_at) VALUES (?, ?, ?, 'platform', ?)
           ON CONFLICT(tenant_id, key) DO UPDATE SET value = excluded.value, updated_by = 'platform', updated_at = excluded.updated_at`)
         if (address) factStmt.run(tenantId, 'storeAddress', address, iso(new Date()))
         if (phone) factStmt.run(tenantId, 'storePhone', phone, iso(new Date()))
-        return json(res, 200, { store: { id: store.id, name, address, phone, currency } })
+        return json(res, 200, { store: { id: store.id, name, address, phone, currency, timezone } })
       }
     }
 
@@ -11278,7 +11305,13 @@ createServer((req, res) => {
 }).listen(PORT, process.env.HOST || '127.0.0.1', () => {
   // 本机开发默认只绑 127.0.0.1(安全);云端(Railway 等)设 HOST=0.0.0.0 才对外可达
   console.log(`Lucky Luxe local API running at http://localhost:${PORT}`)
-  console.log(`Owner API token: ${OWNER_TOKEN}`)
+  // 2026-08-07 安全:主钥匙绝不进生产日志(Railway Deploy Logs 会长期留存、可被截图外传)。
+  // 生产只报「已配置/未配置」;本地开发保留可用性,但也只打印前 8 位做核对。
+  if (IS_PRODUCTION) {
+    console.log(`Owner API token: [已配置,不在日志中显示](长度 ${OWNER_TOKEN.length})`)
+  } else {
+    console.log(`Owner API token: ${OWNER_TOKEN.slice(0, 8)}…(本地开发,完整值见 apps/api/.env 的 OWNER_DEMO_TOKEN)`)
+  }
 })
 
 // ===== 生产环境每日自动备份(BACKUP_ENABLED=true 时开启;快照存进同一持久化卷,保留 30 天) =====

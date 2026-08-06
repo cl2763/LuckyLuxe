@@ -105,6 +105,7 @@ Page({
     let badgeCls = 'off'
     let expText = ''
     if (d.includedInPlan) { badge = '套餐已含'; badgeCls = 'on'; expText = '当前套餐已包含 AI,无需单独订阅' }
+    else if (d.enabled && d.unlimited) { badge = '长期开通'; badgeCls = 'on'; expText = 'AI 智能包长期有效,无到期时间' }
     else if (d.enabled && d.source === 'trial') { badge = '试用中'; badgeCls = 'trial'; expText = `免费试用至 ${exp},到期后可续订` }
     else if (d.enabled) { badge = '已订阅'; badgeCls = 'on'; expText = `AI 有效期至 ${exp}` }
     // 试用为申请制:提交后等平台按门店情况配置好话术与知识库再开通
