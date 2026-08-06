@@ -31,7 +31,9 @@ if (existsSync(pendingImportPath)) {
 
 const db = new DatabaseSync(join(dataDir, 'lucky-luxe.sqlite'))
 const PORT = Number(process.env.PORT || 4000)
-const OWNER_TOKEN = process.env.OWNER_DEMO_TOKEN || 'owner-demo-token'
+// 主钥匙:新名 OWNER_TOKEN 优先,旧名 OWNER_DEMO_TOKEN 兼容(现网还在用旧名,先不破坏)。
+// 名字带 DEMO 容易让人低估它的权限——它是平台最高信任根。
+const OWNER_TOKEN = process.env.OWNER_TOKEN || process.env.OWNER_DEMO_TOKEN || 'owner-demo-token'
 // 生产判定(Railway 会注入 RAILWAY_ENVIRONMENT):用于「日志里不许出现主钥匙」这类只在云端生效的收紧
 const IS_PRODUCTION = process.env.NODE_ENV === 'production' || Boolean(process.env.RAILWAY_ENVIRONMENT)
 // 多租户:请求级租户上下文。商家端 /admin 进入时按登录账号的租户 enterWith;
@@ -1564,9 +1566,9 @@ function appendWecomConversationMessage(conversationId, message, patch = {}) {
   const rawEventJson = patch.raw !== undefined ? JSON.stringify(patch.raw || {}) : (current?.raw_event_json || '{}')
   db.prepare(`
     INSERT INTO wechat_conversations
-      (id, provider, external_user_id, open_kfid, source_channel, status, last_intent, last_message, ai_reply_json, transcript_json, raw_event_json, created_at, updated_at)
+      (id, tenant_id, provider, external_user_id, open_kfid, source_channel, status, last_intent, last_message, ai_reply_json, transcript_json, raw_event_json, created_at, updated_at)
     VALUES
-      (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+      (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
     ON CONFLICT(id) DO UPDATE SET
       provider = excluded.provider,
       open_kfid = COALESCE(NULLIF(excluded.open_kfid, ''), wechat_conversations.open_kfid),
@@ -1580,6 +1582,7 @@ function appendWecomConversationMessage(conversationId, message, patch = {}) {
       updated_at = excluded.updated_at
   `).run(
     conversationId,
+    currentTenantId(),
     provider,
     externalUserId,
     patch.openKfid || current?.open_kfid || '',
@@ -1888,7 +1891,7 @@ function upsertConversationState(conversationId, patch = {}) {
     INSERT INTO ai_conversation_states
       (conversation_id, tenant_id, source_channel, service_type, intent, customer_stage, quote_stage, next_action,
        reference_images_json, state_json, summary_text, last_customer_message, created_at, updated_at)
-    VALUES (?, 'lucky-luxe', ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
     ON CONFLICT(conversation_id) DO UPDATE SET
       source_channel = COALESCE(NULLIF(excluded.source_channel, ''), ai_conversation_states.source_channel),
       service_type = COALESCE(NULLIF(excluded.service_type, ''), ai_conversation_states.service_type),
@@ -1903,6 +1906,7 @@ function upsertConversationState(conversationId, patch = {}) {
       updated_at = excluded.updated_at
   `).run(
     conversationId,
+    currentTenantId(),
     sourceChannel,
     serviceType,
     patch.intent || current?.intent || incomingState.intent || '',
@@ -2097,9 +2101,10 @@ function saveAiLogicNote(body = {}, adminSession = {}) {
   db.prepare(`
     INSERT INTO ai_learning_examples
       (id, tenant_id, conversation_id, feedback_id, source, customer_message, original_reply, corrected_reply, context_json, tags_json, status, created_at, updated_at)
-    VALUES (?, 'lucky-luxe', ?, NULL, 'workflow_logic_gap', ?, '', ?, ?, ?, 'approved', ?, ?)
+    VALUES (?, ?, ?, NULL, 'workflow_logic_gap', ?, '', ?, ?, ?, 'approved', ?, ?)
   `).run(
     id,
+    currentTenantId(),
     conversationId || null,
     String(body.customerMessage || conversation?.lastMessage || '').trim(),
     note,
@@ -2158,9 +2163,9 @@ function recordWecomConversation(inbound, reply, status = 'ai_replied') {
   }
   db.prepare(`
     INSERT INTO wechat_conversations
-      (id, provider, external_user_id, open_kfid, source_channel, status, last_intent, last_message, ai_reply_json, transcript_json, raw_event_json, created_at, updated_at)
+      (id, tenant_id, provider, external_user_id, open_kfid, source_channel, status, last_intent, last_message, ai_reply_json, transcript_json, raw_event_json, created_at, updated_at)
     VALUES
-      (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+      (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
     ON CONFLICT(id) DO UPDATE SET
       open_kfid = excluded.open_kfid,
       source_channel = COALESCE(NULLIF(excluded.source_channel, ''), wechat_conversations.source_channel),
@@ -2173,6 +2178,7 @@ function recordWecomConversation(inbound, reply, status = 'ai_replied') {
       updated_at = excluded.updated_at
   `).run(
     conversationId,
+    currentTenantId(),
     inbound.provider,
     inbound.externalUserId,
     inbound.openKfid,
@@ -2292,9 +2298,13 @@ function isNewCustomerInbound(inbound = {}) {
 }
 
 function newCustomerWelcome(lang = 'zh') {
+  // 2026-08-07:以前写死 Lucky Luxe,别家店的新客一进来就被欢迎到旗舰店去了
+  const brand = tenantKbFacts(currentTenantId())?.brandName
+    || db.prepare('SELECT name FROM stores WHERE tenant_id = ? AND is_active = 1 ORDER BY rowid ASC LIMIT 1').get(currentTenantId())?.name
+    || 'Lucky Luxe'
   return lang === 'en'
-    ? 'Hello, welcome to Lucky Luxe. I am your booking assistant. You can ask me about nail/lash services, pricing rules, available times, deposits, and aftercare. For complex nail styles, you can also send a reference photo and I will help organize the details first.'
-    : '您好欢迎来到 Lucky Luxe，我是您的预约助手。您可以咨询美甲/美睫服务、价格规则、预约时间、定金和护理说明；如果是复杂美甲款式，也可以先发参考图，我会先帮您整理需求。'
+    ? `Hello, welcome to ${brand}. I am your booking assistant. You can ask me about nail/lash services, pricing rules, available times, deposits, and aftercare. For complex nail styles, you can also send a reference photo and I will help organize the details first.`
+    : `您好欢迎来到 ${brand}，我是您的预约助手。您可以咨询美甲/美睫服务、价格规则、预约时间、定金和护理说明；如果是复杂美甲款式，也可以先发参考图，我会先帮您整理需求。`
 }
 
 function shouldSendNewCustomerWelcome(inbound = {}, transcript = []) {
@@ -4628,14 +4638,17 @@ function appendQuoteDraftAssistantReply(quote, draft = null) {
   })
 }
 
+// 2026-08-07 多租户清账:这两个"随便挑一个"的兜底以前不带租户,非旗舰店会挑到旗舰店的门店/项目,
+// 兜底值还写死了 store-ontario-01。现在一律限定当前租户,挑不到就返回 null 让上层报错,不许跨店。
 function firstActiveStoreId() {
-  return db.prepare('SELECT id FROM stores WHERE is_active = 1 ORDER BY name ASC LIMIT 1').get()?.id || 'store-ontario-01'
+  return db.prepare('SELECT id FROM stores WHERE is_active = 1 AND tenant_id = ? ORDER BY name ASC LIMIT 1').get(currentTenantId())?.id || null
 }
 
 function firstActiveService(serviceType = 'nail') {
   const type = String(serviceType || 'nail').toUpperCase()
-  return db.prepare('SELECT * FROM services WHERE is_active = 1 AND type = ? ORDER BY sort_order ASC LIMIT 1').get(type)
-    || db.prepare('SELECT * FROM services WHERE is_active = 1 ORDER BY sort_order ASC LIMIT 1').get()
+  const tid = currentTenantId()
+  return db.prepare('SELECT * FROM services WHERE is_active = 1 AND tenant_id = ? AND type = ? ORDER BY sort_order ASC LIMIT 1').get(tid, type)
+    || db.prepare('SELECT * FROM services WHERE is_active = 1 AND tenant_id = ? ORDER BY sort_order ASC LIMIT 1').get(tid)
 }
 
 function firstQualifiedTechnician(storeId, serviceId) {
@@ -5396,7 +5409,7 @@ function serializeUser(user, tenantId = DEFAULT_TENANT_ID) {
     visits: Number(stats.visits || 0),
     memberCode,
     referralCode: memberCode.replace('LL-', 'REF-'),
-    referralUrl: `https://www.luckyluxeatelier.com/?ref=${encodeURIComponent(memberCode.replace('LL-', 'REF-'))}`
+    referralUrl: `${APP_PUBLIC_URL}/?ref=${encodeURIComponent(memberCode.replace('LL-', 'REF-'))}`
   }
 }
 
@@ -5998,7 +6011,7 @@ function createBooking(body, opts = {}) {
     const slotStmt = db.prepare('INSERT INTO booking_slots (id, booking_id, technician_id, starts_at) VALUES (?, ?, ?, ?)')
     for (const slot of slots) slotStmt.run(randomId('slot'), bookingId, input.technicianId, iso(slot))
 
-    db.prepare('INSERT INTO payments (id, booking_id, provider, status, amount_cents, currency, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?)').run(randomId('pay'), bookingId, 'MOCK', depositCents > 0 ? 'REQUIRES_PAYMENT' : 'PAID', depositCents, 'CAD', now, now)
+    db.prepare('INSERT INTO payments (id, booking_id, provider, status, amount_cents, currency, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?)').run(randomId('pay'), bookingId, 'MOCK', depositCents > 0 ? 'REQUIRES_PAYMENT' : 'PAID', depositCents, tenantCurrencyCode(input.tenantId || DEFAULT_TENANT_ID), now, now)
     db.prepare('INSERT INTO booking_status_history (id, booking_id, to_status, note, created_at) VALUES (?, ?, ?, ?, ?)').run(randomId('hist'), bookingId, status, depositCents > 0 ? 'Booking hold created pending deposit payment.' : 'Booking confirmed with member deposit waiver.', now)
     if (input.bookingDraftId) {
       db.prepare("UPDATE booking_drafts SET status = 'BOOKING_CREATED', booking_id = ?, updated_at = ? WHERE id = ?")
@@ -6358,7 +6371,7 @@ function payrollDraftsForMonth(month) {
     `).get(comp.technician_id, month).revenue
     const commissionCents = Math.round(revenue * comp.commission_rate)
     const marker = `payroll:${month}:${comp.technician_id}`
-    const settled = db.prepare("SELECT id FROM finance_transactions WHERE tags = ? AND reversal_of IS NULL AND NOT EXISTS (SELECT 1 FROM finance_transactions r WHERE r.reversal_of = finance_transactions.id)").get(marker)
+    const settled = db.prepare("SELECT id FROM finance_transactions WHERE tenant_id = ? AND tags = ? AND reversal_of IS NULL AND NOT EXISTS (SELECT 1 FROM finance_transactions r WHERE r.reversal_of = finance_transactions.id)").get(currentTenantId(), marker)
     return {
       technicianId: comp.technician_id,
       technicianName: comp.tech_name,
@@ -6540,14 +6553,15 @@ function getFinanceSummary(body) {
   const password = String(body.password || '')
   if (!FINANCE_PASSWORD) throw apiError(403, 'FINANCE_NOT_CONFIGURED', 'Finance password is not configured yet.')
   if (!FINANCE_EMAILS.includes(email) || password !== FINANCE_PASSWORD) throw apiError(403, 'FORBIDDEN', 'Finance login failed.')
+  // 2026-08-07:这段旧版汇总以前不带租户,等于把全平台营业额算给了当前商家
   return db.prepare(`
     SELECT
       COALESCE(SUM(CASE WHEN status = 'COMPLETED' THEN service_price_cents WHEN status = 'CONFIRMED' THEN deposit_cents ELSE 0 END), 0) AS total_revenue_cents,
       COALESCE(SUM(CASE WHEN appointment_start >= datetime('now', 'start of month') AND status = 'COMPLETED' THEN service_price_cents WHEN appointment_start >= datetime('now', 'start of month') AND status = 'CONFIRMED' THEN deposit_cents ELSE 0 END), 0) AS month_revenue_cents,
       COUNT(CASE WHEN status = 'COMPLETED' THEN 1 END) AS completed_services,
       COUNT(CASE WHEN appointment_start >= datetime('now', 'start of month') AND status = 'COMPLETED' THEN 1 END) AS month_completed_services
-    FROM bookings
-  `).get()
+    FROM bookings WHERE tenant_id = ?
+  `).get(currentTenantId())
 }
 
 /* ===== P0 多价位计价引擎(2026-08-06,店主定稿口径,勿改语义)=====
@@ -8809,8 +8823,11 @@ async function route(req, res) {
     // 排班为团队可见:员工也返回本店全部技师(只读);多租户按店过滤
     const technicians = db.prepare('SELECT * FROM technicians WHERE tenant_id = ? ORDER BY is_active DESC, name ASC').all(currentTenantId())
     const dates = days.map((day) => day.date)
-    const schedules = db.prepare(`SELECT technician_id, date, start_time, end_time, is_working FROM technician_schedules WHERE date IN (${dates.map(() => '?').join(',')})`)
-      .all(...dates)
+    // 2026-08-07:此前只按日期取,别家店的排班行会一起返回;限定为本店技师
+    const techIds = technicians.map((t) => t.id)
+    const schedules = (techIds.length ? db.prepare(`SELECT technician_id, date, start_time, end_time, is_working FROM technician_schedules
+        WHERE date IN (${dates.map(() => '?').join(',')}) AND technician_id IN (${techIds.map(() => '?').join(',')})`)
+      .all(...dates, ...techIds) : [])
       .map((row) => ({ technicianId: row.technician_id, date: row.date, startTime: row.start_time, endTime: row.end_time, isWorking: Boolean(row.is_working) }))
     const bookingCounts = []
     for (const day of days) {
@@ -9508,7 +9525,7 @@ async function route(req, res) {
         iso(new Date())
       )
     }
-    const technicians = db.prepare('SELECT id, name FROM technicians WHERE is_active = 1 ORDER BY name ASC').all()
+    const technicians = db.prepare('SELECT id, name FROM technicians WHERE is_active = 1 AND tenant_id = ? ORDER BY name ASC').all(currentTenantId())
     const comps = db.prepare('SELECT * FROM staff_compensation WHERE tenant_id = ?').all(currentTenantId())
     return json(res, 200, {
       compensation: technicians.map((tech) => {
@@ -9857,13 +9874,16 @@ async function route(req, res) {
     return json(res, 200, { store: db.prepare('SELECT id, name, address, phone FROM stores WHERE id = ?').get(storeId) })
   }
   if (req.method === 'GET' && path === '/admin/business-hours') {
-    const stores = db.prepare('SELECT id, name, address, phone FROM stores WHERE is_active = 1 AND tenant_id = ? ORDER BY name ASC').all(currentTenantId())
+    const stores = db.prepare('SELECT id, name, address, phone, currency, timezone FROM stores WHERE is_active = 1 AND tenant_id = ? ORDER BY name ASC').all(currentTenantId())
     return json(res, 200, {
       stores: stores.map((store) => ({
         id: store.id,
         name: store.name,
         address: store.address,
         phone: store.phone,
+        // 2026-08-07:老板端要按本店币种/时区显示金额与"今天",这两项以前没下发,前端只能写死 CAD + Toronto
+        currency: store.currency || 'CAD',
+        timezone: store.timezone || 'America/Toronto',
         hours: getBusinessHoursRows(store.id).map(serializeBusinessHour),
         hoursText: { zh: businessHoursText(store.id, 'zh'), en: businessHoursText(store.id, 'en') },
         specialDates: upcomingSpecialDates(store.id, 366).map((row) => ({

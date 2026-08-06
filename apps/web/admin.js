@@ -1,12 +1,16 @@
 // 构建号:每次交付递增。侧栏可见,排查"改了没生效"时先对版本。
-const ADMIN_BUILD = '20260807a-jics-plan'
+const ADMIN_BUILD = '20260807b-tenant-audit'
 console.log(`[admin] build ${ADMIN_BUILD}`)
 
-// "今天"必须按门店时区算(服务器同样钉在此时区),否则老板人在别的时区时全站日期错位一天。
-// TODO(多租户): 时区改为从租户配置读取。
-const STORE_TZ = 'America/Toronto'
+// "今天"必须按门店时区算,否则老板人在别的时区时全站日期错位一天。
+// 2026-08-07 多租户清账:时区改为从 /admin/business-hours 下发的门店字段读(拿到之前用默认值兜底)。
+// 注意:后端 process.env.TZ 目前仍是单一时区,跨时区门店的服务端日期口径见审计报告 B-1。
+let STORE_TZ = 'America/Toronto'
+function storeTimezone() {
+  return (owner?.businessHoursStores || [])[0]?.timezone || STORE_TZ
+}
 function storeToday() {
-  return new Intl.DateTimeFormat('en-CA', { timeZone: STORE_TZ, year: 'numeric', month: '2-digit', day: '2-digit' }).format(new Date())
+  return new Intl.DateTimeFormat('en-CA', { timeZone: storeTimezone(), year: 'numeric', month: '2-digit', day: '2-digit' }).format(new Date())
 }
 
 function readStoredAuth() {
@@ -787,8 +791,13 @@ function formatDate(date) {
   return `${year}-${month}-${day}`
 }
 
+// 金额一律按本店币种显示。以前写死 CAD,境内店(CNY)整个老板端都在显示加币。
+// 取值:门店 currency → AI 事实 currency → CAD(旗舰店就是 CAD,显示结果一字不变)
+function storeCurrency() {
+  return (owner?.businessHoursStores || [])[0]?.currency || owner?.tenantKb?.facts?.currency || 'CAD'
+}
 function money(cents) {
-  return `CAD $${Number(cents / 100).toFixed(0)}`
+  return `${storeCurrency()} $${Number(cents / 100).toFixed(0)}`
 }
 
 // 本店是否开通 AI 智能包。2026-08-04 店主定:全部 AI 能力归智能包,前端据此隐藏纯 AI 入口。

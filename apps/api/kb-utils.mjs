@@ -216,7 +216,8 @@ export function buildKnowledgeContext(input = {}) {
   const live = input.liveTenantFacts || {}
   return {
     version: kb.version,
-    tenantId: kb.tenantId,
+    // 2026-08-07:返回给上层(会写进会话记录/调试面板)的 tenantId 也要是真实租户
+    tenantId: live.tenantId || kb.tenantId,
     platformPreset: {
       categories: kb.layers?.platformPreset?.categories || [],
       memberOperationsTemplateOnly: true
