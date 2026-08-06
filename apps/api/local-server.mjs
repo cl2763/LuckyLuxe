@@ -7758,6 +7758,8 @@ async function route(req, res) {
     db.prepare(`INSERT INTO services
       (id, tenant_id, type, category, name_zh, name_en, description_zh, description_en, image_url, price_cents, deposit_cents, base_duration_min, sort_order, is_active, process_json, notice_json)
       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`).run(id, currentTenantId(), payload.type, payload.category, payload.nameZh, payload.nameEn, payload.descriptionZh, payload.descriptionEn, payload.imageUrl, payload.priceCents, payload.depositCents, payload.baseDurationMin, payload.sortOrder, payload.isActive, JSON.stringify(payload.processJson), JSON.stringify(payload.noticeJson))
+    // 2026-08-06:老「服务管理」页也走多价位模型的 list 档,保证 price_cents 与 service_prices(list) 永不漂移
+    upsertServicePrice(currentTenantId(), id, 'list', payload.priceCents)
     const assign = db.prepare('INSERT OR IGNORE INTO technician_services (technician_id, service_id) VALUES (?, ?)')
     for (const tech of db.prepare('SELECT id FROM technicians WHERE is_active = 1 AND tenant_id = ?').all(currentTenantId())) assign.run(tech.id, id)
     return json(res, 201, { service: serializeService(getService(id)) })
@@ -7779,6 +7781,7 @@ async function route(req, res) {
       type = ?, category = ?, name_zh = ?, name_en = ?, description_zh = ?, description_en = ?, image_url = ?,
       price_cents = ?, deposit_cents = ?, base_duration_min = ?, is_active = ?, sort_order = ?, process_json = ?, notice_json = ?
       WHERE id = ?`).run(payload.type, payload.category, payload.nameZh, payload.nameEn, payload.descriptionZh, payload.descriptionEn, payload.imageUrl, payload.priceCents, payload.depositCents, payload.baseDurationMin, payload.isActive, payload.sortOrder, JSON.stringify(payload.processJson), JSON.stringify(payload.noticeJson), id)
+    upsertServicePrice(currentTenantId(), id, 'list', payload.priceCents) // 同上:改价即同步 list 档
     return json(res, 200, { service: serializeService(getService(id)) })
   }
   /* ===== P0 价目表管理(大类 / 项目与加项 / 计价规则 / 试算)=====
@@ -8535,6 +8538,7 @@ async function route(req, res) {
         db.prepare(`INSERT INTO services (id, tenant_id, type, category, name_zh, name_en, description_zh, description_en, image_url, price_cents, deposit_cents, base_duration_min, sort_order, is_active, process_json, notice_json)
           VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`)
           .run(id, tenantId, payload.type, payload.category, payload.nameZh, payload.nameEn, payload.descriptionZh, payload.descriptionEn, payload.imageUrl, payload.priceCents, payload.depositCents, payload.baseDurationMin, payload.sortOrder, payload.isActive, JSON.stringify(payload.processJson), JSON.stringify(payload.noticeJson))
+        upsertServicePrice(tenantId, id, 'list', payload.priceCents) // 与多价位模型的 list 档双写
         // 该租户在职技师自动可做新服务(与商家端一致)
         const assign = db.prepare('INSERT OR IGNORE INTO technician_services (technician_id, service_id) VALUES (?, ?)')
         for (const tech of db.prepare('SELECT id FROM technicians WHERE is_active = 1 AND tenant_id = ?').all(tenantId)) assign.run(tech.id, id)
@@ -8546,6 +8550,7 @@ async function route(req, res) {
         const payload = servicePayload(await readBody(req), cur)
         db.prepare(`UPDATE services SET type = ?, category = ?, name_zh = ?, name_en = ?, description_zh = ?, description_en = ?, image_url = ?, price_cents = ?, deposit_cents = ?, base_duration_min = ?, is_active = ?, sort_order = ?, process_json = ?, notice_json = ? WHERE id = ?`)
           .run(payload.type, payload.category, payload.nameZh, payload.nameEn, payload.descriptionZh, payload.descriptionEn, payload.imageUrl, payload.priceCents, payload.depositCents, payload.baseDurationMin, payload.isActive, payload.sortOrder, JSON.stringify(payload.processJson), JSON.stringify(payload.noticeJson), subId)
+        upsertServicePrice(tenantId, subId, 'list', payload.priceCents) // 同上
         return json(res, 200, { service: serializeService(getService(subId)) })
       }
     }

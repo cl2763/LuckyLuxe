@@ -225,6 +225,14 @@ async function main() {
   check('改价后 list 与 price_cents 仍一致', patched.data.item.listPriceCents === 90000 && patched.data.item.priceCents === 90000)
   const afterPatch = await request('/admin/pricing/preview', { method: 'POST', body: JSON.stringify({ serviceId: mainId, tierKey: 'member' }) }, shopA.token)
   check('改价即时生效到报价', afterPatch.data.quote.totalCents === 50000, String(afterPatch.data.quote.totalCents))
+  // 老「服务管理」页改价也要同步 list 档,否则两套页面会漂移
+  const legacyPatch = await request(`/admin/services/${mainId}`, { method: 'PATCH', body: JSON.stringify({ priceCents: 91000 }) }, shopA.token)
+  check('老服务管理接口改价成功', legacyPatch.status === 200, JSON.stringify(legacyPatch.data).slice(0, 200))
+  const afterLegacy = (await request('/admin/pricing/items', {}, shopA.token)).data.items.find((i) => i.id === mainId)
+  check('老接口改价同步进 list 档(两套页面不漂移)', afterLegacy.listPriceCents === 91000 && afterLegacy.priceCents === 91000, JSON.stringify(afterLegacy))
+  const afterLegacyQuote = await request('/admin/pricing/preview', { method: 'POST', body: JSON.stringify({ serviceId: mainId, tierKey: 'list' }) }, shopA.token)
+  check('老接口改价即时反映到报价', afterLegacyQuote.data.quote.totalCents === 91000, String(afterLegacyQuote.data.quote.totalCents))
+
   const delBusy = await request(`/admin/pricing/categories/${extId}`, { method: 'DELETE' }, shopA.token)
   check('大类下有项目时不允许删除', delBusy.status === 409, JSON.stringify(delBusy.data))
   const delUsedItem = await request(`/admin/pricing/items/${mainId}`, { method: 'DELETE' }, shopA.token)

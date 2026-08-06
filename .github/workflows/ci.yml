@@ -1,4 +1,4 @@
-# Lucky Luxe CI:每次 push 自动跑全部 21 个回归套件
+# Lucky Luxe CI:每次 push 自动跑全部 24 个回归套件
 # 部署 job 预留:云服务器选定后取消注释并配置 secrets
 name: CI
 
