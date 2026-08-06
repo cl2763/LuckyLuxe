@@ -962,6 +962,7 @@ function liveTenantFacts() {
   const technicians = db.prepare('SELECT name, title FROM technicians WHERE tenant_id = ? AND is_active = 1 ORDER BY rowid ASC').all(tid)
     .map((t) => (t.title ? `${t.name}(${t.title})` : t.name))
   return {
+    tenantId: tid, // 让提示词里的 tenantId 是真实租户,而不是种子里写死的 luckyluxe
     defaultHours: {
       zh: businessHoursText(null, 'zh'),
       en: businessHoursText(null, 'en')

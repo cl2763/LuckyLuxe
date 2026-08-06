@@ -150,7 +150,8 @@ function buildPromptText({ kb, intents, matchedRules, matchedQa, matchedHandoffR
   const base = {
     version: kb.version,
     platformScope: platform.description,
-    tenantId: kb.tenantId,
+    // 2026-08-07:此前恒等于种子里的 'luckyluxe',等于告诉每一家店的模型「你是旗舰店」
+    tenantId: live.tenantId || kb.tenantId,
     tenantFacts: mergeTenantFacts(tenant, live),
     platformBoundaryZh: platformNoteZh,
     platformBoundaryEn: platformNoteEn,

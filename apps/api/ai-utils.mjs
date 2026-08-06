@@ -434,9 +434,23 @@ export async function createCustomerServiceReply({ lang = 'zh', message = '', sa
     : ''
   const recentChatText = recentHistoryText(history)
   const previousCustomerText = lastCustomerText(history)
+  // 2026-08-07:系统提示词此前把每一家商家都写死成「Lucky Luxe · Ontario」,真实模型据此把
+  // 境内店(CNY)的价格答成「CAD $368」。改为按本店事实渲染;旗舰店的事实就是
+  // brandName=Lucky Luxe / region=Ontario / currency=CAD,所以它这三行逐字不变。
+  const kbFacts = knowledgeContext?.tenantFacts || {}
+  const brandName = kbFacts.brandName || 'Lucky Luxe'
+  const region = kbFacts.region || ''
+  const currencyCode = kbFacts.currency || ''
+  const identityLine = region
+    ? `You are ${brandName} AI customer service for a nail and lash atelier in ${region}.`
+    : `You are ${brandName} AI customer service for a nail and lash atelier.`
+  const currencyLine = currencyCode
+    ? `All prices and deposits for this store are in ${currencyCode}. Never quote another currency.`
+    : 'Do not state a currency symbol or code unless it appears in the tenant knowledge context.'
   const result = await aiJson({
     system: [
-      'You are Lucky Luxe AI customer service for a nail and lash atelier in Ontario.',
+      identityLine,
+      currencyLine,
       'Answer in the user language. Be concise, warm, and operationally accurate.',
       'Always use Recent chat as short-term conversation memory. If the incoming message is a follow-up such as "那这个呢", "多少钱", "可以吗", or "怎么约", resolve it from the previous customer messages before answering.',
       'If the incoming message includes "Working memory for this exact conversation", treat it as authoritative per-conversation state. Do not ask again for any intake field already marked yes/no/partial in that memory.',
