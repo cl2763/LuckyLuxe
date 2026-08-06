@@ -3025,7 +3025,7 @@ function formatStaffQuoteOptions(options = [], lang = 'zh') {
     .map((item) => {
       const label = lang === 'en' ? (enLabels[item.label] || item.label) : item.label
       const amount = formatCadNumber(item.priceCad)
-      return amount ? `${label} CAD $${amount}` : ''
+      return amount ? `${label} ${tenantCurrencyCode()} $${amount}` : ''
     })
     .filter(Boolean)
     .join(lang === 'en' ? '; ' : '，')
@@ -4394,11 +4394,25 @@ function getQuoteRequestById(id) {
   return serializeQuoteRequest(db.prepare('SELECT * FROM quote_requests WHERE id = ?').get(id))
 }
 
-function formatCadFromCents(value) {
+// 2026-08-07:本店币种。以前所有金额文案都写死 CAD,境内店(CNY)对外报价、AI 上下文全是错的。
+// 取值顺序:租户 AI 事实 currency → 门店 currency → CAD(旗舰店就是 CAD,所以它的文案一字不变)。
+function tenantCurrencyCode(tenantId = currentTenantId()) {
+  try {
+    const fact = db.prepare("SELECT value FROM tenant_kb_facts WHERE tenant_id = ? AND key = 'currency'").get(tenantId)
+    if (fact?.value) return String(fact.value).trim().toUpperCase().slice(0, 6) || 'CAD'
+    const store = db.prepare('SELECT currency FROM stores WHERE tenant_id = ? AND is_active = 1 ORDER BY rowid ASC LIMIT 1').get(tenantId)
+    return String(store?.currency || 'CAD').trim().toUpperCase().slice(0, 6) || 'CAD'
+  } catch (e) {
+    return 'CAD'
+  }
+}
+
+function formatCadFromCents(value, tenantId = currentTenantId()) {
   const centsValue = Number(value || 0)
   if (!Number.isFinite(centsValue) || centsValue <= 0) return ''
   const amount = centsValue / 100
-  return Number.isInteger(amount) ? `CAD $${amount}` : `CAD $${amount.toFixed(2)}`
+  const cur = tenantCurrencyCode(tenantId)
+  return Number.isInteger(amount) ? `${cur} $${amount}` : `${cur} $${amount.toFixed(2)}`
 }
 
 function quoteAssistantReplyPayload(quote, { canDo, priceCents, durationMin, notes }) {
@@ -5161,6 +5175,7 @@ function servicePayload(body, current = {}) {
 
 function serializeService(row, lang = 'zh') {
   const type = String(row.type || '').toLowerCase()
+  const serviceCurrency = tenantCurrencyCode(row.tenant_id || currentTenantId())
   const isNail = type === 'nail'
   const priceExplanationZh = isNail
     ? '显示价格为基础服务价。纯色、基础护理、基础法式等可按基础价执行；复杂手绘、延长、卸甲、特殊材料、3D 装饰、大面积钻饰或参考图差异较大的款式需要人工报价。'
@@ -5188,8 +5203,8 @@ function serializeService(row, lang = 'zh') {
     notice: parseJson(row.notice_json),
     requiresManualQuote: isNail,
     pricingType: isNail ? 'base_plus_quote' : 'fixed_final',
-    priceLabelZh: isNail ? `基础价 CAD $${cents(row.price_cents)}` : `固定价 CAD $${cents(row.price_cents)}`,
-    priceLabelEn: isNail ? `Base price CAD $${cents(row.price_cents)}` : `Fixed price CAD $${cents(row.price_cents)}`,
+    priceLabelZh: isNail ? `基础价 ${serviceCurrency} $${cents(row.price_cents)}` : `固定价 ${serviceCurrency} $${cents(row.price_cents)}`,
+    priceLabelEn: isNail ? `Base price ${serviceCurrency} $${cents(row.price_cents)}` : `Fixed price ${serviceCurrency} $${cents(row.price_cents)}`,
     quoteHintZh: isNail ? '详细价格请联系客服获取报价' : '加项确认后即为最终报价',
     quoteHintEn: isNail ? 'Contact us for detailed custom quote' : 'Add-ons confirmed before checkout are final',
     priceExplanationZh,
@@ -5247,7 +5262,7 @@ function membershipForSpend(totalSpentCents = 0) {
     depositWaived: tier.depositWaived,
     depositRule: tier.depositWaived
       ? `${tier.label} and above do not need to pay booking deposits.`
-      : 'Silver Member pays CAD $50 deposit for each booking.'
+      : `Silver Member pays ${tenantCurrencyCode()} $50 deposit for each booking.`
   }
 }
 
@@ -6290,7 +6305,7 @@ function materializeRecurringTransactions() {
 
 // ===== 目标进度与工资月结（阶段3C）=====
 function cadFromCentsText(cents) {
-  return `CAD $${((cents || 0) / 100).toFixed(2)}`
+  return `${tenantCurrencyCode()} $${((cents || 0) / 100).toFixed(2)}`
 }
 
 function getFinanceTargets(tenantId = DEFAULT_TENANT_ID) {
