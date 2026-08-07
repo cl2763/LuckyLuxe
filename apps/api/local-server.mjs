@@ -6019,9 +6019,18 @@ function serializeSalaryPlan(r) {
   if (!r) return null
   return {
     id: r.id, technicianId: r.technician_id || '', template: r.template,
+    // 'whole'=阶段(落档全额乘) / 'progressive'=阶梯(超额累进)。存量一律 whole,语义等价。
+    ladderMode: r.ladder_mode === 'progressive' ? 'progressive' : 'whole',
     baseSalaryCents: r.base_salary_cents, handworkFeeCents: r.handwork_fee_cents,
     ladder: Array.isArray(parseJson2(r.ladder_json)) ? parseJson2(r.ladder_json) : [],
-    flatPct: r.flat_pct, cardPct: r.card_pct, rechargePct: r.recharge_pct || 0,
+    flatPct: r.flat_pct,
+    firstRechargePct: r.first_recharge_pct || 0,
+    renewRechargePct: r.renew_recharge_pct || 0,
+    customCommissions: Array.isArray(parseJson2(r.custom_commissions_json)) ? parseJson2(r.custom_commissions_json) : [],
+    enableBase: r.enable_base === undefined ? true : Boolean(r.enable_base),
+    enableHandwork: r.enable_handwork === undefined ? true : Boolean(r.enable_handwork),
+    enableOvertime: r.enable_overtime === undefined ? true : Boolean(r.enable_overtime),
+    enableCardCommission: r.enable_card_commission === undefined ? true : Boolean(r.enable_card_commission),
     overtimeRateCents: r.overtime_rate_cents, overtimeUnitMin: r.overtime_unit_min,
     updatedAt: r.updated_at
   }
@@ -6032,53 +6041,134 @@ function effectiveSalaryPlan(techId, tid) {
   const dft = db.prepare("SELECT * FROM salary_plans WHERE tenant_id = ? AND technician_id = ''").get(tid)
   return dft ? { plan: serializeSalaryPlan(dft), source: 'default' } : { plan: null, source: 'none' }
 }
+
+/* 业绩提成的两种算法。同一套档位、同一个业绩额,结果不一样 ——
+   阶段 = 落在哪档,全额乘那档点位;阶梯 = 超额累进,每一段各乘各档。
+   界面上两种常驻并示差额,就是让店主看清楚差在哪儿。 */
+function commissionByLadder(perfCents, ladder, mode) {
+  const rungs = (ladder || []).slice().sort((a, b) => (a.minCents || 0) - (b.minCents || 0))
+  if (!rungs.length) return { cents: 0, pct: 0, tierIndex: -1 }
+  if (mode === 'progressive') {
+    let cents = 0
+    let topIndex = -1
+    for (let i = 0; i < rungs.length; i += 1) {
+      const from = rungs[i].minCents || 0
+      const to = rungs[i].maxCents == null ? Infinity : rungs[i].maxCents
+      const seg = Math.max(0, Math.min(perfCents, to) - from)
+      if (seg > 0) { cents += Math.round(seg * (rungs[i].pct || 0) / 100); topIndex = i }
+    }
+    return { cents, pct: topIndex >= 0 ? (rungs[topIndex].pct || 0) : 0, tierIndex: topIndex }
+  }
+  let tierIndex = -1
+  let pct = 0
+  rungs.forEach((t, i) => {
+    if (perfCents >= (t.minCents || 0) && (t.maxCents == null || perfCents < t.maxCents)) { pct = t.pct || 0; tierIndex = i }
+  })
+  if (tierIndex === -1 && perfCents >= (rungs[rungs.length - 1].minCents || 0)) {
+    tierIndex = rungs.length - 1
+    pct = rungs[tierIndex].pct || 0
+  }
+  return { cents: Math.round(perfCents * pct / 100), pct, tierIndex }
+}
+
+// 当月充值按首充/续卡拆开。首充 = 该顾客在本店的第一笔充值,按全量流水判定,不能只看当月。
+function rechargeSplitOf(techId, tid, startIso, endIso) {
+  const rows = db.prepare("SELECT * FROM stored_value_transactions WHERE tenant_id = ? AND type = 'recharge' ORDER BY created_at ASC").all(tid)
+  const seen = new Set()
+  let firstCents = 0
+  let renewCents = 0
+  for (const r of rows) {
+    const isFirst = !seen.has(r.user_id)
+    seen.add(r.user_id)
+    if (r.technician_id !== techId) continue
+    if (!(r.created_at >= startIso && r.created_at < endIso)) continue
+    if (isFirst) firstCents += Math.max(0, r.amount_cents)
+    else renewCents += Math.max(0, r.amount_cents)
+  }
+  return { firstCents, renewCents }
+}
+
+/* 月度业绩 = Σ 已确认日结的当月 daily_close_lines(P2 定的口径)。
+   没日结的那几天不计 —— 工资试算页顶部会把这些天列出来提醒店长去日结。 */
+function monthPerfFromCloses(techId, month, tid) {
+  const row = db.prepare(`SELECT
+      COALESCE(SUM(l.order_count), 0) AS orders,
+      COALESCE(SUM(l.perf_cents), 0) AS perf,
+      COALESCE(SUM(l.card_used_cents), 0) AS cardUsed
+    FROM daily_close_lines l
+    JOIN daily_closes c ON c.id = l.close_id AND c.status = 'confirmed'
+    WHERE l.tenant_id = ? AND l.technician_id = ? AND l.date LIKE ?`)
+    .get(tid, techId, `${month}%`)
+  return { orderCount: row.orders, perfCents: row.perf, cardUsedCents: row.cardUsed }
+}
+
 function computeSalaryEstimate(techId, month, tid) {
   const [y, m] = month.split('-').map(Number)
   const startIso = iso(localDateTime(`${month}-01`, '00:00'))
   const nextMonth = m === 12 ? `${y + 1}-01` : `${y}-${String(m + 1).padStart(2, '0')}`
   const endIso = iso(localDateTime(`${nextMonth}-01`, '00:00'))
-  const agg = db.prepare(`SELECT COUNT(*) AS cnt, COALESCE(SUM(service_price_cents), 0) AS perf FROM bookings
-    WHERE tenant_id = ? AND technician_id = ? AND status = 'COMPLETED' AND appointment_start >= ? AND appointment_start < ?`)
-    .get(tid, techId, startIso, endIso)
+  const closes = monthPerfFromCloses(techId, month, tid)
   const ot = db.prepare(`SELECT COALESCE(SUM(overtime_min), 0) AS m FROM attendance_records
     WHERE tenant_id = ? AND technician_id = ? AND work_date LIKE ?`).get(tid, techId, `${month}-%`)
   const { plan, source } = effectiveSalaryPlan(techId, tid)
-  const perfCents = agg.perf, orderCount = agg.cnt, overtimeMin = ot.m
+  const perfCents = closes.perfCents
+  const orderCount = closes.orderCount
+  const overtimeMin = ot.m
   if (!plan) return { technicianId: techId, month, noPlan: true, perfCents, orderCount, overtimeMin }
-  // 落档:阶梯按 minCents 升序,取业绩落入的那档;固定提点模板直接用 flatPct
+
   const ladder = (plan.ladder || []).slice().sort((a, b) => (a.minCents || 0) - (b.minCents || 0))
-  let pct = plan.flatPct || 0, tierIndex = -1
-  if (plan.template === 'base_ladder' && ladder.length) {
-    ladder.forEach((t, i) => { if (perfCents >= (t.minCents || 0) && (t.maxCents == null || perfCents < t.maxCents)) { pct = t.pct || 0; tierIndex = i } })
-    if (tierIndex === -1 && perfCents >= ((ladder[ladder.length - 1] || {}).minCents || 0)) { tierIndex = ladder.length - 1; pct = ladder[tierIndex].pct || 0 }
-  }
+  const useLadder = plan.template === 'base_ladder' && ladder.length > 0
+  const byLadder = useLadder ? commissionByLadder(perfCents, ladder, plan.ladderMode) : { cents: 0, pct: 0, tierIndex: -1 }
+  const pct = useLadder ? byLadder.pct : (plan.flatPct || 0)
+  const tierIndex = byLadder.tierIndex
+  const commissionCents = useLadder ? byLadder.cents : Math.round(perfCents * pct / 100)
   let nextTier = null
-  if (plan.template === 'base_ladder' && tierIndex >= 0 && tierIndex < ladder.length - 1) {
+  if (useLadder && tierIndex >= 0 && tierIndex < ladder.length - 1) {
     nextTier = { needCents: Math.max(0, (ladder[tierIndex + 1].minCents || 0) - perfCents), pct: ladder[tierIndex + 1].pct || 0 }
   }
-  const commissionCents = Math.round(perfCents * pct / 100)
-  const handworkCents = (plan.handworkFeeCents || 0) * orderCount
+
+  const baseSalaryCents = plan.enableBase ? (plan.baseSalaryCents || 0) : 0
+  const handworkCents = plan.enableHandwork ? (plan.handworkFeeCents || 0) * orderCount : 0
   const unit = plan.overtimeUnitMin === 60 ? 60 : 30
   const overtimeSegs = Math.floor(overtimeMin / unit)
-  const overtimePayCents = overtimeSegs * (plan.overtimeRateCents || 0)
-  // 充值/耗卡提成:按储值流水的归属技师(operating 时选「经手技师」)在当月汇总
-  const cardUseCents = Math.abs(db.prepare(`SELECT COALESCE(SUM(amount_cents), 0) AS s FROM stored_value_transactions
-    WHERE tenant_id = ? AND technician_id = ? AND type = 'consume' AND created_at >= ? AND created_at < ?`).get(tid, techId, startIso, endIso).s)
-  const cardCents = Math.round(cardUseCents * (plan.cardPct || 0) / 100)
-  const rechargeCents = db.prepare(`SELECT COALESCE(SUM(amount_cents), 0) AS s FROM stored_value_transactions
-    WHERE tenant_id = ? AND technician_id = ? AND type = 'recharge' AND created_at >= ? AND created_at < ?`).get(tid, techId, startIso, endIso).s
-  const rechargePayCents = Math.round(rechargeCents * (plan.rechargePct || 0) / 100)
-  // 手动调整(补贴+/扣款-,锁定前可改)
-  const adj = db.prepare('SELECT adjust_cents, note FROM salary_adjusts WHERE tenant_id = ? AND month = ? AND technician_id = ?').get(tid, month, techId)
-  const adjustCents = adj ? adj.adjust_cents : 0
+  const overtimePayCents = plan.enableOvertime ? overtimeSegs * (plan.overtimeRateCents || 0) : 0
+
+  // 卡提成:只提充值(首充/续卡分档),耗卡不提 —— 卡耗已经计进业绩了,再提一次是重复给钱
+  const rc = rechargeSplitOf(techId, tid, startIso, endIso)
+  const cardOn = plan.enableCardCommission
+  const firstRechargePayCents = cardOn ? Math.round(rc.firstCents * (plan.firstRechargePct || 0) / 100) : 0
+  const renewRechargePayCents = cardOn ? Math.round(rc.renewCents * (plan.renewRechargePct || 0) / 100) : 0
+  // 自定义卡提成行:按关联卡种的当月销售额计提;没关联卡种就按全部充值额
+  const customRows = cardOn ? (plan.customCommissions || []).map((c) => {
+    const baseCents = c.packageId
+      ? db.prepare(`SELECT COALESCE(SUM(amount_cents), 0) AS s FROM stored_value_transactions
+          WHERE tenant_id = ? AND technician_id = ? AND type = 'recharge' AND note LIKE ? AND created_at >= ? AND created_at < ?`)
+        .get(tid, techId, `%${c.packageId}%`, startIso, endIso).s
+      : rc.firstCents + rc.renewCents
+    return { name: String(c.name || '自定义提成'), pct: Number(c.pct) || 0, baseCents, payCents: Math.round(baseCents * (Number(c.pct) || 0) / 100) }
+  }) : []
+  const customPayCents = customRows.reduce((sum, r) => sum + r.payCents, 0)
+
+  // 调整项多行(奖励/扣款/补贴);老的单行表已一次性迁到 salary_adjust_items
+  const adjustItems = db.prepare('SELECT * FROM salary_adjust_items WHERE tenant_id = ? AND month = ? AND technician_id = ? ORDER BY sort ASC, rowid ASC')
+    .all(tid, month, techId)
+    .map((r) => ({ id: r.id, kind: r.kind, amountCents: r.amount_cents, note: r.note || '' }))
+  const adjustCents = adjustItems.reduce((sum, r) => sum + r.amountCents, 0)
+
   return {
-    technicianId: techId, month, planSource: source, template: plan.template,
+    technicianId: techId, month, planSource: source, template: plan.template, ladderMode: plan.ladderMode,
+    perfSource: 'daily_close', // 业绩口径:已确认日结累加(P2 定)
     perfCents, orderCount, overtimeMin, overtimeSegs, overtimeUnitMin: unit,
     pct, tierIndex, nextTier,
-    baseSalaryCents: plan.baseSalaryCents || 0, handworkCents, commissionCents,
-    cardUseCents, cardCents, rechargeCents, rechargePayCents, overtimePayCents,
-    adjustCents, adjustNote: adj ? (adj.note || '') : '',
-    totalCents: (plan.baseSalaryCents || 0) + handworkCents + commissionCents + cardCents + rechargePayCents + overtimePayCents + adjustCents
+    baseSalaryCents, handworkCents, commissionCents,
+    cardUseCents: closes.cardUsedCents, // 卡耗只做展示,不参与提成
+    firstRechargeCents: rc.firstCents, firstRechargePayCents,
+    renewRechargeCents: rc.renewCents, renewRechargePayCents,
+    customCommissionRows: customRows, customCommissionPayCents: customPayCents,
+    overtimePayCents,
+    adjustItems, adjustCents,
+    totalCents: baseSalaryCents + handworkCents + commissionCents + firstRechargePayCents
+      + renewRechargePayCents + customPayCents + overtimePayCents + adjustCents
   }
 }
 
@@ -11748,17 +11838,60 @@ async function route(req, res) {
       .map((t) => ({ minCents: nz(t.minCents), maxCents: t.maxCents == null ? null : nz(t.maxCents), pct: pctOk(t.pct) }))
       .sort((a, b) => a.minCents - b.minCents)
     if (template === 'base_ladder' && !ladder.length) throw apiError(400, 'BAD_REQUEST', '阶梯模板至少要有一档。')
+    // 没传 ladderMode 就保持这份方案原来的算法 —— 存量方案默认 whole,不会因为一次保存被悄悄改成累进
+    const prev = db.prepare('SELECT ladder_mode FROM salary_plans WHERE tenant_id = ? AND technician_id = ?').get(tid, techId)
+    const ladderMode = body.ladderMode === 'progressive' ? 'progressive'
+      : (body.ladderMode === 'whole' ? 'whole' : ((prev && prev.ladder_mode) || 'whole'))
+    const onOff = (v) => (v === false ? 0 : 1)
+    const customCommissions = (Array.isArray(body.customCommissions) ? body.customCommissions : []).slice(0, 10)
+      .map((c) => ({ name: String(c.name || '').trim().slice(0, 30) || '自定义提成', pct: pctOk(c.pct), packageId: c.packageId ? String(c.packageId).slice(0, 60) : null }))
+      .filter((c) => c.pct > 0)
     const now = iso(new Date())
     const existing = db.prepare('SELECT id FROM salary_plans WHERE tenant_id = ? AND technician_id = ?').get(tid, techId)
     if (existing) {
-      db.prepare(`UPDATE salary_plans SET template = ?, base_salary_cents = ?, handwork_fee_cents = ?, ladder_json = ?, flat_pct = ?, card_pct = ?, recharge_pct = ?, overtime_rate_cents = ?, overtime_unit_min = ?, updated_at = ? WHERE id = ?`)
-        .run(template, nz(body.baseSalaryCents), nz(body.handworkFeeCents), JSON.stringify(ladder), pctOk(body.flatPct), pctOk(body.cardPct), pctOk(body.rechargePct), nz(body.overtimeRateCents), body.overtimeUnitMin === 60 ? 60 : 30, now, existing.id)
+      db.prepare(`UPDATE salary_plans SET template = ?, ladder_mode = ?, base_salary_cents = ?, handwork_fee_cents = ?, ladder_json = ?, flat_pct = ?,
+        first_recharge_pct = ?, renew_recharge_pct = ?, custom_commissions_json = ?,
+        enable_base = ?, enable_handwork = ?, enable_overtime = ?, enable_card_commission = ?,
+        overtime_rate_cents = ?, overtime_unit_min = ?, updated_at = ? WHERE id = ?`)
+        .run(template, ladderMode, nz(body.baseSalaryCents), nz(body.handworkFeeCents), JSON.stringify(ladder), pctOk(body.flatPct),
+          pctOk(body.firstRechargePct), pctOk(body.renewRechargePct), JSON.stringify(customCommissions),
+          onOff(body.enableBase), onOff(body.enableHandwork), onOff(body.enableOvertime), onOff(body.enableCardCommission),
+          nz(body.overtimeRateCents), body.overtimeUnitMin === 60 ? 60 : 30, now, existing.id)
     } else {
-      db.prepare(`INSERT INTO salary_plans (id, tenant_id, technician_id, template, base_salary_cents, handwork_fee_cents, ladder_json, flat_pct, card_pct, recharge_pct, overtime_rate_cents, overtime_unit_min, created_at, updated_at)
-        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`)
-        .run(randomId('splan'), tid, techId, template, nz(body.baseSalaryCents), nz(body.handworkFeeCents), JSON.stringify(ladder), pctOk(body.flatPct), pctOk(body.cardPct), pctOk(body.rechargePct), nz(body.overtimeRateCents), body.overtimeUnitMin === 60 ? 60 : 30, now, now)
+      db.prepare(`INSERT INTO salary_plans (id, tenant_id, technician_id, template, ladder_mode, base_salary_cents, handwork_fee_cents, ladder_json, flat_pct,
+        first_recharge_pct, renew_recharge_pct, custom_commissions_json, enable_base, enable_handwork, enable_overtime, enable_card_commission,
+        overtime_rate_cents, overtime_unit_min, created_at, updated_at)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`)
+        .run(randomId('splan'), tid, techId, template, ladderMode, nz(body.baseSalaryCents), nz(body.handworkFeeCents), JSON.stringify(ladder), pctOk(body.flatPct),
+          pctOk(body.firstRechargePct), pctOk(body.renewRechargePct), JSON.stringify(customCommissions),
+          onOff(body.enableBase), onOff(body.enableHandwork), onOff(body.enableOvertime), onOff(body.enableCardCommission),
+          nz(body.overtimeRateCents), body.overtimeUnitMin === 60 ? 60 : 30, now, now)
     }
     return json(res, 200, effectiveSalaryPlan(techId, tid))
+  }
+  /* 三模式对比试算(常驻显示):同一个业绩额,阶段 / 阶梯 / 自定义各算一遍。
+     不落库、不需要方案已保存 —— 店主边调档位边看差多少。 */
+  if (req.method === 'POST' && path === '/admin/salary-plans/preview') {
+    if (adminSession.role !== 'owner') throw apiError(403, 'FORBIDDEN', '仅老板可试算薪资方案。')
+    const body = await readBody(req)
+    const perfCents = Math.max(0, Math.round(Number(body.perfCents) || 0))
+    const pctOk = (v) => Math.min(100, Math.max(0, Number(v) || 0))
+    const ladder = (Array.isArray(body.ladder) ? body.ladder : []).slice(0, 8)
+      .map((t) => ({ minCents: Math.max(0, Math.round(Number(t.minCents) || 0)), maxCents: t.maxCents == null ? null : Math.max(0, Math.round(Number(t.maxCents) || 0)), pct: pctOk(t.pct) }))
+      .sort((a, b) => a.minCents - b.minCents)
+    const whole = commissionByLadder(perfCents, ladder, 'whole')
+    const progressive = commissionByLadder(perfCents, ladder, 'progressive')
+    const flatPct = pctOk(body.flatPct)
+    const tid = currentTenantId()
+    return json(res, 200, {
+      perfCents,
+      currency: tenantCurrencyCode(tid),
+      currencyDisplay: currencyDisplayOf(tenantCurrencyCode(tid)),
+      whole: { cents: whole.cents, pct: whole.pct, tierIndex: whole.tierIndex },
+      progressive: { cents: progressive.cents, pct: progressive.pct, tierIndex: progressive.tierIndex },
+      flat: { cents: Math.round(perfCents * flatPct / 100), pct: flatPct },
+      diffCents: whole.cents - progressive.cents
+    })
   }
   // 删除按人覆盖(恢复跟随全店默认)
   if (req.method === 'DELETE' && path.match(/^\/admin\/salary-plans\/[^/]+$/)) {
@@ -11785,17 +11918,17 @@ async function route(req, res) {
     const techs = db.prepare('SELECT id, name, title FROM technicians WHERE tenant_id = ? AND is_active = 1 ORDER BY name ASC').all(tid)
     const rows = techs.map((t) => Object.assign(computeSalaryEstimate(t.id, month, tid), { name: t.name, title: t.title || '' }))
     const totalCents = rows.reduce((s, r) => s + (r.totalCents || 0), 0)
-    // 当月带归属备注的单:结算时对照,用±调整修正(不改业绩数字)
-    const [ay, am] = month.split('-').map(Number)
-    const aStart = iso(localDateTime(`${month}-01`, '00:00'))
-    const aEnd = iso(localDateTime(`${am === 12 ? `${ay + 1}-01` : `${ay}-${String(am + 1).padStart(2, '0')}`}-01`, '00:00'))
-    const attributionNotes = db.prepare(`SELECT b.public_code AS code, b.attribution_note AS note, b.service_price_cents AS cents,
-        (SELECT name FROM technicians WHERE id = b.technician_id) AS tech,
-        (SELECT display_name FROM users WHERE id = b.user_id) AS cust
-      FROM bookings b WHERE b.tenant_id = ? AND b.attribution_note IS NOT NULL AND b.appointment_start >= ? AND b.appointment_start < ?
-      ORDER BY b.appointment_start ASC`).all(tid, aStart, aEnd)
-      .map((r) => ({ code: r.code, note: r.note, amountCents: r.cents, technicianName: r.tech || '', customerName: r.cust || '' }))
-    return json(res, 200, { month, locked: false, rows, totalCents, attributionNotes })
+    /* P2:业绩口径改成「已确认日结累加」,所以试算页顶部要先把日结情况摆出来 ——
+       哪天没结、还差几单没分配、点一下去哪儿结。没结的天不在业绩里,页面得说清楚。
+       归属备注区已整体退役(代付不涉技师业绩归属,且日结已逐日确认过),不再下发。 */
+    const dailyCloses = monthlyCloseStatus(month, tid)
+    return json(res, 200, {
+      month, locked: false, rows, totalCents,
+      perfSource: 'daily_close',
+      dailyCloses,
+      canLock: dailyCloses.allClosed,
+      lockBlockedReason: dailyCloses.allClosed ? '' : `还有 ${dailyCloses.openDays.length} 天没日结,试算暂不含这些天的业绩`
+    })
   }
   // 确认并锁定当月工资表(owner+财务钥匙):按当下数据快照存档;锁定后 estimate 一律返回快照,防事后改数
   if (req.method === 'POST' && path === '/admin/salary/lock') {
@@ -11806,6 +11939,11 @@ async function route(req, res) {
     const month = /^\d{4}-\d{2}$/.test(body.month || '') ? body.month : localParts(new Date()).date.slice(0, 7)
     if (db.prepare('SELECT 1 FROM salary_payrolls WHERE tenant_id = ? AND month = ? LIMIT 1').get(tid, month)) {
       throw apiError(409, 'ALREADY_LOCKED', `${month} 工资表已锁定;如需重算请先解锁。`)
+    }
+    // P2 前置:当月每一天都日结确认过才允许锁。没结的天业绩不在数里,锁了就是锁错。
+    const closeStatus = monthlyCloseStatus(month, tid)
+    if (!closeStatus.allClosed) {
+      throw apiError(400, 'DAYS_NOT_CLOSED', `${month} 还有 ${closeStatus.openDays.length} 天没日结(${closeStatus.openDays.join('、')}),先把日结做完再锁工资。`)
     }
     const techs = db.prepare('SELECT id, name, title FROM technicians WHERE tenant_id = ? AND is_active = 1 ORDER BY name ASC').all(tid)
     const now = iso(new Date())
@@ -11887,13 +12025,32 @@ async function route(req, res) {
     if (db.prepare('SELECT 1 FROM salary_payrolls WHERE tenant_id = ? AND month = ? LIMIT 1').get(tid, month)) {
       throw apiError(409, 'ALREADY_LOCKED', `${month} 已锁定,先解锁再调整。`)
     }
-    const cents = Math.round(Number(body.adjustCents) || 0)
-    const note = String(body.note || '').trim().slice(0, 100)
-    if (cents !== 0 && !note) throw apiError(400, 'BAD_REQUEST', '调整必须写备注(如:代班补贴/迟到扣款)。')
-    db.prepare(`INSERT INTO salary_adjusts (tenant_id, month, technician_id, adjust_cents, note, updated_at) VALUES (?, ?, ?, ?, ?, ?)
-      ON CONFLICT(tenant_id, month, technician_id) DO UPDATE SET adjust_cents = excluded.adjust_cents, note = excluded.note, updated_at = excluded.updated_at`)
-      .run(tid, month, techId, cents, note, iso(new Date()))
-    return json(res, 200, { ok: true, adjustCents: cents, note })
+    /* P2:调整项改多行 —— 一个人一个月可以有奖励、扣款、补贴好几条,各带各的备注。
+       整批覆盖(前端传全量),比逐条增删好对账。 */
+    const now = iso(new Date())
+    const items = (Array.isArray(body.items) ? body.items : [{ amountCents: body.adjustCents, note: body.note, kind: 'bonus' }])
+      .map((it, index) => ({
+        kind: ['bonus', 'deduct', 'subsidy'].includes(it.kind) ? it.kind : (Math.round(Number(it.amountCents) || 0) < 0 ? 'deduct' : 'bonus'),
+        amountCents: Math.round(Number(it.amountCents) || 0),
+        note: String(it.note || '').trim().slice(0, 100),
+        sort: index
+      }))
+      .filter((it) => it.amountCents !== 0)
+    for (const it of items) {
+      if (!it.note) throw apiError(400, 'BAD_REQUEST', '每条调整都要写备注(如:代班补贴/迟到扣款)。')
+    }
+    db.exec('BEGIN IMMEDIATE')
+    try {
+      db.prepare('DELETE FROM salary_adjust_items WHERE tenant_id = ? AND month = ? AND technician_id = ?').run(tid, month, techId)
+      const stmt = db.prepare(`INSERT INTO salary_adjust_items (id, tenant_id, month, technician_id, kind, amount_cents, note, sort, updated_at)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`)
+      for (const it of items) stmt.run(randomId('sadj'), tid, month, techId, it.kind, it.amountCents, it.note, it.sort, now)
+      db.exec('COMMIT')
+    } catch (error) {
+      db.exec('ROLLBACK')
+      throw error
+    }
+    return json(res, 200, { ok: true, items, adjustCents: items.reduce((sum, it) => sum + it.amountCents, 0) })
   }
   // 员工:我的本月预估(自己的数据,无需财务钥匙);附工资表状态(已锁定/已发放)
   if (req.method === 'GET' && path === '/admin/salary/my-estimate') {
@@ -12471,6 +12628,62 @@ db.exec(`
     UNIQUE (tenant_id, technician_id)
   );
 `)
+/* P2 薪资方案 v2(2026-08-08):
+   - ladder_mode:'whole'=阶段(落档后全额乘该档点位,旧 base_ladder 的语义)
+                 'progressive'=阶梯(超额累进,分段各乘各档)
+     存量方案一律映射成 'whole' —— 语义等价,金额逐分不变。
+   - 充值提成拆成首充/续卡两档;耗卡不再提成(卡耗计入业绩,不重复给钱)。
+   - custom_commissions_json:自定义卡提成行(名称 + 比例 + 可选关联卡种)。
+   - 开关族:底薪 / 手工费 / 加班费 / 卡提成各行,关掉或填 0 都算不启用。 */
+for (const column of [
+  "ladder_mode TEXT NOT NULL DEFAULT 'whole'",
+  'first_recharge_pct REAL NOT NULL DEFAULT 0',
+  'renew_recharge_pct REAL NOT NULL DEFAULT 0',
+  "custom_commissions_json TEXT NOT NULL DEFAULT '[]'",
+  'enable_base INTEGER NOT NULL DEFAULT 1',
+  'enable_handwork INTEGER NOT NULL DEFAULT 1',
+  'enable_overtime INTEGER NOT NULL DEFAULT 1',
+  'enable_card_commission INTEGER NOT NULL DEFAULT 1'
+]) {
+  try {
+    db.exec(`ALTER TABLE salary_plans ADD COLUMN ${column}`)
+  } catch (error) {
+    if (!String(error.message || '').includes('duplicate column')) throw error
+  }
+}
+/* 调整项改多行(奖励/扣款/补贴各记一条)。老表 salary_adjusts 的主键是
+   (tenant_id, month, technician_id),加不了行,所以另起一张表并把老数据搬过来一次;
+   老表原样留着不动,真出问题还能对账。 */
+db.exec(`
+  CREATE TABLE IF NOT EXISTS salary_adjust_items (
+    id TEXT PRIMARY KEY,
+    tenant_id TEXT NOT NULL,
+    month TEXT NOT NULL,
+    technician_id TEXT NOT NULL,
+    kind TEXT NOT NULL DEFAULT 'bonus',
+    amount_cents INTEGER NOT NULL DEFAULT 0,
+    note TEXT,
+    sort INTEGER NOT NULL DEFAULT 0,
+    updated_at TEXT NOT NULL
+  );
+  CREATE INDEX IF NOT EXISTS idx_salary_adjust_items ON salary_adjust_items(tenant_id, month, technician_id);
+`)
+try {
+  const migrated = db.prepare("SELECT value FROM tenant_settings WHERE tenant_id = '__system__' AND key = 'salary_adjusts_migrated'").get()
+  if (!migrated) {
+    const now = iso(new Date())
+    for (const row of db.prepare('SELECT * FROM salary_adjusts').all()) {
+      if (!row.adjust_cents) continue
+      db.prepare(`INSERT INTO salary_adjust_items (id, tenant_id, month, technician_id, kind, amount_cents, note, sort, updated_at)
+        VALUES (?, ?, ?, ?, ?, ?, ?, 0, ?)`)
+        .run(randomId('sadj'), row.tenant_id, row.month, row.technician_id,
+          row.adjust_cents >= 0 ? 'bonus' : 'deduct', row.adjust_cents, row.note || null, row.updated_at || now)
+    }
+    db.prepare("INSERT INTO tenant_settings (tenant_id, key, value, updated_at) VALUES ('__system__', 'salary_adjusts_migrated', '1', ?)").run(now)
+  }
+} catch (error) {
+  console.error('[migrate] salary_adjusts → salary_adjust_items 失败(已跳过,老数据未动):', error.message)
+}
 try {
   // 充值提成(2026-07-30 店主要求拆开):卖卡/促成充值的提点,与耗卡提点分开配
   db.exec('ALTER TABLE salary_plans ADD COLUMN recharge_pct REAL NOT NULL DEFAULT 0')
