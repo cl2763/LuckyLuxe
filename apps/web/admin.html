@@ -4,7 +4,7 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>有迹 · 商家后台</title>
-    <link rel="stylesheet" href="/web/styles.css?v=20260808d-p1-b3">
+    <link rel="stylesheet" href="/web/styles.css?v=20260808e-p2-web">
     <style>
       /* 2026-08-02 财务指标显隐+动效(店主 v4 定稿):AI智能总结卡 / 目标进度条(带平衡线刻度) / 设目标引导与弹窗。
          放这里不放 styles.css:本批约定只动 admin.js + admin.html 两个文件。 */
@@ -103,6 +103,57 @@
       .sub-hist td{padding:10px;border-bottom:1px solid #f5f0ea;color:#2d2826}
       .sub-hist tr:last-child td{border-bottom:none}
       .sub-hist .pend{color:#b8452f;font-weight:700}
+
+      /* ===== P2② 员工管理五页签 / 日结板块 / 财务趋势(2026-08-08)===== */
+      .trow2{display:flex;align-items:center;gap:10px;padding:12px 0;border-bottom:1px solid #f1e7df;flex-wrap:wrap}
+      .trow2:last-of-type{border-bottom:none}
+      .trow2 .nm{width:96px;flex:none;font-size:14px;font-weight:800;color:#241f1d}
+      .trow2 .lab{font-size:11.5px;color:#8c8279}
+      .seg2{display:inline-flex;background:#f3ede6;border-radius:999px;padding:2px;gap:2px}
+      .seg2 button{border:none;background:transparent;border-radius:999px;padding:5px 12px;font-size:12px;font-weight:700;color:#8c8279;cursor:pointer}
+      .seg2 button.on{background:#2d2826;color:#fff}
+      .tgt-fields{display:flex;align-items:center;gap:8px}
+      .tgt-fields label{display:flex;align-items:center;gap:5px;font-size:11.5px;color:#8c8279}
+      .tgt-fields input{width:82px;border:1px solid #eadfd7;border-radius:8px;padding:6px 8px;font-size:13px;font-weight:700;color:#241f1d}
+      .tgt-fields[data-mode="total"] .split-only{display:none}
+      .acct-controls{display:flex;align-items:center;gap:8px;flex-wrap:wrap}
+
+      .dc-alloc{border:1px solid #ece3da;border-radius:12px;margin-bottom:10px;overflow:hidden;background:#fff}
+      .dc-alloc .head{display:flex;justify-content:space-between;align-items:center;padding:11px 13px;background:#faf6f1;font-size:13px;font-weight:700;color:#241f1d;cursor:pointer}
+      .dc-alloc .head .arr{font-size:11px;color:#8c8279;font-weight:400;margin-left:8px}
+      .dc-alloc .body{padding:6px 13px 12px}
+      .dc-alloc.collapsed .body{display:none}
+      .dc-line{display:flex;align-items:center;gap:10px;padding:8px 0;border-bottom:1px solid #f4ede6}
+      .dc-line:last-child{border-bottom:none}
+      .dc-line .nm{width:76px;flex:none;font-size:13px;font-weight:700;color:#241f1d}
+      .dc-line .wnote{flex:1;font-size:11.5px;color:#8c8279}
+      .dc-line input{width:62px;border:1px solid #eadfd7;border-radius:8px;padding:5px 8px;font-size:13px;font-weight:700;text-align:right}
+      .dc-line .money{width:88px;text-align:right;font-size:13px;font-weight:800;color:#9b7655}
+      .dc-links{display:flex;gap:14px;margin-top:8px;font-size:11.5px}
+      .dc-links a{color:#9b7655;font-weight:700;cursor:pointer;text-decoration:none}
+      .dc-sum{width:100%;border-collapse:collapse;margin-top:12px;font-size:12.5px}
+      .dc-sum th{text-align:left;color:#8c8279;font-weight:700;font-size:11px;padding:8px 6px;border-bottom:1px solid #ece3da}
+      .dc-sum td{padding:9px 6px;border-bottom:1px solid #f4ede6;color:#241f1d}
+      .dc-sum td.nm{font-weight:700}
+      .dc-badge{font-size:10.5px;border-radius:999px;padding:2px 9px}
+      .dc-badge.ok{background:#e3eee8;color:#2f7d5c}
+      .dc-badge.warn{background:#fdecec;color:#c0392b}
+      .dc-badge.mut{background:#f1e7df;color:#8c8279}
+      .dc-anom{font-size:12px;color:#4a3c2c;margin-top:10px;line-height:1.9}
+      .dc-warnbar{background:#fdf3ec;border:1px solid #f0d9c4;border-radius:10px;padding:10px 12px;font-size:12.5px;color:#a8551f;margin:10px 0}
+      .dc-ro{background:#faf6f1;border:1px dashed #e0d3c4;border-radius:12px;padding:13px;font-size:12.5px;line-height:1.9;color:#4a3c2c}
+      .dc-ro .ro-t{display:flex;justify-content:space-between;font-weight:800;color:#241f1d;margin-bottom:6px}
+      .dc-ro .lock{font-size:11px;color:#8c8279;font-weight:400}
+
+      .trend-chart{display:flex;align-items:flex-end;gap:10px;height:170px;padding:10px 0 0;overflow-x:auto}
+      .trend-bar{flex:1;min-width:38px;display:flex;flex-direction:column;align-items:center;gap:6px}
+      .trend-bar .stack{width:100%;display:flex;align-items:flex-end;justify-content:center;gap:3px;height:130px}
+      .trend-bar .b{width:14px;border-radius:4px 4px 0 0;background:#c8a47e}
+      .trend-bar .b.exp{background:#e0d3c4}
+      .trend-bar .b.hit{background:#2f7d5c}
+      .trend-bar .lb{font-size:10.5px;color:#8c8279;white-space:nowrap}
+      .trend-legend{display:flex;gap:14px;font-size:11px;color:#8c8279;margin-top:8px}
+      .trend-legend i{display:inline-block;width:10px;height:10px;border-radius:3px;margin-right:5px;vertical-align:-1px}
 
       /* ===== P1 UI 定稿:定金规则卡(左配置右预览) + AI 智能包 Tab(2026-08-08)===== */
       .dep-grid{display:grid;grid-template-columns:minmax(0,1.4fr) minmax(0,1fr);gap:18px;align-items:start}
@@ -310,9 +361,45 @@
           <section class="admin-page hidden" id="schedulePage">
             <button class="ghost back-btn" data-admin-page="dashboard" type="button">← Dashboard</button>
             <div class="admin-tabs" id="staffTabs">
-              <button class="admin-tab active" data-staff-tab="schedule" id="staffTabSchedule" type="button">📅 计时排班</button>
-              <button class="admin-tab" data-staff-tab="performance" id="staffTabPerformance" type="button">📈 技师业绩</button>
+              <button class="admin-tab active" data-staff-tab="schedule" id="staffTabSchedule" type="button">计时排班</button>
+              <button class="admin-tab" data-staff-tab="performance" id="staffTabPerformance" type="button">技师业绩</button>
+              <button class="admin-tab" data-staff-tab="targets" id="staffTabTargets" type="button">业绩目标</button>
+              <button class="admin-tab" data-staff-tab="salary" id="staffTabSalary" type="button">薪资方案</button>
+              <button class="admin-tab" data-staff-tab="accounts" id="staffTabAccounts" type="button">账号管理</button>
             </div>
+            <section class="admin-card hidden" data-staff-panel="targets" id="perfTargetsCard">
+              <div class="section-row compact-row">
+                <div>
+                  <h2 id="perfTargetsTitle">业绩目标</h2>
+                  <p class="subtle" id="perfTargetsHint">设置=目标怎么定 ／ 显示=员工端看什么</p>
+                </div>
+                <div class="schedule-week-nav">
+                  <button class="ghost slim" data-target-month="-1" type="button">‹</button>
+                  <span id="perfTargetsMonth"></span>
+                  <button class="ghost slim" data-target-month="1" type="button">›</button>
+                  <button class="primary slim" id="perfTargetsSave" type="button">保存</button>
+                </div>
+              </div>
+              <div id="perfTargetsBody"></div>
+            </section>
+            <section class="admin-card hidden" data-staff-panel="salary" id="salaryPlansCard">
+              <div class="section-row compact-row">
+                <div>
+                  <h2 id="salaryPlansTitle">薪资方案</h2>
+                  <p class="subtle" id="salaryPlansHint">每人一行,点开即编辑器;工资试算仍在 财务 → 员工工资</p>
+                </div>
+              </div>
+              <div id="salaryPlansBody"></div>
+            </section>
+            <section class="admin-card hidden" data-staff-panel="accounts" id="staffAccountsCard">
+              <div class="section-row compact-row">
+                <div>
+                  <h2 id="staffAccountsTitle">账号管理</h2>
+                  <p class="subtle" id="staffAccountsHint">员工登录账号:生成 / 重置密码 / 停用启用。初始密码只显示一次。</p>
+                </div>
+              </div>
+              <div id="staffAccountsBody"></div>
+            </section>
             <section class="admin-card" data-staff-panel="schedule">
               <div class="section-row compact-row schedule-week-header">
                 <div>
@@ -499,12 +586,44 @@
               <nav class="fin-nav" id="financeNav">
                 <button class="fin-nav-btn active" data-fin-tab="quick" type="button" id="finNavQuick">✎ 记一笔</button>
                 <button class="fin-nav-btn" data-fin-tab="storedValue" type="button" id="finNavStored">💳 储值卡</button>
+                <button class="fin-nav-btn" data-fin-tab="dailyClose" type="button" id="finNavDailyClose">日结</button>
                 <button class="fin-nav-btn" data-fin-tab="payroll" type="button" id="finNavPayroll">👥 员工工资</button>
+                <button class="fin-nav-btn" data-fin-tab="trend" type="button" id="finNavTrend">趋势</button>
                 <button class="fin-nav-btn" data-fin-tab="txns" type="button" id="finNavTxns">☰ 流水</button>
                 <button class="fin-nav-btn" data-fin-tab="settings" type="button" id="finNavSettings">⚙ 财务设置</button>
                 <button class="fin-nav-btn fin-nav-ai" data-fin-insights type="button" id="finNavInsights">✦ AI 解读</button>
               </nav>
               <div class="fin-tab-content">
+            <section class="admin-card hidden" data-fin-panel="dailyClose" id="dailyClosePanel">
+              <div class="section-row compact-row">
+                <div>
+                  <h2 id="dailyCloseTitle">日结</h2>
+                  <p class="subtle" id="dailyCloseHint">逐单分配业绩 → 核对异常 → 确认日结。确认后业绩定格,工资试算只认已确认的日结。</p>
+                </div>
+                <div class="schedule-week-nav">
+                  <button class="ghost slim" data-dc-day="-1" type="button">‹</button>
+                  <span id="dailyCloseDate"></span>
+                  <button class="ghost slim" data-dc-day="1" type="button">›</button>
+                  <button class="ghost slim" data-dc-day="0" type="button">今天</button>
+                </div>
+              </div>
+              <div id="dailyCloseBody"></div>
+            </section>
+            <section class="admin-card hidden" data-fin-panel="trend" id="financeTrendPanel">
+              <div class="section-row compact-row">
+                <div>
+                  <h2 id="financeTrendTitle">经营趋势</h2>
+                  <p class="subtle" id="financeTrendHint">收入 / 支出 / 净利 / 单量 / 客单 / 充值 / 耗卡,与单月汇总同一口径</p>
+                </div>
+                <div class="schedule-week-nav" id="financeTrendTabs">
+                  <button class="ghost slim" data-trend-g="day" type="button">日</button>
+                  <button class="ghost slim" data-trend-g="week" type="button">周</button>
+                  <button class="ghost slim active" data-trend-g="month" type="button">月</button>
+                  <button class="ghost slim" data-trend-g="year" type="button">年</button>
+                </div>
+              </div>
+              <div id="financeTrendBody"></div>
+            </section>
             <section class="admin-card finance-quick-card" data-fin-panel="quick">
               <div class="section-row compact-row">
                 <h2 id="financeQuickTitle">记一笔 <button class="fin-info" data-fin-guide="quick" type="button" aria-label="填写指南">ⓘ</button></h2>
@@ -684,6 +803,6 @@
     </main>
 
     <div class="toast" id="toast"></div>
-    <script src="/web/admin.js?v=20260808d-p1-b3"></script>
+    <script src="/web/admin.js?v=20260808e-p2-web"></script>
   </body>
 </html>

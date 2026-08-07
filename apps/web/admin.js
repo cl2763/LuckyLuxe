@@ -1,5 +1,5 @@
 // 构建号:每次交付递增。侧栏可见,排查"改了没生效"时先对版本。
-const ADMIN_BUILD = '20260808d-p1-b3'
+const ADMIN_BUILD = '20260808e-p2-web'
 console.log(`[admin] build ${ADMIN_BUILD}`)
 
 // "今天"必须按门店时区算,否则老板人在别的时区时全站日期错位一天。
@@ -970,9 +970,15 @@ function applyLanguage() {
   els.sidebarBookings.textContent = t('navBookings')
   els.sidebarSchedule.textContent = isOwnerRole() ? t('navSchedule') : t('navStaffPerformance')
   const staffTabScheduleBtn = document.querySelector('#staffTabSchedule')
-  if (staffTabScheduleBtn) staffTabScheduleBtn.textContent = owner.lang === 'zh' ? '📅 计时排班' : '📅 Schedule'
+  if (staffTabScheduleBtn) staffTabScheduleBtn.textContent = owner.lang === 'zh' ? '计时排班' : 'Schedule'
   const staffTabPerformanceBtn = document.querySelector('#staffTabPerformance')
-  if (staffTabPerformanceBtn) staffTabPerformanceBtn.textContent = owner.lang === 'zh' ? '📈 技师业绩' : '📈 Performance'
+  if (staffTabPerformanceBtn) staffTabPerformanceBtn.textContent = owner.lang === 'zh' ? '技师业绩' : 'Performance'
+  const staffTabTargetsBtn = document.querySelector('#staffTabTargets')
+  if (staffTabTargetsBtn) staffTabTargetsBtn.textContent = owner.lang === 'zh' ? '业绩目标' : 'Targets'
+  const staffTabSalaryBtn = document.querySelector('#staffTabSalary')
+  if (staffTabSalaryBtn) staffTabSalaryBtn.textContent = owner.lang === 'zh' ? '薪资方案' : 'Salary plans'
+  const staffTabAccountsBtn = document.querySelector('#staffTabAccounts')
+  if (staffTabAccountsBtn) staffTabAccountsBtn.textContent = owner.lang === 'zh' ? '账号管理' : 'Accounts'
   const attendanceTitleEl = document.querySelector('#attendanceTitle')
   if (attendanceTitleEl) attendanceTitleEl.textContent = owner.lang === 'zh' ? '🕐 打卡考勤（今日）' : '🕐 Attendance (today)'
   const finNavPayrollEl = document.querySelector('#finNavPayroll')
@@ -2463,6 +2469,201 @@ function animateFinanceProgress() {
   })
 }
 
+/* ===== P2② 日结板块(屏 1 下半)+ 金额更正(屏 1b)+ 财务趋势(P2.4)=====
+   金额红线同 P1:本页不算钱。分成比例是老板填的输入,金额一律由后端算好回传;
+   改比例时前端只做「本地回显」,提交后以后端返回的 shares 为准。 */
+let dailyCloseState = { date: '', view: null, loading: false, open: {}, correcting: null }
+
+function shiftDate(dateStr, delta) {
+  const d = new Date(`${dateStr}T12:00:00Z`)
+  d.setUTCDate(d.getUTCDate() + delta)
+  return d.toISOString().slice(0, 10)
+}
+
+async function loadDailyClose(date) {
+  dailyCloseState.date = date || dailyCloseState.date || storeToday()
+  dailyCloseState.loading = true
+  renderDailyClose()
+  const data = await request(`/admin/daily-close?date=${encodeURIComponent(dailyCloseState.date)}`)
+  dailyCloseState.view = data.dailyClose
+  dailyCloseState.loading = false
+  renderDailyClose()
+}
+
+function renderDailyClose() {
+  const body = document.querySelector('#dailyCloseBody')
+  if (!body) return
+  const zh = owner.lang === 'zh'
+  const dateEl = document.querySelector('#dailyCloseDate')
+  if (dateEl) dateEl.textContent = dailyCloseState.date || ''
+  if (dailyCloseState.loading) { body.innerHTML = `<p class="subtle">${zh ? '加载中…' : 'Loading…'}</p>`; return }
+  const v = dailyCloseState.view
+  if (!v) { body.innerHTML = ''; return }
+  if (dailyCloseState.correcting) { body.innerHTML = renderCorrectionForm(dailyCloseState.correcting, zh); return }
+
+  const confirmed = v.status === 'confirmed'
+  const pend = v.pendingAllocation || []
+  const anomalies = v.anomalies || {}
+  body.innerHTML = `
+    ${confirmed ? `<div class="dc-warnbar" style="background:#e3eee8;border-color:#bcdccd;color:#2f7d5c">
+      ${zh ? `已确认日结 · ${String(v.confirmedAt || '').slice(0, 16).replace('T', ' ')} · ${escapeHtml(v.confirmedBy || '')}${v.reopenCount ? ` · 重开过 ${v.reopenCount} 次` : ''}` : 'Confirmed'}
+      <button class="ghost slim" id="dcReopen" type="button" style="margin-left:10px">${zh ? '重开日结' : 'Reopen'}</button>
+    </div>` : ''}
+
+    <div class="section-row compact-row" style="margin-top:4px">
+      <span class="subtle">${zh ? `本日 ${v.orderCount} 单 · 营业额 ${money(v.revenueCents, 2)}` : `${v.orderCount} orders`}</span>
+    </div>
+
+    ${pend.length ? `<h3 style="font-size:14px;margin:12px 0 8px">${zh ? `待分配 ${pend.length} 单` : `${pend.length} to allocate`}<span class="subtle" style="margin-left:8px;font-weight:400">${zh ? '逐单点开' : ''}</span></h3>` : ''}
+    ${pend.map((p) => {
+      const open = dailyCloseState.open[p.settlementId] !== false
+      return `
+      <div class="dc-alloc ${open ? '' : 'collapsed'}" data-alloc="${escapeHtml(p.settlementId)}">
+        <div class="head" data-alloc-toggle="${escapeHtml(p.settlementId)}">
+          <span>${escapeHtml(p.code)} ${escapeHtml(p.servedPersonName || p.customerName || '')} · ${p.technicians.length > 1 ? (zh ? '双技师' : 'Two techs') : (zh ? '单技师' : 'Single')}</span>
+          <span>${money(p.totalCents, 2)} <span class="arr">${open ? (zh ? '收起 ∧' : 'Hide ∧') : (zh ? '点开分配 ∨' : 'Open ∨')}</span></span>
+        </div>
+        <div class="body">
+          ${p.technicians.map((t, i) => `
+            <div class="dc-line">
+              <span class="nm">${escapeHtml(t.name)}</span>
+              <span class="wnote">${t.role === 'main' ? (zh ? '主' : 'Main') : (zh ? '副' : 'Assist')}${t.itemNos.length ? ` · ${t.itemNos.join('、')}` : ''}</span>
+              <input data-share-tech="${escapeHtml(t.technicianId)}" inputmode="numeric"
+                value="${p.technicians.length === 1 ? 100 : (i === 0 ? p.defaultSplit.mainPct : p.defaultSplit.assistPct)}"> %
+            </div>`).join('')}
+          <div class="dc-links">
+            ${(v.settlements.find((s) => s.settlementId === p.settlementId) || {}).hasSnapshot
+              ? `<a data-dc-snapshot="${escapeHtml(p.code)}">${zh ? '查看签署单' : 'View signed sheet'}</a>` : ''}
+            <a data-dc-correct="${escapeHtml(p.settlementId)}">${zh ? '金额有误?发起更正' : 'Amount wrong? Amend'}</a>
+            <button class="primary slim" data-dc-allocate="${escapeHtml(p.settlementId)}" type="button">${zh ? '保存分配' : 'Save split'}</button>
+          </div>
+        </div>
+      </div>`
+    }).join('')}
+
+    <table class="dc-sum">
+      <tr>
+        <th>${zh ? '技师' : 'Tech'}</th><th>${zh ? '单数' : 'Orders'}</th><th>${zh ? '业绩' : 'Revenue'}</th>
+        <th>${zh ? '卡耗' : 'Card used'}</th><th>${zh ? '冲卡' : 'Recharge'}</th><th>${zh ? '目标' : 'Target'}</th>
+      </tr>
+      ${(v.technicians || []).map((t) => `
+      <tr>
+        <td class="nm">${escapeHtml(t.name)}</td>
+        <td>${t.orderCount}</td>
+        <td>${t.pendingCount ? `<span class="dc-badge mut">${zh ? '待分配' : 'pending'}</span>` : money(t.perfCents, 2)}</td>
+        <td>${money(t.cardUsedCents, 2)}</td>
+        <td>${t.rechargeTotalCents ? money(t.rechargeTotalCents, 2) : '—'}</td>
+        <td>${targetCellText(t, zh)}</td>
+      </tr>`).join('')}
+    </table>
+
+    <div class="dc-anom">
+      ${zh ? '价档异常' : 'Tier changes'} <span class="dc-badge ${(anomalies.tierChanges || []).length ? 'warn' : 'mut'}">${(anomalies.tierChanges || []).length}</span>
+      ${(anomalies.tierChanges || []).map((a) => `<span style="margin-left:8px">${escapeHtml(a.code)} ${escapeHtml(a.from || '')}→${escapeHtml(a.to || '')}${a.by ? `(${escapeHtml(a.by)} ${String(a.at || '').slice(11, 16)})` : ''}</span>`).join('')}
+      <br>${zh ? '免卸甲/免卸睫' : 'Free removals'} <span class="dc-badge mut">${(anomalies.freeRemoval || {}).count || 0} ${zh ? '笔' : ''}</span>
+    </div>
+
+    ${(v.blockers || []).map((b) => `<div class="dc-warnbar">${escapeHtml(b.message)}</div>`).join('')}
+    ${confirmed ? '' : `<button class="primary full" id="dcConfirm" type="button" ${v.canConfirm ? '' : 'disabled'}>
+      ${v.canConfirm ? (zh ? '确认日结' : 'Confirm day') : (zh ? `确认日结(${(v.blockers || [])[0]?.message || ''})` : 'Blocked')}
+    </button>`}`
+}
+
+function targetCellText(t, zh) {
+  if (!t.target || !t.target.perfTargetCents) return '—'
+  const gap = t.target.perfTargetCents - t.perfCents
+  return gap <= 0
+    ? `<span class="dc-badge ok">${zh ? '达标' : 'Hit'}</span>`
+    : `${zh ? '差' : 'Short'} ${money(gap, 2)}`
+}
+
+/* 屏 1b 金额更正:上半是顾客已签的存档单(只读带锁标),下半填改后金额与原因。
+   提交 = 追加一条更正记录,原签署单永不改动;储值差额由后端自动补配。 */
+function renderCorrectionForm(row, zh) {
+  return `
+    <div class="section-row compact-row">
+      <h3 style="font-size:15px">${zh ? '金额更正' : 'Amend'} · ${escapeHtml(row.code)}</h3>
+      <button class="ghost slim" id="dcCorrectCancel" type="button">${zh ? '返回日结' : 'Back'}</button>
+    </div>
+    <div class="dc-ro">
+      <div class="ro-t"><span>${zh ? '顾客已签存档单(只读)' : 'Signed sheet (read-only)'}</span><span class="lock">${zh ? '不可修改' : 'locked'}</span></div>
+      ${escapeHtml(row.servedPersonName || '')}${row.isProxyPaid ? (zh ? '(代付)' : ' (proxy)') : ''} · ${String(row.signedAt || '').slice(0, 16).replace('T', ' ')}
+      · ${(row.technicians || []).map((t) => `${escapeHtml(t.name)}(${t.role === 'main' ? (zh ? '主' : 'main') : (zh ? '副' : 'assist')})`).join('/')}<br>
+      ${(row.items || []).map((l) => `${String(l.itemNo).padStart(2, '0')} ${escapeHtml(l.name)} ${l.isFree ? (zh ? '免收' : 'free') : money(l.amountCents, 2)}`).join(' · ')}<br>
+      ${row.depositDeductCents ? `${zh ? '定金抵扣' : 'Deposit'} −${money(row.depositDeductCents, 2)} · ` : ''}<b>${zh ? '合计' : 'Total'} ${money(row.totalCents, 2)}</b>
+    </div>
+    <div class="dep-block" style="margin-top:12px">
+      <h4>${zh ? '更正内容' : 'Amendment'}</h4>
+      <div class="dep-inline" style="margin-top:0">
+        <label>${zh ? '更正后合计' : 'New total'}<input id="dcNewTotal" inputmode="decimal" value="${row.totalCents / 100}"></label>
+      </div>
+      <textarea class="dep-text" id="dcReason" style="min-height:80px;margin-top:10px"
+        placeholder="${zh ? '原因(必填):例「实际只补了 1 指,技师勾多了」' : 'Reason (required)'}"></textarea>
+      <p class="subtle">${zh
+        ? '提交后:① 原签署单保持原样,顾客服务记录追加一条「订单更正记录」(改前/改后/操作人/时间)② 用卡付过的单,储值差额由系统自动补配(人工不可改这笔)③ 更正进当日日结留痕'
+        : 'The signed sheet stays untouched; an amendment record is appended.'}</p>
+      <button class="primary slim" id="dcCorrectSubmit" type="button">${zh ? '提交更正' : 'Submit'}</button>
+    </div>`
+}
+
+let financeTrendState = { granularity: 'month', data: null }
+
+async function loadFinanceTrend(granularity) {
+  const g = granularity || financeTrendState.granularity
+  const periods = g === 'day' ? 14 : (g === 'week' ? 8 : (g === 'year' ? 3 : 6))
+  const body = document.querySelector('#financeTrendBody')
+  if (body) body.innerHTML = `<p class="subtle">${owner.lang === 'zh' ? '加载中…' : 'Loading…'}</p>`
+  const data = await request(`/admin/finance/trend?granularity=${g}&periods=${periods}`)
+  financeTrendState = { granularity: g, data: data.trend }
+  document.querySelectorAll('#financeTrendTabs [data-trend-g]').forEach((b) => b.classList.toggle('active', b.dataset.trendG === g))
+  renderFinanceTrend()
+}
+
+function renderFinanceTrend() {
+  const body = document.querySelector('#financeTrendBody')
+  if (!body || !financeTrendState.data) return
+  const zh = owner.lang === 'zh'
+  const t = financeTrendState.data
+  // 柱高只是画图比例,不是金额运算;所有数字都照后端返回值显示
+  const max = Math.max(1, ...t.points.map((p) => Math.max(p.revenueCents, p.expenseCents)))
+  const cmp = t.compare
+  body.innerHTML = `
+    <div class="trend-chart">
+      ${t.points.map((p) => `
+        <div class="trend-bar">
+          <div class="stack">
+            <div class="b ${p.hitTarget ? 'hit' : ''}" style="height:${Math.round(p.revenueCents / max * 130)}px" title="${zh ? '收入' : 'Revenue'} ${money(p.revenueCents, 2)}"></div>
+            <div class="b exp" style="height:${Math.round(p.expenseCents / max * 130)}px" title="${zh ? '支出' : 'Expense'} ${money(p.expenseCents, 2)}"></div>
+          </div>
+          <span class="lb">${escapeHtml(p.label)}</span>
+        </div>`).join('')}
+    </div>
+    <div class="trend-legend">
+      <span><i style="background:#c8a47e"></i>${zh ? '收入' : 'Revenue'}</span>
+      <span><i style="background:#2f7d5c"></i>${zh ? '收入(达标)' : 'Revenue (hit)'}</span>
+      <span><i style="background:#e0d3c4"></i>${zh ? '支出' : 'Expense'}</span>
+    </div>
+    ${cmp ? `<p class="subtle" style="margin-top:10px">${zh ? '环比上期' : 'vs previous'}:${cmp.revenueDeltaCents >= 0 ? '+' : '−'}${money(Math.abs(cmp.revenueDeltaCents), 2)}${cmp.revenueDeltaPct === null ? '' : `(${cmp.revenueDeltaPct >= 0 ? '+' : ''}${cmp.revenueDeltaPct}%)`} · ${zh ? '单量' : 'Orders'} ${cmp.orderDelta >= 0 ? '+' : ''}${cmp.orderDelta}</p>` : ''}
+    <table class="dc-sum" style="margin-top:12px">
+      <tr>
+        <th>${zh ? '周期' : 'Period'}</th><th>${zh ? '收入' : 'Revenue'}</th><th>${zh ? '支出' : 'Expense'}</th><th>${zh ? '净利' : 'Net'}</th>
+        <th>${zh ? '单量' : 'Orders'}</th><th>${zh ? '客单' : 'Avg'}</th><th>${zh ? '充值' : 'Recharge'}</th><th>${zh ? '耗卡' : 'Card used'}</th><th>${zh ? '目标' : 'Target'}</th>
+      </tr>
+      ${t.points.slice().reverse().map((p) => `
+      <tr>
+        <td class="nm">${escapeHtml(p.label)}</td>
+        <td>${money(p.revenueCents, 2)}</td>
+        <td>${money(p.expenseCents, 2)}</td>
+        <td>${money(p.netCents, 2)}</td>
+        <td>${p.orderCount}</td>
+        <td>${money(p.avgTicketCents, 2)}</td>
+        <td>${money(p.rechargeCents, 2)}</td>
+        <td>${money(p.cardUsedCents, 2)}</td>
+        <td>${p.targetCents === null ? '—' : (p.hitTarget ? `<span class="dc-badge ok">${zh ? '达标' : 'Hit'}</span>` : money(p.targetCents, 2))}</td>
+      </tr>`).join('')}
+    </table>`
+}
+
 function applyFinanceTab() {
   const tab = owner.financeLedger.tab || 'quick'
   document.querySelectorAll('#financePage [data-fin-panel]').forEach((panel) => {
@@ -2618,9 +2819,10 @@ function renderFinancePayroll() {
   els.financePayrollBody.innerHTML = `<p class="subtle">${zh ? '加载工资试算…' : 'Loading payroll…'}</p>`
   Promise.allSettled([
     request(`/admin/salary/estimate?month=${month}`),
-    request('/admin/service-notes/pending?days=14')
+    request('/admin/service-notes/pending?days=14'),
+    request(`/admin/daily-close/month?month=${month}`)
   ])
-    .then(([estRes, pendRes]) => {
+    .then(([estRes, pendRes, closeRes]) => {
       if (estRes.status === 'rejected') {
         els.financePayrollBody.innerHTML = `<p class="subtle">${escapeHtml(estRes.reason?.message || '加载失败')}</p>`
         return
@@ -2635,8 +2837,10 @@ function renderFinancePayroll() {
       renderFinanceMetrics()
       renderFinanceProgress()
       // 业绩核查数据:归属备注(estimate 未锁定时返回)+ 近14天完成单未写小记按人汇总
-      const notes = data.attributionNotes || []
       const reviewedAt = localStorage.getItem(`lucky-salary-review-${month}`)
+      // 屏 2:业绩 = 已确认日结累加。没日结的天不进试算,黄条明说少算了哪几天
+      const closeInfo = closeRes.status === 'fulfilled' ? closeRes.value : { days: [], openDays: [], allClosed: true }
+      const openDays = closeInfo.openDays || []
       const pendItems = pendRes.status === 'fulfilled' ? (pendRes.value.items || []) : []
       const pendByTech = {}
       pendItems.forEach((item) => {
@@ -2645,7 +2849,7 @@ function renderFinancePayroll() {
         pendByTech[item.technicianId].count += 1
       })
       const rowHtml = (r) => {
-        if (r.noPlan) return `<div class="finance-rule-row disabled"><span><strong>${escapeHtml(r.name)}</strong> · ${zh ? '未配薪资方案(员工管理→技师业绩「薪资方案」里配置,与小程序同步)' : 'No plan'}</span></div>`
+        if (r.noPlan) return `<div class="finance-rule-row disabled"><span><strong>${escapeHtml(r.name)}</strong> · ${zh ? '未配薪资方案(员工管理 →「薪资方案」页签里配,与小程序同步)' : 'No plan'}</span></div>`
         const bits = []
         if (r.baseSalaryCents) bits.push(`${zh ? '底薪' : 'base'} ${cadText(r.baseSalaryCents)}`)
         if (r.handworkCents) bits.push(`${zh ? '手工' : 'hand'} ${cadText(r.handworkCents)}`)
@@ -2662,15 +2866,8 @@ function renderFinancePayroll() {
       const reviewHtml = locked ? '' : `
         <div style="margin:12px 0;padding:10px 12px;border:1px solid #eadfce;border-radius:10px">
           <p class="subtle" style="margin:0 0 6px"><strong>${zh ? '② 业绩核查' : '② Performance review'}</strong>${reviewedAt ? ` · ✅ ${zh ? '已核查' : 'reviewed'} ${String(reviewedAt).slice(0, 16).replace('T', ' ')}` : ''}</p>
-          <p class="subtle" style="margin:0${notes.length ? ';color:#b0483c;font-weight:700' : ''}">${notes.length
-            ? `⚠ ${zh ? `本月有 ${notes.length} 条归属备注(实际谁做),核对后需要改数的用上方「± 调整」:` : `${notes.length} attribution note(s) to verify:`}`
-            : `✓ ${zh ? '本月没有归属备注(没人报"这单实际不是我做的")。' : 'No attribution notes this month.'}`}</p>
-          ${notes.map((n) => `
-          <div class="finance-rule-row" style="background:#fdf6ee;border-radius:8px;align-items:flex-start">
-            <span><strong>${escapeHtml(n.customerName || '顾客')}</strong> · ${cadText(n.amountCents || 0)} · ${zh ? '名下技师' : 'billed to'} ${escapeHtml(n.technicianName || '-')} · ${escapeHtml(n.code || '')}<br><span>${escapeHtml(n.note || '')}</span></span>
-          </div>`).join('')}
           ${Object.keys(pendByTech).length ? `
-          <p class="subtle" style="margin:6px 0 0">📝 ${zh ? '近14天完成单还没写服务小记:' : 'Missing service notes (last 14 days):'}</p>
+          <p class="subtle" style="margin:6px 0 0">${zh ? '近14天完成单还没写服务小记:' : 'Missing service notes (last 14 days):'}</p>
           ${Object.entries(pendByTech).map(([techId, info]) => `
           <div class="finance-rule-row">
             <span><strong>${escapeHtml(info.name)}</strong> · ${info.count} ${zh ? '单未写小记' : 'orders without notes'}</span>
@@ -2680,15 +2877,34 @@ function renderFinancePayroll() {
             ? `<button class="ghost slim" data-sal-review-undo type="button">${zh ? '撤销核查' : 'Undo review'}</button>`
             : `<button class="primary slim" data-sal-review type="button">✓ ${zh ? `完成 ${month} 业绩核查` : `Mark ${month} reviewed`}</button> <span class="subtle">${zh ? '核查完成后才能锁定工资表' : 'Required before locking'}</span>`}
         </div>`
+      const closeHtml = `
+        <div style="margin:0 0 12px;padding:10px 12px;border:1px solid #eadfce;border-radius:10px">
+          <p class="subtle" style="margin:0 0 6px"><strong>${zh ? '日结业绩' : 'Daily closes'}</strong>${openDays.length ? ` <span class="dc-badge warn">${openDays.length}</span>` : ''} · ${zh ? '业绩=已确认日结累加' : 'perf = confirmed closes'}</p>
+          ${(closeInfo.days || []).length ? (closeInfo.days || []).map((d) => `
+          <div class="finance-rule-row">
+            <span><strong>${escapeHtml(d.date)}</strong> · ${d.orderCount} ${zh ? '单' : ''} · ${money(d.revenueCents, 2)}${d.pendingAllocation ? ` · ${zh ? `${d.pendingAllocation} 单待分配` : `${d.pendingAllocation} to allocate`}` : (d.confirmed ? '' : ` · ${zh ? '未确认' : 'open'}`)}</span>
+            ${d.confirmed
+              ? `<span class="dc-badge ok">${zh ? '已日结' : 'Closed'}</span>`
+              : `<button class="ghost slim" data-go-close="${escapeHtml(d.date)}" type="button">${zh ? '去日结' : 'Close it'}</button>`}
+          </div>`).join('') : `<p class="subtle" style="margin:0">${zh ? '本月还没有已签署的服务单。' : 'No signed sheets yet.'}</p>`}
+        </div>
+        ${openDays.length
+          ? `<div class="dc-warnbar">${zh ? `本月有 <b>${openDays.length} 天</b>未日结,试算暂不含这几天业绩` : `${openDays.length} day(s) not closed; excluded from the estimate`}</div>`
+          : ((closeInfo.days || []).length ? '' : `<div class="dc-warnbar">${zh
+            ? '本月业绩显示为 0 是正常的:业绩口径已改为「已确认日结累加」,要走完 <b>结算 → 顾客签署 → 日结确认</b> 才会有数。老流程(直接标记完成)不再计入。'
+            : 'Zero performance is expected until you run settlement → signature → daily close.'}</div>`)}`
       els.financePayrollBody.innerHTML = `
+        ${closeHtml}
         ${paid ? `<p class="subtle">💰 ${zh ? `已发放入账 · ${String(data.paidAt || '').slice(0, 16).replace('T', ' ')} · 账本可查(支出·工资);更正需红字冲销` : 'Paid into ledger'}</p>`
           : locked ? `<p class="subtle">✅ ${zh ? `已锁定存档 · ${String(data.lockedAt || '').slice(0, 16).replace('T', ' ')}` : 'Locked'} <button class="ghost slim" data-sal-unlock type="button">${zh ? '解锁重算' : 'Unlock'}</button></p>`
           : `<p class="subtle" style="margin:0 0 6px"><strong>${zh ? '① 本月试算' : '① Estimate'}</strong> · ${cadText(data.totalCents || 0)}</p>`}
         ${rows.length ? rows.map(rowHtml).join('') : `<p class="subtle">${zh ? '本月暂无技师数据。' : 'No data.'}</p>`}
         ${reviewHtml}
-        ${!locked && hasPlanRows.length ? `<button class="primary slim" data-sal-lock type="button"${reviewedAt ? '' : ' disabled style="opacity:.5"'}>${zh ? `③ 确认并锁定 ${month} 工资表${reviewedAt ? '' : '(先完成上方核查)'}` : 'Lock payroll'}</button>` : ''}
+        ${!locked && hasPlanRows.length ? `<button class="primary slim" data-sal-lock type="button"${reviewedAt && !openDays.length ? '' : ' disabled style="opacity:.5"'}>${zh
+          ? `③ 确认并锁定 ${month} 工资表${openDays.length ? `(需全部日结完成,还差 ${openDays.length} 天)` : (reviewedAt ? '' : '(先完成上方核查)')}`
+          : 'Lock payroll'}</button>` : ''}
         ${locked && !paid ? `<button class="primary slim" data-sal-payout type="button">${zh ? `记为已发放 · 入账本(${cadText(data.totalCents || 0)})` : 'Pay out'}</button>` : ''}
-        <p class="subtle">${zh ? '口径与小程序一致:底薪+手工费×单数+业绩落档提成+充值/耗卡提成(按储值流水的经手技师)+加班费(打卡考勤)±调整。方案在 员工管理→技师业绩「薪资方案」配(与小程序同步);锁定=快照防事后改数;发放=逐人写入账本「支出·工资」。' : 'Same engine as the mini app.'}</p>
+        <p class="subtle">${zh ? '口径与小程序一致:底薪+手工费×单数+业绩落档提成+充值/耗卡提成(按储值流水的经手技师)+加班费(打卡考勤)±调整。方案在 员工管理 →「薪资方案」页签配(与小程序同步);锁定=快照防事后改数;发放=逐人写入账本「支出·工资」。' : 'Same engine as the mini app.'}</p>
       `
       els.financePayrollBody.querySelectorAll('[data-sal-adjust]').forEach((btn) => btn.addEventListener('click', async () => {
         const tid = btn.dataset.salAdjust
@@ -2823,12 +3039,141 @@ function renderAttendanceBoard() {
 function applyStaffTab() {
   const tab = owner.staffTab || 'schedule'
   document.querySelectorAll('#schedulePage [data-staff-panel]').forEach((panel) => {
-    const ownerOnly = panel.id === 'attendanceCard'
+    // 后三个板块都是老板专属(业绩目标/薪资方案/账号管理)
+    const ownerOnly = ['attendanceCard', 'perfTargetsCard', 'salaryPlansCard', 'staffAccountsCard'].includes(panel.id)
     panel.classList.toggle('hidden', panel.dataset.staffPanel !== tab || (ownerOnly && !isOwnerRole()))
+  })
+  // 员工登录时只显示前两个页签
+  document.querySelectorAll('#staffTabs [data-staff-tab]').forEach((button) => {
+    const ownerOnlyTab = ['targets', 'salary', 'accounts'].includes(button.dataset.staffTab)
+    button.classList.toggle('hidden', ownerOnlyTab && !isOwnerRole())
   })
   document.querySelectorAll('#staffTabs [data-staff-tab]').forEach((button) => {
     button.classList.toggle('active', button.dataset.staffTab === tab)
   })
+}
+
+/* ===== P2② 员工管理五页签(屏 4d,2026-08-08)=====
+   计时排班｜技师业绩｜业绩目标｜薪资方案｜账号管理。页签按使用频率排,一律纯文字无 emoji。
+   薪资方案编辑从「财务区」迁到这里(工资试算仍留财务)。 */
+let perfTargetsState = { month: '', rows: [], loading: false }
+
+function shiftMonthKey(month, delta) {
+  const [y, m] = String(month || '').split('-').map(Number)
+  if (!y || !m) return month
+  const total = y * 12 + (m - 1) + delta
+  return `${Math.floor(total / 12)}-${String((total % 12) + 1).padStart(2, '0')}`
+}
+
+async function loadPerfTargets(month) {
+  const target = month || perfTargetsState.month || storeToday().slice(0, 7)
+  perfTargetsState.loading = true
+  renderPerfTargets()
+  const data = await request(`/admin/perf-targets?month=${encodeURIComponent(target)}`)
+  perfTargetsState = { month: data.month, rows: data.technicians || [], loading: false }
+  renderPerfTargets()
+}
+
+function renderPerfTargets() {
+  const body = document.querySelector('#perfTargetsBody')
+  if (!body) return
+  const zh = owner.lang === 'zh'
+  const monthEl = document.querySelector('#perfTargetsMonth')
+  if (monthEl) monthEl.textContent = perfTargetsState.month || ''
+  if (perfTargetsState.loading) { body.innerHTML = `<p class="subtle">${zh ? '加载中…' : 'Loading…'}</p>`; return }
+  if (!perfTargetsState.rows.length) { body.innerHTML = `<p class="subtle">${zh ? '本店还没有技师。' : 'No technicians yet.'}</p>`; return }
+  const seg = (techId, group, options, current) => `
+    <span class="seg2" data-seg-group="${group}" data-seg-tech="${escapeHtml(techId)}">
+      ${options.map(([v, l]) => `<button type="button" class="${v === current ? 'on' : ''}" data-seg-value="${v}">${l}</button>`).join('')}
+    </span>`
+  body.innerHTML = perfTargetsState.rows.map((r) => `
+    <div class="trow2" data-target-row="${escapeHtml(r.technicianId)}">
+      <span class="nm">${escapeHtml(r.name)}</span>
+      <span class="lab">${zh ? '设置' : 'Target'}</span>
+      ${seg(r.technicianId, 'mode', [['total', zh ? '总目标' : 'Total'], ['split', zh ? '分项' : 'Split']], r.mode)}
+      <span class="tgt-fields" data-mode="${r.mode}">
+        <label>${zh ? '业绩' : 'Revenue'}<input data-tgt="perf" inputmode="decimal" value="${r.perfTargetCents / 100}"></label>
+        <label class="split-only">${zh ? '卡耗' : 'Card'}<input data-tgt="card" inputmode="decimal" value="${r.cardTargetCents / 100}"></label>
+        <label class="split-only">${zh ? '单量' : 'Orders'}<input data-tgt="orders" inputmode="numeric" value="${r.orderTarget}"></label>
+      </span>
+      <span class="lab">${zh ? '显示' : 'Show'}</span>
+      ${seg(r.technicianId, 'display', [['total_only', zh ? '仅总进度' : 'Total only'], ['with_split', zh ? '含分项' : 'With split']], r.displayMode)}
+    </div>`).join('')
+    + `<p class="subtle" style="margin-top:10px">${zh
+      ? '系统默认:设置=总目标、显示=仅总进度。显示=仅总进度时,员工端整页(含每日流水)不出现分项来源。'
+      : 'Defaults: total target, total-only display.'}</p>`
+}
+
+// 元 → 分。业绩目标面板在文件里排在价目表模块之前,不能用那边的 pCents(const 暂时性死区)
+function yuanToCents(v) {
+  const n = Number(String(v ?? '').replace(/[^\d.]/g, ''))
+  return Number.isFinite(n) ? Math.round(n * 100) : 0
+}
+
+function collectPerfTargets() {
+  return [...document.querySelectorAll('#perfTargetsBody [data-target-row]')].map((row) => {
+    const val = (k) => row.querySelector(`[data-tgt="${k}"]`)?.value
+    const segOf = (g) => row.querySelector(`[data-seg-group="${g}"] .on`)?.dataset.segValue
+    return {
+      technicianId: row.dataset.targetRow,
+      mode: segOf('mode') || 'total',
+      displayMode: segOf('display') || 'total_only',
+      perfTargetCents: yuanToCents(val('perf')),
+      cardTargetCents: yuanToCents(val('card')),
+      orderTarget: Number(val('orders')) || 0
+    }
+  })
+}
+
+// 薪资方案板块:每人一行(模板名 + 入口),点开就是既有的编辑器
+async function loadSalaryPlansPanel() {
+  const body = document.querySelector('#salaryPlansBody')
+  if (!body) return
+  const zh = owner.lang === 'zh'
+  body.innerHTML = `<p class="subtle">${zh ? '加载中…' : 'Loading…'}</p>`
+  const data = await request('/admin/salary-plans')
+  const byTech = {}
+  for (const p of data.plans || []) byTech[p.technicianId] = p
+  const label = (plan) => {
+    if (!plan) return zh ? '按全店默认' : 'Store default'
+    const mode = plan.mode || 'ladder'
+    return mode === 'fixed' ? (zh ? '底薪+固定提成' : 'Fixed')
+      : (mode === 'custom' ? (zh ? '自定义' : 'Custom')
+        : `${zh ? '底薪+阶梯' : 'Ladder'}(${plan.ladderMode === 'progressive' ? (zh ? '阶梯' : 'progressive') : (zh ? '阶段' : 'whole')})`)
+  }
+  const rows = (owner.technicians || []).filter((t) => t.is_active !== 0 && t.is_active !== false)
+  body.innerHTML = `
+    <div class="trow2">
+      <span class="nm">${zh ? '全店默认' : 'Store default'}</span>
+      <span class="lab">${escapeHtml(label(data.defaultPlan))}</span>
+      <button class="ghost slim" data-sp-plan="" data-sp-name="${zh ? '全店默认' : 'Store default'}" type="button">${zh ? '编辑' : 'Edit'}</button>
+    </div>
+    ${rows.map((t) => `
+    <div class="trow2">
+      <span class="nm">${escapeHtml(t.name)}</span>
+      <span class="lab">${escapeHtml(label(byTech[t.id]))}</span>
+      <button class="ghost slim" data-sp-plan="${escapeHtml(t.id)}" data-sp-name="${escapeHtml(t.name)}" type="button">${zh ? '编辑' : 'Edit'}</button>
+    </div>`).join('')}
+    <p class="subtle" style="margin-top:10px">${zh ? '工资试算仍在 财务 → 员工工资;这里只配方案。' : 'Payroll estimate stays under Finance.'}</p>`
+}
+
+// 账号管理板块:每人一行行内按钮(生成 / 重置密码 / 停用启用)
+async function loadStaffAccountsPanel() {
+  const body = document.querySelector('#staffAccountsBody')
+  if (!body) return
+  const zh = owner.lang === 'zh'
+  body.innerHTML = `<p class="subtle">${zh ? '加载中…' : 'Loading…'}</p>`
+  await refreshStaffAccounts()
+  const rows = (owner.technicians || [])
+  body.innerHTML = rows.map((t) => {
+    const inactive = t.is_active === 0 || t.is_active === false
+    return `
+    <div class="trow2">
+      <span class="nm">${escapeHtml(t.name)}${inactive ? `<span class="tech-inactive-tag">${zh ? '已停用' : 'Inactive'}</span>` : ''}</span>
+      <span class="acct-controls">${renderTechAccountControls(t.id, zh)}</span>
+    </div>`
+  }).join('')
+    + `<p class="subtle" style="margin-top:10px">${zh ? '初始密码只显示一次,复制后发给员工;员工首次登录会被要求改密。' : 'Initial password is shown once.'}</p>`
 }
 
 // 2026-08-02 薪资方案配置(固定/浮动绩效)——入口在 员工管理→技师业绩,与小程序 员工管理→薪资方案 同逻辑同字段(/admin/salary-plans)
@@ -4825,8 +5170,8 @@ function renderTechnicianPerformance() {
       ${!isOwnerRole() && owner.myCompEstimate ? `<p class="subtle comp-estimate-note">${zh ? `底薪 ${money(owner.myCompEstimate.baseSalaryCents)} + 提成 ${money(owner.myCompEstimate.commissionCents)}(${Math.round(owner.myCompEstimate.commissionRate * 100)}%),以老板月结确认为准。` : 'Base + commission; final amount confirmed at monthly settlement.'}</p>` : ''}
       ${isOwnerRole() ? `
       <div class="tech-manage-row">
-        ${inactive ? '' : `<button class="ghost slim" data-sp-plan="${escapeHtml(tech.id)}" data-sp-name="${escapeHtml(tech.name)}" type="button">💰 ${zh ? '薪资方案' : 'Salary plan'}</button>`}
-        <button class="ghost slim" data-tech-more="${escapeHtml(tech.id)}" type="button">⋯ ${zh ? '账号管理' : 'Account'}</button>
+        ${inactive ? '' : `<button class="ghost slim" data-sp-plan="${escapeHtml(tech.id)}" data-sp-name="${escapeHtml(tech.name)}" type="button">${zh ? '薪资方案' : 'Salary plan'}</button>`}
+        <button class="ghost slim" data-tech-more="${escapeHtml(tech.id)}" type="button">${zh ? '账号管理' : 'Account'}</button>
       </div>
       <div class="tech-manage-row hidden" data-tech-more-panel="${escapeHtml(tech.id)}">
         <button class="ghost slim" data-tech-edit="${escapeHtml(tech.id)}" type="button">${zh ? '编辑资料' : 'Edit'}</button>
@@ -4868,7 +5213,7 @@ function renderTechAccountControls(techId, zh) {
   }
   const disabled = account.status !== 'active'
   return `
-    <span class="tech-account-name" title="${zh ? '登录用户名' : 'Username'}">👤 ${escapeHtml(account.username)}${disabled ? (zh ? '(已停用)' : ' (disabled)') : ''}</span>
+    <span class="tech-account-name" title="${zh ? '登录用户名' : 'Username'}">${escapeHtml(account.username)}${disabled ? (zh ? '(已停用)' : ' (disabled)') : ''}</span>
     <button class="ghost slim" data-acct-reset="${escapeHtml(account.id)}" type="button">${zh ? '重置密码' : 'Reset password'}</button>
     <button class="ghost slim ${disabled ? '' : 'danger-ghost'}" data-acct-toggle="${escapeHtml(account.id)}" type="button">${disabled ? (zh ? '启用账号' : 'Enable') : (zh ? '停用账号' : 'Disable')}</button>`
 }
@@ -6267,6 +6612,36 @@ els.schedulePage.addEventListener('click', (event) => {
     owner.staffTab = staffTab.dataset.staffTab
     applyStaffTab()
     if (owner.staffTab === 'performance' && isOwnerRole()) renderAttendanceBoard() // 切到业绩板块时拉最新考勤
+    if (owner.staffTab === 'targets' && isOwnerRole()) loadPerfTargets().catch((error) => toast(error.message))
+    if (owner.staffTab === 'salary' && isOwnerRole()) loadSalaryPlansPanel().catch((error) => toast(error.message))
+    if (owner.staffTab === 'accounts' && isOwnerRole()) loadStaffAccountsPanel().catch((error) => toast(error.message))
+    return
+  }
+  // 业绩目标:两组段选(设置/显示)+ 月份切换 + 保存
+  const segBtn = event.target.closest('.seg2 [data-seg-value]')
+  if (segBtn) {
+    const group = segBtn.closest('.seg2')
+    for (const b of group.querySelectorAll('[data-seg-value]')) b.classList.toggle('on', b === segBtn)
+    if (group.dataset.segGroup === 'mode') {
+      // 「总目标」时把卡耗/单量两格收起来 —— 目标怎么定与员工端看什么是两回事,别混在一起
+      const fields = group.closest('[data-target-row]')?.querySelector('.tgt-fields')
+      if (fields) fields.dataset.mode = segBtn.dataset.segValue
+    }
+    return
+  }
+  const targetMonth = event.target.closest('[data-target-month]')
+  if (targetMonth) {
+    loadPerfTargets(shiftMonthKey(perfTargetsState.month, Number(targetMonth.dataset.targetMonth))).catch((error) => toast(error.message))
+    return
+  }
+  if (event.target.closest('#perfTargetsSave')) {
+    request('/admin/perf-targets', {
+      method: 'PUT',
+      body: JSON.stringify({ month: perfTargetsState.month, targets: collectPerfTargets() })
+    }).then(() => {
+      toast(owner.lang === 'zh' ? '业绩目标已保存,员工端立即生效' : 'Saved')
+      return loadPerfTargets(perfTargetsState.month)
+    }).catch((error) => toast(error.message))
     return
   }
   const techMore = event.target.closest('[data-tech-more]')
@@ -6426,6 +6801,102 @@ els.financePage.addEventListener('click', (event) => {
   if (tabButton) {
     owner.financeLedger.tab = tabButton.dataset.finTab
     applyFinanceTab()
+    if (owner.financeLedger.tab === 'dailyClose') loadDailyClose().catch((error) => toast(error.message))
+    if (owner.financeLedger.tab === 'trend') loadFinanceTrend().catch((error) => toast(error.message))
+    return
+  }
+  // ===== 日结板块(屏 1)=====
+  const dcDay = event.target.closest('[data-dc-day]')
+  if (dcDay) {
+    const delta = Number(dcDay.dataset.dcDay)
+    loadDailyClose(delta === 0 ? storeToday() : shiftDate(dailyCloseState.date || storeToday(), delta))
+      .catch((error) => toast(error.message))
+    return
+  }
+  const allocToggle = event.target.closest('[data-alloc-toggle]')
+  if (allocToggle) {
+    const id = allocToggle.dataset.allocToggle
+    dailyCloseState.open[id] = dailyCloseState.open[id] === false
+    renderDailyClose()
+    return
+  }
+  const allocSave = event.target.closest('[data-dc-allocate]')
+  if (allocSave) {
+    const box = allocSave.closest('[data-alloc]')
+    const shares = [...box.querySelectorAll('[data-share-tech]')].map((input) => ({
+      technicianId: input.dataset.shareTech,
+      pct: Number(input.value) || 0
+    }))
+    request(`/admin/settlements/${encodeURIComponent(allocSave.dataset.dcAllocate)}/allocate`, {
+      method: 'POST', body: JSON.stringify({ shares })
+    }).then(() => {
+      toast(owner.lang === 'zh' ? '业绩已分配' : 'Allocated')
+      return loadDailyClose(dailyCloseState.date)
+    }).catch((error) => toast(error.message))
+    return
+  }
+  const dcSnapshot = event.target.closest('[data-dc-snapshot]')
+  if (dcSnapshot) {
+    window.open(`/settlements/${encodeURIComponent(dcSnapshot.dataset.dcSnapshot)}/snapshot`, '_blank')
+    return
+  }
+  // ===== 屏 1b 金额更正 =====
+  const dcCorrect = event.target.closest('[data-dc-correct]')
+  if (dcCorrect) {
+    const id = dcCorrect.dataset.dcCorrect
+    const row = (dailyCloseState.view?.settlements || []).find((x) => x.settlementId === id)
+    request(`/settlements/${encodeURIComponent(row.code)}`, { public: true })
+      .then((data) => { dailyCloseState.correcting = data.settlement; renderDailyClose() })
+      .catch((error) => toast(error.message))
+    return
+  }
+  if (event.target.closest('#dcCorrectCancel')) {
+    dailyCloseState.correcting = null
+    renderDailyClose()
+    return
+  }
+  if (event.target.closest('#dcCorrectSubmit')) {
+    const reason = document.querySelector('#dcReason')?.value.trim()
+    if (!reason) { toast(owner.lang === 'zh' ? '原因必填' : 'Reason is required'); return }
+    const row = dailyCloseState.correcting
+    request(`/admin/settlements/${encodeURIComponent(row.id)}/amend`, {
+      method: 'POST',
+      body: JSON.stringify({ totalCents: yuanToCents(document.querySelector('#dcNewTotal')?.value), reason })
+    }).then((r) => {
+      toast(owner.lang === 'zh'
+        ? (r.autoBalanceAdjustCents ? '已更正,储值差额已自动补配' : '已更正,原签署单未改动')
+        : 'Amended')
+      dailyCloseState.correcting = null
+      return loadDailyClose(dailyCloseState.date)
+    }).catch((error) => toast(error.message))
+    return
+  }
+  if (event.target.closest('#dcConfirm')) {
+    request('/admin/daily-close', { method: 'POST', body: JSON.stringify({ date: dailyCloseState.date }) })
+      .then(() => { toast(owner.lang === 'zh' ? '日结已确认,业绩定格' : 'Day closed'); return loadDailyClose(dailyCloseState.date) })
+      .catch((error) => toast(error.message))
+    return
+  }
+  if (event.target.closest('#dcReopen')) {
+    const reason = window.prompt(owner.lang === 'zh' ? '重开日结必须写原因(会留痕):' : 'Reason (recorded):')
+    if (!reason || !reason.trim()) return
+    request('/admin/daily-close/reopen', { method: 'POST', body: JSON.stringify({ date: dailyCloseState.date, reason: reason.trim() }) })
+      .then(() => { toast(owner.lang === 'zh' ? '已重开,可以改分成了' : 'Reopened'); return loadDailyClose(dailyCloseState.date) })
+      .catch((error) => toast(error.message))
+    return
+  }
+  // ===== 财务趋势 =====
+  const trendG = event.target.closest('[data-trend-g]')
+  if (trendG) {
+    loadFinanceTrend(trendG.dataset.trendG).catch((error) => toast(error.message))
+    return
+  }
+  // 工资试算页的「去日结」:切到日结板块并定位到那一天
+  const goClose = event.target.closest('[data-go-close]')
+  if (goClose) {
+    owner.financeLedger.tab = 'dailyClose'
+    applyFinanceTab()
+    loadDailyClose(goClose.dataset.goClose).catch((error) => toast(error.message))
     return
   }
   const guideButton = event.target.closest('[data-fin-guide]')
