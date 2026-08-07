@@ -7347,7 +7347,8 @@ function depositKeyFacts(config, lang = 'zh') {
   return [
     { key: 'grace', value: grace === null ? '—' : (zh ? `${grace} 分钟` : `${grace} min`), label: zh ? '迟到宽限' : 'Late grace' },
     { key: 'reschedule', value: noticeText, label: zh ? '改期时限' : 'Reschedule' },
-    { key: 'retain', value: zh ? `可保留 ${retain} 次` : `${retain}x`, label: zh ? '合规改期定金' : 'Deposit retained' }
+    // 0 次是「明确不保留」,不是「没配」—— 说人话,别让顾客读「可保留 0 次」
+    { key: 'retain', value: retain > 0 ? (zh ? `可保留 ${retain} 次` : `${retain}x`) : (zh ? '不保留' : 'not retained'), label: zh ? '合规改期定金' : 'Deposit retained' }
   ]
 }
 

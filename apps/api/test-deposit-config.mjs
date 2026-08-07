@@ -182,6 +182,8 @@ async function main() {
   const pub2 = await request('/store/deposit-policy', {}, null, { 'x-tenant-id': shopA.tenantId })
   check('屏3 未配置的参数显示「—」而不是编一个默认值',
     pub2.data.keyFacts.zh[0].value === '—' && pub2.data.keyFacts.zh[1].value === '—', JSON.stringify(pub2.data.keyFacts.zh))
+  check('屏3 保留 0 次说成「不保留」,不是「可保留 0 次」',
+    pub2.data.keyFacts.zh[2].value === '不保留', JSON.stringify(pub2.data.keyFacts.zh[2]))
   // 后台屏 4 预览与顾客端屏 3 读同一份 keyFacts
   const adminSide = await request('/admin/deposit-config', {}, shopA.token)
   check('屏4 预览与屏3 顾客端 keyFacts 逐字相同',
