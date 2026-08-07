@@ -7673,9 +7673,7 @@ async function signSettlement(row, { signature, signedBy = '', strokes = [] }) {
   // 快照:签完立刻把整张单连同笔迹渲染成 SVG。这是唯一签署凭证 ——
   // 结算数据随时可重渲染,笔迹只在签的这一瞬间存在,过后补不了,所以必须在这里生成。
   const signedRow = db.prepare('SELECT * FROM settlements WHERE id = ?').get(row.id)
-  const snapshotSvg = renderSettlementSnapshotSvg(serializeSettlement(signedRow, { includeSignature: true }), {
-    strokes, signedAt: now, policyText: depositPolicyText(getDepositConfig(tenantId), tenantId, 'zh')
-  })
+  const snapshotSvg = renderSettlementSnapshotSvg(serializeSettlement(signedRow, { includeSignature: true }), { strokes, signedAt: now })
   const objectKey = `settlements/${tenantId}/${signedRow.code}.svg`
   const url = await cosPutObject(objectKey, snapshotSvg, 'image/svg+xml')
   // COS 没配 / 上传失败 → inline 入库标 storage=inline,后续可迁移,绝不因存储故障拦签署
@@ -7804,7 +7802,9 @@ function signatureStrokesToPath(strokes) {
     .join(' ')
 }
 
-function renderSettlementSnapshotSvg(settlement, { strokes = [], signedAt = '', policyText = '' } = {}) {
+/* 凭证只管金额与签名。定金规则的完整展示留在预约页(顾客付定金时已看过并同意),
+   快照上只保留「已付定金抵扣」这一金额行 —— 店主 2026-08-08 拍板。 */
+function renderSettlementSnapshotSvg(settlement, { strokes = [], signedAt = '' } = {}) {
   const s = settlement
   const fmt = s.currencyDisplay || { prefix: '<CODE> ', symbol: '$', trimZeroDecimals: false }
   const money = (cents) => {
@@ -7854,13 +7854,6 @@ function renderSettlementSnapshotSvg(settlement, { strokes = [], signedAt = '', 
   y += 40
   rows.push(`<text x="40" y="${y}" class="grand">合计</text><text x="${W - 40}" y="${y}" class="grand gold" text-anchor="end">${escapeXml(money(s.totalCents))}</text>`)
   y += 46
-  if (policyText) {
-    for (const line of String(policyText).split('\n').slice(0, 6)) {
-      rows.push(`<text x="40" y="${y}" class="s">${escapeXml(line.slice(0, 46))}</text>`)
-      y += 20
-    }
-    y += 10
-  }
   rows.push(`<text x="40" y="${y}" class="s">本单据为服务确认凭证,由顾客本人签署确认。</text>`)
   const H = y + 40
   const inkPath = signatureStrokesToPath(strokes)

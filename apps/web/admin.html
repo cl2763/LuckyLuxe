@@ -4,7 +4,7 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>有迹 · 商家后台</title>
-    <link rel="stylesheet" href="/web/styles.css?v=20260808b-p1-sign">
+    <link rel="stylesheet" href="/web/styles.css?v=20260808c-p1-ui">
     <style>
       /* 2026-08-02 财务指标显隐+动效(店主 v4 定稿):AI智能总结卡 / 目标进度条(带平衡线刻度) / 设目标引导与弹窗。
          放这里不放 styles.css:本批约定只动 admin.js + admin.html 两个文件。 */
@@ -103,6 +103,57 @@
       .sub-hist td{padding:10px;border-bottom:1px solid #f5f0ea;color:#2d2826}
       .sub-hist tr:last-child td{border-bottom:none}
       .sub-hist .pend{color:#b8452f;font-weight:700}
+
+      /* ===== P1 UI 定稿:定金规则卡(左配置右预览) + AI 智能包 Tab(2026-08-08)===== */
+      .dep-grid{display:grid;grid-template-columns:minmax(0,1.4fr) minmax(0,1fr);gap:18px;align-items:start}
+      @media (max-width:900px){.dep-grid{grid-template-columns:1fr}}
+      .dep-block{background:#fff;border:1px solid #ece3da;border-radius:14px;padding:14px 16px;margin-bottom:12px}
+      .dep-block h4{margin:0 0 10px;font-size:12.5px;font-weight:800;color:#8c8279;letter-spacing:.02em}
+      .dep-seg{display:inline-flex;background:#f3ede6;border-radius:999px;padding:3px;gap:3px;flex-wrap:wrap}
+      .dep-seg button{border:none;background:transparent;border-radius:999px;padding:7px 16px;font-size:13px;font-weight:700;color:#8c8279;cursor:pointer}
+      .dep-seg button.on{background:#2d2826;color:#fff}
+      .dep-switches{display:flex;flex-direction:column;gap:10px}
+      .dep-sw{display:flex;align-items:center;justify-content:space-between;gap:12px;font-size:13.5px}
+      .dep-sw .sw{position:relative;width:46px;height:26px;border-radius:999px;background:#ded4ca;border:none;cursor:pointer;flex:none;transition:background .2s}
+      .dep-sw .sw[aria-checked="true"]{background:#2f7d5c}
+      .dep-sw .sw i{position:absolute;top:3px;left:3px;width:20px;height:20px;border-radius:50%;background:#fff;transition:transform .2s}
+      .dep-sw .sw[aria-checked="true"] i{transform:translateX(20px)}
+      .dep-quad{display:grid;grid-template-columns:1fr 1fr;gap:10px}
+      .dep-quad label{display:flex;flex-direction:column;gap:5px;font-size:12px;color:#8c8279}
+      .dep-quad input,.dep-inline input{border:1px solid #eadfd7;border-radius:10px;padding:9px 11px;font-size:14px;font-weight:700;color:#241f1d;width:100%}
+      .dep-inline{display:flex;gap:10px;align-items:center;margin-top:10px}
+      .dep-inline label{flex:1;display:flex;flex-direction:column;gap:5px;font-size:12px;color:#8c8279}
+      .dep-text{width:100%;min-height:120px;border:1px solid #eadfd7;border-radius:12px;padding:10px 12px;font-family:inherit;font-size:13px;line-height:1.7;color:#241f1d}
+      .dep-preview{position:sticky;top:14px}
+      .dep-phone{background:#2d2826;border-radius:22px;padding:10px;box-shadow:0 8px 24px rgba(45,40,38,.16)}
+      .dep-screen{background:#fbf8f5;border-radius:15px;padding:14px 13px;min-height:280px}
+      .dep-prev-title{font-size:11.5px;color:#8c8279;margin-bottom:8px}
+      .dep-card{background:linear-gradient(135deg,#2d2826,#4a3f39);color:#fff;border-radius:14px;padding:14px 15px}
+      .dep-card .l{font-size:11.5px;opacity:.75}
+      .dep-card .v{font-size:30px;font-weight:850;margin-top:2px}
+      .dep-card .n{font-size:11.5px;opacity:.8;margin-top:6px;line-height:1.6}
+      .dep-keys{display:grid;grid-template-columns:repeat(3,1fr);gap:7px;margin-top:10px}
+      .dep-key{background:#fff;border:1px solid #eadfd7;border-radius:10px;padding:8px 6px;text-align:center}
+      .dep-key b{display:block;font-size:13px;color:#241f1d}
+      .dep-key span{font-size:10px;color:#8c8279}
+      .dep-rules{background:#fff;border:1px solid #eadfd7;border-radius:12px;padding:10px 12px;margin-top:10px;font-size:11.5px;line-height:1.8;color:#4a3c2c;white-space:pre-wrap;max-height:190px;overflow:auto}
+      .ai-cards{display:grid;grid-template-columns:repeat(3,1fr);gap:10px;margin-bottom:14px}
+      @media (max-width:760px){.ai-cards{grid-template-columns:1fr}}
+      .ai-card{background:#fff;border:1px solid #ece3da;border-radius:14px;padding:13px 14px}
+      .ai-card .lab{font-size:11.5px;color:#8c8279;display:flex;align-items:center;gap:6px}
+      .ai-card .ro{font-size:9.5px;border:1px solid #e7ddd4;border-radius:8px;padding:0 5px;color:#a89a8c}
+      .ai-card .val{font-size:19px;font-weight:800;color:#241f1d;margin-top:5px}
+      .ai-card .val small{font-size:12px;font-weight:600;color:#8c8279}
+      .ai-card .val.on{color:#2f7d5c}
+      .ai-scene{display:flex;align-items:center;gap:12px;padding:11px 2px;border-bottom:1px solid #f1e7df}
+      .ai-scene:last-child{border-bottom:none}
+      .ai-scene .nm{width:120px;flex:none;font-size:13.5px;font-weight:700;color:#241f1d}
+      .ai-scene .pv{flex:1;font-size:12.5px;color:#8c8279;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+      .ai-scene .st{font-size:11px;border-radius:999px;padding:2px 9px;flex:none}
+      .ai-scene .st.on{background:#e3eee8;color:#2f7d5c}
+      .ai-scene .st.off{background:#f1e7df;color:#8c8279}
+      .ai-vars{background:#fbf8f5;border:1px dashed #e7ddd4;border-radius:10px;padding:9px 12px;font-size:11.5px;color:#8c8279;margin-top:10px}
+      .ai-vars code{background:#fff;border:1px solid #eadfd7;border-radius:6px;padding:1px 6px;margin-right:5px;color:#9b7655}
 
       /* ===== 价目表管理(2026-08-06 P0)===== */
       .pricing-tabs{display:flex;gap:8px;margin:10px 0 14px;flex-wrap:wrap}
@@ -633,6 +684,6 @@
     </main>
 
     <div class="toast" id="toast"></div>
-    <script src="/web/admin.js?v=20260808b-p1-sign"></script>
+    <script src="/web/admin.js?v=20260808c-p1-ui"></script>
   </body>
 </html>

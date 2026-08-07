@@ -1,5 +1,5 @@
 // 构建号:每次交付递增。侧栏可见,排查"改了没生效"时先对版本。
-const ADMIN_BUILD = '20260808b-p1-sign'
+const ADMIN_BUILD = '20260808c-p1-ui'
 console.log(`[admin] build ${ADMIN_BUILD}`)
 
 // "今天"必须按门店时区算,否则老板人在别的时区时全站日期错位一天。
@@ -7294,8 +7294,7 @@ const PRICING_UNITS = [['once', '单次 / once'], ['per_finger', '按指 / per f
 const PRICING_RULE_META = {
   foot_surcharge: { zh: '足部加收', en: 'Foot surcharge', descZh: '足部项目在最终金额上整单加收(各价格档算完后加,不分档)', field: 'amountCents', fieldZh: '加收金额', money: true },
   single_finger: { zh: '单指计费', en: 'Single finger', descZh: '单指价 = 该单所用价格档的延长类主项目价 × 百分比 × 指数', field: 'pct', fieldZh: '百分比(%)', money: false },
-  tip_reuse: { zh: '甲片重利用', en: 'Tip reuse', descZh: '固定金额,不分价格档', field: 'amountCents', fieldZh: '固定金额', money: true },
-  removal_free_if_in_store: { zh: '本店免卸', en: 'Free removal in store', descZh: '本店做过的顾客卸甲 0 元;非本店做的技师可手动勾选免', field: null, fieldZh: '', money: false }
+  tip_reuse: { zh: '甲片重利用', en: 'Tip reuse', descZh: '固定金额,不分价格档', field: 'amountCents', fieldZh: '固定金额', money: true }
 }
 
 async function loadPricingPage() {
@@ -7751,61 +7750,127 @@ function renderDepositSettings() {
   if (!c) { els.depositSettingsBody.innerHTML = ''; return }
   const cp = c.cancelPolicy
   const zh = pzh()
-  const modeLabel = { per_service: zh ? '按项目各自的定金' : 'Per service', fixed: zh ? '固定金额' : 'Fixed', pct: zh ? '按项目价百分比' : 'Percent' }
+  const modeLabel = { per_service: zh ? '按项目' : 'Per service', fixed: zh ? '固定金额' : 'Fixed', pct: zh ? '按比例' : 'Percent' }
   if (els.depositSettingsSummary) {
     els.depositSettingsSummary.textContent = c.enabled
-      ? `${modeLabel[c.mode]}${c.mode === 'fixed' ? ` ${pMoney(c.fixedAmountCents)}` : (c.mode === 'pct' ? ` ${c.pct}%` : '')} · ${cp.refundable ? (zh ? '可退' : 'refundable') : (zh ? '不退' : 'non-refundable')}`
+      ? `${modeLabel[c.mode]}${c.mode === 'fixed' ? ` ${money(c.fixedAmountCents, 2)}` : (c.mode === 'pct' ? ` ${c.pct}%` : '')} · ${cp.refundable ? (zh ? '可退' : 'refundable') : (zh ? '不可退' : 'non-refundable')}`
       : (zh ? '不收定金' : 'No deposit')
   }
+  const sw = (id, on, label) => `
+    <div class="dep-sw"><span>${label}</span>
+      <button class="sw" type="button" id="${id}" role="switch" aria-checked="${on ? 'true' : 'false'}"><i></i></button></div>`
+  const seg = (id, options, current) => `
+    <div class="dep-seg" id="${id}">${options.map(([v, l]) => `<button type="button" data-seg="${v}" class="${v === current ? 'on' : ''}">${l}</button>`).join('')}</div>`
+
+  const previewText = depositSettings.text?.zh || ''
   els.depositSettingsBody.innerHTML = `
-    <div class="kb-facts-grid">
-      <label><span>${zh ? '是否收定金' : 'Deposit enabled'}</span><select id="dpEnabled">
-        <option value="1" ${c.enabled ? 'selected' : ''}>${zh ? '收' : 'Yes'}</option>
-        <option value="0" ${c.enabled ? '' : 'selected'}>${zh ? '不收' : 'No'}</option>
-      </select></label>
-      <label><span>${zh ? '计价方式' : 'Mode'}</span><select id="dpMode">
-        <option value="per_service" ${c.mode === 'per_service' ? 'selected' : ''}>${modeLabel.per_service}</option>
-        <option value="fixed" ${c.mode === 'fixed' ? 'selected' : ''}>${modeLabel.fixed}</option>
-        <option value="pct" ${c.mode === 'pct' ? 'selected' : ''}>${modeLabel.pct}</option>
-      </select></label>
-      <label><span>${zh ? '固定金额' : 'Fixed amount'}</span><input id="dpFixed" inputmode="decimal" value="${c.fixedAmountCents / 100}"></label>
-      <label><span>${zh ? '百分比(%)' : 'Percent'}</span><input id="dpPct" inputmode="decimal" value="${c.pct}"></label>
-      <label><span>${zh ? '兜底金额(项目没设定金时)' : 'Fallback amount'}</span><input id="dpFallback" inputmode="decimal" value="${c.fallbackAmountCents / 100}"></label>
-      <label><span>${zh ? '定金抵扣尾款' : 'Deductible'}</span><select id="dpDeductible">
-        <option value="0" ${c.deductible ? '' : 'selected'}>${zh ? '不抵扣' : 'No'}</option>
-        <option value="1" ${c.deductible ? 'selected' : ''}>${zh ? '可抵扣' : 'Yes'}</option>
-      </select></label>
-      <label><span>${zh ? '会员免定金' : 'Member waiver'}</span><select id="dpWaive">
-        <option value="by_tier" ${c.memberWaive === 'by_tier' ? 'selected' : ''}>${zh ? '按会员等级' : 'By tier'}</option>
-        <option value="all" ${c.memberWaive === 'all' ? 'selected' : ''}>${zh ? '会员全免' : 'All members'}</option>
-        <option value="none" ${c.memberWaive === 'none' ? 'selected' : ''}>${zh ? '都不免' : 'None'}</option>
-      </select></label>
-      <label><span>${zh ? '定金可退' : 'Refundable'}</span><select id="dpRefundable">
-        <option value="1" ${cp.refundable ? 'selected' : ''}>${zh ? '可退' : 'Yes'}</option>
-        <option value="0" ${cp.refundable ? '' : 'selected'}>${zh ? '不退' : 'No'}</option>
-      </select></label>
-      <label><span>${zh ? '提前几小时取消全退' : 'Free cancel hours'}</span><input id="dpFreeHours" inputmode="numeric" value="${cp.freeCancelHours ?? ''}"></label>
-      <label><span>${zh ? '临期取消扣(%)' : 'Late forfeit %'}</span><input id="dpLatePct" inputmode="numeric" value="${cp.lateForfeitPct}"></label>
-      <label><span>${zh ? '爽约扣(%)' : 'No-show forfeit %'}</span><input id="dpNoShowPct" inputmode="numeric" value="${cp.noShowForfeitPct}"></label>
-      <label><span>${zh ? '迟到宽限(分钟,留空=不启用)' : 'Late grace (min)'}</span><input id="dpGrace" inputmode="numeric" value="${cp.lateArrivalGraceMin ?? ''}"></label>
-      <label><span>${zh ? '改期需提前(小时)' : 'Reschedule notice (h)'}</span><input id="dpNotice" inputmode="numeric" value="${cp.rescheduleNoticeHours ?? ''}"></label>
-      <label><span>${zh ? '合规改期定金可保留次数' : 'Deposit retain times'}</span><input id="dpRetain" inputmode="numeric" value="${cp.depositRetainTimes}"></label>
-      <label><span>${zh ? '规则文案' : 'Policy text'}</span><select id="dpDisplayMode">
-        <option value="auto" ${c.displayMode === 'auto' ? 'selected' : ''}>${zh ? '按参数自动生成' : 'Auto'}</option>
-        <option value="custom" ${c.displayMode === 'custom' ? 'selected' : ''}>${zh ? '自定义全文' : 'Custom'}</option>
-      </select></label>
-    </div>
-    <div class="pricing-scope">
-      <textarea id="dpCustomText" rows="4" placeholder="${zh ? '自定义规则全文(选「自定义全文」时生效)' : 'Custom policy text'}">${escapeHtml(c.customText || '')}</textarea>
-    </div>
-    <button class="primary slim" id="dpSave" type="button">${zh ? '保存定金规则' : 'Save deposit rules'}</button>
-    <div class="pricing-quote" style="margin-top:12px">
-      <div class="subtle">${zh ? '顾客与 AI 看到的文案(实时预览):' : 'What customers and the AI see:'}</div>
-      <div>${escapeHtml(depositSettings.text?.zh || '')}</div>
-    </div>
-    <p class="subtle">${depositSettings.onlinePaymentReady
-      ? (zh ? '线上支付通道已接通。' : 'Online payment channel is live.')
-      : (zh ? '线上支付通道尚未接通,文案里不会出现「在线支付定金」;通道接通后自动切换。' : 'Online payment is not live yet; wording switches automatically once it is.')}</p>`
+    <div class="dep-grid">
+      <div>
+        <div class="dep-block">
+          <h4>${zh ? '收取定金' : 'Deposit'}</h4>
+          <div class="dep-inline" style="margin-top:0">
+            ${sw('dpEnabledSw', c.enabled, zh ? '本店收取预约定金' : 'Charge a booking deposit')}
+          </div>
+          <div style="margin-top:10px">${seg('dpModeSeg', [['per_service', modeLabel.per_service], ['fixed', modeLabel.fixed], ['pct', modeLabel.pct]], c.mode)}</div>
+          <div class="dep-inline">
+            <label>${zh ? '固定金额' : 'Fixed'}<input id="dpFixed" inputmode="decimal" value="${c.fixedAmountCents / 100}"></label>
+            <label>${zh ? '百分比 %' : 'Percent %'}<input id="dpPct" inputmode="decimal" value="${c.pct}"></label>
+            <label>${zh ? '兜底金额' : 'Fallback'}<input id="dpFallback" inputmode="decimal" value="${c.fallbackAmountCents / 100}"></label>
+          </div>
+        </div>
+
+        <div class="dep-block">
+          <h4>${zh ? '定金用法' : 'Deposit behaviour'}</h4>
+          <div class="dep-switches">
+            ${sw('dpDeductibleSw', c.deductible, zh ? '定金抵扣尾款' : 'Deduct from final balance')}
+            ${sw('dpWaiveSw', c.memberWaive !== 'none', zh ? '会员免定金' : 'Members exempt')}
+            ${sw('dpRetainSw', (cp.depositRetainTimes || 0) > 0, zh ? '合规改期定金可保留' : 'Keep deposit on compliant reschedule')}
+          </div>
+        </div>
+
+        <div class="dep-block">
+          <h4>${zh ? '退改与爽约' : 'Cancellation & no-show'}</h4>
+          <div class="dep-inline" style="margin-top:0">
+            ${sw('dpRefundableSw', cp.refundable, zh ? '定金可退' : 'Refundable')}
+          </div>
+          <div class="dep-quad" style="margin-top:12px">
+            <label>${zh ? '提前几小时全退' : 'Free cancel (h)'}<input id="dpFreeHours" inputmode="numeric" value="${cp.freeCancelHours ?? ''}"></label>
+            <label>${zh ? '迟到宽限(分钟)' : 'Late grace (min)'}<input id="dpGrace" inputmode="numeric" value="${cp.lateArrivalGraceMin ?? ''}"></label>
+            <label>${zh ? '改期需提前(小时)' : 'Reschedule notice (h)'}<input id="dpNotice" inputmode="numeric" value="${cp.rescheduleNoticeHours ?? ''}"></label>
+            <label>${zh ? '定金可保留次数' : 'Retain times'}<input id="dpRetain" inputmode="numeric" value="${cp.depositRetainTimes}"></label>
+            <label>${zh ? '临期取消扣 %' : 'Late forfeit %'}<input id="dpLatePct" inputmode="numeric" value="${cp.lateForfeitPct}"></label>
+            <label>${zh ? '爽约扣 %' : 'No-show forfeit %'}<input id="dpNoShowPct" inputmode="numeric" value="${cp.noShowForfeitPct}"></label>
+          </div>
+        </div>
+
+        <div class="dep-block">
+          <h4>${zh ? '规则展示文案' : 'Policy text'}</h4>
+          ${seg('dpDisplaySeg', [['auto', zh ? '参数自动生成' : 'Auto'], ['custom', zh ? '自定义全文' : 'Custom']], c.displayMode)}
+          <textarea class="dep-text" id="dpCustomText" style="margin-top:10px" placeholder="${zh ? '按你自己的说法写,顾客看到的就是这段原文(支持换行与 emoji)' : 'Custom policy text'}">${escapeHtml(c.customText || '')}</textarea>
+        </div>
+
+        <button class="primary slim" id="dpSave" type="button">${zh ? '保存并生效' : 'Save'}</button>
+        <p class="subtle">${depositSettings.onlinePaymentReady
+          ? (zh ? '线上支付通道已接通。' : 'Online payment is live.')
+          : (zh ? '线上支付通道未接通,文案里不会出现「在线支付定金」;接通后自动切换。' : 'Online payment is not live yet.')}</p>
+      </div>
+
+      <div class="dep-preview">
+        <div class="dep-prev-title">${zh ? '顾客端实时预览' : 'Customer preview'}</div>
+        <div class="dep-phone"><div class="dep-screen">
+          ${c.enabled ? `
+            <div class="dep-card">
+              <div class="l">${zh ? '预约定金(订位费)' : 'Booking deposit'}</div>
+              <div class="v">${money(c.mode === 'fixed' ? c.fixedAmountCents : (c.mode === 'pct' ? 0 : c.fallbackAmountCents), 2)}</div>
+              <div class="n">${c.deductible ? (zh ? '可抵扣本次消费' : 'Deducted from the bill') : (zh ? '不抵扣尾款' : 'Not deducted')}${c.mode === 'pct' ? (zh ? ` · 按项目价 ${c.pct}%` : ` · ${c.pct}% of price`) : ''}</div>
+            </div>
+            <div class="dep-keys">
+              <div class="dep-key"><b>${cp.lateArrivalGraceMin === null ? '—' : `${cp.lateArrivalGraceMin} ${zh ? '分钟' : 'min'}`}</b><span>${zh ? '迟到宽限' : 'Late grace'}</span></div>
+              <div class="dep-key"><b>${cp.rescheduleNoticeHours === null ? '—' : `${cp.rescheduleNoticeHours} ${zh ? '小时' : 'h'}`}</b><span>${zh ? '改期时限' : 'Reschedule'}</span></div>
+              <div class="dep-key"><b>${cp.depositRetainTimes || 0} ${zh ? '次' : 'x'}</b><span>${zh ? '定金保留' : 'Retain'}</span></div>
+            </div>` : `<div class="dep-card"><div class="l">${zh ? '本店无需定金' : 'No deposit'}</div><div class="n">${zh ? '确认时段即锁位,费用到店支付' : 'Slot locked on confirmation'}</div></div>`}
+          <div class="dep-rules">${escapeHtml(previewText)}</div>
+        </div></div>
+      </div>
+    </div>`
+}
+
+// 把屏4 的表单读成 deposit_config。开关读 aria-checked,段选读 .on,输入框读值。
+function collectDepositForm() {
+  const val = (id) => document.querySelector(id)?.value
+  const on = (id) => document.querySelector(id)?.getAttribute('aria-checked') === 'true'
+  const seg = (id) => document.querySelector(`${id} [data-seg].on`)?.dataset.seg
+  const numOrNull = (v) => (String(v ?? '').trim() === '' ? null : Number(v))
+  return {
+    enabled: on('#dpEnabledSw'),
+    mode: seg('#dpModeSeg') || 'per_service',
+    fixedAmountCents: pCents(val('#dpFixed')) ?? 0,
+    pct: Number(val('#dpPct')) || 0,
+    fallbackAmountCents: pCents(val('#dpFallback')) ?? 0,
+    deductible: on('#dpDeductibleSw'),
+    // 「会员免定金」开关映射回三态:开=按等级免(by_tier,已选 all 的保持 all),关=都不免
+    memberWaive: on('#dpWaiveSw') ? (depositSettings.config?.memberWaive === 'all' ? 'all' : 'by_tier') : 'none',
+    displayMode: seg('#dpDisplaySeg') || 'auto',
+    customText: val('#dpCustomText') || '',
+    cancelPolicy: {
+      refundable: on('#dpRefundableSw'),
+      freeCancelHours: numOrNull(val('#dpFreeHours')),
+      lateForfeitPct: Number(val('#dpLatePct')) || 0,
+      noShowForfeitPct: Number(val('#dpNoShowPct')) || 0,
+      lateArrivalGraceMin: numOrNull(val('#dpGrace')),
+      rescheduleNoticeHours: numOrNull(val('#dpNotice')),
+      // 「可保留」开关只管开关;次数以输入框为准,开了但填 0 就按 1 次
+      depositRetainTimes: on('#dpRetainSw') ? (Number(val('#dpRetain')) || 1) : 0
+    }
+  }
+}
+
+/* 预览里的规则文案由后端按同一套逻辑生成 —— 前端不自己拼一版,免得预览和真实下发的不一致。
+   所以这里只即时刷新「金额卡 + 三个要点」,文案那块等保存后回读。 */
+function applyDepositFormToPreview() {
+  if (!depositSettings.config) return
+  depositSettings.config = { ...depositSettings.config, ...collectDepositForm() }
+  renderDepositSettings()
 }
 
 /* ===== 门店设置 → AI 智能包 Tab(2026-08-08 P1.2 建壳)=====
@@ -7826,98 +7891,126 @@ function renderAiPackSettings() {
   if (!els.aiPackBody) return
   const zh = pzh()
   const ai = aiPackState.ai
-  if (els.aiPackSummary) {
-    els.aiPackSummary.textContent = ai
-      ? (ai.enabled ? (ai.unlimited ? (zh ? '已开通 · 长期' : 'On · unlimited') : (zh ? '已开通' : 'On')) : (zh ? '未开通' : 'Off'))
-      : (zh ? '状态待接入' : 'Status pending')
-  }
   const usage = ai?.usage
   const draft = aiPackState.editing
+  // 三态:套餐自带 / 已开通(含长期)/ 未开通
+  const statusText = !ai ? '—'
+    : (ai.includedInPlan ? (zh ? '套餐已含' : 'In plan')
+      : (ai.enabled ? (zh ? '已开通' : 'On') : (zh ? '未开通' : 'Off')))
+  const statusNote = ai?.unlimited ? (zh ? '· 不限期' : '· unlimited')
+    : (ai?.expiresAt ? `· ${zh ? '至' : 'until'} ${String(ai.expiresAt).slice(0, 10)}` : '')
+  if (els.aiPackSummary) els.aiPackSummary.textContent = `${statusText} ${statusNote}`.trim()
+
+  // 六个场景一行一条:名称 / 预览 / 状态 / 编辑。没配的场景显示「使用系统默认」
+  // 展示顺序按设计图(顾客旅程:约上 → 到店 → 售前中后 → 券临期),与后端返回顺序无关
+  const SCENE_ORDER = ['booking_confirmed_invite', 'arrival_reminder', 'pre_sale', 'in_service', 'post_sale', 'coupon_expiry']
+  const SCENES = (aiPackState.scenes || []).slice()
+    .sort((a, b) => SCENE_ORDER.indexOf(a.scene) - SCENE_ORDER.indexOf(b.scene))
+  const byScene = {}
+  for (const t of aiPackState.templates) if (!byScene[t.scene]) byScene[t.scene] = t
+  const VARS = ['{customerName}', '{bookingTime}', '{storeName}', '{storeAddress}', '{couponExpiry}']
+
   els.aiPackBody.innerHTML = `
-    <div class="pricing-quote">
-      <div class="pricing-quote-line"><span>${zh ? '开通状态' : 'Status'}</span><b>${ai ? (ai.enabled ? (ai.unlimited ? (zh ? '已开通(长期)' : 'On (unlimited)') : (zh ? '已开通' : 'On')) : (zh ? '未开通' : 'Off')) : '—'}</b></div>
-      <div class="pricing-quote-line"><span>${zh ? '本月用量' : 'Usage this month'}</span><b>${usage ? `${usage.used} / ${usage.quota}` : '—'}</b></div>
-      <div class="subtle">${zh ? '状态与用量为只读,由平台开通;此处后续会补充更多 AI 能力开关。' : 'Read-only; managed by the platform.'}</div>
+    <p class="subtle">${zh ? '系统参数由平台配置 · 如需调整请联系平台' : 'System parameters are managed by the platform'}</p>
+    <div class="ai-cards">
+      <div class="ai-card">
+        <div class="lab">${zh ? '开通状态' : 'Status'}<span class="ro">${zh ? '只读' : 'read-only'}</span></div>
+        <div class="val ${ai?.enabled ? 'on' : ''}">${escapeHtml(statusText)} <small>${escapeHtml(statusNote)}</small></div>
+      </div>
+      <div class="ai-card">
+        <div class="lab">${zh ? '本月用量' : 'Usage'}<span class="ro">${zh ? '只读' : 'read-only'}</span></div>
+        <div class="val">${usage ? usage.used : '—'} <small>/ ${usage ? usage.quota : '—'} ${zh ? '次' : ''}</small></div>
+      </div>
+      <div class="ai-card">
+        <div class="lab">${zh ? '接待状态' : 'Reception'}</div>
+        <div class="val ${ai?.enabled ? 'on' : ''}">${ai?.enabled ? (zh ? '正常接待' : 'Active') : (zh ? '未开通' : 'Off')}</div>
+      </div>
     </div>
-    <div class="kb-entry-list">
-      <strong class="kb-entry-list-title">${zh ? '自动消息话术(模板)' : 'Message templates'}</strong>
-      <p class="subtle">${zh ? '本批只做模板管理:改好的文案会在自动发送功能上线后直接生效,不用再录一遍。变量会在发送时替换成真实内容。' : 'Templates only for now; the sending engine arrives in a later batch.'}</p>
-      ${aiPackState.templates.length ? aiPackState.templates.map((t) => `
-        <div class="service-admin-item${t.isActive ? '' : ' inactive'}">
-          <div>
-            <strong>${escapeHtml(t.title)}</strong>
-            <span class="subtle">${escapeHtml(t.sceneLabel || t.scene)}${t.isActive ? '' : (zh ? ' · 已停用' : ' · off')}</span>
-            <div class="subtle" style="white-space:pre-wrap">${escapeHtml(t.content || '')}</div>
-            ${t.variables?.length ? `<div class="subtle">${zh ? '可用变量:' : 'Variables: '}${t.variables.map((v) => escapeHtml(v)).join(' ')}</div>` : ''}
-          </div>
-          <div class="row-actions">
-            <button class="ghost slim" data-tpl-edit="${t.id}" type="button">${zh ? '编辑' : 'Edit'}</button>
-            <button class="ghost slim" data-tpl-toggle="${t.id}" type="button">${t.isActive ? (zh ? '停用' : 'Off') : (zh ? '启用' : 'On')}</button>
-            <button class="ghost slim" data-tpl-delete="${t.id}" type="button">${zh ? '删除' : 'Delete'}</button>
-          </div>
-        </div>`).join('') : `<p class="subtle">${zh ? '还没有话术模板。' : 'No templates yet.'}</p>`}
-      <button class="ghost slim" id="tplAdd" type="button">${zh ? '+ 新增话术' : '+ Add template'}</button>
+
+    <div class="dep-block">
+      <h4>${zh ? '自动消息话术' : 'Message templates'}</h4>
+      <p class="subtle" style="margin:-4px 0 6px">${zh
+        ? '按场景配置自动发送的文案模板。发送时机与通道由系统按提醒规则执行(到店提醒 / 券临期等),本批只做模板管理。'
+        : 'Per-scene templates; the sending engine arrives in a later batch.'}</p>
+      ${SCENES.map((sc) => {
+        const t = byScene[sc.scene]
+        const preview = t && t.content
+          ? escapeHtml(t.content.replace(/\s+/g, ' ').slice(0, 46)) + (t.content.length > 46 ? '…' : '')
+          : `<em>${zh ? '(未配置,使用系统默认)' : '(not configured)'}</em>`
+        return `<div class="ai-scene">
+          <div class="nm">${escapeHtml(sc.label)}</div>
+          <div class="pv">${preview}</div>
+          <span class="st ${t && t.isActive ? 'on' : 'off'}">${t && t.isActive ? (zh ? '启用中' : 'On') : (zh ? '未启用' : 'Off')}</span>
+          <button class="ghost slim" data-scene-edit="${escapeHtml(sc.scene)}" type="button">${zh ? '编辑' : 'Edit'}</button>
+        </div>`
+      }).join('')}
+      <div class="ai-vars">${zh ? '可用变量:' : 'Variables: '}${VARS.map((v) => `<code>${escapeHtml(v)}</code>`).join('')}—— ${zh ? '发送时自动替换为真实内容' : 'replaced at send time'}</div>
     </div>
+
     ${draft ? `
     <div class="pricing-editor">
       <div class="kb-facts-grid">
         <label><span>${zh ? '场景' : 'Scene'}</span><select id="tplScene">
-          ${aiPackState.scenes.map((s) => `<option value="${s.scene}" ${s.scene === draft.scene ? 'selected' : ''}>${escapeHtml(s.label)}</option>`).join('')}
+          ${SCENES.map((sc) => `<option value="${sc.scene}" ${sc.scene === draft.scene ? 'selected' : ''}>${escapeHtml(sc.label)}</option>`).join('')}
         </select></label>
         <label><span>${zh ? '标题' : 'Title'}</span><input id="tplTitle" value="${escapeHtml(draft.title || '')}"></label>
       </div>
       <div class="pricing-scope">
-        <textarea id="tplContent" rows="4" placeholder="${zh ? '话术正文,可用 {customerName} {storeName} {bookingTime} 等变量' : 'Template content'}">${escapeHtml(draft.content || '')}</textarea>
+        <textarea id="tplContent" rows="4" placeholder="${zh ? '话术正文,可用上面列出的变量' : 'Template content'}">${escapeHtml(draft.content || '')}</textarea>
       </div>
       <div class="action-row wrap">
         <button class="primary slim" id="tplSave" type="button">${zh ? '保存' : 'Save'}</button>
         <button class="ghost slim" id="tplCancel" type="button">${zh ? '取消' : 'Cancel'}</button>
+        ${draft.id ? `<button class="ghost slim" id="tplToggle" type="button">${draft.isActive === false ? (zh ? '启用' : 'Enable') : (zh ? '停用' : 'Disable')}</button>` : ''}
       </div>
-    </div>` : ''}`
+    </div>` : ''}
+
+    <div class="dep-block">
+      <h4>${zh ? '店铺专属知识库' : 'Store knowledge base'}</h4>
+      <p class="subtle" style="margin:0">${zh ? 'FAQ · 店内规则 · 话术偏好(价目表自动同步,无需重复维护)' : 'FAQ, store rules, tone preferences'}</p>
+      <button class="ghost slim" id="aiKbEntry" type="button" style="margin-top:8px">${zh ? '进入管理 ›' : 'Manage ›'}</button>
+    </div>`
 }
 
 if (els.storeSettingsPage) {
   els.storeSettingsPage.addEventListener('click', async (event) => {
     try {
+      // 屏4:开关与段选都是纯展示态,点一下改 DOM 再回灌预览,保存时统一从 DOM 读
+      const swBtn = event.target.closest('.dep-sw .sw')
+      if (swBtn) {
+        swBtn.setAttribute('aria-checked', swBtn.getAttribute('aria-checked') === 'true' ? 'false' : 'true')
+        applyDepositFormToPreview()
+        return
+      }
+      const segBtn = event.target.closest('.dep-seg [data-seg]')
+      if (segBtn) {
+        for (const b of segBtn.parentElement.querySelectorAll('[data-seg]')) b.classList.toggle('on', b === segBtn)
+        applyDepositFormToPreview()
+        return
+      }
       if (event.target.closest('#dpSave')) {
-        const val = (id) => document.querySelector(id)?.value
-        const numOrNull = (v) => (String(v || '').trim() === '' ? null : Number(v))
         await request('/admin/deposit-config', {
           method: 'PUT',
-          body: JSON.stringify({
-            config: {
-              enabled: val('#dpEnabled') === '1',
-              mode: val('#dpMode'),
-              fixedAmountCents: pCents(val('#dpFixed')) ?? 0,
-              pct: Number(val('#dpPct')) || 0,
-              fallbackAmountCents: pCents(val('#dpFallback')) ?? 0,
-              deductible: val('#dpDeductible') === '1',
-              memberWaive: val('#dpWaive'),
-              displayMode: val('#dpDisplayMode'),
-              customText: val('#dpCustomText') || '',
-              cancelPolicy: {
-                refundable: val('#dpRefundable') === '1',
-                freeCancelHours: numOrNull(val('#dpFreeHours')),
-                lateForfeitPct: Number(val('#dpLatePct')) || 0,
-                noShowForfeitPct: Number(val('#dpNoShowPct')) || 0,
-                lateArrivalGraceMin: numOrNull(val('#dpGrace')),
-                rescheduleNoticeHours: numOrNull(val('#dpNotice')),
-                depositRetainTimes: Number(val('#dpRetain')) || 0
-              }
-            }
-          })
+          body: JSON.stringify({ config: collectDepositForm() })
         })
         await loadDepositSettings()
         toast(pzh() ? '定金规则已保存,顾客端与 AI 立即生效' : 'Saved')
         return
       }
-      if (event.target.closest('#tplAdd')) {
-        aiPackState.editing = { scene: aiPackState.scenes[0]?.scene || 'pre_sale', title: '', content: '' }
+      if (event.target.closest('#aiKbEntry')) {
+        const kb = document.querySelector('#kbTitle')?.closest('details')
+        if (kb) { kb.open = true; kb.scrollIntoView({ behavior: 'smooth', block: 'start' }) }
+        return
+      }
+      // 屏5:六个场景行点「编辑」——已有模板就编辑,没有就以该场景新建
+      const sceneEdit = event.target.closest('[data-scene-edit]')
+      if (sceneEdit) {
+        const scene = sceneEdit.dataset.sceneEdit
+        const exist = aiPackState.templates.find((t) => t.scene === scene)
+        aiPackState.editing = exist ? { ...exist } : { scene, title: '', content: '' }
         renderAiPackSettings()
         return
       }
-      const edit = event.target.closest('[data-tpl-edit]')
-      if (edit) { aiPackState.editing = { ...aiPackState.templates.find((t) => t.id === edit.dataset.tplEdit) }; renderAiPackSettings(); return }
       if (event.target.closest('#tplCancel')) { aiPackState.editing = null; renderAiPackSettings(); return }
       if (event.target.closest('#tplSave')) {
         const body = {
@@ -7934,17 +8027,11 @@ if (els.storeSettingsPage) {
         toast(pzh() ? '已保存' : 'Saved')
         return
       }
-      const tog = event.target.closest('[data-tpl-toggle]')
-      if (tog) {
-        const t = aiPackState.templates.find((x) => x.id === tog.dataset.tplToggle)
+      if (event.target.closest('#tplToggle')) {
+        const t = aiPackState.templates.find((x) => x.id === aiPackState.editing?.id)
+        if (!t) return
         await request(`/admin/message-templates/${t.id}`, { method: 'PATCH', body: JSON.stringify({ isActive: !t.isActive }) })
-        await loadAiPackSettings()
-        return
-      }
-      const del = event.target.closest('[data-tpl-delete]')
-      if (del) {
-        if (!window.confirm(pzh() ? '删除这条话术?' : 'Delete this template?')) return
-        await request(`/admin/message-templates/${del.dataset.tplDelete}`, { method: 'DELETE' })
+        aiPackState.editing = null
         await loadAiPackSettings()
       }
     } catch (error) { toast(error.message) }
