@@ -8345,7 +8345,17 @@ async function route(req, res) {
     if (!signature) throw apiError(400, 'SIGNATURE_REQUIRED', '请签名后再确认。')
     return json(res, 200, await signSettlement(row, { signature, signedBy: body.signedBy || '', strokes: body.strokes || [] }))
   }
-  if (req.method === 'GET' && path === '/health') return json(res, 200, { ok: true, service: 'lucky-luxe-api-local', time: iso(new Date()) })
+  /* 部署校验用:回一个提交号,好确认线上跑的到底是哪一版。
+     只回 commit 短号与服务名,不回任何配置值或密钥。Railway 会注入
+     RAILWAY_GIT_COMMIT_SHA;本机没有这个变量就回 'local'。 */
+  if (req.method === 'GET' && path === '/health') {
+    return json(res, 200, {
+      ok: true,
+      service: 'lucky-luxe-api-local',
+      commit: String(process.env.RAILWAY_GIT_COMMIT_SHA || 'local').slice(0, 7),
+      time: iso(new Date())
+    })
+  }
   if (req.method === 'GET' && path === '/wechat/customer-service/webhook') {
     const valid = verifyWecomSignature({
       signature: query.msg_signature || query.signature,
