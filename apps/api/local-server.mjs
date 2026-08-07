@@ -7751,6 +7751,8 @@ async function route(req, res) {
   if (req.method === 'GET' && path === '/platform') return serveFile(res, webRoot, 'platform.html')
   if (req.method === 'GET' && path === '/wechat-simulator') return serveFile(res, webRoot, 'wechat-simulator.html')
   if (req.method === 'GET' && path === '/share') return serveFile(res, webRoot, 'share.html')
+  // 顾客签署页(网页版,与小程序同构):/sign/<单号>
+  if (req.method === 'GET' && (path === '/sign' || path.startsWith('/sign/'))) return serveFile(res, webRoot, 'sign.html')
   if (req.method === 'GET' && path.startsWith('/web/')) return serveFile(res, webRoot, path.replace('/web/', ''))
   if (req.method === 'GET' && path.startsWith('/assets/')) return serveFile(res, assetRoot, path.replace('/assets/', ''))
 

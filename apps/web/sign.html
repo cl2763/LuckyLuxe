@@ -1,0 +1,220 @@
+<!DOCTYPE html>
+<html lang="zh">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>服务确认单</title>
+<style>
+  /* 金额红线:本页**不做任何金额计算**,所有数字直接显示 /settlements/:code 的返回值。
+     页面里找不到任何加减乘除 —— 这是结构性保证,不是靠自觉。 */
+  :root{--gold:#c8a47e;--bronze:#9b7655;--ink:#2d2826;--paper:#fbf8f5;--soft:#f1e7df;--line:#e7ddd4;--muted:#8c8279;--danger:#a34c48;--ok:#2f7d5c}
+  *{box-sizing:border-box;margin:0;padding:0;-webkit-tap-highlight-color:transparent}
+  body{background:var(--soft);color:var(--ink);font-family:-apple-system,"PingFang SC","Microsoft YaHei",sans-serif;font-size:15px;line-height:1.55}
+  .wrap{max-width:460px;margin:0 auto;padding:14px 14px 120px}
+  .topbar{display:flex;align-items:center;justify-content:space-between;padding:12px 4px 10px}
+  .topbar h1{font-size:16px;font-weight:750}
+  .pill{font-size:12px;border-radius:999px;padding:3px 11px;background:#fff;border:1px solid var(--line);color:var(--muted)}
+  .pill.warn{background:#fff5ec;border-color:#f0d8bf;color:#8a5a2b}
+  .doc{background:#fff;border-radius:16px;padding:18px 16px;box-shadow:0 2px 14px rgba(45,40,38,.06);position:relative}
+  .doc-head{border-bottom:1px dashed var(--line);padding-bottom:12px;margin-bottom:12px}
+  .store{font-size:17px;font-weight:800}
+  .meta{font-size:12px;color:var(--muted);margin-top:4px}
+  .sign-slot{position:absolute;top:16px;right:16px;text-align:center;width:104px}
+  .sign-slot .lab{font-size:11px;color:var(--muted)}
+  .sign-slot .val{font-family:"Kaiti SC","STKaiti",serif;font-size:22px;color:var(--ink);border-bottom:1px solid var(--line);min-height:30px;padding:2px 0}
+  .sign-slot .val.empty{color:#cfc5ba;font-size:12px;font-family:inherit;padding-top:9px}
+  .sec{margin-top:16px}
+  .sec h2{font-size:12.5px;color:var(--muted);font-weight:700;margin-bottom:8px}
+  .row{display:flex;justify-content:space-between;gap:12px;padding:6px 0;font-size:14px}
+  .row .no{color:var(--muted);font-size:12px;margin-right:6px}
+  .row .amt{white-space:nowrap}
+  .strike{color:var(--muted);text-decoration:line-through;font-size:12.5px;margin-right:6px}
+  .free{color:var(--ok);font-weight:700;font-size:13px}
+  .badge{display:inline-block;font-size:11px;background:#fff5ec;color:#8a5a2b;border:1px solid #f0d8bf;border-radius:8px;padding:1px 7px;margin-left:6px}
+  .totals{border-top:1px solid var(--line);margin-top:12px;padding-top:12px}
+  .totals .row{font-size:13.5px;color:var(--muted)}
+  .totals .row b{color:var(--ink)}
+  .totals .grand{font-size:19px;font-weight:850;color:var(--ink);padding-top:8px}
+  .totals .grand span:last-child{color:var(--bronze)}
+  .disc{background:var(--paper);border:1px solid var(--line);border-radius:12px;padding:12px;margin-top:16px;font-size:13px;display:flex;gap:9px;align-items:flex-start}
+  .disc input{width:17px;height:17px;margin-top:2px;flex:none}
+  .pad{margin-top:14px}
+  .pad canvas{width:100%;height:150px;background:#fff;border:1px dashed var(--line);border-radius:12px;touch-action:none;display:block}
+  .pad .hint{display:flex;justify-content:space-between;font-size:12px;color:var(--muted);margin-top:6px}
+  .pad .hint button{border:none;background:none;color:var(--bronze);font-size:12px;text-decoration:underline;cursor:pointer}
+  .cta{position:fixed;left:0;right:0;bottom:0;background:#fff;border-top:1px solid var(--line);padding:12px 14px calc(12px + env(safe-area-inset-bottom))}
+  .cta .inner{max-width:460px;margin:0 auto}
+  .cta button{width:100%;border:none;border-radius:12px;background:var(--ink);color:#fff;font-size:16px;font-weight:800;padding:14px;cursor:pointer}
+  .cta button:disabled{background:#d6cdc4;color:#fff}
+  .cta .foot{text-align:center;font-size:11.5px;color:var(--muted);margin-top:8px}
+  .toast{position:fixed;left:50%;transform:translateX(-50%);bottom:96px;background:var(--ink);color:#fff;font-size:13px;border-radius:10px;padding:10px 18px;opacity:0;transition:.25s;z-index:99;max-width:88vw;text-align:center}
+  .toast.show{opacity:1}
+  .done{text-align:center;padding:30px 10px;color:var(--ok);font-weight:800}
+  .err{background:#fff;border-radius:16px;padding:28px 18px;text-align:center;color:var(--danger)}
+</style>
+</head>
+<body>
+<div class="wrap" id="wrap"><div class="err" id="boot">加载中…</div></div>
+<div class="cta" id="cta" style="display:none">
+  <div class="inner">
+    <button id="signBtn" disabled>确认签字</button>
+    <div class="foot" id="ctaFoot"></div>
+  </div>
+</div>
+<div class="toast" id="toast"></div>
+
+<script>
+// 金额一律取后端返回值。这里只有一个 money() 负责「分 → 显示」,没有任何业务计算。
+const CUR = { v: '' }
+function money(cents) { return `${CUR.v} $${(Math.round(cents) / 100).toFixed(2)}` }
+function esc(s) { return String(s ?? '').replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c])) }
+function toast(msg) { const t = document.getElementById('toast'); t.textContent = msg; t.classList.add('show'); setTimeout(() => t.classList.remove('show'), 2600) }
+
+const code = decodeURIComponent(location.pathname.replace(/^\/sign\/?/, '') || new URLSearchParams(location.search).get('code') || '')
+let data = null
+let hasInk = false
+
+async function load() {
+  if (!code) { document.getElementById('boot').textContent = '缺少服务单号'; return }
+  const res = await fetch(`/settlements/${encodeURIComponent(code)}`)
+  const body = await res.json()
+  if (!res.ok) { document.getElementById('boot').textContent = body?.error?.message || '找不到这张服务单'; return }
+  data = body
+  CUR.v = body.settlement.currency || ''
+  render()
+}
+
+function render() {
+  const s = data.settlement
+  const signed = s.status === 'signed'
+  const techLine = s.technicians.map((t) => `${esc(t.name)}（${t.role === 'main' ? '主' : '副'}）`).join(' · ')
+  const techNos = s.technicians.map((t) => `${esc(t.name)}：${t.itemNos.join('·') || '—'}`).join(' ／ ')
+  const payLabel = { deposit: '已付定金抵扣', stored_value: '储值卡抵扣', migrate_stored: '储值卡抵扣', offline: '到店支付', times_card: '次卡抵扣', coupon: '优惠券' }
+
+  document.getElementById('wrap').innerHTML = `
+    <div class="topbar">
+      <h1>服务确认单</h1>
+      <span class="pill ${signed ? '' : 'warn'}">${signed ? '已签署' : '待签'}</span>
+    </div>
+    <div class="doc">
+      <div class="sign-slot">
+        <div class="lab">顾客签名：</div>
+        <div class="val ${s.signatureName ? '' : 'empty'}" id="signSlot">${s.signatureName ? esc(s.signatureName) : '（签署后显示于此）'}</div>
+      </div>
+      <div class="doc-head">
+        <div class="store">${esc(s.storeName)}</div>
+        <div class="meta">订单编号 ${esc(s.code)}</div>
+        <div class="meta">${s.appointmentAt ? esc(String(s.appointmentAt).slice(0, 16).replace('T', ' ')) : ''}${s.servedPersonName ? ` · 被服务者：${esc(s.servedPersonName)}` : ''}</div>
+      </div>
+
+      <div class="sec">
+        <h2>服务技师</h2>
+        <div>${techLine || '—'}</div>
+        <div class="meta">${techNos}</div>
+      </div>
+
+      <div class="sec">
+        <h2>服务明细${s.isProxyPaid ? '<span class="badge">代付</span>' : ''}</h2>
+        ${s.items.map((i) => `
+          <div class="row">
+            <span><span class="no">${String(i.itemNo).padStart(2, '0')}</span>${esc(i.name)}${i.unit === 'per_finger' ? ` ×${i.qty} 指` : (i.qty > 1 ? ` ×${i.qty}` : '')}</span>
+            <span class="amt">${i.isFree
+              ? '<span class="free">免收</span>'
+              : `${i.listAmountCents !== i.amountCents ? `<span class="strike">${money(i.listAmountCents)}</span>` : ''}${money(i.amountCents)}`}</span>
+          </div>`).join('')}
+      </div>
+
+      <div class="sec">
+        <h2>支付构成</h2>
+        ${s.payments.map((p) => `
+          <div class="row">
+            <span>${esc(payLabel[p.leg] || p.leg)}${p.leg === 'migrate_stored' ? '<span class="badge">历史余额</span>' : ''}</span>
+            <span class="amt">${p.leg === 'deposit' ? `−${money(p.amountCents)}` : money(p.amountCents)}</span>
+          </div>`).join('') || '<div class="meta">—</div>'}
+      </div>
+
+      <div class="totals">
+        <div class="row"><span>原价合计</span><span class="strike">${money(s.listTotalCents)}</span></div>
+        <div class="row"><span>较原价共优惠</span><b>${money(s.discountTotalCents)}</b></div>
+        <div class="row grand"><span>合计</span><span>${money(s.totalCents)}</span></div>
+      </div>
+    </div>
+
+    ${signed ? `<div class="done">✓ 本单已于 ${esc(String(s.signedAt).slice(0, 16).replace('T', ' '))} 签署完成</div>` : `
+    <label class="disc">
+      <input type="checkbox" id="disc">
+      <span>${esc(data.disclaimer)}</span>
+    </label>
+    <div class="pad">
+      <canvas id="pad"></canvas>
+      <div class="hint"><span>请在框内签名</span><button type="button" id="clearPad">重签</button></div>
+    </div>`}
+  `
+  document.getElementById('cta').style.display = signed ? 'none' : ''
+  const storedLeg = s.payments.filter((p) => p.leg === 'stored_value' || p.leg === 'migrate_stored').reduce((n, p) => n + p.amountCents, 0)
+  document.getElementById('ctaFoot').innerHTML = storedLeg
+    ? `签署后储值卡将即时扣除 ${money(storedLeg)} · 有问题？<a href="#" id="afterSales">联系客服</a>`
+    : '有问题？<a href="#" id="afterSales">联系客服</a>'
+  if (!signed) initPad()
+}
+
+function initPad() {
+  const canvas = document.getElementById('pad')
+  const ratio = window.devicePixelRatio || 1
+  canvas.width = canvas.offsetWidth * ratio
+  canvas.height = canvas.offsetHeight * ratio
+  const ctx = canvas.getContext('2d')
+  ctx.scale(ratio, ratio)
+  ctx.lineWidth = 2.4; ctx.lineCap = 'round'; ctx.lineJoin = 'round'; ctx.strokeStyle = '#2d2826'
+  let drawing = false
+  const pos = (e) => {
+    const r = canvas.getBoundingClientRect()
+    const p = e.touches ? e.touches[0] : e
+    return { x: p.clientX - r.left, y: p.clientY - r.top }
+  }
+  const start = (e) => { e.preventDefault(); drawing = true; hasInk = true; const { x, y } = pos(e); ctx.beginPath(); ctx.moveTo(x, y); sync() }
+  const move = (e) => { if (!drawing) return; e.preventDefault(); const { x, y } = pos(e); ctx.lineTo(x, y); ctx.stroke() }
+  const end = () => { drawing = false }
+  canvas.addEventListener('mousedown', start); canvas.addEventListener('mousemove', move); window.addEventListener('mouseup', end)
+  canvas.addEventListener('touchstart', start, { passive: false }); canvas.addEventListener('touchmove', move, { passive: false }); canvas.addEventListener('touchend', end)
+  document.getElementById('clearPad').addEventListener('click', () => {
+    ctx.clearRect(0, 0, canvas.width, canvas.height); hasInk = false; sync()
+  })
+  document.getElementById('disc').addEventListener('change', sync)
+  sync()
+}
+
+// 必勾免责 + 必须有签名笔迹,两者齐了才允许提交
+function sync() {
+  const disc = document.getElementById('disc')
+  document.getElementById('signBtn').disabled = !(disc && disc.checked && hasInk)
+}
+
+document.getElementById('signBtn').addEventListener('click', async () => {
+  const btn = document.getElementById('signBtn')
+  btn.disabled = true; btn.textContent = '提交中…'
+  try {
+    const res = await fetch(`/settlements/${encodeURIComponent(code)}/sign`, {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({
+        disclaimerAccepted: document.getElementById('disc').checked,
+        // 签名以姓名文本入库(笔迹图片走 COS 的批次再接);此处取被服务者/卡主称呼
+        signature: data.settlement.servedPersonName || '顾客本人',
+        signedBy: data.settlement.servedPersonName || ''
+      })
+    })
+    const body = await res.json()
+    if (!res.ok) throw new Error(body?.error?.message || '签署失败')
+    toast(body.storedDeductedCents ? `已签署,储值卡扣除 ${money(body.storedDeductedCents)}` : '已签署')
+    await load()
+  } catch (error) {
+    toast(error.message)
+    btn.disabled = false; btn.textContent = '确认签字'
+  }
+})
+
+load()
+</script>
+</body>
+</html>
