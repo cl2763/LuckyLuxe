@@ -6569,10 +6569,8 @@ function businessDaysInMonth(month) {
 }
 
 function monthFinanceNet(month, type = null) {
-  const args = [currentTenantId(), `${month}-01`, `${month}-31`]
-  let sql = 'SELECT COALESCE(SUM(amount_cents), 0) AS net FROM finance_transactions WHERE tenant_id = ? AND occurred_on >= ? AND occurred_on <= ?'
-  if (type) { sql += ' AND type = ?'; args.push(type) }
-  return db.prepare(sql).get(...args).net
+  // 与趋势端点共用一条口径 —— 趋势图上的某个月点开来必须和单月汇总一模一样
+  return rangeFinanceNet(`${month}-01`, `${month}-31`, type, currentTenantId())
 }
 
 function payrollDraftsForMonth(month) {
@@ -7839,6 +7837,167 @@ function amendSettlement(settlementId, body = {}, adminSession = {}) {
   }
 }
 
+/* ===== P2.4 财务趋势(2026-08-08)=====
+   多周期对比:收入/支出/净利/单量/客单/充值/耗卡 + 目标 + 达标。
+   **收入与支出复用 rangeFinanceNet,单月 summary 用的是同一条 SQL 口径** ——
+   趋势图上的某个月和你点进那个月看到的数字必须一模一样,不能两套算法各算各的。 */
+function rangeFinanceNet(fromDate, toDate, type = null, tenantId = currentTenantId()) {
+  const args = [tenantId, fromDate, toDate]
+  let sql = 'SELECT COALESCE(SUM(amount_cents), 0) AS net FROM finance_transactions WHERE tenant_id = ? AND occurred_on >= ? AND occurred_on <= ?'
+  if (type) { sql += ' AND type = ?'; args.push(type) }
+  return db.prepare(sql).get(...args).net
+}
+
+const TREND_GRANULARITIES = ['day', 'week', 'month', 'year']
+
+// 倒着数 periods 个周期,返回 [{key, label, from, to}],最后一个是当前周期
+function trendPeriods(granularity, periods, tenantId) {
+  const today = todayOf(tenantId)
+  const out = []
+  if (granularity === 'month') {
+    const cur = today.slice(0, 7)
+    for (let i = periods - 1; i >= 0; i -= 1) {
+      const mk = monthShift(cur, -i)
+      out.push({ key: mk, label: `${Number(mk.slice(5))}月`, from: `${mk}-01`, to: `${mk}-31` })
+    }
+    return out
+  }
+  if (granularity === 'year') {
+    const y = Number(today.slice(0, 4))
+    for (let i = periods - 1; i >= 0; i -= 1) {
+      const yr = String(y - i)
+      out.push({ key: yr, label: `${yr}年`, from: `${yr}-01-01`, to: `${yr}-12-31` })
+    }
+    return out
+  }
+  const step = granularity === 'week' ? 7 : 1
+  const base = new Date(`${today}T12:00:00Z`)
+  for (let i = periods - 1; i >= 0; i -= 1) {
+    const end = new Date(base)
+    end.setUTCDate(end.getUTCDate() - i * step)
+    const start = new Date(end)
+    start.setUTCDate(start.getUTCDate() - (step - 1))
+    const from = start.toISOString().slice(0, 10)
+    const to = end.toISOString().slice(0, 10)
+    out.push({ key: to, label: granularity === 'week' ? `${from.slice(5)}~${to.slice(5)}` : to.slice(5), from, to })
+  }
+  return out
+}
+
+function financeTrend(granularity, periods, tenantId = currentTenantId()) {
+  const g = TREND_GRANULARITIES.includes(granularity) ? granularity : 'month'
+  const n = Math.min(24, Math.max(2, Math.round(Number(periods) || 6)))
+  const tz = tenantTimezone(tenantId)
+  const targets = getFinanceTargets(tenantId)
+  const monthTargetCents = targets.targetMode === 'revenue' ? targets.monthTargetCents : 0
+
+  // 单量按「顾客签了字的服务单」算,与日结、员工业绩同一口径
+  const signed = db.prepare("SELECT signed_at, total_cents FROM settlements WHERE tenant_id = ? AND status = 'signed' AND signed_at IS NOT NULL").all(tenantId)
+    .map((r) => ({ date: localParts(r.signed_at, tz).date, cents: r.total_cents }))
+  const sv = db.prepare("SELECT type, amount_cents, created_at FROM stored_value_transactions WHERE tenant_id = ?").all(tenantId)
+    .map((r) => ({ date: localParts(r.created_at, tz).date, type: r.type, cents: r.amount_cents }))
+
+  const points = trendPeriods(g, n, tenantId).map((p) => {
+    const revenueCents = rangeFinanceNet(p.from, p.to, 'income', tenantId)
+    const expenseCents = -rangeFinanceNet(p.from, p.to, 'expense', tenantId)
+    const inRange = (d) => d >= p.from && d <= p.to
+    const orders = signed.filter((s) => inRange(s.date))
+    const orderCount = orders.length
+    const rechargeCents = sv.filter((r) => r.type === 'recharge' && inRange(r.date)).reduce((sum, r) => sum + Math.max(0, r.cents), 0)
+    const cardUsedCents = sv.filter((r) => r.type === 'consume' && inRange(r.date)).reduce((sum, r) => sum + Math.abs(r.cents), 0)
+    // 目标只有按月才有意义(财务目标本身就是月目标);其它粒度不编一个假目标
+    const targetCents = g === 'month' ? monthTargetCents : null
+    return {
+      key: p.key, label: p.label, from: p.from, to: p.to,
+      revenueCents, expenseCents, netCents: revenueCents - expenseCents,
+      orderCount,
+      avgTicketCents: orderCount ? Math.round(orders.reduce((sum, o) => sum + o.cents, 0) / orderCount) : 0,
+      rechargeCents, cardUsedCents,
+      targetCents,
+      hitTarget: targetCents ? revenueCents >= targetCents : null
+    }
+  })
+
+  const last = points[points.length - 1] || null
+  const prev = points[points.length - 2] || null
+  return {
+    granularity: g,
+    periods: n,
+    currency: tenantCurrencyCode(tenantId),
+    currencyDisplay: currencyDisplayOf(tenantCurrencyCode(tenantId)),
+    points,
+    // 环比只在两个周期都有数时给,分母为 0 时给 null 而不是硬写 0% 或 100%
+    compare: last && prev ? {
+      revenueDeltaCents: last.revenueCents - prev.revenueCents,
+      revenueDeltaPct: prev.revenueCents ? Math.round((last.revenueCents - prev.revenueCents) * 100 / prev.revenueCents) : null,
+      orderDelta: last.orderCount - prev.orderCount
+    } : null
+  }
+}
+
+/* ===== P2 排班 v2 辅助(2026-08-08)===== */
+function afternoonStartOf(tenantId = currentTenantId()) {
+  const row = db.prepare("SELECT value FROM tenant_settings WHERE tenant_id = ? AND key = 'afternoon_start'").get(tenantId)
+  const value = row ? String(row.value || '').replace(/"/g, '') : ''
+  return /^\d{2}:\d{2}$/.test(value) ? value : '14:30'
+}
+
+// 那天门店本身开几点到几点(特殊日期优先于每周固定模式),半天班的边界从这里来
+function storeHoursOn(date, tenantId = currentTenantId()) {
+  const storeId = db.prepare('SELECT id FROM stores WHERE tenant_id = ? AND is_active = 1 LIMIT 1').get(tenantId)?.id || defaultStoreId()
+  const weekday = localDateTime(date, '12:00', tenantTimezone(tenantId)).getDay()
+  const hours = db.prepare('SELECT * FROM business_hours WHERE store_id = ? AND weekday = ?').get(storeId, weekday)
+  const special = specialDateFor(storeId, date)
+  return {
+    openTime: (special && !special.is_closed && special.open_time) || hours?.open_time || '10:00',
+    closeTime: (special && !special.is_closed && special.close_time) || hours?.close_time || '19:00'
+  }
+}
+
+/* 五选一 → 具体时段。全天/上午/下午都按当天门店营业时间算,
+   店铺改了营业时间,半天班的边界跟着走,不用一个个改排班。 */
+function resolveShift(input = {}, date, tenantId = currentTenantId()) {
+  const shift = ['full', 'am', 'pm', 'custom', 'off'].includes(input.shift) ? input.shift : null
+  const { openTime, closeTime } = storeHoursOn(date, tenantId)
+  const split = afternoonStartOf(tenantId)
+  if (shift === 'off') return { shift: 'off', startTime: openTime, endTime: closeTime, isWorking: false }
+  if (shift === 'am') return { shift: 'am', startTime: openTime, endTime: split, isWorking: true }
+  if (shift === 'pm') return { shift: 'pm', startTime: split, endTime: closeTime, isWorking: true }
+  if (shift === 'full') return { shift: 'full', startTime: openTime, endTime: closeTime, isWorking: true }
+  // 没给 shift 就按老写法读 startTime/endTime/isWorking(旧调用方逐字不变)
+  const startTime = /^\d{2}:\d{2}$/.test(String(input.startTime || '')) ? input.startTime : openTime
+  const endTime = /^\d{2}:\d{2}$/.test(String(input.endTime || '')) ? input.endTime : closeTime
+  const isWorking = input.isWorking === undefined ? true : Boolean(input.isWorking)
+  const inferred = !isWorking ? 'off'
+    : (startTime === openTime && endTime === closeTime ? 'full'
+      : (endTime === split ? 'am' : (startTime === split ? 'pm' : 'custom')))
+  return { shift: inferred, startTime, endTime, isWorking }
+}
+
+// 改成这个时段以后,哪些已有预约会落在时段外(或落在休息日)。只报不拦。
+function scheduleConflicts(technicianId, date, resolved, tenantId = currentTenantId()) {
+  const tz = tenantTimezone(tenantId)
+  const rows = db.prepare(`SELECT id, public_code, appointment_start, appointment_end, user_id, service_id
+    FROM bookings WHERE tenant_id = ? AND technician_id = ? AND status IN ('PENDING_PAYMENT','CONFIRMED','IN_PROGRESS')`)
+    .all(tenantId, technicianId)
+    .filter((b) => localParts(b.appointment_start, tz).date === date)
+  const startMin = minutesFromTime(resolved.startTime)
+  const endMin = minutesFromTime(resolved.endTime)
+  return rows.filter((b) => {
+    if (!resolved.isWorking) return true
+    const s = minutesFromTime(localParts(b.appointment_start, tz).time)
+    const e = minutesFromTime(localParts(b.appointment_end, tz).time)
+    return s < startMin || e > endMin
+  }).map((b) => ({
+    bookingId: b.id,
+    code: b.public_code,
+    startTime: localParts(b.appointment_start, tz).time,
+    endTime: localParts(b.appointment_end, tz).time,
+    customerName: (db.prepare('SELECT display_name FROM users WHERE id = ?').get(b.user_id) || {}).display_name || '散客',
+    serviceName: (db.prepare('SELECT name_zh FROM services WHERE id = ?').get(b.service_id) || {}).name_zh || '服务'
+  }))
+}
+
 /* ===== P2 日结引擎(2026-08-08)=====
    一天的业绩 = 当天顾客签了字的服务单。单技师单整单算他的;双技师单要店长逐单分成后才算数。
    「确认日结」是那一天的定格开关:确认前员工端看不到、月度工资试算也不计。
@@ -8143,6 +8302,119 @@ function monthlyCloseStatus(month, tenantId) {
     }
   })
   return { month, days, openDays: days.filter((d) => !d.confirmed).map((d) => d.date), allClosed: days.every((d) => d.confirmed) }
+}
+
+/* ===== P2 员工端「我的业绩」(设计图屏 5a/5b)=====
+   两个开关决定这一页长什么样,而且**都在接口层裁字段**,不靠前端自觉:
+   - 可见性三态(店铺级):纯业绩 / 业绩+工资 / 纯工资
+   - display_mode(每人每月,来自业绩目标设置):total_only 时整页不出现分项来源 ——
+     hero 没有分项行,每日流水也只有日期+单数+金额,连卡耗都不带。
+     店主 v5 特意修过这一条:显示设置管整页,不只管 hero。 */
+const STAFF_VISIBILITY_MODES = ['perf_only', 'perf_and_salary', 'salary_only']
+function staffVisibilityOf(tenantId = currentTenantId()) {
+  const row = db.prepare("SELECT value FROM tenant_settings WHERE tenant_id = ? AND key = 'staff_visibility'").get(tenantId)
+  const value = row ? String(row.value || '').replace(/"/g, '') : ''
+  // 默认沿用现状:员工能看业绩也能看自己的工资
+  return STAFF_VISIBILITY_MODES.includes(value) ? value : 'perf_and_salary'
+}
+
+function monthShift(month, delta) {
+  const [y, m] = month.split('-').map(Number)
+  const total = y * 12 + (m - 1) + delta
+  return `${Math.floor(total / 12)}-${String((total % 12) + 1).padStart(2, '0')}`
+}
+
+// 一位技师某月的日流水(只含已确认日结);当月还没结的天单独标出来,不给数字
+function staffDailyRows(techId, month, tenantId, withSplit) {
+  const closed = db.prepare(`SELECT l.date, l.order_count, l.perf_cents, l.card_used_cents
+    FROM daily_close_lines l JOIN daily_closes c ON c.id = l.close_id AND c.status = 'confirmed'
+    WHERE l.tenant_id = ? AND l.technician_id = ? AND l.date LIKE ? ORDER BY l.date DESC`)
+    .all(tenantId, techId, `${month}%`)
+  const rows = closed.map((r) => {
+    const row = { date: r.date, orderCount: r.order_count, perfCents: r.perf_cents, pending: false }
+    if (withSplit) row.cardUsedCents = r.card_used_cents
+    return row
+  })
+  // 有单但还没日结的天:标「待店长日结」,不显示金额 —— 数字没定格就不给
+  const tz = tenantTimezone(tenantId)
+  const closedDates = new Set(closed.map((r) => r.date))
+  const openDates = new Set()
+  for (const s of db.prepare("SELECT signed_at FROM settlements WHERE tenant_id = ? AND status = 'signed' AND signed_at IS NOT NULL").all(tenantId)) {
+    const d = localParts(s.signed_at, tz).date
+    if (d.startsWith(month) && !closedDates.has(d)) openDates.add(d)
+  }
+  for (const d of openDates) rows.push({ date: d, orderCount: null, perfCents: null, pending: true })
+  return rows.sort((a, b) => b.date.localeCompare(a.date))
+}
+
+function staffPerformanceView(techId, month, tenantId) {
+  const visibility = staffVisibilityOf(tenantId)
+  const target = db.prepare('SELECT * FROM perf_targets WHERE tenant_id = ? AND technician_id = ? AND month = ?')
+    .get(tenantId, techId, month)
+  // 没设目标时按系统默认:显示=仅总进度
+  const displayMode = target && target.display_mode === 'with_split' ? 'with_split' : 'total_only'
+  const withSplit = displayMode === 'with_split'
+  const cur = monthPerfFromCloses(techId, month, tenantId)
+
+  // 近 6 月趋势(含当月),月度页签逐月汇总,年度页签按年
+  const trend = []
+  for (let i = 5; i >= 0; i -= 1) {
+    const mk = monthShift(month, -i)
+    const agg = monthPerfFromCloses(techId, mk, tenantId)
+    trend.push({ month: mk, perfCents: agg.perfCents, orderCount: agg.orderCount, isCurrent: i === 0 })
+  }
+  const yearly = {}
+  for (const r of db.prepare(`SELECT l.date, l.order_count, l.perf_cents FROM daily_close_lines l
+      JOIN daily_closes c ON c.id = l.close_id AND c.status = 'confirmed'
+      WHERE l.tenant_id = ? AND l.technician_id = ?`).all(tenantId, techId)) {
+    const y = r.date.slice(0, 4)
+    const b = yearly[y] || (yearly[y] = { year: y, perfCents: 0, orderCount: 0 })
+    b.perfCents += r.perf_cents
+    b.orderCount += r.order_count
+  }
+
+  const today = todayOf(tenantId)
+  const [ty, tm] = month.split('-').map(Number)
+  const daysInMonth = new Date(Date.UTC(ty, tm, 0)).getUTCDate()
+  const daysLeft = today.startsWith(month) ? Math.max(0, daysInMonth - Number(today.slice(8, 10))) : 0
+
+  const hero = {
+    perfCents: cur.perfCents,
+    orderCount: cur.orderCount,
+    targetCents: target ? target.perf_target_cents : 0,
+    hasTarget: Boolean(target && target.perf_target_cents),
+    pct: target && target.perf_target_cents ? Math.round(cur.perfCents * 100 / target.perf_target_cents) : null,
+    daysLeft
+  }
+  // 只有「含分项」才给分项来源 —— 仅总进度时这几个字段整个不下发
+  if (withSplit) {
+    hero.cardUsedCents = cur.cardUsedCents
+    hero.cardTargetCents = target ? target.card_target_cents : 0
+    hero.orderTarget = target ? target.order_target : 0
+  }
+
+  const view = {
+    month, technicianId: techId, visibility, displayMode,
+    timezone: tenantTimezone(tenantId),
+    currency: tenantCurrencyCode(tenantId),
+    currencyDisplay: currencyDisplayOf(tenantCurrencyCode(tenantId)),
+    perfSource: 'daily_close',
+    hero,
+    daily: staffDailyRows(techId, month, tenantId, withSplit),
+    monthly: trend.slice(),
+    yearly: Object.values(yearly).sort((a, b) => b.year.localeCompare(a.year)),
+    trend
+  }
+  // 纯工资:这一页不给业绩明细(前端据此直接跳到工资视图)
+  if (visibility === 'salary_only') {
+    view.hero = null
+    view.daily = []
+    view.monthly = []
+    view.yearly = []
+    view.trend = []
+    view.note = '本店设置为只向员工展示工资,不展示业绩明细。'
+  }
+  return view
 }
 
 /* ===== 对象存储(腾讯云 COS)最小上传封装(2026-08-08)=====
@@ -9272,6 +9544,35 @@ async function route(req, res) {
     const body = await readBody(req)
     return json(res, 200, amendSettlement(id, body, adminSession))
   }
+  /* 员工端「我的业绩」(屏 5a/5b)。只给自己的数据;
+     可见性与 display_mode 两道裁剪都在这里做,不靠前端自觉。 */
+  if (req.method === 'GET' && path === '/admin/my-performance') {
+    const tid = currentTenantId()
+    // 老板也能看(带 technicianId 查任一位);员工只能看自己
+    const techId = adminSession.role === 'owner'
+      ? String(query.technicianId || adminSession.technicianId || '')
+      : adminSession.technicianId
+    if (!techId) throw apiError(400, 'BAD_REQUEST', '当前账号未绑定技师。')
+    if (adminSession.role !== 'owner' && techId !== adminSession.technicianId) {
+      throw apiError(403, 'FORBIDDEN', '只能查看自己的业绩。')
+    }
+    const month = /^\d{4}-\d{2}$/.test(String(query.month || '')) ? query.month : monthKeyOf()
+    return json(res, 200, { performance: staffPerformanceView(techId, month, tid) })
+  }
+  // 员工可见性三态(店铺级):纯业绩 / 业绩+工资 / 纯工资
+  if (path === '/admin/staff-visibility') {
+    const tid = currentTenantId()
+    if (req.method === 'GET') return json(res, 200, { visibility: staffVisibilityOf(tid), modes: STAFF_VISIBILITY_MODES })
+    if (req.method === 'PUT') {
+      if (adminSession.role !== 'owner') throw apiError(403, 'FORBIDDEN', '仅老板可改员工可见范围。')
+      const body = await readBody(req)
+      if (!STAFF_VISIBILITY_MODES.includes(body.visibility)) throw apiError(400, 'BAD_REQUEST', '可见性只能是 perf_only / perf_and_salary / salary_only。')
+      db.prepare(`INSERT INTO tenant_settings (tenant_id, key, value, updated_at) VALUES (?, 'staff_visibility', ?, ?)
+        ON CONFLICT(tenant_id, key) DO UPDATE SET value = excluded.value, updated_at = excluded.updated_at`)
+        .run(tid, body.visibility, iso(new Date()))
+      return json(res, 200, { visibility: body.visibility })
+    }
+  }
   /* ===== P2 业绩目标(设置=目标怎么定 / 显示=员工端看什么,两组开关独立)===== */
   if (req.method === 'GET' && path === '/admin/perf-targets') {
     if (adminSession.role !== 'owner') throw apiError(403, 'FORBIDDEN', '业绩目标由店长设置。')
@@ -10380,17 +10681,53 @@ async function route(req, res) {
     }
     return json(res, 200, { works })
   }
+  /* ===== P2 排班 v2(设计图屏 4a / 4a-2)=====
+     全天 / 上午 / 下午 / 自定义起止 / 休息 五选一。半天只是「写一个时段」——
+     technician_schedules 本来就存 start/end,不用改表。
+     上下午分界默认 14:30,店铺可在 /admin/schedule-settings 改。
+     排班时段直接约束可预约时段(assertBookable 早就读 schedule.start_time/end_time)。
+     改时段如果和已有预约撞了:**列出冲突单提醒,不硬拦** —— 老板自己判断要不要改。 */
   if (req.method === 'PATCH' && path.startsWith('/admin/technicians/') && path.endsWith('/schedule')) {
     if (adminSession.role !== 'owner') throw apiError(403, 'FORBIDDEN', 'Owner permission is required.')
     const technicianId = path.split('/')[3]
     if (!db.prepare('SELECT id FROM technicians WHERE id = ? AND tenant_id = ?').get(technicianId, currentTenantId())) throw apiError(404, 'NOT_FOUND', 'Technician not found.')
     const body = await readBody(req)
     if (!body.date) throw apiError(400, 'BAD_REQUEST', 'date is required.')
-    db.prepare(`INSERT INTO technician_schedules (technician_id, date, start_time, end_time, is_working)
+    const resolved = resolveShift(body, body.date, currentTenantId())
+    const conflicts = scheduleConflicts(technicianId, body.date, resolved, currentTenantId())
+    const applied = [{ date: body.date, ...resolved }]
+    // 「同步应用到之后每个周 N」:从这天起,之后 weeks 周里同一个星期几都照这么排
+    const repeatWeeks = Math.min(26, Math.max(0, Math.round(Number(body.applyToFollowingWeeks) || 0)))
+    for (let i = 1; i <= repeatWeeks; i += 1) {
+      const d = new Date(`${body.date}T12:00:00Z`)
+      d.setUTCDate(d.getUTCDate() + i * 7)
+      applied.push({ date: iso(d).slice(0, 10), ...resolved })
+    }
+    const stmt = db.prepare(`INSERT INTO technician_schedules (technician_id, date, start_time, end_time, is_working)
       VALUES (?, ?, ?, ?, ?)
       ON CONFLICT(technician_id, date) DO UPDATE SET start_time = excluded.start_time, end_time = excluded.end_time, is_working = excluded.is_working`)
-      .run(technicianId, body.date, body.startTime || '10:00', body.endTime || '19:00', body.isWorking === undefined ? 1 : Number(Boolean(body.isWorking)))
-    return json(res, 200, { schedule: db.prepare('SELECT * FROM technician_schedules WHERE technician_id = ? AND date = ?').get(technicianId, body.date) })
+    for (const a of applied) stmt.run(technicianId, a.date, a.startTime, a.endTime, a.isWorking ? 1 : 0)
+    return json(res, 200, {
+      schedule: db.prepare('SELECT * FROM technician_schedules WHERE technician_id = ? AND date = ?').get(technicianId, body.date),
+      shift: resolved.shift,
+      appliedDates: applied.map((a) => a.date),
+      // 不硬拦:冲突单原样返回,老板看着办(要么改预约,要么把排班改回去)
+      conflicts
+    })
+  }
+  // 上下午分界(默认 14:30,店铺可调)
+  if (path === '/admin/schedule-settings') {
+    const tid = currentTenantId()
+    if (req.method === 'GET') return json(res, 200, { afternoonStart: afternoonStartOf(tid) })
+    if (req.method === 'PUT') {
+      if (adminSession.role !== 'owner') throw apiError(403, 'FORBIDDEN', 'Owner permission is required.')
+      const body = await readBody(req)
+      if (!/^\d{2}:\d{2}$/.test(String(body.afternoonStart || ''))) throw apiError(400, 'BAD_REQUEST', '上下午分界格式应为 HH:MM。')
+      db.prepare(`INSERT INTO tenant_settings (tenant_id, key, value, updated_at) VALUES (?, 'afternoon_start', ?, ?)
+        ON CONFLICT(tenant_id, key) DO UPDATE SET value = excluded.value, updated_at = excluded.updated_at`)
+        .run(tid, body.afternoonStart, iso(new Date()))
+      return json(res, 200, { afternoonStart: body.afternoonStart })
+    }
   }
   // 特殊日期:新增/更新(节假日休息或调整时段),立即影响可预约时段与 AI 营业时间回答
   if (req.method === 'POST' && path === '/admin/special-dates') {
@@ -11121,6 +11458,12 @@ async function route(req, res) {
         updated_by = excluded.updated_by, updated_at = excluded.updated_at
     `).run(currentTenantId(), mode, monthTargetCents, yearTargetCents, rate, adminSession.email || 'owner', iso(new Date()))
     return json(res, 200, { targets: getFinanceTargets(currentTenantId()), progress: computeFinanceProgress(localParts(new Date()).date.slice(0, 7)) })
+  }
+  // P2.4 财务趋势(收入/支出/净利/单量/客单/充值/耗卡 + 目标 + 达标)
+  if (req.method === 'GET' && path === '/admin/finance/trend') {
+    if (adminSession.role !== 'owner') throw apiError(403, 'FORBIDDEN', 'Owner permission is required.')
+    materializeRecurringTransactions()
+    return json(res, 200, { trend: financeTrend(query.granularity, query.periods, currentTenantId()) })
   }
   if (req.method === 'GET' && path === '/admin/finance/progress') {
     if (adminSession.role !== 'owner') throw apiError(403, 'FORBIDDEN', 'Owner permission is required.')
@@ -12080,6 +12423,10 @@ async function route(req, res) {
   // 员工:我的本月预估(自己的数据,无需财务钥匙);附工资表状态(已锁定/已发放)
   if (req.method === 'GET' && path === '/admin/salary/my-estimate') {
     if (!adminSession.technicianId) throw apiError(400, 'BAD_REQUEST', '当前账号未绑定技师。')
+    // 可见性=纯业绩:这一店不给员工看工资,接口层直接闭掉(只裁「我的业绩」那一页不算数)
+    if (staffVisibilityOf(currentTenantId()) === 'perf_only') {
+      throw apiError(403, 'FORBIDDEN', '本店设置为只向员工展示业绩,不展示工资。')
+    }
     const month = /^\d{4}-\d{2}$/.test(query.month || '') ? query.month : localParts(new Date()).date.slice(0, 7)
     const pr = db.prepare('SELECT total_cents, paid_at FROM salary_payrolls WHERE tenant_id = ? AND month = ? AND technician_id = ?')
       .get(currentTenantId(), month, adminSession.technicianId)

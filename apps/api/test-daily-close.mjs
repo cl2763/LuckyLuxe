@@ -209,6 +209,48 @@ async function main() {
   }, other.token)
   check('⑨ B 店改不动 A 店的分成(404)', crossAlloc.status === 404, `${crossAlloc.status} ${JSON.stringify(crossAlloc.data)}`)
 
+  // ---- 员工端「我的业绩」:两道裁剪都在接口层 ----
+  const acct = await request('/admin/staff-accounts', { method: 'POST', body: JSON.stringify({ technicianId: techA.id }) }, shop.token)
+  const sf = await request('/admin/auth/login', { method: 'POST', body: JSON.stringify({ email: acct.data.username, password: acct.data.initialPassword }) }, null)
+  const sp = `Sf-${RUN_ID}-a9`
+  await request('/admin/auth/change-password', { method: 'POST', body: JSON.stringify({ oldPassword: acct.data.initialPassword, newPassword: sp, confirmPassword: sp }) }, sf.data.auth.accessToken)
+  const staffToken = (await request('/admin/auth/login', { method: 'POST', body: JSON.stringify({ email: acct.data.username, password: sp }) }, null)).data.auth.accessToken
+
+  // 目标已设成 mode=split / display=with_split(上面那步),先看含分项形态
+  await request('/admin/daily-close', { method: 'POST', body: JSON.stringify({ date: today }) }, shop.token)
+  const withSplit = await request(`/admin/my-performance?month=${month}`, {}, staffToken)
+  const pv = withSplit.data.performance
+  check('员工端只能看自己的业绩(技师 id 就是自己)', pv.technicianId === techA.id, pv.technicianId)
+  check('屏5a 含分项:hero 带卡耗与单量目标', pv.hero.cardUsedCents !== undefined && pv.hero.orderTarget === 40,
+    JSON.stringify(pv.hero))
+  check('屏5a 含分项:每日流水带卡耗', pv.daily.length > 0 && pv.daily[0].cardUsedCents !== undefined, JSON.stringify(pv.daily[0]))
+  check('近 6 月趋势给 6 个点且最后一个是当月', pv.trend.length === 6 && pv.trend[5].isCurrent === true, JSON.stringify(pv.trend.map((t) => t.month)))
+
+  // 切成「仅总进度」:整页都不能再出现分项来源(v5 修正:显示设置管整页,不只管 hero)
+  await request('/admin/perf-targets', {
+    method: 'PUT',
+    body: JSON.stringify({ month, targets: [{ technicianId: techA.id, mode: 'split', displayMode: 'total_only', perfTargetCents: 1200000, cardTargetCents: 300000, orderTarget: 40 }] })
+  }, shop.token)
+  const totalOnly = await request(`/admin/my-performance?month=${month}`, {}, staffToken)
+  const tv = totalOnly.data.performance
+  check('屏5b 仅总进度:hero 不下发任何分项字段',
+    tv.hero.cardUsedCents === undefined && tv.hero.cardTargetCents === undefined && tv.hero.orderTarget === undefined,
+    JSON.stringify(tv.hero))
+  check('屏5b 仅总进度:每日流水也不带卡耗(显示设置管整页)',
+    tv.daily.every((d) => d.cardUsedCents === undefined), JSON.stringify(tv.daily))
+  check('屏5b 仍然给总进度与剩余天数', tv.hero.perfCents > 0 && typeof tv.hero.daysLeft === 'number', JSON.stringify(tv.hero))
+
+  // 可见性三态在接口层裁
+  check('默认可见性 = 业绩+工资(沿用现状)', (await request('/admin/staff-visibility', {}, shop.token)).data.visibility === 'perf_and_salary')
+  await request('/admin/staff-visibility', { method: 'PUT', body: JSON.stringify({ visibility: 'perf_only' }) }, shop.token)
+  const salaryBlocked = await request('/admin/salary/my-estimate', {}, staffToken)
+  check('纯业绩:员工端工资接口直接闭掉(不只是裁页面)', salaryBlocked.status === 403, `${salaryBlocked.status}`)
+  await request('/admin/staff-visibility', { method: 'PUT', body: JSON.stringify({ visibility: 'salary_only' }) }, shop.token)
+  const perfBlocked = await request(`/admin/my-performance?month=${month}`, {}, staffToken)
+  check('纯工资:业绩明细整块不下发', perfBlocked.data.performance.hero === null && perfBlocked.data.performance.daily.length === 0,
+    JSON.stringify(perfBlocked.data.performance).slice(0, 160))
+  await request('/admin/staff-visibility', { method: 'PUT', body: JSON.stringify({ visibility: 'perf_and_salary' }) }, shop.token)
+
   console.log(`\n日结回归通过:${checks} 项断言全绿`)
 }
 
