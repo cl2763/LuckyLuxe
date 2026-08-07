@@ -59,8 +59,10 @@ async function makeCustomer(tenantId, name, extra = {}) {
   return res.data.users[0].userId
 }
 
-async function setConfig(token, config) {
-  return request('/admin/membership/config', { method: 'PUT', body: JSON.stringify({ config }) }, token)
+// 2026-08-08:会员资格/等级已从商家侧收回,只有平台主钥匙能改(商家端 PUT 会 403)
+let SHOP_TENANT_ID = ''
+async function setConfigShop(config) {
+  return request(`/platform/tenants/${SHOP_TENANT_ID}/membership-config`, { method: 'PUT', body: JSON.stringify({ config }) }, PLATFORM)
 }
 
 // 会员判定没有独立读接口,借 /admin/pricing/preview 不合适——直接用储值充值/消费接口造数据,
@@ -75,7 +77,14 @@ async function consume(token, userId, amountCents) {
 async function main() {
   const shop = await newTenant('a')
   const other = await newTenant('b')
+  SHOP_TENANT_ID = shop.tenantId
   check('临时店建好', Boolean(shop.token && other.token))
+
+  // 2026-08-08:商家端不能再改会员资格/等级(平台统一把关),但读得到 + 有只读提示
+  const denied = await request('/admin/membership/config', { method: 'PUT', body: JSON.stringify({ config: { memberQualify: 'manual' } }) }, shop.token)
+  check('商家端改会员资格被拒(已收归平台)', denied.status === 403 && denied.data.error?.code === 'MANAGED_BY_PLATFORM', JSON.stringify(denied.data))
+  const ro = await request('/admin/membership/config', {}, shop.token)
+  check('商家端仍可读,并带只读标记', ro.data.readOnly === true && ro.data.managedBy === 'platform', JSON.stringify(ro.data).slice(0, 200))
 
   // ---- 1. 默认配置 + tiersEnabled=false 不下发等级 ----
   const def = await request('/admin/membership/config', {}, shop.token)
@@ -83,16 +92,16 @@ async function main() {
   check('tiersEnabled=false 时不返回等级字段', def.data.config.tiersEnabled === false && def.data.config.tiers === undefined, JSON.stringify(def.data.config))
   check('四种资格模式随接口下发', Array.isArray(def.data.qualifyModes) && def.data.qualifyModes.length === 4)
 
-  const withTiers = await setConfig(shop.token, { tiersEnabled: true, tiers: [{ key: 'silver', name: '银卡', minSpendCents: 100000 }] })
+  const withTiers = await setConfigShop({ tiersEnabled: true, tiers: [{ key: 'silver', name: '银卡', minSpendCents: 100000 }] })
   check('打开等级后才下发 tiers', withTiers.data.config.tiersEnabled === true && Array.isArray(withTiers.data.config.tiers) && withTiers.data.config.tiers.length === 1, JSON.stringify(withTiers.data.config))
-  const backOff = await setConfig(shop.token, { tiersEnabled: false })
+  const backOff = await setConfigShop({ tiersEnabled: false })
   check('关掉等级后立刻不再下发 tiers', backOff.data.config.tiers === undefined)
 
   // ---- 2. 四种资格模式 ----
   // (a) any_recharge:充过值就是会员
   const uRecharge = await makeCustomer(shop.tenantId, `充值客${RUN_ID}`)
   const uNever = await makeCustomer(shop.tenantId, `白板客${RUN_ID}`)
-  await setConfig(shop.token, { memberQualify: 'any_recharge', qualifyValueCents: 0, expireDays: null })
+  await setConfigShop({ memberQualify: 'any_recharge', qualifyValueCents: 0, expireDays: null })
   const r1 = await recharge(shop.token, uRecharge, 50000)
   check('充值成功', r1.status === 201 || r1.status === 200, JSON.stringify(r1.data).slice(0, 200))
   let members = await request('/admin/membership/members', {}, shop.token)
@@ -102,25 +111,25 @@ async function main() {
     JSON.stringify(members.data.members))
 
   // (b) balance_gt_0:余额清零后不再是会员
-  await setConfig(shop.token, { memberQualify: 'balance_gt_0' })
+  await setConfigShop({ memberQualify: 'balance_gt_0' })
   await consume(shop.token, uRecharge, 50000)
   members = await request('/admin/membership/members', {}, shop.token)
   check('balance_gt_0:余额清零 → 不是会员', members.data.members.find((m) => m.userId === uRecharge)?.isMember === false, JSON.stringify(members.data.members))
-  await setConfig(shop.token, { memberQualify: 'any_recharge' })
+  await setConfigShop({ memberQualify: 'any_recharge' })
   members = await request('/admin/membership/members', {}, shop.token)
   check('any_recharge:余额清零仍然是会员(充过就算)', members.data.members.find((m) => m.userId === uRecharge)?.isMember === true)
 
   // (c) total_spend:门槛判定,迁移带过来的历史消费也算
   const uSpend = await makeCustomer(shop.tenantId, `老消费客${RUN_ID}`, { totalSpendCents: 200000, balanceCents: 100 })
-  await setConfig(shop.token, { memberQualify: 'total_spend', qualifyValueCents: 150000 })
+  await setConfigShop({ memberQualify: 'total_spend', qualifyValueCents: 150000 })
   members = await request('/admin/membership/members', {}, shop.token)
   check('total_spend:历史累计消费达门槛 → 会员', members.data.members.find((m) => m.userId === uSpend)?.isMember === true, JSON.stringify(members.data.members))
-  await setConfig(shop.token, { memberQualify: 'total_spend', qualifyValueCents: 300000 })
+  await setConfigShop({ memberQualify: 'total_spend', qualifyValueCents: 300000 })
   members = await request('/admin/membership/members', {}, shop.token)
   check('total_spend:抬高门槛后不再是会员', members.data.members.find((m) => m.userId === uSpend)?.isMember === false)
 
   // (d) manual:老板手动打「会员」标签
-  await setConfig(shop.token, { memberQualify: 'manual' })
+  await setConfigShop({ memberQualify: 'manual' })
   members = await request('/admin/membership/members', {}, shop.token)
   check('manual:没打标签的都不是会员', members.data.members.every((m) => m.isMember === false))
   const tagged = await request(`/admin/customers/${uNever}/profile`, { method: 'PATCH', body: JSON.stringify({ tags: ['会员'] }) }, shop.token)
@@ -141,7 +150,7 @@ async function main() {
 
   // 迁移进来的期初余额:算会员(老店充过),但不占用「首充」资格
   const uMigrated = await makeCustomer(shop.tenantId, `迁移客${RUN_ID}`, { balanceCents: 88000 })
-  await setConfig(shop.token, { memberQualify: 'any_recharge' })
+  await setConfigShop({ memberQualify: 'any_recharge' })
   const mig = await request(`/admin/membership/members?userId=${uMigrated}`, {}, shop.token)
   const migRow = mig.data.members.find((m) => m.userId === uMigrated)
   check('迁移客算会员(老店的充值)', migRow?.isMember === true, JSON.stringify(migRow))

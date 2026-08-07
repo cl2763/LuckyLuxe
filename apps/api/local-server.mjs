@@ -953,6 +953,15 @@ function liveTenantFacts() {
   if (ruleState.tip_reuse.isActive) ruleTexts.push(`甲片重利用固定收 ${priceOf(ruleState.tip_reuse.config.amountCents)},不分价格档。`)
   if (ruleState.removal_free_if_in_store.isActive && ruleState.removal_free_if_in_store.config.enabled !== false) ruleTexts.push('本店做的甲免费卸;非本店做的按卸甲价目收费(技师可酌情免)。')
   const pricingRules = ruleTexts.length ? ruleTexts : null
+  // 定金与取消规则:AI 必须按本店配置回答,不能再用旗舰店的口径(P1.2)
+  const depositConfigForAi = getDepositConfig(tid)
+  const depositPolicy = {
+    enabled: depositConfigForAi.enabled,
+    deductible: depositConfigForAi.deductible,
+    onlinePaymentReady: ONLINE_PAYMENT_READY,
+    text: depositPolicyText(depositConfigForAi, tid, 'zh'),
+    textEn: depositPolicyText(depositConfigForAi, tid, 'en')
+  }
   // 会员/储值方案:同样实时读商家自己的配置
   const packages = db.prepare('SELECT kind, name, price_cents, bonus_cents, times_count, benefits FROM membership_packages WHERE tenant_id = ? AND is_active = 1 ORDER BY sort_order ASC, rowid ASC').all(tid)
   const memberLevels = packages.length ? packages.map((p) => ({
@@ -984,6 +993,7 @@ function liveTenantFacts() {
     ...(priceList ? { priceList } : {}),
     ...(addonList ? { addonList } : {}),
     ...(pricingRules ? { pricingRules } : {}),
+    depositPolicy,
     ...(memberLevels ? { memberLevels } : {}),
     ...(technicians.length ? { technicians } : {})
   }
@@ -6048,21 +6058,33 @@ function createBooking(body, opts = {}) {
   const user = input.userId ? db.prepare('SELECT * FROM users WHERE id = ?').get(input.userId) : null
   const serializedUser = serializeUser(user, input.tenantId || DEFAULT_TENANT_ID)
   // 线上定金开关(租户级,默认开):关闭=顾客自约免定金直接确认、到店收款——给没有/不想办支付商户号的商家用
+  const bookingTenantId = input.tenantId || DEFAULT_TENANT_ID
   const onlineDeposit = (() => {
     try {
-      const row = db.prepare("SELECT value FROM tenant_settings WHERE tenant_id = ? AND key = 'booking_rules'").get(input.tenantId || DEFAULT_TENANT_ID)
+      const row = db.prepare("SELECT value FROM tenant_settings WHERE tenant_id = ? AND key = 'booking_rules'").get(bookingTenantId)
       const rules = row ? parseJson2(row.value) : {}
       return rules.onlineDeposit !== false
     } catch (e) { return true }
   })()
-  const depositRequiredCents = onlineDeposit ? 5000 : 0
-  const depositWaivedCents = serializedUser?.depositWaived ? depositRequiredCents : 0
+  /* P1.2:定金金额与减免改为按本店 deposit_config 算。默认配置 = per_service,
+     旗舰店所有项目的 deposit_cents 都是 5000,所以算出来与改造前写死的 5000 完全一致。 */
+  const depositConfig = getDepositConfig(bookingTenantId)
+  const depositRequiredCents = onlineDeposit ? depositAmountForService(service, depositConfig, bookingTenantId) : 0
+  const memberWaives = depositConfig.memberWaive === 'all'
+    ? Boolean(serializedUser)
+    : (depositConfig.memberWaive === 'by_tier' ? Boolean(serializedUser?.depositWaived) : false)
+  const depositWaivedCents = memberWaives ? depositRequiredCents : 0
+  // 上一次合规改期留下的定金保留凭据:有就直接抵掉本次定金,并核销
+  const retain = (!opts.adminDirect && depositRequiredCents > 0) ? activeDepositRetain(input.userId, bookingTenantId) : null
   // 老板直接排单:一律 CONFIRMED、不走在线定金门、不设占位到期;记"未付定金"标(占位但提醒之后收)
   const directUnpaid = opts.adminDirect && !opts.depositPaid ? 1 : 0
-  const depositCents = opts.adminDirect ? 0 : Math.max(0, depositRequiredCents - depositWaivedCents)
+  const retainCoverCents = retain ? Math.min(retain.amount_cents, Math.max(0, depositRequiredCents - depositWaivedCents)) : 0
+  const depositCents = opts.adminDirect ? 0 : Math.max(0, depositRequiredCents - depositWaivedCents - retainCoverCents)
   const status = opts.adminDirect ? 'CONFIRMED' : (depositCents > 0 ? 'PENDING_PAYMENT' : 'CONFIRMED')
   const paymentExpiresAt = (!opts.adminDirect && depositCents > 0) ? iso(addMinutes(new Date(), HOLD_MINUTES)) : null
-  const waiveReason = depositWaivedCents > 0 ? `${serializedUser.memberLevel} member deposit waived` : null
+  const waiveReason = depositWaivedCents > 0
+    ? `${serializedUser.memberLevel} member deposit waived`
+    : (retainCoverCents > 0 ? '上一次合规改期保留的定金已抵扣' : null)
   const sourceChannel = opts.adminDirect ? 'owner_direct' : input.sourceChannel
 
   db.exec('BEGIN IMMEDIATE')
@@ -6078,6 +6100,7 @@ function createBooking(body, opts = {}) {
 
     db.prepare('INSERT INTO payments (id, booking_id, provider, status, amount_cents, currency, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?)').run(randomId('pay'), bookingId, 'MOCK', depositCents > 0 ? 'REQUIRES_PAYMENT' : 'PAID', depositCents, tenantCurrencyCode(input.tenantId || DEFAULT_TENANT_ID), now, now)
     db.prepare('INSERT INTO booking_status_history (id, booking_id, to_status, note, created_at) VALUES (?, ?, ?, ?, ?)').run(randomId('hist'), bookingId, status, depositCents > 0 ? 'Booking hold created pending deposit payment.' : 'Booking confirmed with member deposit waiver.', now)
+    if (retain && retainCoverCents > 0) consumeDepositRetain(retain.id, bookingId)
     if (input.bookingDraftId) {
       db.prepare("UPDATE booking_drafts SET status = 'BOOKING_CREATED', booking_id = ?, updated_at = ? WHERE id = ?")
         .run(bookingId, now, input.bookingDraftId)
@@ -6125,7 +6148,10 @@ function cancelBooking(id, body) {
   if (!booking) throw apiError(404, 'NOT_FOUND', 'Booking not found.')
   if (!['PENDING_PAYMENT', 'CONFIRMED'].includes(booking.status)) throw apiError(400, 'BAD_REQUEST', 'This booking cannot be cancelled.')
   const hoursBefore = (new Date(booking.appointment_start).getTime() - Date.now()) / 3_600_000
-  const cancellationFeeCents = hoursBefore >= 24 ? 0 : Math.floor(booking.deposit_cents / 2)
+  // P1.2:扣费规则改为按本店 deposit_config 算。默认 refundable + 24h 全退 + 临期扣 50%,
+  // 与改造前的 `hoursBefore >= 24 ? 0 : floor(deposit/2)` 完全等价。
+  const cancelConfig = getDepositConfig(booking.tenant_id || currentTenantId())
+  const cancellationFeeCents = forfeitedDepositCents(booking, cancelConfig, { noShow: Boolean(body.noShow) })
   const now = iso(new Date())
 
   db.exec('BEGIN IMMEDIATE')
@@ -7118,6 +7144,218 @@ function importTenantCustomers(tenantId, body = {}) {
   return { dryRun: false, tenantId, created, updated, openingWrittenCents, users: writtenUsers, ...report }
 }
 
+/* ===== P1.2 定金规则每店可配(2026-08-08)=====
+   以前定金写死 5000 分、取消规则写死「24h 全退 / 临期扣半」,所有商家一个样。
+   现在整套参数进 tenant_settings.deposit_config,**默认值与旗舰店现状完全等价**:
+   per_service(旗舰店所有项目 deposit_cents 都是 5000)/ 会员按等级免 / 不抵扣 /
+   24h 全退、临期扣半、爽约不退 —— 所以旗舰店上线后行为逐字不变。 */
+const DEFAULT_DEPOSIT_CONFIG = {
+  enabled: true,
+  mode: 'per_service',            // per_service 用项目自身的 deposit_cents;fixed 固定额;pct 按项目价百分比
+  fixedAmountCents: 5000,
+  pct: 0,
+  fallbackAmountCents: 5000,      // 替换代码里写死的 ?? 5000
+  deductible: false,              // 定金是否抵扣尾款(P1 结算单定金行据此)
+  memberWaive: 'by_tier',         // by_tier 按会员等级 / all 会员全免 / none 都不免
+  cancelPolicy: {
+    refundable: true,             // 定金是否可退
+    freeCancelHours: 24,          // 可退时:提前 N 小时全退
+    lateForfeitPct: 50,           // 临期取消扣多少(旗舰店现状=扣一半)
+    noShowForfeitPct: 100,
+    lateArrivalGraceMin: null,    // 迟到宽限(分钟);null=不启用
+    rescheduleNoticeHours: 24,    // 改期需提前 N 小时
+    depositRetainTimes: 0         // 合规改期时定金可保留次数
+  },
+  displayMode: 'auto',            // auto=参数自动生成文案 / custom=商家自定义全文
+  customText: '',
+  customTextEn: ''
+}
+
+const MESSAGE_TEMPLATE_SCENES = ['pre_sale', 'in_service', 'post_sale', 'booking_confirmed_invite', 'arrival_reminder', 'coupon_expiry']
+const MESSAGE_TEMPLATE_SCENE_LABELS = {
+  pre_sale: '售前',
+  in_service: '售中',
+  post_sale: '售后',
+  booking_confirmed_invite: '预约成功邀请函',
+  arrival_reminder: '到店提醒',
+  coupon_expiry: '优惠券到期'
+}
+// 每店预置一套通用文案(商家可改)。变量在发送时替换,发送引擎归 P3,本批只建模+配置。
+const DEFAULT_MESSAGE_TEMPLATES = [
+  { scene: 'pre_sale', title: '售前咨询开场', content: '你好呀{customerName}~ 这里是{storeName}。想做什么款式呢?可以发参考图给我,我帮你看看时长和价格~', variables: ['{customerName}', '{storeName}'] },
+  { scene: 'in_service', title: '服务中关怀', content: '{customerName},今天的款式做到一半啦,有哪里不舒服或者想调整的随时说哦~', variables: ['{customerName}'] },
+  { scene: 'post_sale', title: '服务后回访', content: '{customerName}今天辛苦啦!新做的款式记得 24 小时内少沾水。有任何问题随时找我~', variables: ['{customerName}'] },
+  { scene: 'booking_confirmed_invite', title: '预约成功邀请函', content: '{customerName}你好,你在{storeName}的预约已确认:\n时间 {bookingTime}\n地址 {storeAddress}\n期待见到你~', variables: ['{customerName}', '{storeName}', '{bookingTime}', '{storeAddress}'] },
+  { scene: 'arrival_reminder', title: '到店提醒', content: '{customerName}你好,提醒一下你在{storeName}的预约是 {bookingTime},路上注意安全~', variables: ['{customerName}', '{storeName}', '{bookingTime}'] },
+  { scene: 'coupon_expiry', title: '优惠券到期提醒', content: '{customerName}你好,你有一张优惠券即将到期({couponExpiry}),记得来用哦~', variables: ['{customerName}', '{couponExpiry}'] }
+]
+
+function serializeMessageTemplate(row) {
+  let variables = []
+  try { variables = JSON.parse(row.variables_json || '[]') } catch { variables = [] }
+  return {
+    id: row.id,
+    scene: row.scene,
+    sceneLabel: MESSAGE_TEMPLATE_SCENE_LABELS[row.scene] || row.scene,
+    title: row.title,
+    content: row.content || '',
+    contentEn: row.content_en || '',
+    variables,
+    isActive: Boolean(row.is_active),
+    sort: row.sort,
+    updatedAt: row.updated_at
+  }
+}
+
+// 懒预置:某租户第一次读模板列表时铺一套默认文案(只铺一次,商家改过/删过都不会被覆盖)
+function ensureDefaultMessageTemplates(tenantId) {
+  const seeded = db.prepare("SELECT value FROM tenant_settings WHERE tenant_id = ? AND key = 'message_templates_seeded'").get(tenantId)
+  if (seeded) return
+  const now = iso(new Date())
+  const stmt = db.prepare(`INSERT INTO message_templates (id, tenant_id, scene, title, content, content_en, variables_json, is_active, sort, updated_at)
+    VALUES (?, ?, ?, ?, ?, '', ?, 1, ?, ?)`)
+  DEFAULT_MESSAGE_TEMPLATES.forEach((tpl, index) => {
+    stmt.run(randomId('tpl'), tenantId, tpl.scene, tpl.title, tpl.content, JSON.stringify(tpl.variables), index, now)
+  })
+  db.prepare(`INSERT INTO tenant_settings (tenant_id, key, value, updated_at) VALUES (?, 'message_templates_seeded', ?, ?)
+    ON CONFLICT(tenant_id, key) DO NOTHING`).run(tenantId, JSON.stringify({ at: now }), now)
+}
+
+function getDepositConfig(tenantId = currentTenantId()) {
+  const row = db.prepare("SELECT value FROM tenant_settings WHERE tenant_id = ? AND key = 'deposit_config'").get(tenantId)
+  let stored = {}
+  if (row) {
+    try { stored = JSON.parse(row.value || '{}') } catch { stored = {} }
+  }
+  const cancelPolicy = { ...DEFAULT_DEPOSIT_CONFIG.cancelPolicy, ...(stored.cancelPolicy && typeof stored.cancelPolicy === 'object' ? stored.cancelPolicy : {}) }
+  const merged = { ...DEFAULT_DEPOSIT_CONFIG, ...stored, cancelPolicy }
+  if (!['per_service', 'fixed', 'pct'].includes(merged.mode)) merged.mode = 'per_service'
+  if (!['by_tier', 'all', 'none'].includes(merged.memberWaive)) merged.memberWaive = 'by_tier'
+  if (!['auto', 'custom'].includes(merged.displayMode)) merged.displayMode = 'auto'
+  merged.enabled = merged.enabled !== false
+  merged.deductible = Boolean(merged.deductible)
+  return merged
+}
+
+function setDepositConfig(tenantId, input = {}) {
+  const current = getDepositConfig(tenantId)
+  const num = (value, fallback) => (value === undefined || value === null || value === '' ? fallback : Math.max(0, Math.round(Number(value) || 0)))
+  const nullableNum = (value, fallback) => (value === undefined ? fallback : (value === null || value === '' ? null : Math.max(0, Math.round(Number(value) || 0))))
+  const cp = input.cancelPolicy && typeof input.cancelPolicy === 'object' ? input.cancelPolicy : {}
+  const next = {
+    enabled: input.enabled === undefined ? current.enabled : input.enabled !== false,
+    mode: ['per_service', 'fixed', 'pct'].includes(input.mode) ? input.mode : current.mode,
+    fixedAmountCents: num(input.fixedAmountCents, current.fixedAmountCents),
+    pct: input.pct === undefined ? current.pct : Math.max(0, Math.min(100, Number(input.pct) || 0)),
+    fallbackAmountCents: num(input.fallbackAmountCents, current.fallbackAmountCents),
+    deductible: input.deductible === undefined ? current.deductible : Boolean(input.deductible),
+    memberWaive: ['by_tier', 'all', 'none'].includes(input.memberWaive) ? input.memberWaive : current.memberWaive,
+    cancelPolicy: {
+      refundable: cp.refundable === undefined ? current.cancelPolicy.refundable : Boolean(cp.refundable),
+      freeCancelHours: nullableNum(cp.freeCancelHours, current.cancelPolicy.freeCancelHours),
+      lateForfeitPct: cp.lateForfeitPct === undefined ? current.cancelPolicy.lateForfeitPct : Math.max(0, Math.min(100, Number(cp.lateForfeitPct) || 0)),
+      noShowForfeitPct: cp.noShowForfeitPct === undefined ? current.cancelPolicy.noShowForfeitPct : Math.max(0, Math.min(100, Number(cp.noShowForfeitPct) || 0)),
+      lateArrivalGraceMin: nullableNum(cp.lateArrivalGraceMin, current.cancelPolicy.lateArrivalGraceMin),
+      rescheduleNoticeHours: nullableNum(cp.rescheduleNoticeHours, current.cancelPolicy.rescheduleNoticeHours),
+      depositRetainTimes: num(cp.depositRetainTimes, current.cancelPolicy.depositRetainTimes)
+    },
+    displayMode: ['auto', 'custom'].includes(input.displayMode) ? input.displayMode : current.displayMode,
+    customText: input.customText === undefined ? current.customText : String(input.customText).slice(0, 4000),
+    customTextEn: input.customTextEn === undefined ? current.customTextEn : String(input.customTextEn).slice(0, 4000)
+  }
+  db.prepare(`INSERT INTO tenant_settings (tenant_id, key, value, updated_at) VALUES (?, 'deposit_config', ?, ?)
+    ON CONFLICT(tenant_id, key) DO UPDATE SET value = excluded.value, updated_at = excluded.updated_at`)
+    .run(tenantId, JSON.stringify(next), iso(new Date()))
+  return getDepositConfig(tenantId)
+}
+
+// 线上支付通道是否已接通。没通之前任何对外文案都不许出现「在线支付定金」——
+// 通道接通后把 ONLINE_PAYMENT_READY 打开,文案自动切换,不用再改代码。
+const ONLINE_PAYMENT_READY = process.env.ONLINE_PAYMENT_READY === 'true'
+
+function depositPolicyText(config, tenantId = currentTenantId(), lang = 'zh') {
+  if (config.displayMode === 'custom') {
+    const text = lang === 'en' ? (config.customTextEn || config.customText) : config.customText
+    if (String(text || '').trim()) return String(text).trim()
+  }
+  const cur = tenantCurrencyCode(tenantId)
+  const money = (cents) => `${cur} $${Math.round(cents) / 100}`
+  const cp = config.cancelPolicy
+  const zh = []
+  const en = []
+  if (!config.enabled) {
+    zh.push('本店预约无需定金,确认时段即锁位,费用到店支付。')
+    en.push('No deposit is required. Your slot is locked on confirmation and payment is collected in store.')
+  } else {
+    const amountZh = config.mode === 'fixed'
+      ? `每次预约定金 ${money(config.fixedAmountCents)}`
+      : (config.mode === 'pct' ? `定金为项目价的 ${config.pct}%` : `定金按所选项目的定金金额收取(默认 ${money(config.fallbackAmountCents)})`)
+    const amountEn = config.mode === 'fixed'
+      ? `A deposit of ${money(config.fixedAmountCents)} is required for each booking`
+      : (config.mode === 'pct' ? `The deposit is ${config.pct}% of the service price` : `The deposit follows each service's own deposit amount (default ${money(config.fallbackAmountCents)})`)
+    const payZh = ONLINE_PAYMENT_READY ? '' : '(暂通过门店确认收取,不支持在线支付)'
+    zh.push(`${amountZh}${payZh}。${config.deductible ? '定金可抵扣尾款。' : '定金不抵扣尾款。'}`)
+    en.push(`${amountEn}${ONLINE_PAYMENT_READY ? '' : ' (collected by the store; online payment is not available yet)'}. ${config.deductible ? 'The deposit is deducted from the final balance.' : 'The deposit is not deducted from the final balance.'}`)
+    if (config.memberWaive === 'all') { zh.push('会员免定金。'); en.push('Members are exempt from the deposit.') }
+    else if (config.memberWaive === 'by_tier') { zh.push('部分会员等级可免定金。'); en.push('Some member tiers are exempt from the deposit.') }
+    if (!cp.refundable) { zh.push('定金一经支付不予退还。'); en.push('The deposit is non-refundable once paid.') }
+    else if (cp.freeCancelHours !== null) {
+      zh.push(`提前 ${cp.freeCancelHours} 小时以上取消可全额退还定金;不足 ${cp.freeCancelHours} 小时取消扣除定金的 ${cp.lateForfeitPct}%。`)
+      en.push(`Cancel more than ${cp.freeCancelHours}h in advance for a full deposit refund; cancelling later forfeits ${cp.lateForfeitPct}% of the deposit.`)
+    }
+    if (cp.noShowForfeitPct) { zh.push(`爽约扣除定金的 ${cp.noShowForfeitPct}%。`); en.push(`No-shows forfeit ${cp.noShowForfeitPct}% of the deposit.`) }
+    if (cp.lateArrivalGraceMin !== null) {
+      zh.push(`迟到超过 ${cp.lateArrivalGraceMin} 分钟视为爽约,当天服务将被取消。`)
+      en.push(`Arriving more than ${cp.lateArrivalGraceMin} minutes late counts as a no-show and the appointment is cancelled.`)
+    }
+    if (cp.rescheduleNoticeHours !== null) {
+      zh.push(`改期需提前 ${cp.rescheduleNoticeHours} 小时告知${cp.depositRetainTimes > 0 ? `,合规改期定金可保留 ${cp.depositRetainTimes} 次` : ''}。`)
+      en.push(`Rescheduling requires ${cp.rescheduleNoticeHours}h notice${cp.depositRetainTimes > 0 ? `; a compliant reschedule keeps the deposit up to ${cp.depositRetainTimes} time(s)` : ''}.`)
+    }
+  }
+  return (lang === 'en' ? en : zh).join('')
+}
+
+// 某笔预约应收的定金(不含会员减免)
+function depositAmountForService(service, config, tenantId = currentTenantId()) {
+  if (!config.enabled) return 0
+  if (config.mode === 'fixed') return Math.max(0, Math.round(config.fixedAmountCents))
+  if (config.mode === 'pct') return Math.max(0, Math.round((service?.price_cents || 0) * (Number(config.pct) || 0) / 100))
+  const own = Number(service?.deposit_cents)
+  return Number.isFinite(own) && own > 0 ? Math.round(own) : Math.max(0, Math.round(config.fallbackAmountCents))
+}
+
+// 取消 / 爽约时扣除的定金
+function forfeitedDepositCents(booking, config, { noShow = false, now = new Date() } = {}) {
+  const deposit = Math.max(0, Number(booking.deposit_cents) || 0)
+  if (!deposit) return 0
+  const cp = config.cancelPolicy
+  if (noShow) return Math.floor(deposit * (Number(cp.noShowForfeitPct) || 0) / 100)
+  if (!cp.refundable) return deposit
+  const hoursBefore = (new Date(booking.appointment_start).getTime() - now.getTime()) / 3_600_000
+  if (cp.freeCancelHours !== null && hoursBefore >= cp.freeCancelHours) return 0
+  return Math.floor(deposit * (Number(cp.lateForfeitPct) || 0) / 100)
+}
+
+/* 定金保留凭据:合规改期时把已付定金转到下一次预约。
+   depositRetainTimes 是「同一笔定金最多被保留几次」,超次数就按正常规则处理(该扣就扣)。 */
+function issueDepositRetain({ tenantId, userId, bookingId, amountCents, timesUsed }) {
+  const id = randomId('retain')
+  db.prepare(`INSERT INTO deposit_retains (id, tenant_id, user_id, source_booking_id, amount_cents, times_used, status, created_at)
+    VALUES (?, ?, ?, ?, ?, ?, 'active', ?)`).run(id, tenantId, userId, bookingId, Math.max(0, Math.round(amountCents)), timesUsed, iso(new Date()))
+  return db.prepare('SELECT * FROM deposit_retains WHERE id = ?').get(id)
+}
+
+function activeDepositRetain(userId, tenantId = currentTenantId()) {
+  if (!userId) return null
+  return db.prepare("SELECT * FROM deposit_retains WHERE tenant_id = ? AND user_id = ? AND status = 'active' ORDER BY created_at ASC LIMIT 1").get(tenantId, userId) || null
+}
+
+function consumeDepositRetain(retainId, bookingId) {
+  db.prepare("UPDATE deposit_retains SET status = 'consumed', consumed_booking_id = ?, consumed_at = ? WHERE id = ?")
+    .run(bookingId, iso(new Date()), retainId)
+}
+
 async function route(req, res) {
   if (req.method === 'OPTIONS') return json(res, 204, {})
   const url = new URL(req.url, `http://${req.headers.host}`)
@@ -7132,6 +7370,18 @@ async function route(req, res) {
   if (req.method === 'GET' && path.startsWith('/web/')) return serveFile(res, webRoot, path.replace('/web/', ''))
   if (req.method === 'GET' && path.startsWith('/assets/')) return serveFile(res, assetRoot, path.replace('/assets/', ''))
 
+  // 公开只读:本店定金与取消规则(结构化参数 + 按 displayMode 输出的文案),供客户端与 AI
+  if (req.method === 'GET' && path === '/store/deposit-policy') {
+    const tid = resolveTenant(req, query)
+    const config = getDepositConfig(tid)
+    return json(res, 200, {
+      tenantId: tid,
+      currency: tenantCurrencyCode(tid),
+      onlinePaymentReady: ONLINE_PAYMENT_READY,
+      config,
+      text: { zh: depositPolicyText(config, tid, 'zh'), en: depositPolicyText(config, tid, 'en') }
+    })
+  }
   if (req.method === 'GET' && path === '/health') return json(res, 200, { ok: true, service: 'lucky-luxe-api-local', time: iso(new Date()) })
   if (req.method === 'GET' && path === '/wechat/customer-service/webhook') {
     const valid = verifyWecomSignature({
@@ -7900,6 +8150,75 @@ async function route(req, res) {
     upsertServicePrice(currentTenantId(), id, 'list', payload.priceCents) // 同上:改价即同步 list 档
     return json(res, 200, { service: serializeService(getService(id)) })
   }
+  // ===== P1.2 定金规则(商家自助)=====
+  if (path === '/admin/deposit-config') {
+    if (adminSession.role !== 'owner') throw apiError(403, 'FORBIDDEN', 'Owner permission is required.')
+    const tid = currentTenantId()
+    if (req.method === 'GET') {
+      const config = getDepositConfig(tid)
+      return json(res, 200, {
+        config,
+        onlinePaymentReady: ONLINE_PAYMENT_READY,
+        text: { zh: depositPolicyText(config, tid, 'zh'), en: depositPolicyText(config, tid, 'en') }
+      })
+    }
+    if (req.method === 'PUT') {
+      const body = await readBody(req)
+      const config = setDepositConfig(tid, body.config && typeof body.config === 'object' ? body.config : body)
+      return json(res, 200, {
+        config,
+        text: { zh: depositPolicyText(config, tid, 'zh'), en: depositPolicyText(config, tid, 'en') }
+      })
+    }
+  }
+  // ===== P1.2 话术模板中心(本批只建模 + 配置,发送引擎归 P3)=====
+  if (path === '/admin/message-templates' || path.startsWith('/admin/message-templates/')) {
+    if (adminSession.role !== 'owner') throw apiError(403, 'FORBIDDEN', 'Owner permission is required.')
+    const tid = currentTenantId()
+    const tplId = path.split('/')[3] || null
+    if (req.method === 'GET' && !tplId) {
+      ensureDefaultMessageTemplates(tid)
+      const rows = db.prepare('SELECT * FROM message_templates WHERE tenant_id = ? ORDER BY sort ASC, rowid ASC').all(tid)
+      return json(res, 200, {
+        templates: rows.map(serializeMessageTemplate),
+        scenes: MESSAGE_TEMPLATE_SCENES.map((scene) => ({ scene, label: MESSAGE_TEMPLATE_SCENE_LABELS[scene] })),
+        note: '本批只做模板管理;自动发送引擎在后续批次接入。'
+      })
+    }
+    if (req.method === 'POST' && !tplId) {
+      const body = await readBody(req)
+      const scene = MESSAGE_TEMPLATE_SCENES.includes(body.scene) ? body.scene : 'pre_sale'
+      const title = String(body.title || '').trim()
+      if (!title) throw apiError(400, 'BAD_REQUEST', '模板标题必填。')
+      const id = randomId('tpl')
+      db.prepare(`INSERT INTO message_templates (id, tenant_id, scene, title, content, content_en, variables_json, is_active, sort, updated_at)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`).run(id, tid, scene, title.slice(0, 60),
+        String(body.content || '').slice(0, 2000), String(body.contentEn || '').slice(0, 2000),
+        JSON.stringify(Array.isArray(body.variables) ? body.variables.map(String) : []),
+        body.isActive === false ? 0 : 1, Math.round(Number(body.sort) || 0), iso(new Date()))
+      return json(res, 201, { template: serializeMessageTemplate(db.prepare('SELECT * FROM message_templates WHERE id = ?').get(id)) })
+    }
+    if (req.method === 'PATCH' && tplId) {
+      const cur = db.prepare('SELECT * FROM message_templates WHERE id = ? AND tenant_id = ?').get(tplId, tid)
+      if (!cur) throw apiError(404, 'NOT_FOUND', 'Template not found.')
+      const body = await readBody(req)
+      db.prepare(`UPDATE message_templates SET scene = ?, title = ?, content = ?, content_en = ?, variables_json = ?, is_active = ?, sort = ?, updated_at = ? WHERE id = ?`).run(
+        MESSAGE_TEMPLATE_SCENES.includes(body.scene) ? body.scene : cur.scene,
+        body.title === undefined ? cur.title : String(body.title).trim().slice(0, 60) || cur.title,
+        body.content === undefined ? cur.content : String(body.content).slice(0, 2000),
+        body.contentEn === undefined ? cur.content_en : String(body.contentEn).slice(0, 2000),
+        body.variables === undefined ? cur.variables_json : JSON.stringify(Array.isArray(body.variables) ? body.variables.map(String) : []),
+        body.isActive === undefined ? cur.is_active : (body.isActive ? 1 : 0),
+        body.sort === undefined ? cur.sort : Math.round(Number(body.sort) || 0),
+        iso(new Date()), tplId)
+      return json(res, 200, { template: serializeMessageTemplate(db.prepare('SELECT * FROM message_templates WHERE id = ?').get(tplId)) })
+    }
+    if (req.method === 'DELETE' && tplId) {
+      const r = db.prepare('DELETE FROM message_templates WHERE id = ? AND tenant_id = ?').run(tplId, tid)
+      if (!r.changes) throw apiError(404, 'NOT_FOUND', 'Template not found.')
+      return json(res, 200, { deleted: true })
+    }
+  }
   /* ===== P0 价目表管理(大类 / 项目与加项 / 计价规则 / 试算)=====
      全部 owner-only + 租户隔离;写库时 services.price_cents 与 service_prices(list) 双写保持一致。 */
   if (path.startsWith('/admin/pricing/') || path.startsWith('/admin/membership/') || path.startsWith('/admin/recharge-tiers')) {
@@ -8058,8 +8377,21 @@ async function route(req, res) {
   }
   if (path === '/admin/membership/config') {
     const tid = currentTenantId()
-    if (req.method === 'GET') return json(res, 200, { config: getMembershipConfig(tid), qualifyModes: MEMBER_QUALIFY_MODES })
+    if (req.method === 'GET') {
+      return json(res, 200, {
+        config: getMembershipConfig(tid),
+        qualifyModes: MEMBER_QUALIFY_MODES,
+        // 2026-08-08 店主拍板:会员资格模式与等级体系(含「储值耗完是否保留会员」)由平台统一把关,
+        // 商家端只读;充值档位与赠送项仍归商家自助。
+        readOnly: true,
+        managedBy: 'platform',
+        readOnlyNote: '会员资格与等级由平台统一配置,如需调整请联系平台。充值档位与赠送项仍可自助设置。'
+      })
+    }
     if (req.method === 'PUT') {
+      if (!isPlatformKey(req)) {
+        throw apiError(403, 'MANAGED_BY_PLATFORM', '会员资格与等级由平台统一配置,如需调整请联系平台。充值档位与赠送项仍可自助设置。')
+      }
       const body = await readBody(req)
       return json(res, 200, { config: setMembershipConfig(tid, body.config && typeof body.config === 'object' ? body.config : body) })
     }
@@ -8594,6 +8926,17 @@ async function route(req, res) {
     const next = cur.status === 'active' ? 'suspended' : 'active'
     db.prepare('UPDATE tenants SET status = ? WHERE id = ?').run(next, id)
     return json(res, 200, { tenant: { id, status: next } })
+  }
+  // 平台端·会员政策(2026-08-08 从商家侧收回):资格模式 / 门槛 / 有效期 / 等级体系
+  if (path.startsWith('/platform/tenants/') && path.endsWith('/membership-config') && (req.method === 'GET' || req.method === 'PUT')) {
+    if (!isPlatform()) throw apiError(401, 'UNAUTHORIZED', 'Platform token required.')
+    const tenantId = path.split('/')[3]
+    if (!db.prepare('SELECT id FROM tenants WHERE id = ?').get(tenantId)) throw apiError(404, 'NOT_FOUND', 'Tenant not found.')
+    if (req.method === 'GET') {
+      return json(res, 200, { tenantId, config: getMembershipConfig(tenantId), qualifyModes: MEMBER_QUALIFY_MODES })
+    }
+    const body = await readBody(req)
+    return json(res, 200, { tenantId, config: setMembershipConfig(tenantId, body.config && typeof body.config === 'object' ? body.config : body) })
   }
   /* ---- 平台端·顾客批量导入(从美团/大众/老系统迁过来的顾客与期初余额)----
      dryRun 只出报告不写库;执行时以手机号为主键去重,期初余额记 legacy 桶(不进本店财务收入)。 */
@@ -10696,7 +11039,104 @@ async function route(req, res) {
     assertStaffCanAccessBooking(adminSession, booking)
     const arrivedAt = body.arrived === false ? null : iso(new Date())
     db.prepare('UPDATE bookings SET arrived_at = ?, updated_at = ? WHERE id = ?').run(arrivedAt, iso(new Date()), id)
-    return json(res, 200, { booking: serializeBooking(db.prepare('SELECT * FROM bookings WHERE id = ?').get(id)) })
+    // P1.2 迟到宽限:超过 lateArrivalGraceMin 就提示按爽约处理(是否真的作废由技师点 /no-show 决定,
+    // 不在"技师刚说客人到了"的这一刻自动作废订单)。未配置宽限的店(含旗舰店)这段不产出任何字段。
+    const arrConfig = getDepositConfig(booking.tenant_id || currentTenantId())
+    const graceMin = arrConfig.cancelPolicy.lateArrivalGraceMin
+    let lateness = null
+    if (graceMin !== null && arrivedAt) {
+      const lateMinutes = Math.round((new Date(arrivedAt).getTime() - new Date(booking.appointment_start).getTime()) / 60000)
+      lateness = {
+        lateMinutes,
+        graceMin,
+        graceExceeded: lateMinutes > graceMin,
+        suggestedAction: lateMinutes > graceMin ? 'no_show' : 'proceed',
+        noShowForfeitPct: arrConfig.cancelPolicy.noShowForfeitPct
+      }
+    }
+    return json(res, 200, {
+      booking: serializeBooking(db.prepare('SELECT * FROM bookings WHERE id = ?').get(id)),
+      ...(lateness ? { lateness } : {})
+    })
+  }
+  // P1.2 改期:合规改期(提前 rescheduleNoticeHours 以上)可把已付定金保留到下一次预约
+  if (req.method === 'POST' && path.startsWith('/admin/bookings/') && path.endsWith('/reschedule')) {
+    if (adminSession.role !== 'owner') throw apiError(403, 'FORBIDDEN', '仅老板可改期。')
+    const id = path.split('/')[3]
+    const booking = db.prepare('SELECT * FROM bookings WHERE id = ?').get(id)
+    if (!booking) throw apiError(404, 'NOT_FOUND', 'Booking not found.')
+    assertStaffCanAccessBooking(adminSession, booking)
+    if (!['PENDING_PAYMENT', 'CONFIRMED'].includes(booking.status)) throw apiError(400, 'BAD_REQUEST', '该订单当前状态不能改期。')
+    const body = await readBody(req)
+    const tid = booking.tenant_id || currentTenantId()
+    const config = getDepositConfig(tid)
+    const cp = config.cancelPolicy
+    const hoursBefore = (new Date(booking.appointment_start).getTime() - Date.now()) / 3_600_000
+    const compliant = cp.rescheduleNoticeHours === null || hoursBefore >= cp.rescheduleNoticeHours
+    // 同一笔定金被保留过几次:看它上一张凭据的计数
+    const priorRetain = db.prepare("SELECT MAX(times_used) AS n FROM deposit_retains WHERE tenant_id = ? AND source_booking_id = ?").get(tid, booking.id)?.n || 0
+    const nextTimes = priorRetain + 1
+    const canRetain = compliant && booking.deposit_cents > 0 && nextTimes <= (cp.depositRetainTimes || 0)
+    let retain = null
+    const now = iso(new Date())
+    db.exec('BEGIN IMMEDIATE')
+    try {
+      db.prepare('DELETE FROM booking_slots WHERE booking_id = ?').run(id)
+      db.prepare("UPDATE bookings SET status = 'CANCELLED', cancelled_at = ?, cancellation_fee_cents = ?, updated_at = ? WHERE id = ?")
+        .run(now, canRetain ? 0 : forfeitedDepositCents(booking, config), now, id)
+      db.prepare('INSERT INTO booking_status_history (id, booking_id, from_status, to_status, note, created_at) VALUES (?, ?, ?, ?, ?, ?)')
+        .run(randomId('hist'), id, booking.status, 'CANCELLED', body.reason || (canRetain ? '合规改期(定金保留)' : '改期'), now)
+      if (canRetain) {
+        retain = issueDepositRetain({ tenantId: tid, userId: booking.user_id, bookingId: booking.id, amountCents: booking.deposit_cents, timesUsed: nextTimes })
+      }
+      db.exec('COMMIT')
+    } catch (error) {
+      db.exec('ROLLBACK')
+      throw error
+    }
+    return json(res, 200, {
+      booking: serializeBooking(db.prepare('SELECT * FROM bookings WHERE id = ?').get(id)),
+      reschedule: {
+        compliant,
+        hoursBefore: Math.round(hoursBefore * 10) / 10,
+        noticeHours: cp.rescheduleNoticeHours,
+        depositRetained: Boolean(retain),
+        retainTimesUsed: retain ? retain.times_used : priorRetain,
+        retainTimesAllowed: cp.depositRetainTimes || 0,
+        retainAmountCents: retain ? retain.amount_cents : 0,
+        forfeitedDepositCents: canRetain ? 0 : forfeitedDepositCents(booking, config),
+        note: canRetain ? '定金已保留,下次预约自动抵扣。' : '本次改期不满足保留条件,按取消规则处理。'
+      }
+    })
+  }
+  // P1.2 爽约:按 noShowForfeitPct 扣定金(迟到超过宽限也走这条)
+  if (req.method === 'POST' && path.startsWith('/admin/bookings/') && path.endsWith('/no-show')) {
+    if (adminSession.role !== 'owner') throw apiError(403, 'FORBIDDEN', '仅老板可标记爽约。')
+    const id = path.split('/')[3]
+    const booking = db.prepare('SELECT * FROM bookings WHERE id = ?').get(id)
+    if (!booking) throw apiError(404, 'NOT_FOUND', 'Booking not found.')
+    assertStaffCanAccessBooking(adminSession, booking)
+    const nsBody = await readBody(req)
+    const tid = booking.tenant_id || currentTenantId()
+    const config = getDepositConfig(tid)
+    const fee = forfeitedDepositCents(booking, config, { noShow: true })
+    const now = iso(new Date())
+    db.exec('BEGIN IMMEDIATE')
+    try {
+      db.prepare('DELETE FROM booking_slots WHERE booking_id = ?').run(id)
+      db.prepare("UPDATE bookings SET status = 'CANCELLED', cancelled_at = ?, cancellation_fee_cents = ?, updated_at = ? WHERE id = ?").run(now, fee, now, id)
+      db.prepare('INSERT INTO booking_status_history (id, booking_id, from_status, to_status, note, created_at) VALUES (?, ?, ?, ?, ?, ?)')
+        .run(randomId('hist'), id, booking.status, 'CANCELLED', String(nsBody.reason || '顾客爽约(或迟到超过宽限)'), now)
+      db.exec('COMMIT')
+    } catch (error) {
+      db.exec('ROLLBACK')
+      throw error
+    }
+    reverseBookingIncome(id, adminSession.email || 'admin')
+    return json(res, 200, {
+      booking: serializeBooking(db.prepare('SELECT * FROM bookings WHERE id = ?').get(id)),
+      noShow: { forfeitedDepositCents: fee, forfeitPct: config.cancelPolicy.noShowForfeitPct }
+    })
   }
   if (req.method === 'PATCH' && path.startsWith('/admin/bookings/') && path.endsWith('/status')) {
     const id = path.split('/')[3]
@@ -11342,6 +11782,37 @@ db.exec(`
   SELECT 'identity-bf-' || lower(hex(randomblob(6))), id, 'phone', phone, phone, datetime('now'), datetime('now')
   FROM users WHERE phone IS NOT NULL AND phone != '';
 `)
+/* ===== P1.2 定金保留凭据 + 话术模板中心(2026-08-08)=====
+   tenant_id 一律不给 DEFAULT(P0.9 立的纪律:默认值会让漏写的 INSERT 悄悄归到旗舰店名下)。 */
+db.exec(`
+  CREATE TABLE IF NOT EXISTS deposit_retains (
+    id TEXT PRIMARY KEY,
+    tenant_id TEXT NOT NULL,
+    user_id TEXT NOT NULL,
+    source_booking_id TEXT,
+    amount_cents INTEGER NOT NULL DEFAULT 0,
+    times_used INTEGER NOT NULL DEFAULT 1,
+    status TEXT NOT NULL DEFAULT 'active',
+    consumed_booking_id TEXT,
+    consumed_at TEXT,
+    created_at TEXT NOT NULL
+  );
+  CREATE INDEX IF NOT EXISTS idx_deposit_retains_user ON deposit_retains(tenant_id, user_id, status);
+  CREATE TABLE IF NOT EXISTS message_templates (
+    id TEXT PRIMARY KEY,
+    tenant_id TEXT NOT NULL,
+    scene TEXT NOT NULL,
+    title TEXT NOT NULL,
+    content TEXT NOT NULL DEFAULT '',
+    content_en TEXT NOT NULL DEFAULT '',
+    variables_json TEXT NOT NULL DEFAULT '[]',
+    is_active INTEGER NOT NULL DEFAULT 1,
+    sort INTEGER NOT NULL DEFAULT 0,
+    updated_at TEXT
+  );
+  CREATE INDEX IF NOT EXISTS idx_message_templates_tenant ON message_templates(tenant_id, scene, sort);
+`)
+
 /* ===== P0.9 七张子表补 tenant_id(2026-08-07,审计 B-5)=====
    payments / technician_schedules / business_hours / store_special_dates /
    booking_slots / booking_status_history / booking_drafts 一直没有 tenant_id,

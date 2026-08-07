@@ -4,7 +4,7 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>有迹 · 商家后台</title>
-    <link rel="stylesheet" href="/web/styles.css?v=20260807b-tenant-audit">
+    <link rel="stylesheet" href="/web/styles.css?v=20260808a-p12-deposit">
     <style>
       /* 2026-08-02 财务指标显隐+动效(店主 v4 定稿):AI智能总结卡 / 目标进度条(带平衡线刻度) / 设目标引导与弹窗。
          放这里不放 styles.css:本批约定只动 admin.js + admin.html 两个文件。 */
@@ -567,6 +567,20 @@
               </details>
               <details class="settings-item">
                 <summary>
+                  <span class="settings-item-title" id="depositSettingsTitle">定金与取消规则</span>
+                  <span class="settings-item-value" id="depositSettingsSummary"></span>
+                </summary>
+                <div class="settings-item-body" id="depositSettingsBody"></div>
+              </details>
+              <details class="settings-item">
+                <summary>
+                  <span class="settings-item-title" id="aiPackTitle">AI 智能包</span>
+                  <span class="settings-item-value" id="aiPackSummary"></span>
+                </summary>
+                <div class="settings-item-body" id="aiPackBody"></div>
+              </details>
+              <details class="settings-item">
+                <summary>
                   <span class="settings-item-title" id="membershipSettingsTitle">会员与储值设置</span>
                   <span class="settings-item-value" id="membershipSettingsSummary"></span>
                 </summary>
@@ -619,6 +633,6 @@
     </main>
 
     <div class="toast" id="toast"></div>
-    <script src="/web/admin.js?v=20260807b-tenant-audit"></script>
+    <script src="/web/admin.js?v=20260808a-p12-deposit"></script>
   </body>
 </html>

@@ -1,5 +1,5 @@
 // 构建号:每次交付递增。侧栏可见,排查"改了没生效"时先对版本。
-const ADMIN_BUILD = '20260807b-tenant-audit'
+const ADMIN_BUILD = '20260808a-p12-deposit'
 console.log(`[admin] build ${ADMIN_BUILD}`)
 
 // "今天"必须按门店时区算,否则老板人在别的时区时全站日期错位一天。
@@ -120,6 +120,10 @@ const els = {
   pricingPreviewBox: document.querySelector('#pricingPreviewBox'),
   sidebarPricing: document.querySelector('#sidebarPricing'),
   membershipSettingsSummary: document.querySelector('#membershipSettingsSummary'),
+  depositSettingsSummary: document.querySelector('#depositSettingsSummary'),
+  depositSettingsBody: document.querySelector('#depositSettingsBody'),
+  aiPackSummary: document.querySelector('#aiPackSummary'),
+  aiPackBody: document.querySelector('#aiPackBody'),
   membershipSettingsBody: document.querySelector('#membershipSettingsBody'),
   membershipPage: document.querySelector('#membershipPage'),
   packageAdminList: document.querySelector('#packageAdminList'),
@@ -3281,6 +3285,8 @@ async function saveStoreProfile() {
 function renderStoreSettings() {
   if (!els.businessHoursEditor) return
   renderMembershipSettings()
+  renderDepositSettings()
+  renderAiPackSettings()
   renderTenantPlan()
   renderTenantKb()
   renderStoreInfo()
@@ -5756,6 +5762,8 @@ els.adminLayout.addEventListener('click', (event) => {
     // 套餐与续费并入「门店设置 → 当前套餐」,进页时取一次订阅数据
     if (owner.adminPage === 'storeSettings') loadSubscriptionPage().catch((error) => toast(error.message))
     if (owner.adminPage === 'storeSettings') loadMembershipSettings().catch((error) => toast(error.message))
+    if (owner.adminPage === 'storeSettings') loadDepositSettings().catch((error) => toast(error.message))
+    if (owner.adminPage === 'storeSettings') loadAiPackSettings().catch((error) => toast(error.message))
     render()
     return
   }
@@ -7610,7 +7618,7 @@ async function loadMembershipSettings() {
     request('/admin/membership/config'),
     request('/admin/recharge-tiers').catch(() => ({ tiers: [] }))
   ])
-  membershipSettings = { config: c.config, tiers: t.tiers || [] }
+  membershipSettings = { config: c.config, tiers: t.tiers || [], readOnly: c.readOnly !== false, readOnlyNote: c.readOnlyNote }
   renderMembershipSettings()
 }
 
@@ -7622,14 +7630,16 @@ function renderMembershipSettings() {
   if (els.membershipSettingsSummary) {
     els.membershipSettingsSummary.textContent = `${pzh() ? label.zh : label.en} · ${pzh() ? `${membershipSettings.tiers.length} 个充值档位` : `${membershipSettings.tiers.length} tiers`}`
   }
+  const msReadOnly = membershipSettings.readOnly !== false // 2026-08-08:会员资格与等级收归平台,商家端只读
   els.membershipSettingsBody.innerHTML = `
+    ${msReadOnly ? `<p class="subtle">🔒 ${pzh() ? (membershipSettings.readOnlyNote || '会员资格与等级由平台统一配置,如需调整请联系平台。充值档位与赠送项仍可自助设置。') : 'Member qualification and tiers are managed by the platform.'}</p>` : ''}
     <div class="kb-facts-grid">
-      <label><span>${pzh() ? '会员资格' : 'Member qualification'}</span><select id="msQualify">
+      <label><span>${pzh() ? '会员资格' : 'Member qualification'}</span><select id="msQualify" ${msReadOnly ? 'disabled' : ''}>
         ${Object.entries(MEMBER_QUALIFY_LABELS).map(([key, l]) => `<option value="${key}" ${key === config.memberQualify ? 'selected' : ''}>${pzh() ? l.zh : l.en}</option>`).join('')}
       </select></label>
-      <label><span>${pzh() ? '消费门槛(仅「累计消费」模式)' : 'Spend threshold'}</span><input id="msQualifyValue" inputmode="decimal" value="${config.qualifyValueCents ? config.qualifyValueCents / 100 : ''}"></label>
-      <label><span>${pzh() ? '会员有效期(天,留空=永久)' : 'Expiry (days)'}</span><input id="msExpire" inputmode="numeric" value="${config.expireDays ?? ''}"></label>
-      <label><span>${pzh() ? '启用会员等级' : 'Enable tiers'}</span><select id="msTiersEnabled">
+      <label><span>${pzh() ? '消费门槛(仅「累计消费」模式)' : 'Spend threshold'}</span><input id="msQualifyValue" inputmode="decimal" value="${config.qualifyValueCents ? config.qualifyValueCents / 100 : ''}" ${msReadOnly ? 'disabled' : ''}></label>
+      <label><span>${pzh() ? '会员有效期(天,留空=永久)' : 'Expiry (days)'}</span><input id="msExpire" inputmode="numeric" value="${config.expireDays ?? ''}" ${msReadOnly ? 'disabled' : ''}></label>
+      <label><span>${pzh() ? '启用会员等级' : 'Enable tiers'}</span><select id="msTiersEnabled" ${msReadOnly ? 'disabled' : ''}>
         <option value="0" ${config.tiersEnabled ? '' : 'selected'}>${pzh() ? '不分等级' : 'Off'}</option>
         <option value="1" ${config.tiersEnabled ? 'selected' : ''}>${pzh() ? '分等级' : 'On'}</option>
       </select></label>
@@ -7639,7 +7649,7 @@ function renderMembershipSettings() {
         <textarea id="msTiers" rows="3" placeholder='[{"key":"silver","name":"银卡","minSpendCents":100000}]'>${escapeHtml(JSON.stringify(config.tiers || [], null, 0))}</textarea>
         <p class="subtle">${pzh() ? '等级表用 JSON 描述(key / name / minSpendCents),暂由平台侧协助配置。' : 'Tier table as JSON.'}</p>
       </div>` : ''}
-    <button class="primary slim" id="msSave" type="button">${pzh() ? '保存会员设置' : 'Save membership settings'}</button>
+    ${msReadOnly ? '' : `<button class="primary slim" id="msSave" type="button">${pzh() ? '保存会员设置' : 'Save membership settings'}</button>`}
     <p class="subtle">${pzh() ? '会员价在「价目表」里逐项设置;这里决定「谁算会员」。' : 'Member prices are set per item in the price list; this decides who counts as a member.'}</p>
     <div class="kb-entry-list">
       <strong class="kb-entry-list-title">${pzh() ? '充值档位(顾客充值时可选的金额与赠送)' : 'Recharge tiers'}</strong>
@@ -7710,6 +7720,222 @@ if (els.storeSettingsPage) {
         if (!window.confirm(pzh() ? '删除这个充值档位?' : 'Delete this tier?')) return
         await request(`/admin/recharge-tiers/${del.dataset.tierDelete}`, { method: 'DELETE' })
         await loadMembershipSettings()
+      }
+    } catch (error) { toast(error.message) }
+  })
+}
+
+/* ===== 门店设置 → 定金与取消规则(2026-08-08 P1.2)=====
+   参数进 tenant_settings.deposit_config;默认值与旗舰店现状等价,所以不动它就等于什么都没变。 */
+let depositSettings = { config: null, text: null, onlinePaymentReady: false }
+
+async function loadDepositSettings() {
+  const res = await request('/admin/deposit-config')
+  depositSettings = { config: res.config, text: res.text, onlinePaymentReady: res.onlinePaymentReady }
+  renderDepositSettings()
+}
+
+function renderDepositSettings() {
+  if (!els.depositSettingsBody) return
+  const c = depositSettings.config
+  if (!c) { els.depositSettingsBody.innerHTML = ''; return }
+  const cp = c.cancelPolicy
+  const zh = pzh()
+  const modeLabel = { per_service: zh ? '按项目各自的定金' : 'Per service', fixed: zh ? '固定金额' : 'Fixed', pct: zh ? '按项目价百分比' : 'Percent' }
+  if (els.depositSettingsSummary) {
+    els.depositSettingsSummary.textContent = c.enabled
+      ? `${modeLabel[c.mode]}${c.mode === 'fixed' ? ` ${pMoney(c.fixedAmountCents)}` : (c.mode === 'pct' ? ` ${c.pct}%` : '')} · ${cp.refundable ? (zh ? '可退' : 'refundable') : (zh ? '不退' : 'non-refundable')}`
+      : (zh ? '不收定金' : 'No deposit')
+  }
+  els.depositSettingsBody.innerHTML = `
+    <div class="kb-facts-grid">
+      <label><span>${zh ? '是否收定金' : 'Deposit enabled'}</span><select id="dpEnabled">
+        <option value="1" ${c.enabled ? 'selected' : ''}>${zh ? '收' : 'Yes'}</option>
+        <option value="0" ${c.enabled ? '' : 'selected'}>${zh ? '不收' : 'No'}</option>
+      </select></label>
+      <label><span>${zh ? '计价方式' : 'Mode'}</span><select id="dpMode">
+        <option value="per_service" ${c.mode === 'per_service' ? 'selected' : ''}>${modeLabel.per_service}</option>
+        <option value="fixed" ${c.mode === 'fixed' ? 'selected' : ''}>${modeLabel.fixed}</option>
+        <option value="pct" ${c.mode === 'pct' ? 'selected' : ''}>${modeLabel.pct}</option>
+      </select></label>
+      <label><span>${zh ? '固定金额' : 'Fixed amount'}</span><input id="dpFixed" inputmode="decimal" value="${c.fixedAmountCents / 100}"></label>
+      <label><span>${zh ? '百分比(%)' : 'Percent'}</span><input id="dpPct" inputmode="decimal" value="${c.pct}"></label>
+      <label><span>${zh ? '兜底金额(项目没设定金时)' : 'Fallback amount'}</span><input id="dpFallback" inputmode="decimal" value="${c.fallbackAmountCents / 100}"></label>
+      <label><span>${zh ? '定金抵扣尾款' : 'Deductible'}</span><select id="dpDeductible">
+        <option value="0" ${c.deductible ? '' : 'selected'}>${zh ? '不抵扣' : 'No'}</option>
+        <option value="1" ${c.deductible ? 'selected' : ''}>${zh ? '可抵扣' : 'Yes'}</option>
+      </select></label>
+      <label><span>${zh ? '会员免定金' : 'Member waiver'}</span><select id="dpWaive">
+        <option value="by_tier" ${c.memberWaive === 'by_tier' ? 'selected' : ''}>${zh ? '按会员等级' : 'By tier'}</option>
+        <option value="all" ${c.memberWaive === 'all' ? 'selected' : ''}>${zh ? '会员全免' : 'All members'}</option>
+        <option value="none" ${c.memberWaive === 'none' ? 'selected' : ''}>${zh ? '都不免' : 'None'}</option>
+      </select></label>
+      <label><span>${zh ? '定金可退' : 'Refundable'}</span><select id="dpRefundable">
+        <option value="1" ${cp.refundable ? 'selected' : ''}>${zh ? '可退' : 'Yes'}</option>
+        <option value="0" ${cp.refundable ? '' : 'selected'}>${zh ? '不退' : 'No'}</option>
+      </select></label>
+      <label><span>${zh ? '提前几小时取消全退' : 'Free cancel hours'}</span><input id="dpFreeHours" inputmode="numeric" value="${cp.freeCancelHours ?? ''}"></label>
+      <label><span>${zh ? '临期取消扣(%)' : 'Late forfeit %'}</span><input id="dpLatePct" inputmode="numeric" value="${cp.lateForfeitPct}"></label>
+      <label><span>${zh ? '爽约扣(%)' : 'No-show forfeit %'}</span><input id="dpNoShowPct" inputmode="numeric" value="${cp.noShowForfeitPct}"></label>
+      <label><span>${zh ? '迟到宽限(分钟,留空=不启用)' : 'Late grace (min)'}</span><input id="dpGrace" inputmode="numeric" value="${cp.lateArrivalGraceMin ?? ''}"></label>
+      <label><span>${zh ? '改期需提前(小时)' : 'Reschedule notice (h)'}</span><input id="dpNotice" inputmode="numeric" value="${cp.rescheduleNoticeHours ?? ''}"></label>
+      <label><span>${zh ? '合规改期定金可保留次数' : 'Deposit retain times'}</span><input id="dpRetain" inputmode="numeric" value="${cp.depositRetainTimes}"></label>
+      <label><span>${zh ? '规则文案' : 'Policy text'}</span><select id="dpDisplayMode">
+        <option value="auto" ${c.displayMode === 'auto' ? 'selected' : ''}>${zh ? '按参数自动生成' : 'Auto'}</option>
+        <option value="custom" ${c.displayMode === 'custom' ? 'selected' : ''}>${zh ? '自定义全文' : 'Custom'}</option>
+      </select></label>
+    </div>
+    <div class="pricing-scope">
+      <textarea id="dpCustomText" rows="4" placeholder="${zh ? '自定义规则全文(选「自定义全文」时生效)' : 'Custom policy text'}">${escapeHtml(c.customText || '')}</textarea>
+    </div>
+    <button class="primary slim" id="dpSave" type="button">${zh ? '保存定金规则' : 'Save deposit rules'}</button>
+    <div class="pricing-quote" style="margin-top:12px">
+      <div class="subtle">${zh ? '顾客与 AI 看到的文案(实时预览):' : 'What customers and the AI see:'}</div>
+      <div>${escapeHtml(depositSettings.text?.zh || '')}</div>
+    </div>
+    <p class="subtle">${depositSettings.onlinePaymentReady
+      ? (zh ? '线上支付通道已接通。' : 'Online payment channel is live.')
+      : (zh ? '线上支付通道尚未接通,文案里不会出现「在线支付定金」;通道接通后自动切换。' : 'Online payment is not live yet; wording switches automatically once it is.')}</p>`
+}
+
+/* ===== 门店设置 → AI 智能包 Tab(2026-08-08 P1.2 建壳)=====
+   ① 自动消息话术:模板列表 / 编辑 / 变量说明 / 预览(发送引擎归后续批次)
+   ② 状态区:开通状态与本月用量(读现有 /admin/subscription 的 aiAddon,没有的字段留占位) */
+let aiPackState = { templates: [], scenes: [], ai: null, editing: null }
+
+async function loadAiPackSettings() {
+  const [tpl, sub] = await Promise.all([
+    request('/admin/message-templates').catch(() => ({ templates: [], scenes: [] })),
+    request('/admin/subscription').catch(() => ({}))
+  ])
+  aiPackState = { ...aiPackState, templates: tpl.templates || [], scenes: tpl.scenes || [], ai: sub.aiAddon || null }
+  renderAiPackSettings()
+}
+
+function renderAiPackSettings() {
+  if (!els.aiPackBody) return
+  const zh = pzh()
+  const ai = aiPackState.ai
+  if (els.aiPackSummary) {
+    els.aiPackSummary.textContent = ai
+      ? (ai.enabled ? (ai.unlimited ? (zh ? '已开通 · 长期' : 'On · unlimited') : (zh ? '已开通' : 'On')) : (zh ? '未开通' : 'Off'))
+      : (zh ? '状态待接入' : 'Status pending')
+  }
+  const usage = ai?.usage
+  const draft = aiPackState.editing
+  els.aiPackBody.innerHTML = `
+    <div class="pricing-quote">
+      <div class="pricing-quote-line"><span>${zh ? '开通状态' : 'Status'}</span><b>${ai ? (ai.enabled ? (ai.unlimited ? (zh ? '已开通(长期)' : 'On (unlimited)') : (zh ? '已开通' : 'On')) : (zh ? '未开通' : 'Off')) : '—'}</b></div>
+      <div class="pricing-quote-line"><span>${zh ? '本月用量' : 'Usage this month'}</span><b>${usage ? `${usage.used} / ${usage.quota}` : '—'}</b></div>
+      <div class="subtle">${zh ? '状态与用量为只读,由平台开通;此处后续会补充更多 AI 能力开关。' : 'Read-only; managed by the platform.'}</div>
+    </div>
+    <div class="kb-entry-list">
+      <strong class="kb-entry-list-title">${zh ? '自动消息话术(模板)' : 'Message templates'}</strong>
+      <p class="subtle">${zh ? '本批只做模板管理:改好的文案会在自动发送功能上线后直接生效,不用再录一遍。变量会在发送时替换成真实内容。' : 'Templates only for now; the sending engine arrives in a later batch.'}</p>
+      ${aiPackState.templates.length ? aiPackState.templates.map((t) => `
+        <div class="service-admin-item${t.isActive ? '' : ' inactive'}">
+          <div>
+            <strong>${escapeHtml(t.title)}</strong>
+            <span class="subtle">${escapeHtml(t.sceneLabel || t.scene)}${t.isActive ? '' : (zh ? ' · 已停用' : ' · off')}</span>
+            <div class="subtle" style="white-space:pre-wrap">${escapeHtml(t.content || '')}</div>
+            ${t.variables?.length ? `<div class="subtle">${zh ? '可用变量:' : 'Variables: '}${t.variables.map((v) => escapeHtml(v)).join(' ')}</div>` : ''}
+          </div>
+          <div class="row-actions">
+            <button class="ghost slim" data-tpl-edit="${t.id}" type="button">${zh ? '编辑' : 'Edit'}</button>
+            <button class="ghost slim" data-tpl-toggle="${t.id}" type="button">${t.isActive ? (zh ? '停用' : 'Off') : (zh ? '启用' : 'On')}</button>
+            <button class="ghost slim" data-tpl-delete="${t.id}" type="button">${zh ? '删除' : 'Delete'}</button>
+          </div>
+        </div>`).join('') : `<p class="subtle">${zh ? '还没有话术模板。' : 'No templates yet.'}</p>`}
+      <button class="ghost slim" id="tplAdd" type="button">${zh ? '+ 新增话术' : '+ Add template'}</button>
+    </div>
+    ${draft ? `
+    <div class="pricing-editor">
+      <div class="kb-facts-grid">
+        <label><span>${zh ? '场景' : 'Scene'}</span><select id="tplScene">
+          ${aiPackState.scenes.map((s) => `<option value="${s.scene}" ${s.scene === draft.scene ? 'selected' : ''}>${escapeHtml(s.label)}</option>`).join('')}
+        </select></label>
+        <label><span>${zh ? '标题' : 'Title'}</span><input id="tplTitle" value="${escapeHtml(draft.title || '')}"></label>
+      </div>
+      <div class="pricing-scope">
+        <textarea id="tplContent" rows="4" placeholder="${zh ? '话术正文,可用 {customerName} {storeName} {bookingTime} 等变量' : 'Template content'}">${escapeHtml(draft.content || '')}</textarea>
+      </div>
+      <div class="action-row wrap">
+        <button class="primary slim" id="tplSave" type="button">${zh ? '保存' : 'Save'}</button>
+        <button class="ghost slim" id="tplCancel" type="button">${zh ? '取消' : 'Cancel'}</button>
+      </div>
+    </div>` : ''}`
+}
+
+if (els.storeSettingsPage) {
+  els.storeSettingsPage.addEventListener('click', async (event) => {
+    try {
+      if (event.target.closest('#dpSave')) {
+        const val = (id) => document.querySelector(id)?.value
+        const numOrNull = (v) => (String(v || '').trim() === '' ? null : Number(v))
+        await request('/admin/deposit-config', {
+          method: 'PUT',
+          body: JSON.stringify({
+            config: {
+              enabled: val('#dpEnabled') === '1',
+              mode: val('#dpMode'),
+              fixedAmountCents: pCents(val('#dpFixed')) ?? 0,
+              pct: Number(val('#dpPct')) || 0,
+              fallbackAmountCents: pCents(val('#dpFallback')) ?? 0,
+              deductible: val('#dpDeductible') === '1',
+              memberWaive: val('#dpWaive'),
+              displayMode: val('#dpDisplayMode'),
+              customText: val('#dpCustomText') || '',
+              cancelPolicy: {
+                refundable: val('#dpRefundable') === '1',
+                freeCancelHours: numOrNull(val('#dpFreeHours')),
+                lateForfeitPct: Number(val('#dpLatePct')) || 0,
+                noShowForfeitPct: Number(val('#dpNoShowPct')) || 0,
+                lateArrivalGraceMin: numOrNull(val('#dpGrace')),
+                rescheduleNoticeHours: numOrNull(val('#dpNotice')),
+                depositRetainTimes: Number(val('#dpRetain')) || 0
+              }
+            }
+          })
+        })
+        await loadDepositSettings()
+        toast(pzh() ? '定金规则已保存,顾客端与 AI 立即生效' : 'Saved')
+        return
+      }
+      if (event.target.closest('#tplAdd')) {
+        aiPackState.editing = { scene: aiPackState.scenes[0]?.scene || 'pre_sale', title: '', content: '' }
+        renderAiPackSettings()
+        return
+      }
+      const edit = event.target.closest('[data-tpl-edit]')
+      if (edit) { aiPackState.editing = { ...aiPackState.templates.find((t) => t.id === edit.dataset.tplEdit) }; renderAiPackSettings(); return }
+      if (event.target.closest('#tplCancel')) { aiPackState.editing = null; renderAiPackSettings(); return }
+      if (event.target.closest('#tplSave')) {
+        const body = {
+          scene: document.querySelector('#tplScene')?.value,
+          title: document.querySelector('#tplTitle')?.value.trim(),
+          content: document.querySelector('#tplContent')?.value || ''
+        }
+        if (!body.title) { toast(pzh() ? '标题必填' : 'Title required'); return }
+        const id = aiPackState.editing?.id
+        if (id) await request(`/admin/message-templates/${id}`, { method: 'PATCH', body: JSON.stringify(body) })
+        else await request('/admin/message-templates', { method: 'POST', body: JSON.stringify(body) })
+        aiPackState.editing = null
+        await loadAiPackSettings()
+        toast(pzh() ? '已保存' : 'Saved')
+        return
+      }
+      const tog = event.target.closest('[data-tpl-toggle]')
+      if (tog) {
+        const t = aiPackState.templates.find((x) => x.id === tog.dataset.tplToggle)
+        await request(`/admin/message-templates/${t.id}`, { method: 'PATCH', body: JSON.stringify({ isActive: !t.isActive }) })
+        await loadAiPackSettings()
+        return
+      }
+      const del = event.target.closest('[data-tpl-delete]')
+      if (del) {
+        if (!window.confirm(pzh() ? '删除这条话术?' : 'Delete this template?')) return
+        await request(`/admin/message-templates/${del.dataset.tplDelete}`, { method: 'DELETE' })
+        await loadAiPackSettings()
       }
     } catch (error) { toast(error.message) }
   })
