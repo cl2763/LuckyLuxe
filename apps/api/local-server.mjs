@@ -10963,7 +10963,10 @@ async function route(req, res) {
       monthKey: monthKeyOf(tid, at),
       localTime: parts.time,
       serverProcessTimezone: APP_TIMEZONE,
-      nowUtc: iso(at)
+      nowUtc: iso(at),
+      // 只读运维探针:只报「配没配」,不回显任何密钥值。
+      // 用它确认生产的对象存储可用,而不必在真实商户数据里造一张假单去验。
+      storage: { cosConfigured: cosConfigured(), snapshotFallback: cosConfigured() ? 'cos' : 'inline' }
     })
   }
   if (req.method === 'GET' && path === '/admin/business-hours') {
