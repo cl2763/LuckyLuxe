@@ -36,7 +36,8 @@ function vm(b) {
   return {
     id: b.id, status: b.status, date: b.appointmentDate || '', time: b.appointmentTime || '',
     statusLabel: s.label, statusCls: s.cls, customer, tech,
-    userId: b.userId || (b.user && (b.user.id || b.user.sub)) || '', serviceName: service,
+    userId: b.userId || (b.user && (b.user.id || b.user.sub)) || '',
+    serviceId: b.serviceId || (b.service && b.service.id) || '', serviceName: service,
     thumb: hasImg ? b.referenceImages[0] : '',
     line: [service, dur].filter(Boolean).join(' · ')
   }
@@ -98,22 +99,56 @@ Page({
     this.setData({ groups })
   },
   setFilter(e) { this.setData({ filter: e.currentTarget.dataset.f }, () => this.buildAll(this.data.raw)) },
-  orderActions(e) {
+  /* 屏 0｜结算入口。按订单状态给按钮,按钮一律纯文字(无 emoji)。
+     「标记完成」已退役 —— COMPLETED 由顾客签署驱动,不再手动标。 */
+  async orderActions(e) {
     const { id, status, userid, customer, service, tech } = e.currentTarget.dataset
-    const opts = status === 'PENDING_PAYMENT' ? [{ label: '确认到店', s: 'CONFIRMED' }, { label: '取消预约', s: 'CANCELLED' }]
-      : status === 'CONFIRMED' ? [{ label: '标记完成', s: 'COMPLETED' }, { label: '取消预约', s: 'CANCELLED' }]
-        : status === 'COMPLETED' ? [{ label: '转售后', s: 'AFTER_SALES' }] : []
+    const ctx = { id, userId: userid, customerName: customer, serviceId: e.currentTarget.dataset.serviceid || '', serviceName: service, tech }
+    const sheets = await this.settlementsOf(id)
+    const pending = sheets.filter((s) => s.status === 'pending_sign')
+    const opts = []
+    if (status === 'PENDING_PAYMENT' || status === 'PENDING_DEPOSIT') {
+      opts.push({ label: '确认到店', s: 'CONFIRMED' }, { label: '取消预约', s: 'CANCELLED' })
+    } else if (status === 'CONFIRMED' || status === 'IN_PROGRESS' || status === 'SERVING') {
+      if (pending.length) opts.push({ label: `查看结算单（待签 ${pending.length} 张）`, sheets: true })
+      else opts.push({ label: '去结算', settle: true })
+      opts.push({ label: '取消预约', s: 'CANCELLED' })
+    } else if (status === 'COMPLETED') {
+      if (sheets.length) opts.push({ label: '查看电子票据', sheets: true })
+      opts.push({ label: '转售后', s: 'AFTER_SALES' })
+    }
     // 任何有顾客的订单都可补写服务小记
-    if (userid) opts.push({ label: '📝 写/补服务小记', note: true })
+    if (userid) opts.push({ label: '写/补服务小记', note: true })
     if (!opts.length) { wx.showToast({ title: '该状态暂无可改操作', icon: 'none' }); return }
     wx.showActionSheet({
       itemList: opts.map((o) => o.label),
       success: (r) => {
         if (r.tapIndex < 0) return
         const o = opts[r.tapIndex]
-        if (o.note) this.goNote({ id, userId: userid, customerName: customer, serviceName: service, tech })
+        if (o.note) this.goNote(ctx)
+        else if (o.settle) this.goSettle(ctx)
+        else if (o.sheets) this.showSheets(sheets)
         else this.applyStatus(id, o.s)
       }
+    })
+  },
+  // 这单已经推过几张结算单?待签几张?按钮文案照它渲染
+  async settlementsOf(bookingId) {
+    if (!bookingId) return []
+    const r = await api.adminGet(`/admin/settlements?bookingId=${encodeURIComponent(bookingId)}`).catch(() => null)
+    return (r && r.settlements) || []
+  },
+  goSettle(b) {
+    if (!b.userId) { wx.showToast({ title: '这单没绑顾客,先补档案再结算', icon: 'none' }); return }
+    wx.navigateTo({
+      url: `/pages/merchant/settlement/index?bookingId=${encodeURIComponent(b.id)}&userId=${encodeURIComponent(b.userId)}&name=${encodeURIComponent(b.customerName || '')}&serviceId=${encodeURIComponent(b.serviceId || '')}`
+    })
+  },
+  showSheets(sheets) {
+    const zh = { pending_sign: '待签', signed: '已签', amended: '已更正' }
+    wx.showModal({
+      title: `结算单 ${sheets.length} 张`, showCancel: false, confirmText: '知道了',
+      content: sheets.map((s) => `${s.code} · ${zh[s.status] || s.status}${s.servedPersonName ? ` · ${s.servedPersonName}` : ''}`).join('\n')
     })
   },
   applyStatus(id, s) {
@@ -121,7 +156,6 @@ Page({
       try { await api.adminPatch(`/admin/bookings/${encodeURIComponent(id)}/status`, { status: s }); wx.showToast({ title: '已更新', icon: 'none' }); this.loadList() }
       catch (err) { wx.showToast({ title: (err && err.message) || '操作失败', icon: 'none' }) }
     }
-    if (s === 'COMPLETED') { wx.showModal({ title: '标记完成', content: '确认该单已完成?完成后自动确认收入入账。', success: (r) => { if (r.confirm) doIt() } }); return }
     if (s === 'CANCELLED') { wx.showModal({ title: '取消预约', content: '确认取消?将释放该时段;若已入账会自动冲销。', success: (r) => { if (r.confirm) doIt() } }); return }
     doIt()
   },
@@ -147,7 +181,8 @@ Page({
             id: b.id, userId: b.userId || '', cls: `${group} ${state}`, state,
             stateGlyph: state === 'active' ? '●' : (state === 'done' ? '✓' : ''),
             top: Math.round((s - openMin) / 60 * PX_PER_HOUR), height: Math.max(34, Math.round((e - s) / 60 * PX_PER_HOUR)),
-            startTime: b.startTime, endTime: b.endTime, customerName: b.customerName, serviceName: b.serviceName,
+            startTime: b.startTime, endTime: b.endTime, customerName: b.customerName,
+            serviceId: b.serviceId || '', serviceName: b.serviceName,
             isNewCustomer: b.isNewCustomer, isDesignated: b.isDesignated, ownerDirect: b.ownerDirect, depositUnpaid: b.depositUnpaid
           }
         })
@@ -182,24 +217,32 @@ Page({
     if (this.data.role !== 'owner' && b.techId !== this.data.myTechId) {
       wx.showModal({ title: b.customerName, content: `${b.startTime}–${b.endTime} · ${b.serviceName} · ${b.tech}`, showCancel: false, confirmText: '知道了' }); return
     }
-    const items = []; const actions = []
-    if (b.state !== 'active') { items.push('✔ 标记到店(开始服务)'); actions.push('arrive') }
-    if (b.state !== 'done') { items.push('✓ 标记完成'); actions.push('complete') }
-    if (b.state === 'active') { items.push('↩ 改回未到店'); actions.push('unarrive') }
-    if (b.depositUnpaid) { items.push('💰 标记已收定金'); actions.push('paid') }
-    items.push('📝 写服务小记'); actions.push('note')
-    items.push('✎ 归属备注(实际谁做)'); actions.push('attr')
-    wx.showActionSheet({
-      itemList: items,
-      success: (res) => {
-        const act = actions[res.tapIndex]
-        if (act === 'arrive') this.setArrival(b.id, true)
-        else if (act === 'unarrive') this.setArrival(b.id, false)
-        else if (act === 'complete') this.setCompleted(b)
-        else if (act === 'note') this.goNote(b)
-        else if (act === 'attr') this.attrNote(b)
-        else if (act === 'paid') wx.showToast({ title: '已标记已收(演示)', icon: 'none' })
-      }
+    // 屏 0:纯文字按钮,不带 emoji;完成由顾客签署驱动,面板里不再有「标记完成」
+    this.settlementsOf(b.id).then((sheets) => {
+      const pending = sheets.filter((x) => x.status === 'pending_sign')
+      const items = []; const actions = []
+      if (b.state !== 'active') { items.push('确认到店(开始服务)'); actions.push('arrive') }
+      if (b.state === 'active') { items.push('改回未到店'); actions.push('unarrive') }
+      if (b.state !== 'done') {
+        if (pending.length) { items.push(`查看结算单(待签 ${pending.length} 张)`); actions.push('sheets') }
+        else { items.push('去结算'); actions.push('settle') }
+      } else if (sheets.length) { items.push('查看电子票据'); actions.push('sheets') }
+      if (b.depositUnpaid) { items.push('标记已收定金'); actions.push('paid') }
+      items.push('写服务小记'); actions.push('note')
+      items.push('归属备注(实际谁做)'); actions.push('attr')
+      wx.showActionSheet({
+        itemList: items,
+        success: (res) => {
+          const act = actions[res.tapIndex]
+          if (act === 'arrive') this.setArrival(b.id, true)
+          else if (act === 'unarrive') this.setArrival(b.id, false)
+          else if (act === 'settle') this.goSettle({ id: b.id, userId: b.userId, customerName: b.customerName, serviceId: b.serviceId })
+          else if (act === 'sheets') this.showSheets(sheets)
+          else if (act === 'note') this.goNote(b)
+          else if (act === 'attr') this.attrNote(b)
+          else if (act === 'paid') wx.showToast({ title: '已标记已收(演示)', icon: 'none' })
+        }
+      })
     })
   },
   // 归属备注:这单实际谁做/怎么分,月底工资试算集中显示,配合±调整用
@@ -219,17 +262,6 @@ Page({
   async setArrival(id, arrived) {
     try { await api.adminPatch(`/admin/bookings/${encodeURIComponent(id)}/arrival`, { arrived }); wx.showToast({ title: arrived ? '已到店' : '已改回未到', icon: 'none' }); this.loadDayView(this.data.selDate) }
     catch (err) { wx.showToast({ title: (err && err.message) || '操作失败', icon: 'none' }) }
-  },
-  async setCompleted(b) {
-    try {
-      await api.adminPatch(`/admin/bookings/${encodeURIComponent(b.id)}/status`, { status: 'COMPLETED' })
-      this.loadDayView(this.data.selDate)
-      // 完成 → 立即引导写小记(可跳过,跳过后进今日待办)
-      wx.showModal({
-        title: `${b.customerName} · 已完成`, content: '趁记忆最新,写句服务小记?', confirmText: '写小记', cancelText: '跳过',
-        success: (r) => { if (r.confirm) { this.goNote(b) } else { wx.showToast({ title: '已跳过,可在今日待办补写', icon: 'none' }) } }
-      })
-    } catch (err) { wx.showToast({ title: (err && err.message) || '操作失败', icon: 'none' }) }
   },
   goNote(b) {
     if (!b.userId) { wx.showToast({ title: '该单缺顾客,无法写小记', icon: 'none' }); return }

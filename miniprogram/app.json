@@ -19,6 +19,8 @@
     "pages/merchant/customers/index",
     "pages/merchant/customer/index",
     "pages/merchant/service-note/index",
+    "pages/merchant/settlement/index",
+    "pages/merchant/quote-calc/index",
     "pages/merchant/attendance/index",
     "pages/merchant/salary-plan/index",
     "pages/merchant/points-mall/index",

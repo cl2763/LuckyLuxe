@@ -7331,6 +7331,26 @@ function depositPolicyText(config, tenantId = currentTenantId(), lang = 'zh') {
   return (lang === 'en' ? en : zh).join('')
 }
 
+/* 定金三要点小卡(迟到宽限 / 改期时限 / 定金保留)。
+   后台屏 4 的预览、顾客预约页屏 3 用的是同一份 —— 措辞在这里定一次,
+   两端各自拼一版迟早会对不上。参数没配就给「—」,不编默认值。 */
+function depositKeyFacts(config, lang = 'zh') {
+  const cp = config.cancelPolicy
+  const zh = lang !== 'en'
+  const grace = cp.lateArrivalGraceMin
+  const notice = cp.rescheduleNoticeHours
+  const retain = cp.depositRetainTimes || 0
+  const noticeText = notice === null ? '—'
+    : (notice >= 24 && notice % 24 === 0
+      ? (zh ? `提前 ${notice / 24} 天` : `${notice / 24} day(s) ahead`)
+      : (zh ? `提前 ${notice} 小时` : `${notice}h ahead`))
+  return [
+    { key: 'grace', value: grace === null ? '—' : (zh ? `${grace} 分钟` : `${grace} min`), label: zh ? '迟到宽限' : 'Late grace' },
+    { key: 'reschedule', value: noticeText, label: zh ? '改期时限' : 'Reschedule' },
+    { key: 'retain', value: zh ? `可保留 ${retain} 次` : `${retain}x`, label: zh ? '合规改期定金' : 'Deposit retained' }
+  ]
+}
+
 // 某笔预约应收的定金(不含会员减免)
 function depositAmountForService(service, config, tenantId = currentTenantId()) {
   if (!config.enabled) return 0
@@ -7959,10 +7979,22 @@ async function route(req, res) {
   if (req.method === 'GET' && path === '/store/deposit-policy') {
     const tid = resolveTenant(req, query)
     const config = getDepositConfig(tid)
+    // 2026-08-08 屏 3 增量:金额(带 serviceId 就按该项目算)、三要点小卡、币种格式。
+    // 顾客端只拿现成的显示串,不自己算金额、不自己拼「提前 1 天」这种措辞。
+    const service = query.serviceId
+      ? db.prepare('SELECT * FROM services WHERE id = ? AND tenant_id = ?').get(query.serviceId, tid)
+      : null
+    const amountCents = depositAmountForService(service, config, tid)
     return json(res, 200, {
       tenantId: tid,
       currency: tenantCurrencyCode(tid),
+      currencyDisplay: currencyDisplayOf(tenantCurrencyCode(tid)),
       onlinePaymentReady: ONLINE_PAYMENT_READY,
+      enabled: config.enabled,
+      deductible: config.deductible,
+      amountCents,
+      amountText: formatMoneyCents(amountCents, tid, 'auto'),
+      keyFacts: { zh: depositKeyFacts(config, 'zh'), en: depositKeyFacts(config, 'en') },
       config,
       text: { zh: depositPolicyText(config, tid, 'zh'), en: depositPolicyText(config, tid, 'en') }
     })
@@ -8159,10 +8191,14 @@ async function route(req, res) {
     if (account.role === 'owner') { try { unlinkSync(OWNER_CREDENTIALS_FILE) } catch { /* 已删 */ } }
     return json(res, 200, { changed: true })
   }
-  // 员工账号管理(老板):列表/生成/重置密码/停用启用
+  /* 员工账号管理(老板):列表/生成/重置密码/停用启用。
+     🔴 2026-08-08 修:这三条路由排在租户上下文闸门之前,自己 requireAdmin 却没进上下文,
+     currentTenantId() 一律回落旗舰店 —— 非旗舰商家看到的是旗舰店的员工账号列表,
+     建账号则因为「技师不在旗舰店」直接 404。按登录账号自己的租户进上下文即可。 */
   if (req.method === 'GET' && path === '/admin/staff-accounts') {
     const admin = requireAdmin(req)
     if (admin.role !== 'owner') throw apiError(403, 'FORBIDDEN', 'Owner permission is required.')
+    tenantContext.enterWith({ tenantId: admin.tenantId || DEFAULT_TENANT_ID })
     const rows = db.prepare("SELECT id, username, role, technician_id, status, must_change_password, last_login_at FROM admin_accounts WHERE role = 'staff' AND tenant_id = ? ORDER BY created_at ASC").all(currentTenantId())
     return json(res, 200, {
       accounts: rows.map((row) => ({
@@ -8174,6 +8210,7 @@ async function route(req, res) {
   if (req.method === 'POST' && path === '/admin/staff-accounts') {
     const admin = requireAdmin(req)
     if (admin.role !== 'owner') throw apiError(403, 'FORBIDDEN', 'Owner permission is required.')
+    tenantContext.enterWith({ tenantId: admin.tenantId || DEFAULT_TENANT_ID })
     const body = await readBody(req)
     const tech = db.prepare('SELECT * FROM technicians WHERE id = ? AND tenant_id = ?').get(String(body.technicianId || ''), currentTenantId())
     if (!tech) throw apiError(404, 'NOT_FOUND', 'Technician not found.')
@@ -8194,6 +8231,7 @@ async function route(req, res) {
   if (req.method === 'POST' && staffAcctMatch) {
     const admin = requireAdmin(req)
     if (admin.role !== 'owner') throw apiError(403, 'FORBIDDEN', 'Owner permission is required.')
+    tenantContext.enterWith({ tenantId: admin.tenantId || DEFAULT_TENANT_ID })
     const account = db.prepare("SELECT * FROM admin_accounts WHERE id = ? AND role = 'staff' AND tenant_id = ?").get(staffAcctMatch[1], currentTenantId())
     if (!account) throw apiError(404, 'NOT_FOUND', 'Account not found.')
     if (staffAcctMatch[2] === 'reset-password') {
@@ -8755,7 +8793,9 @@ async function route(req, res) {
     return json(res, 201, { service: serializeService(getService(id)) })
   }
   if (req.method === 'GET' && path === '/admin/technicians') {
-    const technicians = adminSession.role === 'staff'
+    // roster=1:本店在职名单(结算开单要勾主/副技师,员工也得看得见同事)。
+    // 台面日视图早就把整店技师列给员工看了,这里不多暴露任何东西;默认行为不变。
+    const technicians = adminSession.role === 'staff' && query.roster !== '1'
       ? db.prepare('SELECT * FROM technicians WHERE tenant_id = ? AND id = ? ORDER BY name ASC').all(currentTenantId(), adminSession.technicianId)
       : db.prepare('SELECT * FROM technicians WHERE tenant_id = ? ORDER BY name ASC').all(currentTenantId())
     return json(res, 200, { technicians })
@@ -8818,6 +8858,7 @@ async function route(req, res) {
       return json(res, 200, {
         config,
         onlinePaymentReady: ONLINE_PAYMENT_READY,
+        keyFacts: { zh: depositKeyFacts(config, 'zh'), en: depositKeyFacts(config, 'en') },
         text: { zh: depositPolicyText(config, tid, 'zh'), en: depositPolicyText(config, tid, 'en') }
       })
     }
@@ -8826,6 +8867,7 @@ async function route(req, res) {
       const config = setDepositConfig(tid, body.config && typeof body.config === 'object' ? body.config : body)
       return json(res, 200, {
         config,
+        keyFacts: { zh: depositKeyFacts(config, 'zh'), en: depositKeyFacts(config, 'en') },
         text: { zh: depositPolicyText(config, tid, 'zh'), en: depositPolicyText(config, tid, 'en') }
       })
     }
@@ -9959,6 +10001,7 @@ async function route(req, res) {
         userId: row.user_id,
         status: row.status,
         customerName: custName,
+        serviceId: row.service_id || '', // 台面点单 → 去结算,结算页要用它预勾预约项目
         serviceName: svc ? svc.name_zh : '服务',
         serviceType: svc ? svc.type : '',
         group: groupOf(svc),

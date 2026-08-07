@@ -79,7 +79,7 @@
     <view wx:if="{{!groups.length}}" class="empty">暂无订单</view>
     <view class="ogroup" wx:for="{{groups}}" wx:key="date">
       <view class="oghead">{{item.title}}</view>
-      <view class="orow" wx:for="{{item.items}}" wx:for-item="it" wx:key="id" data-id="{{it.id}}" data-status="{{it.status}}" data-userid="{{it.userId}}" data-customer="{{it.customer}}" data-service="{{it.serviceName}}" data-tech="{{it.tech}}" bindtap="orderActions">
+      <view class="orow" wx:for="{{item.items}}" wx:for-item="it" wx:key="id" data-id="{{it.id}}" data-status="{{it.status}}" data-userid="{{it.userId}}" data-customer="{{it.customer}}" data-service="{{it.serviceName}}" data-serviceid="{{it.serviceId}}" data-tech="{{it.tech}}" bindtap="orderActions">
         <view class="otime">{{it.time}}</view>
         <view class="omain"><view class="oname">{{it.customer}}<text class="ostatus {{it.statusCls}}">{{it.statusLabel}}</text></view><view class="oline">{{it.line}}{{it.tech ? ' · ' + it.tech : ''}}</view></view>
         <text class="ochev">›</text>

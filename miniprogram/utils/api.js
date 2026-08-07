@@ -524,6 +524,8 @@ function aiCustomerService(message, history) {
 }
 
 // 我的资产(user × 当前店)
+// 顾客端预约确认页(屏 3)读本店定金规则。公开接口,不需要登录。
+function getDepositPolicy(qs) { return request(`/store/deposit-policy${qs ? `?${qs}` : ''}`) }
 function getMyCoupons() { return request('/my/coupons') }
 function getMyStoredValue() { return request('/my/stored-value') }
 function getMyPointsHistory() { return request('/my/points-history') }
@@ -676,6 +678,7 @@ module.exports = {
   submitMerchantLead,
   getShops,
   aiCustomerService,
+  getDepositPolicy,
   getMyCoupons,
   getMyStoredValue,
   getMyPointsHistory,

@@ -63,7 +63,28 @@
     </view>
   </view>
 
-  <view class="section">
+  <!-- 屏 3｜定金规则展示。金额、三要点、原文全部来自 GET /deposit-policy,本页不算不编 -->
+  <block wx:if="{{policy}}">
+    <view class="section" wx:if="{{policy.enabled}}">
+      <view class="dcard">
+        <view class="l">{{lang === 'en' ? 'Booking deposit' : '预约定金（订位费）'}}</view>
+        <view class="amt">{{policy.amountText}}</view>
+        <view class="l">{{policy.deductible ? (lang === 'en' ? 'Deducted from your bill' : '可抵扣本次消费') : (lang === 'en' ? 'Not deducted from the bill' : '不抵扣尾款')}}</view>
+      </view>
+      <view class="keyfacts">
+        <view class="kf" wx:for="{{policy.keyFacts}}" wx:for-item="f" wx:key="key">
+          <text class="v">{{f.value}}</text><text class="k">{{f.label}}</text>
+        </view>
+      </view>
+    </view>
+    <view class="section">
+      <view class="deposit-policy card">
+        <view class="deposit-policy-title">{{t.depositPolicyTitle}}<text class="from">{{lang === 'en' ? 'from this store' : '来自本店'}}</text></view>
+        <view class="deposit-policy-text">{{policy.text}}</view>
+      </view>
+    </view>
+  </block>
+  <view class="section" wx:else>
     <view class="deposit-policy card">
       <view class="deposit-policy-title">{{t.depositPolicyTitle}}</view>
       <view class="deposit-policy-text">{{t.depositPolicyText}}</view>
@@ -82,6 +103,6 @@
       <view class="muted">{{t.payable}}</view>
       <view class="price">CAD ${{payableAmount}}</view>
     </view>
-    <button class="btn btn-primary pay-btn" bindtap="submitOrder">{{t.payAction}}</button>
+    <button class="btn btn-primary pay-btn" bindtap="submitOrder">{{payActionText || t.payAction}}</button>
   </view>
 </view>

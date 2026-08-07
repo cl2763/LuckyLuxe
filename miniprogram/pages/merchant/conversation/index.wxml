@@ -31,6 +31,7 @@
     <view class="acts">
       <view class="abtn {{isHuman?'ghost':'p'}}" bindtap="takeOver">接管</view>
       <view class="abtn {{isHuman?'p':'ghost'}}" bindtap="release">归还 AI</view>
+      <view class="abtn ghost" bindtap="goQuoteCalc">报价试算</view>
     </view>
     <view class="replybar">
       <input class="rinp" placeholder="输入人工回复…" placeholder-class="ph" value="{{reply}}" bindinput="onReply" confirm-type="send" bindconfirm="send" />

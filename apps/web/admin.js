@@ -7736,11 +7736,11 @@ if (els.storeSettingsPage) {
 
 /* ===== 门店设置 → 定金与取消规则(2026-08-08 P1.2)=====
    参数进 tenant_settings.deposit_config;默认值与旗舰店现状等价,所以不动它就等于什么都没变。 */
-let depositSettings = { config: null, text: null, onlinePaymentReady: false }
+let depositSettings = { config: null, text: null, keyFacts: null, onlinePaymentReady: false }
 
 async function loadDepositSettings() {
   const res = await request('/admin/deposit-config')
-  depositSettings = { config: res.config, text: res.text, onlinePaymentReady: res.onlinePaymentReady }
+  depositSettings = { config: res.config, text: res.text, keyFacts: res.keyFacts, onlinePaymentReady: res.onlinePaymentReady }
   renderDepositSettings()
 }
 
@@ -7762,7 +7762,8 @@ function renderDepositSettings() {
   const seg = (id, options, current) => `
     <div class="dep-seg" id="${id}">${options.map(([v, l]) => `<button type="button" data-seg="${v}" class="${v === current ? 'on' : ''}">${l}</button>`).join('')}</div>`
 
-  const previewText = depositSettings.text?.zh || ''
+  const previewText = (zh ? depositSettings.text?.zh : depositSettings.text?.en) || depositSettings.text?.zh || ''
+  const keyFacts = (zh ? depositSettings.keyFacts?.zh : depositSettings.keyFacts?.en) || depositSettings.keyFacts?.zh || []
   els.depositSettingsBody.innerHTML = `
     <div class="dep-grid">
       <div>
@@ -7825,9 +7826,7 @@ function renderDepositSettings() {
               <div class="n">${c.deductible ? (zh ? '可抵扣本次消费' : 'Deducted from the bill') : (zh ? '不抵扣尾款' : 'Not deducted')}${c.mode === 'pct' ? (zh ? ` · 按项目价 ${c.pct}%` : ` · ${c.pct}% of price`) : ''}</div>
             </div>
             <div class="dep-keys">
-              <div class="dep-key"><b>${cp.lateArrivalGraceMin === null ? '—' : `${cp.lateArrivalGraceMin} ${zh ? '分钟' : 'min'}`}</b><span>${zh ? '迟到宽限' : 'Late grace'}</span></div>
-              <div class="dep-key"><b>${cp.rescheduleNoticeHours === null ? '—' : `${cp.rescheduleNoticeHours} ${zh ? '小时' : 'h'}`}</b><span>${zh ? '改期时限' : 'Reschedule'}</span></div>
-              <div class="dep-key"><b>${cp.depositRetainTimes || 0} ${zh ? '次' : 'x'}</b><span>${zh ? '定金保留' : 'Retain'}</span></div>
+              ${keyFacts.map((f) => `<div class="dep-key"><b>${escapeHtml(f.value)}</b><span>${escapeHtml(f.label)}</span></div>`).join('')}
             </div>` : `<div class="dep-card"><div class="l">${zh ? '本店无需定金' : 'No deposit'}</div><div class="n">${zh ? '确认时段即锁位,费用到店支付' : 'Slot locked on confirmation'}</div></div>`}
           <div class="dep-rules">${escapeHtml(previewText)}</div>
         </div></div>

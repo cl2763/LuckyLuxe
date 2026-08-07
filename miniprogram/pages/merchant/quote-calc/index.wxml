@@ -1,0 +1,52 @@
+<view class="pg">
+  <view class="hd">
+    <text class="t">报价试算</text>
+    <text class="s">{{fromLabel ? '来自会话：' + fromLabel : '与结算同一计价引擎 · 试算不留痕'}}</text>
+  </view>
+
+  <view wx:if="{{!ready}}" class="loading">正在读取本店价目表…</view>
+
+  <block wx:else>
+    <view class="card">
+      <view class="ch">价格档 <text class="hint">试算用，不留痕</text></view>
+      <view class="chiprow">
+        <view class="chip {{tierKey === it.key ? 'on' : ''}}" wx:for="{{tiers}}" wx:for-item="it" wx:key="key" data-k="{{it.key}}" bindtap="pickTier">{{it.label}}</view>
+      </view>
+    </view>
+
+    <view class="card">
+      <view class="ch">快速勾选</view>
+      <scroll-view class="cattabs" scroll-x>
+        <view class="chip {{catId === c.id ? 'on' : ''}}" wx:for="{{cats}}" wx:for-item="c" wx:key="id" data-id="{{c.id}}" bindtap="pickCat">{{c.name}}</view>
+      </scroll-view>
+      <view class="item" wx:for="{{items}}" wx:for-item="it" wx:key="id" data-id="{{it.id}}" bindtap="toggleItem">
+        <view class="ck {{it.on ? 'on' : ''}}">{{it.on ? '✓' : ''}}</view>
+        <view class="iname">{{it.name}}</view>
+        <text class="now">{{it.priceText}}</text>
+      </view>
+      <block wx:for="{{addonGroups}}" wx:for-item="g" wx:key="title">
+        <view class="gh">{{g.title}}</view>
+        <view class="item" wx:for="{{g.items}}" wx:for-item="it" wx:key="id" data-id="{{it.id}}" bindtap="toggleItem">
+          <view class="ck {{it.on ? 'on' : ''}}">{{it.on ? '✓' : ''}}</view>
+          <view class="iname">{{it.name}}</view>
+          <text class="now">{{it.priceText}}</text>
+        </view>
+      </block>
+      <view class="gh">整单规则</view>
+      <view class="item">
+        <view class="iname">足部美甲（整单加收）</view>
+        <view class="sw {{applyFootSurcharge ? 'on' : ''}}" catchtap="toggleFoot"><view class="dot"></view></view>
+      </view>
+    </view>
+
+    <view class="total" wx:if="{{view}}">
+      <view class="tl big"><text>试算合计（{{view.tierLabel}}档）</text><text>{{view.subtotal}}</text></view>
+      <view class="tl note"><text>{{view.breakdown}} · 加项以到店确认为准</text><text class="est">预估</text></view>
+    </view>
+    <view wx:else class="empty">勾几个项目就出价</view>
+
+    <view class="cta" bindtap="fillQuote">填入报价单（回会话核对后再发）</view>
+    <view class="cta ghost" bindtap="copyText">复制报价话术发给顾客</view>
+    <view class="foot" wx:if="{{view}}">话术示例：您选的款式预估 {{view.subtotal}}（含{{view.breakdown}}），最终以到店确认为准哦～</view>
+  </block>
+</view>

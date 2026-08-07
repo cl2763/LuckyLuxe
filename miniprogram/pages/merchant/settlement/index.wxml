@@ -1,0 +1,140 @@
+<view class="pg">
+  <view class="hd">
+    <text class="t">结算开单</text>
+    <text class="s">顾客：{{customerName}}{{isProxy ? '（代付·卡主 ' + customerName + '）' : ''}}</text>
+  </view>
+
+  <view wx:if="{{!ready}}" class="loading">正在读取本店价目表…</view>
+
+  <block wx:else>
+    <view class="card">
+      <view class="ch">① 价格体系 <text class="hint">{{tierChanged ? '已改档，将留痕' : '默认按会员判定'}}</text></view>
+      <view class="chiprow">
+        <view class="chip {{tierKey === it.key ? 'on' : ''}}" wx:for="{{tiers}}" wx:for-item="it" wx:key="key" data-k="{{it.key}}" bindtap="pickTier">{{it.label}}</view>
+      </view>
+    </view>
+
+    <view class="card">
+      <view class="ch">② 服务项目 <text class="hint">默认=预约项目，可改可多选</text></view>
+      <scroll-view class="cattabs" scroll-x>
+        <view class="chip {{catId === c.id ? 'on' : ''}}" wx:for="{{cats}}" wx:for-item="c" wx:key="id" data-id="{{c.id}}" bindtap="pickCat">{{c.name}}</view>
+      </scroll-view>
+      <view class="item" wx:for="{{mainItems}}" wx:for-item="it" wx:key="id" data-id="{{it.id}}" bindtap="toggleItem">
+        <view class="ck {{it.on ? 'on' : ''}}">{{it.on ? '✓' : ''}}</view>
+        <view class="iname">{{it.name}}</view>
+        <view class="pr">
+          <text wx:if="{{it.listText}}" class="mut">{{it.listText}}</text>
+          <text class="now {{it.isFree ? 'free' : ''}}">{{it.priceText}}</text>
+        </view>
+      </view>
+      <view wx:if="{{!mainItems.length}}" class="empty">该大类下暂无在售项目</view>
+    </view>
+
+    <view class="card">
+      <view class="ch">③ 加项目录 <text class="hint">按本单价格档计价</text></view>
+      <block wx:for="{{addonGroups}}" wx:for-item="g" wx:key="title">
+        <view class="gh">{{g.title}}</view>
+        <view class="item" wx:for="{{g.items}}" wx:for-item="it" wx:key="id">
+          <block wx:if="{{it.perFinger}}">
+            <view class="iname wide">{{it.name}}</view>
+            <view class="stepper">
+              <view class="sb" data-id="{{it.id}}" data-d="-1" catchtap="stepQty">−</view>
+              <text class="qn">{{it.qty}} 指</text>
+              <view class="sb" data-id="{{it.id}}" data-d="1" catchtap="stepQty">＋</view>
+            </view>
+          </block>
+          <block wx:else>
+            <view class="ck {{it.on ? 'on' : ''}}" data-id="{{it.id}}" catchtap="toggleItem">{{it.on ? '✓' : ''}}</view>
+            <view class="iname" data-id="{{it.id}}" catchtap="toggleItem">{{it.name}}</view>
+            <view class="pr">
+              <text wx:if="{{it.listText}}" class="mut">{{it.listText}}</text>
+              <text class="now {{it.isFree ? 'free' : ''}}">{{it.priceText}}</text>
+            </view>
+          </block>
+        </view>
+      </block>
+      <view class="gh">整单规则</view>
+      <view class="item">
+        <view class="iname wide">足部美甲<text class="sub">手部基础上整单加收</text></view>
+        <view class="sw {{applyFootSurcharge ? 'on' : ''}}" bindtap="toggleFoot"><view class="dot"></view></view>
+      </view>
+      <view class="item">
+        <view class="iname wide">甲片重复利用<text class="sub">固定价 · 仅限本店甲片</text></view>
+        <view class="sw {{applyTipReuse ? 'on' : ''}}" bindtap="toggleTipReuse"><view class="dot"></view></view>
+      </view>
+    </view>
+
+    <view class="card">
+      <view class="ch">④ 自选填写行 <text class="hint">价目表外项目</text></view>
+      <view class="inputline">
+        <input class="in" placeholder="项目名称（例：钻球）" value="{{customName}}" bindinput="onCustomName" />
+        <input class="in amt" placeholder="金额" type="digit" value="{{customAmount}}" bindinput="onCustomAmount" />
+        <view class="addbtn" bindtap="addCustom">＋添加</view>
+      </view>
+      <view class="cst" wx:for="{{customItems}}" wx:for-item="c" wx:key="name" wx:for-index="index" data-i="{{index}}" bindtap="removeCustom">
+        <text>{{c.name}}</text><text class="del">移除</text>
+      </view>
+    </view>
+
+    <view class="card">
+      <view class="ch">⑤ 定金</view>
+      <view wx:if="{{depositDeductible}}" class="radios">
+        <view class="radio {{depositApplied ? 'on' : ''}}" data-v="1" bindtap="setDeposit">
+          <view class="dt"></view>已付定金抵扣
+          <text wx:if="{{view.hasDeposit}}" class="ok">−{{view.depositDeduct}}</text>
+        </view>
+        <view class="radio {{depositApplied ? '' : 'on'}}" data-v="0" bindtap="setDeposit"><view class="dt"></view>未付定金</view>
+      </view>
+      <view wx:else class="empty">本店定金不抵扣尾款（门店设置 → 定金与取消规则）</view>
+    </view>
+
+    <view class="card">
+      <view class="ch">⑥ 本单技师 <text class="hint">先从本店名单勾人（1–2 位）</text></view>
+      <view class="roster">
+        <view class="chip {{selectedTechs[0] === t.id || selectedTechs[1] === t.id ? 'on' : ''}}" wx:for="{{roster}}" wx:for-item="t" wx:key="id" data-id="{{t.id}}" bindtap="toggleTech">
+          {{t.name}}<text wx:if="{{t.title}}" class="r">{{t.title}}</text>
+        </view>
+      </view>
+      <view class="tip" wx:if="{{selectedTechs.length}}">
+        已选 {{selectedTechs.length}} 位（第一位为主技师<text wx:if="{{selectedTechs.length > 1}}" class="link" bindtap="swapMain">· 对调主副</text>）· 再各自勾自己做的项目编号：
+      </view>
+      <view class="techrow" wx:for="{{techRows}}" wx:for-item="tr" wx:key="id">
+        <view class="tn">{{tr.name}}<text class="role {{tr.isMain ? '' : 'sub'}}">{{tr.role}}</text></view>
+        <view class="minichips">
+          <view class="mchip {{c.on ? 'on' : ''}}" wx:for="{{tr.chips}}" wx:for-item="c" wx:key="no" data-tech="{{tr.id}}" data-no="{{c.no}}" bindtap="toggleTechItem">{{c.no}}</view>
+        </view>
+      </view>
+      <view class="tip">分成金额由店长在日结时核定，此处不填</view>
+    </view>
+
+    <view class="card" wx:if="{{view}}">
+      <view class="ch">⑦ 支付构成</view>
+      <view class="payline" wx:for="{{view.legs}}" wx:for-item="l" wx:key="label">
+        <text class="l">{{l.label}}</text><text class="v">{{l.amount}}</text>
+      </view>
+      <view class="alert" wx:if="{{view.hasShortfall}}">
+        <view class="ah">余额不足以全额抵扣（差 {{view.shortfall}}）请选择处理方式：</view>
+        <view class="opts">
+          <view class="opt {{payIntent === p.key ? 'on' : ''}}" wx:for="{{payPlans}}" wx:for-item="p" wx:key="key" data-k="{{p.key}}" bindtap="pickPayPlan">{{payIntent === p.key ? '✓ ' : ''}}{{p.label}}</view>
+        </view>
+      </view>
+      <view class="warn" wx:for="{{view.warnings}}" wx:for-item="w" wx:key="*this">{{w}}</view>
+    </view>
+
+    <view class="card">
+      <view class="ch">被服务者 <text class="hint">朋友不建档：填称呼即可，单据仍推卡主签</text></view>
+      <input class="in full" placeholder="留空=本人；朋友填称呼" value="{{servedPersonName}}" bindinput="onServedName" />
+    </view>
+
+    <view class="total" wx:if="{{view}}">
+      <view class="tl"><text>原价合计</text><text class="strike">{{view.listTotal}}</text></view>
+      <view class="tl"><text>项目小计</text><text>{{view.subtotal}}</text></view>
+      <view class="tl" wx:if="{{view.hasDeposit}}"><text>定金抵扣</text><text>−{{view.depositDeduct}}</text></view>
+      <view class="tl save"><text>较原价共优惠</text><text>{{view.discountTotal}}</text></view>
+      <view class="tl big"><text>应收合计</text><text>{{view.total}}</text></view>
+    </view>
+
+    <view class="cta {{submitting ? 'ing' : ''}}" bindtap="submit">{{submitting ? '提交中…' : '推送给卡主签字'}}</view>
+    <view class="foot">金额全部由后端计价引擎算出，本页不做任何金额运算</view>
+  </block>
+</view>

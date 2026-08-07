@@ -18,7 +18,9 @@ Page({
     balanceDeduction: 0,
     memberBalance: 0,
     payableAmount: 0,
-    remark: ''
+    remark: '',
+    policy: null,        // GET /deposit-policy 原样下发,前端不加工
+    payActionText: ''    // 线上支付未接通时按钮说「到店支付定金」,接通后自动变「支付定金」
   },
 
   onLoad(options) {
@@ -36,6 +38,28 @@ Page({
       })
     this.setData({ items, lang, t: i18n.pageCopy('checkout', lang), store: i18n.localizeStore(mock.store, lang) })
     this.calculate()
+    this.loadDepositPolicy(items[0] && items[0].serviceId)
+  },
+
+  /* 屏 3 定金规则:金额/三要点/原文都由后端按本店 deposit_config 生成。
+     不在这里拼文案 —— 后台屏 4 的预览读的是同一份,拼两版早晚对不上。
+     取不到就静默退回原来的静态文案,不拦顾客下单。 */
+  async loadDepositPolicy(serviceId) {
+    try {
+      const zh = this.data.lang !== 'en'
+      const raw = await api.getDepositPolicy(serviceId ? `serviceId=${encodeURIComponent(serviceId)}` : '')
+      // 端点是 zh/en 一起下发的,这里按当前语言各取一份
+      const policy = Object.assign({}, raw, {
+        text: (zh ? raw.text.zh : raw.text.en) || raw.text.zh,
+        keyFacts: (zh ? raw.keyFacts.zh : raw.keyFacts.en) || raw.keyFacts.zh
+      })
+      const payActionText = policy.enabled
+        ? (policy.onlinePaymentReady
+          ? (zh ? `支付定金 ${policy.amountText}` : `Pay deposit ${policy.amountText}`)
+          : (zh ? `确认预约 · 到店支付定金 ${policy.amountText}` : `Confirm · pay ${policy.amountText} in store`))
+        : (zh ? '确认预约' : 'Confirm booking')
+      this.setData({ policy, payActionText })
+    } catch (e) { /* 静默:退回页面自带的静态文案 */ }
   },
 
   calculate() {

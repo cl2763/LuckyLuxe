@@ -154,6 +154,18 @@ async function main() {
     console.log('skip - 未设置 TEST_DB_PATH,跳过七表 tenant_id 的直连断言(run-all-tests.sh 里会设)')
   }
 
+  // 8. 员工账号管理三条路由排在租户上下文闸门之前(2026-08-08 发现):
+  //    此前 currentTenantId() 一律回落旗舰店 —— 甲店老板看到的是旗舰店的员工账号,建账号必 404。
+  const acctTechA = await request(`/platform/tenants/${shopA.tenantId}/technicians`, { method: 'POST', body: JSON.stringify({ name: `账号技师${RUN_ID}` }) })
+  const acctA = await request('/admin/staff-accounts', { method: 'POST', body: JSON.stringify({ technicianId: acctTechA.data.technician.id }) }, shopA.token)
+  check('8 甲店老板能给自己店的技师建员工账号(不再被判成「技师不在本店」)', acctA.status === 201, JSON.stringify(acctA.data))
+  const acctListA = await request('/admin/staff-accounts', {}, shopA.token)
+  const acctListB = await request('/admin/staff-accounts', {}, shopB.token)
+  check('8 甲店员工账号列表里只有自己店的', acctListA.data.accounts.length === 1, JSON.stringify(acctListA.data.accounts.map((a) => a.username)))
+  check('8 乙店看不到甲店的员工账号', acctListB.data.accounts.length === 0, JSON.stringify(acctListB.data.accounts.map((a) => a.username)))
+  const crossReset = await request(`/admin/staff-accounts/${acctListA.data.accounts[0].id}/reset-password`, { method: 'POST', body: '{}' }, shopB.token)
+  check('8 乙店改不动甲店的员工账号(404)', crossReset.status === 404, `${crossReset.status} ${JSON.stringify(crossReset.data)}`)
+
   console.log(`\n多租户卫生回归通过:${checks} 项断言全绿`)
 }
 

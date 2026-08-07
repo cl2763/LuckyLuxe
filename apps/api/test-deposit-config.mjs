@@ -159,6 +159,49 @@ async function main() {
   const custom = await request('/store/deposit-policy', {}, null, { 'x-tenant-id': shopA.tenantId })
   check('displayMode=custom 时输出商家原文', custom.data.text.zh === `本店定金规则 ${RUN_ID} 专用文案`, custom.data.text.zh)
 
+  // ---- 屏 3(小程序预约确认页)增量字段:金额 / 三要点 / 币种格式 ----
+  await setConfig(shopA, {
+    enabled: true, mode: 'fixed', fixedAmountCents: 10000, deductible: true,
+    displayMode: 'custom', customText: `本店定金规则 ${RUN_ID} 专用文案`,
+    cancelPolicy: { refundable: true, freeCancelHours: 24, lateArrivalGraceMin: 30, rescheduleNoticeHours: 24, depositRetainTimes: 1, lateForfeitPct: 50, noShowForfeitPct: 100 }
+  })
+  const pub = await request('/store/deposit-policy', {}, null, { 'x-tenant-id': shopA.tenantId })
+  check('屏3 公开端点给出金额分值与显示串', pub.data.amountCents === 10000 && typeof pub.data.amountText === 'string' && /100/.test(pub.data.amountText),
+    JSON.stringify({ c: pub.data.amountCents, t: pub.data.amountText }))
+  check('屏3 下发 enabled/deductible 布尔(顾客端不必自己翻 config)',
+    pub.data.enabled === true && pub.data.deductible === true)
+  check('屏3 下发 currencyDisplay(顾客端不认识具体币种)',
+    Boolean(pub.data.currencyDisplay && typeof pub.data.currencyDisplay.symbol === 'string'), JSON.stringify(pub.data.currencyDisplay))
+  const kf = pub.data.keyFacts.zh
+  check('屏3 三要点小卡:迟到宽限按分钟', kf[0].value === '30 分钟' && kf[0].label === '迟到宽限', JSON.stringify(kf[0]))
+  check('屏3 三要点小卡:24 小时说成「提前 1 天」', kf[1].value === '提前 1 天', JSON.stringify(kf[1]))
+  check('屏3 三要点小卡:定金保留次数', kf[2].value === '可保留 1 次', JSON.stringify(kf[2]))
+  check('屏3 keyFacts 英文版同时下发', pub.data.keyFacts.en[1].value === '1 day(s) ahead', JSON.stringify(pub.data.keyFacts.en[1]))
+  // 参数没配就给「—」,不编默认值
+  await setConfig(shopA, { cancelPolicy: { lateArrivalGraceMin: null, rescheduleNoticeHours: null, depositRetainTimes: 0 } })
+  const pub2 = await request('/store/deposit-policy', {}, null, { 'x-tenant-id': shopA.tenantId })
+  check('屏3 未配置的参数显示「—」而不是编一个默认值',
+    pub2.data.keyFacts.zh[0].value === '—' && pub2.data.keyFacts.zh[1].value === '—', JSON.stringify(pub2.data.keyFacts.zh))
+  // 后台屏 4 预览与顾客端屏 3 读同一份 keyFacts
+  const adminSide = await request('/admin/deposit-config', {}, shopA.token)
+  check('屏4 预览与屏3 顾客端 keyFacts 逐字相同',
+    JSON.stringify(adminSide.data.keyFacts.zh) === JSON.stringify(pub2.data.keyFacts.zh), JSON.stringify(adminSide.data.keyFacts.zh))
+
+  // ---- 屏1 结算开单:员工也要看得见全店技师名单(roster=1)----
+  const acct = await request('/admin/staff-accounts', { method: 'POST', body: JSON.stringify({ technicianId: shopA.techId }) }, shopA.token)
+  if (acct.status !== 201) throw new Error(`建员工账号失败 ${acct.status}: ${JSON.stringify(acct.data)}`)
+  const staffFirst = await request('/admin/auth/login', { method: 'POST', body: JSON.stringify({ email: acct.data.username, password: acct.data.initialPassword }) }, null)
+  const staffPass = `Sp-${RUN_ID}-a9`
+  await request('/admin/auth/change-password', { method: 'POST', body: JSON.stringify({ oldPassword: acct.data.initialPassword, newPassword: staffPass, confirmPassword: staffPass }) }, staffFirst.data.auth.accessToken)
+  const staffLogin = await request('/admin/auth/login', { method: 'POST', body: JSON.stringify({ email: acct.data.username, password: staffPass }) }, null)
+  const staffToken = staffLogin.data.auth.accessToken
+  await request(`/platform/tenants/${shopA.tenantId}/technicians`, { method: 'POST', body: JSON.stringify({ name: `同事${RUN_ID}` }) })
+  const own = await request('/admin/technicians', {}, staffToken)
+  check('员工默认只看到自己(旧行为不变)', own.data.technicians.length === 1, JSON.stringify(own.data.technicians.map((t) => t.name)))
+  const roster = await request('/admin/technicians?roster=1', {}, staffToken)
+  check('员工带 roster=1 能看到全店名单(结算勾主/副技师要用)', roster.data.technicians.length >= 2,
+    JSON.stringify(roster.data.technicians.map((t) => t.name)))
+
   console.log(`\n定金规则回归通过:${checks} 项断言全绿`)
 }
 

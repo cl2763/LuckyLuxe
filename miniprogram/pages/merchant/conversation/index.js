@@ -1,4 +1,5 @@
 const api = require('../../../utils/api')
+const QUOTE_DRAFT_KEY = 'lucky_quote_draft'
 
 const TIER = { Silver: '银卡', Gold: '金卡', Platinum: '铂金', Diamond: '钻石' }
 
@@ -41,7 +42,16 @@ Page({
   },
 
   onLoad(q) { this.setData({ id: decodeURIComponent((q && q.id) || '') }) },
-  onShow() { this.load() },
+  onShow() {
+    // 报价试算页填过话术就带回输入框(只填不发,发不发技师自己决定)
+    const draft = wx.getStorageSync(QUOTE_DRAFT_KEY)
+    if (draft) { wx.removeStorageSync(QUOTE_DRAFT_KEY); this.setData({ reply: draft }) }
+    this.load()
+  },
+
+  goQuoteCalc() {
+    wx.navigateTo({ url: `/pages/merchant/quote-calc/index?conv=${encodeURIComponent(this.data.id)}&from=${encodeURIComponent(this.data.name || '')}` })
+  },
 
   async load() {
     let r
