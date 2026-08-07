@@ -7749,6 +7749,312 @@ function amendSettlement(settlementId, body = {}, adminSession = {}) {
   }
 }
 
+/* ===== P2 日结引擎(2026-08-08)=====
+   一天的业绩 = 当天顾客签了字的服务单。单技师单整单算他的;双技师单要店长逐单分成后才算数。
+   「确认日结」是那一天的定格开关:确认前员工端看不到、月度工资试算也不计。
+   金额同样全在后端算 —— 前端只显示。 */
+
+// 当天签署的服务单(按门店时区判定「当天」,不用裸 UTC 日期)
+function signedSettlementsOn(date, tenantId) {
+  return db.prepare("SELECT * FROM settlements WHERE tenant_id = ? AND status = 'signed' AND signed_at IS NOT NULL ORDER BY signed_at ASC")
+    .all(tenantId)
+    .filter((row) => localParts(row.signed_at, tenantTimezone(tenantId)).date === date)
+}
+
+// 一张单的卡耗:储值腿 + 迁移腿(迁移腿不进本店收入,但确实是卡在耗)
+function settlementCardUsedCents(settlementId, tenantId) {
+  return db.prepare("SELECT COALESCE(SUM(amount_cents), 0) AS c FROM settlement_payments WHERE tenant_id = ? AND settlement_id = ? AND leg IN ('stored_value','migrate_stored')")
+    .get(tenantId, settlementId).c || 0
+}
+
+function settlementTechRows(settlementId, tenantId) {
+  return db.prepare('SELECT * FROM settlement_technicians WHERE tenant_id = ? AND settlement_id = ? ORDER BY rowid ASC')
+    .all(tenantId, settlementId)
+}
+
+/* 单技师单不需要分配:整单业绩就是他的,进 daily-close 时直接算,不占「待分配」。
+   双技师单必须店长逐单分成 —— 系统不猜,预填只是预填。 */
+function needsAllocation(row, tenantId) {
+  const techs = settlementTechRows(row.id, tenantId)
+  return techs.length > 1 && row.perf_alloc_status !== 'allocated'
+}
+
+// 某张单每位技师分到多少业绩。已分配读 share_cents;单技师整单;双技师未分配返回 null(待分配)
+function settlementPerfShares(row, tenantId) {
+  const techs = settlementTechRows(row.id, tenantId)
+  if (!techs.length) return []
+  if (techs.length === 1) return [{ technicianId: techs[0].technician_id, role: techs[0].role, sharePct: 100, shareCents: row.total_cents }]
+  if (row.perf_alloc_status !== 'allocated') {
+    return techs.map((t) => ({ technicianId: t.technician_id, role: t.role, sharePct: null, shareCents: null }))
+  }
+  return techs.map((t) => ({ technicianId: t.technician_id, role: t.role, sharePct: t.share_pct, shareCents: t.share_cents || 0 }))
+}
+
+function perfSplitDefault(tenantId) {
+  const row = db.prepare("SELECT value FROM tenant_settings WHERE tenant_id = ? AND key = 'perf_split_default'").get(tenantId)
+  if (row) {
+    try {
+      const parsed = JSON.parse(row.value || '{}')
+      if (Array.isArray(parsed.main) && parsed.main.length) return parsed.main.map(Number)
+    } catch { /* 落回默认 */ }
+  }
+  return [70, 30] // 主 70 / 副 30,店主可在设置里改
+}
+
+// 当日冲卡:沿用 2026-08-01 就加好的 stored_value_transactions.technician_id(这笔充值算谁促成)
+function rechargeByTechOn(date, tenantId) {
+  const tz = tenantTimezone(tenantId)
+  const rows = db.prepare("SELECT * FROM stored_value_transactions WHERE tenant_id = ? AND type = 'recharge'").all(tenantId)
+  const map = {}
+  const seenUser = new Set()
+  // 首充判定 = 该顾客在本店的第一笔充值,所以要按时间顺序扫一遍全量,不能只看当天
+  for (const r of rows.slice().sort((a, b) => String(a.created_at).localeCompare(String(b.created_at)))) {
+    const isFirst = !seenUser.has(r.user_id)
+    seenUser.add(r.user_id)
+    if (localParts(r.created_at, tz).date !== date) continue
+    const tech = r.technician_id
+    if (!tech) continue
+    const bucket = map[tech] || (map[tech] = { firstCents: 0, renewCents: 0 })
+    if (isFirst) bucket.firstCents += Math.max(0, r.amount_cents)
+    else bucket.renewCents += Math.max(0, r.amount_cents)
+  }
+  return map
+}
+
+/* 异常核查区:
+   ① 价档异常 —— 技师把价格档改过的单,逐条列出来给店长复核
+   ② 免卸甲/免卸睫 —— 按 ¥0 的目录明细行统计笔数(降维定稿后免卸就是一条 0 元目录项) */
+function dailyAnomalies(rows, tenantId) {
+  const tierChanges = rows.filter((r) => r.tier_changed_from).map((r) => ({
+    code: r.code, from: r.tier_changed_from, to: r.price_tier_used,
+    by: r.tier_changed_by || '', at: r.tier_changed_at || '', settlementId: r.id
+  }))
+  let freeRemovalCount = 0
+  const freeRemovalLines = []
+  for (const r of rows) {
+    const lines = db.prepare("SELECT name_snapshot FROM settlement_items WHERE tenant_id = ? AND settlement_id = ? AND is_free = 1").all(tenantId, r.id)
+    for (const l of lines) {
+      if (!/免卸/.test(l.name_snapshot || '')) continue
+      freeRemovalCount += 1
+      freeRemovalLines.push({ code: r.code, name: l.name_snapshot })
+    }
+  }
+  return { tierChanges, freeRemoval: { count: freeRemovalCount, lines: freeRemovalLines } }
+}
+
+function dailyCloseView(date, tenantId, { lang = 'zh' } = {}) {
+  const rows = signedSettlementsOn(date, tenantId)
+  const closeRow = db.prepare('SELECT * FROM daily_closes WHERE tenant_id = ? AND date = ?').get(tenantId, date)
+  const techNames = {}
+  for (const t of db.prepare('SELECT id, name, title FROM technicians WHERE tenant_id = ?').all(tenantId)) techNames[t.id] = t
+  const month = date.slice(0, 7)
+  const targets = {}
+  for (const t of db.prepare('SELECT * FROM perf_targets WHERE tenant_id = ? AND month = ?').all(tenantId, month)) targets[t.technician_id] = t
+
+  const pending = []
+  const perTech = {}
+  const bump = (id) => (perTech[id] = perTech[id] || { technicianId: id, name: (techNames[id] || {}).name || id, orderCount: 0, perfCents: 0, cardUsedCents: 0, pendingCount: 0 })
+  const settlements = rows.map((r) => {
+    const shares = settlementPerfShares(r, tenantId)
+    const cardUsed = settlementCardUsedCents(r.id, tenantId)
+    const unallocated = needsAllocation(r, tenantId)
+    if (unallocated) {
+      pending.push({
+        settlementId: r.id, code: r.code, totalCents: r.total_cents,
+        customerName: (db.prepare('SELECT display_name FROM users WHERE id = ?').get(r.user_id) || {}).display_name || '',
+        servedPersonName: r.served_person_name || '',
+        defaultSplit: perfSplitDefault(tenantId),
+        technicians: settlementTechRows(r.id, tenantId).map((t) => ({
+          technicianId: t.technician_id, name: (techNames[t.technician_id] || {}).name || t.technician_id,
+          role: t.role, itemNos: JSON.parse(t.item_nos_json || '[]')
+        }))
+      })
+    }
+    for (const s of shares) {
+      const bucket = bump(s.technicianId)
+      bucket.orderCount += 1
+      if (s.shareCents === null) bucket.pendingCount += 1
+      else {
+        bucket.perfCents += s.shareCents
+        // 卡耗按业绩占比摊到各技师头上(整单卡耗 × 该技师业绩占比),口径与业绩一致
+        bucket.cardUsedCents += r.total_cents > 0 ? Math.round(cardUsed * s.shareCents / r.total_cents) : 0
+      }
+    }
+    return {
+      settlementId: r.id, code: r.code, totalCents: r.total_cents, cardUsedCents: cardUsed,
+      allocated: !unallocated, shares, signedAt: r.signed_at,
+      snapshotUrl: r.snapshot_url || null, hasSnapshot: Boolean(r.snapshot_url || r.snapshot_inline)
+    }
+  })
+
+  const recharge = rechargeByTechOn(date, tenantId)
+  for (const id of Object.keys(recharge)) bump(id)
+  const technicians = Object.values(perTech).map((t) => {
+    const rc = recharge[t.technicianId] || { firstCents: 0, renewCents: 0 }
+    const target = targets[t.technicianId] || null
+    return {
+      ...t,
+      rechargeFirstCents: rc.firstCents,
+      rechargeRenewCents: rc.renewCents,
+      rechargeTotalCents: rc.firstCents + rc.renewCents,
+      // 目标没设就不显示 —— 不编一个默认目标压在技师头上
+      target: target ? {
+        mode: target.mode, displayMode: target.display_mode,
+        perfTargetCents: target.perf_target_cents,
+        cardTargetCents: target.card_target_cents,
+        orderTarget: target.order_target
+      } : null
+    }
+  })
+
+  const blockers = []
+  // 待签的单按「开单那天」归日 —— 顾客没签,自然没有 signed_at 可归
+  const unsigned = db.prepare("SELECT created_at FROM settlements WHERE tenant_id = ? AND status = 'pending_sign'").all(tenantId)
+    .filter((r) => localParts(r.created_at, tenantTimezone(tenantId)).date === date)
+  if (unsigned.length) blockers.push({ code: 'UNSIGNED', count: unsigned.length, message: `还有 ${unsigned.length} 张服务单顾客没签字` })
+  if (pending.length) blockers.push({ code: 'UNALLOCATED', count: pending.length, message: `还有 ${pending.length} 单多技师业绩没分配` })
+
+  return {
+    date,
+    status: closeRow ? closeRow.status : 'open',
+    confirmedAt: closeRow ? closeRow.confirmed_at : null,
+    confirmedBy: closeRow ? closeRow.confirmed_by : null,
+    reopenCount: closeRow ? closeRow.reopen_count : 0,
+    currency: tenantCurrencyCode(tenantId),
+    currencyDisplay: currencyDisplayOf(tenantCurrencyCode(tenantId)),
+    orderCount: settlements.length,
+    revenueCents: settlements.reduce((sum, s) => sum + s.totalCents, 0),
+    settlements,
+    pendingAllocation: pending,
+    technicians,
+    anomalies: dailyAnomalies(rows, tenantId),
+    canConfirm: blockers.length === 0,
+    blockers,
+    perfSplitDefault: perfSplitDefault(tenantId),
+    lang
+  }
+}
+
+/* 分成:比例逐单可改,但合计必须正好等于单额 —— 差一分都不收。
+   分完写 settlement_technicians.share_cents 并把 perf_alloc_status 推到 allocated。 */
+function allocateSettlementPerf(settlementId, input = {}, adminSession = {}) {
+  const tenantId = currentTenantId()
+  const row = db.prepare('SELECT * FROM settlements WHERE id = ? AND tenant_id = ?').get(settlementId, tenantId)
+  if (!row) throw apiError(404, 'NOT_FOUND', '找不到这张服务单。')
+  if (row.status !== 'signed') throw apiError(400, 'NOT_SIGNED', '顾客还没签字,不能分配业绩。')
+  const closeRow = db.prepare('SELECT * FROM daily_closes WHERE tenant_id = ? AND date = ?')
+    .get(tenantId, localParts(row.signed_at, tenantTimezone(tenantId)).date)
+  if (closeRow && closeRow.status === 'confirmed') {
+    throw apiError(400, 'DAY_CLOSED', '这一天已经日结确认,要改分成请先重开日结。')
+  }
+  const techs = settlementTechRows(settlementId, tenantId)
+  const shares = Array.isArray(input.shares) ? input.shares : []
+  if (shares.length !== techs.length) throw apiError(400, 'BAD_REQUEST', '分成行数与本单技师人数不一致。')
+  const byId = {}
+  let sum = 0
+  for (const s of shares) {
+    const id = String(s.technicianId || '')
+    if (!techs.some((t) => t.technician_id === id)) throw apiError(400, 'BAD_REQUEST', '分成里出现了不属于本单的技师。')
+    const cents = Math.max(0, Math.round(Number(s.shareCents) || 0))
+    byId[id] = { cents, pct: s.sharePct === undefined || s.sharePct === null ? null : Number(s.sharePct) }
+    sum += cents
+  }
+  if (sum !== row.total_cents) {
+    throw apiError(400, 'SHARE_MISMATCH', `分成合计 ${sum / 100} 与本单金额 ${row.total_cents / 100} 不一致,请调整。`)
+  }
+  const now = iso(new Date())
+  db.exec('BEGIN IMMEDIATE')
+  try {
+    for (const t of techs) {
+      const s = byId[t.technician_id]
+      db.prepare('UPDATE settlement_technicians SET share_pct = ?, share_cents = ?, allocated_by = ?, allocated_at = ? WHERE id = ?')
+        .run(s.pct, s.cents, adminSession.email || 'owner', now, t.id)
+    }
+    db.prepare('UPDATE settlements SET perf_alloc_status = ?, updated_at = ? WHERE id = ?').run('allocated', now, settlementId)
+    db.exec('COMMIT')
+  } catch (error) {
+    db.exec('ROLLBACK')
+    throw error
+  }
+  return { allocated: true, settlementId, shares: settlementPerfShares(db.prepare('SELECT * FROM settlements WHERE id = ?').get(settlementId), tenantId) }
+}
+
+// 确认日结:门槛不满足直接拒,并把原因说清楚(前端据此置灰按钮)
+function confirmDailyClose(date, adminSession = {}) {
+  const tenantId = currentTenantId()
+  const view = dailyCloseView(date, tenantId)
+  if (!view.canConfirm) {
+    throw apiError(400, 'CLOSE_BLOCKED', view.blockers.map((b) => b.message).join(';'))
+  }
+  const now = iso(new Date())
+  const existing = db.prepare('SELECT * FROM daily_closes WHERE tenant_id = ? AND date = ?').get(tenantId, date)
+  const closeId = existing ? existing.id : randomId('dclose')
+  db.exec('BEGIN IMMEDIATE')
+  try {
+    if (existing) {
+      db.prepare("UPDATE daily_closes SET status = 'confirmed', order_count = ?, revenue_cents = ?, confirmed_by = ?, confirmed_at = ?, updated_at = ? WHERE id = ?")
+        .run(view.orderCount, view.revenueCents, adminSession.email || 'owner', now, now, closeId)
+      db.prepare('DELETE FROM daily_close_lines WHERE tenant_id = ? AND close_id = ?').run(tenantId, closeId)
+    } else {
+      db.prepare(`INSERT INTO daily_closes (id, tenant_id, date, status, order_count, revenue_cents, confirmed_by, confirmed_at, created_at, updated_at)
+        VALUES (?, ?, ?, 'confirmed', ?, ?, ?, ?, ?, ?)`)
+        .run(closeId, tenantId, date, view.orderCount, view.revenueCents, adminSession.email || 'owner', now, now, now)
+    }
+    const lineStmt = db.prepare(`INSERT INTO daily_close_lines
+      (id, tenant_id, close_id, date, technician_id, order_count, perf_cents, card_used_cents, recharge_first_cents, recharge_renew_cents, created_at)
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`)
+    for (const t of view.technicians) {
+      lineStmt.run(randomId('dline'), tenantId, closeId, date, t.technicianId, t.orderCount, t.perfCents, t.cardUsedCents, t.rechargeFirstCents, t.rechargeRenewCents, now)
+    }
+    db.exec('COMMIT')
+  } catch (error) {
+    db.exec('ROLLBACK')
+    throw error
+  }
+  return { confirmed: true, ...dailyCloseView(date, tenantId) }
+}
+
+// 重开日结:状态改 reopened 并累加次数,谁在什么时候为什么重开都留着
+function reopenDailyClose(date, reason, adminSession = {}) {
+  const tenantId = currentTenantId()
+  const row = db.prepare('SELECT * FROM daily_closes WHERE tenant_id = ? AND date = ?').get(tenantId, date)
+  if (!row) throw apiError(404, 'NOT_FOUND', '这一天还没日结过。')
+  const text = String(reason || '').trim()
+  if (!text) throw apiError(400, 'REASON_REQUIRED', '重开日结要写原因(会留痕)。')
+  const now = iso(new Date())
+  db.prepare("UPDATE daily_closes SET status = 'reopened', reopened_by = ?, reopened_at = ?, reopen_reason = ?, reopen_count = reopen_count + 1, updated_at = ? WHERE id = ?")
+    .run(adminSession.email || 'owner', now, text.slice(0, 300), now, row.id)
+  return { reopened: true, ...dailyCloseView(date, tenantId) }
+}
+
+/* 某月哪些天该日结、哪些还没结。工资试算页顶部的「日结业绩」模块用它,
+   月度锁定的前置条件也是它 —— 有一天没结,当月工资就不许锁。 */
+function monthlyCloseStatus(month, tenantId) {
+  const tz = tenantTimezone(tenantId)
+  const signed = db.prepare("SELECT signed_at, total_cents FROM settlements WHERE tenant_id = ? AND status = 'signed' AND signed_at IS NOT NULL").all(tenantId)
+  const byDate = {}
+  for (const r of signed) {
+    const d = localParts(r.signed_at, tz).date
+    if (!d.startsWith(month)) continue
+    const b = byDate[d] || (byDate[d] = { date: d, orderCount: 0, revenueCents: 0 })
+    b.orderCount += 1
+    b.revenueCents += r.total_cents
+  }
+  const closes = {}
+  for (const c of db.prepare('SELECT * FROM daily_closes WHERE tenant_id = ? AND date LIKE ?').all(tenantId, `${month}%`)) closes[c.date] = c
+  const days = Object.keys(byDate).sort().reverse().map((d) => {
+    const c = closes[d]
+    const view = c && c.status === 'confirmed' ? null : dailyCloseView(d, tenantId)
+    return {
+      ...byDate[d],
+      status: c ? c.status : 'open',
+      confirmed: Boolean(c && c.status === 'confirmed'),
+      pendingAllocation: view ? view.pendingAllocation.length : 0
+    }
+  })
+  return { month, days, openDays: days.filter((d) => !d.confirmed).map((d) => d.date), allClosed: days.every((d) => d.confirmed) }
+}
+
 /* ===== 对象存储(腾讯云 COS)最小上传封装(2026-08-08)=====
    零依赖,只用 node:crypto 做 COS v5 签名。密钥只从 env 读,不写代码、不进仓库、不打印日志
    (沿用主钥匙那次的纪律)。没配或上传失败一律返回 null,由调用方降级 —— 不因存储故障拦流程。
@@ -8840,6 +9146,87 @@ async function route(req, res) {
     const id = path.split('/')[3]
     const body = await readBody(req)
     return json(res, 200, amendSettlement(id, body, adminSession))
+  }
+  /* ===== P2 业绩目标(设置=目标怎么定 / 显示=员工端看什么,两组开关独立)===== */
+  if (req.method === 'GET' && path === '/admin/perf-targets') {
+    if (adminSession.role !== 'owner') throw apiError(403, 'FORBIDDEN', '业绩目标由店长设置。')
+    const tid = currentTenantId()
+    const month = /^\d{4}-\d{2}$/.test(String(query.month || '')) ? query.month : monthKeyOf()
+    const rows = db.prepare('SELECT * FROM perf_targets WHERE tenant_id = ? AND month = ?').all(tid, month)
+    const byTech = {}
+    for (const r of rows) byTech[r.technician_id] = r
+    return json(res, 200, {
+      month,
+      // 系统默认:设置=总目标、显示=仅总进度。没设过的技师也列出来,但 hasTarget=false
+      technicians: db.prepare('SELECT id, name, title FROM technicians WHERE tenant_id = ? ORDER BY name ASC').all(tid).map((t) => {
+        const r = byTech[t.id]
+        return {
+          technicianId: t.id, name: t.name, title: t.title || '',
+          hasTarget: Boolean(r),
+          mode: r ? r.mode : 'total',
+          displayMode: r ? r.display_mode : 'total_only',
+          perfTargetCents: r ? r.perf_target_cents : 0,
+          cardTargetCents: r ? r.card_target_cents : 0,
+          orderTarget: r ? r.order_target : 0
+        }
+      })
+    })
+  }
+  if (req.method === 'PUT' && path === '/admin/perf-targets') {
+    if (adminSession.role !== 'owner') throw apiError(403, 'FORBIDDEN', '业绩目标由店长设置。')
+    const tid = currentTenantId()
+    const body = await readBody(req)
+    const month = /^\d{4}-\d{2}$/.test(String(body.month || '')) ? body.month : monthKeyOf()
+    const now = iso(new Date())
+    const stmt = db.prepare(`INSERT INTO perf_targets
+      (id, tenant_id, technician_id, month, mode, display_mode, perf_target_cents, card_target_cents, order_target, updated_by, updated_at)
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+      ON CONFLICT (tenant_id, technician_id, month) DO UPDATE SET
+        mode = excluded.mode, display_mode = excluded.display_mode,
+        perf_target_cents = excluded.perf_target_cents, card_target_cents = excluded.card_target_cents,
+        order_target = excluded.order_target, updated_by = excluded.updated_by, updated_at = excluded.updated_at`)
+    for (const t of Array.isArray(body.targets) ? body.targets : []) {
+      const techId = String(t.technicianId || '')
+      if (!db.prepare('SELECT 1 FROM technicians WHERE id = ? AND tenant_id = ?').get(techId, tid)) {
+        throw apiError(400, 'BAD_REQUEST', '技师不属于本店。')
+      }
+      stmt.run(randomId('ptgt'), tid, techId, month,
+        t.mode === 'split' ? 'split' : 'total',
+        t.displayMode === 'with_split' ? 'with_split' : 'total_only',
+        Math.max(0, Math.round(Number(t.perfTargetCents) || 0)),
+        Math.max(0, Math.round(Number(t.cardTargetCents) || 0)),
+        Math.max(0, Math.round(Number(t.orderTarget) || 0)),
+        adminSession.email || 'owner', now)
+    }
+    const rows = db.prepare('SELECT * FROM perf_targets WHERE tenant_id = ? AND month = ?').all(tid, month)
+    return json(res, 200, { month, saved: rows.length })
+  }
+  /* ===== P2 日结(店长每天认账)===== */
+  if (req.method === 'GET' && path === '/admin/daily-close') {
+    if (adminSession.role !== 'owner') throw apiError(403, 'FORBIDDEN', '日结由店长操作。')
+    const date = /^\d{4}-\d{2}-\d{2}$/.test(String(query.date || '')) ? query.date : todayOf()
+    return json(res, 200, { dailyClose: dailyCloseView(date, currentTenantId()) })
+  }
+  if (req.method === 'GET' && path === '/admin/daily-close/month') {
+    if (adminSession.role !== 'owner') throw apiError(403, 'FORBIDDEN', '日结由店长操作。')
+    const month = /^\d{4}-\d{2}$/.test(String(query.month || '')) ? query.month : monthKeyOf()
+    return json(res, 200, monthlyCloseStatus(month, currentTenantId()))
+  }
+  if (req.method === 'POST' && path === '/admin/daily-close') {
+    if (adminSession.role !== 'owner') throw apiError(403, 'FORBIDDEN', '日结由店长操作。')
+    const body = await readBody(req)
+    const date = /^\d{4}-\d{2}-\d{2}$/.test(String(body.date || '')) ? body.date : todayOf()
+    return json(res, 200, confirmDailyClose(date, adminSession))
+  }
+  if (req.method === 'POST' && path === '/admin/daily-close/reopen') {
+    if (adminSession.role !== 'owner') throw apiError(403, 'FORBIDDEN', '日结由店长操作。')
+    const body = await readBody(req)
+    return json(res, 200, reopenDailyClose(String(body.date || ''), body.reason, adminSession))
+  }
+  if (req.method === 'POST' && path.startsWith('/admin/settlements/') && path.endsWith('/allocate')) {
+    if (adminSession.role !== 'owner') throw apiError(403, 'FORBIDDEN', '业绩分配由店长操作。')
+    const body = await readBody(req)
+    return json(res, 200, allocateSettlementPerf(path.split('/')[3], body, adminSession))
   }
   if (req.method === 'POST' && path.startsWith('/admin/settlements/') && path.endsWith('/aftersales')) {
     const id = path.split('/')[3]
@@ -12597,6 +12984,17 @@ db.exec(`
   );
   CREATE INDEX IF NOT EXISTS idx_settlement_amendments ON settlement_amendments(tenant_id, settlement_id);
 `)
+/* 🔴 2026-08-08 补迁移:签署快照那四列是后加进 CREATE TABLE 的,
+   而 CREATE TABLE IF NOT EXISTS 对已存在的表什么也不做 ——
+   凡是在加快照之前建好库的环境(含生产),settlements 表里根本没有这几列,
+   一签字就 500(触发器里的 OLD.snapshot_at 先炸)。按纪律补 try/catch ALTER。 */
+for (const column of ['snapshot_url TEXT', 'snapshot_inline TEXT', 'snapshot_storage TEXT', 'snapshot_at TEXT']) {
+  try {
+    db.exec(`ALTER TABLE settlements ADD COLUMN ${column}`)
+  } catch (error) {
+    if (!String(error.message || '').includes('duplicate column')) throw error
+  }
+}
 // 已签单据永不修改:更正只能走 amendments。数据库层兜住,不靠人记纪律。
 db.exec(`
   DROP TRIGGER IF EXISTS settlements_signed_no_update;
@@ -12607,6 +13005,64 @@ db.exec(`
       -- 快照允许写入一次(签署那一刻),之后不可替换
       OR (OLD.snapshot_at IS NOT NULL AND (OLD.snapshot_url IS NOT NEW.snapshot_url OR OLD.snapshot_inline IS NOT NEW.snapshot_inline)))
   BEGIN SELECT RAISE(ABORT, 'signed settlement is immutable; use settlement_amendments'); END;
+`)
+
+/* ===== P2 日结与业绩目标(2026-08-08)=====
+   日结 = 店长每天把当天已签的服务单逐单认账:多技师单先分成,再整天确认。
+   确认后这一天的业绩才算数 —— 员工端看得到、月度工资试算才计入。
+   tenant_id 一律不给 DEFAULT(P0.9 立的纪律)。 */
+db.exec(`
+  CREATE TABLE IF NOT EXISTS daily_closes (
+    id TEXT PRIMARY KEY,
+    tenant_id TEXT NOT NULL,
+    date TEXT NOT NULL,
+    status TEXT NOT NULL DEFAULT 'confirmed',
+    order_count INTEGER NOT NULL DEFAULT 0,
+    revenue_cents INTEGER NOT NULL DEFAULT 0,
+    confirmed_by TEXT,
+    confirmed_at TEXT,
+    reopened_by TEXT,
+    reopened_at TEXT,
+    reopen_reason TEXT,
+    reopen_count INTEGER NOT NULL DEFAULT 0,
+    created_at TEXT NOT NULL,
+    updated_at TEXT NOT NULL,
+    UNIQUE (tenant_id, date)
+  );
+  CREATE INDEX IF NOT EXISTS idx_daily_closes ON daily_closes(tenant_id, date);
+  /* 一位技师在某一天的业绩快照。确认日结那一刻定格 ——
+     之后再改单也不动这里,要改只能重开日结重算,留痕在 daily_closes.reopen_*。 */
+  CREATE TABLE IF NOT EXISTS daily_close_lines (
+    id TEXT PRIMARY KEY,
+    tenant_id TEXT NOT NULL,
+    close_id TEXT NOT NULL,
+    date TEXT NOT NULL,
+    technician_id TEXT NOT NULL,
+    order_count INTEGER NOT NULL DEFAULT 0,
+    perf_cents INTEGER NOT NULL DEFAULT 0,
+    card_used_cents INTEGER NOT NULL DEFAULT 0,
+    recharge_first_cents INTEGER NOT NULL DEFAULT 0,
+    recharge_renew_cents INTEGER NOT NULL DEFAULT 0,
+    created_at TEXT NOT NULL
+  );
+  CREATE INDEX IF NOT EXISTS idx_daily_close_lines ON daily_close_lines(tenant_id, date, technician_id);
+  /* 业绩目标。设置(mode)= 目标怎么定;显示(display_mode)= 员工端看什么。
+     两组开关独立 —— 老板可以按分项定目标,但只给员工看总进度。 */
+  CREATE TABLE IF NOT EXISTS perf_targets (
+    id TEXT PRIMARY KEY,
+    tenant_id TEXT NOT NULL,
+    technician_id TEXT NOT NULL,
+    month TEXT NOT NULL,
+    mode TEXT NOT NULL DEFAULT 'total',
+    display_mode TEXT NOT NULL DEFAULT 'total_only',
+    perf_target_cents INTEGER NOT NULL DEFAULT 0,
+    card_target_cents INTEGER NOT NULL DEFAULT 0,
+    order_target INTEGER NOT NULL DEFAULT 0,
+    updated_by TEXT,
+    updated_at TEXT NOT NULL,
+    UNIQUE (tenant_id, technician_id, month)
+  );
+  CREATE INDEX IF NOT EXISTS idx_perf_targets ON perf_targets(tenant_id, month);
 `)
 
 /* ===== P1.2 定金保留凭据 + 话术模板中心(2026-08-08)=====
