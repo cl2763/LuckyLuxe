@@ -951,7 +951,6 @@ function liveTenantFacts() {
   if (ruleState.foot_surcharge.isActive) ruleTexts.push(`足部项目在最终金额上整单加收 ${priceOf(ruleState.foot_surcharge.config.amountCents)}(任何价格档都一样加)。`)
   if (ruleState.single_finger.isActive) ruleTexts.push(`单指计费:按该单所用价格档的延长类主项目价的 ${ruleState.single_finger.config.pct || 10}% 每指计算。`)
   if (ruleState.tip_reuse.isActive) ruleTexts.push(`甲片重利用固定收 ${priceOf(ruleState.tip_reuse.config.amountCents)},不分价格档。`)
-  if (ruleState.removal_free_if_in_store.isActive && ruleState.removal_free_if_in_store.config.enabled !== false) ruleTexts.push('本店做的甲免费卸;非本店做的按卸甲价目收费(技师可酌情免)。')
   const pricingRules = ruleTexts.length ? ruleTexts : null
   // 定金与取消规则:AI 必须按本店配置回答,不能再用旗舰店的口径(P1.2)
   const depositConfigForAi = getDepositConfig(tid)
@@ -6669,15 +6668,17 @@ function getFinanceSummary(body) {
      foot_surcharge          足部加收——整单最终金额 +amountCents(各档算完后加,不分档)
      single_finger           单指价——按「该单所用价格档」的延长类主项目价 ÷10(pct) × 指数
      tip_reuse               甲片重利用——固定 amountCents,无档
-     removal_free_if_in_store 本店做的免卸——有本店历史完成单自动免;否则技师可手动勾选免
-   注:tip_reuse 计入小计(它是一项服务费);foot_surcharge 在小计之外整单加收。 */
+   注:tip_reuse 计入小计(它是一项服务费);foot_surcharge 在小计之外整单加收。
+
+   2026-08-08 卸甲/卸睫降维定稿:原来的 removal_free_if_in_store 规则引擎**已整体删除**。
+   「本店制作免卸甲 / 免卸睫毛」改为价目表里的免收目录项(三档价均 0,item_kind='addon',
+   addon_scope 只挂对应大类)—— 纯卸除单的表单自然不出现该项,「本单继续做才免」零代码实现。 */
 const PRICE_TIERS = ['list', 'share', 'member', 'course']
-const PRICING_RULE_KEYS = ['foot_surcharge', 'single_finger', 'tip_reuse', 'removal_free_if_in_store']
+const PRICING_RULE_KEYS = ['foot_surcharge', 'single_finger', 'tip_reuse']
 const DEFAULT_PRICING_RULES = {
   foot_surcharge: { amountCents: 10000 },
   single_finger: { pct: 10 },
-  tip_reuse: { amountCents: 10000 },
-  removal_free_if_in_store: { enabled: true }
+  tip_reuse: { amountCents: 10000 }
 }
 const MEMBER_QUALIFY_MODES = ['any_recharge', 'balance_gt_0', 'total_spend', 'manual']
 const DEFAULT_MEMBERSHIP_CONFIG = {
@@ -6827,16 +6828,8 @@ function servicePriceMap(serviceId) {
   return out
 }
 
-// 卸甲行识别:大类 key = removal(标准) 或项目名含「卸」(商家自建大类时的兜底)
-function isRemovalItem(service, categoryById) {
-  if (!service) return false
-  const cat = service.category_id ? categoryById[service.category_id] : null
-  if (cat && String(cat.key || '').toLowerCase() === 'removal') return true
-  return /卸/.test(String(service.name_zh || '')) || /remov/i.test(String(service.name_en || ''))
-}
-
 /* 纯函数计价:入参 { tenantId, serviceId, tierKey, addons:[{serviceId, qty, fingers}], applyFootSurcharge,
-   applyTipReuse, userId, manualFreeRemoval } → { lines, subtotalCents, rulesApplied, totalCents, freeRemovalBy } */
+   applyTipReuse, userId } → { lines, subtotalCents, rulesApplied, totalCents } */
 function quotePrice(input = {}) {
   const tenantId = input.tenantId || currentTenantId()
   const tierKey = PRICE_TIERS.includes(input.tierKey) ? input.tierKey : 'list'
@@ -6849,16 +6842,8 @@ function quotePrice(input = {}) {
   if (input.serviceId && !main) throw apiError(404, 'NOT_FOUND', '本店没有这个项目(或不属于当前门店)。')
   const mainPrice = main ? servicePriceCents(main, tierKey) : { priceCents: 0, courseTimes: null }
 
-  // 免卸判定:本店有历史完成单 → 系统自动免;没有 → 技师可手动勾选免
   const userId = input.userId || ''
-  const removalRule = rules.removal_free_if_in_store
-  const removalRuleOn = removalRule.isActive && removalRule.config.enabled !== false
   const hasStoreHistory = Boolean(userId && db.prepare("SELECT 1 AS hit FROM bookings WHERE tenant_id = ? AND user_id = ? AND status = 'COMPLETED' LIMIT 1").get(tenantId, userId))
-  let freeRemovalBy = null
-  if (removalRuleOn) {
-    if (hasStoreHistory) freeRemovalBy = 'system'
-    else if (input.manualFreeRemoval) freeRemovalBy = 'manual'
-  }
 
   const lines = []
   const rulesApplied = []
@@ -6867,15 +6852,10 @@ function quotePrice(input = {}) {
   }
 
   const pushItemLine = (service, { kind, qty, fingers, unitCents, note }) => {
-    const removal = isRemovalItem(service, categoryById)
     const count = fingers || qty || 1
-    let amountCents = unitCents * count
-    let freeReason = null
-    if (removal && freeRemovalBy) {
-      amountCents = 0
-      freeReason = freeRemovalBy
-      noteRule('removal_free_if_in_store', 0, freeRemovalBy === 'system' ? '本店做的,卸甲免费' : '技师手动免卸')
-    }
+    const amountCents = unitCents * count
+    // 免收项就是「价目表里价格为 0 的目录项」,不再有任何规则判定
+    const freeReason = amountCents === 0 ? 'catalog_free' : null
     lines.push({
       kind,
       serviceId: service.id,
@@ -6886,7 +6866,7 @@ function quotePrice(input = {}) {
       fingers: service.unit === 'per_finger' ? count : 0,
       unitCents,
       amountCents,
-      isRemoval: removal,
+      isFree: amountCents === 0,
       freeReason,
       note: note || ''
     })
@@ -6941,7 +6921,6 @@ function quotePrice(input = {}) {
     subtotalCents,
     rulesApplied,
     totalCents,
-    freeRemovalBy,
     hasStoreHistory
   }
 }
@@ -7364,6 +7343,403 @@ function consumeDepositRetain(retainId, bookingId) {
     .run(bookingId, iso(new Date()), retainId)
 }
 
+/* ===== P1 结算计算(2026-08-08)=====
+   金额红线:前端永远不自行计算任何金额。这里是唯一的计算入口,两条恒等式在返回前强制校验。
+     共优惠 ≡ 原价合计 − 档位小计
+     应收   ≡ 档位小计 − 定金抵扣
+   足部加收(整单 +100)按店主确认口径**同时进原价合计与档位小计** —— 它是加价不是折扣,
+   这样两条恒等式才自洽。 */
+function assertSettlementInvariants(result) {
+  const d = result.listTotalCents - result.subtotalCents
+  if (result.discountTotalCents !== d) {
+    throw apiError(500, 'SETTLEMENT_INVARIANT', `共优惠对不上:${result.discountTotalCents} ≠ ${result.listTotalCents} − ${result.subtotalCents}`)
+  }
+  const due = result.subtotalCents - result.depositDeductCents
+  if (result.totalCents !== due) {
+    throw apiError(500, 'SETTLEMENT_INVARIANT', `应收对不上:${result.totalCents} ≠ ${result.subtotalCents} − ${result.depositDeductCents}`)
+  }
+  return result
+}
+
+/* 入参 { tenantId, tierKey, items:[{serviceId, qty, fingers}], customItems:[{name, amountCents}],
+   applyFootSurcharge, applyTipReuse, depositApplied, bookingId, userId, payerUserId }
+   出参:带编号的明细 + 五个汇总数 + 支付构成 */
+function computeSettlement(input = {}) {
+  const tenantId = input.tenantId || currentTenantId()
+  const tierKey = PRICE_TIERS.includes(input.tierKey) ? input.tierKey : 'list'
+  const rules = getPricingRules(tenantId)
+  const getSvc = (id) => db.prepare('SELECT * FROM services WHERE id = ? AND tenant_id = ?').get(id, tenantId)
+
+  const rawItems = Array.isArray(input.items) ? input.items : []
+  const mainRow = rawItems.map((it) => getSvc(it.serviceId)).find((svc) => svc && (svc.item_kind || 'main') === 'main')
+  const mainTierCents = mainRow ? servicePriceCents(mainRow, tierKey).priceCents : 0
+
+  const lines = []
+  let no = 0
+  for (const raw of rawItems) {
+    const svc = getSvc(raw && raw.serviceId)
+    if (!svc) throw apiError(404, 'NOT_FOUND', '本店没有这个项目(或不属于当前门店)。')
+    no += 1
+    const unit = svc.unit || 'once'
+    const count = unit === 'per_finger'
+      ? Math.max(1, Math.round(Number(raw.fingers ?? raw.qty ?? 1) || 1))
+      : Math.max(1, Math.round(Number(raw.qty ?? 1) || 1))
+    let tierUnit = servicePriceCents(svc, tierKey).priceCents
+    let listUnit = servicePriceCents(svc, 'list').priceCents
+    let ruleApplied = null
+    // 单指挂靠主项目按比例:两档都按各自档的主项目价算,否则原价合计会失真
+    if (unit === 'per_finger' && svc.price_rule === 'pct_of_tier_price' && rules.single_finger.isActive) {
+      const pct = Number(svc.price_rule_value) > 0 ? Number(svc.price_rule_value) : Number(rules.single_finger.config.pct || 10)
+      tierUnit = Math.round(mainTierCents * pct / 100)
+      listUnit = Math.round((mainRow ? servicePriceCents(mainRow, 'list').priceCents : 0) * pct / 100)
+      ruleApplied = 'single_finger'
+    }
+    lines.push({
+      itemNo: no,
+      kind: (svc.item_kind || 'main') === 'addon' ? 'addon' : 'main',
+      serviceId: svc.id,
+      name: svc.name_zh,
+      tierKey,
+      unit,
+      qty: count,
+      listUnitCents: listUnit,
+      unitPriceCents: tierUnit,
+      listAmountCents: listUnit * count,
+      amountCents: tierUnit * count,
+      ruleApplied,
+      isFree: tierUnit * count === 0
+    })
+  }
+  // 自选填写行:价目表外的项目,原价与档价相同(没有"原价"这一说,不产生优惠)
+  for (const raw of Array.isArray(input.customItems) ? input.customItems : []) {
+    const name = String(raw?.name || '').trim()
+    const amount = Math.max(0, Math.round(Number(raw?.amountCents) || 0))
+    if (!name || !amount) continue
+    no += 1
+    lines.push({
+      itemNo: no, kind: 'custom', serviceId: null, name, tierKey, unit: 'once', qty: 1,
+      listUnitCents: amount, unitPriceCents: amount, listAmountCents: amount, amountCents: amount,
+      ruleApplied: null, isFree: false
+    })
+  }
+
+  const rulesApplied = []
+  // 甲片重利用:固定价,不分档 → 原价与档价相同
+  if ((input.applyTipReuse || input.tipReuse) && rules.tip_reuse.isActive) {
+    const amount = Math.max(0, Math.round(Number(rules.tip_reuse.config.amountCents ?? 10000)))
+    no += 1
+    lines.push({
+      itemNo: no, kind: 'rule', serviceId: null, name: '甲片重复利用', tierKey, unit: 'once', qty: 1,
+      listUnitCents: amount, unitPriceCents: amount, listAmountCents: amount, amountCents: amount,
+      ruleApplied: 'tip_reuse', isFree: false
+    })
+    rulesApplied.push({ key: 'tip_reuse', label: '甲片重复利用', amountCents: amount })
+  }
+
+  let listTotalCents = lines.reduce((sum, l) => sum + l.listAmountCents, 0)
+  let subtotalCents = lines.reduce((sum, l) => sum + l.amountCents, 0)
+  // 足部加收:整单加价,两边同时加(店主 2026-08-08 确认口径)
+  if (input.applyFootSurcharge && rules.foot_surcharge.isActive) {
+    const amount = Math.max(0, Math.round(Number(rules.foot_surcharge.config.amountCents ?? 10000)))
+    listTotalCents += amount
+    subtotalCents += amount
+    rulesApplied.push({ key: 'foot_surcharge', label: '足部美甲(整单加收)', amountCents: amount })
+  }
+
+  // 定金抵扣:只有本店 deposit_config 允许抵扣、且技师勾了「已付定金抵扣」才抵
+  const depositConfig = getDepositConfig(tenantId)
+  let depositDeductCents = 0
+  if (input.depositApplied && depositConfig.deductible) {
+    const booking = input.bookingId ? db.prepare('SELECT * FROM bookings WHERE id = ? AND tenant_id = ?').get(input.bookingId, tenantId) : null
+    const paid = booking ? Math.max(0, booking.deposit_cents || 0) : 0
+    depositDeductCents = Math.min(paid || depositAmountForService(mainRow, depositConfig, tenantId), subtotalCents)
+  }
+
+  const discountTotalCents = listTotalCents - subtotalCents
+  const totalCents = subtotalCents - depositDeductCents
+
+  // 支付构成:储值先烧迁移桶,再烧新桶;不够的进线下腿
+  const payerId = input.payerUserId || input.userId || ''
+  const balance = payerId ? storedValueBalanceDetail(payerId, tenantId) : { totalCents: 0, legacyCents: 0, normalCents: 0 }
+  const plan = ['balance_plus_offline', 'recharge_then_balance', 'offline_full'].includes(input.payIntent) ? input.payIntent : 'balance_plus_offline'
+  const legs = []
+  let remaining = totalCents
+  if (plan !== 'offline_full') {
+    const useLegacy = Math.min(Math.max(0, balance.legacyCents), remaining)
+    if (useLegacy > 0) { legs.push({ leg: 'migrate_stored', amountCents: useLegacy, payerUserId: payerId, note: '迁移桶(不进本店收入)' }); remaining -= useLegacy }
+    const useNormal = Math.min(Math.max(0, balance.normalCents), remaining)
+    if (useNormal > 0) { legs.push({ leg: 'stored_value', amountCents: useNormal, payerUserId: payerId }); remaining -= useNormal }
+  }
+  if (remaining > 0) legs.push({ leg: 'offline', amountCents: remaining, payerUserId: payerId, note: '到店支付' })
+
+  const storedUsedCents = legs.filter((l) => l.leg === 'stored_value' || l.leg === 'migrate_stored').reduce((sum, l) => sum + l.amountCents, 0)
+
+  return assertSettlementInvariants({
+    tenantId,
+    tierKey,
+    currency: tenantCurrencyCode(tenantId),
+    lines,
+    rulesApplied,
+    listTotalCents,
+    subtotalCents,
+    depositDeductCents,
+    discountTotalCents,
+    totalCents,
+    payment: {
+      plan,
+      legs,
+      balanceAvailableCents: balance.totalCents,
+      legacyBalanceCents: balance.legacyCents,
+      normalBalanceCents: balance.normalCents,
+      storedUsedCents,
+      offlineCents: Math.max(0, remaining),
+      shortfallCents: Math.max(0, totalCents - balance.totalCents)
+    },
+    // 互斥软校验:同单既勾了免收项、又勾了对应的收费卸除项 → 提示,不硬拦
+    softWarnings: buildSettlementWarnings(lines)
+  })
+}
+
+function buildSettlementWarnings(lines) {
+  const warnings = []
+  const hasFreeRemoval = lines.some((l) => l.isFree && /免卸/.test(l.name))
+  const paidRemoval = lines.filter((l) => !l.isFree && /卸/.test(l.name))
+  if (hasFreeRemoval && paidRemoval.length) {
+    warnings.push({
+      code: 'FREE_AND_PAID_REMOVAL',
+      message: `本单同时勾了「免卸」和收费卸除项(${paidRemoval.map((l) => l.name).join('、')}),确认是有意为之吗?`
+    })
+  }
+  return warnings
+}
+
+/* 建结算组:一次结算一组,组内一位被服务者一张单。
+   朋友不建档 —— 朋友的单 user_id 仍是卡主,served_person_name 记称呼,is_proxy_paid=1;
+   全部单据推给卡主,逐张本人签,无代确认兜底(原稿第 1 条)。 */
+function createSettlementGroup(body = {}, adminSession = {}) {
+  const tenantId = currentTenantId()
+  const cardOwnerUserId = String(body.cardOwnerUserId || body.userId || '').trim()
+  if (!cardOwnerUserId) throw apiError(400, 'BAD_REQUEST', '缺少卡主(签字人)。')
+  if (!db.prepare('SELECT id FROM users WHERE id = ? AND tenant_id = ?').get(cardOwnerUserId, tenantId)) {
+    throw apiError(404, 'NOT_FOUND', '卡主不在本店档案里。')
+  }
+  const sheets = Array.isArray(body.settlements) && body.settlements.length ? body.settlements : [body]
+  const now = iso(new Date())
+  const groupId = randomId('sgrp')
+  const created = []
+  db.exec('BEGIN IMMEDIATE')
+  try {
+    db.prepare(`INSERT INTO settlement_groups (id, tenant_id, booking_id, card_owner_user_id, status, created_by, created_at, updated_at)
+      VALUES (?, ?, ?, ?, 'pending_sign', ?, ?, ?)`)
+      .run(groupId, tenantId, body.bookingId || null, cardOwnerUserId, adminSession.email || 'staff', now, now)
+
+    for (const sheet of sheets) {
+      const computed = computeSettlement({ ...sheet, tenantId, userId: cardOwnerUserId, payerUserId: cardOwnerUserId, bookingId: sheet.bookingId || body.bookingId })
+      const id = randomId('stl')
+      const isProxy = Boolean(sheet.servedPersonName && String(sheet.servedPersonName).trim())
+      db.prepare(`INSERT INTO settlements
+        (id, tenant_id, group_id, booking_id, user_id, served_person_name, is_proxy_paid, code, status,
+         price_tier_used, tier_changed_from, tier_changed_by, tier_changed_at,
+         list_total_cents, subtotal_cents, deposit_deduct_cents, discount_total_cents, total_cents,
+         pay_intent, perf_alloc_status, created_by, created_at, updated_at)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, 'pending_sign', ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'pending', ?, ?, ?)`)
+        .run(id, tenantId, groupId, sheet.bookingId || body.bookingId || null, cardOwnerUserId,
+          String(sheet.servedPersonName || '').slice(0, 40) || null, isProxy ? 1 : 0, settlementCode(tenantId),
+          computed.tierKey, sheet.tierChangedFrom || null, sheet.tierChangedFrom ? (adminSession.email || 'staff') : null, sheet.tierChangedFrom ? now : null,
+          computed.listTotalCents, computed.subtotalCents, computed.depositDeductCents, computed.discountTotalCents, computed.totalCents,
+          computed.payment.plan, adminSession.email || 'staff', now, now)
+
+      const itemStmt = db.prepare(`INSERT INTO settlement_items
+        (id, tenant_id, settlement_id, item_no, kind, service_id, name_snapshot, tier_key, unit, qty,
+         list_unit_cents, unit_price_cents, list_amount_cents, amount_cents, rule_applied, is_free)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`)
+      for (const line of computed.lines) {
+        itemStmt.run(randomId('sitem'), tenantId, id, line.itemNo, line.kind, line.serviceId, line.name, line.tierKey,
+          line.unit, line.qty, line.listUnitCents, line.unitPriceCents, line.listAmountCents, line.amountCents,
+          line.ruleApplied, line.isFree ? 1 : 0)
+      }
+      // 技师:1–2 位,主/副 + 各自勾的编号;分成留空(P2 老板日结时写)
+      const techs = Array.isArray(sheet.technicians) ? sheet.technicians.slice(0, 2) : []
+      const techStmt = db.prepare(`INSERT INTO settlement_technicians (id, tenant_id, settlement_id, technician_id, role, item_nos_json)
+        VALUES (?, ?, ?, ?, ?, ?)`)
+      techs.forEach((t, index) => {
+        if (!db.prepare('SELECT 1 FROM technicians WHERE id = ? AND tenant_id = ?').get(t.technicianId, tenantId)) {
+          throw apiError(400, 'BAD_REQUEST', '技师不属于本店。')
+        }
+        techStmt.run(randomId('stech'), tenantId, id, t.technicianId, t.role === 'assist' || index > 0 ? 'assist' : 'main',
+          JSON.stringify(Array.isArray(t.itemNos) ? t.itemNos.map(Number) : []))
+      })
+      // 支付腿:先落 pending,签字那一刻才真正扣卡
+      const payStmt = db.prepare(`INSERT INTO settlement_payments (id, tenant_id, settlement_id, leg, amount_cents, payer_user_id, status, note, created_at)
+        VALUES (?, ?, ?, ?, ?, ?, 'pending', ?, ?)`)
+      if (computed.depositDeductCents > 0) {
+        payStmt.run(randomId('spay'), tenantId, id, 'deposit', computed.depositDeductCents, cardOwnerUserId, '已付定金抵扣', now)
+      }
+      for (const leg of computed.payment.legs) {
+        payStmt.run(randomId('spay'), tenantId, id, leg.leg, leg.amountCents, leg.payerUserId || cardOwnerUserId, leg.note || null, now)
+      }
+      created.push(id)
+    }
+    db.exec('COMMIT')
+  } catch (error) {
+    db.exec('ROLLBACK')
+    throw error
+  }
+  const rows = created.map((id) => db.prepare('SELECT * FROM settlements WHERE id = ?').get(id))
+  return {
+    groupId,
+    sheetCount: rows.length,
+    cardOwnerUserId,
+    settlements: rows.map((r) => serializeSettlement(r)),
+    note: `已生成 ${rows.length} 张服务单,推送给卡主逐张签字。`
+  }
+}
+
+/* 签字:卡主本人签的那一刻即时扣卡。
+   顺序 = 先烧迁移桶(不进财务收入)→ 再烧新桶(进财务收入)→ 线下腿标"待收款"。
+   签前二次校验余额,不足直接拦回让技师改支付构成(原稿第 2 条)。 */
+function signSettlement(row, { signature, signedBy = '' }) {
+  const tenantId = row.tenant_id
+  const legs = db.prepare("SELECT * FROM settlement_payments WHERE settlement_id = ? AND leg IN ('stored_value','migrate_stored') ORDER BY rowid ASC").all(row.id)
+  const needStored = legs.reduce((sum, l) => sum + l.amount_cents, 0)
+  const balance = storedValueBalanceDetail(row.user_id, tenantId)
+  if (needStored > balance.totalCents) {
+    throw apiError(400, 'INSUFFICIENT_BALANCE',
+      `储值余额不足(需 ${needStored / 100},现有 ${balance.totalCents / 100}),请回到结算页改支付构成。`)
+  }
+  const now = iso(new Date())
+  db.exec('BEGIN IMMEDIATE')
+  try {
+    for (const leg of legs) {
+      if (leg.amount_cents <= 0) continue
+      db.prepare(`INSERT INTO stored_value_transactions (id, tenant_id, user_id, type, amount_cents, pay_channel, note, created_by, created_at, bucket)
+        VALUES (?, ?, ?, 'consume', ?, 'stored_value', ?, ?, ?, ?)`)
+        .run(randomId('sv'), tenantId, row.user_id, -Math.abs(leg.amount_cents),
+          `服务单 ${row.code} 结算扣卡`, signedBy || row.user_id, now, leg.leg === 'migrate_stored' ? 'legacy' : 'normal')
+      db.prepare("UPDATE settlement_payments SET status = 'paid' WHERE id = ?").run(leg.id)
+      // 迁移桶是老店欠顾客的服务,不是本店收入 —— 只有新桶进财务
+      if (leg.leg === 'stored_value') {
+        insertFinanceTransaction({
+          type: 'income', source: 'settlement', category: '服务收入-耗卡', tags: row.code,
+          amountCents: leg.amount_cents, payChannel: 'stored_value', occurredOn: todayOf(tenantId),
+          note: `服务单 ${row.code}`, createdBy: signedBy || 'customer_sign'
+        })
+      }
+    }
+    db.prepare("UPDATE settlement_payments SET status = 'awaiting' WHERE settlement_id = ? AND leg = 'offline' AND status = 'pending'").run(row.id)
+    db.prepare("UPDATE settlements SET status = 'signed', signature_data = ?, signed_at = ?, disclaimer_accepted = 1, updated_at = ? WHERE id = ?")
+      .run(String(signature).slice(0, 200), now, now, row.id)
+    // 结算 → 订单:签署驱动 COMPLETED
+    if (row.booking_id) {
+      db.prepare("UPDATE bookings SET status = 'COMPLETED', updated_at = ? WHERE id = ? AND status IN ('PENDING_PAYMENT','CONFIRMED')").run(now, row.booking_id)
+    }
+    // 组内全部签完,组才算完成
+    const unsigned = db.prepare("SELECT COUNT(*) AS n FROM settlements WHERE group_id = ? AND status <> 'signed'").get(row.group_id).n
+    db.prepare('UPDATE settlement_groups SET status = ?, updated_at = ? WHERE id = ?').run(unsigned === 0 ? 'signed' : 'pending_sign', now, row.group_id)
+    db.exec('COMMIT')
+  } catch (error) {
+    db.exec('ROLLBACK')
+    throw error
+  }
+  const fresh = db.prepare('SELECT * FROM settlements WHERE id = ?').get(row.id)
+  return {
+    settlement: serializeSettlement(fresh),
+    storedDeductedCents: needStored,
+    groupAllSigned: db.prepare("SELECT COUNT(*) AS n FROM settlements WHERE group_id = ? AND status <> 'signed'").get(row.group_id).n === 0
+  }
+}
+
+/* 更正:已签单据永不修改,只追加 amendments(改前/改后/谁/何时)。
+   储值支付的单被更正后,系统按差额自动补配余额 —— 纯系统行为,人工不可改这一笔(原稿第 6 条)。 */
+function amendSettlement(settlementId, body = {}, adminSession = {}) {
+  const tenantId = currentTenantId()
+  const row = db.prepare('SELECT * FROM settlements WHERE id = ? AND tenant_id = ?').get(settlementId, tenantId)
+  if (!row) throw apiError(404, 'NOT_FOUND', 'Settlement not found.')
+  if (row.status !== 'signed') throw apiError(400, 'BAD_REQUEST', '未签署的单直接改就行,不需要走更正。')
+  const before = serializeSettlement(row)
+  const newTotal = Math.max(0, Math.round(Number(body.totalCents ?? row.total_cents)))
+  const delta = newTotal - row.total_cents
+  const now = iso(new Date())
+  const storedPaid = db.prepare("SELECT COALESCE(SUM(amount_cents),0) AS n FROM settlement_payments WHERE settlement_id = ? AND leg IN ('stored_value','migrate_stored') AND status = 'paid'").get(row.id).n
+  // 少收了要退回卡里,多收了从卡里补扣;只在这张单确实用卡付过的时候才动余额
+  const autoAdjust = storedPaid > 0 ? -delta : 0
+  db.exec('BEGIN IMMEDIATE')
+  try {
+    db.prepare(`INSERT INTO settlement_amendments (id, tenant_id, settlement_id, before_json, after_json, reason, amount_delta_cents, auto_balance_adjust_cents, amended_by, amended_at, created_at)
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`)
+      .run(randomId('samd'), tenantId, row.id, JSON.stringify(before), JSON.stringify({ totalCents: newTotal, reason: body.reason || '' }),
+        String(body.reason || '').slice(0, 300), delta, autoAdjust, adminSession.email || 'owner', now, now)
+    if (autoAdjust !== 0) {
+      db.prepare(`INSERT INTO stored_value_transactions (id, tenant_id, user_id, type, amount_cents, pay_channel, note, created_by, created_at, bucket)
+        VALUES (?, ?, ?, 'adjust', ?, 'stored_value', ?, 'system_amendment', ?, 'normal')`)
+        .run(randomId('sv'), tenantId, row.user_id, autoAdjust, `服务单 ${row.code} 更正差额自动补配`, now)
+    }
+    db.exec('COMMIT')
+  } catch (error) {
+    db.exec('ROLLBACK')
+    throw error
+  }
+  return {
+    amended: true,
+    amountDeltaCents: delta,
+    autoBalanceAdjustCents: autoAdjust,
+    note: '原单据未改动(已签单据不可修改),更正已作为追加记录留痕。',
+    settlement: serializeSettlement(db.prepare('SELECT * FROM settlements WHERE id = ?').get(row.id))
+  }
+}
+
+function settlementCode(tenantId) {
+  const prefix = String(tenantId || '').replace(/[^a-z0-9]/gi, '').slice(0, 2).toUpperCase() || 'LL'
+  return `${prefix}-${todayOf(tenantId).replace(/-/g, '')}-${Math.random().toString(36).slice(2, 6).toUpperCase()}`
+}
+
+function serializeSettlement(row, { includeSignature = false } = {}) {
+  const items = db.prepare('SELECT * FROM settlement_items WHERE settlement_id = ? ORDER BY item_no ASC').all(row.id)
+  const techs = db.prepare('SELECT st.*, t.name AS tech_name FROM settlement_technicians st LEFT JOIN technicians t ON t.id = st.technician_id WHERE st.settlement_id = ?').all(row.id)
+  const pays = db.prepare('SELECT * FROM settlement_payments WHERE settlement_id = ? ORDER BY rowid ASC').all(row.id)
+  const store = db.prepare('SELECT name, address FROM stores WHERE tenant_id = ? AND is_active = 1 ORDER BY rowid ASC LIMIT 1').get(row.tenant_id)
+  const booking = row.booking_id ? db.prepare('SELECT appointment_start FROM bookings WHERE id = ?').get(row.booking_id) : null
+  return {
+    id: row.id,
+    code: row.code,
+    tenantId: row.tenant_id,
+    groupId: row.group_id,
+    bookingId: row.booking_id,
+    storeName: store?.name || '',
+    storeAddress: store?.address || '',
+    appointmentAt: booking?.appointment_start || null,
+    currency: tenantCurrencyCode(row.tenant_id),
+    servedPersonName: row.served_person_name || '',
+    isProxyPaid: Boolean(row.is_proxy_paid),
+    status: row.status,
+    tierKey: row.price_tier_used,
+    tierChangedFrom: row.tier_changed_from,
+    listTotalCents: row.list_total_cents,
+    subtotalCents: row.subtotal_cents,
+    depositDeductCents: row.deposit_deduct_cents,
+    discountTotalCents: row.discount_total_cents,
+    totalCents: row.total_cents,
+    payIntent: row.pay_intent,
+    signedAt: row.signed_at,
+    signatureName: row.signature_data ? (includeSignature ? row.signature_data : '(已签)') : null,
+    disclaimerAccepted: Boolean(row.disclaimer_accepted),
+    aftersalesStatus: row.aftersales_status || null,
+    perfAllocStatus: row.perf_alloc_status,
+    items: items.map((i) => ({
+      itemNo: i.item_no, kind: i.kind, serviceId: i.service_id, name: i.name_snapshot,
+      unit: i.unit, qty: i.qty, listUnitCents: i.list_unit_cents, unitPriceCents: i.unit_price_cents,
+      listAmountCents: i.list_amount_cents, amountCents: i.amount_cents, ruleApplied: i.rule_applied, isFree: Boolean(i.is_free)
+    })),
+    technicians: techs.map((t) => ({
+      technicianId: t.technician_id, name: t.tech_name || '', role: t.role,
+      itemNos: (() => { try { return JSON.parse(t.item_nos_json || '[]') } catch { return [] } })(),
+      sharePct: t.share_pct, shareCents: t.share_cents
+    })),
+    payments: pays.map((p) => ({ leg: p.leg, amountCents: p.amount_cents, payerUserId: p.payer_user_id, status: p.status, note: p.note })),
+    amendments: db.prepare('SELECT id, reason, amount_delta_cents AS amountDeltaCents, auto_balance_adjust_cents AS autoBalanceAdjustCents, amended_by AS amendedBy, amended_at AS amendedAt FROM settlement_amendments WHERE settlement_id = ? ORDER BY created_at ASC').all(row.id)
+  }
+}
+
 async function route(req, res) {
   if (req.method === 'OPTIONS') return json(res, 204, {})
   const url = new URL(req.url, `http://${req.headers.host}`)
@@ -7389,6 +7765,31 @@ async function route(req, res) {
       config,
       text: { zh: depositPolicyText(config, tid, 'zh'), en: depositPolicyText(config, tid, 'en') }
     })
+  }
+  // 顾客签署页(小程序 / 网页同构):凭单号只读,不需要登录
+  if (req.method === 'GET' && path.startsWith('/settlements/') && !path.endsWith('/sign')) {
+    const code = decodeURIComponent(path.split('/')[2] || '')
+    const row = db.prepare('SELECT * FROM settlements WHERE code = ?').get(code)
+    if (!row) throw apiError(404, 'NOT_FOUND', '找不到这张服务单。')
+    const config = getDepositConfig(row.tenant_id)
+    return json(res, 200, {
+      settlement: serializeSettlement(row),
+      depositPolicy: { text: depositPolicyText(config, row.tenant_id, 'zh'), deductible: config.deductible },
+      // 电子签定位:服务确认凭证,不做法律效力表述(原稿第 11 条)
+      disclaimer: '我已阅读并确认以上服务内容及款项无误,同意以此作为本次服务的结算凭证。'
+    })
+  }
+  // 卡主签字:签字那一刻即时扣卡(先烧迁移桶再烧新桶);签前二次校验余额,不足直接拦
+  if (req.method === 'POST' && path.startsWith('/settlements/') && path.endsWith('/sign')) {
+    const code = decodeURIComponent(path.split('/')[2] || '')
+    const row = db.prepare('SELECT * FROM settlements WHERE code = ?').get(code)
+    if (!row) throw apiError(404, 'NOT_FOUND', '找不到这张服务单。')
+    if (row.status === 'signed') throw apiError(400, 'ALREADY_SIGNED', '这张单已经签过了。')
+    const body = await readBody(req)
+    if (body.disclaimerAccepted !== true) throw apiError(400, 'DISCLAIMER_REQUIRED', '请先勾选确认声明再签字。')
+    const signature = String(body.signature || '').trim()
+    if (!signature) throw apiError(400, 'SIGNATURE_REQUIRED', '请签名后再确认。')
+    return json(res, 200, signSettlement(row, { signature, signedBy: body.signedBy || '' }))
   }
   if (req.method === 'GET' && path === '/health') return json(res, 200, { ok: true, service: 'lucky-luxe-api-local', time: iso(new Date()) })
   if (req.method === 'GET' && path === '/wechat/customer-service/webhook') {
@@ -8157,6 +8558,41 @@ async function route(req, res) {
       WHERE id = ?`).run(payload.type, payload.category, payload.nameZh, payload.nameEn, payload.descriptionZh, payload.descriptionEn, payload.imageUrl, payload.priceCents, payload.depositCents, payload.baseDurationMin, payload.isActive, payload.sortOrder, JSON.stringify(payload.processJson), JSON.stringify(payload.noticeJson), id)
     upsertServicePrice(currentTenantId(), id, 'list', payload.priceCents) // 同上:改价即同步 list 档
     return json(res, 200, { service: serializeService(getService(id)) })
+  }
+  // ===== P1 结算(技师端开单)=====
+  if (req.method === 'POST' && path === '/admin/settlements/preview') {
+    // 技师端表单实时试算:不落库,金额口径与正式开单完全一致
+    const body = await readBody(req)
+    return json(res, 200, { settlement: computeSettlement({ ...body, tenantId: currentTenantId() }) })
+  }
+  if (req.method === 'POST' && path === '/admin/settlements') {
+    if (adminSession.role !== 'owner' && adminSession.role !== 'staff') throw apiError(403, 'FORBIDDEN', '需要员工或老板权限。')
+    const body = await readBody(req)
+    return json(res, 201, createSettlementGroup(body, adminSession))
+  }
+  if (req.method === 'GET' && path === '/admin/settlements') {
+    const tid = currentTenantId()
+    const rows = query.groupId
+      ? db.prepare('SELECT * FROM settlements WHERE tenant_id = ? AND group_id = ? ORDER BY rowid ASC').all(tid, query.groupId)
+      : (query.bookingId
+        ? db.prepare('SELECT * FROM settlements WHERE tenant_id = ? AND booking_id = ? ORDER BY rowid DESC').all(tid, query.bookingId)
+        : db.prepare('SELECT * FROM settlements WHERE tenant_id = ? ORDER BY created_at DESC LIMIT 60').all(tid))
+    return json(res, 200, { settlements: rows.map((r) => serializeSettlement(r)) })
+  }
+  if (req.method === 'POST' && path.startsWith('/admin/settlements/') && path.endsWith('/amend')) {
+    if (adminSession.role !== 'owner') throw apiError(403, 'FORBIDDEN', '只有老板可以更正已签单据。')
+    const id = path.split('/')[3]
+    const body = await readBody(req)
+    return json(res, 200, amendSettlement(id, body, adminSession))
+  }
+  if (req.method === 'POST' && path.startsWith('/admin/settlements/') && path.endsWith('/aftersales')) {
+    const id = path.split('/')[3]
+    const row = db.prepare('SELECT * FROM settlements WHERE id = ? AND tenant_id = ?').get(id, currentTenantId())
+    if (!row) throw apiError(404, 'NOT_FOUND', 'Settlement not found.')
+    const body = await readBody(req)
+    db.prepare('UPDATE settlements SET aftersales_status = ?, updated_at = ? WHERE id = ?')
+      .run(String(body.status || 'in_progress').slice(0, 20), iso(new Date()), id)
+    return json(res, 200, { settlement: serializeSettlement(db.prepare('SELECT * FROM settlements WHERE id = ?').get(id)) })
   }
   // ===== P1.2 定金规则(商家自助)=====
   if (path === '/admin/deposit-config') {
@@ -11790,6 +12226,121 @@ db.exec(`
   SELECT 'identity-bf-' || lower(hex(randomblob(6))), id, 'phone', phone, phone, datetime('now'), datetime('now')
   FROM users WHERE phone IS NOT NULL AND phone != '';
 `)
+/* ===== P1 结算闭环(2026-08-08 原稿)=====
+   一次结算 = 一个 settlement_group;组内一位被服务者一张 settlement(带朋友来就是多张)。
+   金额**全部由后端算**,前端只显示返回值 —— 两条恒等式由 assertSettlementInvariants 在
+   每次计算后强制校验,算错就直接抛错,不可能悄悄发出去。
+   全部表带 tenant_id 且**不给 DEFAULT**(P0.9 纪律)。 */
+db.exec(`
+  CREATE TABLE IF NOT EXISTS settlement_groups (
+    id TEXT PRIMARY KEY,
+    tenant_id TEXT NOT NULL,
+    booking_id TEXT,
+    card_owner_user_id TEXT NOT NULL,
+    status TEXT NOT NULL DEFAULT 'pending_sign',
+    created_by TEXT,
+    created_at TEXT NOT NULL,
+    updated_at TEXT NOT NULL
+  );
+  CREATE TABLE IF NOT EXISTS settlements (
+    id TEXT PRIMARY KEY,
+    tenant_id TEXT NOT NULL,
+    group_id TEXT NOT NULL,
+    booking_id TEXT,
+    user_id TEXT NOT NULL,
+    served_person_name TEXT,
+    is_proxy_paid INTEGER NOT NULL DEFAULT 0,
+    code TEXT NOT NULL UNIQUE,
+    status TEXT NOT NULL DEFAULT 'pending_sign',
+    price_tier_used TEXT NOT NULL DEFAULT 'list',
+    tier_changed_from TEXT,
+    tier_changed_by TEXT,
+    tier_changed_at TEXT,
+    list_total_cents INTEGER NOT NULL DEFAULT 0,
+    subtotal_cents INTEGER NOT NULL DEFAULT 0,
+    deposit_deduct_cents INTEGER NOT NULL DEFAULT 0,
+    discount_total_cents INTEGER NOT NULL DEFAULT 0,
+    total_cents INTEGER NOT NULL DEFAULT 0,
+    pay_intent TEXT NOT NULL DEFAULT 'balance_plus_offline',
+    signature_data TEXT,
+    signed_at TEXT,
+    disclaimer_accepted INTEGER NOT NULL DEFAULT 0,
+    perf_alloc_status TEXT NOT NULL DEFAULT 'pending',
+    aftersales_status TEXT,
+    created_by TEXT,
+    created_at TEXT NOT NULL,
+    updated_at TEXT NOT NULL
+  );
+  CREATE INDEX IF NOT EXISTS idx_settlements_group ON settlements(tenant_id, group_id);
+  CREATE TABLE IF NOT EXISTS settlement_items (
+    id TEXT PRIMARY KEY,
+    tenant_id TEXT NOT NULL,
+    settlement_id TEXT NOT NULL,
+    item_no INTEGER NOT NULL,
+    kind TEXT NOT NULL DEFAULT 'main',
+    service_id TEXT,
+    name_snapshot TEXT NOT NULL,
+    tier_key TEXT NOT NULL DEFAULT 'list',
+    unit TEXT NOT NULL DEFAULT 'once',
+    qty INTEGER NOT NULL DEFAULT 1,
+    list_unit_cents INTEGER NOT NULL DEFAULT 0,
+    unit_price_cents INTEGER NOT NULL DEFAULT 0,
+    list_amount_cents INTEGER NOT NULL DEFAULT 0,
+    amount_cents INTEGER NOT NULL DEFAULT 0,
+    rule_applied TEXT,
+    is_free INTEGER NOT NULL DEFAULT 0
+  );
+  CREATE INDEX IF NOT EXISTS idx_settlement_items ON settlement_items(tenant_id, settlement_id, item_no);
+  CREATE TABLE IF NOT EXISTS settlement_technicians (
+    id TEXT PRIMARY KEY,
+    tenant_id TEXT NOT NULL,
+    settlement_id TEXT NOT NULL,
+    technician_id TEXT NOT NULL,
+    role TEXT NOT NULL DEFAULT 'main',
+    item_nos_json TEXT NOT NULL DEFAULT '[]',
+    share_pct REAL,
+    share_cents INTEGER,
+    allocated_by TEXT,
+    allocated_at TEXT
+  );
+  CREATE INDEX IF NOT EXISTS idx_settlement_techs ON settlement_technicians(tenant_id, settlement_id);
+  CREATE TABLE IF NOT EXISTS settlement_payments (
+    id TEXT PRIMARY KEY,
+    tenant_id TEXT NOT NULL,
+    settlement_id TEXT NOT NULL,
+    leg TEXT NOT NULL,
+    amount_cents INTEGER NOT NULL DEFAULT 0,
+    payer_user_id TEXT,
+    status TEXT NOT NULL DEFAULT 'pending',
+    note TEXT,
+    created_at TEXT NOT NULL
+  );
+  CREATE INDEX IF NOT EXISTS idx_settlement_payments ON settlement_payments(tenant_id, settlement_id);
+  CREATE TABLE IF NOT EXISTS settlement_amendments (
+    id TEXT PRIMARY KEY,
+    tenant_id TEXT NOT NULL,
+    settlement_id TEXT NOT NULL,
+    before_json TEXT NOT NULL,
+    after_json TEXT NOT NULL,
+    reason TEXT,
+    amount_delta_cents INTEGER NOT NULL DEFAULT 0,
+    auto_balance_adjust_cents INTEGER NOT NULL DEFAULT 0,
+    amended_by TEXT,
+    amended_at TEXT NOT NULL,
+    created_at TEXT NOT NULL
+  );
+  CREATE INDEX IF NOT EXISTS idx_settlement_amendments ON settlement_amendments(tenant_id, settlement_id);
+`)
+// 已签单据永不修改:更正只能走 amendments。数据库层兜住,不靠人记纪律。
+db.exec(`
+  DROP TRIGGER IF EXISTS settlements_signed_no_update;
+  CREATE TRIGGER settlements_signed_no_update BEFORE UPDATE ON settlements
+  WHEN OLD.status = 'signed' AND NEW.status = 'signed'
+    AND (OLD.total_cents <> NEW.total_cents OR OLD.subtotal_cents <> NEW.subtotal_cents
+      OR OLD.list_total_cents <> NEW.list_total_cents OR OLD.signature_data IS NOT NEW.signature_data)
+  BEGIN SELECT RAISE(ABORT, 'signed settlement is immutable; use settlement_amendments'); END;
+`)
+
 /* ===== P1.2 定金保留凭据 + 话术模板中心(2026-08-08)=====
    tenant_id 一律不给 DEFAULT(P0.9 立的纪律:默认值会让漏写的 INSERT 悄悄归到旗舰店名下)。 */
 db.exec(`

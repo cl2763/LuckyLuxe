@@ -68,6 +68,10 @@ const MAIN_ITEMS = [
 // [名称, 大类key, 类型, 原价, 分享价, 会员价, 单位, 适用大类keys]
 const NAIL_SCOPE = ['nail_solid', 'nail_simple', 'nail_complex']
 const ADDON_ITEMS = [
+  // 2026-08-08 降维定稿:免卸不是规则,是价目表里价格为 0 的目录项。
+  // addon_scope 只挂对应大类 → 纯卸除单的表单自然不出现,「本单继续做才免」零代码实现。
+  ['本店制作免卸甲', 'removal', 'NAIL', 0, 0, 0, 'once', NAIL_SCOPE],
+  ['本店制作免卸睫毛', 'lash', 'LASH', 0, 0, 0, 'once', ['lash']],
   ['浅贴甲片', 'nail_simple', 'NAIL', 38000, 26000, 18000, 'once', NAIL_SCOPE],
   ['甲膜', 'nail_simple', 'NAIL', 38000, 26000, 18000, 'once', NAIL_SCOPE],
   ['水晶', 'nail_complex', 'NAIL', 88000, 68000, 46000, 'once', NAIL_SCOPE],
@@ -83,8 +87,7 @@ const ADDON_ITEMS = [
 const RULES = {
   foot_surcharge: { isActive: true, config: { amountCents: 10000 } },
   single_finger: { isActive: true, config: { pct: 10 } },
-  tip_reuse: { isActive: true, config: { amountCents: 10000 } },
-  removal_free_if_in_store: { isActive: true, config: { enabled: true } }
+  tip_reuse: { isActive: true, config: { amountCents: 10000 } }
 }
 
 async function main() {
@@ -168,7 +171,7 @@ async function main() {
 
   // 6. 四条计价规则
   await T('/admin/pricing/rules', { method: 'PUT', body: JSON.stringify({ rules: RULES }) })
-  log('- 计价规则:足部加收 ¥100 / 单指 10% / 甲片重利用 ¥100 / 本店免卸')
+  log('- 计价规则:足部加收 ¥100 / 单指 10% / 甲片重利用 ¥100')
 
   // 7. AI 知识事实(单店层):品牌与价目口径
   await T('/admin/kb/facts', {
@@ -189,7 +192,7 @@ async function main() {
     {
       question: '卸甲要钱吗?',
       keywords: '卸甲,卸,拆,要钱吗',
-      answerZh: '本店做的甲免费卸;不是本店做的按卸甲价目表收费(卸本甲 ¥68、甲片卸甲 ¥78、水晶卸甲 ¥98,足部卸甲 ¥68),具体以技师现场确认为准。'
+      answerZh: '本单继续做甲的,可用「本店制作免卸甲」这一项免收;单纯来卸的按卸甲价目表收费(卸本甲 ¥68、甲片卸甲 ¥78、水晶卸甲 ¥98,足部卸甲 ¥68),具体以技师现场确认为准。'
     },
     {
       question: '断了一根能单独补吗?',

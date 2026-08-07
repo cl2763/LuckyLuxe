@@ -3,7 +3,7 @@
 // 2. 足部加收 = 整单最终 +amountCents(会员档也一样加)
 // 3. 单指价 = 该单所用价格档的延长类主项目价 ÷10 × 指数
 // 4. 甲片重利用固定价,不分档
-// 5. 本店有历史完成单 → 卸甲 0 元(system);无历史时技师手动勾选也 0 元(manual)
+// 5. 卸甲降维:「本店制作免卸甲」是价目表里价格为 0 的目录项,不再有免卸规则引擎
 // 6. 租户隔离:另一家店读不到、也报不了本店的价
 const BASE_URL = process.env.TEST_BASE_URL || 'http://127.0.0.1:4128'
 const PLATFORM = process.env.TEST_ADMIN_TOKEN || 'owner-demo-token'
@@ -119,12 +119,11 @@ async function main() {
       rules: {
         foot_surcharge: { isActive: true, config: { amountCents: 10000 } },
         single_finger: { isActive: true, config: { pct: 10 } },
-        tip_reuse: { isActive: true, config: { amountCents: 10000 } },
-        removal_free_if_in_store: { isActive: true, config: { enabled: true } }
+        tip_reuse: { isActive: true, config: { amountCents: 10000 } }
       }
     })
   }, shopA.token)
-  check('四条计价规则保存', rulesPut.status === 200 && rulesPut.data.rules.foot_surcharge.isActive === true && rulesPut.data.rules.single_finger.config.pct === 10, JSON.stringify(rulesPut.data))
+  check('三条计价规则保存(免卸已降维成目录项,不再是规则)', rulesPut.status === 200 && rulesPut.data.rules.foot_surcharge.isActive === true && rulesPut.data.rules.single_finger.config.pct === 10, JSON.stringify(rulesPut.data))
 
   // ---- ① 足部加收:整单最终 +100,任何档都一样加 ----
   const listPlain = await request('/admin/pricing/preview', { method: 'POST', body: JSON.stringify({ serviceId: mainId, tierKey: 'list' }) }, shopA.token)
@@ -159,56 +158,35 @@ async function main() {
   check('③ 甲片重利用固定 10000(原价档)', tipList.data.quote.totalCents === 88000 + 10000, String(tipList.data.quote.totalCents))
   check('③ 甲片重利用固定 10000(会员档同价)', tipMember.data.quote.totalCents === 46000 + 10000, String(tipMember.data.quote.totalCents))
 
-  // ---- ④ 免卸:有本店历史完成单 → system;无历史 → 技师手动 manual ----
-  const direct = await request('/admin/bookings/direct', {
+  /* ---- ④ 卸甲/卸睫降维(2026-08-08 定稿):不再有免卸规则引擎,
+        「本店制作免卸甲」就是价目表里一个三档价均为 0 的目录项 ---- */
+  const freeRemoval = await request('/admin/pricing/items', {
     method: 'POST',
-    body: JSON.stringify({ newCustomerName: `老客${RUN_ID}`, serviceId: mainId, technicianId: techId, date: localDateStr(-1), time: '11:00', durationMin: 60 })
+    body: JSON.stringify({ nameZh: '本店制作免卸甲', type: 'NAIL', categoryId: removalCatId, itemKind: 'addon', listPriceCents: 0, sharePriceCents: 0, memberPriceCents: 0, addonScope: [extId] })
   }, shopA.token)
-  check('老板直接排单成功(用于制造历史单)', direct.status === 201, JSON.stringify(direct.data))
-  const bookingId = direct.data.booking.id
-  const done = await request(`/admin/bookings/${bookingId}/status`, { method: 'PATCH', body: JSON.stringify({ status: 'COMPLETED' }) }, shopA.token)
-  check('历史单置为 COMPLETED', done.status === 200)
-  const customers = await request('/admin/customers', {}, shopA.token)
-  const oldCustomer = customers.data.customers.find((c) => c.displayName === `老客${RUN_ID}`)
-  check('老顾客在客户档案里', Boolean(oldCustomer), JSON.stringify(customers.data.customers).slice(0, 200))
+  check('④ 免收目录项建好(三档价均 0)', freeRemoval.status === 201
+    && freeRemoval.data.item.listPriceCents === 0 && freeRemoval.data.item.memberPriceCents === 0, JSON.stringify(freeRemoval.data.item))
+  const freeRemovalId = freeRemoval.data.item.id
 
-  const oldQuote = await request('/admin/pricing/preview', {
+  const withFree = await request('/admin/pricing/preview', {
     method: 'POST',
-    body: JSON.stringify({ serviceId: mainId, tierKey: 'list', addons: [{ serviceId: removalId }], userId: oldCustomer.id })
+    body: JSON.stringify({ serviceId: mainId, tierKey: 'list', addons: [{ serviceId: freeRemovalId }] })
   }, shopA.token)
-  const oldRemovalLine = oldQuote.data.quote.lines.find((l) => l.serviceId === removalId)
-  check('④ 本店老顾客卸甲 0 元 + freeRemovalBy=system',
-    oldRemovalLine.amountCents === 0 && oldQuote.data.quote.freeRemovalBy === 'system' && oldQuote.data.quote.totalCents === 88000,
-    JSON.stringify(oldQuote.data.quote))
+  const freeLine = withFree.data.quote.lines.find((l) => l.serviceId === freeRemovalId)
+  check('④ 含主项单勾免收项:该行 0 元,总额不变', freeLine.amountCents === 0 && freeLine.isFree === true && withFree.data.quote.totalCents === 88000,
+    JSON.stringify(withFree.data.quote))
 
-  // 新顾客(无历史):默认收费,技师勾选后免
-  const imported = await request(`/platform/tenants/${shopA.tenantId}/import/customers`, {
+  const paidRemoval = await request('/admin/pricing/preview', {
     method: 'POST',
-    body: JSON.stringify({ dryRun: false, rows: [{ name: `新客${RUN_ID}`, phone: `13900${RUN_ID.slice(-6)}` }] })
-  })
-  check('导入一个无历史新顾客', imported.status === 200 && imported.data.created === 1, JSON.stringify(imported.data))
-  const newCustomer = { id: imported.data.users[0].userId }
-  check('新顾客建档成功', Boolean(newCustomer.id))
+    body: JSON.stringify({ serviceId: mainId, tierKey: 'list', addons: [{ serviceId: removalId }] })
+  }, shopA.token)
+  check('④ 收费卸甲仍按目录价收', paidRemoval.data.quote.totalCents === 88000 + 6800, String(paidRemoval.data.quote.totalCents))
 
-  const newPaid = await request('/admin/pricing/preview', {
-    method: 'POST',
-    body: JSON.stringify({ serviceId: mainId, tierKey: 'list', addons: [{ serviceId: removalId }], userId: newCustomer.id })
-  }, shopA.token)
-  check('④ 无历史顾客卸甲照收', newPaid.data.quote.totalCents === 88000 + 6800 && newPaid.data.quote.freeRemovalBy === null, JSON.stringify(newPaid.data.quote))
-  const newManual = await request('/admin/pricing/preview', {
-    method: 'POST',
-    body: JSON.stringify({ serviceId: mainId, tierKey: 'list', addons: [{ serviceId: removalId }], userId: newCustomer.id, manualFreeRemoval: true })
-  }, shopA.token)
-  check('④ 技师手动免卸生效 + freeRemovalBy=manual', newManual.data.quote.totalCents === 88000 && newManual.data.quote.freeRemovalBy === 'manual', JSON.stringify(newManual.data.quote))
-
-  // 规则关掉后手动勾选也不再免(规则是总闸)
-  await request('/admin/pricing/rules', { method: 'PUT', body: JSON.stringify({ rules: { removal_free_if_in_store: { isActive: false, config: { enabled: false } } } }) }, shopA.token)
-  const offQuote = await request('/admin/pricing/preview', {
-    method: 'POST',
-    body: JSON.stringify({ serviceId: mainId, tierKey: 'list', addons: [{ serviceId: removalId }], userId: oldCustomer.id, manualFreeRemoval: true })
-  }, shopA.token)
-  check('免卸规则关掉后不再免单', offQuote.data.quote.totalCents === 88000 + 6800 && offQuote.data.quote.freeRemovalBy === null)
-  await request('/admin/pricing/rules', { method: 'PUT', body: JSON.stringify({ rules: { removal_free_if_in_store: { isActive: true, config: { enabled: true } } } }) }, shopA.token)
+  check('④ 免收项的适用大类只挂美甲(纯卸除单的表单自然不出现它)',
+    JSON.stringify(freeRemoval.data.item.addonScope) === JSON.stringify([extId]), JSON.stringify(freeRemoval.data.item.addonScope))
+  check('④ 免卸规则引擎已下线(规则列表只剩三条)',
+    !Object.prototype.hasOwnProperty.call(rulesPut.data.rules, 'removal_free_if_in_store')
+    && Object.keys(rulesPut.data.rules).length === 3, JSON.stringify(Object.keys(rulesPut.data.rules)))
 
   // ---- ⑤ 租户隔离 ----
   const bItems = await request('/admin/pricing/items', {}, shopB.token)
@@ -235,6 +213,12 @@ async function main() {
 
   const delBusy = await request(`/admin/pricing/categories/${extId}`, { method: 'DELETE' }, shopA.token)
   check('大类下有项目时不允许删除', delBusy.status === 409, JSON.stringify(delBusy.data))
+  // 造一笔用到该项目的订单,验证「有历史订单的项目只下架不物理删」
+  const usedBooking = await request('/admin/bookings/direct', {
+    method: 'POST',
+    body: JSON.stringify({ newCustomerName: `占用客${RUN_ID}`, serviceId: mainId, technicianId: techId, date: localDateStr(-1), time: '11:00', durationMin: 60 })
+  }, shopA.token)
+  check('造一笔占用该项目的订单', usedBooking.status === 201, JSON.stringify(usedBooking.data).slice(0, 200))
   const delUsedItem = await request(`/admin/pricing/items/${mainId}`, { method: 'DELETE' }, shopA.token)
   check('有历史订单的项目改为下架而非物理删除', delUsedItem.status === 200 && delUsedItem.data.deleted === false && delUsedItem.data.disabled === true, JSON.stringify(delUsedItem.data))
   const delFreeItem = await request(`/admin/pricing/items/${fingerFixedId}`, { method: 'DELETE' }, shopA.token)
