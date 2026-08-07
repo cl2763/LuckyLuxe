@@ -8,7 +8,10 @@ import { fileURLToPath } from 'node:url'
 import { analyzeReferenceImage, createBookingSummary, createCustomerInsight, createCustomerServiceReply, createDailyBrief, createRecallMessages, createServiceNoteInsights, createSocialCopy, extractKbEntriesFromDocument, polishStaffQuoteReply } from './ai-utils.mjs'
 import { buildKnowledgeContext, loadCustomerServiceKnowledgeBase } from './kb-utils.mjs'
 
-process.env.TZ = process.env.APP_TIMEZONE || 'America/Toronto'
+// 进程时区只作为「没有门店时区可用时」的兜底。业务上的「今天/本月/日期分桶」一律按门店时区算,
+// 见下方 tenantTimezone() / localParts(dateLike, tz) —— 2026-08-07 P0.9 按店时区改造(审计 B-1)。
+const APP_TIMEZONE = process.env.APP_TIMEZONE || 'America/Toronto'
+process.env.TZ = APP_TIMEZONE
 
 const __dirname = dirname(fileURLToPath(import.meta.url))
 const workspaceRoot = join(__dirname, '..', '..')
@@ -5620,9 +5623,55 @@ function registerGoogleDemoUser(body) {
   return serializeUser(db.prepare('SELECT * FROM users WHERE id = ?').get(id))
 }
 
-function localParts(dateLike) {
+/* ===== P0.9 按店时区(2026-08-07,审计 B-1)=====
+   以前这里写死 America/Toronto,于是所有商家的「今天/本月/日期分桶」都按多伦多算。
+   小婕店在中国:北京 8/8 08:00 = 多伦多 8/7 20:00,她早上看到的「今日预约」是多伦多的昨天。
+   现在默认取「当前租户主门店的时区」;租户上下文之外(启动、备份)回落 APP_TIMEZONE,
+   而旗舰店门店时区就是 America/Toronto —— 它的所有分桶结果逐字不变。 */
+const tenantTimezoneCache = new Map()
+
+function isValidTimeZone(tz) {
+  if (!tz) return false
+  try {
+    new Intl.DateTimeFormat('en-CA', { timeZone: tz })
+    return true
+  } catch (e) {
+    return false
+  }
+}
+
+function tenantTimezone(tenantId = currentTenantId()) {
+  if (tenantTimezoneCache.has(tenantId)) return tenantTimezoneCache.get(tenantId)
+  let tz = APP_TIMEZONE
+  try {
+    const row = db.prepare('SELECT timezone FROM stores WHERE tenant_id = ? AND is_active = 1 ORDER BY rowid ASC LIMIT 1').get(tenantId)
+    if (row?.timezone && isValidTimeZone(row.timezone)) tz = row.timezone
+  } catch (e) { /* 建表前/异常时回落 */ }
+  tenantTimezoneCache.set(tenantId, tz)
+  return tz
+}
+
+// 门店时区改了要立刻生效,别等重启
+function invalidateTenantTimezone(tenantId) {
+  if (tenantId) tenantTimezoneCache.delete(tenantId)
+  else tenantTimezoneCache.clear()
+}
+
+// 某个时刻在指定时区的 UTC 偏移(毫秒)。用它把「墙上时间」换算成真实时刻,DST 也对。
+function timeZoneOffsetMs(date, tz) {
+  const parts = new Intl.DateTimeFormat('en-US', {
+    timeZone: tz, hour12: false,
+    year: 'numeric', month: '2-digit', day: '2-digit',
+    hour: '2-digit', minute: '2-digit', second: '2-digit'
+  }).formatToParts(date)
+  const get = (type) => Number(parts.find((part) => part.type === type)?.value)
+  const asUtc = Date.UTC(get('year'), get('month') - 1, get('day'), get('hour') % 24, get('minute'), get('second'))
+  return asUtc - date.getTime()
+}
+
+function localParts(dateLike, tz = tenantTimezone()) {
   const parts = new Intl.DateTimeFormat('en-CA', {
-    timeZone: 'America/Toronto',
+    timeZone: isValidTimeZone(tz) ? tz : APP_TIMEZONE,
     year: 'numeric',
     month: '2-digit',
     day: '2-digit',
@@ -5635,6 +5684,15 @@ function localParts(dateLike) {
     date: `${get('year')}-${get('month')}-${get('day')}`,
     time: `${get('hour')}:${get('minute')}`
   }
+}
+
+// 本店的「今天」/「本月」——业务分桶统一走这两个
+function todayOf(tenantId = currentTenantId()) {
+  return localParts(new Date(), tenantTimezone(tenantId)).date
+}
+
+function monthKeyOf(tenantId = currentTenantId(), dateLike = new Date()) {
+  return localParts(dateLike, tenantTimezone(tenantId)).date.slice(0, 7)
 }
 
 function getService(id) {
@@ -5650,8 +5708,15 @@ function timeFromMinutes(total) {
   return `${String(Math.floor(total / 60)).padStart(2, '0')}:${String(total % 60).padStart(2, '0')}`
 }
 
-function localDateTime(date, time) {
-  return new Date(`${date}T${time}:00`)
+// 「2026-08-08 10:00」这种墙上时间要按门店时区解释,而不是按服务器进程时区。
+// 旗舰店门店时区 = 进程时区,所以它的结果与改造前完全一致。
+function localDateTime(date, time, tz = tenantTimezone()) {
+  const zone = isValidTimeZone(tz) ? tz : APP_TIMEZONE
+  const naiveUtc = new Date(`${date}T${time}:00Z`)
+  const firstGuess = new Date(naiveUtc.getTime() - timeZoneOffsetMs(naiveUtc, zone))
+  // DST 边界上第一次猜可能差一小时,用落点自身的偏移再校正一次
+  const settled = new Date(naiveUtc.getTime() - timeZoneOffsetMs(firstGuess, zone))
+  return settled
 }
 
 function addMinutes(date, minutes) {
@@ -8504,7 +8569,8 @@ async function route(req, res) {
     db.prepare("INSERT INTO tenants (id, name, plan, status, plan_expires_at) VALUES (?, ?, ?, 'active', ?)").run(id, name.slice(0, 60), plan, planExpiresAt)
     db.prepare('INSERT INTO stores (id, name, address, phone, timezone, currency, is_active, tenant_id) VALUES (?, ?, ?, ?, ?, ?, 1, ?)')
       .run(`store-${id}`, name.slice(0, 60), String(body.city || '').slice(0, 80), String(body.phone || '').slice(0, 30),
-        String(body.timezone || 'America/Toronto').slice(0, 64), String(body.currency || 'CAD').toUpperCase().slice(0, 6), id)
+        String(body.timezone || APP_TIMEZONE).slice(0, 64), String(body.currency || 'CAD').toUpperCase().slice(0, 6), id)
+    invalidateTenantTimezone(id)
     // 老板账号:username 唯一,默认 boss-<id>
     let username = String(body.username || `boss-${id}`).trim().toLowerCase().replace(/[^a-z0-9-]/g, '') || `boss-${id}`
     let suffix = 1
@@ -8562,6 +8628,7 @@ async function route(req, res) {
         // 时区(2026-08-07):门店所在地时区,境内店是 Asia/Shanghai;不传就保持原值
         const timezone = String(body.timezone ?? store.timezone ?? 'America/Toronto').trim().slice(0, 64) || store.timezone
         db.prepare('UPDATE stores SET name = ?, address = ?, phone = ?, currency = ?, timezone = ? WHERE id = ?').run(name, address, phone, currency, timezone, store.id)
+        invalidateTenantTimezone(tenantId) // 时区改完立刻生效,不等重启
         // 同步进该租户 AI 知识事实(与商家端同规则,AI 回答与系统一致)
         const factStmt = db.prepare(`INSERT INTO tenant_kb_facts (tenant_id, key, value, updated_by, updated_at) VALUES (?, ?, ?, 'platform', ?)
           ON CONFLICT(tenant_id, key) DO UPDATE SET value = excluded.value, updated_by = 'platform', updated_at = excluded.updated_at`)
@@ -9872,6 +9939,23 @@ async function route(req, res) {
     if (address) factStmt.run(currentTenantId(), 'storeAddress', address, adminSession.email || 'owner', iso(new Date()))
     if (phone) factStmt.run(currentTenantId(), 'storePhone', phone, adminSession.email || 'owner', iso(new Date()))
     return json(res, 200, { store: db.prepare('SELECT id, name, address, phone FROM stores WHERE id = ?').get(storeId) })
+  }
+  // 本店时钟(只读):运维/回归用来确认「服务端认为本店现在几号」——按店时区改造后的对外口径
+  if (req.method === 'GET' && path === '/admin/store-clock') {
+    const tid = currentTenantId()
+    const tz = tenantTimezone(tid)
+    // ?at=<ISO> 只影响这个只读回显,用来在回归里对固定时刻断言跨日/跨月边界
+    const at = query.at && !Number.isNaN(new Date(query.at).getTime()) ? new Date(query.at) : new Date()
+    const parts = localParts(at, tz)
+    return json(res, 200, {
+      tenantId: tid,
+      timezone: tz,
+      today: parts.date,
+      monthKey: monthKeyOf(tid, at),
+      localTime: parts.time,
+      serverProcessTimezone: APP_TIMEZONE,
+      nowUtc: iso(at)
+    })
   }
   if (req.method === 'GET' && path === '/admin/business-hours') {
     const stores = db.prepare('SELECT id, name, address, phone, currency, timezone FROM stores WHERE is_active = 1 AND tenant_id = ? ORDER BY name ASC').all(currentTenantId())
@@ -11258,6 +11342,84 @@ db.exec(`
   SELECT 'identity-bf-' || lower(hex(randomblob(6))), id, 'phone', phone, phone, datetime('now'), datetime('now')
   FROM users WHERE phone IS NOT NULL AND phone != '';
 `)
+/* ===== P0.9 七张子表补 tenant_id(2026-08-07,审计 B-5)=====
+   payments / technician_schedules / business_hours / store_special_dates /
+   booking_slots / booking_status_history / booking_drafts 一直没有 tenant_id,
+   靠父键(booking / technician / store)推导。现状安全,但今后任何直查裸表的报表/清理代码都会跨店。
+
+   两个刻意的设计:
+   1. 加列**不带 DEFAULT**(可空)。A-1 的教训:带 DEFAULT 'lucky-luxe' 会让漏写的 INSERT 悄悄
+      归到旗舰店名下,代码里根本看不见。留 NULL 反而刺眼,回归里直接断言"零 NULL"。
+   2. 新写入靠**数据库触发器**从父表回填,而不是去改 13 个 INSERT 语句 ——
+      改语句会漏、以后新增的写入点也会忘;触发器是一次性的、对未来的写入同样生效。
+   本批只补列 + 回填 + 新写入带租户,**现有查询的父键条件一律不动**(行为零变化)。 */
+for (const sql of [
+  'ALTER TABLE payments ADD COLUMN tenant_id TEXT',
+  'ALTER TABLE technician_schedules ADD COLUMN tenant_id TEXT',
+  'ALTER TABLE business_hours ADD COLUMN tenant_id TEXT',
+  'ALTER TABLE store_special_dates ADD COLUMN tenant_id TEXT',
+  'ALTER TABLE booking_slots ADD COLUMN tenant_id TEXT',
+  'ALTER TABLE booking_status_history ADD COLUMN tenant_id TEXT',
+  'ALTER TABLE booking_drafts ADD COLUMN tenant_id TEXT'
+]) {
+  try {
+    db.exec(sql)
+  } catch (error) {
+    if (!String(error.message || '').includes('duplicate column')) throw error
+  }
+}
+// 存量回填(幂等:只补 NULL 的行)
+db.exec(`
+  UPDATE payments SET tenant_id = (SELECT b.tenant_id FROM bookings b WHERE b.id = payments.booking_id) WHERE tenant_id IS NULL;
+  UPDATE booking_slots SET tenant_id = (SELECT b.tenant_id FROM bookings b WHERE b.id = booking_slots.booking_id) WHERE tenant_id IS NULL;
+  UPDATE booking_status_history SET tenant_id = (SELECT b.tenant_id FROM bookings b WHERE b.id = booking_status_history.booking_id) WHERE tenant_id IS NULL;
+  UPDATE technician_schedules SET tenant_id = (SELECT t.tenant_id FROM technicians t WHERE t.id = technician_schedules.technician_id) WHERE tenant_id IS NULL;
+  UPDATE business_hours SET tenant_id = (SELECT s.tenant_id FROM stores s WHERE s.id = business_hours.store_id) WHERE tenant_id IS NULL;
+  UPDATE store_special_dates SET tenant_id = (SELECT s.tenant_id FROM stores s WHERE s.id = store_special_dates.store_id) WHERE tenant_id IS NULL;
+  UPDATE booking_drafts SET tenant_id = (SELECT s.tenant_id FROM stores s WHERE s.id = booking_drafts.store_id) WHERE tenant_id IS NULL;
+`)
+// 父表已被删/悬空的极少数行:回落默认租户,保证"零 NULL"这条纪律始终成立
+db.exec(`
+  UPDATE payments SET tenant_id = '${DEFAULT_TENANT_ID}' WHERE tenant_id IS NULL;
+  UPDATE booking_slots SET tenant_id = '${DEFAULT_TENANT_ID}' WHERE tenant_id IS NULL;
+  UPDATE booking_status_history SET tenant_id = '${DEFAULT_TENANT_ID}' WHERE tenant_id IS NULL;
+  UPDATE technician_schedules SET tenant_id = '${DEFAULT_TENANT_ID}' WHERE tenant_id IS NULL;
+  UPDATE business_hours SET tenant_id = '${DEFAULT_TENANT_ID}' WHERE tenant_id IS NULL;
+  UPDATE store_special_dates SET tenant_id = '${DEFAULT_TENANT_ID}' WHERE tenant_id IS NULL;
+  UPDATE booking_drafts SET tenant_id = '${DEFAULT_TENANT_ID}' WHERE tenant_id IS NULL;
+`)
+// 新写入自动带租户:AFTER INSERT 从父表回填(每次启动重建,保证与代码同版本)
+db.exec(`
+  DROP TRIGGER IF EXISTS payments_tenant_fill;
+  DROP TRIGGER IF EXISTS booking_slots_tenant_fill;
+  DROP TRIGGER IF EXISTS booking_status_history_tenant_fill;
+  DROP TRIGGER IF EXISTS technician_schedules_tenant_fill;
+  DROP TRIGGER IF EXISTS business_hours_tenant_fill;
+  DROP TRIGGER IF EXISTS store_special_dates_tenant_fill;
+  DROP TRIGGER IF EXISTS booking_drafts_tenant_fill;
+
+  CREATE TRIGGER payments_tenant_fill AFTER INSERT ON payments WHEN NEW.tenant_id IS NULL
+  BEGIN UPDATE payments SET tenant_id = COALESCE((SELECT b.tenant_id FROM bookings b WHERE b.id = NEW.booking_id), '${DEFAULT_TENANT_ID}') WHERE rowid = NEW.rowid; END;
+
+  CREATE TRIGGER booking_slots_tenant_fill AFTER INSERT ON booking_slots WHEN NEW.tenant_id IS NULL
+  BEGIN UPDATE booking_slots SET tenant_id = COALESCE((SELECT b.tenant_id FROM bookings b WHERE b.id = NEW.booking_id), '${DEFAULT_TENANT_ID}') WHERE rowid = NEW.rowid; END;
+
+  CREATE TRIGGER booking_status_history_tenant_fill AFTER INSERT ON booking_status_history WHEN NEW.tenant_id IS NULL
+  BEGIN UPDATE booking_status_history SET tenant_id = COALESCE((SELECT b.tenant_id FROM bookings b WHERE b.id = NEW.booking_id), '${DEFAULT_TENANT_ID}') WHERE rowid = NEW.rowid; END;
+
+  CREATE TRIGGER technician_schedules_tenant_fill AFTER INSERT ON technician_schedules WHEN NEW.tenant_id IS NULL
+  BEGIN UPDATE technician_schedules SET tenant_id = COALESCE((SELECT t.tenant_id FROM technicians t WHERE t.id = NEW.technician_id), '${DEFAULT_TENANT_ID}') WHERE technician_id = NEW.technician_id AND date = NEW.date; END;
+
+  CREATE TRIGGER business_hours_tenant_fill AFTER INSERT ON business_hours WHEN NEW.tenant_id IS NULL
+  BEGIN UPDATE business_hours SET tenant_id = COALESCE((SELECT s.tenant_id FROM stores s WHERE s.id = NEW.store_id), '${DEFAULT_TENANT_ID}') WHERE store_id = NEW.store_id AND weekday = NEW.weekday; END;
+
+  CREATE TRIGGER store_special_dates_tenant_fill AFTER INSERT ON store_special_dates WHEN NEW.tenant_id IS NULL
+  BEGIN UPDATE store_special_dates SET tenant_id = COALESCE((SELECT s.tenant_id FROM stores s WHERE s.id = NEW.store_id), '${DEFAULT_TENANT_ID}') WHERE store_id = NEW.store_id AND date = NEW.date; END;
+
+  CREATE TRIGGER booking_drafts_tenant_fill AFTER INSERT ON booking_drafts WHEN NEW.tenant_id IS NULL
+  BEGIN UPDATE booking_drafts SET tenant_id = COALESCE((SELECT s.tenant_id FROM stores s WHERE s.id = NEW.store_id), '${DEFAULT_TENANT_ID}') WHERE rowid = NEW.rowid; END;
+`)
+
 // ===== AI 纠偏样本的租户归属(2026-08-07)=====
 // ai_response_feedback 一直没有 tenant_id,而 ownerApprovedReplyPrompt 会把「最近 10 条已批准样本」
 // 无差别塞进每一家店的提示词——旗舰店训练出来的话术(含 CAD 定价、本店政策)因此串到了所有商家。

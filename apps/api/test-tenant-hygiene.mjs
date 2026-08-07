@@ -129,6 +129,30 @@ async function main() {
   const leakCtx = (blob.match(/.{0,90}Lucky\s*Luxe.{0,90}/i) || [''])[0]
   check('新客链路不再冒出 Lucky Luxe 字样', !/Lucky\s*Luxe/i.test(blob), leakCtx)
 
+  // ---- 9. 七张子表补 tenant_id(P0.9 / 审计 B-5):零 NULL + 新写入带正确租户 ----
+  // 给甲店写一次营业时间,制造一批新的 business_hours 行
+  const hoursPut = await request(`/platform/tenants/${shopA.tenantId}/business-hours`, {
+    method: 'PUT',
+    body: JSON.stringify({ hours: [0, 1, 2, 3, 4, 5, 6].map((weekday) => ({ weekday, openTime: '10:00', closeTime: '19:00', isClosed: weekday === 1 })) })
+  })
+  check('甲店写入营业时间', hoursPut.status === 200, JSON.stringify(hoursPut.data).slice(0, 160))
+
+  const dbPath = process.env.TEST_DB_PATH
+  if (dbPath) {
+    const { DatabaseSync } = await import('node:sqlite')
+    const db = new DatabaseSync(dbPath)
+    const TABLES = ['payments', 'technician_schedules', 'business_hours', 'store_special_dates', 'booking_slots', 'booking_status_history', 'booking_drafts']
+    const nulls = TABLES.map((t) => ({ t, n: db.prepare(`SELECT COUNT(*) AS c FROM "${t}" WHERE tenant_id IS NULL`).get().c }))
+    check('七张子表零 NULL tenant_id', nulls.every((row) => row.n === 0), JSON.stringify(nulls))
+    const bh = db.prepare("SELECT tenant_id, COUNT(*) AS c FROM business_hours WHERE store_id = ? GROUP BY tenant_id").all(`store-${shopA.tenantId}`)
+    check('新写入的营业时间行带正确租户', bh.length === 1 && bh[0].tenant_id === shopA.tenantId && bh[0].c === 7, JSON.stringify(bh))
+    const cols = TABLES.map((t) => ({ t, has: db.prepare(`PRAGMA table_info("${t}")`).all().some((c) => c.name === 'tenant_id') }))
+    check('七张子表都已有 tenant_id 列', cols.every((row) => row.has), JSON.stringify(cols))
+    db.close()
+  } else {
+    console.log('skip - 未设置 TEST_DB_PATH,跳过七表 tenant_id 的直连断言(run-all-tests.sh 里会设)')
+  }
+
   console.log(`\n多租户卫生回归通过:${checks} 项断言全绿`)
 }
 
