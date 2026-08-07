@@ -5202,6 +5202,14 @@ function servicePayload(body, current = {}) {
 function serializeService(row, lang = 'zh') {
   const type = String(row.type || '').toLowerCase()
   const serviceCurrency = tenantCurrencyCode(row.tenant_id || currentTenantId())
+  // 2026-08-08:对外显示的定金要按本店 deposit_config 算,不能只报项目表里的原始值。
+  // 旗舰店是 per_service 模式 → 结果就是 row.deposit_cents,与改造前完全一致。
+  const effectiveDepositCents = (() => {
+    try {
+      const cfg = getDepositConfig(row.tenant_id || currentTenantId())
+      return depositAmountForService(row, cfg, row.tenant_id || currentTenantId())
+    } catch (e) { return row.deposit_cents }
+  })()
   const isNail = type === 'nail'
   const priceExplanationZh = isNail
     ? '显示价格为基础服务价。纯色、基础护理、基础法式等可按基础价执行；复杂手绘、延长、卸甲、特殊材料、3D 装饰、大面积钻饰或参考图差异较大的款式需要人工报价。'
@@ -5222,8 +5230,8 @@ function serializeService(row, lang = 'zh') {
     imageUrl: row.image_url,
     price: cents(row.price_cents),
     priceCents: row.price_cents,
-    deposit: cents(row.deposit_cents),
-    depositCents: row.deposit_cents,
+    deposit: cents(effectiveDepositCents),
+    depositCents: effectiveDepositCents,
     durationMin: row.base_duration_min,
     process: parseJson(row.process_json),
     notice: parseJson(row.notice_json),

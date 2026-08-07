@@ -447,10 +447,17 @@ export async function createCustomerServiceReply({ lang = 'zh', message = '', sa
   const currencyLine = currencyCode
     ? `All prices and deposits for this store are in ${currencyCode}. Never quote another currency.`
     : 'Do not state a currency symbol or code unless it appears in the tenant knowledge context.'
+  // 2026-08-08:定金/取消规则每店可配后,必须以本店 depositPolicy 为准。
+  // 生产实测过一次反例:平台预置层的通用「24h 可退」压过了商家「定金不退」的真实配置。
+  const depositPolicy = kbFacts.depositPolicy
+  const depositPolicyLine = depositPolicy?.text
+    ? `Deposit and cancellation policy for THIS store (authoritative, overrides any generic template): ${depositPolicy.text}`
+    : ''
   const result = await aiJson({
     system: [
       identityLine,
       currencyLine,
+      ...(depositPolicyLine ? [depositPolicyLine] : []),
       'Answer in the user language. Be concise, warm, and operationally accurate.',
       'Always use Recent chat as short-term conversation memory. If the incoming message is a follow-up such as "那这个呢", "多少钱", "可以吗", or "怎么约", resolve it from the previous customer messages before answering.',
       'If the incoming message includes "Working memory for this exact conversation", treat it as authoritative per-conversation state. Do not ask again for any intake field already marked yes/no/partial in that memory.',

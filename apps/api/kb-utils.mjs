@@ -137,6 +137,11 @@ function mergeTenantFacts(tenant, live) {
     depositAmount: live.depositAmount ?? seed.depositAmount,
     memberLevels: live.memberLevels || seed.memberLevels,
     priceList: live.priceList || seed.priceList,
+    // 2026-08-08:这个白名单是「哪些事实进提示词」的闸门。P0 加的加项目录/计价规则、
+    // P1.2 加的定金政策此前都被它悄悄挡在外面 —— 生产实测里 AI 因此把小婕店的定金答成 0。
+    addonList: live.addonList || undefined,
+    pricingRules: live.pricingRules || undefined,
+    depositPolicy: live.depositPolicy || undefined,
     technicians: live.technicians || undefined
   }
 }
