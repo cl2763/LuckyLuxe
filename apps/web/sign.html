@@ -65,8 +65,13 @@
 
 <script>
 // 金额一律取后端返回值。这里只有一个 money() 负责「分 → 显示」,没有任何业务计算。
-const CUR = { v: '' }
-function money(cents) { return `${CUR.v} $${(Math.round(cents) / 100).toFixed(2)}` }
+// 金额格式由后端下发的 currencyDisplay 决定(CNY→¥358,CAD→CAD $50.00),前端不做任何换算
+const CUR = { v: '', fmt: { prefix: '<CODE> ', symbol: '$', trimZeroDecimals: false } }
+function money(cents) {
+  let text = (Math.round(cents) / 100).toFixed(2)
+  if (CUR.fmt.trimZeroDecimals) text = text.replace(/\.00$/, '')
+  return `${String(CUR.fmt.prefix).replace('<CODE>', CUR.v)}${CUR.fmt.symbol}${text}`
+}
 function esc(s) { return String(s ?? '').replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c])) }
 function toast(msg) { const t = document.getElementById('toast'); t.textContent = msg; t.classList.add('show'); setTimeout(() => t.classList.remove('show'), 2600) }
 
@@ -81,6 +86,7 @@ async function load() {
   if (!res.ok) { document.getElementById('boot').textContent = body?.error?.message || '找不到这张服务单'; return }
   data = body
   CUR.v = body.settlement.currency || ''
+  if (body.settlement.currencyDisplay) CUR.fmt = body.settlement.currencyDisplay
   render()
 }
 

@@ -1,5 +1,5 @@
 // 构建号:每次交付递增。侧栏可见,排查"改了没生效"时先对版本。
-const ADMIN_BUILD = '20260808a-p12-deposit'
+const ADMIN_BUILD = '20260808b-p1-sign'
 console.log(`[admin] build ${ADMIN_BUILD}`)
 
 // "今天"必须按门店时区算,否则老板人在别的时区时全站日期错位一天。
@@ -800,8 +800,18 @@ function formatDate(date) {
 function storeCurrency() {
   return (owner?.businessHoursStores || [])[0]?.currency || owner?.tenantKb?.facts?.currency || 'CAD'
 }
-function money(cents) {
-  return `${storeCurrency()} $${Number(cents / 100).toFixed(0)}`
+// 币种显示映射表(与后端 CURRENCY_DISPLAY 同一套口径):
+// CNY → 「¥358」;其它币种 → 「CAD $358」逐字维持现状,旗舰店零 diff。
+const CURRENCY_DISPLAY = {
+  CNY: { prefix: '', symbol: '¥', trimZeroDecimals: true },
+  DEFAULT: { prefix: '<CODE> ', symbol: '$', trimZeroDecimals: false }
+}
+function money(cents, decimals = 0) {
+  const code = storeCurrency()
+  const fmt = CURRENCY_DISPLAY[String(code).toUpperCase()] || CURRENCY_DISPLAY.DEFAULT
+  let text = Number(cents / 100).toFixed(Number(decimals) || 0)
+  if (fmt.trimZeroDecimals) text = text.replace(/\.00$/, '')
+  return `${fmt.prefix.replace('<CODE>', code)}${fmt.symbol}${text}`
 }
 
 // 本店是否开通 AI 智能包。2026-08-04 店主定:全部 AI 能力归智能包,前端据此隐藏纯 AI 入口。

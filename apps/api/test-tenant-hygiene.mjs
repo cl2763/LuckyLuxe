@@ -118,7 +118,8 @@ async function main() {
   check('甲店建了一个项目', svcA.status === 201, JSON.stringify(svcA.data).slice(0, 200))
   const publicA = await request('/services', {}, null, { 'x-tenant-id': shopA.tenantId })
   const itemA = (publicA.data.services || []).find((s) => s.nameZh === `甲店项目${RUN_ID}`)
-  check('对外价格标签用本店币种 CNY', itemA && /CNY/.test(itemA.priceLabelZh) && !/CAD/.test(itemA.priceLabelZh), JSON.stringify(itemA?.priceLabelZh))
+  // 2026-08-08 币种映射表上线后:CNY 显示成「¥368」(符号前置,无币种前缀),CAD 仍是「CAD $x」
+  check('对外价格标签用本店币种(CNY → ¥,不出现 CAD)', itemA && /¥/.test(itemA.priceLabelZh) && !/CAD/.test(itemA.priceLabelZh), JSON.stringify(itemA?.priceLabelZh))
 
   // ---- 8. 新客欢迎语用本店品牌 ----
   const welcome = await request('/admin/wechat/mock-chat-message', {

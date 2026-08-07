@@ -3047,7 +3047,7 @@ function formatStaffQuoteOptions(options = [], lang = 'zh') {
     .map((item) => {
       const label = lang === 'en' ? (enLabels[item.label] || item.label) : item.label
       const amount = formatCadNumber(item.priceCad)
-      return amount ? `${label} ${tenantCurrencyCode()} $${amount}` : ''
+      return amount ? `${label} ${formatMoneyCents(Math.round(Number(String(amount).replace(/,/g, '')) * 100), currentTenantId(), 'auto')}` : ''
     })
     .filter(Boolean)
     .join(lang === 'en' ? '; ' : '，')
@@ -4429,12 +4429,39 @@ function tenantCurrencyCode(tenantId = currentTenantId()) {
   }
 }
 
+/* 2026-08-08 币种显示映射表:同一套代码,按币种查表渲染。
+   CNY → 「¥358」(符号前置、无币种前缀、整数不带小数)
+   CAD → 「CAD $50」/「CAD $50.00」—— 逐字维持现状,所以旗舰店对外文案零 diff。
+   以后想改某个币种的展示格式,改这张表一行即可,不用翻遍全站。 */
+const CURRENCY_DISPLAY = {
+  CNY: { prefix: '', symbol: '¥', trimZeroDecimals: true },
+  DEFAULT: { prefix: '<CODE> ', symbol: '$', trimZeroDecimals: false }
+}
+
+function currencyDisplayOf(code) {
+  return CURRENCY_DISPLAY[String(code || '').toUpperCase()] || CURRENCY_DISPLAY.DEFAULT
+}
+
+/* decimals: 'auto' = 整数不带小数、有零头带两位(旧 formatCadFromCents 的行为)
+             0 / 2  = 固定位数(旧 money()/cadFromCentsText 的行为)
+   CNY 的 trimZeroDecimals 会把 .00 去掉,与设计图一致;CAD 不去,保持现状。 */
+function formatMoneyCents(value, tenantId = currentTenantId(), decimals = 'auto') {
+  const centsValue = Number(value || 0)
+  if (!Number.isFinite(centsValue)) return ''
+  const code = tenantCurrencyCode(tenantId)
+  const fmt = currencyDisplayOf(code)
+  const amount = centsValue / 100
+  let text
+  if (decimals === 'auto') text = Number.isInteger(amount) ? String(amount) : amount.toFixed(2)
+  else text = amount.toFixed(Number(decimals) || 0)
+  if (fmt.trimZeroDecimals) text = text.replace(/\.00$/, '')
+  return `${fmt.prefix.replace('<CODE>', code)}${fmt.symbol}${text}`
+}
+
 function formatCadFromCents(value, tenantId = currentTenantId()) {
   const centsValue = Number(value || 0)
   if (!Number.isFinite(centsValue) || centsValue <= 0) return ''
-  const amount = centsValue / 100
-  const cur = tenantCurrencyCode(tenantId)
-  return Number.isInteger(amount) ? `${cur} $${amount}` : `${cur} $${amount.toFixed(2)}`
+  return formatMoneyCents(centsValue, tenantId, 'auto')
 }
 
 function quoteAssistantReplyPayload(quote, { canDo, priceCents, durationMin, notes }) {
@@ -5201,6 +5228,8 @@ function servicePayload(body, current = {}) {
 function serializeService(row, lang = 'zh') {
   const type = String(row.type || '').toLowerCase()
   const serviceCurrency = tenantCurrencyCode(row.tenant_id || currentTenantId())
+  // 价格标签走币种映射表:CAD 仍是「CAD $198」逐字不变,CNY 变成「¥198」
+  const serviceMoney = (c) => formatMoneyCents(c, row.tenant_id || currentTenantId(), 'auto')
   // 2026-08-08:对外显示的定金要按本店 deposit_config 算,不能只报项目表里的原始值。
   // 旗舰店是 per_service 模式 → 结果就是 row.deposit_cents,与改造前完全一致。
   const effectiveDepositCents = (() => {
@@ -5236,8 +5265,8 @@ function serializeService(row, lang = 'zh') {
     notice: parseJson(row.notice_json),
     requiresManualQuote: isNail,
     pricingType: isNail ? 'base_plus_quote' : 'fixed_final',
-    priceLabelZh: isNail ? `基础价 ${serviceCurrency} $${cents(row.price_cents)}` : `固定价 ${serviceCurrency} $${cents(row.price_cents)}`,
-    priceLabelEn: isNail ? `Base price ${serviceCurrency} $${cents(row.price_cents)}` : `Fixed price ${serviceCurrency} $${cents(row.price_cents)}`,
+    priceLabelZh: `${isNail ? '基础价' : '固定价'} ${serviceMoney(row.price_cents)}`,
+    priceLabelEn: `${isNail ? 'Base price' : 'Fixed price'} ${serviceMoney(row.price_cents)}`,
     quoteHintZh: isNail ? '详细价格请联系客服获取报价' : '加项确认后即为最终报价',
     quoteHintEn: isNail ? 'Contact us for detailed custom quote' : 'Add-ons confirmed before checkout are final',
     priceExplanationZh,
@@ -5295,7 +5324,7 @@ function membershipForSpend(totalSpentCents = 0) {
     depositWaived: tier.depositWaived,
     depositRule: tier.depositWaived
       ? `${tier.label} and above do not need to pay booking deposits.`
-      : `Silver Member pays ${tenantCurrencyCode()} $50 deposit for each booking.`
+      : `Silver Member pays ${formatMoneyCents(5000, currentTenantId(), 'auto')} deposit for each booking.`
   }
 }
 
@@ -6416,7 +6445,7 @@ function materializeRecurringTransactions() {
 
 // ===== 目标进度与工资月结（阶段3C）=====
 function cadFromCentsText(cents) {
-  return `${tenantCurrencyCode()} $${((cents || 0) / 100).toFixed(2)}`
+  return formatMoneyCents(cents || 0, currentTenantId(), 2)
 }
 
 function getFinanceTargets(tenantId = DEFAULT_TENANT_ID) {
@@ -7265,8 +7294,7 @@ function depositPolicyText(config, tenantId = currentTenantId(), lang = 'zh') {
     const text = lang === 'en' ? (config.customTextEn || config.customText) : config.customText
     if (String(text || '').trim()) return String(text).trim()
   }
-  const cur = tenantCurrencyCode(tenantId)
-  const money = (cents) => `${cur} $${Math.round(cents) / 100}`
+  const money = (cents) => formatMoneyCents(cents, tenantId, 'auto')
   const cp = config.cancelPolicy
   const zh = []
   const en = []
@@ -7478,6 +7506,7 @@ function computeSettlement(input = {}) {
     tenantId,
     tierKey,
     currency: tenantCurrencyCode(tenantId),
+    currencyDisplay: currencyDisplayOf(tenantCurrencyCode(tenantId)),
     lines,
     rulesApplied,
     listTotalCents,
@@ -7709,6 +7738,7 @@ function serializeSettlement(row, { includeSignature = false } = {}) {
     storeAddress: store?.address || '',
     appointmentAt: booking?.appointment_start || null,
     currency: tenantCurrencyCode(row.tenant_id),
+    currencyDisplay: currencyDisplayOf(tenantCurrencyCode(row.tenant_id)),
     servedPersonName: row.served_person_name || '',
     isProxyPaid: Boolean(row.is_proxy_paid),
     status: row.status,
