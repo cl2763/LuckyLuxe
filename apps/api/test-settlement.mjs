@@ -166,7 +166,10 @@ async function main() {
   check('不签名不能提交', noSig.status === 400 && noSig.data.error.code === 'SIGNATURE_REQUIRED')
 
   // ---- 签字即时扣卡:先烧迁移桶 ----
-  const signed = await request(`/settlements/${sheet1.code}/sign`, { method: 'POST', body: JSON.stringify({ disclaimerAccepted: true, signature: '小美' }) }, null)
+  const signed = await request(`/settlements/${sheet1.code}/sign`, {
+    method: 'POST',
+    body: JSON.stringify({ disclaimerAccepted: true, signature: '小美', strokes: [[{ x: 12, y: 60 }, { x: 40, y: 20 }, { x: 70, y: 70 }], [{ x: 90, y: 30 }, { x: 120, y: 66 }]] })
+  }, null)
   check('卡主签字成功', signed.status === 200 && signed.data.settlement.status === 'signed', JSON.stringify(signed.data).slice(0, 220))
   check('签字即时扣卡 ¥180(余额只有这么多)', signed.data.storedDeductedCents === 18000, String(signed.data.storedDeductedCents))
   const members = await request('/admin/membership/members', {}, shop.token)
@@ -176,6 +179,27 @@ async function main() {
   check('扣的是迁移腿(不进本店收入)', paid.length === 1 && paid[0].status === 'paid', JSON.stringify(signed.data.settlement.payments))
   const offline = signed.data.settlement.payments.find((p) => p.leg === 'offline')
   check('线下腿标为待收款', offline && offline.status === 'awaiting', JSON.stringify(offline))
+
+  // ---- 签署快照:唯一凭证,签的那一刻生成 ----
+  check('签署返回快照信息', Boolean(signed.data.snapshot && signed.data.snapshot.at), JSON.stringify(signed.data.snapshot))
+  // 两条分支都断言:配了 COS 就走 COS 并带回 URL;没配(或上传失败)就 inline 降级,绝不拦签署
+  const cosReady = Boolean(process.env.COS_SECRET_ID && process.env.COS_SECRET_KEY && process.env.COS_REGION && process.env.COS_BUCKET)
+  if (cosReady) {
+    check('配了 COS → 快照上 COS 且带回 URL', signed.data.snapshot.storage === 'cos' && /^https:\/\//.test(signed.data.snapshot.url || ''),
+      JSON.stringify(signed.data.snapshot))
+  } else {
+    check('没配 COS → 快照 inline 降级(签署照常完成)', signed.data.snapshot.storage === 'inline' && !signed.data.snapshot.url,
+      JSON.stringify(signed.data.snapshot))
+  }
+  const snap = await fetch(`${BASE_URL}/settlements/${sheet1.code}/snapshot`)
+  const snapText = await snap.text()
+  check('快照可取回', snap.status === 200 || snap.status === 302, String(snap.status))
+  if (snap.status === 200) {
+    check('快照是 SVG 且含单号', snapText.startsWith('<?xml') && snapText.includes(sheet1.code), snapText.slice(0, 80))
+    check('快照里画进了笔迹路径', /<path d="M/.test(snapText), snapText.slice(0, 200))
+    check('快照金额与单据一致(共优惠/合计)', snapText.includes('较原价共优惠') && snapText.includes('合计'), '')
+  }
+  check('快照信息随单据下发(日结页「查看签署单」用它)', Boolean(signed.data.settlement.snapshot), JSON.stringify(signed.data.settlement.snapshot))
 
   // ---- 重复签 / 余额不足拦签 ----
   const again = await request(`/settlements/${sheet1.code}/sign`, { method: 'POST', body: JSON.stringify({ disclaimerAccepted: true, signature: '小美' }) }, null)

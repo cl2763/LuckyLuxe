@@ -7627,7 +7627,7 @@ function createSettlementGroup(body = {}, adminSession = {}) {
 /* 签字:卡主本人签的那一刻即时扣卡。
    顺序 = 先烧迁移桶(不进财务收入)→ 再烧新桶(进财务收入)→ 线下腿标"待收款"。
    签前二次校验余额,不足直接拦回让技师改支付构成(原稿第 2 条)。 */
-function signSettlement(row, { signature, signedBy = '' }) {
+async function signSettlement(row, { signature, signedBy = '', strokes = [] }) {
   const tenantId = row.tenant_id
   const legs = db.prepare("SELECT * FROM settlement_payments WHERE settlement_id = ? AND leg IN ('stored_value','migrate_stored') ORDER BY rowid ASC").all(row.id)
   const needStored = legs.reduce((sum, l) => sum + l.amount_cents, 0)
@@ -7670,9 +7670,22 @@ function signSettlement(row, { signature, signedBy = '' }) {
     db.exec('ROLLBACK')
     throw error
   }
+  // 快照:签完立刻把整张单连同笔迹渲染成 SVG。这是唯一签署凭证 ——
+  // 结算数据随时可重渲染,笔迹只在签的这一瞬间存在,过后补不了,所以必须在这里生成。
+  const signedRow = db.prepare('SELECT * FROM settlements WHERE id = ?').get(row.id)
+  const snapshotSvg = renderSettlementSnapshotSvg(serializeSettlement(signedRow, { includeSignature: true }), {
+    strokes, signedAt: now, policyText: depositPolicyText(getDepositConfig(tenantId), tenantId, 'zh')
+  })
+  const objectKey = `settlements/${tenantId}/${signedRow.code}.svg`
+  const url = await cosPutObject(objectKey, snapshotSvg, 'image/svg+xml')
+  // COS 没配 / 上传失败 → inline 入库标 storage=inline,后续可迁移,绝不因存储故障拦签署
+  db.prepare('UPDATE settlements SET snapshot_url = ?, snapshot_inline = ?, snapshot_storage = ?, snapshot_at = ? WHERE id = ?')
+    .run(url || null, url ? null : snapshotSvg, url ? 'cos' : 'inline', now, row.id)
+
   const fresh = db.prepare('SELECT * FROM settlements WHERE id = ?').get(row.id)
   return {
     settlement: serializeSettlement(fresh),
+    snapshot: { storage: fresh.snapshot_storage, url: fresh.snapshot_url, at: fresh.snapshot_at, bytes: snapshotSvg.length },
     storedDeductedCents: needStored,
     groupAllSigned: db.prepare("SELECT COUNT(*) AS n FROM settlements WHERE group_id = ? AND status <> 'signed'").get(row.group_id).n === 0
   }
@@ -7717,6 +7730,168 @@ function amendSettlement(settlementId, body = {}, adminSession = {}) {
   }
 }
 
+/* ===== 对象存储(腾讯云 COS)最小上传封装(2026-08-08)=====
+   零依赖,只用 node:crypto 做 COS v5 签名。密钥只从 env 读,不写代码、不进仓库、不打印日志
+   (沿用主钥匙那次的纪律)。没配或上传失败一律返回 null,由调用方降级 —— 不因存储故障拦流程。
+   环境变量:COS_SECRET_ID / COS_SECRET_KEY / COS_REGION / COS_BUCKET */
+const COS = {
+  secretId: process.env.COS_SECRET_ID || '',
+  secretKey: process.env.COS_SECRET_KEY || '',
+  region: process.env.COS_REGION || '',
+  bucket: process.env.COS_BUCKET || ''
+}
+function cosConfigured() {
+  return Boolean(COS.secretId && COS.secretKey && COS.region && COS.bucket)
+}
+
+function cosAuthorization({ method, key, headers, now = Math.floor(Date.now() / 1000) }) {
+  const keyTime = `${now - 60};${now + 900}`
+  const signKey = createHmac('sha1', COS.secretKey).update(keyTime).digest('hex')
+  const headerKeys = Object.keys(headers).map((k) => k.toLowerCase()).sort()
+  const headerString = headerKeys.map((k) => `${encodeURIComponent(k)}=${encodeURIComponent(String(headers[Object.keys(headers).find((x) => x.toLowerCase() === k)]))}`).join('&')
+  const httpString = `${method.toLowerCase()}\n${key}\n\n${headerString}\n`
+  const stringToSign = `sha1\n${keyTime}\n${createHash('sha1').update(httpString).digest('hex')}\n`
+  const signature = createHmac('sha1', signKey).update(stringToSign).digest('hex')
+  return [
+    'q-sign-algorithm=sha1',
+    `q-ak=${COS.secretId}`,
+    `q-sign-time=${keyTime}`,
+    `q-key-time=${keyTime}`,
+    `q-header-list=${headerKeys.join(';')}`,
+    'q-url-param-list=',
+    `q-signature=${signature}`
+  ].join('&')
+}
+
+async function cosPutObject(objectKey, body, contentType = 'application/octet-stream') {
+  if (!cosConfigured()) return null
+  const key = objectKey.startsWith('/') ? objectKey : `/${objectKey}`
+  const host = `${COS.bucket}.cos.${COS.region}.myqcloud.com`
+  const payload = Buffer.isBuffer(body) ? body : Buffer.from(String(body), 'utf8')
+  const headers = { host, 'content-type': contentType, 'content-length': String(payload.length) }
+  try {
+    const response = await fetch(`https://${host}${key}`, {
+      method: 'PUT',
+      headers: { ...headers, authorization: cosAuthorization({ method: 'PUT', key, headers }) },
+      body: payload,
+      signal: AbortSignal.timeout(15000)
+    })
+    if (!response.ok) {
+      console.error(`[cos] 上传失败 ${response.status}(已降级,不影响业务)`)
+      return null
+    }
+    return `https://${host}${key}`
+  } catch (error) {
+    console.error(`[cos] 上传异常: ${error.message}(已降级,不影响业务)`)
+    return null
+  }
+}
+
+/* ===== 已签结算单快照(2026-08-08 店主拍板口径)=====
+   顾客点确认的那一刻,把整张结算单连同笔迹渲染成一张 SVG —— 这就是唯一签署凭证。
+   为什么是服务端渲染:一处渲染,小程序与网页拿到的凭证逐字节相同;笔迹只在签的那一瞬间存在,
+   过后补不了,所以生成时机必须在签署时刻。 */
+function escapeXml(value) {
+  return String(value ?? '').replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&apos;' }[c]))
+}
+
+// 笔迹:客户端传来的点阵 [[{x,y},...], ...],按签名板 300×150 坐标系归一化后画成 path
+function signatureStrokesToPath(strokes) {
+  if (!Array.isArray(strokes) || !strokes.length) return ''
+  return strokes
+    .filter((stroke) => Array.isArray(stroke) && stroke.length)
+    .map((stroke) => stroke.map((pt, index) => `${index === 0 ? 'M' : 'L'}${Number(pt.x).toFixed(1)},${Number(pt.y).toFixed(1)}`).join(' '))
+    .join(' ')
+}
+
+function renderSettlementSnapshotSvg(settlement, { strokes = [], signedAt = '', policyText = '' } = {}) {
+  const s = settlement
+  const fmt = s.currencyDisplay || { prefix: '<CODE> ', symbol: '$', trimZeroDecimals: false }
+  const money = (cents) => {
+    let text = (Math.round(cents) / 100).toFixed(2)
+    if (fmt.trimZeroDecimals) text = text.replace(/\.00$/, '')
+    return `${String(fmt.prefix).replace('<CODE>', s.currency)}${fmt.symbol}${text}`
+  }
+  const W = 720
+  const lineH = 30
+  const rows = []
+  let y = 208
+  rows.push(`<text x="40" y="${y}" class="h">服务技师</text>`)
+  y += 26
+  rows.push(`<text x="40" y="${y}" class="t">${escapeXml(s.technicians.map((t) => `${t.name}（${t.role === 'main' ? '主' : '副'}）`).join(' · ') || '—')}</text>`)
+  y += 22
+  rows.push(`<text x="40" y="${y}" class="s">${escapeXml(s.technicians.map((t) => `${t.name}：${t.itemNos.join('·') || '—'}`).join(' ／ '))}</text>`)
+  y += 36
+  rows.push(`<text x="40" y="${y}" class="h">服务明细${s.isProxyPaid ? '（代付）' : ''}</text>`)
+  y += 8
+  for (const item of s.items) {
+    y += lineH
+    const label = `${String(item.itemNo).padStart(2, '0')}  ${item.name}${item.unit === 'per_finger' ? ` ×${item.qty} 指` : (item.qty > 1 ? ` ×${item.qty}` : '')}`
+    rows.push(`<text x="40" y="${y}" class="t">${escapeXml(label)}</text>`)
+    if (item.isFree) {
+      rows.push(`<text x="${W - 40}" y="${y}" class="free" text-anchor="end">免收</text>`)
+    } else {
+      if (item.listAmountCents !== item.amountCents) {
+        rows.push(`<text x="${W - 130}" y="${y}" class="strike" text-anchor="end">${escapeXml(money(item.listAmountCents))}</text>`)
+      }
+      rows.push(`<text x="${W - 40}" y="${y}" class="t" text-anchor="end">${escapeXml(money(item.amountCents))}</text>`)
+    }
+  }
+  y += 40
+  rows.push(`<text x="40" y="${y}" class="h">支付构成</text>`)
+  const payLabel = { deposit: '已付定金抵扣', stored_value: '储值卡抵扣', migrate_stored: '储值卡抵扣（历史余额）', offline: '到店支付', times_card: '次卡抵扣', coupon: '优惠券' }
+  for (const p of s.payments) {
+    y += lineH
+    rows.push(`<text x="40" y="${y}" class="t">${escapeXml(payLabel[p.leg] || p.leg)}</text>`)
+    rows.push(`<text x="${W - 40}" y="${y}" class="t" text-anchor="end">${escapeXml(`${p.leg === 'deposit' ? '−' : ''}${money(p.amountCents)}`)}</text>`)
+  }
+  y += 30
+  rows.push(`<line x1="40" y1="${y}" x2="${W - 40}" y2="${y}" class="rule"/>`)
+  y += 30
+  rows.push(`<text x="40" y="${y}" class="s">原价合计</text><text x="${W - 40}" y="${y}" class="strike" text-anchor="end">${escapeXml(money(s.listTotalCents))}</text>`)
+  y += 26
+  rows.push(`<text x="40" y="${y}" class="s">较原价共优惠</text><text x="${W - 40}" y="${y}" class="t" text-anchor="end">${escapeXml(money(s.discountTotalCents))}</text>`)
+  y += 40
+  rows.push(`<text x="40" y="${y}" class="grand">合计</text><text x="${W - 40}" y="${y}" class="grand gold" text-anchor="end">${escapeXml(money(s.totalCents))}</text>`)
+  y += 46
+  if (policyText) {
+    for (const line of String(policyText).split('\n').slice(0, 6)) {
+      rows.push(`<text x="40" y="${y}" class="s">${escapeXml(line.slice(0, 46))}</text>`)
+      y += 20
+    }
+    y += 10
+  }
+  rows.push(`<text x="40" y="${y}" class="s">本单据为服务确认凭证,由顾客本人签署确认。</text>`)
+  const H = y + 40
+  const inkPath = signatureStrokesToPath(strokes)
+  return `<?xml version="1.0" encoding="UTF-8"?>
+<svg xmlns="http://www.w3.org/2000/svg" width="${W}" height="${H}" viewBox="0 0 ${W} ${H}">
+<style>
+  .t{font:15px -apple-system,"PingFang SC",sans-serif;fill:#2d2826}
+  .s{font:12.5px -apple-system,"PingFang SC",sans-serif;fill:#8c8279}
+  .h{font:700 13px -apple-system,"PingFang SC",sans-serif;fill:#8c8279}
+  .store{font:800 21px -apple-system,"PingFang SC",sans-serif;fill:#2d2826}
+  .grand{font:800 20px -apple-system,"PingFang SC",sans-serif;fill:#2d2826}
+  .gold{fill:#9b7655}
+  .free{font:700 14px -apple-system,"PingFang SC",sans-serif;fill:#2f7d5c}
+  .strike{font:12.5px -apple-system,"PingFang SC",sans-serif;fill:#8c8279;text-decoration:line-through}
+  .rule{stroke:#e7ddd4;stroke-width:1}
+</style>
+<rect width="${W}" height="${H}" fill="#ffffff"/>
+<text x="40" y="60" class="store">${escapeXml(s.storeName)}</text>
+<text x="40" y="86" class="s">订单编号 ${escapeXml(s.code)}</text>
+<text x="40" y="106" class="s">${escapeXml(`${s.appointmentAt ? String(s.appointmentAt).slice(0, 16).replace('T', ' ') : ''}${s.servedPersonName ? ` · 被服务者：${s.servedPersonName}` : ''}`)}</text>
+<text x="40" y="126" class="s">签署时间 ${escapeXml(String(signedAt).slice(0, 19).replace('T', ' '))}</text>
+<text x="${W - 200}" y="56" class="s">顾客签名：</text>
+<g transform="translate(${W - 200},64)">
+  <rect width="160" height="90" fill="none" stroke="#e7ddd4" stroke-dasharray="3 3"/>
+  ${inkPath ? `<path d="${inkPath}" fill="none" stroke="#2d2826" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" transform="scale(0.53)"/>` : `<text x="80" y="52" class="s" text-anchor="middle">${escapeXml(s.signatureName || '')}</text>`}
+</g>
+<line x1="40" y1="170" x2="${W - 40}" y2="170" class="rule"/>
+${rows.join('\n')}
+</svg>`
+}
+
 function settlementCode(tenantId) {
   const prefix = String(tenantId || '').replace(/[^a-z0-9]/gi, '').slice(0, 2).toUpperCase() || 'LL'
   return `${prefix}-${todayOf(tenantId).replace(/-/g, '')}-${Math.random().toString(36).slice(2, 6).toUpperCase()}`
@@ -7754,6 +7929,7 @@ function serializeSettlement(row, { includeSignature = false } = {}) {
     signatureName: row.signature_data ? (includeSignature ? row.signature_data : '(已签)') : null,
     disclaimerAccepted: Boolean(row.disclaimer_accepted),
     aftersalesStatus: row.aftersales_status || null,
+    snapshot: row.snapshot_at ? { storage: row.snapshot_storage, url: row.snapshot_url, at: row.snapshot_at } : null,
     perfAllocStatus: row.perf_alloc_status,
     items: items.map((i) => ({
       itemNo: i.item_no, kind: i.kind, serviceId: i.service_id, name: i.name_snapshot,
@@ -7799,7 +7975,7 @@ async function route(req, res) {
     })
   }
   // 顾客签署页(小程序 / 网页同构):凭单号只读,不需要登录
-  if (req.method === 'GET' && path.startsWith('/settlements/') && !path.endsWith('/sign')) {
+  if (req.method === 'GET' && path.startsWith('/settlements/') && !path.endsWith('/sign') && !path.endsWith('/snapshot')) {
     const code = decodeURIComponent(path.split('/')[2] || '')
     const row = db.prepare('SELECT * FROM settlements WHERE code = ?').get(code)
     if (!row) throw apiError(404, 'NOT_FOUND', '找不到这张服务单。')
@@ -7811,6 +7987,20 @@ async function route(req, res) {
       disclaimer: '我已阅读并确认以上服务内容及款项无误,同意以此作为本次服务的结算凭证。'
     })
   }
+  // 签署快照(唯一凭证):COS 存的直接 302 过去,inline 的直接吐 SVG
+  if (req.method === 'GET' && path.startsWith('/settlements/') && path.endsWith('/snapshot')) {
+    const code = decodeURIComponent(path.split('/')[2] || '')
+    const row = db.prepare('SELECT * FROM settlements WHERE code = ?').get(code)
+    if (!row || !row.snapshot_at) throw apiError(404, 'NOT_FOUND', '这张单还没有签署快照。')
+    if (row.snapshot_url) {
+      res.writeHead(302, { location: row.snapshot_url })
+      res.end()
+      return
+    }
+    res.writeHead(200, { 'content-type': 'image/svg+xml; charset=utf-8', 'cache-control': 'no-store' })
+    res.end(row.snapshot_inline || '')
+    return
+  }
   // 卡主签字:签字那一刻即时扣卡(先烧迁移桶再烧新桶);签前二次校验余额,不足直接拦
   if (req.method === 'POST' && path.startsWith('/settlements/') && path.endsWith('/sign')) {
     const code = decodeURIComponent(path.split('/')[2] || '')
@@ -7821,7 +8011,7 @@ async function route(req, res) {
     if (body.disclaimerAccepted !== true) throw apiError(400, 'DISCLAIMER_REQUIRED', '请先勾选确认声明再签字。')
     const signature = String(body.signature || '').trim()
     if (!signature) throw apiError(400, 'SIGNATURE_REQUIRED', '请签名后再确认。')
-    return json(res, 200, signSettlement(row, { signature, signedBy: body.signedBy || '' }))
+    return json(res, 200, await signSettlement(row, { signature, signedBy: body.signedBy || '', strokes: body.strokes || [] }))
   }
   if (req.method === 'GET' && path === '/health') return json(res, 200, { ok: true, service: 'lucky-luxe-api-local', time: iso(new Date()) })
   if (req.method === 'GET' && path === '/wechat/customer-service/webhook') {
@@ -12299,6 +12489,10 @@ db.exec(`
     disclaimer_accepted INTEGER NOT NULL DEFAULT 0,
     perf_alloc_status TEXT NOT NULL DEFAULT 'pending',
     aftersales_status TEXT,
+    snapshot_url TEXT,
+    snapshot_inline TEXT,
+    snapshot_storage TEXT,
+    snapshot_at TEXT,
     created_by TEXT,
     created_at TEXT NOT NULL,
     updated_at TEXT NOT NULL
@@ -12369,7 +12563,9 @@ db.exec(`
   CREATE TRIGGER settlements_signed_no_update BEFORE UPDATE ON settlements
   WHEN OLD.status = 'signed' AND NEW.status = 'signed'
     AND (OLD.total_cents <> NEW.total_cents OR OLD.subtotal_cents <> NEW.subtotal_cents
-      OR OLD.list_total_cents <> NEW.list_total_cents OR OLD.signature_data IS NOT NEW.signature_data)
+      OR OLD.list_total_cents <> NEW.list_total_cents OR OLD.signature_data IS NOT NEW.signature_data
+      -- 快照允许写入一次(签署那一刻),之后不可替换
+      OR (OLD.snapshot_at IS NOT NULL AND (OLD.snapshot_url IS NOT NEW.snapshot_url OR OLD.snapshot_inline IS NOT NEW.snapshot_inline)))
   BEGIN SELECT RAISE(ABORT, 'signed settlement is immutable; use settlement_amendments'); END;
 `)
 

@@ -78,6 +78,7 @@ function toast(msg) { const t = document.getElementById('toast'); t.textContent 
 const code = decodeURIComponent(location.pathname.replace(/^\/sign\/?/, '') || new URLSearchParams(location.search).get('code') || '')
 let data = null
 let hasInk = false
+let strokes = []   // 笔迹点阵,按签名板坐标系;签署时随请求提交,由服务端渲进快照 SVG
 
 async function load() {
   if (!code) { document.getElementById('boot').textContent = '缺少服务单号'; return }
@@ -146,7 +147,7 @@ function render() {
       </div>
     </div>
 
-    ${signed ? `<div class="done">✓ 本单已于 ${esc(String(s.signedAt).slice(0, 16).replace('T', ' '))} 签署完成</div>` : `
+    ${signed ? `<div class="done">✓ 本单已于 ${esc(String(s.signedAt).slice(0, 16).replace('T', ' '))} 签署完成${s.snapshot ? `<div style="margin-top:10px;font-weight:500"><a href="/settlements/${encodeURIComponent(s.code)}/snapshot" target="_blank">查看签署单</a></div>` : ''}</div>` : `
     <label class="disc">
       <input type="checkbox" id="disc">
       <span>${esc(data.disclaimer)}</span>
@@ -178,13 +179,13 @@ function initPad() {
     const p = e.touches ? e.touches[0] : e
     return { x: p.clientX - r.left, y: p.clientY - r.top }
   }
-  const start = (e) => { e.preventDefault(); drawing = true; hasInk = true; const { x, y } = pos(e); ctx.beginPath(); ctx.moveTo(x, y); sync() }
-  const move = (e) => { if (!drawing) return; e.preventDefault(); const { x, y } = pos(e); ctx.lineTo(x, y); ctx.stroke() }
+  const start = (e) => { e.preventDefault(); drawing = true; hasInk = true; const { x, y } = pos(e); ctx.beginPath(); ctx.moveTo(x, y); strokes.push([{ x: Math.round(x), y: Math.round(y) }]); sync() }
+  const move = (e) => { if (!drawing) return; e.preventDefault(); const { x, y } = pos(e); ctx.lineTo(x, y); ctx.stroke(); const cur = strokes[strokes.length - 1]; if (cur) cur.push({ x: Math.round(x), y: Math.round(y) }) }
   const end = () => { drawing = false }
   canvas.addEventListener('mousedown', start); canvas.addEventListener('mousemove', move); window.addEventListener('mouseup', end)
   canvas.addEventListener('touchstart', start, { passive: false }); canvas.addEventListener('touchmove', move, { passive: false }); canvas.addEventListener('touchend', end)
   document.getElementById('clearPad').addEventListener('click', () => {
-    ctx.clearRect(0, 0, canvas.width, canvas.height); hasInk = false; sync()
+    ctx.clearRect(0, 0, canvas.width, canvas.height); hasInk = false; strokes = []; sync()
   })
   document.getElementById('disc').addEventListener('change', sync)
   sync()
@@ -205,7 +206,8 @@ document.getElementById('signBtn').addEventListener('click', async () => {
       headers: { 'content-type': 'application/json' },
       body: JSON.stringify({
         disclaimerAccepted: document.getElementById('disc').checked,
-        // 签名以姓名文本入库(笔迹图片走 COS 的批次再接);此处取被服务者/卡主称呼
+        // 笔迹点阵交给服务端渲进快照 SVG(唯一凭证);姓名文本继续保留供检索
+        strokes,
         signature: data.settlement.servedPersonName || '顾客本人',
         signedBy: data.settlement.servedPersonName || ''
       })
