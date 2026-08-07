@@ -18,6 +18,8 @@
 4. **绝不破坏已训练的 AI 客服行为**(matrix 66 项是底线);重构只在测试全绿下做。
 5. 敏感文件不入 git:`local-data/`、`apps/api/data/`、`backups/`、`.env`、初始密码文件。
 6. 收入只走财务账本口径,账本只追加(红字冲销纠错);财务数据有独立密码门禁。
+7. **所有 `/admin/*` 路由必须注册在租户上下文闸门之后**(`tenantContext.enterWith` 那一行往下)。排在闸门之前的路由即使自己调了 `requireAdmin`,`currentTenantId()` 也会回落到 `DEFAULT_TENANT_ID`——非旗舰商家会看到旗舰店的数据。确有必要排在前面(如登录本身)的,必须在 `requireAdmin` 之后手动 `tenantContext.enterWith({ tenantId: admin.tenantId || DEFAULT_TENANT_ID })`。2026-08-08 `/admin/staff-accounts` 三条路由就是这么串味的。
+8. **表结构改动:列一律走 `try/catch ALTER TABLE ADD COLUMN`**,只写进 `CREATE TABLE` 等于只对全新库生效,老库(含生产)不会跟上。`test-schema-consistency` 会把「空库新建 schema」与「老库跑完迁移后的 schema」逐表逐列 diff,忘写 ALTER 直接红。2026-08-08 签署快照四列就是这么漏的,差点让生产第一张单一签字就 500。
 
 ## 账号体系
 - 老板主账号 `boss`(首登强制改密);员工账号由老板在排班页生成/重置/停用。

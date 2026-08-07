@@ -49,8 +49,17 @@ Page({
     this.load()
   },
 
-  goQuoteCalc() {
-    wx.navigateTo({ url: `/pages/merchant/quote-calc/index?conv=${encodeURIComponent(this.data.id)}&from=${encodeURIComponent(this.data.name || '')}` })
+  // 这个会话如果挂着一条待报价请求,把它的 id 带过去 —— 试算完可以「记为已报价」(只记状态,不发消息)
+  async goQuoteCalc() {
+    let quoteId = ''
+    try {
+      const r = await api.adminGet('/admin/quote-requests')
+      const hit = (r.quoteRequests || []).find((q) => q.conversationId === this.data.id && q.status === 'PENDING_STAFF')
+      if (hit) quoteId = hit.id
+    } catch (e) { /* 取不到就当没有,试算照常 */ }
+    wx.navigateTo({
+      url: `/pages/merchant/quote-calc/index?conv=${encodeURIComponent(this.data.id)}&from=${encodeURIComponent(this.data.name || '')}&quoteId=${encodeURIComponent(quoteId)}`
+    })
   },
 
   async load() {

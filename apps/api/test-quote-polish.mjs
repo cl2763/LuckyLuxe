@@ -119,6 +119,24 @@ async function main() {
   check('known loose time is not re-asked after quote', !/想预约的日期和时间|请直接回复“日期 \+ 时间”|回复.{0,6}日期和时间/.test(reply), reply.slice(0, 200))
   check('reply references the remembered time', /提到的时间|-07-06|15:00/.test(reply), reply.slice(0, 200))
 
+  /* 屏 6「记为本次已报价」:只记状态,绝不发消息(店主 2026-08-08 裁决)。
+     试算器上的一个按钮不能把话直接发给顾客 —— 真正的报价发送归 P4 状态机。 */
+  const markUser = `polish-mark-${RUN_ID}`
+  const markQuote = await intakeAndQuote(markUser, ['延长：不需要', '卸甲：不需要', '补甲：不需要', '配件：不需要', '手部健康：正常'])
+  const beforeConvo = await conversation(markUser)
+  const beforeCount = (beforeConvo?.transcript || []).length
+  const marked = await request(`/admin/quote-requests/${markQuote.id}/mark-quoted`, {
+    method: 'POST', body: JSON.stringify({ priceCents: 123600, note: '试算 ¥1,236' })
+  })
+  check('mark-quoted 记下报价金额', marked.marked === true && marked.priceCents === 123600, JSON.stringify(marked))
+  const afterConvo = await conversation(markUser)
+  check('mark-quoted 不给顾客发任何消息(会话条数没变)',
+    (afterConvo?.transcript || []).length === beforeCount,
+    `${beforeCount} → ${(afterConvo?.transcript || []).length}`)
+  const afterQuote = await latestQuoteFor(markUser)
+  check('mark-quoted 不改报价单状态(仍待技师处理,发送归 P4)',
+    afterQuote.status === markQuote.status, `${markQuote.status} → ${afterQuote.status}`)
+
   console.log(`[quote-polish] all ${checks} checks passed`)
 }
 

@@ -9105,6 +9105,31 @@ async function route(req, res) {
   if ((req.method === 'POST' || req.method === 'PATCH') && path.startsWith('/admin/quote-requests/') && path.endsWith('/respond')) {
     return json(res, 200, { quoteRequest: await respondQuoteRequest(path.split('/')[3], await readBody(req), adminSession) })
   }
+  /* 屏 6 报价试算器的「填入报价单(记为本次已报价)」。
+     店主 2026-08-08 裁决:**只记状态,绝不发消息** —— 试算器上的一个按钮
+     不能把话直接发给顾客。真正的报价发送流程归 P4 报价状态机。
+     所以这里不碰 ai_reply_json、不 appendQuoteAssistantReply、不动会话,
+     只写报价金额与留痕字段。既有的 /respond 端点语义原样不动。 */
+  if (req.method === 'POST' && path.startsWith('/admin/quote-requests/') && path.endsWith('/mark-quoted')) {
+    const id = path.split('/')[3]
+    const quote = db.prepare('SELECT * FROM quote_requests WHERE id = ?').get(id)
+    if (!quote) throw apiError(404, 'NOT_FOUND', 'Quote request not found.')
+    assertStaffCanAccessQuote(adminSession, quote)
+    const body = await readBody(req)
+    const cents = Math.max(0, Math.round(Number(body.priceCents) || 0))
+    if (!cents) throw apiError(400, 'BAD_REQUEST', '缺少报价金额。')
+    const note = String(body.note || '').trim().slice(0, 300)
+    const now = iso(new Date())
+    db.prepare(`UPDATE quote_requests SET staff_price_cents = ?, staff_notes = ?, quoted_by = ?, quoted_at = ?, updated_at = ?
+      WHERE id = ?`).run(cents, note || quote.staff_notes, adminSession.email || 'staff', now, now, id)
+    return json(res, 200, {
+      marked: true,
+      quoteRequestId: id,
+      priceCents: cents,
+      quotedAt: now,
+      note: '只记录了报价金额与操作人,没有向顾客发送任何消息。'
+    })
+  }
   if ((req.method === 'POST' || req.method === 'PATCH') && path.startsWith('/admin/quote-requests/') && path.endsWith('/draft')) {
     return json(res, 200, { quoteRequest: createQuoteDraftHold(path.split('/')[3], await readBody(req), adminSession) })
   }
@@ -12718,6 +12743,17 @@ for (const col of ['paid_at TEXT', 'paid_by TEXT', 'txn_id TEXT']) {
 try {
   // 储值流水归属技师(2026-08-01):这笔充值/这次耗卡算谁促成——薪资的充值/耗卡提成据此计算
   db.exec('ALTER TABLE stored_value_transactions ADD COLUMN technician_id TEXT')
+} catch (error) {
+  if (!String(error.message || '').includes('duplicate column')) throw error
+}
+try {
+  // 「记为已报价」留痕(2026-08-08 屏 6):谁在什么时候把这个报价填进单子的。只记状态,不发消息。
+  db.exec('ALTER TABLE quote_requests ADD COLUMN quoted_by TEXT')
+} catch (error) {
+  if (!String(error.message || '').includes('duplicate column')) throw error
+}
+try {
+  db.exec('ALTER TABLE quote_requests ADD COLUMN quoted_at TEXT')
 } catch (error) {
   if (!String(error.message || '').includes('duplicate column')) throw error
 }

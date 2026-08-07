@@ -16,19 +16,20 @@ const DRAFT_KEY = 'lucky_quote_draft'
 Page({
   data: {
     ready: false,
-    convId: '', fromLabel: '',
+    convId: '', fromLabel: '', quoteId: '',
     tiers: TIERS, tierKey: 'list',
     cats: [], catId: '',
     items: [], addonGroups: [],
     picked: {},
     applyFootSurcharge: false,
-    display: null, view: null
+    display: null, view: null, preview: null
   },
 
   onLoad(q) {
     this.setData({
       convId: decodeURIComponent((q && q.conv) || ''),
-      fromLabel: decodeURIComponent((q && q.from) || '')
+      fromLabel: decodeURIComponent((q && q.from) || ''),
+      quoteId: decodeURIComponent((q && q.quoteId) || '')
     })
     this.boot()
   },
@@ -112,6 +113,7 @@ Page({
       const prev = this.data.display
       this.setData({
         display: d,
+        preview: s,
         view: {
           subtotal: m(s.subtotalCents),
           tierLabel: (TIERS.find((t) => t.key === this.data.tierKey) || {}).label || '',
@@ -135,12 +137,25 @@ Page({
     if (!text) { wx.showToast({ title: '先勾几个项目', icon: 'none' }); return }
     wx.setClipboardData({ data: text, success: () => wx.showToast({ title: '话术已复制', icon: 'none' }) })
   },
-  // 「填入报价单」只把话术塞进会话输入框,发不发由技师自己按发送 —— 不代技师发消息给顾客
-  fillQuote() {
+  /* 「填入报价单」做两件事,都不碰顾客:
+     ① 把话术塞进会话输入框(发不发由技师自己按发送);
+     ② 有报价单在手时调 mark-quoted 记一笔「本次已报价」——
+        这个端点只写金额与留痕,不向顾客发任何消息(店主 2026-08-08 裁决)。 */
+  async fillQuote() {
     const text = this.quoteText()
     if (!text) { wx.showToast({ title: '先勾几个项目', icon: 'none' }); return }
     wx.setStorageSync(DRAFT_KEY, text)
-    wx.showToast({ title: '已填入会话输入框', icon: 'none' })
-    setTimeout(() => wx.navigateBack(), 600)
+    let marked = false
+    if (this.data.quoteId && this.data.preview) {
+      try {
+        await api.adminPost(`/admin/quote-requests/${encodeURIComponent(this.data.quoteId)}/mark-quoted`, {
+          priceCents: this.data.preview.subtotalCents,
+          note: text
+        })
+        marked = true
+      } catch (e) { wx.showToast({ title: (e && e.message) || '记录报价失败,话术已填入', icon: 'none' }) }
+    }
+    wx.showToast({ title: marked ? '已记为已报价,话术已填入' : '已填入会话输入框', icon: 'none' })
+    setTimeout(() => wx.navigateBack(), 800)
   }
 })

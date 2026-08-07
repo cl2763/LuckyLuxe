@@ -49,6 +49,10 @@ PORT=4129 HUMAN_REPLY_COOLDOWN_MINUTES=0 node local-server.mjs > /tmp/ll-ci-4129
 wait_health 4129 "自动回归实例"
 TEST_BASE_URL=http://127.0.0.1:4129 node test-auto-return.mjs
 
+# 结构一致性:自己起一份全新库的实例(独立 DATA_DIR + 端口 4177),与其它套件互不干扰
+echo "== test-schema-consistency =="
+node test-schema-consistency.mjs
+
 echo "== 租户隔离双实例 (4128+4131) =="
 cleanup; sleep 1
 PORT=4128 node local-server.mjs > /tmp/ll-ci-a.log 2>&1 &
@@ -58,4 +62,4 @@ wait_health 4131 "租户B"
 node test-tenant-isolation.mjs
 
 echo ""
-echo "✅ 全部 31 个套件通过"
+echo "✅ 全部 32 个套件通过"
