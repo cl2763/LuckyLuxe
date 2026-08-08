@@ -25,3 +25,45 @@ page{background:#fbf8f5}
 .dp-t{font-size:26rpx;font-weight:700;color:#5c4630}
 .dp-d{font-size:21rpx;color:#b5885d;font-weight:600}
 .planbtn{margin-top:12rpx;text-align:center;font-size:23rpx;font-weight:700;color:#b5885d;background:#fbf8f5;border:1rpx dashed #e7d3ba;border-radius:12rpx;padding:12rpx 0}
+
+/* ===== P2③ 员工管理板块化(屏 4b/4c + P2.5 屏 V2,2026-08-08)===== */
+.tabs{white-space:nowrap;margin:4rpx 0 14rpx}
+.tabs .t{display:inline-block;font-size:26rpx;padding:10rpx 26rpx;border-radius:999rpx;background:#f3ece2;color:#8c8279;margin-right:12rpx;font-weight:700}
+.tabs .t.on{background:#2d2826;color:#fff}
+.cardhd{display:flex;align-items:center;justify-content:space-between;margin-bottom:12rpx}
+.cardhd .ct{font-size:28rpx;font-weight:800;color:#241f1d}
+.seg{display:inline-flex;background:#f3ece2;border-radius:999rpx;padding:3rpx;gap:3rpx}
+.seg .s{font-size:23rpx;padding:8rpx 20rpx;border-radius:999rpx;color:#8c8279;font-weight:700}
+.seg .s.on{background:#2d2826;color:#fff}
+.rank{display:flex;align-items:center;gap:12rpx;padding:12rpx 0}
+.rank .no{width:34rpx;height:34rpx;line-height:34rpx;text-align:center;border-radius:50%;background:#f1e7df;color:#8c8279;font-size:20rpx;font-weight:800;flex:none}
+.rank .no.top{background:#2d2826;color:#fff}
+.rank .rn{width:96rpx;flex:none;font-size:25rpx;font-weight:700;color:#241f1d}
+.rank .bar{flex:1;height:22rpx;background:#f3ece2;border-radius:999rpx;overflow:hidden}
+.rank .bar .fill{height:100%;background:linear-gradient(90deg,#c8a47e,#9b7655);border-radius:999rpx}
+.rank .rv{width:150rpx;flex:none;text-align:right;font-size:24rpx;font-weight:800;color:#241f1d}
+.prog{display:flex;align-items:center;gap:12rpx;padding:14rpx 0;border-bottom:1rpx solid #f2ebe3}
+.prog:last-child{border-bottom:none}
+.prog .pn{width:96rpx;flex:none;font-size:25rpx;font-weight:700;color:#241f1d}
+.prog .pbar{flex:1;height:18rpx;background:#f3ece2;border-radius:999rpx;overflow:hidden}
+.prog .pbar .pfill{height:100%;background:#c8a47e;border-radius:999rpx}
+.prog .pbar .pfill.done{background:#2f7d5c}
+.prog .pt{width:90rpx;flex:none;text-align:right;font-size:23rpx;font-weight:700;color:#8c8279}
+.prog .pt.ok{color:#2f7d5c}
+.prog .none{flex:1;font-size:22rpx;color:#8c8279;background:#f1e7df;border-radius:999rpx;padding:6rpx 18rpx;text-align:center}
+.prog .setbtn{flex:none;font-size:23rpx;font-weight:700;color:#9b7655;border:1rpx solid #e7d3b8;border-radius:999rpx;padding:8rpx 22rpx}
+.rowline{display:flex;align-items:center;gap:12rpx;padding:18rpx 0;border-bottom:1rpx solid #f2ebe3}
+.rowline:last-of-type{border-bottom:none}
+.rowline .nm{flex:none;width:150rpx;font-size:27rpx;font-weight:700;color:#241f1d}
+.rowline .lb{flex:1;font-size:24rpx;color:#8c8279}
+.rowline .chev{color:#c3b7ab;font-size:30rpx}
+.hint{font-size:22rpx;color:#9a8c7c;line-height:1.7}
+.foot{margin-top:12rpx;font-size:21rpx;color:#b3a89c;line-height:1.7}
+
+.mask{position:fixed;inset:0;background:rgba(45,40,38,.45);z-index:20}
+.sheet{position:fixed;left:0;right:0;bottom:0;z-index:21;background:#fff;border-radius:26rpx 26rpx 0 0;padding:26rpx 28rpx 40rpx}
+.sheet .sh{font-size:28rpx;font-weight:800;color:#241f1d;margin-bottom:18rpx}
+.sheet .fd{display:flex;align-items:center;justify-content:space-between;gap:14rpx;padding:14rpx 0;border-bottom:1rpx solid #f2ebe3}
+.sheet .lab{font-size:25rpx;color:#5c4630}
+.sheet .in{flex:1;max-width:280rpx;text-align:right;font-size:27rpx;font-weight:700;color:#241f1d;background:#faf6f1;border:1rpx solid #ece2d6;border-radius:12rpx;padding:12rpx 16rpx}
+.sheet .save{margin-top:22rpx;background:#2d2826;color:#fff;text-align:center;padding:26rpx;border-radius:16rpx;font-size:29rpx;font-weight:800}

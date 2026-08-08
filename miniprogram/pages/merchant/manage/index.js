@@ -27,7 +27,7 @@ const E = {
   analytics: { k: 'analytics', icon: 'm-analytics', t: '经营分析', d: '询价转化 · 复购 · 客单价' },
   services: { k: 'services', icon: 'm-services', t: '服务与价格', d: '服务项目 · 定金' },
   store: { k: 'store', icon: 'm-store', t: '门店信息 / 营业时间', d: '地址 · 电话 · 特殊日期 · 预约规则' },
-  staff: { k: 'staff', icon: 'm-staff', t: '员工管理', d: '新增/生成账号 · 业绩' },
+  staff: { k: 'staff', icon: 'm-staff', t: '员工管理', d: '排班 · 业绩目标 · 薪资方案 · 账号' },
   me: { k: 'me', icon: 'm-settings', t: '我的 / 账号', d: '改密 · 语言 · 财务密码' },
   myperf: { k: 'myperf', icon: 'm-analytics', t: '我的业绩', d: '本月营收 · 底薪 · 提成估算' },
   attendance: { k: 'attendance', icon: 'm-staff', t: '考勤打卡', d: '在岗看板 · 修正补卡 · 打卡 WiFi' },
@@ -53,9 +53,11 @@ Page({
       shopName = `${(m && m.tenantName) || ''} · ${owner ? '老板' : '员工'}`
     } catch (e) { owner = api.isOwner() }
     const groups = owner ? [
-      { title: '日常经营', rows: [E.schedule, E.attendance, E.finance, E.salaryMonth, E.customers] },
+      // 排班已移入「员工管理 → 排班」板块(P2③ 屏 4a);员工管理随之从「店铺设置」提到
+      // 「日常经营」—— 排班是天天要用的,再让老板去设置里翻一层不合理
+      { title: '日常经营', rows: [E.staff, E.attendance, E.finance, E.salaryMonth, E.customers] },
       { title: '营销与会员', rows: [E.marketing, E.member, E.pointsMall, E.analytics] },
-      { title: '店铺设置', rows: [E.services, E.store, E.staff, E.me] }
+      { title: '店铺设置', rows: [E.services, E.store, E.me] }
     ] : [
       { title: '日常', rows: [E.attendanceStaff, E.scheduleView, E.myperf] },
       { title: '账号', rows: [E.me] }

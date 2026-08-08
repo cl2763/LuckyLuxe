@@ -4,31 +4,121 @@
     <view class="addbtn" bindtap="addTech">＋ 新增员工</view>
   </view>
 
-  <view class="defplan" bindtap="goDefaultPlan">
-    <text class="dp-t">💰 全店默认薪资方案</text>
-    <text class="dp-d">没单独设的员工按这套算 ›</text>
-  </view>
+  <scroll-view class="tabs" scroll-x>
+    <view class="t {{tab === it.key ? 'on' : ''}}" wx:for="{{tabs}}" wx:for-item="it" wx:key="key" data-k="{{it.key}}" bindtap="switchTab">{{it.label}}</view>
+  </scroll-view>
 
-  <view wx:if="{{!list.length}}" class="empty">还没有技师</view>
-  <view class="card" wx:for="{{list}}" wx:key="id">
-    <view class="top">
-      <view class="av">{{item.av}}</view>
-      <view class="info">
-        <view class="name">{{item.name}} <text class="ttl" wx:if="{{item.title}}">{{item.title}}</text></view>
-        <view class="acct" wx:if="{{item.acct}}">账号 {{item.acct.username}}{{item.acct.disabled ? ' · 已停用' : ''}}</view>
-        <view class="acct none" wx:else>未开账号</view>
+  <!-- 排班板块(从「日常经营」移入) -->
+  <block wx:if="{{tab === 'schedule'}}">
+    <view class="card" bindtap="goSchedule">
+      <view class="rowline"><text class="nm">计时排班</text><text class="chev">›</text></view>
+      <view class="hint">按天看每位技师的时段;半天班与自定义时段在这里排。</view>
+    </view>
+  </block>
+
+  <!-- 业绩目标板块:上=新增的本月排行卡,下=原有的逐人设置区(位置交互不变) -->
+  <block wx:if="{{tab === 'targets'}}">
+    <view class="card">
+      <view class="cardhd">
+        <text class="ct">本月排行</text>
+        <view class="seg">
+          <view class="s {{metric === m.key ? 'on' : ''}}" wx:for="{{metrics}}" wx:for-item="m" wx:key="key" data-k="{{m.key}}" bindtap="pickMetric">{{m.label}}</view>
+        </view>
       </view>
-      <view class="tag {{item.active ? 's' : 'n'}}">{{item.active ? '在职' : '已停用'}}</view>
+      <view class="rank" wx:for="{{ranking}}" wx:key="name">
+        <text class="no {{item.rank <= 2 ? 'top' : ''}}">{{item.rank}}</text>
+        <text class="rn">{{item.name}}</text>
+        <view class="bar"><view class="fill" style="width:{{item.barPct}}%"></view></view>
+        <text class="rv">{{item.value}}</text>
+      </view>
+      <view wx:if="{{!ranking.length}}" class="hint">还没有已确认的日结,排行是空的。</view>
+      <view class="foot">口径=已确认日结 · 点技师行看逐日明细</view>
     </view>
-    <view class="btns">
-      <block wx:if="{{item.acct}}">
-        <view class="b" data-acctid="{{item.acct.id}}" bindtap="resetPwd">重置密码</view>
-        <view class="b {{item.acct.disabled ? 'p' : 'd'}}" data-acctid="{{item.acct.id}}" bindtap="toggleAcct">{{item.acct.disabled ? '启用账号' : '停用账号'}}</view>
-      </block>
-      <view wx:else class="b p full" data-id="{{item.id}}" bindtap="genAccount">生成登录账号</view>
-    </view>
-    <view class="planbtn" data-id="{{item.id}}" data-name="{{item.name}}" bindtap="goPlan">💰 薪资方案 ›</view>
-  </view>
 
-  <view class="note">「停用」保留排班/业绩历史,账号即刻失效(离职用);员工首次登录会强制改密。</view>
+    <view class="card">
+      <view class="cardhd"><text class="ct">各技师目标</text></view>
+      <view class="hint">原设置区,交互不变;每行新增左侧进度</view>
+      <view class="prog" wx:for="{{targets}}" wx:key="technicianId">
+        <text class="pn" data-id="{{item.technicianId}}" data-name="{{item.name}}" bindtap="goDetail">{{item.name}}</text>
+        <block wx:if="{{item.hasTarget}}">
+          <view class="pbar"><view class="pfill {{item.hit ? 'done' : ''}}" style="width:{{item.pct}}%"></view></view>
+          <text class="pt {{item.hit ? 'ok' : ''}}">{{item.pctText}}</text>
+        </block>
+        <text wx:else class="none">未设目标</text>
+        <view class="setbtn" data-id="{{item.technicianId}}" catchtap="openTargetSheet">设置</view>
+      </view>
+    </view>
+  </block>
+
+  <!-- 薪资方案板块:每人一行(模板名 + 入口) -->
+  <block wx:if="{{tab === 'salary'}}">
+    <view class="card">
+      <view class="rowline" bindtap="goDefaultPlan">
+        <text class="nm">全店默认</text><text class="lb">{{defaultPlanLabel}}</text><text class="chev">›</text>
+      </view>
+      <view class="rowline" wx:for="{{plans}}" wx:key="id" data-id="{{item.id}}" data-name="{{item.name}}" bindtap="goPlan">
+        <text class="nm">{{item.name}}</text><text class="lb">{{item.label}}</text><text class="chev">›</text>
+      </view>
+      <view class="foot">没单独设的员工按全店默认算;工资试算在「财务 → 工资试算」。</view>
+    </view>
+  </block>
+
+  <!-- 账号管理板块:每人一行行内按钮 -->
+  <block wx:if="{{tab === 'accounts'}}">
+    <view class="card" wx:for="{{list}}" wx:key="id">
+      <view class="top">
+        <view class="av">{{item.av}}</view>
+        <view class="info">
+          <view class="name">{{item.name}} <text class="ttl" wx:if="{{item.title}}">{{item.title}}</text></view>
+          <view class="acct" wx:if="{{item.acct}}">账号 {{item.acct.username}}{{item.acct.disabled ? ' · 已停用' : ''}}</view>
+          <view class="acct none" wx:else>未开账号</view>
+        </view>
+        <view class="tag {{item.active ? 's' : 'n'}}">{{item.active ? '在职' : '已停用'}}</view>
+      </view>
+      <view class="btns">
+        <block wx:if="{{item.acct}}">
+          <view class="b" data-acctid="{{item.acct.id}}" bindtap="resetPwd">重置密码</view>
+          <view class="b {{item.acct.disabled ? 'p' : 'd'}}" data-acctid="{{item.acct.id}}" bindtap="toggleAcct">{{item.acct.disabled ? '启用账号' : '停用账号'}}</view>
+        </block>
+        <view wx:else class="b p full" data-id="{{item.id}}" bindtap="genAccount">生成登录账号</view>
+      </view>
+    </view>
+    <view class="note">「停用」保留排班/业绩历史,账号即刻失效(离职用);员工首次登录会强制改密。</view>
+  </block>
+
+  <!-- 目标设置面板(= v6 屏 4b 原面板,一字未改) -->
+  <view wx:if="{{sheet}}" class="mask" bindtap="closeSheet"></view>
+  <view wx:if="{{sheet}}" class="sheet">
+    <view class="sh">业绩目标 · {{sheet.name}} · {{month}}</view>
+    <view class="fd">
+      <text class="lab">设置口径</text>
+      <view class="seg">
+        <view class="s {{sheet.mode === 'total' ? 'on' : ''}}" data-field="mode" data-v="total" bindtap="sheetPick">总目标</view>
+        <view class="s {{sheet.mode === 'split' ? 'on' : ''}}" data-field="mode" data-v="split" bindtap="sheetPick">分项目标</view>
+      </view>
+    </view>
+    <view class="fd">
+      <text class="lab">本月业绩目标</text>
+      <input class="in" type="digit" value="{{sheet.perf}}" data-field="perf" bindinput="sheetInput" />
+    </view>
+    <block wx:if="{{sheet.mode === 'split'}}">
+      <view class="fd">
+        <text class="lab">卡耗目标</text>
+        <input class="in" type="digit" value="{{sheet.card}}" data-field="card" bindinput="sheetInput" />
+      </view>
+      <view class="fd">
+        <text class="lab">单量目标</text>
+        <input class="in" type="number" value="{{sheet.orders}}" data-field="orders" bindinput="sheetInput" />
+      </view>
+    </block>
+    <view class="fd">
+      <text class="lab">员工端显示</text>
+      <view class="seg">
+        <view class="s {{sheet.displayMode === 'total_only' ? 'on' : ''}}" data-field="displayMode" data-v="total_only" bindtap="sheetPick">仅总进度</view>
+        <view class="s {{sheet.displayMode === 'with_split' ? 'on' : ''}}" data-field="displayMode" data-v="with_split" bindtap="sheetPick">含分项</view>
+      </view>
+    </view>
+    <view class="save" bindtap="saveTarget">保存</view>
+    <view class="foot">显示=仅总进度时,员工端整页(含每日流水)不出现分项来源。</view>
+  </view>
 </view>

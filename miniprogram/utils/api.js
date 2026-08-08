@@ -557,6 +557,9 @@ function adminGet(path) {
 function adminPost(path, data) {
   return adminRequest(path, 'POST', data)
 }
+function adminPut(path, data) {
+  return adminRequest(path, 'PUT', data)
+}
 function adminPatch(path, data) {
   return adminRequest(path, 'PATCH', data)
 }
@@ -687,6 +690,7 @@ module.exports = {
   refreshMember,
   adminGet,
   adminPost,
+  adminPut,
   adminPatch,
   saveServiceNote,
   getCustomerNotes,
