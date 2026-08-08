@@ -8546,8 +8546,36 @@ function cosAuthorization({ method, key, headers, now = Math.floor(Date.now() / 
   ].join('&')
 }
 
+/* 沙盒隔离(店主 2026-08-08 裁决,根因固化不靠自觉):
+   非生产环境**一律不往真实 COS 传**,即使 env 里配了钥匙 —— 快照直接走 inline。
+   本地铺演示数据那次,快照真的传进了生产桶;靠「记得摘环境变量」是防不住的,
+   所以判断放在代码里。只有显式 COS_SMOKE=1 才放行,专供冒烟脚本用。 */
+function cosUploadAllowed() {
+  if (!cosConfigured()) return false
+  if (process.env.COS_SMOKE === '1') return true
+  return IS_PRODUCTION
+}
+
+async function cosDeleteObject(objectKey) {
+  if (!cosConfigured()) return { ok: false, reason: 'COS 未配置' }
+  const key = objectKey.startsWith('/') ? objectKey : `/${objectKey}`
+  const host = `${COS.bucket}.cos.${COS.region}.myqcloud.com`
+  const headers = { host }
+  try {
+    const response = await fetch(`https://${host}${key}`, {
+      method: 'DELETE',
+      headers: { ...headers, authorization: cosAuthorization({ method: 'DELETE', key, headers }) },
+      signal: AbortSignal.timeout(15000)
+    })
+    // COS 删不存在的对象也回 204,幂等
+    return { ok: response.status === 204 || response.ok, status: response.status, url: `https://${host}${key}` }
+  } catch (error) {
+    return { ok: false, reason: error.message }
+  }
+}
+
 async function cosPutObject(objectKey, body, contentType = 'application/octet-stream') {
-  if (!cosConfigured()) return null
+  if (!cosUploadAllowed()) return null
   const key = objectKey.startsWith('/') ? objectKey : `/${objectKey}`
   const host = `${COS.bucket}.cos.${COS.region}.myqcloud.com`
   const payload = Buffer.isBuffer(body) ? body : Buffer.from(String(body), 'utf8')
@@ -12040,7 +12068,7 @@ async function route(req, res) {
       nowUtc: iso(at),
       // 只读运维探针:只报「配没配」,不回显任何密钥值。
       // 用它确认生产的对象存储可用,而不必在真实商户数据里造一张假单去验。
-      storage: { cosConfigured: cosConfigured(), snapshotFallback: cosConfigured() ? 'cos' : 'inline' }
+      storage: { cosConfigured: cosConfigured(), uploadAllowed: cosUploadAllowed(), snapshotFallback: cosUploadAllowed() ? 'cos' : 'inline' }
     })
   }
   if (req.method === 'GET' && path === '/admin/business-hours') {

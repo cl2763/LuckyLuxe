@@ -182,15 +182,13 @@ async function main() {
 
   // ---- 签署快照:唯一凭证,签的那一刻生成 ----
   check('签署返回快照信息', Boolean(signed.data.snapshot && signed.data.snapshot.at), JSON.stringify(signed.data.snapshot))
-  // 两条分支都断言:配了 COS 就走 COS 并带回 URL;没配(或上传失败)就 inline 降级,绝不拦签署
-  const cosReady = Boolean(process.env.COS_SECRET_ID && process.env.COS_SECRET_KEY && process.env.COS_REGION && process.env.COS_BUCKET)
-  if (cosReady) {
-    check('配了 COS → 快照上 COS 且带回 URL', signed.data.snapshot.storage === 'cos' && /^https:\/\//.test(signed.data.snapshot.url || ''),
-      JSON.stringify(signed.data.snapshot))
-  } else {
-    check('没配 COS → 快照 inline 降级(签署照常完成)', signed.data.snapshot.storage === 'inline' && !signed.data.snapshot.url,
-      JSON.stringify(signed.data.snapshot))
-  }
+  /* 2026-08-08 沙盒隔离裁决后,这条断言改口径:
+     测试实例永远是非生产环境,所以**无论 env 里有没有 COS 钥匙,都必须走 inline**。
+     「配了就上传」只在生产(或显式 COS_SMOKE=1 的冒烟)成立 —— 本地铺演示数据那次
+     把快照传进了真实生产桶,就是因为当时只看 cosConfigured。 */
+  check('沙盒里签署一律 inline,不碰真实对象存储',
+    signed.data.snapshot.storage === 'inline' && !signed.data.snapshot.url,
+    JSON.stringify(signed.data.snapshot))
   const snap = await fetch(`${BASE_URL}/settlements/${sheet1.code}/snapshot`)
   const snapText = await snap.text()
   check('快照可取回', snap.status === 200 || snap.status === 302, String(snap.status))
@@ -217,6 +215,32 @@ async function main() {
   check('B 店看不到 A 店的结算单', !(crossRead.data.settlements || []).some((s) => s.id === sheet1.id), String((crossRead.data.settlements || []).length))
   const crossAmend = await request(`/admin/settlements/${sheet1.id}/amend`, { method: 'POST', body: JSON.stringify({ totalCents: 1, reason: '越权' }) }, other.token)
   check('B 店改不动 A 店的单(404)', crossAmend.status === 404)
+
+  // ---- 沙盒隔离:配了 COS 也不许往真桶传(店主 2026-08-08 裁决,根因固化)----
+  const clock = await request('/admin/store-clock', {}, shop.token)
+  check('沙盒隔离:COS 配置齐全时 cosConfigured 为真', clock.data.storage.cosConfigured === true, JSON.stringify(clock.data.storage))
+  check('沙盒隔离:非生产环境 uploadAllowed 为假(不看 env 有没有钥匙)',
+    clock.data.storage.uploadAllowed === false, JSON.stringify(clock.data.storage))
+  check('沙盒隔离:快照回落口径写明 inline',
+    clock.data.storage.snapshotFallback === 'inline', JSON.stringify(clock.data.storage))
+  const sandboxGroup = await request('/admin/settlements', {
+    method: 'POST',
+    body: JSON.stringify({
+      cardOwnerUserId: cardOwner,
+      settlements: [{ tierKey: 'list', items: [{ serviceId: main3h.id }], technicians: [{ technicianId: techA.id, role: 'main', itemNos: [1] }] }]
+    })
+  }, shop.token)
+  const sandboxCode = sandboxGroup.data.settlements[0].code
+  const sandboxSigned = await request(`/settlements/${sandboxCode}/sign`, {
+    method: 'POST', body: JSON.stringify({ disclaimerAccepted: true, signature: '沙盒客' })
+  }, null)
+  check('沙盒隔离:签署产生的快照是 inline,没有 COS 地址',
+    sandboxSigned.data.settlement.snapshot.storage === 'inline' && !sandboxSigned.data.settlement.snapshot.url,
+    JSON.stringify(sandboxSigned.data.settlement.snapshot))
+  const sandboxSvg = await request(`/settlements/${sandboxCode}/snapshot`, {}, null)
+  check('沙盒隔离:inline 快照照样取得回来(功能不受影响)',
+    sandboxSvg.status === 200 && /<svg/.test(String(sandboxSvg.data?.raw || '')),
+    `${sandboxSvg.status}`)
 
   console.log(`\n结算闭环回归通过:${checks} 项断言全绿`)
 }

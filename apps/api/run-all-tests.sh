@@ -28,6 +28,14 @@ wait_health() {
   return 1
 }
 
+# 沙盒隔离回归要用:给测试实例配上「看起来齐全但是假的」COS 钥匙 ——
+# 目的是让 cosConfigured() 为真、再断言沙盒下 uploadAllowed 仍为假、快照走 inline。
+# 值是假的,真要发请求也会失败;而按规则根本不该发。
+export COS_SECRET_ID=test-fake-id
+export COS_SECRET_KEY=test-fake-key
+export COS_REGION=ap-test
+export COS_BUCKET=test-bucket-1250000000
+
 echo "== 启动主服务器 (4128) =="
 PORT=4128 node local-server.mjs > /tmp/ll-ci-main.log 2>&1 &
 wait_health 4128 "主服务器"
