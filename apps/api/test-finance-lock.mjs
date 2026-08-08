@@ -81,8 +81,28 @@ async function main() {
   const bOpen = await request('/admin/finance/transactions', {}, b.token)
   check('⑤ B 店财务区照常进', bOpen.status === 200, `${bOpen.status}`)
 
-  // ---- ④ 关掉即时生效 ----
-  const off = await request('/admin/finance/lock-settings', { method: 'PUT', body: JSON.stringify({ enabled: false }) }, a.token)
+  // ---- 屏 V4:关闭与改密都要验当前密码 ----
+  const offNoPwd = await request('/admin/finance/lock-settings', { method: 'PUT', body: JSON.stringify({ enabled: false }) }, a.token)
+  check('V4 关闭时不给当前密码 → 401(谁摸到电脑都能拆锁可不行)', offNoPwd.status === 401, `${offNoPwd.status}`)
+  const offWrong = await request('/admin/finance/lock-settings', {
+    method: 'PUT', body: JSON.stringify({ enabled: false, currentPassword: 'nope' })
+  }, a.token)
+  check('V4 当前密码错了也拦住', offWrong.status === 401, `${offWrong.status}`)
+  const chgNoPwd = await request('/admin/finance/lock-settings', {
+    method: 'PUT', body: JSON.stringify({ enabled: true, password: 'fin5678', confirmPassword: 'fin5678' })
+  }, a.token)
+  check('V4 改密时也要验当前密码', chgNoPwd.status === 401, `${chgNoPwd.status}`)
+  const chgOk = await request('/admin/finance/lock-settings', {
+    method: 'PUT', body: JSON.stringify({ enabled: true, currentPassword: 'fin1234', password: 'fin5678', confirmPassword: 'fin5678' })
+  }, a.token)
+  check('V4 带对当前密码就能改', chgOk.status === 200 && chgOk.data.enabled === true, `${chgOk.status}`)
+  const oldPwdGone = await request('/admin/finance/unlock', { method: 'POST', body: JSON.stringify({ password: 'fin1234' }) }, a.token)
+  check('V4 改完之后旧密码失效', oldPwdGone.status === 401, `${oldPwdGone.status}`)
+  const newPwdWorks = await request('/admin/finance/unlock', { method: 'POST', body: JSON.stringify({ password: 'fin5678' }) }, a.token)
+  check('V4 新密码可用', newPwdWorks.status === 200 && Boolean(newPwdWorks.data.financeKey), `${newPwdWorks.status}`)
+
+  // ---- ④ 关掉即时生效(带当前密码)----
+  const off = await request('/admin/finance/lock-settings', { method: 'PUT', body: JSON.stringify({ enabled: false, currentPassword: 'fin5678' }) }, a.token)
   check('④ 关掉后 enabled=false', off.data.enabled === false, JSON.stringify(off.data))
   const afterOff = await request('/admin/finance/transactions', {}, a.token)
   check('④ 关掉后不带钥匙也进得去', afterOff.status === 200, `${afterOff.status}`)

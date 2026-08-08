@@ -1,5 +1,5 @@
 // 构建号:每次交付递增。侧栏可见,排查"改了没生效"时先对版本。
-const ADMIN_BUILD = '20260808f-finlock'
+const ADMIN_BUILD = '20260808g-p25'
 console.log(`[admin] build ${ADMIN_BUILD}`)
 
 // "今天"必须按门店时区算,否则老板人在别的时区时全站日期错位一天。
@@ -1027,17 +1027,6 @@ function applyLanguage() {
   if (txnTitle) txnTitle.textContent = owner.lang === 'zh' ? '流水' : 'Transactions'
   const exportCsvBtn = document.querySelector('#financeExportCsv')
   if (exportCsvBtn) exportCsvBtn.textContent = owner.lang === 'zh' ? '导出 CSV' : 'Export CSV'
-  const finPassLabels = [
-    ['#financePasswordTitle', owner.lang === 'zh' ? '修改财务密码' : 'Change finance password'],
-    ['#finOldPassLabel', owner.lang === 'zh' ? '旧密码（忘记时填 Owner Token）' : 'Current password (or Owner Token)'],
-    ['#finNewPassLabel', owner.lang === 'zh' ? '新密码（至少 4 位）' : 'New password (min 4 chars)'],
-    ['#finNewPass2Label', owner.lang === 'zh' ? '再输入一次新密码' : 'Confirm new password'],
-    ['#finChangePassButton', owner.lang === 'zh' ? '确认修改' : 'Change password']
-  ]
-  for (const [selector, text] of finPassLabels) {
-    const node = document.querySelector(selector)
-    if (node) node.textContent = text
-  }
   const guideBtn = document.querySelector('#financeGuideButton')
   if (guideBtn) guideBtn.textContent = owner.lang === 'zh' ? '使用指南' : 'Guide'
   const demoBtn = document.querySelector('#financeDemoButton')
@@ -2178,7 +2167,7 @@ function renderFinanceLock() {
       <input id="finLockPass" type="password" placeholder="${owner.lang === 'zh' ? '财务密码' : 'Finance password'}" autocomplete="off">
       ${setup ? `<input id="finLockPass2" type="password" placeholder="${owner.lang === 'zh' ? '再输入一次确认' : 'Confirm password'}" autocomplete="off">` : ''}
       <button class="primary" data-fin-unlock type="button">${setup ? (owner.lang === 'zh' ? '设置并进入' : 'Set and enter') : (owner.lang === 'zh' ? '解锁' : 'Unlock')}</button>
-      ${!setup ? `<p class="subtle fin-lock-hint">${owner.lang === 'zh' ? '忘记密码?输入启动服务器窗口里显示的 Owner Token 也可解锁,进入后在「财务设置 → 修改财务密码」重设。' : 'Forgot it? The Owner Token from the server window also unlocks; reset it under Finance Settings.'}</p>` : ''}
+      ${!setup ? `<p class="subtle fin-lock-hint">${owner.lang === 'zh' ? '忘记密码?输入启动服务器窗口里显示的 Owner Token 也可解锁,进入后在「财务设置 → 财务密码」重设或关掉。' : 'Forgot it? The Owner Token from the server window also unlocks; reset it under Finance Settings.'}</p>` : ''}
     </div>
   `
 }
@@ -2207,26 +2196,6 @@ async function submitFinanceUnlock() {
   loadAll().catch(() => {})
 }
 
-async function changeFinancePassword() {
-  const zh = owner.lang === 'zh'
-  const data = await request('/admin/finance/change-password', {
-    method: 'POST',
-    body: JSON.stringify({
-      currentPassword: document.querySelector('#finOldPass')?.value || '',
-      newPassword: document.querySelector('#finNewPass')?.value || '',
-      confirmPassword: document.querySelector('#finNewPass2')?.value || ''
-    })
-  })
-  owner.financeKey = data.financeKey || owner.financeKey
-  if (owner.financeKey) sessionStorage.setItem('lucky-finance-key', owner.financeKey)
-  owner.financeLedger.lockConfigured = true
-  for (const id of ['#finOldPass', '#finNewPass', '#finNewPass2']) {
-    const input = document.querySelector(id)
-    if (input) input.value = ''
-  }
-  toast(zh ? '财务密码已修改,下次进入用新密码' : 'Finance password changed')
-}
-
 async function loadFinancePage() {
   const month = owner.financeLedger.month || new Date().toISOString().slice(0, 7)
   owner.financeLedger.month = month
@@ -2234,6 +2203,7 @@ async function loadFinancePage() {
   owner.financeLedger.lockConfigured = Boolean(lockStatus.configured)
   // 财务密码默认关闭(店主 2026-08-08 拍板)。没开门禁就不弹锁屏,直接进财务区(仍是老板专属)
   owner.financeLedger.lockEnabled = Boolean(lockStatus.enabled)
+  loadFinanceLockSettings().catch(() => { /* 卡片拉不到不影响财务页本身 */ })
   if (owner.financeLedger.lockEnabled && !owner.financeKey) {
     renderFinanceLock()
     return
@@ -3058,11 +3028,70 @@ function applyStaffTab() {
   })
 }
 
-/* ===== 财务密码门禁(商家自助,店主 2026-08-08 拍板)=====
-   ① 默认关闭,全商户一律;② 开关归商家,自己在门店设置里开/关/改密,不用找平台。
-   关着的时候财务区没有锁屏,照常进(仍然是老板专属页面)。 */
+/* 财务密码门禁状态(商家自助,店主 2026-08-08 拍板):默认关闭,老板自己开/关/改密。 */
 let financeLockState = { enabled: undefined, configured: false }
 
+/* ===== P2.5 技师业绩可视化(设计图 V1,2026-08-08)=====
+   排行与目标进度都读 /admin/perf-ranking —— 后端那边与工资试算是同一个函数,
+   两处数字逐分一致(测试里有断言)。前端只负责画,条宽用后端给的 barPct。
+   设计图硬性要求:**金额在条外右列,进度条里不压任何文字**。 */
+let perfRankState = { metric: 'perf', period: 'month', data: null, loading: false }
+
+async function loadPerfRanking() {
+  perfRankState.loading = true
+  renderPerfRanking()
+  const res = await request(`/admin/perf-ranking?metric=${perfRankState.metric}&period=${perfRankState.period}`)
+  perfRankState.data = res.ranking
+  perfRankState.loading = false
+  renderPerfRanking()
+}
+
+function renderPerfRanking() {
+  const body = document.querySelector('#perfRankBody')
+  const prog = document.querySelector('#perfProgBody')
+  if (!body || !prog) return
+  const zh = owner.lang === 'zh'
+  document.querySelectorAll('#perfRankMetric [data-rank-metric]').forEach((b) => b.classList.toggle('on', b.dataset.rankMetric === perfRankState.metric))
+  document.querySelectorAll('#perfRankPeriod [data-rank-period]').forEach((b) => b.classList.toggle('on', b.dataset.rankPeriod === perfRankState.period))
+  if (perfRankState.loading) { body.innerHTML = `<p class="subtle">${zh ? '加载中…' : 'Loading…'}</p>`; return }
+  const d = perfRankState.data
+  if (!d) { body.innerHTML = ''; prog.innerHTML = ''; return }
+
+  const title = document.querySelector('#perfRankTitle')
+  if (title) title.textContent = `${zh ? '业绩排行' : 'Ranking'} · ${d.key}`
+  const valueText = (r) => (d.metric === 'orders'
+    ? `${r.orderCount} ${zh ? '单' : ''}`
+    : money(d.metric === 'recharge' ? r.rechargeCents : r.perfCents, 2))
+
+  body.innerHTML = d.ranking.length ? d.ranking.map((r) => `
+    <div class="rankrow">
+      <span class="no ${r.rank <= 2 ? 'top' : ''}">${r.rank}</span>
+      <span class="who">${escapeHtml(r.name)}<small>${escapeHtml(r.title || (zh ? '技师' : 'Tech'))} · ${r.orderCount} ${zh ? '单' : ''}</small></span>
+      <span class="barwrap"><i style="width:${r.barPct}%"></i></span>
+      <span class="amt">${valueText(r)}</span>
+      <span class="meta">${zh ? '卡耗' : 'Card'} ${money(r.cardUsedCents, 2)} · ${zh ? '冲卡' : 'Recharge'} ${money(r.rechargeCents, 2)}</span>
+    </div>`).join('') : `<p class="subtle">${zh ? '本店还没有已确认的日结,排行是空的。' : 'No confirmed daily closes yet.'}</p>`
+
+  // 目标进度只在月维度有意义;日维度后端不下发 target,这里整块提示一句
+  prog.innerHTML = d.period !== 'month'
+    ? `<p class="subtle">${zh ? '目标按月设置,切到「本月」看进度。' : 'Targets are monthly.'}</p>`
+    : (d.targets.length ? d.targets.map((t) => (t.target ? `
+      <div class="progrow">
+        <span class="nm">${escapeHtml(t.name)}</span>
+        <span class="pbar"><i class="${t.target.hit ? 'done' : ''}" style="width:${Math.min(100, t.target.pct)}%"></i></span>
+        <span class="pct"><b>${money(t.perfCents, 2)}</b> / ${money(t.target.perfTargetCents, 2)}</span>
+        <span class="pct">${t.target.hit ? `<span class="dc-badge ok">${zh ? '已达标' : 'Hit'}</span>` : `<b>${t.target.pct}%</b>`}</span>
+      </div>` : `
+      <div class="progrow">
+        <span class="nm">${escapeHtml(t.name)}</span>
+        <span class="tag-none" style="grid-column:span 3">${zh ? '未设目标 · 去「业绩目标」页签设置' : 'No target set'}</span>
+      </div>`)).join('') : '')
+}
+
+/* ===== P2.5 财务密码卡(设计图 V4)=====
+   两态:未启用(默认)/ 已启用。开启要设新密码并确认两次;
+   关闭与改密都要验当前密码 —— 后端也拦一道(不是只靠前端自觉)。
+   忘记密码走平台重置,文案写明。 */
 async function loadFinanceLockSettings() {
   const res = await request('/admin/finance/lock-settings')
   financeLockState = { enabled: Boolean(res.enabled), configured: Boolean(res.configured) }
@@ -3075,25 +3104,31 @@ function renderFinanceLockSettings() {
   if (!body) return
   const zh = owner.lang === 'zh'
   const summary = document.querySelector('#financeLockSummary')
+  const on = financeLockState.enabled === true
   if (summary) {
     summary.textContent = financeLockState.enabled === undefined ? ''
-      : (financeLockState.enabled ? (zh ? '已开启' : 'On') : (zh ? '未开启(默认)' : 'Off (default)'))
+      : (on ? (zh ? '已启用' : 'On') : (zh ? '未启用(默认)' : 'Off (default)'))
   }
-  const on = financeLockState.enabled === true
   body.innerHTML = `
-    <div class="dep-sw"><span>${zh ? '进入财务区需要输入财务密码' : 'Require a password to open Finance'}</span>
+    <p class="subtle" style="margin:0 0 8px">${on
+      ? (zh ? '关闭或修改都需验证当前密码。' : 'Changing or disabling requires the current password.')
+      : (zh ? '开启后,进入财务板块需输入财务密码。' : 'When on, opening Finance requires a password.')}</p>
+    <div class="dep-sw"><span>${zh ? '启用财务密码' : 'Require finance password'}</span>
       <button class="sw" type="button" id="finLockSw" role="switch" aria-checked="${on ? 'true' : 'false'}"><i></i></button></div>
+    ${on ? `<div class="dep-inline">
+      <label>${zh ? '当前密码' : 'Current password'}<input id="finLockCurrent" type="password" autocomplete="current-password"></label>
+    </div>` : ''}
     <div id="finLockPwd" class="${on ? '' : 'hidden'}">
       <div class="dep-inline">
-        <label>${on && financeLockState.configured ? (zh ? '新密码(不改就留空)' : 'New password (blank = keep)') : (zh ? '设置密码' : 'Set password')}
+        <label>${on ? (zh ? '新密码(不改就留空)' : 'New password (blank = keep)') : (zh ? '设置密码' : 'Set password')}
           <input id="finLockPass" type="password" autocomplete="new-password"></label>
         <label>${zh ? '再输一次' : 'Confirm'}<input id="finLockPass2" type="password" autocomplete="new-password"></label>
       </div>
     </div>
     <button class="primary slim" id="finLockSave" type="button" style="margin-top:10px">${zh ? '保存' : 'Save'}</button>
     <p class="subtle">${zh
-      ? '默认不开。开了之后,进「财务」页要先输这个密码;忘记时可用 Owner Token 解锁再重设。关掉即时生效,已发的钥匙作废。这一项由你自己管,不需要联系平台。'
-      : 'Off by default. You manage this yourself — no need to contact the platform.'}</p>`
+      ? '默认不开,这一项由你自己管,不需要联系平台。忘记密码?联系平台重置(会下发一次性新密码,登录后请立即修改)。'
+      : 'Off by default and self-managed. Forgot it? Contact the platform to reset.'}</p>`
 }
 
 /* ===== P2② 员工管理五页签(屏 4d,2026-08-08)=====
@@ -5213,13 +5248,8 @@ function renderTechnicianPerformance() {
       ${!isOwnerRole() && owner.myCompEstimate ? `<p class="subtle comp-estimate-note">${zh ? `底薪 ${money(owner.myCompEstimate.baseSalaryCents)} + 提成 ${money(owner.myCompEstimate.commissionCents)}(${Math.round(owner.myCompEstimate.commissionRate * 100)}%),以老板月结确认为准。` : 'Base + commission; final amount confirmed at monthly settlement.'}</p>` : ''}
       ${isOwnerRole() ? `
       <div class="tech-manage-row">
-        ${inactive ? '' : `<button class="ghost slim" data-sp-plan="${escapeHtml(tech.id)}" data-sp-name="${escapeHtml(tech.name)}" type="button">${zh ? '薪资方案' : 'Salary plan'}</button>`}
-        <button class="ghost slim" data-tech-more="${escapeHtml(tech.id)}" type="button">${zh ? '账号管理' : 'Account'}</button>
-      </div>
-      <div class="tech-manage-row hidden" data-tech-more-panel="${escapeHtml(tech.id)}">
         <button class="ghost slim" data-tech-edit="${escapeHtml(tech.id)}" type="button">${zh ? '编辑资料' : 'Edit'}</button>
         <button class="ghost slim ${inactive ? '' : 'danger-ghost'}" data-tech-toggle="${escapeHtml(tech.id)}" type="button">${inactive ? (zh ? '恢复在职' : 'Reactivate') : (zh ? '停用' : 'Deactivate')}</button>
-        ${renderTechAccountControls(tech.id, zh)}
       </div>` : ''}
     </article>
   `
@@ -6161,7 +6191,6 @@ els.adminLayout.addEventListener('click', (event) => {
     if (owner.adminPage === 'storeSettings') loadSubscriptionPage().catch((error) => toast(error.message))
     if (owner.adminPage === 'storeSettings') loadMembershipSettings().catch((error) => toast(error.message))
     if (owner.adminPage === 'storeSettings') loadDepositSettings().catch((error) => toast(error.message))
-    if (owner.adminPage === 'storeSettings') loadFinanceLockSettings().catch((error) => toast(error.message))
     if (owner.adminPage === 'storeSettings') loadAiPackSettings().catch((error) => toast(error.message))
     render()
     return
@@ -6656,9 +6685,23 @@ els.schedulePage.addEventListener('click', (event) => {
     owner.staffTab = staffTab.dataset.staffTab
     applyStaffTab()
     if (owner.staffTab === 'performance' && isOwnerRole()) renderAttendanceBoard() // 切到业绩板块时拉最新考勤
+    if (owner.staffTab === 'performance' && isOwnerRole()) loadPerfRanking().catch((error) => toast(error.message))
     if (owner.staffTab === 'targets' && isOwnerRole()) loadPerfTargets().catch((error) => toast(error.message))
     if (owner.staffTab === 'salary' && isOwnerRole()) loadSalaryPlansPanel().catch((error) => toast(error.message))
     if (owner.staffTab === 'accounts' && isOwnerRole()) loadStaffAccountsPanel().catch((error) => toast(error.message))
+    return
+  }
+  // 业绩排行:维度 / 周期两组段选(屏 V1)
+  const rankMetric = event.target.closest('[data-rank-metric]')
+  if (rankMetric) {
+    perfRankState.metric = rankMetric.dataset.rankMetric
+    loadPerfRanking().catch((error) => toast(error.message))
+    return
+  }
+  const rankPeriod = event.target.closest('[data-rank-period]')
+  if (rankPeriod) {
+    perfRankState.period = rankPeriod.dataset.rankPeriod
+    loadPerfRanking().catch((error) => toast(error.message))
     return
   }
   // 业绩目标:两组段选(设置/显示)+ 月份切换 + 保存
@@ -6686,11 +6729,6 @@ els.schedulePage.addEventListener('click', (event) => {
       toast(owner.lang === 'zh' ? '业绩目标已保存,员工端立即生效' : 'Saved')
       return loadPerfTargets(perfTargetsState.month)
     }).catch((error) => toast(error.message))
-    return
-  }
-  const techMore = event.target.closest('[data-tech-more]')
-  if (techMore) {
-    document.querySelector(`[data-tech-more-panel="${techMore.dataset.techMore}"]`)?.classList.toggle('hidden')
     return
   }
   if (event.target.closest('#salaryPlanButton')) {
@@ -6750,10 +6788,6 @@ els.financePage.addEventListener('click', (event) => {
   if (event.target.closest('[data-fin-lock-retry]')) {
     owner.financeLedger.lockConfigured = undefined
     renderFinanceLock()
-    return
-  }
-  if (event.target.closest('[data-fin-change-password]')) {
-    changeFinancePassword().catch((error) => toast(error.message))
     return
   }
   if (event.target.closest('#financeExportCsv')) {
@@ -6927,6 +6961,33 @@ els.financePage.addEventListener('click', (event) => {
     request('/admin/daily-close/reopen', { method: 'POST', body: JSON.stringify({ date: dailyCloseState.date, reason: reason.trim() }) })
       .then(() => { toast(owner.lang === 'zh' ? '已重开,可以改分成了' : 'Reopened'); return loadDailyClose(dailyCloseState.date) })
       .catch((error) => toast(error.message))
+    return
+  }
+  // ===== 财务密码卡(屏 V4,商家自助)=====
+  if (event.target.closest('#finLockSw')) {
+    const sw = event.target.closest('#finLockSw')
+    const next = sw.getAttribute('aria-checked') !== 'true'
+    sw.setAttribute('aria-checked', next ? 'true' : 'false')
+    document.querySelector('#finLockPwd')?.classList.toggle('hidden', !next)
+    return
+  }
+  if (event.target.closest('#finLockSave')) {
+    const enabled = document.querySelector('#finLockSw')?.getAttribute('aria-checked') === 'true'
+    request('/admin/finance/lock-settings', {
+      method: 'PUT',
+      body: JSON.stringify({
+        enabled,
+        currentPassword: document.querySelector('#finLockCurrent')?.value || '',
+        password: document.querySelector('#finLockPass')?.value || '',
+        confirmPassword: document.querySelector('#finLockPass2')?.value || ''
+      })
+    }).then((res) => {
+      // 刚开启时后端直接给一把钥匙,免得老板保存完把自己关在门外
+      if (res.financeKey) { owner.financeKey = res.financeKey; sessionStorage.setItem('lucky-finance-key', res.financeKey) }
+      if (!enabled) { owner.financeKey = ''; sessionStorage.removeItem('lucky-finance-key'); clearFinanceLock() }
+      toast(owner.lang === 'zh' ? (enabled ? '财务密码已保存' : '财务密码已关闭,财务区不再锁') : 'Saved')
+      return loadFinanceLockSettings()
+    }).catch((error) => toast(error.message))
     return
   }
   // ===== 财务趋势 =====
@@ -8509,28 +8570,6 @@ if (els.storeSettingsPage) {
         })
         await loadDepositSettings()
         toast(pzh() ? '定金规则已保存,顾客端与 AI 立即生效' : 'Saved')
-        return
-      }
-      // 财务密码门禁开关(商家自助)
-      if (event.target.closest('#finLockSw')) {
-        const sw = event.target.closest('#finLockSw')
-        const next = sw.getAttribute('aria-checked') !== 'true'
-        sw.setAttribute('aria-checked', next ? 'true' : 'false')
-        document.querySelector('#finLockPwd')?.classList.toggle('hidden', !next)
-        return
-      }
-      if (event.target.closest('#finLockSave')) {
-        const enabled = document.querySelector('#finLockSw')?.getAttribute('aria-checked') === 'true'
-        const password = document.querySelector('#finLockPass')?.value || ''
-        const confirmPassword = document.querySelector('#finLockPass2')?.value || ''
-        const res = await request('/admin/finance/lock-settings', {
-          method: 'PUT', body: JSON.stringify({ enabled, password, confirmPassword })
-        })
-        // 刚开启的话后端直接给了一把钥匙,免得老板保存完自己被挡在门外
-        if (res.financeKey) { owner.financeKey = res.financeKey; sessionStorage.setItem('lucky-finance-key', res.financeKey) }
-        if (!enabled) { owner.financeKey = ''; sessionStorage.removeItem('lucky-finance-key') }
-        await loadFinanceLockSettings()
-        toast(pzh() ? (enabled ? '财务密码已开启' : '财务密码已关闭,财务区不再锁') : 'Saved')
         return
       }
       if (event.target.closest('#aiKbEntry')) {

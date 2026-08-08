@@ -6681,6 +6681,9 @@ function issueFinanceKey() {
 }
 
 function requireFinanceKey(req) {
+  // 本店没开财务密码门禁就直接放行(店主 2026-08-08 口径:默认关闭)。
+  // 判断放在这里而不是各调用点 —— 薪资试算等 6 处是直接调本函数的,漏一个就等于锁没关掉。
+  if (!financeLockEnabled()) return
   const key = req.headers['x-finance-key'] || ''
   const session = financeSessions.get(key)
   const expires = session && (typeof session === 'object' ? session.expires : session)
@@ -8310,6 +8313,89 @@ function monthlyCloseStatus(month, tenantId) {
   return { month, days, openDays: days.filter((d) => !d.confirmed).map((d) => d.date), allClosed: days.every((d) => d.confirmed) }
 }
 
+/* ===== P2.5 技师业绩可视化(设计图 V1/V2/V3,2026-08-08)=====
+   口径红线:排行与进度**全部**读 monthPerfFromCloses / dayPerfFromCloses ——
+   与工资试算是同一个函数,两处数字必须逐分一致。未日结的天不计入。
+   冲卡(充值)按已确认日结那几天的储值流水算,口径跟着业绩走。 */
+function dayPerfFromCloses(techId, date, tid) {
+  const row = db.prepare(`SELECT
+      COALESCE(SUM(l.order_count), 0) AS orders,
+      COALESCE(SUM(l.perf_cents), 0) AS perf,
+      COALESCE(SUM(l.card_used_cents), 0) AS cardUsed
+    FROM daily_close_lines l
+    JOIN daily_closes c ON c.id = l.close_id AND c.status = 'confirmed'
+    WHERE l.tenant_id = ? AND l.technician_id = ? AND l.date = ?`)
+    .get(tid, techId, date)
+  return { orderCount: row.orders, perfCents: row.perf, cardUsedCents: row.cardUsed }
+}
+
+// 冲卡:只统计已确认日结那几天的充值(没日结的天不算,与业绩同口径)
+function rechargeFromClosedDays(techId, prefix, tid) {
+  const closed = db.prepare(`SELECT DISTINCT l.date FROM daily_close_lines l
+    JOIN daily_closes c ON c.id = l.close_id AND c.status = 'confirmed'
+    WHERE l.tenant_id = ? AND l.date LIKE ?`).all(tid, `${prefix}%`).map((r) => r.date)
+  if (!closed.length) return 0
+  const tz = tenantTimezone(tid)
+  return db.prepare("SELECT amount_cents, created_at FROM stored_value_transactions WHERE tenant_id = ? AND type = 'recharge' AND technician_id = ?")
+    .all(tid, techId)
+    .filter((r) => closed.includes(localParts(r.created_at, tz).date))
+    .reduce((sum, r) => sum + Math.max(0, r.amount_cents), 0)
+}
+
+const RANK_METRICS = ['perf', 'orders', 'recharge']
+
+function perfRanking({ period = 'month', date = null, metric = 'perf' } = {}, tenantId = currentTenantId()) {
+  const p = period === 'day' ? 'day' : 'month'
+  const m = RANK_METRICS.includes(metric) ? metric : 'perf'
+  const today = todayOf(tenantId)
+  const key = p === 'day'
+    ? (/^\d{4}-\d{2}-\d{2}$/.test(String(date || '')) ? date : today)
+    : (/^\d{4}-\d{2}$/.test(String(date || '')) ? date : monthKeyOf())
+  const month = p === 'day' ? key.slice(0, 7) : key
+
+  const targets = {}
+  for (const t of db.prepare('SELECT * FROM perf_targets WHERE tenant_id = ? AND month = ?').all(tenantId, month)) targets[t.technician_id] = t
+
+  const rows = db.prepare('SELECT id, name, title FROM technicians WHERE tenant_id = ? AND is_active = 1 ORDER BY name ASC').all(tenantId)
+    .map((t) => {
+      const agg = p === 'day' ? dayPerfFromCloses(t.id, key, tenantId) : monthPerfFromCloses(t.id, key, tenantId)
+      const target = targets[t.id] || null
+      const targetCents = target ? target.perf_target_cents : 0
+      return {
+        technicianId: t.id,
+        name: t.name,
+        title: t.title || '',
+        orderCount: agg.orderCount,
+        perfCents: agg.perfCents,
+        cardUsedCents: agg.cardUsedCents,
+        rechargeCents: rechargeFromClosedDays(t.id, key, tenantId),
+        // 目标只有月维度才有意义(业绩目标本身按月设);没设就是 null,前端据此显示「未设目标」而不是画一条 0% 的条
+        target: p === 'month' && targetCents > 0 ? {
+          perfTargetCents: targetCents,
+          pct: Math.round(agg.perfCents * 100 / targetCents),
+          hit: agg.perfCents >= targetCents,
+          gapCents: Math.max(0, targetCents - agg.perfCents)
+        } : null
+      }
+    })
+
+  const valueOf = (r) => (m === 'orders' ? r.orderCount : (m === 'recharge' ? r.rechargeCents : r.perfCents))
+  const sorted = rows.slice().sort((a, b) => valueOf(b) - valueOf(a) || a.name.localeCompare(b.name))
+  const max = Math.max(1, ...sorted.map(valueOf))
+  return {
+    period: p,
+    key,
+    metric: m,
+    metrics: RANK_METRICS,
+    currency: tenantCurrencyCode(tenantId),
+    currencyDisplay: currencyDisplayOf(tenantCurrencyCode(tenantId)),
+    source: 'daily_close',
+    // barPct 只是画图比例,不是金额;金额一律用各自的 *Cents 字段显示(设计图要求数字在条外)
+    ranking: sorted.map((r, index) => ({ ...r, rank: index + 1, value: valueOf(r), barPct: Math.round(valueOf(r) * 100 / max) })),
+    targets: rows.map((r) => ({ technicianId: r.technicianId, name: r.name, perfCents: r.perfCents, target: r.target }))
+  }
+}
+
 /* ===== P2 员工端「我的业绩」(设计图屏 5a/5b)=====
    两个开关决定这一页长什么样,而且**都在接口层裁字段**,不靠前端自觉:
    - 可见性三态(店铺级):纯业绩 / 业绩+工资 / 纯工资
@@ -8384,12 +8470,16 @@ function staffPerformanceView(techId, month, tenantId) {
   const daysInMonth = new Date(Date.UTC(ty, tm, 0)).getUTCDate()
   const daysLeft = today.startsWith(month) ? Math.max(0, daysInMonth - Number(today.slice(8, 10))) : 0
 
+  const targetCents = target ? target.perf_target_cents : 0
   const hero = {
     perfCents: cur.perfCents,
     orderCount: cur.orderCount,
-    targetCents: target ? target.perf_target_cents : 0,
-    hasTarget: Boolean(target && target.perf_target_cents),
-    pct: target && target.perf_target_cents ? Math.round(cur.perfCents * 100 / target.perf_target_cents) : null,
+    targetCents,
+    hasTarget: targetCents > 0,
+    pct: targetCents > 0 ? Math.round(cur.perfCents * 100 / targetCents) : null,
+    // 屏 V3:hero 上的目标进度条与「还差 X 达标」。没设目标就整条不下发,前端不显示
+    gapCents: targetCents > 0 ? Math.max(0, targetCents - cur.perfCents) : null,
+    hitTarget: targetCents > 0 ? cur.perfCents >= targetCents : null,
     daysLeft
   }
   // 只有「含分项」才给分项来源 —— 仅总进度时这几个字段整个不下发
@@ -9549,6 +9639,13 @@ async function route(req, res) {
     const id = path.split('/')[3]
     const body = await readBody(req)
     return json(res, 200, amendSettlement(id, body, adminSession))
+  }
+  // P2.5 技师业绩排行 + 目标进度(设计图 V1/V2);口径与工资试算同源
+  if (req.method === 'GET' && path === '/admin/perf-ranking') {
+    if (adminSession.role !== 'owner') throw apiError(403, 'FORBIDDEN', '业绩排行由店长查看。')
+    return json(res, 200, {
+      ranking: perfRanking({ period: query.period, date: query.date, metric: query.metric }, currentTenantId())
+    })
   }
   /* 员工端「我的业绩」(屏 5a/5b)。只给自己的数据;
      可见性与 display_mode 两道裁剪都在这里做,不靠前端自觉。 */
@@ -11032,6 +11129,15 @@ async function route(req, res) {
       const body = await readBody(req)
       const enabled = Boolean(body.enabled)
       const now = iso(new Date())
+      /* 屏 V4:关闭与改密都要先验当前密码 —— 不然谁摸到这台电脑都能一键把锁拆了。
+         忘记密码走平台重置(OWNER_TOKEN 是平台主钥匙,文案里也这么写)。 */
+      const stored = db.prepare('SELECT finance_password_hash FROM tenants WHERE id = ?').get(tid)?.finance_password_hash
+      const needsCurrent = financeLockEnabled(tid) && Boolean(stored)
+      if (needsCurrent) {
+        const current = String(body.currentPassword || '')
+        const ok = current === OWNER_TOKEN || financePasswordHash(current) === stored
+        if (!ok) throw apiError(401, 'WRONG_FINANCE_PASSWORD', '请先输入当前财务密码。忘记了就联系平台重置。')
+      }
       if (!enabled) {
         db.prepare('UPDATE tenants SET finance_lock_enabled = 0, updated_at = ? WHERE id = ?').run(now, tid)
         // 关掉时把本店已发的钥匙清掉,状态干净
@@ -11094,8 +11200,7 @@ async function route(req, res) {
   if ((path.startsWith('/admin/finance/') || path.startsWith('/admin/stored-value') || path === '/admin/demo/finance-seed')
     && path !== '/admin/finance/unlock' && path !== '/admin/finance/lock-status'
     && path !== '/admin/finance/lock-settings' && path !== '/admin/finance/change-password') {
-    // 没开门禁就不拦(仍然 owner-only);开了才要钥匙
-    if (financeLockEnabled()) requireFinanceKey(req)
+    requireFinanceKey(req) // 没开门禁时该函数直接返回(判断内聚在函数里)
   }
   if (req.method === 'GET' && path === '/admin/stored-value') {
     if (adminSession.role !== 'owner') throw apiError(403, 'FORBIDDEN', 'Owner permission is required.')

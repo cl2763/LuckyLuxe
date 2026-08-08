@@ -6990,9 +6990,6 @@ button.dashboard-chart-card:hover { transform: translateY(-2px); box-shadow: 0 1
 section.card > .section-row:first-child { margin-top: 0; }
 
 /* 财务修改密码 */
-.fin-change-pass-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 12px; margin-bottom: 12px; }
-.fin-change-pass-grid label { display: flex; flex-direction: column; gap: 5px; font-size: .82rem; color: var(--muted); }
-.fin-change-pass-grid input { border: 1px solid var(--line); border-radius: 10px; padding: 8px 10px; background: var(--paper); color: var(--ink); font: inherit; }
 .fin-lock-hint { max-width: 340px; font-size: .78rem; line-height: 1.5; }
 
 /* ===== fix6:首页三列紧凑网格 + 客户详情卡内边距 ===== */

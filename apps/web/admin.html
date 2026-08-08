@@ -4,7 +4,7 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>有迹 · 商家后台</title>
-    <link rel="stylesheet" href="/web/styles.css?v=20260808f-finlock">
+    <link rel="stylesheet" href="/web/styles.css?v=20260808g-p25">
     <style>
       /* 2026-08-02 财务指标显隐+动效(店主 v4 定稿):AI智能总结卡 / 目标进度条(带平衡线刻度) / 设目标引导与弹窗。
          放这里不放 styles.css:本批约定只动 admin.js + admin.html 两个文件。 */
@@ -103,6 +103,29 @@
       .sub-hist td{padding:10px;border-bottom:1px solid #f5f0ea;color:#2d2826}
       .sub-hist tr:last-child td{border-bottom:none}
       .sub-hist .pend{color:#b8452f;font-weight:700}
+
+      /* ===== P2.5 技师业绩可视化(屏 V1,2026-08-08)=====
+         设计图硬性要求:金额在条外右列,进度条里不压任何文字 */
+      .rankrow{display:grid;grid-template-columns:26px 128px minmax(0,1fr) 132px 208px;align-items:center;gap:12px;padding:11px 0;border-bottom:1px solid #f1e7df}
+      .rankrow:last-child{border-bottom:none}
+      .rankrow .no{width:22px;height:22px;border-radius:50%;background:#f1e7df;color:#8c8279;font-size:12px;font-weight:800;display:flex;align-items:center;justify-content:center}
+      .rankrow .no.top{background:#2d2826;color:#fff}
+      .rankrow .who{font-size:13.5px;font-weight:700;color:#241f1d}
+      .rankrow .who small{display:block;font-size:11px;font-weight:400;color:#8c8279;margin-top:2px}
+      .rankrow .barwrap{height:16px;background:#f3ede6;border-radius:999px;overflow:hidden}
+      .rankrow .barwrap i{display:block;height:100%;background:linear-gradient(90deg,#c8a47e,#9b7655);border-radius:999px}
+      .rankrow .amt{text-align:right;font-size:14px;font-weight:800;color:#241f1d;white-space:nowrap}
+      .rankrow .meta{font-size:11px;color:#8c8279;text-align:right}
+      @media (max-width:900px){.rankrow{grid-template-columns:26px 1fr 90px}.rankrow .barwrap,.rankrow .meta{display:none}}
+      .progrow{display:grid;grid-template-columns:96px minmax(0,1fr) 210px 82px;align-items:center;gap:12px;padding:10px 0;border-bottom:1px solid #f1e7df}
+      .progrow:last-child{border-bottom:none}
+      .progrow .nm{font-size:13.5px;font-weight:700;color:#241f1d}
+      .progrow .pbar{height:14px;background:#f3ede6;border-radius:999px;overflow:hidden}
+      .progrow .pbar i{display:block;height:100%;background:#c8a47e;border-radius:999px}
+      .progrow .pbar i.done{background:#2f7d5c}
+      .progrow .pct{font-size:12.5px;color:#8c8279;text-align:right;white-space:nowrap}
+      .progrow .pct b{color:#241f1d}
+      .tag-none{font-size:11.5px;background:#f1e7df;color:#8c8279;border-radius:999px;padding:3px 12px}
 
       /* ===== P2② 员工管理五页签 / 日结板块 / 财务趋势(2026-08-08)===== */
       .trow2{display:flex;align-items:center;gap:10px;padding:12px 0;border-bottom:1px solid #f1e7df;flex-wrap:wrap}
@@ -426,6 +449,29 @@
               </div>
               <p class="subtle" id="scheduleGridHint">点格子切换上班/休息;上班格显示当天时段与已约单数;店休日排班会黄色提醒。</p>
             </section>
+            <section class="admin-card hidden" data-staff-panel="performance" id="perfRankCard">
+              <div class="section-row compact-row">
+                <div>
+                  <h2 id="perfRankTitle">业绩排行</h2>
+                  <p class="subtle" id="perfRankHint">口径=已确认日结累加,与工资试算同源;未日结的天不计入</p>
+                </div>
+                <div class="schedule-week-nav">
+                  <span class="seg2" id="perfRankMetric">
+                    <button type="button" data-rank-metric="perf" class="on">按业绩</button>
+                    <button type="button" data-rank-metric="orders">按单数</button>
+                    <button type="button" data-rank-metric="recharge">按冲卡</button>
+                  </span>
+                  <span class="seg2" id="perfRankPeriod">
+                    <button type="button" data-rank-period="day">本日</button>
+                    <button type="button" data-rank-period="month" class="on">本月</button>
+                  </span>
+                </div>
+              </div>
+              <div id="perfRankBody"></div>
+              <h3 style="font-size:14px;margin:18px 0 4px" id="perfProgTitle">目标进度</h3>
+              <p class="subtle" id="perfProgHint">读「业绩目标」页签的设置;未设目标显示「未设目标」,不显示进度条</p>
+              <div id="perfProgBody"></div>
+            </section>
             <section class="admin-card hidden" data-staff-panel="performance">
               <div class="section-row compact-row">
                 <div>
@@ -678,20 +724,6 @@
                 </summary>
                 <div class="settings-item-body" id="financeLedgerBody"></div>
               </details>
-              <details class="settings-item">
-                <summary>
-                  <span class="settings-item-title" id="financePasswordTitle">修改财务密码</span>
-                  <span class="settings-item-value" id="financePasswordSummary"></span>
-                </summary>
-                <div class="settings-item-body">
-                  <div class="fin-change-pass-grid">
-                    <label><span id="finOldPassLabel">旧密码（忘记时填 Owner Token）</span><input id="finOldPass" type="password" autocomplete="off"></label>
-                    <label><span id="finNewPassLabel">新密码（至少 4 位）</span><input id="finNewPass" type="password" autocomplete="off"></label>
-                    <label><span id="finNewPass2Label">再输入一次新密码</span><input id="finNewPass2" type="password" autocomplete="off"></label>
-                  </div>
-                  <button class="primary slim" data-fin-change-password type="button" id="finChangePassButton">确认修改</button>
-                </div>
-              </details>
             </section>
             <section class="admin-card" data-fin-panel="txns">
               <div class="section-row compact-row">
@@ -810,6 +842,6 @@
     </main>
 
     <div class="toast" id="toast"></div>
-    <script src="/web/admin.js?v=20260808f-finlock"></script>
+    <script src="/web/admin.js?v=20260808g-p25"></script>
   </body>
 </html>
