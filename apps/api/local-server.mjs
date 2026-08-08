@@ -6667,6 +6667,12 @@ function financeLockConfigured() {
   return Boolean(row?.finance_password_hash)
 }
 
+// 本店有没有开启财务密码门禁。默认关 —— 不开就没有锁屏,财务区照常进(仍然是 owner-only)
+function financeLockEnabled(tenantId = currentTenantId()) {
+  const row = db.prepare('SELECT finance_lock_enabled FROM tenants WHERE id = ?').get(tenantId)
+  return row ? Boolean(row.finance_lock_enabled) : false
+}
+
 function issueFinanceKey() {
   const key = randomId('finkey')
   // 多租户:钥匙绑定发放时的租户,跨店不可复用
@@ -11014,7 +11020,36 @@ async function route(req, res) {
   }
   if (req.method === 'GET' && path === '/admin/finance/lock-status') {
     if (adminSession.role !== 'owner') throw apiError(403, 'FORBIDDEN', 'Owner permission is required.')
-    return json(res, 200, { configured: financeLockConfigured() })
+    return json(res, 200, { enabled: financeLockEnabled(), configured: financeLockConfigured() })
+  }
+  /* 财务密码门禁的开关(商家自助,不经平台)。
+     开:必须同时给密码(没密码的开关等于没锁);关:立刻放行,已发的钥匙作废。 */
+  if (path === '/admin/finance/lock-settings') {
+    if (adminSession.role !== 'owner') throw apiError(403, 'FORBIDDEN', '仅老板可改财务密码设置。')
+    const tid = currentTenantId()
+    if (req.method === 'GET') return json(res, 200, { enabled: financeLockEnabled(tid), configured: financeLockConfigured() })
+    if (req.method === 'PUT') {
+      const body = await readBody(req)
+      const enabled = Boolean(body.enabled)
+      const now = iso(new Date())
+      if (!enabled) {
+        db.prepare('UPDATE tenants SET finance_lock_enabled = 0, updated_at = ? WHERE id = ?').run(now, tid)
+        // 关掉时把本店已发的钥匙清掉,状态干净
+        for (const [key, session] of financeSessions) {
+          if (session && session.tenantId === tid) financeSessions.delete(key)
+        }
+        return json(res, 200, { enabled: false, configured: financeLockConfigured() })
+      }
+      const password = String(body.password || '')
+      if (!financeLockConfigured() || password) {
+        if (password.length < 4) throw apiError(400, 'BAD_REQUEST', '开启财务密码需要设置密码(至少 4 位)。')
+        if (password !== String(body.confirmPassword || '')) throw apiError(400, 'BAD_REQUEST', '两次输入的密码不一致。')
+        db.prepare('UPDATE tenants SET finance_password_hash = ?, updated_at = ? WHERE id = ?')
+          .run(financePasswordHash(password), now, tid)
+      }
+      db.prepare('UPDATE tenants SET finance_lock_enabled = 1, updated_at = ? WHERE id = ?').run(now, tid)
+      return json(res, 200, { enabled: true, configured: true, financeKey: issueFinanceKey() })
+    }
   }
   if (req.method === 'POST' && path === '/admin/finance/unlock') {
     if (adminSession.role !== 'owner') throw apiError(403, 'FORBIDDEN', 'Owner permission is required.')
@@ -11024,8 +11059,12 @@ async function route(req, res) {
     if (password && password === OWNER_TOKEN) {
       return json(res, 200, { financeKey: issueFinanceKey(), configured: financeLockConfigured(), master: true })
     }
+    if (!financeLockEnabled()) {
+      // 本店没开门禁:不再逼着老板「首次设置密码」,直接放行(要加锁去门店设置里开)
+      return json(res, 200, { financeKey: issueFinanceKey(), enabled: false, configured: financeLockConfigured() })
+    }
     if (!financeLockConfigured()) {
-      // 首次设置财务密码
+      // 开了门禁却还没有密码(异常状态):这里补设一次
       if (password.length < 4) throw apiError(400, 'BAD_REQUEST', '财务密码至少 4 位。')
       if (password !== String(body.confirmPassword || '')) throw apiError(400, 'BAD_REQUEST', '两次输入的密码不一致。')
       db.prepare('UPDATE tenants SET finance_password_hash = ?, updated_at = ? WHERE id = ?')
@@ -11053,8 +11092,10 @@ async function route(req, res) {
   }
   // 财务数据统一门禁:除解锁/状态接口外,所有财务相关路由都需要有效的财务会话钥匙
   if ((path.startsWith('/admin/finance/') || path.startsWith('/admin/stored-value') || path === '/admin/demo/finance-seed')
-    && path !== '/admin/finance/unlock' && path !== '/admin/finance/lock-status' && path !== '/admin/finance/change-password') {
-    requireFinanceKey(req)
+    && path !== '/admin/finance/unlock' && path !== '/admin/finance/lock-status'
+    && path !== '/admin/finance/lock-settings' && path !== '/admin/finance/change-password') {
+    // 没开门禁就不拦(仍然 owner-only);开了才要钥匙
+    if (financeLockEnabled()) requireFinanceKey(req)
   }
   if (req.method === 'GET' && path === '/admin/stored-value') {
     if (adminSession.role !== 'owner') throw apiError(403, 'FORBIDDEN', 'Owner permission is required.')
@@ -12925,6 +12966,18 @@ try {
 } catch (error) {
   if (!String(error.message || '').includes('duplicate column')) throw error
 }
+/* 财务密码门禁开关(店主 2026-08-08 拍板):
+   ① 默认关闭,全商户一律 —— 以前是「进财务区就被迫先设一个密码」,等于默认开;
+   ② 归属商家自助:老板在自己的门店设置里开/关/改密,不用找平台;
+   ③ 迁移只把旗舰店置为开(它现在就是开着的,现状不动),其余商户一律关。 */
+try {
+  db.exec('ALTER TABLE tenants ADD COLUMN finance_lock_enabled INTEGER')
+} catch (error) {
+  if (!String(error.message || '').includes('duplicate column')) throw error
+}
+db.exec(`UPDATE tenants SET finance_lock_enabled =
+  CASE WHEN id = '${DEFAULT_TENANT_ID}' AND finance_password_hash IS NOT NULL AND finance_password_hash != '' THEN 1 ELSE 0 END
+  WHERE finance_lock_enabled IS NULL`)
 // ===== 特殊日期(节假日休息/调整时段):覆盖每周固定营业时间 =====
 db.exec(`
   CREATE TABLE IF NOT EXISTS store_special_dates (

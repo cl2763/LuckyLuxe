@@ -1,5 +1,5 @@
 // 构建号:每次交付递增。侧栏可见,排查"改了没生效"时先对版本。
-const ADMIN_BUILD = '20260808e-p2-web'
+const ADMIN_BUILD = '20260808f-finlock'
 console.log(`[admin] build ${ADMIN_BUILD}`)
 
 // "今天"必须按门店时区算,否则老板人在别的时区时全站日期错位一天。
@@ -63,7 +63,7 @@ const owner = {
   wechatSearch: '',
   tenantPlan: null,
   tenantKb: null,
-  financeLedger: { month: '', data: null, rules: [], ledger: null, filterType: 'all', filterCategory: 'all', lockConfigured: undefined, tab: 'quick' },
+  financeLedger: { month: '', data: null, rules: [], ledger: null, filterType: 'all', filterCategory: 'all', lockConfigured: undefined, lockEnabled: undefined, tab: 'quick' },
   financeKey: sessionStorage.getItem('lucky-finance-key') || ''
 }
 
@@ -1328,7 +1328,7 @@ function render() {
   renderAiGallery()
   renderStoreSettings()
   if (owner.adminPage === 'finance') {
-    if (!owner.financeKey) renderFinanceLock()
+    if (owner.financeLedger.lockEnabled !== false && !owner.financeKey) renderFinanceLock()
     else if (owner.financeLedger.data) renderFinancePage()
   }
 }
@@ -1352,7 +1352,9 @@ function renderMetrics() {
   const stats = dashboardStats()
   // 营收统一走财务账本口径;未解锁财务时显示锁定,点击跳财务页解锁
   const ledgerIncome = owner.dashFinance?.summary?.incomeCents
-  const revenueDisplay = owner.financeKey && ledgerIncome !== undefined ? money(ledgerIncome) : '🔒'
+  // 没开财务密码门禁的店直接显示金额;开了才在未解锁时打码
+  const financeGated = owner.financeLedger.lockEnabled !== false && !owner.financeKey
+  const revenueDisplay = !financeGated && ledgerIncome !== undefined ? money(ledgerIncome) : '🔒'
   els.metricGrid.innerHTML = `
     <button class="metric" data-dashboard-detail="confirmed" type="button"><span class="subtle">${t('confirmed')}</span><strong>${stats.confirmed}</strong></button>
     <button class="metric" data-dashboard-detail="pending" type="button"><span class="subtle">${t('pending')}</span><strong>${stats.pending}</strong></button>
@@ -1366,7 +1368,7 @@ function renderTodayTasksCard() {
   const needsHuman = (owner.wechatConversations || []).filter((item) => item.status === 'needs_human').length
   const pendingQuotes = (owner.quoteRequests || []).filter((item) => ['PENDING_STAFF', 'WAITING_STAFF_QUOTE'].includes(String(item.status || '').toUpperCase())).length
   const todayActive = dashboardStats().todayBookings.filter((item) => activeStatuses().includes(item.status)).length
-  const financeLocked = !owner.financeKey
+  const financeLocked = owner.financeLedger.lockEnabled !== false && !owner.financeKey
   const item = (count, label, page, tone = '') => `
     <button class="today-task ${tone ? `tone-${tone}` : ''} ${count > 0 ? 'has-items' : ''}" data-admin-page="${page}" type="button">
       <span class="task-label">${label}</span>
@@ -2228,12 +2230,15 @@ async function changeFinancePassword() {
 async function loadFinancePage() {
   const month = owner.financeLedger.month || new Date().toISOString().slice(0, 7)
   owner.financeLedger.month = month
-  const lockStatus = await request('/admin/finance/lock-status').catch(() => ({ configured: owner.financeLedger.lockConfigured }))
+  const lockStatus = await request('/admin/finance/lock-status').catch(() => ({ enabled: owner.financeLedger.lockEnabled, configured: owner.financeLedger.lockConfigured }))
   owner.financeLedger.lockConfigured = Boolean(lockStatus.configured)
-  if (!owner.financeKey) {
+  // 财务密码默认关闭(店主 2026-08-08 拍板)。没开门禁就不弹锁屏,直接进财务区(仍是老板专属)
+  owner.financeLedger.lockEnabled = Boolean(lockStatus.enabled)
+  if (owner.financeLedger.lockEnabled && !owner.financeKey) {
     renderFinanceLock()
     return
   }
+  if (!owner.financeLedger.lockEnabled) clearFinanceLock()
   const [txns, rules, verify, progress, payroll, compensation, storedValue] = await Promise.allSettled([
     request(`/admin/finance/transactions?month=${month}`),
     request('/admin/finance/recurring'),
@@ -3051,6 +3056,44 @@ function applyStaffTab() {
   document.querySelectorAll('#staffTabs [data-staff-tab]').forEach((button) => {
     button.classList.toggle('active', button.dataset.staffTab === tab)
   })
+}
+
+/* ===== 财务密码门禁(商家自助,店主 2026-08-08 拍板)=====
+   ① 默认关闭,全商户一律;② 开关归商家,自己在门店设置里开/关/改密,不用找平台。
+   关着的时候财务区没有锁屏,照常进(仍然是老板专属页面)。 */
+let financeLockState = { enabled: undefined, configured: false }
+
+async function loadFinanceLockSettings() {
+  const res = await request('/admin/finance/lock-settings')
+  financeLockState = { enabled: Boolean(res.enabled), configured: Boolean(res.configured) }
+  owner.financeLedger.lockEnabled = financeLockState.enabled
+  renderFinanceLockSettings()
+}
+
+function renderFinanceLockSettings() {
+  const body = document.querySelector('#financeLockBody')
+  if (!body) return
+  const zh = owner.lang === 'zh'
+  const summary = document.querySelector('#financeLockSummary')
+  if (summary) {
+    summary.textContent = financeLockState.enabled === undefined ? ''
+      : (financeLockState.enabled ? (zh ? '已开启' : 'On') : (zh ? '未开启(默认)' : 'Off (default)'))
+  }
+  const on = financeLockState.enabled === true
+  body.innerHTML = `
+    <div class="dep-sw"><span>${zh ? '进入财务区需要输入财务密码' : 'Require a password to open Finance'}</span>
+      <button class="sw" type="button" id="finLockSw" role="switch" aria-checked="${on ? 'true' : 'false'}"><i></i></button></div>
+    <div id="finLockPwd" class="${on ? '' : 'hidden'}">
+      <div class="dep-inline">
+        <label>${on && financeLockState.configured ? (zh ? '新密码(不改就留空)' : 'New password (blank = keep)') : (zh ? '设置密码' : 'Set password')}
+          <input id="finLockPass" type="password" autocomplete="new-password"></label>
+        <label>${zh ? '再输一次' : 'Confirm'}<input id="finLockPass2" type="password" autocomplete="new-password"></label>
+      </div>
+    </div>
+    <button class="primary slim" id="finLockSave" type="button" style="margin-top:10px">${zh ? '保存' : 'Save'}</button>
+    <p class="subtle">${zh
+      ? '默认不开。开了之后,进「财务」页要先输这个密码;忘记时可用 Owner Token 解锁再重设。关掉即时生效,已发的钥匙作废。这一项由你自己管,不需要联系平台。'
+      : 'Off by default. You manage this yourself — no need to contact the platform.'}</p>`
 }
 
 /* ===== P2② 员工管理五页签(屏 4d,2026-08-08)=====
@@ -6118,6 +6161,7 @@ els.adminLayout.addEventListener('click', (event) => {
     if (owner.adminPage === 'storeSettings') loadSubscriptionPage().catch((error) => toast(error.message))
     if (owner.adminPage === 'storeSettings') loadMembershipSettings().catch((error) => toast(error.message))
     if (owner.adminPage === 'storeSettings') loadDepositSettings().catch((error) => toast(error.message))
+    if (owner.adminPage === 'storeSettings') loadFinanceLockSettings().catch((error) => toast(error.message))
     if (owner.adminPage === 'storeSettings') loadAiPackSettings().catch((error) => toast(error.message))
     render()
     return
@@ -8465,6 +8509,28 @@ if (els.storeSettingsPage) {
         })
         await loadDepositSettings()
         toast(pzh() ? '定金规则已保存,顾客端与 AI 立即生效' : 'Saved')
+        return
+      }
+      // 财务密码门禁开关(商家自助)
+      if (event.target.closest('#finLockSw')) {
+        const sw = event.target.closest('#finLockSw')
+        const next = sw.getAttribute('aria-checked') !== 'true'
+        sw.setAttribute('aria-checked', next ? 'true' : 'false')
+        document.querySelector('#finLockPwd')?.classList.toggle('hidden', !next)
+        return
+      }
+      if (event.target.closest('#finLockSave')) {
+        const enabled = document.querySelector('#finLockSw')?.getAttribute('aria-checked') === 'true'
+        const password = document.querySelector('#finLockPass')?.value || ''
+        const confirmPassword = document.querySelector('#finLockPass2')?.value || ''
+        const res = await request('/admin/finance/lock-settings', {
+          method: 'PUT', body: JSON.stringify({ enabled, password, confirmPassword })
+        })
+        // 刚开启的话后端直接给了一把钥匙,免得老板保存完自己被挡在门外
+        if (res.financeKey) { owner.financeKey = res.financeKey; sessionStorage.setItem('lucky-finance-key', res.financeKey) }
+        if (!enabled) { owner.financeKey = ''; sessionStorage.removeItem('lucky-finance-key') }
+        await loadFinanceLockSettings()
+        toast(pzh() ? (enabled ? '财务密码已开启' : '财务密码已关闭,财务区不再锁') : 'Saved')
         return
       }
       if (event.target.closest('#aiKbEntry')) {

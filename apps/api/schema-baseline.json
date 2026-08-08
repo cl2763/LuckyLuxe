@@ -835,6 +835,7 @@
   "tenants": [
     "auto_renew",
     "created_at",
+    "finance_lock_enabled",
     "finance_password_hash",
     "id",
     "name",
