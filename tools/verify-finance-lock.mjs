@@ -23,10 +23,9 @@ async function get(path, tenantId) {
   return { status: res.status, data }
 }
 
-const EXPECTED = {
-  'lucky-luxe': true,   // 旗舰店:现状是开着的,不动
-  'jics-nail': false    // Jie'Nail:必须关闭(她不需要,哪天要用她自己开)
-}
+/* 店主 2026-08-08 后令覆盖前令:旗舰店生产的财务密码也删掉。
+   所以现在的期望是**全商户一律关闭**,没有例外。 */
+const EXPECTED = {}
 /* 迁移只把「本实例的 DEFAULT_TENANT_ID」置为开,其余一律关。
    本机跑回归时 tenant-isolation 会起一个 DEFAULT_TENANT_ID=tenant-iso-b 的实例,
    那个库里 tenant-iso-b 就成了它自己的「旗舰店」→ 本机看到它是开的属正常残留,

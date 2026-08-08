@@ -10566,6 +10566,42 @@ async function route(req, res) {
     return json(res, 200, importTenantCustomers(tenantId, body))
   }
   // ---- 平台端·商家配置(替商家配好入驻资料):门店/营业时间/服务价目/技师/AI知识库 ----
+  /* 平台侧重置商家财务密码(「忘记密码找平台」的标准路径)。
+     清空 hash 并把门禁关掉 —— 商家进得去财务区,想再上锁自己在卡上开。
+     每次调用写一行 platform_ops_log,谁在什么时候动了哪家店有据可查。 */
+  const finResetMatch = path.match(/^\/platform\/tenants\/([^/]+)\/finance-lock\/reset$/)
+  if (req.method === 'POST' && finResetMatch) {
+    if (!isPlatform()) throw apiError(401, 'UNAUTHORIZED', 'Platform token required.')
+    const tenantId = finResetMatch[1]
+    const tenant = db.prepare('SELECT id, name, finance_password_hash, finance_lock_enabled FROM tenants WHERE id = ?').get(tenantId)
+    if (!tenant) throw apiError(404, 'NOT_FOUND', 'Tenant not found.')
+    const body = await readBody(req).catch(() => ({}))
+    const now = iso(new Date())
+    const had = Boolean(tenant.finance_password_hash)
+    db.prepare('UPDATE tenants SET finance_password_hash = NULL, finance_lock_enabled = 0, updated_at = ? WHERE id = ?').run(now, tenantId)
+    // 该店已发出去的钥匙一并作废
+    for (const [key, session] of financeSessions) {
+      if (session && session.tenantId === tenantId) financeSessions.delete(key)
+    }
+    db.prepare('INSERT INTO platform_ops_log (id, tenant_id, action, detail, operator, created_at) VALUES (?, ?, ?, ?, ?, ?)')
+      .run(randomId('oplog'), tenantId, 'finance_lock_reset',
+        `清空财务密码并关闭门禁(原状态:${had ? '有密码' : '无密码'}/${tenant.finance_lock_enabled ? '已开启' : '未开启'})。原因:${String(body.reason || '店主忘记密码,平台侧重置').slice(0, 200)}`,
+        'platform', now)
+    return json(res, 200, {
+      tenantId,
+      tenantName: tenant.name,
+      enabled: false,
+      configured: false,
+      hadPassword: had,
+      note: '财务密码已清空、门禁已关闭。商家可在「财务 → 财务设置 → 财务密码」自助重新开启。'
+    })
+  }
+  // 平台运维操作日志(只读)
+  if (req.method === 'GET' && path === '/platform/ops-log') {
+    if (!isPlatform()) throw apiError(401, 'UNAUTHORIZED', 'Platform token required.')
+    const rows = db.prepare('SELECT * FROM platform_ops_log ORDER BY created_at DESC LIMIT 100').all()
+    return json(res, 200, { logs: rows })
+  }
   const platTenantMatch = path.match(/^\/platform\/tenants\/([^/]+)\/(store|business-hours|services|technicians|kb)(?:\/([^/]+))?$/)
   if (platTenantMatch) {
     if (!isPlatform()) throw apiError(401, 'UNAUTHORIZED', 'Platform token required.')
@@ -13083,6 +13119,19 @@ try {
 db.exec(`UPDATE tenants SET finance_lock_enabled =
   CASE WHEN id = '${DEFAULT_TENANT_ID}' AND finance_password_hash IS NOT NULL AND finance_password_hash != '' THEN 1 ELSE 0 END
   WHERE finance_lock_enabled IS NULL`)
+/* 平台运维操作日志(2026-08-08):平台侧动了商家的什么,留一行,可追溯。
+   目前只有「重置财务密码」一种,后续平台侧动作照此追加。 */
+db.exec(`
+  CREATE TABLE IF NOT EXISTS platform_ops_log (
+    id TEXT PRIMARY KEY,
+    tenant_id TEXT NOT NULL,
+    action TEXT NOT NULL,
+    detail TEXT,
+    operator TEXT,
+    created_at TEXT NOT NULL
+  );
+`)
+
 // ===== 特殊日期(节假日休息/调整时段):覆盖每周固定营业时间 =====
 db.exec(`
   CREATE TABLE IF NOT EXISTS store_special_dates (

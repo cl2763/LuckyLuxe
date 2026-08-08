@@ -384,6 +384,14 @@
     "updated_at",
     "updated_by"
   ],
+  "platform_ops_log": [
+    "action",
+    "created_at",
+    "detail",
+    "id",
+    "operator",
+    "tenant_id"
+  ],
   "points_prizes": [
     "cost_points",
     "coupon_id",

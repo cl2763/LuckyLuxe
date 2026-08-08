@@ -120,6 +120,36 @@ async function main() {
   const staffTry = await request('/admin/finance/lock-settings', { method: 'PUT', body: JSON.stringify({ enabled: false }) }, staffToken)
   check('② 只有老板能改这个开关(员工 403)', staffTry.status === 403, `${staffTry.status}`)
 
+  // ---- 平台侧重置(「忘记密码找平台」的标准路径,店主 2026-08-08 指令)----
+  await request('/admin/finance/lock-settings', {
+    method: 'PUT', body: JSON.stringify({ enabled: true, password: 'fin0000', confirmPassword: 'fin0000' })
+  }, b.token)
+  check('重置前 B 店门禁是开的', (await request('/admin/finance/lock-settings', {}, b.token)).data.enabled === true)
+  const reset = await request(`/platform/tenants/${b.tenantId}/finance-lock/reset`, {
+    method: 'POST', body: JSON.stringify({ reason: `回归用例 ${RUN_ID}` })
+  })
+  check('平台重置返回 enabled=false / configured=false 且说明原来有密码',
+    reset.status === 200 && reset.data.enabled === false && reset.data.configured === false && reset.data.hadPassword === true,
+    JSON.stringify(reset.data))
+  const after = await request('/admin/finance/lock-settings', {}, b.token)
+  check('重置后商家侧看到「未启用(默认)」', after.data.enabled === false && after.data.configured === false, JSON.stringify(after.data))
+  const afterOpen = await request('/admin/finance/transactions', {}, b.token)
+  check('重置后财务区直接进得去(不用密码)', afterOpen.status === 200, `${afterOpen.status}`)
+  const oldGone = await request('/admin/finance/unlock', { method: 'POST', body: JSON.stringify({ password: 'fin0000' }) }, b.token)
+  check('原密码已作废(门禁本来就关了,直接放行而不是认旧密码)', oldGone.status === 200 && oldGone.data.enabled === false, JSON.stringify(oldGone.data))
+  const logs = await request('/platform/ops-log')
+  const hit = (logs.data.logs || []).find((l) => l.tenant_id === b.tenantId && l.action === 'finance_lock_reset')
+  check('留下一行操作日志(谁/哪家店/什么时候/为什么)',
+    Boolean(hit) && hit.detail.includes(RUN_ID) && Boolean(hit.created_at) && hit.operator === 'platform',
+    JSON.stringify(hit))
+  const reReset = await request(`/platform/tenants/${b.tenantId}/finance-lock/reset`, { method: 'POST', body: '{}' })
+  check('对本来就没密码的店重置也不报错(幂等),并标注原来没密码',
+    reReset.status === 200 && reReset.data.hadPassword === false, JSON.stringify(reReset.data))
+  const noSuch = await request('/platform/tenants/not-a-tenant-xyz/finance-lock/reset', { method: 'POST', body: '{}' })
+  check('店不存在 → 404', noSuch.status === 404, `${noSuch.status}`)
+  const notPlatform = await request(`/platform/tenants/${b.tenantId}/finance-lock/reset`, { method: 'POST', body: '{}' }, b.token)
+  check('商家自己的账号调不动这个平台端点(401)', notPlatform.status === 401, `${notPlatform.status}`)
+
   console.log(`\n财务密码门禁回归通过:${checks} 项断言全绿`)
 }
 
