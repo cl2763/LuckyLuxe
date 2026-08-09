@@ -42,7 +42,8 @@ Page({
   },
 
   onLoad(q) { this.setData({ id: decodeURIComponent((q && q.id) || '') }) },
-  onShow() {
+  async onShow() {
+    if (!api.guardMerchant()) return // 门禁:未登录/会话失效不渲染空壳,直接回登录页
     // 报价试算页填过话术就带回输入框(只填不发,发不发技师自己决定)
     const draft = wx.getStorageSync(QUOTE_DRAFT_KEY)
     if (draft) { wx.removeStorageSync(QUOTE_DRAFT_KEY); this.setData({ reply: draft }) }

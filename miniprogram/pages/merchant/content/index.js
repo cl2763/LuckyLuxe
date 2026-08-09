@@ -6,6 +6,8 @@ const PLATFORMS = [
 ]
 
 Page({
+  // 门禁:未登录/会话失效不渲染空壳,直接回登录页(店主 2026-08-09 红线)
+  onShow() { api.guardMerchant() },
   data: {
     platforms: PLATFORMS,
     pIdx: 0,

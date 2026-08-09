@@ -1,5 +1,5 @@
 // 构建号:每次交付递增。侧栏可见,排查"改了没生效"时先对版本。
-const ADMIN_BUILD = '20260810a-dcrow'
+const ADMIN_BUILD = '20260810b-authgate'
 console.log(`[admin] build ${ADMIN_BUILD}`)
 
 // "今天"必须按门店时区算,否则老板人在别的时区时全站日期错位一天。
@@ -915,12 +915,19 @@ async function request(path, options = {}) {
   } catch (error) {
     throw new Error(error?.name === 'AbortError' ? '请求超时（30秒）：服务器没有响应，请查看服务器终端窗口' : (error.message || '网络错误：连不上服务器'))
   }
-  if (response.status === 401 && !isPublic && owner.auth?.accessToken) {
-    // 登录凭证过期时自动降级：丢弃过期 auth，用备用 token 重试一次
+  /* 🔴 2026-08-09 安全修复:401 一律回登录页,**不做 token 降级**。
+     原来这里会拿 owner.token / localStorage / 写死的 'owner-demo-token' 再试一次 ——
+     等于登录过期后自动换一把开发主钥匙继续用;换不通时请求照样失败,
+     页面就静默空白,这正是店主看到的"未登录空壳"。
+     现在:清掉凭证 → 锁回登录界面 → 明确告诉她重新登录。 */
+  if (response.status === 401 && !isPublic) {
     owner.auth = null
+    owner.financeKey = ''
     localStorage.removeItem('lucky-owner-auth')
-    const fallbackToken = owner.token || localStorage.getItem('lucky-owner-token') || 'owner-demo-token'
-    response = await doFetch(fallbackToken)
+    try { setLocked(true) } catch (e) { /* 初始化早期还没建好 DOM,忽略 */ }
+    const err = new Error('登录已过期,请重新登录')
+    err.code = 'UNAUTHORIZED'
+    throw err
   }
   let data = null
   try {

@@ -1,6 +1,8 @@
 const api = require('../../../utils/api')
 
 Page({
+  // 门禁:未登录/会话失效不渲染空壳,直接回登录页(店主 2026-08-09 红线)
+  onShow() { api.guardMerchant() },
   data: {
     id: '', isNew: true,
     typeIdx: 0, types: [{ k: 'amount', label: '满减券' }, { k: 'percent', label: '折扣券' }],

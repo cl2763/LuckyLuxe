@@ -3,6 +3,8 @@ const api = require('../../../utils/api')
 const PLATFORMS = [{ k: 'xiaohongshu', label: '小红书' }, { k: 'douyin', label: '抖音' }]
 
 Page({
+  // 门禁:未登录/会话失效不渲染空壳,直接回登录页(店主 2026-08-09 红线)
+  onShow() { api.guardMerchant() },
   data: {
     id: '', images: [], curImg: '', title: '', service: '',
     platforms: PLATFORMS, pIdx: 0,

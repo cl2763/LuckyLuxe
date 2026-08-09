@@ -25,7 +25,8 @@ Page({
     fixSheet: false, fixRow: null, fixIn: '', fixOut: ''
   },
 
-  onShow() {
+  async onShow() {
+    if (!api.guardMerchant()) return // 门禁:未登录/会话失效不渲染空壳,直接回登录页
     const d = new Date()
     this.setData({
       dateText: `${d.getMonth() + 1}月${d.getDate()}日 周${'日一二三四五六'[d.getDay()]}`,

@@ -14,6 +14,8 @@ const TIER_PRICE_FIELD = { list: 'listPriceCents', share: 'sharePriceCents', mem
 const DRAFT_KEY = 'lucky_quote_draft'
 
 Page({
+  // 门禁:未登录/会话失效不渲染空壳,直接回登录页(店主 2026-08-09 红线)
+  onShow() { api.guardMerchant() },
   data: {
     ready: false,
     convId: '', fromLabel: '', quoteId: '',

@@ -3,7 +3,10 @@ const api = require('../../../utils/api')
 Page({
   data: { seg: 0, showcase: [], items: [], pendingUpload: 0, pendingPublish: 0, loading: true },
 
-  onShow() { this.load() },
+  async onShow() {
+    if (!api.guardMerchant()) return // 门禁:未登录/会话失效不渲染空壳,直接回登录页
+    this.load()
+  },
 
   onSeg(e) { this.setData({ seg: Number(e.currentTarget.dataset.i) }) },
 
