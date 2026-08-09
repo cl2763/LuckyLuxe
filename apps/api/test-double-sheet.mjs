@@ -185,6 +185,14 @@ async function main() {
   check('⑦ 另一技师不被串(技师乙 ¥0,他那张被撤回了)', !rowB || rowB.perfCents === 0, JSON.stringify(rowB && rowB.perfCents))
   check('⑦ 红线:券没减业绩(用券那张仍按档位小计 ¥200 计)', rowA.perfCents === 100000, String(rowA.perfCents))
 
+  /* 跨零点单的自解释标注(店主 2026-08-10)。口径不变(签字时刻=记账时刻、按门店时区落自然日),
+     但日结行必须说清这单是哪天的 —— 否则「台面本日休息、日结却有单」没人看得懂。 */
+  const sameDay = (view.awaitingConfirm || []).concat(view.pendingAllocation || [])
+  check('跨零点标注:当天做当天签的单**不加**多余标注',
+    sameDay.every((x) => !x.crossDayNote), JSON.stringify(sameDay.map((x) => x.crossDayNote)))
+  check('跨零点标注:字段随日结一起下发(前端不自己算日期)',
+    sameDay.every((x) => Object.prototype.hasOwnProperty.call(x, 'crossDayNote')), JSON.stringify(sameDay[0] || {}).slice(0, 160))
+
   console.log(`\n双单场景回归通过:${checks} 项断言全绿`)
 }
 

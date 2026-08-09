@@ -219,3 +219,6 @@ page{background:#fbf8f5}
 
 /* 日结行主标识:时间打头(店主 2026-08-09 修订 v6);单号退到签署单弹窗/详情里 */
 .ah .code .tm{font-weight:800;color:#241f1d;margin-right:12rpx;font-variant-numeric:tabular-nums}
+
+/* 跨零点单的自解释标注:昨天做的、今晨签的,记在今天的账上 */
+.ah .code .xday{margin-left:12rpx;font-size:20rpx;font-weight:600;color:#a8551f;background:#fdf3ec;border-radius:8rpx;padding:2rpx 10rpx}

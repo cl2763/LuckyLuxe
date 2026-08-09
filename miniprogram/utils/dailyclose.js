@@ -55,7 +55,7 @@ const dailyCloseMixin = {
           blockers: (dc.blockers || []).map((b) => b.message),
           pending: (dc.pendingAllocation || []).map((p) => ({
             // 分成基数=业绩基数(券不扣技师);无券时与应收相等
-            id: p.settlementId, code: p.code, timeText: p.timeText || '', total: m(p.perfBaseCents === undefined ? p.totalCents : p.perfBaseCents),
+            id: p.settlementId, code: p.code, timeText: p.timeText || '', crossDayNote: p.crossDayNote || '', total: m(p.perfBaseCents === undefined ? p.totalCents : p.perfBaseCents),
             couponNote: p.couponDiscountCents ? '业绩基数(不含券)' : '',
             who: p.servedPersonName || p.customerName || '',
             techLabel: p.technicians.length > 1 ? '双技师' : '单技师',
@@ -69,7 +69,7 @@ const dailyCloseMixin = {
           })),
           // 不需要分配、但同样要店长点确认的单(店主 08-09 口径:确认覆盖当日全部单)
           awaiting: (dc.awaitingConfirm || []).map((p) => ({
-            id: p.settlementId, code: p.code, timeText: p.timeText || '',
+            id: p.settlementId, code: p.code, timeText: p.timeText || '', crossDayNote: p.crossDayNote || '',
             who: p.servedPersonName || p.customerName || '',
             amount: m(p.perfBaseCents),
             reason: p.reason,

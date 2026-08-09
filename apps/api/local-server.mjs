@@ -8717,6 +8717,26 @@ function settlementRowTime(row) {
   return localParts(new Date(at), tenantTimezone(row.tenant_id)).time.slice(0, 5)
 }
 
+/* 跨零点单的自解释标注(店主 2026-08-10 拍板)。
+   口径不变:签字时刻 = 记账时刻,按门店时区落自然日。但「台面说本日休息、日结却有 2 单」
+   这种画面必须一眼看懂 —— 2026-08-10 就是这么来的:08-09 晚 20:10/21:10 的两单,
+   店主在 08-10 凌晨 1:25/1:33 才签,于是记在 08-10 的账上。
+   行上标一句「昨日 21:10 单 · 今晨签」,日期口径差异就自解释了。 */
+function settlementCrossDayNote(row, closeDate) {
+  const tz = tenantTimezone(row.tenant_id)
+  const bk = row.booking_id ? db.prepare('SELECT appointment_start FROM bookings WHERE id = ?').get(row.booking_id) : null
+  const serviceAt = (bk && bk.appointment_start) || row.created_at
+  if (!serviceAt || !row.signed_at || !closeDate) return ''
+  const serviceDay = localParts(new Date(serviceAt), tz).date
+  if (serviceDay === closeDate) return ''            // 同一天,没什么好解释的
+  const svc = localParts(new Date(serviceAt), tz)
+  const signHour = Number(localParts(new Date(row.signed_at), tz).time.slice(0, 2))
+  const gap = Math.round((new Date(`${closeDate}T00:00:00Z`) - new Date(`${serviceDay}T00:00:00Z`)) / 86400000)
+  const dayWord = gap === 1 ? '昨日' : `${serviceDay.slice(5).replace('-', '/')} 的`
+  const signWord = signHour < 6 ? '今晨签' : '今日补签'
+  return `${dayWord} ${svc.time.slice(0, 5)} 单 · ${signWord}`
+}
+
 function dailyCloseView(date, tenantId, { lang = 'zh' } = {}) {
   const rows = signedSettlementsOn(date, tenantId)
   const closeRow = db.prepare('SELECT * FROM daily_closes WHERE tenant_id = ? AND date = ?').get(tenantId, date)
@@ -8739,7 +8759,7 @@ function dailyCloseView(date, tenantId, { lang = 'zh' } = {}) {
     const unallocated = needsAllocation(r, tenantId)
     if (unallocated) {
       pending.push({
-        settlementId: r.id, code: r.code, timeText: settlementRowTime(r), totalCents: r.total_cents,
+        settlementId: r.id, code: r.code, timeText: settlementRowTime(r), crossDayNote: settlementCrossDayNote(r, date), totalCents: r.total_cents,
         // 分成按业绩基数走(券不扣技师);无券时两个数相等
         perfBaseCents: settlementPerfBaseCents(r), couponDiscountCents: r.coupon_discount_cents || 0,
         customerName: (db.prepare('SELECT display_name FROM users WHERE id = ?').get(r.user_id) || {}).display_name || '',
@@ -8770,7 +8790,7 @@ function dailyCloseView(date, tenantId, { lang = 'zh' } = {}) {
     }
     if (!unallocated && (!closeRow || closeRow.status !== 'confirmed')) {
       awaitingConfirm.push({
-        settlementId: r.id, code: r.code, timeText: settlementRowTime(r),
+        settlementId: r.id, code: r.code, timeText: settlementRowTime(r), crossDayNote: settlementCrossDayNote(r, date),
         perfBaseCents: settlementPerfBaseCents(r),
         couponDiscountCents: r.coupon_discount_cents || 0,
         customerName: (db.prepare('SELECT display_name FROM users WHERE id = ?').get(r.user_id) || {}).display_name || '',
@@ -8785,7 +8805,7 @@ function dailyCloseView(date, tenantId, { lang = 'zh' } = {}) {
       })
     }
     return {
-      settlementId: r.id, code: r.code, timeText: settlementRowTime(r), totalCents: r.total_cents, cardUsedCents: cardUsed,
+      settlementId: r.id, code: r.code, timeText: settlementRowTime(r), crossDayNote: settlementCrossDayNote(r, date), totalCents: r.total_cents, cardUsedCents: cardUsed,
       perfBaseCents: settlementPerfBaseCents(r),
       couponDiscountCents: r.coupon_discount_cents || 0, couponName: r.coupon_name || '',
       allocated: !unallocated, shares, signedAt: r.signed_at,

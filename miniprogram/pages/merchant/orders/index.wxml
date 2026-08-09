@@ -82,7 +82,7 @@
           <view class="dcsub" wx:if="{{v.pending.length}}">待分配 {{v.pending.length}} 单 · 逐单点开</view>
           <view class="card" wx:for="{{v.pending}}" wx:for-item="p" wx:key="id">
             <view class="ah" data-id="{{p.id}}" bindtap="toggleOpen">
-              <text class="code"><text class="tm">{{p.timeText}}</text>{{p.who}} · {{p.techLabel}}</text>
+              <text class="code"><text class="tm">{{p.timeText}}</text>{{p.who}} · {{p.techLabel}}<text wx:if="{{p.crossDayNote}}" class="xday">{{p.crossDayNote}}</text></text>
               <text class="amt">{{p.total}}<text wx:if="{{p.couponNote}}" class="arr"> {{p.couponNote}}</text> <text class="arr">{{open[p.id] ? '收起 ∧' : '点开分配 ∨'}}</text></text>
             </view>
             <block wx:if="{{open[p.id]}}">
@@ -104,7 +104,7 @@
           <view class="dcsub" wx:if="{{v.awaiting.length}}">无需分配 · 待确认 {{v.awaiting.length}} 单</view>
           <view class="card awaitcard" wx:for="{{v.awaiting}}" wx:for-item="a" wx:key="id">
             <view class="ah">
-              <text class="code"><text class="tm">{{a.timeText}}</text>{{a.who}} · {{a.techs}}</text>
+              <text class="code"><text class="tm">{{a.timeText}}</text>{{a.who}} · {{a.techs}}<text wx:if="{{a.crossDayNote}}" class="xday">{{a.crossDayNote}}</text></text>
               <text class="amt">{{a.amount}} <text class="arr">{{a.reason}}</text></text>
             </view>
             <view class="links">
