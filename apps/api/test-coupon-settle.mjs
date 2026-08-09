@@ -1,6 +1,6 @@
 /* 结算单用券回归(2026-08-09,设计图《结算单用券》v3 规则⓪–⑥):
    ③ 恒等式含券:应收 ≡ 档位小计 − 定金 − 券;共优惠(含券)= 档位优惠 + 券;
-      分成基数 ≡ 应收 + 券 —— **券是店铺让利,不扣技师**
+      分成基数 ≡ 档位小计 —— **定金是付款时序、券是店铺让利,都不扣技师**(店主 08-09 拍板)
    ② 一单一张 / 门槛不满足 / 大类不匹配 / 过期 → 置灰并写清原因
    ① 代付单用**卡主**的券,被服务者的券不出现
    ⑤ 核销时序:签成才 used(签前一直 active,自动回到券包);更正退券留痕
@@ -45,8 +45,13 @@ function assertMoney(label, s) {
     `${s.discountTotalCents} vs ${s.tierDiscountCents} + ${coupon}`)
   check(`${label}:应收 ≡ 档位小计 − 定金 − 券`, s.totalCents === s.subtotalCents - s.depositDeductCents - coupon,
     `${s.totalCents} vs ${s.subtotalCents} - ${s.depositDeductCents} - ${coupon}`)
-  check(`${label}:分成基数 ≡ 应收 + 券(券不扣技师)`, s.perfBaseCents === s.totalCents + coupon,
-    `${s.perfBaseCents} vs ${s.totalCents} + ${coupon}`)
+  check(`${label}:分成基数 ≡ 档位小计(定金与券都不扣技师)`, s.perfBaseCents === s.subtotalCents,
+    `${s.perfBaseCents} vs ${s.subtotalCents}`)
+  // 无定金无券的单:基数就等于应收 —— 08-09 改口径对这种单逐分不变
+  if (s.depositDeductCents === 0 && coupon === 0) {
+    check(`${label}:无定金无券时基数 = 应收(改口径前后逐分不变)`, s.perfBaseCents === s.totalCents,
+      `${s.perfBaseCents} vs ${s.totalCents}`)
+  }
 }
 
 async function newShop(label) {
@@ -167,7 +172,7 @@ async function main() {
   check('③ 算例逐分复现:680 / 394 / 定金100 / 券30 → 应收 ¥264', w.totalCents === 26400, String(w.totalCents))
   check('③ 共优惠(含券) = ¥316', w.discountTotalCents === 31600, String(w.discountTotalCents))
   check('③ 券抵扣 ¥30 单列', w.couponDiscountCents === 3000, String(w.couponDiscountCents))
-  check('③ 分成基数 ¥294(券不扣技师)', w.perfBaseCents === 29400, String(w.perfBaseCents))
+  check('③ 分成基数 ¥394 = 档位小计(定金与券都不扣技师)', w.perfBaseCents === 39400, String(w.perfBaseCents))
   assertMoney('选券后', w)
 
   // 用不了的券:严格模式下正式开单直接拒(不悄悄按无券算)
@@ -274,7 +279,7 @@ async function main() {
   }, shop.token)
   check('③ 按比例分成成功', alloc.status === 200, JSON.stringify(alloc.data).slice(0, 200))
   const sum = alloc.data.shares.reduce((n, s) => n + s.shareCents, 0)
-  check('③ 分成合计 = 业绩基数 ¥294(不是应收 ¥264)', sum === 29400, String(sum))
+  check('③ 分成合计 = 业绩基数 ¥394(不是应收 ¥264,也不是扣了定金的 ¥294)', sum === 39400, String(sum))
 
   // ---- ⓪ 员工端整区 403 ----
   const staffAcc = await request('/admin/staff-accounts', {

@@ -61,6 +61,10 @@ TEST_BASE_URL=http://127.0.0.1:4129 node test-auto-return.mjs
 echo "== test-schema-consistency =="
 node test-schema-consistency.mjs
 
+# 分成基数迁移:要重启实例才能验(迁移只在启动时跑),同样自带 DATA_DIR + 端口 4178
+echo "== test-perf-base-migration =="
+node test-perf-base-migration.mjs
+
 echo "== 租户隔离双实例 (4128+4131) =="
 cleanup; sleep 1
 PORT=4128 node local-server.mjs > /tmp/ll-ci-a.log 2>&1 &
@@ -70,4 +74,4 @@ wait_health 4131 "租户B"
 node test-tenant-isolation.mjs
 
 echo ""
-echo "✅ 全部 37 个套件通过"
+echo "✅ 全部 38 个套件通过"

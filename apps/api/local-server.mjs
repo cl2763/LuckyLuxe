@@ -7494,7 +7494,9 @@ function consumeDepositRetain(retainId, bookingId) {
      档位优惠 ≡ 原价合计 − 档位小计
      共优惠   ≡ 档位优惠 + 券抵扣          ← 设计图「共优惠(含券)」,拆行显示
      应收     ≡ 档位小计 − 定金抵扣 − 券抵扣
-     分成基数 ≡ 应收 + 券抵扣              ← 券是店铺让利,不扣技师(规则③)
+     分成基数 ≡ 档位小计                   ← 技师做了多少活业绩就是多少(规则③)
+   分成基数为什么是档位小计而不是应收(店主 2026-08-09 拍板):
+   **定金是付款时序,不是让利**;券是店铺让利。两者都不该从技师业绩里扣。
    足部加收(整单 +100)按店主确认口径**同时进原价合计与档位小计** —— 它是加价不是折扣,
    这样恒等式才自洽。券抵扣为 0 时以上各式退化成 08-08 的老两条,存量行为逐分不变。 */
 function assertSettlementInvariants(result) {
@@ -7510,8 +7512,8 @@ function assertSettlementInvariants(result) {
   if (result.totalCents !== due) {
     throw apiError(500, 'SETTLEMENT_INVARIANT', `应收对不上:${result.totalCents} ≠ ${result.subtotalCents} − ${result.depositDeductCents} − ${coupon}`)
   }
-  if (result.perfBaseCents !== result.totalCents + coupon) {
-    throw apiError(500, 'SETTLEMENT_INVARIANT', `分成基数对不上:${result.perfBaseCents} ≠ ${result.totalCents} + ${coupon}(券不扣技师)`)
+  if (result.perfBaseCents !== result.subtotalCents) {
+    throw apiError(500, 'SETTLEMENT_INVARIANT', `分成基数对不上:${result.perfBaseCents} ≠ 档位小计 ${result.subtotalCents}(定金与券都不扣技师)`)
   }
   return result
 }
@@ -7690,7 +7692,7 @@ function setSettlementCoupon(settlementId, grantId, { by = 'customer', actor = '
   const couponDiscountCents = wanted ? opts.discountCents : 0
   const totalCents = row.subtotal_cents - row.deposit_deduct_cents - couponDiscountCents
   const discountTotalCents = (row.list_total_cents - row.subtotal_cents) + couponDiscountCents
-  const perfBaseCents = totalCents + couponDiscountCents
+  const perfBaseCents = row.subtotal_cents // 基数 = 档位小计,换券不影响技师业绩
   const pay = buildPaymentLegs({ tenantId, payerId: row.user_id, totalCents, payIntent: row.pay_intent })
   const now = iso(new Date())
   db.exec('BEGIN IMMEDIATE')
@@ -7834,8 +7836,8 @@ function computeSettlement(input = {}) {
   const tierDiscountCents = listTotalCents - subtotalCents
   const discountTotalCents = tierDiscountCents + couponDiscountCents
   const totalCents = subtotalCents - depositDeductCents - couponDiscountCents
-  // 分成基数:券不扣技师(规则③),所以是「加回券」的应收
-  const perfBaseCents = totalCents + couponDiscountCents
+  // 分成基数 = 档位小计:定金是付款时序、券是店铺让利,都不从技师业绩里扣(规则③)
+  const perfBaseCents = subtotalCents
 
   // 支付构成:储值先烧迁移桶,再烧新桶;不够的进线下腿
   const payerId = input.payerUserId || input.userId || ''
@@ -8318,11 +8320,11 @@ function needsAllocation(row, tenantId) {
   return techs.length > 1 && row.perf_alloc_status !== 'allocated'
 }
 
-/* 分成/业绩的基数(2026-08-09 起显式化)。
-   券是**店铺让利,不扣技师**(设计图规则③),所以基数 = 应收 + 券抵扣。
-   老单没有 perf_base_cents 这一列时回落到应收 —— 券为 0,历史业绩数字逐分不变。 */
+/* 分成/业绩的基数 = **档位小计**(店主 2026-08-09 拍板,设计图规则③)。
+   定金是付款时序、券是店铺让利 —— 技师做了多少活,业绩就是多少,两者都不扣。
+   落库的 perf_base_cents 是权威值;没有这一列的老行回落到 subtotal_cents(同一口径)。 */
 function settlementPerfBaseCents(row) {
-  return row.perf_base_cents || (row.total_cents + (row.coupon_discount_cents || 0))
+  return row.perf_base_cents || row.subtotal_cents
 }
 
 // 某张单每位技师分到多少业绩。已分配读 share_cents;单技师整单;双技师未分配返回 null(待分配)
@@ -9048,8 +9050,8 @@ function serializeSettlement(row, { includeSignature = false } = {}) {
     couponDiscountCents: row.coupon_discount_cents || 0,
     discountTotalCents: row.discount_total_cents,
     totalCents: row.total_cents,
-    // 分成基数(券不扣技师);老单没有这一列时回落到应收,历史数字逐分不变
-    perfBaseCents: row.perf_base_cents || (row.total_cents + (row.coupon_discount_cents || 0)),
+    // 分成基数 = 档位小计(定金与券都不扣技师)
+    perfBaseCents: row.perf_base_cents || row.subtotal_cents,
     coupon: row.coupon_grant_id ? {
       grantId: row.coupon_grant_id,
       couponId: row.coupon_id,
@@ -14432,9 +14434,76 @@ for (const column of [
     if (!String(error.message || '').includes('duplicate column')) throw error
   }
 }
-/* 存量单回填分成基数:老单没有券,基数就是当时的应收 —— 逐分不变,
-   已确认日结的历史数字不会因为这次加列而变动。 */
-db.prepare('UPDATE settlements SET perf_base_cents = total_cents + coupon_discount_cents WHERE perf_base_cents = 0').run()
+/* 分成基数迁移(店主 2026-08-09 拍板):基数一律 = **档位小计**。
+   之前是应收(= 档位小计 − 定金),等于顾客先付了定金反而扣技师业绩 —— 定金是付款时序不是让利。
+   迁移三步,幂等(跑第二遍是空操作):
+     ① settlements.perf_base_cents ← subtotal_cents
+     ② 已分配的多技师单:share_cents 按原比例重算到新基数,末行吃余数(合计必须正好等于基数)
+     ③ 已日结那几天的 daily_close_lines 快照重算(排行/工资试算/员工端都读这张表,同源自动跟着对)
+   **无定金无券的单在这次迁移里逐分不变** —— 那种单的档位小计本来就等于应收。 */
+function migratePerfBaseToSubtotal() {
+  const stale = db.prepare('SELECT id, tenant_id, subtotal_cents, signed_at FROM settlements WHERE perf_base_cents <> subtotal_cents').all()
+  if (!stale.length) return { migrated: 0, closes: 0 }
+  const touchedDays = new Set()
+  db.exec('BEGIN IMMEDIATE')
+  try {
+    for (const row of stale) {
+      db.prepare('UPDATE settlements SET perf_base_cents = ? WHERE id = ?').run(row.subtotal_cents, row.id)
+      // 多技师且已分配的单:按落库的比例把金额重算到新基数
+      const techs = db.prepare('SELECT * FROM settlement_technicians WHERE settlement_id = ? ORDER BY rowid ASC').all(row.id)
+      const allocated = techs.filter((t) => t.share_cents !== null && t.share_cents !== undefined)
+      if (techs.length > 1 && allocated.length === techs.length) {
+        const total = techs.reduce((n, t) => n + (t.share_cents || 0), 0)
+        let used = 0
+        techs.forEach((t, index) => {
+          // 有 share_pct 就按比例,没有就按原金额占比;最后一行吃余数
+          const pct = t.share_pct !== null && t.share_pct !== undefined
+            ? Number(t.share_pct)
+            : (total > 0 ? (t.share_cents || 0) * 100 / total : 100 / techs.length)
+          const cents = index === techs.length - 1
+            ? Math.max(0, row.subtotal_cents - used)
+            : Math.max(0, Math.round(row.subtotal_cents * pct / 100))
+          if (index !== techs.length - 1) used += cents
+          db.prepare('UPDATE settlement_technicians SET share_cents = ? WHERE id = ?').run(cents, t.id)
+        })
+      }
+      if (row.signed_at) touchedDays.add(`${row.tenant_id}|${localParts(row.signed_at, tenantTimezone(row.tenant_id)).date}`)
+    }
+    db.exec('COMMIT')
+  } catch (error) {
+    db.exec('ROLLBACK')
+    throw error
+  }
+  // 日结快照重算:只动这几天,且只动已经日结过的那些(没日结过的天本来就没有快照)
+  let closes = 0
+  for (const key of touchedDays) {
+    const [tenantId, date] = key.split('|')
+    const closeRow = db.prepare('SELECT * FROM daily_closes WHERE tenant_id = ? AND date = ?').get(tenantId, date)
+    if (!closeRow) continue
+    const view = dailyCloseView(date, tenantId)
+    const now = iso(new Date())
+    db.exec('BEGIN IMMEDIATE')
+    try {
+      db.prepare('DELETE FROM daily_close_lines WHERE tenant_id = ? AND close_id = ?').run(tenantId, closeRow.id)
+      const lineStmt = db.prepare(`INSERT INTO daily_close_lines
+        (id, tenant_id, close_id, date, technician_id, order_count, perf_cents, card_used_cents, recharge_first_cents, recharge_renew_cents, created_at)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`)
+      for (const t of view.technicians) {
+        lineStmt.run(randomId('dline'), tenantId, closeRow.id, date, t.technicianId, t.orderCount, t.perfCents, t.cardUsedCents, t.rechargeFirstCents, t.rechargeRenewCents, now)
+      }
+      db.exec('COMMIT')
+      closes += 1
+    } catch (error) {
+      db.exec('ROLLBACK')
+      throw error
+    }
+  }
+  // 迁移后自校验:基数必须等于档位小计,一个不落
+  const bad = db.prepare('SELECT COUNT(*) AS n FROM settlements WHERE perf_base_cents <> subtotal_cents').get().n
+  if (bad > 0) throw new Error(`[migrate] 分成基数迁移后仍有 ${bad} 张单 perf_base_cents ≠ subtotal_cents`)
+  console.log(`[migrate] 分成基数改为档位小计:${stale.length} 张单已重算,${closes} 天日结快照已刷新`)
+  return { migrated: stale.length, closes }
+}
 // 已签单据永不修改:更正只能走 amendments。数据库层兜住,不靠人记纪律。
 db.exec(`
   DROP TRIGGER IF EXISTS settlements_signed_no_update;
@@ -14504,6 +14573,9 @@ db.exec(`
   );
   CREATE INDEX IF NOT EXISTS idx_perf_targets ON perf_targets(tenant_id, month);
 `)
+
+// 分成基数迁移放在这里跑:它要读 daily_closes / perf_targets / technicians,得等这些表建完
+migratePerfBaseToSubtotal()
 
 /* ===== P1.2 定金保留凭据 + 话术模板中心(2026-08-08)=====
    tenant_id 一律不给 DEFAULT(P0.9 立的纪律:默认值会让漏写的 INSERT 悄悄归到旗舰店名下)。 */
