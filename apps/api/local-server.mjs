@@ -8098,6 +8098,20 @@ function createSettlementGroup(body = {}, adminSession = {}) {
     throw apiError(404, 'NOT_FOUND', '卡主不在本店档案里。')
   }
   const sheets = Array.isArray(body.settlements) && body.settlements.length ? body.settlements : [body]
+  /* 一个预约一张有效结算单(店主 2026-08-09 拍板)。
+     已经挂着一张未作废单的预约,不许再开第二张 —— 未签的先撤回重开;
+     已签的要补消费,新建一条即时预约再开单,或走更正链。
+     不拦的话同一次服务会出两张单,业绩、券、定金全部重复计。 */
+  for (const sheet of sheets) {
+    const bid = String(sheet.bookingId || '').trim()
+    if (!bid) continue
+    const live = db.prepare("SELECT code, status FROM settlements WHERE tenant_id = ? AND booking_id = ? AND status <> 'voided' ORDER BY rowid DESC LIMIT 1").get(tenantId, bid)
+    if (live) {
+      throw apiError(409, 'BOOKING_ALREADY_SETTLED', live.status === 'signed'
+        ? `这张预约已经有签好的结算单(${live.code})。要补消费请新建一条即时预约再开单,要改金额请走更正。`
+        : `这张预约已经有一张待签结算单(${live.code}),先撤回改单再重开。`)
+    }
+  }
   const now = iso(new Date())
   const groupId = randomId('sgrp')
   const created = []
