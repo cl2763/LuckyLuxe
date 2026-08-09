@@ -1,5 +1,5 @@
 // 构建号:每次交付递增。侧栏可见,排查"改了没生效"时先对版本。
-const ADMIN_BUILD = '20260809c-audit-fix'
+const ADMIN_BUILD = '20260809d-trend'
 console.log(`[admin] build ${ADMIN_BUILD}`)
 
 // "今天"必须按门店时区算,否则老板人在别的时区时全站日期错位一天。
@@ -2618,16 +2618,23 @@ async function renderDailyCloseJump() {
   } catch { bar.classList.add('hidden') }
 }
 
-let financeTrendState = { granularity: 'month', data: null }
+let financeTrendState = { granularity: 'month', range: '6m', data: null }
 
-async function loadFinanceTrend(granularity) {
-  const g = granularity || financeTrendState.granularity
-  const periods = g === 'day' ? 14 : (g === 'week' ? 8 : (g === 'year' ? 3 : 6))
+/* 设计图的周期切换:近 6 个月 / 近 12 个月 / 今年 / 自定义。
+   一次全给 —— 一个接口把 走势 / 相同天数三组对比 / 支出结构 / 收入构成 都返回,
+   前端切周期只改一个参数,不各算各的。 */
+async function loadFinanceTrend(granularity, range) {
+  const r = range || financeTrendState.range || '6m'
   const body = document.querySelector('#financeTrendBody')
   if (body) body.innerHTML = `<p class="subtle">${owner.lang === 'zh' ? '加载中…' : 'Loading…'}</p>`
-  const data = await request(`/admin/finance/trend?granularity=${g}&periods=${periods}`)
-  financeTrendState = { granularity: g, data: data.trend }
-  document.querySelectorAll('#financeTrendTabs [data-trend-g]').forEach((b) => b.classList.toggle('active', b.dataset.trendG === g))
+  let qs = `range=${encodeURIComponent(r)}`
+  if (r === 'custom') {
+    const from = window.prompt(owner.lang === 'zh' ? '从哪个月开始?(格式 2026-01)' : 'From month (2026-01)', '')
+    if (!from || !/^\d{4}-\d{2}$/.test(from.trim())) return
+    qs += `&from=${encodeURIComponent(from.trim())}`
+  }
+  const data = await request(`/admin/finance/trend?${qs}`)
+  financeTrendState = { granularity: 'month', range: r, data: data.trend }
   renderFinanceTrend()
   loadCouponDiscounts().catch(() => { /* 券让利卡拉不到不拖垮趋势页 */ })
 }
@@ -2663,50 +2670,176 @@ async function loadCouponDiscounts() {
     </tbody></table>` : '<p class="subtle">本月还没有用券的已签单。</p>'}`
 }
 
+/* 屏「财务页升级」全套(2026-08-09 按设计图重做)。
+   四块图 + 每块「表格视图」切换 + CSV;当月柱浅色标 partial;
+   目标线与达标月只在目标类型=营收时画(净赚口径下平衡线等于 0,画上去没意义);
+   没设目标 → B 态:不画目标线不画达标点,只留一行淡引导。
+   金额红线:柱高只是画图比例,所有数字照后端返回值显示。 */
+const trendTableView = { main: false, same: false, expense: false, mix: false }
+
+function trendMoney(cents) { return money(cents, 2) }
+
 function renderFinanceTrend() {
   const body = document.querySelector('#financeTrendBody')
   if (!body || !financeTrendState.data) return
   const zh = owner.lang === 'zh'
   const t = financeTrendState.data
-  // 柱高只是画图比例,不是金额运算;所有数字都照后端返回值显示
-  const max = Math.max(1, ...t.points.map((p) => Math.max(p.revenueCents, p.expenseCents)))
-  const cmp = t.compare
-  body.innerHTML = `
-    <div class="trend-chart">
-      ${t.points.map((p) => `
-        <div class="trend-bar">
-          <div class="stack">
-            <div class="b ${p.hitTarget ? 'hit' : ''}" style="height:${Math.round(p.revenueCents / max * 130)}px" title="${zh ? '收入' : 'Revenue'} ${money(p.revenueCents, 2)}"></div>
-            <div class="b exp" style="height:${Math.round(p.expenseCents / max * 130)}px" title="${zh ? '支出' : 'Expense'} ${money(p.expenseCents, 2)}"></div>
-          </div>
-          <span class="lb">${escapeHtml(p.label)}</span>
+  const hasTarget = Boolean(t.monthTargetCents)
+  const max = Math.max(1, ...t.points.map((p) => Math.max(p.revenueCents, p.expenseCents, hasTarget ? t.monthTargetCents : 0)))
+  const H = 150
+  const px = (cents) => Math.round(Math.max(0, cents) / max * H)
+  /* 净赚折线**和柱子共用同一根纵轴**(设计图第二条取舍:不做左右双轴,
+     两根轴的比例是随便定的,等于凭空造一个「相关性」)。负数压到零轴上。 */
+  const netY = (cents) => Math.max(4, Math.min(H, H - px(cents)))
+
+  const rangeBtn = (key, label) => `<button class="ghost slim${financeTrendState.range === key ? ' active' : ''}" data-trend-range="${key}" type="button">${label}</button>`
+  const tableBtn = (k) => `<button class="ghost slim trend-tv" data-trend-tv="${k}" type="button">${trendTableView[k] ? (zh ? '图表视图' : 'Chart') : (zh ? '表格视图' : 'Table')}</button>`
+
+  const mainChart = trendTableView.main
+    ? `<table class="dc-sum">
+        <tr><th>${zh ? '月份' : 'Month'}</th><th>${zh ? '收入' : 'Revenue'}</th><th>${zh ? '支出' : 'Expense'}</th><th>${zh ? '净赚' : 'Net'}</th><th>${zh ? '单量' : 'Orders'}</th><th>${zh ? '客单' : 'Avg'}</th><th>${zh ? '目标' : 'Target'}</th></tr>
+        ${t.points.slice().reverse().map((p) => `<tr>
+          <td class="nm">${escapeHtml(p.label)}${p.partial ? ` <span class="subtle">${zh ? '本月至今' : 'MTD'}</span>` : ''}</td>
+          <td>${trendMoney(p.revenueCents)}</td><td>${trendMoney(p.expenseCents)}</td><td>${trendMoney(p.netCents)}</td>
+          <td>${p.orderCount}</td><td>${trendMoney(p.avgTicketCents)}</td>
+          <td>${!hasTarget ? '—' : (p.hitTarget ? `<span class="dc-badge ok">${zh ? '达标' : 'Hit'}</span>` : trendMoney(t.monthTargetCents))}</td>
+        </tr>`).join('')}
+      </table>`
+    : `<div class="trend-chart" style="position:relative">
+        ${hasTarget ? `<div class="trend-targetline" style="bottom:${px(t.monthTargetCents) + 20}px"><span>${zh ? '月营收目标' : 'Target'} ${trendMoney(t.monthTargetCents)}</span></div>` : ''}
+        ${t.points.map((p) => `
+          <div class="trend-bar">
+            <div class="stack">
+              <div class="b${hasTarget && p.hitTarget ? ' hit' : ''}${p.partial ? ' partial' : ''}" style="height:${px(p.revenueCents)}px" title="${zh ? '收入' : 'Revenue'} ${trendMoney(p.revenueCents)}"></div>
+              <div class="b exp${p.partial ? ' partial' : ''}" style="height:${px(p.expenseCents)}px" title="${zh ? '支出' : 'Expense'} ${trendMoney(p.expenseCents)}"></div>
+            </div>
+            <span class="lb">${escapeHtml(p.label)}${p.partial ? `<em>${zh ? '至今' : 'MTD'}</em>` : ''}</span>
+          </div>`).join('')}
+        <svg class="trend-netline" viewBox="0 0 ${Math.max(1, t.points.length) * 100} ${H}" preserveAspectRatio="none">
+          <polyline points="${t.points.map((p, i) => `${i * 100 + 50},${netY(p.netCents)}`).join(' ')}" fill="none" stroke="#2f7d5c" stroke-width="3" vector-effect="non-scaling-stroke"/>
+          ${t.points.map((p, i) => `<circle cx="${i * 100 + 50}" cy="${netY(p.netCents)}" r="4" fill="#2f7d5c"/>`).join('')}
+        </svg>
+      </div>
+      <div class="trend-legend">
+        <span><i style="background:#c8a47e"></i>${zh ? '收入' : 'Revenue'}</span>
+        ${hasTarget ? `<span><i style="background:#2f7d5c"></i>${zh ? '达标月' : 'Hit'}</span>` : ''}
+        <span><i style="background:#e0d3c4"></i>${zh ? '支出' : 'Expense'}</span>
+        <span><i style="background:#2f7d5c;height:3px;margin-bottom:3px"></i>${zh ? '净赚(折线)' : 'Net (line)'}</span>
+        <span><i style="background:#efe4d5"></i>${zh ? '浅色=本月至今(未满月)' : 'light = MTD'}</span>
+      </div>`
+
+  const sd = t.sameDays
+  const sameBlock = !sd ? '' : (trendTableView.same
+    ? `<table class="dc-sum">
+        <tr><th>${zh ? '区间' : 'Window'}</th><th>${zh ? '收入' : 'Revenue'}</th><th>${zh ? '支出' : 'Expense'}</th><th>${zh ? '净赚' : 'Net'}</th></tr>
+        ${[[zh ? '本月至今' : 'This month', sd.current], [zh ? '上月同期' : 'Last month', sd.lastMonth], [zh ? '去年同期' : 'Last year', sd.lastYear]].map(([lab, w]) => `
+          <tr><td class="nm">${lab} <span class="subtle">${w.from}~${w.to}</span></td><td>${trendMoney(w.revenueCents)}</td><td>${trendMoney(w.expenseCents)}</td><td>${trendMoney(w.netCents)}</td></tr>`).join('')}
+      </table>`
+    : `<div class="trend-same">
+        ${[[zh ? '本月至今' : 'This month', sd.current, true], [zh ? '上月同期' : 'Last month', sd.lastMonth, false], [zh ? '去年同期' : 'Last year', sd.lastYear, false]].map(([lab, w, cur]) => {
+          const m2 = Math.max(1, sd.current.revenueCents, sd.lastMonth.revenueCents, sd.lastYear.revenueCents)
+          return `<div class="tsame-row${cur ? ' cur' : ''}">
+            <span class="tsame-lab">${lab}</span>
+            <span class="tsame-bar"><i style="width:${Math.round(w.revenueCents / m2 * 100)}%"></i></span>
+            <b>${trendMoney(w.revenueCents)}</b>
+          </div>`
+        }).join('')}
+        <p class="subtle">${zh ? `三组都是 1–${sd.days} 日的相同天数,黑线标出的是当前。` : `All windows truncated to the same ${sd.days} days.`}</p>
+      </div>`)
+
+  const eb = t.expenseBreakdown || { rows: [] }
+  const ebMax = Math.max(1, ...eb.rows.map((r) => r.amountCents))
+  const expenseBlock = trendTableView.expense
+    ? `<table class="dc-sum">
+        <tr><th>${zh ? '类别' : 'Category'}</th><th>${zh ? '本期' : 'Now'}</th><th>${zh ? '上期同区间' : 'Prev'}</th><th>${zh ? '增减' : 'Δ'}</th></tr>
+        ${eb.rows.map((r) => `<tr><td class="nm">${escapeHtml(r.category)}</td><td>${trendMoney(r.amountCents)}</td><td>${trendMoney(r.prevAmountCents)}</td>
+          <td class="${r.deltaCents > 0 ? 'warn' : ''}">${r.deltaCents >= 0 ? '+' : '−'}${trendMoney(Math.abs(r.deltaCents))}</td></tr>`).join('')}
+      </table>`
+    : (eb.rows.length ? `<div class="trend-hbars">
+        ${eb.rows.map((r) => `<div class="thbar">
+          <span class="thlab">${escapeHtml(r.category)}</span>
+          <span class="thtrack"><i style="width:${Math.round(r.amountCents / ebMax * 100)}%"></i></span>
+          <b>${trendMoney(r.amountCents)}</b>
+          <span class="thdelta ${r.deltaCents > 0 ? 'up' : (r.deltaCents < 0 ? 'down' : '')}">${r.deltaCents === 0 ? '—' : `${r.deltaCents > 0 ? '+' : '−'}${trendMoney(Math.abs(r.deltaCents))}`}</span>
         </div>`).join('')}
+      </div>` : `<p class="subtle">${zh ? '本期还没有支出记录。' : 'No expenses yet.'}</p>`)
+
+  const mix = t.incomeMix || { months: [], categories: [] }
+  const mixMax = Math.max(1, ...mix.months.map((m) => m.totalCents))
+  const MIXC = ['#c8a47e', '#8fb6a4', '#d9b58c', '#a89b8c', '#e0d3c4', '#7f9bb5', '#c9a0a0', '#b9c4a0']
+  const mixBlock = trendTableView.mix
+    ? `<table class="dc-sum">
+        <tr><th>${zh ? '月份' : 'Month'}</th>${mix.categories.map((c) => `<th>${escapeHtml(c)}</th>`).join('')}<th>${zh ? '合计' : 'Total'}</th></tr>
+        ${mix.months.slice().reverse().map((m) => `<tr><td class="nm">${escapeHtml(m.label)}</td>${mix.categories.map((c) => `<td>${trendMoney(m.parts[c] || 0)}</td>`).join('')}<td>${trendMoney(m.totalCents)}</td></tr>`).join('')}
+      </table>`
+    : `<div class="trend-chart">
+        ${mix.months.map((m) => `<div class="trend-bar">
+          <div class="mixstack" style="height:${Math.round(m.totalCents / mixMax * H)}px">
+            ${mix.categories.map((c, i) => {
+              const v = m.parts[c] || 0
+              return v ? `<div style="flex:${v};background:${MIXC[i % MIXC.length]}" title="${escapeHtml(c)} ${trendMoney(v)}"></div>` : ''
+            }).join('')}
+          </div>
+          <span class="lb">${escapeHtml(m.label)}</span>
+        </div>`).join('')}
+      </div>
+      <div class="trend-legend">${mix.categories.map((c, i) => `<span><i style="background:${MIXC[i % MIXC.length]}"></i>${escapeHtml(c)}</span>`).join('')}</div>`
+
+  body.innerHTML = `
+    <div class="section-row compact-row" style="gap:8px;flex-wrap:wrap">
+      <div class="schedule-week-nav">
+        ${rangeBtn('6m', zh ? '近 6 个月' : 'Last 6')}${rangeBtn('12m', zh ? '近 12 个月' : 'Last 12')}${rangeBtn('ytd', zh ? '今年' : 'YTD')}${rangeBtn('custom', zh ? '自定义' : 'Custom')}
+      </div>
+      <button class="ghost slim" id="trendCsv" type="button">${zh ? '导出 CSV' : 'Export CSV'}</button>
     </div>
-    <div class="trend-legend">
-      <span><i style="background:#c8a47e"></i>${zh ? '收入' : 'Revenue'}</span>
-      <span><i style="background:#2f7d5c"></i>${zh ? '收入(达标)' : 'Revenue (hit)'}</span>
-      <span><i style="background:#e0d3c4"></i>${zh ? '支出' : 'Expense'}</span>
-    </div>
-    ${cmp ? `<p class="subtle" style="margin-top:10px">${zh ? '环比上期' : 'vs previous'}:${cmp.revenueDeltaCents >= 0 ? '+' : '−'}${money(Math.abs(cmp.revenueDeltaCents), 2)}${cmp.revenueDeltaPct === null ? '' : `(${cmp.revenueDeltaPct >= 0 ? '+' : ''}${cmp.revenueDeltaPct}%)`} · ${zh ? '单量' : 'Orders'} ${cmp.orderDelta >= 0 ? '+' : ''}${cmp.orderDelta}</p>` : ''}
-    <table class="dc-sum" style="margin-top:12px">
-      <tr>
-        <th>${zh ? '周期' : 'Period'}</th><th>${zh ? '收入' : 'Revenue'}</th><th>${zh ? '支出' : 'Expense'}</th><th>${zh ? '净利' : 'Net'}</th>
-        <th>${zh ? '单量' : 'Orders'}</th><th>${zh ? '客单' : 'Avg'}</th><th>${zh ? '充值' : 'Recharge'}</th><th>${zh ? '耗卡' : 'Card used'}</th><th>${zh ? '目标' : 'Target'}</th>
-      </tr>
-      ${t.points.slice().reverse().map((p) => `
-      <tr>
-        <td class="nm">${escapeHtml(p.label)}</td>
-        <td>${money(p.revenueCents, 2)}</td>
-        <td>${money(p.expenseCents, 2)}</td>
-        <td>${money(p.netCents, 2)}</td>
-        <td>${p.orderCount}</td>
-        <td>${money(p.avgTicketCents, 2)}</td>
-        <td>${money(p.rechargeCents, 2)}</td>
-        <td>${money(p.cardUsedCents, 2)}</td>
-        <td>${p.targetCents === null ? '—' : (p.hitTarget ? `<span class="dc-badge ok">${zh ? '达标' : 'Hit'}</span>` : money(p.targetCents, 2))}</td>
-      </tr>`).join('')}
-    </table>`
+
+    ${hasTarget ? '' : `<div class="trend-guide">
+      <span>${zh ? '想看目标进度、收支平衡线、达标月份?就 3 项,一分钟;先不设也没关系,上面的真数和下面的走势永远都在。' : 'Set a target to see the goal line and hit months.'}</span>
+      <button class="ghost slim" id="trendGoSetting" type="button">${zh ? '去设置 ›' : 'Set up ›'}</button>
+    </div>`}
+
+    <div class="section-row compact-row"><h3 class="trend-h">${zh ? '收入 / 支出 / 净赚' : 'Revenue / Expense / Net'}</h3>${tableBtn('main')}</div>
+    ${mainChart}
+
+    <div class="section-row compact-row"><h3 class="trend-h">${zh ? '本月至今 · 和谁比' : 'MTD comparison'}</h3>${tableBtn('same')}</div>
+    ${sameBlock}
+
+    <div class="section-row compact-row"><h3 class="trend-h">${zh ? '钱花在哪了 · 本期' : 'Where the money went'}</h3>${tableBtn('expense')}</div>
+    ${expenseBlock}
+
+    <div class="section-row compact-row"><h3 class="trend-h">${zh ? '收入构成变化 · 近 6 个完整月' : 'Income mix'}</h3>${tableBtn('mix')}</div>
+    ${mixBlock}`
+
+  body.querySelectorAll('[data-trend-tv]').forEach((b) => b.addEventListener('click', () => {
+    const k = b.dataset.trendTv
+    trendTableView[k] = !trendTableView[k]
+    renderFinanceTrend()
+  }))
+  body.querySelectorAll('[data-trend-range]').forEach((b) => b.addEventListener('click', () => {
+    loadFinanceTrend(null, b.dataset.trendRange).catch((error) => toast(error.message))
+  }))
+  const csv = body.querySelector('#trendCsv')
+  if (csv) csv.addEventListener('click', () => exportTrendCsv(t))
+  const go = body.querySelector('#trendGoSetting')
+  if (go) go.addEventListener('click', () => document.querySelector('[data-fin-goal-edit]')?.click())
 }
+
+// 导出 CSV:图没法复制,表格能 —— 发给会计或自己核账用(设计图第三条取舍)
+function exportTrendCsv(t) {
+  const zh = owner.lang === 'zh'
+  const rows = [[zh ? '月份' : 'Month', zh ? '收入' : 'Revenue', zh ? '支出' : 'Expense', zh ? '净赚' : 'Net', zh ? '单量' : 'Orders', zh ? '客单' : 'Avg ticket', zh ? '本月至今' : 'MTD']]
+  for (const p of t.points) {
+    rows.push([p.label, p.revenueCents / 100, p.expenseCents / 100, p.netCents / 100, p.orderCount, p.avgTicketCents / 100, p.partial ? 'Y' : ''])
+  }
+  const csv = `﻿${rows.map((r) => r.map((c) => `"${String(c).replace(/"/g, '""')}"`).join(',')).join('\n')}`
+  const url = URL.createObjectURL(new Blob([csv], { type: 'text/csv;charset=utf-8' }))
+  const a = document.createElement('a')
+  a.href = url
+  a.download = `trend-${t.points[0]?.key || ''}-${t.points[t.points.length - 1]?.key || ''}.csv`
+  a.click()
+  URL.revokeObjectURL(url)
+}
+
 
 function applyFinanceTab() {
   const tab = owner.financeLedger.tab || 'quick'
@@ -7174,12 +7307,7 @@ els.financePage.addEventListener('click', (event) => {
     }).catch((error) => toast(error.message))
     return
   }
-  // ===== 财务趋势 =====
-  const trendG = event.target.closest('[data-trend-g]')
-  if (trendG) {
-    loadFinanceTrend(trendG.dataset.trendG).catch((error) => toast(error.message))
-    return
-  }
+  // ===== 财务趋势 =====(周期切换按钮在 renderFinanceTrend 里直接绑,这里不再有 data-trend-g)
   // 工资试算页的「去日结」:切到日结板块并定位到那一天
   const goClose = event.target.closest('[data-go-close]')
   if (goClose) {

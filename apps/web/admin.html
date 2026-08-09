@@ -4,7 +4,7 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>有迹 · 商家后台</title>
-    <link rel="stylesheet" href="/web/styles.css?v=20260809c-audit-fix">
+    <link rel="stylesheet" href="/web/styles.css?v=20260809d-trend">
     <style>
       /* 2026-08-02 财务指标显隐+动效(店主 v4 定稿):AI智能总结卡 / 目标进度条(带平衡线刻度) / 设目标引导与弹窗。
          放这里不放 styles.css:本批约定只动 admin.js + admin.html 两个文件。 */
@@ -251,6 +251,34 @@
       #pricingPage input[type="checkbox"],#membershipSettingsBody input[type="checkbox"]{width:16px;height:16px;min-width:0;flex:none;margin:0;padding:0}
       #pricingPage .row-actions .pricing-sort{margin:0}
       #membershipSettingsBody .service-admin-item{display:flex;justify-content:space-between;align-items:center;gap:14px;flex-wrap:wrap}
+
+      /* ===== 财务趋势全套(2026-08-09 按《财务页升级》设计图重做)===== */
+      .trend-h{font-size:14px;margin:16px 0 6px}
+      .trend-tv{margin-left:auto}
+      .trend-targetline{position:absolute;left:0;right:0;border-top:2px dashed #2d2826;opacity:.7;pointer-events:none;z-index:2}
+      .trend-targetline span{position:absolute;right:0;top:-16px;font-size:11px;color:#2d2826;background:#fff;padding:0 4px}
+      .trend-netline{position:absolute;left:0;right:0;top:0;height:150px;pointer-events:none;z-index:3}
+      .trend-chart .b.partial{opacity:.45}
+      .trend-chart .lb em{display:block;font-style:normal;font-size:10px;color:#8c8279}
+      .mixstack{display:flex;flex-direction:column-reverse;width:26px;border-radius:4px 4px 0 0;overflow:hidden}
+      .trend-guide{display:flex;align-items:center;gap:12px;background:#fbf4ec;border:1px dashed #d9bf9f;border-radius:12px;padding:11px 14px;font-size:12.5px;color:#8a6f4d;margin:10px 0}
+      .trend-guide button{margin-left:auto;flex:none}
+      .trend-same{margin:8px 0}
+      .tsame-row{display:flex;align-items:center;gap:10px;font-size:12.5px;padding:5px 0}
+      .tsame-row.cur{font-weight:700}
+      .tsame-row.cur .tsame-bar i{background:#2d2826}
+      .tsame-lab{width:82px;color:#8c8279}
+      .tsame-row.cur .tsame-lab{color:#2d2826}
+      .tsame-bar{flex:1;height:12px;background:#f0e8de;border-radius:999px;overflow:hidden}
+      .tsame-bar i{display:block;height:100%;background:#c8a47e;border-radius:999px}
+      .trend-hbars{margin:8px 0}
+      .thbar{display:flex;align-items:center;gap:10px;font-size:12.5px;padding:5px 0}
+      .thlab{width:96px;color:#4a3c2c}
+      .thtrack{flex:1;height:12px;background:#f0e8de;border-radius:999px;overflow:hidden}
+      .thtrack i{display:block;height:100%;background:#d98b5f;border-radius:999px}
+      .thdelta{width:88px;text-align:right;color:#8c8279;font-size:11.5px}
+      .thdelta.up{color:#b0483c}
+      .thdelta.down{color:#2f7d5c}
 
       /* 订单页「待日结」直达条(裁决①) */
       .dc-jump{display:flex;align-items:center;gap:12px;background:#fdf0e6;border:1px solid #f0d8bf;border-radius:12px;padding:11px 16px;margin:10px 0;font-size:13px;color:#8a5a2b}
@@ -705,14 +733,9 @@
               <div class="section-row compact-row">
                 <div>
                   <h2 id="financeTrendTitle">经营趋势</h2>
-                  <p class="subtle" id="financeTrendHint">收入 / 支出 / 净利 / 单量 / 客单 / 充值 / 耗卡,与单月汇总同一口径</p>
+                  <p class="subtle" id="financeTrendHint">走势 / 相同天数对比 / 支出结构 / 收入构成 —— 与单月汇总同一口径;当月未满月单独标注</p>
                 </div>
-                <div class="schedule-week-nav" id="financeTrendTabs">
-                  <button class="ghost slim" data-trend-g="day" type="button">日</button>
-                  <button class="ghost slim" data-trend-g="week" type="button">周</button>
-                  <button class="ghost slim active" data-trend-g="month" type="button">月</button>
-                  <button class="ghost slim" data-trend-g="year" type="button">年</button>
-                </div>
+
               </div>
               <div id="financeTrendBody"></div>
             </section>
@@ -898,6 +921,6 @@
     </main>
 
     <div class="toast" id="toast"></div>
-    <script src="/web/admin.js?v=20260809c-audit-fix"></script>
+    <script src="/web/admin.js?v=20260809d-trend"></script>
   </body>
 </html>

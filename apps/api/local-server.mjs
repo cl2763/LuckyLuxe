@@ -8179,6 +8179,94 @@ function trendPeriods(granularity, periods, tenantId) {
   return out
 }
 
+// 两个 yyyy-mm-dd 之间差几天(只做日期算术,不碰时区)
+function dayGap(from, to) {
+  return Math.round((new Date(`${to}T12:00:00Z`) - new Date(`${from}T12:00:00Z`)) / 86400000)
+}
+function addDaysStr(date, n) {
+  const x = new Date(`${date}T12:00:00Z`)
+  x.setUTCDate(x.getUTCDate() + n)
+  return x.toISOString().slice(0, 10)
+}
+
+/* 「本月至今 · 和谁比」(设计图):本月至今 / 上月同期 / 去年同期,
+   **三组都截到相同天数** —— 8 月 1–4 日 vs 7 月 1–4 日 vs 去年 8 月 1–4 日。
+   截断在后端做,免得两端算法不一致(这是趋势图最容易骗人的地方,设计图专门点了名)。 */
+function sameDaysCompare(tenantId) {
+  const today = todayOf(tenantId)
+  const month = today.slice(0, 7)
+  const days = Number(today.slice(8))
+  const win = (mk) => {
+    const from = `${mk}-01`
+    // 上月/去年同月可能没有第 N 天(如 31 日对 2 月),截到该月最后一天
+    const lastDay = new Date(Date.UTC(Number(mk.slice(0, 4)), Number(mk.slice(5, 7)), 0)).getUTCDate()
+    const to = `${mk}-${String(Math.min(days, lastDay)).padStart(2, '0')}`
+    const revenueCents = rangeFinanceNet(from, to, 'income', tenantId)
+    const expenseCents = -rangeFinanceNet(from, to, 'expense', tenantId)
+    return { month: mk, from, to, days: Math.min(days, lastDay), revenueCents, expenseCents, netCents: revenueCents - expenseCents }
+  }
+  const lastYearMonth = `${Number(month.slice(0, 4)) - 1}-${month.slice(5, 7)}`
+  return { days, current: win(month), lastMonth: win(monthShift(month, -1)), lastYear: win(lastYearMonth) }
+}
+
+/* 「钱花在哪了」:当期支出按 category 从大到小,右边是与**上一段等长区间**相比的增减。
+   口径与单月汇总同源 —— 都是 finance_transactions,不另起一套。 */
+function expenseByCategory(tenantId, points) {
+  if (!points.length) return { from: '', to: '', rows: [] }
+  const cur = points[points.length - 1]
+  const span = dayGap(cur.from, cur.to)
+  const prevTo = addDaysStr(cur.from, -1)
+  const prevFrom = addDaysStr(prevTo, -span)
+  const sum = (from, to) => {
+    const rows = db.prepare(`SELECT category, COALESCE(SUM(amount_cents), 0) AS cents FROM finance_transactions
+      WHERE tenant_id = ? AND type = 'expense' AND occurred_on >= ? AND occurred_on <= ? GROUP BY category`).all(tenantId, from, to)
+    const map = {}
+    for (const r of rows) map[r.category || '未分类'] = Math.abs(r.cents)
+    return map
+  }
+  const now = sum(cur.from, cur.to)
+  const before = sum(prevFrom, prevTo)
+  const keys = [...new Set([...Object.keys(now), ...Object.keys(before)])]
+  return {
+    from: cur.from, to: cur.to, prevFrom, prevTo,
+    rows: keys.map((k) => ({
+      category: k,
+      amountCents: now[k] || 0,
+      prevAmountCents: before[k] || 0,
+      deltaCents: (now[k] || 0) - (before[k] || 0)
+    })).filter((r) => r.amountCents || r.prevAmountCents).sort((a, b) => b.amountCents - a.amountCents)
+  }
+}
+
+/* 「收入构成变化」:近 N 个**完整**月份的堆叠柱(未满月的构成比例没有参考价值)。
+   分类直接用账本的 category;**储值消费单独归一类** —— 那是以前收的钱,不是新进的现金。
+   注:设计图原话是「bookings join services 拿服务类型」,但收入只走账本口径(纪律 6),
+   账本行上没有服务类型;硬去 join 订单表会算出与账本对不上的第二套数。故按 category 拆,
+   储值消费按 source='stored_value' 单独成类 —— 设计意图(看得出哪块在长、储值单独拆)保留。 */
+function incomeMixByMonth(tenantId, months = 6) {
+  const cur = todayOf(tenantId).slice(0, 7)
+  const keys = []
+  for (let i = months; i >= 1; i -= 1) keys.push(monthShift(cur, -i)) // 全是已过完的完整月
+  const catSet = new Set()
+  const byMonth = keys.map((mk) => {
+    const rows = db.prepare(`SELECT source, category, COALESCE(SUM(amount_cents), 0) AS cents FROM finance_transactions
+      WHERE tenant_id = ? AND type = 'income' AND occurred_on >= ? AND occurred_on <= ? GROUP BY source, category`)
+      .all(tenantId, `${mk}-01`, `${mk}-31`)
+    const parts = {}
+    for (const r of rows) {
+      const key = r.source === 'stored_value' ? '储值消费' : (r.category || '其他收入')
+      parts[key] = (parts[key] || 0) + Math.max(0, r.cents)
+      catSet.add(key)
+    }
+    return { key: mk, label: `${Number(mk.slice(5))}月`, parts, totalCents: Object.values(parts).reduce((n, v) => n + v, 0) }
+  })
+  // 储值消费固定排最后一段,其余按总额从大到小
+  const cats = [...catSet].filter((c) => c !== '储值消费')
+    .sort((a, b) => byMonth.reduce((n, m) => n + (m.parts[b] || 0), 0) - byMonth.reduce((n, m) => n + (m.parts[a] || 0), 0))
+  if (catSet.has('储值消费')) cats.push('储值消费')
+  return { months: byMonth, categories: cats }
+}
+
 function financeTrend(granularity, periods, tenantId = currentTenantId()) {
   const g = TREND_GRANULARITIES.includes(granularity) ? granularity : 'month'
   const n = Math.min(24, Math.max(2, Math.round(Number(periods) || 6)))
@@ -8213,6 +8301,17 @@ function financeTrend(granularity, periods, tenantId = currentTenantId()) {
     }
   })
 
+  /* 设计图点名的那件事:**当月是不完整的**。8 月只过了 4 天,和整月并排画一样高的柱子
+     会让人以为业绩崩了。所以当期柱子标 partial,前端画浅色并写「本月至今(未满月)」。 */
+  const todayDate = todayOf(tenantId)
+  for (const p of points) {
+    p.partial = todayDate >= p.from && todayDate <= p.to
+    if (p.partial) {
+      p.daysElapsed = dayGap(p.from, todayDate) + 1
+      p.daysTotal = dayGap(p.from, p.to) + 1
+    }
+  }
+
   const last = points[points.length - 1] || null
   const prev = points[points.length - 2] || null
   return {
@@ -8220,7 +8319,16 @@ function financeTrend(granularity, periods, tenantId = currentTenantId()) {
     periods: n,
     currency: tenantCurrencyCode(tenantId),
     currencyDisplay: currencyDisplayOf(tenantCurrencyCode(tenantId)),
+    // 目标线与达标月:目标类型是「营收」时才画(净赚口径下平衡线等于 0,画上去没意义)
+    monthTargetCents: monthTargetCents || null,
+    targetMode: targets.targetMode,
     points,
+    // 「本月至今 · 和谁比」:三组都截到**相同天数**,后端算好,不让前端各算各的
+    sameDays: sameDaysCompare(tenantId),
+    // 「钱花在哪了」:支出按 category 排序 + 与上期同区间的增减
+    expenseBreakdown: expenseByCategory(tenantId, points),
+    // 「收入构成变化」:只画完整月份(未满月的构成比例没有参考价值)
+    incomeMix: incomeMixByMonth(tenantId, 6),
     // 环比只在两个周期都有数时给,分母为 0 时给 null 而不是硬写 0% 或 100%
     compare: last && prev ? {
       revenueDeltaCents: last.revenueCents - prev.revenueCents,
@@ -12200,7 +12308,22 @@ async function route(req, res) {
   if (req.method === 'GET' && path === '/admin/finance/trend') {
     if (adminSession.role !== 'owner') throw apiError(403, 'FORBIDDEN', 'Owner permission is required.')
     materializeRecurringTransactions()
-    return json(res, 200, { trend: financeTrend(query.granularity, query.periods, currentTenantId()) })
+    /* 设计图的周期切换:近 6 个月 / 近 12 个月 / 今年 / 自定义。
+       都落到「按月」这一种粒度上(目标是月目标、构成按月看才有意义);
+       老的 granularity/periods 参数原样保留,现有调用与测试不受影响。 */
+    const tid = currentTenantId()
+    if (query.range) {
+      const cur = todayOf(tid).slice(0, 7)
+      let n = 6
+      if (query.range === '12m') n = 12
+      else if (query.range === 'ytd') n = Number(cur.slice(5, 7))
+      else if (query.range === 'custom') {
+        const from = /^\d{4}-\d{2}$/.test(String(query.from || '')) ? query.from : cur
+        n = Math.max(1, Math.min(24, dayGap(`${from}-01`, `${cur}-01`) / 28 + 1 | 0))
+      }
+      return json(res, 200, { trend: financeTrend('month', n, tid), range: query.range })
+    }
+    return json(res, 200, { trend: financeTrend(query.granularity, query.periods, tid) })
   }
   /* 月度券让利汇总(设计图 C3 末句「月度券让利合计(特批/系统)进财务」)。
      口径 = 当月已签服务单上实际抵掉的券金额,按发放类型拆特批/系统两栏。
