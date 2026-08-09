@@ -23,8 +23,12 @@ async function api(tenantId, path, options = {}) {
   return data
 }
 
-// 按项目名归组(只用来一次性铺演示数据;运行时分组读的是商家填的 addonGroup 字段)
+/* 按项目名归组(只用来一次性铺演示数据;运行时分组读的是商家填的 addonGroup 字段)。
+   卸睫要和卸甲分开 —— 「本店制作免卸睫毛」是美睫的项目,塞进「卸甲类」是错的。
+   交付给店主的默认数据必须是对的,不能指望他自己去改。 */
+const SEEDED_GROUPS = ['延长类', '补甲类', '卸甲类', '卸睫类']
 function groupOf(name) {
+  if (/睫/.test(name) && /卸/.test(name)) return '卸睫类'
   if (/卸/.test(name)) return '卸甲类'
   if (/补甲|矫正/.test(name)) return '补甲类'
   if (/甲片|甲膜|水晶|延长/.test(name)) return '延长类'
@@ -36,11 +40,13 @@ for (const tenantId of ['lucky-luxe', 'jics-nail']) {
   const items = (await api(tenantId, '/admin/pricing/items')).items.filter((i) => i.itemKind === 'addon')
   let touched = 0
   for (const it of items) {
-    if (it.addonGroup) continue
     const g = groupOf(it.nameZh || '')
     if (!g) continue
+    // 店主自己改过组名的(组名不在本脚本铺的那几个里)一律不动 —— 他的设置优先
+    if (it.addonGroup && !SEEDED_GROUPS.includes(it.addonGroup)) continue
+    if (it.addonGroup === g) continue
     await api(tenantId, `/admin/pricing/items/${it.id}`, { method: 'PATCH', body: JSON.stringify({ addonGroup: g }) })
-    console.log(`  ${it.nameZh} → ${g}`)
+    console.log(`  ${it.nameZh} → ${g}${it.addonGroup ? `(原「${it.addonGroup}」纠正)` : ''}`)
     touched += 1
   }
   const after = (await api(tenantId, '/admin/pricing/items')).items.filter((i) => i.itemKind === 'addon')

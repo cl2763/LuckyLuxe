@@ -1,12 +1,15 @@
 const api = require('../../../utils/api')
 
 Page({
-  data: { shopName: '', displayName: '', role: '', account: '', financeOn: false, isOwnerRole: false, subText: '', subWarn: false },
+  data: { shopName: '', displayName: '', role: '', account: '', financeOn: false, financeLockEnabled: false, isOwnerRole: false, subText: '', subWarn: false },
 
   onShow() { if (!api.guardMerchant()) return; this.load() },
 
   async load() {
     this.setData({ financeOn: !!(api.getFinanceKey && api.getFinanceKey()) })
+    api.adminGet('/admin/finance/lock-settings')
+      .then((st) => this.setData({ financeLockEnabled: !!st.enabled }))
+      .catch(() => {})
     try {
       const m = await api.adminMe()
       const isOwner = m.role === 'owner' || m.role === 'boss'
@@ -57,7 +60,58 @@ Page({
 
   changePwd() { wx.navigateTo({ url: '/pages/merchant-change-password/index?mode=change' }) },
 
-  finance() { wx.navigateTo({ url: '/pages/merchant/finance/index' }) },
+  /* 屏 V4 对齐(2026-08-08 口径:财务密码**默认关闭、商家自助**)。
+     这里是小程序侧的开关:未启用 → 设一个新密码开启;已启用 → 改密或关闭,两者都要验当前密码。
+     忘记密码走平台重置(与网页 V4 卡文案一致)。 */
+  async finance() {
+    if (!this.data.isOwnerRole) { wx.navigateTo({ url: '/pages/merchant/finance/index' }); return }
+    let st = { enabled: false, configured: false }
+    try { st = await api.adminGet('/admin/finance/lock-settings') } catch (e) { /* 读不到按未启用处理 */ }
+    const items = st.enabled ? ['修改财务密码', '关闭财务密码', '进入财务页'] : ['启用财务密码', '进入财务页']
+    wx.showActionSheet({
+      itemList: items,
+      success: (r) => {
+        const label = items[r.tapIndex]
+        if (label === '进入财务页') { wx.navigateTo({ url: '/pages/merchant/finance/index' }); return }
+        if (label === '启用财务密码') return this.setFinanceLock(true, false)
+        if (label === '修改财务密码') return this.setFinanceLock(true, true)
+        if (label === '关闭财务密码') return this.setFinanceLock(false, true)
+      }
+    })
+  },
+  setFinanceLock(enabled, needCurrent) {
+    const ask = (title, placeholder) => new Promise((resolve) => {
+      wx.showModal({
+        title, editable: true, placeholderText: placeholder, content: '',
+        success: (r) => resolve(r.confirm ? (r.content || '').trim() : null)
+      })
+    })
+    ;(async () => {
+      let currentPassword
+      if (needCurrent) {
+        currentPassword = await ask('验证当前财务密码', '关闭或修改都要先验当前密码')
+        if (currentPassword === null) return
+        if (!currentPassword) { wx.showToast({ title: '请输入当前密码', icon: 'none' }); return }
+      }
+      let newPassword
+      if (enabled) {
+        newPassword = await ask(needCurrent ? '设置新的财务密码' : '设置财务密码', '至少 4 位')
+        if (newPassword === null) return
+        if (!newPassword || newPassword.length < 4) { wx.showToast({ title: '财务密码至少 4 位', icon: 'none' }); return }
+        const again = await ask('再输一次确认', '两次要一致')
+        if (again === null) return
+        if (again !== newPassword) { wx.showToast({ title: '两次密码不一致', icon: 'none' }); return }
+      }
+      try {
+        await api.adminPut('/admin/finance/lock-settings', { enabled, currentPassword, newPassword })
+        if (api.clearFinanceKey) api.clearFinanceKey()
+        this.setData({ financeOn: false, financeLockEnabled: enabled })
+        wx.showToast({ title: enabled ? (needCurrent ? '密码已修改' : '已启用财务密码') : '已关闭财务密码', icon: 'none' })
+      } catch (e) {
+        wx.showToast({ title: (e && e.message) || '操作失败', icon: 'none' })
+      }
+    })()
+  },
 
   lang() { wx.showToast({ title: '多语言切换即将上线', icon: 'none' }) },
 

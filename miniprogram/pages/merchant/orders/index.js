@@ -67,6 +67,7 @@ Page(Object.assign({
     directCustomers: [], custQuery: '', custMatches: [], selectedCustId: '', selectedCustName: '',
     myTechId: '', // 员工登录时高亮自己那列
     isOwner: false,
+    actPanel: null, // 屏 0 操作面板(自建弹层)
     ...dailyCloseData // 日结板块的状态(date/v/open/shares/correcting…)
   },
 
@@ -131,18 +132,28 @@ Page(Object.assign({
     // 任何有顾客的订单都可补写服务小记
     if (userid) opts.push({ label: '写/补服务小记', note: true })
     if (!opts.length) { wx.showToast({ title: '该状态暂无可改操作', icon: 'none' }); return }
-    wx.showActionSheet({
-      itemList: opts.map((o) => o.label),
-      success: (r) => {
-        if (r.tapIndex < 0) return
-        const o = opts[r.tapIndex]
-        if (o.note) this.goNote(ctx)
-        else if (o.settle) this.goSettle(ctx)
-        else if (o.voidSheets) this.voidSheets(o.voidSheets, ctx)
-        else if (o.sheets) this.showSheets(sheets)
-        else this.applyStatus(id, o.s)
+    // 屏 0:图上是一张自定义面板 —— 顶部一行订单摘要,下面按钮,底部「关闭」;不是系统 ActionSheet
+    this._panelOpts = opts
+    this._panelCtx = ctx
+    this._panelSheets = sheets
+    this.setData({
+      actPanel: {
+        title: `${ctx.customerName || '顾客'} · ${ctx.serviceName || ''} · ${(STATUS_MAP[status] || {}).label || ''}`,
+        opts: opts.map((o, i) => ({ i, label: o.label }))
       }
     })
+  },
+  closeActPanel() { this.setData({ actPanel: null }) },
+  tapAct(e) {
+    const o = (this._panelOpts || [])[Number(e.currentTarget.dataset.i)]
+    if (!o) return
+    this.setData({ actPanel: null })
+    const ctx = this._panelCtx
+    if (o.note) this.goNote(ctx)
+    else if (o.settle) this.goSettle(ctx)
+    else if (o.voidSheets) this.voidSheets(o.voidSheets, ctx)
+    else if (o.sheets) this.showSheets(this._panelSheets)
+    else this.applyStatus(ctx.id, o.s)
   },
   /* 撤回改单:把这单还没签的结算单全撤掉,回到「去结算」状态重新开。
      已签的一张都不动 —— 已签不可改是硬规则,要改走金额更正链。 */

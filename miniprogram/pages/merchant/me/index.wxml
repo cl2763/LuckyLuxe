@@ -25,7 +25,7 @@
     </view>
     <view class="row" bindtap="finance">
       <text class="t">财务密码</text>
-      <text class="tag {{financeOn ? 'on' : ''}}">{{financeOn ? '本次已解锁' : '去财务页设置'}}</text>
+      <text class="tag {{financeLockEnabled ? 'on' : ''}}">{{financeLockEnabled ? (financeOn ? '已启用 · 本次已解锁' : '已启用') : '未启用(默认)'}}</text>
       <text class="arr">›</text>
     </view>
     <view class="row" bindtap="lang">

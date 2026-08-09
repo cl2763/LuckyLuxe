@@ -15,9 +15,9 @@ function localToday() {
 Page({
   data: {
     unlocked: false,
+    lockEnabled: false,
     configured: true,
     pwd: '',
-    pwd2: '',
     setting: false,
     m: { today: '$0', revenue: '$0', net: '$0' },
     estNote: '',
@@ -38,12 +38,20 @@ Page({
   onUnload() { clearInterval(this._rollT) },
   onHide() { clearInterval(this._rollT) },
 
+  /* 财务门禁(店主 2026-08-08 口径:**默认关闭、商家自助**)。
+     没开门禁就直接进,不弹密码框、更不逼着「首次设置」——
+     要开在「我的 → 财务密码」里自己开,和网页 V4 卡同一套口径。 */
   async init() {
     if (api.getFinanceKey()) { this.setData({ unlocked: true }); this.loadData(); return }
     try {
       const s = await api.adminGet('/admin/finance/lock-status')
-      this.setData({ configured: !!s.configured })
-    } catch (e) { /* 忽略 */ }
+      if (!s.enabled) { this.setData({ unlocked: true, lockEnabled: false }); this.loadData(); return }
+      this.setData({ lockEnabled: true, configured: !!s.configured })
+    } catch (e) {
+      // 状态读不到时按「未开门禁」放行:门禁真开着的话后端照样会 403,拦得住
+      this.setData({ unlocked: true, lockEnabled: false })
+      this.loadData()
+    }
   },
 
   onPwd(e) { this.setData({ pwd: e.detail.value }) },
@@ -53,12 +61,10 @@ Page({
     if (this.data.setting) return
     const pw = this.data.pwd
     if (!pw) { wx.showToast({ title: '请输入财务密码', icon: 'none' }); return }
-    if (!this.data.configured && pw !== this.data.pwd2) { wx.showToast({ title: '两次密码不一致', icon: 'none' }); return }
-    if (!this.data.configured && pw.length < 4) { wx.showToast({ title: '财务密码至少 4 位', icon: 'none' }); return }
     this.setData({ setting: true })
     try {
-      await api.financeUnlock(pw, this.data.configured ? undefined : this.data.pwd2)
-      this.setData({ unlocked: true, pwd: '', pwd2: '' })
+      await api.financeUnlock(pw)
+      this.setData({ unlocked: true, pwd: '' })
       this.loadData()
     } catch (err) {
       wx.showToast({ title: (err && err.message) || '解锁失败', icon: 'none' })

@@ -1,13 +1,11 @@
 <view class="page">
-  <!-- 门禁 -->
+  <!-- 门禁:只在店铺开启了财务密码时出现;没开就直接进(默认关闭、商家自助) -->
   <view wx:if="{{!unlocked}}" class="gate">
-    <view class="gate-ic">🔒</view>
-    <view class="gate-t">{{configured ? '输入财务密码' : '首次设置财务密码'}}</view>
-    <view class="gate-s">财务数据受密码保护{{configured ? '' : ',请设置一个至少 4 位的密码'}}</view>
+    <view class="gate-t">输入财务密码</view>
+    <view class="gate-s">本店已开启财务密码保护</view>
     <input class="ginp" password placeholder="财务密码" placeholder-class="ph" value="{{pwd}}" bindinput="onPwd" />
-    <input wx:if="{{!configured}}" class="ginp" password placeholder="确认财务密码" placeholder-class="ph" value="{{pwd2}}" bindinput="onPwd2" />
-    <view class="gbtn" bindtap="unlock">{{setting ? '处理中…' : (configured ? '解锁' : '设置并进入')}}</view>
-    <view class="gate-hint">忘记密码可用启动服务器窗口里的 Owner Token 解锁,进入后在网页版重设</view>
+    <view class="gbtn" bindtap="unlock">{{setting ? '处理中…' : '解锁'}}</view>
+    <view class="gate-hint">忘记密码请联系平台重置(会下发一次性新密码,登录后立即修改)</view>
   </view>
 
   <!-- 已解锁 -->

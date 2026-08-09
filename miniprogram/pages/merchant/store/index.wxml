@@ -36,14 +36,16 @@
 
     <view class="gtitle">预约规则</view>
     <view class="card">
-      <view class="rulerow">
+      <!-- 旧的「线上定金」开关已删(2026-08-09):定金统一由「定金与取消规则」这一处管,
+           两个开关并存会互相打架 —— 设计图屏 4 也是把定金收在定金规则卡里 -->
+      <view class="rulerow" bindtap="goDepositRule">
         <view class="ruleinfo">
-          <view class="rulename">线上定金</view>
-          <view class="ruledesc">{{onlineDeposit ? '开:顾客预约需付定金锁位,超时未付自动释放时段' : '关:顾客预约免定金直接确认,到店收款(适合暂无支付商户号)'}}</view>
+          <view class="rulename">定金与取消规则</view>
+          <view class="ruledesc">{{depositSummary || '收不收定金、多少钱、能不能抵尾款、迟到与改期怎么算 —— 都在这里'}}</view>
         </view>
-        <view class="rtog {{onlineDeposit ? 'on' : ''}}" bindtap="toggleDeposit"><view class="rdot"></view></view>
+        <text class="arr">›</text>
       </view>
-      <view class="note">关闭定金后,记得同步更新 AI 客服的定金话术(门店信息/知识库);其余规则细项在网页后台调整。</view>
+      <view class="note">改完顾客预约页与 AI 客服的定金话术会同步跟上,不用另外维护一份说法。</view>
     </view>
   </block>
 </view>

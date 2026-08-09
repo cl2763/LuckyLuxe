@@ -213,4 +213,12 @@
   </view>
 
   <merchant-tabbar wx:if="{{!directSheet}}" active="orders"></merchant-tabbar>
+
+  <!-- 屏 0 操作面板:顶部订单摘要 + 按钮 + 关闭(图上就是这张卡,不是系统列表) -->
+  <view wx:if="{{actPanel}}" class="actmask" bindtap="closeActPanel"></view>
+  <view wx:if="{{actPanel}}" class="actpanel">
+    <view class="actt">{{actPanel.title}}</view>
+    <view class="actb" wx:for="{{actPanel.opts}}" wx:for-item="o" wx:key="i" data-i="{{o.i}}" bindtap="tapAct">{{o.label}}</view>
+    <view class="actclose" bindtap="closeActPanel">关闭</view>
+  </view>
 </view>

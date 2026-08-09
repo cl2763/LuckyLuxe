@@ -9,6 +9,7 @@ Page({
     hours: [], // [{weekday,label,isClosed,openTime,closeTime}]
     specials: [],
     onlineDeposit: true,
+    depositSummary: '',
     loading: true
   },
 
@@ -18,27 +19,27 @@ Page({
     try {
       const r = await api.adminGet('/admin/booking-rules')
       this.setData({ onlineDeposit: r.rules ? r.rules.onlineDeposit !== false : true })
+      // 定金一律看 deposit_config(唯一口径),这里只做一行摘要
+      api.adminGet('/admin/deposit-config').then((d) => {
+        const c = (d && d.config) || {}
+        this.setData({
+          depositSummary: c.enabled === false
+            ? '当前:不收定金'
+            : `当前:收定金${d.amountText ? ' ' + d.amountText : ''}${c.deductible ? ' · 可抵尾款' : ' · 不抵尾款'}`
+        })
+      }).catch(() => {})
     } catch (e) { /* 默认开 */ }
   },
 
   // 线上定金开关:关=顾客自约免定金直接确认(适配无支付商户号的商家)
-  toggleDeposit() {
-    const next = !this.data.onlineDeposit
+  // 定金细项在网页后台的「定金规则卡」里配(左配置右预览);小程序这边给个说明,避免两处开关打架
+  goDepositRule() {
     wx.showModal({
-      title: next ? '开启线上定金' : '关闭线上定金',
-      content: next
-        ? '顾客预约需付定金锁位,超时未付自动释放时段。确认开启?'
-        : '顾客预约将免定金、直接确认占位,到店再收款。适合暂无支付商户号的门店。确认关闭?',
-      success: async (r) => {
-        if (!r.confirm) return
-        try {
-          await api.adminRequest('/admin/booking-rules', 'PUT', { onlineDeposit: next })
-          this.setData({ onlineDeposit: next })
-          wx.showToast({ title: next ? '已开启' : '已关闭,免定金直约', icon: 'none' })
-        } catch (err) { wx.showToast({ title: (err && err.message) || '保存失败', icon: 'none' }) }
-      }
+      title: '定金与取消规则', showCancel: false, confirmText: '知道了',
+      content: '定金收不收、多少钱、能不能抵尾款、迟到宽限与改期时限,都在网页后台「门店设置 → 定金与取消规则」里配,配完顾客预约页与 AI 话术自动跟上。'
     })
   },
+
 
   async load() {
     try {
