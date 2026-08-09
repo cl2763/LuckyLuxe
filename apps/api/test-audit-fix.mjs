@@ -204,6 +204,24 @@ async function main() {
     method: 'POST', body: JSON.stringify({ disclaimerAccepted: true, signature: '客', strokes: [[{ x: 1, y: 1 }, { x: 5, y: 5 }]] })
   }, null)
   await request('/admin/daily-close/reopen', { method: 'POST', body: JSON.stringify({ date: today, reason: '边界值测试' }) }, shop.token)
+
+  /* 预填比例的形状(2026-08-09 铺大数据时炸出来的):两端读的是 mainPct/assistPct。
+     以前后端给的是裸数组 [70,30] → 两端读到 undefined → 比例框空的 →
+     保存分成必然 SHARE_MISMATCH → 多技师单那一天的日结永远确认不了。 */
+  const dcView = (await request(`/admin/daily-close?date=${today}`, {}, shop.token)).data.dailyClose
+  const anyPending = (dcView.pendingAllocation || [])[0]
+  check('日结预填比例给的是 mainPct/assistPct(不是裸数组)',
+    Boolean(anyPending) && Number.isFinite(anyPending.defaultSplit.mainPct) && Number.isFinite(anyPending.defaultSplit.assistPct),
+    JSON.stringify(anyPending && anyPending.defaultSplit))
+  check('预填比例两项加起来是 100', Boolean(anyPending) && anyPending.defaultSplit.mainPct + anyPending.defaultSplit.assistPct === 100,
+    JSON.stringify(anyPending && anyPending.defaultSplit))
+  // 照两端的读法预填,保存必须成功(以前这里会 SHARE_MISMATCH)
+  const prefill = await request(`/admin/settlements/${anyPending.settlementId}/allocate`, {
+    method: 'POST',
+    body: JSON.stringify({ shares: anyPending.technicians.map((t, i) => ({ technicianId: t.technicianId, pct: i === 0 ? anyPending.defaultSplit.mainPct : anyPending.defaultSplit.assistPct })) })
+  }, shop.token)
+  check('按预填比例直接保存分成成功', prefill.status === 200, JSON.stringify(prefill.data).slice(0, 160))
+
   const zero = await request(`/admin/settlements/${twoSheet.id}/allocate`, {
     method: 'POST', body: JSON.stringify({ shares: [{ technicianId: techA.id, pct: 100 }, { technicianId: techB.id, pct: 0 }] })
   }, shop.token)

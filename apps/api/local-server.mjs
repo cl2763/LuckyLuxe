@@ -8524,7 +8524,14 @@ function dailyCloseView(date, tenantId, { lang = 'zh' } = {}) {
         perfBaseCents: settlementPerfBaseCents(r), couponDiscountCents: r.coupon_discount_cents || 0,
         customerName: (db.prepare('SELECT display_name FROM users WHERE id = ?').get(r.user_id) || {}).display_name || '',
         servedPersonName: r.served_person_name || '',
-        defaultSplit: perfSplitDefault(tenantId),
+        /* 预填比例。**两端读的是 mainPct/assistPct**,所以这里给对象而不是裸数组 ——
+           2026-08-09 铺大规模演示数据时发现:之前给的是 [70,30] 数组,
+           两端 p.defaultSplit.mainPct 全是 undefined → 比例输入框空的 → 保存分成必然
+           SHARE_MISMATCH → 那一天日结永远确认不了。多技师单一直卡在这儿。 */
+        defaultSplit: (() => {
+          const arr = perfSplitDefault(tenantId)
+          return { mainPct: Number(arr[0]) || 0, assistPct: Number(arr[1]) || 0, list: arr }
+        })(),
         technicians: settlementTechRows(r.id, tenantId).map((t) => ({
           technicianId: t.technician_id, name: (techNames[t.technician_id] || {}).name || t.technician_id,
           role: t.role, itemNos: JSON.parse(t.item_nos_json || '[]')
