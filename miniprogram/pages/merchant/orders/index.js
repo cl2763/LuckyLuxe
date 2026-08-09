@@ -1,5 +1,5 @@
 const api = require('../../../utils/api')
-const { storeToday, refreshStoreClock } = require('../../../utils/storeclock')
+const { storeToday, refreshStoreClock, storeMoney } = require('../../../utils/storeclock')
 // 屏 1:日结就长在今日台面下面(设计图把它画在技师网格正下方),渲染与逻辑走同一份 mixin
 const { dailyCloseData, dailyCloseMixin } = require('../../../utils/dailyclose')
 
@@ -316,7 +316,33 @@ Page(Object.assign({
     else if (o.act === 'sheets') this.showSheets(sheets)
     else if (o.act === 'note') this.goNote(b)
     else if (o.act === 'void') this.voidSheets(sheets.filter((x) => x.status === 'pending_sign'), b)
-    else if (o.act === 'paid') wx.showToast({ title: '已标记已收(演示)', icon: 'none' })
+    else if (o.act === 'paid') this.markDepositPaid(b)
+  },
+
+  /* 标记已收定金(拍板 A · 《财务记账总逻辑》v1.1 §五)。
+     金额由后端按本店 deposit_config 算,这里只显示;标记那一刻只记定金预收(负债),
+     不进收入账本 —— 签字时才兑现。重复标记后端幂等,不会记两笔。 */
+  async markDepositPaid(b) {
+    let amountText = ''
+    try {
+      const dep = await api.adminGet('/admin/deposit-config')
+      const c = (dep && dep.config) || {}
+      if (c.enabled === false) { wx.showToast({ title: '本店没开定金,先去门店设置配规则', icon: 'none' }); return }
+      if (c.mode === 'fixed' && c.fixedAmountCents) amountText = storeMoney(c.fixedAmountCents, 0)
+    } catch (e) { /* 拉不到配置也照常让后端算 */ }
+    wx.showModal({
+      title: '标记已收定金',
+      content: `确认已经收到 ${b.customerName || '顾客'} 的定金${amountText ? ` ${amountText}` : ''}?\n记为定金预收(负债),不进收入;签字时才兑现。`,
+      confirmText: '已收到',
+      success: async (r) => {
+        if (!r.confirm) return
+        try {
+          const resp = await api.adminPost(`/admin/bookings/${encodeURIComponent(b.id)}/deposit-receipt`, {})
+          wx.showToast({ title: resp && resp.created === false ? '之前已标过,没重复记账' : '已记定金预收', icon: 'none' })
+          this.loadDayView(this.data.selDate)
+        } catch (err) { wx.showToast({ title: (err && err.message) || '标记失败', icon: 'none' }) }
+      }
+    })
   },
 
   async setArrival(id, arrived) {

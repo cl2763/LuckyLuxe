@@ -770,6 +770,11 @@ const WEEKDAY_LABELS = {
 }
 const WEEKDAY_ORDER = [1, 2, 3, 4, 5, 6, 0]
 
+// 指定租户的默认门店(签署页这种没有租户上下文的公开路由要用)
+function storeIdOfTenant(tenantId) {
+  return db.prepare('SELECT id FROM stores WHERE is_active = 1 AND tenant_id = ? ORDER BY name ASC').get(tenantId)?.id || null
+}
+
 function defaultStoreId() {
   // 租户感知:取"当前租户上下文"的门店(商家端=登录账号的店;无上下文=默认店)
   return db.prepare('SELECT id FROM stores WHERE is_active = 1 AND tenant_id = ? ORDER BY name ASC').get(currentTenantId())?.id || null
@@ -5619,7 +5624,23 @@ async function signInWechatMiniUser(body) {
   const identity = resolveUserByIdentity('wechat_miniprogram', data.openid)
   // unionid 跨端匹配：同一微信用户从公众号/企微等其他端已注册过时，认成同一个人而不是新建。
   const byUnionId = !identity && data.unionid ? resolveUserByUnionId(data.unionid) : null
-  const existing = identity || byUnionId || db.prepare('SELECT * FROM users WHERE wechat_open_id = ?').get(data.openid)
+  /* 轻档案按手机号认领(《待办总方案》§3.2 新客扫码签):
+     店里给电话预约的临时新客建的是「轻档案」(有姓名+手机号,没绑微信)。
+     她当场扫码签字、微信授权手机号时,要认成**同一个人**并绑上,而不是新开一个号 ——
+     不然签完的消费记录会落在一个空壳新账号上,轻档案永远是孤儿。
+     安全边界:手机号来自微信授权(不是用户自填),且只认「本店 + 手机号完全一致 + 还没绑过微信」
+     的**唯一一条**;匹配到多条就宁可不认(有歧义时不合并身份)。 */
+  let claimed = null
+  if (!identity && !byUnionId && phone) {
+    const candidates = db.prepare(`
+      SELECT u.* FROM users u
+      WHERE u.tenant_id = ? AND u.phone = ?
+        AND (u.wechat_open_id IS NULL OR u.wechat_open_id = '')
+        AND NOT EXISTS (SELECT 1 FROM user_identities i WHERE i.user_id = u.id)
+    `).all(currentTenantId(), phone)
+    if (candidates.length === 1) claimed = candidates[0]
+  }
+  const existing = identity || byUnionId || claimed || db.prepare('SELECT * FROM users WHERE wechat_open_id = ?').get(data.openid)
   let user = existing
   if (!user) {
     const id = randomId('user')
@@ -6204,7 +6225,10 @@ function createBooking(body, opts = {}) {
   // 上一次合规改期留下的定金保留凭据:有就直接抵掉本次定金,并核销
   const retain = (!opts.adminDirect && depositRequiredCents > 0) ? activeDepositRetain(input.userId, bookingTenantId) : null
   // 老板直接排单:一律 CONFIRMED、不走在线定金门、不设占位到期;记"未付定金"标(占位但提醒之后收)
-  const directUnpaid = opts.adminDirect && !opts.depositPaid ? 1 : 0
+  /* 「未付定金」标只在本店真的收定金时才打 —— 没配定金规则(或金额算下来是 0)的店
+     不该出现「标记已收定金」按钮(拍板 A 的 corner case 之一)。 */
+  const directDepositCents = depositConfig.enabled ? depositAmountForService(service, depositConfig, bookingTenantId) : 0
+  const directUnpaid = opts.adminDirect && !opts.depositPaid && directDepositCents > 0 ? 1 : 0
   const retainCoverCents = retain ? Math.min(retain.amount_cents, Math.max(0, depositRequiredCents - depositWaivedCents)) : 0
   const depositCents = opts.adminDirect ? 0 : Math.max(0, depositRequiredCents - depositWaivedCents - retainCoverCents)
   const status = opts.adminDirect ? 'CONFIRMED' : (depositCents > 0 ? 'PENDING_PAYMENT' : 'CONFIRMED')
@@ -6411,10 +6435,12 @@ function verifyFinanceLedger(tenantId = DEFAULT_TENANT_ID) {
   return { valid: true, count: rows.length, firstBrokenId: null }
 }
 
-function insertFinanceTransaction({ type, source = 'manual', category, tags = '', amountCents, payChannel = 'unknown', occurredOn, note = '', bookingId = null, recurringRuleId = null, reversalOf = null, createdBy = 'system', storeId = null }) {
+function insertFinanceTransaction({ type, source = 'manual', category, tags = '', amountCents, payChannel = 'unknown', occurredOn, note = '', bookingId = null, recurringRuleId = null, reversalOf = null, createdBy = 'system', storeId = null, tenantId: tenantIdOverride = '' }) {
   const id = randomId('fin')
   const signed = type === 'expense' ? -Math.abs(amountCents) : Math.abs(amountCents)
-  const tenantId = currentTenantId()
+  /* 顾客签署页是**公开路由**,没进租户闸门,currentTenantId() 会回落到旗舰店。
+     签字时刻写账的调用方必须把单据自己的 tenant_id 传进来,否则钱记到别人家账上。 */
+  const tenantId = tenantIdOverride || currentTenantId()
   const createdAt = iso(new Date())
   const record = {
     id,
@@ -6437,7 +6463,7 @@ function insertFinanceTransaction({ type, source = 'manual', category, tags = ''
     INSERT INTO finance_transactions
       (id, tenant_id, store_id, type, source, category, tags, amount_cents, pay_channel, occurred_on, note, booking_id, recurring_rule_id, reversal_of, created_by, created_at, prev_hash, row_hash)
     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-  `).run(id, tenantId, storeId || defaultStoreId(), type, source, category, tags, record.amount_cents, payChannel, record.occurred_on, note, bookingId, recurringRuleId, reversalOf, createdBy, createdAt, prevHash, rowHash)
+  `).run(id, tenantId, storeId || storeIdOfTenant(tenantId), type, source, category, tags, record.amount_cents, payChannel, record.occurred_on, note, bookingId, recurringRuleId, reversalOf, createdBy, createdAt, prevHash, rowHash)
   return db.prepare('SELECT * FROM finance_transactions WHERE id = ?').get(id)
 }
 
@@ -6747,6 +6773,8 @@ function storedValueOverview() {
   }).sort((a, b) => b.dormantDays - a.dormantDays || b.balanceCents - a.balanceCents)
   return {
     totalBalanceCents: totals.balance,
+    // 定金预收(拍板 A · §五):线下收了、还没在单上兑现的定金,与储值同为**负债**
+    depositLiabilityCents: depositLiabilityCents(),
     monthRechargeCents: totals.month_recharge,
     monthConsumeCents: totals.month_consume,
     consumeRate: totals.balance + totals.month_consume > 0 ? Math.round((totals.month_consume / (totals.balance + totals.month_consume)) * 1000) / 10 : 0,
@@ -7462,6 +7490,116 @@ function depositAmountForService(service, config, tenantId = currentTenantId()) 
   return Number.isFinite(own) && own > 0 ? Math.round(own) : Math.max(0, Math.round(config.fallbackAmountCents))
 }
 
+/* ===== 定金收取记录(2026-08-09 拍板 A,《财务记账总逻辑》v1.1 §五)=====
+   线下收的定金:标记那一刻只记「定金预收(负债)」,**不写收入账本**。
+   转收入三条路都在别处:①抵扣开的店 → 签字时作为付款腿抵扣应收(computeSettlement 现行路径);
+   ②抵扣关的店 → 关联单签字时记独立「定金收入」账目行(见 recordDepositIncomeOnSign);
+   ③爽约 → 老板二选一处置(待出图,本批不做)。 */
+
+// 某张预约当前还「有效」的定金收取记录(receipt 减去已被 revoke 的)
+function activeDepositReceipts(bookingId, tenantId = currentTenantId()) {
+  const rows = db.prepare('SELECT * FROM deposit_receipts WHERE tenant_id = ? AND booking_id = ? ORDER BY created_at ASC').all(tenantId, bookingId)
+  const revoked = new Set(rows.filter((r) => r.kind === 'revoke' && r.revoke_of).map((r) => r.revoke_of))
+  return rows.filter((r) => r.kind === 'receipt' && !revoked.has(r.id))
+}
+function activeDepositReceiptCents(bookingId, tenantId = currentTenantId()) {
+  return activeDepositReceipts(bookingId, tenantId).reduce((n, r) => n + (r.amount_cents || 0), 0)
+}
+
+/* 门店当前的「定金预收」余额(负债):收了但还没兑现的定金。
+   兑现 = 已在某张单上抵扣/转收入(settled_settlement_id 有值),或该预约已取消并由老板处置(本批不做)。 */
+function depositLiabilityCents(tenantId = currentTenantId()) {
+  const rows = db.prepare("SELECT * FROM deposit_receipts WHERE tenant_id = ?").all(tenantId)
+  const revoked = new Set(rows.filter((r) => r.kind === 'revoke' && r.revoke_of).map((r) => r.revoke_of))
+  return rows
+    .filter((r) => r.kind === 'receipt' && !revoked.has(r.id) && !r.settled_settlement_id)
+    .reduce((n, r) => n + (r.amount_cents || 0), 0)
+}
+
+function serializeDepositReceipt(row) {
+  return {
+    id: row.id, bookingId: row.booking_id, kind: row.kind, amountCents: row.amount_cents,
+    technicianId: row.technician_id || '', payChannel: row.pay_channel || 'offline',
+    revokeOf: row.revoke_of || '', reason: row.reason || '',
+    settledSettlementId: row.settled_settlement_id || '', actor: row.actor || '', createdAt: row.created_at
+  }
+}
+
+/* 标记已收定金。幂等:同一张预约已经有有效记录时,直接把那条还回去,不再写一行。
+   金额一律由**后端**按本店 deposit_config 算(前端只显示),前端传的金额一概不认。 */
+function markDepositReceived({ booking, technicianId = '', payChannel = 'offline', actor = 'admin' }) {
+  const tenantId = currentTenantId()
+  const already = activeDepositReceipts(booking.id, tenantId)
+  if (already.length) return { receipt: serializeDepositReceipt(already[0]), created: false }
+  const config = getDepositConfig(tenantId)
+  if (!config.enabled) throw apiError(400, 'DEPOSIT_DISABLED', '本店没有开启定金,先到门店设置里配定金规则。')
+  const service = booking.service_id ? getService(booking.service_id) : null
+  const amountCents = depositAmountForService(service, config, tenantId)
+  if (!(amountCents > 0)) throw apiError(400, 'DEPOSIT_AMOUNT_ZERO', '本店定金金额算下来是 0,先到门店设置里配定金规则。')
+  if (technicianId && !db.prepare('SELECT 1 FROM technicians WHERE id = ? AND tenant_id = ?').get(technicianId, tenantId)) {
+    throw apiError(404, 'NOT_FOUND', '经手技师不存在。')
+  }
+  const id = randomId('dep')
+  const now = iso(new Date())
+  db.exec('BEGIN IMMEDIATE')
+  try {
+    db.prepare(`INSERT INTO deposit_receipts (id, tenant_id, booking_id, user_id, kind, amount_cents, technician_id, pay_channel, actor, created_at)
+      VALUES (?, ?, ?, ?, 'receipt', ?, NULLIF(?, ''), ?, ?, ?)`)
+      .run(id, tenantId, booking.id, booking.user_id || null, amountCents, technicianId, payChannel, actor, now)
+    // 预约上同步落金额并摘掉「未付定金」标 —— 结算时 computeSettlement 就能按它抵扣
+    db.prepare('UPDATE bookings SET deposit_cents = ?, direct_deposit_unpaid = 0, updated_at = ? WHERE id = ? AND tenant_id = ?')
+      .run(amountCents, now, booking.id, tenantId)
+    db.exec('COMMIT')
+  } catch (error) { db.exec('ROLLBACK'); throw error }
+  return { receipt: serializeDepositReceipt(db.prepare('SELECT * FROM deposit_receipts WHERE id = ?').get(id)), created: true }
+}
+
+// 误标撤销:写一行 revoke 留痕,原记录一个字都不动
+function revokeDepositReceipt({ booking, reason = '', actor = 'admin' }) {
+  const tenantId = currentTenantId()
+  const active = activeDepositReceipts(booking.id, tenantId)
+  if (!active.length) throw apiError(400, 'NO_DEPOSIT_RECEIPT', '这张预约没有可撤销的定金记录。')
+  const target = active[0]
+  if (target.settled_settlement_id) throw apiError(400, 'DEPOSIT_ALREADY_SETTLED', '这笔定金已经在结算单上兑现了,不能撤销;要改请走金额更正。')
+  const id = randomId('dep')
+  const now = iso(new Date())
+  db.exec('BEGIN IMMEDIATE')
+  try {
+    db.prepare(`INSERT INTO deposit_receipts (id, tenant_id, booking_id, user_id, kind, amount_cents, revoke_of, reason, actor, created_at)
+      VALUES (?, ?, ?, ?, 'revoke', ?, ?, ?, ?, ?)`)
+      .run(id, tenantId, booking.id, booking.user_id || null, target.amount_cents, target.id, String(reason || '').slice(0, 200), actor, now)
+    db.prepare('UPDATE bookings SET deposit_cents = 0, direct_deposit_unpaid = 1, updated_at = ? WHERE id = ? AND tenant_id = ?')
+      .run(now, booking.id, tenantId)
+    db.exec('COMMIT')
+  } catch (error) { db.exec('ROLLBACK'); throw error }
+  return { revoked: true, revokeOf: target.id }
+}
+
+/* 签字时刻兑现这笔定金(§五 的 ①②两条路)。
+   ① 抵扣开的店:定金已经在 computeSettlement 里当付款腿抵掉应收了,这里只把记录标成已兑现;
+   ② 抵扣关的店:定金没参与结算,签字这一刻转当期收入,记一行独立的「定金收入」,
+      **不减应收、不进业绩**(业绩基数恒等于档位小计,与定金无关)。 */
+function settleDepositReceiptsOnSign(settlement, actor = 'system') {
+  if (!settlement || !settlement.booking_id) return
+  const tenantId = settlement.tenant_id || currentTenantId()
+  const active = activeDepositReceipts(settlement.booking_id, tenantId).filter((r) => !r.settled_settlement_id)
+  if (!active.length) return
+  const deductible = getDepositConfig(tenantId).deductible
+  const now = iso(new Date())
+  for (const r of active) {
+    if (!deductible) {
+      insertFinanceTransaction({
+        tenantId, // 签署页是公开路由,必须显式带租户
+        type: 'income', source: 'deposit', category: '定金收入',
+        amountCents: r.amount_cents, payChannel: r.pay_channel || 'offline',
+        occurredOn: localParts(new Date()).date, bookingId: settlement.booking_id,
+        note: `${settlement.code} 定金转收入(本店定金不抵扣尾款)`, createdBy: actor
+      })
+    }
+    db.prepare('UPDATE deposit_receipts SET settled_settlement_id = ? WHERE id = ?').run(settlement.id, r.id)
+  }
+}
+
 // 取消 / 爽约时扣除的定金
 function forfeitedDepositCents(booking, config, { noShow = false, now = new Date() } = {}) {
   const deposit = Math.max(0, Number(booking.deposit_cents) || 0)
@@ -8054,6 +8192,10 @@ async function signSettlement(row, { signature, signedBy = '', strokes = [] }) {
     if (row.booking_id) {
       db.prepare("UPDATE bookings SET status = 'COMPLETED', updated_at = ? WHERE id = ? AND status IN ('PENDING_PAYMENT','CONFIRMED')").run(now, row.booking_id)
     }
+    /* 定金兑现(拍板 A · §五):抵扣开的店定金已经在 computeSettlement 里抵掉应收了,
+       这里只把记录标成已兑现;抵扣关的店在这一刻把定金转成当期「定金收入」。
+       两种都不进业绩 —— 分成基数恒等于档位小计,与定金无关。 */
+    settleDepositReceiptsOnSign(row, signedBy || 'customer_sign')
     // 组内全部签完,组才算完成
     const unsigned = db.prepare("SELECT COUNT(*) AS n FROM settlements WHERE group_id = ? AND status <> 'signed'").get(row.group_id).n
     db.prepare('UPDATE settlement_groups SET status = ?, updated_at = ? WHERE id = ?').run(unsigned === 0 ? 'signed' : 'pending_sign', now, row.group_id)
@@ -12873,8 +13015,16 @@ async function route(req, res) {
   }
   // 老板直接排单(2026-07-22):复用 createBooking → 建单+占 booking_slots,全链路占位(AI 可约/系统显示/技师端同步)。
   if (req.method === 'POST' && path === '/admin/bookings/direct') {
-    if (adminSession.role !== 'owner') throw apiError(403, 'FORBIDDEN', '仅老板可直接排单。')
+    /* 2026-08-09 店主定的产品原则:散客也必须先有预约 —— 没预约的由**技师现场排单**,
+       所以这条不能只给老板。员工只能排到自己那一列(与 assertStaffCanAccessBooking 同一条界)。 */
+    if (adminSession.role !== 'owner' && adminSession.role !== 'staff') throw apiError(403, 'FORBIDDEN', '需要员工或老板权限。')
     const body = await readBody(req)
+    if (adminSession.role === 'staff') {
+      const wantTech = String(body.technicianId || '').trim()
+      if (!adminSession.technicianId || wantTech !== adminSession.technicianId) {
+        throw apiError(403, 'FORBIDDEN', '员工只能给自己排单。')
+      }
+    }
     const tid = currentTenantId()
     let userId = String(body.userId || '').trim()
     // 新建顾客(老板口头约的客):给个名字即建档
@@ -13615,6 +13765,49 @@ async function route(req, res) {
     return json(res, 200, { ok: true, note: signed })
   }
   // 到店打卡:排班台面"进行中"展示态。arrived=true 记到店时间;false 清除(改回未到店)。不改 status、不动财务。
+  /* 标记已收定金(2026-08-09 拍板 A)。员工也能标(现场是技师收的钱),记经手人。
+     金额由后端按本店 deposit_config 算,前端传什么都不认 —— 金额红线。 */
+  if (req.method === 'POST' && path.startsWith('/admin/bookings/') && path.endsWith('/deposit-receipt')) {
+    if (adminSession.role !== 'owner' && adminSession.role !== 'staff') throw apiError(403, 'FORBIDDEN', '需要员工或老板权限。')
+    const id = path.split('/')[3]
+    const booking = db.prepare('SELECT * FROM bookings WHERE id = ? AND tenant_id = ?').get(id, currentTenantId())
+    if (!booking) throw apiError(404, 'NOT_FOUND', '找不到这张预约。')
+    assertStaffCanAccessBooking(adminSession, booking)
+    const body = await readBody(req)
+    const out = markDepositReceived({
+      booking,
+      technicianId: String(body.technicianId || '').trim() || booking.technician_id || '',
+      payChannel: String(body.payChannel || 'offline'),
+      actor: adminSession.email || adminSession.role || 'admin'
+    })
+    return json(res, out.created ? 201 : 200, {
+      ...out,
+      booking: serializeBooking(db.prepare('SELECT * FROM bookings WHERE id = ?').get(id)),
+      note: out.created ? '已记为定金预收(负债);签字时才会兑现。' : '这张预约已经标过了,没有重复记账。'
+    })
+  }
+  // 误标撤销:写一行 revoke 留痕,原记录不删不改
+  if (req.method === 'POST' && path.startsWith('/admin/bookings/') && path.endsWith('/deposit-receipt/revoke')) {
+    if (adminSession.role !== 'owner') throw apiError(403, 'FORBIDDEN', '仅老板可撤销定金记录。')
+    const id = path.split('/')[3]
+    const booking = db.prepare('SELECT * FROM bookings WHERE id = ? AND tenant_id = ?').get(id, currentTenantId())
+    if (!booking) throw apiError(404, 'NOT_FOUND', '找不到这张预约。')
+    const body = await readBody(req)
+    return json(res, 200, revokeDepositReceipt({ booking, reason: body.reason, actor: adminSession.email || 'owner' }))
+  }
+  // 某张预约的定金留痕(含已撤销的,审计用)
+  if (req.method === 'GET' && path.startsWith('/admin/bookings/') && path.endsWith('/deposit-receipt')) {
+    const id = path.split('/')[3]
+    const booking = db.prepare('SELECT * FROM bookings WHERE id = ? AND tenant_id = ?').get(id, currentTenantId())
+    if (!booking) throw apiError(404, 'NOT_FOUND', '找不到这张预约。')
+    assertStaffCanAccessBooking(adminSession, booking)
+    const rows = db.prepare('SELECT * FROM deposit_receipts WHERE tenant_id = ? AND booking_id = ? ORDER BY created_at ASC').all(currentTenantId(), id)
+    return json(res, 200, {
+      receipts: rows.map(serializeDepositReceipt),
+      activeCents: activeDepositReceiptCents(id)
+    })
+  }
+
   if (req.method === 'PATCH' && path.startsWith('/admin/bookings/') && path.endsWith('/arrival')) {
     const id = path.split('/')[3]
     const body = await readBody(req)
@@ -14298,6 +14491,35 @@ db.exec(`
     created_at TEXT NOT NULL
   );
   CREATE INDEX IF NOT EXISTS idx_coupon_grant_logs ON coupon_grant_logs(tenant_id, grant_id);
+
+  /* 定金收取记录(2026-08-09 拍板 A,《财务记账总逻辑》v1.1 §五)。
+     线下收的定金在这里留痕:一行 receipt = 收了一笔,一行 revoke = 误标撤销。
+     **只追加**:撤销也是新写一行,不改不删原行(与账本、券记录同一套纪律)。
+     这笔钱在标记那一刻是**定金预收(负债)**,不进收入账本;转收入只有三条路,
+     见 §五:①抵扣开的店签字时抵应收 ②抵扣关的店签字时记「定金收入」 ③爽约由老板处置。 */
+  CREATE TABLE IF NOT EXISTS deposit_receipts (
+    id TEXT PRIMARY KEY,
+    tenant_id TEXT NOT NULL,
+    booking_id TEXT NOT NULL,
+    user_id TEXT,
+    kind TEXT NOT NULL,             -- receipt | revoke
+    amount_cents INTEGER NOT NULL,
+    technician_id TEXT,             -- 经手人(谁收的)
+    pay_channel TEXT,
+    revoke_of TEXT,                 -- kind=revoke 时指向被撤销的 receipt
+    reason TEXT,
+    settled_settlement_id TEXT,     -- 已经在哪张单上兑现(抵扣或转收入)
+    actor TEXT,
+    created_at TEXT NOT NULL
+  );
+  CREATE INDEX IF NOT EXISTS idx_deposit_receipts ON deposit_receipts(tenant_id, booking_id);
+  DROP TRIGGER IF EXISTS deposit_receipts_no_delete;
+  CREATE TRIGGER deposit_receipts_no_delete BEFORE DELETE ON deposit_receipts
+  BEGIN SELECT RAISE(ABORT, 'deposit receipt is append-only; write a revoke row instead of deleting'); END;
+  DROP TRIGGER IF EXISTS deposit_receipts_amount_locked;
+  CREATE TRIGGER deposit_receipts_amount_locked BEFORE UPDATE ON deposit_receipts
+  WHEN NEW.amount_cents <> OLD.amount_cents OR NEW.kind <> OLD.kind OR NEW.booking_id <> OLD.booking_id
+  BEGIN SELECT RAISE(ABORT, 'deposit receipt amount/kind/booking is immutable; write a revoke row instead'); END;
   DROP TRIGGER IF EXISTS coupon_grant_logs_no_delete;
   CREATE TRIGGER coupon_grant_logs_no_delete BEFORE DELETE ON coupon_grant_logs
   BEGIN SELECT RAISE(ABORT, 'coupon grant log is append-only'); END;

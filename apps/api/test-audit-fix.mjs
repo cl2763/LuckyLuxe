@@ -11,6 +11,9 @@ const BASE_URL = process.env.TEST_BASE_URL || 'http://127.0.0.1:4128'
 const PLATFORM = process.env.TEST_ADMIN_TOKEN || 'owner-demo-token'
 const RUN_ID = Date.now().toString(36)
 
+// 门店时区的今天(测试机与门店时区一致时就是本地日期)
+const todayStr = () => new Date().toLocaleDateString('en-CA')
+
 let checks = 0
 function check(name, condition, detail = '') {
   checks += 1
@@ -300,6 +303,212 @@ async function main() {
     Boolean(depLeg) && depLeg.amountCents === 10000, JSON.stringify(depPublic.data.settlement.payments))
   check('F2 分成基数不受定金影响(仍 ≡ 档位小计)',
     depSheet.perfBaseCents === depSheet.subtotalCents, JSON.stringify({ p: depSheet.perfBaseCents, s: depSheet.subtotalCents }))
+
+  /* 拍板 A(2026-08-09)·《财务记账总逻辑》v1.1 §五:线下收定金的记账。
+     标记 = 写一条只追加的定金收取记录,计入定金预收(负债),**标记那一刻不进收入账本**。
+     corner case:幂等 / 取消预约后留痕 / 越权 / 未配定金规则的店不出按钮 / 撤销留痕。 */
+  const svcA = await mk({ nameZh: '定金测试项', type: 'NAIL', categoryId: cat.id, itemKind: 'main', listPriceCents: 50000, memberPriceCents: 50000 })
+  const bk = (await request('/admin/bookings/direct', {
+    method: 'POST',
+    body: JSON.stringify({ userId: user, serviceId: svcA.id, technicianId: techA.id, date: todayStr(), time: '15:20', durationMin: 60, depositPaid: false })
+  }, shop.token)).data.booking
+  const deskBefore = (await request(`/admin/schedule-day?date=${todayStr()}`, {}, shop.token)).data
+  check('A 未付定金的直接排单在台面上打了「未付定金」标',
+    ((deskBefore.bookings || []).find((x) => x.id === bk.id) || {}).depositUnpaid === true,
+    JSON.stringify((deskBefore.bookings || []).find((x) => x.id === bk.id)))
+
+  const incomeBefore = (await request(`/admin/finance/transactions?month=${todayStr().slice(0, 7)}`, {}, shop.token)).data
+  const beforeIncome = (incomeBefore.transactions || []).filter((t) => t.type === 'income').length
+
+  const mark1 = await request(`/admin/bookings/${bk.id}/deposit-receipt`, { method: 'POST', body: JSON.stringify({}) }, shop.token)
+  check('A 标记已收定金 → 201 并落一条记录', mark1.status === 201 && mark1.data.receipt.amountCents === 10000,
+    JSON.stringify(mark1.data).slice(0, 200))
+  check('A 金额由后端按店配算(¥100),不听前端的', mark1.data.receipt.amountCents === 10000, String(mark1.data.receipt.amountCents))
+  check('A 记了经手人', Boolean(mark1.data.receipt.technicianId), mark1.data.receipt.technicianId)
+  check('A 定金落到预约单上(¥100 = 10000 分)', mark1.data.booking.depositCents === 10000, String(mark1.data.booking.depositCents))
+  const deskAfter = (await request(`/admin/schedule-day?date=${todayStr()}`, {}, shop.token)).data
+  const deskRow = (deskAfter.bookings || []).find((x) => x.id === bk.id)
+  check('A 台面上的「未付定金」标被摘掉(按钮随之消失)', deskRow && deskRow.depositUnpaid === false,
+    JSON.stringify(deskRow && deskRow.depositUnpaid))
+
+  const afterMark = (await request(`/admin/finance/transactions?month=${todayStr().slice(0, 7)}`, {}, shop.token)).data
+  check('A 红线:标记那一刻**不进收入账本**',
+    (afterMark.transactions || []).filter((t) => t.type === 'income').length === beforeIncome,
+    `${beforeIncome} → ${(afterMark.transactions || []).filter((t) => t.type === 'income').length}`)
+
+  const svSummary = (await request('/admin/stored-value', {}, shop.token)).data.storedValue
+  check('A 计入定金预收(负债)', svSummary.depositLiabilityCents === 10000, String(svSummary.depositLiabilityCents))
+
+  // 幂等:再标一次不重复记账
+  const mark2 = await request(`/admin/bookings/${bk.id}/deposit-receipt`, { method: 'POST', body: JSON.stringify({}) }, shop.token)
+  check('A 幂等:重复标记不再记一笔', mark2.status === 200 && mark2.data.created === false, JSON.stringify(mark2.data).slice(0, 160))
+  const list1 = (await request(`/admin/bookings/${bk.id}/deposit-receipt`, {}, shop.token)).data
+  check('A 幂等:留痕里仍然只有一条 receipt', list1.receipts.filter((r) => r.kind === 'receipt').length === 1,
+    JSON.stringify(list1.receipts.map((r) => r.kind)))
+
+  // 越权:未登录 / 跨店都不能标
+  const anonMark = await request(`/admin/bookings/${bk.id}/deposit-receipt`, { method: 'POST', body: JSON.stringify({}) }, null)
+  check('A 越权:未登录标定金 401', anonMark.status === 401, String(anonMark.status))
+  const crossMark = await request(`/admin/bookings/${bk.id}/deposit-receipt`, { method: 'POST', body: JSON.stringify({}) }, other.token)
+  check('A 越权:跨店标定金 404(看不到别家店的预约)', crossMark.status === 404, String(crossMark.status))
+
+  // 撤销:写 revoke 留痕,原记录不删
+  const rev = await request(`/admin/bookings/${bk.id}/deposit-receipt/revoke`, { method: 'POST', body: JSON.stringify({ reason: '标错了' }) }, shop.token)
+  check('A 误标可撤销', rev.status === 200 && rev.data.revoked === true, JSON.stringify(rev.data))
+  const list2 = (await request(`/admin/bookings/${bk.id}/deposit-receipt`, {}, shop.token)).data
+  check('A 撤销留痕:原 receipt 还在,另加一行 revoke',
+    list2.receipts.length === 2 && list2.receipts.some((r) => r.kind === 'receipt') && list2.receipts.some((r) => r.kind === 'revoke'),
+    JSON.stringify(list2.receipts.map((r) => r.kind)))
+  check('A 撤销后有效定金归零', list2.activeCents === 0, String(list2.activeCents))
+  const svAfterRev = (await request('/admin/stored-value', {}, shop.token)).data.storedValue
+  check('A 撤销后定金预收(负债)也归零', svAfterRev.depositLiabilityCents === 0, String(svAfterRev.depositLiabilityCents))
+
+  // 取消预约后:定金记录照样留着(留痕),不因订单取消而消失
+  await request(`/admin/bookings/${bk.id}/deposit-receipt`, { method: 'POST', body: JSON.stringify({}) }, shop.token)
+  await request(`/admin/bookings/${bk.id}/status`, { method: 'PATCH', body: JSON.stringify({ status: 'CANCELLED' }) }, shop.token)
+  const list3 = (await request(`/admin/bookings/${bk.id}/deposit-receipt`, {}, shop.token)).data
+  check('A 取消预约后定金留痕还在', list3.receipts.length === 3, JSON.stringify(list3.receipts.map((r) => r.kind)))
+
+  // DB 层:定金记录删不掉、金额改不动(不靠人记纪律)
+  {
+    const { DatabaseSync } = await import('node:sqlite')
+    const dbPath = process.env.TEST_DB_PATH || `${process.env.DATA_DIR || './local-data'}/lucky-luxe.sqlite`
+    const rawDb = new DatabaseSync(dbPath)
+    const anyId = list3.receipts.find((r) => r.kind === 'receipt').id
+    let delBlocked = false
+    try { rawDb.prepare('DELETE FROM deposit_receipts WHERE id = ?').run(anyId) } catch { delBlocked = true }
+    let amtBlocked = false
+    try { rawDb.prepare('UPDATE deposit_receipts SET amount_cents = 1 WHERE id = ?').run(anyId) } catch { amtBlocked = true }
+    rawDb.close()
+    check('A 定金记录数据库层禁删', delBlocked)
+    check('A 定金记录金额数据库层改不动', amtBlocked)
+  }
+
+  // 未配定金规则的店:直接排单不打「未付定金」标 → 前端也就不会出「标记已收定金」按钮
+  await request('/admin/deposit-config', { method: 'PUT', body: JSON.stringify({ config: { enabled: false } }) }, shop.token)
+  const bkNoDep = (await request('/admin/bookings/direct', {
+    method: 'POST',
+    body: JSON.stringify({ userId: user, serviceId: svcA.id, technicianId: techB.id, date: todayStr(), time: '17:40', durationMin: 60, depositPaid: false })
+  }, shop.token)).data.booking
+  const deskNoDep = (await request(`/admin/schedule-day?date=${todayStr()}`, {}, shop.token)).data
+  check('A 未配定金规则的店:不打「未付定金」标(按钮就不会出现)',
+    ((deskNoDep.bookings || []).find((x) => x.id === bkNoDep.id) || {}).depositUnpaid === false,
+    JSON.stringify((deskNoDep.bookings || []).find((x) => x.id === bkNoDep.id)))
+  const markNoDep = await request(`/admin/bookings/${bkNoDep.id}/deposit-receipt`, { method: 'POST', body: JSON.stringify({}) }, shop.token)
+  check('A 没开定金的店后端也拒绝标记', markNoDep.status === 400 && markNoDep.data.error.code === 'DEPOSIT_DISABLED',
+    JSON.stringify(markNoDep.data).slice(0, 140))
+  // 还原,别影响后面的用例
+  await request('/admin/deposit-config', {
+    method: 'PUT', body: JSON.stringify({ config: { enabled: true, deductible: true, mode: 'fixed', fixedAmountCents: 10000 } })
+  }, shop.token)
+
+  /* 拍板 A 的兑现两条路(§五 ①②)。
+     ① 抵扣开的店:签字时定金作为付款腿抵掉应收,**不再另记收入**(避免一笔钱记两次);
+     ② 抵扣关的店:签字时把定金转成独立的「定金收入」账目行,不减应收、不进业绩。 */
+  const monthKey = todayStr().slice(0, 7)
+  const incomeRows = async () => ((await request(`/admin/finance/transactions?month=${monthKey}`, {}, shop.token)).data.transactions || [])
+
+  // ① 抵扣开
+  const bkD = (await request('/admin/bookings/direct', {
+    method: 'POST',
+    body: JSON.stringify({ userId: user, serviceId: svcA.id, technicianId: techA.id, date: todayStr(), time: '18:40', durationMin: 60, depositPaid: false })
+  }, shop.token)).data.booking
+  await request(`/admin/bookings/${bkD.id}/deposit-receipt`, { method: 'POST', body: JSON.stringify({}) }, shop.token)
+  const shD = (await request('/admin/settlements', {
+    method: 'POST',
+    body: JSON.stringify({
+      cardOwnerUserId: user,
+      settlements: [{ bookingId: bkD.id, tierKey: 'list', depositApplied: true, payIntent: 'offline_full', items: [{ serviceId: svcA.id }], technicians: [{ technicianId: techA.id, role: 'main', itemNos: [1] }] }]
+    })
+  }, shop.token)).data.settlements[0]
+  check('A① 抵扣开:定金抵进应收(¥500 − ¥100 = ¥400)',
+    shD.depositDeductCents === 10000 && shD.totalCents === 40000, JSON.stringify({ d: shD.depositDeductCents, t: shD.totalCents }))
+  check('A① 定金不进业绩:分成基数仍 ≡ 档位小计', shD.perfBaseCents === shD.subtotalCents,
+    JSON.stringify({ p: shD.perfBaseCents, s: shD.subtotalCents }))
+  const depIncomeBefore = (await incomeRows()).filter((t) => t.category === '定金收入').length
+  await request(`/settlements/${shD.code}/sign`, {
+    method: 'POST', body: JSON.stringify({ disclaimerAccepted: true, signature: '客', strokes: [[{ x: 5, y: 50 }, { x: 40, y: 15 }]] })
+  }, null)
+  check('A① 抵扣开的店签字后**不另记**「定金收入」(一笔钱只认一次)',
+    (await incomeRows()).filter((t) => t.category === '定金收入').length === depIncomeBefore,
+    String((await incomeRows()).filter((t) => t.category === '定金收入').length))
+  const recD = (await request(`/admin/bookings/${bkD.id}/deposit-receipt`, {}, shop.token)).data
+  check('A① 签字后定金记录标成已兑现', Boolean(recD.receipts.find((r) => r.kind === 'receipt').settledSettlementId),
+    JSON.stringify(recD.receipts.map((r) => r.settledSettlementId)))
+  const svD = (await request('/admin/stored-value', {}, shop.token)).data.storedValue
+  check('A① 兑现后这笔不再算定金预收(负债)', svD.depositLiabilityCents === 10000, String(svD.depositLiabilityCents)) // 只剩上面取消那张的 ¥100
+
+  // ② 抵扣关(定位费不抵扣)
+  await request('/admin/deposit-config', {
+    method: 'PUT', body: JSON.stringify({ config: { enabled: true, deductible: false, mode: 'fixed', fixedAmountCents: 10000 } })
+  }, shop.token)
+  const bkN = (await request('/admin/bookings/direct', {
+    method: 'POST',
+    body: JSON.stringify({ userId: user, serviceId: svcA.id, technicianId: techB.id, date: todayStr(), time: '19:50', durationMin: 60, depositPaid: false })
+  }, shop.token)).data.booking
+  await request(`/admin/bookings/${bkN.id}/deposit-receipt`, { method: 'POST', body: JSON.stringify({}) }, shop.token)
+  const shN = (await request('/admin/settlements', {
+    method: 'POST',
+    body: JSON.stringify({
+      cardOwnerUserId: user,
+      settlements: [{ bookingId: bkN.id, tierKey: 'list', depositApplied: true, payIntent: 'offline_full', items: [{ serviceId: svcA.id }], technicians: [{ technicianId: techB.id, role: 'main', itemNos: [1] }] }]
+    })
+  }, shop.token)).data.settlements[0]
+  check('A② 抵扣关:定金不抵应收(应收仍是 ¥500)', shN.depositDeductCents === 0 && shN.totalCents === 50000,
+    JSON.stringify({ d: shN.depositDeductCents, t: shN.totalCents }))
+  await request(`/settlements/${shN.code}/sign`, {
+    method: 'POST', body: JSON.stringify({ disclaimerAccepted: true, signature: '客', strokes: [[{ x: 5, y: 50 }, { x: 40, y: 15 }]] })
+  }, null)
+  const depIncome = (await incomeRows()).filter((t) => t.category === '定金收入')
+  check('A② 抵扣关的店签字时记一行「定金收入」¥100', depIncome.length === 1 && depIncome[0].amountCents === 10000,
+    JSON.stringify(depIncome.map((t) => [t.category, t.amountCents])))
+  check('A② 定金收入不减应收:这张单的应收还是 ¥500',
+    (await request(`/settlements/${shN.code}`)).data.settlement.totalCents === 50000,
+    String((await request(`/settlements/${shN.code}`)).data.settlement.totalCents))
+  check('A② 定金收入不进业绩:分成基数仍 ≡ 档位小计', shN.perfBaseCents === shN.subtotalCents,
+    JSON.stringify({ p: shN.perfBaseCents, s: shN.subtotalCents }))
+  await request('/admin/deposit-config', {
+    method: 'PUT', body: JSON.stringify({ config: { enabled: true, deductible: true, mode: 'fixed', fixedAmountCents: 10000 } })
+  }, shop.token)
+
+  /* F3(店主 2026-08-09 更正):散客不做新入口 —— 所有散客先由**技师现场排单**建即时预约,
+     再走正常结算。所以「直接排单」不能只给老板;员工只能排到自己那一列。 */
+  const walkinAcct = (await request('/admin/staff-accounts', {
+    method: 'POST', body: JSON.stringify({ technicianId: techA.id })
+  }, shop.token)).data
+  const walkinFirst = (await request('/admin/auth/login', {
+    method: 'POST', body: JSON.stringify({ email: walkinAcct.username, password: walkinAcct.initialPassword })
+  }, null)).data
+  const staffPass = `Sfx-${RUN_ID}-9a`
+  await request('/admin/auth/change-password', {
+    method: 'POST', body: JSON.stringify({ oldPassword: walkinAcct.initialPassword, newPassword: staffPass, confirmPassword: staffPass })
+  }, walkinFirst.auth.accessToken)
+  const walkinLogin = (await request('/admin/auth/login', {
+    method: 'POST', body: JSON.stringify({ email: walkinAcct.username, password: staffPass })
+  }, null)).data
+  const walkinToken = walkinLogin.auth && walkinLogin.auth.accessToken
+  check('F3 员工账号可登录', Boolean(walkinToken), JSON.stringify(walkinLogin).slice(0, 160))
+  const staffBook = await request('/admin/bookings/direct', {
+    method: 'POST',
+    body: JSON.stringify({ newCustomerName: `散客${RUN_ID}`, phone: `1372${RUN_ID.slice(-7)}`, serviceId: svcA.id, technicianId: techA.id, date: todayStr(), time: '20:40', durationMin: 60, depositPaid: false })
+  }, walkinToken)
+  check('F3 技师能给自己现场排单(散客即时预约)', staffBook.status === 201, JSON.stringify(staffBook.data).slice(0, 200))
+  check('F3 现场建档 = 轻档案(有顾客 id,后面才结算得了)', Boolean(staffBook.data.booking.userId || staffBook.data.booking.user), JSON.stringify(staffBook.data.booking).slice(0, 160))
+  const staffCross = await request('/admin/bookings/direct', {
+    method: 'POST',
+    body: JSON.stringify({ newCustomerName: '别人的客', serviceId: svcA.id, technicianId: techB.id, date: todayStr(), time: '21:40', durationMin: 60 })
+  }, walkinToken)
+  check('F3 越权:员工不能排到别人那一列 403', staffCross.status === 403, String(staffCross.status))
+  const deskWalkIn = (await request(`/admin/schedule-day?date=${todayStr()}`, {}, shop.token)).data
+  check('F3 即时预约立刻出现在今日台面上',
+    (deskWalkIn.bookings || []).some((x) => x.startTime === '20:40'), JSON.stringify((deskWalkIn.bookings || []).map((x) => x.startTime)))
+  const walkRow = (deskWalkIn.bookings || []).find((x) => x.startTime === '20:40')
+  check('F3 台面上这条带顾客 id(「去结算」按钮才点得动)', Boolean(walkRow && walkRow.userId), JSON.stringify(walkRow && walkRow.userId))
+  // 员工也能标定金(现场是技师收的钱)
+  const staffMark = await request(`/admin/bookings/${staffBook.data.booking.id}/deposit-receipt`, { method: 'POST', body: JSON.stringify({}) }, walkinToken)
+  check('A 员工也能标已收定金(现场是技师收的)', staffMark.status === 201, JSON.stringify(staffMark.data).slice(0, 160))
+  const staffRevoke = await request(`/admin/bookings/${staffBook.data.booking.id}/deposit-receipt/revoke`, { method: 'POST', body: JSON.stringify({}) }, walkinToken)
+  check('A 越权:员工不能撤销定金记录(撤销是老板的事)', staffRevoke.status === 403, String(staffRevoke.status))
 
   // ---- 异常输入 ----
   const ghost = await request(`/admin/settlements/${twoSheet.id}/allocate`, {
