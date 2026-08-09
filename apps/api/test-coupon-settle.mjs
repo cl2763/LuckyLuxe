@@ -143,9 +143,18 @@ async function main() {
   check('⓪ 特批券不进券模板列表', tpls.data.coupons.every((c) => c.isCustom === false) && tpls.data.coupons.length === 2,
     JSON.stringify(tpls.data.coupons.map((c) => c.name)))
 
+  /* 设计图算例要出「定金抵扣 ¥100」,而 v1.2 §五 补拍① 规定抵扣依据＝**收取记录**:
+     所以先建一张预约并标记已收定金,试算时把 bookingId 带上 —— 光配定金规则不再产生抵扣行。 */
+  const tech0 = (await request(`/platform/tenants/${shop.tenantId}/technicians`, { method: 'POST', body: JSON.stringify({ name: `算例师${RUN_ID}` }) })).data.technician
+  const depBooking = (await request('/admin/bookings/direct', {
+    method: 'POST',
+    body: JSON.stringify({ userId: cardOwner, serviceId: main3h.id, technicianId: tech0.id, date: new Date().toLocaleDateString('en-CA'), time: '14:10', durationMin: 60, depositPaid: false })
+  }, shop.token)).data.booking
+  await request(`/admin/bookings/${depBooking.id}/deposit-receipt`, { method: 'POST', body: JSON.stringify({}) }, shop.token)
+
   // ---- ② 选券面板:可用在上、不可用在下并写原因 ----
   const draft = {
-    tierKey: 'member', userId: cardOwner, payerUserId: cardOwner, depositApplied: true,
+    tierKey: 'member', userId: cardOwner, payerUserId: cardOwner, depositApplied: true, bookingId: depBooking.id,
     items: [{ serviceId: main3h.id }, { serviceId: fiber.id, fingers: 2 }, { serviceId: freeRemoval.id }]
   }
   const noCoupon = await request('/admin/settlements/preview', { method: 'POST', body: JSON.stringify(draft) }, shop.token)

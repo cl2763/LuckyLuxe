@@ -237,6 +237,23 @@ for (const store of STORES) {
     }
     log('② 带定金抵扣的样本单:补 2 张(1 张已签进日结、1 张待签可在结算页看定金行)')
   }
+  /* 抵扣依据＝收取记录(《财务记账总逻辑》v1.2 §五 补拍①)。
+     演示库里那些「带定金抵扣」的预约是在这条规则之前铺的,没有收取记录 ——
+     补上,否则演示数据自己就不自洽(抵了一笔从没收过的钱)。
+     只补**还没有任何记录**的预约,重跑幂等。 */
+  {
+    const need = withDb((db) => db.prepare(`
+      SELECT DISTINCT s.booking_id AS id FROM settlements s
+      WHERE s.tenant_id = ? AND s.deposit_deduct_cents > 0 AND s.booking_id IS NOT NULL
+        AND NOT EXISTS (SELECT 1 FROM deposit_receipts d WHERE d.booking_id = s.booking_id)
+    `).all(tenantId).map((r) => r.id))
+    let made = 0
+    for (const bid of need) {
+      try { await api(tenantId, `/admin/bookings/${encodeURIComponent(bid)}/deposit-receipt`, { method: 'POST', body: JSON.stringify({}) }); made += 1 }
+      catch (e) { /* 已标过或本店没开定金,跳过 */ }
+    }
+    if (made) log(`② 定金收取记录:给 ${made} 张带定金抵扣的预约补齐(抵扣依据＝收取记录)`)
+  }
   row.depositSheets = `${withDb((db) => db.prepare('SELECT COUNT(*) AS n FROM settlements WHERE tenant_id = ? AND deposit_deduct_cents > 0').get(tenantId).n)} 张带定金抵扣`
 
   // ---------- ③ 日结:多天已确认 + 待分配 + 重开留痕 ----------

@@ -286,11 +286,28 @@ async function main() {
     method: 'PUT',
     body: JSON.stringify({ config: { enabled: true, deductible: true, mode: 'fixed', fixedAmountCents: 10000 } })
   }, shop.token)
+  /* v1.2 §五 补拍①:抵扣依据＝**收取记录**。所以要先有预约、且这张预约标记过已收定金,
+     结算才会出抵扣行 —— 光配了定金规则是不够的。 */
+  const depBk = (await request('/admin/bookings/direct', {
+    method: 'POST',
+    body: JSON.stringify({ userId: user, serviceId: main3h.id, technicianId: techA.id, date: todayStr(), time: '12:10', durationMin: 60, depositPaid: false })
+  }, shop.token)).data.booking
+  const noReceiptSheet = (await request('/admin/settlements', {
+    method: 'POST',
+    body: JSON.stringify({
+      cardOwnerUserId: user,
+      settlements: [{ bookingId: depBk.id, tierKey: 'list', depositApplied: true, payIntent: 'offline_full', items: [{ serviceId: main3h.id }], technicians: [{ technicianId: techA.id, role: 'main', itemNos: [1] }] }]
+    })
+  }, shop.token)).data.settlements[0]
+  check('F2/v1.2① 没标记收过定金的预约:结算不出抵扣行(不许抵没收过的钱)',
+    noReceiptSheet.depositDeductCents === 0, String(noReceiptSheet.depositDeductCents))
+  await request(`/admin/settlements/${noReceiptSheet.id}/void`, { method: 'POST' }, shop.token)
+  await request(`/admin/bookings/${depBk.id}/deposit-receipt`, { method: 'POST', body: JSON.stringify({}) }, shop.token)
   const depSheet = (await request('/admin/settlements', {
     method: 'POST',
     body: JSON.stringify({
       cardOwnerUserId: user,
-      settlements: [{ tierKey: 'list', depositApplied: true, payIntent: 'offline_full', items: [{ serviceId: main3h.id }], technicians: [{ technicianId: techA.id, role: 'main', itemNos: [1] }] }]
+      settlements: [{ bookingId: depBk.id, tierKey: 'list', depositApplied: true, payIntent: 'offline_full', items: [{ serviceId: main3h.id }], technicians: [{ technicianId: techA.id, role: 'main', itemNos: [1] }] }]
     })
   }, shop.token)).data.settlements[0]
   check('F2 配了「定金抵扣尾款」后,定金真的抵进去了', depSheet.depositDeductCents === 10000, String(depSheet.depositDeductCents))
@@ -317,6 +334,7 @@ async function main() {
     ((deskBefore.bookings || []).find((x) => x.id === bk.id) || {}).depositUnpaid === true,
     JSON.stringify((deskBefore.bookings || []).find((x) => x.id === bk.id)))
 
+  const liabBaseline = (await request('/admin/stored-value', {}, shop.token)).data.storedValue.depositLiabilityCents
   const incomeBefore = (await request(`/admin/finance/transactions?month=${todayStr().slice(0, 7)}`, {}, shop.token)).data
   const beforeIncome = (incomeBefore.transactions || []).filter((t) => t.type === 'income').length
 
@@ -337,7 +355,8 @@ async function main() {
     `${beforeIncome} → ${(afterMark.transactions || []).filter((t) => t.type === 'income').length}`)
 
   const svSummary = (await request('/admin/stored-value', {}, shop.token)).data.storedValue
-  check('A 计入定金预收(负债)', svSummary.depositLiabilityCents === 10000, String(svSummary.depositLiabilityCents))
+  check('A 计入定金预收(负债):这一笔让负债 +¥100', svSummary.depositLiabilityCents - liabBaseline === 10000,
+    JSON.stringify({ baseline: liabBaseline, now: svSummary.depositLiabilityCents }))
 
   // 幂等:再标一次不重复记账
   const mark2 = await request(`/admin/bookings/${bk.id}/deposit-receipt`, { method: 'POST', body: JSON.stringify({}) }, shop.token)
@@ -361,7 +380,8 @@ async function main() {
     JSON.stringify(list2.receipts.map((r) => r.kind)))
   check('A 撤销后有效定金归零', list2.activeCents === 0, String(list2.activeCents))
   const svAfterRev = (await request('/admin/stored-value', {}, shop.token)).data.storedValue
-  check('A 撤销后定金预收(负债)也归零', svAfterRev.depositLiabilityCents === 0, String(svAfterRev.depositLiabilityCents))
+  check('A 撤销后这一笔从负债里退出去(回到基线)', svAfterRev.depositLiabilityCents === liabBaseline,
+    JSON.stringify({ baseline: liabBaseline, now: svAfterRev.depositLiabilityCents }))
 
   // 取消预约后:定金记录照样留着(留痕),不因订单取消而消失
   await request(`/admin/bookings/${bk.id}/deposit-receipt`, { method: 'POST', body: JSON.stringify({}) }, shop.token)
@@ -425,18 +445,28 @@ async function main() {
     shD.depositDeductCents === 10000 && shD.totalCents === 40000, JSON.stringify({ d: shD.depositDeductCents, t: shD.totalCents }))
   check('A① 定金不进业绩:分成基数仍 ≡ 档位小计', shD.perfBaseCents === shD.subtotalCents,
     JSON.stringify({ p: shD.perfBaseCents, s: shD.subtotalCents }))
-  const depIncomeBefore = (await incomeRows()).filter((t) => t.category === '定金收入').length
+  const depIncomeBefore = (await incomeRows()).filter((t) => t.category === '服务收入-定金').length
+  const liabBefore = (await request('/admin/stored-value', {}, shop.token)).data.storedValue.depositLiabilityCents
   await request(`/settlements/${shD.code}/sign`, {
     method: 'POST', body: JSON.stringify({ disclaimerAccepted: true, signature: '客', strokes: [[{ x: 5, y: 50 }, { x: 40, y: 15 }]] })
   }, null)
-  check('A① 抵扣开的店签字后**不另记**「定金收入」(一笔钱只认一次)',
-    (await incomeRows()).filter((t) => t.category === '定金收入').length === depIncomeBefore,
-    String((await incomeRows()).filter((t) => t.category === '定金收入').length))
+  /* 守恒(v1.2 §五 补拍②):抵扣开的店定金腿也**必须**记一行收入 ——
+     负债减了 ¥100 而收入不涨,那 ¥100 就凭空消失了(2026-08-09 店主查出来的洞)。 */
+  const depIncomeRows = (await incomeRows()).filter((t) => t.category === '服务收入-定金')
+  check('A① 守恒:抵扣开的店签字时定金腿转收入(+¥100 一行)',
+    depIncomeRows.length === depIncomeBefore + 1 && depIncomeRows[0].amountCents === 10000,
+    JSON.stringify(depIncomeRows.map((t) => [t.category, t.amountCents])))
+  const liabAfter = (await request('/admin/stored-value', {}, shop.token)).data.storedValue.depositLiabilityCents
+  check('A① 守恒:负债同步减少 ¥100(减少额 = 收入增加额)', liabBefore - liabAfter === 10000,
+    JSON.stringify({ before: liabBefore, after: liabAfter }))
+  const legsAfter = (await request(`/settlements/${shD.code}`)).data.settlement.payments || []
+  check('A① 定金腿签后置为已付', (legsAfter.find((l) => l.leg === 'deposit') || {}).status === 'paid',
+    JSON.stringify(legsAfter.map((l) => [l.leg, l.status])))
   const recD = (await request(`/admin/bookings/${bkD.id}/deposit-receipt`, {}, shop.token)).data
   check('A① 签字后定金记录标成已兑现', Boolean(recD.receipts.find((r) => r.kind === 'receipt').settledSettlementId),
     JSON.stringify(recD.receipts.map((r) => r.settledSettlementId)))
-  const svD = (await request('/admin/stored-value', {}, shop.token)).data.storedValue
-  check('A① 兑现后这笔不再算定金预收(负债)', svD.depositLiabilityCents === 10000, String(svD.depositLiabilityCents)) // 只剩上面取消那张的 ¥100
+  const cons1 = (await request('/admin/finance/deposit-conservation', {}, shop.token)).data
+  check('A① 定金守恒审计通过(没有"负债减了收入没涨"的记录)', cons1.ok === true, JSON.stringify(cons1.broken).slice(0, 240))
 
   // ② 抵扣关(定位费不抵扣)
   await request('/admin/deposit-config', {

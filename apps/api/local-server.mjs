@@ -7585,20 +7585,55 @@ function settleDepositReceiptsOnSign(settlement, actor = 'system') {
   const active = activeDepositReceipts(settlement.booking_id, tenantId).filter((r) => !r.settled_settlement_id)
   if (!active.length) return
   const deductible = getDepositConfig(tenantId).deductible
-  const now = iso(new Date())
   for (const r of active) {
-    if (!deductible) {
-      insertFinanceTransaction({
-        tenantId, // 签署页是公开路由,必须显式带租户
-        type: 'income', source: 'deposit', category: '定金收入',
-        amountCents: r.amount_cents, payChannel: r.pay_channel || 'offline',
-        occurredOn: localParts(new Date()).date, bookingId: settlement.booking_id,
-        note: `${settlement.code} 定金转收入(本店定金不抵扣尾款)`, createdBy: actor
-      })
+    /* 守恒(§五 补拍②):负债每减少一分,必须有等额的收入增加。
+       抵扣开的店定金腿在 computeSettlement 里抵掉了应收,但那笔钱**是真收过的**,
+       签字这一刻要从「定金预收(负债)」转成当次签署收入 —— 不记的话负债清零而收入没涨,
+       ¥100 就凭空消失了(2026-08-09 店主查出来的正是这个洞)。 */
+    insertFinanceTransaction({
+      tenantId, // 签署页是公开路由,必须显式带租户
+      type: 'income', source: 'settlement', tags: settlement.code,
+      category: deductible ? '服务收入-定金' : '定金收入',
+      amountCents: r.amount_cents, payChannel: r.pay_channel || 'offline',
+      occurredOn: todayOf(tenantId), bookingId: settlement.booking_id,
+      note: deductible
+        ? `服务单 ${settlement.code} 定金腿转收入(定金预收 −${r.amount_cents / 100})`
+        : `${settlement.code} 定金转收入(本店定金不抵扣尾款)`,
+      createdBy: actor
+    })
+    if (deductible) {
+      db.prepare("UPDATE settlement_payments SET status = 'paid' WHERE settlement_id = ? AND leg = 'deposit' AND status <> 'paid'").run(settlement.id)
     }
     db.prepare('UPDATE deposit_receipts SET settled_settlement_id = ? WHERE id = ?').run(settlement.id, r.id)
   }
 }
+
+/* 定金守恒审计(§五 补拍②):每一笔收取记录的去向必须四选一 ——
+   兑现入账 / 转定金收入 / 爽约处置(未实现) / 撤销。返回不守恒的记录,空数组=守恒。
+   兑现与转收入两条路都会写一行等额的收入账目,所以对账方式统一:找那一行。 */
+function auditDepositConservation(tenantId = currentTenantId()) {
+  const rows = db.prepare('SELECT * FROM deposit_receipts WHERE tenant_id = ?').all(tenantId)
+  const revoked = new Set(rows.filter((r) => r.kind === 'revoke' && r.revoke_of).map((r) => r.revoke_of))
+  const broken = []
+  for (const r of rows.filter((x) => x.kind === 'receipt')) {
+    if (revoked.has(r.id)) continue                 // 去向:撤销(有 revoke 行留痕)
+    if (!r.settled_settlement_id) continue          // 还挂在负债上,没减少,不用对账
+    const stl = db.prepare('SELECT code FROM settlements WHERE id = ?').get(r.settled_settlement_id)
+    const income = db.prepare(`
+      SELECT COALESCE(SUM(amount_cents), 0) AS n FROM finance_transactions
+      WHERE tenant_id = ? AND tags = ? AND category IN ('服务收入-定金', '定金收入')
+    `).get(tenantId, stl ? stl.code : '').n
+    if (income !== r.amount_cents) {
+      broken.push({
+        receiptId: r.id, bookingId: r.booking_id, amountCents: r.amount_cents,
+        settlementCode: stl ? stl.code : '', incomeCents: income,
+        reason: '负债已减少,但没有等额的收入账目行'
+      })
+    }
+  }
+  return broken
+}
+
 
 // 取消 / 爽约时扣除的定金
 function forfeitedDepositCents(booking, config, { noShow = false, now = new Date() } = {}) {
@@ -7947,12 +7982,17 @@ function computeSettlement(input = {}) {
   }
 
   // 定金抵扣:只有本店 deposit_config 允许抵扣、且技师勾了「已付定金抵扣」才抵
+  /* 抵扣依据＝**收取记录**,不是配置(《财务记账总逻辑》v1.2 §五 补拍①)。
+     只配了定金规则、但这张预约从没标记收过钱的,结算时不出抵扣行 —— 店员可以当场补标再抵。
+     防止"抵了没收过的钱":抵扣行一出现就等于把一笔负债兑现掉,凭空抵就是凭空造收入。
+     线上定金支付接通后,支付记录同样写成收取记录,这里一行都不用改。 */
   const depositConfig = getDepositConfig(tenantId)
   let depositDeductCents = 0
-  if (input.depositApplied && depositConfig.deductible) {
-    const booking = input.bookingId ? db.prepare('SELECT * FROM bookings WHERE id = ? AND tenant_id = ?').get(input.bookingId, tenantId) : null
-    const paid = booking ? Math.max(0, booking.deposit_cents || 0) : 0
-    depositDeductCents = Math.min(paid || depositAmountForService(mainRow, depositConfig, tenantId), subtotalCents)
+  if (input.depositApplied && depositConfig.deductible && input.bookingId) {
+    const receiptCents = activeDepositReceipts(input.bookingId, tenantId)
+      .filter((r) => !r.settled_settlement_id)
+      .reduce((n, r) => n + (r.amount_cents || 0), 0)
+    depositDeductCents = Math.min(receiptCents, subtotalCents)
   }
 
   /* 券抵扣(2026-08-09):用的是**卡主**券包里的券(规则①,代付单同理),一单限一张(规则②)。
@@ -13794,6 +13834,18 @@ async function route(req, res) {
     if (!booking) throw apiError(404, 'NOT_FOUND', '找不到这张预约。')
     const body = await readBody(req)
     return json(res, 200, revokeDepositReceipt({ booking, reason: body.reason, actor: adminSession.email || 'owner' }))
+  }
+  /* 定金守恒审计(§五 补拍②):负债的每一分减少都要对得上等额收入。
+     空数组 = 守恒。给店主/测试当体检口。 */
+  if (req.method === 'GET' && path === '/admin/finance/deposit-conservation') {
+    if (adminSession.role !== 'owner') throw apiError(403, 'FORBIDDEN', 'Owner permission is required.')
+    const broken = auditDepositConservation()
+    return json(res, 200, {
+      ok: broken.length === 0,
+      liabilityCents: depositLiabilityCents(),
+      broken,
+      note: broken.length === 0 ? '定金守恒:每一笔已兑现的收取记录都有等额收入账目行。' : '有定金记录的负债减少了却没有等额收入,查 broken。'
+    })
   }
   // 某张预约的定金留痕(含已撤销的,审计用)
   if (req.method === 'GET' && path.startsWith('/admin/bookings/') && path.endsWith('/deposit-receipt')) {
