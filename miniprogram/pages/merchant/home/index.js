@@ -212,7 +212,7 @@ Page({
 
   goOrders() { wx.redirectTo({ url: '/pages/merchant/orders/index' }) },
   goWorkbench() { wx.redirectTo({ url: '/pages/merchant/workbench/index' }) },
-  goSchedule() { wx.navigateTo({ url: '/pages/merchant/schedule/index' }) },
+  goSchedule() { wx.navigateTo({ url: '/pages/merchant/schedule-day/index' }) },
   goAttendance() { wx.navigateTo({ url: '/pages/merchant/attendance/index' }) },
   goFinance() { wx.navigateTo({ url: '/pages/merchant/finance/index' }) },
   goPerformance() { wx.navigateTo({ url: '/pages/merchant/my-performance/index' }) },

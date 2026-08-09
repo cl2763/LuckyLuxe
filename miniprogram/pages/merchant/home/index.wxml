@@ -55,7 +55,7 @@
     </view>
     <view class="rowcard">
       <view class="rowhead" bindtap="goSchedule">
-        <view class="rowico">📅</view>
+        <view class="rowico"></view>
         <view class="rowt"><view class="rowname">我的排班</view><view class="rowhint">本周班表 · 申请调休</view></view>
         <view class="chev">›</view>
       </view>

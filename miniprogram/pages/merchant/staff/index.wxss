@@ -67,3 +67,54 @@ page{background:#fbf8f5}
 .sheet .lab{font-size:25rpx;color:#5c4630}
 .sheet .in{flex:1;max-width:280rpx;text-align:right;font-size:27rpx;font-weight:700;color:#241f1d;background:#faf6f1;border:1rpx solid #ece2d6;border-radius:12rpx;padding:12rpx 16rpx}
 .sheet .save{margin-top:22rpx;background:#2d2826;color:#fff;text-align:center;padding:26rpx;border-radius:16rpx;font-size:29rpx;font-weight:800}
+.pg{padding:16rpx 24rpx 60rpx;background:#fbf8f5;min-height:100vh}
+.topbar{display:flex;align-items:center;gap:14rpx;padding:8rpx 0 12rpx}
+.topbar .h1{font-size:32rpx;font-weight:800;color:#241f1d}
+.topbar .nav{width:52rpx;height:52rpx;border-radius:50%;background:#f3ece2;color:#5c4630;text-align:center;line-height:52rpx;font-size:28rpx}
+.topbar .btn{margin-left:auto;font-size:23rpx;color:#9b7655;border:1rpx solid #e7d3b8;border-radius:999rpx;padding:8rpx 22rpx}
+.splitbar{font-size:22rpx;color:#8c8279;background:#fff;border:1rpx solid #ece3da;border-radius:12rpx;padding:12rpx 16rpx;margin-bottom:14rpx}
+.splitbar .b{font-weight:800;color:#241f1d}
+.empty{padding:70rpx 0;text-align:center;color:#9a8c7c;font-size:26rpx}
+.dayrow{background:#fff;border-radius:16rpx;padding:14rpx 16rpx;margin-bottom:12rpx;box-shadow:0 3rpx 10rpx rgba(92,70,48,.06)}
+.dhead{display:flex;align-items:center;gap:12rpx;margin-bottom:10rpx}
+.dhead .dt{font-size:25rpx;font-weight:800;color:#241f1d}
+.dhead .closed{font-size:20rpx;background:#fdecec;color:#c0392b;border-radius:999rpx;padding:2rpx 12rpx}
+.dhead .onduty{margin-left:auto;font-size:21rpx;color:#8c8279}
+.caps{white-space:nowrap}
+.cap{display:inline-block;min-width:130rpx;margin-right:10rpx;border-radius:14rpx;padding:12rpx 14rpx;border:1rpx solid #e7ddd4;background:#fff}
+.cap .cn{display:block;font-size:23rpx;font-weight:700;color:#241f1d}
+.cap .cl{display:block;font-size:20rpx;color:#8c8279;margin-top:2rpx}
+.cap .cc{display:block;font-size:19rpx;color:#9b7655;margin-top:2rpx}
+.cap.full{background:#efe6da;border-color:#e0d3c4}
+.cap.am{background:linear-gradient(180deg,#efe6da 0 50%,#fff 50% 100%)}
+.cap.pm{background:linear-gradient(0deg,#efe6da 0 50%,#fff 50% 100%)}
+.cap.custom{background:#f6efe6;border-style:dashed}
+.cap.off{background:#f5f2ef;color:#b3a89c}
+.cap.off .cn{color:#9a8c7c}
+.tip{font-size:21rpx;color:#9a8c7c;line-height:1.8;margin-top:10rpx}
+.mask{position:fixed;inset:0;background:rgba(45,40,38,.45);z-index:20}
+.sheet{position:fixed;left:0;right:0;bottom:0;z-index:21;background:#fff;border-radius:26rpx 26rpx 0 0;padding:26rpx 28rpx 40rpx}
+.sheet .sh{font-size:28rpx;font-weight:800;color:#241f1d;margin-bottom:18rpx}
+.kinds{display:flex;flex-wrap:wrap;gap:12rpx}
+.kinds .k{font-size:25rpx;padding:14rpx 30rpx;border-radius:999rpx;background:#f3ece2;color:#5c4630;font-weight:700}
+.kinds .k.on{background:#2d2826;color:#fff}
+.times{display:flex;align-items:center;gap:16rpx;margin-top:16rpx}
+.times .tp{background:#faf6f1;border:1rpx solid #ece2d6;border-radius:12rpx;padding:14rpx 28rpx;font-size:27rpx;font-weight:700;color:#241f1d}
+.times .dash{color:#8c8279}
+.rep{display:flex;align-items:center;gap:12rpx;margin-top:18rpx;font-size:24rpx;color:#5c4630}
+.rep .box{width:36rpx;height:36rpx;border-radius:9rpx;border:2rpx solid #e0d3c4;color:#fff;text-align:center;line-height:34rpx;font-size:22rpx}
+.rep .box.on{background:#2d2826;border-color:#2d2826}
+.conf{margin-top:16rpx;background:#fdf3ec;border:1rpx solid #f0d9c4;border-radius:12rpx;padding:14rpx}
+.conf .ct{font-size:22rpx;color:#a8551f;font-weight:700;line-height:1.7}
+.conf .cr{font-size:21rpx;color:#8c6a4e;margin-top:6rpx}
+.sheet .save{margin-top:22rpx;background:#2d2826;color:#fff;text-align:center;padding:26rpx;border-radius:16rpx;font-size:29rpx;font-weight:800}
+
+/* 屏 4a 内嵌后的补充样式(2026-08-09) */
+.wkbar{display:flex;align-items:center;gap:12rpx;padding:12rpx 4rpx 10rpx}
+.wkbar .nav{width:56rpx;height:56rpx;border-radius:14rpx;background:#f3ece2;color:#5c4630;display:flex;align-items:center;justify-content:center;font-size:30rpx}
+.wkbar .wk{flex:1;text-align:center;font-size:27rpx;font-weight:800;color:#241f1d}
+.wkbar .btn{font-size:23rpx;padding:10rpx 22rpx;border-radius:999rpx;background:#2d2826;color:#fff;font-weight:700}
+.todaytag{font-size:19rpx;color:#fff;background:#b5885d;border-radius:6rpx;padding:2rpx 10rpx;margin-left:10rpx;font-weight:700}
+.applybtn{margin:6rpx 0 10rpx;text-align:center;font-size:25rpx;font-weight:700;color:#9b7655;border:1rpx dashed #e7d3b8;border-radius:14rpx;padding:20rpx}
+.savebtn{margin-top:16rpx;background:#2d2826;color:#fff;text-align:center;padding:26rpx;border-radius:14rpx;font-size:28rpx;font-weight:800}
+.sheet .shs{font-size:22rpx;color:#9a8c7c;margin:6rpx 0 14rpx}

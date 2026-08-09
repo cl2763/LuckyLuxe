@@ -4,10 +4,10 @@ const mock = require('./mock-data')
 // true  = 连你 Mac 本地沙盘(模拟数据,随便测,不影响线上;开发者工具模拟器用 127.0.0.1 即可)
 // false = 连线上生产(www.luckyluxeatelier.com,真实数据)
 // ⚠️ 正式上传/发布前,务必把这里改回 false!
-const USE_LOCAL_SANDBOX = true
+const USE_LOCAL_SANDBOX = true // 2026-08-04 演示结束,切回本地沙盘继续开发(上传/发布前务必改回 false)
 // 本地沙盘地址:127.0.0.1 走开发者工具本机代理,模拟器与真机调试通用,换网络也不用改。
 // 真机预览/体验版连本地沙盘:用电脑局域网 IP(手机与电脑须同一 WiFi);开发者工具上两者皆可。此行临时改动,不提交。
-const LOCAL_API = 'http://192.168.0.100:4128'
+const LOCAL_API = 'http://127.0.0.1:4128' // 开发者工具模拟器用这个;真机调试改成电脑当前局域网 IP(2026-08-03 查询为 192.168.0.104,IP 会变,连不上先重查)
 const API_BASE = USE_LOCAL_SANDBOX ? LOCAL_API : 'https://www.luckyluxeatelier.com'
 const DEMO_USER_ID = 'user-demo'
 const STORE_ID = 'store-ontario-01'

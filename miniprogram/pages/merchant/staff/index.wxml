@@ -8,11 +8,63 @@
     <view class="t {{tab === it.key ? 'on' : ''}}" wx:for="{{tabs}}" wx:for-item="it" wx:key="key" data-k="{{it.key}}" bindtap="switchTab">{{it.label}}</view>
   </scroll-view>
 
-  <!-- 排班板块(从「日常经营」移入) -->
+  <!-- 屏 4a 排班板块：周视图直接铺在页签里（2026-08-09 去掉中间那层「计时排班 ›」卡片） -->
   <block wx:if="{{tab === 'schedule'}}">
-    <view class="card" bindtap="goSchedule">
-      <view class="rowline"><text class="nm">计时排班</text><text class="chev">›</text></view>
-      <view class="hint">按天看每位技师的时段;半天班与自定义时段在这里排。</view>
+    <view class="wkbar">
+      <view class="nav" bindtap="prevWeek">‹</view>
+      <text class="wk">{{sc.rangeText}}</text>
+      <view class="nav" bindtap="nextWeek">›</view>
+      <view class="btn" bindtap="thisWeek">本周</view>
+    </view>
+    <view class="splitbar" bindtap="editSplit">上下午分界 <text class="b">{{sc.afternoonStart}}</text> · 点这里改 ›</view>
+
+    <view wx:if="{{sc.loading}}" class="empty">加载中…</view>
+    <block wx:else>
+      <view class="dayrow" wx:for="{{sc.days}}" wx:for-item="d" wx:key="date">
+        <view class="dhead">
+          <text class="dt">{{d.title}}<text wx:if="{{d.isToday}}" class="todaytag">今天</text></text>
+          <text class="closed" wx:if="{{d.isClosed}}">店休</text>
+          <text class="onduty">{{d.onDuty}}人</text>
+        </view>
+        <scroll-view class="caps" scroll-x>
+          <view class="cap {{c.kind}}" wx:for="{{d.caps}}" wx:for-item="c" wx:key="techId"
+                data-date="{{d.date}}" data-tech="{{c.techId}}" data-name="{{c.name}}" data-kind="{{c.kind}}" bindtap="openSheet">
+            <text class="cn">{{c.name}}</text>
+            <text class="cl">{{c.label}}</text>
+            <text class="cc" wx:if="{{c.count}}">{{c.count}} 单</text>
+          </view>
+        </scroll-view>
+      </view>
+      <view class="applybtn" bindtap="applyWeekAhead">本周模式应用到未来 4 周</view>
+      <view class="tip">半填色=半天班 · 虚线=休 · 点胶囊改时段</view>
+    </block>
+
+    <!-- 屏 4a-2 时段编辑弹层 -->
+    <view wx:if="{{shiftSheet}}" class="mask" bindtap="closeSheet"></view>
+    <view wx:if="{{shiftSheet}}" class="sheet">
+      <view class="sh">{{shiftSheet.name}} · {{shiftSheet.date}}（周{{shiftSheet.weekday}}）</view>
+      <view class="shs">选择当天出勤方式</view>
+      <view class="kinds">
+        <view class="k {{shiftSheet.kind === 'full' ? 'on' : ''}}" data-k="full" bindtap="pickKind">全天班</view>
+        <view class="k {{shiftSheet.kind === 'am' ? 'on' : ''}}" data-k="am" bindtap="pickKind">上午班</view>
+        <view class="k {{shiftSheet.kind === 'pm' ? 'on' : ''}}" data-k="pm" bindtap="pickKind">下午班</view>
+        <view class="k {{shiftSheet.kind === 'custom' ? 'on' : ''}}" data-k="custom" bindtap="pickKind">自定义</view>
+        <view class="k {{shiftSheet.kind === 'off' ? 'on' : ''}}" data-k="off" bindtap="pickKind">休息</view>
+      </view>
+      <view wx:if="{{shiftSheet.kind === 'custom'}}" class="times">
+        <picker mode="time" value="{{shiftSheet.start}}" bindchange="onStart"><view class="tp">{{shiftSheet.start}}</view></picker>
+        <text class="dash">–</text>
+        <picker mode="time" value="{{shiftSheet.end}}" bindchange="onEnd"><view class="tp">{{shiftSheet.end}}</view></picker>
+      </view>
+      <view class="rep" bindtap="toggleRepeat">
+        <view class="box {{shiftSheet.repeat ? 'on' : ''}}">{{shiftSheet.repeat ? '✓' : ''}}</view>
+        <text>同步应用到之后每个周{{shiftSheet.weekday}}</text>
+      </view>
+      <view wx:if="{{scConflicts.length}}" class="conf">
+        <view class="ct">这么排会有 {{scConflicts.length}} 单落在时段外(已保存,自己决定要不要改预约):</view>
+        <view class="cr" wx:for="{{scConflicts}}" wx:key="bookingId">{{item.startTime}}–{{item.endTime}} {{item.customerName}} · {{item.serviceName}}</view>
+      </view>
+      <view class="savebtn" bindtap="saveShift">保存 · 时段外不可被预约</view>
     </view>
   </block>
 

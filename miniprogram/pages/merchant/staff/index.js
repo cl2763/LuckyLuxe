@@ -5,6 +5,16 @@
    金额红线:本页不算钱。排行/进度/差额都来自 /admin/perf-ranking,条宽用后端给的 barPct。 */
 const api = require('../../../utils/api')
 const { formatMoney, displayOf } = require('../../../utils/money')
+const { storeToday, refreshStoreClock } = require('../../../utils/storeclock')
+
+// 排班周视图用(屏 4a):日期加减与星期,一律按门店时区口径
+const WK = ['日', '一', '二', '三', '四', '五', '六']
+function shiftDate(d, n) {
+  const x = new Date(`${d}T12:00:00Z`)
+  x.setUTCDate(x.getUTCDate() + n)
+  return x.toISOString().slice(0, 10)
+}
+function wdOf(d) { return WK[new Date(`${d}T12:00:00Z`).getUTCDay()] }
 
 const TABS = [
   { key: 'schedule', label: '排班' },
@@ -25,7 +35,8 @@ function monthKey() {
 
 Page({
   data: {
-    tab: 'targets',
+    // 图注:点进员工管理默认落在排班页签,和以前点「排班」一样快
+    tab: 'schedule',
     tabs: TABS,
     metrics: RANK_METRICS,
     metric: 'perf',
@@ -35,11 +46,16 @@ Page({
     targets: [],       // 逐人目标 + 进度(原设置区 + 左侧进度)
     plans: [],         // 薪资方案每人一行
     defaultPlanLabel: '',
-    sheet: null        // 目标设置面板(= v6 屏 4b 那套,一字未改)
+    sheet: null,       // 目标设置面板(= v6 屏 4b 那套,一字未改)
+    // 屏 4a 排班周视图(2026-08-09 从独立页内嵌进来,去掉中间那层)
+    sc: { from: '', days: [], afternoonStart: '14:30', loading: true, rangeText: '' },
+    shiftSheet: null,  // 屏 4a-2 时段编辑弹层
+    scConflicts: []
   },
 
   async onShow() {
     if (!(await api.guardOwner())) return
+    await refreshStoreClock().catch(() => {})
     this.setData({ month: monthKey() })
     this.load()
   },
@@ -56,7 +72,8 @@ Page({
   async load() {
     const tab = this.data.tab
     try {
-      if (tab === 'targets') { await this.loadRanking(); await this.loadTargets() }
+      if (tab === 'schedule') await this.loadWeek(this.data.sc.from || storeToday())
+      else if (tab === 'targets') { await this.loadRanking(); await this.loadTargets() }
       else if (tab === 'salary') await this.loadPlans()
       else if (tab === 'accounts') await this.loadAccounts()
     } catch (e) { wx.showToast({ title: (e && e.message) || '加载失败', icon: 'none' }) }
@@ -182,7 +199,147 @@ Page({
     })
   },
 
-  goSchedule() { wx.navigateTo({ url: '/pages/merchant/schedule-day/index' }) },
+  /* ===== 屏 4a/4a-2 排班(内嵌,不再跳页)=====
+     按「天」做行,每行列出全部技师的时段胶囊(全天实色/半天半填色/休虚线),行尾在岗数。
+     时段与冲突判定都在后端:撞上已有预约只回冲突单列表提醒,不硬拦。 */
+  async loadWeek(from) {
+    this.setData({ 'sc.from': from, 'sc.loading': true })
+    try {
+      const [week, settings] = await Promise.all([
+        api.adminGet(`/admin/schedule-week?from=${encodeURIComponent(from)}`),
+        api.adminGet('/admin/schedule-settings').catch(() => ({ afternoonStart: '14:30' }))
+      ])
+      const techs = (week.technicians || []).filter((t) => t.isActive !== false)
+      const byKey = {}
+      ;(week.schedules || []).forEach((x) => { byKey[`${x.date}|${x.technicianId}`] = x })
+      const counts = {}
+      ;(week.bookingCounts || []).forEach((c) => { counts[`${c.date}|${c.technicianId}`] = c.count })
+      const split = settings.afternoonStart || '14:30'
+      const today = storeToday()
+      const days = (week.days || []).map((d) => {
+        const caps = techs.map((t) => {
+          const x = byKey[`${d.date}|${t.id}`]
+          // 没排过班 = 跟随门店营业时间(视作全天),与后端 assertBookable 的兜底一致
+          if (!x) return { techId: t.id, name: t.name, kind: 'full', label: `${d.openTime}–${d.closeTime}`, working: true, count: counts[`${d.date}|${t.id}`] || 0 }
+          if (!x.isWorking) return { techId: t.id, name: t.name, kind: 'off', label: '休', working: false, count: 0 }
+          const isAm = x.endTime === split
+          const isPm = x.startTime === split
+          const isFull = x.startTime === d.openTime && x.endTime === d.closeTime
+          return {
+            techId: t.id, name: t.name, working: true,
+            kind: isFull ? 'full' : (isAm ? 'am' : (isPm ? 'pm' : 'custom')),
+            label: isFull ? `${x.startTime}–${x.endTime}`
+              : (isAm ? `上午 ${x.startTime}–${x.endTime}` : (isPm ? `下午 ${x.startTime}–${x.endTime}` : `${x.startTime}–${x.endTime}`)),
+            count: counts[`${d.date}|${t.id}`] || 0
+          }
+        })
+        return {
+          date: d.date,
+          title: `周${wdOf(d.date)} ${Number(d.date.slice(5, 7))}.${Number(d.date.slice(8))}`,
+          isToday: d.date === today,
+          isClosed: d.isClosed,
+          openTime: d.openTime,
+          closeTime: d.closeTime,
+          onDuty: caps.filter((c) => c.working).length,
+          caps
+        }
+      })
+      const last = days.length ? days[days.length - 1].date : from
+      const rangeText = `${Number(from.slice(5, 7))}月${Number(from.slice(8))}日 – ${Number(last.slice(5, 7))}月${Number(last.slice(8))}日`
+      this.setData({ 'sc.loading': false, 'sc.days': days, 'sc.afternoonStart': split, 'sc.rangeText': rangeText })
+    } catch (e) {
+      this.setData({ 'sc.loading': false })
+      wx.showToast({ title: (e && e.message) || '加载排班失败', icon: 'none' })
+    }
+  },
+  prevWeek() { this.loadWeek(shiftDate(this.data.sc.from, -7)) },
+  nextWeek() { this.loadWeek(shiftDate(this.data.sc.from, 7)) },
+  thisWeek() { this.loadWeek(storeToday()) },
+
+  openSheet(e) {
+    const { date, tech, name, kind } = e.currentTarget.dataset
+    const day = this.data.sc.days.find((d) => d.date === date)
+    this.setData({
+      scConflicts: [],
+      shiftSheet: {
+        date, tech, name, kind,
+        weekday: wdOf(date),
+        start: day ? day.openTime : '10:00',
+        end: day ? day.closeTime : '19:00',
+        repeat: false
+      }
+    })
+  },
+  closeSheet() { this.setData({ shiftSheet: null, scConflicts: [] }) },
+  pickKind(e) { this.setData({ 'shiftSheet.kind': e.currentTarget.dataset.k }) },
+  onStart(e) { this.setData({ 'shiftSheet.start': e.detail.value }) },
+  onEnd(e) { this.setData({ 'shiftSheet.end': e.detail.value }) },
+  toggleRepeat() { this.setData({ 'shiftSheet.repeat': !this.data.shiftSheet.repeat }) },
+
+  async saveShift() {
+    const x = this.data.shiftSheet
+    const body = { date: x.date, applyToFollowingWeeks: x.repeat ? 8 : 0 }
+    if (x.kind === 'custom') { body.startTime = x.start; body.endTime = x.end; body.isWorking = true }
+    else body.shift = x.kind
+    try {
+      const r = await api.adminPatch(`/admin/technicians/${encodeURIComponent(x.tech)}/schedule`, body)
+      const conflicts = r.conflicts || []
+      if (conflicts.length) {
+        // 只报不拦(后端已经写进去了),把撞上的单列出来让老板自己判断
+        this.setData({ scConflicts: conflicts })
+        wx.showToast({ title: `已保存,但有 ${conflicts.length} 单落在时段外`, icon: 'none', duration: 2600 })
+      } else {
+        this.setData({ shiftSheet: null })
+        wx.showToast({ title: x.repeat ? `已应用到之后每个周${x.weekday}` : '已保存', icon: 'none' })
+      }
+      this.loadWeek(this.data.sc.from)
+    } catch (e) { wx.showToast({ title: (e && e.message) || '保存失败', icon: 'none' }) }
+  },
+
+  editSplit() {
+    wx.showModal({
+      title: '上下午分界', editable: true, placeholderText: '如 14:30', content: '',
+      success: async (r) => {
+        if (!r.confirm || !/^\d{2}:\d{2}$/.test((r.content || '').trim())) return
+        try {
+          await api.adminPut('/admin/schedule-settings', { afternoonStart: r.content.trim() })
+          wx.showToast({ title: '已保存,半天班边界跟着走', icon: 'none' })
+          this.loadWeek(this.data.sc.from)
+        } catch (e) { wx.showToast({ title: (e && e.message) || '保存失败', icon: 'none' }) }
+      }
+    })
+  },
+
+  // 图上底部那颗按钮:把本周每个人的排法复制到之后 4 周
+  applyWeekAhead() {
+    wx.showModal({
+      title: '应用到未来 4 周',
+      content: '把本周每位技师的排法复制到接下来 4 周(已有排班会被覆盖)。',
+      success: async (r) => {
+        if (!r.confirm) return
+        try {
+          // 复用既有的 /admin/schedule-batch:把本周每人每天的排法逐条复制到之后 4 周
+          const entries = []
+          for (const d of this.data.sc.days) {
+            for (const c of d.caps) {
+              const isOff = c.kind === 'off'
+              const range = isOff ? null : String(c.label).replace(/^[上下]午\s*/, '')
+              const parts = range ? range.split('–') : []
+              const startTime = parts[0] || d.openTime
+              const endTime = parts[1] || d.closeTime
+              for (let w = 1; w <= 4; w += 1) {
+                entries.push({ technicianId: c.techId, date: shiftDate(d.date, 7 * w), startTime, endTime, isWorking: !isOff })
+              }
+            }
+          }
+          if (!entries.length) { wx.showToast({ title: '这周还没有排班', icon: 'none' }); return }
+          await api.adminPost('/admin/schedule-batch', { entries })
+          wx.showToast({ title: `已应用到未来 4 周(${entries.length} 条)`, icon: 'none' })
+          this.loadWeek(this.data.sc.from)
+        } catch (e) { wx.showToast({ title: (e && e.message) || '应用失败', icon: 'none' }) }
+      }
+    })
+  },
   goDetail(e) {
     // 点技师行 → 该技师逐日明细(已有页)
     const { id, name } = e.currentTarget.dataset

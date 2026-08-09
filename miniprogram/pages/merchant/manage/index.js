@@ -1,7 +1,7 @@
 const api = require('../../../utils/api')
 
 const ROUTES = {
-  schedule: '/pages/merchant/schedule/index',
+  schedule: '/pages/merchant/schedule-day/index',
   dailyClose: '/pages/merchant/daily-close/index',
   finance: '/pages/merchant/finance/index',
   customers: '/pages/merchant/customers/index',

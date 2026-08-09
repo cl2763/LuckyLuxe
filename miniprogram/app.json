@@ -12,7 +12,6 @@
     "pages/merchant/gallery/index",
     "pages/merchant/work-detail/index",
     "pages/merchant/conversation/index",
-    "pages/merchant/schedule/index",
     "pages/merchant/finance/index",
     "pages/merchant/finance-entry/index",
     "pages/merchant/finance-txns/index",
