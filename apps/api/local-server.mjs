@@ -5297,6 +5297,15 @@ function displayNameForUserId(userId) {
   return memberCodeForUserId(userId)
 }
 
+/* 会员码 → 档案(规则⑥ 反查)。会员码是从 userId 末 8 位推导的,不可逆,
+   所以反查靠比对:命中唯一一条才认,零条或多条都不认(与「歧义不合并身份」同一条纪律)。 */
+function userIdFromMemberCode(memberCode) {
+  const want = String(memberCode || '').trim().toUpperCase()
+  if (!/^LL-[A-Z0-9]{8}$/.test(want)) return ''
+  const hits = db.prepare('SELECT id FROM users').all().filter((u) => memberCodeForUserId(u.id) === want)
+  return hits.length === 1 ? hits[0].id : ''
+}
+
 function isGenericDisplayName(value, userId = '') {
   const displayName = String(value || '').trim()
   if (!displayName) return true
@@ -9343,6 +9352,96 @@ function settlementCode(tenantId) {
   return `${prefix}-${todayOf(tenantId).replace(/-/g, '')}-${Math.random().toString(36).slice(2, 6).toUpperCase()}`
 }
 
+/* ===== 扫码签闭环(2026-08-09 图 S1–S4 + 规则⓪–⑧)=====
+   规则⓪ 身份两把钥匙:签署码指向**具体单**、会员码指向**具体档案**;
+   手机号只剩「排单找档案 / 日常联系 / 店内通用建档码兜底」三个职责,不再拿来猜人。 */
+
+// 这份档案绑没绑微信(只看绑定状态,不看新老客 —— 规则③)
+function isUserBound(userId) {
+  if (!userId) return false
+  const u = db.prepare('SELECT wechat_open_id FROM users WHERE id = ?').get(userId)
+  if (u && u.wechat_open_id) return true
+  return Boolean(db.prepare('SELECT 1 FROM user_identities WHERE user_id = ?').get(userId))
+}
+
+// 手机号脱敏:138****0000(图 S2 顾客行)
+function maskPhone(phone) {
+  const p = String(phone || '').replace(/\s/g, '')
+  if (p.length < 7) return p
+  return `${p.slice(0, 3)}****${p.slice(-4)}`
+}
+
+/* 屏 S2 徽标 / 屏 S4 前置卡要的那几个字段。文案在后端拼,前端只显示(规则③)。 */
+function customerBindShape(row) {
+  const user = row.user_id ? db.prepare('SELECT id, display_name, phone FROM users WHERE id = ?').get(row.user_id) : null
+  const bound = isUserBound(row.user_id)
+  return {
+    customerPhoneMasked: maskPhone(user && user.phone),
+    customerBound: bound,
+    // 绑定后徽标消失 → 后端直接给空串,前端 wx:if 一挂就没了
+    bindBadgeText: bound ? '' : '新客 · 未绑定',
+    bindHintText: bound ? '' : '签字时请顾客扫码——签字与绑定小程序一步完成,账单自动存入她的小程序',
+    memberCode: row.user_id ? memberCodeForUserId(row.user_id) : ''
+  }
+}
+
+// 一次性签署码:一单只留一枚有效码,重发即作废旧的
+function issueSignToken(settlement, { actor = 'admin', ttlHours = 24 } = {}) {
+  const tenantId = settlement.tenant_id
+  const now = new Date()
+  db.prepare("UPDATE settlement_sign_tokens SET status = 'superseded' WHERE settlement_id = ? AND status = 'active'").run(settlement.id)
+  const token = `sg${randomId('').replace(/^_/, '')}${Math.random().toString(36).slice(2, 8)}`
+  const expiresAt = iso(new Date(now.getTime() + ttlHours * 3_600_000))
+  db.prepare(`INSERT INTO settlement_sign_tokens (token, tenant_id, settlement_id, status, expires_at, created_by, created_at)
+    VALUES (?, ?, ?, 'active', ?, ?, ?)`).run(token, tenantId, settlement.id, expiresAt, actor, iso(now))
+  return { token, expiresAt }
+}
+
+function activeSignToken(settlementId) {
+  return db.prepare("SELECT * FROM settlement_sign_tokens WHERE settlement_id = ? AND status = 'active' ORDER BY created_at DESC LIMIT 1").get(settlementId) || null
+}
+
+function signTokenUrl(token) {
+  return `${APP_PUBLIC_URL}/sign?t=${encodeURIComponent(token)}`
+}
+
+/* 屏 S3 状态行(规则④):等待顾客进入 → 顾客核对中 → 已签署。
+   「顾客核对中」= 有人拿这枚码打开过签署页(viewed_at 有值)。 */
+function signStateOf(settlement) {
+  if (settlement.status === 'signed') return { state: 'signed', text: '已签署' }
+  if (settlement.status === 'voided') return { state: 'voided', text: '已撤回' }
+  const tk = activeSignToken(settlement.id)
+  if (tk && tk.viewed_at) return { state: 'viewing', text: '顾客核对中' }
+  return { state: 'waiting', text: '等待顾客进入签署页…' }
+}
+
+/* 屏 S4 绑定(规则⑤):openid 绑到**这张单挂着的档案**,与微信注册手机号无关。
+   已绑本店另一档案 = 冲突不覆盖、签字照走、进人工合并队列。 */
+function claimUserByOpenId({ tenantId, userId, provider = 'wechat_miniprogram', providerUserId, settlementCode = '', unionId = '' }) {
+  const target = db.prepare('SELECT * FROM users WHERE id = ? AND tenant_id = ?').get(userId, tenantId)
+  if (!target) throw apiError(404, 'NOT_FOUND', '找不到这份顾客档案。')
+  const boundRow = db.prepare('SELECT user_id FROM user_identities WHERE provider = ? AND provider_user_id = ?').get(provider, providerUserId)
+    || db.prepare('SELECT id AS user_id FROM users WHERE wechat_open_id = ?').get(providerUserId)
+  if (boundRow && boundRow.user_id && boundRow.user_id !== userId) {
+    const other = db.prepare('SELECT tenant_id FROM users WHERE id = ?').get(boundRow.user_id)
+    // 只有「本店另一档案」才是冲突;别家店的同一个微信是正常的(多租户各自建档)
+    if (other && other.tenant_id === tenantId) {
+      db.prepare(`INSERT INTO identity_merge_queue (id, tenant_id, provider, provider_user_id, bound_user_id, target_user_id, settlement_code, status, note, created_at)
+        VALUES (?, ?, ?, ?, ?, ?, ?, 'open', ?, ?)`)
+        .run(randomId('mrg'), tenantId, provider, providerUserId, boundRow.user_id, userId, settlementCode,
+          '该微信已绑本店另一档案,不覆盖;签字照走,等人工合并', iso(new Date()))
+      return { bound: false, conflict: true, mergeQueued: true, memberCode: memberCodeForUserId(userId) }
+    }
+  }
+  if (boundRow && boundRow.user_id === userId) {
+    return { bound: true, conflict: false, alreadyBound: true, memberCode: memberCodeForUserId(userId) }
+  }
+  db.prepare("UPDATE users SET wechat_open_id = COALESCE(wechat_open_id, ?) WHERE id = ?").run(providerUserId, userId)
+  upsertUserIdentity({ userId, provider, providerUserId, unionId, phone: target.phone || '' })
+  // 绑定即激活她的专属会员码(S4-08);会员码由 userId 推导,绑定后才对外展示
+  return { bound: true, conflict: false, memberCode: memberCodeForUserId(userId) }
+}
+
 function serializeSettlement(row, { includeSignature = false } = {}) {
   const items = db.prepare('SELECT * FROM settlement_items WHERE settlement_id = ? ORDER BY item_no ASC').all(row.id)
   const techs = db.prepare('SELECT st.*, t.name AS tech_name FROM settlement_technicians st LEFT JOIN technicians t ON t.id = st.technician_id WHERE st.settlement_id = ?').all(row.id)
@@ -9367,6 +9466,8 @@ function serializeSettlement(row, { includeSignature = false } = {}) {
     isProxyPaid: Boolean(row.is_proxy_paid),
     // 屏 2:代付要在明细区上方单起一行「本单由 X 的卡支付(代付)」,所以要卡主姓名
     cardOwnerName: (db.prepare('SELECT display_name FROM users WHERE id = ?').get(row.user_id) || {}).display_name || '',
+    // 屏 S2 徽标 + 屏 S4 前置卡:**只看档案绑定状态**,不看新老客;文案后端下发(规则③)
+    ...customerBindShape(row),
     status: row.status,
     tierKey: row.price_tier_used,
     tierChangedFrom: row.tier_changed_from,
@@ -9451,7 +9552,7 @@ async function route(req, res) {
     })
   }
   // 顾客签署页(小程序 / 网页同构):凭单号只读,不需要登录
-  if (req.method === 'GET' && path.startsWith('/settlements/') && !path.endsWith('/sign') && !path.endsWith('/snapshot')) {
+  if (req.method === 'GET' && path.startsWith('/settlements/') && !path.startsWith('/settlements/by-token/') && !path.endsWith('/sign') && !path.endsWith('/snapshot')) {
     const code = decodeURIComponent(path.split('/')[2] || '')
     const row = db.prepare('SELECT * FROM settlements WHERE code = ?').get(code)
     if (!row) throw apiError(404, 'NOT_FOUND', '找不到这张服务单。')
@@ -9490,6 +9591,68 @@ async function route(req, res) {
     return
   }
   // 卡主签字:签字那一刻即时扣卡(先烧迁移桶再烧新桶);签前二次校验余额,不足直接拦
+  /* 屏 S3 的二维码扫进来先落这里:凭一次性签署码换到单号(规则⓪ 第一把钥匙)。
+     顺手把 viewed_at 打上 —— 商家端的状态行就从「等待进入」跳到「顾客核对中」(规则④)。 */
+  if (req.method === 'GET' && path.startsWith('/settlements/by-token/')) {
+    const token = decodeURIComponent(path.split('/')[3] || '')
+    const tk = db.prepare('SELECT * FROM settlement_sign_tokens WHERE token = ?').get(token)
+    if (!tk) throw apiError(404, 'BAD_SIGN_TOKEN', '这个签署码无效,请让店员重新出示二维码。')
+    if (tk.status !== 'active') throw apiError(410, 'SIGN_TOKEN_SUPERSEDED', '这张码已经被新码替代了,请扫店员最新出示的二维码。')
+    if (String(tk.expires_at) < iso(new Date())) throw apiError(410, 'SIGN_TOKEN_EXPIRED', '这张签署码已过期,请让店员重新出示二维码。')
+    const row = db.prepare('SELECT * FROM settlements WHERE id = ?').get(tk.settlement_id)
+    if (!row) throw apiError(404, 'NOT_FOUND', '找不到这张服务单。')
+    if (!tk.viewed_at) db.prepare('UPDATE settlement_sign_tokens SET viewed_at = ? WHERE token = ?').run(iso(new Date()), token)
+    return json(res, 200, { code: row.code, settlement: serializeSettlement(row) })
+  }
+  /* 屏 S4「是我本人,绑定并继续」。沙盒(没配微信密钥)走演示旁路:
+     用一个稳定的伪 openid,把整条链路跑通,不真调微信授权(规则⑤ 末句)。 */
+  if (req.method === 'POST' && path.startsWith('/settlements/') && path.endsWith('/claim')) {
+    const code = decodeURIComponent(path.split('/')[2] || '')
+    const row = db.prepare('SELECT * FROM settlements WHERE code = ?').get(code)
+    if (!row) throw apiError(404, 'NOT_FOUND', '找不到这张服务单。')
+    const body = await readBody(req)
+    const sandbox = !process.env.WECHAT_APP_SECRET
+    let openid = String(body.openid || '').trim()
+    if (!openid) {
+      if (!sandbox) throw apiError(400, 'BAD_REQUEST', '缺少微信授权信息。')
+      openid = `demo-openid-${row.user_id}` // 沙盒演示旁路:同一档案每次都是同一个假 openid,幂等
+    }
+    const out = claimUserByOpenId({
+      tenantId: row.tenant_id, userId: row.user_id,
+      providerUserId: openid, unionId: String(body.unionid || ''), settlementCode: row.code
+    })
+    /* 可选手机号一键授权:只做**一致性校验** —— 不一致仅提示,不拦签字、不改档案(S4-06)。 */
+    let phoneCheck = null
+    const authPhone = String(body.phone || '').trim()
+    if (authPhone) {
+      const filed = String((db.prepare('SELECT phone FROM users WHERE id = ?').get(row.user_id) || {}).phone || '').trim()
+      phoneCheck = {
+        matched: Boolean(filed) && filed === authPhone,
+        note: !filed ? '档案上没留手机号,已按本人确认绑定。'
+          : (filed === authPhone ? '手机号与档案一致。' : '授权手机号与档案上的不一致,已按你本人确认绑定,不影响签字;需要改档案请找店员。')
+      }
+    }
+    return json(res, 200, {
+      ...out, sandbox, phoneCheck,
+      customerName: (db.prepare('SELECT display_name FROM users WHERE id = ?').get(row.user_id) || {}).display_name || '',
+      note: out.conflict
+        ? '这个微信在本店已经绑过另一份档案了,我们不覆盖它;你照常签字,店里会人工核对合并。'
+        : '已绑定,本次账单与电子票据会出现在你的小程序「我的 → 消费记录」。'
+    })
+  }
+  /* 规则⑥ 会员码=认领码:未绑定轻档案的会员码,顾客任何时候扫它授权即绑定,
+     不必等到结算。已绑定档案再扫 = 幂等,不重复绑也不报错。 */
+  if (req.method === 'POST' && path.startsWith('/member-code/') && path.endsWith('/claim')) {
+    const mc = decodeURIComponent(path.split('/')[2] || '')
+    const user = db.prepare('SELECT * FROM users WHERE id = ?').get(userIdFromMemberCode(mc))
+    if (!user) throw apiError(404, 'BAD_MEMBER_CODE', '这个会员码无效。')
+    const body = await readBody(req)
+    const sandbox = !process.env.WECHAT_APP_SECRET
+    const openid = String(body.openid || '').trim() || (sandbox ? `demo-openid-${user.id}` : '')
+    if (!openid) throw apiError(400, 'BAD_REQUEST', '缺少微信授权信息。')
+    const out = claimUserByOpenId({ tenantId: user.tenant_id, userId: user.id, providerUserId: openid, unionId: String(body.unionid || '') })
+    return json(res, 200, { ...out, sandbox, customerName: user.display_name || '' })
+  }
   if (req.method === 'POST' && path.startsWith('/settlements/') && path.endsWith('/sign')) {
     const code = decodeURIComponent(path.split('/')[2] || '')
     const row = db.prepare('SELECT * FROM settlements WHERE code = ?').get(code)
@@ -13835,6 +13998,63 @@ async function route(req, res) {
     const body = await readBody(req)
     return json(res, 200, revokeDepositReceipt({ booking, reason: body.reason, actor: adminSession.email || 'owner' }))
   }
+  /* 屏 S1:按手机号找档案(命中即带出,不建重复档案 —— 规则①)。
+     只在**本店**找;唯一命中才认,多条命中当没命中(歧义不猜人 —— 规则⓪)。 */
+  if (req.method === 'GET' && path === '/admin/customers/lookup') {
+    const phone = String(query.phone || '').replace(/\s/g, '').trim()
+    const memberCode = String(query.memberCode || '').trim()
+    if (memberCode) {
+      const uid = userIdFromMemberCode(memberCode)
+      const u = uid ? db.prepare('SELECT id, display_name, phone, tenant_id FROM users WHERE id = ?').get(uid) : null
+      if (!u || u.tenant_id !== currentTenantId()) return json(res, 200, { hit: null, reason: '这个会员码不属于本店,或者查不到档案。' })
+      return json(res, 200, { hit: { id: u.id, displayName: u.display_name || '', phone: u.phone || '', bound: isUserBound(u.id), memberCode: memberCodeForUserId(u.id) }, via: 'member_code' })
+    }
+    if (phone.length < 6) return json(res, 200, { hit: null, reason: '手机号太短,查不了。' })
+    const rows = db.prepare('SELECT id, display_name, phone FROM users WHERE tenant_id = ? AND REPLACE(COALESCE(phone, \'\'), \' \', \'\') = ?').all(currentTenantId(), phone)
+    if (rows.length !== 1) return json(res, 200, { hit: null, reason: rows.length ? '这个手机号在本店对应多份档案,请人工确认。' : '' })
+    return json(res, 200, { hit: { id: rows[0].id, displayName: rows[0].display_name || '', phone: rows[0].phone || '', bound: isUserBound(rows[0].id), memberCode: memberCodeForUserId(rows[0].id) }, via: 'phone' })
+  }
+  /* 屏 S3:出示二维码。所有单都出(不分绑定与否),已绑定的多一行「已推送到顾客小程序」。
+     码 = 这张单的一次性签署链接;再调一次 = 重发(旧码立刻作废)。 */
+  if (req.method === 'POST' && path.startsWith('/admin/settlements/') && path.endsWith('/sign-token')) {
+    if (adminSession.role !== 'owner' && adminSession.role !== 'staff') throw apiError(403, 'FORBIDDEN', '需要员工或老板权限。')
+    const id = path.split('/')[3]
+    const row = db.prepare('SELECT * FROM settlements WHERE id = ? AND tenant_id = ?').get(id, currentTenantId())
+    if (!row) throw apiError(404, 'NOT_FOUND', '找不到这张服务单。')
+    if (row.status === 'signed') throw apiError(400, 'ALREADY_SIGNED', '这张单已经签过了。')
+    const { token, expiresAt } = issueSignToken(row, { actor: adminSession.email || 'staff' })
+    const bound = isUserBound(row.user_id)
+    return json(res, 200, {
+      token, expiresAt, url: signTokenUrl(token),
+      settlement: serializeSettlement(row),
+      pushedToMiniApp: bound,
+      pushedText: bound ? '✓ 已推送到顾客小程序' : '',
+      ...signStateOf(row)
+    })
+  }
+  // 屏 S3 状态行轮询:等待进入 → 顾客核对中 → 已签署(前端据此自动关闭弹层)
+  if (req.method === 'GET' && path.startsWith('/admin/settlements/') && path.endsWith('/sign-state')) {
+    const id = path.split('/')[3]
+    const row = db.prepare('SELECT * FROM settlements WHERE id = ? AND tenant_id = ?').get(id, currentTenantId())
+    if (!row) throw apiError(404, 'NOT_FOUND', '找不到这张服务单。')
+    const tk = activeSignToken(row.id)
+    return json(res, 200, { ...signStateOf(row), expiresAt: tk ? tk.expires_at : null, expired: Boolean(tk && String(tk.expires_at) < iso(new Date())) })
+  }
+  // openid 冲突的人工合并队列(规则⑤):只读,处理动作等出图
+  if (req.method === 'GET' && path === '/admin/identity-merge-queue') {
+    if (adminSession.role !== 'owner') throw apiError(403, 'FORBIDDEN', 'Owner permission is required.')
+    const rows = db.prepare("SELECT * FROM identity_merge_queue WHERE tenant_id = ? AND status = 'open' ORDER BY created_at DESC").all(currentTenantId())
+    const nameOf = (uid) => (db.prepare('SELECT display_name FROM users WHERE id = ?').get(uid) || {}).display_name || uid
+    return json(res, 200, {
+      queue: rows.map((r) => ({
+        id: r.id, settlementCode: r.settlement_code || '',
+        boundUserId: r.bound_user_id, boundUserName: nameOf(r.bound_user_id),
+        targetUserId: r.target_user_id, targetUserName: nameOf(r.target_user_id),
+        note: r.note || '', createdAt: r.created_at
+      }))
+    })
+  }
+
   /* 定金守恒审计(§五 补拍②):负债的每一分减少都要对得上等额收入。
      空数组 = 守恒。给店主/测试当体检口。 */
   if (req.method === 'GET' && path === '/admin/finance/deposit-conservation') {
@@ -14565,6 +14785,41 @@ db.exec(`
     created_at TEXT NOT NULL
   );
   CREATE INDEX IF NOT EXISTS idx_deposit_receipts ON deposit_receipts(tenant_id, booking_id);
+
+  /* 扫码签闭环(2026-08-09 图 S3/S4)。
+     一次性签署码:二维码里编的就是它,指向**具体一张单**(规则⓪ 的第一把钥匙)。
+     一单可以重发,重发即把旧码作废(status='superseded'),永远只有一枚有效码。
+     viewed_at = 顾客扫进来了 → S3 状态行从「等待进入」跳到「顾客核对中」。 */
+  CREATE TABLE IF NOT EXISTS settlement_sign_tokens (
+    token TEXT PRIMARY KEY,
+    tenant_id TEXT NOT NULL,
+    settlement_id TEXT NOT NULL,
+    status TEXT NOT NULL,          -- active | superseded
+    expires_at TEXT NOT NULL,
+    viewed_at TEXT,
+    created_by TEXT,
+    created_at TEXT NOT NULL
+  );
+  CREATE INDEX IF NOT EXISTS idx_sign_tokens ON settlement_sign_tokens(tenant_id, settlement_id);
+
+  /* openid 冲突的人工合并队列(规则⑤):该微信已绑本店另一档案时,
+     **不覆盖**、签字照走,把冲突排进队列等人处理。只追加。 */
+  CREATE TABLE IF NOT EXISTS identity_merge_queue (
+    id TEXT PRIMARY KEY,
+    tenant_id TEXT NOT NULL,
+    provider TEXT NOT NULL,
+    provider_user_id TEXT NOT NULL,
+    bound_user_id TEXT NOT NULL,     -- 这个 openid 现在绑着谁
+    target_user_id TEXT NOT NULL,    -- 想绑到谁(这张单挂着的档案)
+    settlement_code TEXT,
+    status TEXT NOT NULL,            -- open | merged | dismissed
+    note TEXT,
+    created_at TEXT NOT NULL
+  );
+  CREATE INDEX IF NOT EXISTS idx_identity_merge ON identity_merge_queue(tenant_id, status);
+  DROP TRIGGER IF EXISTS identity_merge_no_delete;
+  CREATE TRIGGER identity_merge_no_delete BEFORE DELETE ON identity_merge_queue
+  BEGIN SELECT RAISE(ABORT, 'identity merge record is append-only'); END;
   DROP TRIGGER IF EXISTS deposit_receipts_no_delete;
   CREATE TRIGGER deposit_receipts_no_delete BEFORE DELETE ON deposit_receipts
   BEGIN SELECT RAISE(ABORT, 'deposit receipt is append-only; write a revoke row instead of deleting'); END;
