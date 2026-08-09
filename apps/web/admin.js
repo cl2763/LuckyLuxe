@@ -989,7 +989,7 @@ function applyLanguage() {
   const attendanceTitleEl = document.querySelector('#attendanceTitle')
   if (attendanceTitleEl) attendanceTitleEl.textContent = owner.lang === 'zh' ? '🕐 打卡考勤（今日）' : '🕐 Attendance (today)'
   const finNavPayrollEl = document.querySelector('#finNavPayroll')
-  if (finNavPayrollEl) finNavPayrollEl.textContent = owner.lang === 'zh' ? '👥 员工工资' : '👥 Payroll'
+  if (finNavPayrollEl) finNavPayrollEl.textContent = owner.lang === 'zh' ? '员工工资' : 'Payroll'
   els.sidebarServices.textContent = t('navServices')
   els.sidebarCustomers.textContent = t('navCustomers')
   els.sidebarWechatMockLabel.textContent = t('navWechatMock')
@@ -1039,11 +1039,12 @@ function applyLanguage() {
   const demoBtn = document.querySelector('#financeDemoButton')
   if (demoBtn) demoBtn.textContent = owner.lang === 'zh' ? '演示数据' : 'Demo data'
   const navLabels = [
-    ['#finNavQuick', owner.lang === 'zh' ? '✎ 记一笔' : '✎ Quick entry'],
-    ['#finNavStored', owner.lang === 'zh' ? '💳 储值卡' : '💳 Stored value'],
-    ['#finNavTxns', owner.lang === 'zh' ? '☰ 流水' : '☰ Transactions'],
-    ['#finNavSettings', owner.lang === 'zh' ? '⚙ 财务设置' : '⚙ Settings'],
-    ['#finNavInsights', owner.lang === 'zh' ? '✦ AI 解读' : '✦ AI insights']
+    // 无 emoji 规范(P2③ 定):页签与按钮一律纯文字
+    ['#finNavQuick', owner.lang === 'zh' ? '记一笔' : 'Quick entry'],
+    ['#finNavStored', owner.lang === 'zh' ? '储值卡' : 'Stored value'],
+    ['#finNavTxns', owner.lang === 'zh' ? '流水' : 'Transactions'],
+    ['#finNavSettings', owner.lang === 'zh' ? '财务设置' : 'Settings'],
+    ['#finNavInsights', owner.lang === 'zh' ? 'AI 解读' : 'AI insights']
   ]
   for (const [selector, label] of navLabels) {
     const button = document.querySelector(selector)
@@ -2852,7 +2853,7 @@ function renderFinanceTargets() {
 }
 
 function renderFinancePayroll() {
-  // 2026-08-02 独立「👥 员工工资」tab(店主定:工资月月变,不属于"设置"):试算 → 业绩核查(归属备注+待写小记,融合在本页)→ 锁定 → 发放入账;月份跟随上方财务月份
+  // 2026-08-02 独立「员工工资」tab(店主定:工资月月变,不属于"设置"):试算 → 业绩核查(归属备注+待写小记,融合在本页)→ 锁定 → 发放入账;月份跟随上方财务月份
   if (!els.financePayrollBody) return
   const hasStaffPlan = Boolean(owner.tenantPlan?.features?.staff_schedule?.enabled)
   els.finNavPayroll?.classList.toggle('hidden', !hasStaffPlan)
@@ -2938,7 +2939,7 @@ function renderFinancePayroll() {
             : 'Zero performance is expected until you run settlement → signature → daily close.'}</div>`)}`
       els.financePayrollBody.innerHTML = `
         ${closeHtml}
-        ${paid ? `<p class="subtle">💰 ${zh ? `已发放入账 · ${String(data.paidAt || '').slice(0, 16).replace('T', ' ')} · 账本可查(支出·工资);更正需红字冲销` : 'Paid into ledger'}</p>`
+        ${paid ? `<p class="subtle">${zh ? `已发放入账 · ${String(data.paidAt || '').slice(0, 16).replace('T', ' ')} · 账本可查(支出·工资);更正需红字冲销` : 'Paid into ledger'}</p>`
           : locked ? `<p class="subtle">✅ ${zh ? `已锁定存档 · ${String(data.lockedAt || '').slice(0, 16).replace('T', ' ')}` : 'Locked'} <button class="ghost slim" data-sal-unlock type="button">${zh ? '解锁重算' : 'Unlock'}</button></p>`
           : `<p class="subtle" style="margin:0 0 6px"><strong>${zh ? '① 本月试算' : '① Estimate'}</strong> · ${cadText(data.totalCents || 0)}</p>`}
         ${rows.length ? rows.map(rowHtml).join('') : `<p class="subtle">${zh ? '本月暂无技师数据。' : 'No data.'}</p>`}
@@ -3078,7 +3079,7 @@ function renderAttendanceBoard() {
     .catch((error) => { els.attendanceBody.innerHTML = `<p class="subtle">${escapeHtml(error.message || '加载失败')}</p>` })
 }
 
-// 2026-08-02 员工管理页两板块:📅计时排班 / 📈技师业绩(业绩卡+薪资方案+打卡考勤);月度业绩核查已并入 财务→👥员工工资
+// 2026-08-02 员工管理页两板块:计时排班 / 技师业绩(业绩卡+薪资方案+打卡考勤);月度业绩核查已并入 财务→员工工资
 function applyStaffTab() {
   const tab = owner.staffTab || 'schedule'
   document.querySelectorAll('#schedulePage [data-staff-panel]').forEach((panel) => {
@@ -3336,7 +3337,7 @@ function openSalaryPlanPanel(techId, name) {
   panel.className = 'fin-guide-panel'
   panel.innerHTML = `
     <div class="fin-guide-head">
-      <strong>💰 ${zh ? '薪资方案(固定/浮动绩效)' : 'Salary Plans'}</strong>
+      <strong>${zh ? '薪资方案(固定/浮动绩效)' : 'Salary Plans'}</strong>
       <button class="ghost slim" data-sp-close type="button">${zh ? '关闭' : 'Close'}</button>
     </div>
     <div id="salaryPlanPanelBody"></div>
