@@ -183,6 +183,30 @@
     </view>
 
     <view class="cta {{submitting ? 'ing' : ''}}" bindtap="submit">{{submitting ? '提交中…' : ctaText}}</view>
+
+  <!-- 屏 S3:推送签署后所有单都弹这一层。沙盒态=占位图+链接+复制(裁决 b),
+       真码等接微信官方 wxacode.getUnlimited;状态行实时三态,签完自动关闭。 -->
+  <view wx:if="{{qr}}" class="qmask" bindtap="closeQr"></view>
+  <view wx:if="{{qr}}" class="qsheet">
+    <view class="qhd">
+      <text class="qt">请顾客扫码签署</text>
+      <text class="qx" bindtap="closeQr">✕</text>
+    </view>
+    <view class="qpushed" wx:if="{{qr.pushedText}}">{{qr.pushedText}}</view>
+    <view class="qcode">
+      <view class="qph">二维码</view>
+      <view class="qphs">沙盒占位 · 发版接微信小程序码后显示真码</view>
+    </view>
+    <view class="qno">{{qr.code}}</view>
+    <view class="qamt">{{qr.amountText}}</view>
+    <view class="qsub">{{qr.breakdownText}}</view>
+    <view class="qlink">{{qr.url}}</view>
+    <view class="qcopy" bindtap="copyQrLink">复制链接</view>
+    <view class="qstate {{qr.state}}">{{qr.stateText}}</view>
+    <view class="qtip">顾客扫码 → 手机号授权 → 核对明细 → 签字;签完此页自动关闭并回到今日台面</view>
+    <view class="qhand" bindtap="handSign">顾客无法扫码?店员设备当面手签</view>
+    <view class="qhandtip">当面手签=本人在场本人签;档案保持未绑定,下次可扫店内建档码补绑</view>
+  </view>
     <view class="foot">金额全部由后端计价引擎算出，本页不做任何金额运算</view>
   </block>
 </view>

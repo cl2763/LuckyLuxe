@@ -187,22 +187,42 @@
   <view wx:if="{{directSheet}}" class="mask" bindtap="closeDirect"></view>
   <view wx:if="{{directSheet}}" class="dsheet">
     <view class="ds-head">
-      <view class="ds-t">直接排单 · {{directTechName}}</view>
+      <view class="ds-t">现场排单 · {{directTechName}}</view>
       <view class="ds-x" bindtap="closeDirect">✕</view>
     </view>
     <scroll-view scroll-y class="ds-body">
-      <view class="ds-k">顾客 · 从客户库搜索,或直接输入新客名</view>
-      <input class="ds-inp" placeholder="姓名 / 手机号 / 新客名" value="{{custQuery}}" bindinput="onCustSearch" />
-      <view wx:if="{{selectedCustName}}" class="ds-picked">已选:{{selectedCustName}} <text class="ds-clear" bindtap="clearCust">✕</text></view>
-      <view wx:if="{{custMatches.length}}" class="ds-matches">
-        <view wx:for="{{custMatches}}" wx:key="id" class="ds-match" data-id="{{item.id}}" data-name="{{item.name}}" bindtap="pickCust">
-          <text class="ds-mn">{{item.name}}</text><text class="ds-mp" wx:if="{{item.phone}}">{{item.phone}}</text>
-        </view>
+      <!-- 屏 S1 顾客区:两个页签 + 扫会员码。手机号只用来找档案,身份靠签署码/会员码 -->
+      <view class="ds-k">顾客 <text class="ds-ksub">老顾客扫会员码直接带出</text></view>
+      <view class="ds-tabs">
+        <view class="ds-tab {{dsTab==='find'?'on':''}}" data-t="find" bindtap="dsSwitchTab">找人</view>
+        <view class="ds-tab {{dsTab==='new'?'on':''}}" data-t="new" bindtap="dsSwitchTab">新客 · 输手机号</view>
+        <view class="ds-scan" bindtap="scanMemberCode">扫会员码</view>
       </view>
-      <view wx:elif="{{custQuery && !selectedCustId}}" class="ds-newhint">库中无匹配 → 将作为新客「{{custQuery}}」自动建档</view>
+
+      <block wx:if="{{dsTab==='find'}}">
+        <input class="ds-inp" placeholder="姓名 / 手机号 / 新客名" value="{{custQuery}}" bindinput="onCustSearch" />
+        <view wx:if="{{selectedCustName}}" class="ds-picked">已选:{{selectedCustName}} <text class="ds-clear" bindtap="clearCust">✕</text></view>
+        <view wx:if="{{custMatches.length}}" class="ds-matches">
+          <view wx:for="{{custMatches}}" wx:key="id" class="ds-match" data-id="{{item.id}}" data-name="{{item.name}}" bindtap="pickCust">
+            <text class="ds-mn">{{item.name}}</text><text class="ds-mp" wx:if="{{item.phone}}">{{item.phone}}</text>
+          </view>
+        </view>
+        <view wx:elif="{{custQuery && !selectedCustId}}" class="ds-newhint">库中无匹配 → 将作为新客「{{custQuery}}」自动建档</view>
+      </block>
+
+      <block wx:else>
+        <input class="ds-inp" placeholder="姓名，如 王小雅" bindinput="onDsName" />
+        <input class="ds-inp ds-mt" type="number" placeholder="手机号，如 138 0013 0000" bindinput="onDsPhone" />
+        <view wx:if="{{dsHitText}}" class="ds-hit {{dsHitId ? 'on' : ''}}">{{dsHitText}}</view>
+        <view wx:else class="ds-newhint">未命中 → 新建<text class="ds-light">轻档案</text>(未绑微信，签字时扫码自动绑定)</view>
+        <view class="ds-warn">不填手机号也能建单;身份绑定不依赖手机号(靠签署码/会员码),手机号只用于找档案和联系</view>
+      </block>
 
       <view class="ds-k">时段 · 开始时间</view>
-      <picker mode="time" value="{{directTime}}" bindchange="onDirectTime"><view class="ds-time">{{directTime}} <text class="ds-cal">改 ›</text></view></picker>
+      <view class="ds-timerow">
+        <view class="ds-now" bindtap="dsNow">现在开始</view>
+        <picker class="ds-pick" mode="time" value="{{directTime}}" bindchange="onDirectTime"><view class="ds-time">{{directTime}} <text class="ds-cal">选时段 ›</text></view></picker>
+      </view>
       <view class="ds-durrow">
         <view class="ds-durbtn" bindtap="durMinus">−30分</view>
         <view class="ds-durval">占用 {{directDurH}} 小时<text class="ds-durend" wx:if="{{directEndTime}}"> · 到 {{directEndTime}}</text></view>
@@ -214,14 +234,16 @@
       <view class="ds-k">服务</view>
       <scroll-view scroll-x class="ds-svcs"><view wx:for="{{directServices}}" wx:key="id" class="ds-c {{directServiceId===item.id?'on':''}}" data-id="{{item.id}}" bindtap="pickDirectSvc">{{item.name}}</view></scroll-view>
 
-      <view class="ds-k">定金状态(成为订单标)</view>
-      <view class="ds-toggle">
-        <view class="ds-opt {{directDeposit?'on':''}}" data-v="paid" bindtap="setDeposit">已付定金</view>
-        <view class="ds-opt {{!directDeposit?'on warn':''}}" data-v="unpaid" bindtap="setDeposit">未付定金 · 到店收</view>
-      </view>
-      <view class="ds-hint">未付定金:仍占该时段,订单标「未付定金」提醒之后收</view>
+      <block wx:if="{{depositCfg.enabled}}">
+        <view class="ds-k">定金 <text class="ds-ksub">按店配 {{depositCfg.amountText}} · 可选</text></view>
+        <view class="ds-toggle">
+          <view class="ds-opt {{directDeposit?'on':''}}" data-v="paid" bindtap="setDeposit">已收定金 {{depositCfg.amountText}}</view>
+          <view class="ds-opt {{!directDeposit?'on':''}}" data-v="unpaid" bindtap="setDeposit">未收</view>
+        </view>
+        <view class="ds-hint">选「已收」=走「标记已收定金」同一动作(记经手人、入定金预收);现场即时单通常不收</view>
+      </block>
     </scroll-view>
-    <view class="ds-confirm" bindtap="submitDirect">确认排单 · 占用该时段</view>
+    <view class="ds-confirm" bindtap="submitDirect">建单，进入今日台面</view>
   </view>
 
   <merchant-tabbar wx:if="{{!directSheet}}" active="orders"></merchant-tabbar>

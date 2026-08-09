@@ -75,6 +75,16 @@ async function main() {
   check('S1 手机号命中已有档案(带出,不新建)', lookup.data.hit && lookup.data.hit.id === xiaoya && lookup.data.via === 'phone',
     JSON.stringify(lookup.data).slice(0, 200))
   check('S1 带出的档案标着「未绑定」', lookup.data.hit.bound === false, String(lookup.data.hit.bound))
+  /* 「绑定」只认**微信**。顾客导入会给档案写一条 provider='phone' 的身份行,
+     那只是留了手机号 —— 曾把轻档案误判成已绑定,S2 徽标一直不出现(并排核验查出来的)。 */
+  const impPhone = `1330013${RUN.slice(-4)}`
+  const impUid = (await request(`/platform/tenants/${shop.tenantId}/import/customers`, {
+    method: 'POST', body: JSON.stringify({ dryRun: false, rows: [{ name: '导入客', phone: impPhone, balanceCents: 0 }] })
+  })).data.users[0].userId
+  const impHit = await request(`/admin/customers/lookup?userId=${encodeURIComponent(impUid)}`, {}, shop.token)
+  check('S2 只留了手机号(provider=phone)**不算**已绑定,徽标照出',
+    impHit.data.hit.bound === false && impHit.data.hit.badgeText === '新客 · 未绑定',
+    JSON.stringify(impHit.data.hit).slice(0, 200))
   const memberCode = lookup.data.hit.memberCode
   check('S1 轻档案也有专属会员码(规则⑥ 认领码)', /^LL-[A-Z0-9]{8}$/.test(memberCode), memberCode)
 

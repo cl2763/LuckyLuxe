@@ -9361,7 +9361,10 @@ function isUserBound(userId) {
   if (!userId) return false
   const u = db.prepare('SELECT wechat_open_id FROM users WHERE id = ?').get(userId)
   if (u && u.wechat_open_id) return true
-  return Boolean(db.prepare('SELECT 1 FROM user_identities WHERE user_id = ?').get(userId))
+  /* 「绑定」= **绑了微信**,不是"有任何身份行"。顾客导入会给档案写一条 provider='phone'
+     的身份,那只是留了手机号,不代表她能在小程序里看到自己的账单 ——
+     2026-08-09 并排核验时就是因为这个,轻档案被误判成已绑定,S2 徽标一直不出现。 */
+  return Boolean(db.prepare("SELECT 1 FROM user_identities WHERE user_id = ? AND provider LIKE 'wechat%'").get(userId))
 }
 
 // 手机号脱敏:138****0000(图 S2 顾客行)

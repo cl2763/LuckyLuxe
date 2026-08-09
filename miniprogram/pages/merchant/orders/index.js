@@ -65,6 +65,9 @@ Page(Object.assign({
     directSheet: false, directTech: '', directTechName: '', directTime: '', directEndTime: '', directDurH: 0, directServices: [], directServiceId: '', directDurationMin: 120, directDeposit: false,
     // 顾客搜索选择
     directCustomers: [], custQuery: '', custMatches: [], selectedCustId: '', selectedCustName: '',
+    // 屏 S1(2026-08-09 图):找人 / 新客·输手机号 两个页签 + 扫会员码 + 现在开始 + 可选已收定金
+    dsTab: 'find', dsName: '', dsPhone: '', dsHitText: '', dsHitId: '',
+    depositCfg: { enabled: false, amountText: '' },
     myTechId: '', // 员工登录时高亮自己那列
     isOwner: false,
     actPanel: null, // 屏 0 操作面板(自建弹层)
@@ -375,10 +378,69 @@ Page(Object.assign({
       directSheet: true, directTech: tech, directTechName: (col && col.name) || '', directTime: time,
       directServices: services, directServiceId: first.id || '', directDurationMin: dur0,
       directEndTime: this.calcDirectEnd(time, dur0), directDurH: Math.round(dur0 / 6) / 10,
-      directCustomers: customers, custQuery: '', custMatches: [], selectedCustId: '', selectedCustName: '', directDeposit: false
+      directCustomers: customers, custQuery: '', custMatches: [], selectedCustId: '', selectedCustName: '', directDeposit: false,
+      dsTab: 'find', dsName: '', dsPhone: '', dsHitText: '', dsHitId: ''
     })
+    this.loadDepositCfg()
   },
   closeDirect() { this.setData({ directSheet: false }) },
+
+  /* ===== 屏 S1 现场/电话排单(2026-08-09 图 + 规则①②)=====
+     不是新页面 —— 就是这张既有面板的增强。手机号只用来**找档案**,
+     身份绑定靠签署码/会员码(规则⓪),所以手机号留空照样能建单。 */
+  // 定金块:未配定金规则的店整块不出现(规则②)
+  async loadDepositCfg() {
+    if (this.data.depositCfg.enabled) return
+    try {
+      const r = await api.adminGet('/admin/deposit-config')
+      const c = (r && r.config) || {}
+      const cents = c.mode === 'fixed' ? (c.fixedAmountCents || 0) : 0
+      this.setData({ depositCfg: { enabled: c.enabled !== false, amountText: cents ? storeMoney(cents, 0) : '' } })
+    } catch (e) { this.setData({ depositCfg: { enabled: false, amountText: '' } }) }
+  },
+  dsSwitchTab(e) { this.setData({ dsTab: e.currentTarget.dataset.t, dsHitText: '', dsHitId: '' }) },
+  onDsName(e) { this.setData({ dsName: String((e.detail && e.detail.value) || '') }) },
+  // 手机号命中已有档案 → 带出、不建重复档案(S1-08);唯一命中才认,歧义不猜人
+  async onDsPhone(e) {
+    const v = String((e.detail && e.detail.value) || '').replace(/\D/g, '')
+    this.setData({ dsPhone: v })
+    if (v.length < 6) { this.setData({ dsHitText: '', dsHitId: '' }); return }
+    try {
+      const r = await api.adminGet(`/admin/customers/lookup?phone=${encodeURIComponent(v)}`)
+      if (r && r.hit) {
+        this.setData({
+          dsHitId: r.hit.id, dsName: r.hit.displayName || this.data.dsName,
+          dsHitText: `已有档案 · ${r.hit.displayName || '顾客'}${r.hit.bound ? '' : '(未绑微信)'}`
+        })
+      } else this.setData({ dsHitText: r && r.reason ? r.reason : '', dsHitId: '' })
+    } catch (err) { this.setData({ dsHitText: '', dsHitId: '' }) }
+  },
+  // 商家侧扫顾客专属会员码 → 直接带出档案(规则⑥ 的商家这一向)
+  scanMemberCode() {
+    wx.scanCode({
+      onlyFromCamera: false,
+      success: async (r) => {
+        const raw = String((r && r.result) || '').trim()
+        const mc = (raw.match(/LL-[A-Za-z0-9]{8}/) || [])[0] || raw
+        try {
+          const hit = (await api.adminGet(`/admin/customers/lookup?memberCode=${encodeURIComponent(mc)}`)).hit
+          if (!hit) { wx.showToast({ title: '这个会员码查不到本店档案', icon: 'none' }); return }
+          this.setData({ dsTab: 'find', selectedCustId: hit.id, selectedCustName: hit.displayName, custQuery: hit.displayName, custMatches: [] })
+          wx.showToast({ title: `已带出 ${hit.displayName}`, icon: 'none' })
+        } catch (e) { wx.showToast({ title: '会员码解析失败', icon: 'none' }) }
+      },
+      fail: () => { /* 顾客端没开摄像头 / 取消,不提示 */ }
+    })
+  },
+  // 「现在开始」:即时单,时间取门店当下(店主定的产品原则:散客也先建一条即时预约)
+  dsNow() {
+    const now = new Date()
+    const hh = String(now.getHours()).padStart(2, '0')
+    const mm = String(now.getMinutes()).padStart(2, '0')
+    const t = `${hh}:${mm}`
+    this.setData({ directTime: t, directEndTime: this.calcDirectEnd(t, this.data.directDurationMin) })
+  },
+
   // 预计结束 = 起始 + 所选服务时长(结束时间由服务时长自动定,无需手选)
   calcDirectEnd(time, dur) {
     if (!/^\d{1,2}:\d{2}$/.test(time || '')) return ''
@@ -418,14 +480,23 @@ Page(Object.assign({
   setDeposit(e) { this.setData({ directDeposit: e.currentTarget.dataset.v === 'paid' }) },
   async submitDirect() {
     const d = this.data
-    const body = { serviceId: d.directServiceId, technicianId: d.directTech, date: d.selDate, time: d.directTime, durationMin: d.directDurationMin, depositPaid: d.directDeposit }
+    const body = { serviceId: d.directServiceId, technicianId: d.directTech, date: d.selDate, time: d.directTime, durationMin: d.directDurationMin, depositPaid: false }
+    // 顾客三种来法:库里选中 / 手机号命中带出 / 新建轻档案(姓名 + 可留空的手机号)
     if (d.selectedCustId) body.userId = d.selectedCustId
+    else if (d.dsHitId) body.userId = d.dsHitId
+    else if (d.dsTab === 'new' && d.dsName.trim()) { body.newCustomerName = d.dsName.trim(); if (d.dsPhone) body.phone = d.dsPhone }
     else if (d.custQuery.trim()) body.newCustomerName = d.custQuery.trim()
     else { wx.showToast({ title: '选择或输入顾客', icon: 'none' }); return }
     if (!d.directServiceId) { wx.showToast({ title: '选个服务', icon: 'none' }); return }
     if (!/^\d{2}:\d{2}$/.test(d.directTime)) { wx.showToast({ title: '选个时段', icon: 'none' }); return }
     try {
-      await api.adminPost('/admin/bookings/direct', body)
+      const made = await api.adminPost('/admin/bookings/direct', body)
+      /* 勾了「已收定金」= 走**标记已收定金同一个后端动作**(规则②),
+         不是另开一条路 —— 同一张 deposit_receipts、同一套幂等/留痕/越权/守恒。 */
+      if (d.directDeposit && made && made.booking) {
+        try { await api.adminPost(`/admin/bookings/${encodeURIComponent(made.booking.id)}/deposit-receipt`, {}) }
+        catch (err) { wx.showToast({ title: `单已建,定金没标上:${(err && err.message) || ''}`, icon: 'none' }) }
+      }
       wx.showToast({ title: '已排单', icon: 'success' })
       this.setData({ directSheet: false })
       this.loadDayView(this.data.selDate)

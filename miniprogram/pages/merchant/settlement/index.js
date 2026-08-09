@@ -4,6 +4,7 @@
    本页只负责:勾了什么 → 发给后端 → 把后端算好的数显示出来。 */
 const api = require('../../../utils/api')
 const { formatMoney, displayOf } = require('../../../utils/money')
+const { storeMoney } = require('../../../utils/storeclock')
 
 const TIERS = [
   { key: 'list', label: '原价' },
@@ -38,6 +39,7 @@ Page({
     preview: null, view: null,
     // 屏 S2:绑定状态徽标 —— 文案全部后端下发,前端一个字都不拼(规则③)
     bind: { bound: true, badgeText: '', hintText: '', phoneMasked: '', memberCode: '' },
+    qr: null,   // 屏 S3 二维码弹层
     ctaText: '推送签署',
     submitting: false
   },
@@ -346,6 +348,68 @@ Page({
     }
   },
 
+  /* ===== 屏 S3 出示二维码(2026-08-09 图 S3 + 规则④⑧)=====
+     码 = 这张单的一次性签署链接。沙盒态按店主 08-09 拍板(b)走:
+     **占位图 + 链接文字 + 复制链接 + 状态行**;真码等接微信官方 wxacode.getUnlimited
+     再补(不自研 QR 编码器 —— 本地无法自验的东西不进仓)。
+     状态行三态:等待顾客进入 → 顾客核对中 → 已签署(自动关闭回今日台面)。 */
+  async openQr(sheet) {
+    if (!sheet) { wx.navigateBack(); return }
+    try {
+      const r = await api.adminPost(`/admin/settlements/${encodeURIComponent(sheet.id)}/sign-token`, {})
+      const s = r.settlement || {}
+      const m = (c) => storeMoney(c, 2)
+      this.setData({
+        qr: {
+          settlementId: sheet.id,
+          code: s.code || sheet.code,
+          url: r.url,
+          pushedText: r.pushedText || '',
+          amountText: `应收 ${m(s.totalCents)}`,
+          breakdownText: s.depositDeductCents
+            ? `档位小计 ${m(s.subtotalCents)} − 已付定金 ${m(s.depositDeductCents)}`
+            : `档位小计 ${m(s.subtotalCents)}`,
+          stateText: r.text || '等待顾客进入签署页…',
+          state: r.state || 'waiting'
+        }
+      })
+      this.pollQr()
+    } catch (e) {
+      wx.showToast({ title: (e && e.message) || '出码失败', icon: 'none' })
+      wx.navigateBack()
+    }
+  },
+  // 状态行实时刷新(规则④)。签署完成 → 自动关闭并回今日台面。
+  pollQr() {
+    clearTimeout(this._qrTimer)
+    this._qrTimer = setTimeout(async () => {
+      const q = this.data.qr
+      if (!q) return
+      try {
+        const st = await api.adminGet(`/admin/settlements/${encodeURIComponent(q.settlementId)}/sign-state`)
+        this.setData({ 'qr.state': st.state, 'qr.stateText': st.text })
+        if (st.state === 'signed') {
+          wx.showToast({ title: '顾客已签署', icon: 'success' })
+          setTimeout(() => { this.setData({ qr: null }); wx.navigateBack() }, 900)
+          return
+        }
+      } catch (e) { /* 网络抖一下不打断,下一轮再问 */ }
+      this.pollQr()
+    }, 2500)
+  },
+  closeQr() { clearTimeout(this._qrTimer); this.setData({ qr: null }); wx.navigateBack() },
+  copyQrLink() {
+    wx.setClipboardData({ data: this.data.qr.url, success: () => wx.showToast({ title: '链接已复制', icon: 'none' }) })
+  },
+  // 兜底:顾客不扫码 —— 店员设备当面手签(档案保持未绑定)
+  handSign() {
+    clearTimeout(this._qrTimer)
+    const code = this.data.qr.code
+    this.setData({ qr: null })
+    wx.navigateTo({ url: `/pages/sign/index?code=${encodeURIComponent(code)}` })
+  },
+  onUnload() { clearTimeout(this._qrTimer) },
+
   async submit() {
     if (this.data.submitting) return
     if (!this.data.userId) { wx.showToast({ title: '这单没有绑定顾客,无法结算', icon: 'none' }); return }
@@ -363,11 +427,8 @@ Page({
     this.setData({ submitting: true })
     try {
       const r = await api.adminPost('/admin/settlements', body)
-      wx.showModal({
-        title: '已推送签字', showCancel: false, confirmText: '知道了',
-        content: `${r.note || ''}\n单号:${(r.settlements || []).map((s) => s.code).join('、')}`,
-        success: () => wx.navigateBack()
-      })
+      // 屏 S3:推送签署后**所有单都弹**二维码层(不分绑没绑定)
+      await this.openQr((r.settlements || [])[0])
     } catch (e) {
       wx.showToast({ title: (e && e.message) || '开单失败', icon: 'none' })
     } finally {
