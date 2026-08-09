@@ -5,6 +5,7 @@
 set -euo pipefail
 export ALLOW_DEMO_ADMIN_LOGIN=true  # 测试套件依赖演示登录路径(生产环境默认禁用)
 cd "$(dirname "$0")"
+API_DIR="$(pwd)"   # 绝对路径:restore_local 结束时要用,那时 cwd 可能已经变了
 
 # 回归全程跑独立临时库(DATA_DIR),不碰 local-data 真实/演示库;结束时自动删除
 export DATA_DIR="$(mktemp -d /tmp/ll-ci-data.XXXXXX)"
@@ -21,7 +22,8 @@ if curl -sf -o /dev/null --max-time 2 "http://127.0.0.1:4128/health"; then LOCAL
 restore_local() {
   [ "$LOCAL_WAS_UP" = "1" ] || return 0
   curl -sf -o /dev/null --max-time 2 "http://127.0.0.1:4128/health" && return 0
-  ( cd "$(dirname "$0")" && PORT=4128 DATA_DIR="./local-data" TEST_DB_PATH= nohup node local-server.mjs > /tmp/ll-local-restored.log 2>&1 & )
+  # 脚本开头已经 cd 进 apps/api 了,这里再 dirname $0 会踩空 —— 直接用绝对路径
+  ( cd "$API_DIR" && PORT=4128 DATA_DIR="./local-data" TEST_DB_PATH= nohup node local-server.mjs > /tmp/ll-local-restored.log 2>&1 & )
   for _ in $(seq 1 20); do
     curl -sf -o /dev/null --max-time 2 "http://127.0.0.1:4128/health" && { echo "== 已把店主的本地服务(4128)重新拉起来 =="; return 0; }
     sleep 0.5
