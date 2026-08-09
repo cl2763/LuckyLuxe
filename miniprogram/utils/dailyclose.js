@@ -119,12 +119,13 @@ const dailyCloseMixin = {
       this.loadClose(this.data.date)
     } catch (err) { wx.showToast({ title: (err && err.message) || '分配失败', icon: 'none' }) }
   },
+  /* 「查看签署单」= 直接出快照本体(店主 2026-08-10 拍板,废掉"去网页后台看"的提示框)。
+     四个入口(今日台面内嵌日结的待分配/待确认行、独立日结页的两行)共用这一个方法,
+     改这一处四处同时生效 —— 闭环纪律:同一件事只有一份实现。 */
   viewSnapshot(e) {
     const code = e.currentTarget.dataset.code
-    wx.showModal({
-      title: '签署单', showCancel: false, confirmText: '知道了',
-      content: `单号 ${code}\n签署快照是顾客签字那一刻生成的凭证,不可修改。\n在网页后台「财务 → 日结」可直接打开查看。`
-    })
+    if (!code) { wx.showToast({ title: '这单没有签署快照', icon: 'none' }); return }
+    wx.navigateTo({ url: `/pages/sign/index?snapshot=${encodeURIComponent(code)}` })
   },
 
   // ===== 屏 1b 金额更正 =====

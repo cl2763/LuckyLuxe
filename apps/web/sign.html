@@ -51,6 +51,10 @@
   .cta button.waiting{background:#a8a099}
   .cta .need{font-size:12.5px;color:#a8551f;background:#fdf3ec;border-radius:9px;padding:7px 10px;margin-bottom:8px;text-align:center}
   .disc.flash{outline:2px solid var(--bronze);outline-offset:2px;border-radius:12px}
+  /* 已签单右上角的真实笔迹:嵌快照本体,裁到签名那一块 */
+  .sign-slot .val{overflow:hidden}
+  .sign-slot .val .ink{display:block;width:100%;height:48px;object-fit:contain;object-position:left center;mix-blend-mode:multiply}
+  .sign-slot .val .ink-note{display:block;font-size:10.5px;color:var(--muted);font-weight:400;margin-top:2px}
   .cta .foot{text-align:center;font-size:11.5px;color:var(--muted);margin-top:8px}
   .toast{position:fixed;left:50%;transform:translateX(-50%);bottom:96px;background:var(--ink);color:#fff;font-size:13px;border-radius:10px;padding:10px 18px;opacity:0;transition:.25s;z-index:99;max-width:88vw;text-align:center}
   .toast.show{opacity:1}
@@ -145,6 +149,18 @@ async function load() {
   render()
 }
 
+/* 已签单右上角:显示**真实手写笔迹**(店主 2026-08-10 口径变更,原「存姓名文本」拍板作废)。
+   笔迹本来就渲进签署快照了(全库 115 张已签单里 113 张有真迹),这里把快照当图片嵌进来 ——
+   快照是签字那一刻的凭证、只追加不可改,所以显示的就是当时那一笔。
+   早期 2 张只存了文本的历史单快照不可改,如实标「早期单 · 仅存文本」。 */
+function signSlotHtml(s) {
+  if (s.status !== 'signed') return '（签署后显示于此）'
+  if (s.snapshot && s.snapshotHasInk) {
+    return `<img class="ink" src="/settlements/${encodeURIComponent(s.code)}/signature.svg" alt="顾客签名" loading="lazy">`
+  }
+  return `${esc(s.signatureName || '（已签）')}<span class="ink-note">早期单 · 仅存文本</span>`
+}
+
 function render() {
   const s = data.settlement
   const signed = s.status === 'signed'
@@ -173,7 +189,7 @@ function render() {
     <div class="doc">
       <div class="sign-slot">
         <div class="lab">顾客签名：</div>
-        <div class="val ${s.signatureName ? '' : 'empty'}" id="signSlot">${s.signatureName ? esc(s.signatureName) : '（签署后显示于此）'}</div>
+        <div class="val ${s.signatureName ? '' : 'empty'}" id="signSlot">${signSlotHtml(s)}</div>
       </div>
       <div class="doc-head">
         <div class="store">${esc(s.storeName)}</div>

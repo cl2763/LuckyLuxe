@@ -9515,6 +9515,11 @@ function serializeSettlement(row, { includeSignature = false } = {}) {
     cardOwnerName: (db.prepare('SELECT display_name FROM users WHERE id = ?').get(row.user_id) || {}).display_name || '',
     // 屏 S2 徽标 + 屏 S4 前置卡:**只看档案绑定状态**,不看新老客;文案后端下发(规则③)
     ...customerBindShape(row),
+    /* 已签单右上角要显示**真实笔迹**(店主 2026-08-10)。早期单只存了姓名文本,
+       快照只追加不可改 —— 前端据此决定是贴笔迹还是标「早期单 · 仅存文本」。 */
+    snapshotHasInk: Boolean(row.snapshot_inline
+      ? /<path[^>]*d="M/.test(row.snapshot_inline)
+      : row.snapshot_url),
     status: row.status,
     tierKey: row.price_tier_used,
     tierChangedFrom: row.tier_changed_from,
@@ -9599,7 +9604,7 @@ async function route(req, res) {
     })
   }
   // 顾客签署页(小程序 / 网页同构):凭单号只读,不需要登录
-  if (req.method === 'GET' && path.startsWith('/settlements/') && !path.startsWith('/settlements/by-token/') && !path.endsWith('/sign') && !path.endsWith('/snapshot')) {
+  if (req.method === 'GET' && path.startsWith('/settlements/') && !path.startsWith('/settlements/by-token/') && !path.endsWith('/sign') && !path.endsWith('/snapshot') && !path.endsWith('/signature.svg')) {
     const code = decodeURIComponent(path.split('/')[2] || '')
     const row = db.prepare('SELECT * FROM settlements WHERE code = ?').get(code)
     if (!row) throw apiError(404, 'NOT_FOUND', '找不到这张服务单。')
@@ -9624,6 +9629,31 @@ async function route(req, res) {
     return json(res, 200, setSettlementCoupon(row.id, String(body.grantId || ''), { by: 'customer' }))
   }
   // 签署快照(唯一凭证):COS 存的直接 302 过去,inline 的直接吐 SVG
+  /* 只要**签名那一笔**的小图(店主 2026-08-10:已签单右上角显示真实笔迹)。
+     笔迹本来就渲在签署快照里,但快照是整张单(720×612),直接当头像贴会缩成一团。
+     这里把快照里的笔迹 <path> 抠出来、按它自己的包围盒裁一张紧凑 SVG。
+     快照本身一个字节都不动 —— 只读、只裁。 */
+  if (req.method === 'GET' && path.startsWith('/settlements/') && path.endsWith('/signature.svg')) {
+    const code = decodeURIComponent(path.split('/')[2] || '')
+    const row = db.prepare('SELECT * FROM settlements WHERE code = ?').get(code)
+    if (!row) throw apiError(404, 'NOT_FOUND', '找不到这张服务单。')
+    const svg = row.snapshot_inline || ''
+    const paths = [...svg.matchAll(/<path[^>]*d="([^"]+)"[^>]*>/g)].map((m) => m[1])
+    const nums = paths.join(' ').match(/-?\d+(?:\.\d+)?/g)
+    if (!paths.length || !nums || nums.length < 4) throw apiError(404, 'NO_INK', '这张单只存了姓名文本,没有手写笔迹。')
+    const xs = []; const ys = []
+    for (let i = 0; i + 1 < nums.length; i += 2) { xs.push(Number(nums[i])); ys.push(Number(nums[i + 1])) }
+    const pad = 6
+    const x0 = Math.min(...xs) - pad; const y0 = Math.min(...ys) - pad
+    const w = Math.max(1, Math.max(...xs) - Math.min(...xs) + pad * 2)
+    const h = Math.max(1, Math.max(...ys) - Math.min(...ys) + pad * 2)
+    const out = `<?xml version="1.0" encoding="UTF-8"?>\n<svg xmlns="http://www.w3.org/2000/svg" viewBox="${x0} ${y0} ${w} ${h}" width="${Math.round(w)}" height="${Math.round(h)}">`
+      + paths.map((d) => `<path d="${d}" fill="none" stroke="#241f1d" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>`).join('')
+      + '</svg>'
+    res.writeHead(200, { 'content-type': 'image/svg+xml; charset=utf-8', 'cache-control': 'public, max-age=31536000, immutable' })
+    res.end(out)
+    return
+  }
   if (req.method === 'GET' && path.startsWith('/settlements/') && path.endsWith('/snapshot')) {
     const code = decodeURIComponent(path.split('/')[2] || '')
     const row = db.prepare('SELECT * FROM settlements WHERE code = ?').get(code)

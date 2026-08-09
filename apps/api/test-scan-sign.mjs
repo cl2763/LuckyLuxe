@@ -277,6 +277,24 @@ async function main() {
     check('合并队列数据库层禁删(只追加)', blocked)
   }
 
+  /* 已签单的真实笔迹(店主 2026-08-10 口径变更:原「存姓名文本」拍板作废)。
+     笔迹本来就渲在签署快照里;新加的 /signature.svg 把它抠成一张紧凑小图。
+     快照只读只裁 —— 断言它没被改动过。 */
+  const inkSheet = sheet5.code
+  const snapBefore = await request(`/settlements/${inkSheet}/snapshot`, {}, null)
+  const sig = await request(`/settlements/${inkSheet}/signature.svg`, {}, null)
+  const sigRaw = typeof sig.data === 'string' ? sig.data : (sig.data && sig.data.raw) || ''
+  check('笔迹图能单独取到(不是整张快照缩一团)', sig.status === 200 && sigRaw.includes('<svg') && sigRaw.includes('<path'),
+    `${sig.status} ${String(sigRaw).slice(0, 120)}`)
+  check('笔迹图比整张快照小得多(说明真的裁过)', sigRaw.length > 0 && sigRaw.length < 2000, String(sigRaw.length))
+  const snapAfter = await request(`/settlements/${inkSheet}/snapshot`, {}, null)
+  const raw = (r) => typeof r.data === 'string' ? r.data : (r.data && r.data.raw) || ''
+  check('取笔迹图不动快照一个字节(只读只裁)', raw(snapBefore) === raw(snapAfter) && raw(snapAfter).length > 0,
+    `${raw(snapBefore).length} vs ${raw(snapAfter).length}`)
+  const pubInk = await request(`/settlements/${inkSheet}`, {}, null)
+  check('已签单下发 snapshotHasInk(前端据此决定贴笔迹还是标「早期单·仅存文本」)',
+    pubInk.data.settlement.snapshotHasInk === true, JSON.stringify(pubInk.data.settlement.snapshotHasInk))
+
   /* 财务红线常驻:整条链跑完,定金守恒必须还是 ok */
   const cons = await request('/admin/finance/deposit-conservation', {}, shop.token)
   check('红线:跑完整条扫码签链路,定金守恒仍 ok', cons.data.ok === true, JSON.stringify(cons.data.broken).slice(0, 200))

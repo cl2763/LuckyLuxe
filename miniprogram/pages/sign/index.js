@@ -11,11 +11,20 @@ Page({
   data: { url: '', code: '' },
 
   onLoad(q) {
-    const code = decodeURIComponent(q.code || '')
+    const code = decodeURIComponent(q.code || q.snapshot || '')
     if (!code) { wx.showToast({ title: '缺少服务单号', icon: 'none' }); return }
+    /* 店主 2026-08-10 拍板:所有「查看签署单」入口点了**直接出快照本体**,
+       不再弹"去网页后台看"的提示框。快照就是顾客签字那一刻的 SVG 凭证,
+       同一个 web-view 壳子,只是换个地址 —— 不为它单开一个页面。 */
+    const isSnap = Boolean(q.snapshot)
     // 单号进 URL 前先编码,别让特殊字符把链接拼坏
-    this.setData({ code, url: `${api.API_BASE}/sign/${encodeURIComponent(code)}` })
-    wx.setNavigationBarTitle({ title: '服务确认单' })
+    this.setData({
+      code,
+      url: isSnap
+        ? `${api.API_BASE}/settlements/${encodeURIComponent(code)}/snapshot`
+        : `${api.API_BASE}/sign/${encodeURIComponent(code)}`
+    })
+    wx.setNavigationBarTitle({ title: isSnap ? '签署单凭证' : '服务确认单' })
   },
 
   // web-view 里签完会 postMessage 过来(小程序只在页面卸载/分享时才收得到),这里只做兜底提示

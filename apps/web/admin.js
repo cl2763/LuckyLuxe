@@ -1,5 +1,5 @@
 // 构建号:每次交付递增。侧栏可见,排查"改了没生效"时先对版本。
-const ADMIN_BUILD = '20260810d-crossday'
+const ADMIN_BUILD = '20260810e-ink'
 console.log(`[admin] build ${ADMIN_BUILD}`)
 
 // "今天"必须按门店时区算,否则老板人在别的时区时全站日期错位一天。
@@ -2539,6 +2539,7 @@ function renderDailyClose() {
             <span><b class="dc-tm">${escapeHtml(a.timeText || '')}</b>${escapeHtml(a.servedPersonName || a.customerName || '')} · ${a.technicians.map((t) => escapeHtml(t.name) + (t.sharePct === null || t.sharePct === undefined ? '' : ` ${t.sharePct}%`)).join(' / ')}${a.crossDayNote ? `<em class="dc-xday">${escapeHtml(a.crossDayNote)}</em>` : ''}</span>
             <span>${money(a.perfBaseCents, 2)} <span class="arr">${escapeHtml(a.reason)}</span></span>
           </div>
+          ${a.hasSnapshot ? `<div class="dc-links"><a data-dc-snapshot="${escapeHtml(a.code)}">${zh ? '查看签署单' : 'View signed sheet'}</a></div>` : ''}
         </div>`).join('')}` : ''}
 
     <table class="dc-sum">

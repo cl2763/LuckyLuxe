@@ -7177,3 +7177,7 @@ section.card > .section-row:first-child { margin-top: 0; }
 
 /* 跨零点单的自解释标注(日结行) */
 .dc-alloc .head .dc-xday{margin-left:10px;font-style:normal;font-size:11.5px;font-weight:600;color:#a8551f;background:#fdf3ec;border-radius:7px;padding:2px 8px}
+
+/* 日结待确认行的「查看签署单」入口(与待分配行同一套跳转) */
+.dc-alloc .dc-links{padding:6px 0 2px}
+.dc-alloc .dc-links a{font-size:12.5px;color:var(--bronze);cursor:pointer;text-decoration:underline}
