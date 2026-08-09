@@ -350,12 +350,15 @@ for (const store of STORES) {
   log('⑥ 排班:全天/上午/下午/休息/自定义 全形态已铺,含一条同步到未来 4 周')
 
   // ---------- ⑦ 目标三态 × 两显示口径 ----------
+  /* 三态要齐:达标 / 进行中 / 未设。目标是按**当前**业绩算的,所以后来又灌了单之后
+     原来的「进行中」会变成「达标」—— 2026-08-09 集中核验时就撞上了。这里每次都按当前业绩重设。 */
   const tg = (await api(tenantId, `/admin/perf-targets?month=${month}`)).technicians
-  if (tg.filter((t) => t.hasTarget).length < 2) {
+  {
     const rank = (await api(tenantId, `/admin/perf-ranking?metric=perf&period=month&date=${month}`)).ranking.ranking
     const targets = []
     if (rank[0]) targets.push({ technicianId: rank[0].technicianId, mode: 'total', displayMode: 'total_only', perfTargetCents: Math.max(10000, Math.floor(rank[0].perfCents * 0.7)) })
-    if (rank[1]) targets.push({ technicianId: rank[1].technicianId, mode: 'split', displayMode: 'with_split', perfTargetCents: Math.max(100000, rank[1].perfCents * 3), cardTargetCents: 150000, orderTarget: 30 })
+    // 第二名给一个「够得着但没到」的目标 —— 进度条停在 40% 上下,这才是「进行中」的样子
+    if (rank[1]) targets.push({ technicianId: rank[1].technicianId, mode: 'split', displayMode: 'with_split', perfTargetCents: Math.max(100000, Math.round(rank[1].perfCents / 0.4)), cardTargetCents: 150000, orderTarget: 30 })
     if (targets.length) await api(tenantId, '/admin/perf-targets', { method: 'PUT', body: JSON.stringify({ month, targets }) })
   }
   const tg2 = (await api(tenantId, `/admin/perf-targets?month=${month}`)).technicians

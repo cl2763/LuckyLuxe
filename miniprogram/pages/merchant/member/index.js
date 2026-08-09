@@ -1,4 +1,5 @@
 const api = require('../../../utils/api')
+const { storeMoney } = require('../../../utils/storeclock')
 
 Page({
   data: {
@@ -221,7 +222,7 @@ Page({
       const body = { userId: cust.id, amountCents: Math.round(amount * 100), payChannel: 'manual', note: '线下手动补录' }
       if (technicianId) body.technicianId = technicianId
       const resp = await api.adminPost('/admin/stored-value/recharge', body)
-      const bal = resp && resp.balanceCents != null ? '$' + (resp.balanceCents / 100).toFixed(0) : ''
+      const bal = resp && resp.balanceCents != null ? storeMoney(resp.balanceCents, 0) : ''
       wx.showToast({ title: '已到账 ' + bal, icon: 'none' })
       this.loadAll()
     } catch (err) { wx.showToast({ title: (err && err.message) || '充值失败', icon: 'none' }) }

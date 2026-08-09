@@ -1,4 +1,5 @@
 const api = require('../../../utils/api')
+const { storeMoney } = require('../../../utils/storeclock')
 
 const SHADES = ['#c8a47e', '#b8926a', '#a67f56', '#9b7655', '#7d5e43']
 const CHANNEL_LABEL = {
@@ -44,7 +45,7 @@ Page({
       const rep = custs.length ? Math.round((repeat / custs.length) * 100) + '%' : '—'
       // 客单价(已完成单均价)
       const revenue = done.reduce((s, b) => s + (b.servicePriceCents || 0), 0)
-      const avgTicket = doneN ? '$' + Math.round(revenue / doneN / 100) : '—'
+      const avgTicket = doneN ? storeMoney(Math.round(revenue / doneN), 0) : '—'
       // 按技师完成量
       const byTech = {}
       done.forEach((b) => { const t = (b.technician && b.technician.name) || b.technicianName || '未指定'; byTech[t] = (byTech[t] || 0) + 1 })

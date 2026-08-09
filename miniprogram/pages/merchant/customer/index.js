@@ -1,7 +1,8 @@
 const api = require('../../../utils/api')
+const { storeMoney } = require('../../../utils/storeclock')
 const TIER = { Silver: '银卡', Gold: '金卡', Platinum: '铂金', Diamond: '钻石' }
 const STATUS = { PENDING_PAYMENT: '待付定金', CONFIRMED: '已确认', COMPLETED: '已完成', CANCELLED: '已取消', EXPIRED: '已过期', AFTER_SALES: '售后' }
-function money(c) { const n = Math.round((c || 0) / 100); return '$' + n.toString().replace(/\B(?=(\d{3})+(?!\d))/g, ',') }
+function money(c) { return storeMoney(c, 0) } // 门店币种,不写死 $
 function lastText(iso) { if (!iso) return '—'; const d = Math.floor((Date.now() - new Date(iso).getTime()) / 86400000); if (d <= 0) return '今天'; if (d < 365) return `${d}天前`; return iso.slice(0, 10) }
 
 Page({

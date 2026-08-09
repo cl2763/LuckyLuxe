@@ -1,6 +1,7 @@
 const api = require('../../../utils/api')
+const { storeMoney } = require('../../../utils/storeclock')
 
-function money(c) { const n = Math.round((c || 0) / 100); return '$' + n.toString().replace(/\B(?=(\d{3})+(?!\d))/g, ',') }
+function money(c) { return storeMoney(c, 0) } // 门店币种,不写死 $
 function daysSince(iso) { if (!iso) return 9999; return Math.floor((Date.now() - new Date(iso).getTime()) / 86400000) }
 function lastText(iso) {
   if (!iso) return '未到店'

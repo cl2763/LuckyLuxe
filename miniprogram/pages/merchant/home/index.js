@@ -1,4 +1,5 @@
 const api = require('../../../utils/api')
+const { storeMoney } = require('../../../utils/storeclock')
 
 Page({
   data: {
@@ -125,7 +126,7 @@ Page({
         this.setData({
           digest: {
             count: d.count || 0,
-            items: (d.items || []).map((x) => ({ ...x, av: (x.name || '客')[0], spendText: '$' + Math.round((x.spendCents || 0) / 100) }))
+            items: (d.items || []).map((x) => ({ ...x, av: (x.name || '客')[0], spendText: storeMoney(x.spendCents, 0) }))
           }
         })
       }).catch(() => { /* 静默 */ })

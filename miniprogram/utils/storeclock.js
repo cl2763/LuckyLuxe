@@ -11,6 +11,13 @@ function cached() {
   return v && v.today ? v : null
 }
 
+/* 币种缓存是 2026-08-09 才加的,老缓存里没有这一项 —— 那种情况下必须去刷一次,
+   不然会一直回落到默认 CAD,人民币店的金额就一直显示成 $。 */
+function ensureCurrencyCached() {
+  const c = cached()
+  if (!c || !c.currencyDisplay) refreshStoreClock().catch(() => {})
+}
+
 // 同步读:没缓存时退回设备日期(总比没有强),但会顺手去后台刷新
 function storeToday() {
   const c = cached()
@@ -24,10 +31,38 @@ function storeToday() {
 
 function storeMonth() { return storeToday().slice(0, 7) }
 
+/* 门店币种。和「今天」一样是门店级常量,跟着 /admin/store-clock 一起缓存 ——
+   以前各页自己写 `'$' + n`,人民币店就会显示成「$5,440」。 */
+function storeCurrencyDisplay() {
+  const c = cached()
+  if (!c || !c.currencyDisplay) ensureCurrencyCached()
+  return (c && c.currencyDisplay) || { prefix: '<CODE> ', symbol: '$', trimZeroDecimals: false }
+}
+function storeCurrency() {
+  const c = cached()
+  return (c && c.currency) || 'CAD'
+}
+// 分 → 门店币种显示串。decimals 默认按币种(CNY 整数、CAD 两位)
+function storeMoney(cents, decimals) {
+  const fmt = storeCurrencyDisplay()
+  const n = Number(cents || 0) / 100
+  const d = decimals === undefined ? (fmt.trimZeroDecimals ? 0 : 2) : decimals
+  let text = n.toFixed(d)
+  if (fmt.trimZeroDecimals) text = text.replace(/\.00$/, '')
+  // 千分位:金额一多不加逗号很难读
+  text = text.replace(/\B(?=(\d{3})+(?!\d)(\.|$))/g, ',')
+  return `${String(fmt.prefix).replace('<CODE>', storeCurrency())}${fmt.symbol}${text}`
+}
+
 async function refreshStoreClock() {
   const r = await api.adminGet('/admin/store-clock')
-  if (r && r.today) wx.setStorageSync(KEY, { today: r.today, timezone: r.timezone || '', at: Date.now() })
+  if (r && r.today) {
+    wx.setStorageSync(KEY, {
+      today: r.today, timezone: r.timezone || '', at: Date.now(),
+      currency: r.currency || '', currencyDisplay: r.currencyDisplay || null
+    })
+  }
   return r
 }
 
-module.exports = { storeToday, storeMonth, refreshStoreClock }
+module.exports = { storeToday, storeMonth, storeMoney, storeCurrency, storeCurrencyDisplay, refreshStoreClock, ensureCurrencyCached }

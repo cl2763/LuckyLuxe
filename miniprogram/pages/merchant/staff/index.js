@@ -48,7 +48,7 @@ Page({
     defaultPlanLabel: '',
     sheet: null,       // 目标设置面板(= v6 屏 4b 那套,一字未改)
     // 屏 4a 排班周视图(2026-08-09 从独立页内嵌进来,去掉中间那层)
-    sc: { from: '', days: [], afternoonStart: '14:30', loading: true, rangeText: '' },
+    sc: { from: '', weekStart: '', days: [], afternoonStart: '14:30', loading: true, rangeText: '' },
     shiftSheet: null,  // 屏 4a-2 时段编辑弹层
     scConflicts: []
   },
@@ -244,16 +244,19 @@ Page({
           caps
         }
       })
+      /* 周范围写的是这一周的头尾,不是传进来的那一天 ——
+         后端按「包含该日的整周」返回(周一起),用 from 当起点会显示成「8月9日 – 8月9日」。 */
+      const first = days.length ? days[0].date : from
       const last = days.length ? days[days.length - 1].date : from
-      const rangeText = `${Number(from.slice(5, 7))}月${Number(from.slice(8))}日 – ${Number(last.slice(5, 7))}月${Number(last.slice(8))}日`
-      this.setData({ 'sc.loading': false, 'sc.days': days, 'sc.afternoonStart': split, 'sc.rangeText': rangeText })
+      const rangeText = `${Number(first.slice(5, 7))}月${Number(first.slice(8))}日 – ${Number(last.slice(5, 7))}月${Number(last.slice(8))}日`
+      this.setData({ 'sc.loading': false, 'sc.days': days, 'sc.afternoonStart': split, 'sc.rangeText': rangeText, 'sc.weekStart': first })
     } catch (e) {
       this.setData({ 'sc.loading': false })
       wx.showToast({ title: (e && e.message) || '加载排班失败', icon: 'none' })
     }
   },
-  prevWeek() { this.loadWeek(shiftDate(this.data.sc.from, -7)) },
-  nextWeek() { this.loadWeek(shiftDate(this.data.sc.from, 7)) },
+  prevWeek() { this.loadWeek(shiftDate(this.data.sc.weekStart || this.data.sc.from, -7)) },
+  nextWeek() { this.loadWeek(shiftDate(this.data.sc.weekStart || this.data.sc.from, 7)) },
   thisWeek() { this.loadWeek(storeToday()) },
 
   openSheet(e) {
@@ -366,10 +369,10 @@ Page({
       const sug = await api.adminGet(`/admin/staff-accounts/suggest?technicianId=${encodeURIComponent(id)}`)
       const typed = await new Promise((resolve) => {
         wx.showModal({
-          title: `给「${sug.name}」建账号`,
+          title: `给「${sug.name}」建账号 · 用户名`,
           content: '',
           editable: true,
-          placeholderText: `用户名(英数 3–20 位),留空用 ${sug.username}`,
+          placeholderText: `${sug.username}(直接确定就用这个)`,
           success: (m) => resolve(m.confirm ? (m.content || '').trim().toLowerCase() : null)
         })
       })

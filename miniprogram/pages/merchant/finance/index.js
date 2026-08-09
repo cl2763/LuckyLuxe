@@ -2,11 +2,10 @@
 // ✦AI智能总结(模板即时生成)、目标圆环(设了才显示,没设只留引导)、记一笔/本月流水入口、设个目标弹窗(智能建议率)。
 // 口径与网页端完全一致,同一套 /admin/finance/* 接口。
 const api = require('../../../utils/api')
+const { storeMoney, refreshStoreClock } = require('../../../utils/storeclock')
 
-function money(c) {
-  const n = Math.round((c || 0) / 100)
-  return '$' + n.toString().replace(/\B(?=(\d{3})+(?!\d))/g, ',')
-}
+// 金额一律走门店币种(storeMoney);以前写死 '$',人民币店会显示成「$5,440」
+function money(c) { return storeMoney(c, 0) }
 function localToday() {
   const d = new Date()
   return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`
@@ -31,6 +30,8 @@ Page({
 
   async onShow() {
     if (!(await api.guardOwner())) return
+    // 门店币种要在渲染金额之前拿到,不然人民币店第一屏会显示成 $
+    await refreshStoreClock().catch(() => {})
     this.setData({ aiEnabled: api.merchantHasAi() })
     api.refreshMerchantAi().then((on) => this.setData({ aiEnabled: on }))
     this.init()

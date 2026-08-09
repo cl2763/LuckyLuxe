@@ -1,7 +1,7 @@
 const api = require('../../../utils/api')
-const { storeMonth, refreshStoreClock } = require('../../../utils/storeclock')
+const { storeMonth, refreshStoreClock, storeMoney } = require('../../../utils/storeclock')
 
-function money(c) { return '$' + (Math.round((c || 0)) / 100).toLocaleString('en-US', { maximumFractionDigits: 0 }) }
+function money(c) { return storeMoney(c, 0) } // 门店币种,不写死 $
 function fmtDur(min) { if (!min) return '0m'; const h = Math.floor(min / 60), m = min % 60; return h ? `${h}h${m ? m + 'm' : ''}` : `${m}m` }
 function pad(n) { return `${n}`.padStart(2, '0') }
 

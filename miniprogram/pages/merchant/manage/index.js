@@ -22,7 +22,7 @@ const ROUTES = {
 const E = {
   schedule: { k: 'schedule', icon: 'm-schedule', t: '排班', d: '周网格 · 申请审批' },
   scheduleView: { k: 'schedule', icon: 'm-schedule', t: '排班', d: '查看本周班表' },
-  finance: { k: 'finance', icon: 'm-finance', t: '财务', d: '指标 · 记一笔 · 储值(需密码)' },
+  finance: { k: 'finance', icon: 'm-finance', t: '财务', d: '指标 · 记一笔 · 储值卡' },
   customers: { k: 'customers', icon: 'm-customers', t: '客户库', d: '档案 · 标签 · 分层' },
   marketing: { k: 'marketing', icon: 'm-marketing', t: '营销管理', d: '渠道发帖 · 营销措施' },
   member: { k: 'member', icon: 'm-member', t: '会员套餐 / 充值 / 券', d: '充值套餐 · 次卡 · 优惠券' },
@@ -36,7 +36,7 @@ const E = {
   attendanceStaff: { k: 'attendance', icon: 'm-staff', t: '打卡', d: '上下班打卡 · 本周工时' },
   // 日结不再是独立行 —— 设计图《管理页分组》把它写在「订单管理」副标题里,页面上它长在今日台面下方
   orders: { k: 'orders', icon: 'm-schedule', t: '订单管理', d: '今日台面 · 全部订单 · 日结' },
-  salaryMonth: { k: 'salaryMonth', icon: 'm-finance', t: '工资试算', d: '全员月度工资明细 · 需财务密码' },
+  salaryMonth: { k: 'salaryMonth', icon: 'm-finance', t: '工资试算', d: '全员月度工资明细' },
   pointsMall: { k: 'pointsMall', icon: 'm-member', t: '积分商城', d: '上架奖品 · 顾客用积分兑券' }
 }
 

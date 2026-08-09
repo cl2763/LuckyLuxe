@@ -12779,6 +12779,11 @@ async function route(req, res) {
       today: parts.date,
       monthKey: monthKeyOf(tid, at),
       localTime: parts.time,
+      /* 2026-08-09 集中核验发现:小程序好几页把货币符号写死成 $,人民币店的老板看到自己的
+         收入标着「$5,440」。币种跟「今天」一样是**门店级常量**,顺路一起下发并缓存,
+         各页从同一处取,不再各写各的。 */
+      currency: tenantCurrencyCode(tid),
+      currencyDisplay: currencyDisplayOf(tenantCurrencyCode(tid)),
       serverProcessTimezone: APP_TIMEZONE,
       nowUtc: iso(at),
       // 只读运维探针:只报「配没配」,不回显任何密钥值。
