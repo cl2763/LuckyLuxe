@@ -20,6 +20,8 @@
     "pages/merchant/customer/index",
     "pages/merchant/service-note/index",
     "pages/merchant/settlement/index",
+    "pages/merchant/daily-close/index",
+    "pages/merchant/schedule-day/index",
     "pages/merchant/quote-calc/index",
     "pages/merchant/attendance/index",
     "pages/merchant/salary-plan/index",

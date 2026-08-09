@@ -1,8 +1,10 @@
 const api = require('../../../utils/api')
+const { storeToday, refreshStoreClock } = require('../../../utils/storeclock')
 
 function pad(n) { return `${n}`.padStart(2, '0') }
 function ymd(d) { return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}` }
-function todayStr() { return ymd(new Date()) }
+// 「今天」按门店时区算,不用设备时钟(店在多伦多、人在国内时两者会差一天)
+function todayStr() { return storeToday() }
 function addDays(dateStr, n) { const d = new Date(`${dateStr}T00:00:00`); d.setDate(d.getDate() + n); return ymd(d) }
 function mondayOf(d) { const x = new Date(d); const wd = x.getDay(); const off = wd === 0 ? -6 : 1 - wd; x.setDate(x.getDate() + off); return x }
 const WK = ['日', '一', '二', '三', '四', '五', '六']
@@ -29,6 +31,7 @@ Page({
 
   onShow() {
     if (!api.guardMerchant()) return
+    refreshStoreClock().catch(() => {})
     if (this.data.viewMode === 'tech') {
       this.loadDayView(this.data.selDate || todayStr())
     } else if (this.data.calYear) {

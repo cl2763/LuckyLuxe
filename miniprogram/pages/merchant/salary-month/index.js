@@ -1,4 +1,5 @@
 const api = require('../../../utils/api')
+const { storeMonth, refreshStoreClock } = require('../../../utils/storeclock')
 
 function money(c) { return '$' + (Math.round((c || 0)) / 100).toLocaleString('en-US', { maximumFractionDigits: 0 }) }
 function fmtDur(min) { if (!min) return '0m'; const h = Math.floor(min / 60), m = min % 60; return h ? `${h}h${m ? m + 'm' : ''}` : `${m}m` }
@@ -9,10 +10,9 @@ Page({
 
   async onShow() {
     if (!(await api.guardOwner())) return
-    if (!this.data.month) {
-      const d = new Date()
-      this.setData({ month: `${d.getFullYear()}-${pad(d.getMonth() + 1)}` })
-    }
+    await refreshStoreClock().catch(() => {})
+    // 「本月」按门店时区算(跨时区时设备月份可能已经翻页)
+    if (!this.data.month) this.setData({ month: storeMonth() })
     this.load()
   },
 
@@ -21,7 +21,10 @@ Page({
     this.setData({ monthText: `${Number(m.slice(0, 4))}年${Number(m.slice(5, 7))}月`, loading: true })
     if (!api.getFinanceKey()) { this.setData({ keyMissing: true, loading: false }); return }
     try {
-      const r = await api.adminGet(`/admin/salary/estimate?month=${m}`)
+      const [r, closeInfo] = await Promise.all([
+        api.adminGet(`/admin/salary/estimate?month=${m}`),
+        api.adminGet(`/admin/daily-close/month?month=${m}`).catch(() => ({ days: [], openDays: [], allClosed: true }))
+      ])
       const rows = (r.rows || []).map((x) => ({
         ...x, av: (x.name || '技')[0],
         totalText: x.noPlan ? '未配方案' : money(x.totalCents),
@@ -41,7 +44,15 @@ Page({
         lockedAt: r.lockedAt ? String(r.lockedAt).slice(0, 16).replace('T', ' ') : '',
         paid: Boolean(r.paid),
         paidAt: r.paidAt ? String(r.paidAt).slice(0, 16).replace('T', ' ') : '',
-        attrNotes: (r.attributionNotes || []).map((n) => ({ ...n, amountText: money(n.amountCents) }))
+        /* 屏 2:归属备注区已整体退役(代付不涉技师业绩归属,且日结已逐日确认过),
+           改成日结业绩模块 —— 业绩口径就是「已确认日结累加」,没日结的天在这里一目了然。 */
+        closeDays: (closeInfo.days || []).map((d) => ({
+          date: d.date,
+          confirmed: d.confirmed,
+          line: `${d.orderCount} 单 · ${money(d.revenueCents)}${d.pendingAllocation ? ` · ${d.pendingAllocation} 单待分配` : (d.confirmed ? '' : ' · 未确认')}`
+        })),
+        openDays: (closeInfo.openDays || []).length,
+        zeroHint: !(closeInfo.days || []).length
       })
     } catch (err) {
       if (err && err.code === 'FINANCE_LOCKED') { this.setData({ keyMissing: true, loading: false }); return }
@@ -50,9 +61,19 @@ Page({
     }
   },
 
+  goDailyClose(e) {
+    wx.navigateTo({ url: `/pages/merchant/daily-close/index?date=${encodeURIComponent(e.currentTarget.dataset.date)}` })
+  },
+
   // 确认并锁定当月工资表:快照存档,防事后改数;锁定后 estimate 一律回快照
   lockMonth() {
     if (this.data.locking) return
+    // 设计图:「确认并锁定 X月 工资表(需全部日结完成)」—— 与网页端同一门槛
+    if (this.data.openDays) {
+      wx.showModal({ title: '还不能锁定', showCancel: false, confirmText: '知道了',
+        content: `本月还有 ${this.data.openDays} 天没日结,锁定后这几天的业绩就永远算不进来了。先去日结。` })
+      return
+    }
     wx.showModal({
       title: `锁定 ${this.data.monthText} 工资表`,
       content: '按当前数字生成工资表存档;锁定后业绩/考勤再变动也不影响本月工资。确认?',

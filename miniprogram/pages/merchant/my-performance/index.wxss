@@ -1,17 +1,28 @@
-page{background:#fbf8f5}
-.page{padding:22rpx 26rpx 60rpx}
-.month{font-size:23rpx;color:#8c8279;margin:4rpx 4rpx 16rpx}
-.empty{text-align:center;color:#8c8279;font-size:25rpx;padding:70rpx 30rpx;line-height:1.7}
-.empty .sub{font-size:22rpx;color:#b6a99b;margin-top:10rpx}
-.hero{background:#2d2826;border-radius:18rpx;padding:34rpx 26rpx;color:#fff;text-align:center}
-.hl{font-size:23rpx;color:#d8c6b3}
-.hv{font-size:60rpx;font-weight:700;margin:10rpx 0 6rpx;color:#e7c9a4}
-.hn{font-size:21rpx;color:#b6a99b}
-.rows{background:#fff;border:1rpx solid #e7ddd4;border-radius:16rpx;margin-top:16rpx;overflow:hidden}
-.r{display:flex;justify-content:space-between;align-items:center;padding:24rpx 22rpx;border-bottom:1rpx solid #f1e7df}
-.r:last-child{border-bottom:none}
-.k{font-size:25rpx;color:#8c8279}
-.v{font-size:26rpx;color:#2d2826;font-weight:600}
-.note{font-size:21rpx;color:#b6a99b;line-height:1.6;margin-top:18rpx}
-.v.hot{color:#c0392b}
-.nextcard{background:#fbf4ec;border:1rpx dashed #e7d3ba;border-radius:14rpx;padding:18rpx 20rpx;font-size:24rpx;color:#8a6a3f;font-weight:600;margin-top:14rpx}
+.pg{padding:16rpx 24rpx 60rpx;background:#fbf8f5;min-height:100vh}
+.h1{font-size:34rpx;font-weight:800;color:#241f1d;padding:8rpx 4rpx 16rpx}
+.empty{padding:60rpx 0;text-align:center;color:#9a8c7c;font-size:26rpx}
+.hero{background:linear-gradient(135deg,#2d2826,#4a3f39);color:#fff;border-radius:22rpx;padding:26rpx 24rpx}
+.hero .sub{font-size:22rpx;opacity:.8;line-height:1.8}
+.hero .amt{font-size:64rpx;font-weight:850;letter-spacing:-1rpx;margin:4rpx 0}
+.hero .pbar{height:16rpx;background:rgba(255,255,255,.22);border-radius:999rpx;overflow:hidden;margin-top:16rpx}
+.hero .pbar .pfill{height:100%;background:#e7c9a4;border-radius:999rpx}
+.hero .goal{display:flex;justify-content:space-between;font-size:22rpx;color:#e7c9a4;margin-top:10rpx}
+.hero .split{display:flex;gap:20rpx;font-size:22rpx;opacity:.85;margin-top:12rpx}
+.trend{display:flex;align-items:flex-end;gap:12rpx;height:200rpx;margin:20rpx 0 6rpx}
+.trend .tb{flex:1;display:flex;flex-direction:column;align-items:center;gap:8rpx}
+.trend .col{width:100%;height:160rpx;display:flex;align-items:flex-end;justify-content:center}
+.trend .bar{width:38rpx;background:#e0d3c4;border-radius:8rpx 8rpx 0 0;min-height:6rpx}
+.trend .bar.cur{background:#c8a47e}
+.trend .lb{font-size:20rpx;color:#9a8c7c}
+.tlegend{font-size:20rpx;color:#b3a89c;text-align:center;margin-bottom:14rpx}
+.tabs{display:flex;gap:12rpx;margin-bottom:12rpx}
+.tabs .t{font-size:25rpx;padding:10rpx 26rpx;border-radius:999rpx;background:#f3ece2;color:#8c8279;font-weight:700}
+.tabs .t.on{background:#2d2826;color:#fff}
+.card{background:#fff;border-radius:18rpx;padding:6rpx 18rpx;box-shadow:0 3rpx 10rpx rgba(92,70,48,.06)}
+.row{display:flex;align-items:center;gap:12rpx;padding:16rpx 0;border-bottom:1rpx solid #f2ebe3}
+.row:last-child{border-bottom:none}
+.row .d{width:110rpx;flex:none;font-size:22rpx;color:#8c8279}
+.row .o{flex:1;font-size:24rpx;color:#241f1d}
+.row .c{font-size:21rpx;color:#8c8279}
+.row .p{font-size:27rpx;font-weight:800;color:#241f1d}
+.row .mut{color:#9a8c7c;font-weight:400}

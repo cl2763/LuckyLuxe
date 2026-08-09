@@ -41,3 +41,17 @@ page{background:#fbf8f5}
 .attr-row:last-child{border-bottom:none}
 .attr-m{display:block;font-size:22rpx;color:#5c4630;font-weight:600}
 .attr-n{display:block;font-size:21rpx;color:#a5674c;margin-top:2rpx}
+
+/* 屏 2:日结业绩模块(2026-08-08,取代已退役的归属备注区) */
+.closebox{background:#fff;border:1rpx solid #eadfce;border-radius:16rpx;padding:16rpx;margin:14rpx 0}
+.closebox .close-t{font-size:24rpx;font-weight:800;color:#241f1d;margin-bottom:10rpx}
+.closebox .dot{display:inline-block;min-width:32rpx;text-align:center;background:#fdecec;color:#c0392b;border-radius:999rpx;font-size:20rpx;padding:2rpx 10rpx;margin-left:8rpx}
+.close-row{display:flex;align-items:center;gap:12rpx;padding:12rpx 0;border-bottom:1rpx solid #f4ede6}
+.close-row:last-child{border-bottom:none}
+.close-row .cd{width:150rpx;flex:none;font-size:23rpx;font-weight:700;color:#241f1d}
+.close-row .cl{flex:1;font-size:21rpx;color:#8c8279}
+.close-row .cb{font-size:21rpx;border-radius:999rpx;padding:6rpx 18rpx;flex:none}
+.close-row .cb.ok{background:#e3eee8;color:#2f7d5c}
+.close-row .cb.go{background:#2d2826;color:#fff;font-weight:700}
+.close-empty{font-size:21rpx;color:#9a8c7c}
+.warnbar{background:#fdf3ec;border:1rpx solid #f0d9c4;border-radius:12rpx;padding:14rpx 16rpx;font-size:22rpx;color:#a8551f;line-height:1.7;margin-bottom:12rpx}

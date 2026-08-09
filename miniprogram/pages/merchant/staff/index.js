@@ -182,7 +182,7 @@ Page({
     })
   },
 
-  goSchedule() { wx.navigateTo({ url: '/pages/merchant/schedule/index' }) },
+  goSchedule() { wx.navigateTo({ url: '/pages/merchant/schedule-day/index' }) },
   goDetail(e) {
     // 点技师行 → 该技师逐日明细(已有页)
     const { id, name } = e.currentTarget.dataset

@@ -8208,15 +8208,31 @@ function allocateSettlementPerf(settlementId, input = {}, adminSession = {}) {
   const techs = settlementTechRows(settlementId, tenantId)
   const shares = Array.isArray(input.shares) ? input.shares : []
   if (shares.length !== techs.length) throw apiError(400, 'BAD_REQUEST', '分成行数与本单技师人数不一致。')
+  /* 前端只填比例(店长心里想的就是「七三开」),**分成金额由这里算** ——
+     金额红线:客户端不做金额运算。按比例折算时最后一行吸收四舍五入的余数,
+     保证「合计正好等于单额」这条硬规则在按比例填写时也一定成立。
+     仍然兼容直接传 shareCents 的老写法(测试与脚本在用)。 */
+  const usePct = shares.every((s) => s.shareCents === undefined || s.shareCents === null)
+    && shares.some((s) => s.pct !== undefined || s.sharePct !== undefined)
+  const pctOf = (s) => Number(s.pct ?? s.sharePct ?? 0)
+  let allocated = 0
+  const centsByIndex = shares.map((s, index) => {
+    if (!usePct) return Math.max(0, Math.round(Number(s.shareCents) || 0))
+    if (index === shares.length - 1) return Math.max(0, row.total_cents - allocated) // 末行吃余数
+    const cents = Math.max(0, Math.round(row.total_cents * pctOf(s) / 100))
+    allocated += cents
+    return cents
+  })
   const byId = {}
   let sum = 0
-  for (const s of shares) {
+  shares.forEach((s, index) => {
     const id = String(s.technicianId || '')
     if (!techs.some((t) => t.technician_id === id)) throw apiError(400, 'BAD_REQUEST', '分成里出现了不属于本单的技师。')
-    const cents = Math.max(0, Math.round(Number(s.shareCents) || 0))
-    byId[id] = { cents, pct: s.sharePct === undefined || s.sharePct === null ? null : Number(s.sharePct) }
+    const cents = centsByIndex[index]
+    const pct = usePct ? pctOf(s) : (s.sharePct === undefined || s.sharePct === null ? null : Number(s.sharePct))
+    byId[id] = { cents, pct }
     sum += cents
-  }
+  })
   if (sum !== row.total_cents) {
     throw apiError(400, 'SHARE_MISMATCH', `分成合计 ${sum / 100} 与本单金额 ${row.total_cents / 100} 不一致,请调整。`)
   }

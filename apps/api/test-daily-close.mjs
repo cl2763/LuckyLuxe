@@ -251,6 +251,28 @@ async function main() {
     JSON.stringify(perfBlocked.data.performance).slice(0, 160))
   await request('/admin/staff-visibility', { method: 'PUT', body: JSON.stringify({ visibility: 'perf_and_salary' }) }, shop.token)
 
+  // ---- 按比例分成:金额由后端折算,末行吃余数,合计必须正好等于单额 ----
+  const pctGroup = await request('/admin/settlements', {
+    method: 'POST',
+    body: JSON.stringify({
+      cardOwnerUserId: cust,
+      settlements: [{ tierKey: 'list', items: [{ serviceId: svc.id }],
+        technicians: [{ technicianId: techA.id, role: 'main', itemNos: [1] }, { technicianId: techB.id, role: 'assist', itemNos: [1] }] }]
+    })
+  }, shop.token)
+  const pctSheet = pctGroup.data.settlements[0]
+  await request(`/settlements/${pctSheet.code}/sign`, { method: 'POST', body: JSON.stringify({ disclaimerAccepted: true, signature: '比例客' }) }, null)
+  await request('/admin/daily-close/reopen', { method: 'POST', body: JSON.stringify({ date: today, reason: '比例分成用例' }) }, shop.token)
+  const byPct = await request(`/admin/settlements/${pctSheet.id}/allocate`, {
+    method: 'POST',
+    body: JSON.stringify({ shares: [{ technicianId: techA.id, pct: 70 }, { technicianId: techB.id, pct: 30 }] })
+  }, shop.token)
+  check('前端只填比例也能分成(金额由后端折算,不让客户端算钱)', byPct.status === 200, `${byPct.status} ${JSON.stringify(byPct.data).slice(0, 160)}`)
+  const sum = (byPct.data.shares || []).reduce((n, s) => n + s.shareCents, 0)
+  check('按比例折算后合计仍然正好等于单额(末行吃余数)', sum === pctSheet.totalCents,
+    `${sum} vs ${pctSheet.totalCents}`)
+  check('比例也一并留痕', (byPct.data.shares || []).some((s) => s.sharePct === 70), JSON.stringify(byPct.data.shares))
+
   console.log(`\n日结回归通过:${checks} 项断言全绿`)
 }
 

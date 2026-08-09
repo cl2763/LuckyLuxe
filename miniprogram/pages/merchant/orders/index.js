@@ -1,4 +1,5 @@
 const api = require('../../../utils/api')
+const { storeToday, refreshStoreClock } = require('../../../utils/storeclock')
 
 const STATUS_MAP = {
   CONFIRMED: { label: '待到店', cls: 'g' },
@@ -17,7 +18,8 @@ const STATUS_MAP = {
 
 function pad(n) { return `${n}`.padStart(2, '0') }
 function ymd(d) { return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}` }
-function todayStr() { return ymd(new Date()) }
+// 「今天」按门店时区算,不用设备时钟(店在多伦多、人在国内时两者会差一天)
+function todayStr() { return storeToday() }
 function addDays(dateStr, n) { const d = new Date(`${dateStr}T00:00:00`); d.setDate(d.getDate() + n); return ymd(d) }
 function weekday(dateStr) { const d = new Date(`${dateStr}T00:00:00`); return '日一二三四五六'[d.getDay()] }
 const WK = ['日', '一', '二', '三', '四', '五', '六']
@@ -66,6 +68,7 @@ Page({
 
   onShow() {
     if (!api.guardMerchant()) return
+    refreshStoreClock().catch(() => {})
     if (this.data.mode === 'today') this.loadDayView(this.data.selDate || todayStr())
     else this.loadList()
   },

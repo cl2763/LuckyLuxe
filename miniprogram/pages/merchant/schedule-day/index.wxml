@@ -1,0 +1,57 @@
+<view class="pg">
+  <view class="topbar">
+    <view class="nav" bindtap="prevWeek">‹</view>
+    <text class="h1">排班</text>
+    <view class="nav" bindtap="nextWeek">›</view>
+    <view class="btn" bindtap="thisWeek">本周</view>
+  </view>
+  <view class="splitbar" bindtap="editSplit">上下午分界 <text class="b">{{afternoonStart}}</text> · 点这里改 ›</view>
+
+  <view wx:if="{{loading}}" class="empty">加载中…</view>
+
+  <block wx:else>
+    <view class="dayrow" wx:for="{{days}}" wx:for-item="d" wx:key="date">
+      <view class="dhead">
+        <text class="dt">{{d.title}}</text>
+        <text class="closed" wx:if="{{d.isClosed}}">店休</text>
+        <text class="onduty">在岗 {{d.onDuty}}</text>
+      </view>
+      <scroll-view class="caps" scroll-x>
+        <view class="cap {{c.kind}}" wx:for="{{d.caps}}" wx:for-item="c" wx:key="techId"
+              data-date="{{d.date}}" data-tech="{{c.techId}}" data-name="{{c.name}}" data-kind="{{c.kind}}" bindtap="openSheet">
+          <text class="cn">{{c.name}}</text>
+          <text class="cl">{{c.label}}</text>
+          <text class="cc" wx:if="{{c.count}}">{{c.count}} 单</text>
+        </view>
+      </scroll-view>
+    </view>
+    <view class="tip">点任意胶囊改这一天该技师的时段。半天胶囊半填色;排班时段直接决定顾客能约的时间。</view>
+  </block>
+
+  <!-- 屏 4a-2 时段编辑弹层 -->
+  <view wx:if="{{sheet}}" class="mask" bindtap="closeSheet"></view>
+  <view wx:if="{{sheet}}" class="sheet">
+    <view class="sh">{{sheet.name}} · {{sheet.date}} 周{{sheet.weekday}}</view>
+    <view class="kinds">
+      <view class="k {{sheet.kind === 'full' ? 'on' : ''}}" data-k="full" bindtap="pickKind">全天</view>
+      <view class="k {{sheet.kind === 'am' ? 'on' : ''}}" data-k="am" bindtap="pickKind">上午</view>
+      <view class="k {{sheet.kind === 'pm' ? 'on' : ''}}" data-k="pm" bindtap="pickKind">下午</view>
+      <view class="k {{sheet.kind === 'custom' ? 'on' : ''}}" data-k="custom" bindtap="pickKind">自定义</view>
+      <view class="k {{sheet.kind === 'off' ? 'on' : ''}}" data-k="off" bindtap="pickKind">休息</view>
+    </view>
+    <view wx:if="{{sheet.kind === 'custom'}}" class="times">
+      <picker mode="time" value="{{sheet.start}}" bindchange="onStart"><view class="tp">{{sheet.start}}</view></picker>
+      <text class="dash">–</text>
+      <picker mode="time" value="{{sheet.end}}" bindchange="onEnd"><view class="tp">{{sheet.end}}</view></picker>
+    </view>
+    <view class="rep" bindtap="toggleRepeat">
+      <view class="box {{sheet.repeat ? 'on' : ''}}">{{sheet.repeat ? '✓' : ''}}</view>
+      <text>应用到之后每个周{{sheet.weekday}}(共 8 周)</text>
+    </view>
+    <view wx:if="{{conflicts.length}}" class="conf">
+      <view class="ct">这么排会有 {{conflicts.length}} 单落在时段外(已保存,自己决定要不要改预约):</view>
+      <view class="cr" wx:for="{{conflicts}}" wx:key="bookingId">{{item.startTime}}–{{item.endTime}} {{item.customerName}} · {{item.serviceName}}</view>
+    </view>
+    <view class="save" bindtap="saveShift">保存</view>
+  </view>
+</view>

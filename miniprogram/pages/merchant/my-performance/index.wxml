@@ -1,44 +1,50 @@
-<view class="page">
-  <view class="month">{{monthText}} · 本月完成 {{doneCount}} 单</view>
-
+<view class="pg">
+  <view class="h1">{{title}}</view>
   <view wx:if="{{loading}}" class="empty">加载中…</view>
-
-  <!-- 新:按老板配置的薪资方案实时预估 -->
-  <block wx:elif="{{mode === 'plan'}}">
-    <view class="hero">
-      <view class="hl">本月预估到手</view>
-      <view class="hv">≈ {{e.total}}</view>
-      <view class="hn" wx:if="{{payState==='paid'}}">✅ 本月工资已发放入账{{payTotal ? ':' + payTotal : ''}}</view>
-      <view class="hn" wx:elif="{{payState==='locked'}}">🔒 老板已锁定本月工资表{{payTotal ? ':' + payTotal : ''}},待发放</view>
-      <view class="hn" wx:else>按门店薪资方案实时估算,月底以老板核算为准</view>
-    </view>
-    <view class="rows">
-      <view class="r" wx:if="{{e.hasBase}}"><text class="k">底薪</text><text class="v">{{e.base}}</text></view>
-      <view class="r" wx:if="{{e.hasHandwork}}"><text class="k">手工费 · {{e.orderCount}} 单</text><text class="v">{{e.handwork}}</text></view>
-      <view class="r"><text class="k">提成(业绩 {{e.perf}} · {{e.pct}}% {{e.tierText}})</text><text class="v">{{e.commission}}</text></view>
-      <view class="r" wx:if="{{e.hasOt}}"><text class="k">加班费({{e.otText}})</text><text class="v hot">{{e.otPay}}</text></view>
-    </view>
-    <view class="nextcard" wx:if="{{e.next}}">🚀 离下一档:{{e.next}}</view>
-    <view class="note">仅显示你本人的业绩与薪酬估算,其他同事数据不可见。最终以门店月末结算为准。</view>
-  </block>
-
-  <!-- 旧口径兜底 -->
-  <block wx:elif="{{mode === 'old'}}">
-    <view class="hero">
-      <view class="hl">预估应发合计</view>
-      <view class="hv">{{old.total}}</view>
-      <view class="hn">底薪 + 提成,以老板月末核算为准</view>
-    </view>
-    <view class="rows">
-      <view class="r"><text class="k">本月个人营收</text><text class="v">{{old.revenue}}</text></view>
-      <view class="r"><text class="k">底薪</text><text class="v">{{old.base}}</text></view>
-      <view class="r"><text class="k">提成比例</text><text class="v">{{old.rate}}%</text></view>
-      <view class="r"><text class="k">提成估算</text><text class="v">{{old.commission}}</text></view>
-    </view>
-    <view class="note">仅显示你本人的业绩与薪酬估算,其他同事数据不可见。最终以门店月末结算为准。</view>
-  </block>
+  <view wx:elif="{{note}}" class="empty">{{note}}</view>
 
   <block wx:else>
-    <view class="empty">老板还没为你配置薪酬方案。<view class="sub">配置后这里会显示底薪、手工费、阶梯提成与加班费估算。</view></view>
+    <view class="hero">
+      <view class="sub">{{v.month}} · 本月业绩(已确认日结)</view>
+      <view class="amt">{{v.perf}}</view>
+      <view class="sub">{{v.orderCount}} 单 · 本月还剩 {{v.daysLeft}} 天</view>
+      <block wx:if="{{v.hasTarget}}">
+        <view class="pbar"><view class="pfill" style="width:{{v.pct}}%"></view></view>
+        <view class="goal"><text>{{v.pctText}}</text><text>{{v.gapText}}</text></view>
+      </block>
+      <view wx:if="{{v.hasSplit}}" class="split">
+        <text>卡耗 {{v.cardUsed}}{{v.cardTarget ? ' / ' + v.cardTarget : ''}}</text>
+        <text wx:if="{{v.orderTarget}}">单量 {{v.orderCount}} / {{v.orderTarget}}</text>
+      </view>
+    </view>
+
+    <view class="trend">
+      <view class="tb" wx:for="{{v.trend}}" wx:key="label">
+        <view class="col"><view class="bar {{item.cur ? 'cur' : ''}}" style="height:{{item.h}}%"></view></view>
+        <text class="lb">{{item.label}}</text>
+      </view>
+    </view>
+    <view class="tlegend">近 6 个月业绩趋势(本月高亮)</view>
+
+    <view class="tabs">
+      <view class="t {{tab === it.k ? 'on' : ''}}" wx:for="{{tabs}}" wx:for-item="it" wx:key="k" data-k="{{it.k}}" bindtap="switchTab">{{it.t}}</view>
+    </view>
+
+    <view class="card" wx:if="{{tab === 'daily'}}">
+      <view class="row" wx:for="{{v.daily}}" wx:key="date">
+        <text class="d">{{item.date}}</text>
+        <text class="o {{item.pending ? 'mut' : ''}}">{{item.orders}}</text>
+        <text wx:if="{{item.card}}" class="c">卡耗 {{item.card}}</text>
+        <text class="p {{item.pending ? 'mut' : ''}}">{{item.perf}}</text>
+      </view>
+      <view wx:if="{{!v.daily.length}}" class="empty">本月还没有已确认的日结。</view>
+    </view>
+    <view class="card" wx:elif="{{tab === 'monthly'}}">
+      <view class="row" wx:for="{{v.monthly}}" wx:key="key"><text class="d">{{item.key}}</text><text class="o">{{item.orders}}</text><text class="p">{{item.perf}}</text></view>
+    </view>
+    <view class="card" wx:else>
+      <view class="row" wx:for="{{v.yearly}}" wx:key="key"><text class="d">{{item.key}}</text><text class="o">{{item.orders}}</text><text class="p">{{item.perf}}</text></view>
+      <view wx:if="{{!v.yearly.length}}" class="empty">还没有年度数据。</view>
+    </view>
   </block>
 </view>

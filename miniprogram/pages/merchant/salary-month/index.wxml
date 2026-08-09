@@ -20,13 +20,19 @@
     <view class="lockedbar" wx:elif="{{locked}}">✅ 已锁定存档 · {{lockedAt}}<text class="unlk" bindtap="unlockMonth"> 解锁重算 ›</text></view>
     <view class="totalbar"><text>全员合计{{locked ? '(存档)' : ''}}</text><text class="tb">{{total}}</text></view>
 
-    <view class="attrbox" wx:if="{{attrNotes.length && !locked}}">
-      <view class="attr-t">⚠ 本月有 {{attrNotes.length}} 条归属备注,锁定前核对(用下方「± 调整」修正):</view>
-      <view class="attr-row" wx:for="{{attrNotes}}" wx:key="code">
-        <text class="attr-m">{{item.customerName}} · {{item.amountText}} · 名下:{{item.technicianName}}</text>
-        <text class="attr-n">{{item.note}}</text>
+    <!-- 屏 2:日结业绩模块(取代已退役的归属备注区)。业绩=已确认日结累加 -->
+    <view class="closebox">
+      <view class="close-t">日结业绩<text class="dot" wx:if="{{openDays}}">{{openDays}}</text> · 业绩=已确认日结累加</view>
+      <view class="close-row" wx:for="{{closeDays}}" wx:key="date">
+        <text class="cd">{{item.date}}</text>
+        <text class="cl">{{item.line}}</text>
+        <text wx:if="{{item.confirmed}}" class="cb ok">已日结</text>
+        <text wx:else class="cb go" data-date="{{item.date}}" bindtap="goDailyClose">去日结</text>
       </view>
+      <view wx:if="{{!closeDays.length}}" class="close-empty">本月还没有已签署的服务单。</view>
     </view>
+    <view class="warnbar" wx:if="{{openDays}}">本月有 {{openDays}} 天未日结,试算暂不含这几天业绩;全部日结完成才能锁定。</view>
+    <view class="warnbar" wx:elif="{{zeroHint}}">本月业绩显示为 0 是正常的:口径已改为「已确认日结累加」,要走完 结算 → 顾客签署 → 日结确认 才会有数。</view>
 
     <view class="paycard" wx:for="{{rows}}" wx:key="technicianId">
       <view class="ph">
