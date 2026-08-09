@@ -17,6 +17,10 @@ Page({
     template: 'base_ladder', // commission 纯提成 | base_ladder 底薪+阶梯 | base_flat 底薪+固定提成
     base: '', handwork: '', flatPct: '',
     ladder: [], // [{min,max,pct}] 全部字符串,input 直接编辑
+    // v2(P2①-2 后端已支持):阶段=落档整月按该档;阶梯=分段累进。存量方案默认阶段,不会被悄悄改
+    ladderMode: 'whole',
+    firstRechargePct: '', renewRechargePct: '',
+    customCommissions: [], // [{name,pct}] 卡提成自定义行,屏 3b 的「＋加一行」
     otRate: '', otUnit: 30,
     cardPct: '', rechargePct: '',
     saving: false
@@ -47,6 +51,10 @@ Page({
         cardPct: p.cardPct ? String(p.cardPct) : '',
         rechargePct: p.rechargePct ? String(p.rechargePct) : '',
         otRate: c2y(p.overtimeRateCents), otUnit: p.overtimeUnitMin === 60 ? 60 : 30,
+        ladderMode: p.ladderMode === 'progressive' ? 'progressive' : 'whole',
+        firstRechargePct: p.firstRechargePct ? String(p.firstRechargePct) : '',
+        renewRechargePct: p.renewRechargePct ? String(p.renewRechargePct) : '',
+        customCommissions: (p.customCommissions || []).map((c) => ({ name: c.name || '', pct: String(c.pct || 0) })),
         ladder: (p.ladder && p.ladder.length ? p.ladder : []).map((t) => ({
           min: c2y(t.minCents) || '0', max: t.maxCents == null ? '' : c2y(t.maxCents), pct: String(t.pct || 0)
         }))
@@ -56,6 +64,27 @@ Page({
   },
 
   pickTpl(e) { this.setData({ template: e.currentTarget.dataset.t }) },
+  pickLadderMode(e) { this.setData({ ladderMode: e.currentTarget.dataset.m }) },
+  onFirstPct(e) { this.setData({ firstRechargePct: e.detail.value }) },
+  onRenewPct(e) { this.setData({ renewRechargePct: e.detail.value }) },
+  // 屏 3b:卡提成自定义行「＋加一行」(名称 + 比例)
+  addCustomRow() {
+    const rows = this.data.customCommissions.slice()
+    if (rows.length >= 10) { wx.showToast({ title: '最多 10 行', icon: 'none' }); return }
+    rows.push({ name: '', pct: '' })
+    this.setData({ customCommissions: rows })
+  },
+  removeCustomRow(e) {
+    const rows = this.data.customCommissions.slice()
+    rows.splice(Number(e.currentTarget.dataset.i), 1)
+    this.setData({ customCommissions: rows })
+  },
+  onCustomRow(e) {
+    const { i, f } = e.currentTarget.dataset
+    const rows = this.data.customCommissions.slice()
+    rows[i] = Object.assign({}, rows[i], { [f]: e.detail.value })
+    this.setData({ customCommissions: rows })
+  },
   onBase(e) { this.setData({ base: e.detail.value }) },
   onHandwork(e) { this.setData({ handwork: e.detail.value }) },
   onFlatPct(e) { this.setData({ flatPct: e.detail.value }) },
@@ -104,8 +133,14 @@ Page({
           minCents: y2c(t.min), maxCents: t.max === '' ? null : y2c(t.max), pct: Number(t.pct) || 0
         })) : [],
         flatPct: d.template === 'base_ladder' ? 0 : (Number(d.flatPct) || 0),
+        ladderMode: d.ladderMode,
         cardPct: Number(d.cardPct) || 0,
         rechargePct: Number(d.rechargePct) || 0,
+        firstRechargePct: Number(d.firstRechargePct) || 0,
+        renewRechargePct: Number(d.renewRechargePct) || 0,
+        customCommissions: d.customCommissions
+          .filter((c) => Number(c.pct) > 0)
+          .map((c) => ({ name: (c.name || '').trim() || '自定义提成', pct: Number(c.pct) || 0 })),
         overtimeRateCents: y2c(d.otRate),
         overtimeUnitMin: d.otUnit
       })

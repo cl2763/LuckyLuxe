@@ -27,6 +27,11 @@
 
   <block wx:if="{{template==='base_ladder'}}">
     <view class="k">③ 业绩阶梯(每个数字都能改;最后一档上限留空=不封顶)</view>
+    <view class="modeseg">
+      <view class="ms {{ladderMode==='whole'?'on':''}}" data-m="whole" bindtap="pickLadderMode">阶段</view>
+      <view class="ms {{ladderMode==='progressive'?'on':''}}" data-m="progressive" bindtap="pickLadderMode">阶梯</view>
+      <text class="msn">{{ladderMode==='whole' ? '落到哪档,整月业绩都按该档提点' : '分段累进,每一段各按各自档位提点'}}</text>
+    </view>
     <view class="ladder">
       <view class="lr hd"><text class="c1">业绩从($)</text><text class="c2">到($)</text><text class="c3">提成%</text><text class="c4"></text></view>
       <view class="lr" wx:for="{{ladder}}" wx:key="index">
@@ -61,6 +66,20 @@
     <view class="fl">耗卡提成<text class="fs">顾客用卡付款,按消耗额提</text></view>
     <view class="fv"><input class="num" type="digit" value="{{cardPct}}" placeholder="0" bindinput="onCardPct" /><text class="u">%</text></view>
   </view>
+  <view class="frow">
+    <view class="fl">首充提成<text class="fs">顾客第一次充卡,单独给一个提点</text></view>
+    <view class="fv"><input class="num" type="digit" value="{{firstRechargePct}}" placeholder="0" bindinput="onFirstPct" /><text class="u">%</text></view>
+  </view>
+  <view class="frow">
+    <view class="fl">续卡提成<text class="fs">老顾客再充,按这个提点</text></view>
+    <view class="fv"><input class="num" type="digit" value="{{renewRechargePct}}" placeholder="0" bindinput="onRenewPct" /><text class="u">%</text></view>
+  </view>
+  <view class="crow" wx:for="{{customCommissions}}" wx:key="index">
+    <input class="cin" value="{{item.name}}" placeholder="名称(如 套餐卡提成)" data-i="{{index}}" data-f="name" bindinput="onCustomRow" />
+    <input class="cpct" type="digit" value="{{item.pct}}" placeholder="0" data-i="{{index}}" data-f="pct" bindinput="onCustomRow" /><text class="u">%</text>
+    <text class="del" data-i="{{index}}" bindtap="removeCustomRow">移除</text>
+  </view>
+  <view class="addrow" bindtap="addCustomRow">＋ 加一行</view>
   <view class="cardnote">两项归属流水(哪次充值/耗卡算谁的)接通后自动生效,现在先把提点配好</view>
 
   <view class="save {{saving?'dim':''}}" bindtap="save">{{saving ? '保存中…' : '保存方案 · 立即生效'}}</view>
