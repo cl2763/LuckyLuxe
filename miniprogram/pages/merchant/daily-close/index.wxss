@@ -1,6 +1,6 @@
 .pg{padding:16rpx 24rpx 60rpx;background:#fbf8f5;min-height:100vh}
 .datebar{display:flex;align-items:center;gap:14rpx;padding:8rpx 0 16rpx}
-.datebar .nav{width:52rpx;height:52rpx;border-radius:50%;background:#f3ece2;color:#5c4630;text-align:center;line-height:52rpx;font-size:28rpx}
+.datebar .nav{width:52rpx;height:52rpx;border-radius:50%;background:#f3ece2;color:#5c4630;font-size:28rpx;display:flex;align-items:center;justify-content:center;flex:0 0 auto}
 .datebar .d{font-size:32rpx;font-weight:800;color:#241f1d}
 .datebar .today{margin-left:auto;font-size:23rpx;color:#9b7655;border:1rpx solid #e7d3b8;border-radius:999rpx;padding:8rpx 22rpx}
 .empty{padding:80rpx 0;text-align:center;color:#9a8c7c;font-size:26rpx}
@@ -9,12 +9,12 @@
 .pill{font-size:23rpx;background:#fff;border:1rpx solid #ece3da;border-radius:999rpx;padding:8rpx 20rpx;color:#5c4630}
 .pill.hot{background:#fdf3ec;border-color:#f0d9c4;color:#a8551f}
 .pill .b{font-weight:800;color:#241f1d}
-.card{background:#fff;border-radius:18rpx;padding:18rpx;margin-bottom:14rpx;box-shadow:0 3rpx 10rpx rgba(92,70,48,.06)}
+.card{background:#fff;border-radius:18rpx;padding:24rpx 22rpx;margin-bottom:18rpx;box-shadow:0 3rpx 10rpx rgba(92,70,48,.06)}
 .ah{display:flex;justify-content:space-between;align-items:center;font-size:25rpx;font-weight:700;color:#241f1d}
 .ah .arr{font-size:21rpx;color:#8c8279;font-weight:400;margin-left:8rpx}
 .ah .amt{font-weight:800}
-.aline{display:flex;align-items:center;gap:12rpx;padding:14rpx 0;border-bottom:1rpx solid #f4ede6}
-.aline .nm{width:96rpx;flex:none;font-size:25rpx;font-weight:700;color:#241f1d}
+.aline{display:flex;align-items:center;gap:14rpx;padding:18rpx 0;border-bottom:1rpx solid #f4ede6}
+.aline .nm{width:132rpx;flex:none;font-size:25rpx;font-weight:700;color:#241f1d;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 .aline .wn{flex:1;font-size:21rpx;color:#8c8279}
 .aline .pct{width:100rpx;text-align:right;font-size:26rpx;font-weight:700;background:#faf6f1;border:1rpx solid #ece2d6;border-radius:10rpx;padding:8rpx 12rpx}
 .aline .pcts{font-size:23rpx;color:#8c8279}
@@ -22,11 +22,11 @@
 .lnk{font-size:22rpx;color:#9b7655;font-weight:700}
 .lnk.back{margin-left:auto}
 .savebtn{margin-left:auto;background:#2d2826;color:#fff;border-radius:12rpx;padding:12rpx 26rpx;font-size:23rpx;font-weight:700}
-.th,.tr{display:flex;align-items:center;padding:12rpx 0;font-size:22rpx}
+.th,.tr{display:flex;align-items:center;padding:16rpx 0;font-size:22rpx}
 .th{color:#8c8279;font-weight:700;border-bottom:1rpx solid #ece3da}
 .tr{border-bottom:1rpx solid #f4ede6;color:#241f1d}
 .tr:last-child{border-bottom:none}
-.c1{width:110rpx;flex:none}.c2{width:64rpx;flex:none}.c3{flex:1;text-align:right}.c4{width:130rpx;flex:none;text-align:right}
+.c1{width:140rpx;flex:none;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}.c2{width:64rpx;flex:none}.c3{flex:1;text-align:right}.c4{width:130rpx;flex:none;text-align:right}
 .tr .nm{font-weight:700}
 .c4.ok{color:#2f7d5c;font-weight:700}
 .anom{font-size:22rpx;color:#4a3c2c;line-height:2}
@@ -47,3 +47,7 @@
 .fd .in{flex:1;max-width:280rpx;text-align:right;font-size:28rpx;font-weight:800;background:#faf6f1;border:1rpx solid #ece2d6;border-radius:12rpx;padding:14rpx 16rpx}
 .ta{width:100%;min-height:140rpx;background:#faf6f1;border:1rpx solid #ece2d6;border-radius:12rpx;padding:14rpx;font-size:24rpx;color:#241f1d;margin-top:8rpx}
 .note{font-size:21rpx;color:#9a8c7c;line-height:1.8;margin:12rpx 0}
+
+/* 无需分配但要店长点确认的单(F1) */
+.awaitcard .ah{border-bottom:none}
+.awaitcard .arr{color:#9a8c7c;font-size:21rpx;margin-left:8rpx}

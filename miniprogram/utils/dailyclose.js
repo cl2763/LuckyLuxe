@@ -67,6 +67,15 @@ const dailyCloseMixin = {
             })),
             hasSnapshot: (dc.settlements.find((s) => s.settlementId === p.settlementId) || {}).hasSnapshot
           })),
+          // 不需要分配、但同样要店长点确认的单(店主 08-09 口径:确认覆盖当日全部单)
+          awaiting: (dc.awaitingConfirm || []).map((p) => ({
+            id: p.settlementId, code: p.code,
+            who: p.servedPersonName || p.customerName || '',
+            amount: m(p.perfBaseCents),
+            reason: p.reason,
+            techs: p.technicians.map((t) => `${t.name}${t.sharePct !== null && t.sharePct !== undefined ? ` ${t.sharePct}%` : ''}`).join(' / '),
+            hasSnapshot: p.hasSnapshot
+          })),
           techs: (dc.technicians || []).map((t) => ({
             name: t.name, orderCount: t.orderCount,
             perf: t.pendingCount ? '待分配' : m(t.perfCents),

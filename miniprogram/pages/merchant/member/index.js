@@ -1,5 +1,5 @@
 const api = require('../../../utils/api')
-const { storeMoney } = require('../../../utils/storeclock')
+const { storeMoney, storeCurrency, ensureCurrencyCached } = require('../../../utils/storeclock')
 
 Page({
   data: {
@@ -8,7 +8,10 @@ Page({
     recharges: [], timesCards: [], coupons: [],
     customers: [],
     // 屏 C3 自定义发放(小程序老板版)
-    grantQuery: '', grantResults: [], grantPicked: null, grants: []
+    grantQuery: '', grantResults: [], grantPicked: null, grants: [],
+    // F4 给会员加储值(平铺块,与自定义发放同层)
+    rvQuery: '', rvResults: [], rvPicked: null, rvAmount: '', rvAmountText: '',
+    rvCurrency: '$', rvTechs: [], rvTechNames: ['店里直收(不计提成)'], rvTechIndex: 0
   },
 
   onLoad(opt) {
@@ -16,7 +19,12 @@ Page({
     if (seg === 1 || seg === 2) this.setData({ seg })
   },
 
-  async onShow() { if (!(await api.guardOwner())) return; this.loadAll() },
+  async onShow() {
+    if (!(await api.guardOwner())) return
+    await ensureCurrencyCached().catch(() => {})
+    this.setData({ rvCurrency: storeCurrency() }) // 币种从门店设置来,不写死 $
+    this.loadAll()
+  },
 
   async loadAll() {
     try {
@@ -178,7 +186,46 @@ Page({
     }
   },
 
-  async manualRecharge() {
+  /* ===== F4 给会员加储值(平铺块)=====
+     金额红线:本块一处金额运算都没有 —— 只把店主输入的数字换算成分发给后端,
+     余额与到账结果全部由 /admin/stored-value/* 返回。 */
+  onRvSearch(e) {
+    const q = String(e.detail.value || '').trim()
+    const hit = q ? (this.data.customers || []).filter((c) =>
+      String(c.displayName || '').includes(q) || String(c.phone || '').includes(q)).slice(0, 6) : []
+    this.setData({ rvQuery: q, rvResults: hit.map((c) => this.rvShape(c)) })
+  },
+  rvShape(c) {
+    return { id: c.id, displayName: c.displayName || '会员', balanceText: storeMoney(c.storedValueBalanceCents || 0, 0) }
+  },
+  pickRv(e) {
+    const c = (this.data.customers || []).find((x) => x.id === e.currentTarget.dataset.id)
+    if (!c) return
+    this.setData({ rvPicked: this.rvShape(c), rvResults: [] })
+    this.loadRvTechs()
+  },
+  unpickRv() { this.setData({ rvPicked: null, rvQuery: '', rvResults: [], rvAmount: '', rvAmountText: '', rvTechIndex: 0 }) },
+  async loadRvTechs() {
+    if (this.data.rvTechs.length) return
+    try {
+      const t = await api.adminGet('/admin/technicians')
+      const techs = (t.technicians || []).filter((x) => x.is_active !== 0 && x.isActive !== false)
+      this.setData({ rvTechs: techs, rvTechNames: ['店里直收(不计提成)'].concat(techs.map((x) => `${x.name} 促成`)) })
+    } catch (e) { /* 拉不到技师不挡充值 */ }
+  },
+  onRvTech(e) { this.setData({ rvTechIndex: Number(e.detail.value) || 0 }) },
+  onRvAmount(e) {
+    const raw = String(e.detail.value || '').replace(/[^\d.]/g, '')
+    const v = Number(raw)
+    this.setData({ rvAmount: raw, rvAmountText: v > 0 ? ` ${storeMoney(Math.round(v * 100), 0)}` : '' })
+  },
+
+  async doRecharge() {
+    const cust = this.data.rvPicked
+    const amount = Number(this.data.rvAmount)
+    if (!cust) { wx.showToast({ title: '先选一位会员', icon: 'none' }); return }
+    if (!(amount > 0)) { wx.showToast({ title: '金额无效', icon: 'none' }); return }
+    // 加储值是资金操作:本次会话没解锁财务的,先去财务页输密码(与网页同一道门)
     if (!(api.getFinanceKey && api.getFinanceKey())) {
       wx.showModal({
         title: '需先解锁财务', content: '加储值属于资金操作,请先到财务页输入财务密码解锁本次会话。',
@@ -186,44 +233,14 @@ Page({
       })
       return
     }
-    const list = this.data.customers.slice(0, 6)
-    if (!list.length) { wx.showToast({ title: '暂无会员', icon: 'none' }); return }
-    wx.showActionSheet({
-      itemList: list.map((c) => `${c.displayName || '会员'} · 余额$${((c.storedValueBalanceCents || 0) / 100).toFixed(0)}`),
-      success: (r) => this.askAmount(list[r.tapIndex])
-    })
-  },
-
-  askAmount(cust) {
-    wx.showModal({
-      title: `给 ${cust.displayName || '会员'} 加储值`, editable: true, placeholderText: '输入到账金额(加元),如 1000',
-      success: (r) => {
-        if (!r.confirm) return
-        const v = Number(String(r.content).replace(/[^\d.]/g, ''))
-        if (!v || v <= 0) { wx.showToast({ title: '金额无效', icon: 'none' }); return }
-        this.askRechargeTech(cust, v)
-      }
-    })
-  },
-
-  // 经手技师(可选):这笔充值算谁促成 → 计入该技师的「充值提成」
-  async askRechargeTech(cust, amount) {
-    let techs = []
-    try { const t = await api.adminGet('/admin/technicians'); techs = (t.technicians || []).filter((x) => x.is_active !== 0 && x.isActive !== false) } catch (e) { /* 忽略 */ }
-    const items = ['店里直收(不计提成)'].concat(techs.map((x) => `${x.name} 促成`))
-    wx.showActionSheet({
-      itemList: items.slice(0, 6),
-      success: (r) => this.doRecharge(cust, amount, r.tapIndex === 0 ? '' : techs[r.tapIndex - 1].id),
-      fail: () => this.doRecharge(cust, amount, '') // 点取消也照常入账,不挡钱
-    })
-  },
-  async doRecharge(cust, amount, technicianId) {
+    const tech = this.data.rvTechs[this.data.rvTechIndex - 1]
     try {
       const body = { userId: cust.id, amountCents: Math.round(amount * 100), payChannel: 'manual', note: '线下手动补录' }
-      if (technicianId) body.technicianId = technicianId
+      if (tech) body.technicianId = tech.id
       const resp = await api.adminPost('/admin/stored-value/recharge', body)
       const bal = resp && resp.balanceCents != null ? storeMoney(resp.balanceCents, 0) : ''
-      wx.showToast({ title: '已到账 ' + bal, icon: 'none' })
+      wx.showToast({ title: '已到账,余额 ' + bal, icon: 'none' })
+      this.unpickRv()
       this.loadAll()
     } catch (err) { wx.showToast({ title: (err && err.message) || '充值失败', icon: 'none' }) }
   }

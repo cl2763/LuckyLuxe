@@ -1,5 +1,5 @@
 // 构建号:每次交付递增。侧栏可见,排查"改了没生效"时先对版本。
-const ADMIN_BUILD = '20260809e-username'
+const ADMIN_BUILD = '20260809f-f1f5'
 console.log(`[admin] build ${ADMIN_BUILD}`)
 
 // "今天"必须按门店时区算,否则老板人在别的时区时全站日期错位一天。
@@ -2523,6 +2523,16 @@ function renderDailyClose() {
         </div>
       </div>`
     }).join('')}
+
+    ${(v.awaitingConfirm || []).length ? `
+      <h3 style="font-size:14px;margin:12px 0 8px">${zh ? `无需分配 · 待确认 ${v.awaitingConfirm.length} 单` : `${v.awaitingConfirm.length} awaiting confirmation`}</h3>
+      ${v.awaitingConfirm.map((a) => `
+        <div class="dc-alloc collapsed">
+          <div class="head">
+            <span>${escapeHtml(a.code)} ${escapeHtml(a.servedPersonName || a.customerName || '')} · ${a.technicians.map((t) => escapeHtml(t.name) + (t.sharePct === null || t.sharePct === undefined ? '' : ` ${t.sharePct}%`)).join(' / ')}</span>
+            <span>${money(a.perfBaseCents, 2)} <span class="arr">${escapeHtml(a.reason)}</span></span>
+          </div>
+        </div>`).join('')}` : ''}
 
     <table class="dc-sum">
       <tr>

@@ -8512,6 +8512,10 @@ function dailyCloseView(date, tenantId, { lang = 'zh' } = {}) {
   for (const t of db.prepare('SELECT * FROM perf_targets WHERE tenant_id = ? AND month = ?').all(tenantId, month)) targets[t.technician_id] = t
 
   const pending = []
+  /* 店主 2026-08-09 口径:**每天所有单都要经店长点确认**,单技师单也不例外 ——
+     「不用分配」只是免去分成输入,不等于自动确认。所以单技师单也要在日结列表里
+     以「无需分配 · 待确认」的形态出现,让店长看得见自己确认的是哪些单。 */
+  const awaitingConfirm = []
   const perTech = {}
   const bump = (id) => (perTech[id] = perTech[id] || { technicianId: id, name: (techNames[id] || {}).name || id, orderCount: 0, perfCents: 0, cardUsedCents: 0, pendingCount: 0 })
   const settlements = rows.map((r) => {
@@ -8548,6 +8552,22 @@ function dailyCloseView(date, tenantId, { lang = 'zh' } = {}) {
         // 卡耗按业绩占比摊到各技师头上(整单卡耗 × 该技师业绩占比),口径与业绩一致
         bucket.cardUsedCents += settlementPerfBaseCents(r) > 0 ? Math.round(cardUsed * s.shareCents / settlementPerfBaseCents(r)) : 0
       }
+    }
+    if (!unallocated && (!closeRow || closeRow.status !== 'confirmed')) {
+      awaitingConfirm.push({
+        settlementId: r.id, code: r.code,
+        perfBaseCents: settlementPerfBaseCents(r),
+        couponDiscountCents: r.coupon_discount_cents || 0,
+        customerName: (db.prepare('SELECT display_name FROM users WHERE id = ?').get(r.user_id) || {}).display_name || '',
+        servedPersonName: r.served_person_name || '',
+        technicians: settlementTechRows(r.id, tenantId).map((t) => ({
+          technicianId: t.technician_id, name: (techNames[t.technician_id] || {}).name || t.technician_id,
+          role: t.role, sharePct: t.share_pct, shareCents: t.share_cents
+        })),
+        // 多技师但已分配过的,也归到这里 —— 它同样等着店长点确认
+        reason: settlementTechRows(r.id, tenantId).length > 1 ? '已分配 · 待确认' : '无需分配 · 待确认',
+        hasSnapshot: Boolean(r.snapshot_url || r.snapshot_inline)
+      })
     }
     return {
       settlementId: r.id, code: r.code, totalCents: r.total_cents, cardUsedCents: cardUsed,
@@ -8597,6 +8617,8 @@ function dailyCloseView(date, tenantId, { lang = 'zh' } = {}) {
     revenueCents: settlements.reduce((sum, s) => sum + s.totalCents, 0),
     settlements,
     pendingAllocation: pending,
+    // 不需要分配、但同样等着店长点「确认日结」的单
+    awaitingConfirm,
     technicians,
     anomalies: dailyAnomalies(rows, tenantId),
     canConfirm: blockers.length === 0,

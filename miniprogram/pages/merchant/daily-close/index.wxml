@@ -39,6 +39,18 @@
       </block>
     </view>
 
+
+          <view class="dcsub" wx:if="{{v.awaiting.length}}">无需分配 · 待确认 {{v.awaiting.length}} 单</view>
+          <view class="card awaitcard" wx:for="{{v.awaiting}}" wx:for-item="a" wx:key="id">
+            <view class="ah">
+              <text class="code">{{a.code}} {{a.who}} · {{a.techs}}</text>
+              <text class="amt">{{a.amount}} <text class="arr">{{a.reason}}</text></text>
+            </view>
+            <view class="links">
+              <text wx:if="{{a.hasSnapshot}}" class="lnk" data-code="{{a.code}}" bindtap="viewSnapshot">查看签署单</text>
+              <text class="lnk" data-code="{{a.code}}" bindtap="startCorrect">金额有误?发起更正</text>
+            </view>
+          </view>
     <view class="card">
       <view class="th"><text class="c1">技师</text><text class="c2">单数</text><text class="c3">业绩</text><text class="c3">卡耗</text><text class="c3">冲卡</text><text class="c4">目标</text></view>
       <view class="tr" wx:for="{{v.techs}}" wx:key="name">

@@ -115,6 +115,28 @@ for (const store of STORES) {
   const addons = items.filter((i) => i.itemKind === 'addon')
   if (!mains.length || techs.length < 2) { log('!! 本店价目表或技师不足,跳过订单流'); report.push(row); continue }
 
+  /* ---------- ⑤a 定金规则(F2)----------
+     Jie'Nail 的设计口径是「定位费抵扣总价」(批1 裁决2),但 deposit_config 从来没写进去过 ——
+     没配置 = 默认 deductible=false → 结算页显示「本店定金不抵扣尾款」,定金行根本不渲染。
+     2026-08-09 店主实测「结算页看不到定金抵扣行」就是这个根因。 */
+  const dep = (await api(tenantId, '/admin/deposit-config')).config
+  if (!dep.deductible || !dep.enabled) {
+    await api(tenantId, '/admin/deposit-config', {
+      method: 'PUT',
+      body: JSON.stringify({
+        config: {
+          enabled: true,
+          deductible: true, // 裁决2:Jie'Nail 定位费抵扣总价
+          mode: 'fixed',
+          fixedAmountCents: tenantId === 'jics-nail' ? 10000 : 5000,
+          cancelPolicy: { refundable: false, freeCancelHours: 24, lateForfeitPct: 100, noShowForfeitPct: 100, lateArrivalGraceMin: 30, rescheduleNoticeHours: 24, depositRetainTimes: 1 }
+        }
+      })
+    })
+    log('⑤a 定金规则:补齐(收定金 · 抵扣尾款 · 迟到宽限 30 分钟 · 改期提前 1 天 · 可保留 1 次)')
+  } else log('⑤a 定金规则:已配置,跳过')
+  row.deposit = (await api(tenantId, '/admin/deposit-config')).config.deductible ? '收定金 · 抵扣尾款' : '不抵扣'
+
   // ---------- ② 近 6 周订单流 ----------
   const already = withDb((db) => db.prepare("SELECT COUNT(*) AS n FROM settlements WHERE tenant_id = ? AND created_by = 'bigdemo'").get(tenantId).n)
   const days = []
@@ -180,6 +202,42 @@ for (const store of STORES) {
     const signed = db.prepare("SELECT COUNT(*) AS n FROM settlements WHERE tenant_id = ? AND created_by = 'bigdemo' AND status = 'signed'").get(tenantId).n
     return `${n} 张(已签 ${signed} · 待签 ${n - signed})`
   })
+
+  /* 带定金抵扣的样本单(F2 第二半):上面那批单是在 deductible 还是 false 的时候造的,
+     所以 deposit_deduct_cents 全是 0。定金规则配好后补造两张真的带定金抵扣的单。 */
+  const withDep = withDb((db) => db.prepare('SELECT COUNT(*) AS n FROM settlements WHERE tenant_id = ? AND deposit_deduct_cents > 0').get(tenantId).n)
+  if (withDep < 2) {
+    for (let i = 0; i < 2; i += 1) {
+      try {
+        const g = await api(tenantId, '/admin/settlements', {
+          method: 'POST',
+          body: JSON.stringify({
+            cardOwnerUserId: demoCustomers[i % demoCustomers.length].id,
+            settlements: [{
+              tierKey: 'member', depositApplied: true, payIntent: 'offline_full',
+              items: [{ serviceId: mains[0].id }],
+              technicians: [{ technicianId: techs[i % techs.length].id, role: 'main', itemNos: [1] }]
+            }]
+          })
+        })
+        const st = g.settlements[0]
+        if (i === 0) {
+          await pub(`/settlements/${st.code}/sign`, {
+            method: 'POST',
+            body: JSON.stringify({ disclaimerAccepted: true, signature: '顾客', strokes: [[{ x: 6, y: 50 }, { x: 40, y: 16 }]] })
+          })
+        }
+        // 一张签掉进日结,一张留着待签 —— 店主能在结算页直接看到定金抵扣行
+        withDb((db) => {
+          const at = `${shift(today, -1)}T11:00:00.000Z`
+          db.prepare("UPDATE settlements SET created_at = ?, created_by = 'bigdemo' WHERE id = ?").run(at, st.id)
+          db.prepare('UPDATE settlements SET signed_at = ? WHERE id = ? AND signed_at IS NOT NULL').run(at, st.id)
+        })
+      } catch (e) { log(`   带定金样本没造成(${e.message.slice(0, 70)})`) }
+    }
+    log('② 带定金抵扣的样本单:补 2 张(1 张已签进日结、1 张待签可在结算页看定金行)')
+  }
+  row.depositSheets = `${withDb((db) => db.prepare('SELECT COUNT(*) AS n FROM settlements WHERE tenant_id = ? AND deposit_deduct_cents > 0').get(tenantId).n)} 张带定金抵扣`
 
   // ---------- ③ 日结:多天已确认 + 待分配 + 重开留痕 ----------
   let confirmed = 0
@@ -319,6 +377,7 @@ for (const store of STORES) {
   const heldByPending = withDb((db) => db.prepare("SELECT COUNT(*) AS n FROM settlements WHERE tenant_id = ? AND status = 'pending_sign' AND coupon_grant_id IS NOT NULL").get(tenantId).n)
   row.coupons = `未使用 ${gs.filter((g) => g.status === 'active').length} · 已核销 ${gs.filter((g) => g.status === 'used').length} · 已过期 ${gs.filter((g) => g.status === 'expired').length} · 作废 ${gs.filter((g) => g.status === 'revoked').length} · 被待签单占用 ${heldByPending}`
 
+
   /* ---------- ⑤b 营业时间 ----------
      没配营业时间的话「今日台面」每天都显示「本日休息」,设计图屏 1 的技师网格根本出不来。
      2026-08-09 集中核验时当场发现 Jie'Nail 就是这个状态 —— 补进 seed。 */
@@ -390,6 +449,85 @@ for (const store of STORES) {
     log(`⑧ 会话:${CONVOS.length} 个(待报价 / 已报价 / 已转人工 / 普通咨询 / 已关闭)`)
   }
   row.convos = `${CONVOS.length} 个会话(含待报价 / 已报价 / 已转人工)`
+
+  /* ---------- ⑩ 今日台面:今天/明天的预约,状态全形态(F3)----------
+     2026-08-09 店主随查「走岔流程没正式开单」——根因在数据不在代码:
+     ① 今天一条预约都没有,今日台面是空的,点不到块就走不到「去结算」;
+     ② 近 6 周那批订单是直接建的结算单(没有 booking),所以「全部订单」里也看不到它们。
+     这里把今天铺满、明天留几条,并且**走预约 → 结算 → 签署的完整链路**,
+     让「待到店 / 进行中 / 待签 / 已完成 / 未付定金」五种入口各有真样本可点。 */
+  const todayBookings = withDb((db) => db.prepare(
+    "SELECT COUNT(*) AS n FROM bookings WHERE tenant_id = ? AND substr(appointment_start, 1, 10) = ?"
+  ).get(tenantId, today).n)
+  if (todayBookings >= 4) log(`⑩ 今日台面:今天已有 ${todayBookings} 条预约,跳过`)
+  else {
+    // 状态样本:每条 = [第几个技师, 几点, 想要的状态]
+    const PLAN = [
+      [0, '10:30', 'unpaid'],    // 未付定金 —— 面板上有「标记已收定金」
+      [0, '13:00', 'confirmed'], // 待到店 —— 面板上有「确认到店」
+      [1, '11:00', 'active'],    // 进行中 —— 面板上有「去结算」
+      [1, '14:30', 'pending'],   // 已推结算单待签 —— 有「查看结算单」+「撤回改单」
+      [0, '16:00', 'done']       // 已完成已签 —— 有「查看电子票据」
+    ]
+    let made = 0
+    for (let i = 0; i < PLAN.length; i += 1) {
+      const [ti, time, want] = PLAN[i]
+      const tech = techs[ti % techs.length]
+      const cust = demoCustomers[i % demoCustomers.length]
+      let booking
+      try {
+        booking = (await api(tenantId, '/admin/bookings/direct', {
+          method: 'POST',
+          body: JSON.stringify({
+            userId: cust.id, serviceId: mains[i % mains.length].id, technicianId: tech.id,
+            date: today, time, depositPaid: want !== 'unpaid', notes: '演示数据'
+          })
+        })).booking
+      } catch (e) { log(`   ${time} 这条没排上(${e.message.slice(0, 60)})`); continue }
+      made += 1
+      if (want === 'unpaid' || want === 'confirmed') continue
+      // 到店
+      await api(tenantId, `/admin/bookings/${encodeURIComponent(booking.id)}/arrival`, { method: 'PATCH', body: JSON.stringify({ arrived: true }) }).catch(() => {})
+      if (want === 'active') continue
+      // 推结算单(带 bookingId —— 这样「全部订单」和结算单才对得上)
+      let sheet
+      try {
+        sheet = (await api(tenantId, '/admin/settlements', {
+          method: 'POST',
+          body: JSON.stringify({
+            cardOwnerUserId: cust.id,
+            settlements: [{
+              bookingId: booking.id, tierKey: 'member', depositApplied: true, payIntent: 'offline_full',
+              items: [{ serviceId: mains[i % mains.length].id }],
+              technicians: [{ technicianId: tech.id, role: 'main', itemNos: [1] }]
+            }]
+          })
+        })).settlements[0]
+      } catch (e) { log(`   ${time} 结算单没推成(${e.message.slice(0, 60)})`); continue }
+      if (want === 'pending') continue
+      await pub(`/settlements/${sheet.code}/sign`, {
+        method: 'POST',
+        body: JSON.stringify({ disclaimerAccepted: true, signature: cust.displayName || '顾客', strokes: [[{ x: 8, y: 55 }, { x: 44, y: 18 }, { x: 78, y: 60 }]] })
+      }).catch(() => {})
+    }
+    // 明天留两条待到店,别让「明天」是空的
+    for (let i = 0; i < 2; i += 1) {
+      await api(tenantId, '/admin/bookings/direct', {
+        method: 'POST',
+        body: JSON.stringify({
+          userId: demoCustomers[(i + 2) % demoCustomers.length].id, serviceId: mains[i % mains.length].id,
+          technicianId: techs[i % techs.length].id, date: shift(today, 1), time: i ? '15:00' : '11:30',
+          depositPaid: true, notes: '演示数据'
+        })
+      }).catch(() => {})
+    }
+    log(`⑩ 今日台面:今天 ${made} 条(未付定金/待到店/进行中/待签/已完成 全形态)+ 明天 2 条`)
+  }
+  row.desk = withDb((db) => {
+    const n = db.prepare("SELECT COUNT(*) AS n FROM bookings WHERE tenant_id = ? AND substr(appointment_start, 1, 10) = ?").get(tenantId, today).n
+    const linked = db.prepare('SELECT COUNT(*) AS n FROM settlements WHERE tenant_id = ? AND booking_id IS NOT NULL').get(tenantId).n
+    return `今天 ${n} 条预约 · ${linked} 张结算单挂在预约上`
+  })
 
   // ---------- ⑨ 财务账本:6 个月有起伏的曲线 ----------
   const ledgerN = withDb((db) => db.prepare("SELECT COUNT(*) AS n FROM finance_transactions WHERE tenant_id = ? AND tags = 'bigdemo'").get(tenantId).n)

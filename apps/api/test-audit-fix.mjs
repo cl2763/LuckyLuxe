@@ -133,6 +133,26 @@ async function main() {
   check('① 空态:单全撤完后日结无 blocker、可确认', emptyClose.data.dailyClose.canConfirm === true && emptyClose.data.dailyClose.pendingAllocation.length === 0,
     JSON.stringify(emptyClose.data.dailyClose.blockers))
 
+  /* F1(店主 2026-08-09 口径):每天所有单都要经店长点确认,**单技师单也不例外** ——
+     「不用分配」只是免去分成输入,不等于自动确认。所以单技师单必须在日结列表里
+     以「无需分配 · 待确认」出现,而且在店长点确认之前那天不能是 confirmed。 */
+  const soloG = await request('/admin/settlements', {
+    method: 'POST',
+    body: JSON.stringify({
+      cardOwnerUserId: user,
+      settlements: [{ tierKey: 'list', items: [{ serviceId: main3h.id }], technicians: [{ technicianId: techA.id, role: 'main', itemNos: [1] }] }]
+    })
+  }, shop.token)
+  const soloSheet = soloG.data.settlements[0]
+  await request(`/settlements/${soloSheet.code}/sign`, {
+    method: 'POST', body: JSON.stringify({ disclaimerAccepted: true, signature: '客', strokes: [[{ x: 2, y: 2 }, { x: 7, y: 7 }]] })
+  }, null)
+  const soloView = (await request('/admin/daily-close', {}, shop.token)).data.dailyClose
+  check('F1 单技师单进日结列表(无需分配 · 待确认)',
+    (soloView.awaitingConfirm || []).some((a) => a.settlementId === soloSheet.id && /无需分配/.test(a.reason)),
+    JSON.stringify((soloView.awaitingConfirm || []).map((a) => a.reason)))
+  check('F1 单技师单不会被自动确认(当天仍未 confirmed)', soloView.status !== 'confirmed', soloView.status)
+
   // ---- ④ 财务红线:充值不是业绩 ----
   // 重新开一张真单并签掉,让技师甲有一笔真业绩;技师乙只有一笔大额充值
   const real = await request('/admin/settlements', {
@@ -160,7 +180,8 @@ async function main() {
   const rowA = closed.technicians.find((t) => t.technicianId === techA.id)
   check('④ 红线:充值**不进**日结业绩列', rowB && rowB.perfCents === 0, JSON.stringify(rowB && { perf: rowB.perfCents, rc: rowB.rechargeTotalCents }))
   check('④ 红线:充值只体现在冲卡列(¥10,000)', rowB && rowB.rechargeTotalCents === 1000000, String(rowB && rowB.rechargeTotalCents))
-  check('④ 真做的单才是业绩(技师甲 ¥600)', rowA && rowA.perfCents === 60000, String(rowA && rowA.perfCents))
+  // 技师甲这天做了两张 ¥600 的单(上面 F1 那张单技师单 + 这张),业绩 = ¥1200
+  check('④ 真做的单才是业绩(技师甲 ¥1200 = 两张 ¥600)', rowA && rowA.perfCents === 120000, String(rowA && rowA.perfCents))
 
   const rank = (await request(`/admin/perf-ranking?metric=perf&period=day&date=${today}`, {}, shop.token)).data.ranking
   const rankB = rank.ranking.find((r) => r.technicianId === techB.id)
@@ -253,6 +274,32 @@ async function main() {
   check('用户名:异常输入(中文/太短)被拒', bad.status === 400 && bad.data.error.code === 'BAD_USERNAME', JSON.stringify(bad.data))
   const dup = await request('/admin/staff-accounts', { method: 'POST', body: JSON.stringify({ technicianId: techCn3.id, username: 'jiejie88' }) }, shop.token)
   check('用户名:重名被拒(查重)', dup.status === 409, JSON.stringify(dup.data).slice(0, 120))
+
+  /* F2(店主 2026-08-09 随查):结算页看不到定金抵扣行。
+     根因是数据(门店没配 deposit_config → deductible 默认 false),不是渲染。
+     这里把「配了抵扣 → 定金真的抵进去 + 支付构成里有 deposit 腿」钉死,
+     免得以后又出现「配了却抵不动」或「抵了却不出行」。 */
+  await request('/admin/deposit-config', {
+    method: 'PUT',
+    body: JSON.stringify({ config: { enabled: true, deductible: true, mode: 'fixed', fixedAmountCents: 10000 } })
+  }, shop.token)
+  const depSheet = (await request('/admin/settlements', {
+    method: 'POST',
+    body: JSON.stringify({
+      cardOwnerUserId: user,
+      settlements: [{ tierKey: 'list', depositApplied: true, payIntent: 'offline_full', items: [{ serviceId: main3h.id }], technicians: [{ technicianId: techA.id, role: 'main', itemNos: [1] }] }]
+    })
+  }, shop.token)).data.settlements[0]
+  check('F2 配了「定金抵扣尾款」后,定金真的抵进去了', depSheet.depositDeductCents === 10000, String(depSheet.depositDeductCents))
+  check('F2 应收 ≡ 档位小计 − 定金 − 券',
+    depSheet.totalCents === depSheet.subtotalCents - depSheet.depositDeductCents - (depSheet.couponDiscountCents || 0),
+    JSON.stringify({ t: depSheet.totalCents, s: depSheet.subtotalCents, d: depSheet.depositDeductCents }))
+  const depPublic = await request(`/settlements/${depSheet.code}`)
+  const depLeg = (depPublic.data.settlement.payments || []).find((p) => p.leg === 'deposit')
+  check('F2 顾客签署页拿得到 deposit 支付腿(定金抵扣行的数据源)',
+    Boolean(depLeg) && depLeg.amountCents === 10000, JSON.stringify(depPublic.data.settlement.payments))
+  check('F2 分成基数不受定金影响(仍 ≡ 档位小计)',
+    depSheet.perfBaseCents === depSheet.subtotalCents, JSON.stringify({ p: depSheet.perfBaseCents, s: depSheet.subtotalCents }))
 
   // ---- 异常输入 ----
   const ghost = await request(`/admin/settlements/${twoSheet.id}/allocate`, {

@@ -4,7 +4,7 @@ page{background:#fbf8f5}
 .h1{font-size:34rpx;font-weight:600;color:#2d2826}
 .addbtn{font-size:23rpx;color:#fff;background:#c8a47e;border-radius:40rpx;padding:8rpx 20rpx}
 .empty{text-align:center;color:#8c8279;font-size:24rpx;padding:60rpx 0}
-.card{background:#fff;border:1rpx solid #e7ddd4;border-radius:16rpx;padding:16rpx 18rpx;margin-bottom:14rpx}
+.card{background:#fff;border:1rpx solid #e7ddd4;border-radius:16rpx;padding:22rpx 22rpx;margin-bottom:18rpx}
 .top{display:flex;align-items:center;gap:14rpx}
 .av{width:64rpx;height:64rpx;border-radius:50%;background:#f1e7df;color:#9b7655;display:flex;align-items:center;justify-content:center;font-weight:600;font-size:26rpx;flex:0 0 auto}
 .info{flex:1;min-width:0}
@@ -15,8 +15,8 @@ page{background:#fbf8f5}
 .tag{font-size:21rpx;border-radius:40rpx;padding:4rpx 14rpx;flex:0 0 auto}
 .tag.s{background:#e3eee8;color:#47735f}
 .tag.n{background:#fbf8f5;color:#8c8279;border:1rpx solid #e7ddd4}
-.btns{display:flex;gap:12rpx;margin-top:14rpx}
-.b{flex:1;text-align:center;font-size:23rpx;border-radius:12rpx;padding:12rpx 0;background:#fbf8f5;border:1rpx solid #e7ddd4;color:#8c8279}
+.btns{display:flex;gap:14rpx;margin-top:20rpx}
+.b{flex:1;text-align:center;font-size:23rpx;border-radius:12rpx;padding:16rpx 0;background:#fbf8f5;border:1rpx solid #e7ddd4;color:#8c8279}
 .b.p{background:#c8a47e;color:#fff;border-color:#c8a47e}
 .b.d{border-color:#dcb3b0;color:#a34c48}
 .b.full{flex:none;width:100%}
@@ -35,10 +35,10 @@ page{background:#fbf8f5}
 .seg{display:inline-flex;background:#f3ece2;border-radius:999rpx;padding:3rpx;gap:3rpx}
 .seg .s{font-size:23rpx;padding:8rpx 20rpx;border-radius:999rpx;color:#8c8279;font-weight:700}
 .seg .s.on{background:#2d2826;color:#fff}
-.rank{display:flex;align-items:center;gap:12rpx;padding:12rpx 0}
-.rank .no{width:34rpx;height:34rpx;line-height:34rpx;text-align:center;border-radius:50%;background:#f1e7df;color:#8c8279;font-size:20rpx;font-weight:800;flex:none}
+.rank{display:flex;align-items:center;gap:14rpx;padding:16rpx 0}
+.rank .no{width:38rpx;height:38rpx;border-radius:50%;background:#f1e7df;color:#8c8279;font-size:20rpx;font-weight:800;flex:none;display:flex;align-items:center;justify-content:center}
 .rank .no.top{background:#2d2826;color:#fff}
-.rank .rn{width:96rpx;flex:none;font-size:25rpx;font-weight:700;color:#241f1d}
+.rank .rn{width:132rpx;flex:none;font-size:25rpx;font-weight:700;color:#241f1d;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 .rank .bar{flex:1;height:22rpx;background:#f3ece2;border-radius:999rpx;overflow:hidden}
 .rank .bar .fill{height:100%;background:linear-gradient(90deg,#c8a47e,#9b7655);border-radius:999rpx}
 .rank .rv{width:150rpx;flex:none;text-align:right;font-size:24rpx;font-weight:800;color:#241f1d}
@@ -70,7 +70,7 @@ page{background:#fbf8f5}
 .pg{padding:16rpx 24rpx 60rpx;background:#fbf8f5;min-height:100vh}
 .topbar{display:flex;align-items:center;gap:14rpx;padding:8rpx 0 12rpx}
 .topbar .h1{font-size:32rpx;font-weight:800;color:#241f1d}
-.topbar .nav{width:52rpx;height:52rpx;border-radius:50%;background:#f3ece2;color:#5c4630;text-align:center;line-height:52rpx;font-size:28rpx}
+.topbar .nav{width:52rpx;height:52rpx;border-radius:50%;background:#f3ece2;color:#5c4630;font-size:28rpx;display:flex;align-items:center;justify-content:center;flex:0 0 auto}
 .topbar .btn{margin-left:auto;font-size:23rpx;color:#9b7655;border:1rpx solid #e7d3b8;border-radius:999rpx;padding:8rpx 22rpx}
 .splitbar{font-size:22rpx;color:#8c8279;background:#fff;border:1rpx solid #ece3da;border-radius:12rpx;padding:12rpx 16rpx;margin-bottom:14rpx}
 .splitbar .b{font-weight:800;color:#241f1d}

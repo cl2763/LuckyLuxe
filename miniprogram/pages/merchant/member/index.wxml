@@ -74,6 +74,39 @@
   <view class="add" bindtap="add">＋ 新增{{segs[seg]}}</view>
 
   <view class="divider"></view>
-  <view class="manual" bindtap="manualRecharge">给会员加储值(手动 / 线下)</view>
-  <view class="note"><text class="b">两种到账:</text>①顾客小程序在线直充(微信支付,自动到账,待上线);②线下 / 现金,老板在这里手动补录。均记为储值负债,耗卡时才确认收入。手动加储值需先在财务页解锁。</view>
+
+  <!-- F4(店主 2026-08-09 随查):原来是「按钮 → 财务密码弹窗 → 会员 ActionSheet → 金额弹窗 → 技师 ActionSheet」
+       四层套娃,层级错了。改成与同页「自定义发放」同一层的平铺块:搜顾客 → 填金额 → 选经手人 → 确认。 -->
+  <view class="gsec">给会员加储值<text class="gsub">手动 / 线下补录 · 记为储值负债</text></view>
+  <view class="gcard">
+    <view class="gline">
+      <input class="gin" placeholder="搜索顾客(姓名或手机号)" value="{{rvQuery}}" bindinput="onRvSearch" />
+    </view>
+    <view wx:if="{{rvPicked}}" class="ghit on">
+      <text class="gn">{{rvPicked.displayName}}</text><text class="gp">余额 {{rvPicked.balanceText}}</text>
+      <text class="gswap" bindtap="unpickRv">换一位</text>
+    </view>
+    <block wx:else>
+      <view class="ghit" wx:for="{{rvResults}}" wx:key="id" data-id="{{item.id}}" bindtap="pickRv">
+        <text class="gn">{{item.displayName}}</text><text class="gp">余额 {{item.balanceText}}</text>
+      </view>
+      <view wx:if="{{rvQuery && !rvResults.length}}" class="empty">没搜到这位顾客</view>
+    </block>
+    <block wx:if="{{rvPicked}}">
+      <view class="gline">
+        <text class="glab">到账金额</text>
+        <input class="gin amt" type="digit" placeholder="{{rvCurrency}} 如 1000" value="{{rvAmount}}" bindinput="onRvAmount" />
+      </view>
+      <view class="gline">
+        <text class="glab">经手技师</text>
+        <picker class="gpick" range="{{rvTechNames}}" value="{{rvTechIndex}}" bindchange="onRvTech">
+          <view class="gpickv">{{rvTechNames[rvTechIndex]}}</view>
+        </picker>
+      </view>
+      <view class="gbtns">
+        <view class="gbtn {{rvAmount ? '' : 'dis'}}" bindtap="doRecharge">确认到账{{rvAmountText}}</view>
+      </view>
+    </block>
+  </view>
+  <view class="note"><text class="b">两种到账:</text>①顾客小程序在线直充(微信支付,自动到账,待上线);②线下 / 现金,老板在这里手动补录。均记为储值负债,耗卡时才确认收入。点「确认到账」时若本次会话还没解锁财务,会先请你去财务页输密码。</view>
 </view>
