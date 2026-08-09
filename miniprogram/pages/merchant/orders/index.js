@@ -149,6 +149,7 @@ Page(Object.assign({
     if (!o) return
     this.setData({ actPanel: null })
     const ctx = this._panelCtx
+    if (o.act) return this.tapGridAct(o) // 网格那条路径给的是 act 串
     if (o.note) this.goNote(ctx)
     else if (o.settle) this.goSettle(ctx)
     else if (o.voidSheets) this.voidSheets(o.voidSheets, ctx)
@@ -286,38 +287,38 @@ Page(Object.assign({
         if (pending.length) { items.push(`查看结算单(待签 ${pending.length} 张)`); actions.push('sheets') }
         else { items.push('去结算'); actions.push('settle') }
       } else if (sheets.length) { items.push('查看电子票据'); actions.push('sheets') }
+      // 待签状态可撤回改单(与列表那条路径同一套语义:全撤未签的、券回券包、回到去结算)
+      if (pending.length) { items.push('撤回改单'); actions.push('void') }
       if (b.depositUnpaid) { items.push('标记已收定金'); actions.push('paid') }
       items.push('写服务小记'); actions.push('note')
-      items.push('归属备注(实际谁做)'); actions.push('attr')
-      wx.showActionSheet({
-        itemList: items,
-        success: (res) => {
-          const act = actions[res.tapIndex]
-          if (act === 'arrive') this.setArrival(b.id, true)
-          else if (act === 'unarrive') this.setArrival(b.id, false)
-          else if (act === 'settle') this.goSettle({ id: b.id, userId: b.userId, customerName: b.customerName, serviceId: b.serviceId })
-          else if (act === 'sheets') this.showSheets(sheets)
-          else if (act === 'note') this.goNote(b)
-          else if (act === 'attr') this.attrNote(b)
-          else if (act === 'paid') wx.showToast({ title: '已标记已收(演示)', icon: 'none' })
+      /* 「归属备注」已随 v6 定稿退役(代付不涉技师业绩归属,且日结已逐日确认过)——
+         2026-08-09 集中核验时发现网格这条路径还留着,清掉。 */
+      const ctx = { id: b.id, userId: b.userId, customerName: b.customerName, serviceId: b.serviceId, serviceName: b.serviceName, tech: b.tech }
+      // 屏 0:图上是自建面板(顶部订单摘要 + 按钮 + 关闭),不是系统 ActionSheet
+      this._panelOpts = actions.map((act, i) => ({ act, label: items[i] }))
+      this._panelCtx = ctx
+      this._panelSheets = sheets
+      this.setData({
+        actPanel: {
+          title: `${b.customerName || '顾客'} · ${b.serviceName || ''} · ${b.state === 'done' ? '已完成' : (b.state === 'active' ? '进行中' : '待到店')}`,
+          opts: items.map((label, i) => ({ i, label }))
         }
       })
     })
   },
-  // 归属备注:这单实际谁做/怎么分,月底工资试算集中显示,配合±调整用
-  attrNote(b) {
-    wx.showModal({
-      title: `归属备注 · ${b.customerName}`, editable: true,
-      placeholderText: '如:实际 Coco 做 / 我和Mia各半',
-      success: async (r) => {
-        if (!r.confirm || !r.content || !r.content.trim()) return
-        try {
-          await api.adminPost(`/admin/bookings/${encodeURIComponent(b.id)}/attribution-note`, { note: r.content.trim() })
-          wx.showToast({ title: '已记录,月底工资试算可见', icon: 'none', duration: 2200 })
-        } catch (err) { wx.showToast({ title: (err && err.message) || '保存失败', icon: 'none' }) }
-      }
-    })
+  // 网格面板的按钮走这里(与列表面板共用同一张弹层)
+  tapGridAct(o) {
+    const b = this._panelCtx
+    const sheets = this._panelSheets || []
+    if (o.act === 'arrive') this.setArrival(b.id, true)
+    else if (o.act === 'unarrive') this.setArrival(b.id, false)
+    else if (o.act === 'settle') this.goSettle(b)
+    else if (o.act === 'sheets') this.showSheets(sheets)
+    else if (o.act === 'note') this.goNote(b)
+    else if (o.act === 'void') this.voidSheets(sheets.filter((x) => x.status === 'pending_sign'), b)
+    else if (o.act === 'paid') wx.showToast({ title: '已标记已收(演示)', icon: 'none' })
   },
+
   async setArrival(id, arrived) {
     try { await api.adminPatch(`/admin/bookings/${encodeURIComponent(id)}/arrival`, { arrived }); wx.showToast({ title: arrived ? '已到店' : '已改回未到', icon: 'none' }); this.loadDayView(this.data.selDate) }
     catch (err) { wx.showToast({ title: (err && err.message) || '操作失败', icon: 'none' }) }

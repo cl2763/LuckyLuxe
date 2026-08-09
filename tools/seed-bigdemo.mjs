@@ -319,6 +319,23 @@ for (const store of STORES) {
   const heldByPending = withDb((db) => db.prepare("SELECT COUNT(*) AS n FROM settlements WHERE tenant_id = ? AND status = 'pending_sign' AND coupon_grant_id IS NOT NULL").get(tenantId).n)
   row.coupons = `未使用 ${gs.filter((g) => g.status === 'active').length} · 已核销 ${gs.filter((g) => g.status === 'used').length} · 已过期 ${gs.filter((g) => g.status === 'expired').length} · 作废 ${gs.filter((g) => g.status === 'revoked').length} · 被待签单占用 ${heldByPending}`
 
+  /* ---------- ⑤b 营业时间 ----------
+     没配营业时间的话「今日台面」每天都显示「本日休息」,设计图屏 1 的技师网格根本出不来。
+     2026-08-09 集中核验时当场发现 Jie'Nail 就是这个状态 —— 补进 seed。 */
+  const bh = (await api(tenantId, '/admin/business-hours')).stores[0]
+  if (!bh.hours.length || bh.hours.every((h) => h.isClosed)) {
+    await api(tenantId, '/admin/business-hours', {
+      method: 'PUT',
+      body: JSON.stringify({
+        storeId: bh.id,
+        // 周一休、其余 10:00–19:00(美甲店常见排法)
+        hours: [0, 1, 2, 3, 4, 5, 6].map((w) => ({ weekday: w, isClosed: w === 1, openTime: '10:00', closeTime: '19:00' }))
+      })
+    })
+    log('⑤b 营业时间:补齐(周一休,其余 10:00–19:00)—— 今日台面的技师网格要靠它')
+  } else log('⑤b 营业时间:已配置,跳过')
+  row.hours = (await api(tenantId, '/admin/business-hours')).stores[0].hoursText.zh
+
   // ---------- ⑥ 排班全形态 ----------
   const weekFrom = shift(today, -((new Date(`${today}T12:00:00Z`).getUTCDay() + 6) % 7))
   const shapes = ['full', 'am', 'pm', 'off', 'custom']
