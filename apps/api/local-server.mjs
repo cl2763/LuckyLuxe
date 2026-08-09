@@ -9489,6 +9489,55 @@ function claimUserByOpenId({ tenantId, userId, provider = 'wechat_miniprogram', 
   return { bound: true, conflict: false, memberCode: memberCodeForUserId(userId) }
 }
 
+/* 顾客端「更正记录」卡(图 D1/D1b,店主 2026-08-10 批图)。
+   规则⓪:快照不可变,更正是**追加显示** —— 原单一个字节不改。
+   规则②:每行四要素(方向文案 / ±金额 / 原因原文 / 双时间戳)+ 末行「实际应付」,
+   全部**后端算好下发**,前端零计算(规则⓪ 后半句)。
+   实际应付恒等于 原单合计 + Σ差额 —— 这条加了断言。 */
+function amendmentShape(row) {
+  const rows = db.prepare(`SELECT id, reason, amount_delta_cents, auto_balance_adjust_cents, amended_by, amended_at, created_at
+    FROM settlement_amendments WHERE settlement_id = ? ORDER BY created_at ASC`).all(row.id)
+  const tz = tenantTimezone(row.tenant_id)
+  const stamp = (at) => {
+    if (!at) return ''
+    const p = localParts(new Date(at), tz)
+    return `${p.date.slice(5).replace('-', '-')} ${p.time.slice(0, 5)}`
+  }
+  const list = rows.map((r) => {
+    const delta = r.amount_delta_cents || 0
+    return {
+      id: r.id,
+      reason: r.reason || '',
+      amountDeltaCents: delta,
+      autoBalanceAdjustCents: r.auto_balance_adjust_cents || 0,
+      amendedBy: r.amended_by || '',
+      amendedAt: r.amended_at || r.created_at,
+      // 方向文案与显示串都后端给 —— 前端不判正负、不拼币符
+      directionText: delta < 0 ? '退回差额' : '补收差额',
+      direction: delta < 0 ? 'refund' : 'charge',
+      deltaText: `${delta < 0 ? '−' : '+'}${formatMoneyCents(Math.abs(delta), row.tenant_id, 'auto')}`,
+      raisedAtText: stamp(r.created_at),
+      effectiveAtText: stamp(r.amended_at || r.created_at)
+    }
+  })
+  const sum = list.reduce((n, a) => n + a.amountDeltaCents, 0)
+  const actual = Math.max(0, row.total_cents + sum)
+  return {
+    amendments: list,
+    amendedCount: list.length,
+    // 徽标:没更正就是空串,前端 wx:if / 条件渲染一挂就没了(规则③ 条件渲染)
+    amendBadgeText: list.length ? (list.length > 1 ? `已更正 ×${list.length}` : '已更正') : '',
+    actualDueCents: list.length ? actual : row.total_cents,
+    actualDueText: formatMoneyCents(list.length ? actual : row.total_cents, row.tenant_id, 'auto'),
+    // 储值单差额会自动补配余额,线下单要门店退/补 —— 脚注文案也后端给
+    amendFootnote: list.length
+      ? (list.some((a) => a.autoBalanceAdjustCents)
+        ? '储值支付的单:差额已自动退回/补扣你的储值余额。'
+        : '线下支付的单:差额以门店退/补为准。')
+      : ''
+  }
+}
+
 function serializeSettlement(row, { includeSignature = false } = {}) {
   const items = db.prepare('SELECT * FROM settlement_items WHERE settlement_id = ? ORDER BY item_no ASC').all(row.id)
   const techs = db.prepare('SELECT st.*, t.name AS tech_name FROM settlement_technicians st LEFT JOIN technicians t ON t.id = st.technician_id WHERE st.settlement_id = ?').all(row.id)
@@ -9559,7 +9608,7 @@ function serializeSettlement(row, { includeSignature = false } = {}) {
       sharePct: t.share_pct, shareCents: t.share_cents
     })),
     payments: pays.map((p) => ({ leg: p.leg, amountCents: p.amount_cents, payerUserId: p.payer_user_id, status: p.status, note: p.note })),
-    amendments: db.prepare('SELECT id, reason, amount_delta_cents AS amountDeltaCents, auto_balance_adjust_cents AS autoBalanceAdjustCents, amended_by AS amendedBy, amended_at AS amendedAt FROM settlement_amendments WHERE settlement_id = ? ORDER BY created_at ASC').all(row.id)
+    ...amendmentShape(row)
   }
 }
 

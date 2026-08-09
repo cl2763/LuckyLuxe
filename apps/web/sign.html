@@ -51,6 +51,21 @@
   .cta button.waiting{background:#a8a099}
   .cta .need{font-size:12.5px;color:#a8551f;background:#fdf3ec;border-radius:9px;padding:7px 10px;margin-bottom:8px;text-align:center}
   .disc.flash{outline:2px solid var(--bronze);outline-offset:2px;border-radius:12px}
+  /* 屏 D1/D1b 更正记录卡:独立追加在快照下方,原单区一字不改 */
+  .pill.amend{background:#fdf3ec;color:#a8551f;border-color:#f0d9c4}
+  .amend-card{background:#fff;border-radius:16px;padding:14px 16px;margin-top:12px;box-shadow:0 2px 14px rgba(45,40,38,.06)}
+  .amend-card .hd{font-size:15px;font-weight:800;color:var(--ink);display:flex;align-items:baseline;gap:8px;flex-wrap:wrap}
+  .amend-card .hd .sub{font-size:11.5px;font-weight:400;color:var(--muted)}
+  .amend-card .row{display:flex;justify-content:space-between;gap:12px;align-items:flex-start;padding:11px 0;border-bottom:1px dashed var(--line)}
+  .amend-card .row .dir{font-size:13.5px;font-weight:700;color:var(--ink)}
+  .amend-card .row .why{font-size:12.5px;color:var(--muted);line-height:1.6;margin-top:3px}
+  .amend-card .row .ts{font-size:11.5px;color:#a99d92;margin-top:3px}
+  .amend-card .row .d{font-size:16px;font-weight:800;white-space:nowrap}
+  .amend-card .row .d.refund{color:var(--ok)}
+  .amend-card .row .d.charge{color:#a8551f}
+  .amend-card .actual{display:flex;justify-content:space-between;align-items:baseline;padding-top:12px;font-size:15px;font-weight:800;color:var(--ink)}
+  .amend-card .actual b{font-size:20px;color:var(--bronze)}
+  .amend-card .foot{margin-top:8px;font-size:11.5px;color:var(--muted);line-height:1.6}
   /* 已签单右上角的真实笔迹:嵌快照本体,裁到签名那一块 */
   .sign-slot .val{overflow:hidden}
   .sign-slot .val .ink{display:block;width:100%;height:48px;object-fit:contain;object-position:left center;mix-blend-mode:multiply}
@@ -176,6 +191,7 @@ function render() {
     <div class="topbar">
       <h1>服务确认单</h1>
       <span class="pill ${signed ? '' : 'warn'}">${signed ? '已签署' : `待签 ${s.groupIndex || 1}/${s.groupTotal || 1}`}</span>
+      ${s.amendBadgeText ? `<span class="pill amend">${esc(s.amendBadgeText)}</span>` : ''}
     </div>
     ${needClaim ? `
     <div class="claim">
@@ -231,6 +247,7 @@ function render() {
         <div class="row grand"><span>合计</span><span>${money(s.totalCents)}</span></div>
       </div>
     </div>
+    ${amendCardHtml(s)}
     ${couponCardHtml()}
 
     ${signed ? `<div class="done">✓ 本单已于 ${esc(String(s.signedAt).slice(0, 16).replace('T', ' '))} 签署完成${s.snapshot ? `<div style="margin-top:10px;font-weight:500"><a href="/settlements/${encodeURIComponent(s.code)}/snapshot" target="_blank">查看签署单</a></div>` : ''}</div>` : `
@@ -276,6 +293,31 @@ function render() {
     const btn = document.getElementById('signBtn'); if (btn) btn.disabled = true
     document.getElementById('cta').classList.add('locked')
   }
+}
+
+/* 屏 D1 / D1b 更正记录卡(2026-08-10 批图)。
+   规则⓪:原单快照区一字不改,更正是**独立追加**的一张卡;
+   规则②:方向文案 / ±金额 / 原因原文 / 双时间戳 / 实际应付 **全部后端下发**,
+   这里一个数都不算、一个币符都不拼(规则⑤ 币种走映射表,后端已拼好)。
+   没有更正的普通单:整块不渲染 —— 和现在那张干净确认单一模一样(规则③)。 */
+function amendCardHtml(s) {
+  const list = s.amendments || []
+  if (!list.length) return ''
+  return `
+    <div class="amend-card">
+      <div class="hd">更正记录<span class="sub">商家发起 · 原单不变，以此为准</span></div>
+      ${list.map((a) => `
+        <div class="row">
+          <div class="l">
+            <div class="dir">${esc(a.directionText)}</div>
+            <div class="why">原因：${esc(a.reason || '—')}</div>
+            <div class="ts">发起 ${esc(a.raisedAtText)} · 生效 ${esc(a.effectiveAtText)}</div>
+          </div>
+          <div class="d ${a.direction}">${esc(a.deltaText)}</div>
+        </div>`).join('')}
+      <div class="actual"><span>实际应付</span><b>${esc(s.actualDueText)}</b></div>
+      ${s.amendFootnote ? `<div class="foot">${esc(s.amendFootnote)}</div>` : ''}
+    </div>`
 }
 
 /* 券区(屏 C2)。签字前可点开更换/取消,签后整块不再出现 —— 顾客签的就是用完券的最终构成。

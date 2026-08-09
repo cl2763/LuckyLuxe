@@ -14,6 +14,8 @@ let STORE_TODAY = ''
 const todayStr = () => STORE_TODAY
 const uidOf = (b) => (b && (b.userId || (b.user && b.user.id))) || ''
 
+const raw = (r) => (typeof r.data === 'string' ? r.data : (r.data && r.data.raw) || '')
+
 let checks = 0
 function check(name, condition, detail = '') {
   checks += 1
@@ -192,6 +194,53 @@ async function main() {
     sameDay.every((x) => !x.crossDayNote), JSON.stringify(sameDay.map((x) => x.crossDayNote)))
   check('跨零点标注:字段随日结一起下发(前端不自己算日期)',
     sameDay.every((x) => Object.prototype.hasOwnProperty.call(x, 'crossDayNote')), JSON.stringify(sameDay[0] || {}).slice(0, 160))
+
+  /* 顾客端更正卡(图 D1/D1b,2026-08-10 批图)。规则⓪:快照不可变、更正只追加显示;
+     规则②:四要素 + 实际应付全部后端下发,**实际应付 ≡ 原单合计 + Σ差额**。 */
+  const amendBk = await mkBooking('19:20', techA)
+  const amendSheet = (await mkSheet(amendBk, techA)).data.settlements[0]
+  await sign(amendSheet.code)
+  const amdBefore = (await request(`/settlements/${amendSheet.code}`)).data.settlement
+  check('D1 空态:没更正的普通单不出更正卡、不出徽标',
+    amdBefore.amendments.length === 0 && amdBefore.amendBadgeText === '' && amdBefore.actualDueCents === amdBefore.totalCents,
+    JSON.stringify({ n: amdBefore.amendments.length, b: amdBefore.amendBadgeText }))
+  const snapBefore = raw(await request(`/settlements/${amendSheet.code}/snapshot`, {}, null))
+
+  await request(`/admin/settlements/${amendSheet.id}/amend`, {
+    method: 'POST', body: JSON.stringify({ totalCents: amendSheet.totalCents - 2000, reason: '技师少做了一项' })
+  }, shop.token)
+  await request(`/admin/settlements/${amendSheet.id}/amend`, {
+    method: 'POST', body: JSON.stringify({ totalCents: amendSheet.totalCents + 3000, reason: '漏记加价项' })
+  }, shop.token)
+  const after = (await request(`/settlements/${amendSheet.code}`)).data.settlement
+  check('D1b 多次更正:徽标带次数「已更正 ×2」', after.amendBadgeText === '已更正 ×2', after.amendBadgeText)
+  check('D1b 按时间顺序,方向文案后端给(先退后补)',
+    after.amendments.map((a) => a.directionText).join('/') === '退回差额/补收差额',
+    JSON.stringify(after.amendments.map((a) => a.directionText)))
+  check('D1 四要素齐:方向/±金额/原因原文/双时间戳',
+    after.amendments.every((a) => a.directionText && a.deltaText && a.reason && a.raisedAtText && a.effectiveAtText),
+    JSON.stringify(after.amendments[0]))
+  check('D1 ±方向标对(退=refund 补=charge)',
+    after.amendments[0].direction === 'refund' && after.amendments[1].direction === 'charge',
+    JSON.stringify(after.amendments.map((a) => a.direction)))
+  /* 🔴 财务红线:实际应付恒等于 原单合计 + Σ差额 */
+  const sum = after.amendments.reduce((n, a) => n + a.amountDeltaCents, 0)
+  check('D1b 红线:实际应付 ≡ 原单合计 + Σ差额',
+    after.actualDueCents === after.totalCents + sum,
+    JSON.stringify({ actual: after.actualDueCents, total: after.totalCents, sum }))
+  check('D1 红线:更正**不改原单一个字节**(合计仍是原值)', after.totalCents === amdBefore.totalCents,
+    JSON.stringify({ before: amdBefore.totalCents, after: after.totalCents }))
+  const snapAfter = raw(await request(`/settlements/${amendSheet.code}/snapshot`, {}, null))
+  check('D1 红线:更正不动签署快照(逐字节相同)', snapBefore === snapAfter && snapBefore.length > 0,
+    `${snapBefore.length} vs ${snapAfter.length}`)
+  // 边界:一正一负相抵回原值
+  await request(`/admin/settlements/${amendSheet.id}/amend`, {
+    method: 'POST', body: JSON.stringify({ totalCents: after.actualDueCents - 1000, reason: '再退 ¥10' })
+  }, shop.token)
+  const third = (await request(`/settlements/${amendSheet.code}`)).data.settlement
+  check('D1b 边界:第三笔后恒等式仍成立',
+    third.actualDueCents === third.totalCents + third.amendments.reduce((n, a) => n + a.amountDeltaCents, 0),
+    JSON.stringify({ a: third.actualDueCents, t: third.totalCents }))
 
   console.log(`\n双单场景回归通过:${checks} 项断言全绿`)
 }
