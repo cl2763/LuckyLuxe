@@ -252,6 +252,11 @@
       #pricingPage .row-actions .pricing-sort{margin:0}
       #membershipSettingsBody .service-admin-item{display:flex;justify-content:space-between;align-items:center;gap:14px;flex-wrap:wrap}
 
+      /* 订单页「待日结」直达条(裁决①) */
+      .dc-jump{display:flex;align-items:center;gap:12px;background:#fdf0e6;border:1px solid #f0d8bf;border-radius:12px;padding:11px 16px;margin:10px 0;font-size:13px;color:#8a5a2b}
+      .dc-jump b{font-size:15px}
+      .dc-jump button{margin-left:auto}
+
       /* ===== 屏 3a 薪资方案(2026-08-09 按设计图重做:三模板段选 + 开关区 + 两模式对比常驻)===== */
       .sp-modes{display:grid;grid-template-columns:repeat(3,1fr);gap:10px;margin:10px 0 14px}
       .sp-mode{border:1px solid #eadfd7;background:#fff;border-radius:12px;padding:12px 14px;text-align:left;cursor:pointer}
@@ -376,6 +381,8 @@
               <h1 id="bookingsTitle">订单管理</h1>
               <span class="subtle" id="bookingsSubtitle">全部订单数据，状态变化不会隐藏订单</span>
             </div>
+            <!-- 裁决①(2026-08-09):网页日结保留在财务页,订单页只放一条直达条 -->
+            <div class="dc-jump hidden" id="dcJumpBar"></div>
             <div class="admin-tabs booking-tabs-row">
               <button class="admin-tab active" id="todayTab" data-admin-view="today" type="button">Today</button>
               <button class="admin-tab" id="calendarTab" data-admin-view="calendar" type="button">Calendar</button>

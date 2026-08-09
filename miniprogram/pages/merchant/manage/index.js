@@ -3,6 +3,7 @@ const api = require('../../../utils/api')
 const ROUTES = {
   schedule: '/pages/merchant/schedule-day/index',
   dailyClose: '/pages/merchant/daily-close/index',
+  orders: '/pages/merchant/orders/index',
   finance: '/pages/merchant/finance/index',
   customers: '/pages/merchant/customers/index',
   staff: '/pages/merchant/staff/index',
@@ -33,7 +34,8 @@ const E = {
   myperf: { k: 'myperf', icon: 'm-analytics', t: '我的业绩', d: '本月营收 · 底薪 · 提成估算' },
   attendance: { k: 'attendance', icon: 'm-staff', t: '考勤打卡', d: '在岗看板 · 修正补卡 · 打卡 WiFi' },
   attendanceStaff: { k: 'attendance', icon: 'm-staff', t: '打卡', d: '上下班打卡 · 本周工时' },
-  dailyClose: { k: 'dailyClose', icon: 'm-finance', t: '日结', d: '逐单分配业绩 · 确认后定格' },
+  // 日结不再是独立行 —— 设计图《管理页分组》把它写在「订单管理」副标题里,页面上它长在今日台面下方
+  orders: { k: 'orders', icon: 'm-schedule', t: '订单管理', d: '今日台面 · 全部订单 · 日结' },
   salaryMonth: { k: 'salaryMonth', icon: 'm-finance', t: '工资试算', d: '全员月度工资明细 · 需财务密码' },
   pointsMall: { k: 'pointsMall', icon: 'm-member', t: '积分商城', d: '上架奖品 · 顾客用积分兑券' }
 }
@@ -57,7 +59,7 @@ Page({
     const groups = owner ? [
       // 排班已移入「员工管理 → 排班」板块(P2③ 屏 4a);员工管理随之从「店铺设置」提到
       // 「日常经营」—— 排班是天天要用的,再让老板去设置里翻一层不合理
-      { title: '日常经营', rows: [E.staff, E.dailyClose, E.attendance, E.finance, E.salaryMonth, E.customers] },
+      { title: '日常经营', rows: [E.orders, E.staff, E.attendance, E.finance, E.salaryMonth, E.customers] },
       { title: '营销与会员', rows: [E.marketing, E.member, E.pointsMall, E.analytics] },
       { title: '店铺设置', rows: [E.services, E.store, E.me] }
     ] : [

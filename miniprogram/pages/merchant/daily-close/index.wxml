@@ -3,7 +3,7 @@
     <view class="nav" bindtap="prevDay">‹</view>
     <text class="d">{{date}}</text>
     <view class="nav" bindtap="nextDay">›</view>
-    <view class="today" bindtap="today">今天</view>
+    <view class="today" bindtap="closeToday">今天</view>
   </view>
 
   <view wx:if="{{loading}}" class="empty">加载中…</view>

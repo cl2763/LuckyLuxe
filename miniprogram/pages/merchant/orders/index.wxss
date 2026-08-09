@@ -127,3 +127,62 @@ page{background:#fbf8f5}
 .ds-opt.on.warn{background:#c0392b}
 .ds-confirm{margin-top:16rpx;background:#2d2826;color:#fff;text-align:center;padding:26rpx;border-radius:14rpx;font-size:30rpx;font-weight:700}
 .ds-hint{font-size:20rpx;color:#9a8c7c;text-align:center;margin-top:10rpx}
+.pg{padding:16rpx 24rpx 60rpx;background:#fbf8f5;min-height:100vh}
+.datebar{display:flex;align-items:center;gap:14rpx;padding:8rpx 0 16rpx}
+.datebar .nav{width:52rpx;height:52rpx;border-radius:50%;background:#f3ece2;color:#5c4630;text-align:center;line-height:52rpx;font-size:28rpx}
+.datebar .d{font-size:32rpx;font-weight:800;color:#241f1d}
+.datebar .today{margin-left:auto;font-size:23rpx;color:#9b7655;border:1rpx solid #e7d3b8;border-radius:999rpx;padding:8rpx 22rpx}
+.empty{padding:80rpx 0;text-align:center;color:#9a8c7c;font-size:26rpx}
+.okbar{background:#e3eee8;border:1rpx solid #bcdccd;color:#2f7d5c;border-radius:12rpx;padding:14rpx 16rpx;font-size:23rpx;margin-bottom:14rpx}
+.pills{display:flex;gap:12rpx;flex-wrap:wrap;margin-bottom:14rpx}
+.pill{font-size:23rpx;background:#fff;border:1rpx solid #ece3da;border-radius:999rpx;padding:8rpx 20rpx;color:#5c4630}
+.pill.hot{background:#fdf3ec;border-color:#f0d9c4;color:#a8551f}
+.pill .b{font-weight:800;color:#241f1d}
+.card{background:#fff;border-radius:18rpx;padding:18rpx;margin-bottom:14rpx;box-shadow:0 3rpx 10rpx rgba(92,70,48,.06)}
+.ah{display:flex;justify-content:space-between;align-items:center;font-size:25rpx;font-weight:700;color:#241f1d}
+.ah .arr{font-size:21rpx;color:#8c8279;font-weight:400;margin-left:8rpx}
+.ah .amt{font-weight:800}
+.aline{display:flex;align-items:center;gap:12rpx;padding:14rpx 0;border-bottom:1rpx solid #f4ede6}
+.aline .nm{width:96rpx;flex:none;font-size:25rpx;font-weight:700;color:#241f1d}
+.aline .wn{flex:1;font-size:21rpx;color:#8c8279}
+.aline .pct{width:100rpx;text-align:right;font-size:26rpx;font-weight:700;background:#faf6f1;border:1rpx solid #ece2d6;border-radius:10rpx;padding:8rpx 12rpx}
+.aline .pcts{font-size:23rpx;color:#8c8279}
+.links{display:flex;align-items:center;gap:18rpx;margin-top:14rpx;flex-wrap:wrap}
+.lnk{font-size:22rpx;color:#9b7655;font-weight:700}
+.lnk.back{margin-left:auto}
+.savebtn{margin-left:auto;background:#2d2826;color:#fff;border-radius:12rpx;padding:12rpx 26rpx;font-size:23rpx;font-weight:700}
+.th,.tr{display:flex;align-items:center;padding:12rpx 0;font-size:22rpx}
+.th{color:#8c8279;font-weight:700;border-bottom:1rpx solid #ece3da}
+.tr{border-bottom:1rpx solid #f4ede6;color:#241f1d}
+.tr:last-child{border-bottom:none}
+.c1{width:110rpx;flex:none}.c2{width:64rpx;flex:none}.c3{flex:1;text-align:right}.c4{width:130rpx;flex:none;text-align:right}
+.tr .nm{font-weight:700}
+.c4.ok{color:#2f7d5c;font-weight:700}
+.anom{font-size:22rpx;color:#4a3c2c;line-height:2}
+.anom .sub{display:block;color:#8c8279;font-size:21rpx}
+.badge{font-size:20rpx;background:#f1e7df;color:#8c8279;border-radius:999rpx;padding:2rpx 14rpx;margin-left:8rpx}
+.badge.warn{background:#fdecec;color:#c0392b}
+.warn{background:#fdf3ec;border:1rpx solid #f0d9c4;border-radius:12rpx;padding:14rpx 16rpx;font-size:23rpx;color:#a8551f;margin-bottom:12rpx}
+.cta{margin-top:8rpx;background:#2d2826;color:#fff;text-align:center;padding:28rpx;border-radius:16rpx;font-size:29rpx;font-weight:800}
+.cta.dis{background:#c8bfb6}
+.ch{font-size:29rpx;font-weight:800;color:#241f1d;display:flex;align-items:center;padding:8rpx 0 16rpx}
+.ro{background:#faf6f1;border:1rpx dashed #e0d3c4;border-radius:14rpx;padding:16rpx;font-size:22rpx;line-height:1.9;color:#4a3c2c;margin-bottom:14rpx}
+.ro .rot{display:flex;justify-content:space-between;font-weight:800;color:#241f1d;margin-bottom:8rpx}
+.ro .lock{font-size:20rpx;color:#8c8279;font-weight:400}
+.ro .b{font-weight:800;color:#241f1d}
+.fh{font-size:25rpx;font-weight:800;color:#241f1d;margin-bottom:12rpx}
+.fd{display:flex;align-items:center;justify-content:space-between;gap:14rpx;padding:12rpx 0}
+.fd .lab{font-size:25rpx;color:#5c4630}
+.fd .in{flex:1;max-width:280rpx;text-align:right;font-size:28rpx;font-weight:800;background:#faf6f1;border:1rpx solid #ece2d6;border-radius:12rpx;padding:14rpx 16rpx}
+.ta{width:100%;min-height:140rpx;background:#faf6f1;border:1rpx solid #ece2d6;border-radius:12rpx;padding:14rpx;font-size:24rpx;color:#241f1d;margin-top:8rpx}
+.note{font-size:21rpx;color:#9a8c7c;line-height:1.8;margin:12rpx 0}
+
+/* 屏 1 下半:日结板块长在今日台面网格下方(2026-08-09 归位) */
+.dcwrap{margin-top:18rpx;padding-top:18rpx;border-top:2rpx solid #ece3da}
+.dch{display:flex;align-items:baseline;justify-content:space-between;padding:0 4rpx 12rpx}
+.dch .dct{font-size:30rpx;font-weight:800;color:#241f1d}
+.dch .dcok{font-size:21rpx;color:#2f7d5c}
+.dch .dcok .lnk{margin-left:12rpx;color:#b5885d;text-decoration:underline}
+.dcsub{font-size:22rpx;color:#9a8c7c;padding:0 4rpx 10rpx}
+.dv-pill.hot{background:#fdf0e6;color:#a8551f;font-weight:700}
+.lg.settled{background:repeating-linear-gradient(45deg,#e7ddd4,#e7ddd4 4rpx,#fff 4rpx,#fff 8rpx)}

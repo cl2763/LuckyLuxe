@@ -18,6 +18,7 @@
       <text class="dv-pill live" wx:if="{{dv.activeCount}}">在做 <text class="b">{{dv.activeCount}}</text> 人</text>
       <text class="dv-pill">在岗 <text class="b">{{dv.working}}</text> 人</text>
       <text class="dv-pill">空档 <text class="b">{{dv.freeHours}}</text> h</text>
+      <text class="dv-pill hot" wx:if="{{isOwner && v && v.pending.length}}" bindtap="scrollToClose">待日结 <text class="b">{{v.pending.length}}</text></text>
       <view class="dv-share" bindtap="shareSchedule">⤴ 分享</view>
     </view>
     <view wx:if="{{dv && dv.isClosed}}" class="dv-closed">本日休息{{dv.specialNote ? ' · ' + dv.specialNote : ''}}</view>
@@ -66,7 +67,81 @@
         <text><text class="lg free"></text>空档·点排</text>
       </view>
       <view class="dv-legend">
-        <text>淡色=未到 · <text class="dv-sdot active">●</text>进行中 · <text class="dv-sdot done">✓</text>完成 · 点空档=直接排单</text>
+        <text>淡色=未到 · <text class="dv-sdot active">●</text>进行中 · <text class="dv-sdot done">✓</text>完成 · <text class="lg settled"></text>已结算 · 点空档=直接排单</text>
+      </view>
+    </block>
+
+    <!-- ===== 屏 1 下半:日结板块(与「财务→日结」同一份实现,仅老板可见) ===== -->
+    <block wx:if="{{isOwner && v}}">
+      <view class="dcwrap" id="dcBlock">
+        <view class="dch"><text class="dct">日结 · {{v.date}}</text>
+          <text wx:if="{{v.confirmed}}" class="dcok">已确认{{v.reopenCount ? ' · 重开过 ' + v.reopenCount + ' 次' : ''}}<text class="lnk" bindtap="reopen">重开</text></text>
+        </view>
+
+        <block wx:if="{{!correcting}}">
+          <view class="dcsub" wx:if="{{v.pending.length}}">待分配 {{v.pending.length}} 单 · 逐单点开</view>
+          <view class="card" wx:for="{{v.pending}}" wx:for-item="p" wx:key="id">
+            <view class="ah" data-id="{{p.id}}" bindtap="toggleOpen">
+              <text class="code">{{p.code}} {{p.who}} · {{p.techLabel}}</text>
+              <text class="amt">{{p.total}}<text wx:if="{{p.couponNote}}" class="arr"> {{p.couponNote}}</text> <text class="arr">{{open[p.id] ? '收起 ∧' : '点开分配 ∨'}}</text></text>
+            </view>
+            <block wx:if="{{open[p.id]}}">
+              <view class="aline" wx:for="{{p.techs}}" wx:for-item="t" wx:key="id">
+                <text class="nm">{{t.name}}</text>
+                <text class="wn">{{t.role}} · {{t.nos}}</text>
+                <input class="pct" type="number" value="{{shares[p.id + '|' + t.id]}}" data-sid="{{p.id}}" data-tid="{{t.id}}" bindinput="onShare" />
+                <text class="pcts">%</text>
+              </view>
+              <view class="links">
+                <text wx:if="{{p.hasSnapshot}}" class="lnk" data-code="{{p.code}}" bindtap="viewSnapshot">查看签署单</text>
+                <text class="lnk" data-code="{{p.code}}" bindtap="startCorrect">金额有误?发起更正</text>
+                <view class="savebtn" data-id="{{p.id}}" bindtap="saveAlloc">保存分配</view>
+              </view>
+            </block>
+          </view>
+
+          <view class="card">
+            <view class="th"><text class="c1">技师</text><text class="c2">单数</text><text class="c3">业绩</text><text class="c3">卡耗</text><text class="c3">冲卡</text><text class="c4">目标</text></view>
+            <view class="tr" wx:for="{{v.techs}}" wx:key="name">
+              <text class="c1 nm">{{item.name}}</text>
+              <text class="c2">{{item.orderCount}}</text>
+              <text class="c3">{{item.perf}}</text>
+              <text class="c3">{{item.card}}</text>
+              <text class="c3">{{item.recharge}}</text>
+              <text class="c4 {{item.hit ? 'ok' : ''}}">{{item.target}}</text>
+            </view>
+          </view>
+
+          <view class="card anom">
+            <view>价档异常 <text class="badge {{v.tierChanges.length ? 'warn' : ''}}">{{v.tierChanges.length}}</text>
+              <text class="sub" wx:for="{{v.tierChanges}}" wx:key="*this">{{item}}</text>
+            </view>
+            <view>免卸甲/免卸睫 <text class="badge">{{v.freeRemoval}} 笔</text></view>
+          </view>
+
+          <view class="warn" wx:for="{{v.blockers}}" wx:key="*this">{{item}}</view>
+          <view wx:if="{{!v.confirmed}}" class="cta {{v.canConfirm ? '' : 'dis'}}" bindtap="{{v.canConfirm ? 'confirmClose' : ''}}">
+            {{v.canConfirm ? '确认日结' : '确认日结(' + v.blockers.length + ' 项待办)'}}
+          </view>
+        </block>
+
+        <!-- 屏 1b 金额更正 -->
+        <block wx:else>
+          <view class="ch">金额更正 · {{correcting.code}}<text class="lnk back" bindtap="cancelCorrect">返回日结</text></view>
+          <view class="ro">
+            <view class="rot"><text>顾客已签存档单(只读)</text><text class="lock">不可修改</text></view>
+            <view class="rol">{{correcting.who}}{{correcting.proxy ? '(代付)' : ''}} · {{correcting.signedAt}} · {{correcting.techs}}</view>
+            <view class="rol" wx:for="{{correcting.items}}" wx:key="*this">{{item}}</view>
+            <view class="rol"><text wx:if="{{correcting.deposit}}">定金抵扣 {{correcting.deposit}} · </text><text class="b">合计 {{correcting.total}}</text></view>
+          </view>
+          <view class="card">
+            <view class="fh">更正内容</view>
+            <view class="fd"><text class="lab">更正后合计</text><input class="in" type="digit" value="{{newTotal}}" bindinput="onNewTotal" /></view>
+            <textarea class="ta" placeholder="原因(必填):例「实际只补了 1 指,技师勾多了」" value="{{reason}}" bindinput="onReason"></textarea>
+            <view class="note">提交后:① 原签署单保持原样,顾客服务记录追加一条更正记录 ② 用卡付过的单,储值差额由系统自动补配 ③ 更正进当日日结留痕</view>
+            <view class="cta" bindtap="submitCorrect">提交更正</view>
+          </view>
+        </block>
       </view>
     </block>
   </block>

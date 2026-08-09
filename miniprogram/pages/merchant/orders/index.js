@@ -1,5 +1,7 @@
 const api = require('../../../utils/api')
 const { storeToday, refreshStoreClock } = require('../../../utils/storeclock')
+// 屏 1:日结就长在今日台面下面(设计图把它画在技师网格正下方),渲染与逻辑走同一份 mixin
+const { dailyCloseData, dailyCloseMixin } = require('../../../utils/dailyclose')
 
 const STATUS_MAP = {
   CONFIRMED: { label: '待到店', cls: 'g' },
@@ -45,7 +47,7 @@ function vm(b) {
   }
 }
 
-Page({
+Page(Object.assign({
   data: {
     mode: 'today', // today 今日台面 | all 全部订单 | aftersales 售后订单
     role: 'owner',
@@ -63,12 +65,15 @@ Page({
     directSheet: false, directTech: '', directTechName: '', directTime: '', directEndTime: '', directDurH: 0, directServices: [], directServiceId: '', directDurationMin: 120, directDeposit: false,
     // 顾客搜索选择
     directCustomers: [], custQuery: '', custMatches: [], selectedCustId: '', selectedCustName: '',
-    myTechId: '' // 员工登录时高亮自己那列
+    myTechId: '', // 员工登录时高亮自己那列
+    isOwner: false,
+    ...dailyCloseData // 日结板块的状态(date/v/open/shares/correcting…)
   },
 
   onShow() {
     if (!api.guardMerchant()) return
     refreshStoreClock().catch(() => {})
+    this.setData({ isOwner: api.isOwner() })
     if (this.data.mode === 'today') this.loadDayView(this.data.selDate || todayStr())
     else this.loadList()
   },
@@ -204,8 +209,15 @@ Page({
           freeHours: Math.round(freeTotal / 60 * 10) / 10, activeCount: r.activeCount || 0, cols
         }
       })
+      this.syncClose(date) // 网格下方那块日结跟着看同一天
     } catch (e) { wx.showToast({ title: '加载今日台面失败', icon: 'none' }) }
   },
+  // 日结板块跟着台面看同一天;只有老板看得到(员工端接口就是 403)
+  syncClose(date) {
+    if (!this.data.isOwner) return
+    this.loadClose(date)
+  },
+  scrollToClose() { wx.pageScrollTo({ selector: '#dcBlock', duration: 260 }) },
   dvPrev() { this.loadDayView(addDays(this.data.selDate || todayStr(), -1)) },
   dvNext() { this.loadDayView(addDays(this.data.selDate || todayStr(), 1)) },
   dvToday() { this.loadDayView(todayStr()) },
@@ -348,4 +360,4 @@ Page({
       this.loadDayView(this.data.selDate)
     } catch (err) { wx.showToast({ title: (err && err.message) || '排单失败', icon: 'none' }) }
   }
-})
+}, dailyCloseMixin))

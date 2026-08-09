@@ -134,6 +134,7 @@ const els = {
   couponGrantList: document.querySelector('#couponGrantList'),
   couponDiscountPanel: document.querySelector('#couponDiscountPanel'),
   couponDiscountBody: document.querySelector('#couponDiscountBody'),
+  dcJumpBar: document.querySelector('#dcJumpBar'),
   pointsPrizeList: document.querySelector('#pointsPrizeList'),
   customersPage: document.querySelector('#customersPage'),
   wechatMockPage: document.querySelector('#wechatMockPage'),
@@ -2585,6 +2586,35 @@ function renderCorrectionForm(row, zh) {
         : 'The signed sheet stays untouched; an amendment record is appended.'}</p>
       <button class="primary slim" id="dcCorrectSubmit" type="button">${zh ? '提交更正' : 'Submit'}</button>
     </div>`
+}
+
+/* 订单页「待日结 N · 去日结」直达条(裁决①:网页日结留在财务页,订单页给个直达)。
+   只有老板看得见 —— 员工调这个接口本来就是 403。 */
+async function renderDailyCloseJump() {
+  const bar = els.dcJumpBar
+  if (!bar) return
+  if (!isOwnerRole()) { bar.classList.add('hidden'); return }
+  try {
+    const data = await request('/admin/daily-close')
+    const dc = data.dailyClose
+    const pending = (dc.pendingAllocation || []).length
+    const unsigned = (dc.blockers || []).filter((b) => b.code === 'UNSIGNED').reduce((n, b) => n + b.count, 0)
+    if (dc.status === 'confirmed' && !pending) { bar.classList.add('hidden'); return }
+    const zh = owner.lang === 'zh'
+    bar.classList.remove('hidden')
+    bar.innerHTML = `
+      <span>${zh ? '待日结' : 'To close'} <b>${pending}</b> ${zh ? '单' : ''}${unsigned ? `(${zh ? '另有' : 'plus'} ${unsigned} ${zh ? '张待顾客签字' : 'unsigned'})` : ''}
+        · ${escapeHtml(dc.date)}${dc.status === 'confirmed' ? (zh ? ' · 已确认' : ' · confirmed') : ''}</span>
+      <button class="primary slim" id="dcJumpGo" type="button">${zh ? '去日结' : 'Go'}</button>`
+    const go = bar.querySelector('#dcJumpGo')
+    if (go) go.addEventListener('click', () => {
+      owner.adminPage = 'finance'
+      render()
+      loadFinancePage()
+        .then(() => document.querySelector('#finNavDailyClose')?.click())
+        .catch((error) => toast(error.message))
+    })
+  } catch { bar.classList.add('hidden') }
 }
 
 let financeTrendState = { granularity: 'month', data: null }
@@ -6336,7 +6366,7 @@ els.adminLayout.addEventListener('click', (event) => {
   const pageButton = event.target.closest('[data-admin-page]')
   if (pageButton) {
     owner.adminPage = pageButton.dataset.adminPage
-    if (owner.adminPage === 'bookings') owner.adminView = 'today'
+    if (owner.adminPage === 'bookings') { owner.adminView = 'today'; renderDailyCloseJump() }
     if (owner.adminPage === 'finance') loadFinancePage().catch((error) => toast(error.message))
     if (owner.adminPage === 'membership') loadMembershipPage().catch((error) => toast(error.message))
     if (owner.adminPage === 'pricing') loadPricingPage().catch((error) => toast(error.message))
