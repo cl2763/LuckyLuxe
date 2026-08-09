@@ -53,7 +53,9 @@ Page({
           canConfirm: dc.canConfirm,
           blockers: (dc.blockers || []).map((b) => b.message),
           pending: (dc.pendingAllocation || []).map((p) => ({
-            id: p.settlementId, code: p.code, total: m(p.totalCents),
+            // 分成基数=业绩基数(券不扣技师);无券时与应收相等
+            id: p.settlementId, code: p.code, total: m(p.perfBaseCents === undefined ? p.totalCents : p.perfBaseCents),
+            couponNote: p.couponDiscountCents ? '业绩基数(不含券)' : '',
             who: p.servedPersonName || p.customerName || '',
             techLabel: p.technicians.length > 1 ? '双技师' : '单技师',
             techs: p.technicians.map((t, j) => ({

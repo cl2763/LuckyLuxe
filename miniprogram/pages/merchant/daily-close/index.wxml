@@ -22,7 +22,7 @@
     <view class="card" wx:for="{{v.pending}}" wx:for-item="p" wx:key="id">
       <view class="ah" data-id="{{p.id}}" bindtap="toggleOpen">
         <text class="code">{{p.code}} {{p.who}} · {{p.techLabel}}</text>
-        <text class="amt">{{p.total}} <text class="arr">{{open[p.id] ? '收起 ∧' : '点开分配 ∨'}}</text></text>
+        <text class="amt">{{p.total}}<text wx:if="{{p.couponNote}}" class="arr"> {{p.couponNote}}</text> <text class="arr">{{open[p.id] ? '收起 ∧' : '点开分配 ∨'}}</text></text>
       </view>
       <block wx:if="{{open[p.id]}}">
         <view class="aline" wx:for="{{p.techs}}" wx:for-item="t" wx:key="id">

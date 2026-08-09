@@ -51,6 +51,25 @@
   .toast.show{opacity:1}
   .done{text-align:center;padding:30px 10px;color:var(--ok);font-weight:800}
   .err{background:#fff;border-radius:16px;padding:28px 18px;text-align:center;color:var(--danger)}
+  /* 屏 C2 优惠券:签字前可选/更换,签后整页锁定。无可用券时整行不渲染(不占位)。 */
+  .cpn-card{background:#fff;border-radius:14px;padding:12px 14px;margin-top:12px;box-shadow:0 2px 14px rgba(45,40,38,.06);display:flex;justify-content:space-between;align-items:center;gap:10px}
+  .cpn-card .lab{font-size:13px;color:var(--muted)}
+  .cpn-card .tag{display:inline-block;font-size:11px;background:#e7f0ea;color:var(--ok);border-radius:8px;padding:1px 7px;margin-left:6px;font-weight:700}
+  .cpn-card .val{font-weight:700;color:var(--ok);font-size:14px}
+  .cpn-card .val.none{color:var(--muted);font-weight:500}
+  .cpn-card .arr{color:#c8c0b2;font-size:13px;margin-left:6px}
+  .cpn-mask{position:fixed;inset:0;background:rgba(35,30,28,.42);z-index:120;display:flex;align-items:flex-end}
+  .cpn-sheet{width:100%;max-width:460px;margin:0 auto;background:#fff;border-radius:18px 18px 0 0;padding:16px 14px calc(16px + env(safe-area-inset-bottom));max-height:82vh;overflow:auto}
+  .cpn-sheet h3{font-size:14px;margin-bottom:10px}
+  .cpn-opt{display:flex;align-items:center;gap:10px;border:1px solid var(--line);border-radius:12px;padding:11px 12px;margin-bottom:9px;cursor:pointer}
+  .cpn-opt.on{border-color:var(--ok);background:#eef5f1}
+  .cpn-opt.dis{opacity:.55;cursor:not-allowed}
+  .cpn-opt .l{flex:1}
+  .cpn-opt .n{font-size:13.5px;font-weight:700}
+  .cpn-opt .s{display:block;font-size:11.5px;color:var(--muted);margin-top:2px}
+  .cpn-opt.dis .s{color:var(--danger)}
+  .cpn-opt .d{font-weight:800;color:var(--ok);font-size:13.5px}
+  .cpn-sheet .close{width:100%;border:none;border-radius:12px;background:var(--ink);color:#fff;font-size:15px;font-weight:800;padding:12px;margin-top:4px;cursor:pointer}
 </style>
 </head>
 <body>
@@ -142,10 +161,12 @@ function render() {
 
       <div class="totals">
         <div class="row"><span>原价合计</span><span class="strike">${money(s.listTotalCents)}</span></div>
-        <div class="row"><span>较原价共优惠</span><b>${money(s.discountTotalCents)}</b></div>
+        <div class="row"><span>${s.couponDiscountCents ? '共优惠（含券）' : '较原价共优惠'}</span><b>${money(s.discountTotalCents)}</b></div>
+        ${s.couponDiscountCents ? `<div class="row"><span>优惠券 ${esc(s.coupon ? s.coupon.name : '')}</span><b>−${money(s.couponDiscountCents)}</b></div>` : ''}
         <div class="row grand"><span>合计</span><span>${money(s.totalCents)}</span></div>
       </div>
     </div>
+    ${couponCardHtml()}
 
     ${signed ? `<div class="done">✓ 本单已于 ${esc(String(s.signedAt).slice(0, 16).replace('T', ' '))} 签署完成${s.snapshot ? `<div style="margin-top:10px;font-weight:500"><a href="/settlements/${encodeURIComponent(s.code)}/snapshot" target="_blank">查看签署单</a></div>` : ''}</div>` : `
     <label class="disc">
@@ -163,6 +184,74 @@ function render() {
     ? `签署后储值卡将即时扣除 ${money(storedLeg)} · 有问题？<a href="#" id="afterSales">联系客服</a>`
     : '有问题？<a href="#" id="afterSales">联系客服</a>'
   if (!signed) initPad()
+  const opener = document.getElementById('cpnOpen')
+  if (opener) opener.addEventListener('click', openCouponSheet)
+}
+
+/* 券区(屏 C2)。签字前可点开更换/取消,签后整块不再出现 —— 顾客签的就是用完券的最终构成。
+   规则⑥:一张可用券都没有、也没选过券时,顾客端整行不显示,不占位。 */
+function couponCardHtml() {
+  const s = data.settlement
+  if (s.status === 'signed') return ''
+  const pack = data.coupons || { options: [], usableCount: 0 }
+  const picked = s.coupon
+  if (!picked && !pack.usableCount) return ''
+  const byStaff = picked && picked.selectedBy === 'staff'
+  return `
+    <div class="cpn-card" id="cpnOpen">
+      <span class="lab">优惠券${byStaff ? '<span class="tag">店员已为你选用</span>' : ''}</span>
+      <span>
+        ${picked
+          ? `<b class="val">${esc(picked.name)} −${money(picked.discountCents)}</b><span class="arr">更换›</span>`
+          : `<b class="val none">${pack.usableCount} 张可用</b><span class="arr">去选择›</span>`}
+      </span>
+    </div>`
+}
+
+function openCouponSheet() {
+  const pack = data.coupons || { options: [] }
+  const picked = data.settlement.coupon
+  const box = document.createElement('div')
+  box.className = 'cpn-mask'
+  box.innerHTML = `
+    <div class="cpn-sheet" id="cpnSheet">
+      <h3>选择优惠券</h3>
+      ${pack.options.map((o) => `
+        <div class="cpn-opt ${o.usable ? '' : 'dis'} ${picked && picked.grantId === o.grantId ? 'on' : ''}" data-grant="${o.usable ? esc(o.grantId) : ''}">
+          <span class="l"><span class="n">${esc(o.name)}</span><span class="s">${esc(o.usable ? o.subtitle : o.reason)}</span></span>
+          ${o.usable ? `<span class="d">−${money(o.discountCents)}</span>` : ''}
+        </div>`).join('')}
+      <div class="cpn-opt ${picked ? '' : 'on'}" data-grant=""><span class="l"><span class="n">不使用优惠券</span><span class="s">本单不抵扣</span></span></div>
+      <button class="close" id="cpnClose">取消</button>
+    </div>`
+  document.body.appendChild(box)
+  const close = () => box.remove()
+  box.addEventListener('click', (e) => { if (e.target === box) close() })
+  box.querySelector('#cpnClose').addEventListener('click', close)
+  box.querySelectorAll('.cpn-opt').forEach((el) => {
+    el.addEventListener('click', async () => {
+      if (el.classList.contains('dis')) return
+      close()
+      await applyCoupon(el.dataset.grant || '')
+    })
+  })
+}
+
+// 改券后全部金额由后端重算刷新 —— 本页一处加减都没有
+async function applyCoupon(grantId) {
+  try {
+    const res = await fetch(`/settlements/${encodeURIComponent(code)}/coupon`, {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ grantId })
+    })
+    const body = await res.json()
+    if (!res.ok) throw new Error(body?.error?.message || '改券失败')
+    await load()
+    toast(grantId ? '已使用优惠券,金额已更新' : '已取消用券,金额已更新')
+  } catch (error) {
+    toast(error.message)
+  }
 }
 
 function initPad() {

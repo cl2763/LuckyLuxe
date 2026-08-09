@@ -33,6 +33,8 @@ Page({
     depositApplied: true, depositDeductible: true,
     roster: [], selectedTechs: [], techRows: [],
     payIntent: 'balance_plus_offline', payPlans: PAY_PLANS,
+    // 屏 C1 优惠券:选中的券、券包面板、后端算好的抵扣额与不可用原因
+    couponGrantId: '', couponPanel: false, couponOptions: [], couponUsableCount: 0, couponPicked: null,
     preview: null, view: null,
     submitting: false
   },
@@ -238,8 +240,25 @@ Page({
       applyFootSurcharge: this.data.applyFootSurcharge,
       applyTipReuse: this.data.applyTipReuse,
       depositApplied: this.data.depositApplied,
-      payIntent: this.data.payIntent
+      payIntent: this.data.payIntent,
+      couponGrantId: this.data.couponGrantId || undefined
     }
+  },
+
+  /* 选券面板(设计图 C1 右图):可用在上、不可用置灰在下并写原因。
+     能不能用、能抵多少、原因文案全是后端给的,这里只负责显示和把选择回传。 */
+  openCouponPanel() {
+    if (!this.data.couponOptions.length) { wx.showToast({ title: '顾客券包里没有券', icon: 'none' }); return }
+    this.setData({ couponPanel: true })
+  },
+  closeCouponPanel() { this.setData({ couponPanel: false }) },
+  noop() { /* 面板内点击不穿透到遮罩 */ },
+  pickCoupon(e) {
+    const id = e.currentTarget.dataset.id || ''
+    const picked = this.data.couponOptions.find((o) => o.grantId === id)
+    if (id && picked && !picked.usable) { wx.showToast({ title: picked.reason || '这张券本单用不了', icon: 'none' }); return }
+    this.setData({ couponGrantId: id, couponPanel: false })
+    this.refresh()
   },
 
   // 每次改动都问一次后端要金额。节流 250ms,避免连点 ＋ 时打一串请求。
@@ -259,6 +278,11 @@ Page({
         depositDeduct: m(s.depositDeductCents), discountTotal: m(s.discountTotalCents),
         total: m(s.totalCents),
         hasDeposit: s.depositDeductCents > 0,
+        // 券:抵扣额与「共优惠(含券)」都由后端算好,这里只换个显示格式
+        couponDeduct: m(s.couponDiscountCents || 0),
+        hasCoupon: (s.couponDiscountCents || 0) > 0,
+        couponName: s.coupon ? s.coupon.name : '',
+        discountLabel: (s.couponDiscountCents || 0) > 0 ? '共优惠（含券）' : '较原价共优惠',
         lines: (s.lines || []).map((l) => ({
           no: l.itemNo, name: l.name, qty: l.qty, unit: l.unit,
           amount: l.amountCents === 0 ? '免收' : m(l.amountCents),
@@ -273,8 +297,19 @@ Page({
         hasShortfall: (pay.shortfallCents || 0) > 0,
         warnings: (s.softWarnings || []).map((w) => w.message)
       }
+      // 券包:后端已按可用/不可用排好序,前端只把金额换成显示格式
+      const options = (s.couponOptions || []).map((o) => Object.assign({}, o, {
+        deductText: o.usable ? `−${m(o.discountCents)}` : ''
+      }))
       const prev = this.data.display
-      this.setData({ preview: s, view, display: d })
+      this.setData({
+        preview: s, view, display: d,
+        couponOptions: options,
+        couponUsableCount: s.couponUsableCount || 0,
+        couponPicked: s.coupon ? Object.assign({}, s.coupon, { deductText: `−${m(s.coupon.discountCents)}` }) : null,
+        // 后端没认这张券(过期/被别处占用等)时,把本地选择也清掉,不留一个假的已选态
+        couponGrantId: s.coupon ? s.coupon.grantId : ''
+      })
       this.buildTechRows()
       // 币种格式是第一次试算才拿到的,拿到后要把目录里的价格重新格式化一遍
       if (!prev || prev.symbol !== d.symbol || prev.prefix !== d.prefix) this.renderCatalogue()

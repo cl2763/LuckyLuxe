@@ -7489,27 +7489,223 @@ function consumeDepositRetain(retainId, bookingId) {
     .run(bookingId, iso(new Date()), retainId)
 }
 
-/* ===== P1 结算计算(2026-08-08)=====
-   金额红线:前端永远不自行计算任何金额。这里是唯一的计算入口,两条恒等式在返回前强制校验。
-     共优惠 ≡ 原价合计 − 档位小计
-     应收   ≡ 档位小计 − 定金抵扣
+/* ===== P1 结算计算(2026-08-08;2026-08-09 扩券)=====
+   金额红线:前端永远不自行计算任何金额。这里是唯一的计算入口,恒等式在返回前强制校验。
+     档位优惠 ≡ 原价合计 − 档位小计
+     共优惠   ≡ 档位优惠 + 券抵扣          ← 设计图「共优惠(含券)」,拆行显示
+     应收     ≡ 档位小计 − 定金抵扣 − 券抵扣
+     分成基数 ≡ 应收 + 券抵扣              ← 券是店铺让利,不扣技师(规则③)
    足部加收(整单 +100)按店主确认口径**同时进原价合计与档位小计** —— 它是加价不是折扣,
-   这样两条恒等式才自洽。 */
+   这样恒等式才自洽。券抵扣为 0 时以上各式退化成 08-08 的老两条,存量行为逐分不变。 */
 function assertSettlementInvariants(result) {
-  const d = result.listTotalCents - result.subtotalCents
-  if (result.discountTotalCents !== d) {
-    throw apiError(500, 'SETTLEMENT_INVARIANT', `共优惠对不上:${result.discountTotalCents} ≠ ${result.listTotalCents} − ${result.subtotalCents}`)
+  const coupon = Math.max(0, Math.round(result.couponDiscountCents || 0))
+  const tier = result.listTotalCents - result.subtotalCents
+  if (result.tierDiscountCents !== tier) {
+    throw apiError(500, 'SETTLEMENT_INVARIANT', `档位优惠对不上:${result.tierDiscountCents} ≠ ${result.listTotalCents} − ${result.subtotalCents}`)
   }
-  const due = result.subtotalCents - result.depositDeductCents
+  if (result.discountTotalCents !== tier + coupon) {
+    throw apiError(500, 'SETTLEMENT_INVARIANT', `共优惠(含券)对不上:${result.discountTotalCents} ≠ ${tier} + ${coupon}`)
+  }
+  const due = result.subtotalCents - result.depositDeductCents - coupon
   if (result.totalCents !== due) {
-    throw apiError(500, 'SETTLEMENT_INVARIANT', `应收对不上:${result.totalCents} ≠ ${result.subtotalCents} − ${result.depositDeductCents}`)
+    throw apiError(500, 'SETTLEMENT_INVARIANT', `应收对不上:${result.totalCents} ≠ ${result.subtotalCents} − ${result.depositDeductCents} − ${coupon}`)
+  }
+  if (result.perfBaseCents !== result.totalCents + coupon) {
+    throw apiError(500, 'SETTLEMENT_INVARIANT', `分成基数对不上:${result.perfBaseCents} ≠ ${result.totalCents} + ${coupon}(券不扣技师)`)
   }
   return result
 }
 
+/* ===== 结算单用券(2026-08-09,设计图《结算单用券》v3)=====
+   规则①券包归属=卡主(签字人);代付单也用卡主的券。
+   规则②首版一单限用一张;门槛/适用大类由券模板定义,不满足=置灰 + 写清原因。
+   金额红线:能不能用、能抵多少、不可用的原因文案,全部由这里算好返回,两端零算术。 */
+function couponRawDiscountCents(coupon, subtotalCents) {
+  if ((coupon.discount_type || 'amount') === 'percent') {
+    return Math.round(subtotalCents * Math.max(0, Math.min(100, Number(coupon.percent_off) || 0)) / 100)
+  }
+  return Math.max(0, Math.round(Number(coupon.amount_cents) || 0))
+}
+
+function couponScopeIds(coupon) {
+  try {
+    const parsed = JSON.parse(coupon.scope_categories_json || '[]')
+    return Array.isArray(parsed) ? parsed.map(String).filter(Boolean) : []
+  } catch { return [] }
+}
+
+/* 一张券在「这一单」上的判定结果。ctx = { tenantId, subtotalCents, maxDeductCents, categoryIds, categoryNames, now } */
+function evaluateCouponGrant(grant, ctx) {
+  const scope = couponScopeIds(grant)
+  const minSpend = Math.max(0, Number(grant.min_spend_cents) || 0)
+  const base = {
+    grantId: grant.id,
+    couponId: grant.coupon_id,
+    code: grant.code,
+    name: grant.name,
+    grantKind: grant.grant_kind || 'template',
+    grantReason: grant.grant_reason || '',
+    discountType: grant.discount_type,
+    amountCents: grant.amount_cents,
+    percentOff: grant.percent_off,
+    minSpendCents: minSpend,
+    scopeCategoryIds: scope,
+    scopeText: scope.length ? scope.map((id) => ctx.categoryNames[id] || id).join('、') : '全部大类',
+    expiresAt: grant.expires_at || null,
+    // 「满 ¥300 可用 · 2026-09-30 到期」这行小字也由后端拼,前端不拼金额
+    subtitle: `${minSpend > 0 ? `满 ${formatMoneyCents(minSpend, ctx.tenantId, 'auto')} 可用` : '无门槛'}${grant.expires_at ? ` · ${String(grant.expires_at).slice(0, 10)} 到期` : ''}`,
+    usable: false,
+    reason: '',
+    discountCents: 0,
+    discountText: ''
+  }
+  if (grant.is_active === 0) return { ...base, reason: '不可用:该券已停用' }
+  if (grant.status === 'used') return { ...base, reason: `不可用:已核销${grant.settlement_code ? `(${grant.settlement_code})` : ''}` }
+  if (grant.status === 'revoked') return { ...base, reason: '不可用:已作废' }
+  if (grant.status === 'expired' || (grant.expires_at && String(grant.expires_at) < ctx.now)) return { ...base, reason: '不可用:已过期' }
+  if (grant.status !== 'active') return { ...base, reason: '不可用:该券当前不可使用' }
+  if (minSpend > 0 && ctx.subtotalCents < minSpend) {
+    return { ...base, reason: `不可用:未满 ${formatMoneyCents(minSpend, ctx.tenantId, 'auto')}` }
+  }
+  if (scope.length && !ctx.categoryIds.some((id) => scope.includes(id))) {
+    return { ...base, reason: `不可用:仅适用${base.scopeText}` }
+  }
+  const discount = Math.max(0, Math.min(couponRawDiscountCents(grant, ctx.subtotalCents), Math.max(0, ctx.maxDeductCents)))
+  if (discount <= 0) return { ...base, reason: '不可用:本单已无可抵扣金额' }
+  return { ...base, usable: true, discountCents: discount, discountText: formatMoneyCents(discount, ctx.tenantId, 'auto') }
+}
+
+// 卡主券包里的全部券(可用在上、不可用在下并带原因),连同选中那张的抵扣额
+function couponOptionsFor({ tenantId, userId, subtotalCents, maxDeductCents, categoryIds, selectedGrantId = '' }) {
+  const out = { options: [], selectedGrantId: '', selected: null, discountCents: 0, usableCount: 0 }
+  if (!userId) return out
+  const now = iso(new Date())
+  // 到期的券顺手落地成 expired,和 /my/coupons 同一套口径
+  db.prepare("UPDATE coupon_grants SET status = 'expired' WHERE user_id = ? AND tenant_id = ? AND status = 'active' AND expires_at IS NOT NULL AND expires_at < ?")
+    .run(userId, tenantId, now)
+  const categoryNames = {}
+  for (const c of db.prepare('SELECT id, name FROM service_categories WHERE tenant_id = ?').all(tenantId)) categoryNames[c.id] = c.name
+  const rows = db.prepare(`SELECT g.*, c.name, c.discount_type, c.amount_cents, c.percent_off, c.min_spend_cents,
+      c.scope_categories_json, c.is_active
+    FROM coupon_grants g JOIN coupons c ON c.id = g.coupon_id
+    WHERE g.tenant_id = ? AND g.user_id = ? ORDER BY g.created_at DESC`).all(tenantId, userId)
+  const ctx = { tenantId, subtotalCents, maxDeductCents, categoryIds, categoryNames, now }
+  const evaluated = rows.map((r) => evaluateCouponGrant(r, ctx))
+  // 已核销在别的单上的券不进券包列表(免得顾客以为还能选);本单选中的那张要留着
+  const visible = evaluated.filter((e) => e.usable || e.grantId === selectedGrantId
+    || !(rows.find((r) => r.id === e.grantId) || {}).settlement_id)
+  out.options = visible.sort((a, b) => (Number(b.usable) - Number(a.usable)) || (b.discountCents - a.discountCents))
+  out.usableCount = out.options.filter((o) => o.usable).length
+  const picked = selectedGrantId ? out.options.find((o) => o.grantId === selectedGrantId) : null
+  if (picked && picked.usable) {
+    out.selectedGrantId = picked.grantId
+    out.selected = picked
+    out.discountCents = picked.discountCents
+  }
+  return out
+}
+
+/* 支付构成的唯一实现:储值先烧迁移桶(不进本店收入)→ 再烧新桶 → 剩下的进线下腿。
+   开单试算与「顾客改券后重算」共用这一份 —— 两处各写一遍迟早会算出两个数。 */
+function buildPaymentLegs({ tenantId, payerId, totalCents, payIntent }) {
+  const balance = payerId ? storedValueBalanceDetail(payerId, tenantId) : { totalCents: 0, legacyCents: 0, normalCents: 0 }
+  const plan = ['balance_plus_offline', 'recharge_then_balance', 'offline_full'].includes(payIntent) ? payIntent : 'balance_plus_offline'
+  const legs = []
+  let remaining = totalCents
+  if (plan !== 'offline_full') {
+    const useLegacy = Math.min(Math.max(0, balance.legacyCents), remaining)
+    if (useLegacy > 0) { legs.push({ leg: 'migrate_stored', amountCents: useLegacy, payerUserId: payerId, note: '迁移桶(不进本店收入)' }); remaining -= useLegacy }
+    const useNormal = Math.min(Math.max(0, balance.normalCents), remaining)
+    if (useNormal > 0) { legs.push({ leg: 'stored_value', amountCents: useNormal, payerUserId: payerId }); remaining -= useNormal }
+  }
+  if (remaining > 0) legs.push({ leg: 'offline', amountCents: remaining, payerUserId: payerId, note: '到店支付' })
+  const storedUsedCents = legs.filter((l) => l.leg === 'stored_value' || l.leg === 'migrate_stored').reduce((sum, l) => sum + l.amountCents, 0)
+  return { plan, legs, balance, remaining: Math.max(0, remaining), storedUsedCents }
+}
+
+// 一单一张(规则②):同一张券不能同时挂在两张单上 —— 别处待签的单也算占用
+function assertCouponFree(grantId, tenantId, excludeSettlementId = null) {
+  const held = db.prepare('SELECT code, id FROM settlements WHERE tenant_id = ? AND coupon_grant_id = ?').all(tenantId, grantId)
+    .find((r) => r.id !== excludeSettlementId)
+  if (held) throw apiError(400, 'COUPON_ALREADY_USED', `这张券已经挂在服务单 ${held.code} 上了(一单一张)。`)
+}
+
+// 某张单涉及的服务大类,用来判断券的适用范围
+function settlementCategoryIds(settlementId, tenantId) {
+  const ids = db.prepare('SELECT service_id FROM settlement_items WHERE tenant_id = ? AND settlement_id = ?').all(tenantId, settlementId)
+    .map((i) => i.service_id).filter(Boolean)
+  const cats = ids.map((id) => (db.prepare('SELECT category_id FROM services WHERE id = ?').get(id) || {}).category_id).filter(Boolean)
+  return [...new Set(cats)]
+}
+
+// 待签单的券包(店员代选面板 / 顾客签署页选券面板共用同一份数据)
+function settlementCouponOptions(row) {
+  return couponOptionsFor({
+    tenantId: row.tenant_id,
+    userId: row.user_id,
+    subtotalCents: row.subtotal_cents,
+    maxDeductCents: Math.max(0, row.subtotal_cents - row.deposit_deduct_cents),
+    categoryIds: settlementCategoryIds(row.id, row.tenant_id),
+    selectedGrantId: row.coupon_grant_id || ''
+  })
+}
+
+/* 选券 / 换券 / 取消(规则④时序):店员代选 → 推送 → 顾客签字前可换可取消 → 签字锁定。
+   金额一律在这里重算(含支付构成),两端拿到的就是最终数;签字后一律拒绝。 */
+function setSettlementCoupon(settlementId, grantId, { by = 'customer', actor = '' } = {}) {
+  const row = db.prepare('SELECT * FROM settlements WHERE id = ?').get(settlementId)
+  if (!row) throw apiError(404, 'NOT_FOUND', '找不到这张服务单。')
+  if (row.status === 'signed') throw apiError(400, 'ALREADY_SIGNED', '这张单已经签署,券不能再改;要更正请走金额更正链。')
+  const tenantId = row.tenant_id
+  const wanted = String(grantId || '')
+  const opts = couponOptionsFor({
+    tenantId,
+    userId: row.user_id,
+    subtotalCents: row.subtotal_cents,
+    maxDeductCents: Math.max(0, row.subtotal_cents - row.deposit_deduct_cents),
+    categoryIds: settlementCategoryIds(row.id, tenantId),
+    selectedGrantId: wanted
+  })
+  if (wanted) {
+    if (!opts.selectedGrantId) {
+      const picked = opts.options.find((o) => o.grantId === wanted)
+      throw apiError(400, 'COUPON_UNUSABLE', picked ? picked.reason.replace(/^不可用:/, '这张券本单用不了:') : '这张券不在卡主的券包里。')
+    }
+    assertCouponFree(wanted, tenantId, row.id)
+  }
+  const couponDiscountCents = wanted ? opts.discountCents : 0
+  const totalCents = row.subtotal_cents - row.deposit_deduct_cents - couponDiscountCents
+  const discountTotalCents = (row.list_total_cents - row.subtotal_cents) + couponDiscountCents
+  const perfBaseCents = totalCents + couponDiscountCents
+  const pay = buildPaymentLegs({ tenantId, payerId: row.user_id, totalCents, payIntent: row.pay_intent })
+  const now = iso(new Date())
+  db.exec('BEGIN IMMEDIATE')
+  try {
+    db.prepare(`UPDATE settlements SET coupon_grant_id = ?, coupon_id = ?, coupon_name = ?, coupon_discount_cents = ?,
+      coupon_selected_by = ?, coupon_selected_at = ?, discount_total_cents = ?, total_cents = ?, perf_base_cents = ?, updated_at = ?
+      WHERE id = ?`)
+      .run(wanted || null, opts.selected ? opts.selected.couponId : null, opts.selected ? opts.selected.name : null,
+        couponDiscountCents, wanted ? by : null, wanted ? now : null,
+        discountTotalCents, totalCents, perfBaseCents, now, row.id)
+    // 支付腿随应收变动重建;定金腿是已经付过的钱,原样保留
+    db.prepare("DELETE FROM settlement_payments WHERE settlement_id = ? AND leg <> 'deposit'").run(row.id)
+    const payStmt = db.prepare(`INSERT INTO settlement_payments (id, tenant_id, settlement_id, leg, amount_cents, payer_user_id, status, note, created_at)
+      VALUES (?, ?, ?, ?, ?, ?, 'pending', ?, ?)`)
+    for (const leg of pay.legs) {
+      payStmt.run(randomId('spay'), tenantId, row.id, leg.leg, leg.amountCents, leg.payerUserId || row.user_id, leg.note || null, now)
+    }
+    db.exec('COMMIT')
+  } catch (error) {
+    db.exec('ROLLBACK')
+    throw error
+  }
+  const fresh = db.prepare('SELECT * FROM settlements WHERE id = ?').get(row.id)
+  return { settlement: serializeSettlement(fresh), coupons: settlementCouponOptions(fresh) }
+}
+
 /* 入参 { tenantId, tierKey, items:[{serviceId, qty, fingers}], customItems:[{name, amountCents}],
-   applyFootSurcharge, applyTipReuse, depositApplied, bookingId, userId, payerUserId }
-   出参:带编号的明细 + 五个汇总数 + 支付构成 */
+   applyFootSurcharge, applyTipReuse, depositApplied, bookingId, userId, payerUserId, couponGrantId }
+   出参:带编号的明细 + 汇总数(含券)+ 支付构成 + 卡主券包 */
 function computeSettlement(input = {}) {
   const tenantId = input.tenantId || currentTenantId()
   const tierKey = PRICE_TIERS.includes(input.tierKey) ? input.tierKey : 'list'
@@ -7601,24 +7797,35 @@ function computeSettlement(input = {}) {
     depositDeductCents = Math.min(paid || depositAmountForService(mainRow, depositConfig, tenantId), subtotalCents)
   }
 
-  const discountTotalCents = listTotalCents - subtotalCents
-  const totalCents = subtotalCents - depositDeductCents
+  /* 券抵扣(2026-08-09):用的是**卡主**券包里的券(规则①,代付单同理),一单限一张(规则②)。
+     券只能抵到「应收归零」为止,不会把单子抵成负数。 */
+  const categoryIds = [...new Set(lines.map((l) => l.serviceId).filter(Boolean)
+    .map((id) => (getSvc(id) || {}).category_id).filter(Boolean))]
+  const couponMaxDeductCents = Math.max(0, subtotalCents - depositDeductCents)
+  const coupons = couponOptionsFor({
+    tenantId,
+    userId: input.userId || input.payerUserId || '',
+    subtotalCents,
+    maxDeductCents: couponMaxDeductCents,
+    categoryIds,
+    selectedGrantId: String(input.couponGrantId || '')
+  })
+  // 严格模式(正式开单/顾客改券):选了却用不了就明说,绝不悄悄按无券算然后让顾客签一个不一样的数
+  if (input.strictCoupon && input.couponGrantId && !coupons.selectedGrantId) {
+    const picked = coupons.options.find((o) => o.grantId === String(input.couponGrantId))
+    throw apiError(400, 'COUPON_UNUSABLE', picked ? picked.reason.replace(/^不可用:/, '这张券本单用不了:') : '这张券不在卡主的券包里。')
+  }
+  const couponDiscountCents = coupons.discountCents
+
+  const tierDiscountCents = listTotalCents - subtotalCents
+  const discountTotalCents = tierDiscountCents + couponDiscountCents
+  const totalCents = subtotalCents - depositDeductCents - couponDiscountCents
+  // 分成基数:券不扣技师(规则③),所以是「加回券」的应收
+  const perfBaseCents = totalCents + couponDiscountCents
 
   // 支付构成:储值先烧迁移桶,再烧新桶;不够的进线下腿
   const payerId = input.payerUserId || input.userId || ''
-  const balance = payerId ? storedValueBalanceDetail(payerId, tenantId) : { totalCents: 0, legacyCents: 0, normalCents: 0 }
-  const plan = ['balance_plus_offline', 'recharge_then_balance', 'offline_full'].includes(input.payIntent) ? input.payIntent : 'balance_plus_offline'
-  const legs = []
-  let remaining = totalCents
-  if (plan !== 'offline_full') {
-    const useLegacy = Math.min(Math.max(0, balance.legacyCents), remaining)
-    if (useLegacy > 0) { legs.push({ leg: 'migrate_stored', amountCents: useLegacy, payerUserId: payerId, note: '迁移桶(不进本店收入)' }); remaining -= useLegacy }
-    const useNormal = Math.min(Math.max(0, balance.normalCents), remaining)
-    if (useNormal > 0) { legs.push({ leg: 'stored_value', amountCents: useNormal, payerUserId: payerId }); remaining -= useNormal }
-  }
-  if (remaining > 0) legs.push({ leg: 'offline', amountCents: remaining, payerUserId: payerId, note: '到店支付' })
-
-  const storedUsedCents = legs.filter((l) => l.leg === 'stored_value' || l.leg === 'migrate_stored').reduce((sum, l) => sum + l.amountCents, 0)
+  const { plan, legs, balance, remaining, storedUsedCents } = buildPaymentLegs({ tenantId, payerId, totalCents, payIntent: input.payIntent })
 
   return assertSettlementInvariants({
     tenantId,
@@ -7630,8 +7837,21 @@ function computeSettlement(input = {}) {
     listTotalCents,
     subtotalCents,
     depositDeductCents,
+    tierDiscountCents,
+    couponDiscountCents,
     discountTotalCents,
     totalCents,
+    perfBaseCents,
+    coupon: coupons.selected ? {
+      grantId: coupons.selected.grantId,
+      couponId: coupons.selected.couponId,
+      name: coupons.selected.name,
+      grantKind: coupons.selected.grantKind,
+      discountCents: coupons.discountCents,
+      discountText: coupons.selected.discountText
+    } : null,
+    couponOptions: coupons.options,
+    couponUsableCount: coupons.usableCount,
     payment: {
       plan,
       legs,
@@ -7680,20 +7900,33 @@ function createSettlementGroup(body = {}, adminSession = {}) {
       VALUES (?, ?, ?, ?, 'pending_sign', ?, ?, ?)`)
       .run(groupId, tenantId, body.bookingId || null, cardOwnerUserId, adminSession.email || 'staff', now, now)
 
+    const grantsUsedInGroup = new Set()
     for (const sheet of sheets) {
-      const computed = computeSettlement({ ...sheet, tenantId, userId: cardOwnerUserId, payerUserId: cardOwnerUserId, bookingId: sheet.bookingId || body.bookingId })
+      // 一单一张,且同一张券不能被同组的两张单同时挂上(组内两张 + 别处待签的单都要拦)
+      if (sheet.couponGrantId) {
+        if (grantsUsedInGroup.has(String(sheet.couponGrantId))) {
+          throw apiError(400, 'COUPON_ALREADY_USED', '同一张券不能同时用在两张单上。')
+        }
+        assertCouponFree(String(sheet.couponGrantId), tenantId, null)
+        grantsUsedInGroup.add(String(sheet.couponGrantId))
+      }
+      const computed = computeSettlement({ ...sheet, tenantId, userId: cardOwnerUserId, payerUserId: cardOwnerUserId, bookingId: sheet.bookingId || body.bookingId, strictCoupon: true })
       const id = randomId('stl')
       const isProxy = Boolean(sheet.servedPersonName && String(sheet.servedPersonName).trim())
       db.prepare(`INSERT INTO settlements
         (id, tenant_id, group_id, booking_id, user_id, served_person_name, is_proxy_paid, code, status,
          price_tier_used, tier_changed_from, tier_changed_by, tier_changed_at,
          list_total_cents, subtotal_cents, deposit_deduct_cents, discount_total_cents, total_cents,
+         coupon_grant_id, coupon_id, coupon_name, coupon_discount_cents, coupon_selected_by, coupon_selected_at, perf_base_cents,
          pay_intent, perf_alloc_status, created_by, created_at, updated_at)
-        VALUES (?, ?, ?, ?, ?, ?, ?, ?, 'pending_sign', ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'pending', ?, ?, ?)`)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, 'pending_sign', ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'pending', ?, ?, ?)`)
         .run(id, tenantId, groupId, sheet.bookingId || body.bookingId || null, cardOwnerUserId,
           String(sheet.servedPersonName || '').slice(0, 40) || null, isProxy ? 1 : 0, settlementCode(tenantId),
           computed.tierKey, sheet.tierChangedFrom || null, sheet.tierChangedFrom ? (adminSession.email || 'staff') : null, sheet.tierChangedFrom ? now : null,
           computed.listTotalCents, computed.subtotalCents, computed.depositDeductCents, computed.discountTotalCents, computed.totalCents,
+          computed.coupon ? computed.coupon.grantId : null, computed.coupon ? computed.coupon.couponId : null,
+          computed.coupon ? computed.coupon.name : null, computed.couponDiscountCents,
+          computed.coupon ? 'staff' : null, computed.coupon ? now : null, computed.perfBaseCents,
           computed.payment.plan, adminSession.email || 'staff', now, now)
 
       const itemStmt = db.prepare(`INSERT INTO settlement_items
@@ -7754,6 +7987,19 @@ async function signSettlement(row, { signature, signedBy = '', strokes = [] }) {
     throw apiError(400, 'INSUFFICIENT_BALANCE',
       `储值余额不足(需 ${needStored / 100},现有 ${balance.totalCents / 100}),请回到结算页改支付构成。`)
   }
+  /* 规则⑤ 核销留痕:**签字成功那一刻**券才核销。签字前退出/改单,券一直是 active,
+     自然就回到券包里了 —— 不需要"释放"动作,也就不存在忘记释放这回事。
+     签的这一刻再校验一次:过期了或在别处核销了就拦下,不让顾客签一个抵不了的数。 */
+  let couponGrant = null
+  if (row.coupon_grant_id) {
+    couponGrant = db.prepare('SELECT * FROM coupon_grants WHERE id = ? AND tenant_id = ?').get(row.coupon_grant_id, tenantId)
+    if (!couponGrant || couponGrant.status !== 'active') {
+      throw apiError(400, 'COUPON_UNUSABLE', '所选优惠券已不可用(过期或已在别处核销),请回到服务单重新选券。')
+    }
+    if (couponGrant.expires_at && String(couponGrant.expires_at) < iso(new Date())) {
+      throw apiError(400, 'COUPON_UNUSABLE', '所选优惠券已过期,请回到服务单重新选券。')
+    }
+  }
   const now = iso(new Date())
   db.exec('BEGIN IMMEDIATE')
   try {
@@ -7774,6 +8020,14 @@ async function signSettlement(row, { signature, signedBy = '', strokes = [] }) {
       }
     }
     db.prepare("UPDATE settlement_payments SET status = 'awaiting' WHERE settlement_id = ? AND leg = 'offline' AND status = 'pending'").run(row.id)
+    if (couponGrant) {
+      db.prepare("UPDATE coupon_grants SET status = 'used', used_at = ?, settlement_id = ?, settlement_code = ? WHERE id = ? AND status = 'active'")
+        .run(now, row.id, row.code, couponGrant.id)
+      logCouponGrant({
+        tenantId, grantId: couponGrant.id, action: 'redeemed', settlementCode: row.code,
+        detail: `签署核销,抵扣 ${formatMoneyCents(row.coupon_discount_cents, tenantId, 'auto')}`, actor: signedBy || 'customer_sign'
+      })
+    }
     db.prepare("UPDATE settlements SET status = 'signed', signature_data = ?, signed_at = ?, disclaimer_accepted = 1, updated_at = ? WHERE id = ?")
       .run(String(signature).slice(0, 200), now, now, row.id)
     // 结算 → 订单:签署驱动 COMPLETED
@@ -7821,12 +8075,24 @@ function amendSettlement(settlementId, body = {}, adminSession = {}) {
   const storedPaid = db.prepare("SELECT COALESCE(SUM(amount_cents),0) AS n FROM settlement_payments WHERE settlement_id = ? AND leg IN ('stored_value','migrate_stored') AND status = 'paid'").get(row.id).n
   // 少收了要退回卡里,多收了从卡里补扣;只在这张单确实用卡付过的时候才动余额
   const autoAdjust = storedPaid > 0 ? -delta : 0
+  /* 规则⑤:更正导致券退回时留痕。原单不动(已签不可改),券本身回到顾客券包变回可用,
+     并在券流水上记一笔「因更正退回 + 单号 + 原因」—— 退了没记等于券凭空多出来一张。 */
+  const releaseCoupon = Boolean(body.releaseCoupon) && Boolean(row.coupon_grant_id)
+  const couponGrant = releaseCoupon ? db.prepare('SELECT * FROM coupon_grants WHERE id = ? AND tenant_id = ?').get(row.coupon_grant_id, tenantId) : null
+  if (releaseCoupon && !couponGrant) throw apiError(404, 'NOT_FOUND', '这张单关联的券找不到了,无法退券。')
   db.exec('BEGIN IMMEDIATE')
   try {
     db.prepare(`INSERT INTO settlement_amendments (id, tenant_id, settlement_id, before_json, after_json, reason, amount_delta_cents, auto_balance_adjust_cents, amended_by, amended_at, created_at)
       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`)
-      .run(randomId('samd'), tenantId, row.id, JSON.stringify(before), JSON.stringify({ totalCents: newTotal, reason: body.reason || '' }),
+      .run(randomId('samd'), tenantId, row.id, JSON.stringify(before), JSON.stringify({ totalCents: newTotal, reason: body.reason || '', couponReleased: releaseCoupon }),
         String(body.reason || '').slice(0, 300), delta, autoAdjust, adminSession.email || 'owner', now, now)
+    if (couponGrant) {
+      db.prepare("UPDATE coupon_grants SET status = 'active', used_at = NULL, settlement_id = NULL, settlement_code = NULL WHERE id = ?").run(couponGrant.id)
+      logCouponGrant({
+        tenantId, grantId: couponGrant.id, action: 'released', settlementCode: row.code,
+        detail: `因金额更正退回券包。原因:${String(body.reason || '').slice(0, 120)}`, actor: adminSession.email || 'owner'
+      })
+    }
     if (autoAdjust !== 0) {
       db.prepare(`INSERT INTO stored_value_transactions (id, tenant_id, user_id, type, amount_cents, pay_channel, note, created_by, created_at, bucket)
         VALUES (?, ?, ?, 'adjust', ?, 'stored_value', ?, 'system_amendment', ?, 'normal')`)
@@ -7841,7 +8107,8 @@ function amendSettlement(settlementId, body = {}, adminSession = {}) {
     amended: true,
     amountDeltaCents: delta,
     autoBalanceAdjustCents: autoAdjust,
-    note: '原单据未改动(已签单据不可修改),更正已作为追加记录留痕。',
+    couponReleased: Boolean(couponGrant),
+    note: `原单据未改动(已签单据不可修改),更正已作为追加记录留痕。${couponGrant ? '所用优惠券已退回顾客券包,券流水已留痕。' : ''}`,
     settlement: serializeSettlement(db.prepare('SELECT * FROM settlements WHERE id = ?').get(row.id))
   }
 }
@@ -8037,11 +8304,18 @@ function needsAllocation(row, tenantId) {
   return techs.length > 1 && row.perf_alloc_status !== 'allocated'
 }
 
+/* 分成/业绩的基数(2026-08-09 起显式化)。
+   券是**店铺让利,不扣技师**(设计图规则③),所以基数 = 应收 + 券抵扣。
+   老单没有 perf_base_cents 这一列时回落到应收 —— 券为 0,历史业绩数字逐分不变。 */
+function settlementPerfBaseCents(row) {
+  return row.perf_base_cents || (row.total_cents + (row.coupon_discount_cents || 0))
+}
+
 // 某张单每位技师分到多少业绩。已分配读 share_cents;单技师整单;双技师未分配返回 null(待分配)
 function settlementPerfShares(row, tenantId) {
   const techs = settlementTechRows(row.id, tenantId)
   if (!techs.length) return []
-  if (techs.length === 1) return [{ technicianId: techs[0].technician_id, role: techs[0].role, sharePct: 100, shareCents: row.total_cents }]
+  if (techs.length === 1) return [{ technicianId: techs[0].technician_id, role: techs[0].role, sharePct: 100, shareCents: settlementPerfBaseCents(row) }]
   if (row.perf_alloc_status !== 'allocated') {
     return techs.map((t) => ({ technicianId: t.technician_id, role: t.role, sharePct: null, shareCents: null }))
   }
@@ -8119,6 +8393,8 @@ function dailyCloseView(date, tenantId, { lang = 'zh' } = {}) {
     if (unallocated) {
       pending.push({
         settlementId: r.id, code: r.code, totalCents: r.total_cents,
+        // 分成按业绩基数走(券不扣技师);无券时两个数相等
+        perfBaseCents: settlementPerfBaseCents(r), couponDiscountCents: r.coupon_discount_cents || 0,
         customerName: (db.prepare('SELECT display_name FROM users WHERE id = ?').get(r.user_id) || {}).display_name || '',
         servedPersonName: r.served_person_name || '',
         defaultSplit: perfSplitDefault(tenantId),
@@ -8135,11 +8411,13 @@ function dailyCloseView(date, tenantId, { lang = 'zh' } = {}) {
       else {
         bucket.perfCents += s.shareCents
         // 卡耗按业绩占比摊到各技师头上(整单卡耗 × 该技师业绩占比),口径与业绩一致
-        bucket.cardUsedCents += r.total_cents > 0 ? Math.round(cardUsed * s.shareCents / r.total_cents) : 0
+        bucket.cardUsedCents += settlementPerfBaseCents(r) > 0 ? Math.round(cardUsed * s.shareCents / settlementPerfBaseCents(r)) : 0
       }
     }
     return {
       settlementId: r.id, code: r.code, totalCents: r.total_cents, cardUsedCents: cardUsed,
+      perfBaseCents: settlementPerfBaseCents(r),
+      couponDiscountCents: r.coupon_discount_cents || 0, couponName: r.coupon_name || '',
       allocated: !unallocated, shares, signedAt: r.signed_at,
       snapshotUrl: r.snapshot_url || null, hasSnapshot: Boolean(r.snapshot_url || r.snapshot_inline)
     }
@@ -8211,15 +8489,17 @@ function allocateSettlementPerf(settlementId, input = {}, adminSession = {}) {
   /* 前端只填比例(店长心里想的就是「七三开」),**分成金额由这里算** ——
      金额红线:客户端不做金额运算。按比例折算时最后一行吸收四舍五入的余数,
      保证「合计正好等于单额」这条硬规则在按比例填写时也一定成立。
-     仍然兼容直接传 shareCents 的老写法(测试与脚本在用)。 */
+     仍然兼容直接传 shareCents 的老写法(测试与脚本在用)。
+     基数是 perfBase(应收 + 券),不是应收 —— 券不扣技师。 */
+  const perfBase = settlementPerfBaseCents(row)
   const usePct = shares.every((s) => s.shareCents === undefined || s.shareCents === null)
     && shares.some((s) => s.pct !== undefined || s.sharePct !== undefined)
   const pctOf = (s) => Number(s.pct ?? s.sharePct ?? 0)
   let allocated = 0
   const centsByIndex = shares.map((s, index) => {
     if (!usePct) return Math.max(0, Math.round(Number(s.shareCents) || 0))
-    if (index === shares.length - 1) return Math.max(0, row.total_cents - allocated) // 末行吃余数
-    const cents = Math.max(0, Math.round(row.total_cents * pctOf(s) / 100))
+    if (index === shares.length - 1) return Math.max(0, perfBase - allocated) // 末行吃余数
+    const cents = Math.max(0, Math.round(perfBase * pctOf(s) / 100))
     allocated += cents
     return cents
   })
@@ -8233,8 +8513,8 @@ function allocateSettlementPerf(settlementId, input = {}, adminSession = {}) {
     byId[id] = { cents, pct }
     sum += cents
   })
-  if (sum !== row.total_cents) {
-    throw apiError(400, 'SHARE_MISMATCH', `分成合计 ${sum / 100} 与本单金额 ${row.total_cents / 100} 不一致,请调整。`)
+  if (sum !== perfBase) {
+    throw apiError(400, 'SHARE_MISMATCH', `分成合计 ${sum / 100} 与本单业绩基数 ${perfBase / 100} 不一致,请调整。`)
   }
   const now = iso(new Date())
   db.exec('BEGIN IMMEDIATE')
@@ -8679,7 +8959,12 @@ function renderSettlementSnapshotSvg(settlement, { strokes = [], signedAt = '' }
   y += 30
   rows.push(`<text x="40" y="${y}" class="s">原价合计</text><text x="${W - 40}" y="${y}" class="strike" text-anchor="end">${escapeXml(money(s.listTotalCents))}</text>`)
   y += 26
-  rows.push(`<text x="40" y="${y}" class="s">较原价共优惠</text><text x="${W - 40}" y="${y}" class="t" text-anchor="end">${escapeXml(money(s.discountTotalCents))}</text>`)
+  rows.push(`<text x="40" y="${y}" class="s">较原价共优惠${s.couponDiscountCents ? '(含券)' : ''}</text><text x="${W - 40}" y="${y}" class="t" text-anchor="end">${escapeXml(money(s.discountTotalCents))}</text>`)
+  // 用了券才有这一行(设计图规则⑥:无券不占位);凭证必须与顾客当时签的构成逐字一致
+  if (s.couponDiscountCents > 0) {
+    y += 26
+    rows.push(`<text x="40" y="${y}" class="s">优惠券 ${escapeXml(s.coupon ? s.coupon.name : '')}</text><text x="${W - 40}" y="${y}" class="t" text-anchor="end">${escapeXml(`−${money(s.couponDiscountCents)}`)}</text>`)
+  }
   y += 40
   rows.push(`<text x="40" y="${y}" class="grand">合计</text><text x="${W - 40}" y="${y}" class="grand gold" text-anchor="end">${escapeXml(money(s.totalCents))}</text>`)
   y += 46
@@ -8744,8 +9029,21 @@ function serializeSettlement(row, { includeSignature = false } = {}) {
     listTotalCents: row.list_total_cents,
     subtotalCents: row.subtotal_cents,
     depositDeductCents: row.deposit_deduct_cents,
+    // 共优惠(含券)拆两行:档位优惠 + 券抵扣;无券时券为 0,拆行自然不显示
+    tierDiscountCents: row.list_total_cents - row.subtotal_cents,
+    couponDiscountCents: row.coupon_discount_cents || 0,
     discountTotalCents: row.discount_total_cents,
     totalCents: row.total_cents,
+    // 分成基数(券不扣技师);老单没有这一列时回落到应收,历史数字逐分不变
+    perfBaseCents: row.perf_base_cents || (row.total_cents + (row.coupon_discount_cents || 0)),
+    coupon: row.coupon_grant_id ? {
+      grantId: row.coupon_grant_id,
+      couponId: row.coupon_id,
+      name: row.coupon_name || '',
+      discountCents: row.coupon_discount_cents || 0,
+      selectedBy: row.coupon_selected_by || '',
+      selectedAt: row.coupon_selected_at || null
+    } : null,
     payIntent: row.pay_intent,
     signedAt: row.signed_at,
     signatureName: row.signature_data ? (includeSignature ? row.signature_data : '(已签)') : null,
@@ -8817,9 +9115,21 @@ async function route(req, res) {
     return json(res, 200, {
       settlement: serializeSettlement(row),
       depositPolicy: { text: depositPolicyText(config, row.tenant_id, 'zh'), deductible: config.deductible },
+      /* 屏 C2:签字前顾客可以自己选/换券,所以券包要随单下发;签完就不给了(签后锁定)。
+         规则⑥:无可用券时顾客端整行不显示、不占位 —— 前端按 usableCount 判断,不自己算钱。 */
+      coupons: row.status === 'signed' ? null : settlementCouponOptions(row),
       // 电子签定位:服务确认凭证,不做法律效力表述(原稿第 11 条)
       disclaimer: '我已阅读并确认以上服务内容及款项无误,同意以此作为本次服务的结算凭证。'
     })
+  }
+  /* 顾客自己选券/换券/取消(屏 C2)。签字前可改,签字后一律 400 ——
+     顾客签的就是用完券的最终构成,签后不可改(改走更正链)。 */
+  if (req.method === 'POST' && path.startsWith('/settlements/') && path.endsWith('/coupon')) {
+    const code = decodeURIComponent(path.split('/')[2] || '')
+    const row = db.prepare('SELECT * FROM settlements WHERE code = ?').get(code)
+    if (!row) throw apiError(404, 'NOT_FOUND', '找不到这张服务单。')
+    const body = await readBody(req)
+    return json(res, 200, setSettlementCoupon(row.id, String(body.grantId || ''), { by: 'customer' }))
   }
   // 签署快照(唯一凭证):COS 存的直接 302 过去,inline 的直接吐 SVG
   if (req.method === 'GET' && path.startsWith('/settlements/') && path.endsWith('/snapshot')) {
@@ -9574,7 +9884,19 @@ async function route(req, res) {
   }
   if (req.method === 'GET' && path === '/admin/customers') {
     if (adminSession.role !== 'owner') throw apiError(403, 'FORBIDDEN', 'Owner permission is required.')
-    return json(res, 200, { customers: getAdminCustomers() })
+    /* 2026-08-09 增量:?q= 按姓名/手机号过滤(C3 发券要「边输边出结果」)。
+       **搜索结果只留本店档案里的人** —— 旗舰店是默认租户,getAdminCustomers 对它不加活动过滤、
+       会把别家店的顾客也列出来;发券是写操作,搜出来点一下就发错店,所以这里按 users.tenant_id 收紧。
+       不带 q 的老路径一字不动(顾客页行为零变化)。 */
+    const q = String(query.q || '').trim().toLowerCase()
+    const all = getAdminCustomers()
+    if (!q) return json(res, 200, { customers: all })
+    const mine = new Set(db.prepare('SELECT id FROM users WHERE tenant_id = ?').all(currentTenantId()).map((r) => r.id))
+    const customers = all
+      .filter((c) => mine.has(c.id))
+      .filter((c) => `${c.displayName || ''}`.toLowerCase().includes(q) || `${c.phone || ''}`.includes(q))
+      .slice(0, 20)
+    return json(res, 200, { customers })
   }
   if (req.method === 'POST' && path === '/admin/finance/summary') {
     if (adminSession.role !== 'owner') throw apiError(403, 'FORBIDDEN', 'Owner permission is required.')
@@ -9677,6 +9999,15 @@ async function route(req, res) {
         ? db.prepare('SELECT * FROM settlements WHERE tenant_id = ? AND booking_id = ? ORDER BY rowid DESC').all(tid, query.bookingId)
         : db.prepare('SELECT * FROM settlements WHERE tenant_id = ? ORDER BY created_at DESC LIMIT 60').all(tid))
     return json(res, 200, { settlements: rows.map((r) => serializeSettlement(r)) })
+  }
+  // 店员在待签单上代选/更换/取消券(屏 C1 推送之后仍可改);签后一律拒绝
+  if (req.method === 'POST' && path.startsWith('/admin/settlements/') && path.endsWith('/coupon')) {
+    if (adminSession.role !== 'owner' && adminSession.role !== 'staff') throw apiError(403, 'FORBIDDEN', '需要员工或老板权限。')
+    const id = path.split('/')[3]
+    const row = db.prepare('SELECT id FROM settlements WHERE id = ? AND tenant_id = ?').get(id, currentTenantId())
+    if (!row) throw apiError(404, 'NOT_FOUND', '找不到这张服务单。')
+    const body = await readBody(req)
+    return json(res, 200, setSettlementCoupon(id, String(body.grantId || ''), { by: 'staff', actor: adminSession.email || 'staff' }))
   }
   if (req.method === 'POST' && path.startsWith('/admin/settlements/') && path.endsWith('/amend')) {
     if (adminSession.role !== 'owner') throw apiError(403, 'FORBIDDEN', '只有老板可以更正已签单据。')
@@ -10137,7 +10468,8 @@ async function route(req, res) {
   // ===== 优惠券 定义 CRUD =====
   if (req.method === 'GET' && path === '/admin/coupons') {
     if (adminSession.role !== 'owner') throw apiError(403, 'FORBIDDEN', 'Owner permission is required.')
-    return json(res, 200, { coupons: db.prepare('SELECT * FROM coupons WHERE tenant_id = ? ORDER BY created_at DESC').all(currentTenantId()).map(serializeCoupon) })
+    // 特批券是「自定义发放」当场生成的一次性券,不属于券模板 —— 不进模板列表
+    return json(res, 200, { coupons: db.prepare('SELECT * FROM coupons WHERE tenant_id = ? AND is_custom = 0 ORDER BY created_at DESC').all(currentTenantId()).map(serializeCoupon) })
   }
   if (req.method === 'POST' && path === '/admin/coupons') {
     if (adminSession.role !== 'owner') throw apiError(403, 'FORBIDDEN', 'Owner permission is required.')
@@ -10310,6 +10642,130 @@ async function route(req, res) {
       body.totalQty === undefined ? cur.total_qty : Math.max(0, Math.round(Number(body.totalQty) || 0)),
       body.isActive === undefined ? cur.is_active : (body.isActive ? 1 : 0), id)
     return json(res, 200, { coupon: serializeCoupon(db.prepare('SELECT * FROM coupons WHERE id = ?').get(id)) })
+  }
+
+  /* ===== 券板块「自定义发放」(2026-08-09,设计图屏 C3 + 规则⓪)=====
+     位置=商家后台券板块内,不放顾客档案。首版**仅老板可见可发**,员工端整区隐藏 +
+     后端一律 403(未来若加「员工限额发券」开关,默认关)。发放必填原因,落库发放人/时间/原因;
+     发放记录只追加,作废留痕(coupon_grants 与 coupon_grant_logs 都有禁删触发器)。 */
+  if (req.method === 'GET' && path === '/admin/coupon-grants') {
+    if (adminSession.role !== 'owner') throw apiError(403, 'FORBIDDEN', '发券与发放记录仅老板可用。')
+    const tid = currentTenantId()
+    const rows = db.prepare(`SELECT g.*, c.name, c.discount_type, c.amount_cents, c.percent_off, c.min_spend_cents,
+        c.scope_categories_json, c.is_custom, u.display_name AS user_name, u.phone AS user_phone
+      FROM coupon_grants g JOIN coupons c ON c.id = g.coupon_id LEFT JOIN users u ON u.id = g.user_id
+      WHERE g.tenant_id = ? ORDER BY g.created_at DESC LIMIT 300`).all(tid)
+    const catNames = {}
+    for (const c of db.prepare('SELECT id, name FROM service_categories WHERE tenant_id = ?').all(tid)) catNames[c.id] = c.name
+    const filtered = rows.filter((r) => (!query.kind || (r.grant_kind || 'template') === query.kind)
+      && (!query.status || r.status === query.status)
+      && (!query.userId || r.user_id === query.userId)
+      && (!query.grantedBy || (r.granted_by || '') === query.grantedBy))
+    return json(res, 200, {
+      currency: tenantCurrencyCode(tid),
+      currencyDisplay: currencyDisplayOf(tenantCurrencyCode(tid)),
+      grants: filtered.map((r) => {
+        const scope = couponScopeIds(r)
+        return {
+          id: r.id,
+          code: r.code,
+          couponId: r.coupon_id,
+          name: r.name,
+          grantKind: r.grant_kind || 'template',
+          isCustom: Boolean(r.is_custom),
+          discountType: r.discount_type,
+          amountCents: r.amount_cents,
+          percentOff: r.percent_off,
+          minSpendCents: r.min_spend_cents,
+          scopeCategoryIds: scope,
+          scopeText: scope.length ? scope.map((id) => catNames[id] || id).join('、') : '全部大类',
+          // 金额显示串后端给,前端不拼
+          valueText: r.discount_type === 'percent' ? `立减 ${r.percent_off}%` : formatMoneyCents(r.amount_cents, tid, 'auto'),
+          thresholdText: r.min_spend_cents ? `满 ${formatMoneyCents(r.min_spend_cents, tid, 'auto')}` : '无门槛',
+          userId: r.user_id,
+          userName: r.user_name || '',
+          userPhone: r.user_phone || '',
+          grantedBy: r.granted_by || '系统',
+          grantReason: r.grant_reason || '',
+          status: r.status,
+          settlementCode: r.settlement_code || '',
+          usedAt: r.used_at || null,
+          expiresAt: r.expires_at || null,
+          revokedAt: r.revoked_at || null,
+          revokeReason: r.revoke_reason || '',
+          createdAt: r.created_at,
+          logs: db.prepare('SELECT action, detail, settlement_code AS settlementCode, actor, created_at AS createdAt FROM coupon_grant_logs WHERE tenant_id = ? AND grant_id = ? ORDER BY created_at ASC').all(tid, r.id)
+        }
+      })
+    })
+  }
+  if (req.method === 'POST' && path === '/admin/coupon-grants/custom') {
+    if (adminSession.role !== 'owner') throw apiError(403, 'FORBIDDEN', '发券仅老板可用。')
+    const tid = currentTenantId()
+    const body = await readBody(req)
+    const user = db.prepare('SELECT id, display_name FROM users WHERE id = ? AND tenant_id = ?').get(String(body.userId || ''), tid)
+    if (!user) throw apiError(404, 'NOT_FOUND', '这位顾客不在本店档案里。')
+    const reason = String(body.reason || '').trim()
+    if (!reason) throw apiError(400, 'REASON_REQUIRED', '发放原因必填。')
+    const days = Math.min(365, Math.max(1, Math.round(Number(body.validDays) || 30)))
+    const now = iso(new Date())
+    const expiresAt = iso(new Date(Date.now() + days * 86400000))
+    const scope = Array.isArray(body.scopeCategoryIds) ? body.scopeCategoryIds.map(String).filter(Boolean) : []
+    for (const cid of scope) {
+      if (!db.prepare('SELECT 1 FROM service_categories WHERE id = ? AND tenant_id = ?').get(cid, tid)) {
+        throw apiError(400, 'BAD_REQUEST', '适用范围里有不属于本店的大类。')
+      }
+    }
+    let couponId = ''
+    let grantKind = 'custom'
+    if (body.mode === 'template') {
+      // 也可以直接把现有券模板发给指定顾客(同样记发放人 + 原因)
+      const tpl = db.prepare('SELECT * FROM coupons WHERE id = ? AND tenant_id = ?').get(String(body.couponId || ''), tid)
+      if (!tpl) throw apiError(404, 'NOT_FOUND', '券模板不存在。')
+      if (!tpl.is_active) throw apiError(400, 'BAD_REQUEST', '该券模板已停用。')
+      couponId = tpl.id
+      grantKind = 'template'
+      db.prepare('UPDATE coupons SET issued_qty = issued_qty + 1 WHERE id = ?').run(tpl.id)
+    } else {
+      const amountCents = Math.max(0, Math.round(Number(body.amountCents) || 0))
+      if (amountCents <= 0) throw apiError(400, 'BAD_REQUEST', '自定义券金额要大于 0。')
+      couponId = randomId('cpn')
+      // 特批券 = 一次性"模板",is_custom=1 → 不进券模板列表,避免把券模板区搞乱
+      db.prepare(`INSERT INTO coupons (id, tenant_id, name, discount_type, amount_cents, percent_off, min_spend_cents,
+        valid_days, total_qty, issued_qty, is_active, created_at, scope_categories_json, is_custom)
+        VALUES (?, ?, ?, 'amount', ?, 0, ?, ?, 1, 1, 1, ?, ?, 1)`).run(
+        couponId, tid,
+        String(body.name || '').trim().slice(0, 40) || `${formatMoneyCents(amountCents, tid, 'auto')} 特批券`,
+        amountCents, Math.max(0, Math.round(Number(body.minSpendCents) || 0)), days, now, JSON.stringify(scope))
+    }
+    const grantId = randomId('grant')
+    const code = `LL-${Math.random().toString(36).slice(2, 6).toUpperCase()}-${Math.random().toString(36).slice(2, 6).toUpperCase()}`
+    db.prepare(`INSERT INTO coupon_grants (id, tenant_id, coupon_id, user_id, code, status, expires_at, created_at,
+      grant_kind, granted_by, grant_reason) VALUES (?, ?, ?, ?, ?, 'active', ?, ?, ?, ?, ?)`)
+      .run(grantId, tid, couponId, user.id, code, expiresAt, now, grantKind, adminSession.email || 'owner', reason.slice(0, 200))
+    logCouponGrant({ tenantId: tid, grantId, action: 'granted', detail: `发给 ${user.display_name || user.id}。原因:${reason.slice(0, 120)}`, actor: adminSession.email || 'owner' })
+    const fresh = db.prepare('SELECT * FROM coupons WHERE id = ?').get(couponId)
+    return json(res, 201, {
+      granted: {
+        id: grantId, code, couponName: fresh.name, userName: user.display_name || '', expiresAt,
+        grantKind, valueText: formatMoneyCents(fresh.amount_cents, tid, 'auto')
+      }
+    })
+  }
+  if (req.method === 'POST' && path.startsWith('/admin/coupon-grants/') && path.endsWith('/revoke')) {
+    if (adminSession.role !== 'owner') throw apiError(403, 'FORBIDDEN', '作废券仅老板可用。')
+    const tid = currentTenantId()
+    const grantId = path.split('/')[3]
+    const grant = db.prepare('SELECT * FROM coupon_grants WHERE id = ? AND tenant_id = ?').get(grantId, tid)
+    if (!grant) throw apiError(404, 'NOT_FOUND', '这张券不存在。')
+    if (grant.status === 'used') throw apiError(400, 'ALREADY_USED', '已核销的券不能作废,要退请走金额更正链。')
+    const body = await readBody(req)
+    const reason = String(body.reason || '').trim()
+    if (!reason) throw apiError(400, 'REASON_REQUIRED', '作废原因必填。')
+    const now = iso(new Date())
+    db.prepare("UPDATE coupon_grants SET status = 'revoked', revoked_at = ?, revoke_reason = ? WHERE id = ?").run(now, reason.slice(0, 200), grantId)
+    logCouponGrant({ tenantId: tid, grantId, action: 'revoked', detail: reason.slice(0, 120), actor: adminSession.email || 'owner' })
+    return json(res, 200, { ok: true, revokedAt: now })
   }
   // ===== 平台超管端(platform.html):仅 OWNER_TOKEN 主钥匙可用 =====
   const isPlatform = () => {
@@ -11690,6 +12146,43 @@ async function route(req, res) {
     if (adminSession.role !== 'owner') throw apiError(403, 'FORBIDDEN', 'Owner permission is required.')
     materializeRecurringTransactions()
     return json(res, 200, { trend: financeTrend(query.granularity, query.periods, currentTenantId()) })
+  }
+  /* 月度券让利汇总(设计图 C3 末句「月度券让利合计(特批/系统)进财务」)。
+     口径 = 当月已签服务单上实际抵掉的券金额,按发放类型拆特批/系统两栏。
+     日期按门店时区归日(CLAUDE.md:所有「今天」按门店时区算)。 */
+  if (req.method === 'GET' && path === '/admin/finance/coupon-discounts') {
+    if (adminSession.role !== 'owner') throw apiError(403, 'FORBIDDEN', 'Owner permission is required.')
+    const tid = currentTenantId()
+    const month = /^\d{4}-\d{2}$/.test(String(query.month || '')) ? String(query.month) : todayOf(tid).slice(0, 7)
+    const tz = tenantTimezone(tid)
+    const rows = db.prepare(`SELECT s.code, s.signed_at, s.coupon_discount_cents, s.coupon_name, g.grant_kind, g.granted_by, g.grant_reason
+      FROM settlements s LEFT JOIN coupon_grants g ON g.id = s.coupon_grant_id
+      WHERE s.tenant_id = ? AND s.status = 'signed' AND s.coupon_discount_cents > 0 AND s.signed_at IS NOT NULL`).all(tid)
+      .filter((r) => localParts(r.signed_at, tz).date.slice(0, 7) === month)
+    const customCents = rows.filter((r) => (r.grant_kind || 'template') === 'custom').reduce((n, r) => n + r.coupon_discount_cents, 0)
+    const templateCents = rows.filter((r) => (r.grant_kind || 'template') !== 'custom').reduce((n, r) => n + r.coupon_discount_cents, 0)
+    return json(res, 200, {
+      month,
+      currency: tenantCurrencyCode(tid),
+      currencyDisplay: currencyDisplayOf(tenantCurrencyCode(tid)),
+      couponDiscounts: {
+        month,
+        count: rows.length,
+        totalCents: customCents + templateCents,
+        customCents,
+        templateCents,
+        rows: rows.map((r) => ({
+          code: r.code,
+          signedAt: r.signed_at,
+          date: localParts(r.signed_at, tz).date,
+          couponName: r.coupon_name || '',
+          grantKind: r.grant_kind || 'template',
+          grantedBy: r.granted_by || '系统',
+          grantReason: r.grant_reason || '',
+          discountCents: r.coupon_discount_cents
+        })).sort((a, b) => String(b.signedAt).localeCompare(String(a.signedAt)))
+      }
+    })
   }
   if (req.method === 'GET' && path === '/admin/finance/progress') {
     if (adminSession.role !== 'owner') throw apiError(403, 'FORBIDDEN', 'Owner permission is required.')
@@ -13532,6 +14025,60 @@ db.exec(`
   );
 `)
 
+/* ===== 结算单用券(2026-08-09,设计图《结算单用券》v3)=====
+   coupons / coupon_grants 是 P0 就有的老表 —— 新列一律走 try/catch ALTER,
+   只写进 CREATE TABLE 的话老库(含生产)根本没有这几列(CLAUDE.md 纪律 8)。
+     coupons.scope_categories_json  适用大类(空数组=全部大类)
+     coupons.is_custom              特批券:自定义发放时即时生成的一次性"模板",不进券模板列表
+     coupon_grants.grant_kind       template 系统/模板发放 · custom 老板特批
+     coupon_grants.granted_by/grant_reason  发放人与原因(特批必填)
+     coupon_grants.settlement_id/settlement_code  核销单号(签字那一刻才写)
+     coupon_grants.revoked_at/revoke_reason       作废留痕 */
+for (const column of ["scope_categories_json TEXT NOT NULL DEFAULT '[]'", 'is_custom INTEGER NOT NULL DEFAULT 0']) {
+  try {
+    db.exec(`ALTER TABLE coupons ADD COLUMN ${column}`)
+  } catch (error) {
+    if (!String(error.message || '').includes('duplicate column')) throw error
+  }
+}
+for (const column of [
+  "grant_kind TEXT NOT NULL DEFAULT 'template'", 'granted_by TEXT', 'grant_reason TEXT',
+  'settlement_id TEXT', 'settlement_code TEXT', 'revoked_at TEXT', 'revoke_reason TEXT'
+]) {
+  try {
+    db.exec(`ALTER TABLE coupon_grants ADD COLUMN ${column}`)
+  } catch (error) {
+    if (!String(error.message || '').includes('duplicate column')) throw error
+  }
+}
+/* 发放/核销/退回/作废的流水台账。设计图规则⓪:「记录只追加,作废留痕」——
+   靠触发器兜住,不靠人记纪律(和账本只追加同一套做法)。 */
+db.exec(`
+  CREATE TABLE IF NOT EXISTS coupon_grant_logs (
+    id TEXT PRIMARY KEY,
+    tenant_id TEXT NOT NULL,
+    grant_id TEXT NOT NULL,
+    action TEXT NOT NULL,
+    detail TEXT,
+    settlement_code TEXT,
+    actor TEXT,
+    created_at TEXT NOT NULL
+  );
+  CREATE INDEX IF NOT EXISTS idx_coupon_grant_logs ON coupon_grant_logs(tenant_id, grant_id);
+  DROP TRIGGER IF EXISTS coupon_grant_logs_no_delete;
+  CREATE TRIGGER coupon_grant_logs_no_delete BEFORE DELETE ON coupon_grant_logs
+  BEGIN SELECT RAISE(ABORT, 'coupon grant log is append-only'); END;
+  DROP TRIGGER IF EXISTS coupon_grants_no_delete;
+  CREATE TRIGGER coupon_grants_no_delete BEFORE DELETE ON coupon_grants
+  BEGIN SELECT RAISE(ABORT, 'coupon grant is append-only; revoke instead of delete'); END;
+`)
+
+function logCouponGrant({ tenantId, grantId, action, detail = '', settlementCode = null, actor = '' }) {
+  db.prepare(`INSERT INTO coupon_grant_logs (id, tenant_id, grant_id, action, detail, settlement_code, actor, created_at)
+    VALUES (?, ?, ?, ?, ?, ?, ?, ?)`)
+    .run(randomId('cglog'), tenantId, grantId, action, String(detail || '').slice(0, 300), settlementCode, String(actor || '').slice(0, 80), iso(new Date()))
+}
+
 function serializeMerchantLead(row) {
   return {
     id: row.id,
@@ -13574,6 +14121,9 @@ function serializeCoupon(row) {
     validDays: row.valid_days,
     totalQty: row.total_qty,
     issuedQty: row.issued_qty,
+    // 适用大类:空数组=全部大类(设计图 C3「适用范围」)
+    scopeCategoryIds: couponScopeIds(row),
+    isCustom: Boolean(row.is_custom),
     isActive: Boolean(row.is_active)
   }
 }
@@ -13777,6 +14327,13 @@ db.exec(`
     snapshot_inline TEXT,
     snapshot_storage TEXT,
     snapshot_at TEXT,
+    coupon_grant_id TEXT,
+    coupon_id TEXT,
+    coupon_name TEXT,
+    coupon_discount_cents INTEGER NOT NULL DEFAULT 0,
+    coupon_selected_by TEXT,
+    coupon_selected_at TEXT,
+    perf_base_cents INTEGER NOT NULL DEFAULT 0,
     created_by TEXT,
     created_at TEXT NOT NULL,
     updated_at TEXT NOT NULL
@@ -13845,13 +14402,25 @@ db.exec(`
    而 CREATE TABLE IF NOT EXISTS 对已存在的表什么也不做 ——
    凡是在加快照之前建好库的环境(含生产),settlements 表里根本没有这几列,
    一签字就 500(触发器里的 OLD.snapshot_at 先炸)。按纪律补 try/catch ALTER。 */
-for (const column of ['snapshot_url TEXT', 'snapshot_inline TEXT', 'snapshot_storage TEXT', 'snapshot_at TEXT']) {
+/* 2026-08-09 券抵扣:同样是老表加列,同样走 ALTER。
+   coupon_discount_cents 进恒等式(应收 ≡ 档位小计 − 定金 − 券);
+   perf_base_cents 是分成/业绩的基数,**券不进这个数**(设计图规则③:券是店铺让利,不扣技师)。 */
+for (const column of [
+  'snapshot_url TEXT', 'snapshot_inline TEXT', 'snapshot_storage TEXT', 'snapshot_at TEXT',
+  'coupon_grant_id TEXT', 'coupon_id TEXT', 'coupon_name TEXT',
+  'coupon_discount_cents INTEGER NOT NULL DEFAULT 0',
+  'coupon_selected_by TEXT', 'coupon_selected_at TEXT',
+  'perf_base_cents INTEGER NOT NULL DEFAULT 0'
+]) {
   try {
     db.exec(`ALTER TABLE settlements ADD COLUMN ${column}`)
   } catch (error) {
     if (!String(error.message || '').includes('duplicate column')) throw error
   }
 }
+/* 存量单回填分成基数:老单没有券,基数就是当时的应收 —— 逐分不变,
+   已确认日结的历史数字不会因为这次加列而变动。 */
+db.prepare('UPDATE settlements SET perf_base_cents = total_cents + coupon_discount_cents WHERE perf_base_cents = 0').run()
 // 已签单据永不修改:更正只能走 amendments。数据库层兜住,不靠人记纪律。
 db.exec(`
   DROP TRIGGER IF EXISTS settlements_signed_no_update;

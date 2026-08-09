@@ -4,7 +4,7 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>有迹 · 商家后台</title>
-    <link rel="stylesheet" href="/web/styles.css?v=20260809a-p2-final">
+    <link rel="stylesheet" href="/web/styles.css?v=20260809b-p2-coupon">
     <style>
       /* 2026-08-02 财务指标显隐+动效(店主 v4 定稿):AI智能总结卡 / 目标进度条(带平衡线刻度) / 设目标引导与弹窗。
          放这里不放 styles.css:本批约定只动 admin.js + admin.html 两个文件。 */
@@ -251,6 +251,18 @@
       #pricingPage input[type="checkbox"],#membershipSettingsBody input[type="checkbox"]{width:16px;height:16px;min-width:0;flex:none;margin:0;padding:0}
       #pricingPage .row-actions .pricing-sort{margin:0}
       #membershipSettingsBody .service-admin-item{display:flex;justify-content:space-between;align-items:center;gap:14px;flex-wrap:wrap}
+
+      /* ===== 屏 C3 券板块「自定义发放」(2026-08-09)===== */
+      .cpn-grant-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(220px,1fr));gap:12px;margin-bottom:14px}
+      .cpn-field{display:flex;flex-direction:column;gap:6px}
+      .cpn-field.wide{grid-column:1/-1}
+      .cpn-field>span{font-size:12px;color:#8c8279;font-weight:700}
+      .cpn-field input,.cpn-field select{border:1px solid #eadfd7;border-radius:10px;padding:9px 12px;font-size:14px;color:#241f1d;background:#fff}
+      .cpn-results{grid-column:1/-1;display:flex;flex-direction:column;gap:6px;max-height:180px;overflow:auto}
+      .cpn-hit{display:flex;align-items:center;gap:10px;border:1px solid #eadfd7;border-radius:10px;padding:8px 12px;font-size:13px;cursor:pointer;background:#fff}
+      .cpn-hit:hover{border-color:#d9bf9f}
+      .cpn-hit.on{border-color:#2f7d5c;background:#eef5f1;cursor:default}
+      .cpn-hit .subtle{margin-left:auto}
     </style>
   </head>
   <body>
@@ -564,8 +576,19 @@
                 <h2>优惠券</h2>
                 <button class="primary slim" id="addCouponButton" type="button">新增优惠券</button>
               </div>
-              <p class="subtle" style="margin:2px 0 10px">发券与到店核销在后续版本接入,这里先定义券。</p>
+              <p class="subtle" style="margin:2px 0 10px">券模板 = 券的定义(面额/门槛/有效期)。要发给某位顾客,用右下角「自定义发放」。</p>
               <div class="service-admin-list" id="couponAdminList"></div>
+            </section>
+            <!-- 屏 C3(2026-08-09):券板块内「自定义发放」+ 发放记录。整区仅老板可见,员工端隐藏且后端 403 -->
+            <section class="admin-card" id="couponGrantCard">
+              <div class="section-row compact-row">
+                <h2>自定义发放</h2>
+                <span class="subtle">仅老板可见 · 发放必填原因,记录只追加</span>
+              </div>
+              <div id="couponGrantForm"></div>
+              <h3 style="font-size:14px;margin:18px 0 8px">发放记录(审计,只追加不可删)</h3>
+              <div id="couponGrantFilters" class="section-row compact-row" style="gap:8px;flex-wrap:wrap"></div>
+              <div class="service-admin-list" id="couponGrantList"></div>
             </section>
             <section class="admin-card">
               <div class="section-row compact-row">
@@ -669,6 +692,16 @@
                 </div>
               </div>
               <div id="financeTrendBody"></div>
+            </section>
+            <!-- 2026-08-09:月度券让利汇总(特批 / 系统),跟随上方财务月份 -->
+            <section class="admin-card hidden" data-fin-panel="trend" id="couponDiscountPanel">
+              <div class="section-row compact-row">
+                <div>
+                  <h2>券让利(本月)</h2>
+                  <p class="subtle">已签服务单上实际抵掉的券金额,按发放类型拆「特批 / 系统」。口径 = 结算单用券,不含未核销的券。</p>
+                </div>
+              </div>
+              <div id="couponDiscountBody"></div>
             </section>
             <section class="admin-card finance-quick-card" data-fin-panel="quick">
               <div class="section-row compact-row">
@@ -842,6 +875,6 @@
     </main>
 
     <div class="toast" id="toast"></div>
-    <script src="/web/admin.js?v=20260809a-p2-final"></script>
+    <script src="/web/admin.js?v=20260809b-p2-coupon"></script>
   </body>
 </html>

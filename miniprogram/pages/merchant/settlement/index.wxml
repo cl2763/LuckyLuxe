@@ -86,6 +86,22 @@
         <view class="radio {{depositApplied ? '' : 'on'}}" data-v="0" bindtap="setDeposit"><view class="dt"></view>未付定金</view>
       </view>
       <view wx:else class="empty">本店定金不抵扣尾款（门店设置 → 定金与取消规则）</view>
+
+      <!-- 屏 C1：优惠券行，位置=定金行正下方。默认收起显示可用券数；点开=选券面板 -->
+      <view class="cpnline" bindtap="openCouponPanel">
+        <text class="l">优惠券</text>
+        <block wx:if="{{couponPicked}}">
+          <text class="v ok">{{couponPicked.name}} {{couponPicked.deductText}}</text>
+          <text class="arr">›</text>
+        </block>
+        <block wx:elif="{{couponUsableCount}}">
+          <text class="v">顾客有 {{couponUsableCount}} 张可用券</text>
+          <text class="arr">›</text>
+        </block>
+        <block wx:else>
+          <text class="v mut">无可用券</text>
+        </block>
+      </view>
     </view>
 
     <view class="card">
@@ -128,10 +144,34 @@
 
     <view class="total" wx:if="{{view}}">
       <view class="tl"><text>原价合计</text><text class="strike">{{view.listTotal}}</text></view>
-      <view class="tl"><text>项目小计</text><text>{{view.subtotal}}</text></view>
+      <view class="tl"><text>档位小计</text><text>{{view.subtotal}}</text></view>
       <view class="tl" wx:if="{{view.hasDeposit}}"><text>定金抵扣</text><text>−{{view.depositDeduct}}</text></view>
-      <view class="tl save"><text>较原价共优惠</text><text>{{view.discountTotal}}</text></view>
+      <view class="tl save" wx:if="{{view.hasCoupon}}"><text>优惠券 {{view.couponName}}</text><text>−{{view.couponDeduct}}</text></view>
+      <view class="tl save"><text>{{view.discountLabel}}</text><text>{{view.discountTotal}}</text></view>
       <view class="tl big"><text>应收合计</text><text>{{view.total}}</text></view>
+    </view>
+
+    <!-- 选券面板：可用在上，不可用置灰在下并写原因（金额与原因均由后端下发） -->
+    <view wx:if="{{couponPanel}}" class="cpnmask" bindtap="closeCouponPanel">
+      <view class="cpnsheet" catchtap="noop">
+        <view class="ch">选择优惠券 · {{customerName}}的券包</view>
+        <scroll-view class="cpnlist" scroll-y>
+          <view class="cpn {{o.usable ? '' : 'dis'}} {{couponGrantId === o.grantId ? 'on' : ''}}"
+                wx:for="{{couponOptions}}" wx:for-item="o" wx:key="grantId" data-id="{{o.grantId}}" bindtap="pickCoupon">
+            <view class="l">
+              <text class="n">{{o.name}}</text>
+              <text class="s">{{o.usable ? o.subtitle : o.reason}}</text>
+            </view>
+            <text wx:if="{{o.usable}}" class="d">{{o.deductText}}</text>
+            <view class="pick"></view>
+          </view>
+          <view class="cpn {{couponGrantId ? '' : 'on'}}" data-id="" bindtap="pickCoupon">
+            <view class="l"><text class="n">不使用优惠券</text><text class="s">本单不抵扣</text></view>
+            <view class="pick"></view>
+          </view>
+        </scroll-view>
+        <view class="cpnok" bindtap="closeCouponPanel">确定</view>
+      </view>
     </view>
 
     <view class="cta {{submitting ? 'ing' : ''}}" bindtap="submit">{{submitting ? '提交中…' : '推送给卡主签字'}}</view>

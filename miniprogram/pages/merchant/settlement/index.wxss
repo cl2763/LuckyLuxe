@@ -83,3 +83,26 @@
 .cta{margin-top:18rpx;background:#2d2826;color:#fff;text-align:center;padding:28rpx;border-radius:16rpx;font-size:30rpx;font-weight:800}
 .cta.ing{background:#8a7f78}
 .foot{margin-top:14rpx;text-align:center;font-size:21rpx;color:#b3a89c}
+
+/* 屏 C1 优惠券行 + 选券面板(2026-08-09)。金额与不可用原因全部来自后端,本页零算术。 */
+.cpnline{display:flex;align-items:center;justify-content:space-between;padding:18rpx 0 6rpx;border-top:1rpx solid #f2ebe3;margin-top:8rpx}
+.cpnline .l{font-size:26rpx;color:#5c4630}
+.cpnline .v{font-size:26rpx;font-weight:700;color:#241f1d;margin-left:auto}
+.cpnline .v.ok{color:#1f7a4d}
+.cpnline .v.mut{color:#b3a89c;font-weight:400}
+.cpnline .arr{color:#c8c0b2;font-size:26rpx;margin-left:10rpx}
+
+.cpnmask{position:fixed;left:0;right:0;top:0;bottom:0;background:rgba(35,30,28,.42);z-index:60;display:flex;align-items:flex-end}
+.cpnsheet{width:100%;background:#fff;border-radius:28rpx 28rpx 0 0;padding:24rpx 24rpx calc(24rpx + env(safe-area-inset-bottom))}
+.cpnlist{max-height:56vh}
+.cpn{display:flex;align-items:center;gap:12rpx;border:1rpx solid #e7ddd4;border-radius:16rpx;padding:18rpx;margin-bottom:12rpx;background:#fff}
+.cpn.on{border-color:#2f7d5c;background:#e9f2ec}
+.cpn.dis{opacity:.55}
+.cpn .l{flex:1}
+.cpn .n{font-size:27rpx;font-weight:700;color:#241f1d}
+.cpn .s{display:block;font-size:21rpx;color:#9a8c7c;margin-top:6rpx}
+.cpn.dis .s{color:#a8551f}
+.cpn .d{font-size:27rpx;font-weight:800;color:#1f7a4d;margin-right:8rpx}
+.cpn .pick{width:34rpx;height:34rpx;flex:none;border-radius:50%;border:3rpx solid #ded4ca}
+.cpn.on .pick{border-color:#2f7d5c;background:#2f7d5c;box-shadow:inset 0 0 0 6rpx #fff}
+.cpnok{margin-top:8rpx;background:#2d2826;color:#fff;text-align:center;padding:26rpx;border-radius:16rpx;font-size:29rpx;font-weight:800}

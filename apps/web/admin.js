@@ -1,5 +1,5 @@
 // 构建号:每次交付递增。侧栏可见,排查"改了没生效"时先对版本。
-const ADMIN_BUILD = '20260809a-p2-final'
+const ADMIN_BUILD = '20260809b-p2-coupon'
 console.log(`[admin] build ${ADMIN_BUILD}`)
 
 // "今天"必须按门店时区算,否则老板人在别的时区时全站日期错位一天。
@@ -128,6 +128,12 @@ const els = {
   membershipPage: document.querySelector('#membershipPage'),
   packageAdminList: document.querySelector('#packageAdminList'),
   couponAdminList: document.querySelector('#couponAdminList'),
+  couponGrantCard: document.querySelector('#couponGrantCard'),
+  couponGrantForm: document.querySelector('#couponGrantForm'),
+  couponGrantFilters: document.querySelector('#couponGrantFilters'),
+  couponGrantList: document.querySelector('#couponGrantList'),
+  couponDiscountPanel: document.querySelector('#couponDiscountPanel'),
+  couponDiscountBody: document.querySelector('#couponDiscountBody'),
   pointsPrizeList: document.querySelector('#pointsPrizeList'),
   customersPage: document.querySelector('#customersPage'),
   wechatMockPage: document.querySelector('#wechatMockPage'),
@@ -2496,7 +2502,7 @@ function renderDailyClose() {
       <div class="dc-alloc ${open ? '' : 'collapsed'}" data-alloc="${escapeHtml(p.settlementId)}">
         <div class="head" data-alloc-toggle="${escapeHtml(p.settlementId)}">
           <span>${escapeHtml(p.code)} ${escapeHtml(p.servedPersonName || p.customerName || '')} · ${p.technicians.length > 1 ? (zh ? '双技师' : 'Two techs') : (zh ? '单技师' : 'Single')}</span>
-          <span>${money(p.totalCents, 2)} <span class="arr">${open ? (zh ? '收起 ∧' : 'Hide ∧') : (zh ? '点开分配 ∨' : 'Open ∨')}</span></span>
+          <span>${money(p.perfBaseCents, 2)}${p.couponDiscountCents ? `<span class="subtle" style="margin-left:6px">${zh ? '业绩基数(不含券)' : 'perf base'}</span>` : ''} <span class="arr">${open ? (zh ? '收起 ∧' : 'Hide ∧') : (zh ? '点开分配 ∨' : 'Open ∨')}</span></span>
         </div>
         <div class="body">
           ${p.technicians.map((t, i) => `
@@ -2592,6 +2598,38 @@ async function loadFinanceTrend(granularity) {
   financeTrendState = { granularity: g, data: data.trend }
   document.querySelectorAll('#financeTrendTabs [data-trend-g]').forEach((b) => b.classList.toggle('active', b.dataset.trendG === g))
   renderFinanceTrend()
+  loadCouponDiscounts().catch(() => { /* 券让利卡拉不到不拖垮趋势页 */ })
+}
+
+/* 月度券让利汇总(设计图 C3 末句)。口径 = 当月已签服务单上实际抵掉的券金额,
+   按发放类型拆「特批 / 系统」。金额全是后端算好的,这里只显示。 */
+async function loadCouponDiscounts() {
+  const box = document.querySelector('#couponDiscountBody')
+  if (!box) return
+  const month = els.financeMonth?.value || ''
+  const data = await request(`/admin/finance/coupon-discounts${month ? `?month=${month}` : ''}`)
+  const d = data.couponDiscounts
+  // 币种格式用后端下发的 currencyDisplay,和其它页同一套映射
+  const fmt = data.currencyDisplay || { prefix: '<CODE> ', symbol: '$', trimZeroDecimals: false }
+  const money = (cents) => {
+    let text = (Math.round(cents || 0) / 100).toFixed(2)
+    if (fmt.trimZeroDecimals) text = text.replace(/\.00$/, '')
+    return `${String(fmt.prefix).replace('<CODE>', data.currency)}${fmt.symbol}${text}`
+  }
+  box.innerHTML = `
+    <div class="finance-metrics" style="margin-bottom:10px">
+      <div class="finance-metric"><span>券让利合计（${d.count} 张已核销）</span><strong>${money(d.totalCents)}</strong></div>
+      <div class="finance-metric"><span>特批券（老板逐张发放）</span><strong>${money(d.customCents)}</strong></div>
+      <div class="finance-metric"><span>系统 / 模板券</span><strong>${money(d.templateCents)}</strong></div>
+    </div>
+    ${d.rows.length ? `<table class="dc-sum"><thead><tr><th>日期</th><th>单号</th><th>券</th><th>类型</th><th>发放人 · 原因</th><th style="text-align:right">让利</th></tr></thead><tbody>
+      ${d.rows.map((r) => `<tr>
+        <td>${escapeHtml(r.date)}</td><td>${escapeHtml(r.code)}</td><td>${escapeHtml(r.couponName)}</td>
+        <td>${r.grantKind === 'custom' ? '特批' : '系统'}</td>
+        <td>${escapeHtml(r.grantedBy)}${r.grantReason ? ` · ${escapeHtml(r.grantReason)}` : ''}</td>
+        <td style="text-align:right">−${money(r.discountCents)}</td>
+      </tr>`).join('')}
+    </tbody></table>` : '<p class="subtle">本月还没有用券的已签单。</p>'}`
 }
 
 function renderFinanceTrend() {
@@ -7425,13 +7463,151 @@ let membershipData = { packages: [], coupons: [], prizes: [] }
 function mCents(v) { const n = Number(String(v).replace(/[^\d.]/g, '')); return Number.isFinite(n) ? Math.round(n * 100) : 0 }
 function mMoney(cents) { return '$' + (Math.round(cents || 0) / 100) }
 async function loadMembershipPage() {
-  const [p, c, z] = await Promise.all([
+  const [p, c, z, cat] = await Promise.all([
     request('/admin/packages'),
     request('/admin/coupons'),
-    request('/admin/points-prizes').catch(() => ({ prizes: [] })) // 2026-08-02 积分商城奖品(owner-only,失败不拖垮整页)
+    request('/admin/points-prizes').catch(() => ({ prizes: [] })), // 2026-08-02 积分商城奖品(owner-only,失败不拖垮整页)
+    request('/admin/pricing/categories').catch(() => ({ categories: [] })) // C3 发券的「适用范围」要按本店大类选
   ])
-  membershipData = { packages: p.packages || [], coupons: c.coupons || [], prizes: z.prizes || [] }
+  membershipData = { packages: p.packages || [], coupons: c.coupons || [], prizes: z.prizes || [], categories: cat.categories || [] }
+  // 屏 C3 自定义发放:整区仅老板;员工端连请求都不发(后端同样 403,不靠前端自觉)
+  couponGrantState.grants = isOwnerRole()
+    ? (await request('/admin/coupon-grants').catch(() => ({ grants: [] }))).grants || []
+    : []
   renderMembership()
+  renderCouponGrantSection()
+}
+
+/* ===== 屏 C3「自定义发放」(2026-08-09)=====
+   搜顾客 → 选中 → 填券(自定义金额 或 指定券模板)→ 原因必填 → 发放;下方即发放记录(审计)。
+   金额红线:本区只把「元」换算成「分」传给后端一次,券能抵多少、月度让利多少一律后端算。 */
+const couponGrantState = {
+  grants: [],
+  query: '',
+  results: [],
+  picked: null,
+  mode: 'custom',      // custom 自定义金额 | template 指定券模板
+  templateId: '',
+  amount: '',
+  minSpend: '',
+  scope: [],           // 空 = 全部大类
+  validDays: '30',
+  reason: '',
+  filterKind: '',
+  filterStatus: ''
+}
+
+function renderCouponGrantSection() {
+  if (!els.couponGrantCard) return
+  // 员工登录整区隐藏(设计图规则⓪:首版仅老板可见可发)
+  els.couponGrantCard.classList.toggle('hidden', !isOwnerRole())
+  if (!isOwnerRole()) return
+  const st = couponGrantState
+  const cats = membershipData.categories || []
+  const tpls = membershipData.coupons.filter((c) => c.isActive)
+  els.couponGrantForm.innerHTML = `
+    <div class="cpn-grant-grid">
+      <label class="cpn-field"><span>搜索顾客</span>
+        <input id="cpnGrantSearch" placeholder="姓名或手机号" value="${escapeHtml(st.query)}" autocomplete="off">
+      </label>
+      <div id="cpnGrantResults" class="cpn-results">${
+        st.picked
+          ? `<div class="cpn-hit on"><b>${escapeHtml(st.picked.displayName || '')}</b><span class="subtle">${escapeHtml(st.picked.phone || '')}</span><button class="ghost slim" data-cpn-unpick type="button">换一位</button></div>`
+          : (st.results.length
+            ? st.results.map((c) => `<div class="cpn-hit" data-cpn-pick="${escapeHtml(c.id)}"><b>${escapeHtml(c.displayName || '')}</b><span class="subtle">${escapeHtml(c.phone || '')}</span></div>`).join('')
+            : (st.query ? '<div class="subtle">没搜到这位顾客</div>' : '<div class="subtle">输入姓名或手机号找顾客</div>'))
+      }</div>
+      <div class="cpn-field"><span>发什么</span>
+        <div class="seg-toggle">
+          <button type="button" class="${st.mode === 'template' ? '' : 'on'}" data-cpn-mode="custom">自定义金额</button>
+          <button type="button" class="${st.mode === 'template' ? 'on' : ''}" data-cpn-mode="template">选券模板</button>
+        </div>
+      </div>
+      ${st.mode === 'template'
+        ? `<label class="cpn-field"><span>券模板</span>
+             <select id="cpnGrantTemplate">
+               <option value="">选择一张券模板</option>
+               ${tpls.map((c) => `<option value="${escapeHtml(c.id)}"${st.templateId === c.id ? ' selected' : ''}>${escapeHtml(c.name)}</option>`).join('')}
+             </select>
+           </label>`
+        : `<label class="cpn-field"><span>券面额</span><input id="cpnGrantAmount" placeholder="例:50" value="${escapeHtml(st.amount)}"></label>
+           <label class="cpn-field"><span>使用门槛(留空=无门槛)</span><input id="cpnGrantMin" placeholder="例:300" value="${escapeHtml(st.minSpend)}"></label>
+           <label class="cpn-field"><span>适用范围</span>
+             <select id="cpnGrantScope">
+               <option value="">全部大类</option>
+               ${cats.map((c) => `<option value="${escapeHtml(c.id)}"${st.scope[0] === c.id ? ' selected' : ''}>${escapeHtml(c.name)}</option>`).join('')}
+             </select>
+           </label>`}
+      <label class="cpn-field"><span>有效期(天)</span><input id="cpnGrantDays" value="${escapeHtml(st.validDays)}"></label>
+      <label class="cpn-field wide"><span>发放原因(必填)</span><input id="cpnGrantReason" placeholder="例:上次服务补偿" value="${escapeHtml(st.reason)}"></label>
+    </div>
+    <button class="primary" data-cpn-grant-submit type="button"${st.picked ? '' : ' disabled'}>确认发放${st.picked ? ` 给 ${escapeHtml(st.picked.displayName || '')}` : ''}</button>`
+
+  els.couponGrantFilters.innerHTML = `
+    ${[['', '全部'], ['custom', '特批'], ['template', '模板/系统']].map(([v, label]) =>
+      `<button class="ghost slim${st.filterKind === v ? ' active' : ''}" data-cpn-filter-kind="${v}" type="button">${label}</button>`).join('')}
+    ${[['', '全部状态'], ['active', '未使用'], ['used', '已核销'], ['revoked', '已作废'], ['expired', '已过期']].map(([v, label]) =>
+      `<button class="ghost slim${st.filterStatus === v ? ' active' : ''}" data-cpn-filter-status="${v}" type="button">${label}</button>`).join('')}`
+
+  const rows = st.grants.filter((g) => (!st.filterKind || g.grantKind === st.filterKind) && (!st.filterStatus || g.status === st.filterStatus))
+  const statusText = { active: '未使用', used: '已核销', revoked: '已作废', expired: '已过期' }
+  els.couponGrantList.innerHTML = rows.length ? rows.map((g) => `
+    <div class="service-admin-item">
+      <div>
+        <strong>${escapeHtml(g.name)}</strong>
+        <span class="subtle">${g.grantKind === 'custom' ? '特批' : '模板'} · ${escapeHtml(g.valueText)} · ${escapeHtml(g.thresholdText)} · ${escapeHtml(g.scopeText)}</span>
+        <div class="subtle">发给 ${escapeHtml(g.userName || g.userId)} · 发放人 ${escapeHtml(g.grantedBy)}${g.grantReason ? ` · ${escapeHtml(g.grantReason)}` : ''}</div>
+        <div class="subtle">${statusText[g.status] || g.status}${g.settlementCode ? ` · ${escapeHtml(g.settlementCode)}` : ''}${g.expiresAt ? ` · ${String(g.expiresAt).slice(0, 10)} 到期` : ''}${g.revokeReason ? ` · 作废原因:${escapeHtml(g.revokeReason)}` : ''}</div>
+      </div>
+      <div class="row-actions">
+        ${g.status === 'active' ? `<button class="ghost slim" data-cpn-revoke="${escapeHtml(g.id)}" type="button">作废</button>` : ''}
+      </div>
+    </div>`).join('') : '<div class="empty-state">还没有发放记录</div>'
+}
+
+// 元 → 分只在这一处换算(不是计价);后端拿到的就是分
+function cpnCents(value) {
+  const n = Number(String(value || '').replace(/[^\d.]/g, ''))
+  return Number.isFinite(n) ? Math.round(n * 100) : 0
+}
+
+async function searchCouponCustomers(q) {
+  couponGrantState.query = q
+  if (!q.trim()) { couponGrantState.results = []; return renderCouponGrantSection() }
+  try {
+    const data = await request(`/admin/customers?q=${encodeURIComponent(q.trim())}`)
+    couponGrantState.results = data.customers || []
+  } catch { couponGrantState.results = [] }
+  renderCouponGrantSection()
+}
+
+async function submitCouponGrant() {
+  const st = couponGrantState
+  if (!st.picked) return toast('先选一位顾客')
+  if (!st.reason.trim()) return toast('发放原因必填')
+  const body = {
+    userId: st.picked.id,
+    reason: st.reason.trim(),
+    validDays: Number(st.validDays) || 30
+  }
+  if (st.mode === 'template') {
+    if (!st.templateId) return toast('先选一张券模板')
+    body.mode = 'template'
+    body.couponId = st.templateId
+  } else {
+    body.amountCents = cpnCents(st.amount)
+    if (!body.amountCents) return toast('填一个大于 0 的券面额')
+    body.minSpendCents = cpnCents(st.minSpend)
+    body.scopeCategoryIds = st.scope.filter(Boolean)
+  }
+  try {
+    const res = await request('/admin/coupon-grants/custom', { method: 'POST', body: JSON.stringify(body) })
+    toast(`已发放:${res.granted.couponName} → ${res.granted.userName}`)
+    Object.assign(st, { amount: '', minSpend: '', reason: '', templateId: '', scope: [] })
+    await loadMembershipPage()
+  } catch (error) {
+    toast(error.message)
+  }
 }
 function renderMembership() {
   if (!els.packageAdminList) return
@@ -7610,9 +7786,68 @@ if (els.membershipPage) {
     if (cpnTog) {
       const c = membershipData.coupons.find((x) => x.id === cpnTog.dataset.cpnToggle)
       try { await request(`/admin/coupons/${c.id}`, { method: 'PATCH', body: JSON.stringify({ isActive: !c.isActive }) }); await loadMembershipPage() } catch (error) { toast(error.message) }
+      return
+    }
+
+    // ===== 屏 C3 自定义发放 =====
+    const cpnPick = event.target.closest('[data-cpn-pick]')
+    if (cpnPick) {
+      couponGrantState.picked = couponGrantState.results.find((c) => c.id === cpnPick.dataset.cpnPick) || null
+      return renderCouponGrantSection()
+    }
+    if (event.target.closest('[data-cpn-unpick]')) {
+      couponGrantState.picked = null
+      return renderCouponGrantSection()
+    }
+    const cpnMode = event.target.closest('[data-cpn-mode]')
+    if (cpnMode) {
+      couponGrantState.mode = cpnMode.dataset.cpnMode
+      return renderCouponGrantSection()
+    }
+    const cpnKind = event.target.closest('[data-cpn-filter-kind]')
+    if (cpnKind) {
+      couponGrantState.filterKind = cpnKind.dataset.cpnFilterKind
+      return renderCouponGrantSection()
+    }
+    const cpnStatus = event.target.closest('[data-cpn-filter-status]')
+    if (cpnStatus) {
+      couponGrantState.filterStatus = cpnStatus.dataset.cpnFilterStatus
+      return renderCouponGrantSection()
+    }
+    if (event.target.closest('[data-cpn-grant-submit]')) return submitCouponGrant()
+    const cpnRevoke = event.target.closest('[data-cpn-revoke]')
+    if (cpnRevoke) {
+      const reason = window.prompt('作废原因(必填,记录只追加不可删)')
+      if (!reason || !reason.trim()) return
+      try {
+        await request(`/admin/coupon-grants/${cpnRevoke.dataset.cpnRevoke}/revoke`, { method: 'POST', body: JSON.stringify({ reason: reason.trim() }) })
+        await loadMembershipPage()
+      } catch (error) { toast(error.message) }
     }
   })
+
+  // 发券表单是每次重画的,所以输入用事件委托记进 state,不然重画一次就清空
+  els.membershipPage?.addEventListener('input', (event) => {
+    const st = couponGrantState
+    const id = event.target.id
+    if (id === 'cpnGrantSearch') {
+      clearTimeout(couponSearchTimer)
+      const value = event.target.value
+      couponSearchTimer = setTimeout(() => searchCouponCustomers(value), 250)
+      st.query = value
+      return
+    }
+    if (id === 'cpnGrantAmount') st.amount = event.target.value
+    if (id === 'cpnGrantMin') st.minSpend = event.target.value
+    if (id === 'cpnGrantDays') st.validDays = event.target.value
+    if (id === 'cpnGrantReason') st.reason = event.target.value
+  })
+  els.membershipPage?.addEventListener('change', (event) => {
+    if (event.target.id === 'cpnGrantTemplate') couponGrantState.templateId = event.target.value
+    if (event.target.id === 'cpnGrantScope') couponGrantState.scope = event.target.value ? [event.target.value] : []
+  })
 }
+let couponSearchTimer = null
 initAdmin().catch((error) => toast(error.message))
 
 /* ===== 套餐与续费(网页版,2026-08-03;2026-08-04 并入「门店设置 → 当前套餐」)=====
