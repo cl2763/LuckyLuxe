@@ -546,6 +546,55 @@ for (const store of STORES) {
     return `今天 ${n} 条预约 · ${linked} 张结算单挂在预约上`
   })
 
+  /* ---------- ⑪ 更正单 + 售后单(2026-08-09 核验前置)----------
+     屏 1b「金额更正」和顾客端「更正 / 售后展示」这两屏,演示库里**一条样本都没有** ——
+     不铺的话打开就是空页,和 F2「渲染是好的、数据是空的」同一个坑。
+     更正走正规接口(已签单只追加 amendments,原单一分不改);售后单改订单状态。 */
+  const amendN = withDb((db) => db.prepare(
+    'SELECT COUNT(*) AS n FROM settlement_amendments a JOIN settlements s ON s.id = a.settlement_id WHERE s.tenant_id = ?'
+  ).get(tenantId).n)
+  if (amendN >= 2) log(`⑪ 更正单:已有 ${amendN} 条,跳过`)
+  else {
+    const signed = withDb((db) => db.prepare(
+      "SELECT id, code, total_cents FROM settlements WHERE tenant_id = ? AND status = 'signed' AND created_by = 'bigdemo' ORDER BY signed_at DESC LIMIT 2"
+    ).all(tenantId))
+    let made = 0
+    for (let i = 0; i < signed.length; i += 1) {
+      const st = signed[i]
+      // 一条少收(退给顾客)、一条多收(补收),两个方向都要有样本
+      const delta = i === 0 ? -2000 : 3000
+      try {
+        await api(tenantId, `/admin/settlements/${encodeURIComponent(st.id)}/amend`, {
+          method: 'POST',
+          body: JSON.stringify({
+            totalCents: Math.max(0, st.total_cents + delta),
+            reason: delta < 0 ? '技师少做了一项,退回差额' : '现场加了一个甲片,补收差额'
+          })
+        })
+        made += 1
+      } catch (e) { log(`   更正 ${st.code} 没成(${e.message.slice(0, 70)})`) }
+    }
+    if (made) log(`⑪ 更正单:补 ${made} 条(一少收一多收,原单只追加不改)`)
+  }
+  const afterN = withDb((db) => db.prepare("SELECT COUNT(*) AS n FROM bookings WHERE tenant_id = ? AND status = 'AFTER_SALES'").get(tenantId).n)
+  if (afterN >= 1) log(`⑪ 售后单:已有 ${afterN} 条,跳过`)
+  else {
+    const done = withDb((db) => db.prepare(
+      "SELECT b.id FROM bookings b WHERE b.tenant_id = ? AND b.status = 'COMPLETED' ORDER BY b.appointment_start DESC LIMIT 1"
+    ).get(tenantId))
+    if (done) {
+      try {
+        await api(tenantId, `/admin/bookings/${encodeURIComponent(done.id)}/status`, { method: 'PATCH', body: JSON.stringify({ status: 'AFTER_SALES' }) })
+        log('⑪ 售后单:补 1 条(已完成单转售后)')
+      } catch (e) { log(`   售后没转成(${e.message.slice(0, 70)})`) }
+    }
+  }
+  row.amend = withDb((db) => {
+    const a = db.prepare('SELECT COUNT(*) AS n FROM settlement_amendments a JOIN settlements s ON s.id = a.settlement_id WHERE s.tenant_id = ?').get(tenantId).n
+    const f = db.prepare("SELECT COUNT(*) AS n FROM bookings WHERE tenant_id = ? AND status = 'AFTER_SALES'").get(tenantId).n
+    return `${a} 条更正 · ${f} 条售后`
+  })
+
   // ---------- ⑨ 财务账本:6 个月有起伏的曲线 ----------
   const ledgerN = withDb((db) => db.prepare("SELECT COUNT(*) AS n FROM finance_transactions WHERE tenant_id = ? AND tags = 'bigdemo'").get(tenantId).n)
   if (ledgerN >= 30) log(`⑨ 财务曲线:已有 ${ledgerN} 条演示账目,跳过`)
