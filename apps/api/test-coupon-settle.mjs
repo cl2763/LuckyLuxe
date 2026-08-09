@@ -205,7 +205,12 @@ async function main() {
 
   // ---- ② 一单一张:同一张券不能再挂到第二张单 ----
   const dup = await request(`/admin/settlements/${sheet2.id}/coupon`, { method: 'POST', body: JSON.stringify({ grantId: grant300 }) }, shop.token)
-  check('② 一单一张:同一张券不能挂两张单', dup.status === 400 && dup.data.error.code === 'COUPON_ALREADY_USED', JSON.stringify(dup.data))
+  check('② 一单一张:同一张券不能挂两张单', dup.status === 400 && /一单一张/.test(dup.data.error.message), JSON.stringify(dup.data))
+
+  // 已挂在别的单上的券,在这张单的券包里就该是置灰的(而不是点下去才报错)
+  const packOnSheet2 = await request(`/settlements/${sheet2.code}`, {}, null)
+  const heldOpt = packOnSheet2.data.coupons.options.find((o) => o.grantId === grant300)
+  check('② 别的单占用中的券在面板上就置灰并写原因', heldOpt && heldOpt.usable === false && /一单一张/.test(heldOpt.reason), JSON.stringify(heldOpt && heldOpt.reason))
 
   // ---- ⑤ 签字前券一直是 active(退出/改单自动回券包)----
   const grantsMid = await request('/admin/coupon-grants', {}, shop.token)

@@ -7576,7 +7576,7 @@ function evaluateCouponGrant(grant, ctx) {
 }
 
 // 卡主券包里的全部券(可用在上、不可用在下并带原因),连同选中那张的抵扣额
-function couponOptionsFor({ tenantId, userId, subtotalCents, maxDeductCents, categoryIds, selectedGrantId = '' }) {
+function couponOptionsFor({ tenantId, userId, subtotalCents, maxDeductCents, categoryIds, selectedGrantId = '', excludeSettlementId = null }) {
   const out = { options: [], selectedGrantId: '', selected: null, discountCents: 0, usableCount: 0 }
   if (!userId) return out
   const now = iso(new Date())
@@ -7589,8 +7589,20 @@ function couponOptionsFor({ tenantId, userId, subtotalCents, maxDeductCents, cat
       c.scope_categories_json, c.is_active
     FROM coupon_grants g JOIN coupons c ON c.id = g.coupon_id
     WHERE g.tenant_id = ? AND g.user_id = ? ORDER BY g.created_at DESC`).all(tenantId, userId)
+  /* 已经挂在别的单上的券(那张单还没签,所以券还是 active)也要置灰 ——
+     否则要等点下去才报「一单一张」,不如在面板上就说清楚。 */
+  const heldElsewhere = {}
+  for (const h of db.prepare('SELECT id, code, coupon_grant_id FROM settlements WHERE tenant_id = ? AND coupon_grant_id IS NOT NULL').all(tenantId)) {
+    if (h.id !== excludeSettlementId) heldElsewhere[h.coupon_grant_id] = h.code
+  }
   const ctx = { tenantId, subtotalCents, maxDeductCents, categoryIds, categoryNames, now }
-  const evaluated = rows.map((r) => evaluateCouponGrant(r, ctx))
+  const evaluated = rows.map((r) => {
+    const one = evaluateCouponGrant(r, ctx)
+    if (one.usable && heldElsewhere[r.id]) {
+      return { ...one, usable: false, discountCents: 0, discountText: '', reason: `不可用:已用在服务单 ${heldElsewhere[r.id]} 上(一单一张)` }
+    }
+    return one
+  })
   // 已核销在别的单上的券不进券包列表(免得顾客以为还能选);本单选中的那张要留着
   const visible = evaluated.filter((e) => e.usable || e.grantId === selectedGrantId
     || !(rows.find((r) => r.id === e.grantId) || {}).settlement_id)
@@ -7646,7 +7658,8 @@ function settlementCouponOptions(row) {
     subtotalCents: row.subtotal_cents,
     maxDeductCents: Math.max(0, row.subtotal_cents - row.deposit_deduct_cents),
     categoryIds: settlementCategoryIds(row.id, row.tenant_id),
-    selectedGrantId: row.coupon_grant_id || ''
+    selectedGrantId: row.coupon_grant_id || '',
+    excludeSettlementId: row.id
   })
 }
 
@@ -7664,7 +7677,8 @@ function setSettlementCoupon(settlementId, grantId, { by = 'customer', actor = '
     subtotalCents: row.subtotal_cents,
     maxDeductCents: Math.max(0, row.subtotal_cents - row.deposit_deduct_cents),
     categoryIds: settlementCategoryIds(row.id, tenantId),
-    selectedGrantId: wanted
+    selectedGrantId: wanted,
+    excludeSettlementId: row.id
   })
   if (wanted) {
     if (!opts.selectedGrantId) {
