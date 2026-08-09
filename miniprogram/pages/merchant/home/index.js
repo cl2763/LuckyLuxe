@@ -48,7 +48,8 @@ Page({
         isOwner,
         myTechId: (me && me.technicianId) || '',
         roleLabel: isOwner ? '老板' : '员工',
-        greeting: isOwner ? '嗨,老板 👋' : `嗨,${(me && me.displayName) || '伙伴'} 👋`
+        // 昵称(店主 2026-08-10):老板位原来写死「嗨,老板」,昵称改了也不动 —— 现在两端都跟昵称走
+        greeting: `嗨,${(me && me.displayName) || (isOwner ? '老板' : '伙伴')} 👋`
       })
     } catch (e) { /* 未登录/超时:保持默认 */ }
 

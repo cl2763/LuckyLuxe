@@ -39,17 +39,18 @@ Page({
   editName() {
     const that = this
     wx.showModal({
-      title: '显示名称',
+      title: '昵称',
       editable: true,
-      placeholderText: '例如:悦容老板 / 小美',
+      placeholderText: '例如:悦容老板 / 小美(留空恢复默认)',
       content: this.data.displayName || '',
       success: async (res) => {
         if (!res.confirm) return
+        /* 昵称(店主 2026-08-10):**留空是正当操作** —— 交给后端回退默认(老板=店名、员工=技师名),
+           前端不再拦「不能为空」。超长截断与 emoji 也全在后端兜,这里不重复实现。 */
         const v = String(res.content || '').trim()
-        if (!v) { wx.showToast({ title: '不能为空', icon: 'none' }); return }
         try {
-          await api.adminRequest('/admin/auth/display-name', 'PATCH', { displayName: v })
-          wx.showToast({ title: '已更新', icon: 'success' })
+          const r = await api.adminRequest('/admin/auth/display-name', 'PATCH', { displayName: v })
+          wx.showToast({ title: r && r.isDefault ? '已恢复默认' : '已更新', icon: 'success' })
           that.load()
         } catch (err) {
           wx.showToast({ title: (err && err.message) || '保存失败', icon: 'none' })

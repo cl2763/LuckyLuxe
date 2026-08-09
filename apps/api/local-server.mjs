@@ -9998,10 +9998,15 @@ async function route(req, res) {
     const me = requireAdmin(req)
     if (!me.accountId) throw apiError(400, 'BAD_REQUEST', '演示 token 无法修改显示名,请用账号密码登录。')
     const body = await readBody(req)
-    const displayName = String(body.displayName || '').trim().slice(0, 20)
-    if (!displayName) throw apiError(400, 'BAD_REQUEST', '显示名不能为空。')
+    /* 昵称(店主 2026-08-10)。三条 corner case 在**后端**兜住,前端不重复实现:
+       ① 空 → 不报错,回退到默认(老板=店名,员工=技师名);清空昵称是正当操作,不是错误。
+       ② 超长 → 按**字符**截断(不是按字节),20 字;emoji 是多码元字符,用 [...str] 拆才不会切半个。
+       ③ emoji → 原样保留,不过滤。 */
+    const raw = String(body.displayName || '').trim()
+    const fallback = defaultDisplayNameFor(me)
+    const displayName = raw ? [...raw].slice(0, 20).join('') : fallback
     db.prepare('UPDATE admin_accounts SET display_name = ?, updated_at = ? WHERE id = ?').run(displayName, iso(new Date()), me.accountId)
-    return json(res, 200, { displayName })
+    return json(res, 200, { displayName, isDefault: !raw })
   }
   if (req.method === 'GET' && path.startsWith('/users/')) {
     // 隐私:必须登录,且只能查自己的资料(此前任意 id 可读,已修)
@@ -15012,6 +15017,17 @@ function serializeCoupon(row) {
     isCustom: Boolean(row.is_custom),
     isActive: Boolean(row.is_active)
   }
+}
+
+/* 昵称的默认值:老板回落到店名,员工回落到自己的技师名 —— 清空昵称不该变成空白一片。 */
+function defaultDisplayNameFor(me) {
+  const tid = me.tenantId || currentTenantId()
+  if (me.role === 'staff' && me.technicianId) {
+    const t = db.prepare('SELECT name FROM technicians WHERE id = ?').get(me.technicianId)
+    if (t && t.name) return t.name
+  }
+  const tenant = db.prepare('SELECT name FROM tenants WHERE id = ?').get(tid)
+  return (tenant && tenant.name) || '我的店铺'
 }
 
 function adminPasswordHash(username, password) {

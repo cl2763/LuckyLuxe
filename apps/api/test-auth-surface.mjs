@@ -161,6 +161,32 @@ async function main() {
   check('② 员工自己的接口照常可用(门禁没误伤员工端)', staffOk.status === 200 && staffOk.data.admin.role === 'staff',
     JSON.stringify(staffOk.data).slice(0, 140))
 
+  /* 昵称(店主 2026-08-10)。三条 corner case 在后端兜住,老板/员工都支持。 */
+  const nickOwner = await request('/admin/auth/display-name', { method: 'PATCH', body: JSON.stringify({ displayName: '悦容老板' }) }, shop.token)
+  check('昵称:老板能改', nickOwner.status === 200 && nickOwner.data.displayName === '悦容老板', JSON.stringify(nickOwner.data))
+  const nickStaff = await request('/admin/auth/display-name', { method: 'PATCH', body: JSON.stringify({ displayName: '小美' }) }, staffToken)
+  check('昵称:员工也能改自己的', nickStaff.status === 200 && nickStaff.data.displayName === '小美', JSON.stringify(nickStaff.data))
+  const nickEmoji = await request('/admin/auth/display-name', { method: 'PATCH', body: JSON.stringify({ displayName: '小美🌸✨' }) }, staffToken)
+  check('昵称 corner:emoji 原样保留', nickEmoji.data.displayName === '小美🌸✨', JSON.stringify(nickEmoji.data.displayName))
+  const longNick = '甲'.repeat(30)
+  const nickLong = await request('/admin/auth/display-name', { method: 'PATCH', body: JSON.stringify({ displayName: longNick }) }, staffToken)
+  check('昵称 corner:超长截到 20 字', [...nickLong.data.displayName].length === 20, String([...nickLong.data.displayName].length))
+  // emoji 是多码元字符,按字符截才不会切出半个乱码
+  const emojiLong = await request('/admin/auth/display-name', { method: 'PATCH', body: JSON.stringify({ displayName: '🌸'.repeat(30) }) }, staffToken)
+  check('昵称 corner:超长 emoji 按**字符**截,不切出半个乱码',
+    [...emojiLong.data.displayName].length === 20 && !emojiLong.data.displayName.includes('\uFFFD'),
+    JSON.stringify(emojiLong.data.displayName).slice(0, 80))
+  const nickEmpty = await request('/admin/auth/display-name', { method: 'PATCH', body: JSON.stringify({ displayName: '   ' }) }, staffToken)
+  check('昵称 corner:留空不报错,回退默认(员工=技师名)',
+    nickEmpty.status === 200 && nickEmpty.data.isDefault === true && nickEmpty.data.displayName === `技${RUN}`,
+    JSON.stringify(nickEmpty.data))
+  const nickEmptyOwner = await request('/admin/auth/display-name', { method: 'PATCH', body: JSON.stringify({ displayName: '' }) }, shop.token)
+  check('昵称 corner:老板留空回退店名', nickEmptyOwner.data.isDefault === true && nickEmptyOwner.data.displayName.includes('门禁店'),
+    JSON.stringify(nickEmptyOwner.data))
+  const meNick = await request('/admin/auth/me', {}, shop.token)
+  check('昵称:改完 /auth/me 立刻跟上(首页问候与管理页老板位都读它)',
+    meNick.data.admin.displayName === nickEmptyOwner.data.displayName, JSON.stringify(meNick.data.admin.displayName))
+
   /* ---- ③ 停用的员工账号立刻失效(不是等 token 自然过期)---- */
   const list = (await request('/admin/staff-accounts', {}, shop.token)).data.accounts || []
   const mine = list.find((a) => a.username === acct.username)
