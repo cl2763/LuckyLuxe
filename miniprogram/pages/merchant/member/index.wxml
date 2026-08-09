@@ -37,6 +37,38 @@
       </view>
     </view>
     <view wx:if="{{!coupons.length}}" class="empty">还没有优惠券</view>
+
+    <!-- 屏 C3 自定义发放(小程序老板版,与网页同布局:搜顾客 → 发放 → 记录) -->
+    <view class="gsec">自定义发放<text class="gsub">仅老板 · 原因必填,记录只追加</text></view>
+    <view class="gcard">
+      <view class="gline">
+        <input class="gin" placeholder="搜索顾客(姓名或手机号)" value="{{grantQuery}}" bindinput="onGrantSearch" />
+      </view>
+      <view wx:if="{{grantPicked}}" class="ghit on">
+        <text class="gn">{{grantPicked.displayName}}</text><text class="gp">{{grantPicked.phone}}</text>
+        <text class="gswap" bindtap="unpickGrant">换一位</text>
+      </view>
+      <block wx:else>
+        <view class="ghit" wx:for="{{grantResults}}" wx:key="id" data-id="{{item.id}}" bindtap="pickGrant">
+          <text class="gn">{{item.displayName}}</text><text class="gp">{{item.phone}}</text>
+        </view>
+        <view wx:if="{{grantQuery && !grantResults.length}}" class="empty">没搜到这位顾客</view>
+      </block>
+      <view wx:if="{{grantPicked}}" class="gbtns">
+        <view class="gbtn" bindtap="grantCustom">发自定义金额券</view>
+        <view class="gbtn ghost" bindtap="grantTemplate">发一张券模板</view>
+      </view>
+    </view>
+
+    <view class="gsec">发放记录<text class="gsub">审计 · 只追加不可删</text></view>
+    <view class="gcard">
+      <view class="grow" wx:for="{{grants}}" wx:key="id">
+        <view class="gr1"><text class="gname">{{item.name}}</text><text class="gkind {{item.grantKind === 'custom' ? 'sp' : ''}}">{{item.grantKind === 'custom' ? '特批' : '模板'}}</text><text class="gval">{{item.valueText}}</text></view>
+        <view class="gr2">发给 {{item.userName}} · {{item.grantedBy}}{{item.grantReason ? ' · ' + item.grantReason : ''}}</view>
+        <view class="gr2">{{item.statusText}}{{item.settlementCode ? ' · ' + item.settlementCode : ''}}</view>
+      </view>
+      <view wx:if="{{!grants.length}}" class="empty">还没有发放记录</view>
+    </view>
   </block>
 
   <view class="add" bindtap="add">＋ 新增{{segs[seg]}}</view>

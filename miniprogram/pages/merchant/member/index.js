@@ -5,7 +5,9 @@ Page({
     seg: 0,
     segs: ['充值套餐', '会员次卡', '优惠券'],
     recharges: [], timesCards: [], coupons: [],
-    customers: []
+    customers: [],
+    // 屏 C3 自定义发放(小程序老板版)
+    grantQuery: '', grantResults: [], grantPicked: null, grants: []
   },
 
   onLoad(opt) {
@@ -40,7 +42,84 @@ Page({
       }))
       const list = (cust.customers || []).slice().sort((a, b) => new Date(b.lastVisitAt || 0) - new Date(a.lastVisitAt || 0))
       this.setData({ recharges, timesCards, coupons, customers: list })
+      this.loadGrants()
     } catch (e) { /* ignore */ }
+  },
+
+  /* ===== 屏 C3 自定义发放(仅老板;员工端后端一律 403)===== */
+  async loadGrants() {
+    try {
+      const r = await api.adminGet('/admin/coupon-grants')
+      const st = { active: '未使用', used: '已核销', revoked: '已作废', expired: '已过期' }
+      this.setData({
+        grants: (r.grants || []).slice(0, 30).map((g) => Object.assign({}, g, { statusText: st[g.status] || g.status }))
+      })
+    } catch (e) { this.setData({ grants: [] }) }
+  },
+  onGrantSearch(e) {
+    const q = e.detail.value
+    this.setData({ grantQuery: q })
+    clearTimeout(this._gt)
+    this._gt = setTimeout(async () => {
+      if (!q.trim()) { this.setData({ grantResults: [] }); return }
+      try {
+        const r = await api.adminGet(`/admin/customers?q=${encodeURIComponent(q.trim())}`)
+        this.setData({ grantResults: (r.customers || []).slice(0, 8) })
+      } catch (err) { this.setData({ grantResults: [] }) }
+    }, 250)
+  },
+  pickGrant(e) {
+    const id = e.currentTarget.dataset.id
+    this.setData({ grantPicked: this.data.grantResults.find((c) => c.id === id) || null })
+  },
+  unpickGrant() { this.setData({ grantPicked: null, grantQuery: '', grantResults: [] }) },
+
+  ask(title, placeholder) {
+    return new Promise((resolve) => {
+      wx.showModal({
+        title, editable: true, placeholderText: placeholder, content: '',
+        success: (r) => resolve(r.confirm ? (r.content || '').trim() : null)
+      })
+    })
+  },
+  async grantCustom() {
+    const amount = await this.ask('券面额', '例:50')
+    if (amount === null) return
+    const cents = Math.round(Number(String(amount).replace(/[^\d.]/g, '')) * 100)
+    if (!Number.isFinite(cents) || cents <= 0) { wx.showToast({ title: '金额不对', icon: 'none' }); return }
+    const min = await this.ask('使用门槛(留空=无门槛)', '例:300')
+    if (min === null) return
+    const reason = await this.ask('发放原因(必填)', '例:上次服务补偿')
+    if (reason === null) return
+    if (!reason) { wx.showToast({ title: '发放原因必填', icon: 'none' }); return }
+    this.doGrant({
+      userId: this.data.grantPicked.id, amountCents: cents,
+      minSpendCents: Math.max(0, Math.round(Number(String(min).replace(/[^\d.]/g, '')) * 100) || 0),
+      validDays: 30, reason
+    })
+  },
+  async grantTemplate() {
+    const actives = this.data.coupons.filter((c) => c.active)
+    if (!actives.length) { wx.showToast({ title: '还没有可用的券模板', icon: 'none' }); return }
+    wx.showActionSheet({
+      itemList: actives.map((c) => c.name).slice(0, 6),
+      success: async (r) => {
+        const tpl = actives[r.tapIndex]
+        if (!tpl) return
+        const reason = await this.ask('发放原因(必填)', '例:充值¥1000档赠送')
+        if (reason === null) return
+        if (!reason) { wx.showToast({ title: '发放原因必填', icon: 'none' }); return }
+        this.doGrant({ userId: this.data.grantPicked.id, mode: 'template', couponId: tpl.id, validDays: 90, reason })
+      }
+    })
+  },
+  async doGrant(body) {
+    try {
+      const r = await api.adminPost('/admin/coupon-grants/custom', body)
+      wx.showToast({ title: `已发给 ${r.granted.userName}`, icon: 'none' })
+      this.unpickGrant()
+      this.loadGrants()
+    } catch (e) { wx.showToast({ title: (e && e.message) || '发放失败', icon: 'none' }) }
   },
 
   onSeg(e) { this.setData({ seg: Number(e.currentTarget.dataset.i) }) },

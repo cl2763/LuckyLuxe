@@ -187,11 +187,20 @@ Page(Object.assign({
       url: `/pages/merchant/settlement/index?bookingId=${encodeURIComponent(b.id)}&userId=${encodeURIComponent(b.userId)}&name=${encodeURIComponent(b.customerName || '')}&serviceId=${encodeURIComponent(b.serviceId || '')}`
     })
   },
+  // 顾客签署页(裁决③:web-view 包 /sign);店员当面递手机给顾客签也走这里
+  openSign(code) { wx.navigateTo({ url: `/pages/sign/index?code=${encodeURIComponent(code)}` }) },
   showSheets(sheets) {
-    const zh = { pending_sign: '待签', signed: '已签', amended: '已更正' }
+    const zh = { pending_sign: '待签', signed: '已签', amended: '已更正', voided: '已撤回' }
+    const live = sheets.filter((s) => s.status !== 'voided')
+    const pending = live.filter((s) => s.status === 'pending_sign')
+    // 有待签的就直接把签署页递到顾客手上(裁决③:web-view 包 /sign,与网页同一份)
+    if (pending.length === 1) { this.openSign(pending[0].code); return }
     wx.showModal({
-      title: `结算单 ${sheets.length} 张`, showCancel: false, confirmText: '知道了',
-      content: sheets.map((s) => `${s.code} · ${zh[s.status] || s.status}${s.servedPersonName ? ` · ${s.servedPersonName}` : ''}`).join('\n')
+      title: `结算单 ${live.length} 张`,
+      confirmText: pending.length ? '去签第一张' : '知道了',
+      showCancel: Boolean(pending.length),
+      content: live.map((s) => `${s.code} · ${zh[s.status] || s.status}${s.servedPersonName ? ` · ${s.servedPersonName}` : ''}`).join('\n'),
+      success: (r) => { if (r.confirm && pending.length) this.openSign(pending[0].code) }
     })
   },
   applyStatus(id, s) {

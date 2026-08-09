@@ -2,6 +2,7 @@
   "entryPagePath": "pages/entry/index",
   "pages": [
     "pages/entry/index",
+    "pages/sign/index",
     "pages/merchant-login/index",
     "pages/merchant-change-password/index",
     "pages/merchant-forgot/index",
