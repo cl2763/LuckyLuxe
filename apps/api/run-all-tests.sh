@@ -12,7 +12,23 @@ export TEST_DB_PATH="$DATA_DIR/lucky-luxe.sqlite"  # finance-core 直连库验�
 echo "== 测试数据目录: $DATA_DIR =="
 
 cleanup() { pkill -f "local-server.mjs" 2>/dev/null || true; }
-finish() { cleanup; [ -n "${DATA_DIR:-}" ] && rm -rf "$DATA_DIR"; }
+
+# 🔴 2026-08-09 拆脚枪:回归会 pkill 掉**店主正在用的本地服务**(4128),跑完不还回去 ——
+# 店主再打开小程序就是"每个接口都连不上"的空壳,看起来像登录坏了。真相是后端被测试打死了。
+# 现在:开跑前记下本地服务在不在,跑完自动拉回来(用真实 local-data,不是测试临时库)。
+LOCAL_WAS_UP=0
+if curl -sf -o /dev/null --max-time 2 "http://127.0.0.1:4128/health"; then LOCAL_WAS_UP=1; fi
+restore_local() {
+  [ "$LOCAL_WAS_UP" = "1" ] || return 0
+  curl -sf -o /dev/null --max-time 2 "http://127.0.0.1:4128/health" && return 0
+  ( cd "$(dirname "$0")" && PORT=4128 DATA_DIR="./local-data" TEST_DB_PATH= nohup node local-server.mjs > /tmp/ll-local-restored.log 2>&1 & )
+  for _ in $(seq 1 20); do
+    curl -sf -o /dev/null --max-time 2 "http://127.0.0.1:4128/health" && { echo "== 已把店主的本地服务(4128)重新拉起来 =="; return 0; }
+    sleep 0.5
+  done
+  echo "!! 本地服务没拉回来,店主要用的话请双击 启动服务器.command" >&2
+}
+finish() { cleanup; [ -n "${DATA_DIR:-}" ] && rm -rf "$DATA_DIR"; restore_local; }
 trap finish EXIT
 cleanup; sleep 1
 
