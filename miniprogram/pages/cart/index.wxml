@@ -22,8 +22,8 @@
                 <text>{{item.service.duration}}{{t.minutes}}</text>
               </view>
               <view class="cart-meta">
-                <text>{{t.deposit}} <text class="price">CAD ${{item.service.depositAmount}}</text></text>
-                <text>{{t.servicePrice}} CAD ${{item.service.price}}</text>
+                <text>{{t.deposit}} <text class="price">{{cur.p}}{{cur.s}}{{item.service.depositAmount}}</text></text>
+                <text>{{t.servicePrice}} {{cur.p}}{{cur.s}}{{item.service.price}}</text>
               </view>
             </view>
           </view>
@@ -49,7 +49,7 @@
     </button>
     <view class="bottom-fill">
       <view class="muted">{{t.totalDeposit}}</view>
-      <view class="price">CAD ${{totalDeposit}}</view>
+      <view class="price">{{cur.p}}{{cur.s}}{{totalDeposit}}</view>
     </view>
     <button class="btn btn-primary checkout-btn" bindtap="goCheckout">{{t.checkout}}</button>
   </view>

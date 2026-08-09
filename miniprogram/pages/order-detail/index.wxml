@@ -45,15 +45,15 @@
     <view class="info-card card">
       <view class="info-row">
         <text>服务总价</text>
-        <text>CAD ${{order.servicePrice}}</text>
+        <text>{{cur.p}}{{cur.s}}{{order.servicePrice}}</text>
       </view>
       <view class="info-row">
         <text>定金(线上已付)</text>
-        <text class="price">CAD ${{order.payableAmount}}</text>
+        <text class="price">{{cur.p}}{{cur.s}}{{order.payableAmount}}</text>
       </view>
       <view wx:if="{{order.balanceDeduction}}" class="info-row">
         <text>储值抵扣</text>
-        <text>-CAD ${{order.balanceDeduction}}</text>
+        <text>-{{cur.p}}{{cur.s}}{{order.balanceDeduction}}</text>
       </view>
       <view wx:if="{{order.status === 'completed'}}" class="info-row">
         <text>到店尾款</text>
@@ -61,7 +61,7 @@
       </view>
       <view wx:else class="info-row">
         <text>到店应付</text>
-        <text class="price">CAD ${{order.finalDue}}</text>
+        <text class="price">{{cur.p}}{{cur.s}}{{order.finalDue}}</text>
       </view>
     </view>
   </view>

@@ -24,7 +24,7 @@
     </view>
     <view class="summary-row">
       <text>{{t.paidDeposit}}</text>
-      <text class="price">CAD ${{order.payableAmount}}</text>
+      <text class="price">{{cur.p}}{{cur.s}}{{order.payableAmount}}</text>
     </view>
   </view>
 

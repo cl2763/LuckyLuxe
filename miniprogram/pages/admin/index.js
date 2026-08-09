@@ -1,4 +1,5 @@
 const api = require('../../utils/api')
+const { curOf, ensureCurrencyCached } = require('../../utils/storecurrency')
 const i18n = require('../../utils/i18n')
 
 function isToday(dateText) {
@@ -24,6 +25,9 @@ Page({
   },
 
   onShow() {
+    ensureCurrencyCached()
+    this.setData({ cur: curOf() })   // 币种跟门店走,不写死币符
+
     const lang = i18n.getLang()
     this.setData({ lang })
     wx.setNavigationBarTitle({ title: lang === 'en' ? 'Youji Admin' : '有迹后台' })

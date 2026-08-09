@@ -63,7 +63,7 @@
           </view>
           <view class="tech-stats">
             <text>{{item.count}}{{lang === 'en' ? ' orders' : '单'}}</text>
-            <text>CAD ${{item.revenue}}</text>
+            <text>{{cur.p}}{{cur.s}}{{item.revenue}}</text>
           </view>
         </view>
       </block>
@@ -74,7 +74,7 @@
         <view class="service-row card">
           <view>
             <view class="tech-name">{{item.name}}</view>
-            <view class="booking-meta">{{item.type}} · CAD ${{item.price}} · {{item.durationMin}} min</view>
+            <view class="booking-meta">{{item.type}} · {{cur.p}}{{cur.s}}{{item.price}} · {{item.durationMin}} min</view>
           </view>
           <view class="status-pill">{{item.isActive ? (lang === 'en' ? 'Live' : '上架') : (lang === 'en' ? 'Hidden' : '隐藏')}}</view>
         </view>

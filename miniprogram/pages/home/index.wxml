@@ -74,7 +74,7 @@
           <image class="recommend-visual" src="{{item.image}}" mode="aspectFill"></image>
           <view class="recommend-name">{{item.name}}</view>
           <view class="recommend-meta">
-            <text class="price">CAD ${{item.price}}</text>
+            <text class="price">{{cur.p}}{{cur.s}}{{item.price}}</text>
             <text>{{item.duration}}{{t.minutes}}</text>
           </view>
         </view>
@@ -93,7 +93,7 @@
           <image class="recommend-visual" src="{{item.image}}" mode="aspectFill"></image>
           <view class="recommend-name">{{item.name}}</view>
           <view class="recommend-meta">
-            <text class="price">CAD ${{item.price}}</text>
+            <text class="price">{{cur.p}}{{cur.s}}{{item.price}}</text>
             <text>{{item.duration}}{{t.minutes}}</text>
           </view>
         </view>

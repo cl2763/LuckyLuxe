@@ -1,4 +1,5 @@
 const mock = require('../../utils/mock-data')
+const { curOf, ensureCurrencyCached } = require('../../utils/storecurrency')
 const storage = require('../../utils/storage')
 const i18n = require('../../utils/i18n')
 const api = require('../../utils/api')
@@ -16,6 +17,9 @@ Page({
   },
 
   onShow() {
+    ensureCurrencyCached()
+    this.setData({ cur: curOf() })   // 币种跟门店走,不写死 ${curOf().p}${curOf().s}
+
     if (this.serviceId) this.refresh()
   },
 
@@ -30,8 +34,8 @@ Page({
     }
     const isNail = service.type === 'nail'
     service.priceLabel = lang === 'en'
-      ? (service.priceLabelEn || `${isNail ? 'Base price' : 'Fixed price'} CAD $${service.price}`)
-      : (service.priceLabelZh || `${isNail ? '基础价' : '固定价'} CAD $${service.price}`)
+      ? (service.priceLabelEn || `${isNail ? 'Base price' : 'Fixed price'} ${curOf().p}${curOf().s}${service.price}`)
+      : (service.priceLabelZh || `${isNail ? '基础价' : '固定价'} ${curOf().p}${curOf().s}${service.price}`)
     service.quoteHint = lang === 'en'
       ? (service.quoteHintEn || (isNail ? 'Contact us for a detailed quote' : 'Confirmed add-ons make the final quote'))
       : (service.quoteHintZh || (isNail ? '详细价格请联系客服获取报价' : '加项确认后即为最终报价'))

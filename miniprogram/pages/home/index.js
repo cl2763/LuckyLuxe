@@ -1,4 +1,5 @@
 const mock = require('../../utils/mock-data')
+const { curOf, ensureCurrencyCached } = require('../../utils/storecurrency')
 const i18n = require('../../utils/i18n')
 const api = require('../../utils/api')
 const storage = require('../../utils/storage')
@@ -26,6 +27,9 @@ Page({
   },
 
   onShow() {
+    ensureCurrencyCached()
+    this.setData({ cur: curOf() })   // 币种跟门店走,不写死币符
+
     // 多租户兜底:既没扫店码、也没进过任何店 → 引导选择门店
     if (!wx.getStorageSync('lucky_tenant')) {
       wx.navigateTo({ url: '/pages/shop-select/index' })

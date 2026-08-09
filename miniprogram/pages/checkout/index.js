@@ -1,9 +1,14 @@
 const mock = require('../../utils/mock-data')
+const { curOf, ensureCurrencyCached } = require('../../utils/storecurrency')
 const storage = require('../../utils/storage')
 const i18n = require('../../utils/i18n')
 const api = require('../../utils/api')
 
 Page({
+  onShow() {
+    ensureCurrencyCached()
+    this.setData({ cur: curOf() })   // 币种跟门店走,不写死币符
+  },
   data: {
     items: [],
     lang: 'zh',

@@ -1,4 +1,5 @@
 const mock = require('../../utils/mock-data')
+const { curOf, ensureCurrencyCached } = require('../../utils/storecurrency')
 const i18n = require('../../utils/i18n')
 const api = require('../../utils/api')
 const tabbar = require('../../utils/tabbar')
@@ -14,6 +15,9 @@ Page({
   },
 
   onShow() {
+    ensureCurrencyCached()
+    this.setData({ cur: curOf() })   // 币种跟门店走,不写死币符
+
     tabbar.update(this, 1)
     const lang = i18n.getLang()
     i18n.applyTabBar(lang)

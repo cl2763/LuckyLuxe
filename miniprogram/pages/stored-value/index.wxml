@@ -1,7 +1,7 @@
 <view class="pg">
   <view class="hero">
     <view class="row"><text class="hl">储值余额</text><text class="lv" wx:if="{{level}}">{{level}}</text></view>
-    <view class="hv">CAD ${{balance}}</view>
+    <view class="hv">{{cur.p}}{{cur.s}}{{balance}}</view>
     <view class="charge" bindtap="soon">在线充值(微信支付)</view>
   </view>
 

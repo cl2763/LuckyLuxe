@@ -10,7 +10,7 @@
     <image class="mini-visual" src="{{service.image}}" mode="aspectFill"></image>
     <view class="booking-service-info">
       <view class="service-name">{{service.name}}</view>
-      <view class="muted">{{service.duration}}{{t.minutes}} · {{t.deposit}} CAD ${{service.depositAmount}}</view>
+      <view class="muted">{{service.duration}}{{t.minutes}} · {{t.deposit}} {{cur.p}}{{cur.s}}{{service.depositAmount}}</view>
     </view>
   </view>
 
@@ -60,7 +60,7 @@
       <block wx:for="{{addOns}}" wx:key="id">
         <button class="addon card {{item.checked ? 'active' : ''}}" bindtap="toggleAddon" data-id="{{item.id}}">
           <text>{{item.name}}</text>
-          <text class="muted">+CAD ${{item.price}}</text>
+          <text class="muted">+{{cur.p}}{{cur.s}}{{item.price}}</text>
         </button>
       </block>
     </view>
@@ -112,7 +112,7 @@
   <view class="bottom-bar">
     <view class="summary">
       <text class="muted">{{t.requiredDeposit}}</text>
-      <text class="price">CAD ${{service.depositAmount}}</text>
+      <text class="price">{{cur.p}}{{cur.s}}{{service.depositAmount}}</text>
     </view>
     <button class="btn btn-ghost" bindtap="addToCart">{{cartId ? t.save : t.addToCart}}</button>
     <button class="btn btn-primary" bindtap="checkoutNow">{{t.checkout}}</button>

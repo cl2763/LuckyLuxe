@@ -115,7 +115,7 @@ Page({
       success: async (r) => {
         const tpl = actives[r.tapIndex]
         if (!tpl) return
-        const reason = await this.ask('发放原因(必填)', '例:充值¥1000档赠送')
+        const reason = await this.ask('发放原因(必填)', '例:充值 1000 档赠送')
         if (reason === null) return
         if (!reason) { wx.showToast({ title: '发放原因必填', icon: 'none' }); return }
         this.doGrant({ userId: this.data.grantPicked.id, mode: 'template', couponId: tpl.id, validDays: 90, reason })

@@ -83,7 +83,7 @@ const copy = {
     lifetimeSpend: '累计消费',
     depositRule: '定金规则',
     depositWaived: '预约免定金',
-    depositRequired: '预约需支付 CAD $50 定金',
+    depositRequired: `预约需支付 ${moneyY(50)} 定金`,
     upgradeGift: '升级礼包',
     currentTier: '当前等级',
     memberCode: '会员码',
@@ -236,7 +236,7 @@ const copy = {
     lifetimeSpend: 'Lifetime spend',
     depositRule: 'Deposit rule',
     depositWaived: 'Deposit waived',
-    depositRequired: 'CAD $50 booking deposit required',
+    depositRequired: `${moneyY(50)} booking deposit required`,
     upgradeGift: 'Upgrade gift',
     currentTier: 'Current tier',
     memberCode: 'Member Code',
@@ -390,9 +390,21 @@ function t(key) {
   return copy[state.lang][key] || key
 }
 
-function money(cents) {
-  return `CAD $${Number(cents / 100).toFixed(0)}`
+/* 门店币种(店主 2026-08-10 红线修复)。原来币符写死在代码里 —— 境内 ¥ 店的顾客
+   在网页端看到的每个价格币种都是错的,和小程序顾客端同一个病。
+   现在跟 /stores 下发的 currencyDisplay 走,与小程序两端、网页老板端同一套映射表。
+   金额红线不变:这里一分钱都不算,只拼字符串。 */
+const CUR = { prefix: '', symbol: '', code: '', trimZeroDecimals: false }
+function curPrefix() {
+  return `${String(CUR.prefix || '').replace('<CODE>', CUR.code || '')}${CUR.symbol || ''}`
 }
+function money(cents, decimals) {
+  const n = Number(cents || 0) / 100
+  const d = decimals === undefined ? (CUR.trimZeroDecimals ? 0 : 0) : decimals
+  return `${curPrefix()}${n.toFixed(d)}`
+}
+// 已经是「元」的数字(会员门槛、定金这类文案里是元不是分)
+function moneyY(amount) { return `${curPrefix()}${Number(amount || 0)}` }
 
 function isNailService(service) {
   return String(service?.type || '').toLowerCase() === 'nail'
@@ -476,7 +488,7 @@ function memberTierInfo(user = state.user) {
     amountToNext,
     progress: nextValue ? Math.min(100, Math.round((spend / nextValue) * 100)) : 100,
     note: nextTier
-      ? (state.lang === 'zh' ? `距离 ${nextTier.label} 还差 CAD $${amountToNext}` : `CAD $${amountToNext} to ${nextTier.label}`)
+      ? (state.lang === 'zh' ? `距离 ${nextTier.label} 还差 ${moneyY(amountToNext)}` : `${moneyY(amountToNext)} to ${nextTier.label}`)
       : (state.lang === 'zh' ? '已达到最高等级，预约定金减免已生效。' : 'Highest tier reached. Deposit waiver is active.')
   }
 }
@@ -484,13 +496,13 @@ function memberTierInfo(user = state.user) {
 function tierBenefits(tier) {
   const benefits = {
     zh: {
-      silver: ['会员档案与订单留存', '服务后护理提醒', '累计消费计入成长值', '预约需支付 CAD $50 定金'],
+      silver: ['会员档案与订单留存', '服务后护理提醒', '累计消费计入成长值', `预约需支付 ${moneyY(50)} 定金`],
       gold: ['预约免定金', '生日月权益', '护理与复购提醒', '推荐奖励追踪'],
       platinum: ['预约免定金', '热门时段优先提醒', '完整作品留档', '季节护理建议'],
       diamond: ['预约免定金', '最高等级标识', '优先排班提醒', '专属复购跟进']
     },
     en: {
-      silver: ['Member file and order archive', 'After-care reminders', 'Spend counts toward growth', 'CAD $50 booking deposit required'],
+      silver: ['Member file and order archive', 'After-care reminders', 'Spend counts toward growth', `${moneyY(50)} booking deposit required`],
       gold: ['Deposit waived', 'Birthday-month perks', 'Care and rebooking reminders', 'Referral reward tracking'],
       platinum: ['Deposit waived', 'Priority reminders for popular slots', 'Full work archive', 'Seasonal care suggestions'],
       diamond: ['Deposit waived', 'Highest-tier badge', 'Priority scheduling reminders', 'Dedicated rebooking follow-up']
@@ -741,6 +753,8 @@ async function loadServices() {
 async function loadStores() {
   const data = await request('/stores')
   state.stores = data.stores
+  // 币种跟门店走(公开接口下发,与商家端同源)
+  if (data.currencyDisplay) Object.assign(CUR, data.currencyDisplay, { code: data.currency || '' })
 }
 
 async function loadAddOns() {
@@ -1495,7 +1509,7 @@ function renderCheckout() {
           <p><span>${t('appointment')}</span><strong>${money(deposit)}</strong></p>
           ${waivedDeposit ? `<p><span>${state.lang === 'zh' ? '会员定金减免' : 'Member deposit waiver'}</span><strong>-${money(waivedDeposit)}</strong></p>` : ''}
           <p><span>${t('coupon')}</span><strong>-${money(coupon)}</strong></p>
-          <p><span>${t('balance')}</span><strong>CAD $300</strong></p>
+          <p><span>${t('balance')}</span><strong>${moneyY(300)}</strong></p>
         </div>
       </section>
       <section class="section">
@@ -1623,7 +1637,7 @@ function renderMe() {
           <div class="growth-head"><span>${t('memberGrowth')}</span><span>${tierInfo.spend} / ${tierInfo.nextValue}</span></div>
           <div class="growth-track"><div class="growth-fill" style="width:${tierInfo.progress}%"></div></div>
           <p class="growth-note">${tierInfo.note}</p>
-          <p class="deposit-rule-note">${userWaivesDeposit(user) ? (state.lang === 'zh' ? '当前会员等级：预约免定金' : 'Current tier: booking deposit waived') : (state.lang === 'zh' ? '当前会员等级：预约需支付 CAD $50 定金' : 'Current tier: CAD $50 booking deposit required')}</p>
+          <p class="deposit-rule-note">${userWaivesDeposit(user) ? (state.lang === 'zh' ? '当前会员等级：预约免定金' : 'Current tier: booking deposit waived') : (state.lang === 'zh' ? `当前会员等级：预约需支付 ${moneyY(50)} 定金` : `Current tier: ${moneyY(50)} booking deposit required`)}</p>
           <button class="member-benefits-link" data-me-target="memberBenefits" type="button">${t('memberBenefitsIntro')}</button>
         </div>
         <div class="member-assets">
@@ -1923,7 +1937,7 @@ function renderMemberBenefitsWeb() {
                 ${active ? `<strong>${t('currentTier')}</strong>` : ''}
               </div>
               <h2>${tier.label}</h2>
-              <p class="tier-threshold">${t('lifetimeSpend')} ${tier.minSpend ? `CAD $${tier.minSpend}+` : 'CAD $0+'}</p>
+              <p class="tier-threshold">${t('lifetimeSpend')} ${tier.minSpend ? `${moneyY(tier.minSpend)}+` : `${moneyY(0)}+`}</p>
               <p class="tier-deposit">${t('depositRule')}: <strong>${tier.depositWaived ? t('depositWaived') : t('depositRequired')}</strong></p>
               <ul class="tier-benefit-list">
                 ${tierBenefits(tier).map((benefit) => `<li>${benefit}</li>`).join('')}

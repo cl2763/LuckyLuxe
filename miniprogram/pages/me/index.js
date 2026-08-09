@@ -1,4 +1,5 @@
 const storage = require('../../utils/storage')
+const { curOf, ensureCurrencyCached } = require('../../utils/storecurrency')
 const mock = require('../../utils/mock-data')
 const i18n = require('../../utils/i18n')
 const api = require('../../utils/api')
@@ -90,6 +91,9 @@ Page({
   },
 
   async onShow() {
+    ensureCurrencyCached()
+    this.setData({ cur: curOf() })   // 币种跟门店走,不写死 ${curOf().p}${curOf().s}
+
     tabbar.update(this, 3)
     let member = wx.getStorageSync('lucky_member') || {}
     const lang = i18n.getLang()
@@ -157,8 +161,8 @@ Page({
       ? (member.nextLevelValue || 0) - (member.growthValue || 0)
       : member.amountToNextLevel)
     return lang === 'en'
-      ? `CAD $${amount} to ${member.nextMemberLevel}`
-      : `距离 ${member.nextMemberLevel} 还差 CAD $${amount}`
+      ? `${curOf().p}${curOf().s}${amount} to ${member.nextMemberLevel}`
+      : `距离 ${member.nextMemberLevel} 还差 ${curOf().p}${curOf().s}${amount}`
   },
 
   openLoginPanel() {

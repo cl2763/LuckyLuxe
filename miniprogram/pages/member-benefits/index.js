@@ -1,24 +1,25 @@
 const api = require('../../utils/api')
+const { curOf } = require('../../utils/storecurrency')
 const i18n = require('../../utils/i18n')
 
 const BENEFITS_ZH = {
   silver: {
     note: '基础会员等级，适合首次体验与偶尔到店顾客。',
-    benefits: ['会员档案与作品留档', '护理说明与售后提醒', '消费累计成长值', '预约需支付 CAD $50 定金'],
+    benefits: ['会员档案与作品留档', '护理说明与售后提醒', '消费累计成长值', '预约需支付 ${curOf().p}${curOf().s}50 定金'],
     gifts: ['新人护理说明', '基础会员档案']
   },
   gold: {
-    note: '累计消费达到 CAD $500 后解锁，预约可免定金。',
-    benefits: ['预约免 CAD $50 定金', '生日月礼遇', '优先查看护理建议', '推荐返利记录'],
+    note: '累计消费达到 ${curOf().p}${curOf().s}500 后解锁，预约可免定金。',
+    benefits: ['预约免 ${curOf().p}${curOf().s}50 定金', '生日月礼遇', '优先查看护理建议', '推荐返利记录'],
     gifts: ['生日月优惠券', 'VIP 护理提醒']
   },
   platinum: {
-    note: '累计消费达到 CAD $1200 后解锁，适合高频到店顾客。',
+    note: '累计消费达到 ${curOf().p}${curOf().s}1200 后解锁，适合高频到店顾客。',
     benefits: ['预约免定金', '优先预约热门时段', '更完整作品档案', '季度护理建议'],
     gifts: ['季度护理礼包', '优先指定技师']
   },
   diamond: {
-    note: '累计消费达到 CAD $2500 后解锁，当前最高会员等级。',
+    note: '累计消费达到 ${curOf().p}${curOf().s}2500 后解锁，当前最高会员等级。',
     benefits: ['预约免定金', '最高等级会员标识', '优先排期与服务提醒', '专属复购/护理回访'],
     gifts: ['Diamond 专属礼遇', '节日福利提醒']
   }
@@ -27,21 +28,21 @@ const BENEFITS_ZH = {
 const BENEFITS_EN = {
   silver: {
     note: 'Entry tier for first-time and occasional guests.',
-    benefits: ['Member profile and work archive', 'Aftercare and follow-up reminders', 'Growth value from completed services', 'CAD $50 booking deposit required'],
+    benefits: ['Member profile and work archive', 'Aftercare and follow-up reminders', 'Growth value from completed services', '${curOf().p}${curOf().s}50 booking deposit required'],
     gifts: ['New member aftercare guide', 'Basic member profile']
   },
   gold: {
-    note: 'Unlocked at CAD $500 lifetime spend. Booking deposit is waived.',
-    benefits: ['CAD $50 deposit waived', 'Birthday-month perk', 'Priority aftercare suggestions', 'Referral reward tracking'],
+    note: 'Unlocked at ${curOf().p}${curOf().s}500 lifetime spend. Booking deposit is waived.',
+    benefits: ['${curOf().p}${curOf().s}50 deposit waived', 'Birthday-month perk', 'Priority aftercare suggestions', 'Referral reward tracking'],
     gifts: ['Birthday-month coupon', 'VIP aftercare reminder']
   },
   platinum: {
-    note: 'Unlocked at CAD $1200 lifetime spend for frequent guests.',
+    note: 'Unlocked at ${curOf().p}${curOf().s}1200 lifetime spend for frequent guests.',
     benefits: ['Deposit waived', 'Priority popular time slots', 'Richer work archive', 'Seasonal care suggestions'],
     gifts: ['Seasonal care package', 'Priority artist request']
   },
   diamond: {
-    note: 'Unlocked at CAD $2500 lifetime spend. Current highest tier.',
+    note: 'Unlocked at ${curOf().p}${curOf().s}2500 lifetime spend. Current highest tier.',
     benefits: ['Deposit waived', 'Highest member badge', 'Priority scheduling and reminders', 'Dedicated repurchase follow-up'],
     gifts: ['Diamond exclusive perk', 'Holiday perk reminder']
   }
@@ -101,16 +102,16 @@ Page({
         key: tier.key,
         name: tier.label,
         threshold: nextSpend
-          ? `CAD $${tier.minSpend}+`
+          ? `${curOf().p}${curOf().s}${tier.minSpend}+`
           : (lang === 'en' ? 'Highest tier' : '最高等级'),
         note: tierCopy.note,
         progress: index < currentIndex ? 100 : (isCurrent ? progress : 0),
         statusText: isCurrent
           ? (lang === 'en' ? 'Current tier' : '当前等级')
-          : (spend >= tier.minSpend ? (lang === 'en' ? 'Unlocked' : '已解锁') : `${lang === 'en' ? 'Need' : '还差'} CAD $${tier.minSpend - spend}`),
+          : (spend >= tier.minSpend ? (lang === 'en' ? 'Unlocked' : '已解锁') : `${lang === 'en' ? 'Need' : '还差'} ${curOf().p}${curOf().s}${tier.minSpend - spend}`),
         depositText: tier.depositWaived
           ? (lang === 'en' ? 'Deposit waived' : '免预约定金')
-          : (lang === 'en' ? 'CAD $50 deposit required' : '需支付 CAD $50 定金'),
+          : (lang === 'en' ? '${curOf().p}${curOf().s}50 deposit required' : '需支付 ${curOf().p}${curOf().s}50 定金'),
         benefits: tierCopy.benefits.map((title) => ({ title })),
         gifts: tierCopy.gifts.map((title, giftIndex) => ({ count: String(giftIndex + 1), title }))
       }

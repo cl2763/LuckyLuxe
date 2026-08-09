@@ -10026,6 +10026,11 @@ async function route(req, res) {
     // 没开通就别把按钮摆在顾客面前——点了没结果比没有按钮更伤体验。只暴露布尔值,不泄露套餐信息。
     return json(res, 200, {
       aiEnabled: checkEntitlement(tid, AI_ADDON.feature),
+      /* 顾客端的币种也从这里拿(店主 2026-08-10 红线修复)。
+         顾客端不能调 /admin/store-clock,以前就只好各页写死 "CAD $" ——
+         境内 ¥ 店的顾客看到的每个价格币种都是错的。现在跟商家端同一套 currencyDisplay。 */
+      currency: tenantCurrencyCode(tid),
+      currencyDisplay: currencyDisplayOf(tenantCurrencyCode(tid)),
       stores: storeRows.map((s) => Object.assign({}, s, { hours: hourStmt.all(s.id) }))
     })
   }

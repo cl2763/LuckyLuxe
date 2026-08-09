@@ -1,4 +1,5 @@
 const mock = require('../../utils/mock-data')
+const { curOf, ensureCurrencyCached } = require('../../utils/storecurrency')
 const storage = require('../../utils/storage')
 const i18n = require('../../utils/i18n')
 const api = require('../../utils/api')
@@ -34,6 +35,9 @@ Page({
   },
 
   onShow() {
+    ensureCurrencyCached()
+    this.setData({ cur: curOf() })   // 币种跟门店走,不写死 ${curOf().p}${curOf().s}
+
     if (this.serviceId) this.refresh({ id: this.serviceId, cartId: this.cartId })
   },
 
@@ -92,7 +96,7 @@ Page({
       referenceDataImages: appointment ? (appointment.referenceDataImages || []) : [],
       referenceAnalysis: appointment ? appointment.referenceAnalysis : null,
       referencePriceText: appointment && appointment.referenceAnalysis && appointment.referenceAnalysis.estimatedPriceCents
-        ? `CAD $${Math.round(appointment.referenceAnalysis.estimatedPriceCents / 100)}`
+        ? `${curOf().p}${curOf().s}${Math.round(appointment.referenceAnalysis.estimatedPriceCents / 100)}`
         : '',
       referenceMessage: appointment && appointment.referenceAnalysis
         ? (lang === 'en' ? appointment.referenceAnalysis.clientMessageEn : appointment.referenceAnalysis.clientMessageZh)
@@ -224,7 +228,7 @@ Page({
       const analysis = result.data || result
       this.setData({
         referenceAnalysis: analysis,
-        referencePriceText: analysis.estimatedPriceCents ? `CAD $${Math.round(analysis.estimatedPriceCents / 100)}` : (this.data.lang === 'en' ? 'Manual quote' : '需人工报价'),
+        referencePriceText: analysis.estimatedPriceCents ? `${curOf().p}${curOf().s}${Math.round(analysis.estimatedPriceCents / 100)}` : (this.data.lang === 'en' ? 'Manual quote' : '需人工报价'),
         referenceMessage: this.data.lang === 'en' ? (analysis.clientMessageEn || analysis.priceMessageEn || '') : (analysis.clientMessageZh || analysis.priceMessageZh || '')
       })
     } catch (error) {

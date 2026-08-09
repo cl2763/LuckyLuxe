@@ -18,8 +18,8 @@
           <text>{{item.service.duration}}{{t.minutes}}</text>
         </view>
         <view class="checkout-meta">
-          <text class="price">{{t.deposit}} CAD ${{item.service.depositAmount}}</text>
-          <text>{{t.servicePrice}} CAD ${{item.service.price}}</text>
+          <text class="price">{{t.deposit}} {{cur.p}}{{cur.s}}{{item.service.depositAmount}}</text>
+          <text>{{t.servicePrice}} {{cur.p}}{{cur.s}}{{item.service.price}}</text>
         </view>
       </view>
     </view>
@@ -32,22 +32,22 @@
     <view class="cost-card card">
       <view class="cost-row">
         <text>{{t.appointmentDeposit}}</text>
-        <text>CAD ${{serviceDeposit}}</text>
+        <text>{{cur.p}}{{cur.s}}{{serviceDeposit}}</text>
       </view>
       <view wx:if="{{depositWaived}}" class="cost-row">
         <text>{{lang === 'en' ? 'Member deposit waiver' : '会员定金减免'}}</text>
-        <text>-CAD ${{depositWaivedAmount}}</text>
+        <text>-{{cur.p}}{{cur.s}}{{depositWaivedAmount}}</text>
       </view>
       <view class="cost-row switch-row">
         <view>
           <view>{{t.balance}}</view>
-          <view class="muted">{{lang === 'en' ? ('Balance CAD $' + memberBalance + ', pay deposit from balance') : ('余额 CAD $' + memberBalance + ',用储值抵扣定金,充足时无需微信支付')}}</view>
+          <view class="muted">{{lang === 'en' ? ('Balance {{cur.p}}{{cur.s}}' + memberBalance + ', pay deposit from balance') : ('余额 {{cur.p}}{{cur.s}}' + memberBalance + ',用储值抵扣定金,充足时无需微信支付')}}</view>
         </view>
         <switch color="#C6A27E" checked="{{useBalance}}" bindchange="toggleBalance"></switch>
       </view>
       <view wx:if="{{balanceDeduction}}" class="cost-row">
         <text>{{t.balanceDeduction}}</text>
-        <text>-CAD ${{balanceDeduction}}</text>
+        <text>-{{cur.p}}{{cur.s}}{{balanceDeduction}}</text>
       </view>
     </view>
   </view>
@@ -101,7 +101,7 @@
   <view class="bottom-bar">
     <view class="bottom-fill">
       <view class="muted">{{t.payable}}</view>
-      <view class="price">CAD ${{payableAmount}}</view>
+      <view class="price">{{cur.p}}{{cur.s}}{{payableAmount}}</view>
     </view>
     <button class="btn btn-primary pay-btn" bindtap="submitOrder">{{payActionText || t.payAction}}</button>
   </view>

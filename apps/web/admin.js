@@ -1,5 +1,5 @@
 // 构建号:每次交付递增。侧栏可见,排查"改了没生效"时先对版本。
-const ADMIN_BUILD = '20260810e-ink'
+const ADMIN_BUILD = '20260810f-currency'
 console.log(`[admin] build ${ADMIN_BUILD}`)
 
 // "今天"必须按门店时区算,否则老板人在别的时区时全站日期错位一天。
@@ -808,7 +808,7 @@ function storeCurrency() {
   return (owner?.businessHoursStores || [])[0]?.currency || owner?.tenantKb?.facts?.currency || 'CAD'
 }
 // 币种显示映射表(与后端 CURRENCY_DISPLAY 同一套口径):
-// CNY → 「¥358」;其它币种 → 「CAD $358」逐字维持现状,旗舰店零 diff。
+// CNY → 「¥358」;其它币种 → 「CAD 358」逐字维持现状,旗舰店零 diff。
 const CURRENCY_DISPLAY = {
   CNY: { prefix: '', symbol: '¥', trimZeroDecimals: true },
   DEFAULT: { prefix: '<CODE> ', symbol: '$', trimZeroDecimals: false }
@@ -1720,12 +1720,12 @@ function wechatMockSessions() {
       route: owner.lang === 'zh' ? 'AI 自动处理' : 'AI handled',
       expected: owner.lang === 'zh' ? '无需人工报价' : 'No manual quote needed',
       elements: owner.lang === 'zh'
-        ? ['自然款美睫', '固定价格 CAD $198', '时长 120 分钟', '定金 CAD $50']
-        : ['Natural lash set', 'Fixed price CAD $198', 'Duration 120 min', 'Deposit CAD $50'],
+        ? ['自然款美睫', `固定价格 ${money(19800, 0)}`, '时长 120 分钟', `定金 ${money(5000, 0)}`]
+        : ['Natural lash set', `Fixed price ${money(19800, 0)}`, 'Duration 120 min', `Deposit ${money(5000, 0)}`],
       messages: [
         ['assistant', zhGreeting, enGreeting],
         ['customer', 'Hi, how much is a natural lash set?', 'Hi, how much is a natural lash set?'],
-        ['assistant', '自然款美睫是固定价格 CAD $198，时长约 120 分钟，预约定金 CAD $50。价格已包含基础嫁接服务，不需要人工报价。', 'A natural lash set is CAD $198, about 120 minutes, with a CAD $50 booking deposit. This is a fixed lash price and does not need a manual quote.'],
+        ['assistant', `自然款美睫是固定价格 ${money(19800, 0)}，时长约 120 分钟，预约定金 ${money(5000, 0)}。价格已包含基础嫁接服务，不需要人工报价。`, `A natural lash set is ${money(19800, 0)}, about 120 minutes, with a ${money(5000, 0)} booking deposit. This is a fixed lash price and does not need a manual quote.`],
         ['assistant', '我已为您生成预约草稿，请在小程序中确认时间并支付定金。', 'I created a booking draft for you. Please confirm the time and pay the deposit in the Mini Program.']
       ],
       defaultReply: {
@@ -4672,8 +4672,8 @@ function renderWechatMockDetail(session) {
   const canDo = reply.canDo !== 'no'
   const aiReply = canDo
     ? (owner.lang === 'zh'
-      ? `技师确认这款可以做，预估价格 CAD $${reply.price || '待确认'}，预计 ${reply.duration || '待确认'} 分钟。${reply.notes || ''} 如果您想继续，我可以先为您创建预约草稿，最后需要您在小程序里确认时间并支付 CAD $50 定金。`
-      : `The technician confirmed this style can be done. Estimated price is CAD $${reply.price || 'TBD'} and estimated duration is ${reply.duration || 'TBD'} minutes. ${reply.notes || ''} If you would like to continue, I can create a booking draft for you. Final confirmation and CAD $50 deposit payment happen in the Mini Program.`)
+      ? `技师确认这款可以做，预估价格 ${reply.price ? money(Math.round(Number(reply.price) * 100), 0) : '待确认'}，预计 ${reply.duration || '待确认'} 分钟。${reply.notes || ''} 如果您想继续，我可以先为您创建预约草稿，最后需要您在小程序里确认时间并支付 ${money(5000, 0)} 定金。`
+      : `The technician confirmed this style can be done. Estimated price is ${reply.price ? money(Math.round(Number(reply.price) * 100), 0) : 'TBD'} and estimated duration is ${reply.duration || 'TBD'} minutes. ${reply.notes || ''} If you would like to continue, I can create a booking draft for you. Final confirmation and ${money(5000, 0)} deposit payment happen in the Mini Program.`)
     : (owner.lang === 'zh'
       ? `技师看过后认为这次需要人工进一步确认：${reply.notes || '目前信息不足。'} 我会先为您转人工处理。`
       : `The technician needs human follow-up for this request: ${reply.notes || 'More information is needed.'} I will route this to a staff member.`)

@@ -47,13 +47,13 @@
           <text>{{t.coupons}} ›</text>
         </view>
         <view class="asset-tap" bindtap="goStored">
-          <text>CAD ${{member.balance}}</text>
+          <text>{{cur.p}}{{cur.s}}{{member.balance}}</text>
           <text>{{t.balance}} ›</text>
         </view>
       </view>
 
       <view class="member-extra">
-        <view>{{t.totalSpent}} CAD ${{member.totalSpent}}</view>
+        <view>{{t.totalSpent}} {{cur.p}}{{cur.s}}{{member.totalSpent}}</view>
         <view>{{t.visits}} {{member.visits}} {{t.times}}</view>
       </view>
     </block>
@@ -116,8 +116,8 @@
                 <text>{{item.appointment.date}}</text>
                 <text>{{item.appointment.time}}</text>
               </view>
-              <view class="recent-pay" wx:if="{{item.status === 'completed'}}">已结清 CAD ${{item.servicePrice}}</view>
-              <view class="recent-pay" wx:elif="{{item.status === 'cancelled' || item.status === 'after_sales'}}">总价 CAD ${{item.servicePrice}}</view>
+              <view class="recent-pay" wx:if="{{item.status === 'completed'}}">已结清 {{cur.p}}{{cur.s}}{{item.servicePrice}}</view>
+              <view class="recent-pay" wx:elif="{{item.status === 'cancelled' || item.status === 'after_sales'}}">总价 {{cur.p}}{{cur.s}}{{item.servicePrice}}</view>
               <view class="recent-pay" wx:else>定金 ${{item.payableAmount}} 已付 · 到店应付 ${{item.finalDue}}</view>
             </view>
           </view>
