@@ -4,7 +4,7 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>有迹 · 商家后台</title>
-    <link rel="stylesheet" href="/web/styles.css?v=20260809b-p2-coupon">
+    <link rel="stylesheet" href="/web/styles.css?v=20260809c-audit-fix">
     <style>
       /* 2026-08-02 财务指标显隐+动效(店主 v4 定稿):AI智能总结卡 / 目标进度条(带平衡线刻度) / 设目标引导与弹窗。
          放这里不放 styles.css:本批约定只动 admin.js + admin.html 两个文件。 */
@@ -251,6 +251,22 @@
       #pricingPage input[type="checkbox"],#membershipSettingsBody input[type="checkbox"]{width:16px;height:16px;min-width:0;flex:none;margin:0;padding:0}
       #pricingPage .row-actions .pricing-sort{margin:0}
       #membershipSettingsBody .service-admin-item{display:flex;justify-content:space-between;align-items:center;gap:14px;flex-wrap:wrap}
+
+      /* ===== 屏 3a 薪资方案(2026-08-09 按设计图重做:三模板段选 + 开关区 + 两模式对比常驻)===== */
+      .sp-modes{display:grid;grid-template-columns:repeat(3,1fr);gap:10px;margin:10px 0 14px}
+      .sp-mode{border:1px solid #eadfd7;background:#fff;border-radius:12px;padding:12px 14px;text-align:left;cursor:pointer}
+      .sp-mode b{display:block;font-size:14px;color:#2d2826}
+      .sp-mode span{display:block;font-size:11.5px;color:#8c8279;margin-top:3px}
+      .sp-mode.on{border-color:#b5885d;background:#fbf4ec;box-shadow:0 2px 8px rgba(181,136,93,.15)}
+      .sp-compare{background:#2d2826;color:#cfccc4;border-radius:12px;padding:11px 14px;margin:12px 0;font-size:12.5px;display:flex;flex-wrap:wrap;gap:8px;align-items:center}
+      .sp-cmp-lab{color:#8c8279}
+      .sp-cmp{background:rgba(255,255,255,.08);border-radius:999px;padding:4px 12px}
+      .sp-cmp.on{background:#e8c88f;color:#2d2826;font-weight:800}
+      .sp-cmp-diff{width:100%;color:#e8c88f;font-size:11.5px}
+      .sp-h{font-size:13.5px;margin:16px 0 8px;display:flex;gap:8px;align-items:baseline}
+      .sp-switch-row{display:flex;gap:10px;align-items:center;margin-bottom:8px;flex-wrap:wrap}
+      .sp-switch-row .sp-sw{display:flex;align-items:center;gap:6px;font-size:13px;min-width:170px}
+      .sp-switch-row input[type="number"],.sp-switch-row select{border:1px solid #eadfd7;border-radius:10px;padding:8px 12px;font-size:13px;max-width:180px}
 
       /* ===== 屏 C3 券板块「自定义发放」(2026-08-09)===== */
       .cpn-grant-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(220px,1fr));gap:12px;margin-bottom:14px}
@@ -875,6 +891,6 @@
     </main>
 
     <div class="toast" id="toast"></div>
-    <script src="/web/admin.js?v=20260809b-p2-coupon"></script>
+    <script src="/web/admin.js?v=20260809c-audit-fix"></script>
   </body>
 </html>

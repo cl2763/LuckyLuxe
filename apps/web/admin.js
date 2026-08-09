@@ -1,5 +1,5 @@
 // 构建号:每次交付递增。侧栏可见,排查"改了没生效"时先对版本。
-const ADMIN_BUILD = '20260809b-p2-coupon'
+const ADMIN_BUILD = '20260809c-audit-fix'
 console.log(`[admin] build ${ADMIN_BUILD}`)
 
 // "今天"必须按门店时区算,否则老板人在别的时区时全站日期错位一天。
@@ -3382,6 +3382,12 @@ function renderSalaryPlans() {
     .catch((error) => { if (document.body.contains(body)) body.innerHTML = `<p class="subtle">${escapeHtml(error.message || '加载失败')}</p>` })
 }
 
+/* 屏 3a｜商家后台 · 薪资方案(网页版)· 三模板三状态(2026-08-09 按设计图重做)
+   与小程序 3b/3c 同一套字段:三段选 阶段|阶梯|自定义 →(template, ladderMode);
+   基础项开关化;卡提成只有 首充/续卡/自定义行 —— 耗卡不设提成,卡耗计入业绩。
+   两模式对比常驻显示,三个数都由后端 /admin/salary-plans/preview 算,前端不算钱。 */
+const SP_PREVIEW_PERF_CENTS = 1200000 // 图上的算例:业绩 ¥12,000
+
 function renderSalaryPlanEditor() {
   const zh = owner.lang === 'zh'
   const ed = salaryPlanEditing
@@ -3392,89 +3398,198 @@ function renderSalaryPlanEditor() {
   request(`/admin/salary-plans/effective?technicianId=${encodeURIComponent(ed.techId)}`)
     .then((r) => {
       if (!document.body.contains(body)) return // 面板已被关闭
-      const seed = r.plan || {} // 技师无专属时以默认方案为起点(与小程序一致)
+      const seed = r.plan || {}
       const c2y = (c) => c ? String(Math.round(c) / 100) : ''
       const y2c = (v) => { const n = Number(v); return Number.isFinite(n) && n > 0 ? Math.round(n * 100) : 0 }
+      // 三段选是 (template, ladderMode) 的投影;老的 commission(纯提成)= 自定义 + 底薪开关关闭
+      const st = {
+        mode: (seed.template || 'base_ladder') === 'base_ladder'
+          ? (seed.ladderMode === 'progressive' ? 'progressive' : 'whole')
+          : 'flat',
+        enableBase: seed.template === 'commission' ? false : seed.enableBase !== false,
+        enableHandwork: seed.enableHandwork !== false,
+        enableOvertime: seed.enableOvertime !== false,
+        custom: (seed.customCommissions || []).map((c) => ({ name: c.name || '', pct: String(c.pct || 0) }))
+      }
       let ladder = (seed.ladder && seed.ladder.length
         ? seed.ladder
-        : [{ minCents: 0, maxCents: 800000, pct: 15 }, { minCents: 800000, maxCents: 1500000, pct: 20 }, { minCents: 1500000, maxCents: null, pct: 25 }])
+        : [{ minCents: 0, maxCents: 800000, pct: 10 }, { minCents: 800000, maxCents: 1500000, pct: 12 }, { minCents: 1500000, maxCents: null, pct: 15 }])
         .map((t2) => ({ min: c2y(t2.minCents) || '0', max: t2.maxCents == null ? '' : c2y(t2.maxCents), pct: String(t2.pct || 0) }))
-      const tplOpt = (k) => `<option value="${k}" ${(seed.template || 'base_ladder') === k ? 'selected' : ''}>${SP_TPL_TEXT[k][zh ? 0 : 1]}</option>`
+
       body.innerHTML = `
         <p class="subtle"><strong>${zh ? '编辑:' : 'Editing: '}${escapeHtml(ed.name || '')}</strong>${ed.techId && r.source !== 'custom' ? `(${zh ? '当前跟随默认,保存后变为专属方案' : 'currently follows default; saving creates an override'})` : ''}</p>
-        <div class="finance-quick-grid">
-          <label><span>${zh ? '模板' : 'Template'}</span><select id="spTpl">${['base_ladder', 'base_flat', 'commission'].map(tplOpt).join('')}</select></label>
-          <label id="spBaseWrap"><span>${zh ? '底薪 (CAD/月)' : 'Base (CAD/mo)'}</span><input id="spBase" type="number" min="0" step="50" value="${c2y(seed.baseSalaryCents)}"></label>
-          <label><span>${zh ? '手工费 (CAD/单,可空)' : 'Handwork (CAD/order)'}</span><input id="spHandwork" type="number" min="0" step="0.5" value="${c2y(seed.handworkFeeCents)}"></label>
-          <label id="spFlatWrap"><span>${zh ? '固定提成 %' : 'Flat %'}</span><input id="spFlatPct" type="number" min="0" max="100" value="${seed.flatPct || ''}"></label>
-          <label><span>${zh ? '耗卡提成 %(可空)' : 'Card %'}</span><input id="spCardPct" type="number" min="0" max="100" value="${seed.cardPct || ''}"></label>
-          <label><span>${zh ? '充值提成 %(可空)' : 'Recharge %'}</span><input id="spRechargePct" type="number" min="0" max="100" value="${seed.rechargePct || ''}"></label>
-          <label><span>${zh ? '加班费 (CAD/单位,可空)' : 'OT rate (CAD/unit)'}</span><input id="spOtRate" type="number" min="0" step="0.5" value="${c2y(seed.overtimeRateCents)}"></label>
-          <label><span>${zh ? '加班计费单位' : 'OT unit'}</span><select id="spOtUnit">
-            <option value="30" ${seed.overtimeUnitMin === 60 ? '' : 'selected'}>${zh ? '每30分钟' : 'per 30 min'}</option>
-            <option value="60" ${seed.overtimeUnitMin === 60 ? 'selected' : ''}>${zh ? '每60分钟' : 'per 60 min'}</option>
-          </select></label>
+
+        <div class="sp-modes" id="spModes">
+          <button class="sp-mode${st.mode === 'whole' ? ' on' : ''}" data-sp-mode="whole" type="button">
+            <b>${zh ? '模板:阶段' : 'Whole'}</b><span>${zh ? '落档 · 全额乘该档点位' : 'pick tier, apply to all'}</span></button>
+          <button class="sp-mode${st.mode === 'progressive' ? ' on' : ''}" data-sp-mode="progressive" type="button">
+            <b>${zh ? '模板:阶梯' : 'Progressive'}</b><span>${zh ? '超额累进 · 分段各乘各档' : 'marginal by bracket'}</span></button>
+          <button class="sp-mode${st.mode === 'flat' ? ' on' : ''}" data-sp-mode="flat" type="button">
+            <b>${zh ? '模板:自定义' : 'Flat'}</b><span>${zh ? '固定提点 · 自由组合' : 'flat rate'}</span></button>
         </div>
+
         <div id="spLadderWrap">
-          <p class="subtle" style="margin:8px 0 4px">${zh ? '阶梯提成(浮动绩效):月业绩(完成单含加项)落到哪档,整月按该档 % 提成;上限留空=不封顶,最多 8 档。' : 'Tiers: monthly performance picks the tier; blank max = uncapped; up to 8 tiers.'}</p>
+          <p class="subtle" style="margin:8px 0 4px" id="spLadderHint"></p>
           <div id="spLadderRows"></div>
-          <button class="ghost slim" id="spAddTier" type="button">＋ ${zh ? '加一档' : 'Add tier'}</button>
+          <button class="ghost slim" id="spAddTier" type="button">＋ ${zh ? '加档' : 'Add tier'}</button>
         </div>
-        <div style="margin-top:10px">
-          <button class="primary slim" id="spSave" type="button">${zh ? '保存方案(立即生效)' : 'Save plan'}</button>
+        <div id="spFlatWrap" class="finance-quick-grid">
+          <label><span>${zh ? '业绩固定提点 %' : 'Flat %'}</span><input id="spFlatPct" type="number" min="0" max="100" value="${seed.flatPct || ''}"></label>
+          <p class="subtle" style="align-self:end">${zh ? '不分档;基础项/卡提成开关照常可配' : 'No tiers; base & card switches still apply'}</p>
+        </div>
+
+        <div class="sp-compare" id="spCompare"><span class="subtle">${zh ? '试算中…' : 'Calculating…'}</span></div>
+
+        <h4 class="sp-h">${zh ? '基础项' : 'Base items'} <span class="subtle">${zh ? '关闭或 0 = 不启用' : 'off or 0 = disabled'}</span></h4>
+        <div class="sp-switch-row">
+          <label class="sp-sw"><input type="checkbox" id="spEnBase" ${st.enableBase ? 'checked' : ''}> ${zh ? '底薪' : 'Base'}</label>
+          <input id="spBase" type="number" min="0" step="50" placeholder="${zh ? '月底薪' : 'per month'}" value="${c2y(seed.baseSalaryCents)}">
+        </div>
+        <div class="sp-switch-row">
+          <label class="sp-sw"><input type="checkbox" id="spEnHandwork" ${st.enableHandwork ? 'checked' : ''}> ${zh ? '手工费(每单固定)' : 'Handwork'}</label>
+          <input id="spHandwork" type="number" min="0" step="0.5" placeholder="${zh ? '每单' : 'per order'}" value="${c2y(seed.handworkFeeCents)}">
+        </div>
+        <div class="sp-switch-row">
+          <label class="sp-sw"><input type="checkbox" id="spEnOt" ${st.enableOvertime ? 'checked' : ''}> ${zh ? '加班费' : 'Overtime'}</label>
+          <input id="spOtRate" type="number" min="0" step="0.5" placeholder="${zh ? '费率' : 'rate'}" value="${c2y(seed.overtimeRateCents)}">
+          <select id="spOtUnit">
+            <option value="30" ${seed.overtimeUnitMin === 60 ? '' : 'selected'}>${zh ? '每满30分钟' : 'per 30 min'}</option>
+            <option value="60" ${seed.overtimeUnitMin === 60 ? 'selected' : ''}>${zh ? '每满1小时' : 'per 60 min'}</option>
+          </select>
+        </div>
+
+        <h4 class="sp-h">${zh ? '卡提成' : 'Card commission'} <span class="subtle">${zh ? '填 0 = 不启用' : '0 = disabled'}</span></h4>
+        <div class="finance-quick-grid">
+          <label><span>${zh ? '首充提成 %' : 'First recharge %'}</span><input id="spFirstPct" type="number" min="0" max="100" value="${seed.firstRechargePct || ''}"></label>
+          <label><span>${zh ? '续卡提成 %' : 'Renew %'}</span><input id="spRenewPct" type="number" min="0" max="100" value="${seed.renewRechargePct || ''}"></label>
+        </div>
+        <div id="spCustomRows"></div>
+        <button class="ghost slim" id="spAddCustom" type="button">＋ ${zh ? '加一行(名称 + 比例 + 可选关联卡种)' : 'Add row'}</button>
+        <p class="subtle" style="margin:6px 0 0">${zh ? '耗卡不设提成——卡耗计入业绩' : 'No commission on card usage; it counts as performance'}</p>
+
+        <div style="margin-top:14px">
+          <button class="primary slim" id="spSave" type="button">${zh ? '保存方案' : 'Save plan'}</button>
           <button class="ghost slim" id="spCancel" type="button">${zh ? '← 返回列表' : '← Back'}</button>
         </div>
       `
+
       const renderRows = () => {
         const wrap = body.querySelector('#spLadderRows')
         wrap.innerHTML = ladder.map((t2, i) => `
           <div class="finance-rule-add" style="margin-bottom:6px">
-            <input data-lad="${i}" data-f="min" type="number" min="0" placeholder="${zh ? '起点 $' : 'min $'}" value="${t2.min}">
-            <input data-lad="${i}" data-f="max" type="number" min="0" placeholder="${zh ? '上限 $(空=不封顶)' : 'max $ (blank=∞)'}" value="${t2.max}">
-            <input data-lad="${i}" data-f="pct" type="number" min="0" max="100" placeholder="${zh ? '提成 %' : '%'}" value="${t2.pct}">
+            <input data-lad="${i}" data-f="min" type="number" min="0" placeholder="${zh ? '起点' : 'min'}" value="${t2.min}">
+            <input data-lad="${i}" data-f="max" type="number" min="0" placeholder="${zh ? '上限(空=不封顶)' : 'max (blank=∞)'}" value="${t2.max}">
+            <input data-lad="${i}" data-f="pct" type="number" min="0" max="100" placeholder="%" value="${t2.pct}">
             <button class="ghost slim" data-lad-del="${i}" type="button">✕</button>
           </div>`).join('')
-        wrap.querySelectorAll('input[data-lad]').forEach((inp) => inp.addEventListener('input', () => { ladder[Number(inp.dataset.lad)][inp.dataset.f] = inp.value }))
+        wrap.querySelectorAll('input[data-lad]').forEach((inp) => inp.addEventListener('input', () => {
+          ladder[Number(inp.dataset.lad)][inp.dataset.f] = inp.value
+          refreshCompare()
+        }))
         wrap.querySelectorAll('[data-lad-del]').forEach((b) => b.addEventListener('click', () => {
           if (ladder.length <= 1) { toast(zh ? '至少留一档' : 'Keep at least one tier'); return }
-          ladder.splice(Number(b.dataset.ladDel), 1); renderRows()
+          ladder.splice(Number(b.dataset.ladDel), 1); renderRows(); refreshCompare()
         }))
       }
-      renderRows()
+      const renderCustom = () => {
+        const wrap = body.querySelector('#spCustomRows')
+        wrap.innerHTML = st.custom.map((c, i) => `
+          <div class="finance-rule-add" style="margin-bottom:6px">
+            <input data-cc="${i}" data-f="name" placeholder="${zh ? '名称(如 疗程卡销售)' : 'name'}" value="${escapeHtml(c.name)}">
+            <input data-cc="${i}" data-f="pct" type="number" min="0" max="100" placeholder="%" value="${escapeHtml(c.pct)}">
+            <button class="ghost slim" data-cc-del="${i}" type="button">✕</button>
+          </div>`).join('')
+        wrap.querySelectorAll('input[data-cc]').forEach((inp) => inp.addEventListener('input', () => {
+          st.custom[Number(inp.dataset.cc)][inp.dataset.f] = inp.value
+        }))
+        wrap.querySelectorAll('[data-cc-del]').forEach((b) => b.addEventListener('click', () => {
+          st.custom.splice(Number(b.dataset.ccDel), 1); renderCustom()
+        }))
+      }
+      // 三模式对比常驻:金额全部由后端算,这里只显示(含「与阶段差 ¥X」)
+      let compareTimer = null
+      const refreshCompare = () => {
+        clearTimeout(compareTimer)
+        compareTimer = setTimeout(async () => {
+          const boxEl = body.querySelector('#spCompare')
+          if (!boxEl) return
+          try {
+            const p = await request('/admin/salary-plans/preview', { method: 'POST', body: JSON.stringify({
+              perfCents: SP_PREVIEW_PERF_CENTS,
+              ladder: ladder.map((row) => ({ minCents: y2c(row.min), maxCents: row.max === '' ? null : y2c(row.max), pct: Number(row.pct) || 0 })),
+              flatPct: Number(body.querySelector('#spFlatPct')?.value) || 0
+            }) })
+            const fmt = p.currencyDisplay || { prefix: '<CODE> ', symbol: '$', trimZeroDecimals: false }
+            const m = (cents) => {
+              let text = (Math.round(cents || 0) / 100).toFixed(2)
+              if (fmt.trimZeroDecimals) text = text.replace(/\.00$/, '')
+              return `${String(fmt.prefix).replace('<CODE>', p.currency)}${fmt.symbol}${text}`
+            }
+            boxEl.innerHTML = `
+              <span class="sp-cmp-lab">${zh ? '试算' : 'Preview'} ${m(p.perfCents)}:</span>
+              <span class="sp-cmp${st.mode === 'progressive' ? ' on' : ''}">${zh ? '阶梯' : 'Progressive'} ${m(p.progressive.cents)}</span>
+              <span class="sp-cmp${st.mode === 'whole' ? ' on' : ''}">${zh ? '阶段' : 'Whole'} ${m(p.whole.cents)}</span>
+              <span class="sp-cmp${st.mode === 'flat' ? ' on' : ''}">${zh ? '自定义' : 'Flat'} ${m(p.flat.cents)}</span>
+              ${p.diffCents ? `<span class="sp-cmp-diff">${zh ? '与阶段差' : 'diff'} ${m(Math.abs(p.diffCents))} —— ${zh ? '两模式对比常驻显示' : 'always shown'}</span>` : ''}`
+          } catch { boxEl.textContent = '' }
+        }, 250)
+      }
+      const applyMode = () => {
+        body.querySelectorAll('[data-sp-mode]').forEach((b) => b.classList.toggle('on', b.dataset.spMode === st.mode))
+        const isLadder = st.mode !== 'flat'
+        body.querySelector('#spLadderWrap').classList.toggle('hidden', !isLadder)
+        body.querySelector('#spFlatWrap').classList.toggle('hidden', isLadder)
+        const hint = body.querySelector('#spLadderHint')
+        if (hint) {
+          hint.textContent = st.mode === 'progressive'
+            ? (zh ? '阶梯(超额累进):每一段各乘各档,只有超出的部分按高档算。' : 'Marginal: each bracket at its own rate.')
+            : (zh ? '阶段(落档全额):月业绩落在哪一档,整月业绩都按该档点位算。' : 'Whole: the tier you land in applies to the full amount.')
+        }
+        refreshCompare()
+      }
+      renderRows(); renderCustom(); applyMode()
+
+      body.querySelectorAll('[data-sp-mode]').forEach((b) => b.addEventListener('click', () => { st.mode = b.dataset.spMode; applyMode() }))
+      body.querySelector('#spFlatPct').addEventListener('input', refreshCompare)
       body.querySelector('#spAddTier').addEventListener('click', () => {
         if (ladder.length >= 8) { toast(zh ? '最多 8 档' : 'Max 8 tiers'); return }
         const last = ladder[ladder.length - 1]
         ladder.push({ min: (last && last.max) || '', max: '', pct: '' })
-        renderRows()
+        renderRows(); refreshCompare()
       })
-      const applyTpl = () => {
-        const t2 = body.querySelector('#spTpl').value
-        body.querySelector('#spLadderWrap').classList.toggle('hidden', t2 !== 'base_ladder')
-        body.querySelector('#spFlatWrap').classList.toggle('hidden', t2 === 'base_ladder')
-        body.querySelector('#spBaseWrap').classList.toggle('hidden', t2 === 'commission')
-      }
-      applyTpl()
-      body.querySelector('#spTpl').addEventListener('change', applyTpl)
+      body.querySelector('#spAddCustom').addEventListener('click', () => {
+        if (st.custom.length >= 10) { toast(zh ? '最多 10 行' : 'Max 10 rows'); return }
+        st.custom.push({ name: '', pct: '' }); renderCustom()
+      })
       body.querySelector('#spCancel').addEventListener('click', () => { salaryPlanEditing = null; renderSalaryPlans() })
       body.querySelector('#spSave').addEventListener('click', async () => {
-        const t2 = body.querySelector('#spTpl').value
-        if (t2 === 'base_ladder') {
+        const isLadder = st.mode !== 'flat'
+        if (isLadder) {
           if (!ladder.length) { toast(zh ? '至少留一档' : 'Need at least one tier'); return }
           for (const row of ladder) {
             if (row.pct === '' || !Number.isFinite(Number(row.pct)) || Number(row.pct) < 0) { toast(zh ? '每档都要填提成 %' : 'Each tier needs a %'); return }
           }
         }
+        const enBase = body.querySelector('#spEnBase').checked
+        const enHandwork = body.querySelector('#spEnHandwork').checked
+        const enOt = body.querySelector('#spEnOt').checked
         try {
           await request('/admin/salary-plans', { method: 'PUT', body: JSON.stringify({
             technicianId: ed.techId,
-            template: t2,
-            baseSalaryCents: t2 === 'commission' ? 0 : y2c(body.querySelector('#spBase').value),
-            handworkFeeCents: y2c(body.querySelector('#spHandwork').value),
-            ladder: t2 === 'base_ladder' ? ladder.map((row) => ({ minCents: y2c(row.min), maxCents: row.max === '' ? null : y2c(row.max), pct: Number(row.pct) || 0 })) : [],
-            flatPct: t2 === 'base_ladder' ? 0 : (Number(body.querySelector('#spFlatPct').value) || 0),
-            cardPct: Number(body.querySelector('#spCardPct').value) || 0,
-            rechargePct: Number(body.querySelector('#spRechargePct').value) || 0,
-            overtimeRateCents: y2c(body.querySelector('#spOtRate').value),
+            template: isLadder ? 'base_ladder' : 'base_flat',
+            ladderMode: isLadder ? st.mode : 'whole',
+            baseSalaryCents: enBase ? y2c(body.querySelector('#spBase').value) : 0,
+            handworkFeeCents: enHandwork ? y2c(body.querySelector('#spHandwork').value) : 0,
+            ladder: isLadder ? ladder.map((row) => ({ minCents: y2c(row.min), maxCents: row.max === '' ? null : y2c(row.max), pct: Number(row.pct) || 0 })) : [],
+            flatPct: isLadder ? 0 : (Number(body.querySelector('#spFlatPct').value) || 0),
+            firstRechargePct: Number(body.querySelector('#spFirstPct').value) || 0,
+            renewRechargePct: Number(body.querySelector('#spRenewPct').value) || 0,
+            customCommissions: st.custom.filter((c) => Number(c.pct) > 0)
+              .map((c) => ({ name: (c.name || '').trim() || '自定义提成', pct: Number(c.pct) || 0 })),
+            enableBase: enBase,
+            enableHandwork: enHandwork,
+            enableOvertime: enOt,
+            overtimeRateCents: enOt ? y2c(body.querySelector('#spOtRate').value) : 0,
             overtimeUnitMin: Number(body.querySelector('#spOtUnit').value) === 60 ? 60 : 30
           }) })
           toast(zh ? '已保存,立即生效' : 'Saved')

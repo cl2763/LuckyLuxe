@@ -4,84 +4,116 @@
   <view class="ps" wx:elif="{{source === 'custom'}}">该员工使用专属方案 · <text class="lnk" bindtap="resetToDefault">恢复跟随全店默认</text></view>
   <view class="ps" wx:else>当前跟随全店默认 · 下面改动并保存后变为专属方案</view>
 
-  <view class="k">① 选模板</view>
-  <view class="tpl">
-    <view class="tp {{template==='commission'?'on':''}}" data-t="commission" bindtap="pickTpl"><view class="tt">纯提成</view><view class="td">无底薪\n提成拿大头</view></view>
-    <view class="tp {{template==='base_ladder'?'on':''}}" data-t="base_ladder" bindtap="pickTpl"><view class="tt">底薪+阶梯</view><view class="td">保底安心\n多劳多得</view></view>
-    <view class="tp {{template==='base_flat'?'on':''}}" data-t="base_flat" bindtap="pickTpl"><view class="tt">底薪+固定提成</view><view class="td">最简单\n一个提点</view></view>
+  <!-- 屏 3b/3c：顶部三段选 阶段 | 阶梯 | 自定义 -->
+  <view class="modeseg">
+    <view class="ms {{mode === m.key ? 'on' : ''}}" wx:for="{{modes}}" wx:for-item="m" wx:key="key" data-m="{{m.key}}" bindtap="pickMode">{{m.label}}</view>
   </view>
 
-  <view class="k">② 基础(直接点数字改)</view>
-  <view class="frow" wx:if="{{template!=='commission'}}">
-    <view class="fl">月底薪</view>
-    <view class="fv"><text class="u">$</text><input class="num" type="digit" value="{{base}}" placeholder="0" bindinput="onBase" /></view>
-  </view>
-  <view class="frow">
-    <view class="fl">手工费 / 单<text class="fs">每完成一单固定给</text></view>
-    <view class="fv"><text class="u">$</text><input class="num" type="digit" value="{{handwork}}" placeholder="0" bindinput="onHandwork" /></view>
-  </view>
-  <view class="frow" wx:if="{{template!=='base_ladder'}}">
-    <view class="fl">提成比例<text class="fs">当月业绩 × 此提点</text></view>
-    <view class="fv"><input class="num" type="digit" value="{{flatPct}}" placeholder="0" bindinput="onFlatPct" /><text class="u">%</text></view>
-  </view>
-
-  <block wx:if="{{template==='base_ladder'}}">
-    <view class="k">③ 业绩阶梯(每个数字都能改;最后一档上限留空=不封顶)</view>
-    <view class="modeseg">
-      <view class="ms {{ladderMode==='whole'?'on':''}}" data-m="whole" bindtap="pickLadderMode">阶段</view>
-      <view class="ms {{ladderMode==='progressive'?'on':''}}" data-m="progressive" bindtap="pickLadderMode">阶梯</view>
-      <text class="msn">{{ladderMode==='whole' ? '落到哪档,整月业绩都按该档提点' : '分段累进,每一段各按各自档位提点'}}</text>
+  <!-- 阶梯态主卡 -->
+  <view class="card" wx:if="{{mode === 'progressive'}}">
+    <view class="ch">业绩阶梯<text class="chs">超额累进 · 分段各乘各档</text></view>
+    <view class="lr hd"><text class="c1">业绩从</text><text class="c2">到</text><text class="c3">提成%</text><text class="c4"></text></view>
+    <view class="lr" wx:for="{{ladder}}" wx:key="index">
+      <input class="li c1" type="digit" value="{{item.min}}" placeholder="0" data-i="{{index}}" data-f="min" bindinput="onLadder" />
+      <input class="li c2" type="digit" value="{{item.max}}" placeholder="不封顶" data-i="{{index}}" data-f="max" bindinput="onLadder" />
+      <input class="li c3" type="digit" value="{{item.pct}}" placeholder="%" data-i="{{index}}" data-f="pct" bindinput="onLadder" />
+      <view class="del c4" data-i="{{index}}" bindtap="delTier">✕</view>
     </view>
-    <view class="ladder">
-      <view class="lr hd"><text class="c1">业绩从($)</text><text class="c2">到($)</text><text class="c3">提成%</text><text class="c4"></text></view>
-      <view class="lr" wx:for="{{ladder}}" wx:key="index">
-        <input class="li c1" type="digit" value="{{item.min}}" placeholder="0" data-i="{{index}}" data-f="min" bindinput="onLadder" />
-        <input class="li c2" type="digit" value="{{item.max}}" placeholder="不封顶" data-i="{{index}}" data-f="max" bindinput="onLadder" />
-        <input class="li c3" type="digit" value="{{item.pct}}" placeholder="%" data-i="{{index}}" data-f="pct" bindinput="onLadder" />
-        <view class="del c4" data-i="{{index}}" bindtap="delTier">✕</view>
+    <view class="addrow" bindtap="addTier">＋ 添加档位</view>
+  </view>
+
+  <!-- 阶段态主卡 -->
+  <view class="card" wx:elif="{{mode === 'whole'}}">
+    <view class="ch">业绩阶段<text class="chs">落档 · 全额乘该档点位</text></view>
+    <view class="lr hd"><text class="c1">业绩从</text><text class="c2">到</text><text class="c3">提成%</text><text class="c4"></text></view>
+    <view class="lr" wx:for="{{ladder}}" wx:key="index">
+      <input class="li c1" type="digit" value="{{item.min}}" placeholder="0" data-i="{{index}}" data-f="min" bindinput="onLadder" />
+      <input class="li c2" type="digit" value="{{item.max}}" placeholder="不封顶" data-i="{{index}}" data-f="max" bindinput="onLadder" />
+      <input class="li c3" type="digit" value="{{item.pct}}" placeholder="%" data-i="{{index}}" data-f="pct" bindinput="onLadder" />
+      <view class="del c4" data-i="{{index}}" bindtap="delTier">✕</view>
+    </view>
+    <view class="addrow" bindtap="addTier">＋ 添加档位</view>
+  </view>
+
+  <!-- 自定义态主卡 -->
+  <view class="card" wx:else>
+    <view class="ch">业绩固定提点<text class="chs">不分档 · 全额乘</text></view>
+    <view class="frow">
+      <view class="fl">提点比例</view>
+      <view class="fv"><input class="num" type="digit" value="{{flatPct}}" placeholder="0" bindinput="onFlatPct" /><text class="u">%</text></view>
+    </view>
+    <view class="cardnote">适合纯提成或特殊约定的技师</view>
+  </view>
+
+  <!-- 基础项：三项全部开关化 -->
+  <view class="card">
+    <view class="ch">基础项<text class="chs">关闭或 0 = 不启用</text></view>
+    <view class="frow">
+      <view class="fl">底薪<text class="fs">按月固定发</text></view>
+      <view class="sw {{enableBase ? 'on' : ''}}" bindtap="toggleBase"><view class="dot"></view></view>
+    </view>
+    <view class="frow sub" wx:if="{{enableBase}}">
+      <view class="fl">月底薪</view>
+      <view class="fv"><input class="num" type="digit" value="{{base}}" placeholder="0" bindinput="onBase" /><text class="u">/月</text></view>
+    </view>
+    <view class="frow">
+      <view class="fl">手工费<text class="fs">每单固定给</text></view>
+      <view class="sw {{enableHandwork ? 'on' : ''}}" bindtap="toggleHandwork"><view class="dot"></view></view>
+    </view>
+    <view class="frow sub" wx:if="{{enableHandwork}}">
+      <view class="fl">每单手工费</view>
+      <view class="fv"><input class="num" type="digit" value="{{handwork}}" placeholder="0" bindinput="onHandwork" /><text class="u">/单</text></view>
+    </view>
+    <view class="frow">
+      <view class="fl">加班费<text class="fs">吃打卡考勤的加班时长</text></view>
+      <view class="sw {{enableOvertime ? 'on' : ''}}" bindtap="toggleOvertime"><view class="dot"></view></view>
+    </view>
+    <block wx:if="{{enableOvertime}}">
+      <view class="frow sub">
+        <view class="fl">加班费率<text class="fs">每满一段计一次,不足不计</text></view>
+        <view class="fv"><input class="num" type="digit" value="{{otRate}}" placeholder="0" bindinput="onOtRate" /></view>
       </view>
-      <view class="addrow" bindtap="addTier">＋ 加一档</view>
+      <view class="frow sub">
+        <view class="fl">计段粒度</view>
+        <view class="seg">
+          <view class="sopt {{otUnit===30?'on':''}}" data-u="30" bindtap="setOtUnit">每满30分钟</view>
+          <view class="sopt {{otUnit===60?'on':''}}" data-u="60" bindtap="setOtUnit">每满1小时</view>
+        </view>
+      </view>
+    </block>
+  </view>
+
+  <!-- 卡提成：只有首充 / 续卡 / 自定义行；耗卡不设提成 -->
+  <view class="card">
+    <view class="ch">卡提成<text class="chs">填 0 = 不启用</text></view>
+    <view class="frow">
+      <view class="fl">首充提成<text class="fs">顾客第一次充卡</text></view>
+      <view class="fv"><input class="num" type="digit" value="{{firstRechargePct}}" placeholder="0" bindinput="onFirstPct" /><text class="u">%</text></view>
     </view>
-  </block>
-
-  <view class="k">{{template==='base_ladder' ? '④' : '③'}} 加班费(自动吃打卡考勤的加班时长)</view>
-  <view class="frow">
-    <view class="fl">加班费率<text class="fs">每满一段计一次,不足不计</text></view>
-    <view class="fv"><text class="u">$</text><input class="num" type="digit" value="{{otRate}}" placeholder="0" bindinput="onOtRate" /></view>
-  </view>
-  <view class="frow">
-    <view class="fl">计段粒度</view>
-    <view class="seg">
-      <view class="sopt {{otUnit===30?'on':''}}" data-u="30" bindtap="setOtUnit">每满30分钟</view>
-      <view class="sopt {{otUnit===60?'on':''}}" data-u="60" bindtap="setOtUnit">每满1小时</view>
+    <view class="frow">
+      <view class="fl">续卡提成<text class="fs">老顾客再充</text></view>
+      <view class="fv"><input class="num" type="digit" value="{{renewRechargePct}}" placeholder="0" bindinput="onRenewPct" /><text class="u">%</text></view>
     </view>
+    <view class="crow" wx:for="{{customCommissions}}" wx:key="index">
+      <input class="cin" value="{{item.name}}" placeholder="名称(如 疗程卡销售)" data-i="{{index}}" data-f="name" bindinput="onCustomRow" />
+      <input class="cpct" type="digit" value="{{item.pct}}" placeholder="0" data-i="{{index}}" data-f="pct" bindinput="onCustomRow" /><text class="u">%</text>
+      <text class="del" data-i="{{index}}" bindtap="removeCustomRow">移除</text>
+    </view>
+    <view class="addrow" bindtap="addCustomRow">＋ 加一行(名称 + 比例 + 可选关联卡种)</view>
+    <view class="cardnote">耗卡不设提成——卡耗计入业绩</view>
   </view>
 
-  <view class="k">{{template==='base_ladder' ? '⑤' : '④'}} 卡提成(充值和耗卡分开配;填 0 = 不启用)</view>
-  <view class="frow">
-    <view class="fl">充值提成<text class="fs">员工促成顾客充卡,按充值额提</text></view>
-    <view class="fv"><input class="num" type="digit" value="{{rechargePct}}" placeholder="0" bindinput="onRechargePct" /><text class="u">%</text></view>
+  <!-- 三模式对比常驻显示（金额全部由后端 preview 算） -->
+  <view class="pvbar" wx:if="{{preview}}">
+    <view class="pvt">试算 {{preview.perf}}：</view>
+    <view class="pvrow">
+      <text class="pv {{mode==='progressive'?'on':''}}">阶梯 {{preview.progressive}}</text>
+      <text class="pv {{mode==='whole'?'on':''}}">阶段 {{preview.whole}}</text>
+      <text class="pv {{mode==='flat'?'on':''}}">自定义 {{preview.flat}}</text>
+    </view>
+    <view class="pvd" wx:if="{{preview.hasDiff}}">阶段与阶梯差 {{preview.diff}}</view>
   </view>
-  <view class="frow">
-    <view class="fl">耗卡提成<text class="fs">顾客用卡付款,按消耗额提</text></view>
-    <view class="fv"><input class="num" type="digit" value="{{cardPct}}" placeholder="0" bindinput="onCardPct" /><text class="u">%</text></view>
-  </view>
-  <view class="frow">
-    <view class="fl">首充提成<text class="fs">顾客第一次充卡,单独给一个提点</text></view>
-    <view class="fv"><input class="num" type="digit" value="{{firstRechargePct}}" placeholder="0" bindinput="onFirstPct" /><text class="u">%</text></view>
-  </view>
-  <view class="frow">
-    <view class="fl">续卡提成<text class="fs">老顾客再充,按这个提点</text></view>
-    <view class="fv"><input class="num" type="digit" value="{{renewRechargePct}}" placeholder="0" bindinput="onRenewPct" /><text class="u">%</text></view>
-  </view>
-  <view class="crow" wx:for="{{customCommissions}}" wx:key="index">
-    <input class="cin" value="{{item.name}}" placeholder="名称(如 套餐卡提成)" data-i="{{index}}" data-f="name" bindinput="onCustomRow" />
-    <input class="cpct" type="digit" value="{{item.pct}}" placeholder="0" data-i="{{index}}" data-f="pct" bindinput="onCustomRow" /><text class="u">%</text>
-    <text class="del" data-i="{{index}}" bindtap="removeCustomRow">移除</text>
-  </view>
-  <view class="addrow" bindtap="addCustomRow">＋ 加一行</view>
-  <view class="cardnote">两项归属流水(哪次充值/耗卡算谁的)接通后自动生效,现在先把提点配好</view>
 
-  <view class="save {{saving?'dim':''}}" bindtap="save">{{saving ? '保存中…' : '保存方案 · 立即生效'}}</view>
-  <view class="hint">工资 = 底薪 + 手工费×单数 + 业绩×落档提点 + 卡耗提成 + 加班费;月底在财务→工资试算里一键出全员明细</view>
+  <view class="save {{saving?'dim':''}}" bindtap="save">{{saving ? '保存中…' : '保存方案'}}</view>
+  <view class="hint">工资 = 底薪 + 手工费×单数 + 业绩×提成 + 首充/续卡提成 + 加班费 ± 调整;月底在 财务 → 工资试算 出全员明细</view>
 </view>
