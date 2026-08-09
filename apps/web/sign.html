@@ -52,6 +52,20 @@
   .toast.show{opacity:1}
   .done{text-align:center;padding:30px 10px;color:var(--ok);font-weight:800}
   .err{background:#fff;border-radius:16px;padding:28px 18px;text-align:center;color:var(--danger)}
+  /* 屏 S4 本人确认绑定:只对未绑定顾客显示的签字前置卡 */
+  .claim{background:#fff;border-radius:16px;padding:18px 16px;margin-bottom:14px;box-shadow:0 2px 14px rgba(45,40,38,.06)}
+  .claim h2{font-size:19px;font-weight:800;color:var(--ink);margin:0 0 4px;display:flex;align-items:center;gap:8px}
+  .claim .badge{font-size:11px;font-weight:700;background:#fdecec;color:var(--danger);border-radius:8px;padding:2px 8px}
+  .claim p{font-size:13px;color:var(--muted);line-height:1.7;margin:8px 0 14px}
+  .claim button.main{width:100%;border:none;border-radius:12px;background:var(--ink);color:#fff;font-size:15.5px;font-weight:800;padding:14px;cursor:pointer}
+  .claim .alt{margin-top:12px;font-size:12px;color:var(--muted);line-height:1.7;text-align:center}
+  .claim .alt a{color:var(--bronze)}
+  .claim .phone-auth{margin-top:10px;text-align:center}
+  .claim .phone-auth button{border:1px solid var(--line);background:var(--paper);color:var(--bronze);border-radius:10px;padding:9px 16px;font-size:12.5px;cursor:pointer}
+  .claim .note{margin-top:10px;font-size:12px;border-radius:10px;padding:9px 11px;line-height:1.6}
+  .claim .note.ok{background:#e7f0ea;color:var(--ok)}
+  .claim .note.warn{background:#fdf3ec;color:#a8551f}
+  .locked{opacity:.45;pointer-events:none}
   /* 屏 C2 优惠券:签字前可选/更换,签后整页锁定。无可用券时整行不渲染(不占位)。 */
   .cpn-card{background:#fff;border-radius:14px;padding:12px 14px;margin-top:12px;box-shadow:0 2px 14px rgba(45,40,38,.06);display:flex;justify-content:space-between;align-items:center;gap:10px}
   .cpn-card .lab{font-size:13px;color:var(--muted)}
@@ -95,12 +109,27 @@ function money(cents) {
 function esc(s) { return String(s ?? '').replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c])) }
 function toast(msg) { const t = document.getElementById('toast'); t.textContent = msg; t.classList.add('show'); setTimeout(() => t.classList.remove('show'), 2600) }
 
-const code = decodeURIComponent(location.pathname.replace(/^\/sign\/?/, '') || new URLSearchParams(location.search).get('code') || '')
+/* 进这一页有两个门(规则⑧ 双入口等效):
+     ① 顾客在自己小程序里点通知 → /sign?code=XXX
+     ② 店员出示二维码,顾客扫码 → /sign?t=<一次性签署码>(签署码指向具体一张单)
+   两个门打开的是同一张签署页、同一张单;先签为准。 */
+const qs = new URLSearchParams(location.search)
+const signToken = qs.get('t') || ''
+let code = decodeURIComponent(location.pathname.replace(/^\/sign\/?/, '') || qs.get('code') || '')
 let data = null
+let claimDone = false      // 屏 S4:本人确认绑定完成没有
+let authPhone = ''         // 可选手机号授权拿到的号(只做一致性校验,不改档案)
 let hasInk = false
 let strokes = []   // 笔迹点阵,按签名板坐标系;签署时随请求提交,由服务端渲进快照 SVG
 
 async function load() {
+  if (!code && signToken) {
+    // 扫码进来:凭一次性签署码换单号;换到的同时后端会把状态行推成「顾客核对中」
+    const r = await fetch(`/settlements/by-token/${encodeURIComponent(signToken)}`)
+    const b = await r.json()
+    if (!r.ok) { document.getElementById('boot').textContent = b?.error?.message || '这个签署码无效'; return }
+    code = b.code
+  }
   if (!code) { document.getElementById('boot').textContent = '缺少服务单号'; return }
   const res = await fetch(`/settlements/${encodeURIComponent(code)}`)
   const body = await res.json()
@@ -118,11 +147,24 @@ function render() {
   const techNos = s.technicians.map((t) => `${esc(t.name)}：${t.itemNos.join('·') || '—'}`).join(' ／ ')
   const payLabel = { deposit: '已付定金抵扣', stored_value: '储值卡抵扣', migrate_stored: '储值卡抵扣', offline: '到店支付', times_card: '次卡抵扣', coupon: '优惠券' }
 
+  /* 屏 S4:只对**未绑定**顾客显示的签字前置卡(规则⑤)。
+     绑定 = openid 绑到这张单挂着的档案 —— 单挂谁,建单时就定死,与微信注册手机号无关。
+     已绑定顾客直接看到账单,这张卡整块不渲染。 */
+  const needClaim = !signed && s.customerBound === false && !claimDone
   document.getElementById('wrap').innerHTML = `
     <div class="topbar">
       <h1>服务确认单</h1>
       <span class="pill ${signed ? '' : 'warn'}">${signed ? '已签署' : `待签 ${s.groupIndex || 1}/${s.groupTotal || 1}`}</span>
     </div>
+    ${needClaim ? `
+    <div class="claim">
+      <h2>你是${esc(s.cardOwnerName || '本人')}吗？<span class="badge">${esc(s.bindBadgeText || '未绑定')}</span></h2>
+      <p>确认后本次账单与电子票据自动存入你的小程序「我的 → 消费记录」，同时生成你的专属会员码。</p>
+      <button class="main" id="claimBtn">是我本人，绑定并继续</button>
+      <div class="phone-auth"><button id="phoneAuthBtn">可选：手机号一键授权校验</button></div>
+      <div id="claimNote"></div>
+      <div class="alt">不是本人（代付/代签不适用，须本人签字）→ 店员设备当面手签</div>
+    </div>` : ''}
     <div class="doc">
       <div class="sign-slot">
         <div class="lab">顾客签名：</div>
@@ -188,6 +230,18 @@ function render() {
   if (!signed) initPad()
   const opener = document.getElementById('cpnOpen')
   if (opener) opener.addEventListener('click', openCouponSheet)
+  /* 屏 S4:没确认本人之前,账单以下整块置灰不可点、CTA 也锁住 ——
+     绑定是签字的前置步骤,不是可跳过的提示条。 */
+  const claimBtn = document.getElementById('claimBtn')
+  if (claimBtn) {
+    claimBtn.addEventListener('click', doClaim)
+    const phoneBtn = document.getElementById('phoneAuthBtn')
+    if (phoneBtn) phoneBtn.addEventListener('click', askPhoneAuth)
+    document.querySelector('.doc').classList.add('locked')
+    const disc = document.getElementById('disc'); if (disc) disc.disabled = true
+    const btn = document.getElementById('signBtn'); if (btn) btn.disabled = true
+    document.getElementById('cta').classList.add('locked')
+  }
 }
 
 /* 券区(屏 C2)。签字前可点开更换/取消,签后整块不再出现 —— 顾客签的就是用完券的最终构成。
@@ -286,6 +340,40 @@ function initPad() {
 function sync() {
   const disc = document.getElementById('disc')
   document.getElementById('signBtn').disabled = !(disc && disc.checked && hasInk)
+}
+
+/* 屏 S4 接线:一次点击完成绑定(规则⑤)。
+   冲突(该微信已绑本店另一档案)不覆盖、不拦签字,只提示并进人工合并队列。 */
+async function doClaim() {
+  const btn = document.getElementById('claimBtn')
+  if (!btn) return
+  btn.disabled = true; btn.textContent = '绑定中…'
+  try {
+    const res = await fetch(`/settlements/${encodeURIComponent(code)}/claim`, {
+      method: 'POST', headers: { 'content-type': 'application/json' },
+      body: JSON.stringify(authPhone ? { phone: authPhone } : {})
+    })
+    const body = await res.json()
+    if (!res.ok) throw new Error(body?.error?.message || '绑定失败')
+    claimDone = true
+    await load()                       // 重新拉:绑定后徽标消失、前置卡收起
+    toast(body.note || '已绑定')
+  } catch (e) {
+    btn.disabled = false; btn.textContent = '是我本人，绑定并继续'
+    toast(e.message || '绑定失败，请让店员帮忙')
+  }
+}
+
+/* 可选的手机号一键授权:**只做一致性校验** —— 不一致仅提示,不拦签字、不改档案(S4-06)。
+   沙盒里没有真微信授权,让顾客手填一次即可走通演示。 */
+function askPhoneAuth() {
+  const v = window.prompt('手机号一键授权（仅用于与档案核对，不会修改你的档案）', '')
+  if (v === null) return
+  authPhone = String(v).replace(/\D/g, '')
+  const box = document.getElementById('claimNote')
+  if (!box) return
+  if (!authPhone) { box.innerHTML = ''; return }
+  box.innerHTML = `<div class="note ok">已记下 ${esc(authPhone)}，点「是我本人」时一起核对。</div>`
 }
 
 document.getElementById('signBtn').addEventListener('click', async () => {

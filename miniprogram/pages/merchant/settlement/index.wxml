@@ -1,7 +1,15 @@
 <view class="pg">
   <view class="hd">
     <text class="t">结算开单</text>
-    <text class="s">顾客：{{customerName}}{{isProxy ? '（代付·卡主 ' + customerName + '）' : ''}}</text>
+    <!-- 屏 S2:顾客行 = 姓名 + 脱敏手机号 + 「新客·未绑定」徽标。
+         徽标只看**档案绑定状态**、文案由后端下发;绑定后后端给空串,这里自然消失。 -->
+    <view class="s2row">
+      <text class="s2name">{{customerName}}</text>
+      <text class="s2phone" wx:if="{{bind.phoneMasked}}">{{bind.phoneMasked}}</text>
+      <text class="s2badge" wx:if="{{bind.badgeText}}">{{bind.badgeText}}</text>
+      <text class="s2proxy" wx:if="{{isProxy}}">代付·卡主 {{customerName}}</text>
+    </view>
+    <view class="s2hint" wx:if="{{bind.hintText}}">{{bind.hintText}}</view>
   </view>
 
   <view wx:if="{{!ready}}" class="loading">正在读取本店价目表…</view>
@@ -174,7 +182,7 @@
       </view>
     </view>
 
-    <view class="cta {{submitting ? 'ing' : ''}}" bindtap="submit">{{submitting ? '提交中…' : '推送给卡主签字（1 张服务单）'}}</view>
+    <view class="cta {{submitting ? 'ing' : ''}}" bindtap="submit">{{submitting ? '提交中…' : ctaText}}</view>
     <view class="foot">金额全部由后端计价引擎算出，本页不做任何金额运算</view>
   </block>
 </view>

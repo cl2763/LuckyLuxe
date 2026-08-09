@@ -104,6 +104,14 @@ async function main() {
   check('S2 提示行也是后端下发', sheet1.bindHintText.includes('扫码'), sheet1.bindHintText)
   check('S2 顾客行手机号脱敏', sheet1.customerPhoneMasked === `${phone.slice(0, 3)}****${phone.slice(-4)}`, sheet1.customerPhoneMasked)
 
+  // S2 徽标也能按 userId 单独拿(小程序结算页就用这条,不为一个徽标再开接口)
+  const byUid = await request(`/admin/customers/lookup?userId=${encodeURIComponent(xiaoya)}`, {}, shop.token)
+  check('S2 按 userId 拿徽标状态', byUid.data.hit && byUid.data.via === 'user_id' && byUid.data.hit.badgeText === '新客 · 未绑定',
+    JSON.stringify(byUid.data).slice(0, 200))
+  check('S2 徽标接口也给脱敏手机号', byUid.data.hit.phoneMasked === `${phone.slice(0, 3)}****${phone.slice(-4)}`, byUid.data.hit.phoneMasked)
+  const uidCross = await request(`/admin/customers/lookup?userId=${encodeURIComponent(xiaoya)}`, {}, other.token)
+  check('S2 越权:别家店按 userId 也查不到', uidCross.data.hit === null, JSON.stringify(uidCross.data).slice(0, 140))
+
   /* ---- S3 二维码 + 状态行(规则④)---- */
   const qr = await request(`/admin/settlements/${sheet1.id}/sign-token`, { method: 'POST', body: JSON.stringify({}) }, shop.token)
   check('S3 推送签署出码', qr.status === 200 && qr.data.url.includes('/sign?t='), JSON.stringify(qr.data).slice(0, 160))
@@ -142,6 +150,9 @@ async function main() {
   const after = await request(`/settlements/${sheet1.code}`, {}, null)
   check('S4 绑定后 S2 徽标消失', after.data.settlement.bindBadgeText === '' && after.data.settlement.customerBound === true,
     JSON.stringify({ b: after.data.settlement.bindBadgeText, c: after.data.settlement.customerBound }))
+  const uidAfter = await request(`/admin/customers/lookup?userId=${encodeURIComponent(xiaoya)}`, {}, shop.token)
+  check('S4 绑定后徽标接口也给空串(前端 wx:if 一挂就没了)', uidAfter.data.hit.badgeText === '' && uidAfter.data.hit.bound === true,
+    JSON.stringify(uidAfter.data.hit).slice(0, 160))
   // 已绑定顾客再出码 → 顶部多一行「已推送到顾客小程序」(S3-06)
   const qrBound = await request(`/admin/settlements/${sheet1.id}/sign-token`, { method: 'POST', body: JSON.stringify({}) }, shop.token)
   check('S3 已绑定顾客:顶部多「✓ 已推送到顾客小程序」', qrBound.data.pushedText === '✓ 已推送到顾客小程序', qrBound.data.pushedText)

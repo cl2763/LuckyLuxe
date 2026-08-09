@@ -14003,16 +14003,29 @@ async function route(req, res) {
   if (req.method === 'GET' && path === '/admin/customers/lookup') {
     const phone = String(query.phone || '').replace(/\s/g, '').trim()
     const memberCode = String(query.memberCode || '').trim()
+    const userId = String(query.userId || '').trim()
+    // 屏 S2 用这条拿徽标状态(不为一个徽标再开一个接口)。文案在这里拼,前端只显示。
+    const shapeHit = (u) => ({
+      id: u.id, displayName: u.display_name || '', phone: u.phone || '',
+      phoneMasked: maskPhone(u.phone), bound: isUserBound(u.id), memberCode: memberCodeForUserId(u.id),
+      badgeText: isUserBound(u.id) ? '' : '新客 · 未绑定',
+      hintText: isUserBound(u.id) ? '' : '签字时请顾客扫码——签字与绑定小程序一步完成,账单自动存入她的小程序'
+    })
+    if (userId) {
+      const u = db.prepare('SELECT id, display_name, phone, tenant_id FROM users WHERE id = ?').get(userId)
+      if (!u || u.tenant_id !== currentTenantId()) return json(res, 200, { hit: null, reason: '这份档案不属于本店。' })
+      return json(res, 200, { hit: shapeHit(u), via: 'user_id' })
+    }
     if (memberCode) {
       const uid = userIdFromMemberCode(memberCode)
       const u = uid ? db.prepare('SELECT id, display_name, phone, tenant_id FROM users WHERE id = ?').get(uid) : null
       if (!u || u.tenant_id !== currentTenantId()) return json(res, 200, { hit: null, reason: '这个会员码不属于本店,或者查不到档案。' })
-      return json(res, 200, { hit: { id: u.id, displayName: u.display_name || '', phone: u.phone || '', bound: isUserBound(u.id), memberCode: memberCodeForUserId(u.id) }, via: 'member_code' })
+      return json(res, 200, { hit: shapeHit(u), via: 'member_code' })
     }
     if (phone.length < 6) return json(res, 200, { hit: null, reason: '手机号太短,查不了。' })
     const rows = db.prepare('SELECT id, display_name, phone FROM users WHERE tenant_id = ? AND REPLACE(COALESCE(phone, \'\'), \' \', \'\') = ?').all(currentTenantId(), phone)
     if (rows.length !== 1) return json(res, 200, { hit: null, reason: rows.length ? '这个手机号在本店对应多份档案,请人工确认。' : '' })
-    return json(res, 200, { hit: { id: rows[0].id, displayName: rows[0].display_name || '', phone: rows[0].phone || '', bound: isUserBound(rows[0].id), memberCode: memberCodeForUserId(rows[0].id) }, via: 'phone' })
+    return json(res, 200, { hit: shapeHit(rows[0]), via: 'phone' })
   }
   /* 屏 S3:出示二维码。所有单都出(不分绑定与否),已绑定的多一行「已推送到顾客小程序」。
      码 = 这张单的一次性签署链接;再调一次 = 重发(旧码立刻作废)。 */
@@ -14057,6 +14070,40 @@ async function route(req, res) {
 
   /* 定金守恒审计(§五 补拍②):负债的每一分减少都要对得上等额收入。
      空数组 = 守恒。给店主/测试当体检口。 */
+  /* 守恒回填(店主 2026-08-09 拍板,《财务记账总逻辑》v1.3 §五):
+     修复前签署的单,负债减了但收入没涨。**原单与收取记录一分不动**,
+     靠账本**追加**一行系统更正把错账改对 —— 删历史违反只追加,追加才是更正链的意义。
+     幂等:补过的单审计就 ok 了,再跑一次没有可补的。 */
+  if (req.method === 'POST' && path === '/admin/finance/deposit-conservation/repair') {
+    if (adminSession.role !== 'owner') throw apiError(403, 'FORBIDDEN', 'Owner permission is required.')
+    const tenantId = currentTenantId()
+    const broken = auditDepositConservation(tenantId)
+    const repaired = []
+    for (const b of broken) {
+      const missing = b.amountCents - b.incomeCents
+      if (missing <= 0) continue
+      const stl = db.prepare('SELECT * FROM settlements WHERE code = ? AND tenant_id = ?').get(b.settlementCode, tenantId)
+      const deductible = getDepositConfig(tenantId).deductible
+      insertFinanceTransaction({
+        tenantId,
+        type: 'income', source: 'system_amendment', tags: b.settlementCode,
+        category: deductible ? '服务收入-定金' : '定金收入',
+        amountCents: missing, payChannel: 'offline',
+        occurredOn: stl && stl.signed_at ? localParts(new Date(stl.signed_at)).date : todayOf(tenantId),
+        bookingId: b.bookingId,
+        note: '守恒回填·修复前签署',
+        createdBy: adminSession.email || 'owner'
+      })
+      repaired.push({ settlementCode: b.settlementCode, amountCents: missing })
+    }
+    const after = auditDepositConservation(tenantId)
+    return json(res, 200, {
+      repaired, ok: after.length === 0, broken: after,
+      note: repaired.length
+        ? `已追加 ${repaired.length} 行系统更正(标 system_amendment,note「守恒回填·修复前签署」);原单与收取记录一分未动。`
+        : '没有需要回填的记录,定金守恒本来就是好的。'
+    })
+  }
   if (req.method === 'GET' && path === '/admin/finance/deposit-conservation') {
     if (adminSession.role !== 'owner') throw apiError(403, 'FORBIDDEN', 'Owner permission is required.')
     const broken = auditDepositConservation()

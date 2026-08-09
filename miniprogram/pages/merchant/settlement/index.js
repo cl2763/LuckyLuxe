@@ -36,6 +36,9 @@ Page({
     // 屏 C1 优惠券:选中的券、券包面板、后端算好的抵扣额与不可用原因
     couponGrantId: '', couponPanel: false, couponOptions: [], couponUsableCount: 0, couponPicked: null,
     preview: null, view: null,
+    // 屏 S2:绑定状态徽标 —— 文案全部后端下发,前端一个字都不拼(规则③)
+    bind: { bound: true, badgeText: '', hintText: '', phoneMasked: '', memberCode: '' },
+    ctaText: '推送签署',
     submitting: false
   },
 
@@ -80,11 +83,32 @@ Page({
         depositApplied: Boolean(this.data.bookingId),
         picked
       })
+      this.loadBindState()
       this.renderCatalogue()
       this.refresh()
     } catch (e) {
       wx.showToast({ title: (e && e.message) || '加载价目表失败', icon: 'none' })
     }
+  },
+
+  /* 屏 S2:这份档案绑没绑微信。只看绑定状态,不看新老客;文案后端给,绑定后是空串。
+     用 lookup 拿(与 S1「手机号命中带出」同一个口子),避免为一个徽标再开一个接口。 */
+  async loadBindState() {
+    if (!this.data.userId) return
+    try {
+      const r = await api.adminGet(`/admin/customers/lookup?userId=${encodeURIComponent(this.data.userId)}`)
+      const hit = r && r.hit
+      if (!hit) return
+      this.setData({
+        bind: {
+          bound: hit.bound,
+          badgeText: hit.badgeText || '',
+          hintText: hit.hintText || '',
+          phoneMasked: hit.phoneMasked || '',
+          memberCode: hit.memberCode || ''
+        }
+      })
+    } catch (e) { /* 拉不到就不显示徽标,不挡开单 */ }
   },
 
   catOf(serviceId) {

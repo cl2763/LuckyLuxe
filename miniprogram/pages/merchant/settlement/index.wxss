@@ -106,3 +106,11 @@
 .cpn .pick{width:34rpx;height:34rpx;flex:none;border-radius:50%;border:3rpx solid #ded4ca}
 .cpn.on .pick{border-color:#2f7d5c;background:#2f7d5c;box-shadow:inset 0 0 0 6rpx #fff}
 .cpnok{margin-top:8rpx;background:#2d2826;color:#fff;text-align:center;padding:26rpx;border-radius:16rpx;font-size:29rpx;font-weight:800}
+
+/* 屏 S2:顾客行 + 「新客·未绑定」徽标(文案后端下发,绑定后整块消失) */
+.s2row{display:flex;align-items:center;flex-wrap:wrap;gap:10rpx;margin-top:6rpx}
+.s2name{font-size:26rpx;font-weight:700;color:#241f1d}
+.s2phone{font-size:23rpx;color:#8c8279}
+.s2badge{font-size:21rpx;font-weight:700;background:#fdecec;color:#c0392b;border-radius:999rpx;padding:3rpx 14rpx}
+.s2proxy{font-size:21rpx;color:#9b7655}
+.s2hint{margin-top:8rpx;font-size:21rpx;color:#8c8279;line-height:1.6}

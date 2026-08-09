@@ -540,6 +540,16 @@ async function main() {
   const staffRevoke = await request(`/admin/bookings/${staffBook.data.booking.id}/deposit-receipt/revoke`, { method: 'POST', body: JSON.stringify({}) }, walkinToken)
   check('A 越权:员工不能撤销定金记录(撤销是老板的事)', staffRevoke.status === 403, String(staffRevoke.status))
 
+  /* 守恒回填(v1.3 §五,店主 2026-08-09 拍板):错账靠**追加**改对,不改历史不删。
+     这里只锁「幂等 + 越权」;真实回填在 KAP1 那次已验(两店审计 ok:true)。 */
+  const repairAnon = await request('/admin/finance/deposit-conservation/repair', { method: 'POST', body: JSON.stringify({}) }, null)
+  check('守恒回填 越权:未登录 401', repairAnon.status === 401, String(repairAnon.status))
+  const repair1 = await request('/admin/finance/deposit-conservation/repair', { method: 'POST', body: JSON.stringify({}) }, shop.token)
+  check('守恒回填:本来就守恒时不乱补', repair1.status === 200 && repair1.data.ok === true && repair1.data.repaired.length === 0,
+    JSON.stringify(repair1.data).slice(0, 200))
+  const repair2 = await request('/admin/finance/deposit-conservation/repair', { method: 'POST', body: JSON.stringify({}) }, shop.token)
+  check('守恒回填 幂等:再跑一次还是 0 行', repair2.data.repaired.length === 0 && repair2.data.ok === true, JSON.stringify(repair2.data).slice(0, 160))
+
   // ---- 异常输入 ----
   const ghost = await request(`/admin/settlements/${twoSheet.id}/allocate`, {
     method: 'POST', body: JSON.stringify({ shares: [{ technicianId: 'tech-does-not-exist', pct: 50 }, { technicianId: techB.id, pct: 50 }] })
