@@ -117,14 +117,18 @@ Page({
     const all = this.allItems || []
     const mainItems = all.filter((i) => (i.itemKind || 'main') === 'main' && (i.categoryId || '') === this.data.catId).map(decorate)
     const addons = all.filter((i) => i.itemKind === 'addon')
+    /* 裁决④(2026-08-09):加项按**商家自填的组名**分组(如 延长类 / 补甲类 / 卸甲类),
+       不再按价目表大类分 —— 图上那三个组名是这家店的说法,不该写死在代码里。
+       没填组名的归「其他加项」,永远排在最后。 */
     const groupMap = {}
-    const catName = {}
-    ;(this.data.cats || []).forEach((c) => { catName[c.id] = c.name })
+    const order = []
     addons.forEach((i) => {
-      const key = i.categoryId || 'other'
-      ;(groupMap[key] = groupMap[key] || { title: catName[key] || '加项', items: [] }).items.push(decorate(i))
+      const key = (i.addonGroup || '').trim() || '其他加项'
+      if (!groupMap[key]) { groupMap[key] = { title: key, items: [] }; order.push(key) }
+      groupMap[key].items.push(decorate(i))
     })
-    this.setData({ mainItems, addonGroups: Object.keys(groupMap).map((k) => groupMap[k]) })
+    const sorted = order.filter((k) => k !== '其他加项').concat(order.includes('其他加项') ? ['其他加项'] : [])
+    this.setData({ mainItems, addonGroups: sorted.map((k) => groupMap[k]) })
   },
 
   pickTier(e) {

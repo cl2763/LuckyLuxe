@@ -31,6 +31,7 @@
   .strike{color:var(--muted);text-decoration:line-through;font-size:12.5px;margin-right:6px}
   .free{color:var(--ok);font-weight:700;font-size:13px}
   .badge{display:inline-block;font-size:11px;background:#fff5ec;color:#8a5a2b;border:1px solid #f0d8bf;border-radius:8px;padding:1px 7px;margin-left:6px}
+  .proxy-line{background:#fff5ec;border:1px solid #f0d8bf;border-radius:9px;padding:7px 10px;font-size:12.5px;color:#8a5a2b;margin-bottom:8px}
   .totals{border-top:1px solid var(--line);margin-top:12px;padding-top:12px}
   .totals .row{font-size:13.5px;color:var(--muted)}
   .totals .row b{color:var(--ink)}
@@ -120,7 +121,7 @@ function render() {
   document.getElementById('wrap').innerHTML = `
     <div class="topbar">
       <h1>服务确认单</h1>
-      <span class="pill ${signed ? '' : 'warn'}">${signed ? '已签署' : '待签'}</span>
+      <span class="pill ${signed ? '' : 'warn'}">${signed ? '已签署' : `待签 ${s.groupIndex || 1}/${s.groupTotal || 1}`}</span>
     </div>
     <div class="doc">
       <div class="sign-slot">
@@ -140,7 +141,8 @@ function render() {
       </div>
 
       <div class="sec">
-        <h2>服务明细${s.isProxyPaid ? '<span class="badge">代付</span>' : ''}</h2>
+        <h2>服务明细</h2>
+        ${s.isProxyPaid ? `<div class="proxy-line">本单由 ${esc(s.cardOwnerName || '卡主')} 的卡支付（代付）</div>` : ''}
         ${s.items.map((i) => `
           <div class="row">
             <span><span class="no">${String(i.itemNo).padStart(2, '0')}</span>${esc(i.name)}${i.unit === 'per_finger' ? ` ×${i.qty} 指` : (i.qty > 1 ? ` ×${i.qty}` : '')}</span>

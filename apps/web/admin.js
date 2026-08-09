@@ -8353,6 +8353,10 @@ function renderPricingItemEditor() {
       </div>
       ${isAddon ? `
       <div class="pricing-addon-block">
+        <label><span>${pzh() ? '加项组名(结算表单里按它分组,如 延长类 / 补甲类 / 卸甲类;留空归「其他加项」)' : 'Addon group'}</span>
+          <input id="piAddonGroup" list="piAddonGroupList" value="${escapeHtml(draft.addonGroup || '')}" placeholder="${pzh() ? '例:延长类' : 'e.g. Extensions'}">
+        </label>
+        <datalist id="piAddonGroupList">${[...new Set((pricingState.items || []).map((i) => i.addonGroup).filter(Boolean))].map((g) => `<option value="${escapeHtml(g)}">`).join('')}</datalist>
         <label class="subtle"><input type="checkbox" id="piPctRule" ${draft.priceRule === 'pct_of_tier_price' ? 'checked' : ''}>
           ${pzh() ? '单指价按主项目该档价的百分比算(留空用规则默认 10%)' : 'Derive per-finger price from main item price'}</label>
         <input id="piPct" class="pricing-sort" inputmode="decimal" placeholder="%" value="${draft.priceRuleValue || ''}">
@@ -8388,6 +8392,8 @@ function collectPricingItemForm() {
     body.priceRule = document.querySelector('#piPctRule')?.checked ? 'pct_of_tier_price' : 'fixed'
     body.priceRuleValue = Number(document.querySelector('#piPct')?.value || 0) || 0
     body.addonScope = Array.from(document.querySelectorAll('[data-scope]')).filter((el) => el.checked).map((el) => el.dataset.scope)
+    // 裁决④:加项组名由商家自填,结算表单按它给加项目录分组
+    body.addonGroup = (document.querySelector('#piAddonGroup')?.value || '').trim()
   }
   return body
 }
@@ -8512,7 +8518,7 @@ if (els.pricingPage) {
       if (event.target.closest('#addPricingMain') || event.target.closest('#addPricingAddon')) {
         const isAddon = Boolean(event.target.closest('#addPricingAddon'))
         if (!pricingState.categories.length) { toast(pzh() ? '先建至少一个大类' : 'Create a category first'); return }
-        pricingState.editing = { itemKind: isAddon ? 'addon' : 'main', categoryId: pricingState.categories[0].id, unit: 'once', type: 'OTHER', addonScope: [] }
+        pricingState.editing = { itemKind: isAddon ? 'addon' : 'main', categoryId: pricingState.categories[0].id, unit: 'once', type: 'OTHER', addonScope: [], addonGroup: '' }
         pricingState.tab = 'items'
         renderPricing()
         return

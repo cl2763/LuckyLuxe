@@ -7097,6 +7097,8 @@ function pricingItemShape(body = {}, cur = {}, tenantId = currentTenantId()) {
     priceRule: ['fixed', 'pct_of_tier_price'].includes(body.priceRule) ? body.priceRule : (cur.price_rule || 'fixed'),
     priceRuleValue: body.priceRuleValue === undefined ? (cur.price_rule_value || 0) : (Number(body.priceRuleValue) || 0),
     addonScope,
+    // 加项组名:商家自填(如「延长类」「补甲类」「卸甲类」);留空 = 归「其他加项」
+    addonGroup: body.addonGroup === undefined ? (cur.addon_group || '') : String(body.addonGroup || '').trim().slice(0, 20),
     type: ['NAIL', 'LASH', 'CARE', 'OTHER'].includes(type) ? type : 'OTHER'
   }
 }
@@ -7129,6 +7131,7 @@ function serializePricingItem(row) {
     priceRule: row.price_rule || 'fixed',
     priceRuleValue: row.price_rule_value || 0,
     addonScope,
+    addonGroup: row.addon_group || '',
     baseDurationMin: row.base_duration_min,
     depositCents: row.deposit_cents,
     sortOrder: row.sort_order,
@@ -9031,6 +9034,9 @@ function serializeSettlement(row, { includeSignature = false } = {}) {
     code: row.code,
     tenantId: row.tenant_id,
     groupId: row.group_id,
+    // 屏 2 右上角「待签 1/2」:同组第几张 / 共几张(撤回的不算)
+    groupIndex: db.prepare("SELECT COUNT(*) AS n FROM settlements WHERE group_id = ? AND status <> 'voided' AND rowid <= (SELECT rowid FROM settlements WHERE id = ?)").get(row.group_id, row.id).n,
+    groupTotal: db.prepare("SELECT COUNT(*) AS n FROM settlements WHERE group_id = ? AND status <> 'voided'").get(row.group_id).n,
     bookingId: row.booking_id,
     storeName: store?.name || '',
     storeAddress: store?.address || '',
@@ -9039,6 +9045,8 @@ function serializeSettlement(row, { includeSignature = false } = {}) {
     currencyDisplay: currencyDisplayOf(tenantCurrencyCode(row.tenant_id)),
     servedPersonName: row.served_person_name || '',
     isProxyPaid: Boolean(row.is_proxy_paid),
+    // 屏 2:代付要在明细区上方单起一行「本单由 X 的卡支付(代付)」,所以要卡主姓名
+    cardOwnerName: (db.prepare('SELECT display_name FROM users WHERE id = ?').get(row.user_id) || {}).display_name || '',
     status: row.status,
     tierKey: row.price_tier_used,
     tierChangedFrom: row.tier_changed_from,
@@ -10016,6 +10024,37 @@ async function route(req, res) {
         : db.prepare('SELECT * FROM settlements WHERE tenant_id = ? ORDER BY created_at DESC LIMIT 60').all(tid))
     return json(res, 200, { settlements: rows.map((r) => serializeSettlement(r)) })
   }
+  /* 屏 0:「结算单已推送待签」状态下可**撤回改单**。
+     只撤未签的;已签一律不可撤(账本只追加、已签不可改),要改走金额更正链。
+     撤回时把挂在这张单上的券一并放开,不然那张券会被一张作废单永远占着。 */
+  if (req.method === 'POST' && path.startsWith('/admin/settlements/') && path.endsWith('/void')) {
+    if (adminSession.role !== 'owner' && adminSession.role !== 'staff') throw apiError(403, 'FORBIDDEN', '需要员工或老板权限。')
+    const id = path.split('/')[3]
+    const row = db.prepare('SELECT * FROM settlements WHERE id = ? AND tenant_id = ?').get(id, currentTenantId())
+    if (!row) throw apiError(404, 'NOT_FOUND', '找不到这张服务单。')
+    if (row.status === 'signed') throw apiError(400, 'ALREADY_SIGNED', '这张单顾客已经签了,不能撤回;要改请走金额更正。')
+    if (row.status === 'voided') return json(res, 200, { voided: true, code: row.code, note: '这张单之前已经撤回过了。' })
+    const now = iso(new Date())
+    db.exec('BEGIN IMMEDIATE')
+    try {
+      if (row.coupon_grant_id) {
+        logCouponGrant({
+          tenantId: row.tenant_id, grantId: row.coupon_grant_id, action: 'released', settlementCode: row.code,
+          detail: '服务单撤回改单,券放回券包', actor: adminSession.email || 'staff'
+        })
+      }
+      db.prepare("UPDATE settlements SET status = 'voided', coupon_grant_id = NULL, coupon_id = NULL, coupon_name = NULL, coupon_discount_cents = 0, updated_at = ? WHERE id = ?").run(now, id)
+      db.prepare("UPDATE settlement_payments SET status = 'void' WHERE settlement_id = ?").run(id)
+      // 组里全撤完了,组也跟着作废
+      const alive = db.prepare("SELECT COUNT(*) AS n FROM settlements WHERE group_id = ? AND status <> 'voided'").get(row.group_id).n
+      if (alive === 0) db.prepare("UPDATE settlement_groups SET status = 'voided', updated_at = ? WHERE id = ?").run(now, row.group_id)
+      db.exec('COMMIT')
+    } catch (error) {
+      db.exec('ROLLBACK')
+      throw error
+    }
+    return json(res, 200, { voided: true, code: row.code, note: '已撤回,可以重新开单;所用优惠券已放回券包。' })
+  }
   // 店员在待签单上代选/更换/取消券(屏 C1 推送之后仍可改);签后一律拒绝
   if (req.method === 'POST' && path.startsWith('/admin/settlements/') && path.endsWith('/coupon')) {
     if (adminSession.role !== 'owner' && adminSession.role !== 'staff') throw apiError(403, 'FORBIDDEN', '需要员工或老板权限。')
@@ -10287,14 +10326,14 @@ async function route(req, res) {
       const listCents = Math.max(0, Math.round(Number(body.listPriceCents ?? body.priceCents ?? 0) || 0))
       db.prepare(`INSERT INTO services
         (id, tenant_id, type, category, name_zh, name_en, description_zh, description_en, image_url, price_cents, deposit_cents, base_duration_min, sort_order, is_active, process_json, notice_json,
-         item_kind, category_id, unit, price_rule, price_rule_value, addon_scope_json)
-        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`).run(
+         item_kind, category_id, unit, price_rule, price_rule_value, addon_scope_json, addon_group)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`).run(
         id, tid, shape.type, shape.categoryName, nameZh, String(body.nameEn || nameZh), String(body.descriptionZh || ''), String(body.descriptionEn || ''),
         String(body.imageUrl || '/assets/images/nail-addon.jpg'), listCents,
         Math.max(0, Math.round(Number(body.depositCents ?? 0) || 0)),
         Math.max(0, Math.round(Number(body.baseDurationMin ?? 60) || 0)),
         Math.round(Number(body.sortOrder) || 0), body.isActive === false ? 0 : 1, '[]', '[]',
-        shape.itemKind, shape.categoryId, shape.unit, shape.priceRule, shape.priceRuleValue, JSON.stringify(shape.addonScope))
+        shape.itemKind, shape.categoryId, shape.unit, shape.priceRule, shape.priceRuleValue, JSON.stringify(shape.addonScope), shape.addonGroup || null)
       writePricingItemPrices(tid, id, body, listCents)
       // 主项目自动分配给全部在职技师(与 /admin/services 同规则);加项不占技师能力位
       if (shape.itemKind === 'main') {
@@ -10312,7 +10351,7 @@ async function route(req, res) {
         ? cur.price_cents
         : Math.max(0, Math.round(Number(body.listPriceCents ?? body.priceCents) || 0))
       db.prepare(`UPDATE services SET type = ?, category = ?, name_zh = ?, name_en = ?, price_cents = ?, deposit_cents = ?, base_duration_min = ?,
-        sort_order = ?, is_active = ?, item_kind = ?, category_id = ?, unit = ?, price_rule = ?, price_rule_value = ?, addon_scope_json = ? WHERE id = ?`).run(
+        sort_order = ?, is_active = ?, item_kind = ?, category_id = ?, unit = ?, price_rule = ?, price_rule_value = ?, addon_scope_json = ?, addon_group = ? WHERE id = ?`).run(
         shape.type, shape.categoryName,
         body.nameZh === undefined ? cur.name_zh : String(body.nameZh).trim().slice(0, 60) || cur.name_zh,
         body.nameEn === undefined ? cur.name_en : String(body.nameEn).trim().slice(0, 80),
@@ -10321,7 +10360,7 @@ async function route(req, res) {
         body.baseDurationMin === undefined ? cur.base_duration_min : Math.max(0, Math.round(Number(body.baseDurationMin) || 0)),
         body.sortOrder === undefined ? cur.sort_order : Math.round(Number(body.sortOrder) || 0),
         body.isActive === undefined ? cur.is_active : (body.isActive ? 1 : 0),
-        shape.itemKind, shape.categoryId, shape.unit, shape.priceRule, shape.priceRuleValue, JSON.stringify(shape.addonScope), itemId)
+        shape.itemKind, shape.categoryId, shape.unit, shape.priceRule, shape.priceRuleValue, JSON.stringify(shape.addonScope), shape.addonGroup || null, itemId)
       writePricingItemPrices(tid, itemId, body, listCents)
       return json(res, 200, { item: serializePricingItem(db.prepare('SELECT * FROM services WHERE id = ?').get(itemId)) })
     }
@@ -14434,6 +14473,15 @@ for (const column of [
     if (!String(error.message || '').includes('duplicate column')) throw error
   }
 }
+/* 加项组名(裁决④,2026-08-09):设计图屏 1 的加项目录按「延长类 / 补甲类 / 卸甲类」分组,
+   而这三个名字是这家店的说法,不该写死在代码里 —— 改成商家在价目表里自填的一个字段。
+   留空的加项归「其他加项」。老表加列走 ALTER(CLAUDE.md 纪律 8)。 */
+try {
+  db.exec("ALTER TABLE services ADD COLUMN addon_group TEXT")
+} catch (error) {
+  if (!String(error.message || '').includes('duplicate column')) throw error
+}
+
 /* 分成基数迁移(店主 2026-08-09 拍板):基数一律 = **档位小计**。
    之前是应收(= 档位小计 − 定金),等于顾客先付了定金反而扣技师业绩 —— 定金是付款时序不是让利。
    迁移三步,幂等(跑第二遍是空操作):

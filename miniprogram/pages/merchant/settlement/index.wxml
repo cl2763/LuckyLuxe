@@ -174,7 +174,7 @@
       </view>
     </view>
 
-    <view class="cta {{submitting ? 'ing' : ''}}" bindtap="submit">{{submitting ? '提交中…' : '推送给卡主签字'}}</view>
+    <view class="cta {{submitting ? 'ing' : ''}}" bindtap="submit">{{submitting ? '提交中…' : '推送给卡主签字（1 张服务单）'}}</view>
     <view class="foot">金额全部由后端计价引擎算出，本页不做任何金额运算</view>
   </block>
 </view>

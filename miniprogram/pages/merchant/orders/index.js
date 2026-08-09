@@ -118,8 +118,11 @@ Page(Object.assign({
     if (status === 'PENDING_PAYMENT' || status === 'PENDING_DEPOSIT') {
       opts.push({ label: '确认到店', s: 'CONFIRMED' }, { label: '取消预约', s: 'CANCELLED' })
     } else if (status === 'CONFIRMED' || status === 'IN_PROGRESS' || status === 'SERVING') {
-      if (pending.length) opts.push({ label: `查看结算单（待签 ${pending.length} 张）`, sheets: true })
-      else opts.push({ label: '去结算', settle: true })
+      if (pending.length) {
+        opts.push({ label: `查看结算单（待签 ${pending.length} 张）`, sheets: true })
+        // 屏 0:待签状态可撤回改单(只撤未签的;已签一律走金额更正)
+        opts.push({ label: '撤回改单', voidSheets: pending })
+      } else opts.push({ label: '去结算', settle: true })
       opts.push({ label: '取消预约', s: 'CANCELLED' })
     } else if (status === 'COMPLETED') {
       if (sheets.length) opts.push({ label: '查看电子票据', sheets: true })
@@ -135,11 +138,32 @@ Page(Object.assign({
         const o = opts[r.tapIndex]
         if (o.note) this.goNote(ctx)
         else if (o.settle) this.goSettle(ctx)
+        else if (o.voidSheets) this.voidSheets(o.voidSheets, ctx)
         else if (o.sheets) this.showSheets(sheets)
         else this.applyStatus(id, o.s)
       }
     })
   },
+  /* 撤回改单:把这单还没签的结算单全撤掉,回到「去结算」状态重新开。
+     已签的一张都不动 —— 已签不可改是硬规则,要改走金额更正链。 */
+  voidSheets(pending, ctx) {
+    wx.showModal({
+      title: '撤回改单',
+      content: `撤回 ${pending.length} 张待签结算单,回到未结算状态重新开单。已签的单不受影响;单上用掉的券会放回顾客券包。`,
+      confirmText: '撤回',
+      success: async (r) => {
+        if (!r.confirm) return
+        try {
+          for (const sheet of pending) {
+            await api.adminPost(`/admin/settlements/${encodeURIComponent(sheet.id)}/void`, {})
+          }
+          wx.showToast({ title: '已撤回,可以重新开单', icon: 'none' })
+          this.goSettle(ctx)
+        } catch (e) { wx.showToast({ title: (e && e.message) || '撤回失败', icon: 'none' }) }
+      }
+    })
+  },
+
   // 这单已经推过几张结算单?待签几张?按钮文案照它渲染
   async settlementsOf(bookingId) {
     if (!bookingId) return []
