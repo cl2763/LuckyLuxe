@@ -11,17 +11,31 @@
         <view class="order-card card" bindtap="goDetail" data-id="{{item._id}}">
           <view class="order-head">
             <text>{{item.serviceName}}</text>
-            <text class="status">{{item.statusText}}</text>
+            <!-- 屏 D2 徽标三态:已签署/已更正 ×N/售后中。文案与配色档由后端给,没事的单整块不渲染 -->
+            <text class="status badge-{{item.listBadgeKind}}" wx:if="{{item.listBadgeText}}">{{item.listBadgeText}}</text>
+            <text class="status" wx:else>{{item.statusText}}</text>
           </view>
           <view class="order-body">
             <image class="mini-visual" src="{{item.serviceImage}}" mode="aspectFill"></image>
             <view class="order-info">
               <view class="order-time">{{item.appointment.date}} {{item.appointment.time}}</view>
               <view class="muted">{{item.store.storeName}}</view>
-              <view class="price" wx:if="{{item.status === 'completed'}}">已结清 {{cur.p}}{{cur.s}}{{item.servicePrice}}</view>
+              <view class="muted note" wx:if="{{item.listNote}}">{{item.listNote}}</view>
+              <!-- 有更正时右侧金额=**实际应付**(后端算好的串,含币符);没更正走原路径 -->
+              <view class="price" wx:if="{{item.actualDueText}}">{{item.actualDueText}}</view>
+              <view class="price" wx:elif="{{item.status === 'completed'}}">已结清 {{cur.p}}{{cur.s}}{{item.servicePrice}}</view>
               <view class="price" wx:elif="{{item.status === 'cancelled' || item.status === 'after_sales'}}">总价 {{cur.p}}{{cur.s}}{{item.servicePrice}}</view>
               <view class="price" wx:else>定金 ${{item.payableAmount}} 已付 · 到店应付 ${{item.finalDue}}</view>
             </view>
+          </view>
+          <!-- 屏 D3 售后进度三步 + 单据页入口(规则③:进的是同一张服务确认单) -->
+          <view class="as-card" wx:if="{{item.afterSales}}" catchtap="noop">
+            <view class="as-step {{st.done ? 'done' : ''}}" wx:for="{{item.afterSales.steps}}" wx:for-item="st" wx:key="key">
+              <view class="as-dot"></view>
+              <view class="as-body"><view class="as-l">{{st.label}}</view><view class="as-t">{{st.at}}</view></view>
+            </view>
+            <view class="as-link" wx:if="{{item.settlementCode}}" catchtap="goSettlementDoc" data-code="{{item.settlementCode}}">查看服务确认单 ›</view>
+            <view class="as-foot">{{item.afterSales.footnote}}</view>
           </view>
         </view>
       </block>

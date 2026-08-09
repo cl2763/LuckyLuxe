@@ -5433,10 +5433,65 @@ function serializeBooking(row, lang = 'zh') {
     cancellationFeeCents: row.cancellation_fee_cents,
     service: service ? serializeService(service, lang) : null,
     user,
+    /* 屏 D2 顾客端消费记录列表(2026-08-10 批图):徽标三态 + 右侧金额=**实际应付**。
+       规则①:列表项与详情页同步出现;规则⓪:前端零计算,文案与金额都后端给。
+       没更正、没售后的普通单 → 全是空串,列表项保持现状(条件渲染)。 */
+    ...customerOrderBadges(row),
     technician: db.prepare('SELECT * FROM technicians WHERE id = ?').get(row.technician_id),
     store: db.prepare('SELECT * FROM stores WHERE id = ?').get(row.store_id),
     payments: db.prepare('SELECT * FROM payments WHERE booking_id = ? ORDER BY created_at DESC').all(row.id),
     createdAt: row.created_at
+  }
+}
+
+/* 顾客端列表徽标(图 D2 规则①)。一张预约上可能挂着已签结算单;
+   徽标三态:已签署 / 已更正(×N)/ 售后中。金额一律取**实际应付**(有更正时)。 */
+function customerOrderBadges(row) {
+  const stl = db.prepare("SELECT * FROM settlements WHERE booking_id = ? AND status = 'signed' ORDER BY signed_at DESC LIMIT 1").get(row.id)
+  const isAfterSales = row.status === 'AFTER_SALES'
+  if (!stl) {
+    return {
+      listBadgeText: isAfterSales ? '售后中' : '',
+      listBadgeKind: isAfterSales ? 'aftersales' : '',
+      listNote: isAfterSales ? '已转人工客服跟进' : '',
+      actualDueText: '', actualDueCents: null
+    }
+  }
+  const amd = amendmentShape(stl)
+  // 售后 > 已更正 > 已签署(售后是当前最要紧的状态,压在最上面)
+  const badge = isAfterSales ? '售后中' : (amd.amendBadgeText || '已签署')
+  const kind = isAfterSales ? 'aftersales' : (amd.amendedCount ? 'amended' : 'signed')
+  return {
+    listBadgeText: badge,
+    listBadgeKind: kind,
+    listNote: isAfterSales ? '已转人工客服跟进' : (amd.amendedCount ? '已签署 · 点开看更正明细' : '已签署'),
+    settlementCode: stl.code,
+    actualDueCents: amd.actualDueCents,
+    actualDueText: amd.actualDueText,
+    /* 屏 D3 售后进度三步(发起 → 跟进中 → 结果)。文案与时间全后端给;
+       未完成时结果行显示「—」(规则④ 沿用现行口径,退款凭据只记售后单内)。 */
+    ...(isAfterSales ? { afterSales: afterSalesProgress(row) } : {})
+  }
+}
+
+function afterSalesProgress(row) {
+  const tz = tenantTimezone(row.tenant_id)
+  const stamp = (at) => {
+    if (!at) return ''
+    const p = localParts(new Date(at), tz)
+    return `${p.date.slice(5)} ${p.time.slice(0, 5)}`
+  }
+  const hist = db.prepare("SELECT to_status, note, created_at FROM booking_status_history WHERE booking_id = ? AND to_status = 'AFTER_SALES' ORDER BY created_at ASC LIMIT 1").get(row.id)
+  const raisedAt = (hist && hist.created_at) || row.updated_at
+  return {
+    title: '售后中',
+    steps: [
+      { key: 'raised', label: '发起售后(联系客服)', at: stamp(raisedAt), done: true },
+      { key: 'following', label: '已转人工,门店跟进中', at: stamp(row.updated_at), done: true },
+      { key: 'result', label: '处理结果(完成后显示说明)', at: '—', done: false }
+    ],
+    resultText: '',
+    footnote: '处理完成后此卡状态变「售后完成」并显示结果说明;涉及退款的,退款凭据记在本售后单内。'
   }
 }
 

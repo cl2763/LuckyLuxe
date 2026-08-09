@@ -127,3 +127,21 @@
   width: 240rpx;
   margin: 32rpx auto 0;
 }
+
+/* 屏 D2 徽标三态(2026-08-10 批图):已签署绿 / 已更正暖橙 / 售后中蓝 */
+.status.badge-signed{color:#2f7d5c;background:#e3eee8}
+.status.badge-amended{color:#a8551f;background:#fdf3ec}
+.status.badge-aftersales{color:#2b6cb0;background:#e6effa}
+.status.badge-signed,.status.badge-amended,.status.badge-aftersales{border-radius:999rpx;padding:4rpx 16rpx;font-size:22rpx;font-weight:700}
+.order-info .note{font-size:22rpx;margin-top:4rpx}
+
+/* 屏 D3 售后进度卡:三步(发起 → 跟进中 → 结果)+ 单据页入口 */
+.as-card{margin-top:16rpx;padding-top:16rpx;border-top:1rpx dashed #e7ddd4}
+.as-step{display:flex;gap:16rpx;align-items:flex-start;padding:8rpx 0}
+.as-dot{width:16rpx;height:16rpx;border-radius:50%;background:#d8cec4;margin-top:10rpx;flex:none}
+.as-step.done .as-dot{background:#2b6cb0}
+.as-body{flex:1;min-width:0}
+.as-l{font-size:24rpx;color:#241f1d}
+.as-t{font-size:21rpx;color:#9a8c7c;margin-top:2rpx}
+.as-link{margin-top:12rpx;font-size:24rpx;font-weight:700;color:#2b6cb0}
+.as-foot{margin-top:10rpx;font-size:20rpx;color:#9a8c7c;line-height:1.6}

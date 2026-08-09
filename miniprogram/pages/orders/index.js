@@ -25,6 +25,15 @@ Page({
     this.setData({ activeStatus: options.status || 'all' })
   },
 
+  noop() {},
+  /* 规则③ 单据页只有一张、处处可达:售后卡「查看服务确认单」进的是**同一张**页面
+     (web-view 包的网页 /sign),与消费记录点开完全同一实现。 */
+  goSettlementDoc(e) {
+    const code = e.currentTarget.dataset.code
+    if (!code) return
+    wx.navigateTo({ url: `/pages/sign/index?code=${encodeURIComponent(code)}` })
+  },
+
   onShow() {
     ensureCurrencyCached()
     this.setData({ cur: curOf() })   // 币种跟门店走,不写死币符

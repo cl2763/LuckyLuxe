@@ -242,6 +242,37 @@ async function main() {
     third.actualDueCents === third.totalCents + third.amendments.reduce((n, a) => n + a.amountDeltaCents, 0),
     JSON.stringify({ a: third.actualDueCents, t: third.totalCents }))
 
+  /* 屏 D2 / D3(2026-08-10 批图):徽标三态、右侧金额=实际应付、售后三步进度。
+     规则①:列表项与详情页**同步出现**;规则③:售后入口进的是同一张单据页。 */
+  const listOf = async () => (await request('/admin/bookings?limit=40', {}, shop.token)).data.bookings || []
+  const rowFor = async (bid) => (await listOf()).find((x) => x.id === bid)
+  const plain = await rowFor(bk2.id)     // 已签、没更正
+  check('D2 已签无更正:徽标「已签署」,不冒充更正', plain.listBadgeText === '已签署' && plain.listBadgeKind === 'signed',
+    JSON.stringify({ t: plain.listBadgeText, k: plain.listBadgeKind }))
+  const amended = await rowFor(amendBk.id)
+  check('D2 有更正:徽标带次数,与详情页同一句(规则①)', amended.listBadgeText === third.amendBadgeText,
+    JSON.stringify({ list: amended.listBadgeText, doc: third.amendBadgeText }))
+  check('D2 右侧金额 = 实际应付(与详情页同一个数)', amended.actualDueCents === third.actualDueCents,
+    JSON.stringify({ list: amended.actualDueCents, doc: third.actualDueCents }))
+  check('D2 副行说明后端下发', amended.listNote.includes('更正'), amended.listNote)
+  const bareBk = await mkBooking('20:30', techB)   // 只有预约、没开过单
+  const noSheet = await rowFor(bareBk.id)
+  check('D2 空态:没挂已签单的预约,徽标与金额都是空(列表项保持现状)',
+    noSheet.listBadgeText === '' && noSheet.actualDueText === '',
+    JSON.stringify({ t: noSheet.listBadgeText, a: noSheet.actualDueText }))
+
+  // D3 售后:徽标压过更正、三步进度、单据页入口
+  await request(`/admin/bookings/${bk2.id}/status`, { method: 'PATCH', body: JSON.stringify({ status: 'AFTER_SALES' }) }, shop.token)
+  const asRow = await rowFor(bk2.id)
+  check('D3 售后中徽标压过其它状态', asRow.listBadgeText === '售后中' && asRow.listBadgeKind === 'aftersales',
+    JSON.stringify({ t: asRow.listBadgeText, k: asRow.listBadgeKind }))
+  check('D3 三步进度:发起 → 跟进中 → 结果(未完成显示 —)',
+    asRow.afterSales && asRow.afterSales.steps.length === 3 && asRow.afterSales.steps[2].at === '—' && asRow.afterSales.steps[2].done === false,
+    JSON.stringify(asRow.afterSales && asRow.afterSales.steps))
+  check('D3 规则③:售后卡带单号,进的是同一张单据页', Boolean(asRow.settlementCode), asRow.settlementCode)
+  const plainAgain = await rowFor(amendBk.id)
+  check('D3 只影响这一单,别的单不被串', plainAgain.listBadgeKind === 'amended', plainAgain.listBadgeKind)
+
   console.log(`\n双单场景回归通过:${checks} 项断言全绿`)
 }
 
