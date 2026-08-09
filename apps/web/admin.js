@@ -1,5 +1,5 @@
 // 构建号:每次交付递增。侧栏可见,排查"改了没生效"时先对版本。
-const ADMIN_BUILD = '20260809d-trend'
+const ADMIN_BUILD = '20260809e-username'
 console.log(`[admin] build ${ADMIN_BUILD}`)
 
 // "今天"必须按门店时区算,否则老板人在别的时区时全站日期错位一天。
@@ -7069,8 +7069,21 @@ els.schedulePage.addEventListener('click', (event) => {
   }
   const acctCreate = event.target.closest('[data-acct-create]')
   if (acctCreate) {
-    request('/admin/staff-accounts', { method: 'POST', body: JSON.stringify({ technicianId: acctCreate.dataset.acctCreate }) })
-      .then(async (data) => { showCredentialsOnce(data.username, data.initialPassword); await refreshStaffAccounts() })
+    /* 用户名(店主 2026-08-09 拍板):拼音自动生成(小婕 → xiaojie),重名加数字后缀;
+       弹窗里可以直接改,仍限英数并查重。拼音表只在服务端一份,这里问一下预填值。 */
+    const techId = acctCreate.dataset.acctCreate
+    const zh = owner.lang === 'zh'
+    request(`/admin/staff-accounts/suggest?technicianId=${encodeURIComponent(techId)}`)
+      .then((sug) => {
+        const input = window.prompt(
+          zh ? `给「${sug.name}」建登录账号 —— 用户名(英文字母和数字,3–20 位,可改):` : `Username for ${sug.name} (a-z0-9, 3-20):`,
+          sug.username)
+        if (input === null) return null
+        const username = String(input).trim().toLowerCase()
+        if (!/^[a-z0-9]{3,20}$/.test(username)) { toast(zh ? '用户名只能用英文字母和数字,3–20 位' : 'Invalid username'); return null }
+        return request('/admin/staff-accounts', { method: 'POST', body: JSON.stringify({ technicianId: techId, username }) })
+      })
+      .then(async (data) => { if (!data) return; showCredentialsOnce(data.username, data.initialPassword); await refreshStaffAccounts() })
       .catch((error) => toast(error.message))
     return
   }

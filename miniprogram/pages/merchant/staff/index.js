@@ -357,10 +357,28 @@ Page({
     })
   },
 
+  /* 用户名(店主 2026-08-09 拍板):拼音自动生成(小婕 → xiaojie),重名加数字后缀;
+     弹窗里可以直接改,仍限英数并查重。拼音表只在服务端一份,这里先问一下预填值。 */
   async genAccount(e) {
     const id = e.currentTarget.dataset.id
+    let username
     try {
-      const r = await api.adminPost('/admin/staff-accounts', { technicianId: id })
+      const sug = await api.adminGet(`/admin/staff-accounts/suggest?technicianId=${encodeURIComponent(id)}`)
+      const typed = await new Promise((resolve) => {
+        wx.showModal({
+          title: `给「${sug.name}」建账号`,
+          content: '',
+          editable: true,
+          placeholderText: `用户名(英数 3–20 位),留空用 ${sug.username}`,
+          success: (m) => resolve(m.confirm ? (m.content || '').trim().toLowerCase() : null)
+        })
+      })
+      if (typed === null) return
+      if (typed && !/^[a-z0-9]{3,20}$/.test(typed)) { wx.showToast({ title: '用户名只能用英数,3–20 位', icon: 'none' }); return }
+      username = typed || sug.username
+    } catch (err) { /* 建议拿不到就让后端自己按拼音生成 */ }
+    try {
+      const r = await api.adminPost('/admin/staff-accounts', { technicianId: id, username })
       const text = `用户名:${r.username}\n初始密码:${r.initialPassword}`
       wx.showModal({
         title: '账号已生成', content: `${text}\n(只显示这一次,点「复制」发给员工)`,

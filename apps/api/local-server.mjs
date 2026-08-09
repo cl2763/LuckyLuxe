@@ -1,6 +1,7 @@
 import { createServer } from 'node:http'
 import { AsyncLocalStorage } from 'node:async_hooks'
 import { DatabaseSync } from 'node:sqlite'
+import { nameToUsername, isValidUsername } from './pinyin-names.mjs'
 import { createDecipheriv, createHash, createHmac } from 'node:crypto'
 import { copyFileSync, existsSync, mkdirSync, readdirSync, readFileSync, renameSync, statSync, unlinkSync, writeFileSync } from 'node:fs'
 import { dirname, extname, join, normalize, resolve } from 'node:path'
@@ -9475,6 +9476,19 @@ async function route(req, res) {
       }))
     })
   }
+  // 建号弹窗要预填一个用户名 —— 拼音表只在服务端一份,前端问一下就好
+  if (req.method === 'GET' && path === '/admin/staff-accounts/suggest') {
+    const admin = requireAdmin(req)
+    if (admin.role !== 'owner') throw apiError(403, 'FORBIDDEN', 'Owner permission is required.')
+    tenantContext.enterWith({ tenantId: admin.tenantId || DEFAULT_TENANT_ID })
+    const tech = db.prepare('SELECT * FROM technicians WHERE id = ? AND tenant_id = ?').get(String(query.technicianId || ''), currentTenantId())
+    if (!tech) throw apiError(404, 'NOT_FOUND', 'Technician not found.')
+    const base = nameToUsername(tech.name) || 'staff'
+    let username = base
+    let suffix = 1
+    while (db.prepare('SELECT id FROM admin_accounts WHERE LOWER(username) = ?').get(username)) { suffix += 1; username = `${base}${suffix}` }
+    return json(res, 200, { username, base, name: tech.name })
+  }
   if (req.method === 'POST' && path === '/admin/staff-accounts') {
     const admin = requireAdmin(req)
     if (admin.role !== 'owner') throw apiError(403, 'FORBIDDEN', 'Owner permission is required.')
@@ -9485,7 +9499,14 @@ async function route(req, res) {
     if (db.prepare('SELECT id FROM admin_accounts WHERE technician_id = ?').get(tech.id)) {
       throw apiError(409, 'DUPLICATE', '该技师已有登录账号,可重置密码或停用。')
     }
-    const base = tech.name.toLowerCase().replace(/[^a-z0-9]/g, '').slice(0, 12) || 'staff'
+    /* 用户名(店主 2026-08-09 拍板):**拼音自动生成**(小婕 → xiaojie),重名加数字后缀;
+       店主可以在建号弹窗里自己改(仍限英数并查重)。存量的 staff/staff2 不迁移。 */
+    const wanted = String(body.username || '').trim().toLowerCase()
+    if (wanted && !isValidUsername(wanted)) throw apiError(400, 'BAD_USERNAME', '用户名只能用英文字母和数字,3–20 位。')
+    if (wanted && db.prepare('SELECT id FROM admin_accounts WHERE LOWER(username) = ?').get(wanted)) {
+      throw apiError(409, 'DUPLICATE', '这个用户名已经有人用了,换一个。')
+    }
+    const base = wanted || nameToUsername(tech.name) || 'staff'
     let username = base
     let suffix = 1
     while (db.prepare('SELECT id FROM admin_accounts WHERE LOWER(username) = ?').get(username)) { suffix += 1; username = `${base}${suffix}` }

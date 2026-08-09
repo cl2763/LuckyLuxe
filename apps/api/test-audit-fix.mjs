@@ -234,6 +234,26 @@ async function main() {
     odd.status === 200 && odd.data.shares.reduce((n, s2) => n + s2.shareCents, 0) === twoSheet.subtotalCents,
     JSON.stringify(odd.data.shares))
 
+  /* 用户名:拼音自动生成 + 建号弹窗可改(店主 2026-08-09 拍板)。
+     以前中文名会落到 staff / staff2 —— 用户名规则只取 ascii,中文全被剥掉了。 */
+  const techCn = (await request(`/platform/tenants/${shop.tenantId}/technicians`, { method: 'POST', body: JSON.stringify({ name: '小婕' }) })).data.technician
+  const sug = await request(`/admin/staff-accounts/suggest?technicianId=${techCn.id}`, {}, shop.token)
+  check('用户名:中文名按拼音生成(小婕 → xiaojie)', sug.data.username === 'xiaojie', JSON.stringify(sug.data))
+  const techCn2 = (await request(`/platform/tenants/${shop.tenantId}/technicians`, { method: 'POST', body: JSON.stringify({ name: '小婕' }) })).data.technician
+  const madeCn = await request('/admin/staff-accounts', { method: 'POST', body: JSON.stringify({ technicianId: techCn.id }) }, shop.token)
+  check('用户名:不传就用拼音', madeCn.data.username === 'xiaojie', JSON.stringify(madeCn.data.username))
+  const sug2 = await request(`/admin/staff-accounts/suggest?technicianId=${techCn2.id}`, {}, shop.token)
+  check('用户名:重名加数字后缀', sug2.data.username === 'xiaojie2', JSON.stringify(sug2.data.username))
+  const custom = await request('/admin/staff-accounts', {
+    method: 'POST', body: JSON.stringify({ technicianId: techCn2.id, username: 'jiejie88' })
+  }, shop.token)
+  check('用户名:弹窗里改的名字生效', custom.data.username === 'jiejie88', JSON.stringify(custom.data.username))
+  const techCn3 = (await request(`/platform/tenants/${shop.tenantId}/technicians`, { method: 'POST', body: JSON.stringify({ name: '苏苏' }) })).data.technician
+  const bad = await request('/admin/staff-accounts', { method: 'POST', body: JSON.stringify({ technicianId: techCn3.id, username: '苏苏' }) }, shop.token)
+  check('用户名:异常输入(中文/太短)被拒', bad.status === 400 && bad.data.error.code === 'BAD_USERNAME', JSON.stringify(bad.data))
+  const dup = await request('/admin/staff-accounts', { method: 'POST', body: JSON.stringify({ technicianId: techCn3.id, username: 'jiejie88' }) }, shop.token)
+  check('用户名:重名被拒(查重)', dup.status === 409, JSON.stringify(dup.data).slice(0, 120))
+
   // ---- 异常输入 ----
   const ghost = await request(`/admin/settlements/${twoSheet.id}/allocate`, {
     method: 'POST', body: JSON.stringify({ shares: [{ technicianId: 'tech-does-not-exist', pct: 50 }, { technicianId: techB.id, pct: 50 }] })
