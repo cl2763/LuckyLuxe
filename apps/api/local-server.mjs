@@ -8707,6 +8707,16 @@ function dailyAnomalies(rows, tenantId) {
   return { tierChanges, freeRemoval: { count: freeRemovalCount, lines: freeRemovalLines } }
 }
 
+/* 日结行的主标识时间(店主 2026-08-09 口头修订 v6 合同):行首显示 HH:MM + 顾客 + 技师,
+   单号从行内去掉(签署单弹窗/详情里保留)。时区在**后端**折算,前端只显示 —— 与门店时区纪律一致。
+   有预约的取预约开始时间(店主看的是"几点那一单");没预约的直接单取签署时刻。 */
+function settlementRowTime(row) {
+  const bk = row.booking_id ? db.prepare('SELECT appointment_start FROM bookings WHERE id = ?').get(row.booking_id) : null
+  const at = (bk && bk.appointment_start) || row.signed_at || row.created_at
+  if (!at) return ''
+  return localParts(new Date(at), tenantTimezone(row.tenant_id)).time.slice(0, 5)
+}
+
 function dailyCloseView(date, tenantId, { lang = 'zh' } = {}) {
   const rows = signedSettlementsOn(date, tenantId)
   const closeRow = db.prepare('SELECT * FROM daily_closes WHERE tenant_id = ? AND date = ?').get(tenantId, date)
@@ -8729,7 +8739,7 @@ function dailyCloseView(date, tenantId, { lang = 'zh' } = {}) {
     const unallocated = needsAllocation(r, tenantId)
     if (unallocated) {
       pending.push({
-        settlementId: r.id, code: r.code, totalCents: r.total_cents,
+        settlementId: r.id, code: r.code, timeText: settlementRowTime(r), totalCents: r.total_cents,
         // 分成按业绩基数走(券不扣技师);无券时两个数相等
         perfBaseCents: settlementPerfBaseCents(r), couponDiscountCents: r.coupon_discount_cents || 0,
         customerName: (db.prepare('SELECT display_name FROM users WHERE id = ?').get(r.user_id) || {}).display_name || '',
@@ -8760,7 +8770,7 @@ function dailyCloseView(date, tenantId, { lang = 'zh' } = {}) {
     }
     if (!unallocated && (!closeRow || closeRow.status !== 'confirmed')) {
       awaitingConfirm.push({
-        settlementId: r.id, code: r.code,
+        settlementId: r.id, code: r.code, timeText: settlementRowTime(r),
         perfBaseCents: settlementPerfBaseCents(r),
         couponDiscountCents: r.coupon_discount_cents || 0,
         customerName: (db.prepare('SELECT display_name FROM users WHERE id = ?').get(r.user_id) || {}).display_name || '',
@@ -8775,7 +8785,7 @@ function dailyCloseView(date, tenantId, { lang = 'zh' } = {}) {
       })
     }
     return {
-      settlementId: r.id, code: r.code, totalCents: r.total_cents, cardUsedCents: cardUsed,
+      settlementId: r.id, code: r.code, timeText: settlementRowTime(r), totalCents: r.total_cents, cardUsedCents: cardUsed,
       perfBaseCents: settlementPerfBaseCents(r),
       couponDiscountCents: r.coupon_discount_cents || 0, couponName: r.coupon_name || '',
       allocated: !unallocated, shares, signedAt: r.signed_at,

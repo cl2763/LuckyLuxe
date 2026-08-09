@@ -51,3 +51,6 @@
 /* 无需分配但要店长点确认的单(F1) */
 .awaitcard .ah{border-bottom:none}
 .awaitcard .arr{color:#9a8c7c;font-size:21rpx;margin-left:8rpx}
+
+/* 日结行主标识:时间打头(店主 2026-08-09 修订 v6);单号退到签署单弹窗/详情里 */
+.ah .code .tm{font-weight:800;color:#241f1d;margin-right:12rpx;font-variant-numeric:tabular-nums}

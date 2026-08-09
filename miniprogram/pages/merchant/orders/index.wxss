@@ -138,7 +138,7 @@ page{background:#fbf8f5}
 .pill{font-size:23rpx;background:#fff;border:1rpx solid #ece3da;border-radius:999rpx;padding:8rpx 20rpx;color:#5c4630}
 .pill.hot{background:#fdf3ec;border-color:#f0d9c4;color:#a8551f}
 .pill .b{font-weight:800;color:#241f1d}
-.card{background:#fff;border-radius:18rpx;padding:18rpx;margin-bottom:14rpx;box-shadow:0 3rpx 10rpx rgba(92,70,48,.06)}
+.card{background:#fff;border-radius:18rpx;padding:24rpx 22rpx;margin-bottom:18rpx;box-shadow:0 3rpx 10rpx rgba(92,70,48,.06)}
 .ah{display:flex;justify-content:space-between;align-items:center;font-size:25rpx;font-weight:700;color:#241f1d}
 .ah .arr{font-size:21rpx;color:#8c8279;font-weight:400;margin-left:8rpx}
 .ah .amt{font-weight:800}
@@ -178,7 +178,7 @@ page{background:#fbf8f5}
 .note{font-size:21rpx;color:#9a8c7c;line-height:1.8;margin:12rpx 0}
 
 /* 屏 1 下半:日结板块长在今日台面网格下方(2026-08-09 归位) */
-.dcwrap{margin-top:18rpx;padding-top:18rpx;border-top:2rpx solid #ece3da}
+.dcwrap{margin:18rpx 16rpx 0;padding-top:18rpx;border-top:2rpx solid #ece3da}
 .dch{display:flex;align-items:baseline;justify-content:space-between;padding:0 4rpx 12rpx}
 .dch .dct{font-size:30rpx;font-weight:800;color:#241f1d}
 .dch .dcok{font-size:21rpx;color:#2f7d5c}
@@ -212,3 +212,10 @@ page{background:#fbf8f5}
 .ds-timerow{display:flex;align-items:center;gap:12rpx}
 .ds-now{font-size:24rpx;font-weight:700;color:#fff;background:#2d2826;border-radius:12rpx;padding:16rpx 26rpx;flex:0 0 auto}
 .ds-pick{flex:1}
+
+/* 营业时段外的整点行:沿用网格现有语言,只淡一档 + 底纹,不引入新设计 */
+.dv-hr.off{color:#c4b8ab}
+.dv-line.off{background:repeating-linear-gradient(45deg,rgba(154,140,124,.05) 0,rgba(154,140,124,.05) 6rpx,transparent 6rpx,transparent 14rpx)}
+
+/* 日结行主标识:时间打头(店主 2026-08-09 修订 v6);单号退到签署单弹窗/详情里 */
+.ah .code .tm{font-weight:800;color:#241f1d;margin-right:12rpx;font-variant-numeric:tabular-nums}

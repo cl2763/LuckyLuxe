@@ -221,10 +221,24 @@ Page(Object.assign({
     try {
       const me = await api.adminMe().catch(() => ({ role: 'owner' }))
       const r = await api.adminGet(`/admin/schedule-day?date=${date}`)
-      const openMin = toMin(r.openTime || '10:00'); const closeMin = toMin(r.closeTime || '19:00')
+      /* 今日台面必须显示**当天全部预约**,含营业时段外的(店主 2026-08-09 拍板)。
+         原来网格只画 开门→打烊 这一段,于是提早到店、加钟做到打烊后的单
+         整块落在网格外看不见 —— 而这些单照样进日结、照样算业绩,台面上看不见
+         等于店主对不上账。改成:网格范围 = 营业时段 ∪ 当天所有预约的时间跨度,
+         营业时段外的整点行用淡色标出(沿用现有网格语言,不引入新设计)。 */
+      const bizOpen = toMin(r.openTime || '10:00'); const bizClose = toMin(r.closeTime || '19:00')
+      let openMin = bizOpen; let closeMin = bizClose
+      for (const b of (r.bookings || [])) {
+        openMin = Math.min(openMin, toMin(b.startTime))
+        closeMin = Math.max(closeMin, toMin(b.endTime))
+      }
+      openMin = Math.floor(openMin / 60) * 60            // 往下取整到整点,块不会贴着上沿
+      closeMin = Math.ceil(closeMin / 60) * 60
       const gridH = Math.round(Math.max(60, closeMin - openMin) / 60 * PX_PER_HOUR)
       const hours = []
-      for (let m = Math.floor(openMin / 60) * 60; m < closeMin; m += 60) hours.push(`${pad(Math.floor(m / 60))}:00`)
+      for (let m = openMin; m < closeMin; m += 60) {
+        hours.push({ label: `${pad(Math.floor(m / 60))}:00`, off: m < bizOpen || m >= bizClose })
+      }
       const byTech = {}
       ;(r.bookings || []).forEach((b) => { (byTech[b.technicianId] = byTech[b.technicianId] || []).push(b) })
       let freeTotal = 0

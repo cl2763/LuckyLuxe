@@ -28,7 +28,7 @@
         <view class="dv-left">
           <view class="dv-corner"></view>
           <view class="dv-gutter" style="height:{{dv.gridH}}rpx">
-            <view wx:for="{{dv.hours}}" wx:key="*this" class="dv-hr">{{item}}</view>
+            <view wx:for="{{dv.hours}}" wx:key="label" class="dv-hr {{item.off ? 'off' : ''}}">{{item.label}}</view>
           </view>
         </view>
         <scroll-view scroll-x class="dv-right" show-scrollbar="{{false}}">
@@ -42,7 +42,7 @@
             </view>
             <view class="dv-cols" style="height:{{dv.gridH}}rpx">
               <view wx:for="{{dv.cols}}" wx:key="id" wx:for-item="col" class="dv-col {{col.id===myTechId?'mine':''}}" style="width:{{dv.colW}}rpx">
-                <view wx:for="{{dv.hours}}" wx:key="*this" wx:for-item="hl" class="dv-line"></view>
+                <view wx:for="{{dv.hours}}" wx:key="label" wx:for-item="hl" class="dv-line {{hl.off ? 'off' : ''}}"></view>
                 <view wx:for="{{col.frees}}" wx:key="startTime" wx:for-item="f" class="dv-blk free" style="top:{{f.top}}rpx;height:{{f.height}}rpx" data-tech="{{col.id}}" data-time="{{f.startTime}}" bindtap="tapFree"><text>+ 直接排单</text></view>
                 <view wx:for="{{col.blocks}}" wx:key="id" wx:for-item="b" class="dv-blk {{b.cls}}" style="top:{{b.top}}rpx;height:{{b.height}}rpx" data-id="{{b.id}}" bindtap="tapBlock">
                   <view class="dv-bt"><text wx:if="{{b.stateGlyph}}" class="dv-sdot {{b.state}}">{{b.stateGlyph}}</text>{{b.startTime}}–{{b.endTime}}</view>
@@ -82,7 +82,7 @@
           <view class="dcsub" wx:if="{{v.pending.length}}">待分配 {{v.pending.length}} 单 · 逐单点开</view>
           <view class="card" wx:for="{{v.pending}}" wx:for-item="p" wx:key="id">
             <view class="ah" data-id="{{p.id}}" bindtap="toggleOpen">
-              <text class="code">{{p.code}} {{p.who}} · {{p.techLabel}}</text>
+              <text class="code"><text class="tm">{{p.timeText}}</text>{{p.who}} · {{p.techLabel}}</text>
               <text class="amt">{{p.total}}<text wx:if="{{p.couponNote}}" class="arr"> {{p.couponNote}}</text> <text class="arr">{{open[p.id] ? '收起 ∧' : '点开分配 ∨'}}</text></text>
             </view>
             <block wx:if="{{open[p.id]}}">
@@ -104,7 +104,7 @@
           <view class="dcsub" wx:if="{{v.awaiting.length}}">无需分配 · 待确认 {{v.awaiting.length}} 单</view>
           <view class="card awaitcard" wx:for="{{v.awaiting}}" wx:for-item="a" wx:key="id">
             <view class="ah">
-              <text class="code">{{a.code}} {{a.who}} · {{a.techs}}</text>
+              <text class="code"><text class="tm">{{a.timeText}}</text>{{a.who}} · {{a.techs}}</text>
               <text class="amt">{{a.amount}} <text class="arr">{{a.reason}}</text></text>
             </view>
             <view class="links">

@@ -1,5 +1,5 @@
 // 构建号:每次交付递增。侧栏可见,排查"改了没生效"时先对版本。
-const ADMIN_BUILD = '20260809h-s1s4'
+const ADMIN_BUILD = '20260810a-dcrow'
 console.log(`[admin] build ${ADMIN_BUILD}`)
 
 // "今天"必须按门店时区算,否则老板人在别的时区时全站日期错位一天。
@@ -2503,7 +2503,7 @@ function renderDailyClose() {
       return `
       <div class="dc-alloc ${open ? '' : 'collapsed'}" data-alloc="${escapeHtml(p.settlementId)}">
         <div class="head" data-alloc-toggle="${escapeHtml(p.settlementId)}">
-          <span>${escapeHtml(p.code)} ${escapeHtml(p.servedPersonName || p.customerName || '')} · ${p.technicians.length > 1 ? (zh ? '双技师' : 'Two techs') : (zh ? '单技师' : 'Single')}</span>
+          <span><b class="dc-tm">${escapeHtml(p.timeText || '')}</b>${escapeHtml(p.servedPersonName || p.customerName || '')} · ${p.technicians.length > 1 ? (zh ? '双技师' : 'Two techs') : (zh ? '单技师' : 'Single')}</span>
           <span>${money(p.perfBaseCents, 2)}${p.couponDiscountCents ? `<span class="subtle" style="margin-left:6px">${zh ? '业绩基数(不含券)' : 'perf base'}</span>` : ''} <span class="arr">${open ? (zh ? '收起 ∧' : 'Hide ∧') : (zh ? '点开分配 ∨' : 'Open ∨')}</span></span>
         </div>
         <div class="body">
@@ -2529,7 +2529,7 @@ function renderDailyClose() {
       ${v.awaitingConfirm.map((a) => `
         <div class="dc-alloc collapsed">
           <div class="head">
-            <span>${escapeHtml(a.code)} ${escapeHtml(a.servedPersonName || a.customerName || '')} · ${a.technicians.map((t) => escapeHtml(t.name) + (t.sharePct === null || t.sharePct === undefined ? '' : ` ${t.sharePct}%`)).join(' / ')}</span>
+            <span><b class="dc-tm">${escapeHtml(a.timeText || '')}</b>${escapeHtml(a.servedPersonName || a.customerName || '')} · ${a.technicians.map((t) => escapeHtml(t.name) + (t.sharePct === null || t.sharePct === undefined ? '' : ` ${t.sharePct}%`)).join(' / ')}</span>
             <span>${money(a.perfBaseCents, 2)} <span class="arr">${escapeHtml(a.reason)}</span></span>
           </div>
         </div>`).join('')}` : ''}

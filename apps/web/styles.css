@@ -7171,3 +7171,6 @@ section.card > .section-row:first-child { margin-top: 0; }
   .sidebar-link { min-width: 108px; white-space: nowrap; flex-shrink: 0; }
   .section-row > .subtle { min-width: 0; }
 }
+
+/* 日结行主标识:时间打头(店主 2026-08-09 修订 v6);单号退到签署单/详情里 */
+.dc-alloc .head .dc-tm{font-weight:800;color:#241f1d;margin-right:10px;font-variant-numeric:tabular-nums}

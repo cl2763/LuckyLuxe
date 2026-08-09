@@ -8,7 +8,10 @@
 const BASE_URL = process.env.TEST_BASE_URL || 'http://127.0.0.1:4128'
 const PLATFORM = process.env.TEST_ADMIN_TOKEN || 'owner-demo-token'
 const RUN = Date.now().toString(36)
-const todayStr = () => new Date().toLocaleDateString('en-CA')
+/* 「今天」一律问后端要(门店时区),不用测试机的本地日期 ——
+   跨零点那一下机器日期和门店日期会差一天,断言就会莫名其妙地空。 */
+let STORE_TODAY = ''
+const todayStr = () => STORE_TODAY
 const uidOf = (b) => (b && (b.userId || (b.user && b.user.id))) || ''
 
 let checks = 0
@@ -53,6 +56,7 @@ async function newShop(label) {
 
 async function main() {
   const shop = await newShop('a')
+  STORE_TODAY = (await request('/admin/daily-close', {}, shop.token)).data.dailyClose.date
   const cat = (await request('/admin/pricing/categories', { method: 'POST', body: JSON.stringify({ key: 'nail', name: '美甲' }) }, shop.token)).data.category
   const svc = (await request('/admin/pricing/items', {
     method: 'POST', body: JSON.stringify({ nameZh: '精品单色', type: 'NAIL', categoryId: cat.id, itemKind: 'main', listPriceCents: 20000, memberPriceCents: 20000 })
