@@ -1,4 +1,5 @@
 const api = require('../../utils/api')
+const { clearStoreCurrency } = require('../../utils/storecurrency')
 
 const DEMO_KEY = 'lucky_demo_mode'
 
@@ -38,6 +39,8 @@ Page({
   applyTenant(tid, name) {
     if (!tid) return
     wx.setStorageSync('lucky_tenant', tid)
+    // 换店先把上一家的币符缓存清掉(¥ 店 ↔ CAD 店共用一个键),新店进首页时重取
+    clearStoreCurrency()
     const app = getApp()
     if (app && app.globalData) app.globalData.tenantId = tid
     wx.showToast({ title: '已进入 ' + (name || tid), icon: 'none' })

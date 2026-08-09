@@ -227,6 +227,17 @@ function toMiniBooking(booking) {
     status: statusMap[booking.status] || 'pending_service',
     paymentStatus: booking.status === 'PENDING_PAYMENT' ? 'pending' : 'paid',
     backendBookingId: booking.id,
+    /* 屏 D2/D3(2026-08-10 核验轮修复):这个映射是**白名单**,后端 customerOrderBadges()
+       下发的徽标三态 / 副行 / 实际应付 / 售后三步在这一层被整片丢掉了 ——
+       后端断言全绿,页面上一个徽标也不出、售后进度卡整块不渲染。原样透传,前端仍零计算。 */
+    listBadgeText: booking.listBadgeText || '',
+    listBadgeKind: booking.listBadgeKind || '',
+    listNote: booking.listNote || '',
+    actualDueText: booking.actualDueText || '',
+    listAmountText: booking.listAmountText || '',
+    actualDueCents: booking.actualDueCents === undefined ? null : booking.actualDueCents,
+    settlementCode: booking.settlementCode || '',
+    afterSales: booking.afterSales || null,
     createdAt: booking.createdAt || Date.now()
   }
 }
@@ -360,6 +371,16 @@ async function getStores() {
   } catch (error) {
     return [mock.store]
   }
+}
+
+/* 门店币种(2026-08-10 核验轮修复)。
+   getStores() 返回的是**门店数组**,顶层的 currency / currencyDisplay 在那一步就被丢了 ——
+   storecurrency.js 拿到数组去读 .currencyDisplay 永远是 undefined,缓存一次都写不进去,
+   顾客端 32 处 {{cur.p}}{{cur.s}} 全渲染成空币符(只有后端拼好的价格串才带得出币符)。
+   这里单独把原始字段取回来,不经过 toMiniStore。 */
+async function getStoreCurrency() {
+  const data = await request('/stores')
+  return { currency: data.currency || '', currencyDisplay: data.currencyDisplay || null }
 }
 
 async function getAddOns() {
@@ -718,5 +739,7 @@ module.exports = {
   createBooking,
   confirmMockPayment,
   getBookings,
+  getStoreCurrency,
+  toMiniBooking,   // 导出只为回归断言:这层是白名单,漏字段=页面整块不渲染(见 test-double-sheet)
   analyzeReference
 }

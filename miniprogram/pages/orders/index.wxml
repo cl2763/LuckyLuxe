@@ -21,11 +21,13 @@
               <view class="order-time">{{item.appointment.date}} {{item.appointment.time}}</view>
               <view class="muted">{{item.store.storeName}}</view>
               <view class="muted note" wx:if="{{item.listNote}}">{{item.listNote}}</view>
-              <!-- 有更正时右侧金额=**实际应付**(后端算好的串,含币符);没更正走原路径 -->
+              <!-- 金额一律以结算单为准,后端拼好整串下发(有更正=实际应付;没更正=结算合计,前缀词不变)。
+                   没开过单的预约才走下面按预约底价渲染的老路径。 -->
               <view class="price" wx:if="{{item.actualDueText}}">{{item.actualDueText}}</view>
+              <view class="price" wx:elif="{{item.listAmountText}}">{{item.listAmountText}}</view>
               <view class="price" wx:elif="{{item.status === 'completed'}}">已结清 {{cur.p}}{{cur.s}}{{item.servicePrice}}</view>
               <view class="price" wx:elif="{{item.status === 'cancelled' || item.status === 'after_sales'}}">总价 {{cur.p}}{{cur.s}}{{item.servicePrice}}</view>
-              <view class="price" wx:else>定金 ${{item.payableAmount}} 已付 · 到店应付 ${{item.finalDue}}</view>
+              <view class="price" wx:else>定金 {{cur.p}}{{cur.s}}{{item.payableAmount}} 已付 · 到店应付 {{cur.p}}{{cur.s}}{{item.finalDue}}</view>
             </view>
           </view>
           <!-- 屏 D3 售后进度三步 + 单据页入口(规则③:进的是同一张服务确认单) -->

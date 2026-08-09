@@ -5466,8 +5466,19 @@ function customerOrderBadges(row) {
     listBadgeKind: kind,
     listNote: isAfterSales ? '已转人工客服跟进' : (amd.amendedCount ? '已签署 · 点开看更正明细' : '已签署'),
     settlementCode: stl.code,
-    actualDueCents: amd.actualDueCents,
-    actualDueText: amd.actualDueText,
+    /* 规则③:右侧金额取实际应付**只在有更正时**。没更正的单前缀词一个字不动 ——
+       否则「已结清 ¥198」会被换成光秃秃的「¥198」,那就不是「列表项保持现状」了(D2-03)。 */
+    actualDueCents: amd.amendedCount ? amd.actualDueCents : null,
+    actualDueText: amd.amendedCount ? amd.actualDueText : '',
+    /* 闭环③「同一个事实处处说同一句话」:没更正的已签单,列表金额以前取的是**预约上的服务底价**
+       (service_price_cents),而单据上是结算合计 —— 会员档位/折扣/加项一进来两个数就对不上:
+       列表写「已结清 ¥198」、点开确认单写「合计 ¥128」,顾客看两个数字。
+       金额一律以结算单为准,由后端拼好整串下发(前缀词保持现状,只把数换对)。 */
+    listAmountText: amd.amendedCount ? '' : (
+      isAfterSales ? `总价 ${formatMoneyCents(stl.total_cents, row.tenant_id, 'auto')}`
+        : (row.status === 'COMPLETED' ? `已结清 ${formatMoneyCents(stl.total_cents, row.tenant_id, 'auto')}`
+          : formatMoneyCents(stl.total_cents, row.tenant_id, 'auto'))
+    ),
     /* 屏 D3 售后进度三步(发起 → 跟进中 → 结果)。文案与时间全后端给;
        未完成时结果行显示「—」(规则④ 沿用现行口径,退款凭据只记售后单内)。 */
     ...(isAfterSales ? { afterSales: afterSalesProgress(row) } : {})
@@ -5656,7 +5667,17 @@ async function signInWechatMiniUser(body) {
   // 仅在 ALLOW_DEMO_ADMIN_LOGIN=true 且服务器没有微信凭证时启用;生产(配了凭证)永不走这里。
   if (process.env.ALLOW_DEMO_ADMIN_LOGIN === 'true' && body.demoLogin === true) {
     const demoTenant = validTenantId(body.tenantId)
-    const demoUser = db.prepare('SELECT * FROM users WHERE id = ?').get('demo-cust-01')
+    /* 演示顾客要**挑本店的**(2026-08-10 核验轮修复)。
+       原来无论进哪家店都登录 demo-cust-01,而 users 是按店分行的:她只在旗舰店有档案。
+       结果进 Jie'Nail 的顾客端 = 一个本店没档案的空账号 —— 消费记录、售后页签全空,
+       而且她当不了结算单的卡主(createSettlementGroup 要求卡主是本店 users 行),
+       连"摆个现场给店主看"都办不到。现在:本店有档案就用本店单量最多的那位,
+       没有再回落 demo-cust-01。旗舰店行为不变(她就是那家店单最多的)。 */
+    const demoUser = db.prepare(`SELECT u.* FROM users u
+        WHERE u.tenant_id = ?
+        ORDER BY (SELECT COUNT(*) FROM bookings b WHERE b.user_id = u.id AND b.tenant_id = ?) DESC, u.id ASC
+        LIMIT 1`).get(demoTenant, demoTenant)
+      || db.prepare('SELECT * FROM users WHERE id = ?').get('demo-cust-01')
       || db.prepare('SELECT * FROM users LIMIT 1').get()
     try {
       if (demoTenant === DEFAULT_TENANT_ID

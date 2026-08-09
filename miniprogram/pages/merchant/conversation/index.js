@@ -1,4 +1,5 @@
 const api = require('../../../utils/api')
+const { storeMoney } = require('../../../utils/storeclock')   // 门店币种,不写死 $
 const QUOTE_DRAFT_KEY = 'lucky_quote_draft'
 
 const TIER = { Silver: '银卡', Gold: '金卡', Platinum: '铂金', Diamond: '钻石' }
@@ -27,7 +28,7 @@ function buildProfile(cust) {
     tier: TIER[cust.memberTier] || cust.memberTier || '会员',
     visits: cust.visitCount || 0,
     lastText: lastVisitText(cust.lastVisitAt),
-    stored: ((cust.storedValueBalanceCents || 0) / 100),
+    storedText: storeMoney(cust.storedValueBalanceCents || 0),
     tags: Array.isArray(cust.tags) ? cust.tags : [],
     note: cust.notes || ''
   }

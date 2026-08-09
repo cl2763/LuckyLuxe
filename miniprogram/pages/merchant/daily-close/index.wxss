@@ -44,7 +44,9 @@
 .fh{font-size:25rpx;font-weight:800;color:#241f1d;margin-bottom:12rpx}
 .fd{display:flex;align-items:center;justify-content:space-between;gap:14rpx;padding:12rpx 0}
 .fd .lab{font-size:25rpx;color:#5c4630}
-.fd .in{flex:1;max-width:280rpx;text-align:right;font-size:28rpx;font-weight:800;background:#faf6f1;border:1rpx solid #ece2d6;border-radius:12rpx;padding:14rpx 16rpx}
+/* 2026-08-10 核验:input 只给了 padding 没给高度,wx input 的文字按自身基线落 ——
+   「更正后合计」的数字压在框底被切掉一半(屏 1b 并排对图时抓到)。给死高度+行高居中。 */
+.fd .in{flex:1;max-width:280rpx;text-align:right;font-size:28rpx;font-weight:800;background:#faf6f1;border:1rpx solid #ece2d6;border-radius:12rpx;padding:0 16rpx;height:64rpx;line-height:64rpx;box-sizing:border-box}
 .ta{width:100%;min-height:140rpx;background:#faf6f1;border:1rpx solid #ece2d6;border-radius:12rpx;padding:14rpx;font-size:24rpx;color:#241f1d;margin-top:8rpx}
 .note{font-size:21rpx;color:#9a8c7c;line-height:1.8;margin:12rpx 0}
 

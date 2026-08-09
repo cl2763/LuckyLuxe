@@ -10,7 +10,7 @@
         <view class="tag g">{{profile.tier}}</view>
         <text class="pi">到店{{profile.visits}}次</text>
         <text class="pi">最近到店{{profile.lastText}}</text>
-        <text class="pi">储值${{profile.stored}}</text>
+        <text class="pi">储值{{profile.storedText}}</text>
         <text class="viewdoc" bindtap="viewProfile">查看档案 ›</text>
       </view>
       <view class="prow tags" wx:if="{{profile.tags.length || profile.note}}">

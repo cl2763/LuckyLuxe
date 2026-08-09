@@ -18,12 +18,12 @@ Page({
     configured: true,
     pwd: '',
     setting: false,
-    m: { today: '$0', revenue: '$0', net: '$0' },
+    m: { today: '—', revenue: '—', net: '—' },   // 占位不带币符(¥ 店以前会先闪一下「$0」)
     estNote: '',
     ai: [],
     goal: { has: false, rings: [], daily: '' },
-    sv: { total: '$0', recharge: '$0', consume: '$0', dormant: '' },
-    payroll: { totalCents: 0, total: '$0', monthsText: '' },
+    sv: { total: '—', recharge: '—', consume: '—', dormant: '' },
+    payroll: { totalCents: 0, total: '—', monthsText: '' },
     insight: '',
     gm: { show: false, mode: 'net_profit', monthVal: '', rateVal: '25', yearVal: '', suggest: null }
   },

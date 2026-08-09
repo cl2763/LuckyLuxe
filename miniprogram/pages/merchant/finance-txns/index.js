@@ -24,7 +24,7 @@ Page({
   data: {
     month: '',
     monthText: '',
-    sum: { income: '$0', expense: '$0', net: '$0' },
+    sum: { income: '—', expense: '—', net: '—' },   // 占位不带币符:数据到位后由 storeMoney() 填
     rows: [],
     loading: true,
     isCurrent: true

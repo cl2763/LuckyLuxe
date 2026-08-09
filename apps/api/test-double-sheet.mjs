@@ -249,6 +249,15 @@ async function main() {
   const plain = await rowFor(bk2.id)     // 已签、没更正
   check('D2 已签无更正:徽标「已签署」,不冒充更正', plain.listBadgeText === '已签署' && plain.listBadgeKind === 'signed',
     JSON.stringify({ t: plain.listBadgeText, k: plain.listBadgeKind }))
+  check('D2 规则③:没更正的单不出实际应付(右侧金额前缀词保持现状,不被换成光秃秃的数)',
+    plain.actualDueText === '' && plain.actualDueCents === null && plain.listAmountText.startsWith('已结清'),
+    JSON.stringify({ a: plain.actualDueText, c: plain.actualDueCents, l: plain.listAmountText }))
+  /* 闭环③:列表金额与单据金额必须是同一个数。以前列表取的是**预约上的服务底价**,
+     会员档位/折扣/加项一进来就和确认单的合计对不上(实测 ¥198 vs ¥128、¥480 vs ¥168)。 */
+  const plainSheet = (await request(`/settlements/${s2.data.settlements[0].code}`)).data.settlement
+  check('闭环③:没更正的已签单,列表金额 ≡ 单据合计(不是预约底价)',
+    plain.listAmountText.includes(String(Math.round(plainSheet.totalCents / 100))),
+    JSON.stringify({ list: plain.listAmountText, sheet: plainSheet.totalCents }))
   const amended = await rowFor(amendBk.id)
   check('D2 有更正:徽标带次数,与详情页同一句(规则①)', amended.listBadgeText === third.amendBadgeText,
     JSON.stringify({ list: amended.listBadgeText, doc: third.amendBadgeText }))
@@ -273,7 +282,48 @@ async function main() {
   const plainAgain = await rowFor(amendBk.id)
   check('D3 只影响这一单,别的单不被串', plainAgain.listBadgeKind === 'amended', plainAgain.listBadgeKind)
 
+  await checkMiniMappingLayer(asRow)
+
   console.log(`\n双单场景回归通过:${checks} 项断言全绿`)
+}
+
+/* 顾客端小程序**映射层**断言(2026-08-10 核验轮加)。
+   接口断言全绿不等于页面上看得见:utils/api.js 的 toMiniBooking() 是白名单映射,
+   后端下发的 D2/D3 字段在那一层被整片丢掉,页面一个徽标都不出、售后卡整块不渲染;
+   同一层里 storecurrency 拿门店数组读 .currencyDisplay,币符缓存一次也写不进去,
+   顾客端 32 处 {{cur.p}}{{cur.s}} 全渲染成空。两条都在这里锁死。 */
+async function checkMiniMappingLayer(asRow) {
+  const { createRequire } = await import('node:module')
+  const require = createRequire(import.meta.url)
+  const store = {}
+  global.wx = {
+    getStorageSync: (k) => (k in store ? store[k] : ''),
+    setStorageSync: (k, v) => { store[k] = v },
+    removeStorageSync: (k) => { delete store[k] },
+    showToast() {}, reLaunch() {}, login() {}, request() {}, getSystemInfoSync: () => ({})
+  }
+  global.getApp = () => ({ globalData: {} })
+  const miniApi = require('../../miniprogram/utils/api.js')
+
+  const mapped = miniApi.toMiniBooking(asRow)
+  check('顾客端映射层:D2 徽标三态没被白名单丢掉',
+    mapped.listBadgeText === asRow.listBadgeText && mapped.listBadgeKind === asRow.listBadgeKind,
+    JSON.stringify({ mapped: mapped.listBadgeText, api: asRow.listBadgeText }))
+  check('顾客端映射层:D2 副行 + 实际应付 + 单号透传',
+    mapped.listNote === asRow.listNote && mapped.actualDueText === (asRow.actualDueText || '') && mapped.settlementCode === asRow.settlementCode,
+    JSON.stringify({ note: mapped.listNote, due: mapped.actualDueText, code: mapped.settlementCode }))
+  check('顾客端映射层:D3 售后三步整块透传(丢了就是整卡不渲染)',
+    Boolean(mapped.afterSales) && mapped.afterSales.steps.length === 3,
+    JSON.stringify(mapped.afterSales && mapped.afterSales.steps && mapped.afterSales.steps.length))
+
+  const cur = require('../../miniprogram/utils/storecurrency.js')
+  miniApi.getStoreCurrency = async () => ({ currency: 'CNY', currencyDisplay: { prefix: '', symbol: '¥', trimZeroDecimals: true } })
+  await cur.refreshStoreCurrency()
+  check('顾客端币种:/stores 的币符真能落进缓存(¥ 店不再渲染空币符)',
+    cur.curOf().s === '¥' && cur.money(25800) === '¥258',
+    JSON.stringify({ cur: cur.curOf(), money: cur.money(25800) }))
+  cur.clearStoreCurrency()
+  check('顾客端币种:换店清缓存(不把上一家的币符带进新店)', cur.curOf().s === '', JSON.stringify(cur.curOf()))
 }
 
 main().catch((error) => {

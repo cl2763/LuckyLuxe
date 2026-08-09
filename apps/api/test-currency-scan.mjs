@@ -46,7 +46,14 @@ const BAD = [
   { re: /RMB\s*[¥￥]/g, label: 'RMB ¥', scope: 'all' },
   /* 裸 ¥ 只在**门店币种语境**里算错(小程序两端)。
      平台后台卖 SaaS 的定价(¥1,380/年 之类)本来就是人民币标价,不跟门店币种走,不算硬编码。 */
-  { re: /[¥￥]/g, label: '¥ / ￥', scope: 'mini' }
+  { re: /[¥￥]/g, label: '¥ / ￥', scope: 'mini' },
+  /* 2026-08-10 补漏:**裸 $** 之前一条规则都没管,于是
+     `定金 ${{item.payableAmount}}`(顾客端消费记录/最近消费)、`储值${{profile.stored}}`(商家端会话)
+     和 `'$0'` 这类初始占位全部躲过了扫描 —— Jie'Nail 顾客点开订单看到的就是「定金 $50」。
+     模板里 `$` 紧挨着 `{{`、代码里引号紧跟 `$数字`,只可能是币符,一律红。
+     (JS 模板字符串是 `${` 单花括号,不会被这条误伤。) */
+  { re: /\$\s*\{\{/g, label: '$ 紧贴 {{(写死美元符)', scope: 'all' },
+  { re: /['"`]\$\d/g, label: "'$0' 这类写死币符的占位", scope: 'all', skipIf: /\.replace\(|new RegExp/ }
 ]
 
 function walk(dir, out = []) {
@@ -77,6 +84,8 @@ function main() {
       const isMini = rel.startsWith('miniprogram/')
       for (const b of BAD) {
         if (b.scope === 'mini' && !isMini) continue
+        // 正则替换串里的 $1/$2 是反向引用,不是币符
+        if (b.skipIf && b.skipIf.test(code)) continue
         b.re.lastIndex = 0
         if (b.re.test(code)) hits.push(`${rel}:${i + 1}  [${b.label}]  ${line.trim().slice(0, 100)}`)
       }
@@ -87,8 +96,11 @@ function main() {
 
   // 顾客端确实接上了币种源(不是把币符删了了事)
   const curUtil = readFileSync(join(ROOT, 'miniprogram/utils/storecurrency.js'), 'utf8')
+  /* 2026-08-10:这里原来断言的是 getStores —— 而 getStores() 返回的是门店**数组**,
+     顶层 currencyDisplay 早在那一步就被丢了,缓存一次也写不进去。断言"接上了源"却接了个空,
+     所以改成断言取币种的专用接口;真正落没落进缓存由 test-double-sheet 的行为断言把关。 */
   check('顾客端币种走公开 /stores 下发的 currencyDisplay(与商家端同一套映射表)',
-    curUtil.includes('getStores') && curUtil.includes('currencyDisplay'), curUtil.slice(0, 120))
+    curUtil.includes('getStoreCurrency') && curUtil.includes('currencyDisplay'), curUtil.slice(0, 120))
 
   console.log(`\n币符硬编码扫描通过:${checks} 项断言全绿`)
 }
