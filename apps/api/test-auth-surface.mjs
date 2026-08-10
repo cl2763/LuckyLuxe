@@ -187,37 +187,33 @@ async function main() {
   check('昵称:改完 /auth/me 立刻跟上(首页问候与管理页老板位都读它)',
     meNick.data.admin.displayName === nickEmptyOwner.data.displayName, JSON.stringify(meNick.data.admin.displayName))
 
-  /* ---- ③ 停用的员工账号立刻失效(不是等 token 自然过期)---- */
-  const list = (await request('/admin/staff-accounts', {}, shop.token)).data.accounts || []
-  const mine = list.find((a) => a.username === acct.username)
-  if (mine) {
-    await request(`/admin/staff-accounts/${mine.id}/toggle`, { method: 'POST', body: '{}' }, shop.token)
-    const afterDisable = await request('/admin/auth/me', {}, staffToken)
-    check('③ 停用员工后,他手里的 token 立刻失效(401)', afterDisable.status === 401, String(afterDisable.status))
-  }
-
-  /* 拍板②(店主 2026-08-10):员工「我的客户」—— 只看自己服务过的顾客;手机号脱敏;
-     **财务字段在响应里整体不存在**(不是置空)。裁剪在接口层,前端隐藏不算数。 */
   /* fixture:必须真的有「这位员工服务过的顾客」和「他没服务过的顾客」两种人,
-     越权那两条断言才跑得到。上一版就是因为员工名下一个顾客都没有,断言被静默跳过了 —— 补上。 */
-  const tech2 = (await request(`/platform/tenants/${shop.tenantId}/technicians`, { method: 'POST', body: JSON.stringify({ name: `技乙${RUN}` }) }, PLATFORM)).data.technician
-  const imp2 = await request(`/platform/tenants/${shop.tenantId}/import/customers`, {
-    method: 'POST',
-    body: JSON.stringify({ dryRun: false, rows: [{ name: `我的客${RUN}`, phone: `1385${RUN.slice(-7)}` }, { name: `别人的客${RUN}`, phone: `1386${RUN.slice(-7)}` }] })
-  }, PLATFORM)
-  const mineUser = imp2.data.users[0].userId
-  const otherUser = imp2.data.users[1].userId
-  const fxCat = (await request('/admin/pricing/categories', { method: 'POST', body: JSON.stringify({ key: 'nail', name: '美甲' }) }, shop.token)).data.category
-  const fxSvc = (await request('/admin/pricing/items', {
+     越权断言才跑得到。上一版造不出来 —— 查清了:**不是接口吞错**,
+     /admin/bookings/direct 少 serviceId 时老老实实回 400「serviceId is required.」,
+     是我的 fixture 没检查返回值,自己把错咽了。所以这一版**每一步都验状态码**,
+     哪一步没成当场红,不许再带着空列表往下走。 */
+  const mustOk = (r, what) => {
+    if (r.status >= 300) throw new Error(`fixture「${what}」失败 ${r.status}: ${JSON.stringify(r.data).slice(0, 160)}`)
+    return r.data
+  }
+  const tech2 = mustOk(await request(`/platform/tenants/${shop.tenantId}/technicians`, { method: 'POST', body: JSON.stringify({ name: `技乙${RUN}` }) }, PLATFORM), '建技师乙').technician
+  const fxCat = mustOk(await request('/admin/pricing/categories', { method: 'POST', body: JSON.stringify({ key: `fx${RUN}`, name: `范围类${RUN}` }) }, shop.token), '建大类').category
+  const fxSvc = mustOk(await request('/admin/pricing/items', {
     method: 'POST', body: JSON.stringify({ nameZh: `范围款${RUN}`, type: 'NAIL', categoryId: fxCat.id, itemKind: 'main', listPriceCents: 10000, memberPriceCents: 10000 })
-  }, shop.token)).data.item
-  const svcDate = (await request('/admin/store-clock', {}, shop.token)).data.today
-  await request('/admin/bookings/direct', {
+  }, shop.token), '建服务项目').item
+  const imp2 = mustOk(await request(`/platform/tenants/${shop.tenantId}/import/customers`, {
+    method: 'POST',
+    body: JSON.stringify({ dryRun: false, rows: [{ name: `我的客${RUN}`, phone: `1385${RUN.slice(-7)}` }, { name: `别人客${RUN}`, phone: `1386${RUN.slice(-7)}` }] })
+  }, PLATFORM), '导入两位顾客')
+  const mineUser = imp2.users[0].userId
+  const otherUser = imp2.users[1].userId
+  const svcDate = mustOk(await request('/admin/store-clock', {}, shop.token), '取门店今天').today
+  mustOk(await request('/admin/bookings/direct', {
     method: 'POST', body: JSON.stringify({ userId: mineUser, serviceId: fxSvc.id, technicianId: tech.id, date: svcDate, time: '10:05', durationMin: 60, depositPaid: false })
-  }, shop.token)
-  await request('/admin/bookings/direct', {
+  }, shop.token), '给技师甲排一单(我的客)')
+  mustOk(await request('/admin/bookings/direct', {
     method: 'POST', body: JSON.stringify({ userId: otherUser, serviceId: fxSvc.id, technicianId: tech2.id, date: svcDate, time: '11:05', durationMin: 60, depositPaid: false })
-  }, shop.token)
+  }, shop.token), '给技师乙排一单(别人客)')
 
   const ownerList = (await request('/admin/customers', {}, shop.token)).data.customers || []
   const staffList = (await request('/admin/customers', {}, staffToken)).data.customers || []
@@ -232,15 +228,34 @@ async function main() {
   check('拍板② 老板视图不受影响(财务字段照常给)',
     ownerList.length === 0 || ('totalSpentCents' in ownerList[0] && 'storedValueBalanceCents' in ownerList[0]),
     JSON.stringify(Object.keys(ownerList[0] || {})).slice(0, 120))
-  const staffIds = new Set(staffList.map((c) => c.id))
   /* 越权那两条要真跑,必须**列表里真有人** —— 临时租户里 getAdminCustomers() 没把
      刚导入+刚排单的顾客算进来(活跃度过滤),所以 fixture 造不出行。
      不许让断言静默跳过(上一版就是这么漏的):造不出来就**当场红**,逼下一手把 fixture 补对。 */
-  /* ⚠️ 未覆盖:员工「只看自己服务过的顾客」与越权 404 这两条,**目前只有真实库手验过**,
-     没有常驻断言。原因:临时租户里 fixture(导入顾客 + 给技师排单)没造出可见行,
-     staffList 恒为 0,断言会静默通过 —— 那比没有断言更危险。
-     欠账明确记在这里,下一批把 fixture 补对再开断言,不许当成已覆盖。 */
+  /* 🚧 防空转闸门(店主点名):fixture 一坏,下面几条 every()/some() 会**静默通过** ——
+     那比没有断言更危险。所以先断言"列表里真的有人",空了立刻红。 */
+  check('拍板② 防空转:员工名下确实有顾客(fixture 一坏这里先红)',
+    staffList.length > 0, `员工列表 ${staffList.length} 人`)
+  const staffIds = new Set(staffList.map((c) => c.id))
+  check('拍板② 范围:自己服务过的在列表里,别人的不在',
+    staffIds.has(mineUser) && !staffIds.has(otherUser),
+    JSON.stringify({ mine: staffIds.has(mineUser), other: staffIds.has(otherUser), n: staffList.length }))
+  const peekOther = await request(`/admin/customers/${encodeURIComponent(otherUser)}/notes`, {}, staffToken)
+  check('拍板② 越权:员工请求别人的顾客 → 404(不是 403,不确认这个人存在)', peekOther.status === 404, `${peekOther.status}`)
+  const ownNotes = await request(`/admin/customers/${encodeURIComponent(mineUser)}/notes`, {}, staffToken)
+  check('拍板② 自己服务过的顾客,小记看得到', ownNotes.status === 200, `${ownNotes.status}`)
 
+
+  /* ---- ③ 停用的员工账号立刻失效(不是等 token 自然过期)---- */
+  const list = (await request('/admin/staff-accounts', {}, shop.token)).data.accounts || []
+  const mine = list.find((a) => a.username === acct.username)
+  if (mine) {
+    await request(`/admin/staff-accounts/${mine.id}/toggle`, { method: 'POST', body: '{}' }, shop.token)
+    const afterDisable = await request('/admin/auth/me', {}, staffToken)
+    check('③ 停用员工后,他手里的 token 立刻失效(401)', afterDisable.status === 401, String(afterDisable.status))
+  }
+
+  /* 拍板②(店主 2026-08-10):员工「我的客户」—— 只看自己服务过的顾客;手机号脱敏;
+     **财务字段在响应里整体不存在**(不是置空)。裁剪在接口层,前端隐藏不算数。 */
   console.log(`\n门禁全量扫描通过:${checks} 项断言全绿`)
 }
 
