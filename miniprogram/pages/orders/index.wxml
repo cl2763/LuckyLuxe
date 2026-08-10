@@ -1,5 +1,5 @@
 <view class="page orders-page">
-  <scroll-view class="tabs" scroll-x>
+  <scroll-view class="tabs" scroll-x wx:if="{{showTabs}}">
     <block wx:for="{{tabs}}" wx:key="key">
       <button class="tab {{activeStatus === item.key ? 'active' : ''}}" bindtap="switchStatus" data-status="{{item.key}}">{{item.label}}</button>
     </block>

@@ -18,11 +18,16 @@ Page({
     lang: 'zh',
     t: i18n.pageCopy('orders', 'zh'),
     activeStatus: 'all',
+    showTabs: true,
     orders: []
   },
 
   onLoad(options) {
-    this.setData({ activeStatus: options.status || 'all' })
+    /* D14(店主 2026-08-10 开检):「我的订单」四个板块点进去,顶部还有一条横滑筛选。
+       从「全部」进来才需要筛选条;带着状态进来(待服务/已完成/已取消/售后)时,
+       这一条既多余又容易让人以为自己点错了 —— 右上角「全部」已经能看全部。 */
+    const st = options.status || 'all'
+    this.setData({ activeStatus: st, showTabs: st === 'all' })
   },
 
   noop() {},

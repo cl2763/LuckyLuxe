@@ -11,7 +11,9 @@
       <view class="dv-nav" bindtap="dvPrev">‹</view>
       <text class="dv-date">{{dv.dateText}}</text>
       <view class="dv-nav" bindtap="dvNext">›</view>
-      <view class="dv-today" bindtap="dvToday">今天</view>
+      <!-- D3/D4/D5(店主 2026-08-10 开检):当期就说「今天/本周」,非当期要说「返回今天/返回本周」——
+       以前每一天都写着「今天」,翻到 8/03 那页按钮还叫「今天」,根本看不出自己在哪一天。 -->
+      <view class="dv-today {{dv.isToday ? 'cur' : ''}}" bindtap="dvToday">{{dv.isToday ? '今天' : '返回今天'}}</view>
     </view>
     <view class="dv-summary" wx:if="{{dv && !dv.isClosed}}">
       <text class="dv-pill">今日 <text class="b">{{dv.total}}</text> 单</text>
@@ -21,7 +23,12 @@
       <text class="dv-pill hot" wx:if="{{isOwner && v && v.pending.length}}" bindtap="scrollToClose">待日结 <text class="b">{{v.pending.length}}</text></text>
       <view class="dv-share" bindtap="shareSchedule">⤴ 分享</view>
     </view>
-    <view wx:if="{{dv && dv.isClosed}}" class="dv-closed">本日休息{{dv.specialNote ? ' · ' + dv.specialNote : ''}}</view>
+    <!-- D2:台面空态与日结自洽 —— 「本日休息」但日结里有单时,这里就把原因说出来,
+         别让店主在两个地方看到互相矛盾的两句话(文案后端下发)。 -->
+    <view wx:if="{{dv && dv.isClosed}}" class="dv-closed">
+      本日休息{{dv.specialNote ? ' · ' + dv.specialNote : ''}}
+      <view wx:if="{{v.crossDayNotice}}" class="dv-crossday">{{v.crossDayNotice}}</view>
+    </view>
     <view wx:elif="{{dv && !dv.cols.length}}" class="empty">本日无在岗技师</view>
     <block wx:elif="{{dv}}">
       <view class="dv-grid">

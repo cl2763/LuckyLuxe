@@ -9023,6 +9023,14 @@ function dailyCloseView(date, tenantId, { lang = 'zh' } = {}) {
     anomalies: dailyAnomalies(rows, tenantId),
     canConfirm: blockers.length === 0,
     blockers,
+    /* 🟠 D2(店主 2026-08-10 开检:「8/10 显示本日休息,日结区却有单」,且"昨天问过没解决")。
+       上一轮只在**日结行**上加了 crossDayNote,店主看的是**台面空态**那一句,两处没打通。
+       这里把跨零点的笔数与一句现成的话一起下发,台面空态直接用 —— 两处说同一件事。 */
+    crossDayCount: rows.filter((r) => settlementCrossDayNote(r, date)).length,
+    crossDayNotice: (() => {
+      const n = rows.filter((r) => settlementCrossDayNote(r, date)).length
+      return n ? `有 ${n} 笔昨日单于今晨签署,记在今天,见下方日结` : ''
+    })(),
     // R1:已确认但之后又进了新单 —— 两端都要把这句话说出来,不许只显示「已确认」
     staleClose,
     postCloseAdditions,

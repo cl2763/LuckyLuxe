@@ -3,7 +3,9 @@
     <view class="nav" bindtap="prevDay">‹</view>
     <text class="d">{{date}}</text>
     <view class="nav" bindtap="nextDay">›</view>
-    <view class="today" bindtap="closeToday">今天</view>
+    <!-- D3/D4/D5(店主 2026-08-10 开检):当期就说「今天/本周」,非当期要说「返回今天/返回本周」——
+       以前每一天都写着「今天」,翻到 8/03 那页按钮还叫「今天」,根本看不出自己在哪一天。 -->
+    <view class="today {{isToday ? 'cur' : ''}}" bindtap="closeToday">{{isToday ? '今天' : '返回今天'}}</view>
   </view>
 
   <view wx:if="{{loading}}" class="empty">加载中…</view>

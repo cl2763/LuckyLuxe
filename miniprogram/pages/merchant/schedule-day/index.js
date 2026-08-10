@@ -18,11 +18,27 @@ function wdOf(d) { return WK[new Date(`${d}T12:00:00Z`).getUTCDay()] }
 Page({
   data: {
     from: '', days: [], techs: [], afternoonStart: '14:30', loading: true,
+    isOwner: true, readOnly: false, myTechId: '', isThisWeek: true,
     sheet: null, conflicts: []
   },
 
+  /* 🟠 D11(店主 2026-08-10 开检:「员工进我的排班显示『仅老板可见』一片空白」)。
+     根因是**前端权限判断错了** —— 这页开头就 guardOwner(),员工一进来直接被弹走;
+     而后端 /admin/schedule-week、schedule-day、schedule-settings 对员工**本来就是放行的**(实测全 200)。
+     口径(店主原话):员工必须能看到自己的班表。所以改成:
+     任何已登录的商家账号都进得来,**员工进来是只读、且只看自己那一列**;
+     排班、改分界、批量上下班这些写操作仍然只有老板(后端写接口也照旧 owner-only)。
+     「申请调休」入口属后续功能,没图不做(L3)。 */
   async onShow() {
-    if (!(await api.guardOwner())) return
+    if (!(await api.guardMerchant())) return
+    let isOwner = true
+    let myTechId = ''
+    try {
+      const me = await api.adminMe()
+      isOwner = !me || me.role === 'owner'
+      myTechId = (me && me.technicianId) || ''
+    } catch (e) { return }
+    this.setData({ isOwner, myTechId, readOnly: !isOwner })
     await refreshStoreClock().catch(() => {})
     this.load(this.data.from || storeToday())
   },
@@ -34,12 +50,15 @@ Page({
         api.adminGet(`/admin/schedule-week?from=${encodeURIComponent(from)}`),
         api.adminGet('/admin/schedule-settings').catch(() => ({ afternoonStart: '14:30' }))
       ])
-      const techs = (week.technicians || []).filter((t) => t.isActive !== false)
+      let techs = (week.technicians || []).filter((t) => t.isActive !== false)
+      // D11:员工只看自己那一列(看不到同事的班表)
+      if (this.data.readOnly && this.data.myTechId) techs = techs.filter((t) => t.id === this.data.myTechId)
       const byKey = {}
       ;(week.schedules || []).forEach((s) => { byKey[`${s.date}|${s.technicianId}`] = s })
       const counts = {}
       ;(week.bookingCounts || []).forEach((c) => { counts[`${c.date}|${c.technicianId}`] = c.count })
       const split = settings.afternoonStart || '14:30'
+      const today = storeToday()
       const days = (week.days || []).map((d) => {
         const caps = techs.map((t) => {
           const s = byKey[`${d.date}|${t.id}`]
@@ -58,6 +77,8 @@ Page({
         })
         return {
           date: d.date,
+          // D5:日期条上直接标出今天,翻页时一眼定位
+          isToday: d.date === today,
           title: `${Number(d.date.slice(5, 7))}月${Number(d.date.slice(8))}日 周${wdOf(d.date)}`,
           isClosed: d.isClosed,
           openTime: d.openTime,
@@ -66,7 +87,8 @@ Page({
           caps
         }
       })
-      this.setData({ loading: false, days, techs, afternoonStart: split })
+      // D4:本周才叫「本周」,翻走了叫「返回本周」
+      this.setData({ loading: false, days, techs, afternoonStart: split, isThisWeek: days.some((x) => x.isToday) })
     } catch (e) {
       this.setData({ loading: false })
       wx.showToast({ title: (e && e.message) || '加载排班失败', icon: 'none' })
@@ -79,6 +101,8 @@ Page({
 
   // ===== 屏 4a-2 时段编辑弹层 =====
   openSheet(e) {
+    // D11:员工是只读态,点格子不开排班面板(写操作后端也仍然只有老板)
+    if (this.data.readOnly) { wx.showToast({ title: '排班由店长安排,这里只看不改', icon: 'none' }); return }
     const { date, tech, name, kind } = e.currentTarget.dataset
     const day = this.data.days.find((d) => d.date === date)
     this.setData({
@@ -99,6 +123,7 @@ Page({
   toggleRepeat() { this.setData({ 'sheet.repeat': !this.data.sheet.repeat }) },
 
   async saveShift() {
+    if (this.data.readOnly) return
     const s = this.data.sheet
     const body = { date: s.date, applyToFollowingWeeks: s.repeat ? 8 : 0 }
     if (s.kind === 'custom') { body.startTime = s.start; body.endTime = s.end; body.isWorking = true }
@@ -119,6 +144,7 @@ Page({
   },
 
   editSplit() {
+    if (this.data.readOnly) return
     wx.showModal({
       title: '上下午分界', editable: true, placeholderText: '如 14:30',
       content: '',

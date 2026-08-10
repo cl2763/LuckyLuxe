@@ -3,16 +3,20 @@
     <view class="nav" bindtap="prevWeek">‹</view>
     <text class="h1">排班</text>
     <view class="nav" bindtap="nextWeek">›</view>
-    <view class="btn" bindtap="thisWeek">本周</view>
+    <!-- D3/D4/D5(店主 2026-08-10 开检):当期就说「今天/本周」,非当期要说「返回今天/返回本周」——
+       以前每一天都写着「今天」,翻到 8/03 那页按钮还叫「今天」,根本看不出自己在哪一天。 -->
+    <view class="btn {{isThisWeek ? 'cur' : ''}}" bindtap="thisWeek">{{isThisWeek ? '本周' : '返回本周'}}</view>
   </view>
-  <view class="splitbar" bindtap="editSplit">上下午分界 <text class="b">{{afternoonStart}}</text> · 点这里改 ›</view>
+  <!-- D11:员工只读,不给"点这里改" -->
+  <view wx:if="{{!readOnly}}" class="splitbar" bindtap="editSplit">上下午分界 <text class="b">{{afternoonStart}}</text> · 点这里改 ›</view>
+  <view wx:else class="splitbar">我的班表 · 上下午分界 <text class="b">{{afternoonStart}}</text> · 排班由店长安排</view>
 
   <view wx:if="{{loading}}" class="empty">加载中…</view>
 
   <block wx:else>
     <view class="dayrow" wx:for="{{days}}" wx:for-item="d" wx:key="date">
       <view class="dhead">
-        <text class="dt">{{d.title}}</text>
+        <text class="dt">{{d.title}}<text wx:if="{{d.isToday}}" class="todaytag">今天</text></text>
         <text class="closed" wx:if="{{d.isClosed}}">店休</text>
         <text class="onduty">在岗 {{d.onDuty}}</text>
       </view>

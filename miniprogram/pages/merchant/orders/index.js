@@ -266,6 +266,9 @@ Page(Object.assign({
         role: me.role || 'owner', selDate: date, myTechId: me.technicianId || '',
         dv: {
           date, dateText: `${d.getMonth() + 1}月${d.getDate()}日 周${WK[d.getDay()]}`,
+          // D3:当期才叫「今天」,翻走了要叫「返回今天」;D5:日期上直接标出今天
+          isToday: date === todayStr(),
+          todayTag: date === todayStr() ? '今天' : '',
           isClosed: r.isClosed, specialNote: r.specialNote || '', openTime: r.openTime, closeTime: r.closeTime,
           gridH, colW: 190, hours, total: (r.bookings || []).length, working: cols.length,
           freeHours: Math.round(freeTotal / 60 * 10) / 10, activeCount: r.activeCount || 0, cols

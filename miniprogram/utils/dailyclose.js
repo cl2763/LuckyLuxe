@@ -17,7 +17,7 @@ function shiftDate(d, n) {
 
 // 两处共用的初始 data(展开进各自 Page 的 data)
 const dailyCloseData = {
-  date: '', loading: true, v: null, open: {}, shares: {},
+  date: '', loading: true, isToday: true, v: null, open: {}, shares: {},
   correcting: null, newTotal: '', reason: ''
 }
 
@@ -25,7 +25,8 @@ const dailyCloseMixin = {
 
 
   async loadClose(date) {
-    this.setData({ date, loading: true })
+    // D3:当期才叫「今天」,翻到别的日子要叫「返回今天」(两个落点共用这一份 mixin,一处改两处生效)
+    this.setData({ date, loading: true, isToday: date === storeToday() })
     try {
       const r = await api.adminGet(`/admin/daily-close?date=${encodeURIComponent(date)}`)
       const d = displayOf(r.dailyClose)
@@ -53,6 +54,12 @@ const dailyCloseMixin = {
           revenue: m(dc.revenueCents),
           canConfirm: dc.canConfirm,
           blockers: (dc.blockers || []).map((b) => b.message),
+          /* D2:跨零点自解释 —— 台面「本日休息」空态要用同一句话(两处自洽);
+             R1:已确认但账目对不上时,这天要自己说出来,不许只显示「已确认」。 */
+          crossDayCount: dc.crossDayCount || 0,
+          crossDayNotice: dc.crossDayNotice || '',
+          staleClose: Boolean(dc.staleClose),
+          confirmedSnapshot: dc.confirmedSnapshot || null,
           pending: (dc.pendingAllocation || []).map((p) => ({
             // 分成基数=业绩基数(券不扣技师);无券时与应收相等
             id: p.settlementId, code: p.code, timeText: p.timeText || '', crossDayNote: p.crossDayNote || '', total: m(p.perfBaseCents === undefined ? p.totalCents : p.perfBaseCents),

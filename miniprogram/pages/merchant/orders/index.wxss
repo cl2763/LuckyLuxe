@@ -222,3 +222,6 @@ page{background:#fbf8f5}
 
 /* 跨零点单的自解释标注:昨天做的、今晨签的,记在今天的账上 */
 .ah .code .xday{margin-left:12rpx;font-size:20rpx;font-weight:600;color:#a8551f;background:#fdf3ec;border-radius:8rpx;padding:2rpx 10rpx}
+
+/* D2:台面「本日休息」下的跨零点说明 —— 两处自洽,不让人对着矛盾的两句话发懵 */
+.dv-closed .dv-crossday{margin-top:8rpx;font-size:22rpx;color:#a8551f;background:#fdf3ec;border-radius:8rpx;padding:6rpx 12rpx;display:inline-block;font-weight:400}
