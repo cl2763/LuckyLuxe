@@ -811,7 +811,7 @@ function storeCurrency() {
 // CNY → 「¥358」;其它币种 → 「CAD 358」逐字维持现状,旗舰店零 diff。
 const CURRENCY_DISPLAY = {
   CNY: { prefix: '', symbol: '¥', trimZeroDecimals: true },
-  DEFAULT: { prefix: '<CODE> ', symbol: '$', trimZeroDecimals: false }
+  DEFAULT: { prefix: '<CODE> ', symbol: '$', trimZeroDecimals: false }   /* currency-map:映射表默认档 */
 }
 function money(cents, decimals = 0) {
   const code = storeCurrency()
@@ -2666,7 +2666,7 @@ async function loadCouponDiscounts() {
   const data = await request(`/admin/finance/coupon-discounts${month ? `?month=${month}` : ''}`)
   const d = data.couponDiscounts
   // 币种格式用后端下发的 currencyDisplay,和其它页同一套映射
-  const fmt = data.currencyDisplay || { prefix: '<CODE> ', symbol: '$', trimZeroDecimals: false }
+  const fmt = data.currencyDisplay || CURRENCY_DISPLAY.DEFAULT   // 兜底并回唯一映射表,不再各写一份
   const money = (cents) => {
     let text = (Math.round(cents || 0) / 100).toFixed(2)
     if (fmt.trimZeroDecimals) text = text.replace(/\.00$/, '')
@@ -3701,7 +3701,7 @@ function renderSalaryPlanEditor() {
               ladder: ladder.map((row) => ({ minCents: y2c(row.min), maxCents: row.max === '' ? null : y2c(row.max), pct: Number(row.pct) || 0 })),
               flatPct: Number(body.querySelector('#spFlatPct')?.value) || 0
             }) })
-            const fmt = p.currencyDisplay || { prefix: '<CODE> ', symbol: '$', trimZeroDecimals: false }
+            const fmt = p.currencyDisplay || CURRENCY_DISPLAY.DEFAULT   // 兜底并回唯一映射表,不再各写一份
             const m = (cents) => {
               let text = (Math.round(cents || 0) / 100).toFixed(2)
               if (fmt.trimZeroDecimals) text = text.replace(/\.00$/, '')
@@ -7766,7 +7766,8 @@ async function initAdmin() {
 // ===== 会员套餐 / 次卡 / 优惠券(网页老板端,与小程序同后端 /admin/packages、/admin/coupons)=====
 let membershipData = { packages: [], coupons: [], prizes: [] }
 function mCents(v) { const n = Number(String(v).replace(/[^\d.]/g, '')); return Number.isFinite(n) ? Math.round(n * 100) : 0 }
-function mMoney(cents) { return '$' + (Math.round(cents || 0) / 100) }
+// R4:这里原本自己拼 '$',人民币店的会员套餐/券/积分奖品全显示成美元符。并回统一的 money()
+function mMoney(cents) { return money(Math.round(cents || 0)) }
 async function loadMembershipPage() {
   const [p, c, z, cat] = await Promise.all([
     request('/admin/packages'),

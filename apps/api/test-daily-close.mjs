@@ -273,6 +273,56 @@ async function main() {
     `${sum} vs ${pctSheet.totalCents}`)
   check('比例也一并留痕', (byPct.data.shares || []).some((s) => s.sharePct === 70), JSON.stringify(byPct.data.shares))
 
+  /* R1 账目门槛(店主 2026-08-10 开检:「8 号 3 单未签却已确认日结」)。
+     门槛本身没被绕过 —— confirmDailyClose 见 !canConfirm 直接抛。真洞在于:
+     **它只在点确认那一瞬间校验一次**。确认之后这一天再进单(打烊后加钟客、补录、
+     演示 seed 回填),状态还写着「已确认」,而单数/营收/业绩行永远停在旧数。
+     这里把「确认后再进单」整个演一遍,断言这一天必须自己说出"账对不上了"。 */
+  await request('/admin/daily-close/reopen', { method: 'POST', body: JSON.stringify({ date: today, reason: 'R1 用例:先重开再确认' }) }, shop.token)
+  const beforeConfirm = (await request('/admin/daily-close', {}, shop.token)).data.dailyClose
+  if (beforeConfirm.canConfirm) await request('/admin/daily-close', { method: 'POST', body: JSON.stringify({ date: today }) }, shop.token)
+  const closed = (await request('/admin/daily-close', {}, shop.token)).data.dailyClose
+  check('R1 前置:这一天已确认且账目对得上(staleClose=false)',
+    closed.status === 'confirmed' && closed.staleClose === false,
+    JSON.stringify({ s: closed.status, stale: closed.staleClose, snap: closed.confirmedSnapshot, live: closed.orderCount }))
+  const snapBefore = JSON.stringify(closed.confirmedSnapshot)
+
+  // 确认之后再开一张并签掉 —— 现实里就是打烊后来的加钟客
+  const lateGroup = await request('/admin/settlements', {
+    method: 'POST',
+    body: JSON.stringify({
+      cardOwnerUserId: cust,
+      settlements: [{ tierKey: 'member', items: [{ serviceId: svc.id }], technicians: [{ technicianId: techA.id, role: 'main', itemNos: [1] }] }]
+    })
+  }, shop.token)
+  const late = lateGroup.data.settlements[0]
+  const afterOpen = (await request('/admin/daily-close', {}, shop.token)).data.dailyClose
+  check('R1 已确认的日子又冒出未签单:必须标记账目过期,不许只显示「已确认」',
+    afterOpen.staleClose === true && afterOpen.blockers.some((b) => b.code === 'STALE_CLOSE'),
+    JSON.stringify({ stale: afterOpen.staleClose, codes: afterOpen.blockers.map((b) => b.code) }))
+  check('R1 未签提示点名到单(顾客+时间+单号,D7)',
+    afterOpen.blockers.some((b) => b.code === 'UNSIGNED' && Array.isArray(b.items) && b.items.length > 0 && b.items[0].customerName && b.items[0].code),
+    JSON.stringify(afterOpen.blockers.find((b) => b.code === 'UNSIGNED')))
+
+  await request(`/settlements/${late.code}/sign`, { method: 'POST', body: JSON.stringify({ disclaimerAccepted: true, signature: '加钟客' }) }, null)
+  const r1AfterSign = (await request('/admin/daily-close', {}, shop.token)).data.dailyClose
+  check('R1 后进的单签完了,这一天仍然是「账目过期」(不会自己变回正常)',
+    r1AfterSign.staleClose === true, JSON.stringify({ stale: r1AfterSign.staleClose, live: r1AfterSign.orderCount, snap: r1AfterSign.confirmedSnapshot }))
+  check('R1 红线:已确认的快照不会被后进的单**悄悄改掉**(数字原地不动)',
+    JSON.stringify(r1AfterSign.confirmedSnapshot) === snapBefore,
+    `${snapBefore} → ${JSON.stringify(r1AfterSign.confirmedSnapshot)}`)
+  check('R1 实时数确实比快照大(差额算得出来,店主看得见差在哪)',
+    r1AfterSign.orderCount > r1AfterSign.confirmedSnapshot.orderCount && r1AfterSign.revenueCents > r1AfterSign.confirmedSnapshot.revenueCents,
+    JSON.stringify({ live: [r1AfterSign.orderCount, r1AfterSign.revenueCents], snap: r1AfterSign.confirmedSnapshot }))
+  // 走正规路子(重开→再确认)之后,这一天必须回到干净状态
+  await request('/admin/daily-close/reopen', { method: 'POST', body: JSON.stringify({ date: today, reason: 'R1 用例:核对后重新确认' }) }, shop.token)
+  const reFixed = (await request('/admin/daily-close', {}, shop.token)).data.dailyClose
+  if (reFixed.canConfirm) await request('/admin/daily-close', { method: 'POST', body: JSON.stringify({ date: today }) }, shop.token)
+  const healed = (await request('/admin/daily-close', {}, shop.token)).data.dailyClose
+  check('R1 重开后重新确认:账目重新对上,staleClose 归零',
+    healed.status === 'confirmed' && healed.staleClose === false && healed.confirmedSnapshot.orderCount === healed.orderCount,
+    JSON.stringify({ s: healed.status, stale: healed.staleClose, snap: healed.confirmedSnapshot, live: healed.orderCount }))
+
   console.log(`\n日结回归通过:${checks} 项断言全绿`)
 }
 

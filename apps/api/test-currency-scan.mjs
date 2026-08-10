@@ -53,7 +53,15 @@ const BAD = [
      模板里 `$` 紧挨着 `{{`、代码里引号紧跟 `$数字`,只可能是币符,一律红。
      (JS 模板字符串是 `${` 单花括号,不会被这条误伤。) */
   { re: /\$\s*\{\{/g, label: '$ 紧贴 {{(写死美元符)', scope: 'all' },
-  { re: /['"`]\$\d/g, label: "'$0' 这类写死币符的占位", scope: 'all', skipIf: /\.replace\(|new RegExp/ }
+  { re: /['"`]\$\d/g, label: "'$0' 这类写死币符的占位", scope: 'all', skipIf: /\.replace\(|new RegExp/ },
+  /* 🔴 R4 第三次复发之后补的(店主 2026-08-10 开检:会员充值页 $ 与 ¥ 混用)。
+     前两条规则都要求 $ 后面**紧跟着东西**($数字 / ${{ ),于是漏掉了两种最常见的写法:
+       ① 引号里孤零零一个 '$'   —— member/index.js 的 `rvCurrency: '$'`(输入框 placeholder)
+       ② 字符串拼接 '$' + 金额  —— admin.js 的 `mMoney = '$' + cents/100`
+     这就是"扫描器为什么没咬住"的答案:规则只认了带尾巴的形态。 */
+  { re: /['"`]\$['"`]/g, label: "孤立的 '$' 字面量(拿它当币符用)", scope: 'all' },
+  { re: /['"`]\$['"`]\s*\+/g, label: "'$' + 金额 这种拼接", scope: 'all' },
+  { re: /['"`][¥￥]['"`]/g, label: "孤立的 '¥' 字面量", scope: 'mini' }
 ]
 
 function walk(dir, out = []) {
@@ -82,6 +90,9 @@ function main() {
       // 注释行不算(注释里说"不写死 ¥"是允许的)
       const code = line.replace(/\/\/.*$/, '').replace(/<!--[\s\S]*?-->/g, '')
       const isMini = rel.startsWith('miniprogram/')
+      /* 行级豁免:只给**币种映射表本身**用(默认值那一行天生要出现币符)。
+         比文件级白名单更严 —— 白名单放行整个文件,这个只放行打了标记的那一行。 */
+      if (/currency-map/.test(line)) return
       for (const b of BAD) {
         if (b.scope === 'mini' && !isMini) continue
         // 正则替换串里的 $1/$2 是反向引用,不是币符

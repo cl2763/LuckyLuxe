@@ -145,6 +145,16 @@ function adminRequest(path, method = 'GET', data) {
   })
 }
 
+/* R5:门店定金额(元)。读 /stores 缓存下来的配置;没有就回 0,
+   宁可不显示,也不拿旗舰店的 50 冒充本店配置。 */
+function storeDepositAmount() {
+  try {
+    const d = wx.getStorageSync('lucky_store_deposit')
+    if (d && d.enabled && typeof d.amountCents === 'number') return Math.round(d.amountCents) / 100
+  } catch (e) { /* storage 拿不到就当没配 */ }
+  return 0
+}
+
 function toMiniService(service) {
   return {
     _id: service.id,
@@ -153,7 +163,8 @@ function toMiniService(service) {
     name: service.name,
     description: service.description,
     price: service.price,
-    depositAmount: 50,
+    // R5:定金额来自门店配置(/stores 下发),拿不到就 0 不显示 —— 不许再写死 50
+    depositAmount: storeDepositAmount(),
     duration: service.durationMin,
     suitableFor: service.suitableFor || '',
     imageLabel: `${service.type} · ${service.category}`,
@@ -206,7 +217,7 @@ function toMiniBooking(booking) {
       serviceName: service.name,
       serviceType: service.type,
       duration: booking.totalDurationMin || service.duration,
-      depositAmount: booking.deposit || 50,
+      depositAmount: booking.deposit || storeDepositAmount(),
       technicianName: booking.technician ? booking.technician.name : ''
     },
     service,
@@ -221,7 +232,7 @@ function toMiniBooking(booking) {
     galleryStatus: booking.galleryStatus,
     couponDiscount: 0,
     balanceDeduction: 0,
-    payableAmount: booking.deposit || 50,
+    payableAmount: booking.deposit || storeDepositAmount(),
     finalDue: booking.finalDue || 0,
     servicePrice: booking.servicePrice || service.price || 0,
     status: statusMap[booking.status] || 'pending_service',
@@ -380,7 +391,8 @@ async function getStores() {
    这里单独把原始字段取回来,不经过 toMiniStore。 */
 async function getStoreCurrency() {
   const data = await request('/stores')
-  return { currency: data.currency || '', currencyDisplay: data.currencyDisplay || null }
+  // R5:定金配置跟币种同一趟取回来,顾客端不再自己编默认 50
+  return { currency: data.currency || '', currencyDisplay: data.currencyDisplay || null, deposit: data.deposit || null }
 }
 
 async function getAddOns() {

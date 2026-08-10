@@ -42,7 +42,12 @@
       <view class="ch">③ 加项目录 <text class="hint">按本单价格档计价</text></view>
       <block wx:for="{{addonGroups}}" wx:for-item="g" wx:key="title">
         <view class="gh">{{g.title}}</view>
-        <view class="item" wx:for="{{g.items}}" wx:for-item="it" wx:key="id">
+        <!-- R2(店主 2026-08-10 开检:「再选别的项目合计不变」):加项行原本只有勾选框和名字
+             绑了 catchtap,**价格区和行的空白处点了毫无反应** —— 而正上方的主项目行是整行可点。
+             店主照着上面的习惯点行/点价格,以为选中了,合计当然不动。改成整行可点,与主项目一致。
+             按指数的那种仍然只认 ＋/−(整行可点会和步进器打架)。 -->
+        <view class="item" wx:for="{{g.items}}" wx:for-item="it" wx:key="id"
+              data-id="{{it.id}}" bindtap="{{it.perFinger ? '' : 'toggleItem'}}">
           <block wx:if="{{it.perFinger}}">
             <view class="iname wide">{{it.name}}</view>
             <view class="stepper">
@@ -52,8 +57,8 @@
             </view>
           </block>
           <block wx:else>
-            <view class="ck {{it.on ? 'on' : ''}}" data-id="{{it.id}}" catchtap="toggleItem">{{it.on ? '✓' : ''}}</view>
-            <view class="iname" data-id="{{it.id}}" catchtap="toggleItem">{{it.name}}</view>
+            <view class="ck {{it.on ? 'on' : ''}}">{{it.on ? '✓' : ''}}</view>
+            <view class="iname">{{it.name}}</view>
             <view class="pr">
               <text wx:if="{{it.listText}}" class="mut">{{it.listText}}</text>
               <text class="now {{it.isFree ? 'free' : ''}}">{{it.priceText}}</text>
@@ -86,13 +91,16 @@
 
     <view class="card">
       <view class="ch">⑤ 定金</view>
-      <view wx:if="{{depositDeductible}}" class="radios">
+      <!-- R6②:只有这张单**确实有定金收取记录**时才出开关(v1.2 抵扣依据=收取记录)。
+           没有记录还摆着开关,店员点了金额纹丝不动,只会以为是 bug。 -->
+      <view wx:if="{{depositDeductible && view.hasDepositReceipt}}" class="radios">
         <view class="radio {{depositApplied ? 'on' : ''}}" data-v="1" bindtap="setDeposit">
           <view class="dt"></view>已付定金抵扣
           <text wx:if="{{view.hasDeposit}}" class="ok">−{{view.depositDeduct}}</text>
         </view>
         <view class="radio {{depositApplied ? '' : 'on'}}" data-v="0" bindtap="setDeposit"><view class="dt"></view>未付定金</view>
       </view>
+      <view wx:elif="{{depositDeductible}}" class="empty">{{view.depositHint || '这张单没有定金收取记录,没有可抵扣的定金'}}</view>
       <view wx:else class="empty">本店定金不抵扣尾款（门店设置 → 定金与取消规则）</view>
 
       <!-- 屏 C1：优惠券行，位置=定金行正下方。默认收起显示可用券数；点开=选券面板 -->

@@ -124,7 +124,7 @@
 <script>
 // 金额一律取后端返回值。这里只有一个 money() 负责「分 → 显示」,没有任何业务计算。
 // 金额格式由后端下发的 currencyDisplay 决定(CNY→¥358,CAD→CAD $50.00),前端不做任何换算
-const CUR = { v: '', fmt: { prefix: '<CODE> ', symbol: '$', trimZeroDecimals: false } }
+const CUR = { v: '', fmt: { prefix: '<CODE> ', symbol: '$', trimZeroDecimals: false } }   /* currency-map:本页默认档,真实币种随单据下发覆盖 */
 function money(cents) {
   let text = (Math.round(cents) / 100).toFixed(2)
   if (CUR.fmt.trimZeroDecimals) text = text.replace(/\.00$/, '')
@@ -235,7 +235,7 @@ function render() {
         <h2>支付构成</h2>
         ${s.payments.map((p) => `
           <div class="row">
-            <span>${esc(payLabel[p.leg] || p.leg)}${p.leg === 'migrate_stored' ? '<span class="badge">历史余额</span>' : ''}</span>
+            <span>${esc(payLabel[p.leg] || p.leg)}${p.leg === 'migrate_stored' ? '<span class="badge">旧卡余额</span>' : ''}</span>
             <span class="amt">${p.leg === 'deposit' ? `−${money(p.amountCents)}` : money(p.amountCents)}</span>
           </div>`).join('') || '<div class="meta">—</div>'}
       </div>
@@ -290,8 +290,12 @@ function render() {
     if (phoneBtn) phoneBtn.addEventListener('click', askPhoneAuth)
     document.querySelector('.doc').classList.add('locked')
     const disc = document.getElementById('disc'); if (disc) disc.disabled = true
-    const btn = document.getElementById('signBtn'); if (btn) btn.disabled = true
-    document.getElementById('cta').classList.add('locked')
+    /* R3:这里原本把「确认签字」直接 disabled、并给底栏加 .locked
+       (.locked 带 pointer-events:none,等于双保险把按钮钉死)——
+       死按钮,点了毫无反馈,而底栏提示还指着一个同样被禁用的勾选框。
+       沿用 2026-08-09 定下的做法:**按钮始终点得动,点下去告诉她缺哪一步并滚过去**。
+       锁的是账单区(.doc),不是反馈通道;真正的拦截在 missingStep() 里,签不出去。 */
+    sync()
   }
 }
 
@@ -388,19 +392,63 @@ async function applyCoupon(grantId) {
 
 function initPad() {
   const canvas = document.getElementById('pad')
-  const ratio = window.devicePixelRatio || 1
-  canvas.width = canvas.offsetWidth * ratio
-  canvas.height = canvas.offsetHeight * ratio
   const ctx = canvas.getContext('2d')
-  ctx.scale(ratio, ratio)
-  ctx.lineWidth = 2.4; ctx.lineCap = 'round'; ctx.lineJoin = 'round'; ctx.strokeStyle = '#2d2826'
+  /* 🔴 R3(店主 2026-08-10 开检:「确认签字第一次点开用不了,第二次又可以」)。
+     实测根因:initPad() 在**布局还没落定**的那一拍就量 offsetWidth ——
+     量到的是 2px,于是 canvas.width = 2×ratio = 4,而 CSS 盒子是 432px 宽。
+     背板只有 4 像素:顾客照样能划,strokes 也照样记,**但笔迹一笔都画不出来**,
+     看上去就是"签不了"。刷新一次布局是热的,量对了就好了 —— 正是"第二次可以"。
+     现在:尺寸单独抽出来,量到 0/异常就用父容器兜底;首帧、下一帧、窗口变化、
+     容器变化(web-view 加载完会变尺寸)各量一次,并且**重设尺寸后把已有笔迹重画回去**
+     (改 canvas.width 会清空画布,不重画就等于把顾客签好的字擦了)。 */
+  let ratio = window.devicePixelRatio || 1
+  const measure = () => {
+    const cssW = canvas.offsetWidth || (canvas.parentElement && canvas.parentElement.clientWidth) || 0
+    const cssH = canvas.offsetHeight || 150
+    return { cssW, cssH }
+  }
+  const paintStyle = () => {
+    ctx.setTransform(1, 0, 0, 1, 0, 0)
+    ctx.scale(ratio, ratio)
+    ctx.lineWidth = 2.4; ctx.lineCap = 'round'; ctx.lineJoin = 'round'; ctx.strokeStyle = '#2d2826'
+  }
+  const redraw = () => {
+    ctx.clearRect(0, 0, canvas.width, canvas.height)
+    paintStyle()
+    for (const line of strokes) {
+      if (!line || line.length === 0) continue
+      ctx.beginPath()
+      ctx.moveTo(line[0].x, line[0].y)
+      for (const pt of line.slice(1)) ctx.lineTo(pt.x, pt.y)
+      if (line.length === 1) ctx.lineTo(line[0].x + 0.1, line[0].y)
+      ctx.stroke()
+    }
+  }
+  const resize = () => {
+    ratio = window.devicePixelRatio || 1
+    const { cssW, cssH } = measure()
+    if (cssW < 8) return false               // 还没量出真尺寸,这一拍不动,等下一次
+    const w = Math.round(cssW * ratio)
+    const h = Math.round(cssH * ratio)
+    if (canvas.width === w && canvas.height === h) return true
+    canvas.width = w; canvas.height = h
+    redraw()
+    return true
+  }
+  if (!resize()) paintStyle()
+  requestAnimationFrame(resize)              // 字体/布局落定后再量一次
+  setTimeout(resize, 300); setTimeout(resize, 1200)   // web-view 里容器尺寸来得更晚,多探两次
+  window.addEventListener('resize', resize)
+  if (typeof ResizeObserver === 'function') { try { new ResizeObserver(resize).observe(canvas) } catch (e) { /* 老内核没有就算了 */ } }
   let drawing = false
   const pos = (e) => {
     const r = canvas.getBoundingClientRect()
     const p = e.touches ? e.touches[0] : e
     return { x: p.clientX - r.left, y: p.clientY - r.top }
   }
-  const start = (e) => { e.preventDefault(); drawing = true; hasInk = true; const { x, y } = pos(e); ctx.beginPath(); ctx.moveTo(x, y); strokes.push([{ x: Math.round(x), y: Math.round(y) }]); sync() }
+  /* 最后一道保险:落笔那一刻先把尺寸重量一次。容器什么时候变宽都无所谓 ——
+     只要顾客开始写,背板一定是对的,笔迹不会画丢(R3 的兜底)。 */
+  const start = (e) => { e.preventDefault(); resize(); drawing = true; hasInk = true; const { x, y } = pos(e); ctx.beginPath(); ctx.moveTo(x, y); strokes.push([{ x: Math.round(x), y: Math.round(y) }]); sync() }
   const move = (e) => { if (!drawing) return; e.preventDefault(); const { x, y } = pos(e); ctx.lineTo(x, y); ctx.stroke(); const cur = strokes[strokes.length - 1]; if (cur) cur.push({ x: Math.round(x), y: Math.round(y) }) }
   const end = () => { drawing = false }
   canvas.addEventListener('mousedown', start); canvas.addEventListener('mousemove', move); window.addEventListener('mouseup', end)
@@ -418,6 +466,12 @@ function initPad() {
    改成:按钮**始终可点**,点下去告诉她缺什么并滚到那一项;
    同时底栏上方常驻一行提示,不用点也知道还差什么。 */
 function missingStep() {
+  /* 🔴 R3 之二:没确认本人时,整块是锁着的(S4),可提示语却写「请勾选上方的确认声明」——
+     而那个勾选框**本身也是禁用的**。店主照着提示去点,点不动,按钮也点不动,
+     于是就是「确认签字用不了」。缺哪一步就说哪一步:锁着的时候先说"确认本人"。 */
+  if (document.getElementById('claimBtn')) {
+    return { key: 'claim', text: '还差一步:请先点上方的「是我本人，绑定并继续」' }
+  }
   const disc = document.getElementById('disc')
   if (!disc || !disc.checked) return { key: 'disc', text: '还差一步:请勾选上方的确认声明' }
   if (!hasInk) return { key: 'ink', text: '还差一步:请在签名框里手写签名' }
@@ -475,11 +529,11 @@ document.getElementById('signBtn').addEventListener('click', async () => {
   const miss = missingStep()
   if (miss) {
     toast(miss.text)
-    const el = document.getElementById(miss.key === 'disc' ? 'disc' : 'pad')
+    const el = document.getElementById(miss.key === 'claim' ? 'claimBtn' : (miss.key === 'disc' ? 'disc' : 'pad'))
     if (el) {
-      const box = miss.key === 'disc' ? el.closest('.disc') : el
+      const box = miss.key === 'disc' ? el.closest('.disc') : (miss.key === 'claim' ? (el.closest('.claim') || el) : el)
       if (box) box.scrollIntoView({ behavior: 'smooth', block: 'center' })
-      if (miss.key === 'disc') { box.classList.add('flash'); setTimeout(() => box.classList.remove('flash'), 1200) }
+      if (miss.key === 'disc' || miss.key === 'claim') { box.classList.add('flash'); setTimeout(() => box.classList.remove('flash'), 1200) }
     }
     return
   }

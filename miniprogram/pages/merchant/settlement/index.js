@@ -320,10 +320,12 @@ Page({
           amount: l.amountCents === 0 ? '免收' : m(l.amountCents),
           list: l.listAmountCents !== l.amountCents ? m(l.listAmountCents) : ''
         })),
-        legs: (pay.legs || []).map((l) => ({
-          label: l.leg === 'offline' ? '线下支付' : (l.leg === 'migrate_stored' ? '储值卡抵扣(迁移余额)' : '储值卡抵扣'),
-          amount: m(l.amountCents)
-        })),
+        // R6①:腿文案后端下发(「迁移余额」这种内部说法不再露给店员/顾客)
+        legs: (pay.legs || []).map((l) => ({ label: l.label || l.leg, amount: m(l.amountCents) })),
+        // R6②:没有定金收取记录就不出那个开关,改成一行说明
+        depositReceiptCents: s.depositReceiptCents || 0,
+        hasDepositReceipt: (s.depositReceiptCents || 0) > 0,
+        depositHint: s.depositHint || '',
         balance: m(pay.balanceAvailableCents || 0),
         shortfall: m(pay.shortfallCents || 0),
         hasShortfall: (pay.shortfallCents || 0) > 0,

@@ -7895,6 +7895,18 @@ function buildPaymentLegs({ tenantId, payerId, totalCents, payIntent }) {
     if (useNormal > 0) { legs.push({ leg: 'stored_value', amountCents: useNormal, payerUserId: payerId }); remaining -= useNormal }
   }
   if (remaining > 0) legs.push({ leg: 'offline', amountCents: remaining, payerUserId: payerId, note: '到店支付' })
+  /* R6①(店主 2026-08-10 开检):支付构成里写着「储值卡抵扣(迁移余额)」——
+     「迁移余额」是我们内部说法(老系统搬过来、不计本店收入的那一桶钱),
+     顾客和店员都看不懂。文案统一由后端下发,前端只渲染,不再各端各写一份。 */
+  const LEG_LABEL = {
+    migrate_stored: '储值卡抵扣（旧卡余额）',
+    stored_value: '储值卡抵扣',
+    offline: '到店支付',
+    deposit: '已付定金抵扣',
+    times_card: '次卡抵扣',
+    coupon: '优惠券抵扣'
+  }
+  for (const l of legs) l.label = LEG_LABEL[l.leg] || l.leg
   const storedUsedCents = legs.filter((l) => l.leg === 'stored_value' || l.leg === 'migrate_stored').reduce((sum, l) => sum + l.amountCents, 0)
   return { plan, legs, balance, remaining: Math.max(0, remaining), storedUsedCents }
 }
@@ -8072,12 +8084,18 @@ function computeSettlement(input = {}) {
      防止"抵了没收过的钱":抵扣行一出现就等于把一笔负债兑现掉,凭空抵就是凭空造收入。
      线上定金支付接通后,支付记录同样写成收取记录,这里一行都不用改。 */
   const depositConfig = getDepositConfig(tenantId)
-  let depositDeductCents = 0
-  if (input.depositApplied && depositConfig.deductible && input.bookingId) {
-    const receiptCents = activeDepositReceipts(input.bookingId, tenantId)
+  /* R6②(店主 2026-08-10 开检:「切换已付定金抵扣/未付定金,总金额没变化」)。
+     后端本来就是对的 —— 抵扣依据是**定金收取记录**(v1.2 拍板),这张单没有收取记录,
+     切一百次也该是 0。错在界面:**没有收取记录时根本不该摆这个开关**,
+     摆了就等于请店员去点一个注定没反应的东西。把「有没有可抵的定金」下发,前端据此决定出不出。 */
+  const depositReceiptCents = input.bookingId
+    ? activeDepositReceipts(input.bookingId, tenantId)
       .filter((r) => !r.settled_settlement_id)
       .reduce((n, r) => n + (r.amount_cents || 0), 0)
-    depositDeductCents = Math.min(receiptCents, subtotalCents)
+    : 0
+  let depositDeductCents = 0
+  if (input.depositApplied && depositConfig.deductible && input.bookingId) {
+    depositDeductCents = Math.min(depositReceiptCents, subtotalCents)
   }
 
   /* 券抵扣(2026-08-09):用的是**卡主**券包里的券(规则①,代付单同理),一单限一张(规则②)。
@@ -8120,6 +8138,12 @@ function computeSettlement(input = {}) {
     listTotalCents,
     subtotalCents,
     depositDeductCents,
+    // R6②:这张单有没有可抵的定金收取记录(前端据此决定出不出那个开关)
+    depositReceiptCents,
+    depositDeductible: depositConfig.deductible !== false,
+    depositHint: depositReceiptCents > 0
+      ? ''
+      : (input.bookingId ? '这张单没有定金收取记录,没有可抵扣的定金' : '即时开单(没挂预约),不涉及定金抵扣'),
     tierDiscountCents,
     couponDiscountCents,
     discountTotalCents,
@@ -8911,10 +8935,75 @@ function dailyCloseView(date, tenantId, { lang = 'zh' } = {}) {
 
   const blockers = []
   // 待签的单按「开单那天」归日 —— 顾客没签,自然没有 signed_at 可归
-  const unsigned = db.prepare("SELECT created_at FROM settlements WHERE tenant_id = ? AND status = 'pending_sign'").all(tenantId)
+  const unsignedRows = db.prepare("SELECT id, code, created_at, user_id FROM settlements WHERE tenant_id = ? AND status = 'pending_sign'").all(tenantId)
     .filter((r) => localParts(r.created_at, tenantTimezone(tenantId)).date === date)
-  if (unsigned.length) blockers.push({ code: 'UNSIGNED', count: unsigned.length, message: `还有 ${unsigned.length} 张服务单顾客没签字` })
+  const unsigned = unsignedRows
+  /* D7:提示要点名到单 —— 只说「还有 3 张没签」等于让店长自己去翻是哪三张。
+     顾客 + 时间 + 单号随 blocker 一起下发,两端都能直接点进去处理。 */
+  const unsignedList = unsignedRows.map((r) => ({
+    settlementId: r.id,
+    code: r.code,
+    timeText: localParts(r.created_at, tenantTimezone(tenantId)).time.slice(0, 5),
+    customerName: (db.prepare('SELECT display_name FROM users WHERE id = ?').get(r.user_id) || {}).display_name || '未留姓名'
+  }))
+  const nameHint = unsignedList.map((u) => `${u.customerName} ${u.timeText}`).join('、')
+  if (unsigned.length) {
+    blockers.push({
+      code: 'UNSIGNED',
+      count: unsigned.length,
+      message: `还有 ${unsigned.length} 张服务单顾客没签字:${nameHint}`,
+      items: unsignedList
+    })
+  }
   if (pending.length) blockers.push({ code: 'UNALLOCATED', count: pending.length, message: `还有 ${pending.length} 单多技师业绩没分配` })
+
+  /* R1 账目门槛(店主 2026-08-10 开检):店主看到「8 号 3 单未签,却已确认日结」。
+     查证结论:确认那一刻门槛没被绕过(confirmDailyClose 见 !canConfirm 直接抛),
+     那 3 张是**确认之后**才落库的(演示 seed 回填 created_at)。但底下压着一个真洞 ——
+     **门槛只在"点确认"那一瞬间校验一次**:日结确认完之后,这一天再冒出新单
+     (现实里就是打烊后来了个加钟客、店员照样开单),这天的状态仍旧写着「已确认」,
+     确认时存下的单数/营收/业绩行却再也不含它 —— 账目对不上,界面还不解释。
+     现在:确认之后再出现的单一律算「confirm 之后的新增」,这天标记为**数字已过期**,
+     必须走重开(带原因、留痕、reopen_count+1)再确认,不许悄悄改掉已确认的快照。 */
+  const confirmedAt = closeRow && closeRow.status === 'confirmed' ? closeRow.confirmed_at : null
+  const liveOrderCount = settlements.length
+  const liveRevenueCents = settlements.reduce((sum, s) => sum + s.totalCents, 0)
+  /* 判「过期」不能靠比时间戳。演示 seed 会把 created_at/signed_at **回填到过去**,
+     真实场景里也可能有人补录 —— 时间戳一旦被写成确认之前,时间比较就永远抓不到。
+     所以拿**确认那一刻存下的快照**跟**现在实时算出来的**对账:对不上就是过期,
+     不管这些单是怎么进来的。时间戳只用来解释「哪几单是后加的」,抓不到就不解释。 */
+  const snapshot = confirmedAt ? { orderCount: closeRow.order_count, revenueCents: closeRow.revenue_cents } : null
+  const driftCount = snapshot ? liveOrderCount - snapshot.orderCount : 0
+  const driftCents = snapshot ? liveRevenueCents - snapshot.revenueCents : 0
+  const postCloseAdditions = confirmedAt
+    ? [
+      ...unsignedList.map((u) => ({ ...u, kind: 'unsigned', kindText: '未签字' })),
+      ...rows
+        .filter((r) => r.signed_at && r.signed_at > confirmedAt)
+        .map((r) => ({
+          settlementId: r.id,
+          code: r.code,
+          timeText: settlementRowTime(r),
+          customerName: (db.prepare('SELECT display_name FROM users WHERE id = ?').get(r.user_id) || {}).display_name || '未留姓名',
+          kind: 'signed',
+          kindText: '已签字'
+        }))
+    ]
+    : []
+  const staleClose = Boolean(snapshot) && (driftCount !== 0 || driftCents !== 0 || unsigned.length > 0)
+  if (staleClose) {
+    const bits = []
+    if (driftCount !== 0 || driftCents !== 0) {
+      bits.push(`确认时记的是 ${snapshot.orderCount} 单 / ${formatMoneyCents(snapshot.revenueCents, tenantId, 'auto')},现在实际是 ${liveOrderCount} 单 / ${formatMoneyCents(liveRevenueCents, tenantId, 'auto')}`)
+    }
+    if (unsigned.length) bits.push(`另有 ${unsigned.length} 张没签字(${nameHint})`)
+    blockers.push({
+      code: 'STALE_CLOSE',
+      count: Math.abs(driftCount) || unsigned.length,
+      message: `这一天已确认,但账目已经对不上了:${bits.join(';')}。日结数字仍停在确认那一刻 —— 请重开日结核对后重新确认。`,
+      items: postCloseAdditions
+    })
+  }
 
   return {
     date,
@@ -8934,6 +9023,14 @@ function dailyCloseView(date, tenantId, { lang = 'zh' } = {}) {
     anomalies: dailyAnomalies(rows, tenantId),
     canConfirm: blockers.length === 0,
     blockers,
+    // R1:已确认但之后又进了新单 —— 两端都要把这句话说出来,不许只显示「已确认」
+    staleClose,
+    postCloseAdditions,
+    /* 确认那一刻存下的数(daily_closes 里的快照)。和上面实时算的 orderCount/revenueCents
+       并排给前端,数字对不上时店主一眼看得出差在哪,不用猜。 */
+    confirmedSnapshot: closeRow && closeRow.status === 'confirmed'
+      ? { orderCount: closeRow.order_count, revenueCents: closeRow.revenue_cents }
+      : null,
     perfSplitDefault: perfSplitDefault(tenantId),
     lang
   }
@@ -9416,7 +9513,7 @@ function renderSettlementSnapshotSvg(settlement, { strokes = [], signedAt = '' }
   }
   y += 40
   rows.push(`<text x="40" y="${y}" class="h">支付构成</text>`)
-  const payLabel = { deposit: '已付定金抵扣', stored_value: '储值卡抵扣', migrate_stored: '储值卡抵扣（历史余额）', offline: '到店支付', times_card: '次卡抵扣', coupon: '优惠券' }
+  const payLabel = { deposit: '已付定金抵扣', stored_value: '储值卡抵扣', migrate_stored: '储值卡抵扣（旧卡余额）', offline: '到店支付', times_card: '次卡抵扣', coupon: '优惠券' }
   for (const p of s.payments) {
     y += lineH
     rows.push(`<text x="40" y="${y}" class="t">${escapeXml(payLabel[p.leg] || p.leg)}</text>`)
@@ -10156,6 +10253,20 @@ async function route(req, res) {
          境内 ¥ 店的顾客看到的每个价格币种都是错的。现在跟商家端同一套 currencyDisplay。 */
       currency: tenantCurrencyCode(tid),
       currencyDisplay: currencyDisplayOf(tenantCurrencyCode(tid)),
+      /* 🔴 R5(店主 2026-08-10 开检:顾客端显示「定金已付 50」,而 Jie'Nail 配的是 ¥100)。
+         根因:顾客端**根本拿不到定金配置** —— 公开接口一个字段都没下发,
+         于是 utils/api.js 里写了 `booking.deposit || 50` 和 `depositAmount: 50` 兜底。
+         那个 50 是旗舰店当年的默认值,跟任何一家店的实际配置都没关系。
+         金额只能来自店铺定金配置:这里把它下发,顾客端照着渲染,不许再自己编默认值。 */
+      deposit: (() => {
+        const c = getDepositConfig(tid)
+        return {
+          enabled: c.enabled !== false,
+          amountCents: c.mode === 'fixed' ? (c.fixedAmountCents || 0) : (c.fallbackAmountCents || 0),
+          mode: c.mode || 'fixed',
+          deductible: c.deductible !== false
+        }
+      })(),
       stores: storeRows.map((s) => Object.assign({}, s, { hours: hourStmt.all(s.id) }))
     })
   }
@@ -10913,7 +11024,8 @@ async function route(req, res) {
   }
   // ===== P1.2 定金规则(商家自助)=====
   if (path === '/admin/deposit-config') {
-    if (adminSession.role !== 'owner') throw apiError(403, 'FORBIDDEN', 'Owner permission is required.')
+    // D13 同一处:开单页要按定金规则渲染那一行,员工得读得到;改规则仍然只有老板
+    if (adminSession.role !== 'owner' && req.method !== 'GET') throw apiError(403, 'FORBIDDEN', 'Owner permission is required.')
     const tid = currentTenantId()
     if (req.method === 'GET') {
       const config = getDepositConfig(tid)
@@ -10984,8 +11096,22 @@ async function route(req, res) {
   }
   /* ===== P0 价目表管理(大类 / 项目与加项 / 计价规则 / 试算)=====
      全部 owner-only + 租户隔离;写库时 services.price_cents 与 service_prices(list) 双写保持一致。 */
+  /* D13(店主 2026-08-10 开检:「报价试算一直卡在正在读取本店价目表」)。
+     根因不是数据缺口 —— 是**权限一刀切**:整个 /admin/pricing/* 都是 owner-only,
+     而结算开单页和报价试算页 boot 时就要读 categories / items,员工一进去就吃 403,
+     Promise.all 整个挂掉,页面永远停在「正在读取本店价目表…」。
+     实际影响比店主报的还大:**员工根本开不了单**,不只是试算卡住。
+     口径:价目表是员工干活要看的参照物 —— **读放开给员工,写仍然只有老板**。
+     (改价、加项目、调会员价、调充值档位一律 owner-only,一个都没放。) */
   if (path.startsWith('/admin/pricing/') || path.startsWith('/admin/membership/') || path.startsWith('/admin/recharge-tiers')) {
-    if (adminSession.role !== 'owner') throw apiError(403, 'FORBIDDEN', 'Owner permission is required.')
+    const staffMayRead = req.method === 'GET' && (
+      path === '/admin/pricing/categories' || path === '/admin/pricing/items' || path === '/admin/pricing/rules'
+      /* 会员判定也得放:开单页拿它决定默认价档。原本这条被 403 挡掉后前端 .catch 成 null,
+         默认回落「原价」—— 等于**员工给会员开单一律按原价算**,顾客当场就会说"我是会员啊"。
+         只放会员**名单查询**;会员等级/权益/充值档位的配置仍然只有老板能碰。 */
+      || path === '/admin/membership/members'
+    )
+    if (adminSession.role !== 'owner' && !staffMayRead) throw apiError(403, 'FORBIDDEN', 'Owner permission is required.')
   }
   if (path === '/admin/pricing/categories' || path.startsWith('/admin/pricing/categories/')) {
     const tid = currentTenantId()

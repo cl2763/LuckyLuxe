@@ -42,6 +42,14 @@ function storeCurrency() {
   const c = cached()
   return (c && c.currency) || 'CAD'
 }
+/* 只要币符前缀(给输入框 placeholder 这类"不带数字"的地方用)。
+   R4:商家端会员充值页原来把 storeCurrency() 的**币种代码**当符号显示,
+   于是 ¥ 店的输入框写着「CNY 如 1000」,而同屏别的金额是 ¥ —— 一屏两套写法。
+   与顾客端 curOf() 同一口径:prefix + symbol。 */
+function storeCurrencyPrefix() {
+  const fmt = storeCurrencyDisplay()
+  return `${String(fmt.prefix).replace('<CODE>', storeCurrency())}${fmt.symbol}`
+}
 // 分 → 门店币种显示串。decimals 默认按币种(CNY 整数、CAD 两位)
 function storeMoney(cents, decimals) {
   const fmt = storeCurrencyDisplay()
@@ -65,4 +73,5 @@ async function refreshStoreClock() {
   return r
 }
 
-module.exports = { storeToday, storeMonth, storeMoney, storeCurrency, storeCurrencyDisplay, refreshStoreClock, ensureCurrencyCached }
+module.exports = {
+  storeCurrencyPrefix, storeToday, storeMonth, storeMoney, storeCurrency, storeCurrencyDisplay, refreshStoreClock, ensureCurrencyCached }

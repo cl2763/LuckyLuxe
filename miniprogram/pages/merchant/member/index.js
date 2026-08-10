@@ -1,5 +1,5 @@
 const api = require('../../../utils/api')
-const { storeMoney, storeCurrency, ensureCurrencyCached } = require('../../../utils/storeclock')
+const { storeMoney, storeCurrencyPrefix, ensureCurrencyCached } = require('../../../utils/storeclock')
 
 Page({
   data: {
@@ -11,7 +11,7 @@ Page({
     grantQuery: '', grantResults: [], grantPicked: null, grants: [],
     // F4 给会员加储值(平铺块,与自定义发放同层)
     rvQuery: '', rvResults: [], rvPicked: null, rvAmount: '', rvAmountText: '',
-    rvCurrency: '$', rvTechs: [], rvTechNames: ['店里直收(不计提成)'], rvTechIndex: 0
+    rvCurrency: '', rvTechs: [], rvTechNames: ['店里直收(不计提成)'], rvTechIndex: 0
   },
 
   onLoad(opt) {
@@ -22,7 +22,8 @@ Page({
   async onShow() {
     if (!(await api.guardOwner())) return
     await ensureCurrencyCached().catch(() => {})
-    this.setData({ rvCurrency: storeCurrency() }) // 币种从门店设置来,不写死 $
+    // R4:要的是**币符**(¥/CAD $),不是币种代码(CNY)——以前显示成「CNY 如 1000」
+    this.setData({ rvCurrency: storeCurrencyPrefix() })
     this.loadAll()
   },
 

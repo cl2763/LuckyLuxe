@@ -9,10 +9,23 @@
 const api = require('./api')
 const { formatMoney } = require('./money')
 const KEY = 'lucky_store_currency'
+const DEP_KEY = 'lucky_store_deposit'
 
 function cached() {
   const v = wx.getStorageSync(KEY)
   return v && v.currencyDisplay ? v : null
+}
+
+/* R5:门店定金额也一起缓存(与币种同一个 /stores 请求、同一套缓存)。
+   顾客端以前拿不到配置,只好写死 50 —— 那是旗舰店当年的默认值。 */
+function storeDeposit() {
+  const c = wx.getStorageSync(DEP_KEY)
+  return c && typeof c.amountCents === 'number' ? c : null
+}
+// 元(顾客端不少字段是元不是分);拿不到配置就回 null,由调用方决定怎么兜,不许再编 50
+function storeDepositYuan() {
+  const d = storeDeposit()
+  return d && d.enabled ? Math.round(d.amountCents) / 100 : null
 }
 
 async function refreshStoreCurrency() {
@@ -20,6 +33,7 @@ async function refreshStoreCurrency() {
      数组上没有 currencyDisplay —— 判断永远不成立,缓存一次也没写进去,
      顾客端 32 处 {{cur.p}}{{cur.s}} 一直渲染成空币符。改调只取币种字段的接口。 */
   const r = await api.getStoreCurrency()
+  if (r && r.deposit) wx.setStorageSync(DEP_KEY, r.deposit)
   if (r && r.currencyDisplay) {
     wx.setStorageSync(KEY, { currency: r.currency || '', currencyDisplay: r.currencyDisplay, at: Date.now() })
     repaintCurrency()
@@ -42,7 +56,7 @@ function ensureCurrencyCached() {
 }
 
 // 换店必须清:¥ 店与 CAD 店共用同一个缓存键,不清会把上一家的币符带进新店
-function clearStoreCurrency() { wx.removeStorageSync(KEY) }
+function clearStoreCurrency() { wx.removeStorageSync(KEY); wx.removeStorageSync(DEP_KEY) }
 
 // 分 → 门店币种显示串(decimals 默认按币种:CNY 整数、CAD 两位)
 function money(cents, decimals) {
@@ -54,7 +68,7 @@ function money(cents, decimals) {
 // 已经是「元」的数字(顾客端不少字段是元不是分)→ 同一套币种前缀
 function moneyFromYuan(amount, decimals) { return money(Math.round(Number(amount || 0) * 100), decimals) }
 
-module.exports = { money, moneyFromYuan, refreshStoreCurrency, ensureCurrencyCached, clearStoreCurrency }
+module.exports = { money, moneyFromYuan, refreshStoreCurrency, ensureCurrencyCached, clearStoreCurrency, storeDeposit, storeDepositYuan }
 
 /* 给 WXML 用的币种前缀对象:{ p: 前缀, s: 符号 }。
    页面把它 setData 成 cur,模板里写 {{cur.p}}{{cur.s}}{{金额}} —— 只换币符,
