@@ -57,7 +57,7 @@ const dailyCloseMixin = {
           /* D2:跨零点自解释 —— 台面「本日休息」空态要用同一句话(两处自洽);
              R1:已确认但账目对不上时,这天要自己说出来,不许只显示「已确认」。 */
           crossDayCount: dc.crossDayCount || 0,
-          crossDayNotice: dc.crossDayNotice || '',
+          lateSignNotice: dc.lateSignNotice || '',
           staleClose: Boolean(dc.staleClose),
           confirmedSnapshot: dc.confirmedSnapshot || null,
           pending: (dc.pendingAllocation || []).map((p) => ({

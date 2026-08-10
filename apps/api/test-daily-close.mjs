@@ -323,6 +323,92 @@ async function main() {
     healed.status === 'confirmed' && healed.staleClose === false && healed.confirmedSnapshot.orderCount === healed.orderCount,
     JSON.stringify({ s: healed.status, stale: healed.staleClose, snap: healed.confirmedSnapshot, live: healed.orderCount }))
 
+  /* 🔴 日结归属 = 服务发生日(店主 2026-08-10 拍板 ②,《财务记账总逻辑》v1.5 §六)。
+     晚签的单必须记回**服务那一天**,不许堆到签字那天。四条 corner 全在这儿。 */
+  const svcDay = async (d) => (await request(`/admin/daily-close?date=${d}`, {}, shop.token)).data.dailyClose
+  const yest = new Date(`${today}T00:00:00Z`); yest.setUTCDate(yest.getUTCDate() - 1)
+  const yDate = yest.toISOString().slice(0, 10)
+  // 昨天服务、今天才签的单
+  const lateBk = (await request('/admin/bookings/direct', {
+    method: 'POST',
+    body: JSON.stringify({ userId: cust, serviceId: svc.id, technicianId: techA.id, date: yDate, time: '20:30', durationMin: 60, depositPaid: false })
+  }, shop.token)).data.booking
+  const lateSheet = (await request('/admin/settlements', {
+    method: 'POST',
+    body: JSON.stringify({ cardOwnerUserId: cust, settlements: [{ bookingId: lateBk.id, tierKey: 'list', payIntent: 'offline_full', items: [{ serviceId: svc.id }], technicians: [{ technicianId: techA.id, role: 'main', itemNos: [1] }] }] })
+  }, shop.token)).data.settlements[0]
+  const yBefore = (await svcDay(yDate)).orderCount
+  const tBefore = (await svcDay(today)).orderCount
+  await request(`/settlements/${lateSheet.code}/sign`, { method: 'POST', body: JSON.stringify({ disclaimerAccepted: true, signature: '补签客' }) }, null)
+  const yAfter = await svcDay(yDate)
+  const tAfter = await svcDay(today)
+  check('归属① 昨天服务今天签:记回**昨天**的日结(不是签字那天)',
+    yAfter.orderCount === yBefore + 1 && tAfter.orderCount === tBefore,
+    JSON.stringify({ 昨: [yBefore, yAfter.orderCount], 今: [tBefore, tAfter.orderCount] }))
+  check('归属② 补签单在服务日的行上带小注(说清它是事后签的)',
+    (yAfter.settlements || []).some((x) => x.code === lateSheet.code && x.crossDayNote),
+    JSON.stringify((yAfter.settlements || []).map((x) => [x.code, x.crossDayNote])))
+  check('归属③ 服务当天就签的单不加多余小注',
+    (tAfter.settlements || []).every((x) => !x.crossDayNote),
+    JSON.stringify((tAfter.settlements || []).map((x) => [x.code, x.crossDayNote])))
+  check('归属④ 收入流水仍按签字日(两条轴分开,§三 不变)',
+    yAfter.settlements.find((x) => x.code === lateSheet.code).signedAt.slice(0, 10) >= yDate,
+    '签字时刻不因归属改变而回拨')
+  // 补签进**已确认**的那一天 → 必须标过期(R1 守护机制)
+  await request('/admin/daily-close/reopen', { method: 'POST', body: JSON.stringify({ date: yDate, reason: '归属用例' }) }, shop.token).catch(() => {})
+  const yFix = await svcDay(yDate)
+  if (yFix.canConfirm) await request('/admin/daily-close', { method: 'POST', body: JSON.stringify({ date: yDate }) }, shop.token)
+  const lateBk2 = (await request('/admin/bookings/direct', {
+    method: 'POST',
+    body: JSON.stringify({ userId: cust, serviceId: svc.id, technicianId: techB.id, date: yDate, time: '21:40', durationMin: 60, depositPaid: false })
+  }, shop.token)).data.booking
+  const late2 = (await request('/admin/settlements', {
+    method: 'POST',
+    body: JSON.stringify({ cardOwnerUserId: cust, settlements: [{ bookingId: lateBk2.id, tierKey: 'list', payIntent: 'offline_full', items: [{ serviceId: svc.id }], technicians: [{ technicianId: techB.id, role: 'main', itemNos: [1] }] }] })
+  }, shop.token)).data.settlements[0]
+  await request(`/settlements/${late2.code}/sign`, { method: 'POST', body: JSON.stringify({ disclaimerAccepted: true, signature: '补签客2' }) }, null)
+  const yStale = await svcDay(yDate)
+  check('归属⑤ 补签落进**已确认**的那一天 → 标过期(R1 守护机制接住)',
+    yStale.staleClose === true, JSON.stringify({ stale: yStale.staleClose, live: yStale.orderCount, snap: yStale.confirmedSnapshot }))
+  await request('/admin/daily-close/reopen', { method: 'POST', body: JSON.stringify({ date: yDate, reason: '归属用例:重开再确认' }) }, shop.token)
+  const yReady = await svcDay(yDate)
+  if (yReady.canConfirm) await request('/admin/daily-close', { method: 'POST', body: JSON.stringify({ date: yDate }) }, shop.token)
+  const yHealed = await svcDay(yDate)
+  check('归属⑥ 重开再确认后数字自洽(快照 ≡ 实时)',
+    yHealed.staleClose === false && yHealed.confirmedSnapshot.orderCount === yHealed.orderCount,
+    JSON.stringify({ snap: yHealed.confirmedSnapshot, live: yHealed.orderCount }))
+  // 没有服务发生的那一天:日结区没有任何单
+  const far = '2026-01-05'
+  const empty = await svcDay(far)
+  check('归属⑦ 没有服务发生的日子:日结区零单(休息日不再冒出别人家的尾巴)',
+    empty.orderCount === 0 && (empty.settlements || []).length === 0, JSON.stringify({ n: empty.orderCount }))
+
+  /* 店主点名的 corner:**跨月补签** —— 上月最后一天服务、这个月才签,业绩必须算**上个月**。
+     月度业绩 = Σ 已确认日结的当月 daily_close_lines,归属日一错,整月业绩就错月。 */
+  const tParts = today.split('-')
+  const firstOfThisMonth = new Date(Date.UTC(Number(tParts[0]), Number(tParts[1]) - 1, 1))
+  const lastOfPrevMonth = new Date(firstOfThisMonth.getTime() - 86400000).toISOString().slice(0, 10)
+  const prevMonthKey = lastOfPrevMonth.slice(0, 7)
+  const xmBk = (await request('/admin/bookings/direct', {
+    method: 'POST',
+    body: JSON.stringify({ userId: cust, serviceId: svc.id, technicianId: techA.id, date: lastOfPrevMonth, time: '21:00', durationMin: 60, depositPaid: false })
+  }, shop.token)).data.booking
+  const xmSheet = (await request('/admin/settlements', {
+    method: 'POST',
+    body: JSON.stringify({ cardOwnerUserId: cust, settlements: [{ bookingId: xmBk.id, tierKey: 'list', payIntent: 'offline_full', items: [{ serviceId: svc.id }], technicians: [{ technicianId: techA.id, role: 'main', itemNos: [1] }] }] })
+  }, shop.token)).data.settlements[0]
+  await request(`/settlements/${xmSheet.code}/sign`, { method: 'POST', body: JSON.stringify({ disclaimerAccepted: true, signature: '跨月补签客' }) }, null)
+  const xmDay = (await request(`/admin/daily-close?date=${lastOfPrevMonth}`, {}, shop.token)).data.dailyClose
+  check(`归属⑧ 跨月补签:${lastOfPrevMonth} 服务、${today} 签 → 记回**上月最后一天**(不落本月)`,
+    (xmDay.settlements || []).some((x) => x.code === xmSheet.code),
+    JSON.stringify({ day: lastOfPrevMonth, codes: (xmDay.settlements || []).map((x) => x.code) }))
+  if (xmDay.canConfirm) await request('/admin/daily-close', { method: 'POST', body: JSON.stringify({ date: lastOfPrevMonth }) }, shop.token)
+  const xmClosed = (await request(`/admin/daily-close?date=${lastOfPrevMonth}`, {}, shop.token)).data.dailyClose
+  const rank = ((await request(`/admin/perf-ranking?period=month&date=${prevMonthKey}`, {}, shop.token)).data || {}).ranking || {}
+  check(`归属⑨ 跨月补签的业绩落在**上月**排行里(${prevMonthKey}),不串到本月`,
+    xmClosed.status !== 'confirmed' || (rank.ranking || []).some((r) => r.value > 0),
+    JSON.stringify({ closed: xmClosed.status, ranking: (rank.ranking || []).map((r) => [r.name, r.value]) }))
+
   console.log(`\n日结回归通过:${checks} 项断言全绿`)
 }
 
