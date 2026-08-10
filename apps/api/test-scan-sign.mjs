@@ -10,7 +10,9 @@
 const BASE_URL = process.env.TEST_BASE_URL || 'http://127.0.0.1:4128'
 const PLATFORM = process.env.TEST_ADMIN_TOKEN || 'owner-demo-token'
 const RUN = Date.now().toString(36)
-const todayStr = () => new Date().toLocaleDateString('en-CA')
+// 四之五:日期问后端要门店时区的今天,不用测试机本地日期(白天绿半夜红的根源)
+let STORE_TODAY = ''
+const todayStr = () => STORE_TODAY || new Date().toLocaleDateString('en-CA')
 
 // serializeBooking 把顾客放在 booking.user 里(不是 userId)
 const uidOf = (b) => (b && (b.userId || (b.user && b.user.id))) || ''
@@ -51,6 +53,7 @@ async function newShop(label) {
 
 async function main() {
   const shop = await newShop('a')
+  STORE_TODAY = (await request('/admin/store-clock', {}, shop.token)).data.today
   const other = await newShop('b')
   const cat = (await request('/admin/pricing/categories', { method: 'POST', body: JSON.stringify({ key: 'nail', name: '美甲' }) }, shop.token)).data.category
   const svc = (await request('/admin/pricing/items', {

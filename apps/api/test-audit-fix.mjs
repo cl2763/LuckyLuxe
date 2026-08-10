@@ -12,7 +12,9 @@ const PLATFORM = process.env.TEST_ADMIN_TOKEN || 'owner-demo-token'
 const RUN_ID = Date.now().toString(36)
 
 // 门店时区的今天(测试机与门店时区一致时就是本地日期)
-const todayStr = () => new Date().toLocaleDateString('en-CA')
+// 四之五:日期问后端要门店时区的今天,不用测试机本地日期(白天绿半夜红的根源)
+let STORE_TODAY = ''
+const todayStr = () => STORE_TODAY || new Date().toLocaleDateString('en-CA')
 
 let checks = 0
 function check(name, condition, detail = '') {
@@ -58,6 +60,7 @@ async function main() {
   const shop = await newShop('a')
   const other = await newShop('b')
   check('两家临时店建好', Boolean(shop.token && other.token))
+  STORE_TODAY = (await request('/admin/store-clock', {}, shop.token)).data.today
 
   const cat = (await request('/admin/pricing/categories', { method: 'POST', body: JSON.stringify({ key: 'nail', name: '美甲' }) }, shop.token)).data.category
   const mk = async (body) => (await request('/admin/pricing/items', { method: 'POST', body: JSON.stringify(body) }, shop.token)).data.item

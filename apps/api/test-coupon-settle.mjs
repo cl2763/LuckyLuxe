@@ -148,7 +148,7 @@ async function main() {
   const tech0 = (await request(`/platform/tenants/${shop.tenantId}/technicians`, { method: 'POST', body: JSON.stringify({ name: `算例师${RUN_ID}` }) })).data.technician
   const depBooking = (await request('/admin/bookings/direct', {
     method: 'POST',
-    body: JSON.stringify({ userId: cardOwner, serviceId: main3h.id, technicianId: tech0.id, date: new Date().toLocaleDateString('en-CA'), time: '14:10', durationMin: 60, depositPaid: false })
+    body: JSON.stringify({ userId: cardOwner, serviceId: main3h.id, technicianId: tech0.id, date: (await request('/admin/store-clock', {}, shop.token)).data.today, time: '14:10', durationMin: 60, depositPaid: false })
   }, shop.token)).data.booking
   await request(`/admin/bookings/${depBooking.id}/deposit-receipt`, { method: 'POST', body: JSON.stringify({}) }, shop.token)
 

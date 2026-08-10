@@ -316,6 +316,18 @@ async function checkMiniMappingLayer(asRow) {
     Boolean(mapped.afterSales) && mapped.afterSales.steps.length === 3,
     JSON.stringify(mapped.afterSales && mapped.afterSales.steps && mapped.afterSales.steps.length))
 
+  /* 🔴 D17 永久护栏(店主 2026-08-11 拍板;08-04「假报价」同类第二次)。
+     顾客端这五个函数以前接口一挂就 return mock —— 顾客看到一整套不存在的
+     服务/门店/技师/可约时段,还能照着约进去。现在把 wx.request 打成必失败,
+     断言它们**抛错**而不是交出数据。谁再写 mock 回落,这里直接红。 */
+  const failing = ['getServices', 'getStores', 'getAddOns', 'getAvailability', 'getTechnicians']
+  global.wx.request = ({ fail }) => { if (fail) fail(new Error('network down')) }
+  for (const fn of failing) {
+    let threw = false
+    try { await miniApi[fn]('nail') } catch (e) { threw = true }
+    check(`D17 护栏:${fn}() 接口失败时**抛错**,绝不回 mock 假数据`, threw, `${fn} 没抛错 —— 它把假数据交出去了`)
+  }
+
   const cur = require('../../miniprogram/utils/storecurrency.js')
   miniApi.getStoreCurrency = async () => ({ currency: 'CNY', currencyDisplay: { prefix: '', symbol: '¥', trimZeroDecimals: true } })
   await cur.refreshStoreCurrency()

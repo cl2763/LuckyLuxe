@@ -104,9 +104,16 @@ async function main() {
   /* 单 A:带定金(¥200 档位小计 − ¥50 定金 = ¥150 应收),双技师 70/30
      单 B:无定金无券(¥200 全额),单技师 —— 用它验「迁移前后逐分不变」
      v1.2 §五 补拍①:抵扣依据＝收取记录,所以单 A 要挂一张**标记过已收定金**的预约。 */
+  /* 🔴《交付自检闭环》四之五「套件时间确定性」(店主 2026-08-11 立规):
+     全量回归的绿必须**与挂钟时间无关**。这里原来用 `new Date().toLocaleDateString('en-CA')`
+     —— 那是**跑测试这台机器的本地日期**,而日结查的是**门店时区的今天**。
+     上海 00:0x = 多伦多前一天 12:0x,两者差一天 → 白天跑绿、半夜跑红。
+     日结归属改成服务发生日之后这个坑才显形(以前按签字日归,签字用的是"现在",正好躲过去)。
+     修法:日期一律问后端要门店时区的今天,测试机在哪个时区都一样。 */
+  const storeToday = (await req('/admin/store-clock', {}, token)).data.today
   const bkA = (await req('/admin/bookings/direct', {
     method: 'POST',
-    body: JSON.stringify({ userId: user, serviceId: svc.id, technicianId: techA.id, date: new Date().toLocaleDateString('en-CA'), time: '13:10', durationMin: 60, depositPaid: false })
+    body: JSON.stringify({ userId: user, serviceId: svc.id, technicianId: techA.id, date: storeToday, time: '13:10', durationMin: 60, depositPaid: false })
   }, token)).data.booking
   await req(`/admin/bookings/${bkA.id}/deposit-receipt`, { method: 'POST', body: JSON.stringify({}) }, token)
   const group = await req('/admin/settlements', {
