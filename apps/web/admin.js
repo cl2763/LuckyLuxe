@@ -1,5 +1,5 @@
 // 构建号:每次交付递增。侧栏可见,排查"改了没生效"时先对版本。
-const ADMIN_BUILD = '20260810g-amend'
+const ADMIN_BUILD = '20260810h-d6'
 console.log(`[admin] build ${ADMIN_BUILD}`)
 
 // "今天"必须按门店时区算,否则老板人在别的时区时全站日期错位一天。
@@ -2539,7 +2539,13 @@ function renderDailyClose() {
             <span><b class="dc-tm">${escapeHtml(a.timeText || '')}</b>${escapeHtml(a.servedPersonName || a.customerName || '')} · ${a.technicians.map((t) => escapeHtml(t.name) + (t.sharePct === null || t.sharePct === undefined ? '' : ` ${t.sharePct}%`)).join(' / ')}${a.crossDayNote ? `<em class="dc-xday">${escapeHtml(a.crossDayNote)}</em>` : ''}</span>
             <span>${money(a.perfBaseCents, 2)} <span class="arr">${escapeHtml(a.reason)}</span></span>
           </div>
-          ${a.hasSnapshot ? `<div class="dc-links"><a data-dc-snapshot="${escapeHtml(a.code)}">${zh ? '查看签署单' : 'View signed sheet'}</a></div>` : ''}
+          <!-- D6(店主 2026-08-10 开检):这一组「无需分配 · 待确认」的行,以前只有「查看签署单」,
+               而上面「待分配」那组是有「金额有误?发起更正」的 —— 同一件事两端/两处不一致(闭环③违例)。
+               小程序两组都有,网页这里补齐;入口逻辑与上面那组完全相同(同一个 data-dc-correct 处理器)。 -->
+          <div class="dc-links">
+            ${a.hasSnapshot ? `<a data-dc-snapshot="${escapeHtml(a.code)}">${zh ? '查看签署单' : 'View signed sheet'}</a>` : ''}
+            <a data-dc-correct="${escapeHtml(a.settlementId)}">${zh ? '金额有误?发起更正' : 'Amount wrong? Amend'}</a>
+          </div>
         </div>`).join('')}` : ''}
 
     <table class="dc-sum">
