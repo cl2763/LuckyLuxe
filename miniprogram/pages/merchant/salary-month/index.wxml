@@ -26,7 +26,11 @@
       <view class="close-row" wx:for="{{closeDays}}" wx:key="date">
         <text class="cd">{{item.date}}</text>
         <text class="cl">{{item.line}}</text>
-        <text wx:if="{{item.confirmed}}" class="cb ok">已日结</text>
+        <!-- D8(店主 2026-08-10 开检:「日结确认后就点不开了,看不到每天日结详情」):
+             以前已确认的天渲染成**纯文本**,只有未确认的天才可点 —— 确认完就再也回不去了。
+             改成两种状态都可点,进的是同一张日结页(那页对已确认日本来就是只读态 + 带「重开」入口,
+             重开走既有 R1 流程),不为"回看"另开一份实现。 -->
+        <text wx:if="{{item.confirmed}}" class="cb ok" data-date="{{item.date}}" bindtap="goDailyClose">已日结 ›</text>
         <text wx:else class="cb go" data-date="{{item.date}}" bindtap="goDailyClose">去日结</text>
       </view>
       <view wx:if="{{!closeDays.length}}" class="close-empty">本月还没有已签署的服务单。</view>

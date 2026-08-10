@@ -1,5 +1,5 @@
 // 构建号:每次交付递增。侧栏可见,排查"改了没生效"时先对版本。
-const ADMIN_BUILD = '20260810h-d6'
+const ADMIN_BUILD = '20260811a-d8'
 console.log(`[admin] build ${ADMIN_BUILD}`)
 
 // "今天"必须按门店时区算,否则老板人在别的时区时全站日期错位一天。
@@ -3085,7 +3085,9 @@ function renderFinancePayroll() {
           <div class="finance-rule-row">
             <span><strong>${escapeHtml(d.date)}</strong> · ${d.orderCount} ${zh ? '单' : ''} · ${money(d.revenueCents, 2)}${d.pendingAllocation ? ` · ${zh ? `${d.pendingAllocation} 单待分配` : `${d.pendingAllocation} to allocate`}` : (d.confirmed ? '' : ` · ${zh ? '未确认' : 'open'}`)}</span>
             ${d.confirmed
-              ? `<span class="dc-badge ok">${zh ? '已日结' : 'Closed'}</span>`
+              /* D8 同类第二处(L2):网页这边也是——已确认的天渲染成不可点的 span,
+                 确认完就回不去看当天明细了。改成同样可点,进同一个日结板块(只读态+重开入口)。 */
+              ? `<button class="ghost slim" data-go-close="${escapeHtml(d.date)}" type="button">${zh ? '已日结 ›' : 'Closed ›'}</button>`
               : `<button class="ghost slim" data-go-close="${escapeHtml(d.date)}" type="button">${zh ? '去日结' : 'Close it'}</button>`}
           </div>`).join('') : `<p class="subtle" style="margin:0">${zh ? '本月还没有已签署的服务单。' : 'No signed sheets yet.'}</p>`}
         </div>
