@@ -447,7 +447,10 @@ async function getPortfolio() {
 async function getService(id, lang) {
   const type = id.indexOf('lash') === 0 ? 'lash' : 'nail'
   const services = await getServices(type, lang)
-  return services.find((item) => item._id === id) || mock.findService(id)
+  /* 🔴 D17 同类(2026-08-11 L2 补扫,第六处 mock 回落):原来 `|| mock.findService(id)` ——
+     本店真价目表里没有这个项目时,就从写死的演示表里翻一个**编造的项目连价格**给顾客,
+     顾客还能拿它去预约。真找不到就返回 null,调用方已有「项目不存在」的处理。 */
+  return services.find((item) => item._id === id) || null
 }
 
 async function getAvailability(serviceId, date, addOnIds, technicianId) {

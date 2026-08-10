@@ -186,11 +186,45 @@
   <!-- ===== 售后订单 ===== -->
   <block wx:if="{{mode==='aftersales'}}">
     <view wx:if="{{!aftersalesList.length}}" class="empty">暂无售后订单</view>
-    <view class="orow" wx:for="{{aftersalesList}}" wx:key="id">
+    <!-- 🔴 D12 修复:这一行原来**没有 bindtap**,所以员工点它没有任何反应(店主报的"点不进去")。
+         现在可进入可看:原因 + 处理情况**只读**。写入/完成态等 Cowork 出图,这里不做。 -->
+    <view class="orow" wx:for="{{aftersalesList}}" wx:key="id" data-id="{{item.id}}" bindtap="openAfterSales">
       <view class="otime">{{item.time}}</view>
       <view class="omain"><view class="oname">{{item.customer}}<text class="ostatus d">售后</text></view><view class="oline">{{item.line}}{{item.tech ? ' · ' + item.tech : ''}} · {{item.date}}</view></view>
+      <text class="ochev">›</text>
     </view>
   </block>
+
+  <!-- ===== D12 售后详情(只读)=====
+       ⬜ 无设计图:按最合理方式做,已记入假设清单 —— 沿用现有弹层(mask + dsheet)的
+       结构与留白,不自创新样式;只读,面板里**不放任何写入/完成按钮**。 -->
+  <view wx:if="{{asPanel}}" class="mask" bindtap="closeAfterSales"></view>
+  <view wx:if="{{asPanel}}" class="dsheet">
+    <view class="ds-head">
+      <view class="ds-t">售后详情 · {{asPanel.customer}}</view>
+      <view class="ds-x" bindtap="closeAfterSales">✕</view>
+    </view>
+    <scroll-view scroll-y class="ds-body">
+      <view class="ds-k">订单</view>
+      <view class="as-line">{{asPanel.line}}{{asPanel.tech ? ' · ' + asPanel.tech : ''}} · {{asPanel.date}} {{asPanel.time}}</view>
+
+      <view class="ds-k">原因</view>
+      <view wx:if="{{asPanel.reason}}" class="as-line">{{asPanel.reason}}</view>
+      <view wx:else class="as-empty">转售后时没有留原因</view>
+
+      <view class="ds-k">处理情况</view>
+      <view wx:if="{{asPanel.steps.length}}" class="as-steps">
+        <view wx:for="{{asPanel.steps}}" wx:key="key" class="as-step {{item.done ? 'on' : ''}}">
+          <text class="as-dot">{{item.done ? '●' : '○'}}</text>
+          <text class="as-lab">{{item.label}}</text>
+          <text class="as-at">{{item.at}}</text>
+        </view>
+      </view>
+      <view wx:else class="as-empty">还没有处理记录</view>
+      <view wx:if="{{asPanel.footnote}}" class="ds-hint">{{asPanel.footnote}}</view>
+      <view class="ds-warn">只读:售后的处理与完成在人工客服那边跟进,这里只看不改</view>
+    </scroll-view>
+  </view>
 
   <!-- 直接排单弹窗 -->
   <view wx:if="{{directSheet}}" class="mask" bindtap="closeDirect"></view>
@@ -220,8 +254,15 @@
       </block>
 
       <block wx:else>
-        <input class="ds-inp" placeholder="姓名，如 王小雅" bindinput="onDsName" />
-        <input class="ds-inp ds-mt" type="number" placeholder="手机号，如 138 0013 0000" bindinput="onDsPhone" />
+        <!-- 🔴 D9 修复(2026-08-11 实测复现):这两个框原来**没有 value 绑定**(非受控)。
+             后果有两层:
+             ① 显示值与 data 脱钩 —— 实测往手机号框写 13800130000,data.dsPhone 是对的
+                ("13800130000"),节点显示的却是字面 "undefined"(店主看到的就是这个)。
+             ② tapFree() 每次开面板都把 dsName/dsPhone 重置成 '',但没有 value 绑定,
+                这个重置**清不掉框里的字** —— 所以「改不动删不掉」。
+             改成受控:显示什么完全由 data 说了算,重置就真的清空。 -->
+        <input class="ds-inp" placeholder="姓名，如 王小雅" value="{{dsName}}" bindinput="onDsName" />
+        <input class="ds-inp ds-mt" type="number" placeholder="手机号，如 138 0013 0000" value="{{dsPhone}}" bindinput="onDsPhone" />
         <view wx:if="{{dsHitText}}" class="ds-hit {{dsHitId ? 'on' : ''}}">{{dsHitText}}</view>
         <view wx:else class="ds-newhint">未命中 → 新建<text class="ds-light">轻档案</text>(未绑微信，签字时扫码自动绑定)</view>
         <view class="ds-warn">不填手机号也能建单;身份绑定不依赖手机号(靠签署码/会员码),手机号只用于找档案和联系</view>

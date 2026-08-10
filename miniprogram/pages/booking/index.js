@@ -1,4 +1,3 @@
-const mock = require('../../utils/mock-data')
 const { curOf, ensureCurrencyCached } = require('../../utils/storecurrency')
 const storage = require('../../utils/storage')
 const i18n = require('../../utils/i18n')
@@ -13,8 +12,10 @@ Page({
     minDate: '',
     appointmentDate: '',
     appointmentTime: '',
-    timeSlots: mock.timeSlots,
-    addOns: mock.addOns,
+    // D17 第四种形态(2026-08-11 L2 补扫):初始值不摆假时段/假加项。
+    // 停服实测时这里真的渲染出 4 个不存在的加项 —— 接口没回来就是空,不占位。
+    timeSlots: [],
+    addOns: [],
     technicians: [],
     technicianIndex: 0,
     technician: null,
@@ -53,7 +54,17 @@ Page({
     this.setData({ aiEnabled: api.getStoreAiEnabled(), aiReferenceEnabled: false })
     i18n.applyTabBar(lang)
     i18n.setTitle(i18n.pageCopy('booking', lang).title)
-    const service = i18n.localizeService(await api.getService(options.id, lang), lang)
+    /* 🔴 D17(2026-08-11 停服实测补):getService 也会抛,而它排在下面那个 try 外面 ——
+       抛出后 service 永远是 null,页面闸门为假,连失败态都不渲染 = 纯白屏。
+       这里必须自己兜住:失败就出失败态,不是让整页消失。 */
+    let serviceRaw
+    try {
+      serviceRaw = await api.getService(options.id, lang)
+    } catch (e) {
+      this.setData({ loadFailed: true })
+      return
+    }
+    const service = i18n.localizeService(serviceRaw, lang)
     if (!service) {
       wx.showToast({ title: i18n.pageCopy('booking', lang).missing, icon: 'none' })
       setTimeout(() => wx.navigateBack(), 600)
@@ -94,7 +105,8 @@ Page({
       cartId: options.cartId || '',
       minDate: storage.today(),
       appointmentDate: appointment ? appointment.date : storage.tomorrow(),
-      appointmentTime: appointment ? appointment.time : mock.timeSlots[0],
+      // D17 同类:默认时间不从写死表里取,等 refreshAvailability 用真空档填(取不到就留空)
+      appointmentTime: appointment ? appointment.time : '',
       technicians,
       technicianIndex,
       technician: technicians[technicianIndex] || technicians[0] || null,
@@ -166,7 +178,10 @@ Page({
       : null
     const slots = (techEntry && techEntry.slots && techEntry.slots.length)
       ? techEntry.slots
-      : availability.slots && availability.slots.length ? availability.slots : mock.timeSlots
+      /* 🔴 D17 同类(2026-08-11 L2 补扫):原来末尾是 `: mock.timeSlots` ——
+         当天真的约满/技师没空档时,给顾客列出一整排**不存在的可约时间**,
+         顾客选一个就下单了。空就是空,由 wxml 出「当天已约满」的空态。 */
+      : (availability.slots && availability.slots.length ? availability.slots : [])
     const nextTime = slots.indexOf(this.data.appointmentTime) >= 0 ? this.data.appointmentTime : slots[0]
     this.setData({
       timeSlots: slots,

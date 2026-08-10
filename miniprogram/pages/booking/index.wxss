@@ -293,3 +293,6 @@
 .d17fail{display:flex;flex-direction:column;align-items:center;justify-content:center;gap:20rpx;padding:140rpx 40rpx}
 .d17msg{color:#8c8279;font-size:27rpx}
 .d17btn{border:1rpx solid #d8cec4;border-radius:999rpx;padding:14rpx 48rpx;font-size:27rpx;color:#9b7655}
+
+/* 时段空态(⬜ 无图,假设清单已记):约满就如实说,不列假时段 */
+.slot-empty{color:#8c8279;font-size:26rpx;padding:24rpx 8rpx}

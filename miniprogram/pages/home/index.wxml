@@ -1,11 +1,14 @@
 <view class="page home-page">
-  <!-- D17 失败态:接口挂了如实说,不拿假数据糊住(书面标准代图) -->
+  <!-- D17 失败态:接口挂了如实说,不拿假数据糊住(书面标准代图)。
+       ⚠️ 与正文**互斥**(wx:else),不是叠在正文上方 —— 2026-08-11 停服实测发现:
+       只加 wx:if 不排除正文,失败态下面还渲染出一整个残缺骨架(缓存门店名 +
+       空地址/空营业时间/空电话),等于一边说"加载失败"一边继续摆半张假门店卡。 -->
   <view wx:if="{{loadFailed}}" class="d17fail">
     <view class="d17msg">加载失败，请检查网络后重试</view>
     <view class="d17btn" bindtap="refreshLanguage">重试</view>
   </view>
 
-  <view class="home-landing">
+  <view wx:else class="home-landing">
     <view class="top-row">
       <view class="brand-lockup">
         <!-- 临时 logo(按店主提供设计稿绘制的近似版);正式源文件到位后直接替换此 png -->
@@ -69,7 +72,9 @@
     </view>
   </view>
 
-  <view class="section home-section-container">
+  <!-- 失败态下这两块也要收起来:否则页面上只剩两个「人气美甲/人气美睫」空标题
+       悬在失败提示下面 —— 正是《闭环回归纪律》说的"单独蹦出来找不到上下文"的状态 -->
+  <view wx:if="{{!loadFailed}}" class="section home-section-container">
     <view class="section-head">
       <view class="section-title">{{t.popularNail}}</view>
       <view class="section-note">Popular nail</view>
@@ -88,7 +93,7 @@
     </view>
   </view>
 
-  <view class="section home-section-container">
+  <view wx:if="{{!loadFailed}}" class="section home-section-container">
     <view class="section-head">
       <view class="section-title">{{t.popularLash}}</view>
       <view class="section-note">Popular lash</view>

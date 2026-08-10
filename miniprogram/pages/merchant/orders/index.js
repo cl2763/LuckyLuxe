@@ -58,6 +58,7 @@ Page(Object.assign({
     filterLabels: { all: '全部', PENDING_STAFF: '待报价', CONFIRMED: '待到店', COMPLETED: '已完成', CANCELLED: '已取消' },
     groups: [],
     aftersalesList: [],
+    asPanel: null,        // D12 售后详情(只读)弹层
     // 今日台面(技师维度日视图)
     selDate: '',
     dv: null,
@@ -193,20 +194,51 @@ Page(Object.assign({
   },
   // 顾客签署页(裁决③:web-view 包 /sign);店员当面递手机给顾客签也走这里
   openSign(code) { wx.navigateTo({ url: `/pages/sign/index?code=${encodeURIComponent(code)}` }) },
+  /* 🔴 D10 修复(店主 2026-08-10 开检):这里原来写着
+       `if (pending.length === 1) { this.openSign(pending[0].code); return }`
+     —— 只要恰好有一张待签单,商家点「查看结算单」就**直接跳进顾客端的签署页**
+     (`/pages/sign/index?code=`,顾客看到的「确认本人并绑定」那一屏)。
+     店主想「看单」,拿到的是顾客的身份绑定界面,这就是她报的入口串页。
+
+     改法:**「查看」永远只是看**,列清有哪几张、各是什么状态(顺带满足 D7「点名到单」);
+     要把手机递给顾客签是另一个动作,必须商家在这张弹层上**明确点**「递给顾客签」才走。
+     不再有"恰好一张就自己跳走"这种隐式行为。 */
   showSheets(sheets) {
     const zh = { pending_sign: '待签', signed: '已签', amended: '已更正', voided: '已撤回' }
     const live = sheets.filter((s) => s.status !== 'voided')
     const pending = live.filter((s) => s.status === 'pending_sign')
-    // 有待签的就直接把签署页递到顾客手上(裁决③:web-view 包 /sign,与网页同一份)
-    if (pending.length === 1) { this.openSign(pending[0].code); return }
     wx.showModal({
       title: `结算单 ${live.length} 张`,
-      confirmText: pending.length ? '去签第一张' : '知道了',
+      confirmText: pending.length ? '递给顾客签' : '知道了',
       showCancel: Boolean(pending.length),
+      cancelText: '关闭',
       content: live.map((s) => `${s.code} · ${zh[s.status] || s.status}${s.servedPersonName ? ` · ${s.servedPersonName}` : ''}`).join('\n'),
       success: (r) => { if (r.confirm && pending.length) this.openSign(pending[0].code) }
     })
   },
+  /* D12:售后详情(只读)。原因与处理情况都由后端下发(处理情况复用顾客端同一份
+     afterSalesProgress),前端不自己拼进度文案 —— 否则两端早晚说不同的话。 */
+  openAfterSales(e) {
+    const id = e.currentTarget.dataset.id
+    const b = (this.data.raw || []).find((x) => x.id === id)
+    if (!b) { wx.showToast({ title: '读不到这张售后单', icon: 'none' }); return }
+    const row = (this.data.aftersalesList || []).find((x) => x.id === id) || {}
+    const as = b.afterSales || {}
+    this.setData({
+      asPanel: {
+        customer: row.customer || '顾客',
+        line: row.line || '',
+        tech: row.tech || '',
+        date: row.date || '',
+        time: row.time || '',
+        reason: as.reason || '',
+        steps: as.steps || [],
+        footnote: as.footnote || ''
+      }
+    })
+  },
+  closeAfterSales() { this.setData({ asPanel: null }) },
+
   applyStatus(id, s) {
     const doIt = async () => {
       try { await api.adminPatch(`/admin/bookings/${encodeURIComponent(id)}/status`, { status: s }); wx.showToast({ title: '已更新', icon: 'none' }); this.loadList() }

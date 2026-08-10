@@ -10748,6 +10748,14 @@ async function route(req, res) {
       : db.prepare('SELECT * FROM bookings WHERE tenant_id = ? ORDER BY appointment_start DESC').all(currentTenantId())
     // 服务安全:管理端订单随单携带顾客标签/备注(过敏史/忌讳),技师上钟前必看;不开放完整客户库
     const careStmt = db.prepare('SELECT tags_json, notes FROM users WHERE id = ?')
+    /* D12(店主 2026-08-10 开检):员工端售后订单**点不进去**。要能「可进入可看」,
+       行上就得有东西可看 —— 原因与处理情况以前一个字都没下发。
+       原因取转售后那一刻记的 note(booking_status_history),处理情况复用顾客端
+       已有的 afterSalesProgress():**同一件事只有一份实现**,不给商家端另写一套进度口径。
+       只读:写入/完成态等 Cowork 出图,这里不加任何写接口。 */
+    const asNoteStmt = db.prepare(
+      "SELECT note, created_at FROM booking_status_history WHERE booking_id = ? AND to_status = 'AFTER_SALES' ORDER BY created_at ASC LIMIT 1"
+    )
     return json(res, 200, {
       bookings: rows.map((booking) => {
         const serialized = serializeBooking(booking)
@@ -10755,6 +10763,12 @@ async function route(req, res) {
         serialized.customerCare = {
           tags: care ? (parseJson(care.tags_json) || []) : [],
           notes: care?.notes || ''
+        }
+        if (booking.status === 'AFTER_SALES') {
+          const h = asNoteStmt.get(booking.id)
+          serialized.afterSales = Object.assign({}, afterSalesProgress(booking), {
+            reason: (h && h.note) || ''
+          })
         }
         return serialized
       })

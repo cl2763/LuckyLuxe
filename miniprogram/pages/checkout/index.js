@@ -1,4 +1,3 @@
-const mock = require('../../utils/mock-data')
 const { curOf, ensureCurrencyCached } = require('../../utils/storecurrency')
 const storage = require('../../utils/storage')
 const i18n = require('../../utils/i18n')
@@ -13,7 +12,7 @@ Page({
     items: [],
     lang: 'zh',
     t: i18n.pageCopy('checkout', 'zh'),
-    store: mock.store,
+    store: {},          // D17:初始不摆 mock 门店占位
     serviceDeposit: 0,
     depositRequired: 0,
     depositWaived: false,
@@ -36,14 +35,29 @@ Page({
     const items = storage.getCart()
       .filter((item) => ids.indexOf(item._id) >= 0)
       .map((item) => {
-        const service = i18n.localizeService(mock.findService(item.serviceId) || item.service, lang)
+        /* 🔴 D17 同类(2026-08-11 L2 补扫):原来是 mock.findService(...) || item.service ——
+           **假数据排在真数据前面**,serviceId 一旦撞上 mock 表里的 id,结账页显示的
+           就是编造的项目名与价格。购物车项自己带着加购时的真服务,直接用它。 */
+        const service = i18n.localizeService(item.service, lang)
         return Object.assign({}, item, {
           service: Object.assign({}, item.service, service)
         })
       })
-    this.setData({ items, lang, t: i18n.pageCopy('checkout', lang), store: i18n.localizeStore(mock.store, lang) })
+    this.setData({ items, lang, t: i18n.pageCopy('checkout', lang) })
     this.calculate()
     this.loadDepositPolicy(items[0] && items[0].serviceId)
+    this.loadStore(lang)   // D17 同类:结账页的门店也要取真的,不摆 mock.store
+  },
+
+  /* D17 同类:结账页门店信息取真门店。取不到**留空**而不是回 mock ——
+     结账是掏钱的一步,写错门店名比写不出门店名严重得多;这里不拦下单(与定金规则同策)。 */
+  async loadStore(lang) {
+    try {
+      const stores = await api.getStores()
+      this.setData({ store: i18n.localizeStore(stores[0] || {}, lang) })
+    } catch (e) {
+      this.setData({ store: {} })
+    }
   },
 
   /* 屏 3 定金规则:金额/三要点/原文都由后端按本店 deposit_config 生成。

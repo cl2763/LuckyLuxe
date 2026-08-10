@@ -1,10 +1,12 @@
-<view wx:if="{{service}}" class="page booking-page">
-  <!-- D17 失败态:接口挂了如实说,不拿假数据糊住(书面标准代图) -->
-  <view wx:if="{{loadFailed}}" class="d17fail">
-    <view class="d17msg">加载失败，请检查网络后重试</view>
-    <view class="d17btn" bindtap="retryLoad">重试</view>
-  </view>
+<!-- D17 失败态:接口挂了如实说,不拿假数据糊住(书面标准代图)。
+     ⚠️ 必须排在 wx:if="{{service}}" 这道闸门**外面** —— 2026-08-11 停服实测就是栽在这:
+     service 本身取不到时闸门为假,失败态跟着一起不渲染,顾客看到的是一整片白屏。 -->
+<view wx:if="{{loadFailed}}" class="page booking-page d17fail">
+  <view class="d17msg">加载失败，请检查网络后重试</view>
+  <view class="d17btn" bindtap="retryLoad">重试</view>
+</view>
 
+<view wx:elif="{{service}}" class="page booking-page">
   <view wx:if="{{stylePreset}}" class="style-preset card">
     <image class="sp-img" src="{{stylePreset.image}}" mode="aspectFill"></image>
     <view class="sp-info">
@@ -54,6 +56,9 @@
           <button class="slot {{appointmentTime === item ? 'active' : ''}}" bindtap="chooseTime" data-time="{{item}}">{{item}}</button>
         </block>
       </view>
+      <!-- 空态(⬜ 无设计图,按最合理方式做,已记入假设清单):当天没有真空档时如实说,
+           不再拿写死时间段填满 —— 以前这里约满也会列出一排假时段供顾客选 -->
+      <view wx:if="{{!timeSlots.length}}" class="slot-empty">{{lang === 'en' ? 'No openings for this date' : '当天已约满，请换个日期'}}</view>
     </view>
   </view>
 
