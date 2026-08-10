@@ -19,6 +19,11 @@ const STATUS_MAP = {
 }
 
 function pad(n) { return `${n}`.padStart(2, '0') }
+// 快捷选人列表的手机号脱敏(图 D9 v1.1 样式「138****0000」);短号原样
+function maskPhoneLocal(p) {
+  const s = String(p || '')
+  return s.length >= 7 ? `${s.slice(0, 3)}****${s.slice(-4)}` : s
+}
 function ymd(d) { return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}` }
 // 「今天」按门店时区算,不用设备时钟(店在多伦多、人在国内时两者会差一天)
 function todayStr() { return storeToday() }
@@ -37,13 +42,26 @@ function vm(b) {
   const tech = b.technicianName || (b.technician && b.technician.name) || ''
   const dur = b.totalDurationMin ? `${(b.totalDurationMin / 60).toFixed(1).replace('.0', '')}h` : ''
   const hasImg = Array.isArray(b.referenceImages) && b.referenceImages.length > 0
+  // 爽约定金处置徽标(图 A-1/A-3):待处置红 / 已留存绿 / 已没收灰;无收取记录不出(A⓪)
+  const dd = b.depositDisposal || null
+  const ddBadge = dd
+    ? (dd.state === 'pending' ? `定金 ${dd.outstandingText} 待处置`
+      : (dd.state === 'retain' ? '定金已留存 → 客户档案'
+        : (dd.state === 'forfeit' || dd.state === 'auto_forfeit' ? `已没收入账 ${dd.amountText}` : '')))
+    : ''
   return {
     id: b.id, status: b.status, date: b.appointmentDate || '', time: b.appointmentTime || '',
-    statusLabel: s.label, statusCls: s.cls, customer, tech,
+    statusLabel: b.noShowAt ? '已爽约' : s.label, statusCls: b.noShowAt ? 'n' : s.cls, customer, tech,
     userId: b.userId || (b.user && (b.user.id || b.user.sub)) || '',
     serviceId: b.serviceId || (b.service && b.service.id) || '', serviceName: service,
+    technicianId: b.technicianId || (b.technician && b.technician.id) || '',
     thumb: hasImg ? b.referenceImages[0] : '',
-    line: [service, dur].filter(Boolean).join(' · ')
+    line: [service, dur].filter(Boolean).join(' · '),
+    noShow: Boolean(b.noShowAt),
+    ddState: dd ? dd.state : '',
+    ddBadge,
+    ddCls: dd && dd.state === 'pending' ? 'd' : (dd && dd.state === 'retain' ? 'g' : 'n'),
+    asStatusText: b.afterSales ? b.afterSales.statusText : ''
   }
 }
 
@@ -64,10 +82,10 @@ Page(Object.assign({
     dv: null,
     // 直接排单
     directSheet: false, directTech: '', directTechName: '', directTime: '', directEndTime: '', directDurH: 0, directServices: [], directServiceId: '', directDurationMin: 120, directDeposit: false,
-    // 顾客搜索选择
+    // 顾客区 · D9 根治(图 v1.1):一框即搜 + 无匹配一键建档 + 扫会员码。
+    // 「新客·输手机号」页签连同 dsTab/dsName/dsPhone/dsHitText/dsHitId 整体删除(不是隐藏)。
     directCustomers: [], custQuery: '', custMatches: [], selectedCustId: '', selectedCustName: '',
-    // 屏 S1(2026-08-09 图):找人 / 新客·输手机号 两个页签 + 扫会员码 + 现在开始 + 可选已收定金
-    dsTab: 'find', dsName: '', dsPhone: '', dsHitText: '', dsHitId: '',
+    pendingNewName: '', pendingNewPhone: '',   // 点了「＋建档并排单」待建的轻档案(建档发生在建单那一刻,既有闭环)
     depositCfg: { enabled: false, amountText: '' },
     myTechId: '', // 员工登录时高亮自己那列
     isOwner: false,
@@ -132,6 +150,22 @@ Page(Object.assign({
     } else if (status === 'COMPLETED') {
       if (sheets.length) opts.push({ label: '查看电子票据', sheets: true })
       opts.push({ label: '转售后', s: 'AFTER_SALES' })
+    } else if (status === 'AFTER_SALES') {
+      // 图 B 部:售后详情可看可写(权限在面板里按角色收)
+      opts.push({ label: '查看/处理售后', asOpen: true })
+    }
+    const rawB = (this.data.raw || []).find((x) => x.id === id) || {}
+    /* ⬜ 图上没画「标记爽约」入口(A 部流程的前提),按最合理方式放进操作面板,已记假设清单:
+       仅老板;待到店/进行中的单可标(后端 /no-show 路由本来就是仅老板)。 */
+    if (this.data.isOwner && ['CONFIRMED', 'IN_PROGRESS', 'SERVING'].includes(status)) {
+      opts.push({ label: '标记爽约', noShow: true })
+    }
+    // 图 A-1:已爽约 + 定金待处置 → 老板出「处置定金」;无收取记录不出(A⓪)
+    if (this.data.isOwner && rawB.depositDisposal && rawB.depositDisposal.state === 'pending') {
+      opts.push({ label: `处置定金(${rawB.depositDisposal.outstandingText} 待处置)`, disposal: true })
+    }
+    if (rawB.depositDisposal && ['retain', 'forfeit', 'auto_forfeit'].includes(rawB.depositDisposal.state)) {
+      opts.push({ label: '查看定金处置记录', dispView: true })
     }
     // 任何有顾客的订单都可补写服务小记
     if (userid) opts.push({ label: '写/补服务小记', note: true })
@@ -158,7 +192,69 @@ Page(Object.assign({
     else if (o.settle) this.goSettle(ctx)
     else if (o.voidSheets) this.voidSheets(o.voidSheets, ctx)
     else if (o.sheets) this.showSheets(this._panelSheets)
+    else if (o.noShow) this.markNoShow(ctx)
+    else if (o.disposal) this.openDisposal(ctx.id)
+    else if (o.dispView) this.viewDisposal(ctx.id)
+    else if (o.asOpen) this.openAfterSales({ currentTarget: { dataset: { id: ctx.id } } })
     else this.applyStatus(ctx.id, o.s)
+  },
+
+  /* ===== 爽约与定金处置(图 A 部)===== */
+  // ⬜ 标记爽约(A 部前提;图未画入口,记假设):仅老板,后端落 no_show_at
+  markNoShow(ctx) {
+    wx.showModal({
+      title: '标记爽约',
+      content: `确认 ${ctx.customerName || '顾客'} 爽约?预约将取消;有已收定金的,之后在本单上二选一处置(留存/没收)。`,
+      confirmText: '确认爽约',
+      success: async (r) => {
+        if (!r.confirm) return
+        try {
+          await api.adminPost(`/admin/bookings/${encodeURIComponent(ctx.id)}/no-show`, {})
+          wx.showToast({ title: '已标记爽约', icon: 'none' })
+          this.loadList(); this.loadDayView(this.data.selDate)
+        } catch (err) { wx.showToast({ title: (err && err.message) || '标记失败', icon: 'none' }) }
+      }
+    })
+  },
+  // 图 A-2 处置弹层:老板二选一,备注选填,经手人=当前登录老板(后端自动记)
+  openDisposal(id) {
+    const b = (this.data.raw || []).find((x) => x.id === id)
+    if (!b || !b.depositDisposal) { wx.showToast({ title: '读不到这单的定金信息', icon: 'none' }); return }
+    const row = { customer: (b.user && (b.user.displayName || b.user.display_name)) || b.customerName || '顾客' }
+    this.setData({
+      dispPanel: {
+        bookingId: id,
+        customer: row.customer,
+        amountText: b.depositDisposal.outstandingText,
+        receiptText: b.depositDisposal.receiptText || '',
+        action: 'retain',   // 图 A-2 默认选①留存
+        note: ''
+      }
+    })
+  },
+  dispPick(e) { this.setData({ 'dispPanel.action': e.currentTarget.dataset.a }) },
+  onDispNote(e) { this.setData({ 'dispPanel.note': String((e.detail && e.detail.value) || '') }) },
+  closeDisposal() { this.setData({ dispPanel: null }) },
+  async submitDisposal() {
+    const p = this.data.dispPanel
+    if (!p) return
+    try {
+      const r = await api.adminPost(`/admin/bookings/${encodeURIComponent(p.bookingId)}/deposit-disposal`, { action: p.action, note: p.note })
+      wx.showToast({ title: r.note || '已处置', icon: 'none' })
+      this.setData({ dispPanel: null })
+      this.loadList()
+    } catch (err) { wx.showToast({ title: (err && err.message) || '处置失败', icon: 'none' }) }
+  },
+  viewDisposal(id) {
+    const b = (this.data.raw || []).find((x) => x.id === id)
+    const d = b && b.depositDisposal
+    if (!d) return
+    const act = { retain: '留存到客户档案', forfeit: '没收入账', auto_forfeit: '留存到期自动没收' }[d.state] || d.state
+    wx.showModal({
+      title: '定金处置记录',
+      content: `${act} · ${d.amountText}\n处置:${String(d.at).slice(0, 16).replace('T', ' ')} · ${d.actor}${d.note ? `\n备注:${d.note}` : ''}`,
+      showCancel: false, confirmText: '知道了'
+    })
   },
   /* 撤回改单:把这单还没签的结算单全撤掉,回到「去结算」状态重新开。
      已签的一张都不动 —— 已签不可改是硬规则,要改走金额更正链。 */
@@ -192,8 +288,17 @@ Page(Object.assign({
       url: `/pages/merchant/settlement/index?bookingId=${encodeURIComponent(b.id)}&userId=${encodeURIComponent(b.userId)}&name=${encodeURIComponent(b.customerName || '')}&serviceId=${encodeURIComponent(b.serviceId || '')}`
     })
   },
-  // 顾客签署页(裁决③:web-view 包 /sign);店员当面递手机给顾客签也走这里
-  openSign(code) { wx.navigateTo({ url: `/pages/sign/index?code=${encodeURIComponent(code)}` }) },
+  /* 顾客签署页。D9 规则⑤(店主 08-11 补拍):归属**未绑定轻档案**的单,
+     只有扫码一条签署路(扫码即自动建立绑定)—— 跳结算页的 QR 层(同一份实现),
+     不走店员设备手签的 webview。绑定客照旧手签兜底。 */
+  openSign(sheet) {
+    if (sheet && sheet.customerBound === false) {
+      wx.navigateTo({ url: `/pages/merchant/settlement/index?qrFor=${encodeURIComponent(sheet.id)}` })
+      return
+    }
+    const code = typeof sheet === 'string' ? sheet : (sheet && sheet.code)
+    wx.navigateTo({ url: `/pages/sign/index?code=${encodeURIComponent(code)}` })
+  },
   /* 🔴 D10 修复(店主 2026-08-10 开检):这里原来写着
        `if (pending.length === 1) { this.openSign(pending[0].code); return }`
      —— 只要恰好有一张待签单,商家点「查看结算单」就**直接跳进顾客端的签署页**
@@ -213,31 +318,99 @@ Page(Object.assign({
       showCancel: Boolean(pending.length),
       cancelText: '关闭',
       content: live.map((s) => `${s.code} · ${zh[s.status] || s.status}${s.servedPersonName ? ` · ${s.servedPersonName}` : ''}`).join('\n'),
-      success: (r) => { if (r.confirm && pending.length) this.openSign(pending[0].code) }
+      success: (r) => { if (r.confirm && pending.length) this.openSign(pending[0]) }
     })
   },
-  /* D12:售后详情(只读)。原因与处理情况都由后端下发(处理情况复用顾客端同一份
-     afterSalesProgress),前端不自己拼进度文案 —— 否则两端早晚说不同的话。 */
+  /* 售后详情(图 B-1 写入版 = D12 只读版 + 写入按钮)。
+     状态/时间线/结果全由后端状态机下发(B⓪ 三端同一份);
+     权限(B①):写进展/标已解决 = 当单技师+老板;关闭 = 仅老板。 */
   openAfterSales(e) {
     const id = e.currentTarget.dataset.id
     const b = (this.data.raw || []).find((x) => x.id === id)
     if (!b) { wx.showToast({ title: '读不到这张售后单', icon: 'none' }); return }
-    const row = (this.data.aftersalesList || []).find((x) => x.id === id) || {}
+    const row = (this.data.aftersalesList || []).find((x) => x.id === id) || vm(b)
     const as = b.afterSales || {}
+    const techId = b.technicianId || (b.technician && b.technician.id) || ''
+    const canWrite = this.data.isOwner || (this.data.myTechId && this.data.myTechId === techId)
+    const terminal = as.status === 'resolved' || as.status === 'closed'
     this.setData({
       asPanel: {
+        bookingId: id,
         customer: row.customer || '顾客',
         line: row.line || '',
         tech: row.tech || '',
         date: row.date || '',
         time: row.time || '',
+        status: as.status || 'pending',
+        statusText: as.statusText || '待处理',
         reason: as.reason || '',
-        steps: as.steps || [],
-        footnote: as.footnote || ''
+        timeline: as.timeline || [],
+        resultText: as.resultText || '',
+        footnote: as.footnote || '',
+        canWrite: canWrite && !terminal,
+        canClose: this.data.isOwner && !terminal
       }
     })
   },
   closeAfterSales() { this.setData({ asPanel: null }) },
+  // B①:写进展(当单技师+老板);editable 弹窗,时间线 append-only
+  asWriteProgress() {
+    const p = this.data.asPanel
+    if (!p) return
+    wx.showModal({
+      title: '写处理进展',
+      editable: true,
+      placeholderText: '如:已联系顾客,约 8/13 到店补钻',
+      success: async (r) => {
+        if (!r.confirm || !String(r.content || '').trim()) return
+        try {
+          await api.adminPost(`/admin/bookings/${encodeURIComponent(p.bookingId)}/after-sales/progress`, { text: r.content.trim() })
+          wx.showToast({ title: '进展已记录', icon: 'none' })
+          this.setData({ asPanel: null }); this.loadList()
+        } catch (err) { wx.showToast({ title: (err && err.message) || '写入失败', icon: 'none' }) }
+      }
+    })
+  },
+  // B①/B④:标记已解决 —— 处理结果必填,顾客端展示的就是这段文案
+  asResolve() {
+    const p = this.data.asPanel
+    if (!p) return
+    wx.showModal({
+      title: '标记已解决(结果将展示给顾客)',
+      editable: true,
+      placeholderText: '处理结果(必填),如:8/13 到店免费补钻 2 颗,顾客确认满意',
+      success: async (r) => {
+        if (!r.confirm) return
+        const text = String(r.content || '').trim()
+        if (!text) { wx.showToast({ title: '处理结果必填', icon: 'none' }); return }
+        try {
+          await api.adminPost(`/admin/bookings/${encodeURIComponent(p.bookingId)}/after-sales/resolve`, { resultText: text })
+          wx.showToast({ title: '已标记解决', icon: 'none' })
+          this.setData({ asPanel: null }); this.loadList()
+        } catch (err) { wx.showToast({ title: (err && err.message) || '操作失败', icon: 'none' }) }
+      }
+    })
+  },
+  // B①:关闭 = 仅老板,必填原因(无需处理/顾客撤回等)
+  asClose() {
+    const p = this.data.asPanel
+    if (!p) return
+    wx.showModal({
+      title: '关闭售后(仅老板)',
+      editable: true,
+      placeholderText: '关闭原因(必填),如:顾客撤回反馈',
+      success: async (r) => {
+        if (!r.confirm) return
+        const reason = String(r.content || '').trim()
+        if (!reason) { wx.showToast({ title: '关闭必须填一句原因', icon: 'none' }); return }
+        try {
+          await api.adminPost(`/admin/bookings/${encodeURIComponent(p.bookingId)}/after-sales/close`, { reason })
+          wx.showToast({ title: '已关闭', icon: 'none' })
+          this.setData({ asPanel: null }); this.loadList()
+        } catch (err) { wx.showToast({ title: (err && err.message) || '操作失败', icon: 'none' }) }
+      }
+    })
+  },
 
   applyStatus(id, s) {
     const doIt = async () => {
@@ -419,7 +592,14 @@ Page(Object.assign({
     let customers = this.data.directCustomers
     if (!customers.length) {
       const rc = await api.adminGet('/admin/customers').catch(() => ({ customers: [] }))
-      customers = (rc.customers || []).map((c) => ({ id: c.id, name: c.display_name || c.displayName || c.name || '顾客', phone: c.phone || '' }))
+      // 快捷选人列表按图脱敏显示手机号(搜索仍用全号匹配);到店次数帮店员认人
+      customers = (rc.customers || []).map((c) => ({
+        id: c.id,
+        name: c.display_name || c.displayName || c.name || '顾客',
+        phone: c.phone || '',
+        phoneMasked: c.phoneMasked || maskPhoneLocal(c.phone || ''),
+        visits: c.visitCount || c.visit_count || 0
+      }))
     }
     const first = services[0] || {}
     const dur0 = first.dur || 120
@@ -428,7 +608,7 @@ Page(Object.assign({
       directServices: services, directServiceId: first.id || '', directDurationMin: dur0,
       directEndTime: this.calcDirectEnd(time, dur0), directDurH: Math.round(dur0 / 6) / 10,
       directCustomers: customers, custQuery: '', custMatches: [], selectedCustId: '', selectedCustName: '', directDeposit: false,
-      dsTab: 'find', dsName: '', dsPhone: '', dsHitText: '', dsHitId: ''
+      pendingNewName: '', pendingNewPhone: ''
     })
     this.loadDepositCfg()
   },
@@ -447,39 +627,25 @@ Page(Object.assign({
       this.setData({ depositCfg: { enabled: c.enabled !== false, amountText: cents ? storeMoney(cents, 0) : '' } })
     } catch (e) { this.setData({ depositCfg: { enabled: false, amountText: '' } }) }
   },
-  dsSwitchTab(e) { this.setData({ dsTab: e.currentTarget.dataset.t, dsHitText: '', dsHitId: '' }) },
-  onDsName(e) { this.setData({ dsName: String((e.detail && e.detail.value) || '') }) },
-  // 手机号命中已有档案 → 带出、不建重复档案(S1-08);唯一命中才认,歧义不猜人
-  async onDsPhone(e) {
-    const v = String((e.detail && e.detail.value) || '').replace(/\D/g, '')
-    this.setData({ dsPhone: v })
-    if (v.length < 6) { this.setData({ dsHitText: '', dsHitId: '' }); return }
-    try {
-      const r = await api.adminGet(`/admin/customers/lookup?phone=${encodeURIComponent(v)}`)
-      if (r && r.hit) {
-        this.setData({
-          dsHitId: r.hit.id, dsName: r.hit.displayName || this.data.dsName,
-          dsHitText: `已有档案 · ${r.hit.displayName || '顾客'}${r.hit.bound ? '' : '(未绑微信)'}`
-        })
-      } else this.setData({ dsHitText: r && r.reason ? r.reason : '', dsHitId: '' })
-    } catch (err) { this.setData({ dsHitText: '', dsHitId: '' }) }
-  },
+  /* D9 根治:dsSwitchTab / onDsName / onDsPhone 随「新客·输手机号」页签整体删除。
+     手机号找档案的能力没丢 —— 合并后的单框本来就按姓名/手机号双字段模糊匹配。 */
   // 商家侧扫顾客专属会员码 → 直接带出档案(规则⑥ 的商家这一向)
   scanMemberCode() {
     wx.scanCode({
       onlyFromCamera: false,
-      success: async (r) => {
-        const raw = String((r && r.result) || '').trim()
-        const mc = (raw.match(/LL-[A-Za-z0-9]{8}/) || [])[0] || raw
-        try {
-          const hit = (await api.adminGet(`/admin/customers/lookup?memberCode=${encodeURIComponent(mc)}`)).hit
-          if (!hit) { wx.showToast({ title: '这个会员码查不到本店档案', icon: 'none' }); return }
-          this.setData({ dsTab: 'find', selectedCustId: hit.id, selectedCustName: hit.displayName, custQuery: hit.displayName, custMatches: [] })
-          wx.showToast({ title: `已带出 ${hit.displayName}`, icon: 'none' })
-        } catch (e) { wx.showToast({ title: '会员码解析失败', icon: 'none' }) }
-      },
+      success: (r) => this.applyMemberCode(String((r && r.result) || '').trim()),
       fail: () => { /* 顾客端没开摄像头 / 取消,不提示 */ }
     })
+  },
+  // 扫码 success 的唯一处理器(拆出来是为了可测:wx.scanCode 本体自动化驱动不了)
+  async applyMemberCode(raw) {
+    const mc = (String(raw || '').match(/LL-[A-Za-z0-9]{8}/) || [])[0] || String(raw || '')
+    try {
+      const hit = (await api.adminGet(`/admin/customers/lookup?memberCode=${encodeURIComponent(mc)}`)).hit
+      if (!hit) { wx.showToast({ title: '这个会员码查不到本店档案', icon: 'none' }); return }
+      this.setData({ selectedCustId: hit.id, selectedCustName: hit.displayName, custQuery: hit.displayName, custMatches: [], pendingNewName: '', pendingNewPhone: '' })
+      wx.showToast({ title: `已带出 ${hit.displayName}`, icon: 'none' })
+    } catch (e) { wx.showToast({ title: '会员码解析失败', icon: 'none' }) }
   },
   // 「现在开始」:即时单,时间取门店当下(店主定的产品原则:散客也先建一条即时预约)
   dsNow() {
@@ -501,18 +667,34 @@ Page(Object.assign({
     const dur = (s && s.dur) || 120
     this.setData({ directServiceId: id, directDurationMin: dur, directEndTime: this.calcDirectEnd(this.data.directTime, dur), directDurH: Math.round(dur / 6) / 10 })
   },
-  // 顾客搜索:从客户库匹配,或新建
+  // 顾客搜索(D9 根治后的唯一入口):姓名/手机号模糊匹配,命中最多 5 条(图规则①)
   onCustSearch(e) {
     const q = (e.detail.value || '').trim()
-    const matches = q ? this.data.directCustomers.filter((c) => (c.name || '').indexOf(q) >= 0 || (c.phone || '').indexOf(q) >= 0).slice(0, 8) : []
-    this.setData({ custQuery: q, custMatches: matches, selectedCustId: '', selectedCustName: '' })
+    const matches = q ? this.data.directCustomers.filter((c) => (c.name || '').indexOf(q) >= 0 || (c.phone || '').indexOf(q) >= 0).slice(0, 5) : []
+    this.setData({ custQuery: q, custMatches: matches, selectedCustId: '', selectedCustName: '', pendingNewName: '', pendingNewPhone: '' })
   },
   pickCust(e) {
     const id = e.currentTarget.dataset.id
     const c = this.data.directCustomers.find((x) => x.id === id)
-    if (c) this.setData({ selectedCustId: c.id, selectedCustName: c.name, custQuery: c.name, custMatches: [] })
+    if (c) this.setData({ selectedCustId: c.id, selectedCustName: c.name, custQuery: c.name, custMatches: [], pendingNewName: '', pendingNewPhone: '' })
   },
-  clearCust() { this.setData({ selectedCustId: '', selectedCustName: '', custQuery: '', custMatches: [] }) },
+  /* 「＋建档并排单」(图规则②,店主拍板一步到位不弹确认):
+     ≥7 位纯数字 → 当手机号存(姓名记「未命名」);否则当姓名存(手机号空);
+     空输入 → 「未命名顾客」。都可在档案里后补;真正的建档发生在建单那一刻(既有闭环零新口径)。 */
+  pickNewCust() {
+    const q = (this.data.custQuery || '').trim()
+    const digits = q.replace(/\D/g, '')
+    const isPhone = /^\d{7,}$/.test(digits) && digits.length === q.replace(/\s/g, '').length
+    const name = isPhone ? '未命名' : (q || '未命名顾客')
+    this.setData({
+      pendingNewName: name,
+      pendingNewPhone: isPhone ? digits : '',
+      selectedCustId: '',
+      selectedCustName: `${name}${isPhone ? `(${digits})` : ''} · 新建轻档案`,
+      custMatches: []
+    })
+  },
+  clearCust() { this.setData({ selectedCustId: '', selectedCustName: '', custQuery: '', custMatches: [], pendingNewName: '', pendingNewPhone: '' }) },
   onDirectTime(e) { const t = e.detail.value; this.setData({ directTime: t, directEndTime: this.calcDirectEnd(t, this.data.directDurationMin) }) },
   // 时长微调(这次多做/少做):±30 分钟,30–360;「标准」恢复所选服务默认时长
   adjustDur(delta) {
@@ -530,11 +712,14 @@ Page(Object.assign({
   async submitDirect() {
     const d = this.data
     const body = { serviceId: d.directServiceId, technicianId: d.directTech, date: d.selDate, time: d.directTime, durationMin: d.directDurationMin, depositPaid: false }
-    // 顾客三种来法:库里选中 / 手机号命中带出 / 新建轻档案(姓名 + 可留空的手机号)
+    // 顾客三种来法(D9 根治后):库里选中 / 点了「＋建档并排单」/ 输了字没点建档(按同一套规则②映射)
     if (d.selectedCustId) body.userId = d.selectedCustId
-    else if (d.dsHitId) body.userId = d.dsHitId
-    else if (d.dsTab === 'new' && d.dsName.trim()) { body.newCustomerName = d.dsName.trim(); if (d.dsPhone) body.phone = d.dsPhone }
-    else if (d.custQuery.trim()) body.newCustomerName = d.custQuery.trim()
+    else if (d.pendingNewName) { body.newCustomerName = d.pendingNewName; if (d.pendingNewPhone) body.phone = d.pendingNewPhone }
+    else if (d.custQuery.trim()) {
+      const q = d.custQuery.trim()
+      if (/^\d{7,}$/.test(q.replace(/\s/g, ''))) { body.newCustomerName = '未命名'; body.phone = q.replace(/\D/g, '') }
+      else body.newCustomerName = q
+    }
     else { wx.showToast({ title: '选择或输入顾客', icon: 'none' }); return }
     if (!d.directServiceId) { wx.showToast({ title: '选个服务', icon: 'none' }); return }
     if (!/^\d{2}:\d{2}$/.test(d.directTime)) { wx.showToast({ title: '选个时段', icon: 'none' }); return }

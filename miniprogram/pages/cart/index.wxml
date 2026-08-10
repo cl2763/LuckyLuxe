@@ -18,7 +18,7 @@
                 <text>{{item.appointmentInfo.time}}</text>
               </view>
               <view class="cart-time-row subtle-row">
-                <text>{{item.appointmentInfo.technicianName || 'Mia Chen'}}</text>
+                <text>{{item.appointmentInfo.technicianName || '待选技师'}}</text>
                 <text>{{item.service.duration}}{{t.minutes}}</text>
               </view>
               <view class="cart-meta">

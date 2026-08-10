@@ -62,8 +62,9 @@ Page({
         date: storage.tomorrow(),
         time: '10:00',
         duration: service.duration,
-        technicianId: 'tech-mia',
-        technicianName: 'Mia Chen',
+        // D21:快捷加购不指派假技师;去 booking 页(购物车「修改」)真选后才能下单
+        technicianId: '',
+        technicianName: '',
         addOns: [],
         referenceImages: [],
         remark: ''

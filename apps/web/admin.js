@@ -1,5 +1,5 @@
 // 构建号:每次交付递增。侧栏可见,排查"改了没生效"时先对版本。
-const ADMIN_BUILD = '20260811a-d8'
+const ADMIN_BUILD = '20260811b-noshow-aftersales'
 console.log(`[admin] build ${ADMIN_BUILD}`)
 
 // "今天"必须按门店时区算,否则老板人在别的时区时全站日期错位一天。
@@ -5094,12 +5094,16 @@ function renderBookingCard(booking) {
         <p>${booking.technician.name} · ${booking.store.name}</p>
         <p>${t('depositLabel')} ${money(booking.depositCents)} · ${t('finalDue')} ${money(booking.finalDueCents)} · ${booking.publicCode}</p>
         ${renderCustomerCare(booking)}
+        ${booking.noShowAt ? `<p class="attention-note">已爽约${booking.depositDisposal && booking.depositDisposal.state === 'pending' ? ` · <strong>定金 ${escapeHtml(booking.depositDisposal.outstandingText)} 待处置</strong>` : ''}${booking.depositDisposal && booking.depositDisposal.state === 'retain' ? ' · 定金已留存 → 客户档案' : ''}${booking.depositDisposal && (booking.depositDisposal.state === 'forfeit' || booking.depositDisposal.state === 'auto_forfeit') ? ` · 已没收入账 ${escapeHtml(booking.depositDisposal.amountText)}` : ''}</p>` : ''}
+        ${booking.afterSales ? `<p class="attention-note">售后 · ${escapeHtml(booking.afterSales.statusText)}${booking.afterSales.resultText ? `:${escapeHtml(booking.afterSales.resultText)}` : ''}</p>` : ''}
         ${needsAttention ? `<p class="attention-note">${t('needsAttention')}</p>` : ''}
       </div>
       <div class="booking-actions">
         <button class="ghost" data-view-booking="${booking.id}" type="button">${t('details')}</button>
         <button class="ghost" data-status="COMPLETED" data-booking="${booking.id}" type="button">${t('completed')}</button>
         <button class="ghost" data-status="CANCELLED" data-booking="${booking.id}" type="button">${t('cancelled')}</button>
+        ${isOwnerRole() && booking.depositDisposal && booking.depositDisposal.state === 'pending' ? `<button class="ghost" data-disposal-booking="${booking.id}" type="button">处置定金</button>` : ''}
+        ${booking.afterSales && !['resolved', 'closed'].includes(booking.afterSales.status) ? `<button class="ghost" data-aftersales-booking="${booking.id}" type="button">处理售后</button>` : ''}
       </div>
     </article>
     ${isOpen ? renderBookingDetail(booking) : ''}
@@ -6511,6 +6515,47 @@ els.adminLayout.addEventListener('click', (event) => {
     owner.dashboardDetail = detailButton.dataset.dashboardDetail
     owner.adminPage = 'dashboardDetail'
     render()
+    return
+  }
+  /* 图 A①-3:网页端订单管理同一入口同一弹层(二选一 + 备注;仅老板)。 */
+  const disposalBtn = event.target.closest('[data-disposal-booking]')
+  if (disposalBtn) {
+    const id = disposalBtn.dataset.disposalBooking
+    const bk = (owner.bookings || []).find((b) => b.id === id)
+    const dd = bk && bk.depositDisposal
+    if (!dd) return
+    const pick = window.prompt(`处置爽约定金 ${dd.outstandingText}(${bk.user?.displayName || bk.user?.display_name || '顾客'})\n输入 1 = 留存到客户档案(下次预约自动带出)\n输入 2 = 没收入账(独立「定金收入·爽约没收」行,不进业绩)`, '1')
+    if (pick !== '1' && pick !== '2') return
+    const note = window.prompt('备注(选填)', '') || ''
+    request(`/admin/bookings/${encodeURIComponent(id)}/deposit-disposal`, {
+      method: 'POST',
+      body: JSON.stringify({ action: pick === '1' ? 'retain' : 'forfeit', note })
+    }).then(async (r) => {
+      toast(r.note || '已处置')
+      const data = await request('/admin/bookings')
+      owner.bookings = data.bookings
+      render()
+    }).catch((error) => toast(error.message))
+    return
+  }
+  /* 图 B-UI4:网页端售后写入(同一状态机;权限后端断言)。 */
+  const asBtn = event.target.closest('[data-aftersales-booking]')
+  if (asBtn) {
+    const id = asBtn.dataset.aftersalesBooking
+    const act = window.prompt('售后处理:输入 1 = 写进展;2 = 标记已解决(需处理结果);3 = 关闭(仅老板,需原因)', '1')
+    if (!['1', '2', '3'].includes(act)) return
+    const path = act === '1' ? 'progress' : (act === '2' ? 'resolve' : 'close')
+    const label = act === '1' ? '处理进展' : (act === '2' ? '处理结果(必填,顾客端展示这段)' : '关闭原因(必填)')
+    const text = window.prompt(label, '')
+    if (!String(text || '').trim()) { toast('内容不能为空'); return }
+    const body = act === '1' ? { text } : (act === '2' ? { resultText: text } : { reason: text })
+    request(`/admin/bookings/${encodeURIComponent(id)}/after-sales/${path}`, { method: 'POST', body: JSON.stringify(body) })
+      .then(async () => {
+        toast('已记录')
+        const data = await request('/admin/bookings')
+        owner.bookings = data.bookings
+        render()
+      }).catch((error) => toast(error.message))
     return
   }
   const bookingDetailButton = event.target.closest('[data-view-booking]')
@@ -8932,7 +8977,9 @@ function renderDepositSettings() {
             <label>${zh ? '定金可保留次数' : 'Retain times'}<input id="dpRetain" inputmode="numeric" value="${cp.depositRetainTimes}"></label>
             <label>${zh ? '临期取消扣 %' : 'Late forfeit %'}<input id="dpLatePct" inputmode="numeric" value="${cp.lateForfeitPct}"></label>
             <label>${zh ? '爽约扣 %' : 'No-show forfeit %'}<input id="dpNoShowPct" inputmode="numeric" value="${cp.noShowForfeitPct}"></label>
+            <label>${zh ? '留存定金有效时长(天,不填=长期)' : 'Retained deposit validity (days)'}<input id="dpRetainDays" inputmode="numeric" value="${c.retainValidDays ?? ''}"></label>
           </div>
+          <p class="subtle" style="margin:6px 0 0">${zh ? '爽约定金留存到客户档案后的有效期;到期未使用自动转没收入账(留痕同人工没收)。' : 'Validity of retained no-show deposits; expired ones auto-forfeit to income with audit trail.'}</p>
         </div>
 
         <div class="dep-block">
@@ -8982,6 +9029,8 @@ function collectDepositForm() {
     memberWaive: on('#dpWaiveSw') ? (depositSettings.config?.memberWaive === 'all' ? 'all' : 'by_tier') : 'none',
     displayMode: seg('#dpDisplaySeg') || 'auto',
     customText: val('#dpCustomText') || '',
+    // 图 A①-2:爽约留存定金有效时长(天);空=长期
+    retainValidDays: numOrNull(val('#dpRetainDays')),
     cancelPolicy: {
       refundable: on('#dpRefundableSw'),
       freeCancelHours: numOrNull(val('#dpFreeHours')),

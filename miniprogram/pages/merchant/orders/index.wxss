@@ -108,7 +108,7 @@ page{background:#fbf8f5}
 .ds-match:last-child{border-bottom:none}
 .ds-mn{font-size:27rpx;color:#241f1d;font-weight:600}
 .ds-mp{font-size:22rpx;color:#9a8c7c}
-.ds-newhint{margin-top:8rpx;font-size:22rpx;color:#c8955a}
+/* D9 根治:.ds-newhint 已被 .ds-newrow 取代 */
 .ds-time{background:#fbf8f5;border:1rpx solid #eadfd7;border-radius:12rpx;padding:16rpx 18rpx;font-size:28rpx;color:#241f1d;display:flex;justify-content:space-between}
 .ds-cal{color:#c8a47e}
 .ds-endhint{margin-top:8rpx;font-size:22rpx;color:#8a7f78}
@@ -200,14 +200,12 @@ page{background:#fbf8f5}
 
 /* 屏 S1 现场排单面板增强(2026-08-09 图) */
 .ds-ksub{font-size:21rpx;color:#a99d92;font-weight:400;margin-left:10rpx}
-.ds-tabs{display:flex;align-items:center;gap:10rpx;margin-bottom:12rpx}
-.ds-tab{font-size:24rpx;padding:10rpx 22rpx;border-radius:999rpx;background:#f3ece2;color:#8c8279;font-weight:700}
-.ds-tab.on{background:#2d2826;color:#fff}
-.ds-scan{margin-left:auto;font-size:23rpx;font-weight:700;color:#9b7655;border:1rpx solid #e7d3b8;border-radius:999rpx;padding:10rpx 20rpx}
-.ds-mt{margin-top:10rpx}
-.ds-hit{margin-top:10rpx;font-size:23rpx;color:#8c8279;background:#faf6f1;border-radius:12rpx;padding:12rpx 16rpx}
-.ds-hit.on{color:#2f7d5c;background:#e3eee8;font-weight:700}
-.ds-light{color:#9b7655;font-weight:700}
+/* D9 根治:ds-tabs/ds-tab/ds-mt/ds-hit/ds-light 随「新客·输手机号」页签整体删除 */
+.ds-scan{font-size:23rpx;font-weight:700;color:#9b7655;border:1rpx solid #e7d3b8;border-radius:999rpx;padding:10rpx 20rpx}
+.ds-scan-r{float:right;margin-top:-6rpx}
+/* 「＋建档并排单」行(图 v1.1 虚线框) */
+.ds-newrow{display:flex;justify-content:space-between;align-items:center;margin-top:10rpx;font-size:23rpx;color:#8c8279;border:1rpx dashed #d8cec4;border-radius:12rpx;padding:14rpx 16rpx}
+.ds-newbtn{color:#5b7a99;font-weight:700;white-space:nowrap;margin-left:12rpx}
 .ds-warn{margin-top:10rpx;font-size:21rpx;color:#a8551f;background:#fdf3ec;border-radius:12rpx;padding:12rpx 16rpx;line-height:1.6}
 .ds-timerow{display:flex;align-items:center;gap:12rpx}
 .ds-now{font-size:24rpx;font-weight:700;color:#fff;background:#2d2826;border-radius:12rpx;padding:16rpx 26rpx;flex:0 0 auto}
@@ -235,3 +233,21 @@ page{background:#fbf8f5}
 .as-dot{color:#c6a27e;font-size:22rpx}
 .as-lab{flex:1}
 .as-at{color:#a89c92;font-size:24rpx}
+
+/* 图 B 部:售后状态徽标与写入按钮 */
+.as-badge{display:inline-block;font-size:20rpx;padding:2rpx 14rpx;border-radius:999rpx;margin-left:12rpx;vertical-align:4rpx}
+.as-pending{background:#fbeeec;color:#c0554a;border:1rpx solid #c0554a}
+.as-processing{background:#faf3e3;color:#b98a2f;border:1rpx solid #b98a2f}
+.as-resolved{background:#eef5ee;color:#5e8c61;border:1rpx solid #5e8c61}
+.as-closed{background:#f1ede8;color:#8a7f78;border:1rpx solid #e8e0d8}
+.as-result{margin-top:8rpx;font-weight:700}
+.as-actions{display:flex;gap:14rpx;padding:16rpx 24rpx calc(24rpx + env(safe-area-inset-bottom));border-top:1rpx solid #efe7dd}
+.as-btn{flex:1;text-align:center;font-size:26rpx;font-weight:700;padding:18rpx 0;border-radius:14rpx;background:#f3ece2;color:#3a2e2a}
+.as-btn.pri{background:#2d2826;color:#fff}
+.as-btn.ghost{background:#fff;border:1rpx solid #d8cec4;color:#8c8279}
+
+/* 图 A-2:爽约定金处置弹层的二选一卡 */
+.dp-opt{border:1rpx solid #e8e0d8;border-radius:14rpx;padding:16rpx 18rpx;margin:12rpx 0;background:#fff}
+.dp-opt.on{border-color:#5e8c61;background:#eef5ee}
+.dp-t{font-size:26rpx;font-weight:700;color:#3a2e2a}
+.dp-d{font-size:22rpx;color:#8c8279;margin-top:4rpx;line-height:1.5}

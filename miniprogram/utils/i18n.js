@@ -193,26 +193,28 @@ const copy = {
       noItems: 'No service to checkout'
     }
   },
+  /* D20(《财务总逻辑》v1.5.1 §十-2 过渡期口径):线上支付未接通期间,
+     成功页只说「预约已提交」,不出现任何"支付已成功"类表述;状态以后端为唯一真相。 */
   success: {
     zh: {
-      title: '预约成功',
-      subtitle: '演示版已完成模拟支付，订单已保存到本地。',
+      title: '预约已提交',
+      subtitle: '订单状态以门店确认为准，可在「我的订单」里查看。',
       orderNo: '订单编号',
       service: '服务项目',
       arrival: '到店时间',
       address: '门店地址',
-      paidDeposit: '实付定金',
+      paidDeposit: '应付定金',
       viewOrders: '查看订单',
       home: '回到首页'
     },
     en: {
-      title: 'Booked',
-      subtitle: 'Demo payment completed. Your order is saved locally.',
+      title: 'Booking submitted',
+      subtitle: 'Status will be confirmed by the store. Check My Orders for updates.',
       orderNo: 'Order No.',
       service: 'Service',
       arrival: 'Arrival',
       address: 'Store Address',
-      paidDeposit: 'Paid Deposit',
+      paidDeposit: 'Deposit Due',
       viewOrders: 'View Orders',
       home: 'Home'
     }

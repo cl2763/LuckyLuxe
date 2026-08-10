@@ -5449,22 +5449,29 @@ function serializeBooking(row, lang = 'zh') {
 function customerOrderBadges(row) {
   const stl = db.prepare("SELECT * FROM settlements WHERE booking_id = ? AND status = 'signed' ORDER BY signed_at DESC LIMIT 1").get(row.id)
   const isAfterSales = row.status === 'AFTER_SALES'
+  /* B 部:徽标按完成态细分 —— 售后中(待处理/处理中)/ 售后已解决 / 售后已关闭。
+     同一状态机三端渲染:这里的文案就是顾客看到的那句(B⓪)。 */
+  const asDone = isAfterSales ? (row.after_sales_status === 'resolved' ? 'resolved' : (row.after_sales_status === 'closed' ? 'closed' : '')) : ''
+  const asBadge = asDone === 'resolved' ? '售后已解决' : (asDone === 'closed' ? '售后已关闭' : '售后中')
+  const asKind = asDone === 'resolved' ? 'signed' : (asDone === 'closed' ? 'amended' : 'aftersales')
+  const asNote = asDone === 'resolved' ? (row.after_sales_result ? `已解决:${row.after_sales_result}` : '售后已解决') : (asDone === 'closed' ? '售后已关闭' : '已转人工客服跟进')
   if (!stl) {
     return {
-      listBadgeText: isAfterSales ? '售后中' : '',
-      listBadgeKind: isAfterSales ? 'aftersales' : '',
-      listNote: isAfterSales ? '已转人工客服跟进' : '',
-      actualDueText: '', actualDueCents: null
+      listBadgeText: isAfterSales ? asBadge : '',
+      listBadgeKind: isAfterSales ? asKind : '',
+      listNote: isAfterSales ? asNote : '',
+      actualDueText: '', actualDueCents: null,
+      ...(isAfterSales ? { afterSales: afterSalesProgress(row) } : {})
     }
   }
   const amd = amendmentShape(stl)
   // 售后 > 已更正 > 已签署(售后是当前最要紧的状态,压在最上面)
-  const badge = isAfterSales ? '售后中' : (amd.amendBadgeText || '已签署')
-  const kind = isAfterSales ? 'aftersales' : (amd.amendedCount ? 'amended' : 'signed')
+  const badge = isAfterSales ? asBadge : (amd.amendBadgeText || '已签署')
+  const kind = isAfterSales ? asKind : (amd.amendedCount ? 'amended' : 'signed')
   return {
     listBadgeText: badge,
     listBadgeKind: kind,
-    listNote: isAfterSales ? '已转人工客服跟进' : (amd.amendedCount ? '已签署 · 点开看更正明细' : '已签署'),
+    listNote: isAfterSales ? asNote : (amd.amendedCount ? '已签署 · 点开看更正明细' : '已签署'),
     settlementCode: stl.code,
     /* 规则③:右侧金额取实际应付**只在有更正时**。没更正的单前缀词一个字不动 ——
        否则「已结清 ¥198」会被换成光秃秃的「¥198」,那就不是「列表项保持现状」了(D2-03)。 */
@@ -5485,24 +5492,72 @@ function customerOrderBadges(row) {
   }
 }
 
-function afterSalesProgress(row) {
-  const tz = tenantTimezone(row.tenant_id)
+/* ===== 售后完成态(图 B 部,店主 2026-08-11 确认)=====
+   状态机:待处理 pending → 处理中 processing → 已解决 resolved / 已关闭 closed。
+   状态由后端唯一持有,三端(员工端/网页端/顾客端)读同一份(B⓪);
+   时间线 append-only,每条带时间+操作人(B④);涉钱零新路径(B②);原单快照不动(B③)。 */
+const AFTER_SALES_STATUS_TEXT = { pending: '待处理', processing: '处理中', resolved: '已解决', closed: '已关闭' }
+
+function afterSalesState(row) {
+  const tid = row.tenant_id || currentTenantId()
+  const tz = tenantTimezone(tid)
   const stamp = (at) => {
     if (!at) return ''
     const p = localParts(new Date(at), tz)
     return `${p.date.slice(5)} ${p.time.slice(0, 5)}`
   }
-  const hist = db.prepare("SELECT to_status, note, created_at FROM booking_status_history WHERE booking_id = ? AND to_status = 'AFTER_SALES' ORDER BY created_at ASC LIMIT 1").get(row.id)
-  const raisedAt = (hist && hist.created_at) || row.updated_at
+  const status = row.after_sales_status || 'pending'   // 存量售后单没写过状态 = 待处理
+  const events = db.prepare('SELECT * FROM after_sales_events WHERE booking_id = ? ORDER BY created_at ASC').all(row.id)
+  const hist = db.prepare("SELECT note, created_at FROM booking_status_history WHERE booking_id = ? AND to_status = 'AFTER_SALES' ORDER BY created_at ASC LIMIT 1").get(row.id)
+  const timeline = []
+  if (!events.some((e) => e.kind === 'open')) {
+    timeline.push({ at: stamp((hist && hist.created_at) || row.updated_at), kind: 'open', text: (hist && hist.note) || '顾客发起售后', actor: '顾客' })
+  }
+  for (const e of events) timeline.push({ at: stamp(e.created_at), kind: e.kind, text: e.text || '', actor: e.actor_name || '', relatedCode: e.related_code || '' })
   return {
-    title: '售后中',
+    status,
+    statusText: AFTER_SALES_STATUS_TEXT[status] || status,
+    reason: (hist && hist.note) || '',
+    timeline,
+    resultText: row.after_sales_result || ''
+  }
+}
+
+// 顾客端三步卡(既有 D3 设计)由真实状态机驱动 —— 同一个事实三端说同一句话
+function afterSalesProgress(row) {
+  const s = afterSalesState(row)
+  const raised = s.timeline[0] || {}
+  const progresses = s.timeline.filter((e) => e.kind === 'progress')
+  const lastProgress = progresses[progresses.length - 1]
+  const closer = s.timeline.filter((e) => e.kind === 'resolve' || e.kind === 'close').pop()
+  const terminal = s.status === 'resolved' || s.status === 'closed'
+  return {
+    title: s.statusText === '待处理' || s.statusText === '处理中' ? '售后中' : `售后${s.statusText}`,
+    status: s.status,
+    statusText: s.statusText,
+    reason: s.reason,
     steps: [
-      { key: 'raised', label: '发起售后(联系客服)', at: stamp(raisedAt), done: true },
-      { key: 'following', label: '已转人工,门店跟进中', at: stamp(row.updated_at), done: true },
-      { key: 'result', label: '处理结果(完成后显示说明)', at: '—', done: false }
+      { key: 'raised', label: '发起售后(联系客服)', at: raised.at || '', done: true },
+      {
+        key: 'following',
+        label: lastProgress ? `门店跟进:${lastProgress.text}` : '已转人工,门店跟进中',
+        at: lastProgress ? lastProgress.at : (raised.at || ''),
+        done: true
+      },
+      {
+        key: 'result',
+        label: s.status === 'resolved'
+          ? `已解决:${s.resultText}`
+          : (s.status === 'closed' ? `已关闭${closer && closer.text ? `:${closer.text}` : ''}` : '处理结果(完成后显示说明)'),
+        at: terminal && closer ? closer.at : '—',
+        done: terminal
+      }
     ],
-    resultText: '',
-    footnote: '处理完成后此卡状态变「售后完成」并显示结果说明;涉及退款的,退款凭据记在本售后单内。'
+    timeline: s.timeline,
+    resultText: s.status === 'resolved' ? s.resultText : '',
+    footnote: terminal
+      ? '本单售后已完成;涉及退款的,退款凭据记在关联的更正单内。'
+      : '处理完成后此卡状态变「售后已解决」并显示结果说明;涉及退款的,退款凭据记在关联的更正单内。'
   }
 }
 
@@ -5978,9 +6033,16 @@ function validateBookingInput(body) {
   }
   if (!/^\d{4}-\d{2}-\d{2}$/.test(body.date)) throw apiError(400, 'BAD_REQUEST', 'date must be YYYY-MM-DD.')
   if (!/^\d{2}:\d{2}$/.test(body.time)) throw apiError(400, 'BAD_REQUEST', '时间格式不对,应为 HH:mm(如 14:30)。')
+  /* 🔴 D19 全链断言(店主 2026-08-11 拍板):booking.storeId 必须属于当前租户。
+     顾客端曾写死旗舰店 store id —— 非旗舰店顾客的预约会写到旗舰店名下(租户串味,
+     纪律 #7 的顾客端方向)。前端修掉之后,这里再锁一道:传错店直接 400,串味单进不了库。 */
+  const bookingTenant = body.tenantId || DEFAULT_TENANT_ID
+  if (!db.prepare('SELECT id FROM stores WHERE id = ? AND tenant_id = ?').get(body.storeId, bookingTenant)) {
+    throw apiError(400, 'STORE_TENANT_MISMATCH', '门店与当前商家不符,请退出小程序重新进店后再试。')
+  }
   return {
     userId: body.userId || null,
-    tenantId: body.tenantId || DEFAULT_TENANT_ID,
+    tenantId: bookingTenant,
     storeId: body.storeId,
     serviceId: body.serviceId,
     technicianId: body.technicianId,
@@ -6349,6 +6411,28 @@ function createBooking(body, opts = {}) {
     if (String(error.message || '').includes('UNIQUE constraint failed')) throw apiError(409, 'SLOT_UNAVAILABLE', '该技师这个时段刚被约走了,换个时间试试。')
     throw error
   }
+
+  /* A②(图 v1.1):爽约留存的定金,下次该客户预约确认时**自动带出为已收定金** ——
+     写一条新的收取记录(留痕引用来源留存),核销留存凭据;结算时按既有抵扣路径走。
+     放在建单事务之后:带出失败不应拖垮建单本身(留存还在,下一单再带)。 */
+  try {
+    const nsRetain = activeNoShowRetain(input.userId, bookingTenantId)
+    if (nsRetain && nsRetain.amount_cents > 0) {
+      const nowc = iso(new Date())
+      db.exec('BEGIN IMMEDIATE')
+      try {
+        db.prepare(`INSERT INTO deposit_receipts (id, tenant_id, booking_id, user_id, kind, amount_cents, pay_channel, reason, actor, created_at)
+          VALUES (?, ?, ?, ?, 'receipt', ?, 'retain_carry', ?, 'system', ?)`)
+          .run(randomId('dep'), bookingTenantId, bookingId, input.userId, nsRetain.amount_cents,
+            `爽约留存带出 · 来源预约 ${nsRetain.source_booking_id || ''} · 留存 ${nsRetain.id}`, nowc)
+        db.prepare('UPDATE bookings SET deposit_cents = ?, direct_deposit_unpaid = 0, updated_at = ? WHERE id = ?')
+          .run(nsRetain.amount_cents, nowc, bookingId)
+        db.prepare("UPDATE deposit_retains SET status = 'consumed', consumed_booking_id = ?, consumed_at = ? WHERE id = ?")
+          .run(bookingId, nowc, nsRetain.id)
+        db.exec('COMMIT')
+      } catch (error) { db.exec('ROLLBACK'); throw error }
+    }
+  } catch (error) { /* 带出失败不拦单;留存仍 active,下次预约再带 */ }
 
   return serializeBooking(db.prepare('SELECT * FROM bookings WHERE id = ?').get(bookingId))
 }
@@ -7398,7 +7482,10 @@ const DEFAULT_DEPOSIT_CONFIG = {
   },
   displayMode: 'auto',            // auto=参数自动生成文案 / custom=商家自定义全文
   customText: '',
-  customTextEn: ''
+  customTextEn: '',
+  /* A①-2(店主 2026-08-11 拍板):爽约留存定金的有效时长(天)。
+     null/不填 = 长期有效;设置了的,到期未使用自动转没收入账(留痕同人工没收)。 */
+  retainValidDays: null
 }
 
 const MESSAGE_TEMPLATE_SCENES = ['pre_sale', 'in_service', 'post_sale', 'booking_confirmed_invite', 'arrival_reminder', 'coupon_expiry']
@@ -7491,7 +7578,9 @@ function setDepositConfig(tenantId, input = {}) {
     },
     displayMode: ['auto', 'custom'].includes(input.displayMode) ? input.displayMode : current.displayMode,
     customText: input.customText === undefined ? current.customText : String(input.customText).slice(0, 4000),
-    customTextEn: input.customTextEn === undefined ? current.customTextEn : String(input.customTextEn).slice(0, 4000)
+    customTextEn: input.customTextEn === undefined ? current.customTextEn : String(input.customTextEn).slice(0, 4000),
+    // A①-2 留存定金有效时长(天);空=长期
+    retainValidDays: nullableNum(input.retainValidDays, current.retainValidDays)
   }
   db.prepare(`INSERT INTO tenant_settings (tenant_id, key, value, updated_at) VALUES (?, 'deposit_config', ?, ?)
     ON CONFLICT(tenant_id, key) DO UPDATE SET value = excluded.value, updated_at = excluded.updated_at`)
@@ -7585,7 +7674,8 @@ function depositAmountForService(service, config, tenantId = currentTenantId()) 
 function activeDepositReceipts(bookingId, tenantId = currentTenantId()) {
   const rows = db.prepare('SELECT * FROM deposit_receipts WHERE tenant_id = ? AND booking_id = ? ORDER BY created_at ASC').all(tenantId, bookingId)
   const revoked = new Set(rows.filter((r) => r.kind === 'revoke' && r.revoke_of).map((r) => r.revoke_of))
-  return rows.filter((r) => r.kind === 'receipt' && !revoked.has(r.id))
+  // 已被爽约处置(留存/没收)的记录不再算「活着的负债」—— 它的去向已经闭合(图 A④)
+  return rows.filter((r) => r.kind === 'receipt' && !revoked.has(r.id) && !r.disposal_id)
 }
 function activeDepositReceiptCents(bookingId, tenantId = currentTenantId()) {
   return activeDepositReceipts(bookingId, tenantId).reduce((n, r) => n + (r.amount_cents || 0), 0)
@@ -7660,6 +7750,148 @@ function revokeDepositReceipt({ booking, reason = '', actor = 'admin' }) {
   return { revoked: true, revokeOf: target.id }
 }
 
+/* ===== 爽约定金处置(图 A 部,店主 2026-08-11 确认;《财务总逻辑》v1.5.2 §五)=====
+   前提:已爽约(no_show_at)+ 存在未兑现的定金收取记录(A⓪:无收取记录不出入口,
+   防"处置没收过的钱" —— 与「抵扣依据=收取记录」同构)。
+   老板二选一:①留存到客户档案(负债从预约转档案,零收入)②没收入账(独立
+   「定金收入·爽约没收」行,不进业绩不进日结)。append-only,误处置走撤销冲销(A④)。 */
+
+// 这张爽约单上还挂着的定金负债(未兑现、未撤销、未处置)
+function outstandingNoShowDepositCents(bookingId, tenantId = currentTenantId()) {
+  return activeDepositReceipts(bookingId, tenantId)
+    .filter((r) => !r.settled_settlement_id)
+    .reduce((n, r) => n + (r.amount_cents || 0), 0)
+}
+
+function latestDisposal(bookingId, tenantId = currentTenantId()) {
+  const rows = db.prepare('SELECT * FROM deposit_disposals WHERE tenant_id = ? AND booking_id = ? ORDER BY created_at ASC').all(tenantId, bookingId)
+  const revoked = new Set(rows.filter((r) => r.action === 'revoke' && r.revoke_of).map((r) => r.revoke_of))
+  const live = rows.filter((r) => r.action !== 'revoke' && !revoked.has(r.id))
+  return live.length ? live[live.length - 1] : null
+}
+
+/* A①-2 到期自动转没收:惰性判定 —— 每次要读留存记录的地方先扫一遍到期的。
+   留痕同人工没收:处置行(action=auto_forfeit)+ 独立收入行,note「留存到期自动没收」。 */
+function sweepExpiredNoShowRetains(tenantId = currentTenantId()) {
+  const now = iso(new Date())
+  const rows = db.prepare("SELECT * FROM deposit_retains WHERE tenant_id = ? AND status = 'active' AND source = 'no_show' AND expires_at IS NOT NULL AND expires_at < ?").all(tenantId, now)
+  for (const r of rows) {
+    const did = randomId('disp')
+    db.exec('BEGIN IMMEDIATE')
+    try {
+      db.prepare("UPDATE deposit_retains SET status = 'expired', consumed_at = ? WHERE id = ?").run(now, r.id)
+      db.prepare(`INSERT INTO deposit_disposals (id, tenant_id, booking_id, user_id, action, amount_cents, retain_id, note, actor, created_at)
+        VALUES (?, ?, ?, ?, 'auto_forfeit', ?, ?, '留存到期自动没收', 'system', ?)`)
+        .run(did, tenantId, r.source_booking_id || '', r.user_id, r.amount_cents, r.id, now)
+      db.exec('COMMIT')
+    } catch (error) { db.exec('ROLLBACK'); throw error }
+    // 收入行在事务外记(finance 有自己的哈希链);tags=处置 id,审计按它对账
+    insertFinanceTransaction({
+      tenantId, type: 'income', source: 'deposit_disposal', tags: did,
+      category: '定金收入·爽约没收', amountCents: r.amount_cents, payChannel: 'offline',
+      occurredOn: todayOf(tenantId), bookingId: r.source_booking_id || null,
+      note: '留存到期自动没收', createdBy: 'system'
+    })
+  }
+  return rows.length
+}
+
+// 该顾客账上活着的「爽约留存」(下次预约确认时自动带出 —— A②)
+function activeNoShowRetain(userId, tenantId = currentTenantId()) {
+  if (!userId) return null
+  sweepExpiredNoShowRetains(tenantId)
+  return db.prepare("SELECT * FROM deposit_retains WHERE tenant_id = ? AND user_id = ? AND status = 'active' AND source = 'no_show' ORDER BY created_at ASC LIMIT 1").get(tenantId, userId) || null
+}
+
+// 老板二选一处置(A① 权限在路由层断言;这里管账目守恒)
+function disposeNoShowDeposit({ booking, action, note = '', actor = 'owner' }) {
+  const tenantId = booking.tenant_id || currentTenantId()
+  if (!booking.no_show_at) throw apiError(400, 'NOT_NO_SHOW', '这张预约没有被标记爽约,不能处置定金。')
+  // 先查有没有活着的处置 —— 已处置再来一次要报 409(A④),而不是"没钱可处置"的 400
+  if (latestDisposal(booking.id, tenantId)) throw apiError(409, 'ALREADY_DISPOSED', '这笔定金已经处置过了;要改请先撤销原处置(留痕)。')
+  const receipts = activeDepositReceipts(booking.id, tenantId).filter((r) => !r.settled_settlement_id)
+  const amount = receipts.reduce((n, r) => n + (r.amount_cents || 0), 0)
+  // A⑤:无收取记录=拒绝(没收过的钱不存在"处置")
+  if (!(amount > 0)) throw apiError(400, 'NO_DEPOSIT_RECEIPT', '这张预约没有未兑现的定金收取记录,没有可处置的钱。')
+  const did = randomId('disp')
+  const now = iso(new Date())
+  let retain = null
+  db.exec('BEGIN IMMEDIATE')
+  try {
+    if (action === 'retain') {
+      // A①-2:留存有效时长可配;不填=长期(expires_at 为空)
+      const days = getDepositConfig(tenantId).retainValidDays
+      const expiresAt = days ? iso(new Date(Date.now() + days * 86_400_000)) : null
+      const rid = randomId('retain')
+      db.prepare(`INSERT INTO deposit_retains (id, tenant_id, user_id, source_booking_id, amount_cents, times_used, status, source, expires_at, created_at)
+        VALUES (?, ?, ?, ?, ?, 0, 'active', 'no_show', ?, ?)`)
+        .run(rid, tenantId, booking.user_id, booking.id, amount, expiresAt, now)
+      retain = db.prepare('SELECT * FROM deposit_retains WHERE id = ?').get(rid)
+      db.prepare(`INSERT INTO deposit_disposals (id, tenant_id, booking_id, user_id, action, amount_cents, retain_id, note, actor, created_at)
+        VALUES (?, ?, ?, ?, 'retain', ?, ?, ?, ?, ?)`)
+        .run(did, tenantId, booking.id, booking.user_id, amount, rid, String(note || '').slice(0, 200), actor, now)
+    } else if (action === 'forfeit') {
+      db.prepare(`INSERT INTO deposit_disposals (id, tenant_id, booking_id, user_id, action, amount_cents, note, actor, created_at)
+        VALUES (?, ?, ?, ?, 'forfeit', ?, ?, ?, ?)`)
+        .run(did, tenantId, booking.id, booking.user_id, amount, String(note || '').slice(0, 200), actor, now)
+    } else {
+      throw apiError(400, 'BAD_REQUEST', '处置只有两条路:留存(retain)或没收入账(forfeit)。')
+    }
+    const mark = db.prepare('UPDATE deposit_receipts SET disposal_id = ? WHERE id = ?')
+    for (const r of receipts) mark.run(did, r.id)
+    db.exec('COMMIT')
+  } catch (error) { db.exec('ROLLBACK'); throw error }
+  if (action === 'forfeit') {
+    // A③:按处置确认时刻记独立收入行;不进业绩、不进任何日结区(source 独立,日结/业绩只认 settlements)
+    insertFinanceTransaction({
+      tenantId, type: 'income', source: 'deposit_disposal', tags: did,
+      category: '定金收入·爽约没收', amountCents: amount, payChannel: receipts[0].pay_channel || 'offline',
+      occurredOn: todayOf(tenantId), bookingId: booking.id,
+      note: `爽约没收${note ? ` · ${String(note).slice(0, 160)}` : ''}`, createdBy: actor
+    })
+  }
+  return { disposal: db.prepare('SELECT * FROM deposit_disposals WHERE id = ?').get(did), retain }
+}
+
+// A④ 误处置撤销:追加冲销行,负债/收入同步冲回;不删不改历史
+function revokeNoShowDisposal({ booking, reason = '', actor = 'owner' }) {
+  const tenantId = booking.tenant_id || currentTenantId()
+  const target = latestDisposal(booking.id, tenantId)
+  if (!target) throw apiError(404, 'NOT_FOUND', '这张预约没有可撤销的定金处置。')
+  if (target.action === 'retain' || target.action === 'auto_forfeit') {
+    const retain = target.retain_id ? db.prepare('SELECT * FROM deposit_retains WHERE id = ?').get(target.retain_id) : null
+    if (target.action === 'retain' && retain && retain.status !== 'active') {
+      throw apiError(409, 'RETAIN_ALREADY_USED', '这笔留存已经被使用或已到期,不能撤销;要纠错走更正链。')
+    }
+  }
+  const now = iso(new Date())
+  db.exec('BEGIN IMMEDIATE')
+  try {
+    db.prepare(`INSERT INTO deposit_disposals (id, tenant_id, booking_id, user_id, action, amount_cents, revoke_of, note, actor, created_at)
+      VALUES (?, ?, ?, ?, 'revoke', ?, ?, ?, ?, ?)`)
+      .run(randomId('disp'), tenantId, booking.id, booking.user_id, target.amount_cents, target.id, String(reason || '').slice(0, 200), actor, now)
+    if (target.action === 'retain' && target.retain_id) {
+      db.prepare("UPDATE deposit_retains SET status = 'revoked', consumed_at = ? WHERE id = ?").run(now, target.retain_id)
+    }
+    // 收取记录回到「未处置」—— 负债重新挂回预约
+    db.prepare('UPDATE deposit_receipts SET disposal_id = NULL WHERE disposal_id = ?').run(target.id)
+    db.exec('COMMIT')
+  } catch (error) { db.exec('ROLLBACK'); throw error }
+  if (target.action === 'forfeit' || target.action === 'auto_forfeit') {
+    // 已入账的没收收入 → 红字冲销(账本只追加)
+    const original = db.prepare("SELECT * FROM finance_transactions WHERE tenant_id = ? AND tags = ? AND source = 'deposit_disposal' AND reversal_of IS NULL ORDER BY created_at DESC LIMIT 1").get(tenantId, target.id)
+    if (original) {
+      insertFinanceTransaction({
+        tenantId, type: 'income', source: 'reversal', tags: target.id,
+        category: original.category, amountCents: -original.amount_cents, payChannel: original.pay_channel,
+        occurredOn: todayOf(tenantId), bookingId: booking.id, reversalOf: original.id,
+        note: `冲销爽约没收:${reason || '误处置'}`, createdBy: actor
+      })
+    }
+  }
+  return { revoked: true, revokeOf: target.id }
+}
+
 /* 签字时刻兑现这笔定金(§五 的 ①②两条路)。
    ① 抵扣开的店:定金已经在 computeSettlement 里当付款腿抵掉应收了,这里只把记录标成已兑现;
    ② 抵扣关的店:定金没参与结算,签字这一刻转当期收入,记一行独立的「定金收入」,
@@ -7693,15 +7925,34 @@ function settleDepositReceiptsOnSign(settlement, actor = 'system') {
   }
 }
 
-/* 定金守恒审计(§五 补拍②):每一笔收取记录的去向必须四选一 ——
-   兑现入账 / 转定金收入 / 爽约处置(未实现) / 撤销。返回不守恒的记录,空数组=守恒。
-   兑现与转收入两条路都会写一行等额的收入账目,所以对账方式统一:找那一行。 */
+/* 定金守恒审计(§五 补拍②;2026-08-11 图 A④ 补上第三去向):每一笔收取记录的去向
+   必须四选一 —— 兑现入账 / 转定金收入 / 爽约处置(留存或没收) / 撤销。
+   返回不守恒的记录,空数组=守恒。兑现与转收入写等额收入行;留存写等额留存凭据;
+   没收写等额「定金收入·爽约没收」行(tags=处置 id)。 */
 function auditDepositConservation(tenantId = currentTenantId()) {
+  sweepExpiredNoShowRetains(tenantId)   // 到期未收口的留存先转没收,再对账
   const rows = db.prepare('SELECT * FROM deposit_receipts WHERE tenant_id = ?').all(tenantId)
   const revoked = new Set(rows.filter((r) => r.kind === 'revoke' && r.revoke_of).map((r) => r.revoke_of))
   const broken = []
   for (const r of rows.filter((x) => x.kind === 'receipt')) {
     if (revoked.has(r.id)) continue                 // 去向:撤销(有 revoke 行留痕)
+    if (r.disposal_id) {                            // 去向:爽约处置(A④)
+      const d = db.prepare('SELECT * FROM deposit_disposals WHERE id = ?').get(r.disposal_id)
+      if (!d) { broken.push({ receiptId: r.id, bookingId: r.booking_id, amountCents: r.amount_cents, reason: '标了处置但找不到处置记录' }); continue }
+      if (d.action === 'retain') {
+        const retain = d.retain_id ? db.prepare('SELECT * FROM deposit_retains WHERE id = ?').get(d.retain_id) : null
+        // 留存 = 负债换了个挂法:凭据存在且金额等于处置额即守恒(active/consumed/expired 都有各自留痕)
+        if (!retain || retain.amount_cents !== d.amount_cents) {
+          broken.push({ receiptId: r.id, bookingId: r.booking_id, amountCents: r.amount_cents, reason: '留存处置缺少等额的留存凭据' })
+        }
+      } else {
+        const income = db.prepare("SELECT COALESCE(SUM(amount_cents), 0) AS n FROM finance_transactions WHERE tenant_id = ? AND tags = ? AND source IN ('deposit_disposal', 'reversal')").get(tenantId, d.id).n
+        if (income !== d.amount_cents) {
+          broken.push({ receiptId: r.id, bookingId: r.booking_id, amountCents: r.amount_cents, incomeCents: income, reason: '没收处置缺少等额的「定金收入·爽约没收」行' })
+        }
+      }
+      continue
+    }
     if (!r.settled_settlement_id) continue          // 还挂在负债上,没减少,不用对账
     const stl = db.prepare('SELECT code FROM settlements WHERE id = ?').get(r.settled_settlement_id)
     const income = db.prepare(`
@@ -7743,7 +7994,8 @@ function issueDepositRetain({ tenantId, userId, bookingId, amountCents, timesUse
 
 function activeDepositRetain(userId, tenantId = currentTenantId()) {
   if (!userId) return null
-  return db.prepare("SELECT * FROM deposit_retains WHERE tenant_id = ? AND user_id = ? AND status = 'active' ORDER BY created_at ASC LIMIT 1").get(tenantId, userId) || null
+  // 爽约留存(source='no_show')不走这条:它按 A② 在下次预约时转成定金收取记录带出
+  return db.prepare("SELECT * FROM deposit_retains WHERE tenant_id = ? AND user_id = ? AND status = 'active' AND (source IS NULL OR source <> 'no_show') ORDER BY created_at ASC LIMIT 1").get(tenantId, userId) || null
 }
 
 function consumeDepositRetain(retainId, bookingId) {
@@ -10748,14 +11000,8 @@ async function route(req, res) {
       : db.prepare('SELECT * FROM bookings WHERE tenant_id = ? ORDER BY appointment_start DESC').all(currentTenantId())
     // 服务安全:管理端订单随单携带顾客标签/备注(过敏史/忌讳),技师上钟前必看;不开放完整客户库
     const careStmt = db.prepare('SELECT tags_json, notes FROM users WHERE id = ?')
-    /* D12(店主 2026-08-10 开检):员工端售后订单**点不进去**。要能「可进入可看」,
-       行上就得有东西可看 —— 原因与处理情况以前一个字都没下发。
-       原因取转售后那一刻记的 note(booking_status_history),处理情况复用顾客端
-       已有的 afterSalesProgress():**同一件事只有一份实现**,不给商家端另写一套进度口径。
-       只读:写入/完成态等 Cowork 出图,这里不加任何写接口。 */
-    const asNoteStmt = db.prepare(
-      "SELECT note, created_at FROM booking_status_history WHERE booking_id = ? AND to_status = 'AFTER_SALES' ORDER BY created_at ASC LIMIT 1"
-    )
+    /* D12 + 图 B 部:售后状态与时间线随单下发(同一状态机三端渲染,B⓪)。
+       原因/进展/结果全由 afterSalesProgress()(真实状态机)给,前端不自己拼进度口径。 */
     return json(res, 200, {
       bookings: rows.map((booking) => {
         const serialized = serializeBooking(booking)
@@ -10765,10 +11011,29 @@ async function route(req, res) {
           notes: care?.notes || ''
         }
         if (booking.status === 'AFTER_SALES') {
-          const h = asNoteStmt.get(booking.id)
-          serialized.afterSales = Object.assign({}, afterSalesProgress(booking), {
-            reason: (h && h.note) || ''
-          })
+          serialized.afterSales = afterSalesProgress(booking)
+        }
+        /* 爽约定金处置状态(图 A-1/A-3)。可见性:老板全量;员工本来只拿到自己名下的单
+           (上面的 SQL 按 technician_id 过滤)—— 正好等于「老板+当单技师可见」(A①)。 */
+        if (booking.no_show_at) {
+          const tid0 = booking.tenant_id || currentTenantId()
+          serialized.noShowAt = booking.no_show_at
+          const disposal = latestDisposal(booking.id, tid0)
+          const outstanding = disposal ? 0 : outstandingNoShowDepositCents(booking.id, tid0)
+          const firstReceipt = activeDepositReceipts(booking.id, tid0)[0]
+          serialized.depositDisposal = {
+            // pending=待处置(A-1 红徽标);retain/forfeit/auto_forfeit=已处置(A-3);none=无收取记录,不出入口(A⓪)
+            state: disposal ? disposal.action : (outstanding > 0 ? 'pending' : 'none'),
+            outstandingCents: outstanding,
+            outstandingText: outstanding ? formatMoneyCents(outstanding, tid0, 'auto') : '',
+            amountText: disposal ? formatMoneyCents(disposal.amount_cents, tid0, 'auto') : '',
+            note: (disposal && disposal.note) || '',
+            actor: (disposal && disposal.actor) || '',
+            at: (disposal && disposal.created_at) || '',
+            receiptText: firstReceipt
+              ? `定金收取:${String(firstReceipt.created_at).slice(5, 10)} ${firstReceipt.pay_channel === 'offline' ? '线下' : (firstReceipt.pay_channel || '')}`
+              : ''
+          }
         }
         return serialized
       })
@@ -10808,12 +11073,27 @@ async function route(req, res) {
        不带 q 的老路径一字不动(顾客页行为零变化)。 */
     const q = String(query.q || '').trim().toLowerCase()
     const all = getAdminCustomers()
-    if (!q) return json(res, 200, { customers: all })
+    /* A①-2:客户档案里显示爽约留存定金(长期有效则不显示期限)。
+       惰性到期收口在前 —— 到期的先转没收,列表里就不会出现已死的留存。 */
+    sweepExpiredNoShowRetains(currentTenantId())
+    const retainMap = new Map(db.prepare(
+      "SELECT user_id, SUM(amount_cents) AS s, MIN(expires_at) AS e FROM deposit_retains WHERE tenant_id = ? AND status = 'active' AND source = 'no_show' GROUP BY user_id"
+    ).all(currentTenantId()).map((r) => [r.user_id, r]))
+    const withRetain = (c) => {
+      const r = retainMap.get(c.id)
+      if (!r) return c
+      return Object.assign({}, c, {
+        depositRetainedCents: r.s,
+        depositRetainedText: `定金留存 ${formatMoneyCents(r.s, currentTenantId(), 'auto')} · ${r.e ? `有效期至 ${String(r.e).slice(0, 10)}` : '可用于下次预约'}`
+      })
+    }
+    if (!q) return json(res, 200, { customers: all.map(withRetain) })
     const mine = new Set(db.prepare('SELECT id FROM users WHERE tenant_id = ?').all(currentTenantId()).map((r) => r.id))
     const customers = all
       .filter((c) => mine.has(c.id))
       .filter((c) => `${c.displayName || ''}`.toLowerCase().includes(q) || `${c.phone || ''}`.includes(q))
       .slice(0, 20)
+      .map(withRetain)
     return json(res, 200, { customers })
   }
   if (req.method === 'POST' && path === '/admin/finance/summary') {
@@ -10917,7 +11197,9 @@ async function route(req, res) {
       : (query.bookingId
         ? db.prepare('SELECT * FROM settlements WHERE tenant_id = ? AND booking_id = ? ORDER BY rowid DESC').all(tid, query.bookingId)
         : db.prepare('SELECT * FROM settlements WHERE tenant_id = ? ORDER BY created_at DESC LIMIT 60').all(tid))
-    return json(res, 200, { settlements: rows.map((r) => serializeSettlement(r)) })
+    /* D9 规则⑤:前端要按「归属顾客是否已绑微信」决定签署路(未绑定只有扫码一条路),
+       绑定状态随单下发 —— 不让前端自己再查一遍档案。 */
+    return json(res, 200, { settlements: rows.map((r) => ({ ...serializeSettlement(r), customerBound: isUserBound(r.user_id) })) })
   }
   /* 屏 0:「结算单已推送待签」状态下可**撤回改单**。
      只撤未签的;已签一律不可撤(账本只追加、已签不可改),要改走金额更正链。
@@ -14410,6 +14692,80 @@ async function route(req, res) {
       note: out.created ? '已记为定金预收(负债);签字时才会兑现。' : '这张预约已经标过了,没有重复记账。'
     })
   }
+  /* ===== 售后完成态(图 B 部)三个写入口。
+     B①:写进展=当单技师+老板;标已解决=当单技师+老板(必填结果);关闭=仅老板(必填原因)。
+     B②:接口没有任何金额字段,涉钱只 related_code 关联更正单。
+     B⓪:状态只前进 —— resolved/closed 是终态,不回拨;纠错走追加进展备注。 */
+  if (req.method === 'POST' && path.startsWith('/admin/bookings/') && path.includes('/after-sales/')) {
+    const id = path.split('/')[3]
+    const act = path.split('/').pop()
+    const booking = db.prepare('SELECT * FROM bookings WHERE id = ? AND tenant_id = ?').get(id, currentTenantId())
+    if (!booking) throw apiError(404, 'NOT_FOUND', '找不到这张预约。')
+    if (booking.status !== 'AFTER_SALES') throw apiError(400, 'NOT_AFTER_SALES', '这张单不在售后中。')
+    // 当单技师+老板(assertStaffCanAccessBooking:员工只碰得到自己名下的单)
+    assertStaffCanAccessBooking(adminSession, booking)
+    const body = await readBody(req)
+    const now = iso(new Date())
+    const actorName = adminSession.displayName || adminSession.email || adminSession.role
+    const cur = booking.after_sales_status || 'pending'
+    const insertEvent = (kind, text, relatedCode = '') => db.prepare(
+      `INSERT INTO after_sales_events (id, tenant_id, booking_id, kind, text, related_code, actor_name, actor_role, technician_id, created_at)
+       VALUES (?, ?, ?, ?, ?, NULLIF(?, ''), ?, ?, ?, ?)`
+    ).run(randomId('ase'), currentTenantId(), booking.id, kind, String(text || '').slice(0, 500), String(relatedCode || '').slice(0, 60), actorName, adminSession.role, adminSession.technicianId || null, now)
+    if (act === 'progress') {
+      const text = String(body.text || '').trim()
+      if (!text) throw apiError(400, 'BAD_REQUEST', '进展内容不能为空。')
+      insertEvent('progress', text)
+      // pending → processing;终态不回拨(纠错走追加备注,状态不动)
+      if (cur === 'pending') db.prepare("UPDATE bookings SET after_sales_status = 'processing', updated_at = ? WHERE id = ?").run(now, booking.id)
+      return json(res, 201, { afterSales: afterSalesState(db.prepare('SELECT * FROM bookings WHERE id = ?').get(booking.id)) })
+    }
+    if (act === 'resolve') {
+      const resultText = String(body.resultText || '').trim()
+      if (!resultText) throw apiError(400, 'RESULT_REQUIRED', '处理结果必填 —— 不许无痕迹地"变绿"(B④)。')
+      if (cur === 'closed') throw apiError(409, 'ALREADY_CLOSED', '这单售后已关闭,是终态;要补记录用写进展。')
+      if (cur === 'resolved') throw apiError(409, 'ALREADY_RESOLVED', '这单售后已标过解决。')
+      insertEvent('resolve', resultText, body.relatedCode)
+      db.prepare("UPDATE bookings SET after_sales_status = 'resolved', after_sales_result = ?, updated_at = ? WHERE id = ?").run(resultText, now, booking.id)
+      return json(res, 200, { afterSales: afterSalesState(db.prepare('SELECT * FROM bookings WHERE id = ?').get(booking.id)) })
+    }
+    if (act === 'close') {
+      if (adminSession.role !== 'owner') throw apiError(403, 'FORBIDDEN', '关闭售后仅老板可操作。')
+      const reason = String(body.reason || '').trim()
+      if (!reason) throw apiError(400, 'REASON_REQUIRED', '关闭必须填一句原因。')
+      if (cur === 'resolved' || cur === 'closed') throw apiError(409, 'ALREADY_TERMINAL', '这单售后已是终态。')
+      insertEvent('close', reason)
+      db.prepare("UPDATE bookings SET after_sales_status = 'closed', updated_at = ? WHERE id = ?").run(now, booking.id)
+      return json(res, 200, { afterSales: afterSalesState(db.prepare('SELECT * FROM bookings WHERE id = ?').get(booking.id)) })
+    }
+    throw apiError(404, 'NOT_FOUND', '未知的售后操作。')
+  }
+  /* 爽约定金处置(图 A 部):老板二选一 —— retain 留存到客户档案 / forfeit 没收入账。
+     A①:处置**仅老板**;A⑤:无收取记录=拒绝(helper 里断言)。 */
+  if (req.method === 'POST' && path.startsWith('/admin/bookings/') && path.endsWith('/deposit-disposal')) {
+    if (adminSession.role !== 'owner') throw apiError(403, 'FORBIDDEN', '定金处置仅老板可操作。')
+    const id = path.split('/')[3]
+    const booking = db.prepare('SELECT * FROM bookings WHERE id = ? AND tenant_id = ?').get(id, currentTenantId())
+    if (!booking) throw apiError(404, 'NOT_FOUND', '找不到这张预约。')
+    const body = await readBody(req)
+    const out = disposeNoShowDeposit({ booking, action: String(body.action || ''), note: body.note, actor: adminSession.email || 'owner' })
+    return json(res, 201, {
+      disposal: out.disposal,
+      retain: out.retain,
+      note: out.disposal.action === 'retain'
+        ? '已留存到客户档案:下次预约确认时自动带出为已收定金。'
+        : '已没收入账:独立「定金收入·爽约没收」行,不进业绩不进日结。'
+    })
+  }
+  // A④ 误处置撤销:追加冲销行(负债挂回/收入红字冲回),不删不改历史
+  if (req.method === 'POST' && path.startsWith('/admin/bookings/') && path.endsWith('/deposit-disposal/revoke')) {
+    if (adminSession.role !== 'owner') throw apiError(403, 'FORBIDDEN', '仅老板可撤销定金处置。')
+    const id = path.split('/')[3]
+    const booking = db.prepare('SELECT * FROM bookings WHERE id = ? AND tenant_id = ?').get(id, currentTenantId())
+    if (!booking) throw apiError(404, 'NOT_FOUND', '找不到这张预约。')
+    const body = await readBody(req)
+    return json(res, 200, revokeNoShowDisposal({ booking, reason: body.reason, actor: adminSession.email || 'owner' }))
+  }
   // 误标撤销:写一行 revoke 留痕,原记录不删不改
   if (req.method === 'POST' && path.startsWith('/admin/bookings/') && path.endsWith('/deposit-receipt/revoke')) {
     if (adminSession.role !== 'owner') throw apiError(403, 'FORBIDDEN', '仅老板可撤销定金记录。')
@@ -14462,7 +14818,10 @@ async function route(req, res) {
       token, expiresAt, url: signTokenUrl(token),
       settlement: serializeSettlement(row),
       pushedToMiniApp: bound,
-      pushedText: bound ? '✓ 已推送到顾客小程序' : '',
+      customerBound: bound,
+      /* D9 规则⑤:未绑定客推送不出去,这句话要如实说 —— 店员点了「推送签署」,
+         看到的不能是一片空白,而是"为什么推不了、该走哪条路"。 */
+      pushedText: bound ? '✓ 已推送到顾客小程序' : '该顾客未绑微信,无法推送 —— 请顾客扫码签署',
       ...signStateOf(row)
     })
   }
@@ -14641,7 +15000,8 @@ async function route(req, res) {
     db.exec('BEGIN IMMEDIATE')
     try {
       db.prepare('DELETE FROM booking_slots WHERE booking_id = ?').run(id)
-      db.prepare("UPDATE bookings SET status = 'CANCELLED', cancelled_at = ?, cancellation_fee_cents = ?, updated_at = ? WHERE id = ?").run(now, fee, now, id)
+      // A⓪:爽约要留下可识别的标(no_show_at)—— 处置入口只对已爽约的单开
+      db.prepare("UPDATE bookings SET status = 'CANCELLED', cancelled_at = ?, no_show_at = ?, cancellation_fee_cents = ?, updated_at = ? WHERE id = ?").run(now, now, fee, now, id)
       db.prepare('INSERT INTO booking_status_history (id, booking_id, from_status, to_status, note, created_at) VALUES (?, ?, ?, ?, ?, ?)')
         .run(randomId('hist'), id, booking.status, 'CANCELLED', String(nsBody.reason || '顾客爽约(或迟到超过宽限)'), now)
       db.exec('COMMIT')
@@ -14781,6 +15141,48 @@ try {
   db.exec('ALTER TABLE bookings ADD COLUMN direct_deposit_unpaid INTEGER NOT NULL DEFAULT 0')
 } catch (error) {
   if (!String(error.message || '').includes('duplicate column')) throw error
+}
+try {
+  // 爽约标(2026-08-11 图 A⓪):定金处置入口只对已爽约的单开;/no-show 路由落这个时间戳
+  db.exec('ALTER TABLE bookings ADD COLUMN no_show_at TEXT')
+} catch (error) {
+  if (!String(error.message || '').includes('duplicate column')) throw error
+}
+try {
+  // 售后完成态(2026-08-11 图 B⓪):pending | processing | resolved | closed;空=不在售后
+  db.exec('ALTER TABLE bookings ADD COLUMN after_sales_status TEXT')
+} catch (error) {
+  if (!String(error.message || '').includes('duplicate column')) throw error
+}
+try {
+  // 售后处理结果(B④:完成必有结果文案,顾客端展示的就是这段)
+  db.exec('ALTER TABLE bookings ADD COLUMN after_sales_result TEXT')
+} catch (error) {
+  if (!String(error.message || '').includes('duplicate column')) throw error
+}
+/* 下面三列的表(deposit_retains / deposit_receipts)建表语句在本 ALTER 块**之后**:
+   全新库跑到这里表还不存在 —— 'no such table' 一并容忍,新库的列由 CREATE TABLE 直接带上;
+   老库(表已在)正常走 ALTER。test-schema-consistency 会把两条路的最终 schema 逐列对齐。 */
+try {
+  // 爽约留存有效期(2026-08-11 图 A①-2):到期未使用自动转没收;空=长期
+  db.exec('ALTER TABLE deposit_retains ADD COLUMN expires_at TEXT')
+} catch (error) {
+  const m = String(error.message || '')
+  if (!m.includes('duplicate column') && !m.includes('no such table')) throw error
+}
+try {
+  // 留存来源:reschedule(改期保留,老路)/ no_show(爽约留存,A② 下次预约带出成收取记录)
+  db.exec('ALTER TABLE deposit_retains ADD COLUMN source TEXT')
+} catch (error) {
+  const m = String(error.message || '')
+  if (!m.includes('duplicate column') && !m.includes('no such table')) throw error
+}
+try {
+  // 收取记录的处置指针(2026-08-11 图 A④):非空=这笔负债已由爽约处置闭合
+  db.exec('ALTER TABLE deposit_receipts ADD COLUMN disposal_id TEXT')
+} catch (error) {
+  const m = String(error.message || '')
+  if (!m.includes('duplicate column') && !m.includes('no such table')) throw error
 }
 try {
   db.exec('ALTER TABLE business_hours ADD COLUMN updated_at TEXT')
@@ -15250,7 +15652,8 @@ db.exec(`
     reason TEXT,
     settled_settlement_id TEXT,     -- 已经在哪张单上兑现(抵扣或转收入)
     actor TEXT,
-    created_at TEXT NOT NULL
+    created_at TEXT NOT NULL,
+    disposal_id TEXT                -- 非空=这笔负债已由爽约处置闭合(图 A④;老库走 ALTER,列在末尾对齐)
   );
   CREATE INDEX IF NOT EXISTS idx_deposit_receipts ON deposit_receipts(tenant_id, booking_id);
 
@@ -15824,9 +16227,45 @@ db.exec(`
     status TEXT NOT NULL DEFAULT 'active',
     consumed_booking_id TEXT,
     consumed_at TEXT,
-    created_at TEXT NOT NULL
+    created_at TEXT NOT NULL,
+    expires_at TEXT,                -- 爽约留存有效期(图 A①-2;空=长期;老库走 ALTER)
+    source TEXT                     -- reschedule 改期保留 / no_show 爽约留存(老库走 ALTER)
   );
   CREATE INDEX IF NOT EXISTS idx_deposit_retains_user ON deposit_retains(tenant_id, user_id, status);
+
+  /* 爽约定金处置(2026-08-11 图 A 部,《财务总逻辑》v1.5.2 §五)。
+     append-only:retain 留存 / forfeit 没收 / auto_forfeit 留存到期自动没收 / revoke 撤销冲销。 */
+  CREATE TABLE IF NOT EXISTS deposit_disposals (
+    id TEXT PRIMARY KEY,
+    tenant_id TEXT NOT NULL,
+    booking_id TEXT NOT NULL,
+    user_id TEXT,
+    action TEXT NOT NULL,           -- retain | forfeit | auto_forfeit | revoke
+    amount_cents INTEGER NOT NULL,
+    retain_id TEXT,                 -- action=retain/auto_forfeit 时指向 deposit_retains
+    revoke_of TEXT,                 -- action=revoke 时指向被冲销的处置
+    note TEXT,
+    actor TEXT,
+    created_at TEXT NOT NULL
+  );
+  CREATE INDEX IF NOT EXISTS idx_deposit_disposals ON deposit_disposals(tenant_id, booking_id);
+
+  /* 售后时间线(2026-08-11 图 B④):append-only,每条带时间+操作人。
+     kind: open 发起 | progress 进展 | resolve 已解决 | close 关闭。
+     B②:表里**没有任何金额字段** —— 售后涉钱一律走更正链,这里只放 related_code 关联。 */
+  CREATE TABLE IF NOT EXISTS after_sales_events (
+    id TEXT PRIMARY KEY,
+    tenant_id TEXT NOT NULL,
+    booking_id TEXT NOT NULL,
+    kind TEXT NOT NULL,
+    text TEXT,
+    related_code TEXT,
+    actor_name TEXT,
+    actor_role TEXT,
+    technician_id TEXT,
+    created_at TEXT NOT NULL
+  );
+  CREATE INDEX IF NOT EXISTS idx_after_sales_events ON after_sales_events(tenant_id, booking_id);
   CREATE TABLE IF NOT EXISTS message_templates (
     id TEXT PRIMARY KEY,
     tenant_id TEXT NOT NULL,

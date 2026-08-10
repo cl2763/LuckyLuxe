@@ -44,7 +44,7 @@ Page({
       order.statusText = i18n.statusText(order.status, lang)
       order.serviceImage = service.image || order.serviceImage || '/assets/images/store-cover.jpg'
       order.serviceInfo.serviceName = localizedService.name || order.serviceInfo.serviceName
-      order.serviceInfo.technicianName = order.serviceInfo.technicianName || this.defaultTechnician(order.serviceInfo.serviceType)
+      // D21:不再用写死的假技师名(Mia Chen/Ava Lin)填空 —— 没有就不显示
       order.visibleWorkImages = order.status === 'completed' ? (order.workImages || []).slice(0, 6) : []
       // 价格拆解:总价 / 定金 / 到店应付(不同来源字段不一,统一补算)
       const price = order.servicePrice || (order.items || []).reduce((s, it) => s + (Number(it.price) || 0) * (it.quantity || 1), 0) || (service.price || 0)
@@ -54,10 +54,6 @@ Page({
       order.finalDue = order.finalDue != null && order.finalDue !== '' ? order.finalDue : Math.max(0, price - deposit - (Number(order.balanceDeduction) || 0))
     }
     this.setData({ order, lang, t })
-  },
-
-  defaultTechnician(type) {
-    return type === 'lash' ? 'Ava Lin' : 'Mia Chen'
   },
 
   cancelOrder() {

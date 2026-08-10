@@ -41,6 +41,8 @@
       <view wx:if="{{staffView}}" class="cmeta">到店{{item.visits}}次 · 最近{{item.last}}{{item.phone ? ' · ' + item.phone : ''}}</view>
       <view wx:else class="cmeta">到店{{item.visits}}次 · 最近{{item.last}} · 储值{{item.stored}}</view>
       <view class="ctags" wx:if="{{item.tags.length}}"><text wx:for="{{item.tags}}" wx:for-item="tg" wx:key="*this" class="tg">{{tg}}</text></view>
+      <!-- 图 A-3 客户档案卡:爽约留存的定金 -->
+      <view wx:if="{{item.depositRetained}}" class="cretain">{{item.depositRetained}}</view>
     </view>
     <view wx:if="{{!staffView}}" class="cm"><view class="m1">{{item.spend}}</view><view class="m2">累计消费</view></view>
   </view>

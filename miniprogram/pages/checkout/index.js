@@ -134,12 +134,18 @@ Page({
       this.promptLogin()
       return
     }
+    /* 🔴 D20(店主 2026-08-11 拍板,《财务总逻辑》v1.5.1 §十-2):失败=失败。
+       以前这里 catch 完**没有 return**,后端一单都没建成也照样:写一张
+       paymentStatus:'paid' 的本地假订单 → 清空购物车 → 跳成功页(当时文案还是支付类措辞)。
+       顾客以为约成功且付过款,实际什么都没发生 —— 本轮红条里最重的一处。
+       现在:任何一单失败就停在结账页,如实报错,购物车原样保留。 */
     const now = Date.now()
     const first = this.data.items[0]
     const backendBookings = []
     try {
       for (let index = 0; index < this.data.items.length; index += 1) {
         const created = await api.createBooking(this.data.items[index], this.data.remark)
+        // 沙盘联调:线上支付未接通,后端 mock 支付口只在本地生效;生产接微信支付后替换
         const paid = created && created.id && created.status === 'PENDING_PAYMENT' && created.depositCents > 0
           ? await api.confirmMockPayment(created.id)
           : created
@@ -150,10 +156,19 @@ Page({
         this.promptLogin()
         return
       }
-      wx.showToast({ title: error.message || '后端暂不可用，已使用演示订单', icon: 'none' })
+      wx.showToast({ title: error.message || '预约提交失败，请稍后重试', icon: 'none' })
+      return
     }
     const firstBackendBooking = backendBookings[0]
-    const technicianName = firstBackendBooking && firstBackendBooking.technician ? firstBackendBooking.technician.name : (first.appointmentInfo.technicianName || 'Mia Chen')
+    if (!firstBackendBooking || !firstBackendBooking.id) {
+      wx.showToast({ title: '预约提交失败，请稍后重试', icon: 'none' })
+      return
+    }
+    /* D21:技师名只取后端返回,不再兜底写死的 Mia Chen。
+       D20:本地只存一份**展示用**回执(成功页要显示单号/项目/时间),
+       不造 paymentStatus / transactionId —— 支付与订单状态以后端为唯一真相,
+       订单列表页每次加载都从后端取,这份本地回执只是离线兜底展示。 */
+    const technicianName = firstBackendBooking.technician ? firstBackendBooking.technician.name : (first.appointmentInfo.technicianName || '')
     const order = {
       _id: `order_${now}`,
       orderNo: `LL${now}`,
@@ -172,8 +187,8 @@ Page({
         depositAmount: first.service.depositAmount,
         technicianName
       },
-      backendBookingId: firstBackendBooking ? firstBackendBooking.id : '',
-      backendBookingIds: backendBookings.map((item) => item.id),
+      backendBookingId: firstBackendBooking.id,
+      backendBookingIds: backendBookings.map((item) => item && item.id).filter(Boolean),
       appointment: first.appointmentInfo,
       store: this.data.store,
       couponId: '',
@@ -181,9 +196,7 @@ Page({
       balanceDeduction: this.data.balanceDeduction,
       payableAmount: this.data.payableAmount,
       remark: this.data.remark,
-      status: 'pending_service',
-      paymentStatus: 'paid',
-      transactionId: `mock_${now}`,
+      status: firstBackendBooking.status || 'CONFIRMED',
       createdAt: now,
       updatedAt: now
     }

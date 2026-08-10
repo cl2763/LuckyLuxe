@@ -34,7 +34,7 @@
             <text class="picker-sub">{{lang === 'en' ? 'Tap to select artist' : '点击选择服务人员'}}</text>
           </view>
           <view class="picker-right">
-            <text class="picker-value">{{technician.name || 'Mia Chen'}}</text>
+            <text class="picker-value">{{technician.name || (lang === 'en' ? 'Select technician' : '请选择技师')}}</text>
             <text class="chevron">›</text>
           </view>
         </view>

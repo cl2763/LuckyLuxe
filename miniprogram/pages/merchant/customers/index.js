@@ -43,7 +43,9 @@ function vm(u, TH) {
     stored: money(u.storedValueBalanceCents),
     storedCents: u.storedValueBalanceCents || 0,
     lastAt: u.lastCompletedAt || '',
-    tags: (u.tags || []).slice(0, 3)
+    tags: (u.tags || []).slice(0, 3),
+    // 图 A①-2:爽约留存定金随档案显示(长期有效则后端文案里不带期限)
+    depositRetained: u.depositRetainedText || ''
   }
 }
 

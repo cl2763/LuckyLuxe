@@ -47,6 +47,14 @@ Page({
   },
 
   onLoad(q) {
+    /* D9 规则⑤:?qrFor=<settlementId> = 纯出码模式 —— 台面「递给顾客签」遇到
+       未绑定轻档案的单,跳这里直接弹同一个 QR 层(同一份实现,不另写一套出码)。 */
+    if (q.qrFor) {
+      this._qrOnly = true
+      this.setData({ qrOnly: true })
+      this.openQr({ id: decodeURIComponent(q.qrFor) })
+      return
+    }
     this.setData({
       bookingId: q.bookingId || '',
       userId: q.userId || '',
@@ -369,6 +377,8 @@ Page({
           code: s.code || sheet.code,
           url: r.url,
           pushedText: r.pushedText || '',
+          /* D9 规则⑤:未绑定轻档案 = 新客,显著提示 + 只有扫码一条签署路 */
+          unbound: r.customerBound === false,
           amountText: `应收 ${m(s.totalCents)}`,
           breakdownText: s.depositDeductCents
             ? `档位小计 ${m(s.subtotalCents)} − 已付定金 ${m(s.depositDeductCents)}`
@@ -405,8 +415,14 @@ Page({
   copyQrLink() {
     wx.setClipboardData({ data: this.data.qr.url, success: () => wx.showToast({ title: '链接已复制', icon: 'none' }) })
   },
-  // 兜底:顾客不扫码 —— 店员设备当面手签(档案保持未绑定)
+  // 兜底:顾客不扫码 —— 店员设备当面手签(档案保持未绑定)。
+  // D9 规则⑤:未绑定轻档案的新客**没有这条路** —— 手签不建立绑定,静默跳过等于
+  // 让新客永远悬在未绑定;扫码签署才会自动建立绑定。
   handSign() {
+    if (this.data.qr && this.data.qr.unbound) {
+      wx.showToast({ title: '新客需扫码签署(扫码即自动建立绑定)', icon: 'none' })
+      return
+    }
     clearTimeout(this._qrTimer)
     const code = this.data.qr.code
     this.setData({ qr: null })

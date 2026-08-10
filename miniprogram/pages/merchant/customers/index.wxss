@@ -70,3 +70,6 @@ page{background:#fbf8f5}
 
 /* 拍板②:员工受限视图的说明条 */
 .staffnote{margin:16rpx 24rpx 0;font-size:22rpx;color:#8a5a2b;background:#fdf3ec;border-radius:10rpx;padding:12rpx 16rpx}
+
+/* 图 A①-2:客户档案上的爽约留存定金 */
+.cretain{margin-top:6rpx;font-size:21rpx;color:#5b7a99;background:#edf2f7;border:1rpx solid #cfdcea;border-radius:8rpx;padding:4rpx 12rpx;display:inline-block}

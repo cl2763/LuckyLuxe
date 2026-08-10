@@ -10,7 +10,26 @@ const USE_LOCAL_SANDBOX = true // 2026-08-04 演示结束,切回本地沙盘继�
 const LOCAL_API = 'http://127.0.0.1:4128' // 开发者工具模拟器用这个;真机调试改成电脑当前局域网 IP(2026-08-03 查询为 192.168.0.104,IP 会变,连不上先重查)
 const API_BASE = USE_LOCAL_SANDBOX ? LOCAL_API : 'https://www.luckyluxeatelier.com'
 const DEMO_USER_ID = 'user-demo'
-const STORE_ID = 'store-ontario-01'
+/* 🔴 D19(店主 2026-08-11 拍板,《财务总逻辑》v1.5.1):storeId 必须来自当前门店上下文。
+   以前这里写死 `const STORE_ID = 'store-ontario-01'`(旗舰店)——非旗舰商家的顾客
+   技师列表永远为空、可约时段直接 404,**下单还会把预约写到旗舰店名下**(顾客端方向的
+   租户串味)。现在 storeId 由 /stores 随租户下发并按租户缓存;取不到就如实抛错(D17 路线),
+   不设兜底常量。 */
+function storeIdKey() { return `lucky_store_id::${currentTenant()}` }
+function cacheStoreId(stores) {
+  const id = stores && stores[0] && stores[0].id
+  if (id) wx.setStorageSync(storeIdKey(), id)
+  return id || ''
+}
+async function activeStoreId() {
+  const cached = wx.getStorageSync(storeIdKey())
+  if (cached) return cached
+  const data = await request('/stores')
+  wx.setStorageSync('lucky_store_ai', data.aiEnabled === true)
+  const id = cacheStoreId(data.stores)
+  if (!id) throw new Error('取不到本店门店信息')
+  return id
+}
 const AUTH_KEY = 'lucky_mini_auth'
 const ADMIN_AUTH_KEY = 'lucky_admin_auth'
 const MEMBER_TIERS = [
@@ -192,7 +211,7 @@ function toMiniService(service) {
 
 function toMiniStore(store) {
   return {
-    id: store.id || STORE_ID,
+    id: store.id || '',   // D19:不再用写死的旗舰店 id 兜底
     storeName: store.name || store.storeName || 'Lucky Luxe Ontario',
     address: store.address || '门店地址待补充',
     phone: store.phone || '门店电话待补充',
@@ -457,7 +476,8 @@ async function getAvailability(serviceId, date, addOnIds, technicianId) {
   const extraDurationMin = selectedAddOns(addOnIds).reduce((total, item) => total + item.durationMin, 0)
   try {
     const techQuery = technicianId ? `&technicianId=${technicianId}` : ''
-    const data = await request(`/availability?storeId=${STORE_ID}&serviceId=${serviceId}&date=${date}&extraDurationMin=${extraDurationMin}${techQuery}`)
+    const storeId = await activeStoreId()   // D19:当前门店上下文,不写死
+    const data = await request(`/availability?storeId=${storeId}&serviceId=${serviceId}&date=${date}&extraDurationMin=${extraDurationMin}${techQuery}`)
     const firstGroup = data.slots && data.slots[0]
     return {
       technician: firstGroup ? firstGroup.technician : null,
@@ -471,21 +491,28 @@ async function getAvailability(serviceId, date, addOnIds, technicianId) {
 
 async function getTechnicians(serviceId) {
   try {
-    const data = await request(`/technicians?storeId=${STORE_ID}&serviceId=${serviceId}`)
+    const storeId = await activeStoreId()   // D19:当前门店上下文,不写死
+    const data = await request(`/technicians?storeId=${storeId}&serviceId=${serviceId}`)
     return data.technicians || []
   } catch (error) {
     throw error
   }
 }
 
+/* 🔴 D21(店主 2026-08-11 拍板):删掉假订单路径。
+   以前这里 ①technicianId 兜底写死 'tech-mia' ②后端没回 booking 就自己编一张
+   (假技师 Mia Chen + 写死 50 元定金 + 自算尾款)。拍板④预言的「技师里有 Mia Chen
+   就是系统在骗人」,源头就是这两行;写死的 5000 还与 R5「定金只来自 /stores 配置」
+   直接冲突(本店真实定金 100 元,编出来的是错的一半)。
+   现在:预约由后端创建,或如实失败;技师必须真选(booking 页由真技师列表带出)。 */
 async function createBooking(cartItem, remark) {
   const user = await ensureLogin()
-  const service = cartItem.service
   const appointment = cartItem.appointmentInfo
-  const technicianId = appointment.technicianId || 'tech-mia'
+  const technicianId = appointment.technicianId || ''
+  if (!technicianId) throw new Error('请先选择技师')
   const data = await request('/bookings', 'POST', {
     userId: user.id || DEMO_USER_ID,
-    storeId: STORE_ID,
+    storeId: await activeStoreId(),   // D19:预约归属当前门店,不写死旗舰店
     serviceId: cartItem.serviceId,
     technicianId,
     date: appointment.date,
@@ -496,12 +523,8 @@ async function createBooking(cartItem, remark) {
     notes: remark || appointment.remark || '',
     bookingDraftId: cartItem.bookingDraftId || appointment.bookingDraftId || cartItem.draftId || ''
   })
-  return data.booking || {
-    service,
-    technician: { id: technicianId, name: appointment.technicianName || 'Mia Chen' },
-    depositCents: 5000,
-    finalDueCents: Math.max(0, service.price * 100 - 5000)
-  }
+  if (!data.booking) throw new Error('预约创建失败，请稍后重试')
+  return data.booking
 }
 
 async function confirmMockPayment(bookingId) {
@@ -702,7 +725,6 @@ async function getAdminDashboardData() {
 module.exports = {
   API_BASE,
   DEMO_USER_ID,
-  STORE_ID,
   MEMBER_TIERS,
   normalizeImage,
   ensureLogin,

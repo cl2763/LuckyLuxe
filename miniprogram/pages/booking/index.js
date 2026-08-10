@@ -283,8 +283,9 @@ Page({
         date: this.data.appointmentDate,
         time: this.data.appointmentTime,
         duration: service.duration,
-        technicianId: this.data.technician ? this.data.technician.id : 'tech-mia',
-        technicianName: this.data.technician ? this.data.technician.name : 'Mia Chen',
+        // D21:不再兜底写死 tech-mia / Mia Chen —— validate() 已拦住没选技师的单
+        technicianId: this.data.technician ? this.data.technician.id : '',
+        technicianName: this.data.technician ? this.data.technician.name : '',
         addOns: this.data.selectedAddOns,
         referenceImages: this.data.referenceImages,
         referenceDataImages: this.data.referenceDataImages,
@@ -301,6 +302,11 @@ Page({
     }
     if (!this.data.appointmentTime) {
       wx.showToast({ title: this.data.t.chooseTime, icon: 'none' })
+      return false
+    }
+    // D21:技师必须真选(以前没选会静默兜底成写死的 Mia Chen,单子就归到假技师名下)
+    if (!this.data.technician) {
+      wx.showToast({ title: this.data.lang === 'en' ? 'Please select a technician' : '请先选择技师', icon: 'none' })
       return false
     }
     if (this.data.remark.length > 100) {

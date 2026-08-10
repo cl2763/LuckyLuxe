@@ -177,7 +177,7 @@
       <view class="oghead">{{item.title}}</view>
       <view class="orow" wx:for="{{item.items}}" wx:for-item="it" wx:key="id" data-id="{{it.id}}" data-status="{{it.status}}" data-userid="{{it.userId}}" data-customer="{{it.customer}}" data-service="{{it.serviceName}}" data-serviceid="{{it.serviceId}}" data-tech="{{it.tech}}" bindtap="orderActions">
         <view class="otime">{{it.time}}</view>
-        <view class="omain"><view class="oname">{{it.customer}}<text class="ostatus {{it.statusCls}}">{{it.statusLabel}}</text></view><view class="oline">{{it.line}}{{it.tech ? ' · ' + it.tech : ''}}</view></view>
+        <view class="omain"><view class="oname">{{it.customer}}<text class="ostatus {{it.statusCls}}">{{it.statusLabel}}</text><text wx:if="{{it.ddBadge}}" class="ostatus {{it.ddCls}}">{{it.ddBadge}}</text></view><view class="oline">{{it.line}}{{it.tech ? ' · ' + it.tech : ''}}</view></view>
         <text class="ochev">›</text>
       </view>
     </view>
@@ -190,40 +190,70 @@
          现在可进入可看:原因 + 处理情况**只读**。写入/完成态等 Cowork 出图,这里不做。 -->
     <view class="orow" wx:for="{{aftersalesList}}" wx:key="id" data-id="{{item.id}}" bindtap="openAfterSales">
       <view class="otime">{{item.time}}</view>
-      <view class="omain"><view class="oname">{{item.customer}}<text class="ostatus d">售后</text></view><view class="oline">{{item.line}}{{item.tech ? ' · ' + item.tech : ''}} · {{item.date}}</view></view>
+      <view class="omain"><view class="oname">{{item.customer}}<text class="ostatus d">{{item.asStatusText || '售后'}}</text></view><view class="oline">{{item.line}}{{item.tech ? ' · ' + item.tech : ''}} · {{item.date}}</view></view>
       <text class="ochev">›</text>
     </view>
   </block>
 
-  <!-- ===== D12 售后详情(只读)=====
-       ⬜ 无设计图:按最合理方式做,已记入假设清单 —— 沿用现有弹层(mask + dsheet)的
-       结构与留白,不自创新样式;只读,面板里**不放任何写入/完成按钮**。 -->
+  <!-- ===== 售后详情(图 B-1 写入版:D12 只读版 + 写入按钮)===== -->
   <view wx:if="{{asPanel}}" class="mask" bindtap="closeAfterSales"></view>
   <view wx:if="{{asPanel}}" class="dsheet">
     <view class="ds-head">
-      <view class="ds-t">售后详情 · {{asPanel.customer}}</view>
+      <view class="ds-t">售后 · {{asPanel.customer}} <text class="as-badge as-{{asPanel.status}}">{{asPanel.statusText}}</text></view>
       <view class="ds-x" bindtap="closeAfterSales">✕</view>
     </view>
     <scroll-view scroll-y class="ds-body">
       <view class="ds-k">订单</view>
       <view class="as-line">{{asPanel.line}}{{asPanel.tech ? ' · ' + asPanel.tech : ''}} · {{asPanel.date}} {{asPanel.time}}</view>
 
-      <view class="ds-k">原因</view>
+      <view class="ds-k">售后原因</view>
       <view wx:if="{{asPanel.reason}}" class="as-line">{{asPanel.reason}}</view>
       <view wx:else class="as-empty">转售后时没有留原因</view>
 
-      <view class="ds-k">处理情况</view>
-      <view wx:if="{{asPanel.steps.length}}" class="as-steps">
-        <view wx:for="{{asPanel.steps}}" wx:key="key" class="as-step {{item.done ? 'on' : ''}}">
-          <text class="as-dot">{{item.done ? '●' : '○'}}</text>
-          <text class="as-lab">{{item.label}}</text>
+      <!-- B④ 时间线:append-only,每条带时间+操作人 -->
+      <view class="ds-k">处理时间线</view>
+      <view wx:if="{{asPanel.timeline.length}}" class="as-steps">
+        <view wx:for="{{asPanel.timeline}}" wx:key="index" class="as-step on">
+          <text class="as-dot">●</text>
+          <text class="as-lab">{{item.actor ? item.actor + ':' : ''}}{{item.text}}</text>
           <text class="as-at">{{item.at}}</text>
         </view>
       </view>
       <view wx:else class="as-empty">还没有处理记录</view>
+      <view wx:if="{{asPanel.resultText}}" class="as-line as-result">处理结果:{{asPanel.resultText}}</view>
       <view wx:if="{{asPanel.footnote}}" class="ds-hint">{{asPanel.footnote}}</view>
-      <view class="ds-warn">只读:售后的处理与完成在人工客服那边跟进,这里只看不改</view>
+      <view class="ds-warn">涉及退款/差额一律走「发起更正」,售后单只关联不动钱(图 B②)</view>
     </scroll-view>
+    <!-- B① 权限:写进展/标已解决=当单技师+老板;关闭=仅老板;终态后按钮整体消失 -->
+    <view wx:if="{{asPanel.canWrite || asPanel.canClose}}" class="as-actions">
+      <view wx:if="{{asPanel.canWrite}}" class="as-btn pri" bindtap="asWriteProgress">写进展</view>
+      <view wx:if="{{asPanel.canWrite}}" class="as-btn" bindtap="asResolve">标记已解决</view>
+      <view wx:if="{{asPanel.canClose}}" class="as-btn ghost" bindtap="asClose">关闭</view>
+    </view>
+  </view>
+
+  <!-- ===== 爽约定金处置弹层(图 A-2,仅老板可见入口)===== -->
+  <view wx:if="{{dispPanel}}" class="mask" bindtap="closeDisposal"></view>
+  <view wx:if="{{dispPanel}}" class="dsheet">
+    <view class="ds-head">
+      <view class="ds-t">处置爽约定金 · {{dispPanel.amountText}}</view>
+      <view class="ds-x" bindtap="closeDisposal">✕</view>
+    </view>
+    <scroll-view scroll-y class="ds-body">
+      <view class="as-line">{{dispPanel.customer}} · 已爽约{{dispPanel.receiptText ? ' · ' + dispPanel.receiptText : ''}}</view>
+      <!-- 图 A-2:二选一必选其一才能确认;默认①留存 -->
+      <view class="dp-opt {{dispPanel.action === 'retain' ? 'on' : ''}}" data-a="retain" bindtap="dispPick">
+        <view class="dp-t">① 留存到客户档案</view>
+        <view class="dp-d">{{dispPanel.amountText}} 记入该顾客的定金留存,下次预约自动带出可用</view>
+      </view>
+      <view class="dp-opt {{dispPanel.action === 'forfeit' ? 'on' : ''}}" data-a="forfeit" bindtap="dispPick">
+        <view class="dp-t">② 没收入账</view>
+        <view class="dp-d">{{dispPanel.amountText}} 全额计入当期收入(独立「定金收入·爽约没收」行,不进业绩)</view>
+      </view>
+      <input class="ds-inp" placeholder="备注(选填),如:顾客临时有事,留存下次用" value="{{dispPanel.note}}" bindinput="onDispNote" />
+      <view class="ds-hint">经手人=当前登录老板,自动记;误处置可撤销(留痕冲销,不删历史)</view>
+    </scroll-view>
+    <view class="ds-confirm" bindtap="submitDisposal">确认处置</view>
   </view>
 
   <!-- 直接排单弹窗 -->
@@ -234,39 +264,26 @@
       <view class="ds-x" bindtap="closeDirect">✕</view>
     </view>
     <scroll-view scroll-y class="ds-body">
-      <!-- 屏 S1 顾客区:两个页签 + 扫会员码。手机号只用来找档案,身份靠签署码/会员码 -->
-      <view class="ds-k">顾客 <text class="ds-ksub">老顾客扫会员码直接带出</text></view>
-      <view class="ds-tabs">
-        <view class="ds-tab {{dsTab==='find'?'on':''}}" data-t="find" bindtap="dsSwitchTab">找人</view>
-        <view class="ds-tab {{dsTab==='new'?'on':''}}" data-t="new" bindtap="dsSwitchTab">新客 · 输手机号</view>
-        <view class="ds-scan" bindtap="scanMemberCode">扫会员码</view>
-      </view>
-
-      <block wx:if="{{dsTab==='find'}}">
-        <input class="ds-inp" placeholder="姓名 / 手机号 / 新客名" value="{{custQuery}}" bindinput="onCustSearch" />
-        <view wx:if="{{selectedCustName}}" class="ds-picked">已选:{{selectedCustName}} <text class="ds-clear" bindtap="clearCust">✕</text></view>
-        <view wx:if="{{custMatches.length}}" class="ds-matches">
-          <view wx:for="{{custMatches}}" wx:key="id" class="ds-match" data-id="{{item.id}}" data-name="{{item.name}}" bindtap="pickCust">
-            <text class="ds-mn">{{item.name}}</text><text class="ds-mp" wx:if="{{item.phone}}">{{item.phone}}</text>
-          </view>
+      <!-- 屏 S1 顾客区 · D9 根治(图 v1.1,店主已确认):「新客·输手机号」页签**整体删除**——
+           它与「找人」逻辑同源(搜索无匹配→建轻档案→签署码/会员码绑定),两个页签做同一件事,
+           多出来的框=多出来的故障面(手机号 undefined 一案的案发现场就是它)。
+           合并为:一框受控即搜 + 无匹配一键建档(不弹确认) + 扫会员码原样。 -->
+      <view class="ds-k">顾客 <text class="ds-ksub">老顾客扫会员码直接带出</text><text class="ds-scan ds-scan-r" bindtap="scanMemberCode">扫会员码</text></view>
+      <input class="ds-inp" placeholder="姓名或手机号，输入即搜；新客直接输" value="{{custQuery}}" bindinput="onCustSearch" />
+      <view wx:if="{{selectedCustName}}" class="ds-picked">已选:{{selectedCustName}} <text class="ds-clear" bindtap="clearCust">✕</text></view>
+      <view wx:if="{{custMatches.length}}" class="ds-matches">
+        <view wx:for="{{custMatches}}" wx:key="id" class="ds-match" data-id="{{item.id}}" bindtap="pickCust">
+          <text class="ds-mn">{{item.name}}</text><text class="ds-mp">{{item.phoneMasked}}{{item.phoneMasked && item.visits ? ' · ' : ''}}{{item.visits ? '到店' + item.visits + '次' : ''}}</text>
         </view>
-        <view wx:elif="{{custQuery && !selectedCustId}}" class="ds-newhint">库中无匹配 → 将作为新客「{{custQuery}}」自动建档</view>
-      </block>
-
-      <block wx:else>
-        <!-- 🔴 D9 修复(2026-08-11 实测复现):这两个框原来**没有 value 绑定**(非受控)。
-             后果有两层:
-             ① 显示值与 data 脱钩 —— 实测往手机号框写 13800130000,data.dsPhone 是对的
-                ("13800130000"),节点显示的却是字面 "undefined"(店主看到的就是这个)。
-             ② tapFree() 每次开面板都把 dsName/dsPhone 重置成 '',但没有 value 绑定,
-                这个重置**清不掉框里的字** —— 所以「改不动删不掉」。
-             改成受控:显示什么完全由 data 说了算,重置就真的清空。 -->
-        <input class="ds-inp" placeholder="姓名，如 王小雅" value="{{dsName}}" bindinput="onDsName" />
-        <input class="ds-inp ds-mt" type="number" placeholder="手机号，如 138 0013 0000" value="{{dsPhone}}" bindinput="onDsPhone" />
-        <view wx:if="{{dsHitText}}" class="ds-hit {{dsHitId ? 'on' : ''}}">{{dsHitText}}</view>
-        <view wx:else class="ds-newhint">未命中 → 新建<text class="ds-light">轻档案</text>(未绑微信，签字时扫码自动绑定)</view>
-        <view class="ds-warn">不填手机号也能建单;身份绑定不依赖手机号(靠签署码/会员码),手机号只用于找档案和联系</view>
-      </block>
+      </view>
+      <!-- 规则①②:无论有没有命中,只要还没选人,都给一条「＋建档并排单」——
+           点了直接选中(一步到位,店主拍板不弹确认;建错在档案改名即可)。
+           ≥7 位纯数字存手机号(姓名记「未命名」),否则存姓名;空输入=「未命名顾客」。 -->
+      <view wx:if="{{!selectedCustId && !selectedCustName}}" class="ds-newrow" bindtap="pickNewCust">
+        <text>{{custQuery ? '没找到?为「' + custQuery + '」新建轻档案' : '不留名?新建「未命名顾客」轻档案'}}</text>
+        <text class="ds-newbtn">＋建档并排单</text>
+      </view>
+      <view class="ds-warn">不填手机号也能建单;身份绑定不依赖手机号(靠签署码/会员码),手机号只用于找档案和联系</view>
 
       <view class="ds-k">时段 · 开始时间</view>
       <view class="ds-timerow">

@@ -128,7 +128,12 @@ async function main() {
   /* ---- S3 二维码 + 状态行(规则④)---- */
   const qr = await request(`/admin/settlements/${sheet1.id}/sign-token`, { method: 'POST', body: JSON.stringify({}) }, shop.token)
   check('S3 推送签署出码', qr.status === 200 && qr.data.url.includes('/sign?t='), JSON.stringify(qr.data).slice(0, 160))
-  check('S3 未绑定顾客:不显示「已推送到顾客小程序」', qr.data.pushedText === '', JSON.stringify(qr.data.pushedText))
+  /* 口径更新(店主 2026-08-11 图 v1.1 规则⑤,合同拍板):未绑定顾客推送不出去时
+     不再静默(原断言=空串),必须如实说「无法推送,请扫码」—— 新客只有扫码一条签署路。
+     旧断言随合同一起更新,不是为了绿而改。 */
+  check('S3 未绑定顾客:如实提示无法推送(规则⑤),且不写「已推送」',
+    qr.data.customerBound === false && qr.data.pushedText.includes('无法推送') && !qr.data.pushedText.includes('已推送'),
+    JSON.stringify(qr.data.pushedText))
   check('S3 状态行初始 = 等待顾客进入', qr.data.state === 'waiting' && qr.data.text.includes('等待'), JSON.stringify(qr.data.text))
   // 越权
   const qrAnon = await request(`/admin/settlements/${sheet1.id}/sign-token`, { method: 'POST', body: JSON.stringify({}) }, null)

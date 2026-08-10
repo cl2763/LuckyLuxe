@@ -136,3 +136,6 @@
 .qtip{margin-top:12rpx;font-size:21rpx;color:#8c8279;line-height:1.6;text-align:center}
 .qhand{margin-top:18rpx;text-align:center;font-size:25rpx;font-weight:700;color:#241f1d;background:#f3ece2;border-radius:14rpx;padding:20rpx 0}
 .qhandtip{margin-top:8rpx;font-size:20rpx;color:#a99d92;line-height:1.5;text-align:center}
+
+/* D9 规则⑤:新客(未绑定轻档案)进签署的显著提示 */
+.qnewc{margin-top:12rpx;text-align:center;font-size:24rpx;font-weight:700;color:#b3552f;background:#faeee6;border:1rpx solid #e8c8ae;border-radius:12rpx;padding:14rpx 12rpx;line-height:1.5}
