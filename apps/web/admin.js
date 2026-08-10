@@ -3862,7 +3862,7 @@ function renderFinancePage() {
       <label><span>${owner.lang === 'zh' ? '类别' : 'Category'}</span><select id="finCategory">${expenseOptions}</select></label>
       <label><span>${owner.lang === 'zh' ? '金额 (CAD)' : 'Amount (CAD)'}</span><input id="finAmount" type="number" min="0" step="0.01" placeholder="0.00"></label>
       <label><span>${owner.lang === 'zh' ? '支付方式' : 'Channel'}</span><select id="finChannel">${channelOptions}</select></label>
-      <label><span>${owner.lang === 'zh' ? '日期' : 'Date'}</span><input id="finDate" type="date" value="${new Date().toISOString().slice(0, 10)}"></label>
+      <label><span>${owner.lang === 'zh' ? '日期' : 'Date'}</span><input id="finDate" type="date" value="${storeToday()}"></label>
       <label><span>${owner.lang === 'zh' ? '标签(可选)' : 'Tags'}</span><input id="finTags" placeholder="${owner.lang === 'zh' ? '如:6月采购' : 'optional'}"></label>
     </div>
     <label class="finance-note-field"><span>${owner.lang === 'zh' ? '备注' : 'Note'}</span><input id="finNote" placeholder="${owner.lang === 'zh' ? '例如:超市买棉片和酒精' : ''}"></label>

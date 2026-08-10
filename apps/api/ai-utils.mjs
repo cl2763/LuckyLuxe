@@ -284,7 +284,12 @@ export async function createRecallMessages({ customers = [], storeName = '' }) {
   })
 }
 
-export async function createDailyBrief({ lang = 'zh', bookings = [], customers = [], services = [] }) {
+/* 🟠 D18(店主 2026-08-11 立案):这里原来用 `new Date().toISOString().slice(0,10)`
+   —— **UTC 日期**当"今天",与门店时区无关。多伦多店(UTC-4)每天下午 8 点之后就算成明天,
+   Jie'Nail(UTC+8)每天 8 点前算成昨天,AI 日报的"今日预约数"直接错。
+   日界唯一实现:「今天」一律由调用方按 tenantTimezone 算好传进来(todayOf(tenantId)),
+   这里不再自己算日期。 */
+export async function createDailyBrief({ lang = 'zh', bookings = [], customers = [], services = [], storeToday = '' }) {
   const schema = {
     headlineZh: 'string',
     headlineEn: 'string',
@@ -301,7 +306,7 @@ export async function createDailyBrief({ lang = 'zh', bookings = [], customers =
     schema,
     fallback: () => {
       const pending = bookings.filter((item) => item.status === 'PENDING_PAYMENT').length
-      const today = bookings.filter((item) => item.appointmentDate === new Date().toISOString().slice(0, 10)).length
+      const today = storeToday ? bookings.filter((item) => item.appointmentDate === storeToday).length : 0
       return {
         headlineZh: `今日 ${today} 个预约，${pending} 个待支付需要跟进。`,
         headlineEn: `${today} booking(s) today, ${pending} pending payment(s) need follow-up.`,

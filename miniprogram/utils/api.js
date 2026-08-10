@@ -34,6 +34,11 @@ const localImageMap = {
   '/assets/images/member-profile.png': '/assets/images/member-profile.jpg'
 }
 
+/* 🔴 D17(店主 2026-08-11 拍板):顾客端接口失败**绝不回 mock**。
+   这是 08-04「假报价」的同类第二次 —— 接口一挂就回写死的演示数据,
+   顾客看到的是一整套不存在的服务/门店/技师/可约时段,还能照着约进去,
+   界面上没有任何"这是假的"痕迹。现在一律如实抛错,由页面渲染失败态。 */
+
 function normalizeImage(url) {
   if (!url) return '/assets/images/store-cover.jpg'
   if (localImageMap[url]) return localImageMap[url]
@@ -366,7 +371,7 @@ async function getServices(type, lang) {
     const data = await request(`/services?type=${type}&lang=${lang}`)
     return data.services.map(toMiniService)
   } catch (error) {
-    return mock.services.filter((item) => item.type === type)
+    throw error
   }
 }
 
@@ -380,7 +385,7 @@ async function getStores() {
     wx.setStorageSync('lucky_store_ai', data.aiEnabled === true)
     return (data.stores || []).map(toMiniStore)
   } catch (error) {
-    return [mock.store]
+    throw error
   }
 }
 
@@ -406,7 +411,7 @@ async function getAddOns() {
       durationMin: item.durationMin
     }))
   } catch (error) {
-    return mock.addOns
+    throw error
   }
 }
 
@@ -435,7 +440,8 @@ async function getPortfolio() {
   } catch (error) {
     // Use fallback below.
   }
-  return mock.portfolios
+  // D17(自纠:上一轮误分到 ⚪):这是**编造的作品图**,会端给顾客 —— 同样不许回 mock
+  throw new Error('作品墙加载失败')
 }
 
 async function getService(id, lang) {
@@ -456,7 +462,7 @@ async function getAvailability(serviceId, date, addOnIds, technicianId) {
       durationMin: data.durationMin
     }
   } catch (error) {
-    return { technician: { id: 'tech-mia', name: 'Mia Chen' }, slots: mock.timeSlots, durationMin: 120 }
+    throw error
   }
 }
 
@@ -465,11 +471,7 @@ async function getTechnicians(serviceId) {
     const data = await request(`/technicians?storeId=${STORE_ID}&serviceId=${serviceId}`)
     return data.technicians || []
   } catch (error) {
-    return [
-      { id: 'tech-mia', name: 'Mia Chen', title: 'Natural Lash / Soft Volume' },
-      { id: 'tech-lina', name: 'Lina Zhou', title: 'French / Japanese Shimmer' },
-      { id: 'tech-ava', name: 'Ava Lin', title: 'Care / Daily Maintenance' }
-    ]
+    throw error
   }
 }
 

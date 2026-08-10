@@ -10813,7 +10813,8 @@ async function route(req, res) {
       : db.prepare('SELECT * FROM bookings WHERE tenant_id = ? ORDER BY appointment_start DESC LIMIT 60').all(currentTenantId()).map((booking) => serializeBooking(booking))
     const services = db.prepare('SELECT * FROM services WHERE tenant_id = ? ORDER BY type ASC, sort_order ASC').all(currentTenantId()).map(serializeService)
     countAiUsage()
-    return json(res, 200, { brief: await createDailyBrief({ ...(await readBody(req)), bookings, customers: adminSession.role === 'owner' ? getAdminCustomers() : [], services }) })
+    // D18:「今天」按门店时区算好传进去,AI 侧不再自己用 UTC 日期
+    return json(res, 200, { brief: await createDailyBrief({ ...(await readBody(req)), bookings, customers: adminSession.role === 'owner' ? getAdminCustomers() : [], services, storeToday: todayOf(currentTenantId()) }) })
   }
   if (req.method === 'POST' && path === '/admin/ai/booking-summary') {
     requireAi()

@@ -113,6 +113,29 @@ function main() {
   check('顾客端币种走公开 /stores 下发的 currencyDisplay(与商家端同一套映射表)',
     curUtil.includes('getStoreCurrency') && curUtil.includes('currencyDisplay'), curUtil.slice(0, 120))
 
+  /* 🟠 D18 附带的「日界唯一实现」护栏(店主 2026-08-11 立规)。
+     产品代码里一切"今天/日期归属"必须走按 tenantTimezone 的辅助函数
+     (后端 todayOf()、网页 storeToday()、小程序 storeclock 的 storeToday()),
+     不许再裸写 new Date().toISOString()/toLocaleDateString 当业务日期 ——
+     多伦多店(UTC-4)下午 8 点后就会算成明天,Jie'Nail(UTC+8)早上 8 点前算成昨天。
+     案发:ai-utils 的 AI 日报「今日预约数」、网页「记一笔」的默认日期。 */
+  const DATE_DIRS = ['apps/api', 'apps/web', 'miniprogram/utils', 'miniprogram/pages']
+  const dateBad = /new Date\(\)\.toISOString\(\)\.slice\(0, ?10\)|new Date\(\)\.toLocaleDateString/
+  const dateHits = []
+  for (const d of DATE_DIRS) {
+    for (const abs of walk(join(ROOT, d))) {
+      const rel = relative(ROOT, abs)
+      if (/(^|\/)test-|\.test\./.test(rel)) continue        // 套件另有四之五 那条规矩管
+      readFileSync(abs, 'utf8').split('\n').forEach((line, i) => {
+        const code = line.replace(/\/\/.*$/, '')
+        if (/^\s*[*/]/.test(line)) return                    // 块注释里提到它是允许的
+        if (dateBad.test(code)) dateHits.push(`${rel}:${i + 1}  ${line.trim().slice(0, 100)}`)
+      })
+    }
+  }
+  check('日界唯一实现:产品代码没有裸写的业务日期(一律走门店时区辅助函数)',
+    dateHits.length === 0, `${dateHits.length} 处:\n${dateHits.join('\n')}`)
+
   console.log(`\n币符硬编码扫描通过:${checks} 项断言全绿`)
 }
 
