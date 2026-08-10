@@ -10761,7 +10761,33 @@ async function route(req, res) {
     })
   }
   if (req.method === 'GET' && path === '/admin/customers') {
-    if (adminSession.role !== 'owner') throw apiError(403, 'FORBIDDEN', 'Owner permission is required.')
+    /* 拍板②(店主 2026-08-10):员工「我的客户」——
+       口径:**只看自己服务过/被指定服务的顾客**;手机号脱敏;能看服务记录与自己写的小记;
+       余额、消费金额、充值记录等**一切财务信息在响应里整体不存在**(不是置空,是没有这个字段)。
+       **裁剪必须在接口层**:前端隐藏挡不住任何人直接调接口。老板视图一字不动。 */
+    if (adminSession.role !== 'owner') {
+      const techId = adminSession.technicianId || ''
+      if (!techId) throw apiError(403, 'FORBIDDEN', '这个账号还没绑定技师,看不到客户。')
+      const q0 = String(query.q || '').trim().toLowerCase()
+      const mineIds = new Set(db.prepare(
+        'SELECT DISTINCT user_id FROM bookings WHERE tenant_id = ? AND technician_id = ? AND user_id IS NOT NULL'
+      ).all(currentTenantId(), techId).map((r) => r.user_id))
+      const rows = getAdminCustomers()
+        .filter((c) => mineIds.has(c.id))
+        .filter((c) => !q0 || `${c.displayName || ''}`.toLowerCase().includes(q0) || `${maskPhone(c.phone)}`.includes(q0))
+        .map((c) => ({
+          // 白名单**正向构造**:只挑该给的字段,财务字段连键都不出现
+          id: c.id,
+          displayName: c.displayName,
+          phoneMasked: maskPhone(c.phone),
+          visitCount: c.visitCount,
+          lastVisitAt: c.lastVisitAt,
+          tags: c.tags,
+          memberCode: c.memberCode,
+          scope: 'mine'
+        }))
+      return json(res, 200, { customers: rows, scope: 'mine', scopeNote: '只显示你服务过的顾客;金额与储值信息不对员工开放' })
+    }
     /* 2026-08-09 增量:?q= 按姓名/手机号过滤(C3 发券要「边输边出结果」)。
        **搜索结果只留本店档案里的人** —— 旗舰店是默认租户,getAdminCustomers 对它不加活动过滤、
        会把别家店的顾客也列出来;发券是写操作,搜出来点一下就发错店,所以这里按 users.tenant_id 收紧。
@@ -13651,6 +13677,15 @@ async function route(req, res) {
   if (req.method === 'GET' && path.match(/^\/admin\/customers\/[^/]+\/notes$/)) {
     const userId = path.split('/')[3]
     const tid = currentTenantId()
+    /* 拍板②:员工只能看**自己服务过**的顾客。请求别人的顾客一律 404 ——
+       不用 403,403 等于确认"这个人存在但你不能看",对员工也没必要泄露这一点。 */
+    if (adminSession.role !== 'owner') {
+      const techId = adminSession.technicianId || ''
+      const served = techId && db.prepare(
+        'SELECT 1 FROM bookings WHERE tenant_id = ? AND technician_id = ? AND user_id = ? LIMIT 1'
+      ).get(tid, techId, userId)
+      if (!served) throw apiError(404, 'NOT_FOUND', '没有这位顾客的记录。')
+    }
     const rows = db.prepare('SELECT * FROM service_notes WHERE user_id = ? AND tenant_id = ? ORDER BY created_at DESC').all(userId, tid)
     const notes = rows.map((r) => ({
       id: r.id, rawText: r.raw_text, structured: parseJson2(r.structured_json),

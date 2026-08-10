@@ -196,6 +196,34 @@ async function main() {
     check('③ 停用员工后,他手里的 token 立刻失效(401)', afterDisable.status === 401, String(afterDisable.status))
   }
 
+  /* 拍板②(店主 2026-08-10):员工「我的客户」—— 只看自己服务过的顾客;手机号脱敏;
+     **财务字段在响应里整体不存在**(不是置空)。裁剪在接口层,前端隐藏不算数。 */
+  const ownerList = (await request('/admin/customers', {}, shop.token)).data.customers || []
+  const staffList = (await request('/admin/customers', {}, staffToken)).data.customers || []
+  check('拍板② 员工拿得到「我的客户」(不再一刀切 403)', Array.isArray(staffList), JSON.stringify(staffList).slice(0, 80))
+  const FIN = ['totalSpentCents', 'storedValueBalanceCents', 'balanceCents', 'rechargeCents']
+  check('拍板② 红线:财务字段在员工响应里**整体不存在**(不是置空)',
+    staffList.every((c) => FIN.every((k) => !(k in c))),
+    JSON.stringify(staffList[0] ? Object.keys(staffList[0]) : []))
+  check('拍板② 手机号脱敏,明文 phone 键不下发',
+    staffList.every((c) => !('phone' in c) && (!c.phoneMasked || /\*/.test(c.phoneMasked))),
+    JSON.stringify(staffList[0] || {}))
+  check('拍板② 老板视图不受影响(财务字段照常给)',
+    ownerList.length === 0 || ('totalSpentCents' in ownerList[0] && 'storedValueBalanceCents' in ownerList[0]),
+    JSON.stringify(Object.keys(ownerList[0] || {})).slice(0, 120))
+  const staffIds = new Set(staffList.map((c) => c.id))
+  const notMine = ownerList.find((c) => !staffIds.has(c.id))
+  if (notMine) {
+    const peek = await request(`/admin/customers/${encodeURIComponent(notMine.id)}/notes`, {}, staffToken)
+    check('拍板② 越权:员工请求别人的顾客 → 404(不是 403,不确认这个人存在)',
+      peek.status === 404, `${peek.status}`)
+  }
+  const mineOne = staffList[0]
+  if (mineOne) {
+    const own = await request(`/admin/customers/${encodeURIComponent(mineOne.id)}/notes`, {}, staffToken)
+    check('拍板② 自己服务过的顾客,小记看得到', own.status === 200, `${own.status}`)
+  }
+
   console.log(`\n门禁全量扫描通过:${checks} 项断言全绿`)
 }
 
