@@ -9,7 +9,7 @@ Page({
   data: {
     lang: 'zh',
     t: i18n.pageCopy('home', 'zh'),
-    store: mock.store,
+    store: {},   // D17:初始不塞 mock 门店,接口没回来就是空,不拿假门店占位
     heroSlides: [],
     activeHero: 0,
     portfolioIntro: '',
@@ -112,10 +112,19 @@ Page({
     storage.syncCartBadge()
     tabbar.update(this, 0)
     i18n.setTitle('有迹')
-    const nailServices = await api.getServices('nail', lang)
-    const lashServices = await api.getServices('lash', lang)
-    const stores = await api.getStores()
-    const storeRaw = stores[0] || mock.store
+    /* 🔴 D17:接口挂了如实报失败态,不回 mock。以前这三条任何一条挂了都会
+       悄悄回写死的演示服务/门店,顾客看到的是一整套不存在的东西。 */
+    let nailServices, lashServices, stores
+    try {
+      nailServices = await api.getServices('nail', lang)
+      lashServices = await api.getServices('lash', lang)
+      stores = await api.getStores()
+    } catch (e) {
+      this.setData({ lang, t: i18n.pageCopy('home', lang), loadFailed: true })
+      return
+    }
+    this.setData({ loadFailed: false })
+    const storeRaw = stores[0] || {}
     const hoursInfo = this.computeTodayHours(storeRaw)
     this.setData(Object.assign({}, hoursInfo, {
       lang,

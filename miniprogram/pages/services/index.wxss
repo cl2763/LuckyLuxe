@@ -188,3 +188,8 @@
   font-weight: 800;
   line-height: 1.35;
 }
+
+/* D17 失败态:复用 .empty 的位置与留白,只加一行文案 + 重试按钮 */
+.empty.failbox{display:flex;flex-direction:column;align-items:center;gap:20rpx}
+.empty .failmsg{color:#8c8279;font-size:26rpx}
+.empty .failbtn{border:1rpx solid #d8cec4;border-radius:999rpx;padding:12rpx 40rpx;font-size:26rpx;color:#9b7655}

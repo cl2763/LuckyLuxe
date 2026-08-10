@@ -1,4 +1,10 @@
 <view class="page home-page">
+  <!-- D17 失败态:接口挂了如实说,不拿假数据糊住(书面标准代图) -->
+  <view wx:if="{{loadFailed}}" class="d17fail">
+    <view class="d17msg">加载失败，请检查网络后重试</view>
+    <view class="d17btn" bindtap="refreshLanguage">重试</view>
+  </view>
+
   <view class="home-landing">
     <view class="top-row">
       <view class="brand-lockup">

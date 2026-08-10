@@ -41,6 +41,11 @@ Page({
     if (this.serviceId) this.refresh({ id: this.serviceId, cartId: this.cartId })
   },
 
+  // D17 失败态的「重试」:带上原参数重新走一遍加载
+  retryLoad() {
+    if (this.serviceId) this.refresh({ id: this.serviceId, cartId: this.cartId })
+  },
+
   async refresh(options) {
     const lang = i18n.getLang()
     // aiEnabled = 门店是否开通 AI 智能包(值由 /stores 下发并缓存)
@@ -59,10 +64,15 @@ Page({
       : null
     const appointment = cartItem ? cartItem.appointmentInfo : null
     const selectedAddOns = appointment ? appointment.addOns : []
-    const [addOns, technicians] = await Promise.all([
-      api.getAddOns(),
-      api.getTechnicians(service._id)
-    ])
+    // 🔴 D17:加项/技师接口挂了如实报,不回写死的 Mia Chen 那套假技师
+    let addOns, technicians
+    try {
+      ;[addOns, technicians] = await Promise.all([api.getAddOns(), api.getTechnicians(service._id)])
+    } catch (e) {
+      this.setData({ loadFailed: true })
+      return
+    }
+    this.setData({ loadFailed: false })
     let technicianIndex = Math.max(0, technicians.findIndex((tech) => appointment && tech.id === appointment.technicianId))
     // 预约同款:作品页带来的预设(参考图+指定技师)。
     // 注意:onLoad 后 onShow 会再次 refresh,消费后的预设存页面实例,防止第二次刷新把横幅/参考图清掉。

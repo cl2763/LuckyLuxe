@@ -33,6 +33,11 @@
             </view>
           </block>
         </block>
+        <!-- D17 失败态:接口挂了如实说,不拿假数据糊住(书面标准代图) -->
+        <view wx:elif="{{loadFailed}}" class="empty failbox">
+          <view class="failmsg">加载失败，请检查网络后重试</view>
+          <view class="failbtn" bindtap="refresh">重试</view>
+        </view>
         <view wx:else class="empty">{{t.empty}}</view>
       </view>
     </scroll-view>

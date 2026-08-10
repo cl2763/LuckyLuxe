@@ -473,3 +473,8 @@
   color: #9b7655;
   flex: none;
 }
+
+/* D17 失败态:主体区居中一行文案 + 重试按钮(书面标准,不做局部假数据) */
+.d17fail{display:flex;flex-direction:column;align-items:center;justify-content:center;gap:20rpx;padding:140rpx 40rpx}
+.d17msg{color:#8c8279;font-size:27rpx}
+.d17btn{border:1rpx solid #d8cec4;border-radius:999rpx;padding:14rpx 48rpx;font-size:27rpx;color:#9b7655}
