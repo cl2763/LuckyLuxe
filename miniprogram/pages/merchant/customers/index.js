@@ -61,11 +61,19 @@ Page({
     ruleSheet: false,
     rAdays: '', rAvisits: '', rAspend: '', rNdays: '', rSdays: '',
     // 群发券
-    couponSheet: false, coupons: [], granting: false
+    couponSheet: false, coupons: [], granting: false,
+    isOwner: true, staffView: false, scopeNote: ''
   },
 
+  /* 拍板②(店主 2026-08-10)前端收尾:员工首页有「我的客户」入口,却指向这页的 guardOwner(),
+     点进去直接被弹走 —— 与 D11 同一类(owner-only 误伤员工)。后端已按口径裁好:
+     员工拿到的是**受限视图**(只有 8 个字段,财务字段连键都没有,手机号脱敏)。
+     这里只负责:①放员工进来 ②按后端**实际给的字段**渲染,不去猜没有的字段。 */
   async onShow() {
-    if (!(await api.guardOwner())) return
+    if (!(await api.guardMerchant())) return
+    let isOwner = true
+    try { const me = await api.adminMe(); isOwner = !me || me.role === 'owner' } catch (e) { return }
+    this.setData({ isOwner, staffView: !isOwner })
     this.setData({ aiEnabled: api.merchantHasAi() })
     api.refreshMerchantAi().then((on) => this.setData({ aiEnabled: on }))
     this.load()
@@ -80,6 +88,22 @@ Page({
       } catch (e) { /* 默认规则 */ }
       const TH = this.data.rules
       const r = await api.adminGet('/admin/customers')
+      /* 员工受限视图:后端明确回了 scope='mine' —— 只按**它给的字段**渲染。
+         分层(RFM)、消费额、储值全靠金额算,员工既拿不到也不该看,整块不出。 */
+      if (r.scope === 'mine' || this.data.staffView) {
+        const mine = (r.customers || []).map((u) => ({
+          id: u.id, name: u.displayName || '顾客', av: (u.displayName || '客')[0],
+          phone: u.phoneMasked || '', visits: u.visitCount || 0,
+          last: u.lastVisitAt ? String(u.lastVisitAt).slice(0, 10) : '—',
+          tags: u.tags || [], memberCode: u.memberCode || ''
+        }))
+        this.setData({
+          staffView: true, all: mine, list: mine,
+          scopeNote: r.scopeNote || '只显示你服务过的顾客',
+          counts: { a: 0, b: 0, n: 0, s: 0, total: mine.length }
+        })
+        return
+      }
       const all = (r.customers || r.data || r || []).map((u) => vm(u, TH))
       this.setData({
         all,

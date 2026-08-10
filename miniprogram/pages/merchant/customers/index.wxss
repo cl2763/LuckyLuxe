@@ -67,3 +67,6 @@ page{background:#fbf8f5}
 .cp-n{font-size:27rpx;font-weight:700;color:#241f1d}
 .cp-d{font-size:21rpx;color:#9a8c7c;margin-top:3rpx}
 .cp-go{font-size:24rpx;font-weight:800;color:#fff;background:#c8a47e;border-radius:999rpx;padding:10rpx 26rpx}
+
+/* 拍板②:员工受限视图的说明条 */
+.staffnote{margin:16rpx 24rpx 0;font-size:22rpx;color:#8a5a2b;background:#fdf3ec;border-radius:10rpx;padding:12rpx 16rpx}
