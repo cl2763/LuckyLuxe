@@ -12599,7 +12599,12 @@ async function route(req, res) {
     db.prepare('UPDATE technicians SET name = ?, title = ?, is_active = ? WHERE id = ?').run(name, title, isActive, technicianId)
     return json(res, 200, { technician: db.prepare('SELECT * FROM technicians WHERE id = ?').get(technicianId) })
   }
-  if (req.method === 'GET' && path === '/admin/tenant/plan') {
+  /* 🟠 D16(店主 2026-08-11 立案):前端 api.js 的 refreshMerchantAi() 调的是
+     GET /admin/tenant/entitlements —— 而后端只有 PUT,**从来没有 GET**,一直 404。
+     404 被 `catch { return merchantHasAi() }` 静默吞掉,回落到本地缓存,
+     于是**商家端的 AI 开通状态从来没跟服务端对上过**(D1 的"两端复验"验的其实是缓存)。
+     这里补 GET,与既有的 /admin/tenant/plan 共用同一实现,不写第二份。 */
+  if (req.method === 'GET' && (path === '/admin/tenant/plan' || path === '/admin/tenant/entitlements')) {
     return json(res, 200, { entitlements: getEntitlements(currentTenantId()) })
   }
   if (req.method === 'GET' && path === '/admin/finance/lock-status') {
