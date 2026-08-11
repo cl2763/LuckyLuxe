@@ -199,10 +199,17 @@ Page({
   rvShape(c) {
     return { id: c.id, displayName: c.displayName || '会员', balanceText: storeMoney(c.storedValueBalanceCents || 0, 0) }
   },
-  pickRv(e) {
+  async pickRv(e) {
     const c = (this.data.customers || []).find((x) => x.id === e.currentTarget.dataset.id)
     if (!c) return
-    this.setData({ rvPicked: this.rvShape(c), rvResults: [] })
+    /* D25(《财务总逻辑》3-1b):未绑定微信的轻档案不可充值 —— 选人时就把绑定态带出来,
+       未绑定的把按钮压成禁用态并给提示;后端 UNBOUND_NO_RECHARGE 同拦(这里只是体验层)。 */
+    let bound = true
+    try {
+      const hit = (await api.adminGet(`/admin/customers/lookup?userId=${encodeURIComponent(c.id)}`)).hit
+      bound = Boolean(hit && hit.bound)
+    } catch (err) { /* 查不到绑定态就按未绑定处理,宁严勿松 */ bound = false }
+    this.setData({ rvPicked: Object.assign(this.rvShape(c), { bound }), rvResults: [] })
     this.loadRvTechs()
   },
   unpickRv() { this.setData({ rvPicked: null, rvQuery: '', rvResults: [], rvAmount: '', rvAmountText: '', rvTechIndex: 0 }) },
@@ -225,6 +232,8 @@ Page({
     const cust = this.data.rvPicked
     const amount = Number(this.data.rvAmount)
     if (!cust) { wx.showToast({ title: '先选一位会员', icon: 'none' }); return }
+    // D25:未绑定轻档案不可充值(技师/老板同受约束)
+    if (cust.bound === false) { wx.showToast({ title: '请先让顾客扫码绑定(会员码/签署码)再充值', icon: 'none', duration: 2500 }); return }
     if (!(amount > 0)) { wx.showToast({ title: '金额无效', icon: 'none' }); return }
     // 加储值是资金操作:本次会话没解锁财务的,先去财务页输密码(与网页同一道门)
     if (!(api.getFinanceKey && api.getFinanceKey())) {

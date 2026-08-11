@@ -85,6 +85,13 @@ async function main() {
     method: 'POST', body: JSON.stringify({ dryRun: false, rows: [{ name: `客${RUN_ID}`, phone: `1391${RUN_ID.slice(-7)}`, balanceCents: 0 }] })
   })
   const user = imp.data.users[0].userId
+  /* D25(3-1b,2026-08-12):导入客=phone 身份非绑定,充值会被拦 —— fixture 直连库绑上微信(同 noshow ⑮ 先例) */
+  {
+    const { DatabaseSync } = await import('node:sqlite')
+    const bindDb = new DatabaseSync(process.env.TEST_DB_PATH)
+    bindDb.prepare('UPDATE users SET wechat_open_id = ? WHERE id = ?').run('wx-d25fix-' + user, user)
+    bindDb.close()
+  }
   const techA = (await request(`/platform/tenants/${shop.tenantId}/technicians`, { method: 'POST', body: JSON.stringify({ name: `甲${RUN_ID}` }) })).data.technician
   const techB = (await request(`/platform/tenants/${shop.tenantId}/technicians`, { method: 'POST', body: JSON.stringify({ name: `乙${RUN_ID}` }) })).data.technician
 

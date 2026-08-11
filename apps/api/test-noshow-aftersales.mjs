@@ -325,10 +325,18 @@ const main = async () => {
     const custId = cust.user.id
     check('⑭ 技师可读充值档位(选套餐用,只读)', (await request('/admin/recharge-tiers', {}, staffToken)).status === 200)
     check('⑭ 技师改档位配置=403(读写分明)', (await request('/admin/recharge-tiers', { method: 'POST', body: JSON.stringify({ amountCents: 10000 }) }, staffToken)).status === 403)
-    r = await request('/admin/stored-value/recharge', {
-      method: 'POST', body: JSON.stringify({ userId: custId, amountCents: 3300, payChannel: 'manual', note: '结算单内代充·档位 实收30 + 赠3', technicianId: shop.tech2 })
-    }, staffToken)
-    check('⑭ 技师代充=201(无需财务钥匙)', r.status === 201, JSON.stringify(r.data).slice(0, 120))
+    // ⑮ D25(《财务总逻辑》3-1b):未绑定轻档案不可充值 —— 技师/老板同拦;绑定后放行
+    const rvBody = JSON.stringify({ userId: custId, amountCents: 3300, payChannel: 'manual', note: '结算单内代充·档位 实收30 + 赠3', technicianId: shop.tech2 })
+    r = await request('/admin/stored-value/recharge', { method: 'POST', body: rvBody }, staffToken)
+    check('⑮ D25 未绑定档案技师充值=400 UNBOUND_NO_RECHARGE', r.status === 400 && r.data.error.code === 'UNBOUND_NO_RECHARGE', JSON.stringify(r.data).slice(0, 120))
+    r = await request('/admin/stored-value/recharge', { method: 'POST', body: rvBody }, shop.token)
+    check('⑮ D25 未绑定档案老板充值同拦(同受约束)', r.status === 400 && r.data.error.code === 'UNBOUND_NO_RECHARGE')
+    if (!process.env.TEST_DB_PATH) throw new Error('⑮ 需要 TEST_DB_PATH 直连库绑定 fixture(同 ⑥ 先例)')
+    const db4 = new DatabaseSync(process.env.TEST_DB_PATH)
+    db4.prepare('UPDATE users SET wechat_open_id = ? WHERE id = ?').run(`wx-test-${RUN_ID}`, custId)
+    db4.close()
+    r = await request('/admin/stored-value/recharge', { method: 'POST', body: rvBody }, staffToken)
+    check('⑮ D25 绑定后技师代充放行=201(无需财务钥匙)', r.status === 201, JSON.stringify(r.data).slice(0, 120))
     if (process.env.TEST_DB_PATH) {
       const db3 = new DatabaseSync(process.env.TEST_DB_PATH)
       const tx = db3.prepare("SELECT technician_id, created_by FROM stored_value_transactions WHERE tenant_id = ? AND user_id = ? AND type = 'recharge' ORDER BY created_at DESC LIMIT 1").get(shop.tenantId, custId)

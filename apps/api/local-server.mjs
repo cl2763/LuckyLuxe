@@ -13046,6 +13046,11 @@ async function route(req, res) {
     const userId = String(body.userId || '').trim()
     const user = db.prepare('SELECT id, display_name FROM users WHERE id = ?').get(userId)
     if (!user) throw apiError(404, 'NOT_FOUND', 'Member not found.')
+    /* D25(《财务总逻辑》3-1b,店主 2026-08-12 拍板):未绑定微信的轻档案不可充值 ——
+       防"空充值"挂在无主档案上;技师/老板同受约束,两端入口的禁用态只是体验,这里才是闸。 */
+    if (isRecharge && !isUserBound(userId)) {
+      throw apiError(400, 'UNBOUND_NO_RECHARGE', '请先让顾客扫码绑定(会员码/签署码)再充值。')
+    }
     const amountCents = Math.round(Number(body.amountCents ?? Number(body.amount || 0) * 100))
     if (!Number.isFinite(amountCents) || amountCents <= 0) throw apiError(400, 'BAD_REQUEST', 'A positive amount is required.')
     if (!isRecharge && storedValueBalanceCents(userId) < amountCents) {

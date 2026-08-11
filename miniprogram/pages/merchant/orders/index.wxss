@@ -251,3 +251,8 @@ page{background:#fbf8f5}
 .dp-opt.on{border-color:#5e8c61;background:#eef5ee}
 .dp-t{font-size:26rpx;font-weight:700;color:#3a2e2a}
 .dp-d{font-size:22rpx;color:#8c8279;margin-top:4rpx;line-height:1.5}
+
+/* D24:排单两级选择 —— 大类行比小类行淡一档,视觉分层 */
+.ds-cats{margin-bottom:8rpx}
+.ds-cats .ds-c{background:#f4efe6;border:none}
+.ds-cats .ds-c.on{background:#2f2a22;color:#fff}

@@ -82,6 +82,7 @@ Page(Object.assign({
     dv: null,
     // 直接排单
     directSheet: false, directTech: '', directTechName: '', directTime: '', directEndTime: '', directDurH: 0, directServices: [], directServiceId: '', directDurationMin: 120, directDeposit: false,
+    directCats: [], directCatId: '',   // D24:排单选择器两级(大类→小类),同源结算主项目目录
     // 顾客区 · D9 根治(图 v1.1):一框即搜 + 无匹配一键建档 + 扫会员码。
     // 「新客·输手机号」页签连同 dsTab/dsName/dsPhone/dsHitText/dsHitId 整体删除(不是隐藏)。
     directCustomers: [], custQuery: '', custMatches: [], selectedCustId: '', selectedCustName: '',
@@ -584,11 +585,27 @@ Page(Object.assign({
     if (this.data.role !== 'owner') { wx.showToast({ title: '仅老板可直接排单', icon: 'none' }); return }
     const { tech, time } = e.currentTarget.dataset
     const col = (this.data.dv.cols || []).find((c) => c.id === tech)
-    let services = this.data.directServices
-    if (!services.length) {
-      const r = await api.adminGet('/admin/services').catch(() => ({ services: [] }))
-      services = (r.services || []).filter((s) => s.status !== 'hidden').map((s) => ({ id: s.id, name: s.nameZh || s.name_zh || s.name, dur: s.baseDurationMin || s.base_duration_min || 120 }))
+    /* D24(店主 2026-08-12):排单选择器与结算单「服务项目」同一数据源同一粒度 ——
+       同源 /admin/pricing/categories + items(大类→小类两级,只列主项目;
+       员工也读得到,不再走 owner-only 的旧 /admin/services 平铺口径)。
+       预约存的 serviceId 与结算主项目目录同表同 id,带入结算即精确对上。 */
+    let cats = this.data.directCats
+    let byCat = this._directByCat || {}
+    if (!cats.length) {
+      try {
+        const [rc, ri] = await Promise.all([api.adminGet('/admin/pricing/categories'), api.adminGet('/admin/pricing/items')])
+        const mains = (ri.items || []).filter((i) => i.isActive !== false && i.itemKind === 'main')
+          .map((i) => ({ id: i.id, name: i.nameZh, dur: i.baseDurationMin || 120, catId: i.categoryId || '' }))
+        const catList = (rc.categories || []).filter((c) => c.isBookable !== false).map((c) => ({ id: c.id, name: c.name }))
+        byCat = {}
+        for (const m of mains) { (byCat[m.catId] = byCat[m.catId] || []).push(m) }
+        cats = catList.filter((c) => (byCat[c.id] || []).length)
+        if ((byCat[''] || []).length) cats = cats.concat([{ id: '', name: '未分类' }])
+        this._directByCat = byCat
+      } catch (e) { cats = []; byCat = {} }
     }
+    const firstCat = cats[0] || { id: '' }
+    const services = (byCat[firstCat.id] || [])
     let customers = this.data.directCustomers
     if (!customers.length) {
       const rc = await api.adminGet('/admin/customers').catch(() => ({ customers: [] }))
@@ -605,6 +622,7 @@ Page(Object.assign({
     const dur0 = first.dur || 120
     this.setData({
       directSheet: true, directTech: tech, directTechName: (col && col.name) || '', directTime: time,
+      directCats: cats, directCatId: firstCat.id || '',
       directServices: services, directServiceId: first.id || '', directDurationMin: dur0,
       directEndTime: this.calcDirectEnd(time, dur0), directDurH: Math.round(dur0 / 6) / 10,
       directCustomers: customers, custQuery: '', custMatches: [], selectedCustId: '', selectedCustName: '', directDeposit: false,
@@ -666,6 +684,17 @@ Page(Object.assign({
     const s = this.data.directServices.find((x) => x.id === id)
     const dur = (s && s.dur) || 120
     this.setData({ directServiceId: id, directDurationMin: dur, directEndTime: this.calcDirectEnd(this.data.directTime, dur), directDurH: Math.round(dur / 6) / 10 })
+  },
+  // D24:大类切换 → 小类列表跟着换,默认选该类第一项(时长联动)
+  pickDirectCat(e) {
+    const catId = e.currentTarget.dataset.id
+    const services = (this._directByCat || {})[catId] || []
+    const first = services[0] || {}
+    const dur = first.dur || 120
+    this.setData({
+      directCatId: catId, directServices: services, directServiceId: first.id || '',
+      directDurationMin: dur, directEndTime: this.calcDirectEnd(this.data.directTime, dur), directDurH: Math.round(dur / 6) / 10
+    })
   },
   // 顾客搜索(D9 根治后的唯一入口):姓名/手机号模糊匹配,命中最多 5 条(图规则①)
   onCustSearch(e) {

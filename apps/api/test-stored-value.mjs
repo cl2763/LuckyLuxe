@@ -42,6 +42,20 @@ async function main() {
     userId = registered.data?.user?.id || registered.data?.id
     check('test member created', Boolean(userId))
 
+    /* D25(《财务总逻辑》3-1b,2026-08-12):未绑定档案不可充值 ——
+       先拿新号顺手断言拦截,再直连库绑上微信(同 noshow 套件 ⑥/⑮ 先例)让后续流程走通。 */
+    const d25Blocked = await request('/admin/stored-value/recharge', {
+      method: 'POST', body: JSON.stringify({ userId, amount: 500, payChannel: 'wechat' })
+    })
+    check('D25 未绑定充值=400 UNBOUND_NO_RECHARGE', d25Blocked.status === 400 && d25Blocked.data?.error?.code === 'UNBOUND_NO_RECHARGE', JSON.stringify(d25Blocked.data).slice(0, 120))
+    if (!process.env.TEST_DB_PATH) throw new Error('D25 后本套件需要 TEST_DB_PATH 直连库绑定 fixture')
+    {
+      const { DatabaseSync } = await import('node:sqlite')
+      const bindDb = new DatabaseSync(process.env.TEST_DB_PATH)
+      bindDb.prepare('UPDATE users SET wechat_open_id = ? WHERE id = ?').run(`wx-svtest-${RUN_ID}`, userId)
+      bindDb.close()
+    }
+
     // 1. 充值:余额上升,但不产生收入流水
     const incomeBefore = (await request('/admin/finance/transactions')).data.summary.incomeCents
     const recharged = await request('/admin/stored-value/recharge', {

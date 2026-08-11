@@ -56,7 +56,16 @@ async function makeCustomer(tenantId, name, extra = {}) {
     body: JSON.stringify({ dryRun: false, rows: [{ name, phone: `139${Math.random().toString().slice(2, 10)}`, ...extra }] })
   })
   if (res.status !== 200 || !res.data.users?.length) throw new Error(`建顾客失败: ${JSON.stringify(res.data)}`)
-  return res.data.users[0].userId
+  const uid = res.data.users[0].userId
+  /* D25(3-1b,2026-08-12):导入客非绑定,充值会被拦 —— fixture 统一直连库绑上微信(同 noshow ⑮ 先例)。
+     会员资格判定与绑定无关,不影响本套件断言语义。 */
+  if (process.env.TEST_DB_PATH) {
+    const { DatabaseSync } = await import('node:sqlite')
+    const bindDb = new DatabaseSync(process.env.TEST_DB_PATH)
+    bindDb.prepare('UPDATE users SET wechat_open_id = ? WHERE id = ?').run('wx-d25fix-' + uid, uid)
+    bindDb.close()
+  }
+  return uid
 }
 
 // 2026-08-08:会员资格/等级已从商家侧收回,只有平台主钥匙能改(商家端 PUT 会 403)

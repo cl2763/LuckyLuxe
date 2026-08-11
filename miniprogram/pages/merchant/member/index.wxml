@@ -104,7 +104,8 @@
         </picker>
       </view>
       <view class="gbtns">
-        <view class="gbtn {{rvAmount ? '' : 'dis'}}" bindtap="doRecharge">确认到账{{rvAmountText}}</view>
+        <view wx:if="{{rvPicked.bound === false}}" class="gnote">该档案未绑定微信 —— 请先让顾客扫码绑定(会员码/签署码)再充值</view>
+        <view class="gbtn {{rvAmount && rvPicked.bound !== false ? '' : 'dis'}}" bindtap="doRecharge">确认到账{{rvAmountText}}</view>
       </view>
     </block>
   </view>

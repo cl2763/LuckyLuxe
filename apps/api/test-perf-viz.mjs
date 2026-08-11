@@ -60,6 +60,13 @@ async function main() {
   const cust = (await request(`/platform/tenants/${shop.tenantId}/import/customers`, {
     method: 'POST', body: JSON.stringify({ dryRun: false, rows: [{ name: `顾客${RUN_ID}`, phone: `1386${RUN_ID.slice(-7)}` }] })
   })).data.users[0].userId
+  /* D25(3-1b,2026-08-12):导入客非绑定,充值会被拦 —— fixture 直连库绑上微信(同 noshow ⑮ 先例) */
+  {
+    const { DatabaseSync } = await import('node:sqlite')
+    const bindDb = new DatabaseSync(process.env.TEST_DB_PATH)
+    bindDb.prepare('UPDATE users SET wechat_open_id = ? WHERE id = ?').run('wx-d25fix-' + cust, cust)
+    bindDb.close()
+  }
 
   // 甲师 3 单、乙师 2 单、丙师 1 单(单价 ¥100),签署后日结确认
   const counts = { 甲师: 3, 乙师: 2, 丙师: 1 }

@@ -377,8 +377,13 @@ Page({
 
   /* ===== 内嵌充值面板(合同规则③-2:复用既有代充流程,技师不离开结算单) =====
      权限口径(店主 2026-08-12 拍板):面板对技师开放 —— 充值=预收轻动作,金额只能选套餐/手输、
-     赠额按套餐自动、后端强制经手人=当前技师留痕;耗卡与财务页门禁不变。 */
+     赠额按套餐自动、后端强制经手人=当前技师留痕;耗卡与财务页门禁不变。
+     D25(《财务总逻辑》3-1b):未绑定轻档案不可充值 —— 链接禁用态,点了给提示;后端同拦。 */
   async openRecharge() {
+    if (!this.data.userId || !this.data.bind.bound) {
+      wx.showToast({ title: '请先让顾客扫码绑定(会员码/签署码)再充值', icon: 'none', duration: 2500 })
+      return
+    }
     let tiers = []
     try { tiers = ((await api.adminGet('/admin/recharge-tiers')).tiers || []).filter((t) => t.isActive) } catch (e) { /* 无档位也能手输 */ }
     const d = this.data.display
@@ -495,8 +500,13 @@ Page({
     this._t = setTimeout(() => this.doPreview(), 250)
   },
   async doPreview() {
+    /* 响应次序护栏(2026-08-12 随机矩阵抓出):快速连点时,先发的预览响应可能后到,
+       会把后点的状态(比如刚选的券)静默覆盖掉 —— 过期响应一律整包丢弃,只认最新一发。 */
+    const seq = (this._pvSeq = (this._pvSeq || 0) + 1)
+    const body = this.formBody()
     try {
-      const r = await api.adminPost('/admin/settlements/preview', this.formBody())
+      const r = await api.adminPost('/admin/settlements/preview', body)
+      if (seq !== this._pvSeq) return
       const sheets = r.sheets || []
       const grp = r.group || {}
       const d = displayOf(sheets[0] || {})
@@ -543,12 +553,21 @@ Page({
       const s0 = sheets[0] || {}
       const options = (s0.couponOptions || []).map((o) => Object.assign({}, o, { deductText: o.usable ? `−${m(o.discountCents)}` : '' }))
       const prev = this.data.display
+      /* 券回显护栏(2026-08-12 随机矩阵抓出的"点了券被吞"):
+         响应说"没券"只有两种合法含义 —— ①这次请求带了券而后端没认(门槛没到等,落券);
+         ②请求本来就没带券。②的响应可能发自用户点券**之前**,不许拿它清掉刚点的券:
+         保持现选,点券时 refresh() 已排了下一发预览,马上会带着券重算。 */
+      const sentGrant = ((body.settlements || [])[0] || {}).couponGrantId || ''
+      const curGrant = this.data.couponGrantId || ''
+      const nextGrant = s0.coupon ? s0.coupon.grantId : (curGrant && curGrant !== sentGrant ? curGrant : '')
       this.setData({
         preview: r, view, display: d,
         couponOptions: options,
         couponUsableCount: s0.couponUsableCount || 0,
-        couponPicked: s0.coupon ? Object.assign({}, s0.coupon, { deductText: `−${m(s0.coupon.discountCents)}` }) : null,
-        couponGrantId: s0.coupon ? s0.coupon.grantId : ''
+        couponPicked: s0.coupon
+          ? Object.assign({}, s0.coupon, { deductText: `−${m(s0.coupon.discountCents)}` })
+          : (nextGrant ? this.data.couponPicked : null),
+        couponGrantId: nextGrant
       })
       /* 🔴 D22 护栏(分组版):每组预览行必须与该组勾选一一对应,多/少都当场报警。 */
       const bodySheets = this.groupSheets()

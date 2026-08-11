@@ -160,7 +160,7 @@
       <view class="paym {{payMenu.recharge ? 'on' : ''}}" bindtap="payToggleRecharge">
         <view class="ck {{payMenu.recharge ? 'on' : ''}}">{{payMenu.recharge ? '✓' : ''}}</view>
         <view class="pmain">
-          <b>现场充值再抵扣</b>　<text class="rvlink" catchtap="openRecharge">去帮顾客充值 →</text>
+          <b>现场充值再抵扣</b>　<text class="rvlink {{bind.bound?'':'dis'}}" catchtap="openRecharge">去帮顾客充值 →</text>
           <text class="psmall">点右侧小字进充值面板;充完自动回本单,余额刷新可抵扣</text>
         </view>
       </view>

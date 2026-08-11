@@ -115,6 +115,13 @@ async function main() {
     method: 'POST', body: JSON.stringify({ dryRun: false, rows: [{ name: `顾客${RUN_ID}`, phone: `1383${RUN_ID.slice(-7)}` }] })
   })
   const cust = imp.data.users[0].userId
+  /* D25(3-1b,2026-08-12):导入客=phone 身份非绑定,充值会被拦 —— fixture 直连库绑上微信(同 noshow ⑮ 先例) */
+  {
+    const { DatabaseSync } = await import('node:sqlite')
+    const bindDb = new DatabaseSync(process.env.TEST_DB_PATH)
+    bindDb.prepare('UPDATE users SET wechat_open_id = ? WHERE id = ?').run('wx-d25fix-' + cust, cust)
+    bindDb.close()
+  }
   const g = await request('/admin/settlements', {
     method: 'POST',
     body: JSON.stringify({

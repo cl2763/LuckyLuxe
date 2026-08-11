@@ -298,7 +298,8 @@
       </view>
       <view class="ds-endhint">默认按所选服务时长;这次要多做/少做点上面调</view>
 
-      <view class="ds-k">服务</view>
+      <view class="ds-k">服务 <text class="ds-ksub">与结算单同一份目录,先选大类再选项目</text></view>
+      <scroll-view scroll-x class="ds-svcs ds-cats"><view wx:for="{{directCats}}" wx:key="id" class="ds-c {{directCatId===item.id?'on':''}}" data-id="{{item.id}}" bindtap="pickDirectCat">{{item.name}}</view></scroll-view>
       <scroll-view scroll-x class="ds-svcs"><view wx:for="{{directServices}}" wx:key="id" class="ds-c {{directServiceId===item.id?'on':''}}" data-id="{{item.id}}" bindtap="pickDirectSvc">{{item.name}}</view></scroll-view>
 
       <block wx:if="{{depositCfg.enabled}}">
