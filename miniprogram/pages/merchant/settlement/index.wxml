@@ -218,6 +218,19 @@
     <view class="foot">金额全部由后端计价引擎算出，本页不做任何金额运算</view>
   </block>
 
+  <!-- D22 追加件:跨大类二选一(按护栏放顶层闸门外) -->
+  <view wx:if="{{crossSheet}}" class="qmask" bindtap="crossCancel"></view>
+  <view wx:if="{{crossSheet}}" class="xsheet">
+    <view class="ds-head" style="padding:0 0 12rpx">
+      <view class="xs-t">本单已选『{{crossSheet.existCats}}』</view>
+      <view class="ds-x" bindtap="crossCancel">✕</view>
+    </view>
+    <view class="xs-d">要把另一大类的「{{crossSheet.pendingName}}」也加进这一单吗?</view>
+    <view class="xs-btn pri" bindtap="crossAdd">加选(保留原选择)</view>
+    <view class="xs-btn" bindtap="crossReplace">替换(清除其他大类选择)</view>
+    <view class="xs-hint">选一次后本单内记住方向,不再重复问;点空白处=取消,不加这项</view>
+  </view>
+
   <!-- D9:QR 弹层移到 ready 闸门外 —— qrFor 纯出码模式不加载价目表,弹层不能被闸门连坐
        (与 D17 booking 白屏同一类病,2026-08-11 路④ L5 实测抓出)。 -->
   <!-- 屏 S3:推送签署后所有单都弹这一层。沙盒态=占位图+链接+复制(裁决 b),

@@ -42,6 +42,8 @@ Page({
     // 屏 S2:绑定状态徽标 —— 文案全部后端下发,前端一个字都不拼(规则③)
     bind: { bound: true, badgeText: '', hintText: '', phoneMasked: '', memberCode: '' },
     qr: null,   // 屏 S3 二维码弹层
+    crossSheet: null,   // D22 追加件:跨大类二选一弹层
+    crossChoice: '',    // 本单内记忆:'' 未选过 | add 加选 | replace 替换(误触取消不记)
     ctaText: '推送签署',
     submitting: false
   },
@@ -185,8 +187,64 @@ Page({
     this.setData({ catId: e.currentTarget.dataset.id })
     this.renderCatalogue()
   },
+  /* D22 追加件(店主 2026-08-11 拍板):跨大类防误触二选一。
+     已选某大类主项目后,去勾**另一大类**的主项目 → 弹一次「加选 / 替换」;
+     同大类不弹;取消勾选不弹;加项(全局目录)不弹;
+     选过一次后本单内同方向记忆,不再重复弹;误触取消=不加、不记忆、下次再弹。 */
+  crossCatGate(id) {
+    const it = (this.allItems || []).find((x) => x.id === id)
+    if (!it || (it.itemKind || 'main') !== 'main') return false          // 只管主项目
+    if (Object.prototype.hasOwnProperty.call(this.data.picked, id)) return false  // 取消勾选不弹
+    const cats = this.data.cats || []
+    const catName = (cid) => (cats.find((c) => c.id === cid) || {}).name || ''
+    const existCats = [...new Set((this.allItems || [])
+      .filter((x) => (x.itemKind || 'main') === 'main'
+        && Object.prototype.hasOwnProperty.call(this.data.picked, x.id)
+        && (x.categoryId || '') !== (it.categoryId || ''))
+      .map((x) => catName(x.categoryId)).filter(Boolean))]
+    if (!existCats.length) return false                                  // 没有别的大类的已选 → 不弹
+    if (this.data.crossChoice === 'add') return false                    // 记忆:加选 → 直接放行
+    if (this.data.crossChoice === 'replace') {                           // 记忆:替换 → 静默清其他大类再加
+      this.applyCrossReplace(id)
+      return true
+    }
+    this.setData({ crossSheet: { pendingId: id, pendingName: it.nameZh, existCats: existCats.join('、') } })
+    return true
+  },
+  // 替换=清除**其他大类**的主项目选择(同大类主项目、加项、自选行都不动),再加上这项
+  applyCrossReplace(id) {
+    const it = (this.allItems || []).find((x) => x.id === id)
+    const picked = Object.assign({}, this.data.picked)
+    for (const x of (this.allItems || [])) {
+      if ((x.itemKind || 'main') === 'main'
+        && (x.categoryId || '') !== (it.categoryId || '')
+        && Object.prototype.hasOwnProperty.call(picked, x.id)) delete picked[x.id]
+    }
+    picked[id] = 1
+    this.setData({ picked })
+    this.renderCatalogue()
+    this.refresh()
+  },
+  crossAdd() {
+    const sheet = this.data.crossSheet
+    if (!sheet) return
+    const picked = Object.assign({}, this.data.picked)
+    picked[sheet.pendingId] = 1
+    this.setData({ picked, crossSheet: null, crossChoice: 'add' })   // 本单内记忆:之后跨类直接加
+    this.renderCatalogue()
+    this.refresh()
+  },
+  crossReplace() {
+    const sheet = this.data.crossSheet
+    if (!sheet) return
+    this.setData({ crossSheet: null, crossChoice: 'replace' })       // 本单内记忆:之后跨类直接替换
+    this.applyCrossReplace(sheet.pendingId)
+  },
+  // 误触取消:什么都不加、不记忆 —— 下次跨类照样弹
+  crossCancel() { this.setData({ crossSheet: null }) },
   toggleItem(e) {
     const id = e.currentTarget.dataset.id
+    if (this.crossCatGate(id)) return
     const picked = Object.assign({}, this.data.picked)
     if (Object.prototype.hasOwnProperty.call(picked, id)) delete picked[id]
     else picked[id] = 1
@@ -196,6 +254,8 @@ Page({
   },
   stepQty(e) {
     const { id, d } = e.currentTarget.dataset
+    // 按指主项目从 0 → 1 也算"新勾一项",同一道跨大类闸门
+    if (Number(d) > 0 && !(this.data.picked[id] > 0) && this.crossCatGate(id)) return
     const picked = Object.assign({}, this.data.picked)
     const next = Math.max(0, (picked[id] || 0) + Number(d))
     if (next === 0) delete picked[id]
