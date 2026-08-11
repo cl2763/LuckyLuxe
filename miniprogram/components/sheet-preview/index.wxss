@@ -30,3 +30,4 @@
 .spbtns{display:flex;gap:16rpx;margin-top:16rpx}
 .spbtn{flex:1;text-align:center;background:#2f2a22;color:#fff;border-radius:14rpx;padding:20rpx 0;font-size:26rpx}
 .spbtn.ghost{background:#f4efe6;color:#2f2a22}
+.spbtn.wide{flex:1}

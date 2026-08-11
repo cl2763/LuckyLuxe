@@ -750,7 +750,13 @@ Page({
     }, 2000)
   },
   closeBindCode() { clearTimeout(this._bindTimer); this.setData({ bindQr: null }) },
-  // D26:链接本身可实点 —— 沙盒直落本人确认卡(与真码扫后同一落点)
+  /* D30:签署码「打开链接」—— 沙盒直落签署页(与真码扫后同一落点);
+     真码上线后打开/复制两钮随占位一起撤(发版清单)。 */
+  openQrLink() {
+    if (!this.data.qr) return
+    wx.navigateTo({ url: `/pages/sign/index?code=${encodeURIComponent(this.data.qr.code)}` })
+  },
+  // D26:绑定码「打开链接」 —— 沙盒直落本人确认卡(与真码扫后同一落点)
   openBindLink() {
     if (!this.data.bindQr) return
     wx.navigateTo({ url: this.data.bindQr.pagePath })

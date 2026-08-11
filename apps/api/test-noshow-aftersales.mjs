@@ -417,14 +417,15 @@ const main = async () => {
           else if (/\.js$/.test(f)) {
             const src = readFileSync(pth, 'utf8')
             for (const m of src.matchAll(/(confirmText|cancelText):\s*['"`]([^'"`]+)['"`]/g)) {
-              const zh = (m[2].match(/[一-龥]/g) || []).length
-              if (zh > 4) bad2.push(`${pth.slice(ROOT2.length)}: ${m[1]}='${m[2]}'`)
+              /* 口径(店主一问的答复):报错原文说 4 Chinese characters,官方文档说「最多 4 个字符」
+                 (中英同计)—— 取更严的**总字符 >4 即红**,中英混排一并拦住。 */
+              if (m[2].length > 4) bad2.push(`${pth.slice(ROOT2.length)}: ${m[1]}='${m[2]}'`)
             }
           }
         }
       }
       walk2(join(ROOT2, 'miniprogram/pages'))
-      check('⑱ D28 全仓 showModal 按钮文案 ≤4 汉字(超限=弹窗静默死)', bad2.length === 0, bad2.join(' | '))
+      check('⑱ D28 全仓 showModal 按钮文案 ≤4 字符(中英同计;超限=弹窗静默死)', bad2.length === 0, bad2.join(' | '))
     }
 
     // ===== ⑲ D28:单据预览排版件 —— 合计≡各单之和、行≡落库行、单号可查 =====

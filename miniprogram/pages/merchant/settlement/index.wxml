@@ -254,8 +254,11 @@
     <view class="qnewc">{{bindQr.hint}}</view>
     <view class="qrbox"><view class="qrph">沙盒占位码
 (上线换 wxacode 真码)</view></view>
-    <view class="qlink tap" catchtap="openBindLink">{{bindQr.url}}</view>
-    <view class="qbtns"><view class="qbtn" catchtap="copyBindLink">复制绑定链接</view></view>
+    <view class="qlink">{{bindQr.url}}</view>
+    <view class="qbtns">
+      <view class="qbtn dark" catchtap="openBindLink">打开链接</view>
+      <view class="qbtn" catchtap="copyBindLink">复制链接</view>
+    </view>
     <view class="qstate waiting">{{bindQr.stateText}}</view>
     <view class="qsub">顾客扫码只做绑定 —— 不会进入签署、看不到结算单与金额</view>
   </view>
@@ -275,7 +278,10 @@
     <view class="qamt">{{qr.amountText}}</view>
     <view class="qsub">{{qr.breakdownText}}</view>
     <view class="qlink">{{qr.url}}</view>
-    <view class="qcopy" bindtap="copyQrLink">复制链接</view>
+    <view class="qbtns">
+      <view class="qbtn dark" catchtap="openQrLink">打开链接</view>
+      <view class="qbtn" catchtap="copyQrLink">复制链接</view>
+    </view>
     <view class="qstate {{qr.state}}">{{qr.stateText}}</view>
     <view class="qtip">顾客扫码 → 手机号授权 → 核对明细 → 签字;签完此页自动关闭并回到今日台面</view>
     <block wx:if="{{!qr.unbound}}">

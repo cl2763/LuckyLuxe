@@ -235,13 +235,18 @@ Page({
     // D25:未绑定轻档案不可充值(技师/老板同受约束)
     if (cust.bound === false) { wx.showToast({ title: '请先让顾客扫码绑定(会员码/签署码)再充值', icon: 'none', duration: 2500 }); return }
     if (!(amount > 0)) { wx.showToast({ title: '金额无效', icon: 'none' }); return }
-    // 加储值是资金操作:本次会话没解锁财务的,先去财务页输密码(与网页同一道门)
+    // 加储值是资金操作:门禁开的店没解锁要先去财务页;门禁关的店直接充(D29 lock-aware)
     if (!(api.getFinanceKey && api.getFinanceKey())) {
+      let lockEnabled = false
+      try { lockEnabled = Boolean((await api.adminGet('/admin/finance/lock-status')).enabled) } catch (e) { lockEnabled = false }
+      if (!lockEnabled) { /* 门禁没开:不拦,直接往下走充值 */ }
+      else {
       wx.showModal({
         title: '需先解锁财务', content: '加储值属于资金操作,请先到财务页输入财务密码解锁本次会话。',
         confirmText: '去财务页', success: (r) => { if (r.confirm) wx.navigateTo({ url: '/pages/merchant/finance/index' }) }
       })
       return
+      }
     }
     const tech = this.data.rvTechs[this.data.rvTechIndex - 1]
     try {

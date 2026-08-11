@@ -29,9 +29,9 @@
         <view class="spsig">{{card.signature.name}}<text class="spsigat">{{card.signature.signedAt}}</text></view>
       </view>
     </scroll-view>
-    <view class="spbtns">
-      <view wx:if="{{card.statusKey === 'signed'}}" class="spbtn ghost" bindtap="viewOriginal">查看签署原图</view>
-      <view class="spbtn" bindtap="close">关闭</view>
+    <!-- v1.1:底栏「关闭」删除(✕/点空白已够);未签署无原图 → 底栏整条不显示 -->
+    <view class="spbtns" wx:if="{{card.statusKey === 'signed'}}">
+      <view class="spbtn ghost wide" bindtap="viewOriginal">查看签署原图</view>
     </view>
   </block>
 </view>

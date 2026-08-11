@@ -19,7 +19,13 @@ Page({
   async load() {
     const m = this.data.month
     this.setData({ monthText: `${Number(m.slice(0, 4))}年${Number(m.slice(5, 7))}月`, loading: true })
-    if (!api.getFinanceKey()) { this.setData({ keyMissing: true, loading: false }); return }
+    if (!api.getFinanceKey()) {
+      /* D29(D27 同族补漏):没开财务门禁的店不需要钥匙 —— 原来不问门禁直接判 keyMissing,
+         工资入口就一直提示「去财务页解锁」。先问门禁;门禁开+钥匙过期由下面 FINANCE_LOCKED 兜底。 */
+      let lockEnabled = false
+      try { lockEnabled = Boolean((await api.adminGet('/admin/finance/lock-status')).enabled) } catch (e) { lockEnabled = false }
+      if (lockEnabled) { this.setData({ keyMissing: true, loading: false }); return }
+    }
     try {
       const [r, closeInfo] = await Promise.all([
         api.adminGet(`/admin/salary/estimate?month=${m}`),
