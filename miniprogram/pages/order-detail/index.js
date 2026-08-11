@@ -46,6 +46,18 @@ Page({
       order.serviceInfo.serviceName = localizedService.name || order.serviceInfo.serviceName
       // D21:不再用写死的假技师名(Mia Chen/Ava Lin)填空 —— 没有就不显示
       order.visibleWorkImages = order.status === 'completed' ? (order.workImages || []).slice(0, 6) : []
+      // D32:结算快照分解 分→元(纯格式化;有分币残留保留两位)
+      if (order.payment) {
+        const y = (c) => (c % 100 ? (c / 100).toFixed(2) : String(Math.round(c / 100)))
+        order.pay = {
+          listTotal: y(order.payment.listTotalCents),
+          subtotal: y(order.payment.subtotalCents),
+          coupon: order.payment.couponDiscountCents ? y(order.payment.couponDiscountCents) : '',
+          depositDeduct: order.payment.depositDeductCents ? y(order.payment.depositDeductCents) : '',
+          storedDeduct: order.payment.storedDeductCents ? y(order.payment.storedDeductCents) : '',
+          paid: y(order.payment.paidCents)
+        }
+      }
       // 价格拆解:总价 / 定金 / 到店应付(不同来源字段不一,统一补算)
       const price = order.servicePrice || (order.items || []).reduce((s, it) => s + (Number(it.price) || 0) * (it.quantity || 1), 0) || (service.price || 0)
       const deposit = Number(order.payableAmount) || (order.serviceInfo && order.serviceInfo.depositAmount) || 0

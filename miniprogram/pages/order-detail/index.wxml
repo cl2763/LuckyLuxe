@@ -43,26 +43,33 @@
       <view class="section-title">{{t.payment}}</view>
     </view>
     <view class="info-card card">
-      <view class="info-row">
-        <text>服务总价</text>
-        <text>{{cur.p}}{{cur.s}}{{order.servicePrice}}</text>
-      </view>
-      <view class="info-row">
-        <text>定金(线上已付)</text>
-        <text class="price">{{cur.p}}{{cur.s}}{{order.payableAmount}}</text>
-      </view>
-      <view wx:if="{{order.balanceDeduction}}" class="info-row">
-        <text>储值抵扣</text>
-        <text>-{{cur.p}}{{cur.s}}{{order.balanceDeduction}}</text>
-      </view>
-      <view wx:if="{{order.status === 'completed'}}" class="info-row">
-        <text>到店尾款</text>
-        <text>已结清</text>
-      </view>
-      <view wx:else class="info-row">
-        <text>到店应付</text>
-        <text class="price">{{cur.p}}{{cur.s}}{{order.finalDue}}</text>
-      </view>
+      <!-- D32:已签单=结算快照简版分解(后端直出,前端零运算);未签单=预约层真相(定金按实际状态,不再假「已付」) -->
+      <block wx:if="{{order.pay}}">
+        <view class="info-row"><text>服务标价</text><text class="strike">{{cur.p}}{{cur.s}}{{order.pay.listTotal}}</text></view>
+        <view class="info-row"><text>结算价</text><text>{{cur.p}}{{cur.s}}{{order.pay.subtotal}}</text></view>
+        <view wx:if="{{order.pay.coupon}}" class="info-row"><text>券抵扣</text><text>-{{cur.p}}{{cur.s}}{{order.pay.coupon}}</text></view>
+        <view wx:if="{{order.pay.depositDeduct}}" class="info-row"><text>定金抵扣</text><text>-{{cur.p}}{{cur.s}}{{order.pay.depositDeduct}}</text></view>
+        <view wx:if="{{order.pay.storedDeduct}}" class="info-row"><text>储值抵扣</text><text>-{{cur.p}}{{cur.s}}{{order.pay.storedDeduct}}</text></view>
+        <view class="info-row"><text>实付</text><text class="price">{{cur.p}}{{cur.s}}{{order.pay.paid}}</text></view>
+      </block>
+      <block wx:else>
+        <view class="info-row">
+          <text>服务总价</text>
+          <text>{{cur.p}}{{cur.s}}{{order.servicePrice}}</text>
+        </view>
+        <view wx:if="{{order.depositState === 'received'}}" class="info-row">
+          <text>定金(已收)</text>
+          <text class="price">{{cur.p}}{{cur.s}}{{order.payableAmount}}</text>
+        </view>
+        <view wx:elif="{{order.depositState === 'unpaid'}}" class="info-row">
+          <text>定金(待到店支付)</text>
+          <text>—</text>
+        </view>
+        <view class="info-row">
+          <text>到店结算</text>
+          <text>按当日结算单为准</text>
+        </view>
+      </block>
     </view>
   </view>
 

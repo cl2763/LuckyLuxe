@@ -2,7 +2,7 @@
   <view class="asset-card dark">
     <view>
       <view class="asset-label">{{t.balance}}</view>
-      <view class="asset-value">{{cur.p}}{{cur.s}}{{member.balance}}</view>
+      <view class="asset-value">{{cur.p}}{{cur.s}}{{liveBalance === undefined ? member.balance : liveBalance}}</view>
     </view>
     <view class="asset-note">Stored Card</view>
   </view>

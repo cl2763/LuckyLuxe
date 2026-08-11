@@ -75,3 +75,5 @@
   font-weight: 600;
   text-align: center;
 }
+
+.strike{text-decoration:line-through;color:#b9b3a8}

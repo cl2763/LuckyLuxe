@@ -9,6 +9,10 @@ Page({
   },
 
   onShow() {
+    const api = require('../../utils/api')
+    if (api.isLoggedIn && api.isLoggedIn()) {
+      api.myBalance().then((b) => this.setData({ liveBalance: b.yuan })).catch(() => {})
+    }
     ensureCurrencyCached()
     this.setData({ cur: curOf() })   // 币种跟门店走,不写死币符
 

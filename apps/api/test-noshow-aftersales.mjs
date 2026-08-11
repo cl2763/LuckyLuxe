@@ -471,6 +471,38 @@ const main = async () => {
         }
       }
       walk4(join(ROOT2, 'miniprogram'))
+      // ㉒ D34(《财务总逻辑》休息日不可开单,2026-08-12 拍板):
+      //    休息日排单=400 REST_DAY;设置改营业=放行;顾客端可约时段不含休息日(跨端)。
+      {
+        const stores = await request('/stores', {}, null, { 'x-tenant-id': shop.tenantId })
+        const sid = stores.data.stores[0].id
+        // 造一个特殊休息日(明天+9)
+        const d9 = dateStr(9)
+        await request('/admin/special-dates', { method: 'POST', body: JSON.stringify({ storeId: sid, date: d9, isClosed: true, note: 'CI 休息日' }) }, shop.token)
+        let rr = await request('/admin/bookings/direct', { method: 'POST', body: JSON.stringify({ serviceId: shop.serviceId, technicianId: shop.tech2, date: d9, time: '12:00', newCustomerName: `休息日客${RUN_ID}` }) }, shop.token)
+        check('㉒ D34 休息日排单=400 REST_DAY(提示原句)', rr.status === 400 && rr.data.error.code === 'REST_DAY' && rr.data.error.message.includes('如需接单请到设置将今日改为营业'), JSON.stringify(rr.data).slice(0, 140))
+        const av = await request(`/availability?storeId=${sid}&serviceId=${shop.serviceId}&date=${d9}`, {}, null, { 'x-tenant-id': shop.tenantId })
+        const avStr = JSON.stringify(av.data)
+        check('㉒ D34 顾客端休息日无可约时段(跨端)', av.status !== 200 || !/"available":true/.test(avStr) || (av.data.slots || []).filter((x) => x.available).length === 0, avStr.slice(0, 120))
+        // 改营业 → 放行
+        await request('/admin/special-dates', { method: 'POST', body: JSON.stringify({ storeId: sid, date: d9, isClosed: false, openTime: '10:00', closeTime: '20:00' }) }, shop.token)
+        rr = await request('/admin/bookings/direct', { method: 'POST', body: JSON.stringify({ serviceId: shop.serviceId, technicianId: shop.tech2, date: d9, time: '12:00', newCustomerName: `休息日客${RUN_ID}` }) }, shop.token)
+        check('㉒ D34 改营业后放行', rr.status === 201 || rr.status === 200, JSON.stringify(rr.data).slice(0, 120))
+      }
+
+      // ㉓ D35(核查二抓获,2026-08-12):默认店(旗舰)客户列表不得含他店档案 ——
+      //    历史 bug=默认店不加过滤全库大杂烩;统一口径后跨租户逐向断言。
+      {
+        const nbCust = await directBooking(shop, { name: `串味检客${RUN_ID}`, time: '09:15', techId: shop.tech2 })
+        const defList = await request('/admin/customers', {}, PLATFORM)   // PLATFORM=默认店 owner
+        check('㉓ D35 默认店客户列表不含测试店档案', defList.status === 200 && !(defList.data.customers || []).some((c) => c.id === nbCust.user.id), `混入 ${nbCust.user.id}`)
+        const shopList = await request('/admin/customers', {}, shop.token)
+        check('㉓ D35 测试店列表含自己的档案(过滤没矫枉过正)', (shopList.data.customers || []).some((c) => c.id === nbCust.user.id))
+        // D35-b:拿他店档案在默认店直接排单=400(D19 storeId 拦截的 userId 姊妹条)
+        const cross = await request('/admin/bookings/direct', { method: 'POST', body: JSON.stringify({ userId: nbCust.user.id, serviceId: 'facial-basic', date: dateStr(3), time: '10:00', technicianId: 'tech-mia' }) }, PLATFORM)
+        check('㉓ D35-b 他店档案跨店排单=400 USER_TENANT_MISMATCH', cross.status === 400 && cross.data.error && cross.data.error.code === 'USER_TENANT_MISMATCH', JSON.stringify(cross.data).slice(0, 140))
+      }
+
       const NAV_BASELINE = 106
       check(`㉑ 裸导航调用数 ≤ 基线 ${NAV_BASELINE}(F2 只减不增;新增代码走 utils/nav.js)`, navCount <= NAV_BASELINE, `当前 ${navCount}`)
     }

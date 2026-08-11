@@ -256,7 +256,12 @@ function toMiniBooking(booking) {
     galleryStatus: booking.galleryStatus,
     couponDiscount: 0,
     balanceDeduction: 0,
-    payableAmount: booking.deposit || storeDepositAmount(),
+    /* D32(4500 同族·假数回落):原来 booking.deposit 为 0 就回落店配定金额还标「已付」。
+       现在真相直出:depositState/depositCents/payment(已签快照分解)由后端下发,前端零运算。 */
+    depositState: booking.depositState || 'none',
+    depositCents: booking.depositCents || 0,
+    payment: booking.payment || null,
+    payableAmount: booking.depositCents ? Math.round(booking.depositCents / 100) : 0,
     finalDue: booking.finalDue || 0,
     servicePrice: booking.servicePrice || service.price || 0,
     status: statusMap[booking.status] || 'pending_service',
@@ -353,6 +358,7 @@ function miniMember(user = {}) {
       ? (nextTier ? Math.max(0, nextTier.minSpend - growthValue) : 0)
       : user.amountToNextLevel,
     memberTiers: user.memberTiers || MEMBER_TIERS,
+    tiersEnabled: user.membershipTiersEnabled === undefined ? true : Boolean(user.membershipTiersEnabled),
     depositWaived: user.depositWaived === undefined ? tier.depositWaived : Boolean(user.depositWaived),
     depositRule: user.depositRule || '',
     growthValue,
@@ -589,6 +595,13 @@ function aiCustomerService(message, history) {
 function getDepositPolicy(qs) { return request(`/store/deposit-policy${qs ? `?${qs}` : ''}`) }
 function getMyCoupons() { return request('/my/coupons') }
 function getMyStoredValue() { return request('/my/stored-value') }
+/* D33 余额单源(2026-08-12):顾客端可见余额一律实时取后端 /my/stored-value,
+   不再读 lucky_member.balance 缓存(旧演示残留 4500 事件)。返回 {cents, yuan}。 */
+async function myBalance() {
+  const r = await request('/my/stored-value')
+  const cents = (r && r.balanceCents) || 0
+  return { cents, yuan: Math.round(cents / 100) }
+}
 function getMyPointsHistory() { return request('/my/points-history') }
 // 积分商城
 function getPointsMall() { return request('/my/points-mall') }
@@ -597,9 +610,14 @@ function redeemPrize(prizeId) { return request('/my/points-mall/redeem', 'POST',
 // 按"当前进的店"刷新会员数据(会员=用户×店:积分/储值/等级每店独立,切店后必须刷新)
 async function refreshMember() {
   const auth = getAuth()
-  if (!auth || !auth.accessToken || !auth.user || !auth.user.id) return null
+  /* D33 根因之一:登录存的 auth 里可能没有 user.id(mini-login 的 auth 与 user 是并列字段),
+     这里一早退,lucky_member 里旧演示时代的 4500 余额缓存就永远洗不掉。
+     id 兜底链:auth.user.id → auth.userId → 本机 lucky_member.id。 */
+  if (!auth || !auth.accessToken) return null
+  const uid = (auth.user && auth.user.id) || auth.userId || (wx.getStorageSync('lucky_member') || {}).id
+  if (!uid) return null
   try {
-    const data = await request(`/users/${auth.user.id}`)
+    const data = await request(`/users/${uid}`)
     const fresh = miniMember(data.user)
     const prev = wx.getStorageSync('lucky_member') || {}
     // 头像/昵称/资料完善度是本机资料,保留;数字类(积分/储值/等级/消费)以当前店为准
@@ -744,6 +762,7 @@ module.exports = {
   getDepositPolicy,
   getMyCoupons,
   getMyStoredValue,
+  myBalance,
   getMyPointsHistory,
   getPointsMall,
   redeemPrize,

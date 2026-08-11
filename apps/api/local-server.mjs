@@ -5437,6 +5437,25 @@ function serializeBooking(row, lang = 'zh') {
        规则①:列表项与详情页同步出现;规则⓪:前端零计算,文案与金额都后端给。
        没更正、没售后的普通单 → 全是空串,列表项保持现状(条件渲染)。 */
     ...customerOrderBadges(row),
+    /* D32(2026-08-12):支付信息真相字段 —— 顾客端不许再自己做减法/回落店配定金假数。
+       depositState: received=已收(额=depositCents)/unpaid=应付未付/none=无定金;
+       payment: 已签结算快照简版分解(完整版随 S8),全部 cents 直出前端零运算。 */
+    depositState: (row.deposit_cents || 0) > 0 ? 'received' : (row.direct_deposit_unpaid ? 'unpaid' : 'none'),
+    depositCents: row.deposit_cents || 0,
+    payment: (() => {
+      const sRow = db.prepare("SELECT * FROM settlements WHERE booking_id = ? AND tenant_id = ? AND status IN ('signed', 'amended') ORDER BY signed_at DESC LIMIT 1").get(row.id, row.tenant_id)
+      if (!sRow) return null
+      const stored = Math.abs(db.prepare("SELECT COALESCE(SUM(amount_cents), 0) s FROM stored_value_transactions WHERE tenant_id = ? AND type = 'consume' AND note = ?").get(row.tenant_id, `服务单 ${sRow.code} 结算扣卡`).s || 0)
+      return {
+        code: sRow.code,
+        listTotalCents: sRow.list_total_cents || 0,
+        subtotalCents: sRow.subtotal_cents || 0,
+        couponDiscountCents: sRow.coupon_discount_cents || 0,
+        depositDeductCents: sRow.deposit_deduct_cents || 0,
+        storedDeductCents: stored,
+        paidCents: (sRow.total_cents || 0) - stored
+      }
+    })(),
     technician: db.prepare('SELECT * FROM technicians WHERE id = ?').get(row.technician_id),
     store: db.prepare('SELECT * FROM stores WHERE id = ?').get(row.store_id),
     payments: db.prepare('SELECT * FROM payments WHERE booking_id = ? ORDER BY created_at DESC').all(row.id),
@@ -5579,6 +5598,8 @@ function serializeUser(user, tenantId = DEFAULT_TENANT_ID) {
     memberLevel: membership.memberLevel,
     memberTier: membership.memberTier,
     growthValue: membership.growthValue,
+    // S9 小件(店主 2026-08-12 拍板):不分级店顾客端做减法 —— 由租户配置下发,前端按它渲染,不写死店名
+    membershipTiersEnabled: Boolean(getMembershipConfig(tenantId).tiersEnabled),
     nextLevelValue: membership.nextLevelValue,
     currentLevelValue: membership.currentLevelValue,
     nextMemberLevel: membership.nextMemberLevel,
@@ -6341,9 +6362,25 @@ function computeSalaryEstimate(techId, month, tid) {
   }
 }
 
+/* D34(店主 2026-08-12 拍板,《财务总逻辑》§休息日不可开单):排班标记休息的日子,
+   现场排单/开单一律拦截;想接单的正路=去设置把当天改营业。顾客端可约时段本就不含休息日。
+   历史数据不删不动(既有单照服务发生日留痕)。 */
+function isClosedDay(storeId, dateStr) {
+  const weekday = localDateTime(dateStr, '12:00').getDay()
+  const hours = db.prepare('SELECT * FROM business_hours WHERE store_id = ? AND weekday = ?').get(storeId, weekday)
+  const special = specialDateFor(storeId, dateStr)
+  // 口径(D34):只拦「排班里显式标记休息」的日子;没配过排班的店(如新店/测试店)不算休息,
+  // 否则零配置商户一张单都开不了。特殊日期优先于每周排班。
+  return special ? Boolean(special.is_closed) : Boolean(hours && hours.is_closed)
+}
+
 function createBooking(body, opts = {}) {
   expireOldHolds()
   const input = validateBookingInput(body)
+  // D34:休息日一律拦(排单/开单/即时单单点入口);历史单不动
+  if (input.storeId && input.date && isClosedDay(input.storeId, input.date)) {
+    throw apiError(400, 'REST_DAY', '本日为休息日,如需接单请到设置将今日改为营业。')
+  }
   const { service, durationMin, start, end } = assertBookable(input, opts)
   const bookingId = randomId('booking')
   const now = iso(new Date())
@@ -6496,10 +6533,14 @@ function cancelBooking(id, body) {
 
 function getAdminCustomers() {
   const tid = currentTenantId()
-  // 多租户:统计只算本店订单;非默认店只列"在本店有订单或储值"的顾客(默认店保留全量,行为不变)
-  const activityFilter = tid === DEFAULT_TENANT_ID ? '' : `
-    WHERE EXISTS (SELECT 1 FROM bookings x WHERE x.user_id = u.id AND x.tenant_id = '${tid.replace(/'/g, "''")}')
-       OR EXISTS (SELECT 1 FROM stored_value_transactions s WHERE s.user_id = u.id AND s.tenant_id = '${tid.replace(/'/g, "''")}')`
+  /* 🔴 D35(2026-08-12 核查二抓获):原来默认店(旗舰)不加任何过滤=全库所有租户用户大杂烩,
+     lucky-luxe 客户库能看到 jics 沙盒店手测建的「666/899」——单租户时代遗产,租户红线违例。
+     统一口径(所有租户同一条):本店档案(u.tenant_id=本店)∪ 在本店有预约/储值的档案。 */
+  const esc = tid.replace(/'/g, "''")
+  /* 口径与结算卡主门一致:严格 users.tenant_id = 本店(单一规则,三处同源:客户列表/排单校验/卡主校验)。
+     「本店有活动但档案挂别店」不再放行 —— 那正是串味的形状,该修档案归属而不是放行显示。 */
+  const activityFilter = `
+    WHERE u.tenant_id = '${esc}'`
   return db.prepare(`
     SELECT
       u.id,
@@ -14054,6 +14095,14 @@ async function route(req, res) {
     }
     const tid = currentTenantId()
     let userId = String(body.userId || '').trim()
+    /* 🔴 D35-b(2026-08-12 核查二连带):直接排单原来不校验 userId 租户归属 ——
+       D19 拦了 storeId 串店,这里 userId 还能把别店档案排进本店(卡主校验到结算才炸)。
+       口径与客户列表同一条:本店档案 ∪ 在本店有预约/储值的档案。 */
+    if (userId) {
+      const u0 = db.prepare('SELECT tenant_id FROM users WHERE id = ?').get(userId)
+      if (!u0) throw apiError(404, 'NOT_FOUND', '找不到这位顾客的档案。')
+      if (u0.tenant_id !== tid) throw apiError(400, 'USER_TENANT_MISMATCH', '这位顾客不在本店档案里。')
+    }
     // 新建顾客(老板口头约的客):给个名字即建档
     if (!userId && String(body.newCustomerName || '').trim()) {
       const uid = randomId('user')

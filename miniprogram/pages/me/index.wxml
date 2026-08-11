@@ -6,7 +6,8 @@
         <view>
           <view class="nickname">{{member.nickname}}</view>
           <button class="level-pill" bindtap="goMemberBenefits">
-            <text>{{member.memberLevel}}</text>
+            <!-- S9 小件:不分级店称谓只写「会员」(按租户配置,不写死店名) -->
+            <text>{{member.tiersEnabled === false ? (lang === 'en' ? 'Member' : '会员') : member.memberLevel}}</text>
             <text class="level-more">权益</text>
           </button>
         </view>
@@ -26,7 +27,7 @@
         <button class="profile-pending-btn" bindtap="openProfilePanel">{{lang === 'en' ? 'Complete profile' : '完善头像昵称'}}</button>
       </view>
 
-      <view class="growth-block">
+      <view class="growth-block" wx:if="{{member.tiersEnabled !== false}}">
         <view class="growth-head">
           <text>{{t.growth}}</text>
           <text>{{member.growthValue}} / {{member.nextLevelValue}}</text>
@@ -47,7 +48,7 @@
           <text>{{t.coupons}} ›</text>
         </view>
         <view class="asset-tap" bindtap="goStored">
-          <text>{{cur.p}}{{cur.s}}{{member.balance}}</text>
+          <text>{{cur.p}}{{cur.s}}{{liveBalance === undefined ? member.balance : liveBalance}}</text>
           <text>{{t.balance}} ›</text>
         </view>
       </view>

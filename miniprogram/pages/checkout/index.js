@@ -5,6 +5,7 @@ const api = require('../../utils/api')
 
 Page({
   onShow() {
+    api.myBalance().then((b) => { this._liveBalanceYuan = b.yuan; if (this.calculate) this.calculate(); }).catch(() => {})
     ensureCurrencyCached()
     this.setData({ cur: curOf() })   // 币种跟门店走,不写死币符
   },
@@ -86,7 +87,8 @@ Page({
     const depositWaived = Boolean(member.depositWaived)
     const depositRequired = this.data.items.reduce((sum, item) => sum + item.service.depositAmount * item.quantity, 0)
     const serviceDeposit = depositWaived ? 0 : depositRequired
-    const memberBalance = Number(member.balance) || 0
+    // D33 单源:抵扣估显用实时余额(this._liveBalanceYuan 由 onShow 拉),缓存仅兜底
+    const memberBalance = this._liveBalanceYuan !== undefined ? this._liveBalanceYuan : (Number(member.balance) || 0)
     // 储值余额抵扣定金:开关打开时,从余额里扣(最多扣到定金金额);余额充足则无需微信支付
     const balanceDeduction = this.data.useBalance ? Math.min(memberBalance, serviceDeposit) : 0
     const payableAmount = Math.max(0, serviceDeposit - balanceDeduction)

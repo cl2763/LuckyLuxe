@@ -27,9 +27,9 @@
          别让店主在两个地方看到互相矛盾的两句话(文案后端下发)。 -->
     <view wx:if="{{dv && dv.isClosed}}" class="dv-closed">
       本日休息{{dv.specialNote ? ' · ' + dv.specialNote : ''}}
-      <!-- 日结归属改服务日(v1.5 §六)后,原来那句「有 N 笔昨日单记在今天」已作废:
-           晚签的单记回服务那一天,不会再堆到今天。休息日临时接了单才需要解释这一句。 -->
-      <view wx:if="{{v.orderCount}}" class="dv-crossday">本日仍有 {{v.orderCount}} 单服务发生(休息日临时接单),见下方日结</view>
+      <!-- D34(2026-08-12):休息日不可开单已成口径 —— 历史单照服务发生日留痕,提示改写;
+           旧称谓字样按口径变更全仓移除。 -->
+      <view wx:if="{{v.orderCount}}" class="dv-crossday">该日有 {{v.orderCount}} 单历史单据,见下方日结</view>
     </view>
     <view wx:elif="{{dv && !dv.cols.length}}" class="empty">本日无在岗技师</view>
     <block wx:elif="{{dv}}">
