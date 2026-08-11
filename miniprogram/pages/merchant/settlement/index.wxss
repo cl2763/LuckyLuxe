@@ -188,3 +188,23 @@
 .rvgift{color:#9b7655;font-size:22rpx}
 .rvnote{font-size:20rpx;color:#a89c92;margin:10rpx 0;line-height:1.5}
 .rvsheet .ds-confirm{margin:8rpx -26rpx -26rpx;border-radius:0 0 20rpx 20rpx;background:#2d2826;color:#fff;text-align:center;font-size:28rpx;font-weight:700;padding:22rpx 0}
+
+/* 规则⑦:绑定码入口与拦截提示条 */
+.bindlink{color:#5b7a99;text-decoration:underline;font-size:22rpx}
+.bindbar{margin-top:10rpx;padding:12rpx 16rpx;background:#fdf1e7;color:#b5541f;border-radius:12rpx;font-size:22rpx;display:flex;align-items:center;justify-content:space-between}
+.bindbtn{background:#2f2a22;color:#fff;border-radius:10rpx;padding:8rpx 20rpx;font-size:22rpx;margin-left:16rpx;flex-shrink:0}
+.qrbox{display:flex;justify-content:center;margin:20rpx 0}
+.qrph{width:280rpx;height:280rpx;border:2rpx dashed #c9c0af;border-radius:16rpx;display:flex;align-items:center;justify-content:center;color:#9a917f;font-size:22rpx;text-align:center;white-space:pre-line}
+.qbtns{display:flex;justify-content:center;margin:12rpx 0}
+.qbtn{background:#f4efe6;border-radius:12rpx;padding:14rpx 32rpx;font-size:24rpx;color:#2f2a22}
+
+/* 规则⑧:条目编号清单 + 技师数字排(原样恢复) */
+.numlist{background:#faf7f0;border-radius:12rpx;padding:12rpx 16rpx;margin-bottom:10rpx}
+.numrow{display:flex;gap:10rpx;font-size:22rpx;color:#6b6355;padding:4rpx 0}
+.nno{flex-shrink:0}
+.nname{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.techrow{display:flex;align-items:center;margin:8rpx 0}
+.tn{width:110rpx;font-size:24rpx;color:#2f2a22;flex-shrink:0}
+.minichips{display:flex;flex-wrap:wrap;gap:10rpx}
+.mchip{min-width:56rpx;height:56rpx;line-height:56rpx;text-align:center;border-radius:50%;background:#f4efe6;color:#6b6355;font-size:24rpx}
+.mchip.on{background:#2f2a22;color:#fff}

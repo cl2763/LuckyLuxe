@@ -349,6 +349,45 @@ const main = async () => {
     check('⑭ 技师耗卡=403(确认收入,寸步不让)', (await request('/admin/stored-value/consume', { method: 'POST', body: JSON.stringify({ userId: custId, amountCents: 100 }) }, staffToken)).status === 403)
     check('⑭ 技师储值总览=403', (await request('/admin/stored-value', {}, staffToken)).status === 403)
     check('⑭ 技师财务页=403(财务门禁整体不变)', (await request('/admin/finance/deposit-conservation', {}, staffToken)).status === 403)
+
+    // ===== ⑯ 绑定码全链(图 v2.3 规则⑦):铸码→确认卡→确认绑定→充值解锁;两把钥匙边界 =====
+    {
+      const nb = await directBooking(shop, { name: `绑定客${RUN_ID}`, time: '21:15' })
+      const nbId = nb.user.id
+      const mint = await request(`/admin/customers/${nbId}/bind-token`, { method: 'POST', body: '{}' }, staffToken)
+      check('⑯ 技师可铸绑定码(现场是技师递手机)', mint.status === 201 && Boolean(mint.data.token) && String(mint.data.url).includes('/bind?t='), JSON.stringify(mint.data).slice(0, 140))
+      const card = await request(`/bind-tokens/${mint.data.token}`, {}, null)
+      check('⑯ 确认卡只有称呼/店名,无单无金额字段', card.status === 200 && card.data.displayName && card.data.alreadyBound === false
+        && !JSON.stringify(card.data).match(/totalCents|amountCents|settlement/), JSON.stringify(card.data).slice(0, 160))
+      const cfm = await request(`/bind-tokens/${mint.data.token}/confirm`, { method: 'POST', body: JSON.stringify({ openid: `wx-fresh-${RUN_ID}` }) }, null)
+      check('⑯ 新 openid 确认=绑定成功', cfm.status === 200 && cfm.data.bound === true && !cfm.data.conflict, JSON.stringify(cfm.data).slice(0, 120))
+      r = await request('/admin/stored-value/recharge', { method: 'POST', body: JSON.stringify({ userId: nbId, amountCents: 1000, payChannel: 'manual', note: '绑定后解锁验证' }) }, staffToken)
+      check('⑯ 绑定后充值解锁=201(D25 闭环)', r.status === 201)
+      const again = await request(`/admin/customers/${nbId}/bind-token`, { method: 'POST', body: '{}' }, shop.token)
+      check('⑯ 已绑定档案再铸码=400 ALREADY_BOUND', again.status === 400 && again.data.error.code === 'ALREADY_BOUND')
+      check('⑯ 废令牌=404(用过的码不能再进确认卡)', (await request(`/bind-tokens/${mint.data.token}`, {}, null)).status === 404)
+      check('⑯ 假令牌=404', (await request('/bind-tokens/bind_fake_notexist', {}, null)).status === 404)
+      // 冲突路:同一个 openid 再绑本店另一档案 → 不覆盖,进合并队列
+      const nb2 = await directBooking(shop, { name: `冲突客${RUN_ID}`, time: '22:15', techId: shop.tech2 })
+      const mint2 = await request(`/admin/customers/${nb2.user.id}/bind-token`, { method: 'POST', body: '{}' }, shop.token)
+      const cfm2 = await request(`/bind-tokens/${mint2.data.token}/confirm`, { method: 'POST', body: JSON.stringify({ openid: `wx-fresh-${RUN_ID}` }) }, null)
+      check('⑯ 同 openid 绑本店另一档案=冲突进合并队列不覆盖(S4 规则⑤同构)', cfm2.status === 200 && cfm2.data.conflict === true && cfm2.data.mergeQueued === true, JSON.stringify(cfm2.data).slice(0, 120))
+    }
+
+    // ===== ⑰ 储值逐笔视图(2026-08-12 裁决):求和≡聚合卡月充值;技师=403 =====
+    {
+      const fk = await request('/admin/finance/unlock', { method: 'POST', body: JSON.stringify({}) }, shop.token)
+      const kh = { 'x-finance-key': fk.data.financeKey || '' }
+      const txns = await request('/admin/stored-value/txns', { headers: kh }, shop.token)
+      const overview = await request('/admin/stored-value', { headers: kh }, shop.token)
+      check('⑰ 逐笔列表求和≡后端下发合计≡聚合卡月充值', txns.status === 200
+        && txns.data.txns.reduce((n, t) => n + t.amountCents, 0) === txns.data.totalCents
+        && txns.data.totalCents === overview.data.storedValue.monthRechargeCents,
+        `${txns.data && txns.data.totalCents} vs ${overview.data && overview.data.storedValue && overview.data.storedValue.monthRechargeCents}`)
+      check('⑰ 行含 时间/顾客/金额/经手人/来源 五要素', txns.data.txns.length > 0 && txns.data.txns.every((t) => t.at && t.userName && typeof t.amountCents === 'number' && t.handler && t.source), JSON.stringify(txns.data.txns[0] || {}))
+      check('⑰ 金额纯 cents 下发(币符前端拼,币种红线)', !JSON.stringify(txns.data.txns).match(/[¥$]/))
+      check('⑰ 技师看逐笔=403', (await request('/admin/stored-value/txns', {}, staffToken)).status === 403)
+    }
   }
 
   console.log(`\n爽约处置+售后完成态回归通过:${checks} 项断言全绿`)

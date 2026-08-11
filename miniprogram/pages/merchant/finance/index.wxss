@@ -81,3 +81,15 @@ page{background:#fbf8f5}
 .md-tip{font-size:20rpx;color:#8c8279;line-height:1.6;margin-top:10rpx}
 .md-save{height:88rpx;line-height:88rpx;text-align:center;background:#2d2826;color:#fff;border-radius:16rpx;font-size:29rpx;font-weight:700;margin-top:26rpx}
 .md-skip{text-align:center;font-size:22rpx;color:#8c8279;margin-top:14rpx}
+
+/* 储值逐笔流水(2026-08-12 店主裁决补的商家端视图,只读) */
+.svtxn-h{font-size:24rpx;color:#8a8172;margin:14rpx 0 6rpx}
+.svtxn{display:flex;align-items:center;justify-content:space-between;padding:10rpx 0;border-bottom:1rpx solid #f3eee3}
+.svtxn-l{display:flex;flex-direction:column;flex:1;min-width:0}
+.svtxn-t{font-size:22rpx;color:#9a917f}
+.svtxn-u{font-size:26rpx;color:#2f2a22;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.svtxn-m{display:flex;flex-direction:column;align-items:flex-end;margin-right:20rpx}
+.svtxn-h2{font-size:22rpx;color:#6b6355}
+.svtxn-s{font-size:20rpx;color:#9a917f}
+.svtxn-a{font-size:28rpx;font-weight:700;color:#2f6b3c;flex-shrink:0}
+.svtxn-empty{font-size:22rpx;color:#9a917f;margin-top:10rpx}

@@ -10185,6 +10185,44 @@ async function route(req, res) {
   }
   /* 屏 S4「是我本人,绑定并继续」。沙盒(没配微信密钥)走演示旁路:
      用一个稳定的伪 openid,把整条链路跑通,不真调微信授权(规则⑤ 末句)。 */
+  /* ===== 绑定码(图 v2.3 规则⑦,公开路由:顾客扫码进来,无商家会话) =====
+     GET  /bind-tokens/:token         → 本人确认卡数据(只有档案称呼/店名,无单无金额)
+     POST /bind-tokens/:token/confirm → 绑定(复用 S4 claimUserByOpenId:冲突进合并队列不覆盖) */
+  if (req.method === 'GET' && path.startsWith('/bind-tokens/') && path.split('/').length === 3) {
+    const token = decodeURIComponent(path.split('/')[2] || '')
+    const tk = db.prepare('SELECT * FROM archive_bind_tokens WHERE token = ?').get(token)
+    if (!tk || tk.status !== 'active') throw apiError(404, 'NOT_FOUND', '这枚绑定码已失效,请店员重新出示。')
+    if (tk.expires_at && tk.expires_at < iso(new Date())) throw apiError(410, 'EXPIRED', '这枚绑定码已过期,请店员重新出示。')
+    const u = db.prepare('SELECT id, display_name, phone FROM users WHERE id = ? AND tenant_id = ?').get(tk.user_id, tk.tenant_id)
+    if (!u) throw apiError(404, 'NOT_FOUND', '找不到这份顾客档案。')
+    if (!tk.viewed_at) db.prepare('UPDATE archive_bind_tokens SET viewed_at = ? WHERE token = ?').run(iso(new Date()), token)
+    const store = db.prepare('SELECT name FROM stores WHERE tenant_id = ? ORDER BY rowid ASC LIMIT 1').get(tk.tenant_id)
+    return json(res, 200, {
+      displayName: u.display_name || '顾客',
+      phoneMasked: maskPhone(u.phone),
+      storeName: (store && store.name) || '',
+      alreadyBound: isUserBound(u.id),
+      note: '只做绑定 —— 不会进入签署,看不到结算单与任何金额。'
+    })
+  }
+  if (req.method === 'POST' && path.startsWith('/bind-tokens/') && path.endsWith('/confirm')) {
+    const token = decodeURIComponent(path.split('/')[2] || '')
+    const tk = db.prepare('SELECT * FROM archive_bind_tokens WHERE token = ?').get(token)
+    if (!tk || (tk.status !== 'active' && tk.status !== 'used')) throw apiError(404, 'NOT_FOUND', '这枚绑定码已失效,请店员重新出示。')
+    if (tk.status === 'active' && tk.expires_at && tk.expires_at < iso(new Date())) throw apiError(410, 'EXPIRED', '这枚绑定码已过期,请店员重新出示。')
+    const body = await readBody(req)
+    const sandbox = !process.env.WECHAT_APP_SECRET
+    let openid = String(body.openid || '').trim()
+    if (!openid) {
+      if (!sandbox) throw apiError(400, 'BAD_REQUEST', '缺少微信授权信息。')
+      openid = `demo-openid-${tk.user_id}` // 沙盒旁路:同一档案恒同假 openid(与签署 claim 同法,幂等)
+    }
+    const out = claimUserByOpenId({ tenantId: tk.tenant_id, userId: tk.user_id, providerUserId: openid, unionId: String(body.unionid || '') })
+    if (out.bound && tk.status === 'active') {
+      db.prepare("UPDATE archive_bind_tokens SET status = 'used', used_at = ? WHERE token = ?").run(iso(new Date()), token)
+    }
+    return json(res, 200, { ...out, sandbox })
+  }
   if (req.method === 'POST' && path.startsWith('/settlements/') && path.endsWith('/claim')) {
     const code = decodeURIComponent(path.split('/')[2] || '')
     const row = db.prepare('SELECT * FROM settlements WHERE code = ?').get(code)
@@ -13036,6 +13074,35 @@ async function route(req, res) {
     if (adminSession.role !== 'owner') throw apiError(403, 'FORBIDDEN', 'Owner permission is required.')
     return json(res, 200, { storedValue: storedValueOverview() })
   }
+  /* 储值逐笔流水(店主 2026-08-12 裁决补的商家端视图):默认本月充值明细,按日倒序,只读。
+     求和 ≡ 聚合卡「本月充值」(CI 常驻断言);金额纯 cents 下发,币符前端 storeMoney(币种红线)。 */
+  if (req.method === 'GET' && path === '/admin/stored-value/txns') {
+    if (adminSession.role !== 'owner') throw apiError(403, 'FORBIDDEN', 'Owner permission is required.')
+    const month = /^\d{4}-\d{2}$/.test(String(query.month || '')) ? String(query.month) : localParts(new Date()).date.slice(0, 7)
+    const rows = db.prepare(`
+      SELECT s.id, s.type, s.amount_cents, s.pay_channel, s.note, s.created_by, s.created_at, s.technician_id,
+             u.display_name AS user_name, t.name AS technician_name
+      FROM stored_value_transactions s
+      LEFT JOIN users u ON u.id = s.user_id
+      LEFT JOIN technicians t ON t.id = s.technician_id
+      WHERE s.tenant_id = ? AND s.type = 'recharge' AND substr(s.created_at, 1, 7) = ?
+      ORDER BY s.created_at DESC
+    `).all(currentTenantId(), month)
+    const tz = tenantTimezone(currentTenantId())
+    return json(res, 200, {
+      month,
+      totalCents: rows.reduce((n, r) => n + (r.amount_cents || 0), 0),
+      txns: rows.map((r) => {
+        const p = localParts(new Date(r.created_at), tz)
+        return {
+          id: r.id, at: `${p.date.slice(5)} ${p.time.slice(0, 5)}`,
+          userName: r.user_name || '—', amountCents: r.amount_cents,
+          handler: r.technician_name || (r.created_by || '—'),
+          source: r.pay_channel || '—', note: r.note || ''
+        }
+      })
+    })
+  }
   if (req.method === 'POST' && (path === '/admin/stored-value/recharge' || path === '/admin/stored-value/consume')) {
     const isRecharge = path.endsWith('/recharge')
     // 充值:老板或技师(2026-08-12 拍板放行,技师不离结算单);耗卡=确认收入,仍只有老板能做
@@ -14830,6 +14897,29 @@ async function route(req, res) {
   }
   /* 屏 S1:按手机号找档案(命中即带出,不建重复档案 —— 规则①)。
      只在**本店**找;唯一命中才认,多条命中当没命中(歧义不猜人 —— 规则⓪)。 */
+  /* 出示绑定码(图 v2.3 规则⑦):给**未绑定档案**铸一枚绑定令牌 —— 员工/老板都可
+     (现场是技师递手机)。已绑定档案铸码=400(没有可绑的事)。沙盒期 url 为链接占位,
+     上线换 wxacode 真码;发版清单「码对应到具体对象」项含绑定码→档案。 */
+  if (req.method === 'POST' && path.startsWith('/admin/customers/') && path.endsWith('/bind-token')) {
+    if (adminSession.role !== 'owner' && adminSession.role !== 'staff') throw apiError(403, 'FORBIDDEN', '需要员工或老板权限。')
+    const uid = path.split('/')[3]
+    const u = db.prepare('SELECT id, display_name, tenant_id FROM users WHERE id = ?').get(uid)
+    if (!u || u.tenant_id !== currentTenantId()) throw apiError(404, 'NOT_FOUND', '找不到这份顾客档案。')
+    if (isUserBound(uid)) throw apiError(400, 'ALREADY_BOUND', '这份档案已绑定微信,不需要绑定码。')
+    const now = iso(new Date())
+    db.prepare("UPDATE archive_bind_tokens SET status = 'superseded' WHERE tenant_id = ? AND user_id = ? AND status = 'active'").run(currentTenantId(), uid)
+    const token = randomId('bind') + '_' + Math.random().toString(36).slice(2, 10)
+    const expiresAt = iso(new Date(Date.now() + 48 * 3600 * 1000))
+    db.prepare(`INSERT INTO archive_bind_tokens (token, tenant_id, user_id, status, expires_at, created_by, created_at)
+      VALUES (?, ?, ?, 'active', ?, ?, ?)`).run(token, currentTenantId(), uid, expiresAt, adminSession.email || adminSession.role || 'admin', now)
+    return json(res, 201, {
+      token, expiresAt,
+      url: `${APP_PUBLIC_URL}/bind?t=${encodeURIComponent(token)}`,
+      pagePath: `/pages/bind/index?token=${encodeURIComponent(token)}`,
+      displayName: u.display_name || '顾客',
+      hint: '请顾客扫码完成绑定——只绑定,不会进入签署、看不到结算单'
+    })
+  }
   if (req.method === 'GET' && path === '/admin/customers/lookup') {
     const phone = String(query.phone || '').replace(/\s/g, '').trim()
     const memberCode = String(query.memberCode || '').trim()
@@ -15725,6 +15815,21 @@ db.exec(`
     created_at TEXT NOT NULL
   );
   CREATE INDEX IF NOT EXISTS idx_sign_tokens ON settlement_sign_tokens(tenant_id, settlement_id);
+
+  /* 绑定码(图 v2.3 规则⑦):指向**档案**的一次性令牌 —— 扫了只做绑定,看不到结算单与金额。
+     与签署码(指向单)两把钥匙各司其职。 */
+  CREATE TABLE IF NOT EXISTS archive_bind_tokens (
+    token TEXT PRIMARY KEY,
+    tenant_id TEXT NOT NULL,
+    user_id TEXT NOT NULL,
+    status TEXT NOT NULL,          -- active | superseded | used
+    expires_at TEXT NOT NULL,
+    viewed_at TEXT,
+    used_at TEXT,
+    created_by TEXT,
+    created_at TEXT NOT NULL
+  );
+  CREATE INDEX IF NOT EXISTS idx_bind_tokens ON archive_bind_tokens(tenant_id, user_id);
 
   /* openid 冲突的人工合并队列(规则⑤):该微信已绑本店另一档案时,
      **不覆盖**、签字照走,把冲突排进队列等人处理。只追加。 */

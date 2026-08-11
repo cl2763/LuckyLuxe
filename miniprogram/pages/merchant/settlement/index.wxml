@@ -7,7 +7,7 @@
       <text class="s2phone" wx:if="{{bind.phoneMasked}}">{{bind.phoneMasked}}</text>
       <text class="s2badge" wx:if="{{bind.badgeText}}">{{bind.badgeText}}</text>
     </view>
-    <view class="s2hint" wx:if="{{bind.hintText}}">{{bind.hintText}}</view>
+    <view class="s2hint" wx:if="{{bind.hintText}}">{{bind.hintText}} <text class="bindlink" catchtap="openBindCode">出示绑定码 →</text></view>
   </view>
 
   <!-- qrOnly 纯出码模式不加载价目表 -->
@@ -92,6 +92,19 @@
           </view>
         </view>
 
+        <block wx:if="{{grp.techRows}}">
+          <view class="numlist">
+            <view class="numrow" wx:for="{{grp.numbered}}" wx:for-item="n" wx:key="no"><text class="nno">{{n.label}}</text><text class="nname">{{n.name}}</text></view>
+          </view>
+          <view class="techrow" wx:for="{{grp.techRows}}" wx:for-item="tr" wx:key="id">
+            <view class="tn">{{tr.name}}</view>
+            <view class="minichips">
+              <view class="mchip {{c.on ? 'on' : ''}}" wx:for="{{tr.chips}}" wx:for-item="c" wx:key="no" data-g="{{gi}}" data-tech="{{tr.id}}" data-no="{{c.no}}" catchtap="gToggleTechItem">{{c.label}}</view>
+            </view>
+          </view>
+          <view class="hint">每人点自己做的编号,可两人都点=共做;分成金额店长日结核定,此处只记录</view>
+        </block>
+
         <view class="sec">被服务者(本组) <text class="hint">朋友不建档:填称呼即可,单据仍推卡主签</text></view>
         <input class="in full" placeholder="留空=本人；朋友填称呼" value="{{grp.servedPersonName}}" data-g="{{gi}}" bindinput="gServedName" />
       </view>
@@ -161,6 +174,7 @@
         <view class="ck {{payMenu.recharge ? 'on' : ''}}">{{payMenu.recharge ? '✓' : ''}}</view>
         <view class="pmain">
           <b>现场充值再抵扣</b>　<text class="rvlink {{bind.bound?'':'dis'}}" catchtap="openRecharge">去帮顾客充值 →</text>
+          <view wx:if="{{userId && !bind.bound}}" class="bindbar">未绑定档案不可充值 —— 请先让顾客扫码绑定<view class="bindbtn" catchtap="openBindCode">出示绑定码</view></view>
           <text class="psmall">点右侧小字进充值面板;充完自动回本单,余额刷新可抵扣</text>
         </view>
       </view>
@@ -234,6 +248,17 @@
   </view>
 
   <!-- 屏 S3 出码层(现有闭环全保留;多组=同组多张单,顾客按 待签 1/N 顺序签) -->
+  <view wx:if="{{bindQr}}" class="qmask" bindtap="closeBindCode"></view>
+  <view wx:if="{{bindQr}}" class="qsheet">
+    <view class="qtitle">出示绑定码 · {{bindQr.displayName}}</view>
+    <view class="qnewc">{{bindQr.hint}}</view>
+    <view class="qrbox"><view class="qrph">沙盒占位码
+(上线换 wxacode 真码)</view></view>
+    <view class="qlink">{{bindQr.url}}</view>
+    <view class="qbtns"><view class="qbtn" catchtap="copyBindLink">复制绑定链接</view></view>
+    <view class="qstate waiting">{{bindQr.stateText}}</view>
+    <view class="qsub">顾客扫码只做绑定 —— 不会进入签署、看不到结算单与金额</view>
+  </view>
   <view wx:if="{{qr}}" class="qmask" bindtap="closeQr"></view>
   <view wx:if="{{qr}}" class="qsheet">
     <view class="qhd">

@@ -1,0 +1,29 @@
+<view class="wrap">
+  <view wx:if="{{state === 'loading'}}" class="mut center">正在核对绑定码…</view>
+
+  <view wx:if="{{state === 'confirm'}}" class="card">
+    <view class="store">{{card.storeName}}</view>
+    <view class="title">本人确认</view>
+    <view class="line"><text class="k">档案称呼</text><text class="v">{{card.displayName}}</text></view>
+    <view class="line" wx:if="{{card.phoneMasked}}"><text class="k">手机号</text><text class="v">{{card.phoneMasked}}</text></view>
+    <view class="safe">{{card.note}}</view>
+    <view class="btn" bindtap="confirm">确认是我本人,完成绑定</view>
+    <view class="mut center">绑定后你的服务账单会自动存入你的小程序</view>
+  </view>
+
+  <view wx:if="{{state === 'done'}}" class="card done">
+    <view class="okmark">已绑定 ✓</view>
+    <view class="okhint">请将手机交还技师</view>
+    <view class="mc" wx:if="{{memberCode}}">你的专属会员码:{{memberCode}}</view>
+  </view>
+
+  <view wx:if="{{state === 'already'}}" class="card done">
+    <view class="okmark">该档案已绑定 ✓</view>
+    <view class="okhint">无需重复操作,请将手机交还技师</view>
+  </view>
+
+  <view wx:if="{{state === 'error'}}" class="card">
+    <view class="title">无法完成绑定</view>
+    <view class="safe warn">{{errText}}</view>
+  </view>
+</view>

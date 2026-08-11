@@ -13,6 +13,7 @@ function localToday() {
 
 Page({
   data: {
+    svTxns: [], svTxnTotal: '',
     unlocked: false,
     lockEnabled: false,
     configured: true,
@@ -151,6 +152,15 @@ Page({
           dormant: d ? `${d.displayName} ${money(d.balanceCents)}(${d.dormantDays || 0}天未动)` : ''
         }
       })
+      /* 储值逐笔(2026-08-12 裁决):本月充值明细,按日倒序,只读;金额 storeMoney(币种红线)。
+         求和≡聚合卡月充值由后端一次下发(totalCents),CI 常驻断言。 */
+      try {
+        const tx = await api.adminGet('/admin/stored-value/txns')
+        this.setData({
+          svTxns: (tx.txns || []).map((t) => Object.assign({}, t, { amountText: money(t.amountCents) })),
+          svTxnTotal: money(tx.totalCents || 0)
+        })
+      } catch (e) { this.setData({ svTxns: [], svTxnTotal: '' }) }
       // 待结工资(已锁定未发放)
       try {
         const pp = await api.adminGet('/admin/salary/pending-payout')

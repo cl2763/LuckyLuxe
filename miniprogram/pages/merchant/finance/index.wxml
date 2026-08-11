@@ -62,6 +62,16 @@
         <view class="dorm-l"><text class="dorm-t">💤 沉睡卡</text><text class="dorm-s">{{sv.dormant}}</text></view>
         <view class="wakebtn" bindtap="wakeSleep">唤醒</view>
       </view>
+      <block wx:if="{{svTxns.length}}">
+        <view class="divi"></view>
+        <view class="svtxn-h">本月充值逐笔({{svTxns.length}} 笔,合计 {{svTxnTotal}})</view>
+        <view class="svtxn" wx:for="{{svTxns}}" wx:key="id">
+          <view class="svtxn-l"><text class="svtxn-t">{{item.at}}</text><text class="svtxn-u">{{item.userName}}</text></view>
+          <view class="svtxn-m"><text class="svtxn-h2">{{item.handler}}</text><text class="svtxn-s">{{item.source}}</text></view>
+          <text class="svtxn-a">{{item.amountText}}</text>
+        </view>
+      </block>
+      <view wx:if="{{!svTxns.length}}" class="svtxn-empty">本月暂无充值流水</view>
     </view>
 
     <view class="t2">待结工资</view>

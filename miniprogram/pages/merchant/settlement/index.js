@@ -37,10 +37,17 @@ function newGroup(tierDefault, firstCat) {
     selectedTechs: [],
     servedPersonName: '',
     collapsed: false,
-    // 渲染缓存(renderGroup 填)
-    mainItems: [], addonGroups: [], mainName: '', summary: ''
+    // 规则⑧(v2.3 原样恢复):双技师时各自点选自己做的条目编号;{techId: [itemNo,...]}
+    // 考据结论:原实现按**数字位**保留(条目重排后不跟随也不清空,与重构前一致)
+    techItems: {},
+    // 渲染缓存(renderGroup / doPreview 填)
+    mainItems: [], addonGroups: [], mainName: '', summary: '', techRows: null, numbered: null
   }
 }
+
+// 条目编号显示位(规则⑧):后端 itemNo 从 1 起;超过 10 直接显示数字
+const NO_MARKS = ['①', '②', '③', '④', '⑤', '⑥', '⑦', '⑧', '⑨', '⑩']
+const noMark = (n) => NO_MARKS[n - 1] || String(n)
 
 Page({
   // 门禁:未登录/会话失效不渲染空壳,直接回登录页(店主 2026-08-09 红线)
@@ -63,6 +70,7 @@ Page({
     preview: null, view: null,
     bind: { bound: true, badgeText: '', hintText: '', phoneMasked: '', memberCode: '' },
     qr: null,
+    bindQr: null,      // 出示绑定码弹层(规则⑦)
     rvPanel: null,      // 内嵌充值面板(合同规则③-2)
     ctaText: '推送签署',
     submitting: false
@@ -316,6 +324,43 @@ Page({
     // 技师不改钱,但明细区组标题里有技师行 —— 不刷新会显示旧技师(两处说两句话)
     this.renderAll(); this.refresh()
   },
+  /* 规则⑧:技师点选自己做的条目编号(一个编号可两人都点=共做;单技师不出数字排)。
+     无拦截无新校验 —— 分配只随单记录进日结分成参考,钱仍店长日结核定。 */
+  gToggleTechItem(e) {
+    const { g, tech, no } = e.currentTarget.dataset
+    const groups = this.data.groups.slice()
+    const grp = groups[g]
+    grp.techItems = Object.assign({}, grp.techItems)
+    const cur = (grp.techItems[tech] || []).slice()
+    const at = cur.indexOf(Number(no))
+    if (at >= 0) cur.splice(at, 1)
+    else cur.push(Number(no))
+    grp.techItems[tech] = cur
+    this.setData({ groups })
+    this.buildTechRows()
+  },
+  // 数字排与编号清单都从**后端预览行的 itemNo** 来(金额红线同源,不自己编号)
+  buildTechRows() {
+    const sheets = ((this.data.preview || {}).sheets) || []
+    const groups = this.data.groups.map((g, i) => {
+      const lines = ((sheets[i] || {}).lines || []).filter((l) => l.kind !== 'rule')
+      if (g.selectedTechs.length === 2 && lines.length) {
+        g.numbered = lines.map((l) => ({ no: l.itemNo, label: noMark(l.itemNo), name: l.name }))
+        g.techRows = g.selectedTechs.map((id) => {
+          const t = (this.data.roster || []).find((x) => x.id === id) || { name: '' }
+          return {
+            id, name: t.name,
+            chips: lines.map((l) => ({ no: l.itemNo, label: noMark(l.itemNo), on: (g.techItems[id] || []).indexOf(l.itemNo) >= 0 }))
+          }
+        })
+      } else {
+        g.numbered = null
+        g.techRows = null
+      }
+      return g
+    })
+    this.setData({ groups })
+  },
   gServedName(e) {
     const groups = this.data.groups.slice()
     groups[e.currentTarget.dataset.g].servedPersonName = (e.detail.value || '').trim()
@@ -476,7 +521,8 @@ Page({
         items,
         customItems: g.customItems.map((c) => ({ name: c.name, amountCents: c.amountCents })),
         servedPersonName: g.servedPersonName || '',
-        technicians: g.selectedTechs.map((id, index) => ({ technicianId: id, role: index === 0 ? 'main' : 'assist', itemNos: [] })),
+        // 规则⑧:分配随单记录(原样恢复=按数字位提交,不做过滤校验——别加戏)
+        technicians: g.selectedTechs.map((id, index) => ({ technicianId: id, role: index === 0 ? 'main' : 'assist', itemNos: (g.techItems && g.techItems[id]) || [] })),
         payIntent: this.payIntentOf(),
         depositApplied: i === 0 ? this.data.depositApplied : false,
         couponGrantId: i === 0 ? (this.data.couponGrantId || undefined) : undefined,
@@ -580,6 +626,8 @@ Page({
         }
       }
       if (!prev || prev.symbol !== d.symbol || prev.prefix !== d.prefix) this.renderAll()
+      // 规则⑧:预览行(itemNo)到位后重建各组数字排(编号=后端行号,不自己编)
+      this.buildTechRows()
     } catch (e) {
       wx.showToast({ title: (e && e.message) || '试算失败', icon: 'none' })
     }
@@ -644,7 +692,47 @@ Page({
     this.setData({ qr: null })
     wx.navigateTo({ url: `/pages/sign/index?code=${encodeURIComponent(code)}` })
   },
-  onUnload() { clearTimeout(this._qrTimer) },
+  onUnload() { clearTimeout(this._qrTimer); clearTimeout(this._bindTimer) },
+
+  /* ===== 出示绑定码(图 v2.3 规则⑦):指向档案的码,扫了只做绑定 =====
+     入口:充值拦截提示条按钮 + 顾客区未绑定小字。沙盒=链接占位+复制(同签署码做法)。 */
+  async openBindCode() {
+    if (!this.data.userId) { wx.showToast({ title: '先选择顾客档案', icon: 'none' }); return }
+    if (this.data.bind.bound) { wx.showToast({ title: '该档案已绑定,无需绑定码', icon: 'none' }); return }
+    try {
+      const r = await api.adminPost(`/admin/customers/${encodeURIComponent(this.data.userId)}/bind-token`, {})
+      this.setData({ bindQr: { url: r.url, pagePath: r.pagePath, displayName: r.displayName, hint: r.hint, state: 'waiting', stateText: '等待顾客扫码绑定…' } })
+      this.pollBind()
+    } catch (e) {
+      wx.showToast({ title: (e && e.message) || '绑定码生成失败', icon: 'none' })
+    }
+  },
+  pollBind() {
+    clearTimeout(this._bindTimer)
+    this._bindTimer = setTimeout(async () => {
+      if (!this.data.bindQr) return
+      try {
+        const r = await api.adminGet(`/admin/customers/lookup?userId=${encodeURIComponent(this.data.userId)}`)
+        const hit = r && r.hit
+        if (hit && hit.bound) {
+          // 绑定事件到达:关弹层、刷徽标、充值解锁(重算让储值/推送状态跟上)
+          this.setData({
+            bindQr: null,
+            bind: { bound: true, badgeText: hit.badgeText || '', hintText: hit.hintText || '', phoneMasked: hit.phoneMasked || '', memberCode: hit.memberCode || '' }
+          })
+          wx.showToast({ title: '已绑定,充值已解锁', icon: 'none', duration: 2500 })
+          this.refresh()
+          return
+        }
+      } catch (e) { /* 拉不到就下轮再试 */ }
+      this.pollBind()
+    }, 2000)
+  },
+  closeBindCode() { clearTimeout(this._bindTimer); this.setData({ bindQr: null }) },
+  copyBindLink() {
+    if (!this.data.bindQr) return
+    wx.setClipboardData({ data: this.data.bindQr.url, success: () => wx.showToast({ title: '绑定链接已复制', icon: 'none' }) })
+  },
 
   async submit() {
     if (this.data.submitting) return
