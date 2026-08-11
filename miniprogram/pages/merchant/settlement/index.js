@@ -128,6 +128,18 @@ Page({
       this.loadBindState()
       this.renderAll()
       this.refresh()
+      /* D28 规则①「继续结算」:本预约已有待签单 → 自动回到出码态续办。
+         非 qrOnly:整页都在,关掉码还能操作绑定/充值;重复开单后端 409 挡着(双单口径)。 */
+      if (this.data.bookingId) {
+        try {
+          const r = await api.adminGet(`/admin/settlements?bookingId=${encodeURIComponent(this.data.bookingId)}`)
+          const pending = ((r && r.settlements) || []).filter((s) => s.status === 'pending_sign')
+          if (pending.length) {
+            wx.showToast({ title: `该预约已有待签单 ${pending.length} 张,继续办理`, icon: 'none', duration: 2200 })
+            this.openQr(pending[0])
+          }
+        } catch (e) { /* 拉不到不挡页面 */ }
+      }
     } catch (e) {
       wx.showToast({ title: (e && e.message) || '加载价目表失败', icon: 'none' })
     }
@@ -678,7 +690,12 @@ Page({
       this.pollQr()
     }, 2500)
   },
-  closeQr() { clearTimeout(this._qrTimer); this.setData({ qr: null }); wx.navigateBack() },
+  closeQr() {
+    clearTimeout(this._qrTimer)
+    this.setData({ qr: null })
+    // D28:纯出码模式(qrFor)关码=离开;正常/续办模式关码留在结算页(还要绑定/充值)
+    if (this._qrOnly) wx.navigateBack()
+  },
   copyQrLink() {
     wx.setClipboardData({
       data: this.data.qr.url,

@@ -129,11 +129,15 @@ const dailyCloseMixin = {
   /* 「查看签署单」= 直接出快照本体(店主 2026-08-10 拍板,废掉"去网页后台看"的提示框)。
      四个入口(今日台面内嵌日结的待分配/待确认行、独立日结页的两行)共用这一个方法,
      改这一处四处同时生效 —— 闭环纪律:同一件事只有一份实现。 */
+  /* D28 规则②:「查看签署单」换统一预览弹层(旧"新页面+左上角小图"废除)。
+     mixin 是唯一实现点 —— 订单页日结区与日结落地页同时生效;
+     全屏原图入口收进弹层里的「查看签署原图」。 */
   viewSnapshot(e) {
     const code = e.currentTarget.dataset.code
     if (!code) { wx.showToast({ title: '这单没有签署快照', icon: 'none' }); return }
-    wx.navigateTo({ url: `/pages/sign/index?snapshot=${encodeURIComponent(code)}` })
+    this.setData({ previewSheet: String(code) })
   },
+  closePreview() { this.setData({ previewSheet: '' }) },
 
   // ===== 屏 1b 金额更正 =====
   async startCorrect(e) {

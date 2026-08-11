@@ -14959,6 +14959,68 @@ async function route(req, res) {
   }
   /* 屏 S3:出示二维码。所有单都出(不分绑定与否),已绑定的多一行「已推送到顾客小程序」。
      码 = 这张单的一次性签署链接;再调一次 = 重发(旧码立刻作废)。 */
+  /* 单据预览排版件(D28 图 v1 规则③):整组一份,后端拼好 —— 抬头/状态章/顾客+时间/
+     分组明细(逐行原价划线→原价合计→档位小计→共优惠→抵扣行→到店应收,与结算页明细同构)/
+     签名区。纯 cents 下发,前端零运算零拼口径;只读。 */
+  if (req.method === 'GET' && path.startsWith('/admin/settlements/') && path.endsWith('/preview-card')) {
+    const id = decodeURIComponent(path.split('/')[3] || '')
+    const one = db.prepare('SELECT * FROM settlements WHERE id = ? AND tenant_id = ?').get(id, currentTenantId())
+      || db.prepare('SELECT * FROM settlements WHERE code = ? AND tenant_id = ?').get(id, currentTenantId())
+    if (!one) throw apiError(404, 'NOT_FOUND', '找不到这张结算单。')
+    let rows = one.group_id
+      ? db.prepare("SELECT * FROM settlements WHERE tenant_id = ? AND group_id = ? AND status <> 'voided' ORDER BY rowid ASC").all(currentTenantId(), one.group_id)
+      : (one.status === 'voided' ? [] : [one])
+    if (!rows.length) throw apiError(410, 'SHEET_VOIDED', '这张结算单已撤回,没有可预览的单据。')
+    const marks = ['①', '②', '③', '④', '⑤']
+    const user = one.user_id ? db.prepare('SELECT display_name FROM users WHERE id = ?').get(one.user_id) : null
+    const tz = tenantTimezone(one.tenant_id)
+    const stamp = (at) => { if (!at) return ''; const p = localParts(new Date(at), tz); return `${p.date} ${p.time.slice(0, 5)}` }
+    const groups = rows.map((r, i) => {
+      const techs = db.prepare('SELECT t.name FROM settlement_technicians st JOIN technicians t ON t.id = st.technician_id WHERE st.settlement_id = ? ORDER BY st.rowid ASC').all(r.id).map((x) => x.name)
+      const lines = db.prepare('SELECT * FROM settlement_items WHERE settlement_id = ? ORDER BY item_no ASC').all(r.id)
+        .filter((l) => l.kind !== 'rule')
+        .map((l) => ({
+          no: l.item_no, name: l.name_snapshot, qty: l.qty,
+          amountCents: l.amount_cents, listAmountCents: l.list_amount_cents,
+          strike: l.list_amount_cents !== l.amount_cents, isFree: Boolean(l.is_free)
+        }))
+      return {
+        title: `项目${marks[i] || i + 1} ${lines[0] ? lines[0].name : ''}${techs.length ? ' · ' + techs.join('/') : ''}${r.served_person_name ? ' · 被服务者:' + r.served_person_name : ''}`,
+        tierKey: r.price_tier_used, lines
+      }
+    })
+    const sum = (k) => rows.reduce((n, r) => n + (r[k] || 0), 0)
+    const allSigned = rows.every((r) => r.status === 'signed' || r.status === 'amended')
+    /* 储值抵扣行:已签单的扣卡在留痕账本里(结算扣卡),按组内各单号合出来 */
+    const codes = rows.map((r) => r.code)
+    let storedCents = 0
+    for (const c of codes) {
+      const row = db.prepare("SELECT COALESCE(SUM(amount_cents), 0) s FROM stored_value_transactions WHERE tenant_id = ? AND type = 'consume' AND note = ?").get(one.tenant_id, `服务单 ${c} 结算扣卡`)
+      storedCents += Math.abs(row.s || 0)
+    }
+    return json(res, 200, {
+      card: {
+        settlementId: one.id,
+        code: one.code,
+        codes,
+        statusKey: allSigned ? 'signed' : 'pending',
+        statusText: allSigned ? '已签署' : '已结算 · 待签',
+        customerName: (user && user.display_name) || '顾客',
+        createdAt: stamp(one.created_at),
+        groups,
+        totals: {
+          listTotalCents: sum('list_total_cents'),
+          subtotalCents: sum('subtotal_cents'),
+          discountTotalCents: sum('discount_total_cents') + sum('coupon_discount_cents'),
+          couponDiscountCents: sum('coupon_discount_cents'),
+          depositDeductCents: sum('deposit_deduct_cents'),
+          storedDeductCents: storedCents,
+          dueCents: sum('total_cents') - storedCents
+        },
+        signature: allSigned ? { name: (user && user.display_name) || '', signedAt: stamp(rows[0].signed_at), hasImage: rows.some((r) => r.snapshot_url || r.snapshot_inline || r.signature_data) } : null
+      }
+    })
+  }
   if (req.method === 'POST' && path.startsWith('/admin/settlements/') && path.endsWith('/sign-token')) {
     if (adminSession.role !== 'owner' && adminSession.role !== 'staff') throw apiError(403, 'FORBIDDEN', '需要员工或老板权限。')
     const id = path.split('/')[3]

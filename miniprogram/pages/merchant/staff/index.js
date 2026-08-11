@@ -385,7 +385,7 @@ Page({
       const text = `用户名:${r.username}\n初始密码:${r.initialPassword}`
       wx.showModal({
         title: '账号已生成', content: `${text}\n(只显示这一次,点「复制」发给员工)`,
-        confirmText: '复制账号密码', cancelText: '知道了',
+        confirmText: '复制', cancelText: '知道了',
         success: (m) => { if (m.confirm) wx.setClipboardData({ data: text, success: () => wx.showToast({ title: '已复制,去粘贴给员工', icon: 'none' }) }) }
       })
       this.load()

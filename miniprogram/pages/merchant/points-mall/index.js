@@ -123,7 +123,7 @@ Page({
   revoke() {
     wx.showModal({
       title: '撤销兑换', editable: true, placeholderText: '输入顾客的券码(如 LL-XXXX-XXXX)',
-      confirmText: '撤销并退积分',
+      confirmText: '撤销退分',
       success: async (m) => {
         if (!m.confirm || !m.content) return
         try {

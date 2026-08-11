@@ -96,3 +96,5 @@
     </view>
   </block>
 </view>
+
+<sheet-preview sheet-id="{{previewSheet}}" bind:close="closePreview" />

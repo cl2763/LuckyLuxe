@@ -111,7 +111,7 @@ Page({
     wx.showModal({
       title: `发放 ${this.data.monthText} 工资`,
       content: `将按锁定的工资表,把每人应发金额写入财务账本(支出·工资),合计 ${this.data.total}。入账后不可解锁,发错需红字冲销。确认发放?`,
-      confirmText: '确认发放入账',
+      confirmText: '确认发放',
       success: async (r) => {
         if (!r.confirm) return
         this.setData({ paying: true })

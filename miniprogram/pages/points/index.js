@@ -51,7 +51,7 @@ Page({
           wx.showModal({
             title: '兑换成功 🎉',
             content: `「${r.couponName}」已放入你的券包。当前剩余 ${r.balance} 积分。`,
-            confirmText: '去券包看看', cancelText: '好',
+            confirmText: '看券包', cancelText: '好',
             success: (x) => { if (x.confirm) wx.navigateTo({ url: '/pages/coupons/index' }) }
           })
           this.load()

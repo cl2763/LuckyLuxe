@@ -143,13 +143,19 @@ Page(Object.assign({
       opts.push({ label: '确认到店', s: 'CONFIRMED' }, { label: '取消预约', s: 'CANCELLED' })
     } else if (status === 'CONFIRMED' || status === 'IN_PROGRESS' || status === 'SERVING') {
       if (pending.length) {
-        opts.push({ label: `查看结算单（待签 ${pending.length} 张）`, sheets: true })
-        // 屏 0:待签状态可撤回改单(只撤未签的;已签一律走金额更正)
+        /* D28 规则①:待结算 →「继续结算」直接回结算页续办(不弹层);数据从后端恢复,
+           结算页 boot 会检测本预约的待签单自动回到出码态(绑定/充值入口都在)。 */
+        opts.push({ label: `继续结算（待签 ${pending.length} 张）`, settle: true })
         opts.push({ label: '撤回改单', voidSheets: pending })
+      } else if (sheets.some((s) => s.status === 'signed' || s.status === 'amended')) {
+        opts.push({ label: '查看结算单', preview: sheets.find((s) => s.status === 'signed' || s.status === 'amended').id })
+        opts.push({ label: '去结算', settle: true })
       } else opts.push({ label: '去结算', settle: true })
       opts.push({ label: '取消预约', s: 'CANCELLED' })
     } else if (status === 'COMPLETED') {
-      if (sheets.length) opts.push({ label: '查看电子票据', sheets: true })
+      // D28 规则①②:已结算/已签署 → 同一预览弹层(不再是 showModal 清单)
+      const live = sheets.filter((s) => s.status !== 'voided')
+      if (live.length) opts.push({ label: '查看结算单', preview: live[0].id })
       opts.push({ label: '转售后', s: 'AFTER_SALES' })
     } else if (status === 'AFTER_SALES') {
       // 图 B 部:售后详情可看可写(权限在面板里按角色收)
@@ -192,6 +198,7 @@ Page(Object.assign({
     if (o.note) this.goNote(ctx)
     else if (o.settle) this.goSettle(ctx)
     else if (o.voidSheets) this.voidSheets(o.voidSheets, ctx)
+    else if (o.preview) this.openPreview(o.preview)
     else if (o.sheets) this.showSheets(this._panelSheets)
     else if (o.noShow) this.markNoShow(ctx)
     else if (o.disposal) this.openDisposal(ctx.id)
@@ -309,18 +316,17 @@ Page(Object.assign({
      改法:**「查看」永远只是看**,列清有哪几张、各是什么状态(顺带满足 D7「点名到单」);
      要把手机递给顾客签是另一个动作,必须商家在这张弹层上**明确点**「递给顾客签」才走。
      不再有"恰好一张就自己跳走"这种隐式行为。 */
+  /* D28 定案:老 showSheets 用 wx.showModal 且 confirmText「递给顾客签」5 个汉字 ——
+     微信限 4 字,整个弹窗静默 fail(没挂 fail 回调),这就是「查看结算单」全状态死链的根因。
+     现换成单据预览弹层组件(图 v1);待签路不再进这里(面板层已分流到「继续结算」)。 */
   showSheets(sheets) {
-    const zh = { pending_sign: '待签', signed: '已签', amended: '已更正', voided: '已撤回' }
-    const live = sheets.filter((s) => s.status !== 'voided')
-    const pending = live.filter((s) => s.status === 'pending_sign')
-    wx.showModal({
-      title: `结算单 ${live.length} 张`,
-      confirmText: pending.length ? '递给顾客签' : '知道了',
-      showCancel: Boolean(pending.length),
-      cancelText: '关闭',
-      content: live.map((s) => `${s.code} · ${zh[s.status] || s.status}${s.servedPersonName ? ` · ${s.servedPersonName}` : ''}`).join('\n'),
-      success: (r) => { if (r.confirm && pending.length) this.openSign(pending[0]) }
-    })
+    const live = (sheets || []).filter((s) => s.status !== 'voided')
+    if (!live.length) { wx.showToast({ title: '这单还没有结算单', icon: 'none' }); return }
+    this.openPreview(live[0].id)
+  },
+  openPreview(idOrCode) {
+    if (!idOrCode) { wx.showToast({ title: '找不到这张结算单', icon: 'none' }); return }
+    this.setData({ previewSheet: String(idOrCode) })
   },
   /* 售后详情(图 B-1 写入版 = D12 只读版 + 写入按钮)。
      状态/时间线/结果全由后端状态机下发(B⓪ 三端同一份);
@@ -510,9 +516,9 @@ Page(Object.assign({
       if (b.state !== 'active') { items.push('确认到店(开始服务)'); actions.push('arrive') }
       if (b.state === 'active') { items.push('改回未到店'); actions.push('unarrive') }
       if (b.state !== 'done') {
-        if (pending.length) { items.push(`查看结算单(待签 ${pending.length} 张)`); actions.push('sheets') }
+        if (pending.length) { items.push(`继续结算(待签 ${pending.length} 张)`); actions.push('settle') }
         else { items.push('去结算'); actions.push('settle') }
-      } else if (sheets.length) { items.push('查看电子票据'); actions.push('sheets') }
+      } else if (sheets.filter((x) => x.status !== 'voided').length) { items.push('查看结算单'); actions.push('preview') }
       // 待签状态可撤回改单(与列表那条路径同一套语义:全撤未签的、券回券包、回到去结算)
       if (pending.length) { items.push('撤回改单'); actions.push('void') }
       if (b.depositUnpaid) { items.push('标记已收定金'); actions.push('paid') }
@@ -539,6 +545,7 @@ Page(Object.assign({
     if (o.act === 'arrive') this.setArrival(b.id, true)
     else if (o.act === 'unarrive') this.setArrival(b.id, false)
     else if (o.act === 'settle') this.goSettle(b)
+    else if (o.act === 'preview') this.openPreview((sheets.find((x) => x.status !== 'voided') || {}).id)
     else if (o.act === 'sheets') this.showSheets(sheets)
     else if (o.act === 'note') this.goNote(b)
     else if (o.act === 'void') this.voidSheets(sheets.filter((x) => x.status === 'pending_sign'), b)

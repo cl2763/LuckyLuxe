@@ -1,6 +1,7 @@
 {
   "navigationBarTitleText": "订单",
   "usingComponents": {
-    "merchant-tabbar": "/components/merchant-tabbar/index"
+    "merchant-tabbar": "/components/merchant-tabbar/index",
+    "sheet-preview": "/components/sheet-preview/index"
   }
 }

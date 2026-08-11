@@ -404,6 +404,54 @@ const main = async () => {
       }
       check('⑰ 技师看逐笔=403', (await request('/admin/stored-value/txns', {}, staffToken)).status === 403)
     }
+
+    // ===== ⑱ D28:showModal 按钮文案 4 汉字上限机械扫描(超限=整窗静默 fail,「递给顾客签」惨案) =====
+    {
+      const ROOT2 = new URL('../../', import.meta.url).pathname
+      const bad2 = []
+      const walk2 = (dir) => {
+        for (const f of readdirSync(dir)) {
+          const pth = join(dir, f)
+          const st = statSync(pth)
+          if (st.isDirectory()) walk2(pth)
+          else if (/\.js$/.test(f)) {
+            const src = readFileSync(pth, 'utf8')
+            for (const m of src.matchAll(/(confirmText|cancelText):\s*['"`]([^'"`]+)['"`]/g)) {
+              const zh = (m[2].match(/[一-龥]/g) || []).length
+              if (zh > 4) bad2.push(`${pth.slice(ROOT2.length)}: ${m[1]}='${m[2]}'`)
+            }
+          }
+        }
+      }
+      walk2(join(ROOT2, 'miniprogram/pages'))
+      check('⑱ D28 全仓 showModal 按钮文案 ≤4 汉字(超限=弹窗静默死)', bad2.length === 0, bad2.join(' | '))
+    }
+
+    // ===== ⑲ D28:单据预览排版件 —— 合计≡各单之和、行≡落库行、单号可查 =====
+    {
+      const pb = await directBooking(shop, { name: `预览客${RUN_ID}`, time: '12:30', techId: shop.tech2 })
+      const made = await request('/admin/settlements', {
+        method: 'POST', body: JSON.stringify({
+          userId: pb.user.id, payerUserId: pb.user.id, cardOwnerUserId: pb.user.id, payIntent: 'offline_full',
+          settlements: [
+            { bookingId: pb.id, tierKey: 'list', items: [{ serviceId: shop.serviceId, qty: 1 }], customItems: [{ name: '预览自选', amountCents: 1200 }], technicians: [{ technicianId: shop.tech1, role: 'main', itemNos: [1] }], servedPersonName: '' },
+            { tierKey: 'list', items: [{ serviceId: shop.serviceId, qty: 1 }], customItems: [], technicians: [{ technicianId: shop.tech2, role: 'main', itemNos: [] }], servedPersonName: '预览朋友' }
+          ]
+        })
+      }, shop.token)
+      const rows2 = made.data.settlements
+      const pc = await request(`/admin/settlements/${rows2[0].id}/preview-card`, {}, shop.token)
+      check('⑲ 排版件 200 且分组数=组内单数', pc.status === 200 && pc.data.card.groups.length === 2, JSON.stringify(pc.data).slice(0, 150))
+      const t = pc.data.card.totals
+      const sum2 = (k) => rows2.reduce((n, r) => n + (r[k] || 0), 0)
+      check('⑲ 排版件合计≡各单之和(原价/小计/应收)', t.listTotalCents === sum2('listTotalCents') && t.subtotalCents === sum2('subtotalCents') && t.dueCents === sum2('totalCents'), JSON.stringify(t))
+      check('⑲ 组② 标题带被服务者', pc.data.card.groups[1].title.includes('预览朋友'))
+      check('⑲ 待签状态章=已结算待签(未签无签名区)', pc.data.card.statusKey === 'pending' && pc.data.card.signature === null)
+      check('⑲ 用单号也能查同一张', (await request(`/admin/settlements/${encodeURIComponent(rows2[0].code)}/preview-card`, {}, shop.token)).data.card.settlementId === rows2[0].id)
+      check('⑲ 金额纯 cents(币符前端拼)', !JSON.stringify(pc.data.card.totals).match(/[¥$]/))
+      for (const s2 of rows2) await request(`/admin/settlements/${s2.id}/void`, { method: 'POST', body: JSON.stringify({ reason: 'CI ⑲ 排版件断言,即建即撤' }) }, shop.token)
+      check('⑲ 全撤后排版件=410(voided 不出预览,也不出假「已签署」)', (await request(`/admin/settlements/${rows2[0].id}/preview-card`, {}, shop.token)).status === 410)
+    }
   }
 
   console.log(`\n爽约处置+售后完成态回归通过:${checks} 项断言全绿`)

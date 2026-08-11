@@ -324,3 +324,5 @@
     <view class="actclose" bindtap="closeActPanel">关闭</view>
   </view>
 </view>
+
+<sheet-preview sheet-id="{{previewSheet}}" bind:close="closePreview" />

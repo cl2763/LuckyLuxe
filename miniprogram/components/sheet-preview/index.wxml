@@ -1,0 +1,37 @@
+<view wx:if="{{sheetId}}" class="spmask" bindtap="close"></view>
+<view wx:if="{{sheetId}}" class="spcard" catchtap="noop">
+  <view wx:if="{{loading}}" class="sploading">正在取签署快照…</view>
+  <block wx:if="{{card}}">
+    <view class="sphead">
+      <view class="sptitle">结算单 {{card.code}}</view>
+      <view class="spstamp {{card.statusKey}}">{{card.statusText}}</view>
+      <view class="spx" bindtap="close">✕</view>
+    </view>
+    <view class="spsub">{{card.customerName}} · {{card.createdAt}}</view>
+    <scroll-view scroll-y class="spbody">
+      <view class="spgrp" wx:for="{{card.groups}}" wx:for-item="g" wx:key="title">
+        <view class="spgt">{{g.title}}</view>
+        <view class="spline" wx:for="{{g.lines}}" wx:for-item="l" wx:key="no">
+          <text class="spname">{{l.name}}{{l.qty > 1 ? ' ×' + l.qty : ''}}</text>
+          <view class="spamt"><text wx:if="{{l.listText}}" class="spstrike">{{l.listText}}</text><text class="spval {{l.amountText === '免收' ? 'free' : ''}}">{{l.amountText}}</text></view>
+        </view>
+      </view>
+      <view class="sptot">
+        <view class="sprow"><text class="spk">原价合计</text><text class="spstrike big">{{card.t.listTotal}}</text></view>
+        <view class="sprow"><text class="spk">档位小计</text><text class="spv">{{card.t.subtotal}}</text></view>
+        <view class="sprow"><text class="spk green">{{card.t.discountLabel}}</text><text class="spv green">{{card.t.discount}}</text></view>
+        <view class="sprow" wx:if="{{card.t.hasStored}}"><text class="spk">储值抵扣</text><text class="spv">−{{card.t.stored}}</text></view>
+        <view class="sprow" wx:if="{{card.t.hasDeposit}}"><text class="spk">定金抵扣</text><text class="spv">−{{card.t.deposit}}</text></view>
+        <view class="sprow due"><text class="spk">到店应收</text><text class="spv">{{card.t.due}}</text></view>
+      </view>
+      <view class="spsign" wx:if="{{card.signature}}">
+        <view class="spk">顾客签名</view>
+        <view class="spsig">{{card.signature.name}}<text class="spsigat">{{card.signature.signedAt}}</text></view>
+      </view>
+    </scroll-view>
+    <view class="spbtns">
+      <view wx:if="{{card.statusKey === 'signed'}}" class="spbtn ghost" bindtap="viewOriginal">查看签署原图</view>
+      <view class="spbtn" bindtap="close">关闭</view>
+    </view>
+  </block>
+</view>

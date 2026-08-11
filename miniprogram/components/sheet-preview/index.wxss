@@ -1,0 +1,32 @@
+.spmask{position:fixed;inset:0;background:rgba(24,20,16,.5);z-index:120}
+.spcard{position:fixed;left:32rpx;right:32rpx;top:8vh;max-height:84vh;background:#fff;border-radius:24rpx;z-index:121;display:flex;flex-direction:column;padding:26rpx 26rpx 20rpx;box-shadow:0 14rpx 48rpx rgba(40,34,28,.25)}
+.sploading{text-align:center;color:#9a917f;font-size:24rpx;padding:60rpx 0}
+.sphead{display:flex;align-items:center;gap:14rpx}
+.sptitle{font-size:30rpx;font-weight:700;color:#2f2a22;flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.spstamp{font-size:20rpx;padding:4rpx 14rpx;border-radius:999rpx;flex-shrink:0}
+.spstamp.signed{background:#e7f2e8;color:#2f6b3c}
+.spstamp.pending{background:#fdf1e7;color:#b5541f}
+.spx{font-size:32rpx;color:#9a917f;padding:0 8rpx;flex-shrink:0}
+.spsub{font-size:22rpx;color:#8a8172;margin:8rpx 0 12rpx}
+.spbody{flex:1;min-height:0;max-height:56vh}
+.spgt{font-size:24rpx;font-weight:600;color:#2f2a22;margin:12rpx 0 6rpx}
+.spline{display:flex;justify-content:space-between;align-items:center;padding:8rpx 0;border-bottom:1rpx solid #f4efe6}
+.spname{font-size:24rpx;color:#4a4337;flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.spamt{display:flex;align-items:baseline;gap:10rpx;flex-shrink:0}
+.spstrike{font-size:20rpx;color:#b9b3a8;text-decoration:line-through}
+.spstrike.big{font-size:24rpx}
+.spval{font-size:26rpx;font-weight:600;color:#2f2a22}
+.spval.free{color:#2f6b3c}
+.sptot{margin-top:14rpx;border-top:2rpx solid #efe8db;padding-top:10rpx}
+.sprow{display:flex;justify-content:space-between;padding:6rpx 0}
+.spk{font-size:24rpx;color:#8a8172}
+.spv{font-size:26rpx;color:#2f2a22;font-weight:600}
+.green{color:#2f6b3c}
+.sprow.due .spk{font-size:26rpx;color:#2f2a22;font-weight:700}
+.sprow.due .spv{font-size:34rpx;font-weight:800}
+.spsign{margin-top:16rpx;background:#faf7f0;border-radius:14rpx;padding:14rpx 18rpx}
+.spsig{font-size:34rpx;font-family:cursive;color:#2f2a22;margin-top:6rpx}
+.spsigat{font-size:20rpx;color:#9a917f;margin-left:16rpx;font-family:initial}
+.spbtns{display:flex;gap:16rpx;margin-top:16rpx}
+.spbtn{flex:1;text-align:center;background:#2f2a22;color:#fff;border-radius:14rpx;padding:20rpx 0;font-size:26rpx}
+.spbtn.ghost{background:#f4efe6;color:#2f2a22}
