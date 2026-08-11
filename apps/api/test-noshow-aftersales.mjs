@@ -455,6 +455,24 @@ const main = async () => {
       }
       walk3(join(ROOT2, 'miniprogram'))
       check('⑳ 四之八④ 剪贴板/扫码/支付类 wx.* 全部挂 fail(静默失败家族总闸)', bad3.length === 0, bad3.join(' | '))
+
+      // ㉑ 裁决②(2026-08-12):裸导航基线拦增量 —— 新增代码一律走 utils/nav.js;
+      //    存量 106 处=分叉债 F2(随 S 组迁移清零,清一处基线只准降不准升)。
+      let navCount = 0
+      const walk4 = (dir) => {
+        for (const f of readdirSync(dir)) {
+          const pth = join(dir, f)
+          const st = statSync(pth)
+          if (st.isDirectory()) walk4(pth)
+          else if (/\.js$/.test(f) && !pth.endsWith('utils/nav.js')) {
+            const src = readFileSync(pth, 'utf8')
+            navCount += (src.match(/wx\.(navigateTo|redirectTo|switchTab|reLaunch)\(/g) || []).length
+          }
+        }
+      }
+      walk4(join(ROOT2, 'miniprogram'))
+      const NAV_BASELINE = 106
+      check(`㉑ 裸导航调用数 ≤ 基线 ${NAV_BASELINE}(F2 只减不增;新增代码走 utils/nav.js)`, navCount <= NAV_BASELINE, `当前 ${navCount}`)
     }
 
     // ===== ⑲ D28:单据预览排版件 —— 合计≡各单之和、行≡落库行、单号可查 =====
