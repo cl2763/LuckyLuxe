@@ -254,7 +254,7 @@
     <view class="qnewc">{{bindQr.hint}}</view>
     <view class="qrbox"><view class="qrph">沙盒占位码
 (上线换 wxacode 真码)</view></view>
-    <view class="qlink">{{bindQr.url}}</view>
+    <view class="qlink tap" catchtap="openBindLink">{{bindQr.url}}</view>
     <view class="qbtns"><view class="qbtn" catchtap="copyBindLink">复制绑定链接</view></view>
     <view class="qstate waiting">{{bindQr.stateText}}</view>
     <view class="qsub">顾客扫码只做绑定 —— 不会进入签署、看不到结算单与金额</view>

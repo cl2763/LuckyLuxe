@@ -96,6 +96,6 @@
     ]
   },
   "style": "v2",
-  "__usePrivacyCheck__": true,
+  "__usePrivacyCheck__": false,
   "sitemapLocation": "sitemap.json"
 }

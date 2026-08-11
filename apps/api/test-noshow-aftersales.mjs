@@ -374,18 +374,34 @@ const main = async () => {
       check('⑯ 同 openid 绑本店另一档案=冲突进合并队列不覆盖(S4 规则⑤同构)', cfm2.status === 200 && cfm2.data.conflict === true && cfm2.data.mergeQueued === true, JSON.stringify(cfm2.data).slice(0, 120))
     }
 
-    // ===== ⑰ 储值逐笔视图(2026-08-12 裁决):求和≡聚合卡月充值;技师=403 =====
+    // ===== ⑰ 储值逐笔视图(2026-08-12 裁决;同日扩消耗):充值Σ≡月充值+消耗Σ≡月耗卡;回链;技师=403 =====
     {
       const fk = await request('/admin/finance/unlock', { method: 'POST', body: JSON.stringify({}) }, shop.token)
       const kh = { 'x-finance-key': fk.data.financeKey || '' }
+      // 造一笔手工耗卡(老板+钥匙,既有路由;红线:耗卡=确认收入,这笔是测试店内数据)
+      const cs = await request('/admin/stored-value/consume', { method: 'POST', body: JSON.stringify({ userId: custId, amountCents: 700, note: '逐笔视图消耗断言' }), headers: kh }, shop.token)
+      check('⑰ 手工耗卡 fixture 落账', cs.status === 201)
       const txns = await request('/admin/stored-value/txns', { headers: kh }, shop.token)
       const overview = await request('/admin/stored-value', { headers: kh }, shop.token)
-      check('⑰ 逐笔列表求和≡后端下发合计≡聚合卡月充值', txns.status === 200
-        && txns.data.txns.reduce((n, t) => n + t.amountCents, 0) === txns.data.totalCents
-        && txns.data.totalCents === overview.data.storedValue.monthRechargeCents,
-        `${txns.data && txns.data.totalCents} vs ${overview.data && overview.data.storedValue && overview.data.storedValue.monthRechargeCents}`)
-      check('⑰ 行含 时间/顾客/金额/经手人/来源 五要素', txns.data.txns.length > 0 && txns.data.txns.every((t) => t.at && t.userName && typeof t.amountCents === 'number' && t.handler && t.source), JSON.stringify(txns.data.txns[0] || {}))
+      const sv = overview.data.storedValue
+      const rSum = txns.data.txns.filter((t) => t.type === 'recharge').reduce((n, t) => n + t.amountCents, 0)
+      const cSum = txns.data.txns.filter((t) => t.type === 'consume').reduce((n, t) => n + Math.abs(t.amountCents), 0)
+      check('⑰ 充值行Σ≡下发合计≡聚合卡月充值', rSum === txns.data.rechargeTotalCents && rSum === sv.monthRechargeCents, `${rSum} vs ${sv.monthRechargeCents}`)
+      check('⑰ 消耗行Σ≡下发合计≡聚合卡月耗卡', cSum === txns.data.consumeTotalCents && cSum === sv.monthConsumeCents, `${cSum} vs ${sv.monthConsumeCents}`)
+      check('⑰ 行含 类型/时间/顾客/金额 且充值带经手人', txns.data.txns.length > 0 && txns.data.txns.every((t) => t.type && t.at && t.userName && typeof t.amountCents === 'number' && (t.type !== 'recharge' || t.handler)), JSON.stringify(txns.data.txns[0] || {}))
+      check('⑰ 消耗行金额为负、手工耗卡来源=手工耗卡且无单号', txns.data.txns.filter((t) => t.type === 'consume').every((t) => t.amountCents < 0) && txns.data.txns.some((t) => t.type === 'consume' && t.source === '手工耗卡' && t.settlementCode === ''), JSON.stringify(txns.data.txns.filter((t) => t.type === 'consume')))
       check('⑰ 金额纯 cents 下发(币符前端拼,币种红线)', !JSON.stringify(txns.data.txns).match(/[¥$]/))
+      // 结算扣卡回链:直连库造一行同格式消耗(签署路径写的就是这个 note,同 ⑥ 直连先例)
+      {
+        const db5 = new DatabaseSync(process.env.TEST_DB_PATH)
+        db5.prepare(`INSERT INTO stored_value_transactions (id, tenant_id, user_id, type, amount_cents, pay_channel, note, created_by, created_at)
+          VALUES (?, ?, ?, 'consume', -500, 'stored_value', ?, 'test', ?)`)
+          .run(`sv-link-${RUN_ID}`, shop.tenantId, custId, `服务单 JI-LINK-${RUN_ID} 结算扣卡`, new Date().toISOString())
+        db5.close()
+        const t2 = await request('/admin/stored-value/txns', { headers: kh }, shop.token)
+        const linked = t2.data.txns.find((t) => t.id === `sv-link-${RUN_ID}`)
+        check('⑰ 结算扣卡行回链单号解析+来源=结算抵扣', Boolean(linked) && linked.settlementCode === `JI-LINK-${RUN_ID}` && linked.source === '结算抵扣', JSON.stringify(linked))
+      }
       check('⑰ 技师看逐笔=403', (await request('/admin/stored-value/txns', {}, staffToken)).status === 403)
     }
   }

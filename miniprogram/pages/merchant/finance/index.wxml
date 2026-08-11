@@ -56,22 +56,33 @@
     <view class="t2">储值卡</view>
     <view class="card">
       <view class="row-sb"><text class="mut">储值总余额(负债)</text><text class="cb">{{sv.total}}</text></view>
-      <view class="row-sb"><text class="mut">本月充值 / 耗卡</text><text>{{sv.recharge}} / {{sv.consume}}</text></view>
+      <view class="row-sb"><text class="mut">本月充值</text><text>{{sv.recharge}}</text></view>
+      <view class="row-sb"><text class="mut">本月消耗</text><text>{{sv.consume}}</text></view>
       <view class="divi" wx:if="{{sv.dormant}}"></view>
       <view class="dormrow" wx:if="{{sv.dormant}}">
         <view class="dorm-l"><text class="dorm-t">💤 沉睡卡</text><text class="dorm-s">{{sv.dormant}}</text></view>
         <view class="wakebtn" bindtap="wakeSleep">唤醒</view>
       </view>
+      <view class="divi"></view>
+      <view class="svchips">
+        <view class="svchip {{svFilter==='all'?'on':''}}" data-k="all" bindtap="svFilterTap">全部</view>
+        <view class="svchip {{svFilter==='recharge'?'on':''}}" data-k="recharge" bindtap="svFilterTap">充值</view>
+        <view class="svchip {{svFilter==='consume'?'on':''}}" data-k="consume" bindtap="svFilterTap">消耗</view>
+        <text class="svtxn-h">充值 {{svRechargeTotal}} · 消耗 {{svConsumeTotal}}</text>
+      </view>
       <block wx:if="{{svTxns.length}}">
-        <view class="divi"></view>
-        <view class="svtxn-h">本月充值逐笔({{svTxns.length}} 笔,合计 {{svTxnTotal}})</view>
         <view class="svtxn" wx:for="{{svTxns}}" wx:key="id">
-          <view class="svtxn-l"><text class="svtxn-t">{{item.at}}</text><text class="svtxn-u">{{item.userName}}</text></view>
-          <view class="svtxn-m"><text class="svtxn-h2">{{item.handler}}</text><text class="svtxn-s">{{item.source}}</text></view>
-          <text class="svtxn-a">{{item.amountText}}</text>
+          <view class="svtxn-l"><text class="svtxn-t">{{item.at}} · {{item.type === 'consume' ? '消耗' : '充值'}}</text><text class="svtxn-u">{{item.userName}}</text></view>
+          <view class="svtxn-m">
+            <text wx:if="{{item.type === 'recharge'}}" class="svtxn-h2">{{item.handler}}</text>
+            <text wx:elif="{{item.settlementCode}}" class="svtxn-code" data-code="{{item.settlementCode}}" catchtap="svOpenSettlement">{{item.settlementCode}} →</text>
+            <text wx:else class="svtxn-h2">—</text>
+            <text class="svtxn-s">{{item.source}}</text>
+          </view>
+          <text class="svtxn-a {{item.type === 'consume' ? 'neg' : ''}}">{{item.amountText}}</text>
         </view>
       </block>
-      <view wx:if="{{!svTxns.length}}" class="svtxn-empty">本月暂无充值流水</view>
+      <view wx:if="{{!svTxns.length}}" class="svtxn-empty">本月暂无流水</view>
     </view>
 
     <view class="t2">待结工资</view>

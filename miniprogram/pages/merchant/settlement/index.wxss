@@ -208,3 +208,4 @@
 .minichips{display:flex;flex-wrap:wrap;gap:10rpx}
 .mchip{min-width:56rpx;height:56rpx;line-height:56rpx;text-align:center;border-radius:50%;background:#f4efe6;color:#6b6355;font-size:24rpx}
 .mchip.on{background:#2f2a22;color:#fff}
+.qlink.tap{color:#5b7a99;text-decoration:underline}

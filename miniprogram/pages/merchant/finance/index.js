@@ -13,7 +13,7 @@ function localToday() {
 
 Page({
   data: {
-    svTxns: [], svTxnTotal: '',
+    svTxns: [], svFilter: 'all', svRechargeTotal: '', svConsumeTotal: '',
     unlocked: false,
     lockEnabled: false,
     configured: true,
@@ -152,15 +152,19 @@ Page({
           dormant: d ? `${d.displayName} ${money(d.balanceCents)}(${d.dormantDays || 0}天未动)` : ''
         }
       })
-      /* 储值逐笔(2026-08-12 裁决):本月充值明细,按日倒序,只读;金额 storeMoney(币种红线)。
-         求和≡聚合卡月充值由后端一次下发(totalCents),CI 常驻断言。 */
+      /* 储值逐笔(2026-08-12 裁决;同日扩消耗):充值+消耗两类,只读;金额 storeMoney(币种红线,
+         充值正显、消耗负显)。充值Σ≡卡片月充值、消耗Σ≡卡片月耗卡(后端下发,CI 常驻)。 */
       try {
         const tx = await api.adminGet('/admin/stored-value/txns')
+        this._svAll = (tx.txns || []).map((t) => Object.assign({}, t, {
+          amountText: t.type === 'consume' ? `−${money(Math.abs(t.amountCents))}` : `+${money(t.amountCents)}`
+        }))
         this.setData({
-          svTxns: (tx.txns || []).map((t) => Object.assign({}, t, { amountText: money(t.amountCents) })),
-          svTxnTotal: money(tx.totalCents || 0)
+          svRechargeTotal: money(tx.rechargeTotalCents || 0),
+          svConsumeTotal: money(tx.consumeTotalCents || 0)
         })
-      } catch (e) { this.setData({ svTxns: [], svTxnTotal: '' }) }
+        this.applySvFilter()
+      } catch (e) { this._svAll = []; this.setData({ svTxns: [], svRechargeTotal: '', svConsumeTotal: '' }) }
       // 待结工资(已锁定未发放)
       try {
         const pp = await api.adminGet('/admin/salary/pending-payout')
@@ -200,6 +204,22 @@ Page({
     }, 50)
   },
 
+  // 逐笔筛选芯片:全部|充值|消耗(默认全部)
+  svFilterTap(e) {
+    this.setData({ svFilter: e.currentTarget.dataset.k })
+    this.applySvFilter()
+  },
+  applySvFilter() {
+    const k = this.data.svFilter || 'all'
+    const list = (this._svAll || []).filter((t) => k === 'all' || t.type === k)
+    this.setData({ svTxns: list })
+  },
+  // 消耗行回链:点单号看该结算单凭证(快照,只读)
+  svOpenSettlement(e) {
+    const code = e.currentTarget.dataset.code
+    if (!code) return
+    wx.navigateTo({ url: `/pages/sign/index?snapshot=${encodeURIComponent(code)}` })
+  },
   toEntry() { wx.navigateTo({ url: '/pages/merchant/finance-entry/index' }) },
   toTxns() { wx.navigateTo({ url: '/pages/merchant/finance-txns/index' }) },
   toSalary() { wx.navigateTo({ url: '/pages/merchant/salary-month/index' }) },

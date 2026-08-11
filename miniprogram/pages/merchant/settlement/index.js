@@ -680,7 +680,11 @@ Page({
   },
   closeQr() { clearTimeout(this._qrTimer); this.setData({ qr: null }); wx.navigateBack() },
   copyQrLink() {
-    wx.setClipboardData({ data: this.data.qr.url, success: () => wx.showToast({ title: '链接已复制', icon: 'none' }) })
+    wx.setClipboardData({
+      data: this.data.qr.url,
+      success: () => wx.showToast({ title: '已复制 ✓', icon: 'none' }),
+      fail: () => wx.showToast({ title: '复制失败,请长按链接手动复制', icon: 'none' })
+    })
   },
   handSign() {
     if (this.data.qr && this.data.qr.unbound) {
@@ -729,9 +733,18 @@ Page({
     }, 2000)
   },
   closeBindCode() { clearTimeout(this._bindTimer); this.setData({ bindQr: null }) },
+  // D26:链接本身可实点 —— 沙盒直落本人确认卡(与真码扫后同一落点)
+  openBindLink() {
+    if (!this.data.bindQr) return
+    wx.navigateTo({ url: this.data.bindQr.pagePath })
+  },
   copyBindLink() {
     if (!this.data.bindQr) return
-    wx.setClipboardData({ data: this.data.bindQr.url, success: () => wx.showToast({ title: '绑定链接已复制', icon: 'none' }) })
+    wx.setClipboardData({
+      data: this.data.bindQr.url,
+      success: () => wx.showToast({ title: '已复制 ✓', icon: 'none' }),
+      fail: () => wx.showToast({ title: '复制失败,请长按链接手动复制', icon: 'none' })
+    })
   },
 
   async submit() {

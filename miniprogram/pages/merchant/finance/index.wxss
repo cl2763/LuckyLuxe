@@ -93,3 +93,8 @@ page{background:#fbf8f5}
 .svtxn-s{font-size:20rpx;color:#9a917f}
 .svtxn-a{font-size:28rpx;font-weight:700;color:#2f6b3c;flex-shrink:0}
 .svtxn-empty{font-size:22rpx;color:#9a917f;margin-top:10rpx}
+.svchips{display:flex;align-items:center;gap:12rpx;margin:14rpx 0 6rpx}
+.svchip{padding:8rpx 22rpx;border-radius:999rpx;background:#f4efe6;color:#6b6355;font-size:22rpx}
+.svchip.on{background:#2f2a22;color:#fff}
+.svtxn-a.neg{color:#b5541f}
+.svtxn-code{font-size:22rpx;color:#5b7a99;text-decoration:underline}

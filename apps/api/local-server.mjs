@@ -13074,8 +13074,11 @@ async function route(req, res) {
     if (adminSession.role !== 'owner') throw apiError(403, 'FORBIDDEN', 'Owner permission is required.')
     return json(res, 200, { storedValue: storedValueOverview() })
   }
-  /* 储值逐笔流水(店主 2026-08-12 裁决补的商家端视图):默认本月充值明细,按日倒序,只读。
-     求和 ≡ 聚合卡「本月充值」(CI 常驻断言);金额纯 cents 下发,币符前端 storeMoney(币种红线)。 */
+  /* 储值逐笔流水(店主 2026-08-12 裁决;同日扩消耗,书面标准代图):
+     充值+消耗两类,默认本月,按日倒序,只读自既有留痕账本 —— 消耗=结算单储值抵扣行
+     (note「服务单 X 结算扣卡」,单号可回链)+ 手工耗卡。红线:充值=预收不进收入,
+     消耗=预收负债减少,**不新增任何统计口径**;充值行Σ≡聚合卡月充值、消耗行Σ≡月耗卡(CI 常驻)。
+     金额纯 cents 下发(消耗为负),币符前端 storeMoney(币种红线)。 */
   if (req.method === 'GET' && path === '/admin/stored-value/txns') {
     if (adminSession.role !== 'owner') throw apiError(403, 'FORBIDDEN', 'Owner permission is required.')
     const month = /^\d{4}-\d{2}$/.test(String(query.month || '')) ? String(query.month) : localParts(new Date()).date.slice(0, 7)
@@ -13085,20 +13088,27 @@ async function route(req, res) {
       FROM stored_value_transactions s
       LEFT JOIN users u ON u.id = s.user_id
       LEFT JOIN technicians t ON t.id = s.technician_id
-      WHERE s.tenant_id = ? AND s.type = 'recharge' AND substr(s.created_at, 1, 7) = ?
+      WHERE s.tenant_id = ? AND s.type IN ('recharge', 'consume') AND substr(s.created_at, 1, 7) = ?
       ORDER BY s.created_at DESC
     `).all(currentTenantId(), month)
     const tz = tenantTimezone(currentTenantId())
+    const rechargeTotalCents = rows.filter((r) => r.type === 'recharge').reduce((n, r) => n + (r.amount_cents || 0), 0)
+    const consumeTotalCents = rows.filter((r) => r.type === 'consume').reduce((n, r) => n + Math.abs(r.amount_cents || 0), 0)
     return json(res, 200, {
       month,
-      totalCents: rows.reduce((n, r) => n + (r.amount_cents || 0), 0),
+      totalCents: rechargeTotalCents,           // 兼容字段:老断言口径=月充值
+      rechargeTotalCents, consumeTotalCents,
       txns: rows.map((r) => {
         const p = localParts(new Date(r.created_at), tz)
+        // 结算扣卡的行把单号回链出来;手工耗卡没有单,前端显示 —
+        const codeMatch = r.type === 'consume' ? String(r.note || '').match(/服务单\s+(\S+)\s+结算扣卡/) : null
         return {
-          id: r.id, at: `${p.date.slice(5)} ${p.time.slice(0, 5)}`,
+          id: r.id, type: r.type, at: `${p.date.slice(5)} ${p.time.slice(0, 5)}`,
           userName: r.user_name || '—', amountCents: r.amount_cents,
-          handler: r.technician_name || (r.created_by || '—'),
-          source: r.pay_channel || '—', note: r.note || ''
+          handler: r.type === 'recharge' ? (r.technician_name || (r.created_by || '—')) : '',
+          settlementCode: codeMatch ? codeMatch[1] : '',
+          source: r.type === 'consume' ? (codeMatch ? '结算抵扣' : '手工耗卡') : (r.pay_channel || '—'),
+          note: r.note || ''
         }
       })
     })

@@ -33,9 +33,16 @@ Page({
   async onShow() {
     if (!(await api.guardOwner())) return
     if (!api.getFinanceKey()) {
-      wx.showToast({ title: '请先在财务页解锁', icon: 'none' })
-      setTimeout(() => wx.navigateBack(), 400)
-      return
+      /* D27(店主 2026-08-12 实测,🔴):没开财务门禁的店**不需要钥匙** —— 原来这里不问门禁
+         直接 toast+400ms 回退,回退撞上还没走完的进场转场动画,导航栈卡死、
+         转场透明层残留顶层吃掉全 App 点击(含返回键)。先问门禁再拦;要拦也等转场走完(700ms)。 */
+      let lockEnabled = false
+      try { lockEnabled = Boolean((await api.adminGet('/admin/finance/lock-status')).enabled) } catch (e) { lockEnabled = false }
+      if (lockEnabled) {
+        wx.showToast({ title: '请先在财务页解锁', icon: 'none' })
+        setTimeout(() => wx.navigateBack(), 700)
+        return
+      }
     }
     if (!this.data.month) this.setData({ month: curMonth() })
     this.load()
