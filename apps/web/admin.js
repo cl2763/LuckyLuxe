@@ -1,5 +1,5 @@
 // 构建号:每次交付递增。侧栏可见,排查"改了没生效"时先对版本。
-const ADMIN_BUILD = '20260811b-noshow-aftersales'
+const ADMIN_BUILD = '20260812a-sweep-d31'
 console.log(`[admin] build ${ADMIN_BUILD}`)
 
 // "今天"必须按门店时区算,否则老板人在别的时区时全站日期错位一天。
@@ -6256,8 +6256,9 @@ async function copyCaptionByKey(key) {
   const title = owner.lang === 'en' ? copy.titleEn : copy.titleZh
   const caption = owner.lang === 'en' ? copy.captionEn : copy.captionZh
   const text = [title, caption, (copy.hashtags || []).join(' ')].filter(Boolean).join('\n\n')
-  await navigator.clipboard.writeText(text)
-  toast(t('copyCaption'))
+  /* D31(丁之二·网页端 D26 同病):剪贴板被拒时原来静默无提示 —— 失败也要说话(四之九) */
+  try { await navigator.clipboard.writeText(text); toast(t('copyCaption')) }
+  catch { toast(owner.lang === 'zh' ? '复制失败,请手动选择文本复制' : 'Copy failed, select manually') }
 }
 
 function renderFinancePanel() {

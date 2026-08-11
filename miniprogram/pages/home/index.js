@@ -91,7 +91,9 @@ Page({
         if (res.tapIndex === 0 && store.latitude && store.longitude) {
           wx.openLocation({ latitude: Number(store.latitude), longitude: Number(store.longitude), name: store.storeName, address: store.address })
         } else {
-          wx.setClipboardData({ data: store.address || '' })
+          wx.setClipboardData({ data: store.address || '' ,
+      fail: () => wx.showToast({ title: '复制调用失败,请重试', icon: 'none' })
+    })
         }
       }
     })

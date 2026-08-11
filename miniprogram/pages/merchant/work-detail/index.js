@@ -72,7 +72,9 @@ Page({
   copyAll() {
     const r = this.data.result
     if (!r) return
-    wx.setClipboardData({ data: `${r.title}\n\n${r.caption}\n\n${r.hashtags}`, success: () => wx.showToast({ title: '文案已复制,发给顾客即可', icon: 'none' }) })
+    wx.setClipboardData({ data: `${r.title}\n\n${r.caption}\n\n${r.hashtags}`, success: () => wx.showToast({ title: '文案已复制,发给顾客即可', icon: 'none' }) ,
+      fail: () => wx.showToast({ title: '复制调用失败,请重试', icon: 'none' })
+    })
   },
 
   saveImage() {

@@ -65,6 +65,8 @@ Page({
           wx.showToast({ title: '未识别到门店码', icon: 'none' })
         }
       }
+    ,
+      fail: () => wx.showToast({ title: '扫码调用失败,请重试', icon: 'none' })
     })
   }
 })

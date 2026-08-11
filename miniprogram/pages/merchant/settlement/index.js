@@ -670,7 +670,9 @@ Page({
       this.pollQr()
     } catch (e) {
       wx.showToast({ title: (e && e.message) || '出码失败', icon: 'none' })
-      wx.navigateBack()
+      /* D27 家族(扫雷批⑥类):qrFor 模式 onLoad 即出码,失败若立刻 back 会撞进场转场 → 冻死。
+         等转场走完再退;非纯出码模式留在页面即可。 */
+      if (this._qrOnly) setTimeout(() => wx.navigateBack(), 700)
     }
   },
   pollQr() {

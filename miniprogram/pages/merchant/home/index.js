@@ -182,6 +182,8 @@ Page({
     wx.setClipboardData({
       data: text,
       success: () => wx.showToast({ title: sent ? `已提醒 ${g.name},话术也已复制` : '站内发送失败,话术已复制可发微信', icon: 'none', duration: 2200 })
+    ,
+      fail: () => wx.showToast({ title: '复制调用失败,请重试', icon: 'none' })
     })
   },
   async remindAll() {
@@ -200,6 +202,8 @@ Page({
     wx.setClipboardData({
       data: text,
       success: () => wx.showToast({ title: ok ? `已提醒 ${ok} 位员工,群话术已复制` : '群话术已复制', icon: 'none', duration: 2200 })
+    ,
+      fail: () => wx.showToast({ title: '复制调用失败,请重试', icon: 'none' })
     })
   },
 
@@ -208,7 +212,9 @@ Page({
     const items = this.data.digest.items
     if (!items.length) return
     const text = items.map((x) => `【${x.name}】${x.message}`).join('\n\n')
-    wx.setClipboardData({ data: text, success: () => wx.showToast({ title: `已复制 ${items.length} 条话术,粘微信逐个发`, icon: 'none', duration: 2200 }) })
+    wx.setClipboardData({ data: text, success: () => wx.showToast({ title: `已复制 ${items.length} 条话术,粘微信逐个发`, icon: 'none', duration: 2200 }) ,
+      fail: () => wx.showToast({ title: '复制调用失败,请重试', icon: 'none' })
+    })
   },
   goCustomersS() { wx.navigateTo({ url: '/pages/merchant/customers/index' }) },
 

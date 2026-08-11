@@ -137,7 +137,9 @@ Page({
   copyText() {
     const text = this.quoteText()
     if (!text) { wx.showToast({ title: '先勾几个项目', icon: 'none' }); return }
-    wx.setClipboardData({ data: text, success: () => wx.showToast({ title: '话术已复制', icon: 'none' }) })
+    wx.setClipboardData({ data: text, success: () => wx.showToast({ title: '话术已复制', icon: 'none' }) ,
+      fail: () => wx.showToast({ title: '复制调用失败,请重试', icon: 'none' })
+    })
   },
   /* 「填入报价单」做两件事,都不碰顾客:
      ① 把话术塞进会话输入框(发不发由技师自己按发送);

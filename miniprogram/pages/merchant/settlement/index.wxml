@@ -254,7 +254,7 @@
     <view class="qnewc">{{bindQr.hint}}</view>
     <view class="qrbox"><view class="qrph">沙盒占位码
 (上线换 wxacode 真码)</view></view>
-    <view class="qlink">{{bindQr.url}}</view>
+    <!-- 店主 2026-08-12 小改:链接文本删除,只留两钮(打开/复制) -->
     <view class="qbtns">
       <view class="qbtn dark" catchtap="openBindLink">打开链接</view>
       <view class="qbtn" catchtap="copyBindLink">复制链接</view>
@@ -277,7 +277,6 @@
     <view class="qno">{{qr.code}}</view>
     <view class="qamt">{{qr.amountText}}</view>
     <view class="qsub">{{qr.breakdownText}}</view>
-    <view class="qlink">{{qr.url}}</view>
     <view class="qbtns">
       <view class="qbtn dark" catchtap="openQrLink">打开链接</view>
       <view class="qbtn" catchtap="copyQrLink">复制链接</view>

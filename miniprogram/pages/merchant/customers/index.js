@@ -146,7 +146,9 @@ Page({
     const list = this.data.list
     if (!list.length) { wx.showToast({ title: '当前没有客人', icon: 'none' }); return }
     const text = list.map((x) => `${x.name}${x.phone ? ' ' + x.phone : ''}(${x.visits}次·${x.spend}·${x.last})`).join('\n')
-    wx.setClipboardData({ data: text, success: () => wx.showToast({ title: `已复制 ${list.length} 人名单`, icon: 'none' }) })
+    wx.setClipboardData({ data: text, success: () => wx.showToast({ title: `已复制 ${list.length} 人名单`, icon: 'none' }) ,
+      fail: () => wx.showToast({ title: '复制调用失败,请重试', icon: 'none' })
+    })
   },
 
   // ===== 分层规则微调(每个数字可改,存服务端) =====
@@ -227,7 +229,9 @@ Page({
       wx.setClipboardData({
         data: text,
         success: () => wx.showModal({ title: `已生成 ${msgs.length} 条召回话术`, content: `已复制到剪贴板,粘到微信逐个发送。\n\n${text.slice(0, 100)}…`, showCancel: false, confirmText: '好' })
-      })
+      ,
+      fail: () => wx.showToast({ title: '复制调用失败,请重试', icon: 'none' })
+    })
     } catch (err) {
       wx.hideLoading()
       wx.showToast({ title: (err && err.message) || '生成失败', icon: 'none' })

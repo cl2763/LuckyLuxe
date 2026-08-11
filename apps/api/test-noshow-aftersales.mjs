@@ -426,6 +426,35 @@ const main = async () => {
       }
       walk2(join(ROOT2, 'miniprogram/pages'))
       check('⑱ D28 全仓 showModal 按钮文案 ≤4 字符(中英同计;超限=弹窗静默死)', bad2.length === 0, bad2.join(' | '))
+
+      // ⑳ 波及面回归律④(四之八):静默失败家族 —— 剪贴板/扫码类 wx.* 必须挂 fail
+      //    (类定义:失败无系统提示、用户动作被无声吞掉的 API;showModal 参数问题由 ⑱ 拦,
+      //     导航类栈满另立统一 nav util 待裁决 —— 见回归报告乙①)
+      const bad3 = []
+      const walk3 = (dir) => {
+        for (const f of readdirSync(dir)) {
+          const pth = join(dir, f)
+          const st = statSync(pth)
+          if (st.isDirectory()) walk3(pth)
+          else if (/\.js$/.test(f)) {
+            const src = readFileSync(pth, 'utf8')
+            for (const api of ['setClipboardData', 'getClipboardData', 'scanCode', 'requestPayment']) {
+              let idx = 0
+              while ((idx = src.indexOf(`wx.${api}({`, idx)) >= 0) {
+                let depth = 0; let end = idx
+                for (let q = idx + `wx.${api}(`.length - 1; q < Math.min(src.length, idx + 2000); q += 1) {
+                  if (src[q] === '(') depth += 1
+                  else if (src[q] === ')') { depth -= 1; if (depth === 0) { end = q; break } }
+                }
+                if (!/fail\s*[:(]/.test(src.slice(idx, end))) bad3.push(`${pth.slice(ROOT2.length)}: wx.${api} 无 fail`)
+                idx = end
+              }
+            }
+          }
+        }
+      }
+      walk3(join(ROOT2, 'miniprogram'))
+      check('⑳ 四之八④ 剪贴板/扫码/支付类 wx.* 全部挂 fail(静默失败家族总闸)', bad3.length === 0, bad3.join(' | '))
     }
 
     // ===== ⑲ D28:单据预览排版件 —— 合计≡各单之和、行≡落库行、单号可查 =====

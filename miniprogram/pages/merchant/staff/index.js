@@ -386,7 +386,9 @@ Page({
       wx.showModal({
         title: '账号已生成', content: `${text}\n(只显示这一次,点「复制」发给员工)`,
         confirmText: '复制', cancelText: '知道了',
-        success: (m) => { if (m.confirm) wx.setClipboardData({ data: text, success: () => wx.showToast({ title: '已复制,去粘贴给员工', icon: 'none' }) }) }
+        success: (m) => { if (m.confirm) wx.setClipboardData({ data: text, success: () => wx.showToast({ title: '已复制,去粘贴给员工', icon: 'none' }) ,
+      fail: () => wx.showToast({ title: '复制调用失败,请重试', icon: 'none' })
+    }) }
       })
       this.load()
     } catch (err) { wx.showToast({ title: (err && err.message) || '生成失败', icon: 'none' }) }
@@ -399,7 +401,9 @@ Page({
       wx.showModal({
         title: '密码已重置', content: `新初始密码:${r.initialPassword}\n员工下次登录需改密`,
         confirmText: '复制密码', cancelText: '知道了',
-        success: (m) => { if (m.confirm) wx.setClipboardData({ data: r.initialPassword, success: () => wx.showToast({ title: '已复制,去粘贴给员工', icon: 'none' }) }) }
+        success: (m) => { if (m.confirm) wx.setClipboardData({ data: r.initialPassword, success: () => wx.showToast({ title: '已复制,去粘贴给员工', icon: 'none' }) ,
+      fail: () => wx.showToast({ title: '复制调用失败,请重试', icon: 'none' })
+    }) }
       })
     } catch (err) { wx.showToast({ title: (err && err.message) || '重置失败', icon: 'none' }) }
   },

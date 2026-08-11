@@ -39,6 +39,8 @@ Page({
     wx.setClipboardData({
       data: this.data.store.address,
       success: () => wx.showToast({ title: this.data.t.copied, icon: 'success' })
+    ,
+      fail: () => wx.showToast({ title: '复制调用失败,请重试', icon: 'none' })
     })
   },
 
