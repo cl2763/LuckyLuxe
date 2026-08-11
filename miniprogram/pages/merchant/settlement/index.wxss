@@ -139,3 +139,19 @@
 
 /* D9 规则⑤:新客(未绑定轻档案)进签署的显著提示 */
 .qnewc{margin-top:12rpx;text-align:center;font-size:24rpx;font-weight:700;color:#b3552f;background:#faeee6;border:1rpx solid #e8c8ae;border-radius:12rpx;padding:14rpx 12rpx;line-height:1.5}
+
+/* D22③ 金额区逐行明细(点开对账) */
+.dtl-toggle{margin-left:12rpx;font-size:22rpx;color:#9b7655;font-weight:400}
+.dtl{display:flex;justify-content:space-between;align-items:center;font-size:24rpx;color:#5f564e;padding:8rpx 0 8rpx 16rpx;border-bottom:1rpx dashed #f2ebe3}
+.dtl-n{flex:1;margin-right:12rpx}
+.dtl-r{display:flex;align-items:center;gap:12rpx}
+.dtl-a{color:#241f1d;font-weight:600}
+.dtl-x{color:#c0392b;font-size:26rpx;padding:0 8rpx}
+/* D22 跨大类已选主项目芯片:看不见但在计费的行,钉出来 */
+.ghostrow{display:flex;flex-wrap:wrap;align-items:center;gap:10rpx;margin:-8rpx 0 16rpx;padding:12rpx 16rpx;background:#faf3e3;border:1rpx solid #e8d9b8;border-radius:12rpx}
+.ghost-t{font-size:23rpx;color:#b98a2f;font-weight:700}
+.ghost-chip{display:flex;align-items:center;gap:4rpx;font-size:23rpx;color:#3a2e2a;background:#fff;border:1rpx solid #e8d9b8;border-radius:999rpx;padding:6rpx 8rpx 6rpx 16rpx}
+/* D23:自选行显示金额;输入框加高,文字不上下截断 */
+.cst-r{display:flex;align-items:center;gap:16rpx}
+.cst-amt{color:#241f1d;font-weight:600}
+.in{min-height:72rpx;line-height:40rpx;box-sizing:border-box}

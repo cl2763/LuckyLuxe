@@ -164,7 +164,15 @@ Page({
       groupMap[key].items.push(decorate(i))
     })
     const sorted = order.filter((k) => k !== '其他加项').concat(order.includes('其他加项') ? ['其他加项'] : [])
-    this.setData({ mainItems, addonGroups: sorted.map((k) => groupMap[k]) })
+    /* D22:别的大类里已勾选的主项目 —— 列表看不见但一直在计费,是本次 58 块幽灵的老家。
+       用芯片钉在主项目卡下面:名字+所在大类+✕,永远可见永远可取消。 */
+    const catName = (id) => ((this.data.cats || []).find((c) => c.id === id) || {}).name || ''
+    const pickedElsewhere = all
+      .filter((i) => (i.itemKind || 'main') === 'main'
+        && (i.categoryId || '') !== this.data.catId
+        && Object.prototype.hasOwnProperty.call(this.data.picked, i.id))
+      .map((i) => ({ id: i.id, name: i.nameZh, cat: catName(i.categoryId) }))
+    this.setData({ mainItems, addonGroups: sorted.map((k) => groupMap[k]), pickedElsewhere })
   },
 
   pickTier(e) {
@@ -208,7 +216,22 @@ Page({
     // 元 → 分只在这里做一次单位换算(不是计价),之后金额一律由后端算
     const cents = Math.round(Number(amount.replace(/[^\d.]/g, '')) * 100)
     if (!Number.isFinite(cents) || cents <= 0) { wx.showToast({ title: '金额不对', icon: 'none' }); return }
-    this.setData({ customItems: this.data.customItems.concat([{ name, amountCents: cents }]), customName: '', customAmount: '' })
+    // D23①:行上要显示「钻球 ¥50」—— 币符走 storeMoney 门店映射出口,不写死
+    this.setData({ customItems: this.data.customItems.concat([{ name, amountCents: cents, amountText: storeMoney(cents, cents % 100 ? 2 : 0) }]), customName: '', customAmount: '' })
+    this.refresh()
+  },
+  // D22③:金额区逐行明细展开 —— 每一块钱当场有出处,店主随时自己对账
+  toggleDetail() { this.setData({ detailOpen: !this.data.detailOpen }) },
+  /* D22:从明细行直接移除 —— 幽灵行多是**别的大类里勾过的主项目**(切走后列表里看不见了),
+     不该逼着店主回原大类找;在对账明细里一键取消,取消即重算。 */
+  removeLine(e) {
+    const sid = e.currentTarget.dataset.sid
+    if (!sid) return
+    if (!Object.prototype.hasOwnProperty.call(this.data.picked, sid)) return
+    const picked = Object.assign({}, this.data.picked)
+    delete picked[sid]
+    this.setData({ picked })
+    this.renderCatalogue()
     this.refresh()
   },
   removeCustom(e) {
@@ -325,6 +348,8 @@ Page({
         discountLabel: (s.couponDiscountCents || 0) > 0 ? '共优惠（含券）' : '较原价共优惠',
         lines: (s.lines || []).map((l) => ({
           no: l.itemNo, name: l.name, qty: l.qty, unit: l.unit,
+          serviceId: l.serviceId || '',
+          kind: l.kind || '',
           amount: l.amountCents === 0 ? '免收' : m(l.amountCents),
           list: l.listAmountCents !== l.amountCents ? m(l.listAmountCents) : ''
         })),
@@ -353,6 +378,16 @@ Page({
         couponGrantId: s.coupon ? s.coupon.grantId : ''
       })
       this.buildTechRows()
+      /* 🔴 D22 护栏(店主 2026-08-11 抓出「手部精修前置」幽灵行):合计必须≡当前勾选之和。
+         后端只算被告知的项,所以对账对象是**这张预览单的行 vs 本页勾选状态**:
+         多一行少一行都不许沉默 —— 那 58 块钱就是这么在店主眼皮底下混进去的。 */
+      const pickedIds = Object.keys(this.data.picked)
+      const lineIds = (s.lines || []).filter((l) => l.serviceId && l.kind !== 'rule').map((l) => l.serviceId)
+      const ghost = lineIds.filter((id) => !pickedIds.includes(id))
+      const missing = pickedIds.filter((id) => !lineIds.includes(id))
+      if (ghost.length || missing.length) {
+        wx.showToast({ title: `金额行与勾选不一致(多${ghost.length}少${missing.length}),请截图报给店主`, icon: 'none', duration: 4000 })
+      }
       // 币种格式是第一次试算才拿到的,拿到后要把目录里的价格重新格式化一遍
       if (!prev || prev.symbol !== d.symbol || prev.prefix !== d.prefix) this.renderCatalogue()
     } catch (e) {

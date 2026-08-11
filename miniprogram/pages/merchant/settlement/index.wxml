@@ -39,6 +39,15 @@
       <view wx:if="{{!mainItems.length}}" class="empty">该大类下暂无在售项目</view>
     </view>
 
+    <!-- D22:其他大类已选的主项目 —— 不许存在"看不见但在计费"的行 -->
+    <view class="ghostrow" wx:if="{{pickedElsewhere.length}}">
+      <text class="ghost-t">其他大类已选:</text>
+      <view class="ghost-chip" wx:for="{{pickedElsewhere}}" wx:key="id">
+        <text>{{item.name}}{{item.cat ? ' · ' + item.cat : ''}}</text>
+        <text class="dtl-x" data-sid="{{item.id}}" catchtap="removeLine">✕</text>
+      </view>
+    </view>
+
     <view class="card">
       <view class="ch">③ 加项目录 <text class="hint">按本单价格档计价</text></view>
       <block wx:for="{{addonGroups}}" wx:for-item="g" wx:key="title">
@@ -86,7 +95,8 @@
         <view class="addbtn" bindtap="addCustom">＋添加</view>
       </view>
       <view class="cst" wx:for="{{customItems}}" wx:for-item="c" wx:key="name" wx:for-index="index" data-i="{{index}}" bindtap="removeCustom">
-        <text>{{c.name}}</text><text class="del">移除</text>
+        <text>{{c.name}}</text>
+        <view class="cst-r"><text class="cst-amt">{{c.amountText}}</text><text class="del">移除</text></view>
       </view>
     </view>
 
@@ -161,7 +171,19 @@
 
     <view class="total" wx:if="{{view}}">
       <view class="tl"><text>原价合计</text><text class="strike">{{view.listTotal}}</text></view>
-      <view class="tl"><text>档位小计</text><text>{{view.subtotal}}</text></view>
+      <view class="tl"><text>档位小计 <text class="dtl-toggle" bindtap="toggleDetail">{{view.lines.length}} 行明细 {{detailOpen ? '收起 ∧' : '点开对账 ∨'}}</text></text><text>{{view.subtotal}}</text></view>
+      <!-- D22③(店主点名):逐行明细随时可对账;每行可直接移除(取消即重算)。
+           那笔 58 块的「手部精修前置」若还在,这里一眼就能看见并当场划掉。 -->
+      <block wx:if="{{detailOpen}}">
+        <view class="dtl" wx:for="{{view.lines}}" wx:for-item="l" wx:key="no">
+          <text class="dtl-n">{{l.no}}. {{l.name}}{{l.qty > 1 ? ' ×' + l.qty : ''}}</text>
+          <view class="dtl-r">
+            <text wx:if="{{l.list}}" class="mut">{{l.list}}</text>
+            <text class="dtl-a">{{l.amount}}</text>
+            <text wx:if="{{l.serviceId && l.kind !== 'rule'}}" class="dtl-x" data-sid="{{l.serviceId}}" catchtap="removeLine">✕</text>
+          </view>
+        </view>
+      </block>
       <view class="tl" wx:if="{{view.hasDeposit}}"><text>定金抵扣</text><text>−{{view.depositDeduct}}</text></view>
       <view class="tl save" wx:if="{{view.hasCoupon}}"><text>优惠券 {{view.couponName}}</text><text>−{{view.couponDeduct}}</text></view>
       <view class="tl save"><text>{{view.discountLabel}}</text><text>{{view.discountTotal}}</text></view>

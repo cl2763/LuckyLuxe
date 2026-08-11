@@ -239,6 +239,27 @@ const main = async () => {
   for (const d of scanDirs) walk(join(ROOT, d))
   check('⑪ D20 顾客可见文案 0 处「支付成功」(§十-2)', bad.length === 0, bad.join(', '))
 
+  // ===== ⑫ D22 金额红线(店主 2026-08-11 抓出「手部精修前置」幽灵行):
+  //        预览单的价目表行必须与请求的 items **一一对应** —— 多一行少一行都是红。
+  //        含取消场景:去掉一项再预览,那一行必须消失,合计跟着降。
+  {
+    const svcA = await request(`/platform/tenants/${shop.tenantId}/services`, {
+      method: 'POST', body: JSON.stringify({ type: 'NAIL', nameZh: `主项A${RUN_ID}`, nameEn: 'a', priceCents: 30000, depositCents: 0, baseDurationMin: 60 })
+    })
+    const svcB = await request(`/platform/tenants/${shop.tenantId}/services`, {
+      method: 'POST', body: JSON.stringify({ type: 'NAIL', nameZh: `主项B${RUN_ID}`, nameEn: 'b', priceCents: 5800, depositCents: 0, baseDurationMin: 30 })
+    })
+    const idA = svcA.data.service.id, idB = svcB.data.service.id
+    const preview = (body) => request('/admin/settlements/preview', { method: 'POST', body: JSON.stringify(body) }, shop.token)
+    const p2 = await preview({ tierKey: 'list', items: [{ serviceId: idA, qty: 1 }, { serviceId: idB, qty: 1 }], customItems: [{ name: '钻球', amountCents: 5000 }], payIntent: 'offline_full', depositApplied: false })
+    const ids2 = p2.data.settlement.lines.filter((l) => l.serviceId).map((l) => l.serviceId).sort()
+    check('⑫ D22 预览行与请求项一一对应(两项+自选)', JSON.stringify(ids2) === JSON.stringify([idA, idB].sort()), JSON.stringify(ids2))
+    check('⑫ D22 合计≡勾选行之和', p2.data.settlement.subtotalCents === 30000 + 5800 + 5000, String(p2.data.settlement.subtotalCents))
+    const p3 = await preview({ tierKey: 'list', items: [{ serviceId: idA, qty: 1 }], customItems: [{ name: '钻球', amountCents: 5000 }], payIntent: 'offline_full', depositApplied: false })
+    const ids3 = p3.data.settlement.lines.filter((l) => l.serviceId).map((l) => l.serviceId)
+    check('⑫ D22 取消场景:去掉的项不再出行、合计同步降', JSON.stringify(ids3) === JSON.stringify([idA]) && p3.data.settlement.subtotalCents === 35000, `${JSON.stringify(ids3)} ${p3.data.settlement.subtotalCents}`)
+  }
+
   console.log(`\n爽约处置+售后完成态回归通过:${checks} 项断言全绿`)
 }
 
