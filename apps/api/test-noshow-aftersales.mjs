@@ -10,7 +10,14 @@
    ⑧ B⓪ 状态只前进:resolved 后 close=409;resolve 两次=409
    ⑨ B② 售后接口无金额字段:带 amountCents 的请求不产生任何账目行
    ⑩ D19:跨租户 storeId 下单=400 STORE_TENANT_MISMATCH
-   ⑪ D20:全仓顾客可见文案禁「支付成功」(机械扫描,白名单精确到文件) */
+   ⑪ D20:全仓顾客可见文案禁「支付成功」(机械扫描,白名单精确到文件)
+   ⑫ D22 金额红线 ⑬ 结算单服务分组 ⑭ 技师代充权限边界
+
+   ⚠️ standalone 跑法(护栏,2026-08-12 店主裁决②后立):**绝不许直接打 4128 真库** ——
+     rm -rf /tmp/ll-x && mkdir /tmp/ll-x
+     DATA_DIR=/tmp/ll-x PORT=4300 node local-server.mjs &
+     TEST_BASE_URL=http://127.0.0.1:4300 TEST_DB_PATH=/tmp/ll-x/lucky-luxe.sqlite node 本文件
+   (2026-08-11 有人少了 TEST_BASE_URL,在真库建了 nsas-a-msok023f 测试租户,已停用挂账。) */
 import { readFileSync, readdirSync, statSync } from 'node:fs'
 import { join } from 'node:path'
 import { DatabaseSync } from 'node:sqlite'
@@ -299,6 +306,41 @@ const main = async () => {
       const v = await request(`/admin/settlements/${s.id}/void`, { method: 'POST', body: JSON.stringify({ reason: 'CI 分组断言,即建即撤' }) }, shop.token)
       check(`⑬ 未签可撤 ${s.groupIndex}/2`, v.status === 200, JSON.stringify(v.data).slice(0, 120))
     }
+  }
+
+  // ===== ⑭ 技师代充放行(店主 2026-08-12 拍板)权限边界:
+  //        充值=预收轻动作放技师(经手人强制=当前技师留痕);耗卡/总览/档位配置/财务页寸步不让。
+  {
+    // tech1/tech2 在售后块已生成过账号,这里新建技师走全新账号(fixture 每步验状态码的老教训)
+    const t3 = await request(`/platform/tenants/${shop.tenantId}/technicians`, { method: 'POST', body: JSON.stringify({ name: `技代充${RUN_ID}` }) })
+    if (t3.status >= 300) throw new Error(`fixture 技师失败 ${t3.status}`)
+    const gen = await request('/admin/staff-accounts', { method: 'POST', body: JSON.stringify({ technicianId: t3.data.technician.id }) }, shop.token)
+    const staffUser = gen.data.username
+    if (!staffUser || !gen.data.initialPassword) throw new Error(`员工账号响应意外: ${JSON.stringify(gen.data)}`)
+    const first = await request('/admin/auth/login', { method: 'POST', body: JSON.stringify({ email: staffUser, password: gen.data.initialPassword }) }, null)
+    const sp = `Sv-${RUN_ID}-9a`
+    await request('/admin/auth/change-password', { method: 'POST', body: JSON.stringify({ oldPassword: gen.data.initialPassword, newPassword: sp, confirmPassword: sp }) }, first.data.auth.accessToken)
+    const staffToken = (await request('/admin/auth/login', { method: 'POST', body: JSON.stringify({ email: staffUser, password: sp }) }, null)).data.auth.accessToken
+    const cust = await directBooking(shop, { name: `代充客${RUN_ID}`, time: '18:30' })
+    const custId = cust.user.id
+    check('⑭ 技师可读充值档位(选套餐用,只读)', (await request('/admin/recharge-tiers', {}, staffToken)).status === 200)
+    check('⑭ 技师改档位配置=403(读写分明)', (await request('/admin/recharge-tiers', { method: 'POST', body: JSON.stringify({ amountCents: 10000 }) }, staffToken)).status === 403)
+    r = await request('/admin/stored-value/recharge', {
+      method: 'POST', body: JSON.stringify({ userId: custId, amountCents: 3300, payChannel: 'manual', note: '结算单内代充·档位 实收30 + 赠3', technicianId: shop.tech2 })
+    }, staffToken)
+    check('⑭ 技师代充=201(无需财务钥匙)', r.status === 201, JSON.stringify(r.data).slice(0, 120))
+    if (process.env.TEST_DB_PATH) {
+      const db3 = new DatabaseSync(process.env.TEST_DB_PATH)
+      const tx = db3.prepare("SELECT technician_id, created_by FROM stored_value_transactions WHERE tenant_id = ? AND user_id = ? AND type = 'recharge' ORDER BY created_at DESC LIMIT 1").get(shop.tenantId, custId)
+      db3.close()
+      check('⑭ 经手人强制=当前技师(body 冒名 tech2 不认)', tx.technician_id === t3.data.technician.id, JSON.stringify(tx))
+      check('⑭ 留痕 created_by=员工账号', tx.created_by === staffUser, `${tx.created_by} vs ${staffUser}`)
+    } else {
+      check('⑭ (跳过)无 TEST_DB_PATH,留痕直连断言未跑', true)
+    }
+    check('⑭ 技师耗卡=403(确认收入,寸步不让)', (await request('/admin/stored-value/consume', { method: 'POST', body: JSON.stringify({ userId: custId, amountCents: 100 }) }, staffToken)).status === 403)
+    check('⑭ 技师储值总览=403', (await request('/admin/stored-value', {}, staffToken)).status === 403)
+    check('⑭ 技师财务页=403(财务门禁整体不变)', (await request('/admin/finance/deposit-conservation', {}, staffToken)).status === 403)
   }
 
   console.log(`\n爽约处置+售后完成态回归通过:${checks} 项断言全绿`)

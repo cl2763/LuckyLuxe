@@ -11496,6 +11496,9 @@ async function route(req, res) {
          默认回落「原价」—— 等于**员工给会员开单一律按原价算**,顾客当场就会说"我是会员啊"。
          只放会员**名单查询**;会员等级/权益/充值档位的配置仍然只有老板能碰。 */
       || path === '/admin/membership/members'
+      /* 代充放行(2026-08-12):技师在结算单内嵌面板里要看充值套餐才能选档 ——
+         只放**列表读取**;档位的增删改(POST/PATCH/DELETE)不在 staffMayRead 里,仍 403。 */
+      || path === '/admin/recharge-tiers'
     )
     if (adminSession.role !== 'owner' && !staffMayRead) throw apiError(403, 'FORBIDDEN', 'Owner permission is required.')
   }
@@ -13020,9 +13023,13 @@ async function route(req, res) {
     return json(res, 200, { changed: true, financeKey: issueFinanceKey() })
   }
   // 财务数据统一门禁:除解锁/状态接口外,所有财务相关路由都需要有效的财务会话钥匙
+  /* 代充例外(店主 2026-08-12 拍板):结算单内嵌面板放行技师代充 —— 充值=预收进负债不进收入,
+     属「涉钱轻动作」;金额只能选套餐/手输、赠额按套餐自动、经手人强制=当前技师(路由里落)。
+     耗卡(=确认收入)与财务页所有读写仍在钥匙门禁内,权限不变。 */
   if ((path.startsWith('/admin/finance/') || path.startsWith('/admin/stored-value') || path === '/admin/demo/finance-seed')
     && path !== '/admin/finance/unlock' && path !== '/admin/finance/lock-status'
-    && path !== '/admin/finance/lock-settings' && path !== '/admin/finance/change-password') {
+    && path !== '/admin/finance/lock-settings' && path !== '/admin/finance/change-password'
+    && path !== '/admin/stored-value/recharge') {
     requireFinanceKey(req) // 没开门禁时该函数直接返回(判断内聚在函数里)
   }
   if (req.method === 'GET' && path === '/admin/stored-value') {
@@ -13030,8 +13037,11 @@ async function route(req, res) {
     return json(res, 200, { storedValue: storedValueOverview() })
   }
   if (req.method === 'POST' && (path === '/admin/stored-value/recharge' || path === '/admin/stored-value/consume')) {
-    if (adminSession.role !== 'owner') throw apiError(403, 'FORBIDDEN', 'Owner permission is required.')
     const isRecharge = path.endsWith('/recharge')
+    // 充值:老板或技师(2026-08-12 拍板放行,技师不离结算单);耗卡=确认收入,仍只有老板能做
+    if (isRecharge ? (adminSession.role !== 'owner' && adminSession.role !== 'staff') : adminSession.role !== 'owner') {
+      throw apiError(403, 'FORBIDDEN', isRecharge ? '需要老板或员工权限。' : 'Owner permission is required.')
+    }
     const body = await readBody(req)
     const userId = String(body.userId || '').trim()
     const user = db.prepare('SELECT id, display_name FROM users WHERE id = ?').get(userId)
@@ -13041,8 +13051,11 @@ async function route(req, res) {
     if (!isRecharge && storedValueBalanceCents(userId) < amountCents) {
       throw apiError(400, 'INSUFFICIENT_BALANCE', '余额不足：耗卡金额不能超过该会员当前储值余额。')
     }
-    // 经手技师(可选):这笔充值/耗卡算谁促成,薪资的充值/耗卡提成据此计算
-    const svTech = String(body.technicianId || '').trim()
+    // 经手技师:这笔充值/耗卡算谁促成,薪资的充值/耗卡提成据此计算。
+    // 技师会话:经手人**强制=当前技师**(留痕口径,不认 body 传谁)
+    const svTech = adminSession.role === 'staff'
+      ? String(adminSession.technicianId || '')
+      : String(body.technicianId || '').trim()
     if (svTech && !db.prepare('SELECT 1 FROM technicians WHERE id = ? AND tenant_id = ?').get(svTech, currentTenantId())) {
       throw apiError(404, 'NOT_FOUND', '经手技师不存在。')
     }
@@ -13052,7 +13065,7 @@ async function route(req, res) {
       amountCents,
       payChannel: isRecharge ? String(body.payChannel || 'unknown') : 'stored_value',
       note: String(body.note || ''),
-      createdBy: adminSession.email || 'owner',
+      createdBy: adminSession.email || adminSession.username || adminSession.role || 'owner',
       technicianId: svTech || null
     })
     if (!isRecharge) {

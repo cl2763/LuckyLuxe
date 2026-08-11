@@ -375,16 +375,10 @@ Page({
     return m.useBalance ? 'balance_plus_offline' : 'offline_full'
   },
 
-  /* ===== 内嵌充值面板(合同规则③-2:复用既有代充流程,技师不离开结算单) ===== */
+  /* ===== 内嵌充值面板(合同规则③-2:复用既有代充流程,技师不离开结算单) =====
+     权限口径(店主 2026-08-12 拍板):面板对技师开放 —— 充值=预收轻动作,金额只能选套餐/手输、
+     赠额按套餐自动、后端强制经手人=当前技师留痕;耗卡与财务页门禁不变。 */
   async openRecharge() {
-    // 既有代充口径原样:资金操作需财务密码解锁(与 member 页同一道门,不放宽)
-    if (!(api.getFinanceKey && api.getFinanceKey())) {
-      wx.showModal({
-        title: '需先解锁财务', content: '帮顾客充值属于资金操作,请先到财务页输入财务密码解锁本次会话。',
-        confirmText: '去财务页', success: (r) => { if (r.confirm) wx.navigateTo({ url: '/pages/merchant/finance/index' }) }
-      })
-      return
-    }
     let tiers = []
     try { tiers = ((await api.adminGet('/admin/recharge-tiers')).tiers || []).filter((t) => t.isActive) } catch (e) { /* 无档位也能手输 */ }
     const d = this.data.display
@@ -438,7 +432,7 @@ Page({
       this.setData({ rvPanel: null, payMenu: { useBalance: true, recharge: false } })
       this.refresh()
     } catch (err) {
-      wx.showToast({ title: (err && err.message) || '充值失败(需老板会话+财务解锁)', icon: 'none' })
+      wx.showToast({ title: (err && err.message) || '充值失败,请重试或找老板处理', icon: 'none' })
     }
   },
 
