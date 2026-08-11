@@ -1,7 +1,9 @@
-/* 屏 1｜技师端 · 结算开单
-   金额红线:本页一处运算都没有。所有金额(小计/优惠/定金抵扣/应收/支付腿)
-   都来自 POST /admin/settlements/preview,与正式开单走同一个 computeSettlement。
-   本页只负责:勾了什么 → 发给后端 → 把后端算好的数显示出来。 */
+/* 屏 1｜技师端 · 结算开单 —— 服务分组完整版(图 v2.2 = 合同,2026-08-12)
+   金额红线:本页一处运算都没有。所有金额(各组行/合计/优惠/抵扣/应收/支付腿)
+   都来自 POST /admin/settlements/preview 的**组级预览**,与正式开单同一个 computeSettlement;
+   组级加总与储值顺序抵扣也在后端做 —— 前端只负责:每组勾了什么 → 发给后端 → 显示。
+   结构:组内六件套(价格体系/服务项目/加项/自选/技师/被服务者)× N 组 + 单级四件
+   (定金/支付菜单/分组明细合计/推送签署)。 */
 const api = require('../../../utils/api')
 const { formatMoney, displayOf } = require('../../../utils/money')
 const { storeMoney } = require('../../../utils/storeclock')
@@ -13,46 +15,61 @@ const TIERS = [
   { key: 'course', label: '疗程价' }
 ]
 const TIER_PRICE_FIELD = { list: 'listPriceCents', share: 'sharePriceCents', member: 'memberPriceCents', course: 'coursePriceCents' }
-const PAY_PLANS = [
-  { key: 'balance_plus_offline', label: '差额线下收' },
-  { key: 'recharge_then_balance', label: '现场充值' },
-  { key: 'offline_full', label: '全额线下付' }
-]
+const TIER_LABEL = { list: '原价', share: '分享价', member: '会员价', course: '疗程价' }
+
+/* 加项按主项目类别过滤(合同规则①③):正式映射日后在 S1 可配,眼下用「甲/睫」域启发式 ——
+   类别名含「睫」=lash,含「甲」=nail,其余=other;未归类(无类别)的加项各组都显示。 */
+function domainOfName(name) {
+  const n = String(name || '')
+  if (n.includes('睫')) return 'lash'
+  if (n.includes('甲')) return 'nail'
+  return 'other'
+}
+
+function newGroup(tierDefault, firstCat) {
+  return {
+    key: '', label: '',        // renderAll 按位置补(①②…);wxml 不做字符串下标运算
+    tierKey: tierDefault, tierDefault, tierChanged: false,
+    catId: firstCat || '',
+    mainId: '',                 // 组内单选(替换=换掉它)
+    addonIds: {},               // serviceId -> qty(按指用数量,其余恒 1)
+    customItems: [], customName: '', customAmount: '',
+    selectedTechs: [],
+    servedPersonName: '',
+    collapsed: false,
+    // 渲染缓存(renderGroup 填)
+    mainItems: [], addonGroups: [], mainName: '', summary: ''
+  }
+}
 
 Page({
   // 门禁:未登录/会话失效不渲染空壳,直接回登录页(店主 2026-08-09 红线)
   onShow() { api.guardMerchant() },
   data: {
     ready: false,
-    bookingId: '', userId: '', customerName: '', servedPersonName: '', isProxy: false,
+    bookingId: '', userId: '', customerName: '',
     display: null,
-    tiers: TIERS, tierKey: 'member', tierDefault: 'member', tierChanged: false,
-    cats: [], catId: '',
-    mainItems: [],      // 当前大类下的主项目(带本档价 + 原价)
-    addonGroups: [],    // 加项目录,按大类分组
-    picked: {},         // serviceId -> qty(指数/次数)
-    customItems: [], customName: '', customAmount: '',
-    applyFootSurcharge: false, applyTipReuse: false,
+    tiers: TIERS,
+    cats: [], roster: [],
+    groups: [],
     depositApplied: true, depositDeductible: true,
-    roster: [], selectedTechs: [], techRows: [],
-    payIntent: 'balance_plus_offline', payPlans: PAY_PLANS,
-    // 屏 C1 优惠券:选中的券、券包面板、后端算好的抵扣额与不可用原因
+    /* 单级支付菜单(合同规则③):勾"路",钱后端算。
+       useBalance=储值卡抵扣;useDeposit=已收定金抵扣(=depositApplied);
+       recharge=现场充值再抵扣;线下收款行 = 差额去处,由后端 offlineDue 回显。 */
+    payMenu: { useBalance: true, recharge: false },
+    // 整单规则(足部加收/甲片重复利用):图 v2.2 未画,按现状保留为单级,发给组①(记假设)
+    applyFootSurcharge: false, applyTipReuse: false,
     couponGrantId: '', couponPanel: false, couponOptions: [], couponUsableCount: 0, couponPicked: null,
     preview: null, view: null,
-    // 屏 S2:绑定状态徽标 —— 文案全部后端下发,前端一个字都不拼(规则③)
     bind: { bound: true, badgeText: '', hintText: '', phoneMasked: '', memberCode: '' },
-    qr: null,   // 屏 S3 二维码弹层
-    /* 主项目选择机制终版(店主 2026-08-11 二次拍板,取代跨大类二选一弹层):
-       默认单选自动替换(同/跨大类一律,无弹窗);「＋加第二个主项目」显式加选。 */
-    mainAddArmed: false,   // 点过「＋加第二个主项目」= 下一次点主项目是"加",不是"替换"
-    mainCount: 0,          // 已选主项目数(按钮显隐用)
+    qr: null,
+    rvPanel: null,      // 内嵌充值面板(合同规则③-2)
     ctaText: '推送签署',
     submitting: false
   },
 
   onLoad(q) {
-    /* D9 规则⑤:?qrFor=<settlementId> = 纯出码模式 —— 台面「递给顾客签」遇到
-       未绑定轻档案的单,跳这里直接弹同一个 QR 层(同一份实现,不另写一套出码)。 */
+    /* D9 规则⑤:?qrFor=<settlementId> = 纯出码模式(台面「递给顾客签」的未绑定客通道) */
     if (q.qrFor) {
       this._qrOnly = true
       this.setData({ qrOnly: true })
@@ -62,8 +79,7 @@ Page({
     this.setData({
       bookingId: q.bookingId || '',
       userId: q.userId || '',
-      customerName: decodeURIComponent(q.name || '') || '顾客',
-      servedPersonName: ''
+      customerName: decodeURIComponent(q.name || '') || '顾客'
     })
     this.boot(q.serviceId || '')
   },
@@ -79,41 +95,36 @@ Page({
       const categories = (cats.categories || []).filter((c) => c.isBookable !== false)
       const all = (items.items || []).filter((i) => i.isActive !== false)
       this.allItems = all
-      // 会员判定决定默认价格档:是会员就默认会员价,不是就默认原价(改档会留痕)
+      // 组内价格体系:默认按系统会员判定自动选档(现有口径,落到每一组;可手动改,改档留痕)
       let tierDefault = 'list'
       if (this.data.userId) {
         const m = await api.adminGet(`/admin/membership/members?userId=${encodeURIComponent(this.data.userId)}`).catch(() => null)
         const one = m && (m.members || [])[0]
         if (one && one.isMember) tierDefault = 'member'
       }
-      const picked = {}
-      this._mainOrder = []
-      if (preselectServiceId && all.some((i) => i.id === preselectServiceId)) {
-        picked[preselectServiceId] = 1
-        this._mainOrder = [preselectServiceId]   // 预约带入的主项目占第一个单选位
-      }
       const firstCat = (categories[0] || {}).id || ''
+      const g0 = newGroup(tierDefault, firstCat)
+      // 预约带入的主项目 = 组① 的单选位
+      if (preselectServiceId && all.some((i) => i.id === preselectServiceId)) {
+        g0.mainId = preselectServiceId
+        g0.catId = this.catOf(preselectServiceId) || firstCat
+      }
       this.setData({
         ready: true,
         cats: categories.map((c) => ({ id: c.id, name: c.name })),
-        catId: this.catOf(preselectServiceId) || firstCat,
         roster: (techs.technicians || []).map((t) => ({ id: t.id, name: t.name, title: t.title || '' })),
-        tierKey: tierDefault, tierDefault,
         depositDeductible: dep && dep.config ? dep.config.deductible !== false : true,
         depositApplied: Boolean(this.data.bookingId),
-        picked,
-        mainCount: this._mainOrder.length
+        groups: [g0]
       })
       this.loadBindState()
-      this.renderCatalogue()
+      this.renderAll()
       this.refresh()
     } catch (e) {
       wx.showToast({ title: (e && e.message) || '加载价目表失败', icon: 'none' })
     }
   },
 
-  /* 屏 S2:这份档案绑没绑微信。只看绑定状态,不看新老客;文案后端给,绑定后是空串。
-     用 lookup 拿(与 S1「手机号命中带出」同一个口子),避免为一个徽标再开一个接口。 */
   async loadBindState() {
     if (!this.data.userId) return
     try {
@@ -121,26 +132,22 @@ Page({
       const hit = r && r.hit
       if (!hit) return
       this.setData({
-        bind: {
-          bound: hit.bound,
-          badgeText: hit.badgeText || '',
-          hintText: hit.hintText || '',
-          phoneMasked: hit.phoneMasked || '',
-          memberCode: hit.memberCode || ''
-        }
+        bind: { bound: hit.bound, badgeText: hit.badgeText || '', hintText: hit.hintText || '', phoneMasked: hit.phoneMasked || '', memberCode: hit.memberCode || '' }
       })
-    } catch (e) { /* 拉不到就不显示徽标,不挡开单 */ }
+    } catch (e) { /* 拉不到不挡开单 */ }
   },
 
   catOf(serviceId) {
     const it = (this.allItems || []).find((x) => x.id === serviceId)
     return it ? (it.categoryId || '') : ''
   },
+  catNameOf(catId) {
+    return ((this.data.cats || []).find((c) => c.id === catId) || {}).name || ''
+  },
 
-  // 目录只做「挑出该显示哪些行 + 挑哪个价格字段」,不做任何金额运算
-  renderCatalogue() {
-    const tier = this.data.tierKey
-    const field = TIER_PRICE_FIELD[tier] || 'listPriceCents'
+  /* ===== 组渲染(目录挑行,零金额运算) ===== */
+  renderGroup(g) {
+    const field = TIER_PRICE_FIELD[g.tierKey] || 'listPriceCents'
     const d = this.data.display
     const priceOf = (it) => {
       const cents = it[field] === null || it[field] === undefined ? it.listPriceCents : it[field]
@@ -150,21 +157,27 @@ Page({
     const decorate = (it) => {
       const p = priceOf(it)
       return {
-        id: it.id, name: it.nameZh, unit: it.unit, itemKind: it.itemKind,
+        id: it.id, name: it.nameZh, unit: it.unit,
         priceText: p.cents === 0 ? '免收' : p.text,
         isFree: p.cents === 0,
         listText: it.listPriceCents !== p.cents ? listOf(it) : '',
         perFinger: it.unit === 'per_finger',
-        qty: this.data.picked[it.id] || 0,
-        on: Object.prototype.hasOwnProperty.call(this.data.picked, it.id)
+        qty: it.itemKind === 'addon' ? (g.addonIds[it.id] || 0) : (g.mainId === it.id ? 1 : 0),
+        on: it.itemKind === 'addon'
+          ? Object.prototype.hasOwnProperty.call(g.addonIds, it.id)
+          : g.mainId === it.id
       }
     }
     const all = this.allItems || []
-    const mainItems = all.filter((i) => (i.itemKind || 'main') === 'main' && (i.categoryId || '') === this.data.catId).map(decorate)
-    const addons = all.filter((i) => i.itemKind === 'addon')
-    /* 裁决④(2026-08-09):加项按**商家自填的组名**分组(如 延长类 / 补甲类 / 卸甲类),
-       不再按价目表大类分 —— 图上那三个组名是这家店的说法,不该写死在代码里。
-       没填组名的归「其他加项」,永远排在最后。 */
+    g.mainItems = all.filter((i) => (i.itemKind || 'main') === 'main' && (i.categoryId || '') === g.catId).map(decorate)
+    // 加项按本组主项目类别过滤(甲/睫域启发式;未归类各组都显示;S1 可配映射落地前的代行)
+    const main = all.find((x) => x.id === g.mainId)
+    const groupDomain = main ? domainOfName(this.catNameOf(main.categoryId)) : null
+    const addons = all.filter((i) => i.itemKind === 'addon').filter((i) => {
+      if (!i.categoryId) return true
+      if (!groupDomain) return true            // 未选主项目时先全量显示(记假设)
+      return domainOfName(this.catNameOf(i.categoryId)) === groupDomain
+    })
     const groupMap = {}
     const order = []
     addons.forEach((i) => {
@@ -173,229 +186,269 @@ Page({
       groupMap[key].items.push(decorate(i))
     })
     const sorted = order.filter((k) => k !== '其他加项').concat(order.includes('其他加项') ? ['其他加项'] : [])
-    /* D22:别的大类里已勾选的主项目 —— 列表看不见但一直在计费,是本次 58 块幽灵的老家。
-       用芯片钉在主项目卡下面:名字+所在大类+✕,永远可见永远可取消。 */
-    const catName = (id) => ((this.data.cats || []).find((c) => c.id === id) || {}).name || ''
-    const pickedElsewhere = all
-      .filter((i) => (i.itemKind || 'main') === 'main'
-        && (i.categoryId || '') !== this.data.catId
-        && Object.prototype.hasOwnProperty.call(this.data.picked, i.id))
-      .map((i) => ({ id: i.id, name: i.nameZh, cat: catName(i.categoryId) }))
-    this.setData({ mainItems, addonGroups: sorted.map((k) => groupMap[k]), pickedElsewhere })
+    g.addonGroups = sorted.map((k) => groupMap[k])
+    g.mainName = main ? main.nameZh : ''
+    // 收起态摘要(图 屏2 上半):主项 · 技师;下一行 档位 · 加项 · 自选 · 被服务者
+    const techNames = g.selectedTechs.map((id) => ((this.data.roster.find((t) => t.id === id) || {}).name)).filter(Boolean)
+    const addonNames = Object.keys(g.addonIds).map((id) => ((all.find((x) => x.id === id) || {}).nameZh)).filter(Boolean)
+    g.summary = [
+      TIER_LABEL[g.tierKey] || g.tierKey,
+      addonNames.length ? `加项:${addonNames.join('/')}` : '',
+      g.customItems.length ? `自选:${g.customItems.map((c) => c.name).join('/')}` : '',
+      `被服务者:${g.servedPersonName || '本人'}`
+    ].filter(Boolean).join(' · ')
+    g.techLine = techNames.join('/')
+    return g
+  },
+  renderAll() {
+    const marks = ['①', '②', '③', '④', '⑤']
+    const groups = this.data.groups.map((g, i) => {
+      g.key = 'g' + i
+      g.label = marks[i] || String(i + 1)
+      return this.renderGroup(g)
+    })
+    this.setData({ groups })
   },
 
-  pickTier(e) {
-    const key = e.currentTarget.dataset.k
-    this.setData({ tierKey: key, tierChanged: key !== this.data.tierDefault })
-    this.renderCatalogue()
-    this.refresh()
+  /* ===== 组内六件套操作(全部带 data-g) ===== */
+  gPickTier(e) {
+    const { g, k } = e.currentTarget.dataset
+    const groups = this.data.groups.slice()
+    groups[g].tierKey = k
+    groups[g].tierChanged = k !== groups[g].tierDefault
+    this.setData({ groups })
+    this.renderAll(); this.refresh()
   },
-  pickCat(e) {
-    this.setData({ catId: e.currentTarget.dataset.id })
-    this.renderCatalogue()
+  gPickCat(e) {
+    const { g, id } = e.currentTarget.dataset
+    const groups = this.data.groups.slice()
+    groups[g].catId = id
+    this.setData({ groups })
+    this.renderAll()
   },
-  /* ===== 主项目选择机制终版(店主 2026-08-11 二次拍板)=====
-     ① 主项目全局默认单选:点任何主项目 = 自动替换当前已选(同大类/跨大类一律,无弹窗);
-     ② 显式加选:已选一项后出现「＋加第二个主项目」,点了才进入加选模式、可再加一项(仍单选占位);
-        不点按钮永远只有一项 —— 误触物理不可能(D22 幽灵行的最终解法);
-     ③ 已选行/芯片 ✕ 移除后回到单选态;
-     ④ 加项目录/自选行照旧多选;逐行明细/护栏断言(预览行≡勾选)原样。
-     8cb694f 的跨类二选一弹层已整段移除(不是隐藏)。 */
-  isMainItem(id) {
-    const it = (this.allItems || []).find((x) => x.id === id)
-    return Boolean(it && (it.itemKind || 'main') === 'main')
+  // 服务项目:组内单选自动替换(e8ea109 逻辑,作用域=本组);再点已选=取消
+  gToggleMain(e) {
+    const { g, id } = e.currentTarget.dataset
+    const groups = this.data.groups.slice()
+    const grp = groups[g]
+    grp.mainId = grp.mainId === id ? '' : id
+    // 合同规则④:换主项目后,类别不符的加项自动清除并提示
+    const dropped = this.dropMismatchedAddons(grp)
+    this.setData({ groups })
+    this.renderAll(); this.refresh()
+    if (dropped.length) wx.showToast({ title: `已清除类别不符的加项:${dropped.join('、')}`, icon: 'none', duration: 2500 })
   },
-  pickedMainIds() {
-    // 以 _mainOrder 记录选择顺序(替换=换掉最近加的那一个,保住先选的主项)
-    this._mainOrder = (this._mainOrder || []).filter((id) => Object.prototype.hasOwnProperty.call(this.data.picked, id))
-    for (const id of Object.keys(this.data.picked)) {
-      if (this.isMainItem(id) && !this._mainOrder.includes(id)) this._mainOrder.push(id)
+  dropMismatchedAddons(grp) {
+    const all = this.allItems || []
+    const main = all.find((x) => x.id === grp.mainId)
+    if (!main) return []
+    const groupDomain = domainOfName(this.catNameOf(main.categoryId))
+    const dropped = []
+    for (const id of Object.keys(grp.addonIds)) {
+      const a = all.find((x) => x.id === id)
+      if (a && a.categoryId && domainOfName(this.catNameOf(a.categoryId)) !== groupDomain) {
+        dropped.push(a.nameZh)
+        delete grp.addonIds[id]
+      }
     }
-    return this._mainOrder
+    return dropped
   },
-  armAddMain() {
-    if (!this.pickedMainIds().length) return
-    this.setData({ mainAddArmed: true })
+  gToggleAddon(e) {
+    const { g, id } = e.currentTarget.dataset
+    const groups = this.data.groups.slice()
+    const grp = groups[g]
+    if (Object.prototype.hasOwnProperty.call(grp.addonIds, id)) delete grp.addonIds[id]
+    else grp.addonIds[id] = 1
+    this.setData({ groups })
+    this.renderAll(); this.refresh()
   },
-  /* 主项目的增/替一律走这里(toggleItem 与按指步进器 0→1 共用):
-     - 加选模式(按过 ＋)→ 直接加,消耗这一次加选;
-     - 否则:没有已选 → 加;有已选 → 替换最近加的那一个。 */
-  pickMain(id, qty = 1) {
-    const picked = Object.assign({}, this.data.picked)
-    const mains = this.pickedMainIds()
-    if (this.data.mainAddArmed) {
-      picked[id] = qty
-      this._mainOrder.push(id)
-      this.setData({ picked, mainAddArmed: false, mainCount: this._mainOrder.length })
-    } else if (!mains.length) {
-      picked[id] = qty
-      this._mainOrder = [id]
-      this.setData({ picked, mainCount: 1 })
-    } else {
-      const last = mains[mains.length - 1]
-      delete picked[last]
-      picked[id] = qty
-      this._mainOrder = mains.slice(0, -1).concat([id])
-      this.setData({ picked, mainCount: this._mainOrder.length })
-    }
-    this.renderCatalogue()
-    this.refresh()
+  gStepQty(e) {
+    const { g, id, d } = e.currentTarget.dataset
+    const groups = this.data.groups.slice()
+    const grp = groups[g]
+    const next = Math.max(0, (grp.addonIds[id] || 0) + Number(d))
+    if (next === 0) delete grp.addonIds[id]
+    else grp.addonIds[id] = next
+    this.setData({ groups })
+    this.renderAll(); this.refresh()
   },
-  // 取消选中一个主项目 → 回到单选态(加选武装态一并解除)
-  unpickMain(id) {
-    const picked = Object.assign({}, this.data.picked)
-    delete picked[id]
-    this._mainOrder = (this._mainOrder || []).filter((x) => x !== id)
-    this.setData({ picked, mainAddArmed: false, mainCount: this._mainOrder.length })
-    this.renderCatalogue()
-    this.refresh()
+  gCustomName(e) {
+    const groups = this.data.groups.slice()
+    groups[e.currentTarget.dataset.g].customName = e.detail.value
+    this.setData({ groups })
   },
-  toggleItem(e) {
-    const id = e.currentTarget.dataset.id
-    const has = Object.prototype.hasOwnProperty.call(this.data.picked, id)
-    if (this.isMainItem(id)) {
-      if (has) this.unpickMain(id)
-      else this.pickMain(id, 1)
-      return
-    }
-    // 加项照旧多选
-    const picked = Object.assign({}, this.data.picked)
-    if (has) delete picked[id]
-    else picked[id] = 1
-    this.setData({ picked })
-    this.renderCatalogue()
-    this.refresh()
+  gCustomAmount(e) {
+    const groups = this.data.groups.slice()
+    groups[e.currentTarget.dataset.g].customAmount = e.detail.value
+    this.setData({ groups })
   },
-  stepQty(e) {
-    const { id, d } = e.currentTarget.dataset
-    const delta = Number(d)
-    const cur = this.data.picked[id] || 0
-    // 按指**主项目** 0→1 = 新选一个主项目,走同一套单选/加选规则;减到 0 = 移除回单选态
-    if (this.isMainItem(id)) {
-      if (delta > 0 && cur === 0) { this.pickMain(id, 1); return }
-      if (delta < 0 && cur === 1) { this.unpickMain(id); return }
-    }
-    const picked = Object.assign({}, this.data.picked)
-    const next = Math.max(0, cur + delta)
-    if (next === 0) delete picked[id]
-    else picked[id] = next
-    this.setData({ picked })
-    this.renderCatalogue()
-    this.refresh()
-  },
-  toggleFoot() { this.setData({ applyFootSurcharge: !this.data.applyFootSurcharge }); this.refresh() },
-  toggleTipReuse() { this.setData({ applyTipReuse: !this.data.applyTipReuse }); this.refresh() },
-  setDeposit(e) { this.setData({ depositApplied: e.currentTarget.dataset.v === '1' }); this.refresh() },
-  onCustomName(e) { this.setData({ customName: e.detail.value }) },
-  onCustomAmount(e) { this.setData({ customAmount: e.detail.value }) },
-  addCustom() {
-    const name = (this.data.customName || '').trim()
-    const amount = (this.data.customAmount || '').trim()
+  gAddCustom(e) {
+    const gi = e.currentTarget.dataset.g
+    const groups = this.data.groups.slice()
+    const grp = groups[gi]
+    const name = (grp.customName || '').trim()
+    const amount = (grp.customAmount || '').trim()
     if (!name || !amount) { wx.showToast({ title: '填项目名称和金额', icon: 'none' }); return }
-    // 元 → 分只在这里做一次单位换算(不是计价),之后金额一律由后端算
     const cents = Math.round(Number(amount.replace(/[^\d.]/g, '')) * 100)
     if (!Number.isFinite(cents) || cents <= 0) { wx.showToast({ title: '金额不对', icon: 'none' }); return }
-    // D23①:行上要显示「钻球 ¥50」—— 币符走 storeMoney 门店映射出口,不写死
-    this.setData({ customItems: this.data.customItems.concat([{ name, amountCents: cents, amountText: storeMoney(cents, cents % 100 ? 2 : 0) }]), customName: '', customAmount: '' })
-    this.refresh()
+    grp.customItems = grp.customItems.concat([{ name, amountCents: cents, amountText: storeMoney(cents, cents % 100 ? 2 : 0) }])
+    grp.customName = ''; grp.customAmount = ''
+    this.setData({ groups })
+    this.renderAll(); this.refresh()
   },
-  // D22③:金额区逐行明细展开 —— 每一块钱当场有出处,店主随时自己对账
-  toggleDetail() { this.setData({ detailOpen: !this.data.detailOpen }) },
-  /* D22:从明细行直接移除 —— 幽灵行多是**别的大类里勾过的主项目**(切走后列表里看不见了),
-     不该逼着店主回原大类找;在对账明细里一键取消,取消即重算。 */
-  removeLine(e) {
-    const sid = e.currentTarget.dataset.sid
-    if (!sid) return
-    if (!Object.prototype.hasOwnProperty.call(this.data.picked, sid)) return
-    if (this.isMainItem(sid)) { this.unpickMain(sid); return }   // 主项目走终版移除(回单选态)
-    const picked = Object.assign({}, this.data.picked)
-    delete picked[sid]
-    this.setData({ picked })
-    this.renderCatalogue()
-    this.refresh()
+  gRemoveCustom(e) {
+    const { g, i } = e.currentTarget.dataset
+    const groups = this.data.groups.slice()
+    groups[g].customItems = groups[g].customItems.slice()
+    groups[g].customItems.splice(Number(i), 1)
+    this.setData({ groups })
+    this.renderAll(); this.refresh()
   },
-  removeCustom(e) {
-    const i = Number(e.currentTarget.dataset.i)
-    const next = this.data.customItems.slice()
-    next.splice(i, 1)
-    this.setData({ customItems: next })
-    this.refresh()
-  },
-  onServedName(e) {
-    const v = (e.detail.value || '').trim()
-    this.setData({ servedPersonName: v, isProxy: Boolean(v) })
-  },
-  toggleTech(e) {
-    const id = e.currentTarget.dataset.id
-    const sel = this.data.selectedTechs.slice()
+  gToggleTech(e) {
+    const { g, id } = e.currentTarget.dataset
+    const groups = this.data.groups.slice()
+    const sel = groups[g].selectedTechs.slice()
     const at = sel.indexOf(id)
     if (at >= 0) sel.splice(at, 1)
-    else { if (sel.length >= 2) { wx.showToast({ title: '最多两位技师', icon: 'none' }); return } sel.push(id) }
-    this.setData({ selectedTechs: sel })
-    this.buildTechRows()
+    else { if (sel.length >= 2) { wx.showToast({ title: '每组最多两位技师', icon: 'none' }); return } sel.push(id) }
+    groups[g].selectedTechs = sel
+    this.setData({ groups })
+    // 技师不改钱,但明细区组标题里有技师行 —— 不刷新会显示旧技师(两处说两句话)
+    this.renderAll(); this.refresh()
   },
-  swapMain() {
-    if (this.data.selectedTechs.length < 2) return
-    this.setData({ selectedTechs: [this.data.selectedTechs[1], this.data.selectedTechs[0]] })
-    this.buildTechRows()
+  gServedName(e) {
+    const groups = this.data.groups.slice()
+    groups[e.currentTarget.dataset.g].servedPersonName = (e.detail.value || '').trim()
+    this.setData({ groups })
+    this.renderAll(); this.refresh()
   },
-  // 技师各自勾自己做的项目编号;编号来自后端 preview 的 lines[].itemNo,不自己编号
-  toggleTechItem(e) {
-    const { tech, no } = e.currentTarget.dataset
-    const map = Object.assign({}, this.techItems || {})
-    const cur = (map[tech] || []).slice()
-    const at = cur.indexOf(Number(no))
-    if (at >= 0) cur.splice(at, 1)
-    else cur.push(Number(no))
-    map[tech] = cur
-    this.techItems = map
-    this.buildTechRows()
+  // 「＋添加第二个服务项目」:新组同构六件套;组①收起成摘要行(图 屏2)
+  addGroup() {
+    const groups = this.data.groups.map((g) => Object.assign({}, g, { collapsed: true }))
+    const proto = this.data.groups[0]
+    groups.push(newGroup(proto.tierDefault, (this.data.cats[0] || {}).id))
+    this.setData({ groups })
+    this.renderAll(); this.refresh()
   },
-  buildTechRows() {
-    const lines = ((this.data.preview || {}).lines) || []
-    const map = this.techItems || {}
-    const rows = this.data.selectedTechs.map((id, index) => {
-      const t = this.data.roster.find((x) => x.id === id) || { name: '' }
-      return {
-        id, name: t.name, role: index === 0 ? '主' : '副', isMain: index === 0,
-        chips: lines.map((l) => ({ no: l.itemNo, on: (map[id] || []).indexOf(l.itemNo) >= 0 }))
-      }
-    })
-    this.setData({ techRows: rows })
+  // 组② 整组 ✕;组① 只可替换不可移除(合同规则④)
+  removeGroup(e) {
+    const gi = Number(e.currentTarget.dataset.g)
+    if (gi === 0) { wx.showToast({ title: '第一组只可替换,不可移除', icon: 'none' }); return }
+    const groups = this.data.groups.slice()
+    groups.splice(gi, 1)
+    if (groups.length === 1) groups[0].collapsed = false
+    this.setData({ groups })
+    this.renderAll(); this.refresh()
   },
-  pickPayPlan(e) {
-    this.setData({ payIntent: e.currentTarget.dataset.k })
-    this.refresh()
+  gToggleCollapse(e) {
+    const gi = Number(e.currentTarget.dataset.g)
+    const groups = this.data.groups.slice()
+    groups[gi].collapsed = !groups[gi].collapsed
+    this.setData({ groups })
   },
 
-  formBody() {
-    const items = Object.keys(this.data.picked).map((id) => {
-      const it = (this.allItems || []).find((x) => x.id === id) || {}
-      return it.unit === 'per_finger' ? { serviceId: id, fingers: this.data.picked[id] } : { serviceId: id, qty: this.data.picked[id] }
+  /* ===== 单级四件 ===== */
+  setDeposit(e) { this.setData({ depositApplied: e.currentTarget.dataset.v === '1' }); this.refresh() },
+  toggleFoot() { this.setData({ applyFootSurcharge: !this.data.applyFootSurcharge }); this.refresh() },
+  toggleTipReuse() { this.setData({ applyTipReuse: !this.data.applyTipReuse }); this.refresh() },
+  // 支付菜单(合同规则③):勾选只选"路",金额全部后端重算回显
+  payToggleBalance() {
+    const m = this.data.payMenu
+    this.setData({ payMenu: { useBalance: !m.useBalance, recharge: m.useBalance ? false : m.recharge } })
+    this.refresh()
+  },
+  payToggleDeposit() { this.setData({ depositApplied: !this.data.depositApplied }); this.refresh() },
+  payToggleOffline() {
+    // 线下收款 = 差额的去处;差额>0 时不能取消勾(钱得有地方收),提示后维持原状
+    const v = this.data.view
+    if (v && v.hasOffline) { wx.showToast({ title: '还有差额要到店收;想不走线下就先充值抵扣', icon: 'none' }); return }
+  },
+  payToggleRecharge() {
+    const m = this.data.payMenu
+    const next = !m.recharge
+    this.setData({ payMenu: { useBalance: next ? true : m.useBalance, recharge: next } })
+    this.refresh()
+  },
+  payIntentOf() {
+    const m = this.data.payMenu
+    if (m.recharge) return 'recharge_then_balance'
+    return m.useBalance ? 'balance_plus_offline' : 'offline_full'
+  },
+
+  /* ===== 内嵌充值面板(合同规则③-2:复用既有代充流程,技师不离开结算单) ===== */
+  async openRecharge() {
+    // 既有代充口径原样:资金操作需财务密码解锁(与 member 页同一道门,不放宽)
+    if (!(api.getFinanceKey && api.getFinanceKey())) {
+      wx.showModal({
+        title: '需先解锁财务', content: '帮顾客充值属于资金操作,请先到财务页输入财务密码解锁本次会话。',
+        confirmText: '去财务页', success: (r) => { if (r.confirm) wx.navigateTo({ url: '/pages/merchant/finance/index' }) }
+      })
+      return
+    }
+    let tiers = []
+    try { tiers = ((await api.adminGet('/admin/recharge-tiers')).tiers || []).filter((t) => t.isActive) } catch (e) { /* 无档位也能手输 */ }
+    const d = this.data.display
+    const m = (c) => formatMoney(c, d, d && d.trimZeroDecimals ? 0 : 2)
+    this.setData({
+      rvPanel: {
+        amount: '', amountText: '',
+        tierId: '',
+        tiers: tiers.map((t) => ({
+          id: t.id, amountCents: t.amountCents, amountText: m(t.amountCents),
+          // 赠额只按档位规则自动算(涉钱轻动作口径);券/项目类赠送随 S2,先只显示说明
+          bonusCents: t.gift && t.gift.type === 'amount' ? Math.round(Number(t.gift.value) || 0)
+            : (t.gift && t.gift.type === 'percent' ? Math.round(t.amountCents * (Number(t.gift.value) || 0) / 100) : 0),
+          giftText: t.gift && t.gift.type === 'percent' ? `赠 ${t.gift.value}%`
+            : (t.gift && t.gift.type === 'amount' ? `赠 ${m(Math.round(Number(t.gift.value) || 0))}`
+              : (t.gift && t.gift.type ? '含赠送(券/项目,S2 支持)' : '无赠送'))
+        }))
+      }
     })
-    return {
-      bookingId: this.data.bookingId || undefined,
-      userId: this.data.userId || undefined,
-      payerUserId: this.data.userId || undefined,
-      tierKey: this.data.tierKey,
-      items,
-      customItems: this.data.customItems,
-      applyFootSurcharge: this.data.applyFootSurcharge,
-      applyTipReuse: this.data.applyTipReuse,
-      depositApplied: this.data.depositApplied,
-      payIntent: this.data.payIntent,
-      couponGrantId: this.data.couponGrantId || undefined
+  },
+  closeRecharge() { this.setData({ rvPanel: null }) },
+  rvPickTier(e) {
+    const id = e.currentTarget.dataset.id
+    const p = this.data.rvPanel
+    const t = p.tiers.find((x) => x.id === id)
+    if (!t) return
+    this.setData({ rvPanel: Object.assign({}, p, { tierId: id, amount: String(t.amountCents / 100), amountText: '' }) })
+  },
+  rvAmountInput(e) {
+    const p = this.data.rvPanel
+    this.setData({ rvPanel: Object.assign({}, p, { amount: e.detail.value, tierId: '' }) })
+  },
+  async rvConfirm() {
+    const p = this.data.rvPanel
+    if (!p) return
+    const tier = p.tiers.find((x) => x.id === p.tierId)
+    const payCents = Math.round(Number(String(p.amount || '').replace(/[^\d.]/g, '')) * 100)
+    if (!Number.isFinite(payCents) || payCents <= 0) { wx.showToast({ title: '金额不对', icon: 'none' }); return }
+    const bonus = tier ? tier.bonusCents : 0
+    try {
+      /* ⬜ 假设(记清单):档位充值按「实收+赠额」一笔入储值(充值=预收不进收入,口径不变),
+         note 拆明实收与赠额;实收/赠送分笔的正式账目口径随 S2。 */
+      await api.adminPost('/admin/stored-value/recharge', {
+        userId: this.data.userId,
+        amountCents: payCents + bonus,
+        payChannel: 'manual',
+        note: tier ? `结算单内代充·档位 实收${payCents / 100} + 赠${bonus / 100}` : '结算单内代充·手输金额'
+      })
+      wx.showToast({ title: '已到账,余额已刷新', icon: 'none' })
+      // 充完自动回本单:关面板 → 余额随组级预览刷新 → 储值选项变可勾
+      this.setData({ rvPanel: null, payMenu: { useBalance: true, recharge: false } })
+      this.refresh()
+    } catch (err) {
+      wx.showToast({ title: (err && err.message) || '充值失败(需老板会话+财务解锁)', icon: 'none' })
     }
   },
 
-  /* 选券面板(设计图 C1 右图):可用在上、不可用置灰在下并写原因。
-     能不能用、能抵多少、原因文案全是后端给的,这里只负责显示和把选择回传。 */
+  /* ===== 券(单级,挂组①的单;一单一张口径不变;图 v2.2 未画券区,按现状保留 —— 记假设) ===== */
   openCouponPanel() {
     if (!this.data.couponOptions.length) { wx.showToast({ title: '顾客券包里没有券', icon: 'none' }); return }
     this.setData({ couponPanel: true })
   },
   closeCouponPanel() { this.setData({ couponPanel: false }) },
-  noop() { /* 面板内点击不穿透到遮罩 */ },
+  noop() { /* 面板内点击不穿透 */ },
   pickCoupon(e) {
     const id = e.currentTarget.dataset.id || ''
     const picked = this.data.couponOptions.find((o) => o.grantId === id)
@@ -404,7 +457,45 @@ Page({
     this.refresh()
   },
 
-  // 每次改动都问一次后端要金额。节流 250ms,避免连点 ＋ 时打一串请求。
+  /* ===== 组级预览 ===== */
+  groupSheets() {
+    const all = this.allItems || []
+    return this.data.groups.map((g, i) => {
+      const items = []
+      if (g.mainId) {
+        const it = all.find((x) => x.id === g.mainId) || {}
+        items.push(it.unit === 'per_finger' ? { serviceId: g.mainId, fingers: 1 } : { serviceId: g.mainId, qty: 1 })
+      }
+      for (const id of Object.keys(g.addonIds)) {
+        const it = all.find((x) => x.id === id) || {}
+        items.push(it.unit === 'per_finger' ? { serviceId: id, fingers: g.addonIds[id] } : { serviceId: id, qty: g.addonIds[id] })
+      }
+      return {
+        bookingId: i === 0 ? (this.data.bookingId || undefined) : undefined,
+        tierKey: g.tierKey,
+        tierChangedFrom: g.tierChanged ? g.tierDefault : undefined,
+        items,
+        customItems: g.customItems.map((c) => ({ name: c.name, amountCents: c.amountCents })),
+        servedPersonName: g.servedPersonName || '',
+        technicians: g.selectedTechs.map((id, index) => ({ technicianId: id, role: index === 0 ? 'main' : 'assist', itemNos: [] })),
+        payIntent: this.payIntentOf(),
+        depositApplied: i === 0 ? this.data.depositApplied : false,
+        couponGrantId: i === 0 ? (this.data.couponGrantId || undefined) : undefined,
+        applyFootSurcharge: i === 0 ? this.data.applyFootSurcharge : false,
+        applyTipReuse: i === 0 ? this.data.applyTipReuse : false
+      }
+    })
+  },
+  formBody() {
+    return {
+      bookingId: this.data.bookingId || undefined,
+      userId: this.data.userId || undefined,
+      payerUserId: this.data.userId || undefined,
+      cardOwnerUserId: this.data.userId || undefined,
+      payIntent: this.payIntentOf(),
+      settlements: this.groupSheets()
+    }
+  },
   refresh() {
     clearTimeout(this._t)
     this._t = setTimeout(() => this.doPreview(), 250)
@@ -412,74 +503,76 @@ Page({
   async doPreview() {
     try {
       const r = await api.adminPost('/admin/settlements/preview', this.formBody())
-      const s = r.settlement || {}
-      const d = displayOf(s)
+      const sheets = r.sheets || []
+      const grp = r.group || {}
+      const d = displayOf(sheets[0] || {})
       const m = (cents) => formatMoney(cents, d, d.trimZeroDecimals ? 0 : 2)
-      const pay = s.payment || {}
+      const pay = grp.payment || {}
+      const groupsState = this.data.groups
+      // 分组明细:各组标题(项目N 主项·技师[·被服务者])+ 子行逐行原价划线(合同 单级③)
+      const detailGroups = sheets.map((s, i) => {
+        const g = groupsState[i] || {}
+        const who = g.servedPersonName ? ` · 被服务者:${g.servedPersonName}` : ''
+        return {
+          title: `项目${'①②③④⑤'[i] || i + 1} ${g.mainName || '(未选主项目)'}${g.techLine ? ' · ' + g.techLine : ''}${who}`,
+          lines: (s.lines || []).map((l) => ({
+            no: l.itemNo, name: l.name, qty: l.qty,
+            serviceId: l.serviceId || '', kind: l.kind || '',
+            amount: l.amountCents === 0 ? '免收' : m(l.amountCents),
+            list: l.listAmountCents !== l.amountCents ? m(l.listAmountCents) : ''
+          }))
+        }
+      })
+      const storedUsed = pay.storedUsedCents || 0
       const view = {
-        listTotal: m(s.listTotalCents), subtotal: m(s.subtotalCents),
-        depositDeduct: m(s.depositDeductCents), discountTotal: m(s.discountTotalCents),
-        total: m(s.totalCents),
-        hasDeposit: s.depositDeductCents > 0,
-        // 券:抵扣额与「共优惠(含券)」都由后端算好,这里只换个显示格式
-        couponDeduct: m(s.couponDiscountCents || 0),
-        hasCoupon: (s.couponDiscountCents || 0) > 0,
-        couponName: s.coupon ? s.coupon.name : '',
-        discountLabel: (s.couponDiscountCents || 0) > 0 ? '共优惠（含券）' : '较原价共优惠',
-        lines: (s.lines || []).map((l) => ({
-          no: l.itemNo, name: l.name, qty: l.qty, unit: l.unit,
-          serviceId: l.serviceId || '',
-          kind: l.kind || '',
-          amount: l.amountCents === 0 ? '免收' : m(l.amountCents),
-          list: l.listAmountCents !== l.amountCents ? m(l.listAmountCents) : ''
-        })),
-        // R6①:腿文案后端下发(「迁移余额」这种内部说法不再露给店员/顾客)
-        legs: (pay.legs || []).map((l) => ({ label: l.label || l.leg, amount: m(l.amountCents) })),
-        // R6②:没有定金收取记录就不出那个开关,改成一行说明
-        depositReceiptCents: s.depositReceiptCents || 0,
-        hasDepositReceipt: (s.depositReceiptCents || 0) > 0,
-        depositHint: s.depositHint || '',
+        groups: detailGroups,
+        listTotal: m(grp.listTotalCents || 0),
+        subtotal: m(grp.subtotalCents || 0),
+        discountTotal: m(grp.discountTotalCents || 0),
+        discountLabel: (grp.couponDiscountCents || 0) > 0 ? '共优惠（含券）' : '较原价共优惠',
+        hasDeposit: (grp.depositDeductCents || 0) > 0,
+        depositDeduct: m(grp.depositDeductCents || 0),
+        hasStored: storedUsed > 0,
+        storedDeduct: m(storedUsed),
+        // 到店应收 = 后端 offlineDue(组合计 − 储值抵扣;定金已在各单 total 内扣)
+        total: m(pay.offlineDueCents != null ? pay.offlineDueCents : (grp.totalCents || 0)),
+        balanceCents: pay.balanceAvailableCents || 0,
         balance: m(pay.balanceAvailableCents || 0),
-        shortfall: m(pay.shortfallCents || 0),
-        hasShortfall: (pay.shortfallCents || 0) > 0,
-        warnings: (s.softWarnings || []).map((w) => w.message)
+        hasBalance: (pay.balanceAvailableCents || 0) > 0,
+        depositReceiptCents: grp.depositReceiptCents || 0,
+        hasDepositReceipt: (grp.depositReceiptCents || 0) > 0,
+        hasOffline: (pay.offlineDueCents || 0) > 0,
+        offlineDue: m(pay.offlineDueCents || 0),
+        warnings: sheets.reduce((acc, s) => acc.concat((s.softWarnings || []).map((w) => w.message)), [])
       }
-      // 券包:后端已按可用/不可用排好序,前端只把金额换成显示格式
-      const options = (s.couponOptions || []).map((o) => Object.assign({}, o, {
-        deductText: o.usable ? `−${m(o.discountCents)}` : ''
-      }))
+      // 券(组①):选项与已选照单级显示
+      const s0 = sheets[0] || {}
+      const options = (s0.couponOptions || []).map((o) => Object.assign({}, o, { deductText: o.usable ? `−${m(o.discountCents)}` : '' }))
       const prev = this.data.display
       this.setData({
-        preview: s, view, display: d,
+        preview: r, view, display: d,
         couponOptions: options,
-        couponUsableCount: s.couponUsableCount || 0,
-        couponPicked: s.coupon ? Object.assign({}, s.coupon, { deductText: `−${m(s.coupon.discountCents)}` }) : null,
-        // 后端没认这张券(过期/被别处占用等)时,把本地选择也清掉,不留一个假的已选态
-        couponGrantId: s.coupon ? s.coupon.grantId : ''
+        couponUsableCount: s0.couponUsableCount || 0,
+        couponPicked: s0.coupon ? Object.assign({}, s0.coupon, { deductText: `−${m(s0.coupon.discountCents)}` }) : null,
+        couponGrantId: s0.coupon ? s0.coupon.grantId : ''
       })
-      this.buildTechRows()
-      /* 🔴 D22 护栏(店主 2026-08-11 抓出「手部精修前置」幽灵行):合计必须≡当前勾选之和。
-         后端只算被告知的项,所以对账对象是**这张预览单的行 vs 本页勾选状态**:
-         多一行少一行都不许沉默 —— 那 58 块钱就是这么在店主眼皮底下混进去的。 */
-      const pickedIds = Object.keys(this.data.picked)
-      const lineIds = (s.lines || []).filter((l) => l.serviceId && l.kind !== 'rule').map((l) => l.serviceId)
-      const ghost = lineIds.filter((id) => !pickedIds.includes(id))
-      const missing = pickedIds.filter((id) => !lineIds.includes(id))
-      if (ghost.length || missing.length) {
-        wx.showToast({ title: `金额行与勾选不一致(多${ghost.length}少${missing.length}),请截图报给店主`, icon: 'none', duration: 4000 })
+      /* 🔴 D22 护栏(分组版):每组预览行必须与该组勾选一一对应,多/少都当场报警。 */
+      const bodySheets = this.groupSheets()
+      for (let i = 0; i < sheets.length; i += 1) {
+        const wanted = (bodySheets[i].items || []).map((x) => x.serviceId).sort()
+        const got = (sheets[i].lines || []).filter((l) => l.serviceId && l.kind !== 'rule').map((l) => l.serviceId).sort()
+        if (JSON.stringify(wanted) !== JSON.stringify(got)) {
+          wx.showToast({ title: `组${i + 1} 金额行与勾选不一致,请截图报给店主`, icon: 'none', duration: 4000 })
+          break
+        }
       }
-      // 币种格式是第一次试算才拿到的,拿到后要把目录里的价格重新格式化一遍
-      if (!prev || prev.symbol !== d.symbol || prev.prefix !== d.prefix) this.renderCatalogue()
+      if (!prev || prev.symbol !== d.symbol || prev.prefix !== d.prefix) this.renderAll()
     } catch (e) {
       wx.showToast({ title: (e && e.message) || '试算失败', icon: 'none' })
     }
   },
 
-  /* ===== 屏 S3 出示二维码(2026-08-09 图 S3 + 规则④⑧)=====
-     码 = 这张单的一次性签署链接。沙盒态按店主 08-09 拍板(b)走:
-     **占位图 + 链接文字 + 复制链接 + 状态行**;真码等接微信官方 wxacode.getUnlimited
-     再补(不自研 QR 编码器 —— 本地无法自验的东西不进仓)。
-     状态行三态:等待顾客进入 → 顾客核对中 → 已签署(自动关闭回今日台面)。 */
+  /* ===== 出码 / 签署(现有闭环全保留;多组=同组多张单,顾客按 1/N 顺序签) ===== */
   async openQr(sheet) {
     if (!sheet) { wx.navigateBack(); return }
     try {
@@ -492,7 +585,6 @@ Page({
           code: s.code || sheet.code,
           url: r.url,
           pushedText: r.pushedText || '',
-          /* D9 规则⑤:未绑定轻档案 = 新客,显著提示 + 只有扫码一条签署路 */
           unbound: r.customerBound === false,
           amountText: `应收 ${m(s.totalCents)}`,
           breakdownText: s.depositDeductCents
@@ -508,7 +600,6 @@ Page({
       wx.navigateBack()
     }
   },
-  // 状态行实时刷新(规则④)。签署完成 → 自动关闭并回今日台面。
   pollQr() {
     clearTimeout(this._qrTimer)
     this._qrTimer = setTimeout(async () => {
@@ -522,7 +613,7 @@ Page({
           setTimeout(() => { this.setData({ qr: null }); wx.navigateBack() }, 900)
           return
         }
-      } catch (e) { /* 网络抖一下不打断,下一轮再问 */ }
+      } catch (e) { /* 网络抖动下一轮再问 */ }
       this.pollQr()
     }, 2500)
   },
@@ -530,9 +621,6 @@ Page({
   copyQrLink() {
     wx.setClipboardData({ data: this.data.qr.url, success: () => wx.showToast({ title: '链接已复制', icon: 'none' }) })
   },
-  // 兜底:顾客不扫码 —— 店员设备当面手签(档案保持未绑定)。
-  // D9 规则⑤:未绑定轻档案的新客**没有这条路** —— 手签不建立绑定,静默跳过等于
-  // 让新客永远悬在未绑定;扫码签署才会自动建立绑定。
   handSign() {
     if (this.data.qr && this.data.qr.unbound) {
       wx.showToast({ title: '新客需扫码签署(扫码即自动建立绑定)', icon: 'none' })
@@ -548,21 +636,18 @@ Page({
   async submit() {
     if (this.data.submitting) return
     if (!this.data.userId) { wx.showToast({ title: '这单没有绑定顾客,无法结算', icon: 'none' }); return }
-    if (!Object.keys(this.data.picked).length && !this.data.customItems.length) { wx.showToast({ title: '先勾项目', icon: 'none' }); return }
-    if (!this.data.selectedTechs.length) { wx.showToast({ title: '先勾本单技师', icon: 'none' }); return }
-    const map = this.techItems || {}
-    const body = Object.assign(this.formBody(), {
-      cardOwnerUserId: this.data.userId,
-      servedPersonName: this.data.servedPersonName || '',
-      tierChangedFrom: this.data.tierChanged ? this.data.tierDefault : undefined,
-      technicians: this.data.selectedTechs.map((id, index) => ({
-        technicianId: id, role: index === 0 ? 'main' : 'assist', itemNos: map[id] || []
-      }))
-    })
+    // 每组:必须有内容(主项或自选)+ 1–2 位技师
+    for (let i = 0; i < this.data.groups.length; i += 1) {
+      const g = this.data.groups[i]
+      if (!g.mainId && !Object.keys(g.addonIds).length && !g.customItems.length) {
+        wx.showToast({ title: `项目${i + 1} 还没选内容`, icon: 'none' }); return
+      }
+      if (!g.selectedTechs.length) { wx.showToast({ title: `项目${i + 1} 先勾本组技师`, icon: 'none' }); return }
+    }
     this.setData({ submitting: true })
     try {
-      const r = await api.adminPost('/admin/settlements', body)
-      // 屏 S3:推送签署后**所有单都弹**二维码层(不分绑没绑定)
+      const r = await api.adminPost('/admin/settlements', this.formBody())
+      // 多组=同组多张单;QR 出第一张,顾客按 待签 1/N 顺序签(既有闭环)
       await this.openQr((r.settlements || [])[0])
     } catch (e) {
       wx.showToast({ title: (e && e.message) || '开单失败', icon: 'none' })

@@ -1,114 +1,109 @@
 <view class="pg">
   <view class="hd">
     <text class="t">结算开单</text>
-    <!-- 屏 S2:顾客行 = 姓名 + 脱敏手机号 + 「新客·未绑定」徽标。
-         徽标只看**档案绑定状态**、文案由后端下发;绑定后后端给空串,这里自然消失。 -->
+    <!-- 屏 S2:顾客行 = 姓名 + 脱敏手机号 + 「新客·未绑定」徽标(文案后端下发) -->
     <view class="s2row">
       <text class="s2name">{{customerName}}</text>
       <text class="s2phone" wx:if="{{bind.phoneMasked}}">{{bind.phoneMasked}}</text>
       <text class="s2badge" wx:if="{{bind.badgeText}}">{{bind.badgeText}}</text>
-      <text class="s2proxy" wx:if="{{isProxy}}">代付·卡主 {{customerName}}</text>
     </view>
     <view class="s2hint" wx:if="{{bind.hintText}}">{{bind.hintText}}</view>
   </view>
 
-  <!-- qrOnly 纯出码模式不加载价目表,这句加载文案不该在弹层背后探头 -->
+  <!-- qrOnly 纯出码模式不加载价目表 -->
   <view wx:if="{{!ready && !qrOnly}}" class="loading">正在读取本店价目表…</view>
 
   <block wx:else>
-    <view class="card">
-      <view class="ch">① 价格体系 <text class="hint">{{tierChanged ? '已改档，将留痕' : '默认按会员判定'}}</text></view>
-      <view class="chiprow">
-        <view class="chip {{tierKey === it.key ? 'on' : ''}}" wx:for="{{tiers}}" wx:for-item="it" wx:key="key" data-k="{{it.key}}" bindtap="pickTier">{{it.label}}</view>
-      </view>
-    </view>
+    <!-- ═══ 组内六件套 × N(图 v2.2 屏1/屏2):每个服务项目一组,这组做什么、谁做、给谁做,一张卡说清 ═══ -->
+    <block wx:for="{{groups}}" wx:for-item="grp" wx:for-index="gi" wx:key="key">
 
-    <view class="card">
-      <view class="ch">② 服务项目 <text class="hint">默认=预约项目，可改可多选</text></view>
-      <scroll-view class="cattabs" scroll-x>
-        <view class="chip {{catId === c.id ? 'on' : ''}}" wx:for="{{cats}}" wx:for-item="c" wx:key="id" data-id="{{c.id}}" bindtap="pickCat">{{c.name}}</view>
-      </scroll-view>
-      <view class="item" wx:for="{{mainItems}}" wx:for-item="it" wx:key="id" data-id="{{it.id}}" bindtap="toggleItem">
-        <view class="ck {{it.on ? 'on' : ''}}">{{it.on ? '✓' : ''}}</view>
-        <view class="iname">{{it.name}}</view>
-        <view class="pr">
-          <text wx:if="{{it.listText}}" class="mut">{{it.listText}}</text>
-          <text class="now {{it.isFree ? 'free' : ''}}">{{it.priceText}}</text>
+      <!-- 收起态摘要行(屏2 上半) -->
+      <view wx:if="{{grp.collapsed}}" class="card grpcard dim" data-g="{{gi}}" bindtap="gToggleCollapse">
+        <view class="ch">服务项目 {{grp.label}} · {{grp.mainName || '(未选)'}}{{grp.techLine ? ' · ' + grp.techLine : ''}} <text class="hint">展开 ▸</text></view>
+        <view class="grpsum">{{grp.summary}}</view>
+      </view>
+
+      <!-- 展开态:六件套 -->
+      <view wx:else class="card grpcard">
+        <view class="ch">服务项目 {{grp.label}}
+          <text wx:if="{{gi > 0}}" class="grpx" data-g="{{gi}}" catchtap="removeGroup">✕ 移除此项目</text>
+          <text wx:elif="{{groups.length > 1}}" class="hint" data-g="{{gi}}" catchtap="gToggleCollapse">收起 ▾</text>
         </view>
-      </view>
-      <view wx:if="{{!mainItems.length}}" class="empty">该大类下暂无在售项目</view>
-    </view>
 
-    <!-- 终版:显式加选 —— 已选一项后才出现;点了进入加选模式(下一次点主项目=加,不是替换) -->
-    <view class="addmain {{mainAddArmed ? 'armed' : ''}}" wx:if="{{mainCount >= 1}}" bindtap="armAddMain">
-      {{mainAddArmed ? '加选模式:点任一大类里的主项目,加为第二项' : '＋ 加第二个主项目'}}
-    </view>
-
-    <!-- D22:其他大类已选的主项目 —— 不许存在"看不见但在计费"的行 -->
-    <view class="ghostrow" wx:if="{{pickedElsewhere.length}}">
-      <text class="ghost-t">其他大类已选:</text>
-      <view class="ghost-chip" wx:for="{{pickedElsewhere}}" wx:key="id">
-        <text>{{item.name}}{{item.cat ? ' · ' + item.cat : ''}}</text>
-        <text class="dtl-x" data-sid="{{item.id}}" catchtap="removeLine">✕</text>
-      </view>
-    </view>
-
-    <view class="card">
-      <view class="ch">③ 加项目录 <text class="hint">按本单价格档计价</text></view>
-      <block wx:for="{{addonGroups}}" wx:for-item="g" wx:key="title">
-        <view class="gh">{{g.title}}</view>
-        <!-- R2(店主 2026-08-10 开检:「再选别的项目合计不变」):加项行原本只有勾选框和名字
-             绑了 catchtap,**价格区和行的空白处点了毫无反应** —— 而正上方的主项目行是整行可点。
-             店主照着上面的习惯点行/点价格,以为选中了,合计当然不动。改成整行可点,与主项目一致。
-             按指数的那种仍然只认 ＋/−(整行可点会和步进器打架)。 -->
-        <view class="item" wx:for="{{g.items}}" wx:for-item="it" wx:key="id"
-              data-id="{{it.id}}" bindtap="{{it.perFinger ? '' : 'toggleItem'}}">
-          <block wx:if="{{it.perFinger}}">
-            <view class="iname wide">{{it.name}}</view>
-            <view class="stepper">
-              <view class="sb" data-id="{{it.id}}" data-d="-1" catchtap="stepQty">−</view>
-              <text class="qn">{{it.qty}} 指</text>
-              <view class="sb" data-id="{{it.id}}" data-d="1" catchtap="stepQty">＋</view>
-            </view>
-          </block>
-          <block wx:else>
-            <view class="ck {{it.on ? 'on' : ''}}">{{it.on ? '✓' : ''}}</view>
-            <view class="iname">{{it.name}}</view>
-            <view class="pr">
-              <text wx:if="{{it.listText}}" class="mut">{{it.listText}}</text>
-              <text class="now {{it.isFree ? 'free' : ''}}">{{it.priceText}}</text>
-            </view>
-          </block>
+        <view class="sec">价格体系(本组独立) <text class="hint">{{grp.tierChanged ? '已改档，将留痕' : '默认按会员判定'}}</text></view>
+        <view class="chiprow">
+          <view class="chip {{grp.tierKey === it.key ? 'on' : ''}}" wx:for="{{tiers}}" wx:for-item="it" wx:key="key" data-g="{{gi}}" data-k="{{it.key}}" bindtap="gPickTier">{{it.label}}</view>
         </view>
-      </block>
-      <view class="gh">整单规则</view>
-      <view class="item">
-        <view class="iname wide">足部美甲<text class="sub">手部基础上整单加收</text></view>
-        <view class="sw {{applyFootSurcharge ? 'on' : ''}}" bindtap="toggleFoot"><view class="dot"></view></view>
+
+        <view class="sec">服务项目(单选自动替换)</view>
+        <scroll-view class="cattabs" scroll-x>
+          <view class="chip {{grp.catId === c.id ? 'on' : ''}}" wx:for="{{cats}}" wx:for-item="c" wx:key="id" data-g="{{gi}}" data-id="{{c.id}}" bindtap="gPickCat">{{c.name}}</view>
+        </scroll-view>
+        <view class="item" wx:for="{{grp.mainItems}}" wx:for-item="it" wx:key="id" data-g="{{gi}}" data-id="{{it.id}}" bindtap="gToggleMain">
+          <view class="ck {{it.on ? 'on' : ''}}">{{it.on ? '✓' : ''}}</view>
+          <view class="iname">{{it.name}}</view>
+          <view class="pr">
+            <text wx:if="{{it.listText}}" class="mut">{{it.listText}}</text>
+            <text class="now {{it.isFree ? 'free' : ''}}">{{it.priceText}}</text>
+          </view>
+        </view>
+        <view wx:if="{{!grp.mainItems.length}}" class="empty">该大类下暂无在售项目</view>
+        <view wx:if="{{grp.mainId && grp.mainName}}" class="grppicked">本组主项目:{{grp.mainName}}(点其他大类里的项目=替换)</view>
+
+        <view class="sec">加项目录(按本组主项目类别过滤) <text class="hint">按本组价格档计价</text></view>
+        <block wx:for="{{grp.addonGroups}}" wx:for-item="ag" wx:key="title">
+          <view class="gh">{{ag.title}}</view>
+          <view class="item" wx:for="{{ag.items}}" wx:for-item="it" wx:key="id"
+                data-g="{{gi}}" data-id="{{it.id}}" bindtap="{{it.perFinger ? '' : 'gToggleAddon'}}">
+            <block wx:if="{{it.perFinger}}">
+              <view class="iname wide">{{it.name}}</view>
+              <view class="stepper">
+                <view class="sb" data-g="{{gi}}" data-id="{{it.id}}" data-d="-1" catchtap="gStepQty">−</view>
+                <text class="qn">{{it.qty}} 指</text>
+                <view class="sb" data-g="{{gi}}" data-id="{{it.id}}" data-d="1" catchtap="gStepQty">＋</view>
+              </view>
+            </block>
+            <block wx:else>
+              <view class="ck {{it.on ? 'on' : ''}}">{{it.on ? '✓' : ''}}</view>
+              <view class="iname">{{it.name}}</view>
+              <view class="pr">
+                <text wx:if="{{it.listText}}" class="mut">{{it.listText}}</text>
+                <text class="now {{it.isFree ? 'free' : ''}}">{{it.priceText}}</text>
+              </view>
+            </block>
+          </view>
+        </block>
+
+        <view class="sec">自选填写行(本组) <text class="hint">价目表外项目</text></view>
+        <view class="inputline">
+          <input class="in" placeholder="项目名称（例：钻球）" value="{{grp.customName}}" data-g="{{gi}}" bindinput="gCustomName" />
+          <input class="in amt" placeholder="金额" type="digit" value="{{grp.customAmount}}" data-g="{{gi}}" bindinput="gCustomAmount" />
+          <view class="addbtn" data-g="{{gi}}" bindtap="gAddCustom">＋添加</view>
+        </view>
+        <view class="cst" wx:for="{{grp.customItems}}" wx:for-item="c" wx:key="name" wx:for-index="ci" data-g="{{gi}}" data-i="{{ci}}" bindtap="gRemoveCustom">
+          <text>{{c.name}}</text>
+          <view class="cst-r"><text class="cst-amt">{{c.amountText}}</text><text class="del">移除</text></view>
+        </view>
+
+        <view class="sec">本单技师(本组,1–2 位) <text class="hint">双技师分成由店长日结核定</text></view>
+        <view class="roster">
+          <view class="chip {{grp.selectedTechs[0] === t.id || grp.selectedTechs[1] === t.id ? 'on' : ''}}" wx:for="{{roster}}" wx:for-item="t" wx:key="id" data-g="{{gi}}" data-id="{{t.id}}" bindtap="gToggleTech">
+            {{t.name}}<text wx:if="{{t.title}}" class="r">{{t.title}}</text>
+          </view>
+        </view>
+
+        <view class="sec">被服务者(本组) <text class="hint">朋友不建档:填称呼即可,单据仍推卡主签</text></view>
+        <input class="in full" placeholder="留空=本人；朋友填称呼" value="{{grp.servedPersonName}}" data-g="{{gi}}" bindinput="gServedName" />
       </view>
-      <view class="item">
-        <view class="iname wide">甲片重复利用<text class="sub">固定价 · 仅限本店甲片</text></view>
-        <view class="sw {{applyTipReuse ? 'on' : ''}}" bindtap="toggleTipReuse"><view class="dot"></view></view>
-      </view>
-    </view>
+
+      <!-- 「＋添加第二个服务项目」在组①末尾之后(合同规则④) -->
+      <view wx:if="{{gi === groups.length - 1}}" class="addmain" bindtap="addGroup">＋ 添加第二个服务项目</view>
+    </block>
+
+    <!-- ═══ 单级四件(图 v2.2 屏3):整单一份,在所有组之后 ═══ -->
 
     <view class="card">
-      <view class="ch">④ 自选填写行 <text class="hint">价目表外项目</text></view>
-      <view class="inputline">
-        <input class="in" placeholder="项目名称（例：钻球）" value="{{customName}}" bindinput="onCustomName" />
-        <input class="in amt" placeholder="金额" type="digit" value="{{customAmount}}" bindinput="onCustomAmount" />
-        <view class="addbtn" bindtap="addCustom">＋添加</view>
-      </view>
-      <view class="cst" wx:for="{{customItems}}" wx:for-item="c" wx:key="name" wx:for-index="index" data-i="{{index}}" bindtap="removeCustom">
-        <text>{{c.name}}</text>
-        <view class="cst-r"><text class="cst-amt">{{c.amountText}}</text><text class="del">移除</text></view>
-      </view>
-    </view>
-
-    <view class="card">
-      <view class="ch">⑤ 定金</view>
-      <!-- R6②:只有这张单**确实有定金收取记录**时才出开关(v1.2 抵扣依据=收取记录)。
-           没有记录还摆着开关,店员点了金额纹丝不动,只会以为是 bug。 -->
+      <view class="ch">定金 <text class="hint">按店配收取 · 有收取记录才出开关</text></view>
       <view wx:if="{{depositDeductible && view.hasDepositReceipt}}" class="radios">
         <view class="radio {{depositApplied ? 'on' : ''}}" data-v="1" bindtap="setDeposit">
           <view class="dt"></view>已付定金抵扣
@@ -116,10 +111,10 @@
         </view>
         <view class="radio {{depositApplied ? '' : 'on'}}" data-v="0" bindtap="setDeposit"><view class="dt"></view>未付定金</view>
       </view>
-      <view wx:elif="{{depositDeductible}}" class="empty">{{view.depositHint || '这张单没有定金收取记录,没有可抵扣的定金'}}</view>
+      <view wx:elif="{{depositDeductible}}" class="empty">这张单没有定金收取记录,没有可抵扣的定金</view>
       <view wx:else class="empty">本店定金不抵扣尾款（门店设置 → 定金与取消规则）</view>
 
-      <!-- 屏 C1：优惠券行，位置=定金行正下方。默认收起显示可用券数；点开=选券面板 -->
+      <!-- 优惠券(图 v2.2 未画,按现状保留;挂组①的单,一单一张口径不变 —— 记假设) -->
       <view class="cpnline" bindtap="openCouponPanel">
         <text class="l">优惠券</text>
         <block wx:if="{{couponPicked}}">
@@ -134,68 +129,66 @@
           <text class="v mut">无可用券</text>
         </block>
       </view>
+
+      <!-- 整单规则(足部加收/甲片重复利用):图未画,按现状保留为单级 —— 记假设 -->
+      <view class="gh">整单规则</view>
+      <view class="item">
+        <view class="iname wide">足部美甲<text class="sub">手部基础上整单加收</text></view>
+        <view class="sw {{applyFootSurcharge ? 'on' : ''}}" bindtap="toggleFoot"><view class="dot"></view></view>
+      </view>
+      <view class="item">
+        <view class="iname wide">甲片重复利用<text class="sub">固定价 · 仅限本店甲片</text></view>
+        <view class="sw {{applyTipReuse ? 'on' : ''}}" bindtap="toggleTipReuse"><view class="dot"></view></view>
+      </view>
     </view>
 
-    <view class="card">
-      <view class="ch">⑥ 本单技师 <text class="hint">先从本店名单勾人（1–2 位）</text></view>
-      <view class="roster">
-        <view class="chip {{selectedTechs[0] === t.id || selectedTechs[1] === t.id ? 'on' : ''}}" wx:for="{{roster}}" wx:for-item="t" wx:key="id" data-id="{{t.id}}" bindtap="toggleTech">
-          {{t.name}}<text wx:if="{{t.title}}" class="r">{{t.title}}</text>
-        </view>
-      </view>
-      <view class="tip" wx:if="{{selectedTechs.length}}">
-        已选 {{selectedTechs.length}} 位（第一位为主技师<text wx:if="{{selectedTechs.length > 1}}" class="link" bindtap="swapMain">· 对调主副</text>）· 再各自勾自己做的项目编号：
-      </view>
-      <view class="techrow" wx:for="{{techRows}}" wx:for-item="tr" wx:key="id">
-        <view class="tn">{{tr.name}}<text class="role {{tr.isMain ? '' : 'sub'}}">{{tr.role}}</text></view>
-        <view class="minichips">
-          <view class="mchip {{c.on ? 'on' : ''}}" wx:for="{{tr.chips}}" wx:for-item="c" wx:key="no" data-tech="{{tr.id}}" data-no="{{c.no}}" bindtap="toggleTechItem">{{c.no}}</view>
-        </view>
-      </view>
-      <view class="tip">分成金额由店长在日结时核定，此处不填</view>
-    </view>
-
+    <!-- 支付构成 · 菜单式(合同规则③):技师勾"路",金额全部后端重算回显 -->
     <view class="card" wx:if="{{view}}">
-      <view class="ch">⑦ 支付构成</view>
-      <view class="payline" wx:for="{{view.legs}}" wx:for-item="l" wx:key="label">
-        <text class="l">{{l.label}}</text><text class="v">{{l.amount}}</text>
+      <view class="ch">支付构成 · 菜单式 <text class="hint">勾选支付方式,金额后端算</text></view>
+      <view class="paym {{payMenu.useBalance && view.hasStored ? 'on' : ''}}" wx:if="{{view.hasBalance}}" bindtap="payToggleBalance">
+        <view class="ck {{payMenu.useBalance ? 'on' : ''}}">{{payMenu.useBalance ? '✓' : ''}}</view>
+        <view class="pmain"><b>储值卡抵扣</b><text class="psmall">可用余额 {{view.balance}}{{payMenu.useBalance && view.hasStored ? ' → 本单抵 ' + view.storedDeduct : ''}}</text></view>
       </view>
-      <view class="alert" wx:if="{{view.hasShortfall}}">
-        <view class="ah">余额不足以全额抵扣（差 {{view.shortfall}}）请选择处理方式：</view>
-        <view class="opts">
-          <view class="opt {{payIntent === p.key ? 'on' : ''}}" wx:for="{{payPlans}}" wx:for-item="p" wx:key="key" data-k="{{p.key}}" bindtap="pickPayPlan">{{payIntent === p.key ? '✓ ' : ''}}{{p.label}}</view>
+      <view class="paym {{depositApplied && view.hasDeposit ? 'on' : ''}}" wx:if="{{view.hasDepositReceipt && depositDeductible}}" bindtap="payToggleDeposit">
+        <view class="ck {{depositApplied ? 'on' : ''}}">{{depositApplied ? '✓' : ''}}</view>
+        <view class="pmain"><b>已收定金抵扣</b><text class="psmall">−{{view.depositDeduct}}(来自收取记录)</text></view>
+      </view>
+      <view class="paym {{view.hasOffline ? 'on' : ''}}" bindtap="payToggleOffline">
+        <view class="ck {{view.hasOffline ? 'on' : ''}}">{{view.hasOffline ? '✓' : ''}}</view>
+        <view class="pmain"><b>线下收款(现金/扫码/POS)</b><text class="psmall">差额 {{view.offlineDue}} 到店收</text></view>
+      </view>
+      <view class="paym {{payMenu.recharge ? 'on' : ''}}" bindtap="payToggleRecharge">
+        <view class="ck {{payMenu.recharge ? 'on' : ''}}">{{payMenu.recharge ? '✓' : ''}}</view>
+        <view class="pmain">
+          <b>现场充值再抵扣</b>　<text class="rvlink" catchtap="openRecharge">去帮顾客充值 →</text>
+          <text class="psmall">点右侧小字进充值面板;充完自动回本单,余额刷新可抵扣</text>
         </view>
       </view>
+      <view class="paynote">勾/不勾任何一项,金额分解都由后端重新算出并回显;不勾储值=全额线下。</view>
       <view class="warn" wx:for="{{view.warnings}}" wx:for-item="w" wx:key="*this">{{w}}</view>
     </view>
 
-    <view class="card">
-      <view class="ch">被服务者 <text class="hint">朋友不建档：填称呼即可，单据仍推卡主签</text></view>
-      <input class="in full" placeholder="留空=本人；朋友填称呼" value="{{servedPersonName}}" bindinput="onServedName" />
-    </view>
-
+    <!-- 分组明细 + 合计(合同 单级③):谁的挂谁下面;原价合计与共优惠行不许丢 -->
     <view class="total" wx:if="{{view}}">
-      <view class="tl"><text>原价合计</text><text class="strike">{{view.listTotal}}</text></view>
-      <view class="tl"><text>档位小计 <text class="dtl-toggle" bindtap="toggleDetail">{{view.lines.length}} 行明细 {{detailOpen ? '收起 ∧' : '点开对账 ∨'}}</text></text><text>{{view.subtotal}}</text></view>
-      <!-- D22③(店主点名):逐行明细随时可对账;每行可直接移除(取消即重算)。
-           那笔 58 块的「手部精修前置」若还在,这里一眼就能看见并当场划掉。 -->
-      <block wx:if="{{detailOpen}}">
-        <view class="dtl" wx:for="{{view.lines}}" wx:for-item="l" wx:key="no">
-          <text class="dtl-n">{{l.no}}. {{l.name}}{{l.qty > 1 ? ' ×' + l.qty : ''}}</text>
+      <block wx:for="{{view.groups}}" wx:for-item="dg" wx:key="title">
+        <view class="mg">{{dg.title}}</view>
+        <view class="dtl" wx:for="{{dg.lines}}" wx:for-item="l" wx:key="no">
+          <text class="dtl-n">{{l.name}}{{l.qty > 1 ? ' ×' + l.qty : ''}}</text>
           <view class="dtl-r">
-            <text wx:if="{{l.list}}" class="mut">{{l.list}}</text>
+            <text wx:if="{{l.list}}" class="mut strike">{{l.list}}</text>
             <text class="dtl-a">{{l.amount}}</text>
-            <text wx:if="{{l.serviceId && l.kind !== 'rule'}}" class="dtl-x" data-sid="{{l.serviceId}}" catchtap="removeLine">✕</text>
           </view>
         </view>
       </block>
-      <view class="tl" wx:if="{{view.hasDeposit}}"><text>定金抵扣</text><text>−{{view.depositDeduct}}</text></view>
-      <view class="tl save" wx:if="{{view.hasCoupon}}"><text>优惠券 {{view.couponName}}</text><text>−{{view.couponDeduct}}</text></view>
+      <view class="tl"><text>原价合计</text><text class="strike">{{view.listTotal}}</text></view>
+      <view class="tl"><text>档位小计</text><text>{{view.subtotal}}</text></view>
       <view class="tl save"><text>{{view.discountLabel}}</text><text>{{view.discountTotal}}</text></view>
-      <view class="tl big"><text>应收合计</text><text>{{view.total}}</text></view>
+      <view class="tl" wx:if="{{view.hasStored}}"><text>储值抵扣</text><text>−{{view.storedDeduct}}</text></view>
+      <view class="tl" wx:if="{{view.hasDeposit}}"><text>定金抵扣</text><text>−{{view.depositDeduct}}</text></view>
+      <view class="tl big"><text>到店应收</text><text>{{view.total}}</text></view>
     </view>
 
-    <!-- 选券面板：可用在上，不可用置灰在下并写原因（金额与原因均由后端下发） -->
+    <!-- 选券面板(现状保留) -->
     <view wx:if="{{couponPanel}}" class="cpnmask" bindtap="closeCouponPanel">
       <view class="cpnsheet" catchtap="noop">
         <view class="ch">选择优惠券 · {{customerName}}的券包</view>
@@ -223,17 +216,30 @@
     <view class="foot">金额全部由后端计价引擎算出，本页不做任何金额运算</view>
   </block>
 
-  <!-- D9:QR 弹层移到 ready 闸门外 —— qrFor 纯出码模式不加载价目表,弹层不能被闸门连坐
-       (与 D17 booking 白屏同一类病,2026-08-11 路④ L5 实测抓出)。 -->
-  <!-- 屏 S3:推送签署后所有单都弹这一层。沙盒态=占位图+链接+复制(裁决 b),
-       真码等接微信官方 wxacode.getUnlimited;状态行实时三态,签完自动关闭。 -->
+  <!-- 内嵌充值面板(合同规则③-2:复用既有代充流程,充完自动回本单)—— 浮层放顶层闸门外(护栏) -->
+  <view wx:if="{{rvPanel}}" class="qmask" bindtap="closeRecharge"></view>
+  <view wx:if="{{rvPanel}}" class="rvsheet">
+    <view class="qhd">
+      <text class="qt">帮 {{customerName}} 充值</text>
+      <text class="qx" bindtap="closeRecharge">✕</text>
+    </view>
+    <view class="sec" wx:if="{{rvPanel.tiers.length}}">选充值档位(赠额按套餐规则自动算)</view>
+    <view class="rvtier {{rvPanel.tierId === t.id ? 'on' : ''}}" wx:for="{{rvPanel.tiers}}" wx:for-item="t" wx:key="id" data-id="{{t.id}}" bindtap="rvPickTier">
+      <text>{{t.amountText}}</text><text class="rvgift">{{t.giftText}}</text>
+    </view>
+    <view class="sec">或手输金额(无赠送)</view>
+    <input class="in full" type="digit" placeholder="充值金额" value="{{rvPanel.amount}}" bindinput="rvAmountInput" />
+    <view class="rvnote">充值=预收不进收入(口径不变);线下收款后在此登记。充完自动回本单,余额刷新可抵扣。</view>
+    <view class="ds-confirm" bindtap="rvConfirm">确认充值</view>
+  </view>
+
+  <!-- 屏 S3 出码层(现有闭环全保留;多组=同组多张单,顾客按 待签 1/N 顺序签) -->
   <view wx:if="{{qr}}" class="qmask" bindtap="closeQr"></view>
   <view wx:if="{{qr}}" class="qsheet">
     <view class="qhd">
       <text class="qt">请顾客扫码签署</text>
       <text class="qx" bindtap="closeQr">✕</text>
     </view>
-    <!-- D9 规则⑤(店主 08-11 补拍):新客(未绑定轻档案)单进签署,显著提示不许静默跳过 -->
     <view class="qnewc" wx:if="{{qr.unbound}}">新客 · 尚未绑定档案——请顾客扫码签署(扫码即自动建立绑定)</view>
     <view class="qpushed" wx:if="{{qr.pushedText}}">{{qr.pushedText}}</view>
     <view class="qcode">
@@ -247,7 +253,6 @@
     <view class="qcopy" bindtap="copyQrLink">复制链接</view>
     <view class="qstate {{qr.state}}">{{qr.stateText}}</view>
     <view class="qtip">顾客扫码 → 手机号授权 → 核对明细 → 签字;签完此页自动关闭并回到今日台面</view>
-    <!-- D9 规则⑤:未绑定客只有扫码一条签署路 —— 手签入口对新客整体不出现 -->
     <block wx:if="{{!qr.unbound}}">
       <view class="qhand" bindtap="handSign">顾客无法扫码?店员设备当面手签</view>
       <view class="qhandtip">当面手签=本人在场本人签;档案保持未绑定,下次可扫店内建档码补绑</view>

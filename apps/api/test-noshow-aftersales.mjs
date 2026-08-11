@@ -260,6 +260,47 @@ const main = async () => {
     check('⑫ D22 取消场景:去掉的项不再出行、合计同步降', JSON.stringify(ids3) === JSON.stringify([idA]) && p3.data.settlement.subtotalCents === 35000, `${JSON.stringify(ids3)} ${p3.data.settlement.subtotalCents}`)
   }
 
+  // ===== ⑬ 结算单服务分组(图 v2.2)金额红线:组合计≡Σ各单、每组行≡该组请求项、快照随组 =====
+  {
+    const mk = (name, cents) => request(`/platform/tenants/${shop.tenantId}/services`, {
+      method: 'POST', body: JSON.stringify({ type: 'NAIL', nameZh: `${name}${RUN_ID}`, nameEn: 'g', priceCents: cents, depositCents: 0, baseDurationMin: 60 })
+    })
+    const g1 = (await mk('组项甲', 30000)).data.service.id
+    const g2 = (await mk('组项乙', 12000)).data.service.id
+    const sheets = [
+      { tierKey: 'list', items: [{ serviceId: g1, qty: 1 }], customItems: [{ name: '钻球', amountCents: 5000 }], technicians: [], servedPersonName: '' },
+      { tierKey: 'list', tierChangedFrom: 'member', items: [{ serviceId: g2, qty: 1 }], customItems: [], technicians: [], servedPersonName: '朋友小美' }
+    ]
+    const gp = await request('/admin/settlements/preview', {
+      method: 'POST', body: JSON.stringify({ payIntent: 'offline_full', settlements: sheets })
+    }, shop.token)
+    check('⑬ 组预览返回 sheets+group 两层', Array.isArray(gp.data.sheets) && gp.data.sheets.length === 2 && Boolean(gp.data.group), JSON.stringify(gp.data).slice(0, 120))
+    const sum = (k) => gp.data.sheets.reduce((n, s) => n + (s[k] || 0), 0)
+    for (const k of ['listTotalCents', 'subtotalCents', 'discountTotalCents', 'totalCents']) {
+      check(`⑬ 组合计 ${k} ≡ Σ各单`, gp.data.group[k] === sum(k), `${gp.data.group[k]} vs ${sum(k)}`)
+    }
+    check('⑬ 组① 行≡该组请求项(不含组② 的项)', JSON.stringify(gp.data.sheets[0].lines.filter((l) => l.serviceId).map((l) => l.serviceId)) === JSON.stringify([g1]), JSON.stringify(gp.data.sheets[0].lines.map((l) => l.serviceId)))
+    check('⑬ 组② 行≡该组请求项(不含组① 的项与自选)', gp.data.sheets[1].lines.every((l) => l.serviceId !== g1 && l.kind !== 'custom') && gp.data.sheets[1].lines.some((l) => l.serviceId === g2), JSON.stringify(gp.data.sheets[1].lines))
+    check('⑬ 纯线下:到店应收≡组合计', gp.data.group.payment.offlineDueCents === gp.data.group.totalCents, JSON.stringify(gp.data.group.payment))
+    // 组建单:快照价档/改档留痕/被服务者随组,1/N 顺序,未签可撤
+    const cb = await request('/admin/bookings/direct', {
+      method: 'POST', body: JSON.stringify({ serviceId: shop.serviceId, technicianId: shop.tech1, date: dateStr(4), time: '11:00', newCustomerName: `组卡主${RUN_ID}` })
+    }, shop.token)
+    const cardOwner = (cb.data.booking.user || {}).id || cb.data.booking.userId
+    const made = await request('/admin/settlements', {
+      method: 'POST', body: JSON.stringify({ userId: cardOwner, payerUserId: cardOwner, cardOwnerUserId: cardOwner, payIntent: 'offline_full', settlements: [{ ...sheets[0], tierKey: 'member' }, sheets[1]] })
+    }, shop.token)
+    const rows = made.data.settlements || []
+    check('⑬ 组建单 2 张同组各有单号', rows.length === 2 && rows[0].groupId === rows[1].groupId && rows[0].code !== rows[1].code, JSON.stringify(rows.map((s) => s.code)))
+    check('⑬ 快照价档随组(member/list)+改档留痕只落改档组', rows[0].tierKey === 'member' && rows[1].tierKey === 'list' && !rows[0].tierChangedFrom && rows[1].tierChangedFrom === 'member', `${rows[0].tierKey}/${rows[1].tierKey}/${rows[1].tierChangedFrom}`)
+    check('⑬ 被服务者随组+1/N 顺序', rows[0].servedPersonName === '' && rows[1].servedPersonName === '朋友小美' && rows[0].groupIndex === 1 && rows[1].groupIndex === 2 && rows[1].groupTotal === 2, JSON.stringify(rows.map((s) => [s.servedPersonName, s.groupIndex, s.groupTotal])))
+    check('⑬ 两张合计≡组预览合计(member 档另算)', rows[1].totalCents === gp.data.sheets[1].totalCents, `${rows[1].totalCents} vs ${gp.data.sheets[1].totalCents}`)
+    for (const s of rows) {
+      const v = await request(`/admin/settlements/${s.id}/void`, { method: 'POST', body: JSON.stringify({ reason: 'CI 分组断言,即建即撤' }) }, shop.token)
+      check(`⑬ 未签可撤 ${s.groupIndex}/2`, v.status === 200, JSON.stringify(v.data).slice(0, 120))
+    }
+  }
+
   console.log(`\n爽约处置+售后完成态回归通过:${checks} 项断言全绿`)
 }
 

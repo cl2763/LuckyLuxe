@@ -11183,6 +11183,41 @@ async function route(req, res) {
   if (req.method === 'POST' && path === '/admin/settlements/preview') {
     // 技师端表单实时试算:不落库,金额口径与正式开单完全一致
     const body = await readBody(req)
+    /* 分组完整版(图 v2.2):settlements 数组 = 组级预览。
+       每组各走一遍 computeSettlement(引擎不动),组级合计与支付分解**全部在这里加总**——
+       前端零运算的红线靠这个口子兑现;储值抵扣按整单合计一次算(单级支付菜单)。 */
+    if (Array.isArray(body.settlements) && body.settlements.length) {
+      const tenantId = currentTenantId()
+      const payerId = String(body.payerUserId || body.userId || body.cardOwnerUserId || '').trim() || null
+      const sheets = body.settlements.map((sheet) => computeSettlement({
+        ...sheet, tenantId,
+        userId: payerId || sheet.userId, payerUserId: payerId || sheet.payerUserId,
+        bookingId: sheet.bookingId
+      }))
+      const sum = (k) => sheets.reduce((n, x) => n + (x[k] || 0), 0)
+      const totalCents = sum('totalCents')
+      const pay = buildPaymentLegs({ tenantId, payerId, totalCents, payIntent: body.payIntent })
+      return json(res, 200, {
+        sheets,
+        group: {
+          listTotalCents: sum('listTotalCents'),
+          subtotalCents: sum('subtotalCents'),
+          discountTotalCents: sum('discountTotalCents'),
+          couponDiscountCents: sum('couponDiscountCents'),
+          depositDeductCents: sum('depositDeductCents'),
+          depositReceiptCents: sum('depositReceiptCents'),
+          totalCents,
+          payment: {
+            plan: pay.plan,
+            legs: pay.legs,
+            balanceAvailableCents: pay.balance.totalCents,
+            storedUsedCents: pay.storedUsedCents,
+            offlineDueCents: pay.remaining,
+            shortfallCents: Math.max(0, totalCents - pay.balance.totalCents)
+          }
+        }
+      })
+    }
     return json(res, 200, { settlement: computeSettlement({ ...body, tenantId: currentTenantId() }) })
   }
   if (req.method === 'POST' && path === '/admin/settlements') {

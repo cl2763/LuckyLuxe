@@ -159,3 +159,30 @@
 /* 主项目选择机制终版:「＋加第二个主项目」显式加选按钮(弹层已整段移除) */
 .addmain{margin:-8rpx 0 16rpx;text-align:center;font-size:26rpx;font-weight:700;color:#9b7655;border:1rpx dashed #d8cec4;border-radius:14rpx;padding:18rpx 0;background:#fff}
 .addmain.armed{color:#2f7d5c;border-color:#9fc3ab;background:#eef5ee}
+
+/* ═══ 服务分组完整版(图 v2.2)═══ */
+.grpcard{border:1.5rpx solid #c6a27e;background:#fdfbf8}
+.grpcard.dim{border-color:#e8e0d8;background:#fff}
+.grpsum{font-size:23rpx;color:#8c8279;line-height:1.6}
+.grpx{float:right;font-size:23rpx;color:#c0392b;font-weight:400}
+.sec{font-size:21rpx;color:#9b7655;font-weight:800;letter-spacing:1rpx;margin:18rpx 0 8rpx}
+.sec .hint{font-weight:400;color:#a89c92;margin-left:8rpx}
+.grppicked{font-size:22rpx;color:#5e8c61;background:#eef5ee;border-radius:10rpx;padding:10rpx 14rpx;margin-top:8rpx}
+/* 支付菜单 */
+.paym{display:flex;align-items:flex-start;gap:14rpx;border:1rpx solid #e8e0d8;border-radius:14rpx;padding:16rpx;margin:10rpx 0;background:#fff}
+.paym.on{border-color:#9fc3ab;background:#eef5ee}
+.paym .pmain{flex:1}
+.paym b{font-size:26rpx;color:#241f1d}
+.psmall{display:block;font-size:21rpx;color:#8c8279;margin-top:2rpx}
+.rvlink{font-size:22rpx;color:#5b7a99;text-decoration:underline}
+.paynote{font-size:20rpx;color:#a89c92;margin-top:6rpx;line-height:1.5}
+/* 分组明细 */
+.mg{font-weight:700;font-size:25rpx;color:#241f1d;margin-top:10rpx;padding-top:8rpx}
+.strike{text-decoration:line-through;color:#b9afa6;font-weight:400}
+/* 内嵌充值面板 */
+.rvsheet{position:fixed;left:50%;top:45%;transform:translate(-50%,-50%);width:84%;background:#fff;border-radius:20rpx;padding:26rpx;z-index:97;box-shadow:0 12rpx 48rpx rgba(36,31,29,.18);max-height:80vh;overflow-y:auto}
+.rvtier{display:flex;justify-content:space-between;border:1rpx solid #e8e0d8;border-radius:12rpx;padding:14rpx 18rpx;margin:8rpx 0;font-size:26rpx}
+.rvtier.on{border-color:#5e8c61;background:#eef5ee}
+.rvgift{color:#9b7655;font-size:22rpx}
+.rvnote{font-size:20rpx;color:#a89c92;margin:10rpx 0;line-height:1.5}
+.rvsheet .ds-confirm{margin:8rpx -26rpx -26rpx;border-radius:0 0 20rpx 20rpx;background:#2d2826;color:#fff;text-align:center;font-size:28rpx;font-weight:700;padding:22rpx 0}
