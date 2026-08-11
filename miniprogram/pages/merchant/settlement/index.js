@@ -42,8 +42,10 @@ Page({
     // 屏 S2:绑定状态徽标 —— 文案全部后端下发,前端一个字都不拼(规则③)
     bind: { bound: true, badgeText: '', hintText: '', phoneMasked: '', memberCode: '' },
     qr: null,   // 屏 S3 二维码弹层
-    crossSheet: null,   // D22 追加件:跨大类二选一弹层
-    crossChoice: '',    // 本单内记忆:'' 未选过 | add 加选 | replace 替换(误触取消不记)
+    /* 主项目选择机制终版(店主 2026-08-11 二次拍板,取代跨大类二选一弹层):
+       默认单选自动替换(同/跨大类一律,无弹窗);「＋加第二个主项目」显式加选。 */
+    mainAddArmed: false,   // 点过「＋加第二个主项目」= 下一次点主项目是"加",不是"替换"
+    mainCount: 0,          // 已选主项目数(按钮显隐用)
     ctaText: '推送签署',
     submitting: false
   },
@@ -85,7 +87,11 @@ Page({
         if (one && one.isMember) tierDefault = 'member'
       }
       const picked = {}
-      if (preselectServiceId && all.some((i) => i.id === preselectServiceId)) picked[preselectServiceId] = 1
+      this._mainOrder = []
+      if (preselectServiceId && all.some((i) => i.id === preselectServiceId)) {
+        picked[preselectServiceId] = 1
+        this._mainOrder = [preselectServiceId]   // 预约带入的主项目占第一个单选位
+      }
       const firstCat = (categories[0] || {}).id || ''
       this.setData({
         ready: true,
@@ -95,7 +101,8 @@ Page({
         tierKey: tierDefault, tierDefault,
         depositDeductible: dep && dep.config ? dep.config.deductible !== false : true,
         depositApplied: Boolean(this.data.bookingId),
-        picked
+        picked,
+        mainCount: this._mainOrder.length
       })
       this.loadBindState()
       this.renderCatalogue()
@@ -187,66 +194,73 @@ Page({
     this.setData({ catId: e.currentTarget.dataset.id })
     this.renderCatalogue()
   },
-  /* D22 追加件(店主 2026-08-11 拍板):跨大类防误触二选一。
-     已选某大类主项目后,去勾**另一大类**的主项目 → 弹一次「加选 / 替换」;
-     同大类不弹;取消勾选不弹;加项(全局目录)不弹;
-     选过一次后本单内同方向记忆,不再重复弹;误触取消=不加、不记忆、下次再弹。 */
-  crossCatGate(id) {
+  /* ===== 主项目选择机制终版(店主 2026-08-11 二次拍板)=====
+     ① 主项目全局默认单选:点任何主项目 = 自动替换当前已选(同大类/跨大类一律,无弹窗);
+     ② 显式加选:已选一项后出现「＋加第二个主项目」,点了才进入加选模式、可再加一项(仍单选占位);
+        不点按钮永远只有一项 —— 误触物理不可能(D22 幽灵行的最终解法);
+     ③ 已选行/芯片 ✕ 移除后回到单选态;
+     ④ 加项目录/自选行照旧多选;逐行明细/护栏断言(预览行≡勾选)原样。
+     8cb694f 的跨类二选一弹层已整段移除(不是隐藏)。 */
+  isMainItem(id) {
     const it = (this.allItems || []).find((x) => x.id === id)
-    if (!it || (it.itemKind || 'main') !== 'main') return false          // 只管主项目
-    if (Object.prototype.hasOwnProperty.call(this.data.picked, id)) return false  // 取消勾选不弹
-    const cats = this.data.cats || []
-    const catName = (cid) => (cats.find((c) => c.id === cid) || {}).name || ''
-    const existCats = [...new Set((this.allItems || [])
-      .filter((x) => (x.itemKind || 'main') === 'main'
-        && Object.prototype.hasOwnProperty.call(this.data.picked, x.id)
-        && (x.categoryId || '') !== (it.categoryId || ''))
-      .map((x) => catName(x.categoryId)).filter(Boolean))]
-    if (!existCats.length) return false                                  // 没有别的大类的已选 → 不弹
-    if (this.data.crossChoice === 'add') return false                    // 记忆:加选 → 直接放行
-    if (this.data.crossChoice === 'replace') {                           // 记忆:替换 → 静默清其他大类再加
-      this.applyCrossReplace(id)
-      return true
-    }
-    this.setData({ crossSheet: { pendingId: id, pendingName: it.nameZh, existCats: existCats.join('、') } })
-    return true
+    return Boolean(it && (it.itemKind || 'main') === 'main')
   },
-  // 替换=清除**其他大类**的主项目选择(同大类主项目、加项、自选行都不动),再加上这项
-  applyCrossReplace(id) {
-    const it = (this.allItems || []).find((x) => x.id === id)
-    const picked = Object.assign({}, this.data.picked)
-    for (const x of (this.allItems || [])) {
-      if ((x.itemKind || 'main') === 'main'
-        && (x.categoryId || '') !== (it.categoryId || '')
-        && Object.prototype.hasOwnProperty.call(picked, x.id)) delete picked[x.id]
+  pickedMainIds() {
+    // 以 _mainOrder 记录选择顺序(替换=换掉最近加的那一个,保住先选的主项)
+    this._mainOrder = (this._mainOrder || []).filter((id) => Object.prototype.hasOwnProperty.call(this.data.picked, id))
+    for (const id of Object.keys(this.data.picked)) {
+      if (this.isMainItem(id) && !this._mainOrder.includes(id)) this._mainOrder.push(id)
     }
-    picked[id] = 1
-    this.setData({ picked })
+    return this._mainOrder
+  },
+  armAddMain() {
+    if (!this.pickedMainIds().length) return
+    this.setData({ mainAddArmed: true })
+  },
+  /* 主项目的增/替一律走这里(toggleItem 与按指步进器 0→1 共用):
+     - 加选模式(按过 ＋)→ 直接加,消耗这一次加选;
+     - 否则:没有已选 → 加;有已选 → 替换最近加的那一个。 */
+  pickMain(id, qty = 1) {
+    const picked = Object.assign({}, this.data.picked)
+    const mains = this.pickedMainIds()
+    if (this.data.mainAddArmed) {
+      picked[id] = qty
+      this._mainOrder.push(id)
+      this.setData({ picked, mainAddArmed: false, mainCount: this._mainOrder.length })
+    } else if (!mains.length) {
+      picked[id] = qty
+      this._mainOrder = [id]
+      this.setData({ picked, mainCount: 1 })
+    } else {
+      const last = mains[mains.length - 1]
+      delete picked[last]
+      picked[id] = qty
+      this._mainOrder = mains.slice(0, -1).concat([id])
+      this.setData({ picked, mainCount: this._mainOrder.length })
+    }
     this.renderCatalogue()
     this.refresh()
   },
-  crossAdd() {
-    const sheet = this.data.crossSheet
-    if (!sheet) return
+  // 取消选中一个主项目 → 回到单选态(加选武装态一并解除)
+  unpickMain(id) {
     const picked = Object.assign({}, this.data.picked)
-    picked[sheet.pendingId] = 1
-    this.setData({ picked, crossSheet: null, crossChoice: 'add' })   // 本单内记忆:之后跨类直接加
+    delete picked[id]
+    this._mainOrder = (this._mainOrder || []).filter((x) => x !== id)
+    this.setData({ picked, mainAddArmed: false, mainCount: this._mainOrder.length })
     this.renderCatalogue()
     this.refresh()
   },
-  crossReplace() {
-    const sheet = this.data.crossSheet
-    if (!sheet) return
-    this.setData({ crossSheet: null, crossChoice: 'replace' })       // 本单内记忆:之后跨类直接替换
-    this.applyCrossReplace(sheet.pendingId)
-  },
-  // 误触取消:什么都不加、不记忆 —— 下次跨类照样弹
-  crossCancel() { this.setData({ crossSheet: null }) },
   toggleItem(e) {
     const id = e.currentTarget.dataset.id
-    if (this.crossCatGate(id)) return
+    const has = Object.prototype.hasOwnProperty.call(this.data.picked, id)
+    if (this.isMainItem(id)) {
+      if (has) this.unpickMain(id)
+      else this.pickMain(id, 1)
+      return
+    }
+    // 加项照旧多选
     const picked = Object.assign({}, this.data.picked)
-    if (Object.prototype.hasOwnProperty.call(picked, id)) delete picked[id]
+    if (has) delete picked[id]
     else picked[id] = 1
     this.setData({ picked })
     this.renderCatalogue()
@@ -254,10 +268,15 @@ Page({
   },
   stepQty(e) {
     const { id, d } = e.currentTarget.dataset
-    // 按指主项目从 0 → 1 也算"新勾一项",同一道跨大类闸门
-    if (Number(d) > 0 && !(this.data.picked[id] > 0) && this.crossCatGate(id)) return
+    const delta = Number(d)
+    const cur = this.data.picked[id] || 0
+    // 按指**主项目** 0→1 = 新选一个主项目,走同一套单选/加选规则;减到 0 = 移除回单选态
+    if (this.isMainItem(id)) {
+      if (delta > 0 && cur === 0) { this.pickMain(id, 1); return }
+      if (delta < 0 && cur === 1) { this.unpickMain(id); return }
+    }
     const picked = Object.assign({}, this.data.picked)
-    const next = Math.max(0, (picked[id] || 0) + Number(d))
+    const next = Math.max(0, cur + delta)
     if (next === 0) delete picked[id]
     else picked[id] = next
     this.setData({ picked })
@@ -288,6 +307,7 @@ Page({
     const sid = e.currentTarget.dataset.sid
     if (!sid) return
     if (!Object.prototype.hasOwnProperty.call(this.data.picked, sid)) return
+    if (this.isMainItem(sid)) { this.unpickMain(sid); return }   // 主项目走终版移除(回单选态)
     const picked = Object.assign({}, this.data.picked)
     delete picked[sid]
     this.setData({ picked })
