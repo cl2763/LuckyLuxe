@@ -6192,37 +6192,41 @@ function getAvailability(query) {
   return { date, durationMin, slots: result }
 }
 
-/* ===== 积分(店主 2026-08-12 拍板 B,《财务总逻辑》恒等式区):积分 ≡ 档位小计 × 1元=1分,
-   与业绩基数同源——不按标价、不按实收;储值抵扣部分照常积分。历史积分不追溯:
-   切换时点前的单按旧口径(COMPLETED 预约 × 服务标价推导),之后的新单按已签结算单档位小计。
-   划线键=预约服务时间(appointment_start),新旧两段互斥不重叠。
-   赚分行单源:余额 / 积分页明细 / 积分历史三处全从 pointsEarnRows 出——此前三处各自推导,
-   兑换行只进余额不进明细,正是 D36「三账不齐」的根。 ===== */
-const POINTS_POLICY_B_SWITCH_ISO = '2026-08-14T00:00:00.000Z'
+/* ===== 积分(店主 2026-08-12 拍板 B+二次/三次改判,《财务总逻辑》恒等式区):
+   积分 ≡ 档位小计 × 1元=1分,与业绩基数同源——不按标价、不按实收;储值抵扣照常积分;
+   已签即计,预约状态(售后/完成)不增不减。
+   **历史全量追溯**(改判①):「不追溯」作废,切换时点常量与旧口径分支已拆除——
+   累计获得 ≡ 累计消费(同一条已签结算单档位小计查询);积分余额 = 累计获得 − 已兑换。
+   硬守恒不变量(三次补拍):积分余额永远 ≤ 累计消费——余额只可能少不可能多,
+   违反=数据坏账,直接抛错拒绝出账(与四条金额恒等式同一待遇)。
+   赚分行单源:余额 / 积分页明细 / 积分历史三处全从 pointsEarnRows 出。 ===== */
 function pointsEarnRows(userId, tenantId = currentTenantId()) {
-  // 口径②(店主 2026-08-12 拍板「不要复杂逻辑」):售后中的单照常计积分 —— 旧段含 AFTER_SALES,
-  // 新段本就只看已签结算单不看预约状态(已签即计,售后/结案都不增不减)
-  const legacy = db.prepare(`SELECT b.id AS ref, b.appointment_start AS at, b.service_price_cents AS cents, s.name_zh AS sname
-    FROM bookings b LEFT JOIN services s ON s.id = b.service_id
-    WHERE b.user_id = ? AND b.tenant_id = ? AND b.status IN ('COMPLETED', 'AFTER_SALES') AND b.appointment_start < ?`)
-    .all(userId, tenantId, POINTS_POLICY_B_SWITCH_ISO)
-    .map((r) => ({ refId: r.ref, at: r.at, points: Math.floor((r.cents || 0) / 100), title: `到店消费 · ${r.sname || '服务'}` }))
-  const fresh = db.prepare(`SELECT st.id AS ref, st.signed_at AS at, st.subtotal_cents AS cents, sv.name_zh AS sname
-    FROM settlements st JOIN bookings b ON b.id = st.booking_id
+  // LEFT JOIN:分组结算的「朋友单」没有 bookingId,内联会把它们漏出赚分行,
+  // 累计获得就对不上累计消费(卡主口径:st.user_id 记的是买单人)
+  return db.prepare(`SELECT st.id AS ref, st.signed_at AS at, st.subtotal_cents AS cents, sv.name_zh AS sname
+    FROM settlements st LEFT JOIN bookings b ON b.id = st.booking_id
     LEFT JOIN services sv ON sv.id = b.service_id
-    WHERE b.user_id = ? AND st.tenant_id = ? AND st.status = 'signed' AND b.appointment_start >= ?`)
-    .all(userId, tenantId, POINTS_POLICY_B_SWITCH_ISO)
+    WHERE st.user_id = ? AND st.tenant_id = ? AND st.status = 'signed'`)
+    .all(userId, tenantId)
     .map((r) => ({ refId: r.ref, at: r.at, points: Math.floor((r.cents || 0) / 100), title: `到店消费 · ${r.sname || '服务'}` }))
-  return legacy.concat(fresh)
 }
 function earnedPoints(userId, tenantId = currentTenantId()) {
   return pointsEarnRows(userId, tenantId).reduce((sum, r) => sum + r.points, 0)
+}
+// 已兑换(正数显示):台账负行绝对值合计;冲正/钳位调整是正行,不算「兑换」
+function redeemedPoints(userId, tenantId = currentTenantId()) {
+  const row = db.prepare('SELECT COALESCE(SUM(CASE WHEN amount < 0 THEN -amount ELSE 0 END), 0) AS s FROM points_transactions WHERE user_id = ? AND tenant_id = ?').get(userId, tenantId)
+  return row.s || 0
 }
 function pointsLedgerSum(userId, tenantId = currentTenantId()) {
   return db.prepare('SELECT COALESCE(SUM(amount), 0) AS s FROM points_transactions WHERE user_id = ? AND tenant_id = ?').get(userId, tenantId).s
 }
 function pointsBalance(userId, tenantId = currentTenantId()) {
-  return earnedPoints(userId, tenantId) + pointsLedgerSum(userId, tenantId)
+  const earned = earnedPoints(userId, tenantId)
+  const balance = earned + pointsLedgerSum(userId, tenantId)
+  // 硬守恒(店主三次补拍):余额 ≤ 累计获得(≡累计消费)。多出来=有人凭空造分,拒绝出账。
+  if (balance > earned) throw apiError(500, 'POINTS_INVARIANT_VIOLATION', `积分守恒被破坏:余额 ${balance} > 累计获得 ${earned}(user=${userId})`)
+  return balance
 }
 function serializePrize(r, couponsById) {
   const c = couponsById ? couponsById[r.coupon_id] : db.prepare('SELECT * FROM coupons WHERE id = ?').get(r.coupon_id)
@@ -10835,7 +10839,8 @@ async function route(req, res) {
       .map((r) => ({ title: r.note || (r.type === 'redeem' ? '积分兑换' : '积分退回'), at: r.created_at, delta: r.amount }))
     const history = earns.concat(ledger).sort((a, b) => String(b.at).localeCompare(String(a.at))).slice(0, 25)
       .map((h) => ({ title: h.title.split(' #')[0], date: localParts(h.at).date, delta: h.delta }))
-    return json(res, 200, { balance, prizes, history })
+    // 改判①:积分页三行 —— 累计获得(≡累计消费)/已兑换/余额
+    return json(res, 200, { balance, earnedTotal: earnedPoints(customer.id, tid), redeemedTotal: redeemedPoints(customer.id, tid), prizes, history })
   }
   if (req.method === 'POST' && path === '/my/points-mall/redeem') {
     const customer = requireCustomer(req)
@@ -16789,14 +16794,30 @@ try {
       .run(JSON.stringify({ decidedBy: '店主 2026-08-12 拍板②', note: '开分级显示;初始梯子=原全局 MEMBER_TIERS;F3 分叉债收敛为租户单源' }), iso(new Date()))
   }
 } catch (e) { console.error('拍板②迁移失败(不阻塞启动):', e.message) }
-// 拍板①留痕:积分口径 B(积分≡档位小计,历史不追溯)。给库里现存租户各写一行留痕(INSERT OR IGNORE 幂等)。
+// 改判①留痕(店主 2026-08-12 二次/三次拍板):积分历史全量追溯——累计获得≡累计消费;
+// 「不追溯」作废,切换时点常量已拆除。留痕升 v2(REPLACE 覆盖拍板①旧行)。
 try {
   const tenantIds = db.prepare('SELECT DISTINCT tenant_id AS t FROM tenant_settings UNION SELECT DISTINCT tenant_id FROM bookings').all().map((r) => r.t)
-  const mark = db.prepare("INSERT OR IGNORE INTO tenant_settings (tenant_id, key, value, updated_at) VALUES (?, 'points_policy', ?, ?)")
+  const mark = db.prepare("INSERT OR REPLACE INTO tenant_settings (tenant_id, key, value, updated_at) VALUES (?, 'points_policy', ?, ?)")
   for (const t of tenantIds) {
-    mark.run(t, JSON.stringify({ policy: 'B_subtotal', switchAtIso: POINTS_POLICY_B_SWITCH_ISO, decidedBy: '店主 2026-08-12 拍板①', note: '积分≡档位小计×1元=1分;历史积分不追溯,切换时点前按旧口径(标价推导)' }), iso(new Date()))
+    mark.run(t, JSON.stringify({ policy: 'subtotal_full_retro', decidedBy: '店主 2026-08-12 改判①(二次+三次拍板)', note: '积分历史全量追溯:累计获得≡累计消费(Σ已签档位小计);余额=获得−已兑换;硬守恒 余额≤累计消费;混合口径负余额钳 0 留痕' }), iso(new Date()))
   }
-} catch (e) { console.error('拍板①留痕失败(不阻塞启动):', e.message) }
+} catch (e) { console.error('改判①留痕失败(不阻塞启动):', e.message) }
+// 改判① 钳位扫描:历史混合口径重算后 已兑换>新累计获得 的档案,补记正向调整行至 0
+// (账本只追加;不造负数不硬掰)。幂等:钳后余额=0,重跑扫不到负数即无操作。
+try {
+  const users = db.prepare(`SELECT DISTINCT p.tenant_id AS tid, p.user_id AS uid FROM points_transactions p WHERE p.amount < 0`).all()
+  for (const u of users) {
+    const earned = db.prepare("SELECT COALESCE(SUM(subtotal_cents / 100), 0) AS s FROM settlements WHERE user_id = ? AND tenant_id = ? AND status = 'signed'").get(u.uid, u.tid).s || 0
+    const ledger = db.prepare('SELECT COALESCE(SUM(amount), 0) AS s FROM points_transactions WHERE user_id = ? AND tenant_id = ?').get(u.uid, u.tid).s || 0
+    const bal = earned + ledger
+    if (bal < 0) {
+      db.prepare('INSERT INTO points_transactions (id, tenant_id, user_id, type, amount, ref_id, note, created_by, created_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)')
+        .run(randomId('pts'), u.tid, u.uid, 'adjust', -bal, null, '口径重算钳位(2026-08-12 改判①):历史混合口径致已兑换>新累计获得,补记调整至 0', 'points-retro-clamp', iso(new Date()))
+      console.log(`[points-retro-clamp] ${u.tid}/${u.uid} 钳位 +${-bal}`)
+    }
+  }
+} catch (e) { console.error('改判①钳位扫描失败(不阻塞启动):', e.message) }
 
 seedDatabase()
 // 演示环境:铺一批顾客服务小记,让「有小记/无小记」两态在老板端+员工端都能直接看到

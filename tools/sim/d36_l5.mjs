@@ -20,16 +20,27 @@ for (let i = 1; i <= 5; i += 1) {
   if (i === 1) { await shot(mp, 'r2-d36-stored-value'); console.log('  储值行样本:', JSON.stringify(d.txns.map((t) => ({ t: t.title.slice(0, 22), d: t.delta })))); }
   console.log(`储值页 ${i}/5 ✓ 余额864 · 4行 · 送50只是文案`);
 }
+/* 改判①(全量追溯)后的林小雅:累计获得=564(Σ已签档位小计 98+198+268)、已兑换 800、
+   钳位 +236 → 余额 0。积分页三行 + Σ明细≡余额 + 三行「累计获得≡累计消费」跨页对上。 */
+let meSpent = null;
+{
+  const pm = await go('/pages/me/index', 3200);
+  const m = await pm.data('member');
+  meSpent = Number(m.totalSpent);
+}
 for (let i = 1; i <= 5; i += 1) {
   const p = await go('/pages/points/index');
   const d = await p.data();
-  A(Number(d.balance) === 1200, `积分页余额 ${d.balance} ≠ 1200(口径②后:售后单 268 照常计,1732+268−800)`);
+  A(Number(d.earnedTotal) === 564 && Number(d.redeemedTotal) === 800 && Number(d.balance) === 0,
+    `三行 ${d.earnedTotal}/${d.redeemedTotal}/${d.balance} ≠ 564/800/0(钳位档案)`);
+  A(Number(d.earnedTotal) === meSpent, `累计获得 ${d.earnedTotal} ≠ 我的页累计消费 ${meSpent}(恒等破裂)`);
   const hist = d.history || [];
-  A(hist.some((h) => Number(h.delta) === -800), '明细缺 −800 兑换行(D36 三账缺口复活)');
+  A(hist.some((h) => Number(h.delta) === -800), '明细缺 −800 兑换行');
+  A(hist.some((h) => Number(h.delta) === 236), '明细缺 +236 钳位留痕行');
   const sum = hist.reduce((n, h) => n + Number(h.delta || 0), 0);
   A(sum === Number(d.balance), `页面明细加总 ${sum} ≠ 余额 ${d.balance}`);
   if (i === 1) await shot(mp, 'r2-d36-points');
-  console.log(`积分页 ${i}/5 ✓ 余额1200(口径②) · 含兑换行 · Σ明细=余额`);
+  console.log(`积分页 ${i}/5 ✓ 三行 564/800/0 · 获得≡累计消费(${meSpent}) · 钳位留痕在列 · Σ明细=余额`);
 }
 await mp.disconnect();
 console.log('D36 渲染层实拍:储值 5/5 + 积分 5/5 全绿');

@@ -2,6 +2,12 @@
   <view class="hero">
     <view class="hl">我的积分 · 消费 1 元 = 1 分</view>
     <view class="hv">{{balance}}</view>
+    <!-- 改判①(店主 2026-08-12):三行自证 —— 累计获得≡累计消费,余额=获得−已兑换 -->
+    <view class="hrows">
+      <view class="hrow"><text>累计获得</text><text>{{earnedTotal}}</text></view>
+      <view class="hrow"><text>已兑换</text><text>{{redeemedTotal}}</text></view>
+      <view class="hrow"><text>余额</text><text>{{balance}}</text></view>
+    </view>
     <view class="hn">积分永不过期 · 可兑换下方奖品</view>
   </view>
 

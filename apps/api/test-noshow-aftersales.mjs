@@ -534,18 +534,36 @@ const main = async () => {
         const histSum = (mall1.data.history || []).reduce((n, h) => n + (h.delta || 0), 0)
         check('㉔ D36 三账闭环:积分明细加总 ≡ 余额(赚分行+兑换行同列)', histSum === bal1, `Σ明细=${histSum} 余额=${bal1}`)
         check('㉔ 明细里有这笔赚分行', (mall1.data.history || []).some((h) => h.delta === wantPts), JSON.stringify(mall1.data.history).slice(0, 160))
-        // 历史不追溯侧:默认店 demo 顾客的种子单全在切换时点前 —— API 余额必须等于旧口径直算
+        // 改判①(2026-08-12 二次/三次拍板):历史全量追溯 —— 三行恒等 + 硬守恒全档案扫 + 守恒抛错路径
+        const mall2 = await request('/my/points-mall', {}, ptok, { 'x-tenant-id': shop.tenantId })
+        const u3 = (await request(`/users/${puid}`, {}, ptok, { 'x-tenant-id': shop.tenantId })).data.user
+        check('㉔ 三行:累计获得 ≡ 累计消费(同基数同数值)', mall2.data.earnedTotal === Math.floor((u3.totalSpentCents || 0) / 100), `获得=${mall2.data.earnedTotal} 消费=${u3.totalSpentCents}`)
+        // 干净档案(无钳位/调整行)上三行恒等严格成立;钳位档案由全档案扫的 0≤余额≤获得 兜底
+        check('㉔ 三行:余额 = 累计获得 − 已兑换 且 余额 ≤ 累计获得', mall2.data.balance === (mall2.data.earnedTotal - mall2.data.redeemedTotal) && mall2.data.balance <= mall2.data.earnedTotal, JSON.stringify({ b: mall2.data.balance, e: mall2.data.earnedTotal, r: mall2.data.redeemedTotal }))
         if (process.env.TEST_DB_PATH) {
-          const dm = await request('/auth/wechat/mini-login', { method: 'POST', body: JSON.stringify({ demoLogin: true, tenantId: 'lucky-luxe' }) }, null, { 'x-tenant-id': 'lucky-luxe' })
+          // 硬守恒全档案扫:每一个有积分动账或有签署单的档案,0 ≤ 余额 ≤ 累计获得
           const dbL = new DatabaseSync(process.env.TEST_DB_PATH)
-          const frac = dbL.prepare("SELECT COUNT(*) AS n FROM bookings WHERE user_id = ? AND tenant_id = 'lucky-luxe' AND status IN ('COMPLETED', 'AFTER_SALES') AND service_price_cents % 100 != 0").get(dm.data.user.id).n
-          const legacySum = dbL.prepare("SELECT COALESCE(SUM(service_price_cents / 100), 0) AS s FROM bookings WHERE user_id = ? AND tenant_id = 'lucky-luxe' AND status IN ('COMPLETED', 'AFTER_SALES') AND appointment_start < '2026-08-14T00:00:00.000Z'").get(dm.data.user.id).s // 口径②:售后中的单照常计积分
-          const ledgerSum = dbL.prepare("SELECT COALESCE(SUM(amount), 0) AS s FROM points_transactions WHERE user_id = ? AND tenant_id = 'lucky-luxe'").get(dm.data.user.id).s
+          const rows2 = dbL.prepare(`SELECT uid, tid, SUM(earned) AS earned, SUM(ledger) AS ledger FROM (
+              SELECT user_id AS uid, tenant_id AS tid, subtotal_cents / 100 AS earned, 0 AS ledger FROM settlements WHERE status = 'signed'
+              UNION ALL SELECT user_id, tenant_id, 0, amount FROM points_transactions
+            ) GROUP BY uid, tid`).all()
           dbL.close()
-          check('㉔ 前提:种子单无分币残数(旧口径 floor(Σ) 与 Σfloor 等值)', frac === 0, `${frac} 单带分币`)
-          const dBal = (await request('/my/points-mall', {}, dm.data.auth.accessToken, { 'x-tenant-id': 'lucky-luxe' })).data.balance || 0
-          check('㉔ 历史积分不追溯(切换前种子单仍按标价推导,一分不动)', dBal === legacySum + ledgerSum, `API=${dBal} 直算=${legacySum}+${ledgerSum}`)
-        } else check('㉔ (跳过)无 TEST_DB_PATH,历史不追溯直算未跑', true)
+          const bad = rows2.filter((r2) => (r2.earned + r2.ledger) < 0 || (r2.earned + r2.ledger) > r2.earned)
+          check(`㉔ 硬守恒全档案扫:${rows2.length} 档案全部 0 ≤ 余额 ≤ 累计获得(钳位迁移兜底)`, bad.length === 0, JSON.stringify(bad.slice(0, 3)))
+        } else check('㉔ (跳过)无 TEST_DB_PATH,全档案守恒扫未跑', true)
+        // 守恒抛错路径:凭空造 +100 分 → 读余额=500 拒绝出账;对冲 −100 后恢复(账本只追加,不删毒行)
+        if (process.env.TEST_DB_PATH) {
+          const dbP = new DatabaseSync(process.env.TEST_DB_PATH)
+          const mkAdj = (amt, note) => dbP.prepare('INSERT INTO points_transactions (id, tenant_id, user_id, type, amount, ref_id, note, created_by, created_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)')
+            .run(`pts_ci24_${amt > 0 ? 'p' : 'n'}_${RUN_ID}`, shop.tenantId, puid, 'adjust', amt, null, note, 'ci-invariant-probe', new Date().toISOString())
+          mkAdj(100, 'CI ㉔ 守恒探针:凭空造分(即造即冲)')
+          const boom = await request('/my/points-mall', {}, ptok, { 'x-tenant-id': shop.tenantId })
+          check('㉔ 守恒抛错:余额>累计获得 = 500 拒绝出账', boom.status === 500 && boom.data.error && boom.data.error.code === 'POINTS_INVARIANT_VIOLATION', JSON.stringify(boom.data).slice(0, 120))
+          mkAdj(-100, 'CI ㉔ 守恒探针对冲行')
+          dbP.close()
+          const ok2 = await request('/my/points-mall', {}, ptok, { 'x-tenant-id': shop.tenantId })
+          check('㉔ 对冲后恢复出账', ok2.status === 200 && ok2.data.balance === mall2.data.balance, `${ok2.status}/${ok2.data.balance}`)
+        } else check('㉔ (跳过)无 TEST_DB_PATH,守恒抛错路径未跑', true)
 
         // ㉕ 拍板②(2026-08-12):等级单源=租户配置。lucky-luxe 迁移开分级(原全局梯子入配置);
         //    未配置租户(本测试店)=不分级 → 称谓「会员」+空梯子(三减法的服务端根)。

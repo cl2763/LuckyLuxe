@@ -16,6 +16,8 @@ Page({
       this.setData({
         loading: false, loggedIn: true,
         balance: r.balance || 0,
+        earnedTotal: r.earnedTotal || 0,   // 改判①三行:累计获得(≡累计消费)
+        redeemedTotal: r.redeemedTotal || 0,
         prizes: (r.prizes || []).map((p) => ({
           ...p,
           desc: p.discountType === 'percent' ? `${p.percentOff}% off` : `减 ${money(p.amountCents || 0)}`,

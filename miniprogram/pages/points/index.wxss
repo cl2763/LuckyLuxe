@@ -31,3 +31,7 @@ page{background:#fbf8f5}
 .pgo{margin-top:6rpx;font-size:23rpx;font-weight:700;color:#fff;background:#2d2826;border-radius:999rpx;padding:10rpx 26rpx}
 .pgo.dis{background:#e5ddd3;color:#a99a86}
 .li-v.down{color:#a34c48}
+
+/* 改判①三行(累计获得/已兑换/余额) */
+.hrows { margin: 12rpx 0 4rpx; padding: 12rpx 20rpx; background: rgba(255,255,255,.14); border-radius: 12rpx; }
+.hrow { display: flex; justify-content: space-between; font-size: 24rpx; line-height: 40rpx; opacity: .95; }
