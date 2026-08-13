@@ -104,6 +104,16 @@ function currentTenant() {
   return wx.getStorageSync('lucky_tenant') || 'lucky-luxe'
 }
 
+/* D39 L2(换店残留机制,第 2 案后全仓清单化):换店时必须清/重取的键统一从这走。
+   清:member 快照/币种/定金配置/AI 开关/购物车/本地订单缓存/款式预设(全部 per-store 值挂全局键);
+   不清:lucky_lang(用户偏好)/lucky_service_type(通用过滤)/lucky_store_id::<tenant>(键自带租户)/
+   商家端会话(商家无换店流,跨店有 D35 闸)。auth 不在这清 —— 打了租户戳,下次取数自动静默重登。 */
+function onStoreSwitched() {
+  for (const k of ['lucky_member', 'lucky_store_currency', 'lucky_store_deposit', 'lucky_store_ai', 'lucky_cart', 'lucky_orders', 'lucky_style_preset']) {
+    try { wx.removeStorageSync(k) } catch (e) { /* 单键清不掉不阻塞换店 */ }
+  }
+}
+
 // 会话失效时统一弹回登录页。多个接口并行 401 时只跳一次,避免路由打架。
 let kickingToLogin = false
 function kickToLogin(silent) {
@@ -296,12 +306,12 @@ function authRequiredError() {
   return error
 }
 
-async function ensureLogin(options = {}) {
-  const existing = getAuth()
-  if (existing && existing.accessToken && (!existing.expiresAt || Date.now() < existing.expiresAt - 60 * 1000)) {
-    return existing.user
-  }
-  if (!options.interactive) throw authRequiredError()
+/* 🔴 D39(店主 2026-08-12 末验,数据随店走红线):顾客 token 是按「出生店」的用户行签的
+   (会员=用户×店,同一个微信身份在每家店是独立档案)。换店后旧 token 会把上家店的身份带进本店:
+   「我的」页头部(累计消费/等级/积分)全是上家店的,而 /my/* 明细按新店查=全空。
+   修法:auth 打租户戳;租户不匹配=对本店而言未登录 → wx.login 静默重登(顾客无感);
+   重登失败如实清会话,绝不拿上家店身份凑数。 */
+async function loginForCurrentStore(options = {}) {
   const code = await wxLoginCode()
   const data = await request('/auth/wechat/mini-login', 'POST', {
     code,
@@ -314,9 +324,32 @@ async function ensureLogin(options = {}) {
     phoneCode: options.phoneCode || '',
     phone: options.phone || ''
   })
-  setAuth(Object.assign({}, data.auth, { user: data.user }))
+  setAuth(Object.assign({}, data.auth, { user: data.user, tenantId: currentTenant() }))
   wx.setStorageSync('lucky_member', miniMember(data.user))
   return data.user
+}
+
+async function ensureLogin(options = {}) {
+  const existing = getAuth()
+  const fresh = Boolean(existing && existing.accessToken && (!existing.expiresAt || Date.now() < existing.expiresAt - 60 * 1000))
+  const sameStore = Boolean(existing && existing.tenantId === currentTenant())  // 旧会话无租户戳=按不匹配处理,静默重登一次后就有戳了
+  if (fresh && sameStore) return existing.user
+  if (fresh && !sameStore) {
+    try { return await loginForCurrentStore(options) } catch (e) {
+      clearAuth()
+      wx.removeStorageSync('lucky_member')
+      if (!options.interactive) throw authRequiredError()
+      throw e
+    }
+  }
+  if (!options.interactive) throw authRequiredError()
+  return loginForCurrentStore(options)
+}
+
+// 供 /my/* 出口在请求前自愈:换店后 token 不属于本店 → 先静默重登再取数
+async function ensureStoreScopedAuth() {
+  const a = getAuth()
+  if (a && a.accessToken && a.tenantId !== currentTenant()) await ensureLogin({ interactive: false })
 }
 
 async function loginWithWechat(profile = {}) {
@@ -596,6 +629,7 @@ function getMyStoredValue() { return request('/my/stored-value') }
 /* D33 余额单源(2026-08-12):顾客端可见余额一律实时取后端 /my/stored-value,
    不再读 lucky_member.balance 缓存(旧演示残留 4500 事件)。返回 {cents, yuan}。 */
 async function myBalance() {
+  try { await ensureStoreScopedAuth() } catch (e) { /* 未登录时照常请求,由服务端 401 */ }
   const r = await request('/my/stored-value')
   const cents = (r && r.balanceCents) || 0
   return { cents, yuan: Math.round(cents / 100) }
@@ -607,6 +641,8 @@ function redeemPrize(prizeId) { return request('/my/points-mall/redeem', 'POST',
 
 // 按"当前进的店"刷新会员数据(会员=用户×店:积分/储值/等级每店独立,切店后必须刷新)
 async function refreshMember() {
+  // D39:换店后先把身份换成本店的,再刷会员数据;换不动(未登录/网络断)按原逻辑走
+  try { await ensureStoreScopedAuth() } catch (e) { return null }
   const auth = getAuth()
   /* D33 根因之一:登录存的 auth 里可能没有 user.id(mini-login 的 auth 与 user 是并列字段),
      这里一早退,lucky_member 里旧演示时代的 4500 余额缓存就永远洗不掉。
@@ -741,6 +777,7 @@ async function getAdminDashboardData() {
 module.exports = {
   API_BASE,
   DEMO_USER_ID,
+  onStoreSwitched,
   normalizeImage,
   ensureLogin,
   loginWithWechat,

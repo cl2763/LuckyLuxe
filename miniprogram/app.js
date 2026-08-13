@@ -27,8 +27,11 @@ App({
       let tid = String(q.tenantId || q.merchant || '').trim()
       if (!tid && q.scene) { const s = decodeURIComponent(q.scene); const m = /(?:^|&)t=([^&]+)/.exec(s); if (m) tid = m[1] }
       if (tid) {
+        const prev = wx.getStorageSync('lucky_tenant') || ''
         wx.setStorageSync('lucky_tenant', tid)
         this.globalData.tenantId = tid
+        // D39:扫码/深链换店与选店页同一套清场;租户没变(常规重进)不清
+        if (prev && prev !== tid) { try { require('./utils/api').onStoreSwitched() } catch (e) { /* 清场失败不阻塞启动 */ } }
       } else {
         this.globalData.tenantId = wx.getStorageSync('lucky_tenant') || 'lucky-luxe'
       }

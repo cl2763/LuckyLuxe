@@ -39,7 +39,9 @@ Page({
   applyTenant(tid, name) {
     if (!tid) return
     wx.setStorageSync('lucky_tenant', tid)
-    // 换店先把上一家的币符缓存清掉(¥ 店 ↔ CAD 店共用一个键),新店进首页时重取
+    // D39:换店清场统一走 api.onStoreSwitched(member/币种/定金/AI/购物车/本地订单/款式预设);
+    // auth 带租户戳,下次取数自动静默重登为本店身份 —— 数据随店走
+    api.onStoreSwitched()
     clearStoreCurrency()
     const app = getApp()
     if (app && app.globalData) app.globalData.tenantId = tid

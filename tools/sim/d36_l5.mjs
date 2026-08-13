@@ -23,13 +23,13 @@ for (let i = 1; i <= 5; i += 1) {
 for (let i = 1; i <= 5; i += 1) {
   const p = await go('/pages/points/index');
   const d = await p.data();
-  A(Number(d.balance) === 932, `积分页余额 ${d.balance} ≠ 932`);
+  A(Number(d.balance) === 1200, `积分页余额 ${d.balance} ≠ 1200(口径②后:售后单 268 照常计,1732+268−800)`);
   const hist = d.history || [];
   A(hist.some((h) => Number(h.delta) === -800), '明细缺 −800 兑换行(D36 三账缺口复活)');
   const sum = hist.reduce((n, h) => n + Number(h.delta || 0), 0);
   A(sum === Number(d.balance), `页面明细加总 ${sum} ≠ 余额 ${d.balance}`);
   if (i === 1) await shot(mp, 'r2-d36-points');
-  console.log(`积分页 ${i}/5 ✓ 余额932 · 含兑换行 · Σ明细=余额`);
+  console.log(`积分页 ${i}/5 ✓ 余额1200(口径②) · 含兑换行 · Σ明细=余额`);
 }
 await mp.disconnect();
 console.log('D36 渲染层实拍:储值 5/5 + 积分 5/5 全绿');

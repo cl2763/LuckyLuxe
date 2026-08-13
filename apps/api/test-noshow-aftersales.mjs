@@ -538,8 +538,8 @@ const main = async () => {
         if (process.env.TEST_DB_PATH) {
           const dm = await request('/auth/wechat/mini-login', { method: 'POST', body: JSON.stringify({ demoLogin: true, tenantId: 'lucky-luxe' }) }, null, { 'x-tenant-id': 'lucky-luxe' })
           const dbL = new DatabaseSync(process.env.TEST_DB_PATH)
-          const frac = dbL.prepare("SELECT COUNT(*) AS n FROM bookings WHERE user_id = ? AND tenant_id = 'lucky-luxe' AND status = 'COMPLETED' AND service_price_cents % 100 != 0").get(dm.data.user.id).n
-          const legacySum = dbL.prepare("SELECT COALESCE(SUM(service_price_cents / 100), 0) AS s FROM bookings WHERE user_id = ? AND tenant_id = 'lucky-luxe' AND status = 'COMPLETED' AND appointment_start < '2026-08-14T00:00:00.000Z'").get(dm.data.user.id).s
+          const frac = dbL.prepare("SELECT COUNT(*) AS n FROM bookings WHERE user_id = ? AND tenant_id = 'lucky-luxe' AND status IN ('COMPLETED', 'AFTER_SALES') AND service_price_cents % 100 != 0").get(dm.data.user.id).n
+          const legacySum = dbL.prepare("SELECT COALESCE(SUM(service_price_cents / 100), 0) AS s FROM bookings WHERE user_id = ? AND tenant_id = 'lucky-luxe' AND status IN ('COMPLETED', 'AFTER_SALES') AND appointment_start < '2026-08-14T00:00:00.000Z'").get(dm.data.user.id).s // 口径②:售后中的单照常计积分
           const ledgerSum = dbL.prepare("SELECT COALESCE(SUM(amount), 0) AS s FROM points_transactions WHERE user_id = ? AND tenant_id = 'lucky-luxe'").get(dm.data.user.id).s
           dbL.close()
           check('㉔ 前提:种子单无分币残数(旧口径 floor(Σ) 与 Σfloor 等值)', frac === 0, `${frac} 单带分币`)
@@ -552,6 +552,22 @@ const main = async () => {
         const luckyU = (await request('/auth/wechat/mini-login', { method: 'POST', body: JSON.stringify({ demoLogin: true, tenantId: 'lucky-luxe' }) }, null, { 'x-tenant-id': 'lucky-luxe' })).data.user
         check('㉕ lucky-luxe 分级开启且梯子来自租户配置(4 档)', luckyU.membershipTiersEnabled === true && (luckyU.memberTiers || []).length === 4 && luckyU.memberLevel !== '会员', `${luckyU.memberLevel}/${(luckyU.memberTiers || []).length}`)
         check('㉕ 未配置租户=不分级:称谓「会员」+空梯子', pm.data.user.membershipTiersEnabled === false && (pm.data.user.memberTiers || []).length === 0 && pm.data.user.memberLevel === '会员', `${pm.data.user.memberLevel}/${(pm.data.user.memberTiers || []).length}`)
+
+        // ㉖ D38(2026-08-12 末验):累计消费 ≡ Σ已签结算单档位小计(与积分同基数);
+        //    口径②:签署后预约转售后,积分与累计消费都不增不减(已签即计,不要复杂逻辑)
+        {
+          const u1 = (await request(`/users/${puid}`, {}, ptok, { 'x-tenant-id': shop.tenantId })).data.user
+          const spentBefore = pm.data.user.totalSpentCents || 0
+          check('㉖ D38 累计消费Δ ≡ 本次签署档位小计', (u1.totalSpentCents - spentBefore) === pst.subtotalCents, `Δ=${u1.totalSpentCents - spentBefore} 应为 ${pst.subtotalCents}`)
+          check('㉖ D38 累计消费 ≠ 预约标价口径', (u1.totalSpentCents - spentBefore) !== listPrice, `标价口径会给 ${listPrice}`)
+          const flip = await request(`/admin/bookings/${pbk.data.booking.id}/status`, { method: 'PATCH', body: JSON.stringify({ status: 'AFTER_SALES', note: '㉖ 口径② fixture:签后转售后' }) }, shop.token)
+          check('㉖ 口径② fixture 转售后成功', flip.status === 200, JSON.stringify(flip.data).slice(0, 100))
+          const balAS = (await request('/my/points-mall', {}, ptok, { 'x-tenant-id': shop.tenantId })).data.balance || 0
+          check('㉖ 口径② 售后中积分不增不减(已签即计)', balAS === bal1, `${bal1}→${balAS}`)
+          const u2 = (await request(`/users/${puid}`, {}, ptok, { 'x-tenant-id': shop.tenantId })).data.user
+          check('㉖ 口径② 售后中累计消费不变', u2.totalSpentCents === u1.totalSpentCents, `${u1.totalSpentCents}→${u2.totalSpentCents}`)
+          await request(`/admin/bookings/${pbk.data.booking.id}/status`, { method: 'PATCH', body: JSON.stringify({ status: 'COMPLETED', note: '㉖ fixture 还原' }) }, shop.token)
+        }
       }
 
       const NAV_BASELINE = 106

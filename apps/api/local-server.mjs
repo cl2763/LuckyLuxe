@@ -5363,6 +5363,16 @@ function membershipForSpend(totalSpentCents = 0, tenantId = currentTenantId()) {
   }
 }
 
+/* D38(店主 2026-08-12 末验,《财务总逻辑》恒等式区):
+   累计消费 ≡ 已签结算单档位小计累计 —— 与积分/业绩/成长值同一基数。
+   此前实现按 COMPLETED 预约标价加总(店主观察处显示还错成了储值净额形状);
+   更正链语义:原单 voided/amended 不计,新签单计 —— 与积分新口径同一条查询形状。 */
+function customerSignedSubtotalCents(userId, tenantId = currentTenantId()) {
+  if (!userId) return 0
+  return db.prepare("SELECT COALESCE(SUM(subtotal_cents), 0) AS s FROM settlements WHERE user_id = ? AND tenant_id = ? AND status = 'signed'")
+    .get(userId, tenantId).s || 0
+}
+
 function userBookingStats(userId, tenantId = DEFAULT_TENANT_ID) {
   if (!userId) return { total_spent_cents: 0, visits: 0 }
   // 每店独立会员:消费/到店只算这家店(tenant)
@@ -5605,7 +5615,8 @@ function serializeUser(user, tenantId = DEFAULT_TENANT_ID) {
   const memberCode = memberCodeForUserId(user.id)
   // 每店独立会员:消费/到店/积分/等级/储值都只算这家店(tenant)
   const stats = userBookingStats(user.id, tenantId)
-  const totalSpentCents = Number(stats.total_spent_cents || stats.totalSpentCents || 0)
+  // D38:累计消费=Σ已签结算单档位小计(与积分/业绩/成长值同基数);到店次数仍按预约算
+  const totalSpentCents = customerSignedSubtotalCents(user.id, tenantId)
   const membership = membershipForSpend(totalSpentCents, tenantId)
   const displayName = isGenericDisplayName(user.display_name, user.id) ? memberCode : user.display_name
   return {
@@ -6189,9 +6200,11 @@ function getAvailability(query) {
    兑换行只进余额不进明细,正是 D36「三账不齐」的根。 ===== */
 const POINTS_POLICY_B_SWITCH_ISO = '2026-08-14T00:00:00.000Z'
 function pointsEarnRows(userId, tenantId = currentTenantId()) {
+  // 口径②(店主 2026-08-12 拍板「不要复杂逻辑」):售后中的单照常计积分 —— 旧段含 AFTER_SALES,
+  // 新段本就只看已签结算单不看预约状态(已签即计,售后/结案都不增不减)
   const legacy = db.prepare(`SELECT b.id AS ref, b.appointment_start AS at, b.service_price_cents AS cents, s.name_zh AS sname
     FROM bookings b LEFT JOIN services s ON s.id = b.service_id
-    WHERE b.user_id = ? AND b.tenant_id = ? AND b.status = 'COMPLETED' AND b.appointment_start < ?`)
+    WHERE b.user_id = ? AND b.tenant_id = ? AND b.status IN ('COMPLETED', 'AFTER_SALES') AND b.appointment_start < ?`)
     .all(userId, tenantId, POINTS_POLICY_B_SWITCH_ISO)
     .map((r) => ({ refId: r.ref, at: r.at, points: Math.floor((r.cents || 0) / 100), title: `到店消费 · ${r.sname || '服务'}` }))
   const fresh = db.prepare(`SELECT st.id AS ref, st.signed_at AS at, st.subtotal_cents AS cents, sv.name_zh AS sname
@@ -6592,7 +6605,7 @@ function getAdminCustomers() {
       NULL AS created_at,
       COUNT(b.id) AS visit_count,
       MAX(b.appointment_start) AS last_visit_at,
-      COALESCE(SUM(CASE WHEN b.status = 'COMPLETED' THEN b.service_price_cents ELSE 0 END), 0) AS total_spent_cents,
+      (SELECT COALESCE(SUM(s2.subtotal_cents), 0) FROM settlements s2 WHERE s2.user_id = u.id AND s2.tenant_id = '${esc}' AND s2.status = 'signed') AS total_spent_cents, -- D38:累计消费=Σ已签档位小计,与顾客端同基数
       COALESCE(SUM(CASE WHEN b.status = 'COMPLETED' THEN 1 ELSE 0 END), 0) AS completed_count,
       MIN(CASE WHEN b.status = 'COMPLETED' THEN b.appointment_start END) AS first_visit_at,
       MAX(CASE WHEN b.status = 'COMPLETED' THEN b.appointment_start END) AS last_completed_at
