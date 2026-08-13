@@ -588,6 +588,27 @@ const main = async () => {
         }
       }
 
+      // ㉗ 换代批(2026-08-12):①demoLogin 不选退役档案且「演示2-」优先;②直接排单失败不留孤儿档案
+      {
+        const rt = await directBooking(shop, { name: `退役样本${RUN_ID}`, time: '06:00', techId: shop.tech2 })
+        await directBooking(shop, { name: `退役样本${RUN_ID}2`, time: '05:00', techId: shop.tech1 }).catch(() => {})
+        if (process.env.TEST_DB_PATH) {
+          const dbR = new DatabaseSync(process.env.TEST_DB_PATH)
+          dbR.prepare("UPDATE users SET tags_json = ? WHERE id = ?").run(JSON.stringify(['退役·旧口径演示档案']), rt.user.id)
+          dbR.prepare("UPDATE users SET display_name = ? WHERE display_name = ?").run('演示2-CI样本', `退役样本${RUN_ID}2`)
+          dbR.close()
+          const who = (await request('/auth/wechat/mini-login', { method: 'POST', body: JSON.stringify({ demoLogin: true, tenantId: shop.tenantId }) }, null, { 'x-tenant-id': shop.tenantId })).data.user
+          check('㉗ demoLogin 不选退役档案且演示2优先', who.id !== rt.user.id && who.displayName === '演示2-CI样本', `选中 ${who.displayName}`)
+        } else check('㉗ (跳过)无 TEST_DB_PATH', true)
+        // 孤儿档案:占一个时段,再用新客名撞同一时段 → 排单失败,档案不得留下
+        const occupied = await request('/admin/bookings/direct', { method: 'POST', body: JSON.stringify({ serviceId: shop.serviceId, technicianId: shop.tech1, date: dateStr(4), time: '07:00', newCustomerName: `孤儿探针占位${RUN_ID}` }) }, shop.token)
+        check('㉗ 孤儿探针占位成功', occupied.status === 201 || occupied.status === 200)
+        const clash = await request('/admin/bookings/direct', { method: 'POST', body: JSON.stringify({ serviceId: shop.serviceId, technicianId: shop.tech1, date: dateStr(4), time: '07:00', newCustomerName: `孤儿探针撞档${RUN_ID}` }) }, shop.token)
+        check('㉗ 撞档排单如实失败', clash.status !== 201 && clash.status !== 200, String(clash.status))
+        const list2 = await request('/admin/customers', {}, shop.token)
+        check('㉗ 排单失败不留孤儿档案(建档随排单整体回滚)', !(list2.data.customers || []).some((c) => String(c.displayName || '').includes(`孤儿探针撞档${RUN_ID}`)), '孤儿仍在列表')
+      }
+
       const NAV_BASELINE = 106
       check(`㉑ 裸导航调用数 ≤ 基线 ${NAV_BASELINE}(F2 只减不增;新增代码走 utils/nav.js)`, navCount <= NAV_BASELINE, `当前 ${navCount}`)
     }

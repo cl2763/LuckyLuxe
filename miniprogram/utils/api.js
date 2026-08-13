@@ -325,7 +325,7 @@ async function loginForCurrentStore(options = {}) {
     phone: options.phone || ''
   })
   setAuth(Object.assign({}, data.auth, { user: data.user, tenantId: currentTenant() }))
-  wx.setStorageSync('lucky_member', miniMember(data.user))
+  wx.setStorageSync('lucky_member', Object.assign(miniMember(data.user), { _tenant: currentTenant() }))
   return data.user
 }
 
@@ -654,11 +654,14 @@ async function refreshMember() {
     const data = await request(`/users/${uid}`)
     const fresh = miniMember(data.user)
     const prev = wx.getStorageSync('lucky_member') || {}
-    // 头像/昵称/资料完善度是本机资料,保留;数字类(积分/储值/等级/消费)以当前店为准
+    // D40(换店残留第 3 案):昵称/头像/资料完善度这类「档案身份字段」只在**同一家店**内保留;
+    // 跨店快照一律以当前店档案为准 —— 快照带租户戳(_tenant)界定归属
+    const sameStore = prev._tenant === currentTenant()
     wx.setStorageSync('lucky_member', Object.assign({}, fresh, {
-      nickname: prev.nickname || fresh.nickname,
-      avatarUrl: prev.avatarUrl || fresh.avatarUrl,
-      profileComplete: prev.profileComplete || fresh.profileComplete
+      _tenant: currentTenant(),
+      nickname: (sameStore && prev.nickname) || fresh.nickname,
+      avatarUrl: (sameStore && prev.avatarUrl) || fresh.avatarUrl,
+      profileComplete: (sameStore && prev.profileComplete) || fresh.profileComplete
     }))
     return fresh
   } catch (e) { return null }

@@ -41,9 +41,12 @@ const FX = {};
   FX.svc = (items.find((i) => i.itemKind === 'main' && i.isActive !== false) || {}).id;
   const techs = (await api('GET', '/admin/technicians?roster=1')).data.technicians || [];
   FX.techs = techs.map((t) => t.id);
-  const custs = (await api('GET', '/admin/customers')).data.customers || [];
-  FX.cust = (custs[0] || {}).id;
-  FX.custName = (custs[0] || {}).displayName || '顾客';
+  // 换代批(2026-08-12):fixture 顾客跳过退役档案,优先用演示2 阵容(L2:走查 0 引用旧档案)
+  const custs = ((await api('GET', '/admin/customers')).data.customers || [])
+    .filter((c) => !((c.tags || []).includes('退役·旧口径演示档案')));
+  const lineup = custs.find((c) => String(c.displayName || '').startsWith('演示2-'));
+  FX.cust = (lineup || custs[0] || {}).id;
+  FX.custName = (lineup || custs[0] || {}).displayName || '顾客';
   // 休息日:向后扫 14 天找 isClosed(找不到→O1 休息日断言记跳过)
   FX.restDay = null;
   for (let d = -7; d <= 14; d += 1) {

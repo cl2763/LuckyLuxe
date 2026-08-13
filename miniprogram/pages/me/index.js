@@ -363,6 +363,8 @@ Page({
         }
         const currentMember = wx.getStorageSync('lucky_member') || {}
         wx.setStorageSync('lucky_member', Object.assign({}, currentMember, {
+        _tenant: wx.getStorageSync('lucky_tenant') || 'lucky-luxe', // D40:快照带租户戳
+          _tenant: wx.getStorageSync('lucky_tenant') || 'lucky-luxe', // D40:快照带租户戳
           nickname: profile.nickname || currentMember.nickname || (this.data.lang === 'en' ? 'WeChat User' : '微信用户'),
           avatarUrl: profile.avatarUrl || currentMember.avatarUrl || DEFAULT_AVATAR,
           profileComplete: true,

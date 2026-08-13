@@ -5780,9 +5780,13 @@ async function signInWechatMiniUser(body) {
        而且她当不了结算单的卡主(createSettlementGroup 要求卡主是本店 users 行),
        连"摆个现场给店主看"都办不到。现在:本店有档案就用本店单量最多的那位,
        没有再回落 demo-cust-01。旗舰店行为不变(她就是那家店单最多的)。 */
+    /* D40(2026-08-12):选人排除「退役·旧口径演示档案」——此前按单量最多选,
+       jics 被历次 L5 fixture 的「店主验签」(23 单)霸榜,店主在顾客端看到的姓名就是它。
+       退役档案此后任何测试/验收/演示不再使用(演示阵容换代拍板)。 */
     const demoUser = db.prepare(`SELECT u.* FROM users u
-        WHERE u.tenant_id = ?
-        ORDER BY (SELECT COUNT(*) FROM bookings b WHERE b.user_id = u.id AND b.tenant_id = ?) DESC, u.id ASC
+        WHERE u.tenant_id = ? AND u.tags_json NOT LIKE '%退役·旧口径演示档案%'
+        ORDER BY (u.display_name LIKE '演示2-%') DESC,
+          (SELECT COUNT(*) FROM bookings b WHERE b.user_id = u.id AND b.tenant_id = ?) DESC, u.id ASC
         LIMIT 1`).get(demoTenant, demoTenant)
       || db.prepare('SELECT * FROM users WHERE id = ?').get('demo-cust-01')
       || db.prepare('SELECT * FROM users LIMIT 1').get()
@@ -14159,21 +14163,34 @@ async function route(req, res) {
       if (!u0) throw apiError(404, 'NOT_FOUND', '找不到这位顾客的档案。')
       if (u0.tenant_id !== tid) throw apiError(400, 'USER_TENANT_MISMATCH', '这位顾客不在本店档案里。')
     }
-    // 新建顾客(老板口头约的客):给个名字即建档
-    if (!userId && String(body.newCustomerName || '').trim()) {
+    // 新建顾客(老板口头约的客):给个名字即建档。
+    // 换代批顺带修(2026-08-12):建档若发生在排单校验之前,时段冲突/休息日被拒时会留下
+    // 重名空档案——店台连试几个时段就造一堆孤儿档(演示2 阵容造数时当场抓获,一次留 3 个)。
+    // 排单失败=整体失败:新建的档案随之回滚删除(该档案此刻不可能有任何关联数据)。
+    const newName = String(body.newCustomerName || '').trim()
+    let createdUserId = ''
+    if (!userId && newName) {
       const uid = randomId('user')
-      const nm = String(body.newCustomerName).trim().slice(0, 40)
-      db.prepare('INSERT INTO users (id, display_name, phone, tenant_id) VALUES (?, ?, NULLIF(?, \'\'), ?)').run(uid, nm, String(body.phone || '').trim(), tid)
+      db.prepare('INSERT INTO users (id, display_name, phone, tenant_id) VALUES (?, ?, NULLIF(?, \'\'), ?)').run(uid, newName.slice(0, 40), String(body.phone || '').trim(), tid)
       userId = uid
+      createdUserId = uid
     }
     if (!userId) throw apiError(400, 'BAD_REQUEST', '请选择或新建顾客。')
     const storeId = body.storeId || defaultStoreId()
-    const booking = createBooking({
-      userId, tenantId: tid, storeId,
-      serviceId: body.serviceId, technicianId: body.technicianId,
-      date: body.date, time: body.time, durationMin: body.durationMin,
-      notes: body.notes || '老板直接排单'
-    }, { adminDirect: true, depositPaid: body.depositPaid === true })
+    let booking
+    try {
+      booking = createBooking({
+        userId, tenantId: tid, storeId,
+        serviceId: body.serviceId, technicianId: body.technicianId,
+        date: body.date, time: body.time, durationMin: body.durationMin,
+        notes: body.notes || '老板直接排单'
+      }, { adminDirect: true, depositPaid: body.depositPaid === true })
+    } catch (error) {
+      if (createdUserId) {
+        try { db.prepare('DELETE FROM users WHERE id = ? AND tenant_id = ?').run(createdUserId, tid) } catch (e) { /* 回滚失败不掩盖原错误 */ }
+      }
+      throw error
+    }
     return json(res, 201, { booking })
   }
   // 服务小记(P0-②):写小记(原文 → AI 结构化 → 存);员工/老板均可写。
@@ -16803,6 +16820,37 @@ try {
     mark.run(t, JSON.stringify({ policy: 'subtotal_full_retro', decidedBy: '店主 2026-08-12 改判①(二次+三次拍板)', note: '积分历史全量追溯:累计获得≡累计消费(Σ已签档位小计);余额=获得−已兑换;硬守恒 余额≤累计消费;混合口径负余额钳 0 留痕' }), iso(new Date()))
   }
 } catch (e) { console.error('改判①留痕失败(不阻塞启动):', e.message) }
+// 演示阵容换代(店主 2026-08-12 拍板):旧口径时代演示档案全部退役 —— 打标记不删
+// (历史单据织在日结与收入历史里,账本只追加)。圈定=id demo-% / 名含「演示」/「店主验签」,
+// 只动两家真实店;幂等:已有标记跳过。
+try {
+  const RETIRE_TAG = '退役·旧口径演示档案'
+  // 「名含演示」不得误伤换代后的新阵容(演示2- 前缀)——2026-08-12 当场抓获:
+  // watch 重载重跑迁移,把刚建的 lucky 演示2 八户全打了退役标,demoLogin 又落回真实档案
+  const targets = db.prepare(`SELECT id, tenant_id, tags_json FROM users
+    WHERE tenant_id IN ('lucky-luxe', 'jics-nail')
+      AND display_name NOT LIKE '演示2-%'
+      AND (id LIKE 'demo-%' OR display_name LIKE '%演示%' OR display_name = '店主验签')`).all()
+  // 解错标(幂等):此前被误圈的演示2 档案摘掉退役标
+  const mislabeled = db.prepare(`SELECT id, tags_json FROM users
+    WHERE display_name LIKE '演示2-%' AND tags_json LIKE '%退役·旧口径演示档案%'`).all()
+  for (const u of mislabeled) {
+    let tags = []
+    try { tags = JSON.parse(u.tags_json || '[]') } catch { tags = [] }
+    db.prepare('UPDATE users SET tags_json = ? WHERE id = ?').run(JSON.stringify(tags.filter((t) => t !== '退役·旧口径演示档案')), u.id)
+    console.log(`[demo-retire] 解错标:${u.id}`)
+  }
+  for (const u of targets) {
+    let tags = []
+    try { tags = JSON.parse(u.tags_json || '[]') } catch { tags = [] }
+    if (!tags.includes(RETIRE_TAG)) {
+      tags.push(RETIRE_TAG)
+      db.prepare('UPDATE users SET tags_json = ? WHERE id = ?').run(JSON.stringify(tags.slice(0, 12)), u.id)
+      console.log(`[demo-retire] ${u.tenant_id}/${u.id} 已退役标记`)
+    }
+  }
+} catch (e) { console.error('演示退役标记失败(不阻塞启动):', e.message) }
+
 // 改判① 钳位扫描:历史混合口径重算后 已兑换>新累计获得 的档案,补记正向调整行至 0
 // (账本只追加;不造负数不硬掰)。幂等:钳后余额=0,重跑扫不到负数即无操作。
 try {
