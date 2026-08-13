@@ -169,12 +169,12 @@
         <div class="row" style="margin-bottom:12px">
           <select id="svcType"><option value="NAIL">美甲</option><option value="LASH">美睫</option></select>
           <input id="svcName" placeholder="服务中文名" style="width:170px">
-          <input id="svcPrice" placeholder="价格$" type="number" style="width:90px">
+          <input id="svcPrice" placeholder="价格(门店币种)" type="number" style="width:104px">
           <input id="svcDur" placeholder="分钟" type="number" style="width:80px">
           <input id="svcCat" placeholder="分类(选填)" style="width:110px">
           <button class="p" onclick="addService()">添加服务</button>
         </div>
-        <table><thead><tr><th>服务</th><th>类型</th><th>价格</th><th>时长</th><th>状态</th><th>操作</th></tr></thead><tbody id="svcRows"></tbody></table>
+        <table><thead><tr><th>服务</th><th>类型</th><th>价格(门店币种)</th><th>时长</th><th>状态</th><th>操作</th></tr></thead><tbody id="svcRows"></tbody></table>
         <p class="muted" style="margin-top:8px">美甲为"基础价+复杂款人工报价"、美睫为固定价,口径与 AI 一致。</p>
       </div>
 
@@ -595,7 +595,7 @@ async function saveHours(){
 }
 function renderServices(list){
   $('svcRows').innerHTML=list.map(s=>`<tr>
-    <td><b>${esc(s.nameZh)}</b></td><td>${s.type==='nail'?'美甲':'美睫'}</td><td>$${s.priceCents/100}</td><td>${s.durationMin}min</td>
+    <td><b>${esc(s.nameZh)}</b></td><td>${s.type==='nail'?'美甲':'美睫'}</td><td>${s.priceCents/100}</td><td>${s.durationMin}min</td>
     <td><span class="tag ${s.isActive?'on':'off'}">${s.isActive?'在售':'下架'}</span></td>
     <td class="row"><button class="sm" onclick="editPrice('${esc(s.id)}',${s.priceCents})">改价</button><button class="sm ${s.isActive?'d':'p'}" onclick="toggleSvc('${esc(s.id)}',${s.isActive})">${s.isActive?'下架':'上架'}</button></td>
   </tr>`).join('')||'<tr><td colspan="6" class="muted">还没有服务,替商家把价目表加上吧</td></tr>'

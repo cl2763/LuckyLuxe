@@ -503,6 +503,57 @@ const main = async () => {
         check('㉓ D35-b 他店档案跨店排单=400 USER_TENANT_MISMATCH', cross.status === 400 && cross.data.error && cross.data.error.code === 'USER_TENANT_MISMATCH', JSON.stringify(cross.data).slice(0, 140))
       }
 
+      // ㉔ 拍板①(店主 2026-08-12,《财务总逻辑》恒等式区):积分口径 B ——
+      //    新单积分 ≡ 档位小计 × 1元=1分(不按标价、不按实收);历史单不追溯;
+      //    积分列表必须能加总出余额(D36 三账不齐的闭环断言)。
+      {
+        // 新口径侧:测试店 demo 顾客,明天的单(永远 ≥ 切换时点),结算 qty2+自选 1234 分币
+        const pm = await request('/auth/wechat/mini-login', { method: 'POST', body: JSON.stringify({ demoLogin: true, tenantId: shop.tenantId }) }, null, { 'x-tenant-id': shop.tenantId })
+        const ptok = pm.data.auth.accessToken
+        const puid = pm.data.user.id
+        const mall0 = await request('/my/points-mall', {}, ptok, { 'x-tenant-id': shop.tenantId })
+        const bal0 = mall0.data.balance || 0
+        const pbk = await request('/admin/bookings/direct', { method: 'POST', body: JSON.stringify({ userId: puid, serviceId: shop.serviceId, technicianId: shop.tech1, date: dateStr(2), time: '13:15' }) }, shop.token)
+        check('㉔ 积分 fixture 排单成功', pbk.status === 201 || pbk.status === 200, JSON.stringify(pbk.data).slice(0, 120))
+        const pmk = await request('/admin/settlements', { method: 'POST', body: JSON.stringify({
+          userId: puid, payerUserId: puid, cardOwnerUserId: puid, payIntent: 'offline_full',
+          settlements: [{ bookingId: pbk.data.booking.id, tierKey: 'list', items: [{ serviceId: shop.serviceId, qty: 2 }], customItems: [{ name: '积分分币项', amountCents: 1234 }], technicians: [{ technicianId: shop.tech1, role: 'main', itemNos: [] }], servedPersonName: '' }]
+        }) }, shop.token)
+        const pst = pmk.data.settlements[0]
+        const listPrice = pbk.data.booking.servicePriceCents || pbk.data.booking.service_price_cents || 0
+        check('㉔ 前提:档位小计 ≠ 预约标价(否则新旧口径无法区分)', pst.subtotalCents !== listPrice, `subtotal=${pst.subtotalCents} list=${listPrice}`)
+        const midBal = (await request('/my/points-mall', {}, ptok, { 'x-tenant-id': shop.tenantId })).data.balance || 0
+        check('㉔ 未签不产生积分(积分随签署,不随开单)', midBal === bal0, `${bal0}→${midBal}`)
+        const sg = await request(`/settlements/${encodeURIComponent(pst.code)}/sign`, { method: 'POST', body: JSON.stringify({ signature: '积分口径B验签', disclaimerAccepted: true }) }, null, { 'x-tenant-id': shop.tenantId })
+        check('㉔ 签署成功', sg.status === 200, JSON.stringify(sg.data).slice(0, 120))
+        const mall1 = await request('/my/points-mall', {}, ptok, { 'x-tenant-id': shop.tenantId })
+        const bal1 = mall1.data.balance || 0
+        const wantPts = Math.floor(pst.subtotalCents / 100)
+        check('㉔ 新单积分 ≡ 档位小计(floor 到分币)', bal1 - bal0 === wantPts, `Δ=${bal1 - bal0} 应为 ${wantPts}(subtotal=${pst.subtotalCents})`)
+        check('㉔ 新单积分 ≠ 旧口径(预约标价推导)', bal1 - bal0 !== Math.floor(listPrice / 100), `旧口径会给 ${Math.floor(listPrice / 100)}`)
+        const histSum = (mall1.data.history || []).reduce((n, h) => n + (h.delta || 0), 0)
+        check('㉔ D36 三账闭环:积分明细加总 ≡ 余额(赚分行+兑换行同列)', histSum === bal1, `Σ明细=${histSum} 余额=${bal1}`)
+        check('㉔ 明细里有这笔赚分行', (mall1.data.history || []).some((h) => h.delta === wantPts), JSON.stringify(mall1.data.history).slice(0, 160))
+        // 历史不追溯侧:默认店 demo 顾客的种子单全在切换时点前 —— API 余额必须等于旧口径直算
+        if (process.env.TEST_DB_PATH) {
+          const dm = await request('/auth/wechat/mini-login', { method: 'POST', body: JSON.stringify({ demoLogin: true, tenantId: 'lucky-luxe' }) }, null, { 'x-tenant-id': 'lucky-luxe' })
+          const dbL = new DatabaseSync(process.env.TEST_DB_PATH)
+          const frac = dbL.prepare("SELECT COUNT(*) AS n FROM bookings WHERE user_id = ? AND tenant_id = 'lucky-luxe' AND status = 'COMPLETED' AND service_price_cents % 100 != 0").get(dm.data.user.id).n
+          const legacySum = dbL.prepare("SELECT COALESCE(SUM(service_price_cents / 100), 0) AS s FROM bookings WHERE user_id = ? AND tenant_id = 'lucky-luxe' AND status = 'COMPLETED' AND appointment_start < '2026-08-14T00:00:00.000Z'").get(dm.data.user.id).s
+          const ledgerSum = dbL.prepare("SELECT COALESCE(SUM(amount), 0) AS s FROM points_transactions WHERE user_id = ? AND tenant_id = 'lucky-luxe'").get(dm.data.user.id).s
+          dbL.close()
+          check('㉔ 前提:种子单无分币残数(旧口径 floor(Σ) 与 Σfloor 等值)', frac === 0, `${frac} 单带分币`)
+          const dBal = (await request('/my/points-mall', {}, dm.data.auth.accessToken, { 'x-tenant-id': 'lucky-luxe' })).data.balance || 0
+          check('㉔ 历史积分不追溯(切换前种子单仍按标价推导,一分不动)', dBal === legacySum + ledgerSum, `API=${dBal} 直算=${legacySum}+${ledgerSum}`)
+        } else check('㉔ (跳过)无 TEST_DB_PATH,历史不追溯直算未跑', true)
+
+        // ㉕ 拍板②(2026-08-12):等级单源=租户配置。lucky-luxe 迁移开分级(原全局梯子入配置);
+        //    未配置租户(本测试店)=不分级 → 称谓「会员」+空梯子(三减法的服务端根)。
+        const luckyU = (await request('/auth/wechat/mini-login', { method: 'POST', body: JSON.stringify({ demoLogin: true, tenantId: 'lucky-luxe' }) }, null, { 'x-tenant-id': 'lucky-luxe' })).data.user
+        check('㉕ lucky-luxe 分级开启且梯子来自租户配置(4 档)', luckyU.membershipTiersEnabled === true && (luckyU.memberTiers || []).length === 4 && luckyU.memberLevel !== '会员', `${luckyU.memberLevel}/${(luckyU.memberTiers || []).length}`)
+        check('㉕ 未配置租户=不分级:称谓「会员」+空梯子', pm.data.user.membershipTiersEnabled === false && (pm.data.user.memberTiers || []).length === 0 && pm.data.user.memberLevel === '会员', `${pm.data.user.memberLevel}/${(pm.data.user.memberTiers || []).length}`)
+      }
+
       const NAV_BASELINE = 106
       check(`㉑ 裸导航调用数 ≤ 基线 ${NAV_BASELINE}(F2 只减不增;新增代码走 utils/nav.js)`, navCount <= NAV_BASELINE, `当前 ${navCount}`)
     }

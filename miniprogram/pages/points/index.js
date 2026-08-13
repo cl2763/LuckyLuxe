@@ -1,9 +1,11 @@
 const api = require('../../utils/api')
+const { money, ensureCurrencyCached } = require('../../utils/storecurrency')
 
 Page({
   data: { balance: 0, prizes: [], history: [], loading: true, redeeming: false, loggedIn: true },
 
   async onShow() {
+    ensureCurrencyCached()
     await api.refreshMember()
     this.load()
   },
@@ -16,8 +18,8 @@ Page({
         balance: r.balance || 0,
         prizes: (r.prizes || []).map((p) => ({
           ...p,
-          desc: p.discountType === 'percent' ? `${p.percentOff}% off` : `减 $${Math.round((p.amountCents || 0) / 100)}`,
-          minText: p.minSpendCents > 0 ? ` · 满 $${Math.round(p.minSpendCents / 100)} 可用` : '',
+          desc: p.discountType === 'percent' ? `${p.percentOff}% off` : `减 ${money(p.amountCents || 0)}`,
+          minText: p.minSpendCents > 0 ? ` · 满 ${money(p.minSpendCents)} 可用` : '',
           stockText: p.soldOut ? '已兑完' : `剩 ${p.stock} 份`,
           btnText: p.soldOut ? '已兑完' : (p.limitReached ? '已达限兑' : (p.canRedeem ? '兑换' : '积分不足'))
         })),

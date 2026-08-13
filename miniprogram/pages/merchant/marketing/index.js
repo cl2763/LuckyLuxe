@@ -1,4 +1,5 @@
 const api = require('../../../utils/api')
+const { storeMoney } = require('../../../utils/storeclock')
 
 const SLEEP_DAYS = 60
 
@@ -23,7 +24,7 @@ Page({
       const revisitN = (remRes.reminderTasks || []).filter((t) => ['pending', 'scheduled', 'queued'].includes(String(t.status || '').toLowerCase())).length
       this.setData({
         sleepN: sleepers.length,
-        sleepNames: sleepers.map((c) => `${c.displayName || '会员'}(余额 $${((c.storedValueBalanceCents || 0) / 100).toFixed(0)})`),
+        sleepNames: sleepers.map((c) => `${c.displayName || '会员'}(余额 ${storeMoney(c.storedValueBalanceCents || 0)})`),
         revisitN,
         loading: false
       })

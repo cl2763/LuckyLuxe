@@ -1,4 +1,5 @@
 const api = require('../../../utils/api')
+const { storeMoney } = require('../../../utils/storeclock')
 
 Page({
   data: { groups: [], loading: true },
@@ -16,7 +17,7 @@ Page({
         price: (s.priceCents || 0) / 100,
         dur: s.durationMin || 0,
         active: s.isActive !== false,
-        meta: `${label[s.type] || s.type} · $${(s.priceCents || 0) / 100}${s.durationMin ? ' · ' + s.durationMin + 'min' : ''}${s.isActive === false ? ' · 已下架' : ''}`
+        meta: `${label[s.type] || s.type} · ${storeMoney(s.priceCents || 0)}${s.durationMin ? ' · ' + s.durationMin + 'min' : ''}${s.isActive === false ? ' · 已下架' : ''}`
       }))
       const groups = [
         { key: 'nail', title: '美甲', items: mk('nail') },

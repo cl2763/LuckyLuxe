@@ -1,4 +1,5 @@
 const api = require('../../utils/api')
+const { money } = require('../../utils/storecurrency')
 
 function genQr(seed) {
   const N = 21
@@ -25,11 +26,11 @@ function genQr(seed) {
 }
 
 function fmtCoupon(c) {
-  const amt = c.discountType === 'percent' ? `${c.percentOff > 0 ? (100 - c.percentOff) / 10 : 9}折` : `$${(c.amountCents || 0) / 100}`
+  const amt = c.discountType === 'percent' ? `${c.percentOff > 0 ? (100 - c.percentOff) / 10 : 9}折` : money(c.amountCents || 0)
   return {
     id: c.id, code: c.code, status: c.status, name: c.name,
-    amt: c.discountType === 'percent' ? `立减${c.percentOff}%` : `$${(c.amountCents || 0) / 100}`,
-    unit: c.minSpendCents ? `满$${c.minSpendCents / 100}` : '',
+    amt: c.discountType === 'percent' ? `立减${c.percentOff}%` : money(c.amountCents || 0),
+    unit: c.minSpendCents ? `满${money(c.minSpendCents)}` : '',
     exp: c.status === 'used' ? `已于 ${String(c.usedAt || '').slice(0, 10)} 使用`
       : c.status === 'revoked' ? '已失效(兑换已撤销,积分退回)'
       : c.status === 'expired' ? `已于 ${String(c.expiresAt || '').slice(0, 10)} 过期`

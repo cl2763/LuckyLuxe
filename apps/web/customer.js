@@ -460,22 +460,28 @@ function compactUserCode(user) {
 }
 
 function userWaivesDeposit(user = state.user) {
-  return Boolean(user?.depositWaived || ['gold', 'platinum', 'diamond'].includes(String(user?.memberTier || '').toLowerCase()) || ['Gold', 'Gold Member', 'Platinum', 'Platinum Member', 'Diamond', 'Diamond Member'].includes(user?.memberLevel))
+  // F3 单源:免定金只认后端 depositWaived(租户梯子推导);本地键名/标签名单兜底已删
+  return Boolean(user?.depositWaived)
 }
 
-const MEMBER_TIERS = [
-  { key: 'silver', label: 'Silver Member', minSpend: 0, nextSpend: 500, depositWaived: false },
-  { key: 'gold', label: 'Gold Member', minSpend: 500, nextSpend: 1200, depositWaived: true },
-  { key: 'platinum', label: 'Platinum Member', minSpend: 1200, nextSpend: 2500, depositWaived: true },
-  { key: 'diamond', label: 'Diamond Member', minSpend: 2500, nextSpend: null, depositWaived: true }
-]
+/* F3 收敛(店主 2026-08-12 拍板②):等级梯子单源=后端 user.memberTiers(租户配置推导),
+   网页顾客端本地梯子副本已删。不分级店(membershipTiersEnabled=false)与小程序同口径三减法:
+   成长条不渲染 / 称谓只写「会员」/ 权益卡留空。 */
+function tiersDisabled(user = state.user) {
+  return user?.membershipTiersEnabled === false || !(Array.isArray(user?.memberTiers) && user.memberTiers.length)
+}
 
 function memberTierInfo(user = state.user) {
   const spend = Math.round(Number(user?.growthValue ?? ((user?.totalSpentCents || 0) / 100)) || 0)
-  const tierKey = String(user?.memberTier || '').toLowerCase() || 'silver'
-  const index = Math.max(0, MEMBER_TIERS.findIndex((item) => item.key === tierKey))
-  const tier = MEMBER_TIERS[index] || MEMBER_TIERS[0]
-  const nextTier = MEMBER_TIERS[index + 1] || null
+  if (tiersDisabled(user)) {
+    const plain = { key: 'member', label: state.lang === 'zh' ? '会员' : 'Member', minSpend: 0, nextSpend: null, depositWaived: Boolean(user?.depositWaived) }
+    return { tier: plain, nextTier: null, spend, nextValue: spend, amountToNext: 0, progress: 100, note: '' }
+  }
+  const tiersLadder = user.memberTiers
+  const tierKey = String(user?.memberTier || '').toLowerCase()
+  const index = Math.max(0, tiersLadder.findIndex((item) => item.key === tierKey))
+  const tier = tiersLadder[index] || tiersLadder[0]
+  const nextTier = tiersLadder[index + 1] || null
   const nextValue = user?.nextLevelValue || tier.nextSpend || spend
   const amountToNext = user?.amountToNextLevel === undefined
     ? (nextTier ? Math.max(0, nextTier.minSpend - spend) : 0)
@@ -1633,13 +1639,14 @@ function renderMe() {
             </div>
           </div>
         ` : ''}
+        ${tiersDisabled(user) ? '' : `
         <div class="growth-block">
           <div class="growth-head"><span>${t('memberGrowth')}</span><span>${tierInfo.spend} / ${tierInfo.nextValue}</span></div>
           <div class="growth-track"><div class="growth-fill" style="width:${tierInfo.progress}%"></div></div>
           <p class="growth-note">${tierInfo.note}</p>
           <p class="deposit-rule-note">${userWaivesDeposit(user) ? (state.lang === 'zh' ? '当前会员等级：预约免定金' : 'Current tier: booking deposit waived') : (state.lang === 'zh' ? `当前会员等级：预约需支付 ${moneyY(50)} 定金` : `Current tier: ${moneyY(50)} booking deposit required`)}</p>
           <button class="member-benefits-link" data-me-target="memberBenefits" type="button">${t('memberBenefitsIntro')}</button>
-        </div>
+        </div>`}
         <div class="member-assets">
           <div><strong>${user.points}</strong><span>${t('points')}</span></div>
           <div><strong>${user.couponCount}</strong><span>${t('coupons')}</span></div>
@@ -1928,7 +1935,7 @@ function renderMemberBenefitsWeb() {
         </div>
       </section>
       <section class="tier-grid-web">
-        ${MEMBER_TIERS.map((tier) => {
+        ${(tiersDisabled(user) ? [] : user.memberTiers).map((tier) => {
           const active = tier.key === tierInfo.tier.key
           return `
             <article class="tier-card-web ${active ? 'active' : ''}">

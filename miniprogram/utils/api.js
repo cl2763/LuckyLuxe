@@ -32,12 +32,8 @@ async function activeStoreId() {
 }
 const AUTH_KEY = 'lucky_mini_auth'
 const ADMIN_AUTH_KEY = 'lucky_admin_auth'
-const MEMBER_TIERS = [
-  { key: 'silver', label: 'Silver Member', minSpend: 0, nextSpend: 500, depositWaived: false },
-  { key: 'gold', label: 'Gold Member', minSpend: 500, nextSpend: 1200, depositWaived: true },
-  { key: 'platinum', label: 'Platinum Member', minSpend: 1200, nextSpend: 2500, depositWaived: true },
-  { key: 'diamond', label: 'Diamond Member', minSpend: 2500, nextSpend: null, depositWaived: true }
-]
+/* F3 收敛(店主 2026-08-12 拍板②):等级梯子单源=后端下发 user.memberTiers(租户配置推导)。
+   本地梯子副本已删——四份实现之一;顾客看到的等级只能来自后端,前端不再自算。 */
 
 const localImageMap = {
   '/assets/images/nail-french.png': '/assets/images/nail-french.jpg',
@@ -340,26 +336,28 @@ function miniMember(user = {}) {
   const hasRealName = Boolean(!isGenericName)
   const profileComplete = user.profileComplete === undefined ? Boolean(hasRealName || user.avatarUrl) : Boolean(user.profileComplete)
   const hasRealStats = user.hasRealStats === undefined ? Boolean(user.id) : Boolean(user.hasRealStats)
-  const tierKey = String(user.memberTier || '').toLowerCase() || 'silver'
-  const tierIndex = Math.max(0, MEMBER_TIERS.findIndex((item) => item.key === tierKey))
-  const tier = MEMBER_TIERS[tierIndex]
-  const nextTier = MEMBER_TIERS[tierIndex + 1] || null
+  // 等级信息全部以后端为准(租户单源);后端没给的字段一律中性回落,不再用本地梯子补
+  const tiers = Array.isArray(user.memberTiers) ? user.memberTiers : []
+  const tierKey = String(user.memberTier || '').toLowerCase() || 'member'
+  const tierIndex = tiers.findIndex((item) => item.key === tierKey)
+  const tier = tierIndex >= 0 ? tiers[tierIndex] : null
+  const nextTier = tierIndex >= 0 ? (tiers[tierIndex + 1] || null) : null
   const growthValue = hasRealStats ? (user.growthValue || 0) : 0
-  const nextLevelValue = user.nextLevelValue || tier.nextSpend || growthValue
+  const nextLevelValue = user.nextLevelValue || (tier && tier.nextSpend) || growthValue
   const profileDisplayName = isGenericName ? (user.id || memberCode || '微信用户') : displayName
   return {
     nickname: profileDisplayName,
     profileComplete,
-    memberLevel: user.memberLevel || tier.label,
-    memberTier: tier.key,
+    memberLevel: user.memberLevel || (tier ? tier.label : '会员'),
+    memberTier: tierKey,
     nextMemberLevel: user.nextMemberLevel || (nextTier ? nextTier.label : ''),
-    currentLevelValue: user.currentLevelValue || tier.minSpend,
+    currentLevelValue: user.currentLevelValue || (tier ? tier.minSpend : 0),
     amountToNextLevel: user.amountToNextLevel === undefined
       ? (nextTier ? Math.max(0, nextTier.minSpend - growthValue) : 0)
       : user.amountToNextLevel,
-    memberTiers: user.memberTiers || MEMBER_TIERS,
+    memberTiers: tiers,
     tiersEnabled: user.membershipTiersEnabled === undefined ? true : Boolean(user.membershipTiersEnabled),
-    depositWaived: user.depositWaived === undefined ? tier.depositWaived : Boolean(user.depositWaived),
+    depositWaived: Boolean(user.depositWaived),
     depositRule: user.depositRule || '',
     growthValue,
     nextLevelValue,
@@ -743,7 +741,6 @@ async function getAdminDashboardData() {
 module.exports = {
   API_BASE,
   DEMO_USER_ID,
-  MEMBER_TIERS,
   normalizeImage,
   ensureLogin,
   loginWithWechat,

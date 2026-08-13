@@ -2,13 +2,14 @@
 // 与网页「流水」同口径:GET /admin/finance/transactions?month=、POST /admin/finance/transactions/:id/reverse;
 // 冲销单和被冲销单都保留可见,账本只追加;CSV 导出留在网页端。
 const api = require('../../../utils/api')
+const { storeMoney } = require('../../../utils/storeclock')
 
 const CHANNEL_NAMES = { wechat: '微信', alipay: '支付宝', cash: '现金', card: '刷卡', stored_value: '储值卡', unknown: '其他' }
 
 function money(c) {
-  const v = (c || 0) / 100
-  const abs = Math.abs(v).toFixed(2).replace(/\B(?=(\d{3})+(?!\d))/g, ',')
-  return `${v < 0 ? '-' : ''}$${abs}`
+  // 币种红线:此前这里写死 '$',人民币店流水会显示成美元
+  const v = Number(c || 0)
+  return `${v < 0 ? '-' : ''}${storeMoney(Math.abs(v), 2)}`
 }
 function curMonth() {
   const d = new Date()

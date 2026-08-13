@@ -1,5 +1,5 @@
 // 构建号:每次交付递增。侧栏可见,排查"改了没生效"时先对版本。
-const ADMIN_BUILD = '20260812a-sweep-d31'
+const ADMIN_BUILD = '20260812b-review2-f3'
 console.log(`[admin] build ${ADMIN_BUILD}`)
 
 // "今天"必须按门店时区算,否则老板人在别的时区时全站日期错位一天。
@@ -2034,9 +2034,10 @@ function renderTenantKb() {
   const facts = kb.facts || {}
   const entries = kb.entries || []
   const enabledCount = entries.filter((item) => item.enabled).length
+  // 币种红线:币种代码后不再拼死 '$'(人民币店会显示成 CNY $30)
   els.kbSummary.textContent = owner.lang === 'zh'
-    ? `${enabledCount} 条 FAQ · 定金 ${facts.currency || 'CAD'} $${facts.depositAmount || '-'}`
-    : `${enabledCount} FAQ entries · Deposit ${facts.currency || 'CAD'} $${facts.depositAmount || '-'}`
+    ? `${enabledCount} 条 FAQ · 定金 ${facts.currency || ''} ${facts.depositAmount || '-'}`
+    : `${enabledCount} FAQ entries · Deposit ${facts.currency || ''} ${facts.depositAmount || '-'}`
   els.kbDetailBody.innerHTML = `
     <div class="kb-facts-grid">
       <label><span>${owner.lang === 'zh' ? '品牌名' : 'Brand'}</span><input id="kbFactBrand" value="${escapeHtml(facts.brandName || '')}"></label>
@@ -2144,8 +2145,9 @@ function financeExpenseCategories() {
 }
 
 function cadText(cents) {
-  const value = (cents || 0) / 100
-  return `${value < 0 ? '-' : ''}$${Math.abs(value).toLocaleString('en-CA', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`
+  // 币种红线:此前写死 '$'(函数名都叫 cadText);现在走 money() 门店币种,只保留负号语义
+  const v = Number(cents || 0)
+  return `${v < 0 ? '-' : ''}${money(Math.abs(v), 2)}`
 }
 
 function renderFinanceLock() {

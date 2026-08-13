@@ -366,7 +366,7 @@ Page({
           nickname: profile.nickname || currentMember.nickname || (this.data.lang === 'en' ? 'WeChat User' : '微信用户'),
           avatarUrl: profile.avatarUrl || currentMember.avatarUrl || DEFAULT_AVATAR,
           profileComplete: true,
-          memberLevel: currentMember.memberLevel || 'Silver Member'
+          memberLevel: currentMember.memberLevel || '会员' // F3 单源:兜底不再写死梯子标签
         }))
         this.debugAuth('profile save success')
         wx.showToast({ title: this.data.lang === 'en' ? 'Profile saved' : '资料已保存', icon: 'success' })
@@ -401,7 +401,7 @@ Page({
         nickname: profile.nickname || currentMember.nickname || loginResult.id || loginResult.displayName || currentMember.memberCode || (this.data.lang === 'en' ? 'WeChat User' : '微信用户'),
         avatarUrl: profile.avatarUrl || currentMember.avatarUrl || DEFAULT_AVATAR,
         profileComplete: hasProfile || Boolean(currentMember.profileComplete),
-        memberLevel: currentMember.memberLevel || 'Silver Member',
+        memberLevel: currentMember.memberLevel || '会员', // F3 单源:兜底不再写死梯子标签
         phoneAuthorized: false,
         phoneCode: '',
         phone: ''

@@ -37,16 +37,16 @@ Page({
       const pkgs = pkg.packages || []
       const recharges = pkgs.filter((p) => p.kind === 'recharge').map((p) => ({
         id: p.id, name: p.name, active: p.isActive !== false,
-        sub: `售价 $${(p.priceCents || 0) / 100}` + (p.bonusCents ? ` · 送 $${p.bonusCents / 100}` : '') + (p.benefits ? ` · ${p.benefits}` : '')
+        sub: `售价 ${storeMoney(p.priceCents || 0)}` + (p.bonusCents ? ` · 送 ${storeMoney(p.bonusCents)}` : '') + (p.benefits ? ` · ${p.benefits}` : '')
       }))
       const timesCards = pkgs.filter((p) => p.kind === 'times').map((p) => ({
         id: p.id, name: p.name, active: p.isActive !== false,
-        sub: `售价 $${(p.priceCents || 0) / 100}` + (p.timesCount ? ` · ${p.timesCount} 次` : '') + (p.scope ? ` · ${p.scope}` : '')
+        sub: `售价 ${storeMoney(p.priceCents || 0)}` + (p.timesCount ? ` · ${p.timesCount} 次` : '') + (p.scope ? ` · ${p.scope}` : '')
       }))
       const coupons = (cpn.coupons || []).map((c) => ({
         id: c.id, name: c.name, active: c.isActive !== false,
-        sub: (c.discountType === 'percent' ? `立减 ${c.percentOff}%` : `减 $${(c.amountCents || 0) / 100}`)
-          + (c.minSpendCents ? ` · 满 $${c.minSpendCents / 100}` : ' · 无门槛')
+        sub: (c.discountType === 'percent' ? `立减 ${c.percentOff}%` : `减 ${storeMoney(c.amountCents || 0)}`)
+          + (c.minSpendCents ? ` · 满 ${storeMoney(c.minSpendCents)}` : ' · 无门槛')
           + ` · ${c.validDays}天`
           + (c.totalQty ? ` · 限 ${c.totalQty} 张` : '')
       }))

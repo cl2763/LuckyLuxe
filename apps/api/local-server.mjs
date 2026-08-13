@@ -5282,12 +5282,23 @@ function serializeService(row, lang = 'zh') {
   }
 }
 
-const MEMBER_TIERS = [
-  { key: 'silver', label: 'Silver Member', minSpendCents: 0, nextSpendCents: 50000, depositWaived: false },
-  { key: 'gold', label: 'Gold Member', minSpendCents: 50000, nextSpendCents: 120000, depositWaived: true },
-  { key: 'platinum', label: 'Platinum Member', minSpendCents: 120000, nextSpendCents: 250000, depositWaived: true },
-  { key: 'diamond', label: 'Diamond Member', minSpendCents: 250000, nextSpendCents: null, depositWaived: true }
-]
+/* 等级单源(F3 收敛,店主 2026-08-12 拍板②):梯子只有一个事实源=租户 membership_config.tiers(平台配置)。
+   全局硬编码梯子已删——此前仓里有四份(本文件全局/客户列表内联/网页顾客端/小程序 api.js),
+   客户列表那份阈值还不一样(10/30/60万 vs 5/12/25万),同一人两端两个等级。
+   不分级店(tiersEnabled=false)返回空梯子,前端做三减法;等级内容日后店主在 S9 配置界面自改。 */
+function tenantMemberTiers(tenantId = currentTenantId()) {
+  const cfg = getMembershipConfig(tenantId)
+  if (!cfg.tiersEnabled) return []
+  const tiers = (cfg.tiers || [])
+    .map((t) => ({
+      key: String(t.key || '').toLowerCase() || 'tier',
+      label: String(t.label || t.key || '会员'),
+      minSpendCents: Math.max(0, Math.round(Number(t.minSpendCents) || 0)),
+      depositWaived: Boolean(t.depositWaived)
+    }))
+    .sort((a, b) => a.minSpendCents - b.minSpendCents)
+  return tiers.map((t, i) => ({ ...t, nextSpendCents: tiers[i + 1] ? tiers[i + 1].minSpendCents : null }))
+}
 
 function memberCodeForUserId(userId) {
   return `LL-${String(userId || 'member').replace(/[^a-z0-9]/gi, '').slice(-8).toUpperCase().padStart(8, '0')}`
@@ -5312,14 +5323,23 @@ function isGenericDisplayName(value, userId = '') {
   return ['Lucky Member', '微信用户', 'WeChat User', displayNameForUserId(userId)].includes(displayName)
 }
 
-function membershipForSpend(totalSpentCents = 0) {
+function membershipForSpend(totalSpentCents = 0, tenantId = currentTenantId()) {
   const spend = Number(totalSpentCents || 0)
-  const tierIndex = MEMBER_TIERS.findLastIndex
-    ? MEMBER_TIERS.findLastIndex((item) => spend >= item.minSpendCents)
-    : MEMBER_TIERS.map((item, index) => ({ item, index })).reverse().find(({ item }) => spend >= item.minSpendCents)?.index
-  const safeTierIndex = tierIndex >= 0 ? tierIndex : 0
-  const tier = MEMBER_TIERS[safeTierIndex]
-  const nextTier = MEMBER_TIERS[safeTierIndex + 1] || null
+  const tiers = tenantMemberTiers(tenantId)
+  if (!tiers.length) {
+    // 不分级店:称谓统一「会员」,无成长梯,不按等级免定金(免不免走门店预约规则,不走等级)
+    return {
+      memberLevel: '会员', memberTier: 'member',
+      growthValue: Math.round(spend / 100), nextLevelValue: Math.round(spend / 100),
+      currentLevelValue: 0, nextMemberLevel: null, amountToNextLevel: 0,
+      memberTiers: [], depositWaived: false,
+      depositRule: `Deposit ${formatMoneyCents(5000, tenantId, 'auto')} per booking unless waived by store rules.`
+    }
+  }
+  let tierIndex = 0
+  for (let i = tiers.length - 1; i >= 0; i -= 1) { if (spend >= tiers[i].minSpendCents) { tierIndex = i; break } }
+  const tier = tiers[tierIndex]
+  const nextTier = tiers[tierIndex + 1] || null
   const nextLevelValue = tier.nextSpendCents ?? spend
   return {
     memberLevel: tier.label,
@@ -5329,7 +5349,7 @@ function membershipForSpend(totalSpentCents = 0) {
     currentLevelValue: Math.round(tier.minSpendCents / 100),
     nextMemberLevel: nextTier ? nextTier.label : null,
     amountToNextLevel: nextTier ? Math.max(0, Math.round((nextTier.minSpendCents - spend) / 100)) : 0,
-    memberTiers: MEMBER_TIERS.map((item) => ({
+    memberTiers: tiers.map((item) => ({
       key: item.key,
       label: item.label,
       minSpend: Math.round(item.minSpendCents / 100),
@@ -5339,7 +5359,7 @@ function membershipForSpend(totalSpentCents = 0) {
     depositWaived: tier.depositWaived,
     depositRule: tier.depositWaived
       ? `${tier.label} and above do not need to pay booking deposits.`
-      : `Silver Member pays ${formatMoneyCents(5000, currentTenantId(), 'auto')} deposit for each booking.`
+      : `${tiers[0].label} pays ${formatMoneyCents(5000, tenantId, 'auto')} deposit for each booking.`
   }
 }
 
@@ -5586,7 +5606,7 @@ function serializeUser(user, tenantId = DEFAULT_TENANT_ID) {
   // 每店独立会员:消费/到店/积分/等级/储值都只算这家店(tenant)
   const stats = userBookingStats(user.id, tenantId)
   const totalSpentCents = Number(stats.total_spent_cents || stats.totalSpentCents || 0)
-  const membership = membershipForSpend(totalSpentCents)
+  const membership = membershipForSpend(totalSpentCents, tenantId)
   const displayName = isGenericDisplayName(user.display_name, user.id) ? memberCode : user.display_name
   return {
     id: user.id,
@@ -5607,8 +5627,8 @@ function serializeUser(user, tenantId = DEFAULT_TENANT_ID) {
     memberTiers: membership.memberTiers,
     depositWaived: membership.depositWaived,
     depositRule: membership.depositRule,
-    // 积分=消费推导+台账(兑换扣减/冲正);与积分商城余额同口径
-    points: Math.floor(totalSpentCents / 100) + pointsLedgerSum(user.id, tenantId),
+    // 积分单源:pointsBalance(赚分行+台账)——此前这里用 totalSpent 直推,是第四处各自推导
+    points: pointsBalance(user.id, tenantId),
     couponCount: 0,
     balanceCents: storedValueBalanceCents(user.id, tenantId),
     totalSpentCents,
@@ -6161,10 +6181,29 @@ function getAvailability(query) {
   return { date, durationMin, slots: result }
 }
 
-// ===== 积分:赚分=完成单消费推导($1=1分,与既有展示口径一致);余额=赚分+台账(兑换负/冲正正) =====
+/* ===== 积分(店主 2026-08-12 拍板 B,《财务总逻辑》恒等式区):积分 ≡ 档位小计 × 1元=1分,
+   与业绩基数同源——不按标价、不按实收;储值抵扣部分照常积分。历史积分不追溯:
+   切换时点前的单按旧口径(COMPLETED 预约 × 服务标价推导),之后的新单按已签结算单档位小计。
+   划线键=预约服务时间(appointment_start),新旧两段互斥不重叠。
+   赚分行单源:余额 / 积分页明细 / 积分历史三处全从 pointsEarnRows 出——此前三处各自推导,
+   兑换行只进余额不进明细,正是 D36「三账不齐」的根。 ===== */
+const POINTS_POLICY_B_SWITCH_ISO = '2026-08-14T00:00:00.000Z'
+function pointsEarnRows(userId, tenantId = currentTenantId()) {
+  const legacy = db.prepare(`SELECT b.id AS ref, b.appointment_start AS at, b.service_price_cents AS cents, s.name_zh AS sname
+    FROM bookings b LEFT JOIN services s ON s.id = b.service_id
+    WHERE b.user_id = ? AND b.tenant_id = ? AND b.status = 'COMPLETED' AND b.appointment_start < ?`)
+    .all(userId, tenantId, POINTS_POLICY_B_SWITCH_ISO)
+    .map((r) => ({ refId: r.ref, at: r.at, points: Math.floor((r.cents || 0) / 100), title: `到店消费 · ${r.sname || '服务'}` }))
+  const fresh = db.prepare(`SELECT st.id AS ref, st.signed_at AS at, st.subtotal_cents AS cents, sv.name_zh AS sname
+    FROM settlements st JOIN bookings b ON b.id = st.booking_id
+    LEFT JOIN services sv ON sv.id = b.service_id
+    WHERE b.user_id = ? AND st.tenant_id = ? AND st.status = 'signed' AND b.appointment_start >= ?`)
+    .all(userId, tenantId, POINTS_POLICY_B_SWITCH_ISO)
+    .map((r) => ({ refId: r.ref, at: r.at, points: Math.floor((r.cents || 0) / 100), title: `到店消费 · ${r.sname || '服务'}` }))
+  return legacy.concat(fresh)
+}
 function earnedPoints(userId, tenantId = currentTenantId()) {
-  const row = db.prepare("SELECT COALESCE(SUM(service_price_cents), 0) AS s FROM bookings WHERE user_id = ? AND tenant_id = ? AND status = 'COMPLETED'").get(userId, tenantId)
-  return Math.floor((row.s || 0) / 100)
+  return pointsEarnRows(userId, tenantId).reduce((sum, r) => sum + r.points, 0)
 }
 function pointsLedgerSum(userId, tenantId = currentTenantId()) {
   return db.prepare('SELECT COALESCE(SUM(amount), 0) AS s FROM points_transactions WHERE user_id = ? AND tenant_id = ?').get(userId, tenantId).s
@@ -6580,8 +6619,9 @@ function getAdminCustomers() {
     birthday: row.birthday || '',
     storedValueBalanceCents: storedValueBalanceCents(row.id),
     memberCode: memberCodeForUserId(row.id),
-    // 等级按累计消费推导(默认阈值,以后由商家在租户配置里自定义)
-    memberTier: row.total_spent_cents >= 600000 ? 'Diamond' : row.total_spent_cents >= 300000 ? 'Platinum' : row.total_spent_cents >= 100000 ? 'Gold' : 'Silver'
+    // 等级单源(F3):与顾客端同一套租户梯子 —— 此前这里是另一套内联阈值(10/30/60万),
+    // 与全局梯子(5/12/25万)不一致,同一人商家端列表与顾客端显示两个等级
+    memberTier: membershipForSpend(row.total_spent_cents || 0).memberTier
   }))
 }
 
@@ -10774,11 +10814,10 @@ async function route(req, res) {
           canRedeem: balance >= r.cost_points && r.stock > 0 && !(r.per_user_limit > 0 && myCount >= r.per_user_limit)
         })
       })
-    // 明细:赚分(完成单推导)+ 台账(兑换/冲正)合并按时间倒序
-    const earns = db.prepare(`SELECT b.id, b.appointment_start AS at, b.service_price_cents AS cents, s.name_zh AS sname
-      FROM bookings b LEFT JOIN services s ON s.id = b.service_id
-      WHERE b.user_id = ? AND b.tenant_id = ? AND b.status = 'COMPLETED' ORDER BY b.appointment_start DESC LIMIT 20`).all(customer.id, tid)
-      .map((r) => ({ title: `到店消费 · ${r.sname || '服务'}`, at: r.at, delta: Math.floor((r.cents || 0) / 100) }))
+    // 明细:赚分(pointsEarnRows 单源,与余额同一来源)+ 台账(兑换/冲正)合并按时间倒序
+    const earns = pointsEarnRows(customer.id, tid)
+      .sort((a, b) => String(b.at).localeCompare(String(a.at))).slice(0, 20)
+      .map((r) => ({ title: r.title, at: r.at, delta: r.points }))
     const ledger = db.prepare('SELECT type, amount, note, created_at FROM points_transactions WHERE user_id = ? AND tenant_id = ? ORDER BY created_at DESC LIMIT 20').all(customer.id, tid)
       .map((r) => ({ title: r.note || (r.type === 'redeem' ? '积分兑换' : '积分退回'), at: r.created_at, delta: r.amount }))
     const history = earns.concat(ledger).sort((a, b) => String(b.at).localeCompare(String(a.at))).slice(0, 25)
@@ -10823,16 +10862,15 @@ async function route(req, res) {
   if (req.method === 'GET' && path === '/my/points-history') {
     const customer = requireCustomer(req)
     const tid = resolveTenant(req, query)
-    // 积分台账(权威版):由本店已完成订单推导,消费 $1 = 1 分;兑换扣分待积分商城接入
-    const rows = db.prepare(`SELECT b.id, b.appointment_start, b.service_price_cents, s.name_zh AS service_name
-      FROM bookings b LEFT JOIN services s ON s.id = b.service_id
-      WHERE b.user_id = ? AND b.tenant_id = ? AND b.status = 'COMPLETED' ORDER BY b.appointment_start DESC LIMIT 50`).all(customer.id, tid)
-    return json(res, 200, {
-      records: rows.map((r) => ({
-        id: r.id, title: '消费获得 · ' + (r.service_name || '服务'),
-        date: localParts(r.appointment_start).date, delta: Math.floor((r.service_price_cents || 0) / 100)
-      }))
-    })
+    // 积分历史 = 赚分行(pointsEarnRows 单源)+ 台账行(兑换/冲正)——列表必须能加总出余额,
+    // 只列赚分不列兑换 = D36 三账不齐的形状之一
+    const earns = pointsEarnRows(customer.id, tid)
+      .map((r) => ({ id: r.refId, title: '消费获得 · ' + r.title.replace(/^到店消费 · /, ''), at: r.at, delta: r.points }))
+    const ledger = db.prepare('SELECT id, type, amount, note, created_at FROM points_transactions WHERE user_id = ? AND tenant_id = ? ORDER BY created_at DESC LIMIT 50').all(customer.id, tid)
+      .map((r) => ({ id: r.id, title: (r.note || (r.type === 'redeem' ? '积分兑换' : '积分调整')).split(' #')[0], at: r.created_at, delta: r.amount }))
+    const records = earns.concat(ledger).sort((a, b) => String(b.at).localeCompare(String(a.at))).slice(0, 50)
+      .map((r) => ({ id: r.id, title: r.title, date: localParts(r.at).date, delta: r.delta }))
+    return json(res, 200, { records })
   }
   if (req.method === 'GET' && path === '/bookings') {
     // 隐私+一致性+多租户:必须登录,只返回本人在"当前进的店"的订单
@@ -16720,6 +16758,32 @@ for (const sql of [
 // 存量项目的原价回填成 list 档,保证「services.price_cents === service_prices(list)」双写口径从第一天成立
 db.exec(`INSERT OR IGNORE INTO service_prices (id, tenant_id, service_id, tier_key, price_cents)
   SELECT 'sp-list-' || id, tenant_id, id, 'list', price_cents FROM services`)
+
+// ===== 一次性决策落地(店主 2026-08-12 复核二轮拍板,幂等:标记行防重放)=====
+// 拍板②:lucky-luxe 开分级显示,以原全局 MEMBER_TIERS 为初始租户配置(内容日后店主在 S9 界面自改)。
+// 用决策标记而非「无行才写」做幂等 —— 本地库还原步曾写过默认等值行;标记也保证店主日后手动关闭不被重放覆盖。
+try {
+  const tiersDecided = db.prepare("SELECT 1 FROM tenant_settings WHERE tenant_id = 'lucky-luxe' AND key = 'tiers_decision_20260812'").get()
+  if (!tiersDecided) {
+    const initialTiers = [
+      { key: 'silver', label: 'Silver Member', minSpendCents: 0, depositWaived: false },
+      { key: 'gold', label: 'Gold Member', minSpendCents: 50000, depositWaived: true },
+      { key: 'platinum', label: 'Platinum Member', minSpendCents: 120000, depositWaived: true },
+      { key: 'diamond', label: 'Diamond Member', minSpendCents: 250000, depositWaived: true }
+    ]
+    setMembershipConfig('lucky-luxe', { tiersEnabled: true, tiers: initialTiers })
+    db.prepare("INSERT INTO tenant_settings (tenant_id, key, value, updated_at) VALUES ('lucky-luxe', 'tiers_decision_20260812', ?, ?)")
+      .run(JSON.stringify({ decidedBy: '店主 2026-08-12 拍板②', note: '开分级显示;初始梯子=原全局 MEMBER_TIERS;F3 分叉债收敛为租户单源' }), iso(new Date()))
+  }
+} catch (e) { console.error('拍板②迁移失败(不阻塞启动):', e.message) }
+// 拍板①留痕:积分口径 B(积分≡档位小计,历史不追溯)。给库里现存租户各写一行留痕(INSERT OR IGNORE 幂等)。
+try {
+  const tenantIds = db.prepare('SELECT DISTINCT tenant_id AS t FROM tenant_settings UNION SELECT DISTINCT tenant_id FROM bookings').all().map((r) => r.t)
+  const mark = db.prepare("INSERT OR IGNORE INTO tenant_settings (tenant_id, key, value, updated_at) VALUES (?, 'points_policy', ?, ?)")
+  for (const t of tenantIds) {
+    mark.run(t, JSON.stringify({ policy: 'B_subtotal', switchAtIso: POINTS_POLICY_B_SWITCH_ISO, decidedBy: '店主 2026-08-12 拍板①', note: '积分≡档位小计×1元=1分;历史积分不追溯,切换时点前按旧口径(标价推导)' }), iso(new Date()))
+  }
+} catch (e) { console.error('拍板①留痕失败(不阻塞启动):', e.message) }
 
 seedDatabase()
 // 演示环境:铺一批顾客服务小记,让「有小记/无小记」两态在老板端+员工端都能直接看到

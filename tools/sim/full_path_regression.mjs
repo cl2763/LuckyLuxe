@@ -192,7 +192,7 @@ if (!skipStaff) await run('S4', '员工:UI 层无财务/工资入口(按分组�
 /* ===== 顾客端 ===== */
 const mini = await fetch(BASE + '/auth/wechat/mini-login', { method: 'POST', headers: { 'content-type': 'application/json', 'x-tenant-id': TENANT }, body: JSON.stringify({ demoLogin: true, tenantId: TENANT }) }).then((r) => r.json());
 // auth 与租户必须一起写 —— ONLY= 挑跑时残留上一轮别店的 storage,页面和直连 fetch 会各查各店
-const asCust = () => mp.evaluate((auth, tenant, uid) => { wx.setStorageSync('lucky_mini_auth', auth); wx.setStorageSync('lucky_tenant', tenant); wx.setStorageSync('lucky_member', { id: uid }); }, mini.auth, TENANT, (mini.user || {}).id); // 与真实登录流同构:lucky_member 至少有 id
+const asCust = () => mp.evaluate((auth, tenant, uid) => { wx.setStorageSync('lucky_mini_auth', auth); wx.setStorageSync('lucky_tenant', tenant); wx.setStorageSync('lucky_member', { id: uid }); wx.removeStorageSync('lucky_store_currency'); wx.removeStorageSync('lucky_store_deposit'); /* 换店同构:shop-select 会清币种缓存,走查注入也必须清 */ }, mini.auth, TENANT, (mini.user || {}).id); // 与真实登录流同构:lucky_member 至少有 id
 await run('C1', '顾客:首页→服务→预约提交(「预约已提交」,丁 D20)→撤', async () => {
   await asCust();
   let p = await go('/pages/home/index', 3200);

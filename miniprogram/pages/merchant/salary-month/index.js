@@ -42,7 +42,7 @@ Page({
         srcText: x.planSource === 'custom' ? '专属方案' : (x.planSource === 'default' ? '默认方案' : ''),
         cardText: money(x.cardCents), cardUseText: money(x.cardUseCents),
         rechText: money(x.rechargePayCents), rechUseText: money(x.rechargeCents),
-        adjText: (x.adjustCents > 0 ? '+' : '') + money(x.adjustCents).replace('$-', '-$')
+        adjText: (x.adjustCents > 0 ? '+' : x.adjustCents < 0 ? '-' : '') + money(Math.abs(x.adjustCents)) // 正负号自己拼,不做 '$-'→'-$' 的币符搬运(写死了美元符)
       }))
       this.setData({
         rows, total: money(r.totalCents), keyMissing: false, loading: false,

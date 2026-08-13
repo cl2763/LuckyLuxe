@@ -89,7 +89,8 @@ Page({
   getLevels(lang, member) {
     const copy = lang === 'en' ? BENEFITS_EN : BENEFITS_ZH
     // S9 小件:不分级店权益卡区留空(tiers 空数组 → wxml 区块不渲染)
-    const tiers = member.tiersEnabled === false ? [] : (member.memberTiers && member.memberTiers.length ? member.memberTiers : api.MEMBER_TIERS)
+    // F3 单源:梯子只认后端下发;后端没给=不分级/未配置,留空(不再落本地梯子副本)
+    const tiers = member.tiersEnabled === false ? [] : (member.memberTiers || [])
     const currentIndex = Math.max(0, tiers.findIndex((item) => item.key === member.memberTier))
     const spend = Number(member.growthValue || 0)
     return tiers.map((tier, index) => {
