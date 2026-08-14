@@ -16,12 +16,12 @@
 import { connect, sleep } from './lib.mjs';
 
 const BASE = 'http://127.0.0.1:4128';
-const TOKEN = 'sess_msnk2ktp_tha9l7_3d1gp3gu';
-const FX_USER = 'user_msojbzxv_h59nc8';
-const FX_BOOKING = 'booking_msoud7nw_pblnec';
-const GRANT = 'grant_msouczag_nun3sw';
-const COUPON = { amountCents: 3000, minSpendCents: 20000 };
-const DEPOSIT_RECEIPT = 10000;
+const TOKEN = process.env.FX_TOKEN || 'sess_msnk2ktp_tha9l7_3d1gp3gu';
+const FX_USER = process.env.FX_USER || 'user_msojbzxv_h59nc8';
+const FX_BOOKING = process.env.FX_BOOKING || 'booking_msoud7nw_pblnec';
+const GRANT = process.env.FX_GRANT || 'grant_msouczag_nun3sw';
+const COUPON = { amountCents: Number(process.env.FX_CPN_AMT || 3000), minSpendCents: Number(process.env.FX_CPN_MIN || 20000) };
+const DEPOSIT_RECEIPT = Number(process.env.FX_DEP || 10000);
 
 const START = Number(process.argv[2] || 1);
 const COUNT = Number(process.argv[3] || 22);
@@ -51,7 +51,7 @@ const TIERS = ['list', 'member', 'share'];
 const TF = { list: 'listPriceCents', member: 'memberPriceCents', share: 'sharePriceCents' };
 const priceOf = (id, tier) => { const it = ITEM[id]; const v = it[TF[tier]]; return v === null || v === undefined ? it.listPriceCents : v; };
 
-const balance = 49500; // 自动化验证-勿动 当前余额(随机轮零写入,恒定;开跑前已核)
+const balance = Number(process.env.FX_BAL || 49500); // fixture 户当前余额(env 驱动;随机轮零写入恒定,开跑前 fixture 脚本实测写入)
 
 // 独立计算器
 function calc(body) {
@@ -82,6 +82,14 @@ function calc(body) {
 }
 
 const mp = await connect();
+// 自带会话注入(链式跑法修正 2026-08-12):不再假定模拟器残留 jics 老板会话——
+// 前序走查可能留下别店会话,结算页目录会与 ITEM 对不上(undefined.id 全组炸)
+await mp.evaluate((tok, base) => {
+  wx.setStorageSync('lucky_admin_auth', { accessToken: tok, tokenType: 'bearer', apiBase: base });
+  wx.setStorageSync('lucky_admin_role', 'owner');
+  wx.setStorageSync('lucky_tenant', 'jics-nail');
+}, TOKEN, BASE);
+await sleep(400);
 const ds = (o) => ({ currentTarget: { dataset: o } });
 const dv = (o, v) => ({ currentTarget: { dataset: o }, detail: { value: v } });
 
