@@ -71,7 +71,8 @@ Page({
           storage.removeCartItem(id)
           this.refresh()
         }
-      }
+      },
+      fail: (e) => console.warn('[showModal fail]', e) // S组卫生批:fail=开发者域错误,console 留痕不弹 UI(toast 会撞转场,D27 家族)
     })
   },
 
@@ -102,7 +103,8 @@ Page({
         confirmColor: '#C6A27E',
         success: (res) => {
           if (res.confirm) wx.switchTab({ url: '/pages/me/index' })
-        }
+        },
+        fail: (e) => console.warn('[showModal fail]', e) // S组卫生批:fail=开发者域错误,console 留痕不弹 UI(toast 会撞转场,D27 家族)
       })
       return
     }

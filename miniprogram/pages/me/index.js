@@ -598,7 +598,8 @@ Page({
       title: this.data.lang === 'en' ? 'Member code' : '会员码',
       content: `${this.data.member.memberCode || 'LL-F4ZY'}\n${this.data.lang === 'en' ? 'Show this code in store or share it as your referral code.' : '到店可出示此码，后续也可作为分享推荐码使用。'}`,
       confirmText: this.data.lang === 'en' ? 'OK' : '知道了',
-      showCancel: false
+      showCancel: false,
+      fail: (e) => console.warn('[showModal fail]', e) // S组卫生批:fail=开发者域错误,console 留痕不弹 UI(toast 会撞转场,D27 家族)
     })
   },
 

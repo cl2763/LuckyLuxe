@@ -81,7 +81,8 @@ Page({
           this.setData({ order })
           wx.showToast({ title: this.data.t.cancelled, icon: 'success' })
         }
-      }
+      },
+      fail: (e) => console.warn('[showModal fail]', e) // S组卫生批:fail=开发者域错误,console 留痕不弹 UI(toast 会撞转场,D27 家族)
     })
   },
 
