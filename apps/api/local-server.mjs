@@ -5231,6 +5231,13 @@ function servicePayload(body, current = {}) {
   }
 }
 
+/* S1 规则⑤:展示价「¥xxx 起」=该项目最低可用价档(行存在性),不存第二份价格 —— 改价档橱窗自动跟 */
+function startingPriceCentsOf(serviceId, fallbackCents) {
+  const rows = db.prepare('SELECT price_cents FROM service_prices WHERE service_id = ? AND price_cents > 0').all(serviceId)
+  if (!rows.length) return fallbackCents || 0
+  return Math.min(...rows.map((r) => r.price_cents))
+}
+
 function serializeService(row, lang = 'zh') {
   const type = String(row.type || '').toLowerCase()
   const serviceCurrency = tenantCurrencyCode(row.tenant_id || currentTenantId())
@@ -5264,6 +5271,13 @@ function serializeService(row, lang = 'zh') {
     imageUrl: row.image_url,
     price: cents(row.price_cents),
     priceCents: row.price_cents,
+    // S1:顾客橱窗展示价=最低可用价档+「起」(前端只拼字不算数)
+    startingPriceCents: startingPriceCentsOf(row.id, row.price_cents),
+    startingPrice: cents(startingPriceCentsOf(row.id, row.price_cents)),
+    priceFrom: true,
+    storefront: Boolean(row.storefront),
+    itemKind: row.item_kind || 'main',
+    isTimecard: Boolean(row.is_timecard),
     deposit: cents(effectiveDepositCents),
     depositCents: effectiveDepositCents,
     durationMin: row.base_duration_min,
@@ -5271,6 +5285,10 @@ function serializeService(row, lang = 'zh') {
     notice: parseJson(row.notice_json),
     requiresManualQuote: isNail,
     pricingType: isNail ? 'base_plus_quote' : 'fixed_final',
+    /* S1 顾客橱窗列表:「¥xxx 起」=最低可用价档(规则⑤)。独立字段——priceLabelZh/En 喂 AI 客服与详情页,
+       动它=动已训练话术(红线),所以列表换源不改旧 label。 */
+    priceFromLabelZh: `${serviceMoney(startingPriceCentsOf(row.id, row.price_cents))} 起`,
+    priceFromLabelEn: `From ${serviceMoney(startingPriceCentsOf(row.id, row.price_cents))}`,
     priceLabelZh: `${isNail ? '基础价' : '固定价'} ${serviceMoney(row.price_cents)}`,
     priceLabelEn: `${isNail ? 'Base price' : 'Fixed price'} ${serviceMoney(row.price_cents)}`,
     quoteHintZh: isNail ? '详细价格请联系客服获取报价' : '加项确认后即为最终报价',
@@ -7474,6 +7492,9 @@ function serializePricingItem(row) {
     depositCents: row.deposit_cents,
     sortOrder: row.sort_order,
     isActive: Boolean(row.is_active),
+    storefront: Boolean(row.storefront),
+    isTimecard: Boolean(row.is_timecard),
+    startingPriceCents: startingPriceCentsOf(row.id, row.price_cents),
     priceCents: row.price_cents,
     listPriceCents: prices.list ? prices.list.priceCents : row.price_cents,
     sharePriceCents: prices.share ? prices.share.priceCents : null,
@@ -10730,7 +10751,8 @@ async function route(req, res) {
   }
   if (req.method === 'GET' && path === '/services') {
     const args = [resolveTenant(req, query)]
-    let sql = 'SELECT * FROM services WHERE is_active = 1 AND tenant_id = ?'
+    // S1 规则⓪①:顾客端唯一数据源=模块①上架服务 —— 加项/次卡/未上架永不出现
+    let sql = "SELECT * FROM services WHERE is_active = 1 AND tenant_id = ? AND item_kind = 'main' AND COALESCE(storefront, 0) = 1 AND COALESCE(is_timecard, 0) = 0"
     if (query.type === 'care') {
       // 顾客端「护理·其他」tab:聚合 CARE + OTHER 两类
       sql += " AND type IN ('CARE', 'OTHER')"
@@ -11335,8 +11357,8 @@ async function route(req, res) {
     if (!payload.nameZh || !payload.nameEn) throw apiError(400, 'BAD_REQUEST', 'Service name is required.')
     const id = serviceIdFrom(payload)
     db.prepare(`INSERT INTO services
-      (id, tenant_id, type, category, name_zh, name_en, description_zh, description_en, image_url, price_cents, deposit_cents, base_duration_min, sort_order, is_active, process_json, notice_json)
-      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`).run(id, currentTenantId(), payload.type, payload.category, payload.nameZh, payload.nameEn, payload.descriptionZh, payload.descriptionEn, payload.imageUrl, payload.priceCents, payload.depositCents, payload.baseDurationMin, payload.sortOrder, payload.isActive, JSON.stringify(payload.processJson), JSON.stringify(payload.noticeJson))
+      (id, tenant_id, type, category, name_zh, name_en, description_zh, description_en, image_url, price_cents, deposit_cents, base_duration_min, sort_order, is_active, process_json, notice_json, storefront, is_timecard)
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`).run(id, currentTenantId(), payload.type, payload.category, payload.nameZh, payload.nameEn, payload.descriptionZh, payload.descriptionEn, payload.imageUrl, payload.priceCents, payload.depositCents, payload.baseDurationMin, payload.sortOrder, payload.isActive, JSON.stringify(payload.processJson), JSON.stringify(payload.noticeJson), 1, 0)
     // 2026-08-06:老「服务管理」页也走多价位模型的 list 档,保证 price_cents 与 service_prices(list) 永不漂移
     upsertServicePrice(currentTenantId(), id, 'list', payload.priceCents)
     const assign = db.prepare('INSERT OR IGNORE INTO technician_services (technician_id, service_id) VALUES (?, ?)')
@@ -11357,6 +11379,7 @@ async function route(req, res) {
     const body = await readBody(req)
     const current = getService(id)
     if (!current || (current.tenant_id && current.tenant_id !== currentTenantId())) throw apiError(404, 'NOT_FOUND', 'Service not found.')
+    if (Number(current.is_timecard) === 1) throw apiError(400, 'TIMECARD_MIGRATED', '次卡已迁出「服务与价目」,请在次卡管理中维护。')
     const payload = servicePayload(body, current)
     db.prepare(`UPDATE services SET
       type = ?, category = ?, name_zh = ?, name_en = ?, description_zh = ?, description_en = ?, image_url = ?,
@@ -11742,14 +11765,15 @@ async function route(req, res) {
       const listCents = Math.max(0, Math.round(Number(body.listPriceCents ?? body.priceCents ?? 0) || 0))
       db.prepare(`INSERT INTO services
         (id, tenant_id, type, category, name_zh, name_en, description_zh, description_en, image_url, price_cents, deposit_cents, base_duration_min, sort_order, is_active, process_json, notice_json,
-         item_kind, category_id, unit, price_rule, price_rule_value, addon_scope_json, addon_group)
-        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`).run(
+         item_kind, category_id, unit, price_rule, price_rule_value, addon_scope_json, addon_group, storefront, is_timecard)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`).run(
         id, tid, shape.type, shape.categoryName, nameZh, String(body.nameEn || nameZh), String(body.descriptionZh || ''), String(body.descriptionEn || ''),
         String(body.imageUrl || '/assets/images/nail-addon.jpg'), listCents,
         Math.max(0, Math.round(Number(body.depositCents ?? 0) || 0)),
         Math.max(0, Math.round(Number(body.baseDurationMin ?? 60) || 0)),
         Math.round(Number(body.sortOrder) || 0), body.isActive === false ? 0 : 1, '[]', '[]',
-        shape.itemKind, shape.categoryId, shape.unit, shape.priceRule, shape.priceRuleValue, JSON.stringify(shape.addonScope), shape.addonGroup || null)
+        shape.itemKind, shape.categoryId, shape.unit, shape.priceRule, shape.priceRuleValue, JSON.stringify(shape.addonScope), shape.addonGroup || null,
+        shape.itemKind === 'main' ? (body.storefront === false ? 0 : 1) : 0, 0)
       writePricingItemPrices(tid, id, body, listCents)
       // 主项目自动分配给全部在职技师(与 /admin/services 同规则);加项不占技师能力位
       if (shape.itemKind === 'main') {
@@ -11761,13 +11785,15 @@ async function route(req, res) {
     if (req.method === 'PATCH' && itemId) {
       const cur = db.prepare('SELECT * FROM services WHERE id = ? AND tenant_id = ?').get(itemId, tid)
       if (!cur) throw apiError(404, 'NOT_FOUND', 'Item not found.')
+      /* S1 合同规则③:次卡不属于服务目录,已迁出本页;编辑一律拒绝,S2 次卡管理接手。 */
+      if (Number(cur.is_timecard) === 1) throw apiError(400, 'TIMECARD_MIGRATED', '次卡已迁出「服务与价目」,请在次卡管理中维护。')
       const body = await readBody(req)
       const shape = pricingItemShape(body, cur, tid)
       const listCents = body.listPriceCents === undefined && body.priceCents === undefined
         ? cur.price_cents
         : Math.max(0, Math.round(Number(body.listPriceCents ?? body.priceCents) || 0))
       db.prepare(`UPDATE services SET type = ?, category = ?, name_zh = ?, name_en = ?, price_cents = ?, deposit_cents = ?, base_duration_min = ?,
-        sort_order = ?, is_active = ?, item_kind = ?, category_id = ?, unit = ?, price_rule = ?, price_rule_value = ?, addon_scope_json = ?, addon_group = ? WHERE id = ?`).run(
+        sort_order = ?, is_active = ?, storefront = ?, item_kind = ?, category_id = ?, unit = ?, price_rule = ?, price_rule_value = ?, addon_scope_json = ?, addon_group = ? WHERE id = ?`).run(
         shape.type, shape.categoryName,
         body.nameZh === undefined ? cur.name_zh : String(body.nameZh).trim().slice(0, 60) || cur.name_zh,
         body.nameEn === undefined ? cur.name_en : String(body.nameEn).trim().slice(0, 80),
@@ -11776,6 +11802,7 @@ async function route(req, res) {
         body.baseDurationMin === undefined ? cur.base_duration_min : Math.max(0, Math.round(Number(body.baseDurationMin) || 0)),
         body.sortOrder === undefined ? cur.sort_order : Math.round(Number(body.sortOrder) || 0),
         body.isActive === undefined ? cur.is_active : (body.isActive ? 1 : 0),
+        body.storefront === undefined ? (cur.storefront === null ? (cur.item_kind === 'main' && cur.is_active ? 1 : 0) : cur.storefront) : (body.storefront ? 1 : 0),
         shape.itemKind, shape.categoryId, shape.unit, shape.priceRule, shape.priceRuleValue, JSON.stringify(shape.addonScope), shape.addonGroup || null, itemId)
       writePricingItemPrices(tid, itemId, body, listCents)
       return json(res, 200, { item: serializePricingItem(db.prepare('SELECT * FROM services WHERE id = ?').get(itemId)) })
@@ -12632,9 +12659,9 @@ async function route(req, res) {
         if (!payload.nameZh) throw apiError(400, 'BAD_REQUEST', '服务中文名必填。')
         if (!payload.nameEn) payload.nameEn = payload.nameZh
         const id = serviceIdFrom(payload)
-        db.prepare(`INSERT INTO services (id, tenant_id, type, category, name_zh, name_en, description_zh, description_en, image_url, price_cents, deposit_cents, base_duration_min, sort_order, is_active, process_json, notice_json)
-          VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`)
-          .run(id, tenantId, payload.type, payload.category, payload.nameZh, payload.nameEn, payload.descriptionZh, payload.descriptionEn, payload.imageUrl, payload.priceCents, payload.depositCents, payload.baseDurationMin, payload.sortOrder, payload.isActive, JSON.stringify(payload.processJson), JSON.stringify(payload.noticeJson))
+        db.prepare(`INSERT INTO services (id, tenant_id, type, category, name_zh, name_en, description_zh, description_en, image_url, price_cents, deposit_cents, base_duration_min, sort_order, is_active, process_json, notice_json, storefront, is_timecard)
+          VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`)
+          .run(id, tenantId, payload.type, payload.category, payload.nameZh, payload.nameEn, payload.descriptionZh, payload.descriptionEn, payload.imageUrl, payload.priceCents, payload.depositCents, payload.baseDurationMin, payload.sortOrder, payload.isActive, JSON.stringify(payload.processJson), JSON.stringify(payload.noticeJson), 1, 0)
         upsertServicePrice(tenantId, id, 'list', payload.priceCents) // 与多价位模型的 list 档双写
         // 该租户在职技师自动可做新服务(与商家端一致)
         const assign = db.prepare('INSERT OR IGNORE INTO technician_services (technician_id, service_id) VALUES (?, ?)')
@@ -16829,7 +16856,11 @@ for (const sql of [
   // 储值分桶:legacy = 从老平台迁移过来的期初余额(不进本店财务收入),normal = 本系统内真实充值
   "ALTER TABLE stored_value_transactions ADD COLUMN bucket TEXT NOT NULL DEFAULT 'normal'",
   'ALTER TABLE users ADD COLUMN is_migrated INTEGER NOT NULL DEFAULT 0',
-  'ALTER TABLE users ADD COLUMN legacy_total_spend_cents INTEGER NOT NULL DEFAULT 0'
+  'ALTER TABLE users ADD COLUMN legacy_total_spend_cents INTEGER NOT NULL DEFAULT 0',
+  // S1+S3(图=合同 v1.2):storefront=顾客橱窗上架位(模块①),独立于 is_active;
+  // is_timecard=次卡暂存标记(规则③:迁出本页,S2 接管前不可编辑)
+  'ALTER TABLE services ADD COLUMN storefront INTEGER',
+  'ALTER TABLE services ADD COLUMN is_timecard INTEGER NOT NULL DEFAULT 0'
 ]) {
   try {
     db.exec(sql)
@@ -16867,6 +16898,31 @@ try {
     mark.run(t, JSON.stringify({ policy: 'subtotal_full_retro', decidedBy: '店主 2026-08-12 改判①(二次+三次拍板)', note: '积分历史全量追溯:累计获得≡累计消费(Σ已签档位小计);余额=获得−已兑换;硬守恒 余额≤累计消费;混合口径负余额钳 0 留痕' }), iso(new Date()))
   }
 } catch (e) { console.error('改判①留痕失败(不阻塞启动):', e.message) }
+// S1+S3 迁移一次到位(规则⑥,幂等标记 s1_storefront):现库归位 ——
+// main+active(非次卡)→上架 storefront=1;addon→0(加项永不见客,规则①);
+// 次卡候选(unit='times' 或名称含 次卡/守护(3/足护(9)→ is_timecard=1 暂存,逐条打印供核。
+try {
+  const tenantsAll = db.prepare('SELECT DISTINCT tenant_id AS t FROM services').all().map((r) => r.t)
+  for (const t of tenantsAll) {
+    const done = db.prepare("SELECT 1 FROM tenant_settings WHERE tenant_id = ? AND key = 's1_storefront'").get(t)
+    if (done) continue
+    const tcRows = db.prepare(`SELECT id, name_zh FROM services WHERE tenant_id = ?
+      AND (unit = 'times' OR name_zh LIKE '%次卡%' OR name_zh LIKE '%守护(3%' OR name_zh LIKE '%守护(3%' OR name_zh LIKE '%足护(9%' OR name_zh LIKE '%足护(9%')`).all(t)
+    for (const r of tcRows) {
+      db.prepare('UPDATE services SET is_timecard = 1, storefront = 0 WHERE id = ?').run(r.id)
+      console.log(`[s1-migrate] ${t} 次卡暂存: ${r.name_zh}(${r.id})`)
+    }
+    db.prepare(`UPDATE services SET storefront = CASE
+        WHEN is_timecard = 1 THEN 0
+        WHEN item_kind = 'addon' THEN 0
+        WHEN is_active = 1 THEN 1 ELSE 0 END
+      WHERE tenant_id = ? AND storefront IS NULL`).run(t)
+    db.prepare("INSERT INTO tenant_settings (tenant_id, key, value, updated_at) VALUES (?, 's1_storefront', ?, ?)")
+      .run(t, JSON.stringify({ note: 'S1+S3 迁移一次到位(图=合同 v1.2 规则⑥)' }), iso(new Date()))
+    console.log(`[s1-migrate] ${t} 归位完成(次卡 ${tcRows.length} 条)`)
+  }
+} catch (e) { console.error('S1 迁移失败(不阻塞启动):', e.message) }
+
 // 演示阵容换代(店主 2026-08-12 拍板):旧口径时代演示档案全部退役 —— 打标记不删
 // (历史单据织在日结与收入历史里,账本只追加)。圈定=id demo-% / 名含「演示」/「店主验签」,
 // 只动两家真实店;幂等:已有标记跳过。

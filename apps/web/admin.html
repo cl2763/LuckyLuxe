@@ -4,7 +4,7 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>有迹 · 商家后台</title>
-    <link rel="stylesheet" href="/web/styles.css?v=20260812c-d41">
+    <link rel="stylesheet" href="/web/styles.css?v=20260815a-s1s3">
     <style>
       /* 2026-08-02 财务指标显隐+动效(店主 v4 定稿):AI智能总结卡 / 目标进度条(带平衡线刻度) / 设目标引导与弹窗。
          放这里不放 styles.css:本批约定只动 admin.js + admin.html 两个文件。 */
@@ -234,6 +234,10 @@
       .pricing-tab{border:1px solid #e7ddd4;background:#fff;color:#8c8279;border-radius:999px;padding:8px 18px;font-size:13px;font-weight:700;cursor:pointer}
       .pricing-tab.active{background:#2d2826;border-color:#2d2826;color:#fff}
       .pricing-group-title{font-size:13px;font-weight:800;color:#8a7d70;margin:16px 0 8px}
+      /* S3 价档 chips:on=已挂实心;na=未挂划线(合同图「疗程价(未挂 · 开单时不出现)」态) */
+      .tier-chip{display:inline-block;border:1px solid #dcd2c8;border-radius:999px;padding:2px 10px;font-size:12px;margin:2px 6px 2px 0;color:#4a3c2c;background:#fff}
+      .tier-chip.on{border-color:#b98d5f;background:#f7efe6;font-weight:700}
+      .tier-chip.na{color:#b0a69b;text-decoration:line-through}
       .pricing-sort{width:84px;padding:5px 8px;border:1px solid #e7ddd4;border-radius:8px;font-size:12.5px}
       .pricing-editor{background:#fbf8f5;border:1px solid #eadfd7;border-radius:14px;padding:14px 16px;margin-bottom:14px}
       .pricing-addon-block{margin-top:10px;padding-top:10px;border-top:1px dashed #e7ddd4}
@@ -371,8 +375,8 @@
           <button class="sidebar-link" data-admin-page="finance" id="sidebarFinance" type="button">财务</button>
           <button class="sidebar-link" data-admin-page="customers" id="sidebarCustomers" type="button">客户档案</button>
           <button class="sidebar-link" data-admin-page="schedule" id="sidebarSchedule" type="button">员工管理</button>
-          <button class="sidebar-link" data-admin-page="services" id="sidebarServices" type="button">服务管理</button>
-          <button class="sidebar-link" data-admin-page="pricing" id="sidebarPricing" type="button">价目表</button>
+          <!-- S1(图=合同 v1.2):服务管理+价目表合并为「服务与价目」一页两模块 -->
+          <button class="sidebar-link" data-admin-page="pricing" id="sidebarPricing" type="button">服务与价目</button>
           <button class="sidebar-link" data-admin-page="membership" id="sidebarMembership" type="button">会员套餐/券</button>
           <button class="sidebar-link" data-admin-page="wechatMock" id="sidebarWechatMock" type="button"><span id="sidebarWechatMockLabel">客服工作台</span><span class="sidebar-badge hidden" id="wechatNeedsHumanBadge"></span></button>
           <button class="sidebar-link" data-admin-page="aiGallery" id="sidebarAiGallery" type="button">AI 图库</button>
@@ -557,29 +561,31 @@
             </section>
           </section>
 
-          <section class="admin-page hidden" id="servicesPage">
-            <button class="ghost back-btn" data-admin-page="dashboard" type="button">← Dashboard</button>
-            <section class="admin-card">
-              <div class="section-row compact-row">
-                <h2 id="servicesTitle">Services</h2>
-                <button class="primary slim" id="addServiceButton" type="button">Add Service</button>
-              </div>
-              <div id="serviceEditor"></div>
-              <div class="service-admin-list" id="serviceAdminList"></div>
-            </section>
-          </section>
-
-          <!-- 价目表管理(2026-08-06 P0):大类 / 项目与加项(三档价+疗程) / 计价规则+试算器 -->
+          <!-- S1+S3(图=合同 v1.2):服务管理+价目表合并「服务与价目」。
+               模块①上架服务=顾客端「服务」Tab 唯一数据源;模块②结算单目录=开单唯一数据源(原价目表三子页签整体并入)。 -->
           <section class="admin-page hidden" id="pricingPage">
             <button class="ghost back-btn" data-admin-page="dashboard" type="button">← Dashboard</button>
             <div class="section-row">
               <div>
-                <p class="eyebrow" id="pricingEyebrow">Price List</p>
-                <h1 id="pricingTitle">价目表管理</h1>
+                <p class="eyebrow" id="pricingEyebrow">Services &amp; Pricing</p>
+                <h1 id="pricingTitle">服务与价目</h1>
               </div>
-              <span class="subtle" id="pricingSubtitle">原价 / 分享价 / 会员价 / 疗程价 —— 改完 AI 报价立即跟着变</span>
+              <span class="subtle" id="pricingSubtitle">模块① 顾客橱窗 · 模块② 开单目录 —— 改价档,橱窗展示价与 AI 报价立即跟着变</span>
             </div>
-            <div class="pricing-tabs" id="pricingTabs">
+            <div class="pricing-tabs" id="pricingModuleTabs">
+              <button class="pricing-tab active" data-pricing-module="storefront" type="button">① 上架服务（顾客可见）</button>
+              <button class="pricing-tab" data-pricing-module="catalog" type="button">② 结算单目录（开单用 · 顾客不可见）</button>
+            </div>
+            <section class="admin-card" id="storefrontPanel">
+              <div class="section-row compact-row">
+                <h2 id="servicesTitle">上架服务</h2>
+                <button class="primary slim hidden" id="addServiceButton" type="button">Add Service</button>
+              </div>
+              <div id="serviceEditor"></div>
+              <div class="service-admin-list" id="serviceAdminList"></div>
+              <p class="subtle" id="storefrontCallout" style="margin-top:12px">📌 本模块＝顾客端「服务」Tab 的<b>唯一数据源</b>。加项（卸甲/免卸甲）、次卡、内部项目永远不会出现在这里——它们根本不属于这个模块。</p>
+            </section>
+            <div class="pricing-tabs hidden" id="pricingTabs">
               <button class="pricing-tab active" data-pricing-tab="categories" type="button">大类</button>
               <button class="pricing-tab" data-pricing-tab="items" type="button">项目与加项</button>
               <button class="pricing-tab" data-pricing-tab="rules" type="button">计价规则</button>
@@ -601,6 +607,9 @@
               </div>
               <div id="pricingItemEditor"></div>
               <div id="pricingItemList"></div>
+              <!-- S3 次卡迁出段(合同规则③):本页只留跳转入口;暂存不可编辑,老单据显示不受影响 -->
+              <div id="pricingTimecardSection"></div>
+              <p class="subtle" id="catalogCallout" style="margin-top:12px">📌 <b>价档适用域（S3 核心）</b>：每个价档带「适用项目」范围。疗程价只挂护理类——没挂的项目在<b>开单选价</b>时根本不出现疗程价选项（不是置灰，是不存在）。展示价「¥xxx 起」自动取该项目最低可用价档。</p>
             </section>
             <section class="admin-card hidden" id="pricingRulesPanel">
               <h2 id="pricingRulesTitle">计价规则</h2>
@@ -921,6 +930,6 @@
     </main>
 
     <div class="toast" id="toast"></div>
-    <script src="/web/admin.js?v=20260812c-d41"></script>
+    <script src="/web/admin.js?v=20260815a-s1s3"></script>
   </body>
 </html>

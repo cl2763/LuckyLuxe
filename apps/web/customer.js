@@ -415,6 +415,12 @@ function priceLabel(service) {
   return service.priceLabelZh || `${isNailService(service) ? t('basePrice') : t('fixedPrice')} ${money(service.priceCents)}`
 }
 
+// S1:列表卡片「¥xxx 起」=最低可用价档(与小程序顾客端同句同源);详情页仍用 priceLabel(基础价/固定价语义)
+function fromPriceLabel(service) {
+  if (state.lang === 'en') return service.priceFromLabelEn || priceLabel(service)
+  return service.priceFromLabelZh || priceLabel(service)
+}
+
 function quoteHint(service) {
   if (state.lang === 'en') return service.quoteHintEn || (isNailService(service) ? t('detailedQuote') : t('finalPriceGuide'))
   return service.quoteHintZh || (isNailService(service) ? t('detailedQuote') : t('finalPriceGuide'))
@@ -1237,7 +1243,7 @@ function renderServiceCard(service) {
         <h2>${service.name}</h2>
         <p>${service.description}</p>
         <span class="meta">
-          <span class="price">${priceLabel(service)}</span>
+          <span class="price">${fromPriceLabel(service)}</span>
           <span>${service.durationMin}${t('minutes')}</span>
           <span>${t('deposit')} ${money(service.depositCents)}</span>
         </span>

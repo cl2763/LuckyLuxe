@@ -703,6 +703,67 @@ const main = async () => {
     }
   }
 
+
+    // ===== ㉛ S1+S3 服务与价目合并(图=合同 v1.2):storefront 单源+起价+开关同源+次卡剥离 =====
+    {
+      const pubList = async (tid) => (await request('/services', {}, null, { 'x-tenant-id': tid })).data.services || []
+      const shopB = await newShop('s1b')
+
+      // 规则①:顾客接口 0 加项/次卡条目(双租户)
+      for (const sp of [shop, shopB]) {
+        const pub = await pubList(sp.tenantId)
+        check(`㉛ 规则① 顾客接口零加项/次卡(${sp === shop ? 'A' : 'B'} 店)`, pub.every((sv) => sv.itemKind !== 'addon' && !sv.isTimecard), JSON.stringify(pub.map((x) => x.itemKind)))
+        // 规则⑥:一致性 —— 顾客条目数 = 模块①上架数(admin 目录里 main+storefront+非次卡)
+        const items = (await request('/admin/pricing/items', {}, sp.token)).data.items || []
+        const shelfN = items.filter((i) => i.itemKind === 'main' && i.storefront && !i.isTimecard && i.isActive).length
+        check(`㉛ 规则⑥ 顾客条目数=上架数(${sp === shop ? 'A' : 'B'} 店)`, pub.length === shelfN, `pub=${pub.length} shelf=${shelfN}`)
+      }
+
+      // 规则⑤:起价=最低可用价档,改价档橱窗自动跟(挂会员价 150 → 起价 150;清掉 → 回 200)
+      await request(`/admin/pricing/items/${shop.serviceId}`, { method: 'PATCH', body: JSON.stringify({ memberPriceCents: 15000 }) }, shop.token)
+      let pubA = await pubList(shop.tenantId)
+      let mine = pubA.find((sv) => sv.id === shop.serviceId)
+      check('㉛ 规则⑤ 挂会员价后起价=最低档 150', mine && mine.startingPriceCents === 15000, JSON.stringify(mine && { s: mine.startingPriceCents }))
+      check('㉛ 规则⑤ 「起」字下发(前端零运算)', mine && /起$/.test(mine.priceFromLabelZh || '') && /^From /.test(mine.priceFromLabelEn || ''), mine && mine.priceFromLabelZh)
+      await request(`/admin/pricing/items/${shop.serviceId}`, { method: 'PATCH', body: JSON.stringify({ memberPriceCents: null }) }, shop.token)
+      pubA = await pubList(shop.tenantId)
+      mine = pubA.find((sv) => sv.id === shop.serviceId)
+      check('㉛ 规则⑤ 清会员价后起价回落 list 200', mine && mine.startingPriceCents === 20000, JSON.stringify(mine && { s: mine.startingPriceCents }))
+
+      // 闭环③:开关双端同源 —— PATCH storefront=false 顾客端即时消失,拨回即时恢复
+      await request(`/admin/pricing/items/${shop.serviceId}`, { method: 'PATCH', body: JSON.stringify({ storefront: false }) }, shop.token)
+      check('㉛ 闭环③ 下架后顾客接口即时消失', !(await pubList(shop.tenantId)).some((sv) => sv.id === shop.serviceId))
+      const itemsOff = (await request('/admin/pricing/items', {}, shop.token)).data.items || []
+      check('㉛ 闭环③ 目录仍在(storefront=false 不是删除,开单不受影响)', itemsOff.some((i) => i.id === shop.serviceId && !i.storefront && i.isActive))
+      await request(`/admin/pricing/items/${shop.serviceId}`, { method: 'PATCH', body: JSON.stringify({ storefront: true }) }, shop.token)
+      check('㉛ 闭环③ 拨回后顾客接口即时恢复', (await pubList(shop.tenantId)).some((sv) => sv.id === shop.serviceId))
+
+      // 越权:员工拨开关=403(镜像屏开关只对老板;后端 staffMayRead 是 GET-only)
+      const t3 = await request(`/platform/tenants/${shop.tenantId}/technicians`, { method: 'POST', body: JSON.stringify({ name: `技丙s1${RUN_ID}` }) })
+      const staffTok = await staffLogin(shop, t3.data.technician.id, 's1')
+      const staffFlip = await request(`/admin/pricing/items/${shop.serviceId}`, { method: 'PATCH', body: JSON.stringify({ storefront: false }) }, staffTok)
+      check('㉛ 越权 员工拨开关=403', staffFlip.status === 403, `got ${staffFlip.status}`)
+      check('㉛ 越权后开关未动(顾客端仍可见)', (await pubList(shop.tenantId)).some((sv) => sv.id === shop.serviceId))
+
+      // 规则③ 次卡剥离:现库无次卡行可走行为断言,先机械断言两条编辑路由都装了拦截(S2 有数据后升级为行为断言)
+      const ROOT31 = new URL('../../', import.meta.url).pathname
+      const srv = readFileSync(join(ROOT31, 'apps/api/local-server.mjs'), 'utf8')
+      check('㉛ 规则③ 次卡编辑拒绝装在两条路由(TIMECARD_MIGRATED×2)', (srv.match(/TIMECARD_MIGRATED/g) || []).length >= 2)
+      check('㉛ 规则⑥ 迁移块在(幂等标记 s1_storefront)', srv.includes("s1_storefront"))
+
+      // 双轨收口:老「服务管理」口子建的服务默认进橱窗(storefront=1),不产生「目录有、顾客看不见」的暗礁
+      const legacy = await request('/admin/services', { method: 'POST', body: JSON.stringify({ type: 'NAIL', nameZh: `旧口建${RUN_ID}`, nameEn: 'legacy', priceCents: 8800 }) }, shop.token)
+      check('㉛ 双轨收口 旧口子新建默认上架', legacy.status === 201 && (await pubList(shop.tenantId)).some((sv) => sv.id === legacy.data.service.id))
+
+      // 空态:B 店全部下架 → 顾客接口空数组(既有空态,不 500)
+      const itemsB = (await request('/admin/pricing/items', {}, shopB.token)).data.items || []
+      for (const it of itemsB.filter((i) => i.itemKind === 'main')) {
+        await request(`/admin/pricing/items/${it.id}`, { method: 'PATCH', body: JSON.stringify({ storefront: false }) }, shopB.token)
+      }
+      const pubBEmpty = await request('/services', {}, null, { 'x-tenant-id': shopB.tenantId })
+      check('㉛ 空态 全下架=空数组 200', pubBEmpty.status === 200 && (pubBEmpty.data.services || []).length === 0)
+    }
+
   console.log(`\n爽约处置+售后完成态回归通过:${checks} 项断言全绿`)
 }
 

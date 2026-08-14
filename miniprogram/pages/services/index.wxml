@@ -24,7 +24,7 @@
                 <view class="service-name">{{item.name}}</view>
                 <view class="service-desc">{{item.description}}</view>
                 <view class="service-meta">
-                  <text class="price">{{lang === 'en' ? item.priceLabelEn : item.priceLabelZh}}</text>
+                  <text class="price">{{lang === 'en' ? (item.priceFromLabelEn || item.priceLabelEn) : (item.priceFromLabelZh || item.priceLabelZh)}}</text>
                   <text>{{item.duration}}{{t.minutes}}</text>
                   <text>{{t.deposit}} {{cur.p}}{{cur.s}}{{item.depositAmount}}</text>
                 </view>

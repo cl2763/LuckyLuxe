@@ -1,5 +1,6 @@
 // 构建号:每次交付递增。侧栏可见,排查"改了没生效"时先对版本。
-const ADMIN_BUILD = '20260812c-d41'
+const ADMIN_BUILD = '20260815a-s1s3'
+let pricingState = { module: 'storefront', tab: 'items', categories: [], items: [], rules: {}, editing: null, preview: null, storefrontPicker: false }
 console.log(`[admin] build ${ADMIN_BUILD}`)
 
 // "今天"必须按门店时区算,否则老板人在别的时区时全站日期错位一天。
@@ -92,7 +93,6 @@ const els = {
   sidebarDashboard: document.querySelector('#sidebarDashboard'),
   sidebarBookings: document.querySelector('#sidebarBookings'),
   sidebarSchedule: document.querySelector('#sidebarSchedule'),
-  sidebarServices: document.querySelector('#sidebarServices'),
   sidebarCustomers: document.querySelector('#sidebarCustomers'),
   sidebarWechatMock: document.querySelector('#sidebarWechatMock'),
   sidebarAiGallery: document.querySelector('#sidebarAiGallery'),
@@ -107,7 +107,6 @@ const els = {
   financePanel: document.querySelector('#financePanel'),
   bookingsPage: document.querySelector('#bookingsPage'),
   schedulePage: document.querySelector('#schedulePage'),
-  servicesPage: document.querySelector('#servicesPage'),
   pricingPage: document.querySelector('#pricingPage'),
   pricingTabs: document.querySelector('#pricingTabs'),
   pricingCategoriesPanel: document.querySelector('#pricingCategoriesPanel'),
@@ -997,7 +996,6 @@ function applyLanguage() {
   if (attendanceTitleEl) attendanceTitleEl.textContent = owner.lang === 'zh' ? '🕐 打卡考勤（今日）' : '🕐 Attendance (today)'
   const finNavPayrollEl = document.querySelector('#finNavPayroll')
   if (finNavPayrollEl) finNavPayrollEl.textContent = owner.lang === 'zh' ? '员工工资' : 'Payroll'
-  els.sidebarServices.textContent = t('navServices')
   els.sidebarCustomers.textContent = t('navCustomers')
   els.sidebarWechatMockLabel.textContent = t('navWechatMock')
   els.sidebarAiGallery.textContent = t('navAiGallery')
@@ -1095,7 +1093,7 @@ function applyLanguage() {
   els.addTechnicianButton.textContent = owner.lang === 'zh' ? '＋ 添加技师' : '+ Add technician'
   const fullDemoSeedBtn = document.querySelector('#fullDemoSeed')
   if (fullDemoSeedBtn) fullDemoSeedBtn.textContent = owner.lang === 'zh' ? '演示数据' : 'Demo data'
-  els.servicesTitle.textContent = t('services')
+  els.servicesTitle.textContent = owner.lang === 'zh' ? '上架服务' : 'Storefront services'
   els.addServiceButton.textContent = t('addService')
   els.filterStatus.innerHTML = `
     <option value="active">${t('activeAttention')}</option>
@@ -1517,7 +1515,6 @@ function renderAdminPages() {
   els.sidebarDashboard.classList.toggle('hidden', !isOwnerRole())
   // 员工端没有首页,"← Dashboard"返回按钮一并隐藏
   document.querySelectorAll('.back-btn').forEach((btn) => btn.classList.toggle('hidden', !isOwnerRole()))
-  els.sidebarServices.classList.toggle('hidden', !isOwnerRole())
   els.sidebarCustomers.classList.toggle('hidden', !isOwnerRole())
   els.sidebarStoreSettings.classList.toggle('hidden', !isOwnerRole())
   els.sidebarFinance.classList.toggle('hidden', !isOwnerRole())
@@ -1528,13 +1525,13 @@ function renderAdminPages() {
   els.sidebarAiGallery?.classList.toggle('hidden', !hasAiAddon)
   document.querySelector('#finNavInsights')?.classList.toggle('hidden', !hasAiAddon)
   if (!hasAiAddon && owner.adminPage === 'aiGallery') owner.adminPage = isOwnerRole() ? 'dashboard' : 'bookings'
-  if (!isOwnerRole() && ['dashboard', 'dashboardDetail', 'services', 'pricing', 'membership', 'customers', 'storeSettings', 'finance'].includes(owner.adminPage)) owner.adminPage = 'bookings'
+  if (owner.adminPage === 'services') owner.adminPage = 'pricing' // S1:旧「服务管理」页并入「服务与价目」模块①
+  if (!isOwnerRole() && ['dashboard', 'dashboardDetail', 'pricing', 'membership', 'customers', 'storeSettings', 'finance'].includes(owner.adminPage)) owner.adminPage = 'bookings'
   const pages = {
     dashboard: els.adminDashboard,
     dashboardDetail: els.dashboardDetailPage,
     bookings: els.bookingsPage,
     schedule: els.schedulePage,
-    services: els.servicesPage,
     pricing: els.pricingPage,
     membership: els.membershipPage,
     customers: els.customersPage,
@@ -5235,48 +5232,76 @@ function renderCalendarCell(date) {
 }
 
 function renderServices() {
+  /* S1 模块①(图=合同):上架服务=顾客橱窗。行=目录主项目(非次卡,单行自关联·假设③),
+     开关=storefront 上架位(独立于 is_active);展示价=最低可用价档+「起」(规则⑤,后端算好下发)。 */
   renderServiceEditor()
-  const aiHint = `<p class="services-ai-hint">💡 ${owner.lang === 'zh' ? '此价目表是 AI 客服报价的唯一事实来源:改价格、时长、上下架,AI 的回答立即跟着变。' : 'This price list is the single source of truth for AI quotes — changes apply to AI answers instantly.'}</p>`
-  if (!owner.services.length) {
-    els.serviceAdminList.innerHTML = `${aiHint}<div class="empty-state"><strong>${t('noServices')}</strong></div>`
-    return
+  if (!els.serviceAdminList) return
+  const zh = owner.lang === 'zh'
+  /* 组合矩阵抓的口径:目录已停用(isActive=false)的项不进模块①——顾客端本来就看不见它,
+     列表若仍标「已上架」就是自相矛盾(闭环纪律③);恢复启用回模块②。假设⑦已记录。 */
+  const rows = owner.services.filter((svc) => (svc.itemKind || 'main') === 'main' && !svc.isTimecard && svc.isActive !== false)
+  const tierNote = (svc) => {
+    const it = pricingState.items.find((i) => i.id === svc.id)
+    if (!it) return ''
+    const tiers = []
+    if (it.listPriceCents) tiers.push(zh ? '普通' : 'list')
+    if (it.sharePriceCents) tiers.push(zh ? '分享' : 'share')
+    if (it.memberPriceCents) tiers.push(zh ? '会员' : 'member')
+    if (it.coursePriceCents) tiers.push(zh ? '疗程' : 'course')
+    if (!tiers.length) return ''
+    if (!zh) return `(${tiers.join('/')})`
+    const cnt = ['', '', '两', '三', '四'][tiers.length] || tiers.length
+    return tiers.length === 1 ? `（${tiers[0]}价档）` : `（${tiers.join('/')}${cnt}档）`
   }
-  els.serviceAdminList.innerHTML = aiHint + owner.services.map((service) => `
+  const rowHtml = (svc) => `
     <div class="service-admin-row">
-      <div>
-        <h3>${service.nameZh}</h3>
-        <p>${service.nameEn} · ${service.type} · ${money(service.priceCents)} · ${service.durationMin} min</p>
-        <div class="inline-edit">
-          <label>
-            <span>${t('priceCad')}</span>
-            <input value="${cents(service.priceCents)}" data-price="${service.id}" inputmode="decimal">
-          </label>
-          <label>
-            <span>${t('durationMin')}</span>
-            <input value="${service.durationMin}" data-duration="${service.id}">
-          </label>
-          <button class="primary slim" data-save-service="${service.id}" type="button">${t('save')}</button>
-          <button class="ghost slim" data-edit-service="${service.id}" type="button">${t('modify')}</button>
+      <div style="display:flex;gap:12px;align-items:flex-start">
+        ${svc.imageUrl ? `<img src="${escapeHtml(svc.imageUrl)}" alt="" style="width:44px;height:44px;border-radius:10px;object-fit:cover;flex:none">` : ''}
+        <div>
+          <h3 style="display:inline">${escapeHtml(svc.nameZh)}</h3>
+          <span class="status ${svc.storefront ? 'CONFIRMED' : 'CANCELLED'}" style="margin-left:8px">${svc.storefront ? (zh ? '已上架' : 'Listed') : (zh ? '已下架' : 'Unlisted')}</span>
+          <p class="subtle" style="margin:4px 0 0">${zh ? '关联项目' : 'Catalog item'}：${escapeHtml(svc.nameZh)}${zh ? '（目录同项）' : ''} · ${zh ? '展示价' : 'From'} ${money(svc.startingPriceCents ?? svc.priceCents)} ${zh ? '起' : ''}${tierNote(svc)} · ${zh ? '约' : '~'} ${svc.durationMin} ${zh ? '分钟' : 'min'}</p>
         </div>
       </div>
-      <label class="service-active-toggle">
-        <input type="checkbox" data-service-active="${service.id}" ${service.isActive ? 'checked' : ''}>
-        <span class="status ${service.isActive ? 'CONFIRMED' : 'CANCELLED'}">${service.isActive ? t('active') : t('hidden')}</span>
-      </label>
-    </div>
-  `).join('')
+      <div style="display:flex;gap:10px;align-items:center">
+        <label class="service-active-toggle">
+          <input type="checkbox" data-service-active="${svc.id}" ${svc.storefront ? 'checked' : ''}>
+          <span class="subtle">${zh ? '上架' : 'List'}</span>
+        </label>
+        <button class="ghost slim" data-edit-service="${svc.id}" type="button">${t('modify')}</button>
+      </div>
+    </div>`
+  const offItems = rows.filter((svc) => !svc.storefront)
+  const pickerHtml = pricingState.storefrontPicker ? `
+    <div class="pricing-editor" data-storefront-picker>
+      <p class="subtle" style="margin-top:0">${zh ? '从结算单目录选择未上架的主项目,点「上架」即关联进橱窗;或全新创建一个服务(同时进入目录与橱窗)。' : 'Pick an unlisted catalog item to list, or create a new service.'}</p>
+      ${offItems.length ? offItems.map((svc) => `<button class="ghost slim" data-storefront-link="${svc.id}" type="button" style="margin:0 8px 8px 0">${escapeHtml(svc.nameZh)} · ${zh ? '上架' : 'list'}</button>`).join('') : `<p class="subtle">${zh ? '目录里没有未上架的主项目了。' : 'No unlisted catalog items.'}</p>`}
+      <div class="action-row">
+        <button class="primary slim" data-storefront-create type="button">${zh ? '全新创建' : 'Create new'}</button>
+        <button class="ghost slim" data-storefront-collapse type="button">${zh ? '收起' : 'Close'}</button>
+      </div>
+    </div>` : `
+    <div class="service-admin-row" data-storefront-new role="button" style="border:1.5px dashed #d8cfc6;border-radius:12px;justify-content:center;cursor:pointer;color:#8c8279">
+      ＋ ${zh ? '新建上架服务（从结算单目录选项目关联，或全新创建）' : 'New storefront service (link a catalog item, or create new)'}
+    </div>`
+  els.serviceAdminList.innerHTML = (rows.length
+    ? rows.map(rowHtml).join('')
+    : `<div class="empty-state"><strong>${t('noServices')}</strong></div>`) + pickerHtml
 }
 
-async function toggleServiceActive(serviceId, isActive) {
+async function toggleServiceActive(serviceId, on) {
+  /* S1:列表开关=storefront 橱窗上架位(合同模块①),不再动 is_active(目录停用在模块②)。乐观更新,失败回滚。 */
   const service = owner.services.find((item) => item.id === serviceId)
-  // 乐观更新:先改界面,失败再回滚——开关和状态徽章即时同步
-  if (service) service.isActive = isActive
+  if (service) service.storefront = on
+  const catalogItem = pricingState.items.find((i) => i.id === serviceId)
+  if (catalogItem) catalogItem.storefront = on
   renderServices()
   try {
-    await request(`/admin/services/${serviceId}`, { method: 'PATCH', body: JSON.stringify({ isActive }) })
-    toast(owner.lang === 'zh' ? (isActive ? '已上架,AI 立即可报价此服务' : '已下架,AI 不再推荐此服务') : 'Updated')
+    await request(`/admin/pricing/items/${serviceId}`, { method: 'PATCH', body: JSON.stringify({ storefront: on }) })
+    toast(owner.lang === 'zh' ? (on ? '已上架,顾客端「服务」Tab 立即可见' : '已下架,顾客端不再显示') : 'Updated')
   } catch (error) {
-    if (service) service.isActive = !isActive
+    if (service) service.storefront = !on
+    if (catalogItem) catalogItem.storefront = !on
     renderServices()
     throw error
   }
@@ -7788,6 +7813,20 @@ els.serviceAdminList.addEventListener('change', (event) => {
   if (activeToggle) toggleServiceActive(activeToggle.dataset.serviceActive, activeToggle.checked).catch((error) => toast(error.message))
 })
 els.serviceAdminList.addEventListener('click', (event) => {
+  if (event.target.closest('[data-storefront-new]')) { pricingState.storefrontPicker = true; renderServices(); return }
+  if (event.target.closest('[data-storefront-collapse]')) { pricingState.storefrontPicker = false; renderServices(); return }
+  if (event.target.closest('[data-storefront-create]')) {
+    pricingState.storefrontPicker = false
+    owner.serviceEditor = blankServiceEditor()
+    renderServices()
+    return
+  }
+  const linkBtn = event.target.closest('[data-storefront-link]')
+  if (linkBtn) {
+    pricingState.storefrontPicker = false
+    toggleServiceActive(linkBtn.dataset.storefrontLink, true).catch((error) => toast(error.message))
+    return
+  }
   const editButton = event.target.closest('[data-edit-service]')
   if (editButton) {
     const service = owner.services.find((item) => item.id === editButton.dataset.editService)
@@ -8456,7 +8495,7 @@ async function settleSubOrder(r, kind) {
 /* ===== 价目表管理(2026-08-06 P0)=====
    三个 tab:大类 / 项目与加项(原价·分享价·会员价·疗程价) / 计价规则(四条 + 试算器)。
    与后端 /admin/pricing/* 一一对应;list 档就是 services.price_cents(后端双写),所以「服务管理」页看到的价格 = 这里的原价。 */
-let pricingState = { tab: 'categories', categories: [], items: [], rules: {}, editing: null, preview: null }
+// (S1) pricingState 声明已提前到文件头:renderServices(模块①)在 initAdmin 首次 render 就要读它
 
 const pzh = () => owner.lang === 'zh'
 function pMoney(c) { return (c === null || c === undefined) ? '—' : `${Math.round(c) / 100}` }
@@ -8474,23 +8513,31 @@ const PRICING_RULE_META = {
 }
 
 async function loadPricingPage() {
-  const [c, i, r] = await Promise.all([
+  const [c, i, r, sv] = await Promise.all([
     request('/admin/pricing/categories'),
     request('/admin/pricing/items'),
-    request('/admin/pricing/rules')
+    request('/admin/pricing/rules'),
+    request('/admin/services')
   ])
   pricingState.categories = c.categories || []
   pricingState.items = i.items || []
   pricingState.rules = r.rules || {}
+  owner.services = sv.services || owner.services
   renderPricing()
 }
 
 function renderPricing() {
   if (!els.pricingPage) return
+  /* S1(图=合同):一页两模块。模块①上架服务=顾客橱窗;模块②结算单目录=原价目表三子页签整体并入。 */
+  const mod = pricingState.module || 'storefront'
+  document.querySelectorAll('[data-pricing-module]').forEach((btn) => btn.classList.toggle('active', btn.dataset.pricingModule === mod))
+  document.querySelector('#storefrontPanel')?.classList.toggle('hidden', mod !== 'storefront')
+  document.querySelector('#pricingTabs')?.classList.toggle('hidden', mod !== 'catalog')
   document.querySelectorAll('[data-pricing-tab]').forEach((btn) => btn.classList.toggle('active', btn.dataset.pricingTab === pricingState.tab))
-  els.pricingCategoriesPanel?.classList.toggle('hidden', pricingState.tab !== 'categories')
-  els.pricingItemsPanel?.classList.toggle('hidden', pricingState.tab !== 'items')
-  els.pricingRulesPanel?.classList.toggle('hidden', pricingState.tab !== 'rules')
+  els.pricingCategoriesPanel?.classList.toggle('hidden', mod !== 'catalog' || pricingState.tab !== 'categories')
+  els.pricingItemsPanel?.classList.toggle('hidden', mod !== 'catalog' || pricingState.tab !== 'items')
+  els.pricingRulesPanel?.classList.toggle('hidden', mod !== 'catalog' || pricingState.tab !== 'rules')
+  if (mod === 'storefront') renderServices()
   renderPricingCategories()
   renderPricingItems()
   renderPricingRules()
@@ -8519,32 +8566,55 @@ function renderPricingItems() {
   if (!els.pricingItemList) return
   const catName = (id) => pricingState.categories.find((c) => c.id === id)?.name || (pzh() ? '未分类' : 'Uncategorized')
   const group = (kind) => pricingState.items.filter((i) => i.itemKind === kind)
+  /* S3(图=合同):价档 chips —— 挂了的实心展示;疗程价没挂=划线 na 态「未挂 · 开单时不出现」(不是置灰,开单时根本不存在)。 */
+  const tierChips = (item) => {
+    const chips = []
+    if (item.listPriceCents) chips.push(`<span class="tier-chip on">${pzh() ? '普通价' : 'List'} ${money(item.listPriceCents)}</span>`)
+    if (item.sharePriceCents) chips.push(`<span class="tier-chip on">${pzh() ? '分享价' : 'Share'} ${money(item.sharePriceCents)}</span>`)
+    if (item.memberPriceCents) chips.push(`<span class="tier-chip on">${pzh() ? '会员价' : 'Member'} ${money(item.memberPriceCents)}</span>`)
+    if (item.coursePriceCents) chips.push(`<span class="tier-chip on">${pzh() ? '疗程价' : 'Course'} ${money(item.coursePriceCents)}${item.courseTimes ? `/${item.courseTimes}${pzh() ? '次' : 'x'}` : (pzh() ? '/次' : '/x')}</span>`)
+    else chips.push(`<span class="tier-chip na">${pzh() ? '疗程价（未挂 · 开单时不出现）' : 'Course (not attached · hidden at checkout)'}</span>`)
+    return chips.join('')
+  }
   const rowHtml = (item) => `
     <div class="service-admin-item${item.isActive ? '' : ' inactive'}">
       <div>
         <strong>${escapeHtml(item.nameZh)}</strong>
-        <span class="subtle">${escapeHtml(catName(item.categoryId))}${item.unit === 'per_finger' ? (pzh() ? ' · 按指' : ' · per finger') : ''}${item.isActive ? '' : (pzh() ? ' · 已下架' : ' · hidden')}</span>
-        <div class="subtle">${pzh() ? '原价' : 'List'} ${pMoney(item.listPriceCents)}
-          · ${pzh() ? '分享价' : 'Share'} ${pMoney(item.sharePriceCents)}
-          · ${pzh() ? '会员价' : 'Member'} ${pMoney(item.memberPriceCents)}
-          ${item.coursePriceCents ? ` · ${pzh() ? '疗程' : 'Course'} ${pMoney(item.coursePriceCents)}/${item.courseTimes}${pzh() ? '次' : 'x'}` : ''}
-          ${item.baseDurationMin ? ` · ${item.baseDurationMin}min` : ''}
-          ${item.priceRule === 'pct_of_tier_price' ? ` · ${pzh() ? '按主项目比例' : 'pct of main'} ${item.priceRuleValue || '默认'}%` : ''}</div>
+        <span class="subtle">${escapeHtml(catName(item.categoryId))}${item.unit === 'per_finger' ? (pzh() ? ' · 按指' : ' · per finger') : ''}${item.isActive ? '' : (pzh() ? ' · 已停用' : ' · hidden')}${item.itemKind === 'main' ? (item.storefront ? (pzh() ? ' · 橱窗已上架' : ' · listed') : (pzh() ? ' · 橱窗未上架' : ' · unlisted')) : ''}</span>
+        ${item.itemKind === 'main' ? `<div style="margin-top:4px">${tierChips(item)}</div>` : `<div class="subtle">${money(item.listPriceCents)}${item.priceRule === 'pct_of_tier_price' ? ` · ${pzh() ? '按主项目比例' : 'pct of main'} ${item.priceRuleValue || '默认'}%` : ''}</div>`}
+        <div class="subtle">${item.baseDurationMin ? `${item.baseDurationMin}min` : ''}</div>
       </div>
       <div class="row-actions">
-        <button class="ghost slim" data-item-edit="${item.id}" type="button">${pzh() ? '编辑' : 'Edit'}</button>
-        <button class="ghost slim" data-item-toggle="${item.id}" type="button">${item.isActive ? (pzh() ? '下架' : 'Hide') : (pzh() ? '上架' : 'Show')}</button>
+        <button class="ghost slim" data-item-edit="${item.id}" type="button">${item.itemKind === 'main' ? (pzh() ? '编辑价档' : 'Edit tiers') : (pzh() ? '编辑' : 'Edit')}</button>
+        <button class="ghost slim" data-item-toggle="${item.id}" type="button">${item.isActive ? (pzh() ? '停用' : 'Hide') : (pzh() ? '启用' : 'Show')}</button>
         <button class="ghost slim" data-item-delete="${item.id}" type="button">${pzh() ? '删除' : 'Delete'}</button>
       </div>
     </div>`
-  const mains = group('main')
+  const mains = group('main').filter((i) => !i.isTimecard)
   const addons = group('addon')
   els.pricingItemList.innerHTML = `
-    <h3 class="pricing-group-title">${pzh() ? `主项目(${mains.length})` : `Main items (${mains.length})`}</h3>
+    <h3 class="pricing-group-title">${pzh() ? `项目与价档(${mains.length})` : `Items & tiers (${mains.length})`}</h3>
     ${mains.length ? mains.map(rowHtml).join('') : `<div class="empty-state">${pzh() ? '还没有主项目' : 'No main items'}</div>`}
-    <h3 class="pricing-group-title">${pzh() ? `加项(${addons.length})` : `Add-ons (${addons.length})`}</h3>
+    <h3 class="pricing-group-title">${pzh() ? `加项(${addons.length})（只在开单时出现）` : `Add-ons (${addons.length}) — checkout only`}</h3>
     ${addons.length ? addons.map(rowHtml).join('') : `<div class="empty-state">${pzh() ? '还没有加项(卸甲、贴片、单指补甲都算加项)' : 'No add-ons'}</div>`}`
+  renderPricingTimecards()
   renderPricingItemEditor()
+}
+
+function renderPricingTimecards() {
+  /* S3 合同规则③:次卡不入价目 —— 本页只留跳转入口;有次卡数据时列出但不可编辑(暂存待 S2)。 */
+  const box = document.querySelector('#pricingTimecardSection')
+  if (!box) return
+  const cards = pricingState.items.filter((i) => i.isTimecard)
+  box.innerHTML = `
+    <h3 class="pricing-group-title">${pzh() ? '次卡' : 'Punch cards'} <span class="tier-chip on" style="font-size:11px">${pzh() ? '已迁出' : 'migrated'}</span></h3>
+    <div class="service-admin-item" style="background:#FDFBF8">
+      <div>
+        <span class="subtle">${pzh() ? '守护（3 次）/ 足护（9 次）等按次核销的卡，已迁至「会员与营销」页管理 →' : 'Punch cards (pay-per-visit) now live under Membership & Marketing →'}</span>
+        ${cards.length ? `<div class="subtle" style="margin-top:4px">${cards.map((c) => escapeHtml(c.nameZh)).join(' · ')}（${pzh() ? '暂存待 S2，本页不可编辑；老结算单显示不受影响' : 'read-only until S2'}）</div>` : ''}
+      </div>
+      <button class="ghost slim" data-admin-page="membership" type="button">${pzh() ? '去会员与营销' : 'Membership & Marketing'}</button>
+    </div>`
 }
 
 function renderPricingItemEditor() {
@@ -8587,7 +8657,7 @@ function renderPricingItemEditor() {
       <div class="action-row wrap">
         <button class="primary slim" id="piSave" type="button">${pzh() ? '保存' : 'Save'}</button>
         <button class="ghost slim" id="piCancel" type="button">${pzh() ? '取消' : 'Cancel'}</button>
-        <span class="subtle">${pzh() ? '原价会同步写回「服务管理」的价格,小程序与 AI 报价立即一致。' : 'List price syncs to the service catalogue used by the mini program and AI.'}</span>
+        <span class="subtle">${pzh() ? '留空的价档=未挂:开单时不会出现这个价档。改动即时生效于新开单;已开未签的单不受影响(金额红线:合计只能由后端重算)。' : 'Blank tiers are detached: they never appear at checkout. Changes apply to new settlements only.'}</span>
       </div>
     </div>`
 }
@@ -8704,6 +8774,8 @@ async function runPricingPreview() {
 
 if (els.pricingPage) {
   els.pricingPage.addEventListener('click', async (event) => {
+    const modTab = event.target.closest('[data-pricing-module]')
+    if (modTab) { pricingState.module = modTab.dataset.pricingModule; renderPricing(); return }
     const tab = event.target.closest('[data-pricing-tab]')
     if (tab) { pricingState.tab = tab.dataset.pricingTab; renderPricing(); return }
     try {
@@ -8754,7 +8826,11 @@ if (els.pricingPage) {
         if (!body.nameZh) { toast(pzh() ? '项目名称必填' : 'Name required'); return }
         const editingId = pricingState.editing.id
         if (editingId) await request(`/admin/pricing/items/${editingId}`, { method: 'PATCH', body: JSON.stringify(body) })
-        else await request('/admin/pricing/items', { method: 'POST', body: JSON.stringify(body) })
+        else {
+          // 图注(B7):模块②新增项目「只进结算单,不自动上架给顾客」;上架走模块①(全新创建/关联)
+          if (body.itemKind === 'main') body.storefront = false
+          await request('/admin/pricing/items', { method: 'POST', body: JSON.stringify(body) })
+        }
         pricingState.editing = null
         await loadPricingPage()
         toast(pzh() ? '已保存,AI 报价立即生效' : 'Saved')

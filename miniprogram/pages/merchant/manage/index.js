@@ -27,7 +27,7 @@ const E = {
   marketing: { k: 'marketing', icon: 'm-marketing', t: '营销管理', d: '渠道发帖 · 营销措施' },
   member: { k: 'member', icon: 'm-member', t: '会员套餐 / 充值 / 券', d: '充值套餐 · 次卡 · 优惠券' },
   analytics: { k: 'analytics', icon: 'm-analytics', t: '经营分析', d: '询价转化 · 复购 · 客单价' },
-  services: { k: 'services', icon: 'm-services', t: '服务与价格', d: '服务项目 · 定金' },
+  services: { k: 'services', icon: 'm-services', t: '服务与目录', d: '上架服务 · 结算单目录(只读镜像)' }, // S1 合同§四
   store: { k: 'store', icon: 'm-store', t: '门店信息 / 营业时间', d: '地址 · 电话 · 特殊日期 · 预约规则' },
   staff: { k: 'staff', icon: 'm-staff', t: '员工管理', d: '排班 · 业绩目标 · 薪资方案 · 账号' },
   me: { k: 'me', icon: 'm-settings', t: '我的 / 账号', d: '改密 · 语言 · 财务密码' },
