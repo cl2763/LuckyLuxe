@@ -634,6 +634,14 @@ async function myBalance() {
   const cents = (r && r.balanceCents) || 0
   return { cents, yuan: Math.round(cents / 100) }
 }
+/* 沙盒切换演示身份(补强批):名册+按人登录。服务端 ALLOW_DEMO 闸门,生产 404。 */
+function getSandboxRoster() { return request('/sandbox/demo-roster') }
+async function sandboxLoginAs(userId) {
+  const data = await request('/auth/wechat/mini-login', 'POST', { demoLogin: true, tenantId: currentTenant(), asUserId: userId })
+  setAuth(Object.assign({}, data.auth, { user: data.user, tenantId: currentTenant() }))
+  wx.setStorageSync('lucky_member', Object.assign(miniMember(data.user), { _tenant: currentTenant() }))
+  return data.user
+}
 function getMyPointsHistory() { return request('/my/points-history') }
 // 积分商城
 function getPointsMall() { return request('/my/points-mall') }
@@ -780,7 +788,10 @@ async function getAdminDashboardData() {
 module.exports = {
   API_BASE,
   DEMO_USER_ID,
+  SANDBOX: USE_LOCAL_SANDBOX,
   onStoreSwitched,
+  getSandboxRoster,
+  sandboxLoginAs,
   normalizeImage,
   ensureLogin,
   loginWithWechat,

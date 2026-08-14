@@ -5783,13 +5783,33 @@ async function signInWechatMiniUser(body) {
     /* D40(2026-08-12):选人排除「退役·旧口径演示档案」——此前按单量最多选,
        jics 被历次 L5 fixture 的「店主验签」(23 单)霸榜,店主在顾客端看到的姓名就是它。
        退役档案此后任何测试/验收/演示不再使用(演示阵容换代拍板)。 */
-    const demoUser = db.prepare(`SELECT u.* FROM users u
+    /* 补强批(店主 2026-08-12 原则:测试数据第一要务=可分辨):
+       ①每店演示身份=指定样板户(tenant_settings.demo_identity,阵容脚本落定,店与店内容/金额/币种全不同);
+       ②asUserId=沙盒「切换演示身份」入口按人登录(同一 ALLOW_DEMO 闸门内,只认本店非退役档案);
+       ③兜底链砍掉全局 demo-cust-01/任意用户 —— 那就是「测试店里冒出林小雅」的来路;
+         本店真没有可用演示档案=如实 400,绝不借别店身份。 */
+    let demoUser = null
+    const askUserId = String(body.asUserId || '').trim()
+    if (askUserId) {
+      demoUser = db.prepare(`SELECT * FROM users WHERE id = ? AND tenant_id = ?
+        AND tags_json NOT LIKE '%退役·旧口径演示档案%'`).get(askUserId, demoTenant)
+      if (!demoUser) throw apiError(404, 'NOT_FOUND', '该演示档案不在本店(或已退役)。')
+    }
+    if (!demoUser) {
+      try {
+        const cfgRow = db.prepare("SELECT value FROM tenant_settings WHERE tenant_id = ? AND key = 'demo_identity'").get(demoTenant)
+        const want = cfgRow ? JSON.parse(cfgRow.value || '{}').userId : ''
+        if (want) demoUser = db.prepare("SELECT * FROM users WHERE id = ? AND tenant_id = ? AND tags_json NOT LIKE '%退役·旧口径演示档案%'").get(want, demoTenant)
+      } catch (e) { /* 配置坏了走回退链 */ }
+    }
+    if (!demoUser) {
+      demoUser = db.prepare(`SELECT u.* FROM users u
         WHERE u.tenant_id = ? AND u.tags_json NOT LIKE '%退役·旧口径演示档案%'
         ORDER BY (u.display_name LIKE '演示2-%') DESC,
           (SELECT COUNT(*) FROM bookings b WHERE b.user_id = u.id AND b.tenant_id = ?) DESC, u.id ASC
         LIMIT 1`).get(demoTenant, demoTenant)
-      || db.prepare('SELECT * FROM users WHERE id = ?').get('demo-cust-01')
-      || db.prepare('SELECT * FROM users LIMIT 1').get()
+    }
+    if (!demoUser) throw apiError(400, 'NO_DEMO_PROFILE', '该店暂无可用演示档案(旧档案已退役)。')
     try {
       if (demoTenant === DEFAULT_TENANT_ID
         && !db.prepare('SELECT 1 FROM bookings WHERE user_id = ? AND tenant_id = ? LIMIT 1').get(demoUser.id, demoTenant)) {
@@ -10810,6 +10830,15 @@ async function route(req, res) {
         expiresAt: r.expires_at, usedAt: r.used_at
       }))
     })
+  }
+  // 沙盒专用:当前店演示2阵容名册(顾客端「切换演示身份」入口数据源;生产 ALLOW_DEMO 关=404)
+  if (req.method === 'GET' && path === '/sandbox/demo-roster') {
+    if (process.env.ALLOW_DEMO_ADMIN_LOGIN !== 'true') throw apiError(404, 'NOT_FOUND', 'Not found.')
+    const tid = resolveTenant(req, query)
+    const roster = db.prepare(`SELECT id, display_name FROM users
+      WHERE tenant_id = ? AND display_name LIKE '演示2-%' AND tags_json NOT LIKE '%退役·旧口径演示档案%'
+      ORDER BY display_name ASC`).all(tid)
+    return json(res, 200, { roster: roster.map((r) => ({ id: r.id, name: r.display_name })) })
   }
   if (req.method === 'GET' && path === '/my/stored-value') {
     const customer = requireCustomer(req)

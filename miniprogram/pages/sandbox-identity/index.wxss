@@ -1,0 +1,6 @@
+.pg { padding: 24rpx; }
+.ht { font-size: 34rpx; font-weight: 600; }
+.hd { font-size: 24rpx; color: #888; margin: 8rpx 0 20rpx; }
+.row { display: flex; justify-content: space-between; padding: 26rpx 20rpx; background: #fff; border-radius: 14rpx; margin-bottom: 14rpx; font-size: 28rpx; }
+.go { color: #b8860b; }
+.empty { color: #999; padding: 40rpx 0; text-align: center; }

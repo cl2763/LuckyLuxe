@@ -1,0 +1,11 @@
+<view class="pg">
+  <view class="head">
+    <view class="ht">切换演示身份(沙盒)</view>
+    <view class="hd">当前:{{current || '未登录'}} · 点一行即切换为该演示档案(仅本店阵容)</view>
+  </view>
+  <view wx:if="{{loading}}" class="empty">加载中…</view>
+  <view wx:elif="{{!roster.length}}" class="empty">本店暂无演示2阵容</view>
+  <view class="row" wx:for="{{roster}}" wx:key="id" data-id="{{item.id}}" data-name="{{item.name}}" bindtap="pick">
+    <text>{{item.name}}</text><text class="go">切换 ›</text>
+  </view>
+</view>

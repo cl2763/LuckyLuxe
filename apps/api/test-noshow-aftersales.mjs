@@ -492,8 +492,10 @@ const main = async () => {
 
       // ㉓ D35(核查二抓获,2026-08-12):默认店(旗舰)客户列表不得含他店档案 ——
       //    历史 bug=默认店不加过滤全库大杂烩;统一口径后跨租户逐向断言。
+      let nbCustSaved = null
       {
         const nbCust = await directBooking(shop, { name: `串味检客${RUN_ID}`, time: '09:15', techId: shop.tech2 })
+        nbCustSaved = nbCust.user
         const defList = await request('/admin/customers', {}, PLATFORM)   // PLATFORM=默认店 owner
         check('㉓ D35 默认店客户列表不含测试店档案', defList.status === 200 && !(defList.data.customers || []).some((c) => c.id === nbCust.user.id), `混入 ${nbCust.user.id}`)
         const shopList = await request('/admin/customers', {}, shop.token)
@@ -608,6 +610,25 @@ const main = async () => {
         const list2 = await request('/admin/customers', {}, shop.token)
         check('㉗ 排单失败不留孤儿档案(建档随排单整体回滚)', !(list2.data.customers || []).some((c) => String(c.displayName || '').includes(`孤儿探针撞档${RUN_ID}`)), '孤儿仍在列表')
       }
+
+      // ㉘ 补强批(2026-08-12):①demo_identity 指定样板户优先于「演示2 前缀+单量」;
+      //    ②asUserId 按人登录只认本店非退役档案(跨店/退役=404);③名册路由 ALLOW 闸门内可用
+      if (process.env.TEST_DB_PATH) {
+        const dbI = new DatabaseSync(process.env.TEST_DB_PATH)
+        const desig = (await request('/admin/customers', {}, shop.token)).data.customers.find((c) => !String(c.displayName || '').startsWith('演示2-'))
+        dbI.prepare(`INSERT INTO tenant_settings (tenant_id, key, value, updated_at) VALUES (?, 'demo_identity', ?, ?)
+          ON CONFLICT(tenant_id, key) DO UPDATE SET value = excluded.value, updated_at = excluded.updated_at`)
+          .run(shop.tenantId, JSON.stringify({ userId: desig.id }), new Date().toISOString())
+        dbI.close()
+        const who2 = (await request('/auth/wechat/mini-login', { method: 'POST', body: JSON.stringify({ demoLogin: true, tenantId: shop.tenantId }) }, null, { 'x-tenant-id': shop.tenantId })).data.user
+        check('㉘ demo_identity 指定样板户压过演示2前缀', who2.id === desig.id, `选中 ${who2.displayName}`)
+        const asOk = await request('/auth/wechat/mini-login', { method: 'POST', body: JSON.stringify({ demoLogin: true, tenantId: shop.tenantId, asUserId: nbCustSaved.id }) }, null, { 'x-tenant-id': shop.tenantId })
+        check('㉘ asUserId 按人登录(本店档案)', asOk.status === 200 && asOk.data.user.id === nbCustSaved.id, JSON.stringify(asOk.data).slice(0, 100))
+        const asCross = await request('/auth/wechat/mini-login', { method: 'POST', body: JSON.stringify({ demoLogin: true, tenantId: 'lucky-luxe', asUserId: nbCustSaved.id }) }, null, { 'x-tenant-id': 'lucky-luxe' })
+        check('㉘ asUserId 跨店=404(不借别店身份)', asCross.status === 404, String(asCross.status))
+        const roster2 = await request(`/sandbox/demo-roster`, {}, null, { 'x-tenant-id': shop.tenantId })
+        check('㉘ 沙盒名册路由可用(ALLOW 闸门内)', roster2.status === 200 && Array.isArray(roster2.data.roster), String(roster2.status))
+      } else check('㉘ (跳过)无 TEST_DB_PATH', true)
 
       const NAV_BASELINE = 106
       check(`㉑ 裸导航调用数 ≤ 基线 ${NAV_BASELINE}(F2 只减不增;新增代码走 utils/nav.js)`, navCount <= NAV_BASELINE, `当前 ${navCount}`)

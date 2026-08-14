@@ -4,7 +4,13 @@
 import { connect, shot, sleep } from './lib.mjs';
 const BASE = 'http://127.0.0.1:4128';
 const A = (c, m) => { if (!c) throw new Error(m); };
-const HOPS = ['jics-nail', 'r3s-msn4lfld', 'jics-nail', 'lucky-luxe'];
+const HOPS = ['jics-nail', 'hoptest-demo2', 'jics-nail', 'lucky-luxe'];
+/* 对照卡(handoff/演示身份对照卡_2026-08-12.md)—— 断言值写死,店主拿同一张卡对屏幕 */
+const CARD = {
+  'lucky-luxe':   { name: '演示2-lucky-美睫储值户', spent: 704, points: 104, balance: 96 },
+  'jics-nail':    { name: '演示2-jics-美甲券户',   spent: 158, points: 158, balance: 0 },
+  'hoptest-demo2':{ name: '演示2-试店-样板户',     spent: 154, points: 154, balance: 0 }
+};
 async function truth(tenant) {
   const d = await fetch(BASE + '/auth/wechat/mini-login', { method: 'POST', headers: { 'content-type': 'application/json', 'x-tenant-id': tenant }, body: JSON.stringify({ demoLogin: true, tenantId: tenant }) }).then((r) => r.json());
   const u = d.user;
@@ -44,7 +50,7 @@ async function hopTo(tenant) {
   await sleep(2400);
 }
 async function assertMe(tenant, tag, doShot) {
-  const want = await truth(tenant);
+  const want = Object.assign(await truth(tenant), CARD[tenant] || {});  // 卡上写死值优先;称谓仍取后端
   const p = await go('/pages/me/index', 3500);
   const m = await p.data('member');
   const live = await p.data('liveBalance');
@@ -58,8 +64,10 @@ async function assertMe(tenant, tag, doShot) {
   return `${tag}:${want.name}/${want.spent}/${want.points}/${want.level}/${want.balance}`;
 }
 
-console.log('起点 lucky ✓', await assertMe('lucky-luxe', 'lucky-start', true));
-for (let round = 1; round <= 5; round += 1) {
+/* 抗 devtools 累积劣化:ROUND=n 单轮模式(外层 bash 逐轮起新进程,每轮新连接) */
+const ONLY_ROUND = Number(process.env.ROUND || 0);
+console.log('起点 lucky ✓', await assertMe('lucky-luxe', 'lucky-start', ONLY_ROUND <= 1));
+for (let round = (ONLY_ROUND || 1); round <= (ONLY_ROUND || 5); round += 1) {
   const path = [];
   for (const t of HOPS) {
     await hopTo(t);
@@ -68,4 +76,4 @@ for (let round = 1; round <= 5; round += 1) {
   console.log(`第 ${round}/5 轮五跳 ✓\n  ` + path.join('\n  '));
 }
 await mp.disconnect();
-console.log('D40 五跳闸门:5/5 轮全绿(每跳姓名+四数字 ≡ 当前店)');
+console.log(`D40 五跳闸门:第 ${ONLY_ROUND || '1-5'} 轮全绿(每跳姓名+四数字 ≡ 对照卡)`);

@@ -96,7 +96,8 @@ Page({
       api.myBalance().then((b) => this.setData({ liveBalance: b.yuan })).catch(() => {})
     }
     ensureCurrencyCached()
-    this.setData({ cur: curOf() })   // 币种跟门店走,不写死 ${curOf().p}${curOf().s}
+    this.setData({ cur: curOf() })   // 币种跟门店走,不写死
+    this.setData({ sandbox: api.SANDBOX === true }) // 沙盒工具条开关(正式包恒 false) ${curOf().p}${curOf().s}
 
     tabbar.update(this, 3)
     let member = wx.getStorageSync('lucky_member') || {}
@@ -601,6 +602,8 @@ Page({
       showCancel: false
     })
   },
+
+  goSandboxIdentity() { require('../../utils/nav').to('/pages/sandbox-identity/index') },
 
   goMemberBenefits() {
     this.requireLogin(() => wx.navigateTo({ url: '/pages/member-benefits/index' }))

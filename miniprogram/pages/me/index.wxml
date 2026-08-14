@@ -158,6 +158,11 @@
         <view class="menu-badge"><image class="menu-ic" src="/assets/icons/c-crown.svg"></image></view>
         <view class="menu-title">{{lang === 'en' ? 'Benefits' : '会员权益'}}</view>
       </view>
+      <!-- 沙盒专用工具条(补强批):正式包 USE_LOCAL_SANDBOX=false 不渲染;服务端路由生产也关 -->
+      <view class="menu-card card sandbox-bar" wx:if="{{sandbox}}" bindtap="goSandboxIdentity">
+        <view class="menu-badge"><image class="menu-ic" src="/assets/icons/c-crown.svg"></image></view>
+        <view class="menu-title">切换演示身份(沙盒)</view>
+      </view>
       <view class="menu-card card" bindtap="openPointsMall">
         <view class="menu-badge"><image class="menu-ic" src="/assets/icons/c-gift.svg"></image></view>
         <view class="menu-title">{{t.pointsMall}}</view>

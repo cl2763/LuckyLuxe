@@ -62,7 +62,8 @@
     "pages/orders/index",
     "pages/order-detail/index",
     "pages/store-location/index",
-    "pages/assets/index"
+    "pages/assets/index",
+    "pages/sandbox-identity/index"
   ],
   "window": {
     "navigationBarTitleText": "有迹",
