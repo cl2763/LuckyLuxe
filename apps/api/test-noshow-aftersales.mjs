@@ -447,7 +447,7 @@ const main = async () => {
                   else if (src[q] === ')') { depth -= 1; if (depth === 0) { end = q; break } }
                 }
                 if (!/fail\s*[:(]/.test(src.slice(idx, end))) bad3.push(`${pth.slice(ROOT2.length)}: wx.${api} 无 fail`)
-                idx = end
+                idx = idx + 1 // 补账①修盲区:嵌套在外层回调里的内层调用不能被整块跳过
               }
             }
           }

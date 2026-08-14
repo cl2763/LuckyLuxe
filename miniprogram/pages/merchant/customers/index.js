@@ -207,7 +207,7 @@ Page({
           if (Number.isFinite(days) && days > 0) body.validDays = Math.round(days)
           const r = await api.adminPost(`/admin/coupons/${encodeURIComponent(id)}/grant-batch`, body)
           this.setData({ couponSheet: false })
-          wx.showModal({ title: '发放完成', content: `已发 ${r.granted} 张,有效期 ${body.validDays || dftDays} 天${r.skipped ? `;跳过 ${r.skipped} 人(已持有/超量)` : ''}。顾客打开小程序「券包」即可见。`, showCancel: false, confirmText: '好' })
+          wx.showModal({ title: '发放完成', content: `已发 ${r.granted} 张,有效期 ${body.validDays || dftDays} 天${r.skipped ? `;跳过 ${r.skipped} 人(已持有/超量)` : ''}。顾客打开小程序「券包」即可见。`, showCancel: false, confirmText: '好', fail: (e) => console.warn('[showModal fail]', e) /* S组卫生批补账①:嵌套内层弹窗补挂 */ })
         } catch (err) { wx.showToast({ title: (err && err.message) || '发放失败', icon: 'none' }) }
         this.setData({ granting: false })
       },

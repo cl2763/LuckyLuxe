@@ -56,7 +56,8 @@ Page({
             title: '兑换成功 🎉',
             content: `「${r.couponName}」已放入你的券包。当前剩余 ${r.balance} 积分。`,
             confirmText: '看券包', cancelText: '好',
-            success: (x) => { if (x.confirm) wx.navigateTo({ url: '/pages/coupons/index' }) }
+            success: (x) => { if (x.confirm) wx.navigateTo({ url: '/pages/coupons/index' }) },
+            fail: (e) => console.warn('[showModal fail]', e) // S组卫生批补账①:嵌套内层弹窗,codemod 整块吞跳过,补挂
           })
           this.load()
         } catch (err) {
