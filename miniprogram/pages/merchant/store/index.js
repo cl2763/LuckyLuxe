@@ -36,7 +36,8 @@ Page({
   goDepositRule() {
     wx.showModal({
       title: '定金与取消规则', showCancel: false, confirmText: '知道了',
-      content: '定金收不收、多少钱、能不能抵尾款、迟到宽限与改期时限,都在网页后台「门店设置 → 定金与取消规则」里配,配完顾客预约页与 AI 话术自动跟上。'
+      content: '定金收不收、多少钱、能不能抵尾款、迟到宽限与改期时限,都在网页后台「门店设置 → 定金与取消规则」里配,配完顾客预约页与 AI 话术自动跟上。',
+      fail: (e) => console.warn('[showModal fail]', e) // S组卫生批:fail=开发者域错误,console 留痕不弹 UI(toast 会撞转场,D27 家族)
     })
   },
 
@@ -79,7 +80,8 @@ Page({
           await api.adminRequest('/admin/store-info', 'PUT', { storeId: this.data.storeId, [key]: v })
           this.setData({ [key]: v }); wx.showToast({ title: '已保存', icon: 'none' })
         } catch (err) { wx.showToast({ title: (err && err.message) || '保存失败', icon: 'none' }) }
-      }
+      },
+      fail: (e) => console.warn('[showModal fail]', e) // S组卫生批:fail=开发者域错误,console 留痕不弹 UI(toast 会撞转场,D27 家族)
     })
   },
 
@@ -124,7 +126,8 @@ Page({
           await api.adminPost('/admin/special-dates', { storeId: this.data.storeId, date, isClosed: true })
           wx.showToast({ title: '已添加', icon: 'none' }); this.load()
         } catch (err) { wx.showToast({ title: (err && err.message) || '添加失败', icon: 'none' }) }
-      }
+      },
+      fail: (e) => console.warn('[showModal fail]', e) // S组卫生批:fail=开发者域错误,console 留痕不弹 UI(toast 会撞转场,D27 家族)
     })
   },
 
@@ -138,7 +141,8 @@ Page({
           await api.adminRequest(`/admin/special-dates/${date}?storeId=${encodeURIComponent(this.data.storeId)}`, 'DELETE')
           wx.showToast({ title: '已删除', icon: 'none' }); this.load()
         } catch (err) { wx.showToast({ title: (err && err.message) || '删除失败', icon: 'none' }) }
-      }
+      },
+      fail: (e) => console.warn('[showModal fail]', e) // S组卫生批:fail=开发者域错误,console 留痕不弹 UI(toast 会撞转场,D27 家族)
     })
   }
 })

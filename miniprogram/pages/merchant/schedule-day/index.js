@@ -155,7 +155,8 @@ Page({
           wx.showToast({ title: '已保存,半天班边界跟着走', icon: 'none' })
           this.load(this.data.from)
         } catch (e) { wx.showToast({ title: (e && e.message) || '保存失败', icon: 'none' }) }
-      }
+      },
+      fail: (e) => console.warn('[showModal fail]', e) // S组卫生批:fail=开发者域错误,console 留痕不弹 UI(toast 会撞转场,D27 家族)
     })
   }
 })

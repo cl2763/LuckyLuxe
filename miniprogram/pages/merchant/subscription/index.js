@@ -139,7 +139,8 @@ Page({
         } catch (err) {
           wx.showToast({ title: (err && err.message) || '提交失败', icon: 'none' })
         }
-      }
+      },
+      fail: (e) => console.warn('[showModal fail]', e) // S组卫生批:fail=开发者域错误,console 留痕不弹 UI(toast 会撞转场,D27 家族)
     })
   },
 
@@ -160,13 +161,15 @@ Page({
               wx.showToast({ title: `已开通至 ${fmtDate(p.aiExpiresAt)}`, icon: 'none', duration: 2500 })
               that.load()
             } catch (err) { wx.showToast({ title: (err && err.message) || '支付失败', icon: 'none' }) }
-          }
+          },
+          fail: (e) => console.warn('[showModal fail]', e) // S组卫生批:fail=开发者域错误,console 留痕不弹 UI(toast 会撞转场,D27 家族)
         })
       } else {
         wx.showModal({
           title: '订单已生成',
           content: `AI 智能包订单 ${money(r.order.amountCents)} 已创建,平台确认收款后自动开通。请联系客服完成付款,订单号:${r.order.id.slice(-8)}。`,
-          showCancel: false
+          showCancel: false,
+          fail: (e) => console.warn('[showModal fail]', e) // S组卫生批:fail=开发者域错误,console 留痕不弹 UI(toast 会撞转场,D27 家族)
         })
         this.load()
       }
@@ -208,14 +211,17 @@ Page({
         } catch (err) {
           wx.showToast({ title: (err && err.message) || '提交失败', icon: 'none' })
         }
-      }
+      },
+      fail: (e) => console.warn('[showModal fail]', e) // S组卫生批:fail=开发者域错误,console 留痕不弹 UI(toast 会撞转场,D27 家族)
     })
   },
 
   async renew() {
     if (this._paying) return
     if (this.data.noPrice) {
-      wx.showModal({ title: '无需自助续费', content: '免费版永久免费;定制版为按需报价,续费请直接联系客服。', showCancel: false })
+      wx.showModal({ title: '无需自助续费', content: '免费版永久免费;定制版为按需报价,续费请直接联系客服。', showCancel: false,
+  fail: (e) => console.warn('[showModal fail]', e) // S组卫生批:fail=开发者域错误,console 留痕不弹 UI(toast 会撞转场,D27 家族)
+})
       return
     }
     this._paying = true
@@ -234,14 +240,16 @@ Page({
               wx.showToast({ title: `续费成功,有效期至 ${fmtDate(p.expiresAt)}`, icon: 'none', duration: 2500 })
               that.load()
             } catch (err) { wx.showToast({ title: (err && err.message) || '支付失败', icon: 'none' }) }
-          }
+          },
+          fail: (e) => console.warn('[showModal fail]', e) // S组卫生批:fail=开发者域错误,console 留痕不弹 UI(toast 会撞转场,D27 家族)
         })
       } else {
         wx.showModal({
           title: '订单已生成',
           content: `续费订单 ${money(r.order.amountCents)} 已创建,平台确认收款后自动顺延到期日。请联系客服完成付款,订单号:${r.order.id.slice(-8)}。iPhone 如无法支付属苹果虚拟支付限制,同样走客服通道。`,
           showCancel: false,
-          confirmText: '知道了'
+          confirmText: '知道了',
+          fail: (e) => console.warn('[showModal fail]', e) // S组卫生批:fail=开发者域错误,console 留痕不弹 UI(toast 会撞转场,D27 家族)
         })
         this.load()
       }

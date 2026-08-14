@@ -1,6 +1,5 @@
 const storage = require('../../utils/storage')
 const { curOf, ensureCurrencyCached } = require('../../utils/storecurrency')
-const mock = require('../../utils/mock-data')
 const i18n = require('../../utils/i18n')
 const api = require('../../utils/api')
 const tabbar = require('../../utils/tabbar')
@@ -118,7 +117,7 @@ Page({
       sourceOrders = isLoggedIn ? storage.getOrders() : []
     }
     const orders = sourceOrders.map((item) => {
-      const service = item.service || mock.findService(item.serviceInfo.serviceId) || {}
+      const service = item.service || (item.serviceInfo && { name: item.serviceInfo.serviceName, type: item.serviceInfo.serviceType, duration: item.serviceInfo.duration }) || {} // mock 清除:回落用下单时留档的 serviceInfo,不再查演示表
       const localizedService = i18n.localizeService(service, lang)
       return Object.assign({}, item, {
         statusText: i18n.statusText(item.status, lang),

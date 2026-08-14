@@ -55,7 +55,8 @@ Page({
         } catch (err) {
           wx.showToast({ title: (err && err.message) || '保存失败', icon: 'none' })
         }
-      }
+      },
+      fail: (e) => console.warn('[showModal fail]', e) // S组卫生批:fail=开发者域错误,console 留痕不弹 UI(toast 会撞转场,D27 家族)
     })
   },
 
@@ -84,7 +85,8 @@ Page({
     const ask = (title, placeholder) => new Promise((resolve) => {
       wx.showModal({
         title, editable: true, placeholderText: placeholder, content: '',
-        success: (r) => resolve(r.confirm ? (r.content || '').trim() : null)
+        success: (r) => resolve(r.confirm ? (r.content || '').trim() : null),
+        fail: (e) => console.warn('[showModal fail]', e) // S组卫生批:fail=开发者域错误,console 留痕不弹 UI(toast 会撞转场,D27 家族)
       })
     })
     ;(async () => {
@@ -124,7 +126,8 @@ Page({
         if (api.clearAdminAuth) api.clearAdminAuth()
         if (api.clearFinanceKey) api.clearFinanceKey()
         wx.reLaunch({ url: '/pages/entry/index' })
-      }
+      },
+      fail: (e) => console.warn('[showModal fail]', e) // S组卫生批:fail=开发者域错误,console 留痕不弹 UI(toast 会撞转场,D27 家族)
     })
   }
 })

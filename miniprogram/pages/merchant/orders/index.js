@@ -221,7 +221,8 @@ Page(Object.assign({
           wx.showToast({ title: '已标记爽约', icon: 'none' })
           this.loadList(); this.loadDayView(this.data.selDate)
         } catch (err) { wx.showToast({ title: (err && err.message) || '标记失败', icon: 'none' }) }
-      }
+      },
+      fail: (e) => console.warn('[showModal fail]', e) // S组卫生批:fail=开发者域错误,console 留痕不弹 UI(toast 会撞转场,D27 家族)
     })
   },
   // 图 A-2 处置弹层:老板二选一,备注选填,经手人=当前登录老板(后端自动记)
@@ -261,7 +262,8 @@ Page(Object.assign({
     wx.showModal({
       title: '定金处置记录',
       content: `${act} · ${d.amountText}\n处置:${String(d.at).slice(0, 16).replace('T', ' ')} · ${d.actor}${d.note ? `\n备注:${d.note}` : ''}`,
-      showCancel: false, confirmText: '知道了'
+      showCancel: false, confirmText: '知道了',
+      fail: (e) => console.warn('[showModal fail]', e) // S组卫生批:fail=开发者域错误,console 留痕不弹 UI(toast 会撞转场,D27 家族)
     })
   },
   /* 撤回改单:把这单还没签的结算单全撤掉,回到「去结算」状态重新开。
@@ -280,7 +282,8 @@ Page(Object.assign({
           wx.showToast({ title: '已撤回,可以重新开单', icon: 'none' })
           this.goSettle(ctx)
         } catch (e) { wx.showToast({ title: (e && e.message) || '撤回失败', icon: 'none' }) }
-      }
+      },
+      fail: (e) => console.warn('[showModal fail]', e) // S组卫生批:fail=开发者域错误,console 留痕不弹 UI(toast 会撞转场,D27 家族)
     })
   },
 
@@ -375,7 +378,8 @@ Page(Object.assign({
           wx.showToast({ title: '进展已记录', icon: 'none' })
           this.setData({ asPanel: null }); this.loadList()
         } catch (err) { wx.showToast({ title: (err && err.message) || '写入失败', icon: 'none' }) }
-      }
+      },
+      fail: (e) => console.warn('[showModal fail]', e) // S组卫生批:fail=开发者域错误,console 留痕不弹 UI(toast 会撞转场,D27 家族)
     })
   },
   // B①/B④:标记已解决 —— 处理结果必填,顾客端展示的就是这段文案
@@ -395,7 +399,8 @@ Page(Object.assign({
           wx.showToast({ title: '已标记解决', icon: 'none' })
           this.setData({ asPanel: null }); this.loadList()
         } catch (err) { wx.showToast({ title: (err && err.message) || '操作失败', icon: 'none' }) }
-      }
+      },
+      fail: (e) => console.warn('[showModal fail]', e) // S组卫生批:fail=开发者域错误,console 留痕不弹 UI(toast 会撞转场,D27 家族)
     })
   },
   // B①:关闭 = 仅老板,必填原因(无需处理/顾客撤回等)
@@ -415,7 +420,8 @@ Page(Object.assign({
           wx.showToast({ title: '已关闭', icon: 'none' })
           this.setData({ asPanel: null }); this.loadList()
         } catch (err) { wx.showToast({ title: (err && err.message) || '操作失败', icon: 'none' }) }
-      }
+      },
+      fail: (e) => console.warn('[showModal fail]', e) // S组卫生批:fail=开发者域错误,console 留痕不弹 UI(toast 会撞转场,D27 家族)
     })
   },
 
@@ -424,7 +430,9 @@ Page(Object.assign({
       try { await api.adminPatch(`/admin/bookings/${encodeURIComponent(id)}/status`, { status: s }); wx.showToast({ title: '已更新', icon: 'none' }); this.loadList() }
       catch (err) { wx.showToast({ title: (err && err.message) || '操作失败', icon: 'none' }) }
     }
-    if (s === 'CANCELLED') { wx.showModal({ title: '取消预约', content: '确认取消?将释放该时段;若已入账会自动冲销。', success: (r) => { if (r.confirm) doIt() } }); return }
+    if (s === 'CANCELLED') { wx.showModal({ title: '取消预约', content: '确认取消?将释放该时段;若已入账会自动冲销。', success: (r) => { if (r.confirm) doIt() },
+  fail: (e) => console.warn('[showModal fail]', e) // S组卫生批:fail=开发者域错误,console 留痕不弹 UI(toast 会撞转场,D27 家族)
+}); return }
     doIt()
   },
 
@@ -498,7 +506,9 @@ Page(Object.assign({
   dvPrev() { this.loadDayView(addDays(this.data.selDate || todayStr(), -1)) },
   dvNext() { this.loadDayView(addDays(this.data.selDate || todayStr(), 1)) },
   dvToday() { this.loadDayView(todayStr()) },
-  shareSchedule() { wx.showModal({ title: '分享台面', showCancel: false, confirmText: '知道了', content: '把当前排满的台面截屏,发朋友圈/群做宣传——满屏预约=火爆。\niPhone:侧边键+音量上;安卓:电源+音量下。' }) },
+  shareSchedule() { wx.showModal({ title: '分享台面', showCancel: false, confirmText: '知道了', content: '把当前排满的台面截屏,发朋友圈/群做宣传——满屏预约=火爆。\niPhone:侧边键+音量上;安卓:电源+音量下。',
+  fail: (e) => console.warn('[showModal fail]', e) // S组卫生批:fail=开发者域错误,console 留痕不弹 UI(toast 会撞转场,D27 家族)
+}) },
 
   tapBlock(e) {
     const id = e.currentTarget.dataset.id
@@ -507,7 +517,9 @@ Page(Object.assign({
     if (!b) return
     // 员工:仅本人那列可操作(到店/完成/写小记);别人的单只读
     if (this.data.role !== 'owner' && b.techId !== this.data.myTechId) {
-      wx.showModal({ title: b.customerName, content: `${b.startTime}–${b.endTime} · ${b.serviceName} · ${b.tech}`, showCancel: false, confirmText: '知道了' }); return
+      wx.showModal({ title: b.customerName, content: `${b.startTime}–${b.endTime} · ${b.serviceName} · ${b.tech}`, showCancel: false, confirmText: '知道了',
+  fail: (e) => console.warn('[showModal fail]', e) // S组卫生批:fail=开发者域错误,console 留痕不弹 UI(toast 会撞转场,D27 家族)
+}); return
     }
     // 屏 0:纯文字按钮,不带 emoji;完成由顾客签署驱动,面板里不再有「标记完成」
     this.settlementsOf(b.id).then((sheets) => {
@@ -574,7 +586,8 @@ Page(Object.assign({
           wx.showToast({ title: resp && resp.created === false ? '之前已标过,没重复记账' : '已记定金预收', icon: 'none' })
           this.loadDayView(this.data.selDate)
         } catch (err) { wx.showToast({ title: (err && err.message) || '标记失败', icon: 'none' }) }
-      }
+      },
+      fail: (e) => console.warn('[showModal fail]', e) // S组卫生批:fail=开发者域错误,console 留痕不弹 UI(toast 会撞转场,D27 家族)
     })
   },
 

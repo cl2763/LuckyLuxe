@@ -309,7 +309,8 @@ Page({
           wx.showToast({ title: '已保存,半天班边界跟着走', icon: 'none' })
           this.loadWeek(this.data.sc.from)
         } catch (e) { wx.showToast({ title: (e && e.message) || '保存失败', icon: 'none' }) }
-      }
+      },
+      fail: (e) => console.warn('[showModal fail]', e) // S组卫生批:fail=开发者域错误,console 留痕不弹 UI(toast 会撞转场,D27 家族)
     })
   },
 
@@ -340,7 +341,8 @@ Page({
           wx.showToast({ title: `已应用到未来 4 周(${entries.length} 条)`, icon: 'none' })
           this.loadWeek(this.data.sc.from)
         } catch (e) { wx.showToast({ title: (e && e.message) || '应用失败', icon: 'none' }) }
-      }
+      },
+      fail: (e) => console.warn('[showModal fail]', e) // S组卫生批:fail=开发者域错误,console 留痕不弹 UI(toast 会撞转场,D27 家族)
     })
   },
   goDetail(e) {
@@ -356,7 +358,8 @@ Page({
         if (!r.confirm || !r.content || !r.content.trim()) return
         try { await api.adminPost('/admin/technicians', { name: r.content.trim() }); wx.showToast({ title: '已添加', icon: 'none' }); this.load() }
         catch (err) { wx.showToast({ title: (err && err.message) || '添加失败', icon: 'none' }) }
-      }
+      },
+      fail: (e) => console.warn('[showModal fail]', e) // S组卫生批:fail=开发者域错误,console 留痕不弹 UI(toast 会撞转场,D27 家族)
     })
   },
 
@@ -373,7 +376,8 @@ Page({
           content: '',
           editable: true,
           placeholderText: `${sug.username}(直接确定就用这个)`,
-          success: (m) => resolve(m.confirm ? (m.content || '').trim().toLowerCase() : null)
+          success: (m) => resolve(m.confirm ? (m.content || '').trim().toLowerCase() : null),
+          fail: (e) => console.warn('[showModal fail]', e) // S组卫生批:fail=开发者域错误,console 留痕不弹 UI(toast 会撞转场,D27 家族)
         })
       })
       if (typed === null) return
@@ -388,7 +392,8 @@ Page({
         confirmText: '复制', cancelText: '知道了',
         success: (m) => { if (m.confirm) wx.setClipboardData({ data: text, success: () => wx.showToast({ title: '已复制,去粘贴给员工', icon: 'none' }) ,
       fail: () => wx.showToast({ title: '复制调用失败,请重试', icon: 'none' })
-    }) }
+    }) },
+        fail: (e) => console.warn('[showModal fail]', e) // S组卫生批:fail=开发者域错误,console 留痕不弹 UI(toast 会撞转场,D27 家族)
       })
       this.load()
     } catch (err) { wx.showToast({ title: (err && err.message) || '生成失败', icon: 'none' }) }
@@ -403,7 +408,8 @@ Page({
         confirmText: '复制密码', cancelText: '知道了',
         success: (m) => { if (m.confirm) wx.setClipboardData({ data: r.initialPassword, success: () => wx.showToast({ title: '已复制,去粘贴给员工', icon: 'none' }) ,
       fail: () => wx.showToast({ title: '复制调用失败,请重试', icon: 'none' })
-    }) }
+    }) },
+        fail: (e) => console.warn('[showModal fail]', e) // S组卫生批:fail=开发者域错误,console 留痕不弹 UI(toast 会撞转场,D27 家族)
       })
     } catch (err) { wx.showToast({ title: (err && err.message) || '重置失败', icon: 'none' }) }
   },

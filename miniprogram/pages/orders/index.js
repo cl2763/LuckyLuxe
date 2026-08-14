@@ -1,6 +1,5 @@
 const storage = require('../../utils/storage')
 const { curOf, ensureCurrencyCached } = require('../../utils/storecurrency')
-const mock = require('../../utils/mock-data')
 const i18n = require('../../utils/i18n')
 const api = require('../../utils/api')
 
@@ -73,7 +72,7 @@ Page({
       sourceOrders = storage.getOrders()
     }
     const orders = sourceOrders.map((item) => {
-      const service = item.service || mock.findService(item.serviceInfo.serviceId) || {}
+      const service = item.service || (item.serviceInfo && { name: item.serviceInfo.serviceName, type: item.serviceInfo.serviceType, duration: item.serviceInfo.duration }) || {} // mock 清除:同 me 页
       const localizedService = i18n.localizeService(service, lang)
       return Object.assign({}, item, {
         statusText: i18n.statusText(item.status, lang),

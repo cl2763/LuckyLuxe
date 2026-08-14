@@ -195,7 +195,8 @@ const dailyCloseMixin = {
           wx.showToast({ title: '已重开,可以改分成了', icon: 'none' })
           this.loadClose(this.data.date)
         } catch (e) { wx.showToast({ title: (e && e.message) || '重开失败', icon: 'none' }) }
-      }
+      },
+      fail: (e) => console.warn('[showModal fail]', e) // S组卫生批:fail=开发者域错误,console 留痕不弹 UI(toast 会撞转场,D27 家族)
     })
   }
 }

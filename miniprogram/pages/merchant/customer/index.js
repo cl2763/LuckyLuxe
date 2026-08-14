@@ -54,7 +54,9 @@ Page({
           const c = list[res.tapIndex]
           try {
             const g = await api.adminPost(`/admin/coupons/${encodeURIComponent(c.id)}/grant`, { userId: this.id })
-            wx.showModal({ title: '已发券', content: `「${g.grant.couponName}」已发给 ${g.grant.userName}\n核销码 ${g.grant.code}\n有效期至 ${String(g.grant.expiresAt).slice(0, 10)}\n顾客券包里也能看到`, showCancel: false })
+            wx.showModal({ title: '已发券', content: `「${g.grant.couponName}」已发给 ${g.grant.userName}\n核销码 ${g.grant.code}\n有效期至 ${String(g.grant.expiresAt).slice(0, 10)}\n顾客券包里也能看到`, showCancel: false,
+  fail: (e) => console.warn('[showModal fail]', e) // S组卫生批:fail=开发者域错误,console 留痕不弹 UI(toast 会撞转场,D27 家族)
+})
           } catch (err) { wx.showToast({ title: (err && err.message) || '发券失败', icon: 'none' }) }
         }
       })

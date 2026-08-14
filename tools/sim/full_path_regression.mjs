@@ -100,6 +100,9 @@ await run('O7', '撤回改单(mock 确认弹窗)→回到去结算', async () =>
   const mk = await api('POST', '/admin/settlements', { userId: FX.cust, payerUserId: FX.cust, cardOwnerUserId: FX.cust, payIntent: 'offline_full', settlements: [{ bookingId: bk.data.booking.id, tierKey: 'list', items: [{ serviceId: FX.svc, qty: 1 }], customItems: [], technicians: [{ technicianId: FX.techs[0], role: 'main', itemNos: [] }], servedPersonName: '' }] });
   A(mk.status === 201, '建单失败 ' + mk.status + ' ' + JSON.stringify(mk.data).slice(0, 160));
   try {
+    /* 工具纪律(S组卫生批三轮实锤):①result 式 mock 会把 options 里的 fail 也触发;
+       ②函数式 mock 对 showModal 不生效;③mock showToast 会毒化导航桥。
+       终解=产品侧 showModal 的 fail 统一 console.warn(不弹 UI),walk 保持 result 式 mock。 */
     await mp.mockWxMethod('showModal', { confirm: true });
     const p = await go('/pages/merchant/orders/index');
     await p.callMethod('loadDayView', dateOffset(1)); await sleep(1800);
@@ -113,6 +116,7 @@ await run('O7', '撤回改单(mock 确认弹窗)→回到去结算', async () =>
     await sleep(2500);
     const sheets = await api('GET', `/admin/settlements?bookingId=${bk.data.booking.id}`);
     A((sheets.data.settlements || []).every((s) => s.status === 'voided'), '撤回后仍有存活单');
+
   } finally {
     await mp.restoreWxMethod('showModal').catch(() => {});
     await api('PATCH', `/admin/bookings/${bk.data.booking.id}/status`, { status: 'CANCELLED', note: 'O7 fixture 撤单' });

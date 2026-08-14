@@ -88,7 +88,8 @@ Page({
     return new Promise((resolve) => {
       wx.showModal({
         title, editable: true, placeholderText: placeholder, content: '',
-        success: (r) => resolve(r.confirm ? (r.content || '').trim() : null)
+        success: (r) => resolve(r.confirm ? (r.content || '').trim() : null),
+        fail: (e) => console.warn('[showModal fail]', e) // S组卫生批:fail=开发者域错误,console 留痕不弹 UI(toast 会撞转场,D27 家族)
       })
     })
   },
@@ -170,7 +171,8 @@ Page({
         } else {
           wx.showModal({
             title: '核销券码', editable: true, placeholderText: '如 LL-XXXX-XXXX',
-            success: (m) => { if (m.confirm) this.doRedeem(String(m.content || '').trim()) }
+            success: (m) => { if (m.confirm) this.doRedeem(String(m.content || '').trim()) },
+            fail: (e) => console.warn('[showModal fail]', e) // S组卫生批:fail=开发者域错误,console 留痕不弹 UI(toast 会撞转场,D27 家族)
           })
         }
       }
@@ -181,9 +183,13 @@ Page({
     if (!code) return
     try {
       const r = await api.adminPost('/admin/coupons/redeem', { code })
-      wx.showModal({ title: '核销成功 ✓', content: `${r.redeemed.couponName}\n${r.redeemed.discountText} · ${r.redeemed.minSpendText}\n请在结账时抵扣`, showCancel: false })
+      wx.showModal({ title: '核销成功 ✓', content: `${r.redeemed.couponName}\n${r.redeemed.discountText} · ${r.redeemed.minSpendText}\n请在结账时抵扣`, showCancel: false,
+  fail: (e) => console.warn('[showModal fail]', e) // S组卫生批:fail=开发者域错误,console 留痕不弹 UI(toast 会撞转场,D27 家族)
+})
     } catch (err) {
-      wx.showModal({ title: '核销失败', content: (err && err.message) || '券码无效', showCancel: false })
+      wx.showModal({ title: '核销失败', content: (err && err.message) || '券码无效', showCancel: false,
+  fail: (e) => console.warn('[showModal fail]', e) // S组卫生批:fail=开发者域错误,console 留痕不弹 UI(toast 会撞转场,D27 家族)
+})
     }
   },
 
@@ -243,7 +249,8 @@ Page({
       else {
       wx.showModal({
         title: '需先解锁财务', content: '加储值属于资金操作,请先到财务页输入财务密码解锁本次会话。',
-        confirmText: '去财务页', success: (r) => { if (r.confirm) wx.navigateTo({ url: '/pages/merchant/finance/index' }) }
+        confirmText: '去财务页', success: (r) => { if (r.confirm) wx.navigateTo({ url: '/pages/merchant/finance/index' }) },
+        fail: (e) => console.warn('[showModal fail]', e) // S组卫生批:fail=开发者域错误,console 留痕不弹 UI(toast 会撞转场,D27 家族)
       })
       return
       }

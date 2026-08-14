@@ -1,6 +1,5 @@
 const storage = require('../../utils/storage')
 const { curOf, ensureCurrencyCached } = require('../../utils/storecurrency')
-const mock = require('../../utils/mock-data')
 const i18n = require('../../utils/i18n')
 const api = require('../../utils/api')
 
@@ -39,7 +38,7 @@ Page({
       }
     }
     if (order) {
-      const service = order.service || mock.findService(order.serviceInfo.serviceId) || {}
+      const service = order.service || (order.serviceInfo && { name: order.serviceInfo.serviceName, type: order.serviceInfo.serviceType, duration: order.serviceInfo.duration }) || {} // mock 清除
       const localizedService = i18n.localizeService(service, lang)
       order.statusText = i18n.statusText(order.status, lang)
       order.serviceImage = service.image || order.serviceImage || '/assets/images/store-cover.jpg'

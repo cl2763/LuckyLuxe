@@ -1,6 +1,5 @@
 const storage = require('../../utils/storage')
 const { curOf, ensureCurrencyCached } = require('../../utils/storecurrency')
-const mock = require('../../utils/mock-data')
 const i18n = require('../../utils/i18n')
 
 Page({
@@ -20,7 +19,7 @@ Page({
     i18n.setTitle(i18n.pageCopy('success', lang).title)
     const order = storage.getOrder(options.orderNo)
     if (order) {
-      const service = i18n.localizeService(mock.findService(order.serviceInfo.serviceId), lang)
+      const service = i18n.localizeService(order.service || (order.serviceInfo && { name: order.serviceInfo.serviceName, type: order.serviceInfo.serviceType }) || {}, lang) // mock 清除:订单落库时已带 service
       order.serviceInfo.serviceName = service ? service.name : order.serviceInfo.serviceName
       order.store = i18n.localizeStore(order.store, lang)
     }

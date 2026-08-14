@@ -1,4 +1,3 @@
-const mock = require('./mock-data')
 
 // ===== 联调开关(店主用)=====
 // true  = 连你 Mac 本地沙盘(模拟数据,随便测,不影响线上;开发者工具模拟器用 127.0.0.1 即可)
@@ -407,19 +406,20 @@ function miniMember(user = {}) {
   }
 }
 
-function addOnById(id) {
-  return mock.addOns.find((item) => item.id === id)
-}
-
-function selectedAddOns(ids) {
-  return (ids || []).map((id) => {
-    const item = addOnById(id)
-    return item ? {
-      id: item.id,
-      name: item.name,
-      priceCents: item.price * 100,
-      durationMin: item.id === 'reinforce' ? 15 : item.id === 'senior' ? 0 : 30
-    } : null
+/* D17 家族终章(S组卫生批 2026-08-12):加项解析从 mock 表改**真目录**。
+   旧实现按 id 查写死的 mock.addOns——服务端下发的真加项 id 在 mock 表里查不到,
+   会被 filter 静默丢掉:可用时段少算加项时长、下单载荷丢加项。真目录带 60s 缓存。 */
+let _addOnCatalog = null
+let _addOnCatalogAt = 0
+async function selectedAddOns(ids) {
+  if (!ids || !ids.length) return []
+  if (!_addOnCatalog || Date.now() - _addOnCatalogAt > 60000) {
+    _addOnCatalog = await getAddOns()
+    _addOnCatalogAt = Date.now()
+  }
+  return ids.map((id) => {
+    const item = _addOnCatalog.find((a) => a.id === id)
+    return item ? { id: item.id, name: item.name, priceCents: item.priceCents, durationMin: item.durationMin || 0 } : null
   }).filter(Boolean)
 }
 
@@ -511,7 +511,7 @@ async function getService(id, lang) {
 }
 
 async function getAvailability(serviceId, date, addOnIds, technicianId) {
-  const extraDurationMin = selectedAddOns(addOnIds).reduce((total, item) => total + item.durationMin, 0)
+  const extraDurationMin = (await selectedAddOns(addOnIds)).reduce((total, item) => total + item.durationMin, 0)
   try {
     const techQuery = technicianId ? `&technicianId=${technicianId}` : ''
     const storeId = await activeStoreId()   // D19:当前门店上下文,不写死
@@ -555,7 +555,7 @@ async function createBooking(cartItem, remark) {
     technicianId,
     date: appointment.date,
     time: appointment.time,
-    addOns: selectedAddOns(appointment.addOns),
+    addOns: await selectedAddOns(appointment.addOns),
     referenceImages: appointment.referenceDataImages || appointment.referenceImages || [],
     sourceChannel: appointment.sourceChannel || 'wechat_miniprogram',
     notes: remark || appointment.remark || '',

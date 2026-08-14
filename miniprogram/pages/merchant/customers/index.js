@@ -210,7 +210,8 @@ Page({
           wx.showModal({ title: '发放完成', content: `已发 ${r.granted} 张,有效期 ${body.validDays || dftDays} 天${r.skipped ? `;跳过 ${r.skipped} 人(已持有/超量)` : ''}。顾客打开小程序「券包」即可见。`, showCancel: false, confirmText: '好' })
         } catch (err) { wx.showToast({ title: (err && err.message) || '发放失败', icon: 'none' }) }
         this.setData({ granting: false })
-      }
+      },
+      fail: (e) => console.warn('[showModal fail]', e) // S组卫生批:fail=开发者域错误,console 留痕不弹 UI(toast 会撞转场,D27 家族)
     })
   },
 
@@ -228,7 +229,9 @@ Page({
       wx.hideLoading()
       wx.setClipboardData({
         data: text,
-        success: () => wx.showModal({ title: `已生成 ${msgs.length} 条召回话术`, content: `已复制到剪贴板,粘到微信逐个发送。\n\n${text.slice(0, 100)}…`, showCancel: false, confirmText: '好' })
+        success: () => wx.showModal({ title: `已生成 ${msgs.length} 条召回话术`, content: `已复制到剪贴板,粘到微信逐个发送。\n\n${text.slice(0, 100)}…`, showCancel: false, confirmText: '好',
+  fail: (e) => console.warn('[showModal fail]', e) // S组卫生批:fail=开发者域错误,console 留痕不弹 UI(toast 会撞转场,D27 家族)
+})
       ,
       fail: () => wx.showToast({ title: '复制调用失败,请重试', icon: 'none' })
     })

@@ -85,7 +85,9 @@ Page({
       success: () => wx.showToast({ title: '图片已存相册', icon: 'none' }),
       fail: (e) => {
         if (String(e.errMsg || '').includes('auth')) {
-          wx.showModal({ title: '需要相册权限', content: '请在设置里允许保存到相册后重试。', confirmText: '去设置', success: (r) => { if (r.confirm) wx.openSetting() } })
+          wx.showModal({ title: '需要相册权限', content: '请在设置里允许保存到相册后重试。', confirmText: '去设置', success: (r) => { if (r.confirm) wx.openSetting() },
+  fail: (e) => console.warn('[showModal fail]', e) // S组卫生批:fail=开发者域错误,console 留痕不弹 UI(toast 会撞转场,D27 家族)
+})
         } else wx.showToast({ title: '保存失败', icon: 'none' })
       }
     })

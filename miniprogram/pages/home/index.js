@@ -1,4 +1,3 @@
-const mock = require('../../utils/mock-data')
 const { curOf, ensureCurrencyCached } = require('../../utils/storecurrency')
 const i18n = require('../../utils/i18n')
 const api = require('../../utils/api')

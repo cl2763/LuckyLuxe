@@ -95,7 +95,8 @@ Page({
           wx.showToast({ title: '已发布', icon: 'success' })
           this.load()
         } catch (err) { wx.showToast({ title: (err && err.message) || '发布失败', icon: 'none' }) }
-      }
+      },
+      fail: (e) => console.warn('[showModal fail]', e) // S组卫生批:fail=开发者域错误,console 留痕不弹 UI(toast 会撞转场,D27 家族)
     })
   }
 })

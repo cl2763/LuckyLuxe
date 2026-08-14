@@ -1,6 +1,5 @@
 const storage = require('../../utils/storage')
 const { curOf, ensureCurrencyCached } = require('../../utils/storecurrency')
-const mock = require('../../utils/mock-data')
 const i18n = require('../../utils/i18n')
 const tabbar = require('../../utils/tabbar')
 const api = require('../../utils/api')
@@ -31,7 +30,7 @@ Page({
     tabbar.update(this, 2)
     i18n.setTitle(i18n.pageCopy('cart', lang).title)
     const cart = storage.getCart().map((item) => {
-      const service = i18n.localizeService(mock.findService(item.serviceId) || item.service, lang)
+      const service = i18n.localizeService(item.service || {}, lang) // mock 清除:加购时已存整个 service,mock 优先反而会顶掉真数据
       return Object.assign({}, item, {
         service: Object.assign({}, item.service, service)
       })

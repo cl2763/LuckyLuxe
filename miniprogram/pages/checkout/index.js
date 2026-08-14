@@ -193,6 +193,7 @@ Page({
       backendBookingIds: backendBookings.map((item) => item && item.id).filter(Boolean),
       appointment: first.appointmentInfo,
       store: this.data.store,
+      service: (this.data.items[0] && this.data.items[0].service) || null, // mock 清除:落单带上 service,成功页/订单页不再需要演示表
       couponId: '',
       couponDiscount: this.data.couponDiscount,
       balanceDeduction: this.data.balanceDeduction,

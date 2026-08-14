@@ -1,7 +1,6 @@
 /* 🔴 D17 失败态(店主 2026-08-11 书面标准,代 UI 图):
    主体区居中「加载失败,请检查网络后重试」+ 重试按钮,复用现有空态样式,
    **不做任何局部假数据** —— 接口挂了就如实说挂了,不许拿 mock 糊住顾客。 */
-const mock = require('../../utils/mock-data')
 const { curOf, ensureCurrencyCached } = require('../../utils/storecurrency')
 const i18n = require('../../utils/i18n')
 const api = require('../../utils/api')
@@ -51,7 +50,10 @@ Page({
   async refresh() {
     const lang = i18n.getLang()
     const isCare = this.data.activeType === 'care'
-    const categoryKeys = this.data.activeType === 'nail' ? mock.nailCategories : mock.lashCategories
+    // mock-data 退场:这两组是**展示分组顺序常量**(非动态假数据),就地内联
+    const NAIL_CATS = ['热门推荐', '法式系列', '轻奢设计', '日式款', '基础护理', '加项服务']
+    const LASH_CATS = ['热门推荐', '自然款', '浓密款', '下睫毛', '卸除护理', '加项服务']
+    const categoryKeys = this.data.activeType === 'nail' ? NAIL_CATS : LASH_CATS
     const categories = isCare ? [] : i18n.categories(categoryKeys, lang)
     let source
     try {

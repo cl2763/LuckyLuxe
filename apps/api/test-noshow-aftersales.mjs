@@ -18,7 +18,7 @@
      DATA_DIR=/tmp/ll-x PORT=4300 node local-server.mjs &
      TEST_BASE_URL=http://127.0.0.1:4300 TEST_DB_PATH=/tmp/ll-x/lucky-luxe.sqlite node 本文件
    (2026-08-11 有人少了 TEST_BASE_URL,在真库建了 nsas-a-msok023f 测试租户,已停用挂账。) */
-import { readFileSync, readdirSync, statSync } from 'node:fs'
+import { readFileSync, readdirSync, statSync, existsSync } from 'node:fs'
 import { join } from 'node:path'
 import { DatabaseSync } from 'node:sqlite'
 
@@ -438,7 +438,7 @@ const main = async () => {
           if (st.isDirectory()) walk3(pth)
           else if (/\.js$/.test(f)) {
             const src = readFileSync(pth, 'utf8')
-            for (const api of ['setClipboardData', 'getClipboardData', 'scanCode', 'requestPayment']) {
+            for (const api of ['setClipboardData', 'getClipboardData', 'scanCode', 'requestPayment', 'showModal']) { // S组卫生批:showModal 57 处全挂 fail 后纳入总闸
               let idx = 0
               while ((idx = src.indexOf(`wx.${api}({`, idx)) >= 0) {
                 let depth = 0; let end = idx
@@ -454,7 +454,7 @@ const main = async () => {
         }
       }
       walk3(join(ROOT2, 'miniprogram'))
-      check('⑳ 四之八④ 剪贴板/扫码/支付类 wx.* 全部挂 fail(静默失败家族总闸)', bad3.length === 0, bad3.join(' | '))
+      check('⑳ 四之八④ 剪贴板/扫码/支付/弹窗类 wx.* 全部挂 fail(静默失败家族总闸;S组卫生批起含 showModal)', bad3.length === 0, bad3.join(' | '))
 
       // ㉑ 裁决②(2026-08-12):裸导航基线拦增量 —— 新增代码一律走 utils/nav.js;
       //    存量 106 处=分叉债 F2(随 S 组迁移清零,清一处基线只准降不准升)。
@@ -650,6 +650,27 @@ const main = async () => {
         const luckyU9 = (await request('/auth/wechat/mini-login', { method: 'POST', body: JSON.stringify({ demoLogin: true, tenantId: 'lucky-luxe' }) }, null, { 'x-tenant-id': 'lucky-luxe' })).data.user
         check('㉙ 分级店称谓不受影响(仍走梯子标签)', luckyU9.memberLevel !== '顾客' && luckyU9.memberLevel !== '会员', luckyU9.memberLevel)
       } else check('㉙ (跳过)无 TEST_DB_PATH', true)
+
+      // ㉚ S组卫生批(2026-08-12):mock-data 整体退场 —— 文件删除+全仓零引用
+      //    (D17 家族终章:加项解析改真目录缓存;各页展示回落改下单留档的 serviceInfo)
+      {
+        const mockGone = !existsSync(join(ROOT2, 'miniprogram/utils/mock-data.js'))
+        check('㉚ mock-data.js 文件已删除', mockGone)
+        const badM = []
+        const walkM = (dir) => {
+          for (const f of readdirSync(dir)) {
+            const pth = join(dir, f)
+            const st = statSync(pth)
+            if (st.isDirectory()) { if (f !== 'node_modules') walkM(pth) }
+            else if (/\.js$/.test(f)) {
+              const src = readFileSync(pth, 'utf8')
+              if (/require\([^)]*mock-data/.test(src) || /\bmock\.\w/.test(src.replace(/\/\*[\s\S]*?\*\//g, '').replace(/\/\/[^\n]*/g, ''))) badM.push(pth.slice(ROOT2.length))
+            }
+          }
+        }
+        walkM(join(ROOT2, 'miniprogram'))
+        check('㉚ 全仓零 mock 引用(注释除外)', badM.length === 0, badM.join(' | '))
+      }
 
       const NAV_BASELINE = 106
       check(`㉑ 裸导航调用数 ≤ 基线 ${NAV_BASELINE}(F2 只减不增;新增代码走 utils/nav.js)`, navCount <= NAV_BASELINE, `当前 ${navCount}`)

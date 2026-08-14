@@ -77,7 +77,9 @@ Page({
     // 设计图:「确认并锁定 X月 工资表(需全部日结完成)」—— 与网页端同一门槛
     if (this.data.openDays) {
       wx.showModal({ title: '还不能锁定', showCancel: false, confirmText: '知道了',
-        content: `本月还有 ${this.data.openDays} 天没日结,锁定后这几天的业绩就永远算不进来了。先去日结。` })
+        content: `本月还有 ${this.data.openDays} 天没日结,锁定后这几天的业绩就永远算不进来了。先去日结。`,
+        fail: (e) => console.warn('[showModal fail]', e) // S组卫生批:fail=开发者域错误,console 留痕不弹 UI(toast 会撞转场,D27 家族)
+      })
       return
     }
     wx.showModal({
@@ -93,7 +95,8 @@ Page({
           this.load()
         } catch (err) { wx.showToast({ title: (err && err.message) || '锁定失败', icon: 'none', duration: 2500 }) }
         this.setData({ locking: false })
-      }
+      },
+      fail: (e) => console.warn('[showModal fail]', e) // S组卫生批:fail=开发者域错误,console 留痕不弹 UI(toast 会撞转场,D27 家族)
     })
   },
   unlockMonth() {
@@ -108,7 +111,8 @@ Page({
           wx.showToast({ title: '已解锁', icon: 'none' })
           this.load()
         } catch (err) { wx.showToast({ title: (err && err.message) || '操作失败', icon: 'none', duration: 2600 }) }
-      }
+      },
+      fail: (e) => console.warn('[showModal fail]', e) // S组卫生批:fail=开发者域错误,console 留痕不弹 UI(toast 会撞转场,D27 家族)
     })
   },
   // 发放入账:逐人写入账本支出(category=工资);账本只追加,发错走红字冲销
@@ -127,7 +131,8 @@ Page({
           this.load()
         } catch (err) { wx.showToast({ title: (err && err.message) || '发放失败', icon: 'none', duration: 2600 }) }
         this.setData({ paying: false })
-      }
+      },
+      fail: (e) => console.warn('[showModal fail]', e) // S组卫生批:fail=开发者域错误,console 留痕不弹 UI(toast 会撞转场,D27 家族)
     })
   },
 
@@ -166,7 +171,8 @@ Page({
             } catch (err) { wx.showToast({ title: (err && err.message) || '调整失败', icon: 'none', duration: 2500 }) }
           }
         })
-      }
+      },
+      fail: (e) => console.warn('[showModal fail]', e) // S组卫生批:fail=开发者域错误,console 留痕不弹 UI(toast 会撞转场,D27 家族)
     })
   },
   goPlan(e) {

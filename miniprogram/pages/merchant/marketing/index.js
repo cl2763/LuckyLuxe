@@ -37,7 +37,8 @@ Page({
       title: `沉睡储值卡 · ${this.data.sleepN} 人`,
       content: this.data.sleepNames.slice(0, 8).join('\n') + (this.data.sleepN > 8 ? '\n…' : ''),
       confirmText: '生成名单', cancelText: '关闭',
-      success: (r) => { if (r.confirm) wx.showToast({ title: '名单已生成,推送即将上线', icon: 'none' }) }
+      success: (r) => { if (r.confirm) wx.showToast({ title: '名单已生成,推送即将上线', icon: 'none' }) },
+      fail: (e) => console.warn('[showModal fail]', e) // S组卫生批:fail=开发者域错误,console 留痕不弹 UI(toast 会撞转场,D27 家族)
     })
   },
 

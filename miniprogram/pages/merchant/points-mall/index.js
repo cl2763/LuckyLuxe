@@ -131,7 +131,8 @@ Page({
           wx.showToast({ title: `已撤销,退回 ${r.refundedPoints} 积分`, icon: 'none', duration: 2500 })
           this.load()
         } catch (err) { wx.showToast({ title: (err && err.message) || '撤销失败', icon: 'none', duration: 2500 }) }
-      }
+      },
+      fail: (e) => console.warn('[showModal fail]', e) // S组卫生批:fail=开发者域错误,console 留痕不弹 UI(toast 会撞转场,D27 家族)
     })
   }
 })
