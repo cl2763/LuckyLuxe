@@ -571,7 +571,8 @@ const main = async () => {
         //    未配置租户(本测试店)=不分级 → 称谓「会员」+空梯子(三减法的服务端根)。
         const luckyU = (await request('/auth/wechat/mini-login', { method: 'POST', body: JSON.stringify({ demoLogin: true, tenantId: 'lucky-luxe' }) }, null, { 'x-tenant-id': 'lucky-luxe' })).data.user
         check('㉕ lucky-luxe 分级开启且梯子来自租户配置(4 档)', luckyU.membershipTiersEnabled === true && (luckyU.memberTiers || []).length === 4 && luckyU.memberLevel !== '会员', `${luckyU.memberLevel}/${(luckyU.memberTiers || []).length}`)
-        check('㉕ 未配置租户=不分级:称谓「会员」+空梯子', pm.data.user.membershipTiersEnabled === false && (pm.data.user.memberTiers || []).length === 0 && pm.data.user.memberLevel === '会员', `${pm.data.user.memberLevel}/${(pm.data.user.memberTiers || []).length}`)
+        // D41 后口径:不分级店称谓两态 —— 充值过=会员 / 未充值=顾客(该 demo 户只消费未充值 → 顾客)
+        check('㉕ 未配置租户=不分级:空梯子+称谓按充值史两态', pm.data.user.membershipTiersEnabled === false && (pm.data.user.memberTiers || []).length === 0 && pm.data.user.memberLevel === (pm.data.user.isMember ? '会员' : '顾客'), `${pm.data.user.memberLevel}/${pm.data.user.isMember}`)
 
         // ㉖ D38(2026-08-12 末验):累计消费 ≡ Σ已签结算单档位小计(与积分同基数);
         //    口径②:签署后预约转售后,积分与累计消费都不增不减(已签即计,不要复杂逻辑)
@@ -629,6 +630,26 @@ const main = async () => {
         const roster2 = await request(`/sandbox/demo-roster`, {}, null, { 'x-tenant-id': shop.tenantId })
         check('㉘ 沙盒名册路由可用(ALLOW 闸门内)', roster2.status === 200 && Array.isArray(roster2.data.roster), String(roster2.status))
       } else check('㉘ (跳过)无 TEST_DB_PATH', true)
+
+      // ㉙ D41(2026-08-12):不分级店会员资格=充值即会员(含迁移期初),消费不算;
+      //    未充值=「顾客」;充值那一刻翻转「会员」;分级店(lucky)梯子称谓不受影响
+      if (process.env.TEST_DB_PATH) {
+        const g1 = (await request('/auth/wechat/mini-login', { method: 'POST', body: JSON.stringify({ demoLogin: true, tenantId: shop.tenantId, asUserId: nbCustSaved.id }) }, null, { 'x-tenant-id': shop.tenantId })).data.user
+        check('㉙ D41 未充值(只消费过)=顾客,无会员标', g1.memberLevel === '顾客' && g1.isMember === false && g1.memberTier === 'guest', `${g1.memberLevel}/${g1.isMember}`)
+        check('㉙ memberPerks 通道下发(商家自定义会员权益,S9 填内容)', Array.isArray(g1.memberPerks), typeof g1.memberPerks)
+        const dbM = new DatabaseSync(process.env.TEST_DB_PATH)
+        dbM.prepare('UPDATE users SET wechat_open_id = ? WHERE id = ?').run(`fixture-openid-${nbCustSaved.id}`, nbCustSaved.id)
+        dbM.close()
+        const rc9 = await request('/admin/stored-value/recharge', { method: 'POST', body: JSON.stringify({ userId: nbCustSaved.id, amountCents: 5000, payChannel: 'cash', note: '㉙ D41 翻转 fixture' }) }, shop.token)
+        check('㉙ 翻转 fixture 充值成功', rc9.status === 200 || rc9.status === 201, JSON.stringify(rc9.data).slice(0, 100))
+        const g2 = (await request('/auth/wechat/mini-login', { method: 'POST', body: JSON.stringify({ demoLogin: true, tenantId: shop.tenantId, asUserId: nbCustSaved.id }) }, null, { 'x-tenant-id': shop.tenantId })).data.user
+        check('㉙ 充值那一刻翻转=会员', g2.memberLevel === '会员' && g2.isMember === true && g2.memberTier === 'member', `${g2.memberLevel}/${g2.isMember}`)
+        const list9 = (await request('/admin/customers', {}, shop.token)).data.customers
+        const row9 = list9.find((c) => c.id === nbCustSaved.id)
+        check('㉙ 商家端列表同口径(memberTier=member)', row9 && row9.memberTier === 'member' && row9.isMember === true, JSON.stringify(row9 && row9.memberTier))
+        const luckyU9 = (await request('/auth/wechat/mini-login', { method: 'POST', body: JSON.stringify({ demoLogin: true, tenantId: 'lucky-luxe' }) }, null, { 'x-tenant-id': 'lucky-luxe' })).data.user
+        check('㉙ 分级店称谓不受影响(仍走梯子标签)', luckyU9.memberLevel !== '顾客' && luckyU9.memberLevel !== '会员', luckyU9.memberLevel)
+      } else check('㉙ (跳过)无 TEST_DB_PATH', true)
 
       const NAV_BASELINE = 106
       check(`㉑ 裸导航调用数 ≤ 基线 ${NAV_BASELINE}(F2 只减不增;新增代码走 utils/nav.js)`, navCount <= NAV_BASELINE, `当前 ${navCount}`)

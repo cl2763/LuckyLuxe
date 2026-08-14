@@ -14,7 +14,7 @@ const CARD = {
 async function truth(tenant) {
   const d = await fetch(BASE + '/auth/wechat/mini-login', { method: 'POST', headers: { 'content-type': 'application/json', 'x-tenant-id': tenant }, body: JSON.stringify({ demoLogin: true, tenantId: tenant }) }).then((r) => r.json());
   const u = d.user;
-  return { name: u.displayName, spent: Math.round((u.totalSpentCents || 0) / 100), points: u.points || 0, level: u.membershipTiersEnabled === false ? '会员' : u.memberLevel, balance: Math.round((u.balanceCents || 0) / 100) };
+  return { name: u.displayName, spent: Math.round((u.totalSpentCents || 0) / 100), points: u.points || 0, level: u.memberLevel, balance: Math.round((u.balanceCents || 0) / 100) }; // D41:称谓直读服务端(不分级店=会员/顾客两态)
 }
 const mp = await connect();
 const go = async (r, ms = 3000) => { await mp.reLaunch(r); await sleep(ms); return mp.currentPage(); };
@@ -58,7 +58,7 @@ async function assertMe(tenant, tag, doShot) {
   A(m && String(m.nickname) === String(want.name), `${tag} 姓名「${m && m.nickname}」≠ 本店「${want.name}」(D40 串名)`);
   A(Number(m.totalSpent) === want.spent, `${tag} 累计消费 ${m.totalSpent} ≠ ${want.spent}`);
   A(Number(m.points) === want.points, `${tag} 积分 ${m.points} ≠ ${want.points}`);
-  A(String(m.tiersEnabled === false ? '会员' : m.memberLevel) === String(want.level), `${tag} 称谓 ≠ ${want.level}`);
+  A(String(m.memberLevel) === String(want.level), `${tag} 称谓「${m.memberLevel}」≠「${want.level}」`);
   A(Number(shownBal) === want.balance, `${tag} 余额 ${shownBal} ≠ ${want.balance}`);
   if (doShot) await shot(mp, `d40-${tag}`);
   return `${tag}:${want.name}/${want.spent}/${want.points}/${want.level}/${want.balance}`;

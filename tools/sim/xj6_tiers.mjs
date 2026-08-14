@@ -20,7 +20,7 @@ async function checkBranch(tenant, mini, expectTiers, tag, doShot) {
   const title = String(pillTexts[0] || '').trim();
   if (!expectTiers) {
     A(growth.length === 0, `${tag}: 成长条仍渲染(${growth.length})`);
-    A(title === '会员' || title === 'Member', `${tag}: 称谓「${title}」≠「会员」`);
+    A(['会员', '顾客', 'Member', 'Guest'].includes(title), `${tag}: 称谓「${title}」不在两态(D41)`);
   } else {
     A(growth.length === 1, `${tag}: 分级店成长条丢失(${growth.length})`);
     A(title !== '会员' && title !== 'Member' && title.length > 0, `${tag}: 分级店称谓被降级成「${title}」`);

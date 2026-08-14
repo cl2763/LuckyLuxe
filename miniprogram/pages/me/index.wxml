@@ -6,8 +6,8 @@
         <view>
           <view class="nickname">{{member.nickname}}</view>
           <button class="level-pill" bindtap="goMemberBenefits">
-            <!-- S9 小件:不分级店称谓只写「会员」(按租户配置,不写死店名) -->
-            <text>{{member.tiersEnabled === false ? (lang === 'en' ? 'Member' : '会员') : member.memberLevel}}</text>
+            <!-- D41+店主追加:不分级店 非会员=「成为会员」(CTA,点进权益页看成为会员的权益);会员=「会员」 -->
+            <text>{{member.tiersEnabled === false ? (member.memberLevel === '会员' ? (lang === 'en' ? 'Member' : '会员') : (lang === 'en' ? 'Become a member' : '成为会员')) : member.memberLevel}}</text>
             <text class="level-more">权益</text>
           </button>
         </view>

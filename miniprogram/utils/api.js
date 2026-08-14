@@ -381,7 +381,7 @@ function miniMember(user = {}) {
   return {
     nickname: profileDisplayName,
     profileComplete,
-    memberLevel: user.memberLevel || (tier ? tier.label : '会员'),
+    memberLevel: user.memberLevel || (tier ? tier.label : '顾客'), // D41:兜底不再默认「会员」
     memberTier: tierKey,
     nextMemberLevel: user.nextMemberLevel || (nextTier ? nextTier.label : ''),
     currentLevelValue: user.currentLevelValue || (tier ? tier.minSpend : 0),
@@ -389,6 +389,7 @@ function miniMember(user = {}) {
       ? (nextTier ? Math.max(0, nextTier.minSpend - growthValue) : 0)
       : user.amountToNextLevel,
     memberTiers: tiers,
+    memberPerks: user.memberPerks || [],
     tiersEnabled: user.membershipTiersEnabled === undefined ? true : Boolean(user.membershipTiersEnabled),
     depositWaived: Boolean(user.depositWaived),
     depositRule: user.depositRule || '',

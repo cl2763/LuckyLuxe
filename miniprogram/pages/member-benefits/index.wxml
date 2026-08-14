@@ -17,6 +17,15 @@
     </swiper>
   </view>
 
+  <!-- 不分级店:成为会员承接区(店主 2026-08-12 追加)。已是会员=权益视角;非会员=成为会员视角 -->
+  <view class="plain-join card" wx:if="{{plainStore}}">
+    <view class="pj-title">{{isMemberNow ? '我的会员' : '成为会员'}}</view>
+    <view class="pj-line">{{isMemberNow ? '您已是本店会员(充值即入会)。' : '在本店充值即可成为会员。'}}</view>
+    <block wx:if="{{memberPerks.length}}">
+      <view class="pj-sub">本店会员专属权益</view>
+      <view class="pj-perk" wx:for="{{memberPerks}}" wx:key="*this">· {{item}}</view>
+    </block>
+  </view>
   <view class="benefit-section">
     <view class="benefit-title">{{levels[currentLevelIndex].name}}{{lang === 'en' ? ' benefits' : '权益'}}</view>
     <view class="benefit-grid">

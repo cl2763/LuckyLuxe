@@ -474,7 +474,9 @@ function tiersDisabled(user = state.user) {
 function memberTierInfo(user = state.user) {
   const spend = Math.round(Number(user?.growthValue ?? ((user?.totalSpentCents || 0) / 100)) || 0)
   if (tiersDisabled(user)) {
-    const plain = { key: 'member', label: state.lang === 'zh' ? '会员' : 'Member', minSpend: 0, nextSpend: null, depositWaived: Boolean(user?.depositWaived) }
+    // D41+店主追加:不分级店 非会员=「成为会员」CTA(点进权益页看入会权益);会员=「会员」
+    const svLabel = user?.memberLevel === '会员' ? (state.lang === 'zh' ? '会员' : 'Member') : (state.lang === 'zh' ? '成为会员' : 'Become a member')
+    const plain = { key: user?.memberTier || 'member', label: svLabel, minSpend: 0, nextSpend: null, depositWaived: Boolean(user?.depositWaived) }
     return { tier: plain, nextTier: null, spend, nextValue: spend, amountToNext: 0, progress: 100, note: '' }
   }
   const tiersLadder = user.memberTiers
@@ -1934,6 +1936,12 @@ function renderMemberBenefitsWeb() {
           <div class="growth-track"><div class="growth-fill" style="width:${tierInfo.progress}%"></div></div>
         </div>
       </section>
+      ${tiersDisabled(user) ? `
+      <section class="card" style="padding:18px;margin:12px 0">
+        <h2 style="margin:0 0 6px">${user.memberLevel === '会员' ? (state.lang === 'zh' ? '我的会员' : 'My membership') : (state.lang === 'zh' ? '成为会员' : 'Become a member')}</h2>
+        <p class="subtle">${user.memberLevel === '会员' ? (state.lang === 'zh' ? '您已是本店会员(充值即入会)。' : 'You are a member (join by recharging).') : (state.lang === 'zh' ? '在本店充值即可成为会员。' : 'Recharge at this store to become a member.')}</p>
+        ${(user.memberPerks || []).length ? `<p style="font-weight:600;margin:10px 0 4px">${state.lang === 'zh' ? '本店会员专属权益' : 'Member perks'}</p>${user.memberPerks.map((x) => `<p class="subtle">· ${x}</p>`).join('')}` : ''}
+      </section>` : ''}
       <section class="tier-grid-web">
         ${(tiersDisabled(user) ? [] : user.memberTiers).map((tier) => {
           const active = tier.key === tierInfo.tier.key

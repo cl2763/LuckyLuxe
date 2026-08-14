@@ -91,6 +91,12 @@ Page({
     // S9 小件:不分级店权益卡区留空(tiers 空数组 → wxml 区块不渲染)
     // F3 单源:梯子只认后端下发;后端没给=不分级/未配置,留空(不再落本地梯子副本)
     const tiers = member.tiersEnabled === false ? [] : (member.memberTiers || [])
+    // 店主追加:不分级店权益页承接「成为会员」——资格说明(按 any_recharge 口径)+商家自定义权益(写了才展示)
+    this.setData({
+      plainStore: member.tiersEnabled === false,
+      isMemberNow: member.memberLevel === '会员',
+      memberPerks: member.memberPerks || []
+    })
     const currentIndex = Math.max(0, tiers.findIndex((item) => item.key === member.memberTier))
     const spend = Number(member.growthValue || 0)
     return tiers.map((tier, index) => {

@@ -5618,6 +5618,14 @@ function serializeUser(user, tenantId = DEFAULT_TENANT_ID) {
   // D38:累计消费=Σ已签结算单档位小计(与积分/业绩/成长值同基数);到店次数仍按预约算
   const totalSpentCents = customerSignedSubtotalCents(user.id, tenantId)
   const membership = membershipForSpend(totalSpentCents, tenantId)
+  /* D41(店主 2026-08-12 立案,S9 行既定口径「Jie'Nail=只要充值就是会员」):
+     不分级店的会员资格=有充值记录(recharge/migrate_opening,迁移期初也是充过的钱)——
+     消费不算。未充值=「顾客」;充值成功那一刻翻转「会员」。分级店资格判定不动(基数统一归 S9)。 */
+  const memberFlag = isMemberOf(user.id, tenantId)
+  if (!membership.memberTiers.length) {
+    membership.memberLevel = memberFlag ? '会员' : '顾客'
+    membership.memberTier = memberFlag ? 'member' : 'guest'
+  }
   const displayName = isGenericDisplayName(user.display_name, user.id) ? memberCode : user.display_name
   return {
     id: user.id,
@@ -5631,11 +5639,13 @@ function serializeUser(user, tenantId = DEFAULT_TENANT_ID) {
     growthValue: membership.growthValue,
     // S9 小件(店主 2026-08-12 拍板):不分级店顾客端做减法 —— 由租户配置下发,前端按它渲染,不写死店名
     membershipTiersEnabled: Boolean(getMembershipConfig(tenantId).tiersEnabled),
+    memberPerks: getMembershipConfig(tenantId).memberPerks || [],
     nextLevelValue: membership.nextLevelValue,
     currentLevelValue: membership.currentLevelValue,
     nextMemberLevel: membership.nextMemberLevel,
     amountToNextLevel: membership.amountToNextLevel,
     memberTiers: membership.memberTiers,
+    isMember: memberFlag,
     depositWaived: membership.depositWaived,
     depositRule: membership.depositRule,
     // 积分单源:pointsBalance(赚分行+台账)——此前这里用 totalSpent 直推,是第四处各自推导
@@ -6660,9 +6670,13 @@ function getAdminCustomers() {
     birthday: row.birthday || '',
     storedValueBalanceCents: storedValueBalanceCents(row.id),
     memberCode: memberCodeForUserId(row.id),
-    // 等级单源(F3):与顾客端同一套租户梯子 —— 此前这里是另一套内联阈值(10/30/60万),
-    // 与全局梯子(5/12/25万)不一致,同一人商家端列表与顾客端显示两个等级
-    memberTier: membershipForSpend(row.total_spent_cents || 0).memberTier
+    // 等级单源(F3)+D41:分级店按租户梯子;不分级店=充值即会员(member/guest),消费不算
+    isMember: isMemberOf(row.id, tid),
+    memberTier: (() => {
+      const ms = membershipForSpend(row.total_spent_cents || 0, tid)
+      if (ms.memberTiers.length) return ms.memberTier
+      return isMemberOf(row.id, tid) ? 'member' : 'guest'
+    })()
   }))
 }
 
@@ -7179,6 +7193,9 @@ function getMembershipConfig(tenantId = currentTenantId()) {
     ? null
     : Math.max(0, Math.round(Number(merged.expireDays) || 0)) || null
   merged.tiers = Array.isArray(merged.tiers) ? merged.tiers : []
+  // 店主 2026-08-12 追加:不分级店「成为会员」权益文案=商家自定义(memberPerks,字符串数组);
+  // 写了才展示,没写=顾客端只显示资格说明。配置界面归 S9,先把字段通道打通。
+  merged.memberPerks = Array.isArray(merged.memberPerks) ? merged.memberPerks.map((x) => String(x).slice(0, 60)).slice(0, 10) : []
   // 等级未开启时不下发等级字段,避免前端/AI 误以为门店有等级体系
   if (!merged.tiersEnabled) delete merged.tiers
   return merged
@@ -7195,7 +7212,8 @@ function setMembershipConfig(tenantId, input = {}) {
     expireDays: input.expireDays === undefined
       ? (current.expireDays ?? null)
       : (input.expireDays === null || input.expireDays === '' ? null : Math.max(0, Math.round(Number(input.expireDays) || 0)) || null),
-    tiers: Array.isArray(input.tiers) ? input.tiers.slice(0, 20) : (current.tiers || [])
+    tiers: Array.isArray(input.tiers) ? input.tiers.slice(0, 20) : (current.tiers || []),
+    memberPerks: Array.isArray(input.memberPerks) ? input.memberPerks.map((x) => String(x).slice(0, 60)).slice(0, 10) : (current.memberPerks || [])
   }
   db.prepare(`INSERT INTO tenant_settings (tenant_id, key, value, updated_at) VALUES (?, 'membership_config', ?, ?)
     ON CONFLICT(tenant_id, key) DO UPDATE SET value = excluded.value, updated_at = excluded.updated_at`)

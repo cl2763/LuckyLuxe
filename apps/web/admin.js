@@ -1,5 +1,5 @@
 // 构建号:每次交付递增。侧栏可见,排查"改了没生效"时先对版本。
-const ADMIN_BUILD = '20260812b-review2-f3'
+const ADMIN_BUILD = '20260812c-d41'
 console.log(`[admin] build ${ADMIN_BUILD}`)
 
 // "今天"必须按门店时区算,否则老板人在别的时区时全站日期错位一天。
@@ -5706,7 +5706,10 @@ const MEMBER_TIER_STYLES = {
 }
 
 function memberTierBadge(customer) {
+  // D41:不分级店两态 —— member=会员 / guest=顾客(充值即会员,消费不算);分级店照旧梯子键
   const tier = customer.memberTier || 'Silver'
+  if (tier === 'member') return `<span class="member-tier-badge tier-silver">${owner.lang === 'zh' ? '会员' : 'Member'}</span>`
+  if (tier === 'guest') return `<span class="member-tier-badge" style="background:#eee;color:#666">${owner.lang === 'zh' ? '顾客' : 'Guest'}</span>`
   return `<span class="member-tier-badge ${MEMBER_TIER_STYLES[tier] || 'tier-silver'}">${escapeHtml(tier)}</span>`
 }
 

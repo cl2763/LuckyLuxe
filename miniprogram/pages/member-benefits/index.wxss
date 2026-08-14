@@ -158,3 +158,10 @@
   font-weight: 850;
   text-align: center;
 }
+
+/* 不分级店成为会员承接区 */
+.plain-join { margin: 24rpx; padding: 28rpx; border-radius: 16rpx; background: #fff; }
+.pj-title { font-size: 34rpx; font-weight: 600; }
+.pj-line { font-size: 26rpx; color: #666; margin-top: 10rpx; }
+.pj-sub { font-size: 26rpx; font-weight: 600; margin-top: 20rpx; }
+.pj-perk { font-size: 26rpx; color: #444; line-height: 44rpx; }

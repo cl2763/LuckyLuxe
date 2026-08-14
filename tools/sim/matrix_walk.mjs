@@ -4,6 +4,13 @@
 import { connect, sleep } from './lib.mjs';
 const BASE = 'http://127.0.0.1:4128';
 const A = (c, m) => { if (!c) throw new Error(m); };
+const LEVELS = {
+  'jics-nail::演示2-jics-美甲券户': '顾客',   // 只消费过,从未充值 —— D41 两态之「顾客」
+  'jics-nail::演示2-02储值客': '会员',        // 充过 500 —— 两态之「会员」
+  'jics-nail::演示2-06兑换客': '顾客',        // 只消费+兑换,没充值
+  'hoptest-demo2::演示2-试店-样板户': '顾客',
+  'lucky-luxe::演示2-lucky-美睫储值户': 'Gold Member' // 分级店走梯子,不受 D41 影响
+};
 const CARD = {
   'lucky-luxe::演示2-lucky-美睫储值户': [704, 600, 104],
   'lucky-luxe::演示2-06兑换客': [900, 600, 300],
@@ -31,6 +38,8 @@ for (const tid of ['lucky-luxe', 'jics-nail', 'hoptest-demo2']) {
     const m = await p.data('member');
     A(String(m.nickname) === who.name, `${tid}/${who.name} me 页姓名「${m.nickname}」不符`);
     A(Number(m.totalSpent) === Math.round((d.user.totalSpentCents || 0) / 100), `${tid}/${who.name} 累计消费不符`);
+    A(String(m.memberLevel) === String(d.user.memberLevel), `${tid}/${who.name} 称谓渲染「${m.memberLevel}」≠ 服务端「${d.user.memberLevel}」`);
+    if (LEVELS[tid + '::' + who.name]) A(d.user.memberLevel === LEVELS[tid + '::' + who.name], `${tid}/${who.name} 称谓「${d.user.memberLevel}」≠ 卡「${LEVELS[tid + '::' + who.name]}」`);
     p = await go('/pages/points/index', 3000);
     const pd = await p.data();
     A(Number(pd.earnedTotal) === mall.earnedTotal && Number(pd.redeemedTotal) === mall.redeemedTotal && Number(pd.balance) === mall.balance,
@@ -41,10 +50,10 @@ for (const tid of ['lucky-luxe', 'jics-nail', 'hoptest-demo2']) {
       const [e, r2, b] = CARD[key];
       A(mall.earnedTotal === e && mall.redeemedTotal === r2 && mall.balance === b, `${key} 与对照卡不符:${mall.earnedTotal}/${mall.redeemedTotal}/${mall.balance}`);
     }
-    rows.push(`| ${tid} | ${who.name} | ${mall.earnedTotal}/${mall.redeemedTotal}/${mall.balance} | ✓ |`);
+    rows.push(`| ${tid} | ${who.name} | ${mall.earnedTotal}/${mall.redeemedTotal}/${mall.balance} | ${d.user.memberLevel} | ✓ |`);
     console.log(`✓ ${tid} ${who.name} 三行 ${mall.earnedTotal}/${mall.redeemedTotal}/${mall.balance}`);
   }
 }
 await mp.disconnect();
-console.log('\n矩阵结果表(贴回归报告):\n| 店 | 档案 | 三行 | 判定 |\n|---|---|---|---|\n' + rows.join('\n'));
+console.log('\n矩阵结果表(贴回归报告):\n| 店 | 档案 | 三行 | 称谓 | 判定 |\n|---|---|---|---|---|\n' + rows.join('\n'));
 console.log(`矩阵闸门:${rows.length} 户全绿`);

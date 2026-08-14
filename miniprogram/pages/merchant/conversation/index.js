@@ -2,7 +2,7 @@ const api = require('../../../utils/api')
 const { storeMoney } = require('../../../utils/storeclock')   // 门店币种,不写死 $
 const QUOTE_DRAFT_KEY = 'lucky_quote_draft'
 
-const TIER = { Silver: '银卡', Gold: '金卡', Platinum: '铂金', Diamond: '钻石' }
+const TIER = { Silver: '银卡', Gold: '金卡', Platinum: '铂金', Diamond: '钻石', member: '会员', guest: '顾客' } // D41:不分级店两态
 
 function stinfo(s) {
   if (s === 'needs_human') return { label: '待人工', cls: 'd' }
