@@ -1163,7 +1163,9 @@ function storeHoursSummary(store) {
   return `${time}${closedText}`
 }
 function storeContactLine(store) {
-  return [store.address, store.phone].filter(Boolean).join(' · ')
+  // 种子占位值(Address TBD/Phone TBD)不算数据:显示给顾客=假信息;店主在门店设置填真值后自动出现
+  const real = (v) => (v && !/TBD/i.test(String(v)) ? v : '')
+  return [real(store.address), real(store.phone)].filter(Boolean).join(' · ')
 }
 
 function renderRecommendSection(title, type) {
@@ -1907,7 +1909,7 @@ function renderOrderDetailWeb() {
           <p><span>${t('duration')}</span><strong>${order.totalDurationMin}${t('minutes')}</strong></p>
           <p><span>${t('technician')}</span><strong>${order.technician.name}</strong></p>
           <p><span>${t('store')}</span><strong>${order.store.name}</strong></p>
-          ${order.store.address ? `<p><span>${t('address')}</span><strong>${order.store.address}</strong></p>` : ''}
+          ${order.store.address && !/TBD/i.test(order.store.address) ? `<p><span>${t('address')}</span><strong>${order.store.address}</strong></p>` : ''}
           <p><span>${t('remark')}</span><strong>${order.notes || t('none')}</strong></p>
         </div>
       </section>
@@ -2027,8 +2029,7 @@ function renderStoreWeb() {
       <img class="store-hero-web" src="/assets/images/store-cover.jpg" alt="${store.name || 'Store'}">
       <div class="store-info-web card">
         <h1>${store.name || ''}</h1>
-        ${store.address ? `<p>${store.address}</p>` : ''}
-        ${store.phone ? `<p>${store.phone}</p>` : ''}
+        ${storeContactLine(store) ? `<p>${storeContactLine(store)}</p>` : ''}
         ${storeHoursSummary(store) ? `<p>${storeHoursSummary(store)}</p>` : ''}
       </div>
     </section>
