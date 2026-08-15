@@ -1,5 +1,5 @@
 // 构建号:每次交付递增。侧栏可见,排查"改了没生效"时先对版本。
-const ADMIN_BUILD = '20260815a-s1s3'
+const ADMIN_BUILD = '20260815b-s1fix'
 let pricingState = { module: 'storefront', tab: 'items', categories: [], items: [], rules: {}, editing: null, preview: null, storefrontPicker: false }
 console.log(`[admin] build ${ADMIN_BUILD}`)
 
@@ -8610,8 +8610,8 @@ function renderPricingTimecards() {
     <h3 class="pricing-group-title">${pzh() ? '次卡' : 'Punch cards'} <span class="tier-chip on" style="font-size:11px">${pzh() ? '已迁出' : 'migrated'}</span></h3>
     <div class="service-admin-item" style="background:#FDFBF8">
       <div>
-        <span class="subtle">${pzh() ? '守护（3 次）/ 足护（9 次）等按次核销的卡，已迁至「会员与营销」页管理 →' : 'Punch cards (pay-per-visit) now live under Membership & Marketing →'}</span>
-        ${cards.length ? `<div class="subtle" style="margin-top:4px">${cards.map((c) => escapeHtml(c.nameZh)).join(' · ')}（${pzh() ? '暂存待 S2，本页不可编辑；老结算单显示不受影响' : 'read-only until S2'}）</div>` : ''}
+        <span class="subtle">${pzh() ? '按次核销的次卡不属于服务目录，由「会员与营销」页管理 →' : 'Punch cards (pay-per-visit) live under Membership & Marketing →'}</span>
+        ${cards.length ? `<div class="subtle" style="margin-top:4px">${cards.map((c) => escapeHtml(c.nameZh)).join(' · ')}（${pzh() ? '暂存待 S2，本页不可编辑；老结算单显示不受影响' : 'read-only until S2'}）</div>` : `<div class="subtle" style="margin-top:4px">${pzh() ? '本店服务目录中当前没有次卡条目。' : 'No punch-card entries in this catalog.'}</div>`}
       </div>
       <button class="ghost slim" data-admin-page="membership" type="button">${pzh() ? '去会员与营销' : 'Membership & Marketing'}</button>
     </div>`

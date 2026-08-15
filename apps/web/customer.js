@@ -1,5 +1,21 @@
 const storeId = 'store-ontario-01'
 
+/* 门店币种(店主 2026-08-10 红线修复)。原来币符写死在代码里 —— 境内 ¥ 店的顾客
+   在网页端看到的每个价格币种都是错的,和小程序顾客端同一个病。
+   现在跟 /stores 下发的 currencyDisplay 走,与小程序两端、网页老板端同一套映射表。
+   金额红线不变:这里一分钱都不算,只拼字符串。 */
+const CUR = { prefix: '', symbol: '', code: '', trimZeroDecimals: false }
+function curPrefix() {
+  return `${String(CUR.prefix || '').replace('<CODE>', CUR.code || '')}${CUR.symbol || ''}`
+}
+function money(cents, decimals) {
+  const n = Number(cents || 0) / 100
+  const d = decimals === undefined ? (CUR.trimZeroDecimals ? 0 : 0) : decimals
+  return `${curPrefix()}${n.toFixed(d)}`
+}
+// 已经是「元」的数字(会员门槛、定金这类文案里是元不是分)
+function moneyY(amount) { return `${curPrefix()}${Number(amount || 0)}` }
+
 const copy = {
   zh: {
     registerTitle: '创建 Lucky Luxe 账号',
@@ -390,21 +406,8 @@ function t(key) {
   return copy[state.lang][key] || key
 }
 
-/* 门店币种(店主 2026-08-10 红线修复)。原来币符写死在代码里 —— 境内 ¥ 店的顾客
-   在网页端看到的每个价格币种都是错的,和小程序顾客端同一个病。
-   现在跟 /stores 下发的 currencyDisplay 走,与小程序两端、网页老板端同一套映射表。
-   金额红线不变:这里一分钱都不算,只拼字符串。 */
-const CUR = { prefix: '', symbol: '', code: '', trimZeroDecimals: false }
-function curPrefix() {
-  return `${String(CUR.prefix || '').replace('<CODE>', CUR.code || '')}${CUR.symbol || ''}`
-}
-function money(cents, decimals) {
-  const n = Number(cents || 0) / 100
-  const d = decimals === undefined ? (CUR.trimZeroDecimals ? 0 : 0) : decimals
-  return `${curPrefix()}${n.toFixed(d)}`
-}
-// 已经是「元」的数字(会员门槛、定金这类文案里是元不是分)
-function moneyY(amount) { return `${curPrefix()}${Number(amount || 0)}` }
+/* (复核-2 生产白屏根因修复)CUR/money 块已提到文件头:copy 文案字面量在顶层立即执行 moneyY(50),
+   原声明在 copy 之后 → TDZ ReferenceError,整个顾客页 SPA 崩死(3c948e0 引入,生产白屏 5 天)。 */
 
 function isNailService(service) {
   return String(service?.type || '').toLowerCase() === 'nail'

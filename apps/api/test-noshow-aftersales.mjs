@@ -764,6 +764,31 @@ const main = async () => {
       check('㉛ 空态 全下架=空数组 200', pubBEmpty.status === 200 && (pubBEmpty.data.services || []).length === 0)
     }
 
+
+    // ===== ㉜ 复核-2 复发护栏(2026-08-15):网页顾客端顶层加载冒烟 =====
+    // 立规背景:币种红线批(3c948e0)在 copy 文案字面量里顶层调用 moneyY(50),而 CUR 声明在其后
+    // → TDZ ReferenceError,生产顾客页整页白屏 5 天,没有任何断言兜它(currency-scan 只扫写死币符,不跑运行时)。
+    // 护栏:node 里 stub 最小 DOM 加载 customer.js / share.js,顶层抛任何异常=红。上次靠疏忽能再来一遍的路,这次焊死。
+    {
+      const ROOT32 = new URL('../../', import.meta.url).pathname
+      const { execFileSync } = await import('node:child_process')
+      for (const f of ['apps/web/customer.js', 'apps/web/share.js']) {
+        const stub = `
+          // 万能元素 stub:querySelector 永不回 null(真页面元素齐全;这里只验顶层 JS 逻辑,如 TDZ)
+          const el = () => new Proxy(function(){}, { get: (t, k) => { if (k === Symbol.toPrimitive || k === 'toString') return () => ''; if (k === 'style' || k === 'dataset') return {}; if (k === 'classList') return { add(){}, remove(){}, toggle(){}, contains: () => false }; if (k === 'children' || k === 'childNodes') return []; return typeof k === 'string' && /^(add|remove|set|get|append|insert|focus|blur|click|closest|matches|toggle)/.test(k) ? () => el() : el(); }, set: () => true, apply: () => el() });
+          global.window=global; global.document={querySelector:el,querySelectorAll:()=>[],addEventListener:()=>{},getElementById:el,createElement:el,body:el(),documentElement:{lang:''}};
+          global.localStorage={getItem:()=>null,setItem(){},removeItem(){}}; global.sessionStorage=global.localStorage;
+          global.navigator={language:'zh-CN',clipboard:{}}; global.location={search:'',hash:'',origin:'http://x',pathname:'/'};
+          global.fetch=()=>new Promise(()=>{}); global.history={replaceState(){}}; global.alert=()=>{}; global.MutationObserver=class{observe(){}};
+          require(${JSON.stringify(ROOT32)} + ${JSON.stringify(f)});
+          console.log('TOPOK');
+        `
+        let out = ''
+        try { out = execFileSync(process.execPath, ['-e', stub], { encoding: 'utf8', timeout: 20000 }) } catch (e) { out = String(e.stdout || '') + String(e.stderr || '') }
+        check(`㉜ ${f} 顶层加载不炸(TDZ/未定义引用兜底)`, out.includes('TOPOK'), out.split('\n').slice(0, 3).join(' | '))
+      }
+    }
+
   console.log(`\n爽约处置+售后完成态回归通过:${checks} 项断言全绿`)
 }
 
