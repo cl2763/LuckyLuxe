@@ -1,4 +1,13 @@
-const storeId = 'store-ontario-01'
+/* D45(复核二轮 2026-08-15):网页顾客端按店寻址 —— 「每店专属链接」模型(商家把自己店的链接发给顾客)。
+   ?store=<租户ID> 进入该店并记住(localStorage),刷新/跳页保持;无参=上次的店;首次=旗舰店。
+   所有请求统一带 x-tenant-id;storeId 不再写死,由本店 /stores 下发覆盖。 */
+const TENANT_ID = (() => {
+  const q = new URLSearchParams(location.search)
+  const t = (q.get('store') || q.get('tenant') || '').trim()
+  if (t) { try { localStorage.setItem('lucky-web-tenant', t) } catch (e) {} return t }
+  try { return localStorage.getItem('lucky-web-tenant') || 'lucky-luxe' } catch (e) { return 'lucky-luxe' }
+})()
+let storeId = 'store-ontario-01' // 兜底;boot 时 loadStores() 用本店真实门店覆盖
 
 /* 门店币种(店主 2026-08-10 红线修复)。原来币符写死在代码里 —— 境内 ¥ 店的顾客
    在网页端看到的每个价格币种都是错的,和小程序顾客端同一个病。
@@ -576,6 +585,7 @@ async function request(path, options = {}) {
   const response = await fetch(path, {
     headers: {
       'content-type': 'application/json',
+      'x-tenant-id': TENANT_ID,
       ...(state.auth?.accessToken ? { authorization: `Bearer ${state.auth.accessToken}` } : {}),
       ...(options.headers || {})
     },
@@ -770,6 +780,8 @@ async function loadServices() {
 async function loadStores() {
   const data = await request('/stores')
   state.stores = data.stores
+  // D45:本店真实门店 id 覆盖兜底值(预约/技师/时段接口都用它)
+  if (Array.isArray(data.stores) && data.stores[0] && data.stores[0].id) storeId = data.stores[0].id
   // 币种跟门店走(公开接口下发,与商家端同源)
   if (data.currencyDisplay) Object.assign(CUR, data.currencyDisplay, { code: data.currency || '' })
 }

@@ -787,6 +787,10 @@ const main = async () => {
         try { out = execFileSync(process.execPath, ['-e', stub], { encoding: 'utf8', timeout: 20000 }) } catch (e) { out = String(e.stdout || '') + String(e.stderr || '') }
         check(`㉜ ${f} 顶层加载不炸(TDZ/未定义引用兜底)`, out.includes('TOPOK'), out.split('\n').slice(0, 3).join(' | '))
       }
+      // ㉝ D45:网页顾客端必须按店寻址 —— 禁写死旗舰店 id 当唯一店;寻址函数必须在场
+      const cust = readFileSync(join(ROOT32, 'apps/web/customer.js'), 'utf8')
+      check('㉝ D45 顾客网页不再写死唯一店(const storeId 字面量禁令)', !cust.includes("const storeId = 'store-ontario-01'"))
+      check('㉝ D45 租户寻址在场(?store= → x-tenant-id 全请求注入)', cust.includes("'x-tenant-id': TENANT_ID") && cust.includes("q.get('store')"))
     }
 
   console.log(`\n爽约处置+售后完成态回归通过:${checks} 项断言全绿`)
