@@ -791,6 +791,11 @@ const main = async () => {
       const cust = readFileSync(join(ROOT32, 'apps/web/customer.js'), 'utf8')
       check('㉝ D45 顾客网页不再写死唯一店(const storeId 字面量禁令)', !cust.includes("const storeId = 'store-ontario-01'"))
       check('㉝ D45 租户寻址在场(?store= → x-tenant-id 全请求注入)', cust.includes("'x-tenant-id': TENANT_ID") && cust.includes("q.get('store')"))
+      // ㉞ D46:顾客网页店铺渲染禁写死(机制类=任何店铺相关渲染必须来自 /stores)。剥注释后扫,0 残留
+      const custCode = cust.replace(/\/\*[\s\S]*?\*\//g, '').replace(/\/\/[^\n]*/g, '')
+      const hardcoded = ['Lucky Luxe Ontario', 'Address TBD', 'Phone TBD', 'Tuesday-Sunday', 'Ontario · CAD'].filter((w) => custCode.includes(w))
+      check('㉞ D46 店铺事实零写死(店名/地址/电话/营业时间/币种)', hardcoded.length === 0, hardcoded.join(','))
+      check('㉞ D46 人气区与服务页同口径(fromPriceLabel 进推荐卡)', /recommend-card[\s\S]{0,200}fromPriceLabel/.test(cust))
     }
 
   console.log(`\n爽约处置+售后完成态回归通过:${checks} 项断言全绿`)

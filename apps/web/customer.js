@@ -782,6 +782,13 @@ async function loadStores() {
   state.stores = data.stores
   // D45:本店真实门店 id 覆盖兜底值(预约/技师/时段接口都用它)
   if (Array.isArray(data.stores) && data.stores[0] && data.stores[0].id) storeId = data.stores[0].id
+  // D46:页头店名/标签页标题随店(店主店顾客看到的是她的店名,不是平台旗舰店)
+  const sname = (data.stores && data.stores[0] && data.stores[0].name) || ''
+  if (sname) {
+    const brandEl = document.querySelector('#brandName')
+    if (brandEl) brandEl.textContent = sname
+    document.title = sname
+  }
   // 币种跟门店走(公开接口下发,与商家端同源)
   if (data.currencyDisplay) Object.assign(CUR, data.currencyDisplay, { code: data.currency || '' })
 }
@@ -1008,13 +1015,13 @@ function renderHome() {
     ${renderRecommendSection(t('popularNail'), 'nail')}
     ${renderRecommendSection(t('popularLash'), 'lash')}
     <section class="section">
-      <div class="section-row"><h2>${t('store')}</h2><span class="subtle">Ontario · CAD</span></div>
+      <div class="section-row"><h2>${t('store')}</h2><span class="subtle">${CUR.code || ''}</span></div>
       <div class="store-card-wide card">
-        <img src="/assets/images/store-cover.jpg" alt="Store">
+        <img src="/assets/images/store-cover.jpg" alt="${currentStore().name || 'Store'}">
         <div>
-          <h3>Lucky Luxe Ontario</h3>
-          <p>Tuesday-Sunday 10:00-19:00 · Monday closed</p>
-          <p>Address TBD · Phone TBD</p>
+          <h3>${currentStore().name || ''}</h3>
+          ${storeHoursSummary(currentStore()) ? `<p>${storeHoursSummary(currentStore())}</p>` : ''}
+          ${storeContactLine(currentStore()) ? `<p>${storeContactLine(currentStore())}</p>` : ''}
         </div>
       </div>
     </section>
@@ -1140,6 +1147,25 @@ function stopHeroCarousel() {
   heroTimer = null
 }
 
+
+/* D46:店铺事实单源渲染件 —— 首页门店块/结算页店块/门店详情页全走这里。
+   字段全部来自 /stores(随 ?store= 租户走);空字段不显示,不许再出现 Address TBD 这类假占位。 */
+function currentStore() { return (state.stores && state.stores[0]) || {} }
+function storeHoursSummary(store) {
+  const hs = Array.isArray(store.hours) ? store.hours : []
+  const open = hs.filter((h) => !h.is_closed)
+  if (!open.length) return ''
+  const names = state.lang === 'en' ? ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'] : ['周日', '周一', '周二', '周三', '周四', '周五', '周六']
+  const closed = hs.filter((h) => h.is_closed).map((h) => names[h.weekday])
+  const sameTime = open.every((h) => h.open_time === open[0].open_time && h.close_time === open[0].close_time)
+  const time = sameTime ? `${open[0].open_time}-${open[0].close_time}` : (state.lang === 'en' ? 'Hours vary by day' : '各日时段不同')
+  const closedText = closed.length ? (state.lang === 'en' ? ` · Closed ${closed.join('/')}` : ` · ${closed.join('/')}休`) : ''
+  return `${time}${closedText}`
+}
+function storeContactLine(store) {
+  return [store.address, store.phone].filter(Boolean).join(' · ')
+}
+
 function renderRecommendSection(title, type) {
   return `
     <section class="section">
@@ -1149,7 +1175,7 @@ function renderRecommendSection(title, type) {
           <button class="recommend-card card" data-service-id="${service.id}" type="button">
             <img src="${service.imageUrl}" alt="${service.name}">
             <strong>${service.name}</strong>
-            <span>${money(service.priceCents)} · ${service.durationMin}${t('minutes')}</span>
+            <span>${fromPriceLabel(service)} · ${service.durationMin}${t('minutes')}</span>
           </button>
         `).join('')}
       </div>
@@ -1549,7 +1575,7 @@ function renderCheckout() {
       </section>
       <section class="section">
         <div class="section-row"><h2>${t('store')}</h2></div>
-        <div class="store-box card"><strong>Lucky Luxe Ontario</strong><span>Address TBD · Phone TBD · Tue-Sun 10:00-19:00</span></div>
+        <div class="store-box card"><strong>${currentStore().name || ''}</strong><span>${[storeContactLine(currentStore()), storeHoursSummary(currentStore())].filter(Boolean).join(' · ')}</span></div>
       </section>
       <div class="summary-bar">
         <div><span>${t('requiredDeposit')}</span><strong>${money(payable)}</strong></div>
@@ -1881,7 +1907,7 @@ function renderOrderDetailWeb() {
           <p><span>${t('duration')}</span><strong>${order.totalDurationMin}${t('minutes')}</strong></p>
           <p><span>${t('technician')}</span><strong>${order.technician.name}</strong></p>
           <p><span>${t('store')}</span><strong>${order.store.name}</strong></p>
-          <p><span>${t('address')}</span><strong>${order.store.address || 'Address TBD'}</strong></p>
+          ${order.store.address ? `<p><span>${t('address')}</span><strong>${order.store.address}</strong></p>` : ''}
           <p><span>${t('remark')}</span><strong>${order.notes || t('none')}</strong></p>
         </div>
       </section>
@@ -1998,12 +2024,12 @@ function renderStoreWeb() {
   els.screen.innerHTML = `
     <section class="store-web-page">
       <button class="ghost back-btn" data-view-target="me" type="button">← ${t('me')}</button>
-      <img class="store-hero-web" src="/assets/images/store-cover.jpg" alt="Lucky Luxe Ontario">
+      <img class="store-hero-web" src="/assets/images/store-cover.jpg" alt="${store.name || 'Store'}">
       <div class="store-info-web card">
-        <h1>${store.name || 'Lucky Luxe Ontario'}</h1>
-        <p>${store.address || 'Address TBD'}</p>
-        <p>${store.phone || 'Phone TBD'}</p>
-        <p>Tuesday-Sunday 10:00-19:00 · Monday closed</p>
+        <h1>${store.name || ''}</h1>
+        ${store.address ? `<p>${store.address}</p>` : ''}
+        ${store.phone ? `<p>${store.phone}</p>` : ''}
+        ${storeHoursSummary(store) ? `<p>${storeHoursSummary(store)}</p>` : ''}
       </div>
     </section>
   `
