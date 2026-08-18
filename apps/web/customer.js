@@ -358,7 +358,7 @@ const state = {
   referenceAnalysis: null,
   isAnalyzingReference: false,
   remark: '',
-  cart: readJson('lucky-web-cart') || [],
+  cart: readJson(`lucky-web-cart:${TENANT_ID}`) || [], // 购物车按店分仓(切店不带上家店的商品,D39 同族)
   orders: readJson('lucky-web-orders') || [],
   orderFilter: 'all',
   selectedOrderId: '',
@@ -760,7 +760,7 @@ async function handleBookingDraftParam() {
       depositCents: Number(draft.service.depositCents ?? draft.service.deposit_cents ?? 5000)
     }
     state.cart = [item, ...state.cart.filter((cartItem) => cartItem.bookingDraftId !== draft.id)]
-    writeJson('lucky-web-cart', state.cart)
+    writeJson(`lucky-web-cart:${TENANT_ID}`, state.cart)
     state.view = 'checkout'
     toast(t('draftLoaded'))
     const cleanUrl = new URL(window.location.href)
@@ -784,13 +784,9 @@ async function loadStores() {
   state.stores = data.stores
   // D45:本店真实门店 id 覆盖兜底值(预约/技师/时段接口都用它)
   if (Array.isArray(data.stores) && data.stores[0] && data.stores[0].id) storeId = data.stores[0].id
-  // D46:页头店名/标签页标题随店(店主店顾客看到的是她的店名,不是平台旗舰店)
+  // 店主 08-16 定稿:左上角=平台品牌「有迹」固定(多商家平台),只有标签页标题随店;店名显示在 hero 横幅
   const sname = (data.stores && data.stores[0] && data.stores[0].name) || ''
-  if (sname) {
-    const brandEl = document.querySelector('#brandName')
-    if (brandEl) brandEl.textContent = sname
-    document.title = sname
-  }
+  if (sname) document.title = sname
   // 币种跟门店走(公开接口下发,与商家端同源)
   if (data.currencyDisplay) Object.assign(CUR, data.currencyDisplay, { code: data.currency || '' })
 }
@@ -981,10 +977,7 @@ function renderHome() {
   els.screen.innerHTML = `
     <section class="web-hero">
       <div class="web-hero-copy">
-        <span class="brand-mark hero-logo-mark"><img src="/assets/images/brand-logo.png" alt="${brandName()}"></span>
-        <p class="eyebrow">Nail & Lash Atelier</p>
         <h1>${brandName()}</h1>
-        <p>${state.lang === 'zh' ? '预约美甲与美睫，在线支付定金，到店完成尾款。' : 'Book nail and lash services online, pay the deposit, and settle the balance in store.'}</p>
         <div class="hero-actions">
           <button class="primary" data-go-services="nail" type="button">${t('bookNow')}</button>
           <button class="ghost" data-view-target="me" type="button">${t('quickMember')}</button>
@@ -1154,6 +1147,44 @@ function stopHeroCarousel() {
    字段全部来自 /stores(随 ?store= 租户走);空字段不显示,不许再出现 Address TBD 这类假占位。 */
 function currentStore() { return (state.stores && state.stores[0]) || {} }
 function brandName() { return currentStore().name || 'Lucky Luxe' }
+
+/* 切换门店(店主 08-16 拍板翻案:不能只靠每店专属链接)。参照物=小程序 shop-select 屏:
+   同一 /shops 公开数据源(演示店同口径隐藏);选中即以 ?store= 整页进店——
+   与 D45 直达链接同一机制,整页加载=天然全清场(三跳零残留已验的那套)。 */
+async function openStoreSwitcher() {
+  let shops = []
+  try {
+    const data = await request('/shops')
+    shops = data.shops || []
+  } catch (e) {
+    toast(state.lang === 'en' ? 'Failed to load stores' : '加载门店失败')
+    return
+  }
+  const overlay = document.createElement('div')
+  overlay.className = 'store-switch-overlay'
+  overlay.innerHTML = `
+    <div class="store-switch-panel card">
+      <div class="section-row"><h2>${state.lang === 'en' ? 'Choose a store' : '切换门店'}</h2><button class="ghost slim" data-switch-close type="button">✕</button></div>
+      ${shops.map((shop) => `
+        <button class="store-switch-row ${shop.tenantId === TENANT_ID ? 'current' : ''}" data-switch-tenant="${shop.tenantId}" type="button">
+          <strong>${shop.storeName || shop.name}</strong>
+          ${shop.address ? `<span>${shop.address}</span>` : ''}
+          ${shop.tenantId === TENANT_ID ? `<em>${state.lang === 'en' ? 'Current' : '当前门店'}</em>` : ''}
+        </button>`).join('')}
+    </div>`
+  overlay.addEventListener('click', (event) => {
+    const row = event.target.closest('[data-switch-tenant]')
+    if (row) {
+      const tid = row.dataset.switchTenant
+      if (tid && tid !== TENANT_ID) { window.location.href = `/?store=${encodeURIComponent(tid)}`; return }
+      overlay.remove()
+      return
+    }
+    if (event.target.closest('[data-switch-close]') || event.target === overlay) overlay.remove()
+  })
+  document.body.appendChild(overlay)
+}
+document.querySelector('#storeSwitchBtn')?.addEventListener('click', () => { openStoreSwitcher() })
 function storeHoursSummary(store) {
   const hs = Array.isArray(store.hours) ? store.hours : []
   const open = hs.filter((h) => !h.is_closed)
@@ -1494,7 +1525,7 @@ function saveCurrentToCart(goCheckout = false) {
   if (!state.selectedSlot) return toast(t('noSlots'))
   const item = buildCartItem()
   state.cart.push(item)
-  writeJson('lucky-web-cart', state.cart)
+  writeJson(`lucky-web-cart:${TENANT_ID}`, state.cart)
   toast(t('created'))
   state.view = goCheckout ? 'checkout' : 'cart'
   render()
@@ -1628,7 +1659,7 @@ async function submitPayment() {
   const selectedIds = new Set(selected.map((item) => item.id))
   state.cart = state.cart.filter((item) => !selectedIds.has(item.id))
   state.orders = [...completed, ...state.orders]
-  writeJson('lucky-web-cart', state.cart)
+  writeJson(`lucky-web-cart:${TENANT_ID}`, state.cart)
   writeJson('lucky-web-orders', state.orders)
   toast(t('paidDone'))
   state.view = 'me'
@@ -2227,14 +2258,14 @@ async function handleScreenClick(event) {
   const toggle = event.target.closest('[data-toggle-cart]')
   if (toggle) {
     state.cart = state.cart.map((item) => item.id === toggle.dataset.toggleCart ? { ...item, selected: !item.selected } : item)
-    writeJson('lucky-web-cart', state.cart)
+    writeJson(`lucky-web-cart:${TENANT_ID}`, state.cart)
     renderCart()
     return
   }
   const remove = event.target.closest('[data-remove-cart]')
   if (remove) {
     state.cart = state.cart.filter((item) => item.id !== remove.dataset.removeCart)
-    writeJson('lucky-web-cart', state.cart)
+    writeJson(`lucky-web-cart:${TENANT_ID}`, state.cart)
     renderCart()
     return
   }

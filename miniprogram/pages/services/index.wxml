@@ -1,14 +1,9 @@
 <view class="page services-page">
-  <view class="type-switch">
-    <button class="type-tab {{activeType === 'nail' ? 'active' : ''}}" bindtap="switchType" data-type="nail">{{t.nail}}</button>
-    <button class="type-tab {{activeType === 'lash' ? 'active' : ''}}" bindtap="switchType" data-type="lash">{{t.lash}}</button>
-    <button class="type-tab {{activeType === 'care' ? 'active' : ''}}" bindtap="switchType" data-type="care">{{lang === 'en' ? 'Care' : '护理·其他'}}</button>
-  </view>
-
+  <!-- v1.4:顶部段选已撤(店主判词①);左栏=平台大类,右=项目卡,与网页同构 -->
   <view class="service-layout">
-    <scroll-view class="category-list" scroll-y enhanced show-scrollbar="{{false}}" wx:if="{{categories.length}}">
-      <block wx:for="{{categories}}" wx:key="*this">
-        <view class="category-item {{activeCategory === item.key ? 'active' : ''}}" bindtap="switchCategory" data-category="{{item.key}}">
+    <scroll-view class="category-list" scroll-y enhanced show-scrollbar="{{false}}" wx:if="{{cats.length}}">
+      <block wx:for="{{cats}}" wx:key="key">
+        <view class="category-item {{activeCat === item.key ? 'active' : ''}}" bindtap="switchCat" data-cat="{{item.key}}">
           <text>{{item.label}}</text>
         </view>
       </block>
@@ -21,12 +16,13 @@
             <view class="service-card card" bindtap="goDetail" data-id="{{item._id}}">
               <image class="service-visual" src="{{item.image}}" mode="aspectFill"></image>
               <view class="service-info">
+                <view class="service-eyebrow">{{item.category}}</view>
                 <view class="service-name">{{item.name}}</view>
                 <view class="service-desc">{{item.description}}</view>
                 <view class="service-meta">
                   <text class="price">{{lang === 'en' ? (item.priceFromLabelEn || item.priceLabelEn) : (item.priceFromLabelZh || item.priceLabelZh)}}</text>
                   <text>{{item.duration}}{{t.minutes}}</text>
-                  <text>{{t.deposit}} {{cur.p}}{{cur.s}}{{item.depositAmount}}</text>
+                  <text wx:if="{{item.depositAmount}}">{{t.deposit}} {{cur.p}}{{cur.s}}{{item.depositAmount}}</text>
                 </view>
                 <view class="quote-hint">{{lang === 'en' ? item.quoteHintEn : item.quoteHintZh}}</view>
               </view>

@@ -818,6 +818,22 @@ const main = async () => {
     }
 
 
+
+    // ===== ㊲ v1.4 服务 Tab 重构+网页切店(店主 08-16 三件批)=====
+    {
+      const ROOT37 = new URL('../../', import.meta.url).pathname
+      const svcJs = readFileSync(join(ROOT37, 'miniprogram/pages/services/index.js'), 'utf8')
+      const svcWxml = readFileSync(join(ROOT37, 'miniprogram/pages/services/index.wxml'), 'utf8')
+      check('㊲ 小程序服务页:顶部段选已撤(type-switch 零残留)', !svcWxml.includes('type-switch') && !svcWxml.includes('switchType'))
+      check('㊲ 小程序服务页:左栏=平台大类字典驱动(getServiceCatalog+platformCategories)', svcJs.includes('getServiceCatalog') && svcJs.includes('platformCategories'))
+      const svcJsCode = svcJs.replace(/\/\*[\s\S]*?\*\//g, '').replace(/\/\/[^\n]*/g, '')
+      check('㊲ 小程序服务页:「加项服务」静态分类数组已灭(规则①,剥注释扫)', !svcJsCode.includes('加项服务') && !svcJsCode.includes('NAIL_CATS'))
+      check('㊲ 小程序服务页:「¥xxx 起」渲染在场', svcWxml.includes('priceFromLabelZh'))
+      const custW = readFileSync(join(ROOT37, 'apps/web/customer.js'), 'utf8')
+      check('㊲ 网页切店入口在场(/shops 同源+整页 ?store= 清场)', custW.includes('openStoreSwitcher') && custW.includes("request('/shops')"))
+      check('㊲ 购物车按店分仓(切店零残留,组合矩阵抓获)', custW.includes('lucky-web-cart:${TENANT_ID}') && !/readJson\('lucky-web-cart'\)/.test(custW))
+    }
+
   console.log(`\n爽约处置+售后完成态回归通过:${checks} 项断言全绿`)
 }
 

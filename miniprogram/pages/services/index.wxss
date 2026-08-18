@@ -193,3 +193,6 @@
 .empty.failbox{display:flex;flex-direction:column;align-items:center;gap:20rpx}
 .empty .failmsg{color:#8c8279;font-size:26rpx}
 .empty .failbtn{border:1rpx solid #d8cec4;border-radius:999rpx;padding:12rpx 40rpx;font-size:26rpx;color:#9b7655}
+
+/* v1.4:二级分类并入卡片眉标(左栏只放大类) */
+.service-eyebrow{font-size:20rpx;color:#9b7655;margin-bottom:4rpx}

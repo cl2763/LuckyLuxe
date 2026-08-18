@@ -189,6 +189,7 @@ function toMiniService(service) {
     _id: service.id,
     type: service.type,
     category: service.category,
+    platformCategory: service.platformCategory,
     name: service.name,
     description: service.description,
     price: service.price,
@@ -432,6 +433,15 @@ async function getServices(type, lang) {
     return data.services.map(toMiniService)
   } catch (error) {
     throw error
+  }
+}
+
+/* v1.4 大类改造:服务 Tab 一次拉全量+平台大类字典(左栏=大类,空类不显示,与网页同构)。 */
+async function getServiceCatalog(lang) {
+  const data = await request(`/services?lang=${lang}`)
+  return {
+    services: (data.services || []).map(toMiniService),
+    platformCategories: data.platformCategories || []
   }
 }
 
@@ -810,6 +820,7 @@ module.exports = {
   adminMe,
   submitMerchantLead,
   getShops,
+  getServiceCatalog,
   aiCustomerService,
   getDepositPolicy,
   getMyCoupons,
