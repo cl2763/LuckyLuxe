@@ -205,7 +205,7 @@ function toMiniService(service) {
     pricingType: service.pricingType,
     priceLabelZh: service.priceLabelZh,
     priceLabelEn: service.priceLabelEn,
-    // S1:列表「¥xxx 起」独立字段(详情/AI 报价 label 不动)
+    // S1:列表「xxx 起」起价独立字段(详情/AI 报价 label 不动)
     priceFromLabelZh: service.priceFromLabelZh,
     priceFromLabelEn: service.priceFromLabelEn,
     quoteHintZh: service.quoteHintZh,

@@ -1,7 +1,7 @@
 /* v1.4 服务 Tab 重构(店主 08-16 实拍判词,图=合同):
    ①顶部段选撤除(大类多了会越来越宽,形态不许要);②左栏=平台大类(字典驱动,空类不显示,与网页同构);
    ③右侧=项目卡(二级分类并入卡片眉标);④「加项服务」永不出现在顾客分类(规则①,数据层公开接口已滤,
-   本页不再有任何静态分类数组);⑤价格=「¥xxx 起」(priceFromLabel,后端算好)。
+   本页不再有任何静态分类数组);⑤价格=「xxx 起」起价标签(priceFromLabel,后端算好)。
    D17 失败态保留:接口挂了如实说,不回 mock。 */
 const { curOf, ensureCurrencyCached } = require('../../utils/storecurrency')
 const i18n = require('../../utils/i18n')
