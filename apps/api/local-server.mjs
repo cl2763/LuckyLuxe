@@ -5278,6 +5278,7 @@ function serializeService(row, lang = 'zh') {
     storefront: Boolean(row.storefront),
     itemKind: row.item_kind || 'main',
     isTimecard: Boolean(row.is_timecard),
+    platformCategory: platformCategoryOf(row.type),
     deposit: cents(effectiveDepositCents),
     depositCents: effectiveDepositCents,
     durationMin: row.base_duration_min,
@@ -10761,7 +10762,11 @@ async function route(req, res) {
       args.push(query.type.toUpperCase())
     }
     sql += ' ORDER BY type ASC, sort_order ASC'
-    return json(res, 200, { services: db.prepare(sql).all(...args).map((service) => serializeService(service, query.lang || 'zh')) })
+    return json(res, 200, {
+      services: db.prepare(sql).all(...args).map((service) => serializeService(service, query.lang || 'zh')),
+      // v1.4:平台大类字典随响应下发(固定三大类起步;平台加行零代码)
+      platformCategories: platformCategories()
+    })
   }
   if (req.method === 'GET' && path === '/technicians') {
     const args = [resolveTenant(req, query)]
@@ -16898,6 +16903,33 @@ try {
     mark.run(t, JSON.stringify({ policy: 'subtotal_full_retro', decidedBy: '店主 2026-08-12 改判①(二次+三次拍板)', note: '积分历史全量追溯:累计获得≡累计消费(Σ已签档位小计);余额=获得−已兑换;硬守恒 余额≤累计消费;混合口径负余额钳 0 留痕' }), iso(new Date()))
   }
 } catch (e) { console.error('改判①留痕失败(不阻塞启动):', e.message) }
+/* v1.4 大类改造(店主 08-16 点头):平台大类字典 —— 大类=平台级,商家只读;
+   以后加「美发」类=这张表 INSERT 一行,前后端零代码。services.type → key 映射:
+   NAIL→nail,LASH→lash,CARE/OTHER→care(顾客端「护理·其他」聚合口径不变)。 */
+db.exec(`CREATE TABLE IF NOT EXISTS platform_categories (
+  key TEXT PRIMARY KEY,
+  name_zh TEXT NOT NULL,
+  name_en TEXT NOT NULL,
+  types_json TEXT NOT NULL,
+  sort_order INTEGER NOT NULL DEFAULT 0
+)`)
+{
+  const seedCat = db.prepare('INSERT OR IGNORE INTO platform_categories (key, name_zh, name_en, types_json, sort_order) VALUES (?, ?, ?, ?, ?)')
+  seedCat.run('nail', '美甲', 'Nail', JSON.stringify(['NAIL']), 1)
+  seedCat.run('lash', '美睫', 'Lash', JSON.stringify(['LASH']), 2)
+  seedCat.run('care', '护理·其他', 'Care & More', JSON.stringify(['CARE', 'OTHER']), 3)
+}
+function platformCategoryOf(type) {
+  const t = String(type || '').toUpperCase()
+  const row = db.prepare('SELECT key FROM platform_categories WHERE types_json LIKE ?').get(`%"${t}"%`)
+  return row ? row.key : 'care'
+}
+function platformCategories() {
+  return db.prepare('SELECT * FROM platform_categories ORDER BY sort_order ASC').all().map((r) => ({
+    key: r.key, nameZh: r.name_zh, nameEn: r.name_en, types: JSON.parse(r.types_json), sortOrder: r.sort_order
+  }))
+}
+
 // S1+S3 迁移一次到位(规则⑥,幂等标记 s1_storefront):现库归位 ——
 // main+active(非次卡)→上架 storefront=1;addon→0(加项永不见客,规则①);
 // 次卡候选(unit='times' 或名称含 次卡/守护(3/足护(9)→ is_timecard=1 暂存,逐条打印供核。

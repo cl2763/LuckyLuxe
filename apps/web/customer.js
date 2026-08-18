@@ -27,7 +27,7 @@ function moneyY(amount) { return `${curPrefix()}${Number(amount || 0)}` }
 
 const copy = {
   zh: {
-    registerTitle: '创建 Lucky Luxe 账号',
+    registerTitle: '创建账号',
     registerText: '你可以先以游客身份浏览。预约、购物车结算和会员档案需要登录。',
     emailRegister: '创建账号',
     emailLogin: '邮箱登录',
@@ -180,7 +180,7 @@ const copy = {
     aiQuickPolicy: '取消改期规则？'
   },
   en: {
-    registerTitle: 'Create your Lucky Luxe account',
+    registerTitle: 'Create your account',
     registerText: 'You can browse as a guest. Booking, checkout, and member pages require sign-in.',
     emailRegister: 'Create Account',
     emailLogin: 'Email Login',
@@ -671,16 +671,18 @@ function setView(view) {
   }
 }
 
-function categories() {
-  const names = [...new Set(state.services.filter((item) => item.type === state.type).map((item) => item.category))]
-  return [{ key: 'all', label: state.lang === 'zh' ? '热门推荐' : 'Popular' }, ...names.map((name) => ({ key: name, label: name }))]
+function categoryKeyOf(service) {
+  if (service.platformCategory) return service.platformCategory
+  const t = String(service.type || '').toLowerCase()
+  return t === 'nail' || t === 'lash' ? t : 'care'
 }
-
+function visibleCategories() {
+  // 平台字典驱动;本店没有条目的大类不显示(v1.4:空大类不显示)
+  const cats = state.platformCategories || []
+  return cats.filter((cat) => state.services.some((svc) => categoryKeyOf(svc) === cat.key))
+}
 function servicesByType() {
-  return state.services.filter((service) => {
-    if (service.type !== state.type) return false
-    return state.category === 'all' || service.category === state.category
-  })
+  return state.services.filter((service) => categoryKeyOf(service) === state.type)
 }
 
 function recommended(type) {
@@ -770,11 +772,11 @@ async function handleBookingDraftParam() {
 }
 
 async function loadServices() {
-  const [nail, lash] = await Promise.all([
-    request(`/services?type=nail&lang=${state.lang}`),
-    request(`/services?type=lash&lang=${state.lang}`)
-  ])
-  state.services = [...nail.services, ...lash.services]
+  /* v1.4 大类改造:一次拉全量(此前只拉 nail+lash,护理类服务网页顾客端根本看不到)。
+     platformCategories=平台字典随响应下发,左栏据此渲染,空类不显示。 */
+  const data = await request(`/services?lang=${state.lang}`)
+  state.services = data.services || []
+  state.platformCategories = data.platformCategories || []
 }
 
 async function loadStores() {
@@ -853,7 +855,7 @@ function renderAuth() {
   els.authView.innerHTML = `
     <div class="auth-card">
       <div>
-        <p class="eyebrow">Lucky Luxe Web</p>
+        <p class="eyebrow">${brandName()}</p>
         <h1>${t('registerTitle')}</h1>
         <p>${t('registerText')}</p>
       </div>
@@ -880,7 +882,7 @@ function renderAuth() {
       <button class="ghost full" id="continueGuest" type="button">${t('continueGuest')}</button>
     </div>
     <div class="auth-visual">
-      <img src="/assets/images/store-cover.jpg" alt="Lucky Luxe">
+      <img src="/assets/images/store-cover.jpg" alt="${brandName()}">
     </div>
   `
 }
@@ -966,7 +968,7 @@ function render() {
 
 function heroSlides() {
   return [
-    { image: '/assets/images/hero-carousel-interior.jpg', label: state.lang === 'zh' ? 'Lucky Luxe 店内氛围' : 'Lucky Luxe studio mood' },
+    { image: '/assets/images/hero-carousel-interior.jpg', label: state.lang === 'zh' ? '店内氛围' : 'Studio mood' },
     { image: '/assets/images/hero-carousel-nail.jpg', label: state.lang === 'zh' ? '精致美甲细节' : 'Premium nail detail' },
     { image: '/assets/images/hero-carousel-lash.jpg', label: state.lang === 'zh' ? '美睫服务细节' : 'Lash service detail' }
   ]
@@ -979,16 +981,16 @@ function renderHome() {
   els.screen.innerHTML = `
     <section class="web-hero">
       <div class="web-hero-copy">
-        <span class="brand-mark hero-logo-mark"><img src="/assets/images/brand-logo.png" alt="Lucky Luxe"></span>
+        <span class="brand-mark hero-logo-mark"><img src="/assets/images/brand-logo.png" alt="${brandName()}"></span>
         <p class="eyebrow">Nail & Lash Atelier</p>
-        <h1>Lucky Luxe</h1>
+        <h1>${brandName()}</h1>
         <p>${state.lang === 'zh' ? '预约美甲与美睫，在线支付定金，到店完成尾款。' : 'Book nail and lash services online, pay the deposit, and settle the balance in store.'}</p>
         <div class="hero-actions">
           <button class="primary" data-go-services="nail" type="button">${t('bookNow')}</button>
           <button class="ghost" data-view-target="me" type="button">${t('quickMember')}</button>
         </div>
       </div>
-      <div class="hero-carousel" aria-label="Lucky Luxe">
+      <div class="hero-carousel" aria-label="${brandName()}">
         <div class="hero-slide-track">
           ${slides.map((slide, index) => `
             <img class="hero-slide ${index === activeSlide ? 'active' : ''}" src="${slide.image}" alt="${slide.label}">
@@ -1058,7 +1060,7 @@ function renderAiAssistantWidget() {
     <section class="ai-assistant-panel">
       <div class="ai-assistant-head">
         <div>
-          <p class="eyebrow">Lucky Luxe</p>
+          <p class="eyebrow">${brandName()}</p>
           <h2>${t('aiAssistant')}</h2>
         </div>
         <button class="ghost slim" data-ai-assistant-toggle type="button">×</button>
@@ -1151,6 +1153,7 @@ function stopHeroCarousel() {
 /* D46:店铺事实单源渲染件 —— 首页门店块/结算页店块/门店详情页全走这里。
    字段全部来自 /stores(随 ?store= 租户走);空字段不显示,不许再出现 Address TBD 这类假占位。 */
 function currentStore() { return (state.stores && state.stores[0]) || {} }
+function brandName() { return currentStore().name || 'Lucky Luxe' }
 function storeHoursSummary(store) {
   const hs = Array.isArray(store.hours) ? store.hours : []
   const open = hs.filter((h) => !h.is_closed)
@@ -1218,7 +1221,7 @@ function renderPortfolio() {
       <button class="ghost back-btn" ${selected ? 'data-portfolio-back' : 'data-view-target="home"'} type="button">← ${selected ? t('technicianPortfolio') : t('home')}</button>
       <div class="section-row">
         <div>
-          <p class="eyebrow">Lucky Luxe</p>
+          <p class="eyebrow">${brandName()}</p>
           <h1>${selected ? selected.technician?.name : t('technicianPortfolio')}</h1>
           <span class="subtle">${selected ? selected.technician?.title : t('portfolioIntro')}</span>
         </div>
@@ -1227,7 +1230,7 @@ function renderPortfolio() {
         <div class="technician-work-grid">
           ${(selected.images || []).map((image, index) => `
             <a href="${image}" target="_blank" rel="noreferrer">
-              <img src="${image}" alt="${selected.technician?.name || 'Lucky Luxe'} ${index + 1}">
+              <img src="${image}" alt="${selected.technician?.name || brandName()} ${index + 1}">
             </a>
           `).join('')}
         </div>
@@ -1235,7 +1238,7 @@ function renderPortfolio() {
         <section class="technician-portfolio-section card">
           <div class="section-row compact-row">
             <div>
-              <h2>${portfolio.technician?.name || 'Lucky Luxe'}</h2>
+              <h2>${portfolio.technician?.name || brandName()}</h2>
               <p>${portfolio.technician?.title || (state.lang === 'zh' ? '美甲 / 美睫技师' : 'Nail / Lash Artist')}</p>
             </div>
             <button class="ghost slim" data-portfolio-tech="${portfolio.technician?.id || ''}" type="button">${t('viewWork')}</button>
@@ -1243,7 +1246,7 @@ function renderPortfolio() {
           <div class="portfolio-preview-grid">
             ${(portfolio.images || []).slice(0, 4).map((image, index) => `
               <button class="portfolio-preview-card" data-portfolio-tech="${portfolio.technician?.id || ''}" type="button">
-                <img src="${image}" alt="${portfolio.technician?.name || 'Lucky Luxe'} ${index + 1}">
+                <img src="${image}" alt="${portfolio.technician?.name || brandName()} ${index + 1}">
               </button>
             `).join('')}
           </div>
@@ -1254,20 +1257,15 @@ function renderPortfolio() {
 }
 
 function renderServices() {
-  const cats = categories()
   const list = servicesByType()
   els.screen.innerHTML = `
     <section class="service-web-page">
       <div class="service-toolbar">
-        <h1>Lucky Luxe</h1>
-        <div class="segmented compact">
-          <button class="segment ${state.type === 'nail' ? 'active' : ''}" data-type="nail" type="button">${t('nail')}</button>
-          <button class="segment ${state.type === 'lash' ? 'active' : ''}" data-type="lash" type="button">${t('lash')}</button>
-        </div>
+        <h1>${brandName()}</h1>
       </div>
       <div class="service-layout-web">
         <aside class="category-rail">
-          ${cats.map((cat) => `<button class="${state.category === cat.key ? 'active' : ''}" data-category="${cat.key}" type="button">${cat.label}</button>`).join('')}
+          ${visibleCategories().map((cat) => `<button class="${state.type === cat.key ? 'active' : ''}" data-type="${cat.key}" type="button">${state.lang === 'en' ? cat.nameEn : cat.nameZh}</button>`).join('')}
         </aside>
         <div class="service-list-web">
           ${list.map((service) => renderServiceCard(service)).join('')}

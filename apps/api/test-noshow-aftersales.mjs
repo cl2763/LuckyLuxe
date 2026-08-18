@@ -796,7 +796,27 @@ const main = async () => {
       const hardcoded = ['Lucky Luxe Ontario', 'Address TBD', 'Phone TBD', 'Tuesday-Sunday', 'Ontario · CAD'].filter((w) => custCode.includes(w))
       check('㉞ D46 店铺事实零写死(店名/地址/电话/营业时间/币种)', hardcoded.length === 0, hardcoded.join(','))
       check('㉞ D46 人气区与服务页同口径(fromPriceLabel 进推荐卡)', /recommend-card[\s\S]{0,200}fromPriceLabel/.test(cust))
+      // ㉟ 横幅批:品牌名单源 brandName()——渲染层唯一 'Lucky Luxe' 字面量=回落值本身
+      const brandHits = (custCode.match(/Lucky Luxe/g) || []).length
+      check('㉟ 品牌文案单源(brandName 回落值外零字面量)', brandHits === 1 && custCode.includes('function brandName()'), `hits=${brandHits}`)
     }
+
+    // ===== ㊱ v1.4 大类改造:平台字典+全条目∈大类+空类隐藏 =====
+    {
+      const pubJ = (await request('/services', {}, null, { 'x-tenant-id': shop.tenantId })).data
+      check('㊱ 字典随 /services 下发(三行起步:美甲/美睫/护理·其他)', Array.isArray(pubJ.platformCategories) && pubJ.platformCategories.length >= 3
+        && ['nail', 'lash', 'care'].every((k) => pubJ.platformCategories.some((c) => c.key === k)), JSON.stringify(pubJ.platformCategories))
+      const keys = new Set((pubJ.platformCategories || []).map((c) => c.key))
+      check('㊱ 顾客端所有可见条目∈某大类(v1.4 断言⑥)', (pubJ.services || []).every((sv) => keys.has(sv.platformCategory)),
+        JSON.stringify((pubJ.services || []).filter((sv) => !keys.has(sv.platformCategory)).map((sv) => sv.nameZh)))
+      // 加项永不入大类列表(规则①已有 ok128 双租户;这里对全量再断一次含 platformCategory 的响应)
+      check('㊱ 加项/次卡 0 出现在大类列表', (pubJ.services || []).every((sv) => sv.itemKind !== 'addon' && !sv.isTimecard))
+      // 空类不显示=前端行为:机械断言 visibleCategories 过滤逻辑在场
+      const ROOT36 = new URL('../../', import.meta.url).pathname
+      const cust36 = readFileSync(join(ROOT36, 'apps/web/customer.js'), 'utf8')
+      check('㊱ 空大类不显示(visibleCategories 过滤在场)', cust36.includes('function visibleCategories()') && /state\.services\.some/.test(cust36))
+    }
+
 
   console.log(`\n爽约处置+售后完成态回归通过:${checks} 项断言全绿`)
 }

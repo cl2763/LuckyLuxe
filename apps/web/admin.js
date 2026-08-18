@@ -1,5 +1,5 @@
 // 构建号:每次交付递增。侧栏可见,排查"改了没生效"时先对版本。
-const ADMIN_BUILD = '20260815e-d46b'
+const ADMIN_BUILD = '20260816a-cat'
 let pricingState = { module: 'storefront', tab: 'items', categories: [], items: [], rules: {}, editing: null, preview: null, storefrontPicker: false }
 console.log(`[admin] build ${ADMIN_BUILD}`)
 
@@ -5358,7 +5358,12 @@ function renderServiceEditor() {
         <button class="ghost slim" data-cancel-service-editor type="button">${t('cancel')}</button>
       </div>
       <div class="form-grid">
-        <label><span>${t('type')}</span><select name="type"><option value="NAIL" ${service.type === 'NAIL' ? 'selected' : ''}>NAIL</option><option value="LASH" ${service.type === 'LASH' ? 'selected' : ''}>LASH</option></select></label>
+        <label><span>${owner.lang === 'zh' ? '平台大类(必挂)' : 'Category'}</span><select name="type">
+          <option value="NAIL" ${service.type === 'NAIL' ? 'selected' : ''}>${owner.lang === 'zh' ? '美甲' : 'Nail'}</option>
+          <option value="LASH" ${service.type === 'LASH' ? 'selected' : ''}>${owner.lang === 'zh' ? '美睫' : 'Lash'}</option>
+          <option value="CARE" ${service.type === 'CARE' ? 'selected' : ''}>${owner.lang === 'zh' ? '护理' : 'Care'}</option>
+          <option value="OTHER" ${service.type === 'OTHER' ? 'selected' : ''}>${owner.lang === 'zh' ? '其他(归护理·其他类)' : 'Other'}</option>
+        </select></label>
         <label><span>${t('category')}</span><input name="category" value="${escapeHtml(service.category)}"></label>
         <label><span>${t('nameZh')}</span><input name="nameZh" value="${escapeHtml(service.nameZh)}"></label>
         <label><span>${t('nameEn')}</span><input name="nameEn" value="${escapeHtml(service.nameEn)}"></label>
