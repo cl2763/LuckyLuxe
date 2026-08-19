@@ -24,15 +24,29 @@ async function walkStore(tenant, expectCats, label) {
   A(swArr.length === 0, `${label}:顶部段选 DOM 残留`);
   // 逐大类实点:每类列表非空+全带「起」+眉标在
   for (let i = 0; i < dd.cats.length; i += 1) {
-    const items = await p.$$('.category-item');
+    await mp.reLaunch('/pages/services/index');
+    await sleep(2600);
+    const pg = await mp.currentPage();
+    const items = await pg.$$('.category-item');
     await items[i].tap();
-    await sleep(1200);
-    const cur = await (await mp.currentPage()).data();
+    await sleep(1600);
+    let cur = await (await mp.currentPage()).data();
+    for (let w = 0; w < 5 && !(cur.serviceList && cur.serviceList.length); w += 1) { await sleep(800); cur = await (await mp.currentPage()).data(); }
     A(cur.serviceList.length > 0, `${label}:${cur.cats[i].label} 类空列表`);
     A(cur.serviceList.every((s) => /起$/.test(s.priceFromLabelZh || '')), `${label}:${cur.cats[i].label} 有条目缺「起」`);
     A(cur.serviceList.every((s) => s.category), `${label}:${cur.cats[i].label} 有条目缺二级眉标`);
-    console.log(`  ${label} ${cur.cats[i].label} ✓ ${cur.serviceList.length} 条全带起+眉标`);
+    // D48:每大类第一条以深链直达详情(reLaunch=最稳原语;护理类=事故现场),断言 service 非空
+    const firstId = cur.serviceList[0]._id;
+    await mp.reLaunch(`/pages/service-detail/index?id=${firstId}`);
+    await sleep(3000);
+    let dd2 = await (await mp.currentPage()).data();
+    for (let w = 0; w < 5 && !(dd2.service && dd2.service.name); w += 1) { await sleep(900); dd2 = await (await mp.currentPage()).data(); }
+    A(dd2.service && dd2.service.name, `${label}:${cur.cats[i].label} 详情 service 为空(D48「服务不存在」)`);
+    if (cur.cats[i].label.includes('护理')) await shot(mp, `v14-detail-care-${tenant}`);
+    console.log(`  ${label} ${cur.cats[i].label} ✓ ${cur.serviceList.length} 条全带起+眉标;详情「${dd2.service.name}」可开`);
   }
+  await mp.reLaunch('/pages/services/index');
+  await sleep(2400);
   await shot(mp, `v14-services-${tenant}`);
   console.log(`${label} ✓ 大类 ${dd.cats.map((c) => c.label).join('/')}`);
 }

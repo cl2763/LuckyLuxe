@@ -834,6 +834,19 @@ const main = async () => {
       check('㊲ 购物车按店分仓(切店零残留,组合矩阵抓获)', custW.includes('lucky-web-cart:${TENANT_ID}') && !/readJson\('lucky-web-cart'\)/.test(custW))
     }
 
+
+    // ===== ㊳ D48:护理类详情打不开(getService 猜 id 前缀定类)=====
+    {
+      const ROOT38 = new URL('../../', import.meta.url).pathname
+      const apiJs = readFileSync(join(ROOT38, 'miniprogram/utils/api.js'), 'utf8')
+      check("㊳ D48 getService 不再猜 id 前缀定类(indexOf('lash') 禁令)", !apiJs.includes("indexOf('lash') === 0"))
+      // 行为:CARE 类条目在全量公开列表可按 id 命中(修法=全量直查的后端前提)
+      const careSvc = await request('/admin/pricing/items', { method: 'POST', body: JSON.stringify({ nameZh: `护理条目${RUN_ID}`, type: 'CARE', itemKind: 'main', listPriceCents: 6600 }) }, shop.token)
+      await request(`/admin/pricing/items/${careSvc.data.item.id}`, { method: 'PATCH', body: JSON.stringify({ storefront: true }) }, shop.token)
+      const pubAll = (await request('/services', {}, null, { 'x-tenant-id': shop.tenantId })).data.services || []
+      check('㊳ D48 CARE 条目全量列表按 id 可命中(详情/预约数据前提)', pubAll.some((sv) => sv.id === careSvc.data.item.id))
+    }
+
   console.log(`\n爽约处置+售后完成态回归通过:${checks} 项断言全绿`)
 }
 

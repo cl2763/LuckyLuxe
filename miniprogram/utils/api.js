@@ -515,12 +515,12 @@ async function getPortfolio() {
 }
 
 async function getService(id, lang) {
-  const type = id.indexOf('lash') === 0 ? 'lash' : 'nail'
-  const services = await getServices(type, lang)
-  /* 🔴 D17 同类(2026-08-11 L2 补扫,第六处 mock 回落):原来 `|| mock.findService(id)` ——
-     本店真价目表里没有这个项目时,就从写死的演示表里翻一个**编造的项目连价格**给顾客,
-     顾客还能拿它去预约。真找不到就返回 null,调用方已有「项目不存在」的处理。 */
-  return services.find((item) => item._id === id) || null
+  /* D48(店主 08-16 实测:护理板块「服务不存在」):原实现靠猜 id 前缀定类
+     (id 以 lash 开头→lash,否则一律→nail)——护理类 id(care-service-*)被猜成 nail,
+     去美甲列表里找,永远 null → 护理详情从来打不开。改:全量目录里直查,不猜类。
+     D17 红线不变:真找不到返回 null,绝不回 mock。 */
+  const data = await request(`/services?lang=${lang}`)
+  return (data.services || []).map(toMiniService).find((item) => item._id === id) || null
 }
 
 async function getAvailability(serviceId, date, addOnIds, technicianId) {
