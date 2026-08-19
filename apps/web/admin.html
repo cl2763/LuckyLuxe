@@ -4,7 +4,7 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>有迹 · 商家后台</title>
-    <link rel="stylesheet" href="/web/styles.css?v=20260816c-d49">
+    <link rel="stylesheet" href="/web/styles.css?v=20260817a-s2b1">
     <style>
       /* 2026-08-02 财务指标显隐+动效(店主 v4 定稿):AI智能总结卡 / 目标进度条(带平衡线刻度) / 设目标引导与弹窗。
          放这里不放 styles.css:本批约定只动 admin.js + admin.html 两个文件。 */
@@ -618,19 +618,38 @@
             </section>
           </section>
 
+          <!-- S2批①(图=合同 v1.1 §三):「会员与营销」四页签 —— 充值套餐/次卡/优惠券/会员体系(S9) -->
           <section class="admin-page hidden" id="membershipPage">
             <button class="ghost back-btn" data-admin-page="dashboard" type="button">← Dashboard</button>
-            <section class="admin-card">
+            <div class="section-row">
+              <div><p class="eyebrow">Membership &amp; Marketing</p><h1>会员与营销</h1></div>
+            </div>
+            <div class="pricing-tabs" id="memberTabs">
+              <button class="pricing-tab active" data-member-tab="recharge" type="button">① 充值套餐</button>
+              <button class="pricing-tab" data-member-tab="times" type="button">② 次卡</button>
+              <button class="pricing-tab" data-member-tab="coupon" type="button">③ 优惠券</button>
+              <button class="pricing-tab" data-member-tab="tiers" type="button">④ 会员体系（S9）</button>
+            </div>
+            <section class="admin-card" id="mtabRecharge">
               <div class="section-row compact-row">
-                <h2>充值套餐 / 会员次卡</h2>
-                <div>
-                  <button class="ghost slim" id="addRechargeButton" type="button">+ 充值套餐</button>
-                  <button class="ghost slim" id="addTimesButton" type="button">+ 次卡</button>
-                </div>
+                <h2>充值套餐</h2>
+                <button class="ghost slim" id="addRechargeButton" type="button">+ 新建充值套餐</button>
               </div>
-              <p class="subtle" style="margin:2px 0 10px">套餐/次卡的定义(售价、赠送、次数)。顾客购买与核销在顾客小程序侧。</p>
-              <div class="service-admin-list" id="packageAdminList"></div>
+              <p class="subtle" style="margin:2px 0 10px">充 X 赠 Y(赠送可为 0)。赠送=营销让利:入储值负债、单独列示,永不算实收/业绩/积分。</p>
+              <!-- 收编:「给会员充值」从财务储值页并入(拍板) -->
+              <div id="svOpsCard"></div>
+              <div class="service-admin-list" id="rechargePkgList"></div>
+              <div id="mallSwitchRow"></div>
             </section>
+            <section class="admin-card hidden" id="mtabTimes">
+              <div class="section-row compact-row">
+                <h2>次卡</h2>
+                <button class="ghost slim" id="addTimesButton" type="button">+ 新建次卡</button>
+              </div>
+              <p class="subtle" style="margin:2px 0 10px">名称+总次数+价格+关联项目组+有效期(可选,默认长期)。售卡=预收负债不计积分;核销按折算单价确认收入(批②落地)。</p>
+              <div class="service-admin-list" id="timesPkgList"></div>
+            </section>
+            <div id="mtabCoupon">
             <section class="admin-card">
               <div class="section-row compact-row">
                 <h2>优惠券</h2>
@@ -660,6 +679,11 @@
               </div>
               <p class="subtle" style="margin:2px 0 10px" id="pointsMallHint">奖品=用积分换券($1消费=1积分)。顾客在小程序「积分商城」兑换,到店报券码核销;误兑可用券码撤销。</p>
               <div class="service-admin-list" id="pointsPrizeList"></div>
+            </section>
+            </div>
+            <section class="admin-card hidden" id="mtabTiers">
+              <h2>会员体系</h2>
+              <p class="subtle" style="margin:8px 0">等级/权益/成长值配置界面归 S9 波次,出图后开放。当前口径:不分级店「充值即会员」;分级店(Lucky Luxe)等级由累计消费自动判定。</p>
             </section>
           </section>
 
@@ -930,6 +954,6 @@
     </main>
 
     <div class="toast" id="toast"></div>
-    <script src="/web/admin.js?v=20260816c-d49"></script>
+    <script src="/web/admin.js?v=20260817a-s2b1"></script>
   </body>
 </html>

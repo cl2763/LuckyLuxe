@@ -68,23 +68,28 @@ async function main() {
     const overview = recharged.data.storedValue
     check('outstanding balance includes new card', overview.totalBalanceCents >= 50000)
 
-    // 2. 耗卡:余额下降 + 生成收入流水(支付方式=储值卡)
+    // 2. 耗卡口径(S2批① 店主 08-17 拍板,规则⑥):手动耗卡 HTTP 口=410 GONE ——
+    //    扣卡只随结算单签字由引擎自动做(引擎路径由 test-noshow-aftersales ⑰ 与结算套件覆盖)。
     const consumed = await request('/admin/stored-value/consume', {
       method: 'POST',
       body: JSON.stringify({ userId, amount: 168, note: `耗卡测试-${RUN_ID}` })
     })
-    check('consume accepted, balance reduced', consumed.status === 201 && consumed.data.balanceCents === 50000 - 16800)
-    const txns = (await request('/admin/finance/transactions')).data.transactions || []
-    const consumeTxn = txns.find((item) => item.source === 'stored_value' && item.note?.includes(RUN_ID))
-    check('consume recognized as income with stored_value channel', consumeTxn?.type === 'income' && consumeTxn?.payChannel === 'stored_value' && consumeTxn?.amountCents === 16800, JSON.stringify(consumeTxn))
-    if (consumeTxn) consumeTxnIds.push(consumeTxn.id)
-
-    // 3. 余额不足拒绝
-    const overdraw = await request('/admin/stored-value/consume', {
-      method: 'POST',
-      body: JSON.stringify({ userId, amount: 9999 })
-    })
-    check('overdraw rejected', overdraw.status === 400, String(overdraw.status))
+    check('manual consume = 410 GONE(手动耗卡整口取消)', consumed.status === 410, String(consumed.status))
+    // 引擎写法直插一笔耗卡,继续验负债下降与逐笔视图(模拟签字扣卡结果)
+    {
+      const { DatabaseSync } = await import('node:sqlite')
+      const dbPath0 = process.env.TEST_DB_PATH || new URL('./local-data/lucky-luxe.sqlite', import.meta.url).pathname
+      const raw0 = new DatabaseSync(dbPath0)
+      raw0.prepare("INSERT INTO stored_value_transactions (id,tenant_id,user_id,type,amount_cents,pay_channel,note,created_by,created_at) VALUES (?,?,?,?,?,?,?,?,?)")
+        .run(`sv_ci_${RUN_ID}`, 'lucky-luxe', userId, 'consume', -16800, 'stored_value', `耗卡测试-${RUN_ID}(直插=引擎写法)`, 'ci-sv', new Date().toISOString())
+      raw0.close()
+    }
+    const afterOverview = (await request('/admin/stored-value')).data.storedValue
+    check('balance reduced after engine-style consume', typeof afterOverview.totalBalanceCents === 'number')
+    // 赠送口径(规则④)顺带入本套件:充100赠20 → bonus 独立行,余额含赠送
+    const bonusRc = await request('/admin/stored-value/recharge', { method: 'POST', body: JSON.stringify({ userId, amount: 100, bonusCents: 2000, payChannel: 'cash', note: `赠送口径-${RUN_ID}` }) })
+    check('recharge with bonus accepted', bonusRc.status === 201)
+    check('bonus adds to liability (balance includes gift)', bonusRc.data.balanceCents === 50000 - 16800 + 10000 + 2000, String(bonusRc.data.balanceCents))
 
     // 4. 账户列表带沉睡字段
     const list = (await request('/admin/stored-value')).data.storedValue

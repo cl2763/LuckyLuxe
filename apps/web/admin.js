@@ -1,5 +1,5 @@
 // 构建号:每次交付递增。侧栏可见,排查"改了没生效"时先对版本。
-const ADMIN_BUILD = '20260816c-d49'
+const ADMIN_BUILD = '20260817a-s2b1'
 let pricingState = { module: 'storefront', tab: 'items', categories: [], items: [], rules: {}, editing: null, preview: null, storefrontPicker: false }
 console.log(`[admin] build ${ADMIN_BUILD}`)
 
@@ -2330,16 +2330,10 @@ function renderStoredValue() {
       <div class="finance-metric"><span>${owner.lang === 'zh' ? '本月耗卡' : 'Consumed'}</span><strong>${cadText(sv.monthConsumeCents)}</strong></div>
       <div class="finance-metric"><span>${owner.lang === 'zh' ? '耗卡率' : 'Consume rate'}</span><strong>${sv.consumeRate}%</strong></div>
     </div>
-    <div class="sv-op-row">
-      <select id="svMember">${memberOptions || `<option value="">${owner.lang === 'zh' ? '暂无会员' : 'No members'}</option>`}</select>
-      <input id="svAmount" type="number" min="0" step="0.01" placeholder="${owner.lang === 'zh' ? '金额' : 'Amount'}">
-      <select id="svChannel">${FINANCE_PAY_CHANNELS.filter(([id]) => id !== 'stored_value').map(([id, label]) => `<option value="${id}">${label}</option>`).join('')}</select>
-      <select id="svTech" title="${owner.lang === 'zh' ? '经手技师:这笔算谁促成,计入其充值/耗卡提成' : 'Handled by'}">
-        <option value="">${owner.lang === 'zh' ? '经手:店里直收' : 'House'}</option>
-        ${(owner.technicians || []).map((t2) => `<option value="${escapeHtml(t2.id)}">${escapeHtml(t2.name)}</option>`).join('')}
-      </select>
-      <button class="primary slim" data-sv-recharge type="button">${owner.lang === 'zh' ? '充值' : 'Recharge'}</button>
-      <button class="ghost slim" data-sv-consume type="button">${owner.lang === 'zh' ? '耗卡' : 'Consume'}</button>
+    <!-- S2批① 收编(拍板):「给会员充值」并入 会员与营销/客户档案;「耗卡」按钮取消(结算单签字自动扣,手动耗卡=账目风险口,后端 410) -->
+    <div class="service-admin-item" style="background:#FDFBF8">
+      <div><span class="subtle">${owner.lang === 'zh' ? '充值入口已移至「会员与营销 → 充值套餐」;储值扣款只随结算单签字自动入账(无手动耗卡)。' : 'Recharge moved to Membership & Marketing.'}</span></div>
+      <button class="ghost slim" data-admin-page="membership" type="button">${owner.lang === 'zh' ? '去会员与营销' : 'Open'}</button>
     </div>
     ${(sv.accounts || []).length ? `
       <div class="sv-account-list">
@@ -5786,6 +5780,7 @@ function renderCustomers() {
         ${(customer.tags || []).length ? `<div class="customer-tags">${customer.tags.slice(0, 3).map((tag) => `<span class="customer-tag">${escapeHtml(tag)}</span>`).join('')}${customer.tags.length > 3 ? `<span class="customer-tag">+${customer.tags.length - 3}</span>` : ''}</div>` : ''}
         <div class="inline-actions compact-actions customer-card-actions">
           <button class="ghost slim" data-customer-detail="${customer.id}" type="button">${t('viewCustomerFile')}</button>
+          <button class="ghost slim" data-customer-recharge="${customer.id}" type="button">${owner.lang === 'zh' ? '给 TA 充值' : 'Recharge'}</button>
           <button class="ghost slim" data-ai-customer="${customer.id}" type="button">${owner.aiLoading === `customer:${customer.id}` ? t('aiProcessing') : t('aiCustomerInsight')}</button>
           ${(() => { const tr = rfmTierOf(customer); return tr && tr.k === 's' ? `<button class="ghost slim" data-recall-copy="${customer.id}" type="button">✦ ${owner.lang === 'zh' ? 'AI 召回' : 'Recall'}</button>` : '' })()}
         </div>
@@ -7455,23 +7450,13 @@ els.financePage.addEventListener('click', (event) => {
     showFinanceInsights()
     return
   }
-  if (event.target.closest('[data-sv-recharge]') || event.target.closest('[data-sv-consume]')) {
-    const isRecharge = Boolean(event.target.closest('[data-sv-recharge]'))
-    const userId = document.querySelector('#svMember')?.value
-    const amount = Number(document.querySelector('#svAmount')?.value || 0)
-    if (!userId || !amount || amount <= 0) {
-      toast(owner.lang === 'zh' ? '请选择会员并填写金额' : 'Select a member and amount')
-      return
-    }
-    const svTech = document.querySelector('#svTech')?.value || ''
-    request(`/admin/stored-value/${isRecharge ? 'recharge' : 'consume'}`, {
-      method: 'POST',
-      body: JSON.stringify({ userId, amount, payChannel: document.querySelector('#svChannel')?.value || 'unknown', ...(svTech ? { technicianId: svTech } : {}) })
-    }).then(loadFinancePage)
-      .then(() => toast(isRecharge
-        ? (owner.lang === 'zh' ? '充值成功（记为储值负债）' : 'Recharged')
-        : (owner.lang === 'zh' ? '耗卡成功，已确认为收入' : 'Consumed and recognized as income')))
-      .catch((error) => toast(error.message))
+})
+els.membershipPage.addEventListener('change', (event) => {
+  if (event.target.closest('[data-mall-switch]')) {
+    const on = event.target.checked
+    request('/admin/mall/self-purchase', { method: 'PUT', body: JSON.stringify({ enabled: on }) })
+      .then(() => loadMembershipPage())
+      .catch((error) => { toast(error.message); loadMembershipPage().catch(() => {}) })
   }
 })
 els.financePage.addEventListener('change', (event) => {
@@ -7659,6 +7644,16 @@ els.customerList.addEventListener('click', (event) => {
     owner.selectedCustomerId = ''
     owner.selectedBookingId = ''
     renderCustomers()
+    return
+  }
+  const custRecharge = event.target.closest('[data-customer-recharge]')
+  if (custRecharge) {
+    // S2批① 收编:客户档案 → 会员与营销页签①,预选该会员
+    membershipData.prefillUserId = custRecharge.dataset.customerRecharge
+    membershipData.tab = 'recharge'
+    owner.adminPage = 'membership'
+    loadMembershipPage().catch((error) => toast(error.message))
+    render()
     return
   }
   const customerDetail = event.target.closest('[data-customer-detail]')
@@ -7867,11 +7862,12 @@ async function initAdmin() {
 }
 
 // ===== 会员套餐 / 次卡 / 优惠券(网页老板端,与小程序同后端 /admin/packages、/admin/coupons)=====
-let membershipData = { packages: [], coupons: [], prizes: [] }
+let membershipData = { packages: [], coupons: [], prizes: [], tab: 'recharge', mall: { enabled: false, locked: true }, prefillUserId: '' }
 function mCents(v) { const n = Number(String(v).replace(/[^\d.]/g, '')); return Number.isFinite(n) ? Math.round(n * 100) : 0 }
 // R4:这里原本自己拼 '$',人民币店的会员套餐/券/积分奖品全显示成美元符。并回统一的 money()
 function mMoney(cents) { return money(Math.round(cents || 0)) }
 async function loadMembershipPage() {
+  try { membershipData.mall = await request('/admin/mall/self-purchase') } catch (e) { membershipData.mall = { enabled: false, locked: true } }
   const [p, c, z, cat] = await Promise.all([
     request('/admin/packages'),
     request('/admin/coupons'),
@@ -8018,21 +8014,50 @@ async function submitCouponGrant() {
     toast(error.message)
   }
 }
+function renderMemberTabs() {
+  const tab = membershipData.tab || 'recharge'
+  document.querySelectorAll('[data-member-tab]').forEach((btn) => btn.classList.toggle('active', btn.dataset.memberTab === tab))
+  document.querySelector('#mtabRecharge')?.classList.toggle('hidden', tab !== 'recharge')
+  document.querySelector('#mtabTimes')?.classList.toggle('hidden', tab !== 'times')
+  const cpn = document.querySelector('#mtabCoupon')
+  if (cpn) cpn.style.display = tab === 'coupon' ? '' : 'none'
+  document.querySelector('#mtabTiers')?.classList.toggle('hidden', tab !== 'tiers')
+}
+
 function renderMembership() {
-  if (!els.packageAdminList) return
+  renderMemberTabs()
+  const rl = document.querySelector('#rechargePkgList')
+  const tl = document.querySelector('#timesPkgList')
+  if (!rl || !tl) return
   const pkgs = membershipData.packages
-  els.packageAdminList.innerHTML = pkgs.length ? pkgs.map((p) => `
+  /* S2批① 页签①:充值套餐(充X赠Y+上架商城开关);赠送口径句常驻 */
+  const rec = pkgs.filter((p) => p.kind !== 'times')
+  rl.innerHTML = rec.length ? rec.map((p) => `
     <div class="service-admin-item${p.isActive ? '' : ' inactive'}">
-      <div><strong>${escapeHtml(p.name)}</strong> <span class="subtle">${p.kind === 'times' ? '次卡' : '充值套餐'}${p.isActive ? '' : ' · 已下架'}</span>
-        <div class="subtle">${p.kind === 'times'
-          ? `售价 ${mMoney(p.priceCents)} · ${p.timesCount} 次${p.scope ? ' · ' + escapeHtml(p.scope) : ''}`
-          : `售价 ${mMoney(p.priceCents)}${p.bonusCents ? ' · 送 ' + mMoney(p.bonusCents) : ''}`}${p.benefits ? ' · ' + escapeHtml(p.benefits) : ''}</div>
+      <div><strong>充 ${mMoney(p.priceCents)}${p.bonusCents ? ` 赠 ${mMoney(p.bonusCents)}` : ''}</strong> <span class="subtle">${escapeHtml(p.name)}${p.isActive ? '' : ' · 已下架'}</span>
+        <div class="subtle">${p.bonusCents ? `到账 ${mMoney(p.priceCents + p.bonusCents)}(实收 ${mMoney(p.priceCents)}+赠送 ${mMoney(p.bonusCents)} 分行入账)· ` : `购买后余额 +${mMoney(p.priceCents)} · `}上架商城 ${p.mallVisible ? '✓' : '✗'}${p.benefits ? ' · ' + escapeHtml(p.benefits) : ''}</div>
       </div>
       <div class="row-actions">
+        <button class="ghost slim" data-pkg-mall="${p.id}" type="button">${p.mallVisible ? '撤出商城' : '上架商城'}</button>
         <button class="ghost slim" data-pkg-edit="${p.id}" type="button">编辑</button>
         <button class="ghost slim" data-pkg-toggle="${p.id}" type="button">${p.isActive ? '下架' : '上架'}</button>
       </div>
-    </div>`).join('') : '<div class="empty-state">还没有套餐,点右上角新增</div>'
+    </div>`).join('') : '<div class="empty-state">还没有充值套餐,点右上角新建(金额+赠送额,赠送可为 0)</div>'
+  /* 页签②:次卡(名称/次数/价格/关联项目组/有效期) */
+  const tms = pkgs.filter((p) => p.kind === 'times')
+  tl.innerHTML = tms.length ? tms.map((p) => `
+    <div class="service-admin-item${p.isActive ? '' : ' inactive'}">
+      <div><strong>${escapeHtml(p.name)}</strong> <span class="subtle">${p.isActive ? '' : '已下架'}</span>
+        <div class="subtle">售价 ${mMoney(p.priceCents)} · ${p.timesCount} 次(单次折算 ${p.timesCount ? mMoney(Math.round(p.priceCents / p.timesCount)) : '—'})· ${p.projectGroup ? '关联项目组:' + escapeHtml(p.projectGroup) : '未关联项目组'} · ${p.validDays ? '有效期 ' + p.validDays + ' 天' : '长期有效'} · 上架商城 ${p.mallVisible ? '✓' : '✗'}</div>
+      </div>
+      <div class="row-actions">
+        <button class="ghost slim" data-pkg-mall="${p.id}" type="button">${p.mallVisible ? '撤出商城' : '上架商城'}</button>
+        <button class="ghost slim" data-pkg-edit="${p.id}" type="button">编辑</button>
+        <button class="ghost slim" data-pkg-toggle="${p.id}" type="button">${p.isActive ? '下架' : '上架'}</button>
+      </div>
+    </div>`).join('') : '<div class="empty-state">还没有次卡。现有次卡已自动迁入本页管理。</div>'
+  renderSvOpsCard()
+  renderMallSwitch()
   const cs = membershipData.coupons
   els.couponAdminList.innerHTML = cs.length ? cs.map((c) => `
     <div class="service-admin-item${c.isActive ? '' : ' inactive'}">
@@ -8057,6 +8082,43 @@ function renderMembership() {
       </div>
     </div>`).join('') : '<div class="empty-state">还没有奖品。点「+ 新增奖品」,可选现有券或当场建一张新券。</div>'
 }
+/* S2批① 收编:「给会员充值」从财务储值页并入会员与营销页签①(客户档案入口同函数)。
+   支持「按套餐」快捷:选充值套餐自动填金额+赠送(赠送=bonus 独立行,规则④)。 */
+function renderSvOpsCard() {
+  const box = document.querySelector('#svOpsCard')
+  if (!box) return
+  const members = (owner.customers || []).filter((c) => c.isBound !== false)
+  const memberOptions = (owner.customers || []).map((c) => `<option value="${escapeHtml(c.id)}" ${membershipData.prefillUserId === c.id ? 'selected' : ''}>${escapeHtml(c.displayName || c.name || c.id)}</option>`).join('')
+  const recPkgs = (membershipData.packages || []).filter((p) => p.kind !== 'times' && p.isActive)
+  box.innerHTML = `
+    <div class="pricing-editor" style="margin-bottom:12px">
+      <strong style="font-size:13.5px">给会员充值</strong> <span class="subtle">(从财务「储值卡」页并入;扣款只随结算单签字,无手动耗卡)</span>
+      <div class="sv-op-row" style="margin-top:8px">
+        <select id="mSvMember">${memberOptions || '<option value="">暂无会员</option>'}</select>
+        <select id="mSvPkg"><option value="">按套餐(可选)</option>${recPkgs.map((p) => `<option value="${p.id}">充 ${mMoney(p.priceCents)}${p.bonusCents ? ' 赠 ' + mMoney(p.bonusCents) : ''}</option>`).join('')}</select>
+        <input id="mSvAmount" type="number" min="0" step="0.01" placeholder="金额">
+        <input id="mSvBonus" type="number" min="0" step="0.01" placeholder="赠送(可空)">
+        <select id="mSvChannel">${FINANCE_PAY_CHANNELS.filter(([id]) => id !== 'stored_value').map(([id, label]) => `<option value="${id}">${label}</option>`).join('')}</select>
+        <select id="mSvTech"><option value="">经手:店里直收</option>${(owner.technicians || []).map((t2) => `<option value="${escapeHtml(t2.id)}">${escapeHtml(t2.name)}</option>`).join('')}</select>
+        <button class="primary slim" data-msv-recharge type="button">充值</button>
+      </div>
+      <p class="subtle" style="margin:6px 0 0">赠送=营销让利:入储值负债、明细单独列示,不算实收、不计业绩与积分。</p>
+    </div>`
+}
+
+function renderMallSwitch() {
+  const row = document.querySelector('#mallSwitchRow')
+  if (!row) return
+  const st = membershipData.mall || { enabled: false, locked: true }
+  row.innerHTML = `
+    <div class="service-admin-item" style="background:#FDFBF8;margin-top:10px">
+      <div><strong>线上自助购买</strong>
+        <div class="subtle">${st.locked ? '微信支付通道未接通,此开关锁定——商城仅展示+「到店购买」提示(批⑤接通后解锁)' : '通道已接通,可开放顾客线上自助购买'}</div>
+      </div>
+      <label class="service-active-toggle"><input type="checkbox" data-mall-switch ${st.enabled ? 'checked' : ''} ${st.locked ? 'disabled' : ''}><span class="subtle">${st.enabled ? '开' : '关'}</span></label>
+    </div>`
+}
+
 async function savePackage(kind, existing) {
   kind = kind || (existing && existing.kind) || 'recharge'
   const name = window.prompt('套餐名称', existing ? existing.name : (kind === 'times' ? '纯色×5次卡' : '充1000送50'))
@@ -8068,10 +8130,12 @@ async function savePackage(kind, existing) {
     const bonus = window.prompt('额外赠送(加元,可留空)', existing && existing.bonusCents ? String(existing.bonusCents / 100) : '')
     body.bonusCents = mCents(bonus || 0)
   } else {
-    const times = window.prompt('包含次数', existing && existing.timesCount ? String(existing.timesCount) : '5')
+    const times = window.prompt('总次数', existing && existing.timesCount ? String(existing.timesCount) : '5')
     body.timesCount = Math.round(Number(times) || 0)
-    const scope = window.prompt('适用范围(可留空)', existing ? existing.scope || '' : '')
-    body.scope = (scope || '').trim()
+    const grp = window.prompt('关联项目组(如 美甲单色/护理;核销时组内选具体项目)', existing ? existing.projectGroup || '' : '')
+    body.projectGroup = (grp || '').trim()
+    const vd = window.prompt('有效期天数(留空=长期有效)', existing && existing.validDays ? String(existing.validDays) : '')
+    body.validDays = vd ? Math.round(Number(vd) || 0) : null
   }
   const benefits = window.prompt('权益说明(可留空)', existing ? existing.benefits || '' : '')
   body.benefits = (benefits || '').trim()
@@ -8163,6 +8227,12 @@ async function revokeRedeem() {
 }
 if (els.membershipPage) {
   els.membershipPage.addEventListener('click', async (event) => {
+    const mtab = event.target.closest('[data-member-tab]')
+    if (mtab) {
+      membershipData.tab = mtab.dataset.memberTab
+      renderMemberTabs()
+      return
+    }
     const addR = event.target.closest('#addRechargeButton')
     const addT = event.target.closest('#addTimesButton')
     const addC = event.target.closest('#addCouponButton')
@@ -8174,6 +8244,28 @@ if (els.membershipPage) {
     const cpnTog = event.target.closest('[data-cpn-toggle]')
     const przEdit = event.target.closest('[data-prz-edit]')
     const przTog = event.target.closest('[data-prz-toggle]')
+    const pkgMall = event.target.closest('[data-pkg-mall]')
+    if (pkgMall) {
+      const p = membershipData.packages.find((x) => x.id === pkgMall.dataset.pkgMall)
+      try { await request(`/admin/packages/${p.id}`, { method: 'PATCH', body: JSON.stringify({ mallVisible: !p.mallVisible }) }); await loadMembershipPage() } catch (error) { toast(error.message) }
+      return
+    }
+    if (event.target.closest('[data-msv-recharge]')) {
+      const userId = document.querySelector('#mSvMember')?.value
+      const pkgId = document.querySelector('#mSvPkg')?.value
+      const pkg = pkgId ? membershipData.packages.find((x) => x.id === pkgId) : null
+      const amount = pkg ? pkg.priceCents / 100 : Number(document.querySelector('#mSvAmount')?.value || 0)
+      const bonus = pkg ? (pkg.bonusCents || 0) / 100 : Number(document.querySelector('#mSvBonus')?.value || 0)
+      if (!userId || !amount || amount <= 0) { toast('请选择会员并填写金额(或选套餐)'); return }
+      const tech = document.querySelector('#mSvTech')?.value || ''
+      try {
+        await request('/admin/stored-value/recharge', { method: 'POST', body: JSON.stringify({ userId, amount, bonusCents: Math.round(bonus * 100), payChannel: document.querySelector('#mSvChannel')?.value || 'unknown', note: pkg ? `套餐:${pkg.name}` : '', ...(tech ? { technicianId: tech } : {}) }) })
+        toast(bonus > 0 ? `充值成功:实收 ${amount} + 赠送 ${bonus}(分行入账)` : '充值成功(记为储值负债)')
+        membershipData.prefillUserId = ''
+        await loadMembershipPage()
+      } catch (error) { toast(error.message) }
+      return
+    }
     if (addR) return savePackage('recharge')
     if (addT) return savePackage('times')
     if (addC) return saveCoupon()

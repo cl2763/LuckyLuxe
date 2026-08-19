@@ -80,7 +80,15 @@ async function recharge(token, userId, amountCents) {
   return request('/admin/stored-value/recharge', { method: 'POST', body: JSON.stringify({ userId, amountCents, payChannel: 'cash' }) }, token)
 }
 async function consume(token, userId, amountCents) {
-  return request('/admin/stored-value/consume', { method: 'POST', body: JSON.stringify({ userId, amountCents }) }, token)
+  // S2批①(规则⑥):手动耗卡 HTTP 口=410;fixture 改直插库(引擎签字扣卡写法),语义不变
+  const { DatabaseSync } = await import('node:sqlite')
+  const dbPath = process.env.TEST_DB_PATH || new URL('./local-data/lucky-luxe.sqlite', import.meta.url).pathname
+  const raw = new DatabaseSync(dbPath)
+  const tid = raw.prepare('SELECT tenant_id FROM users WHERE id = ?').get(userId)?.tenant_id
+  raw.prepare("INSERT INTO stored_value_transactions (id,tenant_id,user_id,type,amount_cents,pay_channel,note,created_by,created_at) VALUES (?,?,?,?,?,?,?,?,?)")
+    .run(`sv_mc_${Date.now().toString(36)}_${Math.floor(Math.random() * 1e6)}`, tid, userId, 'consume', -Math.abs(amountCents), 'stored_value', 'CI 引擎写法耗卡', 'ci-mc', new Date().toISOString())
+  raw.close()
+  return { status: 201, data: {} }
 }
 
 async function main() {

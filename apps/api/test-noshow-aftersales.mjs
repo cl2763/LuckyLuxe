@@ -346,7 +346,8 @@ const main = async () => {
     } else {
       check('⑭ (跳过)无 TEST_DB_PATH,留痕直连断言未跑', true)
     }
-    check('⑭ 技师耗卡=403(确认收入,寸步不让)', (await request('/admin/stored-value/consume', { method: 'POST', body: JSON.stringify({ userId: custId, amountCents: 100 }) }, staffToken)).status === 403)
+    // S2批①(店主 08-17 拍板,规则⑥):手动耗卡整口取消=410——技师老板同拒(原 403 断言随拍板升级)
+    check('⑭→㊵ 技师耗卡=410(手动耗卡整口取消,扣卡只随签字)', (await request('/admin/stored-value/consume', { method: 'POST', body: JSON.stringify({ userId: custId, amountCents: 100 }) }, staffToken)).status === 410)
     check('⑭ 技师储值总览=403', (await request('/admin/stored-value', {}, staffToken)).status === 403)
     check('⑭ 技师财务页=403(财务门禁整体不变)', (await request('/admin/finance/deposit-conservation', {}, staffToken)).status === 403)
 
@@ -378,9 +379,13 @@ const main = async () => {
     {
       const fk = await request('/admin/finance/unlock', { method: 'POST', body: JSON.stringify({}) }, shop.token)
       const kh = { 'x-finance-key': fk.data.financeKey || '' }
-      // 造一笔手工耗卡(老板+钥匙,既有路由;红线:耗卡=确认收入,这笔是测试店内数据)
-      const cs = await request('/admin/stored-value/consume', { method: 'POST', body: JSON.stringify({ userId: custId, amountCents: 700, note: '逐笔视图消耗断言' }), headers: kh }, shop.token)
-      check('⑰ 手工耗卡 fixture 落账', cs.status === 201)
+      // S2批① 后 fixture 改直插库:手动耗卡 HTTP 口已 410(规则⑥);引擎内部 consume 写法(签字扣卡)不受影响,
+      // 这里模拟的就是引擎行为——直插 consume 行造逐笔视图数据。
+      const dbf = new DatabaseSync(process.env.TEST_DB_PATH)
+      dbf.prepare("INSERT INTO stored_value_transactions (id,tenant_id,user_id,type,amount_cents,pay_channel,note,created_by,created_at) VALUES (?,?,?,?,?,?,?,?,?)")
+        .run(`sv_fx17_${RUN_ID}`, shop.tenantId, custId, 'consume', -700, 'stored_value', '逐笔视图消耗断言(fixture 直插=引擎写法)', 'ci-17', new Date().toISOString())
+      dbf.close()
+      check('⑰ 耗卡 fixture 落账(直插=引擎写法)', true)
       const txns = await request('/admin/stored-value/txns', { headers: kh }, shop.token)
       const overview = await request('/admin/stored-value', { headers: kh }, shop.token)
       const sv = overview.data.storedValue
@@ -866,6 +871,35 @@ const main = async () => {
       const miniList = readFileSync(join(ROOT39, 'miniprogram/pages/services/index.wxml'), 'utf8')
       check('㊴ L2 出口同源:网页列表 fromPriceLabel+详情 priceDetailLabel 引用在场', custD.includes('function fromPriceLabel') && custD.includes('priceDetailLabelZh'))
       check('㊴ L2 出口同源:小程序列表 priceFromLabel+详情 priceDetailLabel 引用在场', miniList.includes('priceFromLabelZh') && miniDetail.includes('priceDetailLabelZh'))
+    }
+
+
+    // ===== ㊵ S2批①:赠送口径(规则④)+耗卡410(规则⑥)+商城支付闸(规则⑧)+次卡新字段 =====
+    {
+      // 耗卡 410
+      const gone = await request('/admin/stored-value/consume', { method: 'POST', body: JSON.stringify({ userId: 'x', amountCents: 100 }) }, shop.token)
+      check('㊵ 规则⑥ 手动耗卡接口=410 GONE', gone.status === 410, `got ${gone.status}`)
+      // 商城闸:GET locked + PUT 开=400
+      const mall = await request('/admin/mall/self-purchase', {}, shop.token)
+      check('㊵ 规则⑧ 支付未接通:线上自助购买 locked', mall.status === 200 && mall.data.locked === true && mall.data.enabled === false)
+      const flip = await request('/admin/mall/self-purchase', { method: 'PUT', body: JSON.stringify({ enabled: true }) }, shop.token)
+      check('㊵ 规则⑧ 锁定期 PUT 开=400 PAYMENT_CHANNEL_OFFLINE', flip.status === 400 && flip.data.error.code === 'PAYMENT_CHANNEL_OFFLINE')
+      // 次卡新字段 CRUD 往返
+      const tk = await request('/admin/packages', { method: 'POST', body: JSON.stringify({ kind: 'times', name: `CI次卡${RUN_ID}`, priceCents: 54000, timesCount: 3, projectGroup: '护理', validDays: 90, mallVisible: false }) }, shop.token)
+      check('㊵ 次卡字段(项目组/有效期/商城位)持久化', tk.status === 201 && tk.data.package.projectGroup === '护理' && tk.data.package.validDays === 90 && tk.data.package.mallVisible === false)
+      // 赠送口径:充100赠20 → recharge+bonus 两行;余额=120;bonus 不触发首充判定之外的业绩口(type≠recharge)
+      const bkCust = await directBooking(shop, { name: `赠送口径客${RUN_ID}`, time: '13:30', techId: shop.tech1 })
+      const dbx = new DatabaseSync(process.env.TEST_DB_PATH)
+      dbx.prepare('UPDATE users SET wechat_open_id = ? WHERE id = ?').run(`fx-${RUN_ID}`, bkCust.user.id)  // 绑定前置
+      const rc = await request('/admin/stored-value/recharge', { method: 'POST', body: JSON.stringify({ userId: bkCust.user.id, amountCents: 10000, bonusCents: 2000, payChannel: 'cash', technicianId: shop.tech1 }) }, shop.token)
+      check('㊵ 规则④ 充100赠20 落账 201', rc.status === 201)
+      const rows40 = dbx.prepare('SELECT type, amount_cents FROM stored_value_transactions WHERE user_id = ? ORDER BY created_at').all(bkCust.user.id)
+      check('㊵ 规则④ recharge+bonus 两行分立', rows40.length === 2 && rows40.some((r) => r.type === 'recharge' && r.amount_cents === 10000) && rows40.some((r) => r.type === 'bonus' && r.amount_cents === 2000), JSON.stringify(rows40))
+      check('㊵ 规则④ 余额=实收+赠送(负债含赠送)', rows40.reduce((n, r) => n + r.amount_cents, 0) === 12000)
+      // +1 财务红线同构:bonus 永不进技师充值提成基数(提成按 type=recharge 统计)
+      const rcSum = dbx.prepare("SELECT COALESCE(SUM(amount_cents),0) s FROM stored_value_transactions WHERE user_id = ? AND type = 'recharge' AND technician_id = ?").get(bkCust.user.id, shop.tech1).s
+      check('㊵ 规则④ 提成基数只含实收 100(bonus 排除)', rcSum === 10000, `got ${rcSum}`)
+      dbx.close()
     }
 
   console.log(`\n爽约处置+售后完成态回归通过:${checks} 项断言全绿`)

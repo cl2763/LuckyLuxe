@@ -11966,8 +11966,8 @@ async function route(req, res) {
     const name = String(body.name || '').trim()
     if (!name) throw apiError(400, 'BAD_REQUEST', '套餐名称必填。')
     const id = randomId('pkg')
-    db.prepare(`INSERT INTO membership_packages (id, tenant_id, kind, name, price_cents, bonus_cents, times_count, scope, benefits, is_active, sort_order, created_at)
-      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`).run(
+    db.prepare(`INSERT INTO membership_packages (id, tenant_id, kind, name, price_cents, bonus_cents, times_count, scope, benefits, is_active, sort_order, created_at, valid_days, project_group, mall_visible)
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`).run(
       id, currentTenantId(), kind, name,
       Math.max(0, Math.round(Number(body.priceCents) || 0)),
       Math.max(0, Math.round(Number(body.bonusCents) || 0)),
@@ -11975,7 +11975,10 @@ async function route(req, res) {
       String(body.scope || '').slice(0, 200) || null,
       String(body.benefits || '').slice(0, 400) || null,
       body.isActive === false ? 0 : 1,
-      Math.round(Number(body.sortOrder) || 0), iso(new Date()))
+      Math.round(Number(body.sortOrder) || 0), iso(new Date()),
+      body.validDays ? Math.max(1, Math.round(Number(body.validDays) || 0)) : null,
+      String(body.projectGroup || '').slice(0, 120) || null,
+      body.mallVisible === false ? 0 : 1)
     return json(res, 201, { package: serializeMembershipPackage(db.prepare('SELECT * FROM membership_packages WHERE id = ?').get(id)) })
   }
   if (req.method === 'PATCH' && path.startsWith('/admin/packages/')) {
@@ -11984,7 +11987,7 @@ async function route(req, res) {
     const cur = db.prepare('SELECT * FROM membership_packages WHERE id = ? AND tenant_id = ?').get(id, currentTenantId())
     if (!cur) throw apiError(404, 'NOT_FOUND', 'Package not found.')
     const body = await readBody(req)
-    db.prepare(`UPDATE membership_packages SET kind = ?, name = ?, price_cents = ?, bonus_cents = ?, times_count = ?, scope = ?, benefits = ?, is_active = ?, sort_order = ? WHERE id = ?`).run(
+    db.prepare(`UPDATE membership_packages SET kind = ?, name = ?, price_cents = ?, bonus_cents = ?, times_count = ?, scope = ?, benefits = ?, is_active = ?, sort_order = ?, valid_days = ?, project_group = ?, mall_visible = ? WHERE id = ?`).run(
       body.kind === undefined ? cur.kind : (body.kind === 'times' ? 'times' : 'recharge'),
       body.name === undefined ? cur.name : String(body.name).trim(),
       body.priceCents === undefined ? cur.price_cents : Math.max(0, Math.round(Number(body.priceCents) || 0)),
@@ -11993,8 +11996,37 @@ async function route(req, res) {
       body.scope === undefined ? cur.scope : (String(body.scope).slice(0, 200) || null),
       body.benefits === undefined ? cur.benefits : (String(body.benefits).slice(0, 400) || null),
       body.isActive === undefined ? cur.is_active : (body.isActive ? 1 : 0),
-      body.sortOrder === undefined ? cur.sort_order : Math.round(Number(body.sortOrder) || 0), id)
+      body.sortOrder === undefined ? cur.sort_order : Math.round(Number(body.sortOrder) || 0),
+      body.validDays === undefined ? cur.valid_days : (body.validDays ? Math.max(1, Math.round(Number(body.validDays) || 0)) : null),
+      body.projectGroup === undefined ? cur.project_group : (String(body.projectGroup).slice(0, 120) || null),
+      body.mallVisible === undefined ? cur.mall_visible : (body.mallVisible ? 1 : 0), id)
     return json(res, 200, { package: serializeMembershipPackage(db.prepare('SELECT * FROM membership_packages WHERE id = ?').get(id)) })
+  }
+  /* S2批①(规则⑧ 商城支付闸):线上自助购买总开关 —— 支付通道未接通(批⑤才接)时永远锁定,
+     PUT 想开=400;GET 供前端渲染锁定态。开关本身存 tenant_settings,接通后解锁逻辑归批⑤。 */
+  if (path === '/admin/mall/self-purchase') {
+    if (adminSession.role !== 'owner') throw apiError(403, 'FORBIDDEN', 'Owner permission is required.')
+    const PAYMENT_CHANNEL_READY = false // 批⑤「微信支付真实接通」后由通道探测替换
+    if (req.method === 'GET') {
+      const row = db.prepare("SELECT value FROM tenant_settings WHERE tenant_id = ? AND key = 'mall_self_purchase'").get(currentTenantId())
+      return json(res, 200, { enabled: row?.value === '1', locked: !PAYMENT_CHANNEL_READY })
+    }
+    if (req.method === 'PUT') {
+      const body = await readBody(req)
+      if (body.enabled && !PAYMENT_CHANNEL_READY) throw apiError(400, 'PAYMENT_CHANNEL_OFFLINE', '微信支付通道未接通,线上自助购买暂不可开启(批⑤接通后解锁)。')
+      db.prepare(`INSERT INTO tenant_settings (tenant_id, key, value, updated_at) VALUES (?, 'mall_self_purchase', ?, ?)
+        ON CONFLICT(tenant_id, key) DO UPDATE SET value = excluded.value, updated_at = excluded.updated_at`)
+        .run(currentTenantId(), body.enabled ? '1' : '0', iso(new Date()))
+      return json(res, 200, { enabled: Boolean(body.enabled), locked: !PAYMENT_CHANNEL_READY })
+    }
+  }
+  if (req.method === 'DELETE' && path.startsWith('/admin/packages/')) {
+    // S2批①:套餐/次卡定义可删(批②核销落地后,有持卡实例的改为拒删只停用)
+    if (adminSession.role !== 'owner') throw apiError(403, 'FORBIDDEN', 'Owner permission is required.')
+    const id = path.split('/')[3]
+    const r = db.prepare('DELETE FROM membership_packages WHERE id = ? AND tenant_id = ?').run(id, currentTenantId())
+    if (!r.changes) throw apiError(404, 'NOT_FOUND', 'Package not found.')
+    return json(res, 200, { deleted: true })
   }
   // ===== 优惠券 定义 CRUD =====
   if (req.method === 'GET' && path === '/admin/coupons') {
@@ -13321,11 +13353,13 @@ async function route(req, res) {
       })
     })
   }
-  if (req.method === 'POST' && (path === '/admin/stored-value/recharge' || path === '/admin/stored-value/consume')) {
-    const isRecharge = path.endsWith('/recharge')
-    // 充值:老板或技师(2026-08-12 拍板放行,技师不离结算单);耗卡=确认收入,仍只有老板能做
-    if (isRecharge ? (adminSession.role !== 'owner' && adminSession.role !== 'staff') : adminSession.role !== 'owner') {
-      throw apiError(403, 'FORBIDDEN', isRecharge ? '需要老板或员工权限。' : 'Owner permission is required.')
+  /* S2批①(规则⑥ 收编):手动耗卡=账目风险口,永久关闭 —— 扣卡只在结算单签字时刻由引擎自动做。 */
+  if (req.method === 'POST' && path === '/admin/stored-value/consume') {
+    throw apiError(410, 'MANUAL_CONSUME_GONE', '手动耗卡已取消:储值扣款只随结算单签字自动入账。')
+  }
+  if (req.method === 'POST' && path === '/admin/stored-value/recharge') {
+    if (adminSession.role !== 'owner' && adminSession.role !== 'staff') {
+      throw apiError(403, 'FORBIDDEN', '需要老板或员工权限。')
     }
     const body = await readBody(req)
     const userId = String(body.userId || '').trim()
@@ -13333,14 +13367,12 @@ async function route(req, res) {
     if (!user) throw apiError(404, 'NOT_FOUND', 'Member not found.')
     /* D25(《财务总逻辑》3-1b,店主 2026-08-12 拍板):未绑定微信的轻档案不可充值 ——
        防"空充值"挂在无主档案上;技师/老板同受约束,两端入口的禁用态只是体验,这里才是闸。 */
-    if (isRecharge && !isUserBound(userId)) {
+    if (!isUserBound(userId)) {
       throw apiError(400, 'UNBOUND_NO_RECHARGE', '请先让顾客扫码绑定(会员码/签署码)再充值。')
     }
     const amountCents = Math.round(Number(body.amountCents ?? Number(body.amount || 0) * 100))
     if (!Number.isFinite(amountCents) || amountCents <= 0) throw apiError(400, 'BAD_REQUEST', 'A positive amount is required.')
-    if (!isRecharge && storedValueBalanceCents(userId) < amountCents) {
-      throw apiError(400, 'INSUFFICIENT_BALANCE', '余额不足：耗卡金额不能超过该会员当前储值余额。')
-    }
+
     // 经手技师:这笔充值/耗卡算谁促成,薪资的充值/耗卡提成据此计算。
     // 技师会话:经手人**强制=当前技师**(留痕口径,不认 body 传谁)
     const svTech = adminSession.role === 'staff'
@@ -13351,27 +13383,28 @@ async function route(req, res) {
     }
     insertStoredValueTransaction({
       userId,
-      type: isRecharge ? 'recharge' : 'consume',
+      type: 'recharge',
       amountCents,
-      payChannel: isRecharge ? String(body.payChannel || 'unknown') : 'stored_value',
+      payChannel: String(body.payChannel || 'unknown'),
       note: String(body.note || ''),
       createdBy: adminSession.email || adminSession.username || adminSession.role || 'owner',
       technicianId: svTech || null
     })
-    if (!isRecharge) {
-      // 耗卡即确认收入：支付方式=储值卡
-      insertFinanceTransaction({
-        type: 'income',
-        source: 'stored_value',
-        category: '服务收入-耗卡',
-        tags: userId,
-        amountCents,
-        payChannel: 'stored_value',
-        occurredOn: localParts(new Date()).date,
-        note: String(body.note || `${user.display_name || userId} 耗卡`),
-        createdBy: adminSession.email || 'owner'
+    /* S2批①(规则④ 赠送口径):充 X 赠 Y —— 赠送=营销让利,独立 bonus 行入储值负债,
+       单独列示;永不计实收(本就不进 finance)/业绩与提成(按 type='recharge' 统计,bonus 天然排除)/积分基数。 */
+    const bonusCents = Math.max(0, Math.round(Number(body.bonusCents || 0)))
+    if (bonusCents > 0) {
+      insertStoredValueTransaction({
+        userId,
+        type: 'bonus',
+        amountCents: bonusCents,
+        payChannel: 'marketing',
+        note: `充值赠送(营销让利)${body.note ? ' · ' + String(body.note) : ''}`.slice(0, 200),
+        createdBy: adminSession.email || adminSession.username || adminSession.role || 'owner',
+        technicianId: svTech || null
       })
     }
+
     return json(res, 201, { storedValue: storedValueOverview(), balanceCents: storedValueBalanceCents(userId) })
   }
   if (req.method === 'POST' && path === '/admin/finance/insights') {
@@ -16198,7 +16231,10 @@ function serializeMembershipPackage(row) {
     scope: row.scope || '',
     benefits: row.benefits || '',
     isActive: Boolean(row.is_active),
-    sortOrder: row.sort_order
+    sortOrder: row.sort_order,
+    validDays: row.valid_days || null,
+    projectGroup: row.project_group || '',
+    mallVisible: row.mall_visible === undefined ? true : Boolean(row.mall_visible)
   }
 }
 
@@ -16893,6 +16929,10 @@ for (const sql of [
   // S1+S3(图=合同 v1.2):storefront=顾客橱窗上架位(模块①),独立于 is_active;
   // is_timecard=次卡暂存标记(规则③:迁出本页,S2 接管前不可编辑)
   'ALTER TABLE services ADD COLUMN storefront INTEGER',
+  // S2批①(图=合同 v1.1 §三):次卡有效期(NULL=长期)/关联项目组/商城上架位
+  'ALTER TABLE membership_packages ADD COLUMN valid_days INTEGER',
+  "ALTER TABLE membership_packages ADD COLUMN project_group TEXT",
+  'ALTER TABLE membership_packages ADD COLUMN mall_visible INTEGER NOT NULL DEFAULT 1',
   'ALTER TABLE services ADD COLUMN is_timecard INTEGER NOT NULL DEFAULT 0'
 ]) {
   try {

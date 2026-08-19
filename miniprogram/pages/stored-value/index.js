@@ -1,7 +1,7 @@
 const api = require('../../utils/api')
 const { curOf, ensureCurrencyCached, money, moneyFromYuan } = require('../../utils/storecurrency')
 
-const TYPE_LABEL = { recharge: '充值到账', consume: '耗卡' }
+const TYPE_LABEL = { recharge: '充值到账', consume: '耗卡', bonus: '充值赠送', reversal: '更正冲销', migrate_opening: '期初迁移' }
 const CH_LABEL = { manual: '门店补录', wechat: '微信支付', stored_value: '门店核销', unknown: '' }
 
 Page({
