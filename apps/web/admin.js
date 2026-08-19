@@ -1,5 +1,5 @@
 // 构建号:每次交付递增。侧栏可见,排查"改了没生效"时先对版本。
-const ADMIN_BUILD = '20260817a-s2b1'
+const ADMIN_BUILD = '20260817b-d50'
 let pricingState = { module: 'storefront', tab: 'items', categories: [], items: [], rules: {}, editing: null, preview: null, storefrontPicker: false }
 console.log(`[admin] build ${ADMIN_BUILD}`)
 
@@ -8119,111 +8119,157 @@ function renderMallSwitch() {
     </div>`
 }
 
+
+/* D50(店主 08-17 返工令):页内表单弹层 —— 替代 window.prompt 系统黑框链。
+   单弹层多字段一次填完;Esc/遮罩/取消可关;保存走异步 onSave,失败 toast 不关层。
+   fields: [{ key, label, type: 'text'|'number'|'select'|'checkbox', value, placeholder, options: [[v,label]], hint }] */
+function openFormModal({ title, hint, fields, saveText, onSave }) {
+  document.querySelector('.form-modal-overlay')?.remove()
+  const overlay = document.createElement('div')
+  overlay.className = 'store-switch-overlay form-modal-overlay'
+  overlay.innerHTML = `
+    <div class="store-switch-panel card form-modal-panel">
+      <div class="section-row"><h2>${escapeHtml(title || '')}</h2><button class="ghost slim" data-fm-close type="button">✕</button></div>
+      ${hint ? `<p class="subtle" style="margin:4px 0 10px">${hint}</p>` : ''}
+      <div class="kb-facts-grid">
+        ${fields.map((f) => f.type === 'checkbox'
+          ? `<label class="subtle" style="display:flex;align-items:center;gap:8px"><input type="checkbox" data-fm-field="${f.key}" ${f.value ? 'checked' : ''}> ${escapeHtml(f.label)}</label>`
+          : f.type === 'select'
+            ? `<label><span>${escapeHtml(f.label)}</span><select data-fm-field="${f.key}">${(f.options || []).map(([v, l]) => `<option value="${escapeHtml(String(v))}" ${String(v) === String(f.value ?? '') ? 'selected' : ''}>${escapeHtml(l)}</option>`).join('')}</select></label>`
+            : `<label><span>${escapeHtml(f.label)}</span><input data-fm-field="${f.key}" type="${f.type === 'number' ? 'number' : 'text'}" ${f.type === 'number' ? 'step="0.01" min="0"' : ''} value="${escapeHtml(String(f.value ?? ''))}" placeholder="${escapeHtml(f.placeholder || '')}"></label>`).join('')}
+      </div>
+      ${fields.some((f) => f.hint) ? fields.filter((f) => f.hint).map((f) => `<p class="subtle" style="margin:6px 0 0">· ${escapeHtml(f.label)}:${escapeHtml(f.hint)}</p>`).join('') : ''}
+      <div class="action-row" style="margin-top:14px">
+        <button class="primary slim" data-fm-save type="button">${escapeHtml(saveText || '保存')}</button>
+        <button class="ghost slim" data-fm-cancel type="button">取消</button>
+      </div>
+    </div>`
+  const close = () => { overlay.remove(); document.removeEventListener('keydown', onKey) }
+  const onKey = (e) => { if (e.key === 'Escape') close() }
+  document.addEventListener('keydown', onKey)
+  overlay.addEventListener('click', async (e) => {
+    if (e.target === overlay || e.target.closest('[data-fm-close]') || e.target.closest('[data-fm-cancel]')) { close(); return }
+    if (e.target.closest('[data-fm-save]')) {
+      const values = {}
+      for (const f of fields) {
+        const el = overlay.querySelector(`[data-fm-field="${f.key}"]`)
+        values[f.key] = f.type === 'checkbox' ? el.checked : el.value
+      }
+      try { if (await onSave(values) !== false) close() } catch (error) { toast(error.message) }
+    }
+  })
+  document.body.appendChild(overlay)
+  overlay.querySelector('input,select')?.focus()
+}
+
 async function savePackage(kind, existing) {
+  // D50:prompt 链 → 页内表单弹层(单弹层多字段)
   kind = kind || (existing && existing.kind) || 'recharge'
-  const name = window.prompt('套餐名称', existing ? existing.name : (kind === 'times' ? '纯色×5次卡' : '充1000送50'))
-  if (!name) return
-  const price = window.prompt('售价(加元)', existing ? String(existing.priceCents / 100) : '')
-  if (price === null) return
-  const body = { kind, name: name.trim(), priceCents: mCents(price) }
-  if (kind === 'recharge') {
-    const bonus = window.prompt('额外赠送(加元,可留空)', existing && existing.bonusCents ? String(existing.bonusCents / 100) : '')
-    body.bonusCents = mCents(bonus || 0)
-  } else {
-    const times = window.prompt('总次数', existing && existing.timesCount ? String(existing.timesCount) : '5')
-    body.timesCount = Math.round(Number(times) || 0)
-    const grp = window.prompt('关联项目组(如 美甲单色/护理;核销时组内选具体项目)', existing ? existing.projectGroup || '' : '')
-    body.projectGroup = (grp || '').trim()
-    const vd = window.prompt('有效期天数(留空=长期有效)', existing && existing.validDays ? String(existing.validDays) : '')
-    body.validDays = vd ? Math.round(Number(vd) || 0) : null
-  }
-  const benefits = window.prompt('权益说明(可留空)', existing ? existing.benefits || '' : '')
-  body.benefits = (benefits || '').trim()
-  try {
-    if (existing) await request(`/admin/packages/${existing.id}`, { method: 'PATCH', body: JSON.stringify(body) })
-    else await request('/admin/packages', { method: 'POST', body: JSON.stringify(body) })
-    toast('已保存')
-    await loadMembershipPage()
-  } catch (error) { toast(error.message) }
+  const isTimes = kind === 'times'
+  openFormModal({
+    title: existing ? `编辑${isTimes ? '次卡' : '充值套餐'}` : `新建${isTimes ? '次卡' : '充值套餐'}`,
+    hint: isTimes ? '售卡=预收负债不计积分;核销按折算单价确认收入(批②)。' : '赠送=营销让利:入储值负债、单独列示,不算实收/业绩/积分。',
+    fields: [
+      { key: 'name', label: '名称', type: 'text', value: existing ? existing.name : '', placeholder: isTimes ? '如 美甲单色 5 次卡' : '如 充500赠50' },
+      { key: 'price', label: '售价', type: 'number', value: existing ? existing.priceCents / 100 : '' },
+      ...(isTimes ? [
+        { key: 'times', label: '总次数', type: 'number', value: existing ? existing.timesCount : 5 },
+        { key: 'projectGroup', label: '关联项目组', type: 'text', value: existing ? existing.projectGroup || '' : '', placeholder: '如 美甲单色/护理', hint: '核销时从组内选具体项目(批②)' },
+        { key: 'validDays', label: '有效期天数(留空=长期)', type: 'number', value: existing && existing.validDays ? existing.validDays : '' }
+      ] : [
+        { key: 'bonus', label: '赠送金额(可为 0)', type: 'number', value: existing && existing.bonusCents ? existing.bonusCents / 100 : '' }
+      ]),
+      { key: 'benefits', label: '权益说明(可留空)', type: 'text', value: existing ? existing.benefits || '' : '' },
+      { key: 'mallVisible', label: '上架商城(顾客商城可见)', type: 'checkbox', value: existing ? existing.mallVisible !== false : true }
+    ],
+    onSave: async (v) => {
+      if (!String(v.name || '').trim()) { toast('名称必填'); return false }
+      const body = { kind, name: String(v.name).trim(), priceCents: mCents(v.price), benefits: String(v.benefits || '').trim(), mallVisible: Boolean(v.mallVisible) }
+      if (isTimes) {
+        body.timesCount = Math.round(Number(v.times) || 0)
+        body.projectGroup = String(v.projectGroup || '').trim()
+        body.validDays = v.validDays ? Math.round(Number(v.validDays) || 0) : null
+      } else {
+        body.bonusCents = mCents(v.bonus || 0)
+      }
+      if (existing) await request(`/admin/packages/${existing.id}`, { method: 'PATCH', body: JSON.stringify(body) })
+      else await request('/admin/packages', { method: 'POST', body: JSON.stringify(body) })
+      toast('已保存')
+      await loadMembershipPage()
+    }
+  })
 }
 async function saveCoupon(existing) {
-  const name = window.prompt('优惠券名称', existing ? existing.name : '满200减30')
-  if (!name) return
-  const typeIn = window.prompt('类型:输入 1=满减券,2=折扣券', existing ? (existing.discountType === 'percent' ? '2' : '1') : '1')
-  if (typeIn === null) return
-  const discountType = String(typeIn).trim() === '2' ? 'percent' : 'amount'
-  const body = { name: name.trim(), discountType }
-  if (discountType === 'amount') {
-    const amt = window.prompt('面额(减多少加元)', existing ? String(existing.amountCents / 100) : '30')
-    body.amountCents = mCents(amt)
-  } else {
-    const pct = window.prompt('立减折扣(%,如 10 表示立减10%)', existing ? String(existing.percentOff) : '10')
-    body.percentOff = Math.round(Number(pct) || 0)
-  }
-  const min = window.prompt('使用门槛(加元,0=无门槛)', existing ? String(existing.minSpendCents / 100) : '0')
-  body.minSpendCents = mCents(min || 0)
-  const days = window.prompt('有效天数', existing ? String(existing.validDays) : '30')
-  body.validDays = Math.round(Number(days) || 30)
-  const qty = window.prompt('发放总量(0=不限量)', existing && existing.totalQty ? String(existing.totalQty) : '0')
-  body.totalQty = Math.round(Number(qty) || 0)
-  try {
-    if (existing) await request(`/admin/coupons/${existing.id}`, { method: 'PATCH', body: JSON.stringify(body) })
-    else await request('/admin/coupons', { method: 'POST', body: JSON.stringify(body) })
-    toast('已保存')
-    await loadMembershipPage()
-  } catch (error) { toast(error.message) }
+  // D50:prompt 链 → 页内表单弹层
+  openFormModal({
+    title: existing ? '编辑优惠券' : '新建优惠券',
+    fields: [
+      { key: 'name', label: '券名称', type: 'text', value: existing ? existing.name : '', placeholder: '如 满200减30' },
+      { key: 'discountType', label: '类型', type: 'select', value: existing ? existing.discountType : 'amount', options: [['amount', '满减券(减固定金额)'], ['percent', '折扣券(立减百分比)']] },
+      { key: 'amount', label: '面额(满减券用)', type: 'number', value: existing && existing.discountType !== 'percent' ? existing.amountCents / 100 : '' },
+      { key: 'percent', label: '立减 %(折扣券用)', type: 'number', value: existing && existing.discountType === 'percent' ? existing.percentOff : '' },
+      { key: 'minSpend', label: '使用门槛(0=无门槛)', type: 'number', value: existing ? existing.minSpendCents / 100 : 0 },
+      { key: 'validDays', label: '有效天数', type: 'number', value: existing ? existing.validDays : 30 },
+      { key: 'totalQty', label: '发放总量(0=不限量)', type: 'number', value: existing && existing.totalQty ? existing.totalQty : 0 }
+    ],
+    onSave: async (v) => {
+      if (!String(v.name || '').trim()) { toast('券名称必填'); return false }
+      const body = { name: String(v.name).trim(), discountType: v.discountType === 'percent' ? 'percent' : 'amount', minSpendCents: mCents(v.minSpend || 0), validDays: Math.round(Number(v.validDays) || 30), totalQty: Math.round(Number(v.totalQty) || 0) }
+      if (body.discountType === 'amount') body.amountCents = mCents(v.amount)
+      else body.percentOff = Math.round(Number(v.percent) || 0)
+      if (existing) await request(`/admin/coupons/${existing.id}`, { method: 'PATCH', body: JSON.stringify(body) })
+      else await request('/admin/coupons', { method: 'POST', body: JSON.stringify(body) })
+      toast('已保存')
+      await loadMembershipPage()
+    }
+  })
 }
 // 2026-08-02 积分商城:奖品增改(奖品=券,可当场建券,流程参考小程序 points-mall 的 save())
 async function savePrize(existing) {
-  let couponId = existing ? existing.couponId : ''
-  if (!existing) {
-    const actives = membershipData.coupons.filter((c) => c.isActive)
-    const menu = actives.map((c, i) => `${i + 1}. ${c.name}`).join('\n')
-    const pick = window.prompt(`奖品对应哪张券?输入序号;输入 0 当场建一张新券:\n${menu || '(还没有券,输入 0 新建)'}`, actives.length ? '1' : '0')
-    if (pick === null) return
-    const idx = Math.round(Number(pick))
-    if (idx === 0) {
-      const before = new Set(membershipData.coupons.map((c) => c.id))
-      await saveCoupon() // 内部保存成功后会刷新 membershipData
-      const created = membershipData.coupons.find((c) => !before.has(c.id))
-      if (!created) return // 建券被取消/失败,不继续
-      couponId = created.id
-    } else if (idx >= 1 && idx <= actives.length) {
-      couponId = actives[idx - 1].id
-    } else { toast('无效选择'); return }
-  }
-  const cost = window.prompt('兑换所需积分($1消费=1积分)', existing ? String(existing.costPoints) : '500')
-  if (cost === null) return
-  const stock = window.prompt('库存(可兑换份数)', existing ? String(existing.stock) : '10')
-  if (stock === null) return
-  const limit = window.prompt('每人限兑(0=不限)', existing ? String(existing.perUserLimit || 0) : '1')
-  if (limit === null) return
-  const days = window.prompt('兑换后有效天数(0=按券默认)', existing && existing.validDays ? String(existing.validDays) : '0')
-  if (days === null) return
-  const body = {
-    couponId,
-    costPoints: Math.round(Number(cost) || 0),
-    stock: Math.round(Number(stock) || 0),
-    perUserLimit: Math.round(Number(limit) || 0),
-    validDays: Math.round(Number(days) || 0)
-  }
-  try {
-    if (existing) await request(`/admin/points-prizes/${existing.id}`, { method: 'PATCH', body: JSON.stringify(body) })
-    else await request('/admin/points-prizes', { method: 'POST', body: JSON.stringify(body) })
-    toast('已保存,小程序积分商城立即可见')
-    await loadMembershipPage()
-  } catch (error) { toast(error.message) }
+  // D50:prompt 链 → 页内表单弹层。原「输 0 当场建券」链改为提示先去券区新建(能力变化记入假设,Cowork 裁)
+  const actives = membershipData.coupons.filter((c) => c.isActive)
+  if (!existing && !actives.length) { toast('还没有可用的券——先在「优惠券」区新建一张,再来建奖品'); return }
+  openFormModal({
+    title: existing ? '编辑奖品' : '新增奖品',
+    hint: '奖品=用积分换券;没有合适的券就先在上方「优惠券」区新建。',
+    fields: [
+      ...(existing ? [] : [{ key: 'couponId', label: '对应的券', type: 'select', value: actives[0]?.id, options: actives.map((c) => [c.id, c.name]) }]),
+      { key: 'costPoints', label: '兑换所需积分', type: 'number', value: existing ? existing.costPoints : 500, hint: '消费 1 元(本店币种)=1 积分' },
+      { key: 'stock', label: '库存(可兑换份数)', type: 'number', value: existing ? existing.stock : 10 },
+      { key: 'perUserLimit', label: '每人限兑(0=不限)', type: 'number', value: existing ? existing.perUserLimit || 0 : 1 },
+      { key: 'validDays', label: '兑换后有效天数(0=按券默认)', type: 'number', value: existing && existing.validDays ? existing.validDays : 0 }
+    ],
+    onSave: async (v) => {
+      const body = {
+        couponId: existing ? existing.couponId : v.couponId,
+        costPoints: Math.round(Number(v.costPoints) || 0),
+        stock: Math.round(Number(v.stock) || 0),
+        perUserLimit: Math.round(Number(v.perUserLimit) || 0),
+        validDays: Math.round(Number(v.validDays) || 0)
+      }
+      if (existing) await request(`/admin/points-prizes/${existing.id}`, { method: 'PATCH', body: JSON.stringify(body) })
+      else await request('/admin/points-prizes', { method: 'POST', body: JSON.stringify(body) })
+      toast('已保存,小程序积分商城立即可见')
+      await loadMembershipPage()
+    }
+  })
 }
 // 撤销误兑:券未核销才可撤;券作废+积分冲正退回+库存回补(后端事务)
 async function revokeRedeem() {
-  const code = window.prompt('输入要撤销的兑换券码(如 LL-XXXX-XXXX;仅未核销的可撤):')
-  if (!code || !code.trim()) return
-  if (!window.confirm(`确认撤销 ${code.trim().toUpperCase()}?券将作废,积分退回顾客,库存+1。`)) return
-  try {
-    const r = await request('/admin/points-mall/revoke', { method: 'POST', body: JSON.stringify({ code: code.trim() }) })
-    toast(`已撤销,退回 ${r.refundedPoints} 积分`)
-    await loadMembershipPage()
-  } catch (error) { toast(error.message) }
+  // D50:prompt+confirm → 页内表单弹层(券码输入+后果说明,保存钮=确认撤销)
+  openFormModal({
+    title: '撤销兑换',
+    hint: '仅未核销的兑换可撤:券作废、积分退回顾客、库存 +1(后端事务)。',
+    fields: [{ key: 'code', label: '兑换券码', type: 'text', value: '', placeholder: '如 LL-XXXX-XXXX' }],
+    saveText: '确认撤销',
+    onSave: async (v) => {
+      const code = String(v.code || '').trim()
+      if (!code) { toast('请输入券码'); return false }
+      const r = await request('/admin/points-mall/revoke', { method: 'POST', body: JSON.stringify({ code }) })
+      toast(`已撤销,退回 ${r.refundedPoints} 积分`)
+      await loadMembershipPage()
+    }
+  })
 }
 if (els.membershipPage) {
   els.membershipPage.addEventListener('click', async (event) => {
@@ -8318,12 +8364,20 @@ if (els.membershipPage) {
     if (event.target.closest('[data-cpn-grant-submit]')) return submitCouponGrant()
     const cpnRevoke = event.target.closest('[data-cpn-revoke]')
     if (cpnRevoke) {
-      const reason = window.prompt('作废原因(必填,记录只追加不可删)')
-      if (!reason || !reason.trim()) return
-      try {
-        await request(`/admin/coupon-grants/${cpnRevoke.dataset.cpnRevoke}/revoke`, { method: 'POST', body: JSON.stringify({ reason: reason.trim() }) })
-        await loadMembershipPage()
-      } catch (error) { toast(error.message) }
+      // D50:发放作废也走页内弹层(原因必填,记录只追加)
+      const grantId = cpnRevoke.dataset.cpnRevoke
+      openFormModal({
+        title: '作废这次发放',
+        hint: '记录只追加不可删;作废后券失效,发放记录保留并标注原因。',
+        fields: [{ key: 'reason', label: '作废原因(必填)', type: 'text', value: '' }],
+        saveText: '确认作废',
+        onSave: async (v) => {
+          const reason = String(v.reason || '').trim()
+          if (!reason) { toast('原因必填'); return false }
+          await request(`/admin/coupon-grants/${grantId}/revoke`, { method: 'POST', body: JSON.stringify({ reason }) })
+          await loadMembershipPage()
+        }
+      })
     }
   })
 
