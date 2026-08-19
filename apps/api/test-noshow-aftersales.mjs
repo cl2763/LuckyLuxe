@@ -197,6 +197,12 @@ const main = async () => {
   check('⑦ B① 别的技师写进展=403', r.status === 403)
   r = await request(`/admin/bookings/${b5.id}/after-sales/progress`, { method: 'POST', body: JSON.stringify({ text: '已联系顾客,约后天到店补钻' }) }, staffToken)
   check('⑦ B① 当单技师写进展成功→处理中', r.status === 201 && r.data.afterSales.status === 'processing', JSON.stringify(r.data))
+  // ===== ㊷ D51:网页订单管理售后可见 —— 管理端列表随单下发徽标(与顾客端同一 customerOrderBadges,三端同句) =====
+  {
+    const mid = await request('/admin/bookings', {}, shop.token)
+    const row = mid.data.bookings.find((x) => x.id === b5.id)
+    check('㊷ D51 售后开着:admin bookings 徽标=售后中/aftersales', row.listBadgeText === '售后中' && row.listBadgeKind === 'aftersales', JSON.stringify({ t: row.listBadgeText, k: row.listBadgeKind }))
+  }
   r = await request(`/admin/bookings/${b5.id}/after-sales/resolve`, { method: 'POST', body: JSON.stringify({ resultText: '' }) }, shop.token)
   check('⑦ B④ 空结果标解决=400', r.status === 400)
   r = await request(`/admin/bookings/${b5.id}/after-sales/close`, { method: 'POST', body: JSON.stringify({ reason: '试试员工关' }) }, staffToken)
@@ -214,6 +220,12 @@ const main = async () => {
   const list1 = await request('/admin/bookings', {}, shop.token)
   const b5row = list1.data.bookings.find((x) => x.id === b5.id)
   check('⑧ B⓪ 状态机随单下发:resolved + 时间线 ≥3 条(发起/进展/解决)', b5row.afterSales.status === 'resolved' && b5row.afterSales.timeline.length >= 3, JSON.stringify(b5row.afterSales))
+  check('㊷ D51 售后解决:admin bookings 徽标=售后已解决(细分文案随后端,前端不自拼)', b5row.listBadgeText === '售后已解决', JSON.stringify({ t: b5row.listBadgeText, k: b5row.listBadgeKind }))
+  {
+    // 反面:待支付单必无已签结算单,徽标=空串(条件渲染一挂就没了,不冒「已签署」假话)
+    const plain = list1.data.bookings.find((x) => x.status === 'PENDING_PAYMENT')
+    check('㊷ D51 待支付单徽标=空串(字段在场不撒谎)', plain ? plain.listBadgeText === '' : true, plain ? JSON.stringify({ id: plain.id, t: plain.listBadgeText }) : 'no-plain-row')
+  }
   check('⑧ B④ 时间线带操作人', b5row.afterSales.timeline.every((e) => e.at))
 
   // ===== ⑩ D19 跨租户 storeId =====
@@ -914,6 +926,19 @@ const main = async () => {
       const PROMPT_BASELINE = 27 // D50-b 售后4处清后基线 31→27;其余存量按 Cowork 归批清单分批收敛,只减不增
       const total = (adminJs.match(/window\.(prompt|confirm|alert)\(/g) || []).length
       check(`㊶ D50 admin.js 原生弹窗总数 ≤ 基线 ${PROMPT_BASELINE}(新增代码禁 prompt/confirm/alert)`, total <= PROMPT_BASELINE, `当前 ${total}`)
+    }
+
+    // ===== ㊷ 首日四小件机制护栏(2026-08-20 批② 首日):D51 前端在场+五页签+勾选框同行 =====
+    {
+      const ROOT42 = new URL('../../', import.meta.url).pathname
+      const adminJs = readFileSync(join(ROOT42, 'apps/web/admin.js'), 'utf8')
+      const adminHtml = readFileSync(join(ROOT42, 'apps/web/admin.html'), 'utf8')
+      const css = readFileSync(join(ROOT42, 'apps/web/styles.css'), 'utf8')
+      check('㊷ D51 筛选两项在场(售后中/售后完成)+判定唯一实现', adminJs.includes('AFTER_SALES_OPEN') && adminJs.includes('AFTER_SALES_DONE') && adminJs.includes('function matchesStatusFilter'))
+      check('㊷ D51 旧「售后=需关注」错误映射已清(店主找不到售后单的根因)', !adminJs.includes("AFTER_SALES: t('activeAttention')"))
+      check('㊷ D51 需关注含售后中+列表卡徽标渲染在场', adminJs.includes('isAfterSalesOpen(booking)') && adminJs.includes('order-badge badge-'))
+      check('㊷ v1.2 五页签:积分商城独立第④签(mall 页签+容器+切换逻辑)', adminHtml.includes('data-member-tab="mall"') && adminHtml.includes('id="mtabMall"') && adminJs.includes("tab === 'mall'"))
+      check('㊷ 弹层勾选框与文字同一行(fm-check 横排,组件级)', adminJs.includes('class="fm-check"') && /label\.fm-check\{[^}]*flex-direction:row/.test(css))
     }
 
   console.log(`\n爽约处置+售后完成态回归通过:${checks} 项断言全绿`)

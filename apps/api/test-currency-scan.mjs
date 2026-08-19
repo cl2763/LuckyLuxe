@@ -68,7 +68,12 @@ const BAD = [
      skipIf 保留 replace 反向引用($1/$2)豁免。 */
   { re: /[+\-]\$['"`]/g, label: "'+$' / '-$' 带符号的币符拼接", scope: 'all' },
   { re: /\$\$\{/g, label: '模板字符串 $${金额}(写死美元符)', scope: 'all' },
-  { re: /[^$\w]\$\d[\d,.]*/g, label: '文案中 $数字(写死美元符)', scope: 'mini', skipIf: /\.replace\(|new RegExp/ }
+  { re: /[^$\w]\$\d[\d,.]*/g, label: '文案中 $数字(写死美元符)', scope: 'mini', skipIf: /\.replace\(|new RegExp/ },
+  /* 2026-08-20 盲区补课(Cowork 护栏补课令):上一条 scope='mini' 只扫小程序,
+     网页 .html 的**静态文案**整层不在扫描面 —— admin.html:680 的「($1消费=1积分)」
+     就是这么漏的(D50 那轮弹层 hint 被抓、页面同文案静态字面量躲过)。
+     网页 html 是纯标记+文案,$数字 只可能是写死币符,一律红;注释行既有豁免机制照旧。 */
+  { re: /[^$\w]\$\d[\d,.]*/g, label: '网页 html 静态文案 $数字(写死美元符)', scope: 'webhtml', skipIf: /\.replace\(|new RegExp/ }
 ]
 
 function walk(dir, out = []) {
@@ -102,6 +107,7 @@ function main() {
       if (/currency-map/.test(line)) return
       for (const b of BAD) {
         if (b.scope === 'mini' && !isMini) continue
+        if (b.scope === 'webhtml' && !(rel.startsWith('apps/web/') && rel.endsWith('.html'))) continue
         // 正则替换串里的 $1/$2 是反向引用,不是币符
         if (b.skipIf && b.skipIf.test(code)) continue
         b.re.lastIndex = 0

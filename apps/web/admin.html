@@ -4,7 +4,7 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>有迹 · 商家后台</title>
-    <link rel="stylesheet" href="/web/styles.css?v=20260817c-d50bc">
+    <link rel="stylesheet" href="/web/styles.css?v=20260820b-s2b2d1">
     <style>
       /* 2026-08-02 财务指标显隐+动效(店主 v4 定稿):AI智能总结卡 / 目标进度条(带平衡线刻度) / 设目标引导与弹窗。
          放这里不放 styles.css:本批约定只动 admin.js + admin.html 两个文件。 */
@@ -618,7 +618,7 @@
             </section>
           </section>
 
-          <!-- S2批①(图=合同 v1.1 §三):「会员与营销」四页签 —— 充值套餐/次卡/优惠券/会员体系(S9) -->
+          <!-- S2 图 v1.2(店主拍板 08-18):「会员与营销」五页签 —— 充值套餐/次卡/优惠券/积分商城/会员体系(S9) -->
           <section class="admin-page hidden" id="membershipPage">
             <button class="ghost back-btn" data-admin-page="dashboard" type="button">← Dashboard</button>
             <div class="section-row">
@@ -628,7 +628,8 @@
               <button class="pricing-tab active" data-member-tab="recharge" type="button">① 充值套餐</button>
               <button class="pricing-tab" data-member-tab="times" type="button">② 次卡</button>
               <button class="pricing-tab" data-member-tab="coupon" type="button">③ 优惠券</button>
-              <button class="pricing-tab" data-member-tab="tiers" type="button">④ 会员体系（S9）</button>
+              <button class="pricing-tab" data-member-tab="mall" type="button">④ 积分商城</button>
+              <button class="pricing-tab" data-member-tab="tiers" type="button">⑤ 会员体系（S9）</button>
             </div>
             <section class="admin-card" id="mtabRecharge">
               <div class="section-row compact-row">
@@ -669,6 +670,9 @@
               <div id="couponGrantFilters" class="section-row compact-row" style="gap:8px;flex-wrap:wrap"></div>
               <div class="service-admin-list" id="couponGrantList"></div>
             </section>
+            </div>
+            <!-- v1.2:积分商城独立第④页签(功能关系不变:奖品发的仍是券,「当场新建券」仍落券池) -->
+            <div id="mtabMall" style="display:none">
             <section class="admin-card">
               <div class="section-row compact-row">
                 <h2 id="pointsMallTitle">积分商城</h2>
@@ -955,6 +959,6 @@
     </main>
 
     <div class="toast" id="toast"></div>
-    <script src="/web/admin.js?v=20260817c-d50bc"></script>
+    <script src="/web/admin.js?v=20260820b-s2b2d1"></script>
   </body>
 </html>

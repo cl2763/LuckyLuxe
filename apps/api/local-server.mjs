@@ -11251,6 +11251,11 @@ async function route(req, res) {
           tags: care ? (parseJson(care.tags_json) || []) : [],
           notes: care?.notes || ''
         }
+        /* D51:徽标随单下发(售后>已更正>已签署)。与顾客端同一 customerOrderBadges(),
+           后端唯一持有三端同句 —— 网页订单列表此前掉队=四之九双端同病,店主找不到售后单。 */
+        const badges51 = customerOrderBadges(booking)
+        serialized.listBadgeText = badges51.listBadgeText
+        serialized.listBadgeKind = badges51.listBadgeKind
         if (booking.status === 'AFTER_SALES') {
           serialized.afterSales = afterSalesProgress(booking)
         }

@@ -1,5 +1,5 @@
 // 构建号:每次交付递增。侧栏可见,排查"改了没生效"时先对版本。
-const ADMIN_BUILD = '20260817c-d50bc'
+const ADMIN_BUILD = '20260820b-s2b2d1'
 let pricingState = { module: 'storefront', tab: 'items', categories: [], items: [], rules: {}, editing: null, preview: null, storefrontPicker: false }
 console.log(`[admin] build ${ADMIN_BUILD}`)
 
@@ -460,6 +460,10 @@ const copy = {
     cancelled: '已取消',
     expired: '已过期',
     activeAttention: '需关注',
+    afterSalesOpen: '售后中',
+    afterSalesDone: '售后完成',
+    afterSalesWord: '售后',
+    afterSalesAttention: '售后处理完成前需要关注。',
     allStatuses: '全部状态',
     services: '服务',
     addService: '添加服务',
@@ -734,6 +738,10 @@ const copy = {
     cancelled: 'Cancelled',
     expired: 'Expired',
     activeAttention: 'Active attention',
+    afterSalesOpen: 'After-sales open',
+    afterSalesDone: 'After-sales resolved',
+    afterSalesWord: 'After-sales',
+    afterSalesAttention: 'Needs attention until after-sales is resolved.',
     allStatuses: 'All statuses',
     services: 'Services',
     addService: 'Add Service',
@@ -948,14 +956,16 @@ async function request(path, options = {}) {
   return data
 }
 
-function statusLabel(status) {
+function statusLabel(status, booking) {
   const labels = {
     PENDING_PAYMENT: t('pending'),
     CONFIRMED: t('confirmed'),
     COMPLETED: t('completed'),
     CANCELLED: t('cancelled'),
     EXPIRED: t('expired'),
-    AFTER_SALES: t('activeAttention')
+    /* D51:原映射「需关注」——售后单在任何列表里都不自报身份,店主根本找不到(根因之一)。
+       细分文案(售后中/售后已解决/售后已关闭)由后端 listBadgeText 唯一持有,三端同句。 */
+    AFTER_SALES: booking?.listBadgeText || t('afterSalesWord')
   }
   return labels[status] || status
 }
@@ -1103,6 +1113,8 @@ function applyLanguage() {
     <option value="COMPLETED">${t('completed')}</option>
     <option value="CANCELLED">${t('cancelled')}</option>
     <option value="EXPIRED">${t('expired')}</option>
+    <option value="AFTER_SALES_OPEN">${t('afterSalesOpen')}</option>
+    <option value="AFTER_SALES_DONE">${t('afterSalesDone')}</option>
   `
   els.filterStatus.value = currentStatus
   if (!els.filterStatus.value) els.filterStatus.value = 'all'
@@ -4916,7 +4928,7 @@ function renderBookingMini(booking) {
       <span>
         <strong>${escapeHtml(booking.service.name)}</strong>
         <small>${booking.appointmentDate} · ${booking.appointmentTime} · ${escapeHtml(booking.technician?.name || '-')}</small>
-        <small>${statusLabel(booking.status)} · ${money(booking.depositCents)} · ${booking.publicCode}</small>
+        <small>${statusLabel(booking.status, booking)} · ${money(booking.depositCents)} · ${booking.publicCode}</small>
       </span>
     </button>
   `
@@ -4996,17 +5008,29 @@ function activeStatuses() {
   return ['PENDING_PAYMENT', 'CONFIRMED']
 }
 
+/* D51:售后是否仍开着(pending/processing)。resolved/closed=售后完成。
+   afterSales 只随 AFTER_SALES 状态下发;对象缺失时按「开着」算(宁可多进需关注,不许漏)。 */
+function isAfterSalesOpen(booking) {
+  return booking.status === 'AFTER_SALES' && !['resolved', 'closed'].includes(booking.afterSales?.status)
+}
+
+/* D51:状态筛选唯一判定 —— 订单列表/台面/日历同一实现,不许各写一份(四之九)。
+   「需关注」含售后中(店主 08-18 立 D51 点名)。 */
+function matchesStatusFilter(booking, status) {
+  if (status === 'all') return true
+  if (status === 'active') return activeStatuses().includes(booking.status) || isAfterSalesOpen(booking)
+  if (status === 'AFTER_SALES_OPEN') return isAfterSalesOpen(booking)
+  if (status === 'AFTER_SALES_DONE') return booking.status === 'AFTER_SALES' && !isAfterSalesOpen(booking)
+  return booking.status === status
+}
+
 function filteredBookings() {
   const status = owner.adminView === 'today' ? 'all' : (els.filterStatus.value || 'all')
   const date = owner.adminView === 'today' ? storeToday() : els.filterDate.value
   const search = (owner.bookingSearch || '').trim().toLowerCase()
   return owner.bookings
     .filter((booking) => !date || booking.appointmentDate === date)
-    .filter((booking) => {
-      if (status === 'all') return true
-      if (status === 'active') return activeStatuses().includes(booking.status)
-      return booking.status === status
-    })
+    .filter((booking) => matchesStatusFilter(booking, status))
     .filter((booking) => {
       if (!search) return true
       const haystack = [
@@ -5070,19 +5094,20 @@ function renderStaffTodayTimeline() {
             <span>${escapeHtml(booking.service?.name || '-')} · ${booking.totalDurationMin || ''}${zh ? ' 分钟' : ' min'}</span>
             ${renderCustomerCare(booking)}
           </div>
-          <span class="status ${booking.status}">${statusLabel(booking.status)}</span>
+          <span class="status ${booking.status}">${statusLabel(booking.status, booking)}</span>
         </div>`).join('') : ''}
     </section>`
 }
 
 function renderBookingCard(booking) {
-  const needsAttention = activeStatuses().includes(booking.status)
+  // D51:需关注含售后中(售后是当前最要紧的状态)
+  const needsAttention = activeStatuses().includes(booking.status) || isAfterSalesOpen(booking)
   const isOpen = owner.selectedBookingId === booking.id
   return `
     <article class="booking-item">
       <img class="booking-image" src="${booking.service.imageUrl}" alt="${booking.service.name}">
       <div class="booking-copy">
-        <span class="status ${booking.status}">${statusLabel(booking.status)}</span>
+        <span class="status ${booking.status}">${statusLabel(booking.status, booking)}</span>${booking.status !== 'AFTER_SALES' && booking.listBadgeText ? ` <span class="status order-badge badge-${booking.listBadgeKind}">${escapeHtml(booking.listBadgeText)}</span>` : ''}
         <h3>${booking.service.name}</h3>
         <p>${booking.appointmentDate} ${booking.appointmentTime}-${booking.appointmentEndTime}</p>
         <p>${booking.technician.name} · ${booking.store.name}</p>
@@ -5090,7 +5115,7 @@ function renderBookingCard(booking) {
         ${renderCustomerCare(booking)}
         ${booking.noShowAt ? `<p class="attention-note">已爽约${booking.depositDisposal && booking.depositDisposal.state === 'pending' ? ` · <strong>定金 ${escapeHtml(booking.depositDisposal.outstandingText)} 待处置</strong>` : ''}${booking.depositDisposal && booking.depositDisposal.state === 'retain' ? ' · 定金已留存 → 客户档案' : ''}${booking.depositDisposal && (booking.depositDisposal.state === 'forfeit' || booking.depositDisposal.state === 'auto_forfeit') ? ` · 已没收入账 ${escapeHtml(booking.depositDisposal.amountText)}` : ''}</p>` : ''}
         ${booking.afterSales ? `<p class="attention-note">售后 · ${escapeHtml(booking.afterSales.statusText)}${booking.afterSales.resultText ? `:${escapeHtml(booking.afterSales.resultText)}` : ''}</p>` : ''}
-        ${needsAttention ? `<p class="attention-note">${t('needsAttention')}</p>` : ''}
+        ${needsAttention ? `<p class="attention-note">${isAfterSalesOpen(booking) ? t('afterSalesAttention') : t('needsAttention')}</p>` : ''}
       </div>
       <div class="booking-actions">
         <button class="ghost" data-view-booking="${booking.id}" type="button">${t('details')}</button>
@@ -5122,7 +5147,7 @@ function renderBookingDetail(booking) {
       ${owner.aiResults[`booking:${booking.id}`] ? renderBookingAiSummary(owner.aiResults[`booking:${booking.id}`].data || owner.aiResults[`booking:${booking.id}`]) : ''}
       <div class="booking-detail-grid">
         <p><span>${t('orderCode')}</span><strong>${booking.publicCode}</strong></p>
-        <p><span>${t('status')}</span><strong>${statusLabel(booking.status)}</strong></p>
+        <p><span>${t('status')}</span><strong>${statusLabel(booking.status, booking)}</strong></p>
         <p><span>${t('date')}</span><strong>${booking.appointmentDate} ${booking.appointmentTime}-${booking.appointmentEndTime}</strong></p>
         <p><span>${t('technician')}</span><strong>${booking.technician.name}</strong></p>
         <p><span>${t('customer')}</span><strong>${booking.user?.display_name || booking.user?.email || '-'}</strong></p>
@@ -5205,11 +5230,7 @@ function renderCalendarCell(date) {
   const status = els.filterStatus.value
   const dayBookings = owner.bookings
     .filter((booking) => booking.appointmentDate === key)
-    .filter((booking) => {
-      if (status === 'all') return true
-      if (status === 'active') return activeStatuses().includes(booking.status)
-      return booking.status === status
-    })
+    .filter((booking) => matchesStatusFilter(booking, status))
     .sort((a, b) => a.appointmentTime.localeCompare(b.appointmentTime))
   return `
     <button class="calendar-cell ${key === storeToday() ? 'today-cell' : ''}" data-calendar-date="${key}" type="button">
@@ -5964,7 +5985,7 @@ function renderCustomerRecord(booking) {
     <article class="customer-record-row">
       <img src="${booking.service?.imageUrl || '/assets/images/store-cover.jpg'}" alt="${booking.service?.name || 'Lucky Luxe'}">
       <div>
-        <span class="status ${booking.status}">${statusLabel(booking.status)}</span>
+        <span class="status ${booking.status}">${statusLabel(booking.status, booking)}</span>${booking.status !== 'AFTER_SALES' && booking.listBadgeText ? ` <span class="status order-badge badge-${booking.listBadgeKind}">${escapeHtml(booking.listBadgeText)}</span>` : ''}
         <h3>${escapeHtml(booking.service?.name || '-')}</h3>
         <p>${booking.appointmentDate} ${booking.appointmentTime}-${booking.appointmentEndTime} · ${escapeHtml(booking.technician?.name || '-')}</p>
         <p>${t('sourceChannel')} ${escapeHtml(bookingSource(booking))} · ${t('recordImages')} ${imageCount}</p>
@@ -8036,6 +8057,9 @@ function renderMemberTabs() {
   document.querySelector('#mtabTimes')?.classList.toggle('hidden', tab !== 'times')
   const cpn = document.querySelector('#mtabCoupon')
   if (cpn) cpn.style.display = tab === 'coupon' ? '' : 'none'
+  // v1.2 五页签:积分商城独立第④签(店主拍板 08-18)
+  const mall = document.querySelector('#mtabMall')
+  if (mall) mall.style.display = tab === 'mall' ? '' : 'none'
   document.querySelector('#mtabTiers')?.classList.toggle('hidden', tab !== 'tiers')
 }
 
@@ -8148,7 +8172,7 @@ function openFormModal({ title, hint, fields, saveText, onSave }) {
       ${hint ? `<p class="subtle" style="margin:4px 0 10px">${hint}</p>` : ''}
       <div class="kb-facts-grid">
         ${fields.map((f) => `<span data-fm-wrap="${f.key}" style="display:contents">${f.type === 'checkbox'
-          ? `<label class="subtle" style="display:flex;align-items:center;gap:8px"><input type="checkbox" data-fm-field="${f.key}" ${f.value ? 'checked' : ''}> ${escapeHtml(f.label)}</label>`
+          ? `<label class="fm-check"><input type="checkbox" data-fm-field="${f.key}" ${f.value ? 'checked' : ''}> ${escapeHtml(f.label)}</label>`
           : f.type === 'select'
             ? `<label><span>${escapeHtml(f.label)}</span><select data-fm-field="${f.key}">${(f.options || []).map(([v, l]) => `<option value="${escapeHtml(String(v))}" ${String(v) === String(f.value ?? '') ? 'selected' : ''}>${escapeHtml(l)}</option>`).join('')}</select></label>`
             : `<label><span>${escapeHtml(f.label)}</span><input data-fm-field="${f.key}" type="${f.type === 'number' ? 'number' : 'text'}" ${f.type === 'number' ? 'step="0.01" min="0"' : ''} value="${escapeHtml(String(f.value ?? ''))}" placeholder="${escapeHtml(f.placeholder || '')}"></label>`}</span>`).join('')}
