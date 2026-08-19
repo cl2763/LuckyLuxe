@@ -4,7 +4,7 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>有迹 · 商家后台</title>
-    <link rel="stylesheet" href="/web/styles.css?v=20260817b-d50">
+    <link rel="stylesheet" href="/web/styles.css?v=20260817c-d50bc">
     <style>
       /* 2026-08-02 财务指标显隐+动效(店主 v4 定稿):AI智能总结卡 / 目标进度条(带平衡线刻度) / 设目标引导与弹窗。
          放这里不放 styles.css:本批约定只动 admin.js + admin.html 两个文件。 */
@@ -677,7 +677,7 @@
                   <button class="primary slim" id="addPrizeButton" type="button">+ 新增奖品</button>
                 </div>
               </div>
-              <p class="subtle" style="margin:2px 0 10px" id="pointsMallHint">奖品=用积分换券($1消费=1积分)。顾客在小程序「积分商城」兑换,到店报券码核销;误兑可用券码撤销。</p>
+              <p class="subtle" style="margin:2px 0 10px" id="pointsMallHint">奖品=用积分换券(消费 1 元(本店币种)=1 积分)。顾客在小程序「积分商城」兑换,到店报券码核销;误兑可用券码撤销。</p>
               <div class="service-admin-list" id="pointsPrizeList"></div>
             </section>
             </div>
@@ -737,11 +737,12 @@
             <div id="financeProgress"></div>
             <div class="fin-layout-grid">
               <nav class="fin-nav" id="financeNav">
-                <button class="fin-nav-btn active" data-fin-tab="quick" type="button" id="finNavQuick">记一笔</button>
+                <!-- D50-c③(店主 08-17):趋势=页首第一块 -->
+                <button class="fin-nav-btn active" data-fin-tab="trend" type="button" id="finNavTrend">趋势</button>
+                <button class="fin-nav-btn" data-fin-tab="quick" type="button" id="finNavQuick">记一笔</button>
                 <button class="fin-nav-btn" data-fin-tab="storedValue" type="button" id="finNavStored">储值卡</button>
                 <button class="fin-nav-btn" data-fin-tab="dailyClose" type="button" id="finNavDailyClose">日结</button>
                 <button class="fin-nav-btn" data-fin-tab="payroll" type="button" id="finNavPayroll">员工工资</button>
-                <button class="fin-nav-btn" data-fin-tab="trend" type="button" id="finNavTrend">趋势</button>
                 <button class="fin-nav-btn" data-fin-tab="txns" type="button" id="finNavTxns">流水</button>
                 <button class="fin-nav-btn" data-fin-tab="settings" type="button" id="finNavSettings">财务设置</button>
                 <button class="fin-nav-btn fin-nav-ai" data-fin-insights type="button" id="finNavInsights">AI 解读</button>
@@ -762,7 +763,7 @@
               </div>
               <div id="dailyCloseBody"></div>
             </section>
-            <section class="admin-card hidden" data-fin-panel="trend" id="financeTrendPanel">
+            <section class="admin-card" data-fin-panel="trend" id="financeTrendPanel">
               <div class="section-row compact-row">
                 <div>
                   <h2 id="financeTrendTitle">经营趋势</h2>
@@ -773,7 +774,7 @@
               <div id="financeTrendBody"></div>
             </section>
             <!-- 2026-08-09:月度券让利汇总(特批 / 系统),跟随上方财务月份 -->
-            <section class="admin-card hidden" data-fin-panel="trend" id="couponDiscountPanel">
+            <section class="admin-card" data-fin-panel="trend" id="couponDiscountPanel">
               <div class="section-row compact-row">
                 <div>
                   <h2>券让利(本月)</h2>
@@ -782,7 +783,7 @@
               </div>
               <div id="couponDiscountBody"></div>
             </section>
-            <section class="admin-card finance-quick-card" data-fin-panel="quick">
+            <section class="admin-card finance-quick-card hidden" data-fin-panel="quick">
               <div class="section-row compact-row">
                 <h2 id="financeQuickTitle">记一笔 <button class="fin-info" data-fin-guide="quick" type="button" aria-label="填写指南">ⓘ</button></h2>
                 <span class="subtle" id="financeQuickHint">日常收支随手记，三秒入账</span>
@@ -954,6 +955,6 @@
     </main>
 
     <div class="toast" id="toast"></div>
-    <script src="/web/admin.js?v=20260817b-d50"></script>
+    <script src="/web/admin.js?v=20260817c-d50bc"></script>
   </body>
 </html>

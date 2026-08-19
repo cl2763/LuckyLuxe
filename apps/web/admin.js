@@ -1,5 +1,5 @@
 // 构建号:每次交付递增。侧栏可见,排查"改了没生效"时先对版本。
-const ADMIN_BUILD = '20260817b-d50'
+const ADMIN_BUILD = '20260817c-d50bc'
 let pricingState = { module: 'storefront', tab: 'items', categories: [], items: [], rules: {}, editing: null, preview: null, storefrontPicker: false }
 console.log(`[admin] build ${ADMIN_BUILD}`)
 
@@ -64,7 +64,7 @@ const owner = {
   wechatSearch: '',
   tenantPlan: null,
   tenantKb: null,
-  financeLedger: { month: '', data: null, rules: [], ledger: null, filterType: 'all', filterCategory: 'all', lockConfigured: undefined, lockEnabled: undefined, tab: 'quick' },
+  financeLedger: { month: '', data: null, rules: [], ledger: null, filterType: 'all', filterCategory: 'all', lockConfigured: undefined, lockEnabled: undefined, tab: 'trend' }, // D50-c③:进财务页第一眼=趋势
   financeKey: sessionStorage.getItem('lucky-finance-key') || ''
 }
 
@@ -2247,7 +2247,8 @@ async function loadFinancePage() {
   }
   clearFinanceLock()
   owner.financeLedger.storedValue = storedValue.status === 'fulfilled' ? storedValue.value.storedValue : null
-  renderFinancePage()
+  renderFinancePage()  // D50-c③:趋势=默认页签,进页即载(原先点页签才拉,默认态会空屏)
+  if (owner.financeLedger.tab === 'trend' && !financeTrendState.data) loadFinanceTrend().catch(() => {})
 }
 
 const FINANCE_GUIDE = {
@@ -6555,38 +6556,52 @@ els.adminLayout.addEventListener('click', (event) => {
     const bk = (owner.bookings || []).find((b) => b.id === id)
     const dd = bk && bk.depositDisposal
     if (!dd) return
-    const pick = window.prompt(`处置爽约定金 ${dd.outstandingText}(${bk.user?.displayName || bk.user?.display_name || '顾客'})\n输入 1 = 留存到客户档案(下次预约自动带出)\n输入 2 = 没收入账(独立「定金收入·爽约没收」行,不进业绩)`, '1')
-    if (pick !== '1' && pick !== '2') return
-    const note = window.prompt('备注(选填)', '') || ''
-    request(`/admin/bookings/${encodeURIComponent(id)}/deposit-disposal`, {
-      method: 'POST',
-      body: JSON.stringify({ action: pick === '1' ? 'retain' : 'forfeit', note })
-    }).then(async (r) => {
-      toast(r.note || '已处置')
-      const data = await request('/admin/bookings')
-      owner.bookings = data.bookings
-      render()
-    }).catch((error) => toast(error.message))
+    // D50-b:prompt 链 → 页内表单弹层(处置方式+备注同屏)
+    openFormModal({
+      title: `处置爽约定金 ${dd.outstandingText}`,
+      hint: `顾客:${bk.user?.displayName || bk.user?.display_name || '顾客'}。留存=记入客户档案,下次预约自动带出;没收=独立「定金收入·爽约没收」行入账,不进业绩。`,
+      fields: [
+        { key: 'action', label: '处置方式', type: 'select', value: 'retain', options: [['retain', '留存到客户档案'], ['forfeit', '没收入账']] },
+        { key: 'note', label: '备注(选填)', type: 'text', value: '' }
+      ],
+      saveText: '确认处置',
+      onSave: async (v) => {
+        const r = await request(`/admin/bookings/${encodeURIComponent(id)}/deposit-disposal`, {
+          method: 'POST', body: JSON.stringify({ action: v.action, note: String(v.note || '') })
+        })
+        toast(r.note || '已处置')
+        const data = await request('/admin/bookings')
+        owner.bookings = data.bookings
+        render()
+      }
+    })
     return
   }
   /* 图 B-UI4:网页端售后写入(同一状态机;权限后端断言)。 */
   const asBtn = event.target.closest('[data-aftersales-booking]')
   if (asBtn) {
     const id = asBtn.dataset.aftersalesBooking
-    const act = window.prompt('售后处理:输入 1 = 写进展;2 = 标记已解决(需处理结果);3 = 关闭(仅老板,需原因)', '1')
-    if (!['1', '2', '3'].includes(act)) return
-    const path = act === '1' ? 'progress' : (act === '2' ? 'resolve' : 'close')
-    const label = act === '1' ? '处理进展' : (act === '2' ? '处理结果(必填,顾客端展示这段)' : '关闭原因(必填)')
-    const text = window.prompt(label, '')
-    if (!String(text || '').trim()) { toast('内容不能为空'); return }
-    const body = act === '1' ? { text } : (act === '2' ? { resultText: text } : { reason: text })
-    request(`/admin/bookings/${encodeURIComponent(id)}/after-sales/${path}`, { method: 'POST', body: JSON.stringify(body) })
-      .then(async () => {
+    // D50-b(待办11 点名同类):售后 1/2/3 输入链 → 弹层(动作下拉+对应文本框就地切换)
+    openFormModal({
+      title: '售后处理',
+      fields: [
+        { key: 'act', label: '处理动作', type: 'select', value: 'progress', options: [['progress', '写进展'], ['resolve', '标记已解决(需处理结果)'], ['close', '关闭(仅老板,需原因)']] },
+        { key: 'text', label: '处理进展', type: 'text', value: '', showIf: (v) => v.act === 'progress' },
+        { key: 'resultText', label: '处理结果(必填,顾客端展示这段)', type: 'text', value: '', showIf: (v) => v.act === 'resolve' },
+        { key: 'reason', label: '关闭原因(必填)', type: 'text', value: '', showIf: (v) => v.act === 'close' }
+      ],
+      saveText: '提交',
+      onSave: async (v) => {
+        const val = String(v.act === 'progress' ? v.text : (v.act === 'resolve' ? v.resultText : v.reason) || '').trim()
+        if (!val) { toast('内容不能为空'); return false }
+        const body = v.act === 'progress' ? { text: val } : (v.act === 'resolve' ? { resultText: val } : { reason: val })
+        await request(`/admin/bookings/${encodeURIComponent(id)}/after-sales/${v.act}`, { method: 'POST', body: JSON.stringify(body) })
         toast('已记录')
         const data = await request('/admin/bookings')
         owner.bookings = data.bookings
         render()
-      }).catch((error) => toast(error.message))
+      }
+    })
     return
   }
   const bookingDetailButton = event.target.closest('[data-view-booking]')
@@ -8132,11 +8147,11 @@ function openFormModal({ title, hint, fields, saveText, onSave }) {
       <div class="section-row"><h2>${escapeHtml(title || '')}</h2><button class="ghost slim" data-fm-close type="button">✕</button></div>
       ${hint ? `<p class="subtle" style="margin:4px 0 10px">${hint}</p>` : ''}
       <div class="kb-facts-grid">
-        ${fields.map((f) => f.type === 'checkbox'
+        ${fields.map((f) => `<span data-fm-wrap="${f.key}" style="display:contents">${f.type === 'checkbox'
           ? `<label class="subtle" style="display:flex;align-items:center;gap:8px"><input type="checkbox" data-fm-field="${f.key}" ${f.value ? 'checked' : ''}> ${escapeHtml(f.label)}</label>`
           : f.type === 'select'
             ? `<label><span>${escapeHtml(f.label)}</span><select data-fm-field="${f.key}">${(f.options || []).map(([v, l]) => `<option value="${escapeHtml(String(v))}" ${String(v) === String(f.value ?? '') ? 'selected' : ''}>${escapeHtml(l)}</option>`).join('')}</select></label>`
-            : `<label><span>${escapeHtml(f.label)}</span><input data-fm-field="${f.key}" type="${f.type === 'number' ? 'number' : 'text'}" ${f.type === 'number' ? 'step="0.01" min="0"' : ''} value="${escapeHtml(String(f.value ?? ''))}" placeholder="${escapeHtml(f.placeholder || '')}"></label>`).join('')}
+            : `<label><span>${escapeHtml(f.label)}</span><input data-fm-field="${f.key}" type="${f.type === 'number' ? 'number' : 'text'}" ${f.type === 'number' ? 'step="0.01" min="0"' : ''} value="${escapeHtml(String(f.value ?? ''))}" placeholder="${escapeHtml(f.placeholder || '')}"></label>`}</span>`).join('')}
       </div>
       ${fields.some((f) => f.hint) ? fields.filter((f) => f.hint).map((f) => `<p class="subtle" style="margin:6px 0 0">· ${escapeHtml(f.label)}:${escapeHtml(f.hint)}</p>`).join('') : ''}
       <div class="action-row" style="margin-top:14px">
@@ -8144,21 +8159,36 @@ function openFormModal({ title, hint, fields, saveText, onSave }) {
         <button class="ghost slim" data-fm-cancel type="button">取消</button>
       </div>
     </div>`
+  // showIf 动态显隐:值变化只切 display,不重建 DOM(输入不丢);D50-c② 两态切换靠它
+  const readValues = () => {
+    const values = {}
+    for (const f of fields) {
+      const el = overlay.querySelector(`[data-fm-field="${f.key}"]`)
+      values[f.key] = f.type === 'checkbox' ? el.checked : el.value
+    }
+    return values
+  }
+  const applyVisibility = () => {
+    const values = readValues()
+    for (const f of fields) {
+      if (!f.showIf) continue
+      const wrap = overlay.querySelector(`[data-fm-wrap="${f.key}"]`)
+      if (wrap) wrap.style.display = f.showIf(values) ? 'contents' : 'none'
+    }
+  }
+  overlay.addEventListener('change', applyVisibility)
+  overlay.addEventListener('input', applyVisibility)
   const close = () => { overlay.remove(); document.removeEventListener('keydown', onKey) }
   const onKey = (e) => { if (e.key === 'Escape') close() }
   document.addEventListener('keydown', onKey)
   overlay.addEventListener('click', async (e) => {
     if (e.target === overlay || e.target.closest('[data-fm-close]') || e.target.closest('[data-fm-cancel]')) { close(); return }
     if (e.target.closest('[data-fm-save]')) {
-      const values = {}
-      for (const f of fields) {
-        const el = overlay.querySelector(`[data-fm-field="${f.key}"]`)
-        values[f.key] = f.type === 'checkbox' ? el.checked : el.value
-      }
-      try { if (await onSave(values) !== false) close() } catch (error) { toast(error.message) }
+      try { if (await onSave(readValues()) !== false) close() } catch (error) { toast(error.message) }
     }
   })
   document.body.appendChild(overlay)
+  applyVisibility()
   overlay.querySelector('input,select')?.focus()
 }
 
@@ -8226,22 +8256,43 @@ async function saveCoupon(existing) {
 }
 // 2026-08-02 积分商城:奖品增改(奖品=券,可当场建券,流程参考小程序 points-mall 的 save())
 async function savePrize(existing) {
-  // D50:prompt 链 → 页内表单弹层。原「输 0 当场建券」链改为提示先去券区新建(能力变化记入假设,Cowork 裁)
+  // D50-c②(店主翻案):单弹层两态——「选现有券 / 当场新建券」,券字段就地展开(showIf),禁嵌套弹层
   const actives = membershipData.coupons.filter((c) => c.isActive)
-  if (!existing && !actives.length) { toast('还没有可用的券——先在「优惠券」区新建一张,再来建奖品'); return }
+  const isNewCoupon = (v) => v.couponMode === 'new'
   openFormModal({
     title: existing ? '编辑奖品' : '新增奖品',
-    hint: '奖品=用积分换券;没有合适的券就先在上方「优惠券」区新建。',
+    hint: '奖品=用积分换券。可选现有券,也可在本弹层里当场新建一张券。',
     fields: [
-      ...(existing ? [] : [{ key: 'couponId', label: '对应的券', type: 'select', value: actives[0]?.id, options: actives.map((c) => [c.id, c.name]) }]),
+      ...(existing ? [] : [
+        { key: 'couponMode', label: '券来源', type: 'select', value: actives.length ? 'pick' : 'new', options: [...(actives.length ? [['pick', '选现有券']] : []), ['new', '当场新建一张券']] },
+        { key: 'couponId', label: '对应的券', type: 'select', value: actives[0]?.id, options: actives.map((c) => [c.id, c.name]), showIf: (v) => !isNewCoupon(v) },
+        { key: 'ncName', label: '新券名称', type: 'text', value: '', placeholder: '如 满200减30', showIf: isNewCoupon },
+        { key: 'ncType', label: '新券类型', type: 'select', value: 'amount', options: [['amount', '满减券(减固定金额)'], ['percent', '折扣券(立减百分比)']], showIf: isNewCoupon },
+        { key: 'ncAmount', label: '面额(满减券用)', type: 'number', value: '', showIf: (v) => isNewCoupon(v) && v.ncType !== 'percent' },
+        { key: 'ncPercent', label: '立减 %(折扣券用)', type: 'number', value: '', showIf: (v) => isNewCoupon(v) && v.ncType === 'percent' },
+        { key: 'ncMinSpend', label: '新券门槛(0=无门槛)', type: 'number', value: 0, showIf: isNewCoupon },
+        { key: 'ncValidDays', label: '新券有效天数', type: 'number', value: 30, showIf: isNewCoupon }
+      ]),
       { key: 'costPoints', label: '兑换所需积分', type: 'number', value: existing ? existing.costPoints : 500, hint: '消费 1 元(本店币种)=1 积分' },
       { key: 'stock', label: '库存(可兑换份数)', type: 'number', value: existing ? existing.stock : 10 },
       { key: 'perUserLimit', label: '每人限兑(0=不限)', type: 'number', value: existing ? existing.perUserLimit || 0 : 1 },
       { key: 'validDays', label: '兑换后有效天数(0=按券默认)', type: 'number', value: existing && existing.validDays ? existing.validDays : 0 }
     ],
     onSave: async (v) => {
+      let couponId = existing ? existing.couponId : v.couponId
+      if (!existing && isNewCoupon(v)) {
+        // 两态「新建券」:先建券再建奖品,同一次保存串行完成(失败即中断,弹层不关不丢输入)
+        if (!String(v.ncName || '').trim()) { toast('新券名称必填'); return false }
+        const cBody = { name: String(v.ncName).trim(), discountType: v.ncType === 'percent' ? 'percent' : 'amount', minSpendCents: mCents(v.ncMinSpend || 0), validDays: Math.round(Number(v.ncValidDays) || 30), totalQty: 0 }
+        if (cBody.discountType === 'amount') cBody.amountCents = mCents(v.ncAmount)
+        else cBody.percentOff = Math.round(Number(v.ncPercent) || 0)
+        const created = await request('/admin/coupons', { method: 'POST', body: JSON.stringify(cBody) })
+        couponId = created.coupon?.id || created.id
+        if (!couponId) { toast('建券失败,请重试'); return false }
+      }
+      if (!couponId) { toast('请选择或新建一张券'); return false }
       const body = {
-        couponId: existing ? existing.couponId : v.couponId,
+        couponId,
         costPoints: Math.round(Number(v.costPoints) || 0),
         stock: Math.round(Number(v.stock) || 0),
         perUserLimit: Math.round(Number(v.perUserLimit) || 0),
@@ -8254,7 +8305,6 @@ async function savePrize(existing) {
     }
   })
 }
-// 撤销误兑:券未核销才可撤;券作废+积分冲正退回+库存回补(后端事务)
 async function revokeRedeem() {
   // D50:prompt+confirm → 页内表单弹层(券码输入+后果说明,保存钮=确认撤销)
   openFormModal({

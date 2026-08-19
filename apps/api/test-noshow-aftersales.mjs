@@ -911,7 +911,7 @@ const main = async () => {
       const memberHits = (memberSeg.match(/window\.(prompt|confirm|alert)\(/g) || []).length
       check('㊶ D50 会员与营销页原生弹窗=0(全部页内表单弹层)', memberHits === 0, `hits=${memberHits}`)
       check('㊶ D50 弹层组件在场(openFormModal:Esc/遮罩/保存取消)', adminJs.includes('function openFormModal') && adminJs.includes("e.key === 'Escape'"))
-      const PROMPT_BASELINE = 31 // D50 起锁增量:其余存量按 Cowork 归批清单分批收敛,只减不增
+      const PROMPT_BASELINE = 27 // D50-b 售后4处清后基线 31→27;其余存量按 Cowork 归批清单分批收敛,只减不增
       const total = (adminJs.match(/window\.(prompt|confirm|alert)\(/g) || []).length
       check(`㊶ D50 admin.js 原生弹窗总数 ≤ 基线 ${PROMPT_BASELINE}(新增代码禁 prompt/confirm/alert)`, total <= PROMPT_BASELINE, `当前 ${total}`)
     }
