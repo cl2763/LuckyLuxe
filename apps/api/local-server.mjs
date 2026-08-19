@@ -5232,6 +5232,17 @@ function servicePayload(body, current = {}) {
 }
 
 /* S1 规则⑤:展示价「¥xxx 起」=该项目最低可用价档(行存在性),不存第二份价格 —— 改价档橱窗自动跟 */
+/* D49:详情页价格单源件 —— 可用价档明细(顺序固定 普通/分享/会员/疗程)。
+   多档=「¥xxx 起」+档说明;单档才许「固定价/基础价」——「固定价」对多档项目是禁语(CI ㊴)。 */
+function availableTiersOf(serviceId, listCents) {
+  const NAMES = { list: ['普通', 'List'], share: ['分享', 'Share'], member: ['会员', 'Member'], course: ['疗程', 'Course'] }
+  const rows = db.prepare('SELECT tier_key, price_cents FROM service_prices WHERE service_id = ? AND price_cents > 0').all(serviceId)
+  const by = {}
+  for (const r of rows) by[r.tier_key] = r.price_cents
+  if (!by.list && listCents) by.list = listCents
+  return ['list', 'share', 'member', 'course'].filter((k) => by[k]).map((k) => ({ key: k, nameZh: NAMES[k][0], nameEn: NAMES[k][1], cents: by[k] }))
+}
+
 function startingPriceCentsOf(serviceId, fallbackCents) {
   const rows = db.prepare('SELECT price_cents FROM service_prices WHERE service_id = ? AND price_cents > 0').all(serviceId)
   if (!rows.length) return fallbackCents || 0
@@ -5252,12 +5263,27 @@ function serializeService(row, lang = 'zh') {
     } catch (e) { return row.deposit_cents }
   })()
   const isNail = type === 'nail'
+  /* D49:价格说明按大类适配 —— 美甲=人工报价套话;美睫=固定报价套话;护理/其他=中性(不再拿美睫套话贴护理项)。 */
+  const isLash = type === 'lash'
   const priceExplanationZh = isNail
     ? '显示价格为基础服务价。纯色、基础护理、基础法式等可按基础价执行；复杂手绘、延长、卸甲、特殊材料、3D 装饰、大面积钻饰或参考图差异较大的款式需要人工报价。'
-    : '美睫款式为固定报价。页面价格已包含该款式标准嫁接服务；如有卸除、补睫、特殊敏感处理等附加需求，会在加项中明确显示，确认后即为最终报价。'
+    : (isLash
+      ? '美睫款式为固定报价。页面价格已包含该款式标准嫁接服务；如有卸除、补睫、特殊敏感处理等附加需求，会在加项中明确显示，确认后即为最终报价。'
+      : '按所选价格档位计价；如有附加项目会在结算前明确显示，确认后即为最终价格。')
   const priceExplanationEn = isNail
     ? 'Displayed price is the base service price. Solid color, basic care, and basic French designs can follow the base price. Complex hand painting, extensions, removal, special materials, 3D charms, heavy rhinestones, or designs that differ from the reference require manual quotation.'
-    : 'Lash services use fixed pricing. The listed price includes the standard application for this style. Any removal, refill, or special sensitivity add-on will be shown clearly before checkout, and the confirmed total is the final quote.'
+    : (isLash
+      ? 'Lash services use fixed pricing. The listed price includes the standard application for this style. Any removal, refill, or special sensitivity add-on will be shown clearly before checkout, and the confirmed total is the final quote.'
+      : 'Priced by the selected tier. Any add-ons are shown clearly before checkout, and the confirmed total is final.')
+  /* D49:详情页价格 label 与列表同源同口径 —— 多档=「¥xxx 起(档说明)」;单档才是 基础价/固定价。 */
+  const d49Tiers = availableTiersOf(row.id, row.price_cents)
+  const d49Starting = startingPriceCentsOf(row.id, row.price_cents)
+  const priceDetailLabelZh = d49Tiers.length > 1
+    ? `${serviceMoney(d49Starting)} 起（${d49Tiers.map((t2) => `${t2.nameZh} ${serviceMoney(t2.cents)}`).join(' / ')}）`
+    : `${isNail ? '基础价' : '固定价'} ${serviceMoney(row.price_cents)}`
+  const priceDetailLabelEn = d49Tiers.length > 1
+    ? `From ${serviceMoney(d49Starting)} (${d49Tiers.map((t2) => `${t2.nameEn} ${serviceMoney(t2.cents)}`).join(' / ')})`
+    : `${isNail ? 'Base price' : 'Fixed price'} ${serviceMoney(row.price_cents)}`
   return {
     id: row.id,
     type,
@@ -5292,6 +5318,8 @@ function serializeService(row, lang = 'zh') {
     priceFromLabelEn: `From ${serviceMoney(startingPriceCentsOf(row.id, row.price_cents))}`,
     priceLabelZh: `${isNail ? '基础价' : '固定价'} ${serviceMoney(row.price_cents)}`,
     priceLabelEn: `${isNail ? 'Base price' : 'Fixed price'} ${serviceMoney(row.price_cents)}`,
+    priceDetailLabelZh,
+    priceDetailLabelEn,
     quoteHintZh: isNail ? '详细价格请联系客服获取报价' : '加项确认后即为最终报价',
     quoteHintEn: isNail ? 'Contact us for detailed custom quote' : 'Add-ons confirmed before checkout are final',
     priceExplanationZh,

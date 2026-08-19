@@ -423,8 +423,10 @@ function isNailService(service) {
 }
 
 function priceLabel(service) {
-  if (state.lang === 'en') return service.priceLabelEn || `${isNailService(service) ? t('basePrice') : t('fixedPrice')} ${money(service.priceCents)}`
-  return service.priceLabelZh || `${isNailService(service) ? t('basePrice') : t('fixedPrice')} ${money(service.priceCents)}`
+  /* D49:详情价格与列表同源同口径 —— 后端 priceDetailLabel(多档=「¥xxx 起(档说明)」,单档才是固定价/基础价);
+     旧 label 只作老后端兜底。 */
+  if (state.lang === 'en') return service.priceDetailLabelEn || service.priceLabelEn || `${isNailService(service) ? t('basePrice') : t('fixedPrice')} ${money(service.priceCents)}`
+  return service.priceDetailLabelZh || service.priceLabelZh || `${isNailService(service) ? t('basePrice') : t('fixedPrice')} ${money(service.priceCents)}`
 }
 
 // S1:列表卡片「¥xxx 起」=最低可用价档(与小程序顾客端同句同源);详情页仍用 priceLabel(基础价/固定价语义)

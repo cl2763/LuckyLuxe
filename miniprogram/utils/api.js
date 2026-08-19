@@ -208,6 +208,9 @@ function toMiniService(service) {
     // S1:列表「xxx 起」起价独立字段(详情/AI 报价 label 不动)
     priceFromLabelZh: service.priceFromLabelZh,
     priceFromLabelEn: service.priceFromLabelEn,
+    // D49:详情页价格 label(多档=起+档说明,单档才是固定价/基础价)
+    priceDetailLabelZh: service.priceDetailLabelZh,
+    priceDetailLabelEn: service.priceDetailLabelEn,
     quoteHintZh: service.quoteHintZh,
     quoteHintEn: service.quoteHintEn,
     priceExplanationZh: service.priceExplanationZh,

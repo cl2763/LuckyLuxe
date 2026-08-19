@@ -847,6 +847,27 @@ const main = async () => {
       check('㊳ D48 CARE 条目全量列表按 id 可命中(详情/预约数据前提)', pubAll.some((sv) => sv.id === careSvc.data.item.id))
     }
 
+
+    // ===== ㊴ D49:详情页价格双矛盾(Cowork 亲验抓获,D46 同族第五出口)=====
+    {
+      // 行为:多档项目 priceDetailLabel 必须「起+档说明」;「固定价」对多档=禁语
+      const pubD = (await request('/services', {}, null, { 'x-tenant-id': shop.tenantId })).data.services || []
+      const multi = pubD.filter((sv) => sv.startingPriceCents !== sv.priceCents)
+      check('㊴ D49 多档项目详情 label 带「起」零「固定价」禁语', multi.every((sv) => /起/.test(sv.priceDetailLabelZh || '') && !(sv.priceDetailLabelZh || '').includes('固定价')),
+        JSON.stringify(multi.filter((sv) => !/起/.test(sv.priceDetailLabelZh || '') || (sv.priceDetailLabelZh || '').includes('固定价')).map((sv) => [sv.nameZh, sv.priceDetailLabelZh])))
+      check('㊴ D49 单档项目仍是 基础价/固定价 语义', pubD.filter((sv) => sv.startingPriceCents === sv.priceCents).every((sv) => /基础价|固定价/.test(sv.priceDetailLabelZh || '')))
+      // 行为:护理/其他 价格说明=中性,不再贴美睫套话
+      const careD = pubD.find((sv) => sv.platformCategory === 'care')
+      if (careD) check('㊴ D49 护理项价格说明非美睫套话', !(careD.priceExplanationZh || '').includes('美睫'), careD.priceExplanationZh)
+      // L2 四出口机械断言:列表=fromLabel/详情=detailLabel(两端引用在场)
+      const ROOT39 = new URL('../../', import.meta.url).pathname
+      const custD = readFileSync(join(ROOT39, 'apps/web/customer.js'), 'utf8')
+      const miniDetail = readFileSync(join(ROOT39, 'miniprogram/pages/service-detail/index.js'), 'utf8')
+      const miniList = readFileSync(join(ROOT39, 'miniprogram/pages/services/index.wxml'), 'utf8')
+      check('㊴ L2 出口同源:网页列表 fromPriceLabel+详情 priceDetailLabel 引用在场', custD.includes('function fromPriceLabel') && custD.includes('priceDetailLabelZh'))
+      check('㊴ L2 出口同源:小程序列表 priceFromLabel+详情 priceDetailLabel 引用在场', miniList.includes('priceFromLabelZh') && miniDetail.includes('priceDetailLabelZh'))
+    }
+
   console.log(`\n爽约处置+售后完成态回归通过:${checks} 项断言全绿`)
 }
 

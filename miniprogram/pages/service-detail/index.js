@@ -32,9 +32,10 @@ Page({
       return
     }
     const isNail = service.type === 'nail'
+    // D49:详情价格与列表同源(priceDetailLabel:多档=起+档说明;单档才是固定价/基础价);旧 label 兜底老后端
     service.priceLabel = lang === 'en'
-      ? (service.priceLabelEn || `${isNail ? 'Base price' : 'Fixed price'} ${curOf().p}${curOf().s}${service.price}`)
-      : (service.priceLabelZh || `${isNail ? '基础价' : '固定价'} ${curOf().p}${curOf().s}${service.price}`)
+      ? (service.priceDetailLabelEn || service.priceLabelEn || `${isNail ? 'Base price' : 'Fixed price'} ${curOf().p}${curOf().s}${service.price}`)
+      : (service.priceDetailLabelZh || service.priceLabelZh || `${isNail ? '基础价' : '固定价'} ${curOf().p}${curOf().s}${service.price}`)
     service.quoteHint = lang === 'en'
       ? (service.quoteHintEn || (isNail ? 'Contact us for a detailed quote' : 'Confirmed add-ons make the final quote'))
       : (service.quoteHintZh || (isNail ? '详细价格请联系客服获取报价' : '加项确认后即为最终报价'))
