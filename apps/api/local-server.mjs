@@ -8484,6 +8484,39 @@ function computeSettlement(input = {}) {
       isFree: tierUnit * count === 0
     })
   }
+  /* S2批② B②:次卡核销行(图 §四 屏2)。金额=折算单价(末次吃余数,timecardUnitCents),
+     不收现金——支付构成里由 times_card 腿覆盖;计入 subtotal → 积分/业绩自然按折算单价(规则⑦)。
+     拍板③:组内选具体项目——project_group(批① 自由文本)按二级分类名精确匹配,空组=不限(假设入册)。 */
+  let tcCard = null
+  let tcNth = 0
+  if (input.timecardId) {
+    tcCard = db.prepare('SELECT * FROM member_timecards WHERE id = ? AND tenant_id = ?').get(String(input.timecardId), tenantId)
+    if (!tcCard) throw apiError(404, 'TIMECARD_NOT_FOUND', '没有这张次卡。')
+    if (tcCard.user_id !== String(input.userId || '')) throw apiError(400, 'TIMECARD_NOT_OWNER', '这张次卡不属于本单顾客。')
+    if (tcCard.total_times - tcCard.used_times <= 0) throw apiError(400, 'TIMECARD_USED_UP', '这张次卡已用完。')
+    if (timecardExpired(tcCard)) throw apiError(400, 'TIMECARD_EXPIRED', '这张次卡已过期。')
+    tcNth = tcCard.used_times + 1
+    const tcUnit = timecardUnitCents(tcCard, tcNth)
+    const tcSvc = input.timecardServiceId ? getSvc(String(input.timecardServiceId)) : null
+    if (!tcSvc) throw apiError(400, 'TIMECARD_SERVICE_REQUIRED', '请从次卡关联项目组内选择本次核销的项目。')
+    if (tcCard.project_group) {
+      const catName = tcSvc.category_id
+        ? String((db.prepare('SELECT name FROM service_categories WHERE id = ? AND tenant_id = ?').get(tcSvc.category_id, tenantId) || {}).name || '')
+        : ''
+      if (catName !== String(tcCard.project_group)) {
+        throw apiError(400, 'TIMECARD_SERVICE_OUT_OF_GROUP', `这张卡只能核销「${tcCard.project_group}」组内的项目。`)
+      }
+    }
+    no += 1
+    lines.push({
+      itemNo: no, kind: 'timecard', serviceId: tcSvc.id,
+      name: `${tcSvc.name_zh} · 次卡核销 第 ${tcNth}/${tcCard.total_times} 次(${tcCard.name})`,
+      tierKey, unit: 'once', qty: 1,
+      listUnitCents: tcUnit, unitPriceCents: tcUnit, listAmountCents: tcUnit, amountCents: tcUnit,
+      ruleApplied: 'timecard', isFree: false
+    })
+  }
+
   // 自选填写行:价目表外的项目,原价与档价相同(没有"原价"这一说,不产生优惠)
   for (const raw of Array.isArray(input.customItems) ? input.customItems : []) {
     const name = String(raw?.name || '').trim()
@@ -8568,7 +8601,14 @@ function computeSettlement(input = {}) {
 
   // 支付构成:储值先烧迁移桶,再烧新桶;不够的进线下腿
   const payerId = input.payerUserId || input.userId || ''
-  const { plan, legs, balance, remaining, storedUsedCents } = buildPaymentLegs({ tenantId, payerId, totalCents, payIntent: input.payIntent })
+  /* B②:次卡覆盖的部分不进现金/储值腿(B2-9 核销日实收=仅其余项目的钱)。
+     cover 封顶到应收(极端:券+定金把非次卡部分抵穿时不产生负腿)。 */
+  const timecardLine = tcCard ? lines.find((l) => l.kind === 'timecard') : null
+  const timecardCoverCents = timecardLine ? Math.min(timecardLine.amountCents, totalCents) : 0
+  const { plan, legs, balance, remaining, storedUsedCents } = buildPaymentLegs({ tenantId, payerId, totalCents: totalCents - timecardCoverCents, payIntent: input.payIntent })
+  if (tcCard) {
+    legs.unshift({ leg: 'times_card', amountCents: timecardCoverCents, payerUserId: payerId, note: `次卡抵扣 · ${tcCard.name} · 第 ${tcNth}/${tcCard.total_times} 次` })
+  }
 
   return assertSettlementInvariants({
     tenantId,
@@ -8601,6 +8641,8 @@ function computeSettlement(input = {}) {
     } : null,
     couponOptions: coupons.options,
     couponUsableCount: coupons.usableCount,
+    // B②:核销信息随单(建单落列 timecard_id/nth,签字时刻乐观锁兑现)
+    timecard: tcCard ? { id: tcCard.id, nth: tcNth, name: tcCard.name, totalTimes: tcCard.total_times, coverCents: timecardCoverCents } : null,
     payment: {
       plan,
       legs,
@@ -8664,6 +8706,7 @@ function createSettlementGroup(body = {}, adminSession = {}) {
       .run(groupId, tenantId, body.bookingId || null, cardOwnerUserId, adminSession.email || 'staff', now, now)
 
     const grantsUsedInGroup = new Set()
+    const timecardsUsedInGroup = new Set()
     for (const sheet of sheets) {
       // 一单一张,且同一张券不能被同组的两张单同时挂上(组内两张 + 别处待签的单都要拦)
       if (sheet.couponGrantId) {
@@ -8673,7 +8716,19 @@ function createSettlementGroup(body = {}, adminSession = {}) {
         assertCouponFree(String(sheet.couponGrantId), tenantId, null)
         grantsUsedInGroup.add(String(sheet.couponGrantId))
       }
+      /* B② 一单一卡一次(B2-7):同组两张单不许挂同一张次卡(一次签署会话内双扣必炸)。
+         跨组的并发(两端各开一张待签)不在建单层硬拦——签字时刻乐观锁裁决(Cowork 预嘱:并发面靠签署闸)。 */
+      if (sheet.timecardId) {
+        if (timecardsUsedInGroup.has(String(sheet.timecardId))) {
+          throw apiError(400, 'TIMECARD_ALREADY_IN_GROUP', '同一张次卡不能同时挂在两张单上。')
+        }
+        timecardsUsedInGroup.add(String(sheet.timecardId))
+      }
       const computed = computeSettlement({ ...sheet, tenantId, userId: cardOwnerUserId, payerUserId: cardOwnerUserId, bookingId: sheet.bookingId || body.bookingId, strictCoupon: true })
+      // B2-7 核销单必有技师(数字点选同结算单,规则⑧)
+      if (computed.timecard && !(Array.isArray(sheet.technicians) && sheet.technicians.length)) {
+        throw apiError(400, 'TECHNICIAN_REQUIRED', '次卡核销单必须选技师。')
+      }
       const id = randomId('stl')
       const isProxy = Boolean(sheet.servedPersonName && String(sheet.servedPersonName).trim())
       db.prepare(`INSERT INTO settlements
@@ -8681,8 +8736,9 @@ function createSettlementGroup(body = {}, adminSession = {}) {
          price_tier_used, tier_changed_from, tier_changed_by, tier_changed_at,
          list_total_cents, subtotal_cents, deposit_deduct_cents, discount_total_cents, total_cents,
          coupon_grant_id, coupon_id, coupon_name, coupon_discount_cents, coupon_selected_by, coupon_selected_at, perf_base_cents,
+         timecard_id, timecard_nth,
          pay_intent, perf_alloc_status, created_by, created_at, updated_at)
-        VALUES (?, ?, ?, ?, ?, ?, ?, ?, 'pending_sign', ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'pending', ?, ?, ?)`)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, 'pending_sign', ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'pending', ?, ?, ?)`)
         .run(id, tenantId, groupId, sheet.bookingId || body.bookingId || null, cardOwnerUserId,
           String(sheet.servedPersonName || '').slice(0, 40) || null, isProxy ? 1 : 0, settlementCode(tenantId),
           computed.tierKey, sheet.tierChangedFrom || null, sheet.tierChangedFrom ? (adminSession.email || 'staff') : null, sheet.tierChangedFrom ? now : null,
@@ -8690,6 +8746,7 @@ function createSettlementGroup(body = {}, adminSession = {}) {
           computed.coupon ? computed.coupon.grantId : null, computed.coupon ? computed.coupon.couponId : null,
           computed.coupon ? computed.coupon.name : null, computed.couponDiscountCents,
           computed.coupon ? 'staff' : null, computed.coupon ? now : null, computed.perfBaseCents,
+          computed.timecard ? computed.timecard.id : null, computed.timecard ? computed.timecard.nth : null,
           computed.payment.plan, adminSession.email || 'staff', now, now)
 
       const itemStmt = db.prepare(`INSERT INTO settlement_items
@@ -8766,6 +8823,35 @@ async function signSettlement(row, { signature, signedBy = '', strokes = [] }) {
   const now = iso(new Date())
   db.exec('BEGIN IMMEDIATE')
   try {
+    /* 预嘱②(幂等第二道闸):路由层 ALREADY_SIGNED 挡串行双击;这里在 BEGIN IMMEDIATE 串行化后
+       复读状态,挡并发双签——两道闸分立,双击/重试永远只扣一次(储值与次卡同受保护)。 */
+    const freshStatus = db.prepare('SELECT status FROM settlements WHERE id = ?').get(row.id)
+    if (!freshStatus || freshStatus.status !== 'pending_sign') {
+      throw apiError(400, 'ALREADY_SIGNED', '这张单已经签过了。')
+    }
+    /* B② 次卡扣次:签字时刻乐观锁(Cowork 预嘱并发形)——WHERE used_times = nth-1,
+       被别的单抢先用掉即 changes=0 → 409,单据不作废,改支付构成可再签(预嘱① 出路)。 */
+    if (row.timecard_id) {
+      const card = db.prepare('SELECT * FROM member_timecards WHERE id = ? AND tenant_id = ?').get(row.timecard_id, tenantId)
+      if (!card) throw apiError(400, 'TIMECARD_UNUSABLE', '这张次卡已不存在——请回到服务单改支付构成再签(单据不作废)。')
+      if (timecardExpired(card)) throw apiError(400, 'TIMECARD_EXPIRED', '这张次卡已过期——请回到服务单改支付构成再签(单据不作废)。')
+      const deduct = db.prepare('UPDATE member_timecards SET used_times = used_times + 1 WHERE id = ? AND used_times = ?')
+        .run(row.timecard_id, Number(row.timecard_nth) - 1)
+      if (!deduct.changes) {
+        throw apiError(409, 'TIMECARD_RACE', '这张次卡的剩余次数刚被另一张单用掉——请回到服务单改支付构成再签(单据不作废)。')
+      }
+      const tcLeg = db.prepare("SELECT * FROM settlement_payments WHERE settlement_id = ? AND leg = 'times_card'").get(row.id)
+      if (tcLeg) {
+        db.prepare("UPDATE settlement_payments SET status = 'paid' WHERE id = ?").run(tcLeg.id)
+        // 规则⑦:核销=按折算单价确认收入(负债转收入),单列类目供日结;payChannel=times_card 不混现金实收。
+        // tenantId 必传:签署页=公开路由没进租户闸门,不传会记到旗舰店账上(insertFinanceTransaction 注释点名的坑,套件 ㊻ 咬过一次)
+        insertFinanceTransaction({
+          type: 'income', source: 'settlement', category: '服务收入-次卡核销', tags: row.code,
+          amountCents: tcLeg.amount_cents, payChannel: 'times_card', occurredOn: todayOf(tenantId),
+          note: `服务单 ${row.code} · ${tcLeg.note || '次卡核销'}`, createdBy: signedBy || 'customer_sign', tenantId
+        })
+      }
+    }
     for (const leg of legs) {
       if (leg.amount_cents <= 0) continue
       db.prepare(`INSERT INTO stored_value_transactions (id, tenant_id, user_id, type, amount_cents, pay_channel, note, created_by, created_at, bucket)
@@ -8775,10 +8861,12 @@ async function signSettlement(row, { signature, signedBy = '', strokes = [] }) {
       db.prepare("UPDATE settlement_payments SET status = 'paid' WHERE id = ?").run(leg.id)
       // 迁移桶是老店欠顾客的服务,不是本店收入 —— 只有新桶进财务
       if (leg.leg === 'stored_value') {
+        /* D53(B② 施工中扫出的同病):此处原漏传 tenantId——签署页是公开路由,不传=耗卡收入记到旗舰店账上。
+           潜伏未炸:生产至今 0 签署单;套件此前未覆盖「非旗舰租户签储值单查本租户账」位面(㊻ 已补)。 */
         insertFinanceTransaction({
           type: 'income', source: 'settlement', category: '服务收入-耗卡', tags: row.code,
           amountCents: leg.amount_cents, payChannel: 'stored_value', occurredOn: todayOf(tenantId),
-          note: `服务单 ${row.code}`, createdBy: signedBy || 'customer_sign'
+          note: `服务单 ${row.code}`, createdBy: signedBy || 'customer_sign', tenantId
         })
       }
     }
@@ -16543,6 +16631,8 @@ db.exec(`
     coupon_id TEXT,
     coupon_name TEXT,
     coupon_discount_cents INTEGER NOT NULL DEFAULT 0,
+    timecard_id TEXT,
+    timecard_nth INTEGER,
     coupon_selected_by TEXT,
     coupon_selected_at TEXT,
     perf_base_cents INTEGER NOT NULL DEFAULT 0,
@@ -16622,7 +16712,10 @@ for (const column of [
   'coupon_grant_id TEXT', 'coupon_id TEXT', 'coupon_name TEXT',
   'coupon_discount_cents INTEGER NOT NULL DEFAULT 0',
   'coupon_selected_by TEXT', 'coupon_selected_at TEXT',
-  'perf_base_cents INTEGER NOT NULL DEFAULT 0'
+  'perf_base_cents INTEGER NOT NULL DEFAULT 0',
+  /* S2批② B②:次卡核销单——建单时锁定「这单核销第几次」(timecard_nth),签字时刻乐观锁
+     UPDATE ... WHERE used_times = nth-1 兑现;老库走 ALTER(纪律8:只写 CREATE TABLE=生产追不上)。 */
+  'timecard_id TEXT', 'timecard_nth INTEGER'
 ]) {
   try {
     db.exec(`ALTER TABLE settlements ADD COLUMN ${column}`)

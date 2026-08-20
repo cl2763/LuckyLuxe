@@ -950,6 +950,69 @@ const main = async () => {
         dbx.prepare("DELETE FROM member_timecards WHERE id IN ('tc_fix_a1','tc_fix_b0','tc_fix_c9')").run()
         const tcEmpty = (await request(`/admin/customers/${uid}/timecards`, {}, shop.token)).data.timecards
         check('㊺ 夹具清场:持卡列表回空(幂等清理)', tcEmpty.length === 0, JSON.stringify(tcEmpty))
+
+        // ===== ㊻ B② 核销引擎:建单闸×5 → 并发乐观锁 → 幂等 → 出路(预嘱①②全断言化) =====
+        {
+          const tech = [{ technicianId: shop.tech1, role: 'main', itemNos: [] }]
+          const mkSheet = (extra) => ({ userId: uid, settlements: [{ payIntent: 'offline_full', timecardId: 'tc_race', timecardServiceId: shop.serviceId, items: [], technicians: tech, servedPersonName: '', ...extra }] })  // payIntent 必须 sheet 级:createSettlementGroup 只展开 sheet,body 级被忽略(怪癖记档)
+          mk('tc_race', 3, 2, 54000, null)  // 剩 1 次,540 元 3 次 → 末次单价 18000(整除档,余数档 ㊺ 已拍)
+          dbx.prepare("UPDATE member_timecards SET project_group = NULL WHERE id = 'tc_race'").run()  // 空组=不限(组闸由 tc_grp 单测)
+          // 建单闸:无技师
+          const g1 = await request('/admin/settlements', { method: 'POST', body: JSON.stringify({ userId: uid, payIntent: 'offline_full', settlements: [{ timecardId: 'tc_race', timecardServiceId: shop.serviceId, items: [], technicians: [], servedPersonName: '' }] }) }, shop.token)
+          check('㊻ 建单闸:核销单必有技师=400', g1.status === 400 && g1.data.error.code === 'TECHNICIAN_REQUIRED', JSON.stringify(g1.data).slice(0, 120))
+          // 建单闸:组内两张单挂同一张卡
+          const g2 = await request('/admin/settlements', { method: 'POST', body: JSON.stringify({ userId: uid, payIntent: 'offline_full', settlements: [
+            { timecardId: 'tc_race', timecardServiceId: shop.serviceId, items: [], technicians: tech, servedPersonName: '' },
+            { timecardId: 'tc_race', timecardServiceId: shop.serviceId, items: [], technicians: tech, servedPersonName: '甲' }
+          ] }) }, shop.token)
+          check('㊻ 建单闸:一单一卡一次(组内重复挂卡=400)', g2.status === 400 && g2.data.error.code === 'TIMECARD_ALREADY_IN_GROUP', JSON.stringify(g2.data).slice(0, 120))
+          // 建单闸:项目不在关联组
+          mk('tc_grp', 3, 0, 30000, null)
+          dbx.prepare("UPDATE member_timecards SET project_group = '不存在的组' WHERE id = 'tc_grp'").run()
+          const g3 = await request('/admin/settlements', { method: 'POST', body: JSON.stringify({ userId: uid, payIntent: 'offline_full', settlements: [{ timecardId: 'tc_grp', timecardServiceId: shop.serviceId, items: [], technicians: tech, servedPersonName: '' }] }) }, shop.token)
+          check('㊻ 建单闸:项目不在卡关联组=400(拍板③组内选)', g3.status === 400 && g3.data.error.code === 'TIMECARD_SERVICE_OUT_OF_GROUP', JSON.stringify(g3.data).slice(0, 120))
+          // 正常建单 A:核销行=折算单价+times_card 腿,现金腿 0
+          const sA = await request('/admin/settlements', { method: 'POST', body: JSON.stringify(mkSheet({})) }, shop.token)
+          check('㊻ 核销单 A 建成:行=次卡核销第3/3+应收=折算 18000', sA.status === 201 || sA.status === 200, JSON.stringify(sA.data).slice(0, 100))
+          const shA = sA.data.settlements[0]
+          check('㊻ A 金额面:subtotal=18000+times_card 腿=18000(现金腿 0=B2-9)', shA.subtotalCents === 18000 && (shA.payments || []).some((p) => p.leg === 'times_card' && p.amountCents === 18000) && !(shA.payments || []).some((p) => p.leg === 'offline' && p.amountCents > 0), JSON.stringify(shA.payments))
+          check('㊻ A 留痕:条目名含「第 3/3 次」', (shA.items || []).some((i) => i.name && i.name.includes('第 3/3 次')), JSON.stringify((shA.items || []).map((i) => i.name)))
+          // 并发面:同一张剩1的卡,另一端再开一张待签单 B(建单许可=预嘱口径)
+          const sB = await request('/admin/settlements', { method: 'POST', body: JSON.stringify(mkSheet({})) }, shop.token)
+          check('㊻ 并发前提:两端各持一张待签单(建单不硬拦,裁决在签署)', sB.status === 201 || sB.status === 200, JSON.stringify(sB.data).slice(0, 100))
+          const shB = sB.data.settlements[0]
+          // 签 A:扣次+确认收入
+          const led1 = (await financeRows(shop)).length
+          const sgA = await request(`/settlements/${encodeURIComponent(shA.code)}/sign`, { method: 'POST', body: JSON.stringify({ signature: '次卡核销验签A', disclaimerAccepted: true }) }, null, { 'x-tenant-id': shop.tenantId })
+          check('㊻ 签 A 成:卡扣至 3/3', sgA.status === 200 && dbx.prepare("SELECT used_times FROM member_timecards WHERE id = 'tc_race'").get().used_times === 3, JSON.stringify(sgA.data).slice(0, 80))
+          const tcIncome = (await financeRows(shop)).filter((x) => x.category === '服务收入-次卡核销')
+          check('㊻ 核销确认收入单列:服务收入-次卡核销 18000(payChannel=times_card 不混现金)', tcIncome.length === 1 && (tcIncome[0].amountCents ?? tcIncome[0].amount_cents) === 18000 && (tcIncome[0].payChannel ?? tcIncome[0].pay_channel) === 'times_card', JSON.stringify(tcIncome))
+          // 并发闸(乐观锁):签 B 必拦=409 TIMECARD_RACE
+          const sgB = await request(`/settlements/${encodeURIComponent(shB.code)}/sign`, { method: 'POST', body: JSON.stringify({ signature: '次卡核销验签B', disclaimerAccepted: true }) }, null, { 'x-tenant-id': shop.tenantId })
+          check('㊻ 并发闸:两单抢末次,后签=409 TIMECARD_RACE(不是串行防重)', sgB.status === 409 && sgB.data.error.code === 'TIMECARD_RACE', JSON.stringify(sgB.data).slice(0, 140))
+          check('㊻ 并发闸:卡不超扣(仍 3/3)', dbx.prepare("SELECT used_times FROM member_timecards WHERE id = 'tc_race'").get().used_times === 3)
+          // 幂等闸(与乐观锁分立):A 重签=ALREADY_SIGNED,不重扣不重入账
+          const sgA2 = await request(`/settlements/${encodeURIComponent(shA.code)}/sign`, { method: 'POST', body: JSON.stringify({ signature: '双击重试', disclaimerAccepted: true }) }, null, { 'x-tenant-id': shop.tenantId })
+          check('㊻ 幂等闸:已签单重签=400 ALREADY_SIGNED(双击/重试只扣一次)', sgA2.status === 400 && sgA2.data.error.code === 'ALREADY_SIGNED', JSON.stringify(sgA2.data).slice(0, 100))
+          check('㊻ 幂等闸:重签零副作用(卡 3/3+次卡收入行仍 1 条)', dbx.prepare("SELECT used_times FROM member_timecards WHERE id = 'tc_race'").get().used_times === 3 && (await financeRows(shop)).filter((x) => x.category === '服务收入-次卡核销').length === 1)
+          // 出路(预嘱①):被拦的 B 不是死胡同——撤回 → 重开(改支付构成=线下)→ 签成
+          const vB = await request(`/admin/settlements/${shB.id}/void`, { method: 'POST', body: JSON.stringify({ reason: '次卡被另一单用掉,改支付构成重开' }) }, shop.token)
+          check('㊻ 出路①:被拦单可撤回', vB.status === 200, JSON.stringify(vB.data).slice(0, 80))
+          const sC = await request('/admin/settlements', { method: 'POST', body: JSON.stringify({ userId: uid, settlements: [{ payIntent: 'offline_full', items: [{ serviceId: shop.serviceId, qty: 1 }], technicians: tech, servedPersonName: '' }] }) }, shop.token)
+          const shC = sC.data.settlements[0]
+          const sgC = await request(`/settlements/${encodeURIComponent(shC.code)}/sign`, { method: 'POST', body: JSON.stringify({ signature: '改线下重签', disclaimerAccepted: true }) }, null, { 'x-tenant-id': shop.tenantId })
+          check('㊻ 出路②:改支付构成(线下)重开可签成,不废单收场', sgC.status === 200, JSON.stringify(sgC.data).slice(0, 80))
+          check('㊻ 账面守恒:led 增量=次卡核销 1 行(A)+C 单相应行,B 零账目', (await financeRows(shop)).length >= led1 + 1)
+          // D53 回归形:非旗舰租户签**储值腿**的单,「服务收入-耗卡」必须落本租户账(修前=记到旗舰店,本断言 0 行红)
+          const sD = await request('/admin/settlements', { method: 'POST', body: JSON.stringify({ userId: uid, settlements: [{ payIntent: 'balance_plus_offline', items: [{ serviceId: shop.serviceId, qty: 1 }], technicians: tech, servedPersonName: '' }] }) }, shop.token)
+          const shD = sD.data.settlements[0]
+          const svLegD = (shD.payments || []).find((p) => p.leg === 'stored_value')
+          check('㊻ D53 前提:D 单带储值腿(bkCust 余额 120 可烧)', Boolean(svLegD) && svLegD.amountCents > 0, JSON.stringify(shD.payments))
+          const sgD = await request(`/settlements/${encodeURIComponent(shD.code)}/sign`, { method: 'POST', body: JSON.stringify({ signature: 'D53验签', disclaimerAccepted: true }) }, null, { 'x-tenant-id': shop.tenantId })
+          const skRows = (await financeRows(shop)).filter((x) => x.category === '服务收入-耗卡' && x.tags === shD.code)
+          check('㊻ D53 修:耗卡收入落本租户账(签署页公开路由必须显式带租户)', sgD.status === 200 && skRows.length === 1 && (skRows[0].amountCents ?? skRows[0].amount_cents) === svLegD.amountCents, JSON.stringify({ sign: sgD.status, rows: skRows }))
+          dbx.prepare("DELETE FROM member_timecards WHERE id IN ('tc_race','tc_grp')").run()
+        }
       }
       dbx.close()
     }
