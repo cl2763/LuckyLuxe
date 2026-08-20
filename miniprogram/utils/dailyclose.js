@@ -86,6 +86,7 @@ const dailyCloseMixin = {
           techs: (dc.technicians || []).map((t) => ({
             name: t.name, orderCount: t.orderCount,
             perf: t.pendingCount ? '待分配' : m(t.perfCents),
+            deduct: t.releaseDeductCents ? `含售后扣回 −${m(t.releaseDeductCents)}` : '',
             card: m(t.cardUsedCents),
             recharge: t.rechargeTotalCents ? m(t.rechargeTotalCents) : '—',
             target: !t.target || !t.target.perfTargetCents ? '—'
@@ -93,7 +94,11 @@ const dailyCloseMixin = {
             hit: Boolean(t.target && t.target.perfTargetCents && t.perfCents >= t.target.perfTargetCents)
           })),
           tierChanges: (dc.anomalies?.tierChanges || []).map((a) => `${a.code} ${a.from}→${a.to}`),
-          freeRemoval: (dc.anomalies?.freeRemoval || {}).count || 0
+          freeRemoval: (dc.anomalies?.freeRemoval || {}).count || 0,
+          // 售后业绩扣回显式行(裁③:负数+关联单号,与网页日结同源同句)
+          deducts: (dc.afterSalesDeductions || []).map((d) => ({
+            time: d.timeText || '', tech: d.technicianName, label: d.label, amt: `−${m(d.deductCents)}`
+          }))
         }
       })
     } catch (e) {

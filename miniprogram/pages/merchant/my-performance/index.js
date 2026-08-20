@@ -56,7 +56,9 @@ Page({
             pending: x.pending,
             orders: x.pending ? '待店长日结' : `${x.orderCount} 单`,
             perf: x.pending ? '—' : m(x.perfCents),
-            card: x.cardUsedCents !== undefined ? m(x.cardUsedCents) : ''
+            card: x.cardUsedCents !== undefined ? m(x.cardUsedCents) : '',
+            // 售后业绩扣回显式行(裁③:负数+关联单号;perf 已是净额,这行只自证减在哪)
+            deductions: (x.deductions || []).map((d) => ({ code: d.code, amt: `−${m(Math.abs(d.amountCents))}` }))
           })),
           monthly: (p.monthly || []).map((x) => ({ key: x.month, orders: `${x.orderCount} 单`, perf: m(x.perfCents) })),
           yearly: (p.yearly || []).map((x) => ({ key: `${x.year} 年`, orders: `${x.orderCount} 单`, perf: m(x.perfCents) })),

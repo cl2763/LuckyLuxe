@@ -31,11 +31,17 @@
     </view>
 
     <view class="card" wx:if="{{tab === 'daily'}}">
-      <view class="row" wx:for="{{v.daily}}" wx:key="date">
-        <text class="d">{{item.date}}</text>
-        <text class="o {{item.pending ? 'mut' : ''}}">{{item.orders}}</text>
-        <text wx:if="{{item.card}}" class="c">卡耗 {{item.card}}</text>
-        <text class="p {{item.pending ? 'mut' : ''}}">{{item.perf}}</text>
+      <view wx:for="{{v.daily}}" wx:key="date">
+        <view class="row">
+          <text class="d">{{item.date}}</text>
+          <text class="o {{item.pending ? 'mut' : ''}}">{{item.orders}}</text>
+          <text wx:if="{{item.card}}" class="c">卡耗 {{item.card}}</text>
+          <text class="p {{item.pending ? 'mut' : ''}}">{{item.perf}}</text>
+        </view>
+        <!-- 售后业绩扣回显式行(裁③:员工看得见钱减在哪;上行 perf 已是净额) -->
+        <view class="row deduct-row" wx:for="{{item.deductions}}" wx:for-item="dd" wx:key="code">
+          <text class="d"></text><text class="c">售后扣回 · {{dd.code}}</text><text class="p neg">{{dd.amt}}</text>
+        </view>
       </view>
       <view wx:if="{{!v.daily.length}}" class="empty">本月还没有已确认的日结。</view>
     </view>

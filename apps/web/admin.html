@@ -4,7 +4,7 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>有迹 · 商家后台</title>
-    <link rel="stylesheet" href="/web/styles.css?v=20260820e-b2">
+    <link rel="stylesheet" href="/web/styles.css?v=20260821a-perf">
     <style>
       /* 2026-08-02 财务指标显隐+动效(店主 v4 定稿):AI智能总结卡 / 目标进度条(带平衡线刻度) / 设目标引导与弹窗。
          放这里不放 styles.css:本批约定只动 admin.js + admin.html 两个文件。 */
@@ -164,6 +164,12 @@
       .dc-badge.mut{background:#f1e7df;color:#8c8279}
       .dc-anom{font-size:12px;color:#4a3c2c;margin-top:10px;line-height:1.9}
       .dc-warnbar{background:#fdf3ec;border:1px solid #f0d9c4;border-radius:10px;padding:10px 12px;font-size:12.5px;color:#a8551f;margin:10px 0}
+      /* 售后业绩扣回显式行(裁③:负数+关联单号,数字自证) */
+      .dc-deduct{display:block;font-size:11px;font-style:normal;color:#b3423a;margin-top:2px}
+      .dc-deduct-list{margin-top:10px;padding:10px 12px;background:#fbf4f3;border:1px solid #ecd5d2;border-radius:10px;font-size:12.5px}
+      .dc-deduct-list strong{display:block;margin-bottom:6px;color:#8a3a33;font-size:12px}
+      .dc-deduct-row{display:flex;justify-content:space-between;gap:10px;padding:3px 0}
+      .dc-deduct-row .neg{color:#b3423a}
       .dc-ro{background:#faf6f1;border:1px dashed #e0d3c4;border-radius:12px;padding:13px;font-size:12.5px;line-height:1.9;color:#4a3c2c}
       .dc-ro .ro-t{display:flex;justify-content:space-between;font-weight:800;color:#241f1d;margin-bottom:6px}
       .dc-ro .lock{font-size:11px;color:#8c8279;font-weight:400}
@@ -959,6 +965,6 @@
     </main>
 
     <div class="toast" id="toast"></div>
-    <script src="/web/admin.js?v=20260820e-b2"></script>
+    <script src="/web/admin.js?v=20260821a-perf"></script>
   </body>
 </html>

@@ -26,3 +26,7 @@
 .row .c{font-size:21rpx;color:#8c8279}
 .row .p{font-size:27rpx;font-weight:800;color:#241f1d}
 .row .mut{color:#9a8c7c;font-weight:400}
+
+/* 售后业绩扣回显式行(裁③:负数+单号) */
+.deduct-row .neg{color:#b3423a;font-weight:700}
+.deduct-row .c{color:#b3423a}

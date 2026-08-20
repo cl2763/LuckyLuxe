@@ -58,10 +58,18 @@
       <view class="tr" wx:for="{{v.techs}}" wx:key="name">
         <text class="c1 nm">{{item.name}}</text>
         <text class="c2">{{item.orderCount}}</text>
-        <text class="c3">{{item.perf}}</text>
+        <text class="c3">{{item.perf}}<text wx:if="{{item.deduct}}" class="deduct-tag">{{item.deduct}}</text></text>
         <text class="c3">{{item.card}}</text>
         <text class="c3">{{item.recharge}}</text>
         <text class="c4 {{item.hit ? 'ok' : ''}}">{{item.target}}</text>
+      </view>
+    </view>
+
+    <!-- 售后业绩扣回显式行(裁③:负数+关联单号;与网页日结同源同句) -->
+    <view class="card deduct-card" wx:if="{{v.deducts.length}}">
+      <view class="deduct-title">售后扣回(业绩)</view>
+      <view class="deduct-row" wx:for="{{v.deducts}}" wx:key="label">
+        <text>{{item.time}} {{item.tech}} · {{item.label}}</text><text class="neg">{{item.amt}}</text>
       </view>
     </view>
 

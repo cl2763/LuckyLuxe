@@ -59,3 +59,10 @@
 
 /* 跨零点单的自解释标注:昨天做的、今晨签的,记在今天的账上 */
 .ah .code .xday{margin-left:12rpx;font-size:20rpx;font-weight:600;color:#a8551f;background:#fdf3ec;border-radius:8rpx;padding:2rpx 10rpx}
+
+/* 售后业绩扣回显式行(裁③) */
+.deduct-tag{display:block;font-size:20rpx;color:#b3423a;margin-top:2rpx}
+.deduct-card{background:#fbf4f3;border:1rpx solid #ecd5d2}
+.deduct-title{font-size:24rpx;font-weight:700;color:#8a3a33;margin-bottom:8rpx}
+.deduct-row{display:flex;justify-content:space-between;font-size:24rpx;padding:4rpx 0}
+.deduct-row .neg{color:#b3423a;font-weight:700}

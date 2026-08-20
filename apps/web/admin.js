@@ -1,5 +1,5 @@
 // 构建号:每次交付递增。侧栏可见,排查"改了没生效"时先对版本。
-const ADMIN_BUILD = '20260820e-b2'
+const ADMIN_BUILD = '20260821a-perf'
 let pricingState = { module: 'storefront', tab: 'items', categories: [], items: [], rules: {}, editing: null, preview: null, storefrontPicker: false }
 console.log(`[admin] build ${ADMIN_BUILD}`)
 
@@ -2563,12 +2563,19 @@ function renderDailyClose() {
       <tr>
         <td class="nm">${escapeHtml(t.name)}</td>
         <td>${t.orderCount}</td>
-        <td>${t.pendingCount ? `<span class="dc-badge mut">${zh ? '待分配' : 'pending'}</span>` : money(t.perfCents, 2)}</td>
+        <td>${t.pendingCount ? `<span class="dc-badge mut">${zh ? '待分配' : 'pending'}</span>` : money(t.perfCents, 2)}${t.releaseDeductCents ? `<em class="dc-deduct">${zh ? '含售后扣回' : 'incl. deduct'} −${money(t.releaseDeductCents, 2)}</em>` : ''}</td>
         <td>${money(t.cardUsedCents, 2)}</td>
         <td>${t.rechargeTotalCents ? money(t.rechargeTotalCents, 2) : '—'}</td>
         <td>${targetCellText(t, zh)}</td>
       </tr>`).join('')}
     </table>
+
+    ${(v.afterSalesDeductions || []).length ? `
+    <div class="dc-deduct-list">
+      <strong>${zh ? '售后扣回(业绩,裁③显式行)' : 'After-sales deductions'}</strong>
+      ${v.afterSalesDeductions.map((d) => `
+      <div class="dc-deduct-row"><span><b class="dc-tm">${escapeHtml(d.timeText || '')}</b>${escapeHtml(d.technicianName)} · ${escapeHtml(d.label)}</span><b class="neg">−${money(d.deductCents, 2)}</b></div>`).join('')}
+    </div>` : ''}
 
     <div class="dc-anom">
       ${zh ? '价档异常' : 'Tier changes'} <span class="dc-badge ${(anomalies.tierChanges || []).length ? 'warn' : 'mut'}">${(anomalies.tierChanges || []).length}</span>
