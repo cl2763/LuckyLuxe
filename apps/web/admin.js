@@ -1,5 +1,5 @@
 // 构建号:每次交付递增。侧栏可见,排查"改了没生效"时先对版本。
-const ADMIN_BUILD = '20260820b-s2b2d1'
+const ADMIN_BUILD = '20260820c-d52'
 let pricingState = { module: 'storefront', tab: 'items', categories: [], items: [], rules: {}, editing: null, preview: null, storefrontPicker: false }
 console.log(`[admin] build ${ADMIN_BUILD}`)
 
@@ -4995,7 +4995,8 @@ function renderBookings() {
   const grouped = groupByDate(bookings)
   els.bookingList.innerHTML = `
     ${staffTimeline}
-    ${Object.keys(grouped).sort().map((date) => `
+    ${/* D52:日期组倒序=最近日期优先(店主 08-20 立);组内时间升序不变——与商家小程序 orders 同口径(它本来就是 b.localeCompare(a)) */''}
+    ${Object.keys(grouped).sort((a, b) => b.localeCompare(a)).map((date) => `
     <section class="booking-date-group">
       <h2>${dateHeading(date)}</h2>
       ${grouped[date].map(renderBookingCard).join('')}
