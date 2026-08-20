@@ -12026,12 +12026,23 @@ async function route(req, res) {
     }
   }
   if (req.method === 'DELETE' && path.startsWith('/admin/packages/')) {
-    // S2批①:套餐/次卡定义可删(批②核销落地后,有持卡实例的改为拒删只停用)
     if (adminSession.role !== 'owner') throw apiError(403, 'FORBIDDEN', 'Owner permission is required.')
     const id = path.split('/')[3]
+    /* B①(批① 注释押的义务兑现):有持卡实例的定义拒删只停用——删定义会让已售卡断根(快照虽在,审计链断)。 */
+    const held = db.prepare('SELECT COUNT(*) c FROM member_timecards WHERE package_id = ? AND tenant_id = ?').get(id, currentTenantId()).c
+    if (held > 0) throw apiError(409, 'PACKAGE_HAS_HOLDINGS', `已有 ${held} 张已售卡关联此定义,不能删除;请改用「下架」停售。`)
     const r = db.prepare('DELETE FROM membership_packages WHERE id = ? AND tenant_id = ?').run(id, currentTenantId())
     if (!r.changes) throw apiError(404, 'NOT_FOUND', 'Package not found.')
     return json(res, 200, { deleted: true })
+  }
+  /* ===== S2批② B①:顾客次卡持有(开单「次卡」大类的数据源,三端同一接口)=====
+     口径:剩 0 的卡不出现(B1-2,接口层单源);过期卡在场带 expired 位=前端置灰不可点(B1-3)。 */
+  if (req.method === 'GET' && /^\/admin\/customers\/[^/]+\/timecards$/.test(path)) {
+    const uid = path.split('/')[3]
+    const rows = db.prepare('SELECT * FROM member_timecards WHERE tenant_id = ? AND user_id = ? ORDER BY created_at DESC').all(currentTenantId(), uid)
+    const cards = rows.filter((r) => r.total_times - r.used_times > 0).map(serializeMemberTimecard)
+      .sort((a, b) => Number(b.redeemable) - Number(a.redeemable))
+    return json(res, 200, { timecards: cards })
   }
   // ===== 优惠券 定义 CRUD =====
   if (req.method === 'GET' && path === '/admin/coupons') {
@@ -16028,6 +16039,24 @@ db.exec(`
     sort_order INTEGER NOT NULL DEFAULT 0,
     created_at TEXT NOT NULL
   );
+  /* S2批② B①:次卡持有(顾客买到手的卡)。字段全为购买时快照(套餐日后改名改价不影响已售卡);
+     状态一律推导不落列:剩余=total-used,用完=剩0,过期=expires_at<门店今天(少一列少一分歧)。
+     售卡=预收负债(规则⑦:不计积分不计业绩),核销按折算单价确认收入——账务在结算引擎批内接,本表零钱字段歧义。 */
+  CREATE TABLE IF NOT EXISTS member_timecards (
+    id TEXT PRIMARY KEY,
+    tenant_id TEXT NOT NULL,
+    user_id TEXT NOT NULL,
+    package_id TEXT,
+    name TEXT NOT NULL,
+    total_times INTEGER NOT NULL,
+    used_times INTEGER NOT NULL DEFAULT 0,
+    price_cents INTEGER NOT NULL,
+    project_group TEXT,
+    expires_at TEXT,
+    source_settlement_id TEXT,
+    created_at TEXT NOT NULL
+  );
+  CREATE INDEX IF NOT EXISTS idx_member_timecards_user ON member_timecards(tenant_id, user_id);
   CREATE TABLE IF NOT EXISTS coupons (
     id TEXT PRIMARY KEY,
     tenant_id TEXT NOT NULL DEFAULT 'lucky-luxe',
@@ -16228,6 +16257,39 @@ function serializeMerchantLead(row) {
     status: row.status,
     createdAt: row.created_at,
     updatedAt: row.updated_at
+  }
+}
+
+/* ===== S2批② B①:次卡持有推导件(状态零列,全部现算)===== */
+/* 折算单价(规则⑦:核销按折算单价确认收入计积分/业绩)。
+   分币余数末次吃(测试标准点名的边界):第 nth 次(1 起)= 非末次 floor(price/total),末次吃余数。 */
+function timecardUnitCents(card, nth) {
+  const base = Math.floor(card.price_cents / card.total_times)
+  return nth >= card.total_times ? card.price_cents - base * (card.total_times - 1) : base
+}
+function timecardExpired(card) {
+  return Boolean(card.expires_at && String(card.expires_at).slice(0, 10) < todayOf(card.tenant_id))
+}
+function serializeMemberTimecard(row) {
+  const remaining = row.total_times - row.used_times
+  const expired = timecardExpired(row)
+  return {
+    id: row.id,
+    userId: row.user_id,
+    packageId: row.package_id || null,
+    name: row.name,
+    totalTimes: row.total_times,
+    usedTimes: row.used_times,
+    remaining,
+    priceCents: row.price_cents,
+    nextUnitCents: remaining > 0 ? timecardUnitCents(row, row.used_times + 1) : 0,
+    projectGroup: row.project_group || '',
+    expiresAt: row.expires_at ? String(row.expires_at).slice(0, 10) : null,
+    expired,
+    redeemable: remaining > 0 && !expired,
+    // 卡片行文案后端给(三端同句,图 B1-4):名称 · 剩 n/N · 有效期;过期置灰由 expired 位驱动
+    label: `${row.name} · 剩 ${remaining}/${row.total_times}${row.expires_at ? ` · 至 ${String(row.expires_at).slice(0, 10)}` : ' · 长期有效'}`,
+    createdAt: row.created_at
   }
 }
 

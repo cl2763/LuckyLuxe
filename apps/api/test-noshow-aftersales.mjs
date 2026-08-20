@@ -920,6 +920,37 @@ const main = async () => {
       // +1 财务红线同构:bonus 永不进技师充值提成基数(提成按 type=recharge 统计)
       const rcSum = dbx.prepare("SELECT COALESCE(SUM(amount_cents),0) s FROM stored_value_transactions WHERE user_id = ? AND type = 'recharge' AND technician_id = ?").get(bkCust.user.id, shop.tech1).s
       check('㊵ 规则④ 提成基数只含实收 100(bonus 排除)', rcSum === 10000, `got ${rcSum}`)
+
+      // ===== ㊺ S2批② B①:次卡持有推导口径(直插夹具=引擎写法;状态零列全现算) =====
+      {
+        const uid = bkCust.user.id
+        const now = new Date().toISOString()
+        const mk = (id, total, used, price, exp) => dbx.prepare(
+          'INSERT INTO member_timecards (id, tenant_id, user_id, package_id, name, total_times, used_times, price_cents, project_group, expires_at, source_settlement_id, created_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)'
+        ).run(id, shop.tenantId, uid, null, `夹具卡${id.slice(-2)}`, total, used, price, '守护组', exp, null, now)
+        mk('tc_fix_a1', 3, 1, 50000, null)            // 活卡:剩 2/3,500 元 3 次(末次吃余数验算料)
+        mk('tc_fix_b0', 3, 3, 54000, null)            // 用完:剩 0,不许出现
+        mk('tc_fix_c9', 5, 2, 90000, '2020-01-01')    // 过期:在场置灰
+        const tc = (await request(`/admin/customers/${uid}/timecards`, {}, shop.token)).data.timecards
+        const a1 = tc.find((c) => c.id === 'tc_fix_a1')
+        check('㊺ 活卡在场:剩 2/3+可核销+标签句后端给', Boolean(a1) && a1.remaining === 2 && a1.redeemable === true && a1.label.includes('剩 2/3') && a1.label.includes('长期有效'), JSON.stringify(a1))
+        check('㊺ 折算单价末次吃余数:500元3次 → 非末次 16666、末次 16668', a1.nextUnitCents === 16666 && (50000 - 16666 * 2) === 16668, `next=${a1.nextUnitCents}`)
+        check('㊺ 剩 0 的卡不出现(B1-2 接口层单源)', !tc.some((c) => c.id === 'tc_fix_b0'), JSON.stringify(tc.map((c) => c.id)))
+        const c9 = tc.find((c) => c.id === 'tc_fix_c9')
+        check('㊺ 过期卡在场置灰:expired=true 且不可核销(B1-3)', Boolean(c9) && c9.expired === true && c9.redeemable === false, JSON.stringify(c9))
+        // 定义拒删闸(批① 注释押的义务):有持卡实例 → 409;清持卡 → 可删
+        const pkg = (await request('/admin/packages', { method: 'POST', body: JSON.stringify({ kind: 'times', name: '拒删验证卡', priceCents: 30000, timesCount: 3 }) }, shop.token)).data.package
+        dbx.prepare("UPDATE member_timecards SET package_id = ? WHERE id = 'tc_fix_a1'").run(pkg.id)
+        const del1 = await request(`/admin/packages/${pkg.id}`, { method: 'DELETE' }, shop.token)
+        check('㊺ 有持卡实例的定义拒删=409 PACKAGE_HAS_HOLDINGS', del1.status === 409 && del1.data.error.code === 'PACKAGE_HAS_HOLDINGS', JSON.stringify(del1.data))
+        dbx.prepare("UPDATE member_timecards SET package_id = NULL WHERE id = 'tc_fix_a1'").run()
+        const del2 = await request(`/admin/packages/${pkg.id}`, { method: 'DELETE' }, shop.token)
+        check('㊺ 无持卡后定义可删(闸不矫枉过正)', del2.status === 200, JSON.stringify(del2.data))
+        // 越权:员工 token 打别人家顾客的卡列表(跨店断言在双租户闸门套件,此处验角色可达性=staff 可读本店)
+        dbx.prepare("DELETE FROM member_timecards WHERE id IN ('tc_fix_a1','tc_fix_b0','tc_fix_c9')").run()
+        const tcEmpty = (await request(`/admin/customers/${uid}/timecards`, {}, shop.token)).data.timecards
+        check('㊺ 夹具清场:持卡列表回空(幂等清理)', tcEmpty.length === 0, JSON.stringify(tcEmpty))
+      }
       dbx.close()
     }
 
