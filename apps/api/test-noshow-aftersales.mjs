@@ -1027,6 +1027,21 @@ const main = async () => {
           const sgD = await request(`/settlements/${encodeURIComponent(shD.code)}/sign`, { method: 'POST', body: JSON.stringify({ signature: 'D53验签', disclaimerAccepted: true }) }, null, { 'x-tenant-id': shop.tenantId })
           const skRows = (await financeRows(shop)).filter((x) => x.category === '服务收入-耗卡' && x.tags === shD.code)
           check('㊻ D53 修:耗卡收入落本租户账(签署页公开路由必须显式带租户)', sgD.status === 200 && skRows.length === 1 && (skRows[0].amountCents ?? skRows[0].amount_cents) === svLegD.amountCents, JSON.stringify({ sign: sgD.status, rows: skRows }))
+          // ===== ㊽ B2-8 售后返还次数+回冲(贴更正机制,涉钱零新径) =====
+          {
+            const rel = await request(`/admin/settlements/${shA.id}/amend`, { method: 'POST', body: JSON.stringify({ reason: '售后返还验证:顾客投诉本次服务', releaseTimecard: true }) }, shop.token)
+            check('㊽ 返还:更正单挂 releaseTimecard=200', rel.status === 200, JSON.stringify(rel.data).slice(0, 120))
+            check('㊽ 次数返还:卡 3/3 → 2/3', dbx.prepare("SELECT used_times FROM member_timecards WHERE id = 'tc_race'").get().used_times === 2)
+            const ptsRow = dbx.prepare("SELECT type, amount FROM points_transactions WHERE user_id = ? AND ref_id = ? AND amount < 0").all(uid, shA.id)
+            check('㊽ 积分回冲:台账追加 adjust −180(账本只追加,赚分行推导值不动)', ptsRow.length === 1 && ptsRow[0].type === 'adjust' && ptsRow[0].amount === -180, JSON.stringify(ptsRow))
+            const redRows = (await financeRows(shop)).filter((x) => x.category === '服务收入-次卡核销' && x.tags === shA.code && (x.amountCents ?? x.amount_cents) < 0)
+            check('㊽ 收入红字:−18000 冲销行在场(reversalOf 链)', redRows.length === 1 && (redRows[0].amountCents ?? redRows[0].amount_cents) === -18000, JSON.stringify(redRows))
+            const rel2 = await request(`/admin/settlements/${shA.id}/amend`, { method: 'POST', body: JSON.stringify({ reason: '重复返还试探', releaseTimecard: true }) }, shop.token)
+            check('㊽ 防重放:同单二次返还=409 TIMECARD_ALREADY_RELEASED', rel2.status === 409 && rel2.data.error.code === 'TIMECARD_ALREADY_RELEASED', JSON.stringify(rel2.data).slice(0, 120))
+            check('㊽ 防重放:卡仍 2/3 不多退', dbx.prepare("SELECT used_times FROM member_timecards WHERE id = 'tc_race'").get().used_times === 2)
+            const rel3 = await request(`/admin/settlements/${shC.id}/amend`, { method: 'POST', body: JSON.stringify({ reason: '非核销单试探', releaseTimecard: true }) }, shop.token)
+            check('㊽ 非核销单挂返还=400 NOT_TIMECARD_SHEET', rel3.status === 400 && rel3.data.error.code === 'NOT_TIMECARD_SHEET', JSON.stringify(rel3.data).slice(0, 120))
+          }
           dbx.prepare("DELETE FROM member_timecards WHERE id IN ('tc_race','tc_grp')").run()
         }
       }

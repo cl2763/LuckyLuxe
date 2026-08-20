@@ -8935,12 +8935,49 @@ function amendSettlement(settlementId, body = {}, adminSession = {}) {
   const releaseCoupon = Boolean(body.releaseCoupon) && Boolean(row.coupon_grant_id)
   const couponGrant = releaseCoupon ? db.prepare('SELECT * FROM coupon_grants WHERE id = ? AND tenant_id = ?').get(row.coupon_grant_id, tenantId) : null
   if (releaseCoupon && !couponGrant) throw apiError(404, 'NOT_FOUND', '这张单关联的券找不到了,无法退券。')
+  /* B2-8 次卡售后返还(贴券退回先例,涉钱零新径):releaseTimecard=true 时——
+     ①次数返还 used_times−1;②积分回冲=台账追加负 adjust 行(赚分行是推导值,负行净额即回冲);
+     ③收入红字=冲「服务收入-次卡核销」原行(reversalOf 链,账本只追加)。
+     防重放:同一张单只许返还一次(扫历史更正的 timecardReleased 标)。
+     业绩回冲=拍板件留口:签署单 immutable(触发器)+业绩聚合直读 perf_base_cents,
+     现状普通金额更正同样不回冲业绩——聚合层减更正=改口径,报 Cowork 拍板后另批落。 */
+  if (Boolean(body.releaseTimecard) && !row.timecard_id) throw apiError(400, 'NOT_TIMECARD_SHEET', '这张单不是次卡核销单,没有次数可返还。')
+  const releaseTimecard = Boolean(body.releaseTimecard) && Boolean(row.timecard_id)
+  let tcRelease = null
+  if (releaseTimecard) {
+    const already = db.prepare("SELECT 1 AS hit FROM settlement_amendments WHERE settlement_id = ? AND after_json LIKE '%\"timecardReleased\":true%'").get(row.id)
+    if (already) throw apiError(409, 'TIMECARD_ALREADY_RELEASED', '这张单的次卡次数已返还过,不能重复返还。')
+    const card = db.prepare('SELECT * FROM member_timecards WHERE id = ? AND tenant_id = ?').get(row.timecard_id, tenantId)
+    if (!card) throw apiError(404, 'NOT_FOUND', '这张单关联的次卡找不到了。')
+    if (card.used_times <= 0) throw apiError(400, 'BAD_REQUEST', '这张卡没有已核销的次数可返还。')
+    const tcItem = db.prepare("SELECT * FROM settlement_items WHERE settlement_id = ? AND kind = 'timecard'").get(row.id)
+    const unitCents = tcItem ? tcItem.amount_cents : 0
+    tcRelease = { cardId: card.id, cardName: card.name, unitCents, pointsBack: Math.floor(unitCents / 100) }
+  }
   db.exec('BEGIN IMMEDIATE')
   try {
     db.prepare(`INSERT INTO settlement_amendments (id, tenant_id, settlement_id, before_json, after_json, reason, amount_delta_cents, auto_balance_adjust_cents, amended_by, amended_at, created_at)
       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`)
-      .run(randomId('samd'), tenantId, row.id, JSON.stringify(before), JSON.stringify({ totalCents: newTotal, reason: body.reason || '', couponReleased: releaseCoupon }),
+      .run(randomId('samd'), tenantId, row.id, JSON.stringify(before), JSON.stringify({ totalCents: newTotal, reason: body.reason || '', couponReleased: releaseCoupon, timecardReleased: releaseTimecard }),
         String(body.reason || '').slice(0, 300), delta, autoAdjust, adminSession.email || 'owner', now, now)
+    if (tcRelease) {
+      const back = db.prepare('UPDATE member_timecards SET used_times = used_times - 1 WHERE id = ? AND used_times > 0').run(tcRelease.cardId)
+      if (!back.changes) throw apiError(409, 'TIMECARD_RELEASE_RACE', '次卡次数返还失败(已被并发改动),请重试。')
+      if (tcRelease.pointsBack > 0) {
+        db.prepare('INSERT INTO points_transactions (id, tenant_id, user_id, type, amount, ref_id, note, created_by, created_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)')
+          .run(randomId('pts'), tenantId, row.user_id, 'adjust', -tcRelease.pointsBack, row.id,
+            `售后返还次卡次数,回冲当次积分 · 服务单 ${row.code} · ${tcRelease.cardName}`, adminSession.email || 'owner', now)
+      }
+      if (tcRelease.unitCents > 0) {
+        const orig = db.prepare("SELECT id FROM finance_transactions WHERE tenant_id = ? AND category = '服务收入-次卡核销' AND tags = ? AND amount_cents > 0 LIMIT 1").get(tenantId, row.code)
+        insertFinanceTransaction({
+          type: 'income', source: 'settlement', category: '服务收入-次卡核销', tags: row.code,
+          amountCents: -tcRelease.unitCents, payChannel: 'times_card', occurredOn: todayOf(tenantId),
+          note: `红字冲销 · 售后返还次卡次数 · 服务单 ${row.code}`, createdBy: adminSession.email || 'owner',
+          reversalOf: orig ? orig.id : null, tenantId
+        })
+      }
+    }
     if (couponGrant) {
       db.prepare("UPDATE coupon_grants SET status = 'active', used_at = NULL, settlement_id = NULL, settlement_code = NULL WHERE id = ?").run(couponGrant.id)
       logCouponGrant({
