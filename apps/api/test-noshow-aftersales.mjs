@@ -993,6 +993,10 @@ const main = async () => {
           const shA = sA.data.settlements[0]
           check('㊻ A 金额面:subtotal=18000+times_card 腿=18000(现金腿 0=B2-9)', shA.subtotalCents === 18000 && (shA.payments || []).some((p) => p.leg === 'times_card' && p.amountCents === 18000) && !(shA.payments || []).some((p) => p.leg === 'offline' && p.amountCents > 0), JSON.stringify(shA.payments))
           check('㊻ A 留痕:条目名含「第 3/3 次」', (shA.items || []).some((i) => i.name && i.name.includes('第 3/3 次')), JSON.stringify((shA.items || []).map((i) => i.name)))
+          // 组级 preview:次卡覆盖不进现金应收(B1 施工中抓的组级洞——不减的话应收把折算价再收一遍现金)
+          const pv = await request('/admin/settlements/preview', { method: 'POST', body: JSON.stringify(mkSheet({})) }, shop.token)
+          const gpay = pv.data.group.payment
+          check('㊻ 组级 preview:offlineDue 不含次卡覆盖(cover=18000,应收=0)', gpay.timecardCoverCents === 18000 && gpay.offlineDueCents === 0, JSON.stringify(gpay))
           // 并发面:同一张剩1的卡,另一端再开一张待签单 B(建单许可=预嘱口径)
           const sB = await request('/admin/settlements', { method: 'POST', body: JSON.stringify(mkSheet({})) }, shop.token)
           check('㊻ 并发前提:两端各持一张待签单(建单不硬拦,裁决在签署)', sB.status === 201 || sB.status === 200, JSON.stringify(sB.data).slice(0, 100))

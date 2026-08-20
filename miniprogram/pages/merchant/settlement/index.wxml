@@ -37,9 +37,22 @@
 
         <view class="sec">服务项目(单选自动替换)</view>
         <scroll-view class="cattabs" scroll-x>
-          <view class="chip {{grp.catId === c.id ? 'on' : ''}}" wx:for="{{cats}}" wx:for-item="c" wx:key="id" data-g="{{gi}}" data-id="{{c.id}}" bindtap="gPickCat">{{c.name}}</view>
+          <view class="chip {{grp.catId === c.id ? 'on' : ''}}" wx:for="{{cats}}" wx:for-item="c" wx:key="id" data-g="{{gi}}" data-id="{{c.id}}" bindtap="gPickCat">{{c.name}}<text wx:if="{{c.badge}}" class="tcbadge">{{c.badge}}</text></view>
         </scroll-view>
-        <view class="item" wx:for="{{grp.mainItems}}" wx:for-item="it" wx:key="id" data-g="{{gi}}" data-id="{{it.id}}" bindtap="gToggleMain">
+        <!-- B1 次卡大类(图 §四 屏1):卡列表(label 后端句;过期置灰点击拦)→组内选项目→金额=折算单价(后端算) -->
+        <block wx:if="{{grp.catId === '__timecard'}}">
+          <view class="item tccard {{it.on ? '' : ''}} {{!it.redeemable ? 'tcdead' : ''}}" wx:for="{{grp.tcCards}}" wx:for-item="it" wx:key="id" data-g="{{gi}}" data-id="{{it.id}}" bindtap="gPickTimecard">
+            <view class="ck {{it.on ? 'on' : ''}}">{{it.on ? '✓' : ''}}</view>
+            <view class="iname">{{it.label}}<text wx:if="{{it.expired}}" class="tcexp">已过期</text></view>
+          </view>
+          <view wx:if="{{grp.timecardId}}" class="sec">本次核销项目(卡关联组内选)</view>
+          <scroll-view wx:if="{{grp.timecardId}}" class="cattabs" scroll-x>
+            <view class="chip {{s.on ? 'on' : ''}}" wx:for="{{grp.tcServices}}" wx:for-item="s" wx:key="id" data-g="{{gi}}" data-id="{{s.id}}" bindtap="gPickTcService">{{s.name}}</view>
+          </scroll-view>
+          <view wx:if="{{grp.timecardId && !grp.tcServices.length}}" class="empty">卡关联组内暂无在售项目</view>
+          <view wx:if="{{grp.timecardId && grp.mainName}}" class="grppicked">本组:{{grp.mainName}}(金额=折算单价,签字扣一次)</view>
+        </block>
+        <view class="item" wx:if="{{grp.catId !== '__timecard'}}" wx:for="{{grp.mainItems}}" wx:for-item="it" wx:key="id" data-g="{{gi}}" data-id="{{it.id}}" bindtap="gToggleMain">
           <view class="ck {{it.on ? 'on' : ''}}">{{it.on ? '✓' : ''}}</view>
           <view class="iname">{{it.name}}</view>
           <view class="pr">
@@ -47,7 +60,7 @@
             <text class="now {{it.isFree ? 'free' : ''}}">{{it.priceText}}</text>
           </view>
         </view>
-        <view wx:if="{{!grp.mainItems.length}}" class="empty">该大类下暂无在售项目</view>
+        <view wx:if="{{!grp.mainItems.length && grp.catId !== '__timecard'}}" class="empty">该大类下暂无在售项目</view>
         <view wx:if="{{grp.mainId && grp.mainName}}" class="grppicked">本组主项目:{{grp.mainName}}(点其他大类里的项目=替换)</view>
 
         <view class="sec">加项目录(按本组主项目类别过滤) <text class="hint">按本组价格档计价</text></view>
@@ -197,6 +210,7 @@
       <view class="tl"><text>原价合计</text><text class="strike">{{view.listTotal}}</text></view>
       <view class="tl"><text>档位小计</text><text>{{view.subtotal}}</text></view>
       <view class="tl save"><text>{{view.discountLabel}}</text><text>{{view.discountTotal}}</text></view>
+      <view class="tl save" wx:if="{{view.hasTimecard}}"><text>次卡抵扣(签字扣次)</text><text>−{{view.timecardCover}}</text></view>
       <view class="tl" wx:if="{{view.hasStored}}"><text>储值抵扣</text><text>−{{view.storedDeduct}}</text></view>
       <view class="tl" wx:if="{{view.hasDeposit}}"><text>定金抵扣</text><text>−{{view.depositDeduct}}</text></view>
       <view class="tl big"><text>到店应收</text><text>{{view.total}}</text></view>

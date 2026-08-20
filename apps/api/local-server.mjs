@@ -11645,7 +11645,10 @@ async function route(req, res) {
       }))
       const sum = (k) => sheets.reduce((n, x) => n + (x[k] || 0), 0)
       const totalCents = sum('totalCents')
-      const pay = buildPaymentLegs({ tenantId, payerId, totalCents, payIntent: body.payIntent })
+      /* B②:次卡覆盖的部分不进组级现金/储值分解(B2-9)——不减的话组级应收会把折算价再收一遍现金。
+         per-sheet 腿本来就对,这里只是组级加总同口径。 */
+      const timecardCoverCents = sheets.reduce((n, x) => n + ((x.timecard && x.timecard.coverCents) || 0), 0)
+      const pay = buildPaymentLegs({ tenantId, payerId, totalCents: totalCents - timecardCoverCents, payIntent: body.payIntent })
       return json(res, 200, {
         sheets,
         group: {
@@ -11662,7 +11665,9 @@ async function route(req, res) {
             balanceAvailableCents: pay.balance.totalCents,
             storedUsedCents: pay.storedUsedCents,
             offlineDueCents: pay.remaining,
-            shortfallCents: Math.max(0, totalCents - pay.balance.totalCents)
+            // B②:组级次卡抵扣合计(前端自证行「次卡抵扣 −X」;0=无核销组,前端不渲染)
+            timecardCoverCents,
+            shortfallCents: Math.max(0, (totalCents - timecardCoverCents) - pay.balance.totalCents)
           }
         }
       })

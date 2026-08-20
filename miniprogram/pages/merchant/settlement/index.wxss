@@ -210,3 +210,9 @@
 .mchip.on{background:#2f2a22;color:#fff}
 .qlink.tap{color:#5b7a99;text-decoration:underline}
 .qbtn.dark{background:#2f2a22;color:#fff}
+
+/* B1 次卡大类(图 §四 屏1) */
+.tcbadge{display:inline-block;margin-left:6rpx;min-width:28rpx;padding:0 8rpx;background:#b98d5f;color:#fff;border-radius:999rpx;font-size:20rpx;text-align:center;line-height:32rpx}
+.tccard .iname{font-weight:600}
+.tcdead{opacity:.45}
+.tcexp{margin-left:10rpx;font-size:20rpx;color:#b3423a;border:1rpx solid #ecd5d2;border-radius:6rpx;padding:0 6rpx}
