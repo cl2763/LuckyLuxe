@@ -997,6 +997,12 @@ const main = async () => {
           const pv = await request('/admin/settlements/preview', { method: 'POST', body: JSON.stringify(mkSheet({})) }, shop.token)
           const gpay = pv.data.group.payment
           check('㊻ 组级 preview:offlineDue 不含次卡覆盖(cover=18000,应收=0)', gpay.timecardCoverCents === 18000 && gpay.offlineDueCents === 0, JSON.stringify(gpay))
+          // 血缘质询背书(Cowork 08-21):券/定金=价格层减免(恒等式使 totalCents 已扣),组级从未多算;
+          // 次卡=支付层覆盖(留在 subtotal 计积分/业绩)=第一个 sheet 级预定支付腿,故为「新通道漏接」非「组级全漏」。行为钉死:
+          const cg = await request('/admin/coupon-grants/custom', { method: 'POST', body: JSON.stringify({ userId: uid, amountCents: 2000, reason: '血缘质询背书:组级券 cover' }) }, shop.token)
+          const pvC = await request('/admin/settlements/preview', { method: 'POST', body: JSON.stringify({ userId: uid, payIntent: 'offline_full', settlements: [{ payIntent: 'offline_full', items: [{ serviceId: shop.serviceId, qty: 1 }], technicians: tech, servedPersonName: '', couponGrantId: cg.data.granted.id }] }) }, shop.token)  // 组级 plan 读 body 级 payIntent(sheet 级只管建单腿)——怪癖组级面,档案补记
+          const gC = pvC.data.group
+          check('㊻ 血缘背书:券 cover 组级本就正确(total=subtotal−券,offlineDue=total 不再多收)', gC.couponDiscountCents === 2000 && gC.totalCents === gC.subtotalCents - 2000 && gC.payment.offlineDueCents === gC.totalCents, JSON.stringify({ sub: gC.subtotalCents, cpn: gC.couponDiscountCents, total: gC.totalCents, due: gC.payment.offlineDueCents }))
           // 并发面:同一张剩1的卡,另一端再开一张待签单 B(建单许可=预嘱口径)
           const sB = await request('/admin/settlements', { method: 'POST', body: JSON.stringify(mkSheet({})) }, shop.token)
           check('㊻ 并发前提:两端各持一张待签单(建单不硬拦,裁决在签署)', sB.status === 201 || sB.status === 200, JSON.stringify(sB.data).slice(0, 100))

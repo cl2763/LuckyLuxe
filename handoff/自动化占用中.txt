@@ -165,3 +165,5 @@ D35(核查二抓获的跨店串味)已随本批修复推生产,详见总表 D35 
 - 引擎调用注记(2026-08-20,Cowork 令入册):createSettlementGroup 的 payIntent **只认 sheet 级**
   (body 级被静默忽略——函数只展开 sheet)。任何端发结算请求,payIntent 一律写进 settlements[i] 里;
   测试夹具同规。㊻ 首跑就是 body 级被忽略 → C 单默认档烧光余额 → D53 前提假红,查了一轮才定位。
+  补记(08-21):payIntent 双层——**组级 preview 的支付分解读 body 级**,建单各 sheet 腿读 sheet 级;
+  正装前端两级都发(formBody+groupSheets)。测试/脚本只发 sheet 级=组级落默认档(㊻ 背书断言首跑即中招)。
