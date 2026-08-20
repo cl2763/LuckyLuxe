@@ -9346,6 +9346,47 @@ function perfSplitDefault(tenantId) {
   return [70, 30] // 主 70 / 副 30,店主可在设置里改
 }
 
+/* 售后业绩扣回(店主拍板 a 案+三裁,2026-08-21):聚合层负记录的**唯一实现**——
+   日结视图净额+确认快照线(daily_close_lines)继承到排行/工资/我的业绩/目标,任何读方不许自己再算(四之九)。
+   范围钉死:只有 timecardReleased 更正产生扣回;普通更正/券/定金不动业绩(规则③原样)。
+   归属日=返还发生日(裁①案X:已确认日结不追溯漂移;确认后才发生的返还由既有 R1「数字已过期→重开」机制收口;
+   跨月售后扣当月=已知后果入册,《财务总逻辑》§十-7 同段写明)。
+   技师归属(裁②):单技师全额;双技师按日结 share 比例摊、末位吃余数;未分配即返还(罕见)按店默认比例摊。 */
+function perfReleaseRowsOn(date, tenantId) {
+  const amendments = db.prepare(`SELECT a.amended_at, s.id AS sid FROM settlement_amendments a
+    JOIN settlements s ON s.id = a.settlement_id
+    WHERE a.tenant_id = ? AND a.after_json LIKE '%"timecardReleased":true%'`).all(tenantId)
+  const out = []
+  for (const r of amendments) {
+    if (localParts(new Date(r.amended_at), tenantTimezone(tenantId)).date !== date) continue
+    const item = db.prepare("SELECT amount_cents, name_snapshot FROM settlement_items WHERE settlement_id = ? AND kind = 'timecard'").get(r.sid)
+    const unit = item ? item.amount_cents : 0
+    if (!unit) continue
+    const s = db.prepare('SELECT * FROM settlements WHERE id = ?').get(r.sid)
+    const shares = settlementPerfShares(s, tenantId)
+    const base = settlementPerfBaseCents(s)
+    let parts
+    if (shares.length <= 1) {
+      parts = shares.length ? [{ technicianId: shares[0].technicianId, deductCents: unit }] : []
+    } else if (shares.every((x) => x.shareCents !== null) && base > 0) {
+      parts = shares.map((x) => ({ technicianId: x.technicianId, deductCents: Math.floor(unit * x.shareCents / base) }))
+      parts[parts.length - 1].deductCents += unit - parts.reduce((n, p) => n + p.deductCents, 0)
+    } else {
+      const arr = perfSplitDefault(tenantId)
+      parts = shares.map((x, i) => ({ technicianId: x.technicianId, deductCents: Math.floor(unit * (Number(arr[i]) || 0) / 100) }))
+      if (parts.length) parts[parts.length - 1].deductCents += unit - parts.reduce((n, p) => n + p.deductCents, 0)
+    }
+    for (const p of parts) {
+      out.push({
+        technicianId: p.technicianId, deductCents: p.deductCents, code: s.code, settlementId: s.id,
+        itemName: (item && item.name_snapshot) || '', releasedAt: r.amended_at,
+        label: `售后扣回 · ${s.code}`
+      })
+    }
+  }
+  return out
+}
+
 // 当日冲卡:沿用 2026-08-01 就加好的 stored_value_transactions.technician_id(这笔充值算谁促成)
 function rechargeByTechOn(date, tenantId) {
   const tz = tenantTimezone(tenantId)
@@ -9435,7 +9476,7 @@ function dailyCloseView(date, tenantId, { lang = 'zh' } = {}) {
      以「无需分配 · 待确认」的形态出现,让店长看得见自己确认的是哪些单。 */
   const awaitingConfirm = []
   const perTech = {}
-  const bump = (id) => (perTech[id] = perTech[id] || { technicianId: id, name: (techNames[id] || {}).name || id, orderCount: 0, perfCents: 0, cardUsedCents: 0, pendingCount: 0 })
+  const bump = (id) => (perTech[id] = perTech[id] || { technicianId: id, name: (techNames[id] || {}).name || id, orderCount: 0, perfCents: 0, cardUsedCents: 0, pendingCount: 0, releaseDeductCents: 0 })
   const settlements = rows.map((r) => {
     const shares = settlementPerfShares(r, tenantId)
     const cardUsed = settlementCardUsedCents(r.id, tenantId)
@@ -9498,6 +9539,14 @@ function dailyCloseView(date, tenantId, { lang = 'zh' } = {}) {
 
   const recharge = rechargeByTechOn(date, tenantId)
   for (const id of Object.keys(recharge)) bump(id)
+  /* 售后业绩扣回(a 案):返还发生日入负记录净额;显式行随视图下发(裁③:数字自证)。
+     确认日结快照的就是这里的净额 → 排行/工资/我的业绩(读快照线)自动继承,零分叉。 */
+  const releaseRows = perfReleaseRowsOn(date, tenantId)
+  for (const rel of releaseRows) {
+    const bucket = bump(rel.technicianId)
+    bucket.perfCents -= rel.deductCents
+    bucket.releaseDeductCents += rel.deductCents
+  }
   const technicians = Object.values(perTech).map((t) => {
     const rc = recharge[t.technicianId] || { firstCents: 0, renewCents: 0 }
     const target = targets[t.technicianId] || null
@@ -9575,12 +9624,20 @@ function dailyCloseView(date, tenantId, { lang = 'zh' } = {}) {
         }))
     ]
     : []
-  const staleClose = Boolean(snapshot) && (driftCount !== 0 || driftCents !== 0 || unsigned.length > 0)
+  /* 售后扣回补一位(R1 同精神=快照对账式判过期):确认后才发生的返还只动业绩不动单数/营收,
+     原两位对账抓不到 —— 拿实时净业绩总额跟确认时存下的快照线总额对,不齐即过期,逼走重开链。 */
+  const linePerfSum = confirmedAt
+    ? db.prepare('SELECT COALESCE(SUM(perf_cents), 0) AS s FROM daily_close_lines WHERE tenant_id = ? AND close_id = ?').get(tenantId, closeRow.id).s
+    : 0
+  const livePerfSum = Object.values(perTech).reduce((n, t) => n + (t.pendingCount ? 0 : t.perfCents), 0)
+  const perfDrift = Boolean(snapshot) && Object.values(perTech).every((t) => !t.pendingCount) && linePerfSum !== livePerfSum
+  const staleClose = Boolean(snapshot) && (driftCount !== 0 || driftCents !== 0 || unsigned.length > 0 || perfDrift)
   if (staleClose) {
     const bits = []
     if (driftCount !== 0 || driftCents !== 0) {
       bits.push(`确认时记的是 ${snapshot.orderCount} 单 / ${formatMoneyCents(snapshot.revenueCents, tenantId, 'auto')},现在实际是 ${liveOrderCount} 单 / ${formatMoneyCents(liveRevenueCents, tenantId, 'auto')}`)
     }
+    if (perfDrift) bits.push(`业绩净额已变(确认时 ${formatMoneyCents(linePerfSum, tenantId, 'auto')} → 现在 ${formatMoneyCents(livePerfSum, tenantId, 'auto')},多为确认后发生的售后扣回)`)
     if (unsigned.length) bits.push(`另有 ${unsigned.length} 张没签字(${nameHint})`)
     blockers.push({
       code: 'STALE_CLOSE',
@@ -9605,6 +9662,14 @@ function dailyCloseView(date, tenantId, { lang = 'zh' } = {}) {
     // 不需要分配、但同样等着店长点「确认日结」的单
     awaitingConfirm,
     technicians,
+    // 裁③:「售后扣回」显式行(负数+关联单号),日结页两端直接渲染,数字自证
+    afterSalesDeductions: releaseRows.map((rel) => ({
+      technicianId: rel.technicianId,
+      technicianName: (techNames[rel.technicianId] || {}).name || rel.technicianId,
+      deductCents: rel.deductCents, code: rel.code, settlementId: rel.settlementId,
+      itemName: rel.itemName, label: rel.label,
+      timeText: localParts(new Date(rel.releasedAt), tenantTimezone(tenantId)).time.slice(0, 5)
+    })),
     anomalies: dailyAnomalies(rows, tenantId),
     canConfirm: blockers.length === 0,
     blockers,
@@ -9881,6 +9946,13 @@ function staffDailyRows(techId, month, tenantId, withSplit) {
   const rows = closed.map((r) => {
     const row = { date: r.date, orderCount: r.order_count, perfCents: r.perf_cents, pending: false }
     if (withSplit) row.cardUsedCents = r.card_used_cents
+    /* 裁③:售后扣回在员工端显式一行(负数+关联单号)——perf_cents 快照线已是净额,
+       这里只补「这笔减在哪」的自证明细,不再做任何计算(单源在 perfReleaseRowsOn)。 */
+    const rel = perfReleaseRowsOn(r.date, tenantId).filter((x) => x.technicianId === techId)
+    if (rel.length) {
+      row.afterSalesDeductCents = rel.reduce((n, x) => n + x.deductCents, 0)
+      row.deductions = rel.map((x) => ({ code: x.code, amountCents: -x.deductCents, label: x.label }))
+    }
     return row
   })
   // 有单但还没日结的天:标「待店长日结」,不显示金额 —— 数字没定格就不给

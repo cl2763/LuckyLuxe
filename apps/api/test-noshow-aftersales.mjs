@@ -1042,6 +1042,39 @@ const main = async () => {
             const rel3 = await request(`/admin/settlements/${shC.id}/amend`, { method: 'POST', body: JSON.stringify({ reason: '非核销单试探', releaseTimecard: true }) }, shop.token)
             check('㊽ 非核销单挂返还=400 NOT_TIMECARD_SHEET', rel3.status === 400 && rel3.data.error.code === 'NOT_TIMECARD_SHEET', JSON.stringify(rel3.data).slice(0, 120))
           }
+          // ===== ㊾ 业绩扣回(a 案三裁):日结净额+显式行 → 确认快照 → 排行/我的业绩(=工资同源)继承;反例=普通更正不动 =====
+          {
+            let view = (await request('/admin/daily-close', {}, shop.token)).data.dailyClose
+            const today = view.date
+            check('㊾ 日结显式行:售后扣回(负数+关联单号)在场', (view.afterSalesDeductions || []).some((d) => d.code === shA.code && d.deductCents === 18000), JSON.stringify(view.afterSalesDeductions))
+            const vt = view.technicians.find((t) => t.technicianId === shop.tech1)
+            check('㊾ 日结净额:tech1 releaseDeductCents=18000(净额已减)', vt && vt.releaseDeductCents === 18000, JSON.stringify(vt))
+            // 反例:普通金额更正(shD −1 元)不产生扣回、不动净额(范围钉死)
+            const beforePerf = vt.perfCents
+            const amdD = await request(`/admin/settlements/${shD.id}/amend`, { method: 'POST', body: JSON.stringify({ totalCents: shD.totalCents - 100, reason: '普通更正反例' }) }, shop.token)
+            check('㊾ 反例前提:普通更正成功', amdD.status === 200, JSON.stringify(amdD.data).slice(0, 80))
+            view = (await request(`/admin/daily-close?date=${today}`, {}, shop.token)).data.dailyClose
+            const vt2 = view.technicians.find((t) => t.technicianId === shop.tech1)
+            check('㊾ 反例:普通更正后业绩净额分毫不动+扣回行不增', vt2.perfCents === beforePerf && (view.afterSalesDeductions || []).length === (view.afterSalesDeductions || []).filter((d) => d.code === shA.code).length, JSON.stringify({ before: beforePerf, after: vt2.perfCents }))
+            // 撤清今天的待签单(别处夹具残留)→ 确认日结 → 快照线继承
+            for (const u of (view.blockers.find((b) => b.code === 'UNSIGNED') || { items: [] }).items || []) {
+              await request(`/admin/settlements/${u.settlementId}/void`, { method: 'POST', body: JSON.stringify({ reason: '㊾ 清场:确认日结前撤清待签夹具' }) }, shop.token)
+            }
+            view = (await request(`/admin/daily-close?date=${today}`, {}, shop.token)).data.dailyClose
+            if (view.canConfirm) {
+              const cf = await request('/admin/daily-close', { method: 'POST', body: JSON.stringify({ date: today }) }, shop.token)
+              check('㊾ 确认日结成功(净额入快照线)', cf.status === 200, JSON.stringify(cf.data).slice(0, 80))
+              const rank = (await request(`/admin/perf-ranking?period=day&date=${today}`, {}, shop.token)).data.ranking.ranking
+              const rk = rank.find((r) => r.technicianId === shop.tech1)
+              check('㊾ 排行继承:day 业绩=日结净额(同数同源)', rk && rk.perfCents === vt2.perfCents, JSON.stringify({ rank: rk && rk.perfCents, view: vt2.perfCents }))
+              const mp = (await request(`/admin/my-performance?technicianId=${shop.tech1}&month=${today.slice(0, 7)}`, {}, shop.token)).data.performance
+              const mpDay = (mp.daily || []).find((d) => d.date === today)
+              check('㊾ 员工端我的业绩:当日行=净额+扣回显式行(负数+单号)', mpDay && mpDay.perfCents === vt2.perfCents && (mpDay.deductions || []).some((d) => d.code === shA.code && d.amountCents === -18000), JSON.stringify(mpDay))
+              check('㊾ 月净额(hero=目标进度同块;=工资 monthPerfFromCloses 同源)含扣回', mp.hero && mp.hero.perfCents === vt2.perfCents, JSON.stringify({ hero: mp.hero && mp.hero.perfCents, view: vt2.perfCents }))
+            } else {
+              check('㊾ (跳过确认链)canConfirm=false:' + JSON.stringify(view.blockers.map((b) => b.code)), true)
+            }
+          }
           dbx.prepare("DELETE FROM member_timecards WHERE id IN ('tc_race','tc_grp')").run()
         }
       }
