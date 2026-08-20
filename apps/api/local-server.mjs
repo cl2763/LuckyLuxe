@@ -13877,12 +13877,15 @@ async function route(req, res) {
         const p = localParts(new Date(r.created_at), tz)
         // 结算扣卡的行把单号回链出来;手工耗卡没有单,前端显示 —
         const codeMatch = r.type === 'consume' ? String(r.note || '').match(/服务单\s+(\S+)\s+结算扣卡/) : null
+        /* B5 走查双端同病(四之九):渠道裸英文串(cash/wechat/manual)两端都在渲染——
+           句子后端唯一,这里出中文;顾客端 /my 流水渠道映射同批已对齐 */
+        const CH_ZH = { cash: '现金', wechat: '微信支付', alipay: '支付宝', card: '银行卡', manual: '门店补录', marketing: '营销赠送', unknown: '—' }
         return {
           id: r.id, type: r.type, at: `${p.date.slice(5)} ${p.time.slice(0, 5)}`,
           userName: r.user_name || '—', amountCents: r.amount_cents,
           handler: r.type === 'recharge' ? (r.technician_name || (r.created_by || '—')) : '',
           settlementCode: codeMatch ? codeMatch[1] : '',
-          source: r.type === 'consume' ? (codeMatch ? '结算抵扣' : '手工耗卡') : (r.pay_channel || '—'),
+          source: r.type === 'consume' ? (codeMatch ? '结算抵扣' : '手工耗卡') : (CH_ZH[r.pay_channel] || r.pay_channel || '—'),
           note: r.note || '',
           // B3-3:代充回执确认态(充值行专属;随单充值=签字即确认)——未确认只标注,不阻塞
           customerConfirmed: r.type === 'recharge' ? Boolean(r.customer_confirmed_at) : null

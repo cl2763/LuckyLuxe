@@ -2,7 +2,8 @@ const api = require('../../utils/api')
 const { curOf, ensureCurrencyCached, money, moneyFromYuan } = require('../../utils/storecurrency')
 
 const TYPE_LABEL = { recharge: '充值到账', consume: '耗卡', bonus: '充值赠送', reversal: '更正冲销', migrate_opening: '期初迁移' }
-const CH_LABEL = { manual: '门店补录', wechat: '微信支付', stored_value: '门店核销', unknown: '' }
+/* B5 走查抓出:cash/card/alipay 漏映射=顾客回执卡上裸英文;marketing=赠送行渠道 */
+const CH_LABEL = { manual: '门店补录', wechat: '微信支付', stored_value: '门店核销', cash: '现金', card: '银行卡', alipay: '支付宝', marketing: '营销赠送', unknown: '' }
 
 Page({
   data: { balance: 0, level: '', packages: [], txns: [], pendingConfirm: [], loading: true },
