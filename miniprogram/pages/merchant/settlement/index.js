@@ -33,6 +33,7 @@ function newGroup(tierDefault, firstCat) {
     catId: firstCat || '',
     mainId: '',                 // 组内单选(替换=换掉它)
     timecardId: '', timecardServiceId: '',  // B1 次卡核销组(与 mainId 互斥;金额=折算单价,后端算)
+    purchasePackageId: '',                  // B1-6 现场购卡组(三态互斥:主项目/已有卡/购卡)
     addonIds: {},               // serviceId -> qty(按指用数量,其余恒 1)
     customItems: [], customName: '', customAmount: '',
     selectedTechs: [],
@@ -111,6 +112,9 @@ Page({
         const tc = await api.adminGet(`/admin/customers/${encodeURIComponent(this.data.userId)}/timecards`).catch(() => null)
         timecards = (tc && tc.timecards) || []
       }
+      // B1-6:现场购卡套餐(员工可读口;有在售 times 套餐才出「+现场购卡」入口)
+      const tp = await api.adminGet('/admin/timecard-packages').catch(() => null)
+      const timecardPackages = (tp && tp.packages) || []
       // 组内价格体系:默认按系统会员判定自动选档(现有口径,落到每一组;可手动改,改档留痕)
       let tierDefault = 'list'
       if (this.data.userId) {
@@ -128,8 +132,9 @@ Page({
       this.setData({
         ready: true,
         cats: categories.map((c) => ({ id: c.id, name: c.name }))
-          .concat(timecards.length ? [{ id: '__timecard', name: '次卡', badge: timecards.filter((c) => c.redeemable).length }] : []),
+          .concat((timecards.length || timecardPackages.length) ? [{ id: '__timecard', name: '次卡', badge: timecards.filter((c) => c.redeemable).length }] : []),
         timecards,
+        timecardPackages,
         roster: (techs.technicians || []).map((t) => ({ id: t.id, name: t.name, title: t.title || '' })),
         depositDeductible: dep && dep.config ? dep.config.deductible !== false : true,
         depositApplied: Boolean(this.data.bookingId),
@@ -203,14 +208,18 @@ Page({
     // B1 次卡核销组:卡列表(label 后端句/过期灰)+组内项目 chips(project_group→同名二级分类,空组=全部主项目)
     if (g.catId === '__timecard') {
       g.tcCards = (this.data.timecards || []).map((c) => Object.assign({}, c, { on: g.timecardId === c.id }))
+      g.tcPkgs = (this.data.timecardPackages || []).map((p) => Object.assign({}, p, { on: g.purchasePackageId === p.id }))
       const card = (this.data.timecards || []).find((c) => c.id === g.timecardId)
-      g.tcServices = card
+      const pkg = (this.data.timecardPackages || []).find((p) => p.id === g.purchasePackageId)
+      const groupName = card ? card.projectGroup : (pkg ? pkg.projectGroup : null)
+      g.tcServices = (card || pkg)
         ? all.filter((i) => (i.itemKind || 'main') === 'main')
-          .filter((i) => !card.projectGroup || this.catNameOf(i.categoryId) === card.projectGroup)
+          .filter((i) => !groupName || this.catNameOf(i.categoryId) === groupName)
           .map((i) => ({ id: i.id, name: i.nameZh, on: g.timecardServiceId === i.id }))
         : []
-      g.tcName = card ? card.name : ''
-    } else { g.tcCards = []; g.tcServices = []; g.tcName = '' }
+      g.tcName = card ? card.name : (pkg ? pkg.name : '')
+      g.tcMode = card ? 'redeem' : (pkg ? 'purchase' : '')
+    } else { g.tcCards = []; g.tcPkgs = []; g.tcServices = []; g.tcName = ''; g.tcMode = '' }
     // 加项按本组主项目类别过滤(甲/睫域启发式;未归类各组都显示;S1 可配映射落地前的代行)
     const main = all.find((x) => x.id === g.mainId)
     const groupDomain = main ? domainOfName(this.catNameOf(main.categoryId)) : null
@@ -228,7 +237,7 @@ Page({
     })
     const sorted = order.filter((k) => k !== '其他加项').concat(order.includes('其他加项') ? ['其他加项'] : [])
     g.addonGroups = sorted.map((k) => groupMap[k])
-    g.mainName = main ? main.nameZh : (g.timecardId ? `次卡核销 · ${g.tcName}` : '')
+    g.mainName = main ? main.nameZh : (g.timecardId ? `次卡核销 · ${g.tcName}` : (g.purchasePackageId ? `现场购卡 · ${g.tcName}(当场核销第 1 次)` : ''))
     // 收起态摘要(图 屏2 上半):主项 · 技师;下一行 档位 · 加项 · 自选 · 被服务者
     const techNames = g.selectedTechs.map((id) => ((this.data.roster.find((t) => t.id === id) || {}).name)).filter(Boolean)
     const addonNames = Object.keys(g.addonIds).map((id) => ((all.find((x) => x.id === id) || {}).nameZh)).filter(Boolean)
@@ -273,7 +282,7 @@ Page({
     const groups = this.data.groups.slice()
     const grp = groups[g]
     grp.mainId = grp.mainId === id ? '' : id
-    if (grp.mainId && grp.timecardId) { grp.timecardId = ''; grp.timecardServiceId = ''; wx.showToast({ title: '本组切回普通开单,已取消次卡核销', icon: 'none' }) }
+    if (grp.mainId && (grp.timecardId || grp.purchasePackageId)) { grp.timecardId = ''; grp.purchasePackageId = ''; grp.timecardServiceId = ''; wx.showToast({ title: '本组切回普通开单,已取消次卡', icon: 'none' }) }
     // 合同规则④:换主项目后,类别不符的加项自动清除并提示
     const dropped = this.dropMismatchedAddons(grp)
     this.setData({ groups })
@@ -292,7 +301,22 @@ Page({
     else {
       grp.timecardId = id
       grp.timecardServiceId = ''
+      grp.purchasePackageId = ''
       if (grp.mainId) { grp.mainId = ''; wx.showToast({ title: '本组切为次卡核销,已清除主项目', icon: 'none' }) }
+    }
+    this.setData({ groups }); this.renderAll(); this.refresh()
+  },
+  // B1-6:现场购卡选套餐(三态互斥:清已有卡与主项目;当场核销第 1 次=仍需组内选项目)
+  gPickPurchasePkg(e) {
+    const { g, id } = e.currentTarget.dataset
+    const groups = this.data.groups.slice()
+    const grp = groups[g]
+    if (grp.purchasePackageId === id) { grp.purchasePackageId = ''; grp.timecardServiceId = '' }
+    else {
+      grp.purchasePackageId = id
+      grp.timecardServiceId = ''
+      grp.timecardId = ''
+      if (grp.mainId) { grp.mainId = ''; wx.showToast({ title: '本组切为现场购卡,已清除主项目', icon: 'none' }) }
     }
     this.setData({ groups }); this.renderAll(); this.refresh()
   },
@@ -577,7 +601,8 @@ Page({
         tierChangedFrom: g.tierChanged ? g.tierDefault : undefined,
         items,
         timecardId: g.timecardId || undefined,
-        timecardServiceId: g.timecardId ? (g.timecardServiceId || undefined) : undefined,
+        purchasePackageId: g.purchasePackageId || undefined,
+        timecardServiceId: (g.timecardId || g.purchasePackageId) ? (g.timecardServiceId || undefined) : undefined,
         customItems: g.customItems.map((c) => ({ name: c.name, amountCents: c.amountCents })),
         servedPersonName: g.servedPersonName || '',
         // 规则⑧:分配随单记录(原样恢复=按数字位提交,不做过滤校验——别加戏)

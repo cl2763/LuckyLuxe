@@ -45,12 +45,18 @@
             <view class="ck {{it.on ? 'on' : ''}}">{{it.on ? '✓' : ''}}</view>
             <view class="iname">{{it.label}}<text wx:if="{{it.expired}}" class="tcexp">已过期</text></view>
           </view>
-          <view wx:if="{{grp.timecardId}}" class="sec">本次核销项目(卡关联组内选)</view>
-          <scroll-view wx:if="{{grp.timecardId}}" class="cattabs" scroll-x>
+          <!-- B1-6 现场购卡入口(图 §四 屏1:顾客没卡?当场买当场用):选套餐→组内选项目→一次签署分行 -->
+          <view wx:if="{{grp.tcPkgs.length}}" class="sec">＋ 现场购卡(顾客没卡?当场买当场用)</view>
+          <view class="item tccard {{it.on ? '' : ''}}" wx:if="{{grp.tcPkgs.length}}" wx:for="{{grp.tcPkgs}}" wx:for-item="it" wx:key="id" data-g="{{gi}}" data-id="{{it.id}}" bindtap="gPickPurchasePkg">
+            <view class="ck {{it.on ? 'on' : ''}}">{{it.on ? '✓' : ''}}</view>
+            <view class="iname">{{it.label}}</view>
+          </view>
+          <view wx:if="{{grp.tcMode}}" class="sec">本次核销项目({{grp.tcMode === 'purchase' ? '新卡' : '卡'}}关联组内选)</view>
+          <scroll-view wx:if="{{grp.tcMode}}" class="cattabs" scroll-x>
             <view class="chip {{s.on ? 'on' : ''}}" wx:for="{{grp.tcServices}}" wx:for-item="s" wx:key="id" data-g="{{gi}}" data-id="{{s.id}}" bindtap="gPickTcService">{{s.name}}</view>
           </scroll-view>
-          <view wx:if="{{grp.timecardId && !grp.tcServices.length}}" class="empty">卡关联组内暂无在售项目</view>
-          <view wx:if="{{grp.timecardId && grp.mainName}}" class="grppicked">本组:{{grp.mainName}}(金额=折算单价,签字扣一次)</view>
+          <view wx:if="{{grp.tcMode && !grp.tcServices.length}}" class="empty">卡关联组内暂无在售项目</view>
+          <view wx:if="{{grp.tcMode && grp.mainName}}" class="grppicked">本组:{{grp.mainName}}(金额=折算单价,签字{{grp.tcMode === 'purchase' ? '购卡+扣第 1 次' : '扣一次'}})</view>
         </block>
         <view class="item" wx:if="{{grp.catId !== '__timecard'}}" wx:for="{{grp.mainItems}}" wx:for-item="it" wx:key="id" data-g="{{gi}}" data-id="{{it.id}}" bindtap="gToggleMain">
           <view class="ck {{it.on ? 'on' : ''}}">{{it.on ? '✓' : ''}}</view>

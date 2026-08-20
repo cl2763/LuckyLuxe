@@ -1152,6 +1152,9 @@ const main = async () => {
             const dcv = (await request('/admin/daily-close', {}, shop.token)).data.dailyClose
             check('裁① 日结单列:售卡 1 张 +54000(预收)', dcv.timecardSummary && dcv.timecardSummary.soldCount === 1 && dcv.timecardSummary.soldCents === 54000, JSON.stringify(dcv.timecardSummary))
             check('裁① 日结单列:核销次数与折算合计在场(≥2 次,含 18000×n)', dcv.timecardSummary.redeemCount >= 2 && dcv.timecardSummary.redeemCents >= 36000, JSON.stringify(dcv.timecardSummary))
+            // B1-6:员工可读现场购卡套餐口(⑭ 同先例只读;开单是员工干活的页)
+            const tpl = await request('/admin/timecard-packages', {}, staffToken)
+            check('B1-6 员工可读套餐口:200+label 后端句', tpl.status === 200 && (tpl.data.packages || []).some((x) => x.id === pk.id && /守护\(3次卡\) · 3 次/.test(x.label)), JSON.stringify(tpl.data).slice(0, 160))
             dbx.prepare("DELETE FROM member_timecards WHERE id IN ('tc_x1', ?)").run(newCard.id)
           }
           dbx.prepare("DELETE FROM member_timecards WHERE id IN ('tc_race','tc_grp','tc_dual')").run()
@@ -1189,6 +1192,11 @@ const main = async () => {
       const miniOrders = readFileSync(join(ROOT42, 'miniprogram/pages/merchant/orders/index.js'), 'utf8')
       check('㊸ D52 网页全部预约日期组倒序(最近日期优先)', /Object\.keys\(grouped\)\.sort\(\(a, b\) => b\.localeCompare\(a\)\)/.test(adminJs) && !/Object\.keys\(grouped\)\.sort\(\)\.map/.test(adminJs))
       check('㊸ D52 商家小程序全部订单日期组倒序在场(双端同口径锚)', /Object\.keys\(map\)\.sort\(\(a, b\) => b\.localeCompare\(a\)\)/.test(miniOrders))
+      // B1/B1-6:结算页次卡大类+现场购卡入口 wiring 在场(伪类/选卡/选套餐/三态互斥/sheet 字段)
+      const settleJs = readFileSync(join(ROOT42, 'miniprogram/pages/merchant/settlement/index.js'), 'utf8')
+      const settleWxml = readFileSync(join(ROOT42, 'miniprogram/pages/merchant/settlement/index.wxml'), 'utf8')
+      check('B1 结算页次卡大类 wiring 在场', settleJs.includes("'__timecard'") && settleJs.includes('gPickTimecard') && settleJs.includes('timecardId: g.timecardId || undefined'))
+      check('B1-6 现场购卡入口 wiring 在场(选套餐+三态互斥+sheet 字段)', settleJs.includes('gPickPurchasePkg') && settleJs.includes('purchasePackageId: g.purchasePackageId || undefined') && settleWxml.includes('现场购卡(顾客没卡?当场买当场用)'))
       // ㊹ 拍板③(08-20 双端统一):未签署结算单不能发起售后——两端「转售后」前置在场;网页钮+弹层在场
       const srv = readFileSync(join(ROOT42, 'apps/api/local-server.mjs'), 'utf8')
       check('㊹ 网页「转售后」钮:仅已完成且已签署(listBadgeKind 判据=后端徽标唯一持有)+弹层在场', adminJs.includes('data-convert-aftersales') && adminJs.includes("['signed', 'amended'].includes(booking.listBadgeKind)") && adminJs.includes("title: '转售后'"))

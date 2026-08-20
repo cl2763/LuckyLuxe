@@ -12338,6 +12338,18 @@ async function route(req, res) {
     if (!r.changes) throw apiError(404, 'NOT_FOUND', 'Package not found.')
     return json(res, 200, { deleted: true })
   }
+  /* B1-6:现场购卡选套餐——员工可读(开单是员工干活的页;⑭ 技师可读充值档位同先例,只读)。
+     只回在售 times 套餐,label 后端句(三端同句)。 */
+  if (req.method === 'GET' && path === '/admin/timecard-packages') {
+    const rows = db.prepare("SELECT * FROM membership_packages WHERE tenant_id = ? AND kind = 'times' AND is_active = 1 ORDER BY sort_order ASC, created_at ASC").all(currentTenantId())
+    return json(res, 200, {
+      packages: rows.filter((r) => r.times_count > 0 && r.price_cents > 0).map((r) => ({
+        id: r.id, name: r.name, priceCents: r.price_cents, timesCount: r.times_count,
+        validDays: r.valid_days || null, projectGroup: r.project_group || '',
+        label: `${r.name} · ${r.times_count} 次 · ${formatMoneyCents(r.price_cents, r.tenant_id, 'auto')}${r.valid_days ? ` · ${r.valid_days} 天有效` : ' · 长期有效'}`
+      }))
+    })
+  }
   /* 裁②升级(店主 08-21):储值买卡店级开关,默认关;落位=会员与营销·次卡页签 */
   if (req.method === 'GET' && path === '/admin/timecard-settings') {
     return json(res, 200, { allowStoredPurchase: allowStoredPurchase(currentTenantId()) })
