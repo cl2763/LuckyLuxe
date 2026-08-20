@@ -355,7 +355,8 @@ function setupDatabase() {
       pay_channel TEXT NOT NULL DEFAULT 'unknown',
       note TEXT,
       created_by TEXT,
-      created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
+      created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+      customer_confirmed_at TEXT
     );
     CREATE INDEX IF NOT EXISTS idx_stored_value_user ON stored_value_transactions(tenant_id, user_id);
     CREATE TABLE IF NOT EXISTS finance_targets (
@@ -7079,13 +7080,13 @@ function storedValueBalanceCents(userId, tenantId = currentTenantId()) {
     .get(tenantId, userId).balance
 }
 
-function insertStoredValueTransaction({ userId, type, amountCents, payChannel = 'unknown', note = '', createdBy = 'system', createdAt = null, tenantId = currentTenantId(), technicianId = null }) {
+function insertStoredValueTransaction({ userId, type, amountCents, payChannel = 'unknown', note = '', createdBy = 'system', createdAt = null, tenantId = currentTenantId(), technicianId = null, customerConfirmedAt = null }) {
   const id = randomId('sv')
   const signed = type === 'recharge' ? Math.abs(amountCents) : (type === 'consume' ? -Math.abs(amountCents) : Math.round(amountCents))
   db.prepare(`
-    INSERT INTO stored_value_transactions (id, tenant_id, user_id, type, amount_cents, pay_channel, note, created_by, created_at, technician_id)
-    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-  `).run(id, tenantId, userId, type, signed, payChannel, note, createdBy, createdAt || iso(new Date()), technicianId || null)
+    INSERT INTO stored_value_transactions (id, tenant_id, user_id, type, amount_cents, pay_channel, note, created_by, created_at, technician_id, customer_confirmed_at)
+    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+  `).run(id, tenantId, userId, type, signed, payChannel, note, createdBy, createdAt || iso(new Date()), technicianId || null, customerConfirmedAt || null)
   return db.prepare('SELECT * FROM stored_value_transactions WHERE id = ?').get(id)
 }
 
@@ -8215,9 +8216,11 @@ function assertSettlementInvariants(result) {
   /* B3(§十-7 施工):恒等式扩一项——购卡=总额面(收现金),不进 subtotal(售卡不计积分/业绩零特判):
      应收 ≡ 档位小计 − 定金 − 券 + 购卡。无购卡时 purchaseCents=0,恒等式与原式逐分相同。 */
   const purchase = Math.max(0, Math.round(result.purchaseCents || 0))
-  const due = result.subtotalCents - result.depositDeductCents - coupon + purchase
+  // B3-1:随单充值实收=总额面(与购卡同构,不进 subtotal=充值不计业绩/积分零特判)
+  const recharge = Math.max(0, Math.round(result.rechargeCents || 0))
+  const due = result.subtotalCents - result.depositDeductCents - coupon + purchase + recharge
   if (result.totalCents !== due) {
-    throw apiError(500, 'SETTLEMENT_INVARIANT', `应收对不上:${result.totalCents} ≠ ${result.subtotalCents} − ${result.depositDeductCents} − ${coupon} + 购卡 ${purchase}`)
+    throw apiError(500, 'SETTLEMENT_INVARIANT', `应收对不上:${result.totalCents} ≠ ${result.subtotalCents} − ${result.depositDeductCents} − ${coupon} + 购卡 ${purchase} + 充值 ${recharge}`)
   }
   if (result.perfBaseCents !== result.subtotalCents) {
     throw apiError(500, 'SETTLEMENT_INVARIANT', `分成基数对不上:${result.perfBaseCents} ≠ 档位小计 ${result.subtotalCents}(定金与券都不扣技师)`)
@@ -8328,9 +8331,12 @@ function couponOptionsFor({ tenantId, userId, subtotalCents, maxDeductCents, cat
 
 /* 支付构成的唯一实现:储值先烧迁移桶(不进本店收入)→ 再烧新桶 → 剩下的进线下腿。
    开单试算与「顾客改券后重算」共用这一份 —— 两处各写一遍迟早会算出两个数。 */
-function buildPaymentLegs({ tenantId, payerId, totalCents, payIntent, storedExcludeCents = 0 }) {
+function buildPaymentLegs({ tenantId, payerId, totalCents, payIntent, storedExcludeCents = 0, pendingRechargeCents = 0, excludeNote = '' }) {
   const balance = payerId ? storedValueBalanceDetail(payerId, tenantId) : { totalCents: 0, legacyCents: 0, normalCents: 0 }
   const plan = ['balance_plus_offline', 'recharge_then_balance', 'offline_full'].includes(payIntent) ? payIntent : 'balance_plus_offline'
+  /* B3-1 随单充值:挂单随签——签字时刻充值行才入账,规划期把「充+赠」并进新桶可抵范围
+     (充进来的钱落新桶,烧的顺序不变:旧桶→新桶+待充)。余额展示仍是现余额,充后余额单独回传。 */
+  const pendingRecharge = Math.max(0, Math.round(pendingRechargeCents) || 0)
   const legs = []
   let remaining = totalCents
   /* 裁②升级(店主 08-21):储值买卡=店级开关,默认关——关时购卡金额从储值可抵范围**摘出**,
@@ -8340,11 +8346,11 @@ function buildPaymentLegs({ tenantId, payerId, totalCents, payIntent, storedExcl
   if (plan !== 'offline_full') {
     const useLegacy = Math.min(Math.max(0, balance.legacyCents), remaining)
     if (useLegacy > 0) { legs.push({ leg: 'migrate_stored', amountCents: useLegacy, payerUserId: payerId, note: '迁移桶(不进本店收入)' }); remaining -= useLegacy }
-    const useNormal = Math.min(Math.max(0, balance.normalCents), remaining)
+    const useNormal = Math.min(Math.max(0, balance.normalCents) + pendingRecharge, remaining)
     if (useNormal > 0) { legs.push({ leg: 'stored_value', amountCents: useNormal, payerUserId: payerId }); remaining -= useNormal }
   }
   remaining += excluded
-  if (remaining > 0) legs.push({ leg: 'offline', amountCents: remaining, payerUserId: payerId, note: excluded > 0 ? '到店支付(含购卡:本店未开储值购卡)' : '到店支付' })
+  if (remaining > 0) legs.push({ leg: 'offline', amountCents: remaining, payerUserId: payerId, note: excluded > 0 ? (excludeNote || '到店支付(含购卡:本店未开储值购卡)') : '到店支付' })
   /* R6①(店主 2026-08-10 开检):支付构成里写着「储值卡抵扣(迁移余额)」——
      「迁移余额」是我们内部说法(老系统搬过来、不计本店收入的那一桶钱),
      顾客和店员都看不懂。文案统一由后端下发,前端只渲染,不再各端各写一份。 */
@@ -8414,10 +8420,32 @@ function setSettlementCoupon(settlementId, grantId, { by = 'customer', actor = '
     assertCouponFree(wanted, tenantId, row.id)
   }
   const couponDiscountCents = wanted ? opts.discountCents : 0
-  const totalCents = row.subtotal_cents - row.deposit_deduct_cents - couponDiscountCents
+  /* D54(B3-1 施工中扫出,四之八「支付腿重建方」类):这里是**支付腿重建方**,此前只认券/定金,
+     B② 次卡腿、B3 购卡、B3-1 随单充值三个新通道全漏——核销单上改一次券,times_card 腿被删、
+     次卡覆盖额被重新收现金(钱洞,与 B1 组级 preview 同类)。潜伏未炸:生产 0 签署单。
+     修法=与 computeSettlement 同口径重建:恒等式扩项 + 次卡 cover 腿回插 + 购卡/充值摘出储值。 */
+  const d54Purchase = row.purchase_json ? (() => { try { return JSON.parse(row.purchase_json) } catch { return null } })() : null
+  const d54Recharge = row.recharge_json ? (() => { try { return JSON.parse(row.recharge_json) } catch { return null } })() : null
+  const purchaseCents = d54Purchase ? Math.max(0, d54Purchase.priceCents || 0) : 0
+  const rechargeCents = d54Recharge ? Math.max(0, d54Recharge.amountCents || 0) : 0
+  const pendingRechargeCents = d54Recharge ? Math.max(0, (d54Recharge.amountCents || 0) + (d54Recharge.bonusCents || 0)) : 0
+  const totalCents = row.subtotal_cents - row.deposit_deduct_cents - couponDiscountCents + purchaseCents + rechargeCents
   const discountTotalCents = (row.list_total_cents - row.subtotal_cents) + couponDiscountCents
   const perfBaseCents = row.subtotal_cents // 基数 = 档位小计,换券不影响技师业绩
-  const pay = buildPaymentLegs({ tenantId, payerId: row.user_id, totalCents, payIntent: row.pay_intent })
+  // 次卡覆盖额与 computeSettlement 同式:cover = min(次卡行金额, 应收)——券把非次卡部分抵穿时不产生负腿
+  const tcItem = (row.timecard_id || d54Purchase)
+    ? db.prepare("SELECT amount_cents FROM settlement_items WHERE settlement_id = ? AND kind = 'timecard'").get(row.id)
+    : null
+  const coverCents = tcItem ? Math.min(tcItem.amount_cents, totalCents) : 0
+  const oldTcLeg = tcItem ? db.prepare("SELECT note FROM settlement_payments WHERE settlement_id = ? AND leg = 'times_card'").get(row.id) : null
+  const purchaseCashOnlyCents = d54Purchase && !allowStoredPurchase(tenantId) ? purchaseCents : 0
+  const excludeNote = purchaseCashOnlyCents && rechargeCents
+    ? '到店支付(含购卡与充值实收:不可用储值付)'
+    : (rechargeCents ? '到店支付(含本次充值实收:充值不可用储值付)' : '到店支付(含购卡:本店未开储值购卡)')
+  const pay = buildPaymentLegs({ tenantId, payerId: row.user_id, totalCents: totalCents - coverCents, payIntent: row.pay_intent, storedExcludeCents: purchaseCashOnlyCents + rechargeCents, pendingRechargeCents, excludeNote })
+  if (coverCents > 0) {
+    pay.legs.unshift({ leg: 'times_card', amountCents: coverCents, payerUserId: row.user_id, note: (oldTcLeg && oldTcLeg.note) || '次卡抵扣', label: '次卡抵扣' })
+  }
   const now = iso(new Date())
   db.exec('BEGIN IMMEDIATE')
   try {
@@ -8555,6 +8583,40 @@ function computeSettlement(input = {}) {
     tcPurchase = { packageId: pkg.id, name: pkg.name, priceCents: pkg.price_cents, timesCount: pkg.times_count, validDays: pkg.valid_days || null, projectGroup: pkg.project_group || null, unitCents: unit }
   }
 
+  /* B3-1 随单充值(图 §四 屏3+§三 v1.6):挂单随签生效——签署单分行「充值实收/本单抵扣/充后余额」一次签。
+     充值实收=总额面(收现金,不进 subtotal=充值不计积分/业绩既有口径);赠送金额一律后端从套餐算(防前端造赠)。
+     A5 同刀:选档源=membership_packages(kind=recharge);手输金额=无赠。 */
+  let scRecharge = null
+  // 异常输入硬闸:带了充值键但值非法(0/负数/NaN)= 400,不静默当没充(静默忽略=前端拼错悄悄丢钱面)
+  if (input.rechargeAmountCents !== undefined && input.rechargeAmountCents !== null && !input.rechargePackageId
+    && !(Number(input.rechargeAmountCents) > 0)) {
+    throw apiError(400, 'BAD_REQUEST', '充值金额要大于 0。')
+  }
+  if (input.rechargePackageId || Number(input.rechargeAmountCents) > 0) {
+    let amountCents = 0
+    let bonusCents = 0
+    let rpkgName = ''
+    if (input.rechargePackageId) {
+      const rpkg = db.prepare("SELECT * FROM membership_packages WHERE id = ? AND tenant_id = ? AND kind = 'recharge' AND is_active = 1").get(String(input.rechargePackageId), tenantId)
+      if (!rpkg) throw apiError(404, 'PACKAGE_NOT_FOUND', '没有这个充值套餐(或已下架)。')
+      amountCents = rpkg.price_cents
+      bonusCents = rpkg.bonus_cents || 0
+      rpkgName = rpkg.name
+    } else {
+      amountCents = Math.round(Number(input.rechargeAmountCents) || 0)
+      if (amountCents <= 0) throw apiError(400, 'BAD_REQUEST', '充值金额要大于 0。')
+    }
+    const rTech = input.rechargeTechnicianId ? String(input.rechargeTechnicianId) : null
+    if (rTech && !db.prepare('SELECT 1 FROM technicians WHERE id = ? AND tenant_id = ?').get(rTech, tenantId)) {
+      throw apiError(400, 'BAD_REQUEST', '充值经手技师不属于本店。')
+    }
+    scRecharge = {
+      amountCents, bonusCents, packageId: input.rechargePackageId || null, packageName: rpkgName,
+      payChannel: ['wechat', 'alipay', 'cash', 'card', 'unknown'].includes(input.rechargePayChannel) ? input.rechargePayChannel : 'cash',
+      technicianId: rTech
+    }
+  }
+
   // 自选填写行:价目表外的项目,原价与档价相同(没有"原价"这一说,不产生优惠)
   for (const raw of Array.isArray(input.customItems) ? input.customItems : []) {
     const name = String(raw?.name || '').trim()
@@ -8633,9 +8695,10 @@ function computeSettlement(input = {}) {
 
   const tierDiscountCents = listTotalCents - subtotalCents
   const discountTotalCents = tierDiscountCents + couponDiscountCents
-  // B3:购卡=总额面(恒等式扩项:应收 = 档位小计 − 定金 − 券 + 购卡)
+  // B3:购卡/随单充值实收=总额面(恒等式扩项:应收 = 档位小计 − 定金 − 券 + 购卡 + 充值实收)
   const purchaseCents = tcPurchase ? tcPurchase.priceCents : 0
-  const totalCents = subtotalCents - depositDeductCents - couponDiscountCents + purchaseCents
+  const rechargeCents = scRecharge ? scRecharge.amountCents : 0
+  const totalCents = subtotalCents - depositDeductCents - couponDiscountCents + purchaseCents + rechargeCents
   // 分成基数 = 档位小计:定金是付款时序、券是店铺让利,都不从技师业绩里扣(规则③)
   const perfBaseCents = subtotalCents
 
@@ -8647,7 +8710,13 @@ function computeSettlement(input = {}) {
   const timecardCoverCents = timecardLine ? Math.min(timecardLine.amountCents, totalCents) : 0
   // 裁②:开关关(默认)=购卡金额摘出储值可抵范围,只收现金/其他
   const purchaseCashOnlyCents = tcPurchase && !allowStoredPurchase(tenantId) ? purchaseCents : 0
-  const { plan, legs, balance, remaining, storedUsedCents } = buildPaymentLegs({ tenantId, payerId, totalCents: totalCents - timecardCoverCents, payIntent: input.payIntent, storedExcludeCents: purchaseCashOnlyCents })
+  /* B3-1:随单充值实收部分只收现金/其他(充值本身不能拿储值付——储值付储值=空转),
+     与购卡摘出同机制;充+赠计入储值可抵范围(pendingRecharge)。 */
+  const pendingRechargeCents = scRecharge ? scRecharge.amountCents + scRecharge.bonusCents : 0
+  const excludeNote = purchaseCashOnlyCents && rechargeCents
+    ? '到店支付(含购卡与充值实收:不可用储值付)'
+    : (rechargeCents ? '到店支付(含本次充值实收:充值不可用储值付)' : '到店支付(含购卡:本店未开储值购卡)')
+  const { plan, legs, balance, remaining, storedUsedCents } = buildPaymentLegs({ tenantId, payerId, totalCents: totalCents - timecardCoverCents, payIntent: input.payIntent, storedExcludeCents: purchaseCashOnlyCents + rechargeCents, pendingRechargeCents, excludeNote })
   if (tcCard) {
     legs.unshift({ leg: 'times_card', amountCents: timecardCoverCents, payerUserId: payerId, note: `次卡抵扣 · ${tcCard.name} · 第 ${tcNth}/${tcCard.total_times} 次` })
   } else if (tcPurchase) {
@@ -8692,6 +8761,10 @@ function computeSettlement(input = {}) {
     purchase: tcPurchase,
     purchaseCents,
     purchaseCashOnlyCents,
+    /* B3-1 随单充值块:赠送金额后端算(套餐来源),签字时刻才写 sv 行。
+       三行分行(实收/本单抵扣/充后余额)所需数字全在这——前端零运算。 */
+    recharge: scRecharge,
+    rechargeCents,
     payment: {
       plan,
       legs,
@@ -8699,8 +8772,11 @@ function computeSettlement(input = {}) {
       legacyBalanceCents: balance.legacyCents,
       normalBalanceCents: balance.normalCents,
       storedUsedCents,
+      pendingRechargeCents,
+      // 充后余额=现余额+充+赠−本单储值抵扣(仅随单充值时有意义;签字时刻冻结进快照)
+      afterRechargeBalanceCents: scRecharge ? balance.totalCents + pendingRechargeCents - storedUsedCents : null,
       offlineCents: Math.max(0, remaining),
-      shortfallCents: Math.max(0, totalCents - balance.totalCents)
+      shortfallCents: Math.max(0, totalCents - balance.totalCents - pendingRechargeCents)
     },
     // 互斥软校验:同单既勾了免收项、又勾了对应的收费卸除项 → 提示,不硬拦
     softWarnings: buildSettlementWarnings(lines)
@@ -8773,7 +8849,15 @@ function createSettlementGroup(body = {}, adminSession = {}) {
         }
         timecardsUsedInGroup.add(String(sheet.timecardId))
       }
-      const computed = computeSettlement({ ...sheet, tenantId, userId: cardOwnerUserId, payerUserId: cardOwnerUserId, bookingId: sheet.bookingId || body.bookingId, strictCoupon: true })
+      const computed = computeSettlement({
+        ...sheet, tenantId, userId: cardOwnerUserId, payerUserId: cardOwnerUserId,
+        bookingId: sheet.bookingId || body.bookingId, strictCoupon: true,
+        /* B3-1 随单充值经手人=充值提成归属(与代充路由同口径):技师会话**强制=本人**,不认 body;
+           老板会话可不带(面板没选就空,不猜归属——账本里不许有猜出来的数字)。 */
+        rechargeTechnicianId: adminSession.role === 'staff'
+          ? (adminSession.technicianId || null)
+          : (sheet.rechargeTechnicianId || null)
+      })
       // B2-7 核销单必有技师(数字点选同结算单,规则⑧)
       if (computed.timecard && !(Array.isArray(sheet.technicians) && sheet.technicians.length)) {
         throw apiError(400, 'TECHNICIAN_REQUIRED', '次卡核销单必须选技师。')
@@ -8785,9 +8869,9 @@ function createSettlementGroup(body = {}, adminSession = {}) {
          price_tier_used, tier_changed_from, tier_changed_by, tier_changed_at,
          list_total_cents, subtotal_cents, deposit_deduct_cents, discount_total_cents, total_cents,
          coupon_grant_id, coupon_id, coupon_name, coupon_discount_cents, coupon_selected_by, coupon_selected_at, perf_base_cents,
-         timecard_id, timecard_nth, purchase_json,
+         timecard_id, timecard_nth, purchase_json, recharge_json,
          pay_intent, perf_alloc_status, created_by, created_at, updated_at)
-        VALUES (?, ?, ?, ?, ?, ?, ?, ?, 'pending_sign', ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'pending', ?, ?, ?)`)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, 'pending_sign', ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'pending', ?, ?, ?)`)
         .run(id, tenantId, groupId, sheet.bookingId || body.bookingId || null, cardOwnerUserId,
           String(sheet.servedPersonName || '').slice(0, 40) || null, isProxy ? 1 : 0, settlementCode(tenantId),
           computed.tierKey, sheet.tierChangedFrom || null, sheet.tierChangedFrom ? (adminSession.email || 'staff') : null, sheet.tierChangedFrom ? now : null,
@@ -8797,6 +8881,7 @@ function createSettlementGroup(body = {}, adminSession = {}) {
           computed.coupon ? 'staff' : null, computed.coupon ? now : null, computed.perfBaseCents,
           computed.timecard ? computed.timecard.id : null, computed.timecard ? computed.timecard.nth : null,
           computed.purchase ? JSON.stringify(computed.purchase) : null,
+          computed.recharge ? JSON.stringify(computed.recharge) : null,
           computed.payment.plan, adminSession.email || 'staff', now, now)
 
       const itemStmt = db.prepare(`INSERT INTO settlement_items
@@ -8853,9 +8938,12 @@ async function signSettlement(row, { signature, signedBy = '', strokes = [] }) {
   const legs = db.prepare("SELECT * FROM settlement_payments WHERE settlement_id = ? AND leg IN ('stored_value','migrate_stored') ORDER BY rowid ASC").all(row.id)
   const needStored = legs.reduce((sum, l) => sum + l.amount_cents, 0)
   const balance = storedValueBalanceDetail(row.user_id, tenantId)
-  if (needStored > balance.totalCents) {
+  /* B3-1 随单充值:签字时刻「充+赠」先入账再烧储值,余额校验按充后口径 */
+  const scRecharge = row.recharge_json ? (() => { try { return JSON.parse(row.recharge_json) } catch { return null } })() : null
+  const pendingRecharge = scRecharge ? Math.max(0, (scRecharge.amountCents || 0) + (scRecharge.bonusCents || 0)) : 0
+  if (needStored > balance.totalCents + pendingRecharge) {
     throw apiError(400, 'INSUFFICIENT_BALANCE',
-      `储值余额不足(需 ${needStored / 100},现有 ${balance.totalCents / 100}),请回到结算页改支付构成。`)
+      `储值余额不足(需 ${needStored / 100},现有 ${(balance.totalCents + pendingRecharge) / 100}${pendingRecharge ? '(含本单随签充值)' : ''}),请回到结算页改支付构成。`)
   }
   /* 规则⑤ 核销留痕:**签字成功那一刻**券才核销。签字前退出/改单,券一直是 active,
      自然就回到券包里了 —— 不需要"释放"动作,也就不存在忘记释放这回事。
@@ -8922,6 +9010,27 @@ async function signSettlement(row, { signature, signedBy = '', strokes = [] }) {
         })
       }
     }
+    /* B3-1 随单充值(挂单随签):签字这一刻充值行才入账——顺序在烧储值之前,
+       「充完即抵本单」的钱先到再烧,余额永不瞬时为负。与单独代充同构:
+       充=预收负债不写收入行(规则④),赠=bonus 行营销让利(永不计实收/业绩/提成/积分);
+       tenantId 必传(D53:签署页=公开路由,不传记到旗舰店账上)。 */
+    if (scRecharge && scRecharge.amountCents > 0) {
+      insertStoredValueTransaction({
+        userId: row.user_id, type: 'recharge', amountCents: scRecharge.amountCents,
+        payChannel: scRecharge.payChannel || 'cash',
+        note: `随单充值 · 服务单 ${row.code}${scRecharge.packageName ? ' · ' + scRecharge.packageName : ''}`,
+        createdBy: signedBy || 'customer_sign', technicianId: scRecharge.technicianId || null, tenantId, createdAt: now,
+        customerConfirmedAt: now // 随单充值=顾客亲签,入账即确认(B3-3 回执确认只针对单独代充)
+      })
+      if (scRecharge.bonusCents > 0) {
+        insertStoredValueTransaction({
+          userId: row.user_id, type: 'bonus', amountCents: scRecharge.bonusCents,
+          payChannel: 'marketing',
+          note: `充值赠送(营销让利) · 服务单 ${row.code}`,
+          createdBy: signedBy || 'customer_sign', technicianId: scRecharge.technicianId || null, tenantId, createdAt: now
+        })
+      }
+    }
     for (const leg of legs) {
       if (leg.amount_cents <= 0) continue
       db.prepare(`INSERT INTO stored_value_transactions (id, tenant_id, user_id, type, amount_cents, pay_channel, note, created_by, created_at, bucket)
@@ -8941,6 +9050,13 @@ async function signSettlement(row, { signature, signedBy = '', strokes = [] }) {
       }
     }
     db.prepare("UPDATE settlement_payments SET status = 'awaiting' WHERE settlement_id = ? AND leg = 'offline' AND status = 'pending'").run(row.id)
+    /* B3-1:充后余额在签字这一刻冻结进快照列——余额是活的,快照上的「充后余额」必须是签字瞬间那个数,
+       事后重渲染不许再算(同笔迹一个道理)。 */
+    if (scRecharge) {
+      const frozen = storedValueBalanceDetail(row.user_id, tenantId).totalCents
+      db.prepare('UPDATE settlements SET recharge_json = ? WHERE id = ?')
+        .run(JSON.stringify({ ...scRecharge, afterBalanceCents: frozen }), row.id)
+    }
     if (couponGrant) {
       db.prepare("UPDATE coupon_grants SET status = 'used', used_at = ?, settlement_id = ?, settlement_code = ? WHERE id = ? AND status = 'active'")
         .run(now, row.id, row.code, couponGrant.id)
@@ -10290,6 +10406,16 @@ function renderSettlementSnapshotSvg(settlement, { strokes = [], signedAt = '' }
   }
   y += 40
   rows.push(`<text x="40" y="${y}" class="grand">合计</text><text x="${W - 40}" y="${y}" class="grand gold" text-anchor="end">${escapeXml(money(s.totalCents))}</text>`)
+  /* B3-1 随单充值三行分行(图 §四 屏3):实收/本单抵扣/充后余额——快照=签署凭证,
+     充后余额是签字瞬间冻结数(serializeSettlement 已解析),句子后端唯一。 */
+  if (s.recharge && s.recharge.lines) {
+    y += 34
+    rows.push(`<text x="40" y="${y}" class="h">随单充值(本单签字生效)</text>`)
+    for (const rl of s.recharge.lines) {
+      y += 26
+      rows.push(`<text x="40" y="${y}" class="s">${escapeXml(rl.label)}</text><text x="${W - 40}" y="${y}" class="t" text-anchor="end">${escapeXml(rl.amountText)}</text>`)
+    }
+  }
   y += 46
   rows.push(`<text x="40" y="${y}" class="s">本单据为服务确认凭证,由顾客本人签署确认。</text>`)
   const H = y + 40
@@ -10539,6 +10665,30 @@ function serializeSettlement(row, { includeSignature = false } = {}) {
       sharePct: t.share_pct, shareCents: t.share_cents
     })),
     payments: pays.map((p) => ({ leg: p.leg, amountCents: p.amount_cents, payerUserId: p.payer_user_id, status: p.status, note: p.note })),
+    /* B3-1 随单充值三行分行(图 §四 屏3):实收/本单抵扣/充后余额——句子与数字全在后端,
+       四处渲染面(签署页/快照SVG/商家结算页/单据预览)只贴现成行。
+       充后余额:已签=签字瞬间冻结数(afterBalanceCents 落列);待签=按现余额投影。 */
+    recharge: (() => {
+      if (!row.recharge_json) return null
+      let r = null
+      try { r = JSON.parse(row.recharge_json) } catch { return null }
+      if (!r || !(r.amountCents > 0)) return null
+      const m = (c) => formatMoneyCents(c, row.tenant_id, 'auto')
+      const storedUsed = pays.filter((p) => p.leg === 'stored_value' || p.leg === 'migrate_stored').reduce((s, p) => s + p.amount_cents, 0)
+      const frozen = r.afterBalanceCents !== undefined && r.afterBalanceCents !== null
+      const after = frozen
+        ? r.afterBalanceCents
+        : storedValueBalanceDetail(row.user_id, row.tenant_id).totalCents + r.amountCents + (r.bonusCents || 0) - storedUsed
+      const lines = [{ key: 'recharge', label: `本次充值实收${r.packageName ? '(' + r.packageName + ')' : ''}`, amountText: `+${m(r.amountCents)}` }]
+      if (r.bonusCents > 0) lines.push({ key: 'bonus', label: '充值赠送(营销让利)', amountText: `+${m(r.bonusCents)}` })
+      lines.push({ key: 'deduct', label: '本单储值抵扣', amountText: storedUsed > 0 ? `−${m(storedUsed)}` : m(0) })
+      lines.push({ key: 'after', label: frozen ? '充后余额(签字时)' : '充后余额(预计)', amountText: m(Math.max(0, after)) })
+      return {
+        amountCents: r.amountCents, bonusCents: r.bonusCents || 0, packageName: r.packageName || '',
+        payChannel: r.payChannel || 'cash', technicianId: r.technicianId || null,
+        afterBalanceCents: Math.max(0, after), frozen, lines
+      }
+    })(),
     ...amendmentShape(row)
   }
 }
@@ -11204,11 +11354,31 @@ async function route(req, res) {
   if (req.method === 'GET' && path === '/my/stored-value') {
     const customer = requireCustomer(req)
     const tid = resolveTenant(req, query)
-    const txns = db.prepare('SELECT type, amount_cents, pay_channel, note, created_at FROM stored_value_transactions WHERE user_id = ? AND tenant_id = ? ORDER BY created_at DESC LIMIT 50').all(customer.id, tid)
+    const txns = db.prepare('SELECT id, type, amount_cents, pay_channel, note, created_at, customer_confirmed_at FROM stored_value_transactions WHERE user_id = ? AND tenant_id = ? ORDER BY created_at DESC LIMIT 50').all(customer.id, tid)
+    /* B3-3/4 代充回执:未确认的充值行单列(顾客端置顶回执卡带确认钮)。
+       即时到账口径不变——确认与否不影响余额与任何账目,只是让流水两侧都能自证「顾客看过了」。 */
     return json(res, 200, {
       balanceCents: storedValueBalanceCents(customer.id, tid),
-      txns: txns.map((t) => ({ type: t.type, amountCents: t.amount_cents, payChannel: t.pay_channel, note: t.note || '', createdAt: t.created_at }))
+      pendingConfirm: txns.filter((t) => t.type === 'recharge' && !t.customer_confirmed_at)
+        .map((t) => ({ id: t.id, amountCents: t.amount_cents, payChannel: t.pay_channel, note: t.note || '', createdAt: t.created_at })),
+      txns: txns.map((t) => ({
+        id: t.id, type: t.type, amountCents: t.amount_cents, payChannel: t.pay_channel, note: t.note || '', createdAt: t.created_at,
+        needsConfirm: t.type === 'recharge' && !t.customer_confirmed_at
+      }))
     })
+  }
+  /* B3-4:顾客确认代充回执。幂等(重复确认=200 不变);只许确认自己的充值行;不阻塞任何链路。 */
+  if (req.method === 'POST' && path === '/my/stored-value/confirm') {
+    const customer = requireCustomer(req)
+    const tid = resolveTenant(req, query)
+    const body = await readBody(req)
+    const row = db.prepare('SELECT * FROM stored_value_transactions WHERE id = ? AND tenant_id = ? AND user_id = ?').get(String(body.id || ''), tid, customer.id)
+    if (!row) throw apiError(404, 'NOT_FOUND', '没有这笔充值记录。')
+    if (row.type !== 'recharge') throw apiError(400, 'BAD_REQUEST', '只有充值到账需要确认。')
+    if (row.customer_confirmed_at) return json(res, 200, { confirmed: true, confirmedAt: row.customer_confirmed_at, already: true })
+    const now = iso(new Date())
+    db.prepare('UPDATE stored_value_transactions SET customer_confirmed_at = ? WHERE id = ? AND customer_confirmed_at IS NULL').run(now, row.id)
+    return json(res, 200, { confirmed: true, confirmedAt: now })
   }
   // ===== 积分商城(顾客) =====
   if (req.method === 'GET' && path === '/my/points-mall') {
@@ -11736,7 +11906,13 @@ async function route(req, res) {
       const timecardCoverCents = sheets.reduce((n, x) => n + ((x.timecard && x.timecard.coverCents) || 0), 0)
       // 裁②:组级同刀——开关关时 Σ购卡额摘出储值可抵范围
       const purchaseCashOnlyCents = sheets.reduce((n, x) => n + (x.purchaseCashOnlyCents || 0), 0)
-      const pay = buildPaymentLegs({ tenantId, payerId, totalCents: totalCents - timecardCoverCents, payIntent: body.payIntent, storedExcludeCents: purchaseCashOnlyCents })
+      /* B3-1 组级同刀:Σ随单充值实收摘出储值可抵(充值不能拿储值付),Σ(充+赠)计入可抵范围 */
+      const rechargeCents = sheets.reduce((n, x) => n + (x.rechargeCents || 0), 0)
+      const pendingRechargeCents = sheets.reduce((n, x) => n + ((x.payment && x.payment.pendingRechargeCents) || 0), 0)
+      const excludeNote = purchaseCashOnlyCents && rechargeCents
+        ? '到店支付(含购卡与充值实收:不可用储值付)'
+        : (rechargeCents ? '到店支付(含本次充值实收:充值不可用储值付)' : '到店支付(含购卡:本店未开储值购卡)')
+      const pay = buildPaymentLegs({ tenantId, payerId, totalCents: totalCents - timecardCoverCents, payIntent: body.payIntent, storedExcludeCents: purchaseCashOnlyCents + rechargeCents, pendingRechargeCents, excludeNote })
       return json(res, 200, {
         sheets,
         group: {
@@ -11755,7 +11931,11 @@ async function route(req, res) {
             offlineDueCents: pay.remaining,
             // B②:组级次卡抵扣合计(前端自证行「次卡抵扣 −X」;0=无核销组,前端不渲染)
             timecardCoverCents,
-            shortfallCents: Math.max(0, (totalCents - timecardCoverCents) - pay.balance.totalCents)
+            // B3-1:组级随单充值三行分行数字(实收/充后余额);0=无充值,前端不渲染
+            rechargeCents,
+            pendingRechargeCents,
+            afterRechargeBalanceCents: rechargeCents ? pay.balance.totalCents + pendingRechargeCents - pay.storedUsedCents : null,
+            shortfallCents: Math.max(0, (totalCents - timecardCoverCents) - pay.balance.totalCents - pendingRechargeCents)
           }
         }
       })
@@ -12347,6 +12527,18 @@ async function route(req, res) {
         id: r.id, name: r.name, priceCents: r.price_cents, timesCount: r.times_count,
         validDays: r.valid_days || null, projectGroup: r.project_group || '',
         label: `${r.name} · ${r.times_count} 次 · ${formatMoneyCents(r.price_cents, r.tenant_id, 'auto')}${r.valid_days ? ` · ${r.valid_days} 天有效` : ' · 长期有效'}`
+      }))
+    })
+  }
+  /* B3-1+A5(店主 08-21 终段令):随单充值选档源=membership_packages(kind=recharge,充X赠Y),
+     员工可读(⑭ 先例:只读、label 后端句)。recharge_tiers 旧模型就此退役——
+     面板换源后全仓零读方,CI 断言防复活(A5 义务②)。 */
+  if (req.method === 'GET' && path === '/admin/recharge-packages') {
+    const rows = db.prepare("SELECT * FROM membership_packages WHERE tenant_id = ? AND kind = 'recharge' AND is_active = 1 ORDER BY sort_order ASC, created_at ASC").all(currentTenantId())
+    return json(res, 200, {
+      packages: rows.filter((r) => r.price_cents > 0).map((r) => ({
+        id: r.id, name: r.name, priceCents: r.price_cents, bonusCents: r.bonus_cents || 0,
+        label: `${r.name} · 充 ${formatMoneyCents(r.price_cents, r.tenant_id, 'auto')}${r.bonus_cents ? ` 赠 ${formatMoneyCents(r.bonus_cents, r.tenant_id, 'auto')}` : ''}`
       }))
     })
   }
@@ -13666,7 +13858,7 @@ async function route(req, res) {
     if (adminSession.role !== 'owner') throw apiError(403, 'FORBIDDEN', 'Owner permission is required.')
     const month = /^\d{4}-\d{2}$/.test(String(query.month || '')) ? String(query.month) : localParts(new Date()).date.slice(0, 7)
     const rows = db.prepare(`
-      SELECT s.id, s.type, s.amount_cents, s.pay_channel, s.note, s.created_by, s.created_at, s.technician_id,
+      SELECT s.id, s.type, s.amount_cents, s.pay_channel, s.note, s.created_by, s.created_at, s.technician_id, s.customer_confirmed_at,
              u.display_name AS user_name, t.name AS technician_name
       FROM stored_value_transactions s
       LEFT JOIN users u ON u.id = s.user_id
@@ -13691,7 +13883,9 @@ async function route(req, res) {
           handler: r.type === 'recharge' ? (r.technician_name || (r.created_by || '—')) : '',
           settlementCode: codeMatch ? codeMatch[1] : '',
           source: r.type === 'consume' ? (codeMatch ? '结算抵扣' : '手工耗卡') : (r.pay_channel || '—'),
-          note: r.note || ''
+          note: r.note || '',
+          // B3-3:代充回执确认态(充值行专属;随单充值=签字即确认)——未确认只标注,不阻塞
+          customerConfirmed: r.type === 'recharge' ? Boolean(r.customer_confirmed_at) : null
         }
       })
     })
@@ -16232,6 +16426,14 @@ try {
   if (!String(error.message || '').includes('duplicate column')) throw error
 }
 try {
+  /* B3-3/4 代充回执(店主 08-21 终段令):顾客对代充充值行的确认时间戳。
+     即时到账不变、未确认不阻塞任何链路——只是流水上标「顾客未确认」;
+     随单充值=顾客亲签签署单,入账即视为已确认(签字就是确认动作)。老库走 ALTER(纪律8)。 */
+  db.exec('ALTER TABLE stored_value_transactions ADD COLUMN customer_confirmed_at TEXT')
+} catch (error) {
+  if (!String(error.message || '').includes('duplicate column')) throw error
+}
+try {
   // 「记为已报价」留痕(2026-08-08 屏 6):谁在什么时候把这个报价填进单子的。只记状态,不发消息。
   db.exec('ALTER TABLE quote_requests ADD COLUMN quoted_by TEXT')
 } catch (error) {
@@ -16808,6 +17010,19 @@ db.exec(`
   BEGIN SELECT RAISE(ABORT, 'finance ledger is append-only'); END;
   CREATE TRIGGER stored_value_no_update BEFORE UPDATE ON stored_value_transactions
   WHEN OLD.tenant_id NOT LIKE 'demo-%'
+    /* B3-4 唯一豁免:顾客回执确认(customer_confirmed_at 从 NULL 落一次值)。
+       它是回执元数据不是账目数字——金额/类型/归属/时间等台账列必须逐列相等,
+       且只许 NULL→值单向一次,改任何账目列照旧 ABORT(只追加语义不破)。 */
+    AND NOT (
+      NEW.id = OLD.id AND NEW.tenant_id = OLD.tenant_id AND NEW.user_id = OLD.user_id
+      AND NEW.type = OLD.type AND NEW.amount_cents = OLD.amount_cents
+      AND NEW.pay_channel = OLD.pay_channel AND COALESCE(NEW.note, '') = COALESCE(OLD.note, '')
+      AND COALESCE(NEW.created_by, '') = COALESCE(OLD.created_by, '')
+      AND NEW.created_at = OLD.created_at
+      AND COALESCE(NEW.technician_id, '') = COALESCE(OLD.technician_id, '')
+      AND COALESCE(NEW.bucket, '') = COALESCE(OLD.bucket, '')
+      AND OLD.customer_confirmed_at IS NULL AND NEW.customer_confirmed_at IS NOT NULL
+    )
   BEGIN SELECT RAISE(ABORT, 'stored value ledger is append-only'); END;
   CREATE TRIGGER stored_value_no_delete BEFORE DELETE ON stored_value_transactions
   WHEN OLD.tenant_id NOT LIKE 'demo-%'
@@ -16887,6 +17102,7 @@ db.exec(`
     timecard_id TEXT,
     timecard_nth INTEGER,
     purchase_json TEXT,
+    recharge_json TEXT,
     coupon_selected_by TEXT,
     coupon_selected_at TEXT,
     perf_base_cents INTEGER NOT NULL DEFAULT 0,
@@ -16971,7 +17187,9 @@ for (const column of [
      UPDATE ... WHERE used_times = nth-1 兑现;老库走 ALTER(纪律8:只写 CREATE TABLE=生产追不上)。 */
   'timecard_id TEXT', 'timecard_nth INTEGER',
   // B3 现场购卡:购卡快照(套餐名/价/次数/有效期/组)随单落列,签字时刻据此建卡
-  'purchase_json TEXT'
+  'purchase_json TEXT',
+  // B3-1 随单充值:充值快照(实收/赠送/渠道/经手)随单落列,签字时刻才写 sv 行(挂单随签)
+  'recharge_json TEXT'
 ]) {
   try {
     db.exec(`ALTER TABLE settlements ADD COLUMN ${column}`)

@@ -643,6 +643,8 @@ function aiCustomerService(message, history) {
 function getDepositPolicy(qs) { return request(`/store/deposit-policy${qs ? `?${qs}` : ''}`) }
 function getMyCoupons() { return request('/my/coupons') }
 function getMyStoredValue() { return request('/my/stored-value') }
+// B3-4 代充回执确认:幂等,只许确认本人的充值行;未确认不阻塞任何链路
+function confirmStoredRecharge(id) { return request('/my/stored-value/confirm', 'POST', { id }) }
 /* D33 余额单源(2026-08-12):顾客端可见余额一律实时取后端 /my/stored-value,
    不再读 lucky_member.balance 缓存(旧演示残留 4500 事件)。返回 {cents, yuan}。 */
 async function myBalance() {
@@ -828,6 +830,7 @@ module.exports = {
   getDepositPolicy,
   getMyCoupons,
   getMyStoredValue,
+  confirmStoredRecharge,
   myBalance,
   getMyPointsHistory,
   getPointsMall,

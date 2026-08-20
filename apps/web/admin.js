@@ -1,5 +1,5 @@
 // 构建号:每次交付递增。侧栏可见,排查"改了没生效"时先对版本。
-const ADMIN_BUILD = '20260821c-tcsum'
+const ADMIN_BUILD = '20260821d-b31'
 let pricingState = { module: 'storefront', tab: 'items', categories: [], items: [], rules: {}, editing: null, preview: null, storefrontPicker: false }
 console.log(`[admin] build ${ADMIN_BUILD}`)
 
@@ -9171,7 +9171,7 @@ if (els.pricingPage) {
 }
 
 /* ===== 门店设置 → 会员与储值设置(2026-08-06 P0)===== */
-let membershipSettings = { config: null, tiers: [] }
+let membershipSettings = { config: null }
 const MEMBER_QUALIFY_LABELS = {
   any_recharge: { zh: '充过值就是会员', en: 'Any recharge' },
   balance_gt_0: { zh: '余额大于 0 才是会员', en: 'Balance > 0' },
@@ -9179,12 +9179,12 @@ const MEMBER_QUALIFY_LABELS = {
   manual: { zh: '老板手动打「会员」标签', en: 'Manual tag' }
 }
 
+/* A5 收敛(店主 08-21 终段令):旧「充值档位」(recharge_tiers)整块退役——
+   充值选档源统一为「会员与营销 → 套餐」里的充值套餐(充X赠Y,membership_packages);
+   本页只剩会员资格设置,不再读 recharge_tiers(CI 零读方断言防复活)。 */
 async function loadMembershipSettings() {
-  const [c, t] = await Promise.all([
-    request('/admin/membership/config'),
-    request('/admin/recharge-tiers').catch(() => ({ tiers: [] }))
-  ])
-  membershipSettings = { config: c.config, tiers: t.tiers || [], readOnly: c.readOnly !== false, readOnlyNote: c.readOnlyNote }
+  const c = await request('/admin/membership/config')
+  membershipSettings = { config: c.config, readOnly: c.readOnly !== false, readOnlyNote: c.readOnlyNote }
   renderMembershipSettings()
 }
 
@@ -9194,7 +9194,7 @@ function renderMembershipSettings() {
   if (!config) { els.membershipSettingsBody.innerHTML = ''; return }
   const label = MEMBER_QUALIFY_LABELS[config.memberQualify] || MEMBER_QUALIFY_LABELS.any_recharge
   if (els.membershipSettingsSummary) {
-    els.membershipSettingsSummary.textContent = `${pzh() ? label.zh : label.en} · ${pzh() ? `${membershipSettings.tiers.length} 个充值档位` : `${membershipSettings.tiers.length} tiers`}`
+    els.membershipSettingsSummary.textContent = pzh() ? label.zh : label.en
   }
   const msReadOnly = membershipSettings.readOnly !== false // 2026-08-08:会员资格与等级收归平台,商家端只读
   els.membershipSettingsBody.innerHTML = `
@@ -9217,28 +9217,7 @@ function renderMembershipSettings() {
       </div>` : ''}
     ${msReadOnly ? '' : `<button class="primary slim" id="msSave" type="button">${pzh() ? '保存会员设置' : 'Save membership settings'}</button>`}
     <p class="subtle">${pzh() ? '会员价在「价目表」里逐项设置;这里决定「谁算会员」。' : 'Member prices are set per item in the price list; this decides who counts as a member.'}</p>
-    <div class="kb-entry-list">
-      <strong class="kb-entry-list-title">${pzh() ? '充值档位(顾客充值时可选的金额与赠送)' : 'Recharge tiers'}</strong>
-      ${membershipSettings.tiers.length ? membershipSettings.tiers.map((tier) => `
-        <div class="service-admin-item${tier.isActive ? '' : ' inactive'}">
-          <div><strong>${pMoney(tier.amountCents)}</strong>
-            <span class="subtle">${describeGift(tier.gift)}${tier.isActive ? '' : (pzh() ? ' · 已停用' : ' · off')}</span></div>
-          <div class="row-actions">
-            <button class="ghost slim" data-tier-toggle="${tier.id}" type="button">${tier.isActive ? (pzh() ? '停用' : 'Off') : (pzh() ? '启用' : 'On')}</button>
-            <button class="ghost slim" data-tier-delete="${tier.id}" type="button">${pzh() ? '删除' : 'Delete'}</button>
-          </div>
-        </div>`).join('') : `<p class="subtle">${pzh() ? '还没有充值档位。' : 'No recharge tiers yet.'}</p>`}
-      <button class="ghost slim" id="msAddTier" type="button">${pzh() ? '+ 新增充值档位' : '+ Add tier'}</button>
-    </div>`
-}
-
-function describeGift(gift = {}) {
-  if (!gift || !gift.type) return pzh() ? '无赠送' : 'No gift'
-  if (gift.type === 'percent') return pzh() ? `赠 ${gift.value}% 金额` : `+${gift.value}%`
-  if (gift.type === 'amount') return pzh() ? `赠 ${pMoney(gift.value)}` : `+${pMoney(gift.value)}`
-  if (gift.type === 'coupon') return pzh() ? `赠券 ${gift.couponId || ''}` : `Coupon ${gift.couponId || ''}`
-  if (gift.type === 'service') return pzh() ? `赠项目券 ${gift.serviceId || ''}` : `Service ${gift.serviceId || ''}`
-  return pzh() ? '自定义赠送' : 'Custom gift'
+    <p class="subtle">${pzh() ? '充值套餐(充X赠Y)在「会员与营销 → 套餐」里维护,开单随单充值与代充都从那里选档。' : 'Recharge packages are managed under Membership & Marketing → Packages.'}</p>`
 }
 
 if (els.storeSettingsPage) {
@@ -9265,28 +9244,8 @@ if (els.storeSettingsPage) {
         toast(pzh() ? '会员设置已保存' : 'Saved')
         return
       }
-      if (event.target.closest('#msAddTier')) {
-        const amount = window.prompt(pzh() ? '充值金额' : 'Recharge amount', '1000')
-        if (!amount) return
-        const giftPct = window.prompt(pzh() ? '赠送比例(%,留空=不送)' : 'Gift percent', '')
-        const gift = giftPct && Number(giftPct) ? { type: 'percent', value: Number(giftPct) } : {}
-        await request('/admin/recharge-tiers', { method: 'POST', body: JSON.stringify({ amountCents: pCents(amount) ?? 0, gift }) })
-        await loadMembershipSettings()
-        return
-      }
-      const tog = event.target.closest('[data-tier-toggle]')
-      if (tog) {
-        const tier = membershipSettings.tiers.find((x) => x.id === tog.dataset.tierToggle)
-        await request(`/admin/recharge-tiers/${tier.id}`, { method: 'PATCH', body: JSON.stringify({ isActive: !tier.isActive }) })
-        await loadMembershipSettings()
-        return
-      }
-      const del = event.target.closest('[data-tier-delete]')
-      if (del) {
-        if (!window.confirm(pzh() ? '删除这个充值档位?' : 'Delete this tier?')) return
-        await request(`/admin/recharge-tiers/${del.dataset.tierDelete}`, { method: 'DELETE' })
-        await loadMembershipSettings()
-      }
+      /* A5:充值档位的增删改随 recharge_tiers 退役一并移除(三处原生弹窗同批清账,基线 27→24);
+         充值套餐(充X赠Y)在「会员与营销 → 套餐」页维护。 */
     } catch (error) { toast(error.message) }
   })
 }

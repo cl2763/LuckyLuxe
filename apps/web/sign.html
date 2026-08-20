@@ -246,6 +246,12 @@ function render() {
         ${s.couponDiscountCents ? `<div class="row"><span>优惠券 ${esc(s.coupon ? s.coupon.name : '')}</span><b>−${money(s.couponDiscountCents)}</b></div>` : ''}
         <div class="row grand"><span>合计</span><span>${money(s.totalCents)}</span></div>
       </div>
+      ${s.recharge && s.recharge.lines ? `
+      <div class="sec">
+        <h2>随单充值（本单签字生效）</h2>
+        ${s.recharge.lines.map((rl) => `
+          <div class="row"><span>${esc(rl.label)}</span><span class="amt">${esc(rl.amountText)}</span></div>`).join('')}
+      </div>` : ''}
     </div>
     ${amendCardHtml(s)}
     ${couponCardHtml()}
@@ -262,9 +268,12 @@ function render() {
   `
   document.getElementById('cta').style.display = signed ? 'none' : ''
   const storedLeg = s.payments.filter((p) => p.leg === 'stored_value' || p.leg === 'migrate_stored').reduce((n, p) => n + p.amountCents, 0)
-  document.getElementById('ctaFoot').innerHTML = storedLeg
-    ? `签署后储值卡将即时扣除 ${money(storedLeg)} · 有问题？<a href="#" id="afterSales">联系客服</a>`
-    : '有问题？<a href="#" id="afterSales">联系客服</a>'
+  // B3-1:随单充值的签署后果要说全——签字=充值入账+储值扣除,两件事一次签
+  document.getElementById('ctaFoot').innerHTML = s.recharge && s.recharge.lines
+    ? `签署后充值即时入账${storedLeg ? `,储值卡随即扣除 ${money(storedLeg)}` : ''} · 有问题？<a href="#" id="afterSales">联系客服</a>`
+    : (storedLeg
+      ? `签署后储值卡将即时扣除 ${money(storedLeg)} · 有问题？<a href="#" id="afterSales">联系客服</a>`
+      : '有问题？<a href="#" id="afterSales">联系客服</a>')
   if (!signed) initPad()
   const opener = document.getElementById('cpnOpen')
   if (opener) opener.addEventListener('click', openCouponSheet)

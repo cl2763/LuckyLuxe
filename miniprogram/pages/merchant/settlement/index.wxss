@@ -177,6 +177,7 @@
 .rvlink{font-size:22rpx;color:#5b7a99;text-decoration:underline}
 /* D25:未绑定档案充值链接禁用态(点了有提示,后端同拦) */
 .rvlink.dis{color:#b9b3a8;text-decoration:line-through}
+.rvlink.center{display:block;text-align:center;padding:16rpx 0 6rpx;color:#a8574e}
 .paynote{font-size:20rpx;color:#a89c92;margin-top:6rpx;line-height:1.5}
 /* 分组明细 */
 .mg{font-weight:700;font-size:25rpx;color:#241f1d;margin-top:10rpx;padding-top:8rpx}

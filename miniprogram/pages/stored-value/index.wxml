@@ -5,6 +5,19 @@
     <view class="charge" bindtap="soon">在线充值(微信支付)</view>
   </view>
 
+  <!-- B3-3/4 代充回执:门店代充到账后的回执卡(金额/渠道/时间);确认=「我看到了」,不确认不影响余额 -->
+  <block wx:if="{{pendingConfirm.length}}">
+    <view class="t2">到账回执 · 待确认</view>
+    <view class="card rc" wx:for="{{pendingConfirm}}" wx:key="id">
+      <view class="rc-l">
+        <view class="pn">门店已为你充值 {{item.amount}}</view>
+        <view class="ps">{{item.at}}{{item.channel ? ' · ' + item.channel : ''}}{{item.note ? ' · ' + item.note : ''}}</view>
+        <view class="ps">当前余额见顶部;如金额有出入请联系门店。</view>
+      </view>
+      <view class="buy" data-id="{{item.id}}" bindtap="confirmRecharge">确认到账</view>
+    </view>
+  </block>
+
   <view class="t2">充值套餐 <text class="demo">示例</text></view>
   <view class="card row sp" wx:for="{{packages}}" wx:key="id">
     <view><view class="pn">{{item.name}}</view><view class="ps">{{item.sub}}</view></view>
@@ -14,7 +27,7 @@
   <view class="t2">收支明细</view>
   <view wx:if="{{txns.length}}" class="list">
     <view class="li" wx:for="{{txns}}" wx:key="id">
-      <view class="li-main"><view class="li-t">{{item.title}}</view><view class="li-d">{{item.date}}</view></view>
+      <view class="li-main"><view class="li-t">{{item.title}}<text wx:if="{{item.needsConfirm}}" class="li-unconfirmed">待确认</text></view><view class="li-d">{{item.date}}</view></view>
       <text class="li-v {{item.up ? 'up' : 'down'}}">{{item.delta}}</text>
     </view>
   </view>

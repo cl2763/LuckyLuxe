@@ -24,3 +24,8 @@ page{background:#fbf8f5}
 .li-v.down{color:#a34c48}
 .empty{background:#fff;border:1rpx solid #e7ddd4;border-radius:16rpx;padding:40rpx 30rpx;text-align:center;color:#b6a99b;font-size:22rpx;line-height:1.6}
 .note{font-size:21rpx;color:#b6a99b;line-height:1.6;margin-top:18rpx}
+
+/* B3-3/4 代充回执卡:待确认标 + 回执卡两栏 */
+.rc{display:flex;justify-content:space-between;align-items:center;gap:16rpx;border:1rpx solid #efd9c8;background:#fdf8f2}
+.rc-l{flex:1;min-width:0}
+.li-unconfirmed{margin-left:8rpx;padding:2rpx 10rpx;border-radius:8rpx;background:#fbeeec;color:#a8574e;font-size:18rpx}

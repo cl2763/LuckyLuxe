@@ -192,9 +192,9 @@
       <view class="paym {{payMenu.recharge ? 'on' : ''}}" bindtap="payToggleRecharge">
         <view class="ck {{payMenu.recharge ? 'on' : ''}}">{{payMenu.recharge ? '✓' : ''}}</view>
         <view class="pmain">
-          <b>现场充值再抵扣</b>　<text class="rvlink {{bind.bound?'':'dis'}}" catchtap="openRecharge">去帮顾客充值 →</text>
+          <b>随单充值(签字生效)</b>　<text class="rvlink {{bind.bound?'':'dis'}}" catchtap="openRecharge">{{rvDraft ? '改充值 →' : '去挂充值 →'}}</text>
           <view wx:if="{{userId && !bind.bound}}" class="bindbar">未绑定档案不可充值 —— 请先让顾客扫码绑定<view class="bindbtn" catchtap="openBindCode">出示绑定码</view></view>
-          <text class="psmall">点右侧小字进充值面板;充完自动回本单,余额刷新可抵扣</text>
+          <text class="psmall">{{rvDraft ? '已挂:' + rvDraft.label + ';签字那一刻才入账,充完即抵本单' : '挂到本单一起签:签字那一刻充值才入账,充完即抵本单'}}</text>
         </view>
       </view>
       <view class="paynote">勾/不勾任何一项,金额分解都由后端重新算出并回显;不勾储值=全额线下。</view>
@@ -219,6 +219,10 @@
       <view class="tl save" wx:if="{{view.hasTimecard}}"><text>次卡抵扣(签字扣次)</text><text>−{{view.timecardCover}}</text></view>
       <view class="tl" wx:if="{{view.hasStored}}"><text>储值抵扣</text><text>−{{view.storedDeduct}}</text></view>
       <view class="tl" wx:if="{{view.hasDeposit}}"><text>定金抵扣</text><text>−{{view.depositDeduct}}</text></view>
+      <!-- B3-1 随单充值三行分行(图 §四 屏3):实收/赠送/充后余额;签字生效,数字全由后端回传 -->
+      <view class="tl" wx:if="{{view.hasRecharge}}"><text>本次充值实收(签字生效)</text><text>+{{view.rechargeAmount}}</text></view>
+      <view class="tl save" wx:if="{{view.hasRecharge && view.rechargeBonus}}"><text>充值赠送(营销让利)</text><text>+{{view.rechargeBonus}}</text></view>
+      <view class="tl" wx:if="{{view.hasRecharge && view.afterBalance}}"><text>充后余额(预计)</text><text>{{view.afterBalance}}</text></view>
       <view class="tl big"><text>到店应收</text><text>{{view.total}}</text></view>
     </view>
 
@@ -250,21 +254,22 @@
     <view class="foot">金额全部由后端计价引擎算出，本页不做任何金额运算</view>
   </block>
 
-  <!-- 内嵌充值面板(合同规则③-2:复用既有代充流程,充完自动回本单)—— 浮层放顶层闸门外(护栏) -->
+  <!-- B3-1 随单充值面板(挂单随签:只挂草稿,签字那一刻才入账)—— 浮层放顶层闸门外(护栏) -->
   <view wx:if="{{rvPanel}}" class="qmask" bindtap="closeRecharge"></view>
   <view wx:if="{{rvPanel}}" class="rvsheet">
     <view class="qhd">
-      <text class="qt">帮 {{customerName}} 充值</text>
+      <text class="qt">帮 {{customerName}} 随单充值</text>
       <text class="qx" bindtap="closeRecharge">✕</text>
     </view>
-    <view class="sec" wx:if="{{rvPanel.tiers.length}}">选充值档位(赠额按套餐规则自动算)</view>
-    <view class="rvtier {{rvPanel.tierId === t.id ? 'on' : ''}}" wx:for="{{rvPanel.tiers}}" wx:for-item="t" wx:key="id" data-id="{{t.id}}" bindtap="rvPickTier">
-      <text>{{t.amountText}}</text><text class="rvgift">{{t.giftText}}</text>
+    <view class="sec" wx:if="{{rvPanel.pkgs.length}}">选充值套餐(充X赠Y,赠额后端按套餐算)</view>
+    <view class="rvtier {{rvPanel.packageId === p.id ? 'on' : ''}}" wx:for="{{rvPanel.pkgs}}" wx:for-item="p" wx:key="id" data-id="{{p.id}}" bindtap="rvPickPkg">
+      <text>{{p.label}}</text>
     </view>
     <view class="sec">或手输金额(无赠送)</view>
     <input class="in full" type="digit" placeholder="充值金额" value="{{rvPanel.amount}}" bindinput="rvAmountInput" />
-    <view class="rvnote">充值=预收不进收入(口径不变);线下收款后在此登记。充完自动回本单,余额刷新可抵扣。</view>
-    <view class="ds-confirm" bindtap="rvConfirm">确认充值</view>
+    <view class="rvnote">挂到本单一起签:签字那一刻充值才入账、随即抵扣本单,签署单上分行列明「充值实收 / 本单抵扣 / 充后余额」。未签退出=什么都没发生。</view>
+    <view class="ds-confirm" bindtap="rvConfirm">挂到本单(签字生效)</view>
+    <view class="rvlink center" wx:if="{{rvDraft}}" bindtap="rvRemove">移除本单充值</view>
   </view>
 
   <!-- 屏 S3 出码层(现有闭环全保留;多组=同组多张单,顾客按 待签 1/N 顺序签) -->

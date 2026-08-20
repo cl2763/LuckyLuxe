@@ -72,7 +72,8 @@
       </view>
       <block wx:if="{{svTxns.length}}">
         <view class="svtxn" wx:for="{{svTxns}}" wx:key="id">
-          <view class="svtxn-l"><text class="svtxn-t">{{item.at}} · {{item.type === 'consume' ? '消耗' : '充值'}}</text><text class="svtxn-u">{{item.userName}}</text></view>
+          <!-- B3-3 代充回执:未确认只标注不阻塞(随单充值=签字即确认,天然不出现) -->
+          <view class="svtxn-l"><text class="svtxn-t">{{item.at}} · {{item.type === 'consume' ? '消耗' : '充值'}}<text wx:if="{{item.customerConfirmed === false}}" class="svtxn-unconfirmed">顾客未确认</text></text><text class="svtxn-u">{{item.userName}}</text></view>
           <view class="svtxn-m">
             <text wx:if="{{item.type === 'recharge'}}" class="svtxn-h2">{{item.handler}}</text>
             <text wx:elif="{{item.settlementCode}}" class="svtxn-code" data-code="{{item.settlementCode}}" catchtap="svOpenSettlement">{{item.settlementCode}} →</text>

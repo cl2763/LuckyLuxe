@@ -74,6 +74,9 @@ Page({
     qr: null,
     bindQr: null,      // 出示绑定码弹层(规则⑦)
     rvPanel: null,      // 内嵌充值面板(合同规则③-2)
+    /* B3-1 随单充值(挂单随签):面板只挂草稿,签字那一刻后端才写充值行——
+       充完即抵本单,签署单三行分行(实收/本单抵扣/充后余额)一次签。 */
+    rvDraft: null,
     ctaText: '推送签署',
     submitting: false
   },
@@ -490,10 +493,13 @@ Page({
     if (v && v.hasOffline) { wx.showToast({ title: '还有差额要到店收;想不走线下就先充值抵扣', icon: 'none' }); return }
   },
   payToggleRecharge() {
-    const m = this.data.payMenu
-    const next = !m.recharge
-    this.setData({ payMenu: { useBalance: next ? true : m.useBalance, recharge: next } })
-    this.refresh()
+    /* B3-1:勾=进面板挂充值草稿(确认后此路亮);取消勾=撤掉草稿,金额后端重算 */
+    if (this.data.rvDraft) {
+      this.setData({ rvDraft: null, payMenu: { useBalance: this.data.payMenu.useBalance, recharge: false } })
+      this.refresh()
+      return
+    }
+    this.openRecharge()
   },
   payIntentOf() {
     const m = this.data.payMenu
@@ -510,61 +516,50 @@ Page({
       wx.showToast({ title: '请先让顾客扫码绑定(会员码/签署码)再充值', icon: 'none', duration: 2500 })
       return
     }
-    let tiers = []
-    try { tiers = ((await api.adminGet('/admin/recharge-tiers')).tiers || []).filter((t) => t.isActive) } catch (e) { /* 无档位也能手输 */ }
-    const d = this.data.display
-    const m = (c) => formatMoney(c, d, d && d.trimZeroDecimals ? 0 : 2)
+    /* A5 收敛(店主 08-21 终段令):选档源=充值套餐(membership_packages 充X赠Y,员工可读、label 后端句);
+       recharge_tiers 旧档位就此退役(CI 零读方断言防复活)。赠额由后端按套餐算,前端不再拼赠送规则。 */
+    let pkgs = []
+    try { pkgs = (await api.adminGet('/admin/recharge-packages')).packages || [] } catch (e) { /* 无套餐也能手输 */ }
+    const cur = this.data.rvDraft
     this.setData({
       rvPanel: {
-        amount: '', amountText: '',
-        tierId: '',
-        tiers: tiers.map((t) => ({
-          id: t.id, amountCents: t.amountCents, amountText: m(t.amountCents),
-          // 赠额只按档位规则自动算(涉钱轻动作口径);券/项目类赠送随 S2,先只显示说明
-          bonusCents: t.gift && t.gift.type === 'amount' ? Math.round(Number(t.gift.value) || 0)
-            : (t.gift && t.gift.type === 'percent' ? Math.round(t.amountCents * (Number(t.gift.value) || 0) / 100) : 0),
-          giftText: t.gift && t.gift.type === 'percent' ? `赠 ${t.gift.value}%`
-            : (t.gift && t.gift.type === 'amount' ? `赠 ${m(Math.round(Number(t.gift.value) || 0))}`
-              : (t.gift && t.gift.type ? '含赠送(券/项目,S2 支持)' : '无赠送'))
-        }))
+        amount: cur && !cur.packageId ? String(cur.amountCents / 100) : '',
+        packageId: cur ? (cur.packageId || '') : '',
+        pkgs
       }
     })
   },
   closeRecharge() { this.setData({ rvPanel: null }) },
-  rvPickTier(e) {
+  rvPickPkg(e) {
     const id = e.currentTarget.dataset.id
     const p = this.data.rvPanel
-    const t = p.tiers.find((x) => x.id === id)
-    if (!t) return
-    this.setData({ rvPanel: Object.assign({}, p, { tierId: id, amount: String(t.amountCents / 100), amountText: '' }) })
+    this.setData({ rvPanel: Object.assign({}, p, { packageId: p.packageId === id ? '' : id, amount: '' }) })
   },
   rvAmountInput(e) {
     const p = this.data.rvPanel
-    this.setData({ rvPanel: Object.assign({}, p, { amount: e.detail.value, tierId: '' }) })
+    this.setData({ rvPanel: Object.assign({}, p, { amount: e.detail.value, packageId: '' }) })
   },
-  async rvConfirm() {
+  rvConfirm() {
+    /* B3-1 挂单随签:这里只挂草稿,不打充值接口——签字那一刻后端才写充值行(未签退出=什么都没发生)。
+       金额三行(实收/本单抵扣/充后余额)由组级预览回显,本页零运算。 */
     const p = this.data.rvPanel
     if (!p) return
-    const tier = p.tiers.find((x) => x.id === p.tierId)
-    const payCents = Math.round(Number(String(p.amount || '').replace(/[^\d.]/g, '')) * 100)
-    if (!Number.isFinite(payCents) || payCents <= 0) { wx.showToast({ title: '金额不对', icon: 'none' }); return }
-    const bonus = tier ? tier.bonusCents : 0
-    try {
-      /* ⬜ 假设(记清单):档位充值按「实收+赠额」一笔入储值(充值=预收不进收入,口径不变),
-         note 拆明实收与赠额;实收/赠送分笔的正式账目口径随 S2。 */
-      await api.adminPost('/admin/stored-value/recharge', {
-        userId: this.data.userId,
-        amountCents: payCents + bonus,
-        payChannel: 'manual',
-        note: tier ? `结算单内代充·档位 实收${payCents / 100} + 赠${bonus / 100}` : '结算单内代充·手输金额'
-      })
-      wx.showToast({ title: '已到账,余额已刷新', icon: 'none' })
-      // 充完自动回本单:关面板 → 余额随组级预览刷新 → 储值选项变可勾
-      this.setData({ rvPanel: null, payMenu: { useBalance: true, recharge: false } })
-      this.refresh()
-    } catch (err) {
-      wx.showToast({ title: (err && err.message) || '充值失败,请重试或找老板处理', icon: 'none' })
+    let draft = null
+    if (p.packageId) {
+      const pkg = p.pkgs.find((x) => x.id === p.packageId)
+      if (!pkg) { wx.showToast({ title: '请重新选充值套餐', icon: 'none' }); return }
+      draft = { packageId: pkg.id, label: pkg.label }
+    } else {
+      const payCents = Math.round(Number(String(p.amount || '').replace(/[^\d.]/g, '')) * 100)
+      if (!Number.isFinite(payCents) || payCents <= 0) { wx.showToast({ title: '金额不对', icon: 'none' }); return }
+      draft = { packageId: '', amountCents: payCents, label: '手输金额(无赠送)' }
     }
+    this.setData({ rvDraft: draft, rvPanel: null, payMenu: { useBalance: true, recharge: true } })
+    this.refresh()
+  },
+  rvRemove() {
+    this.setData({ rvDraft: null, rvPanel: null, payMenu: { useBalance: this.data.payMenu.useBalance, recharge: false } })
+    this.refresh()
   },
 
   /* ===== 券(单级,挂组①的单;一单一张口径不变;图 v2.2 未画券区,按现状保留 —— 记假设) ===== */
@@ -608,6 +603,9 @@ Page({
         // 规则⑧:分配随单记录(原样恢复=按数字位提交,不做过滤校验——别加戏)
         technicians: g.selectedTechs.map((id, index) => ({ technicianId: id, role: index === 0 ? 'main' : 'assist', itemNos: (g.techItems && g.techItems[id]) || [] })),
         payIntent: this.payIntentOf(),
+        /* B3-1 随单充值挂组①的单(与定金/券同策);赠额后端按套餐算,经手技师后端按会话定 */
+        rechargePackageId: i === 0 && this.data.rvDraft && this.data.rvDraft.packageId ? this.data.rvDraft.packageId : undefined,
+        rechargeAmountCents: i === 0 && this.data.rvDraft && !this.data.rvDraft.packageId ? this.data.rvDraft.amountCents : undefined,
         depositApplied: i === 0 ? this.data.depositApplied : false,
         couponGrantId: i === 0 ? (this.data.couponGrantId || undefined) : undefined,
         applyFootSurcharge: i === 0 ? this.data.applyFootSurcharge : false,
@@ -680,6 +678,14 @@ Page({
         hasDepositReceipt: (grp.depositReceiptCents || 0) > 0,
         hasOffline: (pay.offlineDueCents || 0) > 0,
         offlineDue: m(pay.offlineDueCents || 0),
+        /* B3-1 随单充值三行分行(签字生效):数字全由组级预览回传,本页只贴 */
+        hasRecharge: (pay.rechargeCents || 0) > 0,
+        rechargeAmount: m(pay.rechargeCents || 0),
+        rechargeBonus: (() => {
+          const r = (sheets.find((s) => s.recharge) || {}).recharge
+          return r && r.bonusCents > 0 ? m(r.bonusCents) : ''
+        })(),
+        afterBalance: pay.afterRechargeBalanceCents != null ? m(pay.afterRechargeBalanceCents) : '',
         warnings: sheets.reduce((acc, s) => acc.concat((s.softWarnings || []).map((w) => w.message)), [])
       }
       // 券(组①):选项与已选照单级显示
