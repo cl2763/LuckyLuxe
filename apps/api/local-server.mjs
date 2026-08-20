@@ -8212,9 +8212,12 @@ function assertSettlementInvariants(result) {
   if (result.discountTotalCents !== tier + coupon) {
     throw apiError(500, 'SETTLEMENT_INVARIANT', `共优惠(含券)对不上:${result.discountTotalCents} ≠ ${tier} + ${coupon}`)
   }
-  const due = result.subtotalCents - result.depositDeductCents - coupon
+  /* B3(§十-7 施工):恒等式扩一项——购卡=总额面(收现金),不进 subtotal(售卡不计积分/业绩零特判):
+     应收 ≡ 档位小计 − 定金 − 券 + 购卡。无购卡时 purchaseCents=0,恒等式与原式逐分相同。 */
+  const purchase = Math.max(0, Math.round(result.purchaseCents || 0))
+  const due = result.subtotalCents - result.depositDeductCents - coupon + purchase
   if (result.totalCents !== due) {
-    throw apiError(500, 'SETTLEMENT_INVARIANT', `应收对不上:${result.totalCents} ≠ ${result.subtotalCents} − ${result.depositDeductCents} − ${coupon}`)
+    throw apiError(500, 'SETTLEMENT_INVARIANT', `应收对不上:${result.totalCents} ≠ ${result.subtotalCents} − ${result.depositDeductCents} − ${coupon} + 购卡 ${purchase}`)
   }
   if (result.perfBaseCents !== result.subtotalCents) {
     throw apiError(500, 'SETTLEMENT_INVARIANT', `分成基数对不上:${result.perfBaseCents} ≠ 档位小计 ${result.subtotalCents}(定金与券都不扣技师)`)
@@ -8517,6 +8520,36 @@ function computeSettlement(input = {}) {
     })
   }
 
+  /* B3 现场购卡(图 §四 屏3):无卡顾客当场买当场核销第 1 次,一次签署分行。
+     购卡价=总额面(收现金,不进 subtotal=售卡不计积分/业绩零特判);核销第 1 次=正常 timecard 行进 subtotal。 */
+  let tcPurchase = null
+  if (input.purchasePackageId) {
+    if (tcCard) throw apiError(400, 'BAD_REQUEST', '现场购卡与已有卡核销不能挂在同一张单上。')
+    const pkg = db.prepare("SELECT * FROM membership_packages WHERE id = ? AND tenant_id = ? AND kind = 'times'").get(String(input.purchasePackageId), tenantId)
+    if (!pkg) throw apiError(404, 'PACKAGE_NOT_FOUND', '没有这个次卡套餐。')
+    if (!pkg.is_active) throw apiError(400, 'PACKAGE_INACTIVE', '这个次卡套餐已下架。')
+    if (!(pkg.times_count > 0) || !(pkg.price_cents > 0)) throw apiError(400, 'BAD_REQUEST', '套餐次数或价格未配置,先在「会员与营销 · 次卡」补齐。')
+    const unit = timecardUnitCents({ price_cents: pkg.price_cents, total_times: pkg.times_count }, 1)
+    const tcSvc = input.timecardServiceId ? getSvc(String(input.timecardServiceId)) : null
+    if (!tcSvc) throw apiError(400, 'TIMECARD_SERVICE_REQUIRED', '请选择本次核销的项目(现场购卡=当场核销第 1 次)。')
+    if (pkg.project_group) {
+      const catName = tcSvc.category_id
+        ? String((db.prepare('SELECT name FROM service_categories WHERE id = ? AND tenant_id = ?').get(tcSvc.category_id, tenantId) || {}).name || '')
+        : ''
+      if (catName !== String(pkg.project_group)) throw apiError(400, 'TIMECARD_SERVICE_OUT_OF_GROUP', `这张卡只能核销「${pkg.project_group}」组内的项目。`)
+    }
+    tcNth = 1
+    no += 1
+    lines.push({
+      itemNo: no, kind: 'timecard', serviceId: tcSvc.id,
+      name: `${tcSvc.name_zh} · 次卡核销 第 1/${pkg.times_count} 次(${pkg.name} · 现场购卡)`,
+      tierKey, unit: 'once', qty: 1,
+      listUnitCents: unit, unitPriceCents: unit, listAmountCents: unit, amountCents: unit,
+      ruleApplied: 'timecard', isFree: false
+    })
+    tcPurchase = { packageId: pkg.id, name: pkg.name, priceCents: pkg.price_cents, timesCount: pkg.times_count, validDays: pkg.valid_days || null, projectGroup: pkg.project_group || null, unitCents: unit }
+  }
+
   // 自选填写行:价目表外的项目,原价与档价相同(没有"原价"这一说,不产生优惠)
   for (const raw of Array.isArray(input.customItems) ? input.customItems : []) {
     const name = String(raw?.name || '').trim()
@@ -8595,7 +8628,9 @@ function computeSettlement(input = {}) {
 
   const tierDiscountCents = listTotalCents - subtotalCents
   const discountTotalCents = tierDiscountCents + couponDiscountCents
-  const totalCents = subtotalCents - depositDeductCents - couponDiscountCents
+  // B3:购卡=总额面(恒等式扩项:应收 = 档位小计 − 定金 − 券 + 购卡)
+  const purchaseCents = tcPurchase ? tcPurchase.priceCents : 0
+  const totalCents = subtotalCents - depositDeductCents - couponDiscountCents + purchaseCents
   // 分成基数 = 档位小计:定金是付款时序、券是店铺让利,都不从技师业绩里扣(规则③)
   const perfBaseCents = subtotalCents
 
@@ -8603,11 +8638,13 @@ function computeSettlement(input = {}) {
   const payerId = input.payerUserId || input.userId || ''
   /* B②:次卡覆盖的部分不进现金/储值腿(B2-9 核销日实收=仅其余项目的钱)。
      cover 封顶到应收(极端:券+定金把非次卡部分抵穿时不产生负腿)。 */
-  const timecardLine = tcCard ? lines.find((l) => l.kind === 'timecard') : null
+  const timecardLine = (tcCard || tcPurchase) ? lines.find((l) => l.kind === 'timecard') : null
   const timecardCoverCents = timecardLine ? Math.min(timecardLine.amountCents, totalCents) : 0
   const { plan, legs, balance, remaining, storedUsedCents } = buildPaymentLegs({ tenantId, payerId, totalCents: totalCents - timecardCoverCents, payIntent: input.payIntent })
   if (tcCard) {
     legs.unshift({ leg: 'times_card', amountCents: timecardCoverCents, payerUserId: payerId, note: `次卡抵扣 · ${tcCard.name} · 第 ${tcNth}/${tcCard.total_times} 次` })
+  } else if (tcPurchase) {
+    legs.unshift({ leg: 'times_card', amountCents: timecardCoverCents, payerUserId: payerId, note: `次卡抵扣 · ${tcPurchase.name} · 第 1/${tcPurchase.timesCount} 次(现场购卡)` })
   }
 
   return assertSettlementInvariants({
@@ -8641,8 +8678,12 @@ function computeSettlement(input = {}) {
     } : null,
     couponOptions: coupons.options,
     couponUsableCount: coupons.usableCount,
-    // B②:核销信息随单(建单落列 timecard_id/nth,签字时刻乐观锁兑现)
-    timecard: tcCard ? { id: tcCard.id, nth: tcNth, name: tcCard.name, totalTimes: tcCard.total_times, coverCents: timecardCoverCents } : null,
+    // B②:核销信息随单(建单落列 timecard_id/nth,签字时刻乐观锁兑现);B3 购卡=purchase 块(签字建卡)
+    timecard: tcCard
+      ? { id: tcCard.id, nth: tcNth, name: tcCard.name, totalTimes: tcCard.total_times, coverCents: timecardCoverCents }
+      : (tcPurchase ? { id: null, nth: 1, name: tcPurchase.name, totalTimes: tcPurchase.timesCount, coverCents: timecardCoverCents } : null),
+    purchase: tcPurchase,
+    purchaseCents,
     payment: {
       plan,
       legs,
@@ -8736,9 +8777,9 @@ function createSettlementGroup(body = {}, adminSession = {}) {
          price_tier_used, tier_changed_from, tier_changed_by, tier_changed_at,
          list_total_cents, subtotal_cents, deposit_deduct_cents, discount_total_cents, total_cents,
          coupon_grant_id, coupon_id, coupon_name, coupon_discount_cents, coupon_selected_by, coupon_selected_at, perf_base_cents,
-         timecard_id, timecard_nth,
+         timecard_id, timecard_nth, purchase_json,
          pay_intent, perf_alloc_status, created_by, created_at, updated_at)
-        VALUES (?, ?, ?, ?, ?, ?, ?, ?, 'pending_sign', ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'pending', ?, ?, ?)`)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, 'pending_sign', ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'pending', ?, ?, ?)`)
         .run(id, tenantId, groupId, sheet.bookingId || body.bookingId || null, cardOwnerUserId,
           String(sheet.servedPersonName || '').slice(0, 40) || null, isProxy ? 1 : 0, settlementCode(tenantId),
           computed.tierKey, sheet.tierChangedFrom || null, sheet.tierChangedFrom ? (adminSession.email || 'staff') : null, sheet.tierChangedFrom ? now : null,
@@ -8747,6 +8788,7 @@ function createSettlementGroup(body = {}, adminSession = {}) {
           computed.coupon ? computed.coupon.name : null, computed.couponDiscountCents,
           computed.coupon ? 'staff' : null, computed.coupon ? now : null, computed.perfBaseCents,
           computed.timecard ? computed.timecard.id : null, computed.timecard ? computed.timecard.nth : null,
+          computed.purchase ? JSON.stringify(computed.purchase) : null,
           computed.payment.plan, adminSession.email || 'staff', now, now)
 
       const itemStmt = db.prepare(`INSERT INTO settlement_items
@@ -8828,6 +8870,26 @@ async function signSettlement(row, { signature, signedBy = '', strokes = [] }) {
     const freshStatus = db.prepare('SELECT status FROM settlements WHERE id = ?').get(row.id)
     if (!freshStatus || freshStatus.status !== 'pending_sign') {
       throw apiError(400, 'ALREADY_SIGNED', '这张单已经签过了。')
+    }
+    /* B3 现场购卡:签字时刻按快照建卡(当场核销第 1 次=used_times 直落 1;新卡无并发面)。
+       购卡价=预收负债(卡行本身即负债记录,与充值同构不写收入行);核销第 1 次照常确认收入。 */
+    if (row.purchase_json) {
+      const pur = JSON.parse(row.purchase_json)
+      const exp = pur.validDays
+        ? (() => { const d = new Date(`${todayOf(tenantId)}T12:00:00Z`); d.setUTCDate(d.getUTCDate() + Number(pur.validDays)); return d.toISOString().slice(0, 10) })()
+        : null
+      db.prepare(`INSERT INTO member_timecards (id, tenant_id, user_id, package_id, name, total_times, used_times, price_cents, project_group, expires_at, source_settlement_id, created_at)
+        VALUES (?, ?, ?, ?, ?, ?, 1, ?, ?, ?, ?, ?)`)
+        .run(randomId('tcard'), tenantId, row.user_id, pur.packageId, pur.name, pur.timesCount, pur.priceCents, pur.projectGroup || null, exp, row.id, now)
+      const purLeg = db.prepare("SELECT * FROM settlement_payments WHERE settlement_id = ? AND leg = 'times_card'").get(row.id)
+      if (purLeg) {
+        db.prepare("UPDATE settlement_payments SET status = 'paid' WHERE id = ?").run(purLeg.id)
+        insertFinanceTransaction({
+          type: 'income', source: 'settlement', category: '服务收入-次卡核销', tags: row.code,
+          amountCents: purLeg.amount_cents, payChannel: 'times_card', occurredOn: todayOf(tenantId),
+          note: `服务单 ${row.code} · ${purLeg.note || '现场购卡核销'}`, createdBy: signedBy || 'customer_sign', tenantId
+        })
+      }
     }
     /* B② 次卡扣次:签字时刻乐观锁(Cowork 预嘱并发形)——WHERE used_times = nth-1,
        被别的单抢先用掉即 changes=0 → 409,单据不作废,改支付构成可再签(预嘱① 出路)。 */
@@ -16768,6 +16830,7 @@ db.exec(`
     coupon_discount_cents INTEGER NOT NULL DEFAULT 0,
     timecard_id TEXT,
     timecard_nth INTEGER,
+    purchase_json TEXT,
     coupon_selected_by TEXT,
     coupon_selected_at TEXT,
     perf_base_cents INTEGER NOT NULL DEFAULT 0,
@@ -16850,7 +16913,9 @@ for (const column of [
   'perf_base_cents INTEGER NOT NULL DEFAULT 0',
   /* S2批② B②:次卡核销单——建单时锁定「这单核销第几次」(timecard_nth),签字时刻乐观锁
      UPDATE ... WHERE used_times = nth-1 兑现;老库走 ALTER(纪律8:只写 CREATE TABLE=生产追不上)。 */
-  'timecard_id TEXT', 'timecard_nth INTEGER'
+  'timecard_id TEXT', 'timecard_nth INTEGER',
+  // B3 现场购卡:购卡快照(套餐名/价/次数/有效期/组)随单落列,签字时刻据此建卡
+  'purchase_json TEXT'
 ]) {
   try {
     db.exec(`ALTER TABLE settlements ADD COLUMN ${column}`)

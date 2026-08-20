@@ -1108,6 +1108,35 @@ const main = async () => {
             const dE = (v2.afterSalesDeductions || []).filter((d) => d.code === shE.code)
             check('㊾补 真实比例扣回:70/30 → 12600+5400(末位吃余数)', dE.length === 2 && dE.some((d) => d.technicianId === shop.tech1 && d.deductCents === 12600) && dE.some((d) => d.technicianId === shop.tech2 && d.deductCents === 5400), JSON.stringify(dE))
           }
+          // ===== ㊿ B3 现场购卡:一次签署分行(购卡实收+当场核销第1次)+恒等式扩项+财务红线 =====
+          {
+            const pk = (await request('/admin/packages', { method: 'POST', body: JSON.stringify({ kind: 'times', name: '守护(3次卡)', priceCents: 54000, timesCount: 3 }) }, shop.token)).data.package
+            // 建单闸:购卡与已有卡核销互斥
+            mk('tc_x1', 3, 0, 30000, null)
+            dbx.prepare("UPDATE member_timecards SET project_group = NULL WHERE id = 'tc_x1'").run()
+            const bad1 = await request('/admin/settlements', { method: 'POST', body: JSON.stringify({ userId: uid, settlements: [{ payIntent: 'offline_full', purchasePackageId: pk.id, timecardId: 'tc_x1', timecardServiceId: shop.serviceId, items: [], technicians: tech, servedPersonName: '' }] }) }, shop.token)
+            check('㊿ 建单闸:购卡与已有卡核销同单=400', bad1.status === 400, JSON.stringify(bad1.data).slice(0, 100))
+            const bad2 = await request('/admin/settlements', { method: 'POST', body: JSON.stringify({ userId: uid, settlements: [{ payIntent: 'offline_full', purchasePackageId: pk.id, items: [], technicians: tech, servedPersonName: '' }] }) }, shop.token)
+            check('㊿ 建单闸:购卡未选核销项目=400(现场购卡=当场核销第1次)', bad2.status === 400 && bad2.data.error.code === 'TIMECARD_SERVICE_REQUIRED', JSON.stringify(bad2.data).slice(0, 100))
+            // 正常购卡单:分行金额面(购 540 实收现金+核销第1/3=18000 次卡腿;subtotal 只含核销=售卡不计积分/业绩)
+            const sP = await request('/admin/settlements', { method: 'POST', body: JSON.stringify({ userId: uid, settlements: [{ payIntent: 'offline_full', purchasePackageId: pk.id, timecardServiceId: shop.serviceId, items: [], technicians: tech, servedPersonName: '' }] }) }, shop.token)
+            check('㊿ 购卡单建成', sP.status === 201 || sP.status === 200, JSON.stringify(sP.data).slice(0, 100))
+            const shP = sP.data.settlements[0]
+            check('㊿ 恒等式扩项:total=subtotal(18000)+购卡(54000)=72000', shP.subtotalCents === 18000 && shP.totalCents === 72000, JSON.stringify({ sub: shP.subtotalCents, total: shP.totalCents }))
+            check('㊿ 分行腿:times_card 18000+现金 54000(购卡实收)', (shP.payments || []).some((p) => p.leg === 'times_card' && p.amountCents === 18000) && (shP.payments || []).some((p) => p.leg === 'offline' && p.amountCents === 54000), JSON.stringify(shP.payments))
+            check('㊿ 财务红线:perfBase=18000(售卡 54000 不进业绩/积分基数)', shP.perfBaseCents === 18000, `perfBase=${shP.perfBaseCents}`)
+            check('㊿ 留痕:核销行「第 1/3 次(守护(3次卡) · 现场购卡)」', (shP.items || []).some((i) => i.name && i.name.includes('第 1/3 次') && i.name.includes('现场购卡')), JSON.stringify((shP.items || []).map((i) => i.name)))
+            // 签署:建卡 used=1+核销确认收入 18000
+            const sgP = await request(`/settlements/${encodeURIComponent(shP.code)}/sign`, { method: 'POST', body: JSON.stringify({ signature: '现场购卡验签', disclaimerAccepted: true }) }, null, { 'x-tenant-id': shop.tenantId })
+            const newCard = dbx.prepare("SELECT * FROM member_timecards WHERE source_settlement_id = ?").get(shP.id)
+            check('㊿ 签字建卡:守护(3次卡) used=1/3+快照齐+溯源单号', sgP.status === 200 && newCard && newCard.used_times === 1 && newCard.total_times === 3 && newCard.price_cents === 54000 && newCard.name === '守护(3次卡)', JSON.stringify(newCard))
+            const purIncome = (await financeRows(shop)).filter((x) => x.category === '服务收入-次卡核销' && x.tags === shP.code)
+            check('㊿ 核销确认收入 18000(购卡 54000=预收负债不写收入行,与充值同构)', purIncome.length === 1 && (purIncome[0].amountCents ?? purIncome[0].amount_cents) === 18000, JSON.stringify(purIncome))
+            // 剩 2 次的新卡进持卡接口(第 2 次可正常核销=链路闭环)
+            const tcl = (await request(`/admin/customers/${uid}/timecards`, {}, shop.token)).data.timecards
+            check('㊿ 新卡入持卡列表:剩 2/3 可核销', tcl.some((c) => c.id === newCard.id && c.remaining === 2 && c.redeemable === true), JSON.stringify(tcl.map((c) => ({ id: c.id, r: c.remaining }))))
+            dbx.prepare("DELETE FROM member_timecards WHERE id IN ('tc_x1', ?)").run(newCard.id)
+          }
           dbx.prepare("DELETE FROM member_timecards WHERE id IN ('tc_race','tc_grp','tc_dual')").run()
         }
       }
