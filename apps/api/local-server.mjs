@@ -9372,9 +9372,10 @@ function perfReleaseRowsOn(date, tenantId) {
       parts = shares.map((x) => ({ technicianId: x.technicianId, deductCents: Math.floor(unit * x.shareCents / base) }))
       parts[parts.length - 1].deductCents += unit - parts.reduce((n, p) => n + p.deductCents, 0)
     } else {
-      const arr = perfSplitDefault(tenantId)
-      parts = shares.map((x, i) => ({ technicianId: x.technicianId, deductCents: Math.floor(unit * (Number(arr[i]) || 0) / 100) }))
-      if (parts.length) parts[parts.length - 1].deductCents += unit - parts.reduce((n, p) => n + p.deductCents, 0)
+      /* 双技师未分配即返还(假设⑥,Cowork 尾②):扣回**暂缓**——不用默认比例猜;
+         本函数读时现算,分配落定后扣回行按真实比例自动出现。
+         日结确认闸(UNALLOCATED blocker)保证冻结快照永远是分配后的正确版。 */
+      parts = []
     }
     for (const p of parts) {
       out.push({
@@ -9639,10 +9640,14 @@ function dailyCloseView(date, tenantId, { lang = 'zh' } = {}) {
     }
     if (perfDrift) bits.push(`业绩净额已变(确认时 ${formatMoneyCents(linePerfSum, tenantId, 'auto')} → 现在 ${formatMoneyCents(livePerfSum, tenantId, 'auto')},多为确认后发生的售后扣回)`)
     if (unsigned.length) bits.push(`另有 ${unsigned.length} 张没签字(${nameHint})`)
+    // Cowork 尾①:纯售后返还引起的过期,提示写人话(后端句唯一持有,两端直接渲染)
+    const perfOnlyDrift = perfDrift && driftCount === 0 && driftCents === 0 && !unsigned.length
     blockers.push({
       code: 'STALE_CLOSE',
-      count: Math.abs(driftCount) || unsigned.length,
-      message: `这一天已确认,但账目已经对不上了:${bits.join(';')}。日结数字仍停在确认那一刻 —— 请重开日结核对后重新确认。`,
+      count: Math.abs(driftCount) || unsigned.length || 1,
+      message: perfOnlyDrift
+        ? `本日有售后返还,业绩已变化(确认时 ${formatMoneyCents(linePerfSum, tenantId, 'auto')} → 现在 ${formatMoneyCents(livePerfSum, tenantId, 'auto')}),请重开本日日结重新确认。`
+        : `这一天已确认,但账目已经对不上了:${bits.join(';')}。日结数字仍停在确认那一刻 —— 请重开日结核对后重新确认。`,
       items: postCloseAdditions
     })
   }

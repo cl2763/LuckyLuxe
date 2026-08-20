@@ -1075,7 +1075,30 @@ const main = async () => {
               check('㊾ (跳过确认链)canConfirm=false:' + JSON.stringify(view.blockers.map((b) => b.code)), true)
             }
           }
-          dbx.prepare("DELETE FROM member_timecards WHERE id IN ('tc_race','tc_grp')").run()
+          // ===== ㊾-补(Cowork 尾②):双技师未分配即返还=扣回暂缓;分配落定按真实比例出现 =====
+          {
+            mk('tc_dual', 3, 0, 54000, null)
+            dbx.prepare("UPDATE member_timecards SET project_group = NULL WHERE id = 'tc_dual'").run()
+            const dualTech = [{ technicianId: shop.tech1, role: 'main', itemNos: [] }, { technicianId: shop.tech2, role: 'assist', itemNos: [] }]
+            const sE = await request('/admin/settlements', { method: 'POST', body: JSON.stringify({ userId: uid, settlements: [{ payIntent: 'offline_full', timecardId: 'tc_dual', timecardServiceId: shop.serviceId, items: [], technicians: dualTech, servedPersonName: '' }] }) }, shop.token)
+            const shE = sE.data.settlements[0]
+            const sgE = await request(`/settlements/${encodeURIComponent(shE.code)}/sign`, { method: 'POST', body: JSON.stringify({ signature: '双技师核销验签', disclaimerAccepted: true }) }, null, { 'x-tenant-id': shop.tenantId })
+            check('㊾补 前提:双技师核销单签成(卡 1/3)', sgE.status === 200 && dbx.prepare("SELECT used_times FROM member_timecards WHERE id = 'tc_dual'").get().used_times === 1)
+            const relE = await request(`/admin/settlements/${shE.id}/amend`, { method: 'POST', body: JSON.stringify({ reason: '双技师未分配返还', releaseTimecard: true }) }, shop.token)
+            check('㊾补 未分配即返还:更正成+次数已回(1→0)', relE.status === 200 && dbx.prepare("SELECT used_times FROM member_timecards WHERE id = 'tc_dual'").get().used_times === 0)
+            let v2 = (await request('/admin/daily-close', {}, shop.token)).data.dailyClose
+            check('㊾补 暂缓:未分配时扣回行不出现(不用默认比例猜)', !(v2.afterSalesDeductions || []).some((d) => d.code === shE.code), JSON.stringify((v2.afterSalesDeductions || []).map((d) => d.code)))
+            // 产品路:当日已确认 → 先重开(R1 重开链)再分配
+            const todayE = (await request('/admin/daily-close', {}, shop.token)).data.dailyClose.date
+            const ro = await request('/admin/daily-close/reopen', { method: 'POST', body: JSON.stringify({ date: todayE, reason: '㊾补:确认后双技师核销返还,重开分配' }) }, shop.token)
+            check('㊾补 重开日结(R1 链)', ro.status === 200, JSON.stringify(ro.data).slice(0, 80))
+            const al = await request(`/admin/settlements/${shE.id}/allocate`, { method: 'POST', body: JSON.stringify({ shares: [{ technicianId: shop.tech1, pct: 70 }, { technicianId: shop.tech2, pct: 30 }] }) }, shop.token)
+            check('㊾补 分配落定', al.status === 200, JSON.stringify(al.data).slice(0, 80))
+            v2 = (await request('/admin/daily-close', {}, shop.token)).data.dailyClose
+            const dE = (v2.afterSalesDeductions || []).filter((d) => d.code === shE.code)
+            check('㊾补 真实比例扣回:70/30 → 12600+5400(末位吃余数)', dE.length === 2 && dE.some((d) => d.technicianId === shop.tech1 && d.deductCents === 12600) && dE.some((d) => d.technicianId === shop.tech2 && d.deductCents === 5400), JSON.stringify(dE))
+          }
+          dbx.prepare("DELETE FROM member_timecards WHERE id IN ('tc_race','tc_grp','tc_dual')").run()
         }
       }
       dbx.close()
@@ -1114,6 +1137,7 @@ const main = async () => {
       const srv = readFileSync(join(ROOT42, 'apps/api/local-server.mjs'), 'utf8')
       check('㊹ 网页「转售后」钮:仅已完成且已签署(listBadgeKind 判据=后端徽标唯一持有)+弹层在场', adminJs.includes('data-convert-aftersales') && adminJs.includes("['signed', 'amended'].includes(booking.listBadgeKind)") && adminJs.includes("title: '转售后'"))
       check('㊹ 商家小程序「转售后」前置:sheets 含 signed/amended 才显示', /s\.status === 'signed' \|\| s\.status === 'amended'\)\) opts\.push\(\{ label: '转售后'/.test(miniOrders))
+      check('㊾ 尾①人话句在场:纯售后返还过期提示(后端句唯一持有,两端直渲)', srv.includes('本日有售后返还,业绩已变化'))
       check('㊹ 后端 PATCH AFTER_SALES 落 status_history(发起原因唯一持有链)', srv.includes("if (status === 'AFTER_SALES') {") && /booking_status_history[\s\S]{0,200}AFTER_SALES', String\(body\.note/.test(srv))
       // ㊼ 裁决前端面:项目组=下拉(现有分类+不限)+存量野文本标红改选(不静默改)
       check('㊼ 前端下拉+存量标红在场(savePackage select/legacyGroupBad/danger)', adminJs.includes('groupOptions') && adminJs.includes('legacyGroupBad') && adminJs.includes('danger: legacyGroupBad'))
