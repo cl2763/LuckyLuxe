@@ -18,6 +18,7 @@
     <view class="pills">
       <text class="pill">今日 <text class="b">{{v.orderCount}}</text> 单</text>
       <text class="pill">营业额 <text class="b">{{v.revenue}}</text></text>
+      <text class="pill" wx:if="{{v.tcSummary}}">{{v.tcSummary}}</text>
       <text class="pill hot" wx:if="{{v.pending.length}}">待分配 <text class="b">{{v.pending.length}}</text></text>
     </view>
 

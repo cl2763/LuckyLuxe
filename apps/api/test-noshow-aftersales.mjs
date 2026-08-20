@@ -1148,6 +1148,10 @@ const main = async () => {
             check('裁② 开态:储值余额可全额抵购卡(stored=余额,offline=54000−stored)', pvOn.group.payment.storedUsedCents === pvOn.group.payment.balanceAvailableCents && pvOn.group.payment.storedUsedCents > 0 && pvOn.group.payment.offlineDueCents === 54000 - pvOn.group.payment.storedUsedCents, JSON.stringify(pvOn.group.payment))
             await request('/admin/timecard-settings', { method: 'PUT', body: JSON.stringify({ allowStoredPurchase: false }) }, shop.token)
             check('裁② 回关幂等', (await request('/admin/timecard-settings', {}, shop.token)).data.allowStoredPurchase === false)
+            // 裁①:日结汇总单列——次卡售卡独立行(预收负债与充值并列)+核销 n 次折算(§十-7 v1.6 兑现);技师表零改动
+            const dcv = (await request('/admin/daily-close', {}, shop.token)).data.dailyClose
+            check('裁① 日结单列:售卡 1 张 +54000(预收)', dcv.timecardSummary && dcv.timecardSummary.soldCount === 1 && dcv.timecardSummary.soldCents === 54000, JSON.stringify(dcv.timecardSummary))
+            check('裁① 日结单列:核销次数与折算合计在场(≥2 次,含 18000×n)', dcv.timecardSummary.redeemCount >= 2 && dcv.timecardSummary.redeemCents >= 36000, JSON.stringify(dcv.timecardSummary))
             dbx.prepare("DELETE FROM member_timecards WHERE id IN ('tc_x1', ?)").run(newCard.id)
           }
           dbx.prepare("DELETE FROM member_timecards WHERE id IN ('tc_race','tc_grp','tc_dual')").run()

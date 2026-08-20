@@ -9737,6 +9737,22 @@ function dailyCloseView(date, tenantId, { lang = 'zh' } = {}) {
     // 不需要分配、但同样等着店长点「确认日结」的单
     awaitingConfirm,
     technicians,
+    /* 裁①(队列 B3-2 验收第2点)+§十-7 v1.6:日结汇总单列区——
+       「次卡售卡」独立行(与充值并列,预收负债不混现金实收)+「次卡核销 n 次(折算 ¥xxx)」单列。
+       技师表零改动;营业额口径不动(Σ应收本就含购卡收款,本行自证其中预收部分)。 */
+    timecardSummary: (() => {
+      const sold = rows.filter((r) => r.purchase_json).map((r) => { try { return JSON.parse(r.purchase_json) } catch { return null } }).filter(Boolean)
+      const redeems = rows.length
+        ? db.prepare(`SELECT COUNT(*) AS n, COALESCE(SUM(amount_cents), 0) AS s FROM settlement_items
+            WHERE kind = 'timecard' AND settlement_id IN (${rows.map(() => '?').join(',')})`).get(...rows.map((r) => r.id))
+        : { n: 0, s: 0 }
+      return {
+        soldCount: sold.length,
+        soldCents: sold.reduce((n, p) => n + (p.priceCents || 0), 0),
+        redeemCount: redeems.n,
+        redeemCents: redeems.s
+      }
+    })(),
     // 裁③:「售后扣回」显式行(负数+关联单号),日结页两端直接渲染,数字自证
     afterSalesDeductions: releaseRows.map((rel) => ({
       technicianId: rel.technicianId,

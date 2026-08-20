@@ -98,7 +98,15 @@ const dailyCloseMixin = {
           // 售后业绩扣回显式行(裁③:负数+关联单号,与网页日结同源同句)
           deducts: (dc.afterSalesDeductions || []).map((d) => ({
             time: d.timeText || '', tech: d.technicianName, label: d.label, amt: `−${m(d.deductCents)}`
-          }))
+          })),
+          // 裁①+§十-7:次卡两条汇总单列(售卡=预收负债/核销=折算计业绩积分)
+          tcSummary: (() => {
+            const t = dc.timecardSummary || {}
+            const bits = []
+            if (t.soldCount) bits.push(`次卡售卡 ${t.soldCount} 张 +${m(t.soldCents)}(预收)`)
+            if (t.redeemCount) bits.push(`次卡核销 ${t.redeemCount} 次(折算 ${m(t.redeemCents)})`)
+            return bits.join(' · ')
+          })()
         }
       })
     } catch (e) {

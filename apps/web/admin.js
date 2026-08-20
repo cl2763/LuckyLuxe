@@ -1,5 +1,5 @@
 // 构建号:每次交付递增。侧栏可见,排查"改了没生效"时先对版本。
-const ADMIN_BUILD = '20260821b-tcsp'
+const ADMIN_BUILD = '20260821c-tcsum'
 let pricingState = { module: 'storefront', tab: 'items', categories: [], items: [], rules: {}, editing: null, preview: null, storefrontPicker: false }
 console.log(`[admin] build ${ADMIN_BUILD}`)
 
@@ -2509,6 +2509,14 @@ function renderDailyClose() {
     <div class="section-row compact-row" style="margin-top:4px">
       <span class="subtle">${zh ? `本日 ${v.orderCount} 单 · 营业额 ${money(v.revenueCents, 2)}` : `${v.orderCount} orders`}</span>
     </div>
+    ${/* 裁①+§十-7:次卡两条汇总单列(售卡=预收负债与充值并列不混现金实收;核销=折算计业绩/积分)。技师表零改动 */''}
+    ${v.timecardSummary && (v.timecardSummary.soldCount || v.timecardSummary.redeemCount) ? `
+    <div class="section-row compact-row" style="margin-top:2px">
+      <span class="subtle">${[
+        v.timecardSummary.soldCount ? `次卡售卡 ${v.timecardSummary.soldCount} 张 +${money(v.timecardSummary.soldCents, 2)}(预收负债,不计实收/业绩/积分)` : '',
+        v.timecardSummary.redeemCount ? `次卡核销 ${v.timecardSummary.redeemCount} 次(折算 ${money(v.timecardSummary.redeemCents, 2)} 计业绩/积分)` : ''
+      ].filter(Boolean).join(' · ')}</span>
+    </div>` : ''}
 
     ${pend.length ? `<h3 style="font-size:14px;margin:12px 0 8px">${zh ? `待分配 ${pend.length} 单` : `${pend.length} to allocate`}<span class="subtle" style="margin-left:8px;font-weight:400">${zh ? '逐单点开' : ''}</span></h3>` : ''}
     ${pend.map((p) => {
