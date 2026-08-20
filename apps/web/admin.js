@@ -1,5 +1,5 @@
 // 构建号:每次交付递增。侧栏可见,排查"改了没生效"时先对版本。
-const ADMIN_BUILD = '20260820c-d52'
+const ADMIN_BUILD = '20260820d-zsh'
 let pricingState = { module: 'storefront', tab: 'items', categories: [], items: [], rules: {}, editing: null, preview: null, storefrontPicker: false }
 console.log(`[admin] build ${ADMIN_BUILD}`)
 
@@ -5122,6 +5122,8 @@ function renderBookingCard(booking) {
         <button class="ghost" data-view-booking="${booking.id}" type="button">${t('details')}</button>
         <button class="ghost" data-status="COMPLETED" data-booking="${booking.id}" type="button">${t('completed')}</button>
         <button class="ghost" data-status="CANCELLED" data-booking="${booking.id}" type="button">${t('cancelled')}</button>
+        ${/* 售后线图 v1.1 §四+拍板③:仅「已完成且已签署结算单」出「转售后」(判据=后端徽标 listBadgeKind,唯一持有;未签单不显示) */''}
+        ${booking.status === 'COMPLETED' && ['signed', 'amended'].includes(booking.listBadgeKind) ? `<button class="ghost" data-convert-aftersales="${booking.id}" type="button">转售后</button>` : ''}
         ${isOwnerRole() && booking.depositDisposal && booking.depositDisposal.state === 'pending' ? `<button class="ghost" data-disposal-booking="${booking.id}" type="button">处置定金</button>` : ''}
         ${booking.afterSales && !['resolved', 'closed'].includes(booking.afterSales.status) ? `<button class="ghost" data-aftersales-booking="${booking.id}" type="button">处理售后</button>` : ''}
       </div>
@@ -6600,6 +6602,25 @@ els.adminLayout.addEventListener('click', (event) => {
     return
   }
   /* 图 B-UI4:网页端售后写入(同一状态机;权限后端断言)。 */
+  const cvtBtn = event.target.closest('[data-convert-aftersales]')
+  if (cvtBtn) {
+    // 售后线图 v1.1 §四:转售后=问题描述(必填)+确认;与商家小程序同一后端接口(PATCH status),四之九免疫
+    const id = cvtBtn.dataset.convertAftersales
+    openFormModal({
+      title: '转售后',
+      hint: '转入后本单进入「售后中」,可在本卡「处理售后」跟进;退款/补差走更正单,售后单只记过程与结论。',
+      fields: [{ key: 'desc', label: '问题描述(必填)', type: 'text', value: '', placeholder: '顾客反馈的问题,如:掉钻/起翘…' }],
+      saveText: '确认转售后',
+      onSave: async (v) => {
+        const desc = String(v.desc || '').trim()
+        if (!desc) { toast('请填写问题描述'); return false }
+        await request(`/admin/bookings/${id}/status`, { method: 'PATCH', body: JSON.stringify({ status: 'AFTER_SALES', note: desc }) })
+        toast('已转入售后')
+        await loadAll()
+      }
+    })
+    return
+  }
   const asBtn = event.target.closest('[data-aftersales-booking]')
   if (asBtn) {
     const id = asBtn.dataset.aftersalesBooking

@@ -203,6 +203,15 @@ const main = async () => {
     const row = mid.data.bookings.find((x) => x.id === b5.id)
     check('㊷ D51 售后开着:admin bookings 徽标=售后中/aftersales', row.listBadgeText === '售后中' && row.listBadgeKind === 'aftersales', JSON.stringify({ t: row.listBadgeText, k: row.listBadgeKind }))
   }
+  // ===== ㊹ 售后线图 v1.1 §四:转售后落史(发起原因进 afterSalesProgress 同一读链) =====
+  if (process.env.TEST_DB_PATH) {
+    const dbh = new DatabaseSync(process.env.TEST_DB_PATH, { readOnly: true })
+    const hist = dbh.prepare("SELECT note FROM booking_status_history WHERE booking_id = ? AND to_status = 'AFTER_SALES'").all(b5.id)
+    check('㊹ PATCH 转售后写 status_history(无 note 用默认句,发起原因链在场)', hist.length >= 1 && Boolean(hist[0].note), JSON.stringify(hist))
+    dbh.close()
+  } else {
+    check('㊹ (跳过)无 TEST_DB_PATH,转售后落史未直查', true)
+  }
   r = await request(`/admin/bookings/${b5.id}/after-sales/resolve`, { method: 'POST', body: JSON.stringify({ resultText: '' }) }, shop.token)
   check('⑦ B④ 空结果标解决=400', r.status === 400)
   r = await request(`/admin/bookings/${b5.id}/after-sales/close`, { method: 'POST', body: JSON.stringify({ reason: '试试员工关' }) }, staffToken)
@@ -943,6 +952,11 @@ const main = async () => {
       const miniOrders = readFileSync(join(ROOT42, 'miniprogram/pages/merchant/orders/index.js'), 'utf8')
       check('㊸ D52 网页全部预约日期组倒序(最近日期优先)', /Object\.keys\(grouped\)\.sort\(\(a, b\) => b\.localeCompare\(a\)\)/.test(adminJs) && !/Object\.keys\(grouped\)\.sort\(\)\.map/.test(adminJs))
       check('㊸ D52 商家小程序全部订单日期组倒序在场(双端同口径锚)', /Object\.keys\(map\)\.sort\(\(a, b\) => b\.localeCompare\(a\)\)/.test(miniOrders))
+      // ㊹ 拍板③(08-20 双端统一):未签署结算单不能发起售后——两端「转售后」前置在场;网页钮+弹层在场
+      const srv = readFileSync(join(ROOT42, 'apps/api/local-server.mjs'), 'utf8')
+      check('㊹ 网页「转售后」钮:仅已完成且已签署(listBadgeKind 判据=后端徽标唯一持有)+弹层在场', adminJs.includes('data-convert-aftersales') && adminJs.includes("['signed', 'amended'].includes(booking.listBadgeKind)") && adminJs.includes("title: '转售后'"))
+      check('㊹ 商家小程序「转售后」前置:sheets 含 signed/amended 才显示', /s\.status === 'signed' \|\| s\.status === 'amended'\)\) opts\.push\(\{ label: '转售后'/.test(miniOrders))
+      check('㊹ 后端 PATCH AFTER_SALES 落 status_history(发起原因唯一持有链)', srv.includes("if (status === 'AFTER_SALES') {") && /booking_status_history[\s\S]{0,200}AFTER_SALES', String\(body\.note/.test(srv))
     }
 
   console.log(`\n爽约处置+售后完成态回归通过:${checks} 项断言全绿`)

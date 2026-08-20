@@ -156,7 +156,9 @@ Page(Object.assign({
       // D28 规则①②:已结算/已签署 → 同一预览弹层(不再是 showModal 清单)
       const live = sheets.filter((s) => s.status !== 'voided')
       if (live.length) opts.push({ label: '查看结算单', preview: live[0].id })
-      opts.push({ label: '转售后', s: 'AFTER_SALES' })
+      /* 拍板③(店主 08-20,双端统一):未签署结算单的单不能发起售后——未签单不显示「转售后」。
+         老数据红线:已存在的无签署单售后原样保留(只收紧新发起,不回溯)。 */
+      if (sheets.some((s) => s.status === 'signed' || s.status === 'amended')) opts.push({ label: '转售后', s: 'AFTER_SALES' })
     } else if (status === 'AFTER_SALES') {
       // 图 B 部:售后详情可看可写(权限在面板里按角色收)
       opts.push({ label: '查看/处理售后', asOpen: true })

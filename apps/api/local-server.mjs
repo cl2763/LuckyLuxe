@@ -15506,6 +15506,12 @@ async function route(req, res) {
     if (!booking) throw apiError(404, 'NOT_FOUND', 'Booking not found.')
     assertStaffCanAccessBooking(adminSession, booking)
     if (['CANCELLED', 'EXPIRED'].includes(status)) db.prepare('DELETE FROM booking_slots WHERE booking_id = ?').run(id)
+    /* 售后线图 v1.1 §四:转售后的问题描述落 status_history——afterSalesProgress 的「发起原因」
+       读的就是第一条 to_status=AFTER_SALES 的 note(5607),发起原因由此进后端唯一持有链。 */
+    if (status === 'AFTER_SALES') {
+      db.prepare('INSERT INTO booking_status_history (id, booking_id, from_status, to_status, note, created_at) VALUES (?, ?, ?, ?, ?, ?)')
+        .run(randomId('hist'), id, booking.status, 'AFTER_SALES', String(body.note || '').trim() || '商家标记转入售后', iso(new Date()))
+    }
     db.prepare('UPDATE bookings SET status = ?, updated_at = ? WHERE id = ?').run(status, iso(new Date()), id)
     const updatedBooking = db.prepare('SELECT * FROM bookings WHERE id = ?').get(id)
     // 财务自动入账：完成→确认收入；取消/过期→冲销已入账收入
