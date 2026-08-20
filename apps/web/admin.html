@@ -4,7 +4,7 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>有迹 · 商家后台</title>
-    <link rel="stylesheet" href="/web/styles.css?v=20260821a-perf">
+    <link rel="stylesheet" href="/web/styles.css?v=20260821b-tcsp">
     <style>
       /* 2026-08-02 财务指标显隐+动效(店主 v4 定稿):AI智能总结卡 / 目标进度条(带平衡线刻度) / 设目标引导与弹窗。
          放这里不放 styles.css:本批约定只动 admin.js + admin.html 两个文件。 */
@@ -655,6 +655,8 @@
               </div>
               <p class="subtle" style="margin:2px 0 10px">名称+总次数+价格+关联项目组+有效期(可选,默认长期)。售卡=预收负债不计积分;核销按折算单价确认收入(批②落地)。</p>
               <div class="service-admin-list" id="timesPkgList"></div>
+              <!-- 裁②升级(店主 08-21):储值买卡店级开关(默认关) -->
+              <div id="timecardSettingsRow"></div>
             </section>
             <div id="mtabCoupon">
             <section class="admin-card">
@@ -965,6 +967,6 @@
     </main>
 
     <div class="toast" id="toast"></div>
-    <script src="/web/admin.js?v=20260821a-perf"></script>
+    <script src="/web/admin.js?v=20260821b-tcsp"></script>
   </body>
 </html>

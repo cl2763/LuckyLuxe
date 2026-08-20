@@ -1,5 +1,5 @@
 // 构建号:每次交付递增。侧栏可见,排查"改了没生效"时先对版本。
-const ADMIN_BUILD = '20260821a-perf'
+const ADMIN_BUILD = '20260821b-tcsp'
 let pricingState = { module: 'storefront', tab: 'items', categories: [], items: [], rules: {}, editing: null, preview: null, storefrontPicker: false }
 console.log(`[admin] build ${ADMIN_BUILD}`)
 
@@ -7523,6 +7523,12 @@ els.membershipPage.addEventListener('change', (event) => {
       .then(() => loadMembershipPage())
       .catch((error) => { toast(error.message); loadMembershipPage().catch(() => {}) })
   }
+  if (event.target.closest('[data-tcsp-switch]')) {
+    const on = event.target.checked
+    request('/admin/timecard-settings', { method: 'PUT', body: JSON.stringify({ allowStoredPurchase: on }) })
+      .then(() => loadMembershipPage())
+      .catch((error) => { toast(error.message); loadMembershipPage().catch(() => {}) })
+  }
 })
 els.financePage.addEventListener('change', (event) => {
   if (event.target.id === 'financeMonth') {
@@ -7933,13 +7939,15 @@ function mCents(v) { const n = Number(String(v).replace(/[^\d.]/g, '')); return 
 function mMoney(cents) { return money(Math.round(cents || 0)) }
 async function loadMembershipPage() {
   try { membershipData.mall = await request('/admin/mall/self-purchase') } catch (e) { membershipData.mall = { enabled: false, locked: true } }
-  const [p, c, z, cat] = await Promise.all([
+  const [p, c, z, cat, tcs] = await Promise.all([
     request('/admin/packages'),
     request('/admin/coupons'),
     request('/admin/points-prizes').catch(() => ({ prizes: [] })), // 2026-08-02 积分商城奖品(owner-only,失败不拖垮整页)
-    request('/admin/pricing/categories').catch(() => ({ categories: [] })) // C3 发券的「适用范围」要按本店大类选
+    request('/admin/pricing/categories').catch(() => ({ categories: [] })), // C3 发券的「适用范围」要按本店大类选
+    request('/admin/timecard-settings').catch(() => ({ allowStoredPurchase: false })) // 裁②:储值买卡开关(默认关)
   ])
-  membershipData = { packages: p.packages || [], coupons: c.coupons || [], prizes: z.prizes || [], categories: cat.categories || [] }
+  // 展开保留 mall/tab(原整体重赋值会把刚拉的 mall 和当前页签抹掉——顺手修)
+  membershipData = { ...membershipData, packages: p.packages || [], coupons: c.coupons || [], prizes: z.prizes || [], categories: cat.categories || [], timecardSettings: tcs }
   // 屏 C3 自定义发放:整区仅老板;员工端连请求都不发(后端同样 403,不靠前端自觉)
   couponGrantState.grants = isOwnerRole()
     ? (await request('/admin/coupon-grants').catch(() => ({ grants: [] }))).grants || []
@@ -8094,6 +8102,7 @@ function renderMemberTabs() {
 
 function renderMembership() {
   renderMemberTabs()
+  renderTimecardSettings()
   const rl = document.querySelector('#rechargePkgList')
   const tl = document.querySelector('#timesPkgList')
   if (!rl || !tl) return
@@ -8184,6 +8193,21 @@ function renderMallSwitch() {
         <div class="subtle">${st.locked ? '微信支付通道未接通,此开关锁定——商城仅展示+「到店购买」提示(批⑤接通后解锁)' : '通道已接通,可开放顾客线上自助购买'}</div>
       </div>
       <label class="service-active-toggle"><input type="checkbox" data-mall-switch ${st.enabled ? 'checked' : ''} ${st.locked ? 'disabled' : ''}><span class="subtle">${st.enabled ? '开' : '关'}</span></label>
+    </div>`
+}
+
+/* 裁②升级(店主 08-21):储值买卡店级开关——落位次卡页签;新店默认关。
+   关=购卡金额从储值可抵范围摘出只收现金/其他;开=可用储值余额购卡。引擎 preview/建单同刀。 */
+function renderTimecardSettings() {
+  const row = document.querySelector('#timecardSettingsRow')
+  if (!row) return
+  const st = membershipData.timecardSettings || { allowStoredPurchase: false }
+  row.innerHTML = `
+    <div class="service-admin-item" style="background:#FDFBF8;margin-top:10px">
+      <div><strong>允许用储值余额购买次卡</strong>
+        <div class="subtle">${st.allowStoredPurchase ? '开:现场购卡可用顾客储值余额抵扣(负债转卡债)' : '关(默认):购卡只收现金/其他,储值余额不抵购卡金额'}</div>
+      </div>
+      <label class="service-active-toggle"><input type="checkbox" data-tcsp-switch ${st.allowStoredPurchase ? 'checked' : ''}><span class="subtle">${st.allowStoredPurchase ? '开' : '关'}</span></label>
     </div>`
 }
 

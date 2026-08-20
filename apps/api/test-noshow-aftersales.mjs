@@ -1135,6 +1135,19 @@ const main = async () => {
             // 剩 2 次的新卡进持卡接口(第 2 次可正常核销=链路闭环)
             const tcl = (await request(`/admin/customers/${uid}/timecards`, {}, shop.token)).data.timecards
             check('㊿ 新卡入持卡列表:剩 2/3 可核销', tcl.some((c) => c.id === newCard.id && c.remaining === 2 && c.redeemable === true), JSON.stringify(tcl.map((c) => ({ id: c.id, r: c.remaining }))))
+            // ===== 裁②升级双态:储值买卡开关(默认关=购卡摘出储值可抵;开=照现链路) =====
+            await request('/admin/stored-value/recharge', { method: 'POST', body: JSON.stringify({ userId: uid, amountCents: 10000, payChannel: 'cash' }) }, shop.token)
+            const df = (await request('/admin/timecard-settings', {}, shop.token)).data
+            check('裁② 新店默认关(无设置行=false)', df.allowStoredPurchase === false, JSON.stringify(df))
+            const mkPv = () => request('/admin/settlements/preview', { method: 'POST', body: JSON.stringify({ userId: uid, payIntent: 'balance_plus_offline', settlements: [{ payIntent: 'balance_plus_offline', purchasePackageId: pk.id, timecardServiceId: shop.serviceId, items: [], technicians: tech, servedPersonName: '' }] }) }, shop.token)
+            const pvOff = (await mkPv()).data
+            check('裁② 关态:购卡 54000 摘出储值可抵(stored=0,offline=54000)', pvOff.group.payment.storedUsedCents === 0 && pvOff.group.payment.offlineDueCents === 54000, JSON.stringify(pvOff.group.payment))
+            await request('/admin/timecard-settings', { method: 'PUT', body: JSON.stringify({ allowStoredPurchase: true }) }, shop.token)
+            const pvOn = (await mkPv()).data
+            // 相对式:余额含此前更正自动补回的零头(shD −1 元→+100 分币回卡),全烧+差额恒等即对
+            check('裁② 开态:储值余额可全额抵购卡(stored=余额,offline=54000−stored)', pvOn.group.payment.storedUsedCents === pvOn.group.payment.balanceAvailableCents && pvOn.group.payment.storedUsedCents > 0 && pvOn.group.payment.offlineDueCents === 54000 - pvOn.group.payment.storedUsedCents, JSON.stringify(pvOn.group.payment))
+            await request('/admin/timecard-settings', { method: 'PUT', body: JSON.stringify({ allowStoredPurchase: false }) }, shop.token)
+            check('裁② 回关幂等', (await request('/admin/timecard-settings', {}, shop.token)).data.allowStoredPurchase === false)
             dbx.prepare("DELETE FROM member_timecards WHERE id IN ('tc_x1', ?)").run(newCard.id)
           }
           dbx.prepare("DELETE FROM member_timecards WHERE id IN ('tc_race','tc_grp','tc_dual')").run()

@@ -8328,18 +8328,23 @@ function couponOptionsFor({ tenantId, userId, subtotalCents, maxDeductCents, cat
 
 /* 支付构成的唯一实现:储值先烧迁移桶(不进本店收入)→ 再烧新桶 → 剩下的进线下腿。
    开单试算与「顾客改券后重算」共用这一份 —— 两处各写一遍迟早会算出两个数。 */
-function buildPaymentLegs({ tenantId, payerId, totalCents, payIntent }) {
+function buildPaymentLegs({ tenantId, payerId, totalCents, payIntent, storedExcludeCents = 0 }) {
   const balance = payerId ? storedValueBalanceDetail(payerId, tenantId) : { totalCents: 0, legacyCents: 0, normalCents: 0 }
   const plan = ['balance_plus_offline', 'recharge_then_balance', 'offline_full'].includes(payIntent) ? payIntent : 'balance_plus_offline'
   const legs = []
   let remaining = totalCents
+  /* 裁②升级(店主 08-21):储值买卡=店级开关,默认关——关时购卡金额从储值可抵范围**摘出**,
+     只收现金/其他。摘出的部分先离场再回线下腿,储值腿永远烧不到它(单一实现,调用方传摘出额)。 */
+  const excluded = Math.min(Math.max(0, Math.round(storedExcludeCents) || 0), remaining)
+  remaining -= excluded
   if (plan !== 'offline_full') {
     const useLegacy = Math.min(Math.max(0, balance.legacyCents), remaining)
     if (useLegacy > 0) { legs.push({ leg: 'migrate_stored', amountCents: useLegacy, payerUserId: payerId, note: '迁移桶(不进本店收入)' }); remaining -= useLegacy }
     const useNormal = Math.min(Math.max(0, balance.normalCents), remaining)
     if (useNormal > 0) { legs.push({ leg: 'stored_value', amountCents: useNormal, payerUserId: payerId }); remaining -= useNormal }
   }
-  if (remaining > 0) legs.push({ leg: 'offline', amountCents: remaining, payerUserId: payerId, note: '到店支付' })
+  remaining += excluded
+  if (remaining > 0) legs.push({ leg: 'offline', amountCents: remaining, payerUserId: payerId, note: excluded > 0 ? '到店支付(含购卡:本店未开储值购卡)' : '到店支付' })
   /* R6①(店主 2026-08-10 开检):支付构成里写着「储值卡抵扣(迁移余额)」——
      「迁移余额」是我们内部说法(老系统搬过来、不计本店收入的那一桶钱),
      顾客和店员都看不懂。文案统一由后端下发,前端只渲染,不再各端各写一份。 */
@@ -8640,7 +8645,9 @@ function computeSettlement(input = {}) {
      cover 封顶到应收(极端:券+定金把非次卡部分抵穿时不产生负腿)。 */
   const timecardLine = (tcCard || tcPurchase) ? lines.find((l) => l.kind === 'timecard') : null
   const timecardCoverCents = timecardLine ? Math.min(timecardLine.amountCents, totalCents) : 0
-  const { plan, legs, balance, remaining, storedUsedCents } = buildPaymentLegs({ tenantId, payerId, totalCents: totalCents - timecardCoverCents, payIntent: input.payIntent })
+  // 裁②:开关关(默认)=购卡金额摘出储值可抵范围,只收现金/其他
+  const purchaseCashOnlyCents = tcPurchase && !allowStoredPurchase(tenantId) ? purchaseCents : 0
+  const { plan, legs, balance, remaining, storedUsedCents } = buildPaymentLegs({ tenantId, payerId, totalCents: totalCents - timecardCoverCents, payIntent: input.payIntent, storedExcludeCents: purchaseCashOnlyCents })
   if (tcCard) {
     legs.unshift({ leg: 'times_card', amountCents: timecardCoverCents, payerUserId: payerId, note: `次卡抵扣 · ${tcCard.name} · 第 ${tcNth}/${tcCard.total_times} 次` })
   } else if (tcPurchase) {
@@ -8684,6 +8691,7 @@ function computeSettlement(input = {}) {
       : (tcPurchase ? { id: null, nth: 1, name: tcPurchase.name, totalTimes: tcPurchase.timesCount, coverCents: timecardCoverCents } : null),
     purchase: tcPurchase,
     purchaseCents,
+    purchaseCashOnlyCents,
     payment: {
       plan,
       legs,
@@ -11710,7 +11718,9 @@ async function route(req, res) {
       /* B②:次卡覆盖的部分不进组级现金/储值分解(B2-9)——不减的话组级应收会把折算价再收一遍现金。
          per-sheet 腿本来就对,这里只是组级加总同口径。 */
       const timecardCoverCents = sheets.reduce((n, x) => n + ((x.timecard && x.timecard.coverCents) || 0), 0)
-      const pay = buildPaymentLegs({ tenantId, payerId, totalCents: totalCents - timecardCoverCents, payIntent: body.payIntent })
+      // 裁②:组级同刀——开关关时 Σ购卡额摘出储值可抵范围
+      const purchaseCashOnlyCents = sheets.reduce((n, x) => n + (x.purchaseCashOnlyCents || 0), 0)
+      const pay = buildPaymentLegs({ tenantId, payerId, totalCents: totalCents - timecardCoverCents, payIntent: body.payIntent, storedExcludeCents: purchaseCashOnlyCents })
       return json(res, 200, {
         sheets,
         group: {
@@ -12311,6 +12321,18 @@ async function route(req, res) {
     const r = db.prepare('DELETE FROM membership_packages WHERE id = ? AND tenant_id = ?').run(id, currentTenantId())
     if (!r.changes) throw apiError(404, 'NOT_FOUND', 'Package not found.')
     return json(res, 200, { deleted: true })
+  }
+  /* 裁②升级(店主 08-21):储值买卡店级开关,默认关;落位=会员与营销·次卡页签 */
+  if (req.method === 'GET' && path === '/admin/timecard-settings') {
+    return json(res, 200, { allowStoredPurchase: allowStoredPurchase(currentTenantId()) })
+  }
+  if (req.method === 'PUT' && path === '/admin/timecard-settings') {
+    if (adminSession.role !== 'owner') throw apiError(403, 'FORBIDDEN', 'Owner permission is required.')
+    const body = await readBody(req)
+    db.prepare(`INSERT INTO tenant_settings (tenant_id, key, value, updated_at) VALUES (?, 'timecard_stored_purchase', ?, ?)
+      ON CONFLICT(tenant_id, key) DO UPDATE SET value = excluded.value, updated_at = excluded.updated_at`)
+      .run(currentTenantId(), body.allowStoredPurchase ? '1' : '0', iso(new Date()))
+    return json(res, 200, { allowStoredPurchase: allowStoredPurchase(currentTenantId()) })
   }
   /* ===== S2批② B①:顾客次卡持有(开单「次卡」大类的数据源,三端同一接口)=====
      口径:剩 0 的卡不出现(B1-2,接口层单源);过期卡在场带 expired 位=前端置灰不可点(B1-3)。 */
@@ -16535,6 +16557,12 @@ function serializeMerchantLead(row) {
     createdAt: row.created_at,
     updatedAt: row.updated_at
   }
+}
+
+/* 裁②升级(店主 08-21):店级开关「允许用储值余额购买次卡」,新店默认关。 */
+function allowStoredPurchase(tenantId = currentTenantId()) {
+  const row = db.prepare("SELECT value FROM tenant_settings WHERE tenant_id = ? AND key = 'timecard_stored_purchase'").get(tenantId)
+  return row ? String(row.value).replace(/"/g, '') === '1' : false
 }
 
 /* 裁决(店主 08-20):次卡「关联项目组」禁自由文本——新值必须是现有二级分类名(空串=不限)。
