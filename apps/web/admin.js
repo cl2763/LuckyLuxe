@@ -1,5 +1,5 @@
 // 构建号:每次交付递增。侧栏可见,排查"改了没生效"时先对版本。
-const ADMIN_BUILD = '20260820d-zsh'
+const ADMIN_BUILD = '20260820e-b2'
 let pricingState = { module: 'storefront', tab: 'items', categories: [], items: [], rules: {}, editing: null, preview: null, storefrontPicker: false }
 console.log(`[admin] build ${ADMIN_BUILD}`)
 
@@ -8199,7 +8199,7 @@ function openFormModal({ title, hint, fields, saveText, onSave }) {
             ? `<label><span>${escapeHtml(f.label)}</span><select data-fm-field="${f.key}">${(f.options || []).map(([v, l]) => `<option value="${escapeHtml(String(v))}" ${String(v) === String(f.value ?? '') ? 'selected' : ''}>${escapeHtml(l)}</option>`).join('')}</select></label>`
             : `<label><span>${escapeHtml(f.label)}</span><input data-fm-field="${f.key}" type="${f.type === 'number' ? 'number' : 'text'}" ${f.type === 'number' ? 'step="0.01" min="0"' : ''} value="${escapeHtml(String(f.value ?? ''))}" placeholder="${escapeHtml(f.placeholder || '')}"></label>`}</span>`).join('')}
       </div>
-      ${fields.some((f) => f.hint) ? fields.filter((f) => f.hint).map((f) => `<p class="subtle" style="margin:6px 0 0">· ${escapeHtml(f.label)}:${escapeHtml(f.hint)}</p>`).join('') : ''}
+      ${fields.some((f) => f.hint) ? fields.filter((f) => f.hint).map((f) => `<p class="subtle" style="margin:6px 0 0${f.danger ? ';color:#b3423a;font-weight:700' : ''}">· ${escapeHtml(f.label)}:${escapeHtml(f.hint)}</p>`).join('') : ''}
       <div class="action-row" style="margin-top:14px">
         <button class="primary slim" data-fm-save type="button">${escapeHtml(saveText || '保存')}</button>
         <button class="ghost slim" data-fm-cancel type="button">取消</button>
@@ -8242,6 +8242,19 @@ async function savePackage(kind, existing) {
   // D50:prompt 链 → 页内表单弹层(单弹层多字段)
   kind = kind || (existing && existing.kind) || 'recharge'
   const isTimes = kind === 'times'
+  /* 裁决(店主 08-20):关联项目组禁自由文本——下拉单选(现有二级分类+不限)。
+     存量自由文本匹配不上=选项标 ⚠ 红提示商家改选,不静默改数据。 */
+  let groupOptions = [['', '不限(不限制项目组)']]
+  let legacyGroupBad = false
+  if (isTimes) {
+    const cats = (await request('/admin/pricing/categories').catch(() => ({ categories: [] }))).categories || []
+    groupOptions = groupOptions.concat(cats.map((c) => [c.name, c.name]))
+    const cur = existing ? String(existing.projectGroup || '') : ''
+    if (cur && !cats.some((c) => c.name === cur)) {
+      legacyGroupBad = true
+      groupOptions.unshift([cur, `⚠ ${cur}(分类已不存在,请改选)`])
+    }
+  }
   openFormModal({
     title: existing ? `编辑${isTimes ? '次卡' : '充值套餐'}` : `新建${isTimes ? '次卡' : '充值套餐'}`,
     hint: isTimes ? '售卡=预收负债不计积分;核销按折算单价确认收入(批②)。' : '赠送=营销让利:入储值负债、单独列示,不算实收/业绩/积分。',
@@ -8250,7 +8263,7 @@ async function savePackage(kind, existing) {
       { key: 'price', label: '售价', type: 'number', value: existing ? existing.priceCents / 100 : '' },
       ...(isTimes ? [
         { key: 'times', label: '总次数', type: 'number', value: existing ? existing.timesCount : 5 },
-        { key: 'projectGroup', label: '关联项目组', type: 'text', value: existing ? existing.projectGroup || '' : '', placeholder: '如 美甲单色/护理', hint: '核销时从组内选具体项目(批②)' },
+        { key: 'projectGroup', label: '关联项目组', type: 'select', value: existing ? existing.projectGroup || '' : '', options: groupOptions, hint: legacyGroupBad ? '⚠ 原项目组的分类已不存在,请改选后保存(不会自动改动已售卡)' : '核销时从组内选具体项目;选「不限」=全部项目可核销', danger: legacyGroupBad },
         { key: 'validDays', label: '有效期天数(留空=长期)', type: 'number', value: existing && existing.validDays ? existing.validDays : '' }
       ] : [
         { key: 'bonus', label: '赠送金额(可为 0)', type: 'number', value: existing && existing.bonusCents ? existing.bonusCents / 100 : '' }

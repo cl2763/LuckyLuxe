@@ -12058,6 +12058,8 @@ async function route(req, res) {
     const kind = body.kind === 'times' ? 'times' : 'recharge'
     const name = String(body.name || '').trim()
     if (!name) throw apiError(400, 'BAD_REQUEST', '套餐名称必填。')
+    // 裁决(店主 08-20):项目组禁自由文本——新值必须是现有二级分类名(空=不限)
+    assertProjectGroupValid(currentTenantId(), String(body.projectGroup || '').trim())
     const id = randomId('pkg')
     db.prepare(`INSERT INTO membership_packages (id, tenant_id, kind, name, price_cents, bonus_cents, times_count, scope, benefits, is_active, sort_order, created_at, valid_days, project_group, mall_visible)
       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`).run(
@@ -12080,6 +12082,12 @@ async function route(req, res) {
     const cur = db.prepare('SELECT * FROM membership_packages WHERE id = ? AND tenant_id = ?').get(id, currentTenantId())
     if (!cur) throw apiError(404, 'NOT_FOUND', 'Package not found.')
     const body = await readBody(req)
+    /* 裁决(店主 08-20):只校验**改动的**项目组值——存量自由文本原样不动(不静默改),
+       商家没碰这一项时其余编辑照常放行;一旦改选就必须是现有分类或不限。 */
+    if (body.projectGroup !== undefined) {
+      const nextGroup = String(body.projectGroup || '').trim()
+      if (nextGroup !== String(cur.project_group || '')) assertProjectGroupValid(currentTenantId(), nextGroup)
+    }
     db.prepare(`UPDATE membership_packages SET kind = ?, name = ?, price_cents = ?, bonus_cents = ?, times_count = ?, scope = ?, benefits = ?, is_active = ?, sort_order = ?, valid_days = ?, project_group = ?, mall_visible = ? WHERE id = ?`).run(
       body.kind === undefined ? cur.kind : (body.kind === 'times' ? 'times' : 'recharge'),
       body.name === undefined ? cur.name : String(body.name).trim(),
@@ -16346,6 +16354,14 @@ function serializeMerchantLead(row) {
     createdAt: row.created_at,
     updatedAt: row.updated_at
   }
+}
+
+/* 裁决(店主 08-20):次卡「关联项目组」禁自由文本——新值必须是现有二级分类名(空串=不限)。
+   只拦新写入;存量自由文本值不静默改(编辑页标红请商家改选)。 */
+function assertProjectGroupValid(tenantId, group) {
+  if (!group) return
+  const hit = db.prepare('SELECT 1 FROM service_categories WHERE tenant_id = ? AND name = ?').get(tenantId, group)
+  if (!hit) throw apiError(400, 'PROJECT_GROUP_INVALID', `项目组「${group}」不是本店现有的二级分类——请在表单下拉里改选(或选「不限」)。`)
 }
 
 /* ===== S2批② B①:次卡持有推导件(状态零列,全部现算)===== */

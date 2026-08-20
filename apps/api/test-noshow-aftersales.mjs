@@ -906,6 +906,7 @@ const main = async () => {
       const flip = await request('/admin/mall/self-purchase', { method: 'PUT', body: JSON.stringify({ enabled: true }) }, shop.token)
       check('㊵ 规则⑧ 锁定期 PUT 开=400 PAYMENT_CHANNEL_OFFLINE', flip.status === 400 && flip.data.error.code === 'PAYMENT_CHANNEL_OFFLINE')
       // 次卡新字段 CRUD 往返
+      await request('/admin/pricing/categories', { method: 'POST', body: JSON.stringify({ name: '护理', key: `ci-care-${RUN_ID}` }) }, shop.token)  // 裁决后项目组必须是现有分类
       const tk = await request('/admin/packages', { method: 'POST', body: JSON.stringify({ kind: 'times', name: `CI次卡${RUN_ID}`, priceCents: 54000, timesCount: 3, projectGroup: '护理', validDays: 90, mallVisible: false }) }, shop.token)
       check('㊵ 次卡字段(项目组/有效期/商城位)持久化', tk.status === 201 && tk.data.package.projectGroup === '护理' && tk.data.package.validDays === 90 && tk.data.package.mallVisible === false)
       // 赠送口径:充100赠20 → recharge+bonus 两行;余额=120;bonus 不触发首充判定之外的业绩口(type≠recharge)
@@ -950,6 +951,21 @@ const main = async () => {
         dbx.prepare("DELETE FROM member_timecards WHERE id IN ('tc_fix_a1','tc_fix_b0','tc_fix_c9')").run()
         const tcEmpty = (await request(`/admin/customers/${uid}/timecards`, {}, shop.token)).data.timecards
         check('㊺ 夹具清场:持卡列表回空(幂等清理)', tcEmpty.length === 0, JSON.stringify(tcEmpty))
+
+        // ===== ㊼ 裁决:项目组禁自由文本(下拉约束;存量不静默改) =====
+        {
+          const bad = await request('/admin/packages', { method: 'POST', body: JSON.stringify({ kind: 'times', name: '裁决自由文本卡', priceCents: 1000, timesCount: 2, projectGroup: '随手打的组名' }) }, shop.token)
+          check('㊼ 新建带野组名=400 PROJECT_GROUP_INVALID(禁自由文本)', bad.status === 400 && bad.data.error.code === 'PROJECT_GROUP_INVALID', JSON.stringify(bad.data).slice(0, 120))
+          dbx.prepare('UPDATE membership_packages SET project_group = ? WHERE id = ?').run('历史遗留组', tk.data.package.id)
+          const p1 = await request(`/admin/packages/${tk.data.package.id}`, { method: 'PATCH', body: JSON.stringify({ priceCents: 55000 }) }, shop.token)
+          check('㊼ 存量自由文本不拆无关编辑(只改价=200,组原样不静默改)', p1.status === 200 && p1.data.package.projectGroup === '历史遗留组', JSON.stringify(p1.data.package || p1.data).slice(0, 120))
+          const p2 = await request(`/admin/packages/${tk.data.package.id}`, { method: 'PATCH', body: JSON.stringify({ projectGroup: '又一个野组' }) }, shop.token)
+          check('㊼ 改动值必过闸:改成野文本=400', p2.status === 400 && p2.data.error.code === 'PROJECT_GROUP_INVALID', JSON.stringify(p2.data).slice(0, 120))
+          const p3 = await request(`/admin/packages/${tk.data.package.id}`, { method: 'PATCH', body: JSON.stringify({ projectGroup: '' }) }, shop.token)
+          check('㊼ 改选「不限」=放行', p3.status === 200 && !p3.data.package.projectGroup, JSON.stringify(p3.data.package || p3.data).slice(0, 120))
+          const p4 = await request(`/admin/packages/${tk.data.package.id}`, { method: 'PATCH', body: JSON.stringify({ projectGroup: '护理' }) }, shop.token)
+          check('㊼ 改选现有分类=放行', p4.status === 200 && p4.data.package.projectGroup === '护理', JSON.stringify(p4.data.package || p4.data).slice(0, 120))
+        }
 
         // ===== ㊻ B② 核销引擎:建单闸×5 → 并发乐观锁 → 幂等 → 出路(预嘱①②全断言化) =====
         {
@@ -1051,6 +1067,8 @@ const main = async () => {
       check('㊹ 网页「转售后」钮:仅已完成且已签署(listBadgeKind 判据=后端徽标唯一持有)+弹层在场', adminJs.includes('data-convert-aftersales') && adminJs.includes("['signed', 'amended'].includes(booking.listBadgeKind)") && adminJs.includes("title: '转售后'"))
       check('㊹ 商家小程序「转售后」前置:sheets 含 signed/amended 才显示', /s\.status === 'signed' \|\| s\.status === 'amended'\)\) opts\.push\(\{ label: '转售后'/.test(miniOrders))
       check('㊹ 后端 PATCH AFTER_SALES 落 status_history(发起原因唯一持有链)', srv.includes("if (status === 'AFTER_SALES') {") && /booking_status_history[\s\S]{0,200}AFTER_SALES', String\(body\.note/.test(srv))
+      // ㊼ 裁决前端面:项目组=下拉(现有分类+不限)+存量野文本标红改选(不静默改)
+      check('㊼ 前端下拉+存量标红在场(savePackage select/legacyGroupBad/danger)', adminJs.includes('groupOptions') && adminJs.includes('legacyGroupBad') && adminJs.includes('danger: legacyGroupBad'))
     }
 
   console.log(`\n爽约处置+售后完成态回归通过:${checks} 项断言全绿`)
