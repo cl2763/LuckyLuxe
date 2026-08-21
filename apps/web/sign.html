@@ -251,7 +251,9 @@ function render() {
     ${amendCardHtml(s)}
     ${couponCardHtml()}
 
-    ${signed ? `<div class="done">✓ 本单已于 ${esc(String(s.signedAt).slice(0, 16).replace('T', ' '))} 签署完成${s.snapshot ? `<div style="margin-top:10px;font-weight:500"><a href="/settlements/${encodeURIComponent(s.code)}/snapshot" target="_blank">查看签署单</a></div>` : ''}</div>` : `
+    ${signed ? `<div class="done">✓ 本单已于 ${esc(String(s.signedAt).slice(0, 16).replace('T', ' '))} 签署完成${s.snapshot ? `<div style="margin-top:10px;font-weight:500"><a href="/settlements/${encodeURIComponent(s.code)}/snapshot" target="_blank">查看签署单</a></div>` : ''}${s.groupPendingCount > 0 ? `
+      <div style="margin-top:16px;color:#8a5a2b;font-weight:600">本组还有 ${s.groupPendingCount} 张待签</div>
+      <a href="/sign/${encodeURIComponent(s.groupNextPendingCode)}" style="display:block;margin-top:10px;background:#2d2826;color:#fff;border-radius:12px;padding:14px;text-align:center;text-decoration:none;font-weight:800">继续签下一张 →</a>` : ''}</div>` : `
     <label class="disc">
       <input type="checkbox" id="disc">
       <span>${esc(data.disclaimer)}</span>

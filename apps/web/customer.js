@@ -808,6 +808,8 @@ async function loadUserOrders() {
   const data = await request(`/bookings?lang=${state.lang}`)
   state.orders = data.bookings || []
   writeJson('lucky-web-orders', state.orders)
+  // C4(批③首件):网页顾客端待签单列表(D57 同构)——拉不到不挡订单列表
+  try { state.pendingSign = (await request('/my/pending-sign')).pendingSign || [] } catch { state.pendingSign = [] }
 }
 
 function bindGlobalEvents() {
@@ -1848,10 +1850,17 @@ function renderOrdersWeb() {
       <div class="order-tabs-web">
         ${tabs.map(([key, label]) => `<button class="${state.orderFilter === key ? 'active' : ''}" data-order-filter="${key}" type="button">${label}</button>`).join('')}
       </div>
+      ${(state.pendingSign || []).length ? `
+      <div class="section-row compact"><h2 style="color:#8a3a33;font-size:15px">${state.lang === 'zh' ? `待你签字确认 · ${state.pendingSign.length} 单` : `Awaiting your signature · ${state.pendingSign.length}`}</h2></div>
+      ${state.pendingSign.map((p) => `
+        <a class="order-card-web card" style="display:flex;justify-content:space-between;align-items:center;text-decoration:none" href="/sign/${encodeURIComponent(p.code)}" target="_blank" rel="noreferrer">
+          <span><strong>${escapeHtml(state.lang === 'zh' ? '服务确认单 ' : 'Sheet ')}${escapeHtml(p.code)}</strong><br><small class="subtle">${escapeHtml(p.at)} · ${state.lang === 'zh' ? '到店支付' : 'Pay in store'} ${escapeHtml(p.cashDueText)}</small></span>
+          <span class="primary button-link" style="padding:8px 16px;border-radius:10px">${state.lang === 'zh' ? '去签字 ›' : 'Sign ›'}</span>
+        </a>`).join('')}` : ''}
       <div class="order-list-web">
           ${orders.length ? orders.map((order) => `
           <button class="order-card-web card" data-order-id="${order.id}" type="button">
-            <div class="order-head-web"><strong>${order.service.name}</strong><span>${statusLabel(order.status)}</span></div>
+            <div class="order-head-web"><strong>${order.service.name}</strong><span>${order.listBadgeText ? escapeHtml(order.listBadgeText) : statusLabel(order.status)}</span></div>
             <div class="order-body-web">
               <img src="${order.status === 'COMPLETED' && customerVisibleWorkImages(order)[0] ? customerVisibleWorkImages(order)[0] : order.service.imageUrl}" alt="${order.service.name}">
               <div>
@@ -1944,34 +1953,56 @@ function renderOrderDetailWeb() {
           <p><span>${t('remark')}</span><strong>${order.notes || t('none')}</strong></p>
         </div>
       </section>
+      ${workImages.length ? `
       <section class="section">
         <div class="section-row"><h2>${t('workArchive')}</h2><span class="subtle">${order.technician.name}</span></div>
         <div class="archive-card-web card">
-          <p><span>${t('technician')}</span><strong>${order.technician.name}</strong></p>
-          <p><span>${t('finalPhotos')}</span><strong>${workImages.length}/6</strong></p>
-          ${workImages.length ? `
-            <div class="customer-work-grid">
-              ${workImages.map((image, index) => `
-                <figure class="customer-work-item">
-                  <a href="${image}" target="_blank" rel="noreferrer"><img src="${image}" alt="${t('finalPhotos')} ${index + 1}"></a>
-                  <a class="ghost mini-download" href="${image}" download="Lucky-Luxe-${order.publicCode || order.id}-${index + 1}.jpg">${t('downloadImage')}</a>
-                </figure>
-              `).join('')}
-            </div>
-            <button class="primary slim" data-order-share="${order.id}" type="button">${t('oneClickShare')}</button>
-            ${renderCustomerSharePanel(order, workImages)}
-          ` : `<div class="empty-state small-empty">${t('noWorkImages')}</div>`}
+          <div class="customer-work-grid">
+            ${workImages.map((image, index) => `
+              <figure class="customer-work-item">
+                <a href="${image}" target="_blank" rel="noreferrer"><img src="${image}" alt="${t('finalPhotos')} ${index + 1}"></a>
+                <a class="ghost mini-download" href="${image}" download="Lucky-Luxe-${order.publicCode || order.id}-${index + 1}.jpg">${t('downloadImage')}</a>
+              </figure>
+            `).join('')}
+          </div>
+          <button class="primary slim" data-order-share="${order.id}" type="button">${t('oneClickShare')}</button>
+          ${renderCustomerSharePanel(order, workImages)}
         </div>
-      </section>
+      </section>` : ''}
       <section class="section">
-        <div class="section-row"><h2>${t('payment')}</h2></div>
+        <div class="section-row"><h2>${state.lang === 'zh' ? '服务签署单' : 'Signed sheet'}</h2>${order.payment ? `<span class="subtle">${state.lang === 'zh' ? '已签署 ✍' : 'Signed ✍'} ${escapeHtml(String(order.payment.signedAt || '').slice(0, 16).replace('T', ' '))}</span>` : ''}</div>
         <div class="info-card-web card">
-          <p><span>${t('payment')}</span><strong>${statusLabel(order.status)}</strong></p>
-          <p><span>${t('paidDeposit')}</span><strong class="price">${money(order.depositCents)}</strong></p>
-          <p><span>${t('finalDue')}</span><strong>${money(order.finalDueCents)}</strong></p>
-          <p><span>${t('servicePrice')}</span><strong>${money(order.servicePriceCents)}</strong></p>
+          ${order.payment && order.payment.flow ? `
+            ${order.payment.flow.lines.map((fl) => `<p><span>${escapeHtml(fl.label)}</span><strong>${escapeHtml(fl.amountText)}</strong></p>`).join('')}
+            <p style="border-top:1px solid #e7ddd4;padding-top:8px"><span><strong>${escapeHtml(order.payment.flow.heroLabel)}</strong></span><strong class="price">${escapeHtml(order.payment.flow.cashDueText)}</strong></p>
+            <p style="margin-top:8px"><a href="/sign/${encodeURIComponent(order.payment.code)}" target="_blank" rel="noreferrer">${state.lang === 'zh' ? '查看服务确认单原件 ›' : 'View original ›'}</a></p>
+          ` : (order.status === 'COMPLETED' || order.status === 'AFTER_SALES'
+    ? `<div class="empty-state small-empty">${state.lang === 'zh' ? '本单未产生结算单' : 'No settlement sheet for this booking'}</div>`
+    : `
+            <p><span>${t('paidDeposit')}</span><strong class="price">${money(order.depositCents)}</strong></p>
+            <p><span>${t('finalDue')}</span><strong>${money(order.finalDueCents)}</strong></p>
+            <p><span>${t('servicePrice')}</span><strong>${money(order.servicePriceCents)}</strong></p>`)}
         </div>
       </section>
+      ${order.afterSalesAction ? `
+      <section class="section">
+        <div class="info-card-web card">
+          <button class="primary" data-as-action="${order.id}" type="button" style="width:100%">${escapeHtml(order.afterSalesActionText)}</button>
+          ${state.asPanelOpen && order.afterSalesAction === 'start' ? `
+            <textarea id="asDescWeb" placeholder="${state.lang === 'zh' ? '问题描述(必填):哪里不满意/出了什么状况' : 'Describe the issue (required)'}" style="width:100%;min-height:90px;margin-top:10px;border:1px solid #e7ddd4;border-radius:10px;padding:10px;box-sizing:border-box">${escapeHtml(state.asDesc || '')}</textarea>
+            <button class="primary slim" data-as-submit="${order.id}" type="button" style="margin-top:8px">${state.lang === 'zh' ? '提交,转人工跟进' : 'Submit'}</button>
+            <p class="subtle" style="margin-top:6px">${state.lang === 'zh' ? '提交后门店会跟进处理;涉及退款/补差走门店更正单,这里只记录过程与结论。' : 'The store will follow up; refunds go through correction sheets.'}</p>
+          ` : ''}
+        </div>
+      </section>` : ''}
+      ${order.afterSales ? `
+      <section class="section">
+        <div class="section-row"><h2>${escapeHtml(order.afterSales.title)}</h2></div>
+        <div class="info-card-web card">
+          ${order.afterSales.steps.map((st) => `<p><span>${st.done ? '●' : '○'} ${escapeHtml(st.label)}</span><strong class="subtle">${escapeHtml(st.at || '')}</strong></p>`).join('')}
+          ${order.afterSalesAction === 'progress' ? `<p style="margin-top:8px"><a href="#" data-as-withdraw="${order.id}">${state.lang === 'zh' ? '撤回本次售后(记录保留)' : 'Withdraw'}</a></p>` : ''}
+        </div>
+      </section>` : ''}
     </section>
   `
 }
@@ -2131,6 +2162,40 @@ async function handleScreenClick(event) {
     await refreshOrder(state.selectedOrderId)
     state.view = 'orderDetail'
     render()
+    return
+  }
+  /* 批③首件 C3:售后发起/撤回(同一状态机,句与前置全由后端;涉钱零新径) */
+  const asAction = event.target.closest('[data-as-action]')
+  if (asAction) {
+    const order = selectedOrder()
+    if (!order) return
+    if (order.afterSalesAction === 'start') { state.asPanelOpen = !state.asPanelOpen; render() }
+    return
+  }
+  const asSubmit = event.target.closest('[data-as-submit]')
+  if (asSubmit) {
+    const order = selectedOrder()
+    const desc = String(document.getElementById('asDescWeb')?.value || '').trim()
+    if (!order) return
+    if (!desc) { toast(state.lang === 'zh' ? '问题描述必填' : 'Description required'); return }
+    try {
+      await request(`/my/bookings/${encodeURIComponent(order.id)}/after-sales`, { method: 'POST', body: JSON.stringify({ description: desc }) })
+      state.asPanelOpen = false; state.asDesc = ''
+      await loadUserOrders(); render()
+      toast(state.lang === 'zh' ? '已发起售后,门店会尽快跟进' : 'After-sales started')
+    } catch (error) { toast(error.message) }
+    return
+  }
+  const asWithdraw = event.target.closest('[data-as-withdraw]')
+  if (asWithdraw) {
+    event.preventDefault()
+    const order = selectedOrder()
+    if (!order) return
+    try {
+      await request(`/my/bookings/${encodeURIComponent(order.id)}/after-sales/withdraw`, { method: 'POST', body: '{}' })
+      await loadUserOrders(); render()
+      toast(state.lang === 'zh' ? '已撤回(记录保留)' : 'Withdrawn')
+    } catch (error) { toast(error.message) }
     return
   }
   const orderShare = event.target.closest('[data-order-share]')

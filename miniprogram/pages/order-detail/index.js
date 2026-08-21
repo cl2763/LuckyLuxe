@@ -1,4 +1,5 @@
 const storage = require('../../utils/storage')
+const nav = require('../../utils/nav')
 const { curOf, ensureCurrencyCached } = require('../../utils/storecurrency')
 const i18n = require('../../utils/i18n')
 const api = require('../../utils/api')
@@ -44,17 +45,18 @@ Page({
       order.serviceImage = service.image || order.serviceImage || '/assets/images/store-cover.jpg'
       order.serviceInfo.serviceName = localizedService.name || order.serviceInfo.serviceName
       // D21:不再用写死的假技师名(Mia Chen/Ava Lin)填空 —— 没有就不显示
-      order.visibleWorkImages = order.status === 'completed' ? (order.workImages || []).slice(0, 6) : []
-      // D32:结算快照分解 分→元(纯格式化;有分币残留保留两位)
+      order.visibleWorkImages = order.status === 'completed' || order.status === 'after_sales' ? (order.workImages || []).slice(0, 6) : []
+      /* 批③首件 A2/A6(§二重做):签署单卡=后端 flow 一条五步账直贴(与签署页/快照同源,零拼装);
+         旧「实付」行随 flow 消亡(480 表达错误销案)。y() 仅格式化,无运算。 */
       if (order.payment) {
         const y = (c) => (c % 100 ? (c / 100).toFixed(2) : String(Math.round(c / 100)))
         order.pay = {
-          listTotal: y(order.payment.listTotalCents),
-          subtotal: y(order.payment.subtotalCents),
-          coupon: order.payment.couponDiscountCents ? y(order.payment.couponDiscountCents) : '',
-          depositDeduct: order.payment.depositDeductCents ? y(order.payment.depositDeductCents) : '',
-          storedDeduct: order.payment.storedDeductCents ? y(order.payment.storedDeductCents) : '',
-          paid: y(order.payment.paidCents)
+          code: order.payment.code,
+          signedAt: String(order.payment.signedAt || '').slice(0, 16).replace('T', ' '),
+          flowLines: (order.payment.flow && order.payment.flow.lines) || [],
+          heroLabel: (order.payment.flow && order.payment.flow.heroLabel) || '本单到店支付',
+          heroText: (order.payment.flow && order.payment.flow.cashDueText) || '',
+          listTotal: y(order.payment.listTotalCents)
         }
       }
       // 价格拆解:总价 / 定金 / 到店应付(不同来源字段不一,统一补算)
@@ -65,6 +67,52 @@ Page({
       order.finalDue = order.finalDue != null && order.finalDue !== '' ? order.finalDue : Math.max(0, price - deposit - (Number(order.balanceDeduction) || 0))
     }
     this.setData({ order, lang, t })
+  },
+
+  /* ===== 批③首件 屏B:售后发起(同屏展开,拍板①②③)+签署单原件入口 ===== */
+  goSnapshot() {
+    const o = this.data.order
+    if (!o || !o.pay || !o.pay.code) return
+    nav.to(`/pages/sign/index?code=${encodeURIComponent(o.pay.code)}`)   // ㉑:新增导航一律走 utils/nav
+  },
+  asAction() {
+    const o = this.data.order
+    if (!o) return
+    if (o.afterSalesAction === 'progress') {
+      // 进行中=滚到进度卡(卡就在本页);同屏,无跳转
+      this.setData({ asPanelOpen: false })
+      wx.pageScrollTo({ selector: '.as-progress-card', duration: 200, fail: () => {} })
+      return
+    }
+    if (o.afterSalesAction === 'start') this.setData({ asPanelOpen: !this.data.asPanelOpen })
+  },
+  onAsDesc(e) { this.setData({ asDesc: e.detail.value }) },
+  async submitAfterSales() {
+    const desc = String(this.data.asDesc || '').trim()
+    if (!desc) { wx.showToast({ title: '问题描述必填', icon: 'none' }); return }
+    if (this.data.asSubmitting) return
+    this.setData({ asSubmitting: true })
+    try {
+      await api.startAfterSales(this.data.order._id, desc)
+      wx.showToast({ title: '已发起售后,门店会尽快跟进', icon: 'none', duration: 2200 })
+      this.setData({ asPanelOpen: false, asDesc: '' })
+      storage.setOrders([])   // 缓存失效,强制回源刷新徽标/进度
+      this.load(this.data.order._id)
+    } catch (e) {
+      wx.showToast({ title: (e && e.message) || '发起失败,请稍后再试', icon: 'none' })
+    } finally { this.setData({ asSubmitting: false }) }
+  },
+  async withdrawAfterSales() {
+    if (this.data.asSubmitting) return
+    this.setData({ asSubmitting: true })
+    try {
+      await api.withdrawAfterSales(this.data.order._id)
+      wx.showToast({ title: '已撤回(记录保留)', icon: 'none' })
+      storage.setOrders([])
+      this.load(this.data.order._id)
+    } catch (e) {
+      wx.showToast({ title: (e && e.message) || '撤回失败', icon: 'none' })
+    } finally { this.setData({ asSubmitting: false }) }
   },
 
   cancelOrder() {

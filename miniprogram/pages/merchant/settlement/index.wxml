@@ -191,9 +191,10 @@
         <view class="ck {{depositApplied && view.hasDeposit ? 'on' : ''}}">{{depositApplied && view.hasDeposit ? '✓' : ''}}</view>
         <view class="pmain"><b>已收定金抵扣</b><text class="psmall">−{{view.depositDeduct}}(来自收取记录)</text></view>
       </view>
-      <view class="paym {{view.hasOffline ? 'on' : ''}}" bindtap="payToggleOffline">
-        <view class="ck {{view.hasOffline ? 'on' : ''}}">{{view.hasOffline ? '✓' : ''}}</view>
-        <view class="pmain"><b>线下收款(现金/扫码/POS)</b><text class="psmall">差额 {{view.offlineDue}} 到店收</text></view>
+      <!-- D3(D55 裁,批③首日落):线下行=回显位非勾选控件——「到店收 · 差额自动」,金额口径不动 -->
+      <view class="paym passive">
+        <view class="pmark">→</view>
+        <view class="pmain"><b>到店收 · 差额自动</b><text class="psmall">现金/扫码/POS · 差额 {{view.offlineDue}}(其余支付方式结清后的余数,自动算)</text></view>
       </view>
       <view class="paym {{payMenu.recharge ? 'on' : ''}}" bindtap="payToggleRecharge">
         <view class="ck {{payMenu.recharge ? 'on' : ''}}">{{payMenu.recharge ? '✓' : ''}}</view>

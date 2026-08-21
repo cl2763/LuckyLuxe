@@ -1,6 +1,10 @@
 <view wx:if="{{order}}" class="page order-detail-page">
+  <!-- 批③首件 A1(§二):头卡=服务名+状态徽标(后端三态同源)+单号 -->
   <view class="detail-card card">
-    <view class="status-line">{{order.statusText}}</view>
+    <view class="status-line">
+      <text wx:if="{{order.listBadgeText}}" class="status badge-{{order.listBadgeKind}}">{{order.listBadgeText}}</text>
+      <text wx:else>{{order.statusText}}</text>
+    </view>
     <view class="service-name">{{order.serviceInfo.serviceName}}</view>
     <view class="muted">{{t.orderNo}} {{order.orderNo}}</view>
     <image class="order-cover" src="{{order.serviceImage}}" mode="aspectFill"></image>
@@ -38,59 +42,67 @@
     </view>
   </view>
 
+  <!-- 批③首件 A2/A3/A6(§二):服务签署单卡=后端 flow 一条五步账直贴(与签署页/快照同源);
+       旧「实付」行消亡;未签署的完成单=「本单未产生结算单」明示空态(不放例句) -->
   <view class="section">
     <view class="section-head">
-      <view class="section-title">{{t.payment}}</view>
+      <view class="section-title">服务签署单</view>
+      <view wx:if="{{order.pay}}" class="section-note">已签署 ✍ {{order.pay.signedAt}}</view>
     </view>
-    <view class="info-card card">
-      <!-- D32:已签单=结算快照简版分解(后端直出,前端零运算);未签单=预约层真相(定金按实际状态,不再假「已付」) -->
-      <block wx:if="{{order.pay}}">
-        <view class="info-row"><text>服务标价</text><text class="strike">{{cur.p}}{{cur.s}}{{order.pay.listTotal}}</text></view>
-        <view class="info-row"><text>结算价</text><text>{{cur.p}}{{cur.s}}{{order.pay.subtotal}}</text></view>
-        <view wx:if="{{order.pay.coupon}}" class="info-row"><text>券抵扣</text><text>-{{cur.p}}{{cur.s}}{{order.pay.coupon}}</text></view>
-        <view wx:if="{{order.pay.depositDeduct}}" class="info-row"><text>定金抵扣</text><text>-{{cur.p}}{{cur.s}}{{order.pay.depositDeduct}}</text></view>
-        <view wx:if="{{order.pay.storedDeduct}}" class="info-row"><text>储值抵扣</text><text>-{{cur.p}}{{cur.s}}{{order.pay.storedDeduct}}</text></view>
-        <view class="info-row"><text>实付</text><text class="price">{{cur.p}}{{cur.s}}{{order.pay.paid}}</text></view>
-      </block>
-      <block wx:else>
-        <view class="info-row">
-          <text>服务总价</text>
-          <text>{{cur.p}}{{cur.s}}{{order.servicePrice}}</text>
-        </view>
-        <view wx:if="{{order.depositState === 'received'}}" class="info-row">
-          <text>定金(已收)</text>
-          <text class="price">{{cur.p}}{{cur.s}}{{order.payableAmount}}</text>
-        </view>
-        <view wx:elif="{{order.depositState === 'unpaid'}}" class="info-row">
-          <text>定金(待到店支付)</text>
-          <text>—</text>
-        </view>
-        <view class="info-row">
-          <text>到店结算</text>
-          <text>按当日结算单为准</text>
-        </view>
-      </block>
+    <view class="info-card card" wx:if="{{order.pay}}">
+      <view class="info-row" wx:for="{{order.pay.flowLines}}" wx:for-item="fl" wx:key="key">
+        <text>{{fl.label}}</text><text>{{fl.amountText}}</text>
+      </view>
+      <view class="info-row hero"><text>{{order.pay.heroLabel}}</text><text class="price">{{order.pay.heroText}}</text></view>
+      <view class="as-link" bindtap="goSnapshot">查看服务确认单原件 ›</view>
+    </view>
+    <view class="info-card card" wx:elif="{{order.status === 'completed' || order.status === 'after_sales'}}">
+      <view class="archive-empty">本单未产生结算单</view>
+    </view>
+    <view class="info-card card" wx:else>
+      <view class="info-row"><text>服务总价</text><text>{{cur.p}}{{cur.s}}{{order.servicePrice}}</text></view>
+      <view wx:if="{{order.depositState === 'received'}}" class="info-row"><text>定金(已收)</text><text class="price">{{cur.p}}{{cur.s}}{{order.payableAmount}}</text></view>
+      <view wx:elif="{{order.depositState === 'unpaid'}}" class="info-row"><text>定金(待到店支付)</text><text>—</text></view>
+      <view class="info-row"><text>到店结算</text><text>按当日结算单为准</text></view>
     </view>
   </view>
 
-  <view wx:if="{{order.status === 'completed'}}" class="section">
+  <!-- 批③首件 屏B:售后区——按钮句后端唯一;同屏展开表单(不弹层);D3 三步进度卡 -->
+  <view class="section" wx:if="{{order.afterSalesAction}}">
+    <view class="info-card card">
+      <view class="as-btn" bindtap="asAction">{{order.afterSalesActionText}}</view>
+      <block wx:if="{{asPanelOpen}}">
+        <textarea class="as-desc" placeholder="问题描述(必填):哪里不满意/出了什么状况" value="{{asDesc}}" bindinput="onAsDesc" maxlength="300"></textarea>
+        <view class="as-submit {{asSubmitting ? 'ing' : ''}}" bindtap="submitAfterSales">{{asSubmitting ? '提交中…' : '提交,转人工跟进'}}</view>
+        <view class="as-note">提交后门店会跟进处理;涉及退款/补差走门店更正单,这里只记录过程与结论。</view>
+      </block>
+    </view>
+  </view>
+  <view class="section as-progress-card" wx:if="{{order.afterSales}}">
+    <view class="section-head"><view class="section-title">{{order.afterSales.title}}</view></view>
+    <view class="info-card card">
+      <view class="as-step" wx:for="{{order.afterSales.steps}}" wx:for-item="st" wx:key="key">
+        <view class="as-dot {{st.done ? 'on' : ''}}"></view>
+        <view class="as-step-main"><view class="as-step-t">{{st.label}}</view><view class="as-step-at">{{st.at}}</view></view>
+      </view>
+      <view wx:if="{{order.afterSalesAction === 'progress'}}" class="as-link" bindtap="withdrawAfterSales">撤回本次售后(记录保留)</view>
+    </view>
+  </view>
+
+  <!-- 批③首件 A4(§二):留档卡=有则显示,无则整卡不出现(不占位) -->
+  <view wx:if="{{order.visibleWorkImages.length}}" class="section">
     <view class="section-head">
       <view class="section-title">{{lang === 'en' ? 'Service Archive' : '服务留档'}}</view>
       <view class="section-note">{{order.serviceInfo.technicianName}}</view>
     </view>
     <view class="archive-card card">
-      <view class="info-row">
-        <text>{{lang === 'en' ? 'Final Photos' : '完工作品'}}</text>
-        <text>{{order.visibleWorkImages.length}}/6</text>
-      </view>
-      <view wx:if="{{order.visibleWorkImages.length}}" class="work-grid">
+      <view class="work-grid">
         <block wx:for="{{order.visibleWorkImages}}" wx:key="*this">
           <button class="work-thumb" bindtap="previewWork" data-url="{{item}}">
             <image src="{{item}}" mode="aspectFill"></image>
           </button>
         </block>
       </view>
-      <view wx:else class="archive-empty">{{lang === 'en' ? 'Final photos will appear after admin approval.' : 'admin 确认作品后会自动出现在这里。'}}</view>
     </view>
   </view>
 

@@ -290,6 +290,9 @@ function toMiniBooking(booking) {
     actualDueCents: booking.actualDueCents === undefined ? null : booking.actualDueCents,
     settlementCode: booking.settlementCode || '',
     afterSales: booking.afterSales || null,
+    // 批③首件 B1/B5:售后按钮位(后端句唯一,映射层零裁剪)
+    afterSalesAction: booking.afterSalesAction || '',
+    afterSalesActionText: booking.afterSalesActionText || '',
     createdAt: booking.createdAt || Date.now()
   }
 }
@@ -645,6 +648,9 @@ function getMyCoupons() { return request('/my/coupons') }
 function getMyStoredValue() { return request('/my/stored-value') }
 // D57 顾客侧待签单再入口:全部未签单(不止最新一张;即时开单没挂预约的也在)
 function getMyPendingSign() { return request('/my/pending-sign') }
+// 批③首件 屏B:顾客侧售后发起/撤回(同一状态机,前置=已完成+已签署;撤回=转已解决留痕)
+function startAfterSales(bookingId, description) { return request(`/my/bookings/${encodeURIComponent(bookingId)}/after-sales`, 'POST', { description }) }
+function withdrawAfterSales(bookingId) { return request(`/my/bookings/${encodeURIComponent(bookingId)}/after-sales/withdraw`, 'POST', {}) }
 // B3-4 代充回执确认:幂等,只许确认本人的充值行;未确认不阻塞任何链路
 function confirmStoredRecharge(id) { return request('/my/stored-value/confirm', 'POST', { id }) }
 /* D33 余额单源(2026-08-12):顾客端可见余额一律实时取后端 /my/stored-value,
@@ -833,6 +839,8 @@ module.exports = {
   getMyCoupons,
   getMyStoredValue,
   getMyPendingSign,
+  startAfterSales,
+  withdrawAfterSales,
   confirmStoredRecharge,
   myBalance,
   getMyPointsHistory,

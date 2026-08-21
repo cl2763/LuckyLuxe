@@ -785,7 +785,13 @@ Page({
         const st = await api.adminGet(`/admin/settlements/${encodeURIComponent(q.settlementId)}/sign-state`)
         this.setData({ 'qr.state': st.state, 'qr.stateText': st.text })
         if (st.state === 'signed') {
-          wx.showToast({ title: '顾客已签署', icon: 'success' })
+          /* D61 连签流:组内还有待签=自动接续出下一张的码,全部签完才收弹层回台面 */
+          if (st.nextPendingId) {
+            wx.showToast({ title: '这张已签,接下一张', icon: 'success' })
+            setTimeout(() => this.openQr({ id: st.nextPendingId }), 900)
+            return
+          }
+          wx.showToast({ title: '顾客已签署,全部完成', icon: 'success' })
           setTimeout(() => { this.setData({ qr: null }); wx.navigateBack() }, 900)
           return
         }

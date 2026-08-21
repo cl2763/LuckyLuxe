@@ -5524,8 +5524,13 @@ function serializeBooking(row, lang = 'zh') {
       const sRow = db.prepare("SELECT * FROM settlements WHERE booking_id = ? AND tenant_id = ? AND status IN ('signed', 'amended') ORDER BY signed_at DESC LIMIT 1").get(row.id, row.tenant_id)
       if (!sRow) return null
       const stored = Math.abs(db.prepare("SELECT COALESCE(SUM(amount_cents), 0) s FROM stored_value_transactions WHERE tenant_id = ? AND type = 'consume' AND note = ?").get(row.tenant_id, `服务单 ${sRow.code} 结算扣卡`).s || 0)
+      /* 批③首件 A2/A6:详情页签署单卡=serializeSettlement flow 同一块(一条五步账,与签署页/快照同源);
+         「实付」旧行随 flow 渲染消亡(480 表达错误销案)。web-view 不能内嵌卡,原件入口另给(pages/sign)。 */
+      const ser = serializeSettlement(sRow)
       return {
         code: sRow.code,
+        signedAt: sRow.signed_at,
+        flow: ser.flow,
         listTotalCents: sRow.list_total_cents || 0,
         subtotalCents: sRow.subtotal_cents || 0,
         couponDiscountCents: sRow.coupon_discount_cents || 0,
@@ -5557,10 +5562,18 @@ function customerOrderBadges(row) {
       listBadgeText: isAfterSales ? asBadge : '',
       listBadgeKind: isAfterSales ? asKind : '',
       listNote: isAfterSales ? asNote : '',
+      // 拍板③:未签署单不出售后发起按钮;存量无签署单的售后单=进度卡照旧(老数据只读不回溯)
+      afterSalesAction: '', afterSalesActionText: '',
       actualDueText: '', actualDueCents: null,
       ...(isAfterSales ? { afterSales: afterSalesProgress(row) } : {})
     }
   }
+  /* 批③首件 B1/B5:售后按钮位与句子后端唯一(拍板③:仅已签署可发起;B5:一单一条进行中)——
+     start=「有疑问,去售后」(已完成+已签署,或售后已结案可再发起);progress=「查看售后进度」。 */
+  const asInProgress = isAfterSales && !['resolved', 'closed'].includes(row.after_sales_status || 'pending')
+  const afterSalesAction = asInProgress
+    ? 'progress'
+    : ((row.status === 'COMPLETED' || isAfterSales) && stl ? 'start' : '')
   const amd = amendmentShape(stl)
   // 售后 > 已更正 > 已签署(售后是当前最要紧的状态,压在最上面)
   const badge = isAfterSales ? asBadge : (amd.amendBadgeText || '已签署')
@@ -5569,6 +5582,9 @@ function customerOrderBadges(row) {
     listBadgeText: badge,
     listBadgeKind: kind,
     listNote: isAfterSales ? asNote : (amd.amendedCount ? '已签署 · 点开看更正明细' : '已签署'),
+    // 批③首件 B1/B5:售后按钮位(后端唯一;'' = 不出按钮)
+    afterSalesAction,
+    afterSalesActionText: afterSalesAction === 'progress' ? '查看售后进度' : (afterSalesAction === 'start' ? '有疑问,去售后' : ''),
     settlementCode: stl.code,
     /* 规则③:右侧金额取实际应付**只在有更正时**。没更正的单前缀词一个字不动 ——
        否则「已结清 ¥198」会被换成光秃秃的「¥198」,那就不是「列表项保持现状」了(D2-03)。 */
@@ -5605,7 +5621,8 @@ function afterSalesState(row) {
   }
   const status = row.after_sales_status || 'pending'   // 存量售后单没写过状态 = 待处理
   const events = db.prepare('SELECT * FROM after_sales_events WHERE booking_id = ? ORDER BY created_at ASC').all(row.id)
-  const hist = db.prepare("SELECT note, created_at FROM booking_status_history WHERE booking_id = ? AND to_status = 'AFTER_SALES' ORDER BY created_at ASC LIMIT 1").get(row.id)
+  // 批③首件 B5:结案后可再次发起(重开)——发起原因取**当前这轮**(最近一次转入);历史轮留痕不丢(append-only)
+  const hist = db.prepare("SELECT note, created_at FROM booking_status_history WHERE booking_id = ? AND to_status = 'AFTER_SALES' ORDER BY created_at DESC LIMIT 1").get(row.id)
   const timeline = []
   if (!events.some((e) => e.kind === 'open')) {
     timeline.push({ at: stamp((hist && hist.created_at) || row.updated_at), kind: 'open', text: (hist && hist.note) || '顾客发起售后', actor: '顾客' })
@@ -8920,9 +8937,16 @@ function createSettlementGroup(body = {}, adminSession = {}) {
         bookingId: sheet.bookingId || body.bookingId, strictCoupon: true,
         /* B3-1 随单充值经手人=充值提成归属(与代充路由同口径):技师会话**强制=本人**,不认 body;
            老板会话可不带(面板没选就空,不猜归属——账本里不许有猜出来的数字)。 */
+        /* D59 v2(店主修订,批③首日落)——随单充值归属三层瀑布:
+           ①员工开单=该员工(强制本人,不认 body);
+           ②老板开单且老板有技师身份(账号绑定技师=名册在册判定)=记老板技师行;
+           ③老板无技师身份=回落当单服务技师(**单技师单**;双技师回落两案等店主拍,暂缓=空,日结手调兜底);
+           面板显式选择仍优先于②③(老板替技师代选的场景)。 */
         rechargeTechnicianId: adminSession.role === 'staff'
           ? (adminSession.technicianId || null)
-          : (sheet.rechargeTechnicianId || null),
+          : (sheet.rechargeTechnicianId
+            || adminSession.technicianId
+            || ((Array.isArray(sheet.technicians) && sheet.technicians.length === 1) ? sheet.technicians[0].technicianId : null)),
         plannedStoredCents: plannedStoredInGroup,
         pendingRechargeAvailableCents: pendingAvailInGroup
       })
@@ -10587,7 +10611,15 @@ function signTokenUrl(token) {
 /* 屏 S3 状态行(规则④):等待顾客进入 → 顾客核对中 → 已签署。
    「顾客核对中」= 有人拿这枚码打开过签署页(viewed_at 有值)。 */
 function signStateOf(settlement) {
-  if (settlement.status === 'signed') return { state: 'signed', text: '已签署' }
+  // D61 连签流:签完带出同组下一张,商家出码弹层自动接续(全签完才收弹层)
+  const next = settlement.status === 'signed'
+    ? db.prepare("SELECT id, code FROM settlements WHERE group_id = ? AND status = 'pending_sign' AND id <> ? ORDER BY rowid ASC LIMIT 1").get(settlement.group_id, settlement.id)
+    : null
+  if (settlement.status === 'signed') {
+    return next
+      ? { state: 'signed', text: '已签署 · 组内还有待签', nextPendingId: next.id, nextPendingCode: next.code }
+      : { state: 'signed', text: '已签署' }
+  }
   if (settlement.status === 'voided') return { state: 'voided', text: '已撤回' }
   const tk = activeSignToken(settlement.id)
   if (tk && tk.viewed_at) return { state: 'viewing', text: '顾客核对中' }
@@ -10684,6 +10716,9 @@ function serializeSettlement(row, { includeSignature = false } = {}) {
     // 屏 2 右上角「待签 1/2」:同组第几张 / 共几张(撤回的不算)
     groupIndex: db.prepare("SELECT COUNT(*) AS n FROM settlements WHERE group_id = ? AND status <> 'voided' AND rowid <= (SELECT rowid FROM settlements WHERE id = ?)").get(row.group_id, row.id).n,
     groupTotal: db.prepare("SELECT COUNT(*) AS n FROM settlements WHERE group_id = ? AND status <> 'voided'").get(row.group_id).n,
+    /* D61 连签流(E 组):同组还有几张待签+下一张 code——签完一张自动接续,全签完才回台面 */
+    groupPendingCount: db.prepare("SELECT COUNT(*) AS n FROM settlements WHERE group_id = ? AND status = 'pending_sign' AND id <> ?").get(row.group_id, row.id).n,
+    groupNextPendingCode: (db.prepare("SELECT code FROM settlements WHERE group_id = ? AND status = 'pending_sign' AND id <> ? ORDER BY rowid ASC LIMIT 1").get(row.group_id, row.id) || {}).code || '',
     bookingId: row.booking_id,
     storeName: store?.name || '',
     storeAddress: store?.address || '',
@@ -11487,6 +11522,56 @@ async function route(req, res) {
       WHERE tenant_id = ? AND display_name LIKE '演示2-%' AND tags_json NOT LIKE '%退役·旧口径演示档案%'
       ORDER BY display_name ASC`).all(tid)
     return json(res, 200, { roster: roster.map((r) => ({ id: r.id, name: r.display_name })) })
+  }
+  /* ===== 批③首件 B7:顾客侧售后发起/撤回(定稿图 §二 A/B+拍板①②③;零新状态语义) =====
+     发起=同一状态机(booking→AFTER_SALES+status_history 留痕,actor=顾客);
+     前置=本人的单+已完成+**已签署结算单**(拍板③双端统一);一单同时只一条进行中(B5);
+     撤回(拍板②)=转 resolved+自动备注「顾客撤回」,只能撤自己发起且未结案的;涉钱零新径(B8)。 */
+  if (req.method === 'POST' && /^\/my\/bookings\/[^/]+\/after-sales$/.test(path)) {
+    const customer = requireCustomer(req)
+    const tid = resolveTenant(req, query)
+    const bid = path.split('/')[3]
+    const booking = db.prepare('SELECT * FROM bookings WHERE id = ? AND tenant_id = ?').get(bid, tid)
+    if (!booking || booking.user_id !== customer.id) throw apiError(404, 'NOT_FOUND', '找不到这张订单。')
+    const body = await readBody(req)
+    const desc = String(body.description || '').trim()
+    if (!desc) throw apiError(400, 'DESCRIPTION_REQUIRED', '问题描述必填。')
+    if (booking.status === 'AFTER_SALES') {
+      const cur = booking.after_sales_status || 'pending'
+      if (cur !== 'resolved' && cur !== 'closed') throw apiError(409, 'AFTER_SALES_IN_PROGRESS', '这张单已有进行中的售后(一单同时只一条);可在进度卡查看。')
+      // 结案后可再次发起:重开=状态回 AFTER_SALES 进行态,新一条发起留痕
+      db.prepare("UPDATE bookings SET after_sales_status = NULL, after_sales_result = NULL, updated_at = ? WHERE id = ?").run(iso(new Date()), booking.id)
+    } else {
+      if (booking.status !== 'COMPLETED') throw apiError(400, 'NOT_COMPLETED', '只有已完成的订单可以发起售后。')
+      const signedStl = db.prepare("SELECT 1 FROM settlements WHERE booking_id = ? AND status IN ('signed', 'amended') LIMIT 1").get(booking.id)
+      if (!signedStl) throw apiError(400, 'AFTER_SALES_NEEDS_SIGNED', '这张单还没有已签署的结算单,不能发起售后。')
+    }
+    const now = iso(new Date())
+    db.prepare('INSERT INTO booking_status_history (id, booking_id, from_status, to_status, note, created_at) VALUES (?, ?, ?, ?, ?, ?)')
+      .run(randomId('hist'), booking.id, booking.status, 'AFTER_SALES', `顾客发起:${desc}`.slice(0, 500), now)
+    db.prepare("UPDATE bookings SET status = 'AFTER_SALES', updated_at = ? WHERE id = ?").run(now, booking.id)
+    const fresh = db.prepare('SELECT * FROM bookings WHERE id = ?').get(booking.id)
+    return json(res, 201, { afterSales: afterSalesProgress(fresh), booking: serializeBooking(fresh) })
+  }
+  if (req.method === 'POST' && /^\/my\/bookings\/[^/]+\/after-sales\/withdraw$/.test(path)) {
+    const customer = requireCustomer(req)
+    const tid = resolveTenant(req, query)
+    const bid = path.split('/')[3]
+    const booking = db.prepare('SELECT * FROM bookings WHERE id = ? AND tenant_id = ?').get(bid, tid)
+    if (!booking || booking.user_id !== customer.id) throw apiError(404, 'NOT_FOUND', '找不到这张订单。')
+    if (booking.status !== 'AFTER_SALES') throw apiError(400, 'NOT_AFTER_SALES', '这张单不在售后中。')
+    const cur = booking.after_sales_status || 'pending'
+    if (cur === 'resolved' || cur === 'closed') throw apiError(409, 'ALREADY_TERMINAL', '这单售后已结案,不能撤回;要再反馈可重新发起。')
+    // 只能撤**自己发起**的(最近一条发起留痕带「顾客发起:」前缀=发起人判定,append-only 不改史)
+    const lastOpen = db.prepare("SELECT note FROM booking_status_history WHERE booking_id = ? AND to_status = 'AFTER_SALES' ORDER BY created_at DESC LIMIT 1").get(booking.id)
+    if (!lastOpen || !String(lastOpen.note || '').startsWith('顾客发起:')) throw apiError(403, 'NOT_INITIATOR', '这单售后由门店发起,顾客不能撤回;有疑问请联系门店。')
+    const now = iso(new Date())
+    db.prepare(`INSERT INTO after_sales_events (id, tenant_id, booking_id, kind, text, related_code, actor_name, actor_role, technician_id, created_at)
+      VALUES (?, ?, ?, 'resolve', ?, NULL, ?, 'customer', NULL, ?)`)
+      .run(randomId('ase'), tid, booking.id, '顾客撤回', (customer.displayName || customer.display_name || '顾客'), now)
+    db.prepare("UPDATE bookings SET after_sales_status = 'resolved', after_sales_result = ?, updated_at = ? WHERE id = ?").run('顾客撤回', now, booking.id)
+    const fresh = db.prepare('SELECT * FROM bookings WHERE id = ?').get(booking.id)
+    return json(res, 200, { afterSales: afterSalesProgress(fresh), booking: serializeBooking(fresh) })
   }
   /* D57(店主 08-21 批②尾清):顾客侧待签单再入口——列出**全部**未签单(不止最新一张,
      即时开单没挂预约的也在);每张带签署页直达 code。签字/撤回后自然消失(status 驱动,零状态维护)。 */
@@ -16027,7 +16112,7 @@ async function route(req, res) {
           storedDeductCents: storedCents + (allSigned ? 0 : plannedStoredCents),
           timecardCoverCents: legOf('times_card'),
           dueCents: offlineDueCents,
-          dueLabel: rows.length > 1 ? `组合计应收(${rows.length} 张)` : '到店应收'
+          dueLabel: rows.length > 1 ? `组到店支付(${rows.length} 张)` : '本单到店支付'  // D4(08-22 裁):与签署单头条同句族
         },
         signature: allSigned ? { name: (user && user.display_name) || '', signedAt: stamp(rows[0].signed_at), hasImage: rows.some((r) => r.snapshot_url || r.snapshot_inline || r.signature_data) } : null
       }
@@ -16254,6 +16339,18 @@ async function route(req, res) {
     /* 售后线图 v1.1 §四:转售后的问题描述落 status_history——afterSalesProgress 的「发起原因」
        读的就是第一条 to_status=AFTER_SALES 的 note(5607),发起原因由此进后端唯一持有链。 */
     if (status === 'AFTER_SALES') {
+      /* B9(批③首件,拍板③兜底):未签署结算单的单不能发起售后——双端按钮前置(㊹)只是体验,
+         这里才是闸(直打接口也挡);C1 查明时报过的接口无闸遗留在此收口。 */
+      const signedStl = db.prepare("SELECT 1 FROM settlements WHERE booking_id = ? AND status IN ('signed', 'amended') LIMIT 1").get(id)
+      if (!signedStl) throw apiError(400, 'AFTER_SALES_NEEDS_SIGNED', '这张单还没有已签署的结算单,不能转售后(拍板:未签署不能发起,双端统一)。')
+      const curAs = booking.after_sales_status || 'pending'
+      if (booking.status === 'AFTER_SALES' && curAs !== 'resolved' && curAs !== 'closed') {
+        throw apiError(409, 'AFTER_SALES_IN_PROGRESS', '这张单已有进行中的售后(一单同时只一条)。')
+      }
+      // 商家口重开(与顾客口同构):已结案再转入=清结案态开新一轮,历史轮 append-only 留痕不丢
+      if (booking.status === 'AFTER_SALES' && (curAs === 'resolved' || curAs === 'closed')) {
+        db.prepare('UPDATE bookings SET after_sales_status = NULL, after_sales_result = NULL, updated_at = ? WHERE id = ?').run(iso(new Date()), id)
+      }
       db.prepare('INSERT INTO booking_status_history (id, booking_id, from_status, to_status, note, created_at) VALUES (?, ?, ?, ?, ?, ?)')
         .run(randomId('hist'), id, booking.status, 'AFTER_SALES', String(body.note || '').trim() || '商家标记转入售后', iso(new Date()))
     }

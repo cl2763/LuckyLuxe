@@ -190,7 +190,9 @@ const main = async () => {
 
   // ===== ⑦⑧⑨ 售后完成态 =====
   const b5 = await directBooking(shop, { name: `售后客${RUN_ID}`, time: '16:00', techId: shop.tech1 })
-  await request(`/admin/bookings/${b5.id}/status`, { method: 'PATCH', body: JSON.stringify({ status: 'COMPLETED' }) }, shop.token)
+  /* B9(批③首件):未签署单不能转售后——夹具按新口径先开单签署再转(闸本身 ㋈ 有专测) */
+  const sB5 = await request('/admin/settlements', { method: 'POST', body: JSON.stringify({ userId: b5.userId || b5.user_id || (b5.user && b5.user.id), settlements: [{ payIntent: 'offline_full', bookingId: b5.id, items: [{ serviceId: shop.serviceId, qty: 1 }], technicians: [{ technicianId: shop.tech1, role: 'main', itemNos: [1] }], servedPersonName: '' }] }) }, shop.token)
+  await request(`/settlements/${encodeURIComponent(sB5.data.settlements[0].code)}/sign`, { method: 'POST', body: JSON.stringify({ signature: '⑦夹具签', disclaimerAccepted: true }) }, null, { 'x-tenant-id': shop.tenantId })
   await request(`/admin/bookings/${b5.id}/status`, { method: 'PATCH', body: JSON.stringify({ status: 'AFTER_SALES' }) }, shop.token)
   const staff2Token = await staffLogin(shop, shop.tech2, 'b')
   r = await request(`/admin/bookings/${b5.id}/after-sales/progress`, { method: 'POST', body: JSON.stringify({ text: '我不是这单的技师' }) }, staff2Token)
@@ -1389,7 +1391,7 @@ const main = async () => {
                 check('㋄ D60 购卡显式行(purchaseLine 后端句:名称+「购卡款,预收」)', sh0.purchaseLine && sh0.purchaseLine.priceCents === 54000 && /购卡款,预收/.test(sh0.purchaseLine.amountText) && /守护/.test(sh0.purchaseLine.label), JSON.stringify(sh0.purchaseLine))
                 // preview-card 组卡自证:groupNote+sheetRows+dueLabel+购卡/充值行
                 const pc = (await request(`/admin/settlements/${sh0.id}/preview-card`, {}, shop.token)).data.card
-                check('㋄ D60 组卡自证(共 2 张+逐张状态行+组合计应收 label)', /共 2 张/.test(pc.groupNote) && pc.sheetRows.length === 2 && /组合计应收/.test(pc.totals.dueLabel), JSON.stringify({ note: pc.groupNote, rows: pc.sheetRows.length, label: pc.totals.dueLabel }))
+                check('㋄ D60 组卡自证(共 2 张+逐张状态行+组到店支付 label)', /共 2 张/.test(pc.groupNote) && pc.sheetRows.length === 2 && /组到店支付/.test(pc.totals.dueLabel), JSON.stringify({ note: pc.groupNote, rows: pc.sheetRows.length, label: pc.totals.dueLabel }))
                 check('㋄ D60 组卡购卡/充值显式行(54000/30000)', pc.totals.purchaseCents === 54000 && pc.totals.rechargeCents === 30000, JSON.stringify({ p: pc.totals.purchaseCents, r: pc.totals.rechargeCents }))
                 // 清场:撤两张
                 for (const s of sC.data.settlements) await request(`/admin/settlements/${s.id}/void`, { method: 'POST', body: JSON.stringify({ reason: '㋄ 清场' }) }, shop.token)
@@ -1432,6 +1434,70 @@ const main = async () => {
                   const sgN = await request(`/settlements/${encodeURIComponent(shN.code)}/sign`, { method: 'POST', body: JSON.stringify({ signature: '㋅ 未用储值签', disclaimerAccepted: true }) }, null, { 'x-tenant-id': shop.tenantId })
                   const serN = (await request(`/settlements/${encodeURIComponent(shN.code)}`, {}, null, { 'x-tenant-id': shop.tenantId })).data.settlement
                   check('㋅ 已签单不出句(历史单不随活余额漂)', sgN.status === 200 && !serN.storedUnusedNotice, JSON.stringify(serN.storedUnusedNotice))
+                }
+
+                /* ===== ㋈ 批③首件:顾客售后发起线+连签流+归属瀑布(图 §二§三+拍板①②③) ===== */
+                {
+                  const cm9 = await request('/auth/wechat/mini-login', { method: 'POST', body: JSON.stringify({ demoLogin: true, tenantId: shop.tenantId }) }, null, { 'x-tenant-id': shop.tenantId })
+                  const ctok9 = cm9.data.auth.accessToken
+                  const cuid9 = cm9.data.user.id
+                  const pkR9 = (await request('/admin/recharge-packages', {}, staffToken)).data.packages.find((p) => p.name === '充300赠60')
+                  const bk9 = (await request('/admin/bookings/direct', { method: 'POST', body: JSON.stringify({ userId: cuid9, serviceId: shop.serviceId, technicianId: shop.tech1, date: dateStr(0), time: '19:15' }) }, shop.token)).data.booking
+                  // 未签的已完成单不能发起(拍板③):先把单标 COMPLETED(无结算单)
+                  await request(`/admin/bookings/${bk9.id}/status`, { method: 'PATCH', body: JSON.stringify({ status: 'COMPLETED' }) }, shop.token)
+                  const noSign = await request(`/my/bookings/${bk9.id}/after-sales`, { method: 'POST', body: JSON.stringify({ description: '还没签就想售后' }) }, ctok9, { 'x-tenant-id': shop.tenantId })
+                  check('㋈ 拍板③顾客口:未签署单发起=400', noSign.status === 400 && noSign.data.error.code === 'AFTER_SALES_NEEDS_SIGNED', JSON.stringify(noSign.data).slice(0, 100))
+                  const b9gate = await request(`/admin/bookings/${bk9.id}/status`, { method: 'PATCH', body: JSON.stringify({ status: 'AFTER_SALES', note: '商家强转' }) }, shop.token)
+                  check('㋈ B9 商家口同闸:未签署单转售后=400', b9gate.status === 400 && b9gate.data.error.code === 'AFTER_SALES_NEEDS_SIGNED', JSON.stringify(b9gate.data).slice(0, 100))
+                  // 挂单开一张并签(D61 接续字段一并核)
+                  const sD61 = await request('/admin/settlements', { method: 'POST', body: JSON.stringify({ userId: cuid9, settlements: [{ payIntent: 'offline_full', bookingId: bk9.id, items: [{ serviceId: shop.serviceId, qty: 1 }], technicians: tech, servedPersonName: '' }, { payIntent: 'offline_full', items: [{ serviceId: shop.serviceId, qty: 1 }], technicians: tech, servedPersonName: '' }] }) }, shop.token)
+                  const [d61a, d61b] = sD61.data.settlements
+                  const sg61 = (await request(`/settlements/${encodeURIComponent(d61a.code)}/sign`, { method: 'POST', body: JSON.stringify({ signature: '连签A', disclaimerAccepted: true }) }, null, { 'x-tenant-id': shop.tenantId })).data
+                  const ser61 = (await request(`/settlements/${encodeURIComponent(d61a.code)}`, {}, null, { 'x-tenant-id': shop.tenantId })).data.settlement
+                  check('㋈ D61 签完带出下一张(groupPendingCount=1+nextCode)', ser61.groupPendingCount === 1 && ser61.groupNextPendingCode === d61b.code, JSON.stringify({ n: ser61.groupPendingCount, c: ser61.groupNextPendingCode }))
+                  const st61 = (await request(`/admin/settlements/${d61a.id}/sign-state`, {}, shop.token)).data
+                  check('㋈ D61 商家出码接续(sign-state 带 nextPendingId)', st61.state === 'signed' && st61.nextPendingId === d61b.id, JSON.stringify(st61))
+                  await request(`/settlements/${encodeURIComponent(d61b.code)}/sign`, { method: 'POST', body: JSON.stringify({ signature: '连签B', disclaimerAccepted: true }) }, null, { 'x-tenant-id': shop.tenantId })
+                  const ser61b = (await request(`/settlements/${encodeURIComponent(d61b.code)}`, {}, null, { 'x-tenant-id': shop.tenantId })).data.settlement
+                  check('㋈ D61 全签完=0(接续钮消失,回台面)', ser61b.groupPendingCount === 0, JSON.stringify({ n: ser61b.groupPendingCount }))
+                  // 签署完成 → booking COMPLETED → afterSalesAction='start'
+                  const bks = (await request('/bookings', {}, ctok9, { 'x-tenant-id': shop.tenantId })).data.bookings
+                  const bkMine = bks.find((b) => b.id === bk9.id)
+                  check('㋈ B1 按钮位后端句:已完成+已签署=start「有疑问,去售后」', bkMine && bkMine.afterSalesAction === 'start' && bkMine.afterSalesActionText === '有疑问,去售后', JSON.stringify({ a: bkMine && bkMine.afterSalesAction }))
+                  // B8 涉钱零新径:带 amountCents 的发起=零账目行
+                  const led0 = (await financeRows(shop)).length
+                  const goAS = await request(`/my/bookings/${bk9.id}/after-sales`, { method: 'POST', body: JSON.stringify({ description: '做完第二天就掉了', amountCents: 99999 }) }, ctok9, { 'x-tenant-id': shop.tenantId })
+                  check('㋈ B7 顾客发起=201+进度卡(发起原因入留痕链)', goAS.status === 201 && goAS.data.afterSales && goAS.data.afterSales.reason.includes('做完第二天就掉了'), JSON.stringify(goAS.data.afterSales && goAS.data.afterSales.reason))
+                  check('㋈ B8 涉钱零新径(amountCents 字段不产生账目行)', (await financeRows(shop)).length === led0)
+                  const again = await request(`/my/bookings/${bk9.id}/after-sales`, { method: 'POST', body: JSON.stringify({ description: '再来一条' }) }, ctok9, { 'x-tenant-id': shop.tenantId })
+                  check('㋈ B5 一单一条进行中(再发起=409)', again.status === 409 && again.data.error.code === 'AFTER_SALES_IN_PROGRESS', JSON.stringify(again.data).slice(0, 100))
+                  // 越权+异常输入
+                  const cmX = await request('/auth/wechat/mini-login', { method: 'POST', body: JSON.stringify({ demoLogin: true, tenantId: shop.tenantId, asUserId: uid }) }, null, { 'x-tenant-id': shop.tenantId })
+                  const other = await request(`/my/bookings/${bk9.id}/after-sales/withdraw`, { method: 'POST', body: '{}' }, cmX.data.auth.accessToken, { 'x-tenant-id': shop.tenantId })
+                  check('㋈ 越权:别人撤不了我的售后(404)', other.status === 404, `${other.status}`)
+                  const empty = await request(`/my/bookings/${bk9.id}/after-sales`, { method: 'POST', body: JSON.stringify({ description: '   ' }) }, ctok9, { 'x-tenant-id': shop.tenantId })
+                  check('㋈ 异常输入:空描述=400', empty.status === 400, `${empty.status}`)
+                  // B6 撤回:顾客发起→撤=resolved+「顾客撤回」;结案后再撤=409;结案后可再发起(重开)
+                  const wd = await request(`/my/bookings/${bk9.id}/after-sales/withdraw`, { method: 'POST', body: '{}' }, ctok9, { 'x-tenant-id': shop.tenantId })
+                  check('㋈ B6 撤回=转已解决+自动备注「顾客撤回」', wd.status === 200 && wd.data.afterSales.status === 'resolved' && /顾客撤回/.test(wd.data.afterSales.statusText + (wd.data.afterSales.steps || []).map((s) => s.label).join('')), JSON.stringify(wd.data.afterSales.status))
+                  const wd2 = await request(`/my/bookings/${bk9.id}/after-sales/withdraw`, { method: 'POST', body: '{}' }, ctok9, { 'x-tenant-id': shop.tenantId })
+                  check('㋈ B6 结案后再撤=409(幂等面)', wd2.status === 409, `${wd2.status}`)
+                  const reopen = await request(`/my/bookings/${bk9.id}/after-sales`, { method: 'POST', body: JSON.stringify({ description: '又发现新问题' }) }, ctok9, { 'x-tenant-id': shop.tenantId })
+                  check('㋈ B5 结案后可再次发起(重开=新一条留痕)', reopen.status === 201 && reopen.data.afterSales.reason.includes('又发现新问题'), JSON.stringify(reopen.data.afterSales && reopen.data.afterSales.reason))
+                  // 商家发起的售后顾客不能撤(bk 另一张:先解决当前的再商家转)
+                  await request(`/my/bookings/${bk9.id}/after-sales/withdraw`, { method: 'POST', body: '{}' }, ctok9, { 'x-tenant-id': shop.tenantId })
+                  await request(`/admin/bookings/${bk9.id}/status`, { method: 'PATCH', body: JSON.stringify({ status: 'AFTER_SALES', note: '商家发现问题转入' }) }, shop.token)
+                  const wd3 = await request(`/my/bookings/${bk9.id}/after-sales/withdraw`, { method: 'POST', body: '{}' }, ctok9, { 'x-tenant-id': shop.tenantId })
+                  check('㋈ B6 商家发起的售后顾客不能撤(403)', wd3.status === 403 && wd3.data.error.code === 'NOT_INITIATOR', JSON.stringify(wd3.data).slice(0, 100))
+                  /* D59 v2 瀑布③:老板开单(demo owner 无技师身份)+单技师+随单充值 → 归当单技师 */
+                  const sD59 = await request('/admin/settlements', { method: 'POST', body: JSON.stringify({ userId: cuid9, settlements: [{ payIntent: 'offline_full', items: [{ serviceId: shop.serviceId, qty: 1 }], technicians: tech, servedPersonName: '', rechargePackageId: pkR9.id }] }) }, shop.token)
+                  const shD59 = sD59.data.settlements[0]
+                  check('㋈ D59③ 老板开单无技师身份=归当单技师(单技师回落)', shD59.recharge && JSON.parse(JSON.stringify(shD59.recharge)) && (await (async () => { const r = dbx.prepare('SELECT recharge_json FROM settlements WHERE id = ?').get(shD59.id); return JSON.parse(r.recharge_json).technicianId === shop.tech1 })()), JSON.stringify({ want: shop.tech1 }))
+                  // 双技师=暂缓(空,等店主拍案)
+                  const sD59b = await request('/admin/settlements', { method: 'POST', body: JSON.stringify({ userId: cuid9, settlements: [{ payIntent: 'offline_full', items: [{ serviceId: shop.serviceId, qty: 1 }], technicians: [{ technicianId: shop.tech1, role: 'main', itemNos: [1] }, { technicianId: shop.tech2, role: 'assist', itemNos: [] }], servedPersonName: '', rechargePackageId: pkR9.id }] }) }, shop.token)
+                  const rj59b = JSON.parse(dbx.prepare('SELECT recharge_json FROM settlements WHERE id = ?').get(sD59b.data.settlements[0].id).recharge_json)
+                  check('㋈ D59③ 双技师=暂缓空归属(等店主拍两案,日结手调兜底)', rj59b.technicianId === null, JSON.stringify(rj59b.technicianId))
+                  for (const x of [shD59.id, sD59b.data.settlements[0].id]) await request(`/admin/settlements/${x}/void`, { method: 'POST', body: JSON.stringify({ reason: '㋈ 清场' }) }, shop.token)
                 }
 
                 /* ===== ㋆ 资金时序五步全组合矩阵(店主 08-22 总纲=唯一裁判;40 格常驻) =====
@@ -1641,6 +1707,16 @@ const main = async () => {
       check('㋆ D64 组卡 cover 行+出码第 n/N 张+组内预告句(后端句)', spWxml.includes('次卡抵扣(签字扣次)') && settleJs.includes('第 ${s.groupIndex}/${s.groupTotal} 张') && srvD60.includes('组内后续单据将抵'))
       // ㋇ D65-b wiring:逐张行/未签行/顾客待签卡=头条 cashDue,价值总额不再裸出
       check('㋇ D65-b 单张金额一律头条化(组卡逐张/日结未签行/顾客待签卡)', spJs.includes('m(s.cashDueCents)') && dcMixin.includes('到店支付 ${m(u.cashDueCents)}') && coWxml.includes('到店支付 {{item.cashDueText}}'))
+      // ㋈ 批③首件 wiring:详情页重做(flow 卡/空态句/留档收敛/售后同屏表单/进度卡)+网页同构+连签流+线下行非勾选
+      const odJs = readFileSync(join(ROOT42, 'miniprogram/pages/order-detail/index.js'), 'utf8')
+      const odWxml = readFileSync(join(ROOT42, 'miniprogram/pages/order-detail/index.wxml'), 'utf8')
+      const custWeb = readFileSync(join(ROOT42, 'apps/web/customer.js'), 'utf8')
+      check('㋈ A2/A3/A6 详情页:flow 卡+「本单未产生结算单」空态+旧实付行消亡', odWxml.includes('order.pay.flowLines') && odWxml.includes('本单未产生结算单') && !odWxml.includes('>实付<'))
+      check('㋈ A4/A5/B2 详情页:留档无则不出+售后钮后端句+同屏表单(问题描述必填)', odWxml.includes('wx:if="{{order.visibleWorkImages.length}}"') && odWxml.includes('order.afterSalesActionText') && odWxml.includes('问题描述(必填)'))
+      check('㋈ B6 撤回入口+D3 进度卡在场(顾客小程序)', odWxml.includes('撤回本次售后(记录保留)') && odWxml.includes('order.afterSales.steps') && odJs.includes('withdrawAfterSales'))
+      check('㋈ C 组网页同构(徽标/flow 卡/发起表单/待签列表)', custWeb.includes('order.listBadgeText') && custWeb.includes('order.payment.flow') && custWeb.includes('data-as-submit') && custWeb.includes('state.pendingSign'))
+      check('㋈ E 组连签流 wiring(签署页接续钮+商家出码接续)', readFileSync(join(ROOT42, 'apps/web/sign.html'), 'utf8').includes('继续签下一张') && settleJs.includes('nextPendingId') && srvD60.includes('groupNextPendingCode'))
+      check('㋈ D3 线下行非勾选样式「到店收 · 差额自动」', settleWxml.includes('到店收 · 差额自动') && !settleWxml.includes('payToggleOffline'))
       // ㋅ D63 wiring:组卡/签署页「余额未用」句+四行自证渲染面
       check('㋅ D63 余额未用句渲染面(组卡+签署页)+四行自证键', spWxml.includes('card.storedUnusedNotice') && signHtml.includes('s.storedUnusedNotice') && srvD60.includes("key: 'before', label: '充值前余额'"))
       check('㋄ D60 结算页:购卡显式行+L3① 行内小注定稿句', settleWxml.includes('购卡款,预收') && settleJs.includes('含本单随签充值 +') && settleWxml.includes('view.rvNote'))
