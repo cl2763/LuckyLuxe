@@ -1292,7 +1292,7 @@ const main = async () => {
       const memberHits = (memberSeg.match(/window\.(prompt|confirm|alert)\(/g) || []).length
       check('㊶ D50 会员与营销页原生弹窗=0(全部页内表单弹层)', memberHits === 0, `hits=${memberHits}`)
       check('㊶ D50 弹层组件在场(openFormModal:Esc/遮罩/保存取消)', adminJs.includes('function openFormModal') && adminJs.includes("e.key === 'Escape'"))
-      const PROMPT_BASELINE = 24 // A5 充值档位块退役随删 3 处(2 prompt+1 confirm)基线 27→24;其余存量按 Cowork 归批清单分批收敛,只减不增
+      const PROMPT_BASELINE = 19 // 服务与价目页 5 处提前修(店主 08-21 亲撞拍板:新增/改名/删大类+删项目全换弹层)24→19;此前 A5 退役 27→24;其余存量按 Cowork 归批清单分批收敛,只减不增
       const total = (adminJs.match(/window\.(prompt|confirm|alert)\(/g) || []).length
       check(`㊶ D50 admin.js 原生弹窗总数 ≤ 基线 ${PROMPT_BASELINE}(新增代码禁 prompt/confirm/alert)`, total <= PROMPT_BASELINE, `当前 ${total}`)
     }

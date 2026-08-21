@@ -1,5 +1,5 @@
 // 构建号:每次交付递增。侧栏可见,排查"改了没生效"时先对版本。
-const ADMIN_BUILD = '20260821d-b31'
+const ADMIN_BUILD = '20260821e-pxmodal'
 let pricingState = { module: 'storefront', tab: 'items', categories: [], items: [], rules: {}, editing: null, preview: null, storefrontPicker: false }
 console.log(`[admin] build ${ADMIN_BUILD}`)
 
@@ -9078,31 +9078,54 @@ if (els.pricingPage) {
     const tab = event.target.closest('[data-pricing-tab]')
     if (tab) { pricingState.tab = tab.dataset.pricingTab; renderPricing(); return }
     try {
+      /* 队首令(店主 08-21 亲撞「新增大类」prompt 拍板):本页原生弹窗全部换 openFormModal 弹层
+         (四之七口径:Esc/遮罩/保存取消齐;删除类=弹层确认钮,不再 window.confirm)。 */
       if (event.target.closest('#addPricingCategory')) {
-        const name = window.prompt(pzh() ? '大类名称(如:美甲单色)' : 'Category name')
-        if (!name) return
-        const key = window.prompt(pzh() ? '英文标识(小写字母/数字/短横,如 nail_solid;卸甲类请用 removal)' : 'Key', '')
-        await request('/admin/pricing/categories', { method: 'POST', body: JSON.stringify({ name: name.trim(), key: (key || '').trim() }) })
-        await loadPricingPage()
-        toast(pzh() ? '大类已新增' : 'Category added')
+        openFormModal({
+          title: pzh() ? '新增大类' : 'New category',
+          fields: [
+            { key: 'name', label: pzh() ? '大类名称(如:美甲单色)' : 'Category name' },
+            { key: 'key', label: pzh() ? '英文标识(可留空)' : 'Key (optional)', placeholder: 'nail_solid', hint: pzh() ? '小写字母/数字/短横,如 nail_solid;卸甲类请用 removal;留空自动生成' : 'lowercase key; blank = auto' }
+          ],
+          saveText: pzh() ? '新增' : 'Add',
+          onSave: async (v) => {
+            if (!String(v.name || '').trim()) { toast(pzh() ? '大类名称必填' : 'Name required'); return false }
+            await request('/admin/pricing/categories', { method: 'POST', body: JSON.stringify({ name: String(v.name).trim(), key: String(v.key || '').trim() }) })
+            await loadPricingPage()
+            toast(pzh() ? '大类已新增' : 'Category added')
+          }
+        })
         return
       }
       const rename = event.target.closest('[data-cat-rename]')
       if (rename) {
         const cat = pricingState.categories.find((c) => c.id === rename.dataset.catRename)
-        const name = window.prompt(pzh() ? '大类名称' : 'Category name', cat.name)
-        if (!name) return
-        await request(`/admin/pricing/categories/${cat.id}`, { method: 'PATCH', body: JSON.stringify({ name: name.trim() }) })
-        await loadPricingPage()
+        openFormModal({
+          title: pzh() ? '改大类名称' : 'Rename category',
+          fields: [{ key: 'name', label: pzh() ? '大类名称' : 'Category name', value: cat.name }],
+          saveText: pzh() ? '保存' : 'Save',
+          onSave: async (v) => {
+            if (!String(v.name || '').trim()) { toast(pzh() ? '大类名称必填' : 'Name required'); return false }
+            await request(`/admin/pricing/categories/${cat.id}`, { method: 'PATCH', body: JSON.stringify({ name: String(v.name).trim() }) })
+            await loadPricingPage()
+          }
+        })
         return
       }
       const delCat = event.target.closest('[data-cat-delete]')
       if (delCat) {
         const cat = pricingState.categories.find((c) => c.id === delCat.dataset.catDelete)
-        if (!window.confirm(pzh() ? `删除大类「${cat.name}」?` : `Delete ${cat.name}?`)) return
-        await request(`/admin/pricing/categories/${cat.id}`, { method: 'DELETE' })
-        await loadPricingPage()
-        toast(pzh() ? '已删除' : 'Deleted')
+        openFormModal({
+          title: pzh() ? `删除大类「${cat.name}」?` : `Delete ${cat.name}?`,
+          hint: pzh() ? '删除后该大类不再出现在开单与价目表;项目不随删。' : 'Items are not deleted with the category.',
+          fields: [],
+          saveText: pzh() ? '确认删除' : 'Delete',
+          onSave: async () => {
+            await request(`/admin/pricing/categories/${cat.id}`, { method: 'DELETE' })
+            await loadPricingPage()
+            toast(pzh() ? '已删除' : 'Deleted')
+          }
+        })
         return
       }
       if (event.target.closest('#addPricingMain') || event.target.closest('#addPricingAddon')) {
@@ -9145,10 +9168,17 @@ if (els.pricingPage) {
       const delItem = event.target.closest('[data-item-delete]')
       if (delItem) {
         const item = pricingState.items.find((i) => i.id === delItem.dataset.itemDelete)
-        if (!window.confirm(pzh() ? `删除「${item.nameZh}」?有历史订单的项目会自动改为下架。` : `Delete ${item.nameZh}?`)) return
-        const res = await request(`/admin/pricing/items/${item.id}`, { method: 'DELETE' })
-        await loadPricingPage()
-        toast(res.deleted ? (pzh() ? '已删除' : 'Deleted') : (res.reason || (pzh() ? '已下架' : 'Hidden')))
+        openFormModal({
+          title: pzh() ? `删除「${item.nameZh}」?` : `Delete ${item.nameZh}?`,
+          hint: pzh() ? '有历史订单的项目会自动改为下架(不真删,账目可追溯)。' : 'Items with history are hidden instead of deleted.',
+          fields: [],
+          saveText: pzh() ? '确认删除' : 'Delete',
+          onSave: async () => {
+            const res = await request(`/admin/pricing/items/${item.id}`, { method: 'DELETE' })
+            await loadPricingPage()
+            toast(res.deleted ? (pzh() ? '已删除' : 'Deleted') : (res.reason || (pzh() ? '已下架' : 'Hidden')))
+          }
+        })
         return
       }
       if (event.target.closest('#pricingRulesSave')) return savePricingRules()
