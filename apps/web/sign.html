@@ -181,7 +181,6 @@ function render() {
   const signed = s.status === 'signed'
   const techLine = s.technicians.map((t) => `${esc(t.name)}（${t.role === 'main' ? '主' : '副'}）`).join(' · ')
   const techNos = s.technicians.map((t) => `${esc(t.name)}：${t.itemNos.join('·') || '—'}`).join(' ／ ')
-  const payLabel = { deposit: '已付定金抵扣', stored_value: '储值卡抵扣', migrate_stored: '储值卡抵扣', offline: '到店支付', times_card: '次卡抵扣', coupon: '优惠券' }
 
   /* 屏 S4:只对**未绑定**顾客显示的签字前置卡(规则⑤)。
      绑定 = openid 绑到这张单挂着的档案 —— 单挂谁,建单时就定死,与微信注册手机号无关。
@@ -231,22 +230,14 @@ function render() {
           </div>`).join('')}
       </div>
 
-      <div class="sec">
-        <h2>支付构成</h2>
-        ${s.payments.map((p) => `
-          <div class="row">
-            <span>${esc(payLabel[p.leg] || p.leg)}${p.leg === 'migrate_stored' ? '<span class="badge">旧卡余额</span>' : ''}</span>
-            <span class="amt">${p.leg === 'deposit' ? `−${money(p.amountCents)}` : money(p.amountCents)}</span>
-          </div>`).join('') || '<div class="meta">—</div>'}
-      </div>
-
+      <!-- D65(店主拍板):双叙事合并=一条五步账;头条=本单到店支付(五步⑤现金数);
+           「合计」不再用于价值总和。行序/句子全由后端 flow 块下发,此处只贴。 -->
       <div class="totals">
         <div class="row"><span>原价合计</span><span class="strike">${money(s.listTotalCents)}</span></div>
         <div class="row"><span>${s.couponDiscountCents ? '共优惠（含券）' : '较原价共优惠'}</span><b>${money(s.discountTotalCents)}</b></div>
-        ${s.couponDiscountCents ? `<div class="row"><span>优惠券 ${esc(s.coupon ? s.coupon.name : '')}</span><b>−${money(s.couponDiscountCents)}</b></div>` : ''}
-        ${s.purchaseLine ? `<div class="row"><span>${esc(s.purchaseLine.label)}</span><b>${esc(s.purchaseLine.amountText)}</b></div>` : ''}
-        ${s.recharge ? `<div class="row"><span>本次充值实收（签字生效）</span><b>+${money(s.recharge.amountCents)}</b></div>` : ''}
-        <div class="row grand"><span>合计</span><span>${money(s.totalCents)}</span></div>
+        ${(s.flow && s.flow.lines ? s.flow.lines : []).map((fl) => `
+          <div class="row"><span>${esc(fl.label)}</span><b>${esc(fl.amountText)}</b></div>`).join('')}
+        <div class="row grand"><span>${esc(s.flow ? s.flow.heroLabel : '本单到店支付')}</span><span>${esc(s.flow ? s.flow.cashDueText : '')}</span></div>
       </div>
       ${s.recharge && s.recharge.lines ? `
       <div class="sec">

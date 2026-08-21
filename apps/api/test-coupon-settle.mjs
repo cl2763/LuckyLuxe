@@ -275,7 +275,8 @@ async function main() {
   // ---- 快照上有券行,且与所签构成一致 ----
   const snap = await request(`/settlements/${sheet1.code}/snapshot`, {}, null)
   const svg = String(snap.data && snap.data.raw ? snap.data.raw : '')
-  check('快照 SVG 上有优惠券行', /优惠券 满300减30/.test(svg), svg.slice(0, 120))
+  // D65 改版:快照=一条五步账,券行句式「优惠券抵扣(名称) −X」(flow 块后端句)
+  check('快照 SVG 上有优惠券行', /优惠券抵扣\(满300减30\)/.test(svg), svg.slice(0, 120))
   check('快照共优惠标注含券', /共优惠（含券）/.test(svg) || /共优惠\(含券\)/.test(svg), svg.slice(0, 120))
 
   // ---- ③ 业绩口径:分成按 perfBase(券不扣技师)----

@@ -10461,36 +10461,20 @@ function renderSettlementSnapshotSvg(settlement, { strokes = [], signedAt = '' }
       rows.push(`<text x="${W - 40}" y="${y}" class="t" text-anchor="end">${escapeXml(money(item.amountCents))}</text>`)
     }
   }
-  y += 40
-  rows.push(`<text x="40" y="${y}" class="h">支付构成</text>`)
-  const payLabel = { deposit: '已付定金抵扣', stored_value: '储值卡抵扣', migrate_stored: '储值卡抵扣（旧卡余额）', offline: '到店支付', times_card: '次卡抵扣', coupon: '优惠券' }
-  for (const p of s.payments) {
-    y += lineH
-    rows.push(`<text x="40" y="${y}" class="t">${escapeXml(payLabel[p.leg] || p.leg)}</text>`)
-    rows.push(`<text x="${W - 40}" y="${y}" class="t" text-anchor="end">${escapeXml(`${p.leg === 'deposit' ? '−' : ''}${money(p.amountCents)}`)}</text>`)
-  }
+  /* D65(店主拍板):双叙事合并=一条五步账,头条=本单到店支付(五步⑤现金数);
+     「合计」不再用于价值总和。行序/句子=serializeSettlement flow 块唯一持有,这里只画。 */
   y += 30
   rows.push(`<line x1="40" y1="${y}" x2="${W - 40}" y2="${y}" class="rule"/>`)
   y += 30
   rows.push(`<text x="40" y="${y}" class="s">原价合计</text><text x="${W - 40}" y="${y}" class="strike" text-anchor="end">${escapeXml(money(s.listTotalCents))}</text>`)
   y += 26
   rows.push(`<text x="40" y="${y}" class="s">较原价共优惠${s.couponDiscountCents ? '(含券)' : ''}</text><text x="${W - 40}" y="${y}" class="t" text-anchor="end">${escapeXml(money(s.discountTotalCents))}</text>`)
-  // 用了券才有这一行(设计图规则⑥:无券不占位);凭证必须与顾客当时签的构成逐字一致
-  if (s.couponDiscountCents > 0) {
+  for (const fl of (s.flow && s.flow.lines) || []) {
     y += 26
-    rows.push(`<text x="40" y="${y}" class="s">优惠券 ${escapeXml(s.coupon ? s.coupon.name : '')}</text><text x="${W - 40}" y="${y}" class="t" text-anchor="end">${escapeXml(`−${money(s.couponDiscountCents)}`)}</text>`)
-  }
-  /* D60 合计自证:购卡款/充值实收显式行放在「合计」之前——服务小计+购卡+充值 = 合计,逐行可对 */
-  if (s.purchaseLine) {
-    y += 26
-    rows.push(`<text x="40" y="${y}" class="s">${escapeXml(s.purchaseLine.label)}</text><text x="${W - 40}" y="${y}" class="t" text-anchor="end">${escapeXml(s.purchaseLine.amountText)}</text>`)
-  }
-  if (s.recharge) {
-    y += 26
-    rows.push(`<text x="40" y="${y}" class="s">本次充值实收(签字生效)</text><text x="${W - 40}" y="${y}" class="t" text-anchor="end">${escapeXml(`+${money(s.recharge.amountCents)}`)}</text>`)
+    rows.push(`<text x="40" y="${y}" class="s">${escapeXml(fl.label)}</text><text x="${W - 40}" y="${y}" class="t" text-anchor="end">${escapeXml(fl.amountText)}</text>`)
   }
   y += 40
-  rows.push(`<text x="40" y="${y}" class="grand">合计</text><text x="${W - 40}" y="${y}" class="grand gold" text-anchor="end">${escapeXml(money(s.totalCents))}</text>`)
+  rows.push(`<text x="40" y="${y}" class="grand">${escapeXml((s.flow && s.flow.heroLabel) || '本单到店支付')}</text><text x="${W - 40}" y="${y}" class="grand gold" text-anchor="end">${escapeXml((s.flow && s.flow.cashDueText) || money(s.totalCents))}</text>`)
   /* B3-1 随单充值三行分行(图 §四 屏3):实收/本单抵扣/充后余额——快照=签署凭证,
      充后余额是签字瞬间冻结数(serializeSettlement 已解析),句子后端唯一。 */
   if (s.recharge && s.recharge.lines) {
@@ -10755,6 +10739,31 @@ function serializeSettlement(row, { includeSignature = false } = {}) {
       sharePct: t.share_pct, shareCents: t.share_cents
     })),
     payments: pays.map((p) => ({ leg: p.leg, amountCents: p.amount_cents, payerUserId: p.payer_user_id, status: p.status, note: p.note })),
+    /* D65(店主 08-22 拍板:单据头条=本单到店支付,一条五步账):
+       单栏顺序=档位小计→次卡抵扣→(券/定金)→储值抵扣→服务应付→+现场购卡→+充值实收→本单到店支付(唯一头条)。
+       「合计」一词不再用于价值总和;行序/句子/数字全在这一块,签署页+快照直贴(双叙事合并,三端零分叉)。 */
+    flow: (() => {
+      const m = (c) => formatMoneyCents(c, row.tenant_id, 'auto')
+      const coverCents = pays.filter((p) => p.leg === 'times_card').reduce((n, p) => n + p.amount_cents, 0)
+      const storedCents = pays.filter((p) => p.leg === 'stored_value' || p.leg === 'migrate_stored').reduce((n, p) => n + p.amount_cents, 0)
+      const couponCents = row.coupon_discount_cents || 0
+      const depositCents = row.deposit_deduct_cents || 0
+      const svcPayableCents = Math.max(0, row.subtotal_cents - coverCents - couponCents - depositCents - storedCents)
+      let purchaseCents = 0; let purchaseName = ''
+      try { const p = JSON.parse(row.purchase_json || 'null'); if (p && p.priceCents > 0) { purchaseCents = p.priceCents; purchaseName = p.name || '次卡' } } catch { /* 无购卡 */ }
+      let rechargeAmt = 0
+      try { const r0 = JSON.parse(row.recharge_json || 'null'); if (r0 && r0.amountCents > 0) rechargeAmt = r0.amountCents } catch { /* 无充值 */ }
+      const cashDueCents = svcPayableCents + purchaseCents + rechargeAmt
+      const lines = [{ key: 'subtotal', label: '档位小计', amountText: m(row.subtotal_cents) }]
+      if (coverCents > 0) lines.push({ key: 'cover', label: '次卡抵扣(签字扣次)', amountText: `−${m(coverCents)}` })
+      if (couponCents > 0) lines.push({ key: 'coupon', label: `优惠券抵扣${row.coupon_name ? '(' + row.coupon_name + ')' : ''}`, amountText: `−${m(couponCents)}` })
+      if (depositCents > 0) lines.push({ key: 'deposit', label: '已付定金抵扣', amountText: `−${m(depositCents)}` })
+      if (storedCents > 0) lines.push({ key: 'stored', label: '储值抵扣', amountText: `−${m(storedCents)}` })
+      lines.push({ key: 'svcPayable', label: '服务应付', amountText: m(svcPayableCents) })
+      if (purchaseCents > 0) lines.push({ key: 'purchase', label: `现场购卡 · ${purchaseName}(购卡款,预收)`, amountText: `+${m(purchaseCents)}` })
+      if (rechargeAmt > 0) lines.push({ key: 'recharge', label: '本次充值实收(签字生效)', amountText: `+${m(rechargeAmt)}` })
+      return { lines, cashDueCents, cashDueText: m(cashDueCents), heroLabel: '本单到店支付' }
+    })(),
     /* D63(店主 08-22 定稿句):有余额而本单没用储值的待签单,显式说出来——不许静默。
        只挂待签单(已签单余额是活的,历史单不出句避免误导)。 */
     storedUnusedNotice: (() => {

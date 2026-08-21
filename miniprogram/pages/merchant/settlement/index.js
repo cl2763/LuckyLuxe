@@ -758,8 +758,9 @@ Page({
           url: r.url,
           pushedText: r.pushedText || '',
           unbound: r.customerBound === false,
-          // D64 表达:组内多张时标「第 n/N 张」——顾客按序签,店员一眼知道出的是哪张的码
-          amountText: `${(s.groupTotal || 1) > 1 ? `第 ${s.groupIndex}/${s.groupTotal} 张 · ` : ''}本单应收 ${m(s.totalCents)}`,
+          /* D64+D65 表达:组内多张标「第 n/N 张」;头条=本单到店支付(五步⑤现金数,flow 块后端算),
+             不再用价值总额当头条 */
+          amountText: `${(s.groupTotal || 1) > 1 ? `第 ${s.groupIndex}/${s.groupTotal} 张 · ` : ''}本单到店支付 ${s.flow ? s.flow.cashDueText : m(s.totalCents)}`,
           breakdownText: s.depositDeductCents
             ? `档位小计 ${m(s.subtotalCents)} − 已付定金 ${m(s.depositDeductCents)}`
             : `档位小计 ${m(s.subtotalCents)}`,

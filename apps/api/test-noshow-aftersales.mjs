@@ -1493,16 +1493,19 @@ const main = async () => {
                           const pv = (await request('/admin/settlements/preview', { method: 'POST', body: JSON.stringify({ userId: uid2, payIntent: intent, settlements: shts }) }, shop.token)).data
                           const gp = (pv.group || {}).payment || {}
                           const sc = (await request('/admin/settlements', { method: 'POST', body: JSON.stringify({ userId: uid2, settlements: shts }) }, shop.token)).data
-                          let off = -1; let st = -1; let cardDue = -1
+                          let off = -1; let st = -1; let cardDue = -1; let heroOk = false
                           if (sc.settlements) {
                             const legsX = sc.settlements.flatMap((x) => x.payments)
                             off = legsX.filter((p) => p.leg === 'offline').reduce((n, p) => n + p.amountCents, 0)
                             st = legsX.filter((p) => p.leg === 'stored_value' || p.leg === 'migrate_stored').reduce((n, p) => n + p.amountCents, 0)
                             cardDue = ((await request(`/admin/settlements/${sc.settlements[0].id}/preview-card`, {}, shop.token)).data.card || { totals: {} }).totals.dueCents
+                            /* D65 头条语义:每张单 flow.cashDueCents=五步⑤该张现金;Σ各张头条=组合计 */
+                            heroOk = sc.settlements.every((x) => x.flow && x.flow.cashDueCents === x.payments.filter((p) => p.leg === 'offline').reduce((n, p) => n + p.amountCents, 0))
+                              && sc.settlements.reduce((n, x) => n + ((x.flow || {}).cashDueCents || 0), 0) === exp.cash
                             for (const x of sc.settlements) await request(`/admin/settlements/${x.id}/void`, { method: 'POST', body: JSON.stringify({ reason: '㋆ 矩阵清场' }) }, shop.token)
                           }
-                          const ok = gp.offlineDueCents === exp.cash && gp.storedUsedCents === exp.storedUsed && off === exp.cash && st === exp.storedUsed && cardDue === exp.cash
-                          if (!ok) bad.push(`${tag}: exp(cash=${exp.cash},st=${exp.storedUsed}) pv(${gp.offlineDueCents},${gp.storedUsedCents}) legs(${off},${st}) card(${cardDue})`)
+                          const ok = gp.offlineDueCents === exp.cash && gp.storedUsedCents === exp.storedUsed && off === exp.cash && st === exp.storedUsed && cardDue === exp.cash && heroOk
+                          if (!ok) bad.push(`${tag}: exp(cash=${exp.cash},st=${exp.storedUsed}) pv(${gp.offlineDueCents},${gp.storedUsedCents}) legs(${off},${st}) card(${cardDue}) hero(${heroOk})`)
                         }
                       }
                     }
@@ -1620,7 +1623,8 @@ const main = async () => {
       const signHtml = readFileSync(join(ROOT42, 'apps/web/sign.html'), 'utf8')
       check('㋄ D60 单据预览:组卡自证+购卡/充值显式行+应收 label 后端定', spJs.includes('sheetRows') && spWxml.includes('card.groupNote') && spWxml.includes('现场购卡(购卡款,预收)') && spWxml.includes('card.t.dueLabel'))
       const srvD60 = readFileSync(join(ROOT42, 'apps/api/local-server.mjs'), 'utf8')
-      check('㋄ D60 签署页/快照:合计前购卡行+充值实收行(合计自证)', signHtml.includes('s.purchaseLine') && signHtml.includes('本次充值实收（签字生效）') && srvD60.includes('purchaseLine.label') && srvD60.includes('本次充值实收(签字生效)'))
+      // D65 改版:双叙事合并=flow 一条五步账,头条=本单到店支付;签署页/快照直贴 flow 块(后端句唯一)
+      check('㋄→㋇ D65 签署页/快照:flow 一条五步账+头条「本单到店支付」(「合计」不再当头条)', signHtml.includes('s.flow.lines') && signHtml.includes('s.flow.heroLabel') && !signHtml.includes('>支付构成<') && srvD60.includes("heroLabel: '本单到店支付'") && srvD60.includes("key: 'svcPayable', label: '服务应付'"))
       // ㋅ D62 wiring:四处前端搜索口全 toLowerCase(类定义=用户关键字匹配名称/手机号的本地过滤)
       const custJs = readFileSync(join(ROOT42, 'miniprogram/pages/merchant/customers/index.js'), 'utf8')
       const membJs = readFileSync(join(ROOT42, 'miniprogram/pages/merchant/member/index.js'), 'utf8')
