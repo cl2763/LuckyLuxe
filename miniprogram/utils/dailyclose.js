@@ -54,6 +54,12 @@ const dailyCloseMixin = {
           revenue: m(dc.revenueCents),
           canConfirm: dc.canConfirm,
           blockers: (dc.blockers || []).map((b) => b.message),
+          /* D57/D58(店主 08-21):未签单=独立可点行(不再是锁确认钮的死文本)——
+             点行进结算页出码重推;确认钮不被未签单阻塞(未签单只影响它自己)。 */
+          unsigned: (dc.unsignedList || []).map((u) => ({
+            id: u.settlementId, code: u.code,
+            label: `${u.timeText} ${u.customerName} · ${u.code} · ${m(u.totalCents)}`
+          })),
           /* D2:跨零点自解释 —— 台面「本日休息」空态要用同一句话(两处自洽);
              R1:已确认但账目对不上时,这天要自己说出来,不许只显示「已确认」。 */
           crossDayCount: dc.crossDayCount || 0,
@@ -149,6 +155,15 @@ const dailyCloseMixin = {
     const code = e.currentTarget.dataset.code
     if (!code) { wx.showToast({ title: '这单没有签署快照', icon: 'none' }); return }
     this.setData({ previewSheet: String(code) })
+  },
+  // D57:未签行点开=结算页纯出码模式(递给顾客签/重推签署;mixin 唯一实现,两个日结落点同时生效)
+  goUnsigned(e) {
+    const id = e.currentTarget.dataset.id
+    if (!id) return
+    wx.navigateTo({
+      url: `/pages/merchant/settlement/index?qrFor=${encodeURIComponent(id)}`,
+      fail: (err) => { console.warn('[goUnsigned fail]', err); wx.showToast({ title: '打开签署码失败,请从订单页该单操作', icon: 'none' }) }
+    })
   },
   closePreview() { this.setData({ previewSheet: '' }) },
 

@@ -145,3 +145,10 @@
 .as-t{font-size:21rpx;color:#9a8c7c;margin-top:2rpx}
 .as-link{margin-top:12rpx;font-size:24rpx;font-weight:700;color:#2b6cb0}
 .as-foot{margin-top:10rpx;font-size:20rpx;color:#9a8c7c;line-height:1.6}
+
+/* D57 待签署置顶卡 */
+.pending-sign-title{font-size:26rpx;font-weight:700;color:#8a3a33;margin:16rpx 24rpx 8rpx}
+.pending-sign-card{display:flex;justify-content:space-between;align-items:center;margin:0 24rpx 12rpx;padding:20rpx;border:1rpx solid #ecd5d2;background:#fbf4f3}
+.ps-t{font-size:26rpx;font-weight:600;color:#2d2826}
+.ps-s{font-size:22rpx;color:#8c8279;margin-top:4rpx}
+.ps-btn{font-size:24rpx;color:#fff;background:#c8a47e;border-radius:40rpx;padding:10rpx 24rpx;flex-shrink:0}

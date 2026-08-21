@@ -256,3 +256,9 @@ page{background:#fbf8f5}
 .ds-cats{margin-bottom:8rpx}
 .ds-cats .ds-c{background:#f4efe6;border:none}
 .ds-cats .ds-c.on{background:#2f2a22;color:#fff}
+
+/* D57 未签单可点卡(内嵌日结区;样式与独立日结页同款) */
+.deduct-card{background:#fbf4f3;border:1rpx solid #ecd5d2}
+.deduct-title{font-size:24rpx;font-weight:700;color:#8a3a33;margin-bottom:8rpx}
+.deduct-row{display:flex;justify-content:space-between;font-size:24rpx;padding:4rpx 0}
+.deduct-row.tap{padding:10rpx 0}

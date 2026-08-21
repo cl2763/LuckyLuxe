@@ -1,5 +1,5 @@
 // 构建号:每次交付递增。侧栏可见,排查"改了没生效"时先对版本。
-const ADMIN_BUILD = '20260821e-pxmodal'
+const ADMIN_BUILD = '20260822a-d57'
 let pricingState = { module: 'storefront', tab: 'items', categories: [], items: [], rules: {}, editing: null, preview: null, storefrontPicker: false }
 console.log(`[admin] build ${ADMIN_BUILD}`)
 
@@ -2591,6 +2591,11 @@ function renderDailyClose() {
       <br>${zh ? '免卸甲/免卸睫' : 'Free removals'} <span class="dc-badge mut">${(anomalies.freeRemoval || {}).count || 0} ${zh ? '笔' : ''}</span>
     </div>
 
+    ${(v.unsignedList || []).length ? `
+    <div class="dc-warnbar" style="background:#fbf4f3;border-color:#ecd5d2">
+      <strong>${zh ? `未签署 ${v.unsignedList.length} 单(不计入本日账,点开签署页可重推)` : `${v.unsignedList.length} unsigned`}</strong>
+      ${v.unsignedList.map((u) => `<div style="margin-top:4px"><a href="/sign/${encodeURIComponent(u.code)}" target="_blank">${escapeHtml(`${u.timeText} ${u.customerName} · ${u.code}`)} ›</a></div>`).join('')}
+    </div>` : ''}
     ${(v.blockers || []).map((b) => `<div class="dc-warnbar">${escapeHtml(b.message)}</div>`).join('')}
     ${confirmed ? '' : `<button class="primary full" id="dcConfirm" type="button" ${v.canConfirm ? '' : 'disabled'}>
       ${v.canConfirm ? (zh ? '确认日结' : 'Confirm day') : (zh ? `确认日结(${(v.blockers || [])[0]?.message || ''})` : 'Blocked')}

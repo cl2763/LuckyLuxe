@@ -140,6 +140,13 @@
             <view>免卸甲/免卸睫 <text class="badge">{{v.freeRemoval}} 笔</text></view>
           </view>
 
+          <!-- D57/D58:未签单=可点行(点开出码重推),不再锁确认钮 -->
+          <view class="card deduct-card" wx:if="{{v.unsigned.length}}">
+            <view class="deduct-title">未签署 {{v.unsigned.length}} 单(不计入本日账,点行出码重推)</view>
+            <view class="deduct-row tap" wx:for="{{v.unsigned}}" wx:key="id" data-id="{{item.id}}" bindtap="goUnsigned">
+              <text>{{item.label}}</text><text class="lnk">出码 ›</text>
+            </view>
+          </view>
           <view class="warn" wx:for="{{v.blockers}}" wx:key="*this">{{item}}</view>
           <view wx:if="{{!v.confirmed}}" class="cta {{v.canConfirm ? '' : 'dis'}}" bindtap="{{v.canConfirm ? 'confirmClose' : ''}}">
             {{v.canConfirm ? '确认日结' : '确认日结(' + v.blockers.length + ' 项待办)'}}

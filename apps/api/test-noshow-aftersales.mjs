@@ -1067,7 +1067,7 @@ const main = async () => {
             const vt2 = view.technicians.find((t) => t.technicianId === shop.tech1)
             check('㊾ 反例:普通更正后业绩净额分毫不动+扣回行不增', vt2.perfCents === beforePerf && (view.afterSalesDeductions || []).length === (view.afterSalesDeductions || []).filter((d) => d.code === shA.code).length, JSON.stringify({ before: beforePerf, after: vt2.perfCents }))
             // 撤清今天的待签单(别处夹具残留)→ 确认日结 → 快照线继承
-            for (const u of (view.blockers.find((b) => b.code === 'UNSIGNED') || { items: [] }).items || []) {
+            for (const u of view.unsignedList || []) {   // D58:未签单从 blocker 移到 unsignedList,清场循环同步换源
               await request(`/admin/settlements/${u.settlementId}/void`, { method: 'POST', body: JSON.stringify({ reason: '㊾ 清场:确认日结前撤清待签夹具' }) }, shop.token)
             }
             view = (await request(`/admin/daily-close?date=${today}`, {}, shop.token)).data.dailyClose
@@ -1311,6 +1311,50 @@ const main = async () => {
                 await request(`/admin/settlements/${shY.id}/void`, { method: 'POST', body: JSON.stringify({ reason: '㋂ 清场' }) }, shop.token)
                 dbx.prepare("DELETE FROM member_timecards WHERE id = 'tc_pb'").run()
               }
+
+              /* ===== ㋃ D57/D58 待签单再入口+日结确认独立(店主 08-21 尾清) ===== */
+              {
+                const cm2 = await request('/auth/wechat/mini-login', { method: 'POST', body: JSON.stringify({ demoLogin: true, tenantId: shop.tenantId }) }, null, { 'x-tenant-id': shop.tenantId })
+                const ctok2 = cm2.data.auth.accessToken
+                const cuid2 = cm2.data.user.id
+                const plainSheet = { payIntent: 'offline_full', items: [{ serviceId: shop.serviceId, qty: 1 }], technicians: tech, servedPersonName: '' }
+                const sU1 = await request('/admin/settlements', { method: 'POST', body: JSON.stringify({ userId: cuid2, settlements: [plainSheet] }) }, shop.token)
+                const sU2 = await request('/admin/settlements', { method: 'POST', body: JSON.stringify({ userId: cuid2, settlements: [plainSheet] }) }, shop.token)
+                const shU1 = sU1.data.settlements[0]
+                const shU2 = sU2.data.settlements[0]
+                const sU3 = await request('/admin/settlements', { method: 'POST', body: JSON.stringify({ userId: uid, settlements: [plainSheet] }) }, shop.token)
+                const shU3 = sU3.data.settlements[0]
+                // D58:未签单不阻塞确认(blockers 无 UNSIGNED)+unsignedList 独立下发(可点行数据)
+                const dc1 = (await request('/admin/daily-close', {}, shop.token)).data.dailyClose
+                check('㋃ D58 未签单不再是 blocker(确认按单独立)', (dc1.blockers || []).every((b) => b.code !== 'UNSIGNED'), JSON.stringify((dc1.blockers || []).map((b) => b.code)))
+                check('㋃ D57 unsignedList 独立下发(3 张全列:顾客/时间/单号/金额齐)', (dc1.unsignedList || []).length >= 3 && (dc1.unsignedList || []).every((u) => u.settlementId && u.code && u.timeText && u.totalCents > 0 && u.customerName), JSON.stringify(dc1.unsignedList))
+                // D57 顾客侧:全部未签单(不止最新一张);越权=只见自己的(uid 那张不可见)
+                const ps1 = (await request('/my/pending-sign', {}, ctok2, { 'x-tenant-id': shop.tenantId })).data.pendingSign
+                check('㋃ D57 顾客侧列全部未签单(2 张,不止最新)+签署页直达 code', ps1.length === 2 && ps1.every((p) => p.code && p.totalText && p.at), JSON.stringify(ps1))
+                check('㋃ 越权:别人的未签单不可见(uid 那张不在列)', !ps1.some((p) => p.code === shU3.code), JSON.stringify(ps1.map((p) => p.code)))
+                // 签一张→剩 1;撤一张→剩 0(status 驱动,零状态维护)
+                const sg1 = await request(`/settlements/${encodeURIComponent(shU1.code)}/sign`, { method: 'POST', body: JSON.stringify({ signature: '㋃ 待签再入口验签', disclaimerAccepted: true }) }, null, { 'x-tenant-id': shop.tenantId })
+                check('㋃ 前提:签掉第一张', sg1.status === 200, JSON.stringify(sg1.data).slice(0, 80))
+                await request(`/admin/settlements/${shU2.id}/void`, { method: 'POST', body: JSON.stringify({ reason: '㋃ 撤回清场' }) }, shop.token)
+                const ps2 = (await request('/my/pending-sign', {}, ctok2, { 'x-tenant-id': shop.tenantId })).data.pendingSign
+                check('㋃ 签一张+撤一张后列表归零(签/撤自然消失)', ps2.length === 0, JSON.stringify(ps2))
+                // R1 不减防:确认后再签(补签归今日)→ 快照对账抓 drift 标过期(未签单挂着本身不再标过期)
+                const dc2 = (await request('/admin/daily-close', {}, shop.token)).data.dailyClose
+                if (dc2.canConfirm) {
+                  const cf = await request('/admin/daily-close', { method: 'POST', body: JSON.stringify({ date: dc2.date }) }, shop.token)
+                  check('㋃ 前提:确认日结(此刻 shU3 仍未签,不挡)', cf.status === 200, JSON.stringify(cf.data).slice(0, 80))
+                  const dcMid = (await request('/admin/daily-close', {}, shop.token)).data.dailyClose
+                  check('㋃ D58 已确认+挂着未签单=不标过期(未签不进账,快照本就齐)', dcMid.staleClose === false, JSON.stringify({ stale: dcMid.staleClose }))
+                  const sg3 = await request(`/settlements/${encodeURIComponent(shU3.code)}/sign`, { method: 'POST', body: JSON.stringify({ signature: '㋃ 确认后补签', disclaimerAccepted: true }) }, null, { 'x-tenant-id': shop.tenantId })
+                  check('㋃ 前提:确认后补签落账', sg3.status === 200, JSON.stringify(sg3.data).slice(0, 80))
+                  const dc3 = (await request('/admin/daily-close', {}, shop.token)).data.dailyClose
+                  check('㋃ R1 不减防:补签落账即标过期逼重开(快照对账抓 drift)', dc3.staleClose === true && (dc3.blockers || []).some((b) => b.code === 'STALE_CLOSE'), JSON.stringify({ stale: dc3.staleClose, blockers: (dc3.blockers || []).map((b) => b.code) }))
+                  await request('/admin/daily-close/reopen', { method: 'POST', body: JSON.stringify({ date: dc2.date, reason: '㋃ 清场:补签重开' }) }, shop.token)
+                } else {
+                  check('㋃ (跳过确认链)canConfirm=false:' + JSON.stringify((dc2.blockers || []).map((b) => b.code)), true)
+                  await request(`/admin/settlements/${shU3.id}/void`, { method: 'POST', body: JSON.stringify({ reason: '㋃ 清场' }) }, shop.token)
+                }
+              }
             }
           }
           dbx.prepare("DELETE FROM member_timecards WHERE id IN ('tc_race','tc_grp','tc_dual')").run()
@@ -1390,6 +1434,15 @@ const main = async () => {
       check('㋂ D56 推送校验认次卡组内容(timecardId/purchasePackageId+组内项目)', settleJs.includes('const hasTc = Boolean(g.timecardId || g.purchasePackageId)') && settleJs.includes('请选本次核销项目'))
       check('㋂ D22 护栏类定义补核销行(wanted 含 timecardServiceId)', settleJs.includes('.concat(bodySheets[i].timecardServiceId'))
       check('㋂ 拍板 UI:次卡组隐藏价格体系整排+独立消费句;整单规则/档位不发次卡组', settleWxml.includes("grp.catId !== '__timecard'") && settleWxml.includes('次卡为独立消费') && settleJs.includes("tierKey: isTcGroup ? 'list' : g.tierKey"))
+      // ㋃ D57/D58 wiring:mixin 可点行+两日结 wxml 卡+顾客待签置顶卡+网页签署链接
+      const dcMixin = readFileSync(join(ROOT42, 'miniprogram/utils/dailyclose.js'), 'utf8')
+      const dcWxml = readFileSync(join(ROOT42, 'miniprogram/pages/merchant/daily-close/index.wxml'), 'utf8')
+      const moWxml = readFileSync(join(ROOT42, 'miniprogram/pages/merchant/orders/index.wxml'), 'utf8')
+      const coJs = readFileSync(join(ROOT42, 'miniprogram/pages/orders/index.js'), 'utf8')
+      const coWxml = readFileSync(join(ROOT42, 'miniprogram/pages/orders/index.wxml'), 'utf8')
+      check('㋃ D57 商家日结未签可点行 wiring(mixin goUnsigned+两 wxml 卡=出码重推)', dcMixin.includes('goUnsigned') && dcMixin.includes('unsignedList') && dcWxml.includes('goUnsigned') && moWxml.includes('goUnsigned'))
+      check('㋃ D57 顾客待签置顶卡 wiring(全部未签单+去签字)', coJs.includes('getMyPendingSign') && coWxml.includes('待你签字确认') && coWxml.includes('去签字'))
+      check('㋃ D57 网页日结未签行=签署页链接(双端同刀)', adminJs.includes('v.unsignedList') && adminJs.includes('/sign/${encodeURIComponent(u.code)}'))
       check('㋁ 商家流水「顾客未确认」标注在场', mfinWxml.includes('顾客未确认') && readFileSync(join(ROOT42, 'miniprogram/utils/api.js'), 'utf8').includes('confirmStoredRecharge'))
       // A5 网页端:充值档位块已删+指路句在
       check('㋁ A5 网页门店设置充值档位块已删(msAddTier 零残留)+指路句在', !adminJs.includes('msAddTier') && adminJs.includes('会员与营销 → 套餐'))

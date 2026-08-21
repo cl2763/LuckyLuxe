@@ -66,3 +66,6 @@
 .deduct-title{font-size:24rpx;font-weight:700;color:#8a3a33;margin-bottom:8rpx}
 .deduct-row{display:flex;justify-content:space-between;font-size:24rpx;padding:4rpx 0}
 .deduct-row .neg{color:#b3423a;font-weight:700}
+
+/* D57 未签行可点态 */
+.deduct-row.tap{padding:10rpx 0}

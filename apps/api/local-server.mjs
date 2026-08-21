@@ -9794,14 +9794,9 @@ function dailyCloseView(date, tenantId, { lang = 'zh' } = {}) {
     customerName: (db.prepare('SELECT display_name FROM users WHERE id = ?').get(r.user_id) || {}).display_name || '未留姓名'
   }))
   const nameHint = unsignedList.map((u) => `${u.customerName} ${u.timeText}`).join('、')
-  if (unsigned.length) {
-    blockers.push({
-      code: 'UNSIGNED',
-      count: unsigned.length,
-      message: `还有 ${unsigned.length} 张服务单顾客没签字:${nameHint}`,
-      items: unsignedList
-    })
-  }
+  /* D58(店主 08-21 裁):未签单**不再阻塞**日结确认——确认按单独立,未签单只影响它自己:
+     它本来就不进当日已签账(签字才入账、按服务日归账);确认后补签的,R1 快照对账自然抓到逼重开。
+     未签单列表独立下发(unsignedList),前端渲染成可点行(D57 再入口),不再是灰按钮+一句死文本。 */
   if (pending.length) blockers.push({ code: 'UNALLOCATED', count: pending.length, message: `还有 ${pending.length} 单多技师业绩没分配` })
 
   /* R1 账目门槛(店主 2026-08-10 开检):店主看到「8 号 3 单未签,却已确认日结」。
@@ -9844,7 +9839,9 @@ function dailyCloseView(date, tenantId, { lang = 'zh' } = {}) {
     : 0
   const livePerfSum = Object.values(perTech).reduce((n, t) => n + (t.pendingCount ? 0 : t.perfCents), 0)
   const perfDrift = Boolean(snapshot) && Object.values(perTech).every((t) => !t.pendingCount) && linePerfSum !== livePerfSum
-  const staleClose = Boolean(snapshot) && (driftCount !== 0 || driftCents !== 0 || unsigned.length > 0 || perfDrift)
+  /* D58:未签单不再把已确认日标「过期」——挂着的未签单不进账,快照与实账本来就齐;
+     等它真签字落到这天,driftCount/driftCents 立刻抓到(R1 机制不减防)。 */
+  const staleClose = Boolean(snapshot) && (driftCount !== 0 || driftCents !== 0 || perfDrift)
   if (staleClose) {
     const bits = []
     if (driftCount !== 0 || driftCents !== 0) {
@@ -9878,6 +9875,15 @@ function dailyCloseView(date, tenantId, { lang = 'zh' } = {}) {
     pendingAllocation: pending,
     // 不需要分配、但同样等着店长点「确认日结」的单
     awaitingConfirm,
+    /* D57/D58:本日未签单独立下发(顾客/时间/单号/金额)——两端渲染成**可点行**
+       (商家小程序→结算页出码重推;网页→打开签署页链接);不再作为 blocker 锁确认钮。 */
+    unsignedList: unsignedRows.map((r) => ({
+      settlementId: r.id,
+      code: r.code,
+      timeText: localParts(r.created_at, tenantTimezone(tenantId)).time.slice(0, 5),
+      customerName: (db.prepare('SELECT display_name FROM users WHERE id = ?').get(r.user_id) || {}).display_name || '未留姓名',
+      totalCents: (db.prepare('SELECT total_cents FROM settlements WHERE id = ?').get(r.id) || {}).total_cents || 0
+    })),
     technicians,
     /* 裁①(队列 B3-2 验收第2点)+§十-7 v1.6:日结汇总单列区——
        「次卡售卡」独立行(与充值并列,预收负债不混现金实收)+「次卡核销 n 次(折算 ¥xxx)」单列。
@@ -11376,6 +11382,26 @@ async function route(req, res) {
       WHERE tenant_id = ? AND display_name LIKE '演示2-%' AND tags_json NOT LIKE '%退役·旧口径演示档案%'
       ORDER BY display_name ASC`).all(tid)
     return json(res, 200, { roster: roster.map((r) => ({ id: r.id, name: r.display_name })) })
+  }
+  /* D57(店主 08-21 批②尾清):顾客侧待签单再入口——列出**全部**未签单(不止最新一张,
+     即时开单没挂预约的也在);每张带签署页直达 code。签字/撤回后自然消失(status 驱动,零状态维护)。 */
+  if (req.method === 'GET' && path === '/my/pending-sign') {
+    const customer = requireCustomer(req)
+    const tid = resolveTenant(req, query)
+    const rows = db.prepare("SELECT id, code, created_at, total_cents, group_id FROM settlements WHERE tenant_id = ? AND user_id = ? AND status = 'pending_sign' ORDER BY created_at DESC LIMIT 20").all(tid, customer.id)
+    const tz = tenantTimezone(tid)
+    return json(res, 200, {
+      pendingSign: rows.map((r) => {
+        const p = localParts(new Date(r.created_at), tz)
+        return {
+          code: r.code,
+          totalCents: r.total_cents,
+          totalText: formatMoneyCents(r.total_cents, tid, 'auto'),
+          at: `${p.date.slice(5)} ${p.time.slice(0, 5)}`,
+          groupTotal: db.prepare("SELECT COUNT(*) AS n FROM settlements WHERE group_id = ? AND status <> 'voided'").get(r.group_id).n
+        }
+      })
+    })
   }
   if (req.method === 'GET' && path === '/my/stored-value') {
     const customer = requireCustomer(req)

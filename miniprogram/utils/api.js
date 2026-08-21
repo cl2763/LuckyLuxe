@@ -6,7 +6,7 @@
 const USE_LOCAL_SANDBOX = true // 2026-08-19 体验版 1.0.0 已传(境内号 wx247cd8ad9907430d,连生产);本地开发沙盘;上传前务必改 false
 // 本地沙盘地址:127.0.0.1 走开发者工具本机代理,模拟器与真机调试通用,换网络也不用改。
 // 真机预览/体验版连本地沙盘:用电脑局域网 IP(手机与电脑须同一 WiFi);开发者工具上两者皆可。此行临时改动,不提交。
-const LOCAL_API = 'http://127.0.0.1:4128' // 开发者工具模拟器用这个;真机调试改成电脑当前局域网 IP(2026-08-03 查询为 192.168.0.104,IP 会变,连不上先重查)
+const LOCAL_API = 'http://127.0.0.1:4310' // 开发者工具模拟器用这个;真机调试改成电脑当前局域网 IP(2026-08-03 查询为 192.168.0.104,IP 会变,连不上先重查)
 const API_BASE = USE_LOCAL_SANDBOX ? LOCAL_API : 'https://www.luckyluxeatelier.com'
 const DEMO_USER_ID = 'user-demo'
 /* 🔴 D19(店主 2026-08-11 拍板,《财务总逻辑》v1.5.1):storeId 必须来自当前门店上下文。
@@ -643,6 +643,8 @@ function aiCustomerService(message, history) {
 function getDepositPolicy(qs) { return request(`/store/deposit-policy${qs ? `?${qs}` : ''}`) }
 function getMyCoupons() { return request('/my/coupons') }
 function getMyStoredValue() { return request('/my/stored-value') }
+// D57 顾客侧待签单再入口:全部未签单(不止最新一张;即时开单没挂预约的也在)
+function getMyPendingSign() { return request('/my/pending-sign') }
 // B3-4 代充回执确认:幂等,只许确认本人的充值行;未确认不阻塞任何链路
 function confirmStoredRecharge(id) { return request('/my/stored-value/confirm', 'POST', { id }) }
 /* D33 余额单源(2026-08-12):顾客端可见余额一律实时取后端 /my/stored-value,
@@ -830,6 +832,7 @@ module.exports = {
   getDepositPolicy,
   getMyCoupons,
   getMyStoredValue,
+  getMyPendingSign,
   confirmStoredRecharge,
   myBalance,
   getMyPointsHistory,

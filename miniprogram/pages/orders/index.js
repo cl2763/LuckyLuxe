@@ -18,7 +18,8 @@ Page({
     t: i18n.pageCopy('orders', 'zh'),
     activeStatus: 'all',
     showTabs: true,
-    orders: []
+    orders: [],
+    pendingSign: []   // D57 待签署置顶卡
   },
 
   onLoad(options) {
@@ -71,6 +72,10 @@ Page({
     } catch (error) {
       sourceOrders = storage.getOrders()
     }
+    /* D57(店主 08-21 批②尾清):待签单置顶卡——列出**全部**未签单(不止最新一张,
+       即时开单没挂预约的也在);点卡直达签署页;签完/撤回自然消失。拉不到不挡订单列表。 */
+    let pendingSign = []
+    try { pendingSign = (await api.getMyPendingSign()).pendingSign || [] } catch (e) { /* 未登录/网络失败不挡列表 */ }
     const orders = sourceOrders.map((item) => {
       const service = item.service || (item.serviceInfo && { name: item.serviceInfo.serviceName, type: item.serviceInfo.serviceType, duration: item.serviceInfo.duration }) || {} // mock 清除:同 me 页
       const localizedService = i18n.localizeService(service, lang)
@@ -83,6 +88,7 @@ Page({
     this.setData({
       lang,
       t,
+      pendingSign,
       tabs: tabs.map((item) => Object.assign({}, item, { label: t[item.labelKey] })),
       orders: this.data.activeStatus === 'all'
         ? orders

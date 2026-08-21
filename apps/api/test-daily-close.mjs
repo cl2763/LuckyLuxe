@@ -105,11 +105,14 @@ async function main() {
   const duo = g2.data.settlements[0]
   check('两张服务单已开', Boolean(solo.code && duo.code))
 
-  // ---- ③ 有单没签 → 不许日结 ----
+  /* ---- ③ D58 改口径(店主 08-21 裁):未签单**不再阻塞**确认——确认按单独立,
+     未签单只影响它自己(不进当日账;确认后补签由 R1 快照对账标过期逼重开,㋃ 断言盖)。
+     未签单以 unsignedList 独立下发(D57 可点行),不再是 UNSIGNED blocker。 ---- */
   const beforeSign = await request(`/admin/daily-close?date=${today}`, {}, shop.token)
-  check('③ 有单没签时不许确认', beforeSign.data.dailyClose.canConfirm === false)
-  check('③ 拦住的原因写明「没签字」', beforeSign.data.dailyClose.blockers.some((b) => b.code === 'UNSIGNED'),
+  check('③ D58 未签单不产生 UNSIGNED blocker(确认不被它锁)', beforeSign.data.dailyClose.blockers.every((b) => b.code !== 'UNSIGNED'),
     JSON.stringify(beforeSign.data.dailyClose.blockers))
+  check('③ D57 未签单进 unsignedList(两张全列,可点行数据齐)', (beforeSign.data.dailyClose.unsignedList || []).length === 2 && beforeSign.data.dailyClose.unsignedList.every((u) => u.code && u.settlementId),
+    JSON.stringify(beforeSign.data.dailyClose.unsignedList))
 
   const s1 = await request(`/settlements/${solo.code}/sign`, { method: 'POST', body: JSON.stringify({ disclaimerAccepted: true, signature: '小美' }) }, null)
   if (s1.status !== 200) throw new Error(`签署失败 ${s1.status}: ${JSON.stringify(s1.data)}`)
@@ -304,12 +307,14 @@ async function main() {
   }, shop.token)
   const late = lateGroup.data.settlements[0]
   const afterOpen = (await request('/admin/daily-close', {}, shop.token)).data.dailyClose
-  check('R1 已确认的日子又冒出未签单:必须标记账目过期,不许只显示「已确认」',
-    afterOpen.staleClose === true && afterOpen.blockers.some((b) => b.code === 'STALE_CLOSE'),
+  /* D58 改口径(店主 08-21 裁):挂着的未签单不进账=快照与实账本就齐,**不标过期**;
+     等它真签字落账,快照对账立刻抓 drift(下一段断言即验)——R1 机制不减防,只是不冤枉没入账的单。 */
+  check('R1+D58 已确认+冒出未签单(未落账)=不标过期(未签单只影响它自己)',
+    afterOpen.staleClose === false && afterOpen.blockers.every((b) => b.code !== 'UNSIGNED'),
     JSON.stringify({ stale: afterOpen.staleClose, codes: afterOpen.blockers.map((b) => b.code) }))
-  check('R1 未签提示点名到单(顾客+时间+单号,D7)',
-    afterOpen.blockers.some((b) => b.code === 'UNSIGNED' && Array.isArray(b.items) && b.items.length > 0 && b.items[0].customerName && b.items[0].code),
-    JSON.stringify(afterOpen.blockers.find((b) => b.code === 'UNSIGNED')))
+  check('D57 未签提示点名到单(顾客+时间+单号,可点行独立下发)',
+    (afterOpen.unsignedList || []).length > 0 && afterOpen.unsignedList[0].customerName && afterOpen.unsignedList[0].code,
+    JSON.stringify(afterOpen.unsignedList))
 
   await request(`/settlements/${late.code}/sign`, { method: 'POST', body: JSON.stringify({ disclaimerAccepted: true, signature: '加钟客' }) }, null)
   const r1AfterSign = (await request('/admin/daily-close', {}, shop.token)).data.dailyClose
