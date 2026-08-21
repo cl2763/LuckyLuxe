@@ -29,6 +29,7 @@
         <view class="sprow"><text class="spk">原价合计</text><text class="spstrike big">{{card.t.listTotal}}</text></view>
         <view class="sprow"><text class="spk">档位小计</text><text class="spv">{{card.t.subtotal}}</text></view>
         <view class="sprow"><text class="spk green">{{card.t.discountLabel}}</text><text class="spv green">{{card.t.discount}}</text></view>
+        <view class="sprow" wx:if="{{card.t.hasCover}}"><text class="spk">次卡抵扣(签字扣次)</text><text class="spv">−{{card.t.cover}}</text></view>
         <view class="sprow" wx:if="{{card.t.hasStored}}"><text class="spk">储值抵扣</text><text class="spv">−{{card.t.stored}}</text></view>
         <view class="sprow" wx:if="{{card.t.hasDeposit}}"><text class="spk">定金抵扣</text><text class="spv">−{{card.t.deposit}}</text></view>
         <!-- D60 自证行:购卡款/充值实收不隐身;应收 label 后端定(组卡=组合计应收) -->

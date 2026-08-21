@@ -253,6 +253,7 @@ function render() {
         <h2>随单充值（本单签字生效）</h2>
         ${s.recharge.lines.map((rl) => `
           <div class="row"><span>${esc(rl.label)}</span><span class="amt">${esc(rl.amountText)}</span></div>`).join('')}
+        ${s.recharge.groupForecastText ? `<div class="meta">${esc(s.recharge.groupForecastText)}</div>` : ''}
       </div>` : ''}
       ${s.storedUnusedNotice ? `<div class="sec"><div class="meta" style="color:#8a3a33">${esc(s.storedUnusedNotice)}</div></div>` : ''}
     </div>

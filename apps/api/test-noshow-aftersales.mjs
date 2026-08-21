@@ -1375,8 +1375,9 @@ const main = async () => {
                 check('㋄ D60 组级支付=Σ sheet 腿(不再独立重算)', gp.offlineDueCents === sheetOffline && gp.storedUsedCents === sheetStored, JSON.stringify({ g: { o: gp.offlineDueCents, s: gp.storedUsedCents }, sum: { o: sheetOffline, s: sheetStored } }))
                 check('㋄ D60 组级腿=sheet 腿拼接(带组内序号)', Array.isArray(gp.legs) && gp.legs.every((l) => l.sheetIndex === 0 || l.sheetIndex === 1) && gp.legs.length === pv.sheets.reduce((n, s) => n + s.payment.legs.length, 0), JSON.stringify(gp.legs.map((l) => `${l.sheetIndex}:${l.leg}:${l.amountCents}`)))
                 check('㋄ D60 购卡款组级显式(purchaseCents=54000,不隐身)', gp.purchaseCents === 54000, `purchase=${gp.purchaseCents}`)
-                // 挂单随签的钱只抵挂充值那张 sheet(exclude 全额时=0 烧),不再被组级挪去抵别的单
-                check('㋄ D60 随签充值不再被组级挪抵他单(sheet1 stored 只用共享余额)', pv.sheets[1].payment.storedUsedCents <= Math.max(0, bal0), JSON.stringify({ s1stored: pv.sheets[1].payment.storedUsedCents, bal0 }))
+                /* D64 改判(店主五步④):挂充的钱**就该**被组内后续单抵(前向传递,签字时序兑现)——
+                   上限=共享余额+组内挂充(充+赠),且与建单腿一致(下一条断言钉预览=建单)。 */
+                check('㋄→㋆ 组内后续单可抵挂充(≤共享余额+充赠 360)', pv.sheets[1].payment.storedUsedCents <= Math.max(0, bal0) + 36000, JSON.stringify({ s1stored: pv.sheets[1].payment.storedUsedCents, bal0 }))
                 // 建单=预览逐分一致(落库腿)
                 const sC = await request('/admin/settlements', { method: 'POST', body: JSON.stringify({ userId: cuid3, settlements: comboBody.settlements }) }, shop.token)
                 const builtLegs = sC.data.settlements.flatMap((s) => s.payments.filter((p) => p.leg !== 'deposit'))
@@ -1431,6 +1432,90 @@ const main = async () => {
                   const sgN = await request(`/settlements/${encodeURIComponent(shN.code)}/sign`, { method: 'POST', body: JSON.stringify({ signature: '㋅ 未用储值签', disclaimerAccepted: true }) }, null, { 'x-tenant-id': shop.tenantId })
                   const serN = (await request(`/settlements/${encodeURIComponent(shN.code)}`, {}, null, { 'x-tenant-id': shop.tenantId })).data.settlement
                   check('㋅ 已签单不出句(历史单不随活余额漂)', sgN.status === 200 && !serN.storedUnusedNotice, JSON.stringify(serN.storedUnusedNotice))
+                }
+
+                /* ===== ㋆ 资金时序五步全组合矩阵(店主 08-22 总纲=唯一裁判;40 格常驻) =====
+                   五步:①随单充值先入账 ②次卡线独立 ③服务应付=小计−次卡抵扣−券−定金
+                   ④储值余额抵扣(含本单刚入账;不勾=不抵) ⑤现金收差额。
+                   任何位面(预览/建单腿/组卡)的数字必须与五步模型分毫不差。 */
+                {
+                  const fiveStep = (ms, B0, useStored) => {
+                    let bal = B0; let cash = 0; let storedUsed = 0
+                    for (const s of ms) {
+                      if (s.rechargeAmt) bal += s.rechargeAmt + s.rechargeBonus
+                      const svcDue = s.svcCents - (s.tcCoverCents || 0)
+                      const st = useStored ? Math.min(bal, svcDue) : 0
+                      bal -= st; storedUsed += st
+                      cash += (svcDue - st) + (s.purchaseCents || 0) + (s.rechargeAmt || 0)
+                    }
+                    return { cash, bal, storedUsed }
+                  }
+                  const pkR7 = (await request('/admin/recharge-packages', {}, staffToken)).data.packages.find((p) => p.name === '充300赠60')
+                  const mxTech = [{ technicianId: shop.tech1, role: 'main', itemNos: [] }]
+                  const mxSvcTech = [{ technicianId: shop.tech1, role: 'main', itemNos: [1] }]
+                  let mseq = 0
+                  const mkMxCust = (B) => {
+                    mseq += 1
+                    const id = `mx-${RUN_ID}-${mseq}`
+                    dbx.prepare("INSERT INTO users (id, display_name, phone, wechat_open_id, tenant_id) VALUES (?, ?, '', ?, ?)").run(id, `矩阵客${mseq}`, 'demo-openid-' + id, shop.tenantId)
+                    if (B > 0) dbx.prepare("INSERT INTO stored_value_transactions (id, tenant_id, user_id, type, amount_cents, pay_channel, note, created_by, created_at) VALUES (?, ?, ?, 'recharge', ?, 'cash', '矩阵前余额', 'audit', ?)").run('sv-' + id, shop.tenantId, id, B, new Date().toISOString())
+                    return id
+                  }
+                  const mkMxCard = (uid2) => { const cid = 'mxtc-' + uid2; dbx.prepare("INSERT INTO member_timecards (id, tenant_id, user_id, package_id, name, total_times, used_times, price_cents, project_group, expires_at, created_at) VALUES (?, ?, ?, NULL, '矩阵卡', 3, 0, 54000, NULL, NULL, ?)").run(cid, shop.tenantId, uid2, new Date().toISOString()); return cid }
+                  // 套件项目价=20000(shop.serviceId);折算 18000;充300赠60
+                  const SVC = 20000
+                  const mkSheets = (G, R, uid2, cardId) => {
+                    const withR = (s) => R ? { ...s, rechargePackageId: pkR7.id } : s
+                    const svcS = { items: [{ serviceId: shop.serviceId, qty: 1 }], technicians: mxSvcTech, servedPersonName: '' }
+                    const redS = { timecardId: cardId, timecardServiceId: shop.serviceId, items: [], technicians: mxTech, servedPersonName: '' }
+                    const purS = { purchasePackageId: pk.id, timecardServiceId: shop.serviceId, items: [], technicians: mxTech, servedPersonName: '' }
+                    const M = { r: R ? 30000 : 0, b: R ? 6000 : 0 }
+                    if (G === 'redeem') return { sheets: [withR(redS)], model: [{ svcCents: 18000, tcCoverCents: 18000, rechargeAmt: M.r, rechargeBonus: M.b }] }
+                    if (G === 'purchase+redeem') return { sheets: [withR(purS)], model: [{ svcCents: 18000, tcCoverCents: 18000, purchaseCents: 54000, rechargeAmt: M.r, rechargeBonus: M.b }] }
+                    if (G === 'service') return { sheets: [withR(svcS)], model: [{ svcCents: SVC, rechargeAmt: M.r, rechargeBonus: M.b }] }
+                    if (G === 'redeem+service') return { sheets: [withR(redS), svcS], model: [{ svcCents: 18000, tcCoverCents: 18000, rechargeAmt: M.r, rechargeBonus: M.b }, { svcCents: SVC }] }
+                    return { sheets: [withR(purS), svcS], model: [{ svcCents: 18000, tcCoverCents: 18000, purchaseCents: 54000, rechargeAmt: M.r, rechargeBonus: M.b }, { svcCents: SVC }] }
+                  }
+                  const bad = []
+                  let cells = 0
+                  for (const G of ['redeem', 'purchase+redeem', 'service', 'redeem+service', 'owner-combo']) {
+                    for (const B of [0, 50000]) {
+                      for (const R of [false, true]) {
+                        for (const useStored of [true, false]) {
+                          cells += 1
+                          const uid2 = mkMxCust(B)
+                          const cardId = G.includes('redeem') ? mkMxCard(uid2) : null
+                          const { sheets: shts, model } = mkSheets(G, R, uid2, cardId)
+                          const intent = useStored ? (R ? 'recharge_then_balance' : 'balance_plus_offline') : 'offline_full'
+                          for (const s of shts) s.payIntent = intent
+                          const exp = fiveStep(model, B, useStored)
+                          const tag = `${G}|B${B / 100}|R${R ? 1 : 0}|S${useStored ? 1 : 0}`
+                          const pv = (await request('/admin/settlements/preview', { method: 'POST', body: JSON.stringify({ userId: uid2, payIntent: intent, settlements: shts }) }, shop.token)).data
+                          const gp = (pv.group || {}).payment || {}
+                          const sc = (await request('/admin/settlements', { method: 'POST', body: JSON.stringify({ userId: uid2, settlements: shts }) }, shop.token)).data
+                          let off = -1; let st = -1; let cardDue = -1
+                          if (sc.settlements) {
+                            const legsX = sc.settlements.flatMap((x) => x.payments)
+                            off = legsX.filter((p) => p.leg === 'offline').reduce((n, p) => n + p.amountCents, 0)
+                            st = legsX.filter((p) => p.leg === 'stored_value' || p.leg === 'migrate_stored').reduce((n, p) => n + p.amountCents, 0)
+                            cardDue = ((await request(`/admin/settlements/${sc.settlements[0].id}/preview-card`, {}, shop.token)).data.card || { totals: {} }).totals.dueCents
+                            for (const x of sc.settlements) await request(`/admin/settlements/${x.id}/void`, { method: 'POST', body: JSON.stringify({ reason: '㋆ 矩阵清场' }) }, shop.token)
+                          }
+                          const ok = gp.offlineDueCents === exp.cash && gp.storedUsedCents === exp.storedUsed && off === exp.cash && st === exp.storedUsed && cardDue === exp.cash
+                          if (!ok) bad.push(`${tag}: exp(cash=${exp.cash},st=${exp.storedUsed}) pv(${gp.offlineDueCents},${gp.storedUsedCents}) legs(${off},${st}) card(${cardDue})`)
+                        }
+                      }
+                    }
+                  }
+                  check(`㋆ 五步资金时序全组合矩阵 ${cells} 格全绿(预览=建单腿=组卡=五步模型)`, cells === 40 && bad.length === 0, bad.join(' ; ').slice(0, 600))
+                  // 店主基准格显式钉死:0 余额+挂充+勾抵扣+店主组合=868 式
+                  const uidQ = mkMxCust(0)
+                  const { sheets: shQ } = mkSheets('owner-combo', true, uidQ, null)
+                  for (const s of shQ) s.payIntent = 'recharge_then_balance'
+                  const pvQ = (await request('/admin/settlements/preview', { method: 'POST', body: JSON.stringify({ userId: uidQ, payIntent: 'recharge_then_balance', settlements: shQ }) }, shop.token)).data
+                  /* 868 式结构(套件项目价 200):cash=(180−180)+(200−200)+540+300=840,stored=200(全来自挂充);
+                     真 868 数字(项目价 388)由测试B 沙箱自测实拍钉。 */
+                  check('㋆ 店主基准格:0 余额+挂充+勾抵扣=868 式结构(84000/20000)', pvQ.group.payment.offlineDueCents === 84000 && pvQ.group.payment.storedUsedCents === 20000, JSON.stringify(pvQ.group.payment))
                 }
 
                 /* ===== ㋅ D62 搜索大小写不敏感(后端行为面;前端四处=wiring) ===== */
@@ -1541,6 +1626,9 @@ const main = async () => {
       const membJs = readFileSync(join(ROOT42, 'miniprogram/pages/merchant/member/index.js'), 'utf8')
       const wbJs = readFileSync(join(ROOT42, 'miniprogram/pages/merchant/workbench/index.js'), 'utf8')
       check('㋅ D62 前端四搜索口大小写不敏感(客户/代充选客/工作台/开单找客)', custJs.includes('.trim().toLowerCase()') && membJs.includes('q.toLowerCase()') && wbJs.includes(".trim().toLowerCase()") && miniOrders.includes('q.toLowerCase()'))
+      // ㋆ D64 wiring:payIntent 映射意愿唯一(不勾储值=offline_full,挂充不强制)+储值行显隐含挂充+组卡 cover 行+出码 n/N+预告句
+      check('㋆ D64 前端映射意愿唯一+储值行显隐含挂充', settleJs.includes("if (!m.useBalance) return 'offline_full'") && settleWxml.includes('view.hasBalance || view.hasRecharge'))
+      check('㋆ D64 组卡 cover 行+出码第 n/N 张+组内预告句(后端句)', spWxml.includes('次卡抵扣(签字扣次)') && settleJs.includes('第 ${s.groupIndex}/${s.groupTotal} 张') && srvD60.includes('组内后续单据将抵'))
       // ㋅ D63 wiring:组卡/签署页「余额未用」句+四行自证渲染面
       check('㋅ D63 余额未用句渲染面(组卡+签署页)+四行自证键', spWxml.includes('card.storedUnusedNotice') && signHtml.includes('s.storedUnusedNotice') && srvD60.includes("key: 'before', label: '充值前余额'"))
       check('㋄ D60 结算页:购卡显式行+L3① 行内小注定稿句', settleWxml.includes('购卡款,预收') && settleJs.includes('含本单随签充值 +') && settleWxml.includes('view.rvNote'))

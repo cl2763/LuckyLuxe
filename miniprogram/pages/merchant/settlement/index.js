@@ -502,9 +502,12 @@ Page({
     this.openRecharge()
   },
   payIntentOf() {
+    /* 全组合审计(店主 08-22 五步总纲)抓出的前端映射残余联动:挂充时无视「储值抵扣」意愿
+       强制 recharge_then_balance=不勾也抵。修=意愿唯一由 useBalance 决定(五步④:顾客不勾=不抵;
+       挂充照样签字入账进余额,只是本组不烧)。 */
     const m = this.data.payMenu
-    if (m.recharge) return 'recharge_then_balance'
-    return m.useBalance ? 'balance_plus_offline' : 'offline_full'
+    if (!m.useBalance) return 'offline_full'
+    return m.recharge ? 'recharge_then_balance' : 'balance_plus_offline'
   },
 
   /* ===== 内嵌充值面板(合同规则③-2:复用既有代充流程,技师不离开结算单) =====
@@ -755,7 +758,8 @@ Page({
           url: r.url,
           pushedText: r.pushedText || '',
           unbound: r.customerBound === false,
-          amountText: `应收 ${m(s.totalCents)}`,
+          // D64 表达:组内多张时标「第 n/N 张」——顾客按序签,店员一眼知道出的是哪张的码
+          amountText: `${(s.groupTotal || 1) > 1 ? `第 ${s.groupIndex}/${s.groupTotal} 张 · ` : ''}本单应收 ${m(s.totalCents)}`,
           breakdownText: s.depositDeductCents
             ? `档位小计 ${m(s.subtotalCents)} − 已付定金 ${m(s.depositDeductCents)}`
             : `档位小计 ${m(s.subtotalCents)}`,

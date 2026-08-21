@@ -1,0 +1,176 @@
+==== 矩阵 40 格,绿 5,红 35 ====
+DIFF: redeem|B=0|挂充=无|勾储值=勾
+  期望(五步): cash=0 stored=0
+  预览: off=0 st=0 OK
+  建单腿: off=0,st=0 OK
+  组卡due: 180 ❌
+DIFF: redeem|B=0|挂充=无|勾储值=不勾
+  期望(五步): cash=0 stored=0
+  预览: off=0 st=0 OK
+  建单腿: off=0,st=0 OK
+  组卡due: 180 ❌
+DIFF: redeem|B=0|挂充=有|勾储值=勾
+  期望(五步): cash=300 stored=0
+  预览: off=300 st=0 OK
+  建单腿: off=300,st=0 OK
+  组卡due: 480 ❌
+DIFF: redeem|B=0|挂充=有|勾储值=不勾
+  期望(五步): cash=300 stored=0
+  预览: off=300 st=0 OK
+  建单腿: off=300,st=0 OK
+  组卡due: 480 ❌
+DIFF: redeem|B=500|挂充=无|勾储值=勾
+  期望(五步): cash=0 stored=0
+  预览: off=0 st=0 OK
+  建单腿: off=0,st=0 OK
+  组卡due: 180 ❌
+DIFF: redeem|B=500|挂充=无|勾储值=不勾
+  期望(五步): cash=0 stored=0
+  预览: off=0 st=0 OK
+  建单腿: off=0,st=0 OK
+  组卡due: 180 ❌
+DIFF: redeem|B=500|挂充=有|勾储值=勾
+  期望(五步): cash=300 stored=0
+  预览: off=300 st=0 OK
+  建单腿: off=300,st=0 OK
+  组卡due: 480 ❌
+DIFF: redeem|B=500|挂充=有|勾储值=不勾
+  期望(五步): cash=300 stored=0
+  预览: off=300 st=0 OK
+  建单腿: off=300,st=0 OK
+  组卡due: 480 ❌
+DIFF: purchase+redeem|B=0|挂充=无|勾储值=勾
+  期望(五步): cash=540 stored=0
+  预览: off=540 st=0 OK
+  建单腿: off=540,st=0 OK
+  组卡due: 720 ❌
+DIFF: purchase+redeem|B=0|挂充=无|勾储值=不勾
+  期望(五步): cash=540 stored=0
+  预览: off=540 st=0 OK
+  建单腿: off=540,st=0 OK
+  组卡due: 720 ❌
+DIFF: purchase+redeem|B=0|挂充=有|勾储值=勾
+  期望(五步): cash=840 stored=0
+  预览: off=840 st=0 OK
+  建单腿: off=840,st=0 OK
+  组卡due: 1020 ❌
+DIFF: purchase+redeem|B=0|挂充=有|勾储值=不勾
+  期望(五步): cash=840 stored=0
+  预览: off=840 st=0 OK
+  建单腿: off=840,st=0 OK
+  组卡due: 1020 ❌
+DIFF: purchase+redeem|B=500|挂充=无|勾储值=勾
+  期望(五步): cash=540 stored=0
+  预览: off=540 st=0 OK
+  建单腿: off=540,st=0 OK
+  组卡due: 720 ❌
+DIFF: purchase+redeem|B=500|挂充=无|勾储值=不勾
+  期望(五步): cash=540 stored=0
+  预览: off=540 st=0 OK
+  建单腿: off=540,st=0 OK
+  组卡due: 720 ❌
+DIFF: purchase+redeem|B=500|挂充=有|勾储值=勾
+  期望(五步): cash=840 stored=0
+  预览: off=840 st=0 OK
+  建单腿: off=840,st=0 OK
+  组卡due: 1020 ❌
+DIFF: purchase+redeem|B=500|挂充=有|勾储值=不勾
+  期望(五步): cash=840 stored=0
+  预览: off=840 st=0 OK
+  建单腿: off=840,st=0 OK
+  组卡due: 1020 ❌
+DIFF: service|B=0|挂充=有|勾储值=勾
+  期望(五步): cash=328 stored=360
+  预览: off=328 st=360 OK
+  建单腿: off=328,st=360 OK
+  组卡due: 688 ❌
+DIFF: service|B=500|挂充=无|勾储值=勾
+  期望(五步): cash=0 stored=388
+  预览: off=0 st=388 OK
+  建单腿: off=0,st=388 OK
+  组卡due: 388 ❌
+DIFF: service|B=500|挂充=有|勾储值=勾
+  期望(五步): cash=300 stored=388
+  预览: off=300 st=388 OK
+  建单腿: off=300,st=388 OK
+  组卡due: 688 ❌
+DIFF: redeem+service|B=0|挂充=无|勾储值=勾
+  期望(五步): cash=388 stored=0
+  预览: off=388 st=0 OK
+  建单腿: off=388,st=0 OK
+  组卡due: 568 ❌
+DIFF: redeem+service|B=0|挂充=无|勾储值=不勾
+  期望(五步): cash=388 stored=0
+  预览: off=388 st=0 OK
+  建单腿: off=388,st=0 OK
+  组卡due: 568 ❌
+DIFF: redeem+service|B=0|挂充=有|勾储值=勾
+  期望(五步): cash=328 stored=360
+  预览: off=328 st=360 OK
+  建单腿: off=328,st=360 OK
+  组卡due: 868 ❌
+DIFF: redeem+service|B=0|挂充=有|勾储值=不勾
+  期望(五步): cash=688 stored=0
+  预览: off=688 st=0 OK
+  建单腿: off=688,st=0 OK
+  组卡due: 868 ❌
+DIFF: redeem+service|B=500|挂充=无|勾储值=勾
+  期望(五步): cash=0 stored=388
+  预览: off=0 st=388 OK
+  建单腿: off=0,st=388 OK
+  组卡due: 568 ❌
+DIFF: redeem+service|B=500|挂充=无|勾储值=不勾
+  期望(五步): cash=388 stored=0
+  预览: off=388 st=0 OK
+  建单腿: off=388,st=0 OK
+  组卡due: 568 ❌
+DIFF: redeem+service|B=500|挂充=有|勾储值=勾
+  期望(五步): cash=300 stored=388
+  预览: off=300 st=388 OK
+  建单腿: off=300,st=388 OK
+  组卡due: 868 ❌
+DIFF: redeem+service|B=500|挂充=有|勾储值=不勾
+  期望(五步): cash=688 stored=0
+  预览: off=688 st=0 OK
+  建单腿: off=688,st=0 OK
+  组卡due: 868 ❌
+DIFF: owner-combo|B=0|挂充=无|勾储值=勾
+  期望(五步): cash=928 stored=0
+  预览: off=928 st=0 OK
+  建单腿: off=928,st=0 OK
+  组卡due: 1108 ❌
+DIFF: owner-combo|B=0|挂充=无|勾储值=不勾
+  期望(五步): cash=928 stored=0
+  预览: off=928 st=0 OK
+  建单腿: off=928,st=0 OK
+  组卡due: 1108 ❌
+DIFF: owner-combo|B=0|挂充=有|勾储值=勾
+  期望(五步): cash=868 stored=360
+  预览: off=868 st=360 OK
+  建单腿: off=868,st=360 OK
+  组卡due: 1408 ❌
+DIFF: owner-combo|B=0|挂充=有|勾储值=不勾
+  期望(五步): cash=1228 stored=0
+  预览: off=1228 st=0 OK
+  建单腿: off=1228,st=0 OK
+  组卡due: 1408 ❌
+DIFF: owner-combo|B=500|挂充=无|勾储值=勾
+  期望(五步): cash=540 stored=388
+  预览: off=540 st=388 OK
+  建单腿: off=540,st=388 OK
+  组卡due: 1108 ❌
+DIFF: owner-combo|B=500|挂充=无|勾储值=不勾
+  期望(五步): cash=928 stored=0
+  预览: off=928 st=0 OK
+  建单腿: off=928,st=0 OK
+  组卡due: 1108 ❌
+DIFF: owner-combo|B=500|挂充=有|勾储值=勾
+  期望(五步): cash=840 stored=388
+  预览: off=840 st=388 OK
+  建单腿: off=840,st=388 OK
+  组卡due: 1408 ❌
+DIFF: owner-combo|B=500|挂充=有|勾储值=不勾
+  期望(五步): cash=1228 stored=0
+  预览: off=1228 st=0 OK
+  建单腿: off=1228,st=0 OK
+  组卡due: 1408 ❌

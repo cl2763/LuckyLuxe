@@ -182,7 +182,8 @@
     <view class="card" wx:if="{{view}}">
       <view class="ch">支付构成 · 菜单式 <text class="hint">勾选支付方式,金额后端算</text></view>
       <!-- D55(店主终验抓出):勾选态与金额一致律——金额为 0 的支付腿不得处于勾选态(✓ 与高亮同条件) -->
-      <view class="paym {{payMenu.useBalance && view.hasStored ? 'on' : ''}}" wx:if="{{view.hasBalance}}" bindtap="payToggleBalance">
+      <!-- D64:0 余额客挂充后此行也必须在——显隐计入本单挂充(签字生效的钱一样可抵) -->
+      <view class="paym {{payMenu.useBalance && view.hasStored ? 'on' : ''}}" wx:if="{{view.hasBalance || view.hasRecharge}}" bindtap="payToggleBalance">
         <view class="ck {{payMenu.useBalance && view.hasStored ? 'on' : ''}}">{{payMenu.useBalance && view.hasStored ? '✓' : ''}}</view>
         <view class="pmain"><b>储值卡抵扣</b><text class="psmall">可用余额 {{view.balance}}{{view.rvNote}}{{payMenu.useBalance && view.hasStored ? ' → 本单抵 ' + view.storedDeduct : (payMenu.useBalance ? ' · 本单无可抵金额' : '')}}</text></view>
       </view>
