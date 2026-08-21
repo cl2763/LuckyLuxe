@@ -254,6 +254,7 @@ function render() {
         ${s.recharge.lines.map((rl) => `
           <div class="row"><span>${esc(rl.label)}</span><span class="amt">${esc(rl.amountText)}</span></div>`).join('')}
       </div>` : ''}
+      ${s.storedUnusedNotice ? `<div class="sec"><div class="meta" style="color:#8a3a33">${esc(s.storedUnusedNotice)}</div></div>` : ''}
     </div>
     ${amendCardHtml(s)}
     ${couponCardHtml()}

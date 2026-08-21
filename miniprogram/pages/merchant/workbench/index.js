@@ -44,9 +44,9 @@ Page({
   },
 
   filtered(all, kw) {
-    const k = (kw || '').trim()
+    const k = (kw || '').trim().toLowerCase() // D62:大小写不敏感(全仓搜索口同刀)
     if (!k) return all
-    return all.filter((x) => (x.name && x.name.indexOf(k) >= 0) || (x.msg && x.msg.indexOf(k) >= 0))
+    return all.filter((x) => (x.name && x.name.toLowerCase().indexOf(k) >= 0) || (x.msg && String(x.msg).toLowerCase().indexOf(k) >= 0))
   },
 
   onKw(e) {

@@ -1184,7 +1184,7 @@ const main = async () => {
               check('㋀ 随单充值单建成', sR.status === 201 || sR.status === 200, JSON.stringify(sR.data).slice(0, 120))
               const shR = sR.data.settlements[0]
               const rl = (shR.recharge && shR.recharge.lines) || []
-              check('㋀ 三行分行在场(实收/赠送/本单抵扣/充后余额·预计)', rl.some((l) => l.key === 'recharge' && l.label.includes('本次充值实收') && l.label.includes('充300赠60')) && rl.some((l) => l.key === 'bonus') && rl.some((l) => l.key === 'deduct') && rl.some((l) => l.key === 'after' && l.label.includes('预计')), JSON.stringify(rl))
+              check('㋀→㋅ 四行自证在场(前余额/本次充值 实收+赠送/本单抵扣/充后余额·预计)', rl.some((l) => l.key === 'before' && l.label === '充值前余额') && rl.some((l) => l.key === 'recharge' && l.label.includes('充300赠60') && l.label.includes('实收') && l.label.includes('赠送')) && rl.some((l) => l.key === 'deduct') && rl.some((l) => l.key === 'after' && l.label.includes('预计')), JSON.stringify(rl))
               check('㋀ 财务红线:perfBase=大项(充值 30000 不进业绩/积分基数)', shR.perfBaseCents === bigCents, `perfBase=${shR.perfBaseCents}`)
               // 日结冲卡列前值(相对式)
               const dcB = (await request('/admin/daily-close', {}, shop.token)).data.dailyClose
@@ -1407,6 +1407,39 @@ const main = async () => {
                 const tg2 = await request(`/settlements/${encodeURIComponent(tw[1].code)}/sign`, { method: 'POST', body: JSON.stringify({ signature: '㋄ 双单B', disclaimerAccepted: true }) }, null, { 'x-tenant-id': shop.tenantId })
                 const balEnd = dbx.prepare('SELECT COALESCE(SUM(amount_cents),0) AS b FROM stored_value_transactions WHERE tenant_id = ? AND user_id = ?').get(shop.tenantId, cuid3).b
                 check('㋄ D60 两张顺序签署都成+余额不透支(≥0)', tg1.status === 200 && tg2.status === 200 && balEnd >= 0, JSON.stringify({ a: tg1.status, b: tg2.status, balEnd }))
+
+                /* ===== ㋅ D63 账单自证(四行恒等+余额未用句)===== */
+                {
+                  // 有余额(balEnd 可能 0——补一笔)+随单充值单:四行恒等 前余额+充+赠−抵=充后
+                  await request('/admin/stored-value/recharge', { method: 'POST', body: JSON.stringify({ userId: cuid3, amountCents: 10000, payChannel: 'cash', note: '㋅ 前余额夹具' }) }, shop.token)
+                  const balBefore = dbx.prepare('SELECT COALESCE(SUM(amount_cents),0) AS b FROM stored_value_transactions WHERE tenant_id = ? AND user_id = ?').get(shop.tenantId, cuid3).b
+                  const sR6 = await request('/admin/settlements', { method: 'POST', body: JSON.stringify({ userId: cuid3, settlements: [{ payIntent: 'balance_plus_offline', items: [{ serviceId: shop.serviceId, qty: 1 }], technicians: tech, servedPersonName: '', rechargePackageId: pkR3.id }] }) }, shop.token)
+                  const shR6 = sR6.data.settlements[0]
+                  const L = Object.fromEntries((shR6.recharge.lines || []).map((l) => [l.key, l]))
+                  const num = (t) => Math.round(Number(String(t).replace(/[^\d.]/g, '')) * 100)
+                  check('㋅ 四行恒等自证:前余额+充+赠−抵扣=充后(数字逐行可算)', L.before && L.recharge && L.deduct && L.after && num(L.before.amountText) + 36000 - (num(L.deduct.amountText) || 0) === num(L.after.amountText), JSON.stringify(shR6.recharge.lines))
+                  check('㋅ 前余额行=真实前余额', num(L.before.amountText) === balBefore, JSON.stringify({ line: L.before.amountText, balBefore }))
+                  // 有 stored 腿的待签单:不出「未使用」句
+                  check('㋅ 用了储值的待签单不出「未使用」句', !shR6.storedUnusedNotice, JSON.stringify({ n: shR6.storedUnusedNotice, stored: shR6.payments.filter((p) => p.leg === 'stored_value').length }))
+                  await request(`/admin/settlements/${shR6.id}/void`, { method: 'POST', body: JSON.stringify({ reason: '㋅ 清场' }) }, shop.token)
+                  // 余额>0 而本单未用储值(offline_full)→ 待签单+组卡都出定稿句;签后句消失
+                  const sN = await request('/admin/settlements', { method: 'POST', body: JSON.stringify({ userId: cuid3, settlements: [{ payIntent: 'offline_full', items: [{ serviceId: shop.serviceId, qty: 1 }], technicians: tech, servedPersonName: '' }] }) }, shop.token)
+                  const shN = sN.data.settlements[0]
+                  check('㋅ 余额未用句(待签单):「该客有储值余额 X,本单未使用」', /该客有储值余额 .*本单未使用/.test(shN.storedUnusedNotice || ''), JSON.stringify(shN.storedUnusedNotice))
+                  const pcN = (await request(`/admin/settlements/${shN.id}/preview-card`, {}, shop.token)).data.card
+                  check('㋅ 余额未用句(组卡同句)', /该客有储值余额 .*本单未使用/.test(pcN.storedUnusedNotice || ''), JSON.stringify(pcN.storedUnusedNotice))
+                  const sgN = await request(`/settlements/${encodeURIComponent(shN.code)}/sign`, { method: 'POST', body: JSON.stringify({ signature: '㋅ 未用储值签', disclaimerAccepted: true }) }, null, { 'x-tenant-id': shop.tenantId })
+                  const serN = (await request(`/settlements/${encodeURIComponent(shN.code)}`, {}, null, { 'x-tenant-id': shop.tenantId })).data.settlement
+                  check('㋅ 已签单不出句(历史单不随活余额漂)', sgN.status === 200 && !serN.storedUnusedNotice, JSON.stringify(serN.storedUnusedNotice))
+                }
+
+                /* ===== ㋅ D62 搜索大小写不敏感(后端行为面;前端四处=wiring) ===== */
+                {
+                  const bMary = await directBooking(shop, { name: `MARY-D62-${RUN_ID}`, time: '18:45' })
+                  const hitLower = (await request(`/admin/customers?q=mary-d62`, {}, shop.token)).data.customers || []
+                  const hitTrim = (await request(`/admin/customers?q=${encodeURIComponent('  MARY-d62 ')}`, {}, shop.token)).data.customers || []
+                  check('㋅ D62 后端:小写搜到大写存档+trim', Boolean(bMary && bMary.id) && hitLower.some((c) => (c.displayName || '').startsWith('MARY-D62-')) && hitTrim.some((c) => (c.displayName || '').startsWith('MARY-D62-')), JSON.stringify({ lower: hitLower.length, trim: hitTrim.length }))
+                }
               }
             }
           }
@@ -1503,6 +1536,13 @@ const main = async () => {
       check('㋄ D60 单据预览:组卡自证+购卡/充值显式行+应收 label 后端定', spJs.includes('sheetRows') && spWxml.includes('card.groupNote') && spWxml.includes('现场购卡(购卡款,预收)') && spWxml.includes('card.t.dueLabel'))
       const srvD60 = readFileSync(join(ROOT42, 'apps/api/local-server.mjs'), 'utf8')
       check('㋄ D60 签署页/快照:合计前购卡行+充值实收行(合计自证)', signHtml.includes('s.purchaseLine') && signHtml.includes('本次充值实收（签字生效）') && srvD60.includes('purchaseLine.label') && srvD60.includes('本次充值实收(签字生效)'))
+      // ㋅ D62 wiring:四处前端搜索口全 toLowerCase(类定义=用户关键字匹配名称/手机号的本地过滤)
+      const custJs = readFileSync(join(ROOT42, 'miniprogram/pages/merchant/customers/index.js'), 'utf8')
+      const membJs = readFileSync(join(ROOT42, 'miniprogram/pages/merchant/member/index.js'), 'utf8')
+      const wbJs = readFileSync(join(ROOT42, 'miniprogram/pages/merchant/workbench/index.js'), 'utf8')
+      check('㋅ D62 前端四搜索口大小写不敏感(客户/代充选客/工作台/开单找客)', custJs.includes('.trim().toLowerCase()') && membJs.includes('q.toLowerCase()') && wbJs.includes(".trim().toLowerCase()") && miniOrders.includes('q.toLowerCase()'))
+      // ㋅ D63 wiring:组卡/签署页「余额未用」句+四行自证渲染面
+      check('㋅ D63 余额未用句渲染面(组卡+签署页)+四行自证键', spWxml.includes('card.storedUnusedNotice') && signHtml.includes('s.storedUnusedNotice') && srvD60.includes("key: 'before', label: '充值前余额'"))
       check('㋄ D60 结算页:购卡显式行+L3① 行内小注定稿句', settleWxml.includes('购卡款,预收') && settleJs.includes('含本单随签充值 +') && settleWxml.includes('view.rvNote'))
       check('㋁ 商家流水「顾客未确认」标注在场', mfinWxml.includes('顾客未确认') && readFileSync(join(ROOT42, 'miniprogram/utils/api.js'), 'utf8').includes('confirmStoredRecharge'))
       // A5 网页端:充值档位块已删+指路句在

@@ -198,8 +198,9 @@ Page({
      余额与到账结果全部由 /admin/stored-value/* 返回。 */
   onRvSearch(e) {
     const q = String(e.detail.value || '').trim()
-    const hit = q ? (this.data.customers || []).filter((c) =>
-      String(c.displayName || '').includes(q) || String(c.phone || '').includes(q)).slice(0, 6) : []
+    const ql = q.toLowerCase() // D62:大小写不敏感(全仓搜索口同刀)
+    const hit = ql ? (this.data.customers || []).filter((c) =>
+      String(c.displayName || '').toLowerCase().includes(ql) || String(c.phone || '').includes(q)).slice(0, 6) : []
     this.setData({ rvQuery: q, rvResults: hit.map((c) => this.rvShape(c)) })
   },
   rvShape(c) {

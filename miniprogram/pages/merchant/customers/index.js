@@ -124,8 +124,9 @@ Page({
   apply() {
     const { all, kw, filter, sort } = this.data
     let list = all.slice()
-    const k = (kw || '').trim()
-    if (k) list = list.filter((x) => x.name.indexOf(k) >= 0 || (x.phone || '').indexOf(k) >= 0)
+    // D62(店主 08-22):搜索一律大小写不敏感+trim(小写搜不到大写存档=缺陷;全仓同类同刀)
+    const k = (kw || '').trim().toLowerCase()
+    if (k) list = list.filter((x) => String(x.name || '').toLowerCase().indexOf(k) >= 0 || (x.phone || '').indexOf(k) >= 0)
     if (filter !== 'all') list = list.filter((x) => x.tier === filter)
     // 沉睡客默认按「以前多能花」排,先救最值钱的
     if (filter === 's') list.sort((a, b) => b.spendCents - a.spendCents)

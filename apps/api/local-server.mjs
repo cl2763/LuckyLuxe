@@ -10730,6 +10730,15 @@ function serializeSettlement(row, { includeSignature = false } = {}) {
       sharePct: t.share_pct, shareCents: t.share_cents
     })),
     payments: pays.map((p) => ({ leg: p.leg, amountCents: p.amount_cents, payerUserId: p.payer_user_id, status: p.status, note: p.note })),
+    /* D63(店主 08-22 定稿句):有余额而本单没用储值的待签单,显式说出来——不许静默。
+       只挂待签单(已签单余额是活的,历史单不出句避免误导)。 */
+    storedUnusedNotice: (() => {
+      if (row.status !== 'pending_sign') return ''
+      const used = pays.some((p) => (p.leg === 'stored_value' || p.leg === 'migrate_stored') && p.amount_cents > 0)
+      if (used) return ''
+      const bal = storedValueBalanceDetail(row.user_id, row.tenant_id).totalCents
+      return bal > 0 ? `该客有储值余额 ${formatMoneyCents(bal, row.tenant_id, 'auto')},本单未使用` : ''
+    })(),
     /* D60(店主 08-22):购卡款不许隐身进应收——现场购卡显式行(名称+金额+性质),
        四渲染面(签署页/快照/结算页/单据预览)只贴这句;「合计」由 服务小计+购卡款+充值实收 自证。 */
     purchaseLine: (() => {
@@ -10758,10 +10767,15 @@ function serializeSettlement(row, { includeSignature = false } = {}) {
       const after = frozen
         ? r.afterBalanceCents
         : storedValueBalanceDetail(row.user_id, row.tenant_id).totalCents + r.amountCents + (r.bonusCents || 0) - storedUsed
-      const lines = [{ key: 'recharge', label: `本次充值实收${r.packageName ? '(' + r.packageName + ')' : ''}`, amountText: `+${m(r.amountCents)}` }]
-      if (r.bonusCents > 0) lines.push({ key: 'bonus', label: '充值赠送(营销让利)', amountText: `+${m(r.bonusCents)}` })
-      lines.push({ key: 'deduct', label: '本单储值抵扣', amountText: storedUsed > 0 ? `−${m(storedUsed)}` : m(0) })
-      lines.push({ key: 'after', label: frozen ? '充后余额(签字时)' : '充后余额(预计)', amountText: m(Math.max(0, after)) })
+      /* D63(店主 08-22):四行自证——充值前余额/本次充值(实收+赠送)/本单储值抵扣/充后余额,
+         前余额+充+赠−抵扣=充后 逐行可算;已签单前余额=按冻结数倒推(签字瞬间口径,不随余额漂)。 */
+      const before = after - r.amountCents - (r.bonusCents || 0) + storedUsed
+      const lines = [
+        { key: 'before', label: '充值前余额', amountText: m(Math.max(0, before)) },
+        { key: 'recharge', label: `本次充值${r.packageName ? '(' + r.packageName + ')' : ''}:实收 ${m(r.amountCents)}${r.bonusCents > 0 ? ` + 赠送 ${m(r.bonusCents)}` : ''}`, amountText: `+${m(r.amountCents + (r.bonusCents || 0))}` },
+        { key: 'deduct', label: '本单储值抵扣', amountText: storedUsed > 0 ? `−${m(storedUsed)}` : m(0) },
+        { key: 'after', label: frozen ? '充后余额(签字时)' : '充后余额(预计)', amountText: m(Math.max(0, after)) }
+      ]
       return {
         amountCents: r.amountCents, bonusCents: r.bonusCents || 0, packageName: r.packageName || '',
         payChannel: r.payChannel || 'cash', technicianId: r.technicianId || null,
@@ -15915,6 +15929,13 @@ async function route(req, res) {
        ②购卡款/充值实收显式行(不许隐身进应收);③应收行改名「组合计应收」并逐张可对。 */
     const purchaseSumCents = rows.reduce((n, r) => { try { return n + ((JSON.parse(r.purchase_json || 'null') || {}).priceCents || 0) } catch { return n } }, 0)
     const rechargeSumCents = rows.reduce((n, r) => { try { return n + ((JSON.parse(r.recharge_json || 'null') || {}).amountCents || 0) } catch { return n } }, 0)
+    /* D63:组内有待签单没用储值、而该客有余额 → 组卡显式句(定稿句,不许静默) */
+    const pendingNoStored = rows.some((r) => r.status === 'pending_sign'
+      && !db.prepare("SELECT 1 FROM settlement_payments WHERE settlement_id = ? AND leg IN ('stored_value','migrate_stored') AND amount_cents > 0 LIMIT 1").get(r.id))
+    const custBalCents = pendingNoStored ? storedValueBalanceDetail(one.user_id, one.tenant_id).totalCents : 0
+    const storedUnusedNotice = pendingNoStored && custBalCents > 0
+      ? `该客有储值余额 ${formatMoneyCents(custBalCents, one.tenant_id, 'auto')},本单未使用`
+      : ''
     return json(res, 200, {
       card: {
         settlementId: one.id,
@@ -15924,6 +15945,7 @@ async function route(req, res) {
         statusText: allSigned ? '已签署' : '已结算 · 待签',
         // 组卡自证:共几张+逐张(单号/金额/签署态)——「到店应收」是这几张的合计,不是点进来那一张的
         groupNote: rows.length > 1 ? `本卡为整组单据(共 ${rows.length} 张)` : '',
+        storedUnusedNotice,
         sheetRows: rows.length > 1 ? rows.map((r) => ({
           code: r.code, totalCents: r.total_cents,
           statusText: r.status === 'signed' || r.status === 'amended' ? '已签' : '待签'

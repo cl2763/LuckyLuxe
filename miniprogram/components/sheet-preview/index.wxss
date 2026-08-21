@@ -36,3 +36,4 @@
 .spgroupnote{margin:8rpx 24rpx 0;padding:12rpx 16rpx;background:#fdf8f2;border:1rpx solid #efd9c8;border-radius:12rpx}
 .spgn-t{font-size:22rpx;font-weight:700;color:#8a6a45;margin-bottom:4rpx}
 .spgn-row{display:flex;justify-content:space-between;font-size:22rpx;color:#6b6258;padding:2rpx 0}
+.spnotice{margin:8rpx 24rpx 0;padding:10rpx 16rpx;background:#fbf4f3;border:1rpx solid #ecd5d2;border-radius:10rpx;font-size:22rpx;color:#8a3a33}

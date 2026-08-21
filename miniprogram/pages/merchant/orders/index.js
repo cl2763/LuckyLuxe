@@ -721,7 +721,8 @@ Page(Object.assign({
   // 顾客搜索(D9 根治后的唯一入口):姓名/手机号模糊匹配,命中最多 5 条(图规则①)
   onCustSearch(e) {
     const q = (e.detail.value || '').trim()
-    const matches = q ? this.data.directCustomers.filter((c) => (c.name || '').indexOf(q) >= 0 || (c.phone || '').indexOf(q) >= 0).slice(0, 5) : []
+    const ql = q.toLowerCase() // D62:大小写不敏感(全仓搜索口同刀)
+    const matches = ql ? this.data.directCustomers.filter((c) => (c.name || '').toLowerCase().indexOf(ql) >= 0 || (c.phone || '').indexOf(q) >= 0).slice(0, 5) : []
     this.setData({ custQuery: q, custMatches: matches, selectedCustId: '', selectedCustName: '', pendingNewName: '', pendingNewPhone: '' })
   },
   pickCust(e) {

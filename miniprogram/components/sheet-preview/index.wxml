@@ -8,6 +8,8 @@
       <view class="spx" bindtap="close">✕</view>
     </view>
     <view class="spsub">{{card.customerName}} · {{card.createdAt}}</view>
+    <!-- D63:有余额本单未用=显式句(不许静默) -->
+    <view wx:if="{{card.storedUnusedNotice}}" class="spnotice">{{card.storedUnusedNotice}}</view>
     <!-- D60 组卡自证:共几张+逐张(单号/金额/签署态)——应收是这几张的合计 -->
     <view wx:if="{{card.groupNote}}" class="spgroupnote">
       <view class="spgn-t">{{card.groupNote}}</view>
