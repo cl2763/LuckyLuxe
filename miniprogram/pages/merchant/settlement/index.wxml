@@ -184,7 +184,7 @@
       <!-- D55(店主终验抓出):勾选态与金额一致律——金额为 0 的支付腿不得处于勾选态(✓ 与高亮同条件) -->
       <view class="paym {{payMenu.useBalance && view.hasStored ? 'on' : ''}}" wx:if="{{view.hasBalance}}" bindtap="payToggleBalance">
         <view class="ck {{payMenu.useBalance && view.hasStored ? 'on' : ''}}">{{payMenu.useBalance && view.hasStored ? '✓' : ''}}</view>
-        <view class="pmain"><b>储值卡抵扣</b><text class="psmall">可用余额 {{view.balance}}{{payMenu.useBalance && view.hasStored ? ' → 本单抵 ' + view.storedDeduct : (payMenu.useBalance ? ' · 本单无可抵金额' : '')}}</text></view>
+        <view class="pmain"><b>储值卡抵扣</b><text class="psmall">可用余额 {{view.balance}}{{view.rvNote}}{{payMenu.useBalance && view.hasStored ? ' → 本单抵 ' + view.storedDeduct : (payMenu.useBalance ? ' · 本单无可抵金额' : '')}}</text></view>
       </view>
       <view class="paym {{depositApplied && view.hasDeposit ? 'on' : ''}}" wx:if="{{view.hasDepositReceipt && depositDeductible}}" bindtap="payToggleDeposit">
         <view class="ck {{depositApplied && view.hasDeposit ? 'on' : ''}}">{{depositApplied && view.hasDeposit ? '✓' : ''}}</view>
@@ -224,6 +224,8 @@
       <view class="tl save" wx:if="{{view.hasTimecard}}"><text>次卡抵扣(签字扣次)</text><text>−{{view.timecardCover}}</text></view>
       <view class="tl" wx:if="{{view.hasStored}}"><text>储值抵扣</text><text>−{{view.storedDeduct}}</text></view>
       <view class="tl" wx:if="{{view.hasDeposit}}"><text>定金抵扣</text><text>−{{view.depositDeduct}}</text></view>
+      <!-- D60 自证行:现场购卡款显式(预收)——不许隐身进应收 -->
+      <view class="tl" wx:if="{{view.hasPurchase}}"><text>现场购卡{{view.purchaseName ? ' · ' + view.purchaseName : ''}}(购卡款,预收)</text><text>+{{view.purchaseAmount}}</text></view>
       <!-- B3-1 随单充值三行分行(图 §四 屏3):实收/赠送/充后余额;签字生效,数字全由后端回传 -->
       <view class="tl" wx:if="{{view.hasRecharge}}"><text>本次充值实收(签字生效)</text><text>+{{view.rechargeAmount}}</text></view>
       <view class="tl save" wx:if="{{view.hasRecharge && view.rechargeBonus}}"><text>充值赠送(营销让利)</text><text>+{{view.rechargeBonus}}</text></view>

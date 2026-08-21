@@ -8,6 +8,13 @@
       <view class="spx" bindtap="close">✕</view>
     </view>
     <view class="spsub">{{card.customerName}} · {{card.createdAt}}</view>
+    <!-- D60 组卡自证:共几张+逐张(单号/金额/签署态)——应收是这几张的合计 -->
+    <view wx:if="{{card.groupNote}}" class="spgroupnote">
+      <view class="spgn-t">{{card.groupNote}}</view>
+      <view class="spgn-row" wx:for="{{card.sheetRows}}" wx:for-item="s" wx:key="code">
+        <text>{{s.code}} · {{s.statusText}}</text><text>{{s.totalText}}</text>
+      </view>
+    </view>
     <scroll-view scroll-y class="spbody">
       <view class="spgrp" wx:for="{{card.groups}}" wx:for-item="g" wx:key="title">
         <view class="spgt">{{g.title}}</view>
@@ -22,7 +29,10 @@
         <view class="sprow"><text class="spk green">{{card.t.discountLabel}}</text><text class="spv green">{{card.t.discount}}</text></view>
         <view class="sprow" wx:if="{{card.t.hasStored}}"><text class="spk">储值抵扣</text><text class="spv">−{{card.t.stored}}</text></view>
         <view class="sprow" wx:if="{{card.t.hasDeposit}}"><text class="spk">定金抵扣</text><text class="spv">−{{card.t.deposit}}</text></view>
-        <view class="sprow due"><text class="spk">到店应收</text><text class="spv">{{card.t.due}}</text></view>
+        <!-- D60 自证行:购卡款/充值实收不隐身;应收 label 后端定(组卡=组合计应收) -->
+        <view class="sprow" wx:if="{{card.t.hasPurchase}}"><text class="spk">现场购卡(购卡款,预收)</text><text class="spv">+{{card.t.purchase}}</text></view>
+        <view class="sprow" wx:if="{{card.t.hasRecharge}}"><text class="spk">随单充值实收(签字生效)</text><text class="spv">+{{card.t.recharge}}</text></view>
+        <view class="sprow due"><text class="spk">{{card.t.dueLabel}}</text><text class="spv">{{card.t.due}}</text></view>
       </view>
       <view class="spsign" wx:if="{{card.signature}}">
         <view class="spk">顾客签名</view>

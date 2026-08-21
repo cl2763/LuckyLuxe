@@ -683,6 +683,10 @@ Page({
         hasDepositReceipt: (grp.depositReceiptCents || 0) > 0,
         hasOffline: (pay.offlineDueCents || 0) > 0,
         offlineDue: m(pay.offlineDueCents || 0),
+        /* D60 自证行:现场购卡款显式(+X 购卡款,预收)——不许隐身进应收 */
+        hasPurchase: (pay.purchaseCents || 0) > 0,
+        purchaseAmount: m(pay.purchaseCents || 0),
+        purchaseName: (sheets.find((s) => s.purchase) || {}).purchase ? (sheets.find((s) => s.purchase) || {}).purchase.name : '',
         /* B3-1 随单充值三行分行(签字生效):数字全由组级预览回传,本页只贴 */
         hasRecharge: (pay.rechargeCents || 0) > 0,
         rechargeAmount: m(pay.rechargeCents || 0),
@@ -691,6 +695,8 @@ Page({
           return r && r.bonusCents > 0 ? m(r.bonusCents) : ''
         })(),
         afterBalance: pay.afterRechargeBalanceCents != null ? m(pay.afterRechargeBalanceCents) : '',
+        /* L3① 行内小注(Cowork 定稿句):挂着随签充值时,储值行余额与本单抵的差由这句自证 */
+        rvNote: (pay.pendingRechargeCents || 0) > 0 ? `(含本单随签充值 +${m(pay.pendingRechargeCents)},签字生效)` : '',
         warnings: sheets.reduce((acc, s) => acc.concat((s.softWarnings || []).map((w) => w.message)), [])
       }
       // 券(组①):选项与已选照单级显示

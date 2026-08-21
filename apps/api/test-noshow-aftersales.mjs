@@ -1355,6 +1355,59 @@ const main = async () => {
                   await request(`/admin/settlements/${shU3.id}/void`, { method: 'POST', body: JSON.stringify({ reason: '㋃ 清场' }) }, shop.token)
                 }
               }
+
+              /* ===== ㋄ D60 金额出口同源(店主 08-22:868/1020/1408 三数对账后修) ===== */
+              {
+                const cm3 = await request('/auth/wechat/mini-login', { method: 'POST', body: JSON.stringify({ demoLogin: true, tenantId: shop.tenantId }) }, null, { 'x-tenant-id': shop.tenantId })
+                const cuid3 = cm3.data.user.id
+                const bal0 = dbx.prepare('SELECT COALESCE(SUM(amount_cents),0) AS b FROM stored_value_transactions WHERE tenant_id = ? AND user_id = ?').get(shop.tenantId, cuid3).b
+                const pkR3 = (await request('/admin/recharge-packages', {}, staffToken)).data.packages.find((p) => p.name === '充300赠60')
+                // 店主组合:sheet0=现场购卡+当场核销+随单充值;sheet1=普通服务(payer 同人)
+                const comboBody = { userId: cuid3, payIntent: 'balance_plus_offline', settlements: [
+                  { payIntent: 'balance_plus_offline', purchasePackageId: pk.id, timecardServiceId: shop.serviceId, items: [], technicians: tech, servedPersonName: '', rechargePackageId: pkR3.id },
+                  { payIntent: 'balance_plus_offline', items: [{ serviceId: shop.serviceId, qty: 1 }], technicians: tech, servedPersonName: '' }
+                ] }
+                const pv = (await request('/admin/settlements/preview', { method: 'POST', body: JSON.stringify(comboBody) }, shop.token)).data
+                const gp = pv.group.payment
+                // D60 核心:组级=Σ各 sheet 腿(预览=建单=签署一条数)
+                const sheetOffline = pv.sheets.reduce((n, s) => n + s.payment.offlineCents, 0)
+                const sheetStored = pv.sheets.reduce((n, s) => n + s.payment.storedUsedCents, 0)
+                check('㋄ D60 组级支付=Σ sheet 腿(不再独立重算)', gp.offlineDueCents === sheetOffline && gp.storedUsedCents === sheetStored, JSON.stringify({ g: { o: gp.offlineDueCents, s: gp.storedUsedCents }, sum: { o: sheetOffline, s: sheetStored } }))
+                check('㋄ D60 组级腿=sheet 腿拼接(带组内序号)', Array.isArray(gp.legs) && gp.legs.every((l) => l.sheetIndex === 0 || l.sheetIndex === 1) && gp.legs.length === pv.sheets.reduce((n, s) => n + s.payment.legs.length, 0), JSON.stringify(gp.legs.map((l) => `${l.sheetIndex}:${l.leg}:${l.amountCents}`)))
+                check('㋄ D60 购卡款组级显式(purchaseCents=54000,不隐身)', gp.purchaseCents === 54000, `purchase=${gp.purchaseCents}`)
+                // 挂单随签的钱只抵挂充值那张 sheet(exclude 全额时=0 烧),不再被组级挪去抵别的单
+                check('㋄ D60 随签充值不再被组级挪抵他单(sheet1 stored 只用共享余额)', pv.sheets[1].payment.storedUsedCents <= Math.max(0, bal0), JSON.stringify({ s1stored: pv.sheets[1].payment.storedUsedCents, bal0 }))
+                // 建单=预览逐分一致(落库腿)
+                const sC = await request('/admin/settlements', { method: 'POST', body: JSON.stringify({ userId: cuid3, settlements: comboBody.settlements }) }, shop.token)
+                const builtLegs = sC.data.settlements.flatMap((s) => s.payments.filter((p) => p.leg !== 'deposit'))
+                const builtOffline = builtLegs.filter((p) => p.leg === 'offline').reduce((n, p) => n + p.amountCents, 0)
+                const builtStored = builtLegs.filter((p) => p.leg === 'stored_value' || p.leg === 'migrate_stored').reduce((n, p) => n + p.amountCents, 0)
+                check('㋄ D60 预览承诺=建单落库腿(offline/stored 逐分一致)', builtOffline === gp.offlineDueCents && builtStored === gp.storedUsedCents, JSON.stringify({ built: { o: builtOffline, s: builtStored }, promised: { o: gp.offlineDueCents, s: gp.storedUsedCents } }))
+                // 合计自证行:serialize purchaseLine 后端句在场
+                const sh0 = sC.data.settlements[0]
+                check('㋄ D60 购卡显式行(purchaseLine 后端句:名称+「购卡款,预收」)', sh0.purchaseLine && sh0.purchaseLine.priceCents === 54000 && /购卡款,预收/.test(sh0.purchaseLine.amountText) && /守护/.test(sh0.purchaseLine.label), JSON.stringify(sh0.purchaseLine))
+                // preview-card 组卡自证:groupNote+sheetRows+dueLabel+购卡/充值行
+                const pc = (await request(`/admin/settlements/${sh0.id}/preview-card`, {}, shop.token)).data.card
+                check('㋄ D60 组卡自证(共 2 张+逐张状态行+组合计应收 label)', /共 2 张/.test(pc.groupNote) && pc.sheetRows.length === 2 && /组合计应收/.test(pc.totals.dueLabel), JSON.stringify({ note: pc.groupNote, rows: pc.sheetRows.length, label: pc.totals.dueLabel }))
+                check('㋄ D60 组卡购卡/充值显式行(54000/30000)', pc.totals.purchaseCents === 54000 && pc.totals.rechargeCents === 30000, JSON.stringify({ p: pc.totals.purchaseCents, r: pc.totals.rechargeCents }))
+                // 清场:撤两张
+                for (const s of sC.data.settlements) await request(`/admin/settlements/${s.id}/void`, { method: 'POST', body: JSON.stringify({ reason: '㋄ 清场' }) }, shop.token)
+                /* 双单抢同一份余额(并发六类正门修):代充 500 → 两张 388 同组 → 顺序消耗不超余额,两张都签得动 */
+                await request('/admin/stored-value/recharge', { method: 'POST', body: JSON.stringify({ userId: cuid3, amountCents: 50000, payChannel: 'cash', note: '㋄ 共享余额夹具' }) }, shop.token)
+                const balNow = dbx.prepare('SELECT COALESCE(SUM(amount_cents),0) AS b FROM stored_value_transactions WHERE tenant_id = ? AND user_id = ?').get(shop.tenantId, cuid3).b
+                const twin = { userId: cuid3, payIntent: 'balance_plus_offline', settlements: [
+                  { payIntent: 'balance_plus_offline', items: [{ serviceId: shop.serviceId, qty: 1 }], technicians: tech, servedPersonName: '' },
+                  { payIntent: 'balance_plus_offline', items: [{ serviceId: shop.serviceId, qty: 1 }], technicians: tech, servedPersonName: '' }
+                ] }
+                const sT = await request('/admin/settlements', { method: 'POST', body: JSON.stringify(twin) }, shop.token)
+                const tw = sT.data.settlements
+                const twStored = tw.flatMap((s) => s.payments).filter((p) => p.leg === 'stored_value' || p.leg === 'migrate_stored').reduce((n, p) => n + p.amountCents, 0)
+                check('㋄ D60 双单共享余额顺序消耗(Σstored ≤ 余额,不再双份烧)', twStored <= balNow && twStored > 0, JSON.stringify({ twStored, balNow }))
+                const tg1 = await request(`/settlements/${encodeURIComponent(tw[0].code)}/sign`, { method: 'POST', body: JSON.stringify({ signature: '㋄ 双单A', disclaimerAccepted: true }) }, null, { 'x-tenant-id': shop.tenantId })
+                const tg2 = await request(`/settlements/${encodeURIComponent(tw[1].code)}/sign`, { method: 'POST', body: JSON.stringify({ signature: '㋄ 双单B', disclaimerAccepted: true }) }, null, { 'x-tenant-id': shop.tenantId })
+                const balEnd = dbx.prepare('SELECT COALESCE(SUM(amount_cents),0) AS b FROM stored_value_transactions WHERE tenant_id = ? AND user_id = ?').get(shop.tenantId, cuid3).b
+                check('㋄ D60 两张顺序签署都成+余额不透支(≥0)', tg1.status === 200 && tg2.status === 200 && balEnd >= 0, JSON.stringify({ a: tg1.status, b: tg2.status, balEnd }))
+              }
             }
           }
           dbx.prepare("DELETE FROM member_timecards WHERE id IN ('tc_race','tc_grp','tc_dual')").run()
@@ -1443,6 +1496,14 @@ const main = async () => {
       check('㋃ D57 商家日结未签可点行 wiring(mixin goUnsigned+两 wxml 卡=出码重推)', dcMixin.includes('goUnsigned') && dcMixin.includes('unsignedList') && dcWxml.includes('goUnsigned') && moWxml.includes('goUnsigned'))
       check('㋃ D57 顾客待签置顶卡 wiring(全部未签单+去签字)', coJs.includes('getMyPendingSign') && coWxml.includes('待你签字确认') && coWxml.includes('去签字'))
       check('㋃ D57 网页日结未签行=签署页链接(双端同刀)', adminJs.includes('v.unsignedList') && adminJs.includes('/sign/${encodeURIComponent(u.code)}'))
+      // ㋄ D60 wiring:购卡/充值显式行四渲染面+组卡自证+L3① 小注
+      const spJs = readFileSync(join(ROOT42, 'miniprogram/components/sheet-preview/index.js'), 'utf8')
+      const spWxml = readFileSync(join(ROOT42, 'miniprogram/components/sheet-preview/index.wxml'), 'utf8')
+      const signHtml = readFileSync(join(ROOT42, 'apps/web/sign.html'), 'utf8')
+      check('㋄ D60 单据预览:组卡自证+购卡/充值显式行+应收 label 后端定', spJs.includes('sheetRows') && spWxml.includes('card.groupNote') && spWxml.includes('现场购卡(购卡款,预收)') && spWxml.includes('card.t.dueLabel'))
+      const srvD60 = readFileSync(join(ROOT42, 'apps/api/local-server.mjs'), 'utf8')
+      check('㋄ D60 签署页/快照:合计前购卡行+充值实收行(合计自证)', signHtml.includes('s.purchaseLine') && signHtml.includes('本次充值实收（签字生效）') && srvD60.includes('purchaseLine.label') && srvD60.includes('本次充值实收(签字生效)'))
+      check('㋄ D60 结算页:购卡显式行+L3① 行内小注定稿句', settleWxml.includes('购卡款,预收') && settleJs.includes('含本单随签充值 +') && settleWxml.includes('view.rvNote'))
       check('㋁ 商家流水「顾客未确认」标注在场', mfinWxml.includes('顾客未确认') && readFileSync(join(ROOT42, 'miniprogram/utils/api.js'), 'utf8').includes('confirmStoredRecharge'))
       // A5 网页端:充值档位块已删+指路句在
       check('㋁ A5 网页门店设置充值档位块已删(msAddTier 零残留)+指路句在', !adminJs.includes('msAddTier') && adminJs.includes('会员与营销 → 套餐'))

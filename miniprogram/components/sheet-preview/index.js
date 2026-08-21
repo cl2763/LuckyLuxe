@@ -26,6 +26,7 @@ Component({
                 listText: l.strike ? m(l.listAmountCents) : ''
               }))
             })),
+            sheetRows: (c.sheetRows || []).map((s) => Object.assign({}, s, { totalText: m(s.totalCents) })),
             t: {
               listTotal: m(c.totals.listTotalCents),
               subtotal: m(c.totals.subtotalCents),
@@ -35,6 +36,12 @@ Component({
               deposit: m(c.totals.depositDeductCents),
               hasStored: c.totals.storedDeductCents > 0,
               stored: m(c.totals.storedDeductCents),
+              /* D60 自证行:购卡款/充值实收显式;应收 label 由后端定(组卡=「组合计应收(N 张)」) */
+              hasPurchase: (c.totals.purchaseCents || 0) > 0,
+              purchase: m(c.totals.purchaseCents || 0),
+              hasRecharge: (c.totals.rechargeCents || 0) > 0,
+              recharge: m(c.totals.rechargeCents || 0),
+              dueLabel: c.totals.dueLabel || '到店应收',
               due: m(c.totals.dueCents)
             }
           })

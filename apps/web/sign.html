@@ -244,6 +244,8 @@ function render() {
         <div class="row"><span>原价合计</span><span class="strike">${money(s.listTotalCents)}</span></div>
         <div class="row"><span>${s.couponDiscountCents ? '共优惠（含券）' : '较原价共优惠'}</span><b>${money(s.discountTotalCents)}</b></div>
         ${s.couponDiscountCents ? `<div class="row"><span>优惠券 ${esc(s.coupon ? s.coupon.name : '')}</span><b>−${money(s.couponDiscountCents)}</b></div>` : ''}
+        ${s.purchaseLine ? `<div class="row"><span>${esc(s.purchaseLine.label)}</span><b>${esc(s.purchaseLine.amountText)}</b></div>` : ''}
+        ${s.recharge ? `<div class="row"><span>本次充值实收（签字生效）</span><b>+${money(s.recharge.amountCents)}</b></div>` : ''}
         <div class="row grand"><span>合计</span><span>${money(s.totalCents)}</span></div>
       </div>
       ${s.recharge && s.recharge.lines ? `

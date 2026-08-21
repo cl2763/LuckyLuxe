@@ -8332,8 +8332,17 @@ function couponOptionsFor({ tenantId, userId, subtotalCents, maxDeductCents, cat
 
 /* 支付构成的唯一实现:储值先烧迁移桶(不进本店收入)→ 再烧新桶 → 剩下的进线下腿。
    开单试算与「顾客改券后重算」共用这一份 —— 两处各写一遍迟早会算出两个数。 */
-function buildPaymentLegs({ tenantId, payerId, totalCents, payIntent, storedExcludeCents = 0, pendingRechargeCents = 0, excludeNote = '' }) {
+function buildPaymentLegs({ tenantId, payerId, totalCents, payIntent, storedExcludeCents = 0, pendingRechargeCents = 0, excludeNote = '', plannedStoredCents = 0 }) {
   const balance = payerId ? storedValueBalanceDetail(payerId, tenantId) : { totalCents: 0, legacyCents: 0, normalCents: 0 }
+  /* D60(店主 08-22 抓出,组级 868 vs 落库腿 1228 分叉的另一半):同组多张单共享同一份余额——
+     组内排前面的单已计划烧掉的部分(plannedStoredCents)先从可用余额里扣掉,后面的单不许再烧同一笔钱
+     (烧序与真烧一致:旧桶先扣)。否则两张单各自按全额余额分腿,签到第二张必 INSUFFICIENT。 */
+  let planned = Math.max(0, Math.round(plannedStoredCents) || 0)
+  const plannedLegacy = Math.min(Math.max(0, balance.legacyCents), planned)
+  balance.legacyCents -= plannedLegacy
+  planned -= plannedLegacy
+  balance.normalCents = Math.max(0, balance.normalCents - planned)
+  balance.totalCents = balance.legacyCents + balance.normalCents
   const plan = ['balance_plus_offline', 'recharge_then_balance', 'offline_full'].includes(payIntent) ? payIntent : 'balance_plus_offline'
   /* B3-1 随单充值:挂单随签——签字时刻充值行才入账,规划期把「充+赠」并进新桶可抵范围
      (充进来的钱落新桶,烧的顺序不变:旧桶→新桶+待充)。余额展示仍是现余额,充后余额单独回传。 */
@@ -8344,11 +8353,14 @@ function buildPaymentLegs({ tenantId, payerId, totalCents, payIntent, storedExcl
      只收现金/其他。摘出的部分先离场再回线下腿,储值腿永远烧不到它(单一实现,调用方传摘出额)。 */
   const excluded = Math.min(Math.max(0, Math.round(storedExcludeCents) || 0), remaining)
   remaining -= excluded
+  let sharedStoredUsedCents = 0
   if (plan !== 'offline_full') {
     const useLegacy = Math.min(Math.max(0, balance.legacyCents), remaining)
     if (useLegacy > 0) { legs.push({ leg: 'migrate_stored', amountCents: useLegacy, payerUserId: payerId, note: '迁移桶(不进本店收入)' }); remaining -= useLegacy }
     const useNormal = Math.min(Math.max(0, balance.normalCents) + pendingRecharge, remaining)
     if (useNormal > 0) { legs.push({ leg: 'stored_value', amountCents: useNormal, payerUserId: payerId }); remaining -= useNormal }
+    // D60:本单占用**共享余额**的份额(不含本单随签充值冲进来的新钱)——组内下一张单据此扣减可用余额
+    sharedStoredUsedCents = useLegacy + Math.min(Math.max(0, useNormal), Math.max(0, balance.normalCents))
   }
   remaining += excluded
   if (remaining > 0) legs.push({ leg: 'offline', amountCents: remaining, payerUserId: payerId, note: excluded > 0 ? (excludeNote || '到店支付(含购卡:本店未开储值购卡)') : '到店支付' })
@@ -8365,7 +8377,7 @@ function buildPaymentLegs({ tenantId, payerId, totalCents, payIntent, storedExcl
   }
   for (const l of legs) l.label = LEG_LABEL[l.leg] || l.leg
   const storedUsedCents = legs.filter((l) => l.leg === 'stored_value' || l.leg === 'migrate_stored').reduce((sum, l) => sum + l.amountCents, 0)
-  return { plan, legs, balance, remaining: Math.max(0, remaining), storedUsedCents }
+  return { plan, legs, balance, remaining: Math.max(0, remaining), storedUsedCents, sharedStoredUsedCents }
 }
 
 // 一单一张(规则②):同一张券不能同时挂在两张单上 —— 别处待签的单也算占用
@@ -8460,7 +8472,12 @@ function setSettlementCoupon(settlementId, grantId, { by = 'customer', actor = '
   const excludeNote = purchaseCashOnlyCents && rechargeCents
     ? '到店支付(含购卡与充值实收:不可用储值付)'
     : (rechargeCents ? '到店支付(含本次充值实收:充值不可用储值付)' : '到店支付(含购卡:本店未开储值购卡)')
-  const pay = buildPaymentLegs({ tenantId, payerId: row.user_id, totalCents: totalCents - coverCents, payIntent: row.pay_intent, storedExcludeCents: purchaseCashOnlyCents + rechargeCents, pendingRechargeCents, excludeNote })
+  /* D60 同刀(支付腿重建方,D54 类):组内其他待签兄弟单已计划占用的储值先扣——
+     改券重算不许把同一笔余额再烧一遍。 */
+  const siblingStoredCents = db.prepare(`SELECT COALESCE(SUM(p.amount_cents),0) AS n FROM settlement_payments p
+    JOIN settlements s ON s.id = p.settlement_id
+    WHERE s.group_id = ? AND s.id <> ? AND s.status = 'pending_sign' AND p.leg IN ('stored_value','migrate_stored')`).get(row.group_id, row.id).n
+  const pay = buildPaymentLegs({ tenantId, payerId: row.user_id, totalCents: totalCents - coverCents, payIntent: row.pay_intent, storedExcludeCents: purchaseCashOnlyCents + rechargeCents, pendingRechargeCents, excludeNote, plannedStoredCents: siblingStoredCents })
   if (coverCents > 0) {
     pay.legs.unshift({ leg: 'times_card', amountCents: coverCents, payerUserId: row.user_id, note: (oldTcLeg && oldTcLeg.note) || '次卡抵扣', label: '次卡抵扣' })
   }
@@ -8742,7 +8759,7 @@ function computeSettlement(input = {}) {
   const excludeNote = purchaseCashOnlyCents && rechargeCents
     ? '到店支付(含购卡与充值实收:不可用储值付)'
     : (rechargeCents ? '到店支付(含本次充值实收:充值不可用储值付)' : '到店支付(含购卡:本店未开储值购卡)')
-  const { plan, legs, balance, remaining, storedUsedCents } = buildPaymentLegs({ tenantId, payerId, totalCents: totalCents - timecardCoverCents, payIntent: input.payIntent, storedExcludeCents: purchaseCashOnlyCents + rechargeCents, pendingRechargeCents, excludeNote })
+  const { plan, legs, balance, remaining, storedUsedCents, sharedStoredUsedCents } = buildPaymentLegs({ tenantId, payerId, totalCents: totalCents - timecardCoverCents, payIntent: input.payIntent, storedExcludeCents: purchaseCashOnlyCents + rechargeCents, pendingRechargeCents, excludeNote, plannedStoredCents: Math.max(0, Math.round(Number(input.plannedStoredCents) || 0)) })
   if (tcCard) {
     legs.unshift({ leg: 'times_card', amountCents: timecardCoverCents, payerUserId: payerId, note: `次卡抵扣 · ${tcCard.name} · 第 ${tcNth}/${tcCard.total_times} 次` })
   } else if (tcPurchase) {
@@ -8798,6 +8815,8 @@ function computeSettlement(input = {}) {
       legacyBalanceCents: balance.legacyCents,
       normalBalanceCents: balance.normalCents,
       storedUsedCents,
+      // D60:本单占用共享余额的份额(组内下一张单的可用余额=前面各单 Σ此值扣减后)
+      sharedStoredUsedCents: (typeof sharedStoredUsedCents === 'number' ? sharedStoredUsedCents : 0),
       pendingRechargeCents,
       // 充后余额=现余额+充+赠−本单储值抵扣(仅随单充值时有意义;签字时刻冻结进快照)
       afterRechargeBalanceCents: scRecharge ? balance.totalCents + pendingRechargeCents - storedUsedCents : null,
@@ -8858,6 +8877,9 @@ function createSettlementGroup(body = {}, adminSession = {}) {
 
     const grantsUsedInGroup = new Set()
     const timecardsUsedInGroup = new Set()
+    /* D60:组内多张单共享同一份余额——按组内顺序消耗,前面单占掉的份额后面单不许再烧
+       (与组级预览同一口径:预览=建单腿=签署,一条数)。 */
+    let plannedStoredInGroup = 0
     for (const sheet of sheets) {
       // 一单一张,且同一张券不能被同组的两张单同时挂上(组内两张 + 别处待签的单都要拦)
       if (sheet.couponGrantId) {
@@ -8882,8 +8904,10 @@ function createSettlementGroup(body = {}, adminSession = {}) {
            老板会话可不带(面板没选就空,不猜归属——账本里不许有猜出来的数字)。 */
         rechargeTechnicianId: adminSession.role === 'staff'
           ? (adminSession.technicianId || null)
-          : (sheet.rechargeTechnicianId || null)
+          : (sheet.rechargeTechnicianId || null),
+        plannedStoredCents: plannedStoredInGroup
       })
+      plannedStoredInGroup += (computed.payment && computed.payment.sharedStoredUsedCents) || 0
       // B2-7 核销单必有技师(数字点选同结算单,规则⑧)
       if (computed.timecard && !(Array.isArray(sheet.technicians) && sheet.technicians.length)) {
         throw apiError(400, 'TECHNICIAN_REQUIRED', '次卡核销单必须选技师。')
@@ -10436,6 +10460,15 @@ function renderSettlementSnapshotSvg(settlement, { strokes = [], signedAt = '' }
     y += 26
     rows.push(`<text x="40" y="${y}" class="s">优惠券 ${escapeXml(s.coupon ? s.coupon.name : '')}</text><text x="${W - 40}" y="${y}" class="t" text-anchor="end">${escapeXml(`−${money(s.couponDiscountCents)}`)}</text>`)
   }
+  /* D60 合计自证:购卡款/充值实收显式行放在「合计」之前——服务小计+购卡+充值 = 合计,逐行可对 */
+  if (s.purchaseLine) {
+    y += 26
+    rows.push(`<text x="40" y="${y}" class="s">${escapeXml(s.purchaseLine.label)}</text><text x="${W - 40}" y="${y}" class="t" text-anchor="end">${escapeXml(s.purchaseLine.amountText)}</text>`)
+  }
+  if (s.recharge) {
+    y += 26
+    rows.push(`<text x="40" y="${y}" class="s">本次充值实收(签字生效)</text><text x="${W - 40}" y="${y}" class="t" text-anchor="end">${escapeXml(`+${money(s.recharge.amountCents)}`)}</text>`)
+  }
   y += 40
   rows.push(`<text x="40" y="${y}" class="grand">合计</text><text x="${W - 40}" y="${y}" class="grand gold" text-anchor="end">${escapeXml(money(s.totalCents))}</text>`)
   /* B3-1 随单充值三行分行(图 §四 屏3):实收/本单抵扣/充后余额——快照=签署凭证,
@@ -10697,6 +10730,20 @@ function serializeSettlement(row, { includeSignature = false } = {}) {
       sharePct: t.share_pct, shareCents: t.share_cents
     })),
     payments: pays.map((p) => ({ leg: p.leg, amountCents: p.amount_cents, payerUserId: p.payer_user_id, status: p.status, note: p.note })),
+    /* D60(店主 08-22):购卡款不许隐身进应收——现场购卡显式行(名称+金额+性质),
+       四渲染面(签署页/快照/结算页/单据预览)只贴这句;「合计」由 服务小计+购卡款+充值实收 自证。 */
+    purchaseLine: (() => {
+      if (!row.purchase_json) return null
+      let p = null
+      try { p = JSON.parse(row.purchase_json) } catch { return null }
+      if (!p || !(p.priceCents > 0)) return null
+      return {
+        name: p.name || '次卡',
+        priceCents: p.priceCents,
+        label: `现场购卡 · ${p.name || '次卡'}`,
+        amountText: `+${formatMoneyCents(p.priceCents, row.tenant_id, 'auto')}(购卡款,预收)`
+      }
+    })(),
     /* B3-1 随单充值三行分行(图 §四 屏3):实收/本单抵扣/充后余额——句子与数字全在后端,
        四处渲染面(签署页/快照SVG/商家结算页/单据预览)只贴现成行。
        充后余额:已签=签字瞬间冻结数(afterBalanceCents 落列);待签=按现余额投影。 */
@@ -11946,25 +11993,33 @@ async function route(req, res) {
     if (Array.isArray(body.settlements) && body.settlements.length) {
       const tenantId = currentTenantId()
       const payerId = String(body.payerUserId || body.userId || body.cardOwnerUserId || '').trim() || null
-      const sheets = body.settlements.map((sheet) => computeSettlement({
-        ...sheet, tenantId,
-        userId: payerId || sheet.userId, payerUserId: payerId || sheet.payerUserId,
-        bookingId: sheet.bookingId
-      }))
+      /* D60(店主 08-22 抓出:组级预览 868 vs 落库腿 1228 分叉):组级支付分解不再独立重算——
+         **组级=Σ各 sheet 腿**(与 createSettlementGroup 完全同口径:同一循环、同一顺序、同一余额线程),
+         预览承诺的每一分钱就是建单落库、签字兑现的那一分钱。单一事实源=sheet 级引擎。 */
+      let plannedStoredInGroup = 0
+      const sheets = body.settlements.map((sheet) => {
+        const computed = computeSettlement({
+          ...sheet, tenantId,
+          userId: payerId || sheet.userId, payerUserId: payerId || sheet.payerUserId,
+          bookingId: sheet.bookingId,
+          payIntent: sheet.payIntent || body.payIntent,
+          plannedStoredCents: plannedStoredInGroup
+        })
+        plannedStoredInGroup += (computed.payment && computed.payment.sharedStoredUsedCents) || 0
+        return computed
+      })
       const sum = (k) => sheets.reduce((n, x) => n + (x[k] || 0), 0)
+      const paySum = (k) => sheets.reduce((n, x) => n + ((x.payment && x.payment[k]) || 0), 0)
       const totalCents = sum('totalCents')
-      /* B②:次卡覆盖的部分不进组级现金/储值分解(B2-9)——不减的话组级应收会把折算价再收一遍现金。
-         per-sheet 腿本来就对,这里只是组级加总同口径。 */
       const timecardCoverCents = sheets.reduce((n, x) => n + ((x.timecard && x.timecard.coverCents) || 0), 0)
-      // 裁②:组级同刀——开关关时 Σ购卡额摘出储值可抵范围
-      const purchaseCashOnlyCents = sheets.reduce((n, x) => n + (x.purchaseCashOnlyCents || 0), 0)
-      /* B3-1 组级同刀:Σ随单充值实收摘出储值可抵(充值不能拿储值付),Σ(充+赠)计入可抵范围 */
       const rechargeCents = sheets.reduce((n, x) => n + (x.rechargeCents || 0), 0)
-      const pendingRechargeCents = sheets.reduce((n, x) => n + ((x.payment && x.payment.pendingRechargeCents) || 0), 0)
-      const excludeNote = purchaseCashOnlyCents && rechargeCents
-        ? '到店支付(含购卡与充值实收:不可用储值付)'
-        : (rechargeCents ? '到店支付(含本次充值实收:充值不可用储值付)' : '到店支付(含购卡:本店未开储值购卡)')
-      const pay = buildPaymentLegs({ tenantId, payerId, totalCents: totalCents - timecardCoverCents, payIntent: body.payIntent, storedExcludeCents: purchaseCashOnlyCents + rechargeCents, pendingRechargeCents, excludeNote })
+      const pendingRechargeCents = paySum('pendingRechargeCents')
+      const storedUsedCents = paySum('storedUsedCents')
+      const offlineDueCents = paySum('offlineCents')
+      // 起始共享余额(未被组内任何单占用前)——payer 的真实现余额
+      const balance0 = payerId ? storedValueBalanceDetail(payerId, tenantId) : { totalCents: 0, legacyCents: 0, normalCents: 0 }
+      // D60 自证:现场购卡组级合计(「购卡款不许隐身进应收」——前端显式行数据源)
+      const purchaseSum = sheets.reduce((n, x) => n + (x.purchaseCents || 0), 0)
       return json(res, 200, {
         sheets,
         group: {
@@ -11976,18 +12031,21 @@ async function route(req, res) {
           depositReceiptCents: sum('depositReceiptCents'),
           totalCents,
           payment: {
-            plan: pay.plan,
-            legs: pay.legs,
-            balanceAvailableCents: pay.balance.totalCents,
-            storedUsedCents: pay.storedUsedCents,
-            offlineDueCents: pay.remaining,
+            plan: ['balance_plus_offline', 'recharge_then_balance', 'offline_full'].includes(body.payIntent) ? body.payIntent : 'balance_plus_offline',
+            // 组级腿=各 sheet 腿原样拼接(带组内序号),不再另算一套
+            legs: sheets.flatMap((x, i) => (x.payment.legs || []).map((l) => ({ ...l, sheetIndex: i }))),
+            balanceAvailableCents: balance0.totalCents,
+            storedUsedCents,
+            offlineDueCents,
             // B②:组级次卡抵扣合计(前端自证行「次卡抵扣 −X」;0=无核销组,前端不渲染)
             timecardCoverCents,
             // B3-1:组级随单充值三行分行数字(实收/充后余额);0=无充值,前端不渲染
             rechargeCents,
             pendingRechargeCents,
-            afterRechargeBalanceCents: rechargeCents ? pay.balance.totalCents + pendingRechargeCents - pay.storedUsedCents : null,
-            shortfallCents: Math.max(0, (totalCents - timecardCoverCents) - pay.balance.totalCents - pendingRechargeCents)
+            // D60:购卡款组级合计(显式行「现场购卡 +X(购卡款,预收)」数据源)
+            purchaseCents: purchaseSum,
+            afterRechargeBalanceCents: rechargeCents ? balance0.totalCents + pendingRechargeCents - storedUsedCents : null,
+            shortfallCents: Math.max(0, (totalCents - timecardCoverCents) - balance0.totalCents - pendingRechargeCents)
           }
         }
       })
@@ -15852,6 +15910,11 @@ async function route(req, res) {
       const row = db.prepare("SELECT COALESCE(SUM(amount_cents), 0) s FROM stored_value_transactions WHERE tenant_id = ? AND type = 'consume' AND note = ?").get(one.tenant_id, `服务单 ${c} 结算扣卡`)
       storedCents += Math.abs(row.s || 0)
     }
+    /* D60(店主 08-22 抓出「P1RA 弹窗 1408」):这张卡是**整组**单据卡,「到店应收」是组合计——
+       但界面从单行点进来时没说这是组卡,388 的单看到 1408 无从自证。修:①组卡明示(共 N 张+逐张状态行);
+       ②购卡款/充值实收显式行(不许隐身进应收);③应收行改名「组合计应收」并逐张可对。 */
+    const purchaseSumCents = rows.reduce((n, r) => { try { return n + ((JSON.parse(r.purchase_json || 'null') || {}).priceCents || 0) } catch { return n } }, 0)
+    const rechargeSumCents = rows.reduce((n, r) => { try { return n + ((JSON.parse(r.recharge_json || 'null') || {}).amountCents || 0) } catch { return n } }, 0)
     return json(res, 200, {
       card: {
         settlementId: one.id,
@@ -15859,6 +15922,12 @@ async function route(req, res) {
         codes,
         statusKey: allSigned ? 'signed' : 'pending',
         statusText: allSigned ? '已签署' : '已结算 · 待签',
+        // 组卡自证:共几张+逐张(单号/金额/签署态)——「到店应收」是这几张的合计,不是点进来那一张的
+        groupNote: rows.length > 1 ? `本卡为整组单据(共 ${rows.length} 张)` : '',
+        sheetRows: rows.length > 1 ? rows.map((r) => ({
+          code: r.code, totalCents: r.total_cents,
+          statusText: r.status === 'signed' || r.status === 'amended' ? '已签' : '待签'
+        })) : [],
         customerName: (user && user.display_name) || '顾客',
         createdAt: stamp(one.created_at),
         groups,
@@ -15869,7 +15938,11 @@ async function route(req, res) {
           couponDiscountCents: sum('coupon_discount_cents'),
           depositDeductCents: sum('deposit_deduct_cents'),
           storedDeductCents: storedCents,
-          dueCents: sum('total_cents') - storedCents
+          // D60 自证行:购卡款/充值实收显式(0=不渲染);应收=服务小计−定金−券+购卡+充值−已烧储值 可逐项对
+          purchaseCents: purchaseSumCents,
+          rechargeCents: rechargeSumCents,
+          dueCents: sum('total_cents') - storedCents,
+          dueLabel: rows.length > 1 ? `组合计应收(${rows.length} 张)` : '到店应收'
         },
         signature: allSigned ? { name: (user && user.display_name) || '', signedAt: stamp(rows[0].signed_at), hasImage: rows.some((r) => r.snapshot_url || r.snapshot_inline || r.signature_data) } : null
       }
