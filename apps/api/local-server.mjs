@@ -8283,12 +8283,13 @@ function evaluateCouponGrant(grant, ctx) {
     return { ...base, reason: `不可用:仅适用${base.scopeText}` }
   }
   const discount = Math.max(0, Math.min(couponRawDiscountCents(grant, ctx.subtotalCents), Math.max(0, ctx.maxDeductCents)))
-  if (discount <= 0) return { ...base, reason: '不可用:本单已无可抵扣金额' }
+  // 拍板(店主 08-21 D55/D56 批):次卡=独立消费不叠优惠——纯次卡单可抵基数为 0 时出专句,不让店员猜
+  if (discount <= 0) return { ...base, reason: ctx.noEligibleReason || '不可用:本单已无可抵扣金额' }
   return { ...base, usable: true, discountCents: discount, discountText: formatMoneyCents(discount, ctx.tenantId, 'auto') }
 }
 
 // 卡主券包里的全部券(可用在上、不可用在下并带原因),连同选中那张的抵扣额
-function couponOptionsFor({ tenantId, userId, subtotalCents, maxDeductCents, categoryIds, selectedGrantId = '', excludeSettlementId = null }) {
+function couponOptionsFor({ tenantId, userId, subtotalCents, maxDeductCents, categoryIds, selectedGrantId = '', excludeSettlementId = null, noEligibleReason = '' }) {
   const out = { options: [], selectedGrantId: '', selected: null, discountCents: 0, usableCount: 0 }
   if (!userId) return out
   const now = iso(new Date())
@@ -8307,7 +8308,7 @@ function couponOptionsFor({ tenantId, userId, subtotalCents, maxDeductCents, cat
   for (const h of db.prepare('SELECT id, code, coupon_grant_id FROM settlements WHERE tenant_id = ? AND coupon_grant_id IS NOT NULL').all(tenantId)) {
     if (h.id !== excludeSettlementId) heldElsewhere[h.coupon_grant_id] = h.code
   }
-  const ctx = { tenantId, subtotalCents, maxDeductCents, categoryIds, categoryNames, now }
+  const ctx = { tenantId, subtotalCents, maxDeductCents, categoryIds, categoryNames, now, noEligibleReason }
   const evaluated = rows.map((r) => {
     const one = evaluateCouponGrant(r, ctx)
     if (one.usable && heldElsewhere[r.id]) {
@@ -8374,24 +8375,38 @@ function assertCouponFree(grantId, tenantId, excludeSettlementId = null) {
   if (held) throw apiError(400, 'COUPON_ALREADY_USED', `这张券已经挂在服务单 ${held.code} 上了(一单一张)。`)
 }
 
-// 某张单涉及的服务大类,用来判断券的适用范围
+// 某张单涉及的服务大类,用来判断券的适用范围(拍板 08-21:次卡行不进券的类别面)
 function settlementCategoryIds(settlementId, tenantId) {
-  const ids = db.prepare('SELECT service_id FROM settlement_items WHERE tenant_id = ? AND settlement_id = ?').all(tenantId, settlementId)
+  const ids = db.prepare("SELECT service_id FROM settlement_items WHERE tenant_id = ? AND settlement_id = ? AND kind <> 'timecard'").all(tenantId, settlementId)
     .map((i) => i.service_id).filter(Boolean)
   const cats = ids.map((id) => (db.prepare('SELECT category_id FROM services WHERE id = ?').get(id) || {}).category_id).filter(Boolean)
   return [...new Set(cats)]
 }
 
+/* 已建单的券基数(拍板 08-21 次卡不叠优惠):基数/门槛面=小计−次卡行;
+   computeSettlement/setSettlementCoupon/settlementCouponOptions 三处同一口径(读方+写方同刀,D54 教训)。 */
+function settlementCouponBase(row) {
+  const tcCents = db.prepare("SELECT COALESCE(SUM(amount_cents),0) AS n FROM settlement_items WHERE tenant_id = ? AND settlement_id = ? AND kind = 'timecard'").get(row.tenant_id, row.id).n
+  const eligible = Math.max(0, row.subtotal_cents - tcCents)
+  return {
+    eligibleCents: eligible,
+    maxDeductCents: Math.max(0, eligible - row.deposit_deduct_cents),
+    noEligibleReason: tcCents > 0 ? '不可用:次卡为独立消费,不与优惠叠加' : ''
+  }
+}
+
 // 待签单的券包(店员代选面板 / 顾客签署页选券面板共用同一份数据)
 function settlementCouponOptions(row) {
+  const base = settlementCouponBase(row)
   return couponOptionsFor({
     tenantId: row.tenant_id,
     userId: row.user_id,
-    subtotalCents: row.subtotal_cents,
-    maxDeductCents: Math.max(0, row.subtotal_cents - row.deposit_deduct_cents),
+    subtotalCents: base.eligibleCents,
+    maxDeductCents: base.maxDeductCents,
     categoryIds: settlementCategoryIds(row.id, row.tenant_id),
     selectedGrantId: row.coupon_grant_id || '',
-    excludeSettlementId: row.id
+    excludeSettlementId: row.id,
+    noEligibleReason: base.noEligibleReason
   })
 }
 
@@ -8403,14 +8418,17 @@ function setSettlementCoupon(settlementId, grantId, { by = 'customer', actor = '
   if (row.status === 'signed') throw apiError(400, 'ALREADY_SIGNED', '这张单已经签署,券不能再改;要更正请走金额更正链。')
   const tenantId = row.tenant_id
   const wanted = String(grantId || '')
+  // 拍板 08-21 次卡不叠优惠:券基数与面板同一份实现(settlementCouponBase)——写方读方不分叉
+  const cpBase = settlementCouponBase(row)
   const opts = couponOptionsFor({
     tenantId,
     userId: row.user_id,
-    subtotalCents: row.subtotal_cents,
-    maxDeductCents: Math.max(0, row.subtotal_cents - row.deposit_deduct_cents),
+    subtotalCents: cpBase.eligibleCents,
+    maxDeductCents: cpBase.maxDeductCents,
     categoryIds: settlementCategoryIds(row.id, tenantId),
     selectedGrantId: wanted,
-    excludeSettlementId: row.id
+    excludeSettlementId: row.id,
+    noEligibleReason: cpBase.noEligibleReason
   })
   if (wanted) {
     if (!opts.selectedGrantId) {
@@ -8631,8 +8649,10 @@ function computeSettlement(input = {}) {
   }
 
   const rulesApplied = []
+  /* 拍板(店主 08-21):次卡=独立消费——整单规则(甲片重复利用/足部加收)不作用于次卡组
+     (核销与现场购卡同);前端已不发,这里是第二道闸(直打接口也挡)。 */
   // 甲片重利用:固定价,不分档 → 原价与档价相同
-  if ((input.applyTipReuse || input.tipReuse) && rules.tip_reuse.isActive) {
+  if ((input.applyTipReuse || input.tipReuse) && rules.tip_reuse.isActive && !tcCard && !tcPurchase) {
     const amount = Math.max(0, Math.round(Number(rules.tip_reuse.config.amountCents ?? 10000)))
     no += 1
     lines.push({
@@ -8645,8 +8665,8 @@ function computeSettlement(input = {}) {
 
   let listTotalCents = lines.reduce((sum, l) => sum + l.listAmountCents, 0)
   let subtotalCents = lines.reduce((sum, l) => sum + l.amountCents, 0)
-  // 足部加收:整单加价,两边同时加(店主 2026-08-08 确认口径)
-  if (input.applyFootSurcharge && rules.foot_surcharge.isActive) {
+  // 足部加收:整单加价,两边同时加(店主 2026-08-08 确认口径);次卡组不作用(拍板 08-21)
+  if (input.applyFootSurcharge && rules.foot_surcharge.isActive && !tcCard && !tcPurchase) {
     const amount = Math.max(0, Math.round(Number(rules.foot_surcharge.config.amountCents ?? 10000)))
     listTotalCents += amount
     subtotalCents += amount
@@ -8674,17 +8694,23 @@ function computeSettlement(input = {}) {
   }
 
   /* 券抵扣(2026-08-09):用的是**卡主**券包里的券(规则①,代付单同理),一单限一张(规则②)。
-     券只能抵到「应收归零」为止,不会把单子抵成负数。 */
-  const categoryIds = [...new Set(lines.map((l) => l.serviceId).filter(Boolean)
+     券只能抵到「应收归零」为止,不会把单子抵成负数。
+     拍板(店主 08-21):**次卡=独立消费,不叠加任何优惠**——券的基数/门槛/类别面一律排除
+     kind=timecard 行(核销折算与购卡当场核销都算):纯次卡单可抵=0(专句说明),
+     混组单券挂主项目组天然不吃次卡组(per-sheet 券本就分组)。 */
+  const tcLineCents = lines.filter((l) => l.kind === 'timecard').reduce((n, l) => n + l.amountCents, 0)
+  const couponEligibleCents = Math.max(0, subtotalCents - tcLineCents)
+  const categoryIds = [...new Set(lines.filter((l) => l.kind !== 'timecard').map((l) => l.serviceId).filter(Boolean)
     .map((id) => (getSvc(id) || {}).category_id).filter(Boolean))]
-  const couponMaxDeductCents = Math.max(0, subtotalCents - depositDeductCents)
+  const couponMaxDeductCents = Math.max(0, couponEligibleCents - depositDeductCents)
   const coupons = couponOptionsFor({
     tenantId,
     userId: input.userId || input.payerUserId || '',
-    subtotalCents,
+    subtotalCents: couponEligibleCents,
     maxDeductCents: couponMaxDeductCents,
     categoryIds,
-    selectedGrantId: String(input.couponGrantId || '')
+    selectedGrantId: String(input.couponGrantId || ''),
+    noEligibleReason: tcLineCents > 0 ? '不可用:次卡为独立消费,不与优惠叠加' : ''
   })
   // 严格模式(正式开单/顾客改券):选了却用不了就明说,绝不悄悄按无券算然后让顾客签一个不一样的数
   if (input.strictCoupon && input.couponGrantId && !coupons.selectedGrantId) {

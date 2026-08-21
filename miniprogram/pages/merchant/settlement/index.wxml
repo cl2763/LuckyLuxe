@@ -30,10 +30,14 @@
           <text wx:elif="{{groups.length > 1}}" class="hint" data-g="{{gi}}" catchtap="gToggleCollapse">收起 ▾</text>
         </view>
 
-        <view class="sec">价格体系(本组独立) <text class="hint">{{grp.tierChanged ? '已改档，将留痕' : '默认按会员判定'}}</text></view>
-        <view class="chiprow">
-          <view class="chip {{grp.tierKey === it.key ? 'on' : ''}}" wx:for="{{tiers}}" wx:for-item="it" wx:key="key" data-g="{{gi}}" data-k="{{it.key}}" bindtap="gPickTier">{{it.label}}</view>
-        </view>
+        <!-- 拍板(店主 08-21):次卡=独立消费不叠优惠——次卡组隐藏价格体系整排(折算价/套餐价与档位无关) -->
+        <block wx:if="{{grp.catId !== '__timecard'}}">
+          <view class="sec">价格体系(本组独立) <text class="hint">{{grp.tierChanged ? '已改档，将留痕' : '默认按会员判定'}}</text></view>
+          <view class="chiprow">
+            <view class="chip {{grp.tierKey === it.key ? 'on' : ''}}" wx:for="{{tiers}}" wx:for-item="it" wx:key="key" data-g="{{gi}}" data-k="{{it.key}}" bindtap="gPickTier">{{it.label}}</view>
+          </view>
+        </block>
+        <view wx:else class="sec">次卡为独立消费 <text class="hint">按折算价/套餐价,不叠加会员价与优惠</text></view>
 
         <view class="sec">服务项目(单选自动替换)</view>
         <scroll-view class="cattabs" scroll-x>
@@ -177,12 +181,13 @@
     <!-- 支付构成 · 菜单式(合同规则③):技师勾"路",金额全部后端重算回显 -->
     <view class="card" wx:if="{{view}}">
       <view class="ch">支付构成 · 菜单式 <text class="hint">勾选支付方式,金额后端算</text></view>
+      <!-- D55(店主终验抓出):勾选态与金额一致律——金额为 0 的支付腿不得处于勾选态(✓ 与高亮同条件) -->
       <view class="paym {{payMenu.useBalance && view.hasStored ? 'on' : ''}}" wx:if="{{view.hasBalance}}" bindtap="payToggleBalance">
-        <view class="ck {{payMenu.useBalance ? 'on' : ''}}">{{payMenu.useBalance ? '✓' : ''}}</view>
-        <view class="pmain"><b>储值卡抵扣</b><text class="psmall">可用余额 {{view.balance}}{{payMenu.useBalance && view.hasStored ? ' → 本单抵 ' + view.storedDeduct : ''}}</text></view>
+        <view class="ck {{payMenu.useBalance && view.hasStored ? 'on' : ''}}">{{payMenu.useBalance && view.hasStored ? '✓' : ''}}</view>
+        <view class="pmain"><b>储值卡抵扣</b><text class="psmall">可用余额 {{view.balance}}{{payMenu.useBalance && view.hasStored ? ' → 本单抵 ' + view.storedDeduct : (payMenu.useBalance ? ' · 本单无可抵金额' : '')}}</text></view>
       </view>
       <view class="paym {{depositApplied && view.hasDeposit ? 'on' : ''}}" wx:if="{{view.hasDepositReceipt && depositDeductible}}" bindtap="payToggleDeposit">
-        <view class="ck {{depositApplied ? 'on' : ''}}">{{depositApplied ? '✓' : ''}}</view>
+        <view class="ck {{depositApplied && view.hasDeposit ? 'on' : ''}}">{{depositApplied && view.hasDeposit ? '✓' : ''}}</view>
         <view class="pmain"><b>已收定金抵扣</b><text class="psmall">−{{view.depositDeduct}}(来自收取记录)</text></view>
       </view>
       <view class="paym {{view.hasOffline ? 'on' : ''}}" bindtap="payToggleOffline">

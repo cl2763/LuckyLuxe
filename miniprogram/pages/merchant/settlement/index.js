@@ -554,7 +554,9 @@ Page({
       if (!Number.isFinite(payCents) || payCents <= 0) { wx.showToast({ title: '金额不对', icon: 'none' }); return }
       draft = { packageId: '', amountCents: payCents, label: '手输金额(无赠送)' }
     }
-    this.setData({ rvDraft: draft, rvPanel: null, payMenu: { useBalance: true, recharge: true } })
+    /* D55(店主终验抓出):挂充值**不再联动勾储值**——菜单式=每条路完全自由勾/取消,
+       储值意愿保持店员自己勾的原样(0 额勾选态的病根之一就是这里强制 useBalance:true)。 */
+    this.setData({ rvDraft: draft, rvPanel: null, payMenu: { useBalance: this.data.payMenu.useBalance, recharge: true } })
     this.refresh()
   },
   rvRemove() {
@@ -590,10 +592,13 @@ Page({
         const it = all.find((x) => x.id === id) || {}
         items.push(it.unit === 'per_finger' ? { serviceId: id, fingers: g.addonIds[id] } : { serviceId: id, qty: g.addonIds[id] })
       }
+      /* 拍板(店主 08-21):次卡=独立消费不叠优惠——次卡组价格档固定 list(会员价/档位与折算价无关),
+         整单规则(足部/甲片)不发给次卡组;引擎侧另有第二道闸。 */
+      const isTcGroup = Boolean(g.timecardId || g.purchasePackageId)
       return {
         bookingId: i === 0 ? (this.data.bookingId || undefined) : undefined,
-        tierKey: g.tierKey,
-        tierChangedFrom: g.tierChanged ? g.tierDefault : undefined,
+        tierKey: isTcGroup ? 'list' : g.tierKey,
+        tierChangedFrom: !isTcGroup && g.tierChanged ? g.tierDefault : undefined,
         items,
         timecardId: g.timecardId || undefined,
         purchasePackageId: g.purchasePackageId || undefined,
@@ -608,8 +613,8 @@ Page({
         rechargeAmountCents: i === 0 && this.data.rvDraft && !this.data.rvDraft.packageId ? this.data.rvDraft.amountCents : undefined,
         depositApplied: i === 0 ? this.data.depositApplied : false,
         couponGrantId: i === 0 ? (this.data.couponGrantId || undefined) : undefined,
-        applyFootSurcharge: i === 0 ? this.data.applyFootSurcharge : false,
-        applyTipReuse: i === 0 ? this.data.applyTipReuse : false
+        applyFootSurcharge: i === 0 && !isTcGroup ? this.data.applyFootSurcharge : false,
+        applyTipReuse: i === 0 && !isTcGroup ? this.data.applyTipReuse : false
       }
     })
   },
@@ -708,10 +713,14 @@ Page({
           : (nextGrant ? this.data.couponPicked : null),
         couponGrantId: nextGrant
       })
-      /* 🔴 D22 护栏(分组版):每组预览行必须与该组勾选一一对应,多/少都当场报警。 */
+      /* 🔴 D22 护栏(分组版):每组预览行必须与该组勾选一一对应,多/少都当场报警。
+         D55 复盘:护栏机制没错、类定义漏了 B② 新行种——次卡核销/购卡行的「勾选面」在
+         timecardServiceId(不在 items),原 wanted 没算它 → 核销组必误报。补上=只认真的不一致。 */
       const bodySheets = this.groupSheets()
       for (let i = 0; i < sheets.length; i += 1) {
-        const wanted = (bodySheets[i].items || []).map((x) => x.serviceId).sort()
+        const wanted = (bodySheets[i].items || []).map((x) => x.serviceId)
+          .concat(bodySheets[i].timecardServiceId ? [bodySheets[i].timecardServiceId] : [])
+          .sort()
         const got = (sheets[i].lines || []).filter((l) => l.serviceId && l.kind !== 'rule').map((l) => l.serviceId).sort()
         if (JSON.stringify(wanted) !== JSON.stringify(got)) {
           wx.showToast({ title: `组${i + 1} 金额行与勾选不一致,请截图报给店主`, icon: 'none', duration: 4000 })
@@ -856,11 +865,17 @@ Page({
   async submit() {
     if (this.data.submitting) return
     if (!this.data.userId) { wx.showToast({ title: '这单没有绑定顾客,无法结算', icon: 'none' }); return }
-    // 每组:必须有内容(主项或自选)+ 1–2 位技师
+    /* 每组:必须有内容 + 1–2 位技师。
+       D56(店主终验抓出):次卡组的「内容」在 timecardId/purchasePackageId+组内项目,
+       原校验只认 mainId/addon/自选 → 内容齐全的核销组被「还没选内容」拦死,推送打不出去。 */
     for (let i = 0; i < this.data.groups.length; i += 1) {
       const g = this.data.groups[i]
-      if (!g.mainId && !Object.keys(g.addonIds).length && !g.customItems.length) {
+      const hasTc = Boolean(g.timecardId || g.purchasePackageId)
+      if (!g.mainId && !Object.keys(g.addonIds).length && !g.customItems.length && !hasTc) {
         wx.showToast({ title: `项目${i + 1} 还没选内容`, icon: 'none' }); return
+      }
+      if (hasTc && !g.timecardServiceId) {
+        wx.showToast({ title: `项目${i + 1} 请选本次核销项目(卡关联组内)`, icon: 'none' }); return
       }
       if (!g.selectedTechs.length) { wx.showToast({ title: `项目${i + 1} 先勾本组技师`, icon: 'none' }); return }
     }

@@ -1275,6 +1275,42 @@ const main = async () => {
                 try { dbx.prepare("UPDATE stored_value_transactions SET customer_confirmed_at = '2026-01-01T00:00:00Z' WHERE id = ?").run(pend.id) } catch (e) { tamper2 = /append-only/.test(String(e.message || '')) }
                 check('㋁ 确认时间戳不可二次改(NULL→值单向一次)', tamper2)
               }
+
+              /* ===== ㋂ 拍板「次卡=独立消费不叠优惠」(店主 08-21 D55/D56 批)+引擎双闸 ===== */
+              {
+                mk('tc_pb', 3, 0, 54000, null)
+                dbx.prepare("UPDATE member_timecards SET project_group = NULL WHERE id = 'tc_pb'").run()
+                const cg2 = (await request('/admin/coupon-grants/custom', { method: 'POST', body: JSON.stringify({ userId: uid, amountCents: 3000, reason: '㋂ 次卡不叠优惠夹具券' }) }, shop.token)).data.granted
+                const tcSheet = (extra) => ({ payIntent: 'offline_full', timecardId: 'tc_pb', timecardServiceId: shop.serviceId, items: [], technicians: tech, servedPersonName: '', ...extra })
+                // ① 核销单挂券:券全不可用+专句;折扣 0、折算价原样
+                const pv1 = (await request('/admin/settlements/preview', { method: 'POST', body: JSON.stringify({ userId: uid, payIntent: 'offline_full', settlements: [tcSheet({ couponGrantId: cg2.id })] }) }, shop.token)).data
+                const opt1 = (pv1.sheets[0].couponOptions || []).find((o) => o.grantId === cg2.id)
+                check('㋂ 核销单挂券=不可用+专句「次卡为独立消费,不与优惠叠加」', opt1 && opt1.usable === false && /次卡为独立消费/.test(opt1.reason), JSON.stringify(opt1))
+                check('㋂ 核销单券折扣=0,折算价不动(subtotal=total=18000)', pv1.sheets[0].couponDiscountCents === 0 && pv1.sheets[0].subtotalCents === 18000 && pv1.sheets[0].totalCents === 18000, JSON.stringify({ c: pv1.sheets[0].couponDiscountCents, s: pv1.sheets[0].subtotalCents, t: pv1.sheets[0].totalCents }))
+                // ② strict(正式建单)带券=400 明说
+                const sX = await request('/admin/settlements', { method: 'POST', body: JSON.stringify({ userId: uid, settlements: [tcSheet({ couponGrantId: cg2.id })] }) }, shop.token)
+                check('㋂ 建单带券=400 COUPON_UNUSABLE(不静默按无券建)', sX.status === 400 && sX.data.error.code === 'COUPON_UNUSABLE', JSON.stringify(sX.data).slice(0, 120))
+                // ③ 现场购卡单挂券:同专句(购卡行也是 kind=timecard)
+                const pv3 = (await request('/admin/settlements/preview', { method: 'POST', body: JSON.stringify({ userId: uid, payIntent: 'offline_full', settlements: [{ payIntent: 'offline_full', purchasePackageId: pk.id, timecardServiceId: shop.serviceId, items: [], technicians: tech, servedPersonName: '', couponGrantId: cg2.id }] }) }, shop.token)).data
+                const opt3 = (pv3.sheets[0].couponOptions || []).find((o) => o.grantId === cg2.id)
+                check('㋂ 购卡单挂券=不可用+专句', opt3 && opt3.usable === false && /次卡为独立消费/.test(opt3.reason), JSON.stringify(opt3))
+                // ④ 会员价不作用于次卡:tierKey=member 折算价分毫不动
+                const pv4 = (await request('/admin/settlements/preview', { method: 'POST', body: JSON.stringify({ userId: uid, payIntent: 'offline_full', settlements: [tcSheet({ tierKey: 'member' })] }) }, shop.token)).data
+                check('㋂ tier=member 折算价不动(18000;次卡与档位无关)', pv4.sheets[0].subtotalCents === 18000 && pv4.sheets[0].totalCents === 18000, JSON.stringify({ s: pv4.sheets[0].subtotalCents, t: pv4.sheets[0].totalCents }))
+                // ⑤ 整单规则直打引擎(前端已不发=第一道闸;这里验第二道闸):足部+甲片对次卡组零作用行
+                const pv5 = (await request('/admin/settlements/preview', { method: 'POST', body: JSON.stringify({ userId: uid, payIntent: 'offline_full', settlements: [tcSheet({ applyFootSurcharge: true, applyTipReuse: true })] }) }, shop.token)).data
+                check('㋂ 整单规则不作用于次卡组(无 rule 行,total 仍 18000)', !(pv5.sheets[0].lines || []).some((l) => l.kind === 'rule') && pv5.sheets[0].totalCents === 18000, JSON.stringify((pv5.sheets[0].lines || []).map((l) => l.kind)))
+                // ⑥ 混组:券挂主项目组=全额可用,次卡组零沾(per-sheet 隔离)
+                const pv6 = (await request('/admin/settlements/preview', { method: 'POST', body: JSON.stringify({ userId: uid, payIntent: 'offline_full', settlements: [{ payIntent: 'offline_full', items: [{ serviceId: shop.serviceId, qty: 1 }], technicians: tech, servedPersonName: '', couponGrantId: cg2.id }, tcSheet({})] }) }, shop.token)).data
+                check('㋂ 混组:券吃主项目组 3000,次卡组券=0', pv6.sheets[0].couponDiscountCents === 3000 && pv6.sheets[1].couponDiscountCents === 0 && pv6.group.couponDiscountCents === 3000, JSON.stringify({ a: pv6.sheets[0].couponDiscountCents, b: pv6.sheets[1].couponDiscountCents }))
+                // ⑦ 改券链(写方同口径,D54 教训):核销单(无券建成)上代选该券=400
+                const sY = await request('/admin/settlements', { method: 'POST', body: JSON.stringify({ userId: uid, settlements: [tcSheet({})] }) }, shop.token)
+                const shY = sY.data.settlements[0]
+                const cc7 = await request(`/admin/settlements/${shY.id}/coupon`, { method: 'POST', body: JSON.stringify({ grantId: cg2.id }) }, shop.token)
+                check('㋂ 改券链同口径:核销单代选券=400(写方读方不分叉)', cc7.status === 400 && /次卡为独立消费|用不了/.test((cc7.data.error || {}).message || ''), JSON.stringify(cc7.data).slice(0, 120))
+                await request(`/admin/settlements/${shY.id}/void`, { method: 'POST', body: JSON.stringify({ reason: '㋂ 清场' }) }, shop.token)
+                dbx.prepare("DELETE FROM member_timecards WHERE id = 'tc_pb'").run()
+              }
             }
           }
           dbx.prepare("DELETE FROM member_timecards WHERE id IN ('tc_race','tc_grp','tc_dual')").run()
@@ -1348,6 +1384,12 @@ const main = async () => {
       const csvWxml = readFileSync(join(ROOT42, 'miniprogram/pages/stored-value/index.wxml'), 'utf8')
       const mfinWxml = readFileSync(join(ROOT42, 'miniprogram/pages/merchant/finance/index.wxml'), 'utf8')
       check('㋁ 顾客端回执卡+确认钮 wiring 在场', csvJs.includes('confirmRecharge') && csvJs.includes('pendingConfirm') && csvWxml.includes('确认到账') && csvWxml.includes('到账回执 · 待确认'))
+      // ㋂ D55/D56 wiring:联动勾选已删/0 额腿不勾/次卡组校验认内容/D22 护栏认核销行/价格体系整排隐藏
+      check('㋂ D55 挂充值不再联动勾储值(强制 useBalance:true 已删)', !settleJs.includes('payMenu: { useBalance: true, recharge: true }') && settleJs.includes('useBalance: this.data.payMenu.useBalance, recharge: true'))
+      check('㋂ D55 0 额支付腿不得勾选态(储值/定金 ✓ 与金额同条件)', settleWxml.includes("payMenu.useBalance && view.hasStored ? '✓'") && settleWxml.includes("depositApplied && view.hasDeposit ? '✓'"))
+      check('㋂ D56 推送校验认次卡组内容(timecardId/purchasePackageId+组内项目)', settleJs.includes('const hasTc = Boolean(g.timecardId || g.purchasePackageId)') && settleJs.includes('请选本次核销项目'))
+      check('㋂ D22 护栏类定义补核销行(wanted 含 timecardServiceId)', settleJs.includes('.concat(bodySheets[i].timecardServiceId'))
+      check('㋂ 拍板 UI:次卡组隐藏价格体系整排+独立消费句;整单规则/档位不发次卡组', settleWxml.includes("grp.catId !== '__timecard'") && settleWxml.includes('次卡为独立消费') && settleJs.includes("tierKey: isTcGroup ? 'list' : g.tierKey"))
       check('㋁ 商家流水「顾客未确认」标注在场', mfinWxml.includes('顾客未确认') && readFileSync(join(ROOT42, 'miniprogram/utils/api.js'), 'utf8').includes('confirmStoredRecharge'))
       // A5 网页端:充值档位块已删+指路句在
       check('㋁ A5 网页门店设置充值档位块已删(msAddTier 零残留)+指路句在', !adminJs.includes('msAddTier') && adminJs.includes('会员与营销 → 套餐'))
