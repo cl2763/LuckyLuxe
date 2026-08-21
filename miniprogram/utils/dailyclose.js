@@ -58,7 +58,8 @@ const dailyCloseMixin = {
              点行进结算页出码重推;确认钮不被未签单阻塞(未签单只影响它自己)。 */
           unsigned: (dc.unsignedList || []).map((u) => ({
             id: u.settlementId, code: u.code,
-            label: `${u.timeText} ${u.customerName} · ${u.code} · ${m(u.totalCents)}`
+            // D65-b:金额=头条「本单到店支付」(cashDueCents),价值总额不再裸出
+            label: `${u.timeText} ${u.customerName} · ${u.code} · 到店支付 ${m(u.cashDueCents)}`
           })),
           /* D2:跨零点自解释 —— 台面「本日休息」空态要用同一句话(两处自洽);
              R1:已确认但账目对不上时,这天要自己说出来,不许只显示「已确认」。 */

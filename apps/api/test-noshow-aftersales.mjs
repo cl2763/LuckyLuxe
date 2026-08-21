@@ -1327,10 +1327,10 @@ const main = async () => {
                 // D58:未签单不阻塞确认(blockers 无 UNSIGNED)+unsignedList 独立下发(可点行数据)
                 const dc1 = (await request('/admin/daily-close', {}, shop.token)).data.dailyClose
                 check('㋃ D58 未签单不再是 blocker(确认按单独立)', (dc1.blockers || []).every((b) => b.code !== 'UNSIGNED'), JSON.stringify((dc1.blockers || []).map((b) => b.code)))
-                check('㋃ D57 unsignedList 独立下发(3 张全列:顾客/时间/单号/金额齐)', (dc1.unsignedList || []).length >= 3 && (dc1.unsignedList || []).every((u) => u.settlementId && u.code && u.timeText && u.totalCents > 0 && u.customerName), JSON.stringify(dc1.unsignedList))
+                check('㋃ D57 unsignedList 独立下发(3 张全列:顾客/时间/单号/金额齐)', (dc1.unsignedList || []).length >= 3 && (dc1.unsignedList || []).every((u) => u.settlementId && u.code && u.timeText && u.cashDueCents > 0 && u.customerName), JSON.stringify(dc1.unsignedList))
                 // D57 顾客侧:全部未签单(不止最新一张);越权=只见自己的(uid 那张不可见)
                 const ps1 = (await request('/my/pending-sign', {}, ctok2, { 'x-tenant-id': shop.tenantId })).data.pendingSign
-                check('㋃ D57 顾客侧列全部未签单(2 张,不止最新)+签署页直达 code', ps1.length === 2 && ps1.every((p) => p.code && p.totalText && p.at), JSON.stringify(ps1))
+                check('㋃ D57 顾客侧列全部未签单(2 张,不止最新)+签署页直达 code', ps1.length === 2 && ps1.every((p) => p.code && p.cashDueText && p.at), JSON.stringify(ps1))
                 check('㋃ 越权:别人的未签单不可见(uid 那张不在列)', !ps1.some((p) => p.code === shU3.code), JSON.stringify(ps1.map((p) => p.code)))
                 // 签一张→剩 1;撤一张→剩 0(status 驱动,零状态维护)
                 const sg1 = await request(`/settlements/${encodeURIComponent(shU1.code)}/sign`, { method: 'POST', body: JSON.stringify({ signature: '㋃ 待签再入口验签', disclaimerAccepted: true }) }, null, { 'x-tenant-id': shop.tenantId })
@@ -1498,7 +1498,13 @@ const main = async () => {
                             const legsX = sc.settlements.flatMap((x) => x.payments)
                             off = legsX.filter((p) => p.leg === 'offline').reduce((n, p) => n + p.amountCents, 0)
                             st = legsX.filter((p) => p.leg === 'stored_value' || p.leg === 'migrate_stored').reduce((n, p) => n + p.amountCents, 0)
-                            cardDue = ((await request(`/admin/settlements/${sc.settlements[0].id}/preview-card`, {}, shop.token)).data.card || { totals: {} }).totals.dueCents
+                            const pcCard = (await request(`/admin/settlements/${sc.settlements[0].id}/preview-card`, {}, shop.token)).data.card || { totals: {} }
+                            cardDue = pcCard.totals.dueCents
+                            /* D65-b:组卡逐张行=各张头条,Σ逐张=组头条(多张组才有 sheetRows) */
+                            if ((pcCard.sheetRows || []).length > 1) {
+                              const rowSum = pcCard.sheetRows.reduce((n, x) => n + (x.cashDueCents || 0), 0)
+                              if (rowSum !== cardDue) { cardDue = -9999 }
+                            }
                             /* D65 头条语义:每张单 flow.cashDueCents=五步⑤该张现金;Σ各张头条=组合计 */
                             heroOk = sc.settlements.every((x) => x.flow && x.flow.cashDueCents === x.payments.filter((p) => p.leg === 'offline').reduce((n, p) => n + p.amountCents, 0))
                               && sc.settlements.reduce((n, x) => n + ((x.flow || {}).cashDueCents || 0), 0) === exp.cash
@@ -1633,6 +1639,8 @@ const main = async () => {
       // ㋆ D64 wiring:payIntent 映射意愿唯一(不勾储值=offline_full,挂充不强制)+储值行显隐含挂充+组卡 cover 行+出码 n/N+预告句
       check('㋆ D64 前端映射意愿唯一+储值行显隐含挂充', settleJs.includes("if (!m.useBalance) return 'offline_full'") && settleWxml.includes('view.hasBalance || view.hasRecharge'))
       check('㋆ D64 组卡 cover 行+出码第 n/N 张+组内预告句(后端句)', spWxml.includes('次卡抵扣(签字扣次)') && settleJs.includes('第 ${s.groupIndex}/${s.groupTotal} 张') && srvD60.includes('组内后续单据将抵'))
+      // ㋇ D65-b wiring:逐张行/未签行/顾客待签卡=头条 cashDue,价值总额不再裸出
+      check('㋇ D65-b 单张金额一律头条化(组卡逐张/日结未签行/顾客待签卡)', spJs.includes('m(s.cashDueCents)') && dcMixin.includes('到店支付 ${m(u.cashDueCents)}') && coWxml.includes('到店支付 {{item.cashDueText}}'))
       // ㋅ D63 wiring:组卡/签署页「余额未用」句+四行自证渲染面
       check('㋅ D63 余额未用句渲染面(组卡+签署页)+四行自证键', spWxml.includes('card.storedUnusedNotice') && signHtml.includes('s.storedUnusedNotice') && srvD60.includes("key: 'before', label: '充值前余额'"))
       check('㋄ D60 结算页:购卡显式行+L3① 行内小注定稿句', settleWxml.includes('购卡款,预收') && settleJs.includes('含本单随签充值 +') && settleWxml.includes('view.rvNote'))

@@ -9926,7 +9926,8 @@ function dailyCloseView(date, tenantId, { lang = 'zh' } = {}) {
       code: r.code,
       timeText: localParts(r.created_at, tenantTimezone(tenantId)).time.slice(0, 5),
       customerName: (db.prepare('SELECT display_name FROM users WHERE id = ?').get(r.user_id) || {}).display_name || '未留姓名',
-      totalCents: (db.prepare('SELECT total_cents FROM settlements WHERE id = ?').get(r.id) || {}).total_cents || 0
+      // D65-b:单张金额=头条「本单到店支付」(offline 腿 Σ),不再下发价值总额裸数字
+      cashDueCents: db.prepare("SELECT COALESCE(SUM(amount_cents),0) AS n FROM settlement_payments WHERE settlement_id = ? AND leg = 'offline'").get(r.id).n
     })),
     technicians,
     /* 裁①(队列 B3-2 验收第2点)+§十-7 v1.6:日结汇总单列区——
@@ -11497,10 +11498,12 @@ async function route(req, res) {
     return json(res, 200, {
       pendingSign: rows.map((r) => {
         const p = localParts(new Date(r.created_at), tz)
+        // D65-b:顾客待签卡金额=头条「本单到店支付」(五步⑤),不再给价值总额裸数字
+        const cashDue = db.prepare("SELECT COALESCE(SUM(amount_cents),0) AS n FROM settlement_payments WHERE settlement_id = ? AND leg = 'offline'").get(r.id).n
         return {
           code: r.code,
-          totalCents: r.total_cents,
-          totalText: formatMoneyCents(r.total_cents, tid, 'auto'),
+          cashDueCents: cashDue,
+          cashDueText: formatMoneyCents(cashDue, tid, 'auto'),
           at: `${p.date.slice(5)} ${p.time.slice(0, 5)}`,
           groupTotal: db.prepare("SELECT COUNT(*) AS n FROM settlements WHERE group_id = ? AND status <> 'voided'").get(r.group_id).n
         }
@@ -16001,8 +16004,11 @@ async function route(req, res) {
         // 组卡自证:共几张+逐张(单号/金额/签署态)——「到店应收」是这几张的合计,不是点进来那一张的
         groupNote: rows.length > 1 ? `本卡为整组单据(共 ${rows.length} 张)` : '',
         storedUnusedNotice,
+        /* D65-b(店主拍板):逐张行金额=该张头条「本单到店支付」(五步⑤现金)——
+           Σ逐张行=组头条,肉眼可加;价值总额不再以裸数字出现。 */
         sheetRows: rows.length > 1 ? rows.map((r) => ({
-          code: r.code, totalCents: r.total_cents,
+          code: r.code,
+          cashDueCents: db.prepare("SELECT COALESCE(SUM(amount_cents),0) AS n FROM settlement_payments WHERE settlement_id = ? AND leg = 'offline'").get(r.id).n,
           statusText: r.status === 'signed' || r.status === 'amended' ? '已签' : '待签'
         })) : [],
         customerName: (user && user.display_name) || '顾客',

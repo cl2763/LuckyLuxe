@@ -11,7 +11,7 @@
     <view class="card pending-sign-card" wx:for="{{pendingSign}}" wx:key="code" bindtap="goSettlementDoc" data-code="{{item.code}}">
       <view class="ps-l">
         <view class="ps-t">服务确认单 {{item.code}}{{item.groupTotal > 1 ? '(共 ' + item.groupTotal + ' 张)' : ''}}</view>
-        <view class="ps-s">{{item.at}} · 合计 {{item.totalText}}</view>
+        <view class="ps-s">{{item.at}} · 到店支付 {{item.cashDueText}}</view>
       </view>
       <view class="ps-btn">去签字 ›</view>
     </view>

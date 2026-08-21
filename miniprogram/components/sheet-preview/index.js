@@ -26,7 +26,8 @@ Component({
                 listText: l.strike ? m(l.listAmountCents) : ''
               }))
             })),
-            sheetRows: (c.sheetRows || []).map((s) => Object.assign({}, s, { totalText: m(s.totalCents) })),
+            // D65-b:逐张行=该张头条「本单到店支付」,Σ逐张=组头条肉眼可加
+            sheetRows: (c.sheetRows || []).map((s) => Object.assign({}, s, { totalText: m(s.cashDueCents) })),
             t: {
               listTotal: m(c.totals.listTotalCents),
               subtotal: m(c.totals.subtotalCents),
