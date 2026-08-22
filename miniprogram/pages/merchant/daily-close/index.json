@@ -1,6 +1,7 @@
 {
   "navigationBarTitleText": "日结",
   "usingComponents": {
-    "sheet-preview": "/components/sheet-preview/index"
+    "sheet-preview": "/components/sheet-preview/index",
+    "snapshot-viewer": "/components/snapshot-viewer/index"
   }
 }

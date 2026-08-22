@@ -148,16 +148,31 @@ const dailyCloseMixin = {
       this.loadClose(this.data.date)
     } catch (err) { wx.showToast({ title: (err && err.message) || '分配失败', icon: 'none' }) }
   },
-  /* 「查看签署单」= 直接出快照本体(店主 2026-08-10 拍板,废掉"去网页后台看"的提示框)。
-     四个入口(今日台面内嵌日结的待分配/待确认行、独立日结页的两行)共用这一个方法,
-     改这一处四处同时生效 —— 闭环纪律:同一件事只有一份实现。 */
-  /* D28 规则②:「查看签署单」换统一预览弹层(旧"新页面+左上角小图"废除)。
-     mixin 是唯一实现点 —— 订单页日结区与日结落地页同时生效;
-     全屏原图入口收进弹层里的「查看签署原图」。 */
-  viewSnapshot(e) {
+  /* D68③(店主 08-23 裁):商家端「查看签署单」= 与顾客端**一模一样**的浮层查看器 ——
+     以前点开只出这一张(拿 code 塞排版弹层),多份组的其余份看不到。
+     现在走 GET /admin/settlements/:key/snapshots(与顾客端 payment.sheets 同一出口),
+     整组逐份全列 + 页码 n/N + 左右箭头 + 滑动,组件=components/snapshot-viewer(全仓一份)。
+     mixin 仍是唯一实现点:订单页日结区与日结落地页四个入口同时生效。 */
+  async viewSnapshot(e) {
     const code = e.currentTarget.dataset.code
     if (!code) { wx.showToast({ title: '这单没有签署快照', icon: 'none' }); return }
-    this.setData({ previewSheet: String(code) })
+    try {
+      const r = await api.adminGet(`/admin/settlements/${encodeURIComponent(code)}/snapshots`)
+      const items = (r.sheets || []).filter((sh) => sh.snapshotUrl)
+        .map((sh) => ({ code: sh.code, label: sh.label, url: `${api.API_BASE}${sh.snapshotUrl}` }))
+      if (!items.length) { wx.showToast({ title: '这单还没有签署快照', icon: 'none' }); return }
+      const start = Math.max(0, items.findIndex((it) => it.code === String(code)))
+      this.setData({ snapViewer: { open: true, items, index: start } })
+    } catch (err) {
+      wx.showToast({ title: (err && err.message) || '打开签署单失败', icon: 'none' })
+    }
+  },
+  closeSnapViewer() { this.setData({ snapViewer: null }) },
+  // 单据预览卡里的「查看签署原图」冒泡到这里 —— 与日结行同一入口实现(不另开一份)
+  onPreviewViewSnapshot(e) {
+    const code = (e.detail && e.detail.code) || ''
+    if (!code) return
+    this.viewSnapshot({ currentTarget: { dataset: { code } } })
   },
   // D57:未签行点开=结算页纯出码模式(递给顾客签/重推签署;mixin 唯一实现,两个日结落点同时生效)
   goUnsigned(e) {

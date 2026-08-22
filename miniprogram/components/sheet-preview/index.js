@@ -60,8 +60,9 @@ Component({
     viewOriginal() {
       const c = this.data.card
       if (!c || c.statusKey !== 'signed') return
-      // 全屏可缩放的签署原图 = 既有快照页(web-view),排版弹层是默认、原图是补充(规则④)
-      wx.navigateTo({ url: `/pages/sign/index?snapshot=${encodeURIComponent(c.code)}` })
+      /* D68③(店主 08-23 裁):原图=与顾客端同一浮层查看器(整组逐份+页码+箭头+滑动)。
+         组件不跳页也不自绘——把单号交给宿主页,由 mixin 的 viewSnapshot 统一开(全仓一份实现)。 */
+      this.triggerEvent('viewsnapshot', { code: c.code })
     }
   }
 })

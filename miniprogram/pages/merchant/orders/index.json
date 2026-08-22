@@ -2,6 +2,7 @@
   "navigationBarTitleText": "订单",
   "usingComponents": {
     "merchant-tabbar": "/components/merchant-tabbar/index",
-    "sheet-preview": "/components/sheet-preview/index"
+    "sheet-preview": "/components/sheet-preview/index",
+    "snapshot-viewer": "/components/snapshot-viewer/index"
   }
 }

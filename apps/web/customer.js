@@ -1877,54 +1877,8 @@ function renderOrdersWeb() {
   `
 }
 
-/* D68② 悬浮查看器(网页顾客端):浮层看图,多张左右滑动/箭头/键盘切换;Esc 或点遮罩关闭。
-   图源=后端快照(签字那一刻的 SVG 凭证)。DOM 直挂 body,不改路由=不压历史栈。 */
-function openSnapViewer(items, startIndex = 0) {
-  document.getElementById('snapViewer')?.remove()
-  let i = Math.max(0, Math.min(startIndex, items.length - 1))
-  // D68② 补件(店主 08-23):左右半透明箭头键,图片中部高度;首份隐左、末份隐右(与小程序浮层同构)
-  const arrowCss = 'position:absolute;top:50%;transform:translateY(-50%);width:38px;height:52px;border:0;border-radius:8px;background:rgba(20,16,14,.42);color:#fff;font-size:26px;line-height:1;cursor:pointer;z-index:2;'
-  const box = document.createElement('div')
-  box.id = 'snapViewer'
-  box.style.cssText = 'position:fixed;inset:0;background:rgba(20,16,14,.88);z-index:9999;display:flex;flex-direction:column;align-items:center;justify-content:center;padding:16px;box-sizing:border-box'
-  const paint = () => {
-    box.innerHTML = `
-      <div style="width:min(760px,94vw);display:flex;align-items:center;justify-content:space-between;color:#fff;padding-bottom:10px">
-        <strong style="font-size:15px">${escapeHtml(items[i].label)}</strong>
-        <span style="opacity:.75;font-size:13px">${items.length > 1 ? `${i + 1}/${items.length}` : ''}</span>
-        <button data-snap-close type="button" style="background:none;border:0;color:#fff;font-size:22px;cursor:pointer">✕</button>
-      </div>
-      <div style="width:min(760px,94vw);height:min(78vh,900px);position:relative">
-        <div style="width:100%;height:100%;background:#fff;border-radius:14px;overflow:auto">
-          <img src="${escapeHtml(items[i].url)}" alt="${escapeHtml(items[i].label)}" style="width:100%;display:block">
-        </div>
-        ${items.length > 1 && i > 0 ? `<button data-snap-prev type="button" aria-label="上一份" style="${arrowCss}left:10px">‹</button>` : ''}
-        ${items.length > 1 && i < items.length - 1 ? `<button data-snap-next type="button" aria-label="下一份" style="${arrowCss}right:10px">›</button>` : ''}
-      </div>
-      ${items.length > 1 ? `<div style="width:min(760px,94vw);text-align:center;color:rgba(255,255,255,.7);font-size:12px;padding-top:10px">左右滑动、点两侧箭头或用方向键切换</div>` : ''}`
-  }
-  const go = (d) => { i = (i + d + items.length) % items.length; paint() }
-  const close = () => { box.remove(); document.removeEventListener('keydown', onKey) }
-  const onKey = (e) => {
-    if (e.key === 'Escape') close()
-    if (e.key === 'ArrowRight') go(1)
-    if (e.key === 'ArrowLeft') go(-1)
-  }
-  box.addEventListener('click', (e) => {
-    if (e.target === box || e.target.closest('[data-snap-close]')) { close(); return }
-    if (e.target.closest('[data-snap-next]')) go(1)
-    if (e.target.closest('[data-snap-prev]')) go(-1)
-  })
-  let touchX = 0
-  box.addEventListener('touchstart', (e) => { touchX = e.changedTouches[0].clientX }, { passive: true })
-  box.addEventListener('touchend', (e) => {
-    const dx = e.changedTouches[0].clientX - touchX
-    if (Math.abs(dx) > 48 && items.length > 1) go(dx < 0 ? 1 : -1)
-  }, { passive: true })
-  document.addEventListener('keydown', onKey)
-  paint()
-  document.body.appendChild(box)
-}
+/* D68③:网页端浮层查看器搬去 apps/web/snapshot-viewer.js(admin 与 customer 共用一份实现);
+   本文件只负责把 items 备好后调 window.openSnapViewer(items, startIndex)。 */
 
 function selectedOrder() {
   return state.orders.find((order) => order.id === state.selectedOrderId)

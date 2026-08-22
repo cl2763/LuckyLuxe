@@ -5549,17 +5549,11 @@ function serializeBooking(row, lang = 'zh') {
          +顶部组汇总行「组到店支付(N 张)」=Σ各张头条——与组卡同构,不合并假账。
          单张组 sheets 长度 1,前端保持现状单卡。 */
       const groupRows = db.prepare("SELECT * FROM settlements WHERE group_id = ? AND status <> 'voided' ORDER BY rowid ASC").all(sRow.group_id)
-      const stText = (st) => st === 'signed' ? '已签署' : (st === 'amended' ? '已更正' : '待签署')
+      // D68③:原件清单走唯一出口 groupSheetLinks(与商家端 /snapshots 同源),这里只补各份五步账
+      const links = groupSheetLinks(sRow.group_id, row.tenant_id)
       const sheetSer = groupRows.map((g, i) => {
         const gs = g.id === sRow.id ? ser : serializeSettlement(g)
-        return {
-          n: i + 1, total: groupRows.length, code: g.code, status: g.status, statusText: stText(g.status),
-          // D68 L2 文案扫尽:用户可见处不出现「第 n/N 张」这种内部话术
-          label: groupRows.length > 1 ? `服务确认单 ${i + 1}/${groupRows.length} · ${stText(g.status)}` : `服务确认单 · ${stText(g.status)}`,
-          signedAt: g.signed_at, flow: gs.flow,
-          // D68② 原件悬浮查看器:已签署单的快照图地址(SVG),多张=浮层左右滑动切换
-          snapshotUrl: (g.status === 'signed' || g.status === 'amended') ? `/settlements/${encodeURIComponent(g.code)}/snapshot` : ''
-        }
+        return { ...(links[i] || {}), flow: gs.flow }
       })
       const groupCashDueCents = sheetSer.reduce((sum, x) => sum + ((x.flow && x.flow.cashDueCents) || 0), 0)
       const mainCount = groupMainItemCount(sRow.group_id, row.tenant_id)
@@ -5574,12 +5568,8 @@ function serializeBooking(row, lang = 'zh') {
         // D68 文案(店主 08-23 拍板):汇总行=「到店服务项目(N)」,N=主项目数;右侧金额不变(Σ各张头条)
         groupCashLabel: mainCount >= 2 ? `到店服务项目(${mainCount})` : '',
         mainItemCount: mainCount,
-        // D67③:逐张原件入口(与 sheets 同一来源)
-        sheetLinks: groupRows.map((g, i) => ({
-          n: i + 1, total: groupRows.length, code: g.code,
-          label: groupRows.length > 1 ? `服务确认单 ${i + 1}/${groupRows.length} · ${stText(g.status)}` : `服务确认单 · ${stText(g.status)}`,
-          signed: g.status === 'signed' || g.status === 'amended'
-        })),
+        // D67③:逐份原件入口(与 sheets 同一来源=groupSheetLinks)
+        sheetLinks: links.map((l) => ({ ...l, signed: Boolean(l.snapshotUrl) })),
         listTotalCents: sRow.list_total_cents || 0,
         subtotalCents: sRow.subtotal_cents || 0,
         couponDiscountCents: sRow.coupon_discount_cents || 0,
@@ -5616,6 +5606,26 @@ function groupFirstMainName(groupId, tenantId = currentTenantId()) {
     WHERE s.group_id = ? AND s.tenant_id = ? AND s.status <> 'voided' AND i.kind IN ('main', 'timecard')
     ORDER BY s.rowid ASC, (i.kind = 'timecard') ASC, i.item_no ASC LIMIT 1`).get(groupId, tenantId)
   return String((it && it.name_snapshot) || '服务').split(' · ')[0]
+}
+
+/* D68③(店主 08-23 裁):**所有**「查看签署单/查看原件」入口共用同一份原件清单——
+   组内非撤回单逐份(第 n/N 份 + 状态句 + 快照地址),顾客端 payment.sheets 与商家端
+   GET /admin/settlements/:key/snapshots 都从这里取,任一入口份数=该组签署单张数(同源断言)。 */
+function sheetStatusText(st) { return st === 'signed' ? '已签署' : (st === 'amended' ? '已更正' : '待签署') }
+function groupSheetLinks(groupId, tenantId = currentTenantId()) {
+  const rows = db.prepare("SELECT code, status, signed_at FROM settlements WHERE group_id = ? AND tenant_id = ? AND status <> 'voided' ORDER BY rowid ASC").all(groupId, tenantId)
+  return rows.map((g, i) => ({
+    n: i + 1,
+    total: rows.length,
+    code: g.code,
+    status: g.status,
+    statusText: sheetStatusText(g.status),
+    // D68 L2 文案:用户可见处不出现「第 n/N 张」内部话术
+    label: rows.length > 1 ? `服务确认单 ${i + 1}/${rows.length} · ${sheetStatusText(g.status)}` : `服务确认单 · ${sheetStatusText(g.status)}`,
+    signedAt: g.signed_at,
+    // 未签署份没有快照(点了走签字动线,不是看原件)
+    snapshotUrl: (g.status === 'signed' || g.status === 'amended') ? `/settlements/${encodeURIComponent(g.code)}/snapshot` : ''
+  }))
 }
 
 function customerOrderBadges(row) {
@@ -16183,6 +16193,21 @@ async function route(req, res) {
   /* 单据预览排版件(D28 图 v1 规则③):整组一份,后端拼好 —— 抬头/状态章/顾客+时间/
      分组明细(逐行原价划线→原价合计→档位小计→共优惠→抵扣行→到店应收,与结算页明细同构)/
      签名区。纯 cents 下发,前端零运算零拼口径;只读。 */
+  /* D68③(店主 08-23 裁):商家端「查看签署单」= 与顾客端同一浮层查看器,数据同一出口。
+     :key 收 settlementId 或单号(日结行给 code、台面给 id,两边都能点)。 */
+  if (req.method === 'GET' && path.startsWith('/admin/settlements/') && path.endsWith('/snapshots')) {
+    const key = decodeURIComponent(path.split('/')[3] || '')
+    const tid = currentTenantId()
+    const row = db.prepare('SELECT * FROM settlements WHERE tenant_id = ? AND (id = ? OR code = ?)').get(tid, key, key)
+    if (!row) throw apiError(404, 'NOT_FOUND', '找不到这张结算单。')
+    const sheets = groupSheetLinks(row.group_id, tid)
+    return json(res, 200, {
+      sheets,
+      total: sheets.length,
+      // 点进来的那一份在第几位(浮层直接从它开始翻)
+      startIndex: Math.max(0, sheets.findIndex((x) => x.code === row.code))
+    })
+  }
   if (req.method === 'GET' && path.startsWith('/admin/settlements/') && path.endsWith('/preview-card')) {
     const id = decodeURIComponent(path.split('/')[3] || '')
     const one = db.prepare('SELECT * FROM settlements WHERE id = ? AND tenant_id = ?').get(id, currentTenantId())

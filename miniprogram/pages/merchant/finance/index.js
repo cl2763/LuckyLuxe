@@ -215,11 +215,19 @@ Page({
     this.setData({ svTxns: list })
   },
   // 消耗行回链:点单号看该结算单凭证(快照,只读)
-  svOpenSettlement(e) {
+  // D68③:回链看凭证=与顾客端同一浮层查看器(整组逐份),不再跳整页
+  async svOpenSettlement(e) {
     const code = e.currentTarget.dataset.code
     if (!code) return
-    wx.navigateTo({ url: `/pages/sign/index?snapshot=${encodeURIComponent(code)}` })
+    try {
+      const r = await api.adminGet(`/admin/settlements/${encodeURIComponent(code)}/snapshots`)
+      const items = (r.sheets || []).filter((sh) => sh.snapshotUrl)
+        .map((sh) => ({ code: sh.code, label: sh.label, url: `${api.API_BASE}${sh.snapshotUrl}` }))
+      if (!items.length) { wx.showToast({ title: '这单还没有签署快照', icon: 'none' }); return }
+      this.setData({ snapViewer: { open: true, items, index: Math.max(0, items.findIndex((it) => it.code === String(code))) } })
+    } catch (err) { wx.showToast({ title: (err && err.message) || '打开凭证失败', icon: 'none' }) }
   },
+  closeSnapViewer() { this.setData({ snapViewer: null }) },
   toEntry() { wx.navigateTo({ url: '/pages/merchant/finance-entry/index' }) },
   toTxns() { wx.navigateTo({ url: '/pages/merchant/finance-txns/index' }) },
   toSalary() { wx.navigateTo({ url: '/pages/merchant/salary-month/index' }) },

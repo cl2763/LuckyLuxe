@@ -1,0 +1,22 @@
+<view wx:if="{{open && items.length}}" class="sv-mask" bindtap="close">
+  <view class="sv-box" catchtap="noop">
+    <view class="sv-head">
+      <text class="sv-title">{{items[cur].label}}</text>
+      <text wx:if="{{items.length > 1}}" class="sv-page">{{cur + 1}}/{{items.length}}</text>
+      <text class="sv-close" catchtap="close">✕</text>
+    </view>
+    <view class="sv-stage">
+      <swiper class="sv-swiper" current="{{cur}}" bindchange="onSwipe" indicator-dots="{{items.length > 1}}" indicator-color="rgba(255,255,255,.35)" indicator-active-color="#fff">
+        <swiper-item wx:for="{{items}}" wx:for-item="it" wx:key="code">
+          <scroll-view scroll-y class="sv-scroll">
+            <image class="sv-img" src="{{it.url}}" mode="widthFix" show-menu-by-longpress></image>
+          </scroll-view>
+        </swiper-item>
+      </swiper>
+      <!-- 左右半透明切换键:图片中部高度,首份隐左、末份隐右;滑动手势并存 -->
+      <view wx:if="{{items.length > 1 && cur > 0}}" class="sv-arrow left" catchtap="prev">‹</view>
+      <view wx:if="{{items.length > 1 && cur < items.length - 1}}" class="sv-arrow right" catchtap="next">›</view>
+    </view>
+    <view wx:if="{{items.length > 1}}" class="sv-tip">左右滑动或点两侧箭头看其余原件</view>
+  </view>
+</view>

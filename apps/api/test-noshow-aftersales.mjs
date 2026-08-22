@@ -1658,6 +1658,19 @@ const main = async () => {
                   // 单张组:不出汇总行(N=1 没有「等N项」也没有汇总行)
                   const pmtSingle = (await request('/bookings', {}, ctokK, { 'x-tenant-id': shop.tenantId })).data.bookings.find((b) => b.id === bkT.id).payment
                   check('㋌ D68 单主项目单:无汇总行 label + mainItemCount=1', pmtSingle.mainItemCount === 1 && !pmtSingle.groupCashLabel, JSON.stringify({ n: pmtSingle.mainItemCount, l: pmtSingle.groupCashLabel }))
+
+                  /* ===== ㋍ D68③(店主 08-23 裁):商家端「查看签署单」与顾客端同构=同一出口同一份数 ===== */
+                  const grpCountDb = dbx.prepare("SELECT COUNT(*) AS n FROM settlements WHERE group_id = (SELECT group_id FROM settlements WHERE id = ?) AND status <> 'voided'").get(gA.id).n
+                  const snapById = (await request(`/admin/settlements/${gA.id}/snapshots`, {}, shop.token)).data
+                  const snapByCode = (await request(`/admin/settlements/${encodeURIComponent(gB.code)}/snapshots`, {}, shop.token)).data
+                  check('㋍ D68③ 商家口 /snapshots:id 与 code 都能点,份数=该组签署单张数(同源)', snapById.total === grpCountDb && snapByCode.total === grpCountDb && grpCountDb === 2, JSON.stringify({ byId: snapById.total, byCode: snapByCode.total, db: grpCountDb }))
+                  check('㋍ D68③ 商家口份数≡顾客端 payment.sheets 份数(任一入口取到的原件份数相同)', snapById.total === (pmt.sheets || []).length, JSON.stringify({ admin: snapById.total, customer: (pmt.sheets || []).length }))
+                  check('㋍ D68③ 逐份句与图源同一出口(label/snapshotUrl 与顾客端逐字一致)', snapById.sheets.every((sh, i) => sh.label === pmt.sheets[i].label && sh.snapshotUrl === pmt.sheets[i].snapshotUrl), JSON.stringify(snapById.sheets.map((x) => x.label)))
+                  check('㋍ D68③ 点哪一份就从哪一份开(startIndex 落在被点那份上)', snapByCode.startIndex === 1 && snapById.startIndex === 0, JSON.stringify({ a: snapById.startIndex, b: snapByCode.startIndex }))
+                  // 越权面:另一家店的老板 token 拿本店单 → 租户闸门按会话租户查,查无此单
+                  const otherShop = await newShop(`x68${RUN_ID.slice(-3)}`)
+                  const snapCross = await request(`/admin/settlements/${gA.id}/snapshots`, {}, otherShop.token)
+                  check('㋍ D68③ 越权面:别店老板 token 拿不到本店原件(404)', snapCross.status === 404, String(snapCross.status))
                 }
 
                 /* ===== ㋆ 资金时序五步全组合矩阵(店主 08-22 总纲=唯一裁判;40 格常驻) =====
@@ -1900,14 +1913,36 @@ const main = async () => {
       check('㋌ D68① 连签=替换式导航(location.replace;续签不再用压栈的 <a href>)', signHtml68.includes("location.replace('/sign/") && !/<a href="\/sign\/\$\{encodeURIComponent\(s\.groupNextPendingCode\)/.test(signHtml68))
       const odWx3 = readFileSync(join(ROOT42, 'miniprogram/pages/order-detail/index.wxml'), 'utf8')
       const odJs3 = readFileSync(join(ROOT42, 'miniprogram/pages/order-detail/index.js'), 'utf8')
-      check('㋌ D68② 悬浮查看器(小程序:浮层+swiper 滑动+openViewer/closeViewer;原件不再跳页压栈)', odWx3.includes('viewer-mask') && odWx3.includes('<swiper') && odJs3.includes('openViewer') && odJs3.includes('onViewerSwipe') && !odWx3.includes('goSheetSnapshot'))
-      check('㋌ D68② 悬浮查看器(网页:lightbox 同构,左右切换+触摸滑动+Esc)', custWeb.includes('openSnapViewer') && custWeb.includes('data-snap-open') && custWeb.includes('touchend'))
+      check('㋌→㋍ D68② 悬浮查看器(小程序:顾客端详情挂共用组件+openViewer;原件不再跳页压栈)', odWx3.includes('<snapshot-viewer') && odJs3.includes('openViewer') && !odWx3.includes('goSheetSnapshot'))
+      check('㋌→㋍ D68② 悬浮查看器(网页:顾客端调共用模块 openSnapViewer,入口 data-snap-open)', custWeb.includes('openSnapViewer') && custWeb.includes('data-snap-open'))
       /* D68② 补件(店主 08-23):两侧半透明箭头键(图片中部高度),首份隐左/末份隐右;滑动手势并存 */
-      check('㋌ D68②补 两侧箭头键双端(mini viewerPrev/Next+首末隐边;web 同构 arrowCss+条件渲染)',
-        odWx3.includes('viewerPrev') && odWx3.includes('viewerNext')
-        && odWx3.includes('viewer.index > 0') && odWx3.includes('viewer.index < viewer.items.length - 1')
-        && odJs3.includes('viewerGo(') && readFileSync(join(ROOT42, 'miniprogram/pages/order-detail/index.wxss'), 'utf8').includes('.viewer-arrow')
-        && custWeb.includes('arrowCss') && custWeb.includes('i > 0 ?') && custWeb.includes('i < items.length - 1 ?'))
+      /* ===== ㋍ D68③ wiring:全仓「查看签署单/原件」入口统一复用共用查看器 ===== */
+      const svComp = readFileSync(join(ROOT42, 'miniprogram/components/snapshot-viewer/index.wxml'), 'utf8')
+      const svCompJs = readFileSync(join(ROOT42, 'miniprogram/components/snapshot-viewer/index.js'), 'utf8')
+      check('㋍ D68③ 共用组件在场(浮层+swiper+双箭头+首末隐边+页码)', svComp.includes('sv-mask') && svComp.includes('<swiper') && svComp.includes('sv-arrow') && svComp.includes('cur > 0') && svComp.includes('cur < items.length - 1') && svCompJs.includes('triggerEvent'))
+      const dcMixin68 = readFileSync(join(ROOT42, 'miniprogram/utils/dailyclose.js'), 'utf8')
+      check('㋍ D68③ 商家端日结入口走同一浮层(mixin 调 /snapshots + snapViewer,不再塞排版弹层)', dcMixin68.includes("/snapshots") && dcMixin68.includes('snapViewer') && !/previewSheet: String\(code\)/.test(dcMixin68))
+      for (const pg of ['miniprogram/pages/merchant/orders', 'miniprogram/pages/merchant/daily-close', 'miniprogram/pages/merchant/finance', 'miniprogram/pages/order-detail']) {
+        const wx0 = readFileSync(join(ROOT42, `${pg}/index.wxml`), 'utf8')
+        const js0 = readFileSync(join(ROOT42, `${pg}/index.json`), 'utf8')
+        check(`㋍ D68③ ${pg.split('/').pop()} 页挂共用查看器组件`, wx0.includes('<snapshot-viewer') && js0.includes('components/snapshot-viewer/index'))
+      }
+      check('㋍ D68③ 跳整页看原件零残留(pages/sign?snapshot= 全仓消亡)', !(await (async () => {
+        const files = ['miniprogram/utils/dailyclose.js', 'miniprogram/pages/merchant/finance/index.js', 'miniprogram/components/sheet-preview/index.js', 'miniprogram/pages/order-detail/index.js']
+        return files.some((f) => readFileSync(join(ROOT42, f), 'utf8').includes('snapshot=$'))
+      })()))
+      const svWeb = readFileSync(join(ROOT42, 'apps/web/snapshot-viewer.js'), 'utf8')
+      check('㋍ D68③ 网页端共用模块(admin+customer 同一份:两页都加载、admin 不再 window.open 单张)',
+        svWeb.includes('openSnapViewer') && svWeb.includes('data-snap-prev') && svWeb.includes('touchend')
+        && readFileSync(join(ROOT42, 'apps/web/admin.html'), 'utf8').includes('snapshot-viewer.js')
+        && readFileSync(join(ROOT42, 'apps/web/index.html'), 'utf8').includes('snapshot-viewer.js')
+        && readFileSync(join(ROOT42, 'apps/web/admin.js'), 'utf8').includes("/snapshots`")
+        && !/window\.open\(`\/settlements\//.test(readFileSync(join(ROOT42, 'apps/web/admin.js'), 'utf8')))
+      check('㋌→㋍ D68②补 两侧箭头键双端(小程序共用组件 prev/next+首末隐边;网页共用模块 arrowCss+条件渲染)',
+        svComp.includes('catchtap="prev"') && svComp.includes('catchtap="next"')   // catchtap:点箭头不穿透到遮罩(否则一点就关)
+        && svCompJs.includes('prev()') && svCompJs.includes('next()')
+        && readFileSync(join(ROOT42, 'miniprogram/components/snapshot-viewer/index.wxss'), 'utf8').includes('.sv-arrow')
+        && svWeb.includes('ARROW') && svWeb.includes('i > 0 ?') && svWeb.includes('i < items.length - 1 ?'))
       /* L2 文案机械扫描:用户可见面(两端渲染层+后端句)零「组到店支付」「本组还有 N 张」「第 n/N 张」 */
       const copySurfaces = ['apps/api/local-server.mjs', 'apps/web/customer.js', 'apps/web/sign.html', 'apps/web/admin.js',
         'miniprogram/pages/order-detail/index.wxml', 'miniprogram/pages/merchant/settlement/index.js',

@@ -101,26 +101,10 @@ Page({
       return
     }
     const index = Math.max(0, items.findIndex((it) => it.code === (target ? target.code : items[0].code)))
-    this.setData({ viewer: { open: true, index, items, pageText: `${index + 1}/${items.length}` } })
+    this.setData({ viewer: { open: true, index, items } })
   },
-  onViewerSwipe(e) {
-    const v = this.data.viewer
-    if (!v || !v.open) return
-    const index = e.detail.current
-    this.setData({ 'viewer.index': index, 'viewer.pageText': `${index + 1}/${v.items.length}` })
-  },
-  // D68② 补件:两侧箭头键切换(与滑动手势同一状态源,swiper current 绑 viewer.index)
-  viewerGo(step) {
-    const v = this.data.viewer
-    if (!v || !v.open) return
-    const index = Math.max(0, Math.min(v.items.length - 1, v.index + step))
-    if (index === v.index) return
-    this.setData({ 'viewer.index': index, 'viewer.pageText': `${index + 1}/${v.items.length}` })
-  },
-  viewerPrev() { this.viewerGo(-1) },
-  viewerNext() { this.viewerGo(1) },
+  // D68③:切页/滑动/箭头全在共用组件里(components/snapshot-viewer),页面只负责开关与喂数据
   closeViewer() { this.setData({ viewer: null }) },
-  noop() {},
   asAction() {
     const o = this.data.order
     if (!o) return

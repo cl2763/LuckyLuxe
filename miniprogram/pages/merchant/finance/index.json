@@ -1,4 +1,6 @@
 {
   "navigationBarTitleText": "财务",
-  "usingComponents": {}
+  "usingComponents": {
+    "snapshot-viewer": "/components/snapshot-viewer/index"
+  }
 }

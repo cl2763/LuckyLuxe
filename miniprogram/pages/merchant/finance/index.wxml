@@ -125,3 +125,6 @@
     </view>
   </view>
 </view>
+
+<!-- D68③:签署原件浮层查看器(全仓共用组件;数据走 /admin/settlements/:key/snapshots) -->
+<snapshot-viewer open="{{snapViewer.open}}" items="{{snapViewer.items}}" index="{{snapViewer.index}}" bind:close="closeSnapViewer"></snapshot-viewer>

@@ -123,30 +123,8 @@
     </view>
   </view>
 
-  <!-- D68②(店主 08-23):签署原件悬浮查看器——浮层图片,多张左右滑动切换;
-       点遮罩/关闭钮收起。图源=后端快照(签字那一刻的 SVG 凭证),前端零拼装。 -->
-  <view wx:if="{{viewer.open}}" class="viewer-mask" bindtap="closeViewer">
-    <view class="viewer-box" catchtap="noop">
-      <view class="viewer-head">
-        <text class="viewer-title">{{viewer.items[viewer.index].label}}</text>
-        <text wx:if="{{viewer.items.length > 1}}" class="viewer-page">{{viewer.pageText}}</text>
-        <text class="viewer-close" catchtap="closeViewer">✕</text>
-      </view>
-      <view class="viewer-stage">
-        <swiper class="viewer-swiper" current="{{viewer.index}}" bindchange="onViewerSwipe" indicator-dots="{{viewer.items.length > 1}}" indicator-color="rgba(255,255,255,.35)" indicator-active-color="#fff">
-          <swiper-item wx:for="{{viewer.items}}" wx:for-item="it" wx:key="code">
-            <scroll-view scroll-y class="viewer-scroll">
-              <image class="viewer-img" src="{{it.url}}" mode="widthFix" show-menu-by-longpress></image>
-            </scroll-view>
-          </swiper-item>
-        </swiper>
-        <!-- D68② 补件(店主 08-23):左右半透明切换键——图片中部高度,首份隐左、末份隐右;滑动手势并存 -->
-        <view wx:if="{{viewer.items.length > 1 && viewer.index > 0}}" class="viewer-arrow left" catchtap="viewerPrev">‹</view>
-        <view wx:if="{{viewer.items.length > 1 && viewer.index < viewer.items.length - 1}}" class="viewer-arrow right" catchtap="viewerNext">›</view>
-      </view>
-      <view wx:if="{{viewer.items.length > 1}}" class="viewer-tip">左右滑动或点两侧箭头看其余原件</view>
-    </view>
-  </view>
+  <!-- D68③(店主 08-23 裁):浮层查看器=全仓共用组件(顾客端/商家端同一份实现) -->
+  <snapshot-viewer open="{{viewer.open}}" items="{{viewer.items}}" index="{{viewer.index}}" bind:close="closeViewer"></snapshot-viewer>
 
   <view wx:if="{{order.status === 'pending_service'}}" class="bottom-bar">
     <button class="btn btn-ghost bottom-fill" bindtap="callStore">{{t.support}}</button>

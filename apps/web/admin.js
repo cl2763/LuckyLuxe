@@ -1,5 +1,5 @@
 // 构建号:每次交付递增。侧栏可见,排查"改了没生效"时先对版本。
-const ADMIN_BUILD = '20260823c-d68b'
+const ADMIN_BUILD = '20260823d-d68c'
 let pricingState = { module: 'storefront', tab: 'items', categories: [], items: [], rules: {}, editing: null, preview: null, storefrontPicker: false }
 console.log(`[admin] build ${ADMIN_BUILD}`)
 
@@ -7424,9 +7424,20 @@ els.financePage.addEventListener('click', (event) => {
     }).catch((error) => toast(error.message))
     return
   }
+  /* D68③(店主 08-23 裁):商家端「查看签署单」= 与顾客端同一浮层查看器 ——
+     整组逐份(页码 n/N + 左右箭头 + 滑动),不再 window.open 只开这一张。
+     数据走 /admin/settlements/:key/snapshots(与顾客端 payment.sheets 同一出口)。 */
   const dcSnapshot = event.target.closest('[data-dc-snapshot]')
   if (dcSnapshot) {
-    window.open(`/settlements/${encodeURIComponent(dcSnapshot.dataset.dcSnapshot)}/snapshot`, '_blank')
+    event.preventDefault()
+    const code = dcSnapshot.dataset.dcSnapshot
+    request(`/admin/settlements/${encodeURIComponent(code)}/snapshots`)
+      .then((r) => {
+        const items = (r.sheets || []).filter((sh) => sh.snapshotUrl).map((sh) => ({ code: sh.code, label: sh.label, url: sh.snapshotUrl }))
+        if (!items.length) { toast(owner.lang === 'zh' ? '这单还没有签署快照' : 'No snapshot yet'); return }
+        openSnapViewer(items, Math.max(0, items.findIndex((it) => it.code === code)))
+      })
+      .catch((error) => toast(error.message || (owner.lang === 'zh' ? '打开签署单失败' : 'Failed to open')))
     return
   }
   // ===== 屏 1b 金额更正 =====
