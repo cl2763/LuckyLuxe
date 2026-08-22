@@ -1972,18 +1972,24 @@ function renderOrderDetailWeb() {
       <section class="section">
         <div class="section-row"><h2>${state.lang === 'zh' ? '服务签署单' : 'Signed sheet'}</h2>${order.payment ? `<span class="subtle">${state.lang === 'zh' ? '已签署' : 'Signed'} ${escapeHtml(String(order.payment.signedAt || '').slice(0, 16).replace('T', ' '))}</span>` : ''}</div>
         <div class="info-card-web card">
-          ${order.payment && order.payment.flow ? `
+          ${order.payment && (order.payment.sheets || []).length > 1 ? `
+            <p style="border-bottom:2px solid #e7ddd4;padding-bottom:8px"><span><strong>${escapeHtml(order.payment.groupCashLabel)}</strong></span><strong class="price">${escapeHtml(order.payment.groupCashDueText)}</strong></p>
+            ${order.payment.sheets.map((sh) => `
+              <p style="margin-top:10px"><span><strong>${state.lang === 'zh' ? `第 ${sh.n}/${sh.total} 张 · ${escapeHtml(sh.statusText)}` : `Sheet ${sh.n}/${sh.total}`}</strong></span><span class="subtle">${escapeHtml(String(sh.signedAt || '').slice(0, 16).replace('T', ' '))}</span></p>
+              ${((sh.flow && sh.flow.lines) || []).map((fl) => `<p><span>${escapeHtml(fl.label)}</span><strong>${escapeHtml(fl.amountText)}</strong></p>`).join('')}
+              <p style="border-top:1px solid #e7ddd4;padding-top:6px"><span><strong>${escapeHtml((sh.flow && sh.flow.heroLabel) || '本单到店支付')}</strong></span><strong class="price">${escapeHtml((sh.flow && sh.flow.cashDueText) || '')}</strong></p>
+              <p><a href="/sign/${encodeURIComponent(sh.code)}" target="_blank" rel="noreferrer">${state.lang === 'zh' ? '查看原件 ›' : 'View ›'}</a></p>`).join('')}
+          ` : ''}
+          ${order.payment && order.payment.flow && !((order.payment.sheets || []).length > 1) ? `
             ${order.payment.flow.lines.map((fl) => `<p><span>${escapeHtml(fl.label)}</span><strong>${escapeHtml(fl.amountText)}</strong></p>`).join('')}
             <p style="border-top:1px solid #e7ddd4;padding-top:8px"><span><strong>${escapeHtml(order.payment.flow.heroLabel)}</strong></span><strong class="price">${escapeHtml(order.payment.flow.cashDueText)}</strong></p>
-            ${(order.payment.sheetLinks || []).length > 1
-              ? order.payment.sheetLinks.map((sl) => `<p style="margin-top:8px"><a href="/sign/${encodeURIComponent(sl.code)}" target="_blank" rel="noreferrer">${escapeHtml(sl.label)} · ${state.lang === 'zh' ? '查看原件 ›' : 'View ›'}</a></p>`).join('')
-              : `<p style="margin-top:8px"><a href="/sign/${encodeURIComponent(order.payment.code)}" target="_blank" rel="noreferrer">${state.lang === 'zh' ? '查看服务确认单原件 ›' : 'View original ›'}</a></p>`}
-          ` : (order.status === 'COMPLETED' || order.status === 'AFTER_SALES'
+            <p style="margin-top:8px"><a href="/sign/${encodeURIComponent(order.payment.code)}" target="_blank" rel="noreferrer">${state.lang === 'zh' ? '查看服务确认单原件 ›' : 'View original ›'}</a></p>
+          ` : (order.payment ? '' : (order.status === 'COMPLETED' || order.status === 'AFTER_SALES'
     ? `<div class="empty-state small-empty">${state.lang === 'zh' ? '本单未产生结算单' : 'No settlement sheet for this booking'}</div>`
     : `
             <p><span>${t('paidDeposit')}</span><strong class="price">${money(order.depositCents)}</strong></p>
             <p><span>${t('finalDue')}</span><strong>${money(order.finalDueCents)}</strong></p>
-            <p><span>${t('servicePrice')}</span><strong>${money(order.servicePriceCents)}</strong></p>`)}
+            <p><span>${t('servicePrice')}</span><strong>${money(order.servicePriceCents)}</strong></p>`))}
         </div>
       </section>
       ${order.afterSalesAction ? `

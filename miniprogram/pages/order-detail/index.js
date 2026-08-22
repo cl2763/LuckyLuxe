@@ -58,7 +58,17 @@ Page({
           heroText: (order.payment.flow && order.payment.flow.cashDueText) || '',
           listTotal: y(order.payment.listTotalCents),
           // D67③:组内逐张原件行(映射层零裁剪——toMiniBooking 裁字段教训同族,挑字段处必须点名带上)
-          sheetLinks: order.payment.sheetLinks || []
+          sheetLinks: order.payment.sheetLinks || [],
+          /* L3 裁(店主 08-22):多张单详情=逐张签署单卡+顶部组汇总行(=Σ各张头条,与组卡同构) */
+          sheets: (order.payment.sheets || []).map((sh) => ({
+            ...sh,
+            flowLines: (sh.flow && sh.flow.lines) || [],
+            heroLabel: (sh.flow && sh.flow.heroLabel) || '本单到店支付',
+            heroText: (sh.flow && sh.flow.cashDueText) || '',
+            signedAtText: sh.signedAt ? String(sh.signedAt).slice(0, 16).replace('T', ' ') : ''
+          })),
+          groupCashLabel: order.payment.groupCashLabel || '',
+          groupCashText: order.payment.groupCashDueText || ''
         }
       }
       // 价格拆解:总价 / 定金 / 到店应付(不同来源字段不一,统一补算)

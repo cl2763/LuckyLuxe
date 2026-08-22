@@ -43,9 +43,8 @@ async function newTenant(label) {
 }
 
 function localDateStr(offsetDays = 0) {
-  const d = new Date()
-  d.setDate(d.getDate() + offsetDays)
-  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`
+  // 时区红线(复发登记 08-23,L2 同类):日期一律按门店时区推,裸 new Date() 在 CST 午夜跨天错位
+  return new Date(Date.now() + offsetDays * 86400000).toLocaleDateString('en-CA', { timeZone: 'America/Toronto' })
 }
 
 async function main() {

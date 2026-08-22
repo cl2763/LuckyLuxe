@@ -50,17 +50,26 @@
       <!-- D67②:标题右侧小字去 Emoji(店主 08-22) -->
       <view wx:if="{{order.pay}}" class="section-note">已签署 {{order.pay.signedAt}}</view>
     </view>
-    <view class="info-card card" wx:if="{{order.pay}}">
+    <!-- L3 裁(店主 08-22):多张单=顶部组汇总行(Σ各张头条,与组卡同构)+逐张签署单卡(各自五步账+头条+原件) -->
+    <block wx:if="{{order.pay && order.pay.sheets.length > 1}}">
+      <view class="info-card card">
+        <view class="info-row hero"><text>{{order.pay.groupCashLabel}}</text><text class="price">{{order.pay.groupCashText}}</text></view>
+      </view>
+      <view class="info-card card" wx:for="{{order.pay.sheets}}" wx:for-item="sh" wx:key="code">
+        <view class="info-row"><text>第 {{sh.n}}/{{sh.total}} 张 · {{sh.statusText}}</text><text class="muted">{{sh.signedAtText}}</text></view>
+        <view class="info-row" wx:for="{{sh.flowLines}}" wx:for-item="fl" wx:key="key">
+          <text>{{fl.label}}</text><text>{{fl.amountText}}</text>
+        </view>
+        <view class="info-row hero"><text>{{sh.heroLabel}}</text><text class="price">{{sh.heroText}}</text></view>
+        <view class="as-link" data-code="{{sh.code}}" bindtap="goSheetSnapshot">查看原件 ›</view>
+      </view>
+    </block>
+    <view class="info-card card" wx:elif="{{order.pay}}">
       <view class="info-row" wx:for="{{order.pay.flowLines}}" wx:for-item="fl" wx:key="key">
         <text>{{fl.label}}</text><text>{{fl.amountText}}</text>
       </view>
       <view class="info-row hero"><text>{{order.pay.heroLabel}}</text><text class="price">{{order.pay.heroText}}</text></view>
-      <!-- D67③:多张单原件逐张可看(第 n/N 张列);单张组保持原样单链接 -->
-      <block wx:if="{{order.pay.sheetLinks.length > 1}}">
-        <view class="as-link" wx:for="{{order.pay.sheetLinks}}" wx:for-item="sl" wx:key="code"
-          data-code="{{sl.code}}" bindtap="goSheetSnapshot">{{sl.label}} · 查看原件 ›</view>
-      </block>
-      <view wx:else class="as-link" bindtap="goSnapshot">查看服务确认单原件 ›</view>
+      <view class="as-link" bindtap="goSnapshot">查看服务确认单原件 ›</view>
     </view>
     <view class="info-card card" wx:elif="{{order.status === 'completed' || order.status === 'after_sales'}}">
       <view class="archive-empty">本单未产生结算单</view>

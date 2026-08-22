@@ -5421,6 +5421,24 @@ function customerSignedSubtotalCents(userId, tenantId = currentTenantId()) {
     .get(userId, tenantId).s || 0
 }
 
+/* 裁A(店主 08-22,D66 五裁):到店次数唯一定义=**有消费(已签署组)或已完成预约的自然日数**
+   (门店时区;同日多组=1 次;取消/未到不算)。签署单的「到店日」走 settlementServiceDate
+   服务日口径(挂预约=预约那天,晚签不多算一天)。三处读方(顾客端我的/商家客户列表/画像页)
+   全走这一个出口——同一个事实一处计算(裁E 分叉债收敛)。 */
+function visitDaysCount(userId, tenantId = currentTenantId()) {
+  if (!userId) return 0
+  const tz = tenantTimezone(tenantId)
+  const days = new Set()
+  for (const r of db.prepare("SELECT * FROM settlements WHERE user_id = ? AND tenant_id = ? AND status IN ('signed', 'amended')").all(userId, tenantId)) {
+    const d = settlementServiceDate(r, tenantId)
+    if (d) days.add(d)
+  }
+  for (const r of db.prepare("SELECT appointment_start FROM bookings WHERE user_id = ? AND tenant_id = ? AND status = 'COMPLETED'").all(userId, tenantId)) {
+    days.add(localParts(r.appointment_start, tz).date)
+  }
+  return days.size
+}
+
 function userBookingStats(userId, tenantId = DEFAULT_TENANT_ID) {
   if (!userId) return { total_spent_cents: 0, visits: 0 }
   // 每店独立会员:消费/到店只算这家店(tenant)
@@ -5527,18 +5545,31 @@ function serializeBooking(row, lang = 'zh') {
       /* 批③首件 A2/A6:详情页签署单卡=serializeSettlement flow 同一块(一条五步账,与签署页/快照同源);
          「实付」旧行随 flow 渲染消亡(480 表达错误销案)。web-view 不能内嵌卡,原件入口另给(pages/sign)。 */
       const ser = serializeSettlement(sRow)
+      /* L3 裁(店主 08-22,随五裁落):多张单详情=**逐张签署单卡**(第 n/N 张,各自五步账+头条)
+         +顶部组汇总行「组到店支付(N 张)」=Σ各张头条——与组卡同构,不合并假账。
+         单张组 sheets 长度 1,前端保持现状单卡。 */
+      const groupRows = db.prepare("SELECT * FROM settlements WHERE group_id = ? AND status <> 'voided' ORDER BY rowid ASC").all(sRow.group_id)
+      const stText = (st) => st === 'signed' ? '已签署' : (st === 'amended' ? '已更正' : '待签署')
+      const sheetSer = groupRows.map((g, i) => {
+        const gs = g.id === sRow.id ? ser : serializeSettlement(g)
+        return { n: i + 1, total: groupRows.length, code: g.code, status: g.status, statusText: stText(g.status), signedAt: g.signed_at, flow: gs.flow }
+      })
+      const groupCashDueCents = sheetSer.reduce((sum, x) => sum + ((x.flow && x.flow.cashDueCents) || 0), 0)
       return {
         code: sRow.code,
         signedAt: sRow.signed_at,
         flow: ser.flow,
-        /* D67③(店主 08-22):多张单签署原图逐张可看——组内非撤回单按第 n/N 张列,
-           每张一个原件入口(pages/sign 同一实现);单张组=数组长度 1,前端走原单链接不变。 */
-        sheetLinks: db.prepare("SELECT code, status, signed_at FROM settlements WHERE group_id = ? AND status <> 'voided' ORDER BY rowid ASC").all(sRow.group_id)
-          .map((s, i, arr) => ({
-            n: i + 1, total: arr.length, code: s.code,
-            label: `第 ${i + 1}/${arr.length} 张 · ${s.status === 'signed' ? '已签署' : (s.status === 'amended' ? '已更正' : '待签署')}`,
-            signed: s.status === 'signed' || s.status === 'amended'
-          })),
+        sheets: sheetSer,
+        groupCount: groupRows.length,
+        groupCashDueCents,
+        groupCashDueText: formatMoneyCents(groupCashDueCents, row.tenant_id, 'auto'),
+        groupCashLabel: groupRows.length >= 2 ? `组到店支付(${groupRows.length} 张)` : '',
+        // D67③:逐张原件入口(与 sheets 同一来源)
+        sheetLinks: groupRows.map((g, i) => ({
+          n: i + 1, total: groupRows.length, code: g.code,
+          label: `第 ${i + 1}/${groupRows.length} 张 · ${stText(g.status)}`,
+          signed: g.status === 'signed' || g.status === 'amended'
+        })),
         listTotalCents: sRow.list_total_cents || 0,
         subtotalCents: sRow.subtotal_cents || 0,
         couponDiscountCents: sRow.coupon_discount_cents || 0,
@@ -5600,8 +5631,10 @@ function customerOrderBadges(row) {
   const grpFirstName = (() => {
     if (grpCount < 2) return ''
     const first = db.prepare("SELECT id FROM settlements WHERE group_id = ? AND status <> 'voided' ORDER BY rowid ASC LIMIT 1").get(stl.group_id)
-    const it = first ? db.prepare('SELECT name_snapshot FROM settlement_items WHERE settlement_id = ? ORDER BY item_no ASC LIMIT 1').get(first.id) : null
-    return (it && it.name_snapshot) || '服务'
+    /* 首项目=干净服务名:优先非次卡行;核销行的 name_snapshot 带「· 次卡核销 第 n/N 次(卡名)」
+       长尾(单据里要自证,标题里是噪音)——截「 · 」前主名。 */
+    const it = first ? db.prepare("SELECT name_snapshot FROM settlement_items WHERE settlement_id = ? ORDER BY (kind = 'timecard') ASC, item_no ASC LIMIT 1").get(first.id) : null
+    return String((it && it.name_snapshot) || '服务').split(' · ')[0]
   })()
   // 售后 > 已更正 > 已签署(售后是当前最要紧的状态,压在最上面)
   const badge = isAfterSales ? asBadge : (amd.amendBadgeText || '已签署')
@@ -5747,7 +5780,7 @@ function serializeUser(user, tenantId = DEFAULT_TENANT_ID) {
     couponCount: 0,
     balanceCents: storedValueBalanceCents(user.id, tenantId),
     totalSpentCents,
-    visits: Number(stats.visits || 0),
+    visits: visitDaysCount(user.id, tenantId), // 裁A:三读方唯一出口(stats.visits 旧口径=COMPLETED 单数,售后单漏计)
     memberCode,
     referralCode: memberCode.replace('LL-', 'REF-'),
     referralUrl: `${APP_PUBLIC_URL}/?ref=${encodeURIComponent(memberCode.replace('LL-', 'REF-'))}`
@@ -6752,7 +6785,7 @@ function getAdminCustomers() {
     phone: row.phone,
     email: row.email,
     createdAt: row.created_at,
-    visitCount: row.visit_count,
+    visitCount: visitDaysCount(row.id, tid), // 裁A/裁D:与顾客端同一出口(旧=COUNT 全部预约,取消也算到店)
     lastVisitAt: row.last_visit_at,
     totalSpentCents: row.total_spent_cents,
     // RFM 分层用(按完成单口径)
@@ -8932,11 +8965,38 @@ function createSettlementGroup(body = {}, adminSession = {}) {
   const now = iso(new Date())
   const groupId = randomId('sgrp')
   const created = []
+  /* 裁B(店主 08-22,D66 五裁):开单无预约=引擎自动**建一张即时预约**挂上(写方闭环)——
+     订单列表/日历/到店计数从此天然齐,「即时预约再开单」口径不再靠人肉。
+     即时单=当场消费的事实记录:status 直接 COMPLETED、时间=现在,不做时段冲突检查。
+     组级一张共享(一次开单=一次到店),与店主双服务单形态(一预约多张)同构。 */
+  let instantBookingId = null
+  const needInstant = sheets.some((sh) => !String(sh.bookingId || body.bookingId || '').trim())
   db.exec('BEGIN IMMEDIATE')
   try {
+    if (needInstant) {
+      // 与建组同事务:建组半途失败即回滚,不留孤儿「已完成」预约(幽灵订单卡)
+      const fs = sheets.find((sh) => !String(sh.bookingId || body.bookingId || '').trim())
+      const svcId = (Array.isArray(fs.items) && fs.items[0] && fs.items[0].serviceId) || fs.timecardServiceId
+        || (db.prepare('SELECT id FROM services WHERE tenant_id = ? ORDER BY rowid ASC LIMIT 1').get(tenantId) || {}).id
+      const techId = (Array.isArray(fs.technicians) && fs.technicians[0] && fs.technicians[0].technicianId)
+        || (db.prepare('SELECT id FROM technicians WHERE tenant_id = ? AND is_active = 1 ORDER BY rowid ASC LIMIT 1').get(tenantId) || {}).id
+      if (svcId && techId) {
+        instantBookingId = randomId('booking')
+        const svcRow = getService(svcId)
+        const durMin = (svcRow && (svcRow.base_duration_min || svcRow.duration_min)) || 60
+        db.prepare(`INSERT INTO bookings
+          (id, tenant_id, public_code, user_id, store_id, technician_id, service_id, status, appointment_start, appointment_end, addons_json, reference_images_json, source_channel, notes, service_price_cents, deposit_cents, deposit_required_cents, deposit_waived_cents, final_due_cents, total_duration_min, created_at, updated_at)
+          VALUES (?, ?, ?, ?, ?, ?, ?, 'COMPLETED', ?, ?, '[]', '[]', 'settlement_instant', ?, ?, 0, 0, 0, 0, ?, ?, ?)`)
+          .run(instantBookingId, tenantId, publicCode(), cardOwnerUserId, defaultStoreId(), techId, svcId,
+            now, iso(addMinutes(new Date(), durMin)), '即时预约(开单自动建)',
+            (svcRow && svcRow.price_cents) || 0, durMin, now, now)
+        db.prepare('INSERT INTO booking_status_history (id, booking_id, to_status, note, created_at) VALUES (?, ?, ?, ?, ?)')
+          .run(randomId('hist'), instantBookingId, 'COMPLETED', '即时预约(开单自动建,裁B 写方闭环)', now)
+      }
+    }
     db.prepare(`INSERT INTO settlement_groups (id, tenant_id, booking_id, card_owner_user_id, status, created_by, created_at, updated_at)
       VALUES (?, ?, ?, ?, 'pending_sign', ?, ?, ?)`)
-      .run(groupId, tenantId, body.bookingId || null, cardOwnerUserId, adminSession.email || 'staff', now, now)
+      .run(groupId, tenantId, body.bookingId || instantBookingId || null, cardOwnerUserId, adminSession.email || 'staff', now, now)
 
     const grantsUsedInGroup = new Set()
     const timecardsUsedInGroup = new Set()
@@ -8963,7 +9023,7 @@ function createSettlementGroup(body = {}, adminSession = {}) {
       }
       const computed = computeSettlement({
         ...sheet, tenantId, userId: cardOwnerUserId, payerUserId: cardOwnerUserId,
-        bookingId: sheet.bookingId || body.bookingId, strictCoupon: true,
+        bookingId: sheet.bookingId || body.bookingId || instantBookingId, strictCoupon: true,
         /* B3-1 随单充值经手人=充值提成归属(与代充路由同口径):技师会话**强制=本人**,不认 body;
            老板会话可不带(面板没选就空,不猜归属——账本里不许有猜出来的数字)。 */
         /* D59 v2(店主修订,批③首日落)——随单充值归属三层瀑布:
@@ -8997,7 +9057,7 @@ function createSettlementGroup(body = {}, adminSession = {}) {
          timecard_id, timecard_nth, purchase_json, recharge_json,
          pay_intent, perf_alloc_status, created_by, created_at, updated_at)
         VALUES (?, ?, ?, ?, ?, ?, ?, ?, 'pending_sign', ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'pending', ?, ?, ?)`)
-        .run(id, tenantId, groupId, sheet.bookingId || body.bookingId || null, cardOwnerUserId,
+        .run(id, tenantId, groupId, sheet.bookingId || body.bookingId || instantBookingId || null, cardOwnerUserId,
           String(sheet.servedPersonName || '').slice(0, 40) || null, isProxy ? 1 : 0, settlementCode(tenantId),
           computed.tierKey, sheet.tierChangedFrom || null, sheet.tierChangedFrom ? (adminSession.email || 'staff') : null, sheet.tierChangedFrom ? now : null,
           computed.listTotalCents, computed.subtotalCents, computed.depositDeductCents, computed.discountTotalCents, computed.totalCents,
@@ -13887,7 +13947,9 @@ async function route(req, res) {
     const allTechs = db.prepare('SELECT id, name, title, is_active FROM technicians WHERE tenant_id = ? ORDER BY is_active DESC, name ASC').all(tid)
     const dayStart = iso(localDateTime(date, '00:00'))
     const dayEnd = iso(addMinutes(localDateTime(date, '00:00'), 24 * 60))
-    const rows = db.prepare(`SELECT * FROM bookings WHERE tenant_id = ? AND status IN ('PENDING_PAYMENT','CONFIRMED','COMPLETED')
+    /* 裁C(店主 08-22):售后单带徽标上日历,不再蒸发——转售后前它就在台面上,
+       行踪不应因售后断链(D66 位面④)。 */
+    const rows = db.prepare(`SELECT * FROM bookings WHERE tenant_id = ? AND status IN ('PENDING_PAYMENT','CONFIRMED','COMPLETED','AFTER_SALES')
       AND appointment_start >= ? AND appointment_start < ? ORDER BY appointment_start ASC`).all(tid, dayStart, dayEnd)
     // 服务分组(色相):足部美甲/护理由名称识别,其余按类型
     const groupOf = (svc) => {
@@ -13905,7 +13967,7 @@ async function route(req, res) {
       const u = row.user_id ? db.prepare('SELECT id, display_name FROM users WHERE id = ?').get(row.user_id) : null
       const startLocal = localParts(row.appointment_start)
       const endLocal = localParts(row.appointment_end)
-      const arrivalState = row.status === 'COMPLETED' ? 'done' : (row.arrived_at ? 'active' : 'pending')
+      const arrivalState = (row.status === 'COMPLETED' || row.status === 'AFTER_SALES') ? 'done' : (row.arrived_at ? 'active' : 'pending')
       // 新客:该顾客在本店有没有更早的单(按 appointment_start)
       const earlier = row.user_id
         ? db.prepare(`SELECT 1 FROM bookings WHERE tenant_id = ? AND user_id = ? AND appointment_start < ?
@@ -13930,7 +13992,10 @@ async function route(req, res) {
         isNewCustomer: !earlier,
         isDesignated: /指定|指名|点名/.test(String(row.notes || '')),
         ownerDirect: row.source_channel === 'owner_direct',
-        depositUnpaid: Boolean(row.direct_deposit_unpaid)
+        depositUnpaid: Boolean(row.direct_deposit_unpaid),
+        // 裁C:售后单蓝徽标(句后端唯一)
+        afterSales: row.status === 'AFTER_SALES',
+        afterSalesTag: row.status === 'AFTER_SALES' ? '售后' : ''
       }
     })
     const bookingCount = {}
@@ -15261,7 +15326,7 @@ async function route(req, res) {
     const agg = { styles: new Set(), personality: new Set(), preferences: new Set(), companions: new Set(), safetyFlags: new Set() }
     notes.forEach((n) => { const s = n.structured || {}; ['styles', 'personality', 'preferences', 'companions', 'safetyFlags'].forEach((k) => (s[k] || []).forEach((t) => agg[k].add(t))) })
     const completed = db.prepare("SELECT appointment_start, service_id FROM bookings WHERE user_id = ? AND tenant_id = ? AND status = 'COMPLETED' ORDER BY appointment_start ASC").all(userId, tid)
-    const visitCount = completed.length
+    const visitCount = visitDaysCount(userId, tid) // 裁A/裁E:三读方唯一出口(间隔/常做仍按完成单序列)
     let avgIntervalDays = null
     if (completed.length >= 2) {
       const first = new Date(completed[0].appointment_start), last = new Date(completed[completed.length - 1].appointment_start)
@@ -17677,6 +17742,42 @@ db.exec(`
       OR (OLD.snapshot_at IS NOT NULL AND (OLD.snapshot_url IS NOT NEW.snapshot_url OR OLD.snapshot_inline IS NOT NEW.snapshot_inline)))
   BEGIN SELECT RAISE(ABORT, 'signed settlement is immutable; use settlement_amendments'); END;
 `)
+
+/* 裁B 存量回填(店主 08-22,迁移贴数先行):无挂靠的非作废结算单补挂即时预约——
+   同组已有挂靠预约=挂同一张(同组=同次到店);全组无=建一张 COMPLETED 即时预约共享。
+   幂等:booking_id IS NULL 才处理,重跑一分不动;店/服务/技师残缺的行跳过留待人工。 */
+try {
+  const orphanStl = db.prepare("SELECT * FROM settlements WHERE booking_id IS NULL AND status <> 'voided' ORDER BY rowid ASC").all()
+  const groupBk = {}
+  let backfilled = 0
+  for (const st of orphanStl) {
+    let bid = groupBk[st.group_id]
+      || ((db.prepare("SELECT booking_id FROM settlements WHERE group_id = ? AND booking_id IS NOT NULL AND status <> 'voided' ORDER BY rowid ASC LIMIT 1").get(st.group_id) || {}).booking_id)
+    if (!bid) {
+      const item = db.prepare('SELECT service_id FROM settlement_items WHERE settlement_id = ? AND service_id IS NOT NULL ORDER BY item_no ASC LIMIT 1').get(st.id)
+      const tech = db.prepare('SELECT technician_id FROM settlement_technicians WHERE settlement_id = ? ORDER BY rowid ASC LIMIT 1').get(st.id)
+      const svcId = (item && item.service_id) || ((db.prepare('SELECT id FROM services WHERE tenant_id = ? ORDER BY rowid ASC LIMIT 1').get(st.tenant_id) || {}).id)
+      const techId = (tech && tech.technician_id) || ((db.prepare('SELECT id FROM technicians WHERE tenant_id = ? ORDER BY rowid ASC LIMIT 1').get(st.tenant_id) || {}).id)
+      const storeId = (db.prepare('SELECT id FROM stores WHERE tenant_id = ? ORDER BY rowid ASC LIMIT 1').get(st.tenant_id) || {}).id
+      if (!svcId || !techId || !storeId || !st.user_id) continue
+      const at = st.signed_at || st.created_at
+      bid = randomId('booking')
+      db.prepare(`INSERT INTO bookings
+        (id, tenant_id, public_code, user_id, store_id, technician_id, service_id, status, appointment_start, appointment_end, addons_json, reference_images_json, source_channel, notes, service_price_cents, deposit_cents, deposit_required_cents, deposit_waived_cents, final_due_cents, total_duration_min, created_at, updated_at)
+        VALUES (?, ?, ?, ?, ?, ?, ?, 'COMPLETED', ?, ?, '[]', '[]', 'settlement_instant', '即时预约(存量回填)', 0, 0, 0, 0, 0, 60, ?, ?)`)
+        .run(bid, st.tenant_id, publicCode(), st.user_id, storeId, techId, svcId, at, iso(new Date(new Date(at).getTime() + 3600000)), at, at)
+      db.prepare('INSERT INTO booking_status_history (id, booking_id, to_status, note, created_at) VALUES (?, ?, ?, ?, ?)')
+        .run(randomId('hist'), bid, 'COMPLETED', '即时预约(存量回填,裁B)', at)
+    }
+    groupBk[st.group_id] = bid
+    db.prepare('UPDATE settlements SET booking_id = ? WHERE id = ?').run(bid, st.id)
+    db.prepare('UPDATE settlement_groups SET booking_id = COALESCE(booking_id, ?) WHERE id = ?').run(bid, st.group_id)
+    backfilled += 1
+  }
+  if (backfilled) console.log(`[migrate] 裁B 回填:${backfilled} 张无挂靠结算单已补挂即时预约`)
+} catch (error) {
+  console.warn('[migrate] 裁B 回填失败(已跳过,老数据未动):', error.message)
+}
 
 /* ===== P2 日结与业绩目标(2026-08-08)=====
    日结 = 店长每天把当天已签的服务单逐单认账:多技师单先分成,再整天确认。

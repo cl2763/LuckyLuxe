@@ -57,7 +57,9 @@
                   <view class="dv-bt"><text wx:if="{{b.stateGlyph}}" class="dv-sdot {{b.state}}">{{b.stateGlyph}}</text>{{b.startTime}}–{{b.endTime}}</view>
                   <view class="dv-bn">{{b.customerName}}</view>
                   <view class="dv-bs">{{b.serviceName}}</view>
-                  <text wx:if="{{b.ownerDirect}}" class="dv-tag owner">老板排</text>
+                  <!-- 裁C:售后单带蓝徽标上日历,不再蒸发 -->
+                  <text wx:if="{{b.afterSalesTag}}" class="dv-tag as-blue">{{b.afterSalesTag}}</text>
+                  <text wx:elif="{{b.ownerDirect}}" class="dv-tag owner">老板排</text>
                   <text wx:elif="{{b.isDesignated}}" class="dv-tag zhi">指定</text>
                   <text wx:elif="{{b.isNewCustomer}}" class="dv-tag xin">新客</text>
                   <text wx:if="{{b.depositUnpaid}}" class="dv-unpaid">未付定金</text>

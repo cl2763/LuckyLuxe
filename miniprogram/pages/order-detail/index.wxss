@@ -95,3 +95,6 @@
 .status.badge-signed{color:#2f7d5c}
 .status.badge-amended{color:#a8551f}
 .status.badge-aftersales{color:#a34c48}
+
+/* L3 裁:逐张卡右侧签署时间小字 */
+.info-row .muted{color:#9a8f86;font-size:22rpx}

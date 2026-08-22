@@ -74,6 +74,7 @@ page{background:#fbf8f5}
 .dv-legend .lg.care{background:#cfe0d6}
 .dv-legend .lg.free{background:#f3ece2;border:1rpx dashed #dcc9ad}
 .dv-tag.owner{background:#7a5cff}
+.dv-tag.as-blue{background:#3b6ea5} /* 裁C:售后单蓝徽标 */
 .dv-unpaid{position:absolute;left:14rpx;bottom:6rpx;font-size:15rpx;background:#fdecec;color:#c0392b;border-radius:5rpx;padding:1rpx 8rpx;font-weight:700}
 .dv-blk.active .dv-unpaid{left:20rpx}
 /* 列表 */

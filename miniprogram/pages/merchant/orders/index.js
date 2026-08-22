@@ -475,7 +475,8 @@ Page(Object.assign({
             top: Math.round((s - openMin) / 60 * PX_PER_HOUR), height: Math.max(34, Math.round((e - s) / 60 * PX_PER_HOUR)),
             startTime: b.startTime, endTime: b.endTime, customerName: b.customerName,
             serviceId: b.serviceId || '', serviceName: b.serviceName,
-            isNewCustomer: b.isNewCustomer, isDesignated: b.isDesignated, ownerDirect: b.ownerDirect, depositUnpaid: b.depositUnpaid
+            isNewCustomer: b.isNewCustomer, isDesignated: b.isDesignated, ownerDirect: b.ownerDirect, depositUnpaid: b.depositUnpaid,
+            afterSalesTag: b.afterSalesTag || '' // 裁C:售后单蓝徽标上日历(句后端唯一)
           }
         })
         const frees = []; let cursor = openMin

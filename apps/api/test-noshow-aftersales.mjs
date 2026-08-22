@@ -82,9 +82,10 @@ async function staffLogin(shop, technicianId, tag) {
 }
 
 function dateStr(offsetDays = 0) {
-  const d = new Date()
-  d.setDate(d.getDate() + offsetDays)
-  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`
+  /* 时区红线(复发登记 08-23):裸 new Date() 推日期在店主机器上(CST 刚过午夜)与门店日
+     (America/Toronto)跨天错位——夹具订到「明天」,日结/台面查「今天」,断言凭空红。
+     与后端 storeToday()/process.env.TZ 同一钉法:日期一律按门店时区推。 */
+  return new Date(Date.now() + offsetDays * 86400000).toLocaleDateString('en-CA', { timeZone: 'America/Toronto' })
 }
 
 async function directBooking(shop, { name, time, techId }) {
@@ -1600,6 +1601,44 @@ const main = async () => {
                   const perfSum = dbx.prepare('SELECT COALESCE(SUM(share_cents),0) AS n FROM settlement_technicians WHERE settlement_id = ?').get(sh59.id).n
                   const sub59 = dbx.prepare('SELECT subtotal_cents FROM settlements WHERE id = ?').get(sh59.id).subtotal_cents
                   check('㋉ 红线:核定归属≠计业绩(Σ分成=档位小计,不含充值 300)', perfSum > 0 && perfSum === sub59, JSON.stringify({ perfSum, sub59 }))
+
+                  /* ===== ㋋ D66 五裁落地(店主 08-22):裁A 到店唯一定义/裁B 即时预约写方/裁C 售后上日历/详情逐张卡 ===== */
+                  /* 裁B 写方:开单不带预约=引擎自动建 COMPLETED 即时预约挂上 */
+                  const sNB = await request('/admin/settlements', { method: 'POST', body: JSON.stringify({ userId: cuidK, settlements: [{ payIntent: 'offline_full', items: [{ serviceId: shop.serviceId, qty: 1 }], technicians: tech, servedPersonName: '' }] }) }, shop.token)
+                  const shNB = sNB.data.settlements[0]
+                  check('㋋ 裁B 写方:无预约开单=自动挂即时预约(bookingId 非空)', Boolean(shNB.bookingId), JSON.stringify(shNB.bookingId))
+                  const bkNB = dbx.prepare('SELECT status, source_channel, user_id FROM bookings WHERE id = ?').get(shNB.bookingId)
+                  check('㋋ 裁B 即时预约=COMPLETED+settlement_instant+归卡主', bkNB && bkNB.status === 'COMPLETED' && bkNB.source_channel === 'settlement_instant' && bkNB.user_id === cuidK, JSON.stringify(bkNB))
+                  await request(`/settlements/${encodeURIComponent(shNB.code)}/sign`, { method: 'POST', body: JSON.stringify({ signature: '㋋ 即时签', disclaimerAccepted: true }) }, null, { 'x-tenant-id': shop.tenantId })
+                  const bkNBL = (await request('/bookings', {}, ctokK, { 'x-tenant-id': shop.tenantId })).data.bookings.find((b) => b.id === shNB.bookingId)
+                  check('㋋ 裁B 顾客订单列表见即时单(已结清句在)', bkNBL && /^已结清 /.test(bkNBL.listAmountText || ''), JSON.stringify(bkNBL && bkNBL.listAmountText))
+                  /* 同源断言常驻:全库零无挂靠(每签署组必有预约) */
+                  const orphanN = dbx.prepare("SELECT COUNT(*) AS n FROM settlements WHERE booking_id IS NULL AND status <> 'voided'").get().n
+                  check('㋋ 同源常驻:全库零无挂靠结算单(每组必有预约)', orphanN === 0, `orphans=${orphanN}`)
+                  /* 裁A 三读方同数:新档案=今日签署组+今日完成预约(同日=1)+后日完成预约(+1)+取消单(不算) */
+                  const bkV1 = (await request('/admin/bookings/direct', { method: 'POST', body: JSON.stringify({ newCustomerName: `㋋裁A客${RUN_ID}`, serviceId: shop.serviceId, technicianId: shop.tech2, date: dateStr(0), time: '23:31' }) }, shop.token)).data.booking
+                  const cuidV = bkV1.userId || bkV1.user_id || (bkV1.user && bkV1.user.id)
+                  dbx.prepare('UPDATE users SET wechat_open_id = ? WHERE id = ?').run(`wx-va-${RUN_ID}`, cuidV)
+                  await request(`/admin/bookings/${bkV1.id}/status`, { method: 'PATCH', body: JSON.stringify({ status: 'COMPLETED' }) }, shop.token)
+                  const sV = await request('/admin/settlements', { method: 'POST', body: JSON.stringify({ userId: cuidV, settlements: [{ payIntent: 'offline_full', bookingId: bkV1.id, items: [{ serviceId: shop.serviceId, qty: 1 }], technicians: tech, servedPersonName: '' }] }) }, shop.token)
+                  await request(`/settlements/${encodeURIComponent(sV.data.settlements[0].code)}/sign`, { method: 'POST', body: JSON.stringify({ signature: '㋋ 裁A签', disclaimerAccepted: true }) }, null, { 'x-tenant-id': shop.tenantId })
+                  const bkV2 = (await request('/admin/bookings/direct', { method: 'POST', body: JSON.stringify({ userId: cuidV, serviceId: shop.serviceId, technicianId: shop.tech2, date: dateStr(2), time: '14:31' }) }, shop.token)).data.booking
+                  await request(`/admin/bookings/${bkV2.id}/status`, { method: 'PATCH', body: JSON.stringify({ status: 'COMPLETED' }) }, shop.token)
+                  const bkV3 = (await request('/admin/bookings/direct', { method: 'POST', body: JSON.stringify({ userId: cuidV, serviceId: shop.serviceId, technicianId: shop.tech2, date: dateStr(3), time: '14:31' }) }, shop.token)).data.booking
+                  await request(`/admin/bookings/${bkV3.id}/status`, { method: 'PATCH', body: JSON.stringify({ status: 'CANCELLED' }) }, shop.token)
+                  const meV = (await request('/auth/wechat/mini-login', { method: 'POST', body: JSON.stringify({ demoLogin: true, tenantId: shop.tenantId, asUserId: cuidV }) }, null, { 'x-tenant-id': shop.tenantId })).data.user
+                  const listV = ((await request('/admin/customers', {}, shop.token)).data.customers || []).find((c) => c.id === cuidV)
+                  const profV = (await request(`/admin/customers/${cuidV}/notes`, {}, shop.token)).data.profile
+                  check('㋋ 裁A 三读方同数=2(签署组+完成预约同日=1;后日完成+1;取消不算)', meV.visits === 2 && listV && listV.visitCount === 2 && profV && profV.visitCount === 2, JSON.stringify({ me: meV.visits, list: listV && listV.visitCount, prof: profV && profV.visitCount }))
+                  /* 裁C:售后单带徽标上日历(bkK=售后态) */
+                  const dayV = (await request(`/admin/schedule-day?date=${dateStr(0)}`, {}, shop.token)).data
+                  const rowAS = (dayV.bookings || []).find((b) => b.id === bkK.id)
+                  check('㋋ 裁C 售后单上日历(afterSales 标+「售后」徽标句,不再蒸发)', rowAS && rowAS.afterSales === true && rowAS.afterSalesTag === '售后' && rowAS.arrivalState === 'done', JSON.stringify(rowAS && { s: rowAS.status, t: rowAS.afterSalesTag }))
+                  /* L3 裁:多张单详情=逐张卡+组汇总行(Σ各张头条=列表句同数) */
+                  const bkGD = (await request('/bookings', {}, ctokK, { 'x-tenant-id': shop.tenantId })).data.bookings.find((b) => b.id === bkG.id)
+                  const pmt = bkGD.payment || {}
+                  check('㋋ 详情逐张卡:sheets=2 张各带五步账+头条', Array.isArray(pmt.sheets) && pmt.sheets.length === 2 && pmt.sheets.every((x) => x.flow && Array.isArray(x.flow.lines) && x.flow.cashDueText), JSON.stringify((pmt.sheets || []).map((x) => x.n)))
+                  check('㋋ 组汇总行=「组到店支付(2 张)」且 Σ各张头条=列表已结清同数', pmt.groupCashLabel === '组到店支付(2 张)' && pmt.groupCashDueCents === (pmt.sheets || []).reduce((nn, x) => nn + x.flow.cashDueCents, 0) && pmt.groupCashDueCents === num(bkGD.listAmountText), JSON.stringify({ l: pmt.groupCashLabel, c: pmt.groupCashDueCents }))
                 }
 
                 /* ===== ㋆ 资金时序五步全组合矩阵(店主 08-22 总纲=唯一裁判;40 格常驻) =====
@@ -1826,9 +1865,14 @@ const main = async () => {
       const odWx2 = readFileSync(join(ROOT42, 'miniprogram/pages/order-detail/index.wxml'), 'utf8')
       const odJs2 = readFileSync(join(ROOT42, 'miniprogram/pages/order-detail/index.js'), 'utf8')
       check('㋊ D67② 签署单卡小字无 Emoji(✍ 双端扫尽:mini+web 顾客端)', !odWx2.includes('✍') && !custWeb.includes('✍'))
-      check('㋊ D67③ 逐张原件双端 wiring(mini sheetLinks 循环+goSheetSnapshot;web sheetLinks 循环)', odWx2.includes('order.pay.sheetLinks') && odJs2.includes('goSheetSnapshot') && custWeb.includes('order.payment.sheetLinks'))
+      check('㋊ D67③→L3 裁 逐张原件双端 wiring(升级为逐张卡:mini sheets 循环+goSheetSnapshot;web sheets 循环各带原件链)', odWx2.includes('order.pay.sheets') && odJs2.includes('goSheetSnapshot') && custWeb.includes('order.payment.sheets'))
       check('㋊ D67① 全组签完回台面(relaunch workbench,非退一层)', readFileSync(join(ROOT42, 'miniprogram/pages/merchant/settlement/index.js'), 'utf8').includes("relaunch('/pages/merchant/workbench/index')"))
       check('㋊ D59 提示句双端 wiring(mini rechargeNote+web rechargeUnassignedText)', readFileSync(join(ROOT42, 'miniprogram/utils/dailyclose.js'), 'utf8').includes('rechargeUnassignedText') && readFileSync(join(ROOT42, 'miniprogram/pages/merchant/orders/index.wxml'), 'utf8').includes('p.rechargeNote') && readFileSync(join(ROOT42, 'apps/web/admin.js'), 'utf8').includes('p.rechargeUnassignedText'))
+      // ㋋ 五裁 wiring:详情逐张卡双端+台面售后蓝徽标+到店计数三读方同一出口
+      const srvAll = readFileSync(join(ROOT42, 'apps/api/local-server.mjs'), 'utf8')
+      check('㋋ wiring 详情逐张卡双端(mini sheets 循环+组汇总;web 同构)', readFileSync(join(ROOT42, 'miniprogram/pages/order-detail/index.wxml'), 'utf8').includes('order.pay.sheets') && readFileSync(join(ROOT42, 'apps/web/customer.js'), 'utf8').includes('order.payment.sheets'))
+      check('㋋ wiring 裁C 台面售后蓝徽标(mini as-blue)', readFileSync(join(ROOT42, 'miniprogram/pages/merchant/orders/index.wxml'), 'utf8').includes('b.afterSalesTag'))
+      check('㋋ wiring 裁A/E 三读方同一出口(visitDaysCount 三处调用)', (srvAll.match(/visitDaysCount\(/g) || []).length >= 4)
       // ㋅ D63 wiring:组卡/签署页「余额未用」句+四行自证渲染面
       check('㋅ D63 余额未用句渲染面(组卡+签署页)+四行自证键', spWxml.includes('card.storedUnusedNotice') && signHtml.includes('s.storedUnusedNotice') && srvD60.includes("key: 'before', label: '充值前余额'"))
       check('㋄ D60 结算页:购卡显式行+L3① 行内小注定稿句', settleWxml.includes('购卡款,预收') && settleJs.includes('含本单随签充值 +') && settleWxml.includes('view.rvNote'))
