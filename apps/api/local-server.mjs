@@ -7,6 +7,7 @@ import { copyFileSync, existsSync, mkdirSync, readdirSync, readFileSync, renameS
 import { dirname, extname, join, normalize, resolve } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import os from 'node:os'   // 真机调试:开发机局域网 IP 探测(启动日志给手机用的地址)
+import { pngSize, svgToPng } from './svg-raster.mjs'   // 真机 SVG 空白件:快照出 PNG(真机 <image> 不认带文字的 SVG)
 import { analyzeReferenceImage, createBookingSummary, createCustomerInsight, createCustomerServiceReply, createDailyBrief, createRecallMessages, createServiceNoteInsights, createSocialCopy, extractKbEntriesFromDocument, polishStaffQuoteReply } from './ai-utils.mjs'
 import { buildKnowledgeContext, loadCustomerServiceKnowledgeBase } from './kb-utils.mjs'
 
@@ -5634,6 +5635,35 @@ function groupSheetLinks(groupId, tenantId = currentTenantId()) {
   }))
 }
 
+/* 快照 PNG 缓存:签署快照是不可变凭证,转一次存盘永久复用(DATA_DIR/snapshots/<单号>.png)。
+   转换失败返回 null(调用方回落 SVG),不写空文件、下次还会再试。 */
+const snapshotPngDir = join(dataDir, 'snapshots')
+function snapshotPngFor(code, svg) {
+  const safe = String(code || '').replace(/[^A-Za-z0-9_-]/g, '')
+  if (!safe || !svg) return null
+  const file = join(snapshotPngDir, `${safe}.png`)
+  try {
+    const cached = readFileSync(file)
+    if (cached && cached.length && pngSize(cached)) return cached
+  } catch (e) { /* 没缓存就现转 */ }
+  const png = svgToPng(svg, { width: 1440 })
+  if (!png) return null
+  try {
+    mkdirSync(snapshotPngDir, { recursive: true })
+    writeFileSync(file, png)
+  } catch (e) { /* 存盘失败不影响本次出图 */ }
+  return png
+}
+
+// 快照存在对象存储(COS)时:取回 SVG 原文再转 PNG(转不动就回落 302 外链)
+async function fetchSnapshotSvg(url) {
+  try {
+    const r = await fetch(url, { signal: AbortSignal.timeout(6000) })
+    if (!r.ok) return ''
+    return await r.text()
+  } catch (e) { return '' }
+}
+
 function customerOrderBadges(row) {
   const stl = db.prepare("SELECT * FROM settlements WHERE booking_id = ? AND status = 'signed' ORDER BY signed_at DESC LIMIT 1").get(row.id)
   const isAfterSales = row.status === 'AFTER_SALES'
@@ -11078,7 +11108,7 @@ async function route(req, res) {
     })
   }
   // 顾客签署页(小程序 / 网页同构):凭单号只读,不需要登录
-  if (req.method === 'GET' && path.startsWith('/settlements/') && !path.startsWith('/settlements/by-token/') && !path.endsWith('/sign') && !path.endsWith('/snapshot') && !path.endsWith('/signature.svg')) {
+  if (req.method === 'GET' && path.startsWith('/settlements/') && !path.startsWith('/settlements/by-token/') && !path.endsWith('/sign') && !path.endsWith('/snapshot') && !path.endsWith('/signature.svg') && !path.endsWith('/signature.png')) {
     const code = decodeURIComponent(path.split('/')[2] || '')
     const row = db.prepare('SELECT * FROM settlements WHERE code = ?').get(code)
     if (!row) throw apiError(404, 'NOT_FOUND', '找不到这张服务单。')
@@ -11107,7 +11137,7 @@ async function route(req, res) {
      笔迹本来就渲在签署快照里,但快照是整张单(720×612),直接当头像贴会缩成一团。
      这里把快照里的笔迹 <path> 抠出来、按它自己的包围盒裁一张紧凑 SVG。
      快照本身一个字节都不动 —— 只读、只裁。 */
-  if (req.method === 'GET' && path.startsWith('/settlements/') && path.endsWith('/signature.svg')) {
+  if (req.method === 'GET' && path.startsWith('/settlements/') && (path.endsWith('/signature.svg') || path.endsWith('/signature.png'))) {
     const code = decodeURIComponent(path.split('/')[2] || '')
     const row = db.prepare('SELECT * FROM settlements WHERE code = ?').get(code)
     if (!row) throw apiError(404, 'NOT_FOUND', '找不到这张服务单。')
@@ -11124,21 +11154,48 @@ async function route(req, res) {
     const out = `<?xml version="1.0" encoding="UTF-8"?>\n<svg xmlns="http://www.w3.org/2000/svg" viewBox="${x0} ${y0} ${w} ${h}" width="${Math.round(w)}" height="${Math.round(h)}">`
       + paths.map((d) => `<path d="${d}" fill="none" stroke="#241f1d" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>`).join('')
       + '</svg>'
+    /* 真机 SVG 空白件同刀:笔迹图也出 PNG(`/signature.png`);`.svg` 路径保留兼容旧链接,
+       但全仓图源已改指 PNG —— 三端同一格式,不留两套。 */
+    if (path.endsWith('/signature.png')) {
+      const png = svgToPng(out, { width: Math.max(240, Math.round(w) * 3) })
+      if (png) {
+        res.writeHead(200, { 'content-type': 'image/png', 'content-length': png.length, 'cache-control': 'public, max-age=31536000, immutable' })
+        res.end(png)
+        return
+      }
+    }
     res.writeHead(200, { 'content-type': 'image/svg+xml; charset=utf-8', 'cache-control': 'public, max-age=31536000, immutable' })
     res.end(out)
     return
   }
+  /* 真机 SVG 空白件(店主 08-23 实测):小程序 <image> 在**真机**上渲染不了带文字的 SVG ——
+     壳(浮层/页码/箭头)全对,图全白。这里改成**出 PNG**:契约不动(路径、groupSheetLinks 唯一出口、
+     八处入口三端动线原样),只换图源;PNG 落盘缓存(签署单不可变=转一次永久复用),
+     拿不到栅格化后端(未装 librsvg/ImageMagick、非 macOS)才回落 SVG,绝不因转换失败挡住看单。 */
   if (req.method === 'GET' && path.startsWith('/settlements/') && path.endsWith('/snapshot')) {
     const code = decodeURIComponent(path.split('/')[2] || '')
     const row = db.prepare('SELECT * FROM settlements WHERE code = ?').get(code)
     if (!row || !row.snapshot_at) throw apiError(404, 'NOT_FOUND', '这张单还没有签署快照。')
-    if (row.snapshot_url) {
+    const svg = row.snapshot_inline || (row.snapshot_url ? await fetchSnapshotSvg(row.snapshot_url) : '')
+    // ?format=svg:留一个看原文的口(对账/排查/回归断言用;默认一律 PNG)
+    if (String(query.format || '') === 'svg' && svg) {
+      res.writeHead(200, { 'content-type': 'image/svg+xml; charset=utf-8', 'cache-control': 'no-store' })
+      res.end(svg)
+      return
+    }
+    const png = svg ? snapshotPngFor(row.code, svg) : null
+    if (png) {
+      res.writeHead(200, { 'content-type': 'image/png', 'content-length': png.length, 'cache-control': 'public, max-age=31536000, immutable' })
+      res.end(png)
+      return
+    }
+    if (row.snapshot_url) {   // 转不出来又是外链存储:照旧跳外链(网页仍看得到)
       res.writeHead(302, { location: row.snapshot_url })
       res.end()
       return
     }
     res.writeHead(200, { 'content-type': 'image/svg+xml; charset=utf-8', 'cache-control': 'no-store' })
-    res.end(row.snapshot_inline || '')
+    res.end(svg || '')
     return
   }
   // 卡主签字:签字那一刻即时扣卡(先烧迁移桶再烧新桶);签前二次校验余额,不足直接拦

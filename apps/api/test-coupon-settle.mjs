@@ -273,7 +273,8 @@ async function main() {
   check('④ 已签单不再下发券包', pubSigned.data.coupons === null)
 
   // ---- 快照上有券行,且与所签构成一致 ----
-  const snap = await request(`/settlements/${sheet1.code}/snapshot`, {}, null)
+  // 真机 SVG 空白件后:出图是 PNG,内容层断言走原文口 ?format=svg(引擎产物不变)
+  const snap = await request(`/settlements/${sheet1.code}/snapshot?format=svg`, {}, null)
   const svg = String(snap.data && snap.data.raw ? snap.data.raw : '')
   // D65 改版:快照=一条五步账,券行句式「优惠券抵扣(名称) −X」(flow 块后端句)
   check('快照 SVG 上有优惠券行', /优惠券抵扣\(满300减30\)/.test(svg), svg.slice(0, 120))

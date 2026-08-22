@@ -12,7 +12,7 @@
   <view class="label">密码</view>
   <view class="field">
     <input class="inp" password="{{hidePwd}}" placeholder="请输入密码" placeholder-class="ph" value="{{password}}" bindinput="onPass" />
-    <image class="eye" src="{{hidePwd ? '/assets/icons/eye-off.svg' : '/assets/icons/eye.svg'}}" bindtap="togglePwd" />
+    <image class="eye" src="{{hidePwd ? '/assets/icons/eye-off.png' : '/assets/icons/eye.png'}}" bindtap="togglePwd" />
   </view>
 
   <view class="remember" bindtap="toggleRemember">

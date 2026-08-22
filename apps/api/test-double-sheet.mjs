@@ -204,7 +204,7 @@ async function main() {
   check('D1 空态:没更正的普通单不出更正卡、不出徽标',
     amdBefore.amendments.length === 0 && amdBefore.amendBadgeText === '' && amdBefore.actualDueCents === amdBefore.totalCents,
     JSON.stringify({ n: amdBefore.amendments.length, b: amdBefore.amendBadgeText }))
-  const snapBefore = raw(await request(`/settlements/${amendSheet.code}/snapshot`, {}, null))
+  const snapBefore = raw(await request(`/settlements/${amendSheet.code}/snapshot?format=svg`, {}, null))
 
   await request(`/admin/settlements/${amendSheet.id}/amend`, {
     method: 'POST', body: JSON.stringify({ totalCents: amendSheet.totalCents - 2000, reason: '技师少做了一项' })
@@ -230,7 +230,7 @@ async function main() {
     JSON.stringify({ actual: after.actualDueCents, total: after.totalCents, sum }))
   check('D1 红线:更正**不改原单一个字节**(合计仍是原值)', after.totalCents === amdBefore.totalCents,
     JSON.stringify({ before: amdBefore.totalCents, after: after.totalCents }))
-  const snapAfter = raw(await request(`/settlements/${amendSheet.code}/snapshot`, {}, null))
+  const snapAfter = raw(await request(`/settlements/${amendSheet.code}/snapshot?format=svg`, {}, null))
   check('D1 红线:更正不动签署快照(逐字节相同)', snapBefore === snapAfter && snapBefore.length > 0,
     `${snapBefore.length} vs ${snapAfter.length}`)
   // 边界:一正一负相抵回原值

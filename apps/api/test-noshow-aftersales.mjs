@@ -1669,6 +1669,19 @@ const main = async () => {
                   check('㋍ D68③ 点哪一份就从哪一份开(startIndex 落在被点那份上)', snapByCode.startIndex === 1 && snapById.startIndex === 0, JSON.stringify({ a: snapById.startIndex, b: snapByCode.startIndex }))
                   // 越权面:另一家店的老板 token 拿本店单 → 租户闸门按会话租户查,查无此单
                   const otherShop = await newShop(`x68${RUN_ID.slice(-3)}`)
+                  /* ===== ㋏ 真机 SVG 空白件(店主 08-23 实测):图源换 PNG,契约与份数不动 ===== */
+                  const snapRes = await fetch(`${BASE_URL}/settlements/${encodeURIComponent(gA.code)}/snapshot`)
+                  const snapBuf = Buffer.from(await snapRes.arrayBuffer())
+                  const isPng = snapBuf.length > 24 && snapBuf.subarray(0, 8).equals(Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]))
+                  const pngW = isPng ? snapBuf.readUInt32BE(16) : 0
+                  const pngH = isPng ? snapBuf.readUInt32BE(20) : 0
+                  check('㋏ 快照接口 Content-Type=image/png(真机 <image> 认的格式)', String(snapRes.headers.get('content-type') || '').includes('image/png'), String(snapRes.headers.get('content-type')))
+                  check('㋏ 快照 PNG 尺寸>0 且是真实单据比例(非空图、非正方形留白)', isPng && pngW >= 720 && pngH > 100 && pngH < pngW, JSON.stringify({ w: pngW, h: pngH, bytes: snapBuf.length }))
+                  const snapRes2 = await fetch(`${BASE_URL}/settlements/${encodeURIComponent(gA.code)}/snapshot`)
+                  const snapBuf2 = Buffer.from(await snapRes2.arrayBuffer())
+                  check('㋏ 二次取图=同一张(落盘缓存,签署凭证转一次永久复用)', snapBuf2.length === snapBuf.length && snapBuf2.subarray(0, 64).equals(snapBuf.subarray(0, 64)), JSON.stringify({ a: snapBuf.length, b: snapBuf2.length }))
+                  const snapAfterPng = (await request(`/admin/settlements/${gA.id}/snapshots`, {}, shop.token)).data
+                  check('㋏ 换图源不动契约:每组份数与逐份句原样(snapshotUrl 路径不变)', snapAfterPng.total === grpCountDb && snapAfterPng.sheets.every((sh, i) => sh.label === pmt.sheets[i].label && sh.snapshotUrl === pmt.sheets[i].snapshotUrl), JSON.stringify(snapAfterPng.sheets.map((x) => x.snapshotUrl)))
                   const snapCross = await request(`/admin/settlements/${gA.id}/snapshots`, {}, otherShop.token)
                   check('㋍ D68③ 越权面:别店老板 token 拿不到本店原件(404)', snapCross.status === 404, String(snapCross.status))
                 }
@@ -1931,6 +1944,27 @@ const main = async () => {
         const files = ['miniprogram/utils/dailyclose.js', 'miniprogram/pages/merchant/finance/index.js', 'miniprogram/components/sheet-preview/index.js', 'miniprogram/pages/order-detail/index.js']
         return files.some((f) => readFileSync(join(ROOT42, f), 'utf8').includes('snapshot=$'))
       })()))
+      /* ㋏ L2 机械扫描:全仓 image 位零 SVG 图源(小程序 <image src>、网页 <img src>、图标资源引用)——
+         真机 <image> 不认 SVG,喂一处白一处。 */
+      const svgSrcHits = []
+      for (const rel of ['miniprogram/pages', 'miniprogram/components', 'apps/web']) {
+        const stack = [join(ROOT42, rel)]
+        while (stack.length) {
+          const dir = stack.pop()
+          for (const ent of readdirSync(dir, { withFileTypes: true })) {
+            const full = join(dir, ent.name)
+            if (ent.isDirectory()) { stack.push(full); continue }
+            if (!/\.(wxml|js|html)$/.test(ent.name)) continue
+            const txt = readFileSync(full, 'utf8')
+            for (const line of txt.split('\n')) {
+              if (/^\s*(\/\*|\*|\/\/|<!--)/.test(line)) continue
+              if (/(<image[^>]*src=|<img[^>]*src=|\bsrc:\s*)['"`][^'"`]*\.svg/.test(line)) svgSrcHits.push(`${ent.name}: ${line.trim().slice(0, 70)}`)
+            }
+          }
+        }
+      }
+      check('㋏ L2 全仓 image 位零 SVG 图源(图标/快照/笔迹全部 PNG,0 残留)', svgSrcHits.length === 0, svgSrcHits.join(' | ').slice(0, 220))
+      check('㋏ 图标资源已出 PNG(23 个 icon 同名 .png 在场)', readdirSync(join(ROOT42, 'miniprogram/assets/icons')).filter((f) => f.endsWith('.png')).length >= 23)
       const svWeb = readFileSync(join(ROOT42, 'apps/web/snapshot-viewer.js'), 'utf8')
       /* ===== ㋎ 真机调试联通件(店主 08-23):局域网可达 + 演示白名单生产结构性不成立 ===== */
       const srvLan = readFileSync(join(ROOT42, 'apps/api/local-server.mjs'), 'utf8')

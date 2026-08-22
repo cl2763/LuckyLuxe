@@ -1,1 +1,7 @@
 providers = ["node"]
+
+# 真机 SVG 空白件(店主 08-23):签署快照/笔迹图要出 PNG(真机 <image> 不认带文字的 SVG)。
+# 生产用 librsvg 的 rsvg-convert 栅格化(尺寸精确、中文靠系统字体);仍是**系统包**,
+# 后端「单文件零 npm 依赖」不变。本机开发无 librsvg 时自动回落 macOS 自带 qlmanage。
+[phases.setup]
+nixPkgs = ["nodejs_22", "librsvg", "noto-fonts-cjk-sans"]

@@ -171,7 +171,8 @@ async function load() {
 function signSlotHtml(s) {
   if (s.status !== 'signed') return '（签署后显示于此）'
   if (s.snapshot && s.snapshotHasInk) {
-    return `<img class="ink" src="/settlements/${encodeURIComponent(s.code)}/signature.svg" alt="顾客签名" loading="lazy">`
+    // 真机 SVG 空白件同刀:笔迹图也走 PNG(三端同一格式,不留两套)
+    return `<img class="ink" src="/settlements/${encodeURIComponent(s.code)}/signature.png" alt="顾客签名" loading="lazy">`
   }
   return `${esc(s.signatureName || '（已签）')}<span class="ink-note">早期单 · 仅存文本</span>`
 }

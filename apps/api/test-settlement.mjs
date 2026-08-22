@@ -189,13 +189,20 @@ async function main() {
   check('沙盒里签署一律 inline,不碰真实对象存储',
     signed.data.snapshot.storage === 'inline' && !signed.data.snapshot.url,
     JSON.stringify(signed.data.snapshot))
+  /* 真机 SVG 空白件(店主 08-23):快照出图改 PNG(真机 <image> 不认带文字的 SVG)——
+     图源变、内容不变:内容层断言改盯**快照 SVG 原文**(引擎产物,serializeSettlement 同源),
+     出图层断言改盯 PNG 头与尺寸。 */
   const snap = await fetch(`${BASE_URL}/settlements/${sheet1.code}/snapshot`)
-  const snapText = await snap.text()
+  const snapBuf = Buffer.from(await snap.arrayBuffer())
   check('快照可取回', snap.status === 200 || snap.status === 302, String(snap.status))
   if (snap.status === 200) {
-    check('快照是 SVG 且含单号', snapText.startsWith('<?xml') && snapText.includes(sheet1.code), snapText.slice(0, 80))
-    check('快照里画进了笔迹路径', /<path d="M/.test(snapText), snapText.slice(0, 200))
-    check('快照金额与单据一致(共优惠/合计)', snapText.includes('较原价共优惠') && snapText.includes('合计'), '')
+    const isPng = snapBuf.length > 24 && snapBuf.subarray(0, 8).equals(Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]))
+    check('快照出图=PNG(真机可渲染格式)+尺寸>0', isPng && snapBuf.readUInt32BE(16) > 0 && snapBuf.readUInt32BE(20) > 0,
+      `${snap.headers.get('content-type')} ${snapBuf.length}B`)
+    const snapSvg = await (await fetch(`${BASE_URL}/settlements/${sheet1.code}/snapshot?format=svg`)).text()
+    check('快照原文含单号', snapSvg.includes(sheet1.code), snapSvg.slice(0, 80))
+    check('快照里画进了笔迹路径', /<path d="M/.test(snapSvg), snapSvg.slice(0, 200))
+    check('快照金额与单据一致(共优惠/五步账头条)', snapSvg.includes('较原价共优惠') && snapSvg.includes('本单到店支付'), '')
   }
   check('快照信息随单据下发(日结页「查看签署单」用它)', Boolean(signed.data.settlement.snapshot), JSON.stringify(signed.data.settlement.snapshot))
 
@@ -237,10 +244,13 @@ async function main() {
   check('沙盒隔离:签署产生的快照是 inline,没有 COS 地址',
     sandboxSigned.data.settlement.snapshot.storage === 'inline' && !sandboxSigned.data.settlement.snapshot.url,
     JSON.stringify(sandboxSigned.data.settlement.snapshot))
-  const sandboxSvg = await request(`/settlements/${sandboxCode}/snapshot`, {}, null)
-  check('沙盒隔离:inline 快照照样取得回来(功能不受影响)',
-    sandboxSvg.status === 200 && /<svg/.test(String(sandboxSvg.data?.raw || '')),
-    `${sandboxSvg.status}`)
+  // 真机 SVG 空白件后:出图是 PNG,原文口 ?format=svg 仍在(两个都要能取回来)
+  const sandboxPng = await fetch(`${BASE_URL}/settlements/${sandboxCode}/snapshot`)
+  const sandboxPngBuf = Buffer.from(await sandboxPng.arrayBuffer())
+  const sandboxSvgText = await (await fetch(`${BASE_URL}/settlements/${sandboxCode}/snapshot?format=svg`)).text()
+  check('沙盒隔离:inline 快照照样取得回来(出图 PNG + 原文口 SVG,功能不受影响)',
+    sandboxPng.status === 200 && sandboxPngBuf.subarray(0, 8).equals(Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a])) && /<svg/.test(sandboxSvgText),
+    `${sandboxPng.status} ${sandboxPngBuf.length}B`)
 
   console.log(`\n结算闭环回归通过:${checks} 项断言全绿`)
 }
