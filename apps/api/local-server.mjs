@@ -6,6 +6,7 @@ import { createDecipheriv, createHash, createHmac } from 'node:crypto'
 import { copyFileSync, existsSync, mkdirSync, readdirSync, readFileSync, renameSync, statSync, unlinkSync, writeFileSync } from 'node:fs'
 import { dirname, extname, join, normalize, resolve } from 'node:path'
 import { fileURLToPath } from 'node:url'
+import os from 'node:os'   // 真机调试:开发机局域网 IP 探测(启动日志给手机用的地址)
 import { analyzeReferenceImage, createBookingSummary, createCustomerInsight, createCustomerServiceReply, createDailyBrief, createRecallMessages, createServiceNoteInsights, createSocialCopy, extractKbEntriesFromDocument, polishStaffQuoteReply } from './ai-utils.mjs'
 import { buildKnowledgeContext, loadCustomerServiceKnowledgeBase } from './kb-utils.mjs'
 
@@ -40,6 +41,11 @@ const PORT = Number(process.env.PORT || 4000)
 const OWNER_TOKEN = process.env.OWNER_TOKEN || process.env.OWNER_DEMO_TOKEN || 'owner-demo-token'
 // 生产判定(Railway 会注入 RAILWAY_ENVIRONMENT):用于「日志里不许出现主钥匙」这类只在云端生效的收紧
 const IS_PRODUCTION = process.env.NODE_ENV === 'production' || Boolean(process.env.RAILWAY_ENVIRONMENT)
+/* 四之十红线(店主 08-23 重申,随真机调试联通件钉死):**演示白名单只在沙箱成立,生产结构性不成立**。
+   以前只靠"云端别设 ALLOW_DEMO_ADMIN_LOGIN 这个变量"——那是配置纪律,配错一次就是任何人
+   拿邮箱+任意密码进真库。现在生产进程里这个开关**恒 false**:即使误设环境变量也开不了,
+   演示登录/演示注册/演示种子数据全走这一个判据。生产也绝不建测试账号(测试档案只在沙箱库)。 */
+const DEMO_LOGIN_ALLOWED = !IS_PRODUCTION && process.env.ALLOW_DEMO_ADMIN_LOGIN === 'true'
 // 多租户:请求级租户上下文。商家端 /admin 进入时按登录账号的租户 enterWith;
 // 顾客/公开路径不设上下文 → 回退默认租户(行为不变)。所有用 currentTenantId() 的模块自动按租户走。
 const DEFAULT_TENANT_ID = process.env.DEFAULT_TENANT_ID || 'lucky-luxe'
@@ -1224,7 +1230,7 @@ function requireAdmin(req) {
   // 真实账号会话优先(sess_ 前缀);演示白名单 token 仅在本地开发开关下有效
   const accountAdmin = adminFromSessionToken(token)
   if (accountAdmin) return accountAdmin
-  if (process.env.ALLOW_DEMO_ADMIN_LOGIN === 'true') {
+  if (DEMO_LOGIN_ALLOWED) {
     const ownerEmail = demoEmailFromToken(token, 'owner')
     if (ownerEmail && OWNER_EMAILS.includes(ownerEmail)) return adminForEmail(ownerEmail, 'demo-owner')
     const staffEmail = demoEmailFromToken(token, 'staff')
@@ -5942,7 +5948,7 @@ async function signInWechatMiniUser(body) {
   // 演示旁路:本地/演示环境未配微信凭证时,直接以演示顾客登录当前门店,
   // 让真机/模拟器无需真实微信授权即可演示"我的/会员/发券"等需登录页。
   // 仅在 ALLOW_DEMO_ADMIN_LOGIN=true 且服务器没有微信凭证时启用;生产(配了凭证)永不走这里。
-  if (process.env.ALLOW_DEMO_ADMIN_LOGIN === 'true' && body.demoLogin === true) {
+  if (DEMO_LOGIN_ALLOWED && body.demoLogin === true) {
     const demoTenant = validTenantId(body.tenantId)
     /* 演示顾客要**挑本店的**(2026-08-10 核验轮修复)。
        原来无论进哪家店都登录 demo-cust-01,而 users 是按店分行的:她只在旗舰店有档案。
@@ -6049,7 +6055,7 @@ async function signInWechatMiniUser(body) {
   const loginTenant = validTenantId(body.tenantId)
   // 演示环境:仅默认店(lucky-luxe)首登无单时铺演示数据;其它店首登保持 0,便于直观看到"每店独立会员"。生产开关关闭不启用。
   try {
-    if (process.env.ALLOW_DEMO_ADMIN_LOGIN === 'true' && loginTenant === DEFAULT_TENANT_ID
+    if (DEMO_LOGIN_ALLOWED && loginTenant === DEFAULT_TENANT_ID
       && !db.prepare('SELECT 1 FROM bookings WHERE user_id = ? AND tenant_id = ? LIMIT 1').get(user.id, loginTenant)) {
       seedDemoBookingsForUser(user.id, loginTenant)
     }
@@ -6246,7 +6252,7 @@ function customerFromMiniToken(token) {
   if (!data.exp || Date.now() > Number(data.exp)) throw apiError(401, 'UNAUTHORIZED', 'Mini program session expired.')
   let user = db.prepare('SELECT * FROM users WHERE id = ? AND wechat_open_id = ?').get(data.sub, data.openid)
   // 演示登录旁路:demo-openid 无真实 openid,仅在演示开关下按用户 id 回退(生产不触发)
-  if (!user && process.env.ALLOW_DEMO_ADMIN_LOGIN === 'true' && String(data.openid || '').startsWith('demo-openid-')) {
+  if (!user && DEMO_LOGIN_ALLOWED && String(data.openid || '').startsWith('demo-openid-')) {
     user = db.prepare('SELECT * FROM users WHERE id = ?').get(data.sub)
   }
   if (!user) throw apiError(401, 'UNAUTHORIZED', 'Mini program user was not found.')
@@ -11381,7 +11387,7 @@ async function route(req, res) {
       })
     }
     // 2) 演示白名单兼容——仅本地开发开启(ALLOW_DEMO_ADMIN_LOGIN=true);云端默认禁用
-    if (process.env.ALLOW_DEMO_ADMIN_LOGIN !== 'true') {
+    if (!DEMO_LOGIN_ALLOWED) {
       throw apiError(403, 'FORBIDDEN', '账号不存在。请用正式账号登录(老板:boss;员工:老板发的账号)。')
     }
     const role = OWNER_EMAILS.includes(loginId) ? 'owner' : STAFF_EMAILS.includes(loginId) ? 'staff' : ''
@@ -11486,7 +11492,7 @@ async function route(req, res) {
     return json(res, 200, { username: account.username, status: nextStatus })
   }
   if (req.method === 'POST' && path === '/admin/auth/register') {
-    if (process.env.ALLOW_DEMO_ADMIN_LOGIN !== 'true') throw apiError(403, 'FORBIDDEN', '注册已停用。老板主账号由平台交付。')
+    if (!DEMO_LOGIN_ALLOWED) throw apiError(403, 'FORBIDDEN', '注册已停用。老板主账号由平台交付。')
     const body = await readBody(req)
     const email = String(body.email || '').trim().toLowerCase()
     if (!OWNER_EMAILS.includes(email)) throw apiError(403, 'FORBIDDEN', 'This email is not approved for owner admin.')
@@ -11682,7 +11688,7 @@ async function route(req, res) {
   }
   // 沙盒专用:当前店演示2阵容名册(顾客端「切换演示身份」入口数据源;生产 ALLOW_DEMO 关=404)
   if (req.method === 'GET' && path === '/sandbox/demo-roster') {
-    if (process.env.ALLOW_DEMO_ADMIN_LOGIN !== 'true') throw apiError(404, 'NOT_FOUND', 'Not found.')
+    if (!DEMO_LOGIN_ALLOWED) throw apiError(404, 'NOT_FOUND', 'Not found.')
     const tid = resolveTenant(req, query)
     const roster = db.prepare(`SELECT id, display_name FROM users
       WHERE tenant_id = ? AND display_name LIKE '演示2-%' AND tags_json NOT LIKE '%退役·旧口径演示档案%'
@@ -18252,7 +18258,7 @@ try {
 
 seedDatabase()
 // 演示环境:铺一批顾客服务小记,让「有小记/无小记」两态在老板端+员工端都能直接看到
-if (process.env.ALLOW_DEMO_ADMIN_LOGIN === 'true') {
+if (DEMO_LOGIN_ALLOWED) {
   try { seedDemoServiceNotes(DEFAULT_TENANT_ID) } catch (e) { /* 忽略 */ }
 }
 
@@ -18268,9 +18274,27 @@ createServer((req, res) => {
       }
     })
   })
-}).listen(PORT, process.env.HOST || '127.0.0.1', () => {
-  // 本机开发默认只绑 127.0.0.1(安全);云端(Railway 等)设 HOST=0.0.0.0 才对外可达
+}).listen(PORT, process.env.HOST || (IS_PRODUCTION ? '127.0.0.1' : '0.0.0.0'), () => {
+  /* 真机调试联通件(店主 08-23):手机上的 127.0.0.1 指的是**手机自己**,永远连不到 Mac ——
+     所以本机开发默认绑 0.0.0.0(同一 Wi-Fi 下手机可达 http://<Mac 局域网 IP>:PORT)。
+     云端照旧由 HOST 环境变量决定(Railway 设 0.0.0.0)。
+     安全说明:局域网可达仅限开发机,管理端仍要账号密码;演示白名单只在设了
+     ALLOW_DEMO_ADMIN_LOGIN=true 的沙箱进程里开,真库那台(4128)不设=没有白名单。 */
   console.log(`Lucky Luxe local API running at http://localhost:${PORT}`)
+  if (!IS_PRODUCTION) {
+    const lan = (() => {
+      try {
+        const nets = os.networkInterfaces()
+        for (const name of Object.keys(nets)) {
+          for (const ni of nets[name] || []) {
+            if (ni.family === 'IPv4' && !ni.internal) return ni.address
+          }
+        }
+      } catch (e) { /* 拿不到就不打印 */ }
+      return ''
+    })()
+    if (lan) console.log(`真机调试地址(手机与本机同一 Wi-Fi): http://${lan}:${PORT}   ← 小程序 utils/devhost.js 也认这个`)
+  }
   // 2026-08-07 安全:主钥匙绝不进生产日志(Railway Deploy Logs 会长期留存、可被截图外传)。
   // 生产只报「已配置/未配置」;本地开发保留可用性,但也只打印前 8 位做核对。
   if (IS_PRODUCTION) {

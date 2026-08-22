@@ -4,9 +4,22 @@
 // false = 连线上生产(www.luckyluxeatelier.com,真实数据)
 // ⚠️ 正式上传/发布前,务必把这里改回 false!
 const USE_LOCAL_SANDBOX = true // 2026-08-19 体验版 1.0.0 已传(境内号 wx247cd8ad9907430d,连生产);本地开发沙盘;上传前务必改 false
-// 本地沙盘地址:127.0.0.1 走开发者工具本机代理,模拟器与真机调试通用,换网络也不用改。
-// 真机预览/体验版连本地沙盘:用电脑局域网 IP(手机与电脑须同一 WiFi);开发者工具上两者皆可。此行临时改动,不提交。
-const LOCAL_API = 'http://127.0.0.1:4310' // 开发者工具模拟器用这个;真机调试改成电脑当前局域网 IP(2026-08-03 查询为 192.168.0.104,IP 会变,连不上先重查)
+/* 本地沙盘地址(真机调试联通件,店主 08-23 立):
+   - 开发者工具模拟器 = 跑在 Mac 上,127.0.0.1 就是 Mac,直连即可;
+   - **真机调试/预览 = 跑在手机上,127.0.0.1 指的是手机自己**,永远连不到 Mac ——
+     必须换成 Mac 的局域网 IP(手机与 Mac 同一 Wi-Fi)。
+   所以这里按运行环境自动切:平台是 devtools 用回环,真机用 utils/devhost.js 里的局域网 IP
+   (那个文件由根目录「更新真机调试地址.command」一键写入,换网络重跑一次即可,不用改代码)。 */
+const devhost = require('./devhost')
+const LOCAL_PORT = devhost.port || 4310
+const LOCAL_LOOPBACK = `http://127.0.0.1:${LOCAL_PORT}`
+function isDevtools() {
+  try {
+    const info = (wx.getDeviceInfo ? wx.getDeviceInfo() : wx.getSystemInfoSync()) || {}
+    return String(info.platform || '').toLowerCase() === 'devtools'
+  } catch (e) { return false }   // 拿不到就按真机走(真机连回环必死,回环连不上还能报错自证)
+}
+const LOCAL_API = isDevtools() ? LOCAL_LOOPBACK : `http://${devhost.lanHost}:${LOCAL_PORT}`
 const API_BASE = USE_LOCAL_SANDBOX ? LOCAL_API : 'https://www.luckyluxeatelier.com'
 const DEMO_USER_ID = 'user-demo'
 /* 🔴 D19(店主 2026-08-11 拍板,《财务总逻辑》v1.5.1):storeId 必须来自当前门店上下文。

@@ -1932,6 +1932,23 @@ const main = async () => {
         return files.some((f) => readFileSync(join(ROOT42, f), 'utf8').includes('snapshot=$'))
       })()))
       const svWeb = readFileSync(join(ROOT42, 'apps/web/snapshot-viewer.js'), 'utf8')
+      /* ===== ㋎ 真机调试联通件(店主 08-23):局域网可达 + 演示白名单生产结构性不成立 ===== */
+      const srvLan = readFileSync(join(ROOT42, 'apps/api/local-server.mjs'), 'utf8')
+      check('㋎ 真机件①:本机开发绑 0.0.0.0(手机上的 127.0.0.1 是手机自己,连不到 Mac)', /listen\(PORT, process\.env\.HOST \|\| \(IS_PRODUCTION \? '127\.0\.0\.1' : '0\.0\.0\.0'\)/.test(srvLan))
+      check('㋎ 真机件①:启动日志给出真机可用地址(局域网 IP 探测)', srvLan.includes('真机调试地址(手机与本机同一 Wi-Fi)'))
+      const apiJs68 = readFileSync(join(ROOT42, 'miniprogram/utils/api.js'), 'utf8')
+      check('㋎ 真机件①:小程序按运行环境自动切 base(devtools=回环 / 真机=devhost 局域网 IP)',
+        apiJs68.includes("require('./devhost')") && apiJs68.includes('isDevtools()') && apiJs68.includes('devhost.lanHost'))
+      check('㋎ 真机件①:devhost 由一键脚本写入(换网络不改代码)',
+        readFileSync(join(ROOT42, 'miniprogram/utils/devhost.js'), 'utf8').includes('lanHost')
+        && readFileSync(join(ROOT42, '更新真机调试地址.command'), 'utf8').includes('ipconfig getifaddr'))
+      /* 四之十:白名单不能只靠"云端别设那个变量" —— 生产进程里这个开关必须恒 false */
+      check('㋎ 真机件②:演示白名单生产结构性不成立(DEMO_LOGIN_ALLOWED = !IS_PRODUCTION && env)',
+        /const DEMO_LOGIN_ALLOWED = !IS_PRODUCTION && process\.env\.ALLOW_DEMO_ADMIN_LOGIN === 'true'/.test(srvLan)
+        && !/process\.env\.ALLOW_DEMO_ADMIN_LOGIN === 'true'[\s\S]{0,40}body\.demoLogin/.test(srvLan))
+      check('㋎ 真机件②:演示登录/注册/种子全走同一判据(裸读环境变量零残留)',
+        (srvLan.match(/DEMO_LOGIN_ALLOWED/g) || []).length >= 7
+        && (srvLan.match(/process\.env\.ALLOW_DEMO_ADMIN_LOGIN/g) || []).length === 1)
       check('㋍ D68③ 网页端共用模块(admin+customer 同一份:两页都加载、admin 不再 window.open 单张)',
         svWeb.includes('openSnapViewer') && svWeb.includes('data-snap-prev') && svWeb.includes('touchend')
         && readFileSync(join(ROOT42, 'apps/web/admin.html'), 'utf8').includes('snapshot-viewer.js')
