@@ -760,7 +760,8 @@ Page({
           unbound: r.customerBound === false,
           /* D64+D65 表达:组内多张标「第 n/N 张」;头条=本单到店支付(五步⑤现金数,flow 块后端算),
              不再用价值总额当头条 */
-          amountText: `${(s.groupTotal || 1) > 1 ? `第 ${s.groupIndex}/${s.groupTotal} 张 · ` : ''}本单到店支付 ${s.flow ? s.flow.cashDueText : m(s.totalCents)}`,
+          // D68 L2 文案扫尽:用户可见处不出现「第 n/N 张」内部话术
+          amountText: `${(s.groupTotal || 1) > 1 ? `服务确认单 ${s.groupIndex}/${s.groupTotal} · ` : ''}本单到店支付 ${s.flow ? s.flow.cashDueText : m(s.totalCents)}`,
           breakdownText: s.depositDeductCents
             ? `档位小计 ${m(s.subtotalCents)} − 已付定金 ${m(s.depositDeductCents)}`
             : `档位小计 ${m(s.subtotalCents)}`,

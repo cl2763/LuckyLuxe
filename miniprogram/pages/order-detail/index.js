@@ -60,12 +60,15 @@ Page({
           // D67③:组内逐张原件行(映射层零裁剪——toMiniBooking 裁字段教训同族,挑字段处必须点名带上)
           sheetLinks: order.payment.sheetLinks || [],
           /* L3 裁(店主 08-22):多张单详情=逐张签署单卡+顶部组汇总行(=Σ各张头条,与组卡同构) */
-          sheets: (order.payment.sheets || []).map((sh) => ({
+          sheets: (order.payment.sheets || []).map((sh, i) => ({
             ...sh,
+            idx: i,
             flowLines: (sh.flow && sh.flow.lines) || [],
             heroLabel: (sh.flow && sh.flow.heroLabel) || '本单到店支付',
             heroText: (sh.flow && sh.flow.cashDueText) || '',
-            signedAtText: sh.signedAt ? String(sh.signedAt).slice(0, 16).replace('T', ' ') : ''
+            signedAtText: sh.signedAt ? String(sh.signedAt).slice(0, 16).replace('T', ' ') : '',
+            // D68②:原件=悬浮图片查看器(快照 SVG 绝对地址;未签署单没有快照,点了走签署页)
+            snapUrl: sh.snapshotUrl ? `${api.API_BASE}${sh.snapshotUrl}` : ''
           })),
           groupCashLabel: order.payment.groupCashLabel || '',
           groupCashText: order.payment.groupCashDueText || ''
@@ -82,17 +85,32 @@ Page({
   },
 
   /* ===== 批③首件 屏B:售后发起(同屏展开,拍板①②③)+签署单原件入口 ===== */
-  goSnapshot() {
+  /* D68②(店主 08-23):原件=**悬浮图片查看器**(浮层 + 多张左右滑动切换),
+     不再跳整页——跳页会压栈(D68① 同族),看三张原件要按三次返回。
+     未签署的单没有快照,点了才走签署页(那是去签字,不是看原件)。 */
+  openViewer(e) {
     const o = this.data.order
-    if (!o || !o.pay || !o.pay.code) return
-    nav.to(`/pages/sign/index?code=${encodeURIComponent(o.pay.code)}`)   // ㉑:新增导航一律走 utils/nav
+    if (!o || !o.pay) return
+    const sheets = (o.pay.sheets && o.pay.sheets.length ? o.pay.sheets : [{ idx: 0, code: o.pay.code, label: '服务确认单', snapUrl: o.pay.code ? `${api.API_BASE}/settlements/${encodeURIComponent(o.pay.code)}/snapshot` : '', status: 'signed' }])
+    const items = sheets.filter((sh) => sh.snapUrl).map((sh) => ({ code: sh.code, label: sh.label || '服务确认单', url: sh.snapUrl }))
+    const wantCode = e && e.currentTarget && e.currentTarget.dataset.code
+    const target = sheets.find((sh) => sh.code === wantCode) || sheets[0]
+    if (!items.length || (wantCode && target && !target.snapUrl)) {
+      // 待签署单:没有原件可看,直接去签(这一步是签字动线,不是看图)
+      if (target && target.code) nav.to(`/pages/sign/index?code=${encodeURIComponent(target.code)}`)
+      return
+    }
+    const index = Math.max(0, items.findIndex((it) => it.code === (target ? target.code : items[0].code)))
+    this.setData({ viewer: { open: true, index, items, pageText: `${index + 1}/${items.length}` } })
   },
-  // D67③:多张单逐张原件(第 n/N 张行,code 后端 sheetLinks 下发)
-  goSheetSnapshot(e) {
-    const code = e.currentTarget.dataset.code
-    if (!code) return
-    nav.to(`/pages/sign/index?code=${encodeURIComponent(code)}`)
+  onViewerSwipe(e) {
+    const v = this.data.viewer
+    if (!v || !v.open) return
+    const index = e.detail.current
+    this.setData({ 'viewer.index': index, 'viewer.pageText': `${index + 1}/${v.items.length}` })
   },
+  closeViewer() { this.setData({ viewer: null }) },
+  noop() {},
   asAction() {
     const o = this.data.order
     if (!o) return

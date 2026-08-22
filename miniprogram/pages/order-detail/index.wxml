@@ -56,12 +56,14 @@
         <view class="info-row hero"><text>{{order.pay.groupCashLabel}}</text><text class="price">{{order.pay.groupCashText}}</text></view>
       </view>
       <view class="info-card card" wx:for="{{order.pay.sheets}}" wx:for-item="sh" wx:key="code">
-        <view class="info-row"><text>第 {{sh.n}}/{{sh.total}} 张 · {{sh.statusText}}</text><text class="muted">{{sh.signedAtText}}</text></view>
+        <!-- D68 文案:行首=后端句「服务确认单 n/N · 状态」(不出「第 n/N 张」内部话术) -->
+        <view class="info-row"><text>{{sh.label}}</text><text class="muted">{{sh.signedAtText}}</text></view>
         <view class="info-row" wx:for="{{sh.flowLines}}" wx:for-item="fl" wx:key="key">
           <text>{{fl.label}}</text><text>{{fl.amountText}}</text>
         </view>
         <view class="info-row hero"><text>{{sh.heroLabel}}</text><text class="price">{{sh.heroText}}</text></view>
-        <view class="as-link" data-code="{{sh.code}}" bindtap="goSheetSnapshot">查看原件 ›</view>
+        <!-- D68②:原件=悬浮查看器(不跳页=不压栈,D68① 同族) -->
+        <view class="as-link" data-code="{{sh.code}}" bindtap="openViewer">查看原件 ›</view>
       </view>
     </block>
     <view class="info-card card" wx:elif="{{order.pay}}">
@@ -69,7 +71,7 @@
         <text>{{fl.label}}</text><text>{{fl.amountText}}</text>
       </view>
       <view class="info-row hero"><text>{{order.pay.heroLabel}}</text><text class="price">{{order.pay.heroText}}</text></view>
-      <view class="as-link" bindtap="goSnapshot">查看服务确认单原件 ›</view>
+      <view class="as-link" bindtap="openViewer">查看服务确认单原件 ›</view>
     </view>
     <view class="info-card card" wx:elif="{{order.status === 'completed' || order.status === 'after_sales'}}">
       <view class="archive-empty">本单未产生结算单</view>
@@ -118,6 +120,26 @@
           </button>
         </block>
       </view>
+    </view>
+  </view>
+
+  <!-- D68②(店主 08-23):签署原件悬浮查看器——浮层图片,多张左右滑动切换;
+       点遮罩/关闭钮收起。图源=后端快照(签字那一刻的 SVG 凭证),前端零拼装。 -->
+  <view wx:if="{{viewer.open}}" class="viewer-mask" bindtap="closeViewer">
+    <view class="viewer-box" catchtap="noop">
+      <view class="viewer-head">
+        <text class="viewer-title">{{viewer.items[viewer.index].label}}</text>
+        <text wx:if="{{viewer.items.length > 1}}" class="viewer-page">{{viewer.pageText}}</text>
+        <text class="viewer-close" catchtap="closeViewer">✕</text>
+      </view>
+      <swiper class="viewer-swiper" current="{{viewer.index}}" bindchange="onViewerSwipe" indicator-dots="{{viewer.items.length > 1}}" indicator-color="rgba(255,255,255,.35)" indicator-active-color="#fff">
+        <swiper-item wx:for="{{viewer.items}}" wx:for-item="it" wx:key="code">
+          <scroll-view scroll-y class="viewer-scroll">
+            <image class="viewer-img" src="{{it.url}}" mode="widthFix" show-menu-by-longpress></image>
+          </scroll-view>
+        </swiper-item>
+      </swiper>
+      <view wx:if="{{viewer.items.length > 1}}" class="viewer-tip">左右滑动看其余原件</view>
     </view>
   </view>
 

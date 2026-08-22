@@ -93,7 +93,7 @@ function getEntitlements(tenantId = DEFAULT_TENANT_ID) {
   }
   const latestPlanRequest = db.prepare(`
     SELECT target_plan AS targetPlan, request_type AS requestType, status, created_at AS createdAt
-    FROM plan_change_requests WHERE tenant_id = ? ORDER BY created_at DESC LIMIT 1
+    FROM plan_change_requests WHERE tenant_id = ? ORDER BY created_at DESC, rowid DESC LIMIT 1
   `).get(tenantId) || null
   return {
     tenantId,
@@ -197,7 +197,7 @@ function aiAddonState(tenantId) {
   const trialRow = db.prepare("SELECT value FROM tenant_settings WHERE tenant_id = ? AND key = 'ai_trial_started_at'").get(tenantId)
   // 试用不再自动开通:商家点「领取」只生成申请,落到平台后台由运营配置后才发放
   const pendingTrial = db.prepare(`SELECT id, created_at AS createdAt FROM plan_change_requests
-    WHERE tenant_id = ? AND request_type = 'ai_trial' AND status = 'PENDING' ORDER BY created_at DESC LIMIT 1`).get(tenantId) || null
+    WHERE tenant_id = ? AND request_type = 'ai_trial' AND status = 'PENDING' ORDER BY created_at DESC, rowid DESC LIMIT 1`).get(tenantId) || null
   // 付费订阅与免费试用都带到期日,靠 note 区分(getEntitlements 一律标 trial)
   const isPaid = String(row?.note || '').includes('订阅')
   // 2026-08-07:有权限行但没有到期日 = 长期开通(体验店/内部店),既不是试用也不是付费订阅
@@ -5552,9 +5552,17 @@ function serializeBooking(row, lang = 'zh') {
       const stText = (st) => st === 'signed' ? '已签署' : (st === 'amended' ? '已更正' : '待签署')
       const sheetSer = groupRows.map((g, i) => {
         const gs = g.id === sRow.id ? ser : serializeSettlement(g)
-        return { n: i + 1, total: groupRows.length, code: g.code, status: g.status, statusText: stText(g.status), signedAt: g.signed_at, flow: gs.flow }
+        return {
+          n: i + 1, total: groupRows.length, code: g.code, status: g.status, statusText: stText(g.status),
+          // D68 L2 文案扫尽:用户可见处不出现「第 n/N 张」这种内部话术
+          label: groupRows.length > 1 ? `服务确认单 ${i + 1}/${groupRows.length} · ${stText(g.status)}` : `服务确认单 · ${stText(g.status)}`,
+          signedAt: g.signed_at, flow: gs.flow,
+          // D68② 原件悬浮查看器:已签署单的快照图地址(SVG),多张=浮层左右滑动切换
+          snapshotUrl: (g.status === 'signed' || g.status === 'amended') ? `/settlements/${encodeURIComponent(g.code)}/snapshot` : ''
+        }
       })
       const groupCashDueCents = sheetSer.reduce((sum, x) => sum + ((x.flow && x.flow.cashDueCents) || 0), 0)
+      const mainCount = groupMainItemCount(sRow.group_id, row.tenant_id)
       return {
         code: sRow.code,
         signedAt: sRow.signed_at,
@@ -5563,11 +5571,13 @@ function serializeBooking(row, lang = 'zh') {
         groupCount: groupRows.length,
         groupCashDueCents,
         groupCashDueText: formatMoneyCents(groupCashDueCents, row.tenant_id, 'auto'),
-        groupCashLabel: groupRows.length >= 2 ? `组到店支付(${groupRows.length} 张)` : '',
+        // D68 文案(店主 08-23 拍板):汇总行=「到店服务项目(N)」,N=主项目数;右侧金额不变(Σ各张头条)
+        groupCashLabel: mainCount >= 2 ? `到店服务项目(${mainCount})` : '',
+        mainItemCount: mainCount,
         // D67③:逐张原件入口(与 sheets 同一来源)
         sheetLinks: groupRows.map((g, i) => ({
           n: i + 1, total: groupRows.length, code: g.code,
-          label: `第 ${i + 1}/${groupRows.length} 张 · ${stText(g.status)}`,
+          label: groupRows.length > 1 ? `服务确认单 ${i + 1}/${groupRows.length} · ${stText(g.status)}` : `服务确认单 · ${stText(g.status)}`,
           signed: g.status === 'signed' || g.status === 'amended'
         })),
         listTotalCents: sRow.list_total_cents || 0,
@@ -5587,6 +5597,27 @@ function serializeBooking(row, lang = 'zh') {
 
 /* 顾客端列表徽标(图 D2 规则①)。一张预约上可能挂着已签结算单;
    徽标三态:已签署 / 已更正(×N)/ 售后中。金额一律取**实际应付**(有更正时)。 */
+/* D68 文案口径(店主 08-23 澄清):**N=主项目数量**——店主层级 大类→项目→加项,N 数的是「项目」:
+   加项(kind=addon)/自选填写行(custom)/规则行(rule)/现场购卡(卡本身)都不计;大类不是计数单位。
+   主项目 = kind 'main'(正常项目行)∪ 'timecard'(次卡核销行=用卡做掉的那个项目,照样是到店做的项目)。
+   当前模型每张单恰一主项目,故数值上=张数——但口径锚点是**主项目计数**,实现与断言都不许写成数张数。 */
+function groupMainItemCount(groupId, tenantId = currentTenantId()) {
+  if (!groupId) return 0
+  return db.prepare(`SELECT COUNT(*) AS n FROM settlement_items i
+    JOIN settlements s ON s.id = i.settlement_id
+    WHERE s.group_id = ? AND s.tenant_id = ? AND s.status <> 'voided' AND i.kind IN ('main', 'timecard')`)
+    .get(groupId, tenantId).n
+}
+
+// 主项目名(干净服务名):组内第一条主项目行;次卡核销行名字带「· 次卡核销 第 n/N 次(卡名)」长尾,标题只取主名
+function groupFirstMainName(groupId, tenantId = currentTenantId()) {
+  const it = db.prepare(`SELECT i.name_snapshot FROM settlement_items i
+    JOIN settlements s ON s.id = i.settlement_id
+    WHERE s.group_id = ? AND s.tenant_id = ? AND s.status <> 'voided' AND i.kind IN ('main', 'timecard')
+    ORDER BY s.rowid ASC, (i.kind = 'timecard') ASC, i.item_no ASC LIMIT 1`).get(groupId, tenantId)
+  return String((it && it.name_snapshot) || '服务').split(' · ')[0]
+}
+
 function customerOrderBadges(row) {
   const stl = db.prepare("SELECT * FROM settlements WHERE booking_id = ? AND status = 'signed' ORDER BY signed_at DESC LIMIT 1").get(row.id)
   const isAfterSales = row.status === 'AFTER_SALES'
@@ -5624,18 +5655,10 @@ function customerOrderBadges(row) {
   const cashDueCents = db.prepare(`SELECT COALESCE(SUM(p.amount_cents),0) AS n FROM settlement_payments p
     JOIN settlements s ON s.id = p.settlement_id
     WHERE s.booking_id = ? AND s.status = 'signed' AND p.leg = 'offline'`).get(row.id).n
-  /* D1 修订(店主 08-22 二拍):「等N项」的项=**组/张(大类级)**——N=本组非撤回签署单张数;
-     加项/自选行不计(单张单不管几行都只显服务名);N≥2 才出「首项目 等N项」,
-     首项目=组第 1/N 张的首行项目名;点开详情按第 n/N 张逐张可看(D67③)。 */
-  const grpCount = db.prepare("SELECT COUNT(*) AS n FROM settlements WHERE group_id = ? AND status <> 'voided'").get(stl.group_id).n
-  const grpFirstName = (() => {
-    if (grpCount < 2) return ''
-    const first = db.prepare("SELECT id FROM settlements WHERE group_id = ? AND status <> 'voided' ORDER BY rowid ASC LIMIT 1").get(stl.group_id)
-    /* 首项目=干净服务名:优先非次卡行;核销行的 name_snapshot 带「· 次卡核销 第 n/N 次(卡名)」
-       长尾(单据里要自证,标题里是噪音)——截「 · 」前主名。 */
-    const it = first ? db.prepare("SELECT name_snapshot FROM settlement_items WHERE settlement_id = ? ORDER BY (kind = 'timecard') ASC, item_no ASC LIMIT 1").get(first.id) : null
-    return String((it && it.name_snapshot) || '服务').split(' · ')[0]
-  })()
+  /* D1 修订(店主 08-22 二拍)+D68 口径澄清(08-23):「等N项」的 N=**主项目数量**
+     (groupMainItemCount 唯一出口:加项/自选/购卡不计,大类不是计数单位);N≥2 才出「首项目 等N项」。 */
+  const grpCount = groupMainItemCount(stl.group_id, row.tenant_id)
+  const grpFirstName = grpCount >= 2 ? groupFirstMainName(stl.group_id, row.tenant_id) : ''
   // 售后 > 已更正 > 已签署(售后是当前最要紧的状态,压在最上面)
   const badge = isAfterSales ? asBadge : (amd.amendBadgeText || '已签署')
   const kind = isAfterSales ? asKind : (amd.amendedCount ? 'amended' : 'signed')
@@ -5684,7 +5707,7 @@ function afterSalesState(row) {
   const status = row.after_sales_status || 'pending'   // 存量售后单没写过状态 = 待处理
   const events = db.prepare('SELECT * FROM after_sales_events WHERE booking_id = ? ORDER BY created_at ASC').all(row.id)
   // 批③首件 B5:结案后可再次发起(重开)——发起原因取**当前这轮**(最近一次转入);历史轮留痕不丢(append-only)
-  const hist = db.prepare("SELECT note, created_at FROM booking_status_history WHERE booking_id = ? AND to_status = 'AFTER_SALES' ORDER BY created_at DESC LIMIT 1").get(row.id)
+  const hist = db.prepare("SELECT note, created_at FROM booking_status_history WHERE booking_id = ? AND to_status = 'AFTER_SALES' ORDER BY created_at DESC, rowid DESC LIMIT 1").get(row.id)
   const timeline = []
   if (!events.some((e) => e.kind === 'open')) {
     timeline.push({ at: stamp((hist && hist.created_at) || row.updated_at), kind: 'open', text: (hist && hist.note) || '顾客发起售后', actor: '顾客' })
@@ -8149,7 +8172,7 @@ function revokeNoShowDisposal({ booking, reason = '', actor = 'owner' }) {
   } catch (error) { db.exec('ROLLBACK'); throw error }
   if (target.action === 'forfeit' || target.action === 'auto_forfeit') {
     // 已入账的没收收入 → 红字冲销(账本只追加)
-    const original = db.prepare("SELECT * FROM finance_transactions WHERE tenant_id = ? AND tags = ? AND source = 'deposit_disposal' AND reversal_of IS NULL ORDER BY created_at DESC LIMIT 1").get(tenantId, target.id)
+    const original = db.prepare("SELECT * FROM finance_transactions WHERE tenant_id = ? AND tags = ? AND source = 'deposit_disposal' AND reversal_of IS NULL ORDER BY created_at DESC, rowid DESC LIMIT 1").get(tenantId, target.id)
     if (original) {
       insertFinanceTransaction({
         tenantId, type: 'income', source: 'reversal', tags: target.id,
@@ -10734,7 +10757,7 @@ function issueSignToken(settlement, { actor = 'admin', ttlHours = 24 } = {}) {
 }
 
 function activeSignToken(settlementId) {
-  return db.prepare("SELECT * FROM settlement_sign_tokens WHERE settlement_id = ? AND status = 'active' ORDER BY created_at DESC LIMIT 1").get(settlementId) || null
+  return db.prepare("SELECT * FROM settlement_sign_tokens WHERE settlement_id = ? AND status = 'active' ORDER BY created_at DESC, rowid DESC LIMIT 1").get(settlementId) || null
 }
 
 function signTokenUrl(token) {
@@ -10750,7 +10773,7 @@ function signStateOf(settlement) {
     : null
   if (settlement.status === 'signed') {
     return next
-      ? { state: 'signed', text: '已签署 · 组内还有待签', nextPendingId: next.id, nextPendingCode: next.code }
+      ? { state: 'signed', text: '已签署 · 还有待签确认单', nextPendingId: next.id, nextPendingCode: next.code }
       : { state: 'signed', text: '已签署' }
   }
   if (settlement.status === 'voided') return { state: 'voided', text: '已撤回' }
@@ -10986,7 +11009,7 @@ function serializeSettlement(row, { includeSignature = false } = {}) {
         WHERE s.group_id = ? AND s.id <> ? AND s.status = 'pending_sign' AND p.leg IN ('stored_value','migrate_stored')`).get(row.group_id, row.id).n
       const willDeduct = Math.min(Math.max(0, after), siblingPendingStored)
       const groupForecastText = willDeduct > 0
-        ? `组内后续单据将抵 ${m(willDeduct)},组签完预计余额 ${m(Math.max(0, after) - willDeduct)}`
+        ? `本次其余单据还将抵 ${m(willDeduct)},全部签完预计余额 ${m(Math.max(0, after) - willDeduct)}`
         : ''
       return {
         amountCents: r.amountCents, bonusCents: r.bonusCents || 0, packageName: r.packageName || '',
@@ -11696,7 +11719,7 @@ async function route(req, res) {
     const cur = booking.after_sales_status || 'pending'
     if (cur === 'resolved' || cur === 'closed') throw apiError(409, 'ALREADY_TERMINAL', '这单售后已结案,不能撤回;要再反馈可重新发起。')
     // 只能撤**自己发起**的(最近一条发起留痕带「顾客发起:」前缀=发起人判定,append-only 不改史)
-    const lastOpen = db.prepare("SELECT note FROM booking_status_history WHERE booking_id = ? AND to_status = 'AFTER_SALES' ORDER BY created_at DESC LIMIT 1").get(booking.id)
+    const lastOpen = db.prepare("SELECT note FROM booking_status_history WHERE booking_id = ? AND to_status = 'AFTER_SALES' ORDER BY created_at DESC, rowid DESC LIMIT 1").get(booking.id)
     if (!lastOpen || !String(lastOpen.note || '').startsWith('顾客发起:')) throw apiError(403, 'NOT_INITIATOR', '这单售后由门店发起,顾客不能撤回;有疑问请联系门店。')
     const now = iso(new Date())
     db.prepare(`INSERT INTO after_sales_events (id, tenant_id, booking_id, kind, text, related_code, actor_name, actor_role, technician_id, created_at)
@@ -13588,7 +13611,7 @@ async function route(req, res) {
   // 平台运维操作日志(只读)
   if (req.method === 'GET' && path === '/platform/ops-log') {
     if (!isPlatform()) throw apiError(401, 'UNAUTHORIZED', 'Platform token required.')
-    const rows = db.prepare('SELECT * FROM platform_ops_log ORDER BY created_at DESC LIMIT 100').all()
+    const rows = db.prepare('SELECT * FROM platform_ops_log ORDER BY created_at DESC, rowid DESC LIMIT 100').all()
     return json(res, 200, { logs: rows })
   }
   const platTenantMatch = path.match(/^\/platform\/tenants\/([^/]+)\/(store|business-hours|services|technicians|kb)(?:\/([^/]+))?$/)
@@ -15941,7 +15964,7 @@ async function route(req, res) {
   }
   if (req.method === 'GET' && path === '/admin/staff-nudges/mine') {
     if (!adminSession.technicianId) return json(res, 200, { nudges: [] })
-    const rows = db.prepare('SELECT * FROM staff_nudges WHERE tenant_id = ? AND technician_id = ? AND read_at IS NULL ORDER BY created_at DESC LIMIT 10')
+    const rows = db.prepare('SELECT * FROM staff_nudges WHERE tenant_id = ? AND technician_id = ? AND read_at IS NULL ORDER BY created_at DESC, rowid DESC LIMIT 10')
       .all(currentTenantId(), adminSession.technicianId)
     return json(res, 200, { nudges: rows.map((r) => ({ id: r.id, type: r.type, message: r.message, createdAt: r.created_at })) })
   }
@@ -16225,7 +16248,7 @@ async function route(req, res) {
         statusKey: allSigned ? 'signed' : 'pending',
         statusText: allSigned ? '已签署' : '已结算 · 待签',
         // 组卡自证:共几张+逐张(单号/金额/签署态)——「到店应收」是这几张的合计,不是点进来那一张的
-        groupNote: rows.length > 1 ? `本卡为整组单据(共 ${rows.length} 张)` : '',
+        groupNote: rows.length > 1 ? `本次到店共 ${rows.length} 份服务确认单` : '',
         storedUnusedNotice,
         /* D65-b(店主拍板):逐张行金额=该张头条「本单到店支付」(五步⑤现金)——
            Σ逐张行=组头条,肉眼可加;价值总额不再以裸数字出现。 */
@@ -16250,7 +16273,8 @@ async function route(req, res) {
           storedDeductCents: storedCents + (allSigned ? 0 : plannedStoredCents),
           timecardCoverCents: legOf('times_card'),
           dueCents: offlineDueCents,
-          dueLabel: rows.length > 1 ? `组到店支付(${rows.length} 张)` : '本单到店支付'  // D4(08-22 裁):与签署单头条同句族
+          // D4(08-22 裁)→D68 文案(08-23 拍):汇总行=「到店服务项目(N)」,N=主项目数(非张数);金额不变
+          dueLabel: rows.length > 1 ? `到店服务项目(${groupMainItemCount(one.group_id, one.tenant_id)})` : '本单到店支付'
         },
         signature: allSigned ? { name: (user && user.display_name) || '', signedAt: stamp(rows[0].signed_at), hasImage: rows.some((r) => r.snapshot_url || r.snapshot_inline || r.signature_data) } : null
       }

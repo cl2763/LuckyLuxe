@@ -1392,7 +1392,8 @@ const main = async () => {
                 check('㋄ D60 购卡显式行(purchaseLine 后端句:名称+「购卡款,预收」)', sh0.purchaseLine && sh0.purchaseLine.priceCents === 54000 && /购卡款,预收/.test(sh0.purchaseLine.amountText) && /守护/.test(sh0.purchaseLine.label), JSON.stringify(sh0.purchaseLine))
                 // preview-card 组卡自证:groupNote+sheetRows+dueLabel+购卡/充值行
                 const pc = (await request(`/admin/settlements/${sh0.id}/preview-card`, {}, shop.token)).data.card
-                check('㋄ D60 组卡自证(共 2 张+逐张状态行+组到店支付 label)', /共 2 张/.test(pc.groupNote) && pc.sheetRows.length === 2 && /组到店支付/.test(pc.totals.dueLabel), JSON.stringify({ note: pc.groupNote, rows: pc.sheetRows.length, label: pc.totals.dueLabel }))
+                // D68 文案改版(店主 08-23):组说明=「本次到店共 N 份服务确认单」;汇总行=「到店服务项目(N)」(N=主项目数)
+                check('㋄→㋌ D60 组卡自证(2 份确认单+逐张状态行+到店服务项目 label)', /共 2 份服务确认单/.test(pc.groupNote) && pc.sheetRows.length === 2 && /^到店服务项目\(\d+\)$/.test(pc.totals.dueLabel), JSON.stringify({ note: pc.groupNote, rows: pc.sheetRows.length, label: pc.totals.dueLabel }))
                 check('㋄ D60 组卡购卡/充值显式行(54000/30000)', pc.totals.purchaseCents === 54000 && pc.totals.rechargeCents === 30000, JSON.stringify({ p: pc.totals.purchaseCents, r: pc.totals.rechargeCents }))
                 // 清场:撤两张
                 for (const s of sC.data.settlements) await request(`/admin/settlements/${s.id}/void`, { method: 'POST', body: JSON.stringify({ reason: '㋄ 清场' }) }, shop.token)
@@ -1545,7 +1546,7 @@ const main = async () => {
                   const shP2 = sP2.data.settlements[0]
                   await request(`/settlements/${encodeURIComponent(shP2.code)}/sign`, { method: 'POST', body: JSON.stringify({ signature: '㋉ 购卡签', disclaimerAccepted: true }) }, null, { 'x-tenant-id': shop.tenantId })
                   const bkPL = (await request('/bookings', {}, ctokK, { 'x-tenant-id': shop.tenantId })).data.bookings.find((b) => b.id === bkP.id)
-                  check('㋉ D1修订 购卡+核销=一张(大类级)=不出「等N项」', (bkPL.listTitleText || '') === '', JSON.stringify(bkPL.listTitleText))
+                  check('㋉→㋌ D1修订 购卡+核销=一个主项目(购卡不计)=不出「等N项」', (bkPL.listTitleText || '') === '', JSON.stringify(bkPL.listTitleText))
                   /* --- D1修订+D66 途中修:双服务一预约两张(店主实开形态)——标题=组张数,金额=Σ本预约全部已签单 --- */
                   const bkG = (await request('/admin/bookings/direct', { method: 'POST', body: JSON.stringify({ userId: cuidK, serviceId: shop.serviceId, technicianId: shop.tech2, date: dateStr(0), time: '22:23' }) }, shop.token)).data.booking
                   await request(`/admin/bookings/${bkG.id}/status`, { method: 'PATCH', body: JSON.stringify({ status: 'COMPLETED' }) }, shop.token)
@@ -1558,9 +1559,10 @@ const main = async () => {
                   const offG = dbx.prepare("SELECT COALESCE(SUM(p.amount_cents),0) AS n FROM settlement_payments p JOIN settlements s ON s.id = p.settlement_id WHERE s.booking_id = ? AND s.status = 'signed' AND p.leg = 'offline'").get(bkG.id).n
                   const gFirst = dbx.prepare('SELECT name_snapshot FROM settlement_items WHERE settlement_id = ? ORDER BY item_no ASC').get(gA.id).name_snapshot
                   const bkGL = (await request('/bookings', {}, ctokK, { 'x-tenant-id': shop.tenantId })).data.bookings.find((b) => b.id === bkG.id)
-                  check('㋉ D1修订 双服务一预约两张:标题=「首项目 等2项」(项=组/张)', bkGL.listTitleText === `${gFirst} 等2项`, JSON.stringify({ got: bkGL.listTitleText, gFirst }))
+                  check('㋉→㋌ D1修订 双服务一预约两张:标题=「首项目 等2项」(项=主项目数)', bkGL.listTitleText === `${gFirst} 等2项`, JSON.stringify({ got: bkGL.listTitleText, gFirst }))
                   check('㋉ D66途中修 双张预约金额=Σ本预约全部已签单 offline(只取最新一张=少一半钱)', num(bkGL.listAmountText) === offG && offG > 0, JSON.stringify({ t: bkGL.listAmountText, offG }))
-                  check('㋉ D67③ sheetLinks 逐张原件(第 1/2、2/2 张+code 双有)', bkGL.payment && Array.isArray(bkGL.payment.sheetLinks) && bkGL.payment.sheetLinks.length === 2 && bkGL.payment.sheetLinks[0].label.startsWith('第 1/2 张') && bkGL.payment.sheetLinks[1].label.startsWith('第 2/2 张') && bkGL.payment.sheetLinks.every((l) => l.code), JSON.stringify(bkGL.payment && bkGL.payment.sheetLinks))
+                  // D68 文案改版:行首句=「服务确认单 n/N · 状态」(「第 n/N 张」销案)
+                  check('㋉→㋌ D67③ sheetLinks 逐张原件(服务确认单 1/2、2/2+code 双有)', bkGL.payment && Array.isArray(bkGL.payment.sheetLinks) && bkGL.payment.sheetLinks.length === 2 && bkGL.payment.sheetLinks[0].label.startsWith('服务确认单 1/2') && bkGL.payment.sheetLinks[1].label.startsWith('服务确认单 2/2') && bkGL.payment.sheetLinks.every((l) => l.code), JSON.stringify(bkGL.payment && bkGL.payment.sheetLinks))
                   /* --- D59 案二提示句:待分配单含未归属充值=行上明说;分配后行消失 --- */
                   const s59c = await request('/admin/settlements', { method: 'POST', body: JSON.stringify({ userId: cuidK, settlements: [{ payIntent: 'offline_full', items: [{ serviceId: shop.serviceId, qty: 1 }], technicians: [{ technicianId: shop.tech1, role: 'main', itemNos: [1] }, { technicianId: shop.tech2, role: 'assist', itemNos: [] }], servedPersonName: '', rechargePackageId: pkRK.id }] }) }, shop.token)
                   const sh59c = s59c.data.settlements[0]
@@ -1638,7 +1640,24 @@ const main = async () => {
                   const bkGD = (await request('/bookings', {}, ctokK, { 'x-tenant-id': shop.tenantId })).data.bookings.find((b) => b.id === bkG.id)
                   const pmt = bkGD.payment || {}
                   check('㋋ 详情逐张卡:sheets=2 张各带五步账+头条', Array.isArray(pmt.sheets) && pmt.sheets.length === 2 && pmt.sheets.every((x) => x.flow && Array.isArray(x.flow.lines) && x.flow.cashDueText), JSON.stringify((pmt.sheets || []).map((x) => x.n)))
-                  check('㋋ 组汇总行=「组到店支付(2 张)」且 Σ各张头条=列表已结清同数', pmt.groupCashLabel === '组到店支付(2 张)' && pmt.groupCashDueCents === (pmt.sheets || []).reduce((nn, x) => nn + x.flow.cashDueCents, 0) && pmt.groupCashDueCents === num(bkGD.listAmountText), JSON.stringify({ l: pmt.groupCashLabel, c: pmt.groupCashDueCents }))
+                  check('㋋→㋌ 组汇总行=「到店服务项目(2)」且 Σ各张头条=列表已结清同数', pmt.groupCashLabel === '到店服务项目(2)' && pmt.groupCashDueCents === (pmt.sheets || []).reduce((nn, x) => nn + x.flow.cashDueCents, 0) && pmt.groupCashDueCents === num(bkGD.listAmountText), JSON.stringify({ l: pmt.groupCashLabel, c: pmt.groupCashDueCents }))
+
+                  /* ===== ㋌ D68(店主 08-23):N=主项目数口径 + 文案扫尽 + 原件悬浮查看器 ===== */
+                  /* 口径锚点:N 数**主项目**(kind main/timecard),加项/自选/现场购卡不计——
+                     bkG 组=两张单各 1 主项目,其中第二张还带 1 个自选加项行 → N 仍是 2(不是 3) */
+                  const itemsOfGroup = dbx.prepare(`SELECT i.kind, COUNT(*) AS n FROM settlement_items i
+                    JOIN settlements s ON s.id = i.settlement_id WHERE s.booking_id = ? AND s.status = 'signed' GROUP BY i.kind`).all(bkG.id)
+                  const kindMap = Object.fromEntries(itemsOfGroup.map((r) => [r.kind, r.n]))
+                  check('㋌ D68 口径夹具有效:组内主项目 2 行 + 自选加项 1 行(N 必须只数主项目)', (kindMap.main || 0) === 2 && (kindMap.custom || 0) === 1, JSON.stringify(kindMap))
+                  check('㋌ D68 N=主项目数(自选加项不进 N):汇总行=(2)、标题=等2项', pmt.mainItemCount === 2 && /等2项$/.test(bkGD.listTitleText || ''), JSON.stringify({ n: pmt.mainItemCount, t: bkGD.listTitleText }))
+                  check('㋌ D68 文案:详情汇总行「到店服务项目(N)」不出「组/张」内部话术', pmt.groupCashLabel === '到店服务项目(2)' && !/组|张/.test(pmt.groupCashLabel), JSON.stringify(pmt.groupCashLabel))
+                  check('㋌ D68 文案:逐张行=「服务确认单 n/N · 状态」(「第 n/N 张」销案)', (pmt.sheets || []).every((x) => /^服务确认单 \d+\/\d+ · /.test(x.label || '')) && !(pmt.sheets || []).some((x) => /第 \d+\/\d+ 张/.test(x.label || '')), JSON.stringify((pmt.sheets || []).map((x) => x.label)))
+                  check('㋌ D68② 原件图源:已签署张带 snapshotUrl(悬浮查看器图源),未签署张为空', (pmt.sheets || []).every((x) => (x.status === 'signed' || x.status === 'amended') ? /\/snapshot$/.test(x.snapshotUrl || '') : !x.snapshotUrl), JSON.stringify((pmt.sheets || []).map((x) => x.snapshotUrl)))
+                  const pcK = (await request(`/admin/settlements/${gA.id}/preview-card`, {}, shop.token)).data.card
+                  check('㋌ D68 文案:组卡汇总行同句「到店服务项目(2)」+组说明不出「整组单据(共 N 张)」', pcK.totals.dueLabel === '到店服务项目(2)' && /份服务确认单/.test(pcK.groupNote || '') && !/整组单据/.test(pcK.groupNote || ''), JSON.stringify({ d: pcK.totals.dueLabel, g: pcK.groupNote }))
+                  // 单张组:不出汇总行(N=1 没有「等N项」也没有汇总行)
+                  const pmtSingle = (await request('/bookings', {}, ctokK, { 'x-tenant-id': shop.tenantId })).data.bookings.find((b) => b.id === bkT.id).payment
+                  check('㋌ D68 单主项目单:无汇总行 label + mainItemCount=1', pmtSingle.mainItemCount === 1 && !pmtSingle.groupCashLabel, JSON.stringify({ n: pmtSingle.mainItemCount, l: pmtSingle.groupCashLabel }))
                 }
 
                 /* ===== ㋆ 资金时序五步全组合矩阵(店主 08-22 总纲=唯一裁判;40 格常驻) =====
@@ -1845,7 +1864,8 @@ const main = async () => {
       check('㋅ D62 前端四搜索口大小写不敏感(客户/代充选客/工作台/开单找客)', custJs.includes('.trim().toLowerCase()') && membJs.includes('q.toLowerCase()') && wbJs.includes(".trim().toLowerCase()") && miniOrders.includes('q.toLowerCase()'))
       // ㋆ D64 wiring:payIntent 映射意愿唯一(不勾储值=offline_full,挂充不强制)+储值行显隐含挂充+组卡 cover 行+出码 n/N+预告句
       check('㋆ D64 前端映射意愿唯一+储值行显隐含挂充', settleJs.includes("if (!m.useBalance) return 'offline_full'") && settleWxml.includes('view.hasBalance || view.hasRecharge'))
-      check('㋆ D64 组卡 cover 行+出码第 n/N 张+组内预告句(后端句)', spWxml.includes('次卡抵扣(签字扣次)') && settleJs.includes('第 ${s.groupIndex}/${s.groupTotal} 张') && srvD60.includes('组内后续单据将抵'))
+      // D68 文案改版:出码行=「服务确认单 n/N」;预告句=「本次其余单据还将抵…」
+      check('㋆→㋌ D64 组卡 cover 行+出码「服务确认单 n/N」+预告句(后端句)', spWxml.includes('次卡抵扣(签字扣次)') && settleJs.includes('服务确认单 ${s.groupIndex}/${s.groupTotal}') && srvD60.includes('本次其余单据还将抵'))
       // ㋇ D65-b wiring:逐张行/未签行/顾客待签卡=头条 cashDue,价值总额不再裸出
       check('㋇ D65-b 单张金额一律头条化(组卡逐张/日结未签行/顾客待签卡)', spJs.includes('m(s.cashDueCents)') && dcMixin.includes('到店支付 ${m(u.cashDueCents)}') && coWxml.includes('到店支付 {{item.cashDueText}}'))
       // ㋈ 批③首件 wiring:详情页重做(flow 卡/空态句/留档收敛/售后同屏表单/进度卡)+网页同构+连签流+线下行非勾选
@@ -1856,7 +1876,8 @@ const main = async () => {
       check('㋈ A4/A5/B2 详情页:留档无则不出+售后钮后端句+同屏表单(问题描述必填)', odWxml.includes('wx:if="{{order.visibleWorkImages.length}}"') && odWxml.includes('order.afterSalesActionText') && odWxml.includes('问题描述(必填)'))
       check('㋈ B6 撤回入口+D3 进度卡在场(顾客小程序)', odWxml.includes('撤回本次售后(记录保留)') && odWxml.includes('order.afterSales.steps') && odJs.includes('withdrawAfterSales'))
       check('㋈ C 组网页同构(徽标/flow 卡/发起表单/待签列表)', custWeb.includes('order.listBadgeText') && custWeb.includes('order.payment.flow') && custWeb.includes('data-as-submit') && custWeb.includes('state.pendingSign'))
-      check('㋈ E 组连签流 wiring(签署页接续钮+商家出码接续)', readFileSync(join(ROOT42, 'apps/web/sign.html'), 'utf8').includes('继续签下一张') && settleJs.includes('nextPendingId') && srvD60.includes('groupNextPendingCode'))
+      // D68 文案改版:接续钮=「继续签下一份 →」(替换式导航,见 ㋌ D68①)
+      check('㋈→㋌ E 组连签流 wiring(签署页接续钮+商家出码接续)', readFileSync(join(ROOT42, 'apps/web/sign.html'), 'utf8').includes('继续签下一份') && settleJs.includes('nextPendingId') && srvD60.includes('groupNextPendingCode'))
       check('㋈ D3 线下行非勾选样式「到店收 · 差额自动」', settleWxml.includes('到店收 · 差额自动') && !settleWxml.includes('payToggleOffline'))
       // ㋉ 三拍 wiring:D1 标题双端直渲(映射层零裁剪教训)+C5 金额句双端同刀(网页列表不再裸「实付定金」)
       check('㋉ D1 wiring:标题句双端直渲+映射层透传', readFileSync(join(ROOT42, 'miniprogram/utils/api.js'), 'utf8').includes('listTitleText: booking.listTitleText') && readFileSync(join(ROOT42, 'miniprogram/pages/orders/index.wxml'), 'utf8').includes('listTitleText || item.serviceName') && custWeb.includes('order.listTitleText'))
@@ -1865,7 +1886,8 @@ const main = async () => {
       const odWx2 = readFileSync(join(ROOT42, 'miniprogram/pages/order-detail/index.wxml'), 'utf8')
       const odJs2 = readFileSync(join(ROOT42, 'miniprogram/pages/order-detail/index.js'), 'utf8')
       check('㋊ D67② 签署单卡小字无 Emoji(✍ 双端扫尽:mini+web 顾客端)', !odWx2.includes('✍') && !custWeb.includes('✍'))
-      check('㋊ D67③→L3 裁 逐张原件双端 wiring(升级为逐张卡:mini sheets 循环+goSheetSnapshot;web sheets 循环各带原件链)', odWx2.includes('order.pay.sheets') && odJs2.includes('goSheetSnapshot') && custWeb.includes('order.payment.sheets'))
+      // D68② 再升级:原件入口=悬浮查看器(openViewer / data-snap-open),跳页式 goSheetSnapshot 已销案
+      check('㋊→㋌ 逐张卡+原件入口双端 wiring(mini sheets 循环+openViewer;web sheets 循环+lightbox)', odWx2.includes('order.pay.sheets') && odWx2.includes('openViewer') && custWeb.includes('order.payment.sheets') && custWeb.includes('data-snap-open'))
       check('㋊ D67① 全组签完回台面(relaunch workbench,非退一层)', readFileSync(join(ROOT42, 'miniprogram/pages/merchant/settlement/index.js'), 'utf8').includes("relaunch('/pages/merchant/workbench/index')"))
       check('㋊ D59 提示句双端 wiring(mini rechargeNote+web rechargeUnassignedText)', readFileSync(join(ROOT42, 'miniprogram/utils/dailyclose.js'), 'utf8').includes('rechargeUnassignedText') && readFileSync(join(ROOT42, 'miniprogram/pages/merchant/orders/index.wxml'), 'utf8').includes('p.rechargeNote') && readFileSync(join(ROOT42, 'apps/web/admin.js'), 'utf8').includes('p.rechargeUnassignedText'))
       // ㋋ 五裁 wiring:详情逐张卡双端+台面售后蓝徽标+到店计数三读方同一出口
@@ -1873,6 +1895,33 @@ const main = async () => {
       check('㋋ wiring 详情逐张卡双端(mini sheets 循环+组汇总;web 同构)', readFileSync(join(ROOT42, 'miniprogram/pages/order-detail/index.wxml'), 'utf8').includes('order.pay.sheets') && readFileSync(join(ROOT42, 'apps/web/customer.js'), 'utf8').includes('order.payment.sheets'))
       check('㋋ wiring 裁C 台面售后蓝徽标(mini as-blue)', readFileSync(join(ROOT42, 'miniprogram/pages/merchant/orders/index.wxml'), 'utf8').includes('b.afterSalesTag'))
       check('㋋ wiring 裁A/E 三读方同一出口(visitDaysCount 三处调用)', (srvAll.match(/visitDaysCount\(/g) || []).length >= 4)
+      /* ===== ㋌ D68 wiring:①替换式导航不压栈 ②悬浮查看器双端 ③用户可见文案零「组/张」内部话术 ===== */
+      const signHtml68 = readFileSync(join(ROOT42, 'apps/web/sign.html'), 'utf8')
+      check('㋌ D68① 连签=替换式导航(location.replace;续签不再用压栈的 <a href>)', signHtml68.includes("location.replace('/sign/") && !/<a href="\/sign\/\$\{encodeURIComponent\(s\.groupNextPendingCode\)/.test(signHtml68))
+      const odWx3 = readFileSync(join(ROOT42, 'miniprogram/pages/order-detail/index.wxml'), 'utf8')
+      const odJs3 = readFileSync(join(ROOT42, 'miniprogram/pages/order-detail/index.js'), 'utf8')
+      check('㋌ D68② 悬浮查看器(小程序:浮层+swiper 滑动+openViewer/closeViewer;原件不再跳页压栈)', odWx3.includes('viewer-mask') && odWx3.includes('<swiper') && odJs3.includes('openViewer') && odJs3.includes('onViewerSwipe') && !odWx3.includes('goSheetSnapshot'))
+      check('㋌ D68② 悬浮查看器(网页:lightbox 同构,左右切换+触摸滑动+Esc)', custWeb.includes('openSnapViewer') && custWeb.includes('data-snap-open') && custWeb.includes('touchend'))
+      /* L2 文案机械扫描:用户可见面(两端渲染层+后端句)零「组到店支付」「本组还有 N 张」「第 n/N 张」 */
+      const copySurfaces = ['apps/api/local-server.mjs', 'apps/web/customer.js', 'apps/web/sign.html', 'apps/web/admin.js',
+        'miniprogram/pages/order-detail/index.wxml', 'miniprogram/pages/merchant/settlement/index.js',
+        'miniprogram/components/sheet-preview/index.wxml', 'miniprogram/utils/dailyclose.js']
+      const badCopy = []
+      // 注释=内部说明(设计沿革要留原文),先整段剥掉再扫渲染层文案
+      const stripComments = (t) => t
+        .replace(/\/\*[\s\S]*?\*\//g, '')
+        .replace(/<!--[\s\S]*?-->/g, '')
+        .split('\n').filter((l) => !/^\s*\/\//.test(l)).join('\n')
+      for (const f of copySurfaces) {
+        const txt = stripComments(readFileSync(join(ROOT42, f), 'utf8'))
+        for (const line of txt.split('\n')) {
+          if (/组到店支付|本组还有|第 \$\{[^}]+\}\/\$\{[^}]+\} 张|整组单据/.test(line)) badCopy.push(`${f}:${line.trim().slice(0, 60)}`)
+        }
+      }
+      check('㋌ D68 L2 文案扫尽:用户可见面零「组/张」内部话术(0 残留)', badCopy.length === 0, badCopy.join(' | ').slice(0, 200))
+      /* 途中抓(㋌ 批):「取最新一条」的单行选取同毫秒并列时排序不定=取错行(entitlements 套件偶发红的真因);
+         L2 同类=全仓 ORDER BY created_at DESC LIMIT 1 一律加 rowid 兜底(售后原因/签署令牌/套餐申请同族)。 */
+      check('㋌ 护栏:最新一条单行选取带 rowid 兜底(同毫秒并列不取错行,0 残留)', !/ORDER BY created_at DESC LIMIT 1/.test(srvAll))
       // ㋅ D63 wiring:组卡/签署页「余额未用」句+四行自证渲染面
       check('㋅ D63 余额未用句渲染面(组卡+签署页)+四行自证键', spWxml.includes('card.storedUnusedNotice') && signHtml.includes('s.storedUnusedNotice') && srvD60.includes("key: 'before', label: '充值前余额'"))
       check('㋄ D60 结算页:购卡显式行+L3① 行内小注定稿句', settleWxml.includes('购卡款,预收') && settleJs.includes('含本单随签充值 +') && settleWxml.includes('view.rvNote'))

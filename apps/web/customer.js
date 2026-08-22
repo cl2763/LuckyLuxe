@@ -1877,6 +1877,54 @@ function renderOrdersWeb() {
   `
 }
 
+/* D68② 悬浮查看器(网页顾客端):浮层看图,多张左右滑动/箭头/键盘切换;Esc 或点遮罩关闭。
+   图源=后端快照(签字那一刻的 SVG 凭证)。DOM 直挂 body,不改路由=不压历史栈。 */
+function openSnapViewer(items, startIndex = 0) {
+  document.getElementById('snapViewer')?.remove()
+  let i = Math.max(0, Math.min(startIndex, items.length - 1))
+  const box = document.createElement('div')
+  box.id = 'snapViewer'
+  box.style.cssText = 'position:fixed;inset:0;background:rgba(20,16,14,.88);z-index:9999;display:flex;flex-direction:column;align-items:center;justify-content:center;padding:16px;box-sizing:border-box'
+  const paint = () => {
+    box.innerHTML = `
+      <div style="width:min(760px,94vw);display:flex;align-items:center;justify-content:space-between;color:#fff;padding-bottom:10px">
+        <strong style="font-size:15px">${escapeHtml(items[i].label)}</strong>
+        <span style="opacity:.75;font-size:13px">${items.length > 1 ? `${i + 1}/${items.length}` : ''}</span>
+        <button data-snap-close type="button" style="background:none;border:0;color:#fff;font-size:22px;cursor:pointer">✕</button>
+      </div>
+      <div style="width:min(760px,94vw);height:min(78vh,900px);background:#fff;border-radius:14px;overflow:auto;position:relative">
+        <img src="${escapeHtml(items[i].url)}" alt="${escapeHtml(items[i].label)}" style="width:100%;display:block">
+      </div>
+      ${items.length > 1 ? `
+      <div style="width:min(760px,94vw);display:flex;justify-content:space-between;padding-top:12px">
+        <button data-snap-prev type="button" style="background:#fff;border:0;border-radius:10px;padding:8px 18px;font-weight:700;cursor:pointer">‹ 上一份</button>
+        <span style="color:rgba(255,255,255,.7);font-size:12px;align-self:center">左右滑动或用方向键切换</span>
+        <button data-snap-next type="button" style="background:#fff;border:0;border-radius:10px;padding:8px 18px;font-weight:700;cursor:pointer">下一份 ›</button>
+      </div>` : ''}`
+  }
+  const go = (d) => { i = (i + d + items.length) % items.length; paint() }
+  const close = () => { box.remove(); document.removeEventListener('keydown', onKey) }
+  const onKey = (e) => {
+    if (e.key === 'Escape') close()
+    if (e.key === 'ArrowRight') go(1)
+    if (e.key === 'ArrowLeft') go(-1)
+  }
+  box.addEventListener('click', (e) => {
+    if (e.target === box || e.target.closest('[data-snap-close]')) { close(); return }
+    if (e.target.closest('[data-snap-next]')) go(1)
+    if (e.target.closest('[data-snap-prev]')) go(-1)
+  })
+  let touchX = 0
+  box.addEventListener('touchstart', (e) => { touchX = e.changedTouches[0].clientX }, { passive: true })
+  box.addEventListener('touchend', (e) => {
+    const dx = e.changedTouches[0].clientX - touchX
+    if (Math.abs(dx) > 48 && items.length > 1) go(dx < 0 ? 1 : -1)
+  }, { passive: true })
+  document.addEventListener('keydown', onKey)
+  paint()
+  document.body.appendChild(box)
+}
+
 function selectedOrder() {
   return state.orders.find((order) => order.id === state.selectedOrderId)
 }
@@ -1975,15 +2023,17 @@ function renderOrderDetailWeb() {
           ${order.payment && (order.payment.sheets || []).length > 1 ? `
             <p style="border-bottom:2px solid #e7ddd4;padding-bottom:8px"><span><strong>${escapeHtml(order.payment.groupCashLabel)}</strong></span><strong class="price">${escapeHtml(order.payment.groupCashDueText)}</strong></p>
             ${order.payment.sheets.map((sh) => `
-              <p style="margin-top:10px"><span><strong>${state.lang === 'zh' ? `第 ${sh.n}/${sh.total} 张 · ${escapeHtml(sh.statusText)}` : `Sheet ${sh.n}/${sh.total}`}</strong></span><span class="subtle">${escapeHtml(String(sh.signedAt || '').slice(0, 16).replace('T', ' '))}</span></p>
+              <p style="margin-top:10px"><span><strong>${state.lang === 'zh' ? escapeHtml(sh.label || '') : `Sheet ${sh.n}/${sh.total}`}</strong></span><span class="subtle">${escapeHtml(String(sh.signedAt || '').slice(0, 16).replace('T', ' '))}</span></p>
               ${((sh.flow && sh.flow.lines) || []).map((fl) => `<p><span>${escapeHtml(fl.label)}</span><strong>${escapeHtml(fl.amountText)}</strong></p>`).join('')}
               <p style="border-top:1px solid #e7ddd4;padding-top:6px"><span><strong>${escapeHtml((sh.flow && sh.flow.heroLabel) || '本单到店支付')}</strong></span><strong class="price">${escapeHtml((sh.flow && sh.flow.cashDueText) || '')}</strong></p>
-              <p><a href="/sign/${encodeURIComponent(sh.code)}" target="_blank" rel="noreferrer">${state.lang === 'zh' ? '查看原件 ›' : 'View ›'}</a></p>`).join('')}
+              <p>${sh.snapshotUrl
+                ? `<a href="#" data-snap-open="${escapeHtml(sh.code)}">${state.lang === 'zh' ? '查看原件 ›' : 'View ›'}</a>`
+                : `<a href="/sign/${encodeURIComponent(sh.code)}" target="_blank" rel="noreferrer">${state.lang === 'zh' ? '去签字 ›' : 'Sign ›'}</a>`}</p>`).join('')}
           ` : ''}
           ${order.payment && order.payment.flow && !((order.payment.sheets || []).length > 1) ? `
             ${order.payment.flow.lines.map((fl) => `<p><span>${escapeHtml(fl.label)}</span><strong>${escapeHtml(fl.amountText)}</strong></p>`).join('')}
             <p style="border-top:1px solid #e7ddd4;padding-top:8px"><span><strong>${escapeHtml(order.payment.flow.heroLabel)}</strong></span><strong class="price">${escapeHtml(order.payment.flow.cashDueText)}</strong></p>
-            <p style="margin-top:8px"><a href="/sign/${encodeURIComponent(order.payment.code)}" target="_blank" rel="noreferrer">${state.lang === 'zh' ? '查看服务确认单原件 ›' : 'View original ›'}</a></p>
+            <p style="margin-top:8px"><a href="#" data-snap-open="${escapeHtml(order.payment.code)}">${state.lang === 'zh' ? '查看服务确认单原件 ›' : 'View original ›'}</a></p>
           ` : (order.payment ? '' : (order.status === 'COMPLETED' || order.status === 'AFTER_SALES'
     ? `<div class="empty-state small-empty">${state.lang === 'zh' ? '本单未产生结算单' : 'No settlement sheet for this booking'}</div>`
     : `
@@ -2170,6 +2220,21 @@ async function handleScreenClick(event) {
     await refreshOrder(state.selectedOrderId)
     state.view = 'orderDetail'
     render()
+    return
+  }
+  /* D68②(店主 08-23):签署原件=悬浮 lightbox(多张左右切换/滑动),
+     与小程序浮层同构——不再 target=_blank 开新页(新页/新栈=D68① 要治的病)。 */
+  const snapOpen = event.target.closest('[data-snap-open]')
+  if (snapOpen) {
+    event.preventDefault()
+    const order = selectedOrder()
+    const sheets = ((order && order.payment && order.payment.sheets) || []).filter((sh) => sh.snapshotUrl)
+    const items = sheets.length
+      ? sheets.map((sh) => ({ code: sh.code, label: sh.label || '服务确认单', url: sh.snapshotUrl }))
+      : (order && order.payment ? [{ code: order.payment.code, label: '服务确认单', url: `/settlements/${encodeURIComponent(order.payment.code)}/snapshot` }] : [])
+    if (!items.length) return
+    const idx = Math.max(0, items.findIndex((it) => it.code === snapOpen.dataset.snapOpen))
+    openSnapViewer(items, idx)
     return
   }
   /* 批③首件 C3:售后发起/撤回(同一状态机,句与前置全由后端;涉钱零新径) */

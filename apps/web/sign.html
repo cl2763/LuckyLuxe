@@ -252,8 +252,9 @@ function render() {
     ${couponCardHtml()}
 
     ${signed ? `<div class="done">✓ 本单已于 ${esc(String(s.signedAt).slice(0, 16).replace('T', ' '))} 签署完成${s.snapshot ? `<div style="margin-top:10px;font-weight:500"><a href="/settlements/${encodeURIComponent(s.code)}/snapshot" target="_blank">查看签署单</a></div>` : ''}${s.groupPendingCount > 0 ? `
-      <div style="margin-top:16px;color:#8a5a2b;font-weight:600">本组还有 ${s.groupPendingCount} 张待签</div>
-      <a href="/sign/${encodeURIComponent(s.groupNextPendingCode)}" style="display:block;margin-top:10px;background:#2d2826;color:#fff;border-radius:12px;padding:14px;text-align:center;text-decoration:none;font-weight:800">继续签下一张 →</a>` : ''}</div>` : `
+      <div style="margin-top:16px;color:#8a5a2b;font-weight:600">还有 ${s.groupPendingCount} 份服务确认单待签</div>
+      <!-- D68①(店主 08-23):连签用**替换式导航**——location.replace 不压栈,签完 N 份不用按 N 次返回 -->
+      <button type="button" onclick="location.replace('/sign/${encodeURIComponent(s.groupNextPendingCode)}')" style="display:block;width:100%;margin-top:10px;background:#2d2826;color:#fff;border:0;border-radius:12px;padding:14px;text-align:center;font-weight:800;font-size:15px">继续签下一份 →</button>` : ''}</div>` : `
     <label class="disc">
       <input type="checkbox" id="disc">
       <span>${esc(data.disclaimer)}</span>
