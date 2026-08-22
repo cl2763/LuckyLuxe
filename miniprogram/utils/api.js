@@ -285,6 +285,8 @@ function toMiniBooking(booking) {
     listBadgeText: booking.listBadgeText || '',
     listBadgeKind: booking.listBadgeKind || '',
     listNote: booking.listNote || '',
+    // ㋉ D1(店主拍案一 08-22):多项目单列表标题「首项目 等N项」,句后端唯一;空串=前端回落服务名
+    listTitleText: booking.listTitleText || '',
     actualDueText: booking.actualDueText || '',
     listAmountText: booking.listAmountText || '',
     actualDueCents: booking.actualDueCents === undefined ? null : booking.actualDueCents,

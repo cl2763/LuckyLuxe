@@ -5562,6 +5562,7 @@ function customerOrderBadges(row) {
       listBadgeText: isAfterSales ? asBadge : '',
       listBadgeKind: isAfterSales ? asKind : '',
       listNote: isAfterSales ? asNote : '',
+      listTitleText: '',
       // 拍板③:未签署单不出售后发起按钮;存量无签署单的售后单=进度卡照旧(老数据只读不回溯)
       afterSalesAction: '', afterSalesActionText: '',
       actualDueText: '', actualDueCents: null,
@@ -5575,6 +5576,16 @@ function customerOrderBadges(row) {
     ? 'progress'
     : ((row.status === 'COMPLETED' || isAfterSales) && stl ? 'start' : '')
   const amd = amendmentShape(stl)
+  /* ㋉ 店主三拍(08-22)之 C5(拍案一):列表金额=**实付现金**,与单据头条「本单到店支付」同源
+     (Σoffline 腿;㋆ 矩阵常驻恒等保证头条=offline Σ,所以这里读腿=读头条)。
+     价值总额(结算合计)不再在列表裸出(D65-b L2 同族收口):售后行原「总价 <合计>」同刀换源,
+     前缀随之改「已结清」——「总价」二字配现金数就是说谎,同一事实处处说同一句话。 */
+  const cashDueCents = db.prepare("SELECT COALESCE(SUM(amount_cents),0) AS n FROM settlement_payments WHERE settlement_id = ? AND leg = 'offline'").get(stl.id).n
+  /* ㋉ 之 D1(拍案一):多项目单列表标题=「首项目 等N项」。项=签署单上的项目行
+     (settlement_items 全部行:普通项/自选项/次卡核销行都是「做了的项目」)+现场购卡的卡;
+     充值是钱不是项目,不计。单项目回空串,前端沿用预约服务名(句后端唯一,双端直渲)。 */
+  const titleNames = db.prepare('SELECT name_snapshot FROM settlement_items WHERE settlement_id = ? ORDER BY item_no ASC').all(stl.id).map((r) => r.name_snapshot).filter(Boolean)
+  try { const p0 = JSON.parse(stl.purchase_json || 'null'); if (p0 && p0.name) titleNames.push(p0.name) } catch { /* 无购卡 */ }
   // 售后 > 已更正 > 已签署(售后是当前最要紧的状态,压在最上面)
   const badge = isAfterSales ? asBadge : (amd.amendBadgeText || '已签署')
   const kind = isAfterSales ? asKind : (amd.amendedCount ? 'amended' : 'signed')
@@ -5595,10 +5606,11 @@ function customerOrderBadges(row) {
        列表写「已结清 ¥198」、点开确认单写「合计 ¥128」,顾客看两个数字。
        金额一律以结算单为准,由后端拼好整串下发(前缀词保持现状,只把数换对)。 */
     listAmountText: amd.amendedCount ? '' : (
-      isAfterSales ? `总价 ${formatMoneyCents(stl.total_cents, row.tenant_id, 'auto')}`
-        : (row.status === 'COMPLETED' ? `已结清 ${formatMoneyCents(stl.total_cents, row.tenant_id, 'auto')}`
-          : formatMoneyCents(stl.total_cents, row.tenant_id, 'auto'))
+      isAfterSales || row.status === 'COMPLETED'
+        ? `已结清 ${formatMoneyCents(cashDueCents, row.tenant_id, 'auto')}`
+        : formatMoneyCents(cashDueCents, row.tenant_id, 'auto')
     ),
+    listTitleText: titleNames.length > 1 ? `${titleNames[0]} 等${titleNames.length}项` : '',
     /* 屏 D3 售后进度三步(发起 → 跟进中 → 结果)。文案与时间全后端给;
        未完成时结果行显示「—」(规则④ 沿用现行口径,退款凭据只记售后单内)。 */
     ...(isAfterSales ? { afterSales: afterSalesProgress(row) } : {})
@@ -8940,7 +8952,9 @@ function createSettlementGroup(body = {}, adminSession = {}) {
         /* D59 v2(店主修订,批③首日落)——随单充值归属三层瀑布:
            ①员工开单=该员工(强制本人,不认 body);
            ②老板开单且老板有技师身份(账号绑定技师=名册在册判定)=记老板技师行;
-           ③老板无技师身份=回落当单服务技师(**单技师单**;双技师回落两案等店主拍,暂缓=空,日结手调兜底);
+           ③老板无技师身份=回落当单服务技师(**单技师单**);
+           双技师=空(未分配)——店主拍案二 08-22:店长日结分配业绩那一下一并核定
+           (allocateSettlementPerf 补记台账归属,触发器豁免②单向一次);
            面板显式选择仍优先于②③(老板替技师代选的场景)。 */
         rechargeTechnicianId: adminSession.role === 'staff'
           ? (adminSession.technicianId || null)
@@ -10058,6 +10072,38 @@ function allocateSettlementPerf(settlementId, input = {}, adminSession = {}) {
         .run(s.pct, s.cents, adminSession.email || 'owner', now, t.id)
     }
     db.prepare('UPDATE settlements SET perf_alloc_status = ?, updated_at = ? WHERE id = ?').run('allocated', now, settlementId)
+    /* ㋉ D59 双技师随单充值(店主拍案二 08-22):签字时归属=空(进「未分配」),
+       店长日结分配业绩**这一下**一并核定——同一动线,不另开口子。
+       归属人=本次分成份额最高的技师(平局取分成行第一位);店长要点名别人=显式传
+       rechargeTechnicianId(必须是本单技师之一,不许悬空)。台账只补记 technician_id
+       (触发器豁免②:空→值单向一次,金额列锁死);recharge_json 同步补写同一人,
+       快照读方与台账说同一句话。充值行+赠送行一起归(赠送=营销让利,归属跟充值走)。 */
+    if (row.recharge_json) {
+      let rj = null
+      try { rj = JSON.parse(row.recharge_json) } catch { rj = null }
+      if (rj && rj.amountCents > 0 && !rj.technicianId) {
+        let rTech = input.rechargeTechnicianId ? String(input.rechargeTechnicianId) : ''
+        if (rTech && !techs.some((t) => t.technician_id === rTech)) {
+          throw apiError(400, 'BAD_REQUEST', '充值归属技师必须是本单技师之一。')
+        }
+        if (!rTech) {
+          let best = null
+          for (const t of techs) {
+            const c = byId[t.technician_id].cents
+            if (!best || c > best.cents) best = { id: t.technician_id, cents: c }
+          }
+          rTech = best ? best.id : ''
+        }
+        if (rTech) {
+          db.prepare(`UPDATE stored_value_transactions SET technician_id = ?
+            WHERE tenant_id = ? AND user_id = ? AND technician_id IS NULL AND type IN ('recharge', 'bonus')
+            AND (note LIKE ? OR note = ?)`)
+            .run(rTech, tenantId, row.user_id, `随单充值 · 服务单 ${row.code}%`, `充值赠送(营销让利) · 服务单 ${row.code}`)
+          db.prepare('UPDATE settlements SET recharge_json = ?, updated_at = ? WHERE id = ?')
+            .run(JSON.stringify({ ...rj, technicianId: rTech, technicianAllocatedAt: now }), now, settlementId)
+        }
+      }
+    }
     db.exec('COMMIT')
   } catch (error) {
     db.exec('ROLLBACK')
@@ -17320,18 +17366,25 @@ db.exec(`
   BEGIN SELECT RAISE(ABORT, 'finance ledger is append-only'); END;
   CREATE TRIGGER stored_value_no_update BEFORE UPDATE ON stored_value_transactions
   WHEN OLD.tenant_id NOT LIKE 'demo-%'
-    /* B3-4 唯一豁免:顾客回执确认(customer_confirmed_at 从 NULL 落一次值)。
-       它是回执元数据不是账目数字——金额/类型/归属/时间等台账列必须逐列相等,
-       且只许 NULL→值单向一次,改任何账目列照旧 ABORT(只追加语义不破)。 */
+    /* 仅有的两个豁免(金额/类型/时间等账目数字列永锁,改任何一列照旧 ABORT,只追加语义不破):
+       ① B3-4 顾客回执确认:customer_confirmed_at 从 NULL 落一次值(回执元数据);
+       ② D59 案二(店主拍板 08-22)日结核定:technician_id 从 NULL 落一次值——双技师单的随单充值
+         签字时=未分配,店长日结分配业绩那一下补记归属;归属是台账元数据,数字一分不动,
+         且只许空→值单向一次(定了归属再想改=只能红字冲销重记)。 */
     AND NOT (
       NEW.id = OLD.id AND NEW.tenant_id = OLD.tenant_id AND NEW.user_id = OLD.user_id
       AND NEW.type = OLD.type AND NEW.amount_cents = OLD.amount_cents
       AND NEW.pay_channel = OLD.pay_channel AND COALESCE(NEW.note, '') = COALESCE(OLD.note, '')
       AND COALESCE(NEW.created_by, '') = COALESCE(OLD.created_by, '')
       AND NEW.created_at = OLD.created_at
-      AND COALESCE(NEW.technician_id, '') = COALESCE(OLD.technician_id, '')
       AND COALESCE(NEW.bucket, '') = COALESCE(OLD.bucket, '')
-      AND OLD.customer_confirmed_at IS NULL AND NEW.customer_confirmed_at IS NOT NULL
+      AND (
+        (COALESCE(NEW.technician_id, '') = COALESCE(OLD.technician_id, '')
+          AND OLD.customer_confirmed_at IS NULL AND NEW.customer_confirmed_at IS NOT NULL)
+        OR
+        (COALESCE(OLD.technician_id, '') = '' AND COALESCE(NEW.technician_id, '') <> ''
+          AND COALESCE(NEW.customer_confirmed_at, '') = COALESCE(OLD.customer_confirmed_at, ''))
+      )
     )
   BEGIN SELECT RAISE(ABORT, 'stored value ledger is append-only'); END;
   CREATE TRIGGER stored_value_no_delete BEFORE DELETE ON stored_value_transactions

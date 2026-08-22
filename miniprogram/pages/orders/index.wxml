@@ -22,7 +22,8 @@
       <block wx:for="{{orders}}" wx:key="_id">
         <view class="order-card card" bindtap="goDetail" data-id="{{item._id}}">
           <view class="order-head">
-            <text>{{item.serviceName}}</text>
+            <!-- ㋉ D1(拍案一):多项目单标题=后端「首项目 等N项」;单项目单后端回空串,沿用服务名 -->
+            <text>{{item.listTitleText || item.serviceName}}</text>
             <!-- 屏 D2 徽标三态:已签署/已更正 ×N/售后中。文案与配色档由后端给,没事的单整块不渲染 -->
             <text class="status badge-{{item.listBadgeKind}}" wx:if="{{item.listBadgeText}}">{{item.listBadgeText}}</text>
             <text class="status" wx:else>{{item.statusText}}</text>

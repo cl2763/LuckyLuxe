@@ -1860,13 +1860,13 @@ function renderOrdersWeb() {
       <div class="order-list-web">
           ${orders.length ? orders.map((order) => `
           <button class="order-card-web card" data-order-id="${order.id}" type="button">
-            <div class="order-head-web"><strong>${order.service.name}</strong><span>${order.listBadgeText ? escapeHtml(order.listBadgeText) : statusLabel(order.status)}</span></div>
+            <div class="order-head-web"><strong>${order.listTitleText ? escapeHtml(order.listTitleText) : order.service.name}</strong><span>${order.listBadgeText ? escapeHtml(order.listBadgeText) : statusLabel(order.status)}</span></div>
             <div class="order-body-web">
               <img src="${order.status === 'COMPLETED' && customerVisibleWorkImages(order)[0] ? customerVisibleWorkImages(order)[0] : order.service.imageUrl}" alt="${order.service.name}">
               <div>
                 <p>${order.appointmentDate} ${order.appointmentTime}</p>
                 <p>${order.technician.name} · ${order.store.name}</p>
-                <p class="price">${t('paidDeposit')} ${money(order.depositCents)}</p>
+                <p class="price">${order.actualDueText ? escapeHtml(order.actualDueText) : (order.listAmountText ? escapeHtml(order.listAmountText) : `${t('paidDeposit')} ${money(order.depositCents)}`)}</p>
                 ${order.status === 'COMPLETED' && customerVisibleWorkImages(order).length ? `<p>${t('finalPhotos')} · ${customerVisibleWorkImages(order).length}</p>` : ''}
               </div>
             </div>
