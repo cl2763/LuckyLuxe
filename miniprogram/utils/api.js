@@ -660,6 +660,10 @@ function aiCustomerService(message, history) {
 // 顾客端预约确认页(屏 3)读本店定金规则。公开接口,不需要登录。
 function getDepositPolicy(qs) { return request(`/store/deposit-policy${qs ? `?${qs}` : ''}`) }
 function getMyCoupons() { return request('/my/coupons') }
+// 批③次段:卡包(三类聚合+角标同源)与商城(上架套餐+按钮句)两个只读出口
+function getCardPack() { return request('/my/card-pack') }
+function getMyTimecards() { return request('/my/timecards') }
+function getMall() { return request('/my/mall') }
 function getMyStoredValue() { return request('/my/stored-value') }
 // D57 顾客侧待签单再入口:全部未签单(不止最新一张;即时开单没挂预约的也在)
 function getMyPendingSign() { return request('/my/pending-sign') }
@@ -852,6 +856,9 @@ module.exports = {
   aiCustomerService,
   getDepositPolicy,
   getMyCoupons,
+  getCardPack,
+  getMyTimecards,
+  getMall,
   getMyStoredValue,
   getMyPendingSign,
   startAfterSales,

@@ -1,0 +1,54 @@
+<view class="page card-pack-page">
+  <view wx:if="{{loading}}" class="empty">加载中…</view>
+  <view wx:elif="{{error}}" class="empty">{{error}}</view>
+  <block wx:elif="{{pack}}">
+    <!-- A2-6 空态:三类都空=一句话+去看充值套餐(不放例句、不放假数据) -->
+    <view wx:if="{{pack.emptyText}}" class="empty-state">
+      <view class="empty-t">{{pack.emptyText}}</view>
+      <view class="empty-btn" bindtap="goMall">去看看充值套餐</view>
+    </view>
+
+    <!-- 次卡 -->
+    <view wx:if="{{pack.timecards.length}}" class="sec">
+      <view class="sec-t">次卡</view>
+      <view class="cp-card card" wx:for="{{pack.timecards}}" wx:for-item="c" wx:key="id"
+        data-key="tc-{{c.id}}" bindtap="toggleCard">
+        <view class="cp-row"><text class="cp-name">{{c.name}}</text><text class="cp-badge">剩 {{c.remaining}}/{{c.totalTimes}}</text></view>
+        <view class="cp-sub">{{c.expiresAt ? c.expiresAt + ' 到期' : '长期有效'}}</view>
+        <!-- 案三:买的不出小字;赠的才标一行灰字(句后端唯一 sourceLabel) -->
+        <view wx:if="{{c.sourceLabel}}" class="cp-src">{{c.sourceLabel}}</view>
+        <view wx:if="{{open['tc-' + c.id]}}" class="cp-more">
+          <text>可核销项目:{{c.projectGroup || '不限'}}</text>
+          <text class="cp-note">到店开单时选「次卡」大类核销,核销后次数自动减 1</text>
+        </view>
+      </view>
+    </view>
+
+    <!-- 优惠券 -->
+    <view wx:if="{{pack.coupons.length}}" class="sec">
+      <view class="sec-t">优惠券</view>
+      <view class="cp-card card" wx:for="{{pack.coupons}}" wx:for-item="q" wx:key="grantId"
+        data-key="cp-{{q.grantId}}" bindtap="toggleCard">
+        <view class="cp-row"><text class="cp-name">{{q.name}}</text><text class="cp-face">{{q.faceText}}</text></view>
+        <!-- 门槛+到期句=后端唯一出口 couponSubtitle(与选券面板/签署页同一句) -->
+        <view class="cp-sub">{{q.subtitle}}</view>
+        <view wx:if="{{q.sourceLabel}}" class="cp-src">{{q.sourceLabel}}</view>
+        <view wx:if="{{open['cp-' + q.grantId]}}" class="cp-more">
+          <text class="cp-note">结算时由店员或你在签署页选用;一单一张,不与次卡叠加</text>
+        </view>
+      </view>
+    </view>
+
+    <!-- 储值 -->
+    <view class="sec">
+      <view class="sec-t">储值</view>
+      <view class="cp-card card">
+        <view class="cp-row"><text class="cp-name">储值余额</text><text class="cp-face">{{pack.stored.balanceText}}</text></view>
+        <view class="cp-acts">
+          <text class="cp-link" bindtap="goStored">查看明细 ›</text>
+          <text class="cp-link" bindtap="goMall">去充值 ›</text>
+        </view>
+      </view>
+    </view>
+  </block>
+</view>

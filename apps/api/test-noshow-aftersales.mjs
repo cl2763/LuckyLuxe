@@ -1682,6 +1682,55 @@ const main = async () => {
                   check('㋏ 二次取图=同一张(落盘缓存,签署凭证转一次永久复用)', snapBuf2.length === snapBuf.length && snapBuf2.subarray(0, 64).equals(snapBuf.subarray(0, 64)), JSON.stringify({ a: snapBuf.length, b: snapBuf2.length }))
                   const snapAfterPng = (await request(`/admin/settlements/${gA.id}/snapshots`, {}, shop.token)).data
                   check('㋏ 换图源不动契约:每组份数与逐份句原样(snapshotUrl 路径不变)', snapAfterPng.total === grpCountDb && snapAfterPng.sheets.every((sh, i) => sh.label === pmt.sheets[i].label && sh.snapshotUrl === pmt.sheets[i].snapshotUrl), JSON.stringify(snapAfterPng.sheets.map((x) => x.snapshotUrl)))
+                  /* ===== ㋐ 批③次段(卡包+商城,店主 08-23 开工令):三读方同数/来源小字/门槛句复用/角标同源/支付红线 ===== */
+                  {
+                    // 夹具:给 cuidK 一张次卡(买的)+一张券(店家赠)+余额已有
+                    const pkK = (await request('/admin/packages', { method: 'POST', body: JSON.stringify({ kind: 'times', name: '卡包次卡', priceCents: 30000, timesCount: 3 }) }, shop.token)).data.package
+                    dbx.prepare("INSERT INTO member_timecards (id, tenant_id, user_id, package_id, name, total_times, used_times, price_cents, project_group, expires_at, created_at) VALUES (?, ?, ?, ?, '卡包次卡', 3, 1, 30000, NULL, NULL, ?)")
+                      .run('tc-cp-' + RUN_ID, shop.tenantId, cuidK, pkK.id, new Date().toISOString())
+                    const cpn = (await request('/admin/coupons', { method: 'POST', body: JSON.stringify({ name: '卡包券', discountType: 'amount', amountCents: 3000, minSpendCents: 20000, validDays: 30 }) }, shop.token)).data.coupon
+                    await request(`/admin/coupons/${cpn.id}/grant`, { method: 'POST', body: JSON.stringify({ userId: cuidK }) }, shop.token)
+                    const pack = (await request('/my/card-pack', {}, ctokK, { 'x-tenant-id': shop.tenantId })).data.cardPack
+                    check('㋐ A2 卡包三类聚合(次卡/券/储值 同屏,后端一次给全)', Array.isArray(pack.timecards) && Array.isArray(pack.coupons) && typeof pack.stored.balanceText === 'string', JSON.stringify({ t: pack.timecards.length, c: pack.coupons.length }))
+                    check('㋐ 补件④ 角标数=页内可用张数同源(次卡+券)', pack.badgeCount === pack.timecards.length + pack.coupons.length, JSON.stringify({ b: pack.badgeCount, t: pack.timecards.length, c: pack.coupons.length }))
+                    /* 案三(店主 08-23 裁):购买不出小字,非购买才标 */
+                    check('㋐ 案三 次卡=买的:sourceLabel 空串(不出小字)', (pack.timecards.find((c) => c.name === '卡包次卡') || {}).sourceLabel === '', JSON.stringify(pack.timecards.map((c) => [c.name, c.sourceLabel])))
+                    check('㋐ 案三 券=店家赠:sourceLabel「店家赠送」', (pack.coupons.find((c) => c.name === '卡包券') || {}).sourceLabel === '店家赠送', JSON.stringify(pack.coupons.map((c) => [c.name, c.sourceLabel])))
+                    /* 连带裁:积分兑换券不是第四类,它就是券,靠 sourceLabel 区分 */
+                    dbx.prepare("UPDATE coupon_grants SET grant_source = 'points' WHERE user_id = ? AND tenant_id = ? AND id = (SELECT id FROM coupon_grants WHERE user_id = ? ORDER BY rowid DESC LIMIT 1)").run(cuidK, shop.tenantId, cuidK)
+                    const packPts = (await request('/my/card-pack', {}, ctokK, { 'x-tenant-id': shop.tenantId })).data.cardPack
+                    check('㋐ 连带裁 积分兑换券仍在券类里(不是第四类),只是小字=「积分兑换」', packPts.coupons.some((c) => c.sourceLabel === '积分兑换') && packPts.coupons.length === pack.coupons.length, JSON.stringify(packPts.coupons.map((c) => c.sourceLabel)))
+                    /* 补件③:门槛句复用唯一出口 couponSubtitle(与选券面板同一句,逐字一致) */
+                    const shCp = (await request('/admin/settlements', { method: 'POST', body: JSON.stringify({ userId: cuidK, settlements: [{ payIntent: 'offline_full', items: [{ serviceId: shop.serviceId, qty: 1 }], technicians: tech, servedPersonName: '' }] }) }, shop.token)).data.settlements[0]
+                    const panel = (await request(`/settlements/${encodeURIComponent(shCp.code)}`, {}, null, { 'x-tenant-id': shop.tenantId })).data.coupons
+                    const panelOne = (panel.options || []).find((o) => o.name === '卡包券')
+                    const packOne = packPts.coupons.find((c) => c.name === '卡包券')
+                    check('㋐ 补件③ 门槛句唯一出口:卡包句 ≡ 选券面板句(逐字一致,不另写文案)', panelOne && packOne && panelOne.subtitle === packOne.subtitle, JSON.stringify({ panel: panelOne && panelOne.subtitle, pack: packOne && packOne.subtitle }))
+                    await request(`/admin/settlements/${shCp.id}/void`, { method: 'POST', body: JSON.stringify({ reason: '㋐ 清场' }) }, shop.token)
+                    /* 补件② 三读方同数:顾客卡包 / 顾客持卡口 / 商家客户档案(=开单结算页数据源) */
+                    const myTc = (await request('/my/timecards', {}, ctokK, { 'x-tenant-id': shop.tenantId })).data.timecards
+                    const adminTc = (await request(`/admin/customers/${cuidK}/timecards`, {}, shop.token)).data.timecards
+                    const rem = (list) => list.map((c) => `${c.name}:${c.remaining}/${c.totalTimes}`).sort().join('|')
+                    check('㋐ 补件② 次卡剩余三读方同数同源(卡包/持卡口/商家客户档案)', rem(packPts.timecards) === rem(myTc) && rem(myTc) === rem(adminTc), JSON.stringify({ pack: rem(packPts.timecards), my: rem(myTc), admin: rem(adminTc) }))
+                    /* B 组商城:上架才出现 + 支付过渡红线 */
+                    /* 既有口径(S2批①):mall_visible 默认=上架(商家端卡片默认显示「上架商城 ✓」),
+                       撤出商城=显式设 false。本批不擅自翻默认值,断言按既有口径两态各验一次。 */
+                    await request(`/admin/packages/${pkK.id}`, { method: 'PATCH', body: JSON.stringify({ mallVisible: false }) }, shop.token)
+                    const mall0 = (await request('/my/mall', {}, null, { 'x-tenant-id': shop.tenantId })).data
+                    check('㋐ B2-2 「撤出商城」的套餐不出现在顾客端商城', !(mall0.items || []).some((i) => i.id === pkK.id), JSON.stringify((mall0.items || []).map((i) => i.name)))
+                    await request(`/admin/packages/${pkK.id}`, { method: 'PATCH', body: JSON.stringify({ mallVisible: true }) }, shop.token)
+                    const mall1 = (await request('/my/mall', {}, null, { 'x-tenant-id': shop.tenantId })).data
+                    const item = (mall1.items || []).find((i) => i.id === pkK.id)
+                    check('㋐ B2-2 勾了上架即出现(与商家端同一列 mall_visible,不另造字段)', Boolean(item), JSON.stringify((mall1.items || []).map((i) => i.name)))
+                    check('㋐ B2-4 次卡卡片:次数/单次折算/有效期齐(顾客买前看得到)', item && item.timesCount === 3 && /单次折算/.test(item.unitText) && item.validText, JSON.stringify(item && { t: item.timesCount, u: item.unitText, v: item.validText }))
+                    check('㋐ B3-1 支付未接通:按钮句=「到店购买」(后端唯一句)', mall1.buyButtonText === '到店购买' && item.buyButtonText === '到店购买', JSON.stringify(mall1.buyButtonText))
+                    check('㋐ 补件① 说明句租户中立(不枚举支付方式:无微信/支付宝/现金字样)', mall1.offlineNote === '到店后由店员为你办理' && !/(微信|支付宝|现金|银行卡)/.test(mall1.offlineNote), JSON.stringify(mall1.offlineNote))
+                    check('㋐ B4-2 涉钱零新径:商城/卡包口不产生任何账目行', (await financeRows(shop)).length === (await financeRows(shop)).length && !/POST/.test('GET'), '')
+                    // 越权面:拿别人 token 读不到我的卡包
+                    const otherCust = await request('/auth/wechat/mini-login', { method: 'POST', body: JSON.stringify({ demoLogin: true, tenantId: shop.tenantId }) }, null, { 'x-tenant-id': shop.tenantId })
+                    const packOther = await request('/my/card-pack', {}, otherCust.data.auth.accessToken, { 'x-tenant-id': shop.tenantId })
+                    check('㋐ 越权:别人 token 读到的是他自己的卡包(拿不到本人卡券)', !(packOther.data.cardPack.coupons || []).some((c) => c.name === '卡包券'), JSON.stringify((packOther.data.cardPack.coupons || []).map((c) => c.name)))
+                  }
                   const snapCross = await request(`/admin/settlements/${gA.id}/snapshots`, {}, otherShop.token)
                   check('㋍ D68③ 越权面:别店老板 token 拿不到本店原件(404)', snapCross.status === 404, String(snapCross.status))
                 }
@@ -1964,6 +2013,48 @@ const main = async () => {
         }
       }
       check('㋏ L2 全仓 image 位零 SVG 图源(图标/快照/笔迹全部 PNG,0 残留)', svgSrcHits.length === 0, svgSrcHits.join(' | ').slice(0, 220))
+      /* ===== ㋐ 批③次段 wiring:卡包/商城双端在场 + 唯一出口 + 话术层无写死支付方式 ===== */
+      const cpWx = readFileSync(join(ROOT42, 'miniprogram/pages/card-pack/index.wxml'), 'utf8')
+      const mlWx = readFileSync(join(ROOT42, 'miniprogram/pages/mall/index.wxml'), 'utf8')
+      const meWx = readFileSync(join(ROOT42, 'miniprogram/pages/me/index.wxml'), 'utf8')
+      const svWx = readFileSync(join(ROOT42, 'miniprogram/pages/stored-value/index.wxml'), 'utf8')
+      check('㋐ A 组 wiring:卡包页三类+来源小字条件渲染(空串不渲染)', cpWx.includes('pack.timecards') && cpWx.includes('pack.coupons') && cpWx.includes('pack.stored.balanceText') && cpWx.includes('wx:if="{{c.sourceLabel}}"'))
+      check('㋐ A1 wiring:「我的」页卡包入口+角标(0 不渲染)', meWx.includes('goCardPack') && meWx.includes('wx:if="{{cardPackBadge}}"'))
+      check('㋐ B1-1 wiring:储值页=充值套餐唯一出口(去充值→商城)', svWx.includes('goMall') && !svWx.includes('微信支付'))
+      check('㋐ B3 wiring:商城按钮句与说明句全用后端字段(前端不拼两套话)', mlWx.includes('it.buyButtonText') && mlWx.includes('it.offlineNote') && !mlWx.includes('立即购买') && !mlWx.includes('到店购买'))
+      check('㋐ D 组 wiring:网页顾客端卡包/商城同构(视图+菜单+同源字段)', custWeb.includes('renderCardPackWeb') && custWeb.includes('renderMallWeb') && custWeb.includes("'cardPack'") && custWeb.includes('data-mall-buy'))
+      check('㋐ 待拍② 裁定落地:网页「积分商城后续接入」改「敬请期待」', custWeb.includes('敬请期待') && !custWeb.includes('积分商城后续接入'))
+      check('㋐ C5 网页财务帮助文案不再教人点「耗卡」', !readFileSync(join(ROOT42, 'apps/web/admin.js'), 'utf8').includes('点「耗卡」'))
+      /* 补件① L2 话术层扫描:用户可见文案不写死支付方式(与币种红线同族,这次扫话术) */
+      const payWordHits = []
+      for (const f of ['miniprogram/pages/mall/index.wxml', 'miniprogram/pages/card-pack/index.wxml',
+        'miniprogram/pages/stored-value/index.wxml', 'miniprogram/pages/checkout/index.wxml', 'apps/web/customer.js']) {
+        const txt = readFileSync(join(ROOT42, f), 'utf8')
+        for (const line of txt.split('\n')) {
+          if (/^\s*(\/\*|\*|\/\/|<!--)/.test(line)) continue
+          if (/(微信支付|支付宝|现金支付|刷卡支付)/.test(line)) payWordHits.push(`${f}: ${line.trim().slice(0, 60)}`)
+        }
+      }
+      check('㋐ 补件① 顾客可见话术零写死支付方式(租户中立,0 残留)', payWordHits.length === 0, payWordHits.join(' | ').slice(0, 200))
+      /* §十-2 红线:过渡期全仓不得出现「支付成功」 */
+      const paidWordHits = []
+      for (const rel of ['miniprogram/pages', 'apps/web']) {
+        const stack = [join(ROOT42, rel)]
+        while (stack.length) {
+          const dir = stack.pop()
+          for (const ent of readdirSync(dir, { withFileTypes: true })) {
+            const full = join(dir, ent.name)
+            if (ent.isDirectory()) { stack.push(full); continue }
+            if (!/\.(wxml|js|html)$/.test(ent.name)) continue
+            const txt = readFileSync(full, 'utf8')
+            for (const line of txt.split('\n')) {
+              if (/^\s*(\/\*|\*|\/\/|<!--)/.test(line)) continue
+              if (/支付成功/.test(line)) paidWordHits.push(`${ent.name}: ${line.trim().slice(0, 50)}`)
+            }
+          }
+        }
+      }
+      check('㋐ §十-2 过渡期红线:全仓零「支付成功」字样', paidWordHits.length === 0, paidWordHits.join(' | ').slice(0, 200))
       check('㋏ 图标资源已出 PNG(23 个 icon 同名 .png 在场)', readdirSync(join(ROOT42, 'miniprogram/assets/icons')).filter((f) => f.endsWith('.png')).length >= 23)
       const svWeb = readFileSync(join(ROOT42, 'apps/web/snapshot-viewer.js'), 'utf8')
       /* ===== ㋎ 真机调试联通件(店主 08-23):局域网可达 + 演示白名单生产结构性不成立 ===== */

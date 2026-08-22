@@ -1,5 +1,5 @@
 // 构建号:每次交付递增。侧栏可见,排查"改了没生效"时先对版本。
-const ADMIN_BUILD = '20260823f-png'
+const ADMIN_BUILD = '20260823g-b3b'
 let pricingState = { module: 'storefront', tab: 'items', categories: [], items: [], rules: {}, editing: null, preview: null, storefrontPicker: false }
 console.log(`[admin] build ${ADMIN_BUILD}`)
 
@@ -2269,7 +2269,7 @@ const FINANCE_GUIDE = {
     en: ['Quick entry — record as it happens', 'Pick income/expense, choose a category, enter amount and channel, done. Service revenue posts automatically when a booking completes. Entries cannot be edited; correct mistakes with a reversal in the transactions list.']
   },
   storedValue: {
-    zh: ['储值卡 — 卡上的钱是负债，耗卡才是收入', '顾客充值时选会员、填金额和收款方式，点「充值」——这笔钱记为“欠顾客的服务”（负债），不算收入。顾客用卡消费时点「耗卡」，此刻才确认为收入。储值总余额=所有卡上的“死钱”。列表按“沉睡天数”排序，最久没动的卡排最上——这就是你该做唤醒营销的名单。'],
+    zh: ['储值卡 — 卡上的钱是负债，耗卡才是收入', '顾客充值时选会员、填金额和收款方式，点「充值」——这笔钱记为“欠顾客的服务”（负债），不算收入。顾客用卡消费时，结算单签字那一刻自动扣款并确认为收入（无手动耗卡按钮，手动扣=账目风险口）。储值总余额=所有卡上的“死钱”。列表按“沉睡天数”排序，最久没动的卡排最上——这就是你该做唤醒营销的名单。'],
     en: ['Stored value — balance is a liability', 'Recharges are recorded as a liability (services you owe), not revenue. Revenue is recognized only on consumption. Accounts are sorted by dormant days — the top of the list is your reactivation-marketing target.']
   },
   recurring: {

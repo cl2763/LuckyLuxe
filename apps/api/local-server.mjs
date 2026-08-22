@@ -8395,6 +8395,23 @@ function couponScopeIds(coupon) {
 }
 
 /* 一张券在「这一单」上的判定结果。ctx = { tenantId, subtotalCents, maxDeductCents, categoryIds, categoryNames, now } */
+/* 券门槛+到期小字的**唯一出口**(补件③,店主 08-23):
+   选券面板 / 签署页 / 结算页 / **卡包** 四个调用方共用这一句,谁都不许另写门槛文案或判定。
+   金额走 formatMoneyCents(币种红线),不写死币符。 */
+function couponSubtitle(grant, tenantId) {
+  const minSpend = Math.max(0, Number(grant.min_spend_cents) || 0)
+  return `${minSpend > 0 ? `满 ${formatMoneyCents(minSpend, tenantId, 'auto')} 可用` : '无门槛'}${grant.expires_at ? ` · ${String(grant.expires_at).slice(0, 10)} 到期` : ''}`
+}
+
+/* 卡包来源小字(店主 08-23 裁案三):**购买不出小字**,非购买才标一行灰字。
+   券:积分兑换 / 店家赠送(定向、批量、特批都是店送的)/ 售后返还;买来的券(将来商城若卖)=空串。
+   次卡:买的=空串(现场购卡/商城购卡);店家赠的=「店家赠送」。
+   句后端唯一,前端零拼话(空串=整行不渲染)。 */
+function sourceLabelOf(kind) {
+  const map = { points: '积分兑换', gift: '店家赠送', activity: '活动赠送', refund: '售后返还' }
+  return map[String(kind || '')] || ''
+}
+
 function evaluateCouponGrant(grant, ctx) {
   const scope = couponScopeIds(grant)
   const minSpend = Math.max(0, Number(grant.min_spend_cents) || 0)
@@ -8412,8 +8429,8 @@ function evaluateCouponGrant(grant, ctx) {
     scopeCategoryIds: scope,
     scopeText: scope.length ? scope.map((id) => ctx.categoryNames[id] || id).join('、') : '全部大类',
     expiresAt: grant.expires_at || null,
-    // 「满 ¥300 可用 · 2026-09-30 到期」这行小字也由后端拼,前端不拼金额
-    subtitle: `${minSpend > 0 ? `满 ${formatMoneyCents(minSpend, ctx.tenantId, 'auto')} 可用` : '无门槛'}${grant.expires_at ? ` · ${String(grant.expires_at).slice(0, 10)} 到期` : ''}`,
+    // 「满 ¥300 可用 · 2026-09-30 到期」这行小字由 couponSubtitle() 唯一持有(卡包/选券面板/签署页同一句)
+    subtitle: couponSubtitle(grant, ctx.tenantId),
     usable: false,
     reason: '',
     discountCents: 0,
@@ -11730,6 +11747,60 @@ async function route(req, res) {
     return json(res, 201, { booking: createBooking(body) })
   }
   // ===== 顾客侧"我的资产"(user × 当前店) =====
+  /* 批③次段 A3-1/B4-1(店主 08-23 开工令):顾客端卡包与商城两个**只读**口。
+     涉钱零新径:这里不产生任何账目行、不建订单——买卡/充值一律走既有引擎(随单充值/代充/现场购卡)。 */
+  if (req.method === 'GET' && path === '/my/card-pack') {
+    const customer = requireCustomer(req)
+    return json(res, 200, { cardPack: cardPackOf(customer.id, resolveTenant(req, query)) })
+  }
+  // 顾客自己的持卡(与商家口 /admin/customers/:id/timecards 同一出口 usableTimecardsOf)
+  if (req.method === 'GET' && path === '/my/timecards') {
+    const customer = requireCustomer(req)
+    return json(res, 200, { timecards: usableTimecardsOf(customer.id, resolveTenant(req, query)) })
+  }
+  /* 商城:上架的充值套餐 + 次卡(商家端逐个勾「上架商城」才出现)。
+     §十-2 支付过渡红线:未接通=按钮句「到店购买」,句子后端唯一(buyButtonText),
+     过渡期任何位置不出现「已付款」类字样(§十-2 红线,扫描断言常驻);接通并打开总开关后才变「立即购买」(批⑤接支付链路)。
+     补件①:说明句**租户中立**——不枚举支付方式(本店在安大略收 CAD,没有微信支付)。 */
+  if (req.method === 'GET' && path === '/my/mall') {
+    const tid = resolveTenant(req, query)
+    const selfPurchaseEnabled = (db.prepare("SELECT value FROM tenant_settings WHERE tenant_id = ? AND key = 'mall_self_purchase'").get(tid) || {}).value === '1'
+    const PAYMENT_CHANNEL_READY = false   // 批⑤「微信支付真实接通」后由通道探测替换(与 /admin/mall/self-purchase 同一判据)
+    const canSelfBuy = selfPurchaseEnabled && PAYMENT_CHANNEL_READY
+    const buyButtonText = canSelfBuy ? '立即购买' : '到店购买'
+    const offlineNote = '到店后由店员为你办理'
+    const rows = db.prepare("SELECT * FROM membership_packages WHERE tenant_id = ? AND is_active = 1 AND mall_visible = 1 ORDER BY sort_order ASC, created_at ASC").all(tid)
+    const m = (c) => formatMoneyCents(c, tid, 'auto')
+    const items = rows.map((r) => {
+      const isTimes = r.kind === 'times'
+      const unit = isTimes && r.times_count > 0 ? timecardUnitCents({ price_cents: r.price_cents, total_times: r.times_count }, 1) : 0
+      return {
+        id: r.id,
+        kind: r.kind,
+        name: r.name,
+        priceCents: r.price_cents,
+        priceText: m(r.price_cents),
+        // 充值套餐:实收与赠送分行(§十-8 赠送=营销让利,不与实收混成一个数)
+        bonusCents: isTimes ? 0 : (r.bonus_cents || 0),
+        bonusText: !isTimes && r.bonus_cents > 0 ? `赠 ${m(r.bonus_cents)}` : '',
+        titleText: isTimes ? `${r.name} ${m(r.price_cents)}` : `充 ${m(r.price_cents)} 得 ${m(r.price_cents + (r.bonus_cents || 0))}`,
+        // 次卡卡片:次数/单次折算/项目组/有效期(假设②:顾客买前必须看得到)
+        timesCount: isTimes ? r.times_count : 0,
+        unitText: isTimes && unit ? `单次折算 ${m(unit)}` : '',
+        projectGroupText: isTimes ? (r.scope || '') : '',
+        validText: isTimes ? (r.benefits ? String(r.benefits) : '长期有效') : '',
+        buyButtonText,
+        offlineNote
+      }
+    })
+    return json(res, 200, {
+      items,
+      selfPurchaseEnabled: canSelfBuy,
+      buyButtonText,
+      offlineNote,
+      emptyText: items.length ? '' : '本店暂未上架充值套餐'
+    })
+  }
   if (req.method === 'GET' && path === '/my/coupons') {
     const customer = requireCustomer(req)
     const tid = resolveTenant(req, query)
@@ -11906,8 +11977,9 @@ async function route(req, res) {
       const days = fresh.valid_days || coupon.valid_days || 30
       const expiresAt = iso(new Date(Date.now() + days * 86400000))
       const grantId = randomId('grant')
-      db.prepare(`INSERT INTO coupon_grants (id, tenant_id, coupon_id, user_id, code, status, expires_at, created_at)
-        VALUES (?, ?, ?, ?, ?, 'active', ?, ?)`).run(grantId, tid, coupon.id, customer.id, code, expiresAt, iso(new Date()))
+      // 案三:积分兑换的券在卡包上标「积分兑换」小字(与买来/送来的区分,连带裁 08-23)
+      db.prepare(`INSERT INTO coupon_grants (id, tenant_id, coupon_id, user_id, code, status, expires_at, created_at, grant_source)
+        VALUES (?, ?, ?, ?, ?, 'active', ?, ?, 'points')`).run(grantId, tid, coupon.id, customer.id, code, expiresAt, iso(new Date()))
       db.prepare('UPDATE coupons SET issued_qty = issued_qty + 1 WHERE id = ?').run(coupon.id)
       // 扣积分(台账只追加;note 末尾 #prizeId 供限兑统计与撤销回补)
       db.prepare('INSERT INTO points_transactions (id, tenant_id, user_id, type, amount, ref_id, note, created_by, created_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)')
@@ -13047,11 +13119,8 @@ async function route(req, res) {
   /* ===== S2批② B①:顾客次卡持有(开单「次卡」大类的数据源,三端同一接口)=====
      口径:剩 0 的卡不出现(B1-2,接口层单源);过期卡在场带 expired 位=前端置灰不可点(B1-3)。 */
   if (req.method === 'GET' && /^\/admin\/customers\/[^/]+\/timecards$/.test(path)) {
-    const uid = path.split('/')[3]
-    const rows = db.prepare('SELECT * FROM member_timecards WHERE tenant_id = ? AND user_id = ? ORDER BY created_at DESC').all(currentTenantId(), uid)
-    const cards = rows.filter((r) => r.total_times - r.used_times > 0).map(serializeMemberTimecard)
-      .sort((a, b) => Number(b.redeemable) - Number(a.redeemable))
-    return json(res, 200, { timecards: cards })
+    // 补件②:与顾客端卡包同一出口(usableTimecardsOf),剩余次数三读方同数
+    return json(res, 200, { timecards: usableTimecardsOf(path.split('/')[3], currentTenantId()) })
   }
   // ===== 优惠券 定义 CRUD =====
   if (req.method === 'GET' && path === '/admin/coupons') {
@@ -13093,8 +13162,9 @@ async function route(req, res) {
     const days = Number.isFinite(Number(body.validDays)) && Number(body.validDays) > 0
       ? Math.min(365, Math.round(Number(body.validDays))) : (coupon.valid_days || 30)
     const expiresAt = iso(new Date(Date.now() + days * 86400000))
-    db.prepare(`INSERT INTO coupon_grants (id, tenant_id, coupon_id, user_id, code, status, expires_at, created_at)
-      VALUES (?, ?, ?, ?, ?, 'active', ?, ?)`).run(randomId('grant'), currentTenantId(), couponId, user.id, code, expiresAt, iso(new Date()))
+    // 案三:店家定向发放=卡包标「店家赠送」
+    db.prepare(`INSERT INTO coupon_grants (id, tenant_id, coupon_id, user_id, code, status, expires_at, created_at, grant_source)
+      VALUES (?, ?, ?, ?, ?, 'active', ?, ?, 'gift')`).run(randomId('grant'), currentTenantId(), couponId, user.id, code, expiresAt, iso(new Date()))
     db.prepare('UPDATE coupons SET issued_qty = issued_qty + 1 WHERE id = ?').run(couponId)
     return json(res, 201, { grant: { code, couponName: coupon.name, userName: user.display_name, expiresAt } })
   }
@@ -13123,8 +13193,9 @@ async function route(req, res) {
       if (has) { skipped += 1; continue }
       const code = `LL-${Math.random().toString(36).slice(2, 6).toUpperCase()}-${Math.random().toString(36).slice(2, 6).toUpperCase()}`
       const expiresAt = iso(new Date(Date.now() + days * 86400000))
-      db.prepare(`INSERT INTO coupon_grants (id, tenant_id, coupon_id, user_id, code, status, expires_at, created_at)
-        VALUES (?, ?, ?, ?, ?, 'active', ?, ?)`).run(randomId('grant'), currentTenantId(), couponId, user.id, code, expiresAt, nowIso2)
+      // 案三:批量发放(活动)=卡包标「活动赠送」
+      db.prepare(`INSERT INTO coupon_grants (id, tenant_id, coupon_id, user_id, code, status, expires_at, created_at, grant_source)
+        VALUES (?, ?, ?, ?, ?, 'active', ?, ?, 'activity')`).run(randomId('grant'), currentTenantId(), couponId, user.id, code, expiresAt, nowIso2)
       issued += 1; granted += 1
     }
     db.prepare('UPDATE coupons SET issued_qty = ? WHERE id = ?').run(issued, couponId)
@@ -17146,7 +17217,8 @@ db.exec(`
     project_group TEXT,
     expires_at TEXT,
     source_settlement_id TEXT,
-    created_at TEXT NOT NULL
+    created_at TEXT NOT NULL,
+    card_source TEXT
   );
   CREATE INDEX IF NOT EXISTS idx_member_timecards_user ON member_timecards(tenant_id, user_id);
   CREATE TABLE IF NOT EXISTS coupons (
@@ -17172,7 +17244,8 @@ db.exec(`
     status TEXT NOT NULL DEFAULT 'active',
     expires_at TEXT,
     used_at TEXT,
-    created_at TEXT NOT NULL
+    created_at TEXT NOT NULL,
+    grant_source TEXT
   );
   CREATE TABLE IF NOT EXISTS service_notes (
     id TEXT PRIMARY KEY,
@@ -17396,6 +17469,63 @@ function serializeMemberTimecard(row) {
     // 卡片行文案后端给(三端同句,图 B1-4):名称 · 剩 n/N · 有效期;过期置灰由 expired 位驱动
     label: `${row.name} · 剩 ${remaining}/${row.total_times}${row.expires_at ? ` · 至 ${String(row.expires_at).slice(0, 10)}` : ' · 长期有效'}`,
     createdAt: row.created_at
+  }
+}
+
+/* 可用次卡的**唯一出口**(补件②,店主 08-23):三读方——①顾客端卡包 ②商家端客户档案
+   ③开单结算页「次卡」大类——全部调这一个函数,剩余次数与可核销判定不许各算一份。
+   口径:剩 0 的卡接口层就不下发(B1-2);过期卡在场带 expired 位(B1-3),前端置灰不可点。 */
+function usableTimecardsOf(userId, tenantId = currentTenantId()) {
+  return db.prepare('SELECT * FROM member_timecards WHERE tenant_id = ? AND user_id = ? ORDER BY created_at DESC')
+    .all(tenantId, userId)
+    .filter((r) => r.total_times - r.used_times > 0)
+    .map(serializeMemberTimecard)
+    .sort((a, b) => Number(b.redeemable) - Number(a.redeemable))
+}
+
+/* 卡包(顾客端「我的 → 卡包」)的唯一出口:三类聚合 + 角标数同源(补件④:角标=页内可用张数,
+   杜绝「角标 3 进去 2 张」)。句子全后端拼(券门槛走 couponSubtitle、来源走 sourceLabelOf),
+   前端零计算零拼话;金额一律 cents + formatMoneyCents(币种红线)。 */
+function cardPackOf(userId, tenantId = currentTenantId()) {
+  const cards = usableTimecardsOf(userId, tenantId).map((c) => ({
+    ...c,
+    // 案三:买的不出小字(card_source 空=购买);店家赠的才标
+    sourceLabel: sourceLabelOf((db.prepare('SELECT card_source FROM member_timecards WHERE id = ?').get(c.id) || {}).card_source)
+  }))
+  const nowIso = iso(new Date())
+  db.prepare("UPDATE coupon_grants SET status = 'expired' WHERE user_id = ? AND tenant_id = ? AND status = 'active' AND expires_at < ?").run(userId, tenantId, nowIso)
+  const couponRows = db.prepare(`SELECT g.*, c.name, c.discount_type, c.amount_cents, c.percent_off, c.min_spend_cents
+    FROM coupon_grants g JOIN coupons c ON c.id = g.coupon_id
+    WHERE g.user_id = ? AND g.tenant_id = ? AND g.status = 'active' ORDER BY g.created_at DESC`).all(userId, tenantId)
+  const coupons = couponRows.map((r) => ({
+    grantId: r.id,
+    code: r.code,
+    name: r.name,
+    discountType: r.discount_type,
+    amountCents: r.amount_cents,
+    percentOff: r.percent_off,
+    minSpendCents: r.min_spend_cents || 0,
+    // 面额句与门槛句都后端唯一(门槛句=couponSubtitle,与选券面板/签署页同一句)
+    faceText: r.discount_type === 'percent' ? `${r.percent_off}% off` : formatMoneyCents(r.amount_cents, tenantId, 'auto'),
+    subtitle: couponSubtitle(r, tenantId),
+    expiresAt: r.expires_at || null,
+    /* 案三+连带裁(店主 08-23):积分兑换券不是第四类,它就是券——靠这行小字与买来/送来的区分。
+       券目前只线下发放(拍板),所以来源空的按「店家赠送」标;将来商城若卖券=写 purchase,空串不标。 */
+    sourceLabel: sourceLabelOf(r.grant_source || 'gift')
+  }))
+  const balanceCents = storedValueBalanceCents(userId, tenantId)
+  return {
+    timecards: cards,
+    coupons,
+    stored: {
+      balanceCents,
+      balanceText: formatMoneyCents(balanceCents, tenantId, 'auto'),
+      // 储值=充值来的(购买),案三下不标来源
+      sourceLabel: ''
+    },
+    // 补件④:角标 = 卡包页内可用张数(次卡 + 券),与页内逐张同一份数据算出来
+    badgeCount: cards.length + coupons.length,
+    emptyText: (cards.length + coupons.length) === 0 && balanceCents === 0 ? '还没有卡券' : ''
   }
 }
 
@@ -17767,7 +17897,24 @@ for (const column of [
     if (!String(error.message || '').includes('duplicate column')) throw error
   }
 }
-/* 加项组名(裁决④,2026-08-09):设计图屏 1 的加项目录按「延长类 / 补甲类 / 卸甲类」分组,
+
+
+/* 批③次段(卡包+商城,店主 08-23 开工令):三张表补列——一律走 try/catch ALTER,老库跟上(纪律 8)。
+   ① coupon_grants.grant_source:券的来源(points/gift/activity/refund;买来的=空)——案三「非购买才标小字」的判据;
+   ② member_timecards.card_source:次卡来源(空=买的,gift=店家赠);
+   ③ membership_packages.mall_visible:**S2批① 已有此列**(商家端「上架商城/撤出商城」按钮在用)——
+      本批查明后不另造 mall_listed(避免同义两列=自造分叉),这里只保留幂等 ALTER 兜老库。 */
+for (const [table, column] of [
+  ['coupon_grants', 'grant_source TEXT'],
+  ['member_timecards', 'card_source TEXT'],
+  ['membership_packages', 'mall_visible INTEGER NOT NULL DEFAULT 1']   // 与 S2批① 既有列同名同义:重复 ALTER 会被 duplicate column 静默跳过(幂等)
+]) {
+  try {
+    db.exec(`ALTER TABLE ${table} ADD COLUMN ${column}`)
+  } catch (error) {
+    if (!String(error.message || '').includes('duplicate column')) console.warn(`[migrate] ${table}.${column} 跳过:`, error.message)
+  }
+}/* 加项组名(裁决④,2026-08-09):设计图屏 1 的加项目录按「延长类 / 补甲类 / 卸甲类」分组,
    而这三个名字是这家店的说法,不该写死在代码里 —— 改成商家在价目表里自填的一个字段。
    留空的加项归「其他加项」。老表加列走 ALTER(CLAUDE.md 纪律 8)。 */
 try {

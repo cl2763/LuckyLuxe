@@ -1,0 +1,9 @@
+.mall-page{padding:24rpx 24rpx 60rpx}
+.ml-card{padding:26rpx;border-radius:18rpx;background:#fff;margin-bottom:18rpx}
+.ml-top{display:flex;justify-content:space-between;align-items:baseline}
+.ml-title{font-size:30rpx;font-weight:600;color:#2d2825}
+.ml-bonus{font-size:26rpx;color:#8a5a2b;font-weight:600}
+.ml-sub{font-size:24rpx;color:#8a7f78;margin-top:8rpx}
+.ml-buy{margin-top:18rpx;text-align:center;padding:18rpx;border-radius:12rpx;background:#efe7df;color:#5c4630;font-size:28rpx;font-weight:600}
+.ml-note{margin-top:12rpx;font-size:24rpx;color:#6b615b;background:#faf6f2;border-radius:10rpx;padding:14rpx}
+.empty{padding:80rpx 24rpx;text-align:center;color:#8a7f78;font-size:26rpx}

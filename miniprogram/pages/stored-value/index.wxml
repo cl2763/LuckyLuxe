@@ -2,7 +2,8 @@
   <view class="hero">
     <view class="row"><text class="hl">储值余额</text><text class="lv" wx:if="{{level}}">{{level}}</text></view>
     <view class="hv">{{cur.p}}{{cur.s}}{{balance}}</view>
-    <view class="charge" bindtap="soon">在线充值(微信支付)</view>
+    <!-- B1-1(店主拍板):储值卡页=充值套餐唯一出口;补件①:按钮不枚举支付方式(租户中立) -->
+    <view class="charge" bindtap="goMall">去充值 ›</view>
   </view>
 
   <!-- B3-3/4 代充回执:门店代充到账后的回执卡(金额/渠道/时间);确认=「我看到了」,不确认不影响余额 -->

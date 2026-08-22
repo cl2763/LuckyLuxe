@@ -14,7 +14,7 @@ Page({
 
     await api.refreshMember()
     const m = wx.getStorageSync('lucky_member') || {}
-    // 充值套餐为示例(在线直充待微信支付);余额与明细为真实数据
+    // 余额与明细为真实数据;充值套餐改由商城页(/pages/mall)按商家上架配置下发
     // 币种红线:示例套餐的金额也不许写死 $ —— 那是顾客直接看到的钱
     const packages = [
       { id: 1, name: '充 1000 送 50', sub: `到账 ${moneyFromYuan(1050)}` },
@@ -62,5 +62,6 @@ Page({
     }
   },
 
-  soon() { wx.showToast({ title: '在线充值即将上线(微信支付)', icon: 'none' }) }
+  // B1-1:去商城看充值套餐/次卡(唯一出口;不再是「即将上线」的死胡同)
+  goMall() { require('../../utils/nav').to('/pages/mall/index') }
 })

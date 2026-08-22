@@ -338,6 +338,10 @@ const state = {
   lang: localStorage.getItem('lucky-web-lang') || 'zh',
   user: readJson('lucky-web-user'),
   auth: readJson('lucky-web-auth'),
+  // 批③次段:卡包/商城视图数据(后端唯一出口下发,前端不缓存计算)
+  cardPack: null,
+  mall: null,
+  mallNoteFor: '',
   view: 'home',
   type: 'nail',
   category: 'all',
@@ -638,7 +642,8 @@ async function refreshAuth() {
 }
 
 function privateViews() {
-  return new Set(['booking', 'cart', 'checkout', 'me', 'orders', 'orderDetail', 'assets', 'memberBenefits', 'coupons', 'giftCard', 'pointsMall', 'settings'])
+  // 卡包=私有(自己的卡券);商城=公开(没登录也能看有什么套餐,与小程序同口径)
+  return new Set(['booking', 'cart', 'checkout', 'me', 'orders', 'orderDetail', 'assets', 'memberBenefits', 'coupons', 'giftCard', 'pointsMall', 'settings', 'cardPack'])
 }
 
 function requiresAuth(view) {
@@ -959,6 +964,8 @@ function render() {
   if (state.view === 'memberBenefits') renderMemberBenefitsWeb()
   if (state.view === 'store') renderStoreWeb()
   if (state.view === 'portfolio') renderPortfolio()
+  if (state.view === 'cardPack') renderCardPackWeb()
+  if (state.view === 'mall') renderMallWeb()
   if (state.view === 'coupons') renderPlaceholderWeb(t('coupons'), state.lang === 'zh' ? '优惠券列表和使用规则将在真实会员系统接入后同步。' : 'Coupon list and rules will sync after the real member system is connected.')
   if (state.view === 'giftCard') renderPlaceholderWeb(t('giftCard'), state.lang === 'zh' ? '礼品卡售卖与兑换功能保留为下一阶段。' : 'Gift card purchase and redemption is reserved for the next phase.')
   if (state.view === 'pointsMall') renderPlaceholderWeb(t('pointsMall'), state.lang === 'zh' ? '积分商城规则目前使用占位，后续可按会员规则兑换。' : 'The points mall currently uses placeholder rules.')
@@ -1771,12 +1778,19 @@ function renderMe() {
         <div class="menu-grid-web">
           ${[
             [t('assets'), '/assets/images/nail-luxe.jpg', 'assets'],
+            [state.lang === 'zh' ? '卡包' : 'Card pack', '/assets/images/nail-luxe.jpg', 'cardPack'],
+            [state.lang === 'zh' ? '充值 · 次卡' : 'Recharge & passes', '/assets/images/nail-jp.jpg', 'mall'],
             [t('store'), '/assets/images/store-cover.jpg', 'store'],
             [t('coupons'), '/assets/images/nail-french.jpg', 'coupons'],
             [t('giftCard'), '/assets/images/lash-volume.jpg', 'giftCard'],
             [t('pointsMall'), '/assets/images/nail-jp.jpg', 'pointsMall'],
             [t('settings'), '/assets/images/lash-natural.jpg', 'settings']
-          ].map(([label, image, target]) => `<button class="menu-card card" data-me-target="${target}" type="button"><img src="${image}" alt="${label}"><strong>${label}</strong><span>${t('comingSoon')}</span></button>`).join('')}
+          ].map(([label, image, target]) => {
+            // 卡包/商城本批已是真页,不能再挂「占位功能」标语(其余格保持现状)
+            const live = target === 'cardPack' || target === 'mall'
+            const sub = live ? (state.lang === 'zh' ? '查看与使用' : 'View & use') : t('comingSoon')
+            return `<button class="menu-card card" data-me-target="${target}" type="button"><img src="${image}" alt="${label}"><strong>${label}</strong><span>${sub}</span></button>`
+          }).join('')}
         </div>
       </section>
       <button class="ghost logout-btn" data-logout type="button">${t('logout')}</button>
@@ -2020,6 +2034,76 @@ function renderOrderDetailWeb() {
   `
 }
 
+/* 批③次段 D2/D3(网页顾客端同构,四之九):卡包与商城两页与小程序**同句同结构**——
+   句子全部来自后端唯一出口(/my/card-pack、/my/mall),这里只渲染,不拼话不算钱。 */
+function renderCardPackWeb() {
+  const pack = state.cardPack
+  if (!pack) {
+    els.screen.innerHTML = `<section class="view-web"><div class="empty-state tall"><strong>${state.lang === 'zh' ? '加载中…' : 'Loading…'}</strong></div></section>`
+    loadCardPack().then(() => { if (state.view === 'cardPack') render() })
+    return
+  }
+  const zh = state.lang === 'zh'
+  els.screen.innerHTML = `
+    <section class="view-web">
+      <button class="ghost back-btn" data-me-target="me" type="button">← ${zh ? '我的' : 'Me'}</button>
+      <h1>${zh ? '卡包' : 'Card pack'}</h1>
+      ${pack.emptyText ? `<div class="empty-state tall"><strong>${escapeHtml(pack.emptyText)}</strong>
+        <button class="primary" data-me-target="mall" type="button">${zh ? '去看看充值套餐' : 'See packages'}</button></div>` : ''}
+      ${pack.timecards.length ? `<div class="section-row compact"><h2>${zh ? '次卡' : 'Passes'}</h2></div>
+        ${pack.timecards.map((c) => `
+          <div class="info-card-web card">
+            <p><span><strong>${escapeHtml(c.name)}</strong></span><strong>${zh ? '剩' : 'Left'} ${c.remaining}/${c.totalTimes}</strong></p>
+            <p class="subtle">${c.expiresAt ? `${escapeHtml(c.expiresAt)} ${zh ? '到期' : 'expires'}` : (zh ? '长期有效' : 'No expiry')}</p>
+            ${c.sourceLabel ? `<p class="subtle">${escapeHtml(c.sourceLabel)}</p>` : ''}
+          </div>`).join('')}` : ''}
+      ${pack.coupons.length ? `<div class="section-row compact"><h2>${zh ? '优惠券' : 'Coupons'}</h2></div>
+        ${pack.coupons.map((q) => `
+          <div class="info-card-web card">
+            <p><span><strong>${escapeHtml(q.name)}</strong></span><strong class="price">${escapeHtml(q.faceText)}</strong></p>
+            <p class="subtle">${escapeHtml(q.subtitle)}</p>
+            ${q.sourceLabel ? `<p class="subtle">${escapeHtml(q.sourceLabel)}</p>` : ''}
+          </div>`).join('')}` : ''}
+      <div class="section-row compact"><h2>${zh ? '储值' : 'Balance'}</h2></div>
+      <div class="info-card-web card">
+        <p><span><strong>${zh ? '储值余额' : 'Stored balance'}</strong></span><strong class="price">${escapeHtml(pack.stored.balanceText)}</strong></p>
+        <p style="margin-top:8px"><a href="#" data-me-target="mall">${zh ? '去充值 ›' : 'Top up ›'}</a></p>
+      </div>
+    </section>`
+}
+
+function renderMallWeb() {
+  const mall = state.mall
+  if (!mall) {
+    els.screen.innerHTML = `<section class="view-web"><div class="empty-state tall"><strong>${state.lang === 'zh' ? '加载中…' : 'Loading…'}</strong></div></section>`
+    loadMall().then(() => { if (state.view === 'mall') render() })
+    return
+  }
+  const zh = state.lang === 'zh'
+  els.screen.innerHTML = `
+    <section class="view-web">
+      <button class="ghost back-btn" data-me-target="me" type="button">← ${zh ? '我的' : 'Me'}</button>
+      <h1>${zh ? '充值 · 次卡' : 'Recharge & passes'}</h1>
+      ${mall.emptyText ? `<div class="empty-state tall"><strong>${escapeHtml(mall.emptyText)}</strong></div>` : ''}
+      ${mall.items.map((it) => `
+        <div class="info-card-web card">
+          <p><span><strong>${escapeHtml(it.titleText)}</strong></span>${it.bonusText ? `<strong class="price">${escapeHtml(it.bonusText)}</strong>` : ''}</p>
+          ${it.unitText ? `<p class="subtle">${escapeHtml(it.unitText)}</p>` : ''}
+          ${it.projectGroupText ? `<p class="subtle">${zh ? '适用项目组:' : 'Scope: '}${escapeHtml(it.projectGroupText)}</p>` : ''}
+          ${it.validText ? `<p class="subtle">${escapeHtml(it.validText)}</p>` : ''}
+          <p style="margin-top:10px"><button class="primary" data-mall-buy="${escapeHtml(it.id)}" type="button" style="width:100%">${escapeHtml(it.buyButtonText)}</button></p>
+          ${state.mallNoteFor === it.id ? `<p class="subtle">${escapeHtml(it.offlineNote)}</p>` : ''}
+        </div>`).join('')}
+    </section>`
+}
+
+async function loadCardPack() {
+  try { state.cardPack = (await request('/my/card-pack')).cardPack } catch (error) { state.cardPack = null; toast(error.message) }
+}
+async function loadMall() {
+  try { state.mall = await request('/my/mall') } catch (error) { state.mall = null; toast(error.message) }
+}
+
 function renderAssetsWeb() {
   const user = state.user
   els.screen.innerHTML = `
@@ -2030,7 +2114,7 @@ function renderAssetsWeb() {
         <span>Stored Card</span>
       </div>
       <div class="asset-grid-web">
-        <button class="asset-card-web card" data-me-target="pointsMall" type="button"><span>${t('points')}</span><strong>${user.points}</strong><small>${state.lang === 'zh' ? '积分商城后续接入' : 'Points mall coming later'}</small></button>
+        <button class="asset-card-web card" data-me-target="pointsMall" type="button"><span>${t('points')}</span><strong>${user.points}</strong><small>${state.lang === 'zh' ? '敬请期待' : 'Coming soon'}</small></button>
         <button class="asset-card-web card" data-me-target="coupons" type="button"><span>${t('coupons')}</span><strong>${user.couponCount}</strong><small>${state.lang === 'zh' ? '含新人体验券' : 'Includes new member coupon'}</small></button>
       </div>
       <section class="section">
@@ -2264,6 +2348,13 @@ async function handleScreenClick(event) {
   }
   if (event.target.closest('[data-toggle-member-code]')) {
     state.memberCodeOpen = !state.memberCodeOpen
+    render()
+    return
+  }
+  const mallBuy = event.target.closest('[data-mall-buy]')
+  if (mallBuy) {
+    event.preventDefault()
+    state.mallNoteFor = state.mallNoteFor === mallBuy.dataset.mallBuy ? '' : mallBuy.dataset.mallBuy
     render()
     return
   }

@@ -1,0 +1,18 @@
+.card-pack-page{padding:24rpx 24rpx 60rpx}
+.sec{margin-bottom:28rpx}
+.sec-t{font-size:26rpx;color:#8a7f78;margin:8rpx 4rpx 12rpx}
+.cp-card{padding:24rpx;border-radius:18rpx;background:#fff;margin-bottom:16rpx}
+.cp-row{display:flex;justify-content:space-between;align-items:baseline}
+.cp-name{font-size:30rpx;font-weight:600;color:#2d2825}
+.cp-badge{font-size:26rpx;color:#8a5a2b;font-weight:600}
+.cp-face{font-size:32rpx;color:#8a5a2b;font-weight:700}
+.cp-sub{font-size:24rpx;color:#8a7f78;margin-top:8rpx}
+.cp-src{font-size:22rpx;color:#a9a09a;margin-top:6rpx}
+.cp-more{margin-top:14rpx;padding-top:14rpx;border-top:1rpx solid #f0e9e3;display:flex;flex-direction:column}
+.cp-more text{font-size:24rpx;color:#6b615b;line-height:1.6}
+.cp-note{color:#9a908a}
+.cp-acts{display:flex;gap:28rpx;margin-top:16rpx}
+.cp-link{font-size:26rpx;color:#8a5a2b}
+.empty,.empty-state{padding:80rpx 24rpx;text-align:center;color:#8a7f78}
+.empty-t{font-size:28rpx;margin-bottom:20rpx}
+.empty-btn{display:inline-block;padding:16rpx 36rpx;background:#2d2826;color:#fff;border-radius:12rpx;font-size:26rpx}

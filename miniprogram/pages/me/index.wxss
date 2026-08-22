@@ -1143,3 +1143,6 @@
   background: #d8d0c9;
   color: #fff;
 }
+
+/* 批③次段 A1-2:卡包入口角标(数字由后端 cardPack.badgeCount 给,0 不渲染) */
+.menu-dot{display:inline-block;min-width:32rpx;height:32rpx;line-height:32rpx;text-align:center;margin-left:10rpx;padding:0 8rpx;border-radius:16rpx;background:#8a5a2b;color:#fff;font-size:20rpx;font-weight:700}

@@ -1,0 +1,20 @@
+<view class="page mall-page">
+  <view wx:if="{{loading}}" class="empty">加载中…</view>
+  <view wx:elif="{{error}}" class="empty">{{error}}</view>
+  <block wx:elif="{{mall}}">
+    <view wx:if="{{mall.emptyText}}" class="empty">{{mall.emptyText}}</view>
+    <view class="ml-card card" wx:for="{{mall.items}}" wx:for-item="it" wx:key="id">
+      <view class="ml-top">
+        <text class="ml-title">{{it.titleText}}</text>
+        <!-- 赠送单独成行,不与实收混成一个数(§十-8) -->
+        <text wx:if="{{it.bonusText}}" class="ml-bonus">{{it.bonusText}}</text>
+      </view>
+      <view wx:if="{{it.unitText}}" class="ml-sub">{{it.unitText}}</view>
+      <view wx:if="{{it.projectGroupText}}" class="ml-sub">适用项目组:{{it.projectGroupText}}</view>
+      <view wx:if="{{it.validText}}" class="ml-sub">{{it.validText}}</view>
+      <view class="ml-buy" data-id="{{it.id}}" bindtap="tapBuy">{{it.buyButtonText}}</view>
+      <!-- 过渡期说明句:租户中立,不枚举支付方式(补件①) -->
+      <view wx:if="{{noteFor === it.id}}" class="ml-note">{{it.offlineNote}}</view>
+    </view>
+  </block>
+</view>

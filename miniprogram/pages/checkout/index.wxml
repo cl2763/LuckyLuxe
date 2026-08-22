@@ -43,7 +43,7 @@
           <view>{{t.balance}}</view>
           <!-- 修:{{}} 里再套 {{}} 是字面量,顾客看到的是「余额 {{cur.p}}{{cur.s}}4500」原文
                (2026-08-11 D20 停服实测截图顺带抓到的存量缺陷) -->
-          <view class="muted">{{lang === 'en' ? ('Balance ' + cur.p + cur.s + memberBalance + ', pay deposit from balance') : ('余额 ' + cur.p + cur.s + memberBalance + ',用储值抵扣定金,充足时无需微信支付')}}</view>
+          <view class="muted">{{lang === 'en' ? ('Balance ' + cur.p + cur.s + memberBalance + ', pay deposit from balance') : ('余额 ' + cur.p + cur.s + memberBalance + ',用储值抵扣定金,充足时无需另付')}}</view>
         </view>
         <switch color="#C6A27E" checked="{{useBalance}}" bindchange="toggleBalance"></switch>
       </view>

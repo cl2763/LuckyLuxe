@@ -146,6 +146,11 @@
         <view class="menu-badge"><image class="menu-ic" src="/assets/icons/c-wallet.png"></image></view>
         <view class="menu-title">{{t.assets}}</view>
       </view>
+      <!-- 批③次段 A1:卡包入口(三类聚合);角标=卡包页内可用张数,后端同一出口给(0 不显示,不占位) -->
+      <view class="menu-card card" bindtap="goCardPack">
+        <view class="menu-badge"><image class="menu-ic" src="/assets/icons/c-ticket.png"></image></view>
+        <view class="menu-title">卡包<text wx:if="{{cardPackBadge}}" class="menu-dot">{{cardPackBadge}}</text></view>
+      </view>
       <view class="menu-card card" bindtap="goCoupons">
         <view class="menu-badge"><image class="menu-ic" src="/assets/icons/c-ticket.png"></image></view>
         <view class="menu-title">{{t.coupons}}</view>

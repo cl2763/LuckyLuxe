@@ -96,6 +96,7 @@ Page({
     }
     ensureCurrencyCached()
     this.setData({ cur: curOf() })   // 币种跟门店走,不写死
+    this.loadCardPackBadge()          // 批③次段 A1-2:卡包角标(与卡包页同源)
     this.setData({ sandbox: api.SANDBOX === true }) // 沙盒工具条开关(正式包恒 false) ${curOf().p}${curOf().s}
 
     tabbar.update(this, 3)
@@ -578,6 +579,19 @@ Page({
 
   goCoupons() {
     this.requireLogin(() => wx.navigateTo({ url: '/pages/coupons/index' }))
+  },
+  // 批③次段 A1:卡包(三类聚合)
+  goCardPack() {
+    this.requireLogin(() => require('../../utils/nav').to('/pages/card-pack/index'))
+  },
+  /* 补件④:入口角标与卡包页内可用张数**同源**——都取后端 cardPack.badgeCount,
+     绝不在这里自己数一遍(杜绝「角标 3 进去 2 张」)。 */
+  async loadCardPackBadge() {
+    if (!api.isLoggedIn()) { this.setData({ cardPackBadge: 0 }); return }
+    try {
+      const r = await api.getCardPack()
+      this.setData({ cardPackBadge: (r.cardPack && r.cardPack.badgeCount) || 0 })
+    } catch (e) { this.setData({ cardPackBadge: 0 }) }   // 拿不到就不显示角标,不猜数
   },
 
   goStored() {
