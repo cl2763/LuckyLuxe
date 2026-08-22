@@ -17,6 +17,11 @@ jobs:
       - uses: actions/setup-node@v4
         with:
           node-version: '22'
+      # 真机 SVG 空白件(2026-08-23):签署快照/笔迹要出 PNG(真机 <image> 不认 SVG)。
+      # 栅格化用系统包 librsvg(零 npm 依赖不变);CJK 字体必须装,不然 PNG 上中文变方块。
+      # CI 也装 = 让「快照必须是 PNG」这条断言在 Linux 上真的跑到(与生产同构)。
+      - name: Install SVG rasterizer (librsvg + CJK fonts)
+        run: sudo apt-get update && sudo apt-get install -y --no-install-recommends librsvg2-bin fonts-noto-cjk
       - name: Run all regression suites
         run: bash apps/api/run-all-tests.sh
 

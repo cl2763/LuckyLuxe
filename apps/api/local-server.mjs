@@ -7,7 +7,7 @@ import { copyFileSync, existsSync, mkdirSync, readdirSync, readFileSync, renameS
 import { dirname, extname, join, normalize, resolve } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import os from 'node:os'   // 真机调试:开发机局域网 IP 探测(启动日志给手机用的地址)
-import { pngSize, svgToPng } from './svg-raster.mjs'   // 真机 SVG 空白件:快照出 PNG(真机 <image> 不认带文字的 SVG)
+import { pngSize, rasterBackend, svgToPng } from './svg-raster.mjs'   // 真机 SVG 空白件:快照出 PNG(真机 <image> 不认带文字的 SVG)
 import { analyzeReferenceImage, createBookingSummary, createCustomerInsight, createCustomerServiceReply, createDailyBrief, createRecallMessages, createServiceNoteInsights, createSocialCopy, extractKbEntriesFromDocument, polishStaffQuoteReply } from './ai-utils.mjs'
 import { buildKnowledgeContext, loadCustomerServiceKnowledgeBase } from './kb-utils.mjs'
 
@@ -11318,6 +11318,9 @@ async function route(req, res) {
       ok: true,
       service: 'lucky-luxe-api-local',
       commit: String(process.env.RAILWAY_GIT_COMMIT_SHA || 'local').slice(0, 7),
+      /* 真机 SVG 空白件后:快照要出 PNG 得有栅格化后端。把它摆进 /health,
+         上线后一眼能看出生产装没装上(空=还在回落 SVG,真机图会白),不靠猜。 */
+      snapshotRaster: rasterBackend() || 'none',
       time: iso(new Date())
     })
   }
