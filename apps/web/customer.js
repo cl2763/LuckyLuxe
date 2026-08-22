@@ -1882,6 +1882,8 @@ function renderOrdersWeb() {
 function openSnapViewer(items, startIndex = 0) {
   document.getElementById('snapViewer')?.remove()
   let i = Math.max(0, Math.min(startIndex, items.length - 1))
+  // D68② 补件(店主 08-23):左右半透明箭头键,图片中部高度;首份隐左、末份隐右(与小程序浮层同构)
+  const arrowCss = 'position:absolute;top:50%;transform:translateY(-50%);width:38px;height:52px;border:0;border-radius:8px;background:rgba(20,16,14,.42);color:#fff;font-size:26px;line-height:1;cursor:pointer;z-index:2;'
   const box = document.createElement('div')
   box.id = 'snapViewer'
   box.style.cssText = 'position:fixed;inset:0;background:rgba(20,16,14,.88);z-index:9999;display:flex;flex-direction:column;align-items:center;justify-content:center;padding:16px;box-sizing:border-box'
@@ -1892,15 +1894,14 @@ function openSnapViewer(items, startIndex = 0) {
         <span style="opacity:.75;font-size:13px">${items.length > 1 ? `${i + 1}/${items.length}` : ''}</span>
         <button data-snap-close type="button" style="background:none;border:0;color:#fff;font-size:22px;cursor:pointer">✕</button>
       </div>
-      <div style="width:min(760px,94vw);height:min(78vh,900px);background:#fff;border-radius:14px;overflow:auto;position:relative">
-        <img src="${escapeHtml(items[i].url)}" alt="${escapeHtml(items[i].label)}" style="width:100%;display:block">
+      <div style="width:min(760px,94vw);height:min(78vh,900px);position:relative">
+        <div style="width:100%;height:100%;background:#fff;border-radius:14px;overflow:auto">
+          <img src="${escapeHtml(items[i].url)}" alt="${escapeHtml(items[i].label)}" style="width:100%;display:block">
+        </div>
+        ${items.length > 1 && i > 0 ? `<button data-snap-prev type="button" aria-label="上一份" style="${arrowCss}left:10px">‹</button>` : ''}
+        ${items.length > 1 && i < items.length - 1 ? `<button data-snap-next type="button" aria-label="下一份" style="${arrowCss}right:10px">›</button>` : ''}
       </div>
-      ${items.length > 1 ? `
-      <div style="width:min(760px,94vw);display:flex;justify-content:space-between;padding-top:12px">
-        <button data-snap-prev type="button" style="background:#fff;border:0;border-radius:10px;padding:8px 18px;font-weight:700;cursor:pointer">‹ 上一份</button>
-        <span style="color:rgba(255,255,255,.7);font-size:12px;align-self:center">左右滑动或用方向键切换</span>
-        <button data-snap-next type="button" style="background:#fff;border:0;border-radius:10px;padding:8px 18px;font-weight:700;cursor:pointer">下一份 ›</button>
-      </div>` : ''}`
+      ${items.length > 1 ? `<div style="width:min(760px,94vw);text-align:center;color:rgba(255,255,255,.7);font-size:12px;padding-top:10px">左右滑动、点两侧箭头或用方向键切换</div>` : ''}`
   }
   const go = (d) => { i = (i + d + items.length) % items.length; paint() }
   const close = () => { box.remove(); document.removeEventListener('keydown', onKey) }

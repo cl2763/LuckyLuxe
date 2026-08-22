@@ -1902,6 +1902,12 @@ const main = async () => {
       const odJs3 = readFileSync(join(ROOT42, 'miniprogram/pages/order-detail/index.js'), 'utf8')
       check('㋌ D68② 悬浮查看器(小程序:浮层+swiper 滑动+openViewer/closeViewer;原件不再跳页压栈)', odWx3.includes('viewer-mask') && odWx3.includes('<swiper') && odJs3.includes('openViewer') && odJs3.includes('onViewerSwipe') && !odWx3.includes('goSheetSnapshot'))
       check('㋌ D68② 悬浮查看器(网页:lightbox 同构,左右切换+触摸滑动+Esc)', custWeb.includes('openSnapViewer') && custWeb.includes('data-snap-open') && custWeb.includes('touchend'))
+      /* D68② 补件(店主 08-23):两侧半透明箭头键(图片中部高度),首份隐左/末份隐右;滑动手势并存 */
+      check('㋌ D68②补 两侧箭头键双端(mini viewerPrev/Next+首末隐边;web 同构 arrowCss+条件渲染)',
+        odWx3.includes('viewerPrev') && odWx3.includes('viewerNext')
+        && odWx3.includes('viewer.index > 0') && odWx3.includes('viewer.index < viewer.items.length - 1')
+        && odJs3.includes('viewerGo(') && readFileSync(join(ROOT42, 'miniprogram/pages/order-detail/index.wxss'), 'utf8').includes('.viewer-arrow')
+        && custWeb.includes('arrowCss') && custWeb.includes('i > 0 ?') && custWeb.includes('i < items.length - 1 ?'))
       /* L2 文案机械扫描:用户可见面(两端渲染层+后端句)零「组到店支付」「本组还有 N 张」「第 n/N 张」 */
       const copySurfaces = ['apps/api/local-server.mjs', 'apps/web/customer.js', 'apps/web/sign.html', 'apps/web/admin.js',
         'miniprogram/pages/order-detail/index.wxml', 'miniprogram/pages/merchant/settlement/index.js',

@@ -132,14 +132,19 @@
         <text wx:if="{{viewer.items.length > 1}}" class="viewer-page">{{viewer.pageText}}</text>
         <text class="viewer-close" catchtap="closeViewer">✕</text>
       </view>
-      <swiper class="viewer-swiper" current="{{viewer.index}}" bindchange="onViewerSwipe" indicator-dots="{{viewer.items.length > 1}}" indicator-color="rgba(255,255,255,.35)" indicator-active-color="#fff">
-        <swiper-item wx:for="{{viewer.items}}" wx:for-item="it" wx:key="code">
-          <scroll-view scroll-y class="viewer-scroll">
-            <image class="viewer-img" src="{{it.url}}" mode="widthFix" show-menu-by-longpress></image>
-          </scroll-view>
-        </swiper-item>
-      </swiper>
-      <view wx:if="{{viewer.items.length > 1}}" class="viewer-tip">左右滑动看其余原件</view>
+      <view class="viewer-stage">
+        <swiper class="viewer-swiper" current="{{viewer.index}}" bindchange="onViewerSwipe" indicator-dots="{{viewer.items.length > 1}}" indicator-color="rgba(255,255,255,.35)" indicator-active-color="#fff">
+          <swiper-item wx:for="{{viewer.items}}" wx:for-item="it" wx:key="code">
+            <scroll-view scroll-y class="viewer-scroll">
+              <image class="viewer-img" src="{{it.url}}" mode="widthFix" show-menu-by-longpress></image>
+            </scroll-view>
+          </swiper-item>
+        </swiper>
+        <!-- D68② 补件(店主 08-23):左右半透明切换键——图片中部高度,首份隐左、末份隐右;滑动手势并存 -->
+        <view wx:if="{{viewer.items.length > 1 && viewer.index > 0}}" class="viewer-arrow left" catchtap="viewerPrev">‹</view>
+        <view wx:if="{{viewer.items.length > 1 && viewer.index < viewer.items.length - 1}}" class="viewer-arrow right" catchtap="viewerNext">›</view>
+      </view>
+      <view wx:if="{{viewer.items.length > 1}}" class="viewer-tip">左右滑动或点两侧箭头看其余原件</view>
     </view>
   </view>
 

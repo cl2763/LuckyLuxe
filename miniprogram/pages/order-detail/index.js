@@ -109,6 +109,16 @@ Page({
     const index = e.detail.current
     this.setData({ 'viewer.index': index, 'viewer.pageText': `${index + 1}/${v.items.length}` })
   },
+  // D68② 补件:两侧箭头键切换(与滑动手势同一状态源,swiper current 绑 viewer.index)
+  viewerGo(step) {
+    const v = this.data.viewer
+    if (!v || !v.open) return
+    const index = Math.max(0, Math.min(v.items.length - 1, v.index + step))
+    if (index === v.index) return
+    this.setData({ 'viewer.index': index, 'viewer.pageText': `${index + 1}/${v.items.length}` })
+  },
+  viewerPrev() { this.viewerGo(-1) },
+  viewerNext() { this.viewerGo(1) },
   closeViewer() { this.setData({ viewer: null }) },
   noop() {},
   asAction() {
