@@ -1,5 +1,5 @@
 // 构建号:每次交付递增。侧栏可见,排查"改了没生效"时先对版本。
-const ADMIN_BUILD = '20260822g-3p'
+const ADMIN_BUILD = '20260822h-d66'
 let pricingState = { module: 'storefront', tab: 'items', categories: [], items: [], rules: {}, editing: null, preview: null, storefrontPicker: false }
 console.log(`[admin] build ${ADMIN_BUILD}`)
 
@@ -2527,6 +2527,7 @@ function renderDailyClose() {
           <span><b class="dc-tm">${escapeHtml(p.timeText || '')}</b>${escapeHtml(p.servedPersonName || p.customerName || '')} · ${p.technicians.length > 1 ? (zh ? '双技师' : 'Two techs') : (zh ? '单技师' : 'Single')}${p.crossDayNote ? `<em class="dc-xday">${escapeHtml(p.crossDayNote)}</em>` : ''}</span>
           <span>${money(p.perfBaseCents, 2)}${p.couponDiscountCents ? `<span class="subtle" style="margin-left:6px">${zh ? '业绩基数(不含券)' : 'perf base'}</span>` : ''} <span class="arr">${open ? (zh ? '收起 ∧' : 'Hide ∧') : (zh ? '点开分配 ∨' : 'Open ∨')}</span></span>
         </div>
+        ${p.rechargeUnassignedText ? `<div class="subtle" style="color:#8a3a33;padding:0 12px 6px">${escapeHtml(p.rechargeUnassignedText)}</div>` : ''}
         <div class="body">
           ${p.technicians.map((t, i) => `
             <div class="dc-line">

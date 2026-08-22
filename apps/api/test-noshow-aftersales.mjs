@@ -1535,9 +1535,8 @@ const main = async () => {
                   const sT2 = await request('/admin/settlements', { method: 'POST', body: JSON.stringify({ userId: cuidK, settlements: [{ payIntent: 'offline_full', bookingId: bkT.id, items: [{ serviceId: shop.serviceId, qty: 1 }], customItems: [{ name: '定制加项', amountCents: 5000 }], technicians: tech, servedPersonName: '' }] }) }, shop.token)
                   const shT2 = sT2.data.settlements[0]
                   await request(`/settlements/${encodeURIComponent(shT2.code)}/sign`, { method: 'POST', body: JSON.stringify({ signature: '㋉ D1 签', disclaimerAccepted: true }) }, null, { 'x-tenant-id': shop.tenantId })
-                  const firstName = dbx.prepare('SELECT name_snapshot FROM settlement_items WHERE settlement_id = ? ORDER BY item_no ASC').get(shT2.id).name_snapshot
                   const bkTL = (await request('/bookings', {}, ctokK, { 'x-tenant-id': shop.tenantId })).data.bookings.find((b) => b.id === bkT.id)
-                  check('㋉ D1 多项目单标题=「首项目 等2项」(项目+自选加项)', bkTL.listTitleText === `${firstName} 等2项`, JSON.stringify({ got: bkTL.listTitleText, firstName }))
+                  check('㋉ D1修订 加项/自选行不计:单张单(项目+加项)标题=空串(只显服务名)', (bkTL.listTitleText || '') === '', JSON.stringify(bkTL.listTitleText))
                   /* --- D1 购卡计入 N:核销行+现场购卡=「服务名 等2项」(拍板例句原型) --- */
                   const bkP = (await request('/admin/bookings/direct', { method: 'POST', body: JSON.stringify({ userId: cuidK, serviceId: shop.serviceId, technicianId: shop.tech2, date: dateStr(0), time: '21:13' }) }, shop.token)).data.booking
                   await request(`/admin/bookings/${bkP.id}/status`, { method: 'PATCH', body: JSON.stringify({ status: 'COMPLETED' }) }, shop.token)
@@ -1545,7 +1544,32 @@ const main = async () => {
                   const shP2 = sP2.data.settlements[0]
                   await request(`/settlements/${encodeURIComponent(shP2.code)}/sign`, { method: 'POST', body: JSON.stringify({ signature: '㋉ 购卡签', disclaimerAccepted: true }) }, null, { 'x-tenant-id': shop.tenantId })
                   const bkPL = (await request('/bookings', {}, ctokK, { 'x-tenant-id': shop.tenantId })).data.bookings.find((b) => b.id === bkP.id)
-                  check('㋉ D1 现场购卡计入 N(核销行+卡=等2项)', /等2项$/.test(bkPL.listTitleText || ''), JSON.stringify(bkPL.listTitleText))
+                  check('㋉ D1修订 购卡+核销=一张(大类级)=不出「等N项」', (bkPL.listTitleText || '') === '', JSON.stringify(bkPL.listTitleText))
+                  /* --- D1修订+D66 途中修:双服务一预约两张(店主实开形态)——标题=组张数,金额=Σ本预约全部已签单 --- */
+                  const bkG = (await request('/admin/bookings/direct', { method: 'POST', body: JSON.stringify({ userId: cuidK, serviceId: shop.serviceId, technicianId: shop.tech2, date: dateStr(0), time: '22:23' }) }, shop.token)).data.booking
+                  await request(`/admin/bookings/${bkG.id}/status`, { method: 'PATCH', body: JSON.stringify({ status: 'COMPLETED' }) }, shop.token)
+                  const sG = await request('/admin/settlements', { method: 'POST', body: JSON.stringify({ userId: cuidK, bookingId: bkG.id, settlements: [
+                    { payIntent: 'offline_full', items: [{ serviceId: shop.serviceId, qty: 1 }], technicians: tech, servedPersonName: '' },
+                    { payIntent: 'offline_full', items: [{ serviceId: shop.serviceId, qty: 1 }], customItems: [{ name: '双单加项', amountCents: 3000 }], technicians: tech, servedPersonName: '' }
+                  ] }) }, shop.token)
+                  const [gA, gB] = sG.data.settlements
+                  for (const x of [gA, gB]) await request(`/settlements/${encodeURIComponent(x.code)}/sign`, { method: 'POST', body: JSON.stringify({ signature: '㋉ 双单签', disclaimerAccepted: true }) }, null, { 'x-tenant-id': shop.tenantId })
+                  const offG = dbx.prepare("SELECT COALESCE(SUM(p.amount_cents),0) AS n FROM settlement_payments p JOIN settlements s ON s.id = p.settlement_id WHERE s.booking_id = ? AND s.status = 'signed' AND p.leg = 'offline'").get(bkG.id).n
+                  const gFirst = dbx.prepare('SELECT name_snapshot FROM settlement_items WHERE settlement_id = ? ORDER BY item_no ASC').get(gA.id).name_snapshot
+                  const bkGL = (await request('/bookings', {}, ctokK, { 'x-tenant-id': shop.tenantId })).data.bookings.find((b) => b.id === bkG.id)
+                  check('㋉ D1修订 双服务一预约两张:标题=「首项目 等2项」(项=组/张)', bkGL.listTitleText === `${gFirst} 等2项`, JSON.stringify({ got: bkGL.listTitleText, gFirst }))
+                  check('㋉ D66途中修 双张预约金额=Σ本预约全部已签单 offline(只取最新一张=少一半钱)', num(bkGL.listAmountText) === offG && offG > 0, JSON.stringify({ t: bkGL.listAmountText, offG }))
+                  check('㋉ D67③ sheetLinks 逐张原件(第 1/2、2/2 张+code 双有)', bkGL.payment && Array.isArray(bkGL.payment.sheetLinks) && bkGL.payment.sheetLinks.length === 2 && bkGL.payment.sheetLinks[0].label.startsWith('第 1/2 张') && bkGL.payment.sheetLinks[1].label.startsWith('第 2/2 张') && bkGL.payment.sheetLinks.every((l) => l.code), JSON.stringify(bkGL.payment && bkGL.payment.sheetLinks))
+                  /* --- D59 案二提示句:待分配单含未归属充值=行上明说;分配后行消失 --- */
+                  const s59c = await request('/admin/settlements', { method: 'POST', body: JSON.stringify({ userId: cuidK, settlements: [{ payIntent: 'offline_full', items: [{ serviceId: shop.serviceId, qty: 1 }], technicians: [{ technicianId: shop.tech1, role: 'main', itemNos: [1] }, { technicianId: shop.tech2, role: 'assist', itemNos: [] }], servedPersonName: '', rechargePackageId: pkRK.id }] }) }, shop.token)
+                  const sh59c = s59c.data.settlements[0]
+                  await request(`/settlements/${encodeURIComponent(sh59c.code)}/sign`, { method: 'POST', body: JSON.stringify({ signature: '㋉ 提示句签', disclaimerAccepted: true }) }, null, { 'x-tenant-id': shop.tenantId })
+                  const dcHint = (await request(`/admin/daily-close?date=${dateStr(0)}`, {}, shop.token)).data.dailyClose
+                  const pRow = (dcHint.pendingAllocation || []).find((x) => x.settlementId === sh59c.id)
+                  check('㋉ D59 提示句:待分配行「本单含未归属充值 X,分配业绩时一并核定归属」', pRow && /本单含未归属充值 .*一并核定归属/.test(pRow.rechargeUnassignedText || ''), JSON.stringify(pRow && pRow.rechargeUnassignedText))
+                  await request(`/admin/settlements/${sh59c.id}/allocate`, { method: 'POST', body: JSON.stringify({ shares: [{ technicianId: shop.tech1, pct: 60 }, { technicianId: shop.tech2, pct: 40 }] }) }, shop.token)
+                  const dcHint2 = (await request(`/admin/daily-close?date=${dateStr(0)}`, {}, shop.token)).data.dailyClose
+                  check('㋉ D59 提示句随分配销案(核定即闭环,行不再挂)', !(dcHint2.pendingAllocation || []).some((x) => x.settlementId === sh59c.id), '')
                   /* --- D59 案二:双技师+随单充值 → 签字=未分配;日结分配 70/30 → 归份额最高者;台账+快照同刀 --- */
                   const s59 = await request('/admin/settlements', { method: 'POST', body: JSON.stringify({ userId: cuidK, settlements: [{ payIntent: 'offline_full', items: [{ serviceId: shop.serviceId, qty: 1 }], technicians: [{ technicianId: shop.tech1, role: 'main', itemNos: [1] }, { technicianId: shop.tech2, role: 'assist', itemNos: [] }], servedPersonName: '', rechargePackageId: pkRK.id }] }) }, shop.token)
                   const sh59 = s59.data.settlements[0]
@@ -1798,6 +1822,13 @@ const main = async () => {
       // ㋉ 三拍 wiring:D1 标题双端直渲(映射层零裁剪教训)+C5 金额句双端同刀(网页列表不再裸「实付定金」)
       check('㋉ D1 wiring:标题句双端直渲+映射层透传', readFileSync(join(ROOT42, 'miniprogram/utils/api.js'), 'utf8').includes('listTitleText: booking.listTitleText') && readFileSync(join(ROOT42, 'miniprogram/pages/orders/index.wxml'), 'utf8').includes('listTitleText || item.serviceName') && custWeb.includes('order.listTitleText'))
       check('㋉ C5 wiring:网页列表金额行=后端句优先(actualDue > listAmount > 定金旧路)', custWeb.includes('order.actualDueText ? escapeHtml(order.actualDueText) : (order.listAmountText'))
+      // ㋊ D67 三小件+D59 提示句 wiring(双端)
+      const odWx2 = readFileSync(join(ROOT42, 'miniprogram/pages/order-detail/index.wxml'), 'utf8')
+      const odJs2 = readFileSync(join(ROOT42, 'miniprogram/pages/order-detail/index.js'), 'utf8')
+      check('㋊ D67② 签署单卡小字无 Emoji(✍ 双端扫尽:mini+web 顾客端)', !odWx2.includes('✍') && !custWeb.includes('✍'))
+      check('㋊ D67③ 逐张原件双端 wiring(mini sheetLinks 循环+goSheetSnapshot;web sheetLinks 循环)', odWx2.includes('order.pay.sheetLinks') && odJs2.includes('goSheetSnapshot') && custWeb.includes('order.payment.sheetLinks'))
+      check('㋊ D67① 全组签完回台面(relaunch workbench,非退一层)', readFileSync(join(ROOT42, 'miniprogram/pages/merchant/settlement/index.js'), 'utf8').includes("relaunch('/pages/merchant/workbench/index')"))
+      check('㋊ D59 提示句双端 wiring(mini rechargeNote+web rechargeUnassignedText)', readFileSync(join(ROOT42, 'miniprogram/utils/dailyclose.js'), 'utf8').includes('rechargeUnassignedText') && readFileSync(join(ROOT42, 'miniprogram/pages/merchant/orders/index.wxml'), 'utf8').includes('p.rechargeNote') && readFileSync(join(ROOT42, 'apps/web/admin.js'), 'utf8').includes('p.rechargeUnassignedText'))
       // ㋅ D63 wiring:组卡/签署页「余额未用」句+四行自证渲染面
       check('㋅ D63 余额未用句渲染面(组卡+签署页)+四行自证键', spWxml.includes('card.storedUnusedNotice') && signHtml.includes('s.storedUnusedNotice') && srvD60.includes("key: 'before', label: '充值前余额'"))
       check('㋄ D60 结算页:购卡显式行+L3① 行内小注定稿句', settleWxml.includes('购卡款,预收') && settleJs.includes('含本单随签充值 +') && settleWxml.includes('view.rvNote'))

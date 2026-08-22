@@ -47,14 +47,20 @@
   <view class="section">
     <view class="section-head">
       <view class="section-title">服务签署单</view>
-      <view wx:if="{{order.pay}}" class="section-note">已签署 ✍ {{order.pay.signedAt}}</view>
+      <!-- D67②:标题右侧小字去 Emoji(店主 08-22) -->
+      <view wx:if="{{order.pay}}" class="section-note">已签署 {{order.pay.signedAt}}</view>
     </view>
     <view class="info-card card" wx:if="{{order.pay}}">
       <view class="info-row" wx:for="{{order.pay.flowLines}}" wx:for-item="fl" wx:key="key">
         <text>{{fl.label}}</text><text>{{fl.amountText}}</text>
       </view>
       <view class="info-row hero"><text>{{order.pay.heroLabel}}</text><text class="price">{{order.pay.heroText}}</text></view>
-      <view class="as-link" bindtap="goSnapshot">查看服务确认单原件 ›</view>
+      <!-- D67③:多张单原件逐张可看(第 n/N 张列);单张组保持原样单链接 -->
+      <block wx:if="{{order.pay.sheetLinks.length > 1}}">
+        <view class="as-link" wx:for="{{order.pay.sheetLinks}}" wx:for-item="sl" wx:key="code"
+          data-code="{{sl.code}}" bindtap="goSheetSnapshot">{{sl.label}} · 查看原件 ›</view>
+      </block>
+      <view wx:else class="as-link" bindtap="goSnapshot">查看服务确认单原件 ›</view>
     </view>
     <view class="info-card card" wx:elif="{{order.status === 'completed' || order.status === 'after_sales'}}">
       <view class="archive-empty">本单未产生结算单</view>

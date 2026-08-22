@@ -56,7 +56,9 @@ Page({
           flowLines: (order.payment.flow && order.payment.flow.lines) || [],
           heroLabel: (order.payment.flow && order.payment.flow.heroLabel) || '本单到店支付',
           heroText: (order.payment.flow && order.payment.flow.cashDueText) || '',
-          listTotal: y(order.payment.listTotalCents)
+          listTotal: y(order.payment.listTotalCents),
+          // D67③:组内逐张原件行(映射层零裁剪——toMiniBooking 裁字段教训同族,挑字段处必须点名带上)
+          sheetLinks: order.payment.sheetLinks || []
         }
       }
       // 价格拆解:总价 / 定金 / 到店应付(不同来源字段不一,统一补算)
@@ -74,6 +76,12 @@ Page({
     const o = this.data.order
     if (!o || !o.pay || !o.pay.code) return
     nav.to(`/pages/sign/index?code=${encodeURIComponent(o.pay.code)}`)   // ㉑:新增导航一律走 utils/nav
+  },
+  // D67③:多张单逐张原件(第 n/N 张行,code 后端 sheetLinks 下发)
+  goSheetSnapshot(e) {
+    const code = e.currentTarget.dataset.code
+    if (!code) return
+    nav.to(`/pages/sign/index?code=${encodeURIComponent(code)}`)
   },
   asAction() {
     const o = this.data.order

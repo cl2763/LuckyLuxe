@@ -71,6 +71,8 @@ const dailyCloseMixin = {
             // 分成基数=业绩基数(券不扣技师);无券时与应收相等
             id: p.settlementId, code: p.code, timeText: p.timeText || '', crossDayNote: p.crossDayNote || '', total: m(p.perfBaseCents === undefined ? p.totalCents : p.perfBaseCents),
             couponNote: p.couponDiscountCents ? '业绩基数(不含券)' : '',
+            // D59 案二提示句(店主 08-22):待分配单含未归属充值=行上明说(句后端唯一)
+            rechargeNote: p.rechargeUnassignedText || '',
             who: p.servedPersonName || p.customerName || '',
             techLabel: p.technicians.length > 1 ? '双技师' : '单技师',
             techs: p.technicians.map((t, j) => ({

@@ -792,7 +792,9 @@ Page({
             return
           }
           wx.showToast({ title: '顾客已签署,全部完成', icon: 'success' })
-          setTimeout(() => { this.setData({ qr: null }); wx.navigateBack() }, 900)
+          /* D67①(D61 补尾,店主 08-22):全组签完自动回**排班台面**——不是退一层
+             (从订单页进来的退一层回订单页,店主要的是回台面接着接客)。 */
+          setTimeout(() => { this.setData({ qr: null }); require('../../../utils/nav').relaunch('/pages/merchant/workbench/index') }, 900)
           return
         }
       } catch (e) { /* 网络抖动下一轮再问 */ }

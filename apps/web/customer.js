@@ -1970,12 +1970,14 @@ function renderOrderDetailWeb() {
         </div>
       </section>` : ''}
       <section class="section">
-        <div class="section-row"><h2>${state.lang === 'zh' ? '服务签署单' : 'Signed sheet'}</h2>${order.payment ? `<span class="subtle">${state.lang === 'zh' ? '已签署 ✍' : 'Signed ✍'} ${escapeHtml(String(order.payment.signedAt || '').slice(0, 16).replace('T', ' '))}</span>` : ''}</div>
+        <div class="section-row"><h2>${state.lang === 'zh' ? '服务签署单' : 'Signed sheet'}</h2>${order.payment ? `<span class="subtle">${state.lang === 'zh' ? '已签署' : 'Signed'} ${escapeHtml(String(order.payment.signedAt || '').slice(0, 16).replace('T', ' '))}</span>` : ''}</div>
         <div class="info-card-web card">
           ${order.payment && order.payment.flow ? `
             ${order.payment.flow.lines.map((fl) => `<p><span>${escapeHtml(fl.label)}</span><strong>${escapeHtml(fl.amountText)}</strong></p>`).join('')}
             <p style="border-top:1px solid #e7ddd4;padding-top:8px"><span><strong>${escapeHtml(order.payment.flow.heroLabel)}</strong></span><strong class="price">${escapeHtml(order.payment.flow.cashDueText)}</strong></p>
-            <p style="margin-top:8px"><a href="/sign/${encodeURIComponent(order.payment.code)}" target="_blank" rel="noreferrer">${state.lang === 'zh' ? '查看服务确认单原件 ›' : 'View original ›'}</a></p>
+            ${(order.payment.sheetLinks || []).length > 1
+              ? order.payment.sheetLinks.map((sl) => `<p style="margin-top:8px"><a href="/sign/${encodeURIComponent(sl.code)}" target="_blank" rel="noreferrer">${escapeHtml(sl.label)} · ${state.lang === 'zh' ? '查看原件 ›' : 'View ›'}</a></p>`).join('')
+              : `<p style="margin-top:8px"><a href="/sign/${encodeURIComponent(order.payment.code)}" target="_blank" rel="noreferrer">${state.lang === 'zh' ? '查看服务确认单原件 ›' : 'View original ›'}</a></p>`}
           ` : (order.status === 'COMPLETED' || order.status === 'AFTER_SALES'
     ? `<div class="empty-state small-empty">${state.lang === 'zh' ? '本单未产生结算单' : 'No settlement sheet for this booking'}</div>`
     : `

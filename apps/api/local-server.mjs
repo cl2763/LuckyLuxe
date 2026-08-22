@@ -5531,6 +5531,14 @@ function serializeBooking(row, lang = 'zh') {
         code: sRow.code,
         signedAt: sRow.signed_at,
         flow: ser.flow,
+        /* D67③(店主 08-22):多张单签署原图逐张可看——组内非撤回单按第 n/N 张列,
+           每张一个原件入口(pages/sign 同一实现);单张组=数组长度 1,前端走原单链接不变。 */
+        sheetLinks: db.prepare("SELECT code, status, signed_at FROM settlements WHERE group_id = ? AND status <> 'voided' ORDER BY rowid ASC").all(sRow.group_id)
+          .map((s, i, arr) => ({
+            n: i + 1, total: arr.length, code: s.code,
+            label: `第 ${i + 1}/${arr.length} 张 · ${s.status === 'signed' ? '已签署' : (s.status === 'amended' ? '已更正' : '待签署')}`,
+            signed: s.status === 'signed' || s.status === 'amended'
+          })),
         listTotalCents: sRow.list_total_cents || 0,
         subtotalCents: sRow.subtotal_cents || 0,
         couponDiscountCents: sRow.coupon_discount_cents || 0,
@@ -5579,13 +5587,22 @@ function customerOrderBadges(row) {
   /* ㋉ 店主三拍(08-22)之 C5(拍案一):列表金额=**实付现金**,与单据头条「本单到店支付」同源
      (Σoffline 腿;㋆ 矩阵常驻恒等保证头条=offline Σ,所以这里读腿=读头条)。
      价值总额(结算合计)不再在列表裸出(D65-b L2 同族收口):售后行原「总价 <合计>」同刀换源,
-     前缀随之改「已结清」——「总价」二字配现金数就是说谎,同一事实处处说同一句话。 */
-  const cashDueCents = db.prepare("SELECT COALESCE(SUM(amount_cents),0) AS n FROM settlement_payments WHERE settlement_id = ? AND leg = 'offline'").get(stl.id).n
-  /* ㋉ 之 D1(拍案一):多项目单列表标题=「首项目 等N项」。项=签署单上的项目行
-     (settlement_items 全部行:普通项/自选项/次卡核销行都是「做了的项目」)+现场购卡的卡;
-     充值是钱不是项目,不计。单项目回空串,前端沿用预约服务名(句后端唯一,双端直渲)。 */
-  const titleNames = db.prepare('SELECT name_snapshot FROM settlement_items WHERE settlement_id = ? ORDER BY item_no ASC').all(stl.id).map((r) => r.name_snapshot).filter(Boolean)
-  try { const p0 = JSON.parse(stl.purchase_json || 'null'); if (p0 && p0.name) titleNames.push(p0.name) } catch { /* 无购卡 */ }
+     前缀随之改「已结清」——「总价」二字配现金数就是说谎,同一事实处处说同一句话。
+     D66 途中修(店主双服务单实测抓的):一张预约可挂**多张**已签单(双服务一次开两组),
+     只取最新一张=卡上少一半钱 —— 实付现金按「挂本预约的全部已签单」Σ,一张不漏一分不重。 */
+  const cashDueCents = db.prepare(`SELECT COALESCE(SUM(p.amount_cents),0) AS n FROM settlement_payments p
+    JOIN settlements s ON s.id = p.settlement_id
+    WHERE s.booking_id = ? AND s.status = 'signed' AND p.leg = 'offline'`).get(row.id).n
+  /* D1 修订(店主 08-22 二拍):「等N项」的项=**组/张(大类级)**——N=本组非撤回签署单张数;
+     加项/自选行不计(单张单不管几行都只显服务名);N≥2 才出「首项目 等N项」,
+     首项目=组第 1/N 张的首行项目名;点开详情按第 n/N 张逐张可看(D67③)。 */
+  const grpCount = db.prepare("SELECT COUNT(*) AS n FROM settlements WHERE group_id = ? AND status <> 'voided'").get(stl.group_id).n
+  const grpFirstName = (() => {
+    if (grpCount < 2) return ''
+    const first = db.prepare("SELECT id FROM settlements WHERE group_id = ? AND status <> 'voided' ORDER BY rowid ASC LIMIT 1").get(stl.group_id)
+    const it = first ? db.prepare('SELECT name_snapshot FROM settlement_items WHERE settlement_id = ? ORDER BY item_no ASC LIMIT 1').get(first.id) : null
+    return (it && it.name_snapshot) || '服务'
+  })()
   // 售后 > 已更正 > 已签署(售后是当前最要紧的状态,压在最上面)
   const badge = isAfterSales ? asBadge : (amd.amendBadgeText || '已签署')
   const kind = isAfterSales ? asKind : (amd.amendedCount ? 'amended' : 'signed')
@@ -5610,7 +5627,7 @@ function customerOrderBadges(row) {
         ? `已结清 ${formatMoneyCents(cashDueCents, row.tenant_id, 'auto')}`
         : formatMoneyCents(cashDueCents, row.tenant_id, 'auto')
     ),
-    listTitleText: titleNames.length > 1 ? `${titleNames[0]} 等${titleNames.length}项` : '',
+    listTitleText: grpCount >= 2 ? `${grpFirstName} 等${grpCount}项` : '',
     /* 屏 D3 售后进度三步(发起 → 跟进中 → 结果)。文案与时间全后端给;
        未完成时结果行显示「—」(规则④ 沿用现行口径,退款凭据只记售后单内)。 */
     ...(isAfterSales ? { afterSales: afterSalesProgress(row) } : {})
@@ -9794,7 +9811,17 @@ function dailyCloseView(date, tenantId, { lang = 'zh' } = {}) {
         technicians: settlementTechRows(r.id, tenantId).map((t) => ({
           technicianId: t.technician_id, name: (techNames[t.technician_id] || {}).name || t.technician_id,
           role: t.role, itemNos: JSON.parse(t.item_nos_json || '[]')
-        }))
+        })),
+        /* D59 案二提示句(店主 08-22 队首裁落):待分配单若含未归属随单充值,行上明说 ——
+           店长分配业绩这一下会一并核定充值归属,不能让她分完才发现「还有一笔钱跟着走了」。 */
+        rechargeUnassignedText: (() => {
+          try {
+            const rj = JSON.parse(r.recharge_json || 'null')
+            return rj && rj.amountCents > 0 && !rj.technicianId
+              ? `本单含未归属充值 ${formatMoneyCents(rj.amountCents, tenantId, 'auto')},分配业绩时一并核定归属`
+              : ''
+          } catch { return '' }
+        })()
       })
     }
     for (const s of shares) {

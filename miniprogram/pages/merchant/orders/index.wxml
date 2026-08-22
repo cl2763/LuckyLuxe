@@ -94,6 +94,8 @@
               <text class="code"><text class="tm">{{p.timeText}}</text>{{p.who}} · {{p.techLabel}}<text wx:if="{{p.crossDayNote}}" class="xday">{{p.crossDayNote}}</text></text>
               <text class="amt">{{p.total}}<text wx:if="{{p.couponNote}}" class="arr"> {{p.couponNote}}</text> <text class="arr">{{open[p.id] ? '收起 ∧' : '点开分配 ∨'}}</text></text>
             </view>
+            <!-- D59 案二提示句:含未归属充值的待分配单,行上明说(句后端唯一) -->
+            <view wx:if="{{p.rechargeNote}}" class="dcsub" style="color:#8a3a33">{{p.rechargeNote}}</view>
             <block wx:if="{{open[p.id]}}">
               <view class="aline" wx:for="{{p.techs}}" wx:for-item="t" wx:key="id">
                 <text class="nm">{{t.name}}</text>
