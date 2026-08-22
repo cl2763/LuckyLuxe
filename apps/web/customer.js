@@ -340,6 +340,7 @@ const state = {
   auth: readJson('lucky-web-auth'),
   // 批③次段:卡包/商城视图数据(后端唯一出口下发,前端不缓存计算)
   cardPack: null,
+  assets: null,
   mall: null,
   mallNoteFor: '',
   view: 'home',
@@ -643,7 +644,7 @@ async function refreshAuth() {
 
 function privateViews() {
   // 卡包=私有(自己的卡券);商城=公开(没登录也能看有什么套餐,与小程序同口径)
-  return new Set(['booking', 'cart', 'checkout', 'me', 'orders', 'orderDetail', 'assets', 'memberBenefits', 'coupons', 'giftCard', 'pointsMall', 'settings', 'cardPack'])
+  return new Set(['booking', 'cart', 'checkout', 'me', 'orders', 'orderDetail', 'assets', 'memberBenefits', 'coupons', 'giftCard', 'pointsMall', 'settings', 'cardPack', 'storedValue'])
 }
 
 function requiresAuth(view) {
@@ -965,6 +966,8 @@ function render() {
   if (state.view === 'store') renderStoreWeb()
   if (state.view === 'portfolio') renderPortfolio()
   if (state.view === 'cardPack') renderCardPackWeb()
+  // 网页顾客端暂无独立储值明细页:储值行落卡包(卡包里有储值余额与去充值入口),不造半成品页
+  if (state.view === 'storedValue') renderCardPackWeb()
   if (state.view === 'mall') renderMallWeb()
   if (state.view === 'coupons') renderPlaceholderWeb(t('coupons'), state.lang === 'zh' ? '优惠券列表和使用规则将在真实会员系统接入后同步。' : 'Coupon list and rules will sync after the real member system is connected.')
   if (state.view === 'giftCard') renderPlaceholderWeb(t('giftCard'), state.lang === 'zh' ? '礼品卡售卖与兑换功能保留为下一阶段。' : 'Gift card purchase and redemption is reserved for the next phase.')
@@ -1776,19 +1779,15 @@ function renderMe() {
       <section class="section">
         <div class="section-row"><h2>${t('functions')}</h2></div>
         <div class="menu-grid-web">
+          ${/* 裁定A(店主 08-23):资产族只留「我的资产」一个入口——卡包/券/积分商城/会员权益
+                全部收进资产分类总页(与小程序同构,四之九);商城=购买入口不属资产族,由储值页/资产页进 */''}
           ${[
-            [t('assets'), '/assets/images/nail-luxe.jpg', 'assets'],
-            [state.lang === 'zh' ? '卡包' : 'Card pack', '/assets/images/nail-luxe.jpg', 'cardPack'],
-            [state.lang === 'zh' ? '充值 · 次卡' : 'Recharge & passes', '/assets/images/nail-jp.jpg', 'mall'],
-            [t('store'), '/assets/images/store-cover.jpg', 'store'],
-            [t('coupons'), '/assets/images/nail-french.jpg', 'coupons'],
-            [t('giftCard'), '/assets/images/lash-volume.jpg', 'giftCard'],
-            [t('pointsMall'), '/assets/images/nail-jp.jpg', 'pointsMall'],
-            [t('settings'), '/assets/images/lash-natural.jpg', 'settings']
-          ].map(([label, image, target]) => {
-            // 卡包/商城本批已是真页,不能再挂「占位功能」标语(其余格保持现状)
-            const live = target === 'cardPack' || target === 'mall'
-            const sub = live ? (state.lang === 'zh' ? '查看与使用' : 'View & use') : t('comingSoon')
+            [t('assets'), '/assets/images/nail-luxe.jpg', 'assets', true],
+            [t('store'), '/assets/images/store-cover.jpg', 'store', false],
+            [t('giftCard'), '/assets/images/lash-volume.jpg', 'giftCard', false],
+            [t('settings'), '/assets/images/lash-natural.jpg', 'settings', false]
+          ].map(([label, image, target, live]) => {
+            const sub = live ? (state.lang === 'zh' ? '卡包 · 储值 · 积分 · 权益' : 'Cards · Balance · Points') : t('comingSoon')
             return `<button class="menu-card card" data-me-target="${target}" type="button"><img src="${image}" alt="${label}"><strong>${label}</strong><span>${sub}</span></button>`
           }).join('')}
         </div>
@@ -2104,25 +2103,36 @@ async function loadMall() {
   try { state.mall = await request('/my/mall') } catch (error) { state.mall = null; toast(error.message) }
 }
 
+/* 裁定A(店主 08-23):我的资产=**分类总页**(与小程序同构)。四类各一行,数字全部来自
+   后端唯一出口 /my/assets(卡包与卡包页同源同数、储值与卡包储值行同源、积分与积分页同源);
+   本函数零计算、零拼数。今后新资产类型一律加在这一页,不许回「我的」页并列。 */
 function renderAssetsWeb() {
-  const user = state.user
+  const a = state.assets
+  const zh = state.lang === 'zh'
+  if (!a) {
+    els.screen.innerHTML = `<section class="assets-web-page"><div class="empty-state tall"><strong>${zh ? '加载中…' : 'Loading…'}</strong></div></section>`
+    loadAssets().then(() => { if (state.view === 'assets') render() })
+    return
+  }
+  const row = (title, sub, right, target) => `
+    <button class="menu-card card" data-me-target="${target}" type="button" style="display:flex;justify-content:space-between;align-items:center;width:100%;text-align:left">
+      <span><strong>${escapeHtml(title)}</strong><br><small class="subtle">${escapeHtml(sub)}</small></span>
+      <strong class="price">${escapeHtml(right)} ›</strong>
+    </button>`
   els.screen.innerHTML = `
     <section class="assets-web-page">
       <button class="ghost back-btn" data-view-target="me" type="button">← ${t('me')}</button>
-      <div class="asset-card-web dark">
-        <div><span>${t('balance')}</span><strong>${money(user.balanceCents || 0)}</strong></div>
-        <span>Stored Card</span>
-      </div>
-      <div class="asset-grid-web">
-        <button class="asset-card-web card" data-me-target="pointsMall" type="button"><span>${t('points')}</span><strong>${user.points}</strong><small>${state.lang === 'zh' ? '敬请期待' : 'Coming soon'}</small></button>
-        <button class="asset-card-web card" data-me-target="coupons" type="button"><span>${t('coupons')}</span><strong>${user.couponCount}</strong><small>${state.lang === 'zh' ? '含新人体验券' : 'Includes new member coupon'}</small></button>
-      </div>
-      <section class="section">
-        <div class="section-row"><h2>${t('giftCard')}</h2><span class="subtle">${t('comingSoon')}</span></div>
-        <button class="gift-card-web card" data-me-target="giftCard" type="button"><strong>${state.lang === 'zh' ? '暂无礼品卡' : 'No gift cards yet'}</strong><span>${state.lang === 'zh' ? '真实售卖功能可在下一阶段接入。' : 'Real purchase flow can be added next.'}</span></button>
-      </section>
+      <h1>${t('assets')}</h1>
+      ${row(zh ? '卡包' : 'Card pack', a.cardPack.summaryText, a.cardPack.count ? String(a.cardPack.count) : '', 'cardPack')}
+      ${row(zh ? '储值' : 'Balance', zh ? '余额与流水明细' : 'Balance & history', a.stored.balanceText, 'storedValue')}
+      ${row(zh ? '积分' : 'Points', zh ? '明细与积分商城' : 'History & points mall', String(a.points.balance), 'pointsMall')}
+      ${row(zh ? '会员权益' : 'Benefits', a.membership.level || '', '', 'memberBenefits')}
     </section>
   `
+}
+
+async function loadAssets() {
+  try { state.assets = (await request('/my/assets')).assets } catch (error) { state.assets = null; toast(error.message) }
 }
 
 function renderMemberBenefitsWeb() {

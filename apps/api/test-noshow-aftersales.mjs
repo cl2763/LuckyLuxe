@@ -1727,6 +1727,30 @@ const main = async () => {
                     check('㋐ 补件① 说明句租户中立(不枚举支付方式:无微信/支付宝/现金字样)', mall1.offlineNote === '到店后由店员为你办理' && !/(微信|支付宝|现金|银行卡)/.test(mall1.offlineNote), JSON.stringify(mall1.offlineNote))
                     check('㋐ B4-2 涉钱零新径:商城/卡包口不产生任何账目行', (await financeRows(shop)).length === (await financeRows(shop)).length && !/POST/.test('GET'), '')
                     // 越权面:拿别人 token 读不到我的卡包
+                    /* ===== 裁定A(店主 08-23 返工):资产分类总页各行与明细页同源同数 ===== */
+                    const assets = (await request('/my/assets', {}, ctokK, { 'x-tenant-id': shop.tenantId })).data.assets
+                    const packNow = (await request('/my/card-pack', {}, ctokK, { 'x-tenant-id': shop.tenantId })).data.cardPack
+                    const mallPts = (await request('/my/points-mall', {}, ctokK, { 'x-tenant-id': shop.tenantId })).data
+                    check('㋐ 裁定A 资产页卡包行 ≡ 卡包页(次卡/券/合计三个数逐个同源)',
+                      assets.cardPack.timecardCount === packNow.timecards.length
+                      && assets.cardPack.couponCount === packNow.coupons.length
+                      && assets.cardPack.count === packNow.badgeCount,
+                      JSON.stringify({ a: assets.cardPack, p: { t: packNow.timecards.length, c: packNow.coupons.length, b: packNow.badgeCount } }))
+                    check('㋐ 裁定A 资产页储值行 ≡ 卡包储值行(同一读方,分不出两个数)', assets.stored.balanceCents === packNow.stored.balanceCents && assets.stored.balanceText === packNow.stored.balanceText, JSON.stringify({ a: assets.stored, p: packNow.stored }))
+                    check('㋐ 裁定A 资产页积分行 ≡ 积分页余额(同一出口 pointsBalance)', assets.points.balance === mallPts.balance, JSON.stringify({ a: assets.points.balance, p: mallPts.balance }))
+                    check('㋐ 补件④ 角标 ≡ 卡包可用张数 ≡ 资产页卡包行合计(一个数三处用)', assets.badgeCount === packNow.badgeCount && assets.badgeCount === assets.cardPack.count, JSON.stringify({ a: assets.badgeCount, p: packNow.badgeCount }))
+                    const assetsCross = await request('/my/assets', {}, null, { 'x-tenant-id': shop.tenantId })
+                    check('㋐ 裁定A 资产口需登录(未登录 401)', assetsCross.status === 401, String(assetsCross.status))
+                    /* E8 补:边界(券当天到期)/空态(新客三类全空)/异常输入(不存在套餐 id 不炸商城) */
+                    /* 空态要的是「三类都空」的新档案:demo 顾客带种子余额,拿它验会假绿——直排建档拿干净的 */
+                    const bkE8 = (await request('/admin/bookings/direct', { method: 'POST', body: JSON.stringify({ newCustomerName: `㋐空态客${RUN_ID}`, serviceId: shop.serviceId, technicianId: shop.tech2, date: dateStr(3), time: '10:07' }) }, shop.token)).data.booking
+                    const uidE8 = bkE8.userId || bkE8.user_id || (bkE8.user && bkE8.user.id)
+                    dbx.prepare('UPDATE users SET wechat_open_id = ? WHERE id = ?').run(`wx-e8-${RUN_ID}`, uidE8)
+                    const freshCust = await request('/auth/wechat/mini-login', { method: 'POST', body: JSON.stringify({ demoLogin: true, tenantId: shop.tenantId, asUserId: uidE8 }) }, null, { 'x-tenant-id': shop.tenantId })
+                    const emptyPack = (await request('/my/card-pack', {}, freshCust.data.auth.accessToken, { 'x-tenant-id': shop.tenantId })).data.cardPack
+                    check('㋐ E8 空态:新档案三类全空=空态句在场且角标 0', emptyPack.badgeCount === 0 && emptyPack.emptyText === '还没有卡券' && emptyPack.stored.balanceCents === 0, JSON.stringify({ b: emptyPack.badgeCount, e: emptyPack.emptyText, s: emptyPack.stored.balanceCents }))
+                    const badMall = await request('/my/mall?packageId=不存在的套餐', {}, null, { 'x-tenant-id': shop.tenantId })
+                    check('㋐ E8 异常输入:商城口带无效参数照常 200(只读口不炸)', badMall.status === 200, String(badMall.status))
                     const otherCust = await request('/auth/wechat/mini-login', { method: 'POST', body: JSON.stringify({ demoLogin: true, tenantId: shop.tenantId }) }, null, { 'x-tenant-id': shop.tenantId })
                     const packOther = await request('/my/card-pack', {}, otherCust.data.auth.accessToken, { 'x-tenant-id': shop.tenantId })
                     check('㋐ 越权:别人 token 读到的是他自己的卡包(拿不到本人卡券)', !(packOther.data.cardPack.coupons || []).some((c) => c.name === '卡包券'), JSON.stringify((packOther.data.cardPack.coupons || []).map((c) => c.name)))
@@ -2019,11 +2043,14 @@ const main = async () => {
       const meWx = readFileSync(join(ROOT42, 'miniprogram/pages/me/index.wxml'), 'utf8')
       const svWx = readFileSync(join(ROOT42, 'miniprogram/pages/stored-value/index.wxml'), 'utf8')
       check('㋐ A 组 wiring:卡包页三类+来源小字条件渲染(空串不渲染)', cpWx.includes('pack.timecards') && cpWx.includes('pack.coupons') && cpWx.includes('pack.stored.balanceText') && cpWx.includes('wx:if="{{c.sourceLabel}}"'))
-      check('㋐ A1 wiring:「我的」页卡包入口+角标(0 不渲染)', meWx.includes('goCardPack') && meWx.includes('wx:if="{{cardPackBadge}}"'))
+      // 裁定A 返工后:入口收敛到「我的资产」一格,角标挂它(卡包入口从「我的」页撤下)
+      check('㋐→裁定A A1 wiring:「我的」页资产入口+角标(0 不渲染)', meWx.includes('goAssets') && meWx.includes('wx:if="{{cardPackBadge}}"') && !meWx.includes('bindtap="goCardPack"'))
       check('㋐ B1-1 wiring:储值页=充值套餐唯一出口(去充值→商城)', svWx.includes('goMall') && !svWx.includes('微信支付'))
       check('㋐ B3 wiring:商城按钮句与说明句全用后端字段(前端不拼两套话)', mlWx.includes('it.buyButtonText') && mlWx.includes('it.offlineNote') && !mlWx.includes('立即购买') && !mlWx.includes('到店购买'))
       check('㋐ D 组 wiring:网页顾客端卡包/商城同构(视图+菜单+同源字段)', custWeb.includes('renderCardPackWeb') && custWeb.includes('renderMallWeb') && custWeb.includes("'cardPack'") && custWeb.includes('data-mall-buy'))
-      check('㋐ 待拍② 裁定落地:网页「积分商城后续接入」改「敬请期待」', custWeb.includes('敬请期待') && !custWeb.includes('积分商城后续接入'))
+      /* 待拍②(改「敬请期待」)→ 裁定A 返工后那张资产卡整块被分类总页取代:
+         原句所在的卡不复存在,所以判据从"改成敬请期待"收敛为"旧句零残留 + 积分行进资产页" */
+      check('㋐ 待拍②→裁定A:网页「积分商城后续接入」旧句零残留,积分收进资产分类总页', !custWeb.includes('积分商城后续接入') && custWeb.includes("a.points.balance"))
       check('㋐ C5 网页财务帮助文案不再教人点「耗卡」', !readFileSync(join(ROOT42, 'apps/web/admin.js'), 'utf8').includes('点「耗卡」'))
       /* 补件① L2 话术层扫描:用户可见文案不写死支付方式(与币种红线同族,这次扫话术) */
       const payWordHits = []
@@ -2035,6 +2062,19 @@ const main = async () => {
           if (/(微信支付|支付宝|现金支付|刷卡支付)/.test(line)) payWordHits.push(`${f}: ${line.trim().slice(0, 60)}`)
         }
       }
+      /* 裁定A 常驻护栏:「我的」页资产族入口数 = 1(机械扫描防复发)。
+         资产族=资产/卡包/券包/积分商城/会员权益;只许「我的资产」一个,其余全部收进资产分类总页。 */
+      const meWx2 = readFileSync(join(ROOT42, 'miniprogram/pages/me/index.wxml'), 'utf8')
+      const assetEntryHits = (meWx2.match(/bindtap="(goAssets|goCardPack|goCoupons|openPointsMall|goMemberBenefits)"/g) || [])
+      const nonAssets = assetEntryHits.filter((h) => !h.includes('goAssets'))
+      check('㋐ 裁定A 「我的」页资产族入口数=1(卡包/券包/积分商城/会员权益并列入口零残留)', nonAssets.length === 0, assetEntryHits.join(','))
+      const asWx = readFileSync(join(ROOT42, 'miniprogram/pages/assets/index.wxml'), 'utf8')
+      check('㋐ 裁定A 我的资产=分类总页(卡包/储值/积分/会员权益四行,数字走后端出口)', asWx.includes('goCardPack') && asWx.includes('goStored') && asWx.includes('goPoints') && asWx.includes('goBenefits') && asWx.includes('assets.cardPack.summaryText'))
+      check('㋐ 裁定A 网页顾客端同构(资产分类总页+菜单资产族只剩一格)', custWeb.includes('loadAssets') && custWeb.includes("a.cardPack.summaryText") && !/data-me-target="cardPack"[^]{0,200}menu-card/.test(custWeb))
+      /* 裁定B:路径名与「零支付成功」红线相撞——payment-success 已改 booking-done,引用零残留 */
+      const appJson = readFileSync(join(ROOT42, 'miniprogram/app.json'), 'utf8')
+      const checkoutJs = readFileSync(join(ROOT42, 'miniprogram/pages/checkout/index.js'), 'utf8')
+      check('㋐ 裁定B payment-success 路径名消亡(app.json 与跳转都指 booking-done)', appJson.includes('pages/booking-done/index') && !appJson.includes('payment-success') && checkoutJs.includes('/pages/booking-done/index'))
       check('㋐ 补件① 顾客可见话术零写死支付方式(租户中立,0 残留)', payWordHits.length === 0, payWordHits.join(' | ').slice(0, 200))
       /* §十-2 红线:过渡期全仓不得出现「支付成功」 */
       const paidWordHits = []

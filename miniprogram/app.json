@@ -51,7 +51,7 @@
     "pages/booking/index",
     "pages/cart/index",
     "pages/checkout/index",
-    "pages/payment-success/index",
+    "pages/booking-done/index",
     "pages/me/index",
     "pages/points/index",
     "pages/coupons/index",

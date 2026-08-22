@@ -661,6 +661,7 @@ function aiCustomerService(message, history) {
 function getDepositPolicy(qs) { return request(`/store/deposit-policy${qs ? `?${qs}` : ''}`) }
 function getMyCoupons() { return request('/my/coupons') }
 // 批③次段:卡包(三类聚合+角标同源)与商城(上架套餐+按钮句)两个只读出口
+function getAssets() { return request('/my/assets') }   // 裁定A:资产分类总页唯一出口
 function getCardPack() { return request('/my/card-pack') }
 function getMyTimecards() { return request('/my/timecards') }
 function getMall() { return request('/my/mall') }
@@ -856,6 +857,7 @@ module.exports = {
   aiCustomerService,
   getDepositPolicy,
   getMyCoupons,
+  getAssets,
   getCardPack,
   getMyTimecards,
   getMall,

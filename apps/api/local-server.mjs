@@ -11749,6 +11749,11 @@ async function route(req, res) {
   // ===== 顾客侧"我的资产"(user × 当前店) =====
   /* 批③次段 A3-1/B4-1(店主 08-23 开工令):顾客端卡包与商城两个**只读**口。
      涉钱零新径:这里不产生任何账目行、不建订单——买卡/充值一律走既有引擎(随单充值/代充/现场购卡)。 */
+  /* 裁定A:资产分类总页的唯一出口(我的 → 我的资产 → 类别) */
+  if (req.method === 'GET' && path === '/my/assets') {
+    const customer = requireCustomer(req)
+    return json(res, 200, { assets: assetsOverviewOf(customer.id, resolveTenant(req, query)) })
+  }
   if (req.method === 'GET' && path === '/my/card-pack') {
     const customer = requireCustomer(req)
     return json(res, 200, { cardPack: cardPackOf(customer.id, resolveTenant(req, query)) })
@@ -17526,6 +17531,33 @@ function cardPackOf(userId, tenantId = currentTenantId()) {
     // 补件④:角标 = 卡包页内可用张数(次卡 + 券),与页内逐张同一份数据算出来
     badgeCount: cards.length + coupons.length,
     emptyText: (cards.length + coupons.length) === 0 && balanceCents === 0 ? '还没有卡券' : ''
+  }
+}
+
+/* 裁定A(店主 08-23):顾客端「我拥有的东西」**只许一条路径**——我的 → 我的资产 → 类别。
+   这是那条路径的唯一数据出口:各行数字全部复用既有出口(卡包=cardPackOf、积分=pointsBalance、
+   会员=serializeUser 的等级),本函数不新算一分钱、不新拼一句话;今后新资产类型(含 S15 抽奖奖品)
+   一律挂这里,不许再在「我的」页并列新入口。 */
+function assetsOverviewOf(userId, tenantId = currentTenantId()) {
+  const pack = cardPackOf(userId, tenantId)
+  const user = db.prepare('SELECT * FROM users WHERE id = ?').get(userId)
+  const membership = user ? serializeUser(user, tenantId) : null
+  return {
+    // 卡包行:次卡+券,数字与卡包页逐个同源(补件②扩到本页)
+    cardPack: {
+      timecardCount: pack.timecards.length,
+      couponCount: pack.coupons.length,
+      count: pack.badgeCount,
+      summaryText: pack.badgeCount ? `次卡 ${pack.timecards.length} 张 · 券 ${pack.coupons.length} 张` : '暂无可用卡券'
+    },
+    // 储值行:与卡包储值行同一读方
+    stored: { balanceCents: pack.stored.balanceCents, balanceText: pack.stored.balanceText },
+    // 积分行:与积分页同一出口(pointsBalance),兑换与积分商城入口留在积分页内
+    points: { balance: pointsBalance(userId, tenantId) },
+    // 会员权益行:等级由既有会员出口给,不在这里重算
+    membership: membership ? { level: membership.memberLevel, isMember: membership.isMember } : { level: '', isMember: false },
+    // 补件④:入口角标 = 卡包可用张数(与卡包页、与本页卡包行同一个数)
+    badgeCount: pack.badgeCount
   }
 }
 

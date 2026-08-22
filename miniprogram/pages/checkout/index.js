@@ -206,6 +206,7 @@ Page({
     }
     storage.addOrder(order)
     storage.removeCartItems(this.data.items.map((item) => item._id))
-    wx.navigateTo({ url: `/pages/payment-success/index?orderNo=${order.orderNo}` })
+    // 裁定B(店主 08-23):路径名不留 payment-success ——线上支付未接通,这页是「预约提交成功」不是付款成功
+    wx.navigateTo({ url: `/pages/booking-done/index?orderNo=${order.orderNo}` })
   }
 })

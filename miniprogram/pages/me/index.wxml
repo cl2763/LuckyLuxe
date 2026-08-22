@@ -5,7 +5,8 @@
         <image class="avatar" src="{{member.avatarUrl || '/assets/images/member-profile.jpg'}}" mode="aspectFill"></image>
         <view>
           <view class="nickname">{{member.nickname}}</view>
-          <button class="level-pill" bindtap="goMemberBenefits">
+          <!-- 裁定A:等级徽章也落「我的资产」(权益在资产页内一行进);路径唯一,不留第二条 -->
+          <button class="level-pill" bindtap="goAssets">
             <!-- D41+店主追加:不分级店 非会员=「成为会员」(CTA,点进权益页看成为会员的权益);会员=「会员」 -->
             <text>{{member.tiersEnabled === false ? (member.memberLevel === '会员' ? (lang === 'en' ? 'Member' : '会员') : (lang === 'en' ? 'Become a member' : '成为会员')) : member.memberLevel}}</text>
             <text class="level-more">权益</text>
@@ -38,16 +39,18 @@
         <view class="growth-note">{{member.growthNote}}</view>
       </view>
 
+      <!-- 裁定A:会员卡上的三个数字**只展示不另开路径**——点任意一处都落「我的资产」分类总页,
+           再由那里进各类别(我拥有的东西只许一条路径;数字照常显示,不丢信息) -->
       <view class="member-assets">
-        <view class="asset-tap" bindtap="goPoints">
+        <view class="asset-tap" bindtap="goAssets">
           <text>{{member.points}}</text>
           <text>{{t.points}} ›</text>
         </view>
-        <view class="asset-tap" bindtap="goCoupons">
+        <view class="asset-tap" bindtap="goAssets">
           <text>{{member.couponCount}}</text>
           <text>{{t.coupons}} ›</text>
         </view>
-        <view class="asset-tap" bindtap="goStored">
+        <view class="asset-tap" bindtap="goAssets">
           <text>{{cur.p}}{{cur.s}}{{liveBalance === undefined ? member.balance : liveBalance}}</text>
           <text>{{t.balance}} ›</text>
         </view>
@@ -142,35 +145,20 @@
         <view class="menu-badge"><image class="menu-ic" src="/assets/icons/c-message.png"></image></view>
         <view class="menu-title">{{lang === 'en' ? 'Messages' : '我的消息'}}</view>
       </view>
+      <!-- 裁定A(店主 08-23):资产族**只留这一个入口**——卡包/券包/积分商城/会员权益全部收进
+           「我的资产」分类总页(我拥有的东西只许一条路径);角标=卡包可用张数,后端同一出口(0 不显示) -->
       <view class="menu-card card" bindtap="goAssets">
         <view class="menu-badge"><image class="menu-ic" src="/assets/icons/c-wallet.png"></image></view>
-        <view class="menu-title">{{t.assets}}</view>
-      </view>
-      <!-- 批③次段 A1:卡包入口(三类聚合);角标=卡包页内可用张数,后端同一出口给(0 不显示,不占位) -->
-      <view class="menu-card card" bindtap="goCardPack">
-        <view class="menu-badge"><image class="menu-ic" src="/assets/icons/c-ticket.png"></image></view>
-        <view class="menu-title">卡包<text wx:if="{{cardPackBadge}}" class="menu-dot">{{cardPackBadge}}</text></view>
-      </view>
-      <view class="menu-card card" bindtap="goCoupons">
-        <view class="menu-badge"><image class="menu-ic" src="/assets/icons/c-ticket.png"></image></view>
-        <view class="menu-title">{{t.coupons}}</view>
+        <view class="menu-title">{{t.assets}}<text wx:if="{{cardPackBadge}}" class="menu-dot">{{cardPackBadge}}</text></view>
       </view>
       <view class="menu-card card" bindtap="goStore">
         <view class="menu-badge"><image class="menu-ic" src="/assets/icons/c-store.png"></image></view>
         <view class="menu-title">{{t.store}}</view>
       </view>
-      <view class="menu-card card" bindtap="goMemberBenefits">
-        <view class="menu-badge"><image class="menu-ic" src="/assets/icons/c-crown.png"></image></view>
-        <view class="menu-title">{{lang === 'en' ? 'Benefits' : '会员权益'}}</view>
-      </view>
       <!-- 沙盒专用工具条(补强批):正式包 USE_LOCAL_SANDBOX=false 不渲染;服务端路由生产也关 -->
       <view class="menu-card card sandbox-bar" wx:if="{{sandbox}}" bindtap="goSandboxIdentity">
         <view class="menu-badge"><image class="menu-ic" src="/assets/icons/c-crown.png"></image></view>
         <view class="menu-title">切换演示身份(沙盒)</view>
-      </view>
-      <view class="menu-card card" bindtap="openPointsMall">
-        <view class="menu-badge"><image class="menu-ic" src="/assets/icons/c-gift.png"></image></view>
-        <view class="menu-title">{{t.pointsMall}}</view>
       </view>
     </view>
   </view>
