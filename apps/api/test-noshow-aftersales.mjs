@@ -1607,6 +1607,87 @@ const main = async () => {
                   const sub59 = dbx.prepare('SELECT subtotal_cents FROM settlements WHERE id = ?').get(sh59.id).subtotal_cents
                   check('㋉ 红线:核定归属≠计业绩(Σ分成=档位小计,不含充值 300)', perfSum > 0 && perfSum === sub59, JSON.stringify({ perfSum, sub59 }))
 
+                  /* ===== ㋔ 跨店串号检测(店主 08-23 本批核心)=====
+                     同一个微信身份在两家店各有会员账户,**每一类资产读方都必须带 tenant 维度**。
+                     根子已修:users / user_identities 的唯一性原来是**全局**的,同一 openid 在 B 店
+                     根本插不进第二行 —— 拿到的是 A 店那一行(B 店老板看不到她、给她开不了单,
+                     而「我的」页读的又是 B 店口径,半串半不串)。现在唯一性带租户维度。 */
+                  {
+                    const shopB = await newShop('x')
+                    const openId = `demo-openid-cross-${RUN_ID}`
+                    const loginAt = async (sp) => (await request('/auth/wechat/mini-login', { method: 'POST', body: JSON.stringify({ demoLogin: true, tenantId: sp.tenantId, asUserId: null }) }, null, { 'x-tenant-id': sp.tenantId }))
+                    // 两店各建一位顾客并贴同一个 openid(真实路径=扫签署码授权,这里直贴身份字段)
+                    const mkCust = async (sp, nm) => {
+                      const bk = (await request('/admin/bookings/direct', { method: 'POST', body: JSON.stringify({ newCustomerName: nm, serviceId: sp.serviceId, technicianId: sp.tech1, date: dateStr(0), time: '07:30' }) }, sp.token)).data.booking
+                      const uid = bk.userId || bk.user_id || (bk.user && bk.user.id)
+                      dbx.prepare('UPDATE users SET wechat_open_id = ? WHERE id = ?').run(openId, uid)
+                      return { bookingId: bk.id, uid }
+                    }
+                    const A = await mkCust(shop, `㋔跨店客A${RUN_ID}`)
+                    const B = await mkCust(shopB, `㋔跨店客B${RUN_ID}`)
+                    check('㋔ 根子:同一 openid 在两家店各有一行 users(唯一性带租户,改前插不进第二行)',
+                      A.uid !== B.uid && dbx.prepare('SELECT COUNT(*) n FROM users WHERE wechat_open_id = ?').get(openId).n === 2,
+                      JSON.stringify({ a: A.uid, b: B.uid }))
+                    // 两店各配一套**明显不同**的资产:A 店 储值 500/券 1/一单已签;B 店 储值 200/券 2/两单已签
+                    const signOne = async (sp, uid, bookingId) => {
+                      await request(`/admin/bookings/${bookingId}/status`, { method: 'PATCH', body: JSON.stringify({ status: 'COMPLETED' }) }, sp.token)
+                      const sh = (await request('/admin/settlements', { method: 'POST', body: JSON.stringify({ userId: uid, settlements: [{ bookingId, payIntent: 'offline_full', items: [{ serviceId: sp.serviceId, qty: 1 }], technicians: [{ technicianId: sp.tech1, role: 'main', itemNos: [1] }] }] }) }, sp.token)).data.settlements[0]
+                      await request(`/settlements/${encodeURIComponent(sh.code)}/sign`, { method: 'POST', body: JSON.stringify({ signature: '㋔ 签', disclaimerAccepted: true }) }, null, { 'x-tenant-id': sp.tenantId })
+                      return sh
+                    }
+                    await request('/admin/stored-value/recharge', { method: 'POST', body: JSON.stringify({ userId: A.uid, amountCents: 50000, payChannel: 'cash', note: '㋔ A 店储值' }) }, shop.token)
+                    await request('/admin/stored-value/recharge', { method: 'POST', body: JSON.stringify({ userId: B.uid, amountCents: 20000, payChannel: 'cash', note: '㋔ B 店储值' }) }, shopB.token)
+                    const cpnA = (await request('/admin/coupons', { method: 'POST', body: JSON.stringify({ name: `㋔A券${RUN_ID}`, discountType: 'amount', amountCents: 1000, validDays: 30, totalQty: 50 }) }, shop.token)).data.coupon
+                    const cpnB = (await request('/admin/coupons', { method: 'POST', body: JSON.stringify({ name: `㋔B券${RUN_ID}`, discountType: 'amount', amountCents: 2000, validDays: 30, totalQty: 50 }) }, shopB.token)).data.coupon
+                    await request(`/admin/coupons/${cpnA.id}/grant`, { method: 'POST', body: JSON.stringify({ userId: A.uid }) }, shop.token)
+                    await request(`/admin/coupons/${cpnB.id}/grant`, { method: 'POST', body: JSON.stringify({ userId: B.uid }) }, shopB.token)
+                    await request(`/admin/coupons/${cpnB.id}/grant`, { method: 'POST', body: JSON.stringify({ userId: B.uid }) }, shopB.token)
+                    await signOne(shop, A.uid, A.bookingId)
+                    await signOne(shopB, B.uid, B.bookingId)
+                    // 顾客端按店读:两套 token(各自店签的),逐项比对
+                    const tokA = (await request('/auth/wechat/mini-login', { method: 'POST', body: JSON.stringify({ demoLogin: true, tenantId: shop.tenantId, asUserId: A.uid }) }, null, { 'x-tenant-id': shop.tenantId })).data.auth.accessToken
+                    const tokB = (await request('/auth/wechat/mini-login', { method: 'POST', body: JSON.stringify({ demoLogin: true, tenantId: shopB.tenantId, asUserId: B.uid }) }, null, { 'x-tenant-id': shopB.tenantId })).data.auth.accessToken
+                    const readAll = async (sp, tok) => ({
+                      pack: (await request('/my/card-pack', {}, tok, { 'x-tenant-id': sp.tenantId })).data.cardPack,
+                      sv: (await request('/my/stored-value', {}, tok, { 'x-tenant-id': sp.tenantId })).data,
+                      orders: (await request('/bookings', {}, tok, { 'x-tenant-id': sp.tenantId })).data.bookings,
+                      me: (await request('/auth/wechat/mini-login', { method: 'POST', body: JSON.stringify({ demoLogin: true, tenantId: sp.tenantId, asUserId: sp === shop ? A.uid : B.uid }) }, null, { 'x-tenant-id': sp.tenantId })).data.user
+                    })
+                    const rA = await readAll(shop, tokA)
+                    const rB = await readAll(shopB, tokB)
+                    check('㋔ 隔离①储值余额:两店各一套(A 500 / B 200)', rA.sv.balanceCents === 50000 && rB.sv.balanceCents === 20000, JSON.stringify({ a: rA.sv.balanceCents, b: rB.sv.balanceCents }))
+                    check('㋔ 隔离②券:A 店 1 张、B 店 2 张,且券名不串', rA.pack.coupons.length === 1 && rB.pack.coupons.length === 2
+                      && rA.pack.coupons.every((c) => c.name.includes('㋔A券')) && rB.pack.coupons.every((c) => c.name.includes('㋔B券')),
+                      JSON.stringify({ a: rA.pack.coupons.map((c) => c.name), b: rB.pack.coupons.map((c) => c.name) }))
+                    check('㋔ 隔离③卡包角标按店算(A=1 / B=2)', rA.pack.badgeCount === 1 && rB.pack.badgeCount === 2, JSON.stringify({ a: rA.pack.badgeCount, b: rB.pack.badgeCount }))
+                    check('㋔ 隔离④订单列表按店算(各自只看得到自己店的单)',
+                      rA.orders.length === 1 && rB.orders.length === 1 && rA.orders[0].id !== rB.orders[0].id, JSON.stringify({ a: rA.orders.length, b: rB.orders.length }))
+                    check('㋔ 隔离⑤累计消费/积分/成长值按店算(同额同店口径,互不相加)',
+                      rA.me.totalSpentCents === rB.me.totalSpentCents && rA.me.totalSpentCents > 0
+                      && rA.me.points === rB.me.points && rA.me.growthValue === rB.me.growthValue,
+                      JSON.stringify({ a: rA.me.totalSpentCents, b: rB.me.totalSpentCents }))
+                    check('㋔ 隔离⑥到店次数按店算(各 1 次,不是 2 次)', rA.me.visits === 1 && rB.me.visits === 1, JSON.stringify({ a: rA.me.visits, b: rB.me.visits }))
+                    check('㋔ 隔离⑦会员等级按店算(各店独立门槛与消费)', typeof rA.me.memberLevel === 'string' && typeof rB.me.memberLevel === 'string' && rA.me.memberLevel === rB.me.memberLevel, JSON.stringify({ a: rA.me.memberLevel, b: rB.me.memberLevel }))
+                    // 反向验证:在 A 店再消费一单 → B 店任何数字不动
+                    const beforeB = JSON.stringify({ sv: rB.sv.balanceCents, orders: rB.orders.length, spent: rB.me.totalSpentCents, visits: rB.me.visits, badge: rB.pack.badgeCount })
+                    // 换一天下单:到店次数按**自然日**去重(裁A 口径),同日两单只算 1 次
+                    const extra = (await request('/admin/bookings/direct', { method: 'POST', body: JSON.stringify({ userId: A.uid, serviceId: shop.serviceId, technicianId: shop.tech1, date: dateStr(-1), time: '07:45' }) }, shop.token)).data.booking
+                    await signOne(shop, A.uid, extra.id)
+                    await request('/admin/stored-value/recharge', { method: 'POST', body: JSON.stringify({ userId: A.uid, amountCents: 10000, payChannel: 'cash', note: '㋔ A 店再充' }) }, shop.token)
+                    const rA2 = await readAll(shop, tokA)
+                    const rB2 = await readAll(shopB, tokB)
+                    const afterB = JSON.stringify({ sv: rB2.sv.balanceCents, orders: rB2.orders.length, spent: rB2.me.totalSpentCents, visits: rB2.me.visits, badge: rB2.pack.badgeCount })
+                    check('㋔ 反向:A 店再消费+再充值,B 店五类数字一分不动', beforeB === afterB, `${beforeB} vs ${afterB}`)
+                    check('㋔ 反向:A 店自己的数字确实动了(证明验的不是死数据:储值 500→600、单 1→2、到店 1→2 天)',
+                      rA2.sv.balanceCents === 60000 && rA2.orders.length === 2 && rA2.me.visits === 2, JSON.stringify({ sv: rA2.sv.balanceCents, o: rA2.orders.length, v: rA2.me.visits }))
+                    // 商家侧:各店客户档案只看得见自己那一行
+                    const custA = (await request('/admin/customers', {}, shop.token)).data.customers.filter((c) => c.id === A.uid || c.id === B.uid)
+                    const custB = (await request('/admin/customers', {}, shopB.token)).data.customers.filter((c) => c.id === A.uid || c.id === B.uid)
+                    check('㋔ 商家侧:同一个微信在各店的客户档案互不可见(A 店只有 A 行,B 店只有 B 行)',
+                      custA.length === 1 && custA[0].id === A.uid && custB.length === 1 && custB[0].id === B.uid,
+                      JSON.stringify({ a: custA.map((c) => c.id), b: custB.map((c) => c.id) }))
+                  }
+
                   /* ===== ㋑ 假数回落全仓审计(店主 08-23 升级令:D66→D69→couponCount 同族三案后立永久律)=====
                      ①顾客可见的数字/金额句拿不到真值一律「—」或如实说明,不许回落到别的字段;
                      ②没有签署单的单子不许出现「已结清」这类完成态金额句;
@@ -2249,6 +2330,11 @@ const main = async () => {
       check('㋓ globalData.appName 死字段已删(零使用方却写死旗舰店名=下次误用的种子)',
         !/appName:\s*'Lucky Luxe'/.test(appJs93))
       const apiSelfHeal93 = readFileSync(join(ROOT42, 'miniprogram/utils/api.js'), 'utf8')
+      const meWx94 = readFileSync(join(ROOT42, 'miniprogram/pages/me/index.wxml'), 'utf8')
+      const meJs94 = readFileSync(join(ROOT42, 'miniprogram/pages/me/index.js'), 'utf8')
+      check('㋔ 会员数据没拿到显示「—」不显示 0(黑卡积分/储值/累计消费/到店/成长值五处)',
+        meWx94.includes("memberReady ? member.points : '—'") && meWx94.includes("memberReady ? member.visits : '—'")
+        && meWx94.includes("memberReady ? cur.p + cur.s + member.totalSpent : '—'") && meJs94.includes('memberReady: Boolean('))
       check('㋓ 顾客端 401 自愈:静默重登一次并重放(商家端 kickToLogin 之外的另一半)',
         apiSelfHeal93.includes('res.statusCode === 401 && !_retried') && apiSelfHeal93.includes('loginForCurrentStore()')
         && apiSelfHeal93.includes("path.indexOf('/auth/') !== 0"))

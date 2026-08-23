@@ -1,0 +1,1754 @@
+== 测试数据目录: /tmp/ll-ci-data.mYnMnY ==
+== 启动主服务器 (4128) ==
+== test-customer-service-matrix ==
+[matrix] run=mt5mb7fs
+ok 1 - stale aftercare greeting creates conversation
+ok 2 - stale aftercare greeting is not after-sales handoff
+ok 3 - stale aftercare greeting does not mention after-sales in reply
+ok 4 - stale aftercare greeting does not create after-sales quote task
+ok 5 - unified hello creates conversation
+ok 6 - unified hello is not after-sales handoff
+ok 7 - unified hello does not create after-sales task
+ok 8 - new customer with conflicting tier creates conversation
+ok 9 - new customer with conflicting tier receives new welcome
+ok 10 - new customer with conflicting tier does not receive returning welcome
+ok 11 - nail after-sales routes to human
+ok 12 - nail after-sales intent is after_sales_handoff
+ok 13 - nail after-sales task exists
+ok 14 - nail after-sales task is nail
+ok 15 - nail after-sales keeps image
+ok 16 - nail after-sales does not restart intake template
+ok 17 - lash after-sales routes to human
+ok 18 - lash after-sales intent is after_sales_handoff
+ok 19 - lash after-sales task exists
+ok 20 - lash after-sales task is lash
+ok 21 - lash after-sales health category is retained
+ok 22 - blank broken-nail label does not become after-sales
+ok 23 - blank broken-nail label does not invent repair needed
+ok 24 - sim027 regression creates staff quote task
+ok 25 - sim027 regression keeps service as nail
+ok 26 - sim027 regression is not after-sales
+ok 27 - sim027 regression normalizes new customer to silver
+ok 28 - sim027 regression does not unlock technician selection
+ok 29 - returning customer conversation exists
+ok 30 - returning customer gets fixed welcome
+ok 31 - returning customer gets welcome plus contextual reply
+ok 32 - returning customer is not after-sales by default
+ok 33 - lash inquiry is not after-sales
+ok 34 - lash inquiry keeps lash context in transcript/state
+ok 35 - special arrangement routes to human
+ok 36 - special arrangement creates staff task
+ok 37 - special arrangement has special review trigger
+ok 38 - unknown out-of-scope returns silent handoff flag
+ok 39 - unknown out-of-scope marks needs_human
+ok 40 - unknown out-of-scope has no assistant message
+ok 41 - quote flow creates pending staff quote
+ok 42 - quote flow conversation enters needs_human
+ok 43 - quote flow carries historical image even when latest message has no image
+ok 44 - quote flow preserves removal yes
+ok 45 - quote flow preserves extension ambiguity as yes/unknown-like signal
+ok 46 - active quote merges follow-up image while waiting staff
+ok 47 - staff quote returns conversation to AI flow
+ok 48 - staff quote preserves natural nail price
+ok 49 - staff quote preserves extension price
+ok 50 - staff quote preserves duration
+ok 51 - staff quote gives standardized booking exit
+ok 52 - date-only quote can be sent to staff
+ok 53 - date-only quote records date
+ok 54 - date-only quote does not invent time
+ok 55 - date-only booking confirmation requires time
+ok 56 - date-only booking confirmation asks exact time in chat
+ok 57 - date-only booking confirmation does not create draft link
+ok 58 - unavailable exact time returns unavailable flag
+ok 59 - unavailable exact time gives nearest slot in chat
+ok 60 - unavailable exact time includes suggested time
+ok 61 - accepting suggested time creates booking draft link
+ok 62 - manual reply without release sets human_active
+ok 63 - customer message during human takeover remains human_active
+ok 64 - AI does not reply during human takeover
+ok 65 - manual release allows AI reply again
+ok 66 - matrix contains at least 50 regression checks
+[matrix] all 66 regression checks passed
+== test-working-memory ==
+[working-memory] customer=sim-test-mt5mb7nn
+[working-memory] all regression checks passed
+== test-business-hours ==
+ok 1 - GET /admin/business-hours returns 200
+ok 2 - at least one store with 7 weekday rows
+ok 3 - hoursText present in zh and en
+ok 4 - PUT /admin/business-hours returns 200
+ok 5 - Wednesday saved as closed
+ok 6 - Saturday saved as 11:00-16:00
+ok 7 - update is audited (updatedAt/updatedBy)
+ok 8 - hoursText reflects new schedule
+ok 9 - hoursText mentions closed Wednesday
+ok 10 - rejects invalid time format
+ok 11 - rejects open >= close
+ok 12 - rejects invalid weekday
+ok 13 - closed Wednesday exposes no bookable slots
+ok 14 - store-hours question does not trigger intake template
+ok 15 - store-hours chat answer mentions updated hours
+ok 16 - mock chat responds ok
+ok 17 - AI reply reflects updated Saturday hours or closed Wednesday
+ok 18 - restore default hours
+[business-hours] all 18 checks passed
+== test-intent-guards ==
+ok 1 - hours question is not intake template
+ok 2 - hours question answers business hours
+ok 3 - address question is not intake template
+ok 4 - deposit question is not intake template
+ok 5 - deposit question answers deposit policy
+ok 6 - cancellation question is not intake template
+ok 7 - cancellation question mentions policy/handoff
+ok 8 - mixed hours+service still enters intake flow
+ok 9 - style request still enters intake flow
+[intent-guards] all 9 checks passed
+== test-quote-polish ==
+ok 1 - cannot-do reply contains technician original words
+ok 2 - cannot-do reply guides customer to switch style
+ok 3 - cannot-do reply does not misstate as needs-info
+ok 4 - loose price format 150元 recognized into staff price
+ok 5 - price reply keeps technician original words
+ok 6 - known loose time is not re-asked after quote
+ok 7 - reply references the remembered time
+ok 8 - mark-quoted 记下报价金额
+ok 9 - mark-quoted 不给顾客发任何消息(会话条数没变)
+ok 10 - mark-quoted 不改报价单状态(仍待技师处理,发送归 P4)
+[quote-polish] all 10 checks passed
+== test-silent-handoff ==
+[silent-handoff] unknownCustomer=silent-unknown-mt5mb83n
+[silent-handoff] knownCustomer=silent-known-mt5mb83n
+[silent-handoff] all checks passed
+== test-human-handoff ==
+[human-handoff] customer=handoff-test-mt5mb85n
+[human-handoff] all regression checks passed
+== test-after-sales-handoff ==
+[after-sales] nailCustomer=after-sales-nail-mt5mb891
+[after-sales] lashCustomer=after-sales-lash-mt5mb891
+[after-sales] intakeCustomer=after-sales-intake-mt5mb891
+[after-sales] stagePollutionCustomer=after-sales-stage-pollution-mt5mb891
+[after-sales] unifiedGreetingCustomer=after-sales-unified-greeting-mt5mb891
+[after-sales] all regression checks passed
+== test-identity-links ==
+ok 1 - email register returns user id
+ok 2 - identities endpoint returns 200
+ok 3 - email identity linked
+ok 4 - identity carries tenant id
+ok 5 - repeat login does not duplicate identity
+ok 6 - google demo returns user id
+ok 7 - google identity linked
+ok 8 - unknown user returns 404
+ok 9 - bad token rejected
+[identity-links] all 9 checks passed
+== test-entitlements ==
+ok 1 - plan endpoint 200
+ok 2 - default tenant on chain plan
+ok 3 - ai enabled by plan
+ok 4 - AI replies when entitled
+ok 5 - disable override applied
+ok 6 - AI silent when disabled
+ok 7 - blocked flag returned
+ok 8 - customer message still recorded and marked needs_human
+ok 9 - web channel returns actionable notice when disabled
+ok 10 - expired trial blocks AI
+ok 11 - active trial marked as trial source
+ok 12 - active trial allows AI
+ok 13 - remove override restores plan default
+ok 14 - plan expiry saved
+ok 15 - expired plan disables plan features
+ok 16 - expired plan blocks AI chat
+ok 17 - restore no-expiry re-enables features
+ok 18 - renew request recorded
+ok 19 - upgrade request recorded
+ok 20 - unknown target plan rejected
+ok 21 - bad token rejected
+[entitlements] all 21 checks passed
+== test-tenant-kb ==
+ok 1 - kb endpoint 200
+ok 2 - facts seeded (depositAmount)
+ok 3 - facts seeded (storeAddress)
+ok 4 - AI deposit answer uses updated fact (60)
+ok 5 - AI store answer uses updated address
+ok 6 - parking question silent before FAQ entry
+ok 7 - FAQ entry created
+ok 8 - FAQ entry answers directly
+ok 9 - FAQ answer is merchant original text
+ok 10 - mixed service message not hijacked by FAQ
+ok 11 - disabled entry restores silent handoff
+ok 12 - csv import splits entries
+ok 13 - csv-imported FAQ answers directly
+ok 14 - qa-format import splits entries
+ok 15 - freeform import stored as document (mock mode)
+ok 16 - document listed in kb
+ok 17 - import artifacts cleaned up
+ok 18 - entry deleted
+ok 19 - bad token rejected
+[tenant-kb] all 19 checks passed
+== test-finance-core ==
+ok 1 - manual income created
+ok 2 - manual expense stored as negative
+ok 3 - summary math correct (income +200, expense +80, net +120)
+ok 4 - manual reversal created with opposite amount
+ok 5 - double reversal rejected
+ok 6 - found a booking to exercise auto-ingest
+ok 7 - booking completion auto-creates income
+ok 8 - repeat completion is idempotent
+ok 9 - cancellation reverses income, booking net = 0
+ok 10 - recurring rule created and materialized
+ok 11 - recurring generation idempotent
+ok 12 - recurring expense amount correct
+ok 13 - ledger rejects direct UPDATE (append-only trigger)
+ok 14 - ledger rejects direct DELETE (append-only trigger)
+ok 15 - hash chain verifies intact
+ok 16 - bad token rejected
+[finance-core] all 16 checks passed
+== test-finance-goals ==
+ok 1 - targets saved
+ok 2 - progress endpoint 200
+ok 3 - required monthly revenue formula correct
+ok 4 - break-even formula correct
+ok 5 - daily target spread over business days
+ok 6 - business days exclude closed weekdays
+ok 7 - year target respected
+ok 8 - estimated net = net - pending payroll
+ok 9 - compensation saved
+ok 10 - payroll draft generated
+ok 11 - draft math: total = base + revenue x rate
+ok 12 - payroll confirmed into ledger
+ok 13 - draft marked settled after confirm
+ok 14 - confirm is idempotent
+ok 15 - payroll expense recorded with 员工工资 category
+ok 16 - after settlement estimated net equals actual net
+ok 17 - payroll gated without staff plan feature
+ok 18 - payroll restored with plan default
+[finance-goals] all 18 checks passed
+== test-stored-value ==
+ok 1 - test member created
+ok 2 - D25 未绑定充值=400 UNBOUND_NO_RECHARGE
+ok 3 - recharge accepted
+ok 4 - recharge is liability, NOT income
+ok 5 - outstanding balance includes new card
+ok 6 - manual consume = 410 GONE(手动耗卡整口取消)
+ok 7 - balance reduced after engine-style consume
+ok 8 - recharge with bonus accepted
+ok 9 - bonus adds to liability (balance includes gift)
+ok 10 - account listed with dormantDays field
+ok 11 - stored value ledger rejects DELETE
+ok 12 - demo seed runs
+ok 13 - demo seed idempotent
+ok 14 - insights returns readable text
+ok 15 - insights mentions stored value liability
+[stored-value] all 15 checks passed
+== test-schedule-week ==
+ok 1 - schedule-week returns 200 with 7 days
+ok 2 - week starts on Monday
+ok 3 - days carry closed flag and hours
+ok 4 - technicians listed
+ok 5 - single cell toggle accepted
+ok 6 - override reflected in week view
+ok 7 - batch apply returns applied count
+ok 8 - batch row persisted with custom times
+ok 9 - empty batch rejected
+ok 10 - technician created
+ok 11 - technician renamed
+ok 12 - technician deactivated
+ok 13 - deactivated technician flagged inactive in week view
+ok 14 - unknown technician returns 404
+[schedule-week] all 14 checks passed
+== test-special-dates ==
+ok 1 - store and active service available
+ok 2 - found a future date with open slots
+ok 3 - special closed date saved
+ok 4 - closed special date has zero slots
+ok 5 - specialDates listed in business-hours
+ok 6 - hoursText mentions special arrangement for AI
+ok 7 - schedule-week marks special date closed
+ok 8 - adjusted-hours special date saved
+ok 9 - slots exist within adjusted window
+ok 10 - all slots start no earlier than 12:00
+ok 11 - all slots end within 15:00 window
+ok 12 - adjusted mode without times rejected
+ok 13 - special date deleted
+ok 14 - slots restored after delete
+[special-dates] all 14 checks passed
+== test-customer-profile ==
+ok 1 - test member created
+ok 2 - profile saved
+ok 3 - invalid birthday rejected
+ok 4 - unknown customer 404
+ok 5 - list carries tags/notes/birthday
+ok 6 - list carries stored value balance field
+ok 7 - conversation exists without link
+ok 8 - link member accepted
+ok 9 - conversation carries linkedUserId after binding
+[customer-profile] all 9 checks passed
+== test-staff-portal ==
+ok 1 - staff login works
+ok 2 - staff bound to one technician
+ok 3 - bookings carry customerCare field
+ok 4 - care tags flow onto booking
+ok 5 - staff sees only own bookings
+ok 6 - staff creates schedule request
+ok 7 - duplicate pending request rejected
+ok 8 - staff cannot request for another technician
+ok 9 - staff sees own request pending
+ok 10 - owner sees pending request with tech name
+ok 11 - staff cannot approve requests
+ok 12 - owner approves as set-off
+ok 13 - approved day becomes off in week view
+ok 14 - resolved request cannot be re-resolved
+ok 15 - staff gets compensation estimate
+ok 16 - estimate math consistent (base + rate × revenue)
+[staff-portal] all 16 checks passed
+== test-admin-accounts ==
+ok 1 - owner credentials file written on bootstrap
+ok 2 - initial owner password readable
+ok 3 - boss logs in with initial password, must change flagged
+ok 4 - staff account created with one-time password
+ok 5 - staff logs in with initial password
+ok 6 - change-password rejects wrong old password
+ok 7 - staff changes password
+ok 8 - old password no longer works
+ok 9 - new password works, no forced change
+ok 10 - account session inherits technician isolation
+ok 11 - staff account cannot touch finance
+ok 12 - owner disables account
+ok 13 - disabled account session invalidated immediately
+ok 14 - disabled account cannot login, human-readable error
+ok 15 - legacy demo login still works
+ok 16 - staff cannot list/manage accounts
+[admin-accounts] all 16 checks passed
+== test-pricing-model ==
+ok 1 - 临时店 A/B 建好并各自登录
+ok 2 - 临时店 A 建好技师
+ok 3 - 新建大类 201
+ok 4 - 卸甲大类可建且可关预约
+ok 5 - 同店同 key 大类拒绝重复
+ok 6 - 主项目建好且三档价齐
+ok 7 - services.price_cents 与 list 档双写一致
+ok 8 - 疗程价与次数落库
+ok 9 - 单指加项(按主项目比例)建好
+ok 10 - 单指加项(固定价)建好
+ok 11 - 卸甲加项建好
+ok 12 - 三条计价规则保存(免卸已降维成目录项,不再是规则)
+ok 13 - 原价档小计 = 880
+ok 14 - ① 原价档足部加收 = 整单 +100
+ok 15 - ① 会员档足部同样 +10000(不分档)
+ok 16 - ① 足部加收进 rulesApplied
+ok 17 - ② 分享档 3 指 = 分享价÷10×3
+ok 18 - ② 换会员档单指价随档走
+ok 19 - ② 固定价单指项按自己的档位价 × 指数
+ok 20 - ③ 甲片重利用固定 10000(原价档)
+ok 21 - ③ 甲片重利用固定 10000(会员档同价)
+ok 22 - ④ 免收目录项建好(三档价均 0)
+ok 23 - ④ 含主项单勾免收项:该行 0 元,总额不变
+ok 24 - ④ 收费卸甲仍按目录价收
+ok 25 - ④ 免收项的适用大类只挂美甲(纯卸除单的表单自然不出现它)
+ok 26 - ④ 免卸规则引擎已下线(规则列表只剩三条)
+ok 27 - ⑤ B 店读不到 A 店的项目
+ok 28 - ⑤ B 店读不到 A 店的大类
+ok 29 - ⑤ B 店拿 A 店项目报价被拒 404
+ok 30 - ⑤ B 店的规则不受 A 店影响(默认关闭)
+ok 31 - 改价后 list 与 price_cents 仍一致
+ok 32 - 改价即时生效到报价
+ok 33 - 老服务管理接口改价成功
+ok 34 - 老接口改价同步进 list 档(两套页面不漂移)
+ok 35 - 老接口改价即时反映到报价
+ok 36 - 大类下有项目时不允许删除
+ok 37 - 造一笔占用该项目的订单
+ok 38 - 有历史订单的项目改为下架而非物理删除
+ok 39 - 无订单的项目可物理删除
+ok 40 - AI 事实里主项目带会员价与疗程价
+ok 41 - AI 事实里下架项目不出现(刚被下架的水晶延长)
+ok 42 - AI 事实里有加项目录
+ok 43 - AI 事实里有计价规则摘要
+
+价格模型回归通过:43 项断言全绿
+== test-membership-config ==
+ok 1 - 临时店建好
+ok 2 - 商家端改会员资格被拒(已收归平台)
+ok 3 - 商家端仍可读,并带只读标记
+ok 4 - 会员配置默认可读
+ok 5 - tiersEnabled=false 时不返回等级字段
+ok 6 - 四种资格模式随接口下发
+ok 7 - 打开等级后才下发 tiers
+ok 8 - 关掉等级后立刻不再下发 tiers
+ok 9 - 充值成功
+ok 10 - any_recharge:充过值的是会员,没充的不是
+ok 11 - balance_gt_0:余额清零 → 不是会员
+ok 12 - any_recharge:余额清零仍然是会员(充过就算)
+ok 13 - total_spend:历史累计消费达门槛 → 会员
+ok 14 - total_spend:抬高门槛后不再是会员
+ok 15 - manual:没打标签的都不是会员
+ok 16 - 给顾客打会员标签
+ok 17 - manual:打了标签就是会员
+ok 18 - 从没充过 → 是首充
+ok 19 - 充过一次后 → 不是首充
+ok 20 - 清零复充也不是首充(按流水判定,不按余额)
+ok 21 - 迁移客算会员(老店的充值)
+ok 22 - 迁移客在本系统仍算首充(期初不是本店的充值流水)
+ok 23 - 迁移余额进 legacy 桶
+ok 24 - 新建充值档位
+ok 25 - 第二个档位
+ok 26 - 档位按排序返回
+ok 27 - 档位可停用
+ok 28 - 档位可删除
+ok 29 - 租户隔离:B 店看不到 A 店的档位
+ok 30 - 租户隔离:B 店的会员配置不受 A 店影响
+
+会员可配回归通过:30 项断言全绿
+== test-customer-import ==
+ok 1 - dryRun 返回报告
+ok 2 - dryRun:2 条待新建
+ok 3 - dryRun:期初余额总额正确(不含被跳过的行)
+ok 4 - dryRun:文件内重复与缺手机号进 skipped
+ok 5 - dryRun 后库里零顾客(真的没写)
+ok 6 - 期初余额确认数对不上 → 400 拒绝
+ok 7 - 被拒后仍然零写库
+ok 8 - 执行导入成功
+ok 9 - 新建 2 人、期初写入 1280 元
+ok 10 - 库里正好 2 个顾客(手机号去重生效)
+ok 11 - 期初余额进 legacy 桶,normal 桶为 0
+ok 12 - is_migrated 标记为已迁移
+ok 13 - 历史累计消费只进 legacy_total_spend(计入会员判定口径)
+ok 14 - 迁移期初不算本系统首充
+ok 15 - 期初余额没有变成本店收入
+ok 16 - 同手机号同姓名 → 计入待更新
+ok 17 - 同手机号但姓名不同 → 进 conflicts
+ok 18 - 冲突行的余额不计入期初总额
+ok 19 - 二次执行:1 更新 0 新建
+ok 20 - 冲突行没被写进去(仍然 2 个顾客)
+ok 21 - 更新只抬高历史累计消费,不重复写期初余额
+ok 22 - 冲突顾客的余额没被改动
+ok 23 - 商家老板 token 不能调平台导入
+ok 24 - 不存在的租户 → 404
+ok 25 - 空数据 → 400
+
+顾客导入回归通过:25 项断言全绿
+== test-tenant-hygiene ==
+ok 1 - 两家临时店建好
+ok 2 - 两店各有技师
+ok 3 - 甲店发起一条客服会话
+ok 4 - 甲店能看到自己的会话
+ok 5 - 乙店看不到甲店的会话(会话按租户隔离)
+ok 6 - 旗舰店也看不到甲店的会话(不再被默认值收编)
+ok 7 - 薪资页只列本店技师
+ok 8 - 排班周视图不含别店技师的排班行
+ok 9 - 旧版财务汇总在凭证不符时拒绝(不返回任何跨店数字)
+ok 10 - 门店币种随 business-hours 下发
+ok 11 - 门店时区随 business-hours 下发
+ok 12 - 乙店币种不受甲店影响
+ok 13 - 甲店建了一个项目
+ok 14 - 对外价格标签用本店币种(CNY → ¥,不出现 CAD)
+ok 15 - 新客链路不再冒出 Lucky Luxe 字样
+ok 16 - 甲店写入营业时间
+ok 17 - 七张子表零 NULL tenant_id
+ok 18 - 新写入的营业时间行带正确租户
+ok 19 - 七张子表都已有 tenant_id 列
+ok 20 - 8 甲店老板能给自己店的技师建员工账号(不再被判成「技师不在本店」)
+ok 21 - 8 甲店员工账号列表里只有自己店的
+ok 22 - 8 乙店看不到甲店的员工账号
+ok 23 - 8 乙店改不动甲店的员工账号(404)
+
+多租户卫生回归通过:23 项断言全绿
+== test-tenant-timezone ==
+ok 1 - 两家不同时区的临时店建好
+ok 2 - /admin/store-clock 可读
+ok 3 - 上海店时区 = Asia/Shanghai
+ok 4 - 多伦多店时区 = America/Toronto
+ok 5 - ① 固定时刻(北京 08-08 08:00):上海店 today = 2026-08-08
+ok 6 - ① 同一时刻:多伦多店 today = 2026-08-07(改造前两店都会是这一天)
+ok 7 - ① 同一时刻两店的今天必须不同
+ok 8 - ③ 跨月时刻:上海店归 2026-09
+ok 9 - ③ 跨月时刻:多伦多店归 2026-08
+ok 10 - ③ 跨月时刻两店财务分桶各归各月
+ok 11 - ① 上海店的今天 = 上海时区的今天
+ok 12 - ① 多伦多店的今天 = 多伦多时区的今天
+ok 13 - ① 当前时刻两地同日(2026-08-23),两店今天一致
+ok 14 - ① 进程时区被如实回报为兜底值
+ok 15 - 上海店有技师和项目
+ok 16 - 上海店 21:30 直接排单成功
+ok 17 - ② 21:30 的单换算成 UTC 后,在上海时区读回来仍是当天 21:30
+ok 18 - ② 同一时刻在多伦多是另一个钟点(证明存的是绝对时刻,不是裸字符串)
+ok 19 - ④ 排班日视图能取到该日
+ok 20 - ④ 21:30 那一单落在上海店当天的日视图里
+ok 21 - ③ 上海店月份键 = 上海时区的月份
+ok 22 - ③ 多伦多店月份键 = 多伦多时区的月份
+ok 23 - ③ 当前不在跨月时刻(同为 2026-08),两店月份键一致
+ok 24 - 改门店时区后立刻生效(缓存已失效)
+ok 25 - 门店时区值非法时回落进程时区,不报错
+
+按店时区回归通过:25 项断言全绿
+== test-deposit-config ==
+ok 1 - 两家临时店建好(各带技师与项目)
+ok 2 - ① 默认 enabled + per_service + 兜底 5000
+ok 3 - ① 默认会员按等级免定金、定金不抵扣
+ok 4 - ① 默认取消规则 = 24h 全退 / 临期扣半 / 爽约不退
+ok 5 - ① 默认无迟到宽限、改期 24h、保留 0 次
+ok 6 - 演示顾客登录可用
+ok 7 - 默认配置下顾客下单成功
+ok 8 - ① 默认定金 = 项目自身的 5000(与改造前写死的 5000 一致)
+ok 9 - ⑥ 关掉定金后下单零定金且直接确认
+ok 10 - ② fixed 模式:定金 = 100 元
+ok 11 - ② pct 模式:定金 = 项目价 400 的 20% = 80 元
+ok 12 - ⑤ deductible=true 随公开接口下发(结算单定金行据此)
+ok 13 - ⑤ 公开文案跟着变(可抵扣)
+ok 14 - ⑤ 线上支付未通期间文案不出现「在线支付定金」
+ok 15 - 造一笔昨天的单用于迟到判定
+ok 16 - ③ 到店打卡返回迟到判定(超过 30 分钟宽限)
+ok 17 - ③ 按爽约处理:扣 100% 定金
+ok 18 - ④ 造一笔 7 天后的单
+ok 19 - ④ 合规改期:定金保留(第 1 次)
+ok 20 - ④ 下一次预约自动用掉保留的定金(本次应付 0)
+ok 21 - ④ 第二次改期不再保留(depositRetainTimes=1 用完)
+ok 22 - ⑦ B 店仍是默认配置,不受 A 店改动影响
+ok 23 - ⑦ B 店公开文案也是默认口径
+ok 24 - displayMode=custom 时输出商家原文
+ok 25 - 屏3 公开端点给出金额分值与显示串
+ok 26 - 屏3 下发 enabled/deductible 布尔(顾客端不必自己翻 config)
+ok 27 - 屏3 下发 currencyDisplay(顾客端不认识具体币种)
+ok 28 - 屏3 三要点小卡:迟到宽限按分钟
+ok 29 - 屏3 三要点小卡:24 小时说成「提前 1 天」
+ok 30 - 屏3 三要点小卡:定金保留次数
+ok 31 - 屏3 keyFacts 英文版同时下发
+ok 32 - 屏3 未配置的参数显示「—」而不是编一个默认值
+ok 33 - 屏3 保留 0 次说成「不保留」,不是「可保留 0 次」
+ok 34 - 屏4 预览与屏3 顾客端 keyFacts 逐字相同
+ok 35 - 员工默认只看到自己(旧行为不变)
+ok 36 - 员工带 roster=1 能看到全店名单(结算勾主/副技师要用)
+
+定金规则回归通过:36 项断言全绿
+== test-message-templates ==
+ok 1 - 两家临时店建好
+ok 2 - 模板列表可读
+ok 3 - 首次读取自动预置六个场景各一条
+ok 4 - 场景枚举随接口下发(含中文标签)
+ok 5 - 预约成功邀请函模板带变量说明
+ok 6 - 再读一次不会重复预置
+ok 7 - 新增模板 201
+ok 8 - 改内容与停用生效
+ok 9 - 未知场景回落到 pre_sale(不报错也不写坏数据)
+ok 10 - 标题必填
+ok 11 - B 店看不到 A 店的模板
+ok 12 - B 店也拿到了自己的一套预置
+ok 13 - B 店改不动 A 店的模板(404)
+ok 14 - B 店删不掉 A 店的模板(404)
+ok 15 - A 店可以删自己的模板
+ok 16 - 删掉预置的邀请函模板
+ok 17 - 删掉的预置模板不会被重新塞回来
+ok 18 - 未登录/无效凭证拿不到模板
+
+话术模板回归通过:18 项断言全绿
+== test-settlement ==
+ok 1 - 两家临时店建好
+ok 2 - 价目按设计图搭好
+ok 3 - 设计图算例:原价合计 = 528 + 76 = 604
+ok 4 - 设计图算例:档位小计 = 358 + 36 = 394
+ok 5 - 设计图算例:共优惠 = 210
+ok 6 - 设计图算例:共优惠 ≡ 原价合计 − 档位小计
+ok 7 - 设计图算例:应收 ≡ 档位小计 − 定金抵扣
+ok 8 - 免收目录项显示为 0 且标 isFree
+ok 9 - 明细带编号(技师端按编号勾人)
+ok 10 - 足部 +100 同时进原价合计与档位小计
+ok 11 - 足部加收:共优惠 ≡ 原价合计 − 档位小计
+ok 12 - 足部加收:应收 ≡ 档位小计 − 定金抵扣
+ok 13 - 免收 + 收费卸除同勾 → 软校验提示(不硬拦)
+ok 14 - 自选填写行计入两边(不产生虚假优惠)
+ok 15 - 自选填写行:共优惠 ≡ 原价合计 − 档位小计
+ok 16 - 自选填写行:应收 ≡ 档位小计 − 定金抵扣
+ok 17 - 卡主建档并有迁移余额 ¥180
+ok 18 - 一次结算生成 2 张服务单
+ok 19 - 朋友的单挂在卡主名下并标代付
+ok 20 - 两位技师与各自编号都记下了
+ok 21 - 落库单据1:共优惠 ≡ 原价合计 − 档位小计
+ok 22 - 落库单据1:应收 ≡ 档位小计 − 定金抵扣
+ok 23 - 落库单据2:共优惠 ≡ 原价合计 − 档位小计
+ok 24 - 落库单据2:应收 ≡ 档位小计 − 定金抵扣
+ok 25 - 签署页凭单号可读(不需登录)
+ok 26 - 签署页带免责声明文案
+ok 27 - 签署页金额与落库一致
+ok 28 - 不勾免责不能签
+ok 29 - 不签名不能提交
+ok 30 - 卡主签字成功
+ok 31 - 签字即时扣卡 ¥180(余额只有这么多)
+ok 32 - 先烧迁移桶:legacy 归零
+ok 33 - 扣的是迁移腿(不进本店收入)
+ok 34 - 线下腿标为待收款
+ok 35 - 签署返回快照信息
+ok 36 - 沙盒里签署一律 inline,不碰真实对象存储
+ok 37 - 快照可取回
+ok 38 - 快照出图=PNG(真机可渲染格式)+尺寸>0
+ok 39 - 快照原文含单号
+ok 40 - 快照里画进了笔迹路径
+ok 41 - 快照金额与单据一致(共优惠/五步账头条)
+ok 42 - 快照信息随单据下发(日结页「查看签署单」用它)
+ok 43 - 同一张单不能签两次
+ok 44 - 更正走追加,不改原单
+ok 45 - 更正记录留痕(改前/改后/谁/何时)
+ok 46 - 用卡付过的单更正后自动补配余额
+ok 47 - B 店看不到 A 店的结算单
+ok 48 - B 店改不动 A 店的单(404)
+ok 49 - 沙盒隔离:COS 配置齐全时 cosConfigured 为真
+ok 50 - 沙盒隔离:非生产环境 uploadAllowed 为假(不看 env 有没有钥匙)
+ok 51 - 沙盒隔离:快照回落口径写明 inline
+ok 52 - 沙盒隔离:签署产生的快照是 inline,没有 COS 地址
+ok 53 - 沙盒隔离:inline 快照照样取得回来(出图 PNG + 原文口 SVG,功能不受影响)
+
+结算闭环回归通过:53 项断言全绿
+== test-daily-close ==
+ok 1 - 两家临时店建好
+ok 2 - 取到门店时区的「今天」
+ok 3 - 两张服务单已开
+ok 4 - ③ D58 未签单不产生 UNSIGNED blocker(确认不被它锁)
+ok 5 - ③ D57 未签单进 unsignedList(两张全列,可点行数据齐)
+ok 6 - ① 单技师单不占待分配
+ok 7 - ① 单技师单业绩直接整单归他
+ok 8 - ① 双技师未分配时技师行显示待分配笔数
+ok 9 - ③ 有单没分配时仍不许确认
+ok 10 - 预填比例来自 perf_split_default
+ok 11 - ⑥ 免卸甲按 ¥0 明细行计到 1 笔
+ok 12 - ⑥ 没改过档就没有价档异常
+ok 13 - ⑦ 未设目标的技师 target 为 null
+ok 14 - ② 分成合计对不上直接拒
+ok 15 - ② 合计等于单额才收
+ok 16 - ③ 全签 + 全分配后可以确认
+ok 17 - ⑤ 首充 ¥500 记到促成技师名下
+ok 18 - ⑤ 续充 ¥200 单独统计
+ok 19 - ⑤ 冲卡合计 = 首充 + 续充
+ok 20 - ④ 确认成功
+ok 21 - ④ 快照记下当日单数与营业额
+ok 22 - ⑧ 已日结的那天改分成被拦
+ok 23 - ⑧ 重开日结必须写原因
+ok 24 - ⑧ 重开后状态 reopened 且次数 +1
+ok 25 - ⑧ 重开后才能改分成
+ok 26 - 月度视图列出当天
+ok 27 - 重开后这天算「未确认」,当月不许锁工资
+ok 28 - ⑦ 设过目标的技师带出目标
+ok 29 - ⑦ 没设的仍然是 null
+ok 30 - ⑨ B 店的日结页里没有 A 店的单
+ok 31 - ⑨ B 店改不动 A 店的分成(404)
+ok 32 - 员工端只能看自己的业绩(技师 id 就是自己)
+ok 33 - 屏5a 含分项:hero 带卡耗与单量目标
+ok 34 - 屏5a 含分项:每日流水带卡耗
+ok 35 - 近 6 月趋势给 6 个点且最后一个是当月
+ok 36 - 屏5b 仅总进度:hero 不下发任何分项字段
+ok 37 - 屏5b 仅总进度:每日流水也不带卡耗(显示设置管整页)
+ok 38 - 屏5b 仍然给总进度与剩余天数
+ok 39 - 默认可见性 = 业绩+工资(沿用现状)
+ok 40 - 纯业绩:员工端工资接口直接闭掉(不只是裁页面)
+ok 41 - 纯工资:业绩明细整块不下发
+ok 42 - 前端只填比例也能分成(金额由后端折算,不让客户端算钱)
+ok 43 - 按比例折算后合计仍然正好等于单额(末行吃余数)
+ok 44 - 比例也一并留痕
+ok 45 - R1 前置:这一天已确认且账目对得上(staleClose=false)
+ok 46 - R1+D58 已确认+冒出未签单(未落账)=不标过期(未签单只影响它自己)
+ok 47 - D57 未签提示点名到单(顾客+时间+单号,可点行独立下发)
+ok 48 - R1 后进的单签完了,这一天仍然是「账目过期」(不会自己变回正常)
+ok 49 - R1 红线:已确认的快照不会被后进的单**悄悄改掉**(数字原地不动)
+ok 50 - R1 实时数确实比快照大(差额算得出来,店主看得见差在哪)
+ok 51 - R1 重开后重新确认:账目重新对上,staleClose 归零
+ok 52 - 归属① 昨天服务今天签:记回**昨天**的日结(不是签字那天)
+ok 53 - 归属② 补签单在服务日的行上带小注(说清它是事后签的)
+ok 54 - 归属③ 服务当天就签的单不加多余小注
+ok 55 - 归属④ 收入流水仍按签字日(两条轴分开,§三 不变)
+ok 56 - 归属⑤ 补签落进**已确认**的那一天 → 标过期(R1 守护机制接住)
+ok 57 - 归属⑥ 重开再确认后数字自洽(快照 ≡ 实时)
+ok 58 - 归属⑦ 没有服务发生的日子:日结区零单(休息日不再冒出别人家的尾巴)
+ok 59 - 归属⑧ 跨月补签:2026-07-31 服务、2026-08-23 签 → 记回**上月最后一天**(不落本月)
+ok 60 - 归属⑨ 跨月补签的业绩落在**上月**排行里(2026-07),不串到本月
+
+日结回归通过:60 项断言全绿
+== test-salary-v2 ==
+ok 1 - 临时店建好
+ok 2 - ① 阶段:业绩 ¥12,000 落第二档 → 全额 ×12% = ¥1,440
+ok 3 - ① 阶梯:8,000×10% + 4,000×12% = ¥1,280
+ok 4 - ① 两模式差额 ¥160
+ok 5 - ① 自定义固定提点 ¥12,000×8% = ¥960
+ok 6 - ① 正好卡在档位边界:阶段落第二档 ¥960、阶梯全在第一档 ¥800
+ok 7 - ② 老写法存下来的方案 ladderMode = whole(语义等价存量)
+ok 8 - ③ 不传 ladderMode 时保持原算法,不被悄悄改
+ok 9 - ⑦ 业绩口径标明来自已确认日结
+ok 10 - ⑦ 一天都没日结时业绩为 0
+ok 11 - ⑦ 试算页带出日结模块
+ok 12 - 归属备注区已退役(接口不再下发)
+ok 13 - ⑧ 当月还有天没日结时不许锁工资
+ok 14 - ⑦ 日结确认后业绩计入 ¥12,000
+ok 15 - ① 按阶梯算提成 ¥1,280
+ok 16 - ④ 首充 ¥2,000 × 3% = ¥60
+ok 17 - ④ 续卡 ¥1,500 × 2% = ¥30
+ok 18 - ④ 耗卡不提成(只展示卡耗金额,没有耗卡提成字段)
+ok 19 - ⑤ 自定义行按全部充值额 ¥3,500 × 5% = ¥175
+ok 20 - 工资合计 = 底薪 + 手工费 + 提成 + 首充 + 续卡 + 自定义 + 加班 + 调整
+ok 21 - ⑥ 关掉底薪即不计入
+ok 22 - ⑥ 关掉手工费即不计入
+ok 23 - ⑥ 关掉卡提成后首充/续卡/自定义都不计
+ok 24 - ⑥ 业绩提成不受这些开关影响
+ok 25 - ⑨ 每条调整都必须写备注
+ok 26 - ⑨ 一个月可以记多条调整
+ok 27 - ⑨ 多条调整逐条下发并合计 = +¥420
+ok 28 - ⑧ 当月日结全做完就能锁工资
+
+薪资方案 v2 回归通过:28 项断言全绿
+== test-schedule-v2 ==
+ok 1 - 两家临时店建好
+ok 2 - ① 全天班 = 当天营业时间 10:00–19:00
+ok 3 - ① 上午班 10:00–14:30(默认分界)
+ok 4 - ① 下午班 14:30–19:00
+ok 5 - ① 自定义起止照原样写入,并识别为 custom
+ok 6 - ① 休息 = is_working 0
+ok 7 - ② 默认分界 14:30
+ok 8 - ② 改成 13:00 后上午班边界跟着走
+ok 9 - ③ 下午班时段外(11:00)的预约被拒
+ok 10 - ③ 时段内(15:00)的预约正常
+ok 11 - ④ 冲突单被列出来
+ok 12 - ④ 但不硬拦:排班照样改成了上午班
+ok 13 - ④ 改成休息时,当天所有在途预约都算冲突
+ok 14 - ⑤ 一次写 5 天(当天 + 之后 4 个同星期几)
+ok 15 - ⑤ 日期正好隔 7 天
+ok 16 - ⑤ 第 4 周那天确实排上了全天班
+ok 17 - ⑥ 老写法直接给起止时间照写不误
+ok 18 - ⑥ 老写法 isWorking=false 仍是休息
+ok 19 - ⑦ B 店排不了 A 店的技师(404)
+
+排班 v2 回归通过:19 项断言全绿
+== test-finance-trend ==
+ok 1 - 两家临时店建好
+ok 2 - ① 趋势最后一个点就是当月
+ok 3 - ① 收入与单月汇总逐分一致
+ok 4 - ① 支出与单月汇总逐分一致
+ok 5 - ① 净利与单月汇总逐分一致
+ok 6 - ① 数字确实是记进去的那两笔
+ok 7 - ② day 粒度给 7 个点且区间连续
+ok 8 - ② week 粒度给 4 个点且区间连续
+ok 9 - ② month 粒度给 6 个点且区间连续
+ok 10 - ② year 粒度给 2 个点且区间连续
+ok 11 - ② 日粒度最后一个点是今天,且金额对得上
+ok 12 - ③ 单量 = 当期已签服务单数
+ok 13 - ③ 客单 = 单额均值 ¥400
+ok 14 - ④ 按月给出目标与达标判定
+ok 15 - ④ 非月粒度不编假目标(target 为 null)
+ok 16 - ⑤ 上一周期为 0 时环比百分比给 null,不硬写数字
+ok 17 - ⑥ B 店趋势里没有 A 店的钱
+
+财务趋势回归通过:17 项断言全绿
+== test-finance-lock ==
+ok 1 - 两家临时店建好
+ok 2 - ① 新店默认不开财务密码
+ok 3 - ① 没开门禁时财务区直接进得去(不用钥匙)
+ok 4 - ① lock-status 也下发 enabled 供前端判断要不要弹锁屏
+ok 5 - ③ 只开开关不给密码 → 拒绝
+ok 6 - ③ 两次密码不一致 → 拒绝
+ok 7 - ③ 开启成功并直接发一把钥匙(免得老板保存完把自己关在门外)
+ok 8 - ③ 开了之后没钥匙就 403
+ok 9 - ③ 带钥匙照常进
+ok 10 - ③ 用密码能换到钥匙
+ok 11 - ③ 密码错了拿不到钥匙
+ok 12 - ⑤ A 店开了不影响 B 店(仍是关的)
+ok 13 - ⑤ B 店财务区照常进
+ok 14 - V4 关闭时不给当前密码 → 401(谁摸到电脑都能拆锁可不行)
+ok 15 - V4 当前密码错了也拦住
+ok 16 - V4 改密时也要验当前密码
+ok 17 - V4 带对当前密码就能改
+ok 18 - V4 改完之后旧密码失效
+ok 19 - V4 新密码可用
+ok 20 - ④ 关掉后 enabled=false
+ok 21 - ④ 关掉后不带钥匙也进得去
+ok 22 - ④ 旧钥匙已作废但不影响访问(门本来就开着)
+ok 23 - ④ 密码本身留着(下次开启不用重设)
+ok 24 - ② 只有老板能改这个开关(员工 403)
+ok 25 - 重置前 B 店门禁是开的
+ok 26 - 平台重置返回 enabled=false / configured=false 且说明原来有密码
+ok 27 - 重置后商家侧看到「未启用(默认)」
+ok 28 - 重置后财务区直接进得去(不用密码)
+ok 29 - 原密码已作废(门禁本来就关了,直接放行而不是认旧密码)
+ok 30 - 留下一行操作日志(谁/哪家店/什么时候/为什么)
+ok 31 - 对本来就没密码的店重置也不报错(幂等),并标注原来没密码
+ok 32 - 店不存在 → 404
+ok 33 - 商家自己的账号调不动这个平台端点(401)
+
+财务密码门禁回归通过:33 项断言全绿
+== test-perf-viz ==
+ok 1 - 两家临时店建好
+ok 2 - ② 未日结时排行全 0(口径=已确认日结)
+ok 3 - ① 按业绩排:甲(¥300) > 乙(¥200) > 丙(¥100)
+ok 4 - ① 名次与条宽比例跟着排序走(第一名 100%)
+ok 5 - ① 按单数排:3 / 2 / 1
+ok 6 - ① 按冲卡排:促成充值的丙师排第一
+ok 7 - ② 甲师mt5mbayw 排行业绩与工资试算逐分一致(30000)
+ok 8 - ② 乙师mt5mbayw 排行业绩与工资试算逐分一致(20000)
+ok 9 - ② 丙师mt5mbayw 排行业绩与工资试算逐分一致(10000)
+ok 10 - ⑥ 本日维度金额与本月一致(数据都在今天)
+ok 11 - ⑥ 本日维度不给目标(目标本身是月目标)
+ok 12 - ③ 没设目标时 target 为 null(前端显示「未设目标」,不画 0% 的条)
+ok 13 - ③ 达标的给 hit=true 与 100% 以上
+ok 14 - ③ 未达标的给百分比与差额
+ok 15 - ③ 没设目标的仍是 null
+ok 16 - ④ hero 给出目标进度与「还差 X 达标」
+ok 17 - ⑤ display_mode=total_only 时进度条照给,分项仍然全不下发
+ok 18 - ④ 没设目标的人 hero 不给进度(hasTarget=false,gap/pct 都是 null)
+ok 19 - ⑦ 员工看不到全店排行(403)
+ok 20 - ⑦ B 店排行里没有 A 店的人
+
+技师业绩可视化回归通过:20 项断言全绿
+== test-coupon-settle ==
+ok 1 - 临时店建好
+ok 2 - 价目按算例搭好
+ok 3 - 两位顾客建档
+ok 4 - 券模板建好
+ok 5 - ⓪ 发放原因必填
+ok 6 - ⓪ 老板可发特批券
+ok 7 - ⓪ 同一入口可发现有券模板
+ok 8 - ⓪ 可发限定大类的券
+ok 9 - ⓪ 朋友也有一张券
+ok 10 - ⓪ 特批券不进券模板列表
+ok 11 - 算例·原价合计 ¥680
+ok 12 - 算例·档位小计 ¥394
+ok 13 - 算例·定金抵扣 ¥100
+ok 14 - 未选券时应收 = 394 − 100 = ¥294
+ok 15 - 未选券:档位优惠 ≡ 原价合计 − 档位小计
+ok 16 - 未选券:共优惠(含券) ≡ 档位优惠 + 券
+ok 17 - 未选券:应收 ≡ 档位小计 − 定金 − 券
+ok 18 - 未选券:分成基数 ≡ 档位小计(定金与券都不扣技师)
+ok 19 - ② 满300减30 可用
+ok 20 - ② 未满门槛写清原因
+ok 21 - ② 大类不匹配写清原因
+ok 22 - ① 朋友的券不出现在卡主券包里
+ok 23 - ② 券包给的是后端算好的抵扣额
+ok 24 - ③ 算例逐分复现:680 / 394 / 定金100 / 券30 → 应收 ¥264
+ok 25 - ③ 共优惠(含券) = ¥316
+ok 26 - ③ 券抵扣 ¥30 单列
+ok 27 - ③ 分成基数 ¥394 = 档位小计(定金与券都不扣技师)
+ok 28 - 选券后:档位优惠 ≡ 原价合计 − 档位小计
+ok 29 - 选券后:共优惠(含券) ≡ 档位优惠 + 券
+ok 30 - 选券后:应收 ≡ 档位小计 − 定金 − 券
+ok 31 - 选券后:分成基数 ≡ 档位小计(定金与券都不扣技师)
+ok 32 - ② 用不了的券开单直接拒(不悄悄按无券算)
+ok 33 - 开单成功(2 张)
+ok 34 - 券信息落库
+ok 35 - 店员代选留了标记
+ok 36 - 落库单据1:档位优惠 ≡ 原价合计 − 档位小计
+ok 37 - 落库单据1:共优惠(含券) ≡ 档位优惠 + 券
+ok 38 - 落库单据1:应收 ≡ 档位小计 − 定金 − 券
+ok 39 - 落库单据1:分成基数 ≡ 档位小计(定金与券都不扣技师)
+ok 40 - 落库单据2(代付,无券):档位优惠 ≡ 原价合计 − 档位小计
+ok 41 - 落库单据2(代付,无券):共优惠(含券) ≡ 档位优惠 + 券
+ok 42 - 落库单据2(代付,无券):应收 ≡ 档位小计 − 定金 − 券
+ok 43 - 落库单据2(代付,无券):分成基数 ≡ 档位小计(定金与券都不扣技师)
+ok 44 - 落库单据2(代付,无券):无定金无券时基数 = 应收(改口径前后逐分不变)
+ok 45 - ② 一单一张:同一张券不能挂两张单
+ok 46 - ② 别的单占用中的券在面板上就置灰并写原因
+ok 47 - ⑤ 签字前券仍在券包里(active)
+ok 48 - ① 代付单可用卡主的特批券
+ok 49 - ① 代付单不能用被服务者的券
+ok 50 - ④ 签署页随单下发券包
+ok 51 - ④ 签署页标出店员已代选
+ok 52 - ④ 顾客换成 ¥50 特批券,应收由后端重算为 ¥244
+ok 53 - 顾客换券后:档位优惠 ≡ 原价合计 − 档位小计
+ok 54 - 顾客换券后:共优惠(含券) ≡ 档位优惠 + 券
+ok 55 - 顾客换券后:应收 ≡ 档位小计 − 定金 − 券
+ok 56 - 顾客换券后:分成基数 ≡ 档位小计(定金与券都不扣技师)
+ok 57 - ④ 顾客可取消用券,应收回到 ¥294
+ok 58 - ④ 再选回满300减30 → ¥264
+ok 59 - 签字成功
+ok 60 - ⑤ 签成才核销:状态 used + 关联单号
+ok 61 - ⑤ 核销写进券流水(只追加)
+ok 62 - ④ 签字后券锁定,不能再改
+ok 63 - ④ 已签单不再下发券包
+ok 64 - 快照 SVG 上有优惠券行
+ok 65 - 快照共优惠标注含券
+ok 66 - ③ 分成合计按业绩基数校验(应收 ≠ 基数时直接拒)
+ok 67 - ③ 按比例分成成功
+ok 68 - ③ 分成合计 = 业绩基数 ¥394(不是应收 ¥264,也不是扣了定金的 ¥294)
+ok 69 - 员工账号可登录
+ok 70 - ⓪ 员工看不到发放记录(403)
+ok 71 - ⓪ 员工不能发券(403)
+ok 72 - ⑤ 更正可退券
+ok 73 - ⑤ 退券后回到券包(active)
+ok 74 - ⑤ 退券留痕
+ok 75 - ⑤ 原签署单一分没动(已签不可改)
+ok 76 - ⓪ 作废原因必填
+ok 77 - ⓪ 作废成功且留痕
+ok 78 - ⓪ 作废是留痕不是删除(记录还在)
+ok 79 - ⓪ 券流水按动作全程留痕
+ok 80 - ⓪ 发放记录数据库层禁删
+ok 81 - ⓪ 券流水数据库层禁删
+ok 82 - 财务月度券让利汇总可取
+ok 83 - 券让利合计 = 已签单上实际抵掉的 ¥30
+ok 84 - 券让利按特批/系统拆栏
+ok 85 - ② 过期券置灰并写原因
+
+结算单用券回归通过:85 项断言全绿
+== test-audit-fix ==
+ok 1 - 两家临时店建好
+ok 2 - ③ 加项组名落库并下发
+ok 3 - ③ 留空的加项组名是空串(前端归「其他加项」)
+ok 4 - ③ 异常输入:超长组名被截断而不是报错
+ok 5 - ③ 幂等:重复保存组名不变
+ok 6 - ② 签署页下发同组序号
+ok 7 - ② 代付单下发卡主姓名(明细区上方那行)
+ok 8 - ① 越权:未登录撤单 401
+ok 9 - ① 越权:跨店撤单 404(看不到别家店的单)
+ok 10 - ① 待签单可以撤回改单
+ok 11 - ② 撤回的单不计入「待签 N/N」
+ok 12 - ① 幂等:重复撤回不报错
+ok 13 - ① 带券的单也能撤
+ok 14 - ① 并发时序:撤回后券放回券包,不被作废单占着
+ok 15 - ① 空态:单全撤完后日结无 blocker、可确认
+ok 16 - F1 单技师单进日结列表(无需分配 · 待确认)
+ok 17 - F1 单技师单不会被自动确认(当天仍未 confirmed)
+ok 18 - ④ 大额充值已入账
+ok 19 - ④ 红线:充值**不进**日结业绩列
+ok 20 - ④ 红线:充值只体现在冲卡列(¥10,000)
+ok 21 - ④ 真做的单才是业绩(技师甲 ¥1200 = 两张 ¥600)
+ok 22 - ④ 红线:充值不进排行的业绩
+ok 23 - ④ 排行的冲卡列有这笔
+ok 24 - ④ 红线:员工端「我的业绩」不含这笔充值
+ok 25 - ④ 红线:目标进度不被充值推高(仍是 0%)
+ok 26 - 越权:员工调「日结」被 403
+ok 27 - 越权:员工调「薪资方案」被 403
+ok 28 - 越权:员工调「业绩目标」被 403
+ok 29 - 越权:员工调「发放记录」被 403
+ok 30 - 日结预填比例给的是 mainPct/assistPct(不是裸数组)
+ok 31 - 预填比例两项加起来是 100
+ok 32 - 按预填比例直接保存分成成功
+ok 33 - 边界值:100/0 分成成立且合计等于基数
+ok 34 - 边界值:分币余数由末行吃掉,合计仍正好等于基数
+ok 35 - 用户名:中文名按拼音生成(小婕 → xiaojie)
+ok 36 - 用户名:不传就用拼音
+ok 37 - 用户名:重名加数字后缀
+ok 38 - 用户名:弹窗里改的名字生效
+ok 39 - 用户名:异常输入(中文/太短)被拒
+ok 40 - 用户名:重名被拒(查重)
+ok 41 - F2/v1.2① 没标记收过定金的预约:结算不出抵扣行(不许抵没收过的钱)
+ok 42 - F2 配了「定金抵扣尾款」后,定金真的抵进去了
+ok 43 - F2 应收 ≡ 档位小计 − 定金 − 券
+ok 44 - F2 顾客签署页拿得到 deposit 支付腿(定金抵扣行的数据源)
+ok 45 - F2 分成基数不受定金影响(仍 ≡ 档位小计)
+ok 46 - A 未付定金的直接排单在台面上打了「未付定金」标
+ok 47 - A 标记已收定金 → 201 并落一条记录
+ok 48 - A 金额由后端按店配算(¥100),不听前端的
+ok 49 - A 记了经手人
+ok 50 - A 定金落到预约单上(¥100 = 10000 分)
+ok 51 - A 台面上的「未付定金」标被摘掉(按钮随之消失)
+ok 52 - A 红线:标记那一刻**不进收入账本**
+ok 53 - A 计入定金预收(负债):这一笔让负债 +¥100
+ok 54 - A 幂等:重复标记不再记一笔
+ok 55 - A 幂等:留痕里仍然只有一条 receipt
+ok 56 - A 越权:未登录标定金 401
+ok 57 - A 越权:跨店标定金 404(看不到别家店的预约)
+ok 58 - A 误标可撤销
+ok 59 - A 撤销留痕:原 receipt 还在,另加一行 revoke
+ok 60 - A 撤销后有效定金归零
+ok 61 - A 撤销后这一笔从负债里退出去(回到基线)
+ok 62 - A 取消预约后定金留痕还在
+ok 63 - A 定金记录数据库层禁删
+ok 64 - A 定金记录金额数据库层改不动
+ok 65 - A 未配定金规则的店:不打「未付定金」标(按钮就不会出现)
+ok 66 - A 没开定金的店后端也拒绝标记
+ok 67 - A① 抵扣开:定金抵进应收(¥500 − ¥100 = ¥400)
+ok 68 - A① 定金不进业绩:分成基数仍 ≡ 档位小计
+ok 69 - A① 守恒:抵扣开的店签字时定金腿转收入(+¥100 一行)
+ok 70 - A① 守恒:负债同步减少 ¥100(减少额 = 收入增加额)
+ok 71 - A① 定金腿签后置为已付
+ok 72 - A① 签字后定金记录标成已兑现
+ok 73 - A① 定金守恒审计通过(没有"负债减了收入没涨"的记录)
+ok 74 - A② 抵扣关:定金不抵应收(应收仍是 ¥500)
+ok 75 - A② 抵扣关的店签字时记一行「定金收入」¥100
+ok 76 - A② 定金收入不减应收:这张单的应收还是 ¥500
+ok 77 - A② 定金收入不进业绩:分成基数仍 ≡ 档位小计
+ok 78 - F3 员工账号可登录
+ok 79 - F3 技师能给自己现场排单(散客即时预约)
+ok 80 - F3 现场建档 = 轻档案(有顾客 id,后面才结算得了)
+ok 81 - F3 越权:员工不能排到别人那一列 403
+ok 82 - F3 即时预约立刻出现在今日台面上
+ok 83 - F3 台面上这条带顾客 id(「去结算」按钮才点得动)
+ok 84 - A 员工也能标已收定金(现场是技师收的)
+ok 85 - A 越权:员工不能撤销定金记录(撤销是老板的事)
+ok 86 - 守恒回填 越权:未登录 401
+ok 87 - 守恒回填:本来就守恒时不乱补
+ok 88 - 守恒回填 幂等:再跑一次还是 0 行
+ok 89 - 异常输入:悬空 technicianId 被拒
+ok 90 - 异常输入:悬空 serviceId 被拒
+
+对图修复批回归通过:90 项断言全绿
+== test-scan-sign ==
+ok 1 - S1 现场排单建轻档案(姓名+手机号)
+ok 2 - S1 手机号命中已有档案(带出,不新建)
+ok 3 - S1 带出的档案标着「未绑定」
+ok 4 - S2 只留了手机号(provider=phone)**不算**已绑定,徽标照出
+ok 5 - S1 轻档案也有专属会员码(规则⑥ 认领码)
+ok 6 - S1 扫会员码带出同一份档案
+ok 7 - S1 越权:别家店拿这个会员码查不到(跨店隔离)
+ok 8 - S1 空态:不填手机号也能建单(身份不依赖手机号)
+ok 9 - S2 未绑定 → 徽标文案由后端下发
+ok 10 - S2 提示行也是后端下发
+ok 11 - S2 顾客行手机号脱敏
+ok 12 - S2 按 userId 拿徽标状态
+ok 13 - S2 徽标接口也给脱敏手机号
+ok 14 - S2 越权:别家店按 userId 也查不到
+ok 15 - S3 推送签署出码
+ok 16 - S3 未绑定顾客:如实提示无法推送(规则⑤),且不写「已推送」
+ok 17 - S3 状态行初始 = 等待顾客进入
+ok 18 - S3 越权:未登录取不到码 401
+ok 19 - S3 越权:跨店取别家单的码 404
+ok 20 - S3 扫码换到的就是这张单
+ok 21 - S3 状态行 → 顾客核对中
+ok 22 - S3 可以重发签署码
+ok 23 - S3 边界:重发后旧码立刻失效(410)
+ok 24 - S3 异常输入:乱码签署码 404
+ok 25 - S4 「是我本人」一次点击完成绑定
+ok 26 - S4 沙盒演示旁路生效(没配微信密钥也能跑通)
+ok 27 - S4 绑定同时给出专属会员码
+ok 28 - S4 确认卡显示的是**这张单挂着的档案**的名字
+ok 29 - S4 幂等:重复绑定不报错也不重复绑
+ok 30 - S4 绑定后 S2 徽标消失
+ok 31 - S4 绑定后徽标接口也给空串(前端 wx:if 一挂就没了)
+ok 32 - S3 已绑定顾客:顶部多「✓ 已推送到顾客小程序」
+ok 33 - S4 手机号不一致:照样绑定成功(不拦)
+ok 34 - S4 手机号不一致:只提示不改档案
+ok 35 - S4 档案上的手机号一个字没被改
+ok 36 - corner:扫到别人单的码 → 拿到的是**那张单**
+ok 37 - corner:确认卡显示的是该单单主的名字(张三),不是扫码人
+ok 38 - corner:openid 冲突 → 不绑不覆盖
+ok 39 - corner:openid 冲突 → 进人工合并队列
+ok 40 - corner:合并队列里能查到这条
+ok 41 - corner:openid 冲突不拦签字,照样签成
+ok 42 - corner:会员码扫已绑定档案 → 幂等成功
+ok 43 - corner:异常输入 —— 乱会员码 404
+ok 44 - corner:双端同时点签,只成一次
+ok 45 - corner:另一端拿到「已签过」而不是 500
+ok 46 - corner:签完另一入口变已签只读
+ok 47 - corner:已签的单不再出新码
+ok 48 - 合并队列数据库层禁删(只追加)
+ok 49 - 笔迹图能单独取到(不是整张快照缩一团)
+ok 50 - 笔迹图比整张快照小得多(说明真的裁过)
+ok 51 - 取笔迹图不动快照一个字节(只读只裁)
+ok 52 - 已签单下发 snapshotHasInk(前端据此决定贴笔迹还是标「早期单·仅存文本」)
+ok 53 - 红线:跑完整条扫码签链路,定金守恒仍 ok
+
+扫码签闭环回归通过:53 项断言全绿
+== test-double-sheet ==
+ok 1 - ① 第一张单开得出来
+ok 2 - ① 同一预约再开第二张:409 被拒(未签态提示先撤回)
+ok 3 - ① 撤回后同一预约可以重开
+ok 4 - ① 已签后再开:409 且提示走「新建即时预约 / 更正」
+ok 5 - ② 同一顾客同日第二张单(挂另一条预约)开得出来
+ok 6 - ③ 两张待签单各有各的签署码
+ok 7 - ③ 两枚码各自换到自己的单,不串
+ok 8 - ③ 给 A 单重发码,不影响 B 单那枚
+ok 9 - ④ 已签那张撤不动(ALREADY_SIGNED)
+ok 10 - ④ 待签那张撤得动
+ok 11 - ④ 撤回待签单不影响已签那张
+ok 12 - ⑤ 第一张单用上券(抵 ¥20)
+ok 13 - ⑤ 同一张券被第二单复用 → 拒或不抵(一单一张)
+ok 14 - ⑤ 券核销挂在真正用掉它的那一张单上
+ok 15 - ⑥ 标过定金那张:抵 ¥50
+ok 16 - ⑥ 没标过的那张:一分不抵(哪怕也勾了「已付定金抵扣」)
+ok 17 - ⑥ 两张都签完,定金守恒仍 ok
+ok 18 - ⑦ 5 张已签单都进了「待确认」队列(F1 语义)
+ok 19 - ⑦ 日结确认成功
+ok 20 - ⑦ 同技师的多张单业绩合并(技师甲 ¥1000)
+ok 21 - ⑦ 另一技师不被串(技师乙 ¥0,他那张被撤回了)
+ok 22 - ⑦ 红线:券没减业绩(用券那张仍按档位小计 ¥200 计)
+ok 23 - 跨零点标注:当天做当天签的单**不加**多余标注
+ok 24 - 跨零点标注:字段随日结一起下发(前端不自己算日期)
+ok 25 - D1 空态:没更正的普通单不出更正卡、不出徽标
+ok 26 - D1b 多次更正:徽标带次数「已更正 ×2」
+ok 27 - D1b 按时间顺序,方向文案后端给(先退后补)
+ok 28 - D1 四要素齐:方向/±金额/原因原文/双时间戳
+ok 29 - D1 ±方向标对(退=refund 补=charge)
+ok 30 - D1b 红线:实际应付 ≡ 原单合计 + Σ差额
+ok 31 - D1 红线:更正**不改原单一个字节**(合计仍是原值)
+ok 32 - D1 红线:更正不动签署快照(逐字节相同)
+ok 33 - D1b 边界:第三笔后恒等式仍成立
+ok 34 - D2 已签无更正:徽标「已签署」,不冒充更正
+ok 35 - D2 规则③:没更正的单不出实际应付(右侧金额前缀词保持现状,不被换成光秃秃的数)
+ok 36 - 闭环③:没更正的已签单,列表金额 ≡ 单据合计(不是预约底价)
+ok 37 - D2 有更正:徽标带次数,与详情页同一句(规则①)
+ok 38 - D2 右侧金额 = 实际应付(与详情页同一个数)
+ok 39 - D2 副行说明后端下发
+ok 40 - D2 空态:没挂已签单的预约,徽标与金额都是空(列表项保持现状)
+ok 41 - D3 售后中徽标压过其它状态
+ok 42 - D3 三步进度:发起 → 跟进中 → 结果(未完成显示 —)
+ok 43 - D3 规则③:售后卡带单号,进的是同一张单据页
+ok 44 - D3 只影响这一单,别的单不被串
+ok 45 - 顾客端映射层:D2 徽标三态没被白名单丢掉
+ok 46 - 顾客端映射层:D2 副行 + 实际应付 + 单号透传
+ok 47 - 顾客端映射层:D3 售后三步整块透传(丢了就是整卡不渲染)
+ok 48 - D17 护栏:getServices() 接口失败时**抛错**,绝不回 mock 假数据
+ok 49 - D17 护栏:getStores() 接口失败时**抛错**,绝不回 mock 假数据
+ok 50 - D17 护栏:getAddOns() 接口失败时**抛错**,绝不回 mock 假数据
+ok 51 - D17 护栏:getAvailability() 接口失败时**抛错**,绝不回 mock 假数据
+ok 52 - D17 护栏:getTechnicians() 接口失败时**抛错**,绝不回 mock 假数据
+ok 53 - 顾客端币种:/stores 的币符真能落进缓存(¥ 店不再渲染空币符)
+ok 54 - 顾客端币种:换店清缓存(不把上一家的币符带进新店)
+
+双单场景回归通过:54 项断言全绿
+== test-auth-surface ==
+ok 1 - 老板 token / 员工 token 都拿到了
+ok 2 - 从源码抠出 138 条 /admin 路由(新增路由自动纳入扫描)
+ok 3 - ① 无凭证访问任何商家接口一律 401(没有一个裸奔)
+ok 4 - ① 乱填 token 也是 401
+ok 5 - ① 空 Bearer 也是 401
+ok 6 - ① 数据库导入入口默认关闭(403,不是敞着的)
+ok 7 - 老板专属路由从源码抠出 76 条
+ok 8 - ② 员工 token 打老板接口一律 403(没有一个漏数据)
+ok 9 - ② 员工看**自己**的业绩:200(没被一刀切锁死)
+ok 10 - ② 员工传别人的 technicianId:拿不到别人的数(参数被忽略,回的是自己那份)
+ok 11 - ② 员工能开单(不是 403,是缺参数的 400)
+ok 12 - ② 员工自己的接口照常可用(门禁没误伤员工端)
+ok 13 - 昵称:老板能改
+ok 14 - 昵称:员工也能改自己的
+ok 15 - 昵称 corner:emoji 原样保留
+ok 16 - 昵称 corner:超长截到 20 字
+ok 17 - 昵称 corner:超长 emoji 按**字符**截,不切出半个乱码
+ok 18 - 昵称 corner:留空不报错,回退默认(员工=技师名)
+ok 19 - 昵称 corner:老板留空回退店名
+ok 20 - 昵称:改完 /auth/me 立刻跟上(首页问候与管理页老板位都读它)
+ok 21 - 拍板② 员工拿得到「我的客户」(不再一刀切 403)
+ok 22 - 拍板② 红线:财务字段在员工响应里**整体不存在**(不是置空)
+ok 23 - 拍板② 手机号脱敏,明文 phone 键不下发
+ok 24 - 拍板② 老板视图不受影响(财务字段照常给)
+ok 25 - 拍板② 防空转:员工名下确实有顾客(fixture 一坏这里先红)
+ok 26 - 拍板② 范围:自己服务过的在列表里,别人的不在
+ok 27 - 拍板② 越权:员工请求别人的顾客 → 404(不是 403,不确认这个人存在)
+ok 28 - 拍板② 自己服务过的顾客,小记看得到
+ok 29 - ③ 停用员工后,他手里的 token 立刻失效(401)
+
+门禁全量扫描通过:29 项断言全绿
+== test-currency-scan ==
+ok 1 - 扫描范围覆盖两端 + 网页(228 个文件)
+ok 2 - 全仓没有写死的币符(商家端 + 顾客端 + 网页)
+ok 3 - 顾客端币种走公开 /stores 下发的 currencyDisplay(与商家端同一套映射表)
+ok 4 - 日界唯一实现:产品代码没有裸写的业务日期(一律走门店时区辅助函数)
+
+币符硬编码扫描通过:4 项断言全绿
+== test-settle-stress ==
+ok 1 - 压测店与价目表就位
+ok 2 - ① 恒等式 1200 轮零破例(行和≡小计,小计−定金−券≡应收,行数≡选中数)
+ok 3 - ③ 幂等 1200 轮零破例(同入参同结果,覆盖 439 种不同组合)
+ok 4 - ② 入参没变时金额也没变(321 次重复入参全部稳定)
+ok 5 - ② 红线:逐个加项目,合计每次都严格变大(不许沿用上一次的数)
+ok 6 - ② 红线:逐个减项目,合计每次都严格变小
+
+金额压测通过:6 项断言全绿(1200 轮随机增删改)
+== test-sign-stability ==
+ok 1 - R3① 画布尺寸会重量:窗口变化 + 容器变化都挂了钩子
+ok 2 - R3① 落笔前先重量一次(容器什么时候变宽都不丢笔迹)
+ok 3 - R3① 重设尺寸后把已有笔迹重画回去(不擦掉顾客签好的字)
+ok 4 - R3② 未绑定时「确认签字」不再是死按钮(不 disabled、底栏不加 .locked)
+ok 5 - R3② 缺哪一步就说哪一步:锁着时提示的是「确认本人」而不是被禁用的勾选框
+ok 6 - R3 连续 30 轮「开单 → 点开页面 → 第一次就签」全部成功(零偶发)
+
+签字可靠性回归通过:6 项断言全绿(30 轮)
+== test-noshow-aftersales ==
+ok 1 - ① 未爽约的单处置=400
+ok 2 - ① 标记爽约成功且落 no_show_at
+ok 3 - ① A⑤ 无收取记录的爽约单处置=400
+ok 4 - ② A① 员工调处置接口=403
+ok 5 - ② 老板留存成功
+ok 6 - ② A② 留存零收入(账目行数不变)
+ok 7 - ② A④ 重复处置=409
+ok 8 - ③ 爽约单有档案可留存
+ok 9 - ③ 同顾客再排单成功
+ok 10 - ③ A② 新单上自动带出收取记录(retain_carry)
+ok 11 - ③ A② 带出金额=留存金额 ¥100
+ok 12 - ④ 没收成功
+ok 13 - ④ A③ 独立「定金收入·爽约没收」行存在且=¥100
+ok 14 - ④ A③ 没收不进今天的日结区
+ok 15 - ④ +1 红线:技师业绩不含没收额(summary 里无技师挂 ¥100 业绩)
+ok 16 - ⑤ A④ 守恒审计 0 条不守恒
+ok 17 - ⑥ retainValidDays 配置可存取
+ok 18 - ⑥ 配置时长后留存带 expires_at
+ok 19 - ⑥ A①-2 到期留存自动转没收(note 留痕)
+ok 20 - ⑥ 自动没收后守恒仍 0 条
+ok 21 - ⑦ B① 别的技师写进展=403
+ok 22 - ⑦ B① 当单技师写进展成功→处理中
+ok 23 - ㊷ D51 售后开着:admin bookings 徽标=售后中/aftersales
+ok 24 - ㊹ PATCH 转售后写 status_history(无 note 用默认句,发起原因链在场)
+ok 25 - ⑦ B④ 空结果标解决=400
+ok 26 - ⑦ B① 员工关闭=403
+ok 27 - ⑧ 当单技师标已解决成功
+ok 28 - ⑨ B② 带金额字段的请求不产生任何账目行
+ok 29 - ⑧ B⓪ resolve 两次=409
+ok 30 - ⑧ B⓪ resolved 后 close=409(状态只前进)
+ok 31 - ⑧ B⓪ 状态机随单下发:resolved + 时间线 ≥3 条(发起/进展/解决)
+ok 32 - ㊷ D51 售后解决:admin bookings 徽标=售后已解决(细分文案随后端,前端不自拼)
+ok 33 - ㊷ D51 待支付单徽标=空串(字段在场不撒谎)
+ok 34 - ⑧ B④ 时间线带操作人
+ok 35 - ⑩ D19 跨租户 storeId 下单=400 STORE_TENANT_MISMATCH
+ok 36 - ⑪ D20 顾客可见文案 0 处「支付成功」(§十-2)
+ok 37 - ⑫ D22 预览行与请求项一一对应(两项+自选)
+ok 38 - ⑫ D22 合计≡勾选行之和
+ok 39 - ⑫ D22 取消场景:去掉的项不再出行、合计同步降
+ok 40 - ⑬ 组预览返回 sheets+group 两层
+ok 41 - ⑬ 组合计 listTotalCents ≡ Σ各单
+ok 42 - ⑬ 组合计 subtotalCents ≡ Σ各单
+ok 43 - ⑬ 组合计 discountTotalCents ≡ Σ各单
+ok 44 - ⑬ 组合计 totalCents ≡ Σ各单
+ok 45 - ⑬ 组① 行≡该组请求项(不含组② 的项)
+ok 46 - ⑬ 组② 行≡该组请求项(不含组① 的项与自选)
+ok 47 - ⑬ 纯线下:到店应收≡组合计
+ok 48 - ⑬ 组建单 2 张同组各有单号
+ok 49 - ⑬ 快照价档随组(member/list)+改档留痕只落改档组
+ok 50 - ⑬ 被服务者随组+1/N 顺序
+ok 51 - ⑬ 两张合计≡组预览合计(member 档另算)
+ok 52 - ⑬ 未签可撤 1/2
+ok 53 - ⑬ 未签可撤 2/2
+ok 54 - ⑭ 技师可读充值档位(选套餐用,只读)
+ok 55 - ⑭ 技师改档位配置=403(读写分明)
+ok 56 - ⑮ D25 未绑定档案技师充值=400 UNBOUND_NO_RECHARGE
+ok 57 - ⑮ D25 未绑定档案老板充值同拦(同受约束)
+ok 58 - ⑮ D25 绑定后技师代充放行=201(无需财务钥匙)
+ok 59 - ⑭ 经手人强制=当前技师(body 冒名 tech2 不认)
+ok 60 - ⑭ 留痕 created_by=员工账号
+ok 61 - ⑭→㊵ 技师耗卡=410(手动耗卡整口取消,扣卡只随签字)
+ok 62 - ⑭ 技师储值总览=403
+ok 63 - ⑭ 技师财务页=403(财务门禁整体不变)
+ok 64 - ⑯ 技师可铸绑定码(现场是技师递手机)
+ok 65 - ⑯ 确认卡只有称呼/店名,无单无金额字段
+ok 66 - ⑯ 新 openid 确认=绑定成功
+ok 67 - ⑯ 绑定后充值解锁=201(D25 闭环)
+ok 68 - ⑯ 已绑定档案再铸码=400 ALREADY_BOUND
+ok 69 - ⑯ 废令牌=404(用过的码不能再进确认卡)
+ok 70 - ⑯ 假令牌=404
+ok 71 - ⑯ 同 openid 绑本店另一档案=冲突进合并队列不覆盖(S4 规则⑤同构)
+ok 72 - ⑰ 耗卡 fixture 落账(直插=引擎写法)
+ok 73 - ⑰ 充值行Σ≡下发合计≡聚合卡月充值
+ok 74 - ⑰ 消耗行Σ≡下发合计≡聚合卡月耗卡
+ok 75 - ⑰ 行含 类型/时间/顾客/金额 且充值带经手人
+ok 76 - ⑰ 消耗行金额为负、手工耗卡来源=手工耗卡且无单号
+ok 77 - ⑰ 金额纯 cents 下发(币符前端拼,币种红线)
+ok 78 - ⑰ 结算扣卡行回链单号解析+来源=结算抵扣
+ok 79 - ⑰ 技师看逐笔=403
+ok 80 - ⑱ D28 全仓 showModal 按钮文案 ≤4 字符(中英同计;超限=弹窗静默死)
+ok 81 - ⑳ 四之八④ 剪贴板/扫码/支付/弹窗类 wx.* 全部挂 fail(静默失败家族总闸;S组卫生批起含 showModal)
+ok 82 - ㉒ D34 休息日排单=400 REST_DAY(提示原句)
+ok 83 - ㉒ D34 顾客端休息日无可约时段(跨端)
+ok 84 - ㉒ D34 改营业后放行
+ok 85 - ㉓ D35 默认店客户列表不含测试店档案
+ok 86 - ㉓ D35 测试店列表含自己的档案(过滤没矫枉过正)
+ok 87 - ㉓ D35-b 他店档案跨店排单=400 USER_TENANT_MISMATCH
+ok 88 - ㉔ 积分 fixture 排单成功
+ok 89 - ㉔ 前提:档位小计 ≠ 预约标价(否则新旧口径无法区分)
+ok 90 - ㉔ 未签不产生积分(积分随签署,不随开单)
+ok 91 - ㉔ 签署成功
+ok 92 - ㉔ 新单积分 ≡ 档位小计(floor 到分币)
+ok 93 - ㉔ 新单积分 ≠ 旧口径(预约标价推导)
+ok 94 - ㉔ D36 三账闭环:积分明细加总 ≡ 余额(赚分行+兑换行同列)
+ok 95 - ㉔ 明细里有这笔赚分行
+ok 96 - ㉔ 三行:累计获得 ≡ 累计消费(同基数同数值)
+ok 97 - ㉔ 三行:余额 = 累计获得 − 已兑换 且 余额 ≤ 累计获得
+ok 98 - ㉔ 硬守恒全档案扫:13 档案全部 0 ≤ 余额 ≤ 累计获得(钳位迁移兜底)
+ok 99 - ㉔ 守恒抛错:余额>累计获得 = 500 拒绝出账
+ok 100 - ㉔ 对冲后恢复出账
+ok 101 - ㉕ lucky-luxe 分级开启且梯子来自租户配置(4 档)
+ok 102 - ㉕ 未配置租户=不分级:空梯子+称谓按充值史两态
+ok 103 - ㉖ D38 累计消费Δ ≡ 本次签署档位小计
+ok 104 - ㉖ D38 累计消费 ≠ 预约标价口径
+ok 105 - ㉖ 口径② fixture 转售后成功
+ok 106 - ㉖ 口径② 售后中积分不增不减(已签即计)
+ok 107 - ㉖ 口径② 售后中累计消费不变
+ok 108 - ㉗ demoLogin 不选退役档案且演示2优先
+ok 109 - ㉗ 孤儿探针占位成功
+ok 110 - ㉗ 撞档排单如实失败
+ok 111 - ㉗ 排单失败不留孤儿档案(建档随排单整体回滚)
+ok 112 - ㉘ demo_identity 指定样板户压过演示2前缀
+ok 113 - ㉘ asUserId 按人登录(本店档案)
+ok 114 - ㉘ asUserId 跨店=404(不借别店身份)
+ok 115 - ㉘ 沙盒名册路由可用(ALLOW 闸门内)
+ok 116 - ㉙ D41 未充值(只消费过)=顾客,无会员标
+ok 117 - ㉙ memberPerks 通道下发(商家自定义会员权益,S9 填内容)
+ok 118 - ㉙ 翻转 fixture 充值成功
+ok 119 - ㉙ 充值那一刻翻转=会员
+ok 120 - ㉙ 商家端列表同口径(memberTier=member)
+ok 121 - ㉙ 分级店称谓不受影响(仍走梯子标签)
+ok 122 - ㉚ mock-data.js 文件已删除
+ok 123 - ㉚ 全仓零 mock 引用(注释除外)
+ok 124 - ㉑ 裸导航调用数 ≤ 基线 106(F2 只减不增;新增代码走 utils/nav.js)
+ok 125 - ⑲ 排版件 200 且分组数=组内单数
+ok 126 - ⑲ 排版件合计≡各单之和(原价/小计/应收)
+ok 127 - ⑲ 组② 标题带被服务者
+ok 128 - ⑲ 待签状态章=已结算待签(未签无签名区)
+ok 129 - ⑲ 用单号也能查同一张
+ok 130 - ⑲ 金额纯 cents(币符前端拼)
+ok 131 - ⑲ 全撤后排版件=410(voided 不出预览,也不出假「已签署」)
+ok 132 - ㉛ 规则① 顾客接口零加项/次卡(A 店)
+ok 133 - ㉛ 规则⑥ 顾客条目数=上架数(A 店)
+ok 134 - ㉛ 规则① 顾客接口零加项/次卡(B 店)
+ok 135 - ㉛ 规则⑥ 顾客条目数=上架数(B 店)
+ok 136 - ㉛ 规则⑤ 挂会员价后起价=最低档 150
+ok 137 - ㉛ 规则⑤ 「起」字下发(前端零运算)
+ok 138 - ㉛ 规则⑤ 清会员价后起价回落 list 200
+ok 139 - ㉛ 闭环③ 下架后顾客接口即时消失
+ok 140 - ㉛ 闭环③ 目录仍在(storefront=false 不是删除,开单不受影响)
+ok 141 - ㉛ 闭环③ 拨回后顾客接口即时恢复
+ok 142 - ㉛ 越权 员工拨开关=403
+ok 143 - ㉛ 越权后开关未动(顾客端仍可见)
+ok 144 - ㉛ 规则③ 次卡编辑拒绝装在两条路由(TIMECARD_MIGRATED×2)
+ok 145 - ㉛ 规则⑥ 迁移块在(幂等标记 s1_storefront)
+ok 146 - ㉛ 双轨收口 旧口子新建默认上架
+ok 147 - ㉛ 空态 全下架=空数组 200
+ok 148 - ㉜ apps/web/customer.js 顶层加载不炸(TDZ/未定义引用兜底)
+ok 149 - ㉜ apps/web/share.js 顶层加载不炸(TDZ/未定义引用兜底)
+ok 150 - ㉝ D45 顾客网页不再写死唯一店(const storeId 字面量禁令)
+ok 151 - ㉝ D45 租户寻址在场(?store= → x-tenant-id 全请求注入)
+ok 152 - ㉞ D46 店铺事实零写死(店名/地址/电话/营业时间/币种)
+ok 153 - ㉞ D46 人气区与服务页同口径(fromPriceLabel 进推荐卡)
+ok 154 - ㉟ 品牌文案单源 + 零回落值(渲染层 Lucky Luxe 字面量=0)
+ok 155 - ㊱ 字典随 /services 下发(三行起步:美甲/美睫/护理·其他)
+ok 156 - ㊱ 顾客端所有可见条目∈某大类(v1.4 断言⑥)
+ok 157 - ㊱ 加项/次卡 0 出现在大类列表
+ok 158 - ㊱ 空大类不显示(visibleCategories 过滤在场)
+ok 159 - ㊲ 小程序服务页:顶部段选已撤(type-switch 零残留)
+ok 160 - ㊲ 小程序服务页:左栏=平台大类字典驱动(getServiceCatalog+platformCategories)
+ok 161 - ㊲ 小程序服务页:「加项服务」静态分类数组已灭(规则①,剥注释扫)
+ok 162 - ㊲ 小程序服务页:「¥xxx 起」渲染在场
+ok 163 - ㊲ 网页切店入口在场(/shops 同源+整页 ?store= 清场)
+ok 164 - ㊲ 购物车按店分仓(切店零残留,组合矩阵抓获)
+ok 165 - ㊳ D48 getService 不再猜 id 前缀定类(indexOf('lash') 禁令)
+ok 166 - ㊳ D48 CARE 条目全量列表按 id 可命中(详情/预约数据前提)
+ok 167 - ㊴ D49 多档项目详情 label 带「起」零「固定价」禁语
+ok 168 - ㊴ D49 单档项目仍是 基础价/固定价 语义
+ok 169 - ㊴ D49 护理项价格说明非美睫套话
+ok 170 - ㊴ L2 出口同源:网页列表 fromPriceLabel+详情 priceDetailLabel 引用在场
+ok 171 - ㊴ L2 出口同源:小程序列表 priceFromLabel+详情 priceDetailLabel 引用在场
+ok 172 - ㊵ 规则⑥ 手动耗卡接口=410 GONE
+ok 173 - ㊵ 规则⑧ 支付未接通:线上自助购买 locked
+ok 174 - ㊵ 规则⑧ 锁定期 PUT 开=400 PAYMENT_CHANNEL_OFFLINE
+ok 175 - ㊵ 次卡字段(项目组/有效期/商城位)持久化
+ok 176 - ㊵ 规则④ 充100赠20 落账 201
+ok 177 - ㊵ 规则④ recharge+bonus 两行分立
+ok 178 - ㊵ 规则④ 余额=实收+赠送(负债含赠送)
+ok 179 - ㊵ 规则④ 提成基数只含实收 100(bonus 排除)
+ok 180 - ㊺ 活卡在场:剩 2/3+可核销+标签句后端给
+ok 181 - ㊺ 折算单价末次吃余数:500元3次 → 非末次 16666、末次 16668
+ok 182 - ㊺ 剩 0 的卡不出现(B1-2 接口层单源)
+ok 183 - ㊺ 过期卡在场置灰:expired=true 且不可核销(B1-3)
+ok 184 - ㊺ 有持卡实例的定义拒删=409 PACKAGE_HAS_HOLDINGS
+ok 185 - ㊺ 无持卡后定义可删(闸不矫枉过正)
+ok 186 - ㊺ 夹具清场:持卡列表回空(幂等清理)
+ok 187 - ㊼ 新建带野组名=400 PROJECT_GROUP_INVALID(禁自由文本)
+ok 188 - ㊼ 存量自由文本不拆无关编辑(只改价=200,组原样不静默改)
+ok 189 - ㊼ 改动值必过闸:改成野文本=400
+ok 190 - ㊼ 改选「不限」=放行
+ok 191 - ㊼ 改选现有分类=放行
+ok 192 - ㊻ 建单闸:核销单必有技师=400
+ok 193 - ㊻ 建单闸:一单一卡一次(组内重复挂卡=400)
+ok 194 - ㊻ 建单闸:项目不在卡关联组=400(拍板③组内选)
+ok 195 - ㊻ 核销单 A 建成:行=次卡核销第3/3+应收=折算 18000
+ok 196 - ㊻ A 金额面:subtotal=18000+times_card 腿=18000(现金腿 0=B2-9)
+ok 197 - ㊻ A 留痕:条目名含「第 3/3 次」
+ok 198 - ㊻ 组级 preview:offlineDue 不含次卡覆盖(cover=18000,应收=0)
+ok 199 - ㊻ 血缘背书:券 cover 组级本就正确(total=subtotal−券,offlineDue=total 不再多收)
+ok 200 - ㊻ 并发前提:两端各持一张待签单(建单不硬拦,裁决在签署)
+ok 201 - ㊻ 签 A 成:卡扣至 3/3
+ok 202 - ㊻ 核销确认收入单列:服务收入-次卡核销 18000(payChannel=times_card 不混现金)
+ok 203 - ㊻ 并发闸:两单抢末次,后签=409 TIMECARD_RACE(不是串行防重)
+ok 204 - ㊻ 并发闸:卡不超扣(仍 3/3)
+ok 205 - ㊻ 幂等闸:已签单重签=400 ALREADY_SIGNED(双击/重试只扣一次)
+ok 206 - ㊻ 幂等闸:重签零副作用(卡 3/3+次卡收入行仍 1 条)
+ok 207 - ㊻ 出路①:被拦单可撤回
+ok 208 - ㊻ 出路②:改支付构成(线下)重开可签成,不废单收场
+ok 209 - ㊻ 账面守恒:led 增量=次卡核销 1 行(A)+C 单相应行,B 零账目
+ok 210 - ㊻ D53 前提:D 单带储值腿(bkCust 余额 120 可烧)
+ok 211 - ㊻ D53 修:耗卡收入落本租户账(签署页公开路由必须显式带租户)
+ok 212 - ㊽ 返还:更正单挂 releaseTimecard=200
+ok 213 - ㊽ 次数返还:卡 3/3 → 2/3
+ok 214 - ㊽ 积分回冲:台账追加 adjust −180(账本只追加,赚分行推导值不动)
+ok 215 - ㊽ 收入红字:−18000 冲销行在场(reversalOf 链)
+ok 216 - ㊽ 防重放:同单二次返还=409 TIMECARD_ALREADY_RELEASED
+ok 217 - ㊽ 防重放:卡仍 2/3 不多退
+ok 218 - ㊽ 非核销单挂返还=400 NOT_TIMECARD_SHEET
+ok 219 - ㊾ 日结显式行:售后扣回(负数+关联单号)在场
+ok 220 - ㊾ 日结净额:tech1 releaseDeductCents=18000(净额已减)
+ok 221 - ㊾ 反例前提:普通更正成功
+ok 222 - ㊾ 反例:普通更正后业绩净额分毫不动+扣回行不增
+ok 223 - ㊾ 确认日结成功(净额入快照线)
+ok 224 - ㊾ 排行继承:day 业绩=日结净额(同数同源)
+ok 225 - ㊾ 员工端我的业绩:当日行=净额+扣回显式行(负数+单号)
+ok 226 - ㊾ 月净额(hero=目标进度同块;=工资 monthPerfFromCloses 同源)含扣回
+ok 227 - ㊾补 前提:双技师核销单签成(卡 1/3)
+ok 228 - ㊾补 未分配即返还:更正成+次数已回(1→0)
+ok 229 - ㊾补 暂缓:未分配时扣回行不出现(不用默认比例猜)
+ok 230 - ㊾补 重开日结(R1 链)
+ok 231 - ㊾补 分配落定
+ok 232 - ㊾补 真实比例扣回:70/30 → 12600+5400(末位吃余数)
+ok 233 - ㊿ 建单闸:购卡与已有卡核销同单=400
+ok 234 - ㊿ 建单闸:购卡未选核销项目=400(现场购卡=当场核销第1次)
+ok 235 - ㊿ 购卡单建成
+ok 236 - ㊿ 恒等式扩项:total=subtotal(18000)+购卡(54000)=72000
+ok 237 - ㊿ 分行腿:times_card 18000+现金 54000(购卡实收)
+ok 238 - ㊿ 财务红线:perfBase=18000(售卡 54000 不进业绩/积分基数)
+ok 239 - ㊿ 留痕:核销行「第 1/3 次(守护(3次卡) · 现场购卡)」
+ok 240 - ㊿ 签字建卡:守护(3次卡) used=1/3+快照齐+溯源单号
+ok 241 - ㊿ 核销确认收入 18000(购卡 54000=预收负债不写收入行,与充值同构)
+ok 242 - ㊿ 新卡入持卡列表:剩 2/3 可核销
+ok 243 - 裁② 新店默认关(无设置行=false)
+ok 244 - 裁② 关态:购卡 54000 摘出储值可抵(stored=0,offline=54000)
+ok 245 - 裁② 开态:储值余额可全额抵购卡(stored=余额,offline=54000−stored)
+ok 246 - 裁② 回关幂等
+ok 247 - 裁① 日结单列:售卡 1 张 +54000(预收)
+ok 248 - 裁① 日结单列:核销次数与折算合计在场(≥2 次,含 18000×n)
+ok 249 - B1-6 员工可读套餐口:200+label 后端句
+ok 250 - ㋀ A5 员工可读充值选档口:200+label 后端句(充X赠Y)
+ok 251 - ㋀ 异常输入:充值金额 -5 = 400(不静默当没充)
+ok 252 - ㋀ 悬空充值套餐=404
+ok 253 - ㋀ 组级恒等式扩项:total=大项+充值实收
+ok 254 - ㋀ 充值实收摘出储值可抵(offline=30000)+充与赠计入可抵(stored=B0+20000)
+ok 255 - ㋀ 充后余额(预计)=B0+36000−烧掉=16000
+ok 256 - ㋀ 随单充值单建成
+ok 257 - ㋀→㋅ 四行自证在场(前余额/本次充值 实收+赠送/本单抵扣/充后余额·预计)
+ok 258 - ㋀ 财务红线:perfBase=大项(充值 30000 不进业绩/积分基数)
+ok 259 - ㋀ 签署成功(储值烧到充进来的钱:充后口径不 INSUFFICIENT)
+ok 260 - ㋀ sv 三行:recharge+30000(经手=tech1)/bonus+6000(marketing)/consume −(B0+20000)
+ok 261 - ㋀ 签后余额=16000(B0+36000−烧)
+ok 262 - ㋀ 充后余额签字时冻结=16000(快照句「签字时」)
+ok 263 - ㋀ 幂等:重签=400 且 sv 行数不变(充值只入账一次)
+ok 264 - ㋀ 充值不写收入行(本单收入只有耗卡一类,无 30000 充值收入)
+ok 265 - ㋀ 日结冲卡列 Δ=+30000(赠 6000 天然排除;业绩列由 perfBase 断言盖)
+ok 266 - ㋀ 手输充值单建成(无赠):total=档位小计+5000
+ok 267 - ㋀ D54①:改券重建后充值项不丢(total 不变,stored=小计,offline=5000)
+ok 268 - ㋀ 未签撤回=什么都没发生(0 sv 行,余额仍 16000)
+ok 269 - ㋀ D54②:核销单改券后 times_card 腿仍在(18000)且 total 不变
+ok 270 - ㋀ 组合:购卡+充值同单(关态)=stored 0/offline 84000(两摘出叠加)
+ok 271 - ㋁ 单独代充即时到账(201,不等待确认)
+ok 272 - ㋁ 顾客端回执:待确认卡在场(金额/渠道/时间戳齐;bonus 行不进回执)
+ok 273 - ㋁ 流水行带待确认位(needsConfirm=true)
+ok 274 - ㋁ 商家流水标注:顾客未确认(customerConfirmed=false)
+ok 275 - ㋁ 越权:管理员会话打确认口=401
+ok 276 - ㋁ 悬空 id=404
+ok 277 - ㋁ 赠送行不可确认=400(只有充值到账需要确认)
+ok 278 - ㋁ 确认成功(200+confirmedAt)
+ok 279 - ㋁ 幂等:重复确认=200 already,时间戳不变
+ok 280 - ㋁ 确认后:本笔回执卡消失+流水位翻绿(needsConfirm=false)
+ok 281 - ㋁ 商家流水标注解除(customerConfirmed=true)
+ok 282 - ㋁ 随单充值签字即确认(customer_confirmed_at 非空,不进回执)
+ok 283 - ㋁ 护栏仍硬:改账目列照旧 ABORT(豁免仅确认列)
+ok 284 - ㋁ 确认时间戳不可二次改(NULL→值单向一次)
+ok 285 - ㋂ 核销单挂券=不可用+专句「次卡为独立消费,不与优惠叠加」
+ok 286 - ㋂ 核销单券折扣=0,折算价不动(subtotal=total=18000)
+ok 287 - ㋂ 建单带券=400 COUPON_UNUSABLE(不静默按无券建)
+ok 288 - ㋂ 购卡单挂券=不可用+专句
+ok 289 - ㋂ tier=member 折算价不动(18000;次卡与档位无关)
+ok 290 - ㋂ 整单规则不作用于次卡组(无 rule 行,total 仍 18000)
+ok 291 - ㋂ 混组:券吃主项目组 3000,次卡组券=0
+ok 292 - ㋂ 改券链同口径:核销单代选券=400(写方读方不分叉)
+ok 293 - ㋃ D58 未签单不再是 blocker(确认按单独立)
+ok 294 - ㋃ D57 unsignedList 独立下发(3 张全列:顾客/时间/单号/金额齐)
+ok 295 - ㋃ D57 顾客侧列全部未签单(2 张,不止最新)+签署页直达 code
+ok 296 - ㋃ 越权:别人的未签单不可见(uid 那张不在列)
+ok 297 - ㋃ 前提:签掉第一张
+ok 298 - ㋃ 签一张+撤一张后列表归零(签/撤自然消失)
+ok 299 - ㋃ 前提:确认日结(此刻 shU3 仍未签,不挡)
+ok 300 - ㋃ D58 已确认+挂着未签单=不标过期(未签不进账,快照本就齐)
+ok 301 - ㋃ 前提:确认后补签落账
+ok 302 - ㋃ R1 不减防:补签落账即标过期逼重开(快照对账抓 drift)
+ok 303 - ㋄ D60 组级支付=Σ sheet 腿(不再独立重算)
+ok 304 - ㋄ D60 组级腿=sheet 腿拼接(带组内序号)
+ok 305 - ㋄ D60 购卡款组级显式(purchaseCents=54000,不隐身)
+ok 306 - ㋄→㋆ 组内后续单可抵挂充(≤共享余额+充赠 360)
+ok 307 - ㋄ D60 预览承诺=建单落库腿(offline/stored 逐分一致)
+ok 308 - ㋄ D60 购卡显式行(purchaseLine 后端句:名称+「购卡款,预收」)
+ok 309 - ㋄→㋌ D60 组卡自证(2 份确认单+逐张状态行+到店服务项目 label)
+ok 310 - ㋄ D60 组卡购卡/充值显式行(54000/30000)
+ok 311 - ㋄ D60 双单共享余额顺序消耗(Σstored ≤ 余额,不再双份烧)
+ok 312 - ㋄ D60 两张顺序签署都成+余额不透支(≥0)
+ok 313 - ㋅ 四行恒等自证:前余额+充+赠−抵扣=充后(数字逐行可算)
+ok 314 - ㋅ 前余额行=真实前余额
+ok 315 - ㋅ 用了储值的待签单不出「未使用」句
+ok 316 - ㋅ 余额未用句(待签单):「该客有储值余额 X,本单未使用」
+ok 317 - ㋅ 余额未用句(组卡同句)
+ok 318 - ㋅ 已签单不出句(历史单不随活余额漂)
+ok 319 - ㋈ 拍板③顾客口:未签署单发起=400
+ok 320 - ㋈ B9 商家口同闸:未签署单转售后=400
+ok 321 - ㋈ D61 签完带出下一张(groupPendingCount=1+nextCode)
+ok 322 - ㋈ D61 商家出码接续(sign-state 带 nextPendingId)
+ok 323 - ㋈ D61 全签完=0(接续钮消失,回台面)
+ok 324 - ㋈ B1 按钮位后端句:已完成+已签署=start「有疑问,去售后」
+ok 325 - ㋈ B7 顾客发起=201+进度卡(发起原因入留痕链)
+ok 326 - ㋈ B8 涉钱零新径(amountCents 字段不产生账目行)
+ok 327 - ㋈ B5 一单一条进行中(再发起=409)
+ok 328 - ㋈ 越权:别人撤不了我的售后(404)
+ok 329 - ㋈ 异常输入:空描述=400
+ok 330 - ㋈ B6 撤回=转已解决+自动备注「顾客撤回」
+ok 331 - ㋈ B6 结案后再撤=409(幂等面)
+ok 332 - ㋈ B5 结案后可再次发起(重开=新一条留痕)
+ok 333 - ㋈ B6 商家发起的售后顾客不能撤(403)
+ok 334 - ㋈ D59③ 老板开单无技师身份=归当单技师(单技师回落)
+ok 335 - ㋈ D59③ 双技师=空归属(案二拍定:进「未分配」,日结核定=㋉ 专测)
+ok 336 - ㋉ C5 夹具有效(现金≠合计:储值抵了一半)
+ok 337 - ㋉ C5 「已结清 X」=实付现金(与头条同源=Σoffline 腿,不再是结算合计)
+ok 338 - ㋉ D1 单项目单标题回空串(前端沿用服务名,不出「等1项」)
+ok 339 - ㋉ C5 售后行同刀:售后中也是「已结清 现金数」,「总价 合计数」不再裸出
+ok 340 - ㋉ D1修订 加项/自选行不计:单张单(项目+加项)标题=空串(只显服务名)
+ok 341 - ㋉→㋌ D1修订 购卡+核销=一个主项目(购卡不计)=不出「等N项」
+ok 342 - ㋉→㋌ D1修订 双服务一预约两张:标题=「首项目 等2项」(项=主项目数)
+ok 343 - ㋉ D66途中修 双张预约金额=Σ本预约全部已签单 offline(只取最新一张=少一半钱)
+ok 344 - ㋉→㋌ D67③ sheetLinks 逐张原件(服务确认单 1/2、2/2+code 双有)
+ok 345 - ㋉ D59 提示句:待分配行「本单含未归属充值 X,分配业绩时一并核定归属」
+ok 346 - ㋉ D59 提示句随分配销案(核定即闭环,行不再挂)
+ok 347 - ㋉ D59 签字时=未分配(充值行+赠送行 technician_id 皆空)
+ok 348 - ㋉ D59 显式归属悬空技师=400(不许猜也不许悬空)
+ok 349 - ㋉ D59 日结分配这一下一并核定:充值+赠送归份额最高者(70% 技甲)
+ok 350 - ㋉ D59 快照读方同刀(recharge_json 补写同一人+核定时间)
+ok 351 - ㋉ D59 豁免②单向一次(定了归属再改=ABORT)
+ok 352 - ㋉ D59 金额列照旧永锁(豁免不松账目数字)
+ok 353 - ㋉ D59 店长显式点名优先于份额(点 30% 技乙=归技乙)
+ok 354 - ㋉ 红线:核定归属≠计业绩(Σ分成=档位小计,不含充值 300)
+ok 355 - ㋔ 根子:同一 openid 在两家店各有一行 users(唯一性带租户,改前插不进第二行)
+ok 356 - ㋔ 隔离①储值余额:两店各一套(A 500 / B 200)
+ok 357 - ㋔ 隔离②券:A 店 1 张、B 店 2 张,且券名不串
+ok 358 - ㋔ 隔离③卡包角标按店算(A=1 / B=2)
+ok 359 - ㋔ 隔离④订单列表按店算(各自只看得到自己店的单)
+ok 360 - ㋔ 隔离⑤累计消费/积分/成长值按店算(同额同店口径,互不相加)
+ok 361 - ㋔ 隔离⑥到店次数按店算(各 1 次,不是 2 次)
+ok 362 - ㋔ 隔离⑦会员等级按店算(各店独立门槛与消费)
+ok 363 - ㋔ 反向:A 店再消费+再充值,B 店五类数字一分不动
+ok 364 - ㋔ 反向:A 店自己的数字确实动了(证明验的不是死数据:储值 500→600、单 1→2、到店 1→2 天)
+ok 365 - ㋔ 商家侧:同一个微信在各店的客户档案互不可见(A 店只有 A 行,B 店只有 B 行)
+ok 366 - ㋑ D69主刀:完成但没开单=「本单未产生结算单」(零「已结清」,零预约标价)
+ok 367 - ㋑ 五读方一致(没单时):累计消费/积分/成长值全 0,订单卡也不说收过钱
+ok 368 - ㋑ 未签单≠没开单:完成+待签=「服务确认单待签字」
+ok 369 - ㋑ 已结清句=实付现金(与单据头条同源)
+ok 370 - ㋑ 五读方齐动:签署那一刻 累计消费/积分/成长值/到店次数 一起算数
+ok 371 - ㋑ 取消单金额句后端唯一(「总价 ¥X」,前端零拼串)
+ok 372 - ㋑ 待到店单金额句后端唯一(定金/到店应付整串下发)
+ok 373 - ㋑ 顾客端公开 /stores 下发今日营业句(位面对:顾客读的是公开口不是 admin 口)
+ok 374 - ㋑ 反例:今天特殊休息 → 「今日休息」且 openNow=false(不再拿每周表说营业中)
+ok 375 - ㋑ 反例:今天特殊时段 → 用特殊时段算营业中(特殊日优先于每周表)
+ok 376 - ㋑ 撤掉特殊日 → 回到每周表(幂等面:删掉就恢复,不留残影)
+ok 377 - ㋑ 零空位:每张订单卡都有后端金额句(实际应付 或 金额句)
+ok 378 - ㋋ 裁B 写方:无预约开单=自动挂即时预约(bookingId 非空)
+ok 379 - ㋋ 裁B 即时预约=COMPLETED+settlement_instant+归卡主
+ok 380 - ㋋ 裁B 顾客订单列表见即时单(已结清句在)
+ok 381 - ㋋ 同源常驻:全库零无挂靠结算单(每组必有预约)
+ok 382 - ㋋ 裁A 三读方同数=2(签署组+完成预约同日=1;后日完成+1;取消不算)
+ok 383 - ㋋ 裁C 售后单上日历(afterSales 标+「售后」徽标句,不再蒸发)
+ok 384 - ㋋ 详情逐张卡:sheets=2 张各带五步账+头条
+ok 385 - ㋋→㋌ 组汇总行=「到店服务项目(2)」且 Σ各张头条=列表已结清同数
+ok 386 - ㋌ D68 口径夹具有效:组内主项目 2 行 + 自选加项 1 行(N 必须只数主项目)
+ok 387 - ㋌ D68 N=主项目数(自选加项不进 N):汇总行=(2)、标题=等2项
+ok 388 - ㋌ D68 文案:详情汇总行「到店服务项目(N)」不出「组/张」内部话术
+ok 389 - ㋌ D68 文案:逐张行=「服务确认单 n/N · 状态」(「第 n/N 张」销案)
+ok 390 - ㋌ D68② 原件图源:已签署张带 snapshotUrl(悬浮查看器图源),未签署张为空
+ok 391 - ㋌ D68 文案:组卡汇总行同句「到店服务项目(2)」+组说明不出「整组单据(共 N 张)」
+ok 392 - ㋌ D68 单主项目单:无汇总行 label + mainItemCount=1
+ok 393 - ㋍ D68③ 商家口 /snapshots:id 与 code 都能点,份数=该组签署单张数(同源)
+ok 394 - ㋍ D68③ 商家口份数≡顾客端 payment.sheets 份数(任一入口取到的原件份数相同)
+ok 395 - ㋍ D68③ 逐份句与图源同一出口(label/snapshotUrl 与顾客端逐字一致)
+ok 396 - ㋍ D68③ 点哪一份就从哪一份开(startIndex 落在被点那份上)
+ok 397 - ㋏ 快照接口 Content-Type=image/png(真机 <image> 认的格式)
+ok 398 - ㋏ 快照 PNG 尺寸>0 且是真实单据比例(非空图、非正方形留白)
+ok 399 - ㋏ 二次取图=同一张(落盘缓存,签署凭证转一次永久复用)
+ok 400 - ㋏ 换图源不动契约:每组份数与逐份句原样(snapshotUrl 路径不变)
+ok 401 - ㋐ A2 卡包三类聚合(次卡/券/储值 同屏,后端一次给全)
+ok 402 - ㋐ 补件④ 角标数=页内可用张数同源(次卡+券)
+ok 403 - ㋐ 案三 次卡=买的:sourceLabel 空串(不出小字)
+ok 404 - ㋐ 案三 券=店家赠:sourceLabel「店家赠送」
+ok 405 - ㋐ 连带裁 积分兑换券仍在券类里(不是第四类),只是小字=「积分兑换」
+ok 406 - ㋐ 补件③ 门槛句唯一出口:卡包句 ≡ 选券面板句(逐字一致,不另写文案)
+ok 407 - ㋐ 补件② 次卡剩余三读方同数同源(卡包/持卡口/商家客户档案)
+ok 408 - ㋐ B2-2 「撤出商城」的套餐不出现在顾客端商城
+ok 409 - ㋐ B2-2 勾了上架即出现(与商家端同一列 mall_visible,不另造字段)
+ok 410 - ㋐ B2-4 次卡卡片:次数/单次折算/有效期齐(顾客买前看得到)
+ok 411 - ㋐ B3-1 支付未接通:按钮句=「到店购买」(后端唯一句)
+ok 412 - ㋐ 补件① 说明句租户中立(不枚举支付方式:无微信/支付宝/现金字样)
+ok 413 - ㋐ B4-2 涉钱零新径:商城/卡包口不产生任何账目行
+ok 414 - ㋐ 裁定A 资产页卡包行 ≡ 卡包页(次卡/券/合计三个数逐个同源)
+ok 415 - ㋐ 裁定A 资产页储值行 ≡ 卡包储值行(同一读方,分不出两个数)
+ok 416 - ㋐ 裁定A 资产页积分行 ≡ 积分页余额(同一出口 pointsBalance)
+ok 417 - ㋐ 补件④ 角标 ≡ 卡包可用张数 ≡ 资产页卡包行合计(一个数三处用)
+ok 418 - ㋐ 裁定A 资产口需登录(未登录 401)
+ok 419 - ㋐ E8 空态:新档案三类全空=空态句在场且角标 0
+ok 420 - ㋐ E8 异常输入:商城口带无效参数照常 200(只读口不炸)
+ok 421 - ㋐ 裁定② 商城归一:次卡挂在服务大类分区下,不单开商城
+ok 422 - ㋐ 裁定② 充值套餐与次卡同屏可比(同一 items 一次给全)+ 顶部筛选后端给
+ok 423 - ㋐ 越权:别人 token 读到的是他自己的卡包(拿不到本人卡券)
+ok 424 - ㋍ D68③ 越权面:别店老板 token 拿不到本店原件(404)
+ok 425 - ㋆ 五步资金时序全组合矩阵 40 格全绿(预览=建单腿=组卡=五步模型)
+ok 426 - ㋆ 店主基准格:0 余额+挂充+勾抵扣=868 式结构(84000/20000)
+ok 427 - ㋅ D62 后端:小写搜到大写存档+trim
+ok 428 - ㊶ D50 会员与营销页原生弹窗=0(全部页内表单弹层)
+ok 429 - ㊶ D50 弹层组件在场(openFormModal:Esc/遮罩/保存取消)
+ok 430 - ㊶ D50 admin.js 原生弹窗总数 ≤ 基线 19(新增代码禁 prompt/confirm/alert)
+ok 431 - A5 零读方:网页两端+签署页 0 处 /admin/recharge-tiers 调用
+ok 432 - A5 零读方:小程序全目录 0 处 /admin/recharge-tiers 调用(防复活)
+ok 433 - ㊷ D51 筛选两项在场(售后中/售后完成)+判定唯一实现
+ok 434 - ㊷ D51 旧「售后=需关注」错误映射已清(店主找不到售后单的根因)
+ok 435 - ㊷ D51 需关注含售后中+列表卡徽标渲染在场
+ok 436 - ㊷ v1.2 五页签:积分商城独立第④签(mall 页签+容器+切换逻辑)
+ok 437 - ㊷ 弹层勾选框与文字同一行(fm-check 横排,组件级)
+ok 438 - ㊸ D52 网页全部预约日期组倒序(最近日期优先)
+ok 439 - ㊸ D52 商家小程序全部订单日期组倒序在场(双端同口径锚)
+ok 440 - B1 结算页次卡大类 wiring 在场
+ok 441 - B1-6 现场购卡入口 wiring 在场(选套餐+三态互斥+sheet 字段)
+ok 442 - ㋀ B3-1 结算页随单充值 wiring 在场(rvDraft+组①字段+选档源=recharge-packages)
+ok 443 - ㋀ B3-1 面板挂单随签(不再即时 POST 代充)+三行分行渲染在场
+ok 444 - ㋀ B3-1 签署页三行分行在场(sign.html=双端同构一份实现)
+ok 445 - ㋁ 顾客端回执卡+确认钮 wiring 在场
+ok 446 - ㋂ D55 挂充值不再联动勾储值(强制 useBalance:true 已删)
+ok 447 - ㋂ D55 0 额支付腿不得勾选态(储值/定金 ✓ 与金额同条件)
+ok 448 - ㋂ D56 推送校验认次卡组内容(timecardId/purchasePackageId+组内项目)
+ok 449 - ㋂ D22 护栏类定义补核销行(wanted 含 timecardServiceId)
+ok 450 - ㋂ 拍板 UI:次卡组隐藏价格体系整排+独立消费句;整单规则/档位不发次卡组
+ok 451 - ㋃ D57 商家日结未签可点行 wiring(mixin goUnsigned+两 wxml 卡=出码重推)
+ok 452 - ㋃ D57 顾客待签置顶卡 wiring(全部未签单+去签字)
+ok 453 - ㋃ D57 网页日结未签行=签署页链接(双端同刀)
+ok 454 - ㋄ D60 单据预览:组卡自证+购卡/充值显式行+应收 label 后端定
+ok 455 - ㋄→㋇ D65 签署页/快照:flow 一条五步账+头条「本单到店支付」(「合计」不再当头条)
+ok 456 - ㋅ D62 前端四搜索口大小写不敏感(客户/代充选客/工作台/开单找客)
+ok 457 - ㋆ D64 前端映射意愿唯一+储值行显隐含挂充
+ok 458 - ㋆→㋌ D64 组卡 cover 行+出码「服务确认单 n/N」+预告句(后端句)
+ok 459 - ㋇ D65-b 单张金额一律头条化(组卡逐张/日结未签行/顾客待签卡)
+ok 460 - ㋈ A2/A3/A6 详情页:flow 卡+「本单未产生结算单」空态+旧实付行消亡
+ok 461 - ㋈ A4/A5/B2 详情页:留档无则不出+售后钮后端句+同屏表单(问题描述必填)
+ok 462 - ㋈ B6 撤回入口+D3 进度卡在场(顾客小程序)
+ok 463 - ㋈ C 组网页同构(徽标/flow 卡/发起表单/待签列表)
+ok 464 - ㋈→㋌ E 组连签流 wiring(签署页接续钮+商家出码接续)
+ok 465 - ㋈ D3 线下行非勾选样式「到店收 · 差额自动」
+ok 466 - ㋉ D1 wiring:标题句双端直渲+映射层透传
+ok 467 - ㋑ wiring:小程序订单卡/近期消费零 servicePrice 冒充金额(0 残留)
+ok 468 - ㋑ wiring:网页订单卡与近期消费同一句源(零「实付定金」前端回落)
+ok 469 - ㋑ wiring:后端两个分支都给金额句(没单也说话,不留空位让前端猜)
+ok 470 - ㋊ D67② 签署单卡小字无 Emoji(✍ 双端扫尽:mini+web 顾客端)
+ok 471 - ㋊→㋌ 逐张卡+原件入口双端 wiring(mini sheets 循环+openViewer;web sheets 循环+lightbox)
+ok 472 - ㋊ D67① 全组签完回台面(relaunch workbench,非退一层)
+ok 473 - ㋊ D59 提示句双端 wiring(mini rechargeNote+web rechargeUnassignedText)
+ok 474 - ㋋ wiring 详情逐张卡双端(mini sheets 循环+组汇总;web 同构)
+ok 475 - ㋋ wiring 裁C 台面售后蓝徽标(mini as-blue)
+ok 476 - ㋋ wiring 裁A/E 三读方同一出口(visitDaysCount 三处调用)
+ok 477 - ㋌ D68① 连签=替换式导航(location.replace;续签不再用压栈的 <a href>)
+ok 478 - ㋌→㋍ D68② 悬浮查看器(小程序:顾客端详情挂共用组件+openViewer;原件不再跳页压栈)
+ok 479 - ㋌→㋍ D68② 悬浮查看器(网页:顾客端调共用模块 openSnapViewer,入口 data-snap-open)
+ok 480 - ㋍ D68③ 共用组件在场(浮层+swiper+双箭头+首末隐边+页码)
+ok 481 - ㋍ D68③ 商家端日结入口走同一浮层(mixin 调 /snapshots + snapViewer,不再塞排版弹层)
+ok 482 - ㋍ D68③ orders 页挂共用查看器组件
+ok 483 - ㋍ D68③ daily-close 页挂共用查看器组件
+ok 484 - ㋍ D68③ finance 页挂共用查看器组件
+ok 485 - ㋍ D68③ order-detail 页挂共用查看器组件
+ok 486 - ㋍ D68③ 跳整页看原件零残留(pages/sign?snapshot= 全仓消亡)
+ok 487 - ㋏ L2 全仓 image 位零 SVG 图源(图标/快照/笔迹全部 PNG,0 残留)
+ok 488 - ㋐→裁定① A 组 wiring:卡包=券+次卡两类(储值行已撤)+来源小字条件渲染
+ok 489 - ㋐ 裁定② wiring:卡包次卡区「去商城」带定位参数(双端,不新建页)
+ok 490 - ㋐→勘误 A1 wiring:「我的」页卡包入口+角标(0 不渲染;名字与页归一)
+ok 491 - ㋐ B1-1 wiring:储值页=充值套餐唯一出口(去充值→商城)
+ok 492 - ㋐ B3 wiring:商城按钮句与说明句全用后端字段(前端不拼两套话)
+ok 493 - ㋐ D 组 wiring:网页顾客端卡包/商城同构(视图+菜单+同源字段)
+ok 494 - ㋐ 待拍②→勘误:网页「积分商城后续接入」旧句零残留(积分保持原有入口,不降级不塞总页)
+ok 495 - ㋐ C5 网页财务帮助文案不再教人点「耗卡」
+ok 496 - ㋐ 勘误 券包与卡包不并存(我的券包入口与页面退休,全仓零引用)
+ok 497 - ㋐ 勘误 命名归一:「我的资产」页退休,卡包一名到底(菜单格与黑卡块同名同页)
+ok 498 - ㋐ 勘误 黑卡三块可点直达(积分→积分页 / 卡包→卡包页 / 储值→储值页,不落总页)
+ok 499 - ㋐ 勘误 等级徽章恢复直达权益页(黑卡不变哑)
+ok 500 - ㋐ 勘误 网页同构:菜单格改名卡包+会员卡三块可点(券块改名卡包)
+ok 501 - ㋐ 裁定B payment-success 路径名消亡(app.json 与跳转都指 booking-done)
+ok 502 - ㋐ 补件① 顾客可见话术零写死支付方式(租户中立,0 残留)
+ok 503 - ㋐ §十-2 过渡期红线:全仓零「支付成功」字样
+ok 504 - ㋐ D69族:serializeUser 不再下发恒 0 的 couponCount(两个后端同刀)
+ok 505 - ㋐ D69族:双端黑卡「卡包」格零 couponCount 回落(0 残留)
+ok 506 - ㋐ D69族:未拿到卡包数时显示「—」而不是猜 0(小程序黑卡格)
+ok 507 - ㋐ D69族:网页黑卡格同源同刀(有卡包才出数,没有出「—」,并按需拉一次)
+ok 508 - ㋐ 裁定②:网页商城筛选选中态有真样式(不是只挂 class 看不出来)
+ok 509 - ㋑ 今日营业句挂在顾客读的公开 /stores 上(只加 admin 口=顾客拿不到)
+ok 510 - ㋑ 今日营业句后端唯一(特殊日优先·门店时区),前端零计算零回落常规营业时间
+ok 511 - ㋑ 订单详情零前端自算价(Σitems / service.price 三重回落销案)
+ok 512 - ㋑ 次卡可核销项目句 + 商城分区名 + 待签卡标题:三处均后端给,前端零拼串
+ok 513 - ㋓ 商家网页端零写死旗舰店名/租户 id(剥注释后 0 残留)
+ok 514 - ㋓ 商家端店名走唯一出口 storeDisplayName(拿不到显示「—」,不顶别家店)
+ok 515 - ㋓ 商家端币种不冒充 CAD(与小程序 storeclock 同刀)
+ok 516 - ㋓ globalData.appName 死字段已删(零使用方却写死旗舰店名=下次误用的种子)
+ok 517 - ㋔ 会员数据没拿到显示「—」不显示 0(黑卡积分/储值/累计消费/到店/成长值五处)
+ok 518 - ㋓ 顾客端 401 自愈:静默重登一次并重放(商家端 kickToLogin 之外的另一半)
+ok 519 - ㋓ 显示名修正走 ops 脚本(只改 tenants.name/stores.name,不动业务数据)
+ok 520 - ㋒ 裁定④:顾客端全仓零硬编码租户名(0 残留)
+ok 521 - ㋒ 裁定②:默认店只能来自部署配置项,多租户构建为空(不许把店名写回代码)
+ok 522 - ㋒ 裁定①:租户唯一出口=记忆 → 配置 → 空(小程序 currentTenant 不再兜底任何店)
+ok 523 - ㋒ 裁定①:无门店上下文时不发数据请求,先送去选店(双端同刀,/shops 放行)
+ok 524 - ㋒ 裁定⑤:网页无租户=「请选择门店」引导屏(不是白屏,也不是随便进一家店)
+ok 525 - ㋒ 网页门店 id 不再写死旗舰店(由本店 /stores 下发)
+ok 526 - ㋑ 映射层零写死旗舰店兜底(店名/营业时间/时区/店介绍;多租户下那是别人家的事实)
+ok 527 - ㋑ 映射层透传 todayHours(后端加了字段而映射层裁掉=顾客拿不到,toMiniBooking 同款教训)
+ok 528 - ㋑ 币种红线延伸:缓存未到位不冒充 CAD $(空币符等缓存,不显示别家币种)
+ok 529 - ㋑ 状态/定金态不硬塞默认(未知状态不错分到「待服务」,拿不到不猜「无定金」)
+ok 530 - ㋑ 「couponCount」全仓永久退役(真值出口改名 couponRowCount,防被当回落源复活)
+ok 531 - ㋑ 夹具自证:演示铺单的已完成单连带开单+签署(且回填只碰 demo-seed、生产不跑)
+ok 532 - ㋏ 图标资源已出 PNG(23 个 icon 同名 .png 在场)
+ok 533 - ㋎ 真机件①:本机开发绑 0.0.0.0(手机上的 127.0.0.1 是手机自己,连不到 Mac)
+ok 534 - ㋎ 真机件①:启动日志给出真机可用地址(局域网 IP 探测)
+ok 535 - ㋎ 真机件①:小程序按运行环境自动切 base(devtools=回环 / 真机=devhost 局域网 IP)
+ok 536 - ㋎ 真机件①:devhost 由一键脚本写入(换网络不改代码)
+ok 537 - ㋎ 真机件②:演示白名单生产结构性不成立(DEMO_LOGIN_ALLOWED = !IS_PRODUCTION && env)
+ok 538 - ㋎ 真机件②:演示登录/注册/种子全走同一判据(裸读环境变量零残留)
+ok 539 - ㋍ D68③ 网页端共用模块(admin+customer 同一份:两页都加载、admin 不再 window.open 单张)
+ok 540 - ㋌→㋍ D68②补 两侧箭头键双端(小程序共用组件 prev/next+首末隐边;网页共用模块 arrowCss+条件渲染)
+ok 541 - ㋌ D68 L2 文案扫尽:用户可见面零「组/张」内部话术(0 残留)
+ok 542 - ㋌ 护栏:最新一条单行选取带 rowid 兜底(同毫秒并列不取错行,0 残留)
+ok 543 - ㋅ D63 余额未用句渲染面(组卡+签署页)+四行自证键
+ok 544 - ㋄ D60 结算页:购卡显式行+L3① 行内小注定稿句
+ok 545 - ㋁ 商家流水「顾客未确认」标注在场
+ok 546 - ㋁ A5 网页门店设置充值档位块已删(msAddTier 零残留)+指路句在
+ok 547 - ㊹ 网页「转售后」钮:仅已完成且已签署(listBadgeKind 判据=后端徽标唯一持有)+弹层在场
+ok 548 - ㊹ 商家小程序「转售后」前置:sheets 含 signed/amended 才显示
+ok 549 - ㊾ 尾①人话句在场:纯售后返还过期提示(后端句唯一持有,两端直渲)
+ok 550 - ㊾ 网页日结显式行渲染在场(dc-deduct-list+含售后扣回标)
+ok 551 - ㊾ 小程序日结显式行渲染在场(deducts 映射+售后扣回卡)
+ok 552 - ㊾ 小程序我的业绩显式行渲染在场(deductions 映射+扣回行)
+ok 553 - ㊹ 后端 PATCH AFTER_SALES 落 status_history(发起原因唯一持有链)
+ok 554 - ㊼ 前端下拉+存量标红在场(savePackage select/legacyGroupBad/danger)
+
+爽约处置+售后完成态回归通过:554 项断言全绿
+== 自动回归专用实例 (4129) ==
+apps/api/run-all-tests.sh: line 73: 68254 Terminated: 15          PORT=4128 node local-server.mjs > /tmp/ll-ci-main.log 2>&1
+ok 1 - scenario1: conversation created with AI reply
+ok 2 - scenario1: manual reply keeps human_active
+ok 3 - scenario1: after cooldown elapsed AI auto-returns and replies
+ok 4 - scenario1: conversation no longer human_active
+ok 5 - scenario2: take-over sets human_active
+ok 6 - scenario2: AI stays silent after takeover without staff reply
+ok 7 - scenario2: conversation remains human_active
+[auto-return] all 7 checks passed
+== test-schema-consistency ==
+ok 1 - 全新库 schema 已 dump
+ok 2 - 没有表消失
+ok 3 - 没有列消失
+ok 4 - 老表上新增的列都写了 try/catch ALTER 迁移
+   (新增表 9 张:after_sales_events、archive_bind_tokens、coupon_grant_logs、deposit_disposals、deposit_receipts、identity_merge_queue、member_timecards、platform_categories、settlement_sign_tokens —— CREATE TABLE IF NOT EXISTS 对老库照样建,放行)
+   (老表新增列 33 个,迁移已写全:bookings.after_sales_result、bookings.after_sales_status、bookings.no_show_at、coupon_grants.grant_kind、coupon_grants.grant_reason、coupon_grants.grant_source、coupon_grants.granted_by、coupon_grants.revoke_reason、coupon_grants.revoked_at、coupon_grants.settlement_code、coupon_grants.settlement_id、coupons.is_custom、coupons.scope_categories_json、deposit_retains.expires_at、deposit_retains.source、membership_packages.mall_visible、membership_packages.project_group、membership_packages.valid_days、services.addon_group、services.is_timecard、services.storefront、settlements.coupon_discount_cents、settlements.coupon_grant_id、settlements.coupon_id、settlements.coupon_name、settlements.coupon_selected_at、settlements.coupon_selected_by、settlements.perf_base_cents、settlements.purchase_json、settlements.recharge_json、settlements.timecard_id、settlements.timecard_nth、stored_value_transactions.customer_confirmed_at)
+   基线更新方式:node test-schema-consistency.mjs --update
+
+结构一致性回归通过:4 项断言全绿
+== test-perf-base-migration ==
+ok 1 - 单 A 带定金:档位小计 ¥200 / 应收 ¥150
+ok 2 - 单 B 无定金无券:档位小计 = 应收 ¥200
+ok 3 - 日结已确认
+ok 4 - 旧口径已还原:单 A 基数 = 应收 ¥150
+ok 5 - 旧口径下单 B 基数本来就 = 档位小计(无定金无券)
+ok 6 - ① 迁移后 perf_base ≡ 档位小计(全库一张不落)
+ok 7 - ① 带定金的单基数升到档位小计 ¥200
+ok 8 - ① 分成按原比例重算且合计正好等于新基数
+ok 9 - ② 无定金无券的单迁移前后逐分不变
+ok 10 - 日结快照跟着刷新:甲 = 14000 + 20000 = ¥340
+ok 11 - 日结快照跟着刷新:乙 = ¥60
+ok 12 - 排行与刷新后的日结同源一致
+ok 13 - 迁移幂等:再跑一遍数字不动
+
+分成基数迁移回归通过:13 项断言全绿
+== 租户隔离双实例 (4128+4131) ==
+apps/api/run-all-tests.sh: line 87: 68494 Terminated: 15          PORT=4129 HUMAN_REPLY_COOLDOWN_MINUTES=0 node local-server.mjs > /tmp/ll-ci-4129.log 2>&1
+ok 1 - instance A runs as lucky-luxe
+ok 2 - instance B runs as tenant-iso-b
+ok 3 - tenant A entry created
+ok 4 - tenant B cannot see tenant A entries
+ok 5 - tenant B AI does not answer with tenant A knowledge
+ok 6 - tenant A AI answers with its own knowledge
+ok 7 - tenant A cannot see tenant B entries
+ok 8 - tenant B AI blocked after its own disable
+ok 9 - tenant A AI unaffected by tenant B disable
+ok 10 - tenant A deposit fact unaffected by tenant B change
+[tenant-isolation] all 10 checks passed
+
+✅ 全部 42 个套件通过
+apps/api/run-all-tests.sh: line 33: 68669 Terminated: 15          PORT=4128 node local-server.mjs > /tmp/ll-ci-a.log 2>&1
+apps/api/run-all-tests.sh: line 22: 68708 Terminated: 15          PORT=4131 DEFAULT_TENANT_ID=tenant-iso-b node local-server.mjs > /tmp/ll-ci-b.log 2>&1
+== 已把店主的本地服务(4128)重新拉起来 ==

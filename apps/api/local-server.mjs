@@ -524,8 +524,8 @@ function setupDatabase() {
       display_name TEXT NOT NULL,
       phone TEXT,
       email TEXT,
-      wechat_open_id TEXT UNIQUE,
-      google_id TEXT UNIQUE
+      wechat_open_id TEXT,
+      google_id TEXT
     );
     CREATE TABLE IF NOT EXISTS user_identities (
       id TEXT PRIMARY KEY,
@@ -537,7 +537,6 @@ function setupDatabase() {
       phone TEXT,
       created_at TEXT NOT NULL,
       updated_at TEXT NOT NULL,
-      UNIQUE (provider, provider_user_id),
       FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
     );
     CREATE INDEX IF NOT EXISTS idx_user_identities_user_id ON user_identities(user_id);
@@ -5490,29 +5489,40 @@ function userBookingStats(userId, tenantId = DEFAULT_TENANT_ID) {
 }
 
 // 统一身份解析（留接口纪律 #4）：任何渠道身份 → 内部用户。未来微信客服/企微/网页渠道都走这两个函数。
-function resolveUserByIdentity(provider, providerUserId) {
+/* 会员=用户×店:身份解析必须带租户 —— 不带就会把 A 店那一行认成 B 店的顾客(跨店串号根子)。
+   tenantId 省略时按当前请求租户;显式传 null 表示「跨租户找一次」(仅历史兼容路径用)。 */
+function resolveUserByIdentity(provider, providerUserId, tenantId = currentTenantId()) {
   if (!provider || !providerUserId) return null
+  if (tenantId === null) {
+    return db.prepare(`
+      SELECT users.* FROM user_identities
+      JOIN users ON users.id = user_identities.user_id
+      WHERE user_identities.provider = ? AND user_identities.provider_user_id = ?
+    `).get(provider, providerUserId) || null
+  }
   return db.prepare(`
     SELECT users.* FROM user_identities
     JOIN users ON users.id = user_identities.user_id
-    WHERE user_identities.provider = ? AND user_identities.provider_user_id = ?
-  `).get(provider, providerUserId) || null
+    WHERE user_identities.provider = ? AND user_identities.provider_user_id = ? AND users.tenant_id = ?
+  `).get(provider, providerUserId, tenantId) || null
 }
 
-function resolveUserByUnionId(unionId) {
+function resolveUserByUnionId(unionId, tenantId = currentTenantId()) {
   if (!unionId) return null
   return db.prepare(`
     SELECT users.* FROM user_identities
     JOIN users ON users.id = user_identities.user_id
-    WHERE user_identities.union_id = ?
+    WHERE user_identities.union_id = ? AND users.tenant_id = ?
     ORDER BY user_identities.created_at ASC
-  `).get(unionId) || null
+  `).get(unionId, tenantId) || null
 }
 
 function upsertUserIdentity({ userId, provider, providerUserId, unionId = '', email = '', phone = '' }) {
   if (!userId || !provider || !providerUserId) return
   const now = iso(new Date())
-  const existing = db.prepare('SELECT id FROM user_identities WHERE provider = ? AND provider_user_id = ?').get(provider, providerUserId)
+  // 一店一行:同一 openid 在每家店各挂一行(唯一键=租户+provider+providerUserId)
+  const ownerTenant = (db.prepare('SELECT tenant_id FROM users WHERE id = ?').get(userId) || {}).tenant_id || currentTenantId()
+  const existing = db.prepare('SELECT id FROM user_identities WHERE provider = ? AND provider_user_id = ? AND tenant_id = ?').get(provider, providerUserId, ownerTenant)
   if (existing) {
     db.prepare(`
       UPDATE user_identities
@@ -5523,9 +5533,9 @@ function upsertUserIdentity({ userId, provider, providerUserId, unionId = '', em
     return
   }
   db.prepare(`
-    INSERT INTO user_identities (id, user_id, provider, provider_user_id, union_id, email, phone, created_at, updated_at)
-    VALUES (?, ?, ?, ?, NULLIF(?, ''), NULLIF(?, ''), NULLIF(?, ''), ?, ?)
-  `).run(randomId('identity'), userId, provider, providerUserId, unionId, email, phone, now, now)
+    INSERT INTO user_identities (id, user_id, provider, provider_user_id, union_id, email, phone, created_at, updated_at, tenant_id)
+    VALUES (?, ?, ?, ?, NULLIF(?, ''), NULLIF(?, ''), NULLIF(?, ''), ?, ?, ?)
+  `).run(randomId('identity'), userId, provider, providerUserId, unionId, email, phone, now, now, ownerTenant)
 }
 
 function serializeBooking(row, lang = 'zh') {
@@ -6130,9 +6140,12 @@ async function signInWechatMiniUser(body) {
   }
   const incomingDisplayName = String(body.displayName || '').trim()
   const phone = String(body.phone || '').trim()
-  const identity = resolveUserByIdentity('wechat_miniprogram', data.openid)
-  // unionid 跨端匹配：同一微信用户从公众号/企微等其他端已注册过时，认成同一个人而不是新建。
-  const byUnionId = !identity && data.unionid ? resolveUserByUnionId(data.unionid) : null
+  /* 会员=用户×店:这一整段的身份匹配都按**进的是哪家店**来找;
+     找不到就在这家店新建一行(同一个微信在每家店各一份档案,互不相干)。 */
+  const loginTenantEarly = validTenantId(body.tenantId)
+  const identity = resolveUserByIdentity('wechat_miniprogram', data.openid, loginTenantEarly)
+  // unionid 跨端匹配：同一微信用户从公众号/企微等其他端已注册过时（**同一家店内**），认成同一个人而不是新建。
+  const byUnionId = !identity && data.unionid ? resolveUserByUnionId(data.unionid, loginTenantEarly) : null
   /* 轻档案按手机号认领(《待办总方案》§3.2 新客扫码签):
      店里给电话预约的临时新客建的是「轻档案」(有姓名+手机号,没绑微信)。
      她当场扫码签字、微信授权手机号时,要认成**同一个人**并绑上,而不是新开一个号 ——
@@ -6146,15 +6159,17 @@ async function signInWechatMiniUser(body) {
       WHERE u.tenant_id = ? AND u.phone = ?
         AND (u.wechat_open_id IS NULL OR u.wechat_open_id = '')
         AND NOT EXISTS (SELECT 1 FROM user_identities i WHERE i.user_id = u.id)
-    `).all(currentTenantId(), phone)
+    `).all(loginTenantEarly, phone)
     if (candidates.length === 1) claimed = candidates[0]
   }
-  const existing = identity || byUnionId || claimed || db.prepare('SELECT * FROM users WHERE wechat_open_id = ?').get(data.openid)
+  // openid 直查同样带租户:不带就会把 A 店那一行认成 B 店顾客(跨店串号根子)
+  const existing = identity || byUnionId || claimed
+    || db.prepare('SELECT * FROM users WHERE wechat_open_id = ? AND tenant_id = ?').get(data.openid, loginTenantEarly)
   let user = existing
   if (!user) {
     const id = randomId('user')
     const displayName = isGenericDisplayName(incomingDisplayName, id) ? displayNameForUserId(id) : incomingDisplayName
-    db.prepare('INSERT INTO users (id, display_name, phone, wechat_open_id) VALUES (?, ?, NULLIF(?, \'\'), ?)').run(id, displayName, phone, data.openid)
+    db.prepare('INSERT INTO users (id, display_name, phone, wechat_open_id, tenant_id) VALUES (?, ?, NULLIF(?, \'\'), ?, ?)').run(id, displayName, phone, data.openid, loginTenantEarly)
     user = db.prepare('SELECT * FROM users WHERE id = ?').get(id)
   } else {
     const nextDisplayName = isGenericDisplayName(incomingDisplayName, user.id) ? user.display_name : incomingDisplayName
@@ -10937,8 +10952,9 @@ function signStateOf(settlement) {
 function claimUserByOpenId({ tenantId, userId, provider = 'wechat_miniprogram', providerUserId, settlementCode = '', unionId = '' }) {
   const target = db.prepare('SELECT * FROM users WHERE id = ? AND tenant_id = ?').get(userId, tenantId)
   if (!target) throw apiError(404, 'NOT_FOUND', '找不到这份顾客档案。')
-  const boundRow = db.prepare('SELECT user_id FROM user_identities WHERE provider = ? AND provider_user_id = ?').get(provider, providerUserId)
-    || db.prepare('SELECT id AS user_id FROM users WHERE wechat_open_id = ?').get(providerUserId)
+  // 先看**本店**有没有绑过(多租户下同一 openid 每店各一行,全局查会取到别店那行)
+  const boundRow = db.prepare('SELECT ui.user_id FROM user_identities ui JOIN users u ON u.id = ui.user_id WHERE ui.provider = ? AND ui.provider_user_id = ? AND u.tenant_id = ?').get(provider, providerUserId, tenantId)
+    || db.prepare('SELECT id AS user_id FROM users WHERE wechat_open_id = ? AND tenant_id = ?').get(providerUserId, tenantId)
   if (boundRow && boundRow.user_id && boundRow.user_id !== userId) {
     const other = db.prepare('SELECT tenant_id FROM users WHERE id = ?').get(boundRow.user_id)
     // 只有「本店另一档案」才是冲突;别家店的同一个微信是正常的(多租户各自建档)
@@ -16844,7 +16860,6 @@ try {
       phone TEXT,
       created_at TEXT NOT NULL,
       updated_at TEXT NOT NULL,
-      UNIQUE (provider, provider_user_id),
       FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
     );
     CREATE INDEX IF NOT EXISTS idx_user_identities_user_id ON user_identities(user_id);
@@ -18155,6 +18170,68 @@ db.exec(`
       OR (OLD.snapshot_at IS NOT NULL AND (OLD.snapshot_url IS NOT NEW.snapshot_url OR OLD.snapshot_inline IS NOT NEW.snapshot_inline)))
   BEGIN SELECT RAISE(ABORT, 'signed settlement is immutable; use settlement_amendments'); END;
 `)
+
+/* 🔴 会员=用户×店:唯一性带租户维度(店主 2026-08-23「跨店串号检测批」查明的根子)。
+   原状:users.wechat_open_id / google_id 与 user_identities(provider, provider_user_id) 都是**全局** UNIQUE。
+   于是同一个微信在 B 店**插不进第二行**,登录时按 openid 直查拿到的是 A 店那一行:
+     · B 店老板的客户档案里根本没有她(按 tenant_id 列客户);
+     · 给她开单会被 createSettlementGroup 的「卡主不在本店档案里」挡下;
+     · 而「我的」页读的又是 B 店口径的聚合 —— 半串半不串,最难查的那种。
+   这里把两张表的唯一约束重建成**带租户**的复合唯一。SQLite 不能改列约束,只能重建表;
+   幂等:只有检测到旧的全局 UNIQUE 才重建,重跑一分不动。 */
+try {
+  const usersSql = (db.prepare("SELECT sql FROM sqlite_master WHERE type='table' AND name='users'").get() || {}).sql || ''
+  if (/wechat_open_id\s+TEXT\s+UNIQUE/i.test(usersSql)) {
+    const cols = db.prepare('PRAGMA table_info(users)').all().map((c) => c.name)
+    const defs = db.prepare('PRAGMA table_info(users)').all().map((c) => {
+      const notNull = c.notnull ? ' NOT NULL' : ''
+      const dflt = c.dflt_value === null || c.dflt_value === undefined ? '' : ` DEFAULT ${c.dflt_value}`
+      const pk = c.pk ? ' PRIMARY KEY' : ''
+      return `${c.name} ${c.type || 'TEXT'}${pk}${notNull}${dflt}`
+    })
+    db.exec('PRAGMA foreign_keys=OFF')
+    db.exec('BEGIN')
+    db.exec(`CREATE TABLE users_rebuild (${defs.join(', ')})`)
+    db.exec(`INSERT INTO users_rebuild (${cols.join(', ')}) SELECT ${cols.join(', ')} FROM users`)
+    db.exec('DROP TABLE users')
+    db.exec('ALTER TABLE users_rebuild RENAME TO users')
+    db.exec('COMMIT')
+    db.exec('PRAGMA foreign_keys=ON')
+    console.log('[migrate] users 唯一性重建:openid/google_id 全局唯一 → 按租户唯一')
+  }
+  const identSql = (db.prepare("SELECT sql FROM sqlite_master WHERE type='table' AND name='user_identities'").get() || {}).sql || ''
+  if (/UNIQUE\s*\(provider,\s*provider_user_id\)/i.test(identSql)) {
+    const cols = db.prepare('PRAGMA table_info(user_identities)').all().map((c) => c.name)
+    const defs = db.prepare('PRAGMA table_info(user_identities)').all().map((c) => {
+      const notNull = c.notnull ? ' NOT NULL' : ''
+      const dflt = c.dflt_value === null || c.dflt_value === undefined ? '' : ` DEFAULT ${c.dflt_value}`
+      const pk = c.pk ? ' PRIMARY KEY' : ''
+      return `${c.name} ${c.type || 'TEXT'}${pk}${notNull}${dflt}`
+    })
+    db.exec('PRAGMA foreign_keys=OFF')
+    db.exec('BEGIN')
+    db.exec(`CREATE TABLE user_identities_rebuild (${defs.join(', ')})`)
+    db.exec(`INSERT INTO user_identities_rebuild (${cols.join(', ')}) SELECT ${cols.join(', ')} FROM user_identities`)
+    db.exec('DROP TABLE user_identities')
+    db.exec('ALTER TABLE user_identities_rebuild RENAME TO user_identities')
+    db.exec('COMMIT')
+    db.exec('PRAGMA foreign_keys=ON')
+    console.log('[migrate] user_identities 唯一性重建:(provider,openid) 全局唯一 → 按租户唯一')
+  }
+} catch (error) {
+  console.warn('[migrate] 唯一性重建失败(已跳过,老数据未动):', error.message)
+}
+// 复合唯一索引(新库/老库同一条路;NULL 不参与唯一,轻档案没 openid 不受影响)
+try {
+  db.exec(`
+    CREATE UNIQUE INDEX IF NOT EXISTS idx_users_tenant_openid ON users(tenant_id, wechat_open_id) WHERE wechat_open_id IS NOT NULL;
+    CREATE UNIQUE INDEX IF NOT EXISTS idx_users_tenant_googleid ON users(tenant_id, google_id) WHERE google_id IS NOT NULL;
+    CREATE UNIQUE INDEX IF NOT EXISTS idx_identities_tenant_provider ON user_identities(tenant_id, provider, provider_user_id);
+    CREATE INDEX IF NOT EXISTS idx_users_tenant ON users(tenant_id);
+  `)
+} catch (error) {
+  console.warn('[migrate] 租户维度唯一索引创建失败:', error.message)
+}
 
 /* 裁B 存量回填(店主 08-22,迁移贴数先行):无挂靠的非作废结算单补挂即时预约——
    同组已有挂靠预约=挂同一张(同组=同次到店);全组无=建一张 COMPLETED 即时预约共享。

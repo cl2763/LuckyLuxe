@@ -9,6 +9,7 @@ Page({
   data: {
     member: {},
     cardPackBadge: null,   // null=还没拿到(黑卡格显示「—」);拿到才写数字,不猜数
+    memberReady: false,    // 会员数据(积分/累计消费/到店/成长值)有没有拿到;没拿到显示「—」不显示 0
     lang: 'zh',
     t: i18n.pageCopy('me', 'zh'),
     isLoggedIn: false,
@@ -143,6 +144,8 @@ Page({
     const growthNote = this.memberGrowthNote(member, lang)
     this.setData({
       member: Object.assign({}, member, { growthNote }),
+      // 会员数据到底拿到没有:有本店快照(带租户戳/有 id)才算数,否则黑卡显示「—」不显示 0
+      memberReady: Boolean(member && (member.id || member._tenant) && isLoggedIn),
       lang,
       t: i18n.pageCopy('me', lang),
       isLoggedIn,

@@ -31,7 +31,7 @@
       <view class="growth-block" wx:if="{{member.tiersEnabled !== false}}">
         <view class="growth-head">
           <text>{{t.growth}}</text>
-          <text>{{member.growthValue}} / {{member.nextLevelValue}}</text>
+          <text>{{memberReady ? member.growthValue : '—'}} / {{memberReady ? member.nextLevelValue : '—'}}</text>
         </view>
         <view class="growth-track">
           <view class="growth-fill" style="width: {{growthPercent}}%;"></view>
@@ -43,7 +43,8 @@
            积分→积分页(原位)、卡包→卡包页(券+次卡,原「优惠券」块改名)、储值→储值页(原位)。 -->
       <view class="member-assets">
         <view class="asset-tap" bindtap="goPoints">
-          <text>{{member.points}}</text>
+          <!-- 假数回落红线(08-23):会员数据没拿到就显示「—」,不拿 0 冒充"你没有积分" -->
+          <text>{{memberReady ? member.points : '—'}}</text>
           <text>{{t.points}} ›</text>
         </view>
         <view class="asset-tap" bindtap="goCardPack">
@@ -51,14 +52,16 @@
           <text>卡包 ›</text>
         </view>
         <view class="asset-tap" bindtap="goStored">
-          <text>{{cur.p}}{{cur.s}}{{liveBalance === undefined ? member.balance : liveBalance}}</text>
+          <text wx:if="{{liveBalance !== undefined}}">{{cur.p}}{{cur.s}}{{liveBalance}}</text>
+          <text wx:elif="{{memberReady}}">{{cur.p}}{{cur.s}}{{member.balance}}</text>
+          <text wx:else>—</text>
           <text>{{t.balance}} ›</text>
         </view>
       </view>
 
       <view class="member-extra">
-        <view>{{t.totalSpent}} {{cur.p}}{{cur.s}}{{member.totalSpent}}</view>
-        <view>{{t.visits}} {{member.visits}} {{t.times}}</view>
+        <view>{{t.totalSpent}} {{memberReady ? cur.p + cur.s + member.totalSpent : '—'}}</view>
+        <view>{{t.visits}} {{memberReady ? member.visits : '—'}} {{t.times}}</view>
       </view>
     </block>
     <block wx:else>
