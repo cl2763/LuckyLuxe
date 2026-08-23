@@ -1,5 +1,5 @@
 // 构建号:每次交付递增。侧栏可见,排查"改了没生效"时先对版本。
-const ADMIN_BUILD = '20260823m-tenant'
+const ADMIN_BUILD = '20260823n-close'
 let pricingState = { module: 'storefront', tab: 'items', categories: [], items: [], rules: {}, editing: null, preview: null, storefrontPicker: false }
 console.log(`[admin] build ${ADMIN_BUILD}`)
 
@@ -812,7 +812,12 @@ function formatDate(date) {
 // 金额一律按本店币种显示。以前写死 CAD,境内店(CNY)整个老板端都在显示加币。
 // 取值:门店 currency → AI 事实 currency → CAD(旗舰店就是 CAD,显示结果一字不变)
 function storeCurrency() {
-  return (owner?.businessHoursStores || [])[0]?.currency || owner?.tenantKb?.facts?.currency || 'CAD'
+  // 币种红线 + 假数回落红线(08-23):拿不到就空,等数据到位再渲染;绝不冒充 CAD
+  return (owner?.businessHoursStores || [])[0]?.currency || owner?.tenantKb?.facts?.currency || ''
+}
+// 本店名唯一出口(商家端各处标签共用;拿不到就空,不写死任何店名)
+function storeDisplayName() {
+  return (owner?.businessHoursStores || [])[0]?.name || ''
 }
 // 币种显示映射表(与后端 CURRENCY_DISPLAY 同一套口径):
 // CNY → 「¥358」;其它币种 → 「CAD 358」逐字维持现状,旗舰店零 diff。
@@ -1473,7 +1478,9 @@ function popularStyle() {
     .filter((booking) => isCurrentMonth(booking.appointmentDate))
     .filter((booking) => ['CONFIRMED', 'COMPLETED'].includes(booking.status))
     .reduce((groups, booking) => {
-      const name = booking.service?.name || booking.service?.category || 'Lucky Luxe'
+      // 没有服务名的单不计入「最热门服务」统计(回落成店名会凭空造出一个假服务)
+      const name = booking.service?.name || booking.service?.category || ''
+      if (!name) return groups
       groups[name] = (groups[name] || 0) + 1
       return groups
     }, {})
@@ -1689,8 +1696,8 @@ function renderAiList(title, items = []) {
 }
 
 function wechatMockSessions() {
-  const zhGreeting = '您好欢迎来到 Lucky Luxe，我是您的预约助手，您有任何问题可以随时向我咨询，可以帮您了解美甲/美睫服务、价格规则、预约时间、定金和护理说明。如果是复杂美甲款式，也可以先发参考图，我会帮您整理需求并转给技师确认报价。'
-  const enGreeting = 'Hi, welcome to Lucky Luxe. I am your booking assistant. I can help with nail and lash services, price rules, booking time, deposit policy, and after-care. For custom nail designs, you can send a reference image and I will organize the request for a technician quote.'
+  const zhGreeting = `您好欢迎来到${storeDisplayName() || '本店'}，我是您的预约助手，您有任何问题可以随时向我咨询，可以帮您了解美甲/美睫服务、价格规则、预约时间、定金和护理说明。如果是复杂美甲款式，也可以先发参考图，我会帮您整理需求并转给技师确认报价。`
+  const enGreeting = `Hi, welcome to ${storeDisplayName() || 'our studio'}. I am your booking assistant. I can help with nail and lash services, price rules, booking time, deposit policy, and after-care. For custom nail designs, you can send a reference image and I will organize the request for a technician quote.`
   return [
     {
       id: 'wechat-quote-01',
@@ -1886,7 +1893,7 @@ function renderWechatTranscript(transcript = [], conversation = {}) {
       ? (conversation.externalUserId || owner.wechatChatCustomerId || 'Customer')
       : role === 'staff'
         ? (message.staffName || (owner.lang === 'zh' ? '后台人工' : 'Admin Staff'))
-        : 'Lucky Luxe 预约助手'
+        : `${storeDisplayName() ? storeDisplayName() + ' ' : ''}预约助手`
     return `
       <div class="wechat-bubble ${role === 'customer' ? 'customer' : role === 'staff' ? 'staff' : 'assistant'}">
         <span>${escapeHtml(label)}${message.correctedByOwner ? ` · ${owner.lang === 'zh' ? '店主已修正' : 'Owner corrected'}` : ''}</span>
@@ -1942,7 +1949,7 @@ function renderWechatCustomerChatPanel() {
       ` : ''}
       <div class="wechat-phone-preview">
         <div class="wechat-phone-head">
-          <strong>Lucky Luxe</strong>
+          <strong>${escapeHtml(storeDisplayName() || '—')}</strong>
           <span>${status === 'needs_human' || status === 'human_active' ? t('waitingHuman') : t('aiAutoReplied')}</span>
         </div>
         <div class="wechat-phone-timeline">
@@ -4020,11 +4027,13 @@ async function submitFinanceEntry() {
 
 function renderStoreInfo() {
   if (!els.storeInfoSummary || !els.storeInfoBody) return
-  const tenantId = owner.tenantPlan?.tenantId || 'lucky-luxe'
+  // 🔴 永久律(店主 08-23):拿不到就显示「—」,绝不回落成旗舰店 id ——
+  // 非旗舰商家会在自己的后台看到别人家的商户 ID。
+  const tenantId = owner.tenantPlan?.tenantId || ''
   const store = (owner.businessHoursStores || [])[0]
-  els.storeInfoSummary.textContent = tenantId
+  els.storeInfoSummary.textContent = tenantId || '—'
   const rows = [
-    [owner.lang === 'zh' ? '商户 ID' : 'Tenant ID', tenantId],
+    [owner.lang === 'zh' ? '商户 ID' : 'Tenant ID', tenantId || '—'],
     [owner.lang === 'zh' ? '门店 ID' : 'Store ID', store?.id || '-'],
     [owner.lang === 'zh' ? '门店名称' : 'Store name', store?.name || '-'],
     [owner.lang === 'zh' ? '当前套餐' : 'Plan', owner.tenantPlan?.plan || '-']
@@ -4626,8 +4635,8 @@ function renderKnowledgeMatchPanel(reply = {}) {
   const intents = knowledge.intents || []
   if (!rules.length && !qaEntries.length && !handoffs.length && !intents.length) return ''
   const privateNote = owner.lang === 'zh'
-    ? '会员等级、定金减免、价格和门店规则属于 Lucky Luxe 私有知识。'
-    : 'Member tiers, deposit waivers, prices, and store rules are Lucky Luxe private knowledge.'
+    ? '会员等级、定金减免、价格和门店规则属于本店私有知识。'
+    : 'Member tiers, deposit waivers, prices, and store rules are private to this store.'
   return `
     <section class="knowledge-match-panel">
       <div class="knowledge-match-head">
@@ -4737,7 +4746,7 @@ function renderWechatMockDetail(session) {
       <div class="wechat-timeline">
         ${session.messages.map(([speaker, zh, en]) => `
           <div class="wechat-bubble ${speaker}">
-            <span>${speaker === 'assistant' ? 'Lucky Luxe 预约助手' : escapeHtml(session.customer)}</span>
+            <span>${speaker === 'assistant' ? escapeHtml(`${storeDisplayName() ? storeDisplayName() + ' ' : ''}预约助手`) : escapeHtml(session.customer)}</span>
             <p>${escapeHtml(owner.lang === 'zh' ? zh : en)}</p>
           </div>
         `).join('')}
@@ -6007,7 +6016,7 @@ function renderCustomerRecord(booking) {
   const imageCount = (booking.referenceImages || []).length + (booking.workImages || []).length + (booking.approvedWorkImages || []).length
   return `
     <article class="customer-record-row">
-      <img src="${booking.service?.imageUrl || '/assets/images/store-cover.jpg'}" alt="${booking.service?.name || 'Lucky Luxe'}">
+      <img src="${booking.service?.imageUrl || '/assets/images/store-cover.jpg'}" alt="${booking.service?.name || ''}">
       <div>
         <span class="status ${booking.status}">${statusLabel(booking.status, booking)}</span>${booking.status !== 'AFTER_SALES' && booking.listBadgeText ? ` <span class="status order-badge badge-${booking.listBadgeKind}">${escapeHtml(booking.listBadgeText)}</span>` : ''}
         <h3>${escapeHtml(booking.service?.name || '-')}</h3>
@@ -6117,7 +6126,7 @@ function renderAiGallery() {
           <span class="gallery-status ${status.className}">${status.label}</span>
         </button>
         <div class="gallery-tile-copy">
-          <h3>${escapeHtml(booking.service?.name || 'Lucky Luxe')}</h3>
+          <h3>${escapeHtml(booking.service?.name || '—')}</h3>
           <p>${escapeHtml(booking.technician?.name || '')}</p>
           <p>${booking.appointmentDate} ${booking.appointmentTime || ''}</p>
           <small>${images.length} ${t('workImages')}${group.isMock ? ` · ${t('mockGallery')}` : ''}</small>
@@ -6148,12 +6157,12 @@ function renderGalleryDetail(group) {
     <section class="gallery-detail-page">
       <button class="ghost back-btn" data-gallery-back type="button">← ${t('galleryBack')}</button>
       <div class="gallery-detail-hero card">
-        <img src="${images[0] || booking.service?.imageUrl || '/assets/images/nail-french.jpg'}" alt="${booking.service?.name || 'Lucky Luxe'}">
+        <img src="${images[0] || booking.service?.imageUrl || '/assets/images/nail-french.jpg'}" alt="${booking.service?.name || ''}">
         <div>
           <div class="section-row compact-row">
             <div>
               <p class="eyebrow">${t('workImages')}</p>
-              <h2>${escapeHtml(booking.service?.name || 'Lucky Luxe')}</h2>
+              <h2>${escapeHtml(booking.service?.name || '—')}</h2>
             </div>
             <span class="gallery-status ${galleryStatus(group).className}">${galleryStatus(group).label}</span>
           </div>
@@ -6273,12 +6282,13 @@ function resolveSocialCopy(booking, index, platform, isMock = false) {
 }
 
 function fallbackSocialCopy(booking, platform) {
-  const serviceName = booking.service?.name || 'Lucky Luxe'
+  // 这段文案商家会直接复制去发社媒:回落成旗舰店名 = 别家店发出去带别人的品牌
+  const serviceName = booking.service?.name || (booking.service?.category || '本次服务')
   const zh = {
     xiaohongshu: {
       title: `${serviceName}｜干净又显贵的细节`,
       caption: `今天这组是偏日常耐看的精致感，近看有细节，远看很干净。\n\n适合喜欢低调、通勤、约会都能搭的客人。到店可以带参考图，我们会根据手型、肤色和日常习惯微调。`,
-      hashtags: ['#多伦多美甲', '#美甲分享', '#通勤美甲', '#LuckyLuxe']
+      hashtags: ['#多伦多美甲', '#美甲分享', '#通勤美甲']
     },
     douyin: {
       title: `${serviceName} 到店前后质感变化`,
@@ -6287,7 +6297,7 @@ function fallbackSocialCopy(booking, platform) {
     },
     instagram: {
       title: `${serviceName} | Soft Luxe Archive`,
-      caption: `Soft, clean, and wearable from every angle.\n\nA polished Lucky Luxe finish for clients who love subtle details and a refined daily look.`,
+      caption: `Soft, clean, and wearable from every angle.\n\nA polished finish for clients who love subtle details and a refined daily look.`,
       hashtags: ['#LuckyLuxeAtelier', '#nailarchive', '#lashstudio', '#torontobeauty']
     }
   }
@@ -6298,7 +6308,7 @@ function fallbackSocialCopy(booking, platform) {
     titleZh: item.title,
     captionZh: item.caption,
     titleEn: platform === 'instagram' ? item.title : `${serviceName} | Soft Luxe Archive`,
-    captionEn: platform === 'instagram' ? item.caption : 'A clean, polished Lucky Luxe finish with subtle detail and everyday wearability.',
+    captionEn: platform === 'instagram' ? item.caption : 'A clean, polished finish with subtle detail and everyday wearability.',
     hashtags: item.hashtags,
     altTextZh: `${serviceName} 完工作品图`,
     altTextEn: `${serviceName} finished work archive`

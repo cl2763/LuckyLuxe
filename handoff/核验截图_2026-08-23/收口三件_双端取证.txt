@@ -1,0 +1,17 @@
+== 收口三件 · 双端取证(2026-08-23)==
+
+【① 位面漏扫补件 · 商家网页端】
+  商户 ID 行:真值=lucky-luxe;反例(tenantPlan 置空)→ 显示「—」(改前=回落 'lucky-luxe',小婕会看到别人家的 id)
+  AI 助手标签:有店名→「Lucky Luxe Ontario 预约助手」;拿不到店名→「预约助手」(不顶别家店名)
+  币种:businessHoursStores 置空后仍取 tenantKb.facts.currency=CAD(真值来源),不再有写死 'CAD' 兜底
+  admin.js 剥注释后 'Lucky Luxe' 字面量 = 0(原 11 处:1 处租户 id + 6 处服务名 + AI 问候语/助手标签/手机预览头/知识库说明/社媒文案)
+  app.js globalData.appName 死字段已删(全仓零使用方)
+
+【② 演示租户重名 · 小程序选店页】
+  选店列表: L Lucky Luxe Address TBD › | 小 小婕的店(沙箱) › | 小 小婕的店(演示) ›
+
+【③ 顾客端 401 自愈 · 小程序】
+把顾客 token 改坏: {"had":true}
+【卡包·坏 token 后】error= "" | pack 次卡数= 1 | 券数= 0
+  自愈后的 token 前缀: "mini.eyJzdWI" (不再是 mini.broken)
+  (改前:token 失效 = 卡包页死在「加载失败」,顾客无自助出路;现在静默 wx.login 重登并重放,顾客无感)

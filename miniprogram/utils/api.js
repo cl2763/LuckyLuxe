@@ -162,7 +162,12 @@ function goPickStore() {
   })
 }
 
-function request(path, method = 'GET', data) {
+/* 顾客端会话自愈(店主 08-23 收口件③):商家端一直有 kickToLogin,**顾客端没有** ——
+   后端重启换签名、token 过期,顾客看到的就是「卡包加载失败」这类死页(08-22 实测过一次)。
+   顾客不像商家有账号密码,静默 wx.login 就能换回身份:401 时自动重登一次并重放,顾客无感;
+   仍失败才如实清会话让页面走登录引导。登录接口自身不参与重放(否则死循环)。
+   网页顾客端同款能力早就有(refreshToken + 重放),这里是把两端拉齐(四之九)。 */
+function request(path, method = 'GET', data, _retried) {
   return new Promise((resolve, reject) => {
     const tid = currentTenant()
     if (!tid && !TENANT_FREE_PATHS.some((p) => path.indexOf(p) === 0)) {
@@ -179,8 +184,20 @@ function request(path, method = 'GET', data) {
       data,
       header,
       success(res) {
-        if (res.statusCode >= 200 && res.statusCode < 300) resolve(res.data)
-        else reject(res.data && res.data.error ? res.data.error : new Error('API request failed'))
+        if (res.statusCode >= 200 && res.statusCode < 300) return resolve(res.data)
+        const err = res.data && res.data.error ? res.data.error : new Error('API request failed')
+        // 顾客会话失效 → 静默重登一次再重放(只对"曾经登录过"的会话做,未登录照常报错走登录引导)
+        if (res.statusCode === 401 && !_retried && path.indexOf('/auth/') !== 0 && getAuth() && getAuth().accessToken) {
+          loginForCurrentStore()
+            .then(() => resolve(request(path, method, data, true)))
+            .catch(() => {
+              clearAuth()
+              try { wx.removeStorageSync('lucky_member') } catch (e) { /* 清不掉不阻塞报错 */ }
+              reject(err)
+            })
+          return
+        }
+        reject(err)
       },
       fail: reject
     })

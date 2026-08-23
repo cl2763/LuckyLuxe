@@ -2,7 +2,9 @@ const i18n = require('./utils/i18n')
 
 App({
   globalData: {
-    appName: 'Lucky Luxe',
+    /* appName 已删(店主 08-23 收口件):全仓零使用方,却写死着旗舰店名 ——
+       留着就是下次误用的种子。真要显示店名一律走当前租户的 /shops 那一行;
+       平台名在 utils/i18n.js 的 appName(「有迹」)。 */
     version: '0.1.0-demo',
     privacyResolve: null,
     privacyReady: false

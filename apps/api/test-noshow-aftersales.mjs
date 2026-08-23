@@ -2235,6 +2235,25 @@ const main = async () => {
       /* ===== ㋒ 租户回落裁定(店主 08-23,假数回落同族**第四例也是最深一例**)=====
          拿不到租户就回落到别人家的店:小婕的顾客会看到 Lucky Luxe 的服务与加币价。
          落法:①记忆 → ②部署配置项(多租户构建为空)→ ③空=去选店/扫码,绝不静默替换。 */
+      /* ===== ㋓ 收口三件(店主 08-23):位面漏扫补件 + 演示租户重名 + 顾客端 401 自愈 =====
+         本轮教训:**扫描范围要覆盖所有位面** —— 上一批只清了顾客端,商家网页端还留着同族回落。 */
+      const adminJs93 = readFileSync(join(ROOT42, 'apps/web/admin.js'), 'utf8')
+      const stripJs = (t) => t.replace(/\/\*[\s\S]*?\*\//g, '').replace(/\/\/[^\n]*/g, '')
+      check('㋓ 商家网页端零写死旗舰店名/租户 id(剥注释后 0 残留)',
+        !stripJs(adminJs93).includes('Lucky Luxe'), (stripJs(adminJs93).match(/Lucky Luxe/g) || []).length + ' 处')
+      check('㋓ 商家端店名走唯一出口 storeDisplayName(拿不到显示「—」,不顶别家店)',
+        adminJs93.includes('function storeDisplayName()') && adminJs93.includes("tenantId || '—'"))
+      check('㋓ 商家端币种不冒充 CAD(与小程序 storeclock 同刀)',
+        !/currency \|\| owner\?\.tenantKb\?\.facts\?\.currency \|\| 'CAD'/.test(adminJs93))
+      const appJs93 = readFileSync(join(ROOT42, 'miniprogram/app.js'), 'utf8')
+      check('㋓ globalData.appName 死字段已删(零使用方却写死旗舰店名=下次误用的种子)',
+        !/appName:\s*'Lucky Luxe'/.test(appJs93))
+      const apiSelfHeal93 = readFileSync(join(ROOT42, 'miniprogram/utils/api.js'), 'utf8')
+      check('㋓ 顾客端 401 自愈:静默重登一次并重放(商家端 kickToLogin 之外的另一半)',
+        apiSelfHeal93.includes('res.statusCode === 401 && !_retried') && apiSelfHeal93.includes('loginForCurrentStore()')
+        && apiSelfHeal93.includes("path.indexOf('/auth/') !== 0"))
+      check('㋓ 显示名修正走 ops 脚本(只改 tenants.name/stores.name,不动业务数据)',
+        readFileSync(join(ROOT42, 'tools/ops-rename-tenant-display.mjs'), 'utf8').includes('UPDATE tenants SET name'))
       const apiTen = readFileSync(join(ROOT42, 'miniprogram/utils/api.js'), 'utf8')
       const appTen = readFileSync(join(ROOT42, 'miniprogram/app.js'), 'utf8')
       const homeTen = readFileSync(join(ROOT42, 'miniprogram/pages/home/index.js'), 'utf8')
