@@ -30,7 +30,38 @@ restore_local() {
   done
   echo "!! 本地服务没拉回来,店主要用的话请双击 启动服务器.command" >&2
 }
-finish() { cleanup; [ -n "${DATA_DIR:-}" ] && rm -rf "$DATA_DIR"; restore_local; }
+
+# 🔴 2026-08-23 复发(第二次踩同一个坑):cleanup 的 pkill 打的是**所有** local-server.mjs,
+# 不只是 4128 —— 沙箱 4310(演示/走查用,带 ALLOW_DEMO_ADMIN_LOGIN 和自己的 DATA_DIR)
+# 同样被打死,而当时只还了 4128。店主打开小程序=登录失败,以为是功能坏了。
+# 现在:开跑前把 4310 的 DATA_DIR 从进程环境里抓下来,跑完用同样参数拉回来。
+# 教训写进脚本而不是靠记性 —— 靠记性已经漏过两次。
+SANDBOX_WAS_UP=0
+SANDBOX_DATA_DIR=""
+if curl -sf -o /dev/null --max-time 2 "http://127.0.0.1:4310/health"; then
+  SANDBOX_WAS_UP=1
+  # macOS 拿不到别的进程的环境变量(ps 探不到 DATA_DIR),所以读启动器留下的记录文件。
+  # 沙箱请用 `bash apps/api/start-sandbox.sh <DATA_DIR>` 起,它会写这份记录。
+  if [ -f /tmp/ll-sandbox-4310.env ]; then
+    SANDBOX_DATA_DIR="$(grep '^SANDBOX_DATA_DIR=' /tmp/ll-sandbox-4310.env | head -1 | cut -d= -f2- || true)"
+  fi
+  echo "== 沙箱 4310 在跑(DATA_DIR=${SANDBOX_DATA_DIR:-未探到}),跑完会还回去 =="
+fi
+restore_sandbox() {
+  [ "$SANDBOX_WAS_UP" = "1" ] || return 0
+  curl -sf -o /dev/null --max-time 2 "http://127.0.0.1:4310/health" && return 0
+  if [ -z "$SANDBOX_DATA_DIR" ]; then
+    echo "!! 沙箱 4310 被回归打死了,但没探到它的 DATA_DIR —— 请手动用原来的命令拉起来" >&2
+    return 0
+  fi
+  ( cd "$API_DIR" && PORT=4310 DATA_DIR="$SANDBOX_DATA_DIR" ALLOW_DEMO_ADMIN_LOGIN=true TEST_DB_PATH= nohup node local-server.mjs > /tmp/ll-sandbox-restored.log 2>&1 & )
+  for _ in $(seq 1 20); do
+    curl -sf -o /dev/null --max-time 2 "http://127.0.0.1:4310/health" && { echo "== 已把沙箱(4310)重新拉起来 =="; return 0; }
+    sleep 0.5
+  done
+  echo "!! 沙箱 4310 没拉回来,演示/走查前请手动拉起" >&2
+}
+finish() { cleanup; [ -n "${DATA_DIR:-}" ] && rm -rf "$DATA_DIR"; restore_local; restore_sandbox; }
 trap finish EXIT
 cleanup; sleep 1
 
