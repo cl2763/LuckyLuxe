@@ -1,0 +1,6 @@
+【我的·样板演示户】badge= 1 | 黑卡格: 2320 积分 › || 1 卡包 › || CAD $0 储值余额 ›
+  [shot 失败] timeout:me
+【卡包】区块= 次卡 | 全文= 次卡 去商城 › 守护(3次卡) 剩 1/3 长期有效
+  [shot 失败] timeout:cp
+【商城·定位次卡】filter= "timecard" | 筛选= 全部 | 充值套餐 | 次卡 | 分区= 美甲 · 次卡
+  [shot 失败] timeout:mall

@@ -420,7 +420,6 @@ function miniMember(user = {}) {
     growthValue,
     nextLevelValue,
     points: hasRealStats ? (user.points || 0) : 0,
-    couponCount: hasRealStats ? (user.couponCount || 0) : 0,
     balance: hasRealStats ? Math.round((user.balanceCents || 0) / 100) : 0,
     totalSpent: hasRealStats ? Math.round((user.totalSpentCents || 0) / 100) : 0,
     visits: hasRealStats ? (user.visits || 0) : 0,

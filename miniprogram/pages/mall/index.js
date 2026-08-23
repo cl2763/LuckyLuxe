@@ -4,8 +4,11 @@
 const api = require('../../utils/api')
 
 Page({
-  data: { loading: true, mall: null, error: '', noteFor: '' },
+  data: { loading: true, mall: null, error: '', noteFor: '', filter: 'all' },
 
+  /* 裁定②:卡包次卡区的「去商城」带 ?focus=timecard —— 进来直接落在次卡筛选上
+     (同一个商城页,不新建页;筛选条与分区都由后端给) */
+  onLoad(q) { if (q && q.focus === 'timecard') this.setData({ filter: 'timecard' }) },
   onShow() { this.load() },
 
   async load() {
@@ -17,6 +20,7 @@ Page({
     }
   },
 
+  pickFilter(e) { this.setData({ filter: e.currentTarget.dataset.k || 'all' }) },
   // B3-2:同屏展开说明(不弹原生弹窗,四之七);再点收起
   tapBuy(e) {
     const id = e.currentTarget.dataset.id

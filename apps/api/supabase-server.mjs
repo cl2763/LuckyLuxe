@@ -424,7 +424,8 @@ async function serializeUser(user) {
     depositWaived: membership.depositWaived,
     depositRule: membership.depositRule,
     points: Math.floor(totalSpentCents / 100),
-    couponCount: 0,
+    // couponCount 已删(D69 同族):此前恒为 0,却被双端黑卡格当作卡包数的回落值显示。
+    // 卡包数唯一出口 = /my/card-pack 的 badgeCount(cardPackOf),前端未拿到就显示「—」,不猜数。
     balanceCents: 0,
     totalSpentCents,
     visits: Number(stats.visits || 0),

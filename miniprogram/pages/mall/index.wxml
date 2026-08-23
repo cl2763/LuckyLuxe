@@ -3,7 +3,14 @@
   <view wx:elif="{{error}}" class="empty">{{error}}</view>
   <block wx:elif="{{mall}}">
     <view wx:if="{{mall.emptyText}}" class="empty">{{mall.emptyText}}</view>
-    <view class="ml-card card" wx:for="{{mall.items}}" wx:for-item="it" wx:key="id">
+    <!-- 裁定②:一个商城,顶部筛选(全部/充值套餐/次卡);次卡按服务大类分区,与充值套餐同屏可比 -->
+    <view wx:if="{{mall.filters.length > 1}}" class="ml-filters">
+      <view wx:for="{{mall.filters}}" wx:for-item="f" wx:key="key" class="ml-filter {{filter === f.key ? 'on' : ''}}" data-k="{{f.key}}" bindtap="pickFilter">{{f.label}}</view>
+    </view>
+    <block wx:for="{{mall.sections}}" wx:for-item="sec" wx:key="key">
+      <view wx:if="{{filter === 'all' || filter === sec.kind}}" class="ml-sec">{{sec.kind === 'timecard' ? sec.label + ' · 次卡' : sec.label}}</view>
+      <block wx:if="{{filter === 'all' || filter === sec.kind}}" wx:for="{{mall.items}}" wx:for-item="it" wx:key="id">
+      <view wx:if="{{it.section === sec.key}}" class="ml-card card">
       <view class="ml-top">
         <text class="ml-title">{{it.titleText}}</text>
         <!-- 赠送单独成行,不与实收混成一个数(§十-8) -->
@@ -15,6 +22,8 @@
       <view class="ml-buy" data-id="{{it.id}}" bindtap="tapBuy">{{it.buyButtonText}}</view>
       <!-- 过渡期说明句:租户中立,不枚举支付方式(补件①) -->
       <view wx:if="{{noteFor === it.id}}" class="ml-note">{{it.offlineNote}}</view>
-    </view>
+      </view>
+      </block>
+    </block>
   </block>
 </view>

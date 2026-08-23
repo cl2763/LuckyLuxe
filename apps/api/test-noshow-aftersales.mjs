@@ -1751,7 +1751,11 @@ const main = async () => {
                     check('㋐ E8 空态:新档案三类全空=空态句在场且角标 0', emptyPack.badgeCount === 0 && emptyPack.emptyText === '还没有卡券' && emptyPack.stored.balanceCents === 0, JSON.stringify({ b: emptyPack.badgeCount, e: emptyPack.emptyText, s: emptyPack.stored.balanceCents }))
                     const badMall = await request('/my/mall?packageId=不存在的套餐', {}, null, { 'x-tenant-id': shop.tenantId })
                     check('㋐ E8 异常输入:商城口带无效参数照常 200(只读口不炸)', badMall.status === 200, String(badMall.status))
-                    const otherCust = await request('/auth/wechat/mini-login', { method: 'POST', body: JSON.stringify({ demoLogin: true, tenantId: shop.tenantId }) }, null, { 'x-tenant-id': shop.tenantId })
+                      /* ===== 裁定①② (店主 08-23):卡包去储值行 + 商城归一(次卡挂大类) ===== */
+                    const mallSec = (await request('/my/mall', {}, null, { 'x-tenant-id': shop.tenantId })).data
+                    check('㋐ 裁定② 商城归一:次卡挂在服务大类分区下,不单开商城', (mallSec.sections || []).some((x) => x.kind === 'timecard') && (mallSec.sections || []).some((x) => x.kind === 'recharge') && mallSec.items.every((i) => i.section), JSON.stringify(mallSec.sections))
+                    check('㋐ 裁定② 充值套餐与次卡同屏可比(同一 items 一次给全)+ 顶部筛选后端给', mallSec.items.some((i) => i.sectionKind === 'recharge') && mallSec.items.some((i) => i.sectionKind === 'timecard') && (mallSec.filters || []).length === 3, JSON.stringify(mallSec.filters))
+                  const otherCust = await request('/auth/wechat/mini-login', { method: 'POST', body: JSON.stringify({ demoLogin: true, tenantId: shop.tenantId }) }, null, { 'x-tenant-id': shop.tenantId })
                     const packOther = await request('/my/card-pack', {}, otherCust.data.auth.accessToken, { 'x-tenant-id': shop.tenantId })
                     check('㋐ 越权:别人 token 读到的是他自己的卡包(拿不到本人卡券)', !(packOther.data.cardPack.coupons || []).some((c) => c.name === '卡包券'), JSON.stringify((packOther.data.cardPack.coupons || []).map((c) => c.name)))
                   }
@@ -2042,7 +2046,12 @@ const main = async () => {
       const mlWx = readFileSync(join(ROOT42, 'miniprogram/pages/mall/index.wxml'), 'utf8')
       const meWx = readFileSync(join(ROOT42, 'miniprogram/pages/me/index.wxml'), 'utf8')
       const svWx = readFileSync(join(ROOT42, 'miniprogram/pages/stored-value/index.wxml'), 'utf8')
-      check('㋐ A 组 wiring:卡包页三类+来源小字条件渲染(空串不渲染)', cpWx.includes('pack.timecards') && cpWx.includes('pack.coupons') && cpWx.includes('pack.stored.balanceText') && cpWx.includes('wx:if="{{c.sourceLabel}}"'))
+      check('㋐→裁定① A 组 wiring:卡包=券+次卡两类(储值行已撤)+来源小字条件渲染',
+        cpWx.includes('pack.timecards') && cpWx.includes('pack.coupons') && !cpWx.includes('pack.stored') && cpWx.includes('wx:if="{{c.sourceLabel}}"')
+        && !custWeb.includes('pack.stored.balanceText'))
+      check('㋐ 裁定② wiring:卡包次卡区「去商城」带定位参数(双端,不新建页)',
+        cpWx.includes('goMallTimecards') && readFileSync(join(ROOT42, 'miniprogram/pages/mall/index.js'), 'utf8').includes("q.focus === 'timecard'")
+        && custWeb.includes('data-mall-focus="timecard"') && custWeb.includes('data-mall-filter'))
       // 裁定A 返工后:入口收敛到「我的资产」一格,角标挂它(卡包入口从「我的」页撤下)
       check('㋐→勘误 A1 wiring:「我的」页卡包入口+角标(0 不渲染;名字与页归一)', meWx.includes('bindtap="goCardPack"') && meWx.includes('wx:if="{{cardPackBadge}}"') && !meWx.includes('goAssets'))
       check('㋐ B1-1 wiring:储值页=充值套餐唯一出口(去充值→商城)', svWx.includes('goMall') && !svWx.includes('微信支付'))
@@ -2105,6 +2114,26 @@ const main = async () => {
         }
       }
       check('㋐ §十-2 过渡期红线:全仓零「支付成功」字样', paidWordHits.length === 0, paidWordHits.join(' | ').slice(0, 200))
+      /* ===== ㋐ D69 同族:恒 0 字段冒充卡包数(黑卡格回落)——双端销案 ===== */
+      const srvUser69 = readFileSync(join(ROOT42, 'apps/api/local-server.mjs'), 'utf8')
+      const supaUser69 = readFileSync(join(ROOT42, 'apps/api/supabase-server.mjs'), 'utf8')
+      check('㋐ D69族:serializeUser 不再下发恒 0 的 couponCount(两个后端同刀)',
+        !/^\s*couponCount: 0,\s*$/m.test(srvUser69) && !/^\s*couponCount: 0,\s*$/m.test(supaUser69))
+      const meWx69 = readFileSync(join(ROOT42, 'miniprogram/pages/me/index.wxml'), 'utf8')
+      const meJs69 = readFileSync(join(ROOT42, 'miniprogram/pages/me/index.js'), 'utf8')
+      const apiJs69 = readFileSync(join(ROOT42, 'miniprogram/utils/api.js'), 'utf8')
+      const custJs69 = readFileSync(join(ROOT42, 'apps/web/customer.js'), 'utf8')
+      check('㋐ D69族:双端黑卡「卡包」格零 couponCount 回落(0 残留)',
+        !/couponCount/.test(meWx69) && !/couponCount/.test(meJs69) && !/couponCount/.test(apiJs69)
+        && !/user\.couponCount/.test(custJs69))
+      check('㋐ D69族:未拿到卡包数时显示「—」而不是猜 0(小程序黑卡格)',
+        meWx69.includes("cardPackBadge === null ? '—' : cardPackBadge") && meJs69.includes('cardPackBadge: null'))
+      check('㋐ D69族:网页黑卡格同源同刀(有卡包才出数,没有出「—」,并按需拉一次)',
+        custJs69.includes("state.cardPack ? state.cardPack.badgeCount : '—'")
+        && custJs69.includes("if (state.user && !state.cardPack) loadCardPack()"))
+      const cssMall69 = readFileSync(join(ROOT42, 'apps/web/styles.css'), 'utf8')
+      check('㋐ 裁定②:网页商城筛选选中态有真样式(不是只挂 class 看不出来)',
+        custJs69.includes('class="mall-filter') && /\.mall-filter\.on\s*\{/.test(cssMall69))
       check('㋏ 图标资源已出 PNG(23 个 icon 同名 .png 在场)', readdirSync(join(ROOT42, 'miniprogram/assets/icons')).filter((f) => f.endsWith('.png')).length >= 23)
       const svWeb = readFileSync(join(ROOT42, 'apps/web/snapshot-viewer.js'), 'utf8')
       /* ===== ㋎ 真机调试联通件(店主 08-23):局域网可达 + 演示白名单生产结构性不成立 ===== */

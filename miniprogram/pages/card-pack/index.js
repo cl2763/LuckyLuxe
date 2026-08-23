@@ -20,10 +20,10 @@ Page({
     }
   },
 
-  // 储值行 → 现有储值页(假设④:不新造储值明细页)
-  goStored() { nav.to('/pages/stored-value/index') },
-  // 空态/储值行的「去充值」→ 商城(B1-1:储值卡页=充值套餐唯一出口,这里与储值页同一落点)
+  // 裁定①(店主 08-23):卡包=券+次卡两类,储值不进卡包(黑卡已直达+自有页,重复即乱)
   goMall() { nav.to('/pages/mall/index') },
+  // 裁定②:次卡区「去商城」=统一商城并定位次卡分区(筛选参数,不新建页)
+  goMallTimecards() { nav.to('/pages/mall/index?focus=timecard') },
   // 展开某张卡券的使用说明(A2-8:只看不核销,核销只在开单结算)
   toggleCard(e) {
     const key = e.currentTarget.dataset.key

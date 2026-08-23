@@ -47,7 +47,7 @@
           <text>{{t.points}} ›</text>
         </view>
         <view class="asset-tap" bindtap="goCardPack">
-          <text>{{cardPackBadge || member.couponCount}}</text>
+          <text>{{cardPackBadge === null ? '—' : cardPackBadge}}</text>
           <text>卡包 ›</text>
         </view>
         <view class="asset-tap" bindtap="goStored">

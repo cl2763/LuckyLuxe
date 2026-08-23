@@ -4491,6 +4491,31 @@ textarea:focus {
   margin-top: 18px;
 }
 
+/* 商城筛选 chip:与小程序 .ml-filter 同一视觉(选中=深底白字)。
+   此前借用 .section-note-btn 只加 active class 而没有对应样式,页面上看不出选中的是哪个。 */
+.mall-filters {
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+  margin: 4px 0 14px;
+}
+
+.mall-filter {
+  border: 0;
+  padding: 6px 16px;
+  border-radius: 999px;
+  background: #fff;
+  color: #6b615b;
+  font-size: 13px;
+  font-weight: 700;
+  cursor: pointer;
+}
+
+.mall-filter.on {
+  background: #2d2826;
+  color: #fff;
+}
+
 .section-note-btn {
   border: 0;
   background: transparent;

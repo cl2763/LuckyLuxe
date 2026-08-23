@@ -5846,7 +5846,8 @@ function serializeUser(user, tenantId = DEFAULT_TENANT_ID) {
     depositRule: membership.depositRule,
     // 积分单源:pointsBalance(赚分行+台账)——此前这里用 totalSpent 直推,是第四处各自推导
     points: pointsBalance(user.id, tenantId),
-    couponCount: 0,
+    // couponCount 已删(D69 同族):此前恒为 0,却被双端黑卡格当作卡包数的回落值显示。
+    // 卡包数唯一出口 = /my/card-pack 的 badgeCount(cardPackOf),前端未拿到就显示「—」,不猜数。
     balanceCents: storedValueBalanceCents(user.id, tenantId),
     totalSpentCents,
     visits: visitDaysCount(user.id, tenantId), // 裁A:三读方唯一出口(stats.visits 旧口径=COMPLETED 单数,售后单漏计)
@@ -11779,7 +11780,13 @@ async function route(req, res) {
     const items = rows.map((r) => {
       const isTimes = r.kind === 'times'
       const unit = isTimes && r.times_count > 0 ? timecardUnitCents({ price_cents: r.price_cents, total_times: r.times_count }, 1) : 0
+      /* 裁定②(店主 08-23):**不为次卡单开商城**——一个商城,次卡挂在对应服务大类之下,
+         充值套餐与次卡同屏可比(顾客心智:我要做美甲 → 这个项目买 10 次卡更划算)。
+         分区键:次卡=它关联的项目组(=服务二级分类名);充值套餐=「充值套餐」区。 */
+      const section = isTimes ? (r.project_group || '不限项目') : '充值套餐'
       return {
+        section,
+        sectionKind: isTimes ? 'timecard' : 'recharge',
         id: r.id,
         kind: r.kind,
         name: r.name,
@@ -11798,12 +11805,21 @@ async function route(req, res) {
         offlineNote
       }
     })
+    // 分区顺序:充值套餐在前(可比基准),次卡按大类分区跟随;筛选条由后端给,前端不自造分类
+    const sections = []
+    for (const it of items) if (!sections.some((x) => x.key === it.section)) sections.push({ key: it.section, kind: it.sectionKind, label: it.section })
+    sections.sort((a, b) => (a.kind === 'recharge' ? -1 : 0) - (b.kind === 'recharge' ? -1 : 0))
     return json(res, 200, {
       items,
+      sections,
+      filters: [{ key: 'all', label: '全部' }].concat(
+        items.some((i) => i.sectionKind === 'recharge') ? [{ key: 'recharge', label: '充值套餐' }] : [],
+        items.some((i) => i.sectionKind === 'timecard') ? [{ key: 'timecard', label: '次卡' }] : []
+      ),
       selfPurchaseEnabled: canSelfBuy,
       buyButtonText,
       offlineNote,
-      emptyText: items.length ? '' : '本店暂未上架充值套餐'
+      emptyText: items.length ? '' : '本店暂未上架充值套餐或次卡'
     })
   }
   if (req.method === 'GET' && path === '/my/coupons') {

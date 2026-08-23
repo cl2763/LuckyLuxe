@@ -5,12 +5,16 @@
     <!-- A2-6 空态:三类都空=一句话+去看充值套餐(不放例句、不放假数据) -->
     <view wx:if="{{pack.emptyText}}" class="empty-state">
       <view class="empty-t">{{pack.emptyText}}</view>
-      <view class="empty-btn" bindtap="goMall">去看看充值套餐</view>
+      <view class="empty-btn" bindtap="goMall">去商城看看</view>
     </view>
 
     <!-- 次卡 -->
     <view wx:if="{{pack.timecards.length}}" class="sec">
-      <view class="sec-t">次卡</view>
+      <view class="sec-hd">
+        <text class="sec-t">次卡</text>
+        <!-- 裁定②(店主 08-23):不为次卡单开商城——去统一商城并定位到次卡分区(带参数,不新建页) -->
+        <text class="sec-link" bindtap="goMallTimecards">去商城 ›</text>
+      </view>
       <view class="cp-card card" wx:for="{{pack.timecards}}" wx:for-item="c" wx:key="id"
         data-key="tc-{{c.id}}" bindtap="toggleCard">
         <view class="cp-row"><text class="cp-name">{{c.name}}</text><text class="cp-badge">剩 {{c.remaining}}/{{c.totalTimes}}</text></view>
@@ -39,16 +43,6 @@
       </view>
     </view>
 
-    <!-- 储值 -->
-    <view class="sec">
-      <view class="sec-t">储值</view>
-      <view class="cp-card card">
-        <view class="cp-row"><text class="cp-name">储值余额</text><text class="cp-face">{{pack.stored.balanceText}}</text></view>
-        <view class="cp-acts">
-          <text class="cp-link" bindtap="goStored">查看明细 ›</text>
-          <text class="cp-link" bindtap="goMall">去充值 ›</text>
-        </view>
-      </view>
-    </view>
+
   </block>
 </view>

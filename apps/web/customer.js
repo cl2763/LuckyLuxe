@@ -343,6 +343,7 @@ const state = {
   assets: null,
   mall: null,
   mallNoteFor: '',
+  mallFilter: 'all',
   view: 'home',
   type: 'nail',
   category: 'all',
@@ -958,7 +959,11 @@ function render() {
   if (state.view === 'booking') renderBookingForm()
   if (state.view === 'cart') renderCart()
   if (state.view === 'checkout') renderCheckout()
-  if (state.view === 'me') renderMe()
+  if (state.view === 'me') {
+    renderMe()
+    // 黑卡「卡包」格的数字唯一出口 = /my/card-pack;没拿到先显示「—」,拿到再重绘(不拿恒 0 字段冒充)
+    if (state.user && !state.cardPack) loadCardPack().then(() => { if (state.view === 'me') render() })
+  }
   if (state.view === 'orders') renderOrdersWeb()
   if (state.view === 'orderDetail') renderOrderDetailWeb()
   if (state.view === 'assets') renderAssetsWeb()
@@ -1745,7 +1750,7 @@ function renderMe() {
              券块改名「卡包」(券+次卡同页同名);网页暂无独立储值页,储值块落卡包的储值行 -->
         <div class="member-assets">
           <button data-me-target="pointsMall" type="button"><strong>${user.points}</strong><span>${t('points')}</span></button>
-          <button data-me-target="cardPack" type="button"><strong>${state.cardPack ? state.cardPack.badgeCount : user.couponCount}</strong><span>${state.lang === 'zh' ? '卡包' : 'Card pack'}</span></button>
+          <button data-me-target="cardPack" type="button"><strong>${state.cardPack ? state.cardPack.badgeCount : '—'}</strong><span>${state.lang === 'zh' ? '卡包' : 'Card pack'}</span></button>
           <button data-me-target="cardPack" type="button"><strong>${money(user.balanceCents)}</strong><span>${t('balance')}</span></button>
         </div>
         <div class="member-extra web-member-extra">
@@ -2051,7 +2056,7 @@ function renderCardPackWeb() {
       <h1>${zh ? '卡包' : 'Card pack'}</h1>
       ${pack.emptyText ? `<div class="empty-state tall"><strong>${escapeHtml(pack.emptyText)}</strong>
         <button class="primary" data-me-target="mall" type="button">${zh ? '去看看充值套餐' : 'See packages'}</button></div>` : ''}
-      ${pack.timecards.length ? `<div class="section-row compact"><h2>${zh ? '次卡' : 'Passes'}</h2></div>
+      ${pack.timecards.length ? `<div class="section-row compact"><h2>${zh ? '次卡' : 'Passes'}</h2><button class="section-note-btn" data-mall-focus="timecard" type="button">${zh ? '去商城 ›' : 'Shop ›'}</button></div>
         ${pack.timecards.map((c) => `
           <div class="info-card-web card">
             <p><span><strong>${escapeHtml(c.name)}</strong></span><strong>${zh ? '剩' : 'Left'} ${c.remaining}/${c.totalTimes}</strong></p>
@@ -2065,11 +2070,7 @@ function renderCardPackWeb() {
             <p class="subtle">${escapeHtml(q.subtitle)}</p>
             ${q.sourceLabel ? `<p class="subtle">${escapeHtml(q.sourceLabel)}</p>` : ''}
           </div>`).join('')}` : ''}
-      <div class="section-row compact"><h2>${zh ? '储值' : 'Balance'}</h2></div>
-      <div class="info-card-web card">
-        <p><span><strong>${zh ? '储值余额' : 'Stored balance'}</strong></span><strong class="price">${escapeHtml(pack.stored.balanceText)}</strong></p>
-        <p style="margin-top:8px"><a href="#" data-me-target="mall">${zh ? '去充值 ›' : 'Top up ›'}</a></p>
-      </div>
+      ${/* 裁定①(店主 08-23):卡包=券+次卡两类,储值不进卡包(会员卡已直达+自有页,重复即乱) */''}
     </section>`
 }
 
@@ -2086,7 +2087,10 @@ function renderMallWeb() {
       <button class="ghost back-btn" data-me-target="me" type="button">← ${zh ? '我的' : 'Me'}</button>
       <h1>${zh ? '充值 · 次卡' : 'Recharge & passes'}</h1>
       ${mall.emptyText ? `<div class="empty-state tall"><strong>${escapeHtml(mall.emptyText)}</strong></div>` : ''}
-      ${mall.items.map((it) => `
+      ${(mall.filters || []).length > 1 ? `<div class="mall-filters">${mall.filters.map((f) => `<button class="mall-filter${(state.mallFilter || 'all') === f.key ? ' on' : ''}" data-mall-filter="${escapeHtml(f.key)}" type="button">${escapeHtml(f.label)}</button>`).join(' ')}</div>` : ''}
+      ${(mall.sections || []).filter((sec) => (state.mallFilter || 'all') === 'all' || (state.mallFilter || 'all') === sec.kind).map((sec) => `
+        <div class="section-row compact"><h2>${escapeHtml(sec.kind === 'timecard' ? `${sec.label} · 次卡` : sec.label)}</h2></div>
+        ${mall.items.filter((it) => it.section === sec.key).map((it) => `
         <div class="info-card-web card">
           <p><span><strong>${escapeHtml(it.titleText)}</strong></span>${it.bonusText ? `<strong class="price">${escapeHtml(it.bonusText)}</strong>` : ''}</p>
           ${it.unitText ? `<p class="subtle">${escapeHtml(it.unitText)}</p>` : ''}
@@ -2094,7 +2098,7 @@ function renderMallWeb() {
           ${it.validText ? `<p class="subtle">${escapeHtml(it.validText)}</p>` : ''}
           <p style="margin-top:10px"><button class="primary" data-mall-buy="${escapeHtml(it.id)}" type="button" style="width:100%">${escapeHtml(it.buyButtonText)}</button></p>
           ${state.mallNoteFor === it.id ? `<p class="subtle">${escapeHtml(it.offlineNote)}</p>` : ''}
-        </div>`).join('')}
+        </div>`).join('')}`).join('')}
     </section>`
 }
 
@@ -2365,6 +2369,20 @@ async function handleScreenClick(event) {
   }
   if (event.target.closest('[data-toggle-member-code]')) {
     state.memberCodeOpen = !state.memberCodeOpen
+    render()
+    return
+  }
+  const mallFocus = event.target.closest('[data-mall-focus]')
+  if (mallFocus) {
+    event.preventDefault()
+    state.mallFilter = mallFocus.dataset.mallFocus   // 裁定②:去统一商城并定位次卡分区(不新建页)
+    setView('mall')
+    return
+  }
+  const mallFilter = event.target.closest('[data-mall-filter]')
+  if (mallFilter) {
+    event.preventDefault()
+    state.mallFilter = mallFilter.dataset.mallFilter
     render()
     return
   }

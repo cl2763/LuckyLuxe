@@ -8,6 +8,7 @@ const DEFAULT_AVATAR = '/assets/images/member-profile.jpg'
 Page({
   data: {
     member: {},
+    cardPackBadge: null,   // null=还没拿到(黑卡格显示「—」);拿到才写数字,不猜数
     lang: 'zh',
     t: i18n.pageCopy('me', 'zh'),
     isLoggedIn: false,
@@ -51,7 +52,6 @@ Page({
       amountToNextLevel: 0,
       growthNote: lang === 'en' ? 'Sign in to view member progress.' : '登录后查看会员成长值。',
       points: 0,
-      couponCount: 0,
       balance: 0,
       totalSpent: 0,
       visits: 0,
