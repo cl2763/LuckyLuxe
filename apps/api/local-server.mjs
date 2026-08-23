@@ -7,7 +7,8 @@ import { copyFileSync, existsSync, mkdirSync, readdirSync, readFileSync, renameS
 import { dirname, extname, join, normalize, resolve } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import os from 'node:os'   // 真机调试:开发机局域网 IP 探测(启动日志给手机用的地址)
-import { pngSize, rasterBackend, svgToPng } from './svg-raster.mjs'   // 真机 SVG 空白件:快照出 PNG(真机 <image> 不认带文字的 SVG)
+import { pngSize, rasterBackend, svgToPng } from './svg-raster.mjs'
+import { inkToPng } from './ink-raster.mjs'   // 笔迹图:纯 JS 画折线,**透明底**(单据白纸走 svgToPng,两条路不混)
 import { analyzeReferenceImage, createBookingSummary, createCustomerInsight, createCustomerServiceReply, createDailyBrief, createRecallMessages, createServiceNoteInsights, createSocialCopy, extractKbEntriesFromDocument, polishStaffQuoteReply } from './ai-utils.mjs'
 import { buildKnowledgeContext, loadCustomerServiceKnowledgeBase } from './kb-utils.mjs'
 
@@ -11303,7 +11304,11 @@ async function route(req, res) {
     /* 真机 SVG 空白件同刀:笔迹图也出 PNG(`/signature.png`);`.svg` 路径保留兼容旧链接,
        但全仓图源已改指 PNG —— 三端同一格式,不留两套。 */
     if (path.endsWith('/signature.png')) {
-      const png = svgToPng(out, { width: Math.max(240, Math.round(w) * 3) })
+      /* 🔴 笔迹必须**透明底**(店主 08-24 图标白底件的连带修):
+         原来走 svgToPng —— 那条路是给单据(白纸)用的,会铺白底;笔迹是叠在单据上的线条,
+         白底就是一块白方块,现在没露馅只因为 sign.html 加了 mix-blend-mode:multiply 遮住了。
+         改走 ink-raster:纯 JS 画折线,天然透明,且不再依赖 librsvg 装没装。 */
+      const png = inkToPng(paths, { x0, y0, w, h, width: Math.max(240, Math.round(w) * 3), strokeWidth: 2, color: '#241f1d' })
       if (png) {
         res.writeHead(200, { 'content-type': 'image/png', 'content-length': png.length, 'cache-control': 'public, max-age=31536000, immutable' })
         res.end(png)

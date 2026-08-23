@@ -4501,6 +4501,38 @@ textarea:focus {
   margin-top: 18px;
 }
 
+/* 积分商城块(08-24):常用功能区里的通栏块,右侧留配图位(将来换奖品图/banner 不动版) */
+.fn-block {
+  width: 100%;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 14px;
+  padding: 16px 18px;
+  margin-bottom: 12px;
+  border: 0;
+  text-align: left;
+  cursor: pointer;
+}
+
+.fn-block .fn-block-text { display: grid; gap: 4px; min-width: 0; }
+.fn-block .fn-block-text strong { font-size: 16px; }
+.fn-block .fn-block-text span { color: var(--muted); font-size: 12.5px; font-weight: 650; }
+
+.fn-block .fn-block-art {
+  width: 52px;
+  height: 52px;
+  flex: none;
+  border-radius: 14px;
+  background: #f4ece3;
+  border: 1px solid #ecdfd0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.fn-block .fn-block-art img { width: 26px; height: 26px; display: block; }
+
 /* 裁定①(08-23):黑卡「积分」格下面的「可兑 N 件」小字(句后端唯一,没有就整行不出) */
 .member-assets .asset-hint {
   color: #d8b48a;

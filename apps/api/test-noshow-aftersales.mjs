@@ -18,6 +18,7 @@
      DATA_DIR=/tmp/ll-x PORT=4300 node local-server.mjs &
      TEST_BASE_URL=http://127.0.0.1:4300 TEST_DB_PATH=/tmp/ll-x/lucky-luxe.sqlite node 本文件
    (2026-08-11 有人少了 TEST_BASE_URL,在真库建了 nsas-a-msok023f 测试租户,已停用挂账。) */
+import zlib97 from 'node:zlib'
 import { readFileSync, readdirSync, statSync, existsSync } from 'node:fs'
 import { join } from 'node:path'
 import { DatabaseSync } from 'node:sqlite'
@@ -2372,10 +2373,20 @@ const main = async () => {
       /* ㋕ wiring:积分入口**唯一**(黑卡那一格),别处不许再冒出第二个积分入口 */
       const meWx95 = readFileSync(join(ROOT42, 'miniprogram/pages/me/index.wxml'), 'utf8')
       const custWeb95 = readFileSync(join(ROOT42, 'apps/web/customer.js'), 'utf8')
+      /* 08-24 修订:入口**可以有多个**(黑卡格 + 常用功能块),唯一律约束的是**页面与数据出口** ——
+         所有入口进同一个 pages/points,提示句都读同一个后端出口。数入口个数是错的判据。 */
       const miniPointsEntries = (meWx95.match(/bindtap="goPoints"/g) || []).length
       const webPointsEntries = (custWeb95.match(/data-me-target="pointsMall"/g) || []).length
-      check('㋕ 顾客端积分入口唯一(小程序黑卡 1 处、网页黑卡 1 处,没有第二个入口)',
-        miniPointsEntries === 1 && webPointsEntries === 1, JSON.stringify({ mini: miniPointsEntries, web: webPointsEntries }))
+      const meJs95 = readFileSync(join(ROOT42, 'miniprogram/pages/me/index.js'), 'utf8')
+      const pagesJson95 = JSON.parse(readFileSync(join(ROOT42, 'miniprogram/app.json'), 'utf8'))
+      const pointsPages95 = pagesJson95.pages.filter((x) => /points/.test(x) && !/merchant/.test(x))
+      check('㋕ 积分**页面**唯一(顾客端只有 pages/points 一个积分页,没有第二个页面)',
+        pointsPages95.length === 1 && pointsPages95[0] === 'pages/points/index', JSON.stringify(pointsPages95))
+      check('㋕ 多入口同页:小程序黑卡格 + 常用功能块都走 goPoints(2 处),网页两处都指 pointsMall',
+        miniPointsEntries >= 2 && webPointsEntries >= 2 && /goPoints\(\)\s*\{[^}]*pages\/points/.test(meJs95.replace(/\n/g, ' ')),
+        JSON.stringify({ mini: miniPointsEntries, web: webPointsEntries }))
+      check('㋕ 积分商城块留了配图位(将来放奖品缩略图/banner 不动版)',
+        meWx95.includes('fn-block-art') && custWeb95.includes('fn-block-art'))
       check('㋕ 提示句只读后端出口(两端都不自己算「可兑几件」)',
         meWx95.includes('member.redeemablePrizeText') && custWeb95.includes('user.redeemablePrizeText')
         && !/可兑\s*\$\{/.test(custWeb95))
@@ -2436,7 +2447,72 @@ const main = async () => {
       const seed91 = readFileSync(join(ROOT42, 'apps/api/local-server.mjs'), 'utf8')
       check('㋑ 夹具自证:演示铺单的已完成单连带开单+签署(且回填只碰 demo-seed、生产不跑)',
         seed91.includes('seedSignedSheets') && seed91.includes("source_channel = 'demo-seed'") && seed91.includes('if (!IS_PRODUCTION) {'))
-      check('㋏ 图标资源已出 PNG(23 个 icon 同名 .png 在场)', readdirSync(join(ROOT42, 'miniprogram/assets/icons')).filter((f) => f.endsWith('.png')).length >= 23)
+      /* 🔴 判据要能证伪你要证的那件事(店主 08-24 记档的教训):
+         上一批自查报「图标是透明底」,验的是**有没有 alpha 通道**(colorType=6)——
+         而铺了白底的图一样有 alpha 通道,所以自检绿了、白底还在,深色背景上一放就现形。
+         现在按**像素**验:每个图标 PNG 四角 alpha 必须为 0,且着墨占比落在线条图标的合理区间
+         (铺了底会接近 100%)。 */
+      const iconDir97 = join(ROOT42, 'miniprogram/assets/icons')
+      const iconPngs97 = readdirSync(iconDir97).filter((f) => f.endsWith('.png')).sort()
+      check('㋏ 图标资源已出 PNG(23 个 icon 同名 .png 在场)', iconPngs97.length >= 23)
+      const pngCorners97 = (buf) => {
+        let pos = 8; let w = 0; let h = 0; let bitDepth = 0; let colorType = 0
+        const idat = []
+        while (pos < buf.length) {
+          const len = buf.readUInt32BE(pos)
+          const type = buf.toString('ascii', pos + 4, pos + 8)
+          const data = buf.subarray(pos + 8, pos + 8 + len)
+          if (type === 'IHDR') { w = data.readUInt32BE(0); h = data.readUInt32BE(4); bitDepth = data[8]; colorType = data[9] }
+          else if (type === 'IDAT') idat.push(data)
+          else if (type === 'IEND') break
+          pos += 12 + len
+        }
+        if (colorType !== 6 || bitDepth !== 8) return null
+        const raw = zlib97.inflateSync(Buffer.concat(idat))
+        const bpp = 4; const stride = w * bpp
+        const out = Buffer.alloc(h * stride)
+        let p2 = 0
+        for (let y = 0; y < h; y += 1) {
+          const filter = raw[p2]; p2 += 1
+          const line = raw.subarray(p2, p2 + stride); p2 += stride
+          const prev = y > 0 ? out.subarray((y - 1) * stride, y * stride) : Buffer.alloc(stride)
+          const cur = out.subarray(y * stride, (y + 1) * stride)
+          for (let x = 0; x < stride; x += 1) {
+            const a = x >= bpp ? cur[x - bpp] : 0
+            const b = prev[x]
+            const c = x >= bpp ? prev[x - bpp] : 0
+            let v = line[x]
+            if (filter === 1) v += a
+            else if (filter === 2) v += b
+            else if (filter === 3) v += Math.floor((a + b) / 2)
+            else if (filter === 4) {
+              const pp = a + b - c
+              const pa = Math.abs(pp - a); const pb = Math.abs(pp - b); const pc = Math.abs(pp - c)
+              v += (pa <= pb && pa <= pc) ? a : (pb <= pc ? b : c)
+            }
+            cur[x] = v & 0xff
+          }
+        }
+        const al = (x, y) => out[y * stride + x * bpp + 3]
+        let ink = 0
+        for (let i = 3; i < out.length; i += 4) if (out[i] > 0) ink += 1
+        return { w, h, alphas: [al(0, 0), al(w - 1, 0), al(0, h - 1), al(w - 1, h - 1)], inkRatio: ink / (w * h) }
+      }
+      const opaqueIcons97 = []
+      const inkedIcons97 = []
+      for (const f of iconPngs97) {
+        const c = pngCorners97(readFileSync(join(iconDir97, f)))
+        if (!c) { opaqueIcons97.push(`${f}(非8bitRGBA)`); continue }
+        if (c.alphas.some((a) => a !== 0)) opaqueIcons97.push(`${f}(四角 alpha=${c.alphas.join(',')})`)
+        if (!(c.inkRatio > 0 && c.inkRatio < 0.6)) inkedIcons97.push(`${f}(着墨 ${(c.inkRatio * 100).toFixed(0)}%)`)
+      }
+      check('㋏ 图标底**真透明**:逐像素验四角 alpha=0(通道存在≠底透明,08-24 教训)',
+        opaqueIcons97.length === 0, opaqueIcons97.join(' | ').slice(0, 220))
+      check('㋏ 图标是线条不是色块:着墨占比 0–60%(铺了白底会接近 100%)',
+        inkedIcons97.length === 0, inkedIcons97.join(' | ').slice(0, 220))
+      const iconTool97 = readFileSync(join(ROOT42, 'tools/icons-svg-to-png.mjs'), 'utf8')
+      check('㋏ 图标转换器禁用 qlmanage(它铺白底),且显式要求透明背景',
+        iconTool97.includes("'-b', 'none'") && iconTool97.includes("'-background', 'none'") && !/spawnSync\('qlmanage'/.test(iconTool97))
       const svWeb = readFileSync(join(ROOT42, 'apps/web/snapshot-viewer.js'), 'utf8')
       /* ===== ㋎ 真机调试联通件(店主 08-23):局域网可达 + 演示白名单生产结构性不成立 ===== */
       const srvLan = readFileSync(join(ROOT42, 'apps/api/local-server.mjs'), 'utf8')

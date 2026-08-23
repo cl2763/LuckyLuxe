@@ -1823,6 +1823,16 @@ function renderMe() {
       </section>
       <section class="section">
         <div class="section-row"><h2>${t('functions')}</h2></div>
+        <!-- 裁定(店主 08-24):积分商城做成**一块**(不是普通一格),右侧留配图位;
+             与黑卡「积分」格并存不冲突 —— 入口唯一律约束的是页面与数据出口,不是入口数量。
+             提示句与黑卡同源(redeemablePrizeText),两个入口进同一个积分页。 -->
+        <button class="fn-block card" data-me-target="pointsMall" type="button">
+          <span class="fn-block-text">
+            <strong>${state.lang === 'zh' ? '积分商城' : 'Points mall'}</strong>
+            <span>${escapeHtml(user.redeemablePrizeText || (state.lang === 'zh' ? '用积分换券 · 看每一笔积分怎么来的' : 'Redeem coupons · see where points came from'))}</span>
+          </span>
+          <span class="fn-block-art"><img src="/assets/icons/c-gift.png" alt=""></span>
+        </button>
         <div class="menu-grid-web">
           ${/* 裁定A(店主 08-23):资产族只留「我的资产」一个入口——卡包/券/积分商城/会员权益
                 全部收进资产分类总页(与小程序同构,四之九);商城=购买入口不属资产族,由储值页/资产页进 */''}

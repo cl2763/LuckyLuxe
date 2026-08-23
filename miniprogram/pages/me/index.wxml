@@ -143,6 +143,19 @@
     <view class="section-head">
       <view class="section-title">{{t.functions}}</view>
     </view>
+    <!-- 裁定(店主 08-24):积分商城在常用功能区做成**一块**(不是普通一行),右侧留配图位 ——
+         将来放奖品缩略图 / 活动 banner。与黑卡「积分」格并存不冲突:入口唯一律约束的是
+         **页面与数据出口**,不是入口数量;两个入口进同一个 pages/points,提示数同源(redeemablePrizeText)。 -->
+    <view class="fn-block card" bindtap="goPoints">
+      <view class="fn-block-text">
+        <view class="fn-block-title">积分商城</view>
+        <view class="fn-block-sub">{{member.redeemablePrizeText || '用积分换券 · 看每一笔积分怎么来的'}}</view>
+      </view>
+      <view class="fn-block-art">
+        <!-- 配图位:后端给 bannerUrl 时换成奖品图/活动图,现在放礼物图标占位(装饰,不承载数字) -->
+        <image class="fn-block-ic" src="/assets/icons/c-gift.png"></image>
+      </view>
+    </view>
     <view class="menu-grid">
       <view class="menu-card card" bindtap="goMessages">
         <view class="menu-badge"><image class="menu-ic" src="/assets/icons/c-message.png"></image></view>
