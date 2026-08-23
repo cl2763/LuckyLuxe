@@ -1165,7 +1165,8 @@ function stopHeroCarousel() {
 /* D46:店铺事实单源渲染件 —— 首页门店块/结算页店块/门店详情页全走这里。
    字段全部来自 /stores(随 ?store= 租户走);空字段不显示,不许再出现 Address TBD 这类假占位。 */
 function currentStore() { return (state.stores && state.stores[0]) || {} }
-function brandName() { return currentStore().name || 'Lucky Luxe' }
+// 多租户:店名拿不到就空,绝不回落成旗舰店品牌名(别家店的顾客会看到「Lucky Luxe」)
+function brandName() { return currentStore().name || '' }
 
 /* 切换门店(店主 08-16 拍板翻案:不能只靠每店专属链接)。参照物=小程序 shop-select 屏:
    同一 /shops 公开数据源(演示店同口径隐藏);选中即以 ?store= 整页进店——
@@ -1776,7 +1777,8 @@ function renderMe() {
               <div>
                 <div class="recent-top"><strong>${order.service.name}</strong><span>${statusLabel(order.status)}</span></div>
                 <p>${order.appointmentDate} ${order.appointmentTime} · ${order.technician.name}</p>
-                <p>${t('paidDeposit')} ${money(order.depositCents)}</p>
+                <!-- 同一张单在「近期消费」和「订单列表」必须说同一句话:金额句后端唯一(永久律 08-23) -->
+                <p>${escapeHtml(order.actualDueText || order.listAmountText || '')}</p>
                 ${order.status === 'COMPLETED' && customerVisibleWorkImages(order).length ? `<p>${t('finalPhotos')} · ${customerVisibleWorkImages(order).length}</p>` : ''}
               </div>
             </button>
@@ -1886,7 +1888,7 @@ function renderOrdersWeb() {
               <div>
                 <p>${order.appointmentDate} ${order.appointmentTime}</p>
                 <p>${order.technician.name} · ${order.store.name}</p>
-                <p class="price">${order.actualDueText ? escapeHtml(order.actualDueText) : (order.listAmountText ? escapeHtml(order.listAmountText) : `${t('paidDeposit')} ${money(order.depositCents)}`)}</p>
+                <p class="price">${escapeHtml(order.actualDueText || order.listAmountText || '')}</p>
                 ${order.status === 'COMPLETED' && customerVisibleWorkImages(order).length ? `<p>${t('finalPhotos')} · ${customerVisibleWorkImages(order).length}</p>` : ''}
               </div>
             </div>
@@ -2000,7 +2002,7 @@ function renderOrderDetailWeb() {
             ${order.payment.sheets.map((sh) => `
               <p style="margin-top:10px"><span><strong>${state.lang === 'zh' ? escapeHtml(sh.label || '') : `Sheet ${sh.n}/${sh.total}`}</strong></span><span class="subtle">${escapeHtml(String(sh.signedAt || '').slice(0, 16).replace('T', ' '))}</span></p>
               ${((sh.flow && sh.flow.lines) || []).map((fl) => `<p><span>${escapeHtml(fl.label)}</span><strong>${escapeHtml(fl.amountText)}</strong></p>`).join('')}
-              <p style="border-top:1px solid #e7ddd4;padding-top:6px"><span><strong>${escapeHtml((sh.flow && sh.flow.heroLabel) || '本单到店支付')}</strong></span><strong class="price">${escapeHtml((sh.flow && sh.flow.cashDueText) || '')}</strong></p>
+              <p style="border-top:1px solid #e7ddd4;padding-top:6px"><span><strong>${escapeHtml((sh.flow && sh.flow.heroLabel) || '')}</strong></span><strong class="price">${escapeHtml((sh.flow && sh.flow.cashDueText) || '')}</strong></p>
               <p>${sh.snapshotUrl
                 ? `<a href="#" data-snap-open="${escapeHtml(sh.code)}">${state.lang === 'zh' ? '查看原件 ›' : 'View ›'}</a>`
                 : `<a href="/sign/${encodeURIComponent(sh.code)}" target="_blank" rel="noreferrer">${state.lang === 'zh' ? '去签字 ›' : 'Sign ›'}</a>`}</p>`).join('')}
@@ -2089,7 +2091,7 @@ function renderMallWeb() {
       ${mall.emptyText ? `<div class="empty-state tall"><strong>${escapeHtml(mall.emptyText)}</strong></div>` : ''}
       ${(mall.filters || []).length > 1 ? `<div class="mall-filters">${mall.filters.map((f) => `<button class="mall-filter${(state.mallFilter || 'all') === f.key ? ' on' : ''}" data-mall-filter="${escapeHtml(f.key)}" type="button">${escapeHtml(f.label)}</button>`).join(' ')}</div>` : ''}
       ${(mall.sections || []).filter((sec) => (state.mallFilter || 'all') === 'all' || (state.mallFilter || 'all') === sec.kind).map((sec) => `
-        <div class="section-row compact"><h2>${escapeHtml(sec.kind === 'timecard' ? `${sec.label} · 次卡` : sec.label)}</h2></div>
+        <div class="section-row compact"><h2>${escapeHtml(sec.label)}</h2></div>
         ${mall.items.filter((it) => it.section === sec.key).map((it) => `
         <div class="info-card-web card">
           <p><span><strong>${escapeHtml(it.titleText)}</strong></span>${it.bonusText ? `<strong class="price">${escapeHtml(it.bonusText)}</strong>` : ''}</p>

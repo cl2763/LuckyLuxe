@@ -22,7 +22,7 @@
         <!-- 案三:买的不出小字;赠的才标一行灰字(句后端唯一 sourceLabel) -->
         <view wx:if="{{c.sourceLabel}}" class="cp-src">{{c.sourceLabel}}</view>
         <view wx:if="{{open['tc-' + c.id]}}" class="cp-more">
-          <text>可核销项目:{{c.projectGroup || '不限'}}</text>
+          <text>可核销项目:{{c.projectGroupText}}</text>
           <text class="cp-note">到店开单时选「次卡」大类核销,核销后次数自动减 1</text>
         </view>
       </view>

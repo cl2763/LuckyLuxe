@@ -234,18 +234,24 @@ function toMiniService(service) {
   }
 }
 
+/* 🔴 假数回落红线(店主 08-23):映射层是回落的重灾区 —— 这里原来写死了**旗舰店的**店名、
+   营业时间、时区、店介绍当兜底:多租户下别家店只要某个字段没配,顾客看到的就是「Lucky Luxe Ontario /
+   Tue-Sun 10:00-19:00 / 多伦多时区」,全是别人家的事实(D19 当年只修了 id 那一处)。
+   现在:没有就是空,页面按空态处理;地址/电话保留「待补充」是**如实说明**不是假数。
+   另:今日营业句 todayHours 必须透传 —— 映射层裁字段=后端加了顾客也拿不到(toMiniBooking 同款教训)。 */
 function toMiniStore(store) {
   return {
     id: store.id || '',   // D19:不再用写死的旗舰店 id 兜底
-    storeName: store.name || store.storeName || 'Lucky Luxe Ontario',
+    storeName: store.name || store.storeName || '',
     address: store.address || '门店地址待补充',
     phone: store.phone || '门店电话待补充',
-    businessHours: store.businessHours || store.business_hours || 'Tue-Sun 10:00-19:00',
+    businessHours: store.businessHours || store.business_hours || '',
     hours: store.hours || [],
-    timezone: store.timezone || 'America/Toronto',
+    todayHours: store.todayHours || null,
+    timezone: store.timezone || '',
     latitude: store.latitude,
     longitude: store.longitude,
-    description: store.description || 'Lucky Luxe nail and lash atelier.'
+    description: store.description || ''
   }
 }
 
@@ -283,13 +289,13 @@ function toMiniBooking(booking) {
     balanceDeduction: 0,
     /* D32(4500 同族·假数回落):原来 booking.deposit 为 0 就回落店配定金额还标「已付」。
        现在真相直出:depositState/depositCents/payment(已签快照分解)由后端下发,前端零运算。 */
-    depositState: booking.depositState || 'none',
+    depositState: booking.depositState || '',   // 拿不到不猜「无定金」(页面按未知走通用句)
     depositCents: booking.depositCents || 0,
     payment: booking.payment || null,
     payableAmount: booking.depositCents ? Math.round(booking.depositCents / 100) : 0,
     finalDue: booking.finalDue || 0,
     servicePrice: booking.servicePrice || service.price || 0,
-    status: statusMap[booking.status] || 'pending_service',
+    status: statusMap[booking.status] || '',   // 未知状态不硬塞「待服务」(会把单错分到别的筛选组;徽标句读后端 statusText)
     paymentStatus: booking.status === 'PENDING_PAYMENT' ? 'pending' : 'paid',
     backendBookingId: booking.id,
     /* 屏 D2/D3(2026-08-10 核验轮修复):这个映射是**白名单**,后端 customerOrderBadges()

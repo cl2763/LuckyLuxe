@@ -74,12 +74,12 @@ Page({
           groupCashText: order.payment.groupCashDueText || ''
         }
       }
-      // 价格拆解:总价 / 定金 / 到店应付(不同来源字段不一,统一补算)
-      const price = order.servicePrice || (order.items || []).reduce((s, it) => s + (Number(it.price) || 0) * (it.quantity || 1), 0) || (service.price || 0)
-      const deposit = Number(order.payableAmount) || (order.serviceInfo && order.serviceInfo.depositAmount) || 0
-      order.servicePrice = price
-      order.payableAmount = deposit
-      order.finalDue = order.finalDue != null && order.finalDue !== '' ? order.finalDue : Math.max(0, price - deposit - (Number(order.balanceDeduction) || 0))
+      /* 🔴 永久律(店主 08-23):顾客可见数字拿不到真值就显示「—」,不许前端自算、不许回落到别的字段。
+         原来这里 `servicePrice || Σitems || service.price` 三重回落 + 到店应付前端做减法,
+         同一张单在详情页可能算出与后端不同的数(D69 同族)。现在只认后端字段,缺就空着让 wxml 出「—」。 */
+      order.servicePrice = order.servicePrice != null && order.servicePrice !== '' ? order.servicePrice : null
+      order.payableAmount = order.payableAmount != null && order.payableAmount !== '' ? order.payableAmount : null
+      order.finalDue = order.finalDue != null && order.finalDue !== '' ? order.finalDue : null
     }
     this.setData({ order, lang, t })
   },

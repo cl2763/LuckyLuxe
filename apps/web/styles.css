@@ -4390,9 +4390,19 @@ textarea:focus {
   margin-top: 22px;
 }
 
-.member-assets div {
+/* 勘误(08-23)后三块从 <div> 换成可点的 <button>,这条只选 div 就失效了 ——
+   数字与标签挤成一行、按钮默认白底露出来(本批 L1 截图抓到)。两种标签一起选。 */
+.member-assets div,
+.member-assets button {
   display: grid;
   gap: 4px;
+  background: transparent;
+  border: 0;
+  padding: 0;
+  color: inherit;
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
 }
 
 .member-assets strong {

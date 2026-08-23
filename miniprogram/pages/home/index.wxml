@@ -46,7 +46,7 @@
         </view>
         <view class="shop-card-row" bindtap="goStore">
           <text class="shop-row-icon">◷</text>
-          <text class="shop-row-text">{{todayHoursText || store.businessHours}}</text>
+          <text class="shop-row-text">{{todayHoursText}}</text>
           <text class="shop-row-act">{{lang === 'en' ? 'All hours ›' : '全部时间 ›'}}</text>
         </view>
         <view class="shop-card-row" bindtap="callStore">

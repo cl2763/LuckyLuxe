@@ -825,9 +825,12 @@ const main = async () => {
       const hardcoded = ['Lucky Luxe Ontario', 'Address TBD', 'Phone TBD', 'Tuesday-Sunday', 'Ontario · CAD'].filter((w) => custCode.includes(w))
       check('㉞ D46 店铺事实零写死(店名/地址/电话/营业时间/币种)', hardcoded.length === 0, hardcoded.join(','))
       check('㉞ D46 人气区与服务页同口径(fromPriceLabel 进推荐卡)', /recommend-card[\s\S]{0,200}fromPriceLabel/.test(cust))
-      // ㉟ 横幅批:品牌名单源 brandName()——渲染层唯一 'Lucky Luxe' 字面量=回落值本身
+      /* ㉟ 横幅批:品牌名单源 brandName()。
+         08-23 护栏升级(假数回落红线):**连回落值都不许有** —— 原来允许 1 处 'Lucky Luxe' 作为
+         `currentStore().name || 'Lucky Luxe'` 的兜底,多租户下那就是把旗舰店品牌名贴到别家店头上。
+         现在渲染层字面量必须为 0,拿不到店名就空着。 */
       const brandHits = (custCode.match(/Lucky Luxe/g) || []).length
-      check('㉟ 品牌文案单源(brandName 回落值外零字面量)', brandHits === 1 && custCode.includes('function brandName()'), `hits=${brandHits}`)
+      check('㉟ 品牌文案单源 + 零回落值(渲染层 Lucky Luxe 字面量=0)', brandHits === 0 && custCode.includes('function brandName()'), `hits=${brandHits}`)
     }
 
     // ===== ㊱ v1.4 大类改造:平台字典+全条目∈大类+空类隐藏 =====
@@ -1604,6 +1607,72 @@ const main = async () => {
                   const sub59 = dbx.prepare('SELECT subtotal_cents FROM settlements WHERE id = ?').get(sh59.id).subtotal_cents
                   check('㋉ 红线:核定归属≠计业绩(Σ分成=档位小计,不含充值 300)', perfSum > 0 && perfSum === sub59, JSON.stringify({ perfSum, sub59 }))
 
+                  /* ===== ㋑ 假数回落全仓审计(店主 08-23 升级令:D66→D69→couponCount 同族三案后立永久律)=====
+                     ①顾客可见的数字/金额句拿不到真值一律「—」或如实说明,不许回落到别的字段;
+                     ②没有签署单的单子不许出现「已结清」这类完成态金额句;
+                     ③一笔消费一旦"已结清",订单卡/累计消费/成长值/积分/到店次数**五个读方同时算数**。 */
+                  {
+                    const bkQ1 = (await request('/admin/bookings/direct', { method: 'POST', body: JSON.stringify({ newCustomerName: `㋑回落客${RUN_ID}`, serviceId: shop.serviceId, technicianId: shop.tech1, date: dateStr(0), time: '08:05' }) }, shop.token)).data.booking
+                    const cuidQ = bkQ1.userId || bkQ1.user_id || (bkQ1.user && bkQ1.user.id)
+                    dbx.prepare('UPDATE users SET wechat_open_id = ? WHERE id = ?').run(`wx-q-${RUN_ID}`, cuidQ)
+                    const ctokQ = (await request('/auth/wechat/mini-login', { method: 'POST', body: JSON.stringify({ demoLogin: true, tenantId: shop.tenantId, asUserId: cuidQ }) }, null, { 'x-tenant-id': shop.tenantId })).data.auth.accessToken
+                    const cardsQ = async () => (await request('/bookings', {}, ctokQ, { 'x-tenant-id': shop.tenantId })).data.bookings
+                    const meQ = async () => (await request('/auth/wechat/mini-login', { method: 'POST', body: JSON.stringify({ demoLogin: true, tenantId: shop.tenantId, asUserId: cuidQ }) }, null, { 'x-tenant-id': shop.tenantId })).data.user
+                    // ① 完成 + 完全没开单 → 如实说,不许「已结清」
+                    await request(`/admin/bookings/${bkQ1.id}/status`, { method: 'PATCH', body: JSON.stringify({ status: 'COMPLETED' }) }, shop.token)
+                    const q1 = (await cardsQ()).find((b) => b.id === bkQ1.id)
+                    check('㋑ D69主刀:完成但没开单=「本单未产生结算单」(零「已结清」,零预约标价)',
+                      q1.listAmountText === '本单未产生结算单' && !/已结清/.test(q1.listAmountText), JSON.stringify(q1.listAmountText))
+                    const m0 = await meQ()
+                    check('㋑ 五读方一致(没单时):累计消费/积分/成长值全 0,订单卡也不说收过钱',
+                      m0.totalSpentCents === 0 && m0.points === 0 && m0.growthValue === 0, JSON.stringify({ t: m0.totalSpentCents, p: m0.points, g: m0.growthValue }))
+                    // ② 完成 + 开了单还没签 → 「服务确认单待签字」(与①两件事,不许说同一句)
+                    const sQ = (await request('/admin/settlements', { method: 'POST', body: JSON.stringify({ userId: cuidQ, settlements: [{ payIntent: 'offline_full', bookingId: bkQ1.id, items: [{ serviceId: shop.serviceId, qty: 1 }], technicians: tech, servedPersonName: '' }] }) }, shop.token)).data.settlements[0]
+                    const q2 = (await cardsQ()).find((b) => b.id === bkQ1.id)
+                    check('㋑ 未签单≠没开单:完成+待签=「服务确认单待签字」', q2.listAmountText === '服务确认单待签字', JSON.stringify(q2.listAmountText))
+                    // ③ 签了 → 「已结清 ¥X」+ 五读方同时算数(同源断言常驻)
+                    await request(`/settlements/${encodeURIComponent(sQ.code)}/sign`, { method: 'POST', body: JSON.stringify({ signature: '㋑ 签', disclaimerAccepted: true }) }, null, { 'x-tenant-id': shop.tenantId })
+                    const q3 = (await cardsQ()).find((b) => b.id === bkQ1.id)
+                    const m1 = await meQ()
+                    const subQ = dbx.prepare('SELECT subtotal_cents FROM settlements WHERE id = ?').get(sQ.id).subtotal_cents
+                    const offQ = dbx.prepare("SELECT COALESCE(SUM(amount_cents),0) AS n FROM settlement_payments WHERE settlement_id = ? AND leg = 'offline'").get(sQ.id).n
+                    const numQ = (t) => Math.round(Number(String(t).replace(/[^\d.]/g, '')) * 100)
+                    check('㋑ 已结清句=实付现金(与单据头条同源)', /^已结清 /.test(q3.listAmountText || '') && numQ(q3.listAmountText) === offQ, JSON.stringify({ got: q3.listAmountText, offQ }))
+                    check('㋑ 五读方齐动:签署那一刻 累计消费/积分/成长值/到店次数 一起算数',
+                      m1.totalSpentCents === subQ && m1.points === Math.floor(subQ / 100) && m1.growthValue === subQ / 100 && m1.visits >= 1,
+                      JSON.stringify({ spent: m1.totalSpentCents, sub: subQ, points: m1.points, growth: m1.growthValue, visits: m1.visits }))
+                    // ④ 取消单:金额句同样后端给(不许前端拿标价拼)
+                    const bkQ2 = (await request('/admin/bookings/direct', { method: 'POST', body: JSON.stringify({ userId: cuidQ, serviceId: shop.serviceId, technicianId: shop.tech1, date: dateStr(1), time: '08:35' }) }, shop.token)).data.booking
+                    await request(`/admin/bookings/${bkQ2.id}/status`, { method: 'PATCH', body: JSON.stringify({ status: 'CANCELLED', note: '㋑ 取消' }) }, shop.token)
+                    const q4 = (await cardsQ()).find((b) => b.id === bkQ2.id)
+                    check('㋑ 取消单金额句后端唯一(「总价 ¥X」,前端零拼串)', /^总价 /.test(q4.listAmountText || ''), JSON.stringify(q4.listAmountText))
+                    // ⑤ 待到店单:定金句后端给
+                    const q5 = (await cardsQ()).find((b) => b.status === 'CONFIRMED')
+                    check('㋑ 待到店单金额句后端唯一(定金/到店应付整串下发)', !q5 || /到店应付/.test(q5.listAmountText || ''), JSON.stringify(q5 && q5.listAmountText))
+                    /* ⑤b 今日营业句:后端唯一出口,**特殊营业日优先**(前端原来只看每周表,
+                       今天特殊休息也照样显示「营业中」)。反例数据:把今天设成特殊休息,再设成特殊时段。 */
+                    const storesOf = async () => (await request('/stores', {}, null, { 'x-tenant-id': shop.tenantId })).data.stores[0]
+                    const th0 = (await storesOf()).todayHours
+                    check('㋑ 顾客端公开 /stores 下发今日营业句(位面对:顾客读的是公开口不是 admin 口)',
+                      th0 && typeof th0.zh.text === 'string' && typeof th0.zh.openNow === 'boolean', JSON.stringify(th0 && th0.zh))
+                    await request('/admin/special-dates', { method: 'POST', body: JSON.stringify({ date: dateStr(0), isClosed: true, note: '㋑ 反例休息' }) }, shop.token)
+                    const th1 = (await storesOf()).todayHours
+                    check('㋑ 反例:今天特殊休息 → 「今日休息」且 openNow=false(不再拿每周表说营业中)',
+                      /今日休息/.test(th1.zh.text) && th1.zh.openNow === false && th1.zh.isClosed === true, JSON.stringify(th1.zh))
+                    await request('/admin/special-dates', { method: 'POST', body: JSON.stringify({ date: dateStr(0), isClosed: false, openTime: '00:00', closeTime: '23:59', note: '㋑ 反例通宵' }) }, shop.token)
+                    const th2 = (await storesOf()).todayHours
+                    check('㋑ 反例:今天特殊时段 → 用特殊时段算营业中(特殊日优先于每周表)',
+                      /00:00/.test(th2.zh.text) && th2.zh.openNow === true, JSON.stringify(th2.zh))
+                    await request(`/admin/special-dates/${dateStr(0)}`, { method: 'DELETE' }, shop.token)
+                    const th3 = (await storesOf()).todayHours
+                    check('㋑ 撤掉特殊日 → 回到每周表(幂等面:删掉就恢复,不留残影)',
+                      th3.zh.text !== th2.zh.text, JSON.stringify(th3.zh))
+                    // ⑥ 任何一张订单卡都必须有金额句(否则前端就会去别处找数)
+                    const allQ = await cardsQ()
+                    check('㋑ 零空位:每张订单卡都有后端金额句(实际应付 或 金额句)',
+                      allQ.every((b) => (b.actualDueText || b.listAmountText || '').length > 0), JSON.stringify(allQ.map((b) => b.listAmountText)))
+                  }
+
                   /* ===== ㋋ D66 五裁落地(店主 08-22):裁A 到店唯一定义/裁B 即时预约写方/裁C 售后上日历/详情逐张卡 ===== */
                   /* 裁B 写方:开单不带预约=引擎自动建 COMPLETED 即时预约挂上 */
                   const sNB = await request('/admin/settlements', { method: 'POST', body: JSON.stringify({ userId: cuidK, settlements: [{ payIntent: 'offline_full', items: [{ serviceId: shop.serviceId, qty: 1 }], technicians: tech, servedPersonName: '' }] }) }, shop.token)
@@ -1733,7 +1802,7 @@ const main = async () => {
                     const mallPts = (await request('/my/points-mall', {}, ctokK, { 'x-tenant-id': shop.tenantId })).data
                     check('㋐ 裁定A 资产页卡包行 ≡ 卡包页(次卡/券/合计三个数逐个同源)',
                       assets.cardPack.timecardCount === packNow.timecards.length
-                      && assets.cardPack.couponCount === packNow.coupons.length
+                      && assets.cardPack.couponRowCount === packNow.coupons.length
                       && assets.cardPack.count === packNow.badgeCount,
                       JSON.stringify({ a: assets.cardPack, p: { t: packNow.timecards.length, c: packNow.coupons.length, b: packNow.badgeCount } }))
                     check('㋐ 裁定A 资产页储值行 ≡ 卡包储值行(同一读方,分不出两个数)', assets.stored.balanceCents === packNow.stored.balanceCents && assets.stored.balanceText === packNow.stored.balanceText, JSON.stringify({ a: assets.stored, p: packNow.stored }))
@@ -1984,7 +2053,18 @@ const main = async () => {
       check('㋈ D3 线下行非勾选样式「到店收 · 差额自动」', settleWxml.includes('到店收 · 差额自动') && !settleWxml.includes('payToggleOffline'))
       // ㋉ 三拍 wiring:D1 标题双端直渲(映射层零裁剪教训)+C5 金额句双端同刀(网页列表不再裸「实付定金」)
       check('㋉ D1 wiring:标题句双端直渲+映射层透传', readFileSync(join(ROOT42, 'miniprogram/utils/api.js'), 'utf8').includes('listTitleText: booking.listTitleText') && readFileSync(join(ROOT42, 'miniprogram/pages/orders/index.wxml'), 'utf8').includes('listTitleText || item.serviceName') && custWeb.includes('order.listTitleText'))
-      check('㋉ C5 wiring:网页列表金额行=后端句优先(actualDue > listAmount > 定金旧路)', custWeb.includes('order.actualDueText ? escapeHtml(order.actualDueText) : (order.listAmountText'))
+      /* ㋑ 永久律 wiring(08-23):金额句后端唯一,前端零回落零拼串 —— 双端各自的机械证据 */
+      const ordWx91 = readFileSync(join(ROOT42, 'miniprogram/pages/orders/index.wxml'), 'utf8')
+      const meWx91 = readFileSync(join(ROOT42, 'miniprogram/pages/me/index.wxml'), 'utf8')
+      check('㋑ wiring:小程序订单卡/近期消费零 servicePrice 冒充金额(0 残留)',
+        !/已结清 \{\{cur\.p\}\}/.test(ordWx91) && !/已结清 \{\{cur\.p\}\}/.test(meWx91)
+        && !/servicePrice\}\}/.test(ordWx91) && !/item\.servicePrice/.test(meWx91))
+      check('㋑ wiring:网页订单卡与近期消费同一句源(零「实付定金」前端回落)',
+        custWeb.includes("escapeHtml(order.actualDueText || order.listAmountText || '')")
+        && !custWeb.includes("`${t('paidDeposit')} ${money(order.depositCents)}`"))
+      check('㋑ wiring:后端两个分支都给金额句(没单也说话,不留空位让前端猜)',
+        readFileSync(join(ROOT42, 'apps/api/local-server.mjs'), 'utf8').includes('本单未产生结算单')
+        && readFileSync(join(ROOT42, 'apps/api/local-server.mjs'), 'utf8').includes('服务确认单待签字'))
       // ㋊ D67 三小件+D59 提示句 wiring(双端)
       const odWx2 = readFileSync(join(ROOT42, 'miniprogram/pages/order-detail/index.wxml'), 'utf8')
       const odJs2 = readFileSync(join(ROOT42, 'miniprogram/pages/order-detail/index.js'), 'utf8')
@@ -2134,6 +2214,42 @@ const main = async () => {
       const cssMall69 = readFileSync(join(ROOT42, 'apps/web/styles.css'), 'utf8')
       check('㋐ 裁定②:网页商城筛选选中态有真样式(不是只挂 class 看不出来)',
         custJs69.includes('class="mall-filter') && /\.mall-filter\.on\s*\{/.test(cssMall69))
+      /* ===== ㋑ 全组合审计的常驻护栏:其余四处回落已收口(每处一条,防复活) ===== */
+      const homeJs91 = readFileSync(join(ROOT42, 'miniprogram/pages/home/index.js'), 'utf8')
+      const homeWx91 = readFileSync(join(ROOT42, 'miniprogram/pages/home/index.wxml'), 'utf8')
+      check('㋑ 今日营业句挂在顾客读的公开 /stores 上(只加 admin 口=顾客拿不到)',
+        /path === '\/stores'[\s\S]{0,2200}todayHours: \{ zh: storeTodayHours/.test(readFileSync(join(ROOT42, 'apps/api/local-server.mjs'), 'utf8')))
+      check('㋑ 今日营业句后端唯一(特殊日优先·门店时区),前端零计算零回落常规营业时间',
+        !homeJs91.includes('computeTodayHours') && homeJs91.includes('store.todayHours')
+        && !homeWx91.includes('todayHoursText || store.businessHours')
+        && readFileSync(join(ROOT42, 'apps/api/local-server.mjs'), 'utf8').includes('function storeTodayHours'))
+      const odJs91 = readFileSync(join(ROOT42, 'miniprogram/pages/order-detail/index.js'), 'utf8')
+      check('㋑ 订单详情零前端自算价(Σitems / service.price 三重回落销案)',
+        !/order\.servicePrice \|\| \(order\.items/.test(odJs91) && !/Math\.max\(0, price - deposit/.test(odJs91))
+      const cpWx91 = readFileSync(join(ROOT42, 'miniprogram/pages/card-pack/index.wxml'), 'utf8')
+      const mallWx91 = readFileSync(join(ROOT42, 'miniprogram/pages/mall/index.wxml'), 'utf8')
+      check('㋑ 次卡可核销项目句 + 商城分区名 + 待签卡标题:三处均后端给,前端零拼串',
+        cpWx91.includes('c.projectGroupText') && !cpWx91.includes("projectGroup || '不限'")
+        && mallWx91.includes('{{sec.label}}') && !mallWx91.includes("' · 次卡'")
+        && ordWx91.includes('{{item.titleText}}') && !ordWx91.includes("'(共 '"))
+      const apiMap91 = readFileSync(join(ROOT42, 'miniprogram/utils/api.js'), 'utf8')
+      const clock91 = readFileSync(join(ROOT42, 'miniprogram/utils/storeclock.js'), 'utf8')
+      check('㋑ 映射层零写死旗舰店兜底(店名/营业时间/时区/店介绍;多租户下那是别人家的事实)',
+        !apiMap91.includes("|| 'Lucky Luxe Ontario'") && !apiMap91.includes("|| 'Tue-Sun 10:00-19:00'")
+        && !apiMap91.includes("timezone: store.timezone || 'America/Toronto'")
+        && !custWeb.includes("currentStore().name || 'Lucky Luxe'"))
+      check('㋑ 映射层透传 todayHours(后端加了字段而映射层裁掉=顾客拿不到,toMiniBooking 同款教训)',
+        apiMap91.includes('todayHours: store.todayHours'))
+      check('㋑ 币种红线延伸:缓存未到位不冒充 CAD $(空币符等缓存,不显示别家币种)',
+        !clock91.includes("|| 'CAD'") && !clock91.includes("symbol: '$', trimZeroDecimals: false }"))
+      check('㋑ 状态/定金态不硬塞默认(未知状态不错分到「待服务」,拿不到不猜「无定金」)',
+        !apiMap91.includes("|| 'pending_service'") && !apiMap91.includes("booking.depositState || 'none'"))
+      check('㋑ 「couponCount」全仓永久退役(真值出口改名 couponRowCount,防被当回落源复活)',
+        readFileSync(join(ROOT42, 'apps/api/local-server.mjs'), 'utf8').includes('couponRowCount')
+        && !/couponCount:/.test(readFileSync(join(ROOT42, 'apps/api/local-server.mjs'), 'utf8')))
+      const seed91 = readFileSync(join(ROOT42, 'apps/api/local-server.mjs'), 'utf8')
+      check('㋑ 夹具自证:演示铺单的已完成单连带开单+签署(且回填只碰 demo-seed、生产不跑)',
+        seed91.includes('seedSignedSheets') && seed91.includes("source_channel = 'demo-seed'") && seed91.includes('if (!IS_PRODUCTION) {'))
       check('㋏ 图标资源已出 PNG(23 个 icon 同名 .png 在场)', readdirSync(join(ROOT42, 'miniprogram/assets/icons')).filter((f) => f.endsWith('.png')).length >= 23)
       const svWeb = readFileSync(join(ROOT42, 'apps/web/snapshot-viewer.js'), 'utf8')
       /* ===== ㋎ 真机调试联通件(店主 08-23):局域网可达 + 演示白名单生产结构性不成立 ===== */

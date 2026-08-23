@@ -77,8 +77,8 @@
       <view class="archive-empty">本单未产生结算单</view>
     </view>
     <view class="info-card card" wx:else>
-      <view class="info-row"><text>服务总价</text><text>{{cur.p}}{{cur.s}}{{order.servicePrice}}</text></view>
-      <view wx:if="{{order.depositState === 'received'}}" class="info-row"><text>定金(已收)</text><text class="price">{{cur.p}}{{cur.s}}{{order.payableAmount}}</text></view>
+      <view class="info-row"><text>服务总价</text><text wx:if="{{order.servicePrice !== null}}">{{cur.p}}{{cur.s}}{{order.servicePrice}}</text><text wx:else>—</text></view>
+      <view wx:if="{{order.depositState === 'received'}}" class="info-row"><text>定金(已收)</text><text class="price" wx:if="{{order.payableAmount !== null}}">{{cur.p}}{{cur.s}}{{order.payableAmount}}</text><text wx:else>—</text></view>
       <view wx:elif="{{order.depositState === 'unpaid'}}" class="info-row"><text>定金(待到店支付)</text><text>—</text></view>
       <view class="info-row"><text>到店结算</text><text>按当日结算单为准</text></view>
     </view>

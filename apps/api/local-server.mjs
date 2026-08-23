@@ -820,6 +820,37 @@ function upcomingSpecialDates(storeId = null, limitDays = 45) {
   return db.prepare('SELECT * FROM store_special_dates WHERE store_id = ? AND date >= ? AND date <= ? ORDER BY date ASC').all(id, from, to)
 }
 
+/* 🔴 假数回落审计(店主 08-23 永久律):顾客首页的「今日营业时间 / 营业中」是**状态句**,
+   原来由小程序自己算 —— ①只看每周固定营业时间,**完全不看特殊营业日**(今天特殊休息也照样显示
+   「今日 10:00–19:00 · 营业中」);②拿不到就回落到常规营业时间字符串,顶上去的那句与今天无关;
+   ③前端用手机时区推"今天"(店在多伦多,店主人在别的时区,推出来的可能是别人的今天)。
+   现在唯一出口在后端:按门店时区取当天,特殊日优先于每周表,拿不到就 text='' 让前端不显示。 */
+function storeTodayHours(store, lang = 'zh') {
+  const tz = store.timezone || 'America/Toronto'
+  const now = new Date()
+  const date = now.toLocaleDateString('en-CA', { timeZone: tz })          // 门店时区的今天 YYYY-MM-DD
+  const parts = now.toLocaleTimeString('en-GB', { timeZone: tz, hour12: false })
+  const minutes = Number(parts.slice(0, 2)) * 60 + Number(parts.slice(3, 5))
+  const weekday = new Date(`${date}T12:00:00Z`).getUTCDay()
+  const special = specialDateFor(store.id, date)
+  const weekly = getBusinessHoursRows(store.id).find((h) => Number(h.weekday) === weekday) || null
+  const closedText = lang === 'en' ? 'Closed today' : '今日休息'
+  const toMin = (t) => { const p = String(t || '').split(':'); return Number(p[0]) * 60 + Number(p[1] || 0) }
+  const pick = (open, close, note) => ({
+    text: `${lang === 'en' ? 'Today ' : '今日 '}${open} – ${close}${note ? ` · ${note}` : ''}`,
+    openNow: minutes >= toMin(open) && minutes < toMin(close),
+    isClosed: false,
+    hasHours: true
+  })
+  if (special) {
+    if (special.is_closed) return { text: `${closedText}${special.note ? ` · ${special.note}` : ''}`, openNow: false, isClosed: true, hasHours: true }
+    if (special.open_time && special.close_time) return pick(special.open_time, special.close_time, special.note || '')
+  }
+  if (!weekly) return { text: '', openNow: false, isClosed: false, hasHours: false }
+  if (weekly.is_closed) return { text: closedText, openNow: false, isClosed: true, hasHours: true }
+  return pick(weekly.open_time, weekly.close_time, '')
+}
+
 function businessHoursText(storeId = null, lang = 'zh') {
   const rows = getBusinessHoursRows(storeId)
   if (!rows.length) return lang === 'en' ? 'business hours not configured yet' : '营业时间未设置'
@@ -5674,6 +5705,23 @@ function customerOrderBadges(row) {
   const asKind = asDone === 'resolved' ? 'signed' : (asDone === 'closed' ? 'amended' : 'aftersales')
   const asNote = asDone === 'resolved' ? (row.after_sales_result ? `已解决:${row.after_sales_result}` : '售后已解决') : (asDone === 'closed' ? '售后已关闭' : '已转人工客服跟进')
   if (!stl) {
+    /* 🔴 假数回落全仓审计(店主 08-23 立永久律,D66→D69→couponCount 同族三案后升级):
+       **顾客能看见的数字,拿不到真值就显示「—」或如实说明,一律不许回落到别的字段。**
+       附加:**没有签署单的单子不许出现「已结清」这类完成态金额句。**
+       此前这里回空串,前端就自己拿预约标价(service_price_cents)拼出「已结清 ¥198」——
+       系统各处都认为这单没消费(积分/累计消费/成长值全 0),只有这张卡片说收过钱(D69)。
+       现在金额句一律后端唯一给出,前端零分支:有句就渲染,没句就不显示金额行。
+       措辞与详情页同源(order-detail「本单未产生结算单」),同一事实两处说同一句话。 */
+    /* 「完全没开单」与「开了单还没签字」是两件事,不许说同一句话:
+       有未签单的完成单,顾客端待签卡已置顶催签,这里说「服务确认单待签字」。 */
+    const pendingSheet = db.prepare("SELECT code FROM settlements WHERE booking_id = ? AND status NOT IN ('voided','signed','amended') ORDER BY rowid DESC LIMIT 1").get(row.id)
+    const noSheetAmountText = (row.status === 'COMPLETED' || isAfterSales)
+      ? (pendingSheet ? '服务确认单待签字' : '本单未产生结算单')
+      : (['CANCELLED', 'NO_SHOW'].includes(row.status)
+        ? `总价 ${formatMoneyCents(row.service_price_cents || 0, row.tenant_id, 'auto')}`
+        : (row.deposit_cents
+          ? `定金 ${formatMoneyCents(row.deposit_cents, row.tenant_id, 'auto')} 已付 · 到店应付 ${formatMoneyCents(row.final_due_cents || 0, row.tenant_id, 'auto')}`
+          : `到店应付 ${formatMoneyCents(row.final_due_cents ?? row.service_price_cents ?? 0, row.tenant_id, 'auto')}`))
     return {
       listBadgeText: isAfterSales ? asBadge : '',
       listBadgeKind: isAfterSales ? asKind : '',
@@ -5682,6 +5730,7 @@ function customerOrderBadges(row) {
       // 拍板③:未签署单不出售后发起按钮;存量无签署单的售后单=进度卡照旧(老数据只读不回溯)
       afterSalesAction: '', afterSalesActionText: '',
       actualDueText: '', actualDueCents: null,
+      listAmountText: noSheetAmountText,
       ...(isAfterSales ? { afterSales: afterSalesProgress(row) } : {})
     }
   }
@@ -5874,7 +5923,7 @@ function registerEmailUser(body) {
 
 // 演示铺单:仅本地/演示开关下,给首次登录且无订单的顾客铺 2 完成 + 1 待到店 + 储值,
 // 让会员卡(积分/消费/成长/等级/储值)与订单一致、可直接体验。生产不启用。
-function seedDemoBookingsForUser(userId, tenantId = DEFAULT_TENANT_ID) {
+async function seedDemoBookingsForUser(userId, tenantId = DEFAULT_TENANT_ID) {
   if (!userId) return
   const store = db.prepare('SELECT id FROM stores WHERE is_active = 1 AND tenant_id = ? LIMIT 1').get(tenantId)
   const nail = db.prepare("SELECT * FROM services WHERE is_active = 1 AND tenant_id = ? AND UPPER(type) = 'NAIL' ORDER BY sort_order ASC LIMIT 1").get(tenantId)
@@ -5892,16 +5941,53 @@ function seedDemoBookingsForUser(userId, tenantId = DEFAULT_TENANT_ID) {
       const price = svc.price_cents
       const deposit = 5000
       const code = `LLD${Date.now().toString().slice(-7)}${seq}${Math.floor(Math.random() * 900 + 100)}`
+      const bookingId = randomId('booking')
       db.prepare(`INSERT INTO bookings
         (id, tenant_id, public_code, user_id, store_id, technician_id, service_id, status, appointment_start, appointment_end, addons_json, reference_images_json, notes, service_price_cents, deposit_cents, deposit_required_cents, deposit_waived_cents, final_due_cents, total_duration_min, source_channel, created_at, updated_at)
         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, '[]', '[]', '', ?, ?, ?, 0, ?, ?, 'demo-seed', ?, ?)`)
-        .run(randomId('booking'), tenantId, code, userId, store.id, techId, svc.id, status, iso(start), iso(end), price, deposit, deposit, price - deposit, svc.base_duration_min || 120, nowIso, nowIso)
-    } catch (e) { /* 单条失败不影响其它 */ }
+        .run(bookingId, tenantId, code, userId, store.id, techId, svc.id, status, iso(start), iso(end), price, deposit, deposit, price - deposit, svc.base_duration_min || 120, nowIso, nowIso)
+      return bookingId
+    } catch (e) { return null /* 单条失败不影响其它 */ }
   }
-  mk(nail, techs[0].id, -24, 'COMPLETED')
-  mk(lash, (techs[1] || techs[0]).id, -10, 'COMPLETED')
+  const done1 = mk(nail, techs[0].id, -24, 'COMPLETED')
+  const done2 = mk(lash, (techs[1] || techs[0]).id, -10, 'COMPLETED')
   mk(nail, techs[0].id, 3, 'CONFIRMED')
   try { insertStoredValueTransaction({ userId, type: 'recharge', amountCents: 30000, payChannel: 'manual', note: '演示储值', createdBy: 'demo-seed', tenantId }) } catch (e) { /* 忽略 */ }
+  /* 🔴 夹具完整性(店主 08-23 令,D69 查明结论):演示铺单原来**只建预约不开单**,
+     于是「已完成」的单在系统里没有任何消费凭据 —— 积分/累计消费/成长值全 0,
+     而订单卡却拿预约标价说「已结清」(D69 就是这么来的)。
+     现在演示的两张 COMPLETED 一律**连带开单+顾客签署**(走与真实一模一样的两个函数),
+     测试档案必须能自证:已完成 = 有单 = 有积分、有累计消费、有到店次数。 */
+  await seedSignedSheets([{ bookingId: done1, svc: nail, techId: techs[0].id }, { bookingId: done2, svc: lash, techId: (techs[1] || techs[0]).id }], userId, tenantId)
+}
+
+/* 给演示的已完成预约补开一张已签署结算单(全额到店现金,与真实开单同一条路径)。
+   失败不抛(演示铺单不能因为一张单挡住登录),但会写日志——夹具不完整必须看得见。 */
+async function seedSignedSheets(list, userId, tenantId) {
+  for (const it of list) {
+    if (!it || !it.bookingId || !it.svc) continue
+    try {
+      const exist = db.prepare("SELECT id FROM settlements WHERE booking_id = ? AND status <> 'voided' LIMIT 1").get(it.bookingId)
+      if (exist) continue
+      const created = tenantContext.run({ tenantId }, () => createSettlementGroup({
+        cardOwnerUserId: userId,
+        settlements: [{
+          bookingId: it.bookingId, tierKey: 'member', depositApplied: false, payIntent: 'offline_full',
+          items: [{ serviceId: it.svc.id }],
+          technicians: [{ technicianId: it.techId, role: 'main', itemNos: [1] }]
+        }]
+      }, { email: 'demo-seed', role: 'owner' }))
+      const row = db.prepare('SELECT * FROM settlements WHERE id = ?').get(created.settlements[0].id)
+      if (!row) continue
+      await tenantContext.run({ tenantId }, () => signSettlement(row, {
+        signature: '演示签名',
+        signedBy: 'demo-seed',
+        strokes: [[{ x: 8, y: 55 }, { x: 30, y: 20 }, { x: 52, y: 58 }, { x: 76, y: 22 }]]
+      }))
+    } catch (e) {
+      console.warn('[demo-seed] 演示单开单失败(夹具将不完整):', e && e.message)
+    }
+  }
 }
 
 // 演示:给部分老顾客铺服务小记(结构化直接内置,不调 AI),让老板/员工端能看到「有小记/无小记」两态。
@@ -6020,7 +6106,7 @@ async function signInWechatMiniUser(body) {
     try {
       if (demoTenant === DEFAULT_TENANT_ID
         && !db.prepare('SELECT 1 FROM bookings WHERE user_id = ? AND tenant_id = ? LIMIT 1').get(demoUser.id, demoTenant)) {
-        seedDemoBookingsForUser(demoUser.id, demoTenant)
+        await seedDemoBookingsForUser(demoUser.id, demoTenant)
       }
     } catch (e) { console.error('[demo-seed] failed:', e && e.message) }
     const serializedDemo = serializeUser(demoUser, demoTenant)
@@ -6088,7 +6174,7 @@ async function signInWechatMiniUser(body) {
   try {
     if (DEMO_LOGIN_ALLOWED && loginTenant === DEFAULT_TENANT_ID
       && !db.prepare('SELECT 1 FROM bookings WHERE user_id = ? AND tenant_id = ? LIMIT 1').get(user.id, loginTenant)) {
-      seedDemoBookingsForUser(user.id, loginTenant)
+      await seedDemoBookingsForUser(user.id, loginTenant)
     }
   } catch (e) { console.error('[demo-seed] failed:', e && e.message) }
   const serialized = serializeUser(user, loginTenant)
@@ -11635,7 +11721,12 @@ async function route(req, res) {
           deductible: c.deductible !== false
         }
       })(),
-      stores: storeRows.map((s) => Object.assign({}, s, { hours: hourStmt.all(s.id) }))
+      /* 今日营业句/营业中:后端唯一出口(特殊营业日优先·按门店时区),顾客端零计算。
+         注意位面:顾客端读的是**这个公开 /stores**,不是 /admin/stores —— 只加在 admin 那边等于没加。 */
+      stores: storeRows.map((s) => Object.assign({}, s, {
+        hours: hourStmt.all(s.id),
+        todayHours: { zh: storeTodayHours(s, 'zh'), en: storeTodayHours(s, 'en') }
+      }))
     })
   }
   if (req.method === 'GET' && path === '/services') {
@@ -11807,7 +11898,8 @@ async function route(req, res) {
     })
     // 分区顺序:充值套餐在前(可比基准),次卡按大类分区跟随;筛选条由后端给,前端不自造分类
     const sections = []
-    for (const it of items) if (!sections.some((x) => x.key === it.section)) sections.push({ key: it.section, kind: it.sectionKind, label: it.section })
+    /* 永久律(08-23):分区显示名后端给,前端零拼串(原来前端写 `sec.label + ' · 次卡'`)。 */
+    for (const it of items) if (!sections.some((x) => x.key === it.section)) sections.push({ key: it.section, kind: it.sectionKind, label: it.sectionKind === 'timecard' ? `${it.section} · 次卡` : it.section })
     sections.sort((a, b) => (a.kind === 'recharge' ? -1 : 0) - (b.kind === 'recharge' ? -1 : 0))
     return json(res, 200, {
       items,
@@ -11909,12 +12001,15 @@ async function route(req, res) {
         const p = localParts(new Date(r.created_at), tz)
         // D65-b:顾客待签卡金额=头条「本单到店支付」(五步⑤),不再给价值总额裸数字
         const cashDue = db.prepare("SELECT COALESCE(SUM(amount_cents),0) AS n FROM settlement_payments WHERE settlement_id = ? AND leg = 'offline'").get(r.id).n
+        const grpTotal = db.prepare("SELECT COUNT(*) AS n FROM settlements WHERE group_id = ? AND status <> 'voided'").get(r.group_id).n
         return {
           code: r.code,
           cashDueCents: cashDue,
           cashDueText: formatMoneyCents(cashDue, tid, 'auto'),
           at: `${p.date.slice(5)} ${p.time.slice(0, 5)}`,
-          groupTotal: db.prepare("SELECT COUNT(*) AS n FROM settlements WHERE group_id = ? AND status <> 'voided'").get(r.group_id).n
+          groupTotal: grpTotal,
+          // 永久律(08-23):标题句后端唯一,前端零拼串(原来前端拼 `(共 N 张)`)
+          titleText: `服务确认单 ${r.code}${grpTotal > 1 ? `(共 ${grpTotal} 张)` : ''}`
         }
       })
     })
@@ -15363,6 +15458,8 @@ async function route(req, res) {
         timezone: store.timezone || 'America/Toronto',
         hours: getBusinessHoursRows(store.id).map(serializeBusinessHour),
         hoursText: { zh: businessHoursText(store.id, 'zh'), en: businessHoursText(store.id, 'en') },
+        // 今日营业句/营业中状态:后端唯一出口(特殊日优先、按门店时区),前端零计算
+        todayHours: { zh: storeTodayHours(store, 'zh'), en: storeTodayHours(store, 'en') },
         specialDates: upcomingSpecialDates(store.id, 366).map((row) => ({
           date: row.date,
           isClosed: Boolean(row.is_closed),
@@ -17484,6 +17581,9 @@ function serializeMemberTimecard(row) {
     priceCents: row.price_cents,
     nextUnitCents: remaining > 0 ? timecardUnitCents(row, row.used_times + 1) : 0,
     projectGroup: row.project_group || '',
+    // 永久律(08-23):可核销项目**句**后端唯一——前端原来写 `projectGroup || '不限'`,
+    // 与商城的「不限项目」措辞分叉,同一事实两处两句话。
+    projectGroupText: row.project_group || '不限项目',
     expiresAt: row.expires_at ? String(row.expires_at).slice(0, 10) : null,
     expired,
     redeemable: remaining > 0 && !expired,
@@ -17562,7 +17662,10 @@ function assetsOverviewOf(userId, tenantId = currentTenantId()) {
     // 卡包行:次卡+券,数字与卡包页逐个同源(补件②扩到本页)
     cardPack: {
       timecardCount: pack.timecards.length,
-      couponCount: pack.coupons.length,
+      /* 改名钉死用途(店主 08-23 小件):这里是**真值**(卡包页券张数,同源),
+         但与已删除的恒 0 字段同名,日后极易被当成回落源复活 —— 故改名 couponRowCount,
+         「couponCount」这个名字在全仓永久退役,断言常驻。 */
+      couponRowCount: pack.coupons.length,
       count: pack.badgeCount,
       summaryText: pack.badgeCount ? `次卡 ${pack.timecards.length} 张 · 券 ${pack.coupons.length} 张` : '暂无可用卡券'
     },
@@ -18087,6 +18190,46 @@ try {
   if (backfilled) console.log(`[migrate] 裁B 回填:${backfilled} 张无挂靠结算单已补挂即时预约`)
 } catch (error) {
   console.warn('[migrate] 裁B 回填失败(已跳过,老数据未动):', error.message)
+}
+
+/* 🔴 夹具回填(店主 08-23 令,D69 结论第二条):演示铺单历史上**只建预约不开单**,
+   留下一批「已完成却没有任何消费凭据」的单 —— 顾客端五个读方全 0,只有订单卡拿标价撒谎。
+   这里把它们补成与真实一模一样的「开单 + 顾客签署」。
+   🔒 安全边界(绝不能凭空给真实经营造钱):
+     ①只处理 source_channel = 'demo-seed' 的预约(演示铺单自己打的标记);
+     ②生产环境结构性不跑(IS_PRODUCTION 直接跳过);
+     ③幂等:已有任何非作废单的预约跳过,重跑一分不动。 */
+if (!IS_PRODUCTION) {
+  try {
+    const orphans = db.prepare(`SELECT b.* FROM bookings b
+      WHERE b.status = 'COMPLETED' AND b.source_channel = 'demo-seed' AND b.user_id IS NOT NULL
+        AND NOT EXISTS (SELECT 1 FROM settlements s WHERE s.booking_id = b.id AND s.status <> 'voided')
+      ORDER BY b.rowid ASC`).all()
+    let filled = 0
+    for (const bk of orphans) {
+      if (!bk.service_id || !bk.technician_id) continue
+      try {
+        const created = tenantContext.run({ tenantId: bk.tenant_id }, () => createSettlementGroup({
+          cardOwnerUserId: bk.user_id,
+          settlements: [{
+            bookingId: bk.id, tierKey: 'member', depositApplied: false, payIntent: 'offline_full',
+            items: [{ serviceId: bk.service_id }],
+            technicians: [{ technicianId: bk.technician_id, role: 'main', itemNos: [1] }]
+          }]
+        }, { email: 'demo-seed', role: 'owner' }))
+        const row = db.prepare('SELECT * FROM settlements WHERE id = ?').get(created.settlements[0].id)
+        if (!row) continue
+        await tenantContext.run({ tenantId: bk.tenant_id }, () => signSettlement(row, {
+          signature: '演示签名', signedBy: 'demo-seed',
+          strokes: [[{ x: 8, y: 55 }, { x: 30, y: 20 }, { x: 52, y: 58 }, { x: 76, y: 22 }]]
+        }))
+        filled += 1
+      } catch (e) { console.warn('[migrate] 夹具回填跳过一张:', e && e.message) }
+    }
+    if (filled) console.log(`[migrate] 夹具回填:${filled} 张演示「已完成无单」已补开单+签署(测试档案可自证)`)
+  } catch (error) {
+    console.warn('[migrate] 夹具回填失败(已跳过,老数据未动):', error.message)
+  }
 }
 
 /* ===== P2 日结与业绩目标(2026-08-08)=====

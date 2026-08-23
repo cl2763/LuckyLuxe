@@ -120,12 +120,9 @@
                 <text>{{item.appointment.date}}</text>
                 <text>{{item.appointment.time}}</text>
               </view>
-              <!-- 与消费记录列表同一个数:开过单的以结算单为准(闭环③) -->
+              <!-- 与订单列表同一个数、同一句(金额句后端唯一,前端零分支;永久律 08-23) -->
               <view class="recent-pay" wx:if="{{item.actualDueText}}">{{item.actualDueText}}</view>
               <view class="recent-pay" wx:elif="{{item.listAmountText}}">{{item.listAmountText}}</view>
-              <view class="recent-pay" wx:elif="{{item.status === 'completed'}}">已结清 {{cur.p}}{{cur.s}}{{item.servicePrice}}</view>
-              <view class="recent-pay" wx:elif="{{item.status === 'cancelled' || item.status === 'after_sales'}}">总价 {{cur.p}}{{cur.s}}{{item.servicePrice}}</view>
-              <view class="recent-pay" wx:else>定金 {{cur.p}}{{cur.s}}{{item.payableAmount}} 已付 · 到店应付 {{cur.p}}{{cur.s}}{{item.finalDue}}</view>
             </view>
           </view>
         </block>

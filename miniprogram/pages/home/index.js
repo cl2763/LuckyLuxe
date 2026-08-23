@@ -56,29 +56,14 @@ Page({
   // AI 在线客服入口已下线(2026-08-04),页面保留备用;此处留空避免有残留调用导致跳转报错
   goAiChat() { /* 入口已下线,改走企业微信外部客服 */ },
 
-  // ===== 店卡:今日营业时间/营业状态(按门店时区算,不用手机本地时区) =====
-  computeTodayHours(store) {
-    const lang = i18n.getLang()
-    const hours = (store && store.hours) || []
-    if (!hours.length) return { todayHoursText: '', openNow: false, hasHours: false }
-    let now = new Date()
-    try {
-      // 部分低版本基础库不支持 timeZone,失败则退回手机本地时间
-      now = new Date(now.toLocaleString('en-US', { timeZone: store.timezone || 'America/Toronto' }))
-      if (isNaN(now.getTime())) now = new Date()
-    } catch (e) { now = new Date() }
-    const row = hours.find((h) => Number(h.weekday) === now.getDay())
-    if (!row || row.is_closed) {
-      return { todayHoursText: lang === 'en' ? 'Closed today' : '今日休息', openNow: false, hasHours: true }
-    }
-    const minutes = now.getHours() * 60 + now.getMinutes()
-    const toMin = (t) => { const p = String(t || '').split(':'); return Number(p[0]) * 60 + Number(p[1] || 0) }
-    const openNow = minutes >= toMin(row.open_time) && minutes < toMin(row.close_time)
-    return {
-      todayHoursText: (lang === 'en' ? 'Today ' : '今日 ') + row.open_time + ' – ' + row.close_time,
-      openNow,
-      hasHours: true
-    }
+  /* 🔴 永久律(店主 08-23):今日营业句/营业中状态**后端唯一出口**(/stores 的 todayHours)。
+     原来这里前端自己算:①只看每周固定营业时间,不看特殊营业日 —— 今天特殊休息也照样显示
+     「今日 10:00–19:00 · 营业中」;②算不出就回落到常规营业时间那句;③用手机时区推"今天"。
+     现在前端零计算:后端给什么显示什么,没给就不显示这一行(不拿常规时间顶今天)。 */
+  todayHoursOf(store, lang) {
+    const th = (store && store.todayHours && (store.todayHours[lang] || store.todayHours.zh)) || null
+    if (!th) return { todayHoursText: '', openNow: false, hasHours: false }
+    return { todayHoursText: th.text || '', openNow: Boolean(th.openNow), hasHours: Boolean(th.hasHours) }
   },
 
   copyAddress() {
@@ -126,7 +111,7 @@ Page({
     }
     this.setData({ loadFailed: false })
     const storeRaw = stores[0] || {}
-    const hoursInfo = this.computeTodayHours(storeRaw)
+    const hoursInfo = this.todayHoursOf(storeRaw, lang)
     this.setData(Object.assign({}, hoursInfo, {
       lang,
       t: i18n.pageCopy('home', lang),

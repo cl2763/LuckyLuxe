@@ -8,7 +8,7 @@
       <view wx:for="{{mall.filters}}" wx:for-item="f" wx:key="key" class="ml-filter {{filter === f.key ? 'on' : ''}}" data-k="{{f.key}}" bindtap="pickFilter">{{f.label}}</view>
     </view>
     <block wx:for="{{mall.sections}}" wx:for-item="sec" wx:key="key">
-      <view wx:if="{{filter === 'all' || filter === sec.kind}}" class="ml-sec">{{sec.kind === 'timecard' ? sec.label + ' · 次卡' : sec.label}}</view>
+      <view wx:if="{{filter === 'all' || filter === sec.kind}}" class="ml-sec">{{sec.label}}</view>
       <block wx:if="{{filter === 'all' || filter === sec.kind}}" wx:for="{{mall.items}}" wx:for-item="it" wx:key="id">
       <view wx:if="{{it.section === sec.key}}" class="ml-card card">
       <view class="ml-top">

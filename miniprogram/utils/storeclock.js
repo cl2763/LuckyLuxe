@@ -36,11 +36,13 @@ function storeMonth() { return storeToday().slice(0, 7) }
 function storeCurrencyDisplay() {
   const c = cached()
   if (!c || !c.currencyDisplay) ensureCurrencyCached()
-  return (c && c.currencyDisplay) || { prefix: '<CODE> ', symbol: '$', trimZeroDecimals: false }
+  /* 币种红线(店主 08-10)+ 假数回落红线(08-23):缓存没到位时**不显示币符**,
+     绝不回落成旗舰店的「CAD $」——境内 ¥ 店会当场显示成加元。等缓存补上再渲染。 */
+  return (c && c.currencyDisplay) || { prefix: '', symbol: '', trimZeroDecimals: false }
 }
 function storeCurrency() {
   const c = cached()
-  return (c && c.currency) || 'CAD'
+  return (c && c.currency) || ''   // 同上:拿不到就空,不冒充 CAD
 }
 /* 只要币符前缀(给输入框 placeholder 这类"不带数字"的地方用)。
    R4:商家端会员充值页原来把 storeCurrency() 的**币种代码**当符号显示,
