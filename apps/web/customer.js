@@ -1741,10 +1741,12 @@ function renderMe() {
           <p class="deposit-rule-note">${userWaivesDeposit(user) ? (state.lang === 'zh' ? '当前会员等级：预约免定金' : 'Current tier: booking deposit waived') : (state.lang === 'zh' ? `当前会员等级：预约需支付 ${moneyY(50)} 定金` : `Current tier: ${moneyY(50)} booking deposit required`)}</p>
           <button class="member-benefits-link" data-me-target="memberBenefits" type="button">${t('memberBenefitsIntro')}</button>
         </div>`}
+        <!-- 勘误(店主 08-23):会员卡三块=快捷区,**可点直达**(与小程序黑卡同构);
+             券块改名「卡包」(券+次卡同页同名);网页暂无独立储值页,储值块落卡包的储值行 -->
         <div class="member-assets">
-          <div><strong>${user.points}</strong><span>${t('points')}</span></div>
-          <div><strong>${user.couponCount}</strong><span>${t('coupons')}</span></div>
-          <div><strong>${money(user.balanceCents)}</strong><span>${t('balance')}</span></div>
+          <button data-me-target="pointsMall" type="button"><strong>${user.points}</strong><span>${t('points')}</span></button>
+          <button data-me-target="cardPack" type="button"><strong>${state.cardPack ? state.cardPack.badgeCount : user.couponCount}</strong><span>${state.lang === 'zh' ? '卡包' : 'Card pack'}</span></button>
+          <button data-me-target="cardPack" type="button"><strong>${money(user.balanceCents)}</strong><span>${t('balance')}</span></button>
         </div>
         <div class="member-extra web-member-extra">
           <div>${t('totalSpent')} ${money(user.totalSpentCents || 0)}</div>
@@ -1782,12 +1784,12 @@ function renderMe() {
           ${/* 裁定A(店主 08-23):资产族只留「我的资产」一个入口——卡包/券/积分商城/会员权益
                 全部收进资产分类总页(与小程序同构,四之九);商城=购买入口不属资产族,由储值页/资产页进 */''}
           ${[
-            [t('assets'), '/assets/images/nail-luxe.jpg', 'assets', true],
+            [state.lang === 'zh' ? '卡包' : 'Card pack', '/assets/images/nail-luxe.jpg', 'cardPack', true],
             [t('store'), '/assets/images/store-cover.jpg', 'store', false],
             [t('giftCard'), '/assets/images/lash-volume.jpg', 'giftCard', false],
             [t('settings'), '/assets/images/lash-natural.jpg', 'settings', false]
           ].map(([label, image, target, live]) => {
-            const sub = live ? (state.lang === 'zh' ? '卡包 · 储值 · 积分 · 权益' : 'Cards · Balance · Points') : t('comingSoon')
+            const sub = live ? (state.lang === 'zh' ? '次卡 · 优惠券 · 储值' : 'Passes · Coupons · Balance') : t('comingSoon')
             return `<button class="menu-card card" data-me-target="${target}" type="button"><img src="${image}" alt="${label}"><strong>${label}</strong><span>${sub}</span></button>`
           }).join('')}
         </div>
@@ -2106,7 +2108,12 @@ async function loadMall() {
 /* 裁定A(店主 08-23):我的资产=**分类总页**(与小程序同构)。四类各一行,数字全部来自
    后端唯一出口 /my/assets(卡包与卡包页同源同数、储值与卡包储值行同源、积分与积分页同源);
    本函数零计算、零拼数。今后新资产类型一律加在这一页,不许回「我的」页并列。 */
-function renderAssetsWeb() {
+/* 裁定A 勘误(店主 08-23 推翻重做):不再有「我的资产」分类总页——
+   同一类资产只留一个页一个名字(卡包),高频资产允许从会员卡直达。
+   本函数保留只是为了老路由不 404,直接落卡包页(名字与页都归一)。 */
+function renderAssetsWeb() { renderCardPackWeb() }
+
+function renderAssetsWebRetired() {
   const a = state.assets
   const zh = state.lang === 'zh'
   if (!a) {

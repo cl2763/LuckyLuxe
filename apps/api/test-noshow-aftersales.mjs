@@ -2044,13 +2044,13 @@ const main = async () => {
       const svWx = readFileSync(join(ROOT42, 'miniprogram/pages/stored-value/index.wxml'), 'utf8')
       check('㋐ A 组 wiring:卡包页三类+来源小字条件渲染(空串不渲染)', cpWx.includes('pack.timecards') && cpWx.includes('pack.coupons') && cpWx.includes('pack.stored.balanceText') && cpWx.includes('wx:if="{{c.sourceLabel}}"'))
       // 裁定A 返工后:入口收敛到「我的资产」一格,角标挂它(卡包入口从「我的」页撤下)
-      check('㋐→裁定A A1 wiring:「我的」页资产入口+角标(0 不渲染)', meWx.includes('goAssets') && meWx.includes('wx:if="{{cardPackBadge}}"') && !meWx.includes('bindtap="goCardPack"'))
+      check('㋐→勘误 A1 wiring:「我的」页卡包入口+角标(0 不渲染;名字与页归一)', meWx.includes('bindtap="goCardPack"') && meWx.includes('wx:if="{{cardPackBadge}}"') && !meWx.includes('goAssets'))
       check('㋐ B1-1 wiring:储值页=充值套餐唯一出口(去充值→商城)', svWx.includes('goMall') && !svWx.includes('微信支付'))
       check('㋐ B3 wiring:商城按钮句与说明句全用后端字段(前端不拼两套话)', mlWx.includes('it.buyButtonText') && mlWx.includes('it.offlineNote') && !mlWx.includes('立即购买') && !mlWx.includes('到店购买'))
       check('㋐ D 组 wiring:网页顾客端卡包/商城同构(视图+菜单+同源字段)', custWeb.includes('renderCardPackWeb') && custWeb.includes('renderMallWeb') && custWeb.includes("'cardPack'") && custWeb.includes('data-mall-buy'))
       /* 待拍②(改「敬请期待」)→ 裁定A 返工后那张资产卡整块被分类总页取代:
          原句所在的卡不复存在,所以判据从"改成敬请期待"收敛为"旧句零残留 + 积分行进资产页" */
-      check('㋐ 待拍②→裁定A:网页「积分商城后续接入」旧句零残留,积分收进资产分类总页', !custWeb.includes('积分商城后续接入') && custWeb.includes("a.points.balance"))
+      check('㋐ 待拍②→勘误:网页「积分商城后续接入」旧句零残留(积分保持原有入口,不降级不塞总页)', !custWeb.includes('积分商城后续接入') && custWeb.includes('data-me-target="pointsMall"'))
       check('㋐ C5 网页财务帮助文案不再教人点「耗卡」', !readFileSync(join(ROOT42, 'apps/web/admin.js'), 'utf8').includes('点「耗卡」'))
       /* 补件① L2 话术层扫描:用户可见文案不写死支付方式(与币种红线同族,这次扫话术) */
       const payWordHits = []
@@ -2065,12 +2065,22 @@ const main = async () => {
       /* 裁定A 常驻护栏:「我的」页资产族入口数 = 1(机械扫描防复发)。
          资产族=资产/卡包/券包/积分商城/会员权益;只许「我的资产」一个,其余全部收进资产分类总页。 */
       const meWx2 = readFileSync(join(ROOT42, 'miniprogram/pages/me/index.wxml'), 'utf8')
-      const assetEntryHits = (meWx2.match(/bindtap="(goAssets|goCardPack|goCoupons|openPointsMall|goMemberBenefits)"/g) || [])
-      const nonAssets = assetEntryHits.filter((h) => !h.includes('goAssets'))
-      check('㋐ 裁定A 「我的」页资产族入口数=1(卡包/券包/积分商城/会员权益并列入口零残留)', nonAssets.length === 0, assetEntryHits.join(','))
-      const asWx = readFileSync(join(ROOT42, 'miniprogram/pages/assets/index.wxml'), 'utf8')
-      check('㋐ 裁定A 我的资产=分类总页(卡包/储值/积分/会员权益四行,数字走后端出口)', asWx.includes('goCardPack') && asWx.includes('goStored') && asWx.includes('goPoints') && asWx.includes('goBenefits') && asWx.includes('assets.cardPack.summaryText'))
-      check('㋐ 裁定A 网页顾客端同构(资产分类总页+菜单资产族只剩一格)', custWeb.includes('loadAssets') && custWeb.includes("a.cardPack.summaryText") && !/data-me-target="cardPack"[^]{0,200}menu-card/.test(custWeb))
+      /* 裁定A 勘误(店主 08-23 推翻重做)后的护栏:
+         ①「券包」与「卡包」不得同时存在两个入口(真冗余只有这一对);
+         ② 命名归一:同一类资产只留一个名字一个页(默认「卡包」,「我的券包/我的资产」退休);
+         ③ 黑卡三块=快捷区必须可点直达(积分/卡包/储值),不许变哑。 */
+      check('㋐ 勘误 券包与卡包不并存(我的券包入口与页面退休,全仓零引用)',
+        !meWx2.includes('goCoupons') && !readFileSync(join(ROOT42, 'miniprogram/app.json'), 'utf8').includes('pages/coupons/index')
+        && !existsSync(join(ROOT42, 'miniprogram/pages/coupons')))
+      check('㋐ 勘误 命名归一:「我的资产」页退休,卡包一名到底(菜单格与黑卡块同名同页)',
+        !readFileSync(join(ROOT42, 'miniprogram/app.json'), 'utf8').includes('pages/assets/index')
+        && !existsSync(join(ROOT42, 'miniprogram/pages/assets'))
+        && (meWx2.match(/bindtap="goCardPack"/g) || []).length === 2)
+      check('㋐ 勘误 黑卡三块可点直达(积分→积分页 / 卡包→卡包页 / 储值→储值页,不落总页)',
+        meWx2.includes('bindtap="goPoints"') && meWx2.includes('bindtap="goStored"') && meWx2.includes('bindtap="goCardPack"') && !meWx2.includes('bindtap="goAssets"'))
+      check('㋐ 勘误 等级徽章恢复直达权益页(黑卡不变哑)', meWx2.includes('class="level-pill" bindtap="goMemberBenefits"'))
+      check('㋐ 勘误 网页同构:菜单格改名卡包+会员卡三块可点(券块改名卡包)',
+        custWeb.includes("'卡包' : 'Card pack', '/assets/images/nail-luxe.jpg', 'cardPack'") && custWeb.includes('data-me-target="pointsMall" type="button"><strong>${user.points}'))
       /* 裁定B:路径名与「零支付成功」红线相撞——payment-success 已改 booking-done,引用零残留 */
       const appJson = readFileSync(join(ROOT42, 'miniprogram/app.json'), 'utf8')
       const checkoutJs = readFileSync(join(ROOT42, 'miniprogram/pages/checkout/index.js'), 'utf8')

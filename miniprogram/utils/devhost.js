@@ -4,7 +4,7 @@
    只在沙箱联调用(USE_LOCAL_SANDBOX=true);连生产时完全不参与。 */
 module.exports = {
   // 自动写入:2026-08-23
-  lanHost: '192.168.0.104',
+  lanHost: '192.168.2.15',
   port: 4310,
   updatedAt: '2026-08-23'
 }

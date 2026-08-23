@@ -569,17 +569,11 @@ Page({
     return false
   },
 
-  goAssets() {
-    this.requireLogin(() => wx.navigateTo({ url: '/pages/assets/index' }))
-  },
 
   goPoints() {
     this.requireLogin(() => wx.navigateTo({ url: '/pages/points/index' }))
   },
 
-  goCoupons() {
-    this.requireLogin(() => wx.navigateTo({ url: '/pages/coupons/index' }))
-  },
   // 批③次段 A1:卡包(三类聚合)
   goCardPack() {
     this.requireLogin(() => require('../../utils/nav').to('/pages/card-pack/index'))

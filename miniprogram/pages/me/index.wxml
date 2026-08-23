@@ -5,8 +5,8 @@
         <image class="avatar" src="{{member.avatarUrl || '/assets/images/member-profile.jpg'}}" mode="aspectFill"></image>
         <view>
           <view class="nickname">{{member.nickname}}</view>
-          <!-- 裁定A:等级徽章也落「我的资产」(权益在资产页内一行进);路径唯一,不留第二条 -->
-          <button class="level-pill" bindtap="goAssets">
+          <!-- 勘误:等级徽章恢复直达权益页(黑卡不许变哑) -->
+          <button class="level-pill" bindtap="goMemberBenefits">
             <!-- D41+店主追加:不分级店 非会员=「成为会员」(CTA,点进权益页看成为会员的权益);会员=「会员」 -->
             <text>{{member.tiersEnabled === false ? (member.memberLevel === '会员' ? (lang === 'en' ? 'Member' : '会员') : (lang === 'en' ? 'Become a member' : '成为会员')) : member.memberLevel}}</text>
             <text class="level-more">权益</text>
@@ -39,18 +39,18 @@
         <view class="growth-note">{{member.growthNote}}</view>
       </view>
 
-      <!-- 裁定A:会员卡上的三个数字**只展示不另开路径**——点任意一处都落「我的资产」分类总页,
-           再由那里进各类别(我拥有的东西只许一条路径;数字照常显示,不丢信息) -->
+      <!-- 裁定A 勘误(店主 08-23 推翻重做):黑卡=顾客快捷区,**三块全部可点直达**,不许变哑。
+           积分→积分页(原位)、卡包→卡包页(券+次卡,原「优惠券」块改名)、储值→储值页(原位)。 -->
       <view class="member-assets">
-        <view class="asset-tap" bindtap="goAssets">
+        <view class="asset-tap" bindtap="goPoints">
           <text>{{member.points}}</text>
           <text>{{t.points}} ›</text>
         </view>
-        <view class="asset-tap" bindtap="goAssets">
-          <text>{{member.couponCount}}</text>
-          <text>{{t.coupons}} ›</text>
+        <view class="asset-tap" bindtap="goCardPack">
+          <text>{{cardPackBadge || member.couponCount}}</text>
+          <text>卡包 ›</text>
         </view>
-        <view class="asset-tap" bindtap="goAssets">
+        <view class="asset-tap" bindtap="goStored">
           <text>{{cur.p}}{{cur.s}}{{liveBalance === undefined ? member.balance : liveBalance}}</text>
           <text>{{t.balance}} ›</text>
         </view>
@@ -145,11 +145,11 @@
         <view class="menu-badge"><image class="menu-ic" src="/assets/icons/c-message.png"></image></view>
         <view class="menu-title">{{lang === 'en' ? 'Messages' : '我的消息'}}</view>
       </view>
-      <!-- 裁定A(店主 08-23):资产族**只留这一个入口**——卡包/券包/积分商城/会员权益全部收进
-           「我的资产」分类总页(我拥有的东西只许一条路径);角标=卡包可用张数,后端同一出口(0 不显示) -->
-      <view class="menu-card card" bindtap="goAssets">
-        <view class="menu-badge"><image class="menu-ic" src="/assets/icons/c-wallet.png"></image></view>
-        <view class="menu-title">{{t.assets}}<text wx:if="{{cardPackBadge}}" class="menu-dot">{{cardPackBadge}}</text></view>
+      <!-- 勘误④ 命名归一:同一类资产只留一个名字一个页——菜单这格与黑卡那格**同名同页**(卡包);
+           「我的券包」入口与「我的资产」总页一并退休;角标与页内张数同源(0 不显示) -->
+      <view class="menu-card card" bindtap="goCardPack">
+        <view class="menu-badge"><image class="menu-ic" src="/assets/icons/c-ticket.png"></image></view>
+        <view class="menu-title">卡包<text wx:if="{{cardPackBadge}}" class="menu-dot">{{cardPackBadge}}</text></view>
       </view>
       <view class="menu-card card" bindtap="goStore">
         <view class="menu-badge"><image class="menu-ic" src="/assets/icons/c-store.png"></image></view>

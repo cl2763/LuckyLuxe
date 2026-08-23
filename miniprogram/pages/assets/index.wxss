@@ -1,9 +1,0 @@
-.assets-page{padding:24rpx 24rpx 60rpx}
-.as-row{display:flex;align-items:center;justify-content:space-between;padding:30rpx 26rpx;border-radius:18rpx;background:#fff;margin-bottom:16rpx}
-.as-main{display:flex;flex-direction:column}
-.as-t{font-size:30rpx;font-weight:600;color:#2d2825}
-.as-sub{font-size:24rpx;color:#8a7f78;margin-top:6rpx}
-.as-right{display:flex;align-items:center;gap:12rpx}
-.as-num{font-size:28rpx;color:#8a5a2b;font-weight:600}
-.as-arrow{font-size:32rpx;color:#c3b8b0}
-.empty{padding:80rpx 24rpx;text-align:center;color:#8a7f78;font-size:26rpx}

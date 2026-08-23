@@ -54,7 +54,6 @@
     "pages/booking-done/index",
     "pages/me/index",
     "pages/points/index",
-    "pages/coupons/index",
     "pages/stored-value/index",
     "pages/messages/index",
     "pages/member-benefits/index",
@@ -62,7 +61,6 @@
     "pages/orders/index",
     "pages/order-detail/index",
     "pages/store-location/index",
-    "pages/assets/index",
     "pages/sandbox-identity/index",
     "pages/card-pack/index",
     "pages/mall/index"

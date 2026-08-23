@@ -54,9 +54,10 @@ Page({
           this.setData({ redeeming: false })
           wx.showModal({
             title: '兑换成功 🎉',
-            content: `「${r.couponName}」已放入你的券包。当前剩余 ${r.balance} 积分。`,
-            confirmText: '看券包', cancelText: '好',
-            success: (x) => { if (x.confirm) wx.navigateTo({ url: '/pages/coupons/index' }) },
+            // 勘误④ 命名归一:券与次卡同属「卡包」,不再出现"券包"这个第二名字
+            content: `「${r.couponName}」已放入你的卡包。当前剩余 ${r.balance} 积分。`,
+            confirmText: '看卡包', cancelText: '好',
+            success: (x) => { if (x.confirm) wx.navigateTo({ url: '/pages/card-pack/index' }) },
             fail: (e) => console.warn('[showModal fail]', e) // S组卫生批补账①:嵌套内层弹窗,codemod 整块吞跳过,补挂
           })
           this.load()
