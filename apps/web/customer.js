@@ -1012,7 +1012,7 @@ function render() {
   if (state.view === 'mall') renderMallWeb()
   if (state.view === 'coupons') renderPlaceholderWeb(t('coupons'), state.lang === 'zh' ? '优惠券列表和使用规则将在真实会员系统接入后同步。' : 'Coupon list and rules will sync after the real member system is connected.')
   if (state.view === 'giftCard') renderPlaceholderWeb(t('giftCard'), state.lang === 'zh' ? '礼品卡售卖与兑换功能保留为下一阶段。' : 'Gift card purchase and redemption is reserved for the next phase.')
-  if (state.view === 'pointsMall') renderPlaceholderWeb(t('pointsMall'), state.lang === 'zh' ? '积分商城规则目前使用占位，后续可按会员规则兑换。' : 'The points mall currently uses placeholder rules.')
+  if (state.view === 'pointsMall') renderPointsWeb()
   if (state.view === 'settings') renderPlaceholderWeb(t('settings'), state.lang === 'zh' ? '语言、通知、账号安全等设置将在真实登录后接入。' : 'Language, notifications, and account security settings will connect after real auth.')
   renderAiAssistantWidget()
 }
@@ -1786,7 +1786,7 @@ function renderMe() {
         <!-- 勘误(店主 08-23):会员卡三块=快捷区,**可点直达**(与小程序黑卡同构);
              券块改名「卡包」(券+次卡同页同名);网页暂无独立储值页,储值块落卡包的储值行 -->
         <div class="member-assets">
-          <button data-me-target="pointsMall" type="button"><strong>${user.points}</strong><span>${t('points')}</span></button>
+          <button data-me-target="pointsMall" type="button"><strong>${user.points}</strong><span>${t('points')}</span>${user.redeemablePrizeText ? `<em class="asset-hint">${escapeHtml(user.redeemablePrizeText)}</em>` : ''}</button>
           <button data-me-target="cardPack" type="button"><strong>${state.cardPack ? state.cardPack.badgeCount : '—'}</strong><span>${state.lang === 'zh' ? '卡包' : 'Card pack'}</span></button>
           <button data-me-target="cardPack" type="button"><strong>${money(user.balanceCents)}</strong><span>${t('balance')}</span></button>
         </div>
@@ -2140,6 +2140,45 @@ function renderMallWeb() {
     </section>`
 }
 
+/* 裁定③(店主 08-23):网页顾客端积分页与小程序同构 —— 这一页既是**积分明细**也是**兑换奖品**,
+   原来这里是一句「敬请期待」的占位,而小程序早就能兑了(双端同病检查:病在网页单侧)。
+   数字与判定全部读后端同一出口 /my/points-mall,前端零计算。 */
+async function loadPoints() {
+  try { state.points = await request('/my/points-mall') } catch (error) { state.points = null; toast(error.message) }
+}
+function renderPointsWeb() {
+  const p = state.points
+  const zh = state.lang === 'zh'
+  if (!p) {
+    els.screen.innerHTML = `<section class="view-web"><div class="empty-state tall"><strong>${zh ? '加载中…' : 'Loading…'}</strong></div></section>`
+    loadPoints().then(() => { if (state.view === 'pointsMall') render() })
+    return
+  }
+  els.screen.innerHTML = `
+    <section class="view-web">
+      <button class="ghost back-btn" data-me-target="me" type="button">← ${zh ? '我的' : 'Me'}</button>
+      <h1>${zh ? '积分与兑换' : 'Points & rewards'}</h1>
+      <div class="info-card-web card">
+        <p><span>${zh ? '我的积分 · 消费 1 元 = 1 分' : 'My points · 1 spent = 1 point'}</span><strong class="price">${p.balance}</strong></p>
+        <p><span>${zh ? '累计获得' : 'Earned'}</span><strong>${p.earnedTotal}</strong></p>
+        <p><span>${zh ? '已兑换' : 'Redeemed'}</span><strong>${p.redeemedTotal}</strong></p>
+        <p class="subtle">${zh ? '积分永不过期 · 下面可以拿积分换券,也能看每一笔积分从哪来' : 'Points never expire · redeem below, and see where each point came from'}</p>
+      </div>
+      <div class="section-row compact"><h2>${zh ? '拿积分换券' : 'Redeem with points'}</h2></div>
+      ${(p.prizes || []).length ? (p.prizes || []).map((z) => `
+        <div class="info-card-web card">
+          <p><span><strong>${escapeHtml(z.name)}</strong></span><strong>${z.costPoints} ${zh ? '分' : 'pts'}</strong></p>
+          <p class="subtle">${z.minSpendCents ? `${zh ? '满' : 'Min '} ${money(z.minSpendCents)} ${zh ? '可用' : ''} · ` : ''}${zh ? '有效' : 'Valid'} ${z.validDays} ${zh ? '天' : 'days'} · ${z.stock > 0 ? `${zh ? '余' : 'Left'} ${z.stock}` : (zh ? '已兑完' : 'Sold out')}</p>
+          <button class="primary" data-redeem-prize="${escapeHtml(z.id)}" type="button" ${z.canRedeem ? '' : 'disabled'}>${z.canRedeem ? (zh ? '立即兑换' : 'Redeem') : (z.stock <= 0 ? (zh ? '已兑完' : 'Sold out') : (z.limitReached ? (zh ? '已达限兑' : 'Limit reached') : (zh ? '积分不足' : 'Not enough points')))}</button>
+        </div>`).join('') : `<div class="empty-state">${zh ? '老板还没上架奖品,敬请期待~' : 'No rewards listed yet'}</div>`}
+      <div class="section-row compact"><h2>${zh ? '每一笔积分怎么来的' : 'Where each point came from'}</h2></div>
+      ${(p.history || []).length ? (p.history || []).map((h) => `
+        <div class="info-card-web card">
+          <p><span>${escapeHtml(h.title)}<br><small class="subtle">${escapeHtml(h.date)}</small></span><strong class="${h.delta >= 0 ? '' : 'price'}">${h.delta >= 0 ? '+' : ''}${h.delta}</strong></p>
+        </div>`).join('') : `<div class="empty-state">${zh ? '暂无积分记录,完成消费后自动累计。' : 'No points yet'}</div>`}
+    </section>`
+}
+
 async function loadCardPack() {
   try { state.cardPack = (await request('/my/card-pack')).cardPack } catch (error) { state.cardPack = null; toast(error.message) }
 }
@@ -2415,6 +2454,20 @@ async function handleScreenClick(event) {
     event.preventDefault()
     state.mallFilter = mallFocus.dataset.mallFocus   // 裁定②:去统一商城并定位次卡分区(不新建页)
     setView('mall')
+    return
+  }
+  const redeemBtn = event.target.closest('[data-redeem-prize]')
+  if (redeemBtn && !redeemBtn.disabled) {
+    const prizeId = redeemBtn.dataset.redeemPrize
+    redeemBtn.disabled = true
+    request('/my/points-mall/redeem', { method: 'POST', body: JSON.stringify({ prizeId }) })
+      .then((r) => {
+        toast(state.lang === 'zh' ? `已兑换:${r.couponName},去卡包看看` : `Redeemed: ${r.couponName}`)
+        state.points = null
+        state.cardPack = null   // 券落卡包,角标与卡包页一并重取(同源)
+        render()
+      })
+      .catch((e) => { redeemBtn.disabled = false; toast(e.message) })
     return
   }
   const mallFilter = event.target.closest('[data-mall-filter]')

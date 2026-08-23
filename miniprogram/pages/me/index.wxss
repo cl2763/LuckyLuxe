@@ -238,10 +238,20 @@
   line-height: 1.2;
 }
 
-.member-assets text:last-child {
+/* 标签行:原来写的是 :last-child,积分格加了第三行提示后会选错(标签失样式、提示拿到标签样式)。
+   条件渲染下每格的第 2 个 text 恒为标签,改用 nth-child(2) 才稳。 */
+.member-assets text:nth-child(2) {
   color: rgba(255, 255, 255, 0.7);
   font-size: 23rpx;
   font-weight: 600;
+}
+
+/* 裁定①:积分格下的「可兑 N 件」小字(句后端唯一,没有就整行不出) */
+.member-assets .asset-hint {
+  margin-top: 4rpx;
+  color: #d8b48a;
+  font-size: 20rpx;
+  font-weight: 700;
 }
 
 .member-extra {

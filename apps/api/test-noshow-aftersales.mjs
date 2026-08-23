@@ -1607,6 +1607,44 @@ const main = async () => {
                   const sub59 = dbx.prepare('SELECT subtotal_cents FROM settlements WHERE id = ?').get(sh59.id).subtotal_cents
                   check('㋉ 红线:核定归属≠计业绩(Σ分成=档位小计,不含充值 300)', perfSum > 0 && perfSum === sub59, JSON.stringify({ perfSum, sub59 }))
 
+                  /* ===== ㋕ 积分商城入口回归(店主 08-23 裁:不加第二个入口)=====
+                     ①黑卡「积分」那格是唯一入口,下面加一行后端句「可兑 N 件」;
+                     ②N 必须与积分页里 canRedeem 的件数**同源**(不许提示说有、点进去没有);
+                     ④商家上架 → 顾客看到 → 兑换 → 落卡包带「积分兑换」小字,端到端一条链。 */
+                  {
+                    const bkP = (await request('/admin/bookings/direct', { method: 'POST', body: JSON.stringify({ newCustomerName: `㋕积分客${RUN_ID}`, serviceId: shop.serviceId, technicianId: shop.tech1, date: dateStr(0), time: '05:00' }) }, shop.token)).data.booking
+                    const uidP = bkP.userId || bkP.user_id || (bkP.user && bkP.user.id)
+                    dbx.prepare('UPDATE users SET wechat_open_id = ? WHERE id = ?').run(`wx-pts-${RUN_ID}`, uidP)
+                    const tokP = async () => (await request('/auth/wechat/mini-login', { method: 'POST', body: JSON.stringify({ demoLogin: true, tenantId: shop.tenantId, asUserId: uidP }) }, null, { 'x-tenant-id': shop.tenantId })).data
+                    // 先赚分:签一单(服务价 200 → 200 分)
+                    await request(`/admin/bookings/${bkP.id}/status`, { method: 'PATCH', body: JSON.stringify({ status: 'COMPLETED' }) }, shop.token)
+                    const shP = (await request('/admin/settlements', { method: 'POST', body: JSON.stringify({ userId: uidP, settlements: [{ bookingId: bkP.id, payIntent: 'offline_full', items: [{ serviceId: shop.serviceId, qty: 1 }], technicians: [{ technicianId: shop.tech1, role: 'main', itemNos: [1] }] }] }) }, shop.token)).data.settlements[0]
+                    await request(`/settlements/${encodeURIComponent(shP.code)}/sign`, { method: 'POST', body: JSON.stringify({ signature: '㋕ 签', disclaimerAccepted: true }) }, null, { 'x-tenant-id': shop.tenantId })
+                    const me0 = (await tokP()).user
+                    check('㋕ 没上架奖品时不出提示行(永久律:没有就不显示,不猜)', me0.redeemablePrizeText === '', JSON.stringify(me0.redeemablePrizeText))
+                    // ④ 商家上架两件:一件兑得起(100 分),一件兑不起(99999 分)
+                    const cpnP = (await request('/admin/coupons', { method: 'POST', body: JSON.stringify({ name: `㋕奖品券${RUN_ID}`, discountType: 'amount', amountCents: 1500, validDays: 30, totalQty: 20 }) }, shop.token)).data.coupon
+                    const prizeCheap = (await request('/admin/points-prizes', { method: 'POST', body: JSON.stringify({ couponId: cpnP.id, costPoints: 100, stock: 5, perUserLimit: 1, validDays: 30 }) }, shop.token)).data.prize
+                    await request('/admin/points-prizes', { method: 'POST', body: JSON.stringify({ couponId: cpnP.id, costPoints: 99999, stock: 5 }) }, shop.token)
+                    const auth1 = await tokP()
+                    const ctokP = auth1.auth.accessToken
+                    const mall1 = (await request('/my/points-mall', {}, ctokP, { 'x-tenant-id': shop.tenantId })).data
+                    const canCount1 = (mall1.prizes || []).filter((z) => z.canRedeem).length
+                    check('㋕ 顾客端积分页看得到商家上架的奖品(端到端①:上架→可见)', (mall1.prizes || []).length === 2 && canCount1 === 1, JSON.stringify((mall1.prizes || []).map((z) => `${z.name}/${z.costPoints}/${z.canRedeem}`)))
+                    check('㋕ 提示数与页内可兑数同源(「可兑 1 件」≡ canRedeem 件数)', auth1.user.redeemablePrizeText === `可兑 ${canCount1} 件`, JSON.stringify({ hint: auth1.user.redeemablePrizeText, canCount1 }))
+                    // 兑换 → 落卡包 + 来源小字 + 扣分
+                    const before = mall1.balance
+                    const rd = await request('/my/points-mall/redeem', { method: 'POST', body: JSON.stringify({ prizeId: prizeCheap.id }) }, ctokP, { 'x-tenant-id': shop.tenantId })
+                    check('㋕ 端到端②:兑换成功并扣分(余额 -100)', rd.status === 200 && rd.data.balance === before - 100, JSON.stringify({ before, after: rd.data.balance }))
+                    const packP = (await request('/my/card-pack', {}, ctokP, { 'x-tenant-id': shop.tenantId })).data.cardPack
+                    const got = (packP.coupons || []).find((c) => c.name.includes('㋕奖品券'))
+                    check('㋕ 端到端③:兑来的券落卡包,并带来源小字「积分兑换」', Boolean(got) && got.sourceLabel === '积分兑换', JSON.stringify(got && { n: got.name, s: got.sourceLabel }))
+                    const auth2 = await tokP()
+                    check('㋕ 每人限兑用完后提示行随之消失(同源:页内也不再 canRedeem)',
+                      auth2.user.redeemablePrizeText === '' && (await request('/my/points-mall', {}, ctokP, { 'x-tenant-id': shop.tenantId })).data.prizes.every((z) => !z.canRedeem),
+                      JSON.stringify(auth2.user.redeemablePrizeText))
+                  }
+
                   /* ===== ㋔ 跨店串号检测(店主 08-23 本批核心)=====
                      同一个微信身份在两家店各有会员账户,**每一类资产读方都必须带 tenant 维度**。
                      根子已修:users / user_identities 的唯一性原来是**全局**的,同一 openid 在 B 店
@@ -1618,7 +1656,9 @@ const main = async () => {
                     const loginAt = async (sp) => (await request('/auth/wechat/mini-login', { method: 'POST', body: JSON.stringify({ demoLogin: true, tenantId: sp.tenantId, asUserId: null }) }, null, { 'x-tenant-id': sp.tenantId }))
                     // 两店各建一位顾客并贴同一个 openid(真实路径=扫签署码授权,这里直贴身份字段)
                     const mkCust = async (sp, nm) => {
-                      const bk = (await request('/admin/bookings/direct', { method: 'POST', body: JSON.stringify({ newCustomerName: nm, serviceId: sp.serviceId, technicianId: sp.tech1, date: dateStr(0), time: '07:30' }) }, sp.token)).data.booking
+                      const bkRes = await request('/admin/bookings/direct', { method: 'POST', body: JSON.stringify({ newCustomerName: nm, serviceId: sp.serviceId, technicianId: sp.tech1, date: dateStr(0), time: '07:30' }) }, sp.token)
+                      if (!bkRes.data || !bkRes.data.booking) throw new Error(`㋔ 建档失败(${bkRes.status}):${JSON.stringify(bkRes.data).slice(0, 160)}`)
+                      const bk = bkRes.data.booking
                       const uid = bk.userId || bk.user_id || (bk.user && bk.user.id)
                       dbx.prepare('UPDATE users SET wechat_open_id = ? WHERE id = ?').run(openId, uid)
                       return { bookingId: bk.id, uid }
@@ -2329,6 +2369,19 @@ const main = async () => {
       const appJs93 = readFileSync(join(ROOT42, 'miniprogram/app.js'), 'utf8')
       check('㋓ globalData.appName 死字段已删(零使用方却写死旗舰店名=下次误用的种子)',
         !/appName:\s*'Lucky Luxe'/.test(appJs93))
+      /* ㋕ wiring:积分入口**唯一**(黑卡那一格),别处不许再冒出第二个积分入口 */
+      const meWx95 = readFileSync(join(ROOT42, 'miniprogram/pages/me/index.wxml'), 'utf8')
+      const custWeb95 = readFileSync(join(ROOT42, 'apps/web/customer.js'), 'utf8')
+      const miniPointsEntries = (meWx95.match(/bindtap="goPoints"/g) || []).length
+      const webPointsEntries = (custWeb95.match(/data-me-target="pointsMall"/g) || []).length
+      check('㋕ 顾客端积分入口唯一(小程序黑卡 1 处、网页黑卡 1 处,没有第二个入口)',
+        miniPointsEntries === 1 && webPointsEntries === 1, JSON.stringify({ mini: miniPointsEntries, web: webPointsEntries }))
+      check('㋕ 提示句只读后端出口(两端都不自己算「可兑几件」)',
+        meWx95.includes('member.redeemablePrizeText') && custWeb95.includes('user.redeemablePrizeText')
+        && !/可兑\s*\$\{/.test(custWeb95))
+      check('㋕ 网页积分页不再是「敬请期待」占位,与小程序同构(明细+兑换同页)',
+        custWeb95.includes('function renderPointsWeb()') && custWeb95.includes("request('/my/points-mall/redeem'")
+        && !custWeb95.includes('积分商城规则目前使用占位'))
       const apiSelfHeal93 = readFileSync(join(ROOT42, 'miniprogram/utils/api.js'), 'utf8')
       const meWx94 = readFileSync(join(ROOT42, 'miniprogram/pages/me/index.wxml'), 'utf8')
       const meJs94 = readFileSync(join(ROOT42, 'miniprogram/pages/me/index.js'), 'utf8')

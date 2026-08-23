@@ -4501,6 +4501,14 @@ textarea:focus {
   margin-top: 18px;
 }
 
+/* 裁定①(08-23):黑卡「积分」格下面的「可兑 N 件」小字(句后端唯一,没有就整行不出) */
+.member-assets .asset-hint {
+  color: #d8b48a;
+  font-size: 12px;
+  font-weight: 700;
+  font-style: normal;
+}
+
 /* 商城筛选 chip:与小程序 .ml-filter 同一视觉(选中=深底白字)。
    此前借用 .section-note-btn 只加 active class 而没有对应样式,页面上看不出选中的是哪个。 */
 .mall-filters {

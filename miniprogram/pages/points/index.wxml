@@ -8,7 +8,8 @@
       <view class="hrow"><text>已兑换</text><text>{{redeemedTotal}}</text></view>
       <view class="hrow"><text>余额</text><text>{{balance}}</text></view>
     </view>
-    <view class="hn">积分永不过期 · 可兑换下方奖品</view>
+    <!-- 裁定②(店主 08-23):这一页既能看每笔积分怎么来的,也能拿积分换东西 —— 一句话说清,别让顾客以为只是流水 -->
+    <view class="hn">积分永不过期 · 下面可以拿积分换券,也能看每一笔积分从哪来</view>
   </view>
 
   <block wx:if="{{!loggedIn}}">
@@ -16,7 +17,7 @@
   </block>
 
   <block wx:else>
-    <view class="t2">可兑换</view>
+    <view class="t2">拿积分换券</view>
     <view wx:if="{{!prizes.length}}" class="empty">老板还没上架奖品,敬请期待~</view>
     <view class="prize" wx:for="{{prizes}}" wx:key="id">
       <view class="pinfo">
@@ -29,7 +30,7 @@
       </view>
     </view>
 
-    <view class="t2">积分明细</view>
+    <view class="t2">每一笔积分怎么来的</view>
     <view wx:if="{{history.length}}" class="list">
       <view class="li" wx:for="{{history}}" wx:key="index">
         <view class="li-main"><view class="li-t">{{item.title}}</view><view class="li-d">{{item.date}}</view></view>

@@ -46,6 +46,9 @@
           <!-- 假数回落红线(08-23):会员数据没拿到就显示「—」,不拿 0 冒充"你没有积分" -->
           <text>{{memberReady ? member.points : '—'}}</text>
           <text>{{t.points}} ›</text>
+          <!-- 裁定①(店主 08-23):不加第二个入口,这一格下面提示里面能兑什么;
+               句子后端唯一(redeemablePrizeText),没奖品/积分不够就整行不出 -->
+          <text wx:if="{{member.redeemablePrizeText}}" class="asset-hint">{{member.redeemablePrizeText}}</text>
         </view>
         <view class="asset-tap" bindtap="goCardPack">
           <text>{{cardPackBadge === null ? '—' : cardPackBadge}}</text>

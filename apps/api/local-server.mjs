@@ -5905,6 +5905,12 @@ function serializeUser(user, tenantId = DEFAULT_TENANT_ID) {
     depositRule: membership.depositRule,
     // 积分单源:pointsBalance(赚分行+台账)——此前这里用 totalSpent 直推,是第四处各自推导
     points: pointsBalance(user.id, tenantId),
+    /* 黑卡「积分」格下面那行小字(店主 08-23 裁定①):有可兑奖品且积分够才出,句子后端唯一。
+       顾客现在只能从这一格进积分页,不加提示就看不出里面还能兑奖品。 */
+    redeemablePrizeText: (() => {
+      const n = redeemablePrizeCount(user.id, tenantId)
+      return n > 0 ? `可兑 ${n} 件` : ''
+    })(),
     // couponCount 已删(D69 同族):此前恒为 0,却被双端黑卡格当作卡包数的回落值显示。
     // 卡包数唯一出口 = /my/card-pack 的 badgeCount(cardPackOf),前端未拿到就显示「—」,不猜数。
     balanceCents: storedValueBalanceCents(user.id, tenantId),
@@ -6560,6 +6566,26 @@ function pointsBalance(userId, tenantId = currentTenantId()) {
   if (balance > earned) throw apiError(500, 'POINTS_INVARIANT_VIOLATION', `积分守恒被破坏:余额 ${balance} > 累计获得 ${earned}(user=${userId})`)
   return balance
 }
+/* 🔴 积分入口提示句唯一出口(店主 08-23 裁:不加第二个入口,黑卡「积分」那格下加一行小字)。
+   判定与积分页里每件奖品的 canRedeem **同一套**(上架 + 有库存 + 积分够 + 没超每人限兑),
+   所以「可兑 2 件」永远等于页内那 2 件,不会出现"提示说有、点进去没有"。
+   没有可兑的就回空串 —— 前端不出这行(永久律:拿不到/没有就不显示,不猜)。 */
+function redeemablePrizeCount(userId, tenantId = currentTenantId()) {
+  const balance = pointsBalance(userId, tenantId)
+  const rows = db.prepare('SELECT * FROM points_prizes WHERE tenant_id = ? AND is_active = 1').all(tenantId)
+  let n = 0
+  for (const r of rows) {
+    if (r.stock <= 0) continue
+    if (balance < r.cost_points) continue
+    if (r.per_user_limit > 0) {
+      const mine = db.prepare("SELECT COUNT(*) AS c FROM points_transactions WHERE tenant_id = ? AND user_id = ? AND type = 'redeem' AND note LIKE ?").get(tenantId, userId, `%#${r.id}`).c
+      if (mine >= r.per_user_limit) continue
+    }
+    n += 1
+  }
+  return n
+}
+
 function serializePrize(r, couponsById) {
   const c = couponsById ? couponsById[r.coupon_id] : db.prepare('SELECT * FROM coupons WHERE id = ?').get(r.coupon_id)
   return {
