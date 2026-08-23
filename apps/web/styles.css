@@ -4501,37 +4501,25 @@ textarea:focus {
   margin-top: 18px;
 }
 
-/* 积分商城块(08-24):常用功能区里的通栏块,右侧留配图位(将来换奖品图/banner 不动版) */
-.fn-block {
-  width: 100%;
+/* 功能格的配图位放线条图标时:留白居中,别把图标拉成铺满照片(换成奖品缩略图后这条不再生效) */
+.menu-grid-web .menu-card img.menu-img-art {
+  object-fit: contain;
+  padding: 18px;
+  background: #f4ece3;
+  box-sizing: border-box;
+}
+
+/* 积分商城页顶部一行:我的可用积分 + 次级入口「明细」(08-24:商城页只留这一处余额) */
+.points-bal {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  gap: 14px;
-  padding: 16px 18px;
-  margin-bottom: 12px;
-  border: 0;
-  text-align: left;
-  cursor: pointer;
+  margin: 4px 0 14px;
+  color: var(--muted);
+  font-weight: 650;
 }
 
-.fn-block .fn-block-text { display: grid; gap: 4px; min-width: 0; }
-.fn-block .fn-block-text strong { font-size: 16px; }
-.fn-block .fn-block-text span { color: var(--muted); font-size: 12.5px; font-weight: 650; }
-
-.fn-block .fn-block-art {
-  width: 52px;
-  height: 52px;
-  flex: none;
-  border-radius: 14px;
-  background: #f4ece3;
-  border: 1px solid #ecdfd0;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-}
-
-.fn-block .fn-block-art img { width: 26px; height: 26px; display: block; }
+.points-bal strong { color: var(--ink, #2b2320); font-size: 22px; margin-left: 6px; }
 
 /* 裁定①(08-23):黑卡「积分」格下面的「可兑 N 件」小字(句后端唯一,没有就整行不出) */
 .member-assets .asset-hint {

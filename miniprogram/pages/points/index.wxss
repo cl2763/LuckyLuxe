@@ -1,37 +1,33 @@
-page{background:#fbf8f5}
-.pg{padding:22rpx 26rpx 60rpx}
-.hero{background:#2d2826;border-radius:18rpx;padding:34rpx 26rpx;color:#fff;text-align:center}
-.hl{font-size:23rpx;color:#d8c6b3}
-.hv{font-size:64rpx;font-weight:700;color:#e7c9a4;margin:8rpx 0 6rpx}
-.hn{font-size:21rpx;color:#b6a99b}
-.btns{display:flex;gap:14rpx;margin:16rpx 0}
-.b{flex:1;text-align:center;font-size:25rpx;color:#8c8279;background:#fff;border:1rpx solid #e7ddd4;border-radius:14rpx;padding:22rpx 0}
-.b.p{background:#c8a47e;color:#fff;border-color:#c8a47e}
-.t2{font-size:25rpx;font-weight:600;color:#2d2826;margin:20rpx 4rpx 12rpx}
-.empty{background:#fff;border:1rpx solid #e7ddd4;border-radius:16rpx;padding:50rpx 30rpx;text-align:center;color:#b6a99b;font-size:23rpx;line-height:1.6}
-.demo{font-size:19rpx;color:#b5731f;background:#fff4e6;border:1rpx solid #f0d9b8;border-radius:20rpx;padding:1rpx 12rpx;margin-left:8rpx;font-weight:400}
-.list{background:#fff;border:1rpx solid #e7ddd4;border-radius:16rpx;overflow:hidden}
-.li{display:flex;align-items:center;justify-content:space-between;padding:22rpx 22rpx;border-bottom:1rpx solid #f1e7df}
-.li:last-child{border-bottom:none}
-.li-main{flex:1;min-width:0}
-.li-t{font-size:25rpx;color:#2d2826}
-.li-d{font-size:21rpx;color:#8c8279;margin-top:5rpx}
-.li-v{font-size:26rpx;font-weight:600}
-.li-v.up{color:#47735f}
-.li-v.down{color:#a34c48}
+page{background:#faf6f2}
+.pg{padding:24rpx 24rpx 60rpx}
 
-/* 积分商城奖品卡 */
-.prize{display:flex;align-items:center;gap:16rpx;background:#fff;border:1rpx solid #e7ddd4;border-radius:16rpx;padding:20rpx 20rpx;margin-bottom:12rpx}
-.pico{width:80rpx;height:80rpx;border-radius:16rpx;background:#fbf4ec;display:flex;align-items:center;justify-content:center;font-size:38rpx;flex:none}
-.pinfo{flex:1;min-width:0}
-.pname{font-size:27rpx;font-weight:700;color:#2d2826}
-.pmeta{font-size:20rpx;color:#8c8279;margin-top:4rpx}
-.pbtn{flex:none;text-align:center}
-.pcost{font-size:24rpx;font-weight:800;color:#b5885d}
-.pgo{margin-top:6rpx;font-size:23rpx;font-weight:700;color:#fff;background:#2d2826;border-radius:999rpx;padding:10rpx 26rpx}
-.pgo.dis{background:#e5ddd3;color:#a99a86}
-.li-v.down{color:#a34c48}
+/* 顶部一行:我的可用积分 + 次级入口「明细」(店主 08-24:商城页只留这一处余额) */
+.bal{display:flex;align-items:center;justify-content:space-between;padding:6rpx 4rpx 20rpx}
+.bal-l{color:#6b615b;font-size:26rpx;font-weight:600}
+.bal-v{color:#2d2826;font-size:40rpx;font-weight:850;margin-left:8rpx}
+.bal-r{color:#8a5a2b;font-size:24rpx;font-weight:700;padding:8rpx 4rpx}
 
-/* 改判①三行(累计获得/已兑换/余额) */
-.hrows { margin: 12rpx 0 4rpx; padding: 12rpx 20rpx; background: rgba(255,255,255,.14); border-radius: 12rpx; }
-.hrow { display: flex; justify-content: space-between; font-size: 24rpx; line-height: 40rpx; opacity: .95; }
+/* 明细(次级):点开才出,收起不占版面 */
+.hist{padding:20rpx 24rpx;margin-bottom:22rpx}
+.hrow{display:flex;justify-content:space-between;color:#6b615b;font-size:24rpx;padding:6rpx 0}
+.hsep{height:1rpx;background:#eee2d6;margin:12rpx 0}
+.list{}
+.li{display:flex;align-items:center;justify-content:space-between;padding:14rpx 0;border-bottom:1rpx solid #f2e8dd}
+.li:last-child{border-bottom:0}
+.li-t{color:#342b28;font-size:25rpx;font-weight:650}
+.li-d{color:#a3968c;font-size:21rpx;margin-top:4rpx}
+.li-v{font-size:26rpx;font-weight:800}
+.li-v.up{color:#2f7a52}
+.li-v.down{color:#8a5a2b}
+
+/* 主体:商品(奖品)卡 */
+.prize{display:flex;align-items:center;justify-content:space-between;gap:16rpx;background:#fff;border:1rpx solid #efe3d6;border-radius:20rpx;padding:22rpx 24rpx;margin-bottom:16rpx}
+.pinfo{min-width:0}
+.pname{color:#2d2826;font-size:28rpx;font-weight:800}
+.pmeta{color:#9a8b80;font-size:22rpx;margin-top:6rpx}
+.pbtn{flex:none;text-align:right}
+.pcost{color:#8a5a2b;font-size:26rpx;font-weight:800}
+.pgo{margin-top:10rpx;padding:10rpx 22rpx;border-radius:999rpx;background:#2d2826;color:#fff;font-size:23rpx;font-weight:700}
+.pgo.dis{background:#e6dbd0;color:#a3968c}
+
+.empty{color:#9a8b80;font-size:24rpx;text-align:center;padding:40rpx 0}

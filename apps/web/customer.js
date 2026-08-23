@@ -1823,27 +1823,25 @@ function renderMe() {
       </section>
       <section class="section">
         <div class="section-row"><h2>${t('functions')}</h2></div>
-        <!-- 裁定(店主 08-24):积分商城做成**一块**(不是普通一格),右侧留配图位;
-             与黑卡「积分」格并存不冲突 —— 入口唯一律约束的是页面与数据出口,不是入口数量。
-             提示句与黑卡同源(redeemablePrizeText),两个入口进同一个积分页。 -->
-        <button class="fn-block card" data-me-target="pointsMall" type="button">
-          <span class="fn-block-text">
-            <strong>${state.lang === 'zh' ? '积分商城' : 'Points mall'}</strong>
-            <span>${escapeHtml(user.redeemablePrizeText || (state.lang === 'zh' ? '用积分换券 · 看每一笔积分怎么来的' : 'Redeem coupons · see where points came from'))}</span>
-          </span>
-          <span class="fn-block-art"><img src="/assets/icons/c-gift.png" alt=""></span>
-        </button>
         <div class="menu-grid-web">
           ${/* 裁定A(店主 08-23):资产族只留「我的资产」一个入口——卡包/券/积分商城/会员权益
                 全部收进资产分类总页(与小程序同构,四之九);商城=购买入口不属资产族,由储值页/资产页进 */''}
+          ${/* 裁定(店主 08-24 二拍):积分商城=**同款小方格**排第一格,不做通栏块;
+                格子里的图片位本身就是配图位——将来换奖品缩略图只换图源不动版。 */''}
           ${[
+            [state.lang === 'zh' ? '积分商城' : 'Points mall', '/assets/icons/c-gift.png', 'pointsMall', 'points'],
             [state.lang === 'zh' ? '卡包' : 'Card pack', '/assets/images/nail-luxe.jpg', 'cardPack', true],
             [t('store'), '/assets/images/store-cover.jpg', 'store', false],
             [t('giftCard'), '/assets/images/lash-volume.jpg', 'giftCard', false],
             [t('settings'), '/assets/images/lash-natural.jpg', 'settings', false]
           ].map(([label, image, target, live]) => {
-            const sub = live ? (state.lang === 'zh' ? '次卡 · 优惠券 · 储值' : 'Passes · Coupons · Balance') : t('comingSoon')
-            return `<button class="menu-card card" data-me-target="${target}" type="button"><img src="${image}" alt="${label}"><strong>${label}</strong><span>${sub}</span></button>`
+            const sub = live === 'points'
+              ? (user.redeemablePrizeText || (state.lang === 'zh' ? '用积分换券' : 'Redeem with points'))
+              : (live ? (state.lang === 'zh' ? '次卡 · 优惠券 · 储值' : 'Passes · Coupons · Balance') : t('comingSoon'))
+            // 其它格是实拍照(铺满),积分格现在放的是线条图标(要留白居中);
+            // 将来换成奖品缩略图时把 icon-art 去掉即可,版面不动。
+            const imgCls = live === 'points' ? ' class="menu-img-art"' : ''
+            return `<button class="menu-card card" data-me-target="${target}" type="button"><img${imgCls} src="${image}" alt="${label}"><strong>${label}</strong><span>${escapeHtml(sub)}</span></button>`
           }).join('')}
         </div>
       </section>
@@ -2164,28 +2162,31 @@ function renderPointsWeb() {
     loadPoints().then(() => { if (state.view === 'pointsMall') render() })
     return
   }
+  /* 裁定(店主 08-24):这一页是**商城**不是账本 —— 主体是奖品,顶部只留一行「我的可用积分 X」,
+     积分明细收进次级入口(顶部右侧「明细」),点开才看。只动表达层,余额/canRedeem/兑换事务不动。 */
+  const open = Boolean(state.pointsHistoryOpen)
   els.screen.innerHTML = `
     <section class="view-web">
       <button class="ghost back-btn" data-me-target="me" type="button">← ${zh ? '我的' : 'Me'}</button>
-      <h1>${zh ? '积分与兑换' : 'Points & rewards'}</h1>
-      <div class="info-card-web card">
-        <p><span>${zh ? '我的积分 · 消费 1 元 = 1 分' : 'My points · 1 spent = 1 point'}</span><strong class="price">${p.balance}</strong></p>
+      <h1>${zh ? '积分商城' : 'Points mall'}</h1>
+      <div class="points-bal">
+        <span>${zh ? '我的可用积分' : 'My points'} <strong>${p.balance}</strong></span>
+        <button class="section-note-btn" data-points-history type="button">${open ? (zh ? '收起明细' : 'Hide') : (zh ? '明细 ›' : 'History ›')}</button>
+      </div>
+      ${open ? `<div class="info-card-web card">
         <p><span>${zh ? '累计获得' : 'Earned'}</span><strong>${p.earnedTotal}</strong></p>
         <p><span>${zh ? '已兑换' : 'Redeemed'}</span><strong>${p.redeemedTotal}</strong></p>
-        <p class="subtle">${zh ? '积分永不过期 · 下面可以拿积分换券,也能看每一笔积分从哪来' : 'Points never expire · redeem below, and see where each point came from'}</p>
-      </div>
-      <div class="section-row compact"><h2>${zh ? '拿积分换券' : 'Redeem with points'}</h2></div>
+        <p><span>${zh ? '可用余额' : 'Available'}</span><strong>${p.balance}</strong></p>
+        ${(p.history || []).length ? (p.history || []).map((h) => `
+          <p style="border-top:1px solid #f0e6db;padding-top:8px"><span>${escapeHtml(h.title)}<br><small class="subtle">${escapeHtml(h.date)}</small></span><strong>${h.delta >= 0 ? '+' : ''}${h.delta}</strong></p>`).join('')
+          : `<p class="subtle">${zh ? '暂无积分记录,完成消费后自动累计。' : 'No points yet'}</p>`}
+      </div>` : ''}
       ${(p.prizes || []).length ? (p.prizes || []).map((z) => `
         <div class="info-card-web card">
           <p><span><strong>${escapeHtml(z.name)}</strong></span><strong>${z.costPoints} ${zh ? '分' : 'pts'}</strong></p>
           <p class="subtle">${z.minSpendCents ? `${zh ? '满' : 'Min '} ${money(z.minSpendCents)} ${zh ? '可用' : ''} · ` : ''}${zh ? '有效' : 'Valid'} ${z.validDays} ${zh ? '天' : 'days'} · ${z.stock > 0 ? `${zh ? '余' : 'Left'} ${z.stock}` : (zh ? '已兑完' : 'Sold out')}</p>
           <button class="primary" data-redeem-prize="${escapeHtml(z.id)}" type="button" ${z.canRedeem ? '' : 'disabled'}>${z.canRedeem ? (zh ? '立即兑换' : 'Redeem') : (z.stock <= 0 ? (zh ? '已兑完' : 'Sold out') : (z.limitReached ? (zh ? '已达限兑' : 'Limit reached') : (zh ? '积分不足' : 'Not enough points')))}</button>
         </div>`).join('') : `<div class="empty-state">${zh ? '老板还没上架奖品,敬请期待~' : 'No rewards listed yet'}</div>`}
-      <div class="section-row compact"><h2>${zh ? '每一笔积分怎么来的' : 'Where each point came from'}</h2></div>
-      ${(p.history || []).length ? (p.history || []).map((h) => `
-        <div class="info-card-web card">
-          <p><span>${escapeHtml(h.title)}<br><small class="subtle">${escapeHtml(h.date)}</small></span><strong class="${h.delta >= 0 ? '' : 'price'}">${h.delta >= 0 ? '+' : ''}${h.delta}</strong></p>
-        </div>`).join('') : `<div class="empty-state">${zh ? '暂无积分记录,完成消费后自动累计。' : 'No points yet'}</div>`}
     </section>`
 }
 
@@ -2464,6 +2465,11 @@ async function handleScreenClick(event) {
     event.preventDefault()
     state.mallFilter = mallFocus.dataset.mallFocus   // 裁定②:去统一商城并定位次卡分区(不新建页)
     setView('mall')
+    return
+  }
+  if (event.target.closest('[data-points-history]')) {
+    state.pointsHistoryOpen = !state.pointsHistoryOpen
+    render()
     return
   }
   const redeemBtn = event.target.closest('[data-redeem-prize]')

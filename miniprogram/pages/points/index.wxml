@@ -1,15 +1,11 @@
+<!-- 裁定(店主 2026-08-24):这一页的定位是**商城**,不是账本。
+     主体=可兑换的奖品;顶部只留一行「我的可用积分 X」让顾客知道自己换不换得起;
+     积分明细(每一笔怎么来的)降级到**次级入口**,点开才看,不占商城主视觉。
+     只动表达层与信息层级:余额 / canRedeem / 兑换事务全部沿用既有唯一出口,一分账都不动。 -->
 <view class="pg">
-  <view class="hero">
-    <view class="hl">我的积分 · 消费 1 元 = 1 分</view>
-    <view class="hv">{{balance}}</view>
-    <!-- 改判①(店主 2026-08-12):三行自证 —— 累计获得≡累计消费,余额=获得−已兑换 -->
-    <view class="hrows">
-      <view class="hrow"><text>累计获得</text><text>{{earnedTotal}}</text></view>
-      <view class="hrow"><text>已兑换</text><text>{{redeemedTotal}}</text></view>
-      <view class="hrow"><text>余额</text><text>{{balance}}</text></view>
-    </view>
-    <!-- 裁定②(店主 08-23):这一页既能看每笔积分怎么来的,也能拿积分换东西 —— 一句话说清,别让顾客以为只是流水 -->
-    <view class="hn">积分永不过期 · 下面可以拿积分换券,也能看每一笔积分从哪来</view>
+  <view class="bal">
+    <view class="bal-l">我的可用积分 <text class="bal-v">{{balance}}</text></view>
+    <view class="bal-r" bindtap="toggleHistory">{{historyOpen ? '收起明细' : '明细 ›'}}</view>
   </view>
 
   <block wx:if="{{!loggedIn}}">
@@ -17,7 +13,22 @@
   </block>
 
   <block wx:else>
-    <view class="t2">拿积分换券</view>
+    <!-- 次级入口:默认收起,点「明细」才展开(账本内容不抢商城主视觉) -->
+    <view wx:if="{{historyOpen}}" class="hist card">
+      <view class="hrow"><text>累计获得</text><text>{{earnedTotal}}</text></view>
+      <view class="hrow"><text>已兑换</text><text>{{redeemedTotal}}</text></view>
+      <view class="hrow"><text>可用余额</text><text>{{balance}}</text></view>
+      <view class="hsep"></view>
+      <view wx:if="{{history.length}}" class="list">
+        <view class="li" wx:for="{{history}}" wx:key="index">
+          <view class="li-main"><view class="li-t">{{item.title}}</view><view class="li-d">{{item.date}}</view></view>
+          <text class="li-v {{item.up ? 'up' : 'down'}}">{{item.deltaText}}</text>
+        </view>
+      </view>
+      <view wx:else class="empty">暂无积分记录,完成消费后自动累计。</view>
+    </view>
+
+    <!-- 主体:商品(奖品)列表 -->
     <view wx:if="{{!prizes.length}}" class="empty">老板还没上架奖品,敬请期待~</view>
     <view class="prize" wx:for="{{prizes}}" wx:key="id">
       <view class="pinfo">
@@ -29,14 +40,5 @@
         <view class="pgo {{item.canRedeem ? '' : 'dis'}}" data-id="{{item.id}}" bindtap="redeem">{{item.btnText}}</view>
       </view>
     </view>
-
-    <view class="t2">每一笔积分怎么来的</view>
-    <view wx:if="{{history.length}}" class="list">
-      <view class="li" wx:for="{{history}}" wx:key="index">
-        <view class="li-main"><view class="li-t">{{item.title}}</view><view class="li-d">{{item.date}}</view></view>
-        <text class="li-v {{item.up ? 'up' : 'down'}}">{{item.deltaText}}</text>
-      </view>
-    </view>
-    <view wx:else class="empty">暂无积分记录,完成消费后自动累计。</view>
   </block>
 </view>

@@ -470,8 +470,9 @@ function miniMember(user = {}) {
     growthValue,
     nextLevelValue,
     points: hasRealStats ? (user.points || 0) : 0,
-    // 积分格下的小字(后端唯一出口;空串=不显示,不猜)
+    // 积分入口的提示(后端唯一出口;整句给黑卡格、数字给小方格角标,同一个数)
     redeemablePrizeText: user.redeemablePrizeText || '',
+    redeemablePrizeCount: user.redeemablePrizeCount || 0,
     balance: hasRealStats ? Math.round((user.balanceCents || 0) / 100) : 0,
     totalSpent: hasRealStats ? Math.round((user.totalSpentCents || 0) / 100) : 0,
     visits: hasRealStats ? (user.visits || 0) : 0,

@@ -551,53 +551,6 @@
   color: #7a6250;
 }
 
-/* 积分商城块(店主 08-24):常用功能区里的**通栏块**,右侧留配图位。
-   视觉与 .menu-card 协调(同卡片底/同圆角),但更宽、能放图。 */
-.fn-block {
-  width: 100%;
-  box-sizing: border-box;
-  margin: 0 0 14rpx;
-  padding: 22rpx 24rpx;
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 16rpx;
-}
-
-.fn-block-text { min-width: 0; }
-
-.fn-block-title {
-  color: #342b28;
-  font-size: 28rpx;
-  font-weight: 800;
-}
-
-.fn-block-sub {
-  margin-top: 6rpx;
-  color: #9a8b80;
-  font-size: 22rpx;
-  font-weight: 600;
-}
-
-/* 配图位:现在放图标,将来换奖品缩略图/banner 时把这块尺寸留住不动版 */
-.fn-block-art {
-  width: 96rpx;
-  height: 96rpx;
-  border-radius: 20rpx;
-  background: #f4ece3;
-  border: 1rpx solid #ecdfd0;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  flex: none;
-}
-
-.fn-block-ic {
-  width: 48rpx;
-  height: 48rpx;
-  display: block;
-}
-
 .menu-grid {
   display: grid;
   grid-template-columns: repeat(3, minmax(0, 1fr));

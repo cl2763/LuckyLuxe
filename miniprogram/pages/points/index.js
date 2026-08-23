@@ -2,7 +2,10 @@ const api = require('../../utils/api')
 const { money, ensureCurrencyCached } = require('../../utils/storecurrency')
 
 Page({
-  data: { balance: 0, prizes: [], history: [], loading: true, redeeming: false, loggedIn: true },
+  // historyOpen:积分明细是**次级入口**(默认收起)——这一页的主体是商城,不是账本(店主 08-24)
+  data: { balance: 0, prizes: [], history: [], loading: true, redeeming: false, loggedIn: true, historyOpen: false },
+
+  toggleHistory() { this.setData({ historyOpen: !this.data.historyOpen }) },
 
   async onShow() {
     ensureCurrencyCached()

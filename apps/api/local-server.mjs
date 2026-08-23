@@ -5908,10 +5908,13 @@ function serializeUser(user, tenantId = DEFAULT_TENANT_ID) {
     points: pointsBalance(user.id, tenantId),
     /* 黑卡「积分」格下面那行小字(店主 08-23 裁定①):有可兑奖品且积分够才出,句子后端唯一。
        顾客现在只能从这一格进积分页,不加提示就看不出里面还能兑奖品。 */
+    /* 两个入口两种排版,但**同一个数**:黑卡那格有横向空间放整句「可兑 1 件」;
+       常用功能区是三列小方格,只放得下角标数字(与卡包格同款)。两者都出自 redeemablePrizeCount。 */
     redeemablePrizeText: (() => {
       const n = redeemablePrizeCount(user.id, tenantId)
       return n > 0 ? `可兑 ${n} 件` : ''
     })(),
+    redeemablePrizeCount: redeemablePrizeCount(user.id, tenantId),
     // couponCount 已删(D69 同族):此前恒为 0,却被双端黑卡格当作卡包数的回落值显示。
     // 卡包数唯一出口 = /my/card-pack 的 badgeCount(cardPackOf),前端未拿到就显示「—」,不猜数。
     balanceCents: storedValueBalanceCents(user.id, tenantId),

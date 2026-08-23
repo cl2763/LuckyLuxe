@@ -2373,6 +2373,7 @@ const main = async () => {
       /* ㋕ wiring:积分入口**唯一**(黑卡那一格),别处不许再冒出第二个积分入口 */
       const meWx95 = readFileSync(join(ROOT42, 'miniprogram/pages/me/index.wxml'), 'utf8')
       const custWeb95 = readFileSync(join(ROOT42, 'apps/web/customer.js'), 'utf8')
+      const custWeb96 = custWeb95
       /* 08-24 修订:入口**可以有多个**(黑卡格 + 常用功能块),唯一律约束的是**页面与数据出口** ——
          所有入口进同一个 pages/points,提示句都读同一个后端出口。数入口个数是错的判据。 */
       const miniPointsEntries = (meWx95.match(/bindtap="goPoints"/g) || []).length
@@ -2382,11 +2383,29 @@ const main = async () => {
       const pointsPages95 = pagesJson95.pages.filter((x) => /points/.test(x) && !/merchant/.test(x))
       check('㋕ 积分**页面**唯一(顾客端只有 pages/points 一个积分页,没有第二个页面)',
         pointsPages95.length === 1 && pointsPages95[0] === 'pages/points/index', JSON.stringify(pointsPages95))
-      check('㋕ 多入口同页:小程序黑卡格 + 常用功能块都走 goPoints(2 处),网页两处都指 pointsMall',
-        miniPointsEntries >= 2 && webPointsEntries >= 2 && /goPoints\(\)\s*\{[^}]*pages\/points/.test(meJs95.replace(/\n/g, ' ')),
-        JSON.stringify({ mini: miniPointsEntries, web: webPointsEntries }))
-      check('㋕ 积分商城块留了配图位(将来放奖品缩略图/banner 不动版)',
-        meWx95.includes('fn-block-art') && custWeb95.includes('fn-block-art'))
+      /* 网页两个入口:黑卡那格是字面 data-me-target="pointsMall",功能格是菜单数组里的 'pointsMall' 项
+         —— 数字面量会漏掉后者,所以两种写法各验一次(判据要能覆盖真实写法,08-24 教训的延伸)。 */
+      const webCellEntry = /menu-grid-web[\s\S]{0,600}'pointsMall'/.test(custWeb95)
+      check('㋕ 多入口同页:小程序黑卡格 + 功能格都走 goPoints(2 处);网页黑卡格 + 功能格都指 pointsMall',
+        miniPointsEntries >= 2 && webPointsEntries >= 1 && webCellEntry
+        && /goPoints\(\)\s*\{[^}]*pages\/points/.test(meJs95.replace(/\n/g, ' ')),
+        JSON.stringify({ mini: miniPointsEntries, webLiteral: webPointsEntries, webCell: webCellEntry }))
+      /* 08-24 二拍:积分商城不是通栏块,是**与其他功能同款的小方格**(排在网格第一格);
+         格子里的图标位本身就是配图位 —— 将来换奖品缩略图只换图源不动版。 */
+      check('㋕ 积分商城=同款小方格排进网格第一格(通栏块 fn-block 已撤,0 残留)',
+        !meWx95.includes('fn-block') && !custWeb95.includes('fn-block')
+        && /menu-grid[\s\S]{0,400}bindtap="goPoints"[\s\S]{0,200}menu-ic/.test(meWx95)
+        && /menu-grid-web[\s\S]{0,600}'pointsMall'/.test(custWeb95))
+      /* 商城页的信息层级:主体=奖品,顶部只留一行余额,明细降级为次级入口(默认收起) */
+      const ptsWx96 = readFileSync(join(ROOT42, 'miniprogram/pages/points/index.wxml'), 'utf8')
+      const ptsJs96 = readFileSync(join(ROOT42, 'miniprogram/pages/points/index.js'), 'utf8')
+      check('㋕ 商城页只有一处余额(顶部一行「我的可用积分 X」,原大 hero 三行自证撤出主视觉)',
+        ptsWx96.includes('我的可用积分') && (ptsWx96.match(/\{\{balance\}\}/g) || []).length <= 2 && !ptsWx96.includes('class="hero"'))
+      check('㋕ 积分明细=次级入口,默认收起(点「明细」才展开;双端同构)',
+        ptsWx96.includes('toggleHistory') && ptsWx96.includes("wx:if=\"{{historyOpen}}\"") && ptsJs96.includes('historyOpen: false')
+        && custWeb96.includes('data-points-history') && custWeb96.includes('state.pointsHistoryOpen'))
+      check('㋕ 商城页主体是奖品列表(奖品区在明细之后渲染,明细收起时页面主视觉=商品)',
+        ptsWx96.indexOf('class="prize"') > ptsWx96.indexOf('historyOpen'))
       check('㋕ 提示句只读后端出口(两端都不自己算「可兑几件」)',
         meWx95.includes('member.redeemablePrizeText') && custWeb95.includes('user.redeemablePrizeText')
         && !/可兑\s*\$\{/.test(custWeb95))
