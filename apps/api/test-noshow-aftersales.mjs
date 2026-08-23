@@ -2232,6 +2232,34 @@ const main = async () => {
         cpWx91.includes('c.projectGroupText') && !cpWx91.includes("projectGroup || '不限'")
         && mallWx91.includes('{{sec.label}}') && !mallWx91.includes("' · 次卡'")
         && ordWx91.includes('{{item.titleText}}') && !ordWx91.includes("'(共 '"))
+      /* ===== ㋒ 租户回落裁定(店主 08-23,假数回落同族**第四例也是最深一例**)=====
+         拿不到租户就回落到别人家的店:小婕的顾客会看到 Lucky Luxe 的服务与加币价。
+         落法:①记忆 → ②部署配置项(多租户构建为空)→ ③空=去选店/扫码,绝不静默替换。 */
+      const apiTen = readFileSync(join(ROOT42, 'miniprogram/utils/api.js'), 'utf8')
+      const appTen = readFileSync(join(ROOT42, 'miniprogram/app.js'), 'utf8')
+      const homeTen = readFileSync(join(ROOT42, 'miniprogram/pages/home/index.js'), 'utf8')
+      const meTen = readFileSync(join(ROOT42, 'miniprogram/pages/me/index.js'), 'utf8')
+      const custTen = readFileSync(join(ROOT42, 'apps/web/customer.js'), 'utf8')
+      const dep1 = readFileSync(join(ROOT42, 'miniprogram/utils/deploy.js'), 'utf8')
+      const dep2 = readFileSync(join(ROOT42, 'apps/web/deploy-config.js'), 'utf8')
+      const stripCode = (t) => t.replace(/\/\*[\s\S]*?\*\//g, '').replace(/\/\/[^\n]*/g, '')
+      const tenantHits = [
+        ['miniprogram/utils/api.js', apiTen], ['miniprogram/app.js', appTen],
+        ['miniprogram/pages/home/index.js', homeTen], ['miniprogram/pages/me/index.js', meTen],
+        ['apps/web/customer.js', custTen]
+      ].filter(([, txt]) => stripCode(txt).includes("'lucky-luxe'")).map(([f]) => f)
+      check('㋒ 裁定④:顾客端全仓零硬编码租户名(0 残留)', tenantHits.length === 0, tenantHits.join(','))
+      check('㋒ 裁定②:默认店只能来自部署配置项,多租户构建为空(不许把店名写回代码)',
+        /defaultTenantId:\s*''/.test(dep1) && /defaultTenantId:\s*''/.test(dep2)
+        && apiTen.includes('deploy.defaultTenantId') && custTen.includes('window.LL_DEPLOY'))
+      check('㋒ 裁定①:租户唯一出口=记忆 → 配置 → 空(小程序 currentTenant 不再兜底任何店)',
+        /wx\.getStorageSync\('lucky_tenant'\) \|\| deploy\.defaultTenantId \|\| ''/.test(apiTen))
+      check('㋒ 裁定①:无门店上下文时不发数据请求,先送去选店(双端同刀,/shops 放行)',
+        apiTen.includes('TENANT_FREE_PATHS') && apiTen.includes("goPickStore") && apiTen.includes('/pages/shop-select/index')
+        && custTen.includes('TENANT_FREE_PATHS') && custTen.includes('requireStoreContext'))
+      check('㋒ 裁定⑤:网页无租户=「请选择门店」引导屏(不是白屏,也不是随便进一家店)',
+        custTen.includes('data-pick-store') && custTen.includes('if (!TENANT_ID) {'))
+      check('㋒ 网页门店 id 不再写死旗舰店(由本店 /stores 下发)', !stripCode(custTen).includes("'store-ontario-01'"))
       const apiMap91 = readFileSync(join(ROOT42, 'miniprogram/utils/api.js'), 'utf8')
       const clock91 = readFileSync(join(ROOT42, 'miniprogram/utils/storeclock.js'), 'utf8')
       check('㋑ 映射层零写死旗舰店兜底(店名/营业时间/时区/店介绍;多租户下那是别人家的事实)',

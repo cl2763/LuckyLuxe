@@ -11,6 +11,7 @@ const USE_LOCAL_SANDBOX = true // 2026-08-23 体验版 1.2.0 已传(境内号 wx
    所以这里按运行环境自动切:平台是 devtools 用回环,真机用 utils/devhost.js 里的局域网 IP
    (那个文件由根目录「更新真机调试地址.command」一键写入,换网络重跑一次即可,不用改代码)。 */
 const devhost = require('./devhost')
+const deploy = require('./deploy')
 const LOCAL_PORT = devhost.port || 4310
 const LOCAL_LOOPBACK = `http://127.0.0.1:${LOCAL_PORT}`
 function isDevtools() {
@@ -112,9 +113,15 @@ function clearAdminAuth() {
   wx.removeStorageSync(ADMIN_AUTH_KEY)
 }
 
+/* 🔴 租户不许回落到别人家的店(店主 08-23 裁定,假数回落同族第四例)。
+   顺序:①本次/上次记住的门店(扫码·深链·选店页都写这个键)→ ②单店部署的配置项(默认空)
+   → ③**空**:调用方必须把顾客送到选店页/提示扫码,绝不静默替换成任何一家店。 */
 function currentTenant() {
-  return wx.getStorageSync('lucky_tenant') || 'lucky-luxe'
+  return wx.getStorageSync('lucky_tenant') || deploy.defaultTenantId || ''
 }
+
+// 有没有门店上下文(没有就该去选店,而不是拿别人家的店顶上)
+function hasTenant() { return Boolean(currentTenant()) }
 
 /* D39 L2(换店残留机制,第 2 案后全仓清单化):换店时必须清/重取的键统一从这走。
    清:member 快照/币种/定金配置/AI 开关/购物车/本地订单缓存/款式预设(全部 per-store 值挂全局键);
@@ -141,10 +148,30 @@ function kickToLogin(silent) {
   }, silent ? 0 : 500)
 }
 
+/* 没有门店上下文时的守卫(店主 08-23 裁定):顾客端**一个数据请求都不许发** ——
+   空租户头到了后端会被当成默认店,顾客照样看到别人家的服务与价格(静默替换)。
+   放行的是平台级接口(选店页自己要用),其余一律先把人送去选店/扫码。 */
+const TENANT_FREE_PATHS = ['/shops']
+let pickingStore = false
+function goPickStore() {
+  if (pickingStore) return
+  pickingStore = true
+  wx.reLaunch({
+    url: '/pages/shop-select/index',
+    complete() { setTimeout(function () { pickingStore = false }, 1200) }
+  })
+}
+
 function request(path, method = 'GET', data) {
   return new Promise((resolve, reject) => {
+    const tid = currentTenant()
+    if (!tid && !TENANT_FREE_PATHS.some((p) => path.indexOf(p) === 0)) {
+      goPickStore()
+      reject({ code: 'NO_TENANT', message: '请先扫码或选择门店' })
+      return
+    }
     const auth = getAuth()
-    const header = { 'content-type': 'application/json', 'x-tenant-id': currentTenant() }
+    const header = { 'content-type': 'application/json', 'x-tenant-id': tid }
     if (auth && auth.accessToken) header.authorization = `Bearer ${auth.accessToken}`
     wx.request({
       url: `${API_BASE}${path}`,
@@ -858,6 +885,8 @@ module.exports = {
   adminMe,
   submitMerchantLead,
   getShops,
+  hasTenant,
+  currentTenantId: currentTenant,   // 租户唯一出口(app.js / 页面判空都读它)
   getServiceCatalog,
   aiCustomerService,
   getDepositPolicy,

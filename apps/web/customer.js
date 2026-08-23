@@ -1,13 +1,17 @@
 /* D45(复核二轮 2026-08-15):网页顾客端按店寻址 —— 「每店专属链接」模型(商家把自己店的链接发给顾客)。
    ?store=<租户ID> 进入该店并记住(localStorage),刷新/跳页保持;无参=上次的店;首次=旗舰店。
    所有请求统一带 x-tenant-id;storeId 不再写死,由本店 /stores 下发覆盖。 */
+/* 🔴 租户不许回落到别人家的店(店主 08-23 裁定,与小程序同刀)。
+   顺序:①?store= 专属链接 → ②上次记住的店 → ③单店部署配置(deploy-config.js,多租户构建为空)
+   → ④**空**:不发任何数据请求,直接弹「选择门店」,绝不静默进旗舰店。 */
 const TENANT_ID = (() => {
   const q = new URLSearchParams(location.search)
   const t = (q.get('store') || q.get('tenant') || '').trim()
   if (t) { try { localStorage.setItem('lucky-web-tenant', t) } catch (e) {} return t }
-  try { return localStorage.getItem('lucky-web-tenant') || 'lucky-luxe' } catch (e) { return 'lucky-luxe' }
+  const deployDefault = (window.LL_DEPLOY && window.LL_DEPLOY.defaultTenantId) || ''
+  try { return localStorage.getItem('lucky-web-tenant') || deployDefault } catch (e) { return deployDefault }
 })()
-let storeId = 'store-ontario-01' // 兜底;boot 时 loadStores() 用本店真实门店覆盖
+let storeId = '' // 门店 id 由本店 /stores 下发;拿不到就空,不写死任何一家店的 id
 
 /* 门店币种(店主 2026-08-10 红线修复)。原来币符写死在代码里 —— 境内 ¥ 店的顾客
    在网页端看到的每个价格币种都是错的,和小程序顾客端同一个病。
@@ -587,7 +591,22 @@ function toast(message) {
   setTimeout(() => els.toast.classList.remove('show'), 2400)
 }
 
+/* 没有门店上下文时的守卫(与小程序 TENANT_FREE_PATHS 同刀):顾客端一个数据请求都不发,
+   直接弹选店面板 —— 空租户头到后端会被当成默认店,顾客照样看到别人家的服务与价格。
+   放行 /shops(选店面板自己要用)。 */
+const TENANT_FREE_PATHS = ['/shops']
+let pickingStoreWeb = false
+function requireStoreContext() {
+  if (pickingStoreWeb) return
+  pickingStoreWeb = true
+  openStoreSwitcher().finally(() => { setTimeout(() => { pickingStoreWeb = false }, 1200) })
+}
+
 async function request(path, options = {}) {
+  if (!TENANT_ID && !TENANT_FREE_PATHS.some((p) => path.indexOf(p) === 0)) {
+    requireStoreContext()
+    throw new Error(state.lang === 'en' ? 'Choose a store first' : '请先选择门店')
+  }
   const skipAuthRefresh = options.skipAuthRefresh
   delete options.skipAuthRefresh
   const response = await fetch(path, {
@@ -700,6 +719,23 @@ function recommended(type) {
 
 async function bootstrap() {
   bindGlobalEvents()
+  /* 没有门店上下文:先给一屏「请选择门店」引导(不是白屏,也不是随便进一家店)。
+     选中即以 ?store= 整页进店,与专属链接同一机制(店主 08-23 裁定)。 */
+  if (!TENANT_ID) {
+    els.authView.classList.add('hidden')
+    els.appView.classList.remove('hidden')
+    els.screen.innerHTML = `
+      <section class="section">
+        <div class="empty-state tall">
+          <strong>${state.lang === 'en' ? 'Choose a store' : '请选择门店'}</strong>
+          <span>${state.lang === 'en' ? 'Open your store\'s own link, scan its code, or pick one below.' : '请打开店家给你的专属链接、扫店内小程序码,或在下面选择门店。'}</span>
+          <button class="primary" data-pick-store type="button">${state.lang === 'en' ? 'Pick a store' : '选择门店'}</button>
+        </div>
+      </section>`
+    els.screen.querySelector('[data-pick-store]')?.addEventListener('click', () => { openStoreSwitcher() })
+    openStoreSwitcher()
+    return
+  }
   await Promise.all([loadServices(), loadStores(), loadAddOns(), loadPortfolio()])
   await handleAuthRedirect()
   if (state.user && !state.auth?.accessToken) {

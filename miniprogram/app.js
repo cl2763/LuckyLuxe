@@ -33,9 +33,10 @@ App({
         // D39:扫码/深链换店与选店页同一套清场;租户没变(常规重进)不清
         if (prev && prev !== tid) { try { require('./utils/api').onStoreSwitched() } catch (e) { /* 清场失败不阻塞启动 */ } }
       } else {
-        this.globalData.tenantId = wx.getStorageSync('lucky_tenant') || 'lucky-luxe'
+        // 租户唯一出口(店主 08-23 裁定):记忆 → 部署配置 → 空。空=去选店,不顶别人家的店
+        this.globalData.tenantId = require('./utils/api').currentTenantId()
       }
-    } catch (e) { this.globalData.tenantId = 'lucky-luxe' }
+    } catch (e) { this.globalData.tenantId = '' }
   },
 
   initPrivacyBridge() {

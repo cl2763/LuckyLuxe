@@ -30,7 +30,7 @@ Page({
     this.setData({ cur: curOf() })   // 币种跟门店走,不写死币符
 
     // 多租户兜底:既没扫店码、也没进过任何店 → 引导选择门店
-    if (!wx.getStorageSync('lucky_tenant')) {
+    if (!api.hasTenant()) {
       wx.navigateTo({ url: '/pages/shop-select/index' })
       return
     }
@@ -44,11 +44,13 @@ Page({
   // 当前门店名(顶部门店条)
   async loadShopName() {
     try {
-      const tid = wx.getStorageSync('lucky_tenant') || 'lucky-luxe'
+      // 店名唯一出口=当前租户在 /shops 里的那一行;拿不到就空(店卡另有 store.storeName),
+      // 绝不回落成旗舰店品牌名(店主 08-23 裁定:不许显示别人家的店)
+      const tid = api.currentTenantId()
       const r = await api.getShops()
       const hit = (r.shops || []).find((s) => s.tenantId === tid)
-      this.setData({ shopName: (hit && hit.name) || 'Lucky Luxe' })
-    } catch (e) { this.setData({ shopName: 'Lucky Luxe' }) }
+      this.setData({ shopName: (hit && hit.name) || '' })
+    } catch (e) { this.setData({ shopName: '' }) }
   },
 
   switchShop() { wx.navigateTo({ url: '/pages/shop-select/index' }) },
