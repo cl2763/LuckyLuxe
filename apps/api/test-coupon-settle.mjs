@@ -339,14 +339,23 @@ async function main() {
   // 数据库层禁删(不靠人记纪律)
   const { DatabaseSync } = await import('node:sqlite')
   const dbPath = process.env.TEST_DB_PATH || `${process.env.DATA_DIR || './local-data'}/lucky-luxe.sqlite`
+  /* D72(店主 08-24 裁):禁删律的判据从「租户名字像不像 demo-」改成「tenants.kind='real'」。
+     套件建的店在测试库上落的是 kind='test',所以**默认可删** —— 这正是清理脚本能砍下去的原因。
+     判据跟着口径走,而且验两个方向(只验一个方向等于没验这条律真的按 kind 走):
+       ① 把这家店标成 real → 禁删律必须挡住;② 标回 test → 必须能删。 */
   const rawDb = new DatabaseSync(dbPath)
+  rawDb.prepare("UPDATE tenants SET kind = 'real' WHERE id = ?").run(shop.tenantId)
   let deleteBlocked = false
   try { rawDb.prepare('DELETE FROM coupon_grants WHERE id = ?').run(grant300) } catch { deleteBlocked = true }
   let logDeleteBlocked = false
   try { rawDb.prepare('DELETE FROM coupon_grant_logs WHERE grant_id = ?').run(grant300) } catch { logDeleteBlocked = true }
+  check('⓪ 发放记录数据库层禁删(kind=real 的租户)', deleteBlocked)
+  check('⓪ 券流水数据库层禁删(kind=real 的租户)', logDeleteBlocked)
+  rawDb.prepare("UPDATE tenants SET kind = 'test' WHERE id = ?").run(shop.tenantId)
+  let testDeletable = false
+  try { rawDb.prepare('DELETE FROM coupon_grant_logs WHERE grant_id = ?').run(grant300); testDeletable = true } catch { testDeletable = false }
+  check('⓪ D72 反方向:kind=test 的租户可删(否则清理脚本永远被 ABORT 回滚)', testDeletable)
   rawDb.close()
-  check('⓪ 发放记录数据库层禁删', deleteBlocked)
-  check('⓪ 券流水数据库层禁删', logDeleteBlocked)
 
   // ---- 财务:月度券让利汇总(特批 / 系统)----
   const fin = await request('/admin/finance/coupon-discounts', {}, shop.token)

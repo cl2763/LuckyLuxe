@@ -281,11 +281,14 @@ async function main() {
   {
     const { DatabaseSync } = await import('node:sqlite')
     const dbPath = process.env.TEST_DB_PATH || `${process.env.DATA_DIR || './local-data'}/lucky-luxe.sqlite`
+    // D72:禁删律判据改成 tenants.kind='real'(套件建的店是 test,默认可删)——先标 real 再验律
     const rawDb = new DatabaseSync(dbPath)
+    rawDb.prepare("UPDATE tenants SET kind = 'real' WHERE id = ?").run(shop.tenantId)
     let blocked = false
     try { rawDb.prepare('DELETE FROM identity_merge_queue WHERE tenant_id = ?').run(shop.tenantId) } catch { blocked = true }
+    rawDb.prepare("UPDATE tenants SET kind = 'test' WHERE id = ?").run(shop.tenantId)
     rawDb.close()
-    check('合并队列数据库层禁删(只追加)', blocked)
+    check('合并队列数据库层禁删(只追加;kind=real 的租户)', blocked)
   }
 
   /* 已签单的真实笔迹(店主 2026-08-10 口径变更:原「存姓名文本」拍板作废)。

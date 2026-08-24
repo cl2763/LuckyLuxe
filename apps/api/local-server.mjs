@@ -10,7 +10,8 @@ import os from 'node:os'   // 真机调试:开发机局域网 IP 探测(启动�
 import { pngSize, rasterBackend, svgToPng } from './svg-raster.mjs'
 import { inkToPng } from './ink-raster.mjs'
 import { createAfterSales } from './after-sales.mjs'        // 售后域(公约②:边改边拆)
-import { createOrderBadges, bookingSourceText } from './order-badges.mjs'      // 顾客端订单表达域(同上)
+import { createOrderBadges, bookingSourceText } from './order-badges.mjs'
+import { installLedgerGuards, backfillTenantKind, LEDGER_TRIGGER_NAMES } from './ledger-guards.mjs'  // 账本禁删/禁改律唯一出口(D72)      // 顾客端订单表达域(同上)
 import { createBookingIncome } from './booking-income.mjs'  // 订单入账触点(同上)
 import { createBookingState, isAfterSalesOpen, shouldAutoComplete } from './booking-state.mjs'  // 订单状态机(D70 合同,唯一实现)   // 笔迹图:纯 JS 画折线,**透明底**(单据白纸走 svgToPng,两条路不混)
 import { analyzeReferenceImage, createBookingSummary, createCustomerInsight, createCustomerServiceReply, createDailyBrief, createRecallMessages, createServiceNoteInsights, createSocialCopy, extractKbEntriesFromDocument, polishStaffQuoteReply } from './ai-utils.mjs'
@@ -27,6 +28,10 @@ const webRoot = join(workspaceRoot, 'apps', 'web')
 const assetRoot = join(workspaceRoot, 'miniprogram', 'assets')
 // DATA_DIR 环境变量可指定数据目录(测试跑临时库用);不设则维持原路径,本机/云端(Volume 挂载点)行为不变
 const dataDir = process.env.DATA_DIR ? resolve(process.env.DATA_DIR) : join(__dirname, 'local-data')
+/* 🔴 这台服务往哪个库写(测试护栏与 D72 建店 kind 共用的唯一判据):
+   'test' 只认回归脚本建的临时库(/tmp/ll-ci-data.XXXX)或显式 LL_TEST_DATA=1;真库/沙箱/生产都是 'live'。 */
+const DATA_SCOPE = (!(process.env.NODE_ENV === 'production' || process.env.RAILWAY_ENVIRONMENT)
+  && (process.env.LL_TEST_DATA === '1' || /^ll-ci-data\./.test(basename(dataDir)))) ? 'test' : 'live'
 mkdirSync(dataDir, { recursive: true })
 
 // 数据迁移:发现待导入文件时,先给现库留底份,再原子替换(配合 /admin/ops/import-db)
@@ -11422,7 +11427,7 @@ async function route(req, res) {
          而不是问一个"记得设就设、忘了就没有"的环境变量。
          'test' 只认回归脚本建的临时库(/tmp/ll-ci-data.XXXX)或显式 LL_TEST_DATA=1;
          生产永远是 'live'。 */
-      dataScope: (!IS_PRODUCTION && (process.env.LL_TEST_DATA === '1' || /^ll-ci-data\./.test(basename(dataDir)))) ? 'test' : 'live',
+      dataScope: DATA_SCOPE,
       time: iso(new Date())
     })
   }
@@ -13803,7 +13808,12 @@ async function route(req, res) {
     else if (initialTerm === 'month') expiry.setMonth(expiry.getMonth() + 1)
     else expiry.setFullYear(expiry.getFullYear() + 1)
     const planExpiresAt = iso(expiry)
-    db.prepare("INSERT INTO tenants (id, name, plan, status, plan_expires_at) VALUES (?, ?, ?, 'active', ?)").run(id, name.slice(0, 60), plan, planExpiresAt)
+    /* 🔴 D72(店主 08-24):**新建租户的 kind 在建的那一刻就定死**,不再靠名字前缀事后猜。
+       判据用的是"这台服务往哪个库写"(与测试护栏同一个 dataScope):
+       测试库上建的店 = test,演示登录环境建的 = demo,其余 = real。
+       这条是"80 个空壳能在真库里攒起来"的根治:以后新残留自带标签,一句 SQL 就能筛干净。 */
+    const tenantKind = DATA_SCOPE === 'test' ? 'test' : (String(id).startsWith('demo-') ? 'demo' : 'real')
+    db.prepare("INSERT INTO tenants (id, name, plan, status, plan_expires_at, kind) VALUES (?, ?, ?, 'active', ?, ?)").run(id, name.slice(0, 60), plan, planExpiresAt, tenantKind)
     db.prepare('INSERT INTO stores (id, name, address, phone, timezone, currency, is_active, tenant_id) VALUES (?, ?, ?, ?, ?, ?, 1, ?)')
       .run(`store-${id}`, name.slice(0, 60), String(body.city || '').slice(0, 80), String(body.phone || '').slice(0, 30),
         String(body.timezone || APP_TIMEZONE).slice(0, 64), String(body.currency || 'CAD').toUpperCase().slice(0, 6), id)
@@ -17485,22 +17495,8 @@ db.exec(`
     created_at TEXT NOT NULL
   );
   CREATE INDEX IF NOT EXISTS idx_identity_merge ON identity_merge_queue(tenant_id, status);
-  DROP TRIGGER IF EXISTS identity_merge_no_delete;
-  CREATE TRIGGER identity_merge_no_delete BEFORE DELETE ON identity_merge_queue
-  BEGIN SELECT RAISE(ABORT, 'identity merge record is append-only'); END;
-  DROP TRIGGER IF EXISTS deposit_receipts_no_delete;
-  CREATE TRIGGER deposit_receipts_no_delete BEFORE DELETE ON deposit_receipts
-  BEGIN SELECT RAISE(ABORT, 'deposit receipt is append-only; write a revoke row instead of deleting'); END;
-  DROP TRIGGER IF EXISTS deposit_receipts_amount_locked;
-  CREATE TRIGGER deposit_receipts_amount_locked BEFORE UPDATE ON deposit_receipts
-  WHEN NEW.amount_cents <> OLD.amount_cents OR NEW.kind <> OLD.kind OR NEW.booking_id <> OLD.booking_id
-  BEGIN SELECT RAISE(ABORT, 'deposit receipt amount/kind/booking is immutable; write a revoke row instead'); END;
-  DROP TRIGGER IF EXISTS coupon_grant_logs_no_delete;
-  CREATE TRIGGER coupon_grant_logs_no_delete BEFORE DELETE ON coupon_grant_logs
-  BEGIN SELECT RAISE(ABORT, 'coupon grant log is append-only'); END;
-  DROP TRIGGER IF EXISTS coupon_grants_no_delete;
-  CREATE TRIGGER coupon_grants_no_delete BEFORE DELETE ON coupon_grants
-  BEGIN SELECT RAISE(ABORT, 'coupon grant is append-only; revoke instead of delete'); END;
+  /* D72:这四条禁删/禁改原来写在这里、且**没有任何豁免** —— 已随家族统一搬进
+     ./ledger-guards.mjs(判据改成 tenants.kind='real'),在下面 installLedgerGuards() 一次装好。 */
 `)
 
 function logCouponGrant({ tenantId, grantId, action, detail = '', settlementCode = null, actor = '' }) {
@@ -17805,11 +17801,12 @@ try {
 } catch (error) {
   if (!String(error.message || '').includes('duplicate column')) throw error
 }
-// 回填历史行的哈希链(需先移除触发器才能 UPDATE,回填后立即重建)
-// 演示租户(id 以 demo- 开头)的账本要能整体销毁,所以旧的无条件触发器一律重建为带 WHEN 条件的版本。
-db.exec(`DROP TRIGGER IF EXISTS finance_txn_no_update; DROP TRIGGER IF EXISTS finance_txn_no_delete;
-  DROP TRIGGER IF EXISTS stored_value_no_update; DROP TRIGGER IF EXISTS stored_value_no_delete;
-  DROP TRIGGER IF EXISTS points_ledger_no_update; DROP TRIGGER IF EXISTS points_ledger_no_delete;`)
+/* D72(店主 08-24 裁):账本禁删/禁改律**十二条统一由 ./ledger-guards.mjs 装配**,
+   豁免判据从「租户名字像不像 demo-」改成「tenants.kind 是不是 real」——
+   靠名字立的法,就是 80 个测试空壳能在真库里攒起来的原因。
+   哈希链回填要 UPDATE 历史行,所以顺序是:先卸掉旧触发器 → 回填 → 立刻按新判据装回去
+   (装配窗口在启动期一次性完成,不是"为了删数据临时关法")。 */
+db.exec(LEDGER_TRIGGER_NAMES.map((n) => `DROP TRIGGER IF EXISTS ${n};`).join('\n'))
 {
   const unhashed = db.prepare('SELECT COUNT(*) AS n FROM finance_transactions WHERE row_hash IS NULL').get()
   if (unhashed.n > 0) {
@@ -17824,49 +17821,14 @@ db.exec(`DROP TRIGGER IF EXISTS finance_txn_no_update; DROP TRIGGER IF EXISTS fi
     }
   }
 }
-// 数据库层强制只追加:任何 UPDATE/DELETE 直接拒绝,纠错只能走红字冲销/调整分录。
-// 唯一豁免:演示租户(tenant_id 以 'demo-' 开头)——它们的数据本来就是给店主演示用的、要能一键销毁重建,
-// 真实商户(lucky-luxe 及未来所有正式租户)的只追加保证完全不变。
-db.exec(`
-  CREATE TRIGGER finance_txn_no_update BEFORE UPDATE ON finance_transactions
-  WHEN OLD.tenant_id NOT LIKE 'demo-%'
-  BEGIN SELECT RAISE(ABORT, 'finance ledger is append-only'); END;
-  CREATE TRIGGER finance_txn_no_delete BEFORE DELETE ON finance_transactions
-  WHEN OLD.tenant_id NOT LIKE 'demo-%'
-  BEGIN SELECT RAISE(ABORT, 'finance ledger is append-only'); END;
-  CREATE TRIGGER stored_value_no_update BEFORE UPDATE ON stored_value_transactions
-  WHEN OLD.tenant_id NOT LIKE 'demo-%'
-    /* 仅有的两个豁免(金额/类型/时间等账目数字列永锁,改任何一列照旧 ABORT,只追加语义不破):
-       ① B3-4 顾客回执确认:customer_confirmed_at 从 NULL 落一次值(回执元数据);
-       ② D59 案二(店主拍板 08-22)日结核定:technician_id 从 NULL 落一次值——双技师单的随单充值
-         签字时=未分配,店长日结分配业绩那一下补记归属;归属是台账元数据,数字一分不动,
-         且只许空→值单向一次(定了归属再想改=只能红字冲销重记)。 */
-    AND NOT (
-      NEW.id = OLD.id AND NEW.tenant_id = OLD.tenant_id AND NEW.user_id = OLD.user_id
-      AND NEW.type = OLD.type AND NEW.amount_cents = OLD.amount_cents
-      AND NEW.pay_channel = OLD.pay_channel AND COALESCE(NEW.note, '') = COALESCE(OLD.note, '')
-      AND COALESCE(NEW.created_by, '') = COALESCE(OLD.created_by, '')
-      AND NEW.created_at = OLD.created_at
-      AND COALESCE(NEW.bucket, '') = COALESCE(OLD.bucket, '')
-      AND (
-        (COALESCE(NEW.technician_id, '') = COALESCE(OLD.technician_id, '')
-          AND OLD.customer_confirmed_at IS NULL AND NEW.customer_confirmed_at IS NOT NULL)
-        OR
-        (COALESCE(OLD.technician_id, '') = '' AND COALESCE(NEW.technician_id, '') <> ''
-          AND COALESCE(NEW.customer_confirmed_at, '') = COALESCE(OLD.customer_confirmed_at, ''))
-      )
-    )
-  BEGIN SELECT RAISE(ABORT, 'stored value ledger is append-only'); END;
-  CREATE TRIGGER stored_value_no_delete BEFORE DELETE ON stored_value_transactions
-  WHEN OLD.tenant_id NOT LIKE 'demo-%'
-  BEGIN SELECT RAISE(ABORT, 'stored value ledger is append-only'); END;
-  CREATE TRIGGER points_ledger_no_update BEFORE UPDATE ON points_transactions
-  WHEN OLD.tenant_id NOT LIKE 'demo-%'
-  BEGIN SELECT RAISE(ABORT, 'points ledger is append-only'); END;
-  CREATE TRIGGER points_ledger_no_delete BEFORE DELETE ON points_transactions
-  WHEN OLD.tenant_id NOT LIKE 'demo-%'
-  BEGIN SELECT RAISE(ABORT, 'points ledger is append-only'); END;
-`)
+// tenants.kind:real=真店(受律保护)/ demo=演示样板 / test=自动化测试残留
+try {
+  db.exec("ALTER TABLE tenants ADD COLUMN kind TEXT NOT NULL DEFAULT 'real'")
+} catch (error) {
+  if (!String(error.message || '').includes('duplicate column')) throw error
+}
+backfillTenantKind(db)          // 幂等:只动还是默认值的行,店主改过的归属不覆盖
+// installLedgerGuards 挪到所有建表跑完之后(全新库这里还没有 settlements 表,装到一半会崩)
 
 // 统一身份回填:早期用户只有 users 表字段、没有 user_identities 记录,补齐映射。
 db.exec(`
@@ -18725,6 +18687,10 @@ try {
     }
   }
 } catch (e) { console.error('改判①钳位扫描失败(不阻塞启动):', e.message) }
+
+/* D72:账本禁删/禁改律**在这里一次装好** —— 位置必须在全部建表/迁移之后,
+   否则全新库跑到 settlements 那条时表还不存在,装到一半崩(全新库启动实测抓到的)。 */
+installLedgerGuards(db)
 
 seedDatabase()
 // 演示环境:铺一批顾客服务小记,让「有小记/无小记」两态在老板端+员工端都能直接看到

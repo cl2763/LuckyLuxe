@@ -1278,12 +1278,16 @@ const main = async () => {
                 const rsRow = dbx.prepare("SELECT customer_confirmed_at FROM stored_value_transactions WHERE tenant_id = ? AND type = 'recharge' AND note LIKE '随单充值%' ORDER BY rowid DESC LIMIT 1").get(shop.tenantId)
                 check('㋁ 随单充值签字即确认(customer_confirmed_at 非空,不进回执)', rsRow && Boolean(rsRow.customer_confirmed_at), JSON.stringify(rsRow))
                 // 复发护栏:触发器豁免只放确认列——改账目列照旧 ABORT;确认时间戳单向一次不可二改
+                /* D72:禁改律判据改成 tenants.kind='real' —— 套件建的店是 test(默认可改),
+                   所以验"护栏仍硬"要先把它标成 real,验完标回去(判据跟着口径走,不是把断言删掉)。 */
+                dbx.prepare("UPDATE tenants SET kind = 'real' WHERE id = ?").run(shop.tenantId)
                 let tamper = false
                 try { dbx.prepare('UPDATE stored_value_transactions SET amount_cents = 9999 WHERE id = ?').run(pend.id) } catch (e) { tamper = /append-only/.test(String(e.message || '')) }
-                check('㋁ 护栏仍硬:改账目列照旧 ABORT(豁免仅确认列)', tamper)
+                check('㋁ 护栏仍硬:改账目列照旧 ABORT(豁免仅确认列;kind=real 的租户)', tamper)
                 let tamper2 = false
                 try { dbx.prepare("UPDATE stored_value_transactions SET customer_confirmed_at = '2026-01-01T00:00:00Z' WHERE id = ?").run(pend.id) } catch (e) { tamper2 = /append-only/.test(String(e.message || '')) }
                 check('㋁ 确认时间戳不可二次改(NULL→值单向一次)', tamper2)
+                dbx.prepare("UPDATE tenants SET kind = 'test' WHERE id = ?").run(shop.tenantId)
               }
 
               /* ===== ㋂ 拍板「次卡=独立消费不叠优惠」(店主 08-21 D55/D56 批)+引擎双闸 ===== */
@@ -1592,13 +1596,16 @@ const main = async () => {
                   check('㋉ D59 日结分配这一下一并核定:充值+赠送归份额最高者(70% 技甲)', al59.status === 200 && svOf().every((r) => r.technician_id === shop.tech1), JSON.stringify(svOf()))
                   const rj59 = JSON.parse(dbx.prepare('SELECT recharge_json FROM settlements WHERE id = ?').get(sh59.id).recharge_json)
                   check('㋉ D59 快照读方同刀(recharge_json 补写同一人+核定时间)', rj59.technicianId === shop.tech1 && Boolean(rj59.technicianAllocatedAt), JSON.stringify({ t: rj59.technicianId }))
-                  /* 豁免②单向一次:归属定了再改=ABORT;金额列照旧永锁(护栏不因豁免松动) */
+                  /* 豁免②单向一次:归属定了再改=ABORT;金额列照旧永锁(护栏不因豁免松动)。
+                     D72:律按 tenants.kind='real' 生效,套件店是 test —— 先标 real 验律,验完标回。 */
+                  dbx.prepare("UPDATE tenants SET kind = 'real' WHERE id = ?").run(shop.tenantId)
                   let flip = ''
                   try { dbx.prepare("UPDATE stored_value_transactions SET technician_id = ? WHERE tenant_id = ? AND user_id = ? AND type = 'recharge' AND note LIKE ?").run(shop.tech2, shop.tenantId, cuidK, `%服务单 ${sh59.code}%`) } catch (e) { flip = e.message }
                   check('㋉ D59 豁免②单向一次(定了归属再改=ABORT)', /append-only/.test(flip), flip.slice(0, 60))
                   let amtErr = ''
                   try { dbx.prepare("UPDATE stored_value_transactions SET amount_cents = 1 WHERE tenant_id = ? AND user_id = ? AND type = 'recharge' AND note LIKE ?").run(shop.tenantId, cuidK, `%服务单 ${sh59.code}%`) } catch (e) { amtErr = e.message }
                   check('㋉ D59 金额列照旧永锁(豁免不松账目数字)', /append-only/.test(amtErr), amtErr.slice(0, 60))
+                  dbx.prepare("UPDATE tenants SET kind = 'test' WHERE id = ?").run(shop.tenantId)
                   /* 显式点名口:第二张双技师充值单,店长点名 30% 技乙 → 归技乙(显式优先于份额) */
                   const s59b = await request('/admin/settlements', { method: 'POST', body: JSON.stringify({ userId: cuidK, settlements: [{ payIntent: 'offline_full', items: [{ serviceId: shop.serviceId, qty: 1 }], technicians: [{ technicianId: shop.tech1, role: 'main', itemNos: [1] }, { technicianId: shop.tech2, role: 'assist', itemNos: [] }], servedPersonName: '', rechargePackageId: pkRK.id }] }) }, shop.token)
                   const sh59b = s59b.data.settlements[0]
@@ -2911,6 +2918,49 @@ const main = async () => {
             missing.length === 0, missing.join(' | '))
         }
       }
+      /* ===== ㋛ D72 账本禁删律家族(店主 08-24 裁)=====
+         店主机核抓到的:七条禁删律四条无豁免、三条豁免写死 `demo-%`,清理脚本一下刀就被 ABORT
+         整包回滚 —— 而 dry-run 永远发现不了(它根本不下 DELETE)。判据律又一案:
+         **破坏性脚本的自检必须在副本上真下刀。** */
+      {
+        const guards = readFileSync(join(ROOT42, 'apps/api/ledger-guards.mjs'), 'utf8')
+        const cleaner = readFileSync(join(ROOT42, 'tools/clean-test-tenants.mjs'), 'utf8')
+        check('㋛① 十二条账本触发器统一由 ledger-guards.mjs 装配(local-server 里零散定义清零)',
+          guards.includes('export function installLedgerGuards') && srv.includes('installLedgerGuards(db)')
+          && !/CREATE TRIGGER (finance_txn|stored_value|points_ledger|deposit_receipts|coupon_grant|identity_merge)/.test(srv))
+        /* 判据自证:上一版这条是数"文件里出现过几次 demo-%",结果被模块自己的注释命中 ——
+           废判据。现在验的是**真正要执行的那十二条 DDL**:一条都不许出现 demo-%,
+           且每条租户级的律都必须引用同一个 guardedTenant() 谓词。 */
+        const { ledgerTriggers, guardedTenant } = await import(new URL('../../apps/api/ledger-guards.mjs', import.meta.url))
+        const ddls = ledgerTriggers()
+        const pred = guardedTenant()
+        const tenantScoped = ddls.filter(([name]) => name !== 'settlements_signed_no_update')
+        check('㋛② 豁免判据唯一出口:十二条 DDL 里零 demo-%,租户级的全部引用同一个谓词',
+          ddls.length === 12 && ddls.every(([, sql]) => !sql.includes('demo-%'))
+          && tenantScoped.length === 11 && tenantScoped.every(([, sql]) => sql.includes(pred))
+          /* 只管账本律里的写法:local-server 里别处的 demo-% 是平台列表筛选/演示用户清理,
+             跟禁删律无关,不该被这条判据误伤(㋛① 已经保证账本触发器不在那个文件里)。 */
+          && !/CREATE TRIGGER[\s\S]{0,400}NOT LIKE 'demo-%'/.test(srv))
+        check('㋛③ 判据落在数据上(tenants.kind),不再靠租户名字;fail-closed 查不到按 real 算',
+          guards.includes("COALESCE((SELECT kind FROM tenants WHERE id = ${col}), 'real') = 'real'")
+          && srv.includes("ALTER TABLE tenants ADD COLUMN kind TEXT NOT NULL DEFAULT 'real'"))
+        check('㋛④ 新建租户当场定 kind(测试库上建的店=test),不再靠事后按前缀猜',
+          srv.includes("const tenantKind = DATA_SCOPE === 'test' ? 'test'") && srv.includes('plan_expires_at, kind) VALUES'))
+        // 验的是"还用不用得上前缀"(有没有 const 定义 + 有没有取值),不是"文中出现过这几个字"
+        check('㋛⑤ 清理脚本改按 kind 选目标,前缀表 SUITE_PREFIX 整张退役',
+          cleaner.includes("WHERE kind = 'test'") && !/const SUITE_PREFIX/.test(cleaner) && !/SUITE_PREFIX\[/.test(cleaner))
+        // 护栏②「会红的测试」:故意塞一个受保护 id,断言真的抛错(原来那句是装饰性断言,永远不触发)
+        const { assertNoProtected } = await import(new URL('../../tools/clean-test-tenants.mjs', import.meta.url))
+        let fired = false
+        try { assertNoProtected(['nsas-a-probe', 'lucky-luxe']) } catch (e) { fired = /lucky-luxe/.test(e.message) }
+        check('㋛⑥ 护栏② 是活的:受保护租户混进 DELETE 参数会当场抛错', fired)
+        let passed = false
+        try { assertNoProtected(['nsas-a-probe']); passed = true } catch (e) { passed = false }
+        check('㋛⑦ 护栏② 不误伤:正常测试租户照常放行', passed)
+        /* 判据自证(判据律):上面 ㋛⑥ 如果写成"文件里有没有 PROTECTED 这个词"就是废判据 ——
+           这里是真调用真抛错,缺陷存在时它必红。 */
+      }
+
       /* ===== ㋚ D71 零编造(店主 08-24 立案)=====
          类定义(按机制不按长相):**用哈希 / 随机 / 取模 / 写死权重造出来的、给人看的"事实"**。
          id / token / 单号 / AI 随机种子不算(那是标识符,不是对事实的陈述)。 */

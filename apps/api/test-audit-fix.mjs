@@ -406,15 +406,19 @@ async function main() {
   {
     const { DatabaseSync } = await import('node:sqlite')
     const dbPath = process.env.TEST_DB_PATH || `${process.env.DATA_DIR || './local-data'}/lucky-luxe.sqlite`
+    /* D72(店主 08-24):禁删/禁改律的判据改成 tenants.kind='real'(不再靠租户名字)。
+       套件建的店是 kind='test',默认可删 —— 所以这里先把它标成 real 再验律,验完标回去。 */
     const rawDb = new DatabaseSync(dbPath)
+    rawDb.prepare("UPDATE tenants SET kind = 'real' WHERE id = ?").run(shop.tenantId)
     const anyId = list3.receipts.find((r) => r.kind === 'receipt').id
     let delBlocked = false
     try { rawDb.prepare('DELETE FROM deposit_receipts WHERE id = ?').run(anyId) } catch { delBlocked = true }
     let amtBlocked = false
     try { rawDb.prepare('UPDATE deposit_receipts SET amount_cents = 1 WHERE id = ?').run(anyId) } catch { amtBlocked = true }
+    check('A 定金记录数据库层禁删(kind=real 的租户)', delBlocked)
+    check('A 定金记录金额数据库层改不动(kind=real 的租户)', amtBlocked)
+    rawDb.prepare("UPDATE tenants SET kind = 'test' WHERE id = ?").run(shop.tenantId)
     rawDb.close()
-    check('A 定金记录数据库层禁删', delBlocked)
-    check('A 定金记录金额数据库层改不动', amtBlocked)
   }
 
   // 未配定金规则的店:直接排单不打「未付定金」标 → 前端也就不会出「标记已收定金」按钮
