@@ -10,7 +10,9 @@ import os from 'node:os'   // 真机调试:开发机局域网 IP 探测(启动�
 import { pngSize, rasterBackend, svgToPng } from './svg-raster.mjs'
 import { inkToPng } from './ink-raster.mjs'
 import { createAfterSales } from './after-sales.mjs'        // 售后域(公约②:边改边拆)
-import { createBookingIncome } from './booking-income.mjs'  // 订单入账触点(同上)   // 笔迹图:纯 JS 画折线,**透明底**(单据白纸走 svgToPng,两条路不混)
+import { createOrderBadges } from './order-badges.mjs'      // 顾客端订单表达域(同上)
+import { createBookingIncome } from './booking-income.mjs'  // 订单入账触点(同上)
+import { createBookingState, isAfterSalesOpen, shouldAutoComplete } from './booking-state.mjs'  // 订单状态机(D70 合同,唯一实现)   // 笔迹图:纯 JS 画折线,**透明底**(单据白纸走 svgToPng,两条路不混)
 import { analyzeReferenceImage, createBookingSummary, createCustomerInsight, createCustomerServiceReply, createDailyBrief, createRecallMessages, createServiceNoteInsights, createSocialCopy, extractKbEntriesFromDocument, polishStaffQuoteReply } from './ai-utils.mjs'
 import { buildKnowledgeContext, loadCustomerServiceKnowledgeBase } from './kb-utils.mjs'
 
@@ -39,6 +41,10 @@ if (existsSync(pendingImportPath)) {
 }
 
 const db = new DatabaseSync(join(dataDir, 'lucky-luxe.sqlite'))
+
+/* 订单状态机(D70):合法前置 / 能做什么动作 / 动作后去哪,全在 ./booking-state.mjs;
+   路由只做「取参 → 调状态机 → 回结果」,不许在路由里写状态判断(店主 08-24 硬约束)。 */
+const bookingState = createBookingState({ db })
 const PORT = Number(process.env.PORT || 4000)
 // 主钥匙:新名 OWNER_TOKEN 优先,旧名 OWNER_DEMO_TOKEN 兼容(现网还在用旧名,先不破坏)。
 // 名字带 DEMO 容易让人低估它的权限——它是平台最高信任根。
@@ -5584,6 +5590,12 @@ function serializeBooking(row, lang = 'zh') {
        规则①:列表项与详情页同步出现;规则⓪:前端零计算,文案与金额都后端给。
        没更正、没售后的普通单 → 全是空串,列表项保持现状(条件渲染)。 */
     ...customerOrderBadges(row),
+    /* 🔴 D70:**按钮显隐只能从这里推导** —— 前端不许再写 if 补按钮(「后端出句」在动作层的同构)。
+       商家视角与顾客视角各给一份:同一张单,店员能做的和顾客能做的本来就不一样。 */
+    allowedActions: bookingState.allowedActions(row, { actor: 'merchant', role: 'owner' }),
+    customerActions: bookingState.allowedActions(row, { actor: 'customer' }),
+    afterSalesOpen: bookingState.isAfterSalesOpen(row),
+    afterSalesStatus: row.after_sales_status || '',   // 合同⑤:售后分组按这个字段筛,与主状态无关
     /* D32(2026-08-12):支付信息真相字段 —— 顾客端不许再自己做减法/回落店配定金假数。
        depositState: received=已收(额=depositCents)/unpaid=应付未付/none=无定金;
        payment: 已签结算快照简版分解(完整版随 S8),全部 cents 直出前端零运算。 */
@@ -5708,95 +5720,18 @@ async function fetchSnapshotSvg(url) {
   } catch (e) { return '' }
 }
 
-function customerOrderBadges(row) {
-  const stl = db.prepare("SELECT * FROM settlements WHERE booking_id = ? AND status = 'signed' ORDER BY signed_at DESC LIMIT 1").get(row.id)
-  const isAfterSales = row.status === 'AFTER_SALES'
-  /* B 部:徽标按完成态细分 —— 售后中(待处理/处理中)/ 售后已解决 / 售后已关闭。
-     同一状态机三端渲染:这里的文案就是顾客看到的那句(B⓪)。 */
-  const asDone = isAfterSales ? (row.after_sales_status === 'resolved' ? 'resolved' : (row.after_sales_status === 'closed' ? 'closed' : '')) : ''
-  const asBadge = asDone === 'resolved' ? '售后已解决' : (asDone === 'closed' ? '售后已关闭' : '售后中')
-  const asKind = asDone === 'resolved' ? 'signed' : (asDone === 'closed' ? 'amended' : 'aftersales')
-  const asNote = asDone === 'resolved' ? (row.after_sales_result ? `已解决:${row.after_sales_result}` : '售后已解决') : (asDone === 'closed' ? '售后已关闭' : '已转人工客服跟进')
-  if (!stl) {
-    /* 🔴 假数回落全仓审计(店主 08-23 立永久律,D66→D69→couponCount 同族三案后升级):
-       **顾客能看见的数字,拿不到真值就显示「—」或如实说明,一律不许回落到别的字段。**
-       附加:**没有签署单的单子不许出现「已结清」这类完成态金额句。**
-       此前这里回空串,前端就自己拿预约标价(service_price_cents)拼出「已结清 ¥198」——
-       系统各处都认为这单没消费(积分/累计消费/成长值全 0),只有这张卡片说收过钱(D69)。
-       现在金额句一律后端唯一给出,前端零分支:有句就渲染,没句就不显示金额行。
-       措辞与详情页同源(order-detail「本单未产生结算单」),同一事实两处说同一句话。 */
-    /* 「完全没开单」与「开了单还没签字」是两件事,不许说同一句话:
-       有未签单的完成单,顾客端待签卡已置顶催签,这里说「服务确认单待签字」。 */
-    const pendingSheet = db.prepare("SELECT code FROM settlements WHERE booking_id = ? AND status NOT IN ('voided','signed','amended') ORDER BY rowid DESC LIMIT 1").get(row.id)
-    const noSheetAmountText = (row.status === 'COMPLETED' || isAfterSales)
-      ? (pendingSheet ? '服务确认单待签字' : '本单未产生结算单')
-      : (['CANCELLED', 'NO_SHOW'].includes(row.status)
-        ? `总价 ${formatMoneyCents(row.service_price_cents || 0, row.tenant_id, 'auto')}`
-        : (row.deposit_cents
-          ? `定金 ${formatMoneyCents(row.deposit_cents, row.tenant_id, 'auto')} 已付 · 到店应付 ${formatMoneyCents(row.final_due_cents || 0, row.tenant_id, 'auto')}`
-          : `到店应付 ${formatMoneyCents(row.final_due_cents ?? row.service_price_cents ?? 0, row.tenant_id, 'auto')}`))
-    return {
-      listBadgeText: isAfterSales ? asBadge : '',
-      listBadgeKind: isAfterSales ? asKind : '',
-      listNote: isAfterSales ? asNote : '',
-      listTitleText: '',
-      // 拍板③:未签署单不出售后发起按钮;存量无签署单的售后单=进度卡照旧(老数据只读不回溯)
-      afterSalesAction: '', afterSalesActionText: '',
-      actualDueText: '', actualDueCents: null,
-      listAmountText: noSheetAmountText,
-      ...(isAfterSales ? { afterSales: afterSalesProgress(row) } : {})
-    }
-  }
-  /* 批③首件 B1/B5:售后按钮位与句子后端唯一(拍板③:仅已签署可发起;B5:一单一条进行中)——
-     start=「有疑问,去售后」(已完成+已签署,或售后已结案可再发起);progress=「查看售后进度」。 */
-  const asInProgress = isAfterSales && !['resolved', 'closed'].includes(row.after_sales_status || 'pending')
-  const afterSalesAction = asInProgress
-    ? 'progress'
-    : ((row.status === 'COMPLETED' || isAfterSales) && stl ? 'start' : '')
-  const amd = amendmentShape(stl)
-  /* ㋉ 店主三拍(08-22)之 C5(拍案一):列表金额=**实付现金**,与单据头条「本单到店支付」同源
-     (Σoffline 腿;㋆ 矩阵常驻恒等保证头条=offline Σ,所以这里读腿=读头条)。
-     价值总额(结算合计)不再在列表裸出(D65-b L2 同族收口):售后行原「总价 <合计>」同刀换源,
-     前缀随之改「已结清」——「总价」二字配现金数就是说谎,同一事实处处说同一句话。
-     D66 途中修(店主双服务单实测抓的):一张预约可挂**多张**已签单(双服务一次开两组),
-     只取最新一张=卡上少一半钱 —— 实付现金按「挂本预约的全部已签单」Σ,一张不漏一分不重。 */
-  const cashDueCents = db.prepare(`SELECT COALESCE(SUM(p.amount_cents),0) AS n FROM settlement_payments p
-    JOIN settlements s ON s.id = p.settlement_id
-    WHERE s.booking_id = ? AND s.status = 'signed' AND p.leg = 'offline'`).get(row.id).n
-  /* D1 修订(店主 08-22 二拍)+D68 口径澄清(08-23):「等N项」的 N=**主项目数量**
-     (groupMainItemCount 唯一出口:加项/自选/购卡不计,大类不是计数单位);N≥2 才出「首项目 等N项」。 */
-  const grpCount = groupMainItemCount(stl.group_id, row.tenant_id)
-  const grpFirstName = grpCount >= 2 ? groupFirstMainName(stl.group_id, row.tenant_id) : ''
-  // 售后 > 已更正 > 已签署(售后是当前最要紧的状态,压在最上面)
-  const badge = isAfterSales ? asBadge : (amd.amendBadgeText || '已签署')
-  const kind = isAfterSales ? asKind : (amd.amendedCount ? 'amended' : 'signed')
-  return {
-    listBadgeText: badge,
-    listBadgeKind: kind,
-    listNote: isAfterSales ? asNote : (amd.amendedCount ? '已签署 · 点开看更正明细' : '已签署'),
-    // 批③首件 B1/B5:售后按钮位(后端唯一;'' = 不出按钮)
-    afterSalesAction,
-    afterSalesActionText: afterSalesAction === 'progress' ? '查看售后进度' : (afterSalesAction === 'start' ? '有疑问,去售后' : ''),
-    settlementCode: stl.code,
-    /* 规则③:右侧金额取实际应付**只在有更正时**。没更正的单前缀词一个字不动 ——
-       否则「已结清 ¥198」会被换成光秃秃的「¥198」,那就不是「列表项保持现状」了(D2-03)。 */
-    actualDueCents: amd.amendedCount ? amd.actualDueCents : null,
-    actualDueText: amd.amendedCount ? amd.actualDueText : '',
-    /* 闭环③「同一个事实处处说同一句话」:没更正的已签单,列表金额以前取的是**预约上的服务底价**
-       (service_price_cents),而单据上是结算合计 —— 会员档位/折扣/加项一进来两个数就对不上:
-       列表写「已结清 ¥198」、点开确认单写「合计 ¥128」,顾客看两个数字。
-       金额一律以结算单为准,由后端拼好整串下发(前缀词保持现状,只把数换对)。 */
-    listAmountText: amd.amendedCount ? '' : (
-      isAfterSales || row.status === 'COMPLETED'
-        ? `已结清 ${formatMoneyCents(cashDueCents, row.tenant_id, 'auto')}`
-        : formatMoneyCents(cashDueCents, row.tenant_id, 'auto')
-    ),
-    listTitleText: grpCount >= 2 ? `${grpFirstName} 等${grpCount}项` : '',
-    /* 屏 D3 售后进度三步(发起 → 跟进中 → 结果)。文案与时间全后端给;
-       未完成时结果行显示「—」(规则④ 沿用现行口径,退款凭据只记售后单内)。 */
-    ...(isAfterSales ? { afterSales: afterSalesProgress(row) } : {})
-  }
-}
+/* ===== 顾客端订单表达域已搬出到 ./order-badges.mjs(公约②「边改边拆」,2026-08-24)=====
+   这里只留装配。搬出的是**表达**(徽标/副行/金额句/售后按钮位),不是口径:
+   金额仍由结算单给、售后前置仍由状态机给,这个模块只负责把它们说成一句话。 */
+const { customerOrderBadges } = createOrderBadges({
+  db,
+  bookingState,
+  afterSalesProgress: (row) => afterSalesProgress(row),
+  amendmentShape: (stl) => amendmentShape(stl),
+  formatMoneyCents,
+  groupMainItemCount: (gid, tid) => groupMainItemCount(gid, tid),
+  groupFirstMainName: (gid, tid) => groupFirstMainName(gid, tid)
+})
 
 /* ===== 售后域已搬出到 ./after-sales.mjs(公约②「边改边拆」,2026-08-24)=====
    这里只留装配:状态机与三步卡的实现在那个模块里,行为一字未改。 */
@@ -6857,7 +6792,15 @@ function confirmMockPayment(body) {
 function cancelBooking(id, body) {
   const booking = db.prepare('SELECT * FROM bookings WHERE id = ?').get(id)
   if (!booking) throw apiError(404, 'NOT_FOUND', 'Booking not found.')
-  if (!['PENDING_PAYMENT', 'CONFIRMED'].includes(booking.status)) throw apiError(400, 'BAD_REQUEST', 'This booking cannot be cancelled.')
+  /* 🔴 D70(店主 08-24):取消的前置**只有状态机一份**。这里原来自己写了一遍
+     `['PENDING_PAYMENT','CONFIRMED'].includes(status)` —— 与商家端那份是分叉的两套判定,
+     而且漏了"售后中不许取消"(顾客能把一张正在售后的单取消掉)。错误码是对外契约,原样保留。 */
+  try {
+    bookingState.assertTransition(booking, 'cancel', { actor: 'customer', apiError })
+  } catch (error) {
+    if (error?.code === 'ILLEGAL_TRANSITION') throw apiError(400, 'BAD_REQUEST', 'This booking cannot be cancelled.')
+    throw error
+  }
   const hoursBefore = (new Date(booking.appointment_start).getTime() - Date.now()) / 3_600_000
   // P1.2:扣费规则改为按本店 deposit_config 算。默认 refundable + 24h 全退 + 临期扣 50%,
   // 与改造前的 `hoursBefore >= 24 ? 0 : floor(deposit/2)` 完全等价。
@@ -7038,7 +6981,10 @@ function insertFinanceTransaction({ type, source = 'manual', category, tags = ''
 
 /* ===== 订单入账触点已搬出到 ./booking-income.mjs(公约②,2026-08-24)=====
    终局 A 案(入账唯一路径=签署)就落在那个模块里,这里只留装配。 */
-const { bookingIncomeCategory, recordBookingIncome, reverseBookingIncome } = createBookingIncome({ db, getService, insertFinanceTransaction, localParts })
+/* 合同② 之后 recordBookingIncome 已无调用方(按钮入账退役);
+   不留在这里当死代码 —— 模块里也一并删掉,免得日后有人"看到有现成的就接上去"把旧路径复活。 */
+const { reverseBookingIncome } = createBookingIncome({ db, getService, insertFinanceTransaction, localParts })
+
 
 
 // 固定支出规则：把到期未生成的支出补齐（幂等，可反复调用）
@@ -9424,9 +9370,39 @@ async function signSettlement(row, { signature, signedBy = '', strokes = [] }) {
     }
     db.prepare("UPDATE settlements SET status = 'signed', signature_data = ?, signed_at = ?, disclaimer_accepted = 1, updated_at = ? WHERE id = ?")
       .run(String(signature).slice(0, 200), now, now, row.id)
-    // 结算 → 订单:签署驱动 COMPLETED
+    // 结算 → 订单:签署驱动 COMPLETED(合同②「单据自动为已签署/已完成」)
     if (row.booking_id) {
       db.prepare("UPDATE bookings SET status = 'COMPLETED', updated_at = ? WHERE id = ? AND status IN ('PENDING_PAYMENT','CONFIRMED')").run(now, row.booking_id)
+    }
+    /* 🔴 合同②(店主 08-24 拍 A 案):**入账唯一路径 = 签署**,全额到店单同样;按钮入账路径退役。
+       定金腿与储值腿在下面各自转收入;这里补的是**到店现金腿**——它原来签署时不记账本,
+       靠「已完成」按钮按**预约标价**记(所以才有 D70 那个重复入账的口子)。
+       口径含义(必须说清):签署即确认收入 = 现金还没实际收到也算当期收入(权责发生制);
+       金额按**结算单的到店应收**(offline 腿合计),不是预约标价 —— 与 D65 头条「本单到店支付」同源。
+       幂等:同一单已有未冲销的 booking/settlement 收入就不再记(与 recordBookingIncome 同一把闸)。 */
+    /* ⚠️ offline 腿里**混着三种钱**:服务现金 + 购卡现金 + 随单充值现金
+       (computeSettlement:totalCents = 服务小计 − 定金抵扣 − 券 + 购卡 + 充值,三者一起分腿)。
+       只有服务那部分是**收入**:充值是负债(耗卡时才转收入)、购卡也是预收 —— 这是店主的账本红线。
+       第一版我记了整条腿,套件 ㋀ 当场咬出来:一张随单充值单同时冒出「服务收入-到店 300」和「耗卡 301」。 */
+    const rechargeCash = (() => { try { const r = JSON.parse(row.recharge_json || 'null'); return Math.max(0, Math.round(r?.amountCents || 0)) } catch { return 0 } })()
+    const purchaseCash = (() => { try { const p2 = JSON.parse(row.purchase_json || 'null'); return Math.max(0, Math.round(p2?.priceCents || 0)) } catch { return 0 } })()
+    const offlineRaw = db.prepare("SELECT COALESCE(SUM(amount_cents),0) AS n FROM settlement_payments WHERE settlement_id = ? AND leg = 'offline'").get(row.id).n
+    const offlineDue = Math.max(0, offlineRaw - rechargeCash - purchaseCash)
+    if (offlineDue > 0) {
+      const dup = db.prepare(`
+        SELECT 1 FROM finance_transactions t
+        WHERE t.booking_id IS ? AND t.tags = ? AND t.type = 'income' AND t.source = 'settlement'
+          AND NOT EXISTS (SELECT 1 FROM finance_transactions r WHERE r.reversal_of = t.id)
+        LIMIT 1
+      `).get(row.booking_id || null, row.code)
+      if (!dup) {
+        insertFinanceTransaction({
+          tenantId, type: 'income', source: 'settlement', tags: row.code,
+          category: '服务收入-到店', amountCents: offlineDue, payChannel: 'offline',
+          occurredOn: todayOf(tenantId), bookingId: row.booking_id || null,
+          note: `服务单 ${row.code} 签署入账(到店应收)`, createdBy: signedBy || 'customer_sign'
+        })
+      }
     }
     /* 定金兑现(拍板 A · §五):抵扣开的店定金已经在 computeSettlement 里抵掉应收了,
        这里只把记录标成已兑现;抵扣关的店在这一刻把定金转成当期「定金收入」。
@@ -11956,20 +11932,17 @@ async function route(req, res) {
     const body = await readBody(req)
     const desc = String(body.description || '').trim()
     if (!desc) throw apiError(400, 'DESCRIPTION_REQUIRED', '问题描述必填。')
-    if (booking.status === 'AFTER_SALES') {
-      const cur = booking.after_sales_status || 'pending'
-      if (cur !== 'resolved' && cur !== 'closed') throw apiError(409, 'AFTER_SALES_IN_PROGRESS', '这张单已有进行中的售后(一单同时只一条);可在进度卡查看。')
-      // 结案后可再次发起:重开=状态回 AFTER_SALES 进行态,新一条发起留痕
-      db.prepare("UPDATE bookings SET after_sales_status = NULL, after_sales_result = NULL, updated_at = ? WHERE id = ?").run(iso(new Date()), booking.id)
-    } else {
-      if (booking.status !== 'COMPLETED') throw apiError(400, 'NOT_COMPLETED', '只有已完成的订单可以发起售后。')
-      const signedStl = db.prepare("SELECT 1 FROM settlements WHERE booking_id = ? AND status IN ('signed', 'amended') LIMIT 1").get(booking.id)
-      if (!signedStl) throw apiError(400, 'AFTER_SALES_NEEDS_SIGNED', '这张单还没有已签署的结算单,不能发起售后。')
+    /* 🔴 合同⑤(08-24):顾客口发起售后同刀 —— 判据读售后轨道,**不改写主状态**。
+       前置(已完成 + 已签署 + 一单一条)交给状态机统一判,这里不再自己写一套。 */
+    if (bookingState.isAfterSalesOpen(booking)) {
+      throw apiError(409, 'AFTER_SALES_IN_PROGRESS', '这张单已有进行中的售后(一单同时只一条);可在进度卡查看。')
     }
+    bookingState.assertTransition(booking, 'openAfterSales', { actor: 'customer', apiError })
     const now = iso(new Date())
     db.prepare('INSERT INTO booking_status_history (id, booking_id, from_status, to_status, note, created_at) VALUES (?, ?, ?, ?, ?, ?)')
       .run(randomId('hist'), booking.id, booking.status, 'AFTER_SALES', `顾客发起:${desc}`.slice(0, 500), now)
-    db.prepare("UPDATE bookings SET status = 'AFTER_SALES', updated_at = ? WHERE id = ?").run(now, booking.id)
+    // 重开=清结案态开新一轮(历史轮 append-only 留痕不丢);主状态保持 COMPLETED
+    db.prepare("UPDATE bookings SET after_sales_status = 'pending', after_sales_result = NULL, updated_at = ? WHERE id = ?").run(now, booking.id)
     const fresh = db.prepare('SELECT * FROM bookings WHERE id = ?').get(booking.id)
     return json(res, 201, { afterSales: afterSalesProgress(fresh), booking: serializeBooking(fresh) })
   }
@@ -11979,7 +11952,7 @@ async function route(req, res) {
     const bid = path.split('/')[3]
     const booking = db.prepare('SELECT * FROM bookings WHERE id = ? AND tenant_id = ?').get(bid, tid)
     if (!booking || booking.user_id !== customer.id) throw apiError(404, 'NOT_FOUND', '找不到这张订单。')
-    if (booking.status !== 'AFTER_SALES') throw apiError(400, 'NOT_AFTER_SALES', '这张单不在售后中。')
+    if (!booking.after_sales_status) throw apiError(400, 'NOT_AFTER_SALES', '这张单不在售后中。')   // 合同⑤:读售后轨道,不读主状态
     const cur = booking.after_sales_status || 'pending'
     if (cur === 'resolved' || cur === 'closed') throw apiError(409, 'ALREADY_TERMINAL', '这单售后已结案,不能撤回;要再反馈可重新发起。')
     // 只能撤**自己发起**的(最近一条发起留痕带「顾客发起:」前缀=发起人判定,append-only 不改史)
@@ -12382,7 +12355,7 @@ async function route(req, res) {
         const badges51 = customerOrderBadges(booking)
         serialized.listBadgeText = badges51.listBadgeText
         serialized.listBadgeKind = badges51.listBadgeKind
-        if (booking.status === 'AFTER_SALES') {
+        if (booking.after_sales_status) {                       // 合同⑤:有售后轨道就给进度卡(与主状态无关)
           serialized.afterSales = afterSalesProgress(booking)
         }
         /* 爽约定金处置状态(图 A-1/A-3)。可见性:老板全量;员工本来只拿到自己名下的单
@@ -14274,7 +14247,7 @@ async function route(req, res) {
       const u = row.user_id ? db.prepare('SELECT id, display_name FROM users WHERE id = ?').get(row.user_id) : null
       const startLocal = localParts(row.appointment_start)
       const endLocal = localParts(row.appointment_end)
-      const arrivalState = (row.status === 'COMPLETED' || row.status === 'AFTER_SALES') ? 'done' : (row.arrived_at ? 'active' : 'pending')
+      const arrivalState = row.status === 'COMPLETED' ? 'done' : (row.arrived_at ? 'active' : 'pending')   // 合同⑤:售后单主状态本就是 COMPLETED
       // 新客:该顾客在本店有没有更早的单(按 appointment_start)
       const earlier = row.user_id
         ? db.prepare(`SELECT 1 FROM bookings WHERE tenant_id = ? AND user_id = ? AND appointment_start < ?
@@ -14301,8 +14274,8 @@ async function route(req, res) {
         ownerDirect: row.source_channel === 'owner_direct',
         depositUnpaid: Boolean(row.direct_deposit_unpaid),
         // 裁C:售后单蓝徽标(句后端唯一)
-        afterSales: row.status === 'AFTER_SALES',
-        afterSalesTag: row.status === 'AFTER_SALES' ? '售后' : ''
+        afterSales: Boolean(row.after_sales_status),             // 合同⑤:台面日历的售后标记读轨道
+        afterSalesTag: row.after_sales_status ? '售后' : ''
       }
     })
     const bookingCount = {}
@@ -16338,7 +16311,7 @@ async function route(req, res) {
     const act = path.split('/').pop()
     const booking = db.prepare('SELECT * FROM bookings WHERE id = ? AND tenant_id = ?').get(id, currentTenantId())
     if (!booking) throw apiError(404, 'NOT_FOUND', '找不到这张预约。')
-    if (booking.status !== 'AFTER_SALES') throw apiError(400, 'NOT_AFTER_SALES', '这张单不在售后中。')
+    if (!booking.after_sales_status) throw apiError(400, 'NOT_AFTER_SALES', '这张单不在售后中。')   // 合同⑤:读售后轨道,不读主状态
     // 当单技师+老板(assertStaffCanAccessBooking:员工只碰得到自己名下的单)
     assertStaffCanAccessBooking(adminSession, booking)
     const body = await readBody(req)
@@ -16790,39 +16763,32 @@ async function route(req, res) {
       noShow: { forfeitedDepositCents: fee, forfeitPct: config.cancelPolicy.noShowForfeitPct }
     })
   }
+  /* 🔴 D70:订单动作路由 = **薄壳**(店主 08-24 硬约束:路由里不许出现任何状态判断)。
+     只做三件事:取参 → 调状态机 → 回结果。合法前置/能不能点/点完去哪,全在 ./booking-state.mjs。
+     兼容期:老前端还在传 {status:'CANCELLED'} 这种"目标状态",这里把它翻成动作 key 再交给状态机 ——
+     翻译表是**映射**不是判断(没有 if 决定能不能做,能不能做由 assertTransition 说了算)。 */
   if (req.method === 'PATCH' && path.startsWith('/admin/bookings/') && path.endsWith('/status')) {
     const id = path.split('/')[3]
     const body = await readBody(req)
-    const status = body.status
-    if (!['PENDING_PAYMENT', 'CONFIRMED', 'COMPLETED', 'CANCELLED', 'EXPIRED', 'AFTER_SALES'].includes(status)) throw apiError(400, 'BAD_REQUEST', 'Invalid status.')
+    const STATUS_TO_ACTION = { CANCELLED: 'cancel', CONFIRMED: 'confirmArrival', AFTER_SALES: 'openAfterSales', COMPLETED: 'markCompleted' }
+    const actionKey = String(body.action || STATUS_TO_ACTION[body.status] || '')
     const booking = db.prepare('SELECT * FROM bookings WHERE id = ?').get(id)
     if (!booking) throw apiError(404, 'NOT_FOUND', 'Booking not found.')
     assertStaffCanAccessBooking(adminSession, booking)
-    if (['CANCELLED', 'EXPIRED'].includes(status)) db.prepare('DELETE FROM booking_slots WHERE booking_id = ?').run(id)
-    /* 售后线图 v1.1 §四:转售后的问题描述落 status_history——afterSalesProgress 的「发起原因」
-       读的就是第一条 to_status=AFTER_SALES 的 note(5607),发起原因由此进后端唯一持有链。 */
-    if (status === 'AFTER_SALES') {
-      /* B9(批③首件,拍板③兜底):未签署结算单的单不能发起售后——双端按钮前置(㊹)只是体验,
-         这里才是闸(直打接口也挡);C1 查明时报过的接口无闸遗留在此收口。 */
-      const signedStl = db.prepare("SELECT 1 FROM settlements WHERE booking_id = ? AND status IN ('signed', 'amended') LIMIT 1").get(id)
-      if (!signedStl) throw apiError(400, 'AFTER_SALES_NEEDS_SIGNED', '这张单还没有已签署的结算单,不能转售后(拍板:未签署不能发起,双端统一)。')
-      const curAs = booking.after_sales_status || 'pending'
-      if (booking.status === 'AFTER_SALES' && curAs !== 'resolved' && curAs !== 'closed') {
-        throw apiError(409, 'AFTER_SALES_IN_PROGRESS', '这张单已有进行中的售后(一单同时只一条)。')
+    bookingState.assertTransition(booking, actionKey, { actor: 'merchant', role: adminSession.role === 'owner' ? 'owner' : 'staff', apiError })
+    bookingState.applyTransition(booking, actionKey, {
+      now: iso(new Date()),
+      note: String(body.note || '').trim(),
+      actorEmail: adminSession.email || 'admin',
+      deleteSlots: () => db.prepare('DELETE FROM booking_slots WHERE booking_id = ?').run(id),
+      reverseIncome: (who) => reverseBookingIncome(id, who),
+      writeHistory: ({ from, to, note: n, at }) => db.prepare('INSERT INTO booking_status_history (id, booking_id, from_status, to_status, note, created_at) VALUES (?, ?, ?, ?, ?, ?)').run(randomId('hist'), id, from, to, n, at),
+      updateBooking: (patch) => {
+        const cols = Object.keys(patch)
+        db.prepare(`UPDATE bookings SET ${cols.map((c) => `${c} = ?`).join(', ')} WHERE id = ?`).run(...cols.map((c) => patch[c]), id)
       }
-      // 商家口重开(与顾客口同构):已结案再转入=清结案态开新一轮,历史轮 append-only 留痕不丢
-      if (booking.status === 'AFTER_SALES' && (curAs === 'resolved' || curAs === 'closed')) {
-        db.prepare('UPDATE bookings SET after_sales_status = NULL, after_sales_result = NULL, updated_at = ? WHERE id = ?').run(iso(new Date()), id)
-      }
-      db.prepare('INSERT INTO booking_status_history (id, booking_id, from_status, to_status, note, created_at) VALUES (?, ?, ?, ?, ?, ?)')
-        .run(randomId('hist'), id, booking.status, 'AFTER_SALES', String(body.note || '').trim() || '商家标记转入售后', iso(new Date()))
-    }
-    db.prepare('UPDATE bookings SET status = ?, updated_at = ? WHERE id = ?').run(status, iso(new Date()), id)
-    const updatedBooking = db.prepare('SELECT * FROM bookings WHERE id = ?').get(id)
-    // 财务自动入账：完成→确认收入；取消/过期→冲销已入账收入
-    if (status === 'COMPLETED') recordBookingIncome(updatedBooking, adminSession.email || 'admin')
-    if (['CANCELLED', 'EXPIRED'].includes(status)) reverseBookingIncome(id, adminSession.email || 'admin')
-    return json(res, 200, { booking: serializeBooking(updatedBooking) })
+    })
+    return json(res, 200, { booking: serializeBooking(db.prepare('SELECT * FROM bookings WHERE id = ?').get(id)) })
   }
   if (req.method === 'PATCH' && path.startsWith('/admin/bookings/') && path.endsWith('/work-images')) {
     const id = path.split('/')[3]
@@ -18312,6 +18278,34 @@ if (!IS_PRODUCTION) {
   } catch (error) {
     console.warn('[migrate] 夹具回填失败(已跳过,老数据未动):', error.message)
   }
+}
+
+/* 🔴 D70 合同⑤ 迁移(店主 08-24):**售后不改写主状态**。
+   原来 status='AFTER_SALES' 把主状态占了 —— 一张已完成的单转售后后,主状态就不再是「已完成」,
+   于是"点一下已完成"就把售后态盖掉、单子从售后分组消失(D70 现象④)。
+   现在售后是挂在已完成单上的**并行轨道**(after_sales_status),主状态回归 COMPLETED。
+
+   迁移规则(幂等 + 可回滚):
+     · status='AFTER_SALES' → status='COMPLETED'(售后都是完成后才发起的,history 里 from_status 也印证);
+     · 没写过 after_sales_status 的,补 'pending'(不补的话主状态一改,售后痕迹就没了);
+     · 每条写一行 booking_status_history 留痕(from=AFTER_SALES),要回滚照着这行反查即可;
+     · 重跑一分不动(WHERE status='AFTER_SALES' 自然幂等)。
+   **不碰任何金额**:这一步只动状态字段,账本一行不写。 */
+try {
+  const asRows = db.prepare("SELECT id, tenant_id, after_sales_status FROM bookings WHERE status = 'AFTER_SALES'").all()
+  if (asRows.length) {
+    const now = iso(new Date())
+    for (const r of asRows) {
+      const nextAs = r.after_sales_status || 'pending'
+      db.prepare('UPDATE bookings SET status = ?, after_sales_status = ?, updated_at = ? WHERE id = ?')
+        .run('COMPLETED', nextAs, now, r.id)
+      db.prepare('INSERT INTO booking_status_history (id, booking_id, from_status, to_status, note, created_at) VALUES (?, ?, ?, ?, ?, ?)')
+        .run(randomId('hist'), r.id, 'AFTER_SALES', 'COMPLETED', 'D70 合同⑤:售后改为并行轨道,主状态回归已完成(迁移,可按本行回滚)', now)
+    }
+    console.log(`[migrate] D70 合同⑤:${asRows.length} 张售后单主状态回归 COMPLETED(售后态保留在 after_sales_status)`)
+  }
+} catch (error) {
+  console.warn('[migrate] D70 合同⑤ 迁移失败(已跳过,老数据未动):', error.message)
 }
 
 /* ===== P2 日结与业绩目标(2026-08-08)=====

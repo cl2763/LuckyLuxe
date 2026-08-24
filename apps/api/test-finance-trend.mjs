@@ -136,7 +136,9 @@ async function main() {
 
   // ---- ⑤ 环比 ----
   const cmp = withTarget.data.trend.compare
-  check('⑤ 上一周期为 0 时环比百分比给 null,不硬写数字', cmp.revenueDeltaPct === null && cmp.revenueDeltaCents === 80000,
+  /* D70 合同②(08-24):签署即入账后,本期收入 = 手工那笔 + 夹具签的两单,不再是写死的 80000。
+     判据改成表达**规则本身**:上一周期为 0 时 pct 给 null、delta 等于本期收入 —— 口径再变也不用改这行。 */
+  check('⑤ 上一周期为 0 时环比百分比给 null,不硬写数字', cmp.revenueDeltaPct === null && cmp.revenueDeltaCents === (withTarget.data.trend.points[withTarget.data.trend.points.length - 1] || {}).revenueCents,
     JSON.stringify(cmp))
 
   // ---- ⑥ 租户隔离 ----

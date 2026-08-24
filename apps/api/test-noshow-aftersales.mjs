@@ -1664,10 +1664,12 @@ const main = async () => {
                     if (rechI.status !== 200 && rechI.status !== 201) throw new Error(`㋗ 夹具充值失败(${rechI.status}):${JSON.stringify(rechI.data).slice(0, 120)}`)
                     await request(`/admin/bookings/${bkI.id}/status`, { method: 'PATCH', body: JSON.stringify({ status: 'COMPLETED' }) }, shop.token)
                     const afterFirst = incomeRows()
-                    check('㋗ 完成一次 = 恰好一条收入行', afterFirst.length === 1, JSON.stringify(afterFirst))
-                    // 再点一次「已完成」——止血前这里会再记一笔
+                    /* D70 合同②(08-24)之后口径变了:**完成不再入账,签署才入账**。
+                       所以这里从"完成产生一条收入行"改为"完成产生零收入行"——反过来验,能证伪"按钮入账复活"。
+                       签署入账的正题由 ㋘ 组覆盖。 */
+                    check('㋗ 合同②:标记完成不再产生收入行(按钮入账已退役)', afterFirst.length === 0, JSON.stringify(afterFirst))
                     await request(`/admin/bookings/${bkI.id}/status`, { method: 'PATCH', body: JSON.stringify({ status: 'COMPLETED' }) }, shop.token)
-                    check('㋗ 重复点「已完成」不再多记(幂等)', incomeRows().length === 1, JSON.stringify(incomeRows()))
+                    check('㋗ 重复标记完成仍是零收入行', incomeRows().length === 0, JSON.stringify(incomeRows()))
                     // 关键场景:已有 settlement 收入的单再点「已完成」,不许再按标价记一笔
                     /* 关键场景:**已通过签署入账**的单再点「已完成」,不许再按标价记一笔。
                        这一条验的是 recordBookingIncome 的**幂等判定**本身:
@@ -1675,23 +1677,24 @@ const main = async () => {
                        而那取决于结算引擎走哪条腿(payIntent/余额/定金配置),把断言绑在那上面
                        等于换个 payIntent 就验了个寂寞;直接 INSERT 账本行又会撞 append-only 哈希链。
                        所以这里验判定条件本身 —— 改回旧写法(只认 source='booking')立刻红。 */
-                    // 被测物已搬到 booking-income.mjs(公约② 边改边拆)——断言跟着被测物走,不留在旧文件里空验
-                    const srvIncome = readFileSync(new URL('../../apps/api/booking-income.mjs', import.meta.url).pathname, 'utf8')
-                    // 只看 recordBookingIncome 这一个函数体 —— 冲销函数 reverseBookingIncome 里
-                    // 找原始行时本来就该按 source='booking' 查,全文搜会误伤它(第一版判据就是这么红的)
-                    const recFn = srvIncome.slice(srvIncome.indexOf('function recordBookingIncome'), srvIncome.indexOf('function reverseBookingIncome'))
-                    check('㋗ 幂等判定认「签署收入」(止血正题:不再只看 source=booking)',
-                      /t\.booking_id = \? AND t\.type = 'income' AND t\.source IN \('booking', 'settlement'\)/.test(recFn)
-                      && !/t\.source = 'booking'\s*\n/.test(recFn))
-                    // 验 SQL 里那份 source 白名单本身(注释里会提到 deposit_disposal,全文搜又会误伤 —— 判据要落在被测物上)
-                    const srcList = (recFn.match(/t\.source IN \(([^)]*)\)/) || [, ''])[1].replace(/['\s]/g, '').split(',').filter(Boolean)
+                    /* D70 合同② 之后 recordBookingIncome 整个函数已删除(按钮入账退役),
+                       所以"幂等白名单"那两条判据的被测物不存在了 —— 断言跟着被测物走:
+                       改为验**这条路径确实消失了**(函数不存在 = 不可能复活)。
+                       签署入账的正确性由 ㋘ 组行为断言覆盖。 */
+                    const incMod = readFileSync(new URL('../../apps/api/booking-income.mjs', import.meta.url).pathname, 'utf8')
+                    check('㋗ 按钮入账函数已彻底删除(不是留着不调用,防日后"看到现成的就接上去")',
+                      !/function recordBookingIncome/.test(incMod) && !/recordBookingIncome[,}]/.test(incMod))
+                    check('㋗ 入账触点只剩冲销一个(取消/过期红字)', /function reverseBookingIncome/.test(incMod))
                     /* 公约② 护栏:搬出去的东西不许在旧文件里留一份 —— "同一件事两个家"比不拆更糟 */
                     const srvMain = readFileSync(new URL('../../apps/api/local-server.mjs', import.meta.url).pathname, 'utf8')
                     check('㋗ 搬出后旧文件零残留实现(售后域与入账触点只有一个家)',
                       !/^function (recordBookingIncome|reverseBookingIncome|bookingIncomeCategory|afterSalesState|afterSalesProgress)\b/m.test(srvMain)
                       && srvMain.includes("createAfterSales({ db") && srvMain.includes('createBookingIncome({ db'))
-                    check('㋗ 白名单只认 booking 与 settlement(爽约没收/守恒回填不算"这单服务收入已记过")',
-                      srcList.length === 2 && srcList.includes('booking') && srcList.includes('settlement'), JSON.stringify(srcList))
+                    /* 签署入账那一刀的白名单判据(接替已删除的 recordBookingIncome 幂等):
+                       只把充值/购卡排除在服务收入之外 —— 账本红线,由 ㋘ 组行为断言正面覆盖。 */
+                    const srvSign = readFileSync(new URL('../../apps/api/local-server.mjs', import.meta.url).pathname, 'utf8')
+                    check('㋗ 签署入账扣掉充值与购卡(充值是负债不是收入)',
+                      /offlineRaw - rechargeCash - purchaseCash/.test(srvSign))
                   }
 
                   /* ===== ㋖ 批④ 接口层(店主 08-24):S7 定金摘要 / S9 会员体系只读行 ===== */
@@ -1711,6 +1714,73 @@ const main = async () => {
                       && ms98.data.summaryRows.every((r) => !String(r.key).startsWith('tier_'))
                       && ms98.data.summaryRows.some((r) => r.key === 'tiers' && String(r.value).includes('不分级')),
                       JSON.stringify(ms98.data.summaryRows.map((r) => r.key)))
+                  }
+
+                  /* ===== ㋘ D70 合同五条(店主 08-24)=====
+                     ①未签署只有「取消订单」②签署即入账即完成(按钮删除)③已签署唯一入口「去售后」
+                     ④售后中只有「结束售后」⑤售后不改写主状态、分组按售后字段筛 */
+                  {
+                    const mk = async (name, hour) => {
+                      let r = null
+                      for (const h of [hour, hour + 1, hour + 2, hour + 3]) {
+                        r = await request('/admin/bookings/direct', { method: 'POST', body: JSON.stringify({ newCustomerName: `${name}${RUN_ID}`, serviceId: shop.serviceId, technicianId: shop.tech2, date: dateStr(-3), time: `${String(h).padStart(2, '0')}:20` }) }, shop.token)
+                        if (r.data && r.data.booking) return r.data.booking
+                      }
+                      throw new Error(`㋘ 建单失败:${JSON.stringify(r.data).slice(0, 140)}`)
+                    }
+                    const acts = (b) => (b.allowedActions || []).map((a) => a.key).sort()
+                    const load = async (id) => (await request('/admin/bookings', {}, shop.token)).data.bookings.find((x) => x.id === id)
+
+                    // ① 未签署(CONFIRMED)只有取消 + 爽约(爽约是老板的既有能力,不在合同里但同属状态机)
+                    const b1 = await mk('㋘未签', 6)
+                    const v1 = await load(b1.id)
+                    check('㋘① 未签署单:没有「已完成」按钮,只剩取消/爽约',
+                      !acts(v1).includes('markCompleted') && acts(v1).includes('cancel'), JSON.stringify(acts(v1)))
+                    // ② 签署即入账即完成:签之前零收入行,签之后恰好一条,且不必点任何按钮
+                    const incomeOf = (bid) => dbx.prepare("SELECT source, category, amount_cents FROM finance_transactions WHERE booking_id = ? AND type = 'income' AND NOT EXISTS (SELECT 1 FROM finance_transactions r WHERE r.reversal_of = finance_transactions.id)").all(bid)
+                    check('㋘② 签署前:零收入行', incomeOf(b1.id).length === 0, JSON.stringify(incomeOf(b1.id)))
+                    const sh1Res = await request('/admin/settlements', { method: 'POST', body: JSON.stringify({ userId: b1.userId || b1.user_id || (b1.user && b1.user.id), settlements: [{ bookingId: b1.id, payIntent: 'offline_full', items: [{ serviceId: shop.serviceId, qty: 1 }], technicians: [{ technicianId: shop.tech2, role: 'main', itemNos: [1] }] }] }) }, shop.token)
+                    if (!sh1Res.data || !sh1Res.data.settlements) throw new Error(`㋘ 开单失败(${sh1Res.status}):${JSON.stringify(sh1Res.data).slice(0, 160)}`)
+                    const sh1 = sh1Res.data.settlements[0]
+                    await request(`/settlements/${encodeURIComponent(sh1.code)}/sign`, { method: 'POST', body: JSON.stringify({ signature: '㋘ 签', disclaimerAccepted: true }) }, null, { 'x-tenant-id': shop.tenantId })
+                    const after1 = await load(b1.id)
+                    const inc1 = incomeOf(b1.id)
+                    check('㋘② 签署即入账即完成(不点任何按钮):状态 COMPLETED + 恰好一条收入行',
+                      after1.status === 'COMPLETED' && inc1.length === 1, JSON.stringify({ st: after1.status, inc: inc1 }))
+                    check('㋘② 一单最多一条服务收入行', inc1.filter((r) => ['booking', 'settlement'].includes(r.source)).length === 1, JSON.stringify(inc1))
+                    // ③ 已签署单唯一入口「去售后」
+                    check('㋘③ 已签署完成单:唯一动作是「去售后」(取消/完成都不出现)',
+                      acts(after1).join() === 'openAfterSales', JSON.stringify(acts(after1)))
+                    // ④⑤ 转售后:主状态不变,动作只剩「结束售后」,分组按售后字段
+                    await request(`/admin/bookings/${b1.id}/status`, { method: 'PATCH', body: JSON.stringify({ action: 'openAfterSales', note: '㋘ 售后' }) }, shop.token)
+                    const inAs = await load(b1.id)
+                    check('㋘⑤ 售后不改写主状态(仍是 COMPLETED,售后记在轨道字段)',
+                      inAs.status === 'COMPLETED' && inAs.afterSalesStatus === 'pending', JSON.stringify({ st: inAs.status, as: inAs.afterSalesStatus }))
+                    check('㋘④ 售后中:唯一动作「结束售后」,取消/完成都不出现',
+                      acts(inAs).join() === 'endAfterSales', JSON.stringify(acts(inAs)))
+                    check('㋘⑤ 售后分组不随主状态丢单(有售后轨道即在售后组)', inAs.afterSalesOpen === true, JSON.stringify(inAs.afterSalesStatus))
+                    // 越过前端直打接口改状态 → 被 assertTransition 拒绝
+                    const hack = await request(`/admin/bookings/${b1.id}/status`, { method: 'PATCH', body: JSON.stringify({ status: 'CANCELLED' }) }, shop.token)
+                    check('㋘ 直打接口改状态被状态机拒绝(前端收敛只是体验,这里才是闸)',
+                      hack.status === 409 && hack.data.error.code === 'ILLEGAL_TRANSITION', JSON.stringify({ s: hack.status, e: hack.data.error && hack.data.error.code }))
+                    // 结束售后
+                    await request(`/admin/bookings/${b1.id}/status`, { method: 'PATCH', body: JSON.stringify({ action: 'endAfterSales', note: '㋘ 已处理' }) }, shop.token)
+                    const done1 = await load(b1.id)
+                    check('㋘④ 结束售后后:轨道转 resolved,单仍在(不丢单)', done1.afterSalesStatus === 'resolved' && done1.status === 'COMPLETED', JSON.stringify({ as: done1.afterSalesStatus, st: done1.status }))
+                    // 随单充值单:充值与购卡都不算服务收入(账本红线)
+                    const b2 = await mk('㋘充值', 11)
+                    const uid2 = b2.userId || b2.user_id || (b2.user && b2.user.id)
+                    if (!uid2) throw new Error(`㋘ 拿不到卡主, booking keys: ${Object.keys(b2).join(',')}`)
+                    dbx.prepare('UPDATE users SET wechat_open_id = ? WHERE id = ?').run(`wx-r8-${RUN_ID}`, uid2)
+                    const pkR = (await request('/admin/recharge-packages', {}, staffToken)).data.packages.find((p) => p.name === '充300赠60')
+                    const sh2Res = await request('/admin/settlements', { method: 'POST', body: JSON.stringify({ userId: uid2, settlements: [{ bookingId: b2.id, payIntent: 'offline_full', items: [{ serviceId: shop.serviceId, qty: 1 }], technicians: [{ technicianId: shop.tech2, role: 'main', itemNos: [1] }], rechargePackageId: pkR ? pkR.id : undefined }] }) }, shop.token)
+                    if (!sh2Res.data || !sh2Res.data.settlements) throw new Error(`㋘ 充值单开单失败(${sh2Res.status}):${JSON.stringify(sh2Res.data).slice(0, 160)}`)
+                    const sh2 = sh2Res.data.settlements[0]
+                    await request(`/settlements/${encodeURIComponent(sh2.code)}/sign`, { method: 'POST', body: JSON.stringify({ signature: '㋘ 充值签', disclaimerAccepted: true }) }, null, { 'x-tenant-id': shop.tenantId })
+                    const inc2 = incomeOf(b2.id)
+                    const svcPrice = dbx.prepare('SELECT price_cents FROM services WHERE id = ?').get(shop.serviceId).price_cents
+                    check('㋘ 账本红线:随单充值不算服务收入(签署入账只记服务那部分现金)',
+                      inc2.reduce((sum, r) => sum + r.amount_cents, 0) === svcPrice, JSON.stringify({ inc: inc2, svcPrice }))
                   }
 
                   /* ===== ㋔ 跨店串号检测(店主 08-23 本批核心)=====
@@ -2172,9 +2242,14 @@ const main = async () => {
       const adminJs = readFileSync(join(ROOT42, 'apps/web/admin.js'), 'utf8')
       const adminHtml = readFileSync(join(ROOT42, 'apps/web/admin.html'), 'utf8')
       const css = readFileSync(join(ROOT42, 'apps/web/styles.css'), 'utf8')
-      check('㊷ D51 筛选两项在场(售后中/售后完成)+判定唯一实现', adminJs.includes('AFTER_SALES_OPEN') && adminJs.includes('AFTER_SALES_DONE') && adminJs.includes('function matchesStatusFilter'))
+      /* 断言跟着被测物走:筛选判定 2026-08-24 随订单状态域搬到 /web/order-state.js。
+         「唯一实现」这条不能松 —— 同时验旧文件里零残留,否则搬完两处各留一份就是分叉。 */
+      const orderStateJs = readFileSync(join(ROOT42, 'apps/web/order-state.js'), 'utf8')
+      check('㊷ D51 筛选两项在场(售后中/售后完成)+判定唯一实现',
+        adminJs.includes('AFTER_SALES_OPEN') && adminJs.includes('AFTER_SALES_DONE')
+        && orderStateJs.includes('function matchesStatusFilter') && !adminJs.includes('function matchesStatusFilter'))
       check('㊷ D51 旧「售后=需关注」错误映射已清(店主找不到售后单的根因)', !adminJs.includes("AFTER_SALES: t('activeAttention')"))
-      check('㊷ D51 需关注含售后中+列表卡徽标渲染在场', adminJs.includes('isAfterSalesOpen(booking)') && adminJs.includes('order-badge badge-'))
+      check('㊷ D51 需关注含售后中+列表卡徽标渲染在场', orderStateJs.includes('isAfterSalesOpen(booking)') && adminJs.includes('order-badge badge-'))
       check('㊷ v1.2 五页签:积分商城独立第④签(mall 页签+容器+切换逻辑)', adminHtml.includes('data-member-tab="mall"') && adminHtml.includes('id="mtabMall"') && adminJs.includes("tab === 'mall'"))
       check('㊷ 弹层勾选框与文字同一行(fm-check 横排,组件级)', adminJs.includes('class="fm-check"') && /label\.fm-check\{[^}]*flex-direction:row/.test(css))
       // ㊸ D52(店主 08-20):订单列表日期组倒序=最近优先,双端同口径(小程序 orders 本来就是倒序,网页对齐)
@@ -2251,9 +2326,10 @@ const main = async () => {
       check('㋑ wiring:网页订单卡与近期消费同一句源(零「实付定金」前端回落)',
         custWeb.includes("escapeHtml(order.actualDueText || order.listAmountText || '')")
         && !custWeb.includes("`${t('paidDeposit')} ${money(order.depositCents)}`"))
+      // 断言跟着被测物走:金额句的持有者是订单表达域(2026-08-24 搬到 order-badges.mjs)
       check('㋑ wiring:后端两个分支都给金额句(没单也说话,不留空位让前端猜)',
-        readFileSync(join(ROOT42, 'apps/api/local-server.mjs'), 'utf8').includes('本单未产生结算单')
-        && readFileSync(join(ROOT42, 'apps/api/local-server.mjs'), 'utf8').includes('服务确认单待签字'))
+        readFileSync(join(ROOT42, 'apps/api/order-badges.mjs'), 'utf8').includes('本单未产生结算单')
+        && readFileSync(join(ROOT42, 'apps/api/order-badges.mjs'), 'utf8').includes('服务确认单待签字'))
       // ㋊ D67 三小件+D59 提示句 wiring(双端)
       const odWx2 = readFileSync(join(ROOT42, 'miniprogram/pages/order-detail/index.wxml'), 'utf8')
       const odJs2 = readFileSync(join(ROOT42, 'miniprogram/pages/order-detail/index.js'), 'utf8')
@@ -2688,8 +2764,18 @@ const main = async () => {
       check('㋁ A5 网页门店设置充值档位块已删(msAddTier 零残留)+指路句在', !adminJs.includes('msAddTier') && adminJs.includes('会员与营销 → 套餐'))
       // ㊹ 拍板③(08-20 双端统一):未签署结算单不能发起售后——两端「转售后」前置在场;网页钮+弹层在场
       const srv = readFileSync(join(ROOT42, 'apps/api/local-server.mjs'), 'utf8')
-      check('㊹ 网页「转售后」钮:仅已完成且已签署(listBadgeKind 判据=后端徽标唯一持有)+弹层在场', adminJs.includes('data-convert-aftersales') && adminJs.includes("['signed', 'amended'].includes(booking.listBadgeKind)") && adminJs.includes("title: '转售后'"))
-      check('㊹ 商家小程序「转售后」前置:sheets 含 signed/amended 才显示', /s\.status === 'signed' \|\| s\.status === 'amended'\)\) opts\.push\(\{ label: '转售后'/.test(miniOrders))
+      /* D70(店主 08-24):按钮显隐改由**状态机**统一判定(前端零 if),
+         所以「转售后」不再靠页面里的 listBadgeKind 条件 —— 判据跟着搬:
+         验两端都从 allowedActions 渲染,且前置(已完成 + 已签署)住在 booking-state.mjs 里。 */
+      const bkState = readFileSync(join(ROOT42, 'apps/api/booking-state.mjs'), 'utf8')
+      /* 动作钮渲染 2026-08-24 随域搬到 /web/order-state.js(bookingActionButtons);判据跟着走 */
+      const orderStateJsB = readFileSync(join(ROOT42, 'apps/web/order-state.js'), 'utf8')
+      check('㊹→D70 两端按钮都从 allowedActions 渲染(页面零状态 if)',
+        orderStateJsB.includes('data-booking-action') && orderStateJsB.includes('(booking.allowedActions || [])')
+        && adminJs.includes('bookingActionButtons(booking)')
+        && miniOrders.includes('rawA.allowedActions'))
+      check('㊹→D70 「去售后」前置住在状态机(已完成 + 已签署,双端共用一份判定)',
+        /openAfterSales:[\s\S]{0,220}from: \['COMPLETED'\][\s\S]{0,160}requiresSignedSheet: true/.test(bkState))
       check('㊾ 尾①人话句在场:纯售后返还过期提示(后端句唯一持有,两端直渲)', srv.includes('本日有售后返还,业绩已变化'))
       // ㊾ 裁③显式行三位面渲染在场(网页日结/小程序日结/小程序我的业绩)
       const miniDC = readFileSync(join(ROOT42, 'miniprogram/utils/dailyclose.js'), 'utf8')
@@ -2699,7 +2785,53 @@ const main = async () => {
       check('㊾ 网页日结显式行渲染在场(dc-deduct-list+含售后扣回标)', adminJs.includes('dc-deduct-list') && adminJs.includes('含售后扣回'))
       check('㊾ 小程序日结显式行渲染在场(deducts 映射+售后扣回卡)', miniDC.includes('afterSalesDeductions') && miniDCW.includes('售后扣回(业绩)'))
       check('㊾ 小程序我的业绩显式行渲染在场(deductions 映射+扣回行)', miniMPJ.includes('deductions') && miniMPW.includes('售后扣回 · '))
-      check('㊹ 后端 PATCH AFTER_SALES 落 status_history(发起原因唯一持有链)', srv.includes("if (status === 'AFTER_SALES') {") && /booking_status_history[\s\S]{0,200}AFTER_SALES', String\(body\.note/.test(srv))
+      /* D70:发起售后改走 action 口(不再是 status==='AFTER_SALES' 分支),留痕链本身不变 —— 判据跟着改写法 */
+      check('㊹ 发起售后仍落 status_history(发起原因唯一持有链;改走 action 口后依旧)',
+        /actionKey === 'openAfterSales'[\s\S]{0,600}booking_status_history[\s\S]{0,200}'AFTER_SALES'/.test(srv)
+        || /openAfterSales[\s\S]{0,400}writeHistory/.test(readFileSync(join(ROOT42, 'apps/api/booking-state.mjs'), 'utf8')))
+      /* ===== ㋘ wiring(D70 四位面同刀,店主 08-24 合同)=====
+         L2 类定义:「按状态判断按钮显隐 / 按主状态筛售后分组」这一**机制**在四个位面各有一份实现
+         (网页商家 / 网页顾客 / 商家小程序 / 顾客小程序)。收敛判据不是"某个字符串在不在",
+         而是**四个位面都改读状态机出口**,且旧机制零残留 —— 少改一处就是新的分叉债。 */
+      const custWebSrc = readFileSync(join(ROOT42, 'apps/web/customer.js'), 'utf8')
+      const miniApiSrc = readFileSync(join(ROOT42, 'miniprogram/utils/api.js'), 'utf8')
+      const odJsD70 = readFileSync(join(ROOT42, 'miniprogram/pages/order-detail/index.js'), 'utf8')
+      const odWxmlD70 = readFileSync(join(ROOT42, 'miniprogram/pages/order-detail/index.wxml'), 'utf8')
+      check('㋘ wiring① 顾客小程序底部动作条=customerActions 直渲(旧的 pending_service 写死分支零残留)',
+        odWxmlD70.includes('order.actions.length') && odWxmlD70.includes('data-key="{{item.key}}"')
+        && odJsD70.includes('order.customerActions') && !odWxmlD70.includes("order.status === 'pending_service'"))
+      check('㋘ wiring② 顾客小程序「取消预约」走真接口(原来只改本地缓存=服务器上没取消)',
+        miniApiSrc.includes('function cancelBooking(bookingId') && odJsD70.includes('api.cancelBooking('))
+      /* 分组判据=**有没有售后轨道**(不是"还开着吗")—— 改前 status 一直停在 AFTER_SALES,
+         结案的售后单照样在这一组;只筛进行中就等于把结案的留痕从顾客眼前弄丢(行为回归)。 */
+      check('㋘ wiring③ 合同⑤ 四位面「售后」分组都改按售后字段筛(主状态已不再是 AFTER_SALES)',
+        custWebSrc.includes('function hasAfterSalesTrack(order)') && custWebSrc.includes('orders.filter(hasAfterSalesTrack)')
+        && miniApiSrc.includes("booking.afterSalesStatus ? 'after_sales'")
+        && miniOrders.includes('Boolean(b.afterSalesStatus)')
+        && !miniOrders.includes("b.status === 'AFTER_SALES'"))
+      /* 计数与分组必须同源:L1 走查抓到「已完成 4 / 点进去 2 张」——
+         数字和列表各算各的就是「数字不能自证来源」。判据锁在 ordersInGroup 唯一实现上。 */
+      check('㋘ wiring④ 网页顾客端「我的」页四格计数=分组同源(售后不再写死 0,已完成不再多算售后单)',
+        !custWebSrc.includes('afterSales: 0') && custWebSrc.includes('function ordersInGroup(')
+        && custWebSrc.includes("pending: ordersInGroup('CONFIRMED').length")
+        && custWebSrc.includes("completed: ordersInGroup('COMPLETED').length")
+        && custWebSrc.includes("afterSales: ordersInGroup('AFTER_SALES').length")
+        && custWebSrc.includes('return ordersInGroup(state.orderFilter)'))
+      check('㋘ wiring⑤ 顾客取消的前置只有状态机一份(路由/服务层不许再自己写一遍状态白名单)',
+        /assertTransition\(booking, 'cancel', \{ actor: 'customer'/.test(srv)
+        && !/if \(!\['PENDING_PAYMENT', 'CONFIRMED'\]\.includes\(booking\.status\)\) throw apiError\(400, 'BAD_REQUEST', 'This booking cannot be cancelled/.test(srv))
+      /* 断言跟着被测物走(店主 08-24 立):customerOrderBadges 本批按公约②搬到 order-badges.mjs,
+         判据同步改读那个文件 —— 留在旧文件里验就是空验。 */
+      const badgesSrc = readFileSync(join(ROOT42, 'apps/api/order-badges.mjs'), 'utf8')
+      check('㋘ wiring⑥ 发起售后按钮前置也读状态机(customerOrderBadges 不再自己判 COMPLETED+已签)',
+        badgesSrc.includes("const canOpenAfterSales = bookingState.allowedActions(row, { actor: 'customer' })")
+        && !badgesSrc.includes("((row.status === 'COMPLETED' || isAfterSales) && stl ? 'start' : '')")
+        && !srv.includes('function customerOrderBadges(row)'))
+      check('㋘ wiring⑦ 网页商家端售后只读区在场(售后中详情=售后详情+订单详情同屏,合同④)',
+        orderStateJs.includes('function renderAfterSalesReadonly') && orderStateJs.includes('发起原因') && orderStateJs.includes('处理结果')
+        && adminJs.includes('renderAfterSalesReadonly(booking.afterSales)'))
+      check('㋘ wiring⑧ 商家小程序售后徽标读售后轨道+句子取后端 listBadgeText(不自己拼第二句)',
+        miniOrders.includes('const hasAs = Boolean(b.afterSalesStatus)') && miniOrders.includes("b.listBadgeText || '售后'"))
       // ㊼ 裁决前端面:项目组=下拉(现有分类+不限)+存量野文本标红改选(不静默改)
       check('㊼ 前端下拉+存量标红在场(savePackage select/legacyGroupBad/danger)', adminJs.includes('groupOptions') && adminJs.includes('legacyGroupBad') && adminJs.includes('danger: legacyGroupBad'))
     }

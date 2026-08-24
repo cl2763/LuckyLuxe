@@ -1728,11 +1728,13 @@ function renderMe() {
   const memberCode = user.memberCode || compactUserCode(user)
   const referralCode = referralCodeFor(user)
   const referralUrl = referralUrlFor(user)
+  /* D70:计数与分组同源(ordersInGroup 唯一判据)。原来售后那格写死 0、已完成那格又把售后单算了进去,
+     两个数字都对不上点进去看到的列表。 */
   const counts = {
-    pending: state.orders.filter((item) => item.status === 'CONFIRMED').length,
-    completed: state.orders.filter((item) => item.status === 'COMPLETED').length,
-    cancelled: state.orders.filter((item) => item.status === 'CANCELLED').length,
-    afterSales: 0
+    pending: ordersInGroup('CONFIRMED').length,
+    completed: ordersInGroup('COMPLETED').length,
+    cancelled: ordersInGroup('CANCELLED').length,
+    afterSales: ordersInGroup('AFTER_SALES').length
   }
   els.screen.innerHTML = `
     <section class="me-web">
@@ -1895,9 +1897,30 @@ async function generateCustomerShareCopy(order, platform = state.sharePlatform) 
   rememberCopyHistory('customer', order.id, platform, copyData)
 }
 
+/* 🔴 D70 合同⑤(店主 08-24):售后不改写主状态 —— 后端不再回 AFTER_SALES,
+   「售后」分组必须改按售后字段筛(不改的话这个分组永远空,顾客点进去以为售后没了)。
+   小程序顾客端同刀(utils/api.js toMiniBooking),四之九双端同病。 */
+function isAfterSalesOpen(order) {
+  return ['pending', 'processing'].includes(order.afterSalesStatus || '')
+}
+/* 分组判据用「有没有售后轨道」而不是「售后是否还开着」——
+   改前 status 一直停在 AFTER_SALES,结案的售后单照样留在这一组;
+   若改成只筛进行中,顾客处理完就再也翻不到那次售后了(等于把留痕弄丢)。 */
+function hasAfterSalesTrack(order) {
+  return Boolean(order.afterSalesStatus)
+}
+
+/* 🔴 分组判据**唯一实现**:「我的」页那排计数与点进去看到的列表必须是同一个判据算出来的。
+   L1 走查抓到的原病:计数写「已完成 4」,点进去只有 2 张(另 2 张在售后组)——
+   顾客看到的每个数字都要能自证来源(闭环纪律),所以计数一律走这个函数。 */
+function ordersInGroup(key, orders = state.orders) {
+  if (key === 'all') return orders
+  if (key === 'AFTER_SALES') return orders.filter(hasAfterSalesTrack)
+  return orders.filter((order) => order.status === key && !hasAfterSalesTrack(order))
+}
+
 function filteredOrders() {
-  if (state.orderFilter === 'all') return state.orders
-  return state.orders.filter((order) => order.status === state.orderFilter)
+  return ordersInGroup(state.orderFilter)
 }
 
 function renderOrdersWeb() {

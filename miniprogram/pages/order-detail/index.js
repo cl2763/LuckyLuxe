@@ -77,6 +77,15 @@ Page({
       /* 🔴 永久律(店主 08-23):顾客可见数字拿不到真值就显示「—」,不许前端自算、不许回落到别的字段。
          原来这里 `servicePrice || Σitems || service.price` 三重回落 + 到店应付前端做减法,
          同一张单在详情页可能算出与后端不同的数(D69 同族)。现在只认后端字段,缺就空着让 wxml 出「—」。 */
+      /* 🔴 D70(店主 08-24 合同):**按钮显隐只能从后端状态机推导**(customerActions),
+         页面里不许写 if 补按钮。原来底部条挂在 `order.status === 'pending_service'` 上 ——
+         那是页面自己写的第二套规则:与商家端分叉、且售后中的单照样能点取消。
+         en 没有后端句,才用本地词典兜底(zh 一律用后端句,同一事实一句话)。 */
+      const ACTION_EN = { cancel: 'Cancel booking', openAfterSales: 'Request after-sales' }
+      order.actions = (order.customerActions || []).map((a) => ({
+        key: a.key,
+        label: lang === 'en' ? (ACTION_EN[a.key] || a.label) : a.label
+      }))
       order.servicePrice = order.servicePrice != null && order.servicePrice !== '' ? order.servicePrice : null
       order.payableAmount = order.payableAmount != null && order.payableAmount !== '' ? order.payableAmount : null
       order.finalDue = order.finalDue != null && order.finalDue !== '' ? order.finalDue : null
@@ -145,19 +154,29 @@ Page({
     } finally { this.setData({ asSubmitting: false }) }
   },
 
+  /* D70:底部条按 key 分发(分发≠状态判断 —— 能不能点已经由状态机在 actions 里决定过了) */
+  onAction(e) {
+    const key = e.currentTarget.dataset.key
+    if (key === 'cancel') return this.cancelOrder()
+    if (key === 'openAfterSales') return this.setData({ asPanelOpen: !this.data.asPanelOpen })
+  },
+
   cancelOrder() {
     wx.showModal({
       title: this.data.t.cancelTitle,
       content: this.data.t.cancelContent,
       confirmColor: '#C6A27E',
-      success: (res) => {
-        if (res.confirm) {
-          const order = storage.updateOrder(this.data.order._id, {
-            status: 'cancelled'
-          })
-          order.statusText = i18n.statusText(order.status, i18n.getLang())
-          this.setData({ order })
+      success: async (res) => {
+        if (!res.confirm) return
+        try {
+          /* 真取消:改服务器状态 + 放开占位。原来只改本地缓存 —— 顾客以为取消了,
+             商家台面上这张单还在,时段也还锁着(D70 顺手销案)。 */
+          await api.cancelBooking(this.data.order._id)
+          storage.setOrders([])            // 缓存失效,强制回源:状态/徽标/动作按钮全部重新由后端给
           wx.showToast({ title: this.data.t.cancelled, icon: 'success' })
+          this.load(this.data.order._id)
+        } catch (err) {
+          wx.showToast({ title: (err && err.message) || '取消失败,请稍后再试', icon: 'none' })
         }
       },
       fail: (e) => console.warn('[showModal fail]', e) // S组卫生批:fail=开发者域错误,console 留痕不弹 UI(toast 会撞转场,D27 家族)

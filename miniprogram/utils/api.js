@@ -343,7 +343,10 @@ function toMiniBooking(booking) {
     payableAmount: booking.depositCents ? Math.round(booking.depositCents / 100) : 0,
     finalDue: booking.finalDue || 0,
     servicePrice: booking.servicePrice || service.price || 0,
-    status: statusMap[booking.status] || '',   // 未知状态不硬塞「待服务」(会把单错分到别的筛选组;徽标句读后端 statusText)
+    /* 🔴 D70 合同⑤(店主 08-24):**售后不改写主状态** —— 后端不再回 AFTER_SALES,
+       售后中的单主状态就是 COMPLETED。列表「售后」分组因此必须改按售后字段筛,
+       不然这个分组会永远是空的(网页端同刀,四之九)。 */
+    status: (booking.afterSalesStatus ? 'after_sales' : statusMap[booking.status]) || '',   // 未知状态不硬塞「待服务」(会把单错分到别的筛选组;徽标句读后端 statusText)
     paymentStatus: booking.status === 'PENDING_PAYMENT' ? 'pending' : 'paid',
     backendBookingId: booking.id,
     /* 屏 D2/D3(2026-08-10 核验轮修复):这个映射是**白名单**,后端 customerOrderBadges()
@@ -360,6 +363,11 @@ function toMiniBooking(booking) {
     settlementCode: booking.settlementCode || '',
     afterSales: booking.afterSales || null,
     // 批③首件 B1/B5:售后按钮位(后端句唯一,映射层零裁剪)
+    /* D70(店主 08-24):顾客端可做的动作也由后端状态机给(customerActions);
+       afterSalesAction 是售后线的既有字段,保留不动 —— 两者不冲突:
+       前者管"这张单现在能做什么"(按钮显隐),后者管售后按钮的文案与进度。 */
+    customerActions: booking.customerActions || [],
+    afterSalesStatus: booking.afterSalesStatus || '',
     afterSalesAction: booking.afterSalesAction || '',
     afterSalesActionText: booking.afterSalesActionText || '',
     createdAt: booking.createdAt || Date.now()
@@ -725,6 +733,10 @@ function getMyStoredValue() { return request('/my/stored-value') }
 // D57 顾客侧待签单再入口:全部未签单(不止最新一张;即时开单没挂预约的也在)
 function getMyPendingSign() { return request('/my/pending-sign') }
 // 批③首件 屏B:顾客侧售后发起/撤回(同一状态机,前置=已完成+已签署;撤回=转已解决留痕)
+/* 🔴 D70(店主 08-24):顾客端「取消预约」原来**根本没有接口** —— 页面只改本地缓存
+   (storage.updateOrder status:'cancelled'),服务器上这张单还是 CONFIRMED、占位也还锁着:
+   顾客看到"已取消",商家台面上照样排着。假状态红线同族,连按钮一起收进真接口。 */
+function cancelBooking(bookingId, reason) { return request(`/bookings/${encodeURIComponent(bookingId)}/cancel`, 'POST', { reason: reason || '' }) }
 function startAfterSales(bookingId, description) { return request(`/my/bookings/${encodeURIComponent(bookingId)}/after-sales`, 'POST', { description }) }
 function withdrawAfterSales(bookingId) { return request(`/my/bookings/${encodeURIComponent(bookingId)}/after-sales/withdraw`, 'POST', {}) }
 // B3-4 代充回执确认:幂等,只许确认本人的充值行;未确认不阻塞任何链路
@@ -921,6 +933,7 @@ module.exports = {
   getMall,
   getMyStoredValue,
   getMyPendingSign,
+  cancelBooking,
   startAfterSales,
   withdrawAfterSales,
   confirmStoredRecharge,

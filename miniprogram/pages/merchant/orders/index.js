@@ -36,7 +36,13 @@ function m2t(m) { return `${pad(Math.floor(m / 60))}:${pad(m % 60)}` }
 function typeCls(t) { const u = String(t || '').toUpperCase(); return u === 'NAIL' ? 'hand' : u === 'LASH' ? 'lash' : 'care' }
 
 function vm(b) {
-  const s = STATUS_MAP[b.status] || { label: b.status || '-', cls: 'n' }
+  /* 🔴 D70 合同⑤(店主 08-24):售后是挂在已完成单上的**并行轨道**,不改写主状态。
+     所以徽标不能只看主状态 —— 否则售后中的单在商家列表里显示「已完成」,
+     店员看不出这单正在售后(网页端同刀,四之九)。 */
+  const hasAs = Boolean(b.afterSalesStatus)
+  /* 售后徽标的**字**由后端唯一持有(listBadgeText:售后中/售后已解决/售后已关闭),
+     这里不再自己拼 —— 网页端早就读它,商家小程序自己写一份就是同事实两句话。 */
+  const s = hasAs ? { label: b.listBadgeText || '售后', cls: 'd' } : (STATUS_MAP[b.status] || { label: b.status || '-', cls: 'n' })
   const service = (b.service && b.service.name) || b.serviceName || '服务'
   const customer = b.customerName || b.userName || (b.customer && b.customer.name) || (b.user && b.user.displayName) || (b.user && b.user.display_name) || '顾客'
   const tech = b.technicianName || (b.technician && b.technician.name) || ''
@@ -116,7 +122,8 @@ Page(Object.assign({
       const raw = r.bookings || []
       this.setData({ raw })
       this.buildAll(raw)
-      this.setData({ aftersalesList: raw.filter((b) => b.status === 'AFTER_SALES').map(vm).sort((a, b) => (b.date + b.time).localeCompare(a.date + a.time)) })
+      // 合同⑤:「售后」列表改按售后字段筛(主状态已不再是 AFTER_SALES,原判据会筛出空列表)
+      this.setData({ aftersalesList: raw.filter((b) => Boolean(b.afterSalesStatus)).map(vm).sort((a, b) => (b.date + b.time).localeCompare(a.date + a.time)) })
     } catch (e) { wx.showToast({ title: '加载订单失败', icon: 'none' }) }
   },
   buildAll(raw) {
@@ -139,30 +146,28 @@ Page(Object.assign({
     const sheets = await this.settlementsOf(id)
     const pending = sheets.filter((s) => s.status === 'pending_sign')
     const opts = []
-    if (status === 'PENDING_PAYMENT' || status === 'PENDING_DEPOSIT') {
-      opts.push({ label: '确认到店', s: 'CONFIRMED' }, { label: '取消预约', s: 'CANCELLED' })
-    } else if (status === 'CONFIRMED' || status === 'IN_PROGRESS' || status === 'SERVING') {
-      if (pending.length) {
-        /* D28 规则①:待结算 →「继续结算」直接回结算页续办(不弹层);数据从后端恢复,
-           结算页 boot 会检测本预约的待签单自动回到出码态(绑定/充值入口都在)。 */
-        opts.push({ label: `继续结算（待签 ${pending.length} 张）`, settle: true })
-        opts.push({ label: '撤回改单', voidSheets: pending })
-      } else if (sheets.some((s) => s.status === 'signed' || s.status === 'amended')) {
-        opts.push({ label: '查看结算单', preview: sheets.find((s) => s.status === 'signed' || s.status === 'amended').id })
-        opts.push({ label: '去结算', settle: true })
-      } else opts.push({ label: '去结算', settle: true })
-      opts.push({ label: '取消预约', s: 'CANCELLED' })
-    } else if (status === 'COMPLETED') {
-      // D28 规则①②:已结算/已签署 → 同一预览弹层(不再是 showModal 清单)
+    const rawA = (this.data.raw || []).find((x) => x.id === id) || {}
+    /* 🔴 D70(店主 08-24 合同):**状态动作全部来自后端 allowedActions** —— 这里不再写
+       「什么状态给什么按钮」的分支。原来这段 if 链和网页端各写一份,已经分叉过一次(四之九);
+       现在两端读同一份,后端状态机改了两端同时跟上。
+       下面保留的是**业务入口**(去结算/继续结算/撤回改单/查看结算单/处置定金)——
+       它们不是状态转移,依赖的是单据状态,不归订单状态机管。 */
+    for (const a of (rawA.allowedActions || [])) opts.push({ label: a.label, action: a.key })
+
+    // 业务入口:待签 → 继续结算 / 撤回改单;有已签单 → 查看结算单;其余 → 去结算
+    if (pending.length) {
+      opts.push({ label: `继续结算（待签 ${pending.length} 张）`, settle: true })
+      opts.push({ label: '撤回改单', voidSheets: pending })
+    } else {
       const live = sheets.filter((s) => s.status !== 'voided')
-      if (live.length) opts.push({ label: '查看结算单', preview: live[0].id })
-      /* 拍板③(店主 08-20,双端统一):未签署结算单的单不能发起售后——未签单不显示「转售后」。
-         老数据红线:已存在的无签署单售后原样保留(只收紧新发起,不回溯)。 */
-      if (sheets.some((s) => s.status === 'signed' || s.status === 'amended')) opts.push({ label: '转售后', s: 'AFTER_SALES' })
-    } else if (status === 'AFTER_SALES') {
-      // 图 B 部:售后详情可看可写(权限在面板里按角色收)
-      opts.push({ label: '查看/处理售后', asOpen: true })
+      const signed = sheets.find((s) => s.status === 'signed' || s.status === 'amended')
+      if (signed) opts.push({ label: '查看结算单', preview: signed.id })
+      else if (live.length) opts.push({ label: '查看结算单', preview: live[0].id })
+      if (!signed && status !== 'CANCELLED' && status !== 'EXPIRED') opts.push({ label: '去结算', settle: true })
     }
+    // 售后详情入口(有售后轨道就能看,与主状态无关 —— 合同⑤)
+    if (rawA.afterSalesStatus) opts.push({ label: '查看/处理售后', asOpen: true })
+
     const rawB = (this.data.raw || []).find((x) => x.id === id) || {}
     /* ⬜ 图上没画「标记爽约」入口(A 部流程的前提),按最合理方式放进操作面板,已记假设清单:
        仅老板;待到店/进行中的单可标(后端 /no-show 路由本来就是仅老板)。 */

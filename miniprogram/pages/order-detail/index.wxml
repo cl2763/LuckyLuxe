@@ -105,9 +105,11 @@
   </view>
 
   <!-- 批③首件 屏B:售后区——按钮句后端唯一;同屏展开表单(不弹层);D3 三步进度卡 -->
-  <view class="section" wx:if="{{order.afterSalesAction}}">
+  <!-- D70(店主 08-24):发起售后的**按钮**移到底部动作条(由状态机 customerActions 出),
+       这里只剩两件:①售后中的「查看售后进度」(本页滚动定位,不是状态动作)②同屏展开的提交表单 -->
+  <view class="section" wx:if="{{order.afterSalesAction === 'progress' || asPanelOpen}}">
     <view class="info-card card">
-      <view class="as-btn" bindtap="asAction">{{order.afterSalesActionText}}</view>
+      <view class="as-btn" wx:if="{{order.afterSalesAction === 'progress'}}" bindtap="asAction">{{order.afterSalesActionText}}</view>
       <block wx:if="{{asPanelOpen}}">
         <textarea class="as-desc" placeholder="问题描述(必填):哪里不满意/出了什么状况" value="{{asDesc}}" bindinput="onAsDesc" maxlength="300"></textarea>
         <view class="as-submit {{asSubmitting ? 'ing' : ''}}" bindtap="submitAfterSales">{{asSubmitting ? '提交中…' : '提交,转人工跟进'}}</view>
@@ -129,9 +131,10 @@
   <!-- D68③(店主 08-23 裁):浮层查看器=全仓共用组件(顾客端/商家端同一份实现) -->
   <snapshot-viewer open="{{viewer.open}}" items="{{viewer.items}}" index="{{viewer.index}}" bind:close="closeViewer"></snapshot-viewer>
 
-  <view wx:if="{{order.status === 'pending_service'}}" class="bottom-bar">
+  <!-- 🔴 D70:底部动作条=后端状态机 customerActions 直渲(页面零 if:没有动作就不出这条) -->
+  <view wx:if="{{order.actions.length}}" class="bottom-bar">
     <button class="btn btn-ghost bottom-fill" bindtap="callStore">{{t.support}}</button>
     <button class="btn btn-ghost bottom-fill" bindtap="openLocation">{{t.nav}}</button>
-    <button class="btn btn-primary bottom-fill" bindtap="cancelOrder">{{t.cancel}}</button>
+    <button wx:for="{{order.actions}}" wx:key="key" class="btn btn-primary bottom-fill" bindtap="onAction" data-key="{{item.key}}">{{item.label}}</button>
   </view>
 </view>

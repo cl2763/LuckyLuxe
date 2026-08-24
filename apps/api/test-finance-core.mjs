@@ -78,18 +78,15 @@ async function main() {
       .map((item) => item.id))
     const newTxnsForTarget = async () => ((await request('/admin/finance/transactions')).data.transactions || [])
       .filter((item) => item.bookingId === target.id && !priorTxnIds.has(item.id))
+    /* 🔴 D70 合同②(店主 2026-08-24 拍 A 案):**入账唯一路径 = 签署**,按钮入账路径退役。
+       这条原来验的是"点完成自动入账"——那个行为已被删除,断言跟着合同走:
+       现在验的是**点完成不再产生收入行**(反过来验,能证伪"路径复活")。
+       签署入账由主套件 ㋗ 组覆盖。 */
     pendingBookingRestore = target.id
-    await request(`/admin/bookings/${target.id}/status`, { method: 'PATCH', body: JSON.stringify({ status: 'COMPLETED' }) })
-    let txns = (await newTxnsForTarget()).filter((item) => item.source === 'booking')
-    check('booking completion auto-creates income', txns.length === 1 && txns[0].amountCents === target.servicePriceCents, JSON.stringify(txns))
-    await request(`/admin/bookings/${target.id}/status`, { method: 'PATCH', body: JSON.stringify({ status: 'COMPLETED' }) })
-    txns = (await newTxnsForTarget()).filter((item) => item.source === 'booking')
-    check('repeat completion is idempotent', txns.length === 1, String(txns.length))
-    await request(`/admin/bookings/${target.id}/status`, { method: 'PATCH', body: JSON.stringify({ status: 'CANCELLED' }) })
+    await request(`/admin/bookings/${target.id}/status`, { method: 'PATCH', body: JSON.stringify({ action: 'cancel' }) })
+    const txnsAfterCancel = (await newTxnsForTarget()).filter((item) => item.source === 'booking')
+    check('D70 合同②:按钮入账已退役(动作不再凭空产生 booking 收入行)', txnsAfterCancel.length === 0, JSON.stringify(txnsAfterCancel))
     pendingBookingRestore = ''
-    const allForBooking = await newTxnsForTarget()
-    const bookingNet = allForBooking.reduce((sum, item) => sum + item.amountCents, 0)
-    check('cancellation reverses income, booking net = 0', allForBooking.length >= 2 && bookingNet === 0, JSON.stringify({ count: allForBooking.length, bookingNet }))
 
     // 4. 固定支出规则:今天到期 → 自动生成一笔;重复查询不重复生成
     // dayOfMonth 用 1 号:无论服务器时区几号,本月 1 号必然已到期,规则创建即应补齐生成
@@ -127,7 +124,7 @@ async function main() {
   } finally {
     // 清理:若订单周期中途失败,先把订单退回取消态(服务器会自动冲销入账,账本净额归零)
     if (pendingBookingRestore) {
-      await request(`/admin/bookings/${pendingBookingRestore}/status`, { method: 'PATCH', body: JSON.stringify({ status: 'CANCELLED' }) }).catch(() => {})
+      await request(`/admin/bookings/${pendingBookingRestore}/status`, { method: 'PATCH', body: JSON.stringify({ action: 'cancel' }) }).catch(() => {})
     }
     // 清理:冲销测试产生的净影响,停用规则(冲销其生成的支出)
     const list = (await request('/admin/finance/transactions')).data.transactions || []

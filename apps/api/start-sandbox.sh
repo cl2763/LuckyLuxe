@@ -12,6 +12,16 @@
 #
 # 用法: bash apps/api/start-sandbox.sh [DATA_DIR 路径]
 set -euo pipefail
+# 🔴 2026-08-24:传相对路径会踩坑 —— 下面 cd 到 apps/api 之后,
+#   `apps/api/sandbox-data` 会变成 apps/api/apps/api/sandbox-data(新建空库,看起来像"数据又没了")。
+#   所以先在**调用者的当前目录**里把相对路径展开成绝对路径,再 cd。
+ORIG_PWD="$(pwd)"
+if [ -n "${1:-}" ]; then
+  case "$1" in
+    /*) : ;;                       # 已是绝对路径
+    *) set -- "$ORIG_PWD/$1" ;;    # 相对路径按调用者目录展开
+  esac
+fi
 cd "$(dirname "$0")"
 ENV_FILE="/tmp/ll-sandbox-4310.env"
 DEFAULT_DATA_DIR="$(pwd)/sandbox-data"

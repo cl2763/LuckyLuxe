@@ -1,5 +1,5 @@
 // 构建号:每次交付递增。侧栏可见,排查"改了没生效"时先对版本。
-const ADMIN_BUILD = '20260824c-b4'
+const ADMIN_BUILD = '20260824e-d70'
 let pricingState = { module: 'storefront', tab: 'items', categories: [], items: [], rules: {}, editing: null, preview: null, storefrontPicker: false }
 console.log(`[admin] build ${ADMIN_BUILD}`)
 
@@ -961,20 +961,6 @@ async function request(path, options = {}) {
   return data
 }
 
-function statusLabel(status, booking) {
-  const labels = {
-    PENDING_PAYMENT: t('pending'),
-    CONFIRMED: t('confirmed'),
-    COMPLETED: t('completed'),
-    CANCELLED: t('cancelled'),
-    EXPIRED: t('expired'),
-    /* D51:原映射「需关注」——售后单在任何列表里都不自报身份,店主根本找不到(根因之一)。
-       细分文案(售后中/售后已解决/售后已关闭)由后端 listBadgeText 唯一持有,三端同句。 */
-    AFTER_SALES: booking?.listBadgeText || t('afterSalesWord')
-  }
-  return labels[status] || status
-}
-
 function applyLanguage() {
   const currentStatus = els.filterStatus.value || 'all'
   const currentCustomerSort = els.customerSort.value || 'alpha'
@@ -1522,12 +1508,6 @@ function sourceChannels() {
 
 function hashText(value = '') {
   return [...String(value)].reduce((total, char) => total + char.charCodeAt(0), 0)
-}
-
-function bookingSource(booking) {
-  if (booking.sourceChannel || booking.source || booking.channel) return booking.sourceChannel || booking.source || booking.channel
-  const channels = sourceChannels()
-  return channels[hashText(booking.publicCode || booking.id || booking.service?.name) % channels.length]
 }
 
 function renderAdminPages() {
@@ -5035,25 +5015,8 @@ function renderBookings() {
   `
 }
 
-function activeStatuses() {
-  return ['PENDING_PAYMENT', 'CONFIRMED']
-}
-
-/* D51:售后是否仍开着(pending/processing)。resolved/closed=售后完成。
-   afterSales 只随 AFTER_SALES 状态下发;对象缺失时按「开着」算(宁可多进需关注,不许漏)。 */
-function isAfterSalesOpen(booking) {
-  return booking.status === 'AFTER_SALES' && !['resolved', 'closed'].includes(booking.afterSales?.status)
-}
-
-/* D51:状态筛选唯一判定 —— 订单列表/台面/日历同一实现,不许各写一份(四之九)。
-   「需关注」含售后中(店主 08-18 立 D51 点名)。 */
-function matchesStatusFilter(booking, status) {
-  if (status === 'all') return true
-  if (status === 'active') return activeStatuses().includes(booking.status) || isAfterSalesOpen(booking)
-  if (status === 'AFTER_SALES_OPEN') return isAfterSalesOpen(booking)
-  if (status === 'AFTER_SALES_DONE') return booking.status === 'AFTER_SALES' && !isAfterSalesOpen(booking)
-  return booking.status === status
-}
+/* 订单状态与动作表达域(statusLabel/筛选判定/售后只读区/动作钮)已搬出到 /web/order-state.js
+   (公约②「边改边拆」,2026-08-24;admin.html 先加载它) */
 
 function filteredBookings() {
   const status = owner.adminView === 'today' ? 'all' : (els.filterStatus.value || 'all')
@@ -5138,7 +5101,7 @@ function renderBookingCard(booking) {
     <article class="booking-item">
       <img class="booking-image" src="${booking.service.imageUrl}" alt="${booking.service.name}">
       <div class="booking-copy">
-        <span class="status ${booking.status}">${statusLabel(booking.status, booking)}</span>${booking.status !== 'AFTER_SALES' && booking.listBadgeText ? ` <span class="status order-badge badge-${booking.listBadgeKind}">${escapeHtml(booking.listBadgeText)}</span>` : ''}
+        <span class="status ${booking.status}">${statusLabel(booking.status, booking)}</span>${!booking.afterSalesStatus && booking.listBadgeText ? ` <span class="status order-badge badge-${booking.listBadgeKind}">${escapeHtml(booking.listBadgeText)}</span>` : ''}
         <h3>${booking.service.name}</h3>
         <p>${booking.appointmentDate} ${booking.appointmentTime}-${booking.appointmentEndTime}</p>
         <p>${booking.technician.name} · ${booking.store.name}</p>
@@ -5149,13 +5112,12 @@ function renderBookingCard(booking) {
         ${needsAttention ? `<p class="attention-note">${isAfterSalesOpen(booking) ? t('afterSalesAttention') : t('needsAttention')}</p>` : ''}
       </div>
       <div class="booking-actions">
+        ${/* 🔴 D70(店主 08-24 合同):按钮**全部从后端 allowedActions 推导** —— 页面里不许再写 if 补按钮。
+              原来这里「已完成」「已取消」是两颗零判断的裸按钮:已售后的单点一下就从售后分组消失、
+              已完成的单点「已取消」会把已确认的收入冲掉。现在能不能点由状态机说了算,文案也后端给。 */''}
         <button class="ghost" data-view-booking="${booking.id}" type="button">${t('details')}</button>
-        <button class="ghost" data-status="COMPLETED" data-booking="${booking.id}" type="button">${t('completed')}</button>
-        <button class="ghost" data-status="CANCELLED" data-booking="${booking.id}" type="button">${t('cancelled')}</button>
-        ${/* 售后线图 v1.1 §四+拍板③:仅「已完成且已签署结算单」出「转售后」(判据=后端徽标 listBadgeKind,唯一持有;未签单不显示) */''}
-        ${booking.status === 'COMPLETED' && ['signed', 'amended'].includes(booking.listBadgeKind) ? `<button class="ghost" data-convert-aftersales="${booking.id}" type="button">转售后</button>` : ''}
+        ${bookingActionButtons(booking)}
         ${isOwnerRole() && booking.depositDisposal && booking.depositDisposal.state === 'pending' ? `<button class="ghost" data-disposal-booking="${booking.id}" type="button">处置定金</button>` : ''}
-        ${booking.afterSales && !['resolved', 'closed'].includes(booking.afterSales.status) ? `<button class="ghost" data-aftersales-booking="${booking.id}" type="button">处理售后</button>` : ''}
       </div>
     </article>
     ${isOpen ? renderBookingDetail(booking) : ''}
@@ -5165,6 +5127,11 @@ function renderBookingCard(booking) {
 function renderBookingDetail(booking) {
   const images = booking.referenceImages || []
   const workImages = booking.workImages || []
+  /* 🔴 D70 现象⑤(店主实测):网页端打开售后单只看得到当时的预约详情,**看不到任何售后处理详情** ——
+     原因是两层都缺:接口层不给 afterSales(只在主状态是 AFTER_SALES 时下发),页面层也没有这块。
+     现在接口按售后轨道下发(合同⑤),这里补只读区:发起原因 / 进度时间线 / 处理结果,
+     与小程序售后面板同源同句(afterSalesProgress 唯一出口),结案后照样看得到。 */
+  const afterSalesBlock = renderAfterSalesReadonly(booking.afterSales)   // D70 合同④:同屏只读区(实现在 order-state.js)
   return `
     <section class="booking-detail-panel card">
       <div class="section-row compact-row">
@@ -5187,6 +5154,7 @@ function renderBookingDetail(booking) {
         <p><span>${t('sourceChannel')}</span><strong>${escapeHtml(bookingSource(booking))}</strong></p>
         <p><span>${t('depositCad')}</span><strong>${money(booking.depositCents)}</strong></p>
       </div>
+      ${afterSalesBlock ? `<section class="booking-detail-section">${afterSalesBlock}</section>` : ''}
       <section class="booking-detail-section">
         <h3>${t('notes')}</h3>
         <div class="booking-notes-box">${escapeHtml(booking.notes || t('noNotes'))}</div>
@@ -6018,7 +5986,7 @@ function renderCustomerRecord(booking) {
     <article class="customer-record-row">
       <img src="${booking.service?.imageUrl || '/assets/images/store-cover.jpg'}" alt="${booking.service?.name || ''}">
       <div>
-        <span class="status ${booking.status}">${statusLabel(booking.status, booking)}</span>${booking.status !== 'AFTER_SALES' && booking.listBadgeText ? ` <span class="status order-badge badge-${booking.listBadgeKind}">${escapeHtml(booking.listBadgeText)}</span>` : ''}
+        <span class="status ${booking.status}">${statusLabel(booking.status, booking)}</span>${!booking.afterSalesStatus && booking.listBadgeText ? ` <span class="status order-badge badge-${booking.listBadgeKind}">${escapeHtml(booking.listBadgeText)}</span>` : ''}
         <h3>${escapeHtml(booking.service?.name || '-')}</h3>
         <p>${booking.appointmentDate} ${booking.appointmentTime}-${booking.appointmentEndTime} · ${escapeHtml(booking.technician?.name || '-')}</p>
         <p>${t('sourceChannel')} ${escapeHtml(bookingSource(booking))} · ${t('recordImages')} ${imageCount}</p>
@@ -6632,26 +6600,13 @@ els.adminLayout.addEventListener('click', (event) => {
     })
     return
   }
-  /* 图 B-UI4:网页端售后写入(同一状态机;权限后端断言)。 */
-  const cvtBtn = event.target.closest('[data-convert-aftersales]')
-  if (cvtBtn) {
-    // 售后线图 v1.1 §四:转售后=问题描述(必填)+确认;与商家小程序同一后端接口(PATCH status),四之九免疫
-    const id = cvtBtn.dataset.convertAftersales
-    openFormModal({
-      title: '转售后',
-      hint: '转入后本单进入「售后中」,可在本卡「处理售后」跟进;退款/补差走更正单,售后单只记过程与结论。',
-      fields: [{ key: 'desc', label: '问题描述(必填)', type: 'text', value: '', placeholder: '顾客反馈的问题,如:掉钻/起翘…' }],
-      saveText: '确认转售后',
-      onSave: async (v) => {
-        const desc = String(v.desc || '').trim()
-        if (!desc) { toast('请填写问题描述'); return false }
-        await request(`/admin/bookings/${id}/status`, { method: 'PATCH', body: JSON.stringify({ status: 'AFTER_SALES', note: desc }) })
-        toast('已转入售后')
-        await loadAll()
-      }
-    })
-    return
-  }
+  /* D70(店主 08-24):原来这里还有一份 [data-convert-aftersales] 的「转售后」弹层 ——
+     按钮已随 allowedActions 收敛消失,这段成了**无人能到达的第二份实现**(下次改口径必漏一处),
+     按 L2 同类扫尽直接删。发起售后现在只有一条路:allowedActions → openAfterSales。 */
+  /* ⚠️ D71-b 待店主裁(08-24 L1 走查发现):这条「售后处理」(写进展/标记已解决/关闭)
+     目前**没有按钮能点到** —— 合同④ 规定售后中唯一动作是「结束售后」,三步处理链因此被收掉了。
+     两条路选一条:①确认按合同收掉 → 连这段一起删;②要保留「写进展」→ 加回状态机做成一个动作。
+     在店主裁定前原样留着(不接线、不误导),不许自己替她决定。 */
   const asBtn = event.target.closest('[data-aftersales-booking]')
   if (asBtn) {
     const id = asBtn.dataset.aftersalesBooking
@@ -7715,8 +7670,11 @@ els.bookingList.addEventListener('click', (event) => {
   }
   const button = event.target.closest('[data-booking]')
   if (!button) return
-  // 取消是破坏性动作:二次确认防误点
-  if (button.dataset.status === 'CANCELLED') {
+  /* D70:动作 key 由后端 allowedActions 给,前端不再自己拼状态。
+     「结束售后」要填处理结果(顾客端要看这句),走既有弹层;其余动作直接提交。 */
+  const action = button.dataset.bookingAction
+  if (!action) return
+  if (action === 'cancel') {
     const booking = owner.bookings.find((item) => item.id === button.dataset.booking)
     const label = booking ? `${booking.appointmentDate} ${booking.appointmentTime} ${booking.service?.name || ''}` : ''
     const confirmed = window.confirm(owner.lang === 'zh'
@@ -7724,7 +7682,32 @@ els.bookingList.addEventListener('click', (event) => {
       : `Cancel this booking?\n${label}`)
     if (!confirmed) return
   }
-  updateBookingStatus(button.dataset.booking, button.dataset.status).catch((error) => toast(error.message))
+  if (action === 'openAfterSales' || action === 'endAfterSales') {
+    openFormModal({
+      /* 弹层标题=**点进来的那颗按钮的原话**(后端 label 唯一持有)。
+         L1 走查抓到:钮上写「去售后」、弹层标题写「转售后」—— 同一件事两个名字(闭环③)。 */
+      title: button.textContent.trim() || (action === 'openAfterSales' ? '去售后' : '结束售后'),
+      fields: [{ key: 'note', label: action === 'openAfterSales' ? '问题描述(必填)' : '处理结果(必填,顾客端展示这段)', type: 'text', value: '' }],
+      saveText: '提交',
+      onSave: async (v) => {
+        const note = String(v.note || '').trim()
+        if (!note) { toast('内容不能为空'); return false }
+        await request(`/admin/bookings/${encodeURIComponent(button.dataset.booking)}/status`, { method: 'PATCH', body: JSON.stringify({ action, note }) })
+        toast('已记录')
+        const data = await request('/admin/bookings')
+        owner.bookings = data.bookings
+        render()
+      }
+    })
+    return
+  }
+  request(`/admin/bookings/${encodeURIComponent(button.dataset.booking)}/status`, { method: 'PATCH', body: JSON.stringify({ action }) })
+    .then(async () => {
+      const data = await request('/admin/bookings')
+      owner.bookings = data.bookings
+      render()
+    })
+    .catch((error) => toast(error.message))
 })
 document.querySelector('#customerSearch')?.addEventListener('input', (event) => {
   owner.customerSearch = event.target.value

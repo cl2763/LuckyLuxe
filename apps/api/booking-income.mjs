@@ -13,32 +13,11 @@ export function createBookingIncome({ db, getService, insertFinanceTransaction, 
     return '服务收入-其他'
   }
 
-  // 订单完成 → 自动确认收入（按订单幂等：已有未被冲销的收入则跳过）
-  function recordBookingIncome(booking, createdBy = 'system') {
-    if (!booking?.id || !booking.service_price_cents) return null
-    /* 🩹 D70 止血:幂等要认「签署收入」——只认 source='booking' 会让已签署入账的单再点一次
-       「已完成」按标价再记一笔(同一单两笔收入)。白名单只放这两个:爽约没收/守恒回填记的不是这单服务收入。
-       终局是 A 案(入账唯一路径=签署),详见 handoff/D70查明_订单动作按钮与售后态_2026-08-24.md */
-    const existing = db.prepare(`
-      SELECT t.* FROM finance_transactions t
-      WHERE t.booking_id = ? AND t.type = 'income' AND t.source IN ('booking', 'settlement')
-        AND NOT EXISTS (SELECT 1 FROM finance_transactions r WHERE r.reversal_of = t.id)
-      ORDER BY t.created_at DESC LIMIT 1
-    `).get(booking.id)
-    if (existing) return existing
-    return insertFinanceTransaction({
-      type: 'income',
-      source: 'booking',
-      category: bookingIncomeCategory(booking),
-      tags: booking.technician_id || '',
-      amountCents: booking.service_price_cents,
-      payChannel: 'in_store',
-      occurredOn: localParts(new Date()).date,
-      note: `订单 ${booking.public_code || booking.id} 完成自动入账`,
-      bookingId: booking.id,
-      createdBy
-    })
-  }
+  /* ⚰️ recordBookingIncome 已退役(店主 08-24 拍 A 案:入账唯一路径=签署)。
+     函数整体删除而不是留着不调用 —— 留着就是"看到有现成的就接上去"把旧路径复活的种子。
+     签署入账那一刀写在 local-server.mjs 的 signSettlement 里(按结算单到店应收,不是预约标价);
+     D70 那个"已签署单再点已完成会重复入账"的口子,随这条路径消失而根除。
+     入账触点现在只剩下面这一个:取消/过期 → 红字冲销。 */
 
   // 已入账订单被取消 → 自动红字冲销(这里按 source='booking' 找原始行是**对的**:
   // 冲销的就是那笔按钮入账;止血那条判据第一版全文搜就误伤过这个函数)
@@ -65,5 +44,5 @@ export function createBookingIncome({ db, getService, insertFinanceTransaction, 
     })
   }
 
-  return { bookingIncomeCategory, recordBookingIncome, reverseBookingIncome }
+  return { bookingIncomeCategory, reverseBookingIncome }
 }
