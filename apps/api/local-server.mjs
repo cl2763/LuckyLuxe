@@ -8,7 +8,9 @@ import { dirname, extname, join, normalize, resolve } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import os from 'node:os'   // 真机调试:开发机局域网 IP 探测(启动日志给手机用的地址)
 import { pngSize, rasterBackend, svgToPng } from './svg-raster.mjs'
-import { inkToPng } from './ink-raster.mjs'   // 笔迹图:纯 JS 画折线,**透明底**(单据白纸走 svgToPng,两条路不混)
+import { inkToPng } from './ink-raster.mjs'
+import { createAfterSales } from './after-sales.mjs'        // 售后域(公约②:边改边拆)
+import { createBookingIncome } from './booking-income.mjs'  // 订单入账触点(同上)   // 笔迹图:纯 JS 画折线,**透明底**(单据白纸走 svgToPng,两条路不混)
 import { analyzeReferenceImage, createBookingSummary, createCustomerInsight, createCustomerServiceReply, createDailyBrief, createRecallMessages, createServiceNoteInsights, createSocialCopy, extractKbEntriesFromDocument, polishStaffQuoteReply } from './ai-utils.mjs'
 import { buildKnowledgeContext, loadCustomerServiceKnowledgeBase } from './kb-utils.mjs'
 
@@ -5796,75 +5798,9 @@ function customerOrderBadges(row) {
   }
 }
 
-/* ===== 售后完成态(图 B 部,店主 2026-08-11 确认)=====
-   状态机:待处理 pending → 处理中 processing → 已解决 resolved / 已关闭 closed。
-   状态由后端唯一持有,三端(员工端/网页端/顾客端)读同一份(B⓪);
-   时间线 append-only,每条带时间+操作人(B④);涉钱零新路径(B②);原单快照不动(B③)。 */
-const AFTER_SALES_STATUS_TEXT = { pending: '待处理', processing: '处理中', resolved: '已解决', closed: '已关闭' }
-
-function afterSalesState(row) {
-  const tid = row.tenant_id || currentTenantId()
-  const tz = tenantTimezone(tid)
-  const stamp = (at) => {
-    if (!at) return ''
-    const p = localParts(new Date(at), tz)
-    return `${p.date.slice(5)} ${p.time.slice(0, 5)}`
-  }
-  const status = row.after_sales_status || 'pending'   // 存量售后单没写过状态 = 待处理
-  const events = db.prepare('SELECT * FROM after_sales_events WHERE booking_id = ? ORDER BY created_at ASC').all(row.id)
-  // 批③首件 B5:结案后可再次发起(重开)——发起原因取**当前这轮**(最近一次转入);历史轮留痕不丢(append-only)
-  const hist = db.prepare("SELECT note, created_at FROM booking_status_history WHERE booking_id = ? AND to_status = 'AFTER_SALES' ORDER BY created_at DESC, rowid DESC LIMIT 1").get(row.id)
-  const timeline = []
-  if (!events.some((e) => e.kind === 'open')) {
-    timeline.push({ at: stamp((hist && hist.created_at) || row.updated_at), kind: 'open', text: (hist && hist.note) || '顾客发起售后', actor: '顾客' })
-  }
-  for (const e of events) timeline.push({ at: stamp(e.created_at), kind: e.kind, text: e.text || '', actor: e.actor_name || '', relatedCode: e.related_code || '' })
-  return {
-    status,
-    statusText: AFTER_SALES_STATUS_TEXT[status] || status,
-    reason: (hist && hist.note) || '',
-    timeline,
-    resultText: row.after_sales_result || ''
-  }
-}
-
-// 顾客端三步卡(既有 D3 设计)由真实状态机驱动 —— 同一个事实三端说同一句话
-function afterSalesProgress(row) {
-  const s = afterSalesState(row)
-  const raised = s.timeline[0] || {}
-  const progresses = s.timeline.filter((e) => e.kind === 'progress')
-  const lastProgress = progresses[progresses.length - 1]
-  const closer = s.timeline.filter((e) => e.kind === 'resolve' || e.kind === 'close').pop()
-  const terminal = s.status === 'resolved' || s.status === 'closed'
-  return {
-    title: s.statusText === '待处理' || s.statusText === '处理中' ? '售后中' : `售后${s.statusText}`,
-    status: s.status,
-    statusText: s.statusText,
-    reason: s.reason,
-    steps: [
-      { key: 'raised', label: '发起售后(联系客服)', at: raised.at || '', done: true },
-      {
-        key: 'following',
-        label: lastProgress ? `门店跟进:${lastProgress.text}` : '已转人工,门店跟进中',
-        at: lastProgress ? lastProgress.at : (raised.at || ''),
-        done: true
-      },
-      {
-        key: 'result',
-        label: s.status === 'resolved'
-          ? `已解决:${s.resultText}`
-          : (s.status === 'closed' ? `已关闭${closer && closer.text ? `:${closer.text}` : ''}` : '处理结果(完成后显示说明)'),
-        at: terminal && closer ? closer.at : '—',
-        done: terminal
-      }
-    ],
-    timeline: s.timeline,
-    resultText: s.status === 'resolved' ? s.resultText : '',
-    footnote: terminal
-      ? '本单售后已完成;涉及退款的,退款凭据记在关联的更正单内。'
-      : '处理完成后此卡状态变「售后已解决」并显示结果说明;涉及退款的,退款凭据记在关联的更正单内。'
-  }
-}
+/* ===== 售后域已搬出到 ./after-sales.mjs(公约②「边改边拆」,2026-08-24)=====
+   这里只留装配:状态机与三步卡的实现在那个模块里,行为一字未改。 */
+const { afterSalesState, afterSalesProgress } = createAfterSales({ db, currentTenantId, tenantTimezone, localParts })
 
 function serializeUser(user, tenantId = DEFAULT_TENANT_ID) {
   if (!user) return null
@@ -7100,63 +7036,10 @@ function insertFinanceTransaction({ type, source = 'manual', category, tags = ''
   return db.prepare('SELECT * FROM finance_transactions WHERE id = ?').get(id)
 }
 
-function bookingIncomeCategory(booking) {
-  const service = booking.service_id ? getService(booking.service_id) : null
-  if (service?.type === 'LASH') return '服务收入-美睫'
-  if (service?.type === 'NAIL') return '服务收入-美甲'
-  return '服务收入-其他'
-}
+/* ===== 订单入账触点已搬出到 ./booking-income.mjs(公约②,2026-08-24)=====
+   终局 A 案(入账唯一路径=签署)就落在那个模块里,这里只留装配。 */
+const { bookingIncomeCategory, recordBookingIncome, reverseBookingIncome } = createBookingIncome({ db, getService, insertFinanceTransaction, localParts })
 
-// 订单完成 → 自动确认收入（按订单幂等：已有未被冲销的收入则跳过）
-function recordBookingIncome(booking, createdBy = 'system') {
-  if (!booking?.id || !booking.service_price_cents) return null
-  /* 🩹 D70 止血:幂等要认「签署收入」——只认 source='booking' 会让已签署入账的单再点一次
-     「已完成」按标价再记一笔(同一单两笔收入)。白名单只放这两个:爽约没收/守恒回填记的不是这单服务收入。
-     终局是 A 案(入账唯一路径=签署),详见 handoff/D70查明_订单动作按钮与售后态_2026-08-24.md */
-  const existing = db.prepare(`
-    SELECT t.* FROM finance_transactions t
-    WHERE t.booking_id = ? AND t.type = 'income' AND t.source IN ('booking', 'settlement')
-      AND NOT EXISTS (SELECT 1 FROM finance_transactions r WHERE r.reversal_of = t.id)
-    ORDER BY t.created_at DESC LIMIT 1
-  `).get(booking.id)
-  if (existing) return existing
-  return insertFinanceTransaction({
-    type: 'income',
-    source: 'booking',
-    category: bookingIncomeCategory(booking),
-    tags: booking.technician_id || '',
-    amountCents: booking.service_price_cents,
-    payChannel: 'in_store',
-    occurredOn: localParts(new Date()).date,
-    note: `订单 ${booking.public_code || booking.id} 完成自动入账`,
-    bookingId: booking.id,
-    createdBy
-  })
-}
-
-// 已入账订单被取消 → 自动红字冲销
-function reverseBookingIncome(bookingId, createdBy = 'system') {
-  const original = db.prepare(`
-    SELECT t.* FROM finance_transactions t
-    WHERE t.booking_id = ? AND t.source = 'booking'
-      AND NOT EXISTS (SELECT 1 FROM finance_transactions r WHERE r.reversal_of = t.id)
-    ORDER BY t.created_at DESC LIMIT 1
-  `).get(bookingId)
-  if (!original) return null
-  return insertFinanceTransaction({
-    type: original.type,
-    source: 'reversal',
-    category: original.category,
-    tags: original.tags,
-    amountCents: -original.amount_cents,
-    payChannel: original.pay_channel,
-    occurredOn: localParts(new Date()).date,
-    note: `冲销：${original.note || original.id}`,
-    bookingId,
-    reversalOf: original.id,
-    createdBy
-  })
-}
 
 // 固定支出规则：把到期未生成的支出补齐（幂等，可反复调用）
 function materializeRecurringTransactions() {

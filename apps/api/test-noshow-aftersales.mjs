@@ -1675,7 +1675,8 @@ const main = async () => {
                        而那取决于结算引擎走哪条腿(payIntent/余额/定金配置),把断言绑在那上面
                        等于换个 payIntent 就验了个寂寞;直接 INSERT 账本行又会撞 append-only 哈希链。
                        所以这里验判定条件本身 —— 改回旧写法(只认 source='booking')立刻红。 */
-                    const srvIncome = readFileSync(new URL('../../apps/api/local-server.mjs', import.meta.url).pathname, 'utf8')
+                    // 被测物已搬到 booking-income.mjs(公约② 边改边拆)——断言跟着被测物走,不留在旧文件里空验
+                    const srvIncome = readFileSync(new URL('../../apps/api/booking-income.mjs', import.meta.url).pathname, 'utf8')
                     // 只看 recordBookingIncome 这一个函数体 —— 冲销函数 reverseBookingIncome 里
                     // 找原始行时本来就该按 source='booking' 查,全文搜会误伤它(第一版判据就是这么红的)
                     const recFn = srvIncome.slice(srvIncome.indexOf('function recordBookingIncome'), srvIncome.indexOf('function reverseBookingIncome'))
@@ -1684,6 +1685,11 @@ const main = async () => {
                       && !/t\.source = 'booking'\s*\n/.test(recFn))
                     // 验 SQL 里那份 source 白名单本身(注释里会提到 deposit_disposal,全文搜又会误伤 —— 判据要落在被测物上)
                     const srcList = (recFn.match(/t\.source IN \(([^)]*)\)/) || [, ''])[1].replace(/['\s]/g, '').split(',').filter(Boolean)
+                    /* 公约② 护栏:搬出去的东西不许在旧文件里留一份 —— "同一件事两个家"比不拆更糟 */
+                    const srvMain = readFileSync(new URL('../../apps/api/local-server.mjs', import.meta.url).pathname, 'utf8')
+                    check('㋗ 搬出后旧文件零残留实现(售后域与入账触点只有一个家)',
+                      !/^function (recordBookingIncome|reverseBookingIncome|bookingIncomeCategory|afterSalesState|afterSalesProgress)\b/m.test(srvMain)
+                      && srvMain.includes("createAfterSales({ db") && srvMain.includes('createBookingIncome({ db'))
                     check('㋗ 白名单只认 booking 与 settlement(爽约没收/守恒回填不算"这单服务收入已记过")',
                       srcList.length === 2 && srcList.includes('booking') && srcList.includes('settlement'), JSON.stringify(srcList))
                   }
