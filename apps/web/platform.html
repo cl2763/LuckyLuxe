@@ -121,6 +121,11 @@
           <select id="mPlan"><option value="free">免费版 ¥0</option><option value="single" selected>单店版 ¥1,380/年</option><option value="studio">工作室版 ¥2,980/年</option><option value="chain">连锁版 ¥6,800/年起</option><option value="custom">定制版(面议)</option></select>
           <select id="mTerm"><option value="year" selected>首期:年付(到期=今天+1年)</option><option value="month">首期:月付(+1月)</option><option value="trial30">试用 30 天(交付调试期)</option></select>
           <input id="mId" placeholder="租户id(选填)" style="width:160px">
+          <!-- D73(店主 08-24):演示店归属改**显式勾选**,不再看 id 前缀。
+               勾了=这家店的账本可以整体重置(演示需要);不勾=真商户,账本受禁删禁改律保护。 -->
+          <label style="display:inline-flex;align-items:center;gap:6px;white-space:nowrap">
+            <input id="mIsDemo" type="checkbox"> 这是演示店(账本可重置,不受只追加律保护)
+          </label>
           <button class="p" onclick="createTenant()">创建(建店 + 老板账号)</button>
         </div>
         <div id="credBox" class="cred hidden"></div>
@@ -518,10 +523,12 @@ async function toggleTenant(id){if(!confirm('确认切换营业状态?停用后�
 async function createTenant(){
   const name=$('mName').value.trim();if(!name){toast('商家名称必填');return}
   try{
-    const d=await api('/platform/tenants',{method:'POST',body:JSON.stringify({name,city:$('mCity').value.trim(),plan:$('mPlan').value,initialTerm:$('mTerm').value,id:$('mId').value.trim()})})
+    const isDemo=$('mIsDemo').checked
+    if(isDemo&&!confirm('确认建成【演示店】?\n它的账本不受"只追加"保护(可整体重置),对外不能拿它说"账本不可篡改"。')){return}
+    const d=await api('/platform/tenants',{method:'POST',body:JSON.stringify({name,city:$('mCity').value.trim(),plan:$('mPlan').value,initialTerm:$('mTerm').value,id:$('mId').value.trim(),isDemo})})
     $('credBox').classList.remove('hidden')
     $('credBox').innerHTML=`✅ <b>${esc(d.tenant.name)}</b>(${esc(d.tenant.id)})已创建,订阅到期日 <b>${esc(String(d.tenant.planExpiresAt||'').slice(0,10))}</b>(套餐计费页可改)<br>老板账号:<b>${esc(d.owner.username)}</b> 初始密码:<b>${esc(d.owner.initialPassword)}</b>(只显示一次;商家控制台开放前账号暂不可登录)<br>店码 scene:<b>${esc(d.shopEntry.scene)}</b> · <a href="javascript:void(0)" onclick="goConfig('${esc(d.tenant.id)}')">→ 去替商家配置资料</a>`
-    $('mName').value=$('mCity').value=$('mId').value=''
+    $('mName').value=$('mCity').value=$('mId').value='';$('mIsDemo').checked=false
     loadTenants()
   }catch(e){toast(e.message)}
 }

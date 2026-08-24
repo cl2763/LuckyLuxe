@@ -11,7 +11,7 @@ import { pngSize, rasterBackend, svgToPng } from './svg-raster.mjs'
 import { inkToPng } from './ink-raster.mjs'
 import { createAfterSales } from './after-sales.mjs'        // 售后域(公约②:边改边拆)
 import { createOrderBadges, bookingSourceText } from './order-badges.mjs'
-import { installLedgerGuards, backfillTenantKind, LEDGER_TRIGGER_NAMES } from './ledger-guards.mjs'  // 账本禁删/禁改律唯一出口(D72)      // 顾客端订单表达域(同上)
+import { installLedgerGuards, backfillTenantKindOnce, LEDGER_TRIGGER_NAMES } from './ledger-guards.mjs'  // 账本禁删/禁改律唯一出口(D72)      // 顾客端订单表达域(同上)
 import { createBookingIncome } from './booking-income.mjs'  // 订单入账触点(同上)
 import { createBookingState, isAfterSalesOpen, shouldAutoComplete } from './booking-state.mjs'  // 订单状态机(D70 合同,唯一实现)   // 笔迹图:纯 JS 画折线,**透明底**(单据白纸走 svgToPng,两条路不混)
 import { analyzeReferenceImage, createBookingSummary, createCustomerInsight, createCustomerServiceReply, createDailyBrief, createRecallMessages, createServiceNoteInsights, createSocialCopy, extractKbEntriesFromDocument, polishStaffQuoteReply } from './ai-utils.mjs'
@@ -11814,17 +11814,18 @@ async function route(req, res) {
     // 默认不返回演示门店(顾客看不到);店主在小程序里开「演示模式」时带 ?include=demo 才返回。
     const includeDemo = String(query.include || '') === 'demo' ? 1 : 0
     const rows = db.prepare(`
-      SELECT t.id, t.name AS tenant_name, s.name AS store_name, s.address, s.phone
+      SELECT t.id, t.name AS tenant_name, t.kind, s.name AS store_name, s.address, s.phone
       FROM tenants t
       JOIN stores s ON s.tenant_id = t.id AND s.is_active = 1
-      WHERE t.status = 'active' AND (t.id NOT LIKE 'demo-%' OR ? = 1)
+      -- D73:演示店按**归属列**认(kind='demo'),不再按 id 前缀猜
+      WHERE t.status = 'active' AND (t.kind <> 'demo' OR ? = 1)
       GROUP BY t.id
       ORDER BY t.name ASC
     `).all(includeDemo)
     return json(res, 200, {
       shops: rows.map((r) => ({
         tenantId: r.id, name: r.tenant_name || r.store_name, storeName: r.store_name,
-        address: r.address || '', phone: r.phone || '', isDemo: String(r.id).startsWith('demo-')
+        address: r.address || '', phone: r.phone || '', isDemo: r.kind === 'demo', kind: r.kind || 'real'
       }))
     })
   }
@@ -13808,11 +13809,14 @@ async function route(req, res) {
     else if (initialTerm === 'month') expiry.setMonth(expiry.getMonth() + 1)
     else expiry.setFullYear(expiry.getFullYear() + 1)
     const planExpiresAt = iso(expiry)
-    /* 🔴 D72(店主 08-24):**新建租户的 kind 在建的那一刻就定死**,不再靠名字前缀事后猜。
-       判据用的是"这台服务往哪个库写"(与测试护栏同一个 dataScope):
-       测试库上建的店 = test,演示登录环境建的 = demo,其余 = real。
-       这条是"80 个空壳能在真库里攒起来"的根治:以后新残留自带标签,一句 SQL 就能筛干净。 */
-    const tenantKind = DATA_SCOPE === 'test' ? 'test' : (String(id).startsWith('demo-') ? 'demo' : 'real')
+    /* 🔴 D73(店主 08-24 裁,改 D72 的做法):**归属不许再看 id 前缀。**
+       原来写的是 `id.startsWith('demo-') ? 'demo' : 'real'` —— 那意味着以后在生产开的演示店
+       (都叫 demo-*)一建出来就**不受禁删禁改律**,而演示店恰恰是准商户唯一亲眼看到的那家。
+       现在三条判据,一条都不靠名字:
+         · 测试库上建的(DATA_SCOPE='test')→ test;
+         · 平台后台**显式勾选**「这是演示店」(body.isDemo)→ demo;
+         · 其余一律 real(默认最严,fail-closed)。 */
+    const tenantKind = DATA_SCOPE === 'test' ? 'test' : (body.isDemo === true ? 'demo' : 'real')
     db.prepare("INSERT INTO tenants (id, name, plan, status, plan_expires_at, kind) VALUES (?, ?, ?, 'active', ?, ?)").run(id, name.slice(0, 60), plan, planExpiresAt, tenantKind)
     db.prepare('INSERT INTO stores (id, name, address, phone, timezone, currency, is_active, tenant_id) VALUES (?, ?, ?, ?, ?, ?, 1, ?)')
       .run(`store-${id}`, name.slice(0, 60), String(body.city || '').slice(0, 80), String(body.phone || '').slice(0, 30),
@@ -17827,7 +17831,16 @@ try {
 } catch (error) {
   if (!String(error.message || '').includes('duplicate column')) throw error
 }
-backfillTenantKind(db)          // 幂等:只动还是默认值的行,店主改过的归属不覆盖
+/* D73(店主 08-24):归属回填改**一次性迁移** —— 跑过一次记一笔,以后启动不再扫;
+   生产库一律不跑(那边的归属只能由平台后台显式设置,不许靠名字猜)。 */
+{
+  const r = backfillTenantKindOnce(db, {
+    isProduction: IS_PRODUCTION,
+    markDone: (key) => db.prepare("INSERT INTO tenant_settings (tenant_id, key, value, updated_at) VALUES ('__system__', ?, ?, ?) ON CONFLICT(tenant_id, key) DO UPDATE SET value = excluded.value, updated_at = excluded.updated_at")
+      .run(key, iso(new Date()), iso(new Date()))
+  })
+  if (!r.skipped && (r.demo || r.test)) console.log(`[migrate] D73 归属回填一次性完成:demo ${r.demo} / test ${r.test}`)
+}
 // installLedgerGuards 挪到所有建表跑完之后(全新库这里还没有 settlements 表,装到一半会崩)
 
 // 统一身份回填:早期用户只有 users 表字段、没有 user_identities 记录,补齐映射。

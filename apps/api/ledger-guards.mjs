@@ -92,15 +92,33 @@ export function installLedgerGuards(db) {
   db.exec(sql)
 }
 
-/* 回填 tenants.kind:归属名单店主 08-24 已逐行核过(5 保护 + 80 目标)。
-   幂等:只动 kind 还是默认值 'real' 的行;认过的不再改(店主改过的归属不许被脚本盖回去)。
+/* 🔴 D73(店主 2026-08-24 裁,D72 的复发登记):**判据搬了家,判据的输入没搬。**
 
-   ⚠️ 这份前缀表是**历史归属**用的(存量 80 个空壳是按套件前缀建的),不是长期判据 ——
-   以后新建的测试租户在测试库上建店时直接落 kind='test'(见 local-server 建店路由)。 */
+   D72 把触发器的判据从「租户名字像不像 demo-」改成 tenants.kind ——
+   可 kind 本身当时还是**按名字算**的,而且挂在**每次启动**跑。生产上会真出两件事:
+     ① 以后开的演示店都叫 demo-* → 建店那刻 kind='demo' → 它的账本从此不受禁删禁改律,
+        而演示店恰恰是准商户唯一能亲眼看到的那家;
+     ② 真商户的租户 id 万一撞上 p12/r3s/dbl/nsas/authx/diag 这些头 → 启动时被**静默改成 test**,
+        真账本失去保护,还直接落进清理脚本的目标集。
+
+   修法四条(店主定):
+     ① 回填改**一次性迁移**,不许挂启动路径(跑过就记账,不再每次启动扫);
+     ② 建店的 demo 归属改**平台后台显式勾选**,不看 id 前缀;
+     ③ **生产 scope 禁止启动期改 kind**(生产上这个函数直接不干活);
+     ④ 补一条会红的断言(㋜)。
+
+   这份前缀表只在**那一次迁移**里用过(存量 80 个空壳是按套件前缀建的,店主逐行核过),
+   之后永久退役 —— 留在这里是为了让迁移可复核,不是给运行期用的。 */
 const LEGACY_TEST_PREFIX = ['nsas', 'dbl', 'p2dc', 'p2sc', 'p2sal', 'p2ft', 'p12', 'p25', 'r3s', 'r2s', 'authx', 'diag', 'p0hy', 'p2fl']
 const LEGACY_DEMO_IDS = ['demo-ai', 'demo-basic', 'hoptest-demo2']
+const KIND_BACKFILL_KEY = 'tenant_kind_backfill_v1'
 
-export function backfillTenantKind(db) {
+/* 一次性迁移:跑过一次就在 tenant_settings 里记一笔,以后启动不再扫。
+   生产(scope='live' 且 IS_PRODUCTION)一律不跑 —— 生产库里的归属只能由平台后台显式设置。 */
+export function backfillTenantKindOnce(db, { isProduction = false, markDone } = {}) {
+  if (isProduction) return { skipped: 'production', demo: 0, test: 0 }
+  const done = db.prepare("SELECT value FROM tenant_settings WHERE tenant_id = '__system__' AND key = ?").get(KIND_BACKFILL_KEY)
+  if (done) return { skipped: 'already-done', demo: 0, test: 0 }
   const rows = db.prepare("SELECT id, kind FROM tenants WHERE COALESCE(kind, 'real') = 'real'").all()
   let demo = 0
   let test = 0
@@ -112,5 +130,8 @@ export function backfillTenantKind(db) {
       db.prepare("UPDATE tenants SET kind = 'test' WHERE id = ?").run(r.id); test += 1
     }
   }
-  return { demo, test }
+  if (typeof markDone === 'function') markDone(KIND_BACKFILL_KEY)
+  return { skipped: '', demo, test }
 }
+
+export const TENANT_KIND_BACKFILL_KEY = KIND_BACKFILL_KEY

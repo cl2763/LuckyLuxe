@@ -116,12 +116,28 @@ if (RUN_DIRECT) {
     process.exit(0)
   }
 
-  // —— ① 先备份(真删前置,不备份不执行)
+  /* 小件①(店主 08-24 提):**先看有没有目标,再备份** —— 0 目标照样拷 11MB 是白花力气。 */
+  if (!targets.length) {
+    console.log('\n没有 kind=\'test\' 的租户,无事可做(没有备份,没有事务)。')
+    db.close()
+    process.exit(0)
+  }
+
+  // —— ① 备份(真删前置,不备份不执行)
   const backupDir = join(dirname(DB_PATH), 'backups')
   mkdirSync(backupDir, { recursive: true })
   const stamp = new Date().toISOString().replace(/[-:T]/g, '').slice(0, 14)
-  const backupPath = join(backupDir, `lucky-luxe-${stamp}-清理测试租户前.sqlite`)
-  if (existsSync(backupPath)) throw new Error(`备份文件已存在,换个时间戳再来:${backupPath}`)
+  /* 小件②:同一秒重跑会撞文件名。原来直接 throw = 裸栈退出,看着像脚本坏了。
+     现在给人话 + 自动加序号,退不了就明确告诉你怎么办。 */
+  let backupPath = join(backupDir, `lucky-luxe-${stamp}-清理测试租户前.sqlite`)
+  for (let n = 2; existsSync(backupPath) && n <= 20; n += 1) {
+    backupPath = join(backupDir, `lucky-luxe-${stamp}-${n}-清理测试租户前.sqlite`)
+  }
+  if (existsSync(backupPath)) {
+    console.error(`\n备份文件名连撞 20 次(同一秒跑了太多遍):${backupPath}\n等一秒再来,或先清理 ${backupDir} 里的同秒备份。`)
+    db.close()
+    process.exit(1)
+  }
   copyFileSync(DB_PATH, backupPath)
   console.log(`\n① 已备份:${backupPath}`)
 

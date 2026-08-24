@@ -2961,6 +2961,42 @@ const main = async () => {
            这里是真调用真抛错,缺陷存在时它必红。 */
       }
 
+      /* ===== ㋜ D73:判据的**输入**也不许靠名字(店主 08-24 裁,D72 的复发登记)=====
+         D72 把触发器判据改成 tenants.kind,可 kind 当时还是按前缀算、还挂在每次启动跑。
+         生产上的两个真后果:①以后开的演示店(叫 demo-*)一建出来账本就不受律保护;
+         ②真商户 id 撞上 p12/r3s/dbl/nsas 这些头 → 启动时被静默改成 test,直接落进清理目标集。 */
+      {
+        const guardsD73 = readFileSync(join(ROOT42, 'apps/api/ledger-guards.mjs'), 'utf8')
+        const platformHtml = readFileSync(join(ROOT42, 'apps/web/platform.html'), 'utf8')
+        /* 判据只看**那一行赋值语句**,不扫全文 —— 我已经因为"注释里写了旧写法"把自己的负向判据
+           误伤过三次(㋛②/㋛⑤/这条)。取到代码行本身再判,注释怎么写都影响不了它。 */
+        const kindLine = (srv.match(/^\s*const tenantKind = .*$/m) || [''])[0]
+        check('㋜① 建店归属零名字判据:不看 id 前缀,改看平台后台显式勾选(isDemo)',
+          kindLine.includes('body.isDemo === true') && !kindLine.includes('startsWith')
+          && platformHtml.includes('id="mIsDemo"'))
+        check('㋜② 回填改一次性迁移:不再挂每次启动,跑过记一笔(tenant_kind_backfill_v1)',
+          guardsD73.includes('export function backfillTenantKindOnce') && guardsD73.includes("tenant_kind_backfill_v1")
+          && !/export function backfillTenantKind\b/.test(guardsD73))
+        check('㋜③ 生产 scope 禁止启动期改 kind(生产归属只能平台后台显式设置)',
+          guardsD73.includes("if (isProduction) return { skipped: 'production'") && srv.includes('isProduction: IS_PRODUCTION'))
+        /* 会红的断言(判据自证):真调用 —— 传 isProduction 必须一行都不动;
+           前缀命中的租户在**非生产**下才归 test,而且只归一次(第二次调用为 already-done)。 */
+        const { backfillTenantKindOnce } = await import(new URL('../../apps/api/ledger-guards.mjs', import.meta.url))
+        const probe = new DatabaseSync(':memory:')
+        probe.exec("CREATE TABLE tenants (id TEXT PRIMARY KEY, kind TEXT NOT NULL DEFAULT 'real')")
+        probe.exec("CREATE TABLE tenant_settings (tenant_id TEXT, key TEXT, value TEXT, updated_at TEXT, PRIMARY KEY (tenant_id, key))")
+        probe.exec("INSERT INTO tenants (id) VALUES ('p12-realshop'), ('demo-x'), ('lucky-luxe')")
+        const prod = backfillTenantKindOnce(probe, { isProduction: true })
+        const kindOf = (id) => probe.prepare('SELECT kind FROM tenants WHERE id = ?').get(id).kind
+        check('㋜④ 会红的断言:生产上跑回填=一行不动(真商户 id 撞上套件前缀也不会被改成 test)',
+          prod.skipped === 'production' && kindOf('p12-realshop') === 'real' && kindOf('demo-x') === 'real')
+        const dev1 = backfillTenantKindOnce(probe, { isProduction: false, markDone: (k) => probe.prepare("INSERT INTO tenant_settings (tenant_id, key, value, updated_at) VALUES ('__system__', ?, '1', '') ").run(k) })
+        const dev2 = backfillTenantKindOnce(probe, { isProduction: false })
+        check('㋜⑤ 非生产只跑一次:第二次调用直接 already-done(不再每次启动扫全表)',
+          dev1.skipped === '' && dev2.skipped === 'already-done' && kindOf('lucky-luxe') === 'real')
+        probe.close()
+      }
+
       /* ===== ㋚ D71 零编造(店主 08-24 立案)=====
          类定义(按机制不按长相):**用哈希 / 随机 / 取模 / 写死权重造出来的、给人看的"事实"**。
          id / token / 单号 / AI 随机种子不算(那是标识符,不是对事实的陈述)。 */
