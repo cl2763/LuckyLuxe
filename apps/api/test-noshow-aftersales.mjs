@@ -2480,7 +2480,9 @@ const main = async () => {
         meWx2.includes('bindtap="goPoints"') && meWx2.includes('bindtap="goStored"') && meWx2.includes('bindtap="goCardPack"') && !meWx2.includes('bindtap="goAssets"'))
       check('㋐ 勘误 等级徽章恢复直达权益页(黑卡不变哑)', meWx2.includes('class="level-pill" bindtap="goMemberBenefits"'))
       check('㋐ 勘误 网页同构:菜单格改名卡包+会员卡三块可点(券块改名卡包)',
-        custWeb.includes("'卡包' : 'Card pack', '/assets/images/nail-luxe.jpg', 'cardPack'") && custWeb.includes('data-me-target="pointsMall" type="button"><strong>${user.points}'))
+        custWeb.includes("'卡包' : 'Card pack', '/assets/images/nail-luxe.jpg', 'cardPack'")
+        // D71:积分那格的取值改成 statNum(拿不到真值显示「—」而不是把 undefined 打上屏),入口本身不变
+        && custWeb.includes('data-me-target="pointsMall" type="button"><strong>${statNum(user.points)}'))
       /* 裁定B:路径名与「零支付成功」红线相撞——payment-success 已改 booking-done,引用零残留 */
       const appJson = readFileSync(join(ROOT42, 'miniprogram/app.json'), 'utf8')
       const checkoutJs = readFileSync(join(ROOT42, 'miniprogram/pages/checkout/index.js'), 'utf8')
@@ -2909,6 +2911,23 @@ const main = async () => {
             missing.length === 0, missing.join(' | '))
         }
       }
+      /* ===== ㋚ D71 零编造(店主 08-24 立案)=====
+         类定义(按机制不按长相):**用哈希 / 随机 / 取模 / 写死权重造出来的、给人看的"事实"**。
+         id / token / 单号 / AI 随机种子不算(那是标识符,不是对事实的陈述)。 */
+      const orderStateD71 = readFileSync(join(ROOT42, 'apps/web/order-state.js'), 'utf8')
+      const badgesSrcD71 = readFileSync(join(ROOT42, 'apps/api/order-badges.mjs'), 'utf8')
+      check('㋚① 来源渠道不再编造:前端零哈希,句子读后端 sourceText',
+        !/hashText/.test(orderStateD71) && orderStateD71.includes('booking.sourceText')
+        && badgesSrcD71.includes("if (!v) return '未记录来源'"))
+      check('㋚② 编造原料已退役:假渠道表 sourceChannels / hashText 全仓零残留',
+        !/function sourceChannels\(/.test(adminJs) && !/function hashText\(/.test(adminJs)
+        && !/\['美团', '大众点评'/.test(adminJs))
+      check('㋚③ 首页「渠道来源」卡改真数:按订单真实来源分组,不再写死权重',
+        !/const weights = \[0\.18/.test(adminJs) && adminJs.includes("booking.sourceText || '未记录来源'"))
+      check('㋚④ 后端来源句零回落:没值说「未记录来源」,不认识的值原样透出(不翻译成别的渠道)',
+        badgesSrcD71.includes('return SOURCE_TEXT[v] || v'))
+      check('㋚⑤ 顾客端坏值不上屏:undefined/NaN 一律「—」(statNum 出口在场)',
+        custWebSrc.includes('function statNum(value)') && custWebSrc.includes('statNum(user.points)'))
       /* ===== ㋙ wiring(裁 A/B/C 的护栏,店主 08-24)===== */
       const guardSrc = readFileSync(join(ROOT42, 'apps/api/test-guard.mjs'), 'utf8')
       const suiteFiles = readdirSync(join(ROOT42, 'apps/api')).filter((f) => /^test-.*\.mjs$/.test(f) && f !== 'test-guard.mjs')

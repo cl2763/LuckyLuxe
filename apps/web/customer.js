@@ -29,6 +29,13 @@ function money(cents, decimals) {
 // 已经是「元」的数字(会员门槛、定金这类文案里是元不是分)
 function moneyY(amount) { return `${curPrefix()}${Number(amount || 0)}` }
 
+/* 🔴 D71 同族(08-24 L1 走查抓到):`${user.points}` 这类直插 —— 后端没给这个字段时,
+   屏幕上原样打出 **undefined** 给顾客看(本地缓存的 user 是老版本时就会发生)。
+   零回落律的另一面:拿不到真值不许回落到别的字段,**也不许把坏值当值显示**,一律「—」。 */
+function statNum(value) {
+  return value === undefined || value === null || Number.isNaN(Number(value)) ? '—' : String(value)
+}
+
 const copy = {
   zh: {
     registerTitle: '创建账号',
@@ -1788,9 +1795,9 @@ function renderMe() {
         <!-- 勘误(店主 08-23):会员卡三块=快捷区,**可点直达**(与小程序黑卡同构);
              券块改名「卡包」(券+次卡同页同名);网页暂无独立储值页,储值块落卡包的储值行 -->
         <div class="member-assets">
-          <button data-me-target="pointsMall" type="button"><strong>${user.points}</strong><span>${t('points')}</span>${user.redeemablePrizeText ? `<em class="asset-hint">${escapeHtml(user.redeemablePrizeText)}</em>` : ''}</button>
+          <button data-me-target="pointsMall" type="button"><strong>${statNum(user.points)}</strong><span>${t('points')}</span>${user.redeemablePrizeText ? `<em class="asset-hint">${escapeHtml(user.redeemablePrizeText)}</em>` : ''}</button>
           <button data-me-target="cardPack" type="button"><strong>${state.cardPack ? state.cardPack.badgeCount : '—'}</strong><span>${state.lang === 'zh' ? '卡包' : 'Card pack'}</span></button>
-          <button data-me-target="cardPack" type="button"><strong>${money(user.balanceCents)}</strong><span>${t('balance')}</span></button>
+          <button data-me-target="cardPack" type="button"><strong>${user.balanceCents === undefined || user.balanceCents === null ? '—' : money(user.balanceCents)}</strong><span>${t('balance')}</span></button>
         </div>
         <div class="member-extra web-member-extra">
           <div>${t('totalSpent')} ${money(user.totalSpentCents || 0)}</div>

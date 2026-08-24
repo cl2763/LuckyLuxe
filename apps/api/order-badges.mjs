@@ -4,6 +4,33 @@
 
    这块干的事只有一件:同一张单在**列表 / 详情 / 两端**要说同一句话,
    所以句子在这里唯一成型,前端只渲染不拼串(「后端出句」)。 */
+/* 🔴 D71(店主 2026-08-24 立案):订单「来源渠道」的人话句 —— **后端唯一出口,零编造**。
+
+   立案背景:网页端原来这么写(apps/web 里那份 bookingSource):
+     没有真来源 → `channels[hashText(publicCode) % channels.length]`
+   —— 按订单号哈希**编一个**「美团 / 小红书 / 抖音」出来给店主看。
+   店主可能据此判断渠道效果做投放决策,危害比一般假数更重(假数回落第五例)。
+
+   现在:有真值 → 有就说(库里存的中文渠道名直接用;机器码翻成人话);
+         没真值 → 「未记录来源」。**一律不编。** */
+const SOURCE_TEXT = {
+  owner_direct: '老板直接排单',
+  settlement_instant: '开单即时创建',
+  miniapp: '小程序自助',
+  wechat_miniprogram: '小程序自助',
+  web: '网页自助',
+  ai_booking_draft: 'AI 助手代下',
+  admin_booking_draft: '后台代下',
+  'demo-seed': '演示数据',
+  demo: '演示数据'
+}
+
+export function bookingSourceText(raw) {
+  const v = String(raw || '').trim()
+  if (!v) return '未记录来源'          // 零回落律:拿不到真值就如实说,不许拿别的字段顶上
+  return SOURCE_TEXT[v] || v          // 不认识的值原样透出(那也是真值),就是不编
+}
+
 export function createOrderBadges({ db, bookingState, afterSalesProgress, amendmentShape, formatMoneyCents, groupMainItemCount, groupFirstMainName }) {
   function customerOrderBadges(row) {
     const stl = db.prepare("SELECT * FROM settlements WHERE booking_id = ? AND status = 'signed' ORDER BY signed_at DESC LIMIT 1").get(row.id)

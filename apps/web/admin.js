@@ -1,5 +1,5 @@
 // 构建号:每次交付递增。侧栏可见,排查"改了没生效"时先对版本。
-const ADMIN_BUILD = '20260824f-abc'
+const ADMIN_BUILD = '20260824g-d71'
 let pricingState = { module: 'storefront', tab: 'items', categories: [], items: [], rules: {}, editing: null, preview: null, storefrontPicker: false }
 console.log(`[admin] build ${ADMIN_BUILD}`)
 
@@ -1500,15 +1500,9 @@ function retentionStats() {
   }
 }
 
-function sourceChannels() {
-  return owner.lang === 'zh'
-    ? ['美团', '大众点评', '小红书', '抖音', '微信', '到店转介绍']
-    : ['Meituan', 'Dianping', 'RED', 'Douyin', 'WeChat', 'Referral']
-}
-
-function hashText(value = '') {
-  return [...String(value)].reduce((total, char) => total + char.charCodeAt(0), 0)
-}
+/* D71(店主 08-24):这两个件是「按订单号哈希从一张假渠道表里挑一个」的原料 ——
+   随 bookingSource 改成后端出句一起退役,全仓零使用方,直接删。
+   留着就等于把编造能力摆在手边,下次谁手一滑又编一个出来。 */
 
 function renderAdminPages() {
   els.sidebarDashboard.classList.toggle('hidden', !isOwnerRole())
@@ -1628,7 +1622,8 @@ function renderDashboard() {
         </div>
         <span class="dashboard-card-cue">${t('viewDetails')}</span>
       </div>
-      ${channelRows.map((channel) => chartBar(channel.name, channel.count, maxChannel)).join('')}
+      ${channelRows.length ? channelRows.map((channel) => chartBar(channel.name, channel.count, maxChannel)).join('')
+        : `<p class="subtle">${owner.lang === 'zh' ? '还没有订单,暂无来源数据' : 'No bookings yet'}</p>`}
     </button>
     <button class="dashboard-chart-card card" data-dashboard-detail="retention" type="button">
       <div class="section-row compact-row">
@@ -4800,16 +4795,20 @@ function chartBar(label, value, max, forcedPercent) {
   `
 }
 
+/* 🔴 D71 同族(08-24 扫出来的,比立案那处更重):首页「渠道来源」这张卡原来是**整张编的** ——
+   五个渠道名写死,占比写死 0.18/0.16/0.28/0.14/0.24,乘以顾客数当条形图给店主看。
+   店主看着这张图判断"小红书占 28%,要不要加投" —— 数字跟真实来源一点关系都没有。
+   现在:按订单上**真实记录的来源**(后端 sourceText 唯一出口)分组计数,没记录的单独成一条
+   「未记录来源」,一单不漏、一单不编;没有单就返回空,卡片出空态。 */
 function trafficChannels() {
-  const total = Math.max(owner.customers.length, owner.bookings.length, 10)
-  const channels = owner.lang === 'zh'
-    ? ['大众点评', '美团', '小红书', '抖音', '微信']
-    : ['Dianping', 'Meituan', 'RED', 'Douyin', 'WeChat']
-  const weights = [0.18, 0.16, 0.28, 0.14, 0.24]
-  return channels.map((name, index) => ({
-    name,
-    count: Math.max(1, Math.round(total * weights[index]))
-  }))
+  const counts = (owner.bookings || []).reduce((groups, booking) => {
+    const name = booking.sourceText || '未记录来源'
+    groups[name] = (groups[name] || 0) + 1
+    return groups
+  }, {})
+  return Object.entries(counts)
+    .sort((a, b) => b[1] - a[1])
+    .map(([name, count]) => ({ name, count }))
 }
 
 function technicianPerformanceRows() {

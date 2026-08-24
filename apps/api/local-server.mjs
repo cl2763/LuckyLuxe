@@ -10,7 +10,7 @@ import os from 'node:os'   // 真机调试:开发机局域网 IP 探测(启动�
 import { pngSize, rasterBackend, svgToPng } from './svg-raster.mjs'
 import { inkToPng } from './ink-raster.mjs'
 import { createAfterSales } from './after-sales.mjs'        // 售后域(公约②:边改边拆)
-import { createOrderBadges } from './order-badges.mjs'      // 顾客端订单表达域(同上)
+import { createOrderBadges, bookingSourceText } from './order-badges.mjs'      // 顾客端订单表达域(同上)
 import { createBookingIncome } from './booking-income.mjs'  // 订单入账触点(同上)
 import { createBookingState, isAfterSalesOpen, shouldAutoComplete } from './booking-state.mjs'  // 订单状态机(D70 合同,唯一实现)   // 笔迹图:纯 JS 画折线,**透明底**(单据白纸走 svgToPng,两条路不混)
 import { analyzeReferenceImage, createBookingSummary, createCustomerInsight, createCustomerServiceReply, createDailyBrief, createRecallMessages, createServiceNoteInsights, createSocialCopy, extractKbEntriesFromDocument, polishStaffQuoteReply } from './ai-utils.mjs'
@@ -5578,6 +5578,8 @@ function serializeBooking(row, lang = 'zh') {
     galleryStatus: row.gallery_status || 'draft',
     galleryLockedAt: row.gallery_locked_at,
     sourceChannel: row.source_channel || null,
+    // D71:来源的**人话句**后端唯一给(拿不到真值=「未记录来源」,前端不许再哈希编一个)
+    sourceText: bookingSourceText(row.source_channel),
     notes: row.notes,
     servicePrice: cents(row.service_price_cents),
     servicePriceCents: row.service_price_cents,
@@ -16318,12 +16320,9 @@ async function route(req, res) {
       note: out.created ? '已记为定金预收(负债);签字时才会兑现。' : '这张预约已经标过了,没有重复记账。'
     })
   }
-  /* ===== 售后三步链(写进展/标记已解决/关闭)已按裁 B 收掉(店主 2026-08-24)=====
-     合同④:售后中唯一动作是「结束售后」。三个写入口的**留痕职责**没丢,挪到那个出口上:
-     点「结束售后」必须填处理结果(状态机 requiresNote),写 after_sales_events 一行(kind=resolve),
-     再落 after_sales_result —— 按钮守合同,过程守审计。
-     顾客侧撤回(/my/bookings/:id/after-sales/withdraw)是另一条线,不在此列,原样保留。
-     ⚠️ 这三条路由**整体下线**:留着等于留三个绕过合同的后门(前端不给按钮、接口还能打)。 */
+  /* 售后三步链(写进展/标记已解决/关闭)已按裁 B 整体下线(店主 2026-08-24;留着=三个绕过合同④ 的后门)。
+     留痕职责挪到唯一出口「结束售后」:必填处理结果 + 写 after_sales_events(kind=resolve)+ 落 result。
+     顾客侧撤回(/my/bookings/:id/after-sales/withdraw)是另一条线,原样保留。 */
   /* 爽约定金处置(图 A 部):老板二选一 —— retain 留存到客户档案 / forfeit 没收入账。
      A①:处置**仅老板**;A⑤:无收取记录=拒绝(helper 里断言)。 */
   if (req.method === 'POST' && path.startsWith('/admin/bookings/') && path.endsWith('/deposit-disposal')) {

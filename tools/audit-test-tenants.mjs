@@ -18,6 +18,8 @@ const SUITE_PREFIX = {
   nsas: 'test-noshow-aftersales', dbl: 'test-double-sheet', p2dc: 'test-daily-close',
   p2sc: 'test-schedule-v2', p2sal: 'test-salary-v2', p2ft: 'test-finance-trend',
   p12: 'test-pricing-model', p25: 'test-membership-config', r3s: 'test-settle-stress',
+  p0hy: 'test-tenant-hygiene', p2fl: 'test-finance-lock', r2s: 'test-settle-stress(压测)',
+  'tenant': 'test-tenant-isolation(tenant-iso-b)',
   authx: 'test-auth-surface', diag: '诊断脚本', hoptest: '五跳演示店(人工建,非套件)'
 }
 const guessSuite = (tid) => {

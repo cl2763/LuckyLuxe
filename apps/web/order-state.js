@@ -71,12 +71,10 @@ function bookingActionButtons(booking) {
     .join('')
 }
 
-/* 订单来源渠道(同域搬入,2026-08-24)。
-   ⚠️ 缺陷已登记(D71,报店主裁):没有真来源时,这里**按 publicCode 哈希编一个渠道名**给店主看 ——
-   属于「假数回落」同族(真值拿不到就该显示「—」)。本批只搬不改:改它会动店主看到的来源统计口径,
-   按纪律先报后改,不许悄悄发挥。 */
+/* 🔴 D71 已修(店主 08-24 立案):这里原来在没有真来源时**按订单号哈希编一个渠道名**
+   (美团/小红书/抖音…)给店主看 —— 店主可能据此判断渠道效果做投放决策。
+   现在句子由后端唯一给(order-badges.mjs 的 bookingSourceText):有真值说真值,没有就说「未记录来源」。
+   前端只渲染,零编造、零回落。 */
 function bookingSource(booking) {
-  if (booking.sourceChannel || booking.source || booking.channel) return booking.sourceChannel || booking.source || booking.channel
-  const channels = sourceChannels()
-  return channels[hashText(booking.publicCode || booking.id || booking.service?.name) % channels.length]
+  return booking.sourceText || '未记录来源'
 }
