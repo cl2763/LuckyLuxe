@@ -8,7 +8,7 @@
       <view>
         <text class="price">{{service.priceLabel}}</text>
       </view>
-      <view class="deposit">{{t.deposit}} {{cur.p}}{{cur.s}}{{service.depositAmount}}</view>
+      <view class="deposit">{{t.deposit}} {{service.depositAmount === null ? '—' : cur.p + cur.s + service.depositAmount}}</view>
     </view>
     <view class="price-boundary" wx:if="{{service.priceExplanation}}">
       <view class="price-boundary-title">{{lang === 'en' ? 'Pricing Guide' : '价格说明'}}</view>

@@ -22,7 +22,7 @@
                 <text>{{item.service.duration}}{{t.minutes}}</text>
               </view>
               <view class="cart-meta">
-                <text>{{t.deposit}} <text class="price">{{cur.p}}{{cur.s}}{{item.service.depositAmount}}</text></text>
+                <text>{{t.deposit}} <text class="price" wx:if="{{item.service.depositAmount !== null}}">{{cur.p}}{{cur.s}}{{item.service.depositAmount}}</text><text class="price" wx:else>—</text></text>
                 <text>{{t.servicePrice}} {{cur.p}}{{cur.s}}{{item.service.price}}</text>
               </view>
             </view>

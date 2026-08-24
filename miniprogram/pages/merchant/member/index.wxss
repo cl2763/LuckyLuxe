@@ -50,3 +50,10 @@ page{background:#fbf8f5}
 
 /* D25:未绑定档案禁充提示行 */
 .gnote{font-size:22rpx;color:#b5541f;background:#fdf1e7;border-radius:10rpx;padding:10rpx 16rpx;margin:8rpx 0}
+
+/* 批④ S9:会员体系只读展示 */
+.mrow{display:flex;align-items:flex-start;justify-content:space-between;gap:20rpx;padding:14rpx 0;border-bottom:1rpx solid #f2ece5}
+.mrow:last-child{border-bottom:0}
+.mk{color:#8a7f78;font-size:24rpx;flex:none}
+.mv{color:#2d2826;font-size:24rpx;font-weight:650;text-align:right}
+.mnote{color:#8c8279;font-size:22rpx;line-height:1.7;padding:16rpx 22rpx}

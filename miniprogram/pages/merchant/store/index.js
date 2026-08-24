@@ -9,7 +9,8 @@ Page({
     hours: [], // [{weekday,label,isClosed,openTime,closeTime}]
     specials: [],
     onlineDeposit: true,
-    depositSummary: '',
+    depositRows: [],
+    depositEditHint: '',
     loading: true
   },
 
@@ -19,28 +20,17 @@ Page({
     try {
       const r = await api.adminGet('/admin/booking-rules')
       this.setData({ onlineDeposit: r.rules ? r.rules.onlineDeposit !== false : true })
-      // 定金一律看 deposit_config(唯一口径),这里只做一行摘要
+      /* 批④ S7(店主 08-24):摘要做全 —— 7 项关键值逐行显示,全部读后端 summaryRows
+         (与顾客端 keyFacts/政策全文同一份 config 推导,商家看到的与顾客体验到的同源,不各查各的)。
+         前端零拼串:label/value 与「去哪改」的引导句都由后端给。 */
       api.adminGet('/admin/deposit-config').then((d) => {
-        const c = (d && d.config) || {}
         this.setData({
-          depositSummary: c.enabled === false
-            ? '当前:不收定金'
-            : `当前:收定金${d.amountText ? ' ' + d.amountText : ''}${c.deductible ? ' · 可抵尾款' : ' · 不抵尾款'}`
+          depositRows: (d && d.summaryRows && d.summaryRows.zh) || [],
+          depositEditHint: (d && d.editHint && d.editHint.zh) || ''
         })
       }).catch(() => {})
     } catch (e) { /* 默认开 */ }
   },
-
-  // 线上定金开关:关=顾客自约免定金直接确认(适配无支付商户号的商家)
-  // 定金细项在网页后台的「定金规则卡」里配(左配置右预览);小程序这边给个说明,避免两处开关打架
-  goDepositRule() {
-    wx.showModal({
-      title: '定金与取消规则', showCancel: false, confirmText: '知道了',
-      content: '定金收不收、多少钱、能不能抵尾款、迟到宽限与改期时限,都在网页后台「门店设置 → 定金与取消规则」里配,配完顾客预约页与 AI 话术自动跟上。',
-      fail: (e) => console.warn('[showModal fail]', e) // S组卫生批:fail=开发者域错误,console 留痕不弹 UI(toast 会撞转场,D27 家族)
-    })
-  },
-
 
   async load() {
     try {

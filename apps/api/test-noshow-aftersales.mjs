@@ -1646,6 +1646,25 @@ const main = async () => {
                       JSON.stringify(auth2.user.redeemablePrizeText))
                   }
 
+                  /* ===== ㋖ 批④ 接口层(店主 08-24):S7 定金摘要 / S9 会员体系只读行 ===== */
+                  {
+                    const depoCfg98 = await request('/admin/deposit-config', {}, shop.token)
+                    const rows98 = (depoCfg98.data.summaryRows || {}).zh || []
+                    check('㋖ S7:定金摘要做全(9 行关键值:金额/抵尾款/会员减免/可退/临期/爽约/迟到/改期/保留)',
+                      rows98.length === 9 && rows98.every((r) => r.label && r.value), JSON.stringify(rows98.map((r) => r.label)))
+                    check('㋖ S7:摘要与顾客端同源(同一份 config 推导;关店定金时只出一行「不收定金」)',
+                      typeof depoCfg98.data.editHint === 'object' && String(depoCfg98.data.editHint.zh).includes('网页后台'))
+                    const ms98 = await request('/admin/membership/config', {}, shop.token)
+                    check('㋖ S9:会员体系只读展示有唯一出口(summaryRows + 人话说明句)',
+                      Array.isArray(ms98.data.summaryRows) && ms98.data.summaryRows.length >= 3
+                      && String(ms98.data.editHint || '').includes('找平台对接人'), JSON.stringify((ms98.data.summaryRows || []).map((r) => r.label)))
+                    check('㋖ S9:无等级店(tiersEnabled=false)只读页**不出等级结构**(与顾客端三减法一致)',
+                      ms98.data.config.tiersEnabled === false
+                      && ms98.data.summaryRows.every((r) => !String(r.key).startsWith('tier_'))
+                      && ms98.data.summaryRows.some((r) => r.key === 'tiers' && String(r.value).includes('不分级')),
+                      JSON.stringify(ms98.data.summaryRows.map((r) => r.key)))
+                  }
+
                   /* ===== ㋔ 跨店串号检测(店主 08-23 本批核心)=====
                      同一个微信身份在两家店各有会员账户,**每一类资产读方都必须带 tenant 维度**。
                      根子已修:users / user_identities 的唯一性原来是**全局**的,同一 openid 在 B 店
@@ -2370,6 +2389,38 @@ const main = async () => {
       const appJs93 = readFileSync(join(ROOT42, 'miniprogram/app.js'), 'utf8')
       check('㋓ globalData.appName 死字段已删(零使用方却写死旗舰店名=下次误用的种子)',
         !/appName:\s*'Lucky Luxe'/.test(appJs93))
+      /* ===== ㋖ 批④(店主 08-24):S8 顺序件 / S7 摘要件 / S9 只读展示件 ===== */
+      const odWx98 = readFileSync(join(ROOT42, 'miniprogram/pages/order-detail/index.wxml'), 'utf8')
+      const custWeb98 = readFileSync(join(ROOT42, 'apps/web/customer.js'), 'utf8')
+      // S8:四块顺序双端统一为 预约信息 → 签署单 → 服务留档 → 去售后
+      const miniOrder98 = ['t.bookingInfo', '服务签署单', 'Service Archive', 'afterSalesAction'].map((k) => odWx98.indexOf(k))
+      const webDetailStart = custWeb98.indexOf('function renderOrderDetailWeb()')
+      const webSeg = custWeb98.slice(webDetailStart, webDetailStart + 9000)
+      const webOrder98 = ["t('bookingInfo')", '服务签署单', "t('workArchive')", 'order.afterSalesAction ?'].map((k) => webSeg.indexOf(k))
+      check('㋖ S8:订单详情四块顺序双端统一(预约信息 → 签署单 → 服务留档 → 去售后)',
+        miniOrder98.every((v, i) => v > 0 && (i === 0 || v > miniOrder98[i - 1]))
+        && webOrder98.every((v, i) => v > 0 && (i === 0 || v > webOrder98[i - 1])),
+        JSON.stringify({ mini: miniOrder98, web: webOrder98 }))
+      check('㋖ S8 裁:技师小记不给顾客看(顾客端零 service_notes 出口)',
+        !odWx98.includes('serviceNote') && !custWeb98.includes('serviceNote')
+        && !readFileSync(join(ROOT42, 'miniprogram/pages/order-detail/index.js'), 'utf8').includes('serviceNote'))
+      // S7:定金摘要做全 + 引导句;小程序不做编辑器
+      const storeWx98 = readFileSync(join(ROOT42, 'miniprogram/pages/merchant/store/index.wxml'), 'utf8')
+      const storeJs98 = readFileSync(join(ROOT42, 'miniprogram/pages/merchant/store/index.js'), 'utf8')
+      check('㋖ S7:小程序只读展示(渲染后端 summaryRows + 引导句,不做编辑器、不再弹说明框)',
+        storeWx98.includes('depositRows') && storeWx98.includes('depositEditHint')
+        && storeJs98.includes('d.summaryRows') && !storeJs98.includes('goDepositRule'))
+      const apiJs98 = readFileSync(join(ROOT42, 'miniprogram/utils/api.js'), 'utf8')
+      check('㋖ S7 顺手件:定金拿不到不再返 0(0=免定金是假数),返 null 由前端显示「—」',
+        /if \(d && d\.enabled === false\) return 0/.test(apiJs98) && /\/\* storage 拿不到 = 下面返 null,不猜 \*\/[\s\S]{0,40}return null/.test(apiJs98))
+      // S9:商家端只读展示 + 双端同源 + 无等级店不出等级结构
+      const memberWx98 = readFileSync(join(ROOT42, 'miniprogram/pages/merchant/member/index.wxml'), 'utf8')
+      const memberJs98 = readFileSync(join(ROOT42, 'miniprogram/pages/merchant/member/index.js'), 'utf8')
+      const adminJs98 = readFileSync(join(ROOT42, 'apps/web/admin.js'), 'utf8')
+      check('㋖ S9:双端同源(商家小程序与网页读同一个 /admin/membership/config 出口,不各查各的)',
+        memberWx98.includes('msRows') && memberJs98.includes("adminGet('/admin/membership/config')")
+        && adminJs98.includes('summaryRows: c.summaryRows') && adminJs98.includes('membershipSettings.editHint'))
+
       /* ㋕ wiring:积分入口**唯一**(黑卡那一格),别处不许再冒出第二个积分入口 */
       const meWx95 = readFileSync(join(ROOT42, 'miniprogram/pages/me/index.wxml'), 'utf8')
       const custWeb95 = readFileSync(join(ROOT42, 'apps/web/customer.js'), 'utf8')

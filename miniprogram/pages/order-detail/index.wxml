@@ -84,6 +84,26 @@
     </view>
   </view>
 
+  <!-- 批③首件 A4(§二):留档卡=有则显示,无则整卡不出现(不占位)。
+       批④ S8 顺序件(店主 08-24):四块顺序双端统一为 预约信息 → 签署单 → **服务留档** → 去售后
+       (原小程序把售后排在留档前、网页把留档排在签署单前,双端各不同且都与图不同=四之九分叉)。
+       裁:技师小记不给顾客看,留档只留照片。 -->
+  <view wx:if="{{order.visibleWorkImages.length}}" class="section">
+    <view class="section-head">
+      <view class="section-title">{{lang === 'en' ? 'Service Archive' : '服务留档'}}</view>
+      <view class="section-note">{{order.serviceInfo.technicianName}}</view>
+    </view>
+    <view class="archive-card card">
+      <view class="work-grid">
+        <block wx:for="{{order.visibleWorkImages}}" wx:key="*this">
+          <button class="work-thumb" bindtap="previewWork" data-url="{{item}}">
+            <image src="{{item}}" mode="aspectFill"></image>
+          </button>
+        </block>
+      </view>
+    </view>
+  </view>
+
   <!-- 批③首件 屏B:售后区——按钮句后端唯一;同屏展开表单(不弹层);D3 三步进度卡 -->
   <view class="section" wx:if="{{order.afterSalesAction}}">
     <view class="info-card card">
@@ -103,23 +123,6 @@
         <view class="as-step-main"><view class="as-step-t">{{st.label}}</view><view class="as-step-at">{{st.at}}</view></view>
       </view>
       <view wx:if="{{order.afterSalesAction === 'progress'}}" class="as-link" bindtap="withdrawAfterSales">撤回本次售后(记录保留)</view>
-    </view>
-  </view>
-
-  <!-- 批③首件 A4(§二):留档卡=有则显示,无则整卡不出现(不占位) -->
-  <view wx:if="{{order.visibleWorkImages.length}}" class="section">
-    <view class="section-head">
-      <view class="section-title">{{lang === 'en' ? 'Service Archive' : '服务留档'}}</view>
-      <view class="section-note">{{order.serviceInfo.technicianName}}</view>
-    </view>
-    <view class="archive-card card">
-      <view class="work-grid">
-        <block wx:for="{{order.visibleWorkImages}}" wx:key="*this">
-          <button class="work-thumb" bindtap="previewWork" data-url="{{item}}">
-            <image src="{{item}}" mode="aspectFill"></image>
-          </button>
-        </block>
-      </view>
     </view>
   </view>
 

@@ -35,3 +35,9 @@ page{background:#fbf8f5}
 .rtog .rdot{position:absolute;left:6rpx;top:6rpx;width:36rpx;height:36rpx;border-radius:50%;background:#fff;transition:.2s}
 .rtog.on{background:#1f7a4d}
 .rtog.on .rdot{left:46rpx}
+
+/* 批④ S7:定金摘要逐行(7 项关键值)——只读展示,不做编辑器 */
+.drow{display:flex;align-items:flex-start;justify-content:space-between;gap:20rpx;padding:12rpx 0;border-bottom:1rpx solid #f2ece5}
+.drow:last-of-type{border-bottom:0}
+.dk{color:#8a7f78;font-size:24rpx;flex:none}
+.dv{color:#2d2826;font-size:24rpx;font-weight:650;text-align:right}

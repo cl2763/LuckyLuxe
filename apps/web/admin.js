@@ -1,5 +1,5 @@
 // 构建号:每次交付递增。侧栏可见,排查"改了没生效"时先对版本。
-const ADMIN_BUILD = '20260824b-mall'
+const ADMIN_BUILD = '20260824c-b4'
 let pricingState = { module: 'storefront', tab: 'items', categories: [], items: [], rules: {}, editing: null, preview: null, storefrontPicker: false }
 console.log(`[admin] build ${ADMIN_BUILD}`)
 
@@ -9241,7 +9241,8 @@ const MEMBER_QUALIFY_LABELS = {
    本页只剩会员资格设置,不再读 recharge_tiers(CI 零读方断言防复活)。 */
 async function loadMembershipSettings() {
   const c = await request('/admin/membership/config')
-  membershipSettings = { config: c.config, readOnly: c.readOnly !== false, readOnlyNote: c.readOnlyNote }
+  // 批④ S9:只读展示行与「去哪改」的说明句都从后端取(与小程序商家端、与顾客端同一出口)
+  membershipSettings = { config: c.config, readOnly: c.readOnly !== false, readOnlyNote: c.readOnlyNote, summaryRows: c.summaryRows || [], editHint: c.editHint || '' }
   renderMembershipSettings()
 }
 
@@ -9255,7 +9256,8 @@ function renderMembershipSettings() {
   }
   const msReadOnly = membershipSettings.readOnly !== false // 2026-08-08:会员资格与等级收归平台,商家端只读
   els.membershipSettingsBody.innerHTML = `
-    ${msReadOnly ? `<p class="subtle">🔒 ${pzh() ? (membershipSettings.readOnlyNote || '会员资格与等级由平台统一配置,如需调整请联系平台。充值档位与赠送项仍可自助设置。') : 'Member qualification and tiers are managed by the platform.'}</p>` : ''}
+    ${msReadOnly ? `<p class="subtle">🔒 ${pzh() ? (membershipSettings.editHint || membershipSettings.readOnlyNote || '') : 'Member qualification and tiers are managed by the platform.'}</p>` : ''}
+    ${msReadOnly && pzh() && (membershipSettings.summaryRows || []).length ? `<div class="kb-facts-grid">${membershipSettings.summaryRows.map((r) => `<label><span>${escapeHtml(r.label)}</span><input value="${escapeHtml(r.value)}" disabled></label>`).join('')}</div>` : ''}
     <div class="kb-facts-grid">
       <label><span>${pzh() ? '会员资格' : 'Member qualification'}</span><select id="msQualify" ${msReadOnly ? 'disabled' : ''}>
         ${Object.entries(MEMBER_QUALIFY_LABELS).map(([key, l]) => `<option value="${key}" ${key === config.memberQualify ? 'selected' : ''}>${pzh() ? l.zh : l.en}</option>`).join('')}

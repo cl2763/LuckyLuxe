@@ -4,7 +4,10 @@ const { storeMoney, storeCurrencyPrefix, ensureCurrencyCached } = require('../..
 Page({
   data: {
     seg: 0,
-    segs: ['充值套餐', '会员次卡', '优惠券'],
+    segs: ['充值套餐', '会员次卡', '优惠券', '会员体系'],
+    // 批④ S9:会员体系只读展示(行与说明句都读后端,与网页端/顾客端同一出口)
+    msRows: [],
+    msHint: '',
     recharges: [], timesCards: [], coupons: [],
     customers: [],
     // 屏 C3 自定义发放(小程序老板版)
@@ -20,6 +23,7 @@ Page({
   },
 
   async onShow() {
+    this.loadMembershipView()
     if (!(await api.guardOwner())) return
     await ensureCurrencyCached().catch(() => {})
     // R4:要的是**币符**(¥/CAD $),不是币种代码(CNY)——以前显示成「CNY 如 1000」
@@ -131,6 +135,16 @@ Page({
       this.unpickGrant()
       this.loadGrants()
     } catch (e) { wx.showToast({ title: (e && e.message) || '发放失败', icon: 'none' }) }
+  },
+
+  /* 批④ S9(店主 08-24):会员体系只读展示 —— 行与「去哪改」的说明句全部来自后端
+     /admin/membership/config(summaryRows / editHint),与网页商家端、与顾客端实际生效的规则同源。
+     无等级店后端就不返等级结构,这里自然也不显示(与顾客端三减法一致)。 */
+  async loadMembershipView() {
+    try {
+      const r = await api.adminGet('/admin/membership/config')
+      this.setData({ msRows: (r && r.summaryRows) || [], msHint: (r && r.editHint) || '' })
+    } catch (e) { this.setData({ msRows: [], msHint: '' }) }
   },
 
   onSeg(e) { this.setData({ seg: Number(e.currentTarget.dataset.i) }) },

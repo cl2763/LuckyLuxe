@@ -7507,6 +7507,40 @@ function putPricingRule(tenantId, key, { isActive, config }) {
     .run(tenantId, key, JSON.stringify(merged), isActive === false ? 0 : 1, iso(new Date()))
 }
 
+/* 批④ S9(店主 08-24):会员体系**只读展示**的唯一出口 —— 商家网页端与小程序读同一份,
+   且与顾客端实际生效的规则出自同一个 getMembershipConfig,老板看到的就是顾客体验到的。
+   无等级店(tiersEnabled=false)在这里也**不出等级结构**,与顾客端三减法一致。 */
+function membershipSummaryRows(config, tenantId = currentTenantId(), lang = 'zh') {
+  const zh = lang !== 'en'
+  const m = (cents) => formatMoneyCents(cents, tenantId, 'auto')
+  const qualify = {
+    any_recharge: zh ? '充值任意金额即成为会员' : 'Any recharge',
+    min_recharge: zh ? `单笔充值满 ${m(config.qualifyValueCents)} 成为会员` : `Recharge ≥ ${m(config.qualifyValueCents)}`,
+    total_spend: zh ? `累计消费满 ${m(config.qualifyValueCents)} 成为会员` : `Total spend ≥ ${m(config.qualifyValueCents)}`,
+    manual: zh ? '由门店手动标记' : 'Manual'
+  }
+  const rows = [
+    { key: 'qualify', label: zh ? '怎么算会员' : 'Qualification', value: qualify[config.memberQualify] || qualify.any_recharge },
+    { key: 'expire', label: zh ? '会员有效期' : 'Validity', value: config.expireDays ? (zh ? `${config.expireDays} 天` : `${config.expireDays} days`) : (zh ? '永久' : 'Permanent') },
+    { key: 'tiers', label: zh ? '分不分级' : 'Tiers', value: config.tiersEnabled ? (zh ? `分级(${(config.tiers || []).length} 级)` : `Yes (${(config.tiers || []).length})`) : (zh ? '不分级 · 只要是会员就一个待遇' : 'No tiers') }
+  ]
+  // 不分级店到此为止:不出等级结构(与顾客端"称谓只写会员/成长条不渲染"同口径)
+  if (!config.tiersEnabled) {
+    const perks = Array.isArray(config.memberPerks) ? config.memberPerks.filter(Boolean) : []
+    if (perks.length) rows.push({ key: 'perks', label: zh ? '会员权益' : 'Member perks', value: perks.join(' · ') })
+    return rows
+  }
+  for (const t of config.tiers || []) {
+    rows.push({
+      key: `tier_${t.key || t.label}`,
+      label: t.label || t.key,
+      // 字段是 minSpendCents(分),不是 minSpend —— 取错会让每一级都显示「满 0」
+      value: `${zh ? '累计消费满' : 'Spend ≥'} ${m(Math.max(0, Math.round(Number(t.minSpendCents || 0))))}${t.depositWaived ? (zh ? ' · 预约免定金' : ' · deposit waived') : ''}`
+    })
+  }
+  return rows
+}
+
 function getMembershipConfig(tenantId = currentTenantId()) {
   const row = db.prepare("SELECT value FROM tenant_settings WHERE tenant_id = ? AND key = 'membership_config'").get(tenantId)
   let stored = {}
@@ -8108,6 +8142,40 @@ function depositPolicyText(config, tenantId = currentTenantId(), lang = 'zh') {
 /* 定金三要点小卡(迟到宽限 / 改期时限 / 定金保留)。
    后台屏 4 的预览、顾客预约页屏 3 用的是同一份 —— 措辞在这里定一次,
    两端各自拼一版迟早会对不上。参数没配就给「—」,不编默认值。 */
+/* 批④ S7 摘要件(店主 2026-08-24):商家小程序不做编辑器,但**摘要要做全** ——
+   原来只有一句「当前:收定金 ¥100 · 可抵尾款」,取消政策 7 项一项看不到,老板在手机上判断不了自家规则。
+   这里是**摘要唯一出口**:与顾客端 keyFacts / 政策全文出自同一份 config,商家看到的与顾客体验到的同源。
+   金额一律 formatMoneyCents(币种随店),文案后端持有,前端零拼串。 */
+function depositSummaryRows(config, tenantId = currentTenantId(), lang = 'zh') {
+  const zh = lang !== 'en'
+  const cp = config.cancelPolicy
+  const m = (cents) => formatMoneyCents(cents, tenantId, 'auto')
+  if (!config.enabled) {
+    return [{ key: 'enabled', label: zh ? '定金' : 'Deposit', value: zh ? '不收定金' : 'Not collected' }]
+  }
+  const amountText = config.mode === 'fixed'
+    ? m(config.fixedAmountCents)
+    : (config.mode === 'pct'
+      ? (zh ? `按项目价 ${config.pct}%` : `${config.pct}% of price`)
+      : (zh ? `按项目各自定金(未设的按 ${m(config.fallbackAmountCents)})` : `Per service (fallback ${m(config.fallbackAmountCents)})`))
+  const waive = { by_tier: zh ? '按会员等级减免' : 'By tier', all: zh ? '会员全免' : 'All members', none: zh ? '都不减免' : 'None' }
+  const notice = cp.rescheduleNoticeHours
+  const noticeText = notice === null ? '—'
+    : (notice >= 24 && notice % 24 === 0 ? (zh ? `提前 ${notice / 24} 天` : `${notice / 24} day(s)`) : (zh ? `提前 ${notice} 小时` : `${notice}h`))
+  const retain = cp.depositRetainTimes || 0
+  return [
+    { key: 'amount', label: zh ? '定金金额' : 'Amount', value: amountText },
+    { key: 'deductible', label: zh ? '能否抵尾款' : 'Deductible', value: config.deductible ? (zh ? '可抵扣本次消费' : 'Yes') : (zh ? '不抵扣' : 'No') },
+    { key: 'memberWaive', label: zh ? '会员减免' : 'Member waiver', value: waive[config.memberWaive] || waive.by_tier },
+    { key: 'refundable', label: zh ? '能否退定金' : 'Refundable', value: cp.refundable ? (zh ? `可退(提前 ${cp.freeCancelHours} 小时全退)` : `Yes (${cp.freeCancelHours}h)`) : (zh ? '不可退' : 'No') },
+    { key: 'lateForfeit', label: zh ? '临期取消' : 'Late cancel', value: zh ? `扣 ${cp.lateForfeitPct}%` : `Forfeit ${cp.lateForfeitPct}%` },
+    { key: 'noShowForfeit', label: zh ? '爽约不到' : 'No-show', value: zh ? `扣 ${cp.noShowForfeitPct}%` : `Forfeit ${cp.noShowForfeitPct}%` },
+    { key: 'grace', label: zh ? '迟到宽限' : 'Late grace', value: cp.lateArrivalGraceMin === null ? '—' : (zh ? `${cp.lateArrivalGraceMin} 分钟` : `${cp.lateArrivalGraceMin} min`) },
+    { key: 'reschedule', label: zh ? '改期时限' : 'Reschedule', value: noticeText },
+    { key: 'retain', label: zh ? '合规改期定金' : 'Deposit retained', value: retain > 0 ? (zh ? `可保留 ${retain} 次` : `${retain}x`) : (zh ? '不保留' : 'Not retained') }
+  ]
+}
+
 function depositKeyFacts(config, lang = 'zh') {
   const cp = config.cancelPolicy
   const zh = lang !== 'en'
@@ -12869,6 +12937,12 @@ async function route(req, res) {
         config,
         onlinePaymentReady: ONLINE_PAYMENT_READY,
         keyFacts: { zh: depositKeyFacts(config, 'zh'), en: depositKeyFacts(config, 'en') },
+        // 批④ S7:商家端摘要全量行(小程序只读展示用;与顾客端同一份 config 推导,不各查各的)
+        summaryRows: { zh: depositSummaryRows(config, tid, 'zh'), en: depositSummaryRows(config, tid, 'en') },
+        editHint: {
+          zh: '这些规则在网页后台改:电脑打开后台 → 门店设置 → 定金与取消规则,左边改参数、右边实时看顾客会读到的说法;改完顾客预约页与 AI 客服话术自动跟上。',
+          en: 'Edit these in the web admin: Store settings → Deposit & cancellation.'
+        },
         text: { zh: depositPolicyText(config, tid, 'zh'), en: depositPolicyText(config, tid, 'en') }
       })
     }
@@ -12878,6 +12952,12 @@ async function route(req, res) {
       return json(res, 200, {
         config,
         keyFacts: { zh: depositKeyFacts(config, 'zh'), en: depositKeyFacts(config, 'en') },
+        // 批④ S7:商家端摘要全量行(小程序只读展示用;与顾客端同一份 config 推导,不各查各的)
+        summaryRows: { zh: depositSummaryRows(config, tid, 'zh'), en: depositSummaryRows(config, tid, 'en') },
+        editHint: {
+          zh: '这些规则在网页后台改:电脑打开后台 → 门店设置 → 定金与取消规则,左边改参数、右边实时看顾客会读到的说法;改完顾客预约页与 AI 客服话术自动跟上。',
+          en: 'Edit these in the web admin: Store settings → Deposit & cancellation.'
+        },
         text: { zh: depositPolicyText(config, tid, 'zh'), en: depositPolicyText(config, tid, 'en') }
       })
     }
@@ -13117,7 +13197,12 @@ async function route(req, res) {
         // 商家端只读;充值档位与赠送项仍归商家自助。
         readOnly: true,
         managedBy: 'platform',
-        readOnlyNote: '会员资格与等级由平台统一配置,如需调整请联系平台。充值档位与赠送项仍可自助设置。'
+        readOnlyNote: '会员资格与等级由平台统一配置,如需调整请联系平台。充值档位与赠送项仍可自助设置。',
+        /* 批④ S9(店主 08-24 拍板改定:维持平台统一设置,不放权)——补两件:
+           ①**只读展示行**:分不分级 / 怎么算会员 / 各级门槛与权益,商家两端同源读这里(不各查各的);
+           ②说明句**写成人话**:改什么、找谁改、怎么找,而不是一句「联系平台」让人猜。 */
+        summaryRows: membershipSummaryRows(getMembershipConfig(tid), tid, 'zh'),
+        editHint: '会员怎么算、分不分级、每级门槛与权益,由平台统一按店配置(你家的规则已经按你的要求设好了)。要调整:在微信上直接找平台对接人说明改成什么样,平台改完你这边和顾客端同时生效,不用自己操作。充值档位、次卡、优惠券这些仍然你自己在「会员与营销」里改。'
       })
     }
     if (req.method === 'PUT') {

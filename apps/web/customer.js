@@ -2022,22 +2022,6 @@ function renderOrderDetailWeb() {
           <p><span>${t('remark')}</span><strong>${order.notes || t('none')}</strong></p>
         </div>
       </section>
-      ${workImages.length ? `
-      <section class="section">
-        <div class="section-row"><h2>${t('workArchive')}</h2><span class="subtle">${order.technician.name}</span></div>
-        <div class="archive-card-web card">
-          <div class="customer-work-grid">
-            ${workImages.map((image, index) => `
-              <figure class="customer-work-item">
-                <a href="${image}" target="_blank" rel="noreferrer"><img src="${image}" alt="${t('finalPhotos')} ${index + 1}"></a>
-                <a class="ghost mini-download" href="${image}" download="Lucky-Luxe-${order.publicCode || order.id}-${index + 1}.jpg">${t('downloadImage')}</a>
-              </figure>
-            `).join('')}
-          </div>
-          <button class="primary slim" data-order-share="${order.id}" type="button">${t('oneClickShare')}</button>
-          ${renderCustomerSharePanel(order, workImages)}
-        </div>
-      </section>` : ''}
       <section class="section">
         <div class="section-row"><h2>${state.lang === 'zh' ? '服务签署单' : 'Signed sheet'}</h2>${order.payment ? `<span class="subtle">${state.lang === 'zh' ? '已签署' : 'Signed'} ${escapeHtml(String(order.payment.signedAt || '').slice(0, 16).replace('T', ' '))}</span>` : ''}</div>
         <div class="info-card-web card">
@@ -2063,6 +2047,25 @@ function renderOrderDetailWeb() {
             <p><span>${t('servicePrice')}</span><strong>${money(order.servicePriceCents)}</strong></p>`))}
         </div>
       </section>
+      ${/* 批④ S8 顺序件(店主 08-24):四块顺序双端统一为 预约信息 → 签署单 → 服务留档 → 去售后。
+            原网页把留档排在签署单之前、小程序把售后排在留档之前,双端各不同且都与图不同(四之九分叉)。
+            裁:技师小记不给顾客看,留档只留照片。 */''}
+      ${workImages.length ? `
+      <section class="section">
+        <div class="section-row"><h2>${t('workArchive')}</h2><span class="subtle">${order.technician.name}</span></div>
+        <div class="archive-card-web card">
+          <div class="customer-work-grid">
+            ${workImages.map((image, index) => `
+              <figure class="customer-work-item">
+                <a href="${image}" target="_blank" rel="noreferrer"><img src="${image}" alt="${t('finalPhotos')} ${index + 1}"></a>
+                <a class="ghost mini-download" href="${image}" download="Lucky-Luxe-${order.publicCode || order.id}-${index + 1}.jpg">${t('downloadImage')}</a>
+              </figure>
+            `).join('')}
+          </div>
+          <button class="primary slim" data-order-share="${order.id}" type="button">${t('oneClickShare')}</button>
+          ${renderCustomerSharePanel(order, workImages)}
+        </div>
+      </section>` : ''}
       ${order.afterSalesAction ? `
       <section class="section">
         <div class="info-card-web card">

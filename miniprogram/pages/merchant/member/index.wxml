@@ -3,6 +3,7 @@
     <text class="s {{seg===0?'on':''}}" data-i="0" bindtap="onSeg">充值套餐</text>
     <text class="s {{seg===1?'on':''}}" data-i="1" bindtap="onSeg">会员次卡</text>
     <text class="s {{seg===2?'on':''}}" data-i="2" bindtap="onSeg">优惠券</text>
+    <text class="s {{seg===3?'on':''}}" data-i="3" bindtap="onSeg">会员体系</text>
   </view>
 
   <!-- 充值套餐 -->
@@ -28,7 +29,7 @@
   </block>
 
   <!-- 优惠券 -->
-  <block wx:else>
+  <block wx:elif="{{seg===2}}">
     <view class="redeem" bindtap="redeemCode">扫码/输码 核销顾客的券</view>
     <view class="card" wx:for="{{coupons}}" wx:key="id">
       <view class="crow" data-id="{{item.id}}" data-type="coupon" bindtap="edit">
@@ -71,7 +72,21 @@
     </view>
   </block>
 
-  <view class="add" bindtap="add">＋ 新增{{segs[seg]}}</view>
+  <!-- 批④ S9(店主 08-24 拍板改定:维持平台统一设置,不放权)——商家端补**只读展示**,
+       让老板在手机上看得见自家规则;行与说明句全部读后端 /admin/membership/config 的
+       summaryRows / editHint,与网页端、与顾客端实际生效的规则同一出口(不各查各的)。 -->
+  <block wx:elif="{{seg===3}}">
+    <view class="card">
+      <view wx:if="{{!msRows.length}}" class="empty">读取中…</view>
+      <view class="mrow" wx:for="{{msRows}}" wx:key="key">
+        <text class="mk">{{item.label}}</text>
+        <text class="mv">{{item.value}}</text>
+      </view>
+    </view>
+    <view wx:if="{{msHint}}" class="mnote">{{msHint}}</view>
+  </block>
+
+  <view class="add" wx:if="{{seg !== 3}}" bindtap="add">＋ 新增{{segs[seg]}}</view>
 
   <view class="divider"></view>
 
@@ -110,4 +125,5 @@
     </block>
   </view>
   <view class="note"><text class="b">两种到账:</text>①顾客小程序在线直充(微信支付,自动到账,待上线);②线下 / 现金,老板在这里手动补录。均记为储值负债,耗卡时才确认收入。点「确认到账」时若本次会话还没解锁财务,会先请你去财务页输密码。</view>
+
 </view>

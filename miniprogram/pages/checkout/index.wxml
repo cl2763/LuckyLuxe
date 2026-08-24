@@ -18,7 +18,7 @@
           <text>{{item.service.duration}}{{t.minutes}}</text>
         </view>
         <view class="checkout-meta">
-          <text class="price">{{t.deposit}} {{cur.p}}{{cur.s}}{{item.service.depositAmount}}</text>
+          <text class="price">{{t.deposit}} {{item.service.depositAmount === null ? '—' : cur.p + cur.s + item.service.depositAmount}}</text>
           <text>{{t.servicePrice}} {{cur.p}}{{cur.s}}{{item.service.price}}</text>
         </view>
       </view>

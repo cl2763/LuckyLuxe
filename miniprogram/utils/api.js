@@ -233,12 +233,16 @@ function adminRequest(path, method = 'GET', data) {
 
 /* R5:门店定金额(元)。读 /stores 缓存下来的配置;没有就回 0,
    宁可不显示,也不拿旗舰店的 50 冒充本店配置。 */
+/* 🔴 假数回落红线(店主 08-23 立律,批④ S7 顺手收):拿不到定金配置时原来返回 0 ——
+   而 0 在界面上等于「免定金」,顾客会以为不用付定金,到店才发现要付。
+   现在返回 null:调用方渲染成「—」或整行不出,绝不用 0 冒充"这家店不收定金"。 */
 function storeDepositAmount() {
   try {
     const d = wx.getStorageSync('lucky_store_deposit')
+    if (d && d.enabled === false) return 0                    // 明确配了「不收定金」= 真的 0
     if (d && d.enabled && typeof d.amountCents === 'number') return Math.round(d.amountCents) / 100
-  } catch (e) { /* storage 拿不到就当没配 */ }
-  return 0
+  } catch (e) { /* storage 拿不到 = 下面返 null,不猜 */ }
+  return null
 }
 
 function toMiniService(service) {
