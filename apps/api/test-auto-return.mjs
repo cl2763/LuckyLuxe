@@ -4,6 +4,9 @@
 //   PORT=4129 HUMAN_REPLY_COOLDOWN_MINUTES=0 node apps/api/local-server.mjs
 //   TEST_BASE_URL=http://127.0.0.1:4129 node apps/api/test-auto-return.mjs
 const BASE_URL = process.env.TEST_BASE_URL || 'http://127.0.0.1:4129'
+/* 测试护栏(裁 C):套件永远不许写进真库 —— 开跑前问服务器「你往哪个库写」 */
+import { assertTestTarget } from './test-guard.mjs'
+await assertTestTarget(BASE_URL)
 const TOKEN = process.env.TEST_ADMIN_TOKEN || 'owner-demo-token'
 const RUN_ID = Date.now().toString(36)
 

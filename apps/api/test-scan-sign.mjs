@@ -8,6 +8,9 @@
      推送+扫码双端同时点签只成一次 / 未绑定顾客扫到别人单的码 / 会员码扫到已绑定档案 /
      轻档案无手机号走全链 / openid 冲突 / 一次性签署码过期与重发。 */
 const BASE_URL = process.env.TEST_BASE_URL || 'http://127.0.0.1:4128'
+/* 测试护栏(裁 C):套件永远不许写进真库 —— 开跑前问服务器「你往哪个库写」 */
+import { assertTestTarget } from './test-guard.mjs'
+await assertTestTarget(BASE_URL)
 const PLATFORM = process.env.TEST_ADMIN_TOKEN || 'owner-demo-token'
 const RUN = Date.now().toString(36)
 // 四之五:日期问后端要门店时区的今天,不用测试机本地日期(白天绿半夜红的根源)

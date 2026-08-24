@@ -4,6 +4,9 @@
 // 3. 批量应用(schedule-batch)写入未来数周
 // 4. 添加技师/改名/停用;停用后不出现在可预约技师里
 const BASE_URL = process.env.TEST_BASE_URL || 'http://127.0.0.1:4128'
+/* 测试护栏(裁 C):套件永远不许写进真库 —— 开跑前问服务器「你往哪个库写」 */
+import { assertTestTarget } from './test-guard.mjs'
+await assertTestTarget(BASE_URL)
 const TOKEN = process.env.TEST_ADMIN_TOKEN || 'owner-demo-token'
 const RUN_ID = Date.now().toString(36)
 

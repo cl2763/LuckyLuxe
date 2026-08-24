@@ -20,10 +20,14 @@
    (2026-08-11 有人少了 TEST_BASE_URL,在真库建了 nsas-a-msok023f 测试租户,已停用挂账。) */
 import zlib97 from 'node:zlib'
 import { readFileSync, readdirSync, statSync, existsSync } from 'node:fs'
+import { execFileSync } from 'node:child_process'
 import { join } from 'node:path'
 import { DatabaseSync } from 'node:sqlite'
 
 const BASE_URL = process.env.TEST_BASE_URL || 'http://127.0.0.1:4128'
+/* 测试护栏(裁 C):套件永远不许写进真库 —— 开跑前问服务器「你往哪个库写」 */
+import { assertTestTarget } from './test-guard.mjs'
+await assertTestTarget(BASE_URL)
 const PLATFORM = process.env.TEST_ADMIN_TOKEN || 'owner-demo-token'
 const RUN_ID = Date.now().toString(36)
 
@@ -196,11 +200,14 @@ const main = async () => {
   const sB5 = await request('/admin/settlements', { method: 'POST', body: JSON.stringify({ userId: b5.userId || b5.user_id || (b5.user && b5.user.id), settlements: [{ payIntent: 'offline_full', bookingId: b5.id, items: [{ serviceId: shop.serviceId, qty: 1 }], technicians: [{ technicianId: shop.tech1, role: 'main', itemNos: [1] }], servedPersonName: '' }] }) }, shop.token)
   await request(`/settlements/${encodeURIComponent(sB5.data.settlements[0].code)}/sign`, { method: 'POST', body: JSON.stringify({ signature: '⑦夹具签', disclaimerAccepted: true }) }, null, { 'x-tenant-id': shop.tenantId })
   await request(`/admin/bookings/${b5.id}/status`, { method: 'PATCH', body: JSON.stringify({ status: 'AFTER_SALES' }) }, shop.token)
+  /* 裁 B(店主 08-24):三步链(写进展/标记已解决/关闭)已收掉 —— 判据跟着被测物走:
+     权限红线(别的技师碰不了别人的单)与"不许无痕迹变绿"(结果必填)原样保住,
+     只是都挪到唯一出口「结束售后」上。 */
   const staff2Token = await staffLogin(shop, shop.tech2, 'b')
-  r = await request(`/admin/bookings/${b5.id}/after-sales/progress`, { method: 'POST', body: JSON.stringify({ text: '我不是这单的技师' }) }, staff2Token)
-  check('⑦ B① 别的技师写进展=403', r.status === 403)
-  r = await request(`/admin/bookings/${b5.id}/after-sales/progress`, { method: 'POST', body: JSON.stringify({ text: '已联系顾客,约后天到店补钻' }) }, staffToken)
-  check('⑦ B① 当单技师写进展成功→处理中', r.status === 201 && r.data.afterSales.status === 'processing', JSON.stringify(r.data))
+  r = await request(`/admin/bookings/${b5.id}/after-sales/progress`, { method: 'POST', body: JSON.stringify({ text: '三步链应该已经下线' }) }, staffToken)
+  check('⑦ 裁B 三步链已下线:progress 打不通(留着就是绕过合同④ 的后门)', r.status === 404, `status=${r.status}`)
+  r = await request(`/admin/bookings/${b5.id}/status`, { method: 'PATCH', body: JSON.stringify({ action: 'endAfterSales', note: '我不是这单的技师' }) }, staff2Token)
+  check('⑦ B① 别的技师结束不了别人的单=403', r.status === 403, `status=${r.status}`)
   // ===== ㊷ D51:网页订单管理售后可见 —— 管理端列表随单下发徽标(与顾客端同一 customerOrderBadges,三端同句) =====
   {
     const mid = await request('/admin/bookings', {}, shop.token)
@@ -216,23 +223,19 @@ const main = async () => {
   } else {
     check('㊹ (跳过)无 TEST_DB_PATH,转售后落史未直查', true)
   }
-  r = await request(`/admin/bookings/${b5.id}/after-sales/resolve`, { method: 'POST', body: JSON.stringify({ resultText: '' }) }, shop.token)
-  check('⑦ B④ 空结果标解决=400', r.status === 400)
-  r = await request(`/admin/bookings/${b5.id}/after-sales/close`, { method: 'POST', body: JSON.stringify({ reason: '试试员工关' }) }, staffToken)
-  check('⑦ B① 员工关闭=403', r.status === 403)
+  r = await request(`/admin/bookings/${b5.id}/status`, { method: 'PATCH', body: JSON.stringify({ action: 'endAfterSales', note: '   ' }) }, shop.token)
+  check('⑦ B④ 空结果结束售后=400(不许无痕迹地"变绿",红线跟着出口走)', r.status === 400 && r.data?.error?.code === 'RESULT_REQUIRED', JSON.stringify(r.data).slice(0, 120))
   const led0 = (await financeRows(shop)).length
-  r = await request(`/admin/bookings/${b5.id}/after-sales/resolve`, {
-    method: 'POST', body: JSON.stringify({ resultText: '到店免费补钻 2 颗,顾客确认满意', amountCents: 99999, refundCents: 5000 })
+  r = await request(`/admin/bookings/${b5.id}/status`, {
+    method: 'PATCH', body: JSON.stringify({ action: 'endAfterSales', note: '到店免费补钻 2 颗,顾客确认满意', amountCents: 99999, refundCents: 5000 })
   }, staffToken)
-  check('⑧ 当单技师标已解决成功', r.status === 200 && r.data.afterSales.status === 'resolved')
+  check('⑧ 当单技师结束售后成功', r.status === 200 && r.data.booking.afterSalesStatus === 'resolved', JSON.stringify(r.data).slice(0, 160))
   check('⑨ B② 带金额字段的请求不产生任何账目行', (await financeRows(shop)).length === led0)
-  r = await request(`/admin/bookings/${b5.id}/after-sales/resolve`, { method: 'POST', body: JSON.stringify({ resultText: '再来一次' }) }, shop.token)
-  check('⑧ B⓪ resolve 两次=409', r.status === 409)
-  r = await request(`/admin/bookings/${b5.id}/after-sales/close`, { method: 'POST', body: JSON.stringify({ reason: '想关掉' }) }, shop.token)
-  check('⑧ B⓪ resolved 后 close=409(状态只前进)', r.status === 409)
+  r = await request(`/admin/bookings/${b5.id}/status`, { method: 'PATCH', body: JSON.stringify({ action: 'endAfterSales', note: '再来一次' }) }, shop.token)
+  check('⑧ B⓪ 已结案再结束=409(终态不回拨,前置由状态机挡)', r.status === 409, `status=${r.status}`)
   const list1 = await request('/admin/bookings', {}, shop.token)
   const b5row = list1.data.bookings.find((x) => x.id === b5.id)
-  check('⑧ B⓪ 状态机随单下发:resolved + 时间线 ≥3 条(发起/进展/解决)', b5row.afterSales.status === 'resolved' && b5row.afterSales.timeline.length >= 3, JSON.stringify(b5row.afterSales))
+  check('⑧ B⓪ 状态机随单下发:resolved + 时间线 ≥2 条(发起/结束;裁B 收掉进展这一节)', b5row.afterSales.status === 'resolved' && b5row.afterSales.timeline.length >= 2, JSON.stringify(b5row.afterSales))
   check('㊷ D51 售后解决:admin bookings 徽标=售后已解决(细分文案随后端,前端不自拼)', b5row.listBadgeText === '售后已解决', JSON.stringify({ t: b5row.listBadgeText, k: b5row.listBadgeKind }))
   {
     // 反面:待支付单必无已签结算单,徽标=空串(条件渲染一挂就没了,不冒「已签署」假话)
@@ -1781,6 +1784,49 @@ const main = async () => {
                     const svcPrice = dbx.prepare('SELECT price_cents FROM services WHERE id = ?').get(shop.serviceId).price_cents
                     check('㋘ 账本红线:随单充值不算服务收入(签署入账只记服务那部分现金)',
                       inc2.reduce((sum, r) => sum + r.amount_cents, 0) === svcPrice, JSON.stringify({ inc: inc2, svcPrice }))
+
+                    /* ===== ㋙ 裁 A/B 行为(店主 08-24 三裁)=====
+                       A:爽约走状态机 + 爽约后动作收敛;B:三步链收掉,留痕挂到「结束售后」出口。 */
+                    // A① 爽约前置:已完成的单不许再标爽约(原来任何状态都能标一次,标完主状态被改写、收入被冲销)
+                    const bA = await mk('㋙爽约', 13)
+                    const shA = await request('/admin/settlements', { method: 'POST', body: JSON.stringify({ userId: bA.userId || bA.user_id || (bA.user && bA.user.id), settlements: [{ bookingId: bA.id, payIntent: 'offline_full', items: [{ serviceId: shop.serviceId, qty: 1 }], technicians: [{ technicianId: shop.tech1, role: 'main', itemNos: [1] }] }] }) }, shop.token)
+                    await request(`/settlements/${encodeURIComponent(shA.data.settlements[0].code)}/sign`, { method: 'POST', body: JSON.stringify({ signature: '㋙签', disclaimerAccepted: true }) }, null, { 'x-tenant-id': shop.tenantId })
+                    const incA0 = incomeOf(bA.id).reduce((n, r) => n + r.amount_cents, 0)
+                    const nsBad = await request(`/admin/bookings/${bA.id}/no-show`, { method: 'POST', body: JSON.stringify({ reason: '试试已完成的单能不能标爽约' }) }, shop.token)
+                    check('㋙A① 已完成单标爽约=409(状态机挡;原来能标,标完收入被冲销)', nsBad.status === 409, `status=${nsBad.status}`)
+                    check('㋙A① 被挡住的爽约没动账(收入分文未变)', incomeOf(bA.id).reduce((n, r) => n + r.amount_cents, 0) === incA0)
+                    // A② 未发生的单可以标爽约,标完动作收敛(不再出现取消/确认到店/去售后)
+                    const bB = await mk('㋙爽约2', 14)
+                    const nsOk = await request(`/admin/bookings/${bB.id}/no-show`, { method: 'POST', body: JSON.stringify({ reason: '顾客没来' }) }, shop.token)
+                    check('㋙A② 未发生的单可标爽约(仍走原写入路由,扣费口径不变)', nsOk.status === 200, JSON.stringify(nsOk.data).slice(0, 140))
+                    const listNs = (await request('/admin/bookings', {}, shop.token)).data.bookings.find((x) => x.id === bB.id)
+                    check('㋙A② 爽约后主状态=CANCELLED 且留下 no_show 标', listNs.status === 'CANCELLED' && Boolean(listNs.noShowAt), JSON.stringify({ s: listNs.status, n: listNs.noShowAt }))
+                    check('㋙A② 爽约后动作收敛:不再出现取消/确认到店/去售后',
+                      !(listNs.allowedActions || []).some((a) => ['cancel', 'confirmArrival', 'openAfterSales'].includes(a.key)), JSON.stringify(listNs.allowedActions))
+                    check('㋙A③ 再标一次爽约=409(终态不许重复标)',
+                      (await request(`/admin/bookings/${bB.id}/no-show`, { method: 'POST', body: JSON.stringify({}) }, shop.token)).status === 409)
+                    // A④ 员工标爽约=403(ownerOnly 住在状态机里,不再靠路由自己判)
+                    check('㋙A④ 员工标爽约=403/409(仅老板,判据在状态机)',
+                      [403, 409].includes((await request(`/admin/bookings/${(await mk('㋙爽约3', 15)).id}/no-show`, { method: 'POST', body: JSON.stringify({}) }, staffToken)).status))
+                    // B① 结束售后:空结果打不通(必填),填了才落 after_sales_events(留痕跟着出口走)
+                    const bC = await mk('㋙售后', 16)
+                    const shC = await request('/admin/settlements', { method: 'POST', body: JSON.stringify({ userId: bC.userId || bC.user_id || (bC.user && bC.user.id), settlements: [{ bookingId: bC.id, payIntent: 'offline_full', items: [{ serviceId: shop.serviceId, qty: 1 }], technicians: [{ technicianId: shop.tech1, role: 'main', itemNos: [1] }] }] }) }, shop.token)
+                    await request(`/settlements/${encodeURIComponent(shC.data.settlements[0].code)}/sign`, { method: 'POST', body: JSON.stringify({ signature: '㋙售后签', disclaimerAccepted: true }) }, null, { 'x-tenant-id': shop.tenantId })
+                    await request(`/admin/bookings/${bC.id}/status`, { method: 'PATCH', body: JSON.stringify({ action: 'openAfterSales', note: '㋙ 掉钻' }) }, shop.token)
+                    const evBefore = dbx.prepare("SELECT COUNT(*) n FROM after_sales_events WHERE booking_id = ?").get(bC.id).n
+                    const endEmpty = await request(`/admin/bookings/${bC.id}/status`, { method: 'PATCH', body: JSON.stringify({ action: 'endAfterSales', note: '' }) }, shop.token)
+                    check('㋙B① 结束售后不填结果=400 RESULT_REQUIRED(不许无痕迹变绿)', endEmpty.status === 400 && endEmpty.data?.error?.code === 'RESULT_REQUIRED', JSON.stringify(endEmpty.data).slice(0, 120))
+                    await request(`/admin/bookings/${bC.id}/status`, { method: 'PATCH', body: JSON.stringify({ action: 'endAfterSales', note: '免费返工,顾客确认满意' }) }, shop.token)
+                    const evAfter = dbx.prepare("SELECT kind, text FROM after_sales_events WHERE booking_id = ? ORDER BY created_at DESC").all(bC.id)
+                    check('㋙B② 留痕跟着出口走:结束售后写 after_sales_events(kind=resolve,原文入库)',
+                      evAfter.length === evBefore + 1 && evAfter[0].kind === 'resolve' && evAfter[0].text === '免费返工,顾客确认满意', JSON.stringify(evAfter).slice(0, 160))
+                    const bCrow = (await request('/admin/bookings', {}, shop.token)).data.bookings.find((x) => x.id === bC.id)
+                    check('㋙B③ 结果句三端同源:afterSales.resultText = 刚填那句(顾客端读的就是它)',
+                      bCrow.afterSales?.resultText === '免费返工,顾客确认满意', JSON.stringify(bCrow.afterSales?.resultText))
+                    check('㋙B④ 三步链三条路由全部下线(留一条就是绕过合同④ 的后门)',
+                      (await request(`/admin/bookings/${bC.id}/after-sales/progress`, { method: 'POST', body: JSON.stringify({ text: 'x' }) }, shop.token)).status === 404
+                      && (await request(`/admin/bookings/${bC.id}/after-sales/resolve`, { method: 'POST', body: JSON.stringify({ resultText: 'x' }) }, shop.token)).status === 404
+                      && (await request(`/admin/bookings/${bC.id}/after-sales/close`, { method: 'POST', body: JSON.stringify({ reason: 'x' }) }, shop.token)).status === 404)
                   }
 
                   /* ===== ㋔ 跨店串号检测(店主 08-23 本批核心)=====
@@ -2832,6 +2878,63 @@ const main = async () => {
         && adminJs.includes('renderAfterSalesReadonly(booking.afterSales)'))
       check('㋘ wiring⑧ 商家小程序售后徽标读售后轨道+句子取后端 listBadgeText(不自己拼第二句)',
         miniOrders.includes('const hasAs = Boolean(b.afterSalesStatus)') && miniOrders.includes("b.listBadgeText || '售后'"))
+      /* 🔴 ㋙D 交付完整性(2026-08-24 立,复发登记):
+         D70 那批把 booking-state.mjs(整刀的核心)**漏进了 git** —— 本机全绿、克隆出来直接起不来。
+         护栏:凡是被 import 的自研模块,必须是 git 已跟踪文件。判据不问"我记得加了没",
+         问 `git ls-files` 的真实输出(判据律)。 */
+      {
+        let tracked = null
+        try {
+          tracked = new Set(execFileSync('git', ['ls-files'], { cwd: ROOT42, encoding: 'utf8' }).split('\n').filter(Boolean))
+        } catch (e) { tracked = null }
+        if (!tracked) {
+          check('㋙D (跳过)拿不到 git ls-files,交付完整性未验', true)
+        } else {
+          const entryFiles = [['apps/api/local-server.mjs', 'apps/api'], ['apps/web/admin.js', 'apps/web'], ['apps/web/customer.js', 'apps/web']]
+          const missing = []
+          for (const [entry, dir] of entryFiles) {
+            const src = readFileSync(join(ROOT42, entry), 'utf8')
+            for (const m of src.matchAll(/from '\.\/([A-Za-z0-9_-]+\.mjs)'/g)) {
+              const rel = `${dir}/${m[1]}`
+              if (!tracked.has(rel)) missing.push(`${entry} → ${rel}`)
+            }
+          }
+          // 网页端是 classic script:被 admin.html 挂载的 /web/*.js 同样必须在库里
+          const html = readFileSync(join(ROOT42, 'apps/web/admin.html'), 'utf8')
+          for (const m of html.matchAll(/src="\/web\/([A-Za-z0-9_.-]+\.js)\?/g)) {
+            const rel = `apps/web/${m[1]}`
+            if (!tracked.has(rel)) missing.push(`admin.html → ${rel}`)
+          }
+          check('㋙D 交付完整性:被 import/挂载的自研文件全部已进 git(漏一个=克隆出来起不来)',
+            missing.length === 0, missing.join(' | '))
+        }
+      }
+      /* ===== ㋙ wiring(裁 A/B/C 的护栏,店主 08-24)===== */
+      const guardSrc = readFileSync(join(ROOT42, 'apps/api/test-guard.mjs'), 'utf8')
+      const suiteFiles = readdirSync(join(ROOT42, 'apps/api')).filter((f) => /^test-.*\.mjs$/.test(f) && f !== 'test-guard.mjs')
+      const unguarded = suiteFiles.filter((f) => {
+        const src = readFileSync(join(ROOT42, 'apps/api', f), 'utf8')
+        if (!/const (BASE_URL|URL_A) = /.test(src)) return false        // 自带服务/纯静态扫描的不算
+        return !src.includes('assertTestTarget')
+      })
+      check('㋙C① 每个打接口的套件都装了测试护栏(裁 C:套件永远不许写进真库)',
+        unguarded.length === 0, `没装的:${unguarded.join(', ')}`)
+      check('㋙C② 护栏判据问的是服务器"往哪个库写"(dataScope),不是问环境变量(判据律)',
+        guardSrc.includes("health?.dataScope !== 'test'") && srv.includes('dataScope:'))
+      check('㋙C③ 真库/沙箱都判为 live:只有回归脚本的临时库(ll-ci-data.*)或显式 LL_TEST_DATA=1 才是 test',
+        /\/\^ll-ci-data\\\./.test(srv) && srv.includes("LL_TEST_DATA === '1'"))
+      check('㋙A wiring 两端不再各写一份爽约/处置定金的显示条件(判据只在状态机)',
+        !adminJs.includes("depositDisposal.state === 'pending' ? `<button")
+        && !miniOrders.includes("['CONFIRMED', 'IN_PROGRESS', 'SERVING'].includes(status)")
+        && bkState.includes('disposeDeposit:') && bkState.includes("from: ['PENDING_PAYMENT', 'CONFIRMED'],"))
+      /* 判据要验"还能不能点到",不是"文件里还有没有这几个字" ——
+         注释里写「asWriteProgress 已删」照样命中字符串,那是废判据(判据律)。
+         所以验的是:处理器定义没了、wxml 里没有 bindtap 绑定、网页没有那个 dataset 钩子。 */
+      const miniOrdersWxml = readFileSync(join(ROOT42, 'miniprogram/pages/merchant/orders/index.wxml'), 'utf8')
+      check('㋙B wiring 三步链两端 UI 零残留(后端路由已下线,前端按钮同批收)',
+        !/\[data-aftersales-booking\]/.test(adminJs) && !/data-aftersales-booking="/.test(adminJs)
+        && !/^\s*(asWriteProgress|asResolve|asClose)\s*\(/m.test(miniOrders)
+        && !/bindtap="(asWriteProgress|asResolve|asClose)"/.test(miniOrdersWxml))
       // ㊼ 裁决前端面:项目组=下拉(现有分类+不限)+存量野文本标红改选(不静默改)
       check('㊼ 前端下拉+存量标红在场(savePackage select/legacyGroupBad/danger)', adminJs.includes('groupOptions') && adminJs.includes('legacyGroupBad') && adminJs.includes('danger: legacyGroupBad'))
     }

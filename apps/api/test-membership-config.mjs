@@ -4,6 +4,9 @@
 // 3. tiersEnabled=false 时接口不下发等级字段;打开后才下发
 // 4. 充值档位 CRUD + 租户隔离
 const BASE_URL = process.env.TEST_BASE_URL || 'http://127.0.0.1:4128'
+/* 测试护栏(裁 C):套件永远不许写进真库 —— 开跑前问服务器「你往哪个库写」 */
+import { assertTestTarget } from './test-guard.mjs'
+await assertTestTarget(BASE_URL)
 const PLATFORM = process.env.TEST_ADMIN_TOKEN || 'owner-demo-token'
 const RUN_ID = Date.now().toString(36)
 

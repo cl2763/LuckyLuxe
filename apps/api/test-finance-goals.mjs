@@ -3,6 +3,9 @@
 // 2. 薪酬配置 → 月结草稿(底薪+提成=业绩×比例) → 确认入账(幂等) → 预估口径合一
 // 3. 套餐闸门:关闭员工功能后 payroll 接口被拦
 const BASE_URL = process.env.TEST_BASE_URL || 'http://127.0.0.1:4128'
+/* 测试护栏(裁 C):套件永远不许写进真库 —— 开跑前问服务器「你往哪个库写」 */
+import { assertTestTarget } from './test-guard.mjs'
+await assertTestTarget(BASE_URL)
 const TOKEN = process.env.TEST_ADMIN_TOKEN || 'owner-demo-token'
 
 let checks = 0

@@ -3,6 +3,9 @@
 // 2. 商家 FAQ 命中直答(替代静默转人工);带服务意图的混合消息不被 FAQ 抢答
 // 3. 停用条目后恢复静默转人工;删除、权限保护
 const BASE_URL = process.env.TEST_BASE_URL || 'http://127.0.0.1:4128'
+/* 测试护栏(裁 C):套件永远不许写进真库 —— 开跑前问服务器「你往哪个库写」 */
+import { assertTestTarget } from './test-guard.mjs'
+await assertTestTarget(BASE_URL)
 const TOKEN = process.env.TEST_ADMIN_TOKEN || 'owner-demo-token'
 const RUN_ID = Date.now().toString(36)
 

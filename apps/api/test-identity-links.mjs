@@ -3,6 +3,9 @@
 // 2. 历史用户身份回填:所有带 email/openid/google/phone 的用户都有对应 identity 记录
 // 3. 身份带 tenant_id;owner 可通过 /admin/users/:id/identities 查看
 const BASE_URL = process.env.TEST_BASE_URL || 'http://127.0.0.1:4128'
+/* 测试护栏(裁 C):套件永远不许写进真库 —— 开跑前问服务器「你往哪个库写」 */
+import { assertTestTarget } from './test-guard.mjs'
+await assertTestTarget(BASE_URL)
 const TOKEN = process.env.TEST_ADMIN_TOKEN || 'owner-demo-token'
 const RUN_ID = Date.now().toString(36)
 

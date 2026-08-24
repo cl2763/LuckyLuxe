@@ -7,6 +7,9 @@
    ⓪ 自定义发放仅老板可用(员工 403),发放记录只追加(禁删触发器)
    设计图算例:原价 680 / 档位小计 394 / 定金 100 / 券 30 → 应收 264,逐分复现 */
 const BASE_URL = process.env.TEST_BASE_URL || 'http://127.0.0.1:4128'
+/* 测试护栏(裁 C):套件永远不许写进真库 —— 开跑前问服务器「你往哪个库写」 */
+import { assertTestTarget } from './test-guard.mjs'
+await assertTestTarget(BASE_URL)
 const PLATFORM = process.env.TEST_ADMIN_TOKEN || 'owner-demo-token'
 const RUN_ID = Date.now().toString(36)
 

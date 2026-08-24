@@ -9,6 +9,9 @@
 // ⑧ 重开日结留痕(状态 reopened + 次数 + 原因),重开后才允许改分成
 // ⑨ 租户隔离:B 店看不到也改不动 A 店的日结
 const BASE_URL = process.env.TEST_BASE_URL || 'http://127.0.0.1:4128'
+/* 测试护栏(裁 C):套件永远不许写进真库 —— 开跑前问服务器「你往哪个库写」 */
+import { assertTestTarget } from './test-guard.mjs'
+await assertTestTarget(BASE_URL)
 const PLATFORM = process.env.TEST_ADMIN_TOKEN || 'owner-demo-token'
 const RUN_ID = Date.now().toString(36)
 

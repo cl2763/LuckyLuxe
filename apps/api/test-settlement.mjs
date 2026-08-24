@@ -4,6 +4,9 @@
 // 另测:设计图算例复现 / 免收目录项 / 单指按档 / 足部两边同加 / 代付多单 /
 //       签字扣卡(先烧迁移桶)/ 余额不足拦签 / 已签不可改只能追加更正 / 租户隔离
 const BASE_URL = process.env.TEST_BASE_URL || 'http://127.0.0.1:4128'
+/* 测试护栏(裁 C):套件永远不许写进真库 —— 开跑前问服务器「你往哪个库写」 */
+import { assertTestTarget } from './test-guard.mjs'
+await assertTestTarget(BASE_URL)
 const PLATFORM = process.env.TEST_ADMIN_TOKEN || 'owner-demo-token'
 const RUN_ID = Date.now().toString(36)
 

@@ -8,6 +8,9 @@
 // 6. 门店币种/时区随 /admin/business-hours 下发(老板端据此显示金额与"今天")
 // 7. 新客欢迎语用本店品牌(此前写死 Lucky Luxe)
 const BASE_URL = process.env.TEST_BASE_URL || 'http://127.0.0.1:4128'
+/* 测试护栏(裁 C):套件永远不许写进真库 —— 开跑前问服务器「你往哪个库写」 */
+import { assertTestTarget } from './test-guard.mjs'
+await assertTestTarget(BASE_URL)
 const PLATFORM = process.env.TEST_ADMIN_TOKEN || 'owner-demo-token'
 const RUN_ID = Date.now().toString(36)
 

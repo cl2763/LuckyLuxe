@@ -7,6 +7,9 @@
 // ⑤ 环比:上一周期为 0 时百分比给 null,不硬写 0% 或 100%
 // ⑥ 租户隔离:B 店的趋势里没有 A 店的钱
 const BASE_URL = process.env.TEST_BASE_URL || 'http://127.0.0.1:4128'
+/* 测试护栏(裁 C):套件永远不许写进真库 —— 开跑前问服务器「你往哪个库写」 */
+import { assertTestTarget } from './test-guard.mjs'
+await assertTestTarget(BASE_URL)
 const PLATFORM = process.env.TEST_ADMIN_TOKEN || 'owner-demo-token'
 const RUN_ID = Date.now().toString(36)
 

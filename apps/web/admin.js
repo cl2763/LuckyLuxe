@@ -1,5 +1,5 @@
 // 构建号:每次交付递增。侧栏可见,排查"改了没生效"时先对版本。
-const ADMIN_BUILD = '20260824e-d70'
+const ADMIN_BUILD = '20260824f-abc'
 let pricingState = { module: 'storefront', tab: 'items', categories: [], items: [], rules: {}, editing: null, preview: null, storefrontPicker: false }
 console.log(`[admin] build ${ADMIN_BUILD}`)
 
@@ -5117,7 +5117,8 @@ function renderBookingCard(booking) {
               已完成的单点「已取消」会把已确认的收入冲掉。现在能不能点由状态机说了算,文案也后端给。 */''}
         <button class="ghost" data-view-booking="${booking.id}" type="button">${t('details')}</button>
         ${bookingActionButtons(booking)}
-        ${isOwnerRole() && booking.depositDisposal && booking.depositDisposal.state === 'pending' ? `<button class="ghost" data-disposal-booking="${booking.id}" type="button">处置定金</button>` : ''}
+        <!-- 裁 A:「处置定金」改由状态机出(allowedActions 里的 disposeDeposit,金额也在后端 label 里),
+             这里不再自己判 isOwnerRole() && state==='pending' —— 那是与小程序分叉的第二份判据。 -->
       </div>
     </article>
     ${isOpen ? renderBookingDetail(booking) : ''}
@@ -6551,6 +6552,34 @@ els.ownerLogin.addEventListener('click', (event) => {
   }
 })
 els.ownerLogout.addEventListener('click', ownerLogout)
+/* 图 A①-3:网页端订单管理同一入口同一弹层(二选一 + 备注;仅老板)。
+   裁 A(08-24):入口改由状态机给(allowedActions.disposeDeposit),这里只剩弹层本身,
+   由动作分发调进来 —— 按钮的显示条件不再在页面里写第二遍。 */
+function openDisposalModal(id) {
+  const bk = (owner.bookings || []).find((b) => b.id === id)
+  const dd = bk && bk.depositDisposal
+  if (!dd) return
+  // D50-b:prompt 链 → 页内表单弹层(处置方式+备注同屏)
+  openFormModal({
+    title: `处置爽约定金 ${dd.outstandingText}`,
+    hint: `顾客:${bk.user?.displayName || bk.user?.display_name || '顾客'}。留存=记入客户档案,下次预约自动带出;没收=独立「定金收入·爽约没收」行入账,不进业绩。`,
+    fields: [
+      { key: 'action', label: '处置方式', type: 'select', value: 'retain', options: [['retain', '留存到客户档案'], ['forfeit', '没收入账']] },
+      { key: 'note', label: '备注(选填)', type: 'text', value: '' }
+    ],
+    saveText: '确认处置',
+    onSave: async (v) => {
+      const r = await request(`/admin/bookings/${encodeURIComponent(id)}/deposit-disposal`, {
+        method: 'POST', body: JSON.stringify({ action: v.action, note: String(v.note || '') })
+      })
+      toast(r.note || '已处置')
+      const data = await request('/admin/bookings')
+      owner.bookings = data.bookings
+      render()
+    }
+  })
+}
+
 els.adminLayout.addEventListener('click', (event) => {
   if (event.target.closest('#fullDemoSeed')) {
     request('/admin/demo/full-seed', { method: 'POST', body: '{}' })
@@ -6572,67 +6601,12 @@ els.adminLayout.addEventListener('click', (event) => {
     render()
     return
   }
-  /* 图 A①-3:网页端订单管理同一入口同一弹层(二选一 + 备注;仅老板)。 */
-  const disposalBtn = event.target.closest('[data-disposal-booking]')
-  if (disposalBtn) {
-    const id = disposalBtn.dataset.disposalBooking
-    const bk = (owner.bookings || []).find((b) => b.id === id)
-    const dd = bk && bk.depositDisposal
-    if (!dd) return
-    // D50-b:prompt 链 → 页内表单弹层(处置方式+备注同屏)
-    openFormModal({
-      title: `处置爽约定金 ${dd.outstandingText}`,
-      hint: `顾客:${bk.user?.displayName || bk.user?.display_name || '顾客'}。留存=记入客户档案,下次预约自动带出;没收=独立「定金收入·爽约没收」行入账,不进业绩。`,
-      fields: [
-        { key: 'action', label: '处置方式', type: 'select', value: 'retain', options: [['retain', '留存到客户档案'], ['forfeit', '没收入账']] },
-        { key: 'note', label: '备注(选填)', type: 'text', value: '' }
-      ],
-      saveText: '确认处置',
-      onSave: async (v) => {
-        const r = await request(`/admin/bookings/${encodeURIComponent(id)}/deposit-disposal`, {
-          method: 'POST', body: JSON.stringify({ action: v.action, note: String(v.note || '') })
-        })
-        toast(r.note || '已处置')
-        const data = await request('/admin/bookings')
-        owner.bookings = data.bookings
-        render()
-      }
-    })
-    return
-  }
   /* D70(店主 08-24):原来这里还有一份 [data-convert-aftersales] 的「转售后」弹层 ——
      按钮已随 allowedActions 收敛消失,这段成了**无人能到达的第二份实现**(下次改口径必漏一处),
      按 L2 同类扫尽直接删。发起售后现在只有一条路:allowedActions → openAfterSales。 */
-  /* ⚠️ D71-b 待店主裁(08-24 L1 走查发现):这条「售后处理」(写进展/标记已解决/关闭)
-     目前**没有按钮能点到** —— 合同④ 规定售后中唯一动作是「结束售后」,三步处理链因此被收掉了。
-     两条路选一条:①确认按合同收掉 → 连这段一起删;②要保留「写进展」→ 加回状态机做成一个动作。
-     在店主裁定前原样留着(不接线、不误导),不许自己替她决定。 */
-  const asBtn = event.target.closest('[data-aftersales-booking]')
-  if (asBtn) {
-    const id = asBtn.dataset.aftersalesBooking
-    // D50-b(待办11 点名同类):售后 1/2/3 输入链 → 弹层(动作下拉+对应文本框就地切换)
-    openFormModal({
-      title: '售后处理',
-      fields: [
-        { key: 'act', label: '处理动作', type: 'select', value: 'progress', options: [['progress', '写进展'], ['resolve', '标记已解决(需处理结果)'], ['close', '关闭(仅老板,需原因)']] },
-        { key: 'text', label: '处理进展', type: 'text', value: '', showIf: (v) => v.act === 'progress' },
-        { key: 'resultText', label: '处理结果(必填,顾客端展示这段)', type: 'text', value: '', showIf: (v) => v.act === 'resolve' },
-        { key: 'reason', label: '关闭原因(必填)', type: 'text', value: '', showIf: (v) => v.act === 'close' }
-      ],
-      saveText: '提交',
-      onSave: async (v) => {
-        const val = String(v.act === 'progress' ? v.text : (v.act === 'resolve' ? v.resultText : v.reason) || '').trim()
-        if (!val) { toast('内容不能为空'); return false }
-        const body = v.act === 'progress' ? { text: val } : (v.act === 'resolve' ? { resultText: val } : { reason: val })
-        await request(`/admin/bookings/${encodeURIComponent(id)}/after-sales/${v.act}`, { method: 'POST', body: JSON.stringify(body) })
-        toast('已记录')
-        const data = await request('/admin/bookings')
-        owner.bookings = data.bookings
-        render()
-      }
-    })
-    return
-  }
+  /* D71-b 已裁(店主 08-24 裁 B):「售后处理」三步弹层(写进展/标记已解决/关闭)整段删除 ——
+     合同④ 售后中唯一动作是「结束售后」,留痕改挂在那个出口上(点结束必填处理结果 + 写 after_sales_events)。
+     后端那三条路由与商家小程序的三颗按钮同批下线,三处一起收,不留半条路。 */
   const bookingDetailButton = event.target.closest('[data-view-booking]')
   if (bookingDetailButton) {
     owner.selectedBookingId = bookingDetailButton.dataset.viewBooking
@@ -7681,6 +7655,31 @@ els.bookingList.addEventListener('click', (event) => {
       ? `确定取消这个预约吗?\n${label}\n取消后时段将释放,已入账收入会自动冲销。`
       : `Cancel this booking?\n${label}`)
     if (!confirmed) return
+  }
+  /* 裁 A:爽约与处置定金有各自的写入路由(定金处置链),按 key 分出去;
+     分发不是状态判断 —— 能不能点由后端 allowedActions 决定,这里只负责"点了走哪条路"。 */
+  if (action === 'noShow') {
+    const booking = owner.bookings.find((item) => item.id === button.dataset.booking)
+    const who = booking?.user?.display_name || booking?.user?.email || '顾客'
+    /* D50 纪律:新增代码禁 prompt/confirm/alert —— 用页内弹层,顺便让原因可填(写进留痕)。 */
+    openFormModal({
+      title: button.textContent.trim() || '标记爽约',
+      hint: `确认 ${escapeHtml(who)} 爽约?预约将取消并释放时段;已入账收入会冲销。有已收定金的,之后在本单上二选一处置(留存/没收)。`,
+      fields: [{ key: 'reason', label: '原因(选填,进留痕)', type: 'text', value: '' }],
+      saveText: '确认爽约',
+      onSave: async (v) => {
+        await request(`/admin/bookings/${encodeURIComponent(button.dataset.booking)}/no-show`, { method: 'POST', body: JSON.stringify({ reason: String(v.reason || '') }) })
+        toast('已标记爽约')
+        const data = await request('/admin/bookings')
+        owner.bookings = data.bookings
+        render()
+      }
+    })
+    return
+  }
+  if (action === 'disposeDeposit') {
+    openDisposalModal(button.dataset.booking)
+    return
   }
   if (action === 'openAfterSales' || action === 'endAfterSales') {
     openFormModal({

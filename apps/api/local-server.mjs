@@ -4,7 +4,7 @@ import { DatabaseSync } from 'node:sqlite'
 import { nameToUsername, isValidUsername } from './pinyin-names.mjs'
 import { createDecipheriv, createHash, createHmac } from 'node:crypto'
 import { copyFileSync, existsSync, mkdirSync, readdirSync, readFileSync, renameSync, statSync, unlinkSync, writeFileSync } from 'node:fs'
-import { dirname, extname, join, normalize, resolve } from 'node:path'
+import { basename, dirname, extname, join, normalize, resolve } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import os from 'node:os'   // 真机调试:开发机局域网 IP 探测(启动日志给手机用的地址)
 import { pngSize, rasterBackend, svgToPng } from './svg-raster.mjs'
@@ -44,7 +44,17 @@ const db = new DatabaseSync(join(dataDir, 'lucky-luxe.sqlite'))
 
 /* 订单状态机(D70):合法前置 / 能做什么动作 / 动作后去哪,全在 ./booking-state.mjs;
    路由只做「取参 → 调状态机 → 回结果」,不许在路由里写状态判断(店主 08-24 硬约束)。 */
-const bookingState = createBookingState({ db })
+const bookingState = createBookingState({
+  db,
+  /* 裁 A:「处置定金」这颗按钮出不出、写多少钱,判据只有一处 —— 状态机问,这里答。
+     判据与序列化面同源(latestDisposal / outstandingNoShowDepositCents),不许两边各算一遍。 */
+  noShowPendingDepositText: (booking) => {
+    const tid = booking.tenant_id || currentTenantId()
+    if (latestDisposal(booking.id, tid)) return ''            // 已处置过:入口消失(A③)
+    const cents = outstandingNoShowDepositCents(booking.id, tid)
+    return cents > 0 ? formatMoneyCents(cents, tid, 'auto') : ''   // A⓪:没收过钱就不出入口
+  }
+})
 const PORT = Number(process.env.PORT || 4000)
 // 主钥匙:新名 OWNER_TOKEN 优先,旧名 OWNER_DEMO_TOKEN 兼容(现网还在用旧名,先不破坏)。
 // 名字带 DEMO 容易让人低估它的权限——它是平台最高信任根。
@@ -11405,6 +11415,12 @@ async function route(req, res) {
       /* 真机 SVG 空白件后:快照要出 PNG 得有栅格化后端。把它摆进 /health,
          上线后一眼能看出生产装没装上(空=还在回落 SVG,真机图会白),不靠猜。 */
       snapshotRaster: rasterBackend() || 'none',
+      /* 🔴 测试护栏(店主 08-24 裁 C):**这台服务往哪个库写**,由服务器自己说。
+         套件开跑前问这一句,不是 'test' 就拒跑 —— 判据律:判据要能证伪"我会不会写进真库",
+         而不是问一个"记得设就设、忘了就没有"的环境变量。
+         'test' 只认回归脚本建的临时库(/tmp/ll-ci-data.XXXX)或显式 LL_TEST_DATA=1;
+         生产永远是 'live'。 */
+      dataScope: (!IS_PRODUCTION && (process.env.LL_TEST_DATA === '1' || /^ll-ci-data\./.test(basename(dataDir)))) ? 'test' : 'live',
       time: iso(new Date())
     })
   }
@@ -16302,54 +16318,12 @@ async function route(req, res) {
       note: out.created ? '已记为定金预收(负债);签字时才会兑现。' : '这张预约已经标过了,没有重复记账。'
     })
   }
-  /* ===== 售后完成态(图 B 部)三个写入口。
-     B①:写进展=当单技师+老板;标已解决=当单技师+老板(必填结果);关闭=仅老板(必填原因)。
-     B②:接口没有任何金额字段,涉钱只 related_code 关联更正单。
-     B⓪:状态只前进 —— resolved/closed 是终态,不回拨;纠错走追加进展备注。 */
-  if (req.method === 'POST' && path.startsWith('/admin/bookings/') && path.includes('/after-sales/')) {
-    const id = path.split('/')[3]
-    const act = path.split('/').pop()
-    const booking = db.prepare('SELECT * FROM bookings WHERE id = ? AND tenant_id = ?').get(id, currentTenantId())
-    if (!booking) throw apiError(404, 'NOT_FOUND', '找不到这张预约。')
-    if (!booking.after_sales_status) throw apiError(400, 'NOT_AFTER_SALES', '这张单不在售后中。')   // 合同⑤:读售后轨道,不读主状态
-    // 当单技师+老板(assertStaffCanAccessBooking:员工只碰得到自己名下的单)
-    assertStaffCanAccessBooking(adminSession, booking)
-    const body = await readBody(req)
-    const now = iso(new Date())
-    const actorName = adminSession.displayName || adminSession.email || adminSession.role
-    const cur = booking.after_sales_status || 'pending'
-    const insertEvent = (kind, text, relatedCode = '') => db.prepare(
-      `INSERT INTO after_sales_events (id, tenant_id, booking_id, kind, text, related_code, actor_name, actor_role, technician_id, created_at)
-       VALUES (?, ?, ?, ?, ?, NULLIF(?, ''), ?, ?, ?, ?)`
-    ).run(randomId('ase'), currentTenantId(), booking.id, kind, String(text || '').slice(0, 500), String(relatedCode || '').slice(0, 60), actorName, adminSession.role, adminSession.technicianId || null, now)
-    if (act === 'progress') {
-      const text = String(body.text || '').trim()
-      if (!text) throw apiError(400, 'BAD_REQUEST', '进展内容不能为空。')
-      insertEvent('progress', text)
-      // pending → processing;终态不回拨(纠错走追加备注,状态不动)
-      if (cur === 'pending') db.prepare("UPDATE bookings SET after_sales_status = 'processing', updated_at = ? WHERE id = ?").run(now, booking.id)
-      return json(res, 201, { afterSales: afterSalesState(db.prepare('SELECT * FROM bookings WHERE id = ?').get(booking.id)) })
-    }
-    if (act === 'resolve') {
-      const resultText = String(body.resultText || '').trim()
-      if (!resultText) throw apiError(400, 'RESULT_REQUIRED', '处理结果必填 —— 不许无痕迹地"变绿"(B④)。')
-      if (cur === 'closed') throw apiError(409, 'ALREADY_CLOSED', '这单售后已关闭,是终态;要补记录用写进展。')
-      if (cur === 'resolved') throw apiError(409, 'ALREADY_RESOLVED', '这单售后已标过解决。')
-      insertEvent('resolve', resultText, body.relatedCode)
-      db.prepare("UPDATE bookings SET after_sales_status = 'resolved', after_sales_result = ?, updated_at = ? WHERE id = ?").run(resultText, now, booking.id)
-      return json(res, 200, { afterSales: afterSalesState(db.prepare('SELECT * FROM bookings WHERE id = ?').get(booking.id)) })
-    }
-    if (act === 'close') {
-      if (adminSession.role !== 'owner') throw apiError(403, 'FORBIDDEN', '关闭售后仅老板可操作。')
-      const reason = String(body.reason || '').trim()
-      if (!reason) throw apiError(400, 'REASON_REQUIRED', '关闭必须填一句原因。')
-      if (cur === 'resolved' || cur === 'closed') throw apiError(409, 'ALREADY_TERMINAL', '这单售后已是终态。')
-      insertEvent('close', reason)
-      db.prepare("UPDATE bookings SET after_sales_status = 'closed', updated_at = ? WHERE id = ?").run(now, booking.id)
-      return json(res, 200, { afterSales: afterSalesState(db.prepare('SELECT * FROM bookings WHERE id = ?').get(booking.id)) })
-    }
-    throw apiError(404, 'NOT_FOUND', '未知的售后操作。')
-  }
+  /* ===== 售后三步链(写进展/标记已解决/关闭)已按裁 B 收掉(店主 2026-08-24)=====
+     合同④:售后中唯一动作是「结束售后」。三个写入口的**留痕职责**没丢,挪到那个出口上:
+     点「结束售后」必须填处理结果(状态机 requiresNote),写 after_sales_events 一行(kind=resolve),
+     再落 after_sales_result —— 按钮守合同,过程守审计。
+     顾客侧撤回(/my/bookings/:id/after-sales/withdraw)是另一条线,不在此列,原样保留。
+     ⚠️ 这三条路由**整体下线**:留着等于留三个绕过合同的后门(前端不给按钮、接口还能打)。 */
   /* 爽约定金处置(图 A 部):老板二选一 —— retain 留存到客户档案 / forfeit 没收入账。
      A①:处置**仅老板**;A⑤:无收取记录=拒绝(helper 里断言)。 */
   if (req.method === 'POST' && path.startsWith('/admin/bookings/') && path.endsWith('/deposit-disposal')) {
@@ -16733,9 +16707,12 @@ async function route(req, res) {
       }
     })
   }
-  // P1.2 爽约:按 noShowForfeitPct 扣定金(迟到超过宽限也走这条)
+  /* P1.2 爽约(裁 A,店主 08-24):**同样走状态机** —— 路由零状态判断。
+     原来这条路由自己 UPDATE status、自己校验 role、且**没有任何前置态校验**:
+     已完成的单、已取消的单、售后中的单都能标一次爽约,标完主状态被改写、收入被冲销。
+     现在:取参 → assertTransition(前置:CONFIRMED + 仅老板 + 售后中不许)→ applyTransition。
+     扣多少钱仍按店配算(业务口径,不属于状态机),算完作为字段交给状态机一起写。 */
   if (req.method === 'POST' && path.startsWith('/admin/bookings/') && path.endsWith('/no-show')) {
-    if (adminSession.role !== 'owner') throw apiError(403, 'FORBIDDEN', '仅老板可标记爽约。')
     const id = path.split('/')[3]
     const booking = db.prepare('SELECT * FROM bookings WHERE id = ?').get(id)
     if (!booking) throw apiError(404, 'NOT_FOUND', 'Booking not found.')
@@ -16745,13 +16722,23 @@ async function route(req, res) {
     const config = getDepositConfig(tid)
     const fee = forfeitedDepositCents(booking, config, { noShow: true })
     const now = iso(new Date())
+    bookingState.assertTransition(booking, 'noShow', { actor: 'merchant', role: adminSession.role, apiError })
     db.exec('BEGIN IMMEDIATE')
     try {
-      db.prepare('DELETE FROM booking_slots WHERE booking_id = ?').run(id)
-      // A⓪:爽约要留下可识别的标(no_show_at)—— 处置入口只对已爽约的单开
-      db.prepare("UPDATE bookings SET status = 'CANCELLED', cancelled_at = ?, no_show_at = ?, cancellation_fee_cents = ?, updated_at = ? WHERE id = ?").run(now, now, fee, now, id)
-      db.prepare('INSERT INTO booking_status_history (id, booking_id, from_status, to_status, note, created_at) VALUES (?, ?, ?, ?, ?, ?)')
-        .run(randomId('hist'), id, booking.status, 'CANCELLED', String(nsBody.reason || '顾客爽约(或迟到超过宽限)'), now)
+      bookingState.applyTransition(booking, 'noShow', {
+        now,
+        note: String(nsBody.reason || ''),
+        actorEmail: adminSession.email || 'admin',
+        deleteSlots: () => db.prepare('DELETE FROM booking_slots WHERE booking_id = ?').run(id),
+        reverseIncome: () => {},   // 冲销放事务外(与原实现一致:账本自己带事务)
+        noShowFields: () => ({ cancelled_at: now, no_show_at: now, cancellation_fee_cents: fee }),
+        updateBooking: (fields) => {
+          const keys = Object.keys(fields)
+          db.prepare(`UPDATE bookings SET ${keys.map((k) => `${k} = ?`).join(', ')} WHERE id = ?`).run(...keys.map((k) => fields[k]), id)
+        },
+        writeHistory: ({ from, to, note, at }) => db.prepare('INSERT INTO booking_status_history (id, booking_id, from_status, to_status, note, created_at) VALUES (?, ?, ?, ?, ?, ?)')
+          .run(randomId('hist'), id, from, to, note, at)
+      })
       db.exec('COMMIT')
     } catch (error) {
       db.exec('ROLLBACK')
@@ -16775,10 +16762,13 @@ async function route(req, res) {
     const booking = db.prepare('SELECT * FROM bookings WHERE id = ?').get(id)
     if (!booking) throw apiError(404, 'NOT_FOUND', 'Booking not found.')
     assertStaffCanAccessBooking(adminSession, booking)
-    bookingState.assertTransition(booking, actionKey, { actor: 'merchant', role: adminSession.role === 'owner' ? 'owner' : 'staff', apiError })
+    const noteIn = String(body.note || '').trim()
+    // 必填校验也在状态机里(裁 B:结束售后必须填处理结果)—— 路由只把用户填的字传进去
+    bookingState.assertTransition(booking, actionKey, { actor: 'merchant', role: adminSession.role === 'owner' ? 'owner' : 'staff', apiError, note: noteIn })
+    const nowIso = iso(new Date())
     bookingState.applyTransition(booking, actionKey, {
-      now: iso(new Date()),
-      note: String(body.note || '').trim(),
+      now: nowIso,
+      note: noteIn,
       actorEmail: adminSession.email || 'admin',
       deleteSlots: () => db.prepare('DELETE FROM booking_slots WHERE booking_id = ?').run(id),
       reverseIncome: (who) => reverseBookingIncome(id, who),
@@ -16786,7 +16776,14 @@ async function route(req, res) {
       updateBooking: (patch) => {
         const cols = Object.keys(patch)
         db.prepare(`UPDATE bookings SET ${cols.map((c) => `${c} = ?`).join(', ')} WHERE id = ?`).run(...cols.map((c) => patch[c]), id)
-      }
+      },
+      /* 裁 B:审计留痕跟着出口走 —— 结束售后写一行 after_sales_events(与原三步链 resolve 同一张表同一 kind),
+         顾客端时间线读的就是它,收掉三步链后这节不能断。 */
+      writeAfterSalesEvent: ({ kind, text, at }) => db.prepare(
+        `INSERT INTO after_sales_events (id, tenant_id, booking_id, kind, text, related_code, actor_name, actor_role, technician_id, created_at)
+         VALUES (?, ?, ?, ?, ?, NULL, ?, ?, ?, ?)`
+      ).run(randomId('ase'), currentTenantId(), id, kind, String(text || '').slice(0, 500),
+        adminSession.displayName || adminSession.email || adminSession.role, adminSession.role, adminSession.technicianId || null, at)
     })
     return json(res, 200, { booking: serializeBooking(db.prepare('SELECT * FROM bookings WHERE id = ?').get(id)) })
   }

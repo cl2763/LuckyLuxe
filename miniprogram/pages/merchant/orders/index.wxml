@@ -235,12 +235,10 @@
       <view wx:if="{{asPanel.footnote}}" class="ds-hint">{{asPanel.footnote}}</view>
       <view class="ds-warn">涉及退款/差额一律走「发起更正」,售后单只关联不动钱(图 B②)</view>
     </scroll-view>
-    <!-- B① 权限:写进展/标已解决=当单技师+老板;关闭=仅老板;终态后按钮整体消失 -->
-    <view wx:if="{{asPanel.canWrite || asPanel.canClose}}" class="as-actions">
-      <view wx:if="{{asPanel.canWrite}}" class="as-btn pri" bindtap="asWriteProgress">写进展</view>
-      <view wx:if="{{asPanel.canWrite}}" class="as-btn" bindtap="asResolve">标记已解决</view>
-      <view wx:if="{{asPanel.canClose}}" class="as-btn ghost" bindtap="asClose">关闭</view>
-    </view>
+    <!-- 裁 B(店主 08-24):三步链(写进展/标记已解决/关闭)收掉 —— 合同④ 售后中唯一动作是「结束售后」,
+         它在订单操作面板里(由状态机给),点它必须填处理结果,那句就是这里显示的「处理结果」。
+         这个面板从此只读:看原因、看时间线、看结果。 -->
+    <view wx:if="{{asPanel.canWrite}}" class="ds-hint">要结束这单售后:回订单列表点这张单 →「结束售后」,填一句处理结果(顾客端会看到这句)。</view>
   </view>
 
   <!-- ===== 爽约定金处置弹层(图 A-2,仅老板可见入口)===== -->

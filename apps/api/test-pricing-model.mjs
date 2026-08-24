@@ -6,6 +6,9 @@
 // 5. 卸甲降维:「本店制作免卸甲」是价目表里价格为 0 的目录项,不再有免卸规则引擎
 // 6. 租户隔离:另一家店读不到、也报不了本店的价
 const BASE_URL = process.env.TEST_BASE_URL || 'http://127.0.0.1:4128'
+/* 测试护栏(裁 C):套件永远不许写进真库 —— 开跑前问服务器「你往哪个库写」 */
+import { assertTestTarget } from './test-guard.mjs'
+await assertTestTarget(BASE_URL)
 const PLATFORM = process.env.TEST_ADMIN_TOKEN || 'owner-demo-token'
 const RUN_ID = Date.now().toString(36)
 

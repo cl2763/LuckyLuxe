@@ -153,6 +153,8 @@ Page(Object.assign({
        下面保留的是**业务入口**(去结算/继续结算/撤回改单/查看结算单/处置定金)——
        它们不是状态转移,依赖的是单据状态,不归订单状态机管。 */
     for (const a of (rawA.allowedActions || [])) opts.push({ label: a.label, action: a.key })
+    // 动作 key → 既有处理器(分发≠状态判断:能不能点已经由状态机在 allowedActions 里定了)
+
 
     // 业务入口:待签 → 继续结算 / 撤回改单;有已签单 → 查看结算单;其余 → 去结算
     if (pending.length) {
@@ -169,15 +171,9 @@ Page(Object.assign({
     if (rawA.afterSalesStatus) opts.push({ label: '查看/处理售后', asOpen: true })
 
     const rawB = (this.data.raw || []).find((x) => x.id === id) || {}
-    /* ⬜ 图上没画「标记爽约」入口(A 部流程的前提),按最合理方式放进操作面板,已记假设清单:
-       仅老板;待到店/进行中的单可标(后端 /no-show 路由本来就是仅老板)。 */
-    if (this.data.isOwner && ['CONFIRMED', 'IN_PROGRESS', 'SERVING'].includes(status)) {
-      opts.push({ label: '标记爽约', noShow: true })
-    }
-    // 图 A-1:已爽约 + 定金待处置 → 老板出「处置定金」;无收取记录不出(A⓪)
-    if (this.data.isOwner && rawB.depositDisposal && rawB.depositDisposal.state === 'pending') {
-      opts.push({ label: `处置定金(${rawB.depositDisposal.outstandingText} 待处置)`, disposal: true })
-    }
+    /* 🔴 裁 A(店主 08-24):「标记爽约」「处置定金」原来在这里各写了一份显示条件
+       —— 与上面的 allowedActions 循环**重复**(D70 那刀之后爽约会出两颗一模一样的按钮),
+       而且判据与网页端各一份(网页那份写在 renderBookings 里)。两段全删,统一从状态机出。 */
     if (rawB.depositDisposal && ['retain', 'forfeit', 'auto_forfeit'].includes(rawB.depositDisposal.state)) {
       opts.push({ label: '查看定金处置记录', dispView: true })
     }
@@ -202,6 +198,8 @@ Page(Object.assign({
     this.setData({ actPanel: null })
     const ctx = this._panelCtx
     if (o.act) return this.tapGridAct(o) // 网格那条路径给的是 act 串
+    // 状态机动作:按 key 分发(分发≠状态判断——能不能点已经由状态机在 allowedActions 里定了)
+    if (o.action) return this.runBookingAction(ctx, o.action, o.label)
     if (o.note) this.goNote(ctx)
     else if (o.settle) this.goSettle(ctx)
     else if (o.voidSheets) this.voidSheets(o.voidSheets, ctx)
@@ -212,6 +210,48 @@ Page(Object.assign({
     else if (o.dispView) this.viewDisposal(ctx.id)
     else if (o.asOpen) this.openAfterSales({ currentTarget: { dataset: { id: ctx.id } } })
     else this.applyStatus(ctx.id, o.s)
+  },
+
+  /* 🔴 D70/裁 A:状态机动作的**唯一执行口**(商家小程序侧)。
+     写入一律 PATCH /status 带 action;爽约与处置定金各有自己的写入路由,在这里分出去。
+     需要填字的两个动作(发起售后=问题描述、结束售后=处理结果)用可输入弹层收,
+     **必填**:空串不发请求(后端也再挡一道,裁 B)。 */
+  runBookingAction(ctx, key, label) {
+    if (key === 'noShow') return this.markNoShow(ctx)
+    if (key === 'disposeDeposit') return this.openDisposal(ctx.id)
+    const send = async (note) => {
+      try {
+        await api.adminPatch(`/admin/bookings/${encodeURIComponent(ctx.id)}/status`, note === undefined ? { action: key } : { action: key, note })
+        wx.showToast({ title: '已更新', icon: 'none' })
+        this.loadList(); this.loadDayView(this.data.selDate)
+      } catch (err) { wx.showToast({ title: (err && err.message) || '操作失败', icon: 'none' }) }
+    }
+    if (key === 'openAfterSales' || key === 'endAfterSales') {
+      const isEnd = key === 'endAfterSales'
+      wx.showModal({
+        title: label || (isEnd ? '结束售后' : '去售后'),
+        editable: true,
+        placeholderText: isEnd ? '处理结果(必填,顾客端展示这段)' : '问题描述(必填)',
+        success: (r) => {
+          if (!r.confirm) return
+          const note = String(r.content || '').trim()
+          if (!note) { wx.showToast({ title: isEnd ? '处理结果必填' : '问题描述必填', icon: 'none' }); return }
+          send(note)
+        },
+        fail: (e) => console.warn('[showModal fail]', e)
+      })
+      return
+    }
+    if (key === 'cancel') {
+      wx.showModal({
+        title: label || '取消订单',
+        content: '确认取消?将释放该时段;若已入账会自动冲销。',
+        success: (r) => { if (r.confirm) send() },
+        fail: (e) => console.warn('[showModal fail]', e)
+      })
+      return
+    }
+    send()
   },
 
   /* ===== 爽约与定金处置(图 A 部)===== */
@@ -370,68 +410,9 @@ Page(Object.assign({
     })
   },
   closeAfterSales() { this.setData({ asPanel: null }) },
-  // B①:写进展(当单技师+老板);editable 弹窗,时间线 append-only
-  asWriteProgress() {
-    const p = this.data.asPanel
-    if (!p) return
-    wx.showModal({
-      title: '写处理进展',
-      editable: true,
-      placeholderText: '如:已联系顾客,约 8/13 到店补钻',
-      success: async (r) => {
-        if (!r.confirm || !String(r.content || '').trim()) return
-        try {
-          await api.adminPost(`/admin/bookings/${encodeURIComponent(p.bookingId)}/after-sales/progress`, { text: r.content.trim() })
-          wx.showToast({ title: '进展已记录', icon: 'none' })
-          this.setData({ asPanel: null }); this.loadList()
-        } catch (err) { wx.showToast({ title: (err && err.message) || '写入失败', icon: 'none' }) }
-      },
-      fail: (e) => console.warn('[showModal fail]', e) // S组卫生批:fail=开发者域错误,console 留痕不弹 UI(toast 会撞转场,D27 家族)
-    })
-  },
-  // B①/B④:标记已解决 —— 处理结果必填,顾客端展示的就是这段文案
-  asResolve() {
-    const p = this.data.asPanel
-    if (!p) return
-    wx.showModal({
-      title: '标记已解决(结果将展示给顾客)',
-      editable: true,
-      placeholderText: '处理结果(必填),如:8/13 到店免费补钻 2 颗,顾客确认满意',
-      success: async (r) => {
-        if (!r.confirm) return
-        const text = String(r.content || '').trim()
-        if (!text) { wx.showToast({ title: '处理结果必填', icon: 'none' }); return }
-        try {
-          await api.adminPost(`/admin/bookings/${encodeURIComponent(p.bookingId)}/after-sales/resolve`, { resultText: text })
-          wx.showToast({ title: '已标记解决', icon: 'none' })
-          this.setData({ asPanel: null }); this.loadList()
-        } catch (err) { wx.showToast({ title: (err && err.message) || '操作失败', icon: 'none' }) }
-      },
-      fail: (e) => console.warn('[showModal fail]', e) // S组卫生批:fail=开发者域错误,console 留痕不弹 UI(toast 会撞转场,D27 家族)
-    })
-  },
-  // B①:关闭 = 仅老板,必填原因(无需处理/顾客撤回等)
-  asClose() {
-    const p = this.data.asPanel
-    if (!p) return
-    wx.showModal({
-      title: '关闭售后(仅老板)',
-      editable: true,
-      placeholderText: '关闭原因(必填),如:顾客撤回反馈',
-      success: async (r) => {
-        if (!r.confirm) return
-        const reason = String(r.content || '').trim()
-        if (!reason) { wx.showToast({ title: '关闭必须填一句原因', icon: 'none' }); return }
-        try {
-          await api.adminPost(`/admin/bookings/${encodeURIComponent(p.bookingId)}/after-sales/close`, { reason })
-          wx.showToast({ title: '已关闭', icon: 'none' })
-          this.setData({ asPanel: null }); this.loadList()
-        } catch (err) { wx.showToast({ title: (err && err.message) || '操作失败', icon: 'none' }) }
-      },
-      fail: (e) => console.warn('[showModal fail]', e) // S组卫生批:fail=开发者域错误,console 留痕不弹 UI(toast 会撞转场,D27 家族)
-    })
-  },
-
+  /* 裁 B(店主 08-24):asWriteProgress / asResolve / asClose 三个处理器已删 ——
+     三步链收掉,售后的终结只有一个出口:订单操作面板里的「结束售后」(状态机给的动作,处理结果必填)。
+     留着这三个 = 留三条绕过合同④ 的路(后端那三条路由也已同批下线)。 */
   applyStatus(id, s) {
     const doIt = async () => {
       try { await api.adminPatch(`/admin/bookings/${encodeURIComponent(id)}/status`, { status: s }); wx.showToast({ title: '已更新', icon: 'none' }); this.loadList() }

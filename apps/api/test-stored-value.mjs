@@ -3,6 +3,9 @@
 // 2. 余额不足拒绝耗卡;账户列表含沉睡天数并排序
 // 3. 储值账本只追加;演示数据填充幂等;AI 解读返回文本
 const BASE_URL = process.env.TEST_BASE_URL || 'http://127.0.0.1:4128'
+/* 测试护栏(裁 C):套件永远不许写进真库 —— 开跑前问服务器「你往哪个库写」 */
+import { assertTestTarget } from './test-guard.mjs'
+await assertTestTarget(BASE_URL)
 const TOKEN = process.env.TEST_ADMIN_TOKEN || 'owner-demo-token'
 const RUN_ID = Date.now().toString(36)
 

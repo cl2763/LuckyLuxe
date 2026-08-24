@@ -4,6 +4,9 @@
 // 3. business-hours 返回 specialDates;hoursText 并入"特殊安排"供 AI 引用
 // 4. 周排班视图当天标记店休
 const BASE_URL = process.env.TEST_BASE_URL || 'http://127.0.0.1:4128'
+/* 测试护栏(裁 C):套件永远不许写进真库 —— 开跑前问服务器「你往哪个库写」 */
+import { assertTestTarget } from './test-guard.mjs'
+await assertTestTarget(BASE_URL)
 const TOKEN = process.env.TEST_ADMIN_TOKEN || 'owner-demo-token'
 
 let checks = 0

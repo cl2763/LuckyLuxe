@@ -13,6 +13,9 @@
    压满一万轮:STRESS_ROUNDS=10000 node test-settle-stress.mjs
 */
 const BASE_URL = process.env.TEST_BASE_URL || 'http://127.0.0.1:4128'
+/* 测试护栏(裁 C):套件永远不许写进真库 —— 开跑前问服务器「你往哪个库写」 */
+import { assertTestTarget } from './test-guard.mjs'
+await assertTestTarget(BASE_URL)
 const PLATFORM = process.env.TEST_ADMIN_TOKEN || 'owner-demo-token'
 const ROUNDS = Number(process.env.STRESS_ROUNDS || 1200)
 const RUN = Date.now().toString(36)

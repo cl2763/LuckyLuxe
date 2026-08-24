@@ -6,6 +6,9 @@
 
    本文件只覆盖 corner case,正常路径靠别的套件(报告纪律:corner case 为主)。 */
 const BASE_URL = process.env.TEST_BASE_URL || 'http://127.0.0.1:4128'
+/* 测试护栏(裁 C):套件永远不许写进真库 —— 开跑前问服务器「你往哪个库写」 */
+import { assertTestTarget } from './test-guard.mjs'
+await assertTestTarget(BASE_URL)
 const PLATFORM = process.env.TEST_ADMIN_TOKEN || 'owner-demo-token'
 const RUN = Date.now().toString(36)
 /* 「今天」一律问后端要(门店时区),不用测试机的本地日期 ——

@@ -8,6 +8,9 @@
         业绩 / 排行 / 员工端我的业绩 / 目标进度 全都不含它,只有冲卡列体现
    corner case 类别:边界值 / 空态 / 并发时序 / 越权 / 幂等 / 异常输入 —— 见各段注释标注。 */
 const BASE_URL = process.env.TEST_BASE_URL || 'http://127.0.0.1:4128'
+/* 测试护栏(裁 C):套件永远不许写进真库 —— 开跑前问服务器「你往哪个库写」 */
+import { assertTestTarget } from './test-guard.mjs'
+await assertTestTarget(BASE_URL)
 const PLATFORM = process.env.TEST_ADMIN_TOKEN || 'owner-demo-token'
 const RUN_ID = Date.now().toString(36)
 

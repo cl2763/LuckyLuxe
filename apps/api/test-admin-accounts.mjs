@@ -7,6 +7,9 @@
 // 3. 员工账号继承技师隔离;停用后立即无法登录;重置密码后旧密码失效
 // 4. 演示白名单登录保持兼容;错误密码/停用账号给人话报错
 const BASE_URL = process.env.TEST_BASE_URL || 'http://127.0.0.1:4128'
+/* 测试护栏(裁 C):套件永远不许写进真库 —— 开跑前问服务器「你往哪个库写」 */
+import { assertTestTarget } from './test-guard.mjs'
+await assertTestTarget(BASE_URL)
 const OWNER = 'owner-demo-token'
 const RUN_ID = Date.now().toString(36)
 
