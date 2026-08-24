@@ -7,6 +7,9 @@
 - 后端(单文件): `apps/api/local-server.mjs`(Node 22,node:sqlite,零依赖)
 - 前端: `apps/web/admin.js` / `admin.html` / `styles.css`(老板端+员工端同一套,按角色渲染)
 - 数据库: `apps/api/local-data/lucky-luxe.sqlite`(真实经营数据,**已 gitignore,绝不入库**)
+- 沙箱库(演示/走查/双端实拍用): `apps/api/sandbox-data/lucky-luxe.sqlite`(已 gitignore)
+  起沙箱一律 `bash apps/api/start-sandbox.sh`(不带参数即用该目录,启动会打印实际库路径)。
+  ⚠️ 2026-08-24 之前沙箱库放在 `/private/tmp/...`,被系统清理过几次 —— 那就是「4310 屡次挂掉/数据不见」的根因,不要再往临时目录放。
 - 启动: `启动服务器.command`(--watch 自动重载,端口 4128);重置: `重置数据.command`(先备份)
 - 规划与决策记录: `/Users/changliu/Desktop/LuckyLuxe_Claude_Handoff_2026-07-03/` 下的
   `ROADMAP_2026-07-04.md`、`财务系统设计方案.md`、`后台全面评审报告.md`、`员工端评审报告.md`

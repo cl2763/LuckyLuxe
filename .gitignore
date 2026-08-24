@@ -11,6 +11,8 @@ apps/api/.env.bak.*
 # Local demo database/runtime data (真实经营数据/初始密码文件,绝不入库)
 # 注意: apps/api/data/ 里的 AI 知识库种子(ai-customer-service/)必须入库,只挡数据库文件
 apps/api/local-data/
+# 沙箱库(演示/走查用,2026-08-24 从 /private/tmp 搬进仓内固定目录:临时目录被系统清理=4310 屡次数据不见的根因)
+apps/api/sandbox-data/
 apps/api/data/*.sqlite
 backups/
 tmp/

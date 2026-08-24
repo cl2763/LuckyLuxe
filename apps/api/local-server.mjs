@@ -18875,6 +18875,8 @@ createServer((req, res) => {
      安全说明:局域网可达仅限开发机,管理端仍要账号密码;演示白名单只在设了
      ALLOW_DEMO_ADMIN_LOGIN=true 的沙箱进程里开,真库那台(4128)不设=没有白名单。 */
   console.log(`Lucky Luxe local API running at http://localhost:${PORT}`)
+  // 2026-08-24:把**实际库路径**打出来 —— 沙箱曾经连在 /private/tmp 被系统清掉,靠猜找了很久
+  console.log(`数据库: ${join(dataDir, 'lucky-luxe.sqlite')}`)
   if (!IS_PRODUCTION) {
     const lan = (() => {
       try {
