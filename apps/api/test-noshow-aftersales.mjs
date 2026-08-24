@@ -1646,6 +1646,48 @@ const main = async () => {
                       JSON.stringify(auth2.user.redeemablePrizeText))
                   }
 
+                  /* ===== ㋗ D70 止血(店主 08-24):一单最多一条服务收入行 =====
+                     原来幂等只认 source='booking':已签署入账(settlement)的单再点一次「已完成」
+                     会按预约标价再记一笔 = 同一单两笔收入。现在两个 source 一起认。 */
+                  {
+                    // 时段要与本文件其它组错开(同一技师首尾相接也算冲突):㋕ 用 05:00、㋑ 用 08:05
+                    const bkIRes = await request('/admin/bookings/direct', { method: 'POST', body: JSON.stringify({ newCustomerName: `㋗止血客${RUN_ID}`, serviceId: shop.serviceId, technicianId: shop.tech2, date: dateStr(0), time: '02:00' }) }, shop.token)
+                    if (!bkIRes.data || !bkIRes.data.booking) throw new Error(`㋗ 建单失败(${bkIRes.status}):${JSON.stringify(bkIRes.data).slice(0, 160)}`)
+                    const bkI = bkIRes.data.booking
+                    const uidI = bkI.userId || bkI.user_id || (bkI.user && bkI.user.id)
+                    const incomeRows = () => dbx.prepare("SELECT source, amount_cents FROM finance_transactions WHERE booking_id = ? AND type = 'income' AND NOT EXISTS (SELECT 1 FROM finance_transactions r WHERE r.reversal_of = finance_transactions.id)").all(bkI.id)
+                    check('㋗ 未签署单零收入行(签署前不许有钱)', incomeRows().length === 0, JSON.stringify(incomeRows()))
+    // D25 闸:没绑微信不能充值 —— 夹具直贴 openid(绑定流程另有专测,这里不是被测物),
+    // 不贴的话余额是 0、签署走成全额到店、就产生不了 settlement 收入行,这条断言会验了个寂寞
+                    dbx.prepare('UPDATE users SET wechat_open_id = ? WHERE id = ?').run(`wx-i-${RUN_ID}`, uidI)
+                    const rechI = await request('/admin/stored-value/recharge', { method: 'POST', body: JSON.stringify({ userId: uidI, amountCents: 20000, payChannel: 'cash', note: '㋗ 夹具' }) }, shop.token)
+                    if (rechI.status !== 200 && rechI.status !== 201) throw new Error(`㋗ 夹具充值失败(${rechI.status}):${JSON.stringify(rechI.data).slice(0, 120)}`)
+                    await request(`/admin/bookings/${bkI.id}/status`, { method: 'PATCH', body: JSON.stringify({ status: 'COMPLETED' }) }, shop.token)
+                    const afterFirst = incomeRows()
+                    check('㋗ 完成一次 = 恰好一条收入行', afterFirst.length === 1, JSON.stringify(afterFirst))
+                    // 再点一次「已完成」——止血前这里会再记一笔
+                    await request(`/admin/bookings/${bkI.id}/status`, { method: 'PATCH', body: JSON.stringify({ status: 'COMPLETED' }) }, shop.token)
+                    check('㋗ 重复点「已完成」不再多记(幂等)', incomeRows().length === 1, JSON.stringify(incomeRows()))
+                    // 关键场景:已有 settlement 收入的单再点「已完成」,不许再按标价记一笔
+                    /* 关键场景:**已通过签署入账**的单再点「已完成」,不许再按标价记一笔。
+                       这一条验的是 recordBookingIncome 的**幂等判定**本身:
+                       行为层要造出 source='settlement' 的收入行,得让签署真的走上储值/定金腿,
+                       而那取决于结算引擎走哪条腿(payIntent/余额/定金配置),把断言绑在那上面
+                       等于换个 payIntent 就验了个寂寞;直接 INSERT 账本行又会撞 append-only 哈希链。
+                       所以这里验判定条件本身 —— 改回旧写法(只认 source='booking')立刻红。 */
+                    const srvIncome = readFileSync(new URL('../../apps/api/local-server.mjs', import.meta.url).pathname, 'utf8')
+                    // 只看 recordBookingIncome 这一个函数体 —— 冲销函数 reverseBookingIncome 里
+                    // 找原始行时本来就该按 source='booking' 查,全文搜会误伤它(第一版判据就是这么红的)
+                    const recFn = srvIncome.slice(srvIncome.indexOf('function recordBookingIncome'), srvIncome.indexOf('function reverseBookingIncome'))
+                    check('㋗ 幂等判定认「签署收入」(止血正题:不再只看 source=booking)',
+                      /t\.booking_id = \? AND t\.type = 'income' AND t\.source IN \('booking', 'settlement'\)/.test(recFn)
+                      && !/t\.source = 'booking'\s*\n/.test(recFn))
+                    // 验 SQL 里那份 source 白名单本身(注释里会提到 deposit_disposal,全文搜又会误伤 —— 判据要落在被测物上)
+                    const srcList = (recFn.match(/t\.source IN \(([^)]*)\)/) || [, ''])[1].replace(/['\s]/g, '').split(',').filter(Boolean)
+                    check('㋗ 白名单只认 booking 与 settlement(爽约没收/守恒回填不算"这单服务收入已记过")',
+                      srcList.length === 2 && srcList.includes('booking') && srcList.includes('settlement'), JSON.stringify(srcList))
+                  }
+
                   /* ===== ㋖ 批④ 接口层(店主 08-24):S7 定金摘要 / S9 会员体系只读行 ===== */
                   {
                     const depoCfg98 = await request('/admin/deposit-config', {}, shop.token)

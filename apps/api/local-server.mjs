@@ -7110,9 +7110,12 @@ function bookingIncomeCategory(booking) {
 // 订单完成 → 自动确认收入（按订单幂等：已有未被冲销的收入则跳过）
 function recordBookingIncome(booking, createdBy = 'system') {
   if (!booking?.id || !booking.service_price_cents) return null
+  /* 🩹 D70 止血:幂等要认「签署收入」——只认 source='booking' 会让已签署入账的单再点一次
+     「已完成」按标价再记一笔(同一单两笔收入)。白名单只放这两个:爽约没收/守恒回填记的不是这单服务收入。
+     终局是 A 案(入账唯一路径=签署),详见 handoff/D70查明_订单动作按钮与售后态_2026-08-24.md */
   const existing = db.prepare(`
     SELECT t.* FROM finance_transactions t
-    WHERE t.booking_id = ? AND t.source = 'booking'
+    WHERE t.booking_id = ? AND t.type = 'income' AND t.source IN ('booking', 'settlement')
       AND NOT EXISTS (SELECT 1 FROM finance_transactions r WHERE r.reversal_of = t.id)
     ORDER BY t.created_at DESC LIMIT 1
   `).get(booking.id)
