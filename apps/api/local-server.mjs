@@ -17,6 +17,8 @@ import { createDemoReset, isDemoTenant, PROTECTED_REAL_TENANTS } from './demo-re
 import { createDemoFacts } from './demo-facts.mjs'                    // 演示店事实口(铺设脚本不再直连库)
 import { createPlatformOps } from './platform-ops.mjs'                // 平台运维域(备份/五项/运维日志/重置财务密码)
 import { ensureListedColumn } from './tenant-visibility.mjs'          // D76:选店页可见性(与账本归属解耦)
+import { createPlatformSessions } from './platform-session.mjs'       // 平台后台「记住这台电脑」(令牌不换,只是不用每次掏)
+import { createAdminAuth } from './admin-auth.mjs'                    // 商家端账号与会话(口令哈希/一次性口令/签票/认票)
 import { createImportCustomers } from './import-customers.mjs'        // 平台代商家导入老顾客(公约②)
 import { snapshotDb, dailyBackup } from './db-backup.mjs'             // 库快照唯一出口(按需 + 日备同一处)
 import { createStaticServe } from './static-serve.mjs'                // 静态文件服务(公约②)
@@ -1211,13 +1213,14 @@ function seedDatabase() {
   db.prepare('INSERT OR IGNORE INTO users (id, display_name, phone, wechat_open_id) VALUES (?, ?, ?, ?)').run('user-demo', 'Lucky Member', '+1 000 000 0000', 'demo-wechat-openid')
 }
 
-function json(res, statusCode, body) {
-  res.writeHead(statusCode, {
+function json(res, statusCode, body, extraHeaders) {
+  // extraHeaders 是 2026-08-25 加的可选参数(平台会话要下 Set-Cookie);不传时行为一字未变
+  res.writeHead(statusCode, Object.assign({
     'content-type': 'application/json; charset=utf-8',
     'access-control-allow-origin': '*',
     'access-control-allow-methods': 'GET,POST,PATCH,PUT,DELETE,OPTIONS',
     'access-control-allow-headers': 'content-type,authorization'
-  })
+  }, extraHeaders || {}))
   res.end(JSON.stringify(body))
 }
 
@@ -7138,8 +7141,14 @@ function computeFinanceProgress(month) {
 // ===== 财务密码门禁：进入财务数据前的第二道锁 =====
 const financeSessions = new Map()
 const { importTenantCustomers } = createImportCustomers({ db, apiError, randomId, iso })
+const { adminPasswordHash, randomPassword, issueAdminSession, adminFromSessionToken, bootstrapOwnerAccount } = createAdminAuth({
+  db, randomId, iso, createHash, defaultTenantId: DEFAULT_TENANT_ID
+})
+const platformSessions = createPlatformSessions({
+  db, randomId, iso, sha256: (v) => createHash('sha256').update(String(v)).digest('hex')
+})
 const platformOps = createPlatformOps({
-  db, apiError, randomId, iso, snapshotDb, financeSessions,
+  db, apiError, randomId, iso, snapshotDb, financeSessions, adminPasswordHash, randomPassword,
   dbPath: join(dataDir, 'lucky-luxe.sqlite'), backupDir: join(dataDir, 'backups')
 })
 
@@ -13341,10 +13350,14 @@ async function route(req, res) {
     return json(res, 200, { ok: true, revokedAt: now })
   }
   // ===== 平台超管端(platform.html):仅 OWNER_TOKEN 主钥匙可用 =====
+  /* 平台门禁:①贴令牌(Bearer)②这台电脑上已签的长期会话(httpOnly Cookie,绑设备)。
+     两条都是"同一把钥匙"——会话是拿令牌换来的,强度没降;换的只是"每次都要掏出来"。 */
   const isPlatform = () => {
     const auth = req.headers.authorization || ''
-    return auth === `Bearer ${OWNER_TOKEN}`
+    if (auth === `Bearer ${OWNER_TOKEN}`) return true
+    return platformSessions.verify({ cookieHeader: req.headers.cookie, userAgent: req.headers['user-agent'] })
   }
+  const isHttps = () => String(req.headers['x-forwarded-proto'] || '').split(',')[0].trim() === 'https'
   if (req.method === 'GET' && path === '/platform/overview') {
     if (!isPlatform()) throw apiError(401, 'UNAUTHORIZED', 'Platform token required.')
     const monthStart = `${localParts(new Date()).date.slice(0, 7)}-01`
@@ -13653,6 +13666,24 @@ async function route(req, res) {
     return json(res, 200, importTenantCustomers(tenantId, body))
   }
   // ---- 平台端·商家配置(替商家配好入驻资料):门店/营业时间/服务价目/技师/AI知识库 ----
+  /* 「记住这台电脑」:贴一次令牌换一张长期会话(httpOnly,前端读不到);
+     不勾就只当次有效。令牌本身**不再进 localStorage** —— 那正是店主担心的"钥匙散出去"。 */
+  if (req.method === 'POST' && path === '/platform/session') {
+    const b = await readBody(req).catch(() => ({}))
+    if (String(b.token || '') !== OWNER_TOKEN) throw apiError(401, 'UNAUTHORIZED', '平台令牌不对。')
+    if (b.remember === false) return json(res, 200, { remembered: false })
+    const sess = platformSessions.issue({ userAgent: req.headers['user-agent'], days: 30, secure: isHttps() })
+    return json(res, 200, { remembered: true, expiresAt: sess.expiresAt }, { 'set-cookie': sess.cookie })
+  }
+  if (req.method === 'GET' && path === '/platform/session') {
+    return json(res, 200, { active: isPlatform(), devices: isPlatform() ? platformSessions.list().length : 0 })
+  }
+  if (req.method === 'POST' && path === '/platform/session/revoke-all') {
+    if (!isPlatform()) throw apiError(401, 'UNAUTHORIZED', 'Platform token required.')
+    const n = platformSessions.revokeAll()
+    platformOps.writeLog('__system__', 'platform_sessions_revoked', `吊销全部已记住的设备:${n} 台。`)
+    return json(res, 200, { revoked: n }, { 'set-cookie': platformSessions.clearCookie() })
+  }
   /* ---- 平台运维族(重置财务密码 / 按需备份 / 逐店五项 / 运维日志):实现全在 ./platform-ops.mjs,
      这里只剩门禁 + 分发。每个动作都会自己留一行日志,不靠调用方记得写。 ---- */
   const finResetMatch = path.match(/^\/platform\/tenants\/([^/]+)\/finance-lock\/reset$/)
@@ -13660,6 +13691,15 @@ async function route(req, res) {
     if (!isPlatform()) throw apiError(401, 'UNAUTHORIZED', 'Platform token required.')
     const b = await readBody(req).catch(() => ({}))
     return json(res, 200, platformOps.resetFinanceLock(finResetMatch[1], b.reason))
+  }
+  /* 🔴 B(店主 08-25):重置**商家老板**密码。真店也能用 —— 真商户忘密码是必然事件,
+     此前平台端没有任何口,只能改库。护栏在 ./platform-ops.mjs 里(手打店名/必填原因/
+     落日志/一次性新密码 + 首登强制改密/旧会话吊销)。 */
+  const ownerPwMatch = path.match(/^\/platform\/tenants\/([^/]+)\/owner-password\/reset$/)
+  if (req.method === 'POST' && ownerPwMatch) {
+    if (!isPlatform()) throw apiError(401, 'UNAUTHORIZED', 'Platform token required.')
+    const b = await readBody(req).catch(() => ({}))
+    return json(res, 200, platformOps.resetOwnerPassword({ tenantId: ownerPwMatch[1], confirmName: b.confirmName, reason: b.reason }))
   }
   if (req.method === 'POST' && path === '/platform/backup') {
     if (!isPlatform()) throw apiError(401, 'UNAUTHORIZED', 'Platform token required.')
@@ -17520,61 +17560,10 @@ function defaultDisplayNameFor(me) {
   return (tenant && tenant.name) || '我的店铺'
 }
 
-function adminPasswordHash(username, password) {
-  return createHash('sha256').update(`admin:${String(username).toLowerCase()}:${String(password)}`).digest('hex')
-}
 
-function randomPassword() {
-  const chars = 'abcdefghjkmnpqrstuvwxyzABCDEFGHJKMNPQRSTUVWXYZ23456789'
-  let out = ''
-  for (let i = 0; i < 10; i += 1) out += chars[Math.floor(Math.random() * chars.length)]
-  return out
-}
 
-// 自举:平台交付的老板主账号。初始密码写入 local-data/初始老板账号.txt,首次改密后自动删除该文件。
-const OWNER_CREDENTIALS_FILE = new URL('./local-data/初始老板账号.txt', import.meta.url).pathname
-if (!db.prepare("SELECT id FROM admin_accounts WHERE role = 'owner'").get()) {
-  const initialPassword = randomPassword()
-  db.prepare(`INSERT INTO admin_accounts (id, username, display_name, role, technician_id, password_hash, must_change_password, status, created_at, updated_at)
-    VALUES (?, 'boss', 'Lucky Luxe Owner', 'owner', NULL, ?, 1, 'active', ?, ?)`)
-    .run(randomId('acct'), adminPasswordHash('boss', initialPassword), iso(new Date()), iso(new Date()))
-  try {
-    writeFileSync(OWNER_CREDENTIALS_FILE, `Lucky Luxe 老板主账号(首次登录后必须改密码,改完本文件自动删除)\n用户名: boss\n初始密码: ${initialPassword}\n`)
-  } catch { /* 写不进就只打日志 */ }
-  console.log(`[账号] 老板主账号已创建 用户名: boss 初始密码: ${initialPassword} (也写入 local-data/初始老板账号.txt)`)
-}
-
-function issueAdminSession(accountId, rememberDays = 30) {
-  const token = `sess_${randomId('tok').slice(4)}_${Math.random().toString(36).slice(2, 10)}`
-  const expires = new Date(Date.now() + rememberDays * 86400000)
-  db.prepare('INSERT INTO admin_sessions (token, account_id, expires_at, created_at) VALUES (?, ?, ?, ?)')
-    .run(token, accountId, iso(expires), iso(new Date()))
-  return token
-}
-
-function adminFromSessionToken(token) {
-  if (!String(token || '').startsWith('sess_')) return null
-  const row = db.prepare(`
-    SELECT s.token, s.expires_at, a.* FROM admin_sessions s
-    JOIN admin_accounts a ON a.id = s.account_id
-    WHERE s.token = ?
-  `).get(token)
-  if (!row) return null
-  if (row.expires_at < iso(new Date()) || row.status !== 'active') {
-    db.prepare('DELETE FROM admin_sessions WHERE token = ?').run(token)
-    return null
-  }
-  return {
-    role: row.role,
-    email: row.username,
-    displayName: row.display_name,
-    provider: 'account',
-    accountId: row.id,
-    technicianId: row.technician_id || null,
-    tenantId: row.tenant_id || DEFAULT_TENANT_ID,
-    mustChangePassword: Boolean(row.must_change_password)
-  }
-}
+// 自举:平台交付的老板主账号(实现在 ./admin-auth.mjs,与口令/会话同族)
+const OWNER_CREDENTIALS_FILE = bootstrapOwnerAccount({ writeFileSync })
 
 // ===== 排班申请(员工发起,老板审批) =====
 db.exec(`

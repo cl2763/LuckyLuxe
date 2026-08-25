@@ -74,6 +74,9 @@
     </div>
     <label for="tokenInput" style="display:block;margin-bottom:4px;font-size:13px;color:#666">平台令牌(不是登录密码;浏览器若自动填了密码,请清掉重贴)</label>
     <input id="tokenInput" type="password" autocomplete="off" name="platform-token" placeholder="平台令牌(OWNER_TOKEN)" style="width:100%;margin-bottom:10px">
+    <label style="display:flex;align-items:center;gap:6px;margin-bottom:10px;font-size:13px;color:#666">
+      <input id="rememberBox" type="checkbox" checked> 记住这台电脑 30 天(令牌不会存进浏览器)
+    </label>
     <button class="p" style="width:100%" onclick="login()">进入控制台</button>
     <p class="muted" style="text-align:center;margin-top:10px">仅平台方使用 · 商家后台请访问 /admin</p>
   </div>
@@ -91,7 +94,10 @@
     <button class="navbtn" data-page="kb" onclick="nav('kb')"><svg class="ni" viewBox="0 0 16 16"><path d="M3 2h7l3 3v9H3z"/><path d="M5 7h6M5 10h4"/></svg>通用知识库</button>
     <button class="navbtn dim"><svg class="ni" viewBox="0 0 16 16"><path d="M2 13V8m4 5V5m4 8V9m4 4V3"/></svg>数据报表<span class="fut">规划</span></button>
     <button class="navbtn dim"><svg class="ni" viewBox="0 0 16 16"><circle cx="8" cy="8" r="2.5"/><path d="M8 2v2m0 8v2M2 8h2m8 0h2"/></svg>平台设置<span class="fut">规划</span></button>
-    <div class="foot"><button style="width:100%" onclick="logout()">退出</button></div>
+    <div class="foot">
+      <button style="width:100%" onclick="logout()">退出</button>
+      <button style="width:100%;margin-top:6px" onclick="revokeAllDevices()">吊销所有已记住的设备</button>
+    </div>
   </aside>
 
   <main class="main">
@@ -372,14 +378,40 @@
 <div id="toast" class="toast"></div>
 
 <script>
-let TOKEN = localStorage.getItem('ll-platform-token') || ''
+/* 🔴 店主 08-25 裁定:平台后台**不改成密码登录**(那把钥匙的强度来自"长、随机、不在库里",
+   而且密码框会被浏览器记住并跨设备同步 = 平台钥匙散出去)。改的是"不用每次掏":
+   贴一次令牌 → 勾「记住这台电脑」→ 服务端签一张 httpOnly 长期会话(前端读不到)。
+   所以这里**不再把令牌写进 localStorage**;旧版本存过的,进来先清掉。 */
+try { localStorage.removeItem('ll-platform-token') } catch (e) {}
+let TOKEN = ''
 const $ = (id) => document.getElementById(id)
 const WK = ['周日','周一','周二','周三','周四','周五','周六']
 function toast(m){const t=$('toast');t.textContent=m;t.classList.add('show');setTimeout(()=>t.classList.remove('show'),2200)}
 function esc(s){return String(s??'').replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]))}
-async function api(p,o={}){const r=await fetch(p,{...o,headers:{'content-type':'application/json',authorization:'Bearer '+TOKEN,...(o.headers||{})}});const d=await r.json().catch(()=>null);if(!r.ok)throw new Error((d&&d.error&&d.error.message)||('HTTP '+r.status));return d}
-async function login(){TOKEN=$('tokenInput').value.trim();try{await api('/platform/tenants');localStorage.setItem('ll-platform-token',TOKEN);$('loginWrap').classList.add('hidden');$('app').classList.remove('hidden');refreshAll()}catch(e){toast('平台令牌不对或服务不可用:'+e.message)}}
-function logout(){localStorage.removeItem('ll-platform-token');location.reload()}
+async function api(p,o={}){const r=await fetch(p,{...o,credentials:'same-origin',headers:{'content-type':'application/json',...(TOKEN?{authorization:'Bearer '+TOKEN}:{}),...(o.headers||{})}});const d=await r.json().catch(()=>null);if(!r.ok)throw new Error((d&&d.error&&d.error.message)||('HTTP '+r.status));return d}
+async function login(){
+  TOKEN=$('tokenInput').value.trim()
+  const remember=$('rememberBox') ? $('rememberBox').checked : false
+  try{
+    await api('/platform/tenants')                       // 先验这把钥匙对不对
+    if(remember){ await api('/platform/session',{method:'POST',body:JSON.stringify({token:TOKEN,remember:true})}) }
+    $('tokenInput').value=''                             // 验完就从输入框抹掉
+    $('loginWrap').classList.add('hidden');$('app').classList.remove('hidden');refreshAll()
+  }catch(e){toast('平台令牌不对或服务不可用:'+e.message)}
+}
+function logout(){ TOKEN=''; location.reload() }
+async function revokeAllDevices(){
+  if(!confirm('吊销所有已记住的设备?(下次都要重新贴令牌)'))return
+  try{const r=await api('/platform/session/revoke-all',{method:'POST'});toast('已吊销 '+r.revoked+' 台设备');setTimeout(()=>location.reload(),800)}catch(e){toast('吊销失败:'+e.message)}
+}
+/* 开屏:先问一句"这台电脑记住过吗" —— 记住过就直接进,不再要令牌 */
+async function bootSession(){
+  try{
+    const r=await fetch('/platform/session').then(x=>x.json())
+    if(r&&r.active){$('loginWrap').classList.add('hidden');$('app').classList.remove('hidden');refreshAll()}
+  }catch(e){/* 问不到就照常显示登录卡 */}
+}
+bootSession()
 function nav(p){document.querySelectorAll('.navbtn[data-page]').forEach(b=>b.classList.toggle('on',b.dataset.page===p));['overview','merchants','config','import','leads','billing','kb'].forEach(x=>$('page-'+x).classList.toggle('hidden',x!==p));if(p==='overview')loadOverview();if(p==='leads')loadLeads();if(p==='config')initConfig();if(p==='import')initImport();if(p==='billing')loadBilling();if(p==='kb')loadPlatformKb()}
 async function refreshAll(){await loadTenants();await loadLeads();await loadOverview()}
 
@@ -562,8 +594,10 @@ async function loadTenants(){
     <td><span class="tag ${t.status==='active'?'on':'off'}">${t.status==='active'?'营业中':'已停用'}</span></td>
     <td>${t.storeCount}</td><td>${t.monthBookingCount??'-'} / ${t.bookingCount}</td><td>${esc(t.ownerUsername)||'-'}</td>
     <!-- D73/B线:归属列 —— 它决定这家店的账本受不受只追加律保护,必须一眼看得见 -->
-    <td><span class="tag ${t.kind==='demo'?'off':(t.kind==='test'?'off':'on')}">${t.kind==='demo'?'演示店':(t.kind==='test'?'测试':'真实商户')}</span></td>
-    <td class="row"><button class="sm" onclick="goConfig('${esc(t.id)}')">配置</button>${t.id==='lucky-luxe'?'<span class="muted">默认店</span>':`<button class="sm ${t.status==='active'?'d':'p'}" onclick="toggleTenant('${esc(t.id)}')">${t.status==='active'?'停用':'启用'}</button>`}${t.kind==='test'?'':`<button class="sm" onclick="switchKind('${esc(t.id)}','${t.kind==='demo'?'real':'demo'}')">${t.kind==='demo'?'转为真实商户':'转为演示店'}</button>`}</td>
+    <td><span class="tag ${t.kind==='demo'?'off':(t.kind==='test'?'off':'on')}">${t.kind==='demo'?'演示店':(t.kind==='test'?'测试':'真实商户')}</span>
+      <!-- D76:可见性是**另一件事**(顾客选店页出不出现),与账本归属解耦,两列分开看 -->
+      <span class="tag ${t.listed?'on':'off'}" title="顾客选店页是否出现">${t.listed?'选店页可见':'选店页隐藏'}</span></td>
+    <td class="row"><button class="sm" onclick="goConfig('${esc(t.id)}')">配置</button>${t.id==='lucky-luxe'?'<span class="muted">默认店</span>':`<button class="sm ${t.status==='active'?'d':'p'}" onclick="toggleTenant('${esc(t.id)}')">${t.status==='active'?'停用':'启用'}</button>`}${t.kind==='test'?'':`<button class="sm" onclick="switchKind('${esc(t.id)}','${t.kind==='demo'?'real':'demo'}')">${t.kind==='demo'?'转为真实商户':'转为演示店'}</button>`}<button class="sm" onclick="toggleListed('${esc(t.id)}',${t.listed?'false':'true'})">${t.listed?'从选店页隐藏':'放回选店页'}</button><button class="sm d" onclick="resetOwnerPw('${esc(t.id)}')">重置老板密码</button></td>
   </tr>`).join('')
   return TENANTS
 }
@@ -577,6 +611,29 @@ async function switchKind(id,to){
   const reason=prompt('写一句原因(会写进平台运维日志):')
   if(!reason||!reason.trim()){toast('原因必填');return}
   try{await api(`/platform/tenants/${id}/kind`,{method:'PATCH',body:JSON.stringify({kind:to,reason:reason.trim()})});toast('归属已改,已记进运维日志');loadTenants()}catch(e){toast(e.message)}
+}
+/* D76:只改"顾客选店页出不出现",不碰账本、不碰归属。 */
+async function toggleListed(id,to){
+  const t=TENANTS.find(x=>x.id===id)||{}
+  if(!confirm(`把「${t.name||id}」${to?'放回':'从'}顾客选店页${to?'':'隐藏'}?\n\n只改展示,账本与归属一律不动。`))return
+  const reason=prompt('写一句原因(会写进平台运维日志):')
+  if(!reason||!reason.trim()){toast('原因必填');return}
+  try{await api(`/platform/tenants/${id}/listed`,{method:'PATCH',body:JSON.stringify({listed:to,reason:reason.trim()})});toast('可见性已改');loadTenants()}catch(e){toast(e.message)}
+}
+/* 🔴 重置商家老板密码(店主 08-25):真商户忘密码是必然事件,此前平台端没有任何口。
+   护栏在服务端:手打完整店名 + 必填原因 + 落运维日志 + 一次性新密码 + 首登强制改密 + 旧会话吊销。
+   新密码只在这一次弹出来 —— 页面不留、不进日志正文。 */
+async function resetOwnerPw(id){
+  const t=TENANTS.find(x=>x.id===id)||{}
+  const typed=prompt(`重置「${t.name||id}」的**老板账号**密码。\n\n请一字不差手打这家店的完整名称以确认:`)
+  if(typed===null)return
+  const reason=prompt('写一句原因(会写进平台运维日志,例如:商家来电报忘记密码,已核身份):')
+  if(!reason||!reason.trim()){toast('原因必填');return}
+  try{
+    const r=await api(`/platform/tenants/${id}/owner-password/reset`,{method:'POST',body:JSON.stringify({confirmName:typed,reason:reason.trim()})})
+    alert(`已重置。\n\n账号:${r.username}\n一次性新密码:${r.initialPassword}\n\n这串只显示这一次,请立刻交给商家;\n对方首次登录会被强制改密。原有登录会话已全部吊销(${r.revokedSessions} 个)。`)
+    loadTenants()
+  }catch(e){toast(e.message)}
 }
 async function toggleTenant(id){if(!confirm('确认切换营业状态?停用后顾客端将无法进入该店。'))return;try{await api('/platform/tenants/'+id+'/toggle',{method:'POST',body:'{}'});toast('已切换');loadTenants()}catch(e){toast(e.message)}}
 async function createTenant(){

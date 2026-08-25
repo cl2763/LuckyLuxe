@@ -184,6 +184,70 @@ const realBefore = await statsOf('lucky-luxe')
   check('异常输入:运维日志缺 detail=400', r6.status === 400, JSON.stringify(r6.data))
 }
 
+/* 🔴 B(店主 08-25):重置**商家老板**密码。真店也能用 —— 真商户忘密码是必然事件,
+   此前平台端只有员工账号与财务密码两条重置口,老板忘了只能改库。
+   判据全真跑:真建一家店、真登录、真重置、再真登录一次。 */
+{
+  const bizId = `pwreset-${RUN_ID}`
+  const bizName = `重置探针店${RUN_ID}`
+  const made = await newTenant(bizId, bizName, 'real')
+  const username = made.owner.username
+  const oldPw = made.owner.initialPassword
+  const login = (pw) => request('/admin/auth/login', { method: 'POST', body: JSON.stringify({ email: username, password: pw }) }, null)
+  const first = await login(oldPw)
+  check('B-前置:老板用初始密码登得进', first.status === 200 && Boolean(first.data.auth?.accessToken), `${first.status}`)
+  const oldToken = first.data.auth.accessToken
+
+  const noToken = await request(`/platform/tenants/${bizId}/owner-password/reset`, { method: 'POST', body: JSON.stringify({ confirmName: bizName, reason: 'x' }) }, null)
+  check('B① 越权:不带平台令牌 = 401', noToken.status === 401, `${noToken.status}`)
+  const wrongName = await request(`/platform/tenants/${bizId}/owner-password/reset`, { method: 'POST', body: JSON.stringify({ confirmName: `${bizName}x`, reason: '商家来电报忘记密码' }) })
+  check('B② 店名差一个字 = 400 CONFIRM_NAME_MISMATCH', wrongName.status === 400 && wrongName.data.error?.code === 'CONFIRM_NAME_MISMATCH', JSON.stringify(wrongName.data).slice(0, 120))
+  const noReason = await request(`/platform/tenants/${bizId}/owner-password/reset`, { method: 'POST', body: JSON.stringify({ confirmName: bizName }) })
+  check('B③ 缺原因 = 400 REASON_REQUIRED', noReason.status === 400 && noReason.data.error?.code === 'REASON_REQUIRED', `${noReason.status}`)
+
+  const done = await request(`/platform/tenants/${bizId}/owner-password/reset`, { method: 'POST', body: JSON.stringify({ confirmName: bizName, reason: '商家来电报忘记密码,已核身份' }) })
+  check('B④ 七条都满足 = 200,并下发一次性新密码', done.status === 200 && String(done.data.initialPassword || '').length >= 8, JSON.stringify({ ...done.data, initialPassword: '(不打印)' }))
+  const newPw = done.data.initialPassword
+
+  const oldAgain = await login(oldPw)
+  check('B⑤ 重置后**旧密码必失效**(真跑登录)', oldAgain.status === 401, `${oldAgain.status}`)
+  const withNew = await login(newPw)
+  check('B⑥ 新密码登得进', withNew.status === 200 && Boolean(withNew.data.auth?.accessToken), `${withNew.status}`)
+  check('B⑦ 新密码**首登强制改密**(mustChangePassword=true)', withNew.data.admin?.mustChangePassword === true, JSON.stringify(withNew.data.admin))
+  const oldSession = await request('/admin/services', {}, oldToken)
+  check('B⑧ 旧会话一并吊销(拿着重置前的 token 也进不去)', oldSession.status === 401, `${oldSession.status}`)
+  const logRow = (await request('/platform/ops-log')).data.logs.find((l) => l.action === 'owner_password_reset' && l.tenant_id === bizId)
+  check('B⑨ 落了运维日志,写清账号/吊销数/原因,且**不含新密码**', Boolean(logRow)
+    && /账号 /.test(logRow.detail) && /原因:/.test(logRow.detail) && !logRow.detail.includes(newPw), logRow?.detail?.slice(0, 140))
+  const gone = await request(`/platform/tenants/notexist-${RUN_ID}/owner-password/reset`, { method: 'POST', body: JSON.stringify({ confirmName: 'x', reason: 'y' }) })
+  check('B⑩ 异常输入:租户不存在 = 404', gone.status === 404, `${gone.status}`)
+}
+
+/* 🔴「记住这台电脑」(店主 08-25 裁:平台后台**不改密码登录**,只让钥匙不用每次掏)。
+   判据真跑:拿令牌换会话 → 只带 Cookie 也能过门禁 → 换个 UA 就不认 → 吊销后立即失效。 */
+{
+  const UA = `d77-ua-${RUN_ID}`
+  const bad = await fetch(`${BASE_URL}/platform/session`, { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ token: 'not-the-key', remember: true }) })
+  check('会话① 拿错令牌换不到会话 = 401', bad.status === 401, `${bad.status}`)
+  const ok = await fetch(`${BASE_URL}/platform/session`, { method: 'POST', headers: { 'content-type': 'application/json', 'user-agent': UA }, body: JSON.stringify({ token: PLATFORM, remember: true }) })
+  const setCookie = ok.headers.get('set-cookie') || ''
+  check('会话② 对的令牌换到 httpOnly 会话(带 HttpOnly + SameSite=Strict)',
+    ok.status === 200 && /HttpOnly/i.test(setCookie) && /SameSite=Strict/i.test(setCookie), setCookie.slice(0, 120))
+  const sid = (setCookie.match(/ll_platform=([^;]+)/) || [])[1]
+  const withCookie = await fetch(`${BASE_URL}/platform/tenants`, { headers: { cookie: `ll_platform=${sid}`, 'user-agent': UA } })
+  check('会话③ 只带 Cookie(不带令牌)也能进平台口', withCookie.status === 200, `${withCookie.status}`)
+  const otherUa = await fetch(`${BASE_URL}/platform/tenants`, { headers: { cookie: `ll_platform=${sid}`, 'user-agent': `${UA}-another-device` } })   // UA 只能是 ByteString,别塞中文
+  check('会话④ 票被搬到别的设备 = 不认(绑设备)', otherUa.status === 401, `${otherUa.status}`)
+  const noCookie = await fetch(`${BASE_URL}/platform/tenants`)
+  check('会话⑤ 既没令牌也没票 = 401', noCookie.status === 401, `${noCookie.status}`)
+  await request('/platform/session/revoke-all', { method: 'POST' })
+  const afterRevoke = await fetch(`${BASE_URL}/platform/tenants`, { headers: { cookie: `ll_platform=${sid}`, 'user-agent': UA } })
+  check('会话⑥ 吊销所有设备之后,那张票立刻失效', afterRevoke.status === 401, `${afterRevoke.status}`)
+  const plat = readFileSync(join(ROOT, 'apps/web/platform.html'), 'utf8')
+  check('会话⑦ 平台端不再把令牌写进 localStorage(钥匙不散到浏览器里)',
+    !/localStorage\.setItem\('ll-platform-token'/.test(plat) && /removeItem\('ll-platform-token'\)/.test(plat))
+}
+
 /* 🔴 店主 08-25 复核令②:备份保留策略(建议 A + ⓓⓔ)。
    全部真调用 —— 真打备份口、真数文件、真让预检拦一次。 */
 {

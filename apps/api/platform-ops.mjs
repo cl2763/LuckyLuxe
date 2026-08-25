@@ -3,7 +3,7 @@
    这一族原本散在 local-server.mjs 的路由里:重置财务密码、按需备份、逐店五项、运维日志。
    共同点是**平台侧动商家的东西,每一次都要留痕** —— 收成一处,以后加动作只在这里加,
    不会再出现"某个平台动作忘了写日志"。路由那边只剩门禁 + 分发。 */
-export function createPlatformOps({ db, apiError, randomId, iso, snapshotDb, dbPath, backupDir, financeSessions }) {
+export function createPlatformOps({ db, apiError, randomId, iso, snapshotDb, dbPath, backupDir, financeSessions, adminPasswordHash, randomPassword }) {
   const now = () => iso(new Date())
   function writeLog(tenantId, action, detail, operator = 'platform') {
     db.prepare('INSERT INTO platform_ops_log (id, tenant_id, action, detail, operator, created_at) VALUES (?, ?, ?, ?, ?, ?)')
@@ -87,6 +87,40 @@ export function createPlatformOps({ db, apiError, randomId, iso, snapshotDb, dbP
     return { tenantId, tenantName: t.name, listed }
   }
 
+  /* 🔴 重置**商家老板**密码(店主 2026-08-25 定,B 案先做)。
+     立这条不是为了演示店:**真商户上线后忘记老板密码是必然事件**,
+     而平台端此前只有「员工账号重置」与「财务密码重置」——真商户一旦忘,
+     除了直接改数据库没有别的办法。那是运营能力缺口,不是演示需求。
+     所以**真店也能重置**,靠护栏兜住:
+       ① 手打完整店名二次确认(与 demo-reset 同款,不许勾选框)
+       ② 必填原因
+       ③ 落 platform_ops_log
+       ④ 下发一次性新密码 + **首登强制改密**(must_change_password=1)
+       ⑤ 旧会话一并吊销 —— 不然拿着旧 token 的人还在里面,重置等于没重置 */
+  function resetOwnerPassword({ tenantId, confirmName, reason, operator = 'platform' }) {
+    const t = db.prepare('SELECT id, name FROM tenants WHERE id = ?').get(tenantId)
+    if (!t) throw apiError(404, 'NOT_FOUND', 'Tenant not found.')
+    if (String(confirmName || '').trim() !== String(t.name || '').trim()) {
+      throw apiError(400, 'CONFIRM_NAME_MISMATCH', `二次确认没通过 —— 请一字不差手打这家店的完整名称「${t.name}」。`)
+    }
+    const why = String(reason || '').trim()
+    if (!why) throw apiError(400, 'REASON_REQUIRED', '重置老板密码必须写一句原因(会写进平台运维日志)。')
+    const account = db.prepare("SELECT * FROM admin_accounts WHERE tenant_id = ? AND role = 'owner' ORDER BY created_at ASC LIMIT 1").get(tenantId)
+    if (!account) throw apiError(404, 'NO_OWNER_ACCOUNT', '这家店没有老板账号(建店时未生成?)。')
+    const initialPassword = randomPassword()
+    const now2 = now()
+    db.prepare('UPDATE admin_accounts SET password_hash = ?, must_change_password = 1, updated_at = ? WHERE id = ?')
+      .run(adminPasswordHash(account.username, initialPassword), now2, account.id)
+    let revoked = 0
+    try {
+      revoked = db.prepare('SELECT COUNT(*) n FROM admin_sessions WHERE account_id = ?').get(account.id).n
+      db.prepare('DELETE FROM admin_sessions WHERE account_id = ?').run(account.id)
+    } catch (e) { /* 会话表不在就算了,密码已经换掉 */ }
+    writeLog(tenantId, 'owner_password_reset',
+      `重置商家老板密码(账号 ${account.username});已吊销该账号 ${revoked} 个在用会话;新密码首登强制改。原因:${why.slice(0, 200)}`, operator)
+    return { tenantId, tenantName: t.name, username: account.username, initialPassword, mustChangePassword: true, revokedSessions: revoked }
+  }
+
   /* 平台租户清单(平台后台那张表的数据源)。
      随列表下发 kind(D73:归属认数据不认名字)与 listed(D76:选店页可见性)。 */
   function listTenants(monthStartIso) {
@@ -107,5 +141,5 @@ export function createPlatformOps({ db, apiError, randomId, iso, snapshotDb, dbP
 
   const recentLogs = () => db.prepare('SELECT * FROM platform_ops_log ORDER BY created_at DESC, rowid DESC LIMIT 100').all()
 
-  return { resetFinanceLock, backup, tenantStats, logDemoSeed, setListed, listTenants, recentLogs, writeLog }
+  return { resetFinanceLock, resetOwnerPassword, backup, tenantStats, logDemoSeed, setListed, listTenants, recentLogs, writeLog }
 }
