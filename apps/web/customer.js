@@ -1920,6 +1920,18 @@ function hasAfterSalesTrack(order) {
 /* 🔴 分组判据**唯一实现**:「我的」页那排计数与点进去看到的列表必须是同一个判据算出来的。
    L1 走查抓到的原病:计数写「已完成 4」,点进去只有 2 张(另 2 张在售后组)——
    顾客看到的每个数字都要能自证来源(闭环纪律),所以计数一律走这个函数。 */
+/* 🔴 第三案(店主 08-25):网页顾客端的动作**唯一来源** = 后端 customerActions。
+   这里只做两件事:①原样取那个数组 ②en 界面借一份本地词典(后端句是中文)。
+   **不筛、不加、不判状态** —— 能不能点是后端状态机说了算,页面写 if 就是第二份判据。
+   小程序顾客端同构(pages/order-detail 的 order.actions 也是这么来的)。 */
+const CUSTOMER_ACTION_EN = { cancel: 'Cancel booking', openAfterSales: 'Request after-sales', endAfterSales: 'End after-sales' }
+function customerActionsOf(order) {
+  return (order?.customerActions || []).map((a) => ({
+    key: a.key,
+    label: state.lang === 'en' ? (CUSTOMER_ACTION_EN[a.key] || a.label) : a.label
+  }))
+}
+
 function ordersInGroup(key, orders = state.orders) {
   if (key === 'all') return orders
   if (key === 'AFTER_SALES') return orders.filter(hasAfterSalesTrack)
@@ -2096,17 +2108,24 @@ function renderOrderDetailWeb() {
           ${renderCustomerSharePanel(order, workImages)}
         </div>
       </section>` : ''}
-      ${order.afterSalesAction ? `
+      ${/* 🔴 第三案(店主 2026-08-25):网页顾客端**接进订单状态机** ——
+            按钮的位置、文案、能不能点,全部由后端 customerActions 决定;页面里不许写 if 补按钮
+            (与 D70 合同同一条)。原来这里是手写的「去售后」一颗,而小程序早就从数组渲染 ——
+            那不是排版分歧,是网页顾客端是唯一一个没接状态机的端,状态机一改就又分叉一次。
+            这一刀同时是 S12 网页顾客端对齐的第一刀。 */''}
+      ${customerActionsOf(order).length ? `
       <section class="section">
-        <div class="info-card-web card">
-          <button class="primary" data-as-action="${order.id}" type="button" style="width:100%">${escapeHtml(order.afterSalesActionText)}</button>
-          ${state.asPanelOpen && order.afterSalesAction === 'start' ? `
+        <div class="info-card-web card order-actions-web">
+          ${customerActionsOf(order).map((a) => `<button class="primary" data-customer-action="${escapeHtml(a.key)}" data-order="${order.id}" type="button" style="width:100%">${escapeHtml(a.label)}</button>`).join('')}
+          ${state.asPanelOpen ? `
             <textarea id="asDescWeb" placeholder="${state.lang === 'zh' ? '问题描述(必填):哪里不满意/出了什么状况' : 'Describe the issue (required)'}" style="width:100%;min-height:90px;margin-top:10px;border:1px solid #e7ddd4;border-radius:10px;padding:10px;box-sizing:border-box">${escapeHtml(state.asDesc || '')}</textarea>
             <button class="primary slim" data-as-submit="${order.id}" type="button" style="margin-top:8px">${state.lang === 'zh' ? '提交,转人工跟进' : 'Submit'}</button>
             <p class="subtle" style="margin-top:6px">${state.lang === 'zh' ? '提交后门店会跟进处理;涉及退款/补差走门店更正单,这里只记录过程与结论。' : 'The store will follow up; refunds go through correction sheets.'}</p>
           ` : ''}
         </div>
       </section>` : ''}
+      ${/* 售后中的「查看售后进度」不是状态动作(它只是滚到本页那张进度卡),所以不进动作区 ——
+            与小程序同构:小程序也是把它留在售后块里、状态动作走底部条。 */''}
       ${order.afterSales ? `
       <section class="section">
         <div class="section-row"><h2>${escapeHtml(order.afterSales.title)}</h2></div>
@@ -2419,11 +2438,26 @@ async function handleScreenClick(event) {
     return
   }
   /* 批③首件 C3:售后发起/撤回(同一状态机,句与前置全由后端;涉钱零新径) */
-  const asAction = event.target.closest('[data-as-action]')
-  if (asAction) {
+  /* 第三案:动作按 key 分发(分发≠状态判断——能不能点已经由后端状态机在数组里定了)。 */
+  const custAction = event.target.closest('[data-customer-action]')
+  if (custAction) {
     const order = selectedOrder()
     if (!order) return
-    if (order.afterSalesAction === 'start') { state.asPanelOpen = !state.asPanelOpen; render() }
+    const key = custAction.dataset.customerAction
+    if (key === 'openAfterSales') { state.asPanelOpen = !state.asPanelOpen; render(); return }
+    if (key === 'cancel') {
+      const zh = state.lang === 'zh'
+      if (!window.confirm(zh ? `确定取消这个预约吗?\n${order.appointmentDate} ${order.appointmentTime}\n取消后时段将释放,定金规则以门店说明为准。` : 'Cancel this booking?')) return
+      try {
+        /* 真取消:改服务器状态 + 放开占位。顾客小程序那边同刀(D70 顺手修的那处:
+           原来只改本地缓存,服务器上单还在、时段还锁着)。 */
+        await request(`/bookings/${encodeURIComponent(order.id)}/cancel`, { method: 'POST', body: JSON.stringify({}) })
+        toast(zh ? '已取消' : 'Cancelled')
+        await loadUserOrders()
+        render()
+      } catch (error) { toast(error.message) }
+      return
+    }
     return
   }
   const asSubmit = event.target.closest('[data-as-submit]')

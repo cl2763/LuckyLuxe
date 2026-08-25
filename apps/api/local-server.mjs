@@ -14,7 +14,8 @@ import { createOrderBadges, bookingSourceText } from './order-badges.mjs'
 import { installLedgerGuards, backfillTenantKindOnce, LEDGER_TRIGGER_NAMES } from './ledger-guards.mjs'
 import { createQuoteSerialize } from './quote-serialize.mjs'          // AI 报价域序列化(公约②)
 import { createDemoReset } from './demo-reset.mjs'                    // 演示店账本重置唯一入口(公约①)
-import { createStaticServe } from './static-serve.mjs'                // 静态文件服务(公约②)  // 账本禁删/禁改律唯一出口(D72)      // 顾客端订单表达域(同上)
+import { createStaticServe } from './static-serve.mjs'                // 静态文件服务(公约②)
+import { retireLegacyDemoArchives } from './legacy-demo-retire.mjs'   // 旧口径演示档案退役(一次性)  // 账本禁删/禁改律唯一出口(D72)      // 顾客端订单表达域(同上)
 import { createBookingIncome } from './booking-income.mjs'  // 订单入账触点(同上)
 import { createBookingState, isAfterSalesOpen, shouldAutoComplete } from './booking-state.mjs'  // 订单状态机(D70 合同,唯一实现)   // 笔迹图:纯 JS 画折线,**透明底**(单据白纸走 svgToPng,两条路不混)
 import { analyzeReferenceImage, createBookingSummary, createCustomerInsight, createCustomerServiceReply, createDailyBrief, createRecallMessages, createServiceNoteInsights, createSocialCopy, extractKbEntriesFromDocument, polishStaffQuoteReply } from './ai-utils.mjs'
@@ -18614,33 +18615,8 @@ try {
 // 演示阵容换代(店主 2026-08-12 拍板):旧口径时代演示档案全部退役 —— 打标记不删
 // (历史单据织在日结与收入历史里,账本只追加)。圈定=id demo-% / 名含「演示」/「店主验签」,
 // 只动两家真实店;幂等:已有标记跳过。
-try {
-  const RETIRE_TAG = '退役·旧口径演示档案'
-  // 「名含演示」不得误伤换代后的新阵容(演示2- 前缀)——2026-08-12 当场抓获:
-  // watch 重载重跑迁移,把刚建的 lucky 演示2 八户全打了退役标,demoLogin 又落回真实档案
-  const targets = db.prepare(`SELECT id, tenant_id, tags_json FROM users
-    WHERE tenant_id IN ('lucky-luxe', 'jics-nail')
-      AND display_name NOT LIKE '演示2-%'
-      AND (id LIKE 'demo-%' OR display_name LIKE '%演示%' OR display_name = '店主验签')`).all()
-  // 解错标(幂等):此前被误圈的演示2 档案摘掉退役标
-  const mislabeled = db.prepare(`SELECT id, tags_json FROM users
-    WHERE display_name LIKE '演示2-%' AND tags_json LIKE '%退役·旧口径演示档案%'`).all()
-  for (const u of mislabeled) {
-    let tags = []
-    try { tags = JSON.parse(u.tags_json || '[]') } catch { tags = [] }
-    db.prepare('UPDATE users SET tags_json = ? WHERE id = ?').run(JSON.stringify(tags.filter((t) => t !== '退役·旧口径演示档案')), u.id)
-    console.log(`[demo-retire] 解错标:${u.id}`)
-  }
-  for (const u of targets) {
-    let tags = []
-    try { tags = JSON.parse(u.tags_json || '[]') } catch { tags = [] }
-    if (!tags.includes(RETIRE_TAG)) {
-      tags.push(RETIRE_TAG)
-      db.prepare('UPDATE users SET tags_json = ? WHERE id = ?').run(JSON.stringify(tags.slice(0, 12)), u.id)
-      console.log(`[demo-retire] ${u.tenant_id}/${u.id} 已退役标记`)
-    }
-  }
-} catch (e) { console.error('演示退役标记失败(不阻塞启动):', e.message) }
+/* 旧口径演示档案退役(一次性迁移)已搬出到 ./legacy-demo-retire.mjs(公约②,2026-08-25) */
+retireLegacyDemoArchives({ db, iso, isProduction: IS_PRODUCTION })
 
 // 改判① 钳位扫描:历史混合口径重算后 已兑换>新累计获得 的档案,补记正向调整行至 0
 // (账本只追加;不造负数不硬掰)。幂等:钳后余额=0,重跑扫不到负数即无操作。

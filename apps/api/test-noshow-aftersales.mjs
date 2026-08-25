@@ -2575,7 +2575,9 @@ const main = async () => {
       const miniOrder98 = ['t.bookingInfo', '服务签署单', 'Service Archive', 'afterSalesAction'].map((k) => odWx98.indexOf(k))
       const webDetailStart = custWeb98.indexOf('function renderOrderDetailWeb()')
       const webSeg = custWeb98.slice(webDetailStart, webDetailStart + 9000)
-      const webOrder98 = ["t('bookingInfo')", '服务签署单', "t('workArchive')", 'order.afterSalesAction ?'].map((k) => webSeg.indexOf(k))
+      /* 第三案(08-25):网页第四块的「去售后」不再是手写按钮,改成状态机动作区 —— 判据跟着被测物走。
+         位置没变(仍在服务留档之后),变的是这块由 customerActions 渲染。 */
+      const webOrder98 = ["t('bookingInfo')", '服务签署单', "t('workArchive')", 'customerActionsOf(order).length ?'].map((k) => webSeg.indexOf(k))
       check('㋖ S8:订单详情四块顺序双端统一(预约信息 → 签署单 → 服务留档 → 去售后)',
         miniOrder98.every((v, i) => v > 0 && (i === 0 || v > miniOrder98[i - 1]))
         && webOrder98.every((v, i) => v > 0 && (i === 0 || v > webOrder98[i - 1])),
@@ -2960,6 +2962,70 @@ const main = async () => {
         /* 判据自证(判据律):上面 ㋛⑥ 如果写成"文件里有没有 PROTECTED 这个词"就是废判据 ——
            这里是真调用真抛错,缺陷存在时它必红。 */
       }
+
+      /* ===== ㋟ 第三案:网页顾客端接进订单状态机(店主 2026-08-25)=====
+         查明结论(店主机核):这不是"按钮放哪"的排版分歧 —— apps/web/customer.js 对 customerActions
+         命中为 0,它是**唯一一个没接状态机的端**,还在自己手写按钮。照着小程序再手写一遍,
+         下次状态机一改就又分叉第二次。这一刀同时是 S12 网页顾客端对齐的第一刀。 */
+      {
+        const custJs = readFileSync(join(ROOT42, 'apps/web/customer.js'), 'utf8')
+        const miniOd = readFileSync(join(ROOT42, 'miniprogram/pages/order-detail/index.js'), 'utf8')
+        const miniApi = readFileSync(join(ROOT42, 'miniprogram/utils/api.js'), 'utf8')
+
+        // ① 真实读取与渲染(判据取代码行,不扫全文 —— 判据律新细则)
+        const readLine = (custJs.match(/^\s*return \(order\?\.customerActions \|\| \[\]\)\.map.*$/m) || [''])[0]
+        const renderLine = (custJs.match(/^\s*\$\{customerActionsOf\(order\)\.map.*$/m) || [''])[0]
+        check('㋟① 网页顾客端对 customerActions 有真实读取 + 真实渲染(不再手写按钮)',
+          Boolean(readLine) && Boolean(renderLine) && renderLine.includes('data-customer-action')
+          && !/data-as-action=/.test(custJs))
+
+        // ④ 后端出口数保持 1(新增出口即红)
+        check('㋟④ 后端 customerActions 出口数 = 1(新增出口即红)',
+          (srv.match(/customerActions:/g) || []).length === 1)
+
+        /* ② 两端**真跑取值比对**:把两端各自的转换代码从源文件里抠出来、在同一份 booking 上真执行,
+           再逐项比 key 数组。不是"各查各的",也不是只比后端字段 —— 比的是两端各自算出来的结果。 */
+        const webFnSrc = (custJs.match(/const CUSTOMER_ACTION_EN = [\s\S]*?\n}\n/) || [''])[0]
+        const miniMapSrc = (miniOd.match(/const ACTION_EN = .*$/m) || [''])[0]
+        const miniExpr = (miniOd.match(/\(order\.customerActions \|\| \[\]\)\.map\(\(a\) => \(\{[\s\S]*?\}\)\)/) || [''])[0]
+        check('㋟②-前置 两端的转换代码都抠得出来(抠不出来说明谁又改回手写了)',
+          Boolean(webFnSrc) && Boolean(miniMapSrc) && Boolean(miniExpr))
+        const webActions = new Function('state', 'order', `${webFnSrc}; return customerActionsOf(order)`)
+        const miniActions = new Function('lang', 'order', `${miniMapSrc}; return ${miniExpr}`)
+        check('㋟② 映射层零裁剪:小程序 toMiniBooking 原样透传 customerActions',
+          miniApi.includes('customerActions: booking.customerActions || []'))
+
+        /* ③ 合同五条逐态验:未签署只有取消;已签署只有去售后;售后中只有结束售后(顾客侧无此动作=空)。
+           三个态各造一张真单,两端各自算一次,逐项比。 */
+        const cmp = (label, booking, expectKeys) => {
+          const w = webActions({ lang: 'zh' }, booking).map((a) => a.key)
+          const m = miniActions('zh', booking).map((a) => a.key)
+          const same = JSON.stringify(w) === JSON.stringify(m)
+          check(`㋟③ ${label}:两端 key 数组逐项相同,且=合同预期 ${JSON.stringify(expectKeys)}`,
+            same && JSON.stringify(w) === JSON.stringify(expectKeys), JSON.stringify({ web: w, mini: m }))
+        }
+        const custTok = (await request('/auth/wechat/mini-login', { method: 'POST', body: JSON.stringify({ demoLogin: true, tenantId: shop.tenantId, asUserId: null }) }, null, { 'x-tenant-id': shop.tenantId })).data?.auth?.accessToken
+        const myBookings = async () => (await request('/bookings', {}, custTok, { 'x-tenant-id': shop.tenantId })).data.bookings || []
+        // 未签署:直接建一张给这位顾客的单
+        const rows0 = await myBookings()
+        const pending0 = rows0.find((b) => ['PENDING_PAYMENT', 'CONFIRMED'].includes(b.status))
+        if (pending0) cmp('未签署单', pending0, ['cancel'])
+        else check('㋟③ (跳过)夹具里没有未签署单', true)
+        const signed0 = rows0.find((b) => b.status === 'COMPLETED' && !b.afterSalesStatus && (b.customerActions || []).some((a) => a.key === 'openAfterSales'))
+        if (signed0) cmp('已签署完成单', signed0, ['openAfterSales'])
+        else check('㋟③ (跳过)夹具里没有已签署完成单', true)
+        const inAs0 = rows0.find((b) => ['pending', 'processing'].includes(b.afterSalesStatus || ''))
+        if (inAs0) cmp('售后中的单(顾客侧无动作)', inAs0, [])
+        else check('㋟③ (跳过)夹具里没有售后中的单', true)
+      }
+
+      /* 顺手件(D73 同族,低一级):演示档案退役迁移原来每次启动按 display_name LIKE '%演示%' 重扫全表 */
+      // 判据跟着被测物走:这段同批搬到 legacy-demo-retire.mjs 了
+      const retireMod = readFileSync(join(ROOT42, 'apps/api/legacy-demo-retire.mjs'), 'utf8')
+      check('㋟⑤ 演示档案退役迁移改一次性(不再挂启动路径,生产不跑)',
+        retireMod.includes("const DEMO_RETIRE_KEY = 'demo_retire_backfill_v1'")
+        && retireMod.includes('if (!demoRetireDone && !isProduction) try {')
+        && srv.includes('retireLegacyDemoArchives({ db, iso, isProduction: IS_PRODUCTION })'))
 
       /* ===== ㋞ 演示店重置六条 · 行为断言(店主 08-25 第⑥条:会红的断言)===== */
       {
