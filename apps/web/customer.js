@@ -129,11 +129,9 @@ const copy = {
     memberCodeCopied: '推荐链接已复制',
     memberCodeHint: '店员扫码可用于识别客户；分享链接可用于后续推荐返佣追踪。',
     points: '积分',
-    coupons: '优惠券',
     orders: '我的订单',
     recent: '近期消费',
     functions: '常用功能',
-    assets: '我的资产',
     settings: '设置',
     pointsMall: '积分商城',
     completed: '已完成',
@@ -281,11 +279,9 @@ const copy = {
     memberCodeCopied: 'Referral link copied',
     memberCodeHint: 'Staff can scan this to identify the client; the referral link can track future rewards.',
     points: 'Points',
-    coupons: 'Coupons',
     orders: 'My Orders',
     recent: 'Recent Records',
     functions: 'Common Tools',
-    assets: 'My Assets',
     settings: 'Settings',
     pointsMall: 'Points Mall',
     completed: 'Completed',
@@ -349,7 +345,6 @@ const state = {
   auth: readJson('lucky-web-auth'),
   // 批③次段:卡包/商城视图数据(后端唯一出口下发,前端不缓存计算)
   cardPack: null,
-  assets: null,
   mall: null,
   mallNoteFor: '',
   mallFilter: 'all',
@@ -669,7 +664,7 @@ async function refreshAuth() {
 
 function privateViews() {
   // 卡包=私有(自己的卡券);商城=公开(没登录也能看有什么套餐,与小程序同口径)
-  return new Set(['booking', 'cart', 'checkout', 'me', 'orders', 'orderDetail', 'assets', 'memberBenefits', 'coupons', 'pointsMall', 'settings', 'cardPack', 'storedValue'])
+  return new Set(['booking', 'cart', 'checkout', 'me', 'orders', 'orderDetail', 'memberBenefits', 'pointsMall', 'settings', 'cardPack', 'storedValue'])
 }
 
 function requiresAuth(view) {
@@ -1008,7 +1003,6 @@ function render() {
   }
   if (state.view === 'orders') renderOrdersWeb()
   if (state.view === 'orderDetail') renderOrderDetailWeb()
-  if (state.view === 'assets') renderAssetsWeb()
   if (state.view === 'memberBenefits') renderMemberBenefitsWeb()
   if (state.view === 'store') renderStoreWeb()
   if (state.view === 'portfolio') renderPortfolio()
@@ -1016,7 +1010,6 @@ function render() {
   // 网页顾客端暂无独立储值明细页:储值行落卡包(卡包里有储值余额与去充值入口),不造半成品页
   if (state.view === 'storedValue') renderCardPackWeb()
   if (state.view === 'mall') renderMallWeb()
-  if (state.view === 'coupons') renderPlaceholderWeb(t('coupons'), state.lang === 'zh' ? '优惠券列表和使用规则将在真实会员系统接入后同步。' : 'Coupon list and rules will sync after the real member system is connected.')
   if (state.view === 'pointsMall') renderPointsWeb()
   if (state.view === 'settings') renderPlaceholderWeb(t('settings'), state.lang === 'zh' ? '语言、通知、账号安全等设置将在真实登录后接入。' : 'Language, notifications, and account security settings will connect after real auth.')
   renderAiAssistantWidget()
@@ -1226,9 +1219,12 @@ async function openStoreSwitcher() {
   overlay.innerHTML = `
     <div class="store-switch-panel card">
       <div class="section-row"><h2>${state.lang === 'en' ? 'Choose a store' : '切换门店'}</h2><button class="ghost slim" data-switch-close type="button">✕</button></div>
+      ${/* 【门店列表三个一】(店主 08-25):**数据源不砍**(/shops 给几家就画几家,这里零过滤);
+            排序与「会员」标都由后端一处做完(store-directory.mjs),前端只渲染 shop.joined。
+            以后要加"距离近的优先",去那个排序器加一个维度,不在这里再排一次。 */''}
       ${shops.map((shop) => `
         <button class="store-switch-row ${shop.tenantId === TENANT_ID ? 'current' : ''}" data-switch-tenant="${shop.tenantId}" type="button">
-          <strong>${shop.storeName || shop.name}</strong>
+          <strong>${shop.storeName || shop.name}${shop.joined ? `<em class="store-joined-tag">${state.lang === 'en' ? 'Member' : '会员'}</em>` : ''}</strong>
           ${shop.address ? `<span>${shop.address}</span>` : ''}
           ${shop.tenantId === TENANT_ID ? `<em>${state.lang === 'en' ? 'Current' : '当前门店'}</em>` : ''}
         </button>`).join('')}
@@ -1801,7 +1797,10 @@ function renderMe() {
         <div class="member-assets">
           <button data-me-target="pointsMall" type="button"><strong>${statNum(user.points)}</strong><span>${t('points')}</span>${user.redeemablePrizeText ? `<em class="asset-hint">${escapeHtml(user.redeemablePrizeText)}</em>` : ''}</button>
           <button data-me-target="cardPack" type="button"><strong>${state.cardPack ? state.cardPack.badgeCount : '—'}</strong><span>${state.lang === 'zh' ? '卡包' : 'Card pack'}</span></button>
-          <button data-me-target="cardPack" type="button"><strong>${user.balanceCents === undefined || user.balanceCents === null ? '—' : money(user.balanceCents)}</strong><span>${t('balance')}</span></button>
+          ${/* 资产层收敛(08-25):黑卡三格的 key 与小程序逐项对齐 —— 积分 / 卡包 / 储值。
+                网页暂无独立储值页,storedValue 这个视图落到卡包页的储值行(渲染同一处),
+                但**入口 key 与小程序一致**,以后网页真做储值页只换那一处渲染,入口不用动。 */''}
+          <button data-me-target="storedValue" type="button"><strong>${user.balanceCents === undefined || user.balanceCents === null ? '—' : money(user.balanceCents)}</strong><span>${t('balance')}</span></button>
         </div>
         <div class="member-extra web-member-extra">
           <div>${t('totalSpent')} ${money(user.totalSpentCents || 0)}</div>
@@ -2302,42 +2301,14 @@ async function loadMall() {
   try { state.mall = await request('/my/mall') } catch (error) { state.mall = null; toast(error.message) }
 }
 
-/* 裁定A(店主 08-23):我的资产=**分类总页**(与小程序同构)。四类各一行,数字全部来自
-   后端唯一出口 /my/assets(卡包与卡包页同源同数、储值与卡包储值行同源、积分与积分页同源);
-   本函数零计算、零拼数。今后新资产类型一律加在这一页,不许回「我的」页并列。 */
-/* 裁定A 勘误(店主 08-23 推翻重做):不再有「我的资产」分类总页——
-   同一类资产只留一个页一个名字(卡包),高频资产允许从会员卡直达。
-   本函数保留只是为了老路由不 404,直接落卡包页(名字与页都归一)。 */
-function renderAssetsWeb() { renderCardPackWeb() }
+/* 🔴 资产层收敛(店主 2026-08-25 拍板):网页收成与小程序同构 ——
+   卡包(券+次卡)/ 储值 / 积分 / 商城。**assets 资产总览聚合页与 coupons 券独立页整条退役**
+   (视图分支 / 渲染函数 / 取数 / i18n / 合法视图集合,零残留)。
+   小程序早在裁定A 那轮就退了这两页,网页是最后一处 —— 后端 /my/assets 因此也成了半条链,同批收。
 
-function renderAssetsWebRetired() {
-  const a = state.assets
-  const zh = state.lang === 'zh'
-  if (!a) {
-    els.screen.innerHTML = `<section class="assets-web-page"><div class="empty-state tall"><strong>${zh ? '加载中…' : 'Loading…'}</strong></div></section>`
-    loadAssets().then(() => { if (state.view === 'assets') render() })
-    return
-  }
-  const row = (title, sub, right, target) => `
-    <button class="menu-card card" data-me-target="${target}" type="button" style="display:flex;justify-content:space-between;align-items:center;width:100%;text-align:left">
-      <span><strong>${escapeHtml(title)}</strong><br><small class="subtle">${escapeHtml(sub)}</small></span>
-      <strong class="price">${escapeHtml(right)} ›</strong>
-    </button>`
-  els.screen.innerHTML = `
-    <section class="assets-web-page">
-      <button class="ghost back-btn" data-view-target="me" type="button">← ${t('me')}</button>
-      <h1>${t('assets')}</h1>
-      ${row(zh ? '卡包' : 'Card pack', a.cardPack.summaryText, a.cardPack.count ? String(a.cardPack.count) : '', 'cardPack')}
-      ${row(zh ? '储值' : 'Balance', zh ? '余额与流水明细' : 'Balance & history', a.stored.balanceText, 'storedValue')}
-      ${row(zh ? '积分' : 'Points', zh ? '明细与积分商城' : 'History & points mall', String(a.points.balance), 'pointsMall')}
-      ${row(zh ? '会员权益' : 'Benefits', a.membership.level || '', '', 'memberBenefits')}
-    </section>
-  `
-}
+   🔴 连带保留(店主 08-23 原话,也是我上次判错的地方):**黑卡上的数字仍然要能点开** ——
+   唯一律管的是页面与数据出口,不是入口个数。删聚合页 ≠ 删直达。 */
 
-async function loadAssets() {
-  try { state.assets = (await request('/my/assets')).assets } catch (error) { state.assets = null; toast(error.message) }
-}
 
 function renderMemberBenefitsWeb() {
   const user = state.user

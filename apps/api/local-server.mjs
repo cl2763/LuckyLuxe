@@ -16,7 +16,8 @@ import { createQuoteSerialize } from './quote-serialize.mjs'          // AI 报�
 import { createDemoReset } from './demo-reset.mjs'                    // 演示店账本重置唯一入口(公约①)
 import { createStaticServe } from './static-serve.mjs'                // 静态文件服务(公约②)
 import { retireLegacyDemoArchives } from './legacy-demo-retire.mjs'   // 旧口径演示档案退役(一次性)
-import { createMemberCode } from './member-code.mjs'                  // 会员码域(公约②)  // 账本禁删/禁改律唯一出口(D72)      // 顾客端订单表达域(同上)
+import { createMemberCode } from './member-code.mjs'                  // 会员码域(公约②)
+import { createStoreDirectory } from './store-directory.mjs'          // 门店列表三个一(公约①)  // 账本禁删/禁改律唯一出口(D72)      // 顾客端订单表达域(同上)
 import { createBookingIncome } from './booking-income.mjs'  // 订单入账触点(同上)
 import { createBookingState, isAfterSalesOpen, shouldAutoComplete } from './booking-state.mjs'  // 订单状态机(D70 合同,唯一实现)   // 笔迹图:纯 JS 画折线,**透明底**(单据白纸走 svgToPng,两条路不混)
 import { analyzeReferenceImage, createBookingSummary, createCustomerInsight, createCustomerServiceReply, createDailyBrief, createRecallMessages, createServiceNoteInsights, createSocialCopy, extractKbEntriesFromDocument, polishStaffQuoteReply } from './ai-utils.mjs'
@@ -5347,6 +5348,7 @@ function tenantMemberTiers(tenantId = currentTenantId()) {
 
 /* ===== 会员码域已搬出到 ./member-code.mjs(公约②,2026-08-25)===== */
 const { memberCodeForUserId, displayNameForUserId, userIdFromMemberCode, isGenericDisplayName } = createMemberCode({ db })
+const storeDirectory = createStoreDirectory({ db })
 
 function membershipForSpend(totalSpentCents = 0, tenantId = currentTenantId()) {
   const spend = Number(totalSpentCents || 0)
@@ -11756,12 +11758,17 @@ async function route(req, res) {
       GROUP BY t.id
       ORDER BY t.name ASC
     `).all(includeDemo)
-    return json(res, 200, {
-      shops: rows.map((r) => ({
-        tenantId: r.id, name: r.tenant_name || r.store_name, storeName: r.store_name,
-        address: r.address || '', phone: r.phone || '', isDemo: r.kind === 'demo', kind: r.kind || 'real'
-      }))
-    })
+    /* 【门店列表三个一】(店主 08-25):数据源不砍(上面那条 SQL 就是全部公开门店),
+       标记与排序在 ./store-directory.mjs 一处做完,两端读同一条 /shops 天然一致。
+       登录了才知道"这个身份在哪几家店有档案" —— 没登录就没有 joined 标,列表照样全给。 */
+    let shops = rows.map((r) => ({
+      tenantId: r.id, name: r.tenant_name || r.store_name, storeName: r.store_name,
+      address: r.address || '', phone: r.phone || '', isDemo: r.kind === 'demo', kind: r.kind || 'real'
+    }))
+    let viewer = null
+    try { viewer = requireCustomer(req) } catch (e) { viewer = null }   // 公开接口:没登录也要能看全
+    shops = storeDirectory.decorate(shops, viewer?.id)
+    return json(res, 200, { shops })
   }
   if (req.method === 'GET' && path.startsWith('/booking-drafts/')) {
     const draft = getBookingDraftById(path.split('/')[2], query.lang || 'zh')
@@ -11779,11 +11786,8 @@ async function route(req, res) {
   // ===== 顾客侧"我的资产"(user × 当前店) =====
   /* 批③次段 A3-1/B4-1(店主 08-23 开工令):顾客端卡包与商城两个**只读**口。
      涉钱零新径:这里不产生任何账目行、不建订单——买卡/充值一律走既有引擎(随单充值/代充/现场购卡)。 */
-  /* 裁定A:资产分类总页的唯一出口(我的 → 我的资产 → 类别) */
-  if (req.method === 'GET' && path === '/my/assets') {
-    const customer = requireCustomer(req)
-    return json(res, 200, { assets: assetsOverviewOf(customer.id, resolveTenant(req, query)) })
-  }
+  /* 「我的资产」总页已整条退役(店主 08-25 资产层收敛;小程序在裁定A 那轮就退了,
+     网页 08-25 跟上)—— 这条出口零使用方,留着就是半条链,同批下线。 */
   if (req.method === 'GET' && path === '/my/card-pack') {
     const customer = requireCustomer(req)
     return json(res, 200, { cardPack: cardPackOf(customer.id, resolveTenant(req, query)) })
@@ -17585,31 +17589,6 @@ function cardPackOf(userId, tenantId = currentTenantId()) {
    这是那条路径的唯一数据出口:各行数字全部复用既有出口(卡包=cardPackOf、积分=pointsBalance、
    会员=serializeUser 的等级),本函数不新算一分钱、不新拼一句话;今后新资产类型(含 S15 抽奖奖品)
    一律挂这里,不许再在「我的」页并列新入口。 */
-function assetsOverviewOf(userId, tenantId = currentTenantId()) {
-  const pack = cardPackOf(userId, tenantId)
-  const user = db.prepare('SELECT * FROM users WHERE id = ?').get(userId)
-  const membership = user ? serializeUser(user, tenantId) : null
-  return {
-    // 卡包行:次卡+券,数字与卡包页逐个同源(补件②扩到本页)
-    cardPack: {
-      timecardCount: pack.timecards.length,
-      /* 改名钉死用途(店主 08-23 小件):这里是**真值**(卡包页券张数,同源),
-         但与已删除的恒 0 字段同名,日后极易被当成回落源复活 —— 故改名 couponRowCount,
-         「couponCount」这个名字在全仓永久退役,断言常驻。 */
-      couponRowCount: pack.coupons.length,
-      count: pack.badgeCount,
-      summaryText: pack.badgeCount ? `次卡 ${pack.timecards.length} 张 · 券 ${pack.coupons.length} 张` : '暂无可用卡券'
-    },
-    // 储值行:与卡包储值行同一读方
-    stored: { balanceCents: pack.stored.balanceCents, balanceText: pack.stored.balanceText },
-    // 积分行:与积分页同一出口(pointsBalance),兑换与积分商城入口留在积分页内
-    points: { balance: pointsBalance(userId, tenantId) },
-    // 会员权益行:等级由既有会员出口给,不在这里重算
-    membership: membership ? { level: membership.memberLevel, isMember: membership.isMember } : { level: '', isMember: false },
-    // 补件④:入口角标 = 卡包可用张数(与卡包页、与本页卡包行同一个数)
-    badgeCount: pack.badgeCount
-  }
-}
 
 function serializeMembershipPackage(row) {
   return {

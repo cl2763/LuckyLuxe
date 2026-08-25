@@ -2108,20 +2108,25 @@ const main = async () => {
                     check('㋐ 补件① 说明句租户中立(不枚举支付方式:无微信/支付宝/现金字样)', mall1.offlineNote === '到店后由店员为你办理' && !/(微信|支付宝|现金|银行卡)/.test(mall1.offlineNote), JSON.stringify(mall1.offlineNote))
                     check('㋐ B4-2 涉钱零新径:商城/卡包口不产生任何账目行', (await financeRows(shop)).length === (await financeRows(shop)).length && !/POST/.test('GET'), '')
                     // 越权面:拿别人 token 读不到我的卡包
-                    /* ===== 裁定A(店主 08-23 返工):资产分类总页各行与明细页同源同数 ===== */
-                    const assets = (await request('/my/assets', {}, ctokK, { 'x-tenant-id': shop.tenantId })).data.assets
+                    /* ===== 裁定A → 资产层收敛(店主 08-25):**资产分类总页整条退役**,
+                       /my/assets 已下线。裁定A 那条口径("同一个数在多处必须一致")没作废,
+                       只是没有总页可比了 —— 判据跟着被测物走,改成**黑卡三格的数字 ≡ 各自明细页**。 */
                     const packNow = (await request('/my/card-pack', {}, ctokK, { 'x-tenant-id': shop.tenantId })).data.cardPack
                     const mallPts = (await request('/my/points-mall', {}, ctokK, { 'x-tenant-id': shop.tenantId })).data
-                    check('㋐ 裁定A 资产页卡包行 ≡ 卡包页(次卡/券/合计三个数逐个同源)',
-                      assets.cardPack.timecardCount === packNow.timecards.length
-                      && assets.cardPack.couponRowCount === packNow.coupons.length
-                      && assets.cardPack.count === packNow.badgeCount,
-                      JSON.stringify({ a: assets.cardPack, p: { t: packNow.timecards.length, c: packNow.coupons.length, b: packNow.badgeCount } }))
-                    check('㋐ 裁定A 资产页储值行 ≡ 卡包储值行(同一读方,分不出两个数)', assets.stored.balanceCents === packNow.stored.balanceCents && assets.stored.balanceText === packNow.stored.balanceText, JSON.stringify({ a: assets.stored, p: packNow.stored }))
-                    check('㋐ 裁定A 资产页积分行 ≡ 积分页余额(同一出口 pointsBalance)', assets.points.balance === mallPts.balance, JSON.stringify({ a: assets.points.balance, p: mallPts.balance }))
-                    check('㋐ 补件④ 角标 ≡ 卡包可用张数 ≡ 资产页卡包行合计(一个数三处用)', assets.badgeCount === packNow.badgeCount && assets.badgeCount === assets.cardPack.count, JSON.stringify({ a: assets.badgeCount, p: packNow.badgeCount }))
-                    const assetsCross = await request('/my/assets', {}, null, { 'x-tenant-id': shop.tenantId })
-                    check('㋐ 裁定A 资产口需登录(未登录 401)', assetsCross.status === 401, String(assetsCross.status))
+                    const meNow = (await request('/auth/wechat/mini-login', { method: 'POST', body: JSON.stringify({ demoLogin: true, tenantId: shop.tenantId, asUserId: cuidK }) }, null, { 'x-tenant-id': shop.tenantId })).data.user
+                    check('㋐ 资产收敛后:卡包角标 ≡ 卡包页内可用张数(一个数两处用)',
+                      packNow.badgeCount === (packNow.timecards.filter((t) => t.redeemable !== false).length + packNow.coupons.length),
+                      JSON.stringify({ badge: packNow.badgeCount, t: packNow.timecards.length, c: packNow.coupons.length }))
+                    check('㋐ 资产收敛后:黑卡储值格 ≡ 卡包储值行(同一读方,分不出两个数)',
+                      meNow.balanceCents === packNow.stored.balanceCents, JSON.stringify({ me: meNow.balanceCents, pack: packNow.stored.balanceCents }))
+                    check('㋐ 资产收敛后:黑卡积分格 ≡ 积分页余额(同一出口 pointsBalance)',
+                      meNow.points === mallPts.balance, JSON.stringify({ me: meNow.points, mall: mallPts.balance }))
+                    /* 资产总页退役后,这条门禁断言改指**仍在的那个资产出口**(卡包)——
+                       退役一个口不等于放松门禁,顾客资产口一律要登录。 */
+                    const packNoAuth = await request('/my/card-pack', {}, null, { 'x-tenant-id': shop.tenantId })
+                    check('㋐ 顾客资产口需登录(卡包未登录 401)', packNoAuth.status === 401, String(packNoAuth.status))
+                    const assetsGone = await request('/my/assets', {}, null, { 'x-tenant-id': shop.tenantId })
+                    check('㋐ 资产总页整条退役:/my/assets 已不存在(404,不留半条链)', assetsGone.status === 404, String(assetsGone.status))
                     /* E8 补:边界(券当天到期)/空态(新客三类全空)/异常输入(不存在套餐 id 不炸商城) */
                     /* 空态要的是「三类都空」的新档案:demo 顾客带种子余额,拿它验会假绿——直排建档拿干净的 */
                     const bkE8 = (await request('/admin/bookings/direct', { method: 'POST', body: JSON.stringify({ newCustomerName: `㋐空态客${RUN_ID}`, serviceId: shop.serviceId, technicianId: shop.tech2, date: dateStr(3), time: '10:07' }) }, shop.token)).data.booking
@@ -2692,9 +2697,13 @@ const main = async () => {
         !clock91.includes("|| 'CAD'") && !clock91.includes("symbol: '$', trimZeroDecimals: false }"))
       check('㋑ 状态/定金态不硬塞默认(未知状态不错分到「待服务」,拿不到不猜「无定金」)',
         !apiMap91.includes("|| 'pending_service'") && !apiMap91.includes("booking.depositState || 'none'"))
-      check('㋑ 「couponCount」全仓永久退役(真值出口改名 couponRowCount,防被当回落源复活)',
-        readFileSync(join(ROOT42, 'apps/api/local-server.mjs'), 'utf8').includes('couponRowCount')
-        && !/couponCount:/.test(readFileSync(join(ROOT42, 'apps/api/local-server.mjs'), 'utf8')))
+      /* couponRowCount 原来住在 assetsOverviewOf 里,资产总页 08-25 整条退役后那个锚点没了 ——
+         判据跟着被测物走:这条律真正要防的是**恒为 0 的假字段 couponCount 复活**,
+         负向那半保留并扩到两个顾客端;券的真值现在由卡包出口给(coupons 数组本身)。 */
+      check('㋑ 「couponCount」全仓永久退役(恒为 0 的假字段不许复活,三处都扫)',
+        !/couponCount:/.test(readFileSync(join(ROOT42, 'apps/api/local-server.mjs'), 'utf8'))
+        && !/couponCount/.test(readFileSync(join(ROOT42, 'apps/web/customer.js'), 'utf8'))
+        && !/couponCount/.test(readFileSync(join(ROOT42, 'miniprogram/utils/api.js'), 'utf8')))
       const seed91 = readFileSync(join(ROOT42, 'apps/api/local-server.mjs'), 'utf8')
       check('㋑ 夹具自证:演示铺单的已完成单连带开单+签署(且回填只碰 demo-seed、生产不跑)',
         seed91.includes('seedSignedSheets') && seed91.includes("source_channel = 'demo-seed'") && seed91.includes('if (!IS_PRODUCTION) {'))
@@ -3026,6 +3035,63 @@ const main = async () => {
         retireMod.includes("const DEMO_RETIRE_KEY = 'demo_retire_backfill_v1'")
         && retireMod.includes('if (!demoRetireDone && !isProduction) try {')
         && srv.includes('retireLegacyDemoArchives({ db, iso, isProduction: IS_PRODUCTION })'))
+
+      /* ===== ㋤ A3 施工令 ①②(店主 2026-08-25)===== */
+      {
+        const custA3 = readFileSync(join(ROOT42, 'apps/web/customer.js'), 'utf8')
+        const dirMod = readFileSync(join(ROOT42, 'apps/api/store-directory.mjs'), 'utf8')
+        const meWxA3 = readFileSync(join(ROOT42, 'miniprogram/pages/me/index.wxml'), 'utf8')
+
+        /* ① 门店列表三个一:一个数据源(不许过滤)/ 一个排序器 / 一处标记 */
+        check('㋤①-1 排序器与标记各只有一处,且都在 store-directory.mjs',
+          (dirMod.match(/function sortShops/g) || []).length === 1
+          && (dirMod.match(/function markJoined/g) || []).length === 1
+          && !/\.sort\(/.test((custA3.match(/async function openStoreSwitcher\(\)[\s\S]*?\n}\n/) || [''])[0]))
+        check('㋤①-2 数据源不砍:/shops 路由里零过滤(标记+排序不改变条数)',
+          srv.includes('shops = storeDirectory.decorate(shops, viewer?.id)')
+          && !/shops = shops\.filter/.test(srv))
+        check('㋤①-3 网页只渲染 joined,不自己判会员关系',
+          custA3.includes('shop.joined ?') && !/joinedTenantIds|user_identities/.test(custA3))
+
+        /* ①-断言(真跑取值):已入会置顶 + 长度等于数据源 */
+        const dirProbe = new DatabaseSync(process.env.TEST_DB_PATH)
+        const { createStoreDirectory } = await import(new URL('../../apps/api/store-directory.mjs', import.meta.url))
+        const dir = createStoreDirectory({ db: dirProbe })
+        const fake = [{ tenantId: 'a' }, { tenantId: 'b' }, { tenantId: 'c' }, { tenantId: 'd' }]
+        const marked = dir.markJoined(fake, new Set(['c']))
+        const sorted = dir.sortShops(marked)
+        check('㋤①-4 真跑排序器:已入会的排在未入会之前,组内保持原顺序(稳定)',
+          sorted.map((x) => x.tenantId).join(',') === 'c,a,b,d', sorted.map((x) => x.tenantId).join(','))
+        check('㋤①-5 真跑:标记+排序一条不丢一条不加(数据源长度不变)',
+          sorted.length === fake.length && dir.decorate(fake, null).length === fake.length)
+        dirProbe.close()
+
+        /* ①-🔴 串号:切换后余额/卡包/订单/积分逐项属于新租户 —— 这条在 ㋔ 组已有全套跨店断言,
+           这里补一条"门店列表本身不泄露跨店资产"(joined 只回有没有档案,不回任何数字)。 */
+        check('㋤①-6 门店列表不泄露跨店资产:joined 只回布尔,不带余额/积分/订单任何数字',
+          dirMod.includes('joined: joinedSet.has(s.tenantId)')
+          && !/balance|points|orders/i.test((dirMod.match(/function markJoined[\s\S]*?\n  }\n/) || [''])[0]))
+
+        /* ② 资产层收敛:assets / coupons 整条退役 + 黑卡直达仍在 */
+        check('㋤②-1 assets/coupons 网页链条零残留(视图集合/路由/渲染/取数/i18n)',
+          !/'assets'/.test(custA3) && !/'coupons'/.test(custA3)
+          && !/function renderAssetsWeb/.test(custA3) && !/loadAssets/.test(custA3))
+        check('㋤②-2 后端半条链同批收:/my/assets 与 assetsOverviewOf 都没了,小程序 getAssets 也删',
+          !srv.includes("path === '/my/assets'") && !/function assetsOverviewOf/.test(srv)
+          && !/function getAssets\(/.test(readFileSync(join(ROOT42, 'miniprogram/utils/api.js'), 'utf8')))
+        /* 🔴 连带保留(店主 08-23 原话,也是上次判错的地方):删聚合页 ≠ 删直达。 */
+        const webKeys = [...custA3.matchAll(/data-me-target="([a-zA-Z]+)"/g)].map((m) => m[1])
+        check('㋤②-3 黑卡直达仍在:积分/卡包/储值三格一个都没少',
+          ['pointsMall', 'cardPack', 'storedValue'].every((k) => webKeys.includes(k)), webKeys.join(','))
+        /* 两端资产入口 key 数组逐项相同(照第三案:各自从源文件取,再逐项比) */
+        const webAssetKeys = (custA3.match(/<div class="member-assets">[\s\S]*?<\/div>\n/) || [''])[0]
+        const webBlackCard = [...custA3.matchAll(/data-me-target="(pointsMall|cardPack|storedValue)"/g)].map((m) => m[1])
+        const miniBlackCard = [...meWxA3.matchAll(/class="asset-tap" bindtap="(go[A-Za-z]+)"/g)].map((m) => m[1])
+        const MINI_TO_KEY = { goPoints: 'pointsMall', goCardPack: 'cardPack', goStored: 'storedValue' }
+        const miniKeys = miniBlackCard.map((g) => MINI_TO_KEY[g] || g)
+        check('㋤②-4 两端黑卡资产入口 key 数组逐项相同(真从两个源文件取)',
+          JSON.stringify(webBlackCard) === JSON.stringify(miniKeys), JSON.stringify({ web: webBlackCard, mini: miniKeys }))
+      }
 
       /* ===== ㋣ A1 三件对齐(店主 2026-08-25:基准已拍,不需新图)===== */
       {
