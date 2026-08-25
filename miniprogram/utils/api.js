@@ -74,12 +74,24 @@ function normalizeImage(url) {
   return url
 }
 
+/* 🔴 D77(店主 2026-08-25 走查抓出,双端同病):**换店不清登录态 = 屏幕上串号。**
+   网页端那边是 A 店登录过、点 B 店链接进来,页面拿上一家店的顾客缓存画了一屏。
+   小程序这边 lucky_member 快照早就带 _tenant 戳并在读时校验,**但会话本身没带** ——
+   onStoreSwitched 的注释还写着"auth 打了租户戳",其实没有:这就是注释与代码分了叉。
+   现在按 getAdminAuth 对 apiBase 那条同款做法:**读的时候校验,不符整份丢弃**,
+   不靠"换店时记得清"(那是靠调用方自觉,迟早有一处忘了)。 */
 function getAuth() {
-  return wx.getStorageSync(AUTH_KEY) || null
+  const auth = wx.getStorageSync(AUTH_KEY) || null
+  if (!auth) return null
+  if (auth._tenant !== currentTenant()) {   // 没戳的老数据也走这一条:认不出属于哪家店 → 丢
+    try { wx.removeStorageSync(AUTH_KEY) } catch (e) { /* 清不掉也别拿它当登录态 */ }
+    return null
+  }
+  return auth
 }
 
 function setAuth(auth) {
-  wx.setStorageSync(AUTH_KEY, auth)
+  wx.setStorageSync(AUTH_KEY, Object.assign({}, auth, { _tenant: currentTenant() }))
   return auth
 }
 
@@ -126,7 +138,8 @@ function hasTenant() { return Boolean(currentTenant()) }
 /* D39 L2(换店残留机制,第 2 案后全仓清单化):换店时必须清/重取的键统一从这走。
    清:member 快照/币种/定金配置/AI 开关/购物车/本地订单缓存/款式预设(全部 per-store 值挂全局键);
    不清:lucky_lang(用户偏好)/lucky_service_type(通用过滤)/lucky_store_id::<tenant>(键自带租户)/
-   商家端会话(商家无换店流,跨店有 D35 闸)。auth 不在这清 —— 打了租户戳,下次取数自动静默重登。 */
+   商家端会话(商家无换店流,跨店有 D35 闸)。auth 不在这清 —— 它自己带租户戳,
+   getAuth 读的时候校验、不符即丢(D77;08-25 之前这句注释是空头支票,代码里并没有戳)。 */
 function onStoreSwitched() {
   for (const k of ['lucky_member', 'lucky_store_currency', 'lucky_store_deposit', 'lucky_store_ai', 'lucky_cart', 'lucky_orders', 'lucky_style_preset']) {
     try { wx.removeStorageSync(k) } catch (e) { /* 单键清不掉不阻塞换店 */ }

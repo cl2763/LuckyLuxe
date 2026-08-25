@@ -3224,6 +3224,116 @@ const main = async () => {
           sorted.length === fake.length && dir.decorate(fake, null).length === fake.length)
         dirProbe.close()
 
+        /* 🔴 ㋨ D77(店主 2026-08-25 走查抓出):**换店不清登录态 = 屏幕上串号。**
+           A 店登录过 → 点 B 店专属链接 → 页面拿上一家店的顾客缓存画了一屏
+           (服务名、预约记录全是 A 店的)。后端一直拒 401、服务端隔离没破,
+           但顾客眼睛看到的是别家店的数据,照 A3 的规矩就是串号。
+
+           上一轮为什么没兜住:切店串号我验过,验的是**登录态一致时**的切换,
+           没覆盖【跨租户残留登录态】这条路径 —— 判据要覆盖真实的所有路径,不是所有函数。
+
+           判据:把两端**真实的存取代码抠出来跑**(不是读源码找关键字),
+           喂同一份"A 店留下的缓存",看 B 店读出来是什么。 */
+        {
+          const custD77 = readFileSync(join(ROOT42, 'apps/web/customer.js'), 'utf8')
+          const grab = (name) => {
+            const m = custD77.match(new RegExp(`function ${name}\\([\\s\\S]*?\\n}`))
+            if (!m) throw new Error(`抠不出 ${name} —— 说明它被改写了,判据要跟着改`)
+            return m[0]
+          }
+          // 造一个假 localStorage,把网页端那三个函数原样跑起来
+          const makeWeb = (tenantId, store) => new Function('TENANT_ID', 'localStorage', `
+            ${grab('readJson')}
+            ${grab('writeJson')}
+            ${grab('readTenantJson')}
+            ${grab('writeTenantJson')}
+            return { readTenantJson, writeTenantJson }
+          `)(tenantId, {
+            _d: store,
+            getItem(k) { return Object.prototype.hasOwnProperty.call(this._d, k) ? this._d[k] : null },
+            setItem(k, v) { this._d[k] = String(v) },
+            removeItem(k) { delete this._d[k] }
+          })
+
+          const bucket = {}
+          const inA = makeWeb('shop-A', bucket)
+          inA.writeTenantJson('lucky-web-auth', { accessToken: 'A-token' })
+          inA.writeTenantJson('lucky-web-user', { id: 'userA', displayName: 'A店阿珍' })
+          inA.writeTenantJson('lucky-web-orders', [{ id: 'ordA', serviceName: '日式微闪渐变' }])
+          check('㋨① 同店:写完再读,登录态原样在(别修过头把正常登录也清了)',
+            inA.readTenantJson('lucky-web-auth')?.accessToken === 'A-token'
+            && inA.readTenantJson('lucky-web-user')?.id === 'userA'
+            && (inA.readTenantJson('lucky-web-orders') || []).length === 1)
+
+          const inB = makeWeb('shop-B', bucket)          // 同一份 localStorage,换一家店进来
+          check('㋨② 换店:上一家的登录态/顾客/预约记录**一个都读不出来**(真跑取值)',
+            inB.readTenantJson('lucky-web-auth') === null
+            && inB.readTenantJson('lucky-web-user') === null
+            && inB.readTenantJson('lucky-web-orders') === null,
+            JSON.stringify({ auth: inB.readTenantJson('lucky-web-auth'), user: inB.readTenantJson('lucky-web-user') }))
+          check('㋨③ 不符即**整份丢弃**(不是读不出来但还留在盘上,下次又被别处读到)',
+            !('lucky-web-auth' in bucket) && !('lucky-web-user' in bucket) && !('lucky-web-orders' in bucket),
+            Object.keys(bucket).join(' | '))
+          // 回到 A 店:已经被丢掉了,必须呈现未登录态(而不是"又冒出来")
+          check('㋨④ 再切回 A 店也读不回来(丢了就是丢了,不留复活路径)',
+            makeWeb('shop-A', bucket).readTenantJson('lucky-web-auth') === null)
+          // 老版本写下的、没有租户标的缓存:认不出属于谁 → 一律丢
+          bucket['lucky-web-auth'] = JSON.stringify({ accessToken: '老版本没打标' })
+          const legacy = makeWeb('shop-A', bucket)
+          check('㋨⑤ 旧缓存(没有租户标)一律作废,不当成本店的',
+            legacy.readTenantJson('lucky-web-auth') === null && !('lucky-web-auth' in bucket))
+          // 购物车:本来就按店分仓(键自带租户),这里**取值确认**而不是假设
+          check('㋨⑥ 购物车按店分仓:键自带租户(A 店加的东西不会出现在 B 店)',
+            /lucky-web-cart:\$\{TENANT_ID\}/.test(custD77)
+            && !/writeJson\('lucky-web-cart'/.test(custD77))
+          // 同族全扫:跨租户即失效的键,不许再有裸 readJson/writeJson
+          const strip = custD77.replace(/\/\*[\s\S]*?\*\//g, '').split('\n').filter((l) => !l.trim().startsWith('//')).join('\n')
+          const naked = ['lucky-web-user', 'lucky-web-auth', 'lucky-web-orders', 'lucky-web-pending-auth',
+            'lucky-web-pending-checkout', 'lucky-ai-assistant-messages', 'lucky-social-copy-history']
+            .filter((k) => new RegExp(`(readJson|writeJson)\\('${k}'`).test(strip))
+          check('㋨⑦ 同族扫尽:跨租户即失效的缓存全部走带标出口(裸 readJson/writeJson = 0)',
+            naked.length === 0, naked.join(' | '))
+
+          /* 双端同病检查律:小程序那边 lucky_member 快照早就带 _tenant 并在读时校验,
+             但**会话本身没带** —— onStoreSwitched 的注释还写着"auth 打了租户戳",
+             代码里并没有(注释与实现分了叉)。同批修,判据同样真跑。 */
+          const miniSrc = readFileSync(join(ROOT42, 'miniprogram/utils/api.js'), 'utf8')
+          const miniGrab = (name) => {
+            const m = miniSrc.match(new RegExp(`function ${name}\\([\\s\\S]*?\\n}`))
+            if (!m) throw new Error(`抠不出小程序的 ${name}`)
+            return m[0]
+          }
+          const makeMini = (tenantId, store) => new Function('wx', 'AUTH_KEY', 'currentTenant', `
+            ${miniGrab('getAuth')}
+            ${miniGrab('setAuth')}
+            return { getAuth, setAuth }
+          `)({
+            getStorageSync(k) { return Object.prototype.hasOwnProperty.call(store, k) ? store[k] : '' },
+            setStorageSync(k, v) { store[k] = v },
+            removeStorageSync(k) { delete store[k] }
+          }, 'lucky_auth', () => tenantId)
+          const mstore = {}
+          makeMini('shop-A', mstore).setAuth({ accessToken: 'A-token' })
+          check('㋨⑧ 小程序同店:登录态保留', makeMini('shop-A', mstore).getAuth()?.accessToken === 'A-token')
+          check('㋨⑨ 小程序换店:登录态读不出且已从本地清掉',
+            makeMini('shop-B', mstore).getAuth() === null && !('lucky_auth' in mstore),
+            JSON.stringify(Object.keys(mstore)))
+          mstore.lucky_auth = { accessToken: '老版本没打标' }
+          check('㋨⑩ 小程序旧会话(没有 _tenant)一律作废',
+            makeMini('shop-A', mstore).getAuth() === null)
+
+          /* 顺带两小件(店主 08-25):①平台令牌栏别再长得像密码框 ②「占位功能」要么做要么藏 */
+          const platHtml = readFileSync(join(ROOT42, 'apps/web/platform.html'), 'utf8')
+          check('㋨⑪ 平台后台那栏叫「平台令牌」,并写明不是登录密码(店主被自动填的密码误导过)',
+            /平台令牌/.test(platHtml) && /不是登录密码/.test(platHtml) && !/平台主钥匙/.test(platHtml))
+          const custStrip = custD77.replace(/\/\*[\s\S]*?\*\//g, '').split('\n').filter((l) => !l.trim().startsWith('//')).join('\n')
+          check('㋨⑫ 顾客端「占位功能」整条退役:词条/视图分支/占位渲染器/合法视图集合都没了',
+            !/comingSoon/.test(custStrip) && !/renderPlaceholderWeb/.test(custStrip)
+            && !/'settings'/.test(custStrip), custStrip.split('\n').filter((l) => /comingSoon|renderPlaceholderWeb|'settings'/.test(l)).join(' | ').slice(0, 160))
+          check('㋨⑬ 门店卡说实话(它是真页面:店名/联系方式/营业时间)',
+            /地址 · 营业时间/.test(custD77) && /function renderStoreWeb/.test(custD77))
+        }
+
         /* 🔴 ㋧ D76(店主 2026-08-25):**可见性与账本判据解耦**。
            根因:kind 一列同时管"账本受不受保护"和"顾客选店页出不出现",于是生产上
            两家有收入的演示样板店(kind 只能是 real,D75 拦死改动)一直对真顾客公开挂着。

@@ -132,7 +132,6 @@ const copy = {
     orders: '我的订单',
     recent: '近期消费',
     functions: '常用功能',
-    settings: '设置',
     pointsMall: '积分商城',
     completed: '已完成',
     cancelled: '已取消',
@@ -162,7 +161,6 @@ const copy = {
     totalSpent: '累计消费',
     visits: '到店次数',
     times: '次',
-    comingSoon: '占位功能',
     back: '返回',
     logout: '退出登录',
     completeFlow: '完整预约流程',
@@ -282,7 +280,6 @@ const copy = {
     orders: 'My Orders',
     recent: 'Recent Records',
     functions: 'Common Tools',
-    settings: 'Settings',
     pointsMall: 'Points Mall',
     completed: 'Completed',
     cancelled: 'Cancelled',
@@ -312,7 +309,6 @@ const copy = {
     totalSpent: 'Total Spent',
     visits: 'Visits',
     times: 'times',
-    comingSoon: 'Placeholder',
     back: 'Back',
     logout: 'Log out',
     completeFlow: 'Full booking flow',
@@ -341,8 +337,9 @@ const copy = {
 
 const state = {
   lang: localStorage.getItem('lucky-web-lang') || 'zh',
-  user: readJson('lucky-web-user'),
-  auth: readJson('lucky-web-auth'),
+  // D77:登录态与所有跨租户即失效的缓存,读的时候就校验租户标(不符=当没有)
+  user: readTenantJson('lucky-web-user'),
+  auth: readTenantJson('lucky-web-auth'),
   // 批③次段:卡包/商城视图数据(后端唯一出口下发,前端不缓存计算)
   cardPack: null,
   mall: null,
@@ -369,19 +366,19 @@ const state = {
   isAnalyzingReference: false,
   remark: '',
   cart: readJson(`lucky-web-cart:${TENANT_ID}`) || [], // 购物车按店分仓(切店不带上家店的商品,D39 同族)
-  orders: readJson('lucky-web-orders') || [],
+  orders: readTenantJson('lucky-web-orders') || [],
   orderFilter: 'all',
   selectedOrderId: '',
   shareOrderId: '',
   sharePlatform: 'xiaohongshu',
   shareCopyByOrder: {},
-  shareCopyHistory: readJson('lucky-social-copy-history') || {},
+  shareCopyHistory: readTenantJson('lucky-social-copy-history') || {},
   memberCodeOpen: false,
   aiAssistantOpen: false,
   aiAssistantLoading: false,
   aiAssistantDraft: '',
-  aiAssistantMessages: readJson('lucky-ai-assistant-messages') || [],
-  pendingAuth: readJson('lucky-web-pending-auth')
+  aiAssistantMessages: readTenantJson('lucky-ai-assistant-messages') || [],
+  pendingAuth: readTenantJson('lucky-web-pending-auth')
 }
 
 let heroTimer = null
@@ -408,6 +405,31 @@ function readJson(key) {
 
 function writeJson(key, value) {
   localStorage.setItem(key, JSON.stringify(value))
+}
+
+/* 🔴 D77(店主 2026-08-25 走查抓出):**换店不清登录态 = 屏幕上串号。**
+   店主在 A 店登录过,再点 B 店的专属链接 → 租户换了、`lucky-web-auth/-user` 没换,
+   页面拿上一家店那个顾客的缓存画了一屏(服务名、预约记录全是 A 店的)。
+   后端一直是拒的(401),服务端隔离没破 —— 但**顾客眼睛看到的是别家店的数据**,
+   照 A3 立的规矩:切换后任何一处数字留在上一家 = 串号,零容忍。
+
+   修法是 fail-safe,不是"换店时记得清":凡**跨租户即失效**的本地缓存,
+   写的时候打租户标,**读的时候校验**,不符就整份丢掉。
+   与 db-backup.mjs 那句「失败即抛错、不返回要靠调用方判的值」同一条道理 ——
+   靠调用方自觉的写法,迟早有一处忘了。 */
+function readTenantJson(key) {
+  const raw = readJson(key)
+  if (!raw || typeof raw !== 'object' || !('__tenant' in raw)) {
+    // 没有租户标 = 旧版本写下的缓存,认不出属于哪家店 → 一律丢弃(宁可让人重登一次)
+    if (raw !== null) { try { localStorage.removeItem(key) } catch (e) {} }
+    return null
+  }
+  if (raw.__tenant !== TENANT_ID) { try { localStorage.removeItem(key) } catch (e) {} return null }
+  return raw.__value
+}
+
+function writeTenantJson(key, value) {
+  writeJson(key, { __tenant: TENANT_ID, __value: value })
 }
 
 function defaultDate() {
@@ -582,7 +604,7 @@ function rememberCopyHistory(scope, bookingId, platform, copyData) {
   const key = copyHistoryKey(scope, bookingId, platform)
   const next = [...new Set([...(state.shareCopyHistory[key] || []), copyFingerprint(copyData)].filter(Boolean))].slice(-20)
   state.shareCopyHistory[key] = next
-  writeJson('lucky-social-copy-history', state.shareCopyHistory)
+  writeTenantJson('lucky-social-copy-history', state.shareCopyHistory)
 }
 
 function toast(message) {
@@ -653,8 +675,8 @@ async function refreshAuth() {
     })
     state.user = data.user
     state.auth = data.auth
-    writeJson('lucky-web-user', state.user)
-    writeJson('lucky-web-auth', state.auth)
+    writeTenantJson('lucky-web-user', state.user)
+    writeTenantJson('lucky-web-auth', state.auth)
     return true
   } catch {
     clearCustomerAuth()
@@ -664,7 +686,7 @@ async function refreshAuth() {
 
 function privateViews() {
   // 卡包=私有(自己的卡券);商城=公开(没登录也能看有什么套餐,与小程序同口径)
-  return new Set(['booking', 'cart', 'checkout', 'me', 'orders', 'orderDetail', 'memberBenefits', 'pointsMall', 'settings', 'cardPack', 'storedValue'])
+  return new Set(['booking', 'cart', 'checkout', 'me', 'orders', 'orderDetail', 'memberBenefits', 'pointsMall', 'cardPack', 'storedValue'])
 }
 
 function requiresAuth(view) {
@@ -677,7 +699,7 @@ function requireLogin(pending = {}) {
     serviceId: pending.serviceId || state.service?.id || '',
     bookingMode: pending.bookingMode || ''
   }
-  writeJson('lucky-web-pending-auth', state.pendingAuth)
+  writeTenantJson('lucky-web-pending-auth', state.pendingAuth)
   toast(t('needLogin'))
   renderAuth()
 }
@@ -758,8 +780,8 @@ async function handleAuthRedirect() {
   })
   state.user = data.user
   state.auth = data.auth
-  writeJson('lucky-web-user', state.user)
-  writeJson('lucky-web-auth', state.auth)
+  writeTenantJson('lucky-web-user', state.user)
+  writeTenantJson('lucky-web-auth', state.auth)
   history.replaceState(null, '', window.location.pathname)
 }
 
@@ -771,7 +793,7 @@ async function handleStripeReturn() {
     body: JSON.stringify({ sessionId: params.get('session_id') })
   })
   state.orders = [data.booking, ...state.orders.filter((order) => order.id !== data.booking.id)]
-  writeJson('lucky-web-orders', state.orders)
+  writeTenantJson('lucky-web-orders', state.orders)
   localStorage.removeItem('lucky-web-pending-checkout')
   toast(t('paidDone'))
   state.view = 'me'
@@ -850,7 +872,7 @@ async function loadUserOrders() {
   if (!state.user) return
   const data = await request(`/bookings?lang=${state.lang}`)
   state.orders = data.bookings || []
-  writeJson('lucky-web-orders', state.orders)
+  writeTenantJson('lucky-web-orders', state.orders)
   // C4(批③首件):网页顾客端待签单列表(D57 同构)——拉不到不挡订单列表
   try { state.pendingSign = (await request('/my/pending-sign')).pendingSign || [] } catch { state.pendingSign = [] }
 }
@@ -948,8 +970,8 @@ async function registerEmail(event) {
   }
   state.user = data.user
   state.auth = data.auth
-  writeJson('lucky-web-user', state.user)
-  writeJson('lucky-web-auth', state.auth)
+  writeTenantJson('lucky-web-user', state.user)
+  writeTenantJson('lucky-web-auth', state.auth)
   await showApp()
 }
 
@@ -1011,7 +1033,6 @@ function render() {
   if (state.view === 'storedValue') renderCardPackWeb()
   if (state.view === 'mall') renderMallWeb()
   if (state.view === 'pointsMall') renderPointsWeb()
-  if (state.view === 'settings') renderPlaceholderWeb(t('settings'), state.lang === 'zh' ? '语言、通知、账号安全等设置将在真实登录后接入。' : 'Language, notifications, and account security settings will connect after real auth.')
   renderAiAssistantWidget()
 }
 
@@ -1174,7 +1195,7 @@ async function sendAiAssistantMessage() {
       handoffReason: state.lang === 'en' ? reply.handoffReasonEn : reply.handoffReasonZh
     })
     state.aiAssistantMessages = state.aiAssistantMessages.slice(-12)
-    writeJson('lucky-ai-assistant-messages', state.aiAssistantMessages)
+    writeTenantJson('lucky-ai-assistant-messages', state.aiAssistantMessages)
   } finally {
     state.aiAssistantLoading = false
     renderAiAssistantWidget()
@@ -1706,7 +1727,7 @@ async function submitPayment() {
       body: JSON.stringify({ bookingId: bookingData.booking.id })
     })
     if (checkout.checkoutUrl) {
-      writeJson('lucky-web-pending-checkout', { bookingId: bookingData.booking.id, cartItemId: item.id })
+      writeTenantJson('lucky-web-pending-checkout', { bookingId: bookingData.booking.id, cartItemId: item.id })
       toast(t('paymentRedirect'))
       window.location.href = checkout.checkoutUrl
       return
@@ -1717,7 +1738,7 @@ async function submitPayment() {
   state.cart = state.cart.filter((item) => !selectedIds.has(item.id))
   state.orders = [...completed, ...state.orders]
   writeJson(`lucky-web-cart:${TENANT_ID}`, state.cart)
-  writeJson('lucky-web-orders', state.orders)
+  writeTenantJson('lucky-web-orders', state.orders)
   /* 🔴 A1-M4(店主 08-25):下完单要有明确的"成了"的屏 —— 基准是小程序 booking-done(已拍)。
      原来这里 toast 一下就甩回「我的」页,顾客得自己去列表里找刚下的单,没有落点。 */
   toast(t('paidDone'))
@@ -1843,14 +1864,17 @@ function renderMe() {
           ${[
             [state.lang === 'zh' ? '积分商城' : 'Points mall', '/assets/icons/c-gift.png', 'pointsMall', 'points'],
             [state.lang === 'zh' ? '卡包' : 'Card pack', '/assets/images/nail-luxe.jpg', 'cardPack', true],
-            [t('store'), '/assets/images/store-cover.jpg', 'store', false],
-            /* 礼品卡入口已删(店主 2026-08-25 拍板:早就不做了)—— 占位页 + 视图 + i18n 一并退役,
-                  不留半条链。小程序本来就没有,不补。 */
-            [t('settings'), '/assets/images/lash-natural.jpg', 'settings', false]
+            /* 🔴 店主 08-25:「占位功能」四个字生产上顾客看得到 —— 要么做要么藏。
+               门店卡是**真页面**(店名/联系方式/营业时间),副标题改成说实话;
+               设置卡点进去只有一句"将在真实登录后接入" = 真占位,**整格藏掉**,
+               连同视图分支与 comingSoon 词条一起退役,不留半条链(与礼品卡同刀)。 */
+            [t('store'), '/assets/images/store-cover.jpg', 'store', 'store']
           ].map(([label, image, target, live]) => {
             const sub = live === 'points'
               ? (user.redeemablePrizeText || (state.lang === 'zh' ? '用积分换券' : 'Redeem with points'))
-              : (live ? (state.lang === 'zh' ? '次卡 · 优惠券 · 储值' : 'Passes · Coupons · Balance') : t('comingSoon'))
+              : live === 'store'
+                ? (state.lang === 'zh' ? '地址 · 营业时间' : 'Address · hours')
+                : (state.lang === 'zh' ? '次卡 · 优惠券 · 储值' : 'Passes · Coupons · Balance')
             // 其它格是实拍照(铺满),积分格现在放的是线条图标(要留白居中);
             // 将来换成奖品缩略图时把 icon-art 去掉即可,版面不动。
             const imgCls = live === 'points' ? ' class="menu-img-art"' : ''
@@ -1893,7 +1917,7 @@ async function refreshOrder(id) {
   try {
     const data = await request(`/bookings/${id}?lang=${state.lang}`)
     state.orders = [data.booking, ...state.orders.filter((order) => order.id !== data.booking.id)]
-    writeJson('lucky-web-orders', state.orders)
+    writeTenantJson('lucky-web-orders', state.orders)
   } catch (error) {
     toast(error.message)
   }
@@ -2380,18 +2404,8 @@ function renderStoreWeb() {
   `
 }
 
-function renderPlaceholderWeb(title, text) {
-  els.screen.innerHTML = `
-    <section class="placeholder-web">
-      <button class="ghost back-btn" data-view-target="me" type="button">← ${t('me')}</button>
-      <div class="placeholder-card card">
-        <img src="/assets/images/store-cover.jpg" alt="${title}">
-        <h1>${title}</h1>
-        <p>${text}</p>
-      </div>
-    </section>
-  `
-}
+/* 占位渲染器 renderPlaceholderWeb 已退役(店主 08-25:占位功能要么做要么藏)——
+   最后一个用它的「设置」卡已撤,函数不留(留着下次又会有人往里塞占位页)。 */
 
 async function handleScreenClick(event) {
   const heroSlide = event.target.closest('[data-hero-slide]')

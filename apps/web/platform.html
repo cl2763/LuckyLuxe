@@ -72,7 +72,8 @@
       <div style="font-size:19px;font-weight:750;color:#5c4630">有迹</div>
       <div class="muted" style="margin-top:3px">平台运营控制台 Platform Console</div>
     </div>
-    <input id="tokenInput" type="password" placeholder="平台主钥匙(OWNER_TOKEN)" style="width:100%;margin-bottom:10px">
+    <label for="tokenInput" style="display:block;margin-bottom:4px;font-size:13px;color:#666">平台令牌(不是登录密码;浏览器若自动填了密码,请清掉重贴)</label>
+    <input id="tokenInput" type="password" autocomplete="off" name="platform-token" placeholder="平台令牌(OWNER_TOKEN)" style="width:100%;margin-bottom:10px">
     <button class="p" style="width:100%" onclick="login()">进入控制台</button>
     <p class="muted" style="text-align:center;margin-top:10px">仅平台方使用 · 商家后台请访问 /admin</p>
   </div>
@@ -377,7 +378,7 @@ const WK = ['周日','周一','周二','周三','周四','周五','周六']
 function toast(m){const t=$('toast');t.textContent=m;t.classList.add('show');setTimeout(()=>t.classList.remove('show'),2200)}
 function esc(s){return String(s??'').replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]))}
 async function api(p,o={}){const r=await fetch(p,{...o,headers:{'content-type':'application/json',authorization:'Bearer '+TOKEN,...(o.headers||{})}});const d=await r.json().catch(()=>null);if(!r.ok)throw new Error((d&&d.error&&d.error.message)||('HTTP '+r.status));return d}
-async function login(){TOKEN=$('tokenInput').value.trim();try{await api('/platform/tenants');localStorage.setItem('ll-platform-token',TOKEN);$('loginWrap').classList.add('hidden');$('app').classList.remove('hidden');refreshAll()}catch(e){toast('钥匙不对或服务不可用:'+e.message)}}
+async function login(){TOKEN=$('tokenInput').value.trim();try{await api('/platform/tenants');localStorage.setItem('ll-platform-token',TOKEN);$('loginWrap').classList.add('hidden');$('app').classList.remove('hidden');refreshAll()}catch(e){toast('平台令牌不对或服务不可用:'+e.message)}}
 function logout(){localStorage.removeItem('ll-platform-token');location.reload()}
 function nav(p){document.querySelectorAll('.navbtn[data-page]').forEach(b=>b.classList.toggle('on',b.dataset.page===p));['overview','merchants','config','import','leads','billing','kb'].forEach(x=>$('page-'+x).classList.toggle('hidden',x!==p));if(p==='overview')loadOverview();if(p==='leads')loadLeads();if(p==='config')initConfig();if(p==='import')initImport();if(p==='billing')loadBilling();if(p==='kb')loadPlatformKb()}
 async function refreshAll(){await loadTenants();await loadLeads();await loadOverview()}
