@@ -75,6 +75,27 @@ const DEMO_TENANTS = [
   { tenantId: 'jics-sandbox', label: '小婕的店(演示)', currency: 'CNY', timezone: 'Asia/Shanghai',
     twin: { balance: 36600, timecardTimes: 5, coupons: 3, orders: 1, timecardRemaining: 2, name: '演示·跨店阿珍' } }
 ]
+
+/* 🔴 生产上要铺的两家(店主 2026-08-25 三裁):
+   ① 店名不挂店主自己的品牌 —— 准商户要看的是"一家和我一样的店在用有迹",
+      而且真店品牌不该挂在一个**可被整体重置的账本**上;id 保留 demo- 前缀,运维认得出孪生关系。
+   ② 数字要"有零有整"(888 一眼是样板),且**两张已签署单里必须有一张组合支付**:
+      储值抵扣 + 次卡核销 + 券,一张单说清 —— 那才是有迹和别家的区别。
+   ③ 铺两家:清单里那个「演示·跨店阿珍」是跨店身份,只铺一家的话"跨店"就是个名字骗人;
+      跨店串号又正是多商户平台最容易被质疑的地方,两家才演得出来。
+   一次只铺一家(命令跑两遍)—— 与「不许一把梭」那条不冲突。 */
+const PROD_TENANTS = [
+  /* 次卡剩余的算法(别再按感觉填):买 5 次卡那张单**当场用掉 1 次** → 剩 4;
+     组合支付单再核销 1 次 → 落地 = 4 − 1 = 3。要更少就让 ④b 先多核销几次。
+     所以这里写的是**落地数**,清单上印的也是它(彩排实测对上了才敢印)。 */
+  { tenantId: 'demo-lucky-luxe', label: '星野美甲(演示店)', currency: 'CAD', timezone: 'America/Toronto',
+    twin: { balance: 73650, timecardTimes: 5, coupons: 2, orders: 2, combo: true, timecardRemaining: 3, name: '演示·跨店阿珍' },
+    // 落地数=沙箱彩排**实测**(不是估的):充 736.50 → 组合支付单用掉 336.00 → 余 400.50
+    landed: { balanceCents: 40050, totalSpentCents: 100200, visits: 3, timecardLeft: 3, activeCoupons: 1 } },
+  { tenantId: 'demo-jienail', label: '悦容美甲(演示店)', currency: 'CNY', timezone: 'Asia/Shanghai',
+    twin: { balance: 51240, timecardTimes: 5, coupons: 2, orders: 2, combo: true, timecardRemaining: 1, name: '演示·跨店阿珍' },
+    landed: { balanceCents: 17640, totalSpentCents: 163800, visits: 3, timecardLeft: 1, activeCoupons: 1 } }
+]
 /* ③ 真店黑名单:**就是 demo-reset 导出的那一份**,本地零副本(店主 08-25 复核令①)。
    08-25 一度写成 `[...PROTECTED_REAL_TENANTS, 'jics-store']` —— 那就是第二份名单,
    两份迟早各自长歪(这批自己刚领悟的那条)。沙箱那家 `jics-store` 不进这份名单:
@@ -221,7 +242,7 @@ const membersOf = (spec) => ([
 
 /* 一位演示顾客:开单签署(积分/累计消费/到店次数)+ 储值 + 次卡 + 券,会员卡上每一格都有数。
    **逐项幂等**:哪一项缺就补哪一项(顾客已存在但资产没铺完时,重跑能补齐)。 */
-async function seedMember(spec, { name, openId, balance, timecardTimes, coupons, orders, slotHour = 10, timecardRemaining = 0 }) {
+async function seedMember(spec, { name, openId, balance, timecardTimes, coupons, orders, slotHour = 10, timecardRemaining = 0, combo = false }) {
   const services = ((await api(spec.tenantId, '/admin/services')).services || []).filter((s) => (s.itemKind || 'main') === 'main' && !s.isTimecard)
   const techs = (await api(spec.tenantId, '/admin/technicians')).technicians || []
   const svc = services[0]
@@ -260,7 +281,10 @@ async function seedMember(spec, { name, openId, balance, timecardTimes, coupons,
   // ① 历史已签署单(=积分/累计消费/到店次数/成长值的来源)
   let signed = 0
   if (userId) signed = (await factsOf(spec.tenantId, userId)).signedSheets
-  for (let i = signed; i < orders; i += 1) {
+  /* combo 的顾客留一张额度给最后那张**组合支付单**(它要等储值/次卡/券都铺好才能开),
+     所以这里只铺 orders-1 张普通单 —— 两张加起来仍是 orders 张,幂等仍靠同一个计数。 */
+  const plainTarget = combo ? Math.max(0, orders - 1) : orders
+  for (let i = signed; i < plainTarget; i += 1) {
     const bk = await bookOnce(-3 - i, slotHour + i)
     await settleAndSign(bk.id)
     log(`  ✅ ${name}:补第 ${i + 1} 张已签署单`)
@@ -276,8 +300,9 @@ async function seedMember(spec, { name, openId, balance, timecardTimes, coupons,
   // ③ 储值(缺才充)
   const customerRow = async () => ((await api(spec.tenantId, '/admin/customers')).customers || []).find((c) => c.id === userId) || {}
   if (balance && userId) {
-    const cur = await customerRow()
-    if (!cur.storedValueBalanceCents) {
+    // 🔴 判"充过没有",不判"余额是不是 0":组合支付单会把余额花掉,按余额判等于每跑一次多充一笔
+    const charged = Number((await factsOf(spec.tenantId, userId)).recharges || 0)
+    if (!charged) {
       await api(spec.tenantId, '/admin/stored-value/recharge', { method: 'POST', body: JSON.stringify({ userId, amountCents: balance, payChannel: 'cash', note: '演示储值' }) })
       log(`  ✅ ${name}:充演示储值 ${balance / 100}`)
     }
@@ -299,13 +324,16 @@ async function seedMember(spec, { name, openId, balance, timecardTimes, coupons,
   /* ④b 核销次卡(走正规开单用卡路径):让两家演示店的「次卡剩余」不同,
      店主一眼就能看出切店后换了一套数,而不是两边碰巧一样。 */
   if (timecardRemaining && userId) {
+    /* combo 那张单还要再核销一次,所以这里先留出一次 —— 否则最后落下来比清单上写的少 1 次
+       (彩排第一遍就是这么落到 3 次的,清单写的是 4)。 */
+    const preComboTarget = combo ? timecardRemaining + 1 : timecardRemaining
     const readCard = async () => (await factsOf(spec.tenantId, userId)).timecards[0] || null
     let card = await readCard()
     let guard = 0
-    while (card && (card.totalTimes - card.usedTimes) > timecardRemaining && guard < 6) {
+    while (card && (card.totalTimes - card.usedTimes) > preComboTarget && guard < 6) {
       const bk = await bookOnce(-1, slotHour + orders + 4 + guard)
       await settleAndSign(bk.id, { timecardId: card.id, timecardServiceId: svc.id })
-      log(`  ✅ ${name}:核销次卡 1 次(演示两店剩余不同:目标剩 ${timecardRemaining} 次)`)
+      log(`  ✅ ${name}:核销次卡 1 次(演示两店剩余不同:目标剩 ${timecardRemaining} 次${combo ? ',其中最后一次由组合支付单核销' : ''})`)
       card = await readCard()
       guard += 1
     }
@@ -313,13 +341,40 @@ async function seedMember(spec, { name, openId, balance, timecardTimes, coupons,
 
   // ⑤ 券(缺几张发几张)
   if (coupons && userId) {
-    const have = (await factsOf(spec.tenantId, userId)).activeCoupons
+    // 按**发过几张**判(含已核销)—— 只看还剩几张的话,组合支付单用掉一张,下次重跑就又发一张
+    const have = Number((await factsOf(spec.tenantId, userId)).couponGrants || 0)   // 字段缺就当 0,不许"静默不发"
     const cpn = ((await api(spec.tenantId, '/admin/coupons')).coupons || [])[0]
     for (let i = have; i < coupons && cpn; i += 1) {
       await api(spec.tenantId, `/admin/coupons/${cpn.id}/grant`, { method: 'POST', body: JSON.stringify({ userId }) })
       log(`  ✅ ${name}:发第 ${i + 1} 张券`)
     }
   }
+  /* ⑥ 🔴 组合支付单(店主 08-25 裁②):**一张单说清三件事** ——
+     储值抵扣 + 次卡核销 + 券。普通单商户看不出有迹和别家的区别,这张才是卖点那一屏。
+     必须排在储值/次卡/券都铺好之后:三样资产得先存在,才用得上。
+     单里两个项目:一个由次卡盖掉,另一个走券 + 储值 —— 三条腿同时现形。 */
+  if (combo && userId) {
+    const f = await factsOf(spec.tenantId, userId)
+    if (!f.comboSheets) {
+      const card = f.timecards[0]
+      const grant = ((await api(spec.tenantId, `/admin/coupon-grants?userId=${encodeURIComponent(userId)}&status=active`)).grants || [])[0]
+      const svc2 = services[1] || svc
+      if (card && grant) {
+        const bk = await bookOnce(-2, slotHour + orders + 8)
+        await settleAndSign(bk.id, {
+          payIntent: 'balance_plus_offline',                     // 储值先抵,不够的才走线下
+          items: [{ serviceId: svc.id, qty: 1 }, { serviceId: svc2.id, qty: 1 }],
+          technicians: [{ technicianId: tech.id, role: 'main', itemNos: [1, 2] }],
+          timecardId: card.id, timecardServiceId: svc.id,        // 次卡盖住第一项
+          couponGrantId: grant.id                                 // 券打在余下的部分
+        })
+        log(`  ✅ ${name}:组合支付单(储值抵扣 + 次卡核销 + 券,一张单三条腿)`)
+      } else {
+        log(`  ⚠️ ${name}:组合支付单没铺 —— ${card ? '' : '没有次卡 '}${grant ? '' : '没有可用券'}(不静默,记在这儿)`)
+      }
+    }
+  }
+
   log(`  → ${name} 就绪(${userId})`)
   return userId
 }
@@ -339,10 +394,12 @@ async function reconTenantsOf() {
    能不能写由七条门禁说了算。 */
 function targetsOf() {
   if (!PRODUCTION_SEED) return DEMO_TENANTS
-  const known = DEMO_TENANTS.find((x) => x.tenantId === TARGET_TENANT)
+  const known = [...PROD_TENANTS, ...DEMO_TENANTS].find((x) => x.tenantId === TARGET_TENANT)
+  /* 表里没有的目标:用彩排口径兜底(有零有整 + 组合支付单),别再回落到那套 888 的老数字。
+     真要铺哪家,还是应该先进 PROD_TENANTS 那张表 —— 数字得有人看过才算数。 */
   return [known || {
     tenantId: TARGET_TENANT, label: CONFIRM_NAME, currency: 'CAD', timezone: 'America/Toronto',
-    twin: { balance: 88800, timecardTimes: 5, coupons: 1, orders: 2, timecardRemaining: 4, name: '演示·跨店阿珍' }
+    twin: { balance: 73650, timecardTimes: 5, coupons: 2, orders: 2, combo: true, timecardRemaining: 3, name: '演示·跨店阿珍' }
   }]
 }
 async function statsOf(tenantId) {
@@ -369,9 +426,17 @@ async function dryRun(spec) {
     log(`  租户:不存在 → **将新建**(kind=demo,老板账号一并生成)`)
     log('  目录:七项全新建(服务 ×2 / 技师 ×2 / 充值套餐 / 次卡套餐 / 券模板)')
     for (const m of membersOf(spec)) {
-      log(`  顾客「${m.name}」:**将新建** —— 已签署单 ${m.orders || 0} 张 / 储值 ${(m.balance || 0) / 100} / 次卡 ${m.timecardTimes ? `1 张(用到剩 ${m.timecardRemaining || 0} 次)` : '不铺'} / 券 ${m.coupons || 0} 张 / 贴 openid`)
+      log(`  顾客「${m.name}」:**将新建** —— 已签署单 ${m.orders || 0} 张${m.combo ? '(其中 1 张组合支付:储值抵扣 + 次卡核销 + 券)' : ''}`
+        + ` / 储值 ${(m.balance || 0) / 100} / 次卡 ${m.timecardTimes ? `1 张(用到剩 ${m.timecardRemaining || 0} 次)` : '不铺'} / 券 ${m.coupons || 0} 张 / 贴 openid`)
     }
     log('  ── 合计将写 9 项(租户 1 + 目录 7 + 顾客 2 的资产按上面逐项);真店零写入')
+    log('  ── 每张已签署单都带签署单原件(签完即生成快照,顾客端/商家端都能点开)')
+    if (spec.landed) {
+      const L = spec.landed
+      log(`  ── 铺完「${spec.twin.name}」会员卡上落地长这样(沙箱彩排**实测**,不是估的):`)
+      log(`       储值余额 ${(L.balanceCents / 100).toFixed(2)}(充 ${(spec.twin.balance / 100).toFixed(2)},组合支付单用掉 ${((spec.twin.balance - L.balanceCents) / 100).toFixed(2)})`)
+      log(`       累计消费 ${(L.totalSpentCents / 100).toFixed(2)} · 到店 ${L.visits} 次 · 次卡剩 ${L.timecardLeft} 次 · 券 ${L.activeCoupons} 张`)
+    }
     return
   }
   log(`  租户:已有「${hit.name}」kind=${hit.kind || 'real'} → **不动**`)
@@ -387,11 +452,13 @@ async function dryRun(spec) {
     const f = await factsOf(spec.tenantId, c.id)
     const cards = f.timecards.reduce((n, t) => n + (t.totalTimes - t.usedTimes), 0)
     const gaps = []
-    if ((m.orders || 0) > f.signedSheets) { gaps.push(`补已签署单 ${(m.orders || 0) - f.signedSheets} 张`); willWrite += 1 }
+    const plainWant = m.combo ? Math.max(0, (m.orders || 0) - 1) : (m.orders || 0)
+    if (plainWant > f.signedSheets) { gaps.push(`补已签署单 ${plainWant - f.signedSheets} 张`); willWrite += 1 }
     if (m.balance && !c.storedValueBalanceCents) { gaps.push(`充储值 ${m.balance / 100}`); willWrite += 1 }
     if (m.timecardTimes && !f.timecards.length) { gaps.push('买次卡 1 张'); willWrite += 1 }
     if (m.timecardRemaining && cards > m.timecardRemaining) { gaps.push(`核销次卡 ${cards - m.timecardRemaining} 次`); willWrite += 1 }
-    if ((m.coupons || 0) > f.activeCoupons) { gaps.push(`发券 ${(m.coupons || 0) - f.activeCoupons} 张`); willWrite += 1 }
+    if ((m.coupons || 0) > f.couponGrants) { gaps.push(`发券 ${(m.coupons || 0) - f.couponGrants} 张`); willWrite += 1 }
+    if (m.combo && !f.comboSheets) { gaps.push('开 1 张组合支付单(储值抵扣 + 次卡核销 + 券)'); willWrite += 1 }
     if (f.wechatOpenId === m.openId) gaps.push('openid 已贴,不动')
     else { willWrite += 1; gaps.push(`**将贴 openid**(${m.openId})`) }
     if (!gaps.length) gaps.push('齐了,不动')

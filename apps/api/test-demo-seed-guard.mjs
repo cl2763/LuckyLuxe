@@ -36,10 +36,10 @@ function check(name, condition, detail = '') {
   if (!condition) throw new Error(`${name}${detail ? `: ${detail}` : ''}`)
   console.log(`ok ${checks} - ${name}`)
 }
-async function request(path, options = {}, token = PLATFORM) {
+async function request(path, options = {}, token = PLATFORM, extraHeaders = {}) {
   const r = await fetch(`${BASE_URL}${path}`, {
     ...options,
-    headers: { 'content-type': 'application/json', ...(token ? { authorization: `Bearer ${token}` } : {}), ...(options.headers || {}) }
+    headers: { 'content-type': 'application/json', ...(token ? { authorization: `Bearer ${token}` } : {}), ...extraHeaders, ...(options.headers || {}) }
   })
   const text = await r.text()
   let data = null
@@ -130,6 +130,13 @@ const realBefore = await statsOf('lucky-luxe')
   check('⑦落 platform_ops_log', /⑦ 已落 platform_ops_log/.test(r.out), r.out.slice(-400))
   const seeded = await statsOf(DEMO_ID)
   check('空态铺满:演示店有了顾客与已签署单', seeded.users >= 2 && seeded.settlements >= 3, JSON.stringify(seeded))
+  /* 🔴 店主 08-25 裁②:两张已签署单里必须有一张**组合支付**(储值抵扣 + 次卡核销 + 券)。
+     判据取库里那张单的两个外键(券 + 次卡都挂上才算),不是看铺设脚本打了哪句日志。 */
+  const twin = ((await request(`/admin/customers`, {}, PLATFORM, { 'x-admin-tenant-id': DEMO_ID })).data.customers || [])
+    .find((c) => String(c.displayName || '').startsWith('演示·跨店'))
+  const tf = (await request(`/platform/tenants/${DEMO_ID}/demo-facts?userId=${encodeURIComponent(twin?.id || '')}`)).data.facts
+  check('裁②:组合支付单确实落了(一张单同时挂着券与次卡)', tf.comboSheets >= 1, JSON.stringify(tf))
+  check('裁②:券按"发过几张"判幂等(用掉一张也不会越跑越多)', tf.couponGrants >= tf.activeCoupons, JSON.stringify(tf))
 }
 // ⑥ 的独立复核:真店五项由**这套件自己**再量一遍(不信脚本自报)
 {

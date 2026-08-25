@@ -24,13 +24,21 @@ export function createDemoFacts({ db, apiError, isDemoTenant, protectedRealTenan
   /* 铺设脚本要的三个事实(逐项幂等靠它判「缺不缺」) */
   function facts(tenantId, userId) {
     assertDemo(tenantId)
-    if (!userId) return { userId: null, wechatOpenId: '', signedSheets: 0, timecards: [], activeCoupons: 0 }
+    if (!userId) return { userId: null, wechatOpenId: '', signedSheets: 0, timecards: [], activeCoupons: 0, couponGrants: 0, comboSheets: 0, recharges: 0 }
     return {
       userId,
       wechatOpenId: (db.prepare('SELECT wechat_open_id AS w FROM users WHERE id = ? AND tenant_id = ?').get(userId, tenantId) || {}).w || '',
       signedSheets: db.prepare("SELECT COUNT(*) n FROM settlements WHERE user_id = ? AND tenant_id = ? AND status = 'signed'").get(userId, tenantId).n,
       timecards: db.prepare('SELECT id, total_times AS totalTimes, used_times AS usedTimes FROM member_timecards WHERE user_id = ? AND tenant_id = ? ORDER BY rowid ASC').all(userId, tenantId),
-      activeCoupons: db.prepare("SELECT COUNT(*) n FROM coupon_grants WHERE user_id = ? AND tenant_id = ? AND status = 'active'").get(userId, tenantId).n
+      activeCoupons: db.prepare("SELECT COUNT(*) n FROM coupon_grants WHERE user_id = ? AND tenant_id = ? AND status = 'active'").get(userId, tenantId).n,
+      /* 发过几张券(含已核销):铺设"发几张"要按这个数判幂等 —— 只看 active 的话,
+         组合支付单用掉一张,下次重跑就又发一张,越跑越多(幂等破在这种地方)。 */
+      couponGrants: db.prepare('SELECT COUNT(*) n FROM coupon_grants WHERE user_id = ? AND tenant_id = ?').get(userId, tenantId).n,
+      /* 充过几次值:铺设判"要不要充"得按这个,不能按"余额是不是 0" ——
+         组合支付单会把余额花光,按余额判的话每次重跑都再充一笔(幂等破在这儿)。 */
+      recharges: db.prepare("SELECT COUNT(*) n FROM stored_value_transactions WHERE user_id = ? AND tenant_id = ? AND type = 'recharge'").get(userId, tenantId).n,
+      /* 组合支付单:一张单里同时用了券 + 次卡(储值腿在 payments 里,这两样在单头上) */
+      comboSheets: db.prepare("SELECT COUNT(*) n FROM settlements WHERE user_id = ? AND tenant_id = ? AND status = 'signed' AND coupon_grant_id IS NOT NULL AND timecard_id IS NOT NULL").get(userId, tenantId).n
     }
   }
 
