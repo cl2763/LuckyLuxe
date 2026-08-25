@@ -7280,3 +7280,27 @@ section.card > .section-row:first-child { margin-top: 0; }
 .form-modal-panel .kb-facts-grid label>span{font-size:12.5px;color:#8a7d70;font-weight:700}
 .form-modal-panel input[type="text"],.form-modal-panel input[type="number"],.form-modal-panel select{border:1px solid #e7ddd4;border-radius:10px;padding:8px 10px;font-family:inherit;font-size:13px;background:#fff;color:#2d2826;width:100%}
 .form-modal-panel input:focus,.form-modal-panel select:focus{outline:none;border-color:#b98d5f}
+
+/* S6①(2026-08-25):服务内容占比 = 圆环图。百分比与金额写在图例上,不靠悬停猜。 */
+.mix-donut-wrap{display:flex;gap:18px;align-items:center;flex-wrap:wrap;padding:6px 0}
+.mix-donut{position:relative;width:168px;height:168px;border-radius:50%;flex:0 0 auto}
+.mix-donut-hole{position:absolute;inset:26px;background:#fff;border-radius:50%;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:2px}
+.mix-donut-hole b{font-size:15px;color:#2d2826}
+.mix-donut-hole span{font-size:11.5px;color:#8c8279}
+.mix-donut-legend{flex:1;min-width:220px;display:flex;flex-direction:column;gap:6px}
+.mix-legend-row{display:flex;align-items:center;gap:8px;font-size:13px}
+.mix-legend-row i{width:10px;height:10px;border-radius:3px;flex:0 0 auto}
+.mix-legend-row .nm{flex:1;color:#2d2826}
+.mix-legend-row b{color:#2d2826}
+.mix-legend-row .amt{color:#8c8279;min-width:84px;text-align:right}
+/* S6②:主图表柱子悬停显示金额(浮层跟着柱子走,不用把数字常年挤在图上) */
+.trend-bar .stack{position:relative}
+.trend-bar .b{position:relative}
+.trend-hover{position:absolute;left:50%;transform:translateX(-50%);bottom:calc(100% + 6px);white-space:nowrap;background:#2d2826;color:#fff;font-size:11.5px;padding:4px 8px;border-radius:6px;opacity:0;pointer-events:none;transition:opacity .12s;z-index:5}
+.trend-bar:hover .trend-hover{opacity:1}
+
+/* S13①(2026-08-25):模块① 上架服务按大类分组 —— 组头一行,组内还是原来的行 */
+.svc-group{margin-bottom:14px}
+.svc-group-head{display:flex;align-items:center;gap:8px;padding:6px 2px;border-bottom:1px solid #efe6dc;margin-bottom:6px}
+.svc-group-name{font-size:13.5px;font-weight:600;color:#2d2826}
+.svc-group-count{font-size:11.5px;color:#8c8279;background:#f6efe7;border-radius:999px;padding:1px 8px}

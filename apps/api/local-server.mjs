@@ -17,7 +17,8 @@ import { createDemoReset } from './demo-reset.mjs'                    // 演示�
 import { createStaticServe } from './static-serve.mjs'                // 静态文件服务(公约②)
 import { retireLegacyDemoArchives } from './legacy-demo-retire.mjs'   // 旧口径演示档案退役(一次性)
 import { createMemberCode } from './member-code.mjs'                  // 会员码域(公约②)
-import { createStoreDirectory } from './store-directory.mjs'          // 门店列表三个一(公约①)  // 账本禁删/禁改律唯一出口(D72)      // 顾客端订单表达域(同上)
+import { createStoreDirectory } from './store-directory.mjs'          // 门店列表三个一(公约①)
+import { createPricingCategories } from './pricing-categories.mjs'    // 大类字典 CRUD(两条线共用)  // 账本禁删/禁改律唯一出口(D72)      // 顾客端订单表达域(同上)
 import { createBookingIncome } from './booking-income.mjs'  // 订单入账触点(同上)
 import { createBookingState, isAfterSalesOpen, shouldAutoComplete } from './booking-state.mjs'  // 订单状态机(D70 合同,唯一实现)   // 笔迹图:纯 JS 画折线,**透明底**(单据白纸走 svgToPng,两条路不混)
 import { analyzeReferenceImage, createBookingSummary, createCustomerInsight, createCustomerServiceReply, createDailyBrief, createRecallMessages, createServiceNoteInsights, createSocialCopy, extractKbEntriesFromDocument, polishStaffQuoteReply } from './ai-utils.mjs'
@@ -5349,6 +5350,7 @@ function tenantMemberTiers(tenantId = currentTenantId()) {
 /* ===== 会员码域已搬出到 ./member-code.mjs(公约②,2026-08-25)===== */
 const { memberCodeForUserId, displayNameForUserId, userIdFromMemberCode, isGenericDisplayName } = createMemberCode({ db })
 const storeDirectory = createStoreDirectory({ db })
+const pricingCategoryApi = createPricingCategories({ db, apiError, randomId, iso, serialize: (r) => serializePricingCategory(r), listOf: (tid) => pricingCategories(tid) })
 
 function membershipForSpend(totalSpentCents = 0, tenantId = currentTenantId()) {
   const spend = Number(totalSpentCents || 0)
@@ -12856,40 +12858,11 @@ async function route(req, res) {
   if (path === '/admin/pricing/categories' || path.startsWith('/admin/pricing/categories/')) {
     const tid = currentTenantId()
     const catId = path.split('/')[4] || null
-    if (req.method === 'GET' && !catId) {
-      return json(res, 200, { categories: pricingCategories(tid).map(serializePricingCategory) })
-    }
-    if (req.method === 'POST' && !catId) {
-      const body = await readBody(req)
-      const name = String(body.name || '').trim()
-      if (!name) throw apiError(400, 'BAD_REQUEST', '大类名称必填。')
-      const key = String(body.key || '').trim().toLowerCase().replace(/[^a-z0-9_-]/g, '') || `cat-${Math.random().toString(36).slice(2, 8)}`
-      if (db.prepare('SELECT id FROM service_categories WHERE tenant_id = ? AND key = ?').get(tid, key)) throw apiError(409, 'DUPLICATE', `大类标识 ${key} 已存在。`)
-      const id = randomId('cat')
-      db.prepare(`INSERT INTO service_categories (id, tenant_id, key, name, sort_order, is_bookable, note, created_at)
-        VALUES (?, ?, ?, ?, ?, ?, ?, ?)`).run(id, tid, key, name.slice(0, 40),
-        Math.round(Number(body.sortOrder) || 0), body.isBookable === false ? 0 : 1, String(body.note || '').slice(0, 200) || null, iso(new Date()))
-      return json(res, 201, { category: serializePricingCategory(db.prepare('SELECT * FROM service_categories WHERE id = ?').get(id)) })
-    }
-    if (req.method === 'PATCH' && catId) {
-      const cur = db.prepare('SELECT * FROM service_categories WHERE id = ? AND tenant_id = ?').get(catId, tid)
-      if (!cur) throw apiError(404, 'NOT_FOUND', 'Category not found.')
-      const body = await readBody(req)
-      db.prepare('UPDATE service_categories SET name = ?, sort_order = ?, is_bookable = ?, note = ? WHERE id = ?').run(
-        body.name === undefined ? cur.name : String(body.name).trim().slice(0, 40) || cur.name,
-        body.sortOrder === undefined ? cur.sort_order : Math.round(Number(body.sortOrder) || 0),
-        body.isBookable === undefined ? cur.is_bookable : (body.isBookable ? 1 : 0),
-        body.note === undefined ? cur.note : (String(body.note).slice(0, 200) || null), catId)
-      return json(res, 200, { category: serializePricingCategory(db.prepare('SELECT * FROM service_categories WHERE id = ?').get(catId)) })
-    }
-    if (req.method === 'DELETE' && catId) {
-      const cur = db.prepare('SELECT * FROM service_categories WHERE id = ? AND tenant_id = ?').get(catId, tid)
-      if (!cur) throw apiError(404, 'NOT_FOUND', 'Category not found.')
-      const used = db.prepare('SELECT COUNT(*) AS n FROM services WHERE tenant_id = ? AND category_id = ?').get(tid, catId).n
-      if (used > 0) throw apiError(409, 'CATEGORY_IN_USE', `该大类下还有 ${used} 个项目,请先移走或删除项目。`)
-      db.prepare('DELETE FROM service_categories WHERE id = ?').run(catId)
-      return json(res, 200, { deleted: true })
-    }
+    // 业务规则与平台线共用 ./pricing-categories.mjs(原来这里另写了一份,两份迟早长歪)
+    if (req.method === 'GET' && !catId) return json(res, 200, { categories: pricingCategoryApi.list(tid) })
+    if (req.method === 'POST' && !catId) return json(res, 201, { category: pricingCategoryApi.create(tid, await readBody(req)) })
+    if (req.method === 'PATCH' && catId) return json(res, 200, { category: pricingCategoryApi.patch(tid, catId, await readBody(req)) })
+    if (req.method === 'DELETE' && catId) return json(res, 200, pricingCategoryApi.remove(tid, catId))
   }
   if (path === '/admin/pricing/items' || path.startsWith('/admin/pricing/items/')) {
     const tid = currentTenantId()
@@ -13856,7 +13829,8 @@ async function route(req, res) {
     const rows = db.prepare('SELECT * FROM platform_ops_log ORDER BY created_at DESC, rowid DESC LIMIT 100').all()
     return json(res, 200, { logs: rows })
   }
-  const platTenantMatch = path.match(/^\/platform\/tenants\/([^/]+)\/(store|business-hours|services|technicians|kb)(?:\/([^/]+))?$/)
+  // S13②(店主 08-25):大类字典加进平台侧配置族(商家只读是既定口径 v1.4,不变)
+  const platTenantMatch = path.match(/^\/platform\/tenants\/([^/]+)\/(store|business-hours|services|technicians|kb|categories)(?:\/([^/]+))?$/)
   if (platTenantMatch) {
     if (!isPlatform()) throw apiError(401, 'UNAUTHORIZED', 'Platform token required.')
     const tenantId = platTenantMatch[1]
@@ -13865,6 +13839,20 @@ async function route(req, res) {
     if (!db.prepare('SELECT id FROM tenants WHERE id = ?').get(tenantId)) throw apiError(404, 'NOT_FOUND', 'Tenant not found.')
     const tenantStore = () => db.prepare('SELECT * FROM stores WHERE tenant_id = ? ORDER BY rowid ASC LIMIT 1').get(tenantId)
 
+    /* 🔴 S13②(店主 2026-08-25):**平台侧大类字典管理** —— 以前加/改大类只能动数据库。
+       商家端只读是既定口径(v1.4)不变:写在这条平台线上,商家那条 /admin/pricing/categories
+       的写口原样保留给老板自助(两条线各自的既有口径都没动)。
+       删除仍受「该大类下还有项目就不许删」保护 —— 与商家线同一条业务规则,不因为在平台就放松。 */
+    /* 🔴 S13②(店主 2026-08-25):平台侧大类字典。业务规则在 ./pricing-categories.mjs(与商家线同一份),
+       这里只做门禁 + 分发。商家端只读是既定口径(v1.4)不变。 */
+    if (section === 'categories') {
+      tenantContext.enterWith({ tenantId })
+      if (req.method === 'GET') return json(res, 200, { categories: pricingCategoryApi.list(tenantId) })
+      if (req.method === 'POST') return json(res, 201, { category: pricingCategoryApi.create(tenantId, await readBody(req)) })
+      if (req.method === 'PATCH' && subId) return json(res, 200, { category: pricingCategoryApi.patch(tenantId, subId, await readBody(req)) })
+      if (req.method === 'DELETE' && subId) return json(res, 200, pricingCategoryApi.remove(tenantId, subId))
+      throw apiError(405, 'METHOD_NOT_ALLOWED', 'Unsupported method.')
+    }
     if (section === 'store') {
       const store = tenantStore()
       if (req.method === 'GET') return json(res, 200, { store: store ? { id: store.id, name: store.name, address: store.address || '', phone: store.phone || '', currency: store.currency || '', timezone: store.timezone || '' } : null })

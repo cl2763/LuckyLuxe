@@ -156,6 +156,9 @@
         <!-- D74(店主 08-25):【设置唯一编辑处律】—— 会员资格与等级是"平台定"的,
              编辑处就只能在这里;商家端 admin.js 那块已经是 🔒 只读。 -->
         <button class="tab" data-tab="member" onclick="tab('member')">会员制度</button>
+        <!-- S13②(店主 2026-08-25):大类字典管理 —— 以前加/改大类只能动数据库。
+             商家只读是既定口径(v1.4)不变,写口在平台这条线上。 -->
+        <button class="tab" data-tab="cats" onclick="tab('cats')">大类字典</button>
       </div>
 
       <div id="tab-store" class="card" style="max-width:600px">
@@ -190,6 +193,20 @@
           <div style="margin-top:8px"><button class="sm" onclick="mbAddTier()">+ 加一档</button></div>
         </div>
         <div style="margin-top:14px"><button class="p" onclick="saveMembership()">保存会员制度</button></div>
+      </div>
+
+      <div id="tab-cats" class="card hidden">
+        <h2>大类字典(平台维护;商家端只读)</h2>
+        <p class="muted" style="margin:-4px 0 12px">大类决定商家后台「上架服务」怎么分组、顾客端怎么归类。改名即时生效;
+          <b>该大类下还有项目时不允许删除</b>(先把项目移走)。</p>
+        <table><thead><tr><th>顺序</th><th>标识 key</th><th>名称</th><th>可约</th><th>项目数</th><th>操作</th></tr></thead><tbody id="catRows"></tbody></table>
+        <div class="row" style="margin-top:12px;gap:8px;flex-wrap:wrap">
+          <input id="catName" placeholder="大类名称(必填,如 美甲)" style="width:170px">
+          <input id="catKey" placeholder="标识 key(选填,如 nail)" style="width:150px">
+          <input id="catSort" type="number" placeholder="顺序" style="width:90px">
+          <label style="display:inline-flex;align-items:center;gap:6px"><input id="catBookable" type="checkbox" checked> 可预约</label>
+          <button class="p" onclick="addCat()">新增大类</button>
+        </div>
       </div>
 
       <div id="tab-hours" class="card hidden" style="max-width:600px">
@@ -616,18 +633,19 @@ function initConfig(){
   if(!CFG_T&&TENANTS.length)CFG_T=TENANTS[0].id
   loadConfig()
 }
-function tab(t){document.querySelectorAll('.tab').forEach(b=>b.classList.toggle('on',b.dataset.tab===t));['store','hours','services','techs','kb','member'].forEach(x=>$('tab-'+x).classList.toggle('hidden',x!==t))}
+function tab(t){document.querySelectorAll('.tab').forEach(b=>b.classList.toggle('on',b.dataset.tab===t));['store','hours','services','techs','kb','member','cats'].forEach(x=>$('tab-'+x).classList.toggle('hidden',x!==t))}
 async function loadConfig(){
   CFG_T=$('cfgTenant').value||CFG_T
   if(!CFG_T)return
   try{
-    const [st,hr,sv,tc,kb,mb]=await Promise.all([
+    const [st,hr,sv,tc,kb,mb,ct]=await Promise.all([
       api(`/platform/tenants/${CFG_T}/store`),api(`/platform/tenants/${CFG_T}/business-hours`),
       api(`/platform/tenants/${CFG_T}/services`),api(`/platform/tenants/${CFG_T}/technicians`),api(`/platform/tenants/${CFG_T}/kb`),
-      api(`/platform/tenants/${CFG_T}/membership-config`)
+      api(`/platform/tenants/${CFG_T}/membership-config`),
+      api(`/platform/tenants/${CFG_T}/categories`)
     ])
     $('stName').value=st.store?st.store.name:'';$('stAddr').value=st.store?st.store.address:'';$('stPhone').value=st.store?st.store.phone:''
-    renderHours(hr.hours||[]);renderServices(sv.services||[]);renderTechs(tc.technicians||[]);renderKb(kb);renderMembership(mb)
+    renderHours(hr.hours||[]);renderServices(sv.services||[]);renderTechs(tc.technicians||[]);renderKb(kb);renderMembership(mb);renderCats(ct)
   }catch(e){toast(e.message)}
 }
 /* ===== 会员制度(D74,店主 08-25 立【设置唯一编辑处律】)=====
@@ -676,6 +694,34 @@ async function saveMembership(){
     renderMembership({config:d.config,qualifyModes:(await api(`/platform/tenants/${CFG_T}/membership-config`)).qualifyModes})
     toast('会员制度已保存,商家端只读块即时跟着变')
   }catch(e){toast(e.message)}
+}
+
+/* ===== S13② 大类字典(平台维护)=====
+   写口只有这一处(平台线);商家端 /admin/pricing/categories 的读仍照旧,
+   「商家只读」这条 v1.4 口径不因为这里能改而改变。 */
+function renderCats(d){
+  const rows=(d&&d.categories)||[]
+  $('catRows').innerHTML=rows.length?rows.map(c=>`<tr>
+    <td><input type="number" value="${c.sortOrder||0}" style="width:64px" onchange="patchCat('${esc(c.id)}',{sortOrder:Number(this.value)||0})"></td>
+    <td class="muted">${esc(c.key)}</td>
+    <td><input value="${esc(c.name)}" style="width:150px" onchange="patchCat('${esc(c.id)}',{name:this.value})"></td>
+    <td><input type="checkbox" ${c.isBookable?'checked':''} onchange="patchCat('${esc(c.id)}',{isBookable:this.checked})"></td>
+    <td>${c.itemCount??0}</td>
+    <td><button class="sm d" onclick="delCat('${esc(c.id)}','${esc(c.name)}',${c.itemCount||0})">删除</button></td>
+  </tr>`).join(''):`<tr><td colspan="6" class="muted">这家店还没有大类 —— 新增一个,商家后台的「上架服务」才分得了组。</td></tr>`
+}
+async function addCat(){
+  const name=$('catName').value.trim();if(!name){toast('大类名称必填');return}
+  try{await api(`/platform/tenants/${CFG_T}/categories`,{method:'POST',body:JSON.stringify({name,key:$('catKey').value.trim(),sortOrder:Number($('catSort').value)||0,isBookable:$('catBookable').checked})})
+    $('catName').value=$('catKey').value=$('catSort').value='';toast('已新增');loadConfig()}catch(e){toast(e.message)}
+}
+async function patchCat(id,patch){
+  try{await api(`/platform/tenants/${CFG_T}/categories/${id}`,{method:'PATCH',body:JSON.stringify(patch)});toast('已保存');loadConfig()}catch(e){toast(e.message);loadConfig()}
+}
+async function delCat(id,name,used){
+  if(used>0){toast(`「${name}」下面还有 ${used} 个项目,先把项目移走再删`);return}
+  if(!confirm(`确认删除大类「${name}」?商家后台的分组会少这一组。`))return
+  try{await api(`/platform/tenants/${CFG_T}/categories/${id}`,{method:'DELETE'});toast('已删除');loadConfig()}catch(e){toast(e.message)}
 }
 
 async function saveStore(){try{await api(`/platform/tenants/${CFG_T}/store`,{method:'PUT',body:JSON.stringify({name:$('stName').value,address:$('stAddr').value,phone:$('stPhone').value})});toast('门店信息已保存并同步 AI')}catch(e){toast(e.message)}}

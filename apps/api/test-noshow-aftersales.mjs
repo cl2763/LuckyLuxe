@@ -3036,6 +3036,65 @@ const main = async () => {
         && retireMod.includes('if (!demoRetireDone && !isProduction) try {')
         && srv.includes('retireLegacyDemoArchives({ db, iso, isProduction: IS_PRODUCTION })'))
 
+      /* ===== ㋥ 波次2 网页后台功能波(店主 2026-08-25:S4 / S5-a / S6 / S13)===== */
+      {
+        const admHtml = readFileSync(join(ROOT42, 'apps/web/admin.html'), 'utf8')
+        const admJs = readFileSync(join(ROOT42, 'apps/web/admin.js'), 'utf8')
+        const platHtml = readFileSync(join(ROOT42, 'apps/web/platform.html'), 'utf8')
+
+        // S4:四板块顺序 + 业绩目标并入技师业绩 + 重复的「本月趋势」卡已删(入口没跟着丢)
+        const tabOrder = [...admHtml.matchAll(/data-staff-tab="([a-z]+)"/g)].map((m) => m[1])
+        check('㋥S4① 员工管理四板块顺序=技师业绩→薪资方案→技师排班→账号管理',
+          JSON.stringify(tabOrder) === JSON.stringify(['performance', 'salary', 'schedule', 'accounts']), JSON.stringify(tabOrder))
+        check('㋥S4② 业绩目标并入技师业绩(不再是独立页签),且排在业绩排行之后',
+          admHtml.includes('data-staff-panel="performance" id="perfTargetsCard"')
+          && admHtml.indexOf('id="perfRankCard"') < admHtml.indexOf('id="perfTargetsCard"')
+          && !/data-staff-tab="targets"/.test(admHtml))
+        check('㋥S4③ 重复的「本月趋势」卡已删,但它头上的两个入口没跟着丢(删块不许删入口)',
+          !/id="technicianPerformance"/.test(admHtml)
+          && admHtml.includes('id="addTechnicianButton"') && admHtml.includes('id="salaryPlanButton"'))
+
+        // S5-a:通用设置五块 + 财务密码只剩一处 + S5-b 未做入口
+        check('㋥S5① 通用设置页在场,五块齐(语言/币种/我的密码/昵称头像/财务密码)',
+          admHtml.includes('id="generalSettingsPage"') && admHtml.includes('id="gsLangBody"')
+          && admHtml.includes('id="gsCurrencyBody"') && admHtml.includes('id="gsPasswordBody"')
+          && admHtml.includes('id="gsProfileBody"') && admHtml.includes('id="financeLockBody"'))
+        check('㋥S5② 财务密码**只有一处**(从财务页移入通用设置,不许两处并列)',
+          (admHtml.match(/id="financeLockBody"/g) || []).length === 1)
+        /* 判据律(第五次同坑):负向判据不许扫全文 —— 我在 HTML 注释里写了「S5-b 本轮挂起」,
+           扫全文就会把注释当成"入口还在"。先把 HTML 注释剥掉,再判**真正会渲染的标记**。 */
+        const admHtmlNoComment = admHtml.replace(/<!--[\s\S]*?-->/g, '')
+        check('㋥S5③ S5-b 本轮挂起:页面上零「忘记密码/短信验证码」入口(不做发不出短信的按钮)',
+          !/短信验证码|data-sms-reset|id="smsReset"/.test(admHtmlNoComment))
+
+        // S6:圆环图 + 悬停金额
+        // 判据跟着被测物走:财务趋势域同批搬到 /web/finance-trend.js(公约②)
+        const trendJs = readFileSync(join(ROOT42, 'apps/web/finance-trend.js'), 'utf8')
+        check('㋥S6① 服务内容占比改圆环图(conic-gradient + 百分比图例),零数据出空态不画假圆',
+          trendJs.includes('mix-donut') && trendJs.includes('conic-gradient') && trendJs.includes('还没有服务收入')
+          && !/function renderFinanceTrend/.test(admJs))
+        check('㋥S6② 顶部主图表加悬停显示金额(收入/支出/净赚三项)',
+          trendJs.includes('class="trend-hover"') && /trend-hover[\s\S]{0,200}净赚/.test(trendJs)
+          && readFileSync(join(ROOT42, 'apps/web/styles.css'), 'utf8').includes('.trend-bar:hover .trend-hover')
+          && admHtml.indexOf('/web/finance-trend.js') < admHtml.indexOf('/web/admin.js'))
+
+        // S13:模块①按大类分组 + 平台侧大类字典
+        check('㋥S13① 模块①按大类分组,未归类单独一组排最后(不藏起来)',
+          admJs.includes('data-svc-group=') && admJs.includes("'未归类'") && admJs.includes('if (!a[0]) return 1'))
+        check('㋥S13② 平台侧大类字典界面在场(tab + 增删改三个真实调用)',
+          platHtml.includes(`onclick="tab('cats')"`) && platHtml.includes('id="tab-cats"')
+          && platHtml.includes('/categories`,{method:\'POST\'') && platHtml.includes('categories/${id}`,{method:\'PATCH\'')
+          && platHtml.includes('categories/${id}`,{method:\'DELETE\''))
+        /* CRUD 同批抽成 ./pricing-categories.mjs 两条线共用 —— 判据跟着被测物走,
+           并顺手把"两条线共用一份"也验上(原来是各写一份,迟早各自长歪)。 */
+        const catMod = readFileSync(join(ROOT42, 'apps/api/pricing-categories.mjs'), 'utf8')
+        check('㋥S13③ 后端大类走平台线且带 isPlatform 闸;删除保护在共用模块里(两条线同一份)',
+          srv.includes('|kb|categories)') && srv.includes("if (section === 'categories')")
+          && catMod.includes('CATEGORY_IN_USE')
+          && (srv.match(/pricingCategoryApi\.(list|create|patch|remove)/g) || []).length >= 8
+          && !/CATEGORY_IN_USE/.test(srv))
+      }
+
       /* ===== ㋤ A3 施工令 ①②(店主 2026-08-25)===== */
       {
         const custA3 = readFileSync(join(ROOT42, 'apps/web/customer.js'), 'utf8')

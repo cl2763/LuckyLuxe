@@ -1,5 +1,5 @@
 // 构建号:每次交付递增。侧栏可见,排查"改了没生效"时先对版本。
-const ADMIN_BUILD = '20260825a-5line'
+const ADMIN_BUILD = '20260825e-w2'
 let pricingState = { module: 'storefront', tab: 'items', categories: [], items: [], rules: {}, editing: null, preview: null, storefrontPicker: false }
 console.log(`[admin] build ${ADMIN_BUILD}`)
 
@@ -150,7 +150,9 @@ const els = {
   wechatContextPanel: document.querySelector('#wechatContextPanel'),
   wechatWorkflowPanel: document.querySelector('#wechatWorkflowPanel'),
   sidebarStoreSettings: document.querySelector('#sidebarStoreSettings'),
+  sidebarGeneralSettings: document.querySelector('#sidebarGeneralSettings'),
   storeSettingsPage: document.querySelector('#storeSettingsPage'),
+  generalSettingsPage: document.querySelector('#generalSettingsPage'),   // S5-a 通用设置
   subscriptionBadge: document.querySelector('#subscriptionBadge'),
   storeSettingsEyebrow: document.querySelector('#storeSettingsEyebrow'),
   storeSettingsTitle: document.querySelector('#storeSettingsTitle'),
@@ -984,11 +986,9 @@ function applyLanguage() {
   els.sidebarBookings.textContent = t('navBookings')
   els.sidebarSchedule.textContent = isOwnerRole() ? t('navSchedule') : t('navStaffPerformance')
   const staffTabScheduleBtn = document.querySelector('#staffTabSchedule')
-  if (staffTabScheduleBtn) staffTabScheduleBtn.textContent = owner.lang === 'zh' ? '计时排班' : 'Schedule'
+  if (staffTabScheduleBtn) staffTabScheduleBtn.textContent = owner.lang === 'zh' ? '技师排班' : 'Schedule'
   const staffTabPerformanceBtn = document.querySelector('#staffTabPerformance')
   if (staffTabPerformanceBtn) staffTabPerformanceBtn.textContent = owner.lang === 'zh' ? '技师业绩' : 'Performance'
-  const staffTabTargetsBtn = document.querySelector('#staffTabTargets')
-  if (staffTabTargetsBtn) staffTabTargetsBtn.textContent = owner.lang === 'zh' ? '业绩目标' : 'Targets'
   const staffTabSalaryBtn = document.querySelector('#staffTabSalary')
   if (staffTabSalaryBtn) staffTabSalaryBtn.textContent = owner.lang === 'zh' ? '薪资方案' : 'Salary plans'
   const staffTabAccountsBtn = document.querySelector('#staffTabAccounts')
@@ -1001,6 +1001,7 @@ function applyLanguage() {
   els.sidebarWechatMockLabel.textContent = t('navWechatMock')
   els.sidebarAiGallery.textContent = t('navAiGallery')
   els.sidebarStoreSettings.textContent = t('navStoreSettings')
+  if (els.sidebarGeneralSettings) els.sidebarGeneralSettings.textContent = owner.lang === 'zh' ? '通用设置' : 'General'
   els.storeSettingsEyebrow.textContent = t('storeSettingsEyebrow')
   els.storeSettingsTitle.textContent = t('storeSettingsTitle')
   els.storeSettingsSubtitle.textContent = t('storeSettingsSubtitle')
@@ -1082,8 +1083,9 @@ function applyLanguage() {
   els.filterStatusLabel.textContent = t('status')
   els.clearFilters.textContent = t('clear')
   els.scheduleTitle.textContent = t('schedule')
-  els.techPerformanceEyebrow.textContent = isOwnerRole() ? t('monthOverview') : t('staffMode')
-  els.techPerformanceTitle.textContent = isOwnerRole() ? t('technicianPerformance') : t('myTechnicianPerformance')
+  // S4:重复的「本月趋势」卡已删,这两个标题元素随之消失 —— 可选链兜住(别处没有第二处用它)
+  if (els.techPerformanceEyebrow) els.techPerformanceEyebrow.textContent = isOwnerRole() ? t('monthOverview') : t('staffMode')
+  if (els.techPerformanceTitle) els.techPerformanceTitle.textContent = isOwnerRole() ? t('technicianPerformance') : t('myTechnicianPerformance')
   els.scheduleWeekEyebrow.textContent = owner.lang === 'zh' ? '周视图' : 'Week view'
   els.scheduleThisWeek.textContent = owner.lang === 'zh' ? '本周' : 'This week'
   els.scheduleDefaultLabel.textContent = owner.lang === 'zh' ? '上班默认时段' : 'Default shift'
@@ -1305,7 +1307,7 @@ function setLocked(locked) {
     els.serviceAdminList.innerHTML = ''
     els.serviceEditor.innerHTML = ''
     els.scheduleWeekGrid.innerHTML = ''
-    els.technicianPerformance.innerHTML = ''
+    if (els.technicianPerformance) els.technicianPerformance.innerHTML = ''
     els.customerList.innerHTML = ''
     els.dashboardCharts.innerHTML = ''
     els.dashboardDetailPanel.innerHTML = ''
@@ -1510,6 +1512,7 @@ function renderAdminPages() {
   document.querySelectorAll('.back-btn').forEach((btn) => btn.classList.toggle('hidden', !isOwnerRole()))
   els.sidebarCustomers.classList.toggle('hidden', !isOwnerRole())
   els.sidebarStoreSettings.classList.toggle('hidden', !isOwnerRole())
+  els.sidebarGeneralSettings?.classList.toggle('hidden', !isOwnerRole())   // S5-a:通用设置含财务密码,老板专属
   els.sidebarFinance.classList.toggle('hidden', !isOwnerRole())
   els.sidebarPricing?.classList.toggle('hidden', !isOwnerRole())
   // 2026-08-04 店主定「全部 AI 归智能包」:没开通就把纯 AI 的入口收起来,别让人点了没反应。
@@ -1519,7 +1522,7 @@ function renderAdminPages() {
   document.querySelector('#finNavInsights')?.classList.toggle('hidden', !hasAiAddon)
   if (!hasAiAddon && owner.adminPage === 'aiGallery') owner.adminPage = isOwnerRole() ? 'dashboard' : 'bookings'
   if (owner.adminPage === 'services') owner.adminPage = 'pricing' // S1:旧「服务管理」页并入「服务与价目」模块①
-  if (!isOwnerRole() && ['dashboard', 'dashboardDetail', 'pricing', 'membership', 'customers', 'storeSettings', 'finance'].includes(owner.adminPage)) owner.adminPage = 'bookings'
+  if (!isOwnerRole() && ['dashboard', 'dashboardDetail', 'pricing', 'membership', 'customers', 'storeSettings', 'finance', 'generalSettings'].includes(owner.adminPage)) owner.adminPage = 'bookings'
   const pages = {
     dashboard: els.adminDashboard,
     dashboardDetail: els.dashboardDetailPage,
@@ -1531,9 +1534,11 @@ function renderAdminPages() {
     wechatMock: els.wechatMockPage,
     aiGallery: els.aiGalleryPage,
     finance: els.financePage,
-    storeSettings: els.storeSettingsPage
+    storeSettings: els.storeSettingsPage,
+    generalSettings: els.generalSettingsPage   // S5-a
   }
   Object.entries(pages).forEach(([key, element]) => element.classList.toggle('hidden', owner.adminPage !== key))
+  if (owner.adminPage === 'generalSettings') renderGeneralSettings()   // S5-a
   els.metricGrid.classList.toggle('hidden', owner.adminPage !== 'dashboard')
   els.sidebarLinks.forEach((link) => {
     const activePage = owner.adminPage === 'dashboardDetail' ? 'dashboard' : owner.adminPage
@@ -2451,152 +2456,8 @@ const trendTableView = { main: false, same: false, expense: false, mix: false }
 
 function trendMoney(cents) { return money(cents, 2) }
 
-function renderFinanceTrend() {
-  const body = document.querySelector('#financeTrendBody')
-  if (!body || !financeTrendState.data) return
-  const zh = owner.lang === 'zh'
-  const t = financeTrendState.data
-  const hasTarget = Boolean(t.monthTargetCents)
-  const max = Math.max(1, ...t.points.map((p) => Math.max(p.revenueCents, p.expenseCents, hasTarget ? t.monthTargetCents : 0)))
-  const H = 150
-  const px = (cents) => Math.round(Math.max(0, cents) / max * H)
-  /* 净赚折线**和柱子共用同一根纵轴**(设计图第二条取舍:不做左右双轴,
-     两根轴的比例是随便定的,等于凭空造一个「相关性」)。负数压到零轴上。 */
-  const netY = (cents) => Math.max(4, Math.min(H, H - px(cents)))
+/* 财务趋势域(renderFinanceTrend)已搬出到 /web/finance-trend.js(公约②,2026-08-25 S6) */
 
-  const rangeBtn = (key, label) => `<button class="ghost slim${financeTrendState.range === key ? ' active' : ''}" data-trend-range="${key}" type="button">${label}</button>`
-  const tableBtn = (k) => `<button class="ghost slim trend-tv" data-trend-tv="${k}" type="button">${trendTableView[k] ? (zh ? '图表视图' : 'Chart') : (zh ? '表格视图' : 'Table')}</button>`
-
-  const mainChart = trendTableView.main
-    ? `<table class="dc-sum">
-        <tr><th>${zh ? '月份' : 'Month'}</th><th>${zh ? '收入' : 'Revenue'}</th><th>${zh ? '支出' : 'Expense'}</th><th>${zh ? '净赚' : 'Net'}</th><th>${zh ? '单量' : 'Orders'}</th><th>${zh ? '客单' : 'Avg'}</th><th>${zh ? '目标' : 'Target'}</th></tr>
-        ${t.points.slice().reverse().map((p) => `<tr>
-          <td class="nm">${escapeHtml(p.label)}${p.partial ? ` <span class="subtle">${zh ? '本月至今' : 'MTD'}</span>` : ''}</td>
-          <td>${trendMoney(p.revenueCents)}</td><td>${trendMoney(p.expenseCents)}</td><td>${trendMoney(p.netCents)}</td>
-          <td>${p.orderCount}</td><td>${trendMoney(p.avgTicketCents)}</td>
-          <td>${!hasTarget ? '—' : (p.hitTarget ? `<span class="dc-badge ok">${zh ? '达标' : 'Hit'}</span>` : trendMoney(t.monthTargetCents))}</td>
-        </tr>`).join('')}
-      </table>`
-    : `<div class="trend-chart" style="position:relative">
-        ${hasTarget ? `<div class="trend-targetline" style="bottom:${px(t.monthTargetCents) + 20}px"><span>${zh ? '月营收目标' : 'Target'} ${trendMoney(t.monthTargetCents)}</span></div>` : ''}
-        ${t.points.map((p) => `
-          <div class="trend-bar">
-            <div class="stack">
-              <div class="b${hasTarget && p.hitTarget ? ' hit' : ''}${p.partial ? ' partial' : ''}" style="height:${px(p.revenueCents)}px" title="${zh ? '收入' : 'Revenue'} ${trendMoney(p.revenueCents)}"></div>
-              <div class="b exp${p.partial ? ' partial' : ''}" style="height:${px(p.expenseCents)}px" title="${zh ? '支出' : 'Expense'} ${trendMoney(p.expenseCents)}"></div>
-            </div>
-            <span class="lb">${escapeHtml(p.label)}${p.partial ? `<em>${zh ? '至今' : 'MTD'}</em>` : ''}</span>
-          </div>`).join('')}
-        <svg class="trend-netline" viewBox="0 0 ${Math.max(1, t.points.length) * 100} ${H}" preserveAspectRatio="none">
-          <polyline points="${t.points.map((p, i) => `${i * 100 + 50},${netY(p.netCents)}`).join(' ')}" fill="none" stroke="#2f7d5c" stroke-width="3" vector-effect="non-scaling-stroke"/>
-          ${t.points.map((p, i) => `<circle cx="${i * 100 + 50}" cy="${netY(p.netCents)}" r="4" fill="#2f7d5c"/>`).join('')}
-        </svg>
-      </div>
-      <div class="trend-legend">
-        <span><i style="background:#c8a47e"></i>${zh ? '收入' : 'Revenue'}</span>
-        ${hasTarget ? `<span><i style="background:#2f7d5c"></i>${zh ? '达标月' : 'Hit'}</span>` : ''}
-        <span><i style="background:#e0d3c4"></i>${zh ? '支出' : 'Expense'}</span>
-        <span><i style="background:#2f7d5c;height:3px;margin-bottom:3px"></i>${zh ? '净赚(折线)' : 'Net (line)'}</span>
-        <span><i style="background:#efe4d5"></i>${zh ? '浅色=本月至今(未满月)' : 'light = MTD'}</span>
-      </div>`
-
-  const sd = t.sameDays
-  const sameBlock = !sd ? '' : (trendTableView.same
-    ? `<table class="dc-sum">
-        <tr><th>${zh ? '区间' : 'Window'}</th><th>${zh ? '收入' : 'Revenue'}</th><th>${zh ? '支出' : 'Expense'}</th><th>${zh ? '净赚' : 'Net'}</th></tr>
-        ${[[zh ? '本月至今' : 'This month', sd.current], [zh ? '上月同期' : 'Last month', sd.lastMonth], [zh ? '去年同期' : 'Last year', sd.lastYear]].map(([lab, w]) => `
-          <tr><td class="nm">${lab} <span class="subtle">${w.from}~${w.to}</span></td><td>${trendMoney(w.revenueCents)}</td><td>${trendMoney(w.expenseCents)}</td><td>${trendMoney(w.netCents)}</td></tr>`).join('')}
-      </table>`
-    : `<div class="trend-same">
-        ${[[zh ? '本月至今' : 'This month', sd.current, true], [zh ? '上月同期' : 'Last month', sd.lastMonth, false], [zh ? '去年同期' : 'Last year', sd.lastYear, false]].map(([lab, w, cur]) => {
-          const m2 = Math.max(1, sd.current.revenueCents, sd.lastMonth.revenueCents, sd.lastYear.revenueCents)
-          return `<div class="tsame-row${cur ? ' cur' : ''}">
-            <span class="tsame-lab">${lab}</span>
-            <span class="tsame-bar"><i style="width:${Math.round(w.revenueCents / m2 * 100)}%"></i></span>
-            <b>${trendMoney(w.revenueCents)}</b>
-          </div>`
-        }).join('')}
-        <p class="subtle">${zh ? `三组都是 1–${sd.days} 日的相同天数,黑线标出的是当前。` : `All windows truncated to the same ${sd.days} days.`}</p>
-      </div>`)
-
-  const eb = t.expenseBreakdown || { rows: [] }
-  const ebMax = Math.max(1, ...eb.rows.map((r) => r.amountCents))
-  const expenseBlock = trendTableView.expense
-    ? `<table class="dc-sum">
-        <tr><th>${zh ? '类别' : 'Category'}</th><th>${zh ? '本期' : 'Now'}</th><th>${zh ? '上期同区间' : 'Prev'}</th><th>${zh ? '增减' : 'Δ'}</th></tr>
-        ${eb.rows.map((r) => `<tr><td class="nm">${escapeHtml(r.category)}</td><td>${trendMoney(r.amountCents)}</td><td>${trendMoney(r.prevAmountCents)}</td>
-          <td class="${r.deltaCents > 0 ? 'warn' : ''}">${r.deltaCents >= 0 ? '+' : '−'}${trendMoney(Math.abs(r.deltaCents))}</td></tr>`).join('')}
-      </table>`
-    : (eb.rows.length ? `<div class="trend-hbars">
-        ${eb.rows.map((r) => `<div class="thbar">
-          <span class="thlab">${escapeHtml(r.category)}</span>
-          <span class="thtrack"><i style="width:${Math.round(r.amountCents / ebMax * 100)}%"></i></span>
-          <b>${trendMoney(r.amountCents)}</b>
-          <span class="thdelta ${r.deltaCents > 0 ? 'up' : (r.deltaCents < 0 ? 'down' : '')}">${r.deltaCents === 0 ? '—' : `${r.deltaCents > 0 ? '+' : '−'}${trendMoney(Math.abs(r.deltaCents))}`}</span>
-        </div>`).join('')}
-      </div>` : `<p class="subtle">${zh ? '本期还没有支出记录。' : 'No expenses yet.'}</p>`)
-
-  const mix = t.incomeMix || { months: [], categories: [] }
-  const mixMax = Math.max(1, ...mix.months.map((m) => m.totalCents))
-  const MIXC = ['#c8a47e', '#8fb6a4', '#d9b58c', '#a89b8c', '#e0d3c4', '#7f9bb5', '#c9a0a0', '#b9c4a0']
-  const mixBlock = trendTableView.mix
-    ? `<table class="dc-sum">
-        <tr><th>${zh ? '月份' : 'Month'}</th>${mix.categories.map((c) => `<th>${escapeHtml(c)}</th>`).join('')}<th>${zh ? '合计' : 'Total'}</th></tr>
-        ${mix.months.slice().reverse().map((m) => `<tr><td class="nm">${escapeHtml(m.label)}</td>${mix.categories.map((c) => `<td>${trendMoney(m.parts[c] || 0)}</td>`).join('')}<td>${trendMoney(m.totalCents)}</td></tr>`).join('')}
-      </table>`
-    : `<div class="trend-chart">
-        ${mix.months.map((m) => `<div class="trend-bar">
-          <div class="mixstack" style="height:${Math.round(m.totalCents / mixMax * H)}px">
-            ${mix.categories.map((c, i) => {
-              const v = m.parts[c] || 0
-              return v ? `<div style="flex:${v};background:${MIXC[i % MIXC.length]}" title="${escapeHtml(c)} ${trendMoney(v)}"></div>` : ''
-            }).join('')}
-          </div>
-          <span class="lb">${escapeHtml(m.label)}</span>
-        </div>`).join('')}
-      </div>
-      <div class="trend-legend">${mix.categories.map((c, i) => `<span><i style="background:${MIXC[i % MIXC.length]}"></i>${escapeHtml(c)}</span>`).join('')}</div>`
-
-  body.innerHTML = `
-    <div class="section-row compact-row" style="gap:8px;flex-wrap:wrap">
-      <div class="schedule-week-nav">
-        ${rangeBtn('6m', zh ? '近 6 个月' : 'Last 6')}${rangeBtn('12m', zh ? '近 12 个月' : 'Last 12')}${rangeBtn('ytd', zh ? '今年' : 'YTD')}${rangeBtn('custom', zh ? '自定义' : 'Custom')}
-      </div>
-      <button class="ghost slim" id="trendCsv" type="button">${zh ? '导出 CSV' : 'Export CSV'}</button>
-    </div>
-
-    ${hasTarget ? '' : `<div class="trend-guide">
-      <span>${zh ? '想看目标进度、收支平衡线、达标月份?就 3 项,一分钟;先不设也没关系,上面的真数和下面的走势永远都在。' : 'Set a target to see the goal line and hit months.'}</span>
-      <button class="ghost slim" id="trendGoSetting" type="button">${zh ? '去设置 ›' : 'Set up ›'}</button>
-    </div>`}
-
-    <div class="section-row compact-row"><h3 class="trend-h">${zh ? '收入 / 支出 / 净赚' : 'Revenue / Expense / Net'}</h3>${tableBtn('main')}</div>
-    ${mainChart}
-
-    <div class="section-row compact-row"><h3 class="trend-h">${zh ? '本月至今 · 和谁比' : 'MTD comparison'}</h3>${tableBtn('same')}</div>
-    ${sameBlock}
-
-    <div class="section-row compact-row"><h3 class="trend-h">${zh ? '钱花在哪了 · 本期' : 'Where the money went'}</h3>${tableBtn('expense')}</div>
-    ${expenseBlock}
-
-    <div class="section-row compact-row"><h3 class="trend-h">${zh ? '收入构成变化 · 近 6 个完整月' : 'Income mix'}</h3>${tableBtn('mix')}</div>
-    ${mixBlock}`
-
-  body.querySelectorAll('[data-trend-tv]').forEach((b) => b.addEventListener('click', () => {
-    const k = b.dataset.trendTv
-    trendTableView[k] = !trendTableView[k]
-    renderFinanceTrend()
-  }))
-  body.querySelectorAll('[data-trend-range]').forEach((b) => b.addEventListener('click', () => {
-    loadFinanceTrend(null, b.dataset.trendRange).catch((error) => toast(error.message))
-  }))
-  const csv = body.querySelector('#trendCsv')
-  if (csv) csv.addEventListener('click', () => exportTrendCsv(t))
-  const go = body.querySelector('#trendGoSetting')
-  if (go) go.addEventListener('click', () => document.querySelector('[data-fin-goal-edit]')?.click())
-}
-
-// 导出 CSV:图没法复制,表格能 —— 发给会计或自己核账用(设计图第三条取舍)
 function exportTrendCsv(t) {
   const zh = owner.lang === 'zh'
   const rows = [[zh ? '月份' : 'Month', zh ? '收入' : 'Revenue', zh ? '支出' : 'Expense', zh ? '净赚' : 'Net', zh ? '单量' : 'Orders', zh ? '客单' : 'Avg ticket', zh ? '本月至今' : 'MTD']]
@@ -2988,7 +2849,8 @@ function renderAttendanceBoard() {
 
 // 2026-08-02 员工管理页两板块:计时排班 / 技师业绩(业绩卡+薪资方案+打卡考勤);月度业绩核查已并入 财务→员工工资
 function applyStaffTab() {
-  const tab = owner.staffTab || 'schedule'
+  // S4(08-25):四板块顺序 技师业绩 → 薪资方案 → 技师排班 → 账号管理;默认落第一块
+  const tab = owner.staffTab || 'performance'
   document.querySelectorAll('#schedulePage [data-staff-panel]').forEach((panel) => {
     // 后三个板块都是老板专属(业绩目标/薪资方案/账号管理)
     const ownerOnly = ['attendanceCard', 'perfTargetsCard', 'salaryPlansCard', 'staffAccountsCard'].includes(panel.id)
@@ -2996,7 +2858,8 @@ function applyStaffTab() {
   })
   // 员工登录时只显示前两个页签
   document.querySelectorAll('#staffTabs [data-staff-tab]').forEach((button) => {
-    const ownerOnlyTab = ['targets', 'salary', 'accounts'].includes(button.dataset.staffTab)
+    // 「业绩目标」已并入技师业绩板块,不再是独立页签
+    const ownerOnlyTab = ['salary', 'accounts'].includes(button.dataset.staffTab)
     button.classList.toggle('hidden', ownerOnlyTab && !isOwnerRole())
   })
   document.querySelectorAll('#staffTabs [data-staff-tab]').forEach((button) => {
@@ -3073,6 +2936,54 @@ async function loadFinanceLockSettings() {
   financeLockState = { enabled: Boolean(res.enabled), configured: Boolean(res.configured) }
   owner.financeLedger.lockEnabled = financeLockState.enabled
   renderFinanceLockSettings()
+}
+
+/* ===== S5-a 通用设置(店主 2026-08-25)=====
+   分工:通用 = 小程序环境与账号(语言/币种/我的密码/昵称头像/财务密码);
+        门店 = 门店个性化(营业时间/定金/会员套餐/订阅…)。
+   币种是**只读**的:它由平台按店配置下发(币种红线 §八),商家改不了 —— 这里如实说明,不放假开关。
+   🔴 S5-b 短信自助重置本轮挂起:这一页**不放**「忘记密码」入口,不做发不出短信的按钮。 */
+function renderGeneralSettings() {
+  const zh = owner.lang === 'zh'
+  const lang = document.querySelector('#gsLangBody')
+  if (lang) {
+    document.querySelector('#gsLangSummary').textContent = zh ? '中文' : 'English'
+    lang.innerHTML = `<p class="subtle">${zh ? '切换后台与顾客端后台预览的显示语言(与右上角的中文/EN 同一处设置)。' : 'Switches admin display language.'}</p>
+      <div class="row" style="gap:8px;margin-top:8px">
+        <button class="${owner.lang === 'zh' ? 'primary' : 'ghost'} slim" data-gs-lang="zh" type="button">中文</button>
+        <button class="${owner.lang === 'en' ? 'primary' : 'ghost'} slim" data-gs-lang="en" type="button">English</button>
+      </div>`
+  }
+  const cur = document.querySelector('#gsCurrencyBody')
+  if (cur) {
+    const code = owner.tenantKb?.facts?.currency || owner.storeCurrency || ''
+    document.querySelector('#gsCurrencySummary').textContent = code || (zh ? '未配置' : 'Not set')
+    cur.innerHTML = `<p class="subtle">🔒 ${zh
+      ? `本店币种:${code || '—'}。币种由平台按门店设定(所有金额都按它显示),商家端只读;要改请联系平台。`
+      : `Store currency: ${code || '—'}. Managed by the platform.`}</p>`
+  }
+  const pass = document.querySelector('#gsPasswordBody')
+  if (pass) {
+    document.querySelector('#gsPasswordSummary').textContent = zh ? '可自助修改' : 'Self-service'
+    pass.innerHTML = `<div class="kb-facts-grid">
+        <label><span>${zh ? '当前密码' : 'Current'}</span><input id="gsOldPass" type="password" autocomplete="off"></label>
+        <label><span>${zh ? '新密码(至少 6 位)' : 'New (min 6)'}</span><input id="gsNewPass" type="password" autocomplete="new-password"></label>
+        <label><span>${zh ? '再输入一次' : 'Confirm'}</span><input id="gsNewPass2" type="password" autocomplete="new-password"></label>
+      </div>
+      <div style="margin-top:10px"><button class="primary slim" data-gs-save-pass type="button">${zh ? '修改密码' : 'Change password'}</button></div>
+      <p class="subtle" style="margin-top:6px">${zh ? '改完当前登录仍有效,下次登录用新密码。忘记密码请联系平台重置(短信自助找回在做,暂未开通)。' : 'Contact the platform if you forget it.'}</p>`
+  }
+  const prof = document.querySelector('#gsProfileBody')
+  if (prof) {
+    const name = owner.auth?.admin?.displayName || owner.auth?.admin?.email || ''
+    document.querySelector('#gsProfileSummary').textContent = name
+    prof.innerHTML = `<div class="kb-facts-grid">
+        <label><span>${zh ? '显示昵称' : 'Display name'}</span><input id="gsDisplayName" value="${escapeHtml(name)}"></label>
+      </div>
+      <div style="margin-top:10px"><button class="primary slim" data-gs-save-name type="button">${zh ? '保存昵称' : 'Save'}</button></div>
+      <p class="subtle" style="margin-top:6px">${zh ? '昵称会显示在排班、日结与留痕里(比如「谁确认了这一天」)。头像暂用默认图,换头像随小程序端一起做。' : 'Shown in schedules, daily close and audit trails.'}</p>`
+  }
+  renderFinanceLockSettings()   // 财务密码:复用既有实现,只是换了个落脚页(一个设置一处实现)
 }
 
 function renderFinanceLockSettings() {
@@ -4702,8 +4613,36 @@ function renderServices() {
     <div class="service-admin-row" data-storefront-new role="button" style="border:1.5px dashed #d8cfc6;border-radius:12px;justify-content:center;cursor:pointer;color:#8c8279">
       ＋ ${zh ? '新建上架服务（从结算单目录选项目关联，或全新创建）' : 'New storefront service (link a catalog item, or create new)'}
     </div>`
+  /* 🔴 S13①(店主 2026-08-25):模块① 列表**按大类分组**显示 —— 原来一排平铺,店主说"很乱"。
+     分组键=大类(categoryId,本店大类字典的那张表),组名读同一份字典(catName 唯一出口);
+     **没挂大类的不藏起来**,单独一组「未归类」排在最后 —— 藏起来等于让店主永远发现不了漏挂。
+     组内顺序不动(还是数据源给的顺序),这里只分组不排序。 */
+  const catNameOf = (id) => pricingState.categories.find((c) => c.id === id)?.name || ''
+  const groups = new Map()
+  for (const svc of rows) {
+    const item = pricingState.items.find((i) => i.id === svc.id)
+    const key = item?.categoryId || ''
+    if (!groups.has(key)) groups.set(key, [])
+    groups.get(key).push(svc)
+  }
+  const ordered = [...groups.entries()].sort((a, b) => {
+    if (!a[0]) return 1                       // 未归类永远最后
+    if (!b[0]) return -1
+    const ia = pricingState.categories.findIndex((c) => c.id === a[0])
+    const ib = pricingState.categories.findIndex((c) => c.id === b[0])
+    return ia - ib                            // 其余照大类字典自身的顺序
+  })
+  const groupHtml = ordered.map(([key, list]) => `
+    <div class="svc-group" data-svc-group="${escapeHtml(key || 'uncategorized')}">
+      <div class="svc-group-head">
+        <span class="svc-group-name">${escapeHtml(key ? catNameOf(key) : (zh ? '未归类' : 'Uncategorized'))}</span>
+        <span class="svc-group-count">${list.length}</span>
+        ${key ? '' : `<span class="subtle">${zh ? '没挂大类 —— 点「修改」给它选一个,顾客端才好找' : 'No category yet'}</span>`}
+      </div>
+      ${list.map(rowHtml).join('')}
+    </div>`).join('')
   els.serviceAdminList.innerHTML = (rows.length
-    ? rows.map(rowHtml).join('')
+    ? groupHtml
     : `<div class="empty-state"><strong>${t('noServices')}</strong></div>`) + pickerHtml
 }
 
@@ -5020,7 +4959,9 @@ function renderTechnicianPerformance() {
   const rows = technicianPerformanceRows()
   els.addTechnicianButton?.classList.toggle('hidden', !isOwnerRole())
   els.salaryPlanButton?.classList.toggle('hidden', !isOwnerRole())
-  applyStaffTab() // 员工管理两板块可见性(含 考勤/核查 卡仅老板)
+  applyStaffTab() // 员工管理四板块可见性(S4:技师业绩/薪资方案/技师排班/账号管理)
+  // S4:承载技师卡的那张「本月趋势」卡已删 —— 元素不在就不渲染(业绩排行说的是同一件事)
+  if (!els.technicianPerformance) return
   // 单卡(员工端只看自己)时铺满整行,数据块均匀展开,不留大片空白
   els.technicianPerformance.classList.toggle('single-card', rows.length === 1)
   if (!rows.length) {
@@ -6029,10 +5970,46 @@ els.adminLayout.addEventListener('click', (event) => {
     if (owner.adminPage === 'storeSettings') loadMembershipSettings().catch((error) => toast(error.message))
     if (owner.adminPage === 'storeSettings') loadDepositSettings().catch((error) => toast(error.message))
     if (owner.adminPage === 'storeSettings') loadAiPackSettings().catch((error) => toast(error.message))
+    // S5-a:通用设置进页时拉一次财务密码门禁状态(那块从财务页搬过来了)
+    if (owner.adminPage === 'generalSettings') loadFinanceLockSettings().catch((error) => toast(error.message))
     render()
     return
   }
 })
+/* S5-a 通用设置的三个交互:切语言 / 改密码 / 存昵称。
+   都复用既有出口:语言用 switchAdminLang、密码走 /admin/auth/change-password、
+   昵称走 /admin/auth/display-name —— 不新造第二条路。 */
+els.generalSettingsPage?.addEventListener('click', async (event) => {
+  const zh = owner.lang === 'zh'
+  const langBtn = event.target.closest('[data-gs-lang]')
+  if (langBtn) { switchAdminLang(langBtn.dataset.gsLang); return }
+  if (event.target.closest('[data-gs-save-pass]')) {
+    const oldPassword = document.querySelector('#gsOldPass')?.value || ''
+    const newPassword = document.querySelector('#gsNewPass')?.value || ''
+    const confirmPassword = document.querySelector('#gsNewPass2')?.value || ''
+    if (!oldPassword || !newPassword) { toast(zh ? '当前密码与新密码都要填' : 'Both fields required'); return }
+    if (newPassword !== confirmPassword) { toast(zh ? '两次新密码不一样' : 'Passwords do not match'); return }
+    try {
+      await request('/admin/auth/change-password', { method: 'POST', body: JSON.stringify({ oldPassword, newPassword, confirmPassword }) })
+      toast(zh ? '密码已修改,下次登录用新密码' : 'Password changed')
+      renderGeneralSettings()
+    } catch (error) { toast(error.message) }
+    return
+  }
+  if (event.target.closest('[data-gs-save-name]')) {
+    const displayName = String(document.querySelector('#gsDisplayName')?.value || '').trim()
+    if (!displayName) { toast(zh ? '昵称不能为空' : 'Name required'); return }
+    try {
+      const r = await request('/admin/auth/display-name', { method: 'PATCH', body: JSON.stringify({ displayName }) })
+      if (owner.auth?.admin) owner.auth.admin.displayName = r.admin?.displayName || displayName
+      const store = localStorage.getItem('lucky-owner-auth') ? localStorage : sessionStorage
+      store.setItem('lucky-owner-auth', JSON.stringify(owner.auth))
+      toast(zh ? '昵称已保存' : 'Saved')
+      render()
+    } catch (error) { toast(error.message) }
+  }
+})
+
 els.wechatMockPage.addEventListener('input', (event) => {
   if (event.target.id === 'wechatSearchInput') {
     owner.wechatSearch = event.target.value

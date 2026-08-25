@@ -4,7 +4,7 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>有迹 · 商家后台</title>
-    <link rel="stylesheet" href="/web/styles.css?v=20260825d-a3">
+    <link rel="stylesheet" href="/web/styles.css?v=20260825e-w2">
     <style>
       /* 2026-08-02 财务指标显隐+动效(店主 v4 定稿):AI智能总结卡 / 目标进度条(带平衡线刻度) / 设目标引导与弹窗。
          放这里不放 styles.css:本批约定只动 admin.js + admin.html 两个文件。 */
@@ -387,6 +387,9 @@
           <button class="sidebar-link" data-admin-page="wechatMock" id="sidebarWechatMock" type="button"><span id="sidebarWechatMockLabel">客服工作台</span><span class="sidebar-badge hidden" id="wechatNeedsHumanBadge"></span></button>
           <button class="sidebar-link" data-admin-page="aiGallery" id="sidebarAiGallery" type="button">AI 图库</button>
           <button class="sidebar-link" data-admin-page="storeSettings" id="sidebarStoreSettings" type="button">门店设置<span class="sidebar-badge hidden" id="subscriptionBadge"></span></button>
+          <!-- S5-a(店主 2026-08-25):通用设置 = 小程序环境与账号(语言/币种/我的密码/昵称头像/财务密码);
+               与「门店设置」分工:那边是门店个性化,这边是环境与账号。 -->
+          <button class="sidebar-link" data-admin-page="generalSettings" id="sidebarGeneralSettings" type="button">通用设置</button>
           <span class="sidebar-version" id="sidebarVersion"></span>
         </aside>
 
@@ -457,27 +460,14 @@
           <section class="admin-page hidden" id="schedulePage">
             <button class="ghost back-btn" data-admin-page="dashboard" type="button">← Dashboard</button>
             <div class="admin-tabs" id="staffTabs">
-              <button class="admin-tab active" data-staff-tab="schedule" id="staffTabSchedule" type="button">计时排班</button>
-              <button class="admin-tab" data-staff-tab="performance" id="staffTabPerformance" type="button">技师业绩</button>
-              <button class="admin-tab" data-staff-tab="targets" id="staffTabTargets" type="button">业绩目标</button>
+              <!-- S4(店主 2026-08-25):四板块,顺序照令 ——
+                   ①技师业绩(本月趋势=业绩排行+业绩目标两小节)②薪资方案 ③技师排班 ④账号管理。
+                   原「业绩目标」独立页签并入①;原那张重复的"本月趋势"卡已删。 -->
+              <button class="admin-tab active" data-staff-tab="performance" id="staffTabPerformance" type="button">技师业绩</button>
               <button class="admin-tab" data-staff-tab="salary" id="staffTabSalary" type="button">薪资方案</button>
+              <button class="admin-tab" data-staff-tab="schedule" id="staffTabSchedule" type="button">技师排班</button>
               <button class="admin-tab" data-staff-tab="accounts" id="staffTabAccounts" type="button">账号管理</button>
             </div>
-            <section class="admin-card hidden" data-staff-panel="targets" id="perfTargetsCard">
-              <div class="section-row compact-row">
-                <div>
-                  <h2 id="perfTargetsTitle">业绩目标</h2>
-                  <p class="subtle" id="perfTargetsHint">设置=目标怎么定 ／ 显示=员工端看什么</p>
-                </div>
-                <div class="schedule-week-nav">
-                  <button class="ghost slim" data-target-month="-1" type="button">‹</button>
-                  <span id="perfTargetsMonth"></span>
-                  <button class="ghost slim" data-target-month="1" type="button">›</button>
-                  <button class="primary slim" id="perfTargetsSave" type="button">保存</button>
-                </div>
-              </div>
-              <div id="perfTargetsBody"></div>
-            </section>
             <section class="admin-card hidden" data-staff-panel="salary" id="salaryPlansCard">
               <div class="section-row compact-row">
                 <div>
@@ -538,6 +528,8 @@
                     <button type="button" data-rank-period="day">本日</button>
                     <button type="button" data-rank-period="month" class="on">本月</button>
                   </span>
+                  <button class="ghost slim" id="salaryPlanButton" type="button">薪资方案</button>
+                  <button class="ghost slim" id="addTechnicianButton" type="button">＋ 添加技师</button>
                 </div>
               </div>
               <div id="perfRankBody"></div>
@@ -545,19 +537,23 @@
               <p class="subtle" id="perfProgHint">读「业绩目标」页签的设置;未设目标显示「未设目标」,不显示进度条</p>
               <div id="perfProgBody"></div>
             </section>
-            <section class="admin-card hidden" data-staff-panel="performance">
+            <section class="admin-card hidden" data-staff-panel="performance" id="perfTargetsCard">
               <div class="section-row compact-row">
                 <div>
-                  <p class="eyebrow" id="techPerformanceEyebrow">This Month</p>
-                  <h2 id="techPerformanceTitle">Technician Performance</h2>
+                  <h2 id="perfTargetsTitle">业绩目标</h2>
+                  <p class="subtle" id="perfTargetsHint">设置=目标怎么定 ／ 显示=员工端看什么</p>
                 </div>
-                <div>
-                  <button class="ghost slim" id="salaryPlanButton" type="button">💰 薪资方案</button>
-                  <button class="ghost slim" id="addTechnicianButton" type="button">＋ 添加技师</button>
+                <div class="schedule-week-nav">
+                  <button class="ghost slim" data-target-month="-1" type="button">‹</button>
+                  <span id="perfTargetsMonth"></span>
+                  <button class="ghost slim" data-target-month="1" type="button">›</button>
+                  <button class="primary slim" id="perfTargetsSave" type="button">保存</button>
                 </div>
               </div>
-              <div class="technician-performance-grid" id="technicianPerformance"></div>
+              <div id="perfTargetsBody"></div>
             </section>
+            <!-- S4:重复的「本月趋势」卡已删(与上面业绩排行说同一件事)。
+                 🔴 删块不许删入口:它头上的「添加技师」「薪资方案」两个入口已搬进上面业绩排行卡的头部。 -->
             <section class="admin-card hidden" data-staff-panel="performance" id="attendanceCard">
               <div class="section-row compact-row">
                 <h2 id="attendanceTitle">🕐 打卡考勤（今日）</h2>
@@ -835,13 +831,8 @@
                 </summary>
                 <div class="settings-item-body" id="financeTargetsBody"></div>
               </details>
-              <details class="settings-item">
-                <summary>
-                  <span class="settings-item-title" id="financeLockTitle">财务密码</span>
-                  <span class="settings-item-value" id="financeLockSummary"></span>
-                </summary>
-                <div class="settings-item-body" id="financeLockBody"></div>
-              </details>
+              <!-- S5-a:财务密码已移到「通用设置」(它管账号门禁,不是门店个性化)。
+                   一个设置只留一处编辑口,这里不再并列一份。 -->
               <details class="settings-item">
                 <summary>
                   <span class="settings-item-title" id="financeLedgerTitle">账本安全 <button class="fin-info" data-fin-guide="ledger" type="button" aria-label="填写指南">ⓘ</button></span>
@@ -864,6 +855,38 @@
             </div>
           </section>
 
+          <!-- S5-a 通用设置页(店主 2026-08-25)。财务密码从「财务」页移入这里 ——
+               它管的是账号门禁,不是门店个性化。
+               🔴 S5-b「忘记密码走短信验证码自助重置」本轮挂起(短信通道未确认),
+                  这里**不放**那个入口 —— 不做发不出短信的按钮。 -->
+          <section class="admin-page hidden" id="generalSettingsPage">
+            <div class="section-row"><div><p class="eyebrow">设置</p><h1 id="generalSettingsTitle">通用设置</h1></div></div>
+            <p class="subtle" id="generalSettingsHint">小程序环境与账号相关的设置都在这里;门店营业信息、定金规则、会员套餐在「门店设置」。</p>
+            <section class="admin-card">
+              <div class="settings-list">
+                <details class="settings-item" open>
+                  <summary><span class="settings-item-title">语言</span><span class="settings-item-value" id="gsLangSummary"></span></summary>
+                  <div class="settings-item-body" id="gsLangBody"></div>
+                </details>
+                <details class="settings-item">
+                  <summary><span class="settings-item-title">币种</span><span class="settings-item-value" id="gsCurrencySummary"></span></summary>
+                  <div class="settings-item-body" id="gsCurrencyBody"></div>
+                </details>
+                <details class="settings-item">
+                  <summary><span class="settings-item-title">我的密码</span><span class="settings-item-value" id="gsPasswordSummary"></span></summary>
+                  <div class="settings-item-body" id="gsPasswordBody"></div>
+                </details>
+                <details class="settings-item">
+                  <summary><span class="settings-item-title">昵称与头像</span><span class="settings-item-value" id="gsProfileSummary"></span></summary>
+                  <div class="settings-item-body" id="gsProfileBody"></div>
+                </details>
+                <details class="settings-item">
+                  <summary><span class="settings-item-title" id="gsFinanceLockTitle">财务密码</span><span class="settings-item-value" id="financeLockSummary"></span></summary>
+                  <div class="settings-item-body" id="financeLockBody"></div>
+                </details>
+              </div>
+            </section>
+          </section>
           <section class="admin-page hidden" id="storeSettingsPage">
             <button class="ghost back-btn" data-admin-page="dashboard" type="button">← Dashboard</button>
             <div class="section-row">
@@ -967,9 +990,10 @@
     </main>
 
     <div class="toast" id="toast"></div>
-    <script src="/web/ai-desk.js?v=20260825a-5line"></script>
-    <script src="/web/order-state.js?v=20260825a-5line"></script>
-    <script src="/web/snapshot-viewer.js?v=20260825a-5line"></script>
-    <script src="/web/admin.js?v=20260825a-5line"></script>
+    <script src="/web/ai-desk.js?v=20260825e-w2"></script>
+    <script src="/web/finance-trend.js?v=20260825e-w2"></script>
+    <script src="/web/order-state.js?v=20260825e-w2"></script>
+    <script src="/web/snapshot-viewer.js?v=20260825e-w2"></script>
+    <script src="/web/admin.js?v=20260825e-w2"></script>
   </body>
 </html>
