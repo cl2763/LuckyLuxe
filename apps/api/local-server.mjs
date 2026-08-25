@@ -17,7 +17,7 @@ import { createDemoReset, isDemoTenant, PROTECTED_REAL_TENANTS } from './demo-re
 import { createDemoFacts } from './demo-facts.mjs'                    // 演示店事实口(铺设脚本不再直连库)
 import { createPlatformOps } from './platform-ops.mjs'                // 平台运维域(备份/五项/运维日志/重置财务密码)
 import { createImportCustomers } from './import-customers.mjs'        // 平台代商家导入老顾客(公约②)
-import { snapshotDb } from './db-backup.mjs'                          // 库快照唯一出口
+import { snapshotDb, dailyBackup } from './db-backup.mjs'             // 库快照唯一出口(按需 + 日备同一处)
 import { createStaticServe } from './static-serve.mjs'                // 静态文件服务(公约②)
 import { retireLegacyDemoArchives } from './legacy-demo-retire.mjs'   // 旧口径演示档案退役(一次性)
 import { createMemberCode } from './member-code.mjs'                  // 会员码域(公约②)
@@ -18554,26 +18554,13 @@ createServer((req, res) => {
   }
 })
 
-// ===== 生产环境每日自动备份(BACKUP_ENABLED=true 时开启;快照存进同一持久化卷,保留 30 天) =====
+// ===== 生产环境每日自动备份(BACKUP_ENABLED=true 时开启;实现走唯一出口 ./db-backup.mjs)=====
 if (process.env.BACKUP_ENABLED === 'true') {
-  const backupDir = join(dataDir, 'backups')
   const runBackup = () => {
     try {
-      mkdirSync(backupDir, { recursive: true })
-      const stamp = localParts(new Date()).date
-      const dest = join(backupDir, `lucky-luxe-${stamp}.sqlite`)
-      if (!existsSync(dest)) {
-        copyFileSync(join(dataDir, 'lucky-luxe.sqlite'), dest)
-        console.log(`[backup] 已生成快照 ${stamp}`)
-      }
-      const keepAfter = new Date(Date.now() - 30 * 86400000)
-      for (const file of readdirSync(backupDir)) {
-        const match = file.match(/^lucky-luxe-(\d{4}-\d{2}-\d{2})\.sqlite$/)
-        if (match && new Date(`${match[1]}T12:00:00`) < keepAfter) {
-          unlinkSync(join(backupDir, file))
-          console.log(`[backup] 已清理过期快照 ${file}`)
-        }
-      }
+      const r = dailyBackup({ dbPath: join(dataDir, 'lucky-luxe.sqlite'), backupDir: join(dataDir, 'backups'), dateStr: localParts(new Date()).date })
+      if (r.made) console.log(`[backup] 已生成快照 ${r.made.path}(${r.made.spaceText})`)
+      for (const f of r.removed) console.log(`[backup] 已清理过期快照 ${f}`)
     } catch (error) {
       console.error('[backup] 备份失败:', error.message)
     }

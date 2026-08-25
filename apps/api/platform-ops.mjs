@@ -35,11 +35,20 @@ export function createPlatformOps({ db, apiError, randomId, iso, snapshotDb, dbP
   /* 🔴 生产例外第⑤条(店主 2026-08-25):按需备份 —— 动生产之前先调它,**备份或中止**;
      返回的路径要写进回报与运维日志。落盘走唯一出口 ./db-backup.mjs。 */
   function backup({ tag, tenantId, reason }) {
+    let snap
     try {
-      const snap = snapshotDb({ dbPath, backupDir, tag: String(tag || '按需备份').slice(0, 40) })
-      writeLog(String(tenantId || '__system__'), 'backup', `按需备份:${snap.path}(${snap.size} 字节)。原因:${String(reason || '').slice(0, 200)}`)
-      return snap
-    } catch (error) { throw apiError(500, 'BACKUP_FAILED', `备份失败:${error.message}`) }
+      snap = snapshotDb({ dbPath, backupDir, tag: String(tag || '按需备份').slice(0, 40) })
+    } catch (error) {
+      /* 空间预检没过 / 落盘失败 —— 一律 400/500 抛出去,**没写**。
+         调用方(铺设脚本)拿不到 path 就必须中止,这条不靠自觉。 */
+      throw apiError(507, 'BACKUP_ABORTED', `备份已中止(没写):${error.message}`)
+    }
+    // ⓒ 剩余/总容量每次都进日志;ⓐ 清掉的旧快照也点名,别让人猜文件去哪了
+    writeLog(String(tenantId || '__system__'), 'backup',
+      `按需备份:${snap.path}(${snap.size} 字节)。${snap.spaceText}。`
+      + `${snap.pruned.length ? `已按保留策略清理 ${snap.pruned.length} 份旧快照:${snap.pruned.join(' / ')}。` : '无旧快照可清。'}`
+      + `原因:${String(reason || '').slice(0, 200)}`)
+    return snap
   }
 
   /* 生产例外第⑥条:逐店五项 —— 铺设前后各取一次,对不上立刻停。 */

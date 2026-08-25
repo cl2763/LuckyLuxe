@@ -421,6 +421,8 @@ async function main() {
     backup = await platform('/platform/backup', { method: 'POST', body: JSON.stringify({ tag: `生产铺演示店前-${TARGET_TENANT}`, tenantId: TARGET_TENANT, reason: '演示店种数据前的按需备份(生产例外第⑤条)' }) })
     if (!backup || !backup.path) throw new Error('第⑤条:备份没拿到路径,已中止(备份或中止,不许硬跑)。')
     log(`⑤ 已备份:${backup.path}(${backup.size} 字节)`)
+    // ⓔ 离红线还有多远,每次都说;ⓐ 按保留策略清了哪几份,也点名
+    log(`   卷余量:${backup.spaceText || '探不到'}${(backup.pruned || []).length ? ` · 已清理旧快照 ${backup.pruned.length} 份` : ''}`)
     baseline = {}
     for (const t of await reconTenantsOf()) baseline[t] = await statsOf(t)
     log(`⑥ 真店五项基线已取:${Object.keys(baseline).map((t) => `${t} 收入 ${(baseline[t].incomeCents / 100).toFixed(2)}`).join(' · ')}`)

@@ -17,7 +17,7 @@
      DATA_DIR=/tmp/ll-sg PORT=4301 node local-server.mjs &
      TEST_BASE_URL=http://127.0.0.1:4301 node apps/api/test-demo-seed-guard.mjs */
 import { execFile, execFileSync } from 'node:child_process'
-import { readFileSync } from 'node:fs'
+import { readFileSync, readdirSync, copyFileSync, existsSync, unlinkSync } from 'node:fs'
 import { DatabaseSync } from 'node:sqlite'
 import { dirname, join } from 'node:path'
 import { fileURLToPath } from 'node:url'
@@ -122,7 +122,6 @@ await newTenant(REAL_ID, REAL_NAME, 'real')
 
 // ══ 七条全满足 → 放行(空态:全新演示店从零铺满;真跑,不是试跑)
 const realBefore = await statsOf('lucky-luxe')
-const opsBefore = (await request('/platform/ops-log')).data.logs.length
 {
   const r = await runSeeder(['--production-seed', '--tenant', DEMO_ID, '--confirm-name', DEMO_NAME])
   check('七条全满足=放行并跑完', r.code === 0, r.out.slice(-400))
@@ -146,7 +145,12 @@ const opsBefore = (await request('/platform/ops-log')).data.logs.length
   check('⑦日志确有 demo_seed 一行', Boolean(row), JSON.stringify(logs.slice(0, 2)))
   check('⑦日志写清了操作者/时间/店/量/备份路径',
     row.operator === 'platform' && Boolean(row.created_at) && /结算单/.test(row.detail) && /backups\/\S+\.sqlite/.test(row.detail), row?.detail)
-  check('⑦日志有增无减(备份行 + 铺设行)', logs.length >= opsBefore + 2, `${opsBefore} → ${logs.length}`)
+  /* 原来这里断的是"日志行数至少 +2" —— 废判据:ops-log 只回最近 100 行,
+     同一个库跑够多次之后两边都顶到 100,断言就永远为假(与被测行为无关)。
+     改断**这一次**的两行确实在:备份行 + 铺设行,都挂在本轮的租户上。 */
+  check('⑦这一次的备份行也在(与铺设行成对)',
+    logs.some((l) => l.action === 'backup' && l.tenant_id === DEMO_ID),
+    logs.filter((l) => l.action === 'backup').slice(0, 2).map((l) => l.tenant_id).join(' | '))
 }
 // 幂等:同样的命令再跑一遍,一行不写
 {
@@ -171,6 +175,62 @@ const opsBefore = (await request('/platform/ops-log')).data.logs.length
   check('越权:备份口不带令牌=401', r5.status === 401, JSON.stringify(r5.data))
   const r6 = await request('/platform/ops-log/demo-seed', { method: 'POST', body: JSON.stringify({ tenantId: DEMO_ID }) })
   check('异常输入:运维日志缺 detail=400', r6.status === 400, JSON.stringify(r6.data))
+}
+
+/* 🔴 店主 08-25 复核令②:备份保留策略(建议 A + ⓓⓔ)。
+   全部真调用 —— 真打备份口、真数文件、真让预检拦一次。 */
+{
+  /* 🔴 判据律:数文件**用套件自己的尺子**,不借被测模块的 onDemandSnapshots() ——
+     借了就变成"用被测实现判被测实现":把清理规则从"按格式"改成"按 tag",
+     那个函数会跟着一起改口径,断言照样绿(08-25 变异测试当场撞见,已换掉)。
+     这里只 import snapshotDb(要真跑它的预检),判断一律自己来。 */
+  const { snapshotDb } = await import('./db-backup.mjs')
+  const isDaily = (f) => /^lucky-luxe-\d{4}-\d{2}-\d{2}\.sqlite$/.test(f)
+  const isSnap = (f) => /^lucky-luxe-.*\.sqlite$/.test(f)
+  const onDemandFiles = (dir) => readdirSync(dir).filter((f) => isSnap(f) && !isDaily(f))
+  const dataDir = dirname(DB_PATH)
+  const backupDir = join(dataDir, 'backups')
+
+  // ⓐ 连打 7 次按需备份 → 目录里只剩最近 5 份
+  let last = null
+  for (let i = 0; i < 7; i += 1) {
+    const r = await request('/platform/backup', { method: 'POST', body: JSON.stringify({ tag: `保留策略验${i}`, tenantId: DEMO_ID, reason: '断言用' }) })
+    check(`备份口第 ${i + 1} 次返回 200 且给了路径`, r.status === 200 && /\.sqlite$/.test(r.data.path || ''), JSON.stringify(r.data).slice(0, 160))
+    last = r.data
+  }
+  check('ⓐ 按需快照只留最近 5 份(套件自己数文件)', onDemandFiles(backupDir).length === 5,
+    onDemandFiles(backupDir).join(' | '))
+  check('ⓐ 清掉哪几份有名有姓地回报', Array.isArray(last.pruned) && last.pruned.length > 0, JSON.stringify(last.pruned))
+
+  // ⓔ 通过时也报剩余/总量 —— 返回值里有,运维日志那行里也有
+  check('ⓔ 通过时也报余量(返回值)', /可用 [\d.]+MB \/ 总 [\d.]+MB/.test(last.spaceText || ''), last.spaceText)
+  const bkLog = (await request('/platform/ops-log')).data.logs.find((l) => l.action === 'backup')
+  check('ⓒ 余量进了 platform_ops_log 那一行', /可用 [\d.]+MB/.test(bkLog?.detail || ''), bkLog?.detail?.slice(0, 160))
+  check('ⓐ 清理动作也进了日志', /清理 \d+ 份旧快照|无旧快照可清/.test(bkLog?.detail || ''), bkLog?.detail?.slice(0, 160))
+
+  // ⓓ 类按**格式**分,不按 tag:换个 tag 照样算按需;日备格式一份都不许被它碰
+  const daily = join(backupDir, 'lucky-luxe-2020-01-01.sqlite')
+  copyFileSync(DB_PATH, daily)
+  const before = readdirSync(backupDir).filter(isDaily).length
+  const r2 = await request('/platform/backup', { method: 'POST', body: JSON.stringify({ tag: '换个完全不同的tag', tenantId: DEMO_ID, reason: '断言用' }) })
+  check('ⓓ 换个 tag 仍算按需(照样只留 5 份)', onDemandFiles(backupDir).length === 5, onDemandFiles(backupDir).join(' | '))
+  check('ⓓ 日备格式一份没少(清理只碰按需那一类)',
+    readdirSync(backupDir).filter(isDaily).length === before && existsSync(daily))
+  check('ⓓ 日备不混进按需清单', !onDemandFiles(backupDir).some(isDaily))
+  unlinkSync(daily)
+  check('备份口在预检通过时确实落了盘', existsSync(r2.data.path), r2.data.path)
+
+  // ⓑ 空间预检:把门槛抬到荒唐的高度 → 必须**在写之前**拒绝,且一个字节都没写
+  // 每跑一次换一个空目录:判据要判"**这一次**没写",不是"这目录历来是空的"
+  const probeDir = join(dataDir, `backups-probe-${RUN_ID}`)
+  let aborted = ''
+  try {
+    snapshotDb({ dbPath: DB_PATH, backupDir: probeDir, tag: '预检探针', minFreeBytes: 900 * 1024 * 1024 * 1024 * 1024 })
+  } catch (e) { aborted = e.message }
+  check('ⓑ 空间不够=拒绝并中止(不是写失败才停)', aborted.includes('空间不够,已中止(没写)'), aborted.slice(0, 160))
+  check('ⓑ 拒绝时目录里一个文件都没有(真的没写)',
+    !existsSync(probeDir) || readdirSync(probeDir).length === 0, existsSync(probeDir) ? readdirSync(probeDir).join(' | ') : '目录没建')
+  check('ⓑ 拒绝话里带了余量数字(不是一句"失败了")', /可用 [\d.]+MB \/ 总 [\d.]+MB/.test(aborted), aborted.slice(0, 160))
 }
 
 /* 🔴 店主 08-25 复核令①:**真店黑名单只有一处真相**。
