@@ -1,5 +1,5 @@
 // 构建号:每次交付递增。侧栏可见,排查"改了没生效"时先对版本。
-const ADMIN_BUILD = '20260825e-w2'
+const ADMIN_BUILD = '20260825i-n5'
 let pricingState = { module: 'storefront', tab: 'items', categories: [], items: [], rules: {}, editing: null, preview: null, storefrontPicker: false }
 console.log(`[admin] build ${ADMIN_BUILD}`)
 
@@ -5017,25 +5017,10 @@ const MEMBER_TIER_STYLES = {
   Diamond: 'tier-diamond'
 }
 
-function memberTierBadge(customer) {
-  // D41:不分级店两态 —— member=会员 / guest=顾客(充值即会员,消费不算);分级店照旧梯子键
-  const tier = customer.memberTier || 'Silver'
-  if (tier === 'member') return `<span class="member-tier-badge tier-silver">${owner.lang === 'zh' ? '会员' : 'Member'}</span>`
-  if (tier === 'guest') return `<span class="member-tier-badge" style="background:#eee;color:#666">${owner.lang === 'zh' ? '顾客' : 'Guest'}</span>`
-  return `<span class="member-tier-badge ${MEMBER_TIER_STYLES[tier] || 'tier-silver'}">${escapeHtml(tier)}</span>`
-}
+/* 会员标与 RFM 分层已搬进 ./customer-tags.js(公约②,2026-08-25:动了会员这个域就把它搬出来)。 */
+const memberTierBadge = (c) => window.CustomerTags.memberTierBadge(c, { lang: owner.lang, styles: MEMBER_TIER_STYLES, escapeHtml })
+const rfmTierOf = (c) => window.CustomerTags.rfmTierOf(c, owner.lang)
 
-// RFM 分层(与小程序客户库同口径,默认阈值;详细微调在小程序「⚙ 规则」)
-function rfmTierOf(c) {
-  const visits = c.completedCount || 0
-  if (!visits) return null
-  const days = (iso2) => iso2 ? Math.floor((Date.now() - new Date(iso2).getTime()) / 86400000) : 9999
-  const lastD = days(c.lastCompletedAt)
-  if (lastD > 60) return { k: 's', label: owner.lang === 'zh' ? '沉睡S' : 'Dormant', color: '#8a5a52' }
-  if (lastD <= 45 && visits >= 3 && (c.totalSpentCents || 0) >= 50000) return { k: 'a', label: owner.lang === 'zh' ? '高价值A' : 'VIP', color: '#b5885d' }
-  if (days(c.firstVisitAt) <= 30) return { k: 'n', label: owner.lang === 'zh' ? '新客N' : 'New', color: '#3b6ea5' }
-  return { k: 'b', label: owner.lang === 'zh' ? '回头客B' : 'Repeat', color: '#3f6b52' }
-}
 
 function renderCustomers() {
   if (owner.selectedCustomerId) {
@@ -5069,6 +5054,8 @@ function renderCustomers() {
         <div class="inline-actions compact-actions customer-card-actions">
           <button class="ghost slim" data-customer-detail="${customer.id}" type="button">${t('viewCustomerFile')}</button>
           <button class="ghost slim" data-customer-recharge="${customer.id}" type="button">${owner.lang === 'zh' ? '给 TA 充值' : 'Recharge'}</button>
+          ${/* N-5(图=合同):退卡口开在客户档案 —— 商家找人、看余额、就地处理,不换页 */''}
+          <button class="ghost slim" data-account-adjust="${customer.id}" type="button">${owner.lang === 'zh' ? '账户调整' : 'Adjust'}</button>
           <button class="ghost slim" data-ai-customer="${customer.id}" type="button">${owner.aiLoading === `customer:${customer.id}` ? t('aiProcessing') : t('aiCustomerInsight')}</button>
           ${(() => { const tr = rfmTierOf(customer); return tr && tr.k === 's' ? `<button class="ghost slim" data-recall-copy="${customer.id}" type="button">✦ ${owner.lang === 'zh' ? 'AI 召回' : 'Recall'}</button>` : '' })()}
         </div>
@@ -7004,6 +6991,8 @@ els.customerList.addEventListener('click', (event) => {
     renderCustomers()
     return
   }
+  // N-5 退卡口:入口与弹层全在 ./account-adjust.js(公约①;admin.js 只许搬出不许新增)
+  if (window.AccountAdjust.handleClick(event, { owner, request, money, toast, escapeHtml, customerName, dateOnly, renderCustomers, render, membershipData, loadMembershipPage })) return
   const custRecharge = event.target.closest('[data-customer-recharge]')
   if (custRecharge) {
     // S2批① 收编:客户档案 → 会员与营销页签①,预选该会员

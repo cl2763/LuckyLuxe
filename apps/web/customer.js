@@ -365,6 +365,7 @@ const state = {
   referenceAnalysis: null,
   isAnalyzingReference: false,
   remark: '',
+  wallet: null,          // N-5:储值流水页数据(/my/stored-value)
   cart: readJson(`lucky-web-cart:${TENANT_ID}`) || [], // 购物车按店分仓(切店不带上家店的商品,D39 同族)
   orders: readTenantJson('lucky-web-orders') || [],
   orderFilter: 'all',
@@ -1030,7 +1031,7 @@ function render() {
   if (state.view === 'portfolio') renderPortfolio()
   if (state.view === 'cardPack') renderCardPackWeb()
   // 网页顾客端暂无独立储值明细页:储值行落卡包(卡包里有储值余额与去充值入口),不造半成品页
-  if (state.view === 'storedValue') renderCardPackWeb()
+  if (state.view === 'storedValue') renderStoredValueWeb()
   if (state.view === 'mall') renderMallWeb()
   if (state.view === 'pointsMall') renderPointsWeb()
   renderAiAssistantWidget()
@@ -2216,36 +2217,18 @@ function renderOrderDetailWeb() {
 
 /* 批③次段 D2/D3(网页顾客端同构,四之九):卡包与商城两页与小程序**同句同结构**——
    句子全部来自后端唯一出口(/my/card-pack、/my/mall),这里只渲染,不拼话不算钱。 */
+/* 卡包与储值流水两页已搬进 ./customer-wallet.js(公约①②,2026-08-25):
+   这个文件早就超了前端视图模块 1,500 行的红线,新功能一律新模块。 */
 function renderCardPackWeb() {
-  const pack = state.cardPack
-  if (!pack) {
-    els.screen.innerHTML = `<section class="view-web"><div class="empty-state tall"><strong>${state.lang === 'zh' ? '加载中…' : 'Loading…'}</strong></div></section>`
-    loadCardPack().then(() => { if (state.view === 'cardPack') render() })
-    return
-  }
-  const zh = state.lang === 'zh'
-  els.screen.innerHTML = `
-    <section class="view-web">
-      <button class="ghost back-btn" data-me-target="me" type="button">← ${zh ? '我的' : 'Me'}</button>
-      <h1>${zh ? '卡包' : 'Card pack'}</h1>
-      ${pack.emptyText ? `<div class="empty-state tall"><strong>${escapeHtml(pack.emptyText)}</strong>
-        <button class="primary" data-me-target="mall" type="button">${zh ? '去看看充值套餐' : 'See packages'}</button></div>` : ''}
-      ${pack.timecards.length ? `<div class="section-row compact"><h2>${zh ? '次卡' : 'Passes'}</h2><button class="section-note-btn" data-mall-focus="timecard" type="button">${zh ? '去商城 ›' : 'Shop ›'}</button></div>
-        ${pack.timecards.map((c) => `
-          <div class="info-card-web card">
-            <p><span><strong>${escapeHtml(c.name)}</strong></span><strong>${zh ? '剩' : 'Left'} ${c.remaining}/${c.totalTimes}</strong></p>
-            <p class="subtle">${c.expiresAt ? `${escapeHtml(c.expiresAt)} ${zh ? '到期' : 'expires'}` : (zh ? '长期有效' : 'No expiry')}</p>
-            ${c.sourceLabel ? `<p class="subtle">${escapeHtml(c.sourceLabel)}</p>` : ''}
-          </div>`).join('')}` : ''}
-      ${pack.coupons.length ? `<div class="section-row compact"><h2>${zh ? '优惠券' : 'Coupons'}</h2></div>
-        ${pack.coupons.map((q) => `
-          <div class="info-card-web card">
-            <p><span><strong>${escapeHtml(q.name)}</strong></span><strong class="price">${escapeHtml(q.faceText)}</strong></p>
-            <p class="subtle">${escapeHtml(q.subtitle)}</p>
-            ${q.sourceLabel ? `<p class="subtle">${escapeHtml(q.sourceLabel)}</p>` : ''}
-          </div>`).join('')}` : ''}
-      ${/* 裁定①(店主 08-23):卡包=券+次卡两类,储值不进卡包(会员卡已直达+自有页,重复即乱) */''}
-    </section>`
+  window.CustomerWallet.renderCardPack({ state, els, zh: state.lang === 'zh', escapeHtml, render, loadCardPack })
+}
+function renderStoredValueWeb() {
+  window.CustomerWallet.renderStoredValue({ state, els, zh: state.lang === 'zh', escapeHtml, money, render, loadWallet })
+}
+/* N-5:顾客侧要看得见退款 —— 网页端此前没有储值流水页,这里补上取数口。 */
+async function loadWallet() {
+  try { state.wallet = await request('/my/stored-value') } catch (e) { state.wallet = { balanceCents: 0, txns: [] } }
+  return state.wallet
 }
 
 function renderMallWeb() {

@@ -2371,7 +2371,11 @@ const main = async () => {
       // ㋈ 批③首件 wiring:详情页重做(flow 卡/空态句/留档收敛/售后同屏表单/进度卡)+网页同构+连签流+线下行非勾选
       const odJs = readFileSync(join(ROOT42, 'miniprogram/pages/order-detail/index.js'), 'utf8')
       const odWxml = readFileSync(join(ROOT42, 'miniprogram/pages/order-detail/index.wxml'), 'utf8')
-      const custWeb = readFileSync(join(ROOT42, 'apps/web/customer.js'), 'utf8')
+      /* 网页顾客端的视图 2026-08-25 起分了模块(卡包/储值流水搬进 customer-wallet.js,
+         公约②;customer.js 早就超了 1,500 行红线)。判据**跟着被测物走**:
+         这里读的是"网页顾客端全部视图代码",不是某一个文件 —— 否则搬一次家假红一次。 */
+      const custWeb = ['apps/web/customer.js', 'apps/web/customer-wallet.js']
+        .map((f) => readFileSync(join(ROOT42, f), 'utf8')).join('\n/* —— 模块分隔 —— */\n')
       check('㋈ A2/A3/A6 详情页:flow 卡+「本单未产生结算单」空态+旧实付行消亡', odWxml.includes('order.pay.flowLines') && odWxml.includes('本单未产生结算单') && !odWxml.includes('>实付<'))
       check('㋈ A4/A5/B2 详情页:留档无则不出+售后钮后端句+同屏表单(问题描述必填)', odWxml.includes('wx:if="{{order.visibleWorkImages.length}}"') && odWxml.includes('order.afterSalesActionText') && odWxml.includes('问题描述(必填)'))
       check('㋈ B6 撤回入口+D3 进度卡在场(顾客小程序)', odWxml.includes('撤回本次售后(记录保留)') && odWxml.includes('order.afterSales.steps') && odJs.includes('withdrawAfterSales'))

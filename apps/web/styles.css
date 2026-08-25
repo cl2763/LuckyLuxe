@@ -7304,3 +7304,33 @@ section.card > .section-row:first-child { margin-top: 0; }
 .svc-group-head{display:flex;align-items:center;gap:8px;padding:6px 2px;border-bottom:1px solid #efe6dc;margin-bottom:6px}
 .svc-group-name{font-size:13.5px;font-weight:600;color:#2d2826}
 .svc-group-count{font-size:11.5px;color:#8c8279;background:#f6efe7;border-radius:999px;padding:1px 8px}
+
+/* ===== N-5 退卡口:客户档案 →「账户调整」弹层(图=合同「退卡口设计图」)===== */
+.account-adjust-panel{max-width:460px}
+.aa-head{display:flex;align-items:baseline;gap:8px;padding-bottom:12px;border-bottom:1px solid #e7ddd4;margin-bottom:14px}
+.aa-head strong{font-size:17px}
+.aa-head .subtle{font-size:12.5px;color:#8c8279;flex:1}
+.aa-facts{display:grid;grid-template-columns:repeat(auto-fit,minmax(96px,1fr));gap:8px}
+.aa-fact{background:#f6f2ec;border-radius:8px;padding:9px 11px}
+.aa-fact span{display:block;font-size:11.5px;color:#8c8279}
+.aa-fact strong{display:block;font-size:16px;margin-top:2px;font-variant-numeric:tabular-nums}
+.aa-fact.hi{background:#e6eef1}
+.aa-fact.hi strong{color:#356a7b}
+.aa-hint{font-size:12.5px;color:#8c8279;margin:9px 0 14px}
+.aa-seg{display:flex;border:1px solid #e7ddd4;border-radius:8px;overflow:hidden;margin-bottom:14px}
+.aa-seg-btn{flex:1;padding:9px 6px;font-size:13.5px;background:#fff;border:0;border-right:1px solid #e7ddd4;color:#8c8279;cursor:pointer}
+.aa-seg-btn:last-child{border-right:0}
+.aa-seg-btn.on{background:#a6352b;color:#fff;font-weight:600}
+.aa-sub{display:flex;flex-wrap:wrap;gap:6px;margin-bottom:12px}
+.aa-sub-btn{border:1px solid #e7ddd4;background:#fff;border-radius:999px;padding:5px 12px;font-size:12.5px;color:#6b635c;cursor:pointer}
+.aa-sub-btn.on{border-color:#a6352b;color:#a6352b;font-weight:600}
+.aa-field{display:block;margin-bottom:12px}
+.aa-field>span{display:block;font-size:12.5px;color:#8c8279;margin-bottom:4px}
+.aa-field input,.aa-field select{width:100%;border:1px solid #e7ddd4;border-radius:7px;padding:9px 11px;font-size:14px;background:#fdfaf6}
+.aa-field em{display:block;font-style:normal;font-size:11.5px;color:#8c8279;margin-top:4px}
+.aa-link{border:0;background:none;color:#a6352b;font-size:11.5px;text-decoration:underline;cursor:pointer;padding:0}
+.aa-calc{background:#f6e3e0;border:1px solid #a6352b;border-radius:8px;padding:11px 13px;margin:14px 0}
+.aa-calc div{display:flex;justify-content:space-between;font-size:13.5px;color:#4a4842;padding:2px 0;font-variant-numeric:tabular-nums}
+.aa-calc div.tot{border-top:1px solid #a6352b;margin-top:5px;padding-top:7px;font-weight:600;color:#2d2826}
+.aa-btns{display:flex;gap:9px;flex-wrap:wrap}
+.aa-elsewhere{background:#f6f2ec;border-radius:8px;padding:14px;font-size:13.5px;color:#6b635c}

@@ -191,6 +191,15 @@
           <label style="width:96px">有效期</label>
           <input id="mbExpireDays" type="number" min="0" step="1" style="flex:1" placeholder="天(留空=长期有效)">
         </div>
+        <!-- 🔴 N-5 连带条(店主 08-25 裁:不锁定,每家店不一样):退卡/清零后还算不算会员 -->
+        <div class="row" style="margin-bottom:10px">
+          <label style="width:96px">退卡后</label>
+          <select id="mbKeepAfterRefund" style="flex:1">
+            <option value="keep">保留会员资格(充过就永远是会员)</option>
+            <option value="drop">取消会员资格(余额归零即失去会员)</option>
+          </select>
+        </div>
+        <p class="muted" style="margin:-6px 0 12px 100px;font-size:12px">今天的判据是「有过充值记录」——退完卡那条记录还在。这条是经营选择,入驻时问一遍。</p>
         <div class="row" style="margin-bottom:10px">
           <label style="width:96px">分等级</label>
           <label style="display:inline-flex;align-items:center;gap:6px"><input id="mbTiersEnabled" type="checkbox" onchange="mbToggle()"> 开启等级体系(银卡/金卡/铂金…)</label>
@@ -720,6 +729,7 @@ function renderMembership(mb){
   $('mbQualifyValue').value=cfg.qualifyValueCents?Math.round(cfg.qualifyValueCents/100):''
   $('mbExpireDays').value=cfg.expireDays==null?'':cfg.expireDays
   $('mbTiersEnabled').checked=Boolean(cfg.tiersEnabled)
+  $('mbKeepAfterRefund').value=cfg.keepMemberAfterRefund||'keep'
   MB_TIERS=Array.isArray(cfg.tiers)?cfg.tiers.map(t=>({key:t.key||'',label:t.label||'',minSpend:Math.round((t.minSpendCents||0)/100),depositWaived:Boolean(t.depositWaived)})):[]
   mbToggle();mbRenderTiers()
 }
@@ -745,6 +755,7 @@ async function saveMembership(){
     qualifyValueCents:Math.max(0,Math.round((Number($('mbQualifyValue').value)||0)*100)),
     expireDays:$('mbExpireDays').value===''?null:Math.max(0,Math.round(Number($('mbExpireDays').value)||0)),
     tiersEnabled,
+    keepMemberAfterRefund:$('mbKeepAfterRefund').value,
     tiers:tiersEnabled?MB_TIERS.map(t=>({key:String(t.key).trim(),label:String(t.label).trim(),minSpendCents:Math.max(0,Math.round((Number(t.minSpend)||0)*100)),depositWaived:Boolean(t.depositWaived)})):[]
   }
   try{

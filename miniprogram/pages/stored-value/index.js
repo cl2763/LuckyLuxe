@@ -1,7 +1,9 @@
 const api = require('../../utils/api')
 const { curOf, ensureCurrencyCached, money, moneyFromYuan } = require('../../utils/storecurrency')
 
-const TYPE_LABEL = { recharge: '充值到账', consume: '耗卡', bonus: '充值赠送', reversal: '更正冲销', migrate_opening: '期初迁移' }
+/* 🔴 N-5(店主 08-25):类型文案改**后端下发**(txn.typeText)。
+   原来这儿存着一份本地词典 —— 后端加一个类型(比如退卡 refund),这边不跟,
+   顾客那一行就是空白。同一事实两处两份,迟早分叉。 */
 /* B5 走查抓出:cash/card/alipay 漏映射=顾客回执卡上裸英文;marketing=赠送行渠道 */
 const CH_LABEL = { manual: '门店补录', wechat: '微信支付', stored_value: '门店核销', cash: '现金', card: '银行卡', alipay: '支付宝', marketing: '营销赠送', unknown: '' }
 
@@ -26,7 +28,7 @@ Page({
       const r = await api.getMyStoredValue()
       txns = (r.txns || []).map((t, i) => ({
         id: t.id || i,
-        title: (TYPE_LABEL[t.type] || t.type) + (t.note && t.note !== '演示储值' ? ' · ' + t.note : ''),
+        title: (t.typeText || t.type) + (t.note && t.note !== '演示储值' ? ' · ' + t.note : ''),
         date: String(t.createdAt || '').slice(0, 10) + (CH_LABEL[t.payChannel] ? ' · ' + CH_LABEL[t.payChannel] : ''),
         delta: (t.amountCents >= 0 ? '+' : '-') + money(Math.abs(t.amountCents)),
         up: t.amountCents >= 0,

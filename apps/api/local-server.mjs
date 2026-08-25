@@ -19,6 +19,9 @@ import { createPlatformOps } from './platform-ops.mjs'                // 平台�
 import { ensureListedColumn } from './tenant-visibility.mjs'          // D76:选店页可见性(与账本归属解耦)
 import { createPlatformSessions } from './platform-session.mjs'       // 平台后台「记住这台电脑」(令牌不换,只是不用每次掏)
 import { createAdminAuth } from './admin-auth.mjs'                    // 商家端账号与会话(口令哈希/一次性口令/签票/认票)
+import { createAccountRefund } from './account-refund.mjs'            // N-5 退卡口(退卡≠手动耗卡:不碰收入)
+import { createStoredValue } from './stored-value.mjs'                // 储值域(写流水/算余额/分桶/类型文案)
+import { createMembershipConfig } from './membership-config.mjs'      // 会员制度域(资格判定 + 退卡后是否保留会员)
 import { createImportCustomers } from './import-customers.mjs'        // 平台代商家导入老顾客(公约②)
 import { snapshotDb, dailyBackup } from './db-backup.mjs'             // 库快照唯一出口(按需 + 日备同一处)
 import { createStaticServe } from './static-serve.mjs'                // 静态文件服务(公约②)
@@ -7147,6 +7150,21 @@ const { adminPasswordHash, randomPassword, issueAdminSession, adminFromSessionTo
 const platformSessions = createPlatformSessions({
   db, randomId, iso, sha256: (v) => createHash('sha256').update(String(v)).digest('hex')
 })
+const { storedValueBalanceCents, insertStoredValueTransaction, storedValueOverview, storedValueTypeText, storedValueBalanceDetail, isFirstRecharge } = createStoredValue({
+  db, randomId, iso, currentTenantId, localParts,
+  memberCodeForUserId: (id) => memberCodeForUserId(id),
+  depositLiabilityCents: (tid) => depositLiabilityCents(tid)
+})
+const { MEMBER_QUALIFY_MODES, DEFAULT_MEMBERSHIP_CONFIG, getMembershipConfig, setMembershipConfig, customerTotalSpendCents, isMemberOf } = createMembershipConfig({
+  db, iso, currentTenantId, storedValueBalanceDetail: (u, t) => storedValueBalanceDetail(u, t)
+})
+const refundApi = createAccountRefund({
+  db, apiError, iso, randomId, currentTenantId,
+  insertStoredValueTransaction: (a) => insertStoredValueTransaction(a),
+  storedValueBalanceCents: (u, t) => storedValueBalanceCents(u, t),
+  formatMoneyCents: (c, t, m) => formatMoneyCents(c, t, m),
+  storeDateOf: (at, tid) => localParts(new Date(at), tenantTimezone(tid)).date
+})
 const platformOps = createPlatformOps({
   db, apiError, randomId, iso, snapshotDb, financeSessions, adminPasswordHash, randomPassword,
   dbPath: join(dataDir, 'lucky-luxe.sqlite'), backupDir: join(dataDir, 'backups')
@@ -7189,65 +7207,8 @@ function requireFinanceKey(req) {
 }
 
 // ===== 储值卡（阶段3D）：充值=负债，耗卡=确认收入 =====
-function storedValueBalanceCents(userId, tenantId = currentTenantId()) {
-  return db.prepare('SELECT COALESCE(SUM(amount_cents), 0) AS balance FROM stored_value_transactions WHERE tenant_id = ? AND user_id = ?')
-    .get(tenantId, userId).balance
-}
 
-function insertStoredValueTransaction({ userId, type, amountCents, payChannel = 'unknown', note = '', createdBy = 'system', createdAt = null, tenantId = currentTenantId(), technicianId = null, customerConfirmedAt = null }) {
-  const id = randomId('sv')
-  const signed = type === 'recharge' ? Math.abs(amountCents) : (type === 'consume' ? -Math.abs(amountCents) : Math.round(amountCents))
-  db.prepare(`
-    INSERT INTO stored_value_transactions (id, tenant_id, user_id, type, amount_cents, pay_channel, note, created_by, created_at, technician_id, customer_confirmed_at)
-    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-  `).run(id, tenantId, userId, type, signed, payChannel, note, createdBy, createdAt || iso(new Date()), technicianId || null, customerConfirmedAt || null)
-  return db.prepare('SELECT * FROM stored_value_transactions WHERE id = ?').get(id)
-}
 
-function storedValueOverview() {
-  const month = localParts(new Date()).date.slice(0, 7)
-  const totals = db.prepare(`
-    SELECT
-      COALESCE(SUM(amount_cents), 0) AS balance,
-      COALESCE(SUM(CASE WHEN type = 'recharge' AND substr(created_at, 1, 7) = ? THEN amount_cents ELSE 0 END), 0) AS month_recharge,
-      COALESCE(SUM(CASE WHEN type = 'consume' AND substr(created_at, 1, 7) = ? THEN -amount_cents ELSE 0 END), 0) AS month_consume
-    FROM stored_value_transactions WHERE tenant_id = ?
-  `).get(month, month, currentTenantId())
-  const accounts = db.prepare(`
-    SELECT sv.user_id,
-      COALESCE(SUM(sv.amount_cents), 0) AS balance,
-      MAX(CASE WHEN sv.type = 'consume' THEN sv.created_at END) AS last_consume_at,
-      MAX(sv.created_at) AS last_activity_at,
-      u.display_name
-    FROM stored_value_transactions sv
-    LEFT JOIN users u ON u.id = sv.user_id
-    WHERE sv.tenant_id = ?
-    GROUP BY sv.user_id
-    HAVING balance > 0
-  `).all(currentTenantId())
-  const now = Date.now()
-  const list = accounts.map((row) => {
-    const lastTouch = row.last_consume_at || row.last_activity_at
-    const dormantDays = lastTouch ? Math.floor((now - new Date(lastTouch).getTime()) / 86400000) : 999
-    return {
-      userId: row.user_id,
-      displayName: row.display_name || memberCodeForUserId(row.user_id),
-      memberCode: memberCodeForUserId(row.user_id),
-      balanceCents: row.balance,
-      lastConsumeAt: row.last_consume_at || null,
-      dormantDays
-    }
-  }).sort((a, b) => b.dormantDays - a.dormantDays || b.balanceCents - a.balanceCents)
-  return {
-    totalBalanceCents: totals.balance,
-    // 定金预收(拍板 A · §五):线下收了、还没在单上兑现的定金,与储值同为**负债**
-    depositLiabilityCents: depositLiabilityCents(),
-    monthRechargeCents: totals.month_recharge,
-    monthConsumeCents: totals.month_consume,
-    consumeRate: totals.balance + totals.month_consume > 0 ? Math.round((totals.month_consume / (totals.balance + totals.month_consume)) * 1000) / 10 : 0,
-    accounts: list
-  }
-}
 
 function serializeFinanceTransaction(row) {
   return {
@@ -7301,14 +7262,6 @@ const DEFAULT_PRICING_RULES = {
   foot_surcharge: { amountCents: 10000 },
   single_finger: { pct: 10 },
   tip_reuse: { amountCents: 10000 }
-}
-const MEMBER_QUALIFY_MODES = ['any_recharge', 'balance_gt_0', 'total_spend', 'manual']
-const DEFAULT_MEMBERSHIP_CONFIG = {
-  tiersEnabled: false,
-  memberQualify: 'any_recharge',
-  qualifyValueCents: 0,
-  expireDays: null,
-  tiers: []
 }
 
 function getPricingRules(tenantId = currentTenantId()) {
@@ -7375,97 +7328,19 @@ function membershipSummaryRows(config, tenantId = currentTenantId(), lang = 'zh'
   return rows
 }
 
-function getMembershipConfig(tenantId = currentTenantId()) {
-  const row = db.prepare("SELECT value FROM tenant_settings WHERE tenant_id = ? AND key = 'membership_config'").get(tenantId)
-  let stored = {}
-  if (row) {
-    try { stored = JSON.parse(row.value || '{}') } catch { stored = {} }
-  }
-  const merged = { ...DEFAULT_MEMBERSHIP_CONFIG, ...stored }
-  if (!MEMBER_QUALIFY_MODES.includes(merged.memberQualify)) merged.memberQualify = 'any_recharge'
-  merged.tiersEnabled = Boolean(merged.tiersEnabled)
-  merged.qualifyValueCents = Math.max(0, Math.round(Number(merged.qualifyValueCents) || 0))
-  merged.expireDays = merged.expireDays === null || merged.expireDays === undefined || merged.expireDays === ''
-    ? null
-    : Math.max(0, Math.round(Number(merged.expireDays) || 0)) || null
-  merged.tiers = Array.isArray(merged.tiers) ? merged.tiers : []
-  // 店主 2026-08-12 追加:不分级店「成为会员」权益文案=商家自定义(memberPerks,字符串数组);
-  // 写了才展示,没写=顾客端只显示资格说明。配置界面归 S9,先把字段通道打通。
-  merged.memberPerks = Array.isArray(merged.memberPerks) ? merged.memberPerks.map((x) => String(x).slice(0, 60)).slice(0, 10) : []
-  // 等级未开启时不下发等级字段,避免前端/AI 误以为门店有等级体系
-  if (!merged.tiersEnabled) delete merged.tiers
-  return merged
-}
 
-function setMembershipConfig(tenantId, input = {}) {
-  const current = getMembershipConfig(tenantId)
-  const next = {
-    tiersEnabled: input.tiersEnabled === undefined ? Boolean(current.tiersEnabled) : Boolean(input.tiersEnabled),
-    memberQualify: MEMBER_QUALIFY_MODES.includes(input.memberQualify) ? input.memberQualify : current.memberQualify,
-    qualifyValueCents: input.qualifyValueCents === undefined
-      ? current.qualifyValueCents
-      : Math.max(0, Math.round(Number(input.qualifyValueCents) || 0)),
-    expireDays: input.expireDays === undefined
-      ? (current.expireDays ?? null)
-      : (input.expireDays === null || input.expireDays === '' ? null : Math.max(0, Math.round(Number(input.expireDays) || 0)) || null),
-    tiers: Array.isArray(input.tiers) ? input.tiers.slice(0, 20) : (current.tiers || []),
-    memberPerks: Array.isArray(input.memberPerks) ? input.memberPerks.map((x) => String(x).slice(0, 60)).slice(0, 10) : (current.memberPerks || [])
-  }
-  db.prepare(`INSERT INTO tenant_settings (tenant_id, key, value, updated_at) VALUES (?, 'membership_config', ?, ?)
-    ON CONFLICT(tenant_id, key) DO UPDATE SET value = excluded.value, updated_at = excluded.updated_at`)
-    .run(tenantId, JSON.stringify(next), iso(new Date()))
-  return getMembershipConfig(tenantId)
-}
 
 // 储值余额分桶:legacy = 老平台迁移过来的期初余额(不是本店收的钱),normal = 本系统内真实充值
-function storedValueBalanceDetail(userId, tenantId = currentTenantId()) {
-  const row = db.prepare(`SELECT
-      COALESCE(SUM(amount_cents), 0) AS total,
-      COALESCE(SUM(CASE WHEN bucket = 'legacy' THEN amount_cents ELSE 0 END), 0) AS legacy
-    FROM stored_value_transactions WHERE tenant_id = ? AND user_id = ?`).get(tenantId, userId)
-  const totalCents = row.total || 0
-  const legacyCents = row.legacy || 0
-  return { totalCents, legacyCents, normalCents: totalCents - legacyCents }
-}
+/* 储值流水类型文案(顾客看得见的那一列)——**后端唯一出口**。
+   立这条的直接原因:N-5 新增 refund 类型时发现小程序存着一份本地 TYPE_LABEL 词典,
+   后端加类型、前端不跟,顾客那一行就是空白(零回落律同族:没有的东西不许静默留白)。 */
+
 
 // 首充判定 = 该顾客从未有过任何 recharge 流水(不是「余额为 0」——清零复充不算首充)
-function isFirstRecharge(userId, tenantId = currentTenantId()) {
-  const row = db.prepare("SELECT 1 AS hit FROM stored_value_transactions WHERE tenant_id = ? AND user_id = ? AND type = 'recharge' LIMIT 1")
-    .get(tenantId, userId)
-  return !row
-}
 
 // 顾客累计消费:本系统内完成单的实收 + 迁移带过来的历史累计(只用于会员判定,不进财务)
-function customerTotalSpendCents(userId, tenantId = currentTenantId(), sinceIso = null) {
-  const booked = sinceIso
-    ? db.prepare("SELECT COALESCE(SUM(final_due_cents), 0) AS spent FROM bookings WHERE tenant_id = ? AND user_id = ? AND status = 'COMPLETED' AND appointment_start >= ?").get(tenantId, userId, sinceIso)
-    : db.prepare("SELECT COALESCE(SUM(final_due_cents), 0) AS spent FROM bookings WHERE tenant_id = ? AND user_id = ? AND status = 'COMPLETED'").get(tenantId, userId)
-  const legacy = sinceIso ? 0 : (db.prepare('SELECT legacy_total_spend_cents AS c FROM users WHERE id = ?').get(userId)?.c || 0)
-  return (booked?.spent || 0) + legacy
-}
 
 // 会员判定:四种资格模式由商家在「会员与储值设置」里选
-function isMemberOf(userId, tenantId = currentTenantId()) {
-  if (!userId) return false
-  const config = getMembershipConfig(tenantId)
-  const sinceIso = config.expireDays ? iso(new Date(Date.now() - config.expireDays * 86400000)) : null
-  if (config.memberQualify === 'balance_gt_0') return storedValueBalanceDetail(userId, tenantId).totalCents > 0
-  if (config.memberQualify === 'total_spend') {
-    return customerTotalSpendCents(userId, tenantId, sinceIso) >= config.qualifyValueCents
-  }
-  if (config.memberQualify === 'manual') {
-    const row = db.prepare('SELECT tags_json FROM users WHERE id = ? AND tenant_id = ?').get(userId, tenantId)
-    let tags = []
-    try { tags = JSON.parse(row?.tags_json || '[]') } catch { tags = [] }
-    return tags.some((tag) => /会员|member/i.test(String(tag)))
-  }
-  // any_recharge:充过值就是会员。迁移期初(migrate_opening)本质是老店的充值,同样算数。
-  const sql = sinceIso
-    ? "SELECT 1 AS hit FROM stored_value_transactions WHERE tenant_id = ? AND user_id = ? AND type IN ('recharge', 'migrate_opening') AND created_at >= ? LIMIT 1"
-    : "SELECT 1 AS hit FROM stored_value_transactions WHERE tenant_id = ? AND user_id = ? AND type IN ('recharge', 'migrate_opening') LIMIT 1"
-  const row = sinceIso ? db.prepare(sql).get(tenantId, userId, sinceIso) : db.prepare(sql).get(tenantId, userId)
-  return Boolean(row)
-}
 
 
 // 单个项目的某档价格:缺档回落 list 档,再回落 services.price_cents(老数据零配置也能报价)
@@ -8604,7 +8479,8 @@ function computeSettlement(input = {}) {
     tcCard = db.prepare('SELECT * FROM member_timecards WHERE id = ? AND tenant_id = ?').get(String(input.timecardId), tenantId)
     if (!tcCard) throw apiError(404, 'TIMECARD_NOT_FOUND', '没有这张次卡。')
     if (tcCard.user_id !== String(input.userId || '')) throw apiError(400, 'TIMECARD_NOT_OWNER', '这张次卡不属于本单顾客。')
-    if (tcCard.total_times - tcCard.used_times <= 0) throw apiError(400, 'TIMECARD_USED_UP', '这张次卡已用完。')
+    // N-5:退掉的次数不算可用 —— 走同一个 timecardRemainingOf,不许这里另算一遍
+    if (timecardRemainingOf(tcCard) <= 0) throw apiError(400, 'TIMECARD_USED_UP', '这张次卡已用完(或剩余次数已退)。')
     if (timecardExpired(tcCard)) throw apiError(400, 'TIMECARD_EXPIRED', '这张次卡已过期。')
     tcNth = tcCard.used_times + 1
     const tcUnit = timecardUnitCents(tcCard, tcNth)
@@ -10047,6 +9923,10 @@ function dailyCloseView(date, tenantId, { lang = 'zh' } = {}) {
         redeemCents: redeems.s
       }
     })(),
+    /* 🔴 N-5:当日退卡留痕。**既不进收入也不进支出** —— 退的是负债(欠顾客的服务)换回现金,
+       不是经营损益;写进收入会凭空多一笔,写进支出会让利润凭空少一笔,两个都是把账做歪。
+       所以它在日结上单独一行,让当天的人看得见"今天退过卡",而收入口径一分不动。 */
+    refunds: refundApi.refundsOfDay(date, tenantId),
     // 裁③:「售后扣回」显式行(负数+关联单号),日结页两端直接渲染,数字自证
     afterSalesDeductions: releaseRows.map((rel) => ({
       technicianId: rel.technicianId,
@@ -11843,6 +11723,8 @@ async function route(req, res) {
         .map((t) => ({ id: t.id, amountCents: t.amount_cents, payChannel: t.pay_channel, note: t.note || '', createdAt: t.created_at })),
       txns: txns.map((t) => ({
         id: t.id, type: t.type, amountCents: t.amount_cents, payChannel: t.pay_channel, note: t.note || '', createdAt: t.created_at,
+        // N-5:类型文案**后端唯一出口** —— 以前两端各存一份本地词典,新增 refund 类型时会显示空白
+        typeText: storedValueTypeText(t.type),
         needsConfirm: t.type === 'recharge' && !t.customer_confirmed_at
       }))
     })
@@ -14480,6 +14362,49 @@ async function route(req, res) {
   /* S2批①(规则⑥ 收编):手动耗卡=账目风险口,永久关闭 —— 扣卡只在结算单签字时刻由引擎自动做。 */
   if (req.method === 'POST' && path === '/admin/stored-value/consume') {
     throw apiError(410, 'MANUAL_CONSUME_GONE', '手动耗卡已取消:储值扣款只随结算单签字自动入账。')
+  }
+  /* ===== N-5 退卡口(图=合同「退卡口设计图」,店主 2026-08-25 六条全准)=====
+     实现全在 ./account-refund.mjs;这里只做门禁 + 分发。
+     退卡与充值同权(老板 + 员工):钱是当场退给顾客的,老板不在店里也得退得了。
+     🔴 与充值不同的是**不设 D25 绑定闸** —— 钱已经在卡上,退还给顾客不该被绑定状态挡住。 */
+  if (req.method === 'GET' && path === '/admin/account-adjust/facts') {
+    if (adminSession.role !== 'owner' && adminSession.role !== 'staff') throw apiError(403, 'FORBIDDEN', '需要老板或员工权限。')
+    const uid = String(query.userId || '').trim()
+    if (!uid) throw apiError(400, 'BAD_REQUEST', 'userId 必填。')
+    return json(res, 200, { facts: refundApi.refundFacts(uid) })
+  }
+  if (req.method === 'POST' && path === '/admin/stored-value/refund') {
+    if (adminSession.role !== 'owner' && adminSession.role !== 'staff') throw apiError(403, 'FORBIDDEN', '需要老板或员工权限。')
+    const b = await readBody(req)
+    return json(res, 201, refundApi.refundStoredValue({
+      userId: String(b.userId || '').trim(),
+      amountCents: Math.round(Number(b.amountCents ?? Number(b.amount || 0) * 100)),
+      payChannel: b.payChannel, reason: b.reason,
+      operator: adminSession.email || adminSession.username || adminSession.role || 'owner'
+    }))
+  }
+  /* 商家侧看某位顾客的持卡(退卡屏要选卡)。与顾客端 /my/timecards **同一出口** usableTimecardsOf,
+     所以「剩余」两边天然同一个数(退掉的次数已在 timecardRemainingOf 里扣掉)。 */
+  const custCardsMatch = path.match(/^\/admin\/customers\/([^/]+)\/timecards$/)
+  if (req.method === 'GET' && custCardsMatch) {
+    if (adminSession.role !== 'owner' && adminSession.role !== 'staff') throw apiError(403, 'FORBIDDEN', '需要老板或员工权限。')
+    return json(res, 200, { timecards: usableTimecardsOf(custCardsMatch[1]) })
+  }
+  const tcFactsMatch = path.match(/^\/admin\/timecards\/([^/]+)\/refund-facts$/)
+  if (req.method === 'GET' && tcFactsMatch) {
+    if (adminSession.role !== 'owner' && adminSession.role !== 'staff') throw apiError(403, 'FORBIDDEN', '需要老板或员工权限。')
+    return json(res, 200, { facts: refundApi.timecardRefundFacts(tcFactsMatch[1]) })
+  }
+  const tcRefundMatch = path.match(/^\/admin\/timecards\/([^/]+)\/refund$/)
+  if (req.method === 'POST' && tcRefundMatch) {
+    if (adminSession.role !== 'owner' && adminSession.role !== 'staff') throw apiError(403, 'FORBIDDEN', '需要老板或员工权限。')
+    const b = await readBody(req)
+    return json(res, 201, refundApi.refundTimecard({
+      cardId: tcRefundMatch[1], times: b.times,
+      amountCents: Math.round(Number(b.amountCents ?? Number(b.amount || 0) * 100)),
+      payChannel: b.payChannel, reason: b.reason,
+      operator: adminSession.email || adminSession.username || adminSession.role || 'owner'
+    }))
   }
   if (req.method === 'POST' && path === '/admin/stored-value/recharge') {
     if (adminSession.role !== 'owner' && adminSession.role !== 'staff') {
@@ -17425,8 +17350,15 @@ function timecardUnitCents(card, nth) {
 function timecardExpired(card) {
   return Boolean(card.expires_at && String(card.expires_at).slice(0, 10) < todayOf(card.tenant_id))
 }
+/* 🔴 N-5:剩余次数**只有这一处算法** —— 总次 − 已核销 − **已退**。
+   退掉的次数必须从剩余里扣掉,否则退完还能核销 = 商家真金白银亏钱;
+   而退次又不能记进 used_times(那等于把「手动耗卡」从后门开回来),所以独立一列、一处减。 */
+function timecardRemainingOf(row) {
+  return row.total_times - row.used_times - (row.refunded_times || 0)
+}
+
 function serializeMemberTimecard(row) {
-  const remaining = row.total_times - row.used_times
+  const remaining = timecardRemainingOf(row)
   const expired = timecardExpired(row)
   return {
     id: row.id,
@@ -17435,6 +17367,7 @@ function serializeMemberTimecard(row) {
     name: row.name,
     totalTimes: row.total_times,
     usedTimes: row.used_times,
+    refundedTimes: row.refunded_times || 0,
     remaining,
     priceCents: row.price_cents,
     nextUnitCents: remaining > 0 ? timecardUnitCents(row, row.used_times + 1) : 0,
@@ -17457,7 +17390,7 @@ function serializeMemberTimecard(row) {
 function usableTimecardsOf(userId, tenantId = currentTenantId()) {
   return db.prepare('SELECT * FROM member_timecards WHERE tenant_id = ? AND user_id = ? ORDER BY created_at DESC')
     .all(tenantId, userId)
-    .filter((r) => r.total_times - r.used_times > 0)
+    .filter((r) => timecardRemainingOf(r) > 0)
     .map(serializeMemberTimecard)
     .sort((a, b) => Number(b.redeemable) - Number(a.redeemable))
 }
@@ -17631,6 +17564,27 @@ try {
 } catch (error) {
   if (!String(error.message || '').includes('duplicate column')) throw error
 }
+/* N-5 退卡口(店主 08-25 图=合同):次卡退次数单记一列,**不写 used_times** ——
+   把退次记成核销,等于把被有意关掉的「手动耗卡」从后门开回来。 */
+try {
+  db.exec('ALTER TABLE member_timecards ADD COLUMN refunded_times INTEGER NOT NULL DEFAULT 0')
+} catch (error) {
+  if (!String(error.message || '').includes('duplicate column')) throw error
+}
+db.exec(`
+  CREATE TABLE IF NOT EXISTS timecard_refunds (
+    id TEXT PRIMARY KEY,
+    tenant_id TEXT NOT NULL,
+    card_id TEXT NOT NULL,
+    user_id TEXT NOT NULL,
+    times INTEGER NOT NULL,
+    amount_cents INTEGER NOT NULL,
+    pay_channel TEXT,
+    reason TEXT NOT NULL,
+    created_by TEXT,
+    created_at TEXT NOT NULL
+  );
+`)
 // 🔴 D76 可见性列(与账本归属解耦):建列 + 演示店默认不上架,实现在 ./tenant-visibility.mjs
 ensureListedColumn(db)
 /* D73(店主 08-24):归属回填改**一次性迁移** —— 跑过一次记一笔,以后启动不再扫;
