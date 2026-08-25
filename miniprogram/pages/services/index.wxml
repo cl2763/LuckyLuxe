@@ -16,7 +16,7 @@
             <view class="service-card card" bindtap="goDetail" data-id="{{item._id}}">
               <image class="service-visual" src="{{item.image}}" mode="aspectFill"></image>
               <view class="service-info">
-                <view class="service-eyebrow">{{item.category}}</view>
+                <view class="service-eyebrow" wx:if="{{item.category}}">{{item.category}}</view>
                 <view class="service-name">{{item.name}}</view>
                 <view class="service-desc">{{item.description}}</view>
                 <view class="service-meta">

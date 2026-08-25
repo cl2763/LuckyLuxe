@@ -1368,7 +1368,7 @@ function renderServiceCard(service) {
     <button class="service-card web-service-card" data-service-id="${service.id}" type="button">
       <img src="${service.imageUrl}" alt="${service.name}">
       <span>
-        <span class="eyebrow">${service.category}</span>
+        ${service.category ? `<span class="eyebrow">${service.category}</span>` : ''}
         <h2>${service.name}</h2>
         <p>${service.description}</p>
         <span class="meta">

@@ -3098,6 +3098,25 @@ const main = async () => {
           okImp.status === 200 && okImp.data.created === 1
           && catDb.prepare('SELECT category_id c FROM services WHERE tenant_id = ? AND name_zh = ?').get(shop.tenantId, '导入正例')?.c === catsP[0]?.id)
 
+        /* 🔴 ㋦⑧(08-25 上线前查明补的):**存量没挂大类的项目不许在顾客端消失。**
+           生产上正是这个态 —— lucky-luxe 7 个项目里 6 个只有自由文本、没有 category_id。
+           律管的是「写」(建/改/导入必须挂),不是把已经在卖的东西藏起来:
+           藏了等于上线当天顾客看不到项目,那是事故不是治理。
+           夹具直接写库造一条"老数据"(写口已经拦死,只能这么造)。 */
+        const legacyId = `legacy-nocat-${RUN_ID}`
+        // 列按 PRAGMA table_info 现查的 NOT NULL 清单写全(猜 schema 就是上一轮踩的坑)
+        catDb.prepare(`INSERT INTO services (id, tenant_id, type, category, category_id, name_zh, name_en, description_zh, description_en, image_url, price_cents, deposit_cents, base_duration_min, sort_order, process_json, notice_json, is_active, storefront, is_timecard)
+          VALUES (?, ?, 'NAIL', '法式系列', NULL, ?, 'legacy', '', '', '/assets/images/nail-addon.jpg', 19800, 0, 60, 99, '[]', '[]', 1, 1, 0)`)
+          .run(legacyId, shop.tenantId, `老数据没挂类${RUN_ID}`)
+        const pub2 = (await request(`/services?tenantId=${shop.tenantId}`, {}, null, { 'x-tenant-id': shop.tenantId })).data.services || []
+        const legacy = pub2.find((sv) => sv.id === legacyId)
+        check('㋦⑩ 存量没挂大类的项目照样出现在顾客端(不藏,只是分组名为空)',
+          Boolean(legacy) && legacy.category === '' && String(legacy.type).toLowerCase() === 'nail',
+          JSON.stringify(legacy && { id: legacy.id, category: legacy.category, type: legacy.type }))
+        check('㋦⑪ 空分组名不回落到已退役的自由文本列(库里还留着「法式系列」也不许拿来顶)',
+          legacy && legacy.category !== '法式系列',
+          catDb.prepare('SELECT category c FROM services WHERE id = ?').get(legacyId)?.c)
+
         // 建店默认三大类
         check('㋦⑧ 建店即落平台三大类(起点不是上限,商家可再细分)',
           catsP.length >= 3 && ['美甲', '美睫', '护理·其他'].every((n) => catsP.some((c) => c.name === n)),
