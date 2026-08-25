@@ -3027,6 +3027,105 @@ const main = async () => {
         && retireMod.includes('if (!demoRetireDone && !isProduction) try {')
         && srv.includes('retireLegacyDemoArchives({ db, iso, isProduction: IS_PRODUCTION })'))
 
+      /* ===== ㋣ A1 三件对齐(店主 2026-08-25:基准已拍,不需新图)===== */
+      {
+        const custA1 = readFileSync(join(ROOT42, 'apps/web/customer.js'), 'utf8')
+        const miniApiA1 = readFileSync(join(ROOT42, 'miniprogram/utils/api.js'), 'utf8')
+
+        /* M2 会员码回落收口:两端删本地推导,直渲后端;拿不到显示「—」。
+           判据照第三案:两端各自的取值代码抠出来真跑在同一份 user 上比对。 */
+        const webLine = (custA1.match(/^\s*const memberCode = .*$/m) || [''])[0]
+        const miniLine = (miniApiA1.match(/^\s*const memberCode = .*$/m) || [''])[0]
+        check('㋣M2① 两端会员码都只认后端(本地推导零残留:compactUserCode 已删、不再拿 displayName 猜)',
+          webLine.includes("user.memberCode || '—'") && miniLine.includes("user.memberCode || '—'")
+          && !/function compactUserCode/.test(custA1) && !/displayName\.indexOf\('LL-'\)/.test(miniApiA1))
+        const webCode = new Function('user', `${webLine}; return memberCode`)
+        const miniCode = new Function('user', 'displayName', `${miniLine}; return memberCode`)
+        for (const [label, u] of [['后端给了码', { memberCode: 'LL-00TCUSTC' }], ['后端没给码', { id: 'user_x' }]]) {
+          const w = webCode(u); const m = miniCode(u, String(u.displayName || ''))
+          check(`㋣M2② ${label}:两端逐字相同(${JSON.stringify(w)})`, w === m, JSON.stringify({ web: w, mini: m }))
+        }
+        check('㋣M2③ 推荐码同刀:网页不再本地拼 REF-,拿不到显示「—」',
+          custA1.includes("return user?.referralCode || '—'"))
+
+        // M4 网页补「预约完成」落点(基准=小程序 booking-done,文案逐字取那套)
+        check('㋣M4 网页有预约完成落点,且下单后落到它(不再 toast 一下甩回列表)',
+          custA1.includes('function renderBookingDoneWeb()') && custA1.includes("state.view = 'bookingDone'")
+          && custA1.includes('预约已提交') && custA1.includes('订单状态以门店确认为准'))
+
+        /* c3 小程序顾客端零回落补扫:映射层原来 `|| 0` 三处 + 拿别的字段顶上一处。
+           判据要能证伪"没有值时会不会显示成 0" —— 真跑映射行。 */
+        const mapLines = (miniApiA1.match(/^\s*(depositCents|payableAmount|finalDue|servicePrice): .*$/gm) || []).join('\n')
+        /* 判据律新细则,第四次栽在同一处:负向判据**只对抠出来的代码行**判 ——
+           我在 api.js 的注释里写了旧写法 `servicePrice || service.price` 当反面教材,
+           扫全文就会把注释当成"旧写法还在"。 */
+        check('㋣c3① 映射层零回落:后端没给就是 null,不再 `|| 0`、不再拿 service.price 顶上',
+          !/\|\| 0,/.test(mapLines) && !/service\.price/.test(mapLines)
+          && mapLines.includes('booking.depositCents == null ? null'))
+        const mapFn = new Function('booking', 'service', `return { ${mapLines.trim().replace(/\n\s*/g, ' ')} }`)
+        const empty = mapFn({}, { price: 198 })
+        check('㋣c3② 反例真跑:后端一个金额字段都没给时,四项全是 null(页面才走得到「—」)',
+          empty.depositCents === null && empty.payableAmount === null && empty.finalDue === null && empty.servicePrice === null,
+          JSON.stringify(empty))
+        const full = mapFn({ depositCents: 5000, finalDue: 11800, servicePrice: 16800 }, {})
+        check('㋣c3③ 正例真跑:后端给了值就原样透传(没把真值也改没)',
+          full.depositCents === 5000 && full.payableAmount === 50 && full.finalDue === 11800 && full.servicePrice === 16800,
+          JSON.stringify(full))
+
+        // 礼品卡:店主拍板早就不做了 —— 视图/入口/i18n/合法视图集合零残留,且后端无对应口
+        check('㋣礼品卡 网页链条整条退役(入口/视图分支/i18n/合法视图集合都没了)',
+          !/'giftCard'/.test(custA1) && !/giftCard:/.test(custA1))
+      }
+
+      /* ===== 🔴 ㋢ D75:改归属路由的真店硬拦(店主 2026-08-25 开检,最高优先)=====
+         开检结论:两个调用就能清空真账本 —— ① real→demo(账本失去只追加律保护)② demo-reset(整批删)。
+         挡在真账本前的只剩"把店名打对"。护栏② 那一课没被继承:
+         **黑名单要服务端硬拦、对真参数抛错;UI 二次确认不算护栏。**
+         下面四条探针**全是真调用**,不是读代码。 */
+      {
+        // 探针①:有真钱的店(本测试库里的 lucky-luxe 已有收入)→ 第一道锁(方向律)必须拦
+        const p1 = await request('/platform/tenants/lucky-luxe/kind', { method: 'PATCH', body: JSON.stringify({ kind: 'demo', reason: 'D75 探针' }) })
+        check('㋢① 真店探针 lucky-luxe → 403(收过钱的店永远不能改成演示店)',
+          p1.status === 403 && ['HAS_REAL_MONEY', 'PROTECTED_REAL_TENANT'].includes(p1.data?.error?.code), JSON.stringify(p1.data).slice(0, 160))
+
+        /* 探针②:**单独验第二道锁**。第一道锁靠"有没有收入",所以要造一家
+           **零收入但在黑名单里**的店 —— 只有这样才能证明两条锁互不依赖
+           (哪天收入口径改了、第一道锁失效,这条照样拦死)。 */
+        const dbD75 = new DatabaseSync(process.env.TEST_DB_PATH)
+        const jicsExists = await request('/platform/tenants/jics-nail/kind', { method: 'PATCH', body: JSON.stringify({ kind: 'demo', reason: 'D75 探针二' }) })
+        if (jicsExists.status === 404) {
+          await request('/platform/tenants', { method: 'POST', body: JSON.stringify({ id: 'jics-nail', name: `黑名单探针店${RUN_ID}`, plan: 'single' }) })
+        }
+        // 测试库建店默认 kind='test',那会先被 TEST_TENANT 那条挡住 —— 先按"真店"造场景,才验得到第二道锁
+        dbD75.prepare("UPDATE tenants SET kind = 'real' WHERE id = 'jics-nail'").run()
+        const zeroIncome = dbD75.prepare("SELECT COALESCE(SUM(amount_cents),0) n FROM finance_transactions WHERE tenant_id = 'jics-nail' AND type = 'income'").get().n
+        const p2 = await request('/platform/tenants/jics-nail/kind', { method: 'PATCH', body: JSON.stringify({ kind: 'demo', reason: 'D75 探针二' }) })
+        check('㋢② 黑名单探针 jics-nail(零收入)→ 403 PROTECTED_REAL_TENANT(第二道锁独立生效)',
+          zeroIncome === 0 && p2.status === 403 && p2.data?.error?.code === 'PROTECTED_REAL_TENANT',
+          JSON.stringify({ zeroIncome, status: p2.status, code: p2.data?.error?.code }))
+
+        // 探针③:零收入的错标店 → 200(这条路真正的用途:建店标错了能改回来)
+        const wrongId = `mislabel-${RUN_ID}`
+        await request('/platform/tenants', { method: 'POST', body: JSON.stringify({ id: wrongId, name: `错标演示店${RUN_ID}`, plan: 'single' }) })
+        dbD75.prepare("UPDATE tenants SET kind = 'real' WHERE id = ?").run(wrongId)   // 测试库建店默认 test,这里按"标错成真店"造场景
+        const p3 = await request(`/platform/tenants/${wrongId}/kind`, { method: 'PATCH', body: JSON.stringify({ kind: 'demo', reason: 'D75 探针三:零收入错标店' }) })
+        check('㋢③ 零收入的错标店 → 200 可以改成演示店(不误伤真正的用途)',
+          p3.status === 200 && p3.data?.to === 'demo', JSON.stringify(p3.data).slice(0, 140))
+
+        // 探针④:改完之后再打 demo-reset,仍须按 kind 判据走(能删=因为它现在真是 demo)
+        const p4 = await request(`/platform/tenants/${wrongId}/demo-reset`, { method: 'POST', body: JSON.stringify({ confirmName: `错标演示店${RUN_ID}`, reason: 'D75 探针四' }) })
+        check('㋢④ 改完再打 demo-reset:按 kind 判据放行(判据仍是唯一那条,没被绕过)',
+          p4.status === 200 && p4.data?.tenantId === wrongId, JSON.stringify(p4.data).slice(0, 120))
+        // 反向:demo → real(加保护的方向)不受限制
+        const p5 = await request(`/platform/tenants/${wrongId}/kind`, { method: 'PATCH', body: JSON.stringify({ kind: 'real', reason: 'D75 探针五:加回保护' }) })
+        check('㋢⑤ demo → real(加保护的方向)保持开放,不加限制', p5.status === 200 && p5.data?.to === 'real')
+        // 加回保护后,demo-reset 必须重新被拦(闭环)
+        const p6 = await request(`/platform/tenants/${wrongId}/demo-reset`, { method: 'POST', body: JSON.stringify({ confirmName: `错标演示店${RUN_ID}`, reason: 'D75 探针六' }) })
+        check('㋢⑥ 加回 real 之后,demo-reset 立刻被拦(403 NOT_DEMO_TENANT)',
+          p6.status === 403 && p6.data?.error?.code === 'NOT_DEMO_TENANT', `${p6.status}`)
+        dbD75.close()
+      }
+
       /* ===== ㋡ B线第一段:演示铺设判据改 kind + 与重置口共用同一条(店主 2026-08-25)===== */
       {
         const seedSrc = readFileSync(join(ROOT42, 'tools/seed-demo-twin.mjs'), 'utf8')

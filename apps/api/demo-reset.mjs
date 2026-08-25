@@ -19,6 +19,11 @@
    以后任何新入口都一样。判据落在**数据**(tenants.kind)上,不看名字 —— D73 立的规矩。
    fail-closed:kind 拿不到按 real 算,宁可拦住一次合法操作,不许放过一次真店。 */
 export const DEMO_KIND = 'demo'
+
+/* 🔴 D75 第二道锁:真店黑名单**硬编码在服务端**(与 tools/clean-test-tenants.mjs 的 PROTECTED 同款)。
+   为什么要有第二道:第一道(从未有过收入)依赖统计口径,口径哪天改了它就可能失效;
+   这一条不依赖任何统计,店主的两家真店永远改不成演示店。两条锁互不依赖,单独命中即拦死。 */
+export const PROTECTED_REAL_TENANTS = ['lucky-luxe', 'jics-nail']
 export function isDemoTenant(tenant) {
   return String(tenant?.kind || 'real') === DEMO_KIND
 }
@@ -48,6 +53,34 @@ export function createDemoReset({ db, apiError, randomId, iso, copyFileSync, dbP
     if (!tenant) throw apiError(404, 'NOT_FOUND', '找不到这家店。')
     if (!['real', 'demo'].includes(kind)) throw apiError(400, 'BAD_KIND', "归属只能设成 real 或 demo(test 由测试库建店自动产生,不许人工设)。")
     if (tenant.kind === 'test') throw apiError(403, 'TEST_TENANT', '这是测试库产生的租户,不许改归属。')
+
+    /* 🔴🔴 D75(店主 2026-08-25 开检,最高优先):**改归属这条路以前能清空真账本。**
+       两个调用就够:① real→demo(账本失去只追加律保护)② demo-reset(整批删除)——
+       挡在真账本前的只剩"把店名打对"。D72 立的律被一个 API 变成了可撤销的。
+       这是护栏② 那一课没被继承:**黑名单要服务端硬拦、对真参数抛错;UI 二次确认不算护栏。**
+
+       两道锁,**彼此独立**(不许互相依赖:任一条单独命中就拦死): */
+
+    // 🔒 第一道锁 · 方向律:real → demo 只允许"从未有过收入"的店。
+    //    一家店只要收过一分钱,就**永远**不能被改成演示店。
+    //    (真正要用这条路的场景是"建店时标错、还没有真钱的沙箱店",那种店这里必然放行。)
+    if (tenant.kind !== 'demo' && kind === 'demo') {
+      const income = db.prepare("SELECT COALESCE(SUM(amount_cents),0) n FROM finance_transactions WHERE tenant_id = ? AND type = 'income'").get(tenantId).n
+      const sheets = db.prepare('SELECT COUNT(*) n FROM settlements WHERE tenant_id = ?').get(tenantId).n
+      if (income !== 0 || sheets !== 0) {
+        throw apiError(403, 'HAS_REAL_MONEY',
+          `「${tenant.name}」已经有真实经营数据(收入 ${(income / 100).toFixed(2)} · 结算单 ${sheets} 张),`
+          + '不允许改成演示店 —— 演示店的账本不受只追加律保护,这一改等于给真账本开了删除口。')
+      }
+    }
+
+    // 🔒 第二道锁 · 真店黑名单:硬编码在服务端,与 C 清理脚本同款。
+    //    独立于第一道锁 —— 就算哪天收入统计口径改了、第一道锁失效,这条照样拦死。
+    if (kind === 'demo' && PROTECTED_REAL_TENANTS.includes(tenantId)) {
+      throw apiError(403, 'PROTECTED_REAL_TENANT',
+        `「${tenant.name}」(${tenantId})在真店黑名单里,任何情况下都不允许改成演示店。`)
+    }
+
     const why = String(reason || '').trim()
     if (!why) throw apiError(400, 'REASON_REQUIRED', '改归属必须写一句原因(会写进平台运维日志)。')
     const now = iso(new Date())

@@ -135,7 +135,6 @@ const copy = {
     functions: '常用功能',
     assets: '我的资产',
     settings: '设置',
-    giftCard: '礼品卡',
     pointsMall: '积分商城',
     completed: '已完成',
     cancelled: '已取消',
@@ -288,7 +287,6 @@ const copy = {
     functions: 'Common Tools',
     assets: 'My Assets',
     settings: 'Settings',
-    giftCard: 'Gift Card',
     pointsMall: 'Points Mall',
     completed: 'Completed',
     cancelled: 'Cancelled',
@@ -492,9 +490,7 @@ function shareUrlForOrder(orderId, imageIndex = 0, platform = state.sharePlatfor
   return url.toString()
 }
 
-function compactUserCode(user) {
-  return `LL-${String(user?.id || user?.email || 'member').replace(/[^a-z0-9]/gi, '').slice(-8).toUpperCase().padStart(8, '0')}`
-}
+/* compactUserCode 已删(A1-M2):本地推导会员码的能力摆在手边,就是下次误用的种子。 */
 
 function userWaivesDeposit(user = state.user) {
   // F3 单源:免定金只认后端 depositWaived(租户梯子推导);本地键名/标签名单兜底已删
@@ -564,8 +560,10 @@ function payableDepositFor(item, user = state.user) {
   return userWaivesDeposit(user) ? 0 : Number(item.depositCents || 0)
 }
 
+/* A1-M2 同刀:推荐码后端也已经在给(referralCode),本地那份"再算一遍"同样删掉。
+   拿不到就是拿不到 —— 显示「—」,不本地编一个发给顾客去分享。 */
 function referralCodeFor(user) {
-  return user?.referralCode || compactUserCode(user).replace('LL-', 'REF-')
+  return user?.referralCode || '—'
 }
 
 function referralUrlFor(user) {
@@ -671,7 +669,7 @@ async function refreshAuth() {
 
 function privateViews() {
   // 卡包=私有(自己的卡券);商城=公开(没登录也能看有什么套餐,与小程序同口径)
-  return new Set(['booking', 'cart', 'checkout', 'me', 'orders', 'orderDetail', 'assets', 'memberBenefits', 'coupons', 'giftCard', 'pointsMall', 'settings', 'cardPack', 'storedValue'])
+  return new Set(['booking', 'cart', 'checkout', 'me', 'orders', 'orderDetail', 'assets', 'memberBenefits', 'coupons', 'pointsMall', 'settings', 'cardPack', 'storedValue'])
 }
 
 function requiresAuth(view) {
@@ -1002,6 +1000,7 @@ function render() {
   if (state.view === 'booking') renderBookingForm()
   if (state.view === 'cart') renderCart()
   if (state.view === 'checkout') renderCheckout()
+  if (state.view === 'bookingDone') renderBookingDoneWeb()   // A1-M4:预约完成落点(基准=小程序 booking-done)
   if (state.view === 'me') {
     renderMe()
     // 黑卡「卡包」格的数字唯一出口 = /my/card-pack;没拿到先显示「—」,拿到再重绘(不拿恒 0 字段冒充)
@@ -1018,7 +1017,6 @@ function render() {
   if (state.view === 'storedValue') renderCardPackWeb()
   if (state.view === 'mall') renderMallWeb()
   if (state.view === 'coupons') renderPlaceholderWeb(t('coupons'), state.lang === 'zh' ? '优惠券列表和使用规则将在真实会员系统接入后同步。' : 'Coupon list and rules will sync after the real member system is connected.')
-  if (state.view === 'giftCard') renderPlaceholderWeb(t('giftCard'), state.lang === 'zh' ? '礼品卡售卖与兑换功能保留为下一阶段。' : 'Gift card purchase and redemption is reserved for the next phase.')
   if (state.view === 'pointsMall') renderPointsWeb()
   if (state.view === 'settings') renderPlaceholderWeb(t('settings'), state.lang === 'zh' ? '语言、通知、账号安全等设置将在真实登录后接入。' : 'Language, notifications, and account security settings will connect after real auth.')
   renderAiAssistantWidget()
@@ -1724,15 +1722,21 @@ async function submitPayment() {
   state.orders = [...completed, ...state.orders]
   writeJson(`lucky-web-cart:${TENANT_ID}`, state.cart)
   writeJson('lucky-web-orders', state.orders)
+  /* 🔴 A1-M4(店主 08-25):下完单要有明确的"成了"的屏 —— 基准是小程序 booking-done(已拍)。
+     原来这里 toast 一下就甩回「我的」页,顾客得自己去列表里找刚下的单,没有落点。 */
   toast(t('paidDone'))
-  state.view = 'me'
+  state.lastBookedIds = completed.map((b) => b.id)
+  state.view = 'bookingDone'
   render()
 }
 
 function renderMe() {
   const user = state.user
   const tierInfo = memberTierInfo(user)
-  const memberCode = user.memberCode || compactUserCode(user)
+  /* 🔴 A1-M2(店主 08-25):会员码**只认后端**(memberCodeForUserId 是唯一算法)。
+     原来这里 `user.memberCode || compactUserCode(user)` —— 本地按 userId 末 8 位又算一遍,
+     算法一致纯属巧合,后端哪天改算法两端立刻各说各的。零回落律同族(D71):拿不到就显示「—」。 */
+  const memberCode = user.memberCode || '—'
   const referralCode = referralCodeFor(user)
   const referralUrl = referralUrlFor(user)
   /* D70:计数与分组同源(ordersInGroup 唯一判据)。原来售后那格写死 0、已完成那格又把售后单算了进去,
@@ -1841,7 +1845,8 @@ function renderMe() {
             [state.lang === 'zh' ? '积分商城' : 'Points mall', '/assets/icons/c-gift.png', 'pointsMall', 'points'],
             [state.lang === 'zh' ? '卡包' : 'Card pack', '/assets/images/nail-luxe.jpg', 'cardPack', true],
             [t('store'), '/assets/images/store-cover.jpg', 'store', false],
-            [t('giftCard'), '/assets/images/lash-volume.jpg', 'giftCard', false],
+            /* 礼品卡入口已删(店主 2026-08-25 拍板:早就不做了)—— 占位页 + 视图 + i18n 一并退役,
+                  不留半条链。小程序本来就没有,不补。 */
             [t('settings'), '/assets/images/lash-natural.jpg', 'settings', false]
           ].map(([label, image, target, live]) => {
             const sub = live === 'points'
@@ -2046,6 +2051,41 @@ function renderCustomerSharePanel(order, images) {
       </div>
       ${images.length ? `<small class="subtle">${state.lang === 'zh' ? '分享页只展示已确认入库的作品。' : 'The share page only shows approved archive photos.'}</small>` : ''}
     </div>
+  `
+}
+
+/* 🔴 A1-M4(店主 2026-08-25):网页顾客端「预约完成」落点。
+   基准 = 小程序 `booking-done`(店主已拍):✓ 图标 + 标题 + 副标题 + 订单摘要 + 两个出口。
+   文案逐字取小程序那套(i18n 的 success 段),不另起一套说法。
+   金额一律读后端字段,拿不到显示「—」(零回落律,不本地算)。 */
+function renderBookingDoneWeb() {
+  const zh = state.lang === 'zh'
+  const ids = state.lastBookedIds || []
+  const orders = state.orders.filter((o) => ids.includes(o.id))
+  const c = zh
+    ? { title: '预约已提交', subtitle: '订单状态以门店确认为准,可在「我的订单」里查看。', orderNo: '订单编号', service: '服务项目', arrival: '到店时间', address: '门店地址', paidDeposit: '应付定金', viewOrders: '查看订单', home: '回到首页' }
+    : { title: 'Booking submitted', subtitle: 'Status will be confirmed by the store. Check My Orders for updates.', orderNo: 'Order No.', service: 'Service', arrival: 'Arrival', address: 'Store Address', paidDeposit: 'Deposit Due', viewOrders: 'View Orders', home: 'Home' }
+  const depositText = (cents) => (cents === undefined || cents === null ? '—' : money(cents))
+  els.screen.innerHTML = `
+    <section class="view-web booking-done-web">
+      <div class="info-card-web card" style="text-align:center">
+        <div style="font-size:40px;line-height:1;color:#47735f">✓</div>
+        <h1 style="margin:10px 0 4px">${escapeHtml(c.title)}</h1>
+        <p class="subtle" style="margin:0">${escapeHtml(c.subtitle)}</p>
+      </div>
+      ${orders.map((o) => `
+        <div class="info-card-web card">
+          <p><span>${escapeHtml(c.orderNo)}</span><strong>${escapeHtml(o.publicCode || o.id)}</strong></p>
+          <p><span>${escapeHtml(c.service)}</span><strong>${escapeHtml(o.service?.name || '—')}</strong></p>
+          <p><span>${escapeHtml(c.arrival)}</span><strong>${escapeHtml(`${o.appointmentDate || ''} ${o.appointmentTime || ''}`.trim() || '—')}</strong></p>
+          <p><span>${escapeHtml(c.address)}</span><strong>${escapeHtml(o.store?.address || '—')}</strong></p>
+          <p><span>${escapeHtml(c.paidDeposit)}</span><strong class="price">${escapeHtml(depositText(o.depositCents))}</strong></p>
+        </div>`).join('')}
+      <div class="row" style="gap:10px;margin-top:12px">
+        <button class="primary" data-view-target="orders" type="button" style="flex:1">${escapeHtml(c.viewOrders)}</button>
+        <button class="ghost" data-view-target="home" type="button" style="flex:1">${escapeHtml(c.home)}</button>
+      </div>
+    </section>
   `
 }
 

@@ -338,11 +338,16 @@ function toMiniBooking(booking) {
     /* D32(4500 同族·假数回落):原来 booking.deposit 为 0 就回落店配定金额还标「已付」。
        现在真相直出:depositState/depositCents/payment(已签快照分解)由后端下发,前端零运算。 */
     depositState: booking.depositState || '',   // 拿不到不猜「无定金」(页面按未知走通用句)
-    depositCents: booking.depositCents || 0,
+    /* 🔴 c3 补扫(店主 08-25 通则提炼律):D71 那轮只扫了网页顾客端,小程序**映射层**这几处漏了。
+       三宗罪都在这五行里:①`|| 0` 把"没有值"变成"零元"(0 在界面上=免费/免定金,是假话);
+       ②`servicePrice || service.price` 拿**别的字段**顶上(零回落律明令禁止);
+       ③页面层明明写了「!== null 才显示,否则 —」,被映射层的 `|| 0` 堵死,那句「—」永远走不到。
+       现在:后端没给就是 null,让页面照它本来的写法显示「—」。 */
+    depositCents: booking.depositCents == null ? null : booking.depositCents,
     payment: booking.payment || null,
-    payableAmount: booking.depositCents ? Math.round(booking.depositCents / 100) : 0,
-    finalDue: booking.finalDue || 0,
-    servicePrice: booking.servicePrice || service.price || 0,
+    payableAmount: booking.depositCents == null ? null : Math.round(booking.depositCents / 100),
+    finalDue: booking.finalDue == null ? null : booking.finalDue,
+    servicePrice: booking.servicePrice == null ? null : booking.servicePrice,
     /* 🔴 D70 合同⑤(店主 08-24):**售后不改写主状态** —— 后端不再回 AFTER_SALES,
        售后中的单主状态就是 COMPLETED。列表「售后」分组因此必须改按售后字段筛,
        不然这个分组会永远是空的(网页端同刀,四之九)。 */
@@ -452,7 +457,11 @@ async function loginWithWechat(profile = {}) {
 
 function miniMember(user = {}) {
   const displayName = String(user.displayName || '').trim()
-  const memberCode = user.memberCode || (displayName && displayName.indexOf('LL-') === 0 ? displayName : '登录后生成')
+  /* 🔴 A1-M2(店主 08-25):会员码**只认后端**(memberCodeForUserId 唯一算法)。
+     原来这里拿 displayName 是不是以 LL- 开头来猜 —— 那是"名字碰巧长得像会员码就当成会员码",
+     与网页那份本地推导同族。零回落律:拿不到显示「—」,不猜。
+     (未登录场景后端本来就不给 user,页面另有登录引导,不靠这句话兜。) */
+  const memberCode = user.memberCode || '—'
   const isGenericName = !displayName || displayName === 'Lucky Member' || displayName === '微信用户' || displayName === 'WeChat User' || displayName === memberCode
   const hasRealName = Boolean(!isGenericName)
   const profileComplete = user.profileComplete === undefined ? Boolean(hasRealName || user.avatarUrl) : Boolean(user.profileComplete)
