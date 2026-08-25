@@ -54,5 +54,26 @@ export function createStoreDirectory({ db }) {
     return sortShops(markJoined(shops, joined))
   }
 
-  return { joinedTenantIds, markJoined, sortShops, decorate }
+  /* 🔴 D76(店主 2026-08-25):**「顾客可去的门店」这张清单的数据源**,判据是 tenants.listed。
+     可见性与账本归属(kind)解耦:kind 管账本受不受只追加律保护,listed 管顾客看不看得见。
+     演示店本来就不属于这个集合 —— 不是"被过滤掉的门店",所以【门店列表三个一】不破:
+     数据源就是这一条 SQL,排序与标记仍在本模块 decorate 一处做完。
+     带 includeDemo 才连不上架的一起给(店主在小程序里开「演示模式」用)。 */
+  function publicShops(includeDemo = false) {
+    return db.prepare(`
+      SELECT t.id, t.name AS tenant_name, t.kind, t.listed, s.name AS store_name, s.address, s.phone
+      FROM tenants t
+      JOIN stores s ON s.tenant_id = t.id AND s.is_active = 1
+      WHERE t.status = 'active' AND (t.listed = 1 OR ? = 1)
+      GROUP BY t.id
+      ORDER BY t.name ASC
+    `).all(includeDemo ? 1 : 0).map((r) => ({
+      tenantId: r.id, name: r.tenant_name || r.store_name, storeName: r.store_name,
+      address: r.address || '', phone: r.phone || '', isDemo: r.kind === 'demo', kind: r.kind || 'real',
+      listed: r.listed === 1
+    }))
+  }
+
+  return {
+    publicShops, joinedTenantIds, markJoined, sortShops, decorate }
 }

@@ -73,7 +73,39 @@ export function createPlatformOps({ db, apiError, randomId, iso, snapshotDb, dbP
     return { logged: true }
   }
 
+  /* 🔴 D76:改**可见性**(顾客选店页出不出现)。只写 tenants.listed 一列 ——
+     不碰 kind、不碰账本,D75 那两道锁一条都不触发(它们管账本归属,不管展示)。 */
+  function setListed({ tenantId, listed, reason }) {
+    const t = db.prepare('SELECT id, name, listed FROM tenants WHERE id = ?').get(tenantId)
+    if (!t) throw apiError(404, 'NOT_FOUND', 'Tenant not found.')
+    if (typeof listed !== 'boolean') throw apiError(400, 'BAD_REQUEST', 'listed 必须是 true / false。')
+    const why = String(reason || '').trim()
+    if (!why) throw apiError(400, 'REASON_REQUIRED', '改可见性必须写一句原因(会写进平台运维日志)。')
+    db.prepare('UPDATE tenants SET listed = ?, updated_at = ? WHERE id = ?').run(listed ? 1 : 0, now(), tenantId)
+    writeLog(tenantId, 'tenant_listed_change',
+      `选店页可见性 ${t.listed ? '可见' : '隐藏'} → ${listed ? '可见' : '隐藏'}(只改展示,账本与归属未动)。原因:${why.slice(0, 200)}`)
+    return { tenantId, tenantName: t.name, listed }
+  }
+
+  /* 平台租户清单(平台后台那张表的数据源)。
+     随列表下发 kind(D73:归属认数据不认名字)与 listed(D76:选店页可见性)。 */
+  function listTenants(monthStartIso) {
+    const rows = db.prepare(`
+      SELECT t.id, t.name, t.plan, t.status, t.plan_expires_at, t.kind, t.listed,
+        (SELECT COUNT(*) FROM stores s WHERE s.tenant_id = t.id AND s.is_active = 1) AS store_count,
+        (SELECT COUNT(*) FROM bookings b WHERE b.tenant_id = t.id) AS booking_count,
+        (SELECT COUNT(*) FROM bookings b WHERE b.tenant_id = t.id AND b.appointment_start >= ?) AS month_booking_count,
+        (SELECT username FROM admin_accounts a WHERE a.tenant_id = t.id AND a.role = 'owner' LIMIT 1) AS owner_username
+      FROM tenants t ORDER BY t.rowid ASC
+    `).all(monthStartIso)
+    return rows.map((r) => ({
+      id: r.id, name: r.name, plan: r.plan, status: r.status, kind: r.kind || 'real', listed: r.listed === 1,
+      planExpiresAt: r.plan_expires_at, storeCount: r.store_count, bookingCount: r.booking_count,
+      monthBookingCount: r.month_booking_count, ownerUsername: r.owner_username || ''
+    }))
+  }
+
   const recentLogs = () => db.prepare('SELECT * FROM platform_ops_log ORDER BY created_at DESC, rowid DESC LIMIT 100').all()
 
-  return { resetFinanceLock, backup, tenantStats, logDemoSeed, recentLogs, writeLog }
+  return { resetFinanceLock, backup, tenantStats, logDemoSeed, setListed, listTenants, recentLogs, writeLog }
 }

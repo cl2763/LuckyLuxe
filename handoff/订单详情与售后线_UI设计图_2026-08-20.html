@@ -1,0 +1,121 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>有迹 · 订单详情与售后线 · UI 设计图 2026-08-20</title>
+<style>
+  :root{--bg:#F7F3EF;--card:#FFF;--ink:#3B322C;--sub:#8A7F78;--gold:#C6A27E;--line:#E8E0D8;
+  --red:#C0554A;--redbg:#FBEEEC;--green:#5E8C61;--greenbg:#EEF5EE;--blue:#5B7A99;--bluebg:#EDF2F7;--amber:#B98A2F;--amberbg:#FAF3E3}
+  *{box-sizing:border-box}
+  body{margin:0;background:var(--bg);color:var(--ink);font-family:-apple-system,"PingFang SC",sans-serif;line-height:1.65;padding:26px 16px 60px}
+  .wrap{max-width:900px;margin:0 auto}
+  h1{font-size:20px;margin:0 0 4px}
+  .meta{color:var(--sub);font-size:12.5px;margin-bottom:14px}
+  .card{background:var(--card);border:1px solid var(--line);border-radius:13px;padding:16px 18px;margin-bottom:16px}
+  h2{font-size:16px;margin:0 0 10px;padding-bottom:6px;border-bottom:2px solid var(--gold)}
+  .tag{display:inline-block;font-size:11px;padding:1px 8px;border-radius:8px;margin-right:4px;white-space:nowrap}
+  .t-red{background:var(--redbg);color:var(--red);border:1px solid var(--red)}
+  .t-green{background:var(--greenbg);color:var(--green);border:1px solid var(--green)}
+  .t-blue{background:var(--bluebg);color:var(--blue);border:1px solid var(--blue)}
+  .t-amber{background:var(--amberbg);color:var(--amber);border:1px solid var(--amber)}
+  table{width:100%;border-collapse:collapse;font-size:13px;margin-top:6px}
+  th,td{border:1px solid var(--line);padding:6px 9px;text-align:left;vertical-align:top}
+  th{background:#FDFBF8;font-weight:600;white-space:nowrap}
+  .phone{width:320px;border:2px solid var(--ink);border-radius:22px;padding:12px 10px;background:#FDFBF8;margin:8px auto}
+  .pcard{background:#fff;border:1px solid var(--line);border-radius:10px;padding:10px 12px;margin-bottom:8px;font-size:12.5px}
+  .ph{font-weight:700;font-size:13px;margin-bottom:4px}
+  .row{display:flex;justify-content:space-between;padding:2px 0}
+  .sub{color:var(--sub)}
+  .btnrow{display:flex;gap:8px;margin-top:8px}
+  .btn{flex:1;text-align:center;border:1px solid var(--gold);color:var(--gold);border-radius:9px;padding:7px 0;font-size:13px}
+  .btn.primary{background:var(--gold);color:#fff;font-weight:600}
+  .flow{background:#FDFBF8;border:1px solid var(--line);border-radius:10px;padding:10px 14px;font-size:13.5px;line-height:2}
+  .arrow{color:var(--gold);font-weight:700;padding:0 5px}
+  .rule{border-left:3px solid var(--gold);background:#FDFBF8;padding:7px 12px;margin-bottom:8px;font-size:13.5px;border-radius:0 8px 8px 0}
+  .qnum{display:inline-block;background:var(--gold);color:#fff;border-radius:50%;width:20px;height:20px;text-align:center;line-height:20px;font-size:12px;margin-right:6px}
+  .browser{border:1.5px solid var(--line);border-radius:10px;overflow:hidden;margin:8px 0}
+  .b-top{background:#EFE9E2;padding:6px 12px;font-size:12px;color:var(--sub)}
+  .b-body{padding:12px;font-size:13px;background:#fff}
+  li{margin-bottom:7px;font-size:13.5px}
+</style>
+</head>
+<body><div class="wrap">
+
+<h1>有迹 · 订单详情与售后线 <span class="tag t-green">v1.1 · ✅ 店主拍板定稿(08-20):①文字版✅ ②可撤回留痕✅ ③改判=未签署结算单不能发起售后(双端统一:顾客端按钮仅已签署单出现;商家端「转售后」同口径收紧)</span></h1>
+<div class="meta">来源:S8(订单详情重做,店主多次撞墙)+S12 审计首行(顾客端售后发起线双端从未实现)。合并一张图,店主拍板后归批施工。图=合同,四步交付制度照走。现状正门(图未落地前):商家小程序「转售后」。</div>
+
+<div class="card">
+<h2>一、现状与缺口(08-20 机械证据定性)</h2>
+<table>
+<tr><th>位面</th><th>现状</th><th>本图处置</th></tr>
+<tr><td>商家小程序·已完成单</td><td>✅ 有「转售后」(唯一发起入口;不要求已签结算单)</td><td>保持,口径不变</td></tr>
+<tr><td>网页管理端·订单卡/详情</td><td>❌ 无「转售后」钮(商家侧网页缺席)</td><td><b>§四 补齐</b>(openFormModal 弹层,禁原生弹窗)</td></tr>
+<tr><td>顾客小程序·订单详情</td><td>❌ 旧页(只有服务总价);无签署单本体/留档/售后入口</td><td><b>§二 重做</b>(S8 兑现)</td></tr>
+<tr><td>网页顾客端·订单详情</td><td>❌ 同缺,且整条售后线缺席(连只读展示都无)</td><td><b>§三 同构同批</b>(拍板②:网页=境外主端全对齐)</td></tr>
+<tr><td>顾客端售后展示(徽标/进度卡)</td><td>✅ 小程序已有(D2/D3 线,只读)</td><td>保持;网页顾客端同批补展示</td></tr>
+</table>
+</div>
+
+<div class="card">
+<h2>二、顾客小程序 · 已完成订单详情(重做后)</h2>
+<div class="phone">
+  <div class="pcard"><div class="ph">经典奶油法式 <span class="tag t-green">已完成</span></div>
+    <div class="row"><span class="sub">时间</span><span>2026-08-20 14:00–16:00</span></div>
+    <div class="row"><span class="sub">技师</span><span>Lina</span></div>
+    <div class="row"><span class="sub">门店</span><span>Lucky Luxe Ontario</span></div>
+    <div class="row"><span class="sub">单号</span><span>LL6440032xxx</span></div></div>
+  <div class="pcard"><div class="ph">服务签署单</div>
+    <div class="row"><span>经典奶油法式(会员价)</span><span>CAD $118</span></div>
+    <div class="row"><span>加项·延长</span><span>CAD $20</span></div>
+    <div class="row"><span class="sub">签署时间 2026-08-20 16:02</span><span class="sub">已签署 ✍</span></div>
+    <div class="sub" style="margin-top:4px">※ 本卡=签署单快照直出(pages/sign 单一实现,只读)。<b>未签署的完成单</b>此卡显示:「本单未产生结算单」——绑真数据或明示空态,不放例句。</div></div>
+  <div class="pcard"><div class="ph">服务留档</div><div class="sub">技师小记/照片(有则显示,无则整卡不出现)</div></div>
+  <div class="btnrow"><div class="btn">查看服务确认单</div><div class="btn primary">有疑问,去售后</div></div>
+</div>
+<div class="rule"><span class="qnum">A</span>「有疑问,去售后」仅在<b>已完成单</b>出现;点击=同屏展开发起表单(<b>问题描述必填</b>+提交),不跳原生弹窗、不嵌套弹层。提交→生成售后单(待处理)→本页出现现有 D3 三步进度卡(发起→跟进中→结果)。</div>
+<div class="rule"><span class="qnum">B</span>已有开着的售后时,按钮变「查看售后进度」——<b>一单同时只一条进行中的售后</b>;结案后可再次发起。</div>
+</div>
+
+<div class="card">
+<h2>三、网页顾客端 · 同构同批</h2>
+<div class="flow">订单列表(徽标三态同源)<span class="arrow">→</span>订单详情=§二 同结构(预约信息/签署单本体/留档/售后按钮)<span class="arrow">→</span>发起表单同屏展开<span class="arrow">→</span>进度展示同 D3 口径。<b>后端不加新路由语义:顾客侧发起走同一状态机,渲染句子后端唯一持有(customerOrderBadges 家族),三端零分叉。</b></div>
+</div>
+
+<div class="card">
+<h2>四、网页管理端 · 补「转售后」</h2>
+<div class="browser"><div class="b-top">有迹后台 · 订单管理 · 全部预约</div><div class="b-body">
+订单卡操作区:[详情] [已完成] [已取消] <b>[转售后]</b>(仅已完成单显示)——点击=openFormModal 弹层:<b>问题描述(必填)</b>+确认;转后卡片即挂蓝「售后中」徽标,按钮变「处理售后」(现有弹层)。与商家小程序「转售后」同一后端接口,双端同病免疫(四之九)。
+</div></div>
+</div>
+
+<div class="card">
+<h2>五、全链路口径(不新增涉钱路径)</h2>
+<div class="flow">
+发起(顾客任一端 / 商家任一端)<span class="arrow">→</span>待处理<span class="arrow">→</span>处理中(写进展)<span class="arrow">→</span>已解决 / 已关闭(仅老板,必填原因)<br>
+<b>涉钱零新路径</b>:退款/补差一律走既有更正单,售后单只记过程与结论(既定 B② 规则不动);原单快照不动;顾客端只读展示,店家标完即终态。
+</div>
+</div>
+
+<div class="card">
+<h2>六、拍板三问(答完即定稿)</h2>
+<ul>
+<li><span class="qnum">1</span><b>顾客发起时要不要允许传照片?</b> 建议:第一版只做文字描述(照片随 S 期后续补),先跑通链路。</li>
+<li><span class="qnum">2</span><b>顾客能不能撤回自己发起的售后?</b> 建议:可撤回——撤回=转「已解决」并自动备注「顾客撤回」,留痕不删。</li>
+<li><span class="qnum">3</span><b>未签署结算单的已完成单,顾客端要不要也允许发起售后?</b> 现状商家端允许(转售后不要求签署单)。建议:顾客端同口径允许(预约类纠纷也是售后),签署单卡按空态显示。<b>【店主拍板 08-20:否——未签署结算单的单不能发起售后。双端统一(四之九):顾客端「有疑问,去售后」仅在已签署单出现;商家端「转售后」加同一前置(未签单不显示按钮),现行"无签署单可转"随本图施工时收紧。】</b></li>
+</ul>
+</div>
+
+<div class="card">
+<h2>七、归批建议</h2>
+<table>
+<tr><th>件</th><th>内容</th><th>归批</th></tr>
+<tr><td>管理端「转售后」</td><td>§四(网页补钮+弹层,复用现有接口)</td><td>小件,批② 收尾随批</td></tr>
+<tr><td>顾客双端订单详情重做+发起线</td><td>§二+§三(S8 兑现+售后发起,双端同批)</td><td>批③(卡包+商城本就是顾客端批,同批同构)</td></tr>
+<tr><td>网页顾客端售后展示(徽标/进度)</td><td>§三 内含</td><td>随上,S12 审计续行</td></tr>
+</table>
+</div>
+
+<div class="meta" style="text-align:center">有迹 · 订单详情与售后线 UI 设计图 · 2026-08-20 · Cowork 出图 · 待店主拍板(三问)</div>
+</div></body>
+</html>

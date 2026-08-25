@@ -15,14 +15,21 @@
    刷新基线(基线随代码一起提交,它就是「上一版结构」的存档)。 */
 import { spawn } from 'node:child_process'
 import { DatabaseSync } from 'node:sqlite'
-import { mkdtempSync, rmSync, readFileSync, writeFileSync, existsSync } from 'node:fs'
+import { mkdtempSync, rmSync, readdirSync, readFileSync, writeFileSync, existsSync } from 'node:fs'
 import { join, dirname } from 'node:path'
 import { tmpdir } from 'node:os'
 import { fileURLToPath } from 'node:url'
 
 const here = dirname(fileURLToPath(import.meta.url))
 const BASELINE = join(here, 'schema-baseline.json')
-const SOURCE = readFileSync(join(here, 'local-server.mjs'), 'utf8')
+/* 🔴 08-25:扫描范围从「只看 local-server.mjs」改成「后端所有非测试模块」。
+   公约②「边改边拆」之后,迁移语句会跟着领域搬进模块(D76 的 tenants.listed 就搬进了
+   tenant-visibility.mjs)—— 判据的**范围**得跟着被测物走,否则搬一次家就假红一次,
+   而假红最后总是被人改成放行。 */
+const SOURCE = readdirSync(here)
+  .filter((f) => f.endsWith('.mjs') && !f.startsWith('test-'))
+  .map((f) => readFileSync(join(here, f), 'utf8'))
+  .join('\n/* ——— 模块分隔 ——— */\n')
 const UPDATE = process.argv.includes('--update')
 const PORT = process.env.SCHEMA_TEST_PORT || '4177'
 

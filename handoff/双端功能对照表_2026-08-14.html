@@ -1,0 +1,103 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>有迹 · 双端功能对照表 v1.1 定稿 · 2026-08-14 · 店主两板已拍</title>
+<style>
+  :root{
+    --bg:#F7F3EF; --card:#FFFFFF; --ink:#3B322C; --sub:#8A7F78;
+    --gold:#C6A27E; --line:#E8E0D8;
+    --red:#C0554A; --redbg:#FBEEEC;
+    --green:#5E8C61; --greenbg:#EEF5EE;
+    --blue:#5B7A99; --bluebg:#EDF2F7;
+    --amber:#B98A2F; --amberbg:#FAF3E3;
+  }
+  *{box-sizing:border-box}
+  body{margin:0;background:var(--bg);color:var(--ink);font-family:-apple-system,"PingFang SC","Microsoft YaHei",sans-serif;line-height:1.6;padding:28px 18px 80px}
+  .wrap{max-width:1160px;margin:0 auto}
+  h1{font-size:22px;margin:0 0 4px}
+  .meta{color:var(--sub);font-size:13px;margin-bottom:16px}
+  .card{background:var(--card);border:1px solid var(--line);border-radius:14px;padding:18px 20px;margin-bottom:20px;box-shadow:0 1px 3px rgba(59,50,44,.05)}
+  h2{font-size:17px;margin:0 0 10px;padding-bottom:7px;border-bottom:2px solid var(--gold)}
+  table{width:100%;border-collapse:collapse;font-size:13px;margin-top:6px}
+  th,td{border:1px solid var(--line);padding:6px 9px;text-align:left;vertical-align:top}
+  th{background:#FDFBF8;font-weight:600;white-space:nowrap}
+  .tag{display:inline-block;font-size:11px;padding:1px 7px;border-radius:8px;white-space:nowrap}
+  .t-red{background:var(--redbg);color:var(--red);border:1px solid var(--red)}
+  .t-green{background:var(--greenbg);color:var(--green);border:1px solid var(--green)}
+  .t-blue{background:var(--bluebg);color:var(--blue);border:1px solid var(--blue)}
+  .t-amber{background:var(--amberbg);color:var(--amber);border:1px solid var(--amber)}
+  .t-gray{background:#F1EDE8;color:var(--sub);border:1px solid var(--line)}
+  .note{background:var(--amberbg);border:1px solid var(--amber);border-radius:10px;padding:8px 12px;margin:8px 0;font-size:13px}
+  .rule{border-left:4px solid var(--gold);background:#FDFBF8;padding:8px 13px;border-radius:0 10px 10px 0;margin:8px 0;font-size:13.5px}
+  .confirm{border:2px solid var(--gold);background:#FDFBF8}
+  .confirm li{margin-bottom:9px;font-size:13.5px}
+  .ok{color:var(--green);font-weight:700}
+  .no{color:var(--sub)}
+  .half{color:var(--amber);font-weight:700}
+  .sub{font-size:11.5px;color:var(--sub)}
+</style>
+</head>
+<body>
+<div class="wrap">
+
+<h1>有迹 · 双端功能对照表 <span class="tag t-green">v1.1 定稿 · 2026-08-14 · ✅ 店主两板已拍</span></h1>
+<div class="meta">S11 头号交付的正式输入件。事实来源=Code《双端功能对照盘点清单 08-12》;归口=Cowork。<b>v1.1 拍板记录:①网页补数据分析页 ✅(归 S6);②网页顾客端=全功能对齐 ✅——店主理由:境外没有小程序,网页端是境外顾客的主端,必须全都做齐。</b>此拍板升格为架构级事实,写入 S11。</div>
+
+<div class="rule"><b>判断依据(已拍原则)</b>:①<b>网页=总和</b>(所有设置+所有操作都要有)/<b>小程序=快捷执行</b>+轻量级配置(如上下架开关);②涉钱·重规则只在网页端编辑;③计算逻辑双端必须共享后端(四之九)。<br><b>记号</b>:✔=有 △=形态不同 ✖=无;<span class="tag t-green">合理</span>=符合原则不用动;<span class="tag t-amber">网页补</span>=网页缺了「总和」应补;<span class="tag t-red">拍板</span>=需要你定;<span class="tag t-blue">已排</span>=已在 S 组队列。</div>
+
+<!-- 商家侧 -->
+<div class="card">
+<h2>一、商家侧(网页老板端 vs 小程序商家/员工端)</h2>
+<table>
+<tr><th>功能</th><th>网页</th><th>小程序</th><th>归口判断与建议</th><th>结论</th></tr>
+<tr><td>登录/改密/忘记密码</td><td class="ok">✔</td><td class="ok">✔</td><td>齐,不动</td><td><span class="tag t-green">合理</span></td></tr>
+<tr><td>商家入驻申请</td><td class="no">✖</td><td class="ok">✔</td><td>SaaS 获客入口,现阶段小程序够用;网页入驻页=拉新题不是功能债,<b>后置到正式发版前再议</b></td><td><span class="tag t-gray">后置</span></td></tr>
+<tr><td>订单管理(列表/台面/日历)</td><td class="ok">✔</td><td class="ok">✔</td><td>双端齐;网页多月历=总和应有,不动</td><td><span class="tag t-green">合理</span></td></tr>
+<tr><td>结算单/日结</td><td class="ok">✔</td><td class="ok">✔</td><td>齐;开单=典型快捷执行,双端保留</td><td><span class="tag t-green">合理</span></td></tr>
+<tr><td>财务七子页(流水/记一笔/储值卡/工资/趋势/设置/AI解读)</td><td class="ok">✔</td><td class="half">△ 缺趋势/财务设置/AI解读</td><td>符合原则:趋势分析与财务设置=重规则/分析,归网页;小程序留流水+记一笔快捷位即可。<b>不补小程序</b></td><td><span class="tag t-green">合理</span></td></tr>
+<tr><td>数据分析</td><td class="no">✖</td><td class="ok">✔ analytics</td><td><b>违反「网页=总和」的第一案</b>:分析恰恰是网页强项。网页补数据分析页,与 S6 财务趋势(饼图/悬停)同波做</td><td><span class="tag t-green">✅ 已拍板·网页补</span> <span class="tag t-blue">S6</span></td></tr>
+<tr><td>积分商城管理</td><td class="half">△ 零散入口</td><td class="ok">✔ 独立页</td><td>积分规则=涉钱重规则,网页应有完整管理页。归 S9 会员体系配置波</td><td><span class="tag t-amber">网页补</span> <span class="tag t-blue">S9</span></td></tr>
+<tr><td>营销(券发放等)</td><td class="half">△ 零散</td><td class="ok">✔ 独立页</td><td>券/营销=涉钱,网页应有完整页。归 S2 券线一并出图</td><td><span class="tag t-amber">网页补</span> <span class="tag t-blue">S2</span></td></tr>
+<tr><td>服务管理/价目表</td><td class="ok">✔</td><td class="ok">✔</td><td>正在按 S1+S3 合并页施工:网页一页两模块+小程序镜像屏(上下架开关可操作)</td><td><span class="tag t-blue">S1 施工中</span></td></tr>
+<tr><td>会员套餐/券编辑</td><td class="ok">✔</td><td class="ok">✔</td><td>S2/S9 重构对象(网页储值按钮收编/次卡迁入会员与营销/等级配置)。现状双端可编辑——重构后<b>编辑收归网页,小程序转快捷查看+代充值</b></td><td><span class="tag t-blue">S2/S9</span></td></tr>
+<tr><td>员工管理/排班/考勤/工资方案</td><td class="ok">✔</td><td class="ok">✔</td><td>齐;网页端重排归 S4(四板块)。小程序保留查看与排班快捷操作</td><td><span class="tag t-blue">S4</span></td></tr>
+<tr><td>员工自视业绩/工作台</td><td class="no">✖</td><td class="ok">✔</td><td>员工只用小程序,网页=老板视角——<b>合理缺位不补</b>。老板要看的业绩大屏归 S4/S6(等你的示例图)</td><td><span class="tag t-green">合理</span></td></tr>
+<tr><td>门店设置/订阅/报价计算器/AI图库/AI会话</td><td class="ok">✔</td><td class="ok">✔</td><td>齐,不动;门店设置双端一致性归 S7(定金规则双端)</td><td><span class="tag t-green">合理</span></td></tr>
+</table>
+</div>
+
+<!-- 顾客侧 -->
+<div class="card">
+<h2>二、顾客侧(网页顾客端 vs 小程序顾客端)</h2>
+<div class="note"><b>✅ 拍板②已定(08-14):网页顾客端=全功能对齐。</b>店主理由:境外没有小程序,网页端是境外顾客的主端。<b>执行含义</b>:此后 S2(卡包/充值商城/券)、S8(订单详情)、S9(会员体系/积分商城)每一波出图,<b>网页顾客侧的屏与小程序同批画、同批施工、同受四之九双端同病检查</b>——网页顾客端不再允许「小程序有网页没有」的净新增。</div>
+<table>
+<tr><th>功能</th><th>网页</th><th>小程序</th><th>归口判断与建议</th><th>结论</th></tr>
+<tr><td>首页/服务/预约/购物车/订单/我的/作品集/门店</td><td class="ok">✔</td><td class="ok">✔</td><td>主链路双端齐,不动;订单详情重做归 S8(双端同图)</td><td><span class="tag t-green">合理</span>/<span class="tag t-blue">S8</span></td></tr>
+<tr><td>签署页</td><td class="half">△ 独立 sign.html</td><td class="ok">✔</td><td>形态不同但同一后端签署流,合规;不动</td><td><span class="tag t-green">合理</span></td></tr>
+<tr><td>储值/积分</td><td class="half">△ 有页未核</td><td class="ok">✔</td><td>轻门户下保留只读展示即可;<b>网页 assets 余额是否同小程序单源(D33)未核——派 Code 随 S2 首报查证</b></td><td><span class="tag t-amber">派查证</span></td></tr>
+<tr><td>会员权益页</td><td class="ok">✔</td><td class="ok">✔</td><td>小程序端三减法已实拍;<b>网页 renderMemberBenefitsWeb 是否吃 tiersEnabled 未验(四之九第一候选)——派 Code 随 S9 前置查证,若没吃=立 D 修</b></td><td><span class="tag t-amber">派查证</span></td></tr>
+<tr><td>券包/消息</td><td class="no">✖</td><td class="ok">✔</td><td>按拍板②:<b>网页补</b>——卡包(次卡+券+兑换券)随 S2 网页屏画,消息随 S8/S2 归口</td><td><span class="tag t-amber">网页补</span> <span class="tag t-blue">S2</span></td></tr>
+<tr><td>选店/绑定/登录</td><td class="no">✖</td><td class="ok">✔</td><td>选店:网页单店直连,仍不需要。但拍板②带出一道<b>新的必答题</b>:境外顾客没有微信——网页端需要<b>自有账号体系</b>(注册/登录/绑定档案,不依赖微信扫码),否则卡包/储值/会员在网页端无从挂靠。<b>归 S2 出图前先拍方案</b>(候选:手机号+验证码/邮箱)</td><td><span class="tag t-red">新待拍</span> <span class="tag t-blue">S2 前置</span></td></tr>
+<tr><td>分享落地页</td><td class="ok">✔</td><td class="no">✖</td><td>小程序走卡片分享,网页落地页承接外链——各自形态,合理</td><td><span class="tag t-green">合理</span></td></tr>
+<tr><td>AI 客服</td><td class="half">△ 页内挂件</td><td class="ok">✔ 独立页</td><td>形态不同,功能同源,不动</td><td><span class="tag t-green">合理</span></td></tr>
+</table>
+<div class="note">盘点清单「待核对差异 #3」(等级梯子双实现 F3)已于 08-12 后收敛:memberLevel 统一吃租户 membership_config.tiers,lucky 已开分级——此条销账,不再是分叉债。</div>
+</div>
+
+<!-- 拍板清单 -->
+<div class="card confirm">
+<h2>三、拍板记录 <span class="tag t-green">✅ 两板已拍 · 2026-08-14</span> + 由此产生的一道新题</h2>
+<ol>
+  <li><b>拍板①</b>:网页补「数据分析」页,归 S6 波。<span class="tag t-green">已确认</span></li>
+  <li><b>拍板②</b>:网页顾客端=<b>全功能对齐</b>——境外无小程序,网页端是境外顾客的主端。此后每波出图网页顾客屏同批画、同受双端同病检查。<span class="tag t-green">已确认</span></li>
+  <li><b>新待拍(拍板②的必然推论,归 S2 出图前)</b>:境外顾客没有微信,网页顾客端需要<b>自有登录/账号方案</b>(候选:手机号+验证码 / 邮箱+密码;与微信身份同档案互认)。Cowork 出方案后请店主拍。</li>
+</ol>
+<p style="font-size:13px;color:var(--sub);margin:6px 0 0">两条「派查证」(网页 assets 余额源/网页会员页三减法)已排进 Code 的 S2/S9 首报任务。本表定稿,作为 S11 总图正式输入件。</p>
+</div>
+
+<div class="meta" style="text-align:center">有迹 · 双端功能对照表 v1.1 定稿 · 2026-08-14 · 拍板①网页补数据分析(S6) ②网页顾客端全功能对齐(境外主端) · 新待拍:网页自有登录方案(S2 前置) · S11 正式输入件</div>
+</div>
+</body>
+</html>

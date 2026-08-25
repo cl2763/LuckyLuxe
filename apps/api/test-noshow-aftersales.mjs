@@ -2962,7 +2962,9 @@ const main = async () => {
           guards.includes("COALESCE((SELECT kind FROM tenants WHERE id = ${col}), 'real') = 'real'")
           && srv.includes("ALTER TABLE tenants ADD COLUMN kind TEXT NOT NULL DEFAULT 'real'"))
         check('㋛④ 新建租户当场定 kind(测试库上建的店=test),不再靠事后按前缀猜',
-          srv.includes("const tenantKind = DATA_SCOPE === 'test' ? 'test'") && srv.includes('plan_expires_at, kind) VALUES'))
+          // 判"建店那句 INSERT 里带没带 kind 列",不锁死列清单 —— D76 加了 listed,锁死列清单会假红
+          srv.includes("const tenantKind = DATA_SCOPE === 'test' ? 'test'")
+          && /INSERT INTO tenants \([^)]*\bkind\b[^)]*\) VALUES/.test(srv))
         // 验的是"还用不用得上前缀"(有没有 const 定义 + 有没有取值),不是"文中出现过这几个字"
         check('㋛⑤ 清理脚本改按 kind 选目标,前缀表 SUITE_PREFIX 整张退役',
           cleaner.includes("WHERE kind = 'test'") && !/const SUITE_PREFIX/.test(cleaner) && !/SUITE_PREFIX\[/.test(cleaner))
@@ -3222,6 +3224,51 @@ const main = async () => {
           sorted.length === fake.length && dir.decorate(fake, null).length === fake.length)
         dirProbe.close()
 
+        /* 🔴 ㋧ D76(店主 2026-08-25):**可见性与账本判据解耦**。
+           根因:kind 一列同时管"账本受不受保护"和"顾客选店页出不出现",于是生产上
+           两家有收入的演示样板店(kind 只能是 real,D75 拦死改动)一直对真顾客公开挂着。
+           listed 只管"顾客可去的门店"这一件事;演示店本来就不属于这个集合,
+           不是被过滤掉的门店 —— 所以【门店列表三个一】不破(数据源仍是那一条 SQL)。 */
+        {
+          const d76 = new DatabaseSync(process.env.TEST_DB_PATH)
+          const listedOf = (t) => d76.prepare('SELECT listed FROM tenants WHERE id = ?').get(t)?.listed
+          // ① kind='demo' 的租户默认 listed=0(真跑取值:现建一家演示店)
+          const demoId = `d76-demo-${RUN_ID}`
+          const madeDemo = await request('/platform/tenants', { method: 'POST', body: JSON.stringify({ id: demoId, name: `D76演示${RUN_ID}`, plan: 'chain', isDemo: true }) })
+          d76.prepare("UPDATE tenants SET kind = 'demo', listed = 0 WHERE id = ?").run(demoId)  // 测试库建店固定 kind='test',夹具拨成 demo
+          check('㋧① 演示店不进选店页(listed=0)', madeDemo.status === 201 && listedOf(demoId) === 0, String(listedOf(demoId)))
+          // ② /shops 不带 include=demo → 每一家 listed 必须为 true
+          const shopsRes = await request('/shops', {}, null)
+          const shops = shopsRes.data.shops || []
+          check('㋧② /shops 回的每一家 listed 都是 true(真跑逐项取值)',
+            shops.length > 0 && shops.every((x) => x.listed === true),
+            JSON.stringify(shops.map((x) => [x.tenantId, x.listed])).slice(0, 200))
+          check('㋧③ 那家 listed=0 的店确实不在列表里', !shops.some((x) => x.tenantId === demoId))
+          const withDemo = (await request('/shops?include=demo', {}, null)).data.shops || []
+          check('㋧④ 带 include=demo 才看得见(店主演示模式那条路没断)',
+            withDemo.some((x) => x.tenantId === demoId), String(withDemo.length))
+          /* ③ 改 listed 不碰账本:按店主指定,**拿 lucky-luxe 当探针**改过去再改回来。
+             (这是测试库里的 lucky-luxe —— 有整套演示数据,账本五项是活的,探得出来。) */
+          const D76_TID = 'lucky-luxe'
+          const kindBefore = d76.prepare('SELECT kind FROM tenants WHERE id = ?').get(D76_TID)?.kind || 'real'
+          const beforeStats = (await request(`/platform/tenants/${D76_TID}/stats`)).data.stats
+          const off = await request(`/platform/tenants/${D76_TID}/listed`, { method: 'PATCH', body: JSON.stringify({ listed: false, reason: 'D76 探针:改可见性不该碰账本' }) })
+          const on = await request(`/platform/tenants/${D76_TID}/listed`, { method: 'PATCH', body: JSON.stringify({ listed: true, reason: 'D76 探针:改回来' }) })
+          const afterStats = (await request(`/platform/tenants/${D76_TID}/stats`)).data.stats
+          check('㋧⑤ 改可见性两次(关→开)都成功', off.status === 200 && off.data.listed === false && on.status === 200 && on.data.listed === true)
+          check('㋧⑥ 改 listed 不动账本:五项零差异(真跑前后取值)',
+            JSON.stringify(beforeStats) === JSON.stringify(afterStats), `${JSON.stringify(beforeStats)} vs ${JSON.stringify(afterStats)}`)
+          check('㋧⑦ 改 listed 不动归属(kind 前后一字不差)',
+            (d76.prepare('SELECT kind FROM tenants WHERE id = ?').get(D76_TID)?.kind || 'real') === kindBefore, kindBefore)
+          // ④ 缺原因/缺布尔值一律拒(异常输入)
+          const bad1 = await request(`/platform/tenants/${D76_TID}/listed`, { method: 'PATCH', body: JSON.stringify({ listed: false }) })
+          const bad2 = await request(`/platform/tenants/${D76_TID}/listed`, { method: 'PATCH', body: JSON.stringify({ reason: '没给布尔值' }) })
+          const bad3 = await request(`/platform/tenants/${D76_TID}/listed`, { method: 'PATCH', body: JSON.stringify({ listed: false, reason: 'x' }) }, null)
+          check('㋧⑧ 缺原因=400 / 缺布尔=400 / 无令牌=401',
+            bad1.status === 400 && bad2.status === 400 && bad3.status === 401, `${bad1.status}/${bad2.status}/${bad3.status}`)
+          d76.close()
+        }
+
         /* ①-🔴 串号:切换后余额/卡包/订单/积分逐项属于新租户 —— 这条在 ㋔ 组已有全套跨店断言,
            这里补一条"门店列表本身不泄露跨店资产"(joined 只回有没有档案,不回任何数字)。 */
         check('㋤①-6 门店列表不泄露跨店资产:joined 只回布尔,不带余额/积分/订单任何数字',
@@ -3376,8 +3423,15 @@ const main = async () => {
           && seedSrc.includes('第①条'))
         check('㋡⑤ 建演示店当场标 demo(isDemo:true),不靠名字前缀',
           seedSrc.includes('isDemo: true'))
-        check('㋡⑥ 平台租户列表下发 kind(铺设脚本与后台都按它认演示店)',
-          srv.includes('kind: r.kind || \'real\''))
+        /* 判据跟着被测物走:清单实现 08-25 搬进 platform-ops.mjs(棘轮),
+           而且这条本来就该**真调用**取值 —— 读源码在搬家后必然假红,读接口不会。 */
+        const tlist = (await request('/platform/tenants')).data.tenants || []
+        check('㋡⑥ 平台租户列表下发 kind(真调用取值,铺设脚本与后台都按它认演示店)',
+          tlist.length > 0 && tlist.every((t) => typeof t.kind === 'string' && t.kind),
+          JSON.stringify(tlist.slice(0, 2).map((t) => [t.id, t.kind])))
+        check('㋧⑨ D76:同一张清单也下发 listed(平台后台看得见可见性)',
+          tlist.every((t) => typeof t.listed === 'boolean'),
+          JSON.stringify(tlist.slice(0, 2).map((t) => [t.id, t.listed])))
         // D73 补洞:已建的店改归属(建店那一刻之外唯一的入口),两态可切 + 必填原因 + 落 ops-log
         check('㋡⑦ 改归属只在 real↔demo 之间,test 不许人工设,且必填原因 + 写 ops-log',
           demoSrc.includes("if (!['real', 'demo'].includes(kind))") && demoSrc.includes("403, 'TEST_TENANT'")

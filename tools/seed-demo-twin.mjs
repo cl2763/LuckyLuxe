@@ -88,11 +88,11 @@ const PROD_TENANTS = [
   /* 次卡剩余的算法(别再按感觉填):买 5 次卡那张单**当场用掉 1 次** → 剩 4;
      组合支付单再核销 1 次 → 落地 = 4 − 1 = 3。要更少就让 ④b 先多核销几次。
      所以这里写的是**落地数**,清单上印的也是它(彩排实测对上了才敢印)。 */
-  { tenantId: 'demo-lucky-luxe', label: '星野美甲(演示店)', currency: 'CAD', timezone: 'America/Toronto',
+  { tenantId: 'demo-lucky-luxe', label: '云栖美甲(演示店)', currency: 'CAD', timezone: 'America/Toronto',
     twin: { balance: 73650, timecardTimes: 5, coupons: 2, orders: 2, combo: true, timecardRemaining: 3, name: '演示·跨店阿珍' },
     // 落地数=沙箱彩排**实测**(不是估的):充 736.50 → 组合支付单用掉 336.00 → 余 400.50
     landed: { balanceCents: 40050, totalSpentCents: 100200, visits: 3, timecardLeft: 3, activeCoupons: 1 } },
-  { tenantId: 'demo-jienail', label: '悦容美甲(演示店)', currency: 'CNY', timezone: 'Asia/Shanghai',
+  { tenantId: 'demo-jienail', label: '屿见美睫(演示店)', currency: 'CNY', timezone: 'Asia/Shanghai',
     twin: { balance: 51240, timecardTimes: 5, coupons: 2, orders: 2, combo: true, timecardRemaining: 1, name: '演示·跨店阿珍' },
     landed: { balanceCents: 17640, totalSpentCents: 163800, visits: 3, timecardLeft: 1, activeCoupons: 1 } }
 ]
@@ -175,6 +175,14 @@ async function ensureTenant(spec) {
     body: JSON.stringify({ id: spec.tenantId, name: spec.label, plan: 'chain', initialTerm: 'year', currency: spec.currency, timezone: spec.timezone, isDemo: true })
   })
   log(`  ✅ 新建演示租户:${spec.tenantId}(${spec.label});老板账号 ${created.owner.username}(初始密码只显示这一次,演示店无需交付)`)
+  /* 🔴 执行令②(店主 08-25):新建的演示店**必须不在顾客选店页**,否则铺完选店页从 2 家演示变 4 家。
+     建店那一步已按 kind='demo' 落 listed=0(D76),这里**回头验一眼**再往下走 ——
+     "应该会是 0"不算数,取值确认才算。 */
+  const shopsNow = (await fetch(`${BASE}/shops`).then((r) => r.json()).catch(() => ({ shops: [] }))).shops || []
+  if (shopsNow.some((x) => x.tenantId === spec.tenantId)) {
+    throw new Error(`执行令②:${spec.tenantId} 建出来却出现在顾客选店页里(listed 没落成 0),已停下。`)
+  }
+  log(`     可见性已核:不在顾客选店页(listed=0)`)
 }
 
 /* 目录清单:**一张表两用** —— 真跑照它建,dry-run 照它报「已有/将新建」,不再各写一份

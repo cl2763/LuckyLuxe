@@ -1,0 +1,135 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>有迹 · 单据预览弹层 · UI 设计图 v1 · 2026-08-12</title>
+<style>
+  :root{--bg:#F7F3EF;--card:#fff;--ink:#3B322C;--sub:#8A7F78;--gold:#C6A27E;--line:#E8E0D8;
+  --red:#C0554A;--green:#5E8C61;--greenbg:#EEF5EE;--blue:#5B7A99;--amber:#B98A2F;--amberbg:#FAF3E3}
+  *{box-sizing:border-box}
+  body{margin:0;background:var(--bg);color:var(--ink);font-family:-apple-system,"PingFang SC","Microsoft YaHei",sans-serif;line-height:1.55;padding:28px 18px 70px}
+  .wrap{max-width:1080px;margin:0 auto}
+  h1{font-size:22px;margin:0 0 4px}
+  .meta{color:var(--sub);font-size:13px;margin-bottom:18px}
+  .card{background:var(--card);border:1px solid var(--line);border-radius:14px;padding:20px 22px;margin-bottom:20px;box-shadow:0 1px 3px rgba(59,50,44,.05)}
+  h2{font-size:17px;margin:0 0 12px;padding-bottom:8px;border-bottom:2px solid var(--gold)}
+  .tag{display:inline-block;font-size:11px;padding:1px 8px;border-radius:9px;margin-left:6px;background:#EDF2F7;color:var(--blue);border:1px solid var(--blue)}
+  .rule{border-left:4px solid var(--gold);background:#FDFBF8;padding:9px 14px;border-radius:0 10px 10px 0;margin:8px 0;font-size:14px}
+  .qnum{display:inline-block;min-width:22px;height:22px;border-radius:50%;background:var(--gold);color:#fff;text-align:center;line-height:22px;font-size:12.5px;font-weight:700;margin-right:8px}
+  .phones{display:flex;gap:16px;flex-wrap:wrap;margin:14px 0;align-items:flex-start}
+  .phone{width:295px;border:1px solid #D8CFC5;border-radius:22px;background:#fff;overflow:hidden;box-shadow:0 3px 12px rgba(59,50,44,.08);flex-shrink:0}
+  .p-top{background:#F7F3EF;text-align:center;font-size:13px;font-weight:700;padding:8px 0;border-bottom:1px solid var(--line)}
+  .p-body{padding:11px;font-size:12px;position:relative;min-height:430px}
+  .p-label{text-align:center;font-size:12px;color:var(--sub);padding:7px 6px 9px}
+  /* 弹层 */
+  .ovl{position:absolute;inset:0;background:rgba(30,25,21,.55);display:flex;align-items:center;justify-content:center;padding:14px}
+  .sheet{background:#fff;border-radius:16px;width:100%;max-height:96%;overflow:hidden;display:flex;flex-direction:column}
+  .sh-hd{display:flex;justify-content:space-between;align-items:center;padding:10px 12px;border-bottom:1px solid var(--line)}
+  .sh-hd b{font-size:12.5px}
+  .sh-x{color:var(--sub);font-size:15px}
+  .stamp{display:inline-block;font-size:10px;padding:1px 7px;border-radius:8px;margin-left:6px}
+  .st-g{background:var(--greenbg);color:var(--green);border:1px solid var(--green)}
+  .st-a{background:var(--amberbg);color:var(--amber);border:1px solid var(--amber)}
+  .sh-bd{padding:10px 12px;overflow-y:auto;font-size:11.5px}
+  .g{font-weight:700;margin-top:5px}
+  .r{display:flex;justify-content:space-between;padding:2px 0}
+  .ind{padding-left:13px;color:var(--sub)}
+  .tot{border-top:1.5px solid var(--ink);margin-top:6px;padding-top:6px;font-weight:800;font-size:13px;display:flex;justify-content:space-between}
+  .strike{color:#B9AFA6;text-decoration:line-through;margin-right:4px;font-weight:400}
+  .sig{border:1px dashed var(--line);border-radius:10px;margin-top:8px;padding:7px 10px;display:flex;justify-content:space-between;align-items:center}
+  .sig i{font-family:cursive;font-size:16px;color:var(--ink)}
+  .sh-ft{border-top:1px solid var(--line);padding:9px 12px;display:flex;gap:8px}
+  .btn{flex:1;text-align:center;border-radius:10px;padding:8px 0;font-size:12px;font-weight:700}
+  .btn.dark{background:var(--ink);color:#fff}
+  .btn.lite{border:1px solid var(--line);color:var(--sub)}
+  /* 台面背景 */
+  .slot{border:1px solid var(--line);border-radius:10px;padding:7px 9px;margin-bottom:7px;font-size:11.5px;opacity:.45}
+  .slot b{font-size:12px}
+  .slot .lk{color:var(--blue);text-decoration:underline;font-size:11px}
+</style>
+</head>
+<body>
+<div class="wrap">
+
+<h1>有迹 · 单据预览弹层 <span class="tag">v1.1 · 店主已确认(08-12 修正:底栏去「关闭」)</span></h1>
+<div class="meta">2026-08-12 · D28 配套图。已结算/已签署的单,从<b>排单台面</b>和<b>日结</b>点开都用同一个预览弹层——替换现在日结里"新页面+左上角小图片"的展现。待结算单不走弹层,直接回结算页续办。图＝合同。</div>
+
+<div class="card">
+<h2>一、两个入口,同一个弹层</h2>
+<div class="phones">
+
+  <div class="phone">
+    <div class="p-top">排单台面 · 点已结算单 → 弹层</div>
+    <div class="p-body">
+      <div class="slot"><b>14:00–16:00 · 翠花</b> · 刘畅 · 已结算 <span class="lk">查看结算单</span></div>
+      <div class="slot"><b>16:30–18:00 · 小婕</b> · 王丽 · 待结算 <span class="lk">继续结算</span></div>
+      <div class="ovl">
+        <div class="sheet">
+          <div class="sh-hd">
+            <b>结算单 JI-20260812-XXXX<span class="stamp st-g">已签署</span></b>
+            <span class="sh-x">✕</span>
+          </div>
+          <div class="sh-bd">
+            <div class="r" style="color:var(--sub)"><span>刘畅 · 会员</span><span>2026-08-12 14:05</span></div>
+            <div class="g">项目① 简单款式 2h · 翠花</div>
+            <div class="r ind"><span>主项目（会员价）</span><b><span class="strike">¥458</span>¥298</b></div>
+            <div class="r ind"><span>卸本甲＋浅贴甲片</span><b><span class="strike">¥448</span>¥198</b></div>
+            <div class="r ind"><span>钻球（自选）</span><b>¥50</b></div>
+            <div class="g">项目② 美睫自然款 · 小婕</div>
+            <div class="r ind"><span>主项目（会员价）</span><b><span class="strike">¥328</span>¥228</b></div>
+            <div class="r"><span>原价合计</span><b class="strike">¥1284</b></div>
+            <div class="r"><span>档位小计</span><b>¥774</b></div>
+            <div class="r" style="color:var(--green)"><span>较原价共优惠</span><b>¥510</b></div>
+            <div class="r"><span>储值抵扣</span><b>−¥300</b></div>
+            <div class="tot"><span>到店应收</span><span>¥474</span></div>
+            <div class="sig"><span style="color:var(--sub)">顾客签名</span><i>刘畅</i><span style="color:var(--sub);font-size:10px">08-12 14:32</span></div>
+          </div>
+          <div class="sh-ft">
+            <div class="btn dark">查看签署原图</div>
+          </div>
+        </div>
+      </div>
+    </div>
+    <div class="p-label">半透明底+居中白卡,单据是排版出来的,可上下滚动<br>点「✕」/「关闭」/卡外空白处都能关</div>
+  </div>
+
+  <div class="phone">
+    <div class="p-top">日结 · 点「查看签署单」→ 同一弹层</div>
+    <div class="p-body">
+      <div class="slot"><b>日结 · 2026-08-12</b> · 签字单 6 笔 <span class="lk">查看签署单</span></div>
+      <div class="ovl">
+        <div class="sheet">
+          <div class="sh-hd">
+            <b>结算单 JI-20260812-XXXX<span class="stamp st-g">已签署</span></b>
+            <span class="sh-x">✕</span>
+          </div>
+          <div class="sh-bd">
+            <div style="text-align:center;color:var(--sub);padding:20px 0 6px">（与左边完全同一个组件<br>——日结不再开新页面、不再是左上角小图）</div>
+            <div class="sig"><span style="color:var(--sub)">顾客签名</span><i>刘畅</i><span style="color:var(--sub);font-size:10px">08-12 14:32</span></div>
+          </div>
+          <div class="sh-ft">
+            <div class="btn dark">查看签署原图</div>
+          </div>
+        </div>
+      </div>
+    </div>
+    <div class="p-label">「查看签署原图」才进全屏大图(可放大保存)<br>默认给排版清晰的弹层,不糊眼</div>
+  </div>
+
+</div>
+</div>
+
+<div class="card">
+<h2>二、合同规则</h2>
+<div class="rule"><span class="qnum">①</span><b>状态分流</b>:排单台面点单据入口——<b>待结算 →「继续结算」直接进结算页续办</b>(数据从后端恢复,不弹层);<b>已结算/已签署 →「查看结算单」弹预览弹层</b>。两个文案按状态区分,不再共用一个词。</div>
+<div class="rule"><span class="qnum">②</span><b>同一组件双入口</b>:排单台面与日结「查看签署单」用同一个预览弹层组件——日结现在"新页面+左上角小图"的展现<b>废除</b>。日后其他要看单据快照的地方(如售后)也复用它(视觉同源)。</div>
+<div class="rule"><span class="qnum">③</span><b>弹层内容=签署快照排版件</b>:抬头(单号+状态章:已签署绿/已结算待签橙)、顾客+时间、分组明细(逐行原价划线→原价合计→档位小计→共优惠→抵扣行→到店应收,与结算页明细区同构)、签名区(签名+签署时间);内容只读,storeMoney 出口,数据取签署快照,前端零运算。</div>
+<div class="rule"><span class="qnum">④</span><b>「查看签署原图」</b>:按钮进全屏原图(既有签署存证图),可缩放;默认展现是排版弹层,原图是补充。未签署的已结算单无此按钮。</div>
+<div class="rule"><span class="qnum">⑤</span><b>关闭两法+实点律(v1.1 店主修正)</b>:右上 ✕ 与点卡外空白处可关——<b>底栏「关闭」按钮删除</b>,底栏只留一颗通栏「查看签署原图」(未签署单无原图→底栏整条不显示);弹层走顶层闸门,遵守《交付自检闭环》四之七——所有控件 L5 实点,关闭后遮罩节点 0。</div>
+</div>
+
+<div class="meta" style="text-align:center">有迹 · 单据预览弹层 v1 · 2026-08-12 · Cowork 维护(D28 配套;店主确认后随 D28 指令交 Code)</div>
+</div>
+</body>
+</html>

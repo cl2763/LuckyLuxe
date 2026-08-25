@@ -1,0 +1,313 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>有迹 · S1+S3 服务与价目合并页 · UI 设计图 v1.4 · 2026-08-15</title>
+<style>
+  :root{
+    --bg:#F7F3EF; --card:#FFFFFF; --ink:#3B322C; --sub:#8A7F78;
+    --gold:#C6A27E; --line:#E8E0D8;
+    --red:#C0554A; --redbg:#FBEEEC;
+    --green:#5E8C61; --greenbg:#EEF5EE;
+    --blue:#5B7A99; --bluebg:#EDF2F7;
+    --amber:#B98A2F; --amberbg:#FAF3E3;
+  }
+  *{box-sizing:border-box}
+  body{margin:0;background:var(--bg);color:var(--ink);font-family:-apple-system,"PingFang SC","Microsoft YaHei",sans-serif;line-height:1.6;padding:28px 18px 80px}
+  .wrap{max-width:1100px;margin:0 auto}
+  h1{font-size:23px;margin:0 0 4px}
+  .meta{color:var(--sub);font-size:13px;margin-bottom:18px}
+  .card{background:var(--card);border:1px solid var(--line);border-radius:14px;padding:20px 22px;margin-bottom:22px;box-shadow:0 1px 3px rgba(59,50,44,.05)}
+  h2{font-size:18px;margin:0 0 12px;padding-bottom:8px;border-bottom:2px solid var(--gold)}
+  h3{font-size:15px;margin:16px 0 8px}
+  .tag{display:inline-block;font-size:11px;padding:1px 8px;border-radius:9px;margin-left:6px;vertical-align:1px;white-space:nowrap}
+  .t-red{background:var(--redbg);color:var(--red);border:1px solid var(--red)}
+  .t-green{background:var(--greenbg);color:var(--green);border:1px solid var(--green)}
+  .t-blue{background:var(--bluebg);color:var(--blue);border:1px solid var(--blue)}
+  .t-amber{background:var(--amberbg);color:var(--amber);border:1px solid var(--amber)}
+  .t-gray{background:#F1EDE8;color:var(--sub);border:1px solid var(--line)}
+  .rule{border-left:4px solid var(--gold);background:#FDFBF8;padding:9px 14px;border-radius:0 10px 10px 0;margin:8px 0;font-size:14px}
+  .qnum{display:inline-block;min-width:22px;height:22px;border-radius:50%;background:var(--gold);color:#fff;text-align:center;line-height:22px;font-size:12.5px;font-weight:700;margin-right:8px}
+  table{width:100%;border-collapse:collapse;font-size:13.5px;margin-top:8px}
+  th,td{border:1px solid var(--line);padding:7px 10px;text-align:left;vertical-align:top}
+  th{background:#FDFBF8;font-weight:600;white-space:nowrap}
+  .note{background:var(--amberbg);border:1px solid var(--amber);border-radius:10px;padding:8px 12px;margin:8px 0;font-size:13px}
+  .flag{background:var(--redbg);border:1px solid var(--red);border-radius:10px;padding:8px 12px;margin:8px 0;font-size:13.5px}
+  .confirm{border:2px solid var(--gold);background:#FDFBF8}
+  .confirm li{margin-bottom:8px;font-size:14px}
+
+  /* ===== 网页端模拟窗口 ===== */
+  .browser{border:1px solid #D8CFC5;border-radius:12px;overflow:hidden;margin:14px 0;box-shadow:0 3px 12px rgba(59,50,44,.08)}
+  .b-top{background:#EFE9E2;padding:8px 14px;font-size:12px;color:var(--sub);display:flex;gap:6px;align-items:center}
+  .dot{width:10px;height:10px;border-radius:50%;background:#D8CFC5}
+  .b-body{display:flex;min-height:340px;background:#FBF8F5}
+  .b-side{width:150px;background:#F3EDE6;border-right:1px solid var(--line);padding:10px 0;font-size:13px;flex-shrink:0}
+  .b-side div{padding:7px 16px;color:var(--sub)}
+  .b-side .on{background:#fff;color:var(--ink);font-weight:600;border-right:3px solid var(--gold)}
+  .b-main{flex:1;padding:16px 18px;min-width:0}
+  .ptitle{font-size:16px;font-weight:700;margin-bottom:10px}
+  .modtabs{display:flex;gap:8px;margin-bottom:14px}
+  .modtab{padding:7px 16px;border-radius:9px 9px 0 0;border:1px solid var(--line);border-bottom:none;font-size:13.5px;background:#F1EDE8;color:var(--sub);cursor:default}
+  .modtab.on{background:#fff;color:var(--ink);font-weight:700;border-color:var(--gold)}
+  .panel{border:1px solid var(--gold);border-radius:0 10px 10px 10px;background:#fff;padding:14px}
+  .rowitem{display:flex;align-items:center;gap:10px;padding:9px 6px;border-bottom:1px dashed var(--line);font-size:13.5px}
+  .rowitem:last-child{border-bottom:none}
+  .thumb{width:34px;height:34px;border-radius:8px;background:#EFE4D8;flex-shrink:0;text-align:center;line-height:34px;font-size:15px}
+  .grow{flex:1;min-width:0}
+  .sw{width:34px;height:19px;border-radius:10px;background:var(--green);position:relative;flex-shrink:0}
+  .sw::after{content:'';position:absolute;right:2px;top:2px;width:15px;height:15px;border-radius:50%;background:#fff}
+  .sw.off{background:#D8CFC5}
+  .sw.off::after{right:auto;left:2px}
+  .btn{display:inline-block;padding:5px 12px;border-radius:8px;font-size:12.5px;border:1px solid var(--line);background:#F7F3EF;color:var(--ink);white-space:nowrap}
+  .btn.pri{background:var(--ink);color:#fff;border-color:var(--ink)}
+  .btn.warn{color:var(--red);border-color:var(--red);background:var(--redbg)}
+  .chip{display:inline-block;font-size:11.5px;padding:1px 8px;border-radius:8px;background:#F1EDE8;color:var(--sub);margin-right:4px;white-space:nowrap}
+  .chip.on{background:var(--greenbg);color:var(--green);border:1px solid var(--green)}
+  .chip.na{background:#F1EDE8;color:#B9AFA6;text-decoration:line-through}
+  .subline{font-size:12px;color:var(--sub)}
+  .callout{position:relative;border:1.5px dashed var(--blue);border-radius:10px;padding:8px 10px;margin:10px 0;font-size:12.5px;color:var(--blue);background:var(--bluebg)}
+
+  /* ===== 手机模拟 ===== */
+  .phones{display:flex;gap:18px;flex-wrap:wrap;margin:14px 0}
+  .phone{width:270px;border:1px solid #D8CFC5;border-radius:22px;background:#fff;overflow:hidden;box-shadow:0 3px 12px rgba(59,50,44,.08);flex-shrink:0}
+  .p-top{background:#F7F3EF;text-align:center;font-size:13px;font-weight:700;padding:9px 0;border-bottom:1px solid var(--line)}
+  .p-body{padding:12px;font-size:12.5px}
+  .svc{border:1px solid var(--line);border-radius:10px;padding:9px 10px;margin-bottom:8px;display:flex;gap:8px;align-items:center}
+  .svc .price{margin-left:auto;font-weight:700;white-space:nowrap}
+  .p-label{text-align:center;font-size:12.5px;color:var(--sub);padding:8px 4px 10px}
+  .badphone{opacity:.92}
+  .strike{background:var(--redbg)}
+  .cols2{display:grid;grid-template-columns:1fr 1fr;gap:16px}
+  @media(max-width:900px){.cols2{grid-template-columns:1fr}}
+  .flow{background:#FDFBF8;border:1px solid var(--line);border-radius:10px;padding:12px 14px;font-size:13.5px;line-height:2}
+  .arrow{color:var(--gold);font-weight:700;padding:0 4px}
+</style>
+</head>
+<body>
+<div class="wrap">
+
+<h1>有迹 · 服务与价目合并页 <span class="tag t-green">S1＋S3 · UI 设计图 v1.4 · ✅ 店主已确认（08-16 结构口径点头）</span></h1>
+<div class="meta">2026-08-11 首版 · 08-14 v1.1（模块②补「新增」入口＋画出小程序镜像屏）· 08-14 v1.2（店主拍板：上架/下架属轻量级配置，小程序可直接操作——镜像屏加回开关）· Cowork 出品 · 依据《两端信息架构总图 v1.1》第三节细化。<b>图＝合同</b>：确认后 Code 按四步合同交付（提取清单→实现记假设→逐屏并排核验→交核验单）。示例数据取自 Jie'Nail（¥）；旗舰店同构（$）。</div>
+
+<!-- ═══ 一、一句话与数据流 ═══ -->
+<div class="card">
+<h2>一、这页解决什么（先看数据流）</h2>
+<p style="font-size:14px">现状的病：<b>服务管理</b>和<b>价目表</b>两页分治同一个体系，导致顾客端混进「本店制作免卸甲 ¥0」这种加项（S1）；疗程价谁都能选、次卡混在价目表里（S3）。合并后一页两模块，数据流向变成一条明线：</p>
+<div class="flow">
+  <b>模块① 上架服务</b>（顾客可见的商品橱窗）<span class="arrow">→</span>唯一供给<span class="arrow">→</span><b>顾客端「服务」Tab / 预约</b><br>
+  <b>模块② 结算单目录</b>（开单用的项目/价档/加项，顾客不可见）<span class="arrow">→</span>唯一供给<span class="arrow">→</span><b>电子结算单 / 现场排单选服务</b><br>
+  <b>次卡（守护/足护 3次/9次）</b><span class="arrow">→</span>整体迁出本页<span class="arrow">→</span><b>「会员与营销」页（S2）</b>，本页只留跳转提示
+</div>
+<div class="note"><b>两模块的关系</b>：一个服务通常同时存在于两边（顾客看到的「日式手部护理」＝结算单里的「手护」项目），编辑时用<b>关联</b>而不是复制——模块①的条目可挂到模块②的某个项目上，价格展示从价档取，不存第二份。</div>
+</div>
+
+<!-- ═══ 二、网页端页面总览 ═══ -->
+<div class="card">
+<h2>二、网页端 · 页面总览（侧栏「服务与价目」）</h2>
+<div class="browser">
+  <div class="b-top"><span class="dot"></span><span class="dot"></span><span class="dot"></span>　有迹后台 · Jie'Nail 美甲美睫專門店</div>
+  <div class="b-body">
+    <div class="b-side">
+      <div>后台首页</div><div>订单管理</div><div>财务</div><div>客户档案</div><div>员工管理</div>
+      <div class="on">服务与价目</div>
+      <div>会员与营销</div><div>客服工作台</div><div>AI 图库</div><div>门店设置</div><div>通用设置</div>
+    </div>
+    <div class="b-main">
+      <div class="ptitle">服务与价目</div>
+      <div class="modtabs">
+        <div class="modtab on">① 上架服务（顾客可见）</div>
+        <div class="modtab">② 结算单目录（开单用 · 顾客不可见）</div>
+      </div>
+      <div class="panel">
+        <div class="rowitem">
+          <div class="thumb">💅</div>
+          <div class="grow"><b>日式手部单色</b>　<span class="chip on">已上架</span><span class="chip" style="background:var(--bluebg);color:var(--blue)">大类：美甲</span><br>
+            <span class="subline">关联项目：手部款式 · 展示价 ¥168 起（普通价档）· 约 90 分钟</span></div>
+          <div class="sw"></div><span class="btn">编辑</span>
+        </div>
+        <div class="rowitem">
+          <div class="thumb">🦶</div>
+          <div class="grow"><b>日本UP足部矫正</b>　<span class="chip on">已上架</span><span class="chip" style="background:var(--bluebg);color:var(--blue)">大类：护理</span><br>
+            <span class="subline">关联项目：足部矫正(单指) · 展示价 ¥398 起 · 约 120 分钟</span></div>
+          <div class="sw"></div><span class="btn">编辑</span>
+        </div>
+        <div class="rowitem">
+          <div class="thumb">✨</div>
+          <div class="grow"><b>富勒烯手部护理</b>　<span class="chip">已下架</span><span class="chip" style="background:var(--bluebg);color:var(--blue)">大类：护理</span><br>
+            <span class="subline">关联项目：手部护理 · 展示价 ¥268 起（普通/疗程两档）· 约 60 分钟</span></div>
+          <div class="sw off"></div><span class="btn">编辑</span>
+        </div>
+        <div class="rowitem" style="border:1.5px dashed var(--line);border-radius:9px;justify-content:center;color:var(--sub)">＋ 新建上架服务（从结算单目录选项目关联，或全新创建）</div>
+      </div>
+      <div class="callout">📌 本模块＝顾客端「服务」Tab 的<b>唯一数据源</b>。加项（卸甲/免卸甲）、次卡、内部项目永远不会出现在这里——它们根本不属于这个模块。</div>
+    </div>
+  </div>
+</div>
+</div>
+
+<!-- ═══ 三、模块② 结算单目录 ═══ -->
+<div class="card">
+<h2>三、模块② · 结算单目录（含 S3 价档适用域）</h2>
+<div class="browser">
+  <div class="b-top"><span class="dot"></span><span class="dot"></span><span class="dot"></span>　服务与价目 → ② 结算单目录</div>
+  <div class="b-body">
+    <div class="b-main" style="padding:16px 18px">
+      <div class="modtabs">
+        <div class="modtab">① 上架服务（顾客可见）</div>
+        <div class="modtab on">② 结算单目录（开单用 · 顾客不可见）</div>
+      </div>
+      <div class="panel">
+        <h3 style="margin-top:0">项目与价档</h3>
+        <div class="rowitem">
+          <div class="grow"><b>手部护理</b><br>
+            <span class="chip on">普通价 ¥268</span><span class="chip on">会员价 ¥238</span><span class="chip on">疗程价 ¥199/次</span>
+            <span class="subline">　疗程价适用域：仅护理类 ✓</span></div>
+          <span class="btn">编辑价档</span>
+        </div>
+        <div class="rowitem">
+          <div class="grow"><b>手部精修前置</b><br>
+            <span class="chip on">普通价 ¥88</span><span class="chip na">疗程价（未挂 · 开单时不出现）</span></div>
+          <span class="btn">编辑价档</span>
+        </div>
+        <div class="rowitem">
+          <div class="grow"><b>手部款式（单色/跳色/款式）</b><br>
+            <span class="chip on">普通价 ¥168</span><span class="chip on">会员价 ¥148</span></div>
+          <span class="btn">编辑价档</span>
+        </div>
+        <div class="rowitem" style="border:1.5px dashed var(--line);border-radius:9px;justify-content:center;color:var(--sub)">＋ 新增项目（填项目名，挂上可用价档；只进结算单，不自动上架给顾客）</div>
+        <h3>加项（只在开单时出现）</h3>
+        <div class="rowitem">
+          <div class="grow"><b>卸甲（他店）</b> <span class="chip">¥40</span>　·　<b>本店制作免卸甲</b> <span class="chip">¥0</span></div>
+          <span class="btn">编辑</span>
+        </div>
+        <div class="rowitem" style="border:1.5px dashed var(--line);border-radius:9px;justify-content:center;color:var(--sub)">＋ 新增加项（名称＋价格，永不出现在顾客端）</div>
+        <h3>次卡 <span class="tag t-blue">已迁出</span></h3>
+        <div class="rowitem" style="background:#FDFBF8">
+          <div class="grow"><span class="subline">守护（3 次）/ 足护（9 次）等按次核销的卡，已迁至「会员与营销」页管理 →</span></div>
+          <span class="btn">去会员与营销</span>
+        </div>
+      </div>
+      <div class="callout">📌 <b>价档适用域（S3 核心）</b>：每个价档带「适用项目」范围。疗程价只挂护理类——没挂的项目在<b>开单选价</b>时根本不出现疗程价选项（不是置灰，是不存在）。展示价「¥xxx 起」自动取该项目最低可用价档。</div>
+    </div>
+  </div>
+</div>
+
+<h3>价档编辑器（弹层）<span class="tag t-amber">v1.3 裁决改绘（形态换、语义不变）</span></h3>
+<div class="browser" style="max-width:560px">
+  <div class="b-top"><span class="dot"></span><span class="dot"></span><span class="dot"></span>　编辑价档 · 手部护理</div>
+  <div class="b-body"><div class="b-main">
+    <div style="font-size:13.5px;line-height:2.2">
+      项目：<b>手部护理</b>（单项目 × 四价档）<br>
+      普通价：<b>¥268</b>　　会员价：<b>¥238</b><br>
+      疗程价：<b>¥199</b>/次　　自定义档：<span class="chip na">留空＝未挂</span><br>
+      <span class="subline"><b>留空＝未挂＝开单时该价档不出现</b>（语义与原图完全一致）。改动即时生效于新开单；已开未签的单不受影响（金额红线：合计只能由后端重算）。</span><br>
+      <span class="btn pri">保存</span>　<span class="btn">取消</span>
+    </div>
+  </div></div>
+</div>
+<div class="note"><b>裁决注记（Cowork 08-15，随 S1 施工验收下达）</b>：v1.2 原图画的是「单价档 × 多项目多选」弹层；实库里<b>同名价档在不同项目下金额各自独立</b>（如 Jie'Nail 两条疗程价金额不同），按原图做会把差价抹掉。故准予按「单项目 × 四价档」实现——<b>核心语义未变</b>：某档留空＝该项目未挂此档＝开单选价时该档不出现（不置灰，是不存在）。图随裁决改绘保持「图=事实」。店主复核若不认这个形态，说一声即翻案重做。</div>
+</div>
+
+<!-- ═══ 四、商家小程序只读镜像屏（v1.1 新增） ═══ -->
+<div class="card">
+<h2>四、📱 商家小程序 · 管理宫格「服务与目录」<span class="tag t-green">v1.1 新增 · 店主要求画出</span></h2>
+<p style="font-size:14px">合同规则④早已写明「小程序管理宫格的服务页＝同源只读镜像」，v1 没画屏，这次画出来。定位：<b>网页=总和（在这儿设置），小程序=随手看</b>。老板/有权限的员工在手机上能完整看到两个模块的现状，但改动一律去网页端。</p>
+<div class="phones">
+  <div class="phone">
+    <div class="p-top">管理 · 服务与目录 ① 上架服务</div>
+    <div class="p-body">
+      <div style="display:flex;gap:6px;margin-bottom:8px">
+        <span class="btn pri" style="font-size:11.5px;padding:3px 10px">① 上架服务</span>
+        <span class="btn" style="font-size:11.5px;padding:3px 10px">② 结算单目录</span>
+      </div>
+      <div class="svc"><span>💅</span><div><b>日式手部单色</b><br><span class="subline">¥168 起 · 90 分钟</span></div><div class="sw" style="margin-left:auto"></div></div>
+      <div class="svc"><span>🦶</span><div><b>日本UP足部矫正</b><br><span class="subline">¥398 起 · 120 分钟</span></div><div class="sw" style="margin-left:auto"></div></div>
+      <div class="svc"><span>✨</span><div><b>富勒烯手部护理</b><br><span class="subline">¥268 起 · 60 分钟</span></div><div class="sw off" style="margin-left:auto"></div></div>
+      <div class="note" style="font-size:11.5px;margin:6px 0 0">✅ 上架/下架开关<b>手机可直接拨</b>（店主拍板：属轻量级配置，不涉钱、可逆，即时同步网页端）。🔒 新增/编辑/价格改动仍去<b>网页端 · 服务与价目</b>。</div>
+    </div>
+    <div class="p-label">页签①：与网页模块①同源同序<br>开关双端同源实时一致（闭环③）</div>
+  </div>
+  <div class="phone">
+    <div class="p-top">管理 · 服务与目录 ② 结算单目录</div>
+    <div class="p-body">
+      <div style="display:flex;gap:6px;margin-bottom:8px">
+        <span class="btn" style="font-size:11.5px;padding:3px 10px">① 上架服务</span>
+        <span class="btn pri" style="font-size:11.5px;padding:3px 10px">② 结算单目录</span>
+      </div>
+      <div class="svc"><div><b>手部护理</b><br><span class="chip on">普通 ¥268</span><span class="chip on">会员 ¥238</span><span class="chip on">疗程 ¥199/次</span></div></div>
+      <div class="svc"><div><b>手部精修前置</b><br><span class="chip on">普通 ¥88</span></div></div>
+      <div class="svc"><div><b>手部款式</b><br><span class="chip on">普通 ¥168</span><span class="chip on">会员 ¥148</span></div></div>
+      <div class="svc"><div><b>加项</b>　<span class="chip">卸甲 ¥40</span><span class="chip">免卸甲 ¥0</span></div></div>
+      <div class="note" style="font-size:11.5px;margin:6px 0 0">🔒 仅查看 · 编辑去网页端。次卡见「会员与营销」。</div>
+    </div>
+    <div class="p-label">页签②：项目/价档/加项全量可见<br>开单前随手核对价档就在这儿看</div>
+  </div>
+</div>
+<div class="note"><b>✅ 问题④已拍板（08-14）</b>：上架/下架算轻量级配置，<b>小程序可直接操作</b>——页签①开关已加回。边界不变：改名/改价/改关联/新增删除仍只在网页端；开关动作双端同源（同一后端字段），小程序拨完网页端立刻见，反之亦然。</div>
+</div>
+
+<!-- ═══ 五、顾客端修正对照 ═══ -->
+<div class="card">
+<h2>五、📱 顾客端「服务」Tab · 修正前后对照</h2>
+<div class="phones">
+  <div class="phone badphone">
+    <div class="p-top">现状（错）</div>
+    <div class="p-body">
+      <div class="svc"><span>💅</span><b>日式手部单色</b><span class="price">¥168</span></div>
+      <div class="svc"><span>🦶</span><b>日本UP足部矫正</b><span class="price">¥398</span></div>
+      <div class="svc strike"><span>🧴</span><b>本店制作免卸甲</b><span class="price">¥0</span></div>
+      <div class="svc strike"><span>🛡</span><b>守护（3次卡）</b><span class="price">¥540</span></div>
+    </div>
+    <div class="p-label">🔴 加项和次卡混进服务列表<br>（读的是价目表数据）</div>
+  </div>
+  <div class="phone">
+    <div class="p-top">修正后（对）· v1.4 固定三大类</div>
+    <div class="p-body" style="display:flex;gap:8px;padding:10px 8px">
+      <div style="width:56px;flex-shrink:0;border-right:1px solid var(--line);font-size:12px;text-align:center">
+        <div style="padding:8px 4px;background:var(--greenbg);color:var(--green);font-weight:700;border-radius:8px 0 0 8px;border-right:3px solid var(--green)">美甲</div>
+        <div style="padding:8px 4px;color:var(--sub)">美睫</div>
+        <div style="padding:8px 4px;color:var(--sub)">护理</div>
+      </div>
+      <div style="flex:1;min-width:0">
+        <div class="svc"><span>💅</span><b>日式手部单色</b><span class="price">¥168 起</span></div>
+        <div class="svc"><span>💅</span><b>跳色款式</b><span class="price">¥198 起</span></div>
+        <div class="svc" style="opacity:.55"><span class="subline">（点「护理」→ 富勒烯手部护理 ¥268 起…）</span></div>
+      </div>
+    </div>
+    <div class="p-label">🟢 左栏＝<b>平台固定三大类</b>（美甲/美睫/护理）<br>右侧＝该类下本店自定义项目 · 无加项无次卡</div>
+  </div>
+</div>
+<div class="note"><b>v1.4 增补（店主 08-15 复核拍板）——固定大类字典</b>：顾客端服务 Tab 左栏为<b>平台级固定大类</b>：美甲、美睫、护理。商家<b>不可增删改大类</b>，只能在大类下建自己的项目（模块①每个上架服务必须挂一个大类，如上图 chips）；加项/次卡永不入任何大类。空大类不显示。<b>以后支持新行业＝平台字典加一行（如「美发」），零代码</b>——这就是「帮商家配置只填表、不改后端」的商家模式根基。</div>
+<div class="note" style="border-color:var(--green);background:var(--greenbg)"><b>✅ 店主确认（08-16 原话归纳）——三层结构口径定稿</b>：<b>大类（平台字典·可扩展）→ 项目（大类里边的、商家自定义）→ 加项（存在于项目里边的附加项目）</b>。加项挂在项目/大类之下，只在开单选中项目后出现，顾客端大类与列表永不显示加项。大类字典后续可由平台自动扩展（加行即生效，零代码）。此结构同时是 S12 网页顾客端对齐与 S11 总图的基准结构。</div>
+</div>
+
+<!-- ═══ 六、合同规则 ═══ -->
+<div class="card">
+<h2>六、合同规则（Code 实现时逐条对照）</h2>
+<div class="rule"><span class="qnum">⓪</span><b>数据源唯一</b>：顾客端服务 Tab 只读模块①；结算单/现场排单选服务只读模块②。任何页面不得再直连旧「服务管理」「价目表」两套接口（旧路由由后端 301/映射到新结构，禁止双轨并存）。</div>
+<div class="rule"><span class="qnum">①</span><b>加项永不见客</b>：加项只存在于模块②，只在开单流程出现。断言：顾客端服务接口响应中不含任何加项/次卡条目。</div>
+<div class="rule"><span class="qnum">②</span><b>价档适用域强制</b>（S3）：开单选价时只出现该项目挂了的价档——不置灰、不出现。没挂疗程价的项目按普通价走且不显示"疗程"字样。断言：对每个项目请求可用价档，返回集合⊆其适用域。</div>
+<div class="rule"><span class="qnum">③</span><b>次卡不入价目</b>（S3）:守护/足护等按次核销的卡从模块②剥离，数据迁往 S2（迁移脚本保留历史单据引用，老结算单显示不受影响）。本页只留跳转入口。</div>
+<div class="rule"><span class="qnum">④</span><b>金额红线照旧</b>：本页是「涉钱·重规则」（架构总图涉钱清单）——只在网页端编辑；小程序管理宫格的服务页变为同源只读镜像（<b>屏样见第四节</b>，两页签与网页两模块一一对应）＋「去网页端编辑」提示；价格展示一律 storeMoney()；改价档只影响新开单，已开单合计仍由 computeSettlement() 决定。</div>
+<div class="rule"><span class="qnum">⑤</span><b>关联不复制</b>：模块①条目通过关联取模块②的价档算「¥xxx 起」，不存第二份价格。改价档，橱窗价自动跟着变（闭环③同源）。</div>
+<div class="rule"><span class="qnum">⑥</span><b>迁移一次到位</b>：上线时把现有服务管理+价目表数据按规则归位（顾客可见的→模块①并建关联；其余→模块②；次卡→暂存待 S2），迁移后跑一致性断言：顾客端列表条目数=模块①上架数。<b>此条对生产库同样成立——本地扫过≠生产扫过，生产数据单独跑一遍迁移与断言。</b></div>
+<div class="rule"><span class="qnum">⑦</span><b>固定大类字典</b>（v1.4·店主 08-15 拍板）：大类＝平台级字典（美甲/美睫/护理），存平台层不存租户层；商家只能在类下建项目，不能动字典；模块①每个上架服务必挂一个大类，顾客端按大类分栏展示（左栏目录）；加项/次卡永不属于任何大类；空大类前端不显示；新增行业大类＝平台字典加数据行，禁止为新商家改代码。存量项目迁移时按名称/关联项目归类，归不进的标「待归类」由店主在网页端一键指定。</div>
+</div>
+
+<!-- ═══ 七、请店主确认 ═══ -->
+<div class="card confirm">
+<h2>七、店主确认记录 <span class="tag t-green">✅ 四问全拍 · 2026-08-14</span></h2>
+<ol>
+  <li><b>两模块的形态</b>：页内两个页签（如图）。<span class="tag t-green">已确认</span></li>
+  <li><b>「¥xxx 起」</b>：顾客端展示价自动取最低可用价档、带"起"字。<span class="tag t-green">已确认</span></li>
+  <li><b>次卡迁出的过渡</b>：S2 出图前守护/足护后台暂存不可编辑，老单据显示不受影响，本页只留跳转提示。<span class="tag t-green">已确认</span></li>
+  <li><b>小程序镜像屏「上架/下架」开关</b>：算轻量级配置，手机可直接上/下架；其余编辑仍只在网页端。<span class="tag t-green">已确认</span></li>
+</ol>
+<p style="font-size:13.5px;color:var(--sub);margin:6px 0 0">本图自此为 S1＋S3 施工合同：Code 按四步交付（提取清单→实现记假设→逐屏并排核验→交核验单），排在 showModal 卫生批之后。</p>
+</div>
+
+<div class="meta" style="text-align:center">有迹 · S1+S3 服务与价目合并页 v1.4 · 2026-08-15（v1.1 新增入口＋镜像屏；v1.2 上下架开关进手机;v1.3 价档编辑器裁决改绘;v1.4 店主复核增补:固定三大类字典+规则⑦+规则⑥生产库补充）· Cowork 维护（活文档）</div>
+</div>
+</body>
+</html>

@@ -16,6 +16,7 @@ import { createQuoteSerialize } from './quote-serialize.mjs'          // AI 报�
 import { createDemoReset, isDemoTenant, PROTECTED_REAL_TENANTS } from './demo-reset.mjs'   // 演示店归属判据/黑名单/重置唯一入口(公约①)
 import { createDemoFacts } from './demo-facts.mjs'                    // 演示店事实口(铺设脚本不再直连库)
 import { createPlatformOps } from './platform-ops.mjs'                // 平台运维域(备份/五项/运维日志/重置财务密码)
+import { ensureListedColumn } from './tenant-visibility.mjs'          // D76:选店页可见性(与账本归属解耦)
 import { createImportCustomers } from './import-customers.mjs'        // 平台代商家导入老顾客(公约②)
 import { snapshotDb, dailyBackup } from './db-backup.mjs'             // 库快照唯一出口(按需 + 日备同一处)
 import { createStaticServe } from './static-serve.mjs'                // 静态文件服务(公约②)
@@ -11628,24 +11629,11 @@ async function route(req, res) {
   }
   // 公开门店列表(兜底进店:顾客没带店标识时选择进入哪家)
   if (req.method === 'GET' && path === '/shops') {
-    // 默认不返回演示门店(顾客看不到);店主在小程序里开「演示模式」时带 ?include=demo 才返回。
-    const includeDemo = String(query.include || '') === 'demo' ? 1 : 0
-    const rows = db.prepare(`
-      SELECT t.id, t.name AS tenant_name, t.kind, s.name AS store_name, s.address, s.phone
-      FROM tenants t
-      JOIN stores s ON s.tenant_id = t.id AND s.is_active = 1
-      -- D73:演示店按**归属列**认(kind='demo'),不再按 id 前缀猜
-      WHERE t.status = 'active' AND (t.kind <> 'demo' OR ? = 1)
-      GROUP BY t.id
-      ORDER BY t.name ASC
-    `).all(includeDemo)
-    /* 【门店列表三个一】(店主 08-25):数据源不砍(上面那条 SQL 就是全部公开门店),
-       标记与排序在 ./store-directory.mjs 一处做完,两端读同一条 /shops 天然一致。
-       登录了才知道"这个身份在哪几家店有档案" —— 没登录就没有 joined 标,列表照样全给。 */
-    let shops = rows.map((r) => ({
-      tenantId: r.id, name: r.tenant_name || r.store_name, storeName: r.store_name,
-      address: r.address || '', phone: r.phone || '', isDemo: r.kind === 'demo', kind: r.kind || 'real'
-    }))
+    /* 🔴 D76(店主 2026-08-25):这条列表的语义是**「顾客可去的门店」**,判据是 tenants.listed。
+       以前按 kind='demo' 挡,等于把"账本受不受保护"当成"顾客能不能看见" ——
+       生产上两家有收入的样板店(kind 只能是 real,D75 拦死改动)因此一直公开挂着。
+       数据源 + 排序 + 标记全在 ./store-directory.mjs 一处(【门店列表三个一】)。 */
+    let shops = storeDirectory.publicShops(String(query.include || '') === 'demo')
     let viewer = null
     try { viewer = requireCustomer(req) } catch (e) { viewer = null }   // 公开接口:没登录也要能看全
     shops = storeDirectory.decorate(shops, viewer?.id)
@@ -13575,16 +13563,7 @@ async function route(req, res) {
   if (req.method === 'GET' && path === '/platform/tenants') {
     if (!isPlatform()) throw apiError(401, 'UNAUTHORIZED', 'Platform token required.')
     const monthStartIso = iso(localDateTime(`${localParts(new Date()).date.slice(0, 7)}-01`, '00:00'))
-    const rows = db.prepare(`
-      SELECT t.id, t.name, t.plan, t.status, t.plan_expires_at, t.kind,
-        (SELECT COUNT(*) FROM stores s WHERE s.tenant_id = t.id AND s.is_active = 1) AS store_count,
-        (SELECT COUNT(*) FROM bookings b WHERE b.tenant_id = t.id) AS booking_count,
-        (SELECT COUNT(*) FROM bookings b WHERE b.tenant_id = t.id AND b.appointment_start >= ?) AS month_booking_count,
-        (SELECT username FROM admin_accounts a WHERE a.tenant_id = t.id AND a.role = 'owner' LIMIT 1) AS owner_username
-      FROM tenants t ORDER BY t.rowid ASC
-    `).all(monthStartIso)
-    // D73/B线:归属(real|demo|test)随列表下发 —— 铺设脚本与平台后台都按它认演示店,不再靠名字
-    return json(res, 200, { tenants: rows.map((r) => ({ id: r.id, name: r.name, plan: r.plan, status: r.status, kind: r.kind || 'real', planExpiresAt: r.plan_expires_at, storeCount: r.store_count, bookingCount: r.booking_count, monthBookingCount: r.month_booking_count, ownerUsername: r.owner_username || '' })) })
+    return json(res, 200, { tenants: platformOps.listTenants(monthStartIso) })
   }
   if (req.method === 'POST' && path === '/platform/tenants') {
     if (!isPlatform()) throw apiError(401, 'UNAUTHORIZED', 'Platform token required.')
@@ -13610,7 +13589,9 @@ async function route(req, res) {
          · 平台后台**显式勾选**「这是演示店」(body.isDemo)→ demo;
          · 其余一律 real(默认最严,fail-closed)。 */
     const tenantKind = DATA_SCOPE === 'test' ? 'test' : (body.isDemo === true ? 'demo' : 'real')
-    db.prepare("INSERT INTO tenants (id, name, plan, status, plan_expires_at, kind) VALUES (?, ?, ?, 'active', ?, ?)").run(id, name.slice(0, 60), plan, planExpiresAt, tenantKind)
+    // D76:演示店建出来就不在选店页(可见性独立于账本归属)
+    const tenantListed = tenantKind === 'demo' ? 0 : 1
+    db.prepare("INSERT INTO tenants (id, name, plan, status, plan_expires_at, kind, listed) VALUES (?, ?, ?, 'active', ?, ?, ?)").run(id, name.slice(0, 60), plan, planExpiresAt, tenantKind, tenantListed)
     db.prepare('INSERT INTO stores (id, name, address, phone, timezone, currency, is_active, tenant_id) VALUES (?, ?, ?, ?, ?, ?, 1, ?)')
       .run(`store-${id}`, name.slice(0, 60), String(body.city || '').slice(0, 80), String(body.phone || '').slice(0, 30),
         String(body.timezone || APP_TIMEZONE).slice(0, 64), String(body.currency || 'CAD').toUpperCase().slice(0, 6), id)
@@ -13689,6 +13670,14 @@ async function route(req, res) {
     if (!isPlatform()) throw apiError(401, 'UNAUTHORIZED', 'Platform token required.')
     const tid = path.split('/')[3]
     return json(res, 200, { tenantId: tid, stats: platformOps.tenantStats(tid) })
+  }
+  /* 🔴 D76:改**可见性**(顾客选店页出不出现)。只写 tenants.listed 一列 ——
+     不碰 kind、不碰账本,D75 那两道锁一条都不触发(它们管的是账本归属,不是展示)。 */
+  const listedMatch = path.match(/^\/platform\/tenants\/([^/]+)\/listed$/)
+  if (req.method === 'PATCH' && listedMatch) {
+    if (!isPlatform()) throw apiError(401, 'UNAUTHORIZED', 'Platform token required.')
+    const lb = await readBody(req).catch(() => ({}))
+    return json(res, 200, platformOps.setListed({ tenantId: listedMatch[1], listed: lb.listed, reason: lb.reason }))
   }
   /* 平台改租户归属(real ↔ demo):实现在 ./demo-reset.mjs,这里只分发。 */
   const kindMatch = path.match(/^\/platform\/tenants\/([^/]+)\/kind$/)
@@ -17653,6 +17642,8 @@ try {
 } catch (error) {
   if (!String(error.message || '').includes('duplicate column')) throw error
 }
+// 🔴 D76 可见性列(与账本归属解耦):建列 + 演示店默认不上架,实现在 ./tenant-visibility.mjs
+ensureListedColumn(db)
 /* D73(店主 08-24):归属回填改**一次性迁移** —— 跑过一次记一笔,以后启动不再扫;
    生产库一律不跑(那边的归属只能由平台后台显式设置,不许靠名字猜)。 */
 {

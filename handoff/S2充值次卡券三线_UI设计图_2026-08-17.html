@@ -1,0 +1,236 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>有迹 · S2 充值·次卡·券三线 · UI 设计图 v1 · 2026-08-17</title>
+<style>
+  :root{--bg:#F7F3EF;--card:#FFF;--ink:#3B322C;--sub:#8A7F78;--gold:#C6A27E;--line:#E8E0D8;
+  --red:#C0554A;--redbg:#FBEEEC;--green:#5E8C61;--greenbg:#EEF5EE;--blue:#5B7A99;--bluebg:#EDF2F7;--amber:#B98A2F;--amberbg:#FAF3E3}
+  *{box-sizing:border-box}
+  body{margin:0;background:var(--bg);color:var(--ink);font-family:-apple-system,"PingFang SC","Microsoft YaHei",sans-serif;line-height:1.6;padding:28px 18px 80px}
+  .wrap{max-width:1100px;margin:0 auto}
+  h1{font-size:22px;margin:0 0 4px}
+  .meta{color:var(--sub);font-size:13px;margin-bottom:18px}
+  .card{background:var(--card);border:1px solid var(--line);border-radius:14px;padding:20px 22px;margin-bottom:22px;box-shadow:0 1px 3px rgba(59,50,44,.05)}
+  h2{font-size:18px;margin:0 0 12px;padding-bottom:8px;border-bottom:2px solid var(--gold)}
+  h3{font-size:15px;margin:16px 0 8px}
+  .tag{display:inline-block;font-size:11px;padding:1px 8px;border-radius:9px;margin-left:6px;vertical-align:1px;white-space:nowrap}
+  .t-red{background:var(--redbg);color:var(--red);border:1px solid var(--red)}
+  .t-green{background:var(--greenbg);color:var(--green);border:1px solid var(--green)}
+  .t-blue{background:var(--bluebg);color:var(--blue);border:1px solid var(--blue)}
+  .t-amber{background:var(--amberbg);color:var(--amber);border:1px solid var(--amber)}
+  .t-gray{background:#F1EDE8;color:var(--sub);border:1px solid var(--line)}
+  .rule{border-left:4px solid var(--gold);background:#FDFBF8;padding:9px 14px;border-radius:0 10px 10px 0;margin:8px 0;font-size:14px}
+  .qnum{display:inline-block;min-width:22px;height:22px;border-radius:50%;background:var(--gold);color:#fff;text-align:center;line-height:22px;font-size:12.5px;font-weight:700;margin-right:8px}
+  table{width:100%;border-collapse:collapse;font-size:13.5px;margin-top:8px}
+  th,td{border:1px solid var(--line);padding:7px 10px;text-align:left;vertical-align:top}
+  th{background:#FDFBF8;font-weight:600;white-space:nowrap}
+  .note{background:var(--amberbg);border:1px solid var(--amber);border-radius:10px;padding:8px 12px;margin:8px 0;font-size:13px}
+  .confirm{border:2px solid var(--gold);background:#FDFBF8}
+  .confirm li{margin-bottom:9px;font-size:14px}
+  .browser{border:1px solid #D8CFC5;border-radius:12px;overflow:hidden;margin:14px 0;box-shadow:0 3px 12px rgba(59,50,44,.08)}
+  .b-top{background:#EFE9E2;padding:8px 14px;font-size:12px;color:var(--sub);display:flex;gap:6px;align-items:center}
+  .dot{width:10px;height:10px;border-radius:50%;background:#D8CFC5}
+  .b-body{display:flex;min-height:220px;background:#FBF8F5}
+  .b-main{flex:1;padding:16px 18px;min-width:0}
+  .modtabs{display:flex;gap:8px;margin-bottom:14px}
+  .modtab{padding:7px 16px;border-radius:9px 9px 0 0;border:1px solid var(--line);border-bottom:none;font-size:13.5px;background:#F1EDE8;color:var(--sub)}
+  .modtab.on{background:#fff;color:var(--ink);font-weight:700;border-color:var(--gold)}
+  .panel{border:1px solid var(--gold);border-radius:0 10px 10px 10px;background:#fff;padding:14px}
+  .rowitem{display:flex;align-items:center;gap:10px;padding:9px 6px;border-bottom:1px dashed var(--line);font-size:13.5px}
+  .rowitem:last-child{border-bottom:none}
+  .grow{flex:1;min-width:0}
+  .btn{display:inline-block;padding:5px 12px;border-radius:8px;font-size:12.5px;border:1px solid var(--line);background:#F7F3EF;color:var(--ink);white-space:nowrap}
+  .btn.pri{background:var(--ink);color:#fff;border-color:var(--ink)}
+  .chip{display:inline-block;font-size:11.5px;padding:1px 8px;border-radius:8px;background:#F1EDE8;color:var(--sub);margin-right:4px;white-space:nowrap}
+  .chip.on{background:var(--greenbg);color:var(--green);border:1px solid var(--green)}
+  .subline{font-size:12px;color:var(--sub)}
+  .sw{width:34px;height:19px;border-radius:10px;background:#D8CFC5;position:relative;flex-shrink:0}
+  .sw::after{content:'';position:absolute;left:2px;top:2px;width:15px;height:15px;border-radius:50%;background:#fff}
+  .phones{display:flex;gap:18px;flex-wrap:wrap;margin:14px 0}
+  .phone{width:280px;border:1px solid #D8CFC5;border-radius:22px;background:#fff;overflow:hidden;box-shadow:0 3px 12px rgba(59,50,44,.08);flex-shrink:0}
+  .p-top{background:#F7F3EF;text-align:center;font-size:13px;font-weight:700;padding:9px 0;border-bottom:1px solid var(--line)}
+  .p-body{padding:12px;font-size:12.5px}
+  .p-label{text-align:center;font-size:12.5px;color:var(--sub);padding:8px 6px 10px}
+  .kcard{border:1px solid var(--line);border-radius:10px;padding:9px 10px;margin-bottom:8px}
+  .flow{background:#FDFBF8;border:1px solid var(--line);border-radius:10px;padding:12px 14px;font-size:13.5px;line-height:2.1}
+  .arrow{color:var(--gold);font-weight:700;padding:0 4px}
+  .sign{border:1.5px solid var(--ink);border-radius:10px;padding:10px 12px;font-size:12.5px;background:#fff}
+</style>
+</head>
+<body><div class="wrap">
+
+<h1>有迹 · S2 充值 · 次卡 · 券 三线 <span class="tag t-green">UI 设计图 v1.1 · ✅ 店主六板全拍(08-17)· 定稿＝合同</span></h1>
+<div class="meta"><b>拍板记录(店主 08-17)</b>:①境外登录=邮箱+密码先行、手机号为锚合并 ✅ ②次卡字段够、不加转赠 ✅ ③次卡关联项目组 ✅ ④充X赠Y 认可 ✅ ⑤商城过渡期=到店购买 认 ✅ ⑥拆批序 认 ✅;修订:<b>卡包卡片只标到期日期,不标来源</b>(来源留在记录层供审计,不上屏)。<b>重大新事实:小程序已过审+微信支付商户号已具备,全功能资质齐全——新增批⑤「微信支付真实接通」</b>(单独出小图+线上对账口径拍板,接通后商城「到店购买」切「立即购买」)。施工序:批① 商家管理页+收编+挂账清理 → 批② 开单/核销/随单充值 → 批③ 卡包+商城 → 批④ 境外登录 → 批⑤ 微信支付接通。<b>v1.2 修订(店主拍板 08-18)</b>:「会员与营销」四页签改<b>五页签</b>——积分商城从优惠券页签独立为第④页签(①充值套餐 ②次卡 ③优惠券 ④积分商城 ⑤会员体系);功能关系不变:奖品发的仍是券、奖品弹层内「当场新建券」仍落券池,只动信息架构。</div>
+
+<!-- 一 -->
+<div class="card">
+<h2>一、三条线的账怎么流(总览)</h2>
+<div class="flow">
+<b>① 充值线</b>:商城自购/员工代充<span class="arrow">→</span>储值负债(充值≠收入,只收全额)<span class="arrow">→</span>开单抵扣(耗卡)<span class="arrow">→</span>签字时刻确认收入<br>
+<b>② 次卡线</b>:售卡(实收=预收负债,不计积分)<span class="arrow">→</span>每次核销(折算单价=卡价÷总次数:确认收入+计积分+计技师业绩)<span class="arrow">→</span>次数用尽<br>
+<b>③ 券线</b>:老板/员工发放(无线上路径)<span class="arrow">→</span>顾客卡包<span class="arrow">→</span>开单选用<span class="arrow">→</span>签字核销(店铺让利,不减业绩)<br>
+<b>卡包</b>=次卡+优惠券+积分兑换券三类聚合(标来源);<b>商城</b>=充值套餐+次卡商品的自购出口;全部沿用既有结算引擎——<b>签字时刻=记账时刻</b>红线不动。
+</div>
+</div>
+
+<!-- 二 -->
+<div class="card">
+<h2>二、已拍口径区(直接采用,无需重拍)</h2>
+<table>
+<tr><th>口径</th><th>内容</th><th>出处</th></tr>
+<tr><td>次卡三口径</td><td>售卡不计积分;核销按折算单价计积分+技师业绩(不进当日实收);日结单列「次卡核销 n 次(折算 ¥xxx)」不混现金</td><td>店主 08-14 · 财务总逻辑 §十-7</td></tr>
+<tr><td>核销单三件套</td><td>选卡(第 n/共 N 次)+附加服务(复用自定义价目条,照常收钱计积分)+技师(规则⑧数字点选)→正常签署→次数−1;一单一卡一次;售后返还次数</td><td>店主 08-14</td></tr>
+<tr><td>充值确认留痕</td><td>随单充值/购卡=并入签署单一次签(分行列明实收/抵扣/余额或第n次/剩余);单独代充=回执推送带「确认」钮,未确认不阻塞到账但流水标注</td><td>店主 08-14 · §三</td></tr>
+<tr><td>现场购卡</td><td>开单选「次卡」大类,顾客无卡→现场购卡→当场核销第 1 次,一次签署覆盖(购卡实收+核销抵扣同单分行)</td><td>店主 08-14</td></tr>
+<tr><td>充值前置</td><td>档案未绑定微信不可充值(防空充值);签署本走扫码,绑定与充值同次到店衔接。<b>境外网页账号视同已绑定(见第六节)</b></td><td>店主 08-12 · §十-3-1b</td></tr>
+<tr><td>购卡=充值</td><td>购次卡触发非分级店会员资格(D41 口径「充值即会员」)</td><td>店主 08-14</td></tr>
+<tr><td>线上线下同账</td><td>顾客自购与员工代充落同一套账(同为预收负债、同一张记录),只是经手人/来源标记不同</td><td>§十-8</td></tr>
+<tr><td>线上支付过渡</td><td>微信支付未接通期间不得出现「支付成功」;商城线上购买按钮受支付通道闸门控制(见规则⑧)</td><td>§十-2</td></tr>
+</table>
+</div>
+
+<!-- 三 -->
+<div class="card">
+<h2>三、商家网页端 ·「会员与营销」页(次卡的新家+储值按钮收编)</h2>
+<div class="browser">
+  <div class="b-top"><span class="dot"></span><span class="dot"></span><span class="dot"></span>　有迹后台 · 会员与营销</div>
+  <div class="b-body"><div class="b-main">
+    <div class="modtabs"><div class="modtab on">① 充值套餐</div><div class="modtab">② 次卡</div><div class="modtab">③ 优惠券</div><div class="modtab">④ 积分商城</div><div class="modtab">⑤ 会员体系(S9)</div></div>
+    <div class="panel">
+      <div class="rowitem"><div class="grow"><b>充 ¥300</b> <span class="chip">赠 ¥0</span><br><span class="subline">上架商城 ✓ · 购买后余额 +300</span></div><span class="btn">编辑</span></div>
+      <div class="rowitem"><div class="grow"><b>充 ¥500 赠 ¥50</b> <span class="chip on">赠送=营销让利,单独列示不算实收</span><br><span class="subline">上架商城 ✓ · 到账 550(实收 500+赠送 50 分行入账——挂-004 家族的正确记法)</span></div><span class="btn">编辑</span></div>
+      <div class="rowitem" style="border:1.5px dashed var(--line);border-radius:9px;justify-content:center;color:var(--sub)">＋ 新建充值套餐(金额+赠送额,赠送可为 0)</div>
+      <div class="rowitem" style="background:#FDFBF8"><div class="grow"><b>线上自助购买</b><br><span class="subline">微信支付通道未接通时此开关锁定(灰),商城仅展示+「到店购买」提示</span></div><div class="sw"></div></div>
+    </div>
+    <div class="note" style="margin-top:10px">📌 <b>次卡页签</b>:现有「美甲10次卡(¥880·10次)」迁入此处管理;＋新建次卡=名称+总次数+价格+<b>关联项目组</b>+有效期(可选,默认长期)。<b>优惠券页签</b>:沿用现有券系统(发放仅老板/员工、特批留痕),迁入此页统一入口。</div>
+    <div class="note">🔀 <b>收编(拍过的)</b>:网页财务「储值卡」页的「给会员充值」按钮并入本页与客户档案;「耗卡」按钮<b>取消</b>(结算单签字自动扣,手动耗卡=账目风险口)。</div>
+  </div></div>
+</div>
+</div>
+
+<!-- 四 -->
+<div class="card">
+<h2>四、开单与核销(商家/员工小程序+网页开单,三端共用同一后端引擎)</h2>
+<div class="phones">
+  <div class="phone">
+    <div class="p-top">开单 · 选服务(新增「次卡」大类)</div>
+    <div class="p-body">
+      <div class="kcard">美甲　美睫　护理　<b style="color:var(--gold)">次卡●剩2</b></div>
+      <div class="kcard"><b>守护(3次卡)</b> 剩 2/3 · 长期有效<br><span class="subline">点选即开核销单</span></div>
+      <div class="kcard" style="border-style:dashed;text-align:center;color:var(--sub)">＋ 现场购卡(顾客没卡?当场买当场用)</div>
+    </div>
+    <div class="p-label">「次卡」大类只在该顾客有可用卡时亮起(角标剩余);<br>剩 0 次不出现,过期置灰标注</div>
+  </div>
+  <div class="phone">
+    <div class="p-top">次卡核销单(三件套)</div>
+    <div class="p-body">
+      <div class="kcard"><b>守护(3次)</b> 本次核销第 2/3 次<br><span class="subline">金额栏=「次卡抵扣」(折算 ¥180 计积分/业绩)</span></div>
+      <div class="kcard">附加服务:<b>手部养护油 ¥30</b><br><span class="subline">复用自定义价目条,照常收钱</span></div>
+      <div class="kcard">技师:<b>① ② ③ ④</b>(数字点选,同结算单)</div>
+      <div class="sign">✍️ 顾客签署 → 卡剩余 −1,单据留痕「第2/3次」</div>
+    </div>
+    <div class="p-label">一单一卡一次;售后返还次数;<br>核销日实收=仅附加服务的钱</div>
+  </div>
+  <div class="phone">
+    <div class="p-top">随单充值/现场购卡 · 签署页</div>
+    <div class="p-body">
+      <div class="sign">
+        本次充值　<b>¥800</b>(实收)<br>
+        本单抵扣　<b>−¥704</b><br>
+        充后余额　<b>¥96</b><br>
+        <hr style="border:none;border-top:1px dashed var(--line)">
+        或:购 守护(3次卡) <b>¥540</b>(实收)<br>
+        本次核销 第 1/3 次 · 剩 2 次<br>
+        <b style="color:var(--gold)">✍️ 一次签字覆盖全部</b>
+      </div>
+      <div class="kcard" style="margin-top:8px"><b>单独代充(不开单)</b>:即时到账 → 顾客端推送回执(金额/渠道/余额/时间戳)带「确认」钮;未确认不阻塞,流水显示「顾客未确认」</div>
+    </div>
+    <div class="p-label">随单的签在单里,单独的推送点确认<br>(店主 08-14 拍板原文)</div>
+  </div>
+</div>
+</div>
+
+<!-- 五 -->
+<div class="card">
+<h2>五、顾客端 · 卡包+商城(小程序与网页顾客端同批同构)</h2>
+<div class="phones">
+  <div class="phone">
+    <div class="p-top">卡包(我的 → 卡包)</div>
+    <div class="p-body">
+      <div class="kcard"><b>守护(3次卡)</b> 剩 2/3<br><span class="chip">长期有效</span></div>
+      <div class="kcard"><b>¥30 优惠券</b> 满 200 可用<br><span class="chip">2026-09-30 到期</span></div>
+      <div class="kcard"><b>精修体验券</b><br><span class="chip">长期有效</span></div>
+    </div>
+    <div class="p-label">三类聚合、每张只标到期日期(店主 08-17 修订:来源不上屏,记录层保留供审计);<br>开单/结算时可选用的就是这里的卡券</div>
+  </div>
+  <div class="phone">
+    <div class="p-top">充值商城(储值页 → 去充值)</div>
+    <div class="p-body">
+      <div class="kcard"><b>充 ¥500 得 ¥550</b> <span class="chip on">赠 ¥50</span><br><span class="btn" style="margin-top:4px">到店购买</span></div>
+      <div class="kcard"><b>美甲10次卡 ¥880</b> <span class="chip">单次折算 ¥88</span><br><span class="btn" style="margin-top:4px">到店购买</span></div>
+      <div class="subline" style="margin-top:6px">⚠️ 线上支付接通+店铺开关打开后,「到店购买」变为「立即购买」;过渡期绝不出现「支付成功」字样(§十-2)</div>
+    </div>
+    <div class="p-label">储值卡页=充值套餐唯一出口;<br>商城商品=第三节商家配置的套餐/次卡</div>
+  </div>
+</div>
+<div class="note"><b>网页顾客端(拍板②境外主端)</b>:卡包与商城页同批施工,与小程序同构(响应式布局,不另出图,以本节手机屏为合同);「我的」页增卡包/商城入口。四之九双端同病检查照跑。</div>
+</div>
+
+<!-- 六 -->
+<div class="card">
+<h2>六、境外顾客网页登录方案 <span class="tag t-red">拍板题①(S2 前置)</span></h2>
+<div class="rule"><b>推荐:方案 B 先行——邮箱+密码</b>(注册/登录/邮件找回)。理由:境外最普适、零短信通道依赖、当周可落地。<b>方案 A(手机号+验证码)</b>归 S5 短信基建接通后追加,两方案并存不冲突。</div>
+<div class="flow">
+网页顾客注册(邮箱+密码+<b>手机号选填</b>)<span class="arrow">→</span>成为本店顾客档案(视同已绑定,可充值/购卡/订约)<span class="arrow">→</span><b>同人合并规则:档案以手机号为锚</b>——微信端顾客与网页账号都留了同一手机号=自动同一份档案(余额/卡包/积分共享);没留手机号=两份独立档案,到店出示会员码由店员合并(留痕)。
+</div>
+<div class="note">安全底线:密码哈希存储(盐随用户名,同现有老板号);登录会话按店隔离(D39 纪律);合并操作只追加留痕不删档案。</div>
+</div>
+
+<!-- 七 -->
+<div class="card">
+<h2>七、挂账清理(S2 承诺的红字路线,随批①落地)</h2>
+<table>
+<tr><th>挂账</th><th>内容</th><th>清法</th></tr>
+<tr><td>挂-001</td><td>lucky 测试档案 ¥495 充值(规则出台前自动化留痕)</td><td>红字更正行(负向追加,不删原行)+备注留痕,三账重算</td></tr>
+<tr><td>挂-003</td><td>jics「店主验签」档案 ¥5 尾数</td><td>同上红字路线</td></tr>
+<tr><td>挂-004</td><td>「充1000送50」赠送行从未入账</td><td>按第三节新口径补赠送行(营销让利,单独列示不算实收),账面补平</td></tr>
+</table>
+<div class="note">三笔清完交《挂账清理对账表》,店主过目关单;台账只追加,任何清理不删历史行。</div>
+</div>
+
+<!-- 八 -->
+<div class="card">
+<h2>八、合同规则(Code 逐条对照)</h2>
+<div class="rule"><span class="qnum">⓪</span><b>引擎唯一</b>:三线全走既有结算/签署引擎,签字时刻=记账时刻;金额一律 computeSettlement/storeMoney,前端零金额运算。</div>
+<div class="rule"><span class="qnum">①</span><b>次卡账</b>:售卡=预收负债不计积分;核销按折算单价(卡价÷总次数)确认收入+计积分+计业绩(不进当日实收);日结单列;售后返还次数并回冲当次积分/业绩。</div>
+<div class="rule"><span class="qnum">②</span><b>核销闸</b>:一单一卡一次;剩 0 次不可选;过期卡置灰;核销单必有技师;附加服务照常计账。</div>
+<div class="rule"><span class="qnum">③</span><b>充值确认</b>:随单=签署单分行一次签;代充=回执推送带确认钮,未确认不阻塞但流水标注;充值前置=已绑定(微信扫码或网页账号)。</div>
+<div class="rule"><span class="qnum">④</span><b>赠送口径</b>:充值赠送=营销让利,入储值负债但单独列示,永不计入实收/业绩/积分基数。</div>
+<div class="rule"><span class="qnum">⑤</span><b>券线不动刀</b>:发放/核销沿用现有系统(仅老板/员工发放),S2 只做卡包聚合展示+来源标注+管理入口迁移。</div>
+<div class="rule"><span class="qnum">⑥</span><b>收编</b>:储值卡页「给会员充值」并入会员与营销/客户档案;「耗卡」按钮删除,CI 断言手动耗卡接口 410。</div>
+<div class="rule"><span class="qnum">⑦</span><b>卡包三类聚合</b>:次卡/优惠券/兑换券,每张只标到期日期(来源存记录层不上屏);卡包数据=开单可选卡券的同一数据源(不二笔账)。</div>
+<div class="rule"><span class="qnum">⑧</span><b>商城支付闸</b>:线上购买开关默认关;支付通道未接通时开关锁定、按钮=「到店购买」;任何路径不得出现「支付成功」直至通道接通。</div>
+<div class="rule"><span class="qnum">⑨</span><b>双端同批</b>:顾客侧每一屏小程序+网页同批交付,同受四之九检查;账户合并只追加留痕。</div>
+<div class="rule"><span class="qnum">⑩</span><b>四之十照跑</b>:每批生产两店逐屏实拍+Cowork 亲验后才到店主。</div>
+</div>
+
+<!-- 九 -->
+<div class="card confirm">
+<h2>九、拍板记录 <span class="tag t-green">✅ 六板全拍 · 2026-08-17</span>(原问题留档)</h2>
+<div class="note"><b>新增批⑤·微信支付真实接通</b>(店主 08-17 告知:小程序过审+商户号具备):支付下单/回调/退款/对账单独出小图;<b>线上支付的记账时点与对账口径届时先拍再动码</b>(§十-2 的"届时"=批⑤);接通后商城切「立即购买」、第三节线上开关解锁。AI 等其余真实接入项由店主另行排期。</div>
+<ol>
+  <li><b>境外登录</b>:邮箱+密码先行(方案 B),手机号验证码归 S5 后补——认吗?同人合并"以手机号为锚"认吗?</li>
+  <li><b>次卡商品字段</b>:名称+总次数+价格+关联项目组+有效期(可选,默认长期)——够吗?要不要加"转赠"之类?(建议 S2 不做转赠)</li>
+  <li><b>次卡适用范围</b>:建议卡关联<b>项目组</b>(如"美甲单色类"),核销时从组内选具体项目——认?还是一卡绑死单一项目?</li>
+  <li><b>充值套餐</b>:开放"充 X 赠 Y"配置(赠送=营销让利口径)——认?</li>
+  <li><b>商城过渡期</b>:支付未接通时商城照常展示、按钮="到店购买"——认?还是干脆先不上商城页?</li>
+  <li><b>施工拆批序</b>:批① 商家管理页+收编+挂账清理 → 批② 开单/核销/随单充值 → 批③ 卡包+商城 → 批④ 境外登录——认?(每批独立验收,不憋大招)</li>
+</ol>
+<p style="font-size:13.5px;color:var(--sub);margin:6px 0 0">逐条答或整体"认了"均可;改哪条说哪条,我改图后下发 Code。</p>
+</div>
+
+<div class="meta" style="text-align:center">有迹 · S2 充值·次卡·券三线 UI 设计图 v1 · 2026-08-17 · Cowork 出品(活文档,确认后落 handoff)</div>
+</div></body>
+</html>

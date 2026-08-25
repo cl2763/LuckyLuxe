@@ -1,0 +1,238 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>有迹 · 结算单服务分组·完整版 · UI 设计图 v2 · 2026-08-12</title>
+<style>
+  :root{--bg:#F7F3EF;--card:#fff;--ink:#3B322C;--sub:#8A7F78;--gold:#C6A27E;--line:#E8E0D8;
+  --red:#C0554A;--redbg:#FBEEEC;--green:#5E8C61;--greenbg:#EEF5EE;--blue:#5B7A99;--bluebg:#EDF2F7;--amber:#B98A2F;--amberbg:#FAF3E3}
+  *{box-sizing:border-box}
+  body{margin:0;background:var(--bg);color:var(--ink);font-family:-apple-system,"PingFang SC","Microsoft YaHei",sans-serif;line-height:1.55;padding:28px 18px 70px}
+  .wrap{max-width:1080px;margin:0 auto}
+  h1{font-size:22px;margin:0 0 4px}
+  .meta{color:var(--sub);font-size:13px;margin-bottom:18px}
+  .card{background:var(--card);border:1px solid var(--line);border-radius:14px;padding:20px 22px;margin-bottom:20px;box-shadow:0 1px 3px rgba(59,50,44,.05)}
+  h2{font-size:17px;margin:0 0 12px;padding-bottom:8px;border-bottom:2px solid var(--gold)}
+  .tag{display:inline-block;font-size:11px;padding:1px 8px;border-radius:9px;margin-left:6px;white-space:nowrap}
+  .t-blue{background:var(--bluebg);color:var(--blue);border:1px solid var(--blue)}
+  .rule{border-left:4px solid var(--gold);background:#FDFBF8;padding:9px 14px;border-radius:0 10px 10px 0;margin:8px 0;font-size:14px}
+  .qnum{display:inline-block;min-width:22px;height:22px;border-radius:50%;background:var(--gold);color:#fff;text-align:center;line-height:22px;font-size:12.5px;font-weight:700;margin-right:8px}
+  .confirm{border:2px solid var(--gold);background:#FDFBF8}
+  .confirm li{margin-bottom:8px;font-size:14px}
+  .phones{display:flex;gap:16px;flex-wrap:wrap;margin:14px 0;align-items:flex-start}
+  .phone{width:295px;border:1px solid #D8CFC5;border-radius:22px;background:#fff;overflow:hidden;box-shadow:0 3px 12px rgba(59,50,44,.08);flex-shrink:0}
+  .p-top{background:#F7F3EF;text-align:center;font-size:13px;font-weight:700;padding:8px 0;border-bottom:1px solid var(--line)}
+  .p-body{padding:11px;font-size:12px}
+  .p-label{text-align:center;font-size:12px;color:var(--sub);padding:7px 6px 9px}
+  .grp{border:1.5px solid var(--gold);border-radius:12px;padding:9px 10px;margin-bottom:9px;background:#FDFBF8}
+  .grp.dim{border-color:var(--line);background:#fff}
+  .grp h4{margin:0 0 5px;font-size:12.5px;display:flex;justify-content:space-between;align-items:center}
+  .grp h4 .x{color:var(--red);font-size:11px;font-weight:400}
+  .sec{font-size:10.5px;color:var(--gold);margin:7px 0 3px;font-weight:800;letter-spacing:.3px}
+  .it{display:flex;justify-content:space-between;padding:3.5px 2px;border-bottom:1px dashed var(--line);align-items:center}
+  .it:last-child{border-bottom:none}
+  .pill{display:inline-block;font-size:10.5px;padding:1px 8px;border-radius:8px;background:#F1EDE8;color:var(--sub);margin:2px 3px 2px 0;white-space:nowrap}
+  .pill.on{background:var(--ink);color:#fff}
+  .seg{display:flex;border:1px solid var(--line);border-radius:8px;overflow:hidden;margin:3px 0}
+  .seg div{flex:1;text-align:center;padding:4px 0;font-size:11px;color:var(--sub)}
+  .seg .on{background:var(--ink);color:#fff}
+  .chk{display:inline-block;width:12px;height:12px;border:1.5px solid var(--line);border-radius:4px;margin-right:6px;vertical-align:-2px}
+  .chk.on{background:var(--green);border-color:var(--green)}
+  .inp{border:1px solid var(--line);border-radius:8px;padding:7px 9px;color:#B9AFA6;margin:3px 0;background:#fff;font-size:11.5px;min-height:30px;line-height:1.4}
+  .addbtn{border:1.5px dashed var(--gold);border-radius:11px;text-align:center;padding:8px;color:var(--gold);font-weight:700;font-size:12.5px;margin:9px 0}
+  .money{border:1px solid var(--line);border-radius:11px;padding:8px 10px;font-size:11.5px;margin-top:8px;background:#fff}
+  .money .g{font-weight:700;margin-top:5px}
+  .money .r{display:flex;justify-content:space-between;padding:2px 0}
+  .money .ind{padding-left:13px;color:var(--sub)}
+  .money .tot{border-top:1.5px solid var(--ink);margin-top:6px;padding-top:6px;font-weight:800;font-size:13px;display:flex;justify-content:space-between}
+  .strike{color:#B9AFA6;text-decoration:line-through;margin-right:4px;font-weight:400}
+  .paym{border:1px solid var(--line);border-radius:10px;padding:7px 9px;margin:4px 0;background:#fff}
+  .paym.on{border-color:var(--green);background:var(--greenbg)}
+  .paym small{display:block;color:var(--sub);font-size:10.5px}
+  .pushbtn{background:var(--ink);color:#fff;text-align:center;border-radius:11px;padding:10px;font-weight:700;font-size:13px;margin-top:9px}
+  .note{background:var(--amberbg);border:1px solid var(--amber);border-radius:10px;padding:8px 12px;margin:8px 0;font-size:13px}
+</style>
+</head>
+<body>
+<div class="wrap">
+
+<h1>有迹 · 结算单服务分组·完整版 <span class="tag t-blue">v2 · 待店主确认</span></h1>
+<div class="meta">2026-08-12 · 按现有结算页真实分区（①价格体系…⑦支付构成）重排。<b>组内六件套</b>：价格体系／服务项目／加项目录／自选填写行／本单技师／被服务者——每个服务项目一组全都有；<b>单级四件</b>：定金／支付构成（菜单式）／分组明细合计／推送签署——整单只有一份，在所有组之后。价格计算不动。图＝合同。</div>
+
+<!-- ═══ 屏1 组①完整结构 ═══ -->
+<div class="card">
+<h2>一、页面总结构（三屏连看＝一个页面从上到下）</h2>
+<div class="phones">
+
+  <div class="phone">
+    <div class="p-top">屏 1 · 服务项目①（组内六件套）</div>
+    <div class="p-body">
+      <div class="grp">
+        <h4>服务项目 ①</h4>
+        <div class="sec">价格体系（本组独立）</div>
+        <div class="seg"><div class="on">会员价</div><div>普通价</div><div>疗程价</div></div>
+        <div class="sec">服务项目（单选自动替换）</div>
+        <div class="pill">美甲单色</div><div class="pill on">美甲简单款式</div><div class="pill">复杂款式</div><div class="pill">美睫</div>
+        <div class="it"><span><span class="chk on"></span>简单款式 2 小时</span><b><span class="strike">¥458</span>¥298</b></div>
+        <div class="it"><span><span class="chk"></span>简单款式 3 小时</span><b><span class="strike">¥528</span>¥358</b></div>
+        <div class="sec">加项目录（只显示美甲相关）</div>
+        <div class="it"><span><span class="chk on"></span>卸本甲</span><b><span class="strike">¥68</span>¥18</b></div>
+        <div class="it"><span><span class="chk on"></span>浅贴甲片</span><b><span class="strike">¥380</span>¥180</b></div>
+        <div class="sec">自选填写行（本组）</div>
+        <div class="inp">项目名称（例：钻球）　｜　金额　［＋添加］</div>
+        <div class="it"><span>钻球</span><b>¥50　<span style="color:var(--red)">移除</span></b></div>
+        <div class="sec">本单技师（本组，1–2 位）</div>
+        <div class="pill on">翠花</div><div class="pill">小婕</div><div class="pill">苏苏</div>
+        <div class="sec">被服务者（本组）</div>
+        <div class="inp">留空＝本人；朋友填称呼即可，单据仍推卡主签</div>
+      </div>
+      <div class="addbtn">＋ 添加第二个服务项目</div>
+    </div>
+    <div class="p-label">六件套全在组内——这组做什么、谁做、给谁做，一张卡说清</div>
+  </div>
+
+  <div class="phone">
+    <div class="p-top">屏 2 · 加了服务项目②（同构六件套）</div>
+    <div class="p-body">
+      <div class="grp dim">
+        <h4>服务项目 ① · 简单款式 2h · 翠花 <span class="x">展开 ▸</span></h4>
+        <span style="font-size:11px;color:var(--sub)">会员价 · 加项：卸本甲/浅贴甲片 · 自选：钻球 · 被服务者：本人</span>
+      </div>
+      <div class="grp">
+        <h4>服务项目 ② <span class="x">✕ 移除此项目</span></h4>
+        <div class="sec">价格体系（本组独立）</div>
+        <div class="seg"><div class="on">会员价</div><div>普通价</div><div>疗程价</div></div>
+        <div class="sec">服务项目</div>
+        <div class="pill">美甲简单款式</div><div class="pill on">美睫</div>
+        <div class="it"><span><span class="chk on"></span>美睫自然款</span><b><span class="strike">¥328</span>¥228</b></div>
+        <div class="sec">加项目录（只显示美睫相关）</div>
+        <div class="it"><span><span class="chk on"></span>卸睫毛（他店）</span><b><span class="strike">¥58</span>¥28</b></div>
+        <div class="it"><span><span class="chk"></span>本店制作免卸睫毛</span><b style="color:var(--green)">免收</b></div>
+        <div class="sec">自选填写行（本组）</div>
+        <div class="inp">项目名称　｜　金额　［＋添加］</div>
+        <div class="sec">本单技师（本组）</div>
+        <div class="pill">翠花</div><div class="pill on">小婕</div>
+        <div class="sec">被服务者（本组）</div>
+        <div class="inp">妹妹（朋友·不建档）</div>
+      </div>
+    </div>
+    <div class="p-label">项目②整组同构：可以不同价档、不同技师、不同被服务者<br>不点＋按钮＝这一组根本不存在</div>
+  </div>
+
+  <div class="phone">
+    <div class="p-top">屏 3 · 单级区（整单一份）</div>
+    <div class="p-body">
+      <div class="sec">定金　<span style="color:var(--sub);font-weight:400">按店配 ¥100 · 有收取记录才出开关</span></div>
+      <div class="seg"><div class="on">已收定金 ¥100</div><div>未收</div></div>
+
+      <div class="sec" style="margin-top:9px">支付构成 · 菜单式（技师勾选，金额后端算）</div>
+      <div class="paym on"><span class="chk on"></span><b>储值卡抵扣</b><small>可用余额 ¥300 → 本单抵 ¥300</small></div>
+      <div class="paym on"><span class="chk on"></span><b>已收定金抵扣</b><small>−¥100（来自收取记录）</small></div>
+      <div class="paym on"><span class="chk on"></span><b>线下收款（现金/扫码/POS）</b><small>差额 ¥630 到店收</small></div>
+      <div class="paym"><span class="chk"></span><b>现场充值再抵扣</b>　<span style="color:var(--blue);font-size:11px;text-decoration:underline">去帮顾客充值 →</span><small>点右侧小字进充值面板；充完自动回本单，余额刷新可抵扣</small></div>
+      <div style="font-size:10.5px;color:var(--sub);margin:3px 0 0">勾/不勾任何一项，金额分解都由后端重新算出并回显；不勾储值＝全额线下。</div>
+
+      <div class="money">
+        <div class="g">项目① 简单款式 2h · 翠花</div>
+        <div class="r ind"><span>主项目（会员价）</span><b>¥298</b></div>
+        <div class="r ind"><span>卸本甲＋浅贴甲片</span><b>¥198</b></div>
+        <div class="r ind"><span>钻球（自选）</span><b>¥50</b></div>
+        <div class="g">项目② 美睫自然款 · 小婕 · 被服务者：妹妹</div>
+        <div class="r ind"><span>主项目（会员价）</span><b>¥228</b></div>
+        <div class="r ind"><span>卸睫毛</span><b>¥28</b></div>
+        <div class="r"><span>原价合计</span><b class="strike">¥1342</b></div>
+        <div class="r"><span>档位小计</span><b>¥802</b></div>
+        <div class="r" style="color:var(--green)"><span>较原价共优惠</span><b>¥540</b></div>
+        <div class="r"><span>储值抵扣</span><b>−¥300</b></div>
+        <div class="r"><span>定金抵扣</span><b>−¥100</b></div>
+        <div class="tot"><span>到店应收</span><span>¥402</span></div>
+      </div>
+      <div class="pushbtn">推送签署</div>
+      <div style="text-align:center;font-size:10.5px;color:var(--sub);margin-top:4px">金额全部由后端计价引擎算出，本页不做任何金额运算</div>
+    </div>
+    <div class="p-label">定金/支付/明细/推送＝整单一份<br>明细按组分列，谁的挂谁下面</div>
+  </div>
+</div>
+</div>
+
+<!-- ═══ v2.3 新增:绑定前置+技师分配 ═══ -->
+<div class="card">
+<h2>一之二、新客绑定前置流程（v2.3 新增 · 解"充值须绑定、绑定只在签署"的死结）</h2>
+<div class="flow">
+  未绑定新客单<span class="arrow">→</span>点充值被拦，提示条带<b>【出示绑定码】</b>按钮<span class="arrow">→</span>弹层显示该档案<b>专属绑定码——本体是带档案参数的小程序码（wxacode）</b>，新客微信一扫即自动打开小程序、直落本人确认卡（无需装过/用过小程序）＋文案「请顾客扫码完成绑定——只绑定，不会进入签署、看不到结算单」<span class="arrow">→</span>顾客扫码进<b>本人确认卡（既有 S4 流程）</b><span class="arrow">→</span>绑定成功页（"已绑定 ✓，请将手机交还技师"）<span class="arrow">→</span>结算面板收到绑定事件<b>自动刷新，充值解锁</b><span class="arrow">→</span>充值→余额抵扣→推送签署（此时已绑定，可正常推送到顾客微信）
+</div>
+<div class="rule"><span class="qnum">⑦</span><b>两把钥匙各司其职</b>：绑定码＝会员码（指向档案，扫了只做绑定）；签署码（指向单，扫了进签署）。绑定过程中顾客**看不到结算单与任何金额**。新客签署强提醒那套保留——但走过绑定前置的新客到签署时已是绑定态，直接推送即可。「出示绑定码」入口同时出现在：充值拦截提示条、结算单顾客区（未绑定档案旁的小字）。**沙盒期**：与签署码同法（占位图＋链接＋复制），上线时换 wxacode 真码——发版清单的「码对应到具体对象」验证项把绑定码一并纳入（绑定码→档案，签署码→单）。</div>
+</div>
+
+<div class="card">
+<h2>一之三、组内技师·服务内容分配（v2.3 恢复原有功能 · 规则⑧图示 · <b>数字编号点选，原样恢复</b>）</h2>
+<div class="rule"><span class="qnum">⑧</span><b>数字编号点选（原有机制，原样恢复，不改形态）</b>：本组每条内容（主项目/各加项/自选行）按列表顺序自带**数字编号 ①②③④**；本单技师下方出现**数字按钮排**——每位技师点选自己做的编号即可，一个编号可两人都点（共做）。单技师时不出现（全归一人）。分配随单记录，进**日结分成参考**展示；<b>钱仍由店长日结核定，零新口径</b>。这是分组重构时丢失的原有功能，落回组结构（编号＝本组内编号）。</div>
+
+<div class="phones">
+
+  <div class="phone">
+    <div class="p-top">规则⑧ · 双技师数字点选（原样恢复）</div>
+    <div class="p-body">
+      <div class="grp">
+        <h4>服务项目 ①</h4>
+        <div class="sec">本组条目（自带编号）</div>
+        <div class="it"><span><b>①</b> 简单款式 2 小时</span><b><span class="strike">¥458</span>¥298</b></div>
+        <div class="it"><span><b>②</b> 卸本甲</span><b><span class="strike">¥68</span>¥18</b></div>
+        <div class="it"><span><b>③</b> 浅贴甲片</span><b><span class="strike">¥380</span>¥180</b></div>
+        <div class="it"><span><b>④</b> 钻球（自选）</span><b>¥50</b></div>
+
+        <div class="sec">本单技师（本组，1–2 位）</div>
+        <div class="pill on">翠花</div><div class="pill on">小婕</div><div class="pill">苏苏</div>
+
+        <div style="margin-top:6px;font-size:11.5px">
+          <div style="display:flex;align-items:center;gap:6px;padding:3px 0">
+            <span style="min-width:34px;font-weight:700">翠花</span>
+            <span class="pill on">①</span><span class="pill on">②</span><span class="pill">③</span><span class="pill on">④</span>
+          </div>
+          <div style="display:flex;align-items:center;gap:6px;padding:3px 0">
+            <span style="min-width:34px;font-weight:700">小婕</span>
+            <span class="pill">①</span><span class="pill">②</span><span class="pill on">③</span><span class="pill on">④</span>
+          </div>
+        </div>
+        <div style="font-size:10.5px;color:var(--sub);padding:3px 2px 0">每人点自己做的编号；④两人都点＝共做。单技师时这两排不出现，全归一人。</div>
+      </div>
+      <div class="sec" style="margin-top:7px">↓ 随单进店长日结 · 分成参考（只展示）</div>
+      <div class="money">
+        <div class="r"><span>翠花：①②④　　小婕：③④</span></div>
+        <div style="font-size:10.5px;color:var(--sub);margin-top:3px;border-top:1px dashed var(--line);padding-top:3px">分成金额仍由店长日结核定——零新口径</div>
+      </div>
+    </div>
+    <div class="p-label">和原来一模一样：条目带编号，技师点自己的编号<br>唯一变化＝编号按组各自计数（组②里重新从①起）</div>
+  </div>
+
+</div>
+</div>
+
+<!-- ═══ 合同规则 ═══ -->
+<div class="card">
+<h2>二、合同规则</h2>
+<div class="rule"><span class="qnum">①</span><b>组内六件套（店主确认版）</b>：每个服务项目组内必有——价格体系（**默认按系统会员判定自动选档，可手动调整、改档留痕**——现有口径；每组独立）／服务项目（单选自动替换）／加项目录（按本组主项目类别过滤）／自选填写行（本组）／本单技师（**本组 1–2 位，双技师分成按既有规则由店长日结时核定——技师逻辑与现行完全一致，只是落到组上**）／被服务者（本组；留空＝本人，朋友填称呼不建档，单据推卡主签）。</div>
+<div class="rule"><span class="qnum">②</span><b>单级四件（整单一份，在所有组之后）</b>：定金（挂预约，有收取记录才出开关——v1.2 口径不变）／支付构成（菜单式）／分组明细＋合计／推送签署。</div>
+<div class="rule"><span class="qnum">③</span><b>支付构成菜单式</b>：技师主动勾选支付方式（储值卡抵扣／已收定金抵扣／线下收款／现场充值再抵扣，可组合），**不再自动摆好**；每次勾选变化后端重算金额分解并回显；金额红线不变——菜单只选"路"，钱全由 computeSettlement 算。无储值余额不显示储值项；无收取记录不显示定金项（同现有口径）。</div>
+<div class="rule"><span class="qnum">③-2</span><b>现场充值·小字链接进充值面板（店主拍板 v2.2 修正）</b>：「现场充值再抵扣」选项**旁边带小字链接「去帮顾客充值 →」**——点链接（不是勾选项）弹出内嵌充值面板（复用既有"给会员充值"流程：选套餐或输金额，赠额只按套餐规则自动算——涉钱轻动作口径）→ 充值完成（线下收款标记，充值＝预收不进收入，口径不变）→ **自动回到本结算单**，余额刷新并纳入抵扣重算，技师全程不离开结算单；充完后该选项自动可勾。勾选项本身只表示"用充值后的余额抵扣"，不触发跳转。轻档案顾客同样可充。线上支付接通后，面板自动多一条"顾客扫码自付充值"路（随 S2，本次先接线下代充）。</div>
+<div class="rule"><span class="qnum">④</span><b>添加/移除</b>：「＋添加第二个服务项目」在组①之后；项目②整组 ✕ 移除；组内换主项目时类别不符的加项自动清除并提示。</div>
+<div class="rule"><span class="qnum">⑤</span><b>下游同构</b>：签署单快照、日结、顾客端单据均按组分列（项目→子行）；业绩按组技师各归各（组①归翠花、组②归小婕——多技师分成规则自然落到组上）；口径零新增。</div>
+<div class="rule"><span class="qnum">⑥</span><b>验收</b>：L5 各 5 次——单组全流程／加组②（不同价档不同技师不同被服务者）／移除组②／组内换主项目加项自动清／支付菜单各组合（储值+定金+线下、纯线下、现场充值路）。店主终验在此版上做。</div>
+</div>
+
+<div class="card confirm">
+<h2>三、店主确认记录（2026-08-12 · v2.1）</h2>
+<ol>
+  <li><b>原价合计＋较原价共优惠 ✅ 已补回</b>（v2 漏画，本版恢复：明细区含原价合计划线行与绿色共优惠行，逐行原价划线保留）。</li>
+  <li><b>价格体系每组独立 ✅</b>——默认系统会员判定自动选档，可手动调整（改档留痕，现有口径）。</li>
+  <li><b>技师逻辑照原样 ✅</b>——每组 1–2 名，双技师分成按既有规则日结核定；不引入"各归各"新口径。</li>
+  <li><b>支付菜单四项 ✅＋现场充值＝旁侧小字链接「去帮顾客充值 →」进面板</b>（点链接才跳、勾选项只表示用余额抵扣），充完自动回单重算，技师不离开结算单（规则③-2，v2.2 修正）。</li>
+</ol>
+<p style="font-size:13.5px;color:var(--sub);margin:6px 0 0">v2.1 若无异议，即交 Code 实现（图=合同四步交付）；你的终验在分组完整版上一次做完。</p>
+</div>
+
+<div class="meta" style="text-align:center">有迹 · 结算单服务分组完整版 v2.3 · 2026-08-12 · Cowork 维护（v2.3 新增：绑定前置流程＋组内技师内容分配恢复——均为店主 08-12 提出；规则⑧图示按店主纠正定稿＝数字编号点选原样恢复，Cowork 首版勾选清单方案作废）</div>
+</div>
+</body>
+</html>
