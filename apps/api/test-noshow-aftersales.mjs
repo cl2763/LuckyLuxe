@@ -785,7 +785,13 @@ const main = async () => {
       check('㉛ 规则⑥ 迁移块在(幂等标记 s1_storefront)', srv.includes("s1_storefront"))
 
       // 双轨收口:老「服务管理」口子建的服务默认进橱窗(storefront=1),不产生「目录有、顾客看不见」的暗礁
-      const legacy = await request('/admin/services', { method: 'POST', body: JSON.stringify({ type: 'NAIL', nameZh: `旧口建${RUN_ID}`, nameEn: 'legacy', priceCents: 8800 }) }, shop.token)
+      /* 分类唯一真相律③(08-25):老口子新建也必须挂大类 —— 夹具跟着口径走(先取本店大类)。
+         顺带把「不挂大类会被拒」这条**当场验掉**:同一个口,一次不带大类必拒、一次带上必成。 */
+      const catsNow = (await request('/admin/pricing/categories', {}, shop.token)).data.categories || []
+      const noCat = await request('/admin/services', { method: 'POST', body: JSON.stringify({ type: 'NAIL', nameZh: `旧口无类${RUN_ID}`, nameEn: 'nocat', priceCents: 8800 }) }, shop.token)
+      check('㉛ 分类唯一真相律:老口子不挂大类 = 400 CATEGORY_REQUIRED(不许悄悄留空)',
+        noCat.status === 400 && noCat.data?.error?.code === 'CATEGORY_REQUIRED', `${noCat.status}`)
+      const legacy = await request('/admin/services', { method: 'POST', body: JSON.stringify({ type: 'NAIL', nameZh: `旧口建${RUN_ID}`, nameEn: 'legacy', priceCents: 8800, categoryId: catsNow[0]?.id }) }, shop.token)
       check('㉛ 双轨收口 旧口子新建默认上架', legacy.status === 201 && (await pubList(shop.tenantId)).some((sv) => sv.id === legacy.data.service.id))
 
       // 空态:B 店全部下架 → 顾客接口空数组(既有空态,不 500)
@@ -3036,6 +3042,75 @@ const main = async () => {
         && retireMod.includes('if (!demoRetireDone && !isProduction) try {')
         && srv.includes('retireLegacyDemoArchives({ db, iso, isProduction: IS_PRODUCTION })'))
 
+      /* ===== 🔴 ㋦ 分类唯一真相律(店主 2026-08-25 立,长期规矩)=====
+         结构是**两级不是两套**:上层=大类字典(平台三类是默认起点,商家可细分);
+         下层=款式(项目本身,挂在大类下,不再自成一组)。
+         一个项目的分类**只有一处真相 = category_id → 大类字典**。
+         本案实证:同一家店两套字段各说各的 → 顾客端变成「8 个分组各 1 项」,等于没分组。 */
+      {
+        const catDb = new DatabaseSync(process.env.TEST_DB_PATH)
+        // 断言一:全库 services.category 与大类字典不一致的行 = 0(自由文本已退役为派生)
+        const mismatched = catDb.prepare(`SELECT COUNT(*) n FROM services s
+          LEFT JOIN service_categories c ON c.id = s.category_id
+          WHERE COALESCE(s.category, '') <> '' AND COALESCE(s.category, '') <> COALESCE(c.name, '')`).get().n
+        check('㋦① 全库 services.category 与大类字典零不一致(自由文本已退役为派生字段)',
+          mismatched === 0, `不一致 ${mismatched} 行`)
+
+        // 断言二:新建/编辑不带 category_id → 必须拒绝(两条写口都验)
+        const noCat1 = await request('/admin/services', { method: 'POST', body: JSON.stringify({ type: 'NAIL', nameZh: `律探针${RUN_ID}`, nameEn: 'probe', priceCents: 100 }) }, shop.token)
+        check('㋦② 商家建项目不挂大类 = 400 CATEGORY_REQUIRED',
+          noCat1.status === 400 && noCat1.data?.error?.code === 'CATEGORY_REQUIRED', `${noCat1.status}`)
+        const catsP = (await request('/admin/pricing/categories', {}, shop.token)).data.categories || []
+        const itemNoCat = await request('/admin/pricing/items', { method: 'POST', body: JSON.stringify({ nameZh: `律探针2${RUN_ID}`, type: 'NAIL', itemKind: 'main', listPriceCents: 100, storefront: true }) }, shop.token)
+        check('㋦③ 目录建主项目不挂大类且要上架 = 400 CATEGORY_REQUIRED(不许悄悄留空)',
+          itemNoCat.status === 400 && itemNoCat.data?.error?.code === 'CATEGORY_REQUIRED', `${itemNoCat.status}`)
+
+        // 断言三:顾客端 /services 的分组名 ≡ 大类字典名(真跑取值)
+        const pubSvc = (await request(`/services?tenantId=${shop.tenantId}`, {}, null, { 'x-tenant-id': shop.tenantId })).data.services || []
+        const dictNames = new Set(catsP.map((c) => c.name))
+        const badNames = pubSvc.map((sv) => sv.category).filter((n) => n && !dictNames.has(n))
+        check('㋦④ 顾客端 /services 的分组名 ≡ 大类字典名(真跑取值,零野名字)',
+          badNames.length === 0, JSON.stringify({ 野名字: badNames, 字典: [...dictNames] }))
+
+        // 断言四:导入一份故意缺大类的 CSV → 标红退回、一行没进库
+        const beforeN = catDb.prepare('SELECT COUNT(*) n FROM services WHERE tenant_id = ?').get(shop.tenantId).n
+        const dry = await request(`/platform/tenants/${shop.tenantId}/import/services`, { method: 'POST', body: JSON.stringify({
+          headers: ['项目名', '大类', '价格', '时长'],
+          rows: [['有类的', catsP[0]?.name || '美甲', '198', '90'], ['缺类的', '', '99', '30']]
+        }) })
+        const rep = dry.data.report
+        check('㋦⑤ 导入试跑:缺大类的行标红退回,且报告点名到行号(不是笼统报个失败数)',
+          rep.blocked.length === 1 && rep.blocked[0].kind === 'NO_CATEGORY' && rep.blocked[0].line === 3
+          && rep.willImport === 0 && /缺大类 1 行/.test(rep.verdict), JSON.stringify(rep.blocked))
+        const exec = await request(`/platform/tenants/${shop.tenantId}/import/services`, { method: 'POST', body: JSON.stringify({
+          dryRun: false, headers: ['项目名', '大类', '价格', '时长'],
+          rows: [['有类的', catsP[0]?.name || '美甲', '198', '90'], ['缺类的', '', '99', '30']]
+        }) })
+        const afterN = catDb.prepare('SELECT COUNT(*) n FROM services WHERE tenant_id = ?').get(shop.tenantId).n
+        check('㋦⑥ 导入执行:一行有问题就整批不进库(要么整批干净进,要么一行不进)',
+          exec.status === 400 && exec.data?.error?.code === 'IMPORT_BLOCKED' && afterN === beforeN,
+          JSON.stringify({ status: exec.status, before: beforeN, after: afterN }))
+        // 正例:全都挂了大类 → 真进库
+        const okImp = await request(`/platform/tenants/${shop.tenantId}/import/services`, { method: 'POST', body: JSON.stringify({
+          dryRun: false, headers: ['项目名', '大类', '价格', '时长'], rows: [['导入正例', catsP[0]?.name || '美甲', '288', '60']]
+        }) })
+        check('㋦⑦ 导入正例:全部挂了大类就真进库,且落的是 category_id',
+          okImp.status === 200 && okImp.data.created === 1
+          && catDb.prepare('SELECT category_id c FROM services WHERE tenant_id = ? AND name_zh = ?').get(shop.tenantId, '导入正例')?.c === catsP[0]?.id)
+
+        // 建店默认三大类
+        check('㋦⑧ 建店即落平台三大类(起点不是上限,商家可再细分)',
+          catsP.length >= 3 && ['美甲', '美睫', '护理·其他'].every((n) => catsP.some((c) => c.name === n)),
+          JSON.stringify(catsP.map((c) => c.name)))
+        catDb.close()
+
+        // 商家端只剩一个分类输入口(编辑项目只选大类)
+        const admJs2 = readFileSync(join(ROOT42, 'apps/web/admin.js'), 'utf8')
+        const catInputs = (admJs2.match(/name="category"/g) || []).length
+        check('㋦⑨ 商家编辑项目只选大类:自由文本分类输入框零残留',
+          catInputs === 0 && admJs2.includes('name="categoryId"') && !/category: form\.get\('category'\)/.test(admJs2))
+      }
+
       /* ===== ㋥ 波次2 网页后台功能波(店主 2026-08-25:S4 / S5-a / S6 / S13)===== */
       {
         const admHtml = readFileSync(join(ROOT42, 'apps/web/admin.html'), 'utf8')
@@ -3079,8 +3154,11 @@ const main = async () => {
           && admHtml.indexOf('/web/finance-trend.js') < admHtml.indexOf('/web/admin.js'))
 
         // S13:模块①按大类分组 + 平台侧大类字典
+        // 判据跟着被测物走:模块①列表同批搬到 /web/service-catalog.js(公约②)
+        const svcCatalogJs = readFileSync(join(ROOT42, 'apps/web/service-catalog.js'), 'utf8')
         check('㋥S13① 模块①按大类分组,未归类单独一组排最后(不藏起来)',
-          admJs.includes('data-svc-group=') && admJs.includes("'未归类'") && admJs.includes('if (!a[0]) return 1'))
+          svcCatalogJs.includes('data-svc-group=') && svcCatalogJs.includes("'未归类'")
+          && svcCatalogJs.includes('if (!a[0]) return 1') && !/function renderServices\(/.test(admJs))
         check('㋥S13② 平台侧大类字典界面在场(tab + 增删改三个真实调用)',
           platHtml.includes(`onclick="tab('cats')"`) && platHtml.includes('id="tab-cats"')
           && platHtml.includes('/categories`,{method:\'POST\'') && platHtml.includes('categories/${id}`,{method:\'PATCH\'')

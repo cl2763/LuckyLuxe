@@ -42,5 +42,19 @@ export function createPricingCategories({ db, apiError, randomId, iso, serialize
     return { deleted: true }
   }
 
-  return { list, create, patch, remove }
+  /* 🔴 分类唯一真相律③(店主 2026-08-25):**建店时默认落平台三大类**。
+     不铺的话新店一开就是"零大类",项目挂不上大类 → 上架被拦 → 看起来像功能坏了。
+     平台三类是**起点不是上限**:商家可以细分(小婕就细成六类:美甲单色/简单款式/复杂款式/美睫/护理/卸甲)。
+     幂等:已经有大类的店一行不动。 */
+  function seedDefaults(tenantId, platformCats) {
+    const has = db.prepare('SELECT COUNT(*) n FROM service_categories WHERE tenant_id = ?').get(tenantId).n
+    if (has > 0) return { seeded: 0, skipped: true }
+    let n = 0
+    for (const [i, c] of (platformCats || []).entries()) {
+      try { create(tenantId, { name: c.nameZh, key: c.key, sortOrder: i }); n += 1 } catch (e) { /* 撞名跳过 */ }
+    }
+    return { seeded: n, skipped: false }
+  }
+
+  return { list, create, patch, remove, seedDefaults }
 }

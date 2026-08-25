@@ -18,7 +18,10 @@ import { createStaticServe } from './static-serve.mjs'                // 静态�
 import { retireLegacyDemoArchives } from './legacy-demo-retire.mjs'   // 旧口径演示档案退役(一次性)
 import { createMemberCode } from './member-code.mjs'                  // 会员码域(公约②)
 import { createStoreDirectory } from './store-directory.mjs'          // 门店列表三个一(公约①)
-import { createPricingCategories } from './pricing-categories.mjs'    // 大类字典 CRUD(两条线共用)  // 账本禁删/禁改律唯一出口(D72)      // 顾客端订单表达域(同上)
+import { createPricingCategories } from './pricing-categories.mjs'    // 大类字典 CRUD(两条线共用)
+import { createServiceImport } from './import-services.mjs'           // 价目表导入(分类唯一真相律堵入口)
+import { seedServices } from './seed-services.mjs'                    // 演示种子数据(公约②)
+import { createPricingSerialize } from './pricing-serialize.mjs'      // 价目表序列化域(公约②)  // 账本禁删/禁改律唯一出口(D72)      // 顾客端订单表达域(同上)
 import { createBookingIncome } from './booking-income.mjs'  // 订单入账触点(同上)
 import { createBookingState, isAfterSalesOpen, shouldAutoComplete } from './booking-state.mjs'  // 订单状态机(D70 合同,唯一实现)   // 笔迹图:纯 JS 画折线,**透明底**(单据白纸走 svgToPng,两条路不混)
 import { analyzeReferenceImage, createBookingSummary, createCustomerInsight, createCustomerServiceReply, createDailyBrief, createRecallMessages, createServiceNoteInsights, createSocialCopy, extractKbEntriesFromDocument, polishStaffQuoteReply } from './ai-utils.mjs'
@@ -328,14 +331,7 @@ const addOns = [
   { id: 'extend', name: '延长加项时间', priceCents: 5000, durationMin: 30 }
 ]
 
-const seedServices = [
-  ['nail-french-01', 'NAIL', '法式系列', '经典奶油法式', 'Classic Cream French', '柔和奶油底色搭配细线法式边，适合通勤与约会场景。', 'Soft cream base with a delicate French line for daily wear and special dates.', '/assets/images/nail-french.jpg', 16800, 5000, 120, 1, ['甲型修整', '基础护理', '底色上色', '法式线条', '封层护理'], ['服务前请尽量避免自行修剪过短', '如需卸甲请在预约时勾选加项']],
-  ['nail-luxe-01', 'NAIL', '轻奢设计', '柔金贝母设计', 'Soft Gold Shell Design', '贝母片与柔金线条组合，保留高级感，也适合日常穿搭。', 'Mother-of-pearl accents and soft gold lines for an elevated everyday style.', '/assets/images/nail-luxe.jpg', 23800, 5000, 150, 2, ['甲面护理', '底色铺设', '贝母定位', '金线装饰', '加固封层'], ['复杂设计耗时较长，请预留完整服务时间']],
-  ['nail-jp-01', 'NAIL', '日式款', '日式微闪渐变', 'Japanese Shimmer Gradient', '细腻微闪从甲根自然过渡，温柔显白，适合短甲。', 'A subtle shimmer gradient that looks soft, clean, and flattering on short nails.', '/assets/images/nail-jp.jpg', 19800, 5000, 120, 3, ['手部清洁', '甲型调整', '渐变叠色', '微闪点缀', '封层'], ['渐变色可到店根据肤色调整']],
-  ['nail-care-01', 'NAIL', '基础护理', '手部基础护理', 'Basic Hand Care', '修型、软化、死皮护理与营养油养护，适合定期维护。', 'Shape, soften, clean cuticles, and nourish for regular maintenance.', '/assets/images/nail-care.jpg', 8800, 5000, 120, 4, ['清洁消毒', '修型', '软化护理', '死皮修整', '营养油'], ['此项目不含甲油胶上色']],
-  ['lash-natural-01', 'LASH', '自然款', '裸感自然睫', 'Bare Natural Lash', '轻盈自然，放大眼神但保留原生感。', 'Light, natural lashes that open the eyes while keeping a bare-skin look.', '/assets/images/lash-natural.jpg', 19800, 5000, 120, 1, ['眼型沟通', '清洁隔离', '睫毛嫁接', '梳理定型', '护理说明'], ['服务后 6 小时内尽量避免接触水汽']],
-  ['lash-volume-01', 'LASH', '浓密款', '轻盈浓密睫', 'Soft Volume Lash', '在自然舒适的基础上增强存在感，适合拍照和重要场合。', 'Comfortable volume with stronger presence for photos and special occasions.', '/assets/images/lash-volume.jpg', 26800, 5000, 120, 2, ['眼型设计', '分层嫁接', '密度调整', '梳理检查', '护理说明'], ['敏感眼型请提前备注']]
-]
+/* 演示种子数据已搬出到 ./seed-services.mjs(公约②,2026-08-25) */
 
 function setupDatabase() {
   db.exec(`
@@ -1176,11 +1172,22 @@ function seedDatabase() {
   techStmt.run('tech-ava', 'store-ontario-01', 'Ava Lin', 'Lash Artist')
   techStmt.run('tech-lina', 'store-ontario-01', 'Lina Zhou', 'Senior Artist')
 
+  /* 🔴 分类唯一真相律(店主 2026-08-25):**演示种子也是一条写入路径** —— 它原来往
+     services.category 里写「法式系列 / 日式款」这类**款式名**,与大类字典各说各的,
+     顾客端就是这么变成「8 个分组各 1 项」的。
+     现在:种子只写 category_id(按 type 落到平台三大类),自由文本列写空串。
+     种子里那些款式名不丢 —— 它们本来就是**款式**,是项目名的一部分语义,不是分类。 */
+  const seedCatOf = (type) => {
+    const key = type === 'NAIL' ? 'nail' : (type === 'LASH' ? 'lash' : 'care')
+    const row = db.prepare("SELECT id FROM service_categories WHERE tenant_id = 'lucky-luxe' AND key = ?").get(key)
+    return row?.id || null
+  }
   const serviceStmt = db.prepare(`INSERT OR IGNORE INTO services
-    (id, type, category, name_zh, name_en, description_zh, description_en, image_url, price_cents, deposit_cents, base_duration_min, sort_order, process_json, notice_json)
-    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`)
+    (id, type, category, category_id, name_zh, name_en, description_zh, description_en, image_url, price_cents, deposit_cents, base_duration_min, sort_order, process_json, notice_json)
+    VALUES (?, ?, '', ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`)
   for (const service of seedServices) {
-    serviceStmt.run(...service.slice(0, 12), JSON.stringify(service[12]), JSON.stringify(service[13]))
+    const [id, type] = service
+    serviceStmt.run(id, type, seedCatOf(type), ...service.slice(3, 12), JSON.stringify(service[12]), JSON.stringify(service[13]))
   }
 
   const assignStmt = db.prepare('INSERT OR IGNORE INTO technician_services (technician_id, service_id) VALUES (?, ?)')
@@ -5212,10 +5219,25 @@ function serviceIdFrom(body) {
   return `${String(body.type || 'NAIL').toLowerCase()}-${source}-${Date.now().toString(36)}`
 }
 
+/* 分类唯一真相律③ 的**唯一校验口**:没挂大类 / 挂了本店没有的大类 → 拒。
+   两条写路由(商家「服务管理」与平台代配)共用它,不许谁那边松一点。 */
+function assertCategoryOk(categoryId, tenantId) {
+  if (!categoryId) {
+    throw apiError(400, 'CATEGORY_REQUIRED',
+      '这个项目没挂大类 —— 顾客端按大类分组,不挂就会一个项目自成一组。请先选一个大类。')
+  }
+  const cat = db.prepare('SELECT id FROM service_categories WHERE id = ? AND tenant_id = ?').get(categoryId, tenantId)
+  if (!cat) throw apiError(400, 'BAD_REQUEST', '大类不存在或不属于本店。')
+}
+
 function servicePayload(body, current = {}) {
+  /* 🔴 分类唯一真相律(店主 2026-08-25):写入路径**不再接受**自由文本 category —— 只认 categoryId。
+     `category` 列仍在表上(存量对齐过),但从此**只写空串**:读的时候一律 join 大类字典派生。 */
+  const categoryId = body.categoryId === undefined ? (current.category_id || null) : (String(body.categoryId || '').trim() || null)
   return {
     type: String(body.type ?? current.type ?? 'NAIL').toUpperCase(),
-    category: body.category ?? current.category ?? '未分类',
+    categoryId,
+    category: '',
     nameZh: body.nameZh ?? current.name_zh ?? '',
     nameEn: body.nameEn ?? current.name_en ?? '',
     descriptionZh: body.descriptionZh ?? current.description_zh ?? '',
@@ -5247,6 +5269,15 @@ function startingPriceCentsOf(serviceId, fallbackCents) {
   const rows = db.prepare('SELECT price_cents FROM service_prices WHERE service_id = ? AND price_cents > 0').all(serviceId)
   if (!rows.length) return fallbackCents || 0
   return Math.min(...rows.map((r) => r.price_cents))
+}
+
+/* 🔴 分类唯一真相律的**唯一读出口**:项目的分类名一律由 category_id join 大类字典得到。
+   拿不到(没挂大类)就返回空串 —— 不回落到那个已退役的自由文本列,也不编一个
+   (零回落律同族:没挂就是没挂,让它在界面上以「未归类」现形,才有人去补)。 */
+function categoryNameOf(row) {
+  if (!row?.category_id) return ''
+  const c = db.prepare('SELECT name FROM service_categories WHERE id = ?').get(row.category_id)
+  return c?.name || ''
 }
 
 function serializeService(row, lang = 'zh') {
@@ -5287,7 +5318,13 @@ function serializeService(row, lang = 'zh') {
   return {
     id: row.id,
     type,
-    category: row.category,
+    /* 🔴 分类唯一真相律(店主 2026-08-25 立):一个项目的分类**只有一处真相 = category_id → 大类字典**。
+       `services.category` 这个自由文本列**退役为派生字段** —— 读的时候由 category_id join 出句,
+       写入路径不再接受它(与「后端出句 / 唯一出口」同族)。
+       本案实证:同一家店两套字段各说各的,顾客端就变成「8 个分组各 1 项」,等于没分组;
+       而商家后台那边看着是好的,所以一直没人发现。 */
+    category: categoryNameOf(row),
+    categoryId: row.category_id || null,
     name: lang === 'en' ? row.name_en : row.name_zh,
     nameZh: row.name_zh,
     nameEn: row.name_en,
@@ -5350,6 +5387,12 @@ function tenantMemberTiers(tenantId = currentTenantId()) {
 /* ===== 会员码域已搬出到 ./member-code.mjs(公约②,2026-08-25)===== */
 const { memberCodeForUserId, displayNameForUserId, userIdFromMemberCode, isGenericDisplayName } = createMemberCode({ db })
 const storeDirectory = createStoreDirectory({ db })
+const { pricingCategories, serializePricingCategory, serializePricingItem, pricingItemShape } = createPricingSerialize({
+  db, apiError, currentTenantId, cents, formatMoneyCents,
+  categoryNameOf: (row) => categoryNameOf(row), timecardUnitCents: (row, n) => timecardUnitCents(row, n),
+  servicePriceMap: (id) => servicePriceMap(id), startingPriceCentsOf: (id, base) => startingPriceCentsOf(id, base)
+})
+const serviceImportApi = createServiceImport({ db, apiError, randomId, iso, categoryList: (tid) => pricingCategories(tid) })
 const pricingCategoryApi = createPricingCategories({ db, apiError, randomId, iso, serialize: (r) => serializePricingCategory(r), listOf: (tid) => pricingCategories(tid) })
 
 function membershipForSpend(totalSpentCents = 0, tenantId = currentTenantId()) {
@@ -7404,9 +7447,6 @@ function isMemberOf(userId, tenantId = currentTenantId()) {
   return Boolean(row)
 }
 
-function pricingCategories(tenantId = currentTenantId()) {
-  return db.prepare('SELECT * FROM service_categories WHERE tenant_id = ? ORDER BY sort_order ASC, rowid ASC').all(tenantId)
-}
 
 // 单个项目的某档价格:缺档回落 list 档,再回落 services.price_cents(老数据零配置也能报价)
 function servicePriceCents(service, tierKey = 'list') {
@@ -7545,79 +7585,8 @@ function writePricingItemPrices(tenantId, serviceId, body = {}, listCents = 0) {
   }
 }
 
-function pricingItemShape(body = {}, cur = {}, tenantId = currentTenantId()) {
-  const itemKind = body.itemKind === undefined ? (cur.item_kind || 'main') : (body.itemKind === 'addon' ? 'addon' : 'main')
-  const categoryId = body.categoryId === undefined ? (cur.category_id || null) : (String(body.categoryId || '').trim() || null)
-  let categoryName = cur.category || '未分类'
-  if (categoryId) {
-    const cat = db.prepare('SELECT * FROM service_categories WHERE id = ? AND tenant_id = ?').get(categoryId, tenantId)
-    if (!cat) throw apiError(400, 'BAD_REQUEST', '大类不存在或不属于本店。')
-    categoryName = cat.name
-  } else if (body.category !== undefined) {
-    categoryName = String(body.category || '未分类')
-  }
-  const type = String(body.type || cur.type || 'OTHER').toUpperCase()
-  let addonScope = []
-  if (Array.isArray(body.addonScope)) addonScope = body.addonScope.map((item) => String(item))
-  else { try { addonScope = JSON.parse(cur.addon_scope_json || '[]') } catch { addonScope = [] } }
-  return {
-    itemKind,
-    categoryId,
-    categoryName,
-    unit: ['once', 'per_finger', 'per_session'].includes(body.unit) ? body.unit : (cur.unit || 'once'),
-    priceRule: ['fixed', 'pct_of_tier_price'].includes(body.priceRule) ? body.priceRule : (cur.price_rule || 'fixed'),
-    priceRuleValue: body.priceRuleValue === undefined ? (cur.price_rule_value || 0) : (Number(body.priceRuleValue) || 0),
-    addonScope,
-    // 加项组名:商家自填(如「延长类」「补甲类」「卸甲类」);留空 = 归「其他加项」
-    addonGroup: body.addonGroup === undefined ? (cur.addon_group || '') : String(body.addonGroup || '').trim().slice(0, 20),
-    type: ['NAIL', 'LASH', 'CARE', 'OTHER'].includes(type) ? type : 'OTHER'
-  }
-}
 
-function serializePricingCategory(row) {
-  return {
-    id: row.id,
-    key: row.key,
-    name: row.name,
-    sortOrder: row.sort_order,
-    isBookable: Boolean(row.is_bookable),
-    note: row.note || '',
-    itemCount: db.prepare('SELECT COUNT(*) AS n FROM services WHERE tenant_id = ? AND category_id = ?').get(row.tenant_id, row.id).n
-  }
-}
 
-function serializePricingItem(row) {
-  const prices = servicePriceMap(row.id)
-  let addonScope = []
-  try { addonScope = JSON.parse(row.addon_scope_json || '[]') } catch { addonScope = [] }
-  return {
-    id: row.id,
-    nameZh: row.name_zh,
-    nameEn: row.name_en || '',
-    type: row.type,
-    itemKind: row.item_kind || 'main',
-    categoryId: row.category_id || null,
-    category: row.category,
-    unit: row.unit || 'once',
-    priceRule: row.price_rule || 'fixed',
-    priceRuleValue: row.price_rule_value || 0,
-    addonScope,
-    addonGroup: row.addon_group || '',
-    baseDurationMin: row.base_duration_min,
-    depositCents: row.deposit_cents,
-    sortOrder: row.sort_order,
-    isActive: Boolean(row.is_active),
-    storefront: Boolean(row.storefront),
-    isTimecard: Boolean(row.is_timecard),
-    startingPriceCents: startingPriceCentsOf(row.id, row.price_cents),
-    priceCents: row.price_cents,
-    listPriceCents: prices.list ? prices.list.priceCents : row.price_cents,
-    sharePriceCents: prices.share ? prices.share.priceCents : null,
-    memberPriceCents: prices.member ? prices.member.priceCents : null,
-    coursePriceCents: prices.course ? prices.course.priceCents : null,
-    courseTimes: prices.course ? prices.course.courseTimes : null
-  }
-}
 
 function serializeRechargeTier(row) {
   let gift = {}
@@ -12456,10 +12425,11 @@ async function route(req, res) {
     const payload = servicePayload(await readBody(req))
     if (!['NAIL', 'LASH', 'CARE', 'OTHER'].includes(payload.type)) throw apiError(400, 'BAD_REQUEST', '服务类型须为 美甲/美睫/护理/其他。')
     if (!payload.nameZh || !payload.nameEn) throw apiError(400, 'BAD_REQUEST', 'Service name is required.')
+    assertCategoryOk(payload.categoryId, currentTenantId())   // 分类唯一真相律③:上架项目必须挂大类
     const id = serviceIdFrom(payload)
     db.prepare(`INSERT INTO services
-      (id, tenant_id, type, category, name_zh, name_en, description_zh, description_en, image_url, price_cents, deposit_cents, base_duration_min, sort_order, is_active, process_json, notice_json, storefront, is_timecard)
-      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`).run(id, currentTenantId(), payload.type, payload.category, payload.nameZh, payload.nameEn, payload.descriptionZh, payload.descriptionEn, payload.imageUrl, payload.priceCents, payload.depositCents, payload.baseDurationMin, payload.sortOrder, payload.isActive, JSON.stringify(payload.processJson), JSON.stringify(payload.noticeJson), 1, 0)
+      (id, tenant_id, type, category, category_id, name_zh, name_en, description_zh, description_en, image_url, price_cents, deposit_cents, base_duration_min, sort_order, is_active, process_json, notice_json, storefront, is_timecard)
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`).run(id, currentTenantId(), payload.type, payload.category, payload.categoryId, payload.nameZh, payload.nameEn, payload.descriptionZh, payload.descriptionEn, payload.imageUrl, payload.priceCents, payload.depositCents, payload.baseDurationMin, payload.sortOrder, payload.isActive, JSON.stringify(payload.processJson), JSON.stringify(payload.noticeJson), 1, 0)
     // 2026-08-06:老「服务管理」页也走多价位模型的 list 档,保证 price_cents 与 service_prices(list) 永不漂移
     upsertServicePrice(currentTenantId(), id, 'list', payload.priceCents)
     const assign = db.prepare('INSERT OR IGNORE INTO technician_services (technician_id, service_id) VALUES (?, ?)')
@@ -12482,10 +12452,11 @@ async function route(req, res) {
     if (!current || (current.tenant_id && current.tenant_id !== currentTenantId())) throw apiError(404, 'NOT_FOUND', 'Service not found.')
     if (Number(current.is_timecard) === 1) throw apiError(400, 'TIMECARD_MIGRATED', '次卡已迁出「服务与价目」,请在次卡管理中维护。')
     const payload = servicePayload(body, current)
+    assertCategoryOk(payload.categoryId, currentTenantId())   // 分类唯一真相律③
     db.prepare(`UPDATE services SET
-      type = ?, category = ?, name_zh = ?, name_en = ?, description_zh = ?, description_en = ?, image_url = ?,
+      type = ?, category = ?, category_id = ?, name_zh = ?, name_en = ?, description_zh = ?, description_en = ?, image_url = ?,
       price_cents = ?, deposit_cents = ?, base_duration_min = ?, is_active = ?, sort_order = ?, process_json = ?, notice_json = ?
-      WHERE id = ?`).run(payload.type, payload.category, payload.nameZh, payload.nameEn, payload.descriptionZh, payload.descriptionEn, payload.imageUrl, payload.priceCents, payload.depositCents, payload.baseDurationMin, payload.isActive, payload.sortOrder, JSON.stringify(payload.processJson), JSON.stringify(payload.noticeJson), id)
+      WHERE id = ?`).run(payload.type, payload.category, payload.categoryId, payload.nameZh, payload.nameEn, payload.descriptionZh, payload.descriptionEn, payload.imageUrl, payload.priceCents, payload.depositCents, payload.baseDurationMin, payload.isActive, payload.sortOrder, JSON.stringify(payload.processJson), JSON.stringify(payload.noticeJson), id)
     upsertServicePrice(currentTenantId(), id, 'list', payload.priceCents) // 同上:改价即同步 list 档
     return json(res, 200, { service: serializeService(getService(id)) })
   }
@@ -13733,6 +13704,8 @@ async function route(req, res) {
     db.prepare('INSERT INTO stores (id, name, address, phone, timezone, currency, is_active, tenant_id) VALUES (?, ?, ?, ?, ?, ?, 1, ?)')
       .run(`store-${id}`, name.slice(0, 60), String(body.city || '').slice(0, 80), String(body.phone || '').slice(0, 30),
         String(body.timezone || APP_TIMEZONE).slice(0, 64), String(body.currency || 'CAD').toUpperCase().slice(0, 6), id)
+    // 分类唯一真相律③:建店即落平台三大类(起点,不是上限;商家可再细分)
+    try { pricingCategoryApi.seedDefaults(id, platformCategories()) } catch (e) { console.warn('[建店] 默认大类铺设失败(不阻塞):', e.message) }
     invalidateTenantTimezone(id)
     // 老板账号:username 唯一,默认 boss-<id>
     let username = String(body.username || `boss-${id}`).trim().toLowerCase().replace(/[^a-z0-9-]/g, '') || `boss-${id}`
@@ -13771,6 +13744,16 @@ async function route(req, res) {
   }
   /* ---- 平台端·顾客批量导入(从美团/大众/老系统迁过来的顾客与期初余额)----
      dryRun 只出报告不写库;执行时以手机号为主键去重,期初余额记 legacy 桶(不进本店财务收入)。 */
+  /* 🔴 分类唯一真相律④(店主 2026-08-25):平台代商家导入价目表,受同一条律管 ——
+     模板必须有大类列;缺大类的行试跑报告里标红退回;一行有问题整批不进库。实现在 ./import-services.mjs。 */
+  if (req.method === 'POST' && path.startsWith('/platform/tenants/') && path.endsWith('/import/services')) {
+    if (!isPlatform()) throw apiError(401, 'UNAUTHORIZED', 'Platform token required.')
+    const tenantId = path.split('/')[3]
+    if (!db.prepare('SELECT id FROM tenants WHERE id = ?').get(tenantId)) throw apiError(404, 'NOT_FOUND', 'Tenant not found.')
+    const body = await readBody(req)
+    if (body.dryRun === false) return json(res, 200, serviceImportApi.execute(tenantId, body))
+    return json(res, 200, { report: serviceImportApi.dryRun(tenantId, body) })
+  }
   if (req.method === 'POST' && path.startsWith('/platform/tenants/') && path.endsWith('/import/customers')) {
     if (!isPlatform()) throw apiError(401, 'UNAUTHORIZED', 'Platform token required.')
     const tenantId = path.split('/')[3]
@@ -13902,10 +13885,20 @@ async function route(req, res) {
         if (!['NAIL', 'LASH', 'CARE', 'OTHER'].includes(payload.type)) throw apiError(400, 'BAD_REQUEST', '服务类型须为 美甲/美睫/护理/其他。')
         if (!payload.nameZh) throw apiError(400, 'BAD_REQUEST', '服务中文名必填。')
         if (!payload.nameEn) payload.nameEn = payload.nameZh
+        /* 分类唯一真相律③:平台代商家建项目也必须挂大类 —— 这是"配了一半的店"的另一个入口。
+           没传就落**本店同类型的默认大类**(建店已铺三大类),落不到才拒 ——
+           平台代配是批量活,不能因为少填一列就整批停,但也绝不允许留空。 */
+        if (!payload.categoryId) {
+          const want = payload.type === 'NAIL' ? 'nail' : (payload.type === 'LASH' ? 'lash' : 'care')
+          const fallback = db.prepare('SELECT id FROM service_categories WHERE tenant_id = ? AND key = ?').get(tenantId, want)
+            || db.prepare('SELECT id FROM service_categories WHERE tenant_id = ? ORDER BY sort_order ASC LIMIT 1').get(tenantId)
+          payload.categoryId = fallback?.id || null
+        }
+        assertCategoryOk(payload.categoryId, tenantId)
         const id = serviceIdFrom(payload)
-        db.prepare(`INSERT INTO services (id, tenant_id, type, category, name_zh, name_en, description_zh, description_en, image_url, price_cents, deposit_cents, base_duration_min, sort_order, is_active, process_json, notice_json, storefront, is_timecard)
-          VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`)
-          .run(id, tenantId, payload.type, payload.category, payload.nameZh, payload.nameEn, payload.descriptionZh, payload.descriptionEn, payload.imageUrl, payload.priceCents, payload.depositCents, payload.baseDurationMin, payload.sortOrder, payload.isActive, JSON.stringify(payload.processJson), JSON.stringify(payload.noticeJson), 1, 0)
+        db.prepare(`INSERT INTO services (id, tenant_id, type, category, category_id, name_zh, name_en, description_zh, description_en, image_url, price_cents, deposit_cents, base_duration_min, sort_order, is_active, process_json, notice_json, storefront, is_timecard)
+          VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`)
+          .run(id, tenantId, payload.type, payload.category, payload.categoryId, payload.nameZh, payload.nameEn, payload.descriptionZh, payload.descriptionEn, payload.imageUrl, payload.priceCents, payload.depositCents, payload.baseDurationMin, payload.sortOrder, payload.isActive, JSON.stringify(payload.processJson), JSON.stringify(payload.noticeJson), 1, 0)
         upsertServicePrice(tenantId, id, 'list', payload.priceCents) // 与多价位模型的 list 档双写
         // 该租户在职技师自动可做新服务(与商家端一致)
         const assign = db.prepare('INSERT OR IGNORE INTO technician_services (technician_id, service_id) VALUES (?, ?)')
@@ -18596,6 +18589,8 @@ try {
    否则全新库跑到 settlements 那条时表还不存在,装到一半崩(全新库启动实测抓到的)。 */
 installLedgerGuards(db)
 
+/* 分类唯一真相律:种子要挂大类,得先保证旗舰店有大类字典(全新库时它还是空的) */
+try { pricingCategoryApi.seedDefaults(DEFAULT_TENANT_ID, platformCategories()) } catch (e) { console.warn('[seed] 默认大类铺设失败:', e.message) }
 seedDatabase()
 // 演示环境:铺一批顾客服务小记,让「有小记/无小记」两态在老板端+员工端都能直接看到
 if (DEMO_LOGIN_ALLOWED) {

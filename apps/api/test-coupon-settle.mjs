@@ -39,6 +39,15 @@ async function request(path, options = {}, token = PLATFORM, extraHeaders = {}) 
   return { status: response.status, data }
 }
 
+/* 分类唯一真相律(店主 2026-08-25):建店即落平台三大类(美甲/美睫/护理·其他),
+   所以夹具再建同 key 的大类会撞 409 —— 改成「有就用,没有才建」。判据跟着口径走。 */
+async function ensureCategory(token, body) {
+  const made = await request('/admin/pricing/categories', { method: 'POST', body: JSON.stringify(body) }, token)
+  if (made.data && made.data.category) return made.data.category
+  const list = (await request('/admin/pricing/categories', {}, token)).data.categories || []
+  return list.find((c) => c.key === body.key) || list.find((c) => c.name === body.name) || list[0]
+}
+
 // 恒等式:手会算错,减法不会。每一处金额都用这四条验一遍
 function assertMoney(label, s) {
   const coupon = s.couponDiscountCents || 0
@@ -77,8 +86,8 @@ async function main() {
   check('临时店建好', Boolean(shop.token))
 
   // ---- 价目:与设计图算例一致(主项 604/358、补甲单指 38/18、免卸甲 0)----
-  const catNail = (await request('/admin/pricing/categories', { method: 'POST', body: JSON.stringify({ key: 'nail_simple', name: '美甲简单款式' }) }, shop.token)).data.category
-  const catLash = (await request('/admin/pricing/categories', { method: 'POST', body: JSON.stringify({ key: 'lash', name: '美睫' }) }, shop.token)).data.category
+  const catNail = await ensureCategory(shop.token, { key: 'nail_simple', name: '美甲简单款式' })
+  const catLash = await ensureCategory(shop.token, { key: 'lash', name: '美睫' })
   const mk = async (body) => (await request('/admin/pricing/items', { method: 'POST', body: JSON.stringify(body) }, shop.token)).data.item
   const main3h = await mk({ nameZh: '简单款式 3 小时', type: 'NAIL', categoryId: catNail.id, itemKind: 'main', listPriceCents: 60400, memberPriceCents: 35800, baseDurationMin: 180 })
   const fiber = await mk({ nameZh: '纤维/甲片补甲', type: 'NAIL', categoryId: catNail.id, itemKind: 'addon', unit: 'per_finger', listPriceCents: 3800, memberPriceCents: 1800, addonScope: [catNail.id] })

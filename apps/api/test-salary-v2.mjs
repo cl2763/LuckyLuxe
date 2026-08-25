@@ -43,6 +43,15 @@ async function request(path, options = {}, token = PLATFORM, extraHeaders = {}) 
   return { status: response.status, data }
 }
 
+/* 分类唯一真相律(店主 2026-08-25):建店即落平台三大类(美甲/美睫/护理·其他),
+   所以夹具再建同 key 的大类会撞 409 —— 改成「有就用,没有才建」。判据跟着口径走。 */
+async function ensureCategory(token, body) {
+  const made = await request('/admin/pricing/categories', { method: 'POST', body: JSON.stringify(body) }, token)
+  if (made.data && made.data.category) return made.data.category
+  const list = (await request('/admin/pricing/categories', {}, token)).data.categories || []
+  return list.find((c) => c.key === body.key) || list.find((c) => c.name === body.name) || list[0]
+}
+
 async function newShop(label) {
   const id = `p2sal-${label}-${RUN_ID}`
   const created = await request('/platform/tenants', { method: 'POST', body: JSON.stringify({ id, name: `薪资店${label}${RUN_ID}`, plan: 'chain' }) })
@@ -109,7 +118,7 @@ async function main() {
   check('归属备注区已退役(接口不再下发)', before.data.attributionNotes === undefined)
 
   // 造一天有业绩的日结:开单 → 签 → 日结确认
-  const cat = (await request('/admin/pricing/categories', { method: 'POST', body: JSON.stringify({ key: 'nail', name: '美甲' }) }, shop.token)).data.category
+  const cat = await ensureCategory(shop.token, { key: 'nail', name: '美甲' })
   const svc = (await request('/admin/pricing/items', {
     method: 'POST',
     body: JSON.stringify({ nameZh: `款式${RUN_ID}`, type: 'NAIL', categoryId: cat.id, itemKind: 'main', listPriceCents: 1200000, memberPriceCents: 1200000, baseDurationMin: 60 })

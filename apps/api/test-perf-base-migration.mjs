@@ -87,7 +87,9 @@ async function main() {
   const unlock = await req('/admin/finance/unlock', { method: 'POST', body: JSON.stringify({ password: PLATFORM }) }, token)
   if (unlock.data?.financeKey) keys.set(token, unlock.data.financeKey)
 
+  /* 分类唯一真相律(08-25):建店已铺平台三大类,同 key 再建会 409 —— 有就用,没有才建 */
   const cat = (await req('/admin/pricing/categories', { method: 'POST', body: JSON.stringify({ key: 'nail', name: '美甲' }) }, token)).data.category
+    || ((await req('/admin/pricing/categories', {}, token)).data.categories || []).find((c) => c.key === 'nail')
   const svc = (await req('/admin/pricing/items', {
     method: 'POST',
     body: JSON.stringify({ nameZh: '主项目', type: 'NAIL', categoryId: cat.id, itemKind: 'main', listPriceCents: 20000, memberPriceCents: 20000 })

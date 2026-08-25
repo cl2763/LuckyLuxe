@@ -41,6 +41,15 @@ async function request(path, options = {}, token = PLATFORM, extraHeaders = {}) 
   return { status: response.status, data }
 }
 
+/* 分类唯一真相律(店主 2026-08-25):建店即落平台三大类(美甲/美睫/护理·其他),
+   所以夹具再建同 key 的大类会撞 409 —— 改成「有就用,没有才建」。判据跟着口径走。 */
+async function ensureCategory(token, body) {
+  const made = await request('/admin/pricing/categories', { method: 'POST', body: JSON.stringify(body) }, token)
+  if (made.data && made.data.category) return made.data.category
+  const list = (await request('/admin/pricing/categories', {}, token)).data.categories || []
+  return list.find((c) => c.key === body.key) || list.find((c) => c.name === body.name) || list[0]
+}
+
 async function newShop(label) {
   const id = `p2dc-${label}-${RUN_ID}`
   const created = await request('/platform/tenants', { method: 'POST', body: JSON.stringify({ id, name: `日结店${label}${RUN_ID}`, plan: 'chain' }) })
@@ -61,8 +70,8 @@ async function main() {
   const other = await newShop('b')
   check('两家临时店建好', Boolean(shop.token && other.token))
 
-  const cat = (await request('/admin/pricing/categories', { method: 'POST', body: JSON.stringify({ key: 'nail', name: '美甲' }) }, shop.token)).data.category
-  const catRm = (await request('/admin/pricing/categories', { method: 'POST', body: JSON.stringify({ key: 'removal', name: '卸甲' }) }, shop.token)).data.category
+  const cat = await ensureCategory(shop.token, { key: 'nail', name: '美甲' })
+  const catRm = await ensureCategory(shop.token, { key: 'removal', name: '卸甲' })
   const mk = async (body) => (await request('/admin/pricing/items', { method: 'POST', body: JSON.stringify(body) }, shop.token)).data.item
   const svc = await mk({ nameZh: `款式${RUN_ID}`, type: 'NAIL', categoryId: cat.id, itemKind: 'main', listPriceCents: 40000, memberPriceCents: 30000, baseDurationMin: 120 })
   const freeRm = await mk({ nameZh: '本店制作免卸甲', type: 'NAIL', categoryId: catRm.id, itemKind: 'addon', listPriceCents: 0, memberPriceCents: 0, addonScope: [cat.id] })

@@ -42,6 +42,15 @@ async function request(path, options = {}, token = PLATFORM) {
   return { status: response.status, data }
 }
 
+/* 分类唯一真相律(店主 2026-08-25):建店即落平台三大类(美甲/美睫/护理·其他),
+   所以夹具再建同 key 的大类会撞 409 —— 改成「有就用,没有才建」。判据跟着口径走。 */
+async function ensureCategory(token, body) {
+  const made = await request('/admin/pricing/categories', { method: 'POST', body: JSON.stringify(body) }, token)
+  if (made.data && made.data.category) return made.data.category
+  const list = (await request('/admin/pricing/categories', {}, token)).data.categories || []
+  return list.find((c) => c.key === body.key) || list.find((c) => c.name === body.name) || list[0]
+}
+
 async function newShop(label) {
   const id = `scan-${label}-${RUN}`
   const created = await request('/platform/tenants', { method: 'POST', body: JSON.stringify({ id, name: `扫码店${label}${RUN}`, plan: 'chain' }) })
@@ -58,7 +67,7 @@ async function main() {
   const shop = await newShop('a')
   STORE_TODAY = (await request('/admin/store-clock', {}, shop.token)).data.today
   const other = await newShop('b')
-  const cat = (await request('/admin/pricing/categories', { method: 'POST', body: JSON.stringify({ key: 'nail', name: '美甲' }) }, shop.token)).data.category
+  const cat = await ensureCategory(shop.token, { key: 'nail', name: '美甲' })
   const svc = (await request('/admin/pricing/items', {
     method: 'POST', body: JSON.stringify({ nameZh: '精品单色', type: 'NAIL', categoryId: cat.id, itemKind: 'main', listPriceCents: 36800, memberPriceCents: 19800 })
   }, shop.token)).data.item

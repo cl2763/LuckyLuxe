@@ -44,6 +44,15 @@ async function request(path, options = {}, token = PLATFORM) {
   return { status: response.status, data, text }
 }
 
+/* 分类唯一真相律(店主 2026-08-25):建店即落平台三大类(美甲/美睫/护理·其他),
+   所以夹具再建同 key 的大类会撞 409 —— 改成「有就用,没有才建」。判据跟着口径走。 */
+async function ensureCategory(token, body) {
+  const made = await request('/admin/pricing/categories', { method: 'POST', body: JSON.stringify(body) }, token)
+  if (made.data && made.data.category) return made.data.category
+  const list = (await request('/admin/pricing/categories', {}, token)).data.categories || []
+  return list.find((c) => c.key === body.key) || list.find((c) => c.name === body.name) || list[0]
+}
+
 async function newShop() {
   const id = `r3s-${RUN}`
   const created = await request('/platform/tenants', { method: 'POST', body: JSON.stringify({ id, name: `签字店${RUN}`, plan: 'chain' }) })
@@ -75,7 +84,7 @@ async function main() {
 
   // ---- 服务端可签性:连续 N 轮开单 → 取页面 → 签字 → 验快照 ----
   const shop = await newShop()
-  const cat = (await request('/admin/pricing/categories', { method: 'POST', body: JSON.stringify({ key: 'nail', name: '美甲' }) }, shop.token)).data.category
+  const cat = await ensureCategory(shop.token, { key: 'nail', name: '美甲' })
   const svc = (await request('/admin/pricing/items', {
     method: 'POST', body: JSON.stringify({ nameZh: `签字款${RUN}`, type: 'NAIL', categoryId: cat.id, itemKind: 'main', listPriceCents: 20000, memberPriceCents: 20000 })
   }, shop.token)).data.item

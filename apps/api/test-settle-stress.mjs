@@ -38,6 +38,15 @@ async function request(path, options = {}, token = PLATFORM) {
   return { status: response.status, data }
 }
 
+/* 分类唯一真相律(店主 2026-08-25):建店即落平台三大类(美甲/美睫/护理·其他),
+   所以夹具再建同 key 的大类会撞 409 —— 改成「有就用,没有才建」。判据跟着口径走。 */
+async function ensureCategory(token, body) {
+  const made = await request('/admin/pricing/categories', { method: 'POST', body: JSON.stringify(body) }, token)
+  if (made.data && made.data.category) return made.data.category
+  const list = (await request('/admin/pricing/categories', {}, token)).data.categories || []
+  return list.find((c) => c.key === body.key) || list.find((c) => c.name === body.name) || list[0]
+}
+
 async function newShop() {
   const id = `r2s-${RUN}`
   const created = await request('/platform/tenants', { method: 'POST', body: JSON.stringify({ id, name: `压测店${RUN}`, plan: 'chain' }) })
@@ -56,7 +65,7 @@ const rnd = () => { seed = (seed * 1103515245 + 12345) % 2147483648; return seed
 
 async function main() {
   const shop = await newShop()
-  const cat = (await request('/admin/pricing/categories', { method: 'POST', body: JSON.stringify({ key: 'nail', name: '美甲' }) }, shop.token)).data.category
+  const cat = await ensureCategory(shop.token, { key: 'nail', name: '美甲' })
   const mk = async (b) => (await request('/admin/pricing/items', { method: 'POST', body: JSON.stringify(b) }, shop.token)).data.item
 
   // 主项目 4 个 + 加项 4 个(含一个 ¥0 免费项、一个按指计费),覆盖各种价形
