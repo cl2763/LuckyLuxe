@@ -1,3 +1,5 @@
+import { snapshotDb } from './db-backup.mjs'   // 备份唯一出口(与生产铺设线共用)
+
 /* 演示店账本重置 —— **唯一入口**(店主 2026-08-25 裁定六条)。
 
    为什么要有这个模块:D72/D73 之后,演示店(kind='demo')的账本**不受只追加律保护** ——
@@ -124,17 +126,11 @@ export function createDemoReset({ db, apiError, randomId, iso, copyFileSync, dbP
     const before = snapshotOf(tenantId)
     const now = iso(new Date())
 
-    // ④ 先备份,备份不成就中止
+    /* ④ 先备份,备份不成就中止。备份实现走**唯一出口** ./db-backup.mjs ——
+       生产铺设那条线也调它,不许各写一份(店主 08-25 点的那条:抄一遍两份迟早长歪)。 */
     let backupPath = ''
     try {
-      mkdirSync(backupDir, { recursive: true })
-      const stamp = now.replace(/[-:T]/g, '').slice(0, 14)
-      backupPath = `${backupDir}/lucky-luxe-${stamp}-演示店重置前-${tenantId}.sqlite`
-      for (let n = 2; existsSync(backupPath) && n <= 20; n += 1) {
-        backupPath = `${backupDir}/lucky-luxe-${stamp}-${n}-演示店重置前-${tenantId}.sqlite`
-      }
-      if (existsSync(backupPath)) throw new Error('备份文件名连撞 20 次,等一秒再来')
-      copyFileSync(dbPath, backupPath)
+      backupPath = snapshotDb({ dbPath, backupDir, tag: `演示店重置前-${tenantId}`, stamp: now.replace(/[-:T]/g, '').slice(0, 14) }).path
     } catch (error) {
       throw apiError(500, 'BACKUP_FAILED', `备份失败,已中止重置(一行没删):${error.message}`)
     }

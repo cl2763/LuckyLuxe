@@ -3335,15 +3335,22 @@ const main = async () => {
         const demoSrc = readFileSync(join(ROOT42, 'apps/api/demo-reset.mjs'), 'utf8')
         check('㋡① 判据唯一出口:isDemoTenant 只在 demo-reset.mjs 定义一次,铺设脚本 import 它',
           (demoSrc.match(/export function isDemoTenant/g) || []).length === 1
-          && seedSrc.includes("import { isDemoTenant } from '../apps/api/demo-reset.mjs'")
+          // 08-25 生产例外:同一条 import 顺带取了黑名单常量,判据仍然只有那一份
+          && /import \{[^}]*isDemoTenant[^}]*\} from '\.\.\/apps\/api\/demo-reset\.mjs'/.test(seedSrc)
           && !/function isDemoTenant/.test(seedSrc))
         check('㋡② 铺设目标按 kind 判,不再按租户名白名单;非 demo 拒绝并说明是被拦了',
           seedSrc.includes('async function assertDemoTarget(') && seedSrc.includes('if (!isDemoTenant(hit))')
           && seedSrc.includes('这是**被拦住了**,不是找不到'))
         check('㋡③ 真店黑名单保留作第二道锁(两道都过才写)',
           seedSrc.includes('const REAL_TENANTS =') && seedSrc.includes('是真店,演示数据不许写进去'))
-        check('㋡④ 生产硬边界一行没改(只跑本机/沙箱)',
-          seedSrc.includes("if (!/127\\.0\\.0\\.1|localhost/.test(BASE)) throw new Error('演示铺设只给本机沙箱用,不要指向生产。')"))
+        /* ㋡④ 原来断的是"这一行一字不改"。店主 08-25【乙线开锁】明确开了**一个窄例外**:
+           默认语义不变(不打 --production-seed 就只跑本机/沙箱),要对生产跑必须七条全满足。
+           判据跟着被测物走:这里守"默认边界还在 + 例外必须显式打参数",
+           七条各自能不能拦得住由 test-demo-seed-guard **真起进程**验(那才是能证伪的判据)。 */
+        check('㋡④ 默认边界仍在:非本机 BASE 不打 --production-seed 一律拒绝',
+          seedSrc.includes('const PRODUCTION_SEED = ARGV.includes(\'--production-seed\')')
+          && seedSrc.includes('if (!IS_LOCAL && !PRODUCTION_SEED)')
+          && seedSrc.includes('第①条'))
         check('㋡⑤ 建演示店当场标 demo(isDemo:true),不靠名字前缀',
           seedSrc.includes('isDemo: true'))
         check('㋡⑥ 平台租户列表下发 kind(铺设脚本与后台都按它认演示店)',

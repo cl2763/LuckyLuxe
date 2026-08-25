@@ -13,7 +13,11 @@ import { createAfterSales } from './after-sales.mjs'        // 售后域(公约�
 import { createOrderBadges, bookingSourceText, bookingStatusText } from './order-badges.mjs'
 import { installLedgerGuards, backfillTenantKindOnce, LEDGER_TRIGGER_NAMES } from './ledger-guards.mjs'
 import { createQuoteSerialize } from './quote-serialize.mjs'          // AI 报价域序列化(公约②)
-import { createDemoReset } from './demo-reset.mjs'                    // 演示店账本重置唯一入口(公约①)
+import { createDemoReset, isDemoTenant, PROTECTED_REAL_TENANTS } from './demo-reset.mjs'   // 演示店归属判据/黑名单/重置唯一入口(公约①)
+import { createDemoFacts } from './demo-facts.mjs'                    // 演示店事实口(铺设脚本不再直连库)
+import { createPlatformOps } from './platform-ops.mjs'                // 平台运维域(备份/五项/运维日志/重置财务密码)
+import { createImportCustomers } from './import-customers.mjs'        // 平台代商家导入老顾客(公约②)
+import { snapshotDb } from './db-backup.mjs'                          // 库快照唯一出口
 import { createStaticServe } from './static-serve.mjs'                // 静态文件服务(公约②)
 import { retireLegacyDemoArchives } from './legacy-demo-retire.mjs'   // 旧口径演示档案退役(一次性)
 import { createMemberCode } from './member-code.mjs'                  // 会员码域(公约②)
@@ -4424,6 +4428,7 @@ const demoResetApi = createDemoReset({
   db, apiError, randomId, iso, copyFileSync, mkdirSync, existsSync,
   dbPath: join(dataDir, 'lucky-luxe.sqlite'), backupDir: join(dataDir, 'backups')
 })
+const demoFactsApi = createDemoFacts({ db, apiError, isDemoTenant, protectedRealTenants: PROTECTED_REAL_TENANTS })
 /* ===== AI 报价域序列化已搬出到 ./quote-serialize.mjs(公约②,2026-08-25)===== */
 const { serializeQuoteRequest, getQuoteRequestById } = createQuoteSerialize({
   db, parseJson, cents, normalizeQuoteFlag: (v) => normalizeQuoteFlag(v)
@@ -7131,6 +7136,11 @@ function computeFinanceProgress(month) {
 
 // ===== 财务密码门禁：进入财务数据前的第二道锁 =====
 const financeSessions = new Map()
+const { importTenantCustomers } = createImportCustomers({ db, apiError, randomId, iso })
+const platformOps = createPlatformOps({
+  db, apiError, randomId, iso, snapshotDb, financeSessions,
+  dbPath: join(dataDir, 'lucky-luxe.sqlite'), backupDir: join(dataDir, 'backups')
+})
 
 function financePasswordHash(password) {
   return createHash('sha256').update(`finance:${currentTenantId()}:${String(password)}`).digest('hex')
@@ -7601,107 +7611,7 @@ function serializeRechargeTier(row) {
   }
 }
 
-/* ===== P0 顾客批量导入(平台代商家迁移老顾客与期初余额)=====
-   口径:手机号是唯一主键;期初余额进 legacy 桶(是老店欠顾客的服务,不是本店的收入,永远不进财务账本);
-   历史累计消费只写 users.legacy_total_spend_cents,仅用于会员资格判定。 */
-function normalizeImportPhone(raw) {
-  return String(raw || '').replace(/[\s\-()（）]/g, '').trim().slice(0, 30)
-}
-
-function importTenantCustomers(tenantId, body = {}) {
-  const rows = Array.isArray(body.rows) ? body.rows : []
-  if (!rows.length) throw apiError(400, 'BAD_REQUEST', '没有可导入的数据行。')
-  if (rows.length > 5000) throw apiError(400, 'BAD_REQUEST', '单次导入上限 5000 行,请分批。')
-  const dryRun = body.dryRun !== false
-  const seenPhones = new Set()
-  const report = { toCreate: 0, toUpdate: 0, conflicts: [], skipped: [], balanceSumCents: 0, rowCount: rows.length }
-  const actions = []
-  rows.forEach((raw, index) => {
-    const line = index + 1
-    const source = raw && typeof raw === 'object' ? raw : {}
-    const name = String(source.name || source.displayName || '').trim()
-    const nickname = String(source.nickname || '').trim()
-    const phone = normalizeImportPhone(source.phone)
-    if (!phone) {
-      report.skipped.push({ line, name, reason: '缺手机号,无法去重,已跳过' })
-      return
-    }
-    if (seenPhones.has(phone)) {
-      report.skipped.push({ line, name, phone, reason: '同一文件内手机号重复,只取第一条' })
-      return
-    }
-    seenPhones.add(phone)
-    const balanceCents = Math.max(0, Math.round(Number(source.balanceCents) || 0))
-    const totalSpendCents = Math.max(0, Math.round(Number(source.totalSpendCents) || 0))
-    const existing = db.prepare('SELECT * FROM users WHERE tenant_id = ? AND phone = ? ORDER BY rowid ASC LIMIT 1').get(tenantId, phone)
-    if (existing && name && String(existing.display_name || '').trim() && String(existing.display_name).trim() !== name) {
-      report.conflicts.push({ line, phone, existingName: existing.display_name, incomingName: name, reason: '同手机号已存在但姓名不同,不自动合并,请人工确认' })
-      return
-    }
-    report.balanceSumCents += balanceCents
-    if (existing) report.toUpdate += 1
-    else report.toCreate += 1
-    actions.push({ mode: existing ? 'update' : 'create', userId: existing?.id || null, name, nickname, phone, balanceCents, totalSpendCents, source })
-  })
-  if (dryRun) return { dryRun: true, tenantId, ...report }
-  // 执行前的最后一道闸:平台端必须把试跑报告里的期初余额总额原样回传,数额对不上直接拒绝
-  if (body.confirmBalanceCents !== undefined && Math.round(Number(body.confirmBalanceCents) || 0) !== report.balanceSumCents) {
-    throw apiError(400, 'BALANCE_CONFIRM_MISMATCH', `期初余额总额与试跑报告不一致(试跑 ${report.balanceSumCents} 分,确认 ${body.confirmBalanceCents} 分),请重新试跑。`)
-  }
-  const now = iso(new Date())
-  let created = 0
-  let updated = 0
-  let openingWrittenCents = 0
-  const writtenUsers = []
-  db.exec('BEGIN IMMEDIATE')
-  try {
-    for (const action of actions) {
-      let userId = action.userId
-      const tags = Array.isArray(action.source.tags)
-        ? action.source.tags.map((tag) => String(tag).trim()).filter(Boolean)
-        : String(action.source.tags || '').split(/[,，、|]/).map((tag) => tag.trim()).filter(Boolean)
-      const noteParts = [String(action.source.note || '').trim()]
-      if (action.nickname && action.nickname !== action.name) noteParts.push(`昵称:${action.nickname}`)
-      const note = noteParts.filter(Boolean).join(' · ').slice(0, 400) || null
-      const birthday = String(action.source.birthday || '').trim() || null
-      if (action.mode === 'create') {
-        userId = randomId('user')
-        db.prepare(`INSERT INTO users (id, display_name, phone, tenant_id, tags_json, notes, birthday, is_migrated, legacy_total_spend_cents)
-          VALUES (?, ?, ?, ?, ?, ?, ?, 1, ?)`).run(userId, action.name || action.nickname || action.phone, action.phone, tenantId,
-          JSON.stringify(tags), note, birthday, action.totalSpendCents)
-        db.prepare(`INSERT OR IGNORE INTO user_identities (id, user_id, provider, provider_user_id, phone, created_at, updated_at, tenant_id)
-          VALUES (?, ?, 'phone', ?, ?, ?, ?, ?)`).run(randomId('identity'), userId, action.phone, action.phone, now, now, tenantId)
-        created += 1
-      } else {
-        const cur = db.prepare('SELECT * FROM users WHERE id = ?').get(userId)
-        let curTags = []
-        try { curTags = JSON.parse(cur.tags_json || '[]') } catch { curTags = [] }
-        const mergedTags = Array.from(new Set([...curTags, ...tags]))
-        db.prepare(`UPDATE users SET display_name = ?, tags_json = ?, notes = ?, birthday = ?, is_migrated = 1, legacy_total_spend_cents = ? WHERE id = ?`).run(
-          String(cur.display_name || '').trim() || action.name || action.nickname || action.phone,
-          JSON.stringify(mergedTags),
-          note || cur.notes || null,
-          birthday || cur.birthday || null,
-          Math.max(cur.legacy_total_spend_cents || 0, action.totalSpendCents),
-          userId)
-        updated += 1
-      }
-      if (action.balanceCents > 0) {
-        db.prepare(`INSERT INTO stored_value_transactions (id, tenant_id, user_id, type, amount_cents, pay_channel, note, created_by, created_at, bucket)
-          VALUES (?, ?, ?, 'migrate_opening', ?, 'migration', ?, 'platform-import', ?, 'legacy')`).run(
-          randomId('sv'), tenantId, userId, action.balanceCents,
-          `老系统迁移期初余额(${action.phone})`, now)
-        openingWrittenCents += action.balanceCents
-      }
-      writtenUsers.push({ userId, phone: action.phone, mode: action.mode, balanceCents: action.balanceCents })
-    }
-    db.exec('COMMIT')
-  } catch (error) {
-    db.exec('ROLLBACK')
-    throw error
-  }
-  return { dryRun: false, tenantId, created, updated, openingWrittenCents, users: writtenUsers, ...report }
-}
+/* ===== P0 顾客批量导入:实现已搬到 ./import-customers.mjs(公约②,2026-08-25)===== */
 
 /* ===== P1.2 定金规则每店可配(2026-08-08)=====
    以前定金写死 5000 分、取消规则写死「24h 全退 / 临期扣半」,所有商家一个样。
@@ -13762,35 +13672,23 @@ async function route(req, res) {
     return json(res, 200, importTenantCustomers(tenantId, body))
   }
   // ---- 平台端·商家配置(替商家配好入驻资料):门店/营业时间/服务价目/技师/AI知识库 ----
-  /* 平台侧重置商家财务密码(「忘记密码找平台」的标准路径)。
-     清空 hash 并把门禁关掉 —— 商家进得去财务区,想再上锁自己在卡上开。
-     每次调用写一行 platform_ops_log,谁在什么时候动了哪家店有据可查。 */
+  /* ---- 平台运维族(重置财务密码 / 按需备份 / 逐店五项 / 运维日志):实现全在 ./platform-ops.mjs,
+     这里只剩门禁 + 分发。每个动作都会自己留一行日志,不靠调用方记得写。 ---- */
   const finResetMatch = path.match(/^\/platform\/tenants\/([^/]+)\/finance-lock\/reset$/)
   if (req.method === 'POST' && finResetMatch) {
     if (!isPlatform()) throw apiError(401, 'UNAUTHORIZED', 'Platform token required.')
-    const tenantId = finResetMatch[1]
-    const tenant = db.prepare('SELECT id, name, finance_password_hash, finance_lock_enabled FROM tenants WHERE id = ?').get(tenantId)
-    if (!tenant) throw apiError(404, 'NOT_FOUND', 'Tenant not found.')
-    const body = await readBody(req).catch(() => ({}))
-    const now = iso(new Date())
-    const had = Boolean(tenant.finance_password_hash)
-    db.prepare('UPDATE tenants SET finance_password_hash = NULL, finance_lock_enabled = 0, updated_at = ? WHERE id = ?').run(now, tenantId)
-    // 该店已发出去的钥匙一并作废
-    for (const [key, session] of financeSessions) {
-      if (session && session.tenantId === tenantId) financeSessions.delete(key)
-    }
-    db.prepare('INSERT INTO platform_ops_log (id, tenant_id, action, detail, operator, created_at) VALUES (?, ?, ?, ?, ?, ?)')
-      .run(randomId('oplog'), tenantId, 'finance_lock_reset',
-        `清空财务密码并关闭门禁(原状态:${had ? '有密码' : '无密码'}/${tenant.finance_lock_enabled ? '已开启' : '未开启'})。原因:${String(body.reason || '店主忘记密码,平台侧重置').slice(0, 200)}`,
-        'platform', now)
-    return json(res, 200, {
-      tenantId,
-      tenantName: tenant.name,
-      enabled: false,
-      configured: false,
-      hadPassword: had,
-      note: '财务密码已清空、门禁已关闭。商家可在「财务 → 财务设置 → 财务密码」自助重新开启。'
-    })
+    const b = await readBody(req).catch(() => ({}))
+    return json(res, 200, platformOps.resetFinanceLock(finResetMatch[1], b.reason))
+  }
+  if (req.method === 'POST' && path === '/platform/backup') {
+    if (!isPlatform()) throw apiError(401, 'UNAUTHORIZED', 'Platform token required.')
+    const b = await readBody(req).catch(() => ({}))
+    return json(res, 200, platformOps.backup({ tag: b.tag, tenantId: b.tenantId, reason: b.reason }))
+  }
+  if (req.method === 'GET' && /^\/platform\/tenants\/[^/]+\/stats$/.test(path)) {
+    if (!isPlatform()) throw apiError(401, 'UNAUTHORIZED', 'Platform token required.')
+    const tid = path.split('/')[3]
+    return json(res, 200, { tenantId: tid, stats: platformOps.tenantStats(tid) })
   }
   /* 平台改租户归属(real ↔ demo):实现在 ./demo-reset.mjs,这里只分发。 */
   const kindMatch = path.match(/^\/platform\/tenants\/([^/]+)\/kind$/)
@@ -13799,18 +13697,33 @@ async function route(req, res) {
     const kb = await readBody(req).catch(() => ({}))
     return json(res, 200, demoResetApi.setTenantKind({ tenantId: kindMatch[1], kind: kb.kind, reason: kb.reason }))
   }
-  /* 演示店账本重置(店主 08-25 六条):**唯一入口**,实现全在 ./demo-reset.mjs,这里只分发。 */
+  /* 演示店账本重置(店主 08-25 六条):**唯一入口**,实现全在 ./demo-reset.mjs。 */
   const demoResetMatch = path.match(/^\/platform\/tenants\/([^/]+)\/demo-reset$/)
   if (req.method === 'POST' && demoResetMatch) {
     if (!isPlatform()) throw apiError(401, 'UNAUTHORIZED', 'Platform token required.')
     const b = await readBody(req).catch(() => ({}))
     return json(res, 200, demoResetApi.demoReset({ tenantId: demoResetMatch[1], confirmName: b.confirmName, reason: b.reason, operator: 'platform' }))
   }
-  // 平台运维操作日志(只读)
+  /* 演示店事实口(读)/ 贴微信身份(写):两道锁在 ./demo-facts.mjs 里,真店连读都不给。 */
+  const demoFactsMatch = path.match(/^\/platform\/tenants\/([^/]+)\/demo-facts$/)
+  if (req.method === 'GET' && demoFactsMatch) {
+    if (!isPlatform()) throw apiError(401, 'UNAUTHORIZED', 'Platform token required.')
+    return json(res, 200, { facts: demoFactsApi.facts(demoFactsMatch[1], url.searchParams.get('userId') || '') })
+  }
+  const demoBindMatch = path.match(/^\/platform\/tenants\/([^/]+)\/demo-bind-openid$/)
+  if (req.method === 'POST' && demoBindMatch) {
+    if (!isPlatform()) throw apiError(401, 'UNAUTHORIZED', 'Platform token required.')
+    const b = await readBody(req).catch(() => ({}))
+    return json(res, 200, demoFactsApi.bindOpenId(demoBindMatch[1], String(b.userId || ''), String(b.openId || '')))
+  }
+  if (req.method === 'POST' && path === '/platform/ops-log/demo-seed') {
+    if (!isPlatform()) throw apiError(401, 'UNAUTHORIZED', 'Platform token required.')
+    const b = await readBody(req).catch(() => ({}))
+    return json(res, 201, platformOps.logDemoSeed({ tenantId: b.tenantId, detail: b.detail }))
+  }
   if (req.method === 'GET' && path === '/platform/ops-log') {
     if (!isPlatform()) throw apiError(401, 'UNAUTHORIZED', 'Platform token required.')
-    const rows = db.prepare('SELECT * FROM platform_ops_log ORDER BY created_at DESC, rowid DESC LIMIT 100').all()
-    return json(res, 200, { logs: rows })
+    return json(res, 200, { logs: platformOps.recentLogs() })
   }
   // S13②(店主 08-25):大类字典加进平台侧配置族(商家只读是既定口径 v1.4,不变)
   const platTenantMatch = path.match(/^\/platform\/tenants\/([^/]+)\/(store|business-hours|services|technicians|kb|categories)(?:\/([^/]+))?$/)
