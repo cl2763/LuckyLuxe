@@ -153,6 +153,9 @@
         <button class="tab" data-tab="services" onclick="tab('services')">服务价目</button>
         <button class="tab" data-tab="techs" onclick="tab('techs')">技师</button>
         <button class="tab" data-tab="kb" onclick="tab('kb')">AI 知识库（本店）</button>
+        <!-- D74(店主 08-25):【设置唯一编辑处律】—— 会员资格与等级是"平台定"的,
+             编辑处就只能在这里;商家端 admin.js 那块已经是 🔒 只读。 -->
+        <button class="tab" data-tab="member" onclick="tab('member')">会员制度</button>
       </div>
 
       <div id="tab-store" class="card" style="max-width:600px">
@@ -161,6 +164,32 @@
         <div class="row" style="margin-bottom:10px"><label style="width:56px">地址</label><input id="stAddr" style="flex:1"></div>
         <div class="row" style="margin-bottom:12px"><label style="width:56px">电话</label><input id="stPhone" style="flex:1"></div>
         <button class="p" onclick="saveStore()">保存门店信息</button>
+      </div>
+
+      <div id="tab-member" class="card hidden" style="max-width:600px">
+        <h2>会员制度(平台定;商家端只读展示)</h2>
+        <p class="muted" style="margin:-4px 0 12px">这套规则由平台统一定义。商家后台「会员套餐/券」里显示 🔒「由平台管理」,改不了。</p>
+        <div class="row" style="margin-bottom:10px">
+          <label style="width:96px">会员资格</label>
+          <select id="mbQualify" style="flex:1" onchange="mbToggle()"></select>
+        </div>
+        <div class="row" style="margin-bottom:10px" id="mbThresholdRow">
+          <label style="width:96px">消费门槛</label>
+          <input id="mbQualifyValue" type="number" min="0" step="1" style="flex:1" placeholder="元(累计消费满多少算会员)">
+        </div>
+        <div class="row" style="margin-bottom:10px">
+          <label style="width:96px">有效期</label>
+          <input id="mbExpireDays" type="number" min="0" step="1" style="flex:1" placeholder="天(留空=长期有效)">
+        </div>
+        <div class="row" style="margin-bottom:10px">
+          <label style="width:96px">分等级</label>
+          <label style="display:inline-flex;align-items:center;gap:6px"><input id="mbTiersEnabled" type="checkbox" onchange="mbToggle()"> 开启等级体系(银卡/金卡/铂金…)</label>
+        </div>
+        <div id="mbTierBox" class="hidden">
+          <table><thead><tr><th>等级 key</th><th>显示名</th><th>累计消费满(元)</th><th>免定金</th><th></th></tr></thead><tbody id="mbTierRows"></tbody></table>
+          <div style="margin-top:8px"><button class="sm" onclick="mbAddTier()">+ 加一档</button></div>
+        </div>
+        <div style="margin-top:14px"><button class="p" onclick="saveMembership()">保存会员制度</button></div>
       </div>
 
       <div id="tab-hours" class="card hidden" style="max-width:600px">
@@ -575,19 +604,68 @@ function initConfig(){
   if(!CFG_T&&TENANTS.length)CFG_T=TENANTS[0].id
   loadConfig()
 }
-function tab(t){document.querySelectorAll('.tab').forEach(b=>b.classList.toggle('on',b.dataset.tab===t));['store','hours','services','techs','kb'].forEach(x=>$('tab-'+x).classList.toggle('hidden',x!==t))}
+function tab(t){document.querySelectorAll('.tab').forEach(b=>b.classList.toggle('on',b.dataset.tab===t));['store','hours','services','techs','kb','member'].forEach(x=>$('tab-'+x).classList.toggle('hidden',x!==t))}
 async function loadConfig(){
   CFG_T=$('cfgTenant').value||CFG_T
   if(!CFG_T)return
   try{
-    const [st,hr,sv,tc,kb]=await Promise.all([
+    const [st,hr,sv,tc,kb,mb]=await Promise.all([
       api(`/platform/tenants/${CFG_T}/store`),api(`/platform/tenants/${CFG_T}/business-hours`),
-      api(`/platform/tenants/${CFG_T}/services`),api(`/platform/tenants/${CFG_T}/technicians`),api(`/platform/tenants/${CFG_T}/kb`)
+      api(`/platform/tenants/${CFG_T}/services`),api(`/platform/tenants/${CFG_T}/technicians`),api(`/platform/tenants/${CFG_T}/kb`),
+      api(`/platform/tenants/${CFG_T}/membership-config`)
     ])
     $('stName').value=st.store?st.store.name:'';$('stAddr').value=st.store?st.store.address:'';$('stPhone').value=st.store?st.store.phone:''
-    renderHours(hr.hours||[]);renderServices(sv.services||[]);renderTechs(tc.technicians||[]);renderKb(kb)
+    renderHours(hr.hours||[]);renderServices(sv.services||[]);renderTechs(tc.technicians||[]);renderKb(kb);renderMembership(mb)
   }catch(e){toast(e.message)}
 }
+/* ===== 会员制度(D74,店主 08-25 立【设置唯一编辑处律】)=====
+   规则谁定,编辑处就在谁那儿:会员资格与等级是平台定的 → 只有这里能改,商家端只读。
+   句子与选项**全部来自后端**(qualifyModes 随 GET 下发),这里不自己维护第二份清单。 */
+const MB_MODE_TEXT={any_recharge:'充过值即会员',balance_gt_0:'余额大于 0 才是会员',total_spend:'累计消费达门槛',manual:'仅手动指定'}
+let MB_TIERS=[]
+function renderMembership(mb){
+  const cfg=(mb&&mb.config)||{}
+  const modes=(mb&&mb.qualifyModes)||[]
+  $('mbQualify').innerHTML=modes.map(m=>`<option value="${esc(m)}">${esc(MB_MODE_TEXT[m]||m)}</option>`).join('')
+  $('mbQualify').value=cfg.memberQualify||modes[0]||''
+  // 分↔元只在这一层换算,存的一律是分(后端字段是 qualifyValueCents)
+  $('mbQualifyValue').value=cfg.qualifyValueCents?Math.round(cfg.qualifyValueCents/100):''
+  $('mbExpireDays').value=cfg.expireDays==null?'':cfg.expireDays
+  $('mbTiersEnabled').checked=Boolean(cfg.tiersEnabled)
+  MB_TIERS=Array.isArray(cfg.tiers)?cfg.tiers.map(t=>({key:t.key||'',label:t.label||'',minSpend:Math.round((t.minSpendCents||0)/100),depositWaived:Boolean(t.depositWaived)})):[]
+  mbToggle();mbRenderTiers()
+}
+function mbToggle(){
+  $('mbTierBox').classList.toggle('hidden',!$('mbTiersEnabled').checked)
+  // 门槛只有「累计消费达门槛」这一档用得上,别的模式填了也不算数,直接藏掉不误导
+  $('mbThresholdRow').classList.toggle('hidden',$('mbQualify').value!=='total_spend')
+}
+function mbRenderTiers(){
+  $('mbTierRows').innerHTML=MB_TIERS.map((t,i)=>`<tr>
+    <td><input value="${esc(t.key)}" oninput="MB_TIERS[${i}].key=this.value" placeholder="silver" style="width:90px"></td>
+    <td><input value="${esc(t.label)}" oninput="MB_TIERS[${i}].label=this.value" placeholder="银卡" style="width:90px"></td>
+    <td><input type="number" min="0" value="${Number(t.minSpend)||0}" oninput="MB_TIERS[${i}].minSpend=Number(this.value)||0" style="width:110px"></td>
+    <td><input type="checkbox" ${t.depositWaived?'checked':''} onchange="MB_TIERS[${i}].depositWaived=this.checked"></td>
+    <td><button class="sm" onclick="MB_TIERS.splice(${i},1);mbRenderTiers()">删</button></td></tr>`).join('')
+}
+function mbAddTier(){MB_TIERS.push({key:'',label:'',minSpend:0,depositWaived:false});mbRenderTiers()}
+async function saveMembership(){
+  const tiersEnabled=$('mbTiersEnabled').checked
+  if(tiersEnabled&&MB_TIERS.some(t=>!String(t.key).trim()||!String(t.label).trim())){toast('等级的 key 与显示名都必填');return}
+  const config={
+    memberQualify:$('mbQualify').value,
+    qualifyValueCents:Math.max(0,Math.round((Number($('mbQualifyValue').value)||0)*100)),
+    expireDays:$('mbExpireDays').value===''?null:Math.max(0,Math.round(Number($('mbExpireDays').value)||0)),
+    tiersEnabled,
+    tiers:tiersEnabled?MB_TIERS.map(t=>({key:String(t.key).trim(),label:String(t.label).trim(),minSpendCents:Math.max(0,Math.round((Number(t.minSpend)||0)*100)),depositWaived:Boolean(t.depositWaived)})):[]
+  }
+  try{
+    const d=await api(`/platform/tenants/${CFG_T}/membership-config`,{method:'PUT',body:JSON.stringify({config})})
+    renderMembership({config:d.config,qualifyModes:(await api(`/platform/tenants/${CFG_T}/membership-config`)).qualifyModes})
+    toast('会员制度已保存,商家端只读块即时跟着变')
+  }catch(e){toast(e.message)}
+}
+
 async function saveStore(){try{await api(`/platform/tenants/${CFG_T}/store`,{method:'PUT',body:JSON.stringify({name:$('stName').value,address:$('stAddr').value,phone:$('stPhone').value})});toast('门店信息已保存并同步 AI')}catch(e){toast(e.message)}}
 function renderHours(hours){
   const map={};hours.forEach(h=>map[h.weekday]=h)

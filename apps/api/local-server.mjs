@@ -11,7 +11,10 @@ import { pngSize, rasterBackend, svgToPng } from './svg-raster.mjs'
 import { inkToPng } from './ink-raster.mjs'
 import { createAfterSales } from './after-sales.mjs'        // 售后域(公约②:边改边拆)
 import { createOrderBadges, bookingSourceText } from './order-badges.mjs'
-import { installLedgerGuards, backfillTenantKindOnce, LEDGER_TRIGGER_NAMES } from './ledger-guards.mjs'  // 账本禁删/禁改律唯一出口(D72)      // 顾客端订单表达域(同上)
+import { installLedgerGuards, backfillTenantKindOnce, LEDGER_TRIGGER_NAMES } from './ledger-guards.mjs'
+import { createQuoteSerialize } from './quote-serialize.mjs'          // AI 报价域序列化(公约②)
+import { createDemoReset } from './demo-reset.mjs'                    // 演示店账本重置唯一入口(公约①)
+import { createStaticServe } from './static-serve.mjs'                // 静态文件服务(公约②)  // 账本禁删/禁改律唯一出口(D72)      // 顾客端订单表达域(同上)
 import { createBookingIncome } from './booking-income.mjs'  // 订单入账触点(同上)
 import { createBookingState, isAfterSalesOpen, shouldAutoComplete } from './booking-state.mjs'  // 订单状态机(D70 合同,唯一实现)   // 笔迹图:纯 JS 画折线,**透明底**(单据白纸走 svgToPng,两条路不混)
 import { analyzeReferenceImage, createBookingSummary, createCustomerInsight, createCustomerServiceReply, createDailyBrief, createRecallMessages, createServiceNoteInsights, createSocialCopy, extractKbEntriesFromDocument, polishStaffQuoteReply } from './ai-utils.mjs'
@@ -1202,45 +1205,8 @@ function json(res, statusCode, body) {
   res.end(JSON.stringify(body))
 }
 
-function contentType(filePath) {
-  const ext = extname(filePath)
-  if (ext === '.html') return 'text/html; charset=utf-8'
-  if (ext === '.css') return 'text/css; charset=utf-8'
-  if (ext === '.js') return 'application/javascript; charset=utf-8'
-  if (ext === '.png') return 'image/png'
-  if (ext === '.jpg' || ext === '.jpeg') return 'image/jpeg'
-  if (ext === '.svg') return 'image/svg+xml'
-  return 'application/octet-stream'
-}
-
-function serveFile(res, baseDir, requestPath, fallback = 'index.html') {
-  const cleaned = normalize(decodeURIComponent(requestPath))
-    .replace(/^[/\\]+/, '')
-    .replace(/^(\.\.(\/|\\|$))+/, '')
-  let candidate = join(baseDir, cleaned)
-  // 图片扩展名自愈:引用 .png 但文件是 .jpg(或反之)时自动换后缀,避免退回 index.html 变成花图
-  if (!(existsSync(candidate) && statSync(candidate).isFile()) && /\.(png|jpe?g)$/i.test(candidate)) {
-    const swaps = candidate.endsWith('.png')
-      ? [candidate.replace(/\.png$/i, '.jpg'), candidate.replace(/\.png$/i, '.jpeg')]
-      : [candidate.replace(/\.jpe?g$/i, '.png')]
-    const found = swaps.find((alt) => existsSync(alt) && statSync(alt).isFile())
-    if (found) candidate = found
-    else {
-      res.writeHead(404, { 'content-type': 'text/plain' })
-      res.end('image not found')
-      return true
-    }
-  }
-  const filePath = existsSync(candidate) && statSync(candidate).isFile() ? candidate : join(baseDir, fallback)
-  if (!existsSync(filePath)) return false
-  const type = contentType(filePath)
-  res.writeHead(200, {
-    'content-type': type,
-    ...(type.startsWith('text/') || type.includes('javascript') ? { 'cache-control': 'no-store' } : {})
-  })
-  res.end(readFileSync(filePath))
-  return true
-}
+/* ===== 静态文件服务已搬出到 ./static-serve.mjs(公约②,2026-08-25)===== */
+const { contentType, serveFile } = createStaticServe({ existsSync, statSync, readFileSync, join, normalize, extname })
 
 async function readBody(req) {
   let body = ''
@@ -4443,46 +4409,14 @@ function normalizeQuoteRequestInput(body = {}, customer = null) {
   return input
 }
 
-function serializeQuoteRequest(row) {
-  if (!row) return null
-  const styleElements = parseJson(row.style_elements_json)
-  return {
-    id: row.id,
-    conversationId: row.conversation_id,
-    userId: row.user_id,
-    sourceChannel: row.source_channel,
-    serviceType: row.service_type,
-    serviceId: row.service_id,
-    technicianId: row.technician_id,
-    status: row.status,
-    customerMessage: row.customer_message,
-    customerLang: row.customer_lang,
-    referenceImages: parseJson(row.reference_images_json),
-    styleElements,
-    missingQuestions: parseJson(row.missing_questions_json),
-    extensionNeeded: row.extension_needed,
-    removalNeeded: row.removal_needed,
-    repairNeeded: row.repair_needed,
-    charmsNeeded: row.charms_needed,
-    firstLashVisit: normalizeQuoteFlag(styleElements?.quoteIntake?.firstLashVisit ?? styleElements?.firstLashVisit),
-    lowerLashRequested: row.lower_lash_requested,
-    healthCheckClear: row.health_check_clear,
-    staffCanDo: row.staff_can_do === null || row.staff_can_do === undefined ? null : Boolean(row.staff_can_do),
-    staffPriceCents: row.staff_price_cents,
-    staffPrice: row.staff_price_cents === null || row.staff_price_cents === undefined ? null : cents(row.staff_price_cents),
-    staffDurationMin: row.staff_duration_min,
-    staffNotes: row.staff_notes,
-    aiReply: parseJson(row.ai_reply_json),
-    draftBookingId: row.draft_booking_id,
-    expiresAt: row.expires_at,
-    createdAt: row.created_at,
-    updatedAt: row.updated_at
-  }
-}
-
-function getQuoteRequestById(id) {
-  return serializeQuoteRequest(db.prepare('SELECT * FROM quote_requests WHERE id = ?').get(id))
-}
+const demoResetApi = createDemoReset({
+  db, apiError, randomId, iso, copyFileSync, mkdirSync, existsSync,
+  dbPath: join(dataDir, 'lucky-luxe.sqlite'), backupDir: join(dataDir, 'backups')
+})
+/* ===== AI 报价域序列化已搬出到 ./quote-serialize.mjs(公约②,2026-08-25)===== */
+const { serializeQuoteRequest, getQuoteRequestById } = createQuoteSerialize({
+  db, parseJson, cents, normalizeQuoteFlag: (v) => normalizeQuoteFlag(v)
+})
 
 // 2026-08-07:本店币种。以前所有金额文案都写死 CAD,境内店(CNY)对外报价、AI 上下文全是错的。
 // 取值顺序:租户 AI 事实 currency → 门店 currency → CAD(旗舰店就是 CAD,所以它的文案一字不变)。
@@ -11177,6 +11111,22 @@ async function route(req, res) {
   if (req.method === 'GET' && path === '/share') return serveFile(res, webRoot, 'share.html')
   // 顾客签署页(网页版,与小程序同构):/sign/<单号>
   if (req.method === 'GET' && (path === '/sign' || path.startsWith('/sign/'))) return serveFile(res, webRoot, 'sign.html')
+  /* 🔴 微信「业务域名 / JS 接口安全域名」校验文件(丙线,2026-08-25):
+     微信要求 `https://<域名>/<文件名>.txt` **返回文件原文**。三件事必须同时成立:
+       ① 路由放行到根路径(以前根下的 .txt 会掉进 API 404);
+       ② content-type 是 text/plain(以前 .txt 不在映射表里,会当二进制下载);
+       ③ **文件不存在时必须真 404**,不许回落 index.html —— 回落会返回一段 HTML、
+          微信比对内容失败,而 HTTP 200 会让人以为"路由通了",查半天查不出来。
+     文件本身由店主从公众平台下载后放进 apps/web/ 根下即可,代码这边不用再改。 */
+  if (req.method === 'GET' && /^\/[A-Za-z0-9_.-]+\.txt$/.test(path)) {
+    const name = path.slice(1)
+    if (existsSync(join(webRoot, name)) && statSync(join(webRoot, name)).isFile()) {
+      return serveFile(res, webRoot, name, name)
+    }
+    res.writeHead(404, { 'content-type': 'text/plain; charset=utf-8' })
+    res.end('not found')
+    return
+  }
   if (req.method === 'GET' && path.startsWith('/web/')) return serveFile(res, webRoot, path.replace('/web/', ''))
   if (req.method === 'GET' && path.startsWith('/assets/')) return serveFile(res, assetRoot, path.replace('/assets/', ''))
 
@@ -13896,6 +13846,13 @@ async function route(req, res) {
       hadPassword: had,
       note: '财务密码已清空、门禁已关闭。商家可在「财务 → 财务设置 → 财务密码」自助重新开启。'
     })
+  }
+  /* 演示店账本重置(店主 08-25 六条):**唯一入口**,实现全在 ./demo-reset.mjs,这里只分发。 */
+  const demoResetMatch = path.match(/^\/platform\/tenants\/([^/]+)\/demo-reset$/)
+  if (req.method === 'POST' && demoResetMatch) {
+    if (!isPlatform()) throw apiError(401, 'UNAUTHORIZED', 'Platform token required.')
+    const b = await readBody(req).catch(() => ({}))
+    return json(res, 200, demoResetApi.demoReset({ tenantId: demoResetMatch[1], confirmName: b.confirmName, reason: b.reason, operator: 'platform' }))
   }
   // 平台运维操作日志(只读)
   if (req.method === 'GET' && path === '/platform/ops-log') {

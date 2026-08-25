@@ -2961,6 +2961,89 @@ const main = async () => {
            这里是真调用真抛错,缺陷存在时它必红。 */
       }
 
+      /* ===== ㋞ 演示店重置六条 · 行为断言(店主 08-25 第⑥条:会红的断言)===== */
+      {
+        // 探针一:拿真店打这条路由必须 403(不是 404 —— 要让人知道是被拦了)
+        const realProbe = await request('/platform/tenants/lucky-luxe/demo-reset', { method: 'POST', body: JSON.stringify({ confirmName: 'Lucky Luxe Ontario', reason: '探针:真店不许重置' }) })
+        check('㋞① 真店探针:lucky-luxe 打 demo-reset = 403 NOT_DEMO_TENANT(不是 404)',
+          realProbe.status === 403 && realProbe.data?.error?.code === 'NOT_DEMO_TENANT', JSON.stringify(realProbe.data).slice(0, 140))
+        // 探针二:非平台 token 一律 401
+        const noKey = await request('/platform/tenants/lucky-luxe/demo-reset', { method: 'POST', body: JSON.stringify({}) }, 'not-a-platform-key')
+        check('㋞② 非平台 token 打 demo-reset = 401', noKey.status === 401, `${noKey.status}`)
+        // 真跑一次:建一家 demo 店 → 铺一张单 → 重置 → 单没了、ops-log 落一行、备份路径在回报里
+        const demoId = `demo-reset-${RUN_ID}`
+        const mk = await request('/platform/tenants', { method: 'POST', body: JSON.stringify({ id: demoId, name: `演示重置店${RUN_ID}`, plan: 'single', isDemo: true }) })
+        check('㋞③ 平台建店可显式标演示店(isDemo=true → kind=demo)', mk.status === 201, JSON.stringify(mk.data).slice(0, 120))
+        const dbz = new DatabaseSync(process.env.TEST_DB_PATH)
+        dbz.prepare("UPDATE tenants SET kind = 'demo' WHERE id = ?").run(demoId)   // 测试库上建店默认 test,这里按用途改成 demo
+        dbz.prepare("INSERT INTO finance_transactions (id, tenant_id, type, source, category, amount_cents, occurred_on, created_at) VALUES (?, ?, 'income', 'manual', '演示数据', 12345, '2026-08-25', '2026-08-25T00:00:00.000Z')").run(`fin-${RUN_ID}`, demoId)
+        const before = dbz.prepare('SELECT COUNT(*) n FROM finance_transactions WHERE tenant_id = ?').get(demoId).n
+        // 二次确认:名字不对必须被挡
+        const wrongName = await request(`/platform/tenants/${demoId}/demo-reset`, { method: 'POST', body: JSON.stringify({ confirmName: '随便打的', reason: 'x' }) })
+        check('㋞④ 二次确认:店名没手打对 = 400 CONFIRM_NAME_MISMATCH(不许勾选框放行)',
+          wrongName.status === 400 && wrongName.data?.error?.code === 'CONFIRM_NAME_MISMATCH')
+        const noReason = await request(`/platform/tenants/${demoId}/demo-reset`, { method: 'POST', body: JSON.stringify({ confirmName: `演示重置店${RUN_ID}` }) })
+        check('㋞⑤ 原因必填 = 400 REASON_REQUIRED', noReason.status === 400 && noReason.data?.error?.code === 'REASON_REQUIRED')
+        const done = await request(`/platform/tenants/${demoId}/demo-reset`, { method: 'POST', body: JSON.stringify({ confirmName: `演示重置店${RUN_ID}`, reason: '断言:重播种前清账本' }) })
+        const after = dbz.prepare('SELECT COUNT(*) n FROM finance_transactions WHERE tenant_id = ?').get(demoId).n
+        const oplog = dbz.prepare("SELECT * FROM platform_ops_log WHERE tenant_id = ? AND action = 'demo_reset'").all(demoId)
+        check('㋞⑥ demo 店真跑一次:成功 + 账本清零 + 备份路径在回报里',
+          done.status === 200 && before > 0 && after === 0 && String(done.data?.backupPath || '').includes('演示店重置前'),
+          JSON.stringify({ before, after, bak: done.data?.backupPath }).slice(0, 180))
+        check('㋞⑦ ops-log 落一行,含快照/原因/备份路径(谁在什么时候动了哪家店有据可查)',
+          oplog.length === 1 && /重置前快照/.test(oplog[0].detail) && /原因:断言:重播种前清账本/.test(oplog[0].detail) && /备份:/.test(oplog[0].detail),
+          JSON.stringify(oplog[0] || {}).slice(0, 200))
+        dbz.close()
+      }
+
+      /* ===== ㋝ 五线并行批(店主 2026-08-25):甲拆前端 / 乙平台会员面板 / 丙域名校验 / 丁搬+演示店重置 ===== */
+      {
+        const aiDesk = readFileSync(join(ROOT42, 'apps/web/ai-desk.js'), 'utf8')
+        const platformHtml2 = readFileSync(join(ROOT42, 'apps/web/platform.html'), 'utf8')
+        const quoteMod = readFileSync(join(ROOT42, 'apps/api/quote-serialize.mjs'), 'utf8')
+        const demoMod = readFileSync(join(ROOT42, 'apps/api/demo-reset.mjs'), 'utf8')
+
+        // 甲线:AI/客服域搬出且**旧文件零残留**(判据取函数声明行,不扫全文——判据律新细则)
+        const stillInAdmin = ['wechatMockSessions', 'renderWechatMock', 'renderWechatMockDetail', 'updateWechatMock', 'renderAiBrief']
+          .filter((n) => new RegExp(`^(async )?function ${n}\\b`, 'm').test(adminJs))
+        check('㋝甲① AI/客服域已搬出 ai-desk.js,admin.js 里零残留(判据取函数声明行)',
+          stillInAdmin.length === 0 && /^function wechatMockSessions\b/m.test(aiDesk) && /^function updateWechatMock\b/m.test(aiDesk),
+          `admin.js 里还剩:${stillInAdmin.join(', ')}`)
+        check('㋝甲② 新模块按「取数/状态/渲染」三段分,且 admin.html 在 admin.js 之前加载它',
+          aiDesk.includes('/* ===== 取数 ===== */') && aiDesk.includes('/* ===== 状态 ===== */') && aiDesk.includes('/* ===== 渲染 ===== */')
+          && adminHtml.indexOf('/web/ai-desk.js') > 0 && adminHtml.indexOf('/web/ai-desk.js') < adminHtml.indexOf('/web/admin.js'))
+
+        // 乙线:平台会员面板(GET/PUT 各一处真实调用 + tab 结构照抄)
+        check('㋝乙① 平台后台有会员制度 tab,且 GET/PUT 各至少一处真实调用',
+          platformHtml2.includes(`onclick="tab('member')"`) && platformHtml2.includes('id="tab-member"')
+          && platformHtml2.includes('`/platform/tenants/${CFG_T}/membership-config`')
+          && /membership-config`,\{method:'PUT'/.test(platformHtml2))
+        check('㋝乙② 选项来自后端下发的 qualifyModes,前端不自己维护第二份清单',
+          platformHtml2.includes('(mb&&mb.qualifyModes)||[]') && !/const MB_MODES=\[/.test(platformHtml2))
+        check('㋝乙③ 不新建后端路由:membership-config 仍是唯一那条(GET+PUT 同一处)',
+          (srv.match(/\/membership-config'\)/g) || []).length <= 1 && srv.includes("path.endsWith('/membership-config') && (req.method === 'GET' || req.method === 'PUT')"))
+
+        // 丙线:微信业务域名校验文件通道
+        // contentType 随静态服务域搬到 static-serve.mjs;判据跟着被测物走(㋙D 同族纪律)
+        const staticMod = readFileSync(join(ROOT42, 'apps/api/static-serve.mjs'), 'utf8')
+        check('㋝丙① 根路径 .txt 放行 + text/plain + 文件不存在时真 404(不许回落 index.html)',
+          staticMod.includes("if (ext === '.txt') return 'text/plain; charset=utf-8'")
+          && srv.includes('.txt$/.test(path)') && srv.includes("res.end('not found')"))
+
+        // 丁线:搬 + 演示店重置六条
+        check('㋝丁① AI 报价域序列化已搬出 quote-serialize.mjs,local-server 里零残留',
+          quoteMod.includes('export function createQuoteSerialize') && !/^function serializeQuoteRequest\b/m.test(srv)
+          && srv.includes('const { serializeQuoteRequest, getQuoteRequestById } = createQuoteSerialize('))
+        check('㋝丁② 演示店重置是新模块 + local-server 只留一行分发(公约①)',
+          demoMod.includes('export function createDemoReset') && srv.includes('demoResetApi.demoReset(')
+          && !/RESET_TABLES/.test(srv))
+        check('㋝丁③ 六条前置全在:isPlatform 闸门 / kind=demo 才放行(403) / 手打店名 / 原因必填 / 先备份 / 写 ops-log',
+          srv.includes("if (req.method === 'POST' && demoResetMatch)") && srv.includes('isPlatform()')
+          && demoMod.includes("403, 'NOT_DEMO_TENANT'") && demoMod.includes("400, 'CONFIRM_NAME_MISMATCH'")
+          && demoMod.includes("400, 'REASON_REQUIRED'") && demoMod.includes("'BACKUP_FAILED'")
+          && demoMod.includes("'demo_reset'"))
+      }
+
       /* ===== ㋜ D73:判据的**输入**也不许靠名字(店主 08-24 裁,D72 的复发登记)=====
          D72 把触发器判据改成 tenants.kind,可 kind 当时还是按前缀算、还挂在每次启动跑。
          生产上的两个真后果:①以后开的演示店(叫 demo-*)一建出来账本就不受律保护;
