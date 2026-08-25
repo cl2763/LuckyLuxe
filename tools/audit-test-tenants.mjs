@@ -7,10 +7,11 @@
    ③ 数据量极小(<50 单)且创建时间落在某次回归的分钟级窗口内
    店主的两家真店(lucky-luxe / jics-nail)与演示样板店(demo-ai / demo-basic)一律标"保留"。 */
 import { DatabaseSync } from 'node:sqlite'
+import { PROTECTED_REAL_TENANTS } from '../apps/api/demo-reset.mjs'   // 真店那一份唯一出口(店主 08-25 复核令①:不许本地再抄)
 const path = process.argv[2] || 'apps/api/local-data/lucky-luxe.sqlite'
 const db = new DatabaseSync(path, { readOnly: true })
 
-const KEEP = new Set(['lucky-luxe', 'jics-nail', 'demo-ai', 'demo-basic'])
+const KEEP = new Set([...PROTECTED_REAL_TENANTS, 'demo-ai', 'demo-basic'])   // 真店来自唯一出口,本文件只补演示样板店
 // 人工建的演示/走查店:不是套件残留,删不删由店主定,单独一档
 const ASK = new Set(['hoptest-demo2'])
 // 套件建店前缀:来自 apps/api/test-*.mjs 里的 newShop('x') 命名(前缀-a-<ts> / 前缀-<ts>)

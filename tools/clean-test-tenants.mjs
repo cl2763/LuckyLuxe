@@ -16,6 +16,7 @@
 import { DatabaseSync } from 'node:sqlite'
 import { copyFileSync, mkdirSync, existsSync } from 'node:fs'
 import { join, dirname } from 'node:path'
+import { PROTECTED_REAL_TENANTS } from '../apps/api/demo-reset.mjs'   // 真店黑名单唯一出口,本地零副本
 
 const argv = process.argv.slice(2)
 const EXECUTE = argv.includes('--execute')
@@ -23,11 +24,15 @@ const DB_PATH = (() => { const i = argv.indexOf('--db'); return i >= 0 ? argv[i 
 /* 直接跑才执行主流程;被 import 时只导出纯函数(护栏② 的会红测试要 import 它们)。 */
 const RUN_DIRECT = String(process.argv[1] || '').endsWith('clean-test-tenants.mjs')
 
-/* 🔴 护栏一:真店黑名单。命中即抛错,不是"跳过" ——
-   跳过会让人以为清干净了;抛错才逼人看一眼为什么会碰到真店。 */
+/* 🔴 护栏一:清理保留名单。命中即抛错,不是"跳过" ——
+   跳过会让人以为清干净了;抛错才逼人看一眼为什么会碰到它。
+
+   🔴 店主 08-25 复核令①:**真店那一份不许再抄**。真店来自 demo-reset.mjs 的
+   PROTECTED_REAL_TENANTS(唯一出口),本脚本只在它之上补自己这条口径特有的部分
+   ——「保留的演示样板店」。两者语义本来就不同(真店 ⊂ 保留名单),
+   但"哪几家是真店"这件事只能有一处真相。 */
 const PROTECTED = new Set([
-  'lucky-luxe',        // 店主本店
-  'jics-nail',         // 小婕的店
+  ...PROTECTED_REAL_TENANTS,   // 店主的真店(唯一出口:apps/api/demo-reset.mjs)
   'demo-ai',           // 演示样板(带 AI)
   'demo-basic',        // 演示样板(基础)
   'hoptest-demo2'      // 五跳演示店:人工建的,店主裁定保留(不与自动化残留同批)

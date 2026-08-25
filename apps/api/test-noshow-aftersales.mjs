@@ -3341,8 +3341,12 @@ const main = async () => {
         check('㋡② 铺设目标按 kind 判,不再按租户名白名单;非 demo 拒绝并说明是被拦了',
           seedSrc.includes('async function assertDemoTarget(') && seedSrc.includes('if (!isDemoTenant(hit))')
           && seedSrc.includes('这是**被拦住了**,不是找不到'))
-        check('㋡③ 真店黑名单保留作第二道锁(两道都过才写)',
-          seedSrc.includes('const REAL_TENANTS =') && seedSrc.includes('是真店,演示数据不许写进去'))
+        /* ㋡③ 08-25 复核令①:黑名单收口成一处 —— 原来这里断的是脚本**本地那张表**存在,
+           那正是第二份名单。改断:脚本用的就是 demo-reset 那一份,本地零副本。 */
+        check('㋡③ 真店黑名单是唯一那一份(本地零副本),仍作第二道锁',
+          seedSrc.includes('PROTECTED_REAL_TENANTS.includes(spec.tenantId)')
+          && seedSrc.includes('是真店,演示数据不许写进去')
+          && !/const REAL_TENANTS\s*=/.test(seedSrc.replace(/\/\*[\s\S]*?\*\//g, '')))
         /* ㋡④ 原来断的是"这一行一字不改"。店主 08-25【乙线开锁】明确开了**一个窄例外**:
            默认语义不变(不打 --production-seed 就只跑本机/沙箱),要对生产跑必须七条全满足。
            判据跟着被测物走:这里守"默认边界还在 + 例外必须显式打参数",

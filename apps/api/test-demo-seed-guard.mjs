@@ -16,7 +16,7 @@
      rm -rf /tmp/ll-sg && mkdir /tmp/ll-sg
      DATA_DIR=/tmp/ll-sg PORT=4301 node local-server.mjs &
      TEST_BASE_URL=http://127.0.0.1:4301 node apps/api/test-demo-seed-guard.mjs */
-import { execFile } from 'node:child_process'
+import { execFile, execFileSync } from 'node:child_process'
 import { readFileSync } from 'node:fs'
 import { DatabaseSync } from 'node:sqlite'
 import { dirname, join } from 'node:path'
@@ -171,6 +171,39 @@ const opsBefore = (await request('/platform/ops-log')).data.logs.length
   check('越权:备份口不带令牌=401', r5.status === 401, JSON.stringify(r5.data))
   const r6 = await request('/platform/ops-log/demo-seed', { method: 'POST', body: JSON.stringify({ tenantId: DEMO_ID }) })
   check('异常输入:运维日志缺 detail=400', r6.status === 400, JSON.stringify(r6.data))
+}
+
+/* 🔴 店主 08-25 复核令①:**真店黑名单只有一处真相**。
+   类定义按机制不按长相:凡是"保护/保留名单"这类容器(PROTECTED / KEEP / 黑名单)
+   里硬写店主真店 id 的,就是第二份名单。目标店清单(去哪几家铺数据/走查)不算 ——
+   那是"去哪儿"不是"不许碰谁",语义不同,收在一起反而会互相拖。
+   判据取代码行(剥注释后判),缺陷存在时它会红。 */
+{
+  const files = execFileSync('git', ['ls-files', 'apps/**/*.mjs', 'apps/**/*.js', 'tools/*.mjs', 'tools/**/*.mjs'], { cwd: ROOT, encoding: 'utf8' })
+    .split('\n').filter(Boolean)
+  const dupes = []
+  for (const f of files) {
+    const code = readFileSync(join(ROOT, f), 'utf8').replace(/\/\*[\s\S]*?\*\//g, '')
+      .split('\n').filter((l) => !l.trim().startsWith('//')).join('\n')
+    for (const m of code.matchAll(/(?:const|let|var)\s+([A-Za-z_$][\w$]*)\s*=\s*(?:new Set\()?\[[^\]\n]*\]/g)) {
+      const [whole, name] = m
+      if (!/PROTECT|KEEP|BLACKLIST|REAL_TENANT/i.test(name)) continue       // 只认"保护名单"这一类
+      if (!/'lucky-luxe'/.test(whole) || !/'jics-nail'/.test(whole)) continue
+      if (f === 'apps/api/demo-reset.mjs') continue                          // 唯一出口本身
+      dupes.push(`${f}: ${name}`)
+    }
+  }
+  check('真店黑名单全仓只有一处定义(第二份名单=0)', dupes.length === 0, dupes.join(' | '))
+  const cleaner = await import('../../tools/clean-test-tenants.mjs')
+  check('清理脚本的保留名单由唯一出口派生(真调用取值)',
+    ['lucky-luxe', 'jics-nail'].every((t) => cleaner.PROTECTED_IDS.has(t)) && cleaner.PROTECTED_IDS.size === 5,
+    [...cleaner.PROTECTED_IDS].join(' / '))
+  const auditSrc = readFileSync(join(ROOT, 'tools/audit-test-tenants.mjs'), 'utf8')
+  check('清点脚本同样 import 那一份,不本地抄',
+    /import \{ PROTECTED_REAL_TENANTS \} from '\.\.\/apps\/api\/demo-reset\.mjs'/.test(auditSrc)
+    && /new Set\(\[\.\.\.PROTECTED_REAL_TENANTS/.test(auditSrc))
+  const seedSrc2 = readFileSync(SEEDER, 'utf8').replace(/\/\*[\s\S]*?\*\//g, '')
+  check('铺设脚本本地零副本(REAL_TENANTS 这个本地表已消亡)', !/const REAL_TENANTS\s*=/.test(seedSrc2))
 }
 
 /* 脚本不再直连 sqlite(生产拿不到库文件,那条路在生产上是断的)。

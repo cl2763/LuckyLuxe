@@ -75,9 +75,12 @@ const DEMO_TENANTS = [
   { tenantId: 'jics-sandbox', label: '小婕的店(演示)', currency: 'CNY', timezone: 'Asia/Shanghai',
     twin: { balance: 36600, timecardTimes: 5, coupons: 3, orders: 1, timecardRemaining: 2, name: '演示·跨店阿珍' } }
 ]
-/* ③ 真店黑名单:**直接用 demo-reset 导出的那一份**(PROTECTED_REAL_TENANTS),不再本地抄一份。
-   本地只补一个沙箱里的真店 id(jics-store),合并成一张表用。 */
-const REAL_TENANTS = [...PROTECTED_REAL_TENANTS, 'jics-store']
+/* ③ 真店黑名单:**就是 demo-reset 导出的那一份**,本地零副本(店主 08-25 复核令①)。
+   08-25 一度写成 `[...PROTECTED_REAL_TENANTS, 'jics-store']` —— 那就是第二份名单,
+   两份迟早各自长歪(这批自己刚领悟的那条)。沙箱那家 `jics-store` 不进这份名单:
+   它是**沙箱里的真店替身**、不是店主的真店,而且它照样过不了第②条 ——
+   kind=real 直接拒;想把它改成 demo 又会被 setTenantKind 的方向律拦死
+   (实测:403 HAS_REAL_MONEY,收入 168.00 · 结算单 2 张)。两道锁仍然都在,只是不靠抄名单。 */
 const CROSS_OPENID = 'demo-openid-crossshop-a-zhen'   // 同一个微信身份,两店各一行 users
 
 async function api(tenantId, path, options = {}) {
@@ -120,7 +123,7 @@ const dateStr = (offset = 0) => {
 async function assertDemoTarget(tenantId) {
   /* 🔴 第③条:真店黑名单**独立于第②条**先判 —— 两道锁不许互相依赖(D75 同款)。
      就算哪天 kind 判据出问题,这一条照样拦死。 */
-  if (REAL_TENANTS.includes(tenantId)) {
+  if (PROTECTED_REAL_TENANTS.includes(tenantId)) {
     throw new Error(`第③条拒绝:${tenantId} 在真店黑名单里,任何情况下都不许铺演示数据。`)
   }
   const list = (await platform('/platform/tenants')).tenants || []
@@ -142,7 +145,7 @@ async function assertDemoTarget(tenantId) {
 
 async function ensureTenant(spec) {
   // 第二道锁:真店黑名单(kind 判据之外再兜一层,两道都过才写)
-  if (REAL_TENANTS.includes(spec.tenantId)) throw new Error(`拒绝:${spec.tenantId} 是真店,演示数据不许写进去。`)
+  if (PROTECTED_REAL_TENANTS.includes(spec.tenantId)) throw new Error(`拒绝:${spec.tenantId} 是真店,演示数据不许写进去。`)
   const hit = await assertDemoTarget(spec.tenantId)
   if (hit) { log(`  租户已有:${spec.tenantId}(${hit.name},kind=${hit.kind})`); return }
   const created = await platform('/platform/tenants', {
