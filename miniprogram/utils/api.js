@@ -352,6 +352,8 @@ function toMiniBooking(booking) {
     /* 屏 D2/D3(2026-08-10 核验轮修复):这个映射是**白名单**,后端 customerOrderBadges()
        下发的徽标三态 / 副行 / 实际应付 / 售后三步在这一层被整片丢掉了 ——
        后端断言全绿,页面上一个徽标也不出、售后进度卡整块不渲染。原样透传,前端仍零计算。 */
+    /* A2(08-25):订单状态的人话句后端唯一给(与网页顾客端同一出口),映射层零裁剪 */
+    statusText: booking.statusText || '',
     listBadgeText: booking.listBadgeText || '',
     listBadgeKind: booking.listBadgeKind || '',
     listNote: booking.listNote || '',

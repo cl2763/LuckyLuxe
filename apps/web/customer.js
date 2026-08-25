@@ -1820,7 +1820,7 @@ function renderMe() {
             <button class="recent-card-web card" data-order-id="${order.id}" type="button">
               <img src="${order.status === 'COMPLETED' && customerVisibleWorkImages(order)[0] ? customerVisibleWorkImages(order)[0] : order.service.imageUrl}" alt="${order.service.name}">
               <div>
-                <div class="recent-top"><strong>${order.service.name}</strong><span>${statusLabel(order.status)}</span></div>
+                <div class="recent-top"><strong>${order.service.name}</strong><span>${escapeHtml(orderStatusText(order))}</span></div>
                 <p>${order.appointmentDate} ${order.appointmentTime} · ${order.technician.name}</p>
                 <!-- 同一张单在「近期消费」和「订单列表」必须说同一句话:金额句后端唯一(永久律 08-23) -->
                 <p>${escapeHtml(order.actualDueText || order.listAmountText || '')}</p>
@@ -1859,7 +1859,20 @@ function renderMe() {
   `
 }
 
-function statusLabel(status) {
+/* 🔴 A2(店主 08-25,S12 波次3):订单状态句**后端唯一给**(order.statusText,基准=小程序那套词)。
+   原来这里是本地第二份词典,连词都不一样(CONFIRMED 这儿说「已支付」、小程序说「待服务」)。
+   现在:中文直渲后端句;en 仍用本地词典(后端句是中文,与动作 label 同一处理方式)。
+   筛选器那种"没有单可依据"的场合(传进来的是筛选 key)仍走词典 —— 那不是某张单的状态。 */
+const ORDER_STATUS_EN = {
+  PENDING_PAYMENT: 'To Pay', CONFIRMED: 'Upcoming', COMPLETED: 'Completed',
+  CANCELLED: 'Cancelled', EXPIRED: 'Expired', AFTER_SALES: 'After-sales'
+}
+function orderStatusText(order) {
+  if (state.lang === 'en') return ORDER_STATUS_EN[order?.status] || ''
+  return order?.statusText || ''          // 零回落律:后端没给就空着,不本地编一个
+}
+function statusLabel(statusKey) {
+  // 只给「筛选分组名」用(all/COMPLETED…),不再用于渲染某张单的状态
   const zh = {
     all: t('all'),
     PENDING_PAYMENT: t('pending'),
@@ -1869,7 +1882,7 @@ function statusLabel(status) {
     EXPIRED: 'Expired',
     AFTER_SALES: t('afterSales')
   }
-  return zh[status] || status
+  return zh[statusKey] || statusKey
 }
 
 async function refreshOrder(id) {
@@ -1968,7 +1981,7 @@ function renderOrdersWeb() {
       <div class="order-list-web">
           ${orders.length ? orders.map((order) => `
           <button class="order-card-web card" data-order-id="${order.id}" type="button">
-            <div class="order-head-web"><strong>${order.listTitleText ? escapeHtml(order.listTitleText) : order.service.name}</strong><span>${order.listBadgeText ? escapeHtml(order.listBadgeText) : statusLabel(order.status)}</span></div>
+            <div class="order-head-web"><strong>${order.listTitleText ? escapeHtml(order.listTitleText) : order.service.name}</strong><span>${order.listBadgeText ? escapeHtml(order.listBadgeText) : escapeHtml(orderStatusText(order))}</span></div>
             <div class="order-body-web">
               <img src="${order.status === 'COMPLETED' && customerVisibleWorkImages(order)[0] ? customerVisibleWorkImages(order)[0] : order.service.imageUrl}" alt="${order.service.name}">
               <div>
@@ -2048,7 +2061,7 @@ function renderOrderDetailWeb() {
     <section class="order-detail-web">
       <button class="ghost back-btn" data-view-target="orders" type="button">← ${t('orders')}</button>
       <div class="detail-card-web card">
-        <span class="status">${statusLabel(order.status)}</span>
+        <span class="status">${escapeHtml(orderStatusText(order))}</span>
         <h1>${order.service.name}</h1>
         <p class="subtle">${t('orderNo')} ${order.publicCode}</p>
         <img src="${order.service.imageUrl}" alt="${order.service.name}">

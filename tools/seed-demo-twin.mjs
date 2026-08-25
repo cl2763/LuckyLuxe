@@ -19,6 +19,7 @@
 */
 import { readFileSync } from 'node:fs'
 import { DatabaseSync } from 'node:sqlite'
+import { isDemoTenant } from '../apps/api/demo-reset.mjs'   // 演示店判据唯一出口(与重置口共用同一条)
 import { dirname, join } from 'node:path'
 import { fileURLToPath } from 'node:url'
 
@@ -28,7 +29,11 @@ if (!/127\.0\.0\.1|localhost/.test(BASE)) throw new Error('演示铺设只给本
 const TOKEN = process.env.OWNER_TOKEN || (readFileSync(join(ROOT, 'apps/api/.env'), 'utf8').split('\n')
   .find((l) => l.startsWith('OWNER_DEMO_TOKEN=')) || '').slice('OWNER_DEMO_TOKEN='.length).trim().replace(/^["']|["']$/g, '')
 
-/* 演示租户白名单:名字里必须带「演示」,且 id 不是任何真店。写别的租户直接拒绝。 */
+/* 🔴 B线第一段(店主 2026-08-25):目标判据从**租户名白名单**改成 **tenants.kind='demo'**,
+   与 demo-reset.mjs 用**同一条判据**(唯一出口 isDemoTenant —— 判据只写一处,能共用就共用)。
+   为什么改:靠名字认身份就是 D72/D73 那条病的根 —— 名字随时能改,归属是数据。
+   下面这张表现在只提供**铺什么数据**(币种/时区/孪生档案的数字),**不再决定能不能写**:
+   能不能写由 kind 说了算,非 demo 直接拒绝并说明是被拦了;真店黑名单保留作第二道锁。 */
 const DEMO_TENANTS = [
   { tenantId: 'demo-lucky-luxe', label: 'Lucky Luxe(演示)', currency: 'CAD', timezone: 'America/Toronto',
     twin: { balance: 88800, timecardTimes: 5, coupons: 1, orders: 2, timecardRemaining: 4, name: '演示·跨店阿珍' } },
@@ -68,14 +73,28 @@ const dateStr = (offset = 0) => {
   return d.toLocaleDateString('en-CA', { timeZone: 'America/Toronto' })
 }
 
-async function ensureTenant(spec) {
-  if (REAL_TENANTS.includes(spec.tenantId)) throw new Error(`拒绝:${spec.tenantId} 是真店,演示数据不许写进去。`)
+/* 第一道锁(唯一出口):kind='demo' 才允许写。非 demo 一律拒绝,并**说明是被拦了**,
+   不是"找不到"——与 demo-reset 的 403 措辞同一条思路。 */
+async function assertDemoTarget(tenantId) {
   const list = (await platform('/platform/tenants')).tenants || []
-  const hit = list.find((t) => t.id === spec.tenantId)
-  if (hit) { log(`  租户已有:${spec.tenantId}(${hit.name})`); return }
+  const hit = list.find((t) => t.id === tenantId)
+  if (!hit) return null                                     // 还没建店:由 ensureTenant 去建(建出来就是 demo)
+  if (!isDemoTenant(hit)) {
+    throw new Error(`拒绝写入 ${tenantId}:它的归属是 kind=${hit.kind || 'real'},不是演示店。`
+      + `\n  这是**被拦住了**,不是找不到。演示归属只能在平台后台「新建商家」时显式勾选「这是演示店」。`)
+  }
+  return hit
+}
+
+async function ensureTenant(spec) {
+  // 第二道锁:真店黑名单(kind 判据之外再兜一层,两道都过才写)
+  if (REAL_TENANTS.includes(spec.tenantId)) throw new Error(`拒绝:${spec.tenantId} 是真店,演示数据不许写进去。`)
+  const hit = await assertDemoTarget(spec.tenantId)
+  if (hit) { log(`  租户已有:${spec.tenantId}(${hit.name},kind=${hit.kind})`); return }
   const created = await platform('/platform/tenants', {
     method: 'POST',
-    body: JSON.stringify({ id: spec.tenantId, name: spec.label, plan: 'chain', initialTerm: 'year', currency: spec.currency, timezone: spec.timezone })
+    // D73:建店当场定归属(不靠名字前缀事后猜)
+    body: JSON.stringify({ id: spec.tenantId, name: spec.label, plan: 'chain', initialTerm: 'year', currency: spec.currency, timezone: spec.timezone, isDemo: true })
   })
   log(`  ✅ 新建演示租户:${spec.tenantId}(${spec.label});老板账号 ${created.owner.username}(初始密码只显示这一次,演示店无需交付)`)
 }

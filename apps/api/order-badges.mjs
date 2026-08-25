@@ -31,6 +31,29 @@ export function bookingSourceText(raw) {
   return SOURCE_TEXT[v] || v          // 不认识的值原样透出(那也是真值),就是不编
 }
 
+/* 🔴 A2(店主 2026-08-25,S12 波次3):订单状态的**人话句后端唯一给**。
+
+   查明(A1 清单 M1):两端各维护一份中文映射 —— 小程序 `i18n.statusText`、
+   网页 `statusLabel()`,而且词还不一样(CONFIRMED 小程序说「待服务」、网页说「已支付」)。
+   后端从来没下发过订单主状态的句子,于是"同一张单在两端显示不同的状态词"是必然而不是意外。
+
+   基准取**小程序已拍的那套词**(店主验过的),后端照抄下发,两端直渲 ——
+   这是机械对齐,不是口径变更:顾客看到的字与小程序原来一模一样。
+   en 仍由各端本地词典兜(后端句是中文,与 listBadgeText / 动作 label 同一处理方式)。 */
+const BOOKING_STATUS_TEXT = {
+  PENDING_PAYMENT: '待支付',
+  CONFIRMED: '待服务',
+  COMPLETED: '已完成',
+  CANCELLED: '已取消',
+  EXPIRED: '已过期'
+}
+
+export function bookingStatusText(row) {
+  // 合同⑤:售后是并行轨道 —— 轨道开着时,顾客看到的状态词是「售后」(与小程序分组口径一致)
+  if (['pending', 'processing'].includes(row?.after_sales_status || '')) return '售后'
+  return BOOKING_STATUS_TEXT[row?.status] || ''   // 认不出来就空串,不编(零回落律)
+}
+
 export function createOrderBadges({ db, bookingState, afterSalesProgress, amendmentShape, formatMoneyCents, groupMainItemCount, groupFirstMainName }) {
   function customerOrderBadges(row) {
     const stl = db.prepare("SELECT * FROM settlements WHERE booking_id = ? AND status = 'signed' ORDER BY signed_at DESC LIMIT 1").get(row.id)

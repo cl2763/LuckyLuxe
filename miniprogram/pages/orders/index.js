@@ -80,7 +80,8 @@ Page({
       const service = item.service || (item.serviceInfo && { name: item.serviceInfo.serviceName, type: item.serviceInfo.serviceType, duration: item.serviceInfo.duration }) || {} // mock 清除:同 me 页
       const localizedService = i18n.localizeService(service, lang)
       return Object.assign({}, item, {
-        statusText: i18n.statusText(item.status, lang),
+        // A2(08-25):中文状态句读后端唯一出口(与网页顾客端同一份);en 仍走本地词典
+        statusText: lang === 'en' ? i18n.statusText(item.status, lang) : (item.statusText || i18n.statusText(item.status, lang)),
         serviceName: localizedService.name || item.serviceInfo.serviceName,
         serviceImage: service.image || item.serviceImage || '/assets/images/store-cover.jpg'
       })

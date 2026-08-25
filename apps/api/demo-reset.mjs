@@ -14,6 +14,15 @@
 
    公约①:新功能一律新模块 —— local-server 只留 import + 一行分发。 */
 
+/* 🔴 演示店判据 —— **唯一出口**(店主 08-25:判据只写一处,能共用就共用)。
+   谁要判"这家店是不是演示店",一律问这里:重置口(本模块)、铺设脚本(tools/seed-demo-twin.mjs)、
+   以后任何新入口都一样。判据落在**数据**(tenants.kind)上,不看名字 —— D73 立的规矩。
+   fail-closed:kind 拿不到按 real 算,宁可拦住一次合法操作,不许放过一次真店。 */
+export const DEMO_KIND = 'demo'
+export function isDemoTenant(tenant) {
+  return String(tenant?.kind || 'real') === DEMO_KIND
+}
+
 /* 演示店重置会清掉的表(**只清这家店的经营数据**,不动店本身/账号/门店资料/服务价目):
    重播种脚本会重新铺这些,所以清单与它对齐;不在这张表里的一律不碰。 */
 const RESET_TABLES = [
@@ -29,6 +38,27 @@ const RESET_TABLES = [
 ]
 
 export function createDemoReset({ db, apiError, randomId, iso, copyFileSync, dbPath, backupDir, mkdirSync, existsSync }) {
+  /* 🔴 D73 留的洞(2026-08-25 铺设时撞到):归属只能在**建店那一刻**定,
+     已经建好的店没有任何入口能改 —— 于是「小婕的店(演示)」这种**名字是演示、归属是 real** 的店
+     既不能铺演示数据、也不能重置,而我写在错误提示里的那句"归属只能在平台后台显式设置"当时是句空话。
+     现在补上:平台可以改归属,但**只在 real ↔ demo 之间**(test 只由测试库建店产生,不许人工设),
+     且每次都写 ops-log —— 这一步改的是"这家店的账本受不受只追加律保护",必须有据可查。 */
+  function setTenantKind({ tenantId, kind, reason, operator = 'platform' }) {
+    const tenant = db.prepare('SELECT id, name, kind FROM tenants WHERE id = ?').get(tenantId)
+    if (!tenant) throw apiError(404, 'NOT_FOUND', '找不到这家店。')
+    if (!['real', 'demo'].includes(kind)) throw apiError(400, 'BAD_KIND', "归属只能设成 real 或 demo(test 由测试库建店自动产生,不许人工设)。")
+    if (tenant.kind === 'test') throw apiError(403, 'TEST_TENANT', '这是测试库产生的租户,不许改归属。')
+    const why = String(reason || '').trim()
+    if (!why) throw apiError(400, 'REASON_REQUIRED', '改归属必须写一句原因(会写进平台运维日志)。')
+    const now = iso(new Date())
+    db.prepare('UPDATE tenants SET kind = ?, updated_at = ? WHERE id = ?').run(kind, now, tenantId)
+    db.prepare('INSERT INTO platform_ops_log (id, tenant_id, action, detail, operator, created_at) VALUES (?, ?, ?, ?, ?, ?)')
+      .run(randomId('oplog'), tenantId, 'tenant_kind_change',
+        `归属 ${tenant.kind} → ${kind}(${kind === 'demo' ? '账本从此不受只追加律保护、可整体重置' : '账本从此受只追加律保护'})。原因:${why.slice(0, 200)}`,
+        operator, now)
+    return { tenantId, tenantName: tenant.name, from: tenant.kind, to: kind, at: now }
+  }
+
   const countOf = (table, tenantId) => {
     try { return db.prepare(`SELECT COUNT(*) n FROM ${table} WHERE tenant_id = ?`).get(tenantId).n } catch (e) { return 0 }
   }
@@ -47,7 +77,7 @@ export function createDemoReset({ db, apiError, randomId, iso, copyFileSync, dbP
     const tenant = db.prepare('SELECT id, name, kind FROM tenants WHERE id = ?').get(tenantId)
     if (!tenant) throw apiError(404, 'NOT_FOUND', '找不到这家店。')
     // ② 非 demo 一律 403:让人知道是被拦了,不是找不到
-    if (tenant.kind !== 'demo') {
+    if (!isDemoTenant(tenant)) {
       throw apiError(403, 'NOT_DEMO_TENANT', `「${tenant.name}」不是演示店(kind=${tenant.kind}),不允许重置账本。演示店归属只能在平台后台显式设置。`)
     }
     // ③ 手打完整店名才放行(不许勾选框)
@@ -105,5 +135,5 @@ export function createDemoReset({ db, apiError, randomId, iso, copyFileSync, dbP
     }
   }
 
-  return { demoReset, RESET_TABLES }
+  return { demoReset, setTenantKind, RESET_TABLES }
 }

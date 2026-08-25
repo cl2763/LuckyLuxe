@@ -41,7 +41,9 @@ Page({
     if (order) {
       const service = order.service || (order.serviceInfo && { name: order.serviceInfo.serviceName, type: order.serviceInfo.serviceType, duration: order.serviceInfo.duration }) || {} // mock 清除
       const localizedService = i18n.localizeService(service, lang)
-      order.statusText = i18n.statusText(order.status, lang)
+      /* A2(店主 08-25):中文状态句读**后端唯一出口**(order.statusText,与网页顾客端同一份);
+         en 仍走本地词典(后端句是中文)。两端从此不再各维护一套中文映射。 */
+      order.statusText = lang === 'en' ? i18n.statusText(order.status, lang) : (order.statusText || i18n.statusText(order.status, lang))
       order.serviceImage = service.image || order.serviceImage || '/assets/images/store-cover.jpg'
       order.serviceInfo.serviceName = localizedService.name || order.serviceInfo.serviceName
       // D21:不再用写死的假技师名(Mia Chen/Ava Lin)填空 —— 没有就不显示

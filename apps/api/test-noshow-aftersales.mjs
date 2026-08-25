@@ -3027,6 +3027,80 @@ const main = async () => {
         && retireMod.includes('if (!demoRetireDone && !isProduction) try {')
         && srv.includes('retireLegacyDemoArchives({ db, iso, isProduction: IS_PRODUCTION })'))
 
+      /* ===== ㋡ B线第一段:演示铺设判据改 kind + 与重置口共用同一条(店主 2026-08-25)===== */
+      {
+        const seedSrc = readFileSync(join(ROOT42, 'tools/seed-demo-twin.mjs'), 'utf8')
+        const demoSrc = readFileSync(join(ROOT42, 'apps/api/demo-reset.mjs'), 'utf8')
+        check('㋡① 判据唯一出口:isDemoTenant 只在 demo-reset.mjs 定义一次,铺设脚本 import 它',
+          (demoSrc.match(/export function isDemoTenant/g) || []).length === 1
+          && seedSrc.includes("import { isDemoTenant } from '../apps/api/demo-reset.mjs'")
+          && !/function isDemoTenant/.test(seedSrc))
+        check('㋡② 铺设目标按 kind 判,不再按租户名白名单;非 demo 拒绝并说明是被拦了',
+          seedSrc.includes('async function assertDemoTarget(') && seedSrc.includes('if (!isDemoTenant(hit))')
+          && seedSrc.includes('这是**被拦住了**,不是找不到'))
+        check('㋡③ 真店黑名单保留作第二道锁(两道都过才写)',
+          seedSrc.includes('const REAL_TENANTS =') && seedSrc.includes('是真店,演示数据不许写进去'))
+        check('㋡④ 生产硬边界一行没改(只跑本机/沙箱)',
+          seedSrc.includes("if (!/127\\.0\\.0\\.1|localhost/.test(BASE)) throw new Error('演示铺设只给本机沙箱用,不要指向生产。')"))
+        check('㋡⑤ 建演示店当场标 demo(isDemo:true),不靠名字前缀',
+          seedSrc.includes('isDemo: true'))
+        check('㋡⑥ 平台租户列表下发 kind(铺设脚本与后台都按它认演示店)',
+          srv.includes('kind: r.kind || \'real\''))
+        // D73 补洞:已建的店改归属(建店那一刻之外唯一的入口),两态可切 + 必填原因 + 落 ops-log
+        check('㋡⑦ 改归属只在 real↔demo 之间,test 不许人工设,且必填原因 + 写 ops-log',
+          demoSrc.includes("if (!['real', 'demo'].includes(kind))") && demoSrc.includes("403, 'TEST_TENANT'")
+          && demoSrc.includes("'tenant_kind_change'") && srv.includes('demoResetApi.setTenantKind('))
+      }
+
+      /* ===== ㋠ A2:订单状态句后端出句(S12 波次3,店主 2026-08-25)=====
+         A1 清单 M1:两端各维护一份中文映射,连词都不一样(CONFIRMED 小程序「待服务」/网页「已支付」)。
+         基准取小程序已拍那套,后端照抄下发,两端直渲。
+         判据照第三案:**两端各自的转换代码真跑在同一份 booking 上**,再逐项比 —— 不是各查各的。 */
+      {
+        const custJs2 = readFileSync(join(ROOT42, 'apps/web/customer.js'), 'utf8')
+        const miniApi2 = readFileSync(join(ROOT42, 'miniprogram/utils/api.js'), 'utf8')
+        const miniOrders2 = readFileSync(join(ROOT42, 'miniprogram/pages/orders/index.js'), 'utf8')
+        const badges2 = readFileSync(join(ROOT42, 'apps/api/order-badges.mjs'), 'utf8')
+
+        check('㋠① 状态句有后端唯一出口(bookingStatusText),serializeBooking 随单下发',
+          badges2.includes('export function bookingStatusText') && srv.includes('statusText: bookingStatusText(row)'))
+        // 取代码行判负向,不扫全文(判据律新细则)
+        const webRenderLines = (custJs2.match(/^.*statusLabel\(order\.status\).*$/gm) || [])
+        check('㋠② 网页顾客端不再用本地词典渲染某张单的状态(statusLabel 只剩筛选分组名在用)',
+          webRenderLines.length === 0 && custJs2.includes('function orderStatusText(order)')
+          && custJs2.includes("return order?.statusText || ''"))
+        check('㋠③ 映射层零裁剪 + 小程序两处都读后端句(中文),en 仍本地词典',
+          miniApi2.includes("statusText: booking.statusText || ''")
+          && miniOrders2.includes("(item.statusText || i18n.statusText(item.status, lang))")
+          && readFileSync(join(ROOT42, 'miniprogram/pages/order-detail/index.js'), 'utf8').includes("(order.statusText || i18n.statusText(order.status, lang))"))
+
+        /* ④ 两端真跑比对:把两端各自的取句代码抠出来,在同一份 booking 上真执行,逐字比。 */
+        // 抠两段:EN 词典 + orderStatusText 函数体(第一版只抠到词典,函数没带上 → 真跑时 not defined)
+        const webFn = ((custJs2.match(/const ORDER_STATUS_EN = [\s\S]*?\n}\n/) || [''])[0])
+          + ((custJs2.match(/function orderStatusText\(order\) \{[\s\S]*?\n}\n/) || [''])[0])
+        const miniExprOd = (readFileSync(join(ROOT42, 'miniprogram/pages/order-detail/index.js'), 'utf8')
+          .match(/lang === 'en' \? i18n\.statusText\(order\.status, lang\) : \(order\.statusText \|\| i18n\.statusText\(order\.status, lang\)\)/) || [''])[0]
+        check('㋠④-前置 两端取句代码都抠得出来(抠不出来=谁又改回本地词典了)', Boolean(webFn) && Boolean(miniExprOd))
+        const webText = new Function('state', 'order', `${webFn}; return orderStatusText(order)`)
+        const miniText = new Function('lang', 'order', 'i18n', `return ${miniExprOd}`)
+        const i18nStub = { statusText: () => '本地兜底(不该被用到)' }
+        const cases = [
+          ['待支付单', { status: 'PENDING_PAYMENT', statusText: '待支付' }],
+          ['待服务单', { status: 'CONFIRMED', statusText: '待服务' }],
+          ['已完成单', { status: 'COMPLETED', statusText: '已完成' }],
+          ['售后中的单', { status: 'COMPLETED', afterSalesStatus: 'pending', statusText: '售后' }]
+        ]
+        for (const [label, bk] of cases) {
+          const w = webText({ lang: 'zh' }, bk)
+          const m = miniText('zh', bk, i18nStub)
+          check(`㋠④ ${label}:两端渲染同一份数据(逐字相同=${JSON.stringify(bk.statusText)})`,
+            w === m && w === bk.statusText, JSON.stringify({ web: w, mini: m }))
+        }
+        // 反例:后端没给句子时,两端都不许本地编一个(零回落律)
+        check('㋠⑤ 反例:后端没给 statusText,网页显示空串(不本地编)',
+          webText({ lang: 'zh' }, { status: 'COMPLETED' }) === '')
+      }
+
       /* ===== ㋞ 演示店重置六条 · 行为断言(店主 08-25 第⑥条:会红的断言)===== */
       {
         // 探针一:拿真店打这条路由必须 403(不是 404 —— 要让人知道是被拦了)

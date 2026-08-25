@@ -10,12 +10,13 @@ import os from 'node:os'   // 真机调试:开发机局域网 IP 探测(启动�
 import { pngSize, rasterBackend, svgToPng } from './svg-raster.mjs'
 import { inkToPng } from './ink-raster.mjs'
 import { createAfterSales } from './after-sales.mjs'        // 售后域(公约②:边改边拆)
-import { createOrderBadges, bookingSourceText } from './order-badges.mjs'
+import { createOrderBadges, bookingSourceText, bookingStatusText } from './order-badges.mjs'
 import { installLedgerGuards, backfillTenantKindOnce, LEDGER_TRIGGER_NAMES } from './ledger-guards.mjs'
 import { createQuoteSerialize } from './quote-serialize.mjs'          // AI 报价域序列化(公约②)
 import { createDemoReset } from './demo-reset.mjs'                    // 演示店账本重置唯一入口(公约①)
 import { createStaticServe } from './static-serve.mjs'                // 静态文件服务(公约②)
-import { retireLegacyDemoArchives } from './legacy-demo-retire.mjs'   // 旧口径演示档案退役(一次性)  // 账本禁删/禁改律唯一出口(D72)      // 顾客端订单表达域(同上)
+import { retireLegacyDemoArchives } from './legacy-demo-retire.mjs'   // 旧口径演示档案退役(一次性)
+import { createMemberCode } from './member-code.mjs'                  // 会员码域(公约②)  // 账本禁删/禁改律唯一出口(D72)      // 顾客端订单表达域(同上)
 import { createBookingIncome } from './booking-income.mjs'  // 订单入账触点(同上)
 import { createBookingState, isAfterSalesOpen, shouldAutoComplete } from './booking-state.mjs'  // 订单状态机(D70 合同,唯一实现)   // 笔迹图:纯 JS 画折线,**透明底**(单据白纸走 svgToPng,两条路不混)
 import { analyzeReferenceImage, createBookingSummary, createCustomerInsight, createCustomerServiceReply, createDailyBrief, createRecallMessages, createServiceNoteInsights, createSocialCopy, extractKbEntriesFromDocument, polishStaffQuoteReply } from './ai-utils.mjs'
@@ -5344,28 +5345,8 @@ function tenantMemberTiers(tenantId = currentTenantId()) {
   return tiers.map((t, i) => ({ ...t, nextSpendCents: tiers[i + 1] ? tiers[i + 1].minSpendCents : null }))
 }
 
-function memberCodeForUserId(userId) {
-  return `LL-${String(userId || 'member').replace(/[^a-z0-9]/gi, '').slice(-8).toUpperCase().padStart(8, '0')}`
-}
-
-function displayNameForUserId(userId) {
-  return memberCodeForUserId(userId)
-}
-
-/* 会员码 → 档案(规则⑥ 反查)。会员码是从 userId 末 8 位推导的,不可逆,
-   所以反查靠比对:命中唯一一条才认,零条或多条都不认(与「歧义不合并身份」同一条纪律)。 */
-function userIdFromMemberCode(memberCode) {
-  const want = String(memberCode || '').trim().toUpperCase()
-  if (!/^LL-[A-Z0-9]{8}$/.test(want)) return ''
-  const hits = db.prepare('SELECT id FROM users').all().filter((u) => memberCodeForUserId(u.id) === want)
-  return hits.length === 1 ? hits[0].id : ''
-}
-
-function isGenericDisplayName(value, userId = '') {
-  const displayName = String(value || '').trim()
-  if (!displayName) return true
-  return ['Lucky Member', '微信用户', 'WeChat User', displayNameForUserId(userId)].includes(displayName)
-}
+/* ===== 会员码域已搬出到 ./member-code.mjs(公约②,2026-08-25)===== */
+const { memberCodeForUserId, displayNameForUserId, userIdFromMemberCode, isGenericDisplayName } = createMemberCode({ db })
 
 function membershipForSpend(totalSpentCents = 0, tenantId = currentTenantId()) {
   const spend = Number(totalSpentCents || 0)
@@ -5520,6 +5501,8 @@ function serializeBooking(row, lang = 'zh') {
     sourceChannel: row.source_channel || null,
     // D71:来源的**人话句**后端唯一给(拿不到真值=「未记录来源」,前端不许再哈希编一个)
     sourceText: bookingSourceText(row.source_channel),
+    // A2(08-25):订单状态的人话句后端唯一给(基准=小程序已拍的那套词),两端直渲不各写一份
+    statusText: bookingStatusText(row),
     notes: row.notes,
     servicePrice: cents(row.service_price_cents),
     servicePriceCents: row.service_price_cents,
@@ -13735,14 +13718,15 @@ async function route(req, res) {
     if (!isPlatform()) throw apiError(401, 'UNAUTHORIZED', 'Platform token required.')
     const monthStartIso = iso(localDateTime(`${localParts(new Date()).date.slice(0, 7)}-01`, '00:00'))
     const rows = db.prepare(`
-      SELECT t.id, t.name, t.plan, t.status, t.plan_expires_at,
+      SELECT t.id, t.name, t.plan, t.status, t.plan_expires_at, t.kind,
         (SELECT COUNT(*) FROM stores s WHERE s.tenant_id = t.id AND s.is_active = 1) AS store_count,
         (SELECT COUNT(*) FROM bookings b WHERE b.tenant_id = t.id) AS booking_count,
         (SELECT COUNT(*) FROM bookings b WHERE b.tenant_id = t.id AND b.appointment_start >= ?) AS month_booking_count,
         (SELECT username FROM admin_accounts a WHERE a.tenant_id = t.id AND a.role = 'owner' LIMIT 1) AS owner_username
       FROM tenants t ORDER BY t.rowid ASC
     `).all(monthStartIso)
-    return json(res, 200, { tenants: rows.map((r) => ({ id: r.id, name: r.name, plan: r.plan, status: r.status, planExpiresAt: r.plan_expires_at, storeCount: r.store_count, bookingCount: r.booking_count, monthBookingCount: r.month_booking_count, ownerUsername: r.owner_username || '' })) })
+    // D73/B线:归属(real|demo|test)随列表下发 —— 铺设脚本与平台后台都按它认演示店,不再靠名字
+    return json(res, 200, { tenants: rows.map((r) => ({ id: r.id, name: r.name, plan: r.plan, status: r.status, kind: r.kind || 'real', planExpiresAt: r.plan_expires_at, storeCount: r.store_count, bookingCount: r.booking_count, monthBookingCount: r.month_booking_count, ownerUsername: r.owner_username || '' })) })
   }
   if (req.method === 'POST' && path === '/platform/tenants') {
     if (!isPlatform()) throw apiError(401, 'UNAUTHORIZED', 'Platform token required.')
@@ -13847,6 +13831,13 @@ async function route(req, res) {
       hadPassword: had,
       note: '财务密码已清空、门禁已关闭。商家可在「财务 → 财务设置 → 财务密码」自助重新开启。'
     })
+  }
+  /* 平台改租户归属(real ↔ demo):实现在 ./demo-reset.mjs,这里只分发。 */
+  const kindMatch = path.match(/^\/platform\/tenants\/([^/]+)\/kind$/)
+  if (req.method === 'PATCH' && kindMatch) {
+    if (!isPlatform()) throw apiError(401, 'UNAUTHORIZED', 'Platform token required.')
+    const kb = await readBody(req).catch(() => ({}))
+    return json(res, 200, demoResetApi.setTenantKind({ tenantId: kindMatch[1], kind: kb.kind, reason: kb.reason }))
   }
   /* 演示店账本重置(店主 08-25 六条):**唯一入口**,实现全在 ./demo-reset.mjs,这里只分发。 */
   const demoResetMatch = path.match(/^\/platform\/tenants\/([^/]+)\/demo-reset$/)
