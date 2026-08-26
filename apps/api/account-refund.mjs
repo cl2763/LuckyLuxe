@@ -140,5 +140,53 @@ export function createAccountRefund({ db, apiError, iso, randomId, currentTenant
     }
   }
 
-  return { refundFacts, refundStoredValue, timecardRefundFacts, refundTimecard, refundsOfDay }
+  /* 🔴 店主 08-25 复核抓出的那一半:**钱真的出去了。**
+     退卡不进损益(对:那笔钱从没被确认成收入)—— 但**现金合计也没扣它**,
+     于是「今天收现 2000、退顾客 400 → 抽屉实际 1600,日结却报 2000」,
+     店主晚上数钱对不上,而她不会怀疑退卡,**她会怀疑店员**。
+
+     三本账:损益不动 / 负债已减 / **现金必须减** —— 这里补的是第三本。
+
+     ⚠️ 口径说明(如实写在这儿,别让人以为比实际更精确):
+     `settlement_payments` 的线下腿(leg='offline')**不分现金还是刷卡**,表上没有渠道列。
+     所以这个数是「**到店收的钱**(现金+刷卡)应有数」;要精确到钱柜里的纸币,
+     得先给线下腿记渠道 —— 那是另一件事,没在这批里做。
+     退款这一侧是分渠道的:现金/到店退才从这个数里扣,转账与原路退回单列(它们走银行,不出抽屉)。 */
+  function cashDrawerOf(date, tenantId, { settlementIds = [] } = {}) {
+    // 到店支付(线下腿 Σ):在这儿算,免得日结那边再拼一段 SQL
+    const storefrontCents = settlementIds.length
+      ? db.prepare(`SELECT COALESCE(SUM(amount_cents),0) n FROM settlement_payments
+          WHERE leg = 'offline' AND settlement_id IN (${settlementIds.map(() => '?').join(',')})`).get(...settlementIds).n
+      : 0
+    const refunds = refundsOfDay(date, tenantId)
+    const isDrawer = (ch) => ['cash', 'offline', 'unknown', ''].includes(String(ch || ''))
+    const svRows = db.prepare(`SELECT amount_cents, pay_channel, created_at, type FROM stored_value_transactions
+      WHERE tenant_id = ? AND type IN ('refund', 'recharge')`).all(tenantId)
+      .filter((r) => storeDateOf(r.created_at, tenantId) === date)
+    const rechargeCash = svRows.filter((r) => r.type === 'recharge' && isDrawer(r.pay_channel))
+      .reduce((n, r) => n + r.amount_cents, 0)
+    const refundCash = svRows.filter((r) => r.type === 'refund' && isDrawer(r.pay_channel))
+      .reduce((n, r) => n + Math.abs(r.amount_cents), 0)
+    const tcRows = db.prepare('SELECT amount_cents, pay_channel, created_at FROM timecard_refunds WHERE tenant_id = ?').all(tenantId)
+      .filter((r) => storeDateOf(r.created_at, tenantId) === date)
+    const tcCash = tcRows.filter((r) => isDrawer(r.pay_channel)).reduce((n, r) => n + r.amount_cents, 0)
+    const outCash = refundCash + tcCash
+    const outOther = (refunds.totalCents || 0) - outCash
+    const money = (c) => formatMoneyCents(c, tenantId, 'auto')
+    const should = storefrontCents + rechargeCash - outCash
+    return {
+      storefrontCents, storefrontText: money(storefrontCents),
+      rechargeCashCents: rechargeCash, rechargeCashText: money(rechargeCash),
+      refundOutCents: outCash, refundOutText: money(outCash),
+      refundOtherCents: outOther, refundOtherText: money(outOther),
+      shouldHaveCents: should, shouldHaveText: money(should),
+      incomeImpactCents: 0,
+      label: '到店收的钱 · 应有数',
+      hint: '到店支付 + 现金充值 − 现金退卡。晚上按这个数点账,退卡已经扣掉了。'
+        + (outOther ? `另有 ${money(outOther)} 退款走转账/原路退回,不从这里出。` : ''),
+      note: '线下腿不分现金与刷卡(表上没有渠道列),所以这是「到店收的钱」的应有数,不是纯钞票数。'
+    }
+  }
+
+  return { refundFacts, refundStoredValue, timecardRefundFacts, refundTimecard, refundsOfDay, cashDrawerOf }
 }

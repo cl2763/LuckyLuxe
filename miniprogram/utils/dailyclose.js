@@ -108,6 +108,18 @@ const dailyCloseMixin = {
           deducts: (dc.afterSalesDeductions || []).map((d) => ({
             time: d.timeText || '', tech: d.technicianName, label: d.label, amt: `−${m(d.deductCents)}`
           })),
+          /* 🔴 N-5(店主 08-25 复核):退卡不进损益,但**现金必须扣** ——
+             不扣的话「今天收现 2000、退顾客 400 → 抽屉实际 1600、日结报 2000」,
+             店主晚上数钱对不上,而她不会怀疑退卡,会怀疑店员。句子后端给,这里零计算。 */
+          drawer: dc.cashDrawer ? {
+            label: dc.cashDrawer.label,
+            should: dc.cashDrawer.shouldHaveText,
+            hint: dc.cashDrawer.hint,
+            out: dc.cashDrawer.refundOutCents ? `退卡 −${m(dc.cashDrawer.refundOutCents)}` : ''
+          } : null,
+          refundLine: (dc.refunds && dc.refunds.totalCents)
+            ? `${dc.refunds.label} · ${dc.refunds.storedCount ? `储值 ${dc.refunds.storedCount} 笔` : ''}${dc.refunds.timecardCount ? ` 次卡 ${dc.refunds.timecardCount} 笔` : ''} 合计 ${m(dc.refunds.totalCents)}`
+            : '',
           // 裁①+§十-7:次卡两条汇总单列(售卡=预收负债/核销=折算计业绩积分)
           tcSummary: (() => {
             const t = dc.timecardSummary || {}

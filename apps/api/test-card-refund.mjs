@@ -129,6 +129,48 @@ const rf = close.data?.dailyClose?.refunds
 check('⑦-1 日结带当日退卡留痕', rf && rf.storedCount === 2 && rf.storedCents === 110000, JSON.stringify(rf && { c: rf.storedCount, s: rf.storedCents }))
 check('⑦-2 留痕行自证「不进收入」', rf.incomeImpactCents === 0 && /不进收入/.test(rf.label || ''), rf.label)
 
+/* 🔴 店主 08-25 复核抓出的那一半:**钱真的出去了** ——
+   退卡不进损益(对),但现金合计必须扣它,否则店主晚上数钱对不上,而她会怀疑店员。
+   判据用店主的语言:当天「现金应有数」== 收现 − 退款。 */
+{
+  const drawer = close.data?.dailyClose?.cashDrawer
+  check('⑦-3 日结有「到店收的钱 · 应有数」这一块', Boolean(drawer) && /应有数/.test(drawer.label || ''), JSON.stringify(drawer).slice(0, 160))
+  const X = drawer.storefrontCents + drawer.rechargeCashCents      // 当天收进来的
+  const Y = drawer.refundOutCents                                  // 当天退出去的(现金渠道)
+  check('⑦-4 🔴 现金应有数 == 收现 − 退款(真跑取值)', drawer.shouldHaveCents === X - Y, `${X} − ${Y} ≠ ${drawer.shouldHaveCents}`)
+  /* 夹具里两笔:300 走现金、800 走转账 —— 正好验渠道分得开:
+     现金那笔从抽屉扣,转账那笔不扣(它走银行,不影响晚上数的钱)。 */
+  check('⑦-5 现金那笔(300)进了应有数', Y === 30000, String(Y))
+  check('⑦-6 转账那笔(800)不从抽屉出,但仍在退款留痕里', drawer.refundOtherCents === 80000
+    && drawer.refundOtherCents + drawer.refundOutCents === rf.totalCents,
+    `${drawer.refundOutCents} + ${drawer.refundOtherCents} vs ${rf.totalCents}`)
+  check('⑦-7 🔴 反例守死:退款没进营业额(利润不动)',
+    close.data.dailyClose.revenueCents === (await request(`/admin/daily-close?date=${today}`, {}, TOKEN, H)).data.dailyClose.revenueCents
+    && incomeTotal(tid) === incomeBefore, `${incomeBefore} vs ${incomeTotal(tid)}`)
+  check('⑦-8 应有数这一块自证收入影响为 0', drawer.incomeImpactCents === 0)
+  /* 应有数可能是负的(退得比收得多)——负号必须在币符**前面**,
+     「CAD $-10」那种写法商家一眼读不出是负数(金额句由后端出,所以这条在后端守)。 */
+  const negText = (await request(`/admin/daily-close?date=${today}`, {}, TOKEN, H)).data.dailyClose.cashDrawer.shouldHaveText
+  check('⑦-8b 负数金额句:负号在币符前(−CAD $x,不是 CAD $-x)',
+    !/\$-/.test(negText) && (drawer.shouldHaveCents >= 0 || /^−/.test(negText)), negText)
+  check('⑦-9 口径如实标注(线下腿不分现金与刷卡)', /不是纯钞票数|没有渠道列/.test(drawer.note || ''), drawer.note)
+
+  /* 跨天:昨天退的钱不许算进今天的应有数(否则今天数钱又对不上,方向还反了)。
+     夹具直接写一行"昨天的退款"——按门店时区的昨天,不是 UTC 的昨天。 */
+  const ydIso = new Date(Date.now() - 26 * 3600 * 1000).toISOString()
+  const yd = new Date(ydIso).toLocaleDateString('en-CA', { timeZone: 'America/Toronto' })
+  db.prepare(`INSERT INTO stored_value_transactions (id, tenant_id, user_id, type, amount_cents, pay_channel, note, created_by, created_at)
+    VALUES (?, ?, ?, 'refund', -5000, 'cash', '昨天退的', 'fixture', ?)`).run(`sv-yd-${RUN}`, tid, userId, ydIso)
+  const todayAgain = (await request(`/admin/daily-close?date=${today}`, {}, TOKEN, H)).data.dailyClose
+  check('⑦-10 昨天那笔退款不影响今天的应有数', todayAgain.cashDrawer.shouldHaveCents === drawer.shouldHaveCents,
+    `${drawer.shouldHaveCents} → ${todayAgain.cashDrawer.shouldHaveCents}`)
+  const ydClose = (await request(`/admin/daily-close?date=${yd}`, {}, TOKEN, H)).data.dailyClose
+  check('⑦-11 它落在昨天那张日结上(退款当天看得见)', ydClose.refunds.storedCents === 5000 && ydClose.cashDrawer.refundOutCents === 5000,
+    JSON.stringify({ r: ydClose.refunds.storedCents, d: ydClose.cashDrawer.refundOutCents }))
+  check('⑦-12 昨天的应有数也是「收现 − 退款」', ydClose.cashDrawer.shouldHaveCents
+    === ydClose.cashDrawer.storefrontCents + ydClose.cashDrawer.rechargeCashCents - ydClose.cashDrawer.refundOutCents)
+}
+
 // ===== 八、退次卡:单位是次,退完卡作废,退掉的次数不能再核销 =====
 const cardId = `tc-${RUN}`
 db.prepare(`INSERT INTO member_timecards (id, tenant_id, user_id, package_id, name, total_times, used_times, price_cents, project_group, created_at)
@@ -179,6 +221,24 @@ const dropSays = await isMember()
 check('⑩-1 两种取值都存得住', ((await request(`/platform/tenants/${tid}/membership-config`)).data.config || {}).keepMemberAfterRefund === 'drop')
 check('⑩-2 🔴 行为必须不同:keep=仍是会员 / drop=余额归零即失去会员(真跑取值)',
   keepSays === true && dropSays === false, `keep=${keepSays} drop=${dropSays}`)
+
+/* 双端同病检查律:这一块要在**两个商家端**都看得见(店主只查一个端)。
+   判据取渲染代码里的字段引用 —— 后端给句、前端只渲染,所以对得上就是两端同句。 */
+{
+  const { readFileSync } = await import('node:fs')
+  const { join, dirname } = await import('node:path')
+  const { fileURLToPath } = await import('node:url')
+  const ROOT = join(dirname(fileURLToPath(import.meta.url)), '../..')
+  const web = readFileSync(join(ROOT, 'apps/web/admin.js'), 'utf8')
+  const miniMap = readFileSync(join(ROOT, 'miniprogram/utils/dailyclose.js'), 'utf8')
+  const miniWx = readFileSync(join(ROOT, 'miniprogram/pages/merchant/daily-close/index.wxml'), 'utf8')
+  /* 网页那两行 08-25 搬进 daily-close-rows.js(棘轮)——判据跟着被测物走,读"网页日结全部渲染代码" */
+  const webRows = web + '\n' + readFileSync(join(ROOT, 'apps/web/daily-close-rows.js'), 'utf8')
+  check('⑦-13 网页日结渲染应有数与退卡行(读后端句,不自算)',
+    /cashAndRefundRows/.test(web) && /cashDrawer/.test(webRows) && /shouldHaveText/.test(webRows) && /refunds/.test(webRows))
+  check('⑦-14 小程序日结同样两行(双端同句)',
+    /dc\.cashDrawer/.test(miniMap) && /shouldHaveText/.test(miniMap) && /v\.drawer/.test(miniWx) && /v\.refundLine/.test(miniWx))
+}
 
 db.close()
 console.log(`\n退卡口回归通过:${checks} 项断言全绿`)

@@ -2235,6 +2235,7 @@ function renderDailyClose() {
     <div class="section-row compact-row" style="margin-top:4px">
       <span class="subtle">${zh ? `本日 ${v.orderCount} 单 · 营业额 ${money(v.revenueCents, 2)}` : `${v.orderCount} orders`}</span>
     </div>
+    ${window.DailyCloseRows.cashAndRefundRows(v, { zh, money, escapeHtml })}
     ${/* 裁①+§十-7:次卡两条汇总单列(售卡=预收负债与充值并列不混现金实收;核销=折算计业绩/积分)。技师表零改动 */''}
     ${v.timecardSummary && (v.timecardSummary.soldCount || v.timecardSummary.redeemCount) ? `
     <div class="section-row compact-row" style="margin-top:2px">
@@ -2329,13 +2330,9 @@ function renderDailyClose() {
     </button>`}`
 }
 
-function targetCellText(t, zh) {
-  if (!t.target || !t.target.perfTargetCents) return '—'
-  const gap = t.target.perfTargetCents - t.perfCents
-  return gap <= 0
-    ? `<span class="dc-badge ok">${zh ? '达标' : 'Hit'}</span>`
-    : `${zh ? '差' : 'Short'} ${money(gap, 2)}`
-}
+// 日结里那两个小件已搬进 ./daily-close-rows.js(公约②;admin.js 只许搬出)
+const targetCellText = (t, zh) => window.DailyCloseRows.targetCellText(t, zh, money)
+
 
 /* 屏 1b 金额更正:上半是顾客已签的存档单(只读带锁标),下半填改后金额与原因。
    提交 = 追加一条更正记录,原签署单永不改动;储值差额由后端自动补配。 */

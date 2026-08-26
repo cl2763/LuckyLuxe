@@ -4480,14 +4480,14 @@ function formatMoneyCents(value, tenantId = currentTenantId(), decimals = 'auto'
   if (decimals === 'auto') text = Number.isInteger(amount) ? String(amount) : amount.toFixed(2)
   else text = amount.toFixed(Number(decimals) || 0)
   if (fmt.trimZeroDecimals) text = text.replace(/\.00$/, '')
-  return `${fmt.prefix.replace('<CODE>', code)}${fmt.symbol}${text}`
+  // 负数:负号放最前,不能跟在币符后头(现金应有数可能是负的);一处改,全仓金额句跟着对
+  const neg = text.startsWith('-')
+  if (neg) text = text.slice(1)
+  return `${neg ? '−' : ''}${fmt.prefix.replace('<CODE>', code)}${fmt.symbol}${text}`
 }
 
-function formatCadFromCents(value, tenantId = currentTenantId()) {
-  const centsValue = Number(value || 0)
-  if (!Number.isFinite(centsValue) || centsValue <= 0) return ''
-  return formatMoneyCents(centsValue, tenantId, 'auto')
-}
+// 只在"正数才出句"的场合用(0 与负数返回空串)
+const formatCadFromCents = (v, tid = currentTenantId()) => (Number(v || 0) > 0 ? formatMoneyCents(Number(v), tid, 'auto') : '')
 
 function quoteAssistantReplyPayload(quote, { canDo, priceCents, durationMin, notes }) {
   const priceLabel = formatCadFromCents(priceCents)
@@ -9923,10 +9923,10 @@ function dailyCloseView(date, tenantId, { lang = 'zh' } = {}) {
         redeemCents: redeems.s
       }
     })(),
-    /* 🔴 N-5:当日退卡留痕。**既不进收入也不进支出** —— 退的是负债(欠顾客的服务)换回现金,
-       不是经营损益;写进收入会凭空多一笔,写进支出会让利润凭空少一笔,两个都是把账做歪。
-       所以它在日结上单独一行,让当天的人看得见"今天退过卡",而收入口径一分不动。 */
+    // N-5 当日退卡留痕:既不进收入也不进支出(口径与理由写在 ./account-refund.mjs)
     refunds: refundApi.refundsOfDay(date, tenantId),
+    // 🔴 现金必须扣退卡(店主 08-25 复核;三本账:损益不动/负债已减/现金必须减)。口径见 ./account-refund.mjs
+    cashDrawer: refundApi.cashDrawerOf(date, tenantId, { settlementIds: rows.map((r) => r.id) }),
     // 裁③:「售后扣回」显式行(负数+关联单号),日结页两端直接渲染,数字自证
     afterSalesDeductions: releaseRows.map((rel) => ({
       technicianId: rel.technicianId,
