@@ -7334,3 +7334,6 @@ section.card > .section-row:first-child { margin-top: 0; }
 .aa-calc div.tot{border-top:1px solid #a6352b;margin-top:5px;padding-top:7px;font-weight:600;color:#2d2826}
 .aa-btns{display:flex;gap:9px;flex-wrap:wrap}
 .aa-elsewhere{background:#f6f2ec;border-radius:8px;padding:14px;font-size:13.5px;color:#6b635c}
+/* N-5 v1.1:拆账行 + 赠送黄条(只提醒不拦) */
+.aa-split{font-size:12.5px;color:#6b635c;margin:6px 0 0}
+.aa-warn{background:#f3e7da;border:1px solid #9a5a28;color:#7a4a20;border-radius:8px;padding:9px 12px;font-size:13px;margin:12px 0}

@@ -5051,8 +5051,8 @@ function renderCustomers() {
         <div class="inline-actions compact-actions customer-card-actions">
           <button class="ghost slim" data-customer-detail="${customer.id}" type="button">${t('viewCustomerFile')}</button>
           <button class="ghost slim" data-customer-recharge="${customer.id}" type="button">${owner.lang === 'zh' ? '给 TA 充值' : 'Recharge'}</button>
-          ${/* N-5(图=合同):退卡口开在客户档案 —— 商家找人、看余额、就地处理,不换页 */''}
-          <button class="ghost slim" data-account-adjust="${customer.id}" type="button">${owner.lang === 'zh' ? '账户调整' : 'Adjust'}</button>
+          ${/* N-5 v1.1 ③:退卡是财务动作 —— 员工连按钮都不渲染(理由见 account-adjust.js) */''}
+          ${owner.role === 'owner' ? `<button class="ghost slim" data-account-adjust="${customer.id}" type="button">${owner.lang === 'zh' ? '账户调整' : 'Adjust'}</button>` : ''}
           <button class="ghost slim" data-ai-customer="${customer.id}" type="button">${owner.aiLoading === `customer:${customer.id}` ? t('aiProcessing') : t('aiCustomerInsight')}</button>
           ${(() => { const tr = rfmTierOf(customer); return tr && tr.k === 's' ? `<button class="ghost slim" data-recall-copy="${customer.id}" type="button">✦ ${owner.lang === 'zh' ? 'AI 召回' : 'Recall'}</button>` : '' })()}
         </div>

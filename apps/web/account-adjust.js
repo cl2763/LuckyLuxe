@@ -11,14 +11,14 @@ window.AccountAdjust = (function () {
   let ctx = null            // { request, money, toast, escapeHtml, onDone, zh }
   /* 输入值放 state,不从 DOM 里现读:弹层每次重画都会重建 input,
      从 DOM 读就会出现"点了全额退、结算块显示 804、输入框却是空的"(实测撞到过)。 */
-  let stateA = { userId: '', name: '', facts: null, tab: 'refund', cards: [], cardId: '', amount: '', times: '', busy: false }
+  let stateA = { userId: '', name: '', facts: null, tab: 'refund', cards: [], cardId: '', amount: '', times: '', warning: '', busy: false }
 
   const el = () => document.querySelector('#accountAdjustOverlay')
   function close() { const o = el(); if (o) o.remove(); stateA.facts = null }
 
   async function open({ userId, name, meta, request, money, toast, escapeHtml, onDone, zh = true }) {
     ctx = { request, money, toast, escapeHtml, onDone, zh }
-    stateA = { userId, name: name || '', meta: meta || '', facts: null, tab: 'refund', cards: [], cardId: '', amount: '', times: '', busy: false }
+    stateA = { userId, name: name || '', meta: meta || '', facts: null, tab: 'refund', cards: [], cardId: '', amount: '', times: '', warning: '', busy: false }
     mount()
     try {
       const [f, pack] = await Promise.all([
@@ -61,6 +61,8 @@ window.AccountAdjust = (function () {
           <div class="aa-fact"><span>${zh ? '已消费' : 'Consumed'}</span><strong>${escapeHtml(f.consumedText)}</strong></div>
           <div class="aa-fact hi"><span>${zh ? '当前余额' : 'Balance'}</span><strong>${escapeHtml(f.balanceText)}</strong></div>
         </div>
+        ${/* 🔴 图 v1.1 ①:当前余额下面那一行 —— 界限画到屏上(句子后端给,前端零拼串) */''}
+        <p class="aa-split">${escapeHtml(f.splitText || '')}</p>
         <p class="aa-hint">${escapeHtml(f.hint)}</p>` : `<p class="aa-hint">${zh ? '读取中…' : 'Loading…'}</p>`}
         <div class="aa-seg">${seg.map(([k, label]) => `<button class="aa-seg-btn${stateA.tab === k ? ' on' : ''}" data-aa-tab="${k}" type="button">${label}</button>`).join('')}</div>
         ${stateA.tab === 'refund' ? renderRefund() : renderElsewhere()}
@@ -110,6 +112,9 @@ window.AccountAdjust = (function () {
         <input id="aaReason" type="text" maxlength="200" placeholder="${zh ? '例:顾客搬去外地,不再来店' : 'e.g. moved away'}">
         <em>${zh ? '会写进这位顾客的账户记录,以后查得到。' : 'Kept on the customer record.'}</em>
       </label>
+      ${/* 🔴 图 v1.1 ①:越过「顾客实付可退」出黄条 —— **只提醒,不拦**(退多少是商家的决定)。
+             句子由后端给(bonusWarningText),前端不自己算"退了多少赠送"。 */''}
+      ${stateA.warning ? `<div class="aa-warn">${escapeHtml(stateA.warning)}</div>` : ''}
       <div class="aa-calc">
         <div><span>${zh ? '退款金额' : 'Refund'}</span><span>−${money(Number.isFinite(amountCents) ? amountCents : 0)}</span></div>
         <div><span>${zh ? '本店收入影响' : 'Impact on income'}</span><span>${escapeHtml(f.incomeImpactText)}</span></div>
@@ -172,7 +177,9 @@ window.AccountAdjust = (function () {
       if (!reason) { toast(zh ? '退款原因必填' : 'Reason required'); return }
       stateA.busy = true; mount()
       try {
-        const r = await request('/admin/stored-value/refund', { method: 'POST', body: JSON.stringify({ userId: stateA.userId, amountCents: amount, payChannel, reason }) })
+        // 幂等单号:同一次点击只认一次(连点两下不会退两笔)
+        stateA.requestId = stateA.requestId || `rf-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 8)}`
+        const r = await request('/admin/stored-value/refund', { method: 'POST', body: JSON.stringify({ userId: stateA.userId, amountCents: amount, payChannel, reason, requestId: stateA.requestId }) })
         toast(zh ? `已退款 ${ctx.money(r.refundedCents)},余额 ${ctx.money(r.balanceAfterCents)}` : 'Refunded')
         close(); ctx.onDone({ refunded: true })
       } catch (e) { stateA.busy = false; mount(); toast(e.message) }
@@ -196,7 +203,14 @@ window.AccountAdjust = (function () {
   // 输入时把值存进 state 再重画那三行(退款后余额 / 剩余次数),重画后光标回到原处
   document.addEventListener('input', (e) => {
     if (!el()) return
-    if (e.target.id === 'aaAmount') stateA.amount = e.target.value
+    if (e.target.id === 'aaAmount') {
+      stateA.amount = e.target.value
+      // 黄条问后端(它知道还剩多少赠送);拿不到就不出条,绝不前端瞎算
+      const cents = Math.round(Number(stateA.amount || 0) * 100)
+      ctx.request(`/admin/account-adjust/facts?userId=${encodeURIComponent(stateA.userId)}&amountCents=${cents}`)
+        .then((r) => { if (el()) { stateA.warning = r.bonusWarning || ''; stateA.facts = r.facts || stateA.facts; mount() } })
+        .catch(() => {})
+    }
     else if (e.target.id === 'aaTimes') stateA.times = e.target.value
     else return
     const id = e.target.id

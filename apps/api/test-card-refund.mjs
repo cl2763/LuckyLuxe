@@ -278,5 +278,126 @@ check('⑩-2 🔴 行为必须不同:keep=仍是会员 / drop=余额归零即失
     /dc\.cashDrawer/.test(miniMap) && /shouldHaveText/.test(miniMap) && /v\.drawer/.test(miniWx) && /v\.refundLine/.test(miniWx))
 }
 
+/* ═══ 图 v1.1(店主 2026-08-26 补三条)+ 十条常驻硬拦 ═══ */
+
+// ── ① 赠送金:屏上画界限 + 拆两个分量入账(先冲赠送、后冲实付)
+{
+  const bId = `n5b-${RUN}`
+  await request('/platform/tenants', { method: 'POST', body: JSON.stringify({ id: bId, name: `赠送拆账店${RUN}`, plan: 'chain' }) })
+  /* 🔴 复发护栏(08-26 沙箱真点撞出来的那一课):测试库建的租户 kind='test',
+     **账本只追加那十二条触发器对它豁免** —— 于是"先 INSERT 再 UPDATE"这种写法在套件里绿、
+     在真店上被打回(stored value ledger is append-only)。
+     这家店的 kind 拨成 'real',让触发器真的压在头上,以后再有人写 UPDATE 就当场红。 */
+  db.prepare("UPDATE tenants SET kind = 'real' WHERE id = ?").run(bId)
+  const BH = { 'x-admin-tenant-id': bId, 'x-tenant-id': bId }
+  const bTech = (await request('/admin/technicians', { method: 'POST', body: JSON.stringify({ name: `技师${RUN}`, isActive: true }) }, TOKEN, BH)).data.technician.id
+  const bCat = ((await request('/admin/pricing/categories', {}, TOKEN, BH)).data.categories || [])[0]?.id
+  const bSvc = (await request('/admin/services', { method: 'POST', body: JSON.stringify({ type: 'NAIL', nameZh: `项目${RUN}`, nameEn: 'x', priceCents: 18000, baseDurationMin: 60, categoryId: bCat }) }, TOKEN, BH)).data.service.id
+  const bBk = await request('/admin/bookings/direct', { method: 'POST', body: JSON.stringify({ newCustomerName: `赠送顾客${RUN}`, serviceId: bSvc, technicianId: bTech, date: today, time: '10:00' }) }, TOKEN, BH)
+  const bUser = bBk.data.booking.user.id
+  db.prepare('UPDATE users SET wechat_open_id = ? WHERE id = ?').run(`n5b-openid-${RUN}`, bUser)
+  // 充 1000 送 100(图 v1.1 举的就是这个例子)
+  await request('/admin/stored-value/recharge', { method: 'POST', body: JSON.stringify({ userId: bUser, amountCents: 100000, bonusCents: 10000, payChannel: 'cash' }) }, TOKEN, BH)
+
+  const bf = (await request(`/admin/account-adjust/facts?userId=${bUser}`, {}, TOKEN, BH)).data.facts
+  check('v1.1①-1 屏上那行:其中 顾客实付可退 X · 本店赠送 Y(后端出句)',
+    /其中 顾客实付可退 .* · 本店赠送 /.test(bf.splitText || '') && bf.paidRefundableCents === 100000 && bf.bonusRemainingCents === 10000,
+    JSON.stringify({ t: bf.splitText, p: bf.paidRefundableCents, b: bf.bonusRemainingCents }))
+  const noWarn = (await request(`/admin/account-adjust/facts?userId=${bUser}&amountCents=100000`, {}, TOKEN, BH)).data.bonusWarning
+  const warn = (await request(`/admin/account-adjust/facts?userId=${bUser}&amountCents=110000`, {}, TOKEN, BH)).data.bonusWarning
+  check('v1.1①-2 没越过实付可退 → 不出黄条', !noWarn, String(noWarn))
+  check('v1.1①-3 越过了 → 出黄条且点名金额(只提醒,不拦)',
+    /你正在退出赠送部分/.test(warn) && /本店让利,退出去是真金/.test(warn), warn)
+
+  // 退 150:先冲赠送(100)、后冲实付(50)——图 v1.1 的原样例子
+  const r150 = await request('/admin/stored-value/refund', { method: 'POST', body: JSON.stringify({ userId: bUser, amountCents: 15000, payChannel: 'cash', reason: '拆账验证' }) }, TOKEN, BH)
+  check('v1.1①-4 🔴 拆账:退 150 → bonus_part 100 / paid_part 50(先冲赠送后冲实付)',
+    r150.status === 201 && r150.data.bonusPartCents === 10000 && r150.data.paidPartCents === 5000,
+    JSON.stringify({ b: r150.data.bonusPartCents, p: r150.data.paidPartCents }))
+  check('v1.1①-5 🔴 恒等式 paid_part + bonus_part ≡ 退款金额',
+    r150.data.bonusPartCents + r150.data.paidPartCents === r150.data.refundedCents,
+    `${r150.data.bonusPartCents} + ${r150.data.paidPartCents} vs ${r150.data.refundedCents}`)
+  const row150 = db.prepare("SELECT paid_part_cents p, bonus_part_cents b, amount_cents a FROM stored_value_transactions WHERE tenant_id = ? AND type = 'refund'").get(bId)
+  check('v1.1①-6 两个分量真落进库里,且与流水金额恒等', row150.p + row150.b === Math.abs(row150.a), JSON.stringify(row150))
+  check('v1.1①-6b 🔴 这一切是在**真店口径**(kind=real,账本触发器压着)下写成的 —— 一次 INSERT 写全,没有事后 UPDATE',
+    db.prepare('SELECT kind FROM tenants WHERE id = ?').get(bId).kind === 'real' && r150.status === 201,
+    db.prepare('SELECT kind FROM tenants WHERE id = ?').get(bId).kind)
+  const bf2 = (await request(`/admin/account-adjust/facts?userId=${bUser}`, {}, TOKEN, BH)).data.facts
+  check('v1.1①-7 赠送退完之后,屏上「本店赠送」归 0(下一笔只能退实付)',
+    bf2.bonusRemainingCents === 0 && bf2.paidRefundableCents === 95000, JSON.stringify({ b: bf2.bonusRemainingCents, p: bf2.paidRefundableCents }))
+
+  // ── ⑥ 幂等:按请求单号判,不按「余额还剩多少」判
+  const rid = `req-${RUN}`
+  const first = await request('/admin/stored-value/refund', { method: 'POST', body: JSON.stringify({ userId: bUser, amountCents: 5000, payChannel: 'cash', reason: '幂等验证', requestId: rid }) }, TOKEN, BH)
+  const again = await request('/admin/stored-value/refund', { method: 'POST', body: JSON.stringify({ userId: bUser, amountCents: 5000, payChannel: 'cash', reason: '幂等验证', requestId: rid }) }, TOKEN, BH)
+  const cnt = db.prepare("SELECT COUNT(*) n FROM stored_value_transactions WHERE tenant_id = ? AND type = 'refund' AND request_id = ?").get(bId, rid).n
+  check('⑥ 幂等:同一请求单号重复提交只写一笔(不是靠"余额已经是 0"判)',
+    first.status === 201 && again.data.duplicate === true && cnt === 1, JSON.stringify({ f: first.status, dup: again.data.duplicate, cnt }))
+
+  // ── ⑦ 金额:负数 / 0 / 非数字 / 超两位小数
+  const bad = {}
+  for (const [k, body] of Object.entries({
+    负数: { amountCents: -100 }, 零: { amountCents: 0 },
+    非数字: { amountCents: 'abc' }, 超两位小数: { amount: 12.345 }
+  })) {
+    const r = await request('/admin/stored-value/refund', { method: 'POST', body: JSON.stringify({ userId: bUser, reason: '异常输入', ...body }) }, TOKEN, BH)
+    bad[k] = r.status
+  }
+  check('⑦ 金额 负数/0/非数字/超两位小数 一律拒', Object.values(bad).every((x) => x === 400), JSON.stringify(bad))
+
+  // ── ⑧ 跨店隔离:拿 A 店的顾客 id 去 B 店退
+  const cross = await request('/admin/stored-value/refund', { method: 'POST', body: JSON.stringify({ userId, amountCents: 100, reason: '跨店试探' }) }, TOKEN, BH)
+  const crossBack = await request('/admin/stored-value/refund', { method: 'POST', body: JSON.stringify({ userId: bUser, amountCents: 100, reason: '跨店试探' }) }, TOKEN, H)
+  check('⑧ 跨店隔离:A 店顾客在 B 店退不了,反向也退不了(各 404)',
+    cross.status === 404 && crossBack.status === 404, `${cross.status}/${crossBack.status}`)
+
+  // ── v1.1 ②:两向都守 —— 现金退减、转账退不减
+  const beforeDrawer = (await request(`/admin/daily-close?date=${today}`, {}, TOKEN, BH)).data.dailyClose.cashDrawer
+  await request('/admin/stored-value/refund', { method: 'POST', body: JSON.stringify({ userId: bUser, amountCents: 1000, payChannel: 'transfer', reason: '转账退' }) }, TOKEN, BH)
+  const afterTransfer = (await request(`/admin/daily-close?date=${today}`, {}, TOKEN, BH)).data.dailyClose.cashDrawer
+  check('v1.1②-1 🔴 转账退:日结现金一分不动(方向反了就是抽屉又对不上)',
+    afterTransfer.refundOutCents === beforeDrawer.refundOutCents && afterTransfer.shouldHaveCents === beforeDrawer.shouldHaveCents,
+    `${beforeDrawer.shouldHaveCents} → ${afterTransfer.shouldHaveCents}`)
+  await request('/admin/stored-value/refund', { method: 'POST', body: JSON.stringify({ userId: bUser, amountCents: 1000, payChannel: 'cash', reason: '现金退' }) }, TOKEN, BH)
+  const afterCash = (await request(`/admin/daily-close?date=${today}`, {}, TOKEN, BH)).data.dailyClose.cashDrawer
+  check('v1.1②-2 🔴 现金退:日结现金**减**同一笔金额',
+    afterCash.refundOutCents === afterTransfer.refundOutCents + 1000
+    && afterCash.shouldHaveCents === afterTransfer.shouldHaveCents - 1000,
+    `${afterTransfer.shouldHaveCents} → ${afterCash.shouldHaveCents}`)
+  check('v1.1②-3 转账那笔仍在留痕里(负债照减、留痕照留,只是不出抽屉)',
+    afterCash.refundOtherCents > 0, String(afterCash.refundOtherCents))
+
+  // ── v1.1 ③:权限 —— 财务门 + 仅老板
+  await request(`/admin/finance/password`, { method: 'POST', body: JSON.stringify({ password: 'Fin-2026-n5' }) }, TOKEN, BH).catch(() => ({}))
+  db.prepare('UPDATE tenants SET finance_lock_enabled = 1 WHERE id = ?').run(bId)
+  const locked = await request('/admin/stored-value/refund', { method: 'POST', body: JSON.stringify({ userId: bUser, amountCents: 100, reason: '锁着退' }) }, TOKEN, BH)
+  check('v1.1③-1 🔴 财务门开着、没带钥匙 → 403 FINANCE_LOCKED(走已有那道门)',
+    locked.status === 403 && /FINANCE_LOCKED/.test(JSON.stringify(locked.data)), JSON.stringify(locked.data).slice(0, 120))
+  const key = (await request('/admin/finance/unlock', { method: 'POST', body: JSON.stringify({ password: TOKEN }) }, TOKEN, BH)).data.financeKey
+  const unlocked = await request('/admin/stored-value/refund', { method: 'POST', body: JSON.stringify({ userId: bUser, amountCents: 100, reason: '带钥匙退' }) }, TOKEN, { ...BH, 'x-finance-key': key })
+  check('v1.1③-2 带上财务钥匙就能退(门是同一道,不是新造的)', unlocked.status === 201, JSON.stringify(unlocked.data).slice(0, 120))
+  db.prepare('UPDATE tenants SET finance_lock_enabled = 0 WHERE id = ?').run(bId)
+
+  const { readFileSync: rf2 } = await import('node:fs')
+  const { join: j2, dirname: d2 } = await import('node:path')
+  const { fileURLToPath: f2 } = await import('node:url')
+  const ROOT2 = j2(d2(f2(import.meta.url)), '../..')
+  const adminSrc = rf2(j2(ROOT2, 'apps/web/admin.js'), 'utf8')
+  /* 接口层也得拦死 —— 前端不渲染是体验,后端 403 才是闸(员工绕过界面直接打接口的场合)。 */
+  const acct = await request('/admin/staff-accounts', { method: 'POST', body: JSON.stringify({ technicianId: bTech }) }, TOKEN, BH)
+  if (acct.status === 201) {
+    const login = await request('/admin/auth/login', { method: 'POST', body: JSON.stringify({ email: acct.data.username, password: acct.data.initialPassword }) }, null, BH)
+    const staffToken = login.data.auth?.accessToken
+    const staffTry = await request('/admin/stored-value/refund', { method: 'POST', body: JSON.stringify({ userId: bUser, amountCents: 100, reason: '员工试探' }) }, staffToken, BH)
+    const staffFacts = await request(`/admin/account-adjust/facts?userId=${bUser}`, {}, staffToken, BH)
+    check('v1.1③-3 🔴 员工账号打退卡接口 = 403(界面不渲染是体验,这里才是闸)',
+      staffTry.status === 403 && staffFacts.status === 403, `${staffTry.status}/${staffFacts.status}`)
+  } else {
+    check('v1.1③-3 🔴 员工账号打退卡接口 = 403', false, `建员工号失败 ${JSON.stringify(acct.data).slice(0, 120)}`)
+  }
+  check('v1.1③-4 员工端**连按钮都不渲染**(不是点了报错)',
+    /owner\.role === 'owner' \? `<button class="ghost slim" data-account-adjust/.test(adminSrc), '入口没有按角色渲染')
+}
+
 db.close()
 console.log(`\n退卡口回归通过:${checks} 项断言全绿`)

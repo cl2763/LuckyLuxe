@@ -14,6 +14,11 @@
    为什么不复用 reversal(冲销):**冲销 = 我们记错了,红字改正;退卡 = 顾客真要退钱走人。**
    挤一个类型,以后就分不清「我们记错过多少」和「顾客退过多少钱」——
    一个衡量团队,一个衡量生意。 */
+/* 🔴 v1.1 ③(店主 2026-08-26):**退卡是财务动作,与冲销同级。**
+   充值是钱进来,退卡是真金出去 —— 出钱的口必须比进钱的口严:
+   仅老板(或被授予财务权限的账号),且**必须过已有那道财务密码门**(不新造门);
+   员工端连按钮都不渲染(不是点了报错),接口层再拦一道 403。
+   门禁本身在 local-server 的 requireRefundRight 里(它要拿 adminSession 与 req)。 */
 export function createAccountRefund({ db, apiError, iso, randomId, currentTenantId, insertStoredValueTransaction, storedValueBalanceCents, formatMoneyCents, storeDateOf }) {
   const now = () => iso(new Date())
 
@@ -28,7 +33,17 @@ export function createAccountRefund({ db, apiError, iso, randomId, currentTenant
         COALESCE(SUM(amount_cents), 0) AS balance
       FROM stored_value_transactions WHERE tenant_id = ? AND user_id = ?`).get(tenantId, userId)
     const money = (c) => formatMoneyCents(c, tenantId, 'auto')
+    /* 🔴 v1.1 ①(店主 08-26):余额 = 实付 + 赠送 − 已消费。点「全额退」有可能
+       **把本店送出去的钱用现金退给顾客** —— 不加硬拦(每家店规则不一样),但界限要画到屏上。
+       bonusRemaining = 还没被退掉的赠送;paidRefundable = 余额里属于顾客自己付过的那部分。 */
+    const bonusRefunded = db.prepare("SELECT COALESCE(SUM(bonus_part_cents),0) n FROM stored_value_transactions WHERE tenant_id = ? AND user_id = ? AND type = 'refund'").get(tenantId, userId).n
+    const bonusRemaining = Math.max(0, Math.min(row.bonus - bonusRefunded, row.balance))
+    const paidRefundable = Math.max(0, row.balance - bonusRemaining)
     return {
+      bonusRemainingCents: bonusRemaining, bonusRemainingText: money(bonusRemaining),
+      paidRefundableCents: paidRefundable, paidRefundableText: money(paidRefundable),
+      // 图 v1.1:当前余额下面那一行(后端出句,前端零拼串)
+      splitText: `其中 顾客实付可退 ${money(paidRefundable)} · 本店赠送 ${money(bonusRemaining)}`,
       paidCents: row.paid, paidText: money(row.paid),
       bonusCents: row.bonus, bonusText: money(row.bonus),
       consumedCents: row.consumed, consumedText: money(row.consumed),
@@ -40,13 +55,47 @@ export function createAccountRefund({ db, apiError, iso, randomId, currentTenant
     }
   }
 
+  /* 黄条句也**后端唯一出口**(前端零拼串):填的金额越过「顾客实付可退」时才出,
+     只提醒不拦 —— 退多少是商家的决定,系统只负责让他知道自己在退什么钱。 */
+  function bonusWarningText(userId, amountCents, tenantId = currentTenantId()) {
+    const f = refundFacts(userId, tenantId)
+    const amount = Math.round(Number(amountCents) || 0)
+    if (!Number.isFinite(amount) || amount <= f.paidRefundableCents) return ''
+    const over = Math.min(amount, f.balanceCents) - f.paidRefundableCents
+    if (over <= 0) return ''
+    return `你正在退出赠送部分 ${formatMoneyCents(over, tenantId, 'auto')},这是本店让利,退出去是真金。`
+  }
+
   /* 储值退卡。硬拦三条(图 §四):超余额 / 原因空 / 金额非正。
      账本只许追加:写一行 type='refund' 的负数流水,**绝不改旧行**。 */
-  function refundStoredValue({ userId, amountCents, payChannel, reason, operator, tenantId = currentTenantId() }) {
+  /* 金额校验(图 v1.1 顺带补齐的硬拦):负数 / 0 / 非数字 / 超两位小数一律拒。
+     超两位小数单独拒 —— 分是最小单位,0.005 元这种数字进了账本就再也对不平。 */
+  function assertAmount(raw, label = '退款金额') {
+    const n = Number(raw)
+    if (!Number.isFinite(n)) throw apiError(400, 'BAD_AMOUNT', `${label}不是一个数字。`)
+    if (Math.abs(n - Math.round(n)) > 1e-9) throw apiError(400, 'BAD_AMOUNT', `${label}最多两位小数(分是最小单位)。`)
+    const cents = Math.round(n)
+    if (cents <= 0) throw apiError(400, 'BAD_AMOUNT', `${label}必须大于 0。`)
+    return cents
+  }
+
+  function refundStoredValue({ userId, amountCents, payChannel, reason, operator, requestId, tenantId = currentTenantId() }) {
     const user = db.prepare('SELECT id, display_name FROM users WHERE id = ? AND tenant_id = ?').get(userId, tenantId)
-    if (!user) throw apiError(404, 'NOT_FOUND', '找不到这位顾客。')
-    const amount = Math.round(Number(amountCents) || 0)
-    if (!Number.isFinite(amount) || amount <= 0) throw apiError(400, 'BAD_REQUEST', '退款金额必须大于 0。')
+    if (!user) throw apiError(404, 'NOT_FOUND', '找不到这位顾客。')   // 跨店:别家店的顾客在这儿就查不到
+    /* 🔴 幂等按「做过没有」判(幂等判据律):同一个请求单号只认第一次。
+       **不许拿"余额已经是 0"当判据** —— 余额会被正常业务消耗,拿它当幂等键必然重复执行。 */
+    const rid = String(requestId || '').trim().slice(0, 64)
+    if (rid) {
+      const done = db.prepare("SELECT id, amount_cents FROM stored_value_transactions WHERE tenant_id = ? AND type = 'refund' AND request_id = ?").get(tenantId, rid)
+      if (done) {
+        return {
+          txnId: done.id, userId, refundedCents: Math.abs(done.amount_cents), duplicate: true,
+          balanceBeforeCents: storedValueBalanceCents(userId, tenantId), balanceAfterCents: storedValueBalanceCents(userId, tenantId),
+          incomeImpactCents: 0, facts: refundFacts(userId, tenantId)
+        }
+      }
+    }
+    const amount = assertAmount(amountCents)
     const why = String(reason || '').trim()
     if (!why) throw apiError(400, 'REASON_REQUIRED', '退款原因必填 —— 它会写进这位顾客的账户记录,以后查得到。')
     const before = storedValueBalanceCents(userId, tenantId)
@@ -54,15 +103,24 @@ export function createAccountRefund({ db, apiError, iso, randomId, currentTenant
       throw apiError(400, 'REFUND_EXCEEDS_BALANCE',
         `退款金额 ${formatMoneyCents(amount, tenantId, 'auto')} 超过当前余额 ${formatMoneyCents(before, tenantId, 'auto')} —— 余额不许变负。`)
     }
+    /* 🔴 v1.1 ①:拆两个分量入账,**先冲赠送、后冲实付**。
+       理由:赠送是营销让利;退款先把让利收回,商家账上「还欠顾客的赠送」才不虚高。
+       恒等式:paid_part + bonus_part ≡ 退款金额(有断言守,不是只写在注释里)。 */
+    const before0 = refundFacts(userId, tenantId)
+    const bonusPart = Math.min(amount, before0.bonusRemainingCents)
+    const paidPart = amount - bonusPart
+    /* 一次 INSERT 写全 —— **不许写完再 UPDATE**:账本只许追加,那道触发器会打回来
+       (08-26 沙箱真点撞到过:测试库租户被豁免,所以只有真店口径上才现形)。 */
     const txn = insertStoredValueTransaction({
       userId, type: 'refund', amountCents: -Math.abs(amount),
       payChannel: String(payChannel || 'cash'),
       note: `退卡 · ${why}`.slice(0, 200),
-      createdBy: operator || 'owner', tenantId
+      createdBy: operator || 'owner', tenantId,
+      paidPartCents: paidPart, bonusPartCents: bonusPart, requestId: rid || null
     })
     const after = storedValueBalanceCents(userId, tenantId)
     return {
-      txnId: txn.id, userId, refundedCents: amount,
+      txnId: txn.id, userId, refundedCents: amount, paidPartCents: paidPart, bonusPartCents: bonusPart,
       balanceBeforeCents: before, balanceAfterCents: after,
       incomeImpactCents: 0,                // 恒 0 —— 这行不是装饰,是约束:不是 0 就是账记错了
       facts: refundFacts(userId, tenantId)
@@ -97,8 +155,7 @@ export function createAccountRefund({ db, apiError, iso, randomId, currentTenant
     }
     const why = String(reason || '').trim()
     if (!why) throw apiError(400, 'REASON_REQUIRED', '退卡原因必填。')
-    const amount = Math.round(Number(amountCents) || 0)
-    if (amount < 0) throw apiError(400, 'BAD_REQUEST', '退款金额不能是负数。')
+    const amount = assertAmount(amountCents, '次卡退款金额')
     db.prepare('UPDATE member_timecards SET refunded_times = COALESCE(refunded_times, 0) + ? WHERE id = ? AND tenant_id = ?')
       .run(n, cardId, tenantId)
     db.prepare(`INSERT INTO timecard_refunds (id, tenant_id, card_id, user_id, times, amount_cents, pay_channel, reason, created_by, created_at)
@@ -190,5 +247,5 @@ export function createAccountRefund({ db, apiError, iso, randomId, currentTenant
     }
   }
 
-  return { refundFacts, refundStoredValue, timecardRefundFacts, refundTimecard, refundsOfDay, cashDrawerOf }
+  return { refundFacts, bonusWarningText, refundStoredValue, timecardRefundFacts, refundTimecard, refundsOfDay, cashDrawerOf }
 }

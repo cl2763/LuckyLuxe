@@ -20,6 +20,7 @@ import { ensureListedColumn } from './tenant-visibility.mjs'          // D76:选
 import { createPlatformSessions } from './platform-session.mjs'       // 平台后台「记住这台电脑」(令牌不换,只是不用每次掏)
 import { createAdminAuth } from './admin-auth.mjs'                    // 商家端账号与会话(口令哈希/一次性口令/签票/认票)
 import { createAccountRefund } from './account-refund.mjs'            // N-5 退卡口(退卡≠手动耗卡:不碰收入)
+import { ensureRefundSchema } from './account-refund-schema.mjs'      // N-5 建表建列(公约⑧:列一律 try/catch ALTER)
 import { createStoredValue } from './stored-value.mjs'                // 储值域(写流水/算余额/分桶/类型文案)
 import { createMembershipConfig } from './membership-config.mjs'      // 会员制度域(资格判定 + 退卡后是否保留会员)
 import { createImportCustomers } from './import-customers.mjs'        // 平台代商家导入老顾客(公约②)
@@ -11929,6 +11930,11 @@ async function route(req, res) {
     // 多租户贯通:本请求内所有 currentTenantId() 都按登录账号的租户走(财务/KB/套餐/券/储值等自动隔离)
     tenantContext.enterWith({ tenantId: adminSession.tenantId || DEFAULT_TENANT_ID })
   }
+  // 🔴 v1.1 ③:退卡是财务动作(出钱的口比进钱的口严)——仅老板 + 过已有那道财务密码门。理由见 ./account-refund.mjs
+  const requireRefundRight = () => {
+    if (adminSession.role !== 'owner') throw apiError(403, 'FORBIDDEN', '退卡是财务动作,仅老板(或有财务权限的账号)可操作。')
+    requireFinanceKey(req)
+  }
   if (req.method === 'GET' && path === '/admin/wechat/status') {
     return json(res, 200, { wechat: wecomConfigStatus() })
   }
@@ -14363,45 +14369,43 @@ async function route(req, res) {
   if (req.method === 'POST' && path === '/admin/stored-value/consume') {
     throw apiError(410, 'MANUAL_CONSUME_GONE', '手动耗卡已取消:储值扣款只随结算单签字自动入账。')
   }
-  /* ===== N-5 退卡口(图=合同「退卡口设计图」,店主 2026-08-25 六条全准)=====
-     实现全在 ./account-refund.mjs;这里只做门禁 + 分发。
-     退卡与充值同权(老板 + 员工):钱是当场退给顾客的,老板不在店里也得退得了。
-     🔴 与充值不同的是**不设 D25 绑定闸** —— 钱已经在卡上,退还给顾客不该被绑定状态挡住。 */
+  /* ===== N-5 退卡口(图=合同):实现全在 ./account-refund.mjs,这里只做门禁 + 分发 ===== */
   if (req.method === 'GET' && path === '/admin/account-adjust/facts') {
-    if (adminSession.role !== 'owner' && adminSession.role !== 'staff') throw apiError(403, 'FORBIDDEN', '需要老板或员工权限。')
+    requireRefundRight()
     const uid = String(query.userId || '').trim()
     if (!uid) throw apiError(400, 'BAD_REQUEST', 'userId 必填。')
-    return json(res, 200, { facts: refundApi.refundFacts(uid) })
+    const facts = refundApi.refundFacts(uid)
+    // 黄条句也后端给:前端把当前填的金额带上来,越过「实付可退」才有话
+    return json(res, 200, { facts, bonusWarning: query.amountCents ? refundApi.bonusWarningText(uid, query.amountCents) : '' })
   }
   if (req.method === 'POST' && path === '/admin/stored-value/refund') {
-    if (adminSession.role !== 'owner' && adminSession.role !== 'staff') throw apiError(403, 'FORBIDDEN', '需要老板或员工权限。')
+    requireRefundRight()
     const b = await readBody(req)
     return json(res, 201, refundApi.refundStoredValue({
       userId: String(b.userId || '').trim(),
-      amountCents: Math.round(Number(b.amountCents ?? Number(b.amount || 0) * 100)),
-      payChannel: b.payChannel, reason: b.reason,
+      amountCents: b.amountCents ?? (b.amount === undefined ? undefined : Number(b.amount) * 100),
+      payChannel: b.payChannel, reason: b.reason, requestId: b.requestId,
       operator: adminSession.email || adminSession.username || adminSession.role || 'owner'
     }))
   }
-  /* 商家侧看某位顾客的持卡(退卡屏要选卡)。与顾客端 /my/timecards **同一出口** usableTimecardsOf,
-     所以「剩余」两边天然同一个数(退掉的次数已在 timecardRemainingOf 里扣掉)。 */
+  // 商家侧看某位顾客的持卡(退卡屏选卡用):与顾客端 /my/timecards 同一出口,剩余天然同数
   const custCardsMatch = path.match(/^\/admin\/customers\/([^/]+)\/timecards$/)
   if (req.method === 'GET' && custCardsMatch) {
-    if (adminSession.role !== 'owner' && adminSession.role !== 'staff') throw apiError(403, 'FORBIDDEN', '需要老板或员工权限。')
+    requireRefundRight()
     return json(res, 200, { timecards: usableTimecardsOf(custCardsMatch[1]) })
   }
   const tcFactsMatch = path.match(/^\/admin\/timecards\/([^/]+)\/refund-facts$/)
   if (req.method === 'GET' && tcFactsMatch) {
-    if (adminSession.role !== 'owner' && adminSession.role !== 'staff') throw apiError(403, 'FORBIDDEN', '需要老板或员工权限。')
+    requireRefundRight()
     return json(res, 200, { facts: refundApi.timecardRefundFacts(tcFactsMatch[1]) })
   }
   const tcRefundMatch = path.match(/^\/admin\/timecards\/([^/]+)\/refund$/)
   if (req.method === 'POST' && tcRefundMatch) {
-    if (adminSession.role !== 'owner' && adminSession.role !== 'staff') throw apiError(403, 'FORBIDDEN', '需要老板或员工权限。')
+    requireRefundRight()
     const b = await readBody(req)
     return json(res, 201, refundApi.refundTimecard({
       cardId: tcRefundMatch[1], times: b.times,
-      amountCents: Math.round(Number(b.amountCents ?? Number(b.amount || 0) * 100)),
+      amountCents: b.amountCents ?? (b.amount === undefined ? undefined : Number(b.amount) * 100),
       payChannel: b.payChannel, reason: b.reason,
       operator: adminSession.email || adminSession.username || adminSession.role || 'owner'
     }))
@@ -17564,27 +17568,8 @@ try {
 } catch (error) {
   if (!String(error.message || '').includes('duplicate column')) throw error
 }
-/* N-5 退卡口(店主 08-25 图=合同):次卡退次数单记一列,**不写 used_times** ——
-   把退次记成核销,等于把被有意关掉的「手动耗卡」从后门开回来。 */
-try {
-  db.exec('ALTER TABLE member_timecards ADD COLUMN refunded_times INTEGER NOT NULL DEFAULT 0')
-} catch (error) {
-  if (!String(error.message || '').includes('duplicate column')) throw error
-}
-db.exec(`
-  CREATE TABLE IF NOT EXISTS timecard_refunds (
-    id TEXT PRIMARY KEY,
-    tenant_id TEXT NOT NULL,
-    card_id TEXT NOT NULL,
-    user_id TEXT NOT NULL,
-    times INTEGER NOT NULL,
-    amount_cents INTEGER NOT NULL,
-    pay_channel TEXT,
-    reason TEXT NOT NULL,
-    created_by TEXT,
-    created_at TEXT NOT NULL
-  );
-`)
+// N-5 退卡口的建表与建列(拆账两列 / 幂等单号 / 次卡已退次数 / 次卡退款表)全在 ./account-refund-schema.mjs
+ensureRefundSchema(db)
 // 🔴 D76 可见性列(与账本归属解耦):建列 + 演示店默认不上架,实现在 ./tenant-visibility.mjs
 ensureListedColumn(db)
 /* D73(店主 08-24):归属回填改**一次性迁移** —— 跑过一次记一笔,以后启动不再扫;
