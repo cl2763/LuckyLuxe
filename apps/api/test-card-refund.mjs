@@ -77,6 +77,8 @@ check('①-3 「本店收入影响」那一行也是后端给的(前端不许自
 // ===== 二、硬拦三条(图 §四:拦不住就是账错)=====
 const incomeBefore = incomeTotal(tid)
 const rowsBefore = financeRows(tid)
+let incomeMark = incomeBefore      // 卖过东西之后的新基线(见 ⑦-17)
+let rowsMark = rowsBefore
 const over = await request('/admin/stored-value/refund', { method: 'POST', body: JSON.stringify({ userId, amountCents: 110001, reason: '试探超额' }) }, TOKEN, H)
 check('②-1 退款额超余额 1 分 = 拒(余额不许变负)', over.status === 400 && over.data.error?.code === 'REFUND_EXCEEDS_BALANCE', JSON.stringify(over.data).slice(0, 140))
 const noReason = await request('/admin/stored-value/refund', { method: 'POST', body: JSON.stringify({ userId, amountCents: 100, reason: '   ' }) }, TOKEN, H)
@@ -159,6 +161,10 @@ check('⑦-2 留痕行自证「不进收入」', rf.incomeImpactCents === 0 && /
      夹具直接写一行"昨天的退款"——按门店时区的昨天,不是 UTC 的昨天。 */
   const ydIso = new Date(Date.now() - 26 * 3600 * 1000).toISOString()
   const yd = new Date(ydIso).toLocaleDateString('en-CA', { timeZone: 'America/Toronto' })
+  /* 夹具要配平:光插一行退款会把余额做成 −50,后面开单签字会被「储值余额不足」挡下
+     (那道闸是对的 —— 余额不许为负)。所以先补一笔同日充值(走微信,不进当天抽屉)。 */
+  db.prepare(`INSERT INTO stored_value_transactions (id, tenant_id, user_id, type, amount_cents, pay_channel, note, created_by, created_at)
+    VALUES (?, ?, ?, 'recharge', 5000, 'wechat', '昨天充的(夹具配平)', 'fixture', ?)`).run(`sv-ydr-${RUN}`, tid, userId, ydIso)
   db.prepare(`INSERT INTO stored_value_transactions (id, tenant_id, user_id, type, amount_cents, pay_channel, note, created_by, created_at)
     VALUES (?, ?, ?, 'refund', -5000, 'cash', '昨天退的', 'fixture', ?)`).run(`sv-yd-${RUN}`, tid, userId, ydIso)
   const todayAgain = (await request(`/admin/daily-close?date=${today}`, {}, TOKEN, H)).data.dailyClose
@@ -169,6 +175,37 @@ check('⑦-2 留痕行自证「不进收入」', rf.incomeImpactCents === 0 && /
     JSON.stringify({ r: ydClose.refunds.storedCents, d: ydClose.cashDrawer.refundOutCents }))
   check('⑦-12 昨天的应有数也是「收现 − 退款」', ydClose.cashDrawer.shouldHaveCents
     === ydClose.cashDrawer.storefrontCents + ydClose.cashDrawer.rechargeCashCents - ydClose.cashDrawer.refundOutCents)
+
+  /* 🔴 店主 08-25 收尾令:**两边都不为 0** 才证得了两边都没漏。
+     收现 0 / 退 10 那种只证明了"退款被减掉",证不了"收现有没有进这个式子"。
+     所以这里真开一张到店支付的单再看:漏收现会得负数、漏退款会得收现原值,
+     只有两边都对才等于差额。 */
+  let payBk = { status: 0, data: {} }
+  for (const hh of ['09', '19', '20', '12', '16']) {
+    payBk = await request('/admin/bookings/direct', { method: 'POST', body: JSON.stringify({ userId, serviceId, technicianId, date: today, time: `${hh}:00` }) }, TOKEN, H)
+    if (payBk.status === 201 || payBk.status === 200) break
+  }
+  check('⑦-15 前置:到店支付那一单排上了', Boolean(payBk.data.booking?.id), JSON.stringify(payBk.data).slice(0, 120))
+  await request(`/admin/bookings/${payBk.data.booking.id}/status`, { method: 'PATCH', body: JSON.stringify({ status: 'COMPLETED' }) }, TOKEN, H)
+  const paySheet = await request('/admin/settlements', { method: 'POST', body: JSON.stringify({ userId, settlements: [{ bookingId: payBk.data.booking.id, payIntent: 'offline_full', items: [{ serviceId, qty: 1 }], technicians: [{ technicianId, role: 'main', itemNos: [1] }] }] }) }, TOKEN, H)
+  check('⑦-15 前置:单开出来了', paySheet.status === 201 && Boolean(paySheet.data.settlements?.[0]?.code), JSON.stringify(paySheet.data).slice(0, 140))
+  await fetch(`${BASE_URL}/settlements/${encodeURIComponent(paySheet.data.settlements[0].code)}/sign`, {
+    method: 'POST', headers: { 'content-type': 'application/json', 'x-tenant-id': tid }, body: JSON.stringify({ signature: '演示', disclaimerAccepted: true })
+  })
+  const withTakeIn = (await request(`/admin/daily-close?date=${today}`, {}, TOKEN, H)).data.dailyClose.cashDrawer
+  check('⑦-15 🔴 收现与退款都不为 0 时,应有数 == 收现 − 退款(两边都证)',
+    withTakeIn.storefrontCents > 0 && withTakeIn.refundOutCents > 0
+    && withTakeIn.shouldHaveCents === withTakeIn.storefrontCents + withTakeIn.rechargeCashCents - withTakeIn.refundOutCents,
+    `${withTakeIn.storefrontCents} + ${withTakeIn.rechargeCashCents} − ${withTakeIn.refundOutCents} = ${withTakeIn.shouldHaveCents}`)
+  check('⑦-16 收现进来了、退款也扣了(两个反例都排除:既不等于 −退款,也不等于收现原值)',
+    withTakeIn.shouldHaveCents !== -withTakeIn.refundOutCents && withTakeIn.shouldHaveCents !== withTakeIn.storefrontCents,
+    String(withTakeIn.shouldHaveCents))
+  /* ⑦-15 那一单是**真卖了一次**,收入本来就该涨 —— 后面验"退卡不碰收入"要拿这个新基线比,
+     不然验的就成了"这套件从头到尾没卖过东西",与被测行为无关。 */
+  incomeMark = incomeTotal(tid)
+  rowsMark = financeRows(tid)
+  check('⑦-17 反过来:真卖一单,收入**该涨**(说明前面那些"不变"不是因为收入根本不动)',
+    incomeMark > incomeBefore, `${incomeBefore} → ${incomeMark}`)
 }
 
 // ===== 八、退次卡:单位是次,退完卡作废,退掉的次数不能再核销 =====
@@ -188,7 +225,8 @@ check('⑧-6 退完剩 0 次 = 卡作废', tcOk.data.remainingTimes === 0 && tcO
 check('⑧-7 🔴 退次数**不写 used_times**(那等于把手动耗卡从后门开回来)',
   db.prepare('SELECT used_times, refunded_times FROM member_timecards WHERE id = ?').get(cardId).used_times === 4
   && db.prepare('SELECT refunded_times FROM member_timecards WHERE id = ?').get(cardId).refunded_times === 6)
-check('⑧-8 🔴 退次卡同样不碰收入', incomeTotal(tid) === incomeBefore && financeRows(tid) === rowsBefore)
+check('⑧-8 🔴 退次卡同样不碰收入(对比"卖过一单之后"的基线)', incomeTotal(tid) === incomeMark && financeRows(tid) === rowsMark,
+  `${incomeMark} → ${incomeTotal(tid)}`)
 const packAfter = await request('/my/timecards', {}, custToken, H)
 check('⑧-9 顾客端卡包里这张卡不再可用(剩余算法唯一出口)', !(packAfter.data.timecards || []).some((c) => c.id === cardId), JSON.stringify((packAfter.data.timecards || []).map((c) => c.id)))
 

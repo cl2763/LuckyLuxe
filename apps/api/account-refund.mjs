@@ -182,7 +182,9 @@ export function createAccountRefund({ db, apiError, iso, randomId, currentTenant
       shouldHaveCents: should, shouldHaveText: money(should),
       incomeImpactCents: 0,
       label: '到店收的钱 · 应有数',
-      hint: '到店支付 + 现金充值 − 现金退卡。晚上按这个数点账,退卡已经扣掉了。'
+      /* 措辞不许说过头(店主 08-25 更正):能保证的是「**到店收的钱**·应有数」对得上;
+         要精确到抽屉里的纸币,得先给线下腿记渠道 —— 那是后续项,不在这批。 */
+      hint: '到店支付 + 现金充值 − 现金退卡,退卡已经扣掉了。对账按这个数。'
         + (outOther ? `另有 ${money(outOther)} 退款走转账/原路退回,不从这里出。` : ''),
       note: '线下腿不分现金与刷卡(表上没有渠道列),所以这是「到店收的钱」的应有数,不是纯钞票数。'
     }
