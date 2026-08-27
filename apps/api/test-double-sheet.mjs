@@ -332,13 +332,57 @@ async function checkMiniMappingLayer(asRow) {
      顾客端这五个函数以前接口一挂就 return mock —— 顾客看到一整套不存在的
      服务/门店/技师/可约时段,还能照着约进去。现在把 wx.request 打成必失败,
      断言它们**抛错**而不是交出数据。谁再写 mock 回落,这里直接红。 */
-  const failing = ['getServices', 'getStores', 'getAddOns', 'getAvailability', 'getTechnicians']
-  global.wx.request = ({ fail }) => { if (fail) fail(new Error('network down')) }
-  for (const fn of failing) {
-    let threw = false
-    try { await miniApi[fn]('nail') } catch (e) { threw = true }
-    check(`D17 护栏:${fn}() 接口失败时**抛错**,绝不回 mock 假数据`, threw, `${fn} 没抛错 —— 它把假数据交出去了`)
+/* 🔴 判据翻面(店主 2026-08-28,靠列举的判据 A 类之一)。
+     原判据手写 5 个函数名 —— 它叫「绝不回 mock 假数据」,却只验我列的那 5 个。
+     第 6 个函数写个 `catch { return mock }`,它一辈子不会被验到,而断言永远绿。
+     改成**反过来数**:
+       ①静态:扫 `miniprogram/utils/api.js` **每一个**函数,凡"发网络请求 + catch 里 return"的
+         都要在下面这张白名单里,理由逐条写死;
+       ②行为:把 wx.request 打成必失败,**所有 get* 网络读取者**逐个调一遍,必须抛错。
+     被测集合从**源码里推出来**,不是我打字打出来的。 */
+  const { readFileSync: rfApi } = await import('node:fs')
+  const apiSrc = rfApi(new URL('../../miniprogram/utils/api.js', import.meta.url), 'utf8')
+  const FALLBACK_ALLOW = {
+    request: '底座本身:catch 里做的是 401 重登与错误归一,不产出业务数据',
+    getPortfolioWall: '失败回**空**作品墙({works:[],categories:[]})—— 空态不是假数据,页面照常显示"暂无作品"',
+    refreshMember: '未登录/取不到 auth 时 return null,调用方按"没登录"处理;不编造会员信息',
+    refreshMerchantAi: '失败时回**上一次缓存过的**开通状态(不是编一个),只影响 AI 入口显不显示'
   }
+  const ALLOW_CAP = 4   // 🔴 棘轮:只许减不许增。要加一项,先报 Cowork 批,并把这个数一起改
+  const fnRe = /(?:async\s+)?function\s+([A-Za-z_$][\w$]*)\s*\([^)]*\)\s*\{/g
+  const netFns = []
+  const fallbackFns = []
+  let fm
+  while ((fm = fnRe.exec(apiSrc))) {
+    let d = 0
+    let end = fm.index + fm[0].length - 1
+    for (let i = end; i < apiSrc.length; i += 1) {
+      if (apiSrc[i] === '{') d += 1
+      else if (apiSrc[i] === '}') { d -= 1; if (d === 0) { end = i; break } }
+    }
+    const body = apiSrc.slice(fm.index, end + 1)
+    if (!/\brequest\(|\badminRequest\(|wx\.request/.test(body)) continue
+    netFns.push(fm[1])
+    if (/catch\s*(\([^)]*\))?\s*\{[^}]*return/.test(body) || /\.catch\(\s*\(\)\s*=>/.test(body)) fallbackFns.push(fm[1])
+  }
+  const badFallback = fallbackFns.filter((f) => !(f in FALLBACK_ALLOW))
+  check(`D17 白名单式:api.js ${netFns.length} 个网络函数里,${fallbackFns.length} 个带 catch 回落,全在白名单(原判据只列举了 5 个函数名)`,
+    badFallback.length === 0, `不在白名单里的回落:${badFallback.join(', ')}`)
+  check(`D17 白名单防线②:回落白名单条目数上棘轮 ≤ ${ALLOW_CAP}(只许减不许增)`,
+    Object.keys(FALLBACK_ALLOW).length <= ALLOW_CAP, String(Object.keys(FALLBACK_ALLOW).length))
+  const staleAllow = Object.keys(FALLBACK_ALLOW).filter((f) => !fallbackFns.includes(f))
+  check('D17 白名单防线③:白名单里每一项都还真的在代码里回落(改好了却留着豁免 = 偷偷放宽)',
+    staleAllow.length === 0, `代码里已经不回落了、豁免却还留着:${staleAllow.join(', ')}`)
+
+  global.wx.request = ({ fail }) => { if (fail) fail(new Error('network down')) }
+  const probes = netFns.filter((f) => /^get[A-Z]/.test(f) && typeof miniApi[f] === 'function' && !(f in FALLBACK_ALLOW))
+  const notThrown = []
+  for (const fn of probes) {
+    try { await miniApi[fn]('nail'); notThrown.push(fn) } catch (e) { /* 抛错=对 */ }
+  }
+  check(`D17 护栏 行为:${probes.length} 个 get* 网络读取者在接口挂掉时**全部抛错**,绝不回假数据`,
+    notThrown.length === 0, `把数据交出去了的:${notThrown.join(', ')}`)
+  check('D17 反向守:这一轮真的调到了函数(不是 probes 为空混过去)', probes.length >= 5, String(probes.length))
 
   const cur = require('../../miniprogram/utils/storecurrency.js')
   miniApi.getStoreCurrency = async () => ({ currency: 'CNY', currencyDisplay: { prefix: '', symbol: '¥', trimZeroDecimals: true } })

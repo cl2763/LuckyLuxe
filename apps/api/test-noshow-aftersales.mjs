@@ -2439,10 +2439,29 @@ const main = async () => {
         const js0 = readFileSync(join(ROOT42, `${pg}/index.json`), 'utf8')
         check(`㋍ D68③ ${pg.split('/').pop()} 页挂共用查看器组件`, wx0.includes('<snapshot-viewer') && js0.includes('components/snapshot-viewer/index'))
       }
-      check('㋍ D68③ 跳整页看原件零残留(pages/sign?snapshot= 全仓消亡)', !(await (async () => {
-        const files = ['miniprogram/utils/dailyclose.js', 'miniprogram/pages/merchant/finance/index.js', 'miniprogram/components/sheet-preview/index.js', 'miniprogram/pages/order-detail/index.js']
-        return files.some((f) => readFileSync(join(ROOT42, f), 'utf8').includes('snapshot=$'))
-      })()))
+      /* 🔴 判据翻面(店主 2026-08-28,靠列举的判据 A 类之一)。
+         原来这里列 4 个文件扫 `snapshot=$` —— 它叫「全仓消亡」,却只扫我列的那 4 个。
+         第 5 个文件里写一句跳整页,它一辈子不会被扫到,而断言永远绿。
+         改成**真·全仓**:走遍 miniprogram + apps/web 的每个 .js/.wxml,一处都不许有。 */
+      const walkAll = (rel, exts) => {
+        const out = []
+        const stack = [join(ROOT42, rel)]
+        while (stack.length) {
+          const dir = stack.pop()
+          let entries = []
+          try { entries = readdirSync(dir, { withFileTypes: true }) } catch { continue }
+          for (const e of entries) {
+            const abs = join(dir, e.name)
+            if (e.isDirectory()) { if (e.name !== 'node_modules') stack.push(abs) } else if (exts.test(e.name)) out.push(abs)
+          }
+        }
+        return out
+      }
+      const snapScan = ['miniprogram', 'apps/web'].flatMap((d) => walkAll(d, /\.(js|wxml)$/))
+      const snapHits = snapScan.filter((f) => readFileSync(f, 'utf8').includes('snapshot=$')).map((f) => f.split('/').slice(-3).join('/'))
+      check(`㋍ D68③ 跳整页看原件零残留:**全仓** ${snapScan.length} 个文件扫 \`snapshot=$\`(原判据只列举了 4 个文件)`,
+        snapHits.length === 0, snapHits.join(' | '))
+      check('㋍ 反向守:这条扫描真读到了文件(不是路径写错扫了个空)', snapScan.length >= 100, String(snapScan.length))
       /* ㋏ L2 机械扫描:全仓 image 位零 SVG 图源(小程序 <image src>、网页 <img src>、图标资源引用)——
          真机 <image> 不认 SVG,喂一处白一处。 */
       const svgSrcHits = []

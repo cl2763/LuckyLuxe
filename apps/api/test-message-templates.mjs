@@ -40,7 +40,13 @@ async function newShop(label) {
   return { tenantId: id, token: again.data.auth.accessToken }
 }
 
-const SCENES = ['pre_sale', 'in_service', 'post_sale', 'booking_confirmed_invite', 'arrival_reminder', 'coupon_expiry']
+/* 🔴 判据翻面(店主 2026-08-28,靠列举的判据 A 类之一)。
+   原来这里手写六个场景名 —— 后端加第七个场景时,这份清单不会跟着变,
+   于是「六个场景各预置一条」照样绿,而那个新场景**从没被验过预置、验过标签、验过越权**。
+   改成**从后端现取**:场景枚举本来就随接口下发(`listA.data.scenes`),
+   拿它当被测集合,加一个场景就自动纳入。手写的这份降级成**反向守**:
+   它必须是后端那份的子集 —— 万一后端哪天把某个场景删了,这里当场红,而不是悄悄少验一个。 */
+const SCENES_MUST_HAVE = ['pre_sale', 'in_service', 'post_sale', 'booking_confirmed_invite', 'arrival_reminder', 'coupon_expiry']
 
 async function main() {
   const shopA = await newShop('a')
@@ -51,13 +57,21 @@ async function main() {
   const listA = await request('/admin/message-templates', {}, shopA.token)
   check('模板列表可读', listA.status === 200, JSON.stringify(listA.data).slice(0, 200))
   const scenesA = (listA.data.templates || []).map((t) => t.scene)
-  check('首次读取自动预置六个场景各一条', SCENES.every((s) => scenesA.includes(s)) && listA.data.templates.length === 6, JSON.stringify(scenesA))
-  check('场景枚举随接口下发(含中文标签)', (listA.data.scenes || []).length === 6 && listA.data.scenes[0].label, JSON.stringify(listA.data.scenes))
+  const SCENES = (listA.data.scenes || []).map((x) => x.scene)          // 被测集合从后端现取,不写死
+  check(`白名单式:后端下发 ${SCENES.length} 个场景,**每一个**都自动预置了一条(加新场景自动纳入)`,
+    SCENES.length > 0 && SCENES.every((sc) => scenesA.includes(sc)) && listA.data.templates.length === SCENES.length,
+    JSON.stringify({ 后端: SCENES, 预置: scenesA }))
+  check('反向守:手写那六个仍在后端清单里(后端删了场景 → 这里当场红,不许悄悄少验)',
+    SCENES_MUST_HAVE.every((sc) => SCENES.includes(sc)),
+    JSON.stringify(SCENES_MUST_HAVE.filter((sc) => !SCENES.includes(sc))))
+  check('场景枚举随接口下发(每一个都带中文标签,不是只有第一个有)',
+    (listA.data.scenes || []).length === SCENES.length && (listA.data.scenes || []).every((x) => x.label && /[一-龥]/.test(x.label)),
+    JSON.stringify(listA.data.scenes))
   const invite = listA.data.templates.find((t) => t.scene === 'booking_confirmed_invite')
   check('预约成功邀请函模板带变量说明', invite && invite.variables.includes('{bookingTime}') && invite.variables.includes('{storeName}'), JSON.stringify(invite))
 
   const listAgain = await request('/admin/message-templates', {}, shopA.token)
-  check('再读一次不会重复预置', listAgain.data.templates.length === 6, String(listAgain.data.templates.length))
+  check('再读一次不会重复预置', listAgain.data.templates.length === SCENES.length, String(listAgain.data.templates.length))
 
   // ---- 2. CRUD ----
   const created = await request('/admin/message-templates', {

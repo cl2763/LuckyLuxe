@@ -262,10 +262,39 @@ async function main() {
   const ownerList = (await request('/admin/customers', {}, shop.token)).data.customers || []
   const staffList = (await request('/admin/customers', {}, staffToken)).data.customers || []
   check('拍板② 员工拿得到「我的客户」(不再一刀切 403)', Array.isArray(staffList), JSON.stringify(staffList).slice(0, 80))
-  const FIN = ['totalSpentCents', 'storedValueBalanceCents', 'balanceCents', 'rechargeCents']
-  check('拍板② 红线:财务字段在员工响应里**整体不存在**(不是置空)',
-    staffList.every((c) => FIN.every((k) => !(k in c))),
-    JSON.stringify(staffList[0] ? Object.keys(staffList[0]) : []))
+/* 🔴 判据翻面(店主 2026-08-28,靠列举的判据 A 类之一)。
+   原判据:列 4 个财务字段名,断言它们不在员工响应里 —— **它叫"财务字段整体不存在",却只验我列的那 4 个**。
+   后端哪天多下发一个 `depositRetainCents`、`lastRechargeAt`,它一辈子不会被验到,而断言永远绿。
+   改成**反过来数**:员工响应里出现的**每一个字段**都必须在下面这张白名单里,理由逐条写死。
+   新加字段=不在白名单=当场红,想放进来得先说清"它为什么不算钱"。
+
+   白名单的失败模式是「遇到红的就往里加一条」,所以配三道防线:
+     ①每一项写一行理由;②条目数上棘轮(只许减不许增,要增先报 Cowork);
+     ③自检:白名单里每一项**必须真的还在响应里出现** —— 删了字段却留着豁免 = 偷偷放宽。 */
+  const STAFF_FIELD_ALLOW = {
+    id: '主键,员工要拿它点进这位顾客',
+    displayName: '顾客名 —— 干活要叫得出名字',
+    phoneMasked: '**已脱敏**的手机号(后端 maskPhone),用来对人不用来联系',
+    visitCount: '到店次数 = 服务频次,不是钱',
+    lastVisitAt: '最近到店时间,判断该不该回访',
+    tags: '偏好/安全项标签(过敏、忌讳),上钟前必看',
+    memberCode: '会员码 = 身份标识,不含余额',
+    scope: '这批数据的口径标记(mine),前端据此渲染"只看我的"'
+  }
+  const ALLOW_CAP = 8   // 🔴 棘轮:只许减不许增。要加一项,先报 Cowork 批,并把这个数一起改
+  const staffKeys = [...new Set(staffList.flatMap((c) => Object.keys(c)))]
+  const ownerKeys = [...new Set(ownerList.flatMap((c) => Object.keys(c)))]
+  const notAllowed = staffKeys.filter((k) => !(k in STAFF_FIELD_ALLOW))
+  check(`拍板② 白名单式:员工响应里 ${staffKeys.length} 个字段全在白名单(老板视图有 ${ownerKeys.length} 个;原判据只列举了 4 个财务字段名)`,
+    notAllowed.length === 0, `不在白名单里的:${notAllowed.join(', ')}`)
+  check(`白名单防线②:条目数上棘轮 ≤ ${ALLOW_CAP}(只许减不许增;想增先报 Cowork)`,
+    Object.keys(STAFF_FIELD_ALLOW).length <= ALLOW_CAP, String(Object.keys(STAFF_FIELD_ALLOW).length))
+  const stale = Object.keys(STAFF_FIELD_ALLOW).filter((k) => !staffKeys.includes(k))
+  check('白名单防线③:白名单里每一项都还真的在响应里(删了字段却留着豁免 = 偷偷放宽)',
+    stale.length === 0 || staffList.length === 0, `响应里已经没有的豁免项:${stale.join(', ')}`)
+  check('反向守:老板视图**确实**带着钱(证明上面那个"没有钱字段"是裁出来的,不是这接口本来就不给钱)',
+    ownerKeys.some((k) => /cents|balance|spent|recharge|deposit/i.test(k)),
+    JSON.stringify(ownerKeys).slice(0, 200))
   check('拍板② 手机号脱敏,明文 phone 键不下发',
     staffList.every((c) => !('phone' in c) && (!c.phoneMasked || /\*/.test(c.phoneMasked))),
     JSON.stringify(staffList[0] || {}))

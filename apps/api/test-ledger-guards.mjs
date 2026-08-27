@@ -64,6 +64,17 @@ check(`前置:十二条触发器全部在库里(ledger-guards.mjs 声明 ${LEDGE
       if (new RegExp(`CREATE TRIGGER (IF NOT EXISTS )?${name}\\b`).test(src)) dupes.push(`${name} 也写在 ${f}`)
     }
   }
+  /* ⚠️ 下一个人看到这条断言时,先读这段再决定要不要删它 —— **它不是碍事的洁癖,是一颗拆过的雷。**
+     2026-08-27 审计现场挖出来的:`points_ledger_no_delete/no_update` 在 local-server 建库那段
+     还留着 **D72 之前的老定义** —— `CREATE TRIGGER IF NOT EXISTS` + **一个租户豁免都没有**。
+     当时最终状态是对的,因为 installLedgerGuards() 排在后面,DROP 再建带豁免的那一版。
+     但这是**靠初始化顺序活着的正确**:
+       · 哪天有人把装法那步往前挪、或者建库那段往后挪,悄悄接管的就是**无豁免**老版本;
+       · 那一刻 `tools/clean-test-tenants.mjs` 一下刀就被 ABORT 整包回滚 —— **D72 原病原样复发**,
+         而所有断言照样绿(法确实在,只是管得太宽)。
+     `settlements_signed_no_update` 当时也有第二份,字字相同,谁都没发现 ——
+     直到把 installLedgerGuards 关掉、它居然还拦得住,才现形。
+     所以这条断言守的是:**十二条只许有一处定义**。删掉它,上面那颗雷就重新埋回去了。 */
   check('🔴 十二条只在 ledger-guards.mjs 里建(别处再 CREATE 一遍 = 两处真相,改一处另一处静默覆盖)',
     dupes.length === 0, dupes.join(' | '))
   const guardSrc = readFileSync(join(HERE, 'ledger-guards.mjs'), 'utf8')
@@ -80,18 +91,36 @@ const tryRun = (sql, ...args) => {
    seed 返回两个 id,做完立刻断言 —— 不攒到最后,免得一处失败看不出是哪一族。 */
 function bothTenants(seed) { return { real: seed(REAL, 'r'), test: seed(TEST, 't') } }
 
-function lawPair(label, triggerName, seed, forbid, hint) {
-  const ids = bothTenants(seed)
-  const blocked = forbid(ids.real, REAL)
-  const allowed = forbid(ids.test, TEST)
-  check(`${label} 负向:kind=real 上${hint} → ABORT(${triggerName})`,
+/* 🔴 店主 08-28:十二条**全部要实测红**,一条推定都不留(「同段同写法」不算证据)。
+   所以每一条都跑**四步**,把「是不是这一条锁在起作用」钉死:
+     ①法在 · real → 必须 ABORT
+     ②法在 · test → 必须放行(豁免真的存在;只写①会把"全锁死"当成做对)
+     ③**只把这一条锁摘掉** · real → 必须放行 ⇒ 证明①的 ABORT 来自**这一条**,不是别的规则顺手拦的
+     ④装回去 · real → 必须又 ABORT ⇒ 证明摘掉那一步没把法弄丢
+   第③步就是店主要的「逐条把锁关掉再跑,该锁的断言必须红」——
+   它在套件内部跑,每次回归都重验一遍,不靠人记得去做一次性实验。 */
+const dropOne = (name) => db.exec(`DROP TRIGGER IF EXISTS ${name}`)
+const restoreAll = async () => { const { installLedgerGuards } = await import('./ledger-guards.mjs'); installLedgerGuards(db) }
+
+async function lawPair(label, triggerName, seed, forbid, hint, { tenantExempt = true } = {}) {
+  const blocked = forbid(seed(REAL, `r${checks}`), REAL)
+  check(`${label} ①法在·real:${hint} → ABORT(${triggerName})`,
     /append-only|immutable|revoke|ABORT/i.test(blocked), blocked || '**没拦住**')
-  check(`${label} 正向反向守:kind=test 上同一件事 → 放行(不然清理脚本永远被回滚)`,
-    allowed === '', allowed)
+  const onTest = forbid(seed(TEST, `t${checks}`), TEST)
+  check(`${label} ②法在·test:同一件事 → ${tenantExempt ? '放行(豁免真的在)' : '照样 ABORT(这条不吃租户豁免)'}`,
+    tenantExempt ? onTest === '' : /append-only|immutable|revoke|ABORT/i.test(onTest), onTest)
+  dropOne(triggerName)
+  const withoutLaw = forbid(seed(REAL, `x${checks}`), REAL)
+  await restoreAll()
+  const afterRestore = forbid(seed(REAL, `y${checks}`), REAL)
+  check(`${label} ③🔴 只摘掉这一条锁 → 同一件事放行(证明上面拦住的正是 ${triggerName},不是别的规则顺手拦的)`,
+    withoutLaw === '', withoutLaw || '**摘了锁还是拦住了 —— 那条断言证不了这把锁**')
+  check(`${label} ④装回去 → 又拦得住(摘锁那一步没把法弄丢)`,
+    /append-only|immutable|revoke|ABORT/i.test(afterRestore), afterRestore || '**装回去了却拦不住**')
 }
 
 // ①②③ 三大账本禁删
-lawPair('①财务台账禁删', 'finance_txn_no_delete',
+await lawPair('①财务台账禁删', 'finance_txn_no_delete',
   (tid, p) => {
     const id = `lgfin-${p}-${RUN}`
     db.prepare(`INSERT INTO finance_transactions (id, tenant_id, type, source, category, amount_cents, occurred_on, created_at)
@@ -100,7 +129,7 @@ lawPair('①财务台账禁删', 'finance_txn_no_delete',
   },
   (id) => tryRun('DELETE FROM finance_transactions WHERE id = ?', id), '删一行账')
 
-lawPair('②储值流水禁删', 'stored_value_no_delete',
+await lawPair('②储值流水禁删', 'stored_value_no_delete',
   (tid, p) => {
     const id = `lgsv-${p}-${RUN}`
     db.prepare(`INSERT INTO stored_value_transactions (id, tenant_id, user_id, type, amount_cents, created_at)
@@ -109,7 +138,7 @@ lawPair('②储值流水禁删', 'stored_value_no_delete',
   },
   (id) => tryRun('DELETE FROM stored_value_transactions WHERE id = ?', id), '删一行储值流水')
 
-lawPair('③积分台账禁删', 'points_ledger_no_delete',
+await lawPair('③积分台账禁删', 'points_ledger_no_delete',
   (tid, p) => {
     const id = `lgpt-${p}-${RUN}`
     db.prepare(`INSERT INTO points_transactions (id, tenant_id, user_id, type, amount, created_at)
@@ -119,7 +148,7 @@ lawPair('③积分台账禁删', 'points_ledger_no_delete',
   (id) => tryRun('DELETE FROM points_transactions WHERE id = ?', id), '删一行积分')
 
 // ④ 定金回执禁删
-lawPair('④定金回执禁删', 'deposit_receipts_no_delete',
+await lawPair('④定金回执禁删', 'deposit_receipts_no_delete',
   (tid, p) => {
     const id = `lgdr-${p}-${RUN}`
     db.prepare(`INSERT INTO deposit_receipts (id, tenant_id, booking_id, kind, amount_cents, created_at)
@@ -129,7 +158,7 @@ lawPair('④定金回执禁删', 'deposit_receipts_no_delete',
   (id) => tryRun('DELETE FROM deposit_receipts WHERE id = ?', id), '删一张定金回执')
 
 // ⑤⑥ 券:发放记录 + 流水
-lawPair('⑤券发放禁删', 'coupon_grants_no_delete',
+await lawPair('⑤券发放禁删', 'coupon_grants_no_delete',
   (tid, p) => {
     const id = `lgcg-${p}-${RUN}`
     db.prepare(`INSERT INTO coupon_grants (id, tenant_id, coupon_id, user_id, code, created_at)
@@ -138,7 +167,7 @@ lawPair('⑤券发放禁删', 'coupon_grants_no_delete',
   },
   (id) => tryRun('DELETE FROM coupon_grants WHERE id = ?', id), '删一张已发的券')
 
-lawPair('⑥券流水禁删', 'coupon_grant_logs_no_delete',
+await lawPair('⑥券流水禁删', 'coupon_grant_logs_no_delete',
   (tid, p) => {
     const id = `lgcl-${p}-${RUN}`
     db.prepare(`INSERT INTO coupon_grant_logs (id, tenant_id, grant_id, action, created_at)
@@ -148,7 +177,7 @@ lawPair('⑥券流水禁删', 'coupon_grant_logs_no_delete',
   (id) => tryRun('DELETE FROM coupon_grant_logs WHERE id = ?', id), '删一行券流水')
 
 // ⑦ 身份合并队列
-lawPair('⑦身份合并记录禁删', 'identity_merge_no_delete',
+await lawPair('⑦身份合并记录禁删', 'identity_merge_no_delete',
   (tid, p) => {
     const id = `lgim-${p}-${RUN}`
     db.prepare(`INSERT INTO identity_merge_queue (id, tenant_id, provider, provider_user_id, bound_user_id, target_user_id, status, created_at)
@@ -158,7 +187,7 @@ lawPair('⑦身份合并记录禁删', 'identity_merge_no_delete',
   (id) => tryRun('DELETE FROM identity_merge_queue WHERE id = ?', id), '删一条身份合并记录')
 
 // ⑧⑨ 两大台账禁改
-lawPair('⑧财务台账禁改', 'finance_txn_no_update',
+await lawPair('⑧财务台账禁改', 'finance_txn_no_update',
   (tid, p) => {
     const id = `lgfinu-${p}-${RUN}`
     db.prepare(`INSERT INTO finance_transactions (id, tenant_id, type, source, category, amount_cents, occurred_on, created_at)
@@ -167,7 +196,7 @@ lawPair('⑧财务台账禁改', 'finance_txn_no_update',
   },
   (id) => tryRun('UPDATE finance_transactions SET amount_cents = 999999 WHERE id = ?', id), '改一行账的金额')
 
-lawPair('⑨积分台账禁改', 'points_ledger_no_update',
+await lawPair('⑨积分台账禁改', 'points_ledger_no_update',
   (tid, p) => {
     const id = `lgptu-${p}-${RUN}`
     db.prepare(`INSERT INTO points_transactions (id, tenant_id, user_id, type, amount, created_at)
@@ -177,7 +206,7 @@ lawPair('⑨积分台账禁改', 'points_ledger_no_update',
   (id) => tryRun('UPDATE points_transactions SET amount = 9999 WHERE id = ?', id), '改一行积分的数')
 
 // ⑩ 定金回执金额/类型/挂靠单永锁
-lawPair('⑩定金回执三列永锁', 'deposit_receipts_amount_locked',
+await lawPair('⑩定金回执三列永锁', 'deposit_receipts_amount_locked',
   (tid, p) => {
     const id = `lgdru-${p}-${RUN}`
     db.prepare(`INSERT INTO deposit_receipts (id, tenant_id, booking_id, kind, amount_cents, created_at)
@@ -187,7 +216,7 @@ lawPair('⑩定金回执三列永锁', 'deposit_receipts_amount_locked',
   (id) => tryRun('UPDATE deposit_receipts SET amount_cents = 1 WHERE id = ?', id), '改定金回执的金额')
 
 // ⑪ 储值禁改(带两个单向豁免,下面单独验豁免边界)
-lawPair('⑪储值流水禁改', 'stored_value_no_update',
+await lawPair('⑪储值流水禁改', 'stored_value_no_update',
   (tid, p) => {
     const id = `lgsvu-${p}-${RUN}`
     db.prepare(`INSERT INTO stored_value_transactions (id, tenant_id, user_id, type, amount_cents, created_at)
@@ -223,18 +252,22 @@ lawPair('⑪储值流水禁改', 'stored_value_no_update',
     (id, tenant_id, group_id, user_id, code, status, subtotal_cents, total_cents, list_total_cents, created_at, updated_at)
     VALUES (?, ?, ?, 'u-lg', ?, ?, 19800, 19800, 19800, ?, ?)`)
     .run(id, tid, `grp-${id}`, `LG-${id}`.slice(0, 20), status, iso(), iso())
-  mk(REAL, `lgst-signed-${RUN}`, 'signed')
-  mk(TEST, `lgst-demo-${RUN}`, 'signed')
   mk(REAL, `lgst-draft-${RUN}`, 'pending_sign')
-  const signedReal = tryRun('UPDATE settlements SET total_cents = 1 WHERE id = ?', `lgst-signed-${RUN}`)
-  const signedTest = tryRun('UPDATE settlements SET total_cents = 1 WHERE id = ?', `lgst-demo-${RUN}`)
+  // 走与前十一条同一套四步(只是第②步的期望反过来:这条不吃租户豁免)
+  let n = 0
+  await lawPair('⑫已签单禁改', 'settlements_signed_no_update',
+    (tid, p) => { const id = `lgst-${p}-${RUN}-${n++}`; mk(tid, id, 'signed'); return id },
+    (id) => tryRun('UPDATE settlements SET total_cents = 1 WHERE id = ?', id),
+    '改已签单金额', { tenantExempt: false })
   const draft = tryRun('UPDATE settlements SET total_cents = 1 WHERE id = ?', `lgst-draft-${RUN}`)
-  check('⑫已签单禁改 负向:kind=real 上改已签单金额 → ABORT(settlements_signed_no_update)',
-    /immutable/.test(signedReal), signedReal || '**改成了**')
-  check('⑫已签单禁改 🔴 这条**不吃租户豁免**:kind=test 的已签单照样 ABORT(判据是单据状态,不是哪家店)',
-    /immutable/.test(signedTest), signedTest || '**演示店的已签单被改成了**')
-  check('⑫反向守:**未签**的单可以改(证明拦的是"已签"这件事,不是"所有单都锁死")',
+  check('⑫⑤反向守:**未签**的单可以改(证明拦的是"已签"这件事,不是"所有单都锁死")',
     draft === '', draft)
+  /* 🔴 店主 08-28 追问:副本删掉之后,这条断言撞的到底是哪一份?
+     上面第③步已经回答了 —— 只摘掉 ledger-guards.mjs 里的那一条,改已签单就放行了。
+     副本要是还在(local-server 那份),摘一条根本不管用,第③步会当场红。 */
+  const defs = db.prepare("SELECT sql FROM sqlite_master WHERE type = 'trigger' AND name = 'settlements_signed_no_update'").all()
+  check('⑫⑥库里这条触发器只有一份(副本删干净了,撞的就是 ledger-guards.mjs 那一条)',
+    defs.length === 1, `库里有 ${defs.length} 份`)
 }
 
 /* 🔴 判据律自检:上面十二条要是**法没了**也照样绿,那它们就是废判据。

@@ -27,6 +27,7 @@ import { createRefundRoutes } from './refund-routes.mjs'              // 退卡/
 import { createPerfAdjust } from './perf-adjust.mjs'                  // 业绩基数/分成/业绩调整行(唯一实现)
 import { createDailyCloseScope } from './daily-close-scope.mjs'       // 日结归属(服务发生日)
 import { createFinanceLedger } from './finance-ledger.mjs'            // 财务台账写入口 + 哈希链(唯一写口)
+import { createWriteGates } from './write-gates.mjs'                  // 写口后端最终闸(券面额/套餐售价/项目价)
 import { createAssetFingerprint } from './asset-fingerprint.mjs'      // 前端资源内容指纹(缓存失效)
 import { createStoredValue } from './stored-value.mjs'                // 储值域(写流水/算余额/分桶/类型文案)
 import { createMembershipConfig } from './membership-config.mjs'      // 会员制度域(资格判定 + 退卡后是否保留会员)
@@ -5248,15 +5249,6 @@ function serviceIdFrom(body) {
 
 /* 分类唯一真相律③ 的**唯一校验口**:没挂大类 / 挂了本店没有的大类 → 拒。
    两条写路由(商家「服务管理」与平台代配)共用它,不许谁那边松一点。 */
-function assertCategoryOk(categoryId, tenantId) {
-  if (!categoryId) {
-    throw apiError(400, 'CATEGORY_REQUIRED',
-      '这个项目没挂大类 —— 顾客端按大类分组,不挂就会一个项目自成一组。请先选一个大类。')
-  }
-  const cat = db.prepare('SELECT id FROM service_categories WHERE id = ? AND tenant_id = ?').get(categoryId, tenantId)
-  if (!cat) throw apiError(400, 'BAD_REQUEST', '大类不存在或不属于本店。')
-}
-
 function servicePayload(body, current = {}) {
   /* 🔴 分类唯一真相律(店主 2026-08-25):写入路径**不再接受**自由文本 category —— 只认 categoryId。
      `category` 列仍在表上(存量对齐过),但从此**只写空串**:读的时候一律 join 大类字典派生。 */
@@ -6914,6 +6906,7 @@ function buildCustomerServiceContext(req, lang = 'zh') {
 }
 
 /* 财务台账写入口与哈希链整族搬去 ./finance-ledger.mjs(公约①②,2026-08-27);这里只留装配。 */
+const { assertCouponValueOk, assertPackageValueOk, assertServicePriceOk, assertCategoryOk, assertProjectGroupValid } = createWriteGates({ apiError, db })
 const { financeRowHash, latestFinanceHash, verifyFinanceLedger, insertFinanceTransaction } = createFinanceLedger({
   db, createHash, randomId, iso, currentTenantId, localParts, storeIdOfTenant, DEFAULT_TENANT_ID
 })
@@ -12127,6 +12120,7 @@ async function route(req, res) {
     const payload = servicePayload(await readBody(req))
     if (!['NAIL', 'LASH', 'CARE', 'OTHER'].includes(payload.type)) throw apiError(400, 'BAD_REQUEST', '服务类型须为 美甲/美睫/护理/其他。')
     if (!payload.nameZh || !payload.nameEn) throw apiError(400, 'BAD_REQUEST', 'Service name is required.')
+    assertServicePriceOk(payload)                              // 08-28 A5:价格/定金/时长后端兜底(前端拦不算数)
     assertCategoryOk(payload.categoryId, currentTenantId())   // 分类唯一真相律③:上架项目必须挂大类
     const id = serviceIdFrom(payload)
     db.prepare(`INSERT INTO services
@@ -12154,6 +12148,7 @@ async function route(req, res) {
     if (!current || (current.tenant_id && current.tenant_id !== currentTenantId())) throw apiError(404, 'NOT_FOUND', 'Service not found.')
     if (Number(current.is_timecard) === 1) throw apiError(400, 'TIMECARD_MIGRATED', '次卡已迁出「服务与价目」,请在次卡管理中维护。')
     const payload = servicePayload(body, current)
+    assertServicePriceOk(payload)                              // 08-28 A5:改价这条路同样兜底(建/改两口都过闸)
     assertCategoryOk(payload.categoryId, currentTenantId())   // 分类唯一真相律③
     db.prepare(`UPDATE services SET
       type = ?, category = ?, category_id = ?, name_zh = ?, name_en = ?, description_zh = ?, description_en = ?, image_url = ?,
@@ -12725,6 +12720,8 @@ async function route(req, res) {
     const kind = body.kind === 'times' ? 'times' : 'recharge'
     const name = String(body.name || '').trim()
     if (!name) throw apiError(400, 'BAD_REQUEST', '套餐名称必填。')
+    // 08-28 A4:套餐售价/次数的后端闸(实现在 ./write-gates.mjs)
+    assertPackageValueOk({ kind, priceCents: Math.round(Number(body.priceCents) || 0), timesCount: Math.round(Number(body.timesCount) || 0) })
     // 裁决(店主 08-20):项目组禁自由文本——新值必须是现有二级分类名(空=不限)
     assertProjectGroupValid(currentTenantId(), String(body.projectGroup || '').trim())
     const id = randomId('pkg')
@@ -12852,6 +12849,8 @@ async function route(req, res) {
     const name = String(body.name || '').trim()
     if (!name) throw apiError(400, 'BAD_REQUEST', '优惠券名称必填。')
     const discountType = body.discountType === 'percent' ? 'percent' : 'amount'
+    // 08-28 A3:券面额/折扣的后端闸(实现在 ./write-gates.mjs,前端拦不算数)
+    assertCouponValueOk({ discountType, amountCents: Math.round(Number(body.amountCents) || 0), percentOff: Math.round(Number(body.percentOff) || 0) })
     const id = randomId('cpn')
     db.prepare(`INSERT INTO coupons (id, tenant_id, name, discount_type, amount_cents, percent_off, min_spend_cents, valid_days, total_qty, issued_qty, is_active, created_at)
       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, 0, ?, ?)`).run(
@@ -13646,6 +13645,7 @@ async function route(req, res) {
         const cur = db.prepare('SELECT * FROM services WHERE id = ? AND tenant_id = ?').get(subId, tenantId)
         if (!cur) throw apiError(404, 'NOT_FOUND', 'Service not found in tenant.')
         const payload = servicePayload(await readBody(req), cur)
+        assertServicePriceOk(payload)                          // 08-28 A5:第三条改价路径,同一把闸
         db.prepare(`UPDATE services SET type = ?, category = ?, name_zh = ?, name_en = ?, description_zh = ?, description_en = ?, image_url = ?, price_cents = ?, deposit_cents = ?, base_duration_min = ?, is_active = ?, sort_order = ?, process_json = ?, notice_json = ? WHERE id = ?`)
           .run(payload.type, payload.category, payload.nameZh, payload.nameEn, payload.descriptionZh, payload.descriptionEn, payload.imageUrl, payload.priceCents, payload.depositCents, payload.baseDurationMin, payload.isActive, payload.sortOrder, JSON.stringify(payload.processJson), JSON.stringify(payload.noticeJson), subId)
         upsertServicePrice(tenantId, subId, 'list', payload.priceCents) // 同上
@@ -17224,12 +17224,6 @@ function allowStoredPurchase(tenantId = currentTenantId()) {
 
 /* 裁决(店主 08-20):次卡「关联项目组」禁自由文本——新值必须是现有二级分类名(空串=不限)。
    只拦新写入;存量自由文本值不静默改(编辑页标红请商家改选)。 */
-function assertProjectGroupValid(tenantId, group) {
-  if (!group) return
-  const hit = db.prepare('SELECT 1 FROM service_categories WHERE tenant_id = ? AND name = ?').get(tenantId, group)
-  if (!hit) throw apiError(400, 'PROJECT_GROUP_INVALID', `项目组「${group}」不是本店现有的二级分类——请在表单下拉里改选(或选「不限」)。`)
-}
-
 /* ===== S2批② B①:次卡持有推导件(状态零列,全部现算)===== */
 /* 折算单价(规则⑦:核销按折算单价确认收入计积分/业绩)。
    分币余数末次吃(测试标准点名的边界):第 nth 次(1 起)= 非末次 floor(price/total),末次吃余数。 */
