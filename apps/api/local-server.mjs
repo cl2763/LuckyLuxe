@@ -26,6 +26,7 @@ import { createStaffScope } from './staff-scope.mjs'                  // 员工�
 import { createRefundRoutes } from './refund-routes.mjs'              // 退卡/账户调整/我的客人 的路由层
 import { createPerfAdjust } from './perf-adjust.mjs'                  // 业绩基数/分成/业绩调整行(唯一实现)
 import { createDailyCloseScope } from './daily-close-scope.mjs'       // 日结归属(服务发生日)
+import { createFinanceLedger } from './finance-ledger.mjs'            // 财务台账写入口 + 哈希链(唯一写口)
 import { createAssetFingerprint } from './asset-fingerprint.mjs'      // 前端资源内容指纹(缓存失效)
 import { createStoredValue } from './stored-value.mjs'                // 储值域(写流水/算余额/分桶/类型文案)
 import { createMembershipConfig } from './membership-config.mjs'      // 会员制度域(资格判定 + 退卡后是否保留会员)
@@ -6912,71 +6913,10 @@ function buildCustomerServiceContext(req, lang = 'zh') {
   return depositMode ? { customer, bookings, services, stores, depositMode } : { customer, bookings, services, stores }
 }
 
-// ===== 财务记账底座（阶段3A/3B）=====
-// 金额带符号存储：收入为正、支出为负、冲销取反。汇总 = 直接求和，永远对得上。
-// 防篡改：只追加（触发器拒绝 UPDATE/DELETE）+ 哈希链（每笔指纹咬合上一笔）。
-function financeRowHash(row, prevHash) {
-  const canonical = JSON.stringify([
-    row.id, row.tenant_id, row.type, row.source, row.category,
-    row.amount_cents, row.pay_channel, row.occurred_on,
-    row.booking_id || '', row.recurring_rule_id || '', row.reversal_of || '',
-    row.created_by || '', row.created_at, prevHash
-  ])
-  return createHash('sha256').update(canonical).digest('hex')
-}
-
-function latestFinanceHash(tenantId) {
-  const row = db.prepare('SELECT row_hash FROM finance_transactions WHERE tenant_id = ? ORDER BY rowid DESC LIMIT 1').get(tenantId)
-  return row?.row_hash || 'genesis'
-}
-
-function verifyFinanceLedger(tenantId = DEFAULT_TENANT_ID) {
-  const rows = db.prepare('SELECT rowid, * FROM finance_transactions WHERE tenant_id = ? ORDER BY rowid ASC').all(tenantId)
-  let prev = 'genesis'
-  for (const row of rows) {
-    if (row.prev_hash !== prev || row.row_hash !== financeRowHash(row, prev)) {
-      return { valid: false, count: rows.length, firstBrokenId: row.id, firstBrokenAt: row.created_at }
-    }
-    prev = row.row_hash
-  }
-  return { valid: true, count: rows.length, firstBrokenId: null }
-}
-
-function insertFinanceTransaction({ type, source = 'manual', category, tags = '', amountCents, payChannel = 'unknown', occurredOn, note = '', bookingId = null, recurringRuleId = null, reversalOf = null, keepSign = false, createdBy = 'system', storeId = null, tenantId: tenantIdOverride = '' }) {
-  const id = randomId('fin')
-  const signed = type === 'expense' ? -Math.abs(amountCents) : Math.abs(amountCents)
-  /* 顾客签署页是**公开路由**,没进租户闸门,currentTenantId() 会回落到旗舰店。
-     签字时刻写账的调用方必须把单据自己的 tenant_id 传进来,否则钱记到别人家账上。 */
-  const tenantId = tenantIdOverride || currentTenantId()
-  const createdAt = iso(new Date())
-  const record = {
-    id,
-    tenant_id: tenantId,
-    type,
-    source,
-    category,
-    /* keepSign = 金额更正的差额行(店主 08-27 拍板):它是**部分**红字,不是整行冲销 ——
-       所以不许挂 reversal_of(那个字段的语义是"这一行作废了",签署入账的防重与手工冲销都读它),
-       但金额必须保号(收入 −48 才能让净额跟着单据走)。 */
-    amount_cents: (reversalOf || keepSign) ? amountCents : signed,
-    pay_channel: payChannel,
-    occurred_on: occurredOn || localParts(new Date()).date,
-    booking_id: bookingId,
-    recurring_rule_id: recurringRuleId,
-    reversal_of: reversalOf,
-    created_by: createdBy,
-    created_at: createdAt
-  }
-  const prevHash = latestFinanceHash(tenantId)
-  const rowHash = financeRowHash(record, prevHash)
-  db.prepare(`
-    INSERT INTO finance_transactions
-      (id, tenant_id, store_id, type, source, category, tags, amount_cents, pay_channel, occurred_on, note, booking_id, recurring_rule_id, reversal_of, created_by, created_at, prev_hash, row_hash)
-    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-  `).run(id, tenantId, storeId || storeIdOfTenant(tenantId), type, source, category, tags, record.amount_cents, payChannel, record.occurred_on, note, bookingId, recurringRuleId, reversalOf, createdBy, createdAt, prevHash, rowHash)
-  return db.prepare('SELECT * FROM finance_transactions WHERE id = ?').get(id)
-}
-
+/* 财务台账写入口与哈希链整族搬去 ./finance-ledger.mjs(公约①②,2026-08-27);这里只留装配。 */
+const { financeRowHash, latestFinanceHash, verifyFinanceLedger, insertFinanceTransaction } = createFinanceLedger({
+  db, createHash, randomId, iso, currentTenantId, localParts, storeIdOfTenant, DEFAULT_TENANT_ID
+})
 /* ===== 订单入账触点已搬出到 ./booking-income.mjs(公约②,2026-08-24)=====
    终局 A 案(入账唯一路径=签署)就落在那个模块里,这里只留装配。 */
 /* 合同② 之后 recordBookingIncome 已无调用方(按钮入账退役);
@@ -14359,28 +14299,39 @@ async function route(req, res) {
     if (svTech && !db.prepare('SELECT 1 FROM technicians WHERE id = ? AND tenant_id = ?').get(svTech, currentTenantId())) {
       throw apiError(404, 'NOT_FOUND', '经手技师不存在。')
     }
-    insertStoredValueTransaction({
-      userId,
-      type: 'recharge',
-      amountCents,
-      payChannel: String(body.payChannel || 'unknown'),
-      note: String(body.note || ''),
-      createdBy: adminSession.email || adminSession.username || adminSession.role || 'owner',
-      technicianId: svTech || null
-    })
     /* S2批①(规则④ 赠送口径):充 X 赠 Y —— 赠送=营销让利,独立 bonus 行入储值负债,
-       单独列示;永不计实收(本就不进 finance)/业绩与提成(按 type='recharge' 统计,bonus 天然排除)/积分基数。 */
+       单独列示;永不计实收(本就不进 finance)/业绩与提成(按 type='recharge' 统计,bonus 天然排除)/积分基数。
+       🔴 2026-08-27 事务扫查出来的:这两行原来是**两次裸 INSERT,中间没有事务** ——
+       第二行要是挂了(触发器 ABORT、磁盘满、进程被杀),顾客钱收了、赠送没到账,
+       而且账面上看不出少了什么。按《动钱多步写律》包成一个事务:要么两行都在,要么一行都没有。 */
     const bonusCents = Math.max(0, Math.round(Number(body.bonusCents || 0)))
-    if (bonusCents > 0) {
+    const svOperator = adminSession.email || adminSession.username || adminSession.role || 'owner'
+    db.exec('BEGIN IMMEDIATE')
+    try {
       insertStoredValueTransaction({
         userId,
-        type: 'bonus',
-        amountCents: bonusCents,
-        payChannel: 'marketing',
-        note: `充值赠送(营销让利)${body.note ? ' · ' + String(body.note) : ''}`.slice(0, 200),
-        createdBy: adminSession.email || adminSession.username || adminSession.role || 'owner',
+        type: 'recharge',
+        amountCents,
+        payChannel: String(body.payChannel || 'unknown'),
+        note: String(body.note || ''),
+        createdBy: svOperator,
         technicianId: svTech || null
       })
+      if (bonusCents > 0) {
+        insertStoredValueTransaction({
+          userId,
+          type: 'bonus',
+          amountCents: bonusCents,
+          payChannel: 'marketing',
+          note: `充值赠送(营销让利)${body.note ? ' · ' + String(body.note) : ''}`.slice(0, 200),
+          createdBy: svOperator,
+          technicianId: svTech || null
+        })
+      }
+      db.exec('COMMIT')
+    } catch (error) {
+      db.exec('ROLLBACK')
+      throw error
     }
 
     return json(res, 201, { storedValue: storedValueOverview(), balanceCents: storedValueBalanceCents(userId) })
@@ -16995,10 +16946,12 @@ db.exec(`
     created_at TEXT NOT NULL
   );
   CREATE INDEX IF NOT EXISTS idx_points_user ON points_transactions(tenant_id, user_id);
-  CREATE TRIGGER IF NOT EXISTS points_ledger_no_update BEFORE UPDATE ON points_transactions
-  BEGIN SELECT RAISE(ABORT, 'points ledger is append-only'); END;
-  CREATE TRIGGER IF NOT EXISTS points_ledger_no_delete BEFORE DELETE ON points_transactions
-  BEGIN SELECT RAISE(ABORT, 'points ledger is append-only'); END;
+  /* 🔴 积分台账的禁改禁删两条**从这里删掉了**(2026-08-27 豁免族审计):
+     它们是 D72 之前的老版本 —— **一个租户豁免都没有**,连 kind='test' 的库都拦。
+     后面 installLedgerGuards() 会 DROP 再建带豁免的那一版,所以今天的最终状态是对的;
+     但建库到装法之间有一段"老版本在管事"的窗口,而且哪天装法那步挪了位,
+     悄悄接管的就是这个无豁免版本 —— 清理脚本又会被整包回滚(D72 原病复发)。
+     唯一出口:./ledger-guards.mjs 的十二条。 */
   CREATE TABLE IF NOT EXISTS points_prizes (
     id TEXT PRIMARY KEY,
     tenant_id TEXT NOT NULL DEFAULT 'lucky-luxe',
@@ -17775,17 +17728,12 @@ function migratePerfBaseToSubtotal() {
   console.log(`[migrate] 分成基数改为档位小计:${stale.length} 张单已重算,${closes} 天日结快照已刷新`)
   return { migrated: stale.length, closes }
 }
-// 已签单据永不修改:更正只能走 amendments。数据库层兜住,不靠人记纪律。
-db.exec(`
-  DROP TRIGGER IF EXISTS settlements_signed_no_update;
-  CREATE TRIGGER settlements_signed_no_update BEFORE UPDATE ON settlements
-  WHEN OLD.status = 'signed' AND NEW.status = 'signed'
-    AND (OLD.total_cents <> NEW.total_cents OR OLD.subtotal_cents <> NEW.subtotal_cents
-      OR OLD.list_total_cents <> NEW.list_total_cents OR OLD.signature_data IS NOT NEW.signature_data
-      -- 快照允许写入一次(签署那一刻),之后不可替换
-      OR (OLD.snapshot_at IS NOT NULL AND (OLD.snapshot_url IS NOT NEW.snapshot_url OR OLD.snapshot_inline IS NOT NEW.snapshot_inline)))
-  BEGIN SELECT RAISE(ABORT, 'signed settlement is immutable; use settlement_amendments'); END;
-`)
+/* 已签单据永不修改:更正只能走 amendments。数据库层兜住,不靠人记纪律。
+   🔴 2026-08-27 豁免族审计查出来的:这条触发器**同时写在两处** —— 这里一份、./ledger-guards.mjs
+   的十二条里一份。两份今天字字相同,所以谁也没发现;但改法只改一处的那天,
+   后跑的那份会静默把先跑的覆盖掉,而断言照样绿(审计里就是这么现形的:
+   把 installLedgerGuards 关掉,它居然还拦得住 —— 因为这里又建了一遍)。
+   现在删掉这一份,唯一出口回到 ledger-guards.mjs 的十二条。 */
 
 /* 🔴 会员=用户×店:唯一性带租户维度(店主 2026-08-23「跨店串号检测批」查明的根子)。
    原状:users.wechat_open_id / google_id 与 user_identities(provider, provider_user_id) 都是**全局** UNIQUE。

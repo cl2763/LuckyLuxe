@@ -22,7 +22,13 @@ export function createPerfAdjust({ db, localParts, tenantTimezone, settlementTec
     return [70, 30] // 主 70 / 副 30,店主可在设置里改
   }
 
-  /* 分成/业绩的基数 = **档位小计**(店主 2026-08-09 拍板,设计图规则③)。
+  /* 🔴 `perf_base_cents` 是**派生字段,不许直接写**(店主 2026-08-27 登记标死)。
+     它有**两个写入者**:业务写一次、开机迁移 `migratePerfBaseToSubtotal()` 按 subtotal_cents 覆盖一次。
+     谁把业务值写进去,下次重启就被静默抹掉 —— 08-27 金额更正联动业绩时差点踩进去。
+     要调业绩,走本文件的 `perfAdjustRowsOn`(读时调整行,自带自证明细)。
+     归族「一个字段只许回答一个问题」。test-ledger-guards 有一条会红的断言守这件事。
+
+     分成/业绩的基数 = **档位小计**(店主 2026-08-09 拍板,设计图规则③)。
      定金是付款时序、券是店铺让利 —— 技师做了多少活,业绩就是多少,两者都不扣。
      落库的 perf_base_cents 是权威值;没有这一列的老行回落到 subtotal_cents(同一口径)。 */
       function settlementPerfBaseCents(row) {

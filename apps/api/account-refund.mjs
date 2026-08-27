@@ -159,11 +159,21 @@ export function createAccountRefund({ db, apiError, iso, randomId, currentTenant
     const why = String(reason || '').trim()
     if (!why) throw apiError(400, 'REASON_REQUIRED', '退卡原因必填。')
     const amount = assertAmount(amountCents, '次卡退款金额')
-    db.prepare('UPDATE member_timecards SET refunded_times = COALESCE(refunded_times, 0) + ? WHERE id = ? AND tenant_id = ?')
-      .run(n, cardId, tenantId)
-    db.prepare(`INSERT INTO timecard_refunds (id, tenant_id, card_id, user_id, times, amount_cents, pay_channel, reason, created_by, created_at)
-      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`)
-      .run(randomId('tcr'), tenantId, cardId, facts.userId, n, amount, String(payChannel || 'cash'), why.slice(0, 200), operator || 'owner', now())
+    /* 🔴 2026-08-27 事务扫查出来的:扣次数与写退款记录原来是**两步裸写,中间没有事务**。
+       坏的方向特别难看:次数先扣掉了、退款记录没写进去 —— 顾客的次数没了,
+       系统里却查不到"退给过她钱",事后谁也说不清。按《动钱多步写律》包进一个事务。 */
+    db.exec('BEGIN IMMEDIATE')
+    try {
+      db.prepare('UPDATE member_timecards SET refunded_times = COALESCE(refunded_times, 0) + ? WHERE id = ? AND tenant_id = ?')
+        .run(n, cardId, tenantId)
+      db.prepare(`INSERT INTO timecard_refunds (id, tenant_id, card_id, user_id, times, amount_cents, pay_channel, reason, created_by, created_at)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`)
+        .run(randomId('tcr'), tenantId, cardId, facts.userId, n, amount, String(payChannel || 'cash'), why.slice(0, 200), operator || 'owner', now())
+      db.exec('COMMIT')
+    } catch (error) {
+      db.exec('ROLLBACK')
+      throw error
+    }
     const after = timecardRefundFacts(cardId, tenantId)
     return {
       cardId, userId: facts.userId, refundedTimes: n, refundedCents: amount,
