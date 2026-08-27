@@ -145,13 +145,22 @@ async function main() {
   if (dbPath) {
     const { DatabaseSync } = await import('node:sqlite')
     const db = new DatabaseSync(dbPath)
-    const TABLES = ['payments', 'technician_schedules', 'business_hours', 'store_special_dates', 'booking_slots', 'booking_status_history', 'booking_drafts']
-    const nulls = TABLES.map((t) => ({ t, n: db.prepare(`SELECT COUNT(*) AS c FROM "${t}" WHERE tenant_id IS NULL`).get().c }))
-    check('七张子表零 NULL tenant_id', nulls.every((row) => row.n === 0), JSON.stringify(nulls))
+    /* 🔴 白名单判据(店主 08-27 立):原来这里数的是**手写的七张表** ——
+       新加一张带 tenant_id 的表,它一辈子不会被验到,而断言永远是绿的。
+       改成**反过来数**:全库凡是有 tenant_id 列的表,一张都不许有 NULL。
+       手写清单降级成"这七张必须在场"的反向守(防止扫描本身扫了个空)。 */
+    const MUST_COVER = ['payments', 'technician_schedules', 'business_hours', 'store_special_dates', 'booking_slots', 'booking_status_history', 'booking_drafts']
+    const allTables = db.prepare("SELECT name FROM sqlite_master WHERE type = 'table' AND name NOT LIKE 'sqlite_%'").all().map((r) => r.name)
+    const TABLES = allTables.filter((t) => db.prepare(`PRAGMA table_info("${t}")`).all().some((c) => c.name === 'tenant_id'))
+    check(`白名单判据:全库 ${TABLES.length} 张带 tenant_id 的表都在扫描面里(手写的七张只是反向守)`,
+      TABLES.length >= MUST_COVER.length && MUST_COVER.every((t) => TABLES.includes(t)),
+      JSON.stringify({ scanned: TABLES.length, missing: MUST_COVER.filter((t) => !TABLES.includes(t)) }))
+    const nulls = TABLES.map((t) => ({ t, n: db.prepare(`SELECT COUNT(*) AS c FROM "${t}" WHERE tenant_id IS NULL`).get().c })).filter((r) => r.n > 0)
+    check(`全库带 tenant_id 的表零 NULL(${TABLES.length} 张)`, nulls.length === 0, JSON.stringify(nulls))
     const bh = db.prepare("SELECT tenant_id, COUNT(*) AS c FROM business_hours WHERE store_id = ? GROUP BY tenant_id").all(`store-${shopA.tenantId}`)
     check('新写入的营业时间行带正确租户', bh.length === 1 && bh[0].tenant_id === shopA.tenantId && bh[0].c === 7, JSON.stringify(bh))
-    const cols = TABLES.map((t) => ({ t, has: db.prepare(`PRAGMA table_info("${t}")`).all().some((c) => c.name === 'tenant_id') }))
-    check('七张子表都已有 tenant_id 列', cols.every((row) => row.has), JSON.stringify(cols))
+    check('七张子表都已有 tenant_id 列(它们必须在上面那张全库清单里)',
+      MUST_COVER.every((t) => TABLES.includes(t)), JSON.stringify(MUST_COVER.filter((t) => !TABLES.includes(t))))
     db.close()
   } else {
     console.log('skip - 未设置 TEST_DB_PATH,跳过七表 tenant_id 的直连断言(run-all-tests.sh 里会设)')

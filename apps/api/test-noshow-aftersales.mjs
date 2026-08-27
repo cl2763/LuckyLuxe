@@ -1075,13 +1075,22 @@ const main = async () => {
             check('㊾ 日结显式行:售后扣回(负数+关联单号)在场', (view.afterSalesDeductions || []).some((d) => d.code === shA.code && d.deductCents === 18000), JSON.stringify(view.afterSalesDeductions))
             const vt = view.technicians.find((t) => t.technicianId === shop.tech1)
             check('㊾ 日结净额:tech1 releaseDeductCents=18000(净额已减)', vt && vt.releaseDeductCents === 18000, JSON.stringify(vt))
-            // 反例:普通金额更正(shD −1 元)不产生扣回、不动净额(范围钉死)
+            /* 🔴 口径变更(店主 2026-08-27 拍板):这条原来断言「普通更正不动业绩」——
+               那是旧口径。她的原话是「要改。单据改了,账和业绩就得跟」。
+               所以判据**反过来重锚**:普通更正 −1 元 → 业绩正好减 100 分、多出一条「更正扣回」行,
+               而售后那条(shA)一分不受影响(范围仍然钉死,只是钉的是新口径)。
+               新口径的完整覆盖在 test-amend-linkage.mjs。 */
             const beforePerf = vt.perfCents
             const amdD = await request(`/admin/settlements/${shD.id}/amend`, { method: 'POST', body: JSON.stringify({ totalCents: shD.totalCents - 100, reason: '普通更正反例' }) }, shop.token)
             check('㊾ 反例前提:普通更正成功', amdD.status === 200, JSON.stringify(amdD.data).slice(0, 80))
             view = (await request(`/admin/daily-close?date=${today}`, {}, shop.token)).data.dailyClose
             const vt2 = view.technicians.find((t) => t.technicianId === shop.tech1)
-            check('㊾ 反例:普通更正后业绩净额分毫不动+扣回行不增', vt2.perfCents === beforePerf && (view.afterSalesDeductions || []).length === (view.afterSalesDeductions || []).filter((d) => d.code === shA.code).length, JSON.stringify({ before: beforePerf, after: vt2.perfCents }))
+            check('㊾ 新口径:普通更正 −1 元 → 业绩正好减 100 分(单据改了业绩就跟)',
+              vt2.perfCents === beforePerf - 100, JSON.stringify({ before: beforePerf, after: vt2.perfCents }))
+            check('㊾ 新口径:多出来的是一条「更正扣回」行,售后那条(shA)一分不受影响',
+              (view.afterSalesDeductions || []).some((d) => d.code === shD.code && d.label.includes('更正扣回'))
+              && (view.afterSalesDeductions || []).some((d) => d.code === shA.code && d.deductCents === 18000),
+              JSON.stringify((view.afterSalesDeductions || []).map((d) => d.label)))
             // 撤清今天的待签单(别处夹具残留)→ 确认日结 → 快照线继承
             for (const u of view.unsignedList || []) {   // D58:未签单从 blocker 移到 unsignedList,清场循环同步换源
               await request(`/admin/settlements/${u.settlementId}/void`, { method: 'POST', body: JSON.stringify({ reason: '㊾ 清场:确认日结前撤清待签夹具' }) }, shop.token)
@@ -2858,9 +2867,15 @@ const main = async () => {
       const miniDCW = readFileSync(join(ROOT42, 'miniprogram/pages/merchant/daily-close/index.wxml'), 'utf8')
       const miniMPJ = readFileSync(join(ROOT42, 'miniprogram/pages/merchant/my-performance/index.js'), 'utf8')
       const miniMPW = readFileSync(join(ROOT42, 'miniprogram/pages/merchant/my-performance/index.wxml'), 'utf8')
-      check('㊾ 网页日结显式行渲染在场(dc-deduct-list+含售后扣回标)', adminJs.includes('dc-deduct-list') && adminJs.includes('含售后扣回'))
-      check('㊾ 小程序日结显式行渲染在场(deducts 映射+售后扣回卡)', miniDC.includes('afterSalesDeductions') && miniDCW.includes('售后扣回(业绩)'))
-      check('㊾ 小程序我的业绩显式行渲染在场(deductions 映射+扣回行)', miniMPJ.includes('deductions') && miniMPW.includes('售后扣回 · '))
+      /* 🔴 08-27:这一族的**句子搬到后端**了(金额更正的扣回/补记也走同一族,前端判不了正负与措辞)。
+         判据跟着搬:两端都必须**渲染后端给的串**,而不是自己硬编码「售后扣回」四个字 ——
+         谁再把句子写回前端,这三条立刻红。 */
+      check('㊾ 网页日结显式行渲染在场(dc-deduct-list + 标题/含XX句都读后端)',
+        adminJs.includes('dc-deduct-list') && adminJs.includes('deductListTitle') && adminJs.includes('deductNoteText'))
+      check('㊾ 小程序日结显式行渲染在场(deducts 映射 + 标题读后端 deductTitle)',
+        miniDC.includes('afterSalesDeductions') && miniDC.includes('deductListTitle') && miniDCW.includes('{{v.deductTitle}}'))
+      check('㊾ 小程序我的业绩显式行渲染在场(deductions 映射 + 行文案读后端 label)',
+        miniMPJ.includes('deductions') && miniMPJ.includes('d.label') && miniMPW.includes('{{dd.label}}'))
       /* D70:发起售后改走 action 口(不再是 status==='AFTER_SALES' 分支),留痕链本身不变 —— 判据跟着改写法 */
       check('㊹ 发起售后仍落 status_history(发起原因唯一持有链;改走 action 口后依旧)',
         /actionKey === 'openAfterSales'[\s\S]{0,600}booking_status_history[\s\S]{0,200}'AFTER_SALES'/.test(srv)

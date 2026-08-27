@@ -58,7 +58,8 @@ Page({
             perf: x.pending ? '—' : m(x.perfCents),
             card: x.cardUsedCents !== undefined ? m(x.cardUsedCents) : '',
             // 售后业绩扣回显式行(裁③:负数+关联单号;perf 已是净额,这行只自证减在哪)
-            deductions: (x.deductions || []).map((d) => ({ code: d.code, amt: `−${m(Math.abs(d.amountCents))}` }))
+            // 句子后端唯一出口:「售后扣回 · 单号」/「更正扣回 · 单号」/「更正补记 · 单号」都由后端给
+            deductions: (x.deductions || []).map((d) => ({ code: d.code, label: d.label || '', amt: `${d.amountCents > 0 ? '+' : '−'}${m(Math.abs(d.amountCents))}` }))
           })),
           monthly: (p.monthly || []).map((x) => ({ key: x.month, orders: `${x.orderCount} 单`, perf: m(x.perfCents) })),
           yearly: (p.yearly || []).map((x) => ({ key: `${x.year} 年`, orders: `${x.orderCount} 单`, perf: m(x.perfCents) })),

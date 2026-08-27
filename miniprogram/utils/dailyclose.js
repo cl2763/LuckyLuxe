@@ -104,9 +104,11 @@ const dailyCloseMixin = {
           })),
           tierChanges: (dc.anomalies?.tierChanges || []).map((a) => `${a.code} ${a.from}→${a.to}`),
           freeRemoval: (dc.anomalies?.freeRemoval || {}).count || 0,
-          // 售后业绩扣回显式行(裁③:负数+关联单号,与网页日结同源同句)
+          /* 业绩调整显式行(裁③:负数+关联单号,与网页日结同源同句)。
+             08-27 起这一族还包含**金额更正**的扣回/补记 —— 标题与正负号都后端给,这里零判断。 */
+          deductTitle: dc.deductListTitle || '',
           deducts: (dc.afterSalesDeductions || []).map((d) => ({
-            time: d.timeText || '', tech: d.technicianName, label: d.label, amt: `−${m(d.deductCents)}`
+            time: d.timeText || '', tech: d.technicianName, label: d.label, amt: d.amountText || `−${m(d.deductCents)}`
           })),
           /* 🔴 N-5(店主 08-25 复核):退卡不进损益,但**现金必须扣** ——
              不扣的话「今天收现 2000、退顾客 400 → 抽屉实际 1600、日结报 2000」,
@@ -117,7 +119,8 @@ const dailyCloseMixin = {
             should: dc.cashDrawer.shouldHaveText,
             totalLabel: dc.cashDrawer.totalLabel || '',
             rows: (dc.cashDrawer.rows || []).map((r) => ({ label: r.label, amt: `${r.sign} ${r.amountText}`, neg: Boolean(r.negative) })),
-            footnote: dc.cashDrawer.footnote || ''
+            footnote: dc.cashDrawer.footnote || '',
+            amendNote: dc.cashDrawer.amendNote || ''   // 更正后「营业额 ≠ 抽屉数」的那句解释(后端出句,双端同句)
           } : null,
           headline: (dc.headline || []).map((h) => ({ label: h.label, value: h.value })),
           refundLine: (dc.refunds && dc.refunds.totalCents)

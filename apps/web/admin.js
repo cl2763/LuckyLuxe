@@ -2294,7 +2294,7 @@ function renderDailyClose() {
         <div class="dc-alloc collapsed">
           <div class="head">
             <span><b class="dc-tm">${escapeHtml(a.timeText || '')}</b>${escapeHtml(a.servedPersonName || a.customerName || '')} · ${a.technicians.map((t) => escapeHtml(t.name) + (t.sharePct === null || t.sharePct === undefined ? '' : ` ${t.sharePct}%`)).join(' / ')}${a.crossDayNote ? `<em class="dc-xday">${escapeHtml(a.crossDayNote)}</em>` : ''}</span>
-            <span>${money(a.perfBaseCents, 2)} <span class="arr">${escapeHtml(a.reason)}</span></span>
+            <span>${escapeHtml(a.perfRowText || money(a.perfBaseCents, 2))}${a.amendBadgeText ? ` <em class="dc-deduct">${escapeHtml(a.amendBadgeText)}</em>` : ''} <span class="arr">${escapeHtml(a.reason)}</span></span>
           </div>
           <!-- D6(店主 2026-08-10 开检):这一组「无需分配 · 待确认」的行,以前只有「查看签署单」,
                而上面「待分配」那组是有「金额有误?发起更正」的 —— 同一件事两端/两处不一致(闭环③违例)。
@@ -2314,7 +2314,7 @@ function renderDailyClose() {
       <tr>
         <td class="nm">${escapeHtml(t.name)}</td>
         <td>${t.orderCount}</td>
-        <td>${t.pendingCount ? `<span class="dc-badge mut">${zh ? '待分配' : 'pending'}</span>` : money(t.perfCents, 2)}${t.releaseDeductCents ? `<em class="dc-deduct">${zh ? '含售后扣回' : 'incl. deduct'} −${money(t.releaseDeductCents, 2)}</em>` : ''}</td>
+        <td>${t.pendingCount ? `<span class="dc-badge mut">${zh ? '待分配' : 'pending'}</span>` : money(t.perfCents, 2)}${t.deductNoteText ? `<em class="dc-deduct">${escapeHtml(t.deductNoteText)}</em>` : ''}</td>
         <td>${money(t.cardUsedCents, 2)}</td>
         <td>${t.rechargeTotalCents ? money(t.rechargeTotalCents, 2) : '—'}</td>
         <td>${targetCellText(t, zh)}</td>
@@ -2323,9 +2323,9 @@ function renderDailyClose() {
 
     ${(v.afterSalesDeductions || []).length ? `
     <div class="dc-deduct-list">
-      <strong>${zh ? '售后扣回(业绩,裁③显式行)' : 'After-sales deductions'}</strong>
+      <strong>${zh ? escapeHtml(v.deductListTitle || '') : 'Performance adjustments'}</strong>
       ${v.afterSalesDeductions.map((d) => `
-      <div class="dc-deduct-row"><span><b class="dc-tm">${escapeHtml(d.timeText || '')}</b>${escapeHtml(d.technicianName)} · ${escapeHtml(d.label)}</span><b class="neg">−${money(d.deductCents, 2)}</b></div>`).join('')}
+      <div class="dc-deduct-row"><span><b class="dc-tm">${escapeHtml(d.timeText || '')}</b>${escapeHtml(d.technicianName)} · ${escapeHtml(d.label)}</span><b class="neg">${escapeHtml(d.amountText || '')}</b></div>`).join('')}
     </div>` : ''}
 
     <div class="dc-anom">

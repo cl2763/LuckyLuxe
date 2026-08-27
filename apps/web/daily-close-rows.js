@@ -32,6 +32,7 @@ window.DailyCloseRows = (function () {
           <div class="dc-due-row tot"><span>${escapeHtml(d.totalLabel || '')}</span><span>${escapeHtml(d.shouldHaveText)}</span></div>
         </div>
         ${d.footnote ? `<div class="dc-due-aside">${escapeHtml(d.footnote)}</div>` : ''}
+        ${d.amendNote ? `<div class="dc-due-aside">${escapeHtml(d.amendNote)}</div>` : ''}
       </div>
       ${stats ? `<div class="dc-stats">${stats}</div>` : ''}
       <div class="dc-due-note">${escapeHtml(zh ? '退卡 = 负债减少,不进收入 —— 所以它单独摆一格,不混进营业额。' : 'Refunds reduce liability, not income.')}</div>

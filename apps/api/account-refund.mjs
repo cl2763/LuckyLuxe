@@ -213,6 +213,10 @@ export function createAccountRefund({ db, apiError, iso, randomId, currentTenant
      得先给线下腿记渠道 —— 那是另一件事,没在这批里做。
      退款这一侧是分渠道的:现金/到店退才从这个数里扣,转账与原路退回单列(它们走银行,不出抽屉)。 */
   function cashDrawerOf(date, tenantId, { settlementIds = [] } = {}) {
+    /* 🔴 08-27 实拍抓到的同屏矛盾:金额更正之后「营业额 CAD $150」而「抽屉里应该有 CAD $198」。
+       两个数其实都对 —— 顾客当时**真的付了 198 现金**,差额退没退是门店当场的动作,系统不知道。
+       但屏幕不解释就等于自相矛盾(闭环纪律:不许出现找不到上下文的界面状态)。
+       所以**算式不动**(不许替她假设钱退了),底下加一句把两个数连起来。 */
     // 到店支付(线下腿 Σ):在这儿算,免得日结那边再拼一段 SQL
     const storefrontCents = settlementIds.length
       ? db.prepare(`SELECT COALESCE(SUM(amount_cents),0) n FROM settlement_payments
@@ -255,6 +259,18 @@ export function createAccountRefund({ db, apiError, iso, randomId, currentTenant
       label: '到店收的钱 · 应有数',
       // 脚注:那部分钱没经过抽屉,所以**不进算式**,只在底下说一句
       footnote: outOther ? `另有 ${money(outOther)} 退款走转账 / 原路退回 —— 没经过抽屉,不在这个数里` : '',
+      // 更正差额:算式不动,只说清"这个数为什么和营业额不一样"
+      amendNote: (() => {
+        const rows = db.prepare(`SELECT a.amount_delta_cents d FROM settlement_amendments a
+          JOIN settlements s ON s.id = a.settlement_id
+          WHERE a.tenant_id = ? AND a.amount_delta_cents <> 0 AND s.id IN (${settlementIds.length ? settlementIds.map(() => '?').join(',') : "''"})`)
+          .all(tenantId, ...settlementIds)
+        const sum = rows.reduce((n, r) => n + r.d, 0)
+        if (!sum) return ''
+        return sum < 0
+          ? `今天有金额更正 −${money(Math.abs(sum))}:抽屉这个数按**顾客当时实付**算;差额若已当场退给顾客,实际应是 ${money(should + sum)}。`
+          : `今天有金额更正 +${money(sum)}:抽屉这个数按**顾客当时实付**算;补收的差额若已当场收到,实际应是 ${money(should + sum)}。`
+      })(),
       /* 措辞不许说过头(店主 08-25 更正):能保证的是「到店收的钱·应有数」对得上;
          要精确到抽屉里的纸币,得先给线下腿记渠道 —— 那是后续项,不在这批。 */
       hint: '到店支付 + 现金充值 − 现金退卡,退卡已经扣掉了。对账按这个数。',

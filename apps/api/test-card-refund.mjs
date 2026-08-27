@@ -672,6 +672,44 @@ check('⑩-2 🔴 行为必须不同:keep=仍是会员 / drop=余额归零即失
   }
 }
 
+/* 🔴 店主 08-27 指出:走查里看到的那次黄条是**退化用例** —— 那个号当时实付可退已经是 0、
+   余额全是赠送,黄条上的数恰好等于退款额,**它算得对不对根本没被验到**。
+   这里补一刀**切两边**的:实付可退 850 + 赠送 100,一次退 950。
+   正确答案:paid_part 850 / bonus_part 100 / 黄条数 100(不是 950,也不是 0)。 */
+{
+  // 撞档就换时段(别的夹具占了);这不是被测行为,别让它把断言弄红
+  let mixBk = { status: 0, data: {} }
+  for (const hh of ['19', '07', '22', '23', '12']) {
+    mixBk = await request('/admin/bookings/direct', { method: 'POST', body: JSON.stringify({ newCustomerName: `混合拆客${RUN}`, serviceId, technicianId, date: today, time: `${hh}:00` }) }, TOKEN, H)
+    if (mixBk.data?.booking?.user?.id) break
+  }
+  const mixUser = mixBk.data?.booking?.user?.id
+  if (mixUser) {
+    db.prepare('UPDATE users SET wechat_open_id = ? WHERE id = ?').run(`n5-mix-${RUN}`, mixUser)
+    await request('/admin/stored-value/recharge', { method: 'POST', body: JSON.stringify({ userId: mixUser, amountCents: 85000, bonusCents: 10000, payChannel: 'cash', note: '混合拆夹具' }) }, TOKEN, H)
+    const mf = (await request(`/admin/account-adjust/facts?userId=${mixUser}`, {}, TOKEN, H)).data.facts
+    check('混合拆-0 前置:实付可退 850 · 赠送 100 · 余额 950(两边都不为 0 才切得出刀口)',
+      mf.paidRefundableCents === 85000 && mf.bonusRemainingCents === 10000 && mf.balanceCents === 95000,
+      JSON.stringify({ p: mf.paidRefundableCents, b: mf.bonusRemainingCents, bal: mf.balanceCents }))
+    const warn = (await request(`/admin/account-adjust/facts?userId=${mixUser}&amountCents=95000`, {}, TOKEN, H)).data.bonusWarning
+    check('混合拆-1 🔴 黄条上的数 = 100(越过实付可退的那一截),不是 950 也不是 0',
+      /100/.test(String(warn)) && !/950/.test(String(warn)) && String(warn).includes('赠送'), String(warn))
+    const mixR = await request('/admin/stored-value/refund', { method: 'POST', body: JSON.stringify({ userId: mixUser, amountCents: 95000, payChannel: 'cash', reason: '混合拆:一次退干净' }) }, TOKEN, H)
+    const mixRow = db.prepare("SELECT paid_part_cents p, bonus_part_cents b, amount_cents a FROM stored_value_transactions WHERE tenant_id = ? AND user_id = ? AND type = 'refund' ORDER BY created_at DESC LIMIT 1").get(tid, mixUser)
+    check('混合拆-2 🔴 拆账切两边:paid_part 850 / bonus_part 100(先冲实付、后冲赠送)',
+      mixR.status === 201 && mixRow && mixRow.p === 85000 && mixRow.b === 10000,
+      JSON.stringify({ status: mixR.status, row: mixRow }))
+    check('混合拆-3 恒等式在这一刀上照样成立:paid + bonus ≡ 退款额',
+      mixRow && mixRow.p + mixRow.b === Math.abs(mixRow.a), JSON.stringify(mixRow))
+    /* 反向守:只退 500(没越过实付可退)时**不许出黄条** ——
+       否则"总是出黄条"也能让上面那条绿。 */
+    const noWarn = (await request(`/admin/account-adjust/facts?userId=${userId}&amountCents=100`, {}, TOKEN, H)).data.bonusWarning
+    check('混合拆-4 🔴 反向守:没越过实付可退时不出黄条(不是"总是出")', !noWarn, String(noWarn))
+  } else {
+    check('混合拆 前置:排单失败', false, JSON.stringify(mixBk.data).slice(0, 140))
+  }
+}
+
 /* 🔴 恒等式要**扫全表**,不能只验刚写的那一行(店主 08-26 第 10 步点的正是这个:
    "绿的才是问题 —— 说明只扫新行")。范围=本套件建的两家店的**所有** refund 行:
    它们全是当前代码写的,所以每一行都必须带分量且恒等;缺一行就说明有别的写路绕过了拆账。 */

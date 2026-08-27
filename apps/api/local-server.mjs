@@ -24,6 +24,8 @@ import { ensureRefundSchema } from './account-refund-schema.mjs'      // N-5 建
 import { zhErrorText } from './error-text.mjs'                        // 报错话中文出口(一处翻译,不逐句改 262 处)
 import { createStaffScope } from './staff-scope.mjs'                  // 员工只读范围(我的客人)
 import { createRefundRoutes } from './refund-routes.mjs'              // 退卡/账户调整/我的客人 的路由层
+import { createPerfAdjust } from './perf-adjust.mjs'                  // 业绩基数/分成/业绩调整行(唯一实现)
+import { createDailyCloseScope } from './daily-close-scope.mjs'       // 日结归属(服务发生日)
 import { createAssetFingerprint } from './asset-fingerprint.mjs'      // 前端资源内容指纹(缓存失效)
 import { createStoredValue } from './stored-value.mjs'                // 储值域(写流水/算余额/分桶/类型文案)
 import { createMembershipConfig } from './membership-config.mjs'      // 会员制度域(资格判定 + 退卡后是否保留会员)
@@ -6940,7 +6942,7 @@ function verifyFinanceLedger(tenantId = DEFAULT_TENANT_ID) {
   return { valid: true, count: rows.length, firstBrokenId: null }
 }
 
-function insertFinanceTransaction({ type, source = 'manual', category, tags = '', amountCents, payChannel = 'unknown', occurredOn, note = '', bookingId = null, recurringRuleId = null, reversalOf = null, createdBy = 'system', storeId = null, tenantId: tenantIdOverride = '' }) {
+function insertFinanceTransaction({ type, source = 'manual', category, tags = '', amountCents, payChannel = 'unknown', occurredOn, note = '', bookingId = null, recurringRuleId = null, reversalOf = null, keepSign = false, createdBy = 'system', storeId = null, tenantId: tenantIdOverride = '' }) {
   const id = randomId('fin')
   const signed = type === 'expense' ? -Math.abs(amountCents) : Math.abs(amountCents)
   /* 顾客签署页是**公开路由**,没进租户闸门,currentTenantId() 会回落到旗舰店。
@@ -6953,7 +6955,10 @@ function insertFinanceTransaction({ type, source = 'manual', category, tags = ''
     type,
     source,
     category,
-    amount_cents: reversalOf ? amountCents : signed,
+    /* keepSign = 金额更正的差额行(店主 08-27 拍板):它是**部分**红字,不是整行冲销 ——
+       所以不许挂 reversal_of(那个字段的语义是"这一行作废了",签署入账的防重与手工冲销都读它),
+       但金额必须保号(收入 −48 才能让净额跟着单据走)。 */
+    amount_cents: (reversalOf || keepSign) ? amountCents : signed,
     pay_channel: payChannel,
     occurred_on: occurredOn || localParts(new Date()).date,
     booking_id: bookingId,
@@ -9143,9 +9148,21 @@ function amendSettlement(settlementId, body = {}, adminSession = {}) {
   const row = db.prepare('SELECT * FROM settlements WHERE id = ? AND tenant_id = ?').get(settlementId, tenantId)
   if (!row) throw apiError(404, 'NOT_FOUND', 'Settlement not found.')
   if (row.status !== 'signed') throw apiError(400, 'BAD_REQUEST', '未签署的单直接改就行,不需要走更正。')
+  /* 原因必填(08-27 起硬拦在后端):更正从今天开始会**动账本与业绩** ——
+     没原因就等于改了钱却没留痕。原来只有网页前端拦,小程序/接口直调一律放行。 */
+  if (!String(body.reason || '').trim()) throw apiError(400, 'REASON_REQUIRED', '更正必须写原因(会进账本备注,以后查得到)。')
   const before = serializeSettlement(row)
-  const newTotal = Math.max(0, Math.round(Number(body.totalCents ?? row.total_cents)))
-  const delta = newTotal - row.total_cents
+  /* 🔴 差额要对**上一次更正后**的金额算,不是永远对原单算(08-27 施工时被账本咬出来的老 bug):
+     198 → 150 → 120,原来两条 delta 记成 −48 与 −78,累加 −126 ⇒ 「实付」被算成 72。
+     amendmentShape 的 actualDueCents = 原额 + Σdelta 也一直吃这个错 —— 只是以前没人拿它对账,
+     现在 delta 直接进账本,一算就现形。改成对上一次的金额算:Σdelta ≡ 新额 − 原额,两处同时归位。 */
+  const prevAmd = db.prepare('SELECT after_json FROM settlement_amendments WHERE settlement_id = ? ORDER BY created_at DESC, rowid DESC LIMIT 1').get(row.id)
+  let prevTotal = row.total_cents
+  if (prevAmd) {
+    try { const m = JSON.parse(prevAmd.after_json || '{}'); if (Number.isFinite(m.totalCents)) prevTotal = m.totalCents } catch { /* 老行没记金额就退回原额 */ }
+  }
+  const newTotal = Math.max(0, Math.round(Number(body.totalCents ?? prevTotal)))
+  const delta = newTotal - prevTotal
   const now = iso(new Date())
   const storedPaid = db.prepare("SELECT COALESCE(SUM(amount_cents),0) AS n FROM settlement_payments WHERE settlement_id = ? AND leg IN ('stored_value','migrate_stored') AND status = 'paid'").get(row.id).n
   // 少收了要退回卡里,多收了从卡里补扣;只在这张单确实用卡付过的时候才动余额
@@ -9174,12 +9191,39 @@ function amendSettlement(settlementId, body = {}, adminSession = {}) {
     const unitCents = tcItem ? tcItem.amount_cents : 0
     tcRelease = { cardId: card.id, cardName: card.name, unitCents, pointsBack: Math.floor(unitCents / 100) }
   }
+  /* 🔴 店主 08-27 拍板:**单据改了,账和业绩就得跟。**
+     原来普通金额更正只留痕 —— 账本仍记 198、业绩仍算 198,而单据说 150,同一件事两个数。
+     三者分工从此写死:**更正改单据 · 冲销改账本 · 退卡改负债+现金**;更正**联动**后两者:
+       ①账本:同一笔操作里追一条差额行(198→150 = 收入 −48),只追加、原行不动;
+       ②业绩:日结**未确认**→调整落在这张单的**服务日**(店主确认时看到的就是改过的数);
+              日结**已确认**→不回溯定格数,调整落在**更正当天**(当期冲减)。
+     业绩这一刀走**读时单源** perfAdjustRowsOn,不改 settlements.perf_base_cents ——
+     那一列有开机迁移(migratePerfBaseToSubtotal)会把它按 subtotal 改回去,写进去等于下次重启被悄悄抹掉。
+     净额两种做法完全相等,而显式行还能自证「这笔减在哪」。 */
+  const serviceDay = settlementServiceDate(row, tenantId)
+  const closeOfDay = db.prepare('SELECT status FROM daily_closes WHERE tenant_id = ? AND date = ?').get(tenantId, serviceDay)
+  const perfMode = closeOfDay && closeOfDay.status === 'confirmed' ? 'deduct' : 'base'
   db.exec('BEGIN IMMEDIATE')
   try {
     db.prepare(`INSERT INTO settlement_amendments (id, tenant_id, settlement_id, before_json, after_json, reason, amount_delta_cents, auto_balance_adjust_cents, amended_by, amended_at, created_at)
       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`)
-      .run(randomId('samd'), tenantId, row.id, JSON.stringify(before), JSON.stringify({ totalCents: newTotal, reason: body.reason || '', couponReleased: releaseCoupon, timecardReleased: releaseTimecard }),
+      .run(randomId('samd'), tenantId, row.id, JSON.stringify(before), JSON.stringify({ totalCents: newTotal, reason: body.reason || '', couponReleased: releaseCoupon, timecardReleased: releaseTimecard, perfMode, serviceDay }),
         String(body.reason || '').slice(0, 300), delta, autoAdjust, adminSession.email || 'owner', now, now)
+    /* 账本差额行:落在**更正当天**(账本只追加、不回溯);类目与渠道跟这张单最大的那条收入腿走,
+       找不到腿(理论上不该有)就单列「服务收入-更正」,**钱绝不能凭空消失在中间**。 */
+    if (delta !== 0) {
+      const leg = db.prepare(`SELECT id, category, pay_channel FROM finance_transactions
+        WHERE tenant_id = ? AND tags = ? AND type = 'income' AND source = 'settlement' AND amount_cents > 0
+        ORDER BY amount_cents DESC LIMIT 1`).get(tenantId, row.code)
+      insertFinanceTransaction({
+        tenantId, type: 'income', source: 'amendment', keepSign: true,
+        category: leg ? leg.category : '服务收入-更正', tags: row.code,
+        amountCents: delta, payChannel: leg ? leg.pay_channel : (storedPaid > 0 ? 'stored_value' : 'offline'),
+        occurredOn: todayOf(tenantId), bookingId: row.booking_id || null,
+        note: `金额更正 · 服务单 ${row.code} · ${formatMoneyCents(prevTotal, tenantId, 'auto')}→${formatMoneyCents(newTotal, tenantId, 'auto')} · ${String(body.reason || '').slice(0, 60)}`,
+        createdBy: adminSession.email || 'owner'
+      })
+    }
     if (tcRelease) {
       const back = db.prepare('UPDATE member_timecards SET used_times = used_times - 1 WHERE id = ? AND used_times > 0').run(tcRelease.cardId)
       if (!back.changes) throw apiError(409, 'TIMECARD_RELEASE_RACE', '次卡次数返还失败(已被并发改动),请重试。')
@@ -9499,25 +9543,8 @@ function scheduleConflicts(technicianId, date, resolved, tenantId = currentTenan
    「确认日结」是那一天的定格开关:确认前员工端看不到、月度工资试算也不计。
    金额同样全在后端算 —— 前端只显示。 */
 
-// 当天签署的服务单(按门店时区判定「当天」,不用裸 UTC 日期)
-/* 🔴 日结归属 = **服务发生日**(店主 2026-08-10 拍板 ②,《财务记账总逻辑》v1.5 §六,
-   取代此前的"按签字日归集")。某天的日结区只留痕**服务发生在那一天**的单 ——
-   当晚签、次晨签、数日后补签,一律记回服务那一天,不许把晚签的单堆到签字那天
-   (否则日积月累越滚越多,店主看到的"今天"永远混着前几天的尾巴)。
-   **两条轴分开**:收入流水仍按签字时刻(§三 不变),日结/业绩/工资按服务日。
-   服务发生日:挂了预约的取预约开始时间;即时单(没挂预约)取开单时间 —— 开单当天就是服务当天。 */
-function settlementServiceDate(row, tenantId) {
-  const tz = tenantTimezone(tenantId)
-  const bk = row.booking_id ? db.prepare('SELECT appointment_start FROM bookings WHERE id = ?').get(row.booking_id) : null
-  const at = (bk && bk.appointment_start) || row.created_at
-  return at ? localParts(new Date(at), tz).date : ''
-}
-
-function signedSettlementsOn(date, tenantId) {
-  return db.prepare("SELECT * FROM settlements WHERE tenant_id = ? AND status = 'signed' AND signed_at IS NOT NULL ORDER BY signed_at ASC")
-    .all(tenantId)
-    .filter((row) => settlementServiceDate(row, tenantId) === date)
-}
+/* 日结归属(服务发生日)四件套搬去 ./daily-close-scope.mjs(公约①②,2026-08-27);这里只留装配。 */
+const { settlementServiceDate, signedSettlementsOn, settlementRowTime, settlementCrossDayNote } = createDailyCloseScope({ db, localParts, tenantTimezone })
 
 // 一张单的卡耗:储值腿 + 迁移腿(迁移腿不进本店收入,但确实是卡在耗)
 function settlementCardUsedCents(settlementId, tenantId) {
@@ -9530,83 +9557,12 @@ function settlementTechRows(settlementId, tenantId) {
     .all(tenantId, settlementId)
 }
 
-/* 单技师单不需要分配:整单业绩就是他的,进 daily-close 时直接算,不占「待分配」。
-   双技师单必须店长逐单分成 —— 系统不猜,预填只是预填。 */
-function needsAllocation(row, tenantId) {
-  const techs = settlementTechRows(row.id, tenantId)
-  return techs.length > 1 && row.perf_alloc_status !== 'allocated'
-}
+/* 业绩基数 / 分成 / 业绩调整行(售后扣回 + 金额更正)整族搬去 ./perf-adjust.mjs(公约①②,2026-08-27)。
+   这里只留装配 —— 业绩的唯一实现在那个模块里,日结、排行、工资、我的业绩都读它。 */
+const { settlementPerfBaseCents, settlementPerfShares, perfAdjustRowsOn, needsAllocation, perfSplitDefault } = createPerfAdjust({
+  db, localParts, tenantTimezone, settlementTechRows: (sid, tid) => settlementTechRows(sid, tid)
+})
 
-/* 分成/业绩的基数 = **档位小计**(店主 2026-08-09 拍板,设计图规则③)。
-   定金是付款时序、券是店铺让利 —— 技师做了多少活,业绩就是多少,两者都不扣。
-   落库的 perf_base_cents 是权威值;没有这一列的老行回落到 subtotal_cents(同一口径)。 */
-function settlementPerfBaseCents(row) {
-  return row.perf_base_cents || row.subtotal_cents
-}
-
-// 某张单每位技师分到多少业绩。已分配读 share_cents;单技师整单;双技师未分配返回 null(待分配)
-function settlementPerfShares(row, tenantId) {
-  const techs = settlementTechRows(row.id, tenantId)
-  if (!techs.length) return []
-  if (techs.length === 1) return [{ technicianId: techs[0].technician_id, role: techs[0].role, sharePct: 100, shareCents: settlementPerfBaseCents(row) }]
-  if (row.perf_alloc_status !== 'allocated') {
-    return techs.map((t) => ({ technicianId: t.technician_id, role: t.role, sharePct: null, shareCents: null }))
-  }
-  return techs.map((t) => ({ technicianId: t.technician_id, role: t.role, sharePct: t.share_pct, shareCents: t.share_cents || 0 }))
-}
-
-function perfSplitDefault(tenantId) {
-  const row = db.prepare("SELECT value FROM tenant_settings WHERE tenant_id = ? AND key = 'perf_split_default'").get(tenantId)
-  if (row) {
-    try {
-      const parsed = JSON.parse(row.value || '{}')
-      if (Array.isArray(parsed.main) && parsed.main.length) return parsed.main.map(Number)
-    } catch { /* 落回默认 */ }
-  }
-  return [70, 30] // 主 70 / 副 30,店主可在设置里改
-}
-
-/* 售后业绩扣回(店主拍板 a 案+三裁,2026-08-21):聚合层负记录的**唯一实现**——
-   日结视图净额+确认快照线(daily_close_lines)继承到排行/工资/我的业绩/目标,任何读方不许自己再算(四之九)。
-   范围钉死:只有 timecardReleased 更正产生扣回;普通更正/券/定金不动业绩(规则③原样)。
-   归属日=返还发生日(裁①案X:已确认日结不追溯漂移;确认后才发生的返还由既有 R1「数字已过期→重开」机制收口;
-   跨月售后扣当月=已知后果入册,《财务总逻辑》§十-7 同段写明)。
-   技师归属(裁②):单技师全额;双技师按日结 share 比例摊、末位吃余数;未分配即返还(罕见)按店默认比例摊。 */
-function perfReleaseRowsOn(date, tenantId) {
-  const amendments = db.prepare(`SELECT a.amended_at, s.id AS sid FROM settlement_amendments a
-    JOIN settlements s ON s.id = a.settlement_id
-    WHERE a.tenant_id = ? AND a.after_json LIKE '%"timecardReleased":true%'`).all(tenantId)
-  const out = []
-  for (const r of amendments) {
-    if (localParts(new Date(r.amended_at), tenantTimezone(tenantId)).date !== date) continue
-    const item = db.prepare("SELECT amount_cents, name_snapshot FROM settlement_items WHERE settlement_id = ? AND kind = 'timecard'").get(r.sid)
-    const unit = item ? item.amount_cents : 0
-    if (!unit) continue
-    const s = db.prepare('SELECT * FROM settlements WHERE id = ?').get(r.sid)
-    const shares = settlementPerfShares(s, tenantId)
-    const base = settlementPerfBaseCents(s)
-    let parts
-    if (shares.length <= 1) {
-      parts = shares.length ? [{ technicianId: shares[0].technicianId, deductCents: unit }] : []
-    } else if (shares.every((x) => x.shareCents !== null) && base > 0) {
-      parts = shares.map((x) => ({ technicianId: x.technicianId, deductCents: Math.floor(unit * x.shareCents / base) }))
-      parts[parts.length - 1].deductCents += unit - parts.reduce((n, p) => n + p.deductCents, 0)
-    } else {
-      /* 双技师未分配即返还(假设⑥,Cowork 尾②):扣回**暂缓**——不用默认比例猜;
-         本函数读时现算,分配落定后扣回行按真实比例自动出现。
-         日结确认闸(UNALLOCATED blocker)保证冻结快照永远是分配后的正确版。 */
-      parts = []
-    }
-    for (const p of parts) {
-      out.push({
-        technicianId: p.technicianId, deductCents: p.deductCents, code: s.code, settlementId: s.id,
-        itemName: (item && item.name_snapshot) || '', releasedAt: r.amended_at,
-        label: `售后扣回 · ${s.code}`
-      })
-    }
-  }
-  return out
-}
 
 // 当日冲卡:沿用 2026-08-01 就加好的 stored_value_transactions.technician_id(这笔充值算谁促成)
 function rechargeByTechOn(date, tenantId) {
@@ -9649,38 +9605,6 @@ function dailyAnomalies(rows, tenantId) {
   return { tierChanges, freeRemoval: { count: freeRemovalCount, lines: freeRemovalLines } }
 }
 
-/* 日结行的主标识时间(店主 2026-08-09 口头修订 v6 合同):行首显示 HH:MM + 顾客 + 技师,
-   单号从行内去掉(签署单弹窗/详情里保留)。时区在**后端**折算,前端只显示 —— 与门店时区纪律一致。
-   有预约的取预约开始时间(店主看的是"几点那一单");没预约的直接单取签署时刻。 */
-function settlementRowTime(row) {
-  const bk = row.booking_id ? db.prepare('SELECT appointment_start FROM bookings WHERE id = ?').get(row.booking_id) : null
-  const at = (bk && bk.appointment_start) || row.signed_at || row.created_at
-  if (!at) return ''
-  return localParts(new Date(at), tenantTimezone(row.tenant_id)).time.slice(0, 5)
-}
-
-/* 跨零点单的自解释标注(店主 2026-08-10 拍板)。
-   口径不变:签字时刻 = 记账时刻,按门店时区落自然日。但「台面说本日休息、日结却有 2 单」
-   这种画面必须一眼看懂 —— 2026-08-10 就是这么来的:08-09 晚 20:10/21:10 的两单,
-   店主在 08-10 凌晨 1:25/1:33 才签,于是记在 08-10 的账上。
-   行上标一句「昨日 21:10 单 · 今晨签」,日期口径差异就自解释了。 */
-/* 日结归属改服务日之后,这行小注的语义**反过来了**:
-   以前是"这单的服务发生在别的天"(因为日结按签字日归);
-   现在日结日 ≡ 服务日,需要解释的变成**签字晚于服务日**那一种 —— 「次晨补签」「隔 2 天补签」。
-   服务当天就签掉的单不加任何小注(绝大多数单都是这种,不打扰)。 */
-function settlementCrossDayNote(row, closeDate) {
-  const tz = tenantTimezone(row.tenant_id)
-  if (!row.signed_at || !closeDate) return ''
-  const serviceDay = settlementServiceDate(row, tz ? row.tenant_id : row.tenant_id)
-  if (serviceDay !== closeDate) return ''            // 不属于这一天,不该出现在这里
-  const signParts = localParts(new Date(row.signed_at), tz)
-  if (signParts.date === serviceDay) return ''       // 当天签,没什么好解释的
-  const gap = Math.round((new Date(`${signParts.date}T00:00:00Z`) - new Date(`${serviceDay}T00:00:00Z`)) / 86400000)
-  const signHour = Number(signParts.time.slice(0, 2))
-  if (gap === 1 && signHour < 6) return '次晨补签'
-  if (gap === 1) return '次日补签'
-  return `隔 ${gap} 天补签`
-}
 
 function dailyCloseView(date, tenantId, { lang = 'zh' } = {}) {
   const rows = signedSettlementsOn(date, tenantId)
@@ -9691,6 +9615,17 @@ function dailyCloseView(date, tenantId, { lang = 'zh' } = {}) {
   const targets = {}
   for (const t of db.prepare('SELECT * FROM perf_targets WHERE tenant_id = ? AND month = ?').all(tenantId, month)) targets[t.technician_id] = t
 
+  /* 业绩调整行提前算:**行上的数**与**技师行的数**必须来自同一份,不许各算一遍(四之九)。
+     08-27 实拍教训:更正后技师业绩显示 150,而上面那张单的行仍写 198 ——
+     同屏两个数,店主只会觉得是系统错了。 */
+  const adjustRows = perfAdjustRowsOn(date, tenantId)
+  const adjustBySheet = new Map()
+  for (const r of adjustRows) adjustBySheet.set(r.settlementId, (adjustBySheet.get(r.settlementId) || 0) + r.deductCents)
+  const rowPerfText = (r) => {
+    const base = settlementPerfBaseCents(r)
+    const adj = adjustBySheet.get(r.id) || 0
+    return adj ? `${formatMoneyCents(base - adj, tenantId, 'auto')}(更正后)` : formatMoneyCents(base, tenantId, 'auto')
+  }
   const pending = []
   /* 店主 2026-08-09 口径:**每天所有单都要经店长点确认**,单技师单也不例外 ——
      「不用分配」只是免去分成输入,不等于自动确认。所以单技师单也要在日结列表里
@@ -9706,7 +9641,8 @@ function dailyCloseView(date, tenantId, { lang = 'zh' } = {}) {
       pending.push({
         settlementId: r.id, code: r.code, timeText: settlementRowTime(r), crossDayNote: settlementCrossDayNote(r, date), totalCents: r.total_cents,
         // 分成按业绩基数走(券不扣技师);无券时两个数相等
-        perfBaseCents: settlementPerfBaseCents(r), couponDiscountCents: r.coupon_discount_cents || 0,
+        perfBaseCents: settlementPerfBaseCents(r), perfRowText: rowPerfText(r),
+        amendBadgeText: amendmentShape(r).amendBadgeText, couponDiscountCents: r.coupon_discount_cents || 0,
         customerName: (db.prepare('SELECT display_name FROM users WHERE id = ?').get(r.user_id) || {}).display_name || '',
         servedPersonName: r.served_person_name || '',
         /* 预填比例。**两端读的是 mainPct/assistPct**,所以这里给对象而不是裸数组 ——
@@ -9746,7 +9682,8 @@ function dailyCloseView(date, tenantId, { lang = 'zh' } = {}) {
     if (!unallocated && (!closeRow || closeRow.status !== 'confirmed')) {
       awaitingConfirm.push({
         settlementId: r.id, code: r.code, timeText: settlementRowTime(r), crossDayNote: settlementCrossDayNote(r, date),
-        perfBaseCents: settlementPerfBaseCents(r),
+        perfBaseCents: settlementPerfBaseCents(r), perfRowText: rowPerfText(r),
+        amendBadgeText: amendmentShape(r).amendBadgeText,
         couponDiscountCents: r.coupon_discount_cents || 0,
         customerName: (db.prepare('SELECT display_name FROM users WHERE id = ?').get(r.user_id) || {}).display_name || '',
         servedPersonName: r.served_person_name || '',
@@ -9759,8 +9696,16 @@ function dailyCloseView(date, tenantId, { lang = 'zh' } = {}) {
         hasSnapshot: Boolean(r.snapshot_url || r.snapshot_inline)
       })
     }
+    /* 🔴 08-27:更正过的单,这一行要说**更正后**的数 ——
+       不然同屏就出现「行上 198 / 业绩 150 / 账本 150」,店主只会觉得是系统错了。
+       徽标与金额都取 amendmentShape(顾客端读的也是它,两端同一句)。
+       已确认那天的**快照**不动(冻结的就是冻结的),差异照旧由 R1「数字已过期」那条路解释。 */
+    const amd = amendmentShape(r)
     return {
-      settlementId: r.id, code: r.code, timeText: settlementRowTime(r), crossDayNote: settlementCrossDayNote(r, date), totalCents: r.total_cents, cardUsedCents: cardUsed,
+      settlementId: r.id, code: r.code, timeText: settlementRowTime(r), crossDayNote: settlementCrossDayNote(r, date),
+      totalCents: amd.amendedCount ? amd.actualDueCents : r.total_cents,
+      originalTotalCents: r.total_cents, amendBadgeText: amd.amendBadgeText, amendedCount: amd.amendedCount,
+      cardUsedCents: cardUsed,
       perfBaseCents: settlementPerfBaseCents(r),
       couponDiscountCents: r.coupon_discount_cents || 0, couponName: r.coupon_name || '',
       allocated: !unallocated, shares, signedAt: r.signed_at,
@@ -9772,17 +9717,32 @@ function dailyCloseView(date, tenantId, { lang = 'zh' } = {}) {
   for (const id of Object.keys(recharge)) bump(id)
   /* 售后业绩扣回(a 案):返还发生日入负记录净额;显式行随视图下发(裁③:数字自证)。
      确认日结快照的就是这里的净额 → 排行/工资/我的业绩(读快照线)自动继承,零分叉。 */
-  const releaseRows = perfReleaseRowsOn(date, tenantId)
+  const releaseRows = adjustRows      // 同一份,不再算第二遍
   for (const rel of releaseRows) {
     const bucket = bump(rel.technicianId)
     bucket.perfCents -= rel.deductCents
-    bucket.releaseDeductCents += rel.deductCents
+    if (rel.kind === 'amend') {
+      /* 扣回与补记**分开记**:同一天两头都有时,净额那一个数说不清是哪一族的钱。
+         08-27 实测:一天里 +48 +48 −30,净额 66 会被写成「含更正扣回 −$66」——
+         看起来像只扣了 66,补记那 30 凭空消失在句子里。 */
+      if (rel.deductCents >= 0) bucket.amendDeductCents = (bucket.amendDeductCents || 0) + rel.deductCents
+      else bucket.amendAddCents = (bucket.amendAddCents || 0) - rel.deductCents
+    } else bucket.releaseDeductCents += rel.deductCents
   }
   const technicians = Object.values(perTech).map((t) => {
     const rc = recharge[t.technicianId] || { firstCents: 0, renewCents: 0 }
+    /* 「含…」这句由后端出(前端零词典):两族可能同时出现在同一天,
+       句子里必须说清是哪一族的钱 —— 否则店主看到一个减数不知道来自售后还是更正。 */
+    const noteBits = []
+    if (t.releaseDeductCents) noteBits.push(`售后扣回 −${formatMoneyCents(t.releaseDeductCents, tenantId, 'auto')}`)
+    if (t.amendDeductCents) noteBits.push(`更正扣回 −${formatMoneyCents(t.amendDeductCents, tenantId, 'auto')}`)
+    if (t.amendAddCents) noteBits.push(`更正补记 +${formatMoneyCents(t.amendAddCents, tenantId, 'auto')}`)
     const target = targets[t.technicianId] || null
     return {
       ...t,
+      amendDeductCents: t.amendDeductCents || 0,
+      amendAddCents: t.amendAddCents || 0,
+      deductNoteText: noteBits.length ? `含${noteBits.join(' · ')}` : '',
       rechargeFirstCents: rc.firstCents,
       rechargeRenewCents: rc.renewCents,
       rechargeTotalCents: rc.firstCents + rc.renewCents,
@@ -9930,11 +9890,17 @@ function dailyCloseView(date, tenantId, { lang = 'zh' } = {}) {
       revenueCents: settlements.reduce((sum, x) => sum + x.totalCents, 0)
     }),
     // 裁③:「售后扣回」显式行(负数+关联单号),日结页两端直接渲染,数字自证
+    /* 这张明细表原来只有售后扣回;08-27 起金额更正的业绩调整也走同一族(同一读时单源)。
+       标题与每行金额句都**后端出**:补记是加号,扣回是减号,前端不许自己判正负拼串。 */
+    deductListTitle: releaseRows.some((r) => r.kind === 'amend')
+      ? (releaseRows.some((r) => r.kind !== 'amend') ? '业绩调整(售后扣回 + 金额更正)' : '业绩调整(金额更正)')
+      : '售后扣回(业绩,裁③显式行)',
     afterSalesDeductions: releaseRows.map((rel) => ({
       technicianId: rel.technicianId,
       technicianName: (techNames[rel.technicianId] || {}).name || rel.technicianId,
       deductCents: rel.deductCents, code: rel.code, settlementId: rel.settlementId,
-      itemName: rel.itemName, label: rel.label,
+      itemName: rel.itemName, label: rel.label, kind: rel.kind || 'after_sales',
+      amountText: `${rel.deductCents < 0 ? '+' : '−'}${formatMoneyCents(Math.abs(rel.deductCents), tenantId, 'auto')}`,
       timeText: localParts(new Date(rel.releasedAt), tenantTimezone(tenantId)).time.slice(0, 5)
     })),
     anomalies: dailyAnomalies(rows, tenantId),
@@ -10247,9 +10213,10 @@ function staffDailyRows(techId, month, tenantId, withSplit) {
     if (withSplit) row.cardUsedCents = r.card_used_cents
     /* 裁③:售后扣回在员工端显式一行(负数+关联单号)——perf_cents 快照线已是净额,
        这里只补「这笔减在哪」的自证明细,不再做任何计算(单源在 perfReleaseRowsOn)。 */
-    const rel = perfReleaseRowsOn(r.date, tenantId).filter((x) => x.technicianId === techId)
+    const rel = perfAdjustRowsOn(r.date, tenantId).filter((x) => x.technicianId === techId)
     if (rel.length) {
-      row.afterSalesDeductCents = rel.reduce((n, x) => n + x.deductCents, 0)
+      row.afterSalesDeductCents = rel.filter((x) => x.kind !== 'amend').reduce((n, x) => n + x.deductCents, 0)
+      row.amendAdjustCents = rel.filter((x) => x.kind === 'amend').reduce((n, x) => n + x.deductCents, 0)   // 员工端只显示逐行,这里给净额供对数
       row.deductions = rel.map((x) => ({ code: x.code, amountCents: -x.deductCents, label: x.label }))
     }
     return row
