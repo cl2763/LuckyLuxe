@@ -67,5 +67,49 @@ window.DailyCloseRows = (function () {
       </div>`
   }
 
-  return { targetCellText, cashAndRefundRows, correctionForm }
+  /* 屏 1b 金额更正 + 日结确认/重开的点击处理(2026-08-27 从 admin.js 搬出,公约①②:
+     本批动的就是日结这一屏,按「边改边拆」把同屏的行为一起搬过来,admin.js 只留一行分发)。
+     返回 true = 这一族接住了这次点击,admin.js 那边就不用再往下找了。 */
+  function handleClick(event, ctx) {
+    const { state, request, toast, renderDailyClose, loadDailyClose, yuanToCents, zh } = ctx
+    const dcCorrect = event.target.closest('[data-dc-correct]')
+    if (dcCorrect) {
+      const row = (state.view?.settlements || []).find((x) => x.settlementId === dcCorrect.dataset.dcCorrect)
+      request(`/settlements/${encodeURIComponent(row.code)}`, { public: true })
+        .then((data) => { state.correcting = data.settlement; renderDailyClose() })
+        .catch((error) => toast(error.message))
+      return true
+    }
+    if (event.target.closest('#dcCorrectCancel')) { state.correcting = null; renderDailyClose(); return true }
+    if (event.target.closest('#dcCorrectSubmit')) {
+      const reason = document.querySelector('#dcReason')?.value.trim()
+      if (!reason) { toast(zh ? '原因必填' : 'Reason is required'); return true }
+      request(`/admin/settlements/${encodeURIComponent(state.correcting.id)}/amend`, {
+        method: 'POST',
+        body: JSON.stringify({ totalCents: yuanToCents(document.querySelector('#dcNewTotal')?.value), reason })
+      }).then((r) => {
+        toast(zh ? (r.autoBalanceAdjustCents ? '已更正,储值差额已自动补配' : '已更正,原签署单未改动') : 'Amended')
+        state.correcting = null
+        return loadDailyClose(state.date)
+      }).catch((error) => toast(error.message))
+      return true
+    }
+    if (event.target.closest('#dcConfirm')) {
+      request('/admin/daily-close', { method: 'POST', body: JSON.stringify({ date: state.date }) })
+        .then(() => { toast(zh ? '日结已确认,业绩定格' : 'Day closed'); return loadDailyClose(state.date) })
+        .catch((error) => toast(error.message))
+      return true
+    }
+    if (event.target.closest('#dcReopen')) {
+      const reason = window.prompt(zh ? '重开日结必须写原因(会留痕):' : 'Reason (recorded):')
+      if (!reason || !reason.trim()) return true
+      request('/admin/daily-close/reopen', { method: 'POST', body: JSON.stringify({ date: state.date, reason: reason.trim() }) })
+        .then(() => { toast(zh ? '已重开,可以改分成了' : 'Reopened'); return loadDailyClose(state.date) })
+        .catch((error) => toast(error.message))
+      return true
+    }
+    return false
+  }
+
+  return { targetCellText, cashAndRefundRows, correctionForm, handleClick }
 })()

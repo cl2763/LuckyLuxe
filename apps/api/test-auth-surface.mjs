@@ -6,7 +6,7 @@
    新加的路由只要忘了挂门禁,这个套件立刻红 —— 门禁是长在测试里的,不是长在记性里的。
 
    放行清单只有登录相关的公开入口(登录/注册/改密本身不能要求先登录)。 */
-import { readFileSync } from 'node:fs'
+import { readFileSync, readdirSync } from 'node:fs'
 import { dirname, join } from 'node:path'
 import { fileURLToPath } from 'node:url'
 
@@ -49,9 +49,20 @@ const PUBLIC_OK = new Set([
   '/admin/ops/import-db'
 ])
 
+/* 扫描面 = local-server.mjs + 所有 `*-routes.mjs`(2026-08-27)。
+   🔴 立这一条的原因:退卡那一族路由从 local-server.mjs 搬进 ./refund-routes.mjs 时,
+   扫描器还只读旧文件 —— 8 条接口**从扫描面上消失**,而这个套件照样全绿。
+   那种绿比红更危险:它证明的是"我扫到的都合格",不是"接口都合格"。
+   现在扫描面跟着文件走,并配一条**条数下限**断言:再有人搬走路由却忘了让扫描器跟上,条数掉下来立刻红。 */
+function routeSources() {
+  const names = readdirSync(HERE).filter((f) => f.endsWith('-routes.mjs')).sort()
+  return ['local-server.mjs', ...names].map((f) => readFileSync(join(HERE, f), 'utf8'))
+}
+
 // 从源码里抠出所有 /admin/* 路由(method + path),这样新增路由自动纳入扫描
 function collectAdminRoutes() {
-  const src = readFileSync(join(HERE, 'local-server.mjs'), 'utf8')
+  const src = routeSources().join('\n')
+  const lines = src.split('\n')
   const out = new Map()
   const re = /req\.method === '(GET|POST|PATCH|PUT|DELETE)'[^\n]*?path (?:===|\.startsWith\(|\.match\()\s*'?(\/admin\/[^'`)]*)'?/g
   let m
@@ -63,6 +74,25 @@ function collectAdminRoutes() {
     if (p.endsWith('/')) p = `${p}probe-id`
     const key = `${method} ${p}`
     if (!out.has(key)) out.set(key, { method, path: p })
+  }
+  /* 🔴 两行式路由(先 `const xMatch = path.match(...)`,下一行才 `if (req.method === ... && xMatch)`)
+     以前**一条都没被扫到** —— 上面那条正则要求方法与路径同行。08-27 实测这样的 /admin 路由有 14 条,
+     其中就有 /admin/my-customers 这一族(08-27 实测基线 153 条):它们从来没被验过"不带凭证是不是 401"。
+     判据里把正则源码还原成一条能打的路径(捕获组填 probe-id,或选一个字面量)。 */
+  for (let i = 0; i < lines.length; i += 1) {
+    const d = /const\s+(\w+)\s*=\s*path\.match\((\/.*?\/)\)/.exec(lines[i])
+    if (!d) continue
+    const probe = d[2].slice(1, -1).replace(/^\^/, '').replace(/\$$/, '')
+      .replace(/\(\?:\\\/\(\[\^\/\]\+\)\)\?/g, '')   // 可选段 (?:\/([^/]+))? 先摘掉,不然下一条会先把它里头吃掉
+      .replace(/\(\[\^\/\]\+\??\)/g, 'probe-id')
+      .replace(/\(\.\+\)/g, 'probe-id')
+      .replace(/\(([^()|]+)\|[^()]*\)/g, '$1')
+      .replace(/\\\//g, '/')
+    if (!probe.startsWith('/admin/') || /[()?*+\[\]\\]/.test(probe)) continue
+    for (let j = i + 1; j < Math.min(i + 4, lines.length); j += 1) {
+      const u = new RegExp(`req\\.method === '(GET|POST|PATCH|PUT|DELETE)'[^\\n]*\\b${d[1]}\\b`).exec(lines[j])
+      if (u) { out.set(`${u[1]} ${probe}`, { method: u[1], path: probe }); break }
+    }
   }
   return [...out.values()]
 }
@@ -90,6 +120,14 @@ async function main() {
 
   const routes = collectAdminRoutes()
   check(`从源码抠出 ${routes.length} 条 /admin 路由(新增路由自动纳入扫描)`, routes.length >= 60, String(routes.length))
+  /* 下限按 08-27 实测条数钉住:搬家可以,搬没了不行。加路由会自然把这个数推高,
+     哪天它掉回下限以下,说明有一批接口悄悄退出了扫描面。 */
+  check('🔴 扫描面没缩水(路由条数不低于 08-27 实测基线)', routes.length >= 153, String(routes.length))
+  const moved = ['GET /admin/my-customers', 'POST /admin/stored-value/refund', 'POST /admin/timecards/probe-id/refund']
+  const keys = new Set(routes.map((r) => `${r.method} ${r.path}`))
+  const missing = moved.filter((k) => !keys.has(k))
+  check('🔴 搬进 *-routes.mjs 的那几条仍在扫描面里(反向守:证明这条扫描真读到了新文件)',
+    missing.length === 0, missing.join(' | '))
 
   /* ---- ① 不带凭证:全部必须 401 ---- */
   const naked = []
@@ -114,8 +152,7 @@ async function main() {
   /* ---- ② 员工 token 打老板接口:必须 403,且**不能返回数据** ---- */
   /* 老板专属路由也**从源码里抠**,不靠我手写清单 ——
      判据:路由体里出现 `role !== 'owner'` 这类老板断言。手写清单会漏,源码不会。 */
-  const src = readFileSync(join(HERE, 'local-server.mjs'), 'utf8')
-  const srcLines = src.split('\n')
+  const srcLines = routeSources().join('\n').split('\n')
   const ownerOnly = []
   for (let i = 0; i < srcLines.length; i += 1) {
     const m = /req\.method === '(GET|POST|PATCH|PUT|DELETE)'[^\n]*?path (?:===|\.startsWith\()\s*'(\/admin\/[^']*)'/.exec(srcLines[i])

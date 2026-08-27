@@ -23,6 +23,8 @@ import { createAccountRefund } from './account-refund.mjs'            // N-5 退
 import { ensureRefundSchema } from './account-refund-schema.mjs'      // N-5 建表建列(公约⑧:列一律 try/catch ALTER)
 import { zhErrorText } from './error-text.mjs'                        // 报错话中文出口(一处翻译,不逐句改 262 处)
 import { createStaffScope } from './staff-scope.mjs'                  // 员工只读范围(我的客人)
+import { createRefundRoutes } from './refund-routes.mjs'              // 退卡/账户调整/我的客人 的路由层
+import { createAssetFingerprint } from './asset-fingerprint.mjs'      // 前端资源内容指纹(缓存失效)
 import { createStoredValue } from './stored-value.mjs'                // 储值域(写流水/算余额/分桶/类型文案)
 import { createMembershipConfig } from './membership-config.mjs'      // 会员制度域(资格判定 + 退卡后是否保留会员)
 import { createImportCustomers } from './import-customers.mjs'        // 平台代商家导入老顾客(公约②)
@@ -1231,7 +1233,13 @@ function json(res, statusCode, body, extraHeaders) {
 }
 
 /* ===== 静态文件服务已搬出到 ./static-serve.mjs(公约②,2026-08-25)===== */
-const { contentType, serveFile } = createStaticServe({ existsSync, statSync, readFileSync, join, normalize, extname })
+/* 2026-08-27:发 HTML 时给前端资源打**内容指纹**(店主连撞两轮"功能没生效",根因是缓存)。
+   文件内容一变 URL 就变,旧缓存不可能命中;页面版本串也由它算,不再靠人记得手改。 */
+const { fingerprintHtml } = createAssetFingerprint({ readFileSync, existsSync, join, createHash })
+const { contentType, serveFile } = createStaticServe({
+  existsSync, statSync, readFileSync, join, normalize, extname,
+  transformHtml: (html, { baseDir }) => fingerprintHtml(html, { webRoot: baseDir, statSync })
+})
 
 async function readBody(req) {
   let body = ''
@@ -7149,13 +7157,21 @@ const { storedValueBalanceCents, insertStoredValueTransaction, storedValueOvervi
 const { MEMBER_QUALIFY_MODES, DEFAULT_MEMBERSHIP_CONFIG, getMembershipConfig, setMembershipConfig, customerTotalSpendCents, isMemberOf } = createMembershipConfig({
   db, iso, currentTenantId, storedValueBalanceDetail: (u, t) => storedValueBalanceDetail(u, t)
 })
-const staffScope = createStaffScope({ db, apiError, currentTenantId, memberCodeForUserId: (id) => memberCodeForUserId(id) })
+const staffScope = createStaffScope({
+  db, apiError, currentTenantId, bookingStatusText,
+  memberCodeForUserId: (id) => memberCodeForUserId(id),
+  storeTimeText: (at) => { const p = localParts(new Date(at), tenantTimezone(currentTenantId())); return `${p.date} ${p.time.slice(0, 5)}` }
+})
 const refundApi = createAccountRefund({
   db, apiError, iso, randomId, currentTenantId,
   insertStoredValueTransaction: (a) => insertStoredValueTransaction(a),
   storedValueBalanceCents: (u, t) => storedValueBalanceCents(u, t),
   formatMoneyCents: (c, t, m) => formatMoneyCents(c, t, m),
   storeDateOf: (at, tid) => localParts(new Date(at), tenantTimezone(tid)).date
+})
+const refundRoutes = createRefundRoutes({
+  apiError, json, readBody, refundApi, staffScope,
+  usableTimecardsOf: (uid) => usableTimecardsOf(uid)
 })
 const platformOps = createPlatformOps({
   db, apiError, randomId, iso, snapshotDb, financeSessions, adminPasswordHash, randomPassword,
@@ -14349,58 +14365,9 @@ async function route(req, res) {
       })
     })
   }
-  /* S2批①(规则⑥ 收编):手动耗卡=账目风险口,永久关闭 —— 扣卡只在结算单签字时刻由引擎自动做。 */
-  if (req.method === 'POST' && path === '/admin/stored-value/consume') {
-    throw apiError(410, 'MANUAL_CONSUME_GONE', '手动耗卡已取消:储值扣款只随结算单签字自动入账。')
-  }
-  if (req.method === 'GET' && path === '/admin/account-adjust/facts') {
-    requireRefundRight()
-    const uid = String(query.userId || '').trim()
-    if (!uid) throw apiError(400, 'BAD_REQUEST', 'userId 必填。')
-    const facts = refundApi.refundFacts(uid)
-    // 黄条句也后端给:前端把当前填的金额带上来,越过「实付可退」才有话
-    return json(res, 200, { facts, bonusWarning: query.amountCents ? refundApi.bonusWarningText(uid, query.amountCents) : '' })
-  }
-  if (req.method === 'POST' && path === '/admin/stored-value/refund') {
-    requireRefundRight()
-    const b = await readBody(req)
-    return json(res, 201, refundApi.refundStoredValue({
-      userId: String(b.userId || '').trim(),
-      amountCents: b.amountCents ?? (b.amount === undefined ? undefined : Number(b.amount) * 100),
-      payChannel: b.payChannel, reason: b.reason, requestId: b.requestId,
-      operator: adminSession.email || adminSession.username || adminSession.role || 'owner'
-    }))
-  }
-  // v1.2 ④ 员工只读「我的客人」:实现在 ./staff-scope.mjs,这里只门禁 + 分发
-  const myCustMatch = path.match(/^\/admin\/my-customers(?:\/([^/]+))?$/)
-  if (req.method === 'GET' && myCustMatch) {
-    if (adminSession.role !== 'owner' && adminSession.role !== 'staff') throw apiError(403, 'FORBIDDEN', '需要登录商家后台。')
-    if (myCustMatch[1] && adminSession.role !== 'staff') throw apiError(403, 'FORBIDDEN', '这条只给员工端用。')
-    return json(res, 200, myCustMatch[1]
-      ? staffScope.myCustomerDetail(adminSession, myCustMatch[1])
-      : staffScope.myCustomers(adminSession, query))
-  }
-  const custCardsMatch = path.match(/^\/admin\/customers\/([^/]+)\/timecards$/)
-  if (req.method === 'GET' && custCardsMatch) {
-    requireRefundRight()
-    return json(res, 200, { timecards: usableTimecardsOf(custCardsMatch[1]) })
-  }
-  const tcFactsMatch = path.match(/^\/admin\/timecards\/([^/]+)\/refund-facts$/)
-  if (req.method === 'GET' && tcFactsMatch) {
-    requireRefundRight()
-    return json(res, 200, { facts: refundApi.timecardRefundFacts(tcFactsMatch[1]) })
-  }
-  const tcRefundMatch = path.match(/^\/admin\/timecards\/([^/]+)\/refund$/)
-  if (req.method === 'POST' && tcRefundMatch) {
-    requireRefundRight()
-    const b = await readBody(req)
-    return json(res, 201, refundApi.refundTimecard({
-      cardId: tcRefundMatch[1], times: b.times,
-      amountCents: b.amountCents ?? (b.amount === undefined ? undefined : Number(b.amount) * 100),
-      payChannel: b.payChannel, reason: b.reason,
-      operator: adminSession.email || adminSession.username || adminSession.role || 'owner'
-    }))
-  }
+  /* 退卡 / 账户调整 / 员工「我的客人」这一族路由整体搬去 ./refund-routes.mjs(公约①②,2026-08-27)。
+     门禁扫描器同批改成连 `*-routes.mjs` 一起读 —— 搬家不许把接口从扫描面上搬没了。 */
+  if (await refundRoutes.route(req, res, { path, query, adminSession, requireRefundRight })) return
   if (req.method === 'POST' && path === '/admin/stored-value/recharge') {
     if (adminSession.role !== 'owner' && adminSession.role !== 'staff') {
       throw apiError(403, 'FORBIDDEN', '需要老板或员工权限。')
@@ -15388,6 +15355,14 @@ async function route(req, res) {
     const booking = body.bookingId ? db.prepare('SELECT * FROM bookings WHERE id = ? AND tenant_id = ?').get(body.bookingId, currentTenantId()) : null
     if (booking) { assertStaffCanAccessBooking(adminSession, booking); userId = userId || booking.user_id }
     if (!userId) throw apiError(400, 'BAD_REQUEST', '缺少顾客。')
+    /* 🔴 08-27 补的越权闸:不带 bookingId 时,这条口原来**谁的顾客都能写** ——
+       读那一侧(GET /admin/customers/:id/notes)早就限死"只看自己服务过的",写这一侧漏了同一刀。
+       员工写别人的顾客一律 404(与读口同一措辞:那个人对他不该存在)。 */
+    if (!booking && adminSession.role !== 'owner') {
+      const mine = db.prepare('SELECT 1 AS hit FROM bookings WHERE tenant_id = ? AND technician_id = ? AND user_id = ? LIMIT 1')
+        .get(currentTenantId(), adminSession.technicianId || '', userId)
+      if (!mine) throw apiError(404, 'NOT_FOUND', '没有这位顾客的记录。')
+    }
     const svc = booking && booking.service_id ? getService(booking.service_id) : null
     const tech = booking && booking.technician_id ? db.prepare('SELECT name FROM technicians WHERE id = ?').get(booking.technician_id) : null
     const u = db.prepare('SELECT display_name FROM users WHERE id = ?').get(userId)

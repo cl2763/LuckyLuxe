@@ -1,4 +1,5 @@
 // 构建号:每次交付递增。侧栏可见,排查"改了没生效"时先对版本。
+// 兜底用(服务端会注入 window.LL_BUILD = 资源内容指纹,页面优先显示那个)
 const ADMIN_BUILD = '20260827a-n5v12'
 let pricingState = { module: 'storefront', tab: 'items', categories: [], items: [], rules: {}, editing: null, preview: null, storefrontPicker: false }
 console.log(`[admin] build ${ADMIN_BUILD}`)
@@ -1513,7 +1514,7 @@ function retentionStats() {
    留着就等于把编造能力摆在手边,下次谁手一滑又编一个出来。 */
 
 // v1.2 ④:员工只读「我的客人」——整页在 ./my-customers.js(公约①;admin.js 只许搬出)
-const renderMyCustomers = () => window.MyCustomers.render(els.myCustomersPage, { zh: owner.lang === 'zh', request, escapeHtml, dateOnly })
+const renderMyCustomers = () => window.MyCustomers.render(els.myCustomersPage, { zh: owner.lang === 'zh', request, escapeHtml, dateOnly, toast })
 
 function renderAdminPages() {
   els.sidebarDashboard.classList.toggle('hidden', !isOwnerRole())
@@ -1792,7 +1793,7 @@ function renderTenantKb() {
       <label><span>${owner.lang === 'zh' ? '品牌名' : 'Brand'}</span><input id="kbFactBrand" value="${escapeHtml(facts.brandName || '')}"></label>
       <label><span>${owner.lang === 'zh' ? 'AI 助理名称' : 'Assistant name'}</span><input id="kbFactAssistant" value="${escapeHtml(facts.assistantName || '')}"></label>
       <label><span>${owner.lang === 'zh' ? '门店地址' : 'Store address'}</span><input id="kbFactAddress" value="${escapeHtml(facts.storeAddress || '')}"></label>
-      <label><span>${owner.lang === 'zh' ? '定金金额' : 'Deposit amount'}</span><input id="kbFactDeposit" type="number" min="0" value="${escapeHtml(facts.depositAmount || '')}"></label>
+      <label><span>${owner.lang === 'zh' ? '定金金额' : 'Deposit amount'}</span><input id="kbFactDeposit" data-money type="text" inputmode="decimal"  value="${escapeHtml(facts.depositAmount || '')}"></label>
     </div>
     <button class="primary slim" data-kb-save-facts type="button">${owner.lang === 'zh' ? '保存店铺事实' : 'Save facts'}</button>
     <p class="subtle">${owner.lang === 'zh' ? '以上信息 AI 回答时实时读取，保存即生效。' : 'AI reads these facts live; changes apply immediately.'}</p>
@@ -2536,7 +2537,7 @@ async function openGoalSetupModal() {
         <button class="${t0.targetMode === 'revenue' ? 'on' : ''}" data-goal-mode="revenue" type="button">${zh ? '每月想收到' : 'Revenue'}</button>
       </div>
       <p class="fin-goal-lab">② ${zh ? '目标金额($ / 月)' : 'Amount ($/month)'}</p>
-      <input id="goalMonth" type="number" min="0" step="100" value="${t0.monthTargetCents ? t0.monthTargetCents / 100 : ''}" placeholder="3500">
+      <input id="goalMonth" data-money type="text" inputmode="decimal"  value="${t0.monthTargetCents ? t0.monthTargetCents / 100 : ''}" placeholder="3500">
       <p class="fin-goal-lab">③ ${zh ? '变动成本率(每营收100块中耗材和提成的占比)' : 'Variable cost % (materials + commission per $100 revenue)'}</p>
       <div class="fin-goal-raterow">
         <input id="goalRate" type="number" min="0" max="95" value="${Math.round((t0.variableCostRate || 0.25) * 100)}">
@@ -2544,7 +2545,7 @@ async function openGoalSetupModal() {
       </div>
       <p class="subtle fin-goal-tip">${zh ? `新店没账时默认 25%(行业经验值);之后每个月会使用上个月的真实变动成本率作为智能建议值${suggestPct != null ? `(当前建议:${suggestPct}%)` : ''}。` : `Default 25%; the suggestion is derived from last month's real ledger${suggestPct != null ? ` (currently ${suggestPct}%)` : ''}.`}</p>
       <p class="fin-goal-lab">④ ${zh ? '年目标($,可选,留空不显示年度进度)' : 'Year target ($, optional)'}</p>
-      <input id="goalYear" type="number" min="0" step="1000" value="${t0.yearTargetCents ? t0.yearTargetCents / 100 : ''}">
+      <input id="goalYear" data-money type="text" inputmode="decimal"  value="${t0.yearTargetCents ? t0.yearTargetCents / 100 : ''}">
       <button class="primary slim fin-goal-save" data-goal-save type="button">${zh ? '保存,点亮进度条' : 'Save'}</button>
       <p class="subtle fin-goal-skip">${zh ? '先不设也没关系,四个真数永远都在' : 'Skipping is fine — the four base numbers always show'}</p>
     </div>
@@ -2595,9 +2596,9 @@ function renderFinanceTargets() {
           <option value="revenue" ${targets.targetMode === 'revenue' ? 'selected' : ''}>${owner.lang === 'zh' ? '月营收' : 'Monthly revenue'}</option>
         </select>
       </label>
-      <label><span>${owner.lang === 'zh' ? '月目标 (CAD)' : 'Monthly target'}</span><input id="finTargetMonth" type="number" min="0" step="100" value="${(targets.monthTargetCents / 100) || ''}"></label>
+      <label><span>${owner.lang === 'zh' ? '月目标 (CAD)' : 'Monthly target'}</span><input id="finTargetMonth" data-money type="text" inputmode="decimal"  value="${(targets.monthTargetCents / 100) || ''}"></label>
       <label><span>${owner.lang === 'zh' ? '变动成本率 %(每营收100块中耗材和提成的占比)' : 'Variable cost %'}</span><input id="finTargetRate" type="number" min="0" max="95" value="${Math.round((targets.variableCostRate || 0.25) * 100)}"></label>
-      <label><span>${owner.lang === 'zh' ? '年营收目标 (可选)' : 'Yearly target (optional)'}</span><input id="finTargetYear" type="number" min="0" step="1000" value="${targets.yearTargetCents ? targets.yearTargetCents / 100 : ''}"></label>
+      <label><span>${owner.lang === 'zh' ? '年营收目标 (可选)' : 'Yearly target (optional)'}</span><input id="finTargetYear" data-money type="text" inputmode="decimal"  value="${targets.yearTargetCents ? targets.yearTargetCents / 100 : ''}"></label>
     </div>
     <button class="primary slim" data-fin-targets-save type="button">${owner.lang === 'zh' ? '保存目标' : 'Save targets'}</button>
     <p class="subtle">${owner.lang === 'zh' ? '变动成本率=耗材+提成约占收入的比例,不确定就先用 25%,跑出流水后可随时调。系统据此反推:需要的月营收=(固定支出+目标净利)÷(1−变动成本率)。' : 'Required revenue = (fixed costs + target net) ÷ (1 − variable cost rate).'}</p>
@@ -3278,15 +3279,15 @@ function renderSalaryPlanEditor() {
         <h4 class="sp-h">${zh ? '基础项' : 'Base items'} <span class="subtle">${zh ? '关闭或 0 = 不启用' : 'off or 0 = disabled'}</span></h4>
         <div class="sp-switch-row">
           <label class="sp-sw"><input type="checkbox" id="spEnBase" ${st.enableBase ? 'checked' : ''}> ${zh ? '底薪' : 'Base'}</label>
-          <input id="spBase" type="number" min="0" step="50" placeholder="${zh ? '月底薪' : 'per month'}" value="${c2y(seed.baseSalaryCents)}">
+          <input id="spBase" data-money type="text" inputmode="decimal"  placeholder="${zh ? '月底薪' : 'per month'}" value="${c2y(seed.baseSalaryCents)}">
         </div>
         <div class="sp-switch-row">
           <label class="sp-sw"><input type="checkbox" id="spEnHandwork" ${st.enableHandwork ? 'checked' : ''}> ${zh ? '手工费(每单固定)' : 'Handwork'}</label>
-          <input id="spHandwork" type="number" min="0" step="0.5" placeholder="${zh ? '每单' : 'per order'}" value="${c2y(seed.handworkFeeCents)}">
+          <input id="spHandwork" data-money type="text" inputmode="decimal"  placeholder="${zh ? '每单' : 'per order'}" value="${c2y(seed.handworkFeeCents)}">
         </div>
         <div class="sp-switch-row">
           <label class="sp-sw"><input type="checkbox" id="spEnOt" ${st.enableOvertime ? 'checked' : ''}> ${zh ? '加班费' : 'Overtime'}</label>
-          <input id="spOtRate" type="number" min="0" step="0.5" placeholder="${zh ? '费率' : 'rate'}" value="${c2y(seed.overtimeRateCents)}">
+          <input id="spOtRate" data-money type="text" inputmode="decimal"  placeholder="${zh ? '费率' : 'rate'}" value="${c2y(seed.overtimeRateCents)}">
           <select id="spOtUnit">
             <option value="30" ${seed.overtimeUnitMin === 60 ? '' : 'selected'}>${zh ? '每满30分钟' : 'per 30 min'}</option>
             <option value="60" ${seed.overtimeUnitMin === 60 ? 'selected' : ''}>${zh ? '每满1小时' : 'per 60 min'}</option>
@@ -3312,8 +3313,8 @@ function renderSalaryPlanEditor() {
         const wrap = body.querySelector('#spLadderRows')
         wrap.innerHTML = ladder.map((t2, i) => `
           <div class="finance-rule-add" style="margin-bottom:6px">
-            <input data-lad="${i}" data-f="min" type="number" min="0" placeholder="${zh ? '起点' : 'min'}" value="${t2.min}">
-            <input data-lad="${i}" data-f="max" type="number" min="0" placeholder="${zh ? '上限(空=不封顶)' : 'max (blank=∞)'}" value="${t2.max}">
+            <input data-lad="${i}" data-f="min" data-money type="text" inputmode="decimal" placeholder="${zh ? '起点' : 'min'}" value="${t2.min}">
+            <input data-lad="${i}" data-f="max" data-money type="text" inputmode="decimal" placeholder="${zh ? '上限(空=不封顶)' : 'max (blank=∞)'}" value="${t2.max}">
             <input data-lad="${i}" data-f="pct" type="number" min="0" max="100" placeholder="%" value="${t2.pct}">
             <button class="ghost slim" data-lad-del="${i}" type="button">✕</button>
           </div>`).join('')
@@ -6622,51 +6623,10 @@ els.financePage.addEventListener('click', (event) => {
       .catch((error) => toast(error.message || (owner.lang === 'zh' ? '打开签署单失败' : 'Failed to open')))
     return
   }
-  // ===== 屏 1b 金额更正 =====
-  const dcCorrect = event.target.closest('[data-dc-correct]')
-  if (dcCorrect) {
-    const id = dcCorrect.dataset.dcCorrect
-    const row = (dailyCloseState.view?.settlements || []).find((x) => x.settlementId === id)
-    request(`/settlements/${encodeURIComponent(row.code)}`, { public: true })
-      .then((data) => { dailyCloseState.correcting = data.settlement; renderDailyClose() })
-      .catch((error) => toast(error.message))
-    return
-  }
-  if (event.target.closest('#dcCorrectCancel')) {
-    dailyCloseState.correcting = null
-    renderDailyClose()
-    return
-  }
-  if (event.target.closest('#dcCorrectSubmit')) {
-    const reason = document.querySelector('#dcReason')?.value.trim()
-    if (!reason) { toast(owner.lang === 'zh' ? '原因必填' : 'Reason is required'); return }
-    const row = dailyCloseState.correcting
-    request(`/admin/settlements/${encodeURIComponent(row.id)}/amend`, {
-      method: 'POST',
-      body: JSON.stringify({ totalCents: yuanToCents(document.querySelector('#dcNewTotal')?.value), reason })
-    }).then((r) => {
-      toast(owner.lang === 'zh'
-        ? (r.autoBalanceAdjustCents ? '已更正,储值差额已自动补配' : '已更正,原签署单未改动')
-        : 'Amended')
-      dailyCloseState.correcting = null
-      return loadDailyClose(dailyCloseState.date)
-    }).catch((error) => toast(error.message))
-    return
-  }
-  if (event.target.closest('#dcConfirm')) {
-    request('/admin/daily-close', { method: 'POST', body: JSON.stringify({ date: dailyCloseState.date }) })
-      .then(() => { toast(owner.lang === 'zh' ? '日结已确认,业绩定格' : 'Day closed'); return loadDailyClose(dailyCloseState.date) })
-      .catch((error) => toast(error.message))
-    return
-  }
-  if (event.target.closest('#dcReopen')) {
-    const reason = window.prompt(owner.lang === 'zh' ? '重开日结必须写原因(会留痕):' : 'Reason (recorded):')
-    if (!reason || !reason.trim()) return
-    request('/admin/daily-close/reopen', { method: 'POST', body: JSON.stringify({ date: dailyCloseState.date, reason: reason.trim() }) })
-      .then(() => { toast(owner.lang === 'zh' ? '已重开,可以改分成了' : 'Reopened'); return loadDailyClose(dailyCloseState.date) })
-      .catch((error) => toast(error.message))
-    return
-  }
+  // 屏 1b 金额更正 + 日结确认/重开:整族搬去 ./daily-close-rows.js(公约①②)
+  if (window.DailyCloseRows.handleClick(event, {
+    state: dailyCloseState, request, toast, renderDailyClose, loadDailyClose, yuanToCents, zh: owner.lang === 'zh'
+  })) return
   // ===== 财务密码卡(屏 V4,商家自助)=====
   if (event.target.closest('#finLockSw')) {
     const sw = event.target.closest('#finLockSw')
@@ -7180,7 +7140,10 @@ function switchAdminLang(lang) {
 
 async function initAdmin() {
   const versionTag = document.querySelector('#sidebarVersion')
-  if (versionTag) versionTag.textContent = `v${ADMIN_BUILD}`
+  /* 🔴 2026-08-27:版本串**跟着构建走** —— window.LL_BUILD 由服务端按资源内容算出来。
+     原来这里显示手写常量 ADMIN_BUILD:我改了三轮 admin.js 它一个字没动,
+     店主完全没办法知道自己在看哪一版(她连撞两轮"功能没生效",根因就是旧缓存)。 */
+  if (versionTag) versionTag.textContent = `v${window.LL_BUILD || ADMIN_BUILD}`
   applyLanguage()
   setLocked(true)
   if (!owner.auth?.accessToken) return

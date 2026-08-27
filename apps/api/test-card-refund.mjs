@@ -247,6 +247,45 @@ if (bk.status === 201 || bk.status === 200) {
   check('⑨ 退干净的卡不能再核销(排单失败,跳过)', false, JSON.stringify(bk.data).slice(0, 140))
 }
 
+/* 🔴 店主 08-27 追加:上面那条 ⑨ 要先排得上单才跑得起来,排不上就红在"排单"上,不是红在核销上。
+   她要的是**直接打核销接口**这一刀(第 8 步下半不用等小程序):
+   开单不带 bookingId(裁B:引擎自动建即时预约),核销口是同一个 `createSettlementGroup`,
+   所以这条走的正是小程序那条路,只是绕开了排班。
+   ⑨-c 是**反向守**:光有"一律拒"也能让 ⑨/⑨-b 全绿 —— 必须证明没退干净的卡照样核销得动,
+   而且剩余次数真的从 4 掉到 3。 */
+{
+  const mk = (used, total, price) => {
+    const id = `tc-${RUN}-${Math.random().toString(36).slice(2, 8)}`
+    db.prepare(`INSERT INTO member_timecards (id, tenant_id, user_id, package_id, name, total_times, used_times, price_cents, project_group, created_at)
+      VALUES (?, ?, ?, NULL, ?, ?, ?, ?, '', ?)`).run(id, tid, userId, `直打核销卡${RUN}`, total, used, price, new Date().toISOString())
+    return id
+  }
+  const deadCard = mk(2, 10, 200000)
+  const rDead = await request(`/admin/timecards/${deadCard}/refund`, { method: 'POST', body: JSON.stringify({ times: 8, amountCents: 160000, payChannel: 'cash', reason: '全退' }) }, TOKEN, H)
+  const direct = await request('/admin/settlements', { method: 'POST', body: JSON.stringify({ userId, settlements: [{ payIntent: 'offline_full', items: [{ serviceId, qty: 1 }], timecardId: deadCard, timecardServiceId: serviceId }] }) }, TOKEN, H)
+  check('⑨-b 🔴 直接打核销接口 + 一张退干净的次卡 = 拒(不经排班,走的是小程序同一条口)',
+    (rDead.status === 201 || rDead.status === 200) && direct.status === 400 && /TIMECARD_USED_UP/.test(JSON.stringify(direct.data)),
+    `退卡 ${rDead.status} · 核销 ${direct.status} ${JSON.stringify(direct.data).slice(0, 100)}`)
+  check('⑨-b2 退干净的卡在"可核销卡"列表里也不出现(选卡那一层就没得选)',
+    !((await request(`/admin/customers/${userId}/timecards`, {}, TOKEN, H)).data.timecards || []).some((c) => c.id === deadCard && (c.remainingTimes ?? 1) > 0))
+  const liveCard = mk(2, 10, 200000)
+  await request(`/admin/timecards/${liveCard}/refund`, { method: 'POST', body: JSON.stringify({ times: 4, amountCents: 80000, payChannel: 'cash', reason: '退一半' }) }, TOKEN, H)
+  const beforeUsed = db.prepare('SELECT used_times FROM member_timecards WHERE id = ?').get(liveCard).used_times
+  const okUse = await request('/admin/settlements', { method: 'POST', body: JSON.stringify({ userId, settlements: [{ payIntent: 'offline_full', items: [{ serviceId, qty: 1 }], timecardId: liveCard, timecardServiceId: serviceId, technicians: [{ technicianId, role: 'main', itemNos: [1] }] }] }) }, TOKEN, H)
+  /* 扣卡在**签字那一刻**才发生(规则⑥:手动耗卡已废,只随签字入账),
+     所以反向守要签完再数 —— 只看"开单成功"证不到"次数真的少了一次"。 */
+  const liveCode = okUse.data?.settlements?.[0]?.code
+  if (liveCode) {
+    await fetch(`${BASE_URL}/settlements/${encodeURIComponent(liveCode)}/sign`, {
+      method: 'POST', headers: { 'content-type': 'application/json', 'x-tenant-id': tid }, body: JSON.stringify({ signature: '演示', disclaimerAccepted: true })
+    })
+  }
+  const afterUsed = db.prepare('SELECT used_times FROM member_timecards WHERE id = ?').get(liveCard).used_times
+  check('⑨-c 反向守:退了一半的卡照样核销得动,签完剩余真的少一次(不是"一律拒"混过去的绿)',
+    (okUse.status === 201 || okUse.status === 200) && afterUsed === beforeUsed + 1,
+    `${okUse.status} · used ${beforeUsed}→${afterUsed} · code ${liveCode || '无'}`)
+}
+
 // ===== 十、退卡后还算不算会员:两种配置各跑一遍,行为必须不同 =====
 const setCfg = (mode) => request(`/platform/tenants/${tid}/membership-config`, { method: 'PUT', body: JSON.stringify({ config: { memberQualify: 'any_recharge', keepMemberAfterRefund: mode } }) })
 const isMember = async () => {
@@ -409,6 +448,42 @@ check('⑩-2 🔴 行为必须不同:keep=仍是会员 / drop=余额归零即失
     /owner\.role === 'owner' \? `<button class="ghost slim" data-account-adjust/.test(adminSrc), '入口没有按角色渲染')
 }
 
+/* 🔴 缓存失效(店主 2026-08-27 第三轮:两次"功能没生效"其实都是浏览器在跑旧 JS)。
+   立的律是**运行时取证律·前端条**:断言要跑在"店主实际会加载到的那份资源"上。
+   所以这里判的不是源文件,是 /admin 这一页**真发出来的 HTML**:
+     ① 资源 URL 必须带内容指纹;② 改一个字节 → URL 与页面版本串都必须变。 */
+{
+  const { readFileSync: rfp, writeFileSync: wfp } = await import('node:fs')
+  const { join: jp, dirname: dp } = await import('node:path')
+  const { fileURLToPath: fp } = await import('node:url')
+  const ROOTF = jp(dp(fp(import.meta.url)), '../..')
+  const probeFile = jp(ROOTF, 'apps/web/money-input.js')
+  const grab = async () => {
+    const html = await (await fetch(`${BASE_URL}/admin`)).text()
+    return {
+      asset: (html.match(/\/web\/money-input\.js\?v=([a-f0-9]+)/) || [])[1] || '',
+      build: (html.match(/LL_BUILD="([a-f0-9]+)"/) || [])[1] || ''
+    }
+  }
+  const before = await grab()
+  check('缓存①-1 前端资源 URL 带内容指纹(不是手写版本号)', /^[a-f0-9]{10}$/.test(before.asset), before.asset)
+  check('缓存①-2 页面版本串由服务端按内容算(window.LL_BUILD 在)', /^[a-f0-9]{8}$/.test(before.build), before.build)
+  const original = rfp(probeFile, 'utf8')
+  try {
+    wfp(probeFile, `${original}\n// 指纹断言临时改一行\n`)
+    const after = await grab()
+    check('缓存①-3 🔴 内容变一个字节 → 资源 URL 必须不同(旧缓存不可能命中)',
+      after.asset && after.asset !== before.asset, `${before.asset} → ${after.asset}`)
+    check('缓存①-4 🔴 内容变一个字节 → 页面上的版本串也必须不同(店主看得出自己在哪一版)',
+      after.build && after.build !== before.build, `${before.build} → ${after.build}`)
+  } finally {
+    wfp(probeFile, original)
+  }
+  const restored = await grab()
+  check('缓存①-5 改回去之后指纹回到原值(它只跟内容走,不跟时间走)',
+    restored.asset === before.asset && restored.build === before.build, `${restored.asset} vs ${before.asset}`)
+}
+
 /* ═══ v1.2(店主 2026-08-27 走查回执四件)═══ */
 
 // ② 日结应有数:算式三项之和 ≡ 大数;转账那笔**不进算式**
@@ -438,10 +513,27 @@ check('⑩-2 🔴 行为必须不同:keep=仍是会员 / drop=余额归零即失
      只读两个文件就会漏掉它(实测漏过一次)。这里读的是"网页商家端全部会出现钱输入框的地方"。 */
   const web = ['apps/web/admin.js', 'apps/web/account-adjust.js', 'apps/web/daily-close-rows.js']
     .map((f) => rf3(j4(ROOT3, f), 'utf8')).join('\n')
-  const moneyIds = ['aaAmount', 'aaCardAmount', 'finAmount', 'finRuleAmount', 'mSvAmount', 'mSvBonus', 'cpnGrantAmount', 'dcNewTotal']
+  const moneyIds = ['aaAmount', 'aaCardAmount', 'finAmount', 'finRuleAmount', 'mSvAmount', 'mSvBonus', 'cpnGrantAmount', 'dcNewTotal',
+    'kbFactDeposit', 'goalMonth', 'goalYear', 'finTargetMonth', 'finTargetYear', 'spBase', 'spHandwork', 'spOtRate']
   const stillNumber = moneyIds.filter((id) => new RegExp(`id="${id}"[^>]*type="number"`).test(web))
-  check('v1.2③-1 🔴 所有钱的输入框都不再是 type=number(去掉那对上下箭头)',
+  check(`v1.2③-1 🔴 ${moneyIds.length} 个钱的输入框都不再是 type=number(去掉那对上下箭头)`,
     stillNumber.length === 0, stillNumber.join(' | '))
+  /* 🔴 判据律现场:上面那条只验**我列出来的**那几个 —— 它叫"所有"却证不了"所有",
+     漏掉的字段在缺陷存在时照样绿(08-27 全仓一数:定金/月目标/年目标/底薪/手工费/加班费率/阶梯起止
+     共 10 个钱的框还挂着 spinner,而那条断言当时是绿的)。
+     改成**反过来数**:把网页端所有 type=number 的框抠出来,逐个必须落在下面这份
+     「不是钱」的白名单里(百分比 / 每月几号 / 排序 / 时长)。以后谁再拿 type=number 加一个钱的框,
+     它不在白名单里 → 立刻红。这条才配叫"所有"。 */
+  const NON_MONEY = ['goalRate', 'finTargetRate', 'spFlatPct', 'spFirstPct', 'spRenewPct', 'finRuleDay']
+  const numberInputs = [...web.matchAll(/<input([^>]*type="number"[^>]*)>/g)].map((m) => m[1])
+  const suspects = numberInputs.filter((attrs) => {
+    const id = (/id="([^"]+)"/.exec(attrs) || [])[1] || ''
+    const isPct = /data-f="pct"|max="100"|placeholder="%"/.test(attrs)
+    const isSort = /class="pricing-sort"/.test(attrs)
+    return !NON_MONEY.includes(id) && !isPct && !isSort
+  })
+  check(`v1.2③-1b 🔴 反过来数:全网页端 ${numberInputs.length} 个 type=number 全是"不是钱"的(百分比/几号/排序)`,
+    suspects.length === 0 && numberInputs.length >= 5, suspects.join(' | ').slice(0, 300))
   const noInputmode = moneyIds.filter((id) => !new RegExp(`id="${id}"[^>]*inputmode="decimal"`).test(web)
     && !new RegExp(`MoneyInput\\.field\\(\\{ id: '${id}'`).test(web))
   check('v1.2③-2 都带 inputmode="decimal"(手机上照样弹数字键盘)', noInputmode.length === 0, noInputmode.join(' | '))
@@ -467,7 +559,7 @@ check('⑩-2 🔴 行为必须不同:keep=仍是会员 / drop=余额归零即失
   const modFail = [
     loadWebModule('apps/web/account-adjust.js', { name: 'AccountAdjust', keys: ['open', 'close', 'handleClick'] }),
     loadWebModule('apps/web/money-input.js', { name: 'MoneyInput', keys: ['field', 'normalize', 'centsOf'] }),
-    loadWebModule('apps/web/my-customers.js', { name: 'MyCustomers', keys: ['render'] }),
+    loadWebModule('apps/web/my-customers.js', { name: 'MyCustomers', keys: ['render', 'open'] }),
     loadWebModule('apps/web/daily-close-rows.js', { name: 'DailyCloseRows', keys: ['cashAndRefundRows', 'correctionForm', 'targetCellText'] })
   ].filter(Boolean)
   check('v1.2③-5 🔴 四个前端模块真装得起来、导出齐(点不动那种病,代码行断言看不出来)',
@@ -507,6 +599,74 @@ check('⑩-2 🔴 行为必须不同:keep=仍是会员 / drop=余额归零即失
     check('v1.2④-6 「我的客人」页零金额编辑口(不出现账户调整/充值按钮)',
       /renderMyCustomers/.test(web2) && !/renderMyCustomers[\s\S]{0,1500}?data-account-adjust/.test(web2)
       && !/renderMyCustomers[\s\S]{0,1500}?data-customer-recharge/.test(web2))
+
+    /* 🔴 店主 08-27 追加:「我的客人」要**点得开** —— 技师看基本信息/到店记录/服务历史/偏好,
+       能写服务小记与备注;碰不到余额·充值·赠送·退卡·冲销·会员等级。
+       她给的判据是**两向**的,两向都得有,单向那半条会自己骗自己:
+         负向 = 钱的按钮数 0;正向 = 写小记接口 200。
+       负向单独立着会被"整页什么都没有"蒙混过去(那也是 0),所以每条负向都配一个反向守:
+       按钮总数 ≥ 2、服务历史 ≥ 1 —— 先证明"这页真有东西",再说"里头没有钱"。 */
+    const det = await request(`/admin/my-customers/${userId}`, {}, stf, H)
+    check('④-7 点开一位客人:真有料(服务历史 + 可写小记)',
+      det.status === 200 && (det.data.bookings || []).length >= 1 && det.data.canWriteNote === true,
+      `${det.status} · 历史 ${(det.data.bookings || []).length} 条`)
+    /* 🔴 08-27 实拍抓到的两处(截图在交付文档里):服务历史那行直接渲染了裸 `COMPLETED`,
+       小记时间戳是裸 ISO 的 UTC 时刻(多伦多下午 4 点显示成 08:59)。
+       两处都是"前端拿字段自己拼"的老毛病 —— 收成后端出句:状态走全仓唯一出口 bookingStatusText,
+       时间走门店时区。判据不看代码看**下发的值**:状态必须是中文、时间必须是门店当天。 */
+    check('④-7c 🔴 状态词是中文、由后端出句(不许把 COMPLETED 直接甩给店员看)',
+      (det.data.bookings || []).every((b) => /^[一-龥]+$/.test(String(b.statusText || ''))
+        && !/[A-Z_]{3,}/.test(String(b.statusText || ''))),
+      JSON.stringify((det.data.bookings || []).map((b) => b.statusText)))
+    const storeToday = new Date().toLocaleDateString('en-CA', { timeZone: 'America/Toronto' })
+    check('④-7d 🔴 时间按门店时区出句(裸 ISO 会把多伦多的下午显示成 UTC 的晚上)',
+      (det.data.bookings || []).every((b) => /^\d{4}-\d{2}-\d{2} \d{2}:\d{2}$/.test(String(b.atText || '')))
+      && (det.data.bookings || []).some((b) => String(b.atText || '').startsWith(storeToday)),
+      JSON.stringify((det.data.bookings || []).map((b) => b.atText)))
+    check('④-7b 服务历史带项目名(技师要看的是"上次给她做了什么")',
+      (det.data.bookings || []).some((b) => String(b.serviceName || '').length > 0),
+      JSON.stringify((det.data.bookings || []).map((b) => b.serviceName)).slice(0, 120))
+    /* 负向:**按键名**扫,不扫文本 —— 那句「余额、充值、退卡这些是老板的口」本身就带这些字,
+       扫全文会把说明句当成缺陷(08-23 判据律:判据要能证伪你要证的那件事,不是碰字就红)。 */
+    const keysOf = (v, acc = []) => {
+      if (Array.isArray(v)) v.forEach((x) => keysOf(x, acc))
+      else if (v && typeof v === 'object') Object.keys(v).forEach((k) => { acc.push(k); keysOf(v[k], acc) })
+      return acc
+    }
+    const allKeys = keysOf(det.data)
+    const moneyKeys = allKeys.filter((k) => /balance|bonus|amount|cents|price|refund|recharge|level|discount|paid|stored/i.test(k))
+    check('④-8 🔴 详情接口一个金额字段都不下发(负向;反向守=真下发了 ' + allKeys.length + ' 个字段)',
+      moneyKeys.length === 0 && allKeys.length >= 8, `钱字段:${moneyKeys.join(',') || '无'}`)
+    /* 正向:写一条小记要 201,而且**从「我的客人」这一页读得回来**(只写不显=白写)。
+       🔴 写口是**现成的** POST /admin/service-notes(员工/老板均可写,带 AI 结构化)——
+       我第一版另开了 /admin/my-customers/:id/notes 并新建了一张同名表,`CREATE TABLE IF NOT EXISTS`
+       悄悄没建成,接口直接 500(no such column: kind)。公约④「动手前先搜复用」的现场教训,
+       所以这里连断言一起接回现有那条口:并排两个写口本身就是缺陷。 */
+    const wrote = await request('/admin/service-notes', { method: 'POST', body: JSON.stringify({ userId, rawText: `偏爱裸色,卸甲要轻${RUN}` }) }, stf, H)
+    const det2 = await request(`/admin/my-customers/${userId}`, {}, stf, H)
+    check('④-9 正向:写小记接口 200(201 Created)且在「我的客人」里读得回来',
+      wrote.status === 201 && (det2.data.notes || []).some((n) => String(n.body || '').includes(RUN)
+        && /^\d{4}-\d{2}-\d{2} \d{2}:\d{2}$/.test(String(n.createdText || ''))),
+      `${wrote.status} · 小记 ${(det2.data.notes || []).length} 条`)
+    check('④-9b 写口只有一个(不许并排再开第二个小记接口)',
+      (await request(`/admin/my-customers/${userId}/notes`, { method: 'POST', body: JSON.stringify({ body: 'x' }) }, stf, H)).status === 404)
+    const emptyNote = await request('/admin/service-notes', { method: 'POST', body: JSON.stringify({ userId, rawText: '   ' }) }, stf, H)
+    check('④-9c 空小记写不进去(异常输入)', emptyNote.status === 400, String(emptyNote.status))
+    const othersNote = await request('/admin/service-notes', { method: 'POST', body: JSON.stringify({ userId: otherUser, rawText: '越权写' }) }, stf, H)
+    check('④-10 🔴 别人的客人写不了小记(越权=404;读口早就限死了,写口 08-27 才补上同一刀)',
+      othersNote.status === 404, String(othersNote.status))
+    const ownerNote = await request('/admin/service-notes', { method: 'POST', body: JSON.stringify({ userId: otherUser, rawText: '老板写谁都行' }) }, TOKEN, H)
+    check('④-10b 反向守:老板写谁都行(证明上一条 404 是"越权"挡的,不是这条口本身坏了)',
+      ownerNote.status === 201, String(ownerNote.status))
+    /* 前端那一半:数**按钮**,不数字符。反向守=按钮总数 ≥ 2(证明这条正则真数得到东西)。 */
+    const mcSrc = (await import('node:fs')).readFileSync((await import('node:path')).join((await import('node:path')).dirname((await import('node:url')).fileURLToPath(import.meta.url)), '../../apps/web/my-customers.js'), 'utf8')
+    const btns = [...mcSrc.matchAll(/<button[\s\S]*?<\/button>/g)].map((m) => m[0])
+    const moneyBtns = btns.filter((b) => /余额|充值|赠送|退卡|冲销|会员等级|account-adjust|recharge|refund|reversal/.test(b))
+    check('④-11 🔴 「我的客人」页钱的按钮数 = 0(负向;反向守=页上共 ' + btns.length + ' 个按钮)',
+      moneyBtns.length === 0 && btns.length >= 2, moneyBtns.join(' | ').slice(0, 160))
+    check('④-11b 正向:页上真有写小记的口(不是靠"整页空着"混过负向)',
+      /data-my-note=/.test(mcSrc) && /#myNoteBody/.test(mcSrc) && /data-my-customer=/.test(mcSrc)
+      && /\/admin\/service-notes/.test(mcSrc))
   } else {
     check('v1.2④ 员工号建不出来', false, JSON.stringify(acct2.data).slice(0, 120))
   }

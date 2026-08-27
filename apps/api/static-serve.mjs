@@ -2,7 +2,9 @@
 
    本批动的就是这一域(微信业务域名校验文件要 .txt 原文返回、不存在要真 404),
    按公约②「边改边拆」把它整域搬出来;**行为一字未改**,依赖由调用方注入。 */
-export function createStaticServe({ existsSync, statSync, readFileSync, join, normalize, extname }) {
+/* transformHtml:发 HTML 的那一刻过一道(2026-08-27 给前端资源打内容指纹用)。
+   放在这里而不是各调用点 —— 页面有好几个入口,漏一个就等于那一页永远吃旧缓存。 */
+export function createStaticServe({ existsSync, statSync, readFileSync, join, normalize, extname, transformHtml = null }) {
   function contentType(filePath) {
     const ext = extname(filePath)
     if (ext === '.html') return 'text/html; charset=utf-8'
@@ -40,6 +42,10 @@ export function createStaticServe({ existsSync, statSync, readFileSync, join, no
       'content-type': type,
       ...(type.startsWith('text/') || type.includes('javascript') ? { 'cache-control': 'no-store' } : {})
     })
+    if (type.startsWith('text/html') && transformHtml) {
+      res.end(transformHtml(readFileSync(filePath, 'utf8'), { baseDir }))
+      return true
+    }
     res.end(readFileSync(filePath))
     return true
   }
