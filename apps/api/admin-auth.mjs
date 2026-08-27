@@ -64,5 +64,20 @@ export function createAdminAuth({ db, randomId, iso, createHash, defaultTenantId
     }
   }
 
-  return { adminPasswordHash, randomPassword, issueAdminSession, adminFromSessionToken, bootstrapOwnerAccount }
+
+  /* 演示令牌(邮箱那条路)——**只在演示开关下有效**,调用方负责判 DEMO_LOGIN_ALLOWED。
+     2026-08-26 查明:商家侧 08-07 就上了这道闸,**顾客侧漏了同一刀**,于是知道邮箱
+     就能拿 `demo-customer:<email>` 当成那个人(连密码都不用),而且生产上那条路开着。
+     令牌本身不带任何签名 —— 这也正是它绝不能出现在生产口径里的原因。 */
+  function demoAuthFor(email, scope = 'customer') {
+    return { accessToken: `demo-${scope}:${encodeURIComponent(email)}`, refreshToken: null, expiresIn: 3600, tokenType: 'bearer' }
+  }
+
+  function demoEmailFromToken(token, scope = 'customer') {
+    const prefix = `demo-${scope}:`
+    if (!String(token || '').startsWith(prefix)) return ''
+    return decodeURIComponent(token.slice(prefix.length)).trim().toLowerCase()
+  }
+
+  return { adminPasswordHash, randomPassword, issueAdminSession, adminFromSessionToken, bootstrapOwnerAccount, demoAuthFor, demoEmailFromToken }
 }

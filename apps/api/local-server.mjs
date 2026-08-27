@@ -1305,7 +1305,11 @@ function requireCustomer(req) {
   const token = auth.startsWith('Bearer ') ? auth.slice(7) : ''
   const miniUser = customerFromMiniToken(token)
   if (miniUser) return miniUser
-  const email = demoEmailFromToken(token, 'customer')
+  /* 🔴 2026-08-26(店主走查前抓出):顾客侧的演示令牌**一直没上闸**。
+     商家侧 2026-08-07 就把 demo 白名单锁进 DEMO_LOGIN_ALLOWED 了,顾客侧漏了同一刀 ——
+     结果是:知道邮箱就能拿到 `demo-customer:<email>` 当成那个人(连密码都不用)。
+     现在与商家侧走**同一个开关**:生产恒关(判据写死在 DEMO_LOGIN_ALLOWED 里,不看环境变量脸色)。 */
+  const email = DEMO_LOGIN_ALLOWED ? demoEmailFromToken(token, 'customer') : ''
   if (email) return registerEmailUser({ email, displayName: email.split('@')[0] })
   throw apiError(401, 'UNAUTHORIZED', 'Customer login is required before booking or payment.')
 }
@@ -6210,20 +6214,7 @@ function randomId(prefix) {
   return `${prefix}_${Date.now().toString(36)}_${Math.random().toString(36).slice(2, 8)}`
 }
 
-function demoAuthFor(email, scope = 'customer') {
-  return {
-    accessToken: `demo-${scope}:${encodeURIComponent(email)}`,
-    refreshToken: null,
-    expiresIn: 3600,
-    tokenType: 'bearer'
-  }
-}
 
-function demoEmailFromToken(token, scope = 'customer') {
-  const prefix = `demo-${scope}:`
-  if (!String(token || '').startsWith(prefix)) return ''
-  return decodeURIComponent(token.slice(prefix.length)).trim().toLowerCase()
-}
 
 function base64UrlEncode(value) {
   return Buffer.from(JSON.stringify(value)).toString('base64url')
@@ -7145,7 +7136,7 @@ function computeFinanceProgress(month) {
 // ===== 财务密码门禁：进入财务数据前的第二道锁 =====
 const financeSessions = new Map()
 const { importTenantCustomers } = createImportCustomers({ db, apiError, randomId, iso })
-const { adminPasswordHash, randomPassword, issueAdminSession, adminFromSessionToken, bootstrapOwnerAccount } = createAdminAuth({
+const { adminPasswordHash, randomPassword, issueAdminSession, adminFromSessionToken, bootstrapOwnerAccount, demoAuthFor, demoEmailFromToken } = createAdminAuth({
   db, randomId, iso, createHash, defaultTenantId: DEFAULT_TENANT_ID
 })
 const platformSessions = createPlatformSessions({
@@ -11186,15 +11177,16 @@ async function route(req, res) {
     const result = await handleWecomInbound(inbound, req)
     return json(res, 200, { ok: true, ...result })
   }
-  if (req.method === 'POST' && path === '/auth/email/register') {
+  /* 🔴 邮箱注册/登录这两条**本来就是演示口**(不校验任何口令,`mode: 'demo'` 是它自报的),
+     所以只在演示开关下开放。生产上要的是真实校验(验证码/微信授权),那是另一件事 ——
+     没做之前,这条路必须是关的,不能因为"顾客端得有个登录"就把门虚掩着。 */
+  if (req.method === 'POST' && (path === '/auth/email/register' || path === '/auth/email/login')) {
+    if (!DEMO_LOGIN_ALLOWED) {
+      throw apiError(403, 'DEMO_LOGIN_DISABLED', '邮箱登录目前只在本地/沙箱开放(它不校验密码)。生产顾客端请用微信登录。')
+    }
     const body = await readBody(req)
     const user = registerEmailUser(body)
-    return json(res, 201, { user, auth: demoAuthFor(user.email || body.email), mode: 'demo' })
-  }
-  if (req.method === 'POST' && path === '/auth/email/login') {
-    const body = await readBody(req)
-    const user = registerEmailUser(body)
-    return json(res, 200, { user, auth: demoAuthFor(user.email || body.email), mode: 'demo' })
+    return json(res, path.endsWith('register') ? 201 : 200, { user, auth: demoAuthFor(user.email || body.email), mode: 'demo' })
   }
   if (req.method === 'POST' && path === '/auth/wechat/mini-login') return json(res, 200, await signInWechatMiniUser(await readBody(req)))
   // 商家入驻申请(公开表单,无需登录):留资给平台客服联系

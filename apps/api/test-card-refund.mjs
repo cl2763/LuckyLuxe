@@ -165,8 +165,10 @@ check('⑦-2 留痕行自证「不进收入」', rf.incomeImpactCents === 0 && /
      (那道闸是对的 —— 余额不许为负)。所以先补一笔同日充值(走微信,不进当天抽屉)。 */
   db.prepare(`INSERT INTO stored_value_transactions (id, tenant_id, user_id, type, amount_cents, pay_channel, note, created_by, created_at)
     VALUES (?, ?, ?, 'recharge', 5000, 'wechat', '昨天充的(夹具配平)', 'fixture', ?)`).run(`sv-ydr-${RUN}`, tid, userId, ydIso)
-  db.prepare(`INSERT INTO stored_value_transactions (id, tenant_id, user_id, type, amount_cents, pay_channel, note, created_by, created_at)
-    VALUES (?, ?, ?, 'refund', -5000, 'cash', '昨天退的', 'fixture', ?)`).run(`sv-yd-${RUN}`, tid, userId, ydIso)
+  /* 夹具也要带两个分量 —— 它模拟的是一笔真退款;不带就等于夹具自己绕过了拆账,
+     全表恒等式那条会当场把它抓出来(08-26 实测抓到过,改在这儿而不是给夹具开例外)。 */
+  db.prepare(`INSERT INTO stored_value_transactions (id, tenant_id, user_id, type, amount_cents, pay_channel, note, created_by, created_at, paid_part_cents, bonus_part_cents)
+    VALUES (?, ?, ?, 'refund', -5000, 'cash', '昨天退的', 'fixture', ?, 5000, 0)`).run(`sv-yd-${RUN}`, tid, userId, ydIso)
   const todayAgain = (await request(`/admin/daily-close?date=${today}`, {}, TOKEN, H)).data.dailyClose
   check('⑦-10 昨天那笔退款不影响今天的应有数', todayAgain.cashDrawer.shouldHaveCents === drawer.shouldHaveCents,
     `${drawer.shouldHaveCents} → ${todayAgain.cashDrawer.shouldHaveCents}`)
@@ -397,6 +399,63 @@ check('⑩-2 🔴 行为必须不同:keep=仍是会员 / drop=余额归零即失
   }
   check('v1.1③-4 员工端**连按钮都不渲染**(不是点了报错)',
     /owner\.role === 'owner' \? `<button class="ghost slim" data-account-adjust/.test(adminSrc), '入口没有按角色渲染')
+}
+
+/* 🔴 恒等式要**扫全表**,不能只验刚写的那一行(店主 08-26 第 10 步点的正是这个:
+   "绿的才是问题 —— 说明只扫新行")。范围=本套件建的两家店的**所有** refund 行:
+   它们全是当前代码写的,所以每一行都必须带分量且恒等;缺一行就说明有别的写路绕过了拆账。 */
+{
+  const sweep = db.prepare("SELECT id, tenant_id, amount_cents a, paid_part_cents p, bonus_part_cents b FROM stored_value_transactions WHERE type = 'refund' AND tenant_id IN (?, ?)").all(tid, `n5b-${RUN}`)
+  const noParts = sweep.filter((r) => r.p === null || r.b === null)
+  const broken = sweep.filter((r) => r.p !== null && r.b !== null && r.p + r.b !== Math.abs(r.a))
+  check('恒等式扫全表-1 本批所有退款行都带两个分量(没有"绕过拆账"的写路)',
+    sweep.length > 0 && noParts.length === 0, `${sweep.length} 行,缺分量 ${noParts.length} 行:${noParts.map((r) => r.id).join(',')}`)
+  check('恒等式扫全表-2 🔴 每一行 paid_part + bonus_part ≡ 退款金额',
+    broken.length === 0, broken.map((r) => `${r.id}:${r.p}+${r.b}≠${Math.abs(r.a)}`).join(' | '))
+}
+
+/* 🔴 顾客侧演示登录必须只在沙箱生效(店主 08-26 走查前追问「随便填密码」这条旁路)。
+   查明:商家侧 2026-08-07 已把 demo 白名单锁进 DEMO_LOGIN_ALLOWED,**顾客侧漏了同一刀** ——
+   知道邮箱就能拿 `demo-customer:<email>` 当成那个人,连密码都不用,而且**生产上这条路开着**。
+   判据不能只读代码:**真起一个 NODE_ENV=production 的实例**,而且故意把 ALLOW_DEMO_ADMIN_LOGIN
+   也打开 —— 证明这条路在生产口径下**拿环境变量也打不开**。 */
+{
+  const { spawn } = await import('node:child_process')
+  const { mkdtempSync, rmSync } = await import('node:fs')
+  const { tmpdir } = await import('node:os')
+  const { join: j3, dirname: d3 } = await import('node:path')
+  const { fileURLToPath: f3 } = await import('node:url')
+  const here = d3(f3(import.meta.url))
+  const dir = mkdtempSync(j3(tmpdir(), 'll-prodgate-'))
+  const port = 4406
+  const child = spawn(process.execPath, ['local-server.mjs'], {
+    cwd: here, stdio: 'ignore',
+    env: { ...process.env, NODE_ENV: 'production', ALLOW_DEMO_ADMIN_LOGIN: 'true', DATA_DIR: dir, PORT: String(port), TEST_DB_PATH: '' }
+  })
+  const wait = async () => {
+    for (let i = 0; i < 60; i += 1) {
+      try { const r = await fetch(`http://127.0.0.1:${port}/health`); if (r.ok) return true } catch { /* 还没起来 */ }
+      await new Promise((r) => setTimeout(r, 500))
+    }
+    return false
+  }
+  const up = await wait()
+  try {
+    check('生产闸-0 生产模式实例起得来(判据要真调用,不是读代码)', up)
+    const loginRes = await fetch(`http://127.0.0.1:${port}/auth/email/login`, {
+      method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ email: 'probe@example.com', password: 'x' })
+    })
+    const loginBody = await loginRes.json().catch(() => ({}))
+    check('生产闸-1 🔴 生产口径下邮箱登录 = 403 DEMO_LOGIN_DISABLED(且 ALLOW_DEMO_ADMIN_LOGIN=true 也打不开)',
+      loginRes.status === 403 && loginBody?.error?.code === 'DEMO_LOGIN_DISABLED', `${loginRes.status} ${JSON.stringify(loginBody).slice(0, 120)}`)
+    const forged = await fetch(`http://127.0.0.1:${port}/my/stored-value`, { headers: { authorization: 'Bearer demo-customer:probe%40example.com' } })
+    check('生产闸-2 🔴 伪造 demo-customer 令牌在生产口径下 = 401(顾客侧与商家侧同一把闸)', forged.status === 401, String(forged.status))
+    const localStill = await request('/auth/email/login', { method: 'POST', body: JSON.stringify({ email: `walk-probe-${RUN}@n5.local`, password: 'x' }) }, null)
+    check('生产闸-3 反例:沙箱/本地照旧可用(别把走查台也锁死了)', localStill.status === 200, String(localStill.status))
+  } finally {
+    child.kill()
+    try { rmSync(dir, { recursive: true, force: true }) } catch { /* 清不掉不影响断言 */ }
+  }
 }
 
 db.close()
