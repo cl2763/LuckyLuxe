@@ -18,7 +18,9 @@ function shiftDate(d, n) {
 // 两处共用的初始 data(展开进各自 Page 的 data)
 const dailyCloseData = {
   date: '', loading: true, isToday: true, v: null, open: {}, shares: {},
-  correcting: null, newTotal: '', reason: ''
+  correcting: null, newTotal: '', reason: '',
+  // D79 现金手记的表单态(金额/备注只进 data,不回写输入框 —— 敲的过程中不许重画)
+  noteKind: '', noteKindIndex: 0, noteSignIndex: 0, noteAmount: '', noteText: ''
 }
 
 const dailyCloseMixin = {
@@ -121,6 +123,16 @@ const dailyCloseMixin = {
             rows: (dc.cashDrawer.rows || []).map((r) => ({ label: r.label, amt: `${r.sign} ${r.amountText}`, neg: Boolean(r.negative) })),
             footnote: dc.cashDrawer.footnote || '',
             amendNote: dc.cashDrawer.amendNote || ''   // 更正后「营业额 ≠ 抽屉数」的那句解释(后端出句,双端同句)
+          } : null,
+          /* 🔴 D79(店主 2026-08-28)线下现金腿:买材料的现金、备用金、找零、更正后的现金找补。
+             列表与金额句**全部后端给**(kindLabel / amountText),这里零拼串、零计算 —— 与网页端同源同句。 */
+          notes: dc.cashNotes ? {
+            label: dc.cashNotes.label || '现金手记',
+            hint: dc.cashNotes.hint || '',
+            kinds: dc.cashNotes.kinds || [],
+            items: (dc.cashNotes.items || []).map((it) => ({
+              id: it.id, kindLabel: it.kindLabel, note: it.note, amt: it.amountText, isReversal: it.isReversal
+            }))
           } : null,
           headline: (dc.headline || []).map((h) => ({ label: h.label, value: h.value })),
           refundLine: (dc.refunds && dc.refunds.totalCents)
@@ -248,6 +260,36 @@ const dailyCloseMixin = {
       wx.showToast({ title: '日结已确认,业绩定格', icon: 'none' })
       this.loadClose(this.data.date)
     } catch (e) { wx.showToast({ title: (e && e.message) || '确认失败', icon: 'none' }) }
+  },
+  /* D79 手记入口(商家端)。金额框在 wxml 里是 type=digit,**敲的过程中不重画**
+     (只把值收进 data,不回写、不格式化)—— 店主 08-27 立的那条同族。
+     备注前端提示、**后端才是最终闸**:接口直调同样会被 NOTE_REQUIRED 拦。 */
+  onNoteKind(e) { this.setData({ noteKind: (this.data.v.notes.kinds[e.detail.value] || {}).kind || '', noteKindIndex: Number(e.detail.value) }) },
+  onNoteSign(e) { this.setData({ noteSignIndex: Number(e.detail.value) }) },
+  onNoteAmount(e) { this.data.noteAmount = e.detail.value },
+  onNoteText(e) { this.data.noteText = e.detail.value },
+  async addCashNote() {
+    const kinds = ((this.data.v || {}).notes || {}).kinds || []
+    const kind = this.data.noteKind || (kinds[0] || {}).kind || ''
+    const sign = this.data.noteSignIndex === 1 ? 1 : -1
+    const cents = Math.round(Number(this.data.noteAmount || 0) * 100)
+    const note = String(this.data.noteText || '').trim()
+    if (!cents) { wx.showToast({ title: '先填金额', icon: 'none' }); return }
+    if (!note) { wx.showToast({ title: '写一句这笔钱是干什么的', icon: 'none' }); return }
+    try {
+      await api.adminPost('/admin/cash-notes', { date: this.data.date, kind, amountCents: sign * Math.abs(cents), note })
+      this.setData({ noteAmount: '', noteText: '' })
+      wx.showToast({ title: '已记一笔', icon: 'none' })
+      this.loadClose(this.data.date)
+    } catch (e) { wx.showToast({ title: (e && e.message) || '记账失败', icon: 'none' }) }
+  },
+  async reverseCashNote(e) {
+    const id = e.currentTarget.dataset.id
+    try {
+      await api.adminPost(`/admin/cash-notes/${encodeURIComponent(id)}/reverse`, {})
+      wx.showToast({ title: '已冲销(原记录留痕)', icon: 'none' })
+      this.loadClose(this.data.date)
+    } catch (err) { wx.showToast({ title: (err && err.message) || '冲销失败', icon: 'none' }) }
   },
   reopen() {
     wx.showModal({

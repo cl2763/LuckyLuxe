@@ -36,6 +36,49 @@ window.DailyCloseRows = (function () {
       </div>
       ${stats ? `<div class="dc-stats">${stats}</div>` : ''}
       <div class="dc-due-note">${escapeHtml(zh ? '退卡 = 负债减少,不进收入 —— 所以它单独摆一格,不混进营业额。' : 'Refunds reduce liability, not income.')}</div>
+      ${cashNotesBlock(v, { zh, escapeHtml })}
+    `
+  }
+
+  /* 🔴 D79 线下现金腿(店主 2026-08-28):买材料付的现金、备用金、找零、更正后的现金找补 ——
+     系统本来一个都不知道,「今晚数钱按这个数」于是永远等不于抽屉。
+     这一块是**手记的入口 + 当日流水**。三件事按纪律办:
+       ① 金额框走 MoneyInput(type=text + inputmode,敲的过程中不重画);
+       ② 备注必填 —— 前端提示,**后端才是最终闸**(接口直调同样拦);
+       ③ 只追加不修改:记错了点「冲销」追加一条反向行,原始那条留着。 */
+  function cashNotesBlock(v, { zh, escapeHtml }) {
+    const n = v.cashNotes
+    if (!n) return ''
+    const items = n.items || []
+    return `
+      <div class="dc-notes">
+        <div class="dc-notes-head">
+          <strong>${escapeHtml(n.label || '现金手记')}</strong>
+          <span class="subtle">${escapeHtml(n.hint || '')}</span>
+        </div>
+        ${items.length ? `<div class="dc-notes-list">
+          ${items.map((it) => `
+            <div class="dc-notes-row${it.isReversal ? ' rev' : ''}">
+              <span class="k">${escapeHtml(it.kindLabel)}</span>
+              <span class="n">${escapeHtml(it.note)}</span>
+              <span class="a">${escapeHtml(it.amountText)}</span>
+              ${it.isReversal ? `<span class="subtle">${zh ? '冲销行' : 'reversal'}</span>`
+                : `<button class="ghost slim" data-cash-note-reverse="${escapeHtml(it.id)}" type="button">${zh ? '冲销' : 'Reverse'}</button>`}
+            </div>`).join('')}
+        </div>` : `<div class="empty-state small-empty">${zh ? '今天还没有手记。' : 'No notes today.'}</div>`}
+        <div class="dc-notes-form">
+          <select id="dcNoteKind">
+            ${(n.kinds || []).map((k) => `<option value="${escapeHtml(k.kind)}">${escapeHtml(k.label)}</option>`).join('')}
+          </select>
+          <select id="dcNoteSign">
+            <option value="-">${zh ? '钱出抽屉 −' : 'Out −'}</option>
+            <option value="+">${zh ? '钱进抽屉 +' : 'In +'}</option>
+          </select>
+          <input id="dcNoteAmount" data-money type="text" inputmode="decimal" autocomplete="off" placeholder="0.00">
+          <input id="dcNoteText" type="text" maxlength="120" placeholder="${zh ? '这笔钱是干什么的(必填)' : 'What was it for (required)'}">
+          <button class="primary slim" id="dcNoteAdd" type="button">${zh ? '记一笔' : 'Add'}</button>
+        </div>
+      </div>
     `
   }
 
@@ -93,6 +136,27 @@ window.DailyCloseRows = (function () {
         state.correcting = null
         return loadDailyClose(state.date)
       }).catch((error) => toast(error.message))
+      return true
+    }
+    if (event.target.closest('#dcNoteAdd')) {
+      const kind = document.querySelector('#dcNoteKind')?.value || ''
+      const sign = document.querySelector('#dcNoteSign')?.value === '+' ? 1 : -1
+      const cents = yuanToCents(document.querySelector('#dcNoteAmount')?.value)
+      const note = (document.querySelector('#dcNoteText')?.value || '').trim()
+      if (!cents) { toast(zh ? '先填金额' : 'Amount required'); return true }
+      if (!note) { toast(zh ? '写一句这笔钱是干什么的' : 'Note required'); return true }
+      request('/admin/cash-notes', {
+        method: 'POST',
+        body: JSON.stringify({ date: state.date, kind, amountCents: sign * Math.abs(cents), note })
+      }).then(() => { toast(zh ? '已记一笔,应有数已跟着变' : 'Recorded'); return loadDailyClose(state.date) })
+        .catch((error) => toast(error.message))
+      return true
+    }
+    const rev = event.target.closest('[data-cash-note-reverse]')
+    if (rev) {
+      request(`/admin/cash-notes/${encodeURIComponent(rev.dataset.cashNoteReverse)}/reverse`, { method: 'POST', body: JSON.stringify({}) })
+        .then(() => { toast(zh ? '已冲销(原记录留痕)' : 'Reversed'); return loadDailyClose(state.date) })
+        .catch((error) => toast(error.message))
       return true
     }
     if (event.target.closest('#dcConfirm')) {

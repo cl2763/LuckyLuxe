@@ -222,7 +222,7 @@ export function createAccountRefund({ db, apiError, iso, randomId, currentTenant
      所以这个数是「**到店收的钱**(现金+刷卡)应有数」;要精确到钱柜里的纸币,
      得先给线下腿记渠道 —— 那是另一件事,没在这批里做。
      退款这一侧是分渠道的:现金/到店退才从这个数里扣,转账与原路退回单列(它们走银行,不出抽屉)。 */
-  function cashDrawerOf(date, tenantId, { settlementIds = [] } = {}) {
+  function cashDrawerOf(date, tenantId, { settlementIds = [], notesCents = 0, notesCount = 0 } = {}) {
     /* 🔴 08-27 实拍抓到的同屏矛盾:金额更正之后「营业额 CAD $150」而「抽屉里应该有 CAD $198」。
        两个数其实都对 —— 顾客当时**真的付了 198 现金**,差额退没退是门店当场的动作,系统不知道。
        但屏幕不解释就等于自相矛盾(闭环纪律:不许出现找不到上下文的界面状态)。
@@ -247,7 +247,10 @@ export function createAccountRefund({ db, apiError, iso, randomId, currentTenant
     const outCash = refundCash + tcCash
     const outOther = (refunds.totalCents || 0) - outCash
     const money = (c) => formatMoneyCents(c, tenantId, 'auto')
-    const should = storefrontCents + rechargeCash - outCash
+    /* 🔴 D79(店主 2026-08-28)线下现金腿:买材料付的现金、备用金、找零、更正后的现金找补 ——
+       这些系统本来一律不知道,于是「应有数」永远等不于抽屉,而店主不会怀疑系统少算一腿,她会怀疑店员。
+       手记只加在**现金这一行**:不进损益、不进营业额、不进业绩(incomeImpactCents 仍恒为 0)。 */
+    const should = storefrontCents + rechargeCash - outCash + notesCents
     return {
       storefrontCents, storefrontText: money(storefrontCents),
       rechargeCashCents: rechargeCash, rechargeCashText: money(rechargeCash),
@@ -264,7 +267,14 @@ export function createAccountRefund({ db, apiError, iso, randomId, currentTenant
       rows: [
         { label: '到店支付', sign: '+', amountCents: storefrontCents, amountText: money(storefrontCents) },
         { label: '现金充值', sign: '+', amountCents: rechargeCash, amountText: money(rechargeCash) },
-        { label: '现金退卡', sign: '−', amountCents: outCash, amountText: money(outCash), negative: true }
+        { label: '现金退卡', sign: '−', amountCents: outCash, amountText: money(outCash), negative: true },
+        ...(notesCount ? [{
+          label: `现金手记(${notesCount} 笔)`,
+          sign: notesCents < 0 ? '−' : '+',
+          amountCents: Math.abs(notesCents),
+          amountText: money(Math.abs(notesCents)),
+          negative: notesCents < 0
+        }] : [])
       ],
       label: '到店收的钱 · 应有数',
       // 脚注:那部分钱没经过抽屉,所以**不进算式**,只在底下说一句
@@ -277,13 +287,22 @@ export function createAccountRefund({ db, apiError, iso, randomId, currentTenant
           .all(tenantId, ...settlementIds)
         const sum = rows.reduce((n, r) => n + r.d, 0)
         if (!sum) return ''
+        /* D79 之后这句要分两种情况说,否则会自相矛盾(闭环纪律:屏幕上不许有解释不了的数):
+           · 差额**已经**记进现金手记(net 正好等于更正额)→ 抽屉数已经把它算进去了,别再说"实际应是";
+           · 还没记 → 照旧告诉她实际应是多少,并指向手记那个口。 */
+        if (notesCents === sum) {
+          return `今天有金额更正 ${sum < 0 ? '−' : '+'}${money(Math.abs(sum))},差额已经记进下面的现金手记 —— 抽屉这个数已经把它算进去了。`
+        }
+        const wouldBe = should - notesCents + sum
         return sum < 0
-          ? `今天有金额更正 −${money(Math.abs(sum))}:抽屉这个数按**顾客当时实付**算;差额若已当场退给顾客,实际应是 ${money(should + sum)}。`
-          : `今天有金额更正 +${money(sum)}:抽屉这个数按**顾客当时实付**算;补收的差额若已当场收到,实际应是 ${money(should + sum)}。`
+          ? `今天有金额更正 −${money(Math.abs(sum))}:抽屉这个数按**顾客当时实付**算;差额若已当场退给顾客,实际应是 ${money(wouldBe)} —— 在下面「现金手记」里记一笔 −${money(Math.abs(sum))},这个数就自动对上了(D79)。`
+          : `今天有金额更正 +${money(sum)}:抽屉这个数按**顾客当时实付**算;补收的差额若已当场收到,实际应是 ${money(wouldBe)} —— 在下面「现金手记」里记一笔 +${money(sum)},这个数就自动对上了(D79)。`
       })(),
       /* 措辞不许说过头(店主 08-25 更正):能保证的是「到店收的钱·应有数」对得上;
          要精确到抽屉里的纸币,得先给线下腿记渠道 —— 那是后续项,不在这批。 */
-      hint: '到店支付 + 现金充值 − 现金退卡,退卡已经扣掉了。对账按这个数。',
+      hint: notesCount
+        ? '到店支付 + 现金充值 − 现金退卡 ± 现金手记,都算进去了。对账按这个数。'
+        : '到店支付 + 现金充值 − 现金退卡,退卡已经扣掉了。对账按这个数。',
       note: '线下腿不分现金与刷卡(表上没有渠道列),所以这是「到店收的钱」的应有数,不是纯钞票数。'
     }
   }

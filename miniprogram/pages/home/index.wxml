@@ -26,7 +26,8 @@
 
     <!-- 一体店卡(方案A 2026-07-20 定稿):轮播为卡片封面,下接 店名/状态/地址/营业时间/电话 -->
     <view class="shop-card card home-section-container">
-      <swiper class="shop-card-swiper" indicator-dots circular autoplay interval="4600" current="{{activeHero}}" bindchange="onHeroChange">
+      <!-- D78 零回落:这家店没配轮播 → 整块不渲染,只出店卡(不拿别家店的图顶上) -->
+      <swiper wx:if="{{heroSlides.length}}" class="shop-card-swiper" indicator-dots="{{heroSlides.length > 1}}" circular autoplay="{{heroSlides.length > 1}}" interval="4600" current="{{activeHero}}" bindchange="onHeroChange">
         <block wx:for="{{heroSlides}}" wx:key="image">
           <swiper-item>
             <image class="shop-card-visual" src="{{item.image}}" mode="aspectFill"></image>

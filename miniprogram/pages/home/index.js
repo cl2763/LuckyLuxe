@@ -102,11 +102,12 @@ Page({
     i18n.setTitle('有迹')
     /* 🔴 D17:接口挂了如实报失败态,不回 mock。以前这三条任何一条挂了都会
        悄悄回写死的演示服务/门店,顾客看到的是一整套不存在的东西。 */
-    let nailServices, lashServices, stores
+    let nailServices, lashServices, stores, heroSlides
     try {
       nailServices = await api.getServices('nail', lang)
       lashServices = await api.getServices('lash', lang)
       stores = await api.getStores()
+      heroSlides = await api.getHeroSlides()      // D78:轮播按租户出(后端唯一出口)
     } catch (e) {
       this.setData({ lang, t: i18n.pageCopy('home', lang), loadFailed: true })
       return
@@ -118,11 +119,10 @@ Page({
       lang,
       t: i18n.pageCopy('home', lang),
       store: i18n.localizeStore(storeRaw, lang),
-      heroSlides: [
-        { image: '/assets/images/hero-carousel-interior.jpg', label: lang === 'en' ? 'Lucky Luxe studio mood' : 'Lucky Luxe 店内氛围' },
-        { image: '/assets/images/hero-carousel-nail.jpg', label: lang === 'en' ? 'Premium nail detail' : '精致美甲细节' },
-        { image: '/assets/images/hero-carousel-lash.jpg', label: lang === 'en' ? 'Lash service detail' : '美睫服务细节' }
-      ],
+      /* 🔴 D78(店主 2026-08-28):轮播图**按租户出**,与网页顾客端同一个出口(公开 /stores)。
+         原来这里写死三张 Lucky Luxe 的图、文案还带着店名 —— 小婕的店和两家演示店的顾客
+         首页看到的全是别人家的门店照。零回落:后端没给就是空数组,swiper 整块不渲染,只出店卡。 */
+      heroSlides: heroSlides,
       technicianWorks: lang === 'en' ? 'Artist Work' : '技师作品',
       portfolioIntro: lang === 'en' ? 'Browse approved finished work by each artist.' : '浏览每位技师已确认入库的真实作品。',
       recommendedNail: i18n.localizeServices(nailServices.filter((item) => item.isRecommended), lang),

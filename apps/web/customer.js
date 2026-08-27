@@ -354,6 +354,7 @@ const state = {
   technicians: [],
   portfolios: [],
   heroSlide: 0,
+  heroSlides: [],   // D78:轮播图由后端按租户下发(公开 /stores),前端不写死、不回落
   selectedPortfolioTechId: '',
   selectedTechId: '',
   date: defaultDate(),
@@ -857,6 +858,8 @@ async function loadStores() {
   if (sname) document.title = sname
   // 币种跟门店走(公开接口下发,与商家端同源)
   if (data.currencyDisplay) Object.assign(CUR, data.currencyDisplay, { code: data.currency || '' })
+  // D78:轮播图跟门店走(同一趟取回,不额外发请求);没配就是空数组,前端不补默认值
+  state.heroSlides = Array.isArray(data.heroSlides) ? data.heroSlides : []
 }
 
 async function loadAddOns() {
@@ -1037,20 +1040,26 @@ function render() {
   renderAiAssistantWidget()
 }
 
+/* 🔴 D78(店主 2026-08-28 立案):轮播图**按租户出**,后端唯一出口(公开 /stores 下发)。
+   原来这里是写死的三张 Lucky Luxe 门店图,小程序端还各写了一份 —— 小婕的店和两家演示店的顾客
+   首页看到的全是本店的照片。前端从此**零写死、零回落**:后端给什么就是什么,
+   一张都没有 → 返回空数组 → 不出轮播,只出店卡(不拿别家店的图顶上)。 */
 function heroSlides() {
-  return [
-    { image: '/assets/images/hero-carousel-interior.jpg', label: state.lang === 'zh' ? '店内氛围' : 'Studio mood' },
-    { image: '/assets/images/hero-carousel-nail.jpg', label: state.lang === 'zh' ? '精致美甲细节' : 'Premium nail detail' },
-    { image: '/assets/images/hero-carousel-lash.jpg', label: state.lang === 'zh' ? '美睫服务细节' : 'Lash service detail' }
-  ]
+  const rows = Array.isArray(state.heroSlides) ? state.heroSlides : []
+  // 文案跟着语言走:后端把中英两份都下发了,切语言不用重新取一次接口
+  return rows.map((row) => ({
+    image: row.image,
+    label: state.lang === 'en' ? (row.labelEn || row.labelZh || '') : (row.labelZh || row.labelEn || '')
+  }))
 }
 
 function renderHome() {
   const slides = heroSlides()
-  const activeSlide = ((state.heroSlide % slides.length) + slides.length) % slides.length
+  // 零回落:没配轮播的店,整个 hero-carousel 块不渲染(下面 renderHeroCarousel 回空串)
+  const activeSlide = slides.length ? ((state.heroSlide % slides.length) + slides.length) % slides.length : 0
   state.heroSlide = activeSlide
   els.screen.innerHTML = `
-    <section class="web-hero">
+    <section class="web-hero${slides.length ? '' : ' no-carousel'}">
       <div class="web-hero-copy">
         <h1>${brandName()}</h1>
         <div class="hero-actions">
@@ -1058,18 +1067,20 @@ function renderHome() {
           <button class="ghost" data-view-target="me" type="button">${t('quickMember')}</button>
         </div>
       </div>
+      ${slides.length ? `
       <div class="hero-carousel" aria-label="${brandName()}">
         <div class="hero-slide-track">
           ${slides.map((slide, index) => `
-            <img class="hero-slide ${index === activeSlide ? 'active' : ''}" src="${slide.image}" alt="${slide.label}">
+            <img class="hero-slide ${index === activeSlide ? 'active' : ''}" src="${slide.image}" alt="${escapeHtml(slide.label || '')}">
           `).join('')}
         </div>
+        ${slides.length > 1 ? `
         <button class="hero-carousel-btn prev" data-hero-slide-prev type="button" aria-label="Previous">‹</button>
         <button class="hero-carousel-btn next" data-hero-slide-next type="button" aria-label="Next">›</button>
         <div class="hero-carousel-dots">
-          ${slides.map((slide, index) => `<button class="${index === activeSlide ? 'active' : ''}" data-hero-slide="${index}" type="button" aria-label="${slide.label}"></button>`).join('')}
-        </div>
-      </div>
+          ${slides.map((slide, index) => `<button class="${index === activeSlide ? 'active' : ''}" data-hero-slide="${index}" type="button" aria-label="${escapeHtml(slide.label || '')}"></button>`).join('')}
+        </div>` : ''}
+      </div>` : ''}
     </section>
     <section class="home-actions section">
       <div class="service-shortcut-row">
@@ -1206,7 +1217,9 @@ async function sendAiAssistantMessage() {
 function startHeroCarousel() {
   stopHeroCarousel()
   heroTimer = window.setInterval(() => {
-    state.heroSlide = (state.heroSlide + 1) % heroSlides().length
+    const total = heroSlides().length
+    if (total < 2) return          // 没配 / 只有一张:不轮播(0 张时 % 0 会变 NaN)
+    state.heroSlide = (state.heroSlide + 1) % total
     if (state.view === 'home') renderHome()
   }, 5200)
 }
@@ -2398,12 +2411,14 @@ async function handleScreenClick(event) {
     return
   }
   if (event.target.closest('[data-hero-slide-prev]')) {
-    state.heroSlide = (state.heroSlide - 1 + heroSlides().length) % heroSlides().length
+    const total = heroSlides().length
+    if (total) state.heroSlide = (state.heroSlide - 1 + total) % total
     renderHome()
     return
   }
   if (event.target.closest('[data-hero-slide-next]')) {
-    state.heroSlide = (state.heroSlide + 1) % heroSlides().length
+    const total = heroSlides().length
+    if (total) state.heroSlide = (state.heroSlide + 1) % total
     renderHome()
     return
   }

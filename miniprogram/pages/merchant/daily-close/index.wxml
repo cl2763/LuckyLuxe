@@ -33,6 +33,31 @@
       <text class="due-aside" wx:if="{{v.drawer.footnote}}">{{v.drawer.footnote}}</text>
       <text class="due-aside" wx:if="{{v.drawer.amendNote}}">{{v.drawer.amendNote}}</text>
     </view>
+    <!-- 🔴 D79(店主 2026-08-28)线下现金腿:手记入口 + 当日流水。只追加不修改,记错了冲销。 -->
+    <view class="notes" wx:if="{{v.notes}}">
+      <view class="notes-head">
+        <text class="notes-lab">{{v.notes.label}}</text>
+        <text class="notes-hint">{{v.notes.hint}}</text>
+      </view>
+      <view class="notes-row {{it.isReversal ? 'rev' : ''}}" wx:for="{{v.notes.items}}" wx:for-item="it" wx:key="id">
+        <text class="k">{{it.kindLabel}}</text>
+        <text class="n">{{it.note}}</text>
+        <text class="a">{{it.amt}}</text>
+        <text class="rv" wx:if="{{!it.isReversal}}" data-id="{{it.id}}" bindtap="reverseCashNote">冲销</text>
+      </view>
+      <text class="notes-empty" wx:if="{{!v.notes.items.length}}">今天还没有手记。</text>
+      <view class="notes-form">
+        <picker range="{{v.notes.kinds}}" range-key="label" value="{{noteKindIndex}}" bindchange="onNoteKind">
+          <view class="pk">{{v.notes.kinds[noteKindIndex].label}}</view>
+        </picker>
+        <picker range="{{['钱出抽屉 −','钱进抽屉 +']}}" value="{{noteSignIndex}}" bindchange="onNoteSign">
+          <view class="pk">{{noteSignIndex === 1 ? '钱进抽屉 +' : '钱出抽屉 −'}}</view>
+        </picker>
+        <input class="ipt" type="digit" placeholder="0.00" value="{{noteAmount}}" bindinput="onNoteAmount"></input>
+        <input class="ipt wide" type="text" maxlength="120" placeholder="这笔钱是干什么的(必填)" value="{{noteText}}" bindinput="onNoteText"></input>
+        <view class="btn" bindtap="addCashNote">记一笔</view>
+      </view>
+    </view>
     <view class="pills" wx:if="{{v.headline.length}}">
       <text class="pill" wx:for="{{v.headline}}" wx:for-item="h" wx:key="label">{{h.label}} <text class="b">{{h.value}}</text></text>
       <text class="pill hot" wx:if="{{v.pending.length}}">待分配 <text class="b">{{v.pending.length}}</text></text>

@@ -2600,7 +2600,17 @@ const main = async () => {
          落法:①记忆 → ②部署配置项(多租户构建为空)→ ③空=去选店/扫码,绝不静默替换。 */
       /* ===== ㋓ 收口三件(店主 08-23):位面漏扫补件 + 演示租户重名 + 顾客端 401 自愈 =====
          本轮教训:**扫描范围要覆盖所有位面** —— 上一批只清了顾客端,商家网页端还留着同族回落。 */
-      const adminJs93 = readFileSync(join(ROOT42, 'apps/web/admin.js'), 'utf8')
+      /* 🔴 扫描面跟着代码走(店主 08-27《判据的覆盖面本身要有判据》)。
+         2026-08-28 D78 批把「门店信息三件」从 admin.js 搬进 /web/store-content.js ——
+         只读 admin.js 的判据当场就少看了一块。改法与门禁扫描器那次同刀:
+         **扫描面 = admin.html 里真正加载的那一组脚本**(admin.js + 所有 /web/*.js 模块),
+         并配一条文件数下限断言,谁再搬走一块而扫描面没跟上,立刻红。 */
+      const adminHtml93 = readFileSync(join(ROOT42, 'apps/web/admin.html'), 'utf8')
+      const adminScripts93 = [...adminHtml93.matchAll(/<script src="\/web\/([\w.-]+\.js)/g)].map((m) => m[1])
+      const adminSurface93 = ['admin.js', ...adminScripts93]
+      check(`㋓ 扫描面反向守:商家后台这一屏由 ${adminSurface93.length} 个脚本组成(搬家而扫描面没跟上=当场红)`,
+        adminSurface93.length >= 9, adminSurface93.join(', '))
+      const adminJs93 = adminSurface93.map((f) => readFileSync(join(ROOT42, 'apps/web', f), 'utf8')).join('\n')
       const stripJs = (t) => t.replace(/\/\*[\s\S]*?\*\//g, '').replace(/\/\/[^\n]*/g, '')
       check('㋓ 商家网页端零写死旗舰店名/租户 id(剥注释后 0 残留)',
         !stripJs(adminJs93).includes('Lucky Luxe'), (stripJs(adminJs93).match(/Lucky Luxe/g) || []).length + ' 处')

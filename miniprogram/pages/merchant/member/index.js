@@ -215,7 +215,8 @@ Page({
     const ql = q.toLowerCase() // D62:大小写不敏感(全仓搜索口同刀)
     const hit = ql ? (this.data.customers || []).filter((c) =>
       String(c.displayName || '').toLowerCase().includes(ql) || String(c.phone || '').includes(q)).slice(0, 6) : []
-    this.setData({ rvQuery: q, rvResults: hit.map((c) => this.rvShape(c)) })
+    // 输入过程中不许改写内容:回写的是**原样**,trim 只用于匹配(打空格不该被吃掉)
+    this.setData({ rvQuery: String(e.detail.value || ''), rvResults: hit.map((c) => this.rvShape(c)) })
   },
   rvShape(c) {
     return { id: c.id, displayName: c.displayName || '会员', balanceText: storeMoney(c.storedValueBalanceCents || 0, 0) }
@@ -243,10 +244,16 @@ Page({
     } catch (e) { /* 拉不到技师不挡充值 */ }
   },
   onRvTech(e) { this.setData({ rvTechIndex: Number(e.detail.value) || 0 }) },
+  /* 🔴 钱的输入框族(店主 2026-08-27 立:**输入过程中不许重画**)——小程序这一处就是同病:
+     原来把敲进来的字符过滤一遍再 setData **写回同一个框**,每敲一下重画一次、
+     连着敲就丢字符(网页端那次她实测「打了 1 就被重画一次,5 和 0 丢了」是同一个病)。
+     改法:值只进 this.data(不 setData,视图不重画,输入框内容不被顶掉),
+     setData 只更新旁边那句预览文字。type="digit" 的键盘本来就只出数字和小数点,过滤那步是多余的。 */
   onRvAmount(e) {
-    const raw = String(e.detail.value || '').replace(/[^\d.]/g, '')
-    const v = Number(raw)
-    this.setData({ rvAmount: raw, rvAmountText: v > 0 ? ` ${storeMoney(Math.round(v * 100), 0)}` : '' })
+    const raw = String(e.detail.value || '')
+    this.data.rvAmount = raw
+    const v = Number(raw.replace(/[^\d.]/g, ''))
+    this.setData({ rvAmountText: v > 0 ? ` ${storeMoney(Math.round(v * 100), 0)}` : '' })
   },
 
   async doRecharge() {

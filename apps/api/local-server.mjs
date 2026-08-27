@@ -20,7 +20,11 @@ import { ensureListedColumn } from './tenant-visibility.mjs'          // D76:选
 import { createPlatformSessions } from './platform-session.mjs'       // 平台后台「记住这台电脑」(令牌不换,只是不用每次掏)
 import { createAdminAuth } from './admin-auth.mjs'                    // 商家端账号与会话(口令哈希/一次性口令/签票/认票)
 import { createAccountRefund } from './account-refund.mjs'            // N-5 退卡口(退卡≠手动耗卡:不碰收入)
-import { ensureRefundSchema } from './account-refund-schema.mjs'      // N-5 建表建列(公约⑧:列一律 try/catch ALTER)
+import { ensureRefundSchema } from './account-refund-schema.mjs'
+import { createHeroSlides, ensureHeroSlidesSchema, HERO_SLIDE_MAX } from './hero-slides.mjs'   // D78 顾客首页轮播按租户出数据(零回落)
+import { createCashNotes, ensureCashNotesSchema, CASH_NOTE_KINDS, CASH_NOTE_KIND_LABELS } from './cash-notes.mjs'   // D79 线下现金腿手记
+import { createStoreContentRoutes } from './store-content-routes.mjs'   // D78/D79 路由层(公约①②)
+import { createMessageTemplates } from './message-templates.mjs'               // 消息模板域(D78 批边改边拆搬出)      // N-5 建表建列(公约⑧:列一律 try/catch ALTER)
 import { zhErrorText } from './error-text.mjs'                        // 报错话中文出口(一处翻译,不逐句改 262 处)
 import { createStaffScope } from './staff-scope.mjs'                  // 员工只读范围(我的客人)
 import { createRefundRoutes } from './refund-routes.mjs'              // 退卡/账户调整/我的客人 的路由层
@@ -7107,6 +7111,15 @@ const refundApi = createAccountRefund({
   formatMoneyCents: (c, t, m) => formatMoneyCents(c, t, m),
   storeDateOf: (at, tid) => localParts(new Date(at), tenantTimezone(tid)).date
 })
+const heroSlidesApi = createHeroSlides({ db, apiError, iso, randomId, currentTenantId })
+const cashNotesApi = createCashNotes({ db, apiError, iso, randomId, currentTenantId, formatMoneyCents: (v, t, m) => formatMoneyCents(v, t, m) })
+const storeContentRoutes = createStoreContentRoutes({
+  apiError, json, readBody, heroSlidesApi, cashNotesApi, HERO_SLIDE_MAX,
+  constants: { CASH_NOTE_KINDS, CASH_NOTE_KIND_LABELS },
+  localParts, tenantTimezone, currentTenantId
+})
+const messageTemplatesApi = createMessageTemplates({ db, iso, randomId })
+const { MESSAGE_TEMPLATE_SCENES, MESSAGE_TEMPLATE_SCENE_LABELS, serializeMessageTemplate, ensureDefaultMessageTemplates } = messageTemplatesApi
 const refundRoutes = createRefundRoutes({
   apiError, json, readBody, refundApi, staffScope,
   usableTimecardsOf: (uid) => usableTimecardsOf(uid)
@@ -7463,55 +7476,7 @@ const DEFAULT_DEPOSIT_CONFIG = {
   retainValidDays: null
 }
 
-const MESSAGE_TEMPLATE_SCENES = ['pre_sale', 'in_service', 'post_sale', 'booking_confirmed_invite', 'arrival_reminder', 'coupon_expiry']
-const MESSAGE_TEMPLATE_SCENE_LABELS = {
-  pre_sale: '售前',
-  in_service: '售中',
-  post_sale: '售后',
-  booking_confirmed_invite: '预约成功邀请函',
-  arrival_reminder: '到店提醒',
-  coupon_expiry: '优惠券到期'
-}
-// 每店预置一套通用文案(商家可改)。变量在发送时替换,发送引擎归 P3,本批只建模+配置。
-const DEFAULT_MESSAGE_TEMPLATES = [
-  { scene: 'pre_sale', title: '售前咨询开场', content: '你好呀{customerName}~ 这里是{storeName}。想做什么款式呢?可以发参考图给我,我帮你看看时长和价格~', variables: ['{customerName}', '{storeName}'] },
-  { scene: 'in_service', title: '服务中关怀', content: '{customerName},今天的款式做到一半啦,有哪里不舒服或者想调整的随时说哦~', variables: ['{customerName}'] },
-  { scene: 'post_sale', title: '服务后回访', content: '{customerName}今天辛苦啦!新做的款式记得 24 小时内少沾水。有任何问题随时找我~', variables: ['{customerName}'] },
-  { scene: 'booking_confirmed_invite', title: '预约成功邀请函', content: '{customerName}你好,你在{storeName}的预约已确认:\n时间 {bookingTime}\n地址 {storeAddress}\n期待见到你~', variables: ['{customerName}', '{storeName}', '{bookingTime}', '{storeAddress}'] },
-  { scene: 'arrival_reminder', title: '到店提醒', content: '{customerName}你好,提醒一下你在{storeName}的预约是 {bookingTime},路上注意安全~', variables: ['{customerName}', '{storeName}', '{bookingTime}'] },
-  { scene: 'coupon_expiry', title: '优惠券到期提醒', content: '{customerName}你好,你有一张优惠券即将到期({couponExpiry}),记得来用哦~', variables: ['{customerName}', '{couponExpiry}'] }
-]
-
-function serializeMessageTemplate(row) {
-  let variables = []
-  try { variables = JSON.parse(row.variables_json || '[]') } catch { variables = [] }
-  return {
-    id: row.id,
-    scene: row.scene,
-    sceneLabel: MESSAGE_TEMPLATE_SCENE_LABELS[row.scene] || row.scene,
-    title: row.title,
-    content: row.content || '',
-    contentEn: row.content_en || '',
-    variables,
-    isActive: Boolean(row.is_active),
-    sort: row.sort,
-    updatedAt: row.updated_at
-  }
-}
-
-// 懒预置:某租户第一次读模板列表时铺一套默认文案(只铺一次,商家改过/删过都不会被覆盖)
-function ensureDefaultMessageTemplates(tenantId) {
-  const seeded = db.prepare("SELECT value FROM tenant_settings WHERE tenant_id = ? AND key = 'message_templates_seeded'").get(tenantId)
-  if (seeded) return
-  const now = iso(new Date())
-  const stmt = db.prepare(`INSERT INTO message_templates (id, tenant_id, scene, title, content, content_en, variables_json, is_active, sort, updated_at)
-    VALUES (?, ?, ?, ?, ?, '', ?, 1, ?, ?)`)
-  DEFAULT_MESSAGE_TEMPLATES.forEach((tpl, index) => {
-    stmt.run(randomId('tpl'), tenantId, tpl.scene, tpl.title, tpl.content, JSON.stringify(tpl.variables), index, now)
-  })
-  db.prepare(`INSERT INTO tenant_settings (tenant_id, key, value, updated_at) VALUES (?, 'message_templates_seeded', ?, ?)
-    ON CONFLICT(tenant_id, key) DO NOTHING`).run(tenantId, JSON.stringify({ at: now }), now)
-}
+// 消息模板域(场景枚举/中文标签/预置文案/序列化/首次预置)已整块搬出到 ./message-templates.mjs(2026-08-28 D78 批,边改边拆)
 
 function getDepositConfig(tenantId = currentTenantId()) {
   const row = db.prepare("SELECT value FROM tenant_settings WHERE tenant_id = ? AND key = 'deposit_config'").get(tenantId)
@@ -9816,7 +9781,18 @@ function dailyCloseView(date, tenantId, { lang = 'zh' } = {}) {
     // N-5 当日退卡留痕:既不进收入也不进支出(口径与理由写在 ./account-refund.mjs)
     refunds: refundApi.refundsOfDay(date, tenantId),
     // 🔴 现金必须扣退卡(店主 08-25 复核;三本账:损益不动/负债已减/现金必须减)。口径见 ./account-refund.mjs
-    cashDrawer: refundApi.cashDrawerOf(date, tenantId, { settlementIds: rows.map((r) => r.id) }),
+    /* 🔴 D79:线下现金腿(手记)进抽屉算式 —— 只影响现金那一行,不进损益/营业额/业绩。 */
+    cashDrawer: refundApi.cashDrawerOf(date, tenantId, {
+      settlementIds: rows.map((r) => r.id),
+      notesCents: cashNotesApi.cashNotesTotalCents(date, tenantId),
+      notesCount: cashNotesApi.listCashNotes(date, tenantId).length
+    }),
+    cashNotes: {
+      label: '现金手记',
+      hint: '买材料付的现金、备用金、找零、更正后的现金找补 —— 记在这里,「今晚数钱按这个数」才等于抽屉。',
+      kinds: CASH_NOTE_KINDS.map((kind) => ({ kind, label: CASH_NOTE_KIND_LABELS[kind] })),
+      items: cashNotesApi.listCashNotes(date, tenantId)
+    },
     // v1.2 ②:日结顶部三小格(退卡单独一格,不混进营业额)——口径在 ./account-refund.mjs
     headline: refundApi.headlineOf(date, tenantId, {
       orderCount: settlements.length,
@@ -11332,6 +11308,9 @@ async function route(req, res) {
           deductible: c.deductible !== false
         }
       })(),
+      /* 🔴 D78:顾客首页轮播**按租户出**,这里是唯一出口(两端同源,前端不许再写死)。
+         零回落:这家店没配 → 空数组 → 两端都不出轮播、只出店卡;绝不拿别家店的图顶上。 */
+      heroSlides: heroSlidesApi.publicHeroSlides(tid, query.lang === 'en' ? 'en' : 'zh'),
       /* 今日营业句/营业中:后端唯一出口(特殊营业日优先·按门店时区),顾客端零计算。
          注意位面:顾客端读的是**这个公开 /stores**,不是 /admin/stores —— 只加在 admin 那边等于没加。 */
       stores: storeRows.map((s) => Object.assign({}, s, {
@@ -12454,6 +12433,8 @@ async function route(req, res) {
     }
   }
   // ===== P1.2 话术模板中心(本批只建模 + 配置,发送引擎归 P3)=====
+  // D78 轮播 / D79 现金手记的路由层住在 ./store-content-routes.mjs(公约①②:新功能新模块)
+  if (await storeContentRoutes.route(req, res, { path, query, adminSession })) return
   if (path === '/admin/message-templates' || path.startsWith('/admin/message-templates/')) {
     if (adminSession.role !== 'owner') throw apiError(403, 'FORBIDDEN', 'Owner permission is required.')
     const tid = currentTenantId()
@@ -17450,6 +17431,8 @@ try {
 }
 // N-5 退卡口的建表与建列(拆账两列 / 幂等单号 / 次卡已退次数 / 次卡退款表)全在 ./account-refund-schema.mjs
 ensureRefundSchema(db)
+ensureHeroSlidesSchema(db)   // D78:建表后立刻 PRAGMA 逐列自证(静默失败器族)
+ensureCashNotesSchema(db)    // D79:同上
 // 🔴 D76 可见性列(与账本归属解耦):建列 + 演示店默认不上架,实现在 ./tenant-visibility.mjs
 ensureListedColumn(db)
 /* D73(店主 08-24):归属回填改**一次性迁移** —— 跑过一次记一笔,以后启动不再扫;

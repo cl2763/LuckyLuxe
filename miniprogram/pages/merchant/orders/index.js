@@ -710,7 +710,8 @@ Page(Object.assign({
     const q = (e.detail.value || '').trim()
     const ql = q.toLowerCase() // D62:大小写不敏感(全仓搜索口同刀)
     const matches = ql ? this.data.directCustomers.filter((c) => (c.name || '').toLowerCase().indexOf(ql) >= 0 || (c.phone || '').indexOf(q) >= 0).slice(0, 5) : []
-    this.setData({ custQuery: q, custMatches: matches, selectedCustId: '', selectedCustName: '', pendingNewName: '', pendingNewPhone: '' })
+    // 输入过程中不许改写内容:回写原样,trim 只用于匹配(同 member 那一处)
+    this.setData({ custQuery: String(e.detail.value || ''), custMatches: matches, selectedCustId: '', selectedCustName: '', pendingNewName: '', pendingNewPhone: '' })
   },
   pickCust(e) {
     const id = e.currentTarget.dataset.id

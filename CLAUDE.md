@@ -14,6 +14,26 @@
 - 规划与决策记录: `/Users/changliu/Desktop/LuckyLuxe_Claude_Handoff_2026-07-03/` 下的
   `ROADMAP_2026-07-04.md`、`财务系统设计方案.md`、`后台全面评审报告.md`、`员工端评审报告.md`
 
+## 库名口径(店主 2026-08-28 立,起因:「真库」一词同时指过两个库)
+
+**四个库,四个名字,报数与安全保证一律写全名 —— 不许再说「真库」。**
+
+| 名字 | 在哪 | 谁在用 | 里面是什么 |
+|---|---|---|---|
+| **生产库** | Railway Volume `api-volume` → 容器内 `/app/apps/api/local-data/lucky-luxe.sqlite`(线上 www.luckyluxeatelier.com) | 线上服务 | **唯一有真顾客的库**。08-28 只读现测:users 77 / bookings 1,242 / settlements 10 / finance_transactions 1,160 / tenants 6 |
+| **本机库** | `apps/api/local-data/lucky-luxe.sqlite`(端口 4128) | 店主本机 | 真实历史 + 演示店 + 早期铺的样本。08-28 现测:users 185 / bookings 1,436 / settlements 269 / tenants 5 |
+| **沙箱库** | `apps/api/sandbox-data/lucky-luxe.sqlite`(端口 4310) | 演示/走查/双端实拍 | 一次性演示数据 |
+| **回归临时库** | `/tmp/ll-ci-data.XXXXXX/lucky-luxe.sqlite` | `run-all-tests.sh` | 每次新建、跑完即删 |
+
+🔴 **含糊的根在这里:生产库与本机库的相对路径一模一样**(都是 `apps/api/local-data/lucky-luxe.sqlite`),
+Volume 就挂在这个位置。所以只说「local-data 那个库」照样分不清,**必须说「生产库」还是「本机库」**。
+
+**规矩**:
+1. 报任何行数/金额,**先写库名**(例:「生产库 settlements 10 张」)。
+2. 每批交付那句安全保证从「真库未动」改写成 **「〈库名〉未动」** —— 通常是「**生产库未动 · 本机库未动**」。
+   这句是交付的安全保证,**名字含糊它就是含糊的**。
+3. 生产诊断一律只读(`railway ssh` 里跑 `ls` / `df` / 只读 sqlite 查询算诊断);写生产要单独批准。
+
 ## 交付纪律(店主明确要求,必须遵守)
 1. **先答疑/给方案,店主说"可以/继续"再动代码**(小修复除外)。
 2. **loop engineering**:每次交付自测;全量回归 `bash apps/api/run-all-tests.sh`(21 套件,全新库可跑);交付报告附证据。

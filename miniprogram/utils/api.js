@@ -568,6 +568,15 @@ async function getStores() {
   }
 }
 
+/* 🔴 D78(店主 2026-08-28):顾客首页轮播**按租户出**,与网页顾客端同一个出口(公开 /stores)。
+   为什么单独一个函数而不是塞进 getStores():getStores() 返回的是**门店数组**,顶层字段在那一步就被丢了 ——
+   币种当年正是踩了这个坑(见下面那段注释)。**不加 catch**:接口挂了就抛,顾客端宁可不出轮播,
+   也不许回落到写死的图(那正是 D78 本身的病)。 */
+async function getHeroSlides() {
+  const data = await request('/stores')
+  return data.heroSlides || []
+}
+
 /* 门店币种(2026-08-10 核验轮修复)。
    getStores() 返回的是**门店数组**,顶层的 currency / currencyDisplay 在那一步就被丢了 ——
    storecurrency.js 拿到数组去读 .currencyDisplay 永远是 undefined,缓存一次都写不进去,
@@ -925,6 +934,7 @@ async function getAdminDashboardData() {
 }
 
 module.exports = {
+  getHeroSlides,
   API_BASE,
   DEMO_USER_ID,
   SANDBOX: USE_LOCAL_SANDBOX,

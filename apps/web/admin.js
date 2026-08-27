@@ -3637,74 +3637,7 @@ async function submitFinanceEntry() {
   toast(owner.lang === 'zh' ? '已入账（账本只追加，不可修改）' : 'Recorded (append-only).')
 }
 
-function renderStoreInfo() {
-  if (!els.storeInfoSummary || !els.storeInfoBody) return
-  // 🔴 永久律(店主 08-23):拿不到就显示「—」,绝不回落成旗舰店 id ——
-  // 非旗舰商家会在自己的后台看到别人家的商户 ID。
-  const tenantId = owner.tenantPlan?.tenantId || ''
-  const store = (owner.businessHoursStores || [])[0]
-  els.storeInfoSummary.textContent = tenantId || '—'
-  const rows = [
-    [owner.lang === 'zh' ? '商户 ID' : 'Tenant ID', tenantId || '—'],
-    [owner.lang === 'zh' ? '门店 ID' : 'Store ID', store?.id || '-'],
-    [owner.lang === 'zh' ? '门店名称' : 'Store name', store?.name || '-'],
-    [owner.lang === 'zh' ? '当前套餐' : 'Plan', owner.tenantPlan?.plan || '-']
-  ]
-  els.storeInfoBody.innerHTML = `
-    <table class="store-info-table">
-      ${rows.map(([label, value]) => `
-        <tr>
-          <td>${escapeHtml(label)}</td>
-          <td><code>${escapeHtml(String(value))}</code></td>
-          <td><button class="ghost slim" data-copy-value="${escapeHtml(String(value))}" type="button">${owner.lang === 'zh' ? '复制' : 'Copy'}</button></td>
-        </tr>`).join('')}
-    </table>
-    <p class="subtle">${owner.lang === 'zh' ? '联系技术支持或反馈问题时，提供商户 ID 和门店 ID 可以快速定位你的数据。' : 'Share the tenant and store IDs with support to locate your data quickly.'}</p>
-  `
-}
-
-function renderStoreProfile() {
-  const body = document.querySelector('#storeProfileBody')
-  const summary = document.querySelector('#storeProfileSummary')
-  if (!body || !summary) return
-  const store = (owner.businessHoursStores || [])[0]
-  if (!store) {
-    summary.textContent = '-'
-    body.innerHTML = ''
-    return
-  }
-  const addressUsable = store.address && !/tbd/i.test(store.address) ? store.address : ''
-  summary.textContent = addressUsable || (owner.lang === 'zh' ? '⚠ 地址未设置' : '⚠ Address not set')
-  summary.classList.toggle('plan-expired', !addressUsable)
-  body.innerHTML = `
-    <div class="kb-facts-grid">
-      <label><span>${owner.lang === 'zh' ? '门店名称' : 'Store name'}</span><input id="storeProfileName" value="${escapeHtml(store.name || '')}"></label>
-      <label><span>${owner.lang === 'zh' ? '门店地址' : 'Address'}</span><input id="storeProfileAddress" value="${escapeHtml(addressUsable)}"></label>
-      <label><span>${owner.lang === 'zh' ? '联系电话' : 'Phone'}</span><input id="storeProfilePhone" value="${escapeHtml(store.phone && !/tbd/i.test(store.phone) ? store.phone : '')}"></label>
-    </div>
-    <button class="primary slim" data-store-profile-save type="button">${owner.lang === 'zh' ? '保存门店信息' : 'Save store info'}</button>
-    <p class="subtle">${owner.lang === 'zh' ? '保存后同步到订单系统和 AI 知识库——顾客问路、预约确认、AI 回答三处永远一致。' : 'Saved info syncs to bookings and the AI knowledge base so all three stay consistent.'}</p>
-  `
-}
-
-async function saveStoreProfile() {
-  const store = (owner.businessHoursStores || [])[0]
-  if (!store) return
-  await request('/admin/store-info', {
-    method: 'PUT',
-    body: JSON.stringify({
-      storeId: store.id,
-      name: document.querySelector('#storeProfileName')?.value.trim(),
-      address: document.querySelector('#storeProfileAddress')?.value.trim(),
-      phone: document.querySelector('#storeProfilePhone')?.value.trim()
-    })
-  })
-  const refreshed = await request('/admin/business-hours')
-  owner.businessHoursStores = refreshed.stores || []
-  await refreshTenantKb().catch(() => {})
-  renderStoreSettings()
-  toast(owner.lang === 'zh' ? '门店信息已保存并同步到 AI 知识库' : 'Store info saved and synced')
-}
+// 门店信息三件(renderStoreInfo / renderStoreProfile / saveStoreProfile)已搬出到 /web/store-content.js(D78 批,边改边拆)
 
 function renderStoreSettings() {
   if (!els.businessHoursEditor) return
@@ -3715,6 +3648,7 @@ function renderStoreSettings() {
   renderTenantKb()
   renderStoreInfo()
   renderStoreProfile()
+  renderHeroSlidesPanel()   // D78 顾客首页轮播(住在 /web/store-content.js)
   const store = (owner.businessHoursStores || [])[0]
   if (!store) {
     els.businessHoursEditor.innerHTML = `<div class="empty-state small-empty">-</div>`

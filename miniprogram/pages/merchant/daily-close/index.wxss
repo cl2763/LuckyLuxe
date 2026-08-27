@@ -79,3 +79,21 @@
 .due-row.neg{color:#95332a}
 .due-row.tot{border-top:1rpx solid #dcd2c2;margin-top:8rpx;padding-top:10rpx;font-weight:700;color:#1b1815}
 .due-aside{display:block;margin-top:14rpx;font-size:22rpx;color:#8c8478;border-top:1rpx dashed #e6dfd4;padding-top:12rpx}
+
+/* D79 现金手记(2026-08-28):沿用本页 due-* 的用色与间距,不另起一套视觉 */
+.notes { margin-top: 20rpx; padding: 20rpx; border: 1rpx solid #ece7e1; border-radius: 12rpx; }
+.notes-head { display: flex; flex-direction: column; margin-bottom: 12rpx; }
+.notes-lab { font-size: 28rpx; font-weight: 600; }
+.notes-hint { font-size: 22rpx; color: #9a938c; margin-top: 4rpx; }
+.notes-row { display: flex; align-items: center; gap: 12rpx; font-size: 26rpx; padding: 8rpx 0; }
+.notes-row.rev { opacity: .6; }
+.notes-row .k { color: #9a938c; }
+.notes-row .n { flex: 1; }
+.notes-row .a { font-weight: 600; }
+.notes-row .rv { color: #b08d57; }
+.notes-empty { font-size: 24rpx; color: #9a938c; }
+.notes-form { display: flex; flex-wrap: wrap; gap: 12rpx; align-items: center; margin-top: 12rpx; }
+.notes-form .pk { padding: 10rpx 16rpx; border: 1rpx solid #ece7e1; border-radius: 8rpx; font-size: 24rpx; }
+.notes-form .ipt { padding: 10rpx 16rpx; border: 1rpx solid #ece7e1; border-radius: 8rpx; font-size: 24rpx; min-width: 160rpx; }
+.notes-form .ipt.wide { flex: 1; min-width: 300rpx; }
+.notes-form .btn { padding: 10rpx 24rpx; background: #b08d57; color: #fff; border-radius: 8rpx; font-size: 24rpx; }

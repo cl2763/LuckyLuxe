@@ -447,7 +447,8 @@ Page({
   },
   gServedName(e) {
     const groups = this.data.groups.slice()
-    groups[e.currentTarget.dataset.g].servedPersonName = (e.detail.value || '').trim()
+    // 输入过程中不许改写内容:原样存,提交时才 trim(否则姓和名之间打不出空格)
+    groups[e.currentTarget.dataset.g].servedPersonName = String(e.detail.value || '')
     this.setData({ groups })
     this.renderAll(); this.refresh()
   },
@@ -607,7 +608,7 @@ Page({
         purchasePackageId: g.purchasePackageId || undefined,
         timecardServiceId: (g.timecardId || g.purchasePackageId) ? (g.timecardServiceId || undefined) : undefined,
         customItems: g.customItems.map((c) => ({ name: c.name, amountCents: c.amountCents })),
-        servedPersonName: g.servedPersonName || '',
+        servedPersonName: String(g.servedPersonName || '').trim(),   // trim 移到提交这一刻(输入过程中不许改写)
         // 规则⑧:分配随单记录(原样恢复=按数字位提交,不做过滤校验——别加戏)
         technicians: g.selectedTechs.map((id, index) => ({ technicianId: id, role: index === 0 ? 'main' : 'assist', itemNos: (g.techItems && g.techItems[id]) || [] })),
         payIntent: this.payIntentOf(),

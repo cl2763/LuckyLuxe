@@ -3521,6 +3521,13 @@ textarea:focus {
   overflow: hidden;
 }
 
+/* D78 空态:这家店没配轮播时,右半边不该留一块 520px 高的空白 —— 收成单列、矮一半。
+   零回落的代价不能是"版面看起来坏了",否则商家会去找一张别人的图填上。 */
+.web-hero.no-carousel {
+  grid-template-columns: 1fr;
+  min-height: 260px;
+}
+
 .hero-carousel {
   position: relative;
   min-height: 520px;
@@ -7352,3 +7359,28 @@ section.card > .section-row:first-child { margin-top: 0; }
 .dc-stat .l{font-size:10.5px;color:#8c8478}
 .dc-stat .v{font-size:15px;font-weight:600;font-variant-numeric:tabular-nums}
 .dc-due-note{font-size:11.5px;color:#8c8478;margin-top:8px}
+
+/* D78 顾客首页轮播 · 商家自管面板(2026-08-28)。
+   刻意复用同页 settings-item / card 的间距与圆角,不另起一套视觉。 */
+.hero-slide-admin-list { display: grid; gap: 12px; margin: 12px 0; }
+.hero-slide-admin-row { display: grid; grid-template-columns: 96px 1fr; gap: 12px; align-items: start; padding: 12px; }
+.hero-slide-admin-row img { width: 96px; height: 64px; object-fit: cover; border-radius: 8px; background: rgba(0,0,0,.05); }
+.hero-slide-admin-actions { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 8px; grid-column: 2; }
+.hero-slide-admin-footer { display: flex; gap: 12px; align-items: center; flex-wrap: wrap; }
+.hero-slide-upload { cursor: pointer; display: inline-flex; align-items: center; }
+@media (max-width: 640px) {
+  .hero-slide-admin-row { grid-template-columns: 1fr; }
+  .hero-slide-admin-actions { grid-column: 1; }
+}
+
+/* D79 日结 · 现金手记(2026-08-28)。复用日结页既有的 dc-* 视觉,不另起一套。 */
+.dc-notes { margin-top: 14px; padding: 12px; border: 1px solid var(--line); border-radius: 8px; }
+.dc-notes-head { display: grid; gap: 2px; margin-bottom: 8px; }
+.dc-notes-list { display: grid; gap: 6px; margin-bottom: 10px; }
+.dc-notes-row { display: grid; grid-template-columns: auto 1fr auto auto; gap: 10px; align-items: center; font-size: 14px; }
+.dc-notes-row.rev { opacity: .62; }
+.dc-notes-row .k { color: var(--muted); }
+.dc-notes-row .a { font-variant-numeric: tabular-nums; font-weight: 600; }
+.dc-notes-form { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; }
+.dc-notes-form input, .dc-notes-form select { min-width: 120px; }
+.dc-notes-form #dcNoteText { flex: 1 1 220px; }

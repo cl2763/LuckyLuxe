@@ -30,3 +30,21 @@ tmp/video-transcript-test/
 tmp/video-transcript-test-xhs/
 tmp/video-transcript-login-small/
 handoff/本地自查账号.txt
+
+# 设计/宣传交付物(2026-08-28 店主定:真身在桌面交付包里,不入 git)
+# 立这条的原因:它们是 png/zip/mp4/dwg 和一个带 node_modules 的 Remotion 视频工程,
+# 一次 `git add -A` 就能把上万个文件推进仓库,而仓库里留着也没人从这儿取。
+# 一律用 / 打头钉死在仓库根:不加的话 `output/` 这种通用名会连累以后任何一层的同名目录。
+/LuckyLuxe-ClaudeDesign-confirmed-v*/
+/LuckyLuxe-*.zip
+/LuckyLuxe-*.mp4
+/LuckyLuxe-room-tour-poster-*.png
+/LuckyNail-127sqm-*/
+/LuckyNail-127sqm-*.zip
+/lucky-nail-brief/
+/luckyluxe-source/
+/luckyluxe-output/
+/luckyluxe-remotion-tour/
+/radius-luvia-phase1*/
+/radius-luvia-logo-proof-*/
+/output/
