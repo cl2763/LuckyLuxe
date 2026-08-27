@@ -4,7 +4,7 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>有迹 · 商家后台</title>
-    <link rel="stylesheet" href="/web/styles.css?v=20260825i-n5">
+    <link rel="stylesheet" href="/web/styles.css?v=20260827a-n5v12">
     <style>
       /* 2026-08-02 财务指标显隐+动效(店主 v4 定稿):AI智能总结卡 / 目标进度条(带平衡线刻度) / 设目标引导与弹窗。
          放这里不放 styles.css:本批约定只动 admin.js + admin.html 两个文件。 */
@@ -384,6 +384,8 @@
           <!-- S1(图=合同 v1.2):服务管理+价目表合并为「服务与价目」一页两模块 -->
           <button class="sidebar-link" data-admin-page="pricing" id="sidebarPricing" type="button">服务与价目</button>
           <button class="sidebar-link" data-admin-page="membership" id="sidebarMembership" type="button">会员套餐/券</button>
+          <!-- v1.2 ④(店主 08-27):店员看得见的只读「我的客人」——只列他服务过的人,零金额口 -->
+          <button class="sidebar-link hidden" data-admin-page="myCustomers" id="sidebarMyCustomers" type="button">我的客人</button>
           <button class="sidebar-link" data-admin-page="wechatMock" id="sidebarWechatMock" type="button"><span id="sidebarWechatMockLabel">客服工作台</span><span class="sidebar-badge hidden" id="wechatNeedsHumanBadge"></span></button>
           <button class="sidebar-link" data-admin-page="aiGallery" id="sidebarAiGallery" type="button">AI 图库</button>
           <button class="sidebar-link" data-admin-page="storeSettings" id="sidebarStoreSettings" type="button">门店设置<span class="sidebar-badge hidden" id="subscriptionBadge"></span></button>
@@ -695,6 +697,8 @@
             </section>
           </section>
 
+          <!-- v1.2 ④(店主 08-27):店员只读「我的客人」——只列他服务过的人,零金额编辑口 -->
+          <section class="admin-page hidden" id="myCustomersPage"></section>
           <section class="admin-page hidden" id="customersPage">
             <button class="ghost back-btn" data-admin-page="dashboard" type="button">← Dashboard</button>
             <div class="section-row">
@@ -994,10 +998,12 @@
     <script src="/web/finance-trend.js?v=20260825e-w2"></script>
     <script src="/web/service-catalog.js?v=20260825e-w2"></script>
     <script src="/web/order-state.js?v=20260825e-w2"></script>
-    <script src="/web/customer-tags.js?v=20260825i-n5"></script>
-    <script src="/web/daily-close-rows.js?v=20260825i-n5"></script>
-    <script src="/web/account-adjust.js?v=20260825i-n5"></script>
+    <script src="/web/money-input.js?v=20260827a-n5v12"></script>
+    <script src="/web/my-customers.js?v=20260827a-n5v12"></script>
+    <script src="/web/customer-tags.js?v=20260827a-n5v12"></script>
+    <script src="/web/daily-close-rows.js?v=20260827a-n5v12"></script>
+    <script src="/web/account-adjust.js?v=20260827a-n5v12"></script>
     <script src="/web/snapshot-viewer.js?v=20260825e-w2"></script>
-    <script src="/web/admin.js?v=20260825i-n5"></script>
+    <script src="/web/admin.js?v=20260827a-n5v12"></script>
   </body>
 </html>

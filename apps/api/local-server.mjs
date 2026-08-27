@@ -21,6 +21,8 @@ import { createPlatformSessions } from './platform-session.mjs'       // 平台�
 import { createAdminAuth } from './admin-auth.mjs'                    // 商家端账号与会话(口令哈希/一次性口令/签票/认票)
 import { createAccountRefund } from './account-refund.mjs'            // N-5 退卡口(退卡≠手动耗卡:不碰收入)
 import { ensureRefundSchema } from './account-refund-schema.mjs'      // N-5 建表建列(公约⑧:列一律 try/catch ALTER)
+import { zhErrorText } from './error-text.mjs'                        // 报错话中文出口(一处翻译,不逐句改 262 处)
+import { createStaffScope } from './staff-scope.mjs'                  // 员工只读范围(我的客人)
 import { createStoredValue } from './stored-value.mjs'                // 储值域(写流水/算余额/分桶/类型文案)
 import { createMembershipConfig } from './membership-config.mjs'      // 会员制度域(资格判定 + 退卡后是否保留会员)
 import { createImportCustomers } from './import-customers.mjs'        // 平台代商家导入老顾客(公约②)
@@ -1305,10 +1307,7 @@ function requireCustomer(req) {
   const token = auth.startsWith('Bearer ') ? auth.slice(7) : ''
   const miniUser = customerFromMiniToken(token)
   if (miniUser) return miniUser
-  /* 🔴 2026-08-26(店主走查前抓出):顾客侧的演示令牌**一直没上闸**。
-     商家侧 2026-08-07 就把 demo 白名单锁进 DEMO_LOGIN_ALLOWED 了,顾客侧漏了同一刀 ——
-     结果是:知道邮箱就能拿到 `demo-customer:<email>` 当成那个人(连密码都不用)。
-     现在与商家侧走**同一个开关**:生产恒关(判据写死在 DEMO_LOGIN_ALLOWED 里,不看环境变量脸色)。 */
+  // 顾客侧演示令牌与商家侧同一把闸(生产恒关)。理由见 ./admin-auth.mjs
   const email = DEMO_LOGIN_ALLOWED ? demoEmailFromToken(token, 'customer') : ''
   if (email) return registerEmailUser({ email, displayName: email.split('@')[0] })
   throw apiError(401, 'UNAUTHORIZED', 'Customer login is required before booking or payment.')
@@ -7150,6 +7149,7 @@ const { storedValueBalanceCents, insertStoredValueTransaction, storedValueOvervi
 const { MEMBER_QUALIFY_MODES, DEFAULT_MEMBERSHIP_CONFIG, getMembershipConfig, setMembershipConfig, customerTotalSpendCents, isMemberOf } = createMembershipConfig({
   db, iso, currentTenantId, storedValueBalanceDetail: (u, t) => storedValueBalanceDetail(u, t)
 })
+const staffScope = createStaffScope({ db, apiError, currentTenantId, memberCodeForUserId: (id) => memberCodeForUserId(id) })
 const refundApi = createAccountRefund({
   db, apiError, iso, randomId, currentTenantId,
   insertStoredValueTransaction: (a) => insertStoredValueTransaction(a),
@@ -7323,17 +7323,6 @@ function membershipSummaryRows(config, tenantId = currentTenantId(), lang = 'zh'
 
 
 // 储值余额分桶:legacy = 老平台迁移过来的期初余额(不是本店收的钱),normal = 本系统内真实充值
-/* 储值流水类型文案(顾客看得见的那一列)——**后端唯一出口**。
-   立这条的直接原因:N-5 新增 refund 类型时发现小程序存着一份本地 TYPE_LABEL 词典,
-   后端加类型、前端不跟,顾客那一行就是空白(零回落律同族:没有的东西不许静默留白)。 */
-
-
-// 首充判定 = 该顾客从未有过任何 recharge 流水(不是「余额为 0」——清零复充不算首充)
-
-// 顾客累计消费:本系统内完成单的实收 + 迁移带过来的历史累计(只用于会员判定,不进财务)
-
-// 会员判定:四种资格模式由商家在「会员与储值设置」里选
-
 
 // 单个项目的某档价格:缺档回落 list 档,再回落 services.price_cents(老数据零配置也能报价)
 function servicePriceCents(service, tierKey = 'list') {
@@ -9919,6 +9908,11 @@ function dailyCloseView(date, tenantId, { lang = 'zh' } = {}) {
     refunds: refundApi.refundsOfDay(date, tenantId),
     // 🔴 现金必须扣退卡(店主 08-25 复核;三本账:损益不动/负债已减/现金必须减)。口径见 ./account-refund.mjs
     cashDrawer: refundApi.cashDrawerOf(date, tenantId, { settlementIds: rows.map((r) => r.id) }),
+    // v1.2 ②:日结顶部三小格(退卡单独一格,不混进营业额)——口径在 ./account-refund.mjs
+    headline: refundApi.headlineOf(date, tenantId, {
+      orderCount: settlements.length,
+      revenueCents: settlements.reduce((sum, x) => sum + x.totalCents, 0)
+    }),
     // 裁③:「售后扣回」显式行(负数+关联单号),日结页两端直接渲染,数字自证
     afterSalesDeductions: releaseRows.map((rel) => ({
       technicianId: rel.technicianId,
@@ -11177,9 +11171,7 @@ async function route(req, res) {
     const result = await handleWecomInbound(inbound, req)
     return json(res, 200, { ok: true, ...result })
   }
-  /* 🔴 邮箱注册/登录这两条**本来就是演示口**(不校验任何口令,`mode: 'demo'` 是它自报的),
-     所以只在演示开关下开放。生产上要的是真实校验(验证码/微信授权),那是另一件事 ——
-     没做之前,这条路必须是关的,不能因为"顾客端得有个登录"就把门虚掩着。 */
+  // 邮箱注册/登录本来就是演示口(自报 mode:'demo',不校验口令)——只在演示开关下开放
   if (req.method === 'POST' && (path === '/auth/email/register' || path === '/auth/email/login')) {
     if (!DEMO_LOGIN_ALLOWED) {
       throw apiError(403, 'DEMO_LOGIN_DISABLED', '邮箱登录目前只在本地/沙箱开放(它不校验密码)。生产顾客端请用微信登录。')
@@ -11922,7 +11914,7 @@ async function route(req, res) {
     // 多租户贯通:本请求内所有 currentTenantId() 都按登录账号的租户走(财务/KB/套餐/券/储值等自动隔离)
     tenantContext.enterWith({ tenantId: adminSession.tenantId || DEFAULT_TENANT_ID })
   }
-  // 🔴 v1.1 ③:退卡是财务动作(出钱的口比进钱的口严)——仅老板 + 过已有那道财务密码门。理由见 ./account-refund.mjs
+  // v1.1 ③ 退卡=财务动作:仅老板 + 过已有那道财务密码门(理由见 ./account-refund.mjs)
   const requireRefundRight = () => {
     if (adminSession.role !== 'owner') throw apiError(403, 'FORBIDDEN', '退卡是财务动作,仅老板(或有财务权限的账号)可操作。')
     requireFinanceKey(req)
@@ -14361,7 +14353,6 @@ async function route(req, res) {
   if (req.method === 'POST' && path === '/admin/stored-value/consume') {
     throw apiError(410, 'MANUAL_CONSUME_GONE', '手动耗卡已取消:储值扣款只随结算单签字自动入账。')
   }
-  /* ===== N-5 退卡口(图=合同):实现全在 ./account-refund.mjs,这里只做门禁 + 分发 ===== */
   if (req.method === 'GET' && path === '/admin/account-adjust/facts') {
     requireRefundRight()
     const uid = String(query.userId || '').trim()
@@ -14380,7 +14371,15 @@ async function route(req, res) {
       operator: adminSession.email || adminSession.username || adminSession.role || 'owner'
     }))
   }
-  // 商家侧看某位顾客的持卡(退卡屏选卡用):与顾客端 /my/timecards 同一出口,剩余天然同数
+  // v1.2 ④ 员工只读「我的客人」:实现在 ./staff-scope.mjs,这里只门禁 + 分发
+  const myCustMatch = path.match(/^\/admin\/my-customers(?:\/([^/]+))?$/)
+  if (req.method === 'GET' && myCustMatch) {
+    if (adminSession.role !== 'owner' && adminSession.role !== 'staff') throw apiError(403, 'FORBIDDEN', '需要登录商家后台。')
+    if (myCustMatch[1] && adminSession.role !== 'staff') throw apiError(403, 'FORBIDDEN', '这条只给员工端用。')
+    return json(res, 200, myCustMatch[1]
+      ? staffScope.myCustomerDetail(adminSession, myCustMatch[1])
+      : staffScope.myCustomers(adminSession, query))
+  }
   const custCardsMatch = path.match(/^\/admin\/customers\/([^/]+)\/timecards$/)
   if (req.method === 'GET' && custCardsMatch) {
     requireRefundRight()
@@ -18428,7 +18427,8 @@ createServer((req, res) => {
     json(res, status, {
       error: {
         code: error.code || 'INTERNAL_ERROR',
-        message: error.message || 'Unexpected server error.',
+        // 报错话统一走中文出口(店主 08-27:产品其余都是中文,只有报错蹦英文)
+        message: zhErrorText(error.code || 'INTERNAL_ERROR', error.message || 'Unexpected server error.'),
         details: error.details || undefined
       }
     })

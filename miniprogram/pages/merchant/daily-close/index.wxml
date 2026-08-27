@@ -19,8 +19,21 @@
       <text class="pill">今日 <text class="b">{{v.orderCount}}</text> 单</text>
       <text class="pill">营业额 <text class="b">{{v.revenue}}</text></text>
       <text class="pill" wx:if="{{v.tcSummary}}">{{v.tcSummary}}</text>
-      <text class="pill" wx:if="{{v.drawer}}">{{v.drawer.label}} <text class="b">{{v.drawer.should}}</text><text wx:if="{{v.drawer.out}}"> · {{v.drawer.out}}</text></text>
-      <text class="pill" wx:if="{{v.refundLine}}">{{v.refundLine}}</text>
+    </view>
+    <!-- 🔴 v1.2 ②(店主 08-27):应有数是要动手的那个数,给成收据式:抬头句 + 大数 + 算式 + 脚注 -->
+    <view class="due" wx:if="{{v.drawer}}">
+      <text class="due-lab">{{v.drawer.title}}</text>
+      <text class="due-big">{{v.drawer.should}}</text>
+      <view class="due-calc">
+        <view class="due-row {{r.neg ? 'neg' : ''}}" wx:for="{{v.drawer.rows}}" wx:for-item="r" wx:key="label">
+          <text>{{r.label}}</text><text>{{r.amt}}</text>
+        </view>
+        <view class="due-row tot"><text>{{v.drawer.totalLabel}}</text><text>{{v.drawer.should}}</text></view>
+      </view>
+      <text class="due-aside" wx:if="{{v.drawer.footnote}}">{{v.drawer.footnote}}</text>
+    </view>
+    <view class="pills" wx:if="{{v.headline.length}}">
+      <text class="pill" wx:for="{{v.headline}}" wx:for-item="h" wx:key="label">{{h.label}} <text class="b">{{h.value}}</text></text>
       <text class="pill hot" wx:if="{{v.pending.length}}">待分配 <text class="b">{{v.pending.length}}</text></text>
     </view>
 

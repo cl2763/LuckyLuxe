@@ -11,14 +11,14 @@ window.AccountAdjust = (function () {
   let ctx = null            // { request, money, toast, escapeHtml, onDone, zh }
   /* 输入值放 state,不从 DOM 里现读:弹层每次重画都会重建 input,
      从 DOM 读就会出现"点了全额退、结算块显示 804、输入框却是空的"(实测撞到过)。 */
-  let stateA = { userId: '', name: '', facts: null, tab: 'refund', cards: [], cardId: '', amount: '', times: '', warning: '', busy: false }
+  let stateA = { userId: '', name: '', facts: null, tab: 'refund', cards: [], cardId: '', amount: '', times: '', cardAmount: '', warning: '', busy: false }
 
   const el = () => document.querySelector('#accountAdjustOverlay')
   function close() { const o = el(); if (o) o.remove(); stateA.facts = null }
 
   async function open({ userId, name, meta, request, money, toast, escapeHtml, onDone, zh = true }) {
     ctx = { request, money, toast, escapeHtml, onDone, zh }
-    stateA = { userId, name: name || '', meta: meta || '', facts: null, tab: 'refund', cards: [], cardId: '', amount: '', times: '', warning: '', busy: false }
+    stateA = { userId, name: name || '', meta: meta || '', facts: null, tab: 'refund', cards: [], cardId: '', amount: '', times: '', cardAmount: '', warning: '', busy: false }
     mount()
     try {
       const [f, pack] = await Promise.all([
@@ -97,7 +97,7 @@ window.AccountAdjust = (function () {
       </div>
       ${stateA.cardId ? renderCardRefund() : `
       <label class="aa-field"><span>${zh ? '退款金额' : 'Refund amount'}</span>
-        <input id="aaAmount" type="number" min="0" step="0.01" placeholder="0.00" value="${escapeHtml(String(stateA.amount || ''))}">
+        ${window.MoneyInput.field({ id: 'aaAmount', value: escapeHtml(String(stateA.amount || '')) })}
         <em>${zh ? `不得超过当前余额 ${f.balanceText}。` : `Not more than ${f.balanceText}.`} <button class="aa-link" data-aa-all type="button">${zh ? '全额退(清空)' : 'Refund all'}</button></em>
       </label>
       <label class="aa-field"><span>${zh ? '退款方式' : 'Method'}</span>
@@ -142,10 +142,10 @@ window.AccountAdjust = (function () {
       </div>
       <p class="aa-hint">${zh ? `折算单价 ${ctx.money(unit)}/次 — 仅供参考,退款金额由你填。` : `Unit ${ctx.money(unit)} — reference only.`}</p>
       <label class="aa-field"><span>${zh ? '退多少次' : 'Times to refund'}</span>
-        <input id="aaTimes" type="number" min="1" step="1" max="${c.remaining}" placeholder="0" value="${escapeHtml(String(stateA.times || ''))}">
+        <input id="aaTimes" type="text" inputmode="numeric" autocomplete="off" placeholder="0" value="${escapeHtml(String(stateA.times || ''))}">
         <em>${zh ? `不得超过剩余 ${c.remaining} 次。退完剩 0 次 = 这张卡作废。` : `Max ${c.remaining}.`}</em>
       </label>
-      <label class="aa-field"><span>${zh ? '退款金额' : 'Refund amount'}</span><input id="aaCardAmount" type="number" min="0" step="0.01" placeholder="0.00"></label>
+      <label class="aa-field"><span>${zh ? '退款金额' : 'Refund amount'}</span>${window.MoneyInput.field({ id: 'aaCardAmount', value: escapeHtml(String(stateA.cardAmount || '')) })}</label>
       <label class="aa-field"><span>${zh ? '原因(必填)' : 'Reason (required)'}</span><input id="aaReason" type="text" maxlength="200" placeholder="${zh ? '例:顾客要求全退' : 'e.g. customer asked'}"></label>
       <div class="aa-calc">
         <div><span>${zh ? '本店收入影响' : 'Impact on income'}</span><span>${escapeHtml(stateA.facts.incomeImpactText)}</span></div>
@@ -165,13 +165,20 @@ window.AccountAdjust = (function () {
     const card = event.target.closest('[data-aa-card]')
     if (card) { stateA.cardId = card.dataset.aaCard || ''; mount(); return }
     if (event.target.closest('[data-aa-all]')) {
-      if (stateA.facts) { stateA.amount = (stateA.facts.balanceCents / 100).toFixed(2); mount() }
+      if (stateA.facts) {
+        stateA.amount = (stateA.facts.balanceCents / 100).toFixed(2)
+        const box = document.querySelector('#aaAmount')
+        if (box) box.value = stateA.amount        // 就地填,不重画(重画就是那个"框是空的"老病)
+        patchCalc()
+        ctx.request(`/admin/account-adjust/facts?userId=${encodeURIComponent(stateA.userId)}&amountCents=${window.MoneyInput.centsOf(stateA.amount)}`)
+          .then((r) => { if (el()) { stateA.warning = r.bonusWarning || ''; patchWarning() } }).catch(() => {})
+      }
       return
     }
     const goto = event.target.closest('[data-aa-goto]')
     if (goto) { close(); ctx.onDone({ goto: goto.dataset.aaGoto, userId: stateA.userId }); return }
     if (event.target.closest('[data-aa-submit]')) {
-      const amount = Math.round(Number(stateA.amount || 0) * 100)
+      const amount = window.MoneyInput.centsOf(stateA.amount)
       const reason = String(document.querySelector('#aaReason')?.value || '').trim()
       const payChannel = String(document.querySelector('#aaChannel')?.value || 'cash')
       if (!reason) { toast(zh ? '退款原因必填' : 'Reason required'); return }
@@ -187,7 +194,7 @@ window.AccountAdjust = (function () {
     }
     if (event.target.closest('[data-aa-card-submit]')) {
       const times = Math.round(Number(stateA.times || 0))
-      const amount = Math.round(Number(document.querySelector('#aaCardAmount')?.value || 0) * 100)
+      const amount = window.MoneyInput.centsOf(stateA.cardAmount)
       const reason = String(document.querySelector('#aaReason')?.value || '').trim()
       if (!reason) { toast(zh ? '退卡原因必填' : 'Reason required'); return }
       stateA.busy = true; mount()
@@ -200,27 +207,64 @@ window.AccountAdjust = (function () {
   }
 
   // 输入时重算那三行(退款后余额 / 剩余次数)——只重画,不发请求
-  // 输入时把值存进 state 再重画那三行(退款后余额 / 剩余次数),重画后光标回到原处
+  /* 🔴 v1.2 ③(店主 2026-08-27 走查撞到):**敲的过程中不许重画整屏。**
+     原来每敲一个字符就 mount() 一次 —— 框被重建,打了 1 就丢了后面的 5 和 0。
+     现在只**就地改那几行文字**(退款金额/退款后余额/剩余次数/黄条),输入框本身一个字节不动。 */
+  function patchCalc() {
+    const o = el()
+    if (!o || !stateA.facts) return
+    const money = ctx.money
+    const zh = ctx.zh
+    if (stateA.cardId) {
+      const c = stateA.cards.find((x) => x.id === stateA.cardId)
+      const times = Math.round(Number(stateA.times || 0))
+      const left = c ? Math.max(0, c.remaining - (Number.isFinite(times) ? times : 0)) : 0
+      const tot = o.querySelector('.aa-calc .tot span:last-child')
+      if (tot) tot.textContent = `${left} ${zh ? '次' : ''}${left === 0 ? (zh ? '(卡作废)' : ' (void)') : ''}`
+      return
+    }
+    const cents = window.MoneyInput.centsOf(stateA.amount)
+    const rows = o.querySelectorAll('.aa-calc div')
+    if (rows[0]) rows[0].querySelector('span:last-child').textContent = `−${money(cents)}`
+    if (rows[2]) rows[2].querySelector('span:last-child').textContent = money(Math.max(0, stateA.facts.balanceCents - cents))
+  }
+
+  function patchWarning() {
+    const o = el()
+    if (!o) return
+    let bar = o.querySelector('.aa-warn')
+    if (!stateA.warning) { if (bar) bar.remove(); return }
+    if (!bar) {
+      bar = document.createElement('div')
+      bar.className = 'aa-warn'
+      const calc = o.querySelector('.aa-calc')
+      if (calc) calc.parentNode.insertBefore(bar, calc)
+    }
+    bar.textContent = stateA.warning
+  }
+
   document.addEventListener('input', (e) => {
     if (!el()) return
     if (e.target.id === 'aaAmount') {
-      stateA.amount = e.target.value
-      // 黄条问后端(它知道还剩多少赠送);拿不到就不出条,绝不前端瞎算
-      const cents = Math.round(Number(stateA.amount || 0) * 100)
+      stateA.amount = e.target.value                    // 存值,**不重画**
+      patchCalc()
+      const cents = window.MoneyInput.centsOf(stateA.amount)
       ctx.request(`/admin/account-adjust/facts?userId=${encodeURIComponent(stateA.userId)}&amountCents=${cents}`)
-        .then((r) => { if (el()) { stateA.warning = r.bonusWarning || ''; stateA.facts = r.facts || stateA.facts; mount() } })
+        .then((r) => { if (el()) { stateA.warning = r.bonusWarning || ''; stateA.facts = r.facts || stateA.facts; patchWarning() } })
         .catch(() => {})
+    } else if (e.target.id === 'aaTimes') {
+      stateA.times = e.target.value
+      patchCalc()
+    } else if (e.target.id === 'aaCardAmount') {
+      stateA.cardAmount = e.target.value
     }
-    else if (e.target.id === 'aaTimes') stateA.times = e.target.value
-    else return
-    const id = e.target.id
-    mount()
-    const again = document.querySelector('#' + id)
-    if (again) { again.focus(); const n = again.value.length; try { again.setSelectionRange(n, n) } catch (err) { /* number 输入框不支持就算了 */ } }
   })
 
-  /* 客户档案上那个「账户调整」按钮的点击处理 —— 连同"充值/赠送/冲销去哪儿"的跳转,
-     整块住在这里,admin.js 那边只剩一行调用(它早已超 1,500 行红线,只许搬出)。 */
+  /* 客户档案那个「账户调整」按钮的点击处理 —— 连同"充值/赠送/冲销去哪儿"的跳转,
+     整块住在这里,admin.js 那边只剩一行调用(它早已超行数红线,只许搬出)。
+     ⚠️ 08-27 教训:上一版做输入框改造时,这个函数**连同那段一起被替换掉了**,
+     而 return 里还引着它 —— 模块整个初始化失败,`window.AccountAdjust` 是 undefined,
+     点按钮毫无反应;而代码行断言照样绿。**真点一下才看得见。** */
   function handleClick(event, deps) {
     const hit = event.target.closest('[data-account-adjust]')
     if (!hit) return false
@@ -234,7 +278,6 @@ window.AccountAdjust = (function () {
       zh: deps.owner.lang === 'zh',
       onDone: (r) => {
         if (r && r.goto) {
-          // 充值/赠送/冲销都有各自的正式入口 —— 这里只把人送过去,不在弹层里再造一份写口
           deps.membershipData.prefillUserId = r.userId
           deps.membershipData.tab = 'recharge'
           deps.owner.adminPage = r.goto === 'reversal' ? 'finance' : 'membership'
@@ -242,7 +285,6 @@ window.AccountAdjust = (function () {
           deps.render()
           return
         }
-        // 退完刷新客户列表(余额/会员标都可能变)——走既有的整表刷新口,不另造一个
         deps.request('/admin/customers').then((d) => { deps.owner.customers = d.customers; deps.renderCustomers() }).catch(() => {})
       }
     })

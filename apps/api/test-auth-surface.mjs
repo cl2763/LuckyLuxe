@@ -130,7 +130,11 @@ async function main() {
     /* 只认**纯老板门**:`role !== 'owner') throw`。
        复合条件不算 —— `role !== 'owner' && role !== 'staff'` 是"员工或老板都行",
        `role !== 'owner' && techId !== 自己` 是"员工只能看自己",两者员工拿到 200 都是对的。 */
-    if (!/(?:adminSession|admin)\.role !== 'owner'\)\s*throw/.test(body)) continue
+    /* 只认**纯老板门**。08-27 补:复合条件写成 `!== 'staff' && !== 'owner')` 这个**反过来的顺序**时,
+       上面那条正则照样命中 —— 于是把"员工也能用"的接口误报成越权漏(/admin/my-customers 撞过)。
+       现在先把复合条件整段剔掉,再判是不是纯老板门。 */
+    const pure = body.replace(/(?:adminSession|admin)\.role !== '(?:owner|staff)' && (?:adminSession|admin)\.role !== '(?:owner|staff)'\)\s*throw/g, 'COMPOUND_GATE')
+    if (!/(?:adminSession|admin)\.role !== 'owner'\)\s*throw/.test(pure)) continue
     let p = m[2]
     if (p.endsWith('/')) p = `${p}probe-id`
     ownerOnly.push([m[1], p])

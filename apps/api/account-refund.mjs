@@ -103,12 +103,15 @@ export function createAccountRefund({ db, apiError, iso, randomId, currentTenant
       throw apiError(400, 'REFUND_EXCEEDS_BALANCE',
         `退款金额 ${formatMoneyCents(amount, tenantId, 'auto')} 超过当前余额 ${formatMoneyCents(before, tenantId, 'auto')} —— 余额不许变负。`)
     }
-    /* 🔴 v1.1 ①:拆两个分量入账,**先冲赠送、后冲实付**。
-       理由:赠送是营销让利;退款先把让利收回,商家账上「还欠顾客的赠送」才不虚高。
-       恒等式:paid_part + bonus_part ≡ 退款金额(有断言守,不是只写在注释里)。 */
+    /* 🔴 v1.2(店主 2026-08-27 走查第 6 步撞出来,当场改回):拆账**先冲实付、后冲赠送**。
+       v1.1 写反了,症状是店主亲眼看到的那一屏:充 1000 送 100、退 150 之后显示
+       「实付可退 $950 · 本店赠送 $0」—— 赠送凭空没了,而顾客其实只动了自己的钱。
+       改对之后同样这一步显示「实付可退 $850 · 本店赠送 $100」:退的先是顾客自己付的钱,
+       赠送留到最后 —— 只有退到超过实付时才会吃到让利,黄条也正是在那一刻才该出。
+       恒等式:paid_part + bonus_part ≡ 退款金额(断言守,不是只写在注释里)。 */
     const before0 = refundFacts(userId, tenantId)
-    const bonusPart = Math.min(amount, before0.bonusRemainingCents)
-    const paidPart = amount - bonusPart
+    const paidPart = Math.min(amount, before0.paidRefundableCents)
+    const bonusPart = amount - paidPart
     /* 一次 INSERT 写全 —— **不许写完再 UPDATE**:账本只许追加,那道触发器会打回来
        (08-26 沙箱真点撞到过:测试库租户被豁免,所以只有真店口径上才现形)。 */
     const txn = insertStoredValueTransaction({
@@ -238,14 +241,38 @@ export function createAccountRefund({ db, apiError, iso, randomId, currentTenant
       refundOtherCents: outOther, refundOtherText: money(outOther),
       shouldHaveCents: should, shouldHaveText: money(should),
       incomeImpactCents: 0,
+      /* 🔴 v1.2 ②(店主 2026-08-27):这个数是**一个动作的落点** —— 晚上拿着它去数抽屉。
+         原来三行同样大小混在正文里,她的原话:「全在上面写成小字,根本不让人觉得这是一项操作」。
+         按回执图改成收据式:抬头句 + 大号金额 + 底下摊开算式;走转账/原路退回的降为脚注。
+         句子与算式行**全部后端给**,两端照渲染,谁都不许自己拼口径。 */
+      title: '今晚数钱按这个数',
+      totalLabel: '抽屉里应该有',
+      rows: [
+        { label: '到店支付', sign: '+', amountCents: storefrontCents, amountText: money(storefrontCents) },
+        { label: '现金充值', sign: '+', amountCents: rechargeCash, amountText: money(rechargeCash) },
+        { label: '现金退卡', sign: '−', amountCents: outCash, amountText: money(outCash), negative: true }
+      ],
       label: '到店收的钱 · 应有数',
-      /* 措辞不许说过头(店主 08-25 更正):能保证的是「**到店收的钱**·应有数」对得上;
+      // 脚注:那部分钱没经过抽屉,所以**不进算式**,只在底下说一句
+      footnote: outOther ? `另有 ${money(outOther)} 退款走转账 / 原路退回 —— 没经过抽屉,不在这个数里` : '',
+      /* 措辞不许说过头(店主 08-25 更正):能保证的是「到店收的钱·应有数」对得上;
          要精确到抽屉里的纸币,得先给线下腿记渠道 —— 那是后续项,不在这批。 */
-      hint: '到店支付 + 现金充值 − 现金退卡,退卡已经扣掉了。对账按这个数。'
-        + (outOther ? `另有 ${money(outOther)} 退款走转账/原路退回,不从这里出。` : ''),
+      hint: '到店支付 + 现金充值 − 现金退卡,退卡已经扣掉了。对账按这个数。',
       note: '线下腿不分现金与刷卡(表上没有渠道列),所以这是「到店收的钱」的应有数,不是纯钞票数。'
     }
   }
 
-  return { refundFacts, bonusWarningText, refundStoredValue, timecardRefundFacts, refundTimecard, refundsOfDay, cashDrawerOf }
+  /* v1.2 ②:日结顶部三小格。**退卡单独一格,不混进营业额** ——
+     它是负债减少不是收入,混进去等于把"退给顾客的钱"算成生意做大了。 */
+  function headlineOf(date, tenantId = currentTenantId(), { orderCount = 0, revenueCents = 0 } = {}) {
+    const rf = refundsOfDay(date, tenantId)
+    const m = (c) => formatMoneyCents(c, tenantId, 'auto')
+    return [
+      { key: 'orders', label: '本日单数', value: String(orderCount) },
+      { key: 'revenue', label: '营业额', value: m(revenueCents) },
+      { key: 'refund', label: `退卡合计(储值 ${rf.storedCount} 笔${rf.timecardCount ? ` · 次卡 ${rf.timecardCount} 笔` : ''})`, value: m(rf.totalCents) }
+    ]
+  }
+
+  return { refundFacts, bonusWarningText, headlineOf, refundStoredValue, timecardRefundFacts, refundTimecard, refundsOfDay, cashDrawerOf }
 }

@@ -111,12 +111,15 @@ const dailyCloseMixin = {
           /* 🔴 N-5(店主 08-25 复核):退卡不进损益,但**现金必须扣** ——
              不扣的话「今天收现 2000、退顾客 400 → 抽屉实际 1600、日结报 2000」,
              店主晚上数钱对不上,而她不会怀疑退卡,会怀疑店员。句子后端给,这里零计算。 */
+          /* v1.2 ②:收据式 —— 抬头句 + 大数 + 算式 + 脚注,全部后端给(与网页同句) */
           drawer: dc.cashDrawer ? {
-            label: dc.cashDrawer.label,
+            title: dc.cashDrawer.title || dc.cashDrawer.label,
             should: dc.cashDrawer.shouldHaveText,
-            hint: dc.cashDrawer.hint,
-            out: dc.cashDrawer.refundOutCents ? `退卡 −${m(dc.cashDrawer.refundOutCents)}` : ''
+            totalLabel: dc.cashDrawer.totalLabel || '',
+            rows: (dc.cashDrawer.rows || []).map((r) => ({ label: r.label, amt: `${r.sign} ${r.amountText}`, neg: Boolean(r.negative) })),
+            footnote: dc.cashDrawer.footnote || ''
           } : null,
+          headline: (dc.headline || []).map((h) => ({ label: h.label, value: h.value })),
           refundLine: (dc.refunds && dc.refunds.totalCents)
             ? `${dc.refunds.label} · ${dc.refunds.storedCount ? `储值 ${dc.refunds.storedCount} 笔` : ''}${dc.refunds.timecardCount ? ` 次卡 ${dc.refunds.timecardCount} 笔` : ''} 合计 ${m(dc.refunds.totalCents)}`
             : '',

@@ -276,8 +276,11 @@ check('⑩-2 🔴 行为必须不同:keep=仍是会员 / drop=余额归零即失
   const webRows = web + '\n' + readFileSync(join(ROOT, 'apps/web/daily-close-rows.js'), 'utf8')
   check('⑦-13 网页日结渲染应有数与退卡行(读后端句,不自算)',
     /cashAndRefundRows/.test(web) && /cashDrawer/.test(webRows) && /shouldHaveText/.test(webRows) && /refunds/.test(webRows))
-  check('⑦-14 小程序日结同样两行(双端同句)',
-    /dc\.cashDrawer/.test(miniMap) && /shouldHaveText/.test(miniMap) && /v\.drawer/.test(miniWx) && /v\.refundLine/.test(miniWx))
+  /* v1.2 ②:小程序也改成收据式(抬头句 + 大数 + 算式 + 脚注),判据跟着被测物走 —— 
+     原来那条断的是旧的「两行 pill」写法,重画之后必然假红。 */
+  check('⑦-14 小程序日结同样是收据式(双端同句,句子都来自后端)',
+    /dc\.cashDrawer/.test(miniMap) && /shouldHaveText/.test(miniMap) && /footnote/.test(miniMap)
+    && /v\.drawer\.title/.test(miniWx) && /v\.drawer\.rows/.test(miniWx) && /v\.headline/.test(miniWx))
 }
 
 /* ═══ 图 v1.1(店主 2026-08-26 补三条)+ 十条常驻硬拦 ═══ */
@@ -313,9 +316,11 @@ check('⑩-2 🔴 行为必须不同:keep=仍是会员 / drop=余额归零即失
 
   // 退 150:先冲赠送(100)、后冲实付(50)——图 v1.1 的原样例子
   const r150 = await request('/admin/stored-value/refund', { method: 'POST', body: JSON.stringify({ userId: bUser, amountCents: 15000, payChannel: 'cash', reason: '拆账验证' }) }, TOKEN, BH)
-  check('v1.1①-4 🔴 拆账:退 150 → bonus_part 100 / paid_part 50(先冲赠送后冲实付)',
-    r150.status === 201 && r150.data.bonusPartCents === 10000 && r150.data.paidPartCents === 5000,
-    JSON.stringify({ b: r150.data.bonusPartCents, p: r150.data.paidPartCents }))
+  /* 🔴 v1.2(店主 08-27 走查第 6 步当场撞出):方向是**先冲实付、后冲赠送**。
+     v1.1 反了,她看到的是「实付可退 $950 · 本店赠送 $0」——赠送凭空没了。 */
+  check('v1.2①-4 🔴 拆账:退 150 → paid_part 150 / bonus_part 0(先冲实付后冲赠送)',
+    r150.status === 201 && r150.data.paidPartCents === 15000 && r150.data.bonusPartCents === 0,
+    JSON.stringify({ p: r150.data.paidPartCents, b: r150.data.bonusPartCents }))
   check('v1.1①-5 🔴 恒等式 paid_part + bonus_part ≡ 退款金额',
     r150.data.bonusPartCents + r150.data.paidPartCents === r150.data.refundedCents,
     `${r150.data.bonusPartCents} + ${r150.data.paidPartCents} vs ${r150.data.refundedCents}`)
@@ -325,8 +330,11 @@ check('⑩-2 🔴 行为必须不同:keep=仍是会员 / drop=余额归零即失
     db.prepare('SELECT kind FROM tenants WHERE id = ?').get(bId).kind === 'real' && r150.status === 201,
     db.prepare('SELECT kind FROM tenants WHERE id = ?').get(bId).kind)
   const bf2 = (await request(`/admin/account-adjust/facts?userId=${bUser}`, {}, TOKEN, BH)).data.facts
-  check('v1.1①-7 赠送退完之后,屏上「本店赠送」归 0(下一笔只能退实付)',
-    bf2.bonusRemainingCents === 0 && bf2.paidRefundableCents === 95000, JSON.stringify({ b: bf2.bonusRemainingCents, p: bf2.paidRefundableCents }))
+  /* 🔴 v1.2:退 150 之后,屏上该是「实付可退 850 · 本店赠送 100」——
+     赠送**一分没动**(店主走查那一屏看到的 950/0 就是方向反了的样子)。 */
+  check('v1.2①-7 退 150 之后:实付可退 850 · 本店赠送 100(赠送一分没动)',
+    bf2.paidRefundableCents === 85000 && bf2.bonusRemainingCents === 10000,
+    `实付可退 ${bf2.paidRefundableCents} · 赠送 ${bf2.bonusRemainingCents} · 屏上句:${bf2.splitText}`)
 
   // ── ⑥ 幂等:按请求单号判,不按「余额还剩多少」判
   const rid = `req-${RUN}`
@@ -399,6 +407,109 @@ check('⑩-2 🔴 行为必须不同:keep=仍是会员 / drop=余额归零即失
   }
   check('v1.1③-4 员工端**连按钮都不渲染**(不是点了报错)',
     /owner\.role === 'owner' \? `<button class="ghost slim" data-account-adjust/.test(adminSrc), '入口没有按角色渲染')
+}
+
+/* ═══ v1.2(店主 2026-08-27 走查回执四件)═══ */
+
+// ② 日结应有数:算式三项之和 ≡ 大数;转账那笔**不进算式**
+{
+  const dc = (await request(`/admin/daily-close?date=${today}`, {}, TOKEN, H)).data.dailyClose
+  const d = dc.cashDrawer
+  check('v1.2②-1 卡片三件套齐:抬头句 / 大数 / 算式行(全部后端给)',
+    d.title === '今晚数钱按这个数' && Boolean(d.shouldHaveText) && Array.isArray(d.rows) && d.rows.length === 3,
+    JSON.stringify({ t: d.title, rows: (d.rows || []).map((r) => r.label) }))
+  const sum = d.rows.reduce((n, r) => n + (r.sign === '−' ? -r.amountCents : r.amountCents), 0)
+  check('v1.2②-2 🔴 算式三项之和 ≡ 大数', sum === d.shouldHaveCents, `${sum} vs ${d.shouldHaveCents}`)
+  check('v1.2②-3 🔴 转账那笔不在算式里(它没经过抽屉,只在脚注)',
+    d.refundOtherCents > 0 && !d.rows.some((r) => r.amountCents === d.refundOtherCents) && /转账/.test(d.footnote || ''),
+    `other=${d.refundOtherCents} footnote=${d.footnote}`)
+  check('v1.2②-4 三小格:退卡单独一格,不混进营业额',
+    Array.isArray(dc.headline) && dc.headline.length === 3 && /退卡合计/.test(dc.headline[2].label)
+    && dc.headline[1].label === '营业额', JSON.stringify((dc.headline || []).map((h) => h.label)))
+}
+
+// ③ 钱的输入框:全仓不许再有 type=number(那对箭头就是从它来的);敲的过程中不重画
+{
+  const { readFileSync: rf3 } = await import('node:fs')
+  const { join: j4, dirname: d4 } = await import('node:path')
+  const { fileURLToPath: f4 } = await import('node:url')
+  const ROOT3 = j4(d4(f4(import.meta.url)), '../..')
+  /* 判据跟着被测物走:金额更正那个框 08-27 随「日结小件」搬进 daily-close-rows.js ——
+     只读两个文件就会漏掉它(实测漏过一次)。这里读的是"网页商家端全部会出现钱输入框的地方"。 */
+  const web = ['apps/web/admin.js', 'apps/web/account-adjust.js', 'apps/web/daily-close-rows.js']
+    .map((f) => rf3(j4(ROOT3, f), 'utf8')).join('\n')
+  const moneyIds = ['aaAmount', 'aaCardAmount', 'finAmount', 'finRuleAmount', 'mSvAmount', 'mSvBonus', 'cpnGrantAmount', 'dcNewTotal']
+  const stillNumber = moneyIds.filter((id) => new RegExp(`id="${id}"[^>]*type="number"`).test(web))
+  check('v1.2③-1 🔴 所有钱的输入框都不再是 type=number(去掉那对上下箭头)',
+    stillNumber.length === 0, stillNumber.join(' | '))
+  const noInputmode = moneyIds.filter((id) => !new RegExp(`id="${id}"[^>]*inputmode="decimal"`).test(web)
+    && !new RegExp(`MoneyInput\\.field\\(\\{ id: '${id}'`).test(web))
+  check('v1.2③-2 都带 inputmode="decimal"(手机上照样弹数字键盘)', noInputmode.length === 0, noInputmode.join(' | '))
+  const panel = rf3(j4(ROOT3, 'apps/web/account-adjust.js'), 'utf8')
+  check('v1.2③-3 🔴 敲的过程中不重画:input 事件里只 patch 那几行,没有 mount()',
+    /if \(e\.target\.id === 'aaAmount'\)[\s\S]{0,400}?patchCalc\(\)/.test(panel)
+    && !/e\.target\.id === 'aaAmount'[\s\S]{0,200}?mount\(\)/.test(panel))
+  const mi = rf3(j4(ROOT3, 'apps/web/money-input.js'), 'utf8')
+  check('v1.2③-4 归一只在 blur 做(敲的时候不补零、不重排)',
+    /addEventListener\('blur'/.test(mi) && /normalize/.test(mi))
+  /* 🔴 08-27 实测教训:改输入框那一刀把 handleClick **连带删掉了**,而 return 里还引着它 ——
+     模块整个初始化失败、window.AccountAdjust 是 undefined、点按钮毫无反应,
+     **而所有代码行断言照样绿**。所以补这一条:把两个前端模块真装一遍,看导出齐不齐。 */
+  const loadWebModule = (file, expect) => {
+    const src = rf3(j4(ROOT3, file), 'utf8')
+    const win = { document: { addEventListener() {}, querySelector: () => null, createElement: () => ({ classList: { add() {} } }) } }
+    try {
+      new Function('window', 'document', src)(win, win.document)
+    } catch (e) { return `装不起来:${e.message}` }
+    const got = Object.keys(win[expect.name] || {})
+    return expect.keys.every((k) => got.includes(k)) ? '' : `导出缺:${expect.keys.filter((k) => !got.includes(k)).join(',')}`
+  }
+  const modFail = [
+    loadWebModule('apps/web/account-adjust.js', { name: 'AccountAdjust', keys: ['open', 'close', 'handleClick'] }),
+    loadWebModule('apps/web/money-input.js', { name: 'MoneyInput', keys: ['field', 'normalize', 'centsOf'] }),
+    loadWebModule('apps/web/my-customers.js', { name: 'MyCustomers', keys: ['render'] }),
+    loadWebModule('apps/web/daily-close-rows.js', { name: 'DailyCloseRows', keys: ['cashAndRefundRows', 'correctionForm', 'targetCellText'] })
+  ].filter(Boolean)
+  check('v1.2③-5 🔴 四个前端模块真装得起来、导出齐(点不动那种病,代码行断言看不出来)',
+    modFail.length === 0, modFail.join(' | '))
+  check('v1.2③-6 侧栏那几个 els 引用真存在(`els.x?.` 拿不到元素时会静默什么也不做)',
+    /sidebarMembership: document\.querySelector/.test(web) && /sidebarMyCustomers: document\.querySelector/.test(web))
+}
+
+// ④ 店员端:会员套餐/券不出现;我的客人只读且只列自己的客人
+{
+  const acct2 = await request('/admin/staff-accounts', { method: 'POST', body: JSON.stringify({ technicianId }) }, TOKEN, H)
+  if (acct2.status === 201) {
+    const lg = await request('/admin/auth/login', { method: 'POST', body: JSON.stringify({ email: acct2.data.username, password: acct2.data.initialPassword }) }, null, H)
+    const stf = lg.data.auth?.accessToken
+    const pkgs = await request('/admin/packages', {}, stf, H)
+    check('v1.2④-1 会员套餐/券对员工仍是 403(菜单也不再渲染它)', pkgs.status === 403, String(pkgs.status))
+    check('v1.2④-2 🔴 报错话是中文(产品其余都是中文,不该只有报错蹦英文)',
+      /[一-龥]/.test(pkgs.data?.error?.message || ''), pkgs.data?.error?.message)
+    const mine = await request('/admin/my-customers', {}, stf, H)
+    check('v1.2④-3 员工有「我的客人」且是只读', mine.status === 200 && mine.data.readOnly === true, String(mine.status))
+    /* 判据要挑**真不是他的**那个人:本店那位顾客恰恰是他服务的(所以 200 才对)。
+       挑一个他从没服务过的:现建一位、只由别的技师服务。 */
+    const otherTech = (await request('/admin/technicians', { method: 'POST', body: JSON.stringify({ name: `别的技师${RUN}`, isActive: true }) }, TOKEN, H)).data.technician.id
+    let otherUser = ''
+    for (const hh of ['08', '18', '20', '21']) {
+      const bk2 = await request('/admin/bookings/direct', { method: 'POST', body: JSON.stringify({ newCustomerName: `别人的客人${RUN}`, serviceId, technicianId: otherTech, date: today, time: `${hh}:00` }) }, TOKEN, H)
+      if (bk2.data?.booking?.user?.id) { otherUser = bk2.data.booking.user.id; break }
+    }
+    const mineOne = await request(`/admin/my-customers/${userId}`, {}, stf, H)
+    check('v1.2④-4a 自己服务过的客人:看得到(只读)', mineOne.status === 200 && mineOne.data.readOnly === true, String(mineOne.status))
+    const others = await request(`/admin/my-customers/${otherUser}`, {}, stf, H)
+    check('v1.2④-4b 🔴 别人的客人 = 404(那个人对他不该存在)', others.status === 404, `${others.status} · ${otherUser}`)
+    const web2 = (await import('node:fs')).readFileSync((await import('node:path')).join((await import('node:path')).dirname((await import('node:url')).fileURLToPath(import.meta.url)), '../../apps/web/admin.js'), 'utf8')
+    check('v1.2④-5 菜单按角色渲染:会员套餐/券对员工隐藏、我的客人只给员工',
+      /sidebarMembership\?\.classList\.toggle\('hidden', !isOwnerRole\(\)\)/.test(web2)
+      && /sidebarMyCustomers\?\.classList\.toggle\('hidden', isOwnerRole\(\)\)/.test(web2))
+    check('v1.2④-6 「我的客人」页零金额编辑口(不出现账户调整/充值按钮)',
+      /renderMyCustomers/.test(web2) && !/renderMyCustomers[\s\S]{0,1500}?data-account-adjust/.test(web2)
+      && !/renderMyCustomers[\s\S]{0,1500}?data-customer-recharge/.test(web2))
+  } else {
+    check('v1.2④ 员工号建不出来', false, JSON.stringify(acct2.data).slice(0, 120))
+  }
 }
 
 /* 🔴 恒等式要**扫全表**,不能只验刚写的那一行(店主 08-26 第 10 步点的正是这个:

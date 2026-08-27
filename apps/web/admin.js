@@ -1,5 +1,5 @@
 // 构建号:每次交付递增。侧栏可见,排查"改了没生效"时先对版本。
-const ADMIN_BUILD = '20260825i-n5'
+const ADMIN_BUILD = '20260827a-n5v12'
 let pricingState = { module: 'storefront', tab: 'items', categories: [], items: [], rules: {}, editing: null, preview: null, storefrontPicker: false }
 console.log(`[admin] build ${ADMIN_BUILD}`)
 
@@ -118,6 +118,10 @@ const els = {
   pricingRuleList: document.querySelector('#pricingRuleList'),
   pricingPreviewBox: document.querySelector('#pricingPreviewBox'),
   sidebarPricing: document.querySelector('#sidebarPricing'),
+  /* 🔴 08-27 实测教训:这行原来没有,而调用处写的是 `els.sidebarMembership?.classList…` ——
+     可选链让它**静默什么也不做**,代码行断言照样绿、屏幕上菜单照旧在。
+     判据要能证伪的话,得数屏幕上的菜单项(下面那条断言改成真数 DOM)。 */
+  sidebarMembership: document.querySelector('#sidebarMembership'),
   membershipSettingsSummary: document.querySelector('#membershipSettingsSummary'),
   depositSettingsSummary: document.querySelector('#depositSettingsSummary'),
   depositSettingsBody: document.querySelector('#depositSettingsBody'),
@@ -136,6 +140,8 @@ const els = {
   dcJumpBar: document.querySelector('#dcJumpBar'),
   pointsPrizeList: document.querySelector('#pointsPrizeList'),
   customersPage: document.querySelector('#customersPage'),
+  myCustomersPage: document.querySelector('#myCustomersPage'),
+  sidebarMyCustomers: document.querySelector('#sidebarMyCustomers'),
   wechatMockPage: document.querySelector('#wechatMockPage'),
   wechatMockEyebrow: document.querySelector('#wechatMockEyebrow'),
   wechatMockTitle: document.querySelector('#wechatMockTitle'),
@@ -1506,6 +1512,9 @@ function retentionStats() {
    随 bookingSource 改成后端出句一起退役,全仓零使用方,直接删。
    留着就等于把编造能力摆在手边,下次谁手一滑又编一个出来。 */
 
+// v1.2 ④:员工只读「我的客人」——整页在 ./my-customers.js(公约①;admin.js 只许搬出)
+const renderMyCustomers = () => window.MyCustomers.render(els.myCustomersPage, { zh: owner.lang === 'zh', request, escapeHtml, dateOnly })
+
 function renderAdminPages() {
   els.sidebarDashboard.classList.toggle('hidden', !isOwnerRole())
   // 员工端没有首页,"← Dashboard"返回按钮一并隐藏
@@ -1514,6 +1523,9 @@ function renderAdminPages() {
   els.sidebarStoreSettings.classList.toggle('hidden', !isOwnerRole())
   els.sidebarGeneralSettings?.classList.toggle('hidden', !isOwnerRole())   // S5-a:通用设置含财务密码,老板专属
   els.sidebarFinance.classList.toggle('hidden', !isOwnerRole())
+  // v1.2 ④:看不见的东西不该出现在菜单里(会员套餐/券对员工隐藏);员工那条只读页只给员工
+  els.sidebarMembership?.classList.toggle('hidden', !isOwnerRole())
+  els.sidebarMyCustomers?.classList.toggle('hidden', isOwnerRole())
   els.sidebarPricing?.classList.toggle('hidden', !isOwnerRole())
   // 2026-08-04 店主定「全部 AI 归智能包」:没开通就把纯 AI 的入口收起来,别让人点了没反应。
   // AI 图库整页只做 AI 文案,没 AI 就没意义;客服工作台保留(它是人工会话收件箱,没 AI 也要用)。
@@ -1531,6 +1543,7 @@ function renderAdminPages() {
     pricing: els.pricingPage,
     membership: els.membershipPage,
     customers: els.customersPage,
+    myCustomers: els.myCustomersPage,
     wechatMock: els.wechatMockPage,
     aiGallery: els.aiGalleryPage,
     finance: els.financePage,
@@ -1539,6 +1552,7 @@ function renderAdminPages() {
   }
   Object.entries(pages).forEach(([key, element]) => element.classList.toggle('hidden', owner.adminPage !== key))
   if (owner.adminPage === 'generalSettings') renderGeneralSettings()   // S5-a
+  if (owner.adminPage === 'myCustomers') renderMyCustomers()           // v1.2 ④ 员工只读页
   els.metricGrid.classList.toggle('hidden', owner.adminPage !== 'dashboard')
   els.sidebarLinks.forEach((link) => {
     const activePage = owner.adminPage === 'dashboardDetail' ? 'dashboard' : owner.adminPage
@@ -2336,32 +2350,7 @@ const targetCellText = (t, zh) => window.DailyCloseRows.targetCellText(t, zh, mo
 
 /* 屏 1b 金额更正:上半是顾客已签的存档单(只读带锁标),下半填改后金额与原因。
    提交 = 追加一条更正记录,原签署单永不改动;储值差额由后端自动补配。 */
-function renderCorrectionForm(row, zh) {
-  return `
-    <div class="section-row compact-row">
-      <h3 style="font-size:15px">${zh ? '金额更正' : 'Amend'} · ${escapeHtml(row.code)}</h3>
-      <button class="ghost slim" id="dcCorrectCancel" type="button">${zh ? '返回日结' : 'Back'}</button>
-    </div>
-    <div class="dc-ro">
-      <div class="ro-t"><span>${zh ? '顾客已签存档单(只读)' : 'Signed sheet (read-only)'}</span><span class="lock">${zh ? '不可修改' : 'locked'}</span></div>
-      ${escapeHtml(row.servedPersonName || '')}${row.isProxyPaid ? (zh ? '(代付)' : ' (proxy)') : ''} · ${String(row.signedAt || '').slice(0, 16).replace('T', ' ')}
-      · ${(row.technicians || []).map((t) => `${escapeHtml(t.name)}(${t.role === 'main' ? (zh ? '主' : 'main') : (zh ? '副' : 'assist')})`).join('/')}<br>
-      ${(row.items || []).map((l) => `${String(l.itemNo).padStart(2, '0')} ${escapeHtml(l.name)} ${l.isFree ? (zh ? '免收' : 'free') : money(l.amountCents, 2)}`).join(' · ')}<br>
-      ${row.depositDeductCents ? `${zh ? '定金抵扣' : 'Deposit'} −${money(row.depositDeductCents, 2)} · ` : ''}<b>${zh ? '合计' : 'Total'} ${money(row.totalCents, 2)}</b>
-    </div>
-    <div class="dep-block" style="margin-top:12px">
-      <h4>${zh ? '更正内容' : 'Amendment'}</h4>
-      <div class="dep-inline" style="margin-top:0">
-        <label>${zh ? '更正后合计' : 'New total'}<input id="dcNewTotal" inputmode="decimal" value="${row.totalCents / 100}"></label>
-      </div>
-      <textarea class="dep-text" id="dcReason" style="min-height:80px;margin-top:10px"
-        placeholder="${zh ? '原因(必填):例「实际只补了 1 指,技师勾多了」' : 'Reason (required)'}"></textarea>
-      <p class="subtle">${zh
-        ? '提交后:① 原签署单保持原样,顾客服务记录追加一条「订单更正记录」(改前/改后/操作人/时间)② 用卡付过的单,储值差额由系统自动补配(人工不可改这笔)③ 更正进当日日结留痕'
-        : 'The signed sheet stays untouched; an amendment record is appended.'}</p>
-      <button class="primary slim" id="dcCorrectSubmit" type="button">${zh ? '提交更正' : 'Submit'}</button>
-    </div>`
-}
+const renderCorrectionForm = (row, zh) => window.DailyCloseRows.correctionForm(row, zh, { escapeHtml, money })
 
 /* 订单页「待日结 N · 去日结」直达条(裁决①:网页日结留在财务页,订单页给个直达)。
    只有老板看得见 —— 员工调这个接口本来就是 403。 */
@@ -3516,7 +3505,7 @@ function renderFinancePage() {
         </select>
       </label>
       <label><span>${owner.lang === 'zh' ? '类别' : 'Category'}</span><select id="finCategory">${expenseOptions}</select></label>
-      <label><span>${owner.lang === 'zh' ? '金额 (CAD)' : 'Amount (CAD)'}</span><input id="finAmount" type="number" min="0" step="0.01" placeholder="0.00"></label>
+      <label><span>${owner.lang === 'zh' ? '金额 (CAD)' : 'Amount (CAD)'}</span><input id="finAmount" data-money type="text" inputmode="decimal" autocomplete="off" placeholder="0.00"></label>
       <label><span>${owner.lang === 'zh' ? '支付方式' : 'Channel'}</span><select id="finChannel">${channelOptions}</select></label>
       <label><span>${owner.lang === 'zh' ? '日期' : 'Date'}</span><input id="finDate" type="date" value="${storeToday()}"></label>
       <label><span>${owner.lang === 'zh' ? '标签(可选)' : 'Tags'}</span><input id="finTags" placeholder="${owner.lang === 'zh' ? '如:6月采购' : 'optional'}"></label>
@@ -3538,7 +3527,7 @@ function renderFinancePage() {
     <div class="finance-rule-add">
       <input id="finRuleName" placeholder="${owner.lang === 'zh' ? '名称,如:店面房租' : 'Name'}">
       <select id="finRuleCategory">${expenseOptions}</select>
-      <input id="finRuleAmount" type="number" min="0" step="0.01" placeholder="${owner.lang === 'zh' ? '金额' : 'Amount'}">
+      <input id="finRuleAmount" data-money type="text" inputmode="decimal" autocomplete="off" placeholder="${owner.lang === 'zh' ? '金额' : 'Amount'}">
       <input id="finRuleDay" type="number" min="1" max="31" value="1" title="${owner.lang === 'zh' ? '每月几号' : 'Day of month'}">
       <button class="primary slim" data-fin-rule-add type="button">${owner.lang === 'zh' ? '添加规则' : 'Add'}</button>
     </div>
@@ -7281,7 +7270,7 @@ function renderCouponGrantSection() {
                ${tpls.map((c) => `<option value="${escapeHtml(c.id)}"${st.templateId === c.id ? ' selected' : ''}>${escapeHtml(c.name)}</option>`).join('')}
              </select>
            </label>`
-        : `<label class="cpn-field"><span>券面额</span><input id="cpnGrantAmount" placeholder="例:50" value="${escapeHtml(st.amount)}"></label>
+        : `<label class="cpn-field"><span>券面额</span><input id="cpnGrantAmount" data-money type="text" inputmode="decimal" placeholder="例:50" value="${escapeHtml(st.amount)}"></label>
            <label class="cpn-field"><span>使用门槛(留空=无门槛)</span><input id="cpnGrantMin" placeholder="例:300" value="${escapeHtml(st.minSpend)}"></label>
            <label class="cpn-field"><span>适用范围</span>
              <select id="cpnGrantScope">
@@ -7446,8 +7435,8 @@ function renderSvOpsCard() {
       <div class="sv-op-row" style="margin-top:8px">
         <select id="mSvMember">${memberOptions || '<option value="">暂无会员</option>'}</select>
         <select id="mSvPkg"><option value="">按套餐(可选)</option>${recPkgs.map((p) => `<option value="${p.id}">充 ${mMoney(p.priceCents)}${p.bonusCents ? ' 赠 ' + mMoney(p.bonusCents) : ''}</option>`).join('')}</select>
-        <input id="mSvAmount" type="number" min="0" step="0.01" placeholder="金额">
-        <input id="mSvBonus" type="number" min="0" step="0.01" placeholder="赠送(可空)">
+        <input id="mSvAmount" data-money type="text" inputmode="decimal" autocomplete="off" placeholder="金额">
+        <input id="mSvBonus" data-money type="text" inputmode="decimal" autocomplete="off" placeholder="赠送(可空)">
         <select id="mSvChannel">${FINANCE_PAY_CHANNELS.filter(([id]) => id !== 'stored_value').map(([id, label]) => `<option value="${id}">${label}</option>`).join('')}</select>
         <select id="mSvTech"><option value="">经手:店里直收</option>${(owner.technicians || []).map((t2) => `<option value="${escapeHtml(t2.id)}">${escapeHtml(t2.name)}</option>`).join('')}</select>
         <button class="primary slim" data-msv-recharge type="button">充值</button>

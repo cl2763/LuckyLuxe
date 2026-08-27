@@ -7337,3 +7337,18 @@ section.card > .section-row:first-child { margin-top: 0; }
 /* N-5 v1.1:拆账行 + 赠送黄条(只提醒不拦) */
 .aa-split{font-size:12.5px;color:#6b635c;margin:6px 0 0}
 .aa-warn{background:#f3e7da;border:1px solid #9a5a28;color:#7a4a20;border-radius:8px;padding:9px 12px;font-size:13px;margin:12px 0}
+
+/* N-5 v1.2 ②:日结「今晚数钱按这个数」收据式卡片(回执图 2026-08-27) */
+.dc-due{background:#fff;border:1px solid #dcd2c2;border-radius:8px;padding:14px 16px;margin:10px 0 0}
+.dc-due-lab{font-size:11px;letter-spacing:.1em;color:#8c8478;font-weight:700}
+.dc-due-big{font-size:30px;font-weight:700;line-height:1.15;margin-top:2px;font-variant-numeric:tabular-nums}
+.dc-due-calc{margin-top:11px;font-size:12.5px;font-variant-numeric:tabular-nums}
+.dc-due-row{display:flex;justify-content:space-between;padding:2.5px 0;color:#3a342c}
+.dc-due-row.neg{color:#95332a}
+.dc-due-row.tot{border-top:1px solid #dcd2c2;margin-top:5px;padding-top:6px;font-weight:700;color:#1b1815}
+.dc-due-aside{margin-top:10px;font-size:11.8px;color:#8c8478;border-top:1px dashed #e6dfd4;padding-top:8px}
+.dc-stats{display:flex;gap:9px;margin-top:11px;flex-wrap:wrap}
+.dc-stat{background:#fff;border:1px solid #e6dfd4;border-radius:5px;padding:7px 11px;flex:1;min-width:96px}
+.dc-stat .l{font-size:10.5px;color:#8c8478}
+.dc-stat .v{font-size:15px;font-weight:600;font-variant-numeric:tabular-nums}
+.dc-due-note{font-size:11.5px;color:#8c8478;margin-top:8px}

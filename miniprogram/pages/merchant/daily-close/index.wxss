@@ -69,3 +69,13 @@
 
 /* D57 未签行可点态 */
 .deduct-row.tap{padding:10rpx 0}
+
+/* N-5 v1.2 ②:应有数收据卡(与网页同构) */
+.due{background:#fff;border:1rpx solid #e6dfd4;border-radius:12rpx;padding:22rpx 24rpx;margin:16rpx 0 0}
+.due-lab{display:block;font-size:20rpx;letter-spacing:2rpx;color:#8c8478;font-weight:700}
+.due-big{display:block;font-size:52rpx;font-weight:700;margin-top:4rpx}
+.due-calc{margin-top:16rpx;font-size:24rpx}
+.due-row{display:flex;justify-content:space-between;padding:4rpx 0;color:#3a342c}
+.due-row.neg{color:#95332a}
+.due-row.tot{border-top:1rpx solid #dcd2c2;margin-top:8rpx;padding-top:10rpx;font-weight:700;color:#1b1815}
+.due-aside{display:block;margin-top:14rpx;font-size:22rpx;color:#8c8478;border-top:1rpx dashed #e6dfd4;padding-top:12rpx}
