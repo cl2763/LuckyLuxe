@@ -161,6 +161,12 @@ const BLOCKS = [
 ]
 const missing = BLOCKS.filter(([, anchor]) => !served.includes(anchor)).map(([name]) => name)
 check(`🔴 ⑤ 开单页 ${BLOCKS.length} 个块全部在**服务端实发资源**上找到锚点`, missing.length === 0, missing.join(' | '))
+/* 🔴 UI 重做判据(店主 08-29:「每一个环节都要下拉才能点开,很麻烦」;小程序屏=合同,小程序零下拉):
+   开单模块渲染输出**零 <select>** —— 价格档/大类/项目/技师全部 chips 或列表行,与小程序同形。 */
+check('🔴 ⑤b 动作对齐:开单模块零下拉(小程序同位置全是 chips/列表行,网页不许多一层「点开」)',
+  !served.includes('<select'), (served.match(/<select[^>]{0,40}/g) || []).join(' | '))
+check('⑤b 小程序同形控件都在:chips(价格档/大类/技师)+ 列表行勾框 + stepper + 定金 radio + 整单规则开关 + 券入口行',
+  ['sw-chip', 'sw-ck', 'sw-stepper', 'sw-radio', 'sw-sw', 'sw-cpnline', 'sw-tl big'].every((c) => served.includes(c)))
 const servedHtml = await fetch(`${BASE_URL}/web/admin.html`).then((r) => r.text())
 check('⑤ 模块带内容指纹挂在 admin.html,容器在订单页里',
   /settlement-web\.js\?v=[0-9a-f]{6,}/.test(servedHtml) && servedHtml.includes('id="settlementComposer"'))

@@ -23,6 +23,8 @@ window.SettlementWeb = (function () {
     depositDeductible: true, depositApplied: false,
     groups: [], couponGrantId: '', couponOptions: [], couponUsableCount: 0,
     payMenu: { useBalance: false, recharge: false },
+    applyFootSurcharge: false, applyTipReuse: false,
+    bind: null, couponPanel: false,
     preview: null, view: null, pendingSheets: []
   }
 
@@ -66,8 +68,8 @@ window.SettlementWeb = (function () {
         payIntent: payIntentOf(st),
         depositApplied: i === 0 ? st.depositApplied : false,
         couponGrantId: i === 0 ? (st.couponGrantId || undefined) : undefined,
-        applyFootSurcharge: false,
-        applyTipReuse: false
+        applyFootSurcharge: i === 0 && !isTcGroup ? Boolean(st.applyFootSurcharge) : false,
+        applyTipReuse: i === 0 && !isTcGroup ? Boolean(st.applyTipReuse) : false
       }
     })
   }
@@ -96,7 +98,8 @@ window.SettlementWeb = (function () {
       open: true, ready: false, submitting: false, _scrolled: false,
       bookingId: ctx.bookingId || '', userId: ctx.userId || '', customerName: ctx.customerName || '',
       groups: [], couponGrantId: '', couponOptions: [], couponUsableCount: 0,
-      payMenu: { useBalance: false, recharge: false }, preview: null, view: null, pendingSheets: []
+      payMenu: { useBalance: false, recharge: false }, applyFootSurcharge: false, applyTipReuse: false,
+      bind: null, couponPanel: false, preview: null, view: null, pendingSheets: []
     })
     state._deps = deps
     try {
@@ -119,6 +122,11 @@ window.SettlementWeb = (function () {
         const tc = await request(`/admin/customers/${encodeURIComponent(state.userId)}/timecards`).catch(function () { return null })
         state.timecards = (tc && tc.timecards) || []
       } else state.timecards = []
+      if (state.userId) {
+        const lk = await request(`/admin/customers/lookup?userId=${encodeURIComponent(state.userId)}`).catch(function () { return null })
+        state.bind = (lk && lk.hit) || null
+        if (state.bind && state.bind.displayName && !state.customerName) state.customerName = state.bind.displayName
+      }
       const g0 = newGroup(tierDefault, (state.cats[0] || {}).id || '')
       if (ctx.serviceId && state.items.some(function (i) { return i.id === ctx.serviceId })) {
         g0.mainId = ctx.serviceId
@@ -165,10 +173,19 @@ window.SettlementWeb = (function () {
     const { escapeHtml } = state._deps
     if (!state.ready) { mount.innerHTML = '<div class="empty-state">加载中…</div>'; window.scrollTo(0, 0); return }
     const v = state.view || {}
+    const bindInfo = state.bind || {}
     mount.innerHTML = `
       <section class="admin-card settle-composer">
+        ${/* ═══ 头部(小程序 .hd):标题 + 顾客行(姓名+脱敏手机号+绑定徽标)═══ */''}
         <div class="section-row compact-row">
-          <h2>结算开单${state.customerName ? ` · ${escapeHtml(state.customerName)}` : ''}</h2>
+          <div>
+            <h2>结算开单</h2>
+            <div class="sw-s2row">
+              ${state.customerName ? `<span class="sw-s2name">${escapeHtml(state.customerName)}</span>` : ''}
+              ${bindInfo.phoneMasked ? `<span class="sw-s2phone">${escapeHtml(bindInfo.phoneMasked)}</span>` : ''}
+              ${bindInfo.badgeText ? `<span class="sw-s2badge">${escapeHtml(bindInfo.badgeText)}</span>` : ''}
+            </div>
+          </div>
           <button class="ghost slim" data-sw-close type="button">返回订单</button>
         </div>
         ${state.pendingSheets.length ? `
@@ -176,164 +193,294 @@ window.SettlementWeb = (function () {
             ${state.pendingSheets.map(function (sheet) { return `<div class="sw-pending-row"><code>${escapeHtml(sheet.code)}</code> 待签</div>` }).join('')}
           </div>` : ''}
         ${state.groups.map(function (g, gi) { return renderGroup(g, gi, escapeHtml) }).join('')}
-        <button class="ghost slim" data-sw-add-group type="button">＋ 添加第二个服务项目</button>
-        <div class="sw-block" id="swPayBlock">
-          <h3>定金 / 券 / 储值</h3>
-          ${state.bookingId ? `<label class="sw-check"><input type="checkbox" data-sw-deposit ${state.depositApplied ? 'checked' : ''}> 定金抵扣${state.depositDeductible ? '' : '(本店定金不抵尾款)'}</label>` : ''}
-          <label class="sw-check"><input type="checkbox" data-sw-balance ${state.payMenu.useBalance ? 'checked' : ''}> 储值抵扣(勾了才烧余额)</label>
-          ${state.couponOptions.length ? `
-            <label>券(组①)<select data-sw-coupon>
-              <option value="">不用券</option>
-              ${state.couponOptions.map(function (o) { return `<option value="${escapeHtml(o.grantId)}" ${state.couponGrantId === o.grantId ? 'selected' : ''} ${o.usable ? '' : 'disabled'}>${escapeHtml(o.title || o.name || o.grantId)}${o.usable ? ` ${escapeHtml(o.deductText || '')}` : `(${escapeHtml(o.reason || '本单用不了')})`}</option>` }).join('')}
-            </select></label>` : `<p class="subtle">顾客券包里没有可用券。</p>`}
+        <button class="sw-addmain" data-sw-add-group type="button">＋ 添加第二个服务项目</button>
+
+        ${/* ═══ 单级卡:定金 / 券 / 整单规则(小程序屏 3 上半)═══ */''}
+        <div class="sw-card" id="swPayBlock">
+          <div class="sw-ch">定金 <span class="sw-hint">按店配收取 · 有收取记录才出开关</span></div>
+          ${state.bookingId && state.depositDeductible && (v.depositReceiptCents || 0) > 0 ? `
+            <div class="sw-radios">
+              <button class="sw-radio ${state.depositApplied ? 'on' : ''}" data-sw-deposit="1" type="button"><span class="sw-dt"></span>已付定金抵扣${v.depositDeduct ? ` <span class="sw-ok">−${escapeHtml(v.depositDeduct)}</span>` : ''}</button>
+              <button class="sw-radio ${state.depositApplied ? '' : 'on'}" data-sw-deposit="0" type="button"><span class="sw-dt"></span>未付定金</button>
+            </div>`
+          : (state.depositDeductible
+            ? '<p class="sw-empty">这张单没有定金收取记录,没有可抵扣的定金</p>'
+            : '<p class="sw-empty">本店定金不抵扣尾款（门店设置 → 定金与取消规则）</p>')}
+
+          <button class="sw-cpnline" data-sw-coupon-open type="button">
+            <span class="l">优惠券</span>
+            ${state.couponGrantId && couponPickedOf() ? `<span class="v ok">${escapeHtml(couponPickedOf().title || couponPickedOf().name || '')} ${escapeHtml(couponPickedOf().deductText || '')}</span><span class="arr">›</span>`
+              : (state.couponUsableCount ? `<span class="v">顾客有 ${state.couponUsableCount} 张可用券</span><span class="arr">›</span>` : '<span class="v mut">无可用券</span>')}
+          </button>
+
+          <div class="sw-gh">整单规则</div>
+          <div class="sw-item"><span class="sw-iname wide">足部美甲<span class="sw-sub">手部基础上整单加收</span></span>
+            <button class="sw-sw ${state.applyFootSurcharge ? 'on' : ''}" data-sw-foot type="button" aria-label="足部美甲"><span class="sw-dot"></span></button></div>
+          <div class="sw-item"><span class="sw-iname wide">甲片重复利用<span class="sw-sub">固定价 · 仅限本店甲片</span></span>
+            <button class="sw-sw ${state.applyTipReuse ? 'on' : ''}" data-sw-tipreuse type="button" aria-label="甲片重复利用"><span class="sw-dot"></span></button></div>
         </div>
-        <div class="sw-block" id="swTotalBlock">
-          <h3>合计(后端试算,零前端计算)</h3>
-          ${v.detailGroups ? v.detailGroups.map(function (dg) {
-            return `<div class="sw-preview-group"><strong>${escapeHtml(dg.title)}</strong>
-              ${(dg.lines || []).map(function (l) { return `<div class="sw-line"><span>${escapeHtml(String(l.no || ''))} ${escapeHtml(l.name || '')}</span><span>${escapeHtml(l.amountText || '')}</span></div>` }).join('')}</div>`
-          }).join('') : '<p class="subtle">选好项目与技师后自动试算。</p>'}
-          ${v.rows ? v.rows.map(function (r) { return `<div class="sw-line sw-pay"><span>${escapeHtml(r.label)}</span><span>${escapeHtml(r.text)}</span></div>` }).join('') : ''}
-          ${v.totalText ? `<div class="sw-total"><span>合计</span><strong>${escapeHtml(v.totalText)}</strong></div>` : ''}
+
+        ${/* ═══ 支付构成 · 菜单式(小程序屏 3 中):勾"路",金额全部后端算 ═══ */''}
+        <div class="sw-card">
+          <div class="sw-ch">支付构成 · 菜单式 <span class="sw-hint">勾选支付方式,金额后端算</span></div>
+          <button class="sw-paym ${state.payMenu.useBalance && v.hasStored ? 'on' : ''}" data-sw-balance type="button">
+            <span class="sw-ck ${state.payMenu.useBalance && v.hasStored ? 'on' : ''}">${state.payMenu.useBalance && v.hasStored ? '✓' : ''}</span>
+            <span class="sw-pmain"><b>储值卡抵扣</b><span class="sw-psmall">${v.balance ? `可用余额 ${escapeHtml(v.balance)}` : '勾了才烧余额'}${state.payMenu.useBalance && v.hasStored ? ` → 本单抵 ${escapeHtml(v.storedDeduct)}` : (state.payMenu.useBalance ? ' · 本单无可抵金额' : '')}</span></span>
+          </button>
+          <div class="sw-paym passive">
+            <span class="sw-pmark">→</span>
+            <span class="sw-pmain"><b>到店收 · 差额自动</b><span class="sw-psmall">现金/扫码/POS · 差额 ${escapeHtml(v.offlineDue || '—')}(其余支付方式结清后的余数,自动算)</span></span>
+          </div>
+          <p class="sw-paynote">勾/不勾任何一项,金额分解都由后端重新算出并回显;不勾储值=全额线下。随单充值/现场购卡:网页版登记待排,先用小程序办。</p>
           ${(v.warnings || []).map(function (w) { return `<p class="sw-warn">${escapeHtml(w)}</p>` }).join('')}
         </div>
-        <button class="primary" data-sw-submit ${state.submitting ? 'disabled' : ''} type="button" id="swSubmitBtn">生成待签结算单(顾客侧签署)</button>
-        <p class="subtle">入账唯一路径=签署:这里只生成待签单,签字那一刻才记账。</p>
+
+        ${/* ═══ 分组明细 + 合计(小程序 .total):原价合计与共优惠行不许丢 ═══ */''}
+        <div class="sw-card sw-total-card" id="swTotalBlock">
+          ${v.detailGroups ? v.detailGroups.map(function (dg) {
+            return `<div class="sw-mg">${escapeHtml(dg.title)}</div>
+              ${(dg.lines || []).map(function (l) { return `<div class="sw-dtl"><span class="sw-dtl-n">${escapeHtml(l.name || '')}${l.qty > 1 ? ' ×' + l.qty : ''}</span><span class="sw-dtl-r">${l.list ? `<span class="sw-mut sw-strike">${escapeHtml(l.list)}</span>` : ''}<span class="sw-dtl-a">${escapeHtml(l.amountText || '')}</span></span></div>` }).join('')}`
+          }).join('') : '<p class="sw-empty">选好项目与技师后自动试算。</p>'}
+          ${v.listTotal ? `<div class="sw-tl"><span>原价合计</span><span class="sw-strike">${escapeHtml(v.listTotal)}</span></div>` : ''}
+          ${v.subtotal ? `<div class="sw-tl"><span>档位小计</span><span>${escapeHtml(v.subtotal)}</span></div>` : ''}
+          ${v.discountTotal ? `<div class="sw-tl save"><span>${escapeHtml(v.discountLabel || '较原价共优惠')}</span><span>${escapeHtml(v.discountTotal)}</span></div>` : ''}
+          ${v.timecardCover ? `<div class="sw-tl save"><span>次卡抵扣(签字扣次)</span><span>−${escapeHtml(v.timecardCover)}</span></div>` : ''}
+          ${v.storedDeduct && v.hasStored ? `<div class="sw-tl"><span>储值抵扣</span><span>−${escapeHtml(v.storedDeduct)}</span></div>` : ''}
+          ${v.depositDeduct && state.depositApplied ? `<div class="sw-tl"><span>定金抵扣</span><span>−${escapeHtml(v.depositDeduct)}</span></div>` : ''}
+          ${v.couponDeduct ? `<div class="sw-tl save"><span>券抵扣</span><span>−${escapeHtml(v.couponDeduct)}</span></div>` : ''}
+          ${v.totalText ? `<div class="sw-tl big"><span>到店应收</span><span>${escapeHtml(v.totalText)}</span></div>` : ''}
+        </div>
+
+        <button class="sw-cta" data-sw-submit ${state.submitting ? 'disabled' : ''} type="button" id="swSubmitBtn">${state.submitting ? '提交中…' : '生成待签结算单(顾客侧签署)'}</button>
+        <p class="sw-foot">金额全部由后端计价引擎算出，本页不做任何金额运算 · 入账唯一路径=签署</p>
       </section>
+      ${state.couponPanel ? renderCouponPanel(escapeHtml) : ''}
     `
     bind(mount)
     if (!state._scrolled) { state._scrolled = true; window.scrollTo(0, 0) }   // 开单块就在页顶:直接回顶,不与浏览器滚动锚定打架
   }
 
+  const TIERS = [
+    { key: 'list', label: '原价' }, { key: 'share', label: '分享价' },
+    { key: 'member', label: '会员价' }, { key: 'course', label: '疗程价' }
+  ]
+  const TIER_PRICE_FIELD = { list: 'listPriceCents', share: 'sharePriceCents', member: 'memberPriceCents', course: 'coursePriceCents' }
+
+  function priceCentsOf(it, tierKey) {
+    const c = it[TIER_PRICE_FIELD[tierKey]]
+    return (c === null || c === undefined) ? (it.listPriceCents ?? it.priceCents ?? 0) : c
+  }
+
+  function couponPickedOf() {
+    return state.couponOptions.find(function (o) { return o.grantId === state.couponGrantId }) || null
+  }
+
   function renderGroup(g, gi, escapeHtml) {
-    const catItems = state.items.filter(function (i) { return i.itemKind !== 'addon' && (!g.catId || i.categoryId === g.catId) })
+    const money = state._deps.money
+    const mains = state.items.filter(function (i) { return (i.itemKind || 'main') === 'main' && (i.categoryId || '') === g.catId })
     const addons = state.items.filter(function (i) { return i.itemKind === 'addon' })
+    const isTc = g.catId === '__timecard'
+    const decorateRow = function (it, on, qty) {
+      const cents = priceCentsOf(it, isTc ? 'list' : g.tierKey)
+      const listC = it.listPriceCents ?? cents
+      return `<span class="sw-pr">${listC !== cents ? `<span class="sw-mut sw-strike">${money(listC, 2)}</span>` : ''}<span class="sw-now${cents === 0 ? ' free' : ''}">${cents === 0 ? '免收' : money(cents, 2)}</span></span>`
+    }
     return `
-      <div class="sw-group" data-gi="${gi}">
-        <div class="sw-block"><h3>项目${'①②③④⑤'[gi] || gi + 1} · 价格体系</h3>
-          <select data-sw-tier="${gi}">
-            ${Object.keys(TIER_LABEL).map(function (k) { return `<option value="${k}" ${g.tierKey === k ? 'selected' : ''}>${TIER_LABEL[k]}${k === g.tierDefault ? '(系统判定)' : ''}</option>` }).join('')}
-          </select>
+      <div class="sw-card sw-group" data-gi="${gi}">
+        <div class="sw-ch">服务项目 ${'①②③④⑤'[gi] || gi + 1}
+          ${gi > 0 ? `<button class="ghost slim sw-grpx" data-sw-remove-group="${gi}" type="button">✕ 移除此项目</button>` : ''}
         </div>
-        <div class="sw-block" id="swItemsBlock"><h3>服务项目(单选自动替换)</h3>
-          <select data-sw-cat="${gi}">
-            ${state.cats.map(function (c) { return `<option value="${c.id}" ${g.catId === c.id ? 'selected' : ''}>${escapeHtml(c.name)}</option>` }).join('')}
-            ${state.timecards.length ? `<option value="__timecard" ${g.catId === '__timecard' ? 'selected' : ''}>次卡(可核销 ${state.timecards.filter(function (c) { return c.redeemable }).length})</option>` : ''}
-          </select>
-          ${g.catId === '__timecard' ? `
-            <select data-sw-timecard="${gi}">
-              <option value="">选一张卡</option>
-              ${state.timecards.map(function (c) { return `<option value="${c.id}" ${g.timecardId === c.id ? 'selected' : ''} ${c.redeemable ? '' : 'disabled'}>${escapeHtml(c.name || c.packageName || c.id)}(剩 ${c.remainTimes ?? '-'} 次)</option>` }).join('')}
-            </select>
-            ${g.timecardId ? `<select data-sw-tcservice="${gi}">
-              <option value="">本次核销项目(卡关联)</option>
-              ${state.items.filter(function (i) { return i.itemKind !== 'addon' }).map(function (i) { return `<option value="${i.id}" ${g.timecardServiceId === i.id ? 'selected' : ''}>${escapeHtml(i.nameZh || i.name)}</option>` }).join('')}
-            </select>` : ''}` : `
-            <select data-sw-main="${gi}">
-              <option value="">选主项目</option>
-              ${catItems.map(function (i) { return `<option value="${i.id}" ${g.mainId === i.id ? 'selected' : ''}>${escapeHtml(i.nameZh || i.name)}</option>` }).join('')}
-            </select>`}
+
+        ${/* 价格体系:chips 单选(小程序同形;次卡组隐藏整排) */''}
+        ${!isTc ? `
+        <div class="sw-sec">价格体系(本组独立) <span class="sw-hint">${g.tierChanged ? '已改档，将留痕' : '默认按会员判定'}</span></div>
+        <div class="sw-chiprow" id="swItemsBlock">
+          ${TIERS.map(function (t2) { return `<button class="sw-chip ${g.tierKey === t2.key ? 'on' : ''}" data-sw-tier="${gi}" data-k="${t2.key}" type="button">${t2.label}${t2.key === g.tierDefault ? '(默认)' : ''}</button>` }).join('')}
+        </div>` : '<div class="sw-sec">次卡为独立消费 <span class="sw-hint">按折算价/套餐价,不叠加会员价与优惠</span></div>'}
+
+        ${/* 服务项目:大类横排 chips + 项目列表行(勾框+名+划线价+现价),单选自动替换 */''}
+        <div class="sw-sec">服务项目(单选自动替换)</div>
+        <div class="sw-chiprow sw-cattabs">
+          ${state.cats.map(function (c) { return `<button class="sw-chip ${g.catId === c.id ? 'on' : ''}" data-sw-cat="${gi}" data-id="${c.id}" type="button">${escapeHtml(c.name)}</button>` }).join('')}
+          ${state.timecards.length ? `<button class="sw-chip ${isTc ? 'on' : ''}" data-sw-cat="${gi}" data-id="__timecard" type="button">次卡<span class="sw-tcbadge">${state.timecards.filter(function (c) { return c.redeemable }).length}</span></button>` : ''}
         </div>
-        <div class="sw-block" id="swAddonBlock"><h3>加项目录</h3>
-          ${addons.length ? addons.map(function (a) {
-            return `<label class="sw-check"><input type="checkbox" data-sw-addon="${gi}" data-svc="${a.id}" ${g.addonIds[a.id] ? 'checked' : ''}> ${escapeHtml(a.nameZh || a.name)}</label>`
-          }).join('') : '<p class="subtle">本店没有加项。</p>'}
+        ${isTc ? `
+          ${state.timecards.map(function (c) {
+            return `<button class="sw-item sw-tccard ${c.redeemable ? '' : 'tcdead'}" data-sw-timecard="${gi}" data-id="${c.id}" type="button" ${c.redeemable ? '' : 'disabled'}>
+              <span class="sw-ck ${g.timecardId === c.id ? 'on' : ''}">${g.timecardId === c.id ? '✓' : ''}</span>
+              <span class="sw-iname">${escapeHtml(c.label || c.name || c.packageName || c.id)}${c.expired ? '<span class="sw-tcexp">已过期</span>' : ''}</span>
+            </button>`
+          }).join('')}
+          ${g.timecardId ? `
+            <div class="sw-sec">本次核销项目(卡关联组内选)</div>
+            <div class="sw-chiprow">
+              ${state.items.filter(function (i) { return (i.itemKind || 'main') === 'main' }).map(function (i) { return `<button class="sw-chip ${g.timecardServiceId === i.id ? 'on' : ''}" data-sw-tcservice="${gi}" data-id="${i.id}" type="button">${escapeHtml(i.nameZh || i.name)}</button>` }).join('')}
+            </div>` : ''}`
+        : `
+          ${mains.map(function (it) {
+            const on = g.mainId === it.id
+            return `<button class="sw-item" data-sw-main="${gi}" data-id="${it.id}" type="button">
+              <span class="sw-ck ${on ? 'on' : ''}">${on ? '✓' : ''}</span>
+              <span class="sw-iname">${escapeHtml(it.nameZh || it.name)}</span>
+              ${decorateRow(it, on, 1)}
+            </button>`
+          }).join('')}
+          ${mains.length ? '' : '<p class="sw-empty">该大类下暂无在售项目</p>'}
+          ${g.mainId ? `<p class="sw-grppicked">本组主项目:${escapeHtml((state.items.find(function (i) { return i.id === g.mainId }) || {}).nameZh || '')}(点其他大类里的项目=替换)</p>` : ''}`}
+
+        ${/* 加项:列表行勾选;按指计价的用 stepper(− n指 ＋) */''}
+        <div class="sw-sec" id="swAddonBlock">加项目录 <span class="sw-hint">按本组价格档计价</span></div>
+        ${addons.length ? addons.map(function (a) {
+          const qty = g.addonIds[a.id] || 0
+          const on = Object.prototype.hasOwnProperty.call(g.addonIds, a.id)
+          if (a.unit === 'per_finger') {
+            return `<div class="sw-item"><span class="sw-iname wide">${escapeHtml(a.nameZh || a.name)}</span>
+              <span class="sw-stepper"><button class="sw-sb" data-sw-step="${gi}" data-svc="${a.id}" data-d="-1" type="button">−</button><span class="sw-qn">${qty} 指</span><button class="sw-sb" data-sw-step="${gi}" data-svc="${a.id}" data-d="1" type="button">＋</button></span></div>`
+          }
+          return `<button class="sw-item" data-sw-addon="${gi}" data-svc="${a.id}" type="button">
+            <span class="sw-ck ${on ? 'on' : ''}">${on ? '✓' : ''}</span>
+            <span class="sw-iname">${escapeHtml(a.nameZh || a.name)}</span>
+            ${decorateRow(a, on, qty)}
+          </button>`
+        }).join('') : '<p class="sw-empty">本店没有加项。</p>'}
+
+        ${/* 自选填写行(小程序 inputline 同形) */''}
+        <div class="sw-sec" id="swCustomBlock">自选填写行(本组) <span class="sw-hint">价目表外项目</span></div>
+        <div class="sw-inputline">
+          <input class="sw-in" data-sw-custom-name="${gi}" placeholder="项目名称（例：钻球）">
+          <input class="sw-in amt" data-sw-custom-amount="${gi}" data-money type="text" inputmode="decimal" autocomplete="off" placeholder="金额">
+          <button class="sw-addbtn" data-sw-custom-add="${gi}" type="button">＋添加</button>
         </div>
-        <div class="sw-block" id="swCustomBlock"><h3>自选填写行(价目表外项目)</h3>
-          ${g.customItems.map(function (c, ci) { return `<div class="sw-line"><span>${escapeHtml(c.name)}</span><span>${(c.amountCents / 100).toFixed(2)} <button class="ghost slim" data-sw-custom-del="${gi}:${ci}" type="button">删</button></span></div>` }).join('')}
-          <div class="sw-inline">
-            <input data-sw-custom-name="${gi}" placeholder="名目">
-            <input data-sw-custom-amount="${gi}" data-money type="text" inputmode="decimal" autocomplete="off" placeholder="金额">
-            <button class="ghost slim" data-sw-custom-add="${gi}" type="button">添加</button>
-          </div>
-        </div>
-        <div class="sw-block" id="swTechBlock"><h3>本单技师(本组,1–2 位)</h3>
-          ${state.roster.map(function (t) {
-            const on = g.selectedTechs.includes(t.id)
-            return `<label class="sw-check"><input type="checkbox" data-sw-tech="${gi}" data-tech="${t.id}" ${on ? 'checked' : ''}> ${escapeHtml(t.name)}${on && g.selectedTechs[0] === t.id ? '(主)' : on ? '(副)' : ''}</label>`
+        ${g.customItems.map(function (c, ci) { return `<button class="sw-cst" data-sw-custom-del="${gi}:${ci}" type="button"><span>${escapeHtml(c.name)}</span><span class="sw-cst-r"><span class="sw-cst-amt">${money(c.amountCents, 2)}</span><span class="sw-del">移除</span></span></button>` }).join('')}
+
+        ${/* 技师:chips(小程序 roster 同形) */''}
+        <div class="sw-sec" id="swTechBlock">本单技师(本组,1–2 位) <span class="sw-hint">双技师分成由店长日结核定</span></div>
+        <div class="sw-chiprow sw-roster">
+          ${state.roster.map(function (t2) {
+            const on = g.selectedTechs.includes(t2.id)
+            return `<button class="sw-chip ${on ? 'on' : ''}" data-sw-tech="${gi}" data-tech="${t2.id}" type="button">${escapeHtml(t2.name)}${on && g.selectedTechs[0] === t2.id ? '(主)' : on ? '(副)' : ''}</button>`
           }).join('')}
         </div>
-        <div class="sw-block" id="swServedBlock"><h3>被服务者(本组)<span class="subtle"> 朋友不建档:填称呼即可,单据仍推卡主签</span></h3>
-          <input data-sw-served="${gi}" placeholder="留空=本人；朋友填称呼" value="${escapeHtml(g.servedPersonName)}">
+        ${g.selectedTechs.length > 1 ? '<p class="sw-hint-line">双技师编号分配:网页版登记待排 —— 分成金额店长日结核定,此处只记录两位技师</p>' : ''}
+
+        ${/* 被服务者:input full(输入过程原样,不 trim 不重画) */''}
+        <div class="sw-sec" id="swServedBlock">被服务者(本组) <span class="sw-hint">朋友不建档:填称呼即可,单据仍推卡主签</span></div>
+        <input class="sw-in full" data-sw-served="${gi}" placeholder="留空=本人；朋友填称呼" value="${escapeHtml(g.servedPersonName)}">
+      </div>`
+  }
+
+  function renderCouponPanel(escapeHtml) {
+    return `
+      <div class="sw-cpnmask" data-sw-coupon-close></div>
+      <div class="sw-cpnsheet">
+        <div class="sw-ch">选择优惠券 · ${escapeHtml(state.customerName || '顾客')}的券包</div>
+        <div class="sw-cpnlist">
+          ${state.couponOptions.map(function (o) {
+            return `<button class="sw-cpn ${o.usable ? '' : 'dis'} ${state.couponGrantId === o.grantId ? 'on' : ''}" data-sw-coupon-pick="${escapeHtml(o.grantId)}" type="button" ${o.usable ? '' : 'disabled'}>
+              <span class="l"><span class="n">${escapeHtml(o.title || o.name || '')}</span><span class="s">${escapeHtml(o.usable ? (o.subtitle || '') : (o.reason || '本单用不了'))}</span></span>
+              ${o.usable ? `<span class="d">${escapeHtml(o.deductText || '')}</span>` : ''}
+            </button>`
+          }).join('')}
+          <button class="sw-cpn ${state.couponGrantId ? '' : 'on'}" data-sw-coupon-pick="" type="button">
+            <span class="l"><span class="n">不使用优惠券</span><span class="s">本单不抵扣</span></span>
+          </button>
         </div>
+        <button class="sw-cpnok" data-sw-coupon-close type="button">确定</button>
       </div>`
   }
 
   /* ===== 事件(输入原样进 state,不回写不重画;金额框走 data-money 全局兜底) ===== */
   function bind(mount) {
     const { toast } = state._deps
+    const on = function (sel, fn) { mount.querySelectorAll(sel).forEach(function (el) { el.addEventListener('click', function (e2) { fn(el, e2) }) }) }
     mount.querySelector('[data-sw-close]')?.addEventListener('click', close)
-    mount.querySelector('[data-sw-add-group]')?.addEventListener('click', function () {
+    on('[data-sw-add-group]', function () {
       state.groups.push(newGroup(state.groups[0]?.tierDefault || 'list', (state.cats[0] || {}).id || ''))
       render(); schedulePreview()
     })
-    mount.querySelectorAll('[data-sw-tier]').forEach(function (el) {
-      el.addEventListener('change', function () {
-        const g = state.groups[Number(el.dataset.swTier)]
-        g.tierKey = el.value; g.tierChanged = el.value !== g.tierDefault
-        render(); schedulePreview()
-      })
+    on('[data-sw-remove-group]', function (el) { state.groups.splice(Number(el.dataset.swRemoveGroup), 1); render(); schedulePreview() })
+    on('[data-sw-tier]', function (el) {
+      const g = state.groups[Number(el.dataset.swTier)]
+      g.tierKey = el.dataset.k; g.tierChanged = el.dataset.k !== g.tierDefault
+      render(); schedulePreview()
     })
-    mount.querySelectorAll('[data-sw-cat]').forEach(function (el) {
-      el.addEventListener('change', function () {
-        const g = state.groups[Number(el.dataset.swCat)]
-        g.catId = el.value; g.mainId = ''; g.timecardId = ''; g.timecardServiceId = ''
-        render(); schedulePreview()
-      })
+    on('[data-sw-cat]', function (el) {
+      const g = state.groups[Number(el.dataset.swCat)]
+      g.catId = el.dataset.id
+      if (el.dataset.id !== '__timecard') { g.timecardId = ''; g.timecardServiceId = '' }
+      render(); schedulePreview()
     })
-    mount.querySelectorAll('[data-sw-main]').forEach(function (el) {
-      el.addEventListener('change', function () { state.groups[Number(el.dataset.swMain)].mainId = el.value; render(); schedulePreview() })
+    on('[data-sw-main]', function (el) {
+      const g = state.groups[Number(el.dataset.swMain)]
+      g.mainId = g.mainId === el.dataset.id ? '' : el.dataset.id   // 单选自动替换;再点=取消
+      render(); schedulePreview()
     })
-    mount.querySelectorAll('[data-sw-timecard]').forEach(function (el) {
-      el.addEventListener('change', function () { const g = state.groups[Number(el.dataset.swTimecard)]; g.timecardId = el.value; g.mainId = ''; render(); schedulePreview() })
+    on('[data-sw-timecard]', function (el) {
+      const g = state.groups[Number(el.dataset.swTimecard)]
+      g.timecardId = g.timecardId === el.dataset.id ? '' : el.dataset.id
+      g.mainId = ''
+      render(); schedulePreview()
     })
-    mount.querySelectorAll('[data-sw-tcservice]').forEach(function (el) {
-      el.addEventListener('change', function () { state.groups[Number(el.dataset.swTcservice)].timecardServiceId = el.value; render(); schedulePreview() })
+    on('[data-sw-tcservice]', function (el) { state.groups[Number(el.dataset.swTcservice)].timecardServiceId = el.dataset.id; render(); schedulePreview() })
+    on('[data-sw-addon]', function (el) {
+      const g = state.groups[Number(el.dataset.swAddon)]
+      if (Object.prototype.hasOwnProperty.call(g.addonIds, el.dataset.svc)) delete g.addonIds[el.dataset.svc]
+      else g.addonIds[el.dataset.svc] = 1
+      render(); schedulePreview()
     })
-    mount.querySelectorAll('[data-sw-addon]').forEach(function (el) {
-      el.addEventListener('change', function () {
-        const g = state.groups[Number(el.dataset.swAddon)]
-        if (el.checked) g.addonIds[el.dataset.svc] = 1
-        else delete g.addonIds[el.dataset.svc]
-        schedulePreview()
-      })
+    on('[data-sw-step]', function (el) {
+      const g = state.groups[Number(el.dataset.swStep)]
+      const id = el.dataset.svc
+      const next = Math.max(0, (g.addonIds[id] || 0) + Number(el.dataset.d))
+      if (next === 0) delete g.addonIds[id]
+      else g.addonIds[id] = next
+      render(); schedulePreview()
     })
-    mount.querySelectorAll('[data-sw-tech]').forEach(function (el) {
-      el.addEventListener('change', function () {
-        const g = state.groups[Number(el.dataset.swTech)]
-        const id = el.dataset.tech
-        if (el.checked) {
-          if (g.selectedTechs.length >= 2) { el.checked = false; toast('本组最多 2 位技师'); return }
-          g.selectedTechs.push(id)
-        } else g.selectedTechs = g.selectedTechs.filter(function (x) { return x !== id })
-        render(); schedulePreview()
-      })
+    on('[data-sw-tech]', function (el) {
+      const g = state.groups[Number(el.dataset.swTech)]
+      const id = el.dataset.tech
+      if (g.selectedTechs.includes(id)) g.selectedTechs = g.selectedTechs.filter(function (x) { return x !== id })
+      else {
+        if (g.selectedTechs.length >= 2) { toast('本组最多 2 位技师'); return }
+        g.selectedTechs.push(id)
+      }
+      render(); schedulePreview()
     })
     mount.querySelectorAll('[data-sw-served]').forEach(function (el) {
       /* 🔴 被服务者:输入过程中**原样进 state,不回写、不 trim** —— 姓和名之间打得出空格 */
       el.addEventListener('input', function () { state.groups[Number(el.dataset.swServed)].servedPersonName = el.value })
     })
-    mount.querySelectorAll('[data-sw-custom-add]').forEach(function (el) {
-      el.addEventListener('click', function () {
-        const gi = Number(el.dataset.swCustomAdd)
-        const name = (mount.querySelector(`[data-sw-custom-name="${gi}"]`)?.value || '').trim()
-        const cents = Math.round(Number(mount.querySelector(`[data-sw-custom-amount="${gi}"]`)?.value || 0) * 100)
-        if (!name || !cents) { toast('名目和金额都要填'); return }
-        state.groups[gi].customItems.push({ name, amountCents: cents })
-        render(); schedulePreview()
-      })
+    on('[data-sw-custom-add]', function (el) {
+      const gi = Number(el.dataset.swCustomAdd)
+      const name = (mount.querySelector(`[data-sw-custom-name="${gi}"]`)?.value || '').trim()
+      const cents = Math.round(Number(mount.querySelector(`[data-sw-custom-amount="${gi}"]`)?.value || 0) * 100)
+      if (!name || !cents) { toast('名目和金额都要填'); return }
+      state.groups[gi].customItems.push({ name, amountCents: cents })
+      render(); schedulePreview()
     })
-    mount.querySelectorAll('[data-sw-custom-del]').forEach(function (el) {
-      el.addEventListener('click', function () {
-        const [gi, ci] = el.dataset.swCustomDel.split(':').map(Number)
-        state.groups[gi].customItems.splice(ci, 1)
-        render(); schedulePreview()
-      })
+    on('[data-sw-custom-del]', function (el) {
+      const parts = el.dataset.swCustomDel.split(':')
+      state.groups[Number(parts[0])].customItems.splice(Number(parts[1]), 1)
+      render(); schedulePreview()
     })
-    mount.querySelector('[data-sw-deposit]')?.addEventListener('change', function (e) { state.depositApplied = e.target.checked; schedulePreview() })
-    mount.querySelector('[data-sw-balance]')?.addEventListener('change', function (e) { state.payMenu.useBalance = e.target.checked; schedulePreview() })
-    mount.querySelector('[data-sw-coupon]')?.addEventListener('change', function (e) { state.couponGrantId = e.target.value; schedulePreview() })
+    on('[data-sw-deposit]', function (el) { state.depositApplied = el.dataset.swDeposit === '1'; render(); schedulePreview() })
+    on('[data-sw-balance]', function () { state.payMenu.useBalance = !state.payMenu.useBalance; render(); schedulePreview() })
+    on('[data-sw-foot]', function () { state.applyFootSurcharge = !state.applyFootSurcharge; render(); schedulePreview() })
+    on('[data-sw-tipreuse]', function () { state.applyTipReuse = !state.applyTipReuse; render(); schedulePreview() })
+    on('[data-sw-coupon-open]', function () {
+      if (!state.couponOptions.length) { toast('顾客券包里没有券'); return }
+      state.couponPanel = true; render()
+    })
+    on('[data-sw-coupon-close]', function () { state.couponPanel = false; render() })
+    on('[data-sw-coupon-pick]', function (el) {
+      const id = el.dataset.swCouponPick || ''
+      const picked = state.couponOptions.find(function (o) { return o.grantId === id })
+      if (id && picked && !picked.usable) { toast(picked.reason || '这张券本单用不了'); return }
+      state.couponGrantId = id; state.couponPanel = false
+      render(); schedulePreview()
+    })
     mount.querySelector('[data-sw-submit]')?.addEventListener('click', submit)
+    /* 券弹层挂在 mount 外?不 —— 就在 composer 模板尾部,同一 mount,选择器都能找到 */
   }
 
   /* ===== 预览:响应次序护栏与小程序同刀(过期响应整包丢弃) ===== */
@@ -355,25 +502,38 @@ window.SettlementWeb = (function () {
       const money = state._deps.money
       /* 金额零**算术**:全部数字来自后端 cents,这里只做货币格式化(money()),
          与小程序 doPreview 的 m() 同口径 —— 加减乘除一处都没有。 */
+      const pay2 = pay
       state.view = {
-        detailGroups: sheets.map(function (s, i) {
+        detailGroups: sheets.map(function (s2, i) {
           const g = state.groups[i] || {}
           const who = g.servedPersonName ? ` · 被服务者:${g.servedPersonName}` : ''
-          const techNames = (g.selectedTechs || []).map(function (id) { return (state.roster.find(function (t) { return t.id === id }) || {}).name }).filter(Boolean).join('/')
+          const techNames = (g.selectedTechs || []).map(function (id) { return (state.roster.find(function (t2) { return t2.id === id }) || {}).name }).filter(Boolean).join('/')
+          const mainName = (state.items.find(function (it) { return it.id === g.mainId }) || {}).nameZh || ''
           return {
-            title: `项目${'①②③④⑤'[i] || i + 1}${techNames ? ' · ' + techNames : ''}${who}`,
-            lines: (s.lines || []).map(function (l) { return { no: l.itemNo, name: l.name, amountText: l.freeReason ? '免收' : money(l.amountCents || 0, 2) } })
+            title: `项目${'①②③④⑤'[i] || i + 1} ${mainName || '(未选主项目)'}${techNames ? ' · ' + techNames : ''}${who}`,
+            lines: (s2.lines || []).map(function (l) {
+              return {
+                no: l.itemNo, name: l.name, qty: l.qty,
+                amountText: l.amountCents === 0 ? '免收' : money(l.amountCents, 2),
+                list: l.listAmountCents !== l.amountCents && l.listAmountCents != null ? money(l.listAmountCents, 2) : ''
+              }
+            })
           }
         }),
-        rows: [
-          (grp.depositDeductCents || 0) > 0 ? { label: '定金抵扣', text: `−${money(grp.depositDeductCents, 2)}` } : null,
-          (grp.couponDiscountCents || 0) > 0 ? { label: '券抵扣', text: `−${money(grp.couponDiscountCents, 2)}` } : null,
-          (pay.timecardCoverCents || 0) > 0 ? { label: '次卡抵扣', text: `−${money(pay.timecardCoverCents, 2)}` } : null,
-          (pay.storedUsedCents || 0) > 0 ? { label: '储值抵扣', text: `−${money(pay.storedUsedCents, 2)}` } : null,
-          { label: '到店支付', text: money(pay.offlineDueCents || 0, 2) }
-        ].filter(Boolean),
+        listTotal: money(grp.listTotalCents || 0, 2),
+        subtotal: money(grp.subtotalCents || 0, 2),
+        discountTotal: (grp.discountTotalCents || 0) > 0 ? money(grp.discountTotalCents, 2) : '',
+        discountLabel: (grp.couponDiscountCents || 0) > 0 ? '共优惠（含券）' : '较原价共优惠',
+        couponDeduct: (grp.couponDiscountCents || 0) > 0 ? money(grp.couponDiscountCents, 2) : '',
+        depositDeduct: (grp.depositDeductCents || 0) > 0 ? money(grp.depositDeductCents, 2) : '',
+        depositReceiptCents: grp.depositReceiptCents || 0,
+        timecardCover: (pay2.timecardCoverCents || 0) > 0 ? money(pay2.timecardCoverCents, 2) : '',
+        hasStored: (pay2.storedUsedCents || 0) > 0,
+        storedDeduct: money(pay2.storedUsedCents || 0, 2),
+        balance: (pay2.balanceAvailableCents || 0) > 0 ? money(pay2.balanceAvailableCents, 2) : '',
+        offlineDue: money(pay2.offlineDueCents || 0, 2),
         totalText: money(grp.totalCents || 0, 2),
-        warnings: sheets.reduce(function (acc, s) { return acc.concat((s.softWarnings || []).map(function (w) { return w.message })) }, [])
+        warnings: sheets.reduce(function (acc, s2) { return acc.concat((s2.softWarnings || []).map(function (w) { return w.message })) }, [])
       }
       render()
     } catch (e) {

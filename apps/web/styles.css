@@ -7406,17 +7406,106 @@ section.card > .section-row:first-child { margin-top: 0; }
 .finance-entry-note { margin: 4px 0 8px; border-left: 2px solid var(--line); padding-left: 8px; }
 .dc-deposit-alert { margin-top: 10px; padding: 8px 12px; border-left: 3px solid #c0392b; color: #c0392b; background: rgba(192,57,43,.06); font-size: 13px; }
 
-/* 结算开单(网页,批次三):复用 admin-card 视觉,块间距与小程序屏序对应 */
-.settle-composer { display: grid; gap: 14px; margin-bottom: 16px; }
-.sw-group { border: 1px solid var(--line); border-radius: 8px; padding: 12px; display: grid; gap: 10px; }
-.sw-block h3 { font-size: 14px; margin-bottom: 6px; }
-.sw-check { display: inline-flex; align-items: center; gap: 6px; margin-right: 14px; font-size: 14px; }
-.sw-inline { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; }
-.sw-line { display: flex; justify-content: space-between; font-size: 14px; padding: 2px 0; }
-.sw-line.sw-pay { color: var(--muted); }
-.sw-total { display: flex; justify-content: space-between; font-size: 16px; border-top: 1px solid var(--line); margin-top: 6px; padding-top: 6px; }
+/* 结算开单(网页):**小程序屏=设计合同**(店主 08-29 裁)——
+   全部块摊开、零下拉;chips/列表行/stepper 照小程序控件形态;宽屏只用横向空间(项目区两栏)。 */
+.settle-composer { display: grid; gap: 14px; margin-bottom: 16px; max-width: 860px; }
+.sw-s2row { display: flex; gap: 8px; align-items: baseline; margin-top: 2px; }
+.sw-s2name { font-weight: 600; }
+.sw-s2phone { color: var(--muted); font-size: 13px; }
+.sw-s2badge { font-size: 12px; color: #b08d57; border: 1px solid #b08d57; border-radius: 10px; padding: 0 8px; }
+.sw-card, .sw-group { border: 1px solid var(--line); border-radius: 10px; padding: 14px; display: block; background: rgba(255,255,255,.6); }
+.sw-ch { font-size: 15px; font-weight: 600; margin-bottom: 8px; display: flex; justify-content: space-between; align-items: center; }
+.sw-sec { font-size: 13px; font-weight: 600; margin: 12px 0 6px; color: #6b645d; }
+.sw-hint { font-weight: 400; font-size: 12px; color: var(--muted); margin-left: 6px; }
+.sw-hint-line { font-size: 12px; color: var(--muted); margin: 4px 0; }
+.sw-gh { font-size: 12px; color: var(--muted); margin: 10px 0 4px; }
+.sw-chiprow { display: flex; flex-wrap: wrap; gap: 8px; }
+.sw-chip { border: 1px solid var(--line); border-radius: 16px; padding: 4px 14px; font-size: 13px; background: #fff; cursor: pointer; }
+.sw-chip.on { background: #2d2a26; color: #fff; border-color: #2d2a26; }
+.sw-tcbadge { margin-left: 4px; font-size: 11px; color: #b08d57; }
+/* 项目/加项 = 列表行(小程序 .item 同形):勾框 + 名称 + 划线原价 + 现价;宽屏两栏 */
+.sw-item { display: flex; align-items: center; gap: 10px; width: 100%; padding: 8px 6px; border: none; border-bottom: 1px solid rgba(0,0,0,.05); background: none; font-size: 14px; cursor: pointer; text-align: left; }
+.sw-ck { width: 20px; height: 20px; border: 1.5px solid #cfc8c0; border-radius: 6px; display: inline-flex; align-items: center; justify-content: center; font-size: 13px; flex: none; color: #fff; }
+.sw-ck.on { background: #2d2a26; border-color: #2d2a26; }
+.sw-iname { flex: 1; }
+.sw-iname .sw-sub, .sw-sub { display: block; font-size: 11px; color: var(--muted); }
+.sw-pr { display: inline-flex; gap: 8px; align-items: baseline; }
+.sw-mut { color: var(--muted); font-size: 12px; }
+.sw-strike { text-decoration: line-through; }
+.sw-now { font-variant-numeric: tabular-nums; }
+.sw-now.free { color: #b08d57; }
+.sw-grppicked { font-size: 12px; color: #6b645d; background: rgba(176,141,87,.08); border-radius: 6px; padding: 6px 10px; margin-top: 6px; }
+.sw-stepper { display: inline-flex; gap: 8px; align-items: center; }
+.sw-sb { width: 26px; height: 26px; border: 1px solid var(--line); border-radius: 6px; background: #fff; cursor: pointer; }
+.sw-qn { font-size: 13px; min-width: 44px; text-align: center; }
+.sw-inputline { display: flex; gap: 8px; }
+.sw-in { border: 1px solid var(--line); border-radius: 8px; padding: 7px 10px; font-size: 14px; flex: 1; }
+.sw-in.amt { flex: 0 0 110px; }
+.sw-in.full { width: 100%; box-sizing: border-box; }
+.sw-addbtn { border: none; background: #2d2a26; color: #fff; border-radius: 8px; padding: 0 16px; cursor: pointer; }
+.sw-cst { display: flex; justify-content: space-between; width: 100%; padding: 6px 8px; border: none; background: none; font-size: 13px; cursor: pointer; }
+.sw-cst .sw-del { color: #c0392b; margin-left: 10px; }
+.sw-cst-amt { font-variant-numeric: tabular-nums; }
+.sw-addmain { border: 1px dashed #b08d57; color: #b08d57; background: none; border-radius: 10px; padding: 12px; font-size: 14px; cursor: pointer; }
+.sw-grpx { color: #c0392b; }
+/* 定金 radio(小程序 .radios 同形) */
+.sw-radios { display: grid; gap: 6px; }
+.sw-radio { display: flex; align-items: center; gap: 8px; border: 1px solid var(--line); border-radius: 8px; padding: 8px 12px; background: #fff; font-size: 14px; cursor: pointer; text-align: left; }
+.sw-radio .sw-dt { width: 14px; height: 14px; border: 1.5px solid #cfc8c0; border-radius: 50%; flex: none; }
+.sw-radio.on { border-color: #2d2a26; }
+.sw-radio.on .sw-dt { border-width: 4.5px; border-color: #2d2a26; }
+.sw-ok { color: #b08d57; margin-left: 6px; }
+/* 券入口行(小程序 .cpnline 同形) */
+.sw-cpnline { display: flex; align-items: center; width: 100%; border: none; border-top: 1px solid rgba(0,0,0,.05); background: none; padding: 10px 4px; font-size: 14px; cursor: pointer; margin-top: 8px; }
+.sw-cpnline .l { flex: none; font-weight: 600; margin-right: 12px; }
+.sw-cpnline .v { flex: 1; text-align: right; }
+.sw-cpnline .v.ok { color: #b08d57; }
+.sw-cpnline .v.mut { color: var(--muted); }
+.sw-cpnline .arr { margin-left: 6px; color: var(--muted); }
+/* 开关(小程序 .sw 同形) */
+.sw-sw { width: 42px; height: 24px; border-radius: 12px; border: none; background: #ddd6ce; position: relative; cursor: pointer; flex: none; }
+.sw-sw .sw-dot { position: absolute; top: 2px; left: 2px; width: 20px; height: 20px; border-radius: 50%; background: #fff; transition: left .15s; }
+.sw-sw.on { background: #2d2a26; }
+.sw-sw.on .sw-dot { left: 20px; }
+/* 支付构成(小程序 .paym 同形) */
+.sw-paym { display: flex; gap: 10px; width: 100%; align-items: flex-start; border: 1px solid var(--line); border-radius: 8px; padding: 10px 12px; background: #fff; margin-top: 6px; font-size: 14px; cursor: pointer; text-align: left; }
+.sw-paym.on { border-color: #2d2a26; }
+.sw-paym.passive { cursor: default; background: rgba(0,0,0,.02); }
+.sw-pmark { color: var(--muted); }
+.sw-pmain b { display: block; }
+.sw-psmall { font-size: 12px; color: var(--muted); }
+.sw-paynote { font-size: 12px; color: var(--muted); margin-top: 8px; }
+/* 明细 + 合计(小程序 .total 收据式) */
+.sw-total-card { font-size: 14px; }
+.sw-mg { font-weight: 600; font-size: 13px; margin: 10px 0 4px; }
+.sw-dtl { display: flex; justify-content: space-between; padding: 2px 0; }
+.sw-dtl-r { display: inline-flex; gap: 8px; align-items: baseline; }
+.sw-dtl-a { font-variant-numeric: tabular-nums; }
+.sw-tl { display: flex; justify-content: space-between; padding: 3px 0; }
+.sw-tl.save { color: #b08d57; }
+.sw-tl.big { font-size: 17px; font-weight: 700; border-top: 1px solid var(--line); margin-top: 8px; padding-top: 8px; }
+.sw-cta { border: none; background: #2d2a26; color: #fff; border-radius: 10px; padding: 14px; font-size: 16px; cursor: pointer; width: 100%; }
+.sw-cta:disabled { opacity: .6; }
+.sw-foot { text-align: center; font-size: 12px; color: var(--muted); }
+.sw-empty { font-size: 13px; color: var(--muted); padding: 6px 0; }
 .sw-warn { color: #c0392b; font-size: 13px; }
+.sw-tccard.tcdead { opacity: .5; }
+.sw-tcexp { color: #c0392b; font-size: 11px; margin-left: 6px; }
+/* 券弹层(小程序 cpnsheet 同形) */
+.sw-cpnmask { position: fixed; inset: 0; background: rgba(0,0,0,.4); z-index: 60; }
+.sw-cpnsheet { position: fixed; left: 50%; top: 50%; transform: translate(-50%,-50%); width: min(480px, 92vw); max-height: 70vh; overflow: auto; background: #fff; border-radius: 12px; padding: 16px; z-index: 61; display: grid; gap: 8px; }
+.sw-cpn { display: flex; justify-content: space-between; align-items: center; width: 100%; border: 1px solid var(--line); border-radius: 8px; padding: 10px 12px; background: #fff; cursor: pointer; text-align: left; }
+.sw-cpn.on { border-color: #2d2a26; }
+.sw-cpn.dis { opacity: .5; }
+.sw-cpn .n { font-weight: 600; display: block; }
+.sw-cpn .s { font-size: 12px; color: var(--muted); }
+.sw-cpn .d { color: #b08d57; font-weight: 600; }
+.sw-cpnok { border: none; background: #2d2a26; color: #fff; border-radius: 8px; padding: 10px; cursor: pointer; }
+/* 宽屏:只用横向空间 —— 项目/加项列表两栏,交互模型不变 */
+@media (min-width: 1100px) {
+  .sw-group { display: block; }
+  .sw-group .sw-item { width: calc(50% - 6px); display: inline-flex; box-sizing: border-box; }
+}
 .sw-pending { border-left: 3px solid #b08d57; padding: 8px 12px; background: rgba(176,141,87,.07); font-size: 14px; }
-.sw-preview-group { margin-bottom: 8px; }
 /* 开单打开时=独立一页:订单页其余块全部让位(点哪张卡都一样,画面必变) */
 #bookingsPage.settle-open > :not(#settlementComposer) { display: none; }
