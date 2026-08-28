@@ -23,8 +23,10 @@ import { createAccountRefund } from './account-refund.mjs'            // N-5 退
 import { ensureRefundSchema } from './account-refund-schema.mjs'
 import { createHeroSlides, ensureHeroSlidesSchema, HERO_SLIDE_MAX } from './hero-slides.mjs'   // D78 顾客首页轮播按租户出数据(零回落)
 import { contentImage } from './image-placeholder.mjs'   // 占位零回落:内容图的唯一出口
+import { createDepositAudit } from './deposit-audit.mjs'   // 定金守恒定时自检(店主 08-29 两票之一)
 import { createCashNotes, ensureCashNotesSchema, CASH_NOTE_KINDS, CASH_NOTE_KIND_LABELS } from './cash-notes.mjs'   // D79 线下现金腿手记
 import { createStoreContentRoutes } from './store-content-routes.mjs'   // D78/D79 路由层(公约①②)
+import { createSettlementRoutes } from './settlement-routes.mjs'   // 开单三条路由(批次三边改边拆)
 import { createMessageTemplates } from './message-templates.mjs'               // 消息模板域(D78 批边改边拆搬出)      // N-5 建表建列(公约⑧:列一律 try/catch ALTER)
 import { zhErrorText } from './error-text.mjs'                        // 报错话中文出口(一处翻译,不逐句改 262 处)
 import { createStaffScope } from './staff-scope.mjs'                  // 员工只读范围(我的客人)
@@ -5599,6 +5601,7 @@ function serializeBooking(row, lang = 'zh') {
     /* 🔴 D70:**按钮显隐只能从这里推导** —— 前端不许再写 if 补按钮(「后端出句」在动作层的同构)。
        商家视角与顾客视角各给一份:同一张单,店员能做的和顾客能做的本来就不一样。 */
     allowedActions: bookingState.allowedActions(row, { actor: 'merchant', role: 'owner' }),
+    settleAction: bookingState.settleActionOf(row),   // 网页开单入口按钮(D70 律后端出;口径在 ./booking-state.mjs)
     customerActions: bookingState.allowedActions(row, { actor: 'customer' }),
     afterSalesOpen: bookingState.isAfterSalesOpen(row),
     afterSalesStatus: row.after_sales_status || '',   // 合同⑤:售后分组按这个字段筛,与主状态无关
@@ -7114,6 +7117,15 @@ const refundApi = createAccountRefund({
 })
 const heroSlidesApi = createHeroSlides({ db, apiError, iso, randomId, currentTenantId })
 const cashNotesApi = createCashNotes({ db, apiError, iso, randomId, currentTenantId, formatMoneyCents: (v, t, m) => formatMoneyCents(v, t, m) })
+const settlementRoutes = createSettlementRoutes({
+  apiError, json, readBody, db, currentTenantId,
+  computeSettlement: (a) => computeSettlement(a),
+  createSettlementGroup: (a, b2) => createSettlementGroup(a, b2),
+  serializeSettlement: (r) => serializeSettlement(r),
+  isUserBound: (u) => isUserBound(u),
+  storedValueBalanceDetail: (u, t) => storedValueBalanceDetail(u, t)
+})
+const depositAudit = createDepositAudit({ db, auditDepositConservation: (t) => auditDepositConservation(t), formatMoneyCents: (v, t, m) => formatMoneyCents(v, t, m) })
 const storeContentRoutes = createStoreContentRoutes({
   apiError, json, readBody, heroSlidesApi, cashNotesApi, HERO_SLIDE_MAX,
   constants: { CASH_NOTE_KINDS, CASH_NOTE_KIND_LABELS },
@@ -9744,6 +9756,7 @@ function dailyCloseView(date, tenantId, { lang = 'zh' } = {}) {
     date,
     status: closeRow ? closeRow.status : 'open',
     confirmedAt: closeRow ? closeRow.confirmed_at : null,
+    ...(() => { const a = depositAudit.depositAlertOf(closeRow, tenantId); return a ? { depositAlert: a } : {} })(),
     confirmedBy: closeRow ? closeRow.confirmed_by : null,
     reopenCount: closeRow ? closeRow.reopen_count : 0,
     currency: tenantCurrencyCode(tenantId),
@@ -9966,6 +9979,8 @@ function confirmDailyClose(date, adminSession = {}) {
     db.exec('ROLLBACK')
     throw error
   }
+  // 定金守恒定时自检:每日日结确认后自动跑一次(店主 08-29;口径在 ./deposit-audit.mjs)
+  depositAudit.runOnConfirm(closeId, tenantId)
   return { confirmed: true, ...dailyCloseView(date, tenantId) }
 }
 
@@ -12139,96 +12154,8 @@ async function route(req, res) {
     return json(res, 200, { service: serializeService(getService(id)) })
   }
   // ===== P1 结算(技师端开单)=====
-  if (req.method === 'POST' && path === '/admin/settlements/preview') {
-    // 技师端表单实时试算:不落库,金额口径与正式开单完全一致
-    const body = await readBody(req)
-    /* 分组完整版(图 v2.2):settlements 数组 = 组级预览。
-       每组各走一遍 computeSettlement(引擎不动),组级合计与支付分解**全部在这里加总**——
-       前端零运算的红线靠这个口子兑现;储值抵扣按整单合计一次算(单级支付菜单)。 */
-    if (Array.isArray(body.settlements) && body.settlements.length) {
-      const tenantId = currentTenantId()
-      const payerId = String(body.payerUserId || body.userId || body.cardOwnerUserId || '').trim() || null
-      /* D60(店主 08-22 抓出:组级预览 868 vs 落库腿 1228 分叉):组级支付分解不再独立重算——
-         **组级=Σ各 sheet 腿**(与 createSettlementGroup 完全同口径:同一循环、同一顺序、同一余额线程),
-         预览承诺的每一分钱就是建单落库、签字兑现的那一分钱。单一事实源=sheet 级引擎。 */
-      let plannedStoredInGroup = 0
-      let pendingAvailInGroup = 0   // D64:组内挂充未用余量前向传递(与建单同一循环口径)
-      const sheets = body.settlements.map((sheet) => {
-        const computed = computeSettlement({
-          ...sheet, tenantId,
-          userId: payerId || sheet.userId, payerUserId: payerId || sheet.payerUserId,
-          bookingId: sheet.bookingId,
-          payIntent: sheet.payIntent || body.payIntent,
-          plannedStoredCents: plannedStoredInGroup,
-          pendingRechargeAvailableCents: pendingAvailInGroup
-        })
-        plannedStoredInGroup += (computed.payment && computed.payment.sharedStoredUsedCents) || 0
-        pendingAvailInGroup = (computed.payment && computed.payment.pendingRechargeUnusedCents) || 0
-        return computed
-      })
-      const sum = (k) => sheets.reduce((n, x) => n + (x[k] || 0), 0)
-      const paySum = (k) => sheets.reduce((n, x) => n + ((x.payment && x.payment[k]) || 0), 0)
-      const totalCents = sum('totalCents')
-      const timecardCoverCents = sheets.reduce((n, x) => n + ((x.timecard && x.timecard.coverCents) || 0), 0)
-      const rechargeCents = sheets.reduce((n, x) => n + (x.rechargeCents || 0), 0)
-      const pendingRechargeCents = paySum('pendingRechargeCents')
-      const storedUsedCents = paySum('storedUsedCents')
-      const offlineDueCents = paySum('offlineCents')
-      // 起始共享余额(未被组内任何单占用前)——payer 的真实现余额
-      const balance0 = payerId ? storedValueBalanceDetail(payerId, tenantId) : { totalCents: 0, legacyCents: 0, normalCents: 0 }
-      // D60 自证:现场购卡组级合计(「购卡款不许隐身进应收」——前端显式行数据源)
-      const purchaseSum = sheets.reduce((n, x) => n + (x.purchaseCents || 0), 0)
-      return json(res, 200, {
-        sheets,
-        group: {
-          listTotalCents: sum('listTotalCents'),
-          subtotalCents: sum('subtotalCents'),
-          discountTotalCents: sum('discountTotalCents'),
-          couponDiscountCents: sum('couponDiscountCents'),
-          depositDeductCents: sum('depositDeductCents'),
-          depositReceiptCents: sum('depositReceiptCents'),
-          totalCents,
-          payment: {
-            plan: ['balance_plus_offline', 'recharge_then_balance', 'offline_full'].includes(body.payIntent) ? body.payIntent : 'balance_plus_offline',
-            // 组级腿=各 sheet 腿原样拼接(带组内序号),不再另算一套
-            legs: sheets.flatMap((x, i) => (x.payment.legs || []).map((l) => ({ ...l, sheetIndex: i }))),
-            balanceAvailableCents: balance0.totalCents,
-            storedUsedCents,
-            offlineDueCents,
-            // B②:组级次卡抵扣合计(前端自证行「次卡抵扣 −X」;0=无核销组,前端不渲染)
-            timecardCoverCents,
-            // B3-1:组级随单充值三行分行数字(实收/充后余额);0=无充值,前端不渲染
-            rechargeCents,
-            pendingRechargeCents,
-            // D60:购卡款组级合计(显式行「现场购卡 +X(购卡款,预收)」数据源)
-            purchaseCents: purchaseSum,
-            afterRechargeBalanceCents: rechargeCents ? balance0.totalCents + pendingRechargeCents - storedUsedCents : null,
-            shortfallCents: Math.max(0, (totalCents - timecardCoverCents) - balance0.totalCents - pendingRechargeCents)
-          }
-        }
-      })
-    }
-    return json(res, 200, { settlement: computeSettlement({ ...body, tenantId: currentTenantId() }) })
-  }
-  if (req.method === 'POST' && path === '/admin/settlements') {
-    if (adminSession.role !== 'owner' && adminSession.role !== 'staff') throw apiError(403, 'FORBIDDEN', '需要员工或老板权限。')
-    const body = await readBody(req)
-    return json(res, 201, createSettlementGroup(body, adminSession))
-  }
-  if (req.method === 'GET' && path === '/admin/settlements') {
-    const tid = currentTenantId()
-    const rows = query.groupId
-      ? db.prepare('SELECT * FROM settlements WHERE tenant_id = ? AND group_id = ? ORDER BY rowid ASC').all(tid, query.groupId)
-      : (query.bookingId
-        ? db.prepare('SELECT * FROM settlements WHERE tenant_id = ? AND booking_id = ? ORDER BY rowid DESC').all(tid, query.bookingId)
-        : db.prepare('SELECT * FROM settlements WHERE tenant_id = ? ORDER BY created_at DESC LIMIT 60').all(tid))
-    /* D9 规则⑤:前端要按「归属顾客是否已绑微信」决定签署路(未绑定只有扫码一条路),
-       绑定状态随单下发 —— 不让前端自己再查一遍档案。 */
-    return json(res, 200, { settlements: rows.map((r) => ({ ...serializeSettlement(r), customerBound: isUserBound(r.user_id) })) })
-  }
-  /* 屏 0:「结算单已推送待签」状态下可**撤回改单**。
-     只撤未签的;已签一律不可撤(账本只追加、已签不可改),要改走金额更正链。
-     撤回时把挂在这张单上的券一并放开,不然那张券会被一张作废单永远占着。 */
+  // 开单三条路由(preview / 建单 / 列表)搬进 ./settlement-routes.mjs(批次三边改边拆,只搬不改)
+  if (await settlementRoutes.route(req, res, { path, query, adminSession })) return
   if (req.method === 'POST' && path.startsWith('/admin/settlements/') && path.endsWith('/void')) {
     if (adminSession.role !== 'owner' && adminSession.role !== 'staff') throw apiError(403, 'FORBIDDEN', '需要员工或老板权限。')
     const id = path.split('/')[3]
@@ -17918,6 +17845,8 @@ db.exec(`
   );
   CREATE INDEX IF NOT EXISTS idx_perf_targets ON perf_targets(tenant_id, month);
 `)
+// 定金守恒定时自检的落库列(店主 08-29;公约⑧:老库走 ALTER)
+try { db.exec('ALTER TABLE daily_closes ADD COLUMN deposit_audit_json TEXT') } catch (e) { if (!String(e.message).includes('duplicate column')) throw e }
 
 // 分成基数迁移放在这里跑:它要读 daily_closes / perf_targets / technicians,得等这些表建完
 migratePerfBaseToSubtotal()

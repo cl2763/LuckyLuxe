@@ -35,6 +35,8 @@ window.DailyCloseRows = (function () {
         ${d.amendNote ? `<div class="dc-due-aside">${escapeHtml(d.amendNote)}</div>` : ''}
       </div>
       ${stats ? `<div class="dc-stats">${stats}</div>` : ''}
+      ${/* 定金守恒定时自检(店主 08-29):平=这一行整个不出现;不平=红字,句子后端出 */''}
+      ${v.depositAlert ? `<div class="dc-deposit-alert">${escapeHtml(v.depositAlert.text)}</div>` : ''}
       <div class="dc-due-note">${escapeHtml(zh ? '退卡 = 负债减少,不进收入 —— 所以它单独摆一格,不混进营业额。' : 'Refunds reduce liability, not income.')}</div>
       ${cashNotesBlock(v, { zh, escapeHtml })}
     `

@@ -135,6 +135,8 @@ const dailyCloseMixin = {
               id: it.id, kindLabel: it.kindLabel, note: it.note, amt: it.amountText, isReversal: it.isReversal
             }))
           } : null,
+          // 定金守恒自检红字(后端出句;平=null,整块不渲染)
+          depositAlert: dc.depositAlert ? dc.depositAlert.text : '',
           headline: (dc.headline || []).map((h) => ({ label: h.label, value: h.value })),
           refundLine: (dc.refunds && dc.refunds.totalCents)
             ? `${dc.refunds.label} · ${dc.refunds.storedCount ? `储值 ${dc.refunds.storedCount} 笔` : ''}${dc.refunds.timecardCount ? ` 次卡 ${dc.refunds.timecardCount} 笔` : ''} 合计 ${m(dc.refunds.totalCents)}`

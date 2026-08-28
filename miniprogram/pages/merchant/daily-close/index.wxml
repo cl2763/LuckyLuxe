@@ -33,6 +33,8 @@
       <text class="due-aside" wx:if="{{v.drawer.footnote}}">{{v.drawer.footnote}}</text>
       <text class="due-aside" wx:if="{{v.drawer.amendNote}}">{{v.drawer.amendNote}}</text>
     </view>
+    <!-- 定金守恒定时自检(店主 08-29):平=整块不出现;不平=红字,句子后端出 -->
+    <text class="deposit-alert" wx:if="{{v.depositAlert}}">{{v.depositAlert}}</text>
     <!-- 🔴 D79(店主 2026-08-28)线下现金腿:手记入口 + 当日流水。只追加不修改,记错了冲销。 -->
     <view class="notes" wx:if="{{v.notes}}">
       <view class="notes-head">

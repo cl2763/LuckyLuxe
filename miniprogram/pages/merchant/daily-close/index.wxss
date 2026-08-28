@@ -98,3 +98,4 @@
 .notes-form .ipt.wide { flex: 1; min-width: 300rpx; }
 .notes-form .btn { padding: 10rpx 24rpx; background: #b08d57; color: #fff; border-radius: 8rpx; font-size: 24rpx; }
 .notes-split { font-size: 22rpx; color: #7a736c; margin-top: 6rpx; padding-left: 12rpx; border-left: 2rpx solid #ece7e1; }
+.deposit-alert { display: block; margin-top: 16rpx; padding: 12rpx 20rpx; border-left: 4rpx solid #c0392b; color: #c0392b; background: rgba(192,57,43,.06); font-size: 24rpx; }

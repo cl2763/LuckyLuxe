@@ -4309,13 +4309,12 @@ function renderBookingCard(booking) {
         ${needsAttention ? `<p class="attention-note">${isAfterSalesOpen(booking) ? t('afterSalesAttention') : t('needsAttention')}</p>` : ''}
       </div>
       <div class="booking-actions">
-        ${/* 🔴 D70(店主 08-24 合同):按钮**全部从后端 allowedActions 推导** —— 页面里不许再写 if 补按钮。
-              原来这里「已完成」「已取消」是两颗零判断的裸按钮:已售后的单点一下就从售后分组消失、
-              已完成的单点「已取消」会把已确认的收入冲掉。现在能不能点由状态机说了算,文案也后端给。 */''}
+        ${/* 🔴 D70(店主 08-24 合同):按钮**全部从后端推导**(allowedActions / settleAction),页面零 if 补按钮。
+              案底:裸按钮让已售后的单一点就消失、已完成的单一点「已取消」冲掉已确认收入。 */''}
         <button class="ghost" data-view-booking="${booking.id}" type="button">${t('details')}</button>
+        ${booking.settleAction ? `<button class="primary slim" data-settle-booking="${booking.id}" type="button">${escapeHtml(booking.settleAction.label)}</button>` : ''}
         ${bookingActionButtons(booking)}
-        <!-- 裁 A:「处置定金」改由状态机出(allowedActions 里的 disposeDeposit,金额也在后端 label 里),
-             这里不再自己判 isOwnerRole() && state==='pending' —— 那是与小程序分叉的第二份判据。 -->
+        <!-- 裁 A:「处置定金」由状态机出(disposeDeposit,金额在后端 label 里)——不再前端自判,那是与小程序分叉的第二份判据 -->
       </div>
     </article>
     ${isOpen ? renderBookingDetail(booking) : ''}
@@ -5658,6 +5657,7 @@ els.adminLayout.addEventListener('click', (event) => {
   /* D71-b 已裁(店主 08-24 裁 B):「售后处理」三步弹层(写进展/标记已解决/关闭)整段删除 ——
      合同④ 售后中唯一动作是「结束售后」,留痕改挂在那个出口上(点结束必填处理结果 + 写 after_sales_events)。
      后端那三条路由与商家小程序的三颗按钮同批下线,三处一起收,不留半条路。 */
+  if (window.SettlementWeb.handleClick(event, { bookings: owner.bookings, request, escapeHtml, toast, money, onClose: () => renderBookings() })) return   // 去结算整条链在 /web/settlement-web.js
   const bookingDetailButton = event.target.closest('[data-view-booking]')
   if (bookingDetailButton) {
     owner.selectedBookingId = bookingDetailButton.dataset.viewBooking

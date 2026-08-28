@@ -138,6 +138,15 @@ export function createBookingState({ db, noShowPendingDepositText } = {}) {
     return out
   }
 
+  /* 网页开单入口(批次三 2026-08-29 上线前必办):按钮显隐与文案照 D70 律**后端出**。
+     settle 不是状态转移(它是导航动作),所以不进 BOOKING_ACTIONS,单独一个出口 ——
+     与小程序订单面板同一判定:未完成的单才有;有待签单时文案变「继续结算(待签 N 张)」。 */
+  function settleActionOf(row) {
+    if (row.status === 'COMPLETED' || row.status === 'CANCELLED' || row.status === 'EXPIRED') return null
+    const pending = db.prepare("SELECT COUNT(*) n FROM settlements WHERE booking_id = ? AND tenant_id = ? AND status = 'pending_sign'").get(row.id, row.tenant_id).n
+    return { key: 'settle', label: pending ? `继续结算(待签 ${pending} 张)` : '去结算', pendingCount: pending }
+  }
+
   /* 出口二:后端前置校验。前端收敛了也挡不住直打接口,这里才是闸。 */
   function assertTransition(booking, actionKey, { actor = 'merchant', role = 'owner', apiError, note } = {}) {
     /* 错误码是**对外契约**,不能因为内部重构而变(前端和既有断言都认它):
@@ -223,5 +232,5 @@ export function createBookingState({ db, noShowPendingDepositText } = {}) {
     return { statusChanged: true, to: next, label: def.label }
   }
 
-  return { allowedActions, assertTransition, nextStatus, applyTransition, hasSignedSheet, isAfterSalesOpen, shouldAutoComplete }
+  return { allowedActions, assertTransition, nextStatus, applyTransition, hasSignedSheet, isAfterSalesOpen, shouldAutoComplete , settleActionOf }
 }
