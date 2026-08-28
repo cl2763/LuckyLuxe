@@ -23,15 +23,22 @@ Page({
     const t = i18n.pageCopy('store', lang)
     i18n.applyTabBar(lang)
     i18n.setTitle(t.title)
-    let stores
+    let stores, slides
     try {
       stores = await api.getStores()
+      /* 占位零回落(店主 08-28 六):门店封面原来写死店主本店那张沙龙照。
+         她配过轮播就用第一张(那是她自己的图),没配就交空串 → 出占位,不拿别家的顶上。 */
+      slides = await api.getHeroSlides(lang)
     } catch (e) {
       this.setData({ lang, t, store: {}, loadFailed: true })
       return
     }
     const storeRaw = stores[0] || {}
-    this.setData({ lang, t, loadFailed: false, store: i18n.localizeStore(storeRaw, lang) })
+    this.setData({
+      lang, t, loadFailed: false,
+      store: i18n.localizeStore(storeRaw, lang),
+      storeCover: (slides[0] && slides[0].image) || ''
+    })
   },
 
   copyAddress() {

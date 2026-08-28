@@ -1,0 +1,8 @@
+<!-- 图片占位 · 唯一出口(店主 2026-08-28 六立律):
+     有图出图 / 没配图出「空框 + 相机 + 一句话」/ 不该有图的地方整块不出现(调用方 wx:if 控制)。
+     不许回落到别的租户的图,也不许什么都不显示。 -->
+<image wx:if="{{src}}" class="ph-img {{imgClass}}" src="{{src}}" mode="{{mode}}"></image>
+<view wx:else class="ph-box {{imgClass}}">
+  <view class="ph-cam"></view>
+  <text class="ph-txt">{{text || '还没有图片'}}</text>
+</view>

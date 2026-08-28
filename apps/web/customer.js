@@ -951,7 +951,7 @@ function renderAuth() {
       <button class="ghost full" id="continueGuest" type="button">${t('continueGuest')}</button>
     </div>
     <div class="auth-visual">
-      <img src="/assets/images/store-cover.jpg" alt="${brandName()}">
+      ${window.ImgPlaceholder.tag(storeCoverImage(), { className: 'store-cover-img', alt: brandName() })}
     </div>
   `
 }
@@ -1044,6 +1044,14 @@ function render() {
    原来这里是写死的三张 Lucky Luxe 门店图,小程序端还各写了一份 —— 小婕的店和两家演示店的顾客
    首页看到的全是本店的照片。前端从此**零写死、零回落**:后端给什么就是什么,
    一张都没有 → 返回空数组 → 不出轮播,只出店卡(不拿别家店的图顶上)。 */
+/* 🔴 占位零回落(店主 08-28 六):门店封面原来写死 store-cover.jpg —— 那是**店主本店**的一张
+   沙龙实景照,却当成每家店的封面。现在:她配过轮播就用第一张(那是她自己的图),
+   没配就交空串 → 出占位,绝不拿别家店的照片顶上。 */
+function storeCoverImage() {
+  const first = heroSlides()[0]
+  return first ? first.image : ''
+}
+
 function heroSlides() {
   const rows = Array.isArray(state.heroSlides) ? state.heroSlides : []
   // 文案跟着语言走:后端把中英两份都下发了,切语言不用重新取一次接口
@@ -1073,6 +1081,12 @@ function renderHome() {
           ${slides.map((slide, index) => `
             <img class="hero-slide ${index === activeSlide ? 'active' : ''}" src="${slide.image}" alt="${escapeHtml(slide.label || '')}">
           `).join('')}
+          ${/* 🔴 店主 08-28(六)实测:面板里写的文案顾客端看不到。查明=**渲染在别处** ——
+                label 原来只落在 alt / aria-label(无障碍属性,屏幕上看不见)。
+                写死数组年代那样没问题,但它现在是**商家可编辑字段**:能编辑就说明商家预期它会显示。
+                现在压在图上;没写文案的图不出这条(空文案不出空条)。 */''}
+          ${slides[activeSlide] && slides[activeSlide].label
+            ? `<div class="hero-slide-caption">${escapeHtml(slides[activeSlide].label)}</div>` : ''}
         </div>
         ${slides.length > 1 ? `
         <button class="hero-carousel-btn prev" data-hero-slide-prev type="button" aria-label="Previous">‹</button>
@@ -1098,7 +1112,7 @@ function renderHome() {
     <section class="section">
       <div class="section-row"><h2>${t('store')}</h2><span class="subtle">${CUR.code || ''}</span></div>
       <div class="store-card-wide card">
-        <img src="/assets/images/store-cover.jpg" alt="${currentStore().name || 'Store'}">
+        ${window.ImgPlaceholder.tag(storeCoverImage(), { className: 'store-cover-img', alt: currentStore().name || 'Store' })}
         <div>
           <h3>${currentStore().name || ''}</h3>
           ${storeHoursSummary(currentStore()) ? `<p>${storeHoursSummary(currentStore())}</p>` : ''}
@@ -1301,7 +1315,7 @@ function renderRecommendSection(title, type) {
       <div class="recommend-strip">
         ${recommended(type).map((service) => `
           <button class="recommend-card card" data-service-id="${service.id}" type="button">
-            <img src="${service.imageUrl}" alt="${service.name}">
+            ${window.ImgPlaceholder.tag(service.imageUrl, { alt: service.name, zh: state.lang !== 'en' })}
             <strong>${service.name}</strong>
             <span>${fromPriceLabel(service)} · ${service.durationMin}${t('minutes')}</span>
           </button>
@@ -1318,22 +1332,13 @@ function portfolioImages() {
   })))
 }
 
+/* 🔴 占位零回落(店主 08-28 六立律)第三案 —— 这是本批最脏的一处:
+   原来「没有真实作品就编三位技师(Lina Zhou / Mia Chen / Ava Lin)+ 11 张**店主本店**的图」。
+   小婕店的顾客点开「技师作品」,看到的是别人家的作品和三个不存在的人。
+   《假数回落红线》第 1 条:拿不到真值就如实说,绝不拿别的顶上。
+   现在:有几个技师的作品就出几个,一个都没有 → 空态(下面 renderPortfolio 里那句)。 */
 function effectivePortfolios() {
-  if (state.portfolios.length) return state.portfolios
-  return [
-    {
-      technician: { id: 'tech-lina-demo', name: 'Lina Zhou', title: state.lang === 'zh' ? '法式 / 日式微闪 / 轻奢设计' : 'French / Japanese Shimmer / Soft Luxe' },
-      images: ['/assets/images/nail-french.jpg', '/assets/images/nail-luxe.jpg', '/assets/images/nail-jp.jpg', '/assets/images/nail-addon.jpg']
-    },
-    {
-      technician: { id: 'tech-mia-demo', name: 'Mia Chen', title: state.lang === 'zh' ? '自然美睫 / 裸感款 / 轻盈浓密' : 'Natural Lash / Bare Look / Soft Volume' },
-      images: ['/assets/images/lash-natural.jpg', '/assets/images/lash-volume.jpg', '/assets/images/lash-lower.jpg', '/assets/images/lash-remove.jpg']
-    },
-    {
-      technician: { id: 'tech-ava-demo', name: 'Ava Lin', title: state.lang === 'zh' ? '基础护理 / 短甲显白 / 日常维护' : 'Care / Short Nails / Daily Maintenance' },
-      images: ['/assets/images/nail-care.jpg', '/assets/images/nail-jp.jpg', '/assets/images/nail-french.jpg']
-    }
-  ]
+  return state.portfolios || []
 }
 
 function renderPortfolio() {
@@ -1349,6 +1354,11 @@ function renderPortfolio() {
           <span class="subtle">${selected ? selected.technician?.title : t('portfolioIntro')}</span>
         </div>
       </div>
+      ${!portfolios.length ? `
+        <div class="empty-state">
+          <strong>${state.lang === 'zh' ? '还没有作品' : 'No work yet'}</strong>
+          <p class="subtle">${state.lang === 'zh' ? '技师发布并经审核后,作品会出现在这里。' : 'Approved work will show up here.'}</p>
+        </div>` : ''}
       ${selected ? `
         <div class="technician-work-grid">
           ${(selected.images || []).map((image, index) => `
@@ -1401,7 +1411,7 @@ function renderServices() {
 function renderServiceCard(service) {
   return `
     <button class="service-card web-service-card" data-service-id="${service.id}" type="button">
-      <img src="${service.imageUrl}" alt="${service.name}">
+      ${window.ImgPlaceholder.tag(service.imageUrl, { alt: service.name, zh: state.lang !== 'en' })}
       <span>
         ${service.category ? `<span class="eyebrow">${service.category}</span>` : ''}
         <h2>${service.name}</h2>
@@ -1423,7 +1433,7 @@ function renderDetail() {
   els.screen.innerHTML = `
     <section class="detail-web">
       <button class="ghost back-btn" data-view-target="services" type="button">← ${t('services')}</button>
-      <img class="detail-visual-web" src="${service.imageUrl}" alt="${service.name}">
+      ${window.ImgPlaceholder.tag(service.imageUrl, { className: 'detail-visual-web', alt: service.name, zh: state.lang !== 'en' })}
       <div class="detail-main card">
         <h1>${service.name}</h1>
         <p>${service.description}</p>
@@ -1448,8 +1458,8 @@ function renderDetail() {
       <section class="section">
         <div class="section-row"><h2>${t('reference')}</h2><span class="subtle">Preview</span></div>
         <div class="reference-grid-web">
-          <img src="${service.imageUrl}" alt="${service.name}">
-          <img src="${service.imageUrl}" alt="${service.name}">
+          ${window.ImgPlaceholder.tag(service.imageUrl, { alt: service.name, zh: state.lang !== 'en' })}
+          ${window.ImgPlaceholder.tag(service.imageUrl, { alt: service.name, zh: state.lang !== 'en' })}
         </div>
       </section>
       <div class="bottom-action-web">
@@ -1510,7 +1520,7 @@ function renderBookingForm() {
     <section class="booking-flow">
       <button class="ghost back-btn" data-view-target="detail" type="button">← ${service.name}</button>
       <div class="booking-service card">
-        <img class="mini-visual-web" src="${service.imageUrl}" alt="${service.name}">
+        ${window.ImgPlaceholder.tag(service.imageUrl, { className: 'mini-visual-web', alt: service.name, zh: state.lang !== 'en' })}
         <div>
           <h2>${service.name}</h2>
           <p>${service.durationMin}${t('minutes')} · ${t('deposit')} ${money(service.depositCents)}</p>
@@ -1651,7 +1661,7 @@ function renderCartItem(item) {
         ${userWaivesDeposit() ? `<p class="subtle">${state.lang === 'zh' ? '会员等级已减免预约定金' : 'Member tier deposit waiver applied'}</p>` : ''}
         ${item.referenceImages?.length ? `<div class="cart-reference-row">${item.referenceImages.map((image, index) => `<img src="${image}" alt="${t('reference')} ${index + 1}">`).join('')}</div>` : ''}
       </div>
-      <img src="${item.service.imageUrl}" alt="${item.service.name}">
+      ${window.ImgPlaceholder.tag(item.service.imageUrl, { alt: item.service.name, zh: state.lang !== 'en' })}
       <button class="ghost" data-remove-cart="${item.id}" type="button">Remove</button>
     </article>
   `
@@ -1783,7 +1793,7 @@ function renderMe() {
       <div class="member-card web-member-card">
         <div class="member-top">
           <div class="member-identity">
-            <img class="avatar" src="/assets/images/member-profile.jpg" alt="${user.displayName}">
+            ${window.ImgPlaceholder.tag('', { className: 'avatar', alt: user.displayName, text: state.lang === 'en' ? 'No photo' : '没有头像', zh: state.lang !== 'en' })}
             <div class="member-copy">
               <h1>${user.displayName}</h1>
               <div class="member-level-line">
@@ -1856,7 +1866,7 @@ function renderMe() {
         <div class="recent-list-web">
           ${state.orders.length ? state.orders.map((order) => `
             <button class="recent-card-web card" data-order-id="${order.id}" type="button">
-              <img src="${order.status === 'COMPLETED' && customerVisibleWorkImages(order)[0] ? customerVisibleWorkImages(order)[0] : order.service.imageUrl}" alt="${order.service.name}">
+              ${window.ImgPlaceholder.tag(order.status === 'COMPLETED' && customerVisibleWorkImages(order)[0] ? customerVisibleWorkImages(order)[0] : order.service.imageUrl, { alt: order.service.name, zh: state.lang !== 'en' })}
               <div>
                 <div class="recent-top"><strong>${order.service.name}</strong><span>${escapeHtml(orderStatusText(order))}</span></div>
                 <p>${order.appointmentDate} ${order.appointmentTime} · ${order.technician.name}</p>
@@ -1877,12 +1887,15 @@ function renderMe() {
                 格子里的图片位本身就是配图位——将来换奖品缩略图只换图源不动版。 */''}
           ${[
             [state.lang === 'zh' ? '积分商城' : 'Points mall', '/assets/icons/c-gift.png', 'pointsMall', 'points'],
-            [state.lang === 'zh' ? '卡包' : 'Card pack', '/assets/images/nail-luxe.jpg', 'cardPack', true],
+            [state.lang === 'zh' ? '卡包' : 'Card pack', '/assets/icons/c-ticket.png', 'cardPack', true],
             /* 🔴 店主 08-25:「占位功能」四个字生产上顾客看得到 —— 要么做要么藏。
                门店卡是**真页面**(店名/联系方式/营业时间),副标题改成说实话;
                设置卡点进去只有一句"将在真实登录后接入" = 真占位,**整格藏掉**,
                连同视图分支与 comingSoon 词条一起退役,不留半条链(与礼品卡同刀)。 */
-            [t('store'), '/assets/images/store-cover.jpg', 'store', 'store']
+            /* 🔴 占位零回落(店主 08-28 六):这两格原来用的是**店主本店的实拍照**
+               (卡包=nail-luxe.jpg / 门店=store-cover.jpg)—— 小婕的顾客在自己店的「我的」页上
+               看到的是 Lucky Luxe 的美甲和沙龙。换成与积分格同款的线条图标:店店中立,不涉租户内容。 */
+            [t('store'), '/assets/icons/c-store.png', 'store', 'store']
           ].map(([label, image, target, live]) => {
             const sub = live === 'points'
               ? (user.redeemablePrizeText || (state.lang === 'zh' ? '用积分换券' : 'Redeem with points'))
@@ -1891,7 +1904,7 @@ function renderMe() {
                 : (state.lang === 'zh' ? '次卡 · 优惠券 · 储值' : 'Passes · Coupons · Balance')
             // 其它格是实拍照(铺满),积分格现在放的是线条图标(要留白居中);
             // 将来换成奖品缩略图时把 icon-art 去掉即可,版面不动。
-            const imgCls = live === 'points' ? ' class="menu-img-art"' : ''
+            const imgCls = ' class="menu-img-art"'   // 三格现在都是线条图标(见上面那条注释)
             return `<button class="menu-card card" data-me-target="${target}" type="button"><img${imgCls} src="${image}" alt="${label}"><strong>${label}</strong><span>${escapeHtml(sub)}</span></button>`
           }).join('')}
         </div>
@@ -2025,7 +2038,7 @@ function renderOrdersWeb() {
           <button class="order-card-web card" data-order-id="${order.id}" type="button">
             <div class="order-head-web"><strong>${order.listTitleText ? escapeHtml(order.listTitleText) : order.service.name}</strong><span>${order.listBadgeText ? escapeHtml(order.listBadgeText) : escapeHtml(orderStatusText(order))}</span></div>
             <div class="order-body-web">
-              <img src="${order.status === 'COMPLETED' && customerVisibleWorkImages(order)[0] ? customerVisibleWorkImages(order)[0] : order.service.imageUrl}" alt="${order.service.name}">
+              ${window.ImgPlaceholder.tag(order.status === 'COMPLETED' && customerVisibleWorkImages(order)[0] ? customerVisibleWorkImages(order)[0] : order.service.imageUrl, { alt: order.service.name, zh: state.lang !== 'en' })}
               <div>
                 <p>${order.appointmentDate} ${order.appointmentTime}</p>
                 <p>${order.technician.name} · ${order.store.name}</p>
@@ -2141,7 +2154,7 @@ function renderOrderDetailWeb() {
         <span class="status">${escapeHtml(orderStatusText(order))}</span>
         <h1>${order.service.name}</h1>
         <p class="subtle">${t('orderNo')} ${order.publicCode}</p>
-        <img src="${order.service.imageUrl}" alt="${order.service.name}">
+        ${window.ImgPlaceholder.tag(order.service.imageUrl, { alt: order.service.name, zh: state.lang !== 'en' })}
       </div>
       <section class="section">
         <div class="section-row"><h2>${t('bookingInfo')}</h2></div>
@@ -2390,7 +2403,7 @@ function renderStoreWeb() {
   els.screen.innerHTML = `
     <section class="store-web-page">
       <button class="ghost back-btn" data-view-target="me" type="button">← ${t('me')}</button>
-      <img class="store-hero-web" src="/assets/images/store-cover.jpg" alt="${store.name || 'Store'}">
+      ${window.ImgPlaceholder.tag(storeCoverImage(), { className: 'store-hero-web', alt: store.name || 'Store', zh: state.lang !== 'en' })}
       <div class="store-info-web card">
         <h1>${store.name || ''}</h1>
         ${storeContactLine(store) ? `<p>${storeContactLine(store)}</p>` : ''}

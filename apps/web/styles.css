@@ -7384,3 +7384,22 @@ section.card > .section-row:first-child { margin-top: 0; }
 .dc-notes-form { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; }
 .dc-notes-form input, .dc-notes-form select { min-width: 120px; }
 .dc-notes-form #dcNoteText { flex: 1 1 220px; }
+
+/* D78 轮播文案(2026-08-28 六:面板写了顾客端看不到 —— 原来只落在 alt) */
+.hero-slide-caption {
+  position: absolute; left: 0; right: 0; bottom: 0;
+  padding: 28px 20px 16px; color: #fff; font-size: 15px; letter-spacing: .02em;
+  background: linear-gradient(to top, rgba(0,0,0,.55), rgba(0,0,0,0));
+  pointer-events: none;
+}
+.dc-notes-split { display: block; margin-top: 4px; font-size: 12px; color: var(--muted); border-left: 2px solid var(--line); padding-left: 8px; }
+
+/* 图片占位(2026-08-28 六立律:没上传过的图,要让人看出「这里该有图,只是还没传」) */
+.img-placeholder {
+  display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 6px;
+  background: repeating-linear-gradient(45deg, rgba(0,0,0,.02) 0 8px, rgba(0,0,0,.045) 8px 16px);
+  border: 1px dashed var(--line); color: var(--muted);
+  font-size: 12px; text-align: center; min-height: 64px; box-sizing: border-box;
+}
+.img-placeholder svg { opacity: .55; }
+.img-placeholder span { opacity: .85; }

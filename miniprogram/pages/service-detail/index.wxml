@@ -1,5 +1,5 @@
 <view wx:if="{{service}}" class="page detail-page">
-  <image class="detail-visual" src="{{service.image}}" mode="aspectFill"></image>
+  <img-placeholder src="{{service.image}}" img-class="detail-visual"></img-placeholder>
 
   <view class="detail-main card">
     <view class="detail-title">{{service.name}}</view>
@@ -52,8 +52,8 @@
       <view class="section-note">Placeholder</view>
     </view>
     <view class="reference-grid">
-      <image class="reference-image" src="{{service.image}}" mode="aspectFill"></image>
-      <image class="reference-image" src="{{service.image}}" mode="aspectFill"></image>
+      <img-placeholder src="{{service.image}}" img-class="reference-image"></img-placeholder>
+      <img-placeholder src="{{service.image}}" img-class="reference-image"></img-placeholder>
     </view>
   </view>
 

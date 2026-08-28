@@ -1,6 +1,7 @@
 {
   "navigationBarTitleText": "订单详情",
   "usingComponents": {
-    "snapshot-viewer": "/components/snapshot-viewer/index"
+    "snapshot-viewer": "/components/snapshot-viewer/index",
+    "img-placeholder": "../../components/img-placeholder/index"
   }
 }

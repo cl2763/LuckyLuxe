@@ -1,3 +1,6 @@
 {
-  "navigationBarTitleText": "服务详情"
+  "navigationBarTitleText": "服务详情",
+  "usingComponents": {
+    "img-placeholder": "../../components/img-placeholder/index"
+  }
 }

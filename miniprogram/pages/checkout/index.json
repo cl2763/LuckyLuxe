@@ -1,3 +1,6 @@
 {
-  "navigationBarTitleText": "结算"
+  "navigationBarTitleText": "结算",
+  "usingComponents": {
+    "img-placeholder": "../../components/img-placeholder/index"
+  }
 }

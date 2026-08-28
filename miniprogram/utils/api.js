@@ -572,8 +572,8 @@ async function getStores() {
    为什么单独一个函数而不是塞进 getStores():getStores() 返回的是**门店数组**,顶层字段在那一步就被丢了 ——
    币种当年正是踩了这个坑(见下面那段注释)。**不加 catch**:接口挂了就抛,顾客端宁可不出轮播,
    也不许回落到写死的图(那正是 D78 本身的病)。 */
-async function getHeroSlides() {
-  const data = await request('/stores')
+async function getHeroSlides(lang) {
+  const data = await request(`/stores?lang=${lang === 'en' ? 'en' : 'zh'}`)
   return data.heroSlides || []
 }
 

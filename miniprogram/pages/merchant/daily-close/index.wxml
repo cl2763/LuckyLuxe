@@ -38,6 +38,7 @@
       <view class="notes-head">
         <text class="notes-lab">{{v.notes.label}}</text>
         <text class="notes-hint">{{v.notes.hint}}</text>
+        <text class="notes-split" wx:if="{{v.drawer.splitNote}}">{{v.drawer.splitNote}}</text>
       </view>
       <view class="notes-row {{it.isReversal ? 'rev' : ''}}" wx:for="{{v.notes.items}}" wx:for-item="it" wx:key="id">
         <text class="k">{{it.kindLabel}}</text>

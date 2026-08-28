@@ -22,6 +22,7 @@ import { createAdminAuth } from './admin-auth.mjs'                    // 商家�
 import { createAccountRefund } from './account-refund.mjs'            // N-5 退卡口(退卡≠手动耗卡:不碰收入)
 import { ensureRefundSchema } from './account-refund-schema.mjs'
 import { createHeroSlides, ensureHeroSlidesSchema, HERO_SLIDE_MAX } from './hero-slides.mjs'   // D78 顾客首页轮播按租户出数据(零回落)
+import { contentImage } from './image-placeholder.mjs'   // 占位零回落:内容图的唯一出口
 import { createCashNotes, ensureCashNotesSchema, CASH_NOTE_KINDS, CASH_NOTE_KIND_LABELS } from './cash-notes.mjs'   // D79 线下现金腿手记
 import { createStoreContentRoutes } from './store-content-routes.mjs'   // D78/D79 路由层(公约①②)
 import { createMessageTemplates } from './message-templates.mjs'               // 消息模板域(D78 批边改边拆搬出)      // N-5 建表建列(公约⑧:列一律 try/catch ALTER)
@@ -5265,7 +5266,7 @@ function servicePayload(body, current = {}) {
     nameEn: body.nameEn ?? current.name_en ?? '',
     descriptionZh: body.descriptionZh ?? current.description_zh ?? '',
     descriptionEn: body.descriptionEn ?? current.description_en ?? '',
-    imageUrl: body.imageUrl ?? current.image_url ?? '/assets/images/nail-addon.jpg',
+    imageUrl: body.imageUrl ?? current.image_url ?? '',   // 占位零回落:没传图就是没有,不塞本店那张(理由见 ./image-placeholder.mjs)
     priceCents: Number(body.priceCents ?? current.price_cents ?? 0),
     depositCents: Number(body.depositCents ?? current.deposit_cents ?? 5000),
     baseDurationMin: Number(body.baseDurationMin ?? current.base_duration_min ?? 120),
@@ -5354,7 +5355,7 @@ function serializeService(row, lang = 'zh') {
     description: lang === 'en' ? row.description_en : row.description_zh,
     descriptionZh: row.description_zh,
     descriptionEn: row.description_en,
-    imageUrl: row.image_url,
+    imageUrl: contentImage(row.image_url),   // 平台自带资产=没人上传过 → 回空,两端出占位
     price: cents(row.price_cents),
     priceCents: row.price_cents,
     // S1:顾客橱窗展示价=最低可用价档+「起」(前端只拼字不算数)
@@ -9784,8 +9785,7 @@ function dailyCloseView(date, tenantId, { lang = 'zh' } = {}) {
     /* 🔴 D79:线下现金腿(手记)进抽屉算式 —— 只影响现金那一行,不进损益/营业额/业绩。 */
     cashDrawer: refundApi.cashDrawerOf(date, tenantId, {
       settlementIds: rows.map((r) => r.id),
-      notesCents: cashNotesApi.cashNotesTotalCents(date, tenantId),
-      notesCount: cashNotesApi.listCashNotes(date, tenantId).length
+      ...cashNotesApi.drawerInputs(date, tenantId)   // 手记 + 记一笔·现金 两条腿(口径在 ./cash-notes.mjs)
     }),
     cashNotes: {
       label: '现金手记',
@@ -12532,7 +12532,7 @@ async function route(req, res) {
          item_kind, category_id, unit, price_rule, price_rule_value, addon_scope_json, addon_group, storefront, is_timecard)
         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`).run(
         id, tid, shape.type, shape.categoryName, nameZh, String(body.nameEn || nameZh), String(body.descriptionZh || ''), String(body.descriptionEn || ''),
-        String(body.imageUrl || '/assets/images/nail-addon.jpg'), listCents,
+        String(body.imageUrl || ''), listCents,   // 同上:加项也不塞默认图
         Math.max(0, Math.round(Number(body.depositCents ?? 0) || 0)),
         Math.max(0, Math.round(Number(body.baseDurationMin ?? 60) || 0)),
         Math.round(Number(body.sortOrder) || 0), body.isActive === false ? 0 : 1, '[]', '[]',

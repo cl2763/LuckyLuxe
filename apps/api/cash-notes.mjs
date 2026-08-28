@@ -19,12 +19,20 @@
       买材料的钱是成本不是负收入,更不是技师的业绩;把它混进营业额等于篡改经营数字。
       这条在 cashDrawerOf 的算式里体现:手记只加在现金那一行,收入影响恒为 0。 */
 
-export const CASH_NOTE_KINDS = ['expense', 'float', 'change', 'amend_change']
+/* 🔴 收窄(店主 08-28 六裁:**一个动作一个入口**)。
+   她问「现金手记是干嘛用的?我之前已经有记一笔了,两个是不是有重叠」—— 有,是设计漏洞:
+   买材料付现 50,点记一笔抽屉不减、点现金手记损益不记,难道记两次?
+   裁定:**买东西花钱一律走「记一笔」并选付款方式**;现金手记只留「既不是赚也不是花」的三种。
+   `expense` 因此**退役**:老数据还读得出来(账本口径:只追加不删),但**不许再新记**,
+   写口会把人指回「记一笔」。 */
+export const CASH_NOTE_KINDS = ['float', 'count_diff', 'amend_change']
+export const CASH_NOTE_RETIRED_KINDS = ['expense', 'change']   // 只读:历史数据仍要显示得出来
 export const CASH_NOTE_KIND_LABELS = {
-  expense: '现金支出',
   float: '备用金调整',
-  change: '找零 / 抹零',
-  amend_change: '更正后现金找补'
+  count_diff: '盘点差异',
+  amend_change: '更正后现金找补',
+  expense: '现金支出(已退役 → 请用「记一笔」)',
+  change: '找零 / 抹零(已退役 → 并入盘点差异)'
 }
 export const CASH_NOTE_MAX_CENTS = 100000000   // 单笔上限 100 万:手记是零星现金,再大必然是记错了小数点
 
@@ -52,6 +60,10 @@ export function ensureCashNotesSchema(db) {
 export function createCashNotes({ db, apiError, iso, randomId, currentTenantId, formatMoneyCents }) {
   /* ===== 后端最终闸 ===== */
   function assertNoteOk({ kind, amountCents, note, date }) {
+    if (CASH_NOTE_RETIRED_KINDS.includes(kind)) {
+      throw apiError(400, 'KIND_RETIRED',
+        '花出去或收进来的钱请走「记一笔」并选付款方式(选现金时抽屉会自动跟着减)。现金手记只记「既不是赚也不是花」的:备用金 / 盘点差异 / 更正后现金找补。')
+    }
     if (!CASH_NOTE_KINDS.includes(kind)) {
       throw apiError(400, 'BAD_REQUEST', `手记类型不对(只能是:${CASH_NOTE_KINDS.join(' / ')})。`)
     }
@@ -100,6 +112,25 @@ export function createCashNotes({ db, apiError, iso, randomId, currentTenantId, 
       .get(tenantId, date).n
   }
 
+  /* 🔴 08-28(六)裁「一个动作一个入口」的另一半:手工「记一笔」**选了现金**的,当天抽屉也得动。
+     只认明确选了现金的(`pay_channel='cash'`)—— 'unknown' 不算,否则历史上没选过方式的旧账
+     会被悄悄拉进抽屉,把她的应有数改掉。`source='manual'` 只认手工那一类:
+     签署单 / 充值那些已经在别的腿里算过了,再算一遍就是重复记账(反向守断言守着这一条)。
+     金额符号沿用账本口径:收入为正(钱进抽屉)、支出为负(钱出抽屉)。 */
+  function manualCashOfDay(date, tenantId = currentTenantId()) {
+    const r = db.prepare(`SELECT COUNT(*) n, COALESCE(SUM(amount_cents), 0) s FROM finance_transactions
+      WHERE tenant_id = ? AND occurred_on = ? AND source = 'manual' AND pay_channel = 'cash'`).get(tenantId, date)
+    return { manualCashCents: r.s, manualCashCount: r.n }
+  }
+
+  /* 抽屉那两条手工腿一次给全(日结那边只写一行,免得每加一条腿就往巨型文件里堆参数)。 */
+  function drawerInputs(date, tenantId = currentTenantId()) {
+    return Object.assign(
+      { notesCents: cashNotesTotalCents(date, tenantId), notesCount: listCashNotes(date, tenantId).length },
+      manualCashOfDay(date, tenantId)
+    )
+  }
+
   function addCashNote({ date, kind, amountCents, note, createdBy }, tenantId = currentTenantId()) {
     assertNoteOk({ kind, amountCents, note, date })
     const id = randomId('cashnote')
@@ -125,5 +156,5 @@ export function createCashNotes({ db, apiError, iso, randomId, currentTenantId, 
     return serialize(db.prepare('SELECT * FROM cash_notes WHERE id = ?').get(rid), tenantId)
   }
 
-  return { listCashNotes, cashNotesTotalCents, addCashNote, reverseCashNote, assertNoteOk }
+  return { listCashNotes, cashNotesTotalCents, manualCashOfDay, drawerInputs, addCashNote, reverseCashNote, assertNoteOk }
 }

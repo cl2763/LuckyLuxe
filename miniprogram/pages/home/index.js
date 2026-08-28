@@ -107,7 +107,7 @@ Page({
       nailServices = await api.getServices('nail', lang)
       lashServices = await api.getServices('lash', lang)
       stores = await api.getStores()
-      heroSlides = await api.getHeroSlides()      // D78:轮播按租户出(后端唯一出口)
+      heroSlides = await api.getHeroSlides(lang)  // D78:轮播按租户出(后端唯一出口;文案跟语言走)
     } catch (e) {
       this.setData({ lang, t: i18n.pageCopy('home', lang), loadFailed: true })
       return

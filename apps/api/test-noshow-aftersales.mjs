@@ -834,7 +834,17 @@ const main = async () => {
       const custCode = cust.replace(/\/\*[\s\S]*?\*\//g, '').replace(/\/\/[^\n]*/g, '')
       const hardcoded = ['Lucky Luxe Ontario', 'Address TBD', 'Phone TBD', 'Tuesday-Sunday', 'Ontario · CAD'].filter((w) => custCode.includes(w))
       check('㉞ D46 店铺事实零写死(店名/地址/电话/营业时间/币种)', hardcoded.length === 0, hardcoded.join(','))
-      check('㉞ D46 人气区与服务页同口径(fromPriceLabel 进推荐卡)', /recommend-card[\s\S]{0,200}fromPriceLabel/.test(cust))
+      /* 🔴 判据加固(2026-08-28 六):原来写的是「recommend-card 后 200 字符内出现 fromPriceLabel」——
+         **距离阈值不是判据**。占位出口一进来,那一行长了几十个字符,它就红了,而口径根本没变。
+         改成看**这张卡这一整块**里有没有它:块的边界是 `<button class="recommend-card` 到 `</button>`。 */
+      const recCard = (() => {
+        const i = cust.indexOf('class="recommend-card')
+        if (i < 0) return ''
+        const j = cust.indexOf('</button>', i)
+        return j < 0 ? '' : cust.slice(i, j)
+      })()
+      check('㉞ D46 人气区与服务页同口径(fromPriceLabel 在推荐卡这一块里)',
+        Boolean(recCard) && recCard.includes('fromPriceLabel'), recCard.slice(0, 120))
       /* ㉟ 横幅批:品牌名单源 brandName()。
          08-23 护栏升级(假数回落红线):**连回落值都不许有** —— 原来允许 1 处 'Lucky Luxe' 作为
          `currentStore().name || 'Lucky Luxe'` 的兜底,多租户下那就是把旗舰店品牌名贴到别家店头上。
@@ -2530,7 +2540,10 @@ const main = async () => {
         meWx2.includes('bindtap="goPoints"') && meWx2.includes('bindtap="goStored"') && meWx2.includes('bindtap="goCardPack"') && !meWx2.includes('bindtap="goAssets"'))
       check('㋐ 勘误 等级徽章恢复直达权益页(黑卡不变哑)', meWx2.includes('class="level-pill" bindtap="goMemberBenefits"'))
       check('㋐ 勘误 网页同构:菜单格改名卡包+会员卡三块可点(券块改名卡包)',
-        custWeb.includes("'卡包' : 'Card pack', '/assets/images/nail-luxe.jpg', 'cardPack'")
+        /* 2026-08-28(六)更新:这条原来把**图源**也写进断言里(`nail-luxe.jpg`)——
+           而那张是店主本店的实拍照,当天被《占位零回落》律换成了店店中立的线条图标。
+           这条断言要守的是「券块改名卡包、且指向 cardPack」,不是那张图叫什么,所以只钉名字与落点。 */
+        /卡包' : 'Card pack', '[^']+', 'cardPack'/.test(custWeb)
         // D71:积分那格的取值改成 statNum(拿不到真值显示「—」而不是把 undefined 打上屏),入口本身不变
         && custWeb.includes('data-me-target="pointsMall" type="button"><strong>${statNum(user.points)}'))
       /* 裁定B:路径名与「零支付成功」红线相撞——payment-success 已改 booking-done,引用零残留 */

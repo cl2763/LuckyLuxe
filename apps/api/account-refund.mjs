@@ -222,7 +222,7 @@ export function createAccountRefund({ db, apiError, iso, randomId, currentTenant
      所以这个数是「**到店收的钱**(现金+刷卡)应有数」;要精确到钱柜里的纸币,
      得先给线下腿记渠道 —— 那是另一件事,没在这批里做。
      退款这一侧是分渠道的:现金/到店退才从这个数里扣,转账与原路退回单列(它们走银行,不出抽屉)。 */
-  function cashDrawerOf(date, tenantId, { settlementIds = [], notesCents = 0, notesCount = 0 } = {}) {
+  function cashDrawerOf(date, tenantId, { settlementIds = [], notesCents = 0, notesCount = 0, manualCashCents = 0, manualCashCount = 0 } = {}) {
     /* 🔴 08-27 实拍抓到的同屏矛盾:金额更正之后「营业额 CAD $150」而「抽屉里应该有 CAD $198」。
        两个数其实都对 —— 顾客当时**真的付了 198 现金**,差额退没退是门店当场的动作,系统不知道。
        但屏幕不解释就等于自相矛盾(闭环纪律:不许出现找不到上下文的界面状态)。
@@ -250,7 +250,12 @@ export function createAccountRefund({ db, apiError, iso, randomId, currentTenant
     /* 🔴 D79(店主 2026-08-28)线下现金腿:买材料付的现金、备用金、找零、更正后的现金找补 ——
        这些系统本来一律不知道,于是「应有数」永远等不于抽屉,而店主不会怀疑系统少算一腿,她会怀疑店员。
        手记只加在**现金这一行**:不进损益、不进营业额、不进业绩(incomeImpactCents 仍恒为 0)。 */
-    const should = storefrontCents + rechargeCash - outCash + notesCents
+    /* 🔴 店主 08-28(六)问的那件:「记一笔」和「现金手记」是不是重叠?——**她是对的,原来是重叠的**。
+       裁定:**一个动作一个入口**。买材料付现 50 只走「记一笔(方式=现金)」,
+       它**同时**动两处:损益记支出 −50、抽屉减 50。现金手记只管「既不是赚也不是花」的那三种
+       (备用金 / 盘点差异 / 更正后现金找补)。
+       所以抽屉算式现在有两条手工腿,各管各的,谁也不重复记谁。 */
+    const should = storefrontCents + rechargeCash - outCash + manualCashCents + notesCents
     return {
       storefrontCents, storefrontText: money(storefrontCents),
       rechargeCashCents: rechargeCash, rechargeCashText: money(rechargeCash),
@@ -268,6 +273,13 @@ export function createAccountRefund({ db, apiError, iso, randomId, currentTenant
         { label: '到店支付', sign: '+', amountCents: storefrontCents, amountText: money(storefrontCents) },
         { label: '现金充值', sign: '+', amountCents: rechargeCash, amountText: money(rechargeCash) },
         { label: '现金退卡', sign: '−', amountCents: outCash, amountText: money(outCash), negative: true },
+        ...(manualCashCount ? [{
+          label: `记一笔·现金收支(${manualCashCount} 笔)`,
+          sign: manualCashCents < 0 ? '−' : '+',
+          amountCents: Math.abs(manualCashCents),
+          amountText: money(Math.abs(manualCashCents)),
+          negative: manualCashCents < 0
+        }] : []),
         ...(notesCount ? [{
           label: `现金手记(${notesCount} 笔)`,
           sign: notesCents < 0 ? '−' : '+',
@@ -300,9 +312,11 @@ export function createAccountRefund({ db, apiError, iso, randomId, currentTenant
       })(),
       /* 措辞不许说过头(店主 08-25 更正):能保证的是「到店收的钱·应有数」对得上;
          要精确到抽屉里的纸币,得先给线下腿记渠道 —— 那是后续项,不在这批。 */
-      hint: notesCount
-        ? '到店支付 + 现金充值 − 现金退卡 ± 现金手记,都算进去了。对账按这个数。'
+      hint: (notesCount || manualCashCount)
+        ? '到店支付 + 现金充值 − 现金退卡 ± 记一笔的现金收支 ± 现金手记,都算进去了。对账按这个数。'
         : '到店支付 + 现金充值 − 现金退卡,退卡已经扣掉了。对账按这个数。',
+      /* 🔴 分工原样写到页面上,不许让商家猜(店主 08-28 六:她问「两个是不是有重叠」)。 */
+      splitNote: '「记一笔」管这笔钱是赚了还是花了;「现金手记」管抽屉里的钞票多了还是少了,但既不是赚也不是花。',
       note: '线下腿不分现金与刷卡(表上没有渠道列),所以这是「到店收的钱」的应有数,不是纯钞票数。'
     }
   }

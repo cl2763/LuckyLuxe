@@ -6,7 +6,7 @@
 
   <block wx:for="{{items}}" wx:key="_id">
     <view class="checkout-item card">
-      <image class="mini-visual" src="{{item.service.image}}" mode="aspectFill"></image>
+      <img-placeholder src="{{item.service.image}}" img-class="mini-visual"></img-placeholder>
       <view class="checkout-info">
         <view class="checkout-title-row">
           <text class="checkout-title">{{item.service.name}}</text>

@@ -122,7 +122,8 @@ const dailyCloseMixin = {
             totalLabel: dc.cashDrawer.totalLabel || '',
             rows: (dc.cashDrawer.rows || []).map((r) => ({ label: r.label, amt: `${r.sign} ${r.amountText}`, neg: Boolean(r.negative) })),
             footnote: dc.cashDrawer.footnote || '',
-            amendNote: dc.cashDrawer.amendNote || ''   // 更正后「营业额 ≠ 抽屉数」的那句解释(后端出句,双端同句)
+            amendNote: dc.cashDrawer.amendNote || '',  // 更正后「营业额 ≠ 抽屉数」的那句解释(后端出句,双端同句)
+            splitNote: dc.cashDrawer.splitNote || ''   // 「记一笔」与「现金手记」的分工(店主 08-28 六问的那件,后端出句)
           } : null,
           /* 🔴 D79(店主 2026-08-28)线下现金腿:买材料的现金、备用金、找零、更正后的现金找补。
              列表与金额句**全部后端给**(kindLabel / amountText),这里零拼串、零计算 —— 与网页端同源同句。 */

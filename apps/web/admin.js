@@ -41,8 +41,6 @@ const owner = {
   galleryDetailId: '',
   galleryPlatform: 'xiaohongshu',
   gallerySelections: {},
-  galleryMockImages: {},
-  galleryMockApproved: {},
   finance: null,
   dashboardDetail: 'today',
   aiBrief: null,
@@ -397,7 +395,6 @@ const copy = {
     downloadImage: '下载图片',
     uploadMoreImages: '上传更多图片',
     mainImage: '主图',
-    mockGallery: '演示图库',
     platformLinks: '发布平台',
     todayOverview: '今日运营',
     monthOverview: '本月趋势',
@@ -675,7 +672,6 @@ const copy = {
     downloadImage: 'Download Image',
     uploadMoreImages: 'Upload More Images',
     mainImage: 'Main Image',
-    mockGallery: 'Demo Gallery',
     platformLinks: 'Publish Platforms',
     todayOverview: 'Today Overview',
     monthOverview: 'Month Trend',
@@ -4165,7 +4161,7 @@ function dashboardDetail() {
 function renderBookingMini(booking) {
   return `
     <button class="dashboard-detail-card" data-admin-page="bookings" data-view-booking="${booking.id}" type="button">
-      <img src="${booking.service.imageUrl}" alt="${booking.service.name}">
+      ${window.ImgPlaceholder.tag(booking.service.imageUrl, { alt: booking.service.name, zh: owner.lang === 'zh' })}
       <span>
         <strong>${escapeHtml(booking.service.name)}</strong>
         <small>${booking.appointmentDate} · ${booking.appointmentTime} · ${escapeHtml(booking.technician?.name || '-')}</small>
@@ -4331,7 +4327,7 @@ function renderBookingCard(booking) {
   const isOpen = owner.selectedBookingId === booking.id
   return `
     <article class="booking-item">
-      <img class="booking-image" src="${booking.service.imageUrl}" alt="${booking.service.name}">
+      ${window.ImgPlaceholder.tag(booking.service.imageUrl, { className: 'booking-image', alt: booking.service.name, zh: owner.lang === 'zh' })}
       <div class="booking-copy">
         <span class="status ${booking.status}">${statusLabel(booking.status, booking)}</span>${!booking.afterSalesStatus && booking.listBadgeText ? ` <span class="status order-badge badge-${booking.listBadgeKind}">${escapeHtml(booking.listBadgeText)}</span>` : ''}
         <h3>${booking.service.name}</h3>
@@ -4573,7 +4569,7 @@ function renderServiceEditor() {
       <label><span>${t('descriptionEn')}</span><textarea name="descriptionEn" rows="2">${escapeHtml(service.descriptionEn)}</textarea></label>
       <label class="service-image-field">
         <span>${t('imageUrl')}</span>
-        <img src="${escapeHtml(service.imageUrl)}" alt="${t('imageUrl')}">
+        ${window.ImgPlaceholder.tag(service.imageUrl, { alt: t('imageUrl'), zh: owner.lang === 'zh' })}
         <input name="imageUrl" type="hidden" value="${escapeHtml(service.imageUrl)}">
         <input name="imageFile" type="file" accept="image/*">
         <small>${t('uploadImage')}</small>
@@ -5157,7 +5153,8 @@ function renderCustomerRecord(booking) {
   const imageCount = (booking.referenceImages || []).length + (booking.workImages || []).length + (booking.approvedWorkImages || []).length
   return `
     <article class="customer-record-row">
-      <img src="${booking.service?.imageUrl || '/assets/images/store-cover.jpg'}" alt="${booking.service?.name || ''}">
+      ${/* 占位零回落:拿不到项目图就出占位,不拿门店封面顶上(它是另一件事的图) */''}
+      ${window.ImgPlaceholder.tag(booking.service?.imageUrl, { alt: booking.service?.name || '', zh: owner.lang === 'zh' })}
       <div>
         <span class="status ${booking.status}">${statusLabel(booking.status, booking)}</span>${!booking.afterSalesStatus && booking.listBadgeText ? ` <span class="status order-badge badge-${booking.listBadgeKind}">${escapeHtml(booking.listBadgeText)}</span>` : ''}
         <h3>${escapeHtml(booking.service?.name || '-')}</h3>
@@ -5188,60 +5185,13 @@ function galleryGroups() {
       id: booking.id,
       booking,
       images: (booking.approvedWorkImages?.length ? booking.approvedWorkImages : booking.workImages || []).filter(Boolean),
-      isMock: false
     }))
     .sort((a, b) => `${b.booking.appointmentDate} ${b.booking.appointmentTime}`.localeCompare(`${a.booking.appointmentDate} ${a.booking.appointmentTime}`))
-  if (realGroups.length >= 3) return realGroups
-  return [...realGroups, ...mockGalleryGroups().slice(0, 3 - realGroups.length)]
-}
-
-function mockGalleryGroups() {
-  const baseDate = storeToday()
-  const mocks = [
-    {
-      id: 'mock-gallery-french',
-      service: { name: owner.lang === 'en' ? 'Classic Cream French' : '经典奶油法式', category: owner.lang === 'en' ? 'French' : '法式', imageUrl: '/assets/images/nail-french.jpg' },
-      images: ['/assets/images/nail-french.jpg', '/assets/images/nail-luxe.jpg', '/assets/images/nail-jp.jpg'],
-      technician: { name: 'Lina Zhou' },
-      date: baseDate
-    },
-    {
-      id: 'mock-gallery-lash',
-      service: { name: owner.lang === 'en' ? 'Bare Natural Lash' : '裸感自然睫', category: owner.lang === 'en' ? 'Natural Lash' : '自然款', imageUrl: '/assets/images/lash-natural.jpg' },
-      images: ['/assets/images/lash-natural.jpg', '/assets/images/lash-volume.jpg'],
-      technician: { name: 'Mia Chen' },
-      date: baseDate
-    },
-    {
-      id: 'mock-gallery-soft',
-      service: { name: owner.lang === 'en' ? 'Soft Volume Lash' : '轻盈浓密睫', category: owner.lang === 'en' ? 'Volume Lash' : '浓密款', imageUrl: '/assets/images/lash-volume.jpg' },
-      images: ['/assets/images/lash-volume.jpg', '/assets/images/lash-lower.jpg'],
-      technician: { name: 'Ava Lin' },
-      date: baseDate
-    }
-  ]
-  return mocks.map((mock) => ({
-    id: mock.id,
-    isMock: true,
-    images: mockGalleryImages(mock),
-    booking: {
-      id: mock.id,
-      appointmentDate: mock.date,
-      appointmentTime: '14:30',
-      technician: mock.technician,
-      service: mock.service,
-      publicCode: 'DEMO',
-      workImages: mockGalleryImages(mock),
-      approvedWorkImages: owner.galleryMockApproved[mock.id]?.images || [],
-      galleryStatus: owner.galleryMockApproved[mock.id] ? 'approved' : 'draft',
-      galleryLockedAt: owner.galleryMockApproved[mock.id]?.lockedAt || null
-    }
-  }))
-}
-
-function mockGalleryImages(mock) {
-  if (!owner.galleryMockImages[mock.id]) owner.galleryMockImages[mock.id] = [...mock.images]
-  return owner.galleryMockApproved[mock.id]?.images || owner.galleryMockImages[mock.id]
+  /* 🔴 占位零回落(店主 08-28 六立律)第二案:这里原来「真实作品不足 3 组就拿 mock 凑齐」——
+     mock 用的是**店主本店**那几张美甲图,别家商家打开 AI 图库看到的是编造出来的三组作品。
+     那是《假数回落红线》第 1 条(拿不到真值不许拿别的顶上)。
+     现在:有几组是几组,一组都没有就走本来就在的空态。 */
+  return realGroups
 }
 
 function renderAiGallery() {
@@ -5259,18 +5209,19 @@ function renderAiGallery() {
     const { booking } = group
     const images = Array.isArray(group.images) ? group.images.filter(Boolean) : []
     const status = galleryStatus(group)
-    const mainImage = images[0] || booking.service?.imageUrl || '/assets/images/nail-french.jpg'
+    // 占位零回落:三级回落里最后那张是店主本店的图 —— 摘掉,拿不到就交空串出占位
+    const mainImage = images[0] || booking.service?.imageUrl || ''
     return `
       <article class="ai-gallery-tile card">
         <button class="gallery-tile-image" data-gallery-detail="${group.id}" type="button" aria-label="${t('viewWork')}">
-          <img src="${mainImage}" alt="${t('mainImage')}">
+          ${window.ImgPlaceholder.tag(mainImage, { alt: t('mainImage'), zh: owner.lang === 'zh' })}
           <span class="gallery-status ${status.className}">${status.label}</span>
         </button>
         <div class="gallery-tile-copy">
           <h3>${escapeHtml(booking.service?.name || '—')}</h3>
           <p>${escapeHtml(booking.technician?.name || '')}</p>
           <p>${booking.appointmentDate} ${booking.appointmentTime || ''}</p>
-          <small>${images.length} ${t('workImages')}${group.isMock ? ` · ${t('mockGallery')}` : ''}</small>
+          <small>${images.length} ${t('workImages')}</small>
           ${!images.length && booking.status === 'COMPLETED' ? `<span class="missing-work-badge">📷 ${owner.lang === 'zh' ? '待传作品图' : 'Photos missing'}</span>` : ''}
         </div>
       </article>
@@ -5284,7 +5235,6 @@ function galleryStatus(group) {
   if (group.booking.galleryStatus === 'approved') return { className: 'ready', label: t('lockedGallery') }
   if (group.booking.status === 'COMPLETED') return { className: 'review', label: t('aiStatusReview') }
   if (hasCopy) return { className: 'review', label: t('aiStatusReview') }
-  if (group.isMock) return { className: 'review', label: t('aiStatusReview') }
   return { className: 'uploaded', label: t('draftGallery') }
 }
 
@@ -5293,12 +5243,12 @@ function renderGalleryDetail(group) {
   const images = Array.isArray(group.images) ? group.images.filter(Boolean) : []
   const isLocked = booking.galleryStatus === 'approved'
   const selected = gallerySelectedImages(group)
-  const copy = resolveSocialCopy(booking, 0, owner.galleryPlatform, group.isMock)
+  const copy = resolveSocialCopy(booking, 0, owner.galleryPlatform)
   els.aiGalleryList.innerHTML = `
     <section class="gallery-detail-page">
       <button class="ghost back-btn" data-gallery-back type="button">← ${t('galleryBack')}</button>
       <div class="gallery-detail-hero card">
-        <img src="${images[0] || booking.service?.imageUrl || '/assets/images/nail-french.jpg'}" alt="${booking.service?.name || ''}">
+        ${window.ImgPlaceholder.tag(images[0] || booking.service?.imageUrl, { alt: booking.service?.name || '', zh: owner.lang === 'zh' })}
         <div>
           <div class="section-row compact-row">
             <div>
@@ -5320,7 +5270,7 @@ function renderGalleryDetail(group) {
       <section class="gallery-detail-section card">
         <div class="section-row compact-row">
           <h3>${t('workImages')}</h3>
-          ${!isLocked ? `<label class="ghost slim upload-inline">${t('uploadMoreImages')}<input ${group.isMock ? `data-mock-work-image-input="${booking.id}"` : `data-work-image-input="${booking.id}"`} type="file" accept="image/*" multiple></label>` : ''}
+          ${!isLocked ? `<label class="ghost slim upload-inline">${t('uploadMoreImages')}<input data-work-image-input="${booking.id}" type="file" accept="image/*" multiple></label>` : ''}
         </div>
         <div class="gallery-review-grid">
           ${images.map((image, index) => `
@@ -5374,14 +5324,6 @@ async function approveGallery(bookingId) {
   const group = galleryGroups().find((item) => item.booking.id === bookingId)
   if (!group) return
   const selected = gallerySelectedImages(group)
-  if (group.isMock) {
-    owner.galleryMockApproved[bookingId] = { images: selected, lockedAt: new Date().toISOString() }
-    owner.galleryMockImages[bookingId] = selected
-    owner.gallerySelections[bookingId] = selected
-    toast(t('lockedGallery'))
-    renderAiGallery()
-    return
-  }
   const data = await request(`/admin/bookings/${bookingId}/gallery-approval`, {
     method: 'PATCH',
     body: JSON.stringify({ images: selected })
@@ -5416,44 +5358,11 @@ function rememberSocialHistory(audience, bookingId, index, platform, copyData) {
   writeJson('lucky-admin-social-copy-history', owner.aiCopyHistory)
 }
 
-function resolveSocialCopy(booking, index, platform, isMock = false) {
+/* mock 那一族退役后,这里只剩「有真结果就给,没有就 null」——
+   原来的 `isMock ? 编一段 : null` 正是「拿不到就编」的写法,一起收掉。 */
+function resolveSocialCopy(booking, index, platform) {
   const saved = owner.aiResults[socialKey(booking.id, index, platform)]
-  if (saved) return saved.data || saved
-  return isMock ? fallbackSocialCopy(booking, platform) : null
-}
-
-function fallbackSocialCopy(booking, platform) {
-  // 这段文案商家会直接复制去发社媒:回落成旗舰店名 = 别家店发出去带别人的品牌
-  const serviceName = booking.service?.name || (booking.service?.category || '本次服务')
-  const zh = {
-    xiaohongshu: {
-      title: `${serviceName}｜干净又显贵的细节`,
-      caption: `今天这组是偏日常耐看的精致感，近看有细节，远看很干净。\n\n适合喜欢低调、通勤、约会都能搭的客人。到店可以带参考图，我们会根据手型、肤色和日常习惯微调。`,
-      hashtags: ['#多伦多美甲', '#美甲分享', '#通勤美甲']
-    },
-    douyin: {
-      title: `${serviceName} 到店前后质感变化`,
-      caption: `想要高级但不夸张的效果，可以参考这组。\n\n镜头里看是干净的，实际手上会更温柔。保存给下次预约用。`,
-      hashtags: ['#今日美甲', '#美甲款式', '#同城美甲', '#LuckyLuxe']
-    },
-    instagram: {
-      title: `${serviceName} | Soft Luxe Archive`,
-      caption: `Soft, clean, and wearable from every angle.\n\nA polished finish for clients who love subtle details and a refined daily look.`,
-      hashtags: ['#LuckyLuxeAtelier', '#nailarchive', '#lashstudio', '#torontobeauty']
-    }
-  }
-  const item = zh[platform] || zh.xiaohongshu
-  return {
-    platform,
-    styleTags: [booking.service?.category || 'soft luxury', 'clean', platform],
-    titleZh: item.title,
-    captionZh: item.caption,
-    titleEn: platform === 'instagram' ? item.title : `${serviceName} | Soft Luxe Archive`,
-    captionEn: platform === 'instagram' ? item.caption : 'A clean, polished finish with subtle detail and everyday wearability.',
-    hashtags: item.hashtags,
-    altTextZh: `${serviceName} 完工作品图`,
-    altTextEn: `${serviceName} finished work archive`
-  }
+  return saved ? (saved.data || saved) : null
 }
 
 function shareUrlFor(bookingId, index, platform) {
@@ -5478,7 +5387,7 @@ async function copyCaptionByKey(key) {
   const [, bookingId, imageIndex, platform] = key.split(':')
   const group = galleryGroups().find((item) => item.booking.id === bookingId)
   if (!group) return
-  const copy = resolveSocialCopy(group.booking, Number(imageIndex), platform, group.isMock)
+  const copy = resolveSocialCopy(group.booking, Number(imageIndex), platform)
   if (!copy) return
   const title = owner.lang === 'en' ? copy.titleEn : copy.titleZh
   const caption = owner.lang === 'en' ? copy.captionEn : copy.captionZh
@@ -6945,7 +6854,7 @@ els.aiGalleryList.addEventListener('click', (event) => {
     const bookingId = platform.dataset.galleryPlatformBooking
     const group = galleryGroups().find((item) => item.booking.id === bookingId)
     const key = socialKey(bookingId, 0, owner.galleryPlatform)
-    if (group && !group.isMock && !owner.aiResults[key]) {
+    if (group && !owner.aiResults[key]) {
       generateSocialCopy(bookingId, 0, owner.galleryPlatform).catch((error) => toast(error.message))
     } else {
       renderAiGallery()
@@ -6960,14 +6869,6 @@ els.aiGalleryList.addEventListener('click', (event) => {
   const removeWorkImage = event.target.closest('[data-remove-work-image]')
   if (removeWorkImage) {
     const group = galleryGroups().find((item) => item.booking.id === removeWorkImage.dataset.workBooking)
-    if (group?.isMock) {
-      const images = [...(owner.galleryMockImages[group.id] || [])]
-      images.splice(Number(removeWorkImage.dataset.removeWorkImage), 1)
-      owner.galleryMockImages[group.id] = images
-      owner.gallerySelections[group.id] = (owner.gallerySelections[group.id] || []).filter((image) => images.includes(image))
-      renderAiGallery()
-      return
-    }
     const booking = owner.bookings.find((item) => item.id === removeWorkImage.dataset.workBooking)
     if (!booking) return
     const images = [...(booking.workImages || [])]
@@ -6985,11 +6886,6 @@ els.aiGalleryList.addEventListener('click', (event) => {
   generateSocialCopy(social.dataset.aiSocial, social.dataset.imageIndex, social.dataset.platform).catch((error) => toast(error.message))
 })
 els.aiGalleryList.addEventListener('change', (event) => {
-  const mockInput = event.target.closest('[data-mock-work-image-input]')
-  if (mockInput) {
-    handleMockWorkImageFiles(mockInput.dataset.mockWorkImageInput, mockInput.files).catch((error) => toast(error.message))
-    return
-  }
   const input = event.target.closest('[data-work-image-input]')
   if (input) {
     handleWorkImageFiles(input.dataset.workImageInput, input.files).catch((error) => toast(error.message))
@@ -7004,14 +6900,6 @@ els.aiGalleryList.addEventListener('change', (event) => {
   renderAiGallery()
 })
 
-async function handleMockWorkImageFiles(id, files) {
-  const selected = [...files].slice(0, 6)
-  const images = await Promise.all(selected.map(readCompressedImage))
-  owner.galleryMockImages[id] = [...(owner.galleryMockImages[id] || []), ...images].slice(0, 6)
-  owner.gallerySelections[id] = owner.gallerySelections[id] || owner.galleryMockImages[id].slice(0, 1)
-  toast(t('workImagesSaved'))
-  renderAiGallery()
-}
 els.addServiceButton.addEventListener('click', () => {
   owner.serviceEditor = blankServiceEditor()
   renderServices()

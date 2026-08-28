@@ -1,3 +1,6 @@
 {
-  "navigationBarTitleText": "有迹"
+  "navigationBarTitleText": "有迹",
+  "usingComponents": {
+    "img-placeholder": "../../components/img-placeholder/index"
+  }
 }

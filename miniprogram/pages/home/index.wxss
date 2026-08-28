@@ -478,3 +478,10 @@
 .d17fail{display:flex;flex-direction:column;align-items:center;justify-content:center;gap:20rpx;padding:140rpx 40rpx}
 .d17msg{color:#8c8279;font-size:27rpx}
 .d17btn{border:1rpx solid #d8cec4;border-radius:999rpx;padding:14rpx 48rpx;font-size:27rpx;color:#9b7655}
+
+/* 轮播文案(2026-08-28 六):商家在自管面板写的字要看得见,不能只活在无障碍属性里 */
+.shop-card-caption {
+  position: absolute; left: 0; right: 0; bottom: 0;
+  padding: 40rpx 24rpx 20rpx; color: #fff; font-size: 26rpx;
+  background: linear-gradient(to top, rgba(0,0,0,.55), rgba(0,0,0,0));
+}

@@ -15,6 +15,7 @@
 
    ⚠️ standalone:CI_SUITES="cash-notes" bash apps/api/run-all-tests.sh */
 import { assertTestTarget } from './test-guard.mjs'
+import { CASH_NOTE_KIND_LABELS as KIND_LABELS } from './cash-notes.mjs'
 
 const BASE_URL = process.env.TEST_BASE_URL || 'http://127.0.0.1:4128'
 await assertTestTarget(BASE_URL)
@@ -57,7 +58,7 @@ check('① 反向守:不记手记时,应有数一分不动(连读两次相同)',
 
 /* ===== ② 店主判据本体:手记一笔 −50 → 应有数跟着减 50 ===== */
 const add1 = await request('/admin/cash-notes', {
-  method: 'POST', body: JSON.stringify({ date: today, kind: 'expense', amountCents: -5000, note: `买卸甲棉${RUN}` })
+  method: 'POST', body: JSON.stringify({ date: today, kind: 'count_diff', amountCents: -5000, note: `盘点少了${RUN}` })
 }, PLATFORM, H)
 check('② 记一笔 −50 成功', add1.status === 201 && add1.data.note.amountCents === -5000, JSON.stringify(add1.data).slice(0, 160))
 const afterOut = await drawerOf()
@@ -87,19 +88,20 @@ check('④ 手记不进业绩(本日技师业绩合计仍为 0)',
 
 /* ===== ⑤ 后端最终闸(前端拦只算体验)===== */
 const gates = [
-  ['备注空白', { date: today, kind: 'expense', amountCents: -100, note: '   ' }],
-  ['金额 0', { date: today, kind: 'expense', amountCents: 0, note: 'x' }],
+  ['备注空白', { date: today, kind: 'count_diff', amountCents: -100, note: '   ' }],
+  ['金额 0', { date: today, kind: 'count_diff', amountCents: 0, note: 'x' }],
   ['类型非法', { date: today, kind: 'steal', amountCents: -100, note: 'x' }],
-  ['超上限', { date: today, kind: 'expense', amountCents: -100000001, note: 'x' }],
-  ['日期格式不对', { date: '08/28', kind: 'expense', amountCents: -100, note: 'x' }],
-  ['备注超长', { date: today, kind: 'expense', amountCents: -100, note: 'x'.repeat(121) }]
+  ['已退役的类型(现金支出 → 请走「记一笔」)', { date: today, kind: 'expense', amountCents: -100, note: 'x' }],
+  ['超上限', { date: today, kind: 'count_diff', amountCents: -100000001, note: 'x' }],
+  ['日期格式不对', { date: '08/28', kind: 'count_diff', amountCents: -100, note: 'x' }],
+  ['备注超长', { date: today, kind: 'count_diff', amountCents: -100, note: 'x'.repeat(121) }]
 ]
 for (const [label, body] of gates) {
   const r = await request('/admin/cash-notes', { method: 'POST', body: JSON.stringify(body) }, PLATFORM, H)
   check(`⑤ 后端闸「${label}」→ 4xx(${r.status})`, r.status >= 400 && r.status < 500, JSON.stringify(r.data).slice(0, 120))
 }
 const afterGates = await drawerOf()
-check('⑤ 被拒的六次一分钱都没写进去(应有数与拒之前相同)',
+check('⑤ 被拒的七次一分钱都没写进去(应有数与拒之前相同)',
   afterGates.shouldHaveCents === afterIn.shouldHaveCents, `${afterIn.shouldHaveCents} → ${afterGates.shouldHaveCents}`)
 
 /* ===== ⑥ 只追加不修改:冲销 = 追加一条反向行 ===== */
@@ -132,13 +134,81 @@ check('⑧ 乙店手记列表为空', (await request(`/admin/cash-notes?date=${t
 const yesterday = new Date(`${today}T12:00:00Z`)
 yesterday.setUTCDate(yesterday.getUTCDate() - 1)
 const yday = yesterday.toISOString().slice(0, 10)
-await request('/admin/cash-notes', { method: 'POST', body: JSON.stringify({ date: yday, kind: 'expense', amountCents: -9999, note: `昨天的${RUN}` }) }, PLATFORM, H)
+await request('/admin/cash-notes', { method: 'POST', body: JSON.stringify({ date: yday, kind: 'count_diff', amountCents: -9999, note: `昨天的${RUN}` }) }, PLATFORM, H)
 const todayAfterY = await drawerOf()
 check('⑨ 昨天记的手记不影响今天的应有数(日界要对)',
   todayAfterY.shouldHaveCents === afterRev.shouldHaveCents, `${afterRev.shouldHaveCents} → ${todayAfterY.shouldHaveCents}`)
 const ydayDrawer = await drawerOf(yday)
 check('⑨ 昨天那天自己看得到那一笔', (ydayDrawer.rows || []).some((r) => r.label === '现金手记(1 笔)' && r.amountCents === 9999),
   JSON.stringify(ydayDrawer.rows))
+
+/* ===== 🔴 ⑨a 一个动作一个入口(店主 08-28 六裁;她问「记一笔和现金手记是不是重叠」——是,原来重叠)=====
+   四条判据按她给的原文:
+     ①记一笔(现金)→ 损益与抽屉**同时**动 ②记一笔(刷卡)→ 只动损益
+     ③现金手记 → 只动抽屉 ④**反向守**:同一笔不许被两个口同时记进抽屉(抽屉只减一次)。 */
+{
+  const before = await drawerOf()
+  const beforeClose = await closeOf()
+  const pnl = (dc) => (dc.financeSummary ? dc.financeSummary.netCents : null)
+
+  // ① 记一笔:买材料付现 60
+  const cashEntry = await request('/admin/finance/transactions', {
+    method: 'POST',
+    body: JSON.stringify({ type: 'expense', category: '耗材', amount: 60, payChannel: 'cash', occurredOn: today })
+  }, PLATFORM, H)
+  check('⑨a① 记一笔(现金)成功', cashEntry.status === 201 || cashEntry.status === 200, JSON.stringify(cashEntry.data).slice(0, 120))
+  const afterCash = await drawerOf()
+  check('⑨a① 🔴 记一笔(现金)→ **抽屉跟着减 60**(以前它一分不动,所以商家只能再记一次手记)',
+    afterCash.shouldHaveCents === before.shouldHaveCents - 6000,
+    `${before.shouldHaveCents} → ${afterCash.shouldHaveCents}`)
+  check('⑨a① 算式里多出「记一笔·现金收支」这一行(数字要能自证来源)',
+    (afterCash.rows || []).some((r) => String(r.label).startsWith('记一笔·现金收支') && r.sign === '−' && r.amountCents === 6000),
+    JSON.stringify(afterCash.rows))
+
+  // ② 记一笔:刷卡 88 —— 只动损益,抽屉一分不动
+  const cardEntry = await request('/admin/finance/transactions', {
+    method: 'POST',
+    body: JSON.stringify({ type: 'expense', category: '耗材', amount: 88, payChannel: 'card', occurredOn: today })
+  }, PLATFORM, H)
+  check('⑨a② 记一笔(刷卡)成功', cardEntry.status === 201 || cardEntry.status === 200)
+  const afterCard = await drawerOf()
+  check('⑨a② 🔴 记一笔(刷卡)→ **抽屉一分不动**(钱没经过抽屉)',
+    afterCard.shouldHaveCents === afterCash.shouldHaveCents, `${afterCash.shouldHaveCents} → ${afterCard.shouldHaveCents}`)
+  check('⑨a② 两笔都进了账本(损益那边确实收到了 60 + 88;否则"抽屉不动"可能是因为根本没记成)',
+    ((await request(`/admin/finance/transactions?month=${today.slice(0, 7)}`, {}, PLATFORM, H)).data.transactions || [])
+      .filter((t) => t.category === '耗材').length === 2)
+
+  // ③ 现金手记只动抽屉,不进损益
+  const beforeNote = await drawerOf()
+  const finBefore = (await request(`/admin/finance/transactions?month=${today.slice(0, 7)}`, {}, PLATFORM, H)).data.summary.netCents
+  await request('/admin/cash-notes', { method: 'POST', body: JSON.stringify({ date: today, kind: 'float', amountCents: 30000, note: `备用金${RUN}` }) }, PLATFORM, H)
+  const afterNote = await drawerOf()
+  const finAfter = (await request(`/admin/finance/transactions?month=${today.slice(0, 7)}`, {}, PLATFORM, H)).data.summary.netCents
+  check('⑨a③ 现金手记 → 抽屉动了(+300)', afterNote.shouldHaveCents === beforeNote.shouldHaveCents + 30000,
+    `${beforeNote.shouldHaveCents} → ${afterNote.shouldHaveCents}`)
+  check('⑨a③ 现金手记 → **损益一分不动**(它既不是赚也不是花)', finAfter === finBefore, `${finBefore} → ${finAfter}`)
+
+  // ④ 反向守:一笔现金支出只许被记进抽屉一次
+  const legs = (afterNote.rows || []).filter((r) => /记一笔·现金收支|现金手记/.test(String(r.label)))
+  check('⑨a④ 🔴 反向守:两条手工腿各自独立,同一笔 60 只出现在「记一笔·现金收支」那一行,没被手记再记一遍',
+    legs.length === 2
+    && legs.find((r) => String(r.label).startsWith('记一笔·现金收支')).amountCents === 6000
+    && legs.find((r) => String(r.label).startsWith('现金手记')).amountCents !== 6000,
+    JSON.stringify(legs))
+
+  // ⑤ 花钱的口收窄:现金手记不许再记 expense,要把人指回「记一笔」
+  const retired = await request('/admin/cash-notes', { method: 'POST', body: JSON.stringify({ date: today, kind: 'expense', amountCents: -100, note: '买东西' }) }, PLATFORM, H)
+  check('⑨a⑤ 现金手记的「现金支出」已退役 → 400 KIND_RETIRED,并把人指回「记一笔」',
+    retired.status === 400 && retired.data.error.code === 'KIND_RETIRED' && String(retired.data.error.message).includes('记一笔'),
+    JSON.stringify(retired.data).slice(0, 160))
+  check('⑨a⑤ 退役只挡**写口**:老账仍认得出来(标签表里还留着,不然历史记录会显示成一串英文)',
+    Boolean(KIND_LABELS.expense) && Boolean(KIND_LABELS.change)
+    && !(await request('/admin/cash-notes', {}, PLATFORM, H)).data.kinds.some((k) => k.kind === 'expense'),
+    `标签在:${KIND_LABELS.expense} / 下拉里已没有它`)
+  check('⑨a⑥ 分工那句话由后端出,两端同一句(不让商家猜)',
+    String(afterNote.splitNote || '').includes('记一笔') && String(afterNote.splitNote).includes('现金手记'),
+    String(afterNote.splitNote))
+}
 
 /* ===== ⑨b 与金额更正的接缝(08-27 店主登记的那一行:更正后的现金找补走这个口)=====
    判据两向:更正额还没记进手记 → 那句话要告诉她"实际应是多少";记进去了 → 必须改口,

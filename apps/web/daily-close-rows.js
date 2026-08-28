@@ -55,6 +55,9 @@ window.DailyCloseRows = (function () {
         <div class="dc-notes-head">
           <strong>${escapeHtml(n.label || '现金手记')}</strong>
           <span class="subtle">${escapeHtml(n.hint || '')}</span>
+          ${/* 🔴 店主 08-28(六)问「跟记一笔是不是重叠」——分工原样写到页面上,不许让商家猜。
+                句子后端出(cashDrawer.splitNote),两端同一句。 */''}
+          ${v.cashDrawer && v.cashDrawer.splitNote ? `<span class="dc-notes-split">${escapeHtml(v.cashDrawer.splitNote)}</span>` : ''}
         </div>
         ${items.length ? `<div class="dc-notes-list">
           ${items.map((it) => `

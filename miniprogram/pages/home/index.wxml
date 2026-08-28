@@ -31,6 +31,8 @@
         <block wx:for="{{heroSlides}}" wx:key="image">
           <swiper-item>
             <image class="shop-card-visual" src="{{item.image}}" mode="aspectFill"></image>
+            <!-- 08-28(六):文案原来只在网页的 alt 里、小程序根本没渲染 —— 商家在面板写的字要看得见 -->
+            <text class="shop-card-caption" wx:if="{{item.label}}">{{item.label}}</text>
           </swiper-item>
         </block>
       </swiper>
@@ -83,7 +85,7 @@
     <view class="recommend-grid">
       <block wx:for="{{recommendedNail}}" wx:key="_id">
         <view class="recommend-card card" bindtap="goDetail" data-id="{{item._id}}">
-          <image class="recommend-visual" src="{{item.image}}" mode="aspectFill"></image>
+          <img-placeholder src="{{item.image}}" img-class="recommend-visual"></img-placeholder>
           <view class="recommend-name">{{item.name}}</view>
           <view class="recommend-meta">
             <text class="price">{{cur.p}}{{cur.s}}{{item.price}}</text>
@@ -102,7 +104,7 @@
     <view class="recommend-grid">
       <block wx:for="{{recommendedLash}}" wx:key="_id">
         <view class="recommend-card card" bindtap="goDetail" data-id="{{item._id}}">
-          <image class="recommend-visual" src="{{item.image}}" mode="aspectFill"></image>
+          <img-placeholder src="{{item.image}}" img-class="recommend-visual"></img-placeholder>
           <view class="recommend-name">{{item.name}}</view>
           <view class="recommend-meta">
             <text class="price">{{cur.p}}{{cur.s}}{{item.price}}</text>

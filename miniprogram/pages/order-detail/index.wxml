@@ -7,7 +7,7 @@
     </view>
     <view class="service-name">{{order.serviceInfo.serviceName}}</view>
     <view class="muted">{{t.orderNo}} {{order.orderNo}}</view>
-    <image class="order-cover" src="{{order.serviceImage}}" mode="aspectFill"></image>
+    <img-placeholder src="{{order.serviceImage}}" img-class="order-cover"></img-placeholder>
   </view>
 
   <view class="section">

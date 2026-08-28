@@ -129,6 +129,31 @@ check('🔴 判据本体:全仓**零处**在输入过程中改写内容(加工�
   rewrites.length === 0, rewrites.join(' | '))
 check('反向守:handler 都找得到(找不到就等于没验,不许当成通过)', missingHandler.length === 0, missingHandler.join(' | '))
 
+/* 🔴 店主 08-28(六)第③条欠答:那 22 处「回写原样」这一批不收,**但要把「不改内容」这个前提钉住**。
+   —— 不钉的话,今天它们是"回写原样"所以放行,明天有人在里面加一句 `.trim()`,
+   放行的理由就悄悄不成立了,而判据不会响。
+   做法:把回写型的那一组单独数出来,**逐个断言写回去的就是手指敲的那个值**,并给条数下限
+   (掉下来说明它们被改写法了,得重新看一眼是变好了还是变没了)。 */
+{
+  const writeBack = []
+  for (const item of inputs) {
+    if (!item.body) continue
+    const one = item.body.replace(/\s+/g, ' ')
+    const setDataPart = (one.match(/setData\(([\s\S]*)\)/) || [, ''])[1]
+    const esc2 = item.leaf.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
+    const m = new RegExp(`\\b${esc2}\\s*:\\s*([^,}]+)`).exec(setDataPart)
+      || new RegExp(`\\[\\s*(?:\`[^\`]*\`|\\w+)\\s*\\]\\s*:\\s*([^,}]+)`).exec(setDataPart)
+    if (m) writeBack.push({ where: `${item.page}:${item.field}`, rhs: m[1].trim() })
+  }
+  const rawAliasOk = (rhs) => /^(?:String\(\s*)?(?:e|ev|evt|event)\.detail\.value(?:\s*\|\|\s*''\s*)?\)?$/.test(rhs)
+    || /^[a-z]\w*$/i.test(rhs)   // 一层别名,上面主判据已经验过它的初始化式是原样
+  const notRaw = writeBack.filter((w) => !rawAliasOk(w.rhs)).map((w) => `${w.where} ← ${w.rhs}`)
+  check(`回写型那一组(${writeBack.length} 处)**写回去的就是手指敲的那个值** —— 这是"不收它们"的前提,钉住`,
+    notRaw.length === 0, notRaw.join(' | '))
+  check('反向守:回写型确实还在(≥15 处;掉下来说明写法被改过,要重新看一眼)',
+    writeBack.length >= 15, String(writeBack.length))
+}
+
 /* ③ type 的白名单式判据(spinner / 键盘是平台差异,与上面那条分开记):
    小程序 `type="digit"` = 带小数点的数字键盘(金额用);`type="number"` = 整数键盘(计数/百分比用)。
    凡 `type="number"` 必须落进「不是金额」白名单,每项一行理由;条目数上棘轮,只许减。 */

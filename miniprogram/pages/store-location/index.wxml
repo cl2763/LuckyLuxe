@@ -5,7 +5,8 @@
 </view>
 
 <view wx:else class="page store-page">
-  <image class="store-hero" src="/assets/images/store-cover.jpg" mode="aspectFill"></image>
+  <!-- 占位零回落:门店封面原来写死店主本店那张沙龙照,每家店都用它。没配就出占位 -->
+  <img-placeholder src="{{storeCover}}" img-class="store-hero" text="还没有门店照片"></img-placeholder>
 
   <view class="store-card card">
     <view class="store-name">{{store.storeName}}</view>

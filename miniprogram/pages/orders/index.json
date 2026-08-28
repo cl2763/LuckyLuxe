@@ -1,3 +1,6 @@
 {
-  "navigationBarTitleText": "我的订单"
+  "navigationBarTitleText": "我的订单",
+  "usingComponents": {
+    "img-placeholder": "../../components/img-placeholder/index"
+  }
 }
