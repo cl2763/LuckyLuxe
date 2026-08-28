@@ -5,14 +5,10 @@ const api = require('../../../utils/api')
 
 const EXPENSE_CATS = ['耗材采购', '房租', '水电网', '设备', '营销推广', '平台软件费', '员工工资', '提成', '其他支出']
 const INCOME_CATS = ['产品销售', '礼品卡', '其他收入']
-const CHANNELS = [
-  { id: 'card', name: '刷卡 POS' },
-  { id: 'cash', name: '现金' },
-  { id: 'wechat', name: '微信' },
-  { id: 'alipay', name: '支付宝' },
-  { id: 'stored_value', name: '储值卡' },
-  { id: 'unknown', name: '其他' }
-]
+/* 🔴 08-29 店主收窄:付款方式的唯一作用=判断动不动抽屉。原来这里写死六个选项
+   (含**储值卡** —— 她的原话:「储值卡会在会员界面去动他的值,不会在记一笔这里记」)。
+   现在选项与那句分工话都由后端 /admin/finance/entry-config 唯一出口下发,
+   与网页端同一份;**不写死、不回落**(接口挂了就没得选,如实报错,不许编一份默认选项)。 */
 
 function localToday() {
   const d = new Date()
@@ -25,8 +21,9 @@ Page({
     cats: EXPENSE_CATS,
     cat: EXPENSE_CATS[0],
     amount: '',
-    channels: CHANNELS,
-    channelNames: CHANNELS.map((c) => c.name),
+    channels: [],
+    channelNames: [],
+    entryNote: '',
     channelIdx: 0,
     date: '',
     note: '',
@@ -48,6 +45,12 @@ Page({
       }
     }
     if (!this.data.date) this.setData({ date: localToday() })
+    try {
+      const cfg = await api.adminGet('/admin/finance/entry-config')
+      this.setData({ channels: cfg.channels || [], channelNames: (cfg.channels || []).map((c) => c.label), entryNote: cfg.note || '' })
+    } catch (e) {
+      wx.showToast({ title: '选项加载失败,请重进', icon: 'none' })
+    }
   },
 
   setType(e) {
@@ -71,7 +74,7 @@ Page({
         type: this.data.type,
         category: this.data.cat,
         amount,
-        payChannel: CHANNELS[this.data.channelIdx].id,
+        payChannel: (this.data.channels[this.data.channelIdx] || {}).id || '',
         occurredOn: this.data.date,
         tags: '',
         note: this.data.note.trim()

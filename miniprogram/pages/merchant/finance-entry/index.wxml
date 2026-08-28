@@ -21,8 +21,10 @@
 
   <view class="k">支付方式 · 日期</view>
   <picker mode="selector" range="{{channelNames}}" value="{{channelIdx}}" bindchange="onChannel">
-    <view class="inp"><text class="inp-l">支付方式</text><text class="inp-v">{{channelNames[channelIdx]}} ›</text></view>
+    <view class="inp"><text class="inp-l">付款方式</text><text class="inp-v">{{channelNames[channelIdx]}} ›</text></view>
   </picker>
+  <!-- 08-29:分工那句话由后端出(entry-config),两端同一句,不让商家猜 -->
+  <text class="entry-note" wx:if="{{entryNote}}">{{entryNote}}</text>
   <picker mode="date" value="{{date}}" bindchange="onDate">
     <view class="inp"><text class="inp-l">日期</text><text class="inp-v">{{date}} ›</text></view>
   </picker>

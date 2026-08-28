@@ -36,6 +36,29 @@ export const CASH_NOTE_KIND_LABELS = {
 }
 export const CASH_NOTE_MAX_CENTS = 100000000   // 单笔上限 100 万:手记是零星现金,再大必然是记错了小数点
 
+/* ===== 「记一笔」的付款方式(店主 2026-08-29 收窄)=====
+   店主原话:「这个地方记储值卡有什么意义?储值卡会在会员界面去动他的值,不会在记一笔这里记。」
+   裁定:**付款方式的唯一作用 = 判断动不动抽屉。**
+   「记一笔」只记**不走订单流程**的收支(买材料、房租、报销、杂项);
+   顾客消费的钱走结算单签署 —— 入账唯一路径 = 签署,不在这儿记。
+   储值卡消费 = 耗卡 = 确认收入,那是结算单干的事;店家不会拿顾客的储值卡去买材料。
+
+   四个选项:现金(唯一动抽屉的)/ 刷卡 / 转账 / 其他 —— 后三个账上作用完全相同,细分只是备注。
+   原来两端下拉里的 微信 / 支付宝 并进「转账」;**储值卡删掉**。
+   退役手法与现金手记那两类同刀:**写口拒、读口留**(老账的标签仍显示得出来)。 */
+export const MANUAL_ENTRY_CHANNELS = [
+  { id: 'cash', label: '现金' },
+  { id: 'card', label: '刷卡' },
+  { id: 'transfer', label: '转账' },
+  { id: 'unknown', label: '其他' }
+]
+/* 读口标签全集:老账里存过的值都认得出来,历史行不许显示成一串英文。只用于显示,下拉不用它。 */
+export const MANUAL_ENTRY_CHANNEL_LABELS = {
+  cash: '现金', card: '刷卡', transfer: '转账', unknown: '其他',
+  stored_value: '储值卡(已退役)', wechat: '微信(旧,归转账)', alipay: '支付宝(旧,归转账)'
+}
+export const MANUAL_ENTRY_NOTE = '这里只记不走订单的收支(买材料、房租、报销、杂项)。顾客消费的钱走结算单签署,不在这儿记。'
+
 /* 建表 + 结构自证(《静默失败器族》:IF NOT EXISTS 在"表在但结构不同"时什么也不做)。 */
 export function ensureCashNotesSchema(db) {
   db.exec(`
@@ -131,6 +154,29 @@ export function createCashNotes({ db, apiError, iso, randomId, currentTenantId, 
     )
   }
 
+  /* 「记一笔」写口的付款方式闸(《后端是最终闸律》:前端下拉即使改了,接口直调也要拦)。 */
+  function assertEntryChannelOk(payChannel) {
+    const ch = String(payChannel || '')
+    /* 不传 = 归「其他」(后端落库 || 'unknown',不动抽屉 —— 保守的那一边)。
+       拒的是**明确传了非法值**:说明调用方以为自己在选一个存在的选项,那才是要当场纠正的。 */
+    if (!ch) return
+    if (ch === 'stored_value') {
+      throw apiError(400, 'CHANNEL_RETIRED',
+        '顾客用储值卡消费走结算单签署,储值动账在会员界面 —— 不在「记一笔」里记。这里只记不走订单的收支。')
+    }
+    if (ch === 'wechat' || ch === 'alipay') {
+      throw apiError(400, 'BAD_REQUEST', '微信 / 支付宝到账属于「转账」,请选「转账」。')
+    }
+    if (!MANUAL_ENTRY_CHANNELS.some((c) => c.id === ch)) {
+      throw apiError(400, 'BAD_REQUEST', `付款方式只能是:${MANUAL_ENTRY_CHANNELS.map((c) => c.label).join(' / ')}。`)
+    }
+  }
+
+  /* 选项与那句分工话的唯一出口:两端都从这里拿,不许各写一份(网页搭 GET transactions 的车,小程序打 entry-config)。 */
+  function manualEntryConfig() {
+    return { channels: MANUAL_ENTRY_CHANNELS, note: MANUAL_ENTRY_NOTE }
+  }
+
   function addCashNote({ date, kind, amountCents, note, createdBy }, tenantId = currentTenantId()) {
     assertNoteOk({ kind, amountCents, note, date })
     const id = randomId('cashnote')
@@ -156,5 +202,5 @@ export function createCashNotes({ db, apiError, iso, randomId, currentTenantId, 
     return serialize(db.prepare('SELECT * FROM cash_notes WHERE id = ?').get(rid), tenantId)
   }
 
-  return { listCashNotes, cashNotesTotalCents, manualCashOfDay, drawerInputs, addCashNote, reverseCashNote, assertNoteOk }
+  return { listCashNotes, cashNotesTotalCents, manualCashOfDay, drawerInputs, addCashNote, reverseCashNote, assertNoteOk, assertEntryChannelOk, manualEntryConfig }
 }

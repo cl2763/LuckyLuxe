@@ -7117,7 +7117,9 @@ const cashNotesApi = createCashNotes({ db, apiError, iso, randomId, currentTenan
 const storeContentRoutes = createStoreContentRoutes({
   apiError, json, readBody, heroSlidesApi, cashNotesApi, HERO_SLIDE_MAX,
   constants: { CASH_NOTE_KINDS, CASH_NOTE_KIND_LABELS },
-  localParts, tenantTimezone, currentTenantId
+  localParts, tenantTimezone, currentTenantId,
+  insertFinanceTransaction: (a) => insertFinanceTransaction(a),
+  serializeFinanceTransaction: (r) => serializeFinanceTransaction(r)
 })
 const messageTemplatesApi = createMessageTemplates({ db, iso, randomId })
 const { MESSAGE_TEMPLATE_SCENES, MESSAGE_TEMPLATE_SCENE_LABELS, serializeMessageTemplate, ensureDefaultMessageTemplates } = messageTemplatesApi
@@ -14826,31 +14828,12 @@ async function route(req, res) {
     return json(res, 200, {
       month,
       summary: { incomeCents: summary.income_cents, expenseCents: summary.expense_cents, netCents: summary.net_cents },
-      transactions: rows.map(serializeFinanceTransaction)
+      transactions: rows.map(serializeFinanceTransaction),
+      // 08-29:「记一笔」的付款方式选项与分工句由后端唯一出口下发(两端同一份,口径在 ./cash-notes.mjs)
+      entryConfig: cashNotesApi.manualEntryConfig()
     })
   }
-  if (req.method === 'POST' && path === '/admin/finance/transactions') {
-    if (adminSession.role !== 'owner') throw apiError(403, 'FORBIDDEN', 'Owner permission is required.')
-    const body = await readBody(req)
-    const type = body.type === 'expense' ? 'expense' : 'income'
-    const amountCents = Math.round(Number(body.amountCents ?? Number(body.amount || 0) * 100))
-    if (!Number.isFinite(amountCents) || amountCents <= 0) throw apiError(400, 'BAD_REQUEST', 'A positive amount is required.')
-    const category = String(body.category || '').trim()
-    if (!category) throw apiError(400, 'BAD_REQUEST', 'category is required.')
-    const occurredOn = /^\d{4}-\d{2}-\d{2}$/.test(String(body.occurredOn || '')) ? body.occurredOn : localParts(new Date()).date
-    const row = insertFinanceTransaction({
-      type,
-      source: 'manual',
-      category,
-      tags: String(body.tags || ''),
-      amountCents,
-      payChannel: String(body.payChannel || 'unknown'),
-      occurredOn,
-      note: String(body.note || ''),
-      createdBy: adminSession.email || 'owner'
-    })
-    return json(res, 201, { transaction: serializeFinanceTransaction(row) })
-  }
+  // 手工「记一笔」的写口搬进 ./store-content-routes.mjs(08-29 边改边拆;付款方式闸也在那条链上)
   const financeReverseMatch = path.match(/^\/admin\/finance\/transactions\/([^/]+)\/reverse$/)
   if (req.method === 'POST' && financeReverseMatch) {
     if (adminSession.role !== 'owner') throw apiError(403, 'FORBIDDEN', 'Owner permission is required.')

@@ -7403,3 +7403,4 @@ section.card > .section-row:first-child { margin-top: 0; }
 }
 .img-placeholder svg { opacity: .55; }
 .img-placeholder span { opacity: .85; }
+.finance-entry-note { margin: 4px 0 8px; border-left: 2px solid var(--line); padding-left: 8px; }

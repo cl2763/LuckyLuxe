@@ -210,6 +210,77 @@ check('⑨ 昨天那天自己看得到那一笔', (ydayDrawer.rows || []).some((
     String(afterNote.splitNote))
 }
 
+/* ===== 🔴 ⑨c 付款方式收窄(店主 08-29:「储值卡会在会员界面去动他的值,不会在记一笔这里记」)=====
+   裁定:付款方式的唯一作用 = 判断动不动抽屉。「记一笔」只记不走订单流程的收支;
+   顾客消费的钱走结算单签署,入账唯一路径 = 签署。判据按她给的四条 + 唯一出口。 */
+{
+  // ① 选项集合 = 白名单精确等值(现金/刷卡/转账/其他)—— 多一个、少一个、换顺序里混进新的,都红
+  const cfg = (await request('/admin/finance/entry-config', {}, PLATFORM, H)).data
+  const ids = (cfg.channels || []).map((c) => c.id).sort()
+  check('⑨c① 选项集合 = 白名单(cash/card/transfer/unknown),多一个就红',
+    JSON.stringify(ids) === JSON.stringify(['card', 'cash', 'transfer', 'unknown']), JSON.stringify(cfg.channels))
+  check('⑨c① 分工那句话随选项一起下发(后端唯一出口,两端同一句)',
+    String(cfg.note || '').includes('结算单') && String(cfg.note).includes('不在这儿记'), String(cfg.note))
+  const viaGet = (await request(`/admin/finance/transactions?month=${today.slice(0, 7)}`, {}, PLATFORM, H)).data.entryConfig
+  check('⑨c① 网页搭车那份与小程序那份是同一份(同一个函数出的)',
+    JSON.stringify(viaGet) === JSON.stringify(cfg), JSON.stringify(viaGet).slice(0, 120))
+
+  // ② 写口:储值卡 → 拒,且话里说清为什么
+  const sv = await request('/admin/finance/transactions', {
+    method: 'POST', body: JSON.stringify({ type: 'expense', category: '耗材', amount: 10, payChannel: 'stored_value', occurredOn: today })
+  }, PLATFORM, H)
+  check('⑨c② 🔴 写口传储值卡 → 400 CHANNEL_RETIRED,话里指向结算单',
+    sv.status === 400 && sv.data.error.code === 'CHANNEL_RETIRED' && String(sv.data.error.message).includes('结算单'),
+    JSON.stringify(sv.data).slice(0, 160))
+  const wc2 = await request('/admin/finance/transactions', {
+    method: 'POST', body: JSON.stringify({ type: 'expense', category: '耗材', amount: 10, payChannel: 'wechat', occurredOn: today })
+  }, PLATFORM, H)
+  check('⑨c② 微信/支付宝(旧选项)→ 400 并指引「转账」', wc2.status === 400 && String(wc2.data.error.message).includes('转账'),
+    JSON.stringify(wc2.data).slice(0, 120))
+  check('⑨c② 编的值(steal)→ 400', (await request('/admin/finance/transactions', {
+    method: 'POST', body: JSON.stringify({ type: 'expense', category: '耗材', amount: 10, payChannel: 'steal', occurredOn: today })
+  }, PLATFORM, H)).status === 400)
+  // 不传 = 归「其他」:落库 unknown、**不动抽屉**(保守边);拒的只是明确传了非法值的
+  const beforeNoCh = (await drawerOf()).shouldHaveCents
+  const noCh = await request('/admin/finance/transactions', {
+    method: 'POST', body: JSON.stringify({ type: 'expense', category: '耗材', amount: 5, occurredOn: today })
+  }, PLATFORM, H)
+  check('⑨c② 不传付款方式 → 201 落「其他」,抽屉一分不动',
+    noCh.status === 201 && noCh.data.transaction.payChannel === 'unknown'
+    && (await drawerOf()).shouldHaveCents === beforeNoCh,
+    JSON.stringify(noCh.data).slice(0, 120))
+
+  // ③ 老账读得出:显示标签全集仍认得退役与旧值(读口留,写口拒)
+  const { MANUAL_ENTRY_CHANNEL_LABELS } = await import('./cash-notes.mjs')
+  check('⑨c③ 读口标签全集仍认得 stored_value / wechat / alipay(历史行不许显示成一串英文)',
+    Boolean(MANUAL_ENTRY_CHANNEL_LABELS.stored_value && MANUAL_ENTRY_CHANNEL_LABELS.wechat && MANUAL_ENTRY_CHANNEL_LABELS.alipay))
+  /* 扫描面跟着代码走(J3 教训):表单搬进了 finance-entry-form.js,标签表还在 admin.js —— 两个都扫 */
+  const servedAdmin = await fetch(`${BASE_URL}/web/admin.js`).then((r) => r.text())
+  const servedEntryForm = await fetch(`${BASE_URL}/web/finance-entry-form.js`).then((r) => r.text())
+  check('⑨c③ 网页(实发资源):历史行标签表仍含 stored_value;下拉改读 entryConfig,不再用常量渲染',
+    servedAdmin.includes("'stored_value', '储值卡(已退役)'") && servedEntryForm.includes('entryConfig || {}'))
+  const servedAdminHtml = await fetch(`${BASE_URL}/web/admin.html`).then((r) => r.text())
+  check('⑨c③ 表单模块真的在页面加载清单里(带内容指纹)', /finance-entry-form\.js\?v=[0-9a-f]{6,}/.test(servedAdminHtml),
+    (servedAdminHtml.match(/finance-entry-form\.js\?v=[^"]*/) || ['(没挂上)'])[0])
+
+  // ④ 只有现金动抽屉:刷卡/转账/其他各记一笔,应有数一分不动(现金那半在 ⑨a① 已实测)
+  const beforeCh = (await drawerOf()).shouldHaveCents
+  for (const ch of ['card', 'transfer', 'unknown']) {
+    const r = await request('/admin/finance/transactions', {
+      method: 'POST', body: JSON.stringify({ type: 'expense', category: '耗材', amount: 7, payChannel: ch, occurredOn: today })
+    }, PLATFORM, H)
+    check(`⑨c④ 记一笔(${ch})写入成功`, r.status === 201, JSON.stringify(r.data).slice(0, 100))
+  }
+  check('⑨c④ 🔴 反向守:刷卡/转账/其他三笔都不动抽屉(唯一动抽屉的是现金)',
+    (await drawerOf()).shouldHaveCents === beforeCh, `${beforeCh} → ${(await drawerOf()).shouldHaveCents}`)
+
+  // ⑤ 小程序(源码层):零写死选项,从 entry-config 取,失败不回落
+  const { readFileSync } = await import('node:fs')
+  const miniEntry = readFileSync(new URL('../../miniprogram/pages/merchant/finance-entry/index.js', import.meta.url), 'utf8')
+  check('⑨c⑤ 小程序记一笔页:写死的 CHANNELS 数组已消亡,选项从 /admin/finance/entry-config 取',
+    !/const CHANNELS = \[/.test(miniEntry) && miniEntry.includes('/admin/finance/entry-config'))
+}
+
 /* ===== ⑨b 与金额更正的接缝(08-27 店主登记的那一行:更正后的现金找补走这个口)=====
    判据两向:更正额还没记进手记 → 那句话要告诉她"实际应是多少";记进去了 → 必须改口,
    不许一边说"抽屉已经算进去了"一边又说"实际应是另一个数"(屏幕上不许有解释不了的数)。 */

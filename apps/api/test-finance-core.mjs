@@ -48,13 +48,15 @@ async function main() {
     const before = await summaryNow()
     const income = await request('/admin/finance/transactions', {
       method: 'POST',
-      body: JSON.stringify({ type: 'income', category: '产品销售', tags: `test-${RUN_ID}`, amount: 200, payChannel: 'wechat', note: '回归测试收入' })
+      /* 08-29 店主收窄:「记一笔」付款方式白名单只剩 现金/刷卡/转账/其他(wechat 归「转账」)。
+         夹具跟着口径走 —— 旧值现在会被后端闸 400(那是对的,test-cash-notes ⑨c 专门守它)。 */
+      body: JSON.stringify({ type: 'income', category: '产品销售', tags: `test-${RUN_ID}`, amount: 200, payChannel: 'transfer', note: '回归测试收入' })
     })
     check('manual income created', income.status === 201 && income.data.transaction?.amountCents === 20000, JSON.stringify(income.data).slice(0, 150))
     created.push(income.data.transaction.id)
     const expense = await request('/admin/finance/transactions', {
       method: 'POST',
-      body: JSON.stringify({ type: 'expense', category: '耗材采购', tags: `test-${RUN_ID}`, amount: 80, payChannel: 'alipay', note: '回归测试支出' })
+      body: JSON.stringify({ type: 'expense', category: '耗材采购', tags: `test-${RUN_ID}`, amount: 80, payChannel: 'card', note: '回归测试支出' })
     })
     check('manual expense stored as negative', expense.data.transaction?.amountCents === -8000, String(expense.data.transaction?.amountCents))
     created.push(expense.data.transaction.id)

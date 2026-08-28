@@ -1883,7 +1883,10 @@ async function addKbEntry() {
 const FINANCE_INCOME_CATEGORIES = ['产品销售', '礼品卡', '其他收入']
 const FINANCE_EXPENSE_CATEGORIES_BASE = ['房租', '水电网', '耗材采购', '设备', '营销推广', '平台软件费', '其他支出']
 const FINANCE_STAFF_CATEGORIES = ['员工工资', '提成']
-const FINANCE_PAY_CHANNELS = [['wechat', '微信'], ['alipay', '支付宝'], ['cash', '现金'], ['card', '刷卡'], ['stored_value', '储值卡'], ['unknown', '其他']]
+/* 🔴 08-29 店主收窄:这张表现在**只用于显示历史行的标签**(老账里存过的值都认得出来)。
+   「记一笔」的下拉**不再用它** —— 选项由后端 entryConfig 唯一出口下发(现金/刷卡/转账/其他,
+   储值卡已退役:顾客消费走结算单签署,不在记一笔里记)。 */
+const FINANCE_PAY_CHANNELS = [['wechat', '微信(旧,归转账)'], ['alipay', '支付宝(旧,归转账)'], ['cash', '现金'], ['card', '刷卡'], ['transfer', '转账'], ['stored_value', '储值卡(已退役)'], ['unknown', '其他']]
 
 function financeExpenseCategories() {
   const hasStaff = Boolean(owner.tenantPlan?.features?.staff_schedule?.enabled)
@@ -3492,25 +3495,8 @@ function renderFinancePage() {
   renderFinanceMetrics()
   const incomeOptions = FINANCE_INCOME_CATEGORIES.map((cat) => `<option value="${cat}">${cat}</option>`).join('')
   const expenseOptions = financeExpenseCategories().map((cat) => `<option value="${cat}">${cat}</option>`).join('')
-  const channelOptions = FINANCE_PAY_CHANNELS.map(([id, label]) => `<option value="${id}">${label}</option>`).join('')
-  els.financeQuickBody.innerHTML = `
-    <div class="finance-quick-grid">
-      <label><span>${owner.lang === 'zh' ? '类型' : 'Type'}</span>
-        <select id="finType">
-          <option value="expense">${owner.lang === 'zh' ? '支出' : 'Expense'}</option>
-          <option value="income">${owner.lang === 'zh' ? '收入' : 'Income'}</option>
-        </select>
-      </label>
-      <label><span>${owner.lang === 'zh' ? '类别' : 'Category'}</span><select id="finCategory">${expenseOptions}</select></label>
-      <label><span>${owner.lang === 'zh' ? '金额 (CAD)' : 'Amount (CAD)'}</span><input id="finAmount" data-money type="text" inputmode="decimal" autocomplete="off" placeholder="0.00"></label>
-      <label><span>${owner.lang === 'zh' ? '支付方式' : 'Channel'}</span><select id="finChannel">${channelOptions}</select></label>
-      <label><span>${owner.lang === 'zh' ? '日期' : 'Date'}</span><input id="finDate" type="date" value="${storeToday()}"></label>
-      <label><span>${owner.lang === 'zh' ? '标签(可选)' : 'Tags'}</span><input id="finTags" placeholder="${owner.lang === 'zh' ? '如:6月采购' : 'optional'}"></label>
-    </div>
-    <label class="finance-note-field"><span>${owner.lang === 'zh' ? '备注' : 'Note'}</span><input id="finNote" placeholder="${owner.lang === 'zh' ? '例如:超市买棉片和酒精' : ''}"></label>
-    <button class="primary slim" data-fin-submit type="button">${owner.lang === 'zh' ? '记账' : 'Record'}</button>
-    <p class="subtle">${owner.lang === 'zh' ? '服务收入由订单完成自动入账,不需要手记。账本只追加:记错了用流水里的"冲销"纠正。' : 'Service income auto-posts on booking completion. The ledger is append-only; correct mistakes via reversal.'}</p>
-  `
+  // 「记一笔」表单渲染 + 提交搬到 /web/finance-entry-form.js(08-29 边改边拆;付款方式收窄同批)
+  window.FinanceEntryForm.render(els.financeQuickBody, fin, { zh: owner.lang === 'zh', expenseOptions, escapeHtml, storeToday })
   const activeRules = (fin.rules || []).filter((rule) => rule.active)
   els.financeRecurringSummary.textContent = activeRules.length
     ? `${activeRules.length} ${owner.lang === 'zh' ? '条规则' : 'rules'} · ${cadText(activeRules.reduce((sum, rule) => sum + rule.amountCents, 0))}/${owner.lang === 'zh' ? '月' : 'mo'}`
@@ -3610,27 +3596,10 @@ function exportFinanceCsv() {
   toast(zh ? 'CSV 已导出(含冲销记录,与账本完全一致)' : 'CSV exported')
 }
 
+// submitFinanceEntry 搬到 /web/finance-entry-form.js(同批)
 async function submitFinanceEntry() {
-  const type = document.querySelector('#finType')?.value || 'expense'
-  const amount = Number(document.querySelector('#finAmount')?.value || 0)
-  if (!amount || amount <= 0) {
-    toast(owner.lang === 'zh' ? '请填写正确的金额' : 'Enter a valid amount')
-    return
-  }
-  await request('/admin/finance/transactions', {
-    method: 'POST',
-    body: JSON.stringify({
-      type,
-      category: document.querySelector('#finCategory')?.value || '其他支出',
-      amount,
-      payChannel: document.querySelector('#finChannel')?.value || 'unknown',
-      occurredOn: document.querySelector('#finDate')?.value || '',
-      tags: document.querySelector('#finTags')?.value.trim() || '',
-      note: document.querySelector('#finNote')?.value.trim() || ''
-    })
-  })
+  await window.FinanceEntryForm.submit({ request, toast, zh: owner.lang === 'zh' })
   await loadFinancePage()
-  toast(owner.lang === 'zh' ? '已入账（账本只追加，不可修改）' : 'Recorded (append-only).')
 }
 
 // 门店信息三件(renderStoreInfo / renderStoreProfile / saveStoreProfile)已搬出到 /web/store-content.js(D78 批,边改边拆)

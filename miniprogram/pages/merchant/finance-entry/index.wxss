@@ -24,3 +24,6 @@ page{background:#fbf8f5}
 .save.dis{opacity:.6}
 .tip{font-size:20rpx;color:#8c8279;line-height:1.7;margin-top:18rpx}
 .link{color:#9b7655;text-decoration:underline}
+
+/* 08-29:记一笔的分工句(后端出句) */
+.entry-note { display: block; font-size: 22rpx; color: #9a938c; margin: 8rpx 0 16rpx; padding-left: 12rpx; border-left: 2rpx solid #ece7e1; }

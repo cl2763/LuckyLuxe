@@ -509,10 +509,15 @@ check('⑩-2 🔴 行为必须不同:keep=仍是会员 / drop=余额归零即失
   const { join: j4, dirname: d4 } = await import('node:path')
   const { fileURLToPath: f4 } = await import('node:url')
   const ROOT3 = j4(d4(f4(import.meta.url)), '../..')
-  /* 判据跟着被测物走:金额更正那个框 08-27 随「日结小件」搬进 daily-close-rows.js ——
-     只读两个文件就会漏掉它(实测漏过一次)。这里读的是"网页商家端全部会出现钱输入框的地方"。 */
-  const web = ['apps/web/admin.js', 'apps/web/account-adjust.js', 'apps/web/daily-close-rows.js']
-    .map((f) => rf3(j4(ROOT3, f), 'utf8')).join('\n')
+  /* 🔴 扫描面第四案(2026-08-29):这里原来手写三个文件名 —— 注释都写着「判据跟着被测物走」,
+     写法却还是靠列举。08-29 finAmount 搬进 finance-entry-form.js,当场又漏(J3 同族:退卡路由搬家、
+     snapshot 扫 4 个文件、门店信息三件)。同刀改:**扫描面 = admin.html 真正加载的那组 /web/*.js**
+     + admin.js 本体,搬进哪个模块都跑不出这张网;附文件数下限,缩水立刻红。 */
+  const adminHtmlSrc = rf3(j4(ROOT3, 'apps/web/admin.html'), 'utf8')
+  const webFiles = ['apps/web/admin.js',
+    ...[...adminHtmlSrc.matchAll(/<script src="\/web\/([\w.-]+\.js)/g)].map((m) => `apps/web/${m[1]}`)]
+  if (webFiles.length < 10) throw new Error(`扫描面缩水:admin.html 只挂了 ${webFiles.length} 个脚本`)
+  const web = webFiles.map((f) => rf3(j4(ROOT3, f), 'utf8')).join('\n')
   const moneyIds = ['aaAmount', 'aaCardAmount', 'finAmount', 'finRuleAmount', 'mSvAmount', 'mSvBonus', 'cpnGrantAmount', 'dcNewTotal',
     'kbFactDeposit', 'goalMonth', 'goalYear', 'finTargetMonth', 'finTargetYear', 'spBase', 'spHandwork', 'spOtRate']
   const stillNumber = moneyIds.filter((id) => new RegExp(`id="${id}"[^>]*type="number"`).test(web))
