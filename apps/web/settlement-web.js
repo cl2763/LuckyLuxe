@@ -93,7 +93,7 @@ window.SettlementWeb = (function () {
   async function open(ctx, deps) {
     const { request, escapeHtml, toast, money } = deps
     Object.assign(state, {
-      open: true, ready: false, submitting: false,
+      open: true, ready: false, submitting: false, _scrolled: false,
       bookingId: ctx.bookingId || '', userId: ctx.userId || '', customerName: ctx.customerName || '',
       groups: [], couponGrantId: '', couponOptions: [], couponUsableCount: 0,
       payMenu: { useBalance: false, recharge: false }, preview: null, view: null, pendingSheets: []
@@ -148,10 +148,22 @@ window.SettlementWeb = (function () {
   function render() {
     const mount = document.querySelector('#settlementComposer')
     if (!mount) return
-    if (!state.open) { mount.classList.add('hidden'); mount.innerHTML = ''; return }
+    const page = mount.closest('.admin-page') || mount.parentElement
+    if (!state.open) {
+      mount.classList.add('hidden'); mount.innerHTML = ''
+      if (page) page.classList.remove('settle-open')
+      return
+    }
+    /* 🔴 店主实测「点了没反应」的真相(2026-08-29 修):事件链一直是通的 ——
+       composer 在订单页**顶部**打开,而真店列表 198 单很长,她点的卡在视口下面:
+       开单页在她看不见的地方打开了,眼前画面纹丝不动。我走查用的夹具只有 1 张卡,
+       页面短所以"看着通"(反例数据律:该用长列表验)。
+       修两刀:①开单=一页不是一块 —— 打开时把订单列表整个藏掉(settle-open,与小程序
+       navigateTo 的语义对应);②滚回到 composer,人在哪点的都能看见它。 */
+    if (page) page.classList.add('settle-open')
     mount.classList.remove('hidden')
     const { escapeHtml } = state._deps
-    if (!state.ready) { mount.innerHTML = '<div class="empty-state">加载中…</div>'; return }
+    if (!state.ready) { mount.innerHTML = '<div class="empty-state">加载中…</div>'; window.scrollTo(0, 0); return }
     const v = state.view || {}
     mount.innerHTML = `
       <section class="admin-card settle-composer">
@@ -190,6 +202,7 @@ window.SettlementWeb = (function () {
       </section>
     `
     bind(mount)
+    if (!state._scrolled) { state._scrolled = true; window.scrollTo(0, 0) }   // 开单块就在页顶:直接回顶,不与浏览器滚动锚定打架
   }
 
   function renderGroup(g, gi, escapeHtml) {
@@ -396,7 +409,8 @@ window.SettlementWeb = (function () {
     const btn = event.target.closest('[data-settle-booking]')
     if (!btn) return false
     const bk = (deps.bookings || []).find(function (b) { return b.id === btn.dataset.settleBooking })
-    if (bk) open({ bookingId: bk.id, userId: (bk.user && bk.user.id) || '', customerName: (bk.user && bk.user.displayName) || '', serviceId: (bk.service && bk.service.id) || '' }, deps)
+    if (!bk) { deps.toast('这张单不在当前列表数据里,刷新后再试'); return true }   // 静默失败器族:找不到必须出声
+    open({ bookingId: bk.id, userId: (bk.user && bk.user.id) || '', customerName: (bk.user && bk.user.displayName) || '', serviceId: (bk.service && bk.service.id) || '' }, deps)
     return true
   }
 

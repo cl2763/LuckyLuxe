@@ -180,4 +180,51 @@ check('⑦ 网页开的单 status=pending_sign(只到待签为止)', rowW.status
 const fin = db.prepare("SELECT COUNT(*) n FROM finance_transactions WHERE tenant_id = ? AND source NOT IN ('manual')").get(tid).n
 check('⑦ 签字之前账本一分未记(入账唯一路径=签署,不变)', fin === 0, String(fin))
 
+/* ===== ⑧ 🔴 运行时真点(店主 08-29 退回件):「按钮点击 → 页面打开」必须**真调事件链**,
+   不是查代码里有没有 addEventListener。案底:事件链一直是通的,坏的是**视口** ——
+   composer 在页顶打开而她点的卡在 42,000px 下面,眼前纹丝不动=「点了没反应」。
+   所以这条断言连"打开的效果"一起验:列表让位(settle-open)+ 回顶被调 + 页面内容真渲染。 */
+{
+  const scrollCalls = []
+  const mkClassList = () => { const s2 = new Set(); return { add: (c) => s2.add(c), remove: (c) => s2.delete(c), contains: (c) => s2.has(c) } }
+  const fakePage = { classList: mkClassList() }
+  const fakeMount = {
+    classList: mkClassList(), innerHTML: '',
+    closest: () => fakePage, querySelector: () => null, querySelectorAll: () => [], scrollIntoView: () => {}
+  }
+  const ctx2 = {
+    window: { scrollTo: (x, y) => scrollCalls.push([x, y]) },
+    document: { querySelector: (sel) => (sel === '#settlementComposer' ? fakeMount : null) },
+    clearTimeout, setTimeout
+  }
+  vm.createContext(ctx2)
+  vm.runInContext(readFileSync(new URL('../web/settlement-web.js', import.meta.url), 'utf8'), ctx2)
+  const SW2 = ctx2.window.SettlementWeb
+  const stubRequest = async (p2) => {
+    if (p2.startsWith('/admin/pricing/categories')) return { categories: [{ id: 'c1', name: '美甲' }] }
+    if (p2.startsWith('/admin/pricing/items')) return { items: [] }
+    if (p2.startsWith('/admin/technicians')) return { technicians: [{ id: 't1', name: 'Lina' }] }
+    if (p2.startsWith('/admin/settlements?bookingId')) return { settlements: [] }
+    return {}
+  }
+  const fakeEvent = { target: { closest: (sel) => (sel === '[data-settle-booking]' ? { dataset: { settleBooking: 'bk1' } } : null) } }
+  const toasts = []
+  const handled = SW2.handleClick(fakeEvent, {
+    bookings: [{ id: 'bk1', user: { id: '' }, service: { id: '' } }],
+    request: stubRequest, escapeHtml: (x) => String(x ?? ''), toast: (m2) => toasts.push(m2), money: () => '$0'
+  })
+  await new Promise((r2) => setTimeout(r2, 80))
+  check('🔴 ⑧ 真点:handleClick 认领事件并真的打开了页面(state.open=true,内容渲染出「结算开单」)',
+    handled === true && SW2._state.open === true && fakeMount.innerHTML.includes('结算开单'),
+    JSON.stringify({ handled, open: SW2._state.open, toasts, html: fakeMount.innerHTML.slice(0, 60) }))
+  check('🔴 ⑧ 打开的效果两件:订单列表让位(settle-open)+ 视口回顶(scrollTo 被真调)',
+    fakePage.classList.contains('settle-open') && scrollCalls.length >= 1,
+    JSON.stringify({ settleOpen: fakePage.classList.contains('settle-open'), scrollCalls }))
+  const fakeEventMiss = { target: { closest: (sel) => (sel === '[data-settle-booking]' ? { dataset: { settleBooking: 'nope' } } : null) } }
+  const toasts2 = []
+  SW2.handleClick(fakeEventMiss, { bookings: [], request: stubRequest, escapeHtml: String, toast: (m2) => toasts2.push(m2), money: () => '' })
+  check('⑧ 反向守:找不到那张单时**必须出声**(toast),不许静默吃掉事件装没事',
+    toasts2.length === 1 && /刷新/.test(toasts2[0]), JSON.stringify(toasts2))
+}
+
 console.log(`\n✅ test-web-settlement 通过 ${checks} 项`)
