@@ -1,0 +1,90 @@
+<view class="pg">
+  <view class="hd"><text class="t">账户调整</text><text class="nm">{{name}}</text></view>
+
+  <!-- 四个参考数 + 界限句 + 提示(句子全部后端给,前端零拼串 —— 与网页同一份 facts) -->
+  <block wx:if="{{facts}}">
+    <view class="facts">
+      <view class="fact"><text class="fl">顾客实付累计</text><text class="fv">{{facts.paidText}}</text></view>
+      <view class="fact"><text class="fl">赠送累计</text><text class="fv">{{facts.bonusText}}</text></view>
+      <view class="fact"><text class="fl">已消费</text><text class="fv">{{facts.consumedText}}</text></view>
+      <view class="fact hi"><text class="fl">当前余额</text><text class="fv">{{facts.balanceText}}</text></view>
+    </view>
+    <view class="split">{{facts.splitText}}</view>
+    <view class="hint">{{facts.hint}}</view>
+  </block>
+  <view wx:else class="hint">读取中…</view>
+
+  <!-- 四 tab:充值 / 赠送 / 退卡 / 冲销(与网页同序同名) -->
+  <view class="seg">
+    <view class="segbtn {{tab === 'recharge' ? 'on' : ''}}" data-k="recharge" bindtap="pickTab">充值</view>
+    <view class="segbtn {{tab === 'bonus' ? 'on' : ''}}" data-k="bonus" bindtap="pickTab">赠送</view>
+    <view class="segbtn {{tab === 'refund' ? 'on' : ''}}" data-k="refund" bindtap="pickTab">退卡</view>
+    <view class="segbtn {{tab === 'reversal' ? 'on' : ''}}" data-k="reversal" bindtap="pickTab">冲销</view>
+  </view>
+
+  <!-- 充值/赠送/冲销 = 指路(写口唯一,不在这儿再造一份) -->
+  <view wx:if="{{tab !== 'refund'}}" class="card">
+    <view class="elsewhere">{{elsewhere[tab]}}</view>
+    <view class="gobtn" bindtap="goElsewhere">去那个入口</view>
+  </view>
+
+  <!-- 退卡:储值退 + 次卡退(与网页同形) -->
+  <view wx:else class="card">
+    <view class="sub">
+      <view class="subbtn {{cardId ? '' : 'on'}}" data-id="" bindtap="pickCard">退储值</view>
+      <view class="subbtn {{cardId === c.id ? 'on' : ''}}" wx:for="{{cards}}" wx:for-item="c" wx:key="id" data-id="{{c.id}}" bindtap="pickCard">{{c.name}} · 剩{{c.remaining}}{{c.expired ? ' · 已过期' : ''}}</view>
+    </view>
+
+    <block wx:if="{{!cardId}}">
+      <view class="fld">
+        <text class="fldl">退款金额</text>
+        <input class="in" type="digit" placeholder="0.00" value="{{amount}}" bindinput="onAmount" />
+        <view class="fldem">不得超过当前余额 {{facts.balanceText}}。<text class="link" bindtap="fillAll">全额退(清空)</text></view>
+      </view>
+      <view class="fld">
+        <text class="fldl">退款方式</text>
+        <picker range="{{channels}}" range-key="label" value="{{channelIdx}}" bindchange="onChannel">
+          <view class="pk">{{channels[channelIdx].label}} ›</view>
+        </picker>
+      </view>
+      <view class="fld">
+        <text class="fldl">原因(必填)</text>
+        <input class="in" maxlength="200" placeholder="例:顾客搬去外地,不再来店" value="{{reason}}" bindinput="onReason" />
+        <view class="fldem">会写进这位顾客的账户记录,以后查得到。</view>
+      </view>
+      <view wx:if="{{warning}}" class="warn">{{warning}}</view>
+      <view class="calc">
+        <view class="crow"><text>退款金额</text><text>{{refundText}}</text></view>
+        <view class="crow"><text>本店收入影响</text><text>{{facts.incomeImpactText}}</text></view>
+        <view class="crow tot"><text>退款后余额</text><text>{{afterText}}</text></view>
+      </view>
+      <view class="cta {{busy ? 'ing' : ''}}" bindtap="submitRefund">{{busy ? '提交中…' : '确认退款'}}</view>
+    </block>
+
+    <block wx:else>
+      <view class="facts">
+        <view class="fact"><text class="fl">卡名</text><text class="fv small">{{card.name}}</text></view>
+        <view class="fact"><text class="fl">已核销</text><text class="fv">{{card.usedTimes}} 次</text></view>
+        <view class="fact hi"><text class="fl">剩余</text><text class="fv">{{card.remaining}} 次</text></view>
+      </view>
+      <view class="fld">
+        <text class="fldl">退多少次</text>
+        <input class="in" type="number" placeholder="0" value="{{times}}" bindinput="onTimes" />
+        <view class="fldem">不得超过剩余 {{card.remaining}} 次。退完剩 0 次 = 这张卡作废。</view>
+      </view>
+      <view class="fld">
+        <text class="fldl">退款金额</text>
+        <input class="in" type="digit" placeholder="0.00" value="{{cardAmount}}" bindinput="onCardAmount" />
+      </view>
+      <view class="fld">
+        <text class="fldl">原因(必填)</text>
+        <input class="in" maxlength="200" placeholder="例:顾客要求全退" value="{{reason}}" bindinput="onReason" />
+      </view>
+      <view class="calc">
+        <view class="crow"><text>本店收入影响</text><text>{{facts.incomeImpactText}}</text></view>
+        <view class="crow tot"><text>退款后剩余</text><text>{{leftText}}</text></view>
+      </view>
+      <view class="cta {{busy ? 'ing' : ''}}" bindtap="submitCardRefund">{{busy ? '提交中…' : '确认退卡'}}</view>
+    </block>
+  </view>
+</view>

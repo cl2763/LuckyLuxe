@@ -32,6 +32,8 @@
     <view class="hbtn" bindtap="writeNote">＋ 写服务小记</view>
     <view class="hbtn ghost" bindtap="viewProfile">顾客画像 ›</view>
   </view>
+  <!-- 二.1(店主 08-27 裁「账户调整=双端」):四 tab 与网页同源;本页已 guardOwner,店员进不来 -->
+  <view class="linkbtn" bindtap="accountAdjust">账户调整(充值 / 赠送 / 退卡 / 冲销)</view>
   <view class="linkbtn" bindtap="sendCoupon">给她发一张优惠券</view>
 
   <view class="card">

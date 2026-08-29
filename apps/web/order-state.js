@@ -78,3 +78,35 @@ function bookingActionButtons(booking) {
 function bookingSource(booking) {
   return booking.sourceText || '未记录来源'
 }
+
+/* 员工「我的今天」卡(2026-08-30 从 admin.js 搬来,只搬不改;owner/galleryGroups 等全局运行期解析) */
+function renderStaffTodayTimeline() {
+  const zh = owner.lang === 'zh'
+  const today = (owner.bookings || [])
+    .filter((booking) => isToday(booking.appointmentDate) && booking.status !== 'CANCELLED' && booking.status !== 'EXPIRED')
+    .sort((a, b) => String(a.appointmentTime).localeCompare(String(b.appointmentTime)))
+  // 待传作品/待审核入口放在这里(员工端没有首页,这张卡是员工每天必看的地方)
+  const missingWork = (owner.bookings || []).filter((booking) => booking.status === 'COMPLETED' && !(booking.workImages || []).length && booking.galleryStatus !== 'approved').length
+  const reviewCount = galleryGroups().filter((group) => group.booking.galleryStatus !== 'approved' && (group.images || []).length).length
+  return `
+    <section class="staff-timeline-card card">
+      <div class="section-row compact-row">
+        <h2>${zh ? '我的今天' : 'My Day'}</h2>
+        <div class="staff-day-chips">
+          ${missingWork ? `<button class="staff-day-chip chip-warn" data-admin-page="aiGallery" type="button">📷 ${zh ? '待传作品' : 'Missing photos'} ${missingWork}</button>` : ''}
+          ${reviewCount ? `<button class="staff-day-chip" data-admin-page="aiGallery" type="button">${zh ? '待审核图' : 'For review'} ${reviewCount}</button>` : ''}
+          <span class="subtle">${today.length ? `${today.length} ${zh ? '单' : 'bookings'}` : (zh ? '今天没有预约' : 'No bookings today')}</span>
+        </div>
+      </div>
+      ${today.length ? today.map((booking) => `
+        <div class="staff-timeline-row ${booking.status === 'COMPLETED' ? 'is-done' : ''}">
+          <strong class="stl-time">${booking.appointmentTime}<small>–${booking.appointmentEndTime}</small></strong>
+          <div class="stl-main">
+            <strong>${escapeHtml(booking.user?.displayName || booking.publicCode)}</strong>
+            <span>${escapeHtml(booking.service?.name || '-')} · ${booking.totalDurationMin || ''}${zh ? ' 分钟' : ' min'}</span>
+            ${renderCustomerCare(booking)}
+          </div>
+          <span class="status ${booking.status}">${statusLabel(booking.status, booking)}</span>
+        </div>`).join('') : ''}
+    </section>`
+}

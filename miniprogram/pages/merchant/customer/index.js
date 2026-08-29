@@ -12,6 +12,10 @@ Page({
     const nm = (this.data.c && this.data.c.name) || '顾客'
     wx.navigateTo({ url: `/pages/merchant/service-note/index?userId=${encodeURIComponent(this.id)}&name=${encodeURIComponent(nm)}` })
   },
+  accountAdjust() {
+    const nm = (this.data.c && this.data.c.name) || '顾客'
+    wx.navigateTo({ url: `/pages/merchant/account-adjust/index?userId=${encodeURIComponent(this.id)}&name=${encodeURIComponent(nm)}` })
+  },
   viewProfile() {
     const nm = (this.data.c && this.data.c.name) || '顾客'
     wx.navigateTo({ url: `/pages/merchant/customer-profile/index?userId=${encodeURIComponent(this.id)}&name=${encodeURIComponent(nm)}` })

@@ -1,0 +1,33 @@
+/* 账户调整(与网页 account-adjust 面板同形;视觉沿用商家端既有卡片风) */
+.pg { padding: 24rpx; }
+.hd { display: flex; align-items: baseline; gap: 16rpx; margin-bottom: 20rpx; }
+.hd .t { font-size: 36rpx; font-weight: 700; }
+.hd .nm { font-size: 28rpx; color: #6b645d; }
+.facts { display: flex; gap: 12rpx; margin-bottom: 12rpx; }
+.fact { flex: 1; background: #fff; border: 1rpx solid #ece7e1; border-radius: 10rpx; padding: 14rpx 10rpx; text-align: center; }
+.fact.hi { border-color: #b08d57; }
+.fl { display: block; font-size: 20rpx; color: #9a938c; }
+.fv { display: block; font-size: 28rpx; font-weight: 700; margin-top: 4rpx; }
+.fv.small { font-size: 22rpx; }
+.split, .hint { font-size: 22rpx; color: #9a938c; margin: 6rpx 0; }
+.seg { display: flex; gap: 10rpx; margin: 16rpx 0; }
+.segbtn { flex: 1; text-align: center; padding: 12rpx 0; border: 1rpx solid #ece7e1; border-radius: 10rpx; font-size: 26rpx; background: #fff; }
+.segbtn.on { background: #2d2a26; color: #fff; border-color: #2d2a26; }
+.card { background: #fff; border: 1rpx solid #ece7e1; border-radius: 12rpx; padding: 20rpx; }
+.sub { display: flex; flex-wrap: wrap; gap: 10rpx; margin-bottom: 16rpx; }
+.subbtn { padding: 8rpx 20rpx; border: 1rpx solid #ece7e1; border-radius: 16rpx; font-size: 24rpx; }
+.subbtn.on { background: #2d2a26; color: #fff; border-color: #2d2a26; }
+.fld { margin: 16rpx 0; }
+.fldl { font-size: 24rpx; color: #6b645d; display: block; margin-bottom: 6rpx; }
+.in { border: 1rpx solid #ece7e1; border-radius: 8rpx; padding: 12rpx 16rpx; font-size: 28rpx; }
+.pk { border: 1rpx solid #ece7e1; border-radius: 8rpx; padding: 12rpx 16rpx; font-size: 26rpx; }
+.fldem { font-size: 20rpx; color: #9a938c; margin-top: 6rpx; }
+.link { color: #b08d57; }
+.warn { border-left: 4rpx solid #b08d57; background: rgba(176,141,87,.08); padding: 10rpx 14rpx; font-size: 22rpx; color: #6b5432; margin: 10rpx 0; }
+.calc { border-top: 1rpx solid #ece7e1; margin-top: 14rpx; padding-top: 10rpx; }
+.crow { display: flex; justify-content: space-between; font-size: 26rpx; padding: 4rpx 0; }
+.crow.tot { font-weight: 700; font-size: 28rpx; }
+.cta { margin-top: 16rpx; background: #2d2a26; color: #fff; border-radius: 10rpx; text-align: center; padding: 18rpx 0; font-size: 28rpx; }
+.cta.ing { opacity: .6; }
+.elsewhere { font-size: 26rpx; color: #6b645d; line-height: 1.6; }
+.gobtn { margin-top: 16rpx; border: 1rpx solid #2d2a26; border-radius: 10rpx; text-align: center; padding: 14rpx 0; font-size: 26rpx; }

@@ -2370,13 +2370,10 @@ async function renderDailyCloseJump() {
       <span>${zh ? '待日结' : 'To close'} <b>${pending}</b> ${zh ? '单' : ''}${unsigned ? `(${zh ? '另有' : 'plus'} ${unsigned} ${zh ? '张待顾客签字' : 'unsigned'})` : ''}
         · ${escapeHtml(dc.date)}${dc.status === 'confirmed' ? (zh ? ' · 已确认' : ' · confirmed') : ''}</span>
       <button class="primary slim" id="dcJumpGo" type="button">${zh ? '去日结' : 'Go'}</button>`
-    const go = bar.querySelector('#dcJumpGo')
-    if (go) go.addEventListener('click', () => {
+    bar.querySelector('#dcJumpGo')?.addEventListener('click', () => {
       owner.adminPage = 'finance'
       render()
-      loadFinancePage()
-        .then(() => document.querySelector('#finNavDailyClose')?.click())
-        .catch((error) => toast(error.message))
+      loadFinancePage().then(() => document.querySelector('#finNavDailyClose')?.click()).catch((error) => toast(error.message))
     })
   } catch { bar.classList.add('hidden') }
 }
@@ -4189,6 +4186,13 @@ function renderBookings() {
     return
   }
 
+  // 「今天」= 小程序今日台面同款网格(骨=同一条 /admin/schedule-day;整条链住 /web/today-board.js,含点块回跳)
+  if (owner.adminView === 'today') {
+    window.TodayBoard.mountInto(els.bookingList, { request, escapeHtml, toast, storeToday,
+      openBooking: (id) => { owner.adminView = 'all'; owner.selectedBookingId = id; renderBookings() } })
+    return
+  }
+
   const staffTimeline = !isOwnerRole() ? renderStaffTodayTimeline() : ''
   const bookings = filteredBookings()
   if (!bookings.length) {
@@ -4259,37 +4263,7 @@ function renderCustomerCare(booking) {
 }
 
 // 员工端:我的今日时间线——按时间排今天自己的单,一眼看完该知道的事
-function renderStaffTodayTimeline() {
-  const zh = owner.lang === 'zh'
-  const today = (owner.bookings || [])
-    .filter((booking) => isToday(booking.appointmentDate) && booking.status !== 'CANCELLED' && booking.status !== 'EXPIRED')
-    .sort((a, b) => String(a.appointmentTime).localeCompare(String(b.appointmentTime)))
-  // 待传作品/待审核入口放在这里(员工端没有首页,这张卡是员工每天必看的地方)
-  const missingWork = (owner.bookings || []).filter((booking) => booking.status === 'COMPLETED' && !(booking.workImages || []).length && booking.galleryStatus !== 'approved').length
-  const reviewCount = galleryGroups().filter((group) => group.booking.galleryStatus !== 'approved' && (group.images || []).length).length
-  return `
-    <section class="staff-timeline-card card">
-      <div class="section-row compact-row">
-        <h2>${zh ? '我的今天' : 'My Day'}</h2>
-        <div class="staff-day-chips">
-          ${missingWork ? `<button class="staff-day-chip chip-warn" data-admin-page="aiGallery" type="button">📷 ${zh ? '待传作品' : 'Missing photos'} ${missingWork}</button>` : ''}
-          ${reviewCount ? `<button class="staff-day-chip" data-admin-page="aiGallery" type="button">${zh ? '待审核图' : 'For review'} ${reviewCount}</button>` : ''}
-          <span class="subtle">${today.length ? `${today.length} ${zh ? '单' : 'bookings'}` : (zh ? '今天没有预约' : 'No bookings today')}</span>
-        </div>
-      </div>
-      ${today.length ? today.map((booking) => `
-        <div class="staff-timeline-row ${booking.status === 'COMPLETED' ? 'is-done' : ''}">
-          <strong class="stl-time">${booking.appointmentTime}<small>–${booking.appointmentEndTime}</small></strong>
-          <div class="stl-main">
-            <strong>${escapeHtml(booking.user?.displayName || booking.publicCode)}</strong>
-            <span>${escapeHtml(booking.service?.name || '-')} · ${booking.totalDurationMin || ''}${zh ? ' 分钟' : ' min'}</span>
-            ${renderCustomerCare(booking)}
-          </div>
-          <span class="status ${booking.status}">${statusLabel(booking.status, booking)}</span>
-        </div>`).join('') : ''}
-    </section>`
-}
-
+// renderStaffTodayTimeline(员工「我的今天」卡)搬到 /web/order-state.js(2026-08-30 边改边拆)
 function renderBookingCard(booking) {
   // D51:需关注含售后中(售后是当前最要紧的状态)
   const needsAttention = activeStatuses().includes(booking.status) || isAfterSalesOpen(booking)

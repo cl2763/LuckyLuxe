@@ -166,9 +166,10 @@ const NOT_MONEY_NUMBER = {
   'pages/merchant/package-edit/index.wxml:times': '次卡包含次数 —— 计数',
   'pages/merchant/staff/index.wxml:sheet.orders': '单数目标 —— 计数',
   'pages/merchant/orders/index.wxml:shares[p.id + \'|\' + t.id]': '分成百分比 —— 百分数不是金额',
-  'pages/merchant/daily-close/index.wxml:shares[p.id + \'|\' + t.id]': '同上(日结页是同一份 mixin 的第二个落点)'
+  'pages/merchant/daily-close/index.wxml:shares[p.id + \'|\' + t.id]': '同上(日结页是同一份 mixin 的第二个落点)',
+  'pages/merchant/account-adjust/index.wxml:times': '退次卡「退多少次」—— 计数不是金额(退款金额另有 digit 框);2026-08-30 二.1 新增,棘轮 9→10 随批报 Cowork'
 }
-const NUMBER_CAP = 9
+const NUMBER_CAP = 10
 const numberInputs = allTags.filter((t) => t.type === 'number').map((t) => `${t.page}:${t.valueExpr}`)
 const notWhitelisted = numberInputs.filter((k) => !(k in NOT_MONEY_NUMBER))
 check(`③ 白名单式:全仓 ${numberInputs.length} 个 type="number" 逐个落在「不是金额」白名单里(新来的自动红)`,
