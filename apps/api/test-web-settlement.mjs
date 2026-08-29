@@ -233,4 +233,25 @@ check('⑦ 签字之前账本一分未记(入账唯一路径=签署,不变)', fi
     toasts2.length === 1 && /刷新/.test(toasts2[0]), JSON.stringify(toasts2))
 }
 
+/* ===== ⑨ 🔴 多租户生效证明(店主 08-29 一问:「是不是所有商家都生效?」不许只答"是")=====
+   ①零租户硬编码:白名单式扫开单前端模块与路由模块的租户字面量 —— 任何真实租户 id / 店名
+   出现在代码里都红(除非进白名单并写理由;白名单现为空)。
+   ②行为面:本套件全程跑在临时新建店上(tid=wsttl-RUN),从没碰过任何真实租户 ——
+   一家刚建的店能全流程走通,本身就是"不认店"的行为证明。 */
+{
+  const TENANT_LITERALS = ['lucky-luxe', 'jics-nail', 'jics', 'jienail', 'Lucky Luxe', "Jie's Nail", '小婕', 'demo-ai', 'demo-basic', 'hoptest']
+  const HARDCODE_ALLOW = {}   // 白名单空:一处都不许有;要加先报 Cowork 并写理由
+  const scanFiles = ['../web/settlement-web.js', './settlement-routes.mjs']
+  const stripJs2 = (t) => t.replace(/\/\*[\s\S]*?\*\//g, '').replace(/\/\/[^\n]*/g, '')
+  const hits = []
+  for (const f of scanFiles) {
+    const src = stripJs2(readFileSync(new URL(f, import.meta.url), 'utf8'))
+    for (const lit of TENANT_LITERALS) {
+      if (src.includes(lit) && !(`${f}|${lit}` in HARDCODE_ALLOW)) hits.push(`${f}:${lit}`)
+    }
+  }
+  check('🔴 ⑨ 多租户①:开单前端模块与路由模块零租户硬编码(剥注释扫,白名单空)', hits.length === 0, hits.join(' | '))
+  check('⑨ 多租户②:本套件所有断言都跑在临时新建店上(从没碰真实租户)—— 新店全流程走通 = 不认店', tid.startsWith('wsttl-'))
+}
+
 console.log(`\n✅ test-web-settlement 通过 ${checks} 项`)
