@@ -13802,10 +13802,13 @@ async function route(req, res) {
       const weekday = localDateTime(dateStr, '12:00').getDay()
       const hours = db.prepare('SELECT * FROM business_hours WHERE store_id = ? AND weekday = ?').get(storeId, weekday)
       const special = specialDateFor(storeId, dateStr)
+      // D84 同族第二处:未设置 ≠ 休息(口径同 schedule-day)
+      const wkUnset = !special && !hours && !db.prepare('SELECT 1 FROM business_hours WHERE store_id = ? LIMIT 1').get(storeId)
       days.push({
         date: dateStr,
         weekday,
-        isClosed: special ? Boolean(special.is_closed) : (!hours || Boolean(hours.is_closed)),
+        hoursUnset: wkUnset,
+        isClosed: special ? Boolean(special.is_closed) : (wkUnset ? false : (!hours || Boolean(hours.is_closed))),
         openTime: (special && !special.is_closed && special.open_time) || hours?.open_time || '10:00',
         closeTime: (special && !special.is_closed && special.close_time) || hours?.close_time || '19:00',
         specialNote: special?.note || (special ? (special.is_closed ? '特殊休息' : '特殊时段') : '')
@@ -13843,7 +13846,14 @@ async function route(req, res) {
     const weekday = localDateTime(date, '12:00').getDay()
     const hours = db.prepare('SELECT * FROM business_hours WHERE store_id = ? AND weekday = ?').get(storeId, weekday)
     const special = specialDateFor(storeId, date)
-    const isClosed = special ? Boolean(special.is_closed) : (!hours || Boolean(hours.is_closed))
+    /* 🔴 D84(店主 2026-08-29 自诊出的真根因):原来这里 `!hours ||` 把「business_hours 没有这一行
+       (= 从来没设置过营业时间)」静默判成「休息」—— 一个缺失配置无声吞掉整个台面功能面,
+       还给了误导性文案(明明是没设置,却说本日休息)。静默失败器族(`|| 默认值` 变体)。
+       三态口径(空态律:空态说真话):设置了且当天休 → isClosed;**整店从没设置过 → hoursUnset**
+       (两端渲染引导墙「还没设置营业时间」+ 直达设置);休息态只留给真休息。
+       参照 isClosedDay(D34)早就写对的口径:「没配过排班的店不算休息」。 */
+    const hoursUnset = !special && !hours && !db.prepare('SELECT 1 FROM business_hours WHERE store_id = ? LIMIT 1').get(storeId)
+    const isClosed = special ? Boolean(special.is_closed) : (hoursUnset ? false : (!hours || Boolean(hours.is_closed)))
     const openTime = (special && !special.is_closed && special.open_time) || hours?.open_time || '10:00'
     const closeTime = (special && !special.is_closed && special.close_time) || hours?.close_time || '19:00'
     const allTechs = db.prepare('SELECT id, name, title, is_active FROM technicians WHERE tenant_id = ? ORDER BY is_active DESC, name ASC').all(tid)
@@ -13909,7 +13919,7 @@ async function route(req, res) {
     const activeCount = bookings.filter((b) => b.arrivalState === 'active').length
     const pendingCount = bookings.filter((b) => b.arrivalState === 'pending').length
     return json(res, 200, {
-      date, weekday, isClosed, openTime, closeTime,
+      date, weekday, isClosed, hoursUnset, openTime, closeTime,
       specialNote: special?.note || '',
       technicians,
       bookings,

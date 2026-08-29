@@ -36,8 +36,23 @@ const servedTb = await fetch(`${BASE_URL}/web/today-board.js`).then((r) => r.tex
 const tbCode = stripJs(servedTb)
 check('🔴 ① 骨同源:网页台面调同一条 /admin/schedule-day(与小程序 loadDayView 同口)',
   tbCode.includes('/admin/schedule-day?date='))
-check('① 不许另起数据口:模块里除 schedule-day 外零 /admin 调用',
-  (tbCode.match(/\/admin\//g) || []).length === 1, String((tbCode.match(/\/admin\//g) || []).length))
+/* 08-30 死口清剿·三接回后,台面多了「空档直排面板」——白名单式升级(判据三律·三):
+   每条 /admin 调用必须落进白名单并写明理由,新冒出来的自动红;条数上下都钉死。 */
+{
+  const TB_API_ALLOW = {
+    '/admin/schedule-day?date=': '骨同源:台面唯一数据口(与小程序 loadDayView 同条)',
+    '/admin/customers?q=': '直排面板顾客搜索(复用客户档案同一读口,不另造)',
+    '/admin/bookings/direct': '直排面板落单(与老板代排同一写口,不另造)',
+    '/admin/pricing/items': '直排面板服务 chips(与开单页同一价目读口,不另造)'
+  }
+  const calls = tbCode.match(/\/admin\/[A-Za-z0-9/?=&_-]*/g) || []
+  const outside = calls.filter((c) => !Object.keys(TB_API_ALLOW).some((k) => c.startsWith(k.replace(/\?.*$/, ''))))
+  check('① 数据口白名单:台面模块每条 /admin 调用都在白名单里(超出即红)', outside.length === 0, outside.join(' | '))
+  for (const k of Object.keys(TB_API_ALLOW)) {
+    check(`① 白名单条目仍在用:${k}(${TB_API_ALLOW[k].slice(0, 18)}…)`, calls.some((c) => c.startsWith(k.replace(/\?.*$/, ''))), k)
+  }
+  check('① 条数钉死:/admin 调用恰 4 条(缩水或新增都要来对表)', calls.length === 4, String(calls.length))
+}
 
 /* ===== ② 几何口径同参(与小程序 loadDayView 逐条对) ===== */
 const miniOrders = stripJs(readFileSync(new URL('../../miniprogram/pages/merchant/orders/index.js', import.meta.url), 'utf8'))

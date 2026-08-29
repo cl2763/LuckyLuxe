@@ -25,7 +25,13 @@
     </view>
     <!-- D2:台面空态与日结自洽 —— 「本日休息」但日结里有单时,这里就把原因说出来,
          别让店主在两个地方看到互相矛盾的两句话(文案后端下发)。 -->
-    <view wx:if="{{dv && dv.isClosed}}" class="dv-closed">
+    <!-- D84(店主自诊):未设置营业时间 ≠ 休息 —— 引导墙说真话,直达设置(店铺页) -->
+    <view wx:if="{{dv && dv.hoursUnset}}" class="dv-setupwall">
+      <view class="dv-sw-t">还没设置营业时间</view>
+      <view class="dv-sw-p">设置营业时间后,今天台面、排班表和顾客可约时段才会亮起来 —— 没设置不等于休息。</view>
+      <view class="dv-sw-btn" bindtap="goHoursSetup">去设置营业时间</view>
+    </view>
+    <view wx:elif="{{dv && dv.isClosed}}" class="dv-closed">
       本日休息{{dv.specialNote ? ' · ' + dv.specialNote : ''}}
       <!-- D34(2026-08-12):休息日不可开单已成口径 —— 历史单照服务发生日留痕,提示改写;
            旧称谓字样按口径变更全仓移除。 -->

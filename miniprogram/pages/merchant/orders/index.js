@@ -478,6 +478,7 @@ Page(Object.assign({
           // D3:当期才叫「今天」,翻走了要叫「返回今天」;D5:日期上直接标出今天
           isToday: date === todayStr(),
           todayTag: date === todayStr() ? '今天' : '',
+          hoursUnset: Boolean(r.hoursUnset),   // D84 三态:未设置 ≠ 休息(空态说真话)
           isClosed: r.isClosed, specialNote: r.specialNote || '', openTime: r.openTime, closeTime: r.closeTime,
           gridH, colW: 190, hours, total: (r.bookings || []).length, working: cols.length,
           freeHours: Math.round(freeTotal / 60 * 10) / 10, activeCount: r.activeCount || 0, cols
@@ -492,6 +493,7 @@ Page(Object.assign({
     this.loadClose(date)
   },
   scrollToClose() { wx.pageScrollTo({ selector: '#dcBlock', duration: 260 }) },
+  goHoursSetup() { wx.navigateTo({ url: '/pages/merchant/store/index' }) },
   dvPrev() { this.loadDayView(addDays(this.data.selDate || todayStr(), -1)) },
   dvNext() { this.loadDayView(addDays(this.data.selDate || todayStr(), 1)) },
   dvToday() { this.loadDayView(todayStr()) },

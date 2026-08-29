@@ -1,6 +1,6 @@
 // 构建号:每次交付递增。侧栏可见,排查"改了没生效"时先对版本。
 // 兜底用(服务端会注入 window.LL_BUILD = 资源内容指纹,页面优先显示那个)
-const ADMIN_BUILD = '20260827a-n5v12'
+const ADMIN_BUILD = '20260830b-dk3'
 let pricingState = { module: 'storefront', tab: 'items', categories: [], items: [], rules: {}, editing: null, preview: null, storefrontPicker: false }
 console.log(`[admin] build ${ADMIN_BUILD}`)
 
@@ -2742,7 +2742,7 @@ function renderFinancePayroll() {
           await request('/admin/staff-nudges', { method: 'POST', body: JSON.stringify({
             technicianId: btn.dataset.reviewNudge,
             type: 'service-note',
-            message: zh ? '你有已完成的订单还没写服务小记,记得在小程序里补一下哦~' : 'You have completed orders missing service notes — please add them in the mini app.'
+            message: zh ? '你有已完成的订单还没写服务小记,记得在小程序或网页「我的客人」里补一下哦~' : 'You have completed orders missing service notes — please add them in the mini app or on the web under "My Customers".'
           }) })
           toast(zh ? `已提醒 ${btn.dataset.reviewName}(员工小程序主页会显示横幅)` : 'Nudged')
         } catch (error) { toast(error.message) }
@@ -4189,7 +4189,7 @@ function renderBookings() {
   // 「今天」= 小程序今日台面同款网格(骨=同一条 /admin/schedule-day;整条链住 /web/today-board.js,含点块回跳)
   if (owner.adminView === 'today') {
     window.TodayBoard.mountInto(els.bookingList, { request, escapeHtml, toast, storeToday,
-      openBooking: (id) => { owner.adminView = 'all'; owner.selectedBookingId = id; renderBookings() } })
+      openBooking: (id) => jumpToBooking(id) })
     return
   }
 
@@ -4218,6 +4218,20 @@ function renderBookings() {
 /* AI/客服域(微信客服工作台:取数/状态/渲染 22 个函数)已搬出到 /web/ai-desk.js(甲线,2026-08-25)。
    订单状态与动作表达域(statusLabel/筛选判定/售后只读区/动作钮)已搬出到 /web/order-state.js
    (公约②「边改边拆」,2026-08-24;admin.html 先加载它) */
+
+/* 🔴 店主 08-29 实测:日历翻到 08-27 点单 → 跳「全部预约」什么都没有。
+   两个缺:深链不带日期(原来还把 filterDate 清空)、落地不滚动定位。
+   统一出口:凡"跳到某一单",落地即筛到**该单的日期**、展开详情、滚动到那张卡。 */
+function jumpToBooking(id) {
+  const bk = (owner.bookings || []).find((b) => b.id === id)
+  owner.selectedBookingId = id
+  owner.adminPage = 'bookings'
+  owner.adminView = 'all'
+  els.filterDate.value = bk ? bk.appointmentDate : ''
+  els.filterStatus.value = 'all'
+  render()
+  setTimeout(() => document.querySelector(`#bk-${CSS.escape(id)}`)?.scrollIntoView({ block: 'start' }), 60)
+}
 
 function filteredBookings() {
   const status = owner.adminView === 'today' ? 'all' : (els.filterStatus.value || 'all')
@@ -4269,7 +4283,7 @@ function renderBookingCard(booking) {
   const needsAttention = activeStatuses().includes(booking.status) || isAfterSalesOpen(booking)
   const isOpen = owner.selectedBookingId === booking.id
   return `
-    <article class="booking-item">
+    <article class="booking-item" id="bk-${booking.id}">
       ${window.ImgPlaceholder.tag(booking.service.imageUrl, { className: 'booking-image', alt: booking.service.name, zh: owner.lang === 'zh' })}
       <div class="booking-copy">
         <span class="status ${booking.status}">${statusLabel(booking.status, booking)}</span>${!booking.afterSalesStatus && booking.listBadgeText ? ` <span class="status order-badge badge-${booking.listBadgeKind}">${escapeHtml(booking.listBadgeText)}</span>` : ''}
@@ -5056,7 +5070,7 @@ function loadCustomerNotes(customerId) {
         ${groups.length
           ? `<div class="customer-tags" style="flex-wrap:wrap;gap:6px;margin-bottom:6px">${groups.map(([label, items, danger]) =>
               `<span class="subtle" style="margin:0 2px 0 6px${danger ? ';color:#b0483c;font-weight:700' : ''}">${label}</span>${items.map((x) => tag(x, danger)).join('')}`).join('')}</div>`
-          : `<p class="subtle">${zh ? '还没有画像标签。技师在小程序完成订单时写服务小记,画像会自动生成。' : 'No profile yet — technicians add notes in the mini app when completing orders.'}</p>`}
+          : `<p class="subtle">${zh ? '还没有画像标签。技师写服务小记(小程序或网页「我的客人」)后,画像会自动生成。' : 'No profile yet — technicians add service notes (mini app, or "My Customers" on web) when completing orders.'}</p>`}
         ${stats.length ? `<p class="subtle">${stats.join(' · ')}</p>` : ''}
         ${notes.length ? notes.map((n) => `
           <div class="finance-rule-row" style="align-items:flex-start">
@@ -5634,12 +5648,7 @@ els.adminLayout.addEventListener('click', (event) => {
   if (window.SettlementWeb.handleClick(event, { bookings: owner.bookings, request, escapeHtml, toast, money, onClose: () => renderBookings() })) return   // 去结算整条链在 /web/settlement-web.js
   const bookingDetailButton = event.target.closest('[data-view-booking]')
   if (bookingDetailButton) {
-    owner.selectedBookingId = bookingDetailButton.dataset.viewBooking
-    owner.adminPage = 'bookings'
-    owner.adminView = 'all'
-    els.filterDate.value = ''
-    els.filterStatus.value = 'all'
-    render()
+    jumpToBooking(bookingDetailButton.dataset.viewBooking)
     return
   }
   const pageButton = event.target.closest('[data-admin-page]')

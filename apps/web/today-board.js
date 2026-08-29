@@ -20,7 +20,7 @@ window.TodayBoard = (function () {
   const pad = (n) => String(n).padStart(2, '0')
   const m2t = (m) => `${pad(Math.floor(m / 60))}:${pad(m % 60)}`
 
-  let stateT = { date: '', dv: null, deps: null }
+  let stateT = { date: '', dv: null, deps: null, free: null }   // free = 空档直排面板 { techId, time, q, hits, userId, name, newName, serviceId }
 
   async function load(date, deps) {
     stateT.deps = deps
@@ -80,6 +80,7 @@ window.TodayBoard = (function () {
     return {
       date, dateText: `${d.getMonth() + 1}月${d.getDate()}日 周${WK[d.getDay()]}`,
       isToday: date === todayStr,
+      hoursUnset: Boolean(r.hoursUnset),   // D84 三态:未设置 ≠ 休息
       isClosed: r.isClosed, specialNote: r.specialNote || '',
       gridH, hours, cols,
       total: (r.bookings || []).length, working: cols.length,
@@ -100,7 +101,12 @@ window.TodayBoard = (function () {
         <button class="tb-nav" data-tb-next type="button">›</button>
         <button class="tb-today ${dv.isToday ? 'cur' : ''}" data-tb-today type="button">${dv.isToday ? '今天' : '返回今天'}</button>
       </div>
-      ${dv.isClosed ? `<div class="tb-closed">本日休息${dv.specialNote ? ' · ' + escapeHtml(dv.specialNote) : ''}</div>` : `
+      ${dv.hoursUnset ? `
+      <div class="tb-setup-wall">
+        <strong>还没设置营业时间</strong>
+        <p>设置营业时间后,今天台面、排班表和顾客可约时段才会亮起来 —— 没设置不等于休息。</p>
+        <button class="primary slim" data-tb-setup type="button">去设置营业时间</button>
+      </div>` : dv.isClosed ? `<div class="tb-closed">本日休息${dv.specialNote ? ' · ' + escapeHtml(dv.specialNote) : ''}</div>` : `
       <div class="tb-summary">
         <span class="tb-pill">今日 <b>${dv.total}</b> 单</span>
         ${dv.activeCount ? `<span class="tb-pill live">在做 <b>${dv.activeCount}</b> 人</span>` : ''}
@@ -150,7 +156,30 @@ window.TodayBoard = (function () {
       <div class="tb-legend">淡色=未到 · <i class="tb-sdot active">●</i>进行中 · <i class="tb-sdot done">✓</i>完成 · 点空档=直接排单</div>
       ` : '<div class="empty-state">本日无在岗技师</div>'}`}
     `
+    if (stateT.free) mount.insertAdjacentHTML('beforeend', renderFreePanel(escapeHtml))
     bind(mount)
+  }
+
+  /* 空档「+ 直接排单」= 小程序 tapFree 的直排面板同功能(死口清剿三.1:不再指小程序)。
+     同一条后端路由 POST /admin/bookings/direct;技师与时间就是点的那个空档。 */
+  function renderFreePanel(escapeHtml) {
+    const f = stateT.free
+    const tech = (stateT.dv.cols.find(function (c) { return c.id === f.techId }) || {})
+    const services = (stateT._services || []).filter(function (i) { return (i.itemKind || 'main') === 'main' })
+    return `
+      <div class="sw-cpnmask" data-tbf-close></div>
+      <div class="sw-cpnsheet">
+        <div class="sw-ch">直接排单 · ${escapeHtml(tech.name || '')} · ${escapeHtml(stateT.date)} ${escapeHtml(f.time)}</div>
+        <div class="sw-sec">顾客(搜现有,或直接填新客姓名)</div>
+        <input class="sw-in full" data-tbf-q placeholder="搜姓名 / 手机号,或直接填新客姓名" value="${escapeHtml(f.q || '')}">
+        ${(f.hits || []).map(function (h) { return `<button class="sw-cpn ${f.userId === h.id ? 'on' : ''}" data-tbf-pick="${escapeHtml(h.id)}" data-name="${escapeHtml(h.displayName)}" type="button"><span class="l"><span class="n">${escapeHtml(h.displayName)}</span><span class="s">${escapeHtml(h.phoneMasked || '')}</span></span></button>` }).join('')}
+        ${f.userId ? `<p class="sw-grppicked">已选:${escapeHtml(f.name)}(再点搜索结果可换)</p>` : (f.q ? `<p class="sw-hint-line">没选中现有顾客时,「${escapeHtml(f.q)}」将按**新客**建档排单</p>` : '')}
+        <div class="sw-sec">服务项目</div>
+        <div class="sw-chiprow">
+          ${services.map(function (i) { return `<button class="sw-chip ${f.serviceId === i.id ? 'on' : ''}" data-tbf-svc="${escapeHtml(i.id)}" type="button">${escapeHtml(i.nameZh || i.name)}</button>` }).join('')}
+        </div>
+        <button class="sw-cta" data-tbf-submit type="button">排进 ${escapeHtml(f.time)} 这个空档</button>
+      </div>`
   }
 
   function bind(mount) {
@@ -159,6 +188,7 @@ window.TodayBoard = (function () {
     mount.querySelector('[data-tb-next]')?.addEventListener('click', function () { load(shift(stateT.date, 1), deps) })
     mount.querySelector('[data-tb-today]')?.addEventListener('click', function () { load(deps.storeToday(), deps) })
     mount.querySelector('[data-tb-close]')?.addEventListener('click', function () { deps.goDailyClose() })
+    mount.querySelector('[data-tb-setup]')?.addEventListener('click', function () { deps.goHoursSetup() })
     mount.querySelectorAll('[data-tb-block]').forEach(function (el) {
       /* 点块 = 打开该单(与小程序 tapBlock 出操作面板同一动作数:1 下)——
          去结算按钮仍在展开的订单卡上原位(后端 settleAction 出,店主刚学会的那个位置) */
@@ -166,6 +196,41 @@ window.TodayBoard = (function () {
     })
     mount.querySelectorAll('[data-tb-free]').forEach(function (el) {
       el.addEventListener('click', function () { deps.onFreeSlot(el.dataset.tbFree, el.dataset.time, stateT.date) })
+    })
+    mount.querySelector('[data-tbf-close]')?.addEventListener('click', function () { stateT.free = null; render() })
+    mount.querySelector('[data-tbf-q]')?.addEventListener('input', function (e2) {
+      const f = stateT.free
+      f.q = e2.target.value; f.userId = ''
+      clearTimeout(stateT._ft)
+      stateT._ft = setTimeout(async function () {
+        const q = f.q.trim()
+        if (!q) { f.hits = []; render(); return }
+        const r = await deps.request(`/admin/customers?q=${encodeURIComponent(q)}`).catch(function () { return { customers: [] } })
+        f.hits = (r.customers || []).slice(0, 5).map(function (c) { return { id: c.id, displayName: c.displayName, phoneMasked: c.phoneMasked || '' } })
+        render()
+        const box = mount.ownerDocument.querySelector('[data-tbf-q]')
+        if (box) { box.focus(); box.setSelectionRange(box.value.length, box.value.length) }
+      }, 300)
+    })
+    mount.querySelectorAll('[data-tbf-pick]').forEach(function (el) {
+      el.addEventListener('click', function () { stateT.free.userId = el.dataset.tbfPick; stateT.free.name = el.dataset.name; render() })
+    })
+    mount.querySelectorAll('[data-tbf-svc]').forEach(function (el) {
+      el.addEventListener('click', function () { stateT.free.serviceId = el.dataset.tbfSvc; render() })
+    })
+    mount.querySelector('[data-tbf-submit]')?.addEventListener('click', async function () {
+      const f = stateT.free
+      if (!f.serviceId) { deps.toast('先选服务项目'); return }
+      if (!f.userId && !f.q.trim()) { deps.toast('选一位顾客,或填新客姓名'); return }
+      try {
+        const body = { serviceId: f.serviceId, technicianId: f.techId, date: stateT.date, time: f.time }
+        if (f.userId) body.userId = f.userId
+        else body.newCustomerName = f.q.trim()
+        await deps.request('/admin/bookings/direct', { method: 'POST', body: JSON.stringify(body) })
+        deps.toast('已排进空档 —— 点这个块可去结算')
+        stateT.free = null
+        load(stateT.date, deps)
+      } catch (e2) { deps.toast((e2 && e2.message) || '排单失败') }
     })
   }
 
@@ -176,13 +241,24 @@ window.TodayBoard = (function () {
   }
 
   /* 接线收在模块里(棘轮:admin.js 只留 4 行转发):容器 + 缺省 deps 一次装配。
-     「待日结」不重复出 pill —— 订单页顶的直达条(dcJumpBar)本来就在;空档点排=网页版登记待排。 */
+     「待日结」不重复出 pill —— 订单页顶的直达条(dcJumpBar)本来就在;空档点排=本端直排面板(renderFreePanel)。 */
   function mountInto(listEl, deps) {
     listEl.innerHTML = '<div id="todayBoard"></div>'
     load(deps.storeToday(), Object.assign({
       pendingCloseCount: 0,
+      goHoursSetup: function () {
+        const btn = [].slice.call(document.querySelectorAll('button')).find(function (x) { return x.dataset.adminPage === 'storeSettings' || x.textContent.trim() === '门店设置' })
+        if (btn) btn.click()
+      },
       goDailyClose: function () { document.querySelector('#dcJumpGo')?.click() },
-      onFreeSlot: function (techId, time, date) { deps.toast(`${date} ${time} · 直接排单走小程序台面(网页版登记待排)`) }
+      onFreeSlot: async function (techId, time) {
+        if (!stateT._services) {
+          const r = await deps.request('/admin/pricing/items').catch(function () { return { items: [] } })
+          stateT._services = (r.items || []).filter(function (i) { return i.isActive !== false })
+        }
+        stateT.free = { techId, time, q: '', hits: [], userId: '', name: '', serviceId: '' }
+        render()
+      }
     }, deps))
   }
 

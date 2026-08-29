@@ -57,27 +57,41 @@ vm.createContext(ctx)
 vm.runInContext(readFileSync(new URL('../web/settlement-web.js', import.meta.url), 'utf8'), ctx)
 const SW = ctx.window.SettlementWeb
 check('前置:网页模块加载成功且 buildBody/buildSheets 可独立调用(纯函数,不碰 DOM)', typeof SW.buildBody === 'function' && typeof SW.newGroup === 'function')
+/* 08-30 走查现测咬出的双端默认值分叉:小程序 payMenu 默认勾储值(index.js L68),网页原默认不勾 →
+   同一单两端默认差额不同(金额类分叉)。合同=小程序屏 → 默认必须同为 true,常驻守住。 */
+check('🔴 默认勾储值与小程序一致(payMenu.useBalance 初始=true,金额类分叉不许回潮)', SW._state.payMenu.useBalance === true, JSON.stringify(SW._state.payMenu))
 
-/* 小程序 formBody 的同形构造(从 groupSheets/formBody 逐字段抄的期望形状) */
-function miniFormBody({ bookingId, userId, groups, payMenu = { useBalance: false, recharge: false }, depositApplied = true, couponGrantId = '' }) {
+/* 小程序 formBody 的同形构造(从 groupSheets/formBody **逐字段逐序**抄的期望形状;
+   死口清剿·三(08-30)接回随单充值/现场购卡/编号分配后,镜面同步补齐 —— 字段序也照抄:
+   JSON.stringify 深比对是序敏感的,镜面漏序=判据自己先说谎) */
+function miniFormBody({ bookingId, userId, groups, payMenu = { useBalance: false, recharge: false }, depositApplied = true, couponGrantId = '', rvDraft = null, applyFootSurcharge = false, applyTipReuse = false }) {
   const payIntent = !payMenu.useBalance ? 'offline_full' : (payMenu.recharge ? 'recharge_then_balance' : 'balance_plus_offline')
   return {
     bookingId: bookingId || undefined, userId: userId || undefined,
     payerUserId: userId || undefined, cardOwnerUserId: userId || undefined,
     payIntent,
-    settlements: groups.map((g, i) => ({
-      bookingId: i === 0 ? (bookingId || undefined) : undefined,
-      tierKey: g.tierKey, tierChangedFrom: g.tierChanged ? g.tierDefault : undefined,
-      items: g.items,
-      timecardId: undefined, purchasePackageId: undefined, timecardServiceId: undefined,
-      customItems: g.customItems || [],
-      servedPersonName: String(g.servedPersonName || '').trim(),
-      technicians: g.technicians,
-      payIntent,
-      depositApplied: i === 0 ? depositApplied : false,
-      couponGrantId: i === 0 ? (couponGrantId || undefined) : undefined,
-      applyFootSurcharge: false, applyTipReuse: false
-    }))
+    settlements: groups.map((g, i) => {
+      const isTcGroup = Boolean(g.timecardId || g.purchasePackageId)
+      return {
+        bookingId: i === 0 ? (bookingId || undefined) : undefined,
+        tierKey: isTcGroup ? 'list' : g.tierKey,
+        tierChangedFrom: !isTcGroup && g.tierChanged ? g.tierDefault : undefined,
+        items: g.items,
+        timecardId: g.timecardId || undefined,
+        purchasePackageId: g.purchasePackageId || undefined,
+        timecardServiceId: (g.timecardId || g.purchasePackageId) ? (g.timecardServiceId || undefined) : undefined,
+        customItems: g.customItems || [],
+        servedPersonName: String(g.servedPersonName || '').trim(),
+        technicians: g.technicians,
+        payIntent,
+        rechargePackageId: i === 0 && rvDraft && rvDraft.packageId ? rvDraft.packageId : undefined,
+        rechargeAmountCents: i === 0 && rvDraft && !rvDraft.packageId ? rvDraft.amountCents : undefined,
+        depositApplied: i === 0 ? depositApplied : false,
+        couponGrantId: i === 0 ? (couponGrantId || undefined) : undefined,
+        applyFootSurcharge: i === 0 && !isTcGroup ? Boolean(applyFootSurcharge) : false,
+        applyTipReuse: i === 0 && !isTcGroup ? Boolean(applyTipReuse) : false
+      }
+    })
   }
 }
 
@@ -252,6 +266,108 @@ check('⑦ 签字之前账本一分未记(入账唯一路径=签署,不变)', fi
   }
   check('🔴 ⑨ 多租户①:开单前端模块与路由模块零租户硬编码(剥注释扫,白名单空)', hits.length === 0, hits.join(' | '))
   check('⑨ 多租户②:本套件所有断言都跑在临时新建店上(从没碰真实租户)—— 新店全流程走通 = 不认店', tid.startsWith('wsttl-'))
+}
+
+/* ===== ⑩ 死口清剿·三接回(店主 08-29 v2 指令三,08-30 落):随单充值 / 现场购卡 / 双技师编号
+   原文案「随单充值/现场购卡:网页版登记待排,先用小程序办」「双技师编号分配:网页版登记待排」
+   = 死口,当批接回本端。判据四层:①body 同形(含新字段) ②行为(开得出/拦得住) ③UI 锚点 ④死口句零残留。 */
+{
+  /* ①a body 同形 · 随单充值(套餐) */
+  const gBase = () => Object.assign(SW.newGroup('list', catId), { mainId: svcA.id, selectedTechs: [t1.id] })
+  const stR = { bookingId: '', userId, items: [{ id: svcA.id, unit: 'once' }], groups: [gBase()],
+    payMenu: { useBalance: true, recharge: true }, depositApplied: false, couponGrantId: '',
+    rvDraft: { packageId: 'pkg_zz', label: '充500赠50' } }
+  const mR = miniFormBody({ bookingId: '', userId, payMenu: { useBalance: true, recharge: true }, depositApplied: false,
+    rvDraft: { packageId: 'pkg_zz', label: '充500赠50' },
+    groups: [{ tierKey: 'list', tierChanged: false, tierDefault: 'list', items: [{ serviceId: svcA.id, qty: 1 }], customItems: [], servedPersonName: '', technicians: [{ technicianId: t1.id, role: 'main', itemNos: [] }] }] })
+  check('🔴 ⑩①a 随单充值(套餐)两端 body 深比对相等,且 rechargePackageId 真在提交体里',
+    JSON.stringify(SW.buildBody(stR)) === JSON.stringify(mR) && SW.buildBody(stR).settlements[0].rechargePackageId === 'pkg_zz',
+    `web=${JSON.stringify(SW.buildBody(stR)).slice(0, 260)}\nmini=${JSON.stringify(mR).slice(0, 260)}`)
+
+  /* ①b body 同形 · 随单充值(手输,packageId='' 与小程序 rvConfirm 同形) */
+  const stR2 = Object.assign({}, stR, { rvDraft: { packageId: '', amountCents: 5000, label: '手输金额(无赠送)' } })
+  const mR2 = miniFormBody({ bookingId: '', userId, payMenu: { useBalance: true, recharge: true }, depositApplied: false,
+    rvDraft: { packageId: '', amountCents: 5000, label: '手输金额(无赠送)' },
+    groups: [{ tierKey: 'list', tierChanged: false, tierDefault: 'list', items: [{ serviceId: svcA.id, qty: 1 }], customItems: [], servedPersonName: '', technicians: [{ technicianId: t1.id, role: 'main', itemNos: [] }] }] })
+  check('⑩①b 随单充值(手输)两端 body 深比对相等,rechargeAmountCents=5000',
+    JSON.stringify(SW.buildBody(stR2)) === JSON.stringify(mR2) && SW.buildBody(stR2).settlements[0].rechargeAmountCents === 5000)
+
+  /* ①c body 同形 · 现场购卡组:档位强制 list、整单规则不作用、timecardServiceId 带上 */
+  const gTc = Object.assign(SW.newGroup('member', catId), { purchasePackageId: 'pkg_tc', timecardServiceId: svcA.id, tierKey: 'member' })
+  const stT = { bookingId: '', userId, items: [{ id: svcA.id, unit: 'once' }], groups: [gTc],
+    payMenu: { useBalance: false, recharge: false }, depositApplied: false, couponGrantId: '', rvDraft: null, applyFootSurcharge: true }
+  const mT = miniFormBody({ bookingId: '', userId, depositApplied: false, applyFootSurcharge: true,
+    groups: [{ tierKey: 'member', tierChanged: false, tierDefault: 'member', items: [], timecardId: '', purchasePackageId: 'pkg_tc', timecardServiceId: svcA.id, customItems: [], servedPersonName: '', technicians: [] }] })
+  const bT = SW.buildBody(stT)
+  check('⑩①c 现场购卡组两端 body 深比对相等:tierKey 被压回 list、足部加收不作用于次卡组',
+    JSON.stringify(bT) === JSON.stringify(mT) && bT.settlements[0].tierKey === 'list' && bT.settlements[0].applyFootSurcharge === false,
+    `web=${JSON.stringify(bT).slice(0, 260)}\nmini=${JSON.stringify(mT).slice(0, 260)}`)
+
+  /* ①d body 同形 · 双技师编号分配:itemNos 原序原样带走(不排序不过滤 —— 小程序同刀) */
+  const gN = Object.assign(SW.newGroup('list', catId), { mainId: svcA.id, selectedTechs: [t1.id, t2.id], techItems: { [t1.id]: [2, 1], [t2.id]: [2] } })
+  const stN = { bookingId: '', userId, items: [{ id: svcA.id, unit: 'once' }], groups: [gN], payMenu: { useBalance: false, recharge: false }, depositApplied: false, couponGrantId: '', rvDraft: null }
+  const bN = SW.buildBody(stN)
+  check('⑩①d 编号分配:technicians[].itemNos 原序进提交体([2,1] 不被排序,共做位两人都带)',
+    JSON.stringify(bN.settlements[0].technicians) === JSON.stringify([
+      { technicianId: t1.id, role: 'main', itemNos: [2, 1] }, { technicianId: t2.id, role: 'assist', itemNos: [2] }]),
+    JSON.stringify(bN.settlements[0].technicians))
+
+  /* ② 行为 · 手输随单充值真开单:201 + recharge_json 落列;签字前账本仍零(入账唯一路径不变) */
+  const bkR = await mkBooking('14:00')
+  const stLive = { bookingId: bkR.id, userId, items: [{ id: svcA.id, unit: 'once' }], groups: [gBase()],
+    payMenu: { useBalance: true, recharge: true }, depositApplied: false, couponGrantId: '',
+    rvDraft: { packageId: '', amountCents: 5000, label: '手输金额(无赠送)' } }
+  const madeR = await request('/admin/settlements', { method: 'POST', body: JSON.stringify(SW.buildBody(stLive)) }, PLATFORM, H)
+  check('⑩② 网页挂随单充值开单成功(同一套路由,零新造接口)', madeR.status === 201, JSON.stringify(madeR.data).slice(0, 140))
+  const rowR = db.prepare('SELECT recharge_json, status FROM settlements WHERE tenant_id = ? AND booking_id = ?').get(tid, bkR.id)
+  const rj = JSON.parse(rowR.recharge_json || 'null')
+  check('⑩② recharge_json 落列:amountCents=5000、无赠(手输无赠口径)、单仍 pending_sign',
+    rj && rj.amountCents === 5000 && (rj.bonusCents || 0) === 0 && rowR.status === 'pending_sign', rowR.recharge_json)
+  const finR = db.prepare("SELECT COUNT(*) n FROM finance_transactions WHERE tenant_id = ? AND source NOT IN ('manual')").get(tid).n
+  check('⑩② 挂充签字前账本一分未记(签字那一刻才入账 —— 与小程序同一后端闸)', finR === 0, String(finR))
+
+  /* ② 行为 · 异常输入闸:rechargeAmountCents=0 必须 400(不许静默当没充) */
+  const bkR0 = await mkBooking('15:00')
+  const bad = SW.buildBody(Object.assign({}, stLive, { bookingId: bkR0.id, rvDraft: { packageId: '', amountCents: 0, label: 'x' } }))
+  bad.settlements[0].rechargeAmountCents = 0   // buildSheets 对 0 也原样带 —— 后端是最终闸
+  const madeBad = await request('/admin/settlements', { method: 'POST', body: JSON.stringify(bad) }, PLATFORM, H)
+  check('⑩② 充值金额 0 → 400(后端最终闸,静默失败器族反例)', madeBad.status === 400, String(madeBad.status))
+
+  /* ② 行为 · 现场购卡:真建 times 套餐 → 预览购卡款显式(D60 自证行同源字段) */
+  const pkgMade = await request('/admin/packages', { method: 'POST', body: JSON.stringify({ kind: 'times', name: `十次卡${RUN}`, priceCents: 88000, timesCount: 10 }) }, PLATFORM, H)
+  check('⑩② 建 times 套餐成功(夹具走正门路由)', pkgMade.status === 201 || pkgMade.status === 200, String(pkgMade.status))
+  const pkgId = (pkgMade.data.package || pkgMade.data).id
+  const gBuy = Object.assign(SW.newGroup('list', catId), { purchasePackageId: pkgId, timecardServiceId: svcA.id, selectedTechs: [t1.id] })
+  const stBuy = { bookingId: '', userId, items: [{ id: svcA.id, unit: 'once' }], groups: [gBuy], payMenu: { useBalance: false, recharge: false }, depositApplied: false, couponGrantId: '', rvDraft: null }
+  const pvBuy = await request('/admin/settlements/preview', { method: 'POST', body: JSON.stringify(SW.buildBody(stBuy)) }, PLATFORM, H)
+  const payBuy = (pvBuy.data.group || {}).payment || {}
+  check('⑩② 现场购卡预览:purchaseCents=88000 显式回传(D60:购卡款不许隐身进应收)',
+    pvBuy.status === 200 && payBuy.purchaseCents === 88000,
+    JSON.stringify({ status: pvBuy.status, purchaseCents: payBuy.purchaseCents }).slice(0, 140))
+  const shBuy = (pvBuy.data.sheets || [])[0] || {}
+  check('⑩② 购卡预览行自证:sheet.purchase.name=套餐名 + 核销第 1 次行在 lines 里',
+    shBuy.purchase && shBuy.purchase.name === `十次卡${RUN}` && (shBuy.lines || []).some((l) => /现场购卡/.test(l.name || '')),
+    JSON.stringify({ purchase: shBuy.purchase, lines: (shBuy.lines || []).map((l) => l.name) }).slice(0, 200))
+
+  /* ③ UI 锚点(判据⑤白名单式延伸):三个新块的交互锚点必须在实发资源上 */
+  const servedSW = await fetch(`${BASE_URL}/web/settlement-web.js`).then((r) => r.text())
+  for (const anchor of ['data-sw-recharge', 'data-sw-rv-ok', 'data-sw-tcpkg', 'data-sw-technos', '挂到本单(签字生效)', '现场购卡(顾客没卡?当场买当场用)']) {
+    check(`⑩③ 实发资源上有锚点「${anchor}」`, servedSW.includes(anchor))
+  }
+
+  /* ③b 08-30 走查两刀(镜面缺口,修后常驻锚点):
+     预览守卫认购卡组(原来购卡组预览发不出去,页面挂旧数);
+     到店应收=offlineDue(小程序 682 行同形 —— 储值抵完两端都要显 0,不许网页显总额)。 */
+  check('⑩③b 预览守卫认购卡组(doPreview 守卫行含 purchasePackageId)',
+    /\|\| g\.timecardId \|\| g\.purchasePackageId \}\)/.test(servedSW))
+  check('⑩③b 到店应收=offlineDue 同形(totalText 走 offlineDueCents,回落 totalCents)',
+    servedSW.includes('totalText: money(pay2.offlineDueCents != null ? pay2.offlineDueCents : (grp.totalCents || 0), 2)'))
+
+  /* ④ 死口句零残留:剥注释后,实发开单模块一句「先用小程序/网页版登记待排」都不许有 */
+  const stripJs3 = (t) => t.replace(/\/\*[\s\S]*?\*\//g, '').replace(/\/\/[^\n]*/g, '')
+  const deadPhrases = ['先用小程序', '网页版登记待排', '请在小程序']
+  const residue = deadPhrases.filter((ph) => stripJs3(servedSW).includes(ph))
+  check('🔴 ⑩④ 死口句零残留(剥注释扫实发 settlement-web.js)', residue.length === 0, residue.join(' | '))
 }
 
 console.log(`\n✅ test-web-settlement 通过 ${checks} 项`)

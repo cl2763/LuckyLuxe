@@ -263,3 +263,9 @@ page{background:#fbf8f5}
 .deduct-title{font-size:24rpx;font-weight:700;color:#8a3a33;margin-bottom:8rpx}
 .deduct-row{display:flex;justify-content:space-between;font-size:24rpx;padding:4rpx 0}
 .deduct-row.tap{padding:10rpx 0}
+
+/* D84 引导墙:未设置营业时间(≠休息,空态说真话) */
+.dv-setupwall { border: 2rpx dashed #b08d57; border-radius: 14rpx; padding: 40rpx 24rpx; text-align: center; margin: 20rpx 0; }
+.dv-sw-t { font-size: 30rpx; font-weight: 700; }
+.dv-sw-p { font-size: 22rpx; color: #9a938c; margin: 12rpx 0 20rpx; line-height: 1.6; }
+.dv-sw-btn { display: inline-block; background: #2d2a26; color: #fff; border-radius: 10rpx; padding: 14rpx 40rpx; font-size: 26rpx; }

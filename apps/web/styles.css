@@ -7568,3 +7568,16 @@ section.card > .section-row:first-child { margin-top: 0; }
 .tb-legend .lg.lash { background: #dcebf5; } .tb-legend .lg.care { background: #e2f0e2; }
 .tb-legend .lg.free { background: rgba(29,122,79,.15); border: 1px dashed rgba(29,122,79,.4); }
 .tb-legend-hd { color: var(--muted); }
+.tb-setup-wall { border: 1px dashed #b08d57; border-radius: 10px; padding: 28px; text-align: center; display: grid; gap: 10px; justify-items: center; }
+.tb-setup-wall p { color: var(--muted); font-size: 13px; max-width: 420px; }
+/* 死口清剿·三接回(2026-08-30):随单充值行内件 + 双技师数字排(镜像小程序 rvsheet/numlist) */
+.sw-rvlink { color: #b08d57; font-weight: 600; cursor: pointer; }
+.sw-rvlink.dis { opacity: .5; }
+.sw-bindbar { display: block; font-size: 12px; color: #a05a2c; background: rgba(176,141,87,.1); border-radius: 6px; padding: 4px 8px; margin: 4px 0; }
+.sw-cpnsheet input#swRvAmt { border: 1px solid var(--line); border-radius: 8px; padding: 10px 12px; font-size: 15px; width: 100%; box-sizing: border-box; }
+.sw-numlist { display: grid; gap: 2px; margin: 6px 0 2px; }
+.sw-numrow { font-size: 13px; color: var(--muted); }
+.sw-numrow b { color: #2d2a26; margin-right: 4px; }
+.sw-techrow { display: flex; align-items: center; gap: 6px; margin: 4px 0; flex-wrap: wrap; }
+.sw-tn { font-size: 13px; font-weight: 600; min-width: 56px; }
+.sw-chip.mini { padding: 2px 10px; font-size: 12px; }
