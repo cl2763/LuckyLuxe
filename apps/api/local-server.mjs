@@ -11024,6 +11024,15 @@ async function route(req, res) {
       /* 真机 SVG 空白件后:快照要出 PNG 得有栅格化后端。把它摆进 /health,
          上线后一眼能看出生产装没装上(空=还在回落 SVG,真机图会白),不靠猜。 */
       snapshotRaster: rasterBackend() || 'none',
+      /* 🔴 2026-08-30(退回件②):这台服务**实发的前端是哪一版**,由服务自己说 ——
+         adminBuild = admin.html 现算的 LL_BUILD(与页面左下角同源)。restore 拉错版本、
+         看错端口,店主报的版本串与这里一对就现形,不再猜「你测的和她用的是不是同一份」。 */
+      adminBuild: (() => {
+        try {
+          const m = /LL_BUILD="?([0-9a-f]+)"?/.exec(fingerprintHtml(readFileSync(join(webRoot, 'admin.html'), 'utf8'), { webRoot, statSync }))
+          return m ? m[1] : 'none'
+        } catch (e) { return 'error' }
+      })(),
       /* 🔴 测试护栏(店主 08-24 裁 C):**这台服务往哪个库写**,由服务器自己说。
          套件开跑前问这一句,不是 'test' 就拒跑 —— 判据律:判据要能证伪"我会不会写进真库",
          而不是问一个"记得设就设、忘了就没有"的环境变量。

@@ -34,6 +34,38 @@ async function request(path, options = {}, token = PLATFORM, extra = {}) {
 const stripJs = (t) => t.replace(/\/\*[\s\S]*?\*\//g, '').replace(/\/\/[^\n]*/g, '')
 const mini = (p) => stripJs(readFileSync(new URL(`../../miniprogram/${p}`, import.meta.url), 'utf8'))
 
+/* ===== ⓪ 页面完整性(店主 2026-08-30 退回件:账户调整页白屏 wxml not found)=====
+   「无开发者工具」不是借口:四件套存在性 + app.json 注册是**纯文件断言**。
+   双向白名单:①app.json 每个注册页,wxml/js/json 三件必须都在(wxss 可选但本仓惯例四件全);
+   ②每个 pages 目录下的 index.js 都必须在 app.json 里 —— 新建页漏注册、注册了没建文件,双向都当场红。 */
+{
+  const { readdirSync, existsSync } = await import('node:fs')
+  const root = new URL('../../miniprogram/', import.meta.url)
+  const appJson = JSON.parse(readFileSync(new URL('app.json', root), 'utf8'))
+  const registered = appJson.pages.concat(...(appJson.subPackages || []).map((sp) => (sp.pages || []).map((pg) => `${sp.root}/${pg}`)))
+  const missing = []
+  for (const pg of registered) {
+    for (const ext of ['wxml', 'js', 'json']) {
+      if (!existsSync(new URL(`${pg}.${ext}`, root))) missing.push(`${pg}.${ext}`)
+    }
+  }
+  check(`⓪ app.json ${registered.length} 个注册页,每页 wxml/js/json 三件都在(缺一件=白屏 __route__ 那个病)`,
+    missing.length === 0, missing.join(' | '))
+  const walkPages = (dir, out = []) => {
+    for (const e of readdirSync(new URL(dir, root), { withFileTypes: true })) {
+      if (e.isDirectory()) walkPages(`${dir}${e.name}/`, out)
+      else if (e.name === 'index.js') out.push(`${dir}index`)
+    }
+    return out
+  }
+  const onDisk = walkPages('pages/')
+  const unregistered = onDisk.filter((pg) => !registered.includes(pg))
+  check(`⓪ 反向:磁盘上 ${onDisk.length} 个页面目录全部在 app.json 里(建了页忘注册=入口点了白屏)`,
+    unregistered.length === 0, unregistered.join(' | '))
+  check('⓪ app.json 以换行收尾(json.dump 会吃掉它 —— 本次退回件里的真 diff)',
+    readFileSync(new URL('app.json', root), 'utf8').endsWith('\n'))
+}
+
 /* ===== ① 源码层:小程序调的每一条口都是网页那一套(同一后端出口,零第二实现) ===== */
 const aa = mini('pages/merchant/account-adjust/index.js')
 check('① 四个参考数与黄条:同一条 facts 口(/admin/account-adjust/facts)', (aa.match(/account-adjust\/facts/g) || []).length >= 2)
@@ -44,6 +76,10 @@ check('① 页面 guardOwner(店员连入口页都进不来)+ 财务门禁先例
   aa.includes('guardOwner') && aa.includes('finance/lock-status') && aa.includes('getFinanceKey'))
 const custWxml = mini('pages/merchant/customer/index.wxml')
 check('① 入口挂在客户档案页(customer 页本身 guardOwner)', custWxml.includes('accountAdjust') && custWxml.includes('账户调整'))
+/* 店主 08-30 点名:一套按钮规格 —— 客户档案四个动作(写小记/画像/账户调整/发券)全部 hbtn 同形制 */
+check('① 按钮同形制:账户调整与发券都是 hbtn(与写服务小记同规格),linkbtn 不再用于这两个动作',
+  /class="hbtn"[^>]*bindtap="accountAdjust"/.test(custWxml) && /hbtn[^>]*bindtap="sendCoupon"/.test(custWxml)
+  && !/linkbtn[^>]*bindtap="(accountAdjust|sendCoupon)"/.test(custWxml))
 const aaWxml = mini('pages/merchant/account-adjust/index.wxml')
 check('① 四 tab 与网页同序同名(充值/赠送/退卡/冲销);句子字段全部来自 facts(splitText/hint/incomeImpactText)',
   ['充值', '赠送', '退卡', '冲销'].every((t) => aaWxml.includes(t))
