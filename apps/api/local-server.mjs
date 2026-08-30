@@ -11,6 +11,7 @@ import { pngSize, rasterBackend, svgToPng } from './svg-raster.mjs'
 import { inkToPng } from './ink-raster.mjs'
 import { createAfterSales } from './after-sales.mjs'        // 售后域(公约②:边改边拆)
 import { hoursUnsetOfStore, hoursSavable, HOURS_GATE_TEXT } from './hours-gate.mjs'   // 营业时间闸(D84 强制设置图 v1.0)
+import { createStoredValueReversal } from './stored-value-reversal.mjs'   // 储值行冲销(裁定2 准开口,08-30d)
 import { createBusinessHoursRoutes } from './business-hours-routes.mjs'   // 营业时间两条路由(强制设置批边改边拆)
 import { createOrderBadges, bookingSourceText, bookingStatusText } from './order-badges.mjs'
 import { installLedgerGuards, backfillTenantKindOnce, LEDGER_TRIGGER_NAMES } from './ledger-guards.mjs'
@@ -7163,9 +7164,12 @@ const storeContentRoutes = createStoreContentRoutes({
 })
 const messageTemplatesApi = createMessageTemplates({ db, iso, randomId })
 const { MESSAGE_TEMPLATE_SCENES, MESSAGE_TEMPLATE_SCENE_LABELS, serializeMessageTemplate, ensureDefaultMessageTemplates } = messageTemplatesApi
+const svReversal = createStoredValueReversal({
+  db, apiError, insertStoredValueTransaction: (a) => insertStoredValueTransaction(a)
+})
 const refundRoutes = createRefundRoutes({
   apiError, json, readBody, refundApi, staffScope,
-  usableTimecardsOf: (uid) => usableTimecardsOf(uid)
+  usableTimecardsOf: (uid) => usableTimecardsOf(uid), svReversal
 })
 const platformOps = createPlatformOps({
   db, apiError, randomId, iso, snapshotDb, financeSessions, adminPasswordHash, randomPassword,
@@ -14216,13 +14220,17 @@ async function route(req, res) {
   if (req.method === 'GET' && path === '/admin/stored-value/txns') {
     if (adminSession.role !== 'owner') throw apiError(403, 'FORBIDDEN', 'Owner permission is required.')
     const month = /^\d{4}-\d{2}$/.test(String(query.month || '')) ? String(query.month) : localParts(new Date()).date.slice(0, 7)
+    /* 裁定2(08-30d)读口扩形(路由集不变):带 user_id / 赠送与冲销行 / 已冲销标 ——
+       账调冲销 tab「储值行与账本行同列一表」的数据源就是这条 */
     const rows = db.prepare(`
-      SELECT s.id, s.type, s.amount_cents, s.pay_channel, s.note, s.created_by, s.created_at, s.technician_id, s.customer_confirmed_at,
+      SELECT s.id, s.user_id, s.type, s.amount_cents, s.pay_channel, s.note, s.created_by, s.created_at, s.technician_id, s.customer_confirmed_at,
+             s.reversal_of,
+             (SELECT 1 FROM stored_value_transactions r WHERE r.reversal_of = s.id LIMIT 1) AS reversed,
              u.display_name AS user_name, t.name AS technician_name
       FROM stored_value_transactions s
       LEFT JOIN users u ON u.id = s.user_id
       LEFT JOIN technicians t ON t.id = s.technician_id
-      WHERE s.tenant_id = ? AND s.type IN ('recharge', 'consume') AND substr(s.created_at, 1, 7) = ?
+      WHERE s.tenant_id = ? AND s.type IN ('recharge', 'consume', 'bonus', 'reversal') AND substr(s.created_at, 1, 7) = ?
       ORDER BY s.created_at DESC
     `).all(currentTenantId(), month)
     const tz = tenantTimezone(currentTenantId())
@@ -14241,6 +14249,8 @@ async function route(req, res) {
         const CH_ZH = { cash: '现金', wechat: '微信支付', alipay: '支付宝', card: '银行卡', manual: '门店补录', marketing: '营销赠送', unknown: '—' }
         return {
           id: r.id, type: r.type, at: `${p.date.slice(5)} ${p.time.slice(0, 5)}`,
+          userId: r.user_id, occurredOn: p.date,
+          reversed: Boolean(r.reversed), reversalOf: r.reversal_of || null,
           userName: r.user_name || '—', amountCents: r.amount_cents,
           handler: r.type === 'recharge' ? (r.technician_name || (r.created_by || '—')) : '',
           settlementCode: codeMatch ? codeMatch[1] : '',
@@ -14254,7 +14264,7 @@ async function route(req, res) {
   }
   /* 退卡 / 账户调整 / 员工「我的客人」这一族路由整体搬去 ./refund-routes.mjs(公约①②,2026-08-27)。
      门禁扫描器同批改成连 `*-routes.mjs` 一起读 —— 搬家不许把接口从扫描面上搬没了。 */
-  if (await refundRoutes.route(req, res, { path, query, adminSession, requireRefundRight })) return
+  if (await refundRoutes.route(req, res, { path, query, adminSession, requireRefundRight, tenantId: currentTenantId() })) return
   if (req.method === 'POST' && path === '/admin/stored-value/recharge') {
     if (adminSession.role !== 'owner' && adminSession.role !== 'staff') {
       throw apiError(403, 'FORBIDDEN', '需要老板或员工权限。')
@@ -16770,6 +16780,12 @@ try {
      即时到账不变、未确认不阻塞任何链路——只是流水上标「顾客未确认」;
      随单充值=顾客亲签签署单,入账即视为已确认(签字就是确认动作)。老库走 ALTER(纪律8)。 */
   db.exec('ALTER TABLE stored_value_transactions ADD COLUMN customer_confirmed_at TEXT')
+} catch (error) {
+  if (!String(error.message || '').includes('duplicate column')) throw error
+}
+try {
+  /* 裁定2(店主 08-30d):储值行冲销 —— 红字反向行经 reversal_of 指回原行,原行由此标「已冲销」 */
+  db.exec('ALTER TABLE stored_value_transactions ADD COLUMN reversal_of TEXT')
 } catch (error) {
   if (!String(error.message || '').includes('duplicate column')) throw error
 }

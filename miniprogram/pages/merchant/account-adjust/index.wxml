@@ -73,7 +73,7 @@
           <text class="tnote">{{x.note}}</text>
         </view>
         <text class="tamt {{x.negative ? 'neg' : ''}}">{{x.negative ? '−' : ''}}{{x.amountText}}</text>
-        <view wx:if="{{!x.isReversal && !x.reversed}}" class="tbtn" data-id="{{x.id}}" data-note="{{x.note}}" bindtap="reverseTxn">冲销</view>
+        <view wx:if="{{x.canReverse}}" class="tbtn" data-id="{{x.id}}" data-kind="{{x.kind}}" data-note="{{x.note}}" bindtap="reverseTxn">冲销</view>
       </view>
     </block>
     <view wx:else class="hint">{{month}} 没有与这位顾客订单关联的账本流水。</view>

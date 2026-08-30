@@ -1,0 +1,37 @@
+# 批次九 · 员工号证据(2026-08-30,沙箱 4310 走查店 zj-open-cad;全程沙箱,生产墙内零接触)
+员工号:shiyi(绑定技师乙 tech_…s4j3n4;一次性沙箱号,凭据按裁4 入 本地自查账号.txt)
+首登强制改密真走了一遍(mustChange:true → change-password → 新密码登录 role:staff)。
+
+## 正向(员工该通的路,逐步取证)
+① 登录 → role=staff ✓
+② 我的客人:GET /admin/my-customers → 200
+   {"customers":[],"readOnly":true,"note":"只列你服务过的客人 · 只读(改余额、退卡这些是老板的口)"}
+   (空=这位新员工还没服务过客人 —— 空态说真话;readOnly 与提示句=后端出)
+③ 排单:GET /admin/schedule-day → 200(bookings/storeNow 齐);
+   给**自己**排单 POST /admin/bookings/direct → 201(booking_mtg3po97,18:00)
+④ 开单:POST /admin/settlements/preview → 200(员工可开单,入账仍只随签署)
+⑤ 服务小记读口:GET /admin/customers/:id/notes → 200(画像+小记结构齐)
+
+## 反向(不该见的,逐口 403)
+| 口 | 结果 |
+|---|---|
+| 替别的技师排单(bookings/direct 传他人 technicianId) | 403「员工只能给自己排单。」 |
+| 账户调整 GET /admin/account-adjust/facts | 403 |
+| 储值流水 GET /admin/stored-value/txns | 403 |
+| 储值冲销 POST /admin/stored-value/txns/:id/reverse(本批新口) | 403 |
+| 员工账号管理 GET /admin/staff-accounts | 403 |
+| 财务流水 GET /admin/finance/transactions | 403 |
+| 套餐管理 GET /admin/packages | 403 |
+| 营业时间 PUT /admin/business-hours | 403(owner-only) |
+
+## 权限差异表(店主号 vs 员工号,同店同接口现测)
+| 接口 | 店主 | 员工 |
+|---|---|---|
+| my-customers / schedule-day / 自排单 / 开单预览 / 小记读 | 200 | 200 |
+| account-adjust facts · stored-value txns/reverse · staff-accounts · finance txns · packages · business-hours PUT | 200 | **403** |
+| 替他人排单 | 200(老板代排任一技师) | **403** |
+
+## 小程序端入口不可见(文件层,与接口层双闸)
+- 客户档案页 guardOwner:员工连入口页都进不来(test-mini-account-adjust ③「店员打 facts/退款 → 403」+ 既有 N-5 断言「员工界面无账户调整按钮」)
+- 账调页 onShow guardOwner + 接口 requireRefundRight(前端拦=体验,接口=终闸 —— 上表即终闸现测)
+- 像素终验=店主真机(员工号已备好,走查单可直接用)

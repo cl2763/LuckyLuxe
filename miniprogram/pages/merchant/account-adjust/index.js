@@ -141,22 +141,38 @@ Page({
   async loadTxns(month) {
     this.setData({ txnsLoading: true, month })
     try {
-      const [tx, bks] = await Promise.all([
+      /* 裁定2(08-30d):储值行与账本行同列一表,两读口合流(与网页同刀) */
+      const [tx, sv, bks] = await Promise.all([
         api.adminGet(`/admin/finance/transactions?month=${month}`),
+        api.adminGet(`/admin/stored-value/txns?month=${month}`).catch(() => ({ txns: [] })),
         this._bookingIds ? Promise.resolve(null) : api.adminGet('/admin/bookings')
       ])
       if (bks) this._bookingIds = new Set((bks.bookings || []).filter((b) => b.user && b.user.id === this.data.userId).map((b) => b.id))
       const all = tx.transactions || []
       const reversedSet = new Set(all.filter((t) => t.reversalOf).map((t) => t.reversalOf))
-      const rows = all
+      const finRows = all
         .filter((t) => t.bookingId && this._bookingIds.has(t.bookingId))
         .map((t) => ({
-          id: t.id, occurredOn: t.occurredOn, note: t.note || t.category || t.source,
+          id: t.id, kind: 'fin', occurredOn: t.occurredOn, note: t.note || t.category || t.source,
           amountText: storeMoney(Math.abs(t.amountCents), 2),
           negative: t.amountCents < 0,
           isReversal: t.source === 'reversal',
-          reversed: reversedSet.has(t.id)
+          reversed: reversedSet.has(t.id),
+          canReverse: t.source !== 'reversal' && !reversedSet.has(t.id)
         }))
+      const SV_LABEL = { recharge: '储值充值', bonus: '充值赠送', reversal: '储值冲销单' }
+      const svRows = (sv.txns || [])
+        .filter((t) => t.userId === this.data.userId && t.type !== 'consume')
+        .map((t) => ({
+          id: t.id, kind: 'sv', occurredOn: t.occurredOn,
+          note: `${SV_LABEL[t.type] || t.type}${t.note ? ' · ' + t.note : ''}`,
+          amountText: storeMoney(Math.abs(t.amountCents), 2),
+          negative: t.amountCents < 0,
+          isReversal: t.type === 'reversal',
+          reversed: Boolean(t.reversed),
+          canReverse: t.type === 'recharge' && !t.reversed
+        }))
+      const rows = finRows.concat(svRows).sort((a, b) => String(b.occurredOn).localeCompare(String(a.occurredOn)))
       this.setData({ txns: rows, txnsLoading: false })
     } catch (e) {
       this.setData({ txnsLoading: false })
@@ -164,7 +180,7 @@ Page({
     }
   },
   reverseTxn(e) {
-    const { id, note } = e.currentTarget.dataset
+    const { id, note, kind } = e.currentTarget.dataset
     if (this.data.busy) return
     wx.showModal({
       title: '确认冲销?',
@@ -173,9 +189,14 @@ Page({
         if (!r.confirm) return
         this.setData({ busy: true })
         try {
-          await api.adminPost(`/admin/finance/transactions/${encodeURIComponent(id)}/reverse`, {})
+          const url = kind === 'sv'
+            ? `/admin/stored-value/txns/${encodeURIComponent(id)}/reverse`
+            : `/admin/finance/transactions/${encodeURIComponent(id)}/reverse`
+          await api.adminPost(url, {})
           wx.showToast({ title: '已冲销(红字反向记录已生成)', icon: 'none' })
           this.setData({ busy: false })
+          const f = await api.adminGet(`/admin/account-adjust/facts?userId=${encodeURIComponent(this.data.userId)}`).catch(() => null)
+          if (f) this.setData({ facts: f.facts })   // 判据⑤:四参考数联动=真值重拉
           this.loadTxns(this.data.month)
         } catch (err) {
           this.setData({ busy: false })

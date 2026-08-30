@@ -148,4 +148,55 @@ if (staffLg?.auth) {
   check('③ 店员账号建失败时如实红(不许跳过越权断言)', false, JSON.stringify(staffMk.data).slice(0, 120))
 }
 
+/* ===== ④ 裁定2(店主 08-30d 准开口):储值行冲销 · 合同五条逐条验 ===== */
+{
+  const today = (await request('/admin/store-clock', {}, PLATFORM, H)).data.today
+  const imp2 = (await request(`/platform/tenants/${tid}/import/customers`, { method: 'POST', body: JSON.stringify({ dryRun: false, rows: [{ name: `冲销客${RUN}`, phone: `136${RUN.slice(-8)}` }] }) })).data
+  const u2 = imp2.users[0].userId
+  db.prepare('UPDATE users SET wechat_open_id = ? WHERE id = ?').run(`rev-${RUN}`, u2)
+  check('④ 夹具:错记一笔 充500赠50(现金)', (await request('/admin/stored-value/recharge', { method: 'POST', body: JSON.stringify({ userId: u2, amountCents: 50000, bonusCents: 5000, payChannel: 'cash' }) }, PLATFORM, H)).status === 201)
+  const f0 = (await request(`/admin/account-adjust/facts?userId=${u2}`, {}, PLATFORM, H)).data.facts
+  check('④ 冲销前四数:实付 500 / 赠送 50 / 余额 550', f0.paidCents === 50000 && f0.bonusCents === 5000 && f0.balanceCents === 55000, JSON.stringify(f0).slice(0, 100))
+  const d0 = (await request(`/admin/daily-close?date=${today}`, {}, PLATFORM, H)).data.dailyClose.cashDrawer
+  const tx0 = (await request(`/admin/stored-value/txns?month=${today.slice(0, 7)}`, {}, PLATFORM, H)).data.txns.filter((t) => t.userId === u2)
+  const rcRow = tx0.find((t) => t.type === 'recharge')
+  check('④ 读口扩形:流水带 userId/赠送行/reversed 标', rcRow && rcRow.reversed === false && tx0.some((t) => t.type === 'bonus'), JSON.stringify(tx0).slice(0, 160))
+
+  /* 合同①:赠送行/退款行不许直接冲 —— 两口不许混 */
+  const bnRow = tx0.find((t) => t.type === 'bonus')
+  const tryBonus = await request(`/admin/stored-value/txns/${bnRow.id}/reverse`, { method: 'POST' }, PLATFORM, H)
+  check('④ 合同①:对赠送行点冲销 → 400 指回充值行(赠随充一起冲)', tryBonus.status === 400 && /充值行/.test(tryBonus.data?.error?.message || ''))
+
+  /* 合同③:一刀双行 + 全联动 */
+  const rev = await request(`/admin/stored-value/txns/${rcRow.id}/reverse`, { method: 'POST' }, PLATFORM, H)
+  check('🔴 ④ 冲销成功:一刀双行(充值反向 + 赠送反向,同一事务)', rev.status === 201 && rev.data.reversedAmountCents === 50000 && rev.data.reversedBonusCents === 5000, JSON.stringify(rev.data).slice(0, 140))
+  const f1 = (await request(`/admin/account-adjust/facts?userId=${u2}`, {}, PLATFORM, H)).data.facts
+  check('🔴 ④ 判据⑤ 四参考数联动:实付 0 / 赠送 0 / 余额 0(负债−)', f1.paidCents === 0 && f1.bonusCents === 0 && f1.balanceCents === 0, JSON.stringify({ p: f1.paidCents, b: f1.bonusCents, bal: f1.balanceCents }))
+  const d1 = (await request(`/admin/daily-close?date=${today}`, {}, PLATFORM, H)).data.dailyClose.cashDrawer
+  check('🔴 ④ 判据⑤ 抽屉联动:当日现金较冲销前 −500(充值现金腿被红字抵平),损益仍恒 0',
+    d0.rechargeCashCents - d1.rechargeCashCents === 50000 && d1.incomeImpactCents === 0,
+    JSON.stringify({ before: d0.rechargeCashCents, after: d1.rechargeCashCents }))
+  const tx1 = (await request(`/admin/stored-value/txns?month=${today.slice(0, 7)}`, {}, PLATFORM, H)).data.txns.filter((t) => t.userId === u2)
+  check('④ 合同③:原两行标「已冲销」保留 + 两条红字反向行在(冲充值带原渠道/冲赠送 marketing)',
+    tx1.find((t) => t.id === rcRow.id).reversed === true && tx1.find((t) => t.id === bnRow.id).reversed === true
+    && tx1.filter((t) => t.type === 'reversal').length === 2
+    && tx1.some((t) => t.type === 'reversal' && t.amountCents === -50000)
+    && tx1.some((t) => t.type === 'reversal' && t.amountCents === -5000),
+    JSON.stringify(tx1.map((t) => [t.type, t.amountCents, t.reversed])).slice(0, 180))
+  check('④ 幂等:再冲同一笔 → 400 ALREADY_REVERSED', (await request(`/admin/stored-value/txns/${rcRow.id}/reverse`, { method: 'POST' }, PLATFORM, H)).data?.error?.code === 'ALREADY_REVERSED')
+
+  /* 合同②:前置闸 —— 动过一分钱就拒(后端终闸;合同句原文) */
+  const imp3 = (await request(`/platform/tenants/${tid}/import/customers`, { method: 'POST', body: JSON.stringify({ dryRun: false, rows: [{ name: `动过钱客${RUN}`, phone: `135${RUN.slice(-8)}` }] }) })).data
+  const u3 = imp3.users[0].userId
+  db.prepare('UPDATE users SET wechat_open_id = ? WHERE id = ?').run(`rev3-${RUN}`, u3)
+  await request('/admin/stored-value/recharge', { method: 'POST', body: JSON.stringify({ userId: u3, amountCents: 30000, payChannel: 'cash' }) }, PLATFORM, H)
+  const tx3 = (await request(`/admin/stored-value/txns?month=${today.slice(0, 7)}`, {}, PLATFORM, H)).data.txns.find((t) => t.userId === u3 && t.type === 'recharge')
+  await request('/admin/stored-value/refund', { method: 'POST', body: JSON.stringify({ userId: u3, amountCents: 1000, payChannel: 'cash', reason: '动一分钱', requestId: `rv3-${RUN}` }) }, PLATFORM, H)
+  const gate = await request(`/admin/stored-value/txns/${tx3.id}/reverse`, { method: 'POST' }, PLATFORM, H)
+  check('🔴 ④ 合同② 前置闸:动过一分钱就拒 →「已产生消费,请走退卡。」', gate.status === 400 && gate.data?.error?.message === '已产生消费,请走退卡。', JSON.stringify(gate.data).slice(0, 120))
+
+  /* 权限:无 token → 401/403(requireRefundRight 同门) */
+  check('④ 越权:未登录打冲销口 → 拒', (await request(`/admin/stored-value/txns/${rcRow.id}/reverse`, { method: 'POST' }, null, H)).status >= 401)
+}
+
 console.log(`\n✅ test-mini-account-adjust 通过 ${checks} 项`)

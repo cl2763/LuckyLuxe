@@ -15,15 +15,16 @@ export function createStoredValue({ db, randomId, iso, currentTenantId, localPar
      08-26 沙箱真点撞出来的:先 INSERT 再 UPDATE 会被账本触发器打回
      (stored value ledger is append-only)—— 那道触发器是对的,只追加不许改。
      测试库的租户 kind='test' 被豁免,所以套件当时没红:**只有在真店口径上真点才撞得出**。 */
-  function insertStoredValueTransaction({ userId, type, amountCents, payChannel = 'unknown', note = '', createdBy = 'system', createdAt = null, tenantId = currentTenantId(), technicianId = null, customerConfirmedAt = null, paidPartCents = null, bonusPartCents = null, requestId = null }) {
+  function insertStoredValueTransaction({ userId, type, amountCents, payChannel = 'unknown', note = '', createdBy = 'system', createdAt = null, tenantId = currentTenantId(), technicianId = null, customerConfirmedAt = null, paidPartCents = null, bonusPartCents = null, requestId = null, reversalOf = null }) {
     const id = randomId('sv')
     // N-5:refund(退卡)与 consume 同族都是负数;两者的区别在**收入**上,不在符号上
+    // 裁定2(08-30d):reversal=红字反向,符号由调用方给(冲充值=负,原样透传)
     const signed = type === 'recharge' ? Math.abs(amountCents)
       : (type === 'consume' || type === 'refund' ? -Math.abs(amountCents) : Math.round(amountCents))
     db.prepare(`
-      INSERT INTO stored_value_transactions (id, tenant_id, user_id, type, amount_cents, pay_channel, note, created_by, created_at, technician_id, customer_confirmed_at, paid_part_cents, bonus_part_cents, request_id)
-      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-    `).run(id, tenantId, userId, type, signed, payChannel, note, createdBy, createdAt || iso(new Date()), technicianId || null, customerConfirmedAt || null, paidPartCents, bonusPartCents, requestId)
+      INSERT INTO stored_value_transactions (id, tenant_id, user_id, type, amount_cents, pay_channel, note, created_by, created_at, technician_id, customer_confirmed_at, paid_part_cents, bonus_part_cents, request_id, reversal_of)
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+    `).run(id, tenantId, userId, type, signed, payChannel, note, createdBy, createdAt || iso(new Date()), technicianId || null, customerConfirmedAt || null, paidPartCents, bonusPartCents, requestId, reversalOf)
     return db.prepare('SELECT * FROM stored_value_transactions WHERE id = ?').get(id)
   }
 

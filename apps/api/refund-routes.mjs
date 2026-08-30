@@ -8,9 +8,22 @@
    路由一搬出去就等于**从扫描面里消失**,而套件照样全绿 —— 那是最坏的一种"绿"。
    所以同批把扫描器改成读 local-server.mjs + 全部 `*-routes.mjs`,并加了一条**路由条数下限**断言:
    下次再有人把路由搬走却忘了让扫描器跟上,条数掉下来立刻红。 */
-export function createRefundRoutes({ apiError, json, readBody, refundApi, staffScope, usableTimecardsOf }) {
+export function createRefundRoutes({ apiError, json, readBody, refundApi, staffScope, usableTimecardsOf, svReversal }) {
   async function route(req, res, ctx) {
     const { path, query, adminSession, requireRefundRight } = ctx
+    /* 裁定2(08-30d 准开口):错记充值整笔冲销 —— 合同五条见 ./stored-value-reversal.mjs。
+       权限与退卡同门(老板 + 财务钥匙:/admin/stored-value 前缀天然在钥匙闸内)。 */
+    const svRevMatch = path.match(/^\/admin\/stored-value\/txns\/([^/]+)\/reverse$/)
+    if (req.method === 'POST' && svRevMatch) {
+      requireRefundRight()
+      const r = svReversal.reverseRechargeTxn({
+        txnId: decodeURIComponent(svRevMatch[1]),
+        tenantId: ctx.tenantId,
+        operator: adminSession.email || adminSession.username || 'owner'
+      })
+      json(res, 201, r)
+      return true
+    }
     /* S2批①(规则⑥ 收编):手动耗卡=账目风险口,永久关闭 —— 扣卡只在结算单签字时刻由引擎自动做。 */
     if (req.method === 'POST' && path === '/admin/stored-value/consume') {
       throw apiError(410, 'MANUAL_CONSUME_GONE', '手动耗卡已取消:储值扣款只随结算单签字自动入账。')

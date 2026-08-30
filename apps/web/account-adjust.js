@@ -116,7 +116,7 @@ window.AccountAdjust = (function () {
         <div class="aa-txn${x.isReversal ? ' rev' : ''}">
           <div class="aa-txn-info"><span class="subtle">${x.occurredOn}${x.isReversal ? (zh ? ' · 冲销单' : ' · reversal') : ''}${x.reversed ? (zh ? ' · 已冲销' : ' · reversed') : ''}</span><span>${escapeHtml(x.note)}</span></div>
           <strong${x.negative ? ' class="neg"' : ''}>${x.negative ? '−' : ''}${money(Math.abs(x.amountCents))}</strong>
-          ${!x.isReversal && !x.reversed ? `<button class="ghost slim" data-aa-reverse="${escapeHtml(x.id)}" type="button">${zh ? '冲销' : 'Reverse'}</button>` : ''}
+          ${x.canReverse ? `<button class="ghost slim" data-aa-reverse="${escapeHtml(x.id)}" data-kind="${x.kind}" type="button">${zh ? '冲销' : 'Reverse'}</button>` : ''}
         </div>`).join('') : `<p class="aa-hint">${zh ? `${stateA.month} 没有与这位顾客订单关联的账本流水。` : 'No linked ledger rows this month.'}</p>`}`
   }
 
@@ -127,12 +127,22 @@ window.AccountAdjust = (function () {
   async function loadTxns(month) {
     stateA.month = month
     try {
-      const r = await ctx.request(`/admin/finance/transactions?month=${month}`)
+      /* 裁定2(08-30d):储值行与账本行同列一表 —— 两读口合流,行尾同一个「冲销」钮。
+         储值行冲的是「错记的充值」(合同①);账本行冲的是记错的收支(既有口)。 */
+      const [r, sv] = await Promise.all([
+        ctx.request(`/admin/finance/transactions?month=${month}`),
+        ctx.request(`/admin/stored-value/txns?month=${month}`).catch(() => ({ txns: [] }))
+      ])
       const all = r.transactions || []
       const reversedSet = new Set(all.filter((t2) => t2.reversalOf).map((t2) => t2.reversalOf))
-      stateA.txns = all
+      const finRows = all
         .filter((t2) => t2.bookingId && stateA.bookingIds.has(t2.bookingId))
-        .map((t2) => ({ id: t2.id, occurredOn: t2.occurredOn, note: t2.note || t2.category || t2.source, amountCents: t2.amountCents, negative: t2.amountCents < 0, isReversal: t2.source === 'reversal', reversed: reversedSet.has(t2.id) }))
+        .map((t2) => ({ id: t2.id, kind: 'fin', occurredOn: t2.occurredOn, note: t2.note || t2.category || t2.source, amountCents: t2.amountCents, negative: t2.amountCents < 0, isReversal: t2.source === 'reversal', reversed: reversedSet.has(t2.id), canReverse: t2.source !== 'reversal' && !reversedSet.has(t2.id) }))
+      const SV_LABEL = { recharge: '储值充值', bonus: '充值赠送', reversal: '储值冲销单', consume: '储值消费' }
+      const svRows = (sv.txns || [])
+        .filter((t2) => t2.userId === stateA.userId && t2.type !== 'consume')
+        .map((t2) => ({ id: t2.id, kind: 'sv', occurredOn: t2.occurredOn, note: `${SV_LABEL[t2.type] || t2.type}${t2.note ? ' · ' + t2.note : ''}`, amountCents: t2.amountCents, negative: t2.amountCents < 0, isReversal: t2.type === 'reversal', reversed: Boolean(t2.reversed), canReverse: t2.type === 'recharge' && !t2.reversed }))
+      stateA.txns = finRows.concat(svRows).sort((a, b2) => String(b2.occurredOn).localeCompare(String(a.occurredOn)))
     } catch (e) { ctx.toast(e.message); stateA.txns = [] }
     mount()
   }
@@ -280,9 +290,14 @@ window.AccountAdjust = (function () {
       if (!confirm(zh ? `确认冲销?将生成一条等额红字反向记录纠错,原始记录保留:${row ? row.note : ''}` : 'Reverse this entry?')) return
       stateA.busy = true; mount()
       try {
-        await request(`/admin/finance/transactions/${encodeURIComponent(revBtn.dataset.aaReverse)}/reverse`, { method: 'POST' })
+        const url2 = revBtn.dataset.kind === 'sv'
+          ? `/admin/stored-value/txns/${encodeURIComponent(revBtn.dataset.aaReverse)}/reverse`
+          : `/admin/finance/transactions/${encodeURIComponent(revBtn.dataset.aaReverse)}/reverse`
+        await request(url2, { method: 'POST' })
         toast(zh ? '已冲销(红字反向记录已生成)' : 'Reversed')
         stateA.busy = false
+        const f2 = await request(`/admin/account-adjust/facts?userId=${encodeURIComponent(stateA.userId)}`).catch(() => null)
+        if (f2) stateA.facts = f2.facts   // 判据⑤:四参考数联动=真值重拉
         loadTxns(stateA.month)
       } catch (e) { stateA.busy = false; mount(); toast(e.message) }
       return

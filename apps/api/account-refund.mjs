@@ -25,13 +25,19 @@ export function createAccountRefund({ db, apiError, iso, randomId, currentTenant
   /* 退卡屏上那四个参考数(图 §二:少一个商家心里没底,多一个就成了替他算)。
      四个数一处出,前端零计算 —— 顾客可见/商家决策用的数字都后端唯一出口。 */
   function refundFacts(userId, tenantId = currentTenantId()) {
+    /* 裁定2(08-30d):冲销红字行按 reversal_of 归位 —— 冲充值的负数进「实付累计」、
+       冲赠送的进「赠送累计」,四参考数与余额同步联动(判据⑤) */
     const row = db.prepare(`SELECT
-        COALESCE(SUM(CASE WHEN type IN ('recharge','migrate_opening') THEN amount_cents ELSE 0 END), 0) AS paid,
-        COALESCE(SUM(CASE WHEN type = 'bonus' THEN amount_cents ELSE 0 END), 0) AS bonus,
-        COALESCE(SUM(CASE WHEN type = 'consume' THEN -amount_cents ELSE 0 END), 0) AS consumed,
-        COALESCE(SUM(CASE WHEN type = 'refund' THEN -amount_cents ELSE 0 END), 0) AS refunded,
-        COALESCE(SUM(amount_cents), 0) AS balance
-      FROM stored_value_transactions WHERE tenant_id = ? AND user_id = ?`).get(tenantId, userId)
+        COALESCE(SUM(CASE WHEN t.type IN ('recharge','migrate_opening') THEN t.amount_cents
+                          WHEN t.type = 'reversal' AND o.type IN ('recharge','migrate_opening') THEN t.amount_cents ELSE 0 END), 0) AS paid,
+        COALESCE(SUM(CASE WHEN t.type = 'bonus' THEN t.amount_cents
+                          WHEN t.type = 'reversal' AND o.type = 'bonus' THEN t.amount_cents ELSE 0 END), 0) AS bonus,
+        COALESCE(SUM(CASE WHEN t.type = 'consume' THEN -t.amount_cents ELSE 0 END), 0) AS consumed,
+        COALESCE(SUM(CASE WHEN t.type = 'refund' THEN -t.amount_cents ELSE 0 END), 0) AS refunded,
+        COALESCE(SUM(t.amount_cents), 0) AS balance
+      FROM stored_value_transactions t
+      LEFT JOIN stored_value_transactions o ON o.id = t.reversal_of
+      WHERE t.tenant_id = ? AND t.user_id = ?`).get(tenantId, userId)
     const money = (c) => formatMoneyCents(c, tenantId, 'auto')
     /* 🔴 v1.1 ①(店主 08-26):余额 = 实付 + 赠送 − 已消费。点「全额退」有可能
        **把本店送出去的钱用现金退给顾客** —— 不加硬拦(每家店规则不一样),但界限要画到屏上。
@@ -234,10 +240,12 @@ export function createAccountRefund({ db, apiError, iso, randomId, currentTenant
       : 0
     const refunds = refundsOfDay(date, tenantId)
     const isDrawer = (ch) => ['cash', 'offline', 'unknown', ''].includes(String(ch || ''))
+    /* 裁定2(08-30d):冲销红字行带原渠道负数,当日抽屉自动 −(充值本就不写账本行,
+       抽屉的钱一直从储值行累加 —— 反向行走同一口径;赠送反向 pay_channel=marketing 天然不进抽屉) */
     const svRows = db.prepare(`SELECT amount_cents, pay_channel, created_at, type FROM stored_value_transactions
-      WHERE tenant_id = ? AND type IN ('refund', 'recharge')`).all(tenantId)
+      WHERE tenant_id = ? AND type IN ('refund', 'recharge', 'reversal')`).all(tenantId)
       .filter((r) => storeDateOf(r.created_at, tenantId) === date)
-    const rechargeCash = svRows.filter((r) => r.type === 'recharge' && isDrawer(r.pay_channel))
+    const rechargeCash = svRows.filter((r) => (r.type === 'recharge' || r.type === 'reversal') && isDrawer(r.pay_channel))
       .reduce((n, r) => n + r.amount_cents, 0)
     const refundCash = svRows.filter((r) => r.type === 'refund' && isDrawer(r.pay_channel))
       .reduce((n, r) => n + Math.abs(r.amount_cents), 0)
