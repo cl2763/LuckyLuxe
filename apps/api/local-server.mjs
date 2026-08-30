@@ -10,6 +10,8 @@ import os from 'node:os'   // 真机调试:开发机局域网 IP 探测(启动�
 import { pngSize, rasterBackend, svgToPng } from './svg-raster.mjs'
 import { inkToPng } from './ink-raster.mjs'
 import { createAfterSales } from './after-sales.mjs'        // 售后域(公约②:边改边拆)
+import { hoursUnsetOfStore, hoursSavable, HOURS_GATE_TEXT } from './hours-gate.mjs'   // 营业时间闸(D84 强制设置图 v1.0)
+import { createBusinessHoursRoutes } from './business-hours-routes.mjs'   // 营业时间两条路由(强制设置批边改边拆)
 import { createOrderBadges, bookingSourceText, bookingStatusText } from './order-badges.mjs'
 import { installLedgerGuards, backfillTenantKindOnce, LEDGER_TRIGGER_NAMES } from './ledger-guards.mjs'
 import { createQuoteSerialize } from './quote-serialize.mjs'          // AI 报价域序列化(公约②)
@@ -6342,10 +6344,13 @@ function assertBookable(input, opts = {}) {
   const schedule = db.prepare('SELECT * FROM technician_schedules WHERE technician_id = ? AND date = ?').get(input.technicianId, input.date)
   if (schedule && !schedule.is_working && !opts.adminDirect) throw apiError(400, 'BAD_REQUEST', '该技师这天休息。')
 
-  const baseOpen = (special && !special.is_closed && special.open_time) || hours?.open_time || '10:00'
-  const baseClose = (special && !special.is_closed && special.close_time) || hours?.close_time || '19:00'
+  /* 零回落(图 v1.0 合同三):未设置不许编时段。老板直排(adminDirect)本就跳过边界校验,
+     普通预约走到这里必有真实营业行(closedThatDay 已拦) —— 万一没有,按休息拒,不编数。 */
+  const baseOpen = (special && !special.is_closed && special.open_time) || hours?.open_time || null
+  const baseClose = (special && !special.is_closed && special.close_time) || hours?.close_time || null
   const openTime = schedule?.start_time || baseOpen
   const closeTime = schedule?.end_time || baseClose
+  if (!opts.adminDirect && (!openTime || !closeTime)) throw apiError(400, 'BAD_REQUEST', '该日期门店休息。')
   // 老板直接排单可覆盖时长(这次多做/少做);普通预约按服务标准时长
   const durationMin = (opts.adminDirect && input.durationMin) ? input.durationMin : totalDuration(service.type, service.base_duration_min, input.addOns)
   const startMinutes = minutesFromTime(input.time)
@@ -6371,8 +6376,10 @@ function getAvailability(query) {
   const special = specialDateFor(storeId, date)
   const closedThatDay = special ? Boolean(special.is_closed) : (!hours || Boolean(hours.is_closed))
   if (closedThatDay) return { date, durationMin, slots: [] }
-  const dayOpen = (special && !special.is_closed && special.open_time) || hours?.open_time || '10:00'
-  const dayClose = (special && !special.is_closed && special.close_time) || hours?.close_time || '19:00'
+  /* 零回落:没真实时段=没有可约,不编 10:00-20:00 给顾客约一家从没设置过营业时间的店 */
+  const dayOpen = (special && !special.is_closed && special.open_time) || hours?.open_time || null
+  const dayClose = (special && !special.is_closed && special.close_time) || hours?.close_time || null
+  if (!dayOpen || !dayClose) return { date, durationMin, slots: [] }
 
   const techRows = db.prepare(`
     SELECT t.* FROM technicians t
@@ -7117,6 +7124,15 @@ const refundApi = createAccountRefund({
 })
 const heroSlidesApi = createHeroSlides({ db, apiError, iso, randomId, currentTenantId })
 const cashNotesApi = createCashNotes({ db, apiError, iso, randomId, currentTenantId, formatMoneyCents: (v, t, m) => formatMoneyCents(v, t, m) })
+const businessHoursRoutes = createBusinessHoursRoutes({
+  apiError, json, readBody, db, currentTenantId, defaultStoreId,
+  getBusinessHoursRows: (sid) => getBusinessHoursRows(sid),
+  serializeBusinessHour: (r) => serializeBusinessHour(r),
+  businessHoursText: (sid, l) => businessHoursText(sid, l),
+  storeTodayHours: (st, l) => storeTodayHours(st, l),
+  upcomingSpecialDates: (sid, d) => upcomingSpecialDates(sid, d),
+  iso, hoursSavable, HOURS_GATE_TEXT
+})
 const settlementRoutes = createSettlementRoutes({
   apiError, json, readBody, db, currentTenantId,
   computeSettlement: (a) => computeSettlement(a),
@@ -9401,9 +9417,11 @@ function storeHoursOn(date, tenantId = currentTenantId()) {
   const weekday = localDateTime(date, '12:00', tenantTimezone(tenantId)).getDay()
   const hours = db.prepare('SELECT * FROM business_hours WHERE store_id = ? AND weekday = ?').get(storeId, weekday)
   const special = specialDateFor(storeId, date)
+  /* 零回落:那天没有真实营业时段就回 null —— 消费方(半天班边界)自己决定拒绝,不许编数 */
+  const hoursOpen = hours && !hours.is_closed ? hours : null   // 读口先看 is_closed:休息行的时间是占位,不许消费
   return {
-    openTime: (special && !special.is_closed && special.open_time) || hours?.open_time || '10:00',
-    closeTime: (special && !special.is_closed && special.close_time) || hours?.close_time || '19:00'
+    openTime: (special && !special.is_closed && special.open_time) || hoursOpen?.open_time || null,
+    closeTime: (special && !special.is_closed && special.close_time) || hoursOpen?.close_time || null
   }
 }
 
@@ -9413,6 +9431,10 @@ function resolveShift(input = {}, date, tenantId = currentTenantId()) {
   const shift = ['full', 'am', 'pm', 'custom', 'off'].includes(input.shift) ? input.shift : null
   const { openTime, closeTime } = storeHoursOn(date, tenantId)
   const split = afternoonStartOf(tenantId)
+  /* 零回落:那天门店没有真实营业时段,半天/全天班没有可依的边界 —— 明说,不编 10:00-19:00 */
+  if ((!openTime || !closeTime) && ['full', 'am', 'pm', 'off'].includes(shift)) {
+    throw apiError(400, 'HOURS_UNSET', '这天门店没有营业时段(未设置或休息),先在 设置→营业时间 里设好再排班。')
+  }
   if (shift === 'off') return { shift: 'off', startTime: openTime, endTime: closeTime, isWorking: false }
   if (shift === 'am') return { shift: 'am', startTime: openTime, endTime: split, isWorking: true }
   if (shift === 'pm') return { shift: 'pm', startTime: split, endTime: closeTime, isWorking: true }
@@ -11280,7 +11302,13 @@ async function route(req, res) {
     // 2026-08-03 附带店铺名:商家端「我的/管理」页顶部显示自己的店名(而非"老板"这类通用词)
     const me = requireAdmin(req)
     const t = db.prepare('SELECT name FROM tenants WHERE id = ?').get(me.tenantId || currentTenantId())
-    return json(res, 200, { admin: Object.assign({}, me, { tenantName: t?.name || '' }) })
+    /* D84 强制设置(图 v1.0):未设置态旗标随会话下发 —— 两端强制页/员工墙都由这一个字段驱动 */
+    const gateStore = db.prepare('SELECT id FROM stores WHERE tenant_id = ? AND is_active = 1 LIMIT 1').get(me.tenantId || currentTenantId())
+    return json(res, 200, {
+      admin: Object.assign({}, me, { tenantName: t?.name || '' }),
+      hoursUnset: hoursUnsetOfStore(db, gateStore?.id),
+      hoursGateText: HOURS_GATE_TEXT
+    })
   }
   if (req.method === 'PATCH' && path === '/admin/auth/display-name') {
     // 2026-08-03 显示名自助修改(店主/员工都可改自己的):管理页顶部那行黑字
@@ -13523,10 +13551,15 @@ async function route(req, res) {
         const body = await readBody(req)
         const entries = Array.isArray(body.hours) ? body.hours : []
         if (!entries.length) throw apiError(400, 'BAD_REQUEST', 'hours array is required.')
+        const tp2 = /^([01]\d|2[0-3]):[0-5]\d$/
+        for (const e of entries) {
+          if (!e.isClosed && (!tp2.test(e.openTime || '') || !tp2.test(e.closeTime || ''))) throw apiError(400, 'BAD_REQUEST', 'openTime/closeTime must be HH:MM.')
+        }
+        if (!hoursSavable(entries, getBusinessHoursRows(store.id))) throw apiError(400, 'HOURS_ALL_CLOSED', HOURS_GATE_TEXT.saveDisabledNote + '。')
         const stmt = db.prepare(`INSERT INTO business_hours (store_id, weekday, open_time, close_time, is_closed, updated_at, updated_by)
           VALUES (?, ?, ?, ?, ?, ?, 'platform')
           ON CONFLICT(store_id, weekday) DO UPDATE SET open_time = excluded.open_time, close_time = excluded.close_time, is_closed = excluded.is_closed, updated_at = excluded.updated_at, updated_by = 'platform'`)
-        for (const e of entries) stmt.run(store.id, Number(e.weekday), e.openTime || '10:00', e.closeTime || '19:00', e.isClosed ? 1 : 0, iso(new Date()))
+        for (const e of entries) stmt.run(store.id, Number(e.weekday), e.isClosed ? '00:00' : e.openTime, e.isClosed ? '00:00' : e.closeTime, e.isClosed ? 1 : 0, iso(new Date()))
         return json(res, 200, { hours: getBusinessHoursRows(store.id).map(serializeBusinessHour) })
       }
     }
@@ -13802,15 +13835,15 @@ async function route(req, res) {
       const weekday = localDateTime(dateStr, '12:00').getDay()
       const hours = db.prepare('SELECT * FROM business_hours WHERE store_id = ? AND weekday = ?').get(storeId, weekday)
       const special = specialDateFor(storeId, dateStr)
-      // D84 同族第二处:未设置 ≠ 休息(口径同 schedule-day)
-      const wkUnset = !special && !hours && !db.prepare('SELECT 1 FROM business_hours WHERE store_id = ? LIMIT 1').get(storeId)
+      // D84 同族第二处:未设置 ≠ 休息;判定收口到 hoursUnsetOfStore(图 v1.0:七天全关也算未设置)
+      const wkUnset = !special && hoursUnsetOfStore(db, storeId)
       days.push({
         date: dateStr,
         weekday,
         hoursUnset: wkUnset,
         isClosed: special ? Boolean(special.is_closed) : (wkUnset ? false : (!hours || Boolean(hours.is_closed))),
-        openTime: (special && !special.is_closed && special.open_time) || hours?.open_time || '10:00',
-        closeTime: (special && !special.is_closed && special.close_time) || hours?.close_time || '19:00',
+        openTime: (special && !special.is_closed && special.open_time) || (hours && !hours.is_closed ? hours.open_time : null),
+        closeTime: (special && !special.is_closed && special.close_time) || (hours && !hours.is_closed ? hours.close_time : null),
         specialNote: special?.note || (special ? (special.is_closed ? '特殊休息' : '特殊时段') : '')
       })
     }
@@ -13852,10 +13885,10 @@ async function route(req, res) {
        三态口径(空态律:空态说真话):设置了且当天休 → isClosed;**整店从没设置过 → hoursUnset**
        (两端渲染引导墙「还没设置营业时间」+ 直达设置);休息态只留给真休息。
        参照 isClosedDay(D34)早就写对的口径:「没配过排班的店不算休息」。 */
-    const hoursUnset = !special && !hours && !db.prepare('SELECT 1 FROM business_hours WHERE store_id = ? LIMIT 1').get(storeId)
+    const hoursUnset = !special && hoursUnsetOfStore(db, storeId)
     const isClosed = special ? Boolean(special.is_closed) : (hoursUnset ? false : (!hours || Boolean(hours.is_closed)))
-    const openTime = (special && !special.is_closed && special.open_time) || hours?.open_time || '10:00'
-    const closeTime = (special && !special.is_closed && special.close_time) || hours?.close_time || '19:00'
+    const openTime = (special && !special.is_closed && special.open_time) || (hours && !hours.is_closed ? hours.open_time : null)
+    const closeTime = (special && !special.is_closed && special.close_time) || (hours && !hours.is_closed ? hours.close_time : null)
     const allTechs = db.prepare('SELECT id, name, title, is_active FROM technicians WHERE tenant_id = ? ORDER BY is_active DESC, name ASC').all(tid)
     const dayStart = iso(localDateTime(date, '00:00'))
     const dayEnd = iso(addMinutes(localDateTime(date, '00:00'), 24 * 60))
@@ -14006,7 +14039,11 @@ async function route(req, res) {
     for (const entry of entries) {
       if (!entry.technicianId || !/^\d{4}-\d{2}-\d{2}$/.test(entry.date || '')) continue
       if (!techOk.get(entry.technicianId, currentTenantId())) continue // 多租户:只排本店技师
-      stmt.run(entry.technicianId, entry.date, entry.startTime || '10:00', entry.endTime || '19:00', Number(Boolean(entry.isWorking)))
+      const dayHours = storeHoursOn(entry.date)   // 零回落:缺参兜底改用真实营业时段,不编 10:00-19:00
+      const st2 = entry.startTime || dayHours.openTime
+      const en2 = entry.endTime || dayHours.closeTime
+      if (!st2 || !en2) continue   // 那天门店没有营业时段 → 这行排不了,applied 如实少计
+      stmt.run(entry.technicianId, entry.date, st2, en2, Number(Boolean(entry.isWorking)))
       applied += 1
     }
     return json(res, 200, { applied })
@@ -15062,66 +15099,8 @@ async function route(req, res) {
       storage: { cosConfigured: cosConfigured(), uploadAllowed: cosUploadAllowed(), snapshotFallback: cosUploadAllowed() ? 'cos' : 'inline' }
     })
   }
-  if (req.method === 'GET' && path === '/admin/business-hours') {
-    const stores = db.prepare('SELECT id, name, address, phone, currency, timezone FROM stores WHERE is_active = 1 AND tenant_id = ? ORDER BY name ASC').all(currentTenantId())
-    return json(res, 200, {
-      stores: stores.map((store) => ({
-        id: store.id,
-        name: store.name,
-        address: store.address,
-        phone: store.phone,
-        // 2026-08-07:老板端要按本店币种/时区显示金额与"今天",这两项以前没下发,前端只能写死 CAD + Toronto
-        currency: store.currency || 'CAD',
-        timezone: store.timezone || 'America/Toronto',
-        hours: getBusinessHoursRows(store.id).map(serializeBusinessHour),
-        hoursText: { zh: businessHoursText(store.id, 'zh'), en: businessHoursText(store.id, 'en') },
-        // 今日营业句/营业中状态:后端唯一出口(特殊日优先、按门店时区),前端零计算
-        todayHours: { zh: storeTodayHours(store, 'zh'), en: storeTodayHours(store, 'en') },
-        specialDates: upcomingSpecialDates(store.id, 366).map((row) => ({
-          date: row.date,
-          isClosed: Boolean(row.is_closed),
-          openTime: row.open_time,
-          closeTime: row.close_time,
-          note: row.note || ''
-        }))
-      }))
-    })
-  }
-  if (req.method === 'PUT' && path === '/admin/business-hours') {
-    if (adminSession.role !== 'owner') throw apiError(403, 'FORBIDDEN', 'Owner permission is required.')
-    const body = await readBody(req)
-    const storeId = body.storeId || defaultStoreId()
-    const store = db.prepare('SELECT * FROM stores WHERE id = ? AND tenant_id = ?').get(storeId, currentTenantId())
-    if (!store) throw apiError(404, 'NOT_FOUND', 'Store not found.')
-    const entries = Array.isArray(body.hours) ? body.hours : []
-    if (!entries.length) throw apiError(400, 'BAD_REQUEST', 'hours array is required.')
-    const timePattern = /^([01]\d|2[0-3]):[0-5]\d$/
-    const seen = new Set()
-    for (const entry of entries) {
-      const weekday = Number(entry.weekday)
-      if (!Number.isInteger(weekday) || weekday < 0 || weekday > 6) throw apiError(400, 'BAD_REQUEST', 'weekday must be 0-6.')
-      if (seen.has(weekday)) throw apiError(400, 'BAD_REQUEST', `duplicate weekday ${weekday}.`)
-      seen.add(weekday)
-      if (!entry.isClosed) {
-        if (!timePattern.test(entry.openTime || '') || !timePattern.test(entry.closeTime || '')) throw apiError(400, 'BAD_REQUEST', 'openTime/closeTime must be HH:MM.')
-        if (entry.openTime >= entry.closeTime) throw apiError(400, 'BAD_REQUEST', 'openTime must be earlier than closeTime.')
-      }
-    }
-    const now = iso(new Date())
-    const updatedBy = adminSession.email || adminSession.provider || 'owner'
-    const stmt = db.prepare(`INSERT INTO business_hours (store_id, weekday, open_time, close_time, is_closed, updated_at, updated_by)
-      VALUES (?, ?, ?, ?, ?, ?, ?)
-      ON CONFLICT(store_id, weekday) DO UPDATE SET open_time = excluded.open_time, close_time = excluded.close_time, is_closed = excluded.is_closed, updated_at = excluded.updated_at, updated_by = excluded.updated_by`)
-    for (const entry of entries) {
-      const isClosed = entry.isClosed ? 1 : 0
-      stmt.run(storeId, Number(entry.weekday), entry.openTime || '10:00', entry.closeTime || '19:00', isClosed, now, updatedBy)
-    }
-    return json(res, 200, {
-      store: { id: store.id, name: store.name },
-      hours: getBusinessHoursRows(storeId).map(serializeBusinessHour),
-      hoursText: { zh: businessHoursText(storeId, 'zh'), en: businessHoursText(storeId, 'en') }
-    })
-  }
+  // 营业时间两条路由搬进 ./business-hours-routes.mjs(强制设置批边改边拆,只搬不改)
+  if (await businessHoursRoutes.route(req, res, { path, query, adminSession })) return
   // 老板直接排单(2026-07-22):复用 createBooking → 建单+占 booking_slots,全链路占位(AI 可约/系统显示/技师端同步)。
   if (req.method === 'POST' && path === '/admin/bookings/direct') {
     /* 2026-08-09 店主定的产品原则:散客也必须先有预约 —— 没预约的由**技师现场排单**,
@@ -15691,8 +15670,8 @@ async function route(req, res) {
     const sched = db.prepare('SELECT end_time, is_working FROM technician_schedules WHERE technician_id = ? AND date = ?').get(techId, date)
     if (sched && sched.is_working && sched.end_time) return sched.end_time
     const wd = localDateTime(date, '12:00').getDay()
-    const bh = db.prepare('SELECT close_time FROM business_hours WHERE store_id = ? AND weekday = ?').get(storeId || defaultStoreId(), wd)
-    return (bh && bh.close_time) || '19:00'
+    const bh = db.prepare('SELECT close_time FROM business_hours WHERE store_id = ? AND weekday = ? AND is_closed = 0').get(storeId || defaultStoreId(), wd)
+    return (bh && bh.close_time) || '19:00'   // 打卡域成文口径(注释:排班>门店>19:00),A3 白名单唯一条目
   }
   // 打卡(员工本人):action in|out;WiFi 白名单已配置则校验 BSSID(不匹配 403,提示连店内 WiFi);未配置=放行但标未验证
   if (req.method === 'POST' && path === '/admin/attendance/clock') {

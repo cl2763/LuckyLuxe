@@ -1,0 +1,22 @@
+<!-- 图 v1.0 屏①(老板)/屏②(员工)。员工分支零表单元素(A4)。 -->
+<view class="wrap" wx:if="{{isOwner}}">
+  <view class="title">{{txt.ownerTitle}}</view>
+  <view class="hint">{{txt.ownerHint}}</view>
+  <view class="day" wx:for="{{days}}" wx:key="weekday" wx:for-item="d" wx:for-index="i">
+    <switch class="sw" checked="{{d.open}}" data-i="{{i}}" bindchange="toggleDay" color="#0e6e62" />
+    <text class="dn">{{d.name}}</text>
+    <block wx:if="{{d.open}}">
+      <picker class="tm set" mode="time" value="{{d.openTime}}" data-i="{{i}}" bindchange="pickOpen">{{d.openTime || txt.timePlaceholder}}</picker>
+      <text class="dash">–</text>
+      <picker class="tm set" mode="time" value="{{d.closeTime}}" data-i="{{i}}" bindchange="pickClose">{{d.closeTime || txt.timePlaceholder}}</picker>
+    </block>
+    <text class="tm ph" wx:else>{{txt.timePlaceholder}}</text>
+  </view>
+  <view class="save {{anyOpen && !saving ? 'go' : 'dis'}}" bindtap="save">{{saving ? '保存中…' : txt.saveButton}}</view>
+  <view class="note" wx:if="{{!anyOpen}}">{{txt.saveDisabledNote}}</view>
+</view>
+<view class="wrap wall" wx:else>
+  <view class="emoji">🕘</view>
+  <view class="title">{{txt.staffTitle}}</view>
+  <view class="hint">{{txt.staffHint}}</view>
+</view>

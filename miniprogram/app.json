@@ -20,6 +20,7 @@
     "pages/merchant/customers/index",
     "pages/merchant/customer/index",
     "pages/merchant/account-adjust/index",
+    "pages/merchant/hours-setup/index",
     "pages/merchant/service-note/index",
     "pages/merchant/settlement/index",
     "pages/merchant/daily-close/index",

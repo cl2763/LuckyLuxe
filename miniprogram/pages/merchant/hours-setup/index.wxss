@@ -1,0 +1,17 @@
+.wrap { padding: 56rpx 40rpx; }
+.title { font-size: 40rpx; font-weight: 700; margin-bottom: 4rpx; }
+.hint { font-size: 26rpx; color: #6b6f66; margin-bottom: 28rpx; }
+.day { display: flex; align-items: center; gap: 16rpx; padding: 18rpx 0; border-bottom: 2rpx dashed #e2e0d8; }
+.sw { transform: scale(.8); }
+.dn { width: 4.4em; font-size: 28rpx; }
+.tm { margin-left: auto; font-size: 26rpx; background: #f1efe9; border-radius: 8rpx; padding: 6rpx 16rpx; color: #6b6f66; }
+.tm.set { margin-left: auto; background: #eef4f2; color: #20211f; }
+.tm.set + .dash + .tm.set { margin-left: 0; }
+.dash { color: #6b6f66; }
+.tm.ph { margin-left: auto; }
+.save { margin-top: 36rpx; text-align: center; border-radius: 12rpx; padding: 22rpx 0; font-size: 30rpx; font-weight: 700; }
+.save.go { background: #0e6e62; color: #fff; }
+.save.dis { background: #f1efe9; color: #6b6f66; }
+.note { text-align: center; font-size: 24rpx; color: #b45309; margin-top: 12rpx; }
+.wall { text-align: center; padding-top: 200rpx; }
+.emoji { font-size: 64rpx; margin-bottom: 16rpx; }

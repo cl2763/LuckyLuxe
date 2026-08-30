@@ -592,7 +592,7 @@ window.SettlementWeb = (function () {
       }
       openRvPanel()
     })
-    on('[data-sw-rv-open]', function () { openRvPanel() })
+    on('[data-sw-rv-open]', function (el, e2) { e2.stopPropagation(); openRvPanel() })   // catchtap 同刀:别冒泡进外层勾选行
     on('[data-sw-rv-close]', function () { state.rvPanel = null; render() })
     on('[data-sw-rv-pick]', function (el) {
       const id = el.dataset.swRvPick
@@ -659,8 +659,9 @@ window.SettlementWeb = (function () {
   let _t = null; let _seq = 0
   function schedulePreview() { clearTimeout(_t); _t = setTimeout(doPreview, 250) }
   async function doPreview() {
+    /* C2 裁(08-30):空态守卫拆除 —— 小程序 doPreview 从来不设守卫,后端对空单回 200 合法零单
+       (后端是最终闸)。守卫=前端多养一份「什么算空」的定义,D86(漏认购卡组)就是它咬的第一口。 */
     const { request } = state._deps
-    if (!state.groups.some(function (g) { return g.mainId || Object.keys(g.addonIds).length || g.customItems.length || g.timecardId || g.purchasePackageId })) return
     const seq = ++_seq
     try {
       const r = await request('/admin/settlements/preview', { method: 'POST', body: JSON.stringify(buildBody(state)) })

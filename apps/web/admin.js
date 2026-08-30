@@ -1,6 +1,6 @@
 // 构建号:每次交付递增。侧栏可见,排查"改了没生效"时先对版本。
 // 兜底用(服务端会注入 window.LL_BUILD = 资源内容指纹,页面优先显示那个)
-const ADMIN_BUILD = '20260830b-dk3'
+const ADMIN_BUILD = '20260830c-hg'
 let pricingState = { module: 'storefront', tab: 'items', categories: [], items: [], rules: {}, editing: null, preview: null, storefrontPicker: false }
 console.log(`[admin] build ${ADMIN_BUILD}`)
 
@@ -1128,7 +1128,7 @@ async function loadAll() {
     request('/admin/bookings'),
     request('/admin/technicians')
   ])
-  owner.role = meData.admin?.role || owner.auth?.admin?.role || 'owner'
+  owner.role = meData.admin?.role || owner.auth?.admin?.role || 'owner'; owner.hoursUnset = Boolean(meData.hoursUnset); owner.hoursGateText = meData.hoursGateText   // D84 旗标(图 v1.0)
   const [serviceData, customerData] = isOwnerRole()
     ? await Promise.all([request('/admin/services'), request('/admin/customers')])
     : [{ services: [] }, { customers: [] }]
@@ -1324,6 +1324,7 @@ function setLocked(locked) {
 }
 
 function render() {
+  if (!owner.auth?.admin?.mustChangePassword && window.HoursSetup?.gate(owner, { request, escapeHtml, toast, reboot: loadAll })) return   // D84 强制设置闸(图 v1.0 合同一);改密先行=账户安全在前(图未画次序,入假设清单)
   applyLanguage()
   renderMetrics()
   renderAdminPages()

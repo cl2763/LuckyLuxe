@@ -40,7 +40,12 @@ async function main() {
   check('schedule-week returns 200 with 7 days', week.status === 200 && week.data.days?.length === 7)
   const monday = new Date(`${week.data.weekStart}T12:00:00`)
   check('week starts on Monday', monday.getDay() === 1, week.data.weekStart)
-  check('days carry closed flag and hours', week.data.days.every((day) => 'isClosed' in day && day.openTime && day.closeTime))
+  /* 08-30 强制设置批(A3 零回落)改口:休息/未设置日不再编 10:00-19:00 —— 时间只属于营业日。
+     旧断言要求每天都有时间,恰是靠被处死的回落才绿的(判据吃编数的活案例)。 */
+  check('days carry closed flag; hours only on open days (零回落口径)',
+    week.data.days.every((day) => 'isClosed' in day && (day.isClosed || day.hoursUnset ? true : (day.openTime && day.closeTime))))
+  check('closed/unset days carry no invented times(编数复活即红)',
+    week.data.days.every((day) => (!day.isClosed && !day.hoursUnset) || (!day.openTime && !day.closeTime)))
   check('technicians listed', Array.isArray(week.data.technicians) && week.data.technicians.length > 0)
 
   // 2. 单格切换:指定未来某天休息 → override 出现

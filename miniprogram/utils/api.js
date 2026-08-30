@@ -853,10 +853,22 @@ function goMerchantLogin() {
 
 // 商家区通用守卫(老板或员工都可):没登录就送回登录页,别让人停在没有数据的空壳页面上。
 // 只做本地会话判断,不发请求——放在 onShow 开头零成本。
+/* D84 强制设置闸(图 v1.0 合同一/四):未设置态 → 强制页(老板=表单,员工=墙,同页分脸)。
+   redirectTo 不留返回键 —— 不可跳过、不可关闭。 */
+const HOURS_SETUP_PAGE = 'pages/merchant/hours-setup/index'
+function hoursGateText() { try { return JSON.parse(wx.getStorageSync('lucky_hours_gate') || 'null') || {} } catch (e) { return {} } }
+function enforceHoursGate() {
+  if (wx.getStorageSync('lucky_hours_unset') !== '1') return false
+  const pages = getCurrentPages()
+  const cur = pages[pages.length - 1]
+  if (cur && cur.route === HOURS_SETUP_PAGE) return false
+  require('./nav').relaunch('/' + HOURS_SETUP_PAGE)   // 清栈进强制页(裸导航棘轮㉑:新增一律走 nav)
+  return true
+}
 function guardMerchant() {
-  if (isAdminLoggedIn()) return true
-  goMerchantLogin()
-  return false
+  if (!isAdminLoggedIn()) { goMerchantLogin(); return false }
+  if (enforceHoursGate()) return false
+  return true
 }
 
 async function guardOwner() {
@@ -874,6 +886,7 @@ async function guardOwner() {
     if (code === 401 || code === 403 || code === 'UNAUTHORIZED' || code === 'FORBIDDEN' || code === 'ACCOUNT_DISABLED') return false
     return true // 断网/超时:不误伤
   }
+  if (enforceHoursGate()) return false
   if (me && me.role === 'owner') return true
   wx.showToast({ title: '仅老板可用', icon: 'none' })
   setTimeout(() => wx.navigateBack({ fail: () => wx.reLaunch({ url: '/pages/merchant/home/index' }) }), 350)
@@ -892,6 +905,9 @@ async function financeUnlock(password, confirmPassword) {
 async function adminMe() {
   const data = await adminRequest('/admin/auth/me')
   if (data && data.admin && data.admin.role) wx.setStorageSync('lucky_admin_role', data.admin.role)
+  /* D84 强制设置(图 v1.0):未设置旗标+后端句随 me 缓存,守卫零请求即时拦 */
+  wx.setStorageSync('lucky_hours_unset', data && data.hoursUnset ? '1' : '')
+  if (data && data.hoursGateText) wx.setStorageSync('lucky_hours_gate', JSON.stringify(data.hoursGateText))
   return data.admin
 }
 
@@ -986,6 +1002,8 @@ module.exports = {
   isOwner,
   guardOwner,
   guardMerchant,
+  enforceHoursGate,
+  hoursGateText,
   refreshMerchantAi,
   merchantHasAi,
   financeUnlock,

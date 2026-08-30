@@ -355,13 +355,18 @@ check('⑦ 签字之前账本一分未记(入账唯一路径=签署,不变)', fi
     check(`⑩③ 实发资源上有锚点「${anchor}」`, servedSW.includes(anchor))
   }
 
-  /* ③b 08-30 走查两刀(镜面缺口,修后常驻锚点):
-     预览守卫认购卡组(原来购卡组预览发不出去,页面挂旧数);
+  /* ③b 08-30 两刀(修后常驻锚点):
+     C2 裁定 —— 预览零守卫(小程序同形:doPreview 不设空态早退,空单由后端回合法零单;
+     守卫曾咬出 D86,拆除后不许回潮);
      到店应收=offlineDue(小程序 682 行同形 —— 储值抵完两端都要显 0,不许网页显总额)。 */
-  check('⑩③b 预览守卫认购卡组(doPreview 守卫行含 purchasePackageId)',
-    /\|\| g\.timecardId \|\| g\.purchasePackageId \}\)/.test(servedSW))
+  check('⑩③b 预览零守卫(doPreview 里不存在 groups.some 空态早退 —— 与小程序同形)',
+    !/groups\.some[\s\S]{0,120}?\)\s*\)\s*return/.test(servedSW.slice(servedSW.indexOf('async function doPreview'), servedSW.indexOf('async function doPreview') + 600)))
   check('⑩③b 到店应收=offlineDue 同形(totalText 走 offlineDueCents,回落 totalCents)',
     servedSW.includes('totalText: money(pay2.offlineDueCents != null ? pay2.offlineDueCents : (grp.totalCents || 0), 2)'))
+
+  /* ③c L5 五连咬出(08-30):「改充值 →」嵌在勾选行内,不截冒泡=点链接连带清草稿(小程序 catchtap 同刀) */
+  check('⑩③c 行内链接截冒泡(data-sw-rv-open 带 stopPropagation,catchtap 同刀)',
+    servedSW.includes("e2.stopPropagation(); openRvPanel()"))
 
   /* ④ 死口句零残留:剥注释后,实发开单模块一句「先用小程序/网页版登记待排」都不许有 */
   const stripJs3 = (t) => t.replace(/\/\*[\s\S]*?\*\//g, '').replace(/\/\/[^\n]*/g, '')

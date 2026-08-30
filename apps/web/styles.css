@@ -7581,3 +7581,23 @@ section.card > .section-row:first-child { margin-top: 0; }
 .sw-techrow { display: flex; align-items: center; gap: 6px; margin: 4px 0; flex-wrap: wrap; }
 .sw-tn { font-size: 13px; font-weight: 600; min-width: 56px; }
 .sw-chip.mini { padding: 2px 10px; font-size: 12px; }
+/* 营业时间强制设置(图 v1.0 屏①/屏②):全屏接管,无 ×,不可绕过 */
+#hoursSetupWall { position: fixed; inset: 0; z-index: 200; background: var(--bg, #faf9f5); display: flex; align-items: center; justify-content: center; overflow: auto; }
+.hsw-box { width: min(420px, 92vw); background: #fff; border: 1px solid var(--line); border-radius: 14px; padding: 26px 24px; }
+.hsw-title { font-size: 20px; font-weight: 700; margin-bottom: 2px; }
+.hsw-hint { font-size: 13px; color: var(--muted); margin-bottom: 14px; }
+.hsw-day { display: flex; align-items: center; gap: 10px; padding: 8px 0; border-bottom: 1px dashed var(--line); }
+.hsw-sw { width: 34px; height: 20px; border-radius: 10px; border: none; background: var(--line); position: relative; cursor: pointer; flex-shrink: 0; }
+.hsw-sw::after { content: ""; position: absolute; width: 16px; height: 16px; border-radius: 50%; background: #fff; top: 2px; left: 2px; transition: left .15s; }
+.hsw-sw.on { background: #0e6e62; }
+.hsw-sw.on::after { left: 16px; }
+.hsw-dn { width: 2.4em; font-size: 14px; }
+.hsw-times { margin-left: auto; display: flex; align-items: center; gap: 4px; font-size: 13px; }
+.hsw-times input { border: 1px solid var(--line); border-radius: 6px; padding: 3px 6px; font-size: 13px; }
+.hsw-ph { margin-left: auto; font-size: 12px; color: var(--muted); background: #f1efe9; border-radius: 4px; padding: 2px 8px; }
+.hsw-save { width: 100%; margin-top: 16px; border: none; border-radius: 8px; padding: 11px 0; font-size: 15px; font-weight: 700; cursor: pointer; }
+.hsw-save.go { background: #0e6e62; color: #fff; }
+.hsw-save.dis { background: #f1efe9; color: var(--muted); cursor: not-allowed; }
+.hsw-note { text-align: center; font-size: 12px; color: #b45309; margin-top: 6px; }
+.hsw-staff { text-align: center; padding: 46px 24px; }
+.hsw-emoji { font-size: 34px; margin-bottom: 8px; }
