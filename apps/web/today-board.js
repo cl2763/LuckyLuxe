@@ -66,9 +66,10 @@ window.TodayBoard = (function () {
           depositUnpaid: b.depositUnpaid, afterSalesTag: b.afterSalesTag || ''
         }
       })
-      /* D88(08-30c):过去的时段不出「+直接排单」——今天的空档起点截到「现在」之后的下一个半点;
+      /* D88(08-30c)+ 乙案(店主 08-30g 裁):过去的时段不出「+直接排单」——今天的空档起点
+         截到「门店现在这一分钟」,不再对齐下一个半点(随点随排);
          「现在」只认后端 storeNow(门店时区),不裸 new Date 推 */
-      const minStart = date === r.storeToday && r.storeNow ? Math.ceil(toMin(r.storeNow) / 30) * 30 : -1
+      const minStart = date === r.storeToday && r.storeNow ? toMin(r.storeNow) : -1
       const frees = []; let cursor = openMin
       list.forEach((b) => {
         const s = toMin(b.startTime)

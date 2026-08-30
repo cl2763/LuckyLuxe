@@ -1,6 +1,6 @@
 // 构建号:每次交付递增。侧栏可见,排查"改了没生效"时先对版本。
 // 兜底用(服务端会注入 window.LL_BUILD = 资源内容指纹,页面优先显示那个)
-const ADMIN_BUILD = '20260830d-ui567'
+const ADMIN_BUILD = '20260830g-p3n01'
 let pricingState = { module: 'storefront', tab: 'items', categories: [], items: [], rules: {}, editing: null, preview: null, storefrontPicker: false }
 console.log(`[admin] build ${ADMIN_BUILD}`)
 
@@ -3614,6 +3614,7 @@ function renderStoreSettings() {
   els.businessHoursUpdated.textContent = updated ? `${t('lastUpdatedLabel')}: ${String(updated).slice(0, 16).replace('T', ' ')}` : ''
   els.businessHoursEditor.innerHTML = `
     <div id="hoursSettingsMount"></div>
+    <div id="notifySettingsMount"></div>
     <div class="special-dates-block">
       <h4>${owner.lang === 'zh' ? '特殊日期(节假日休息 / 临时调整)' : 'Special dates (holidays / temporary changes)'}</h4>
       <p class="subtle">${owner.lang === 'zh' ? '优先于每周固定模式,保存后立即影响可预约时段和 AI 的营业时间回答。' : 'Overrides the weekly pattern; affects booking slots and AI answers instantly.'}</p>
@@ -3648,6 +3649,7 @@ function renderStoreSettings() {
       toast(t('businessHoursSaved'))
     }
   })
+  window.NotifySettings.mountSettings(document.querySelector('#notifySettingsMount'), { request, escapeHtml, toast })
 }
 
 async function addSpecialDate() {

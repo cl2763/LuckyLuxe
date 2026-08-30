@@ -7615,3 +7615,17 @@ section.card > .section-row:first-child { margin-top: 0; }
 .mn-thumbs{display:flex;flex-wrap:wrap;gap:8px;margin-top:6px}
 .mn-del{position:absolute;top:-6px;right:-6px;width:20px;height:20px;line-height:18px;border:none;border-radius:50%;background:rgba(0,0,0,.55);color:#fff;font-size:11px;cursor:pointer}
 .dc-due-note{font-size:11.5px;color:var(--muted);margin:-2px 0 6px;padding-left:2px}
+
+/* ===== P3 通知与回访设置(notify-settings.js;08-30g)===== */
+.notify-settings-block { margin-top: 18px; padding-top: 14px; border-top: 1px solid var(--line, #e5e5ea); }
+.nfy-rules { display: flex; flex-direction: column; gap: 8px; margin: 10px 0 12px; }
+.nfy-rule { display: flex; align-items: center; gap: 10px; font-size: 14px; }
+.nfy-label { min-width: 130px; }
+.nfy-field { color: #555; font-size: 13px; }
+.nfy-num { width: 74px; padding: 4px 6px; }
+.nfy-queue { margin-top: 16px; }
+.nfy-queue-head { display: flex; align-items: center; justify-content: space-between; gap: 10px; }
+.nfy-table { width: 100%; border-collapse: collapse; font-size: 13px; margin-top: 8px; }
+.nfy-table th, .nfy-table td { text-align: left; padding: 6px 8px; border-bottom: 1px solid var(--line, #eee); }
+.nfy-row.failed td { color: #b42318; }
+.nfy-row.cancelled td { color: #8a8a8e; }

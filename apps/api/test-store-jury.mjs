@@ -92,9 +92,30 @@ for (const tid of allTenants) {
     const truth = db.prepare('SELECT COALESCE(SUM(amount_cents),0) n FROM stored_value_transactions WHERE tenant_id = ? AND user_id = ?').get(tid, own.id).n
     if (f.data.facts.balanceCents !== truth) throw new Error(`${label} I6 余额句 ${f.data.facts.balanceCents} ≠ 库真值 ${truth}`)
   }
+  /* I7 通知域(P3,08-30g):逐店三守 —— 队列行零串店 / 状态全在状态机集合内 /
+     FAILED 必带 fail_reason(静默失败器零容忍在每一家店都成立,不只样板店)。
+     串店按**机制**定义(L2 类按机制不按长相):任务租户 ≡ 来源实体租户 ——
+     带 booking 的对 bookings.tenant_id,扫描类对 users.tenant_id。
+     第一版直接对 users 全量比,被 deposit-config 夹具咬红:顾客走全局注册口(无租户头)落旗舰、
+     再带 x-tenant-id 在 p12 店下单 —— 既有身份模型现实(跨店身份归 identity_links 域),
+     预约在本店、任务就该在本店,不算通知域串店;已在回执登记该观察。 */
+  const NOTIFY_TYPES7 = ['booking_created', 'booking_rescheduled', 'booking_cancelled', 'arrival_reminder', 'card_expiring', 'birthday', 'revisit', 'coupon_expiring']
+  const ph7 = NOTIFY_TYPES7.map(() => '?').join(',')
+  const crossBk = db.prepare(`SELECT COUNT(*) AS n FROM reminder_tasks t JOIN bookings b ON b.id = t.booking_id
+    WHERE t.tenant_id = ? AND t.type IN (${ph7}) AND b.tenant_id != ?`).get(tid, ...NOTIFY_TYPES7, tid).n
+  if (crossBk !== 0) throw new Error(`${label} I7 通知队列串店:${crossBk} 行的预约属于别家店`)
+  const crossScan = db.prepare(`SELECT COUNT(*) AS n FROM reminder_tasks t JOIN users u ON u.id = t.user_id
+    WHERE t.tenant_id = ? AND t.booking_id IS NULL AND t.type IN (${ph7}) AND u.tenant_id != ?`).get(tid, ...NOTIFY_TYPES7, tid).n
+  if (crossScan !== 0) throw new Error(`${label} I7 通知队列串店:${crossScan} 条扫描任务指向别家顾客`)
+  const badState = db.prepare(`SELECT COUNT(*) AS n FROM reminder_tasks WHERE tenant_id = ? AND type IN (${ph7})
+    AND status NOT IN ('PENDING','SENT','FAILED','CANCELLED')`).get(tid, ...NOTIFY_TYPES7).n
+  if (badState !== 0) throw new Error(`${label} I7 通知状态越出状态机:${badState} 行`)
+  const dumbFail = db.prepare(`SELECT COUNT(*) AS n FROM reminder_tasks WHERE tenant_id = ? AND type IN (${ph7})
+    AND status = 'FAILED' AND (fail_reason IS NULL OR fail_reason = '')`).get(tid, ...NOTIFY_TYPES7).n
+  if (dumbFail !== 0) throw new Error(`${label} I7 FAILED 无原因(吞了):${dumbFail} 行`)
   iterated += 1
 }
-check(`🔴 ③ 不变量组 I1-I6 × ${iterated} 家全过(一家红整批红;含前序套件的各态店)`, iterated === allTenants.length)
+check(`🔴 ③ 不变量组 I1-I7 × ${iterated} 家全过(一家红整批红;含前序套件的各态店)`, iterated === allTenants.length)
 
 /* ===== ④ 矩阵店特征各验(建店规格 → 现测) ===== */
 for (const b of built) {

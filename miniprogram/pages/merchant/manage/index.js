@@ -13,6 +13,7 @@ const ROUTES = {
   member: '/pages/merchant/member/index',
   analytics: '/pages/merchant/analytics/index',
   store: '/pages/merchant/store/index',
+  notify: '/pages/merchant/notify-settings/index',
   myperf: '/pages/merchant/my-performance/index',
   attendance: '/pages/merchant/attendance/index',
   salaryMonth: '/pages/merchant/salary-month/index',
@@ -29,6 +30,7 @@ const E = {
   analytics: { k: 'analytics', icon: 'm-analytics', t: '经营分析', d: '询价转化 · 复购 · 客单价' },
   services: { k: 'services', icon: 'm-services', t: '服务与目录', d: '上架服务 · 结算单目录(只读镜像)' }, // S1 合同§四
   store: { k: 'store', icon: 'm-store', t: '门店信息 / 营业时间', d: '地址 · 电话 · 特殊日期 · 预约规则' },
+  notify: { k: 'notify', icon: 'm-marketing', t: '通知与回访', d: '预约通知 · 到店提醒 · 生日/回访' },
   staff: { k: 'staff', icon: 'm-staff', t: '员工管理', d: '排班 · 业绩目标 · 薪资方案 · 账号' },
   me: { k: 'me', icon: 'm-settings', t: '我的 / 账号', d: '改密 · 语言 · 财务密码' },
   myperf: { k: 'myperf', icon: 'm-analytics', t: '我的业绩', d: '本月营收 · 底薪 · 提成估算' },
@@ -61,7 +63,7 @@ Page({
       // 「日常经营」—— 排班是天天要用的,再让老板去设置里翻一层不合理
       { title: '日常经营', rows: [E.orders, E.staff, E.attendance, E.finance, E.salaryMonth, E.customers] },
       { title: '营销与会员', rows: [E.marketing, E.member, E.pointsMall, E.analytics] },
-      { title: '店铺设置', rows: [E.services, E.store, E.me] }
+      { title: '店铺设置', rows: [E.services, E.store, E.notify, E.me] }
     ] : [
       { title: '日常', rows: [E.attendanceStaff, E.scheduleView, E.myperf] },
       { title: '账号', rows: [E.me] }

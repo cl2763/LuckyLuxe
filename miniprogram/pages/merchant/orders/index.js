@@ -465,9 +465,10 @@ Page(Object.assign({
             afterSalesTag: b.afterSalesTag || '' // 裁C:售后单蓝徽标上日历(句后端唯一)
           }
         })
-        /* D88(08-30c 与网页同刀):过去的时段不出「+直接排单」——今天的空档起点截到
-           storeNow(后端门店时区句)之后的下一个半点,不裸 new Date 推 */
-        const minStart = date === r.storeToday && r.storeNow ? Math.ceil(toMin(r.storeNow) / 30) * 30 : -1
+        /* D88(08-30c 与网页同刀)+ 乙案(店主 08-30g 裁):过去的时段不出「+直接排单」——
+           今天的空档起点截到 storeNow(后端门店时区句)这一分钟,不再对齐半点(随点随排),
+           不裸 new Date 推 */
+        const minStart = date === r.storeToday && r.storeNow ? toMin(r.storeNow) : -1
         const frees = []; let cursor = openMin
         list.forEach((b) => { const s = toMin(b.startTime); const from = Math.max(cursor, minStart); if (s - from >= 30) { frees.push({ startTime: m2t(from), top: Math.round((from - openMin) / 60 * PX_PER_HOUR), height: Math.round((s - from) / 60 * PX_PER_HOUR) }); freeTotal += (s - from) } cursor = Math.max(cursor, toMin(b.endTime)) })
         const tailFrom = Math.max(cursor, minStart)

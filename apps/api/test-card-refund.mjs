@@ -537,7 +537,10 @@ check('⑩-2 🔴 行为必须不同:keep=仍是会员 / drop=余额归零即失
     const id = (/id="([^"]+)"/.exec(attrs) || [])[1] || ''
     const isPct = /data-f="pct"|max="100"|placeholder="%"/.test(attrs)
     const isSort = /class="pricing-sort"/.test(attrs)
-    return !NON_MONEY.includes(id) && !isPct && !isSort
+    /* P3 通知设置三框(提前分钟/提前天/回访天)= 计数不是钱;按类豁免(pricing-sort 同例):
+       动态逐类型渲染没法给唯一 id,类名只住 notify-settings.js,棘轮 6 id+2 类 → +1 类随批报 Cowork */
+    const isNfy = /class="nfy-num"/.test(attrs)
+    return !NON_MONEY.includes(id) && !isPct && !isSort && !isNfy
   })
   check(`v1.2③-1b 🔴 反过来数:全网页端 ${numberInputs.length} 个 type=number 全是"不是钱"的(百分比/几号/排序)`,
     suspects.length === 0 && numberInputs.length >= 5, suspects.join(' | ').slice(0, 300))

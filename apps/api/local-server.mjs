@@ -36,6 +36,7 @@ import { createStaffScope } from './staff-scope.mjs'                  // 员工�
 import { createRefundRoutes } from './refund-routes.mjs'              // 退卡/账户调整/我的客人 的路由层
 import { createPerfAdjust } from './perf-adjust.mjs'                  // 业绩基数/分成/业绩调整行(唯一实现)
 import { createDailyCloseScope } from './daily-close-scope.mjs'       // 日结归属(服务发生日)
+import { createNotifyScheduler } from './notify-scheduler.mjs'        // P3 通知调度器(队列/规则/tick;通道只有站内落地)
 import { createFinanceLedger } from './finance-ledger.mjs'            // 财务台账写入口 + 哈希链(唯一写口)
 import { createWriteGates } from './write-gates.mjs'                  // 写口后端最终闸(券面额/套餐售价/项目价)
 import { createAssetFingerprint } from './asset-fingerprint.mjs'      // 前端资源内容指纹(缓存失效)
@@ -6776,6 +6777,9 @@ function createBooking(body, opts = {}) {
     }
   } catch (error) { /* 带出失败不拦单;留存仍 active,下次预约再带 */ }
 
+  /* P3 事件钩:通知失败不许拦单(可用性>通知),但也不吞 —— 落日志有名有姓 */
+  try { notifyScheduler.onBookingEvent({ event: 'created', bookingId }) } catch (error) { console.error('[notify] created 钩失败:', error.message) }
+
   return serializeBooking(db.prepare('SELECT * FROM bookings WHERE id = ?').get(bookingId))
 }
 
@@ -6834,6 +6838,7 @@ function cancelBooking(id, body) {
     db.exec('ROLLBACK')
     throw error
   }
+  try { notifyScheduler.onBookingEvent({ event: 'cancelled', bookingId: id }) } catch (error) { console.error('[notify] cancelled 钩失败:', error.message) }
   return {
     booking: serializeBooking(db.prepare('SELECT * FROM bookings WHERE id = ?').get(id)),
     refundPolicy: {
@@ -7170,6 +7175,10 @@ const svReversal = createStoredValueReversal({
 const refundRoutes = createRefundRoutes({
   apiError, json, readBody, refundApi, staffScope,
   usableTimecardsOf: (uid) => usableTimecardsOf(uid), svReversal
+})
+const notifyScheduler = createNotifyScheduler({
+  db, randomId, iso, apiError, json, readBody, parseJson: parseJson2, localParts, tenantTimezone,
+  DEFAULT_TENANT_ID, dataScope: DATA_SCOPE
 })
 const platformOps = createPlatformOps({
   db, apiError, randomId, iso, snapshotDb, financeSessions, adminPasswordHash, randomPassword,
@@ -14265,6 +14274,7 @@ async function route(req, res) {
   /* 退卡 / 账户调整 / 员工「我的客人」这一族路由整体搬去 ./refund-routes.mjs(公约①②,2026-08-27)。
      门禁扫描器同批改成连 `*-routes.mjs` 一起读 —— 搬家不许把接口从扫描面上搬没了。 */
   if (await refundRoutes.route(req, res, { path, query, adminSession, requireRefundRight, tenantId: currentTenantId() })) return
+  if (await notifyScheduler.route(req, res, { path, query, adminSession, tenantId: currentTenantId() })) return
   if (req.method === 'POST' && path === '/admin/stored-value/recharge') {
     if (adminSession.role !== 'owner' && adminSession.role !== 'staff') {
       throw apiError(403, 'FORBIDDEN', '需要老板或员工权限。')
@@ -16261,6 +16271,7 @@ async function route(req, res) {
     assertStaffCanAccessBooking(adminSession, booking)
     const arrivedAt = body.arrived === false ? null : iso(new Date())
     db.prepare('UPDATE bookings SET arrived_at = ?, updated_at = ? WHERE id = ?').run(arrivedAt, iso(new Date()), id)
+    if (arrivedAt) { try { notifyScheduler.onArrived(id) } catch (error) { console.error('[notify] arrived 钩失败:', error.message) } }
     // P1.2 迟到宽限:超过 lateArrivalGraceMin 就提示按爽约处理(是否真的作废由技师点 /no-show 决定,
     // 不在"技师刚说客人到了"的这一刻自动作废订单)。未配置宽限的店(含旗舰店)这段不产出任何字段。
     const arrConfig = getDepositConfig(booking.tenant_id || currentTenantId())
@@ -16316,6 +16327,7 @@ async function route(req, res) {
       db.exec('ROLLBACK')
       throw error
     }
+    try { notifyScheduler.onBookingEvent({ event: 'rescheduled', bookingId: id }) } catch (error) { console.error('[notify] rescheduled 钩失败:', error.message) }
     return json(res, 200, {
       booking: serializeBooking(db.prepare('SELECT * FROM bookings WHERE id = ?').get(id)),
       reschedule: {
@@ -16409,6 +16421,8 @@ async function route(req, res) {
       ).run(randomId('ase'), currentTenantId(), id, kind, String(text || '').slice(0, 500),
         adminSession.displayName || adminSession.email || adminSession.role, adminSession.role, adminSession.technicianId || null, at)
     })
+    /* P3 事件钩:按动作分发(不是状态判断,D70 薄壳不破) */
+    if (actionKey === 'cancel') { try { notifyScheduler.onBookingEvent({ event: 'cancelled', bookingId: id }) } catch (error) { console.error('[notify] cancelled 钩失败:', error.message) } }
     return json(res, 200, { booking: serializeBooking(db.prepare('SELECT * FROM bookings WHERE id = ?').get(id)) })
   }
   if (req.method === 'PATCH' && path.startsWith('/admin/bookings/') && path.endsWith('/work-images')) {
@@ -16581,6 +16595,8 @@ for (const table of ['stores', 'services', 'technicians', 'users', 'bookings', '
     if (!String(error.message || '').includes('duplicate column')) throw error
   }
 }
+/* P3 通知调度器建表/扩列 —— 放在 reminder_tasks 建表与 tenant_id ALTER 之后(迁移顺序学费:images_json 那次) */
+notifyScheduler.ensureSchema()
 try {
   db.exec('ALTER TABLE tenants ADD COLUMN plan_expires_at TEXT')
 } catch (error) {
@@ -18302,4 +18318,11 @@ if (process.env.BACKUP_ENABLED === 'true') {
   }
   runBackup()
   setInterval(runBackup, 6 * 3600 * 1000)
+}
+
+// ===== P3 通知调度器心跳(60 秒 tick;确定终点=每 tick 限量批;NOTIFY_TICK=off 可停,细节见 notify-scheduler.mjs)=====
+if (process.env.NOTIFY_TICK !== 'off') {
+  const safeTick = () => { try { notifyScheduler.runTick() } catch (error) { console.error('[notify] tick 失败:', error.message) } }
+  setTimeout(safeTick, 5000)          // 开机 5 秒后补一轮:停服期间到点的单从库里续上,不丢
+  setInterval(safeTick, 60_000)
 }

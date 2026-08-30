@@ -106,11 +106,15 @@ check('⑤ 营业时段字段在(网格范围口径的输入)', 'openTime' in da
   check('🔴 D88 后端:schedule-day 下发 storeNow/storeToday(台面裁过去空档的唯一时刻源)',
     /^\d{2}:\d{2}$/.test(day.data.storeNow || '') && day.data.storeToday === today,
     JSON.stringify({ now: day.data.storeNow, td: day.data.storeToday }))
-  const clip = 'Math.ceil(toMin(r.storeNow) / 30) * 30'
+  /* 乙案(店主 08-30g 裁):绿区从「门店现在这一分钟」起,不对齐半点 —— 裁剪式换串重钉 */
+  const clip = 'r.storeNow ? toMin(r.storeNow) : -1'
   const miniOrders2 = stripJs(readFileSync(new URL('../../miniprogram/pages/merchant/orders/index.js', import.meta.url), 'utf8'))
-  check('🔴 D88 双端同刀:裁过去空档的截齐式两端逐字同串(各恰 1 处)',
-    (tbCode.match(/Math\.ceil\(toMin\(r\.storeNow\) \/ 30\) \* 30/g) || []).length === 1
-    && (miniOrders2.match(/Math\.ceil\(toMin\(r\.storeNow\) \/ 30\) \* 30/g) || []).length === 1, clip)
+  check('🔴 D88+乙案 双端同刀:裁过去空档的裁剪式两端逐字同串(各恰 1 处,起点=现在这一分钟)',
+    (tbCode.match(/r\.storeNow \? toMin\(r\.storeNow\) : -1/g) || []).length === 1
+    && (miniOrders2.match(/r\.storeNow \? toMin\(r\.storeNow\) : -1/g) || []).length === 1, clip)
+  check('🔴 乙案 反向守:半点对齐式(ceil/30*30)两端零残留(改回对齐即红)',
+    (tbCode.match(/Math\.ceil\(toMin\(r\.storeNow\) \/ 30\) \* 30/g) || []).length === 0
+    && (miniOrders2.match(/Math\.ceil\(toMin\(r\.storeNow\) \/ 30\) \* 30/g) || []).length === 0)
   check('D88 双击双发拦:网页 f.busy 闸 + 小程序 _directBusy 闸都在',
     tbCode.includes('if (f.busy) return') && miniOrders2.includes('this._directBusy) return'))
 
