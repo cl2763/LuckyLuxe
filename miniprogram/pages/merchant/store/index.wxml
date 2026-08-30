@@ -12,16 +12,8 @@
 
     <view class="gtitle">营业时间</view>
     <view class="card">
-      <view class="hrow" wx:for="{{hours}}" wx:key="weekday">
-        <text class="day">{{item.label}}</text>
-        <block wx:if="{{!item.isClosed}}">
-          <picker class="tp" mode="time" value="{{item.openTime}}" data-i="{{index}}" bindchange="onOpen"><view class="tpv">{{item.openTime}}</view></picker>
-          <text class="dash">-</text>
-          <picker class="tp" mode="time" value="{{item.closeTime}}" data-i="{{index}}" bindchange="onClose"><view class="tpv">{{item.closeTime}}</view></picker>
-        </block>
-        <text wx:else class="rest">休息</text>
-        <switch class="sw" checked="{{!item.isClosed}}" color="#c8a47e" data-i="{{index}}" bindtap="toggleDay" />
-      </view>
+      <!-- 裁定2 收敛:与强制页同一份组件(改口=常驻入口,合同六) -->
+      <hours-form initial="{{hours}}" txt="{{hoursTxt}}" saving="{{hoursSaving}}" save-label="保存营业时间" bind:save="onHoursSave" />
     </view>
 
     <view class="gtitle">特殊日期(节假日/临时)</view>

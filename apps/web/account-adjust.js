@@ -11,22 +11,28 @@ window.AccountAdjust = (function () {
   let ctx = null            // { request, money, toast, escapeHtml, onDone, zh }
   /* 输入值放 state,不从 DOM 里现读:弹层每次重画都会重建 input,
      从 DOM 读就会出现"点了全额退、结算块显示 804、输入框却是空的"(实测撞到过)。 */
-  let stateA = { userId: '', name: '', facts: null, tab: 'refund', cards: [], cardId: '', amount: '', times: '', cardAmount: '', warning: '', busy: false }
+  let stateA = { userId: '', name: '', facts: null, tab: 'recharge', cards: [], cardId: '', amount: '', times: '', cardAmount: '', warning: '', busy: false, bound: true, rvPkgs: [], rvPkgId: '', rvAmount: '', rvBonus: '', roster: [], month: '', txns: [], bookingIds: null }
 
   const el = () => document.querySelector('#accountAdjustOverlay')
   function close() { const o = el(); if (o) o.remove(); stateA.facts = null }
 
-  async function open({ userId, name, meta, request, money, toast, escapeHtml, onDone, zh = true }) {
+  async function open({ userId, name, meta, request, money, toast, escapeHtml, onDone, zh = true, bookings = [], technicians = [] }) {
     ctx = { request, money, toast, escapeHtml, onDone, zh }
-    stateA = { userId, name: name || '', meta: meta || '', facts: null, tab: 'refund', cards: [], cardId: '', amount: '', times: '', cardAmount: '', warning: '', busy: false }
+    stateA = { userId, name: name || '', meta: meta || '', facts: null, tab: 'recharge', cards: [], cardId: '', amount: '', times: '', cardAmount: '', warning: '', busy: false,
+      bound: true, rvPkgs: [], rvPkgId: '', rvAmount: '', rvBonus: '', roster: technicians, month: '', txns: [],
+      bookingIds: new Set(bookings.filter((b) => b.user?.id === userId).map((b) => b.id)) }
     mount()
     try {
-      const [f, pack] = await Promise.all([
+      const [f, pack, lk, pkgs] = await Promise.all([
         request(`/admin/account-adjust/facts?userId=${encodeURIComponent(userId)}`),
-        request(`/admin/customers/${encodeURIComponent(userId)}/timecards`).catch(() => ({ timecards: [] }))
+        request(`/admin/customers/${encodeURIComponent(userId)}/timecards`).catch(() => ({ timecards: [] })),
+        request(`/admin/customers/lookup?userId=${encodeURIComponent(userId)}`).catch(() => null),
+        request('/admin/recharge-packages').catch(() => ({ packages: [] }))
       ])
       stateA.facts = f.facts
       stateA.cards = (pack.timecards || []).filter((c) => c.remaining > 0)
+      stateA.bound = lk && lk.hit ? lk.hit.bound !== false : true
+      stateA.rvPkgs = pkgs.packages || []
     } catch (e) { toast(e.message) }
     mount()
   }
@@ -65,21 +71,70 @@ window.AccountAdjust = (function () {
         <p class="aa-split">${escapeHtml(f.splitText || '')}</p>
         <p class="aa-hint">${escapeHtml(f.hint)}</p>` : `<p class="aa-hint">${zh ? '读取中…' : 'Loading…'}</p>`}
         <div class="aa-seg">${seg.map(([k, label]) => `<button class="aa-seg-btn${stateA.tab === k ? ' on' : ''}" data-aa-tab="${k}" type="button">${label}</button>`).join('')}</div>
-        ${stateA.tab === 'refund' ? renderRefund() : renderElsewhere()}
+        ${stateA.tab === 'refund' ? renderRefund() : (stateA.tab === 'reversal' ? renderReversal() : renderRecharge())}
       </div>`
   }
 
-  /* 充值 / 赠送 / 冲销三段都已经有各自的正式入口 —— 这里只做**去那儿**,
-     不在弹层里再造一份写口(同一件事两处写口 = 迟早分叉)。 */
-  function renderElsewhere() {
-    const { zh } = ctx
-    const where = {
-      recharge: zh ? '充值走「会员与营销 → 充值」那条正式入口(含套餐、赠送、经手技师)。' : 'Use Membership → Recharge.',
-      bonus: zh ? '赠送跟着充值一起记(充 X 赠 Y),在「会员与营销 → 充值」里填赠送额。' : 'Bonus is recorded with a recharge.',
-      reversal: zh ? '冲销是「我们记错了」的红字改正,不是退钱给顾客;在财务页对那笔流水做冲销。' : 'Reversal corrects our own mistake — not a customer refund.'
-    }[stateA.tab]
-    return `<div class="aa-elsewhere"><p>${ctx.escapeHtml(where)}</p>
-      <div class="aa-btns"><button class="ghost" data-aa-goto="${stateA.tab}" type="button">${zh ? '去那个入口' : 'Go there'}</button></div></div>`
+  /* 入口总收敛(店主 08-30c 裁):充值/赠送/冲销**内嵌**在本弹层 —— 调的仍是各自既有唯一写口
+     (/admin/stored-value/recharge 与 /admin/finance/transactions/:id/reverse),后端路由一个不加一个不改;
+     UI 从「去那个入口」改为表单就地填 —— 同一件事仍只有一个写口,只是入口并到了这里。 */
+  function renderRecharge() {
+    const { escapeHtml, zh } = ctx
+    const isBonusTab = stateA.tab === 'bonus'
+    return `
+      ${isBonusTab ? `<p class="aa-hint">${zh ? '赠送=营销让利,跟充值一起记(充 X 赠 Y):入储值负债、明细单独列示,不算实收、不计业绩与积分。' : 'Bonus posts together with a recharge.'}</p>` : ''}
+      ${stateA.bound ? '' : `<div class="aa-warn">${zh ? '该档案未绑定微信 —— 请先让顾客扫码绑定(会员码/签署码)再充值。' : 'Customer not bound yet.'}</div>`}
+      ${stateA.rvPkgs.length ? `<label class="aa-field"><span>${zh ? '按套餐(可选,点选自动填金额与赠送)' : 'Package (optional)'}</span>
+        <div class="aa-sub">${stateA.rvPkgs.map((p) => `<button class="aa-sub-btn${stateA.rvPkgId === p.id ? ' on' : ''}" data-aa-pkg="${escapeHtml(p.id)}" type="button">${escapeHtml(p.label)}</button>`).join('')}</div></label>` : ''}
+      <label class="aa-field"><span>${zh ? '充值金额' : 'Amount'}</span>${window.MoneyInput.field({ id: 'aaRvAmount', value: escapeHtml(String(stateA.rvAmount || '')) })}</label>
+      <label class="aa-field"><span>${zh ? '赠送(可空)' : 'Bonus (optional)'}</span>${window.MoneyInput.field({ id: 'aaRvBonus', value: escapeHtml(String(stateA.rvBonus || '')) })}</label>
+      <label class="aa-field"><span>${zh ? '付款方式' : 'Channel'}</span>
+        <select id="aaRvChannel">
+          <option value="cash">${zh ? '现金' : 'Cash'}</option>
+          <option value="card">${zh ? '刷卡' : 'Card'}</option>
+          <option value="transfer">${zh ? '转账' : 'Transfer'}</option>
+          <option value="unknown">${zh ? '其他' : 'Other'}</option>
+        </select>
+      </label>
+      <label class="aa-field"><span>${zh ? '经手技师' : 'Technician'}</span>
+        <select id="aaRvTech"><option value="">${zh ? '店里直收' : 'Direct'}</option>${stateA.roster.map((t2) => `<option value="${escapeHtml(t2.id)}">${escapeHtml(t2.name)}</option>`).join('')}</select>
+        <em>${zh ? '这笔充值算谁促成,充值提成据此计算。' : 'Attribution for commission.'}</em>
+      </label>
+      <div class="aa-btns">
+        <button class="primary" data-aa-rv-submit type="button" ${stateA.busy ? 'disabled' : ''}>${stateA.busy ? (zh ? '提交中…' : '…') : (zh ? '确认到账' : 'Confirm')}</button>
+        <button class="ghost" data-aa-close type="button">${zh ? '取消' : 'Cancel'}</button>
+      </div>`
+  }
+
+  function renderReversal() {
+    const { escapeHtml, money, zh } = ctx
+    if (!stateA.month) return `<p class="aa-hint">${zh ? '读取中…' : 'Loading…'}</p>`
+    return `
+      <p class="aa-hint">${zh ? '冲销是「我们记错了」的红字改正,不是退钱给顾客;点「冲销」生成等额反向记录纠错,原始记录永远保留。' : 'Reversal corrects our own mistake.'}</p>
+      <div class="aa-mrow"><button class="ghost slim" data-aa-month="-1" type="button">‹</button><strong>${stateA.month}</strong><button class="ghost slim" data-aa-month="1" type="button">›</button></div>
+      ${stateA.txns.length ? stateA.txns.map((x) => `
+        <div class="aa-txn${x.isReversal ? ' rev' : ''}">
+          <div class="aa-txn-info"><span class="subtle">${x.occurredOn}${x.isReversal ? (zh ? ' · 冲销单' : ' · reversal') : ''}${x.reversed ? (zh ? ' · 已冲销' : ' · reversed') : ''}</span><span>${escapeHtml(x.note)}</span></div>
+          <strong${x.negative ? ' class="neg"' : ''}>${x.negative ? '−' : ''}${money(Math.abs(x.amountCents))}</strong>
+          ${!x.isReversal && !x.reversed ? `<button class="ghost slim" data-aa-reverse="${escapeHtml(x.id)}" type="button">${zh ? '冲销' : 'Reverse'}</button>` : ''}
+        </div>`).join('') : `<p class="aa-hint">${zh ? `${stateA.month} 没有与这位顾客订单关联的账本流水。` : 'No linked ledger rows this month.'}</p>`}`
+  }
+
+  function curMonth() {
+    const d = new Date()
+    return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`
+  }
+  async function loadTxns(month) {
+    stateA.month = month
+    try {
+      const r = await ctx.request(`/admin/finance/transactions?month=${month}`)
+      const all = r.transactions || []
+      const reversedSet = new Set(all.filter((t2) => t2.reversalOf).map((t2) => t2.reversalOf))
+      stateA.txns = all
+        .filter((t2) => t2.bookingId && stateA.bookingIds.has(t2.bookingId))
+        .map((t2) => ({ id: t2.id, occurredOn: t2.occurredOn, note: t2.note || t2.category || t2.source, amountCents: t2.amountCents, negative: t2.amountCents < 0, isReversal: t2.source === 'reversal', reversed: reversedSet.has(t2.id) }))
+    } catch (e) { ctx.toast(e.message); stateA.txns = [] }
+    mount()
   }
 
   function renderRefund() {
@@ -161,7 +216,11 @@ window.AccountAdjust = (function () {
     const { request, toast, zh } = ctx
     if (event.target.closest('[data-aa-close]') || event.target === el()) { close(); return }
     const tab = event.target.closest('[data-aa-tab]')
-    if (tab) { stateA.tab = tab.dataset.aaTab; mount(); return }
+    if (tab) {
+      stateA.tab = tab.dataset.aaTab
+      if (stateA.tab === 'reversal' && !stateA.month) { loadTxns(curMonth()); return }
+      mount(); return
+    }
     const card = event.target.closest('[data-aa-card]')
     if (card) { stateA.cardId = card.dataset.aaCard || ''; mount(); return }
     if (event.target.closest('[data-aa-all]')) {
@@ -175,8 +234,59 @@ window.AccountAdjust = (function () {
       }
       return
     }
-    const goto = event.target.closest('[data-aa-goto]')
-    if (goto) { close(); ctx.onDone({ goto: goto.dataset.aaGoto, userId: stateA.userId }); return }
+    const pkgBtn = event.target.closest('[data-aa-pkg]')
+    if (pkgBtn) {
+      const id = pkgBtn.dataset.aaPkg
+      if (stateA.rvPkgId === id) { stateA.rvPkgId = '' } else {
+        const p = stateA.rvPkgs.find((x) => x.id === id)
+        if (p) {
+          stateA.rvPkgId = id
+          stateA.rvAmount = (p.priceCents / 100).toFixed(2)
+          stateA.rvBonus = p.bonusCents ? (p.bonusCents / 100).toFixed(2) : ''
+        }
+      }
+      mount(); return
+    }
+    if (event.target.closest('[data-aa-rv-submit]')) {
+      const cents = window.MoneyInput.centsOf(stateA.rvAmount)
+      const bonus = window.MoneyInput.centsOf(stateA.rvBonus)
+      if (!(cents > 0)) { toast(zh ? '充值金额要大于 0(赠送随充值一起记)' : 'Amount required'); return }
+      stateA.busy = true; mount()
+      try {
+        await request('/admin/stored-value/recharge', { method: 'POST', body: JSON.stringify({
+          userId: stateA.userId, amountCents: cents, bonusCents: bonus,
+          payChannel: document.querySelector('#aaRvChannel')?.value || 'unknown',
+          ...(document.querySelector('#aaRvTech')?.value ? { technicianId: document.querySelector('#aaRvTech').value } : {})
+        }) })
+        toast(zh ? `已到账 ${ctx.money(cents)}${bonus ? ` 赠 ${ctx.money(bonus)}` : ''}` : 'Recharged')
+        stateA.busy = false; stateA.rvAmount = ''; stateA.rvBonus = ''; stateA.rvPkgId = ''
+        /* 四个参考数=真值重拉,不前端加减 */
+        const f = await request(`/admin/account-adjust/facts?userId=${encodeURIComponent(stateA.userId)}`).catch(() => null)
+        if (f) stateA.facts = f.facts
+        mount(); ctx.onDone({ recharged: true })
+      } catch (e) { stateA.busy = false; mount(); toast(e.message) }
+      return
+    }
+    const mBtn = event.target.closest('[data-aa-month]')
+    if (mBtn) {
+      const [y, mo] = stateA.month.split('-').map(Number)
+      const t2 = new Date(y, mo - 1 + Number(mBtn.dataset.aaMonth), 1)
+      loadTxns(`${t2.getFullYear()}-${String(t2.getMonth() + 1).padStart(2, '0')}`)
+      return
+    }
+    const revBtn = event.target.closest('[data-aa-reverse]')
+    if (revBtn) {
+      const row = stateA.txns.find((x) => x.id === revBtn.dataset.aaReverse)
+      if (!confirm(zh ? `确认冲销?将生成一条等额红字反向记录纠错,原始记录保留:${row ? row.note : ''}` : 'Reverse this entry?')) return
+      stateA.busy = true; mount()
+      try {
+        await request(`/admin/finance/transactions/${encodeURIComponent(revBtn.dataset.aaReverse)}/reverse`, { method: 'POST' })
+        toast(zh ? '已冲销(红字反向记录已生成)' : 'Reversed')
+        stateA.busy = false
+        loadTxns(stateA.month)
+      } catch (e) { stateA.busy = false; mount(); toast(e.message) }
+      return
+    }
     if (event.target.closest('[data-aa-submit]')) {
       const amount = window.MoneyInput.centsOf(stateA.amount)
       const reason = String(document.querySelector('#aaReason')?.value || '').trim()
@@ -257,6 +367,10 @@ window.AccountAdjust = (function () {
       patchCalc()
     } else if (e.target.id === 'aaCardAmount') {
       stateA.cardAmount = e.target.value
+    } else if (e.target.id === 'aaRvAmount') {
+      stateA.rvAmount = e.target.value; stateA.rvPkgId = ''
+    } else if (e.target.id === 'aaRvBonus') {
+      stateA.rvBonus = e.target.value; stateA.rvPkgId = ''
     }
   })
 
@@ -276,15 +390,9 @@ window.AccountAdjust = (function () {
       meta: `${deps.owner.lang === 'zh' ? '到店' : 'Visits'} ${c.visitCount || 0}${c.lastVisitAt ? ` · ${deps.dateOnly(c.lastVisitAt)}` : ''}`,
       request: deps.request, money: deps.money, toast: deps.toast, escapeHtml: deps.escapeHtml,
       zh: deps.owner.lang === 'zh',
-      onDone: (r) => {
-        if (r && r.goto) {
-          deps.membershipData.prefillUserId = r.userId
-          deps.membershipData.tab = 'recharge'
-          deps.owner.adminPage = r.goto === 'reversal' ? 'finance' : 'membership'
-          if (deps.owner.adminPage === 'membership') deps.loadMembershipPage().catch((e) => deps.toast(e.message))
-          deps.render()
-          return
-        }
+      bookings: deps.owner.bookings || [], technicians: deps.owner.technicians || [],
+      /* 入口总收敛(08-30c):goto 指路分支已死 —— 充值/赠送/冲销都内嵌本弹层 */
+      onDone: () => {
         deps.request('/admin/customers').then((d) => { deps.owner.customers = d.customers; deps.renderCustomers() }).catch(() => {})
       }
     })

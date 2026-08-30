@@ -465,9 +465,13 @@ Page(Object.assign({
             afterSalesTag: b.afterSalesTag || '' // 裁C:售后单蓝徽标上日历(句后端唯一)
           }
         })
+        /* D88(08-30c 与网页同刀):过去的时段不出「+直接排单」——今天的空档起点截到
+           storeNow(后端门店时区句)之后的下一个半点,不裸 new Date 推 */
+        const minStart = date === r.storeToday && r.storeNow ? Math.ceil(toMin(r.storeNow) / 30) * 30 : -1
         const frees = []; let cursor = openMin
-        list.forEach((b) => { const s = toMin(b.startTime); if (s - cursor >= 30) { frees.push({ startTime: m2t(cursor), top: Math.round((cursor - openMin) / 60 * PX_PER_HOUR), height: Math.round((s - cursor) / 60 * PX_PER_HOUR) }); freeTotal += (s - cursor) } cursor = Math.max(cursor, toMin(b.endTime)) })
-        if (closeMin - cursor >= 30) { frees.push({ startTime: m2t(cursor), top: Math.round((cursor - openMin) / 60 * PX_PER_HOUR), height: Math.round((closeMin - cursor) / 60 * PX_PER_HOUR) }); freeTotal += (closeMin - cursor) }
+        list.forEach((b) => { const s = toMin(b.startTime); const from = Math.max(cursor, minStart); if (s - from >= 30) { frees.push({ startTime: m2t(from), top: Math.round((from - openMin) / 60 * PX_PER_HOUR), height: Math.round((s - from) / 60 * PX_PER_HOUR) }); freeTotal += (s - from) } cursor = Math.max(cursor, toMin(b.endTime)) })
+        const tailFrom = Math.max(cursor, minStart)
+        if (closeMin - tailFrom >= 30) { frees.push({ startTime: m2t(tailFrom), top: Math.round((tailFrom - openMin) / 60 * PX_PER_HOUR), height: Math.round((closeMin - tailFrom) / 60 * PX_PER_HOUR) }); freeTotal += (closeMin - tailFrom) }
         return { id: t.id, name: t.name, role: t.title || '', busy: t.bookingCount > 0, count: t.bookingCount, blocks, frees }
       })
       const d = new Date(`${date}T00:00:00`)
@@ -765,6 +769,8 @@ Page(Object.assign({
     else { wx.showToast({ title: '选择或输入顾客', icon: 'none' }); return }
     if (!d.directServiceId) { wx.showToast({ title: '选个服务', icon: 'none' }); return }
     if (!/^\d{2}:\d{2}$/.test(d.directTime)) { wx.showToast({ title: '选个时段', icon: 'none' }); return }
+    if (this._directBusy) return   // D88:双击双 POST 拦(第一发在途第二发不出手)
+    this._directBusy = true
     try {
       const made = await api.adminPost('/admin/bookings/direct', body)
       /* 勾了「已收定金」= 走**标记已收定金同一个后端动作**(规则②),
@@ -773,9 +779,10 @@ Page(Object.assign({
         try { await api.adminPost(`/admin/bookings/${encodeURIComponent(made.booking.id)}/deposit-receipt`, {}) }
         catch (err) { wx.showToast({ title: `单已建,定金没标上:${(err && err.message) || ''}`, icon: 'none' }) }
       }
+      this._directBusy = false
       wx.showToast({ title: '已排单', icon: 'success' })
       this.setData({ directSheet: false })
       this.loadDayView(this.data.selDate)
-    } catch (err) { wx.showToast({ title: (err && err.message) || '排单失败', icon: 'none' }) }
+    } catch (err) { this._directBusy = false; wx.showToast({ title: (err && err.message) || '排单失败', icon: 'none' }) }
   }
 }, dailyCloseMixin))

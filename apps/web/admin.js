@@ -1,6 +1,6 @@
 // 构建号:每次交付递增。侧栏可见,排查"改了没生效"时先对版本。
 // 兜底用(服务端会注入 window.LL_BUILD = 资源内容指纹,页面优先显示那个)
-const ADMIN_BUILD = '20260830c-hg'
+const ADMIN_BUILD = '20260830d-ui567'
 let pricingState = { module: 'storefront', tab: 'items', categories: [], items: [], rules: {}, editing: null, preview: null, storefrontPicker: false }
 console.log(`[admin] build ${ADMIN_BUILD}`)
 
@@ -165,7 +165,6 @@ const els = {
   businessHoursTitle: document.querySelector('#businessHoursTitle'),
   businessHoursUpdated: document.querySelector('#businessHoursUpdated'),
   businessHoursEditor: document.querySelector('#businessHoursEditor'),
-  saveBusinessHours: document.querySelector('#saveBusinessHours'),
   businessHoursSummary: document.querySelector('#businessHoursSummary'),
   planTitle: document.querySelector('#planTitle'),
   planSummary: document.querySelector('#planSummary'),
@@ -282,7 +281,6 @@ const copy = {
     storeSettingsTitle: '门店设置',
     storeSettingsSubtitle: '保存后 AI 回答与预约空位立即生效',
     businessHoursTitle: '营业时间',
-    saveBusinessHours: '保存营业时间',
     businessHoursSaved: '营业时间已保存，AI 回答与预约空位立即生效。',
     closedDay: '休息',
     lastUpdatedLabel: '最近修改',
@@ -559,7 +557,6 @@ const copy = {
     storeSettingsTitle: 'Store Settings',
     storeSettingsSubtitle: 'Changes apply instantly to AI answers and booking availability',
     businessHoursTitle: 'Business Hours',
-    saveBusinessHours: 'Save Business Hours',
     businessHoursSaved: 'Business hours saved. AI answers and availability updated instantly.',
     closedDay: 'Closed',
     lastUpdatedLabel: 'Last updated',
@@ -1009,7 +1006,6 @@ function applyLanguage() {
   els.storeSettingsTitle.textContent = t('storeSettingsTitle')
   els.storeSettingsSubtitle.textContent = t('storeSettingsSubtitle')
   els.businessHoursTitle.textContent = t('businessHoursTitle')
-  els.saveBusinessHours.textContent = t('saveBusinessHours')
   els.planTitle.textContent = owner.lang === 'zh' ? '当前套餐' : 'Current Plan'
   els.kbTitle.textContent = owner.lang === 'zh' ? 'AI 知识库（店规 / FAQ）' : 'AI Knowledge Base (Rules / FAQ)'
   els.storeInfoTitle.textContent = owner.lang === 'zh' ? '店铺信息（技术支持用）' : 'Store Info (for support)'
@@ -1324,7 +1320,7 @@ function setLocked(locked) {
 }
 
 function render() {
-  if (!owner.auth?.admin?.mustChangePassword && window.HoursSetup?.gate(owner, { request, escapeHtml, toast, reboot: loadAll })) return   // D84 强制设置闸(图 v1.0 合同一);改密先行=账户安全在前(图未画次序,入假设清单)
+  if (!owner.auth?.admin?.mustChangePassword && window.HoursSetup?.gate(owner, { request, escapeHtml, toast, reboot: loadAll })) return   // D84 强制设置闸(图 v1.0 合同一);改密先行=账户安全在前(图 v1.1 已追认为合同)
   applyLanguage()
   renderMetrics()
   renderAdminPages()
@@ -1710,14 +1706,6 @@ function linkifyEscapedText(text = '') {
 
 
 
-
-const WEEKDAY_UI_ORDER = [1, 2, 3, 4, 5, 6, 0]
-
-function weekdayLabel(weekday) {
-  const zh = ['周日', '周一', '周二', '周三', '周四', '周五', '周六']
-  const en = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday']
-  return owner.lang === 'zh' ? zh[weekday] : en[weekday]
-}
 
 const FEATURE_LABELS = {
   booking: ['预约系统', 'Booking'],
@@ -3622,26 +3610,10 @@ function renderStoreSettings() {
   if (els.businessHoursSummary) {
     els.businessHoursSummary.textContent = (owner.lang === 'zh' ? store.hoursText?.zh : store.hoursText?.en) || ''
   }
-  const byWeekday = new Map((store.hours || []).map((row) => [row.weekday, row]))
   const updated = (store.hours || []).map((row) => row.updatedAt).filter(Boolean).sort().pop()
   els.businessHoursUpdated.textContent = updated ? `${t('lastUpdatedLabel')}: ${String(updated).slice(0, 16).replace('T', ' ')}` : ''
   els.businessHoursEditor.innerHTML = `
-    <div class="business-hours-grid">
-      ${WEEKDAY_UI_ORDER.map((weekday) => {
-        const row = byWeekday.get(weekday) || { openTime: '10:00', closeTime: '19:00', isClosed: false }
-        return `
-          <div class="business-hours-row ${row.isClosed ? 'closed' : ''}">
-            <strong>${weekdayLabel(weekday)}</strong>
-            <label class="check-row slim-check">
-              <input type="checkbox" data-hours-closed="${weekday}" ${row.isClosed ? 'checked' : ''}>
-              <span>${t('closedDay')}</span>
-            </label>
-            <input type="time" data-hours-open="${weekday}" value="${row.openTime}" ${row.isClosed ? 'disabled' : ''}>
-            <span class="hours-dash">–</span>
-            <input type="time" data-hours-close="${weekday}" value="${row.closeTime}" ${row.isClosed ? 'disabled' : ''}>
-          </div>`
-      }).join('')}
-    </div>
+    <div id="hoursSettingsMount"></div>
     <div class="special-dates-block">
       <h4>${owner.lang === 'zh' ? '特殊日期(节假日休息 / 临时调整)' : 'Special dates (holidays / temporary changes)'}</h4>
       <p class="subtle">${owner.lang === 'zh' ? '优先于每周固定模式,保存后立即影响可预约时段和 AI 的营业时间回答。' : 'Overrides the weekly pattern; affects booking slots and AI answers instantly.'}</p>
@@ -3667,6 +3639,15 @@ function renderStoreSettings() {
         <button class="ghost slim" data-special-date-add type="button">${owner.lang === 'zh' ? '添加' : 'Add'}</button>
       </div>
     </div>`
+  window.HoursSetup.mountSettings(document.querySelector('#hoursSettingsMount'), {
+    storeId: store.id, rows: store.hours || [], txt: owner.hoursGateText || {}, escapeHtml, toast, request,
+    afterSave: async () => {
+      const refreshed = await request('/admin/business-hours')
+      owner.businessHoursStores = refreshed.stores || []
+      renderStoreSettings()
+      toast(t('businessHoursSaved'))
+    }
+  })
 }
 
 async function addSpecialDate() {
@@ -3703,26 +3684,6 @@ async function deleteSpecialDate(date) {
   owner.businessHoursStores = refreshed.stores || []
   renderStoreSettings()
   toast(owner.lang === 'zh' ? '已删除,恢复每周固定模式' : 'Removed')
-}
-
-async function saveBusinessHoursSettings() {
-  const store = (owner.businessHoursStores || [])[0]
-  if (!store) return
-  const hours = [0, 1, 2, 3, 4, 5, 6].map((weekday) => ({
-    weekday,
-    openTime: document.querySelector(`[data-hours-open="${weekday}"]`)?.value || '10:00',
-    closeTime: document.querySelector(`[data-hours-close="${weekday}"]`)?.value || '19:00',
-    isClosed: Boolean(document.querySelector(`[data-hours-closed="${weekday}"]`)?.checked)
-  }))
-  const data = await request('/admin/business-hours', {
-    method: 'PUT',
-    body: JSON.stringify({ storeId: store.id, hours })
-  })
-  owner.businessHoursStores = (owner.businessHoursStores || []).map((item) => item.id === store.id
-    ? { ...item, hours: data.hours, hoursText: data.hoursText }
-    : item)
-  renderStoreSettings()
-  toast(t('businessHoursSaved'))
 }
 
 
@@ -4927,7 +4888,6 @@ function renderCustomers() {
         ${(customer.tags || []).length ? `<div class="customer-tags">${customer.tags.slice(0, 3).map((tag) => `<span class="customer-tag">${escapeHtml(tag)}</span>`).join('')}${customer.tags.length > 3 ? `<span class="customer-tag">+${customer.tags.length - 3}</span>` : ''}</div>` : ''}
         <div class="inline-actions compact-actions customer-card-actions">
           <button class="ghost slim" data-customer-detail="${customer.id}" type="button">${t('viewCustomerFile')}</button>
-          <button class="ghost slim" data-customer-recharge="${customer.id}" type="button">${owner.lang === 'zh' ? '给 TA 充值' : 'Recharge'}</button>
           ${/* N-5 v1.1 ③:退卡是财务动作 —— 员工连按钮都不渲染(理由见 account-adjust.js) */''}
           ${owner.role === 'owner' ? `<button class="ghost slim" data-account-adjust="${customer.id}" type="button">${owner.lang === 'zh' ? '账户调整' : 'Adjust'}</button>` : ''}
           <button class="ghost slim" data-ai-customer="${customer.id}" type="button">${owner.aiLoading === `customer:${customer.id}` ? t('aiProcessing') : t('aiCustomerInsight')}</button>
@@ -6265,7 +6225,6 @@ els.schedulePage.addEventListener('click', (event) => {
       .catch((error) => toast(error.message))
   }
 })
-els.saveBusinessHours.addEventListener('click', () => saveBusinessHoursSettings().catch((error) => toast(error.message)))
 els.financePage.addEventListener('click', (event) => {
   if (event.target.closest('[data-goal-setup]')) {
     openGoalSetupModal().catch((error) => toast(error.message))
@@ -6597,15 +6556,6 @@ els.businessHoursEditor.addEventListener('change', (event) => {
     document.querySelector('#specialDateClose')?.classList.toggle('hidden', !showHours)
     return
   }
-  const closedBox = event.target.closest('[data-hours-closed]')
-  if (!closedBox) return
-  const weekday = closedBox.dataset.hoursClosed
-  const disabled = closedBox.checked
-  const openInput = document.querySelector(`[data-hours-open="${weekday}"]`)
-  const closeInput = document.querySelector(`[data-hours-close="${weekday}"]`)
-  if (openInput) openInput.disabled = disabled
-  if (closeInput) closeInput.disabled = disabled
-  closedBox.closest('.business-hours-row')?.classList.toggle('closed', disabled)
 })
 els.bookingList.addEventListener('click', (event) => {
   if (event.target.closest('[data-close-booking-detail]')) {
@@ -6734,17 +6684,7 @@ els.customerList.addEventListener('click', (event) => {
     return
   }
   // N-5 退卡口:入口与弹层全在 ./account-adjust.js(公约①;admin.js 只许搬出不许新增)
-  if (window.AccountAdjust.handleClick(event, { owner, request, money, toast, escapeHtml, customerName, dateOnly, renderCustomers, render, membershipData, loadMembershipPage })) return
-  const custRecharge = event.target.closest('[data-customer-recharge]')
-  if (custRecharge) {
-    // S2批① 收编:客户档案 → 会员与营销页签①,预选该会员
-    membershipData.prefillUserId = custRecharge.dataset.customerRecharge
-    membershipData.tab = 'recharge'
-    owner.adminPage = 'membership'
-    loadMembershipPage().catch((error) => toast(error.message))
-    render()
-    return
-  }
+  if (window.AccountAdjust.handleClick(event, { owner, request, money, toast, escapeHtml, customerName, dateOnly, renderCustomers, render })) return
   const customerDetail = event.target.closest('[data-customer-detail]')
   if (customerDetail) {
     owner.selectedCustomerId = customerDetail.dataset.customerDetail
@@ -6933,7 +6873,7 @@ async function initAdmin() {
 }
 
 // ===== 会员套餐 / 次卡 / 优惠券(网页老板端,与小程序同后端 /admin/packages、/admin/coupons)=====
-let membershipData = { packages: [], coupons: [], prizes: [], tab: 'recharge', mall: { enabled: false, locked: true }, prefillUserId: '' }
+let membershipData = { packages: [], coupons: [], prizes: [], tab: 'recharge', mall: { enabled: false, locked: true } }
 function mCents(v) { const n = Number(String(v).replace(/[^\d.]/g, '')); return Number.isFinite(n) ? Math.round(n * 100) : 0 }
 // R4:这里原本自己拼 '$',人民币店的会员套餐/券/积分奖品全显示成美元符。并回统一的 money()
 function mMoney(cents) { return money(Math.round(cents || 0)) }
@@ -7133,7 +7073,7 @@ function renderMembership() {
         <button class="ghost slim" data-pkg-toggle="${p.id}" type="button">${p.isActive ? '下架' : '上架'}</button>
       </div>
     </div>`).join('') : '<div class="empty-state">还没有次卡。现有次卡已自动迁入本页管理。</div>'
-  renderSvOpsCard()
+  /* 入口总收敛(店主 08-30c 裁):「给会员充值」表单已删 —— 唯一 UI 入口=客户档案 → 账户调整 */
   renderMallSwitch()
   const cs = membershipData.coupons
   els.couponAdminList.innerHTML = cs.length ? cs.map((c) => `
@@ -7159,30 +7099,6 @@ function renderMembership() {
       </div>
     </div>`).join('') : '<div class="empty-state">还没有奖品。点「+ 新增奖品」,可选现有券或当场建一张新券。</div>'
 }
-/* S2批① 收编:「给会员充值」从财务储值页并入会员与营销页签①(客户档案入口同函数)。
-   支持「按套餐」快捷:选充值套餐自动填金额+赠送(赠送=bonus 独立行,规则④)。 */
-function renderSvOpsCard() {
-  const box = document.querySelector('#svOpsCard')
-  if (!box) return
-  const members = (owner.customers || []).filter((c) => c.isBound !== false)
-  const memberOptions = (owner.customers || []).map((c) => `<option value="${escapeHtml(c.id)}" ${membershipData.prefillUserId === c.id ? 'selected' : ''}>${escapeHtml(c.displayName || c.name || c.id)}</option>`).join('')
-  const recPkgs = (membershipData.packages || []).filter((p) => p.kind !== 'times' && p.isActive)
-  box.innerHTML = `
-    <div class="pricing-editor" style="margin-bottom:12px">
-      <strong style="font-size:13.5px">给会员充值</strong> <span class="subtle">(从财务「储值卡」页并入;扣款只随结算单签字,无手动耗卡)</span>
-      <div class="sv-op-row" style="margin-top:8px">
-        <select id="mSvMember">${memberOptions || '<option value="">暂无会员</option>'}</select>
-        <select id="mSvPkg"><option value="">按套餐(可选)</option>${recPkgs.map((p) => `<option value="${p.id}">充 ${mMoney(p.priceCents)}${p.bonusCents ? ' 赠 ' + mMoney(p.bonusCents) : ''}</option>`).join('')}</select>
-        <input id="mSvAmount" data-money type="text" inputmode="decimal" autocomplete="off" placeholder="金额">
-        <input id="mSvBonus" data-money type="text" inputmode="decimal" autocomplete="off" placeholder="赠送(可空)">
-        <select id="mSvChannel">${FINANCE_PAY_CHANNELS.filter(([id]) => id !== 'stored_value').map(([id, label]) => `<option value="${id}">${label}</option>`).join('')}</select>
-        <select id="mSvTech"><option value="">经手:店里直收</option>${(owner.technicians || []).map((t2) => `<option value="${escapeHtml(t2.id)}">${escapeHtml(t2.name)}</option>`).join('')}</select>
-        <button class="primary slim" data-msv-recharge type="button">充值</button>
-      </div>
-      <p class="subtle" style="margin:6px 0 0">赠送=营销让利:入储值负债、明细单独列示,不算实收、不计业绩与积分。</p>
-    </div>`
-}
-
 function renderMallSwitch() {
   const row = document.querySelector('#mallSwitchRow')
   if (!row) return
@@ -7434,22 +7350,6 @@ if (els.membershipPage) {
     if (pkgMall) {
       const p = membershipData.packages.find((x) => x.id === pkgMall.dataset.pkgMall)
       try { await request(`/admin/packages/${p.id}`, { method: 'PATCH', body: JSON.stringify({ mallVisible: !p.mallVisible }) }); await loadMembershipPage() } catch (error) { toast(error.message) }
-      return
-    }
-    if (event.target.closest('[data-msv-recharge]')) {
-      const userId = document.querySelector('#mSvMember')?.value
-      const pkgId = document.querySelector('#mSvPkg')?.value
-      const pkg = pkgId ? membershipData.packages.find((x) => x.id === pkgId) : null
-      const amount = pkg ? pkg.priceCents / 100 : Number(document.querySelector('#mSvAmount')?.value || 0)
-      const bonus = pkg ? (pkg.bonusCents || 0) / 100 : Number(document.querySelector('#mSvBonus')?.value || 0)
-      if (!userId || !amount || amount <= 0) { toast('请选择会员并填写金额(或选套餐)'); return }
-      const tech = document.querySelector('#mSvTech')?.value || ''
-      try {
-        await request('/admin/stored-value/recharge', { method: 'POST', body: JSON.stringify({ userId, amount, bonusCents: Math.round(bonus * 100), payChannel: document.querySelector('#mSvChannel')?.value || 'unknown', note: pkg ? `套餐:${pkg.name}` : '', ...(tech ? { technicianId: tech } : {}) }) })
-        toast(bonus > 0 ? `充值成功:实收 ${amount} + 赠送 ${bonus}(分行入账)` : '充值成功(记为储值负债)')
-        membershipData.prefillUserId = ''
-        await loadMembershipPage()
-      } catch (error) { toast(error.message) }
       return
     }
     if (addR) return savePackage('recharge')

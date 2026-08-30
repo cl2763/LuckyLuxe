@@ -1,19 +1,26 @@
-/* 客户档案 →「账户调整」(二.1,店主 08-27 裁「账户调整=双端」—— 欠最久的一笔,2026-08-30 上小程序)。
+/* 客户档案 →「账户调整」(店主 08-30c 裁定·入口总收敛:凡针对特定顾客、改其账户余额的动作
+   —— 充值 / 赠送 / 退卡 / 冲销 —— 唯一 UI 入口就是本页,两端同此)。
 
-   骨与网页 apps/web/account-adjust.js **同一套后端出口**,前端零第二实现:
-     · 四个参考数 + 界限句 + 黄条 → GET /admin/account-adjust/facts(句子全部后端给)
-     · 退储值 → POST /admin/stored-value/refund(幂等 requestId;后端硬拦超余额)
-     · 退次卡 → POST /admin/timecards/:id/refund(退完剩 0 = 卡作废)
-     · 充值 / 赠送 / 冲销:**指路不再造写口**(与网页同策略 —— 同一件事两处写口 = 迟早分叉):
-       充值与赠送走会员页充值那条正式入口;冲销在财务页对那笔流水做。
-   权限同网页:页面 guardOwner(店员连入口都看不到);接口层 requireRefundRight
-   (仅老板 + **财务密码门**)再兜一道 —— 前端拦只算体验。 */
+   四 tab 全部**内嵌表单**,不再指路(08-30 店主原话返工件):
+     · 充值/赠送 → POST /admin/stored-value/recharge(充X赠Y 同一条;赠送=营销让利独立 bonus 行,
+       不算实收/业绩/积分;未绑定档案后端 400 UNBOUND_NO_RECHARGE 终闸,前端只做提示)
+     · 退卡 → POST /admin/stored-value/refund · /admin/timecards/:id/refund(原样)
+     · 冲销 → POST /admin/finance/transactions/:id/reverse(既有唯一冲销口;列表=本月与这位顾客
+       订单关联的账本流水,冲销=红字反向记录,原始记录保留)
+   **后端路由一个不加一个不改** —— 本页只是把既有写口的表单搬到唯一入口。
+   权限:页面 guardOwner;退卡/冲销另有财务钥匙门(接口层终闸)。 */
 const api = require('../../../utils/api')
 const { storeMoney } = require('../../../utils/storeclock')
 
+const RV_CHANNELS = [
+  { id: 'cash', label: '现金' }, { id: 'card', label: '刷卡' },
+  { id: 'transfer', label: '转账' }, { id: 'unknown', label: '其他' }
+]
+
 Page({
   data: {
-    userId: '', name: '', facts: null, tab: 'refund',
+    userId: '', name: '', facts: null, tab: 'recharge',
+    /* 退卡(原样) */
     cards: [], cardId: '', card: null,
     amount: '', times: '', cardAmount: '', reason: '',
     channelIdx: 0, channels: [
@@ -21,11 +28,12 @@ Page({
       { id: 'original', label: '原路退回' }, { id: 'other', label: '其它' }
     ],
     warning: '', afterText: '', refundText: '', leftText: '', busy: false,
-    elsewhere: {
-      recharge: '充值走「会员」页充值那条正式入口(含套餐、赠送、经手技师)。',
-      bonus: '赠送跟着充值一起记(充 X 赠 Y),在「会员」页充值里填赠送额。',
-      reversal: '冲销是「我们记错了」的红字改正,不是退钱给顾客;在财务页对那笔流水做冲销。'
-    }
+    /* 充值/赠送(内嵌) */
+    bound: true, rvPkgs: [], rvPkgId: '', rvAmount: '', rvBonus: '', rvAmountText: '',
+    rvChannels: RV_CHANNELS, rvChannelIdx: 0,
+    techNames: ['店里直收'], techIds: [''], techIdx: 0,
+    /* 冲销(内嵌) */
+    month: '', txns: [], txnsLoading: false
   },
 
   onLoad(q) {
@@ -34,11 +42,11 @@ Page({
 
   async onShow() {
     if (!(await api.guardOwner())) return
-    /* 财务门禁(D27 先例):启用了门禁而没解锁 → 指去财务页,等转场走完再退 */
+    /* 财务门禁(D27 先例):退卡/冲销是财务动作;启用了门禁而没解锁 → 指去财务页 */
     let lockEnabled = false
     try { lockEnabled = Boolean((await api.adminGet('/admin/finance/lock-status')).enabled) } catch (e) { lockEnabled = false }
     if (lockEnabled && !api.getFinanceKey()) {
-      wx.showToast({ title: '退卡是财务动作 —— 请先在财务页解锁', icon: 'none' })
+      wx.showToast({ title: '账户调整是财务动作 —— 请先在财务页解锁', icon: 'none' })
       setTimeout(() => wx.navigateBack(), 900)
       return
     }
@@ -47,16 +55,138 @@ Page({
 
   async load() {
     try {
-      const [f, pack] = await Promise.all([
+      const [f, pack, lk, pkgs, techs] = await Promise.all([
         api.adminGet(`/admin/account-adjust/facts?userId=${encodeURIComponent(this.data.userId)}`),
-        api.adminGet(`/admin/customers/${encodeURIComponent(this.data.userId)}/timecards`).catch(() => ({ timecards: [] }))
+        api.adminGet(`/admin/customers/${encodeURIComponent(this.data.userId)}/timecards`).catch(() => ({ timecards: [] })),
+        api.adminGet(`/admin/customers/lookup?userId=${encodeURIComponent(this.data.userId)}`).catch(() => null),
+        api.adminGet('/admin/recharge-packages').catch(() => ({ packages: [] })),
+        api.adminGet('/admin/technicians?roster=1').catch(() => ({ technicians: [] }))
       ])
-      this.setData({ facts: f.facts, cards: (pack.timecards || []).filter((c) => c.remaining > 0) })
+      const roster = (techs.technicians || [])
+      this.setData({
+        facts: f.facts,
+        cards: (pack.timecards || []).filter((c) => c.remaining > 0),
+        bound: lk && lk.hit ? lk.hit.bound !== false : true,
+        rvPkgs: pkgs.packages || [],
+        techNames: ['店里直收'].concat(roster.map((t) => t.name)),
+        techIds: [''].concat(roster.map((t) => t.id))
+      })
       this.recalc()
     } catch (e) { wx.showToast({ title: (e && e.message) || '读取失败', icon: 'none' }) }
   },
 
-  pickTab(e) { this.setData({ tab: e.currentTarget.dataset.k }) },
+  pickTab(e) {
+    const tab = e.currentTarget.dataset.k
+    this.setData({ tab })
+    if (tab === 'reversal' && !this.data.month) this.loadTxns(this.curMonth())
+  },
+
+  /* ===== 充值 / 赠送(内嵌) ===== */
+  pickPkg(e) {
+    const id = e.currentTarget.dataset.id
+    if (this.data.rvPkgId === id) { this.setData({ rvPkgId: '' }); return }
+    const p = this.data.rvPkgs.find((x) => x.id === id)
+    if (!p) return
+    /* 套餐快捷=自动填金额+赠送(可再改)—— 与网页原「按套餐」同口径 */
+    this.setData({
+      rvPkgId: id,
+      rvAmount: (p.priceCents / 100).toFixed(2),
+      rvBonus: p.bonusCents ? (p.bonusCents / 100).toFixed(2) : ''
+    })
+    this.rvText()
+  },
+  onRvAmount(e) { this.data.rvAmount = e.detail.value; this.data.rvPkgId = ''; this.rvTextSoon() },
+  onRvBonus(e) { this.data.rvBonus = e.detail.value; this.data.rvPkgId = ''; this.rvTextSoon() },
+  onRvChannel(e) { this.setData({ rvChannelIdx: Number(e.detail.value) || 0 }) },
+  onTech(e) { this.setData({ techIdx: Number(e.detail.value) || 0 }) },
+  rvTextSoon() { clearTimeout(this._rt); this._rt = setTimeout(() => this.rvText(), 250) },
+  rvText() {
+    const cents = Math.round(Number(String(this.data.rvAmount || '').replace(/[^\d.]/g, '')) * 100) || 0
+    this.setData({ rvAmountText: cents > 0 ? ` ${storeMoney(cents, 2)}` : '' })
+  },
+
+  async submitRecharge() {
+    const cents = Math.round(Number(String(this.data.rvAmount || '').replace(/[^\d.]/g, '')) * 100) || 0
+    const bonus = Math.round(Number(String(this.data.rvBonus || '').replace(/[^\d.]/g, '')) * 100) || 0
+    if (cents <= 0) { wx.showToast({ title: '充值金额要大于 0(赠送随充值一起记)', icon: 'none' }); return }
+    if (this.data.busy) return
+    this.setData({ busy: true })
+    try {
+      await api.adminPost('/admin/stored-value/recharge', {
+        userId: this.data.userId, amountCents: cents, bonusCents: bonus,
+        payChannel: this.data.rvChannels[this.data.rvChannelIdx].id,
+        technicianId: this.data.techIds[this.data.techIdx] || undefined
+      })
+      wx.showToast({ title: `已到账 ${storeMoney(cents, 2)}${bonus ? ` 赠 ${storeMoney(bonus, 2)}` : ''}`, icon: 'none' })
+      this.setData({ busy: false, rvAmount: '', rvBonus: '', rvPkgId: '', rvAmountText: '' })
+      this.load()   // 余额等四数=真值重拉,不前端加减
+    } catch (e) {
+      this.setData({ busy: false })
+      wx.showToast({ title: (e && e.message) || '充值失败', icon: 'none' })
+    }
+  },
+
+  /* ===== 冲销(内嵌):本月与这位顾客订单关联的账本流水 ===== */
+  curMonth() {
+    const d = new Date()
+    return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`
+  },
+  prevMonth() { this.loadTxns(this.shiftMonth(this.data.month, -1)) },
+  nextMonth() { this.loadTxns(this.shiftMonth(this.data.month, 1)) },
+  shiftMonth(m, d) {
+    const [y, mo] = m.split('-').map(Number)
+    const t = new Date(y, mo - 1 + d, 1)
+    return `${t.getFullYear()}-${String(t.getMonth() + 1).padStart(2, '0')}`
+  },
+  async loadTxns(month) {
+    this.setData({ txnsLoading: true, month })
+    try {
+      const [tx, bks] = await Promise.all([
+        api.adminGet(`/admin/finance/transactions?month=${month}`),
+        this._bookingIds ? Promise.resolve(null) : api.adminGet('/admin/bookings')
+      ])
+      if (bks) this._bookingIds = new Set((bks.bookings || []).filter((b) => b.user && b.user.id === this.data.userId).map((b) => b.id))
+      const all = tx.transactions || []
+      const reversedSet = new Set(all.filter((t) => t.reversalOf).map((t) => t.reversalOf))
+      const rows = all
+        .filter((t) => t.bookingId && this._bookingIds.has(t.bookingId))
+        .map((t) => ({
+          id: t.id, occurredOn: t.occurredOn, note: t.note || t.category || t.source,
+          amountText: storeMoney(Math.abs(t.amountCents), 2),
+          negative: t.amountCents < 0,
+          isReversal: t.source === 'reversal',
+          reversed: reversedSet.has(t.id)
+        }))
+      this.setData({ txns: rows, txnsLoading: false })
+    } catch (e) {
+      this.setData({ txnsLoading: false })
+      wx.showToast({ title: (e && e.message) || '读取流水失败', icon: 'none' })
+    }
+  },
+  reverseTxn(e) {
+    const { id, note } = e.currentTarget.dataset
+    if (this.data.busy) return
+    wx.showModal({
+      title: '确认冲销?',
+      content: `将生成一条等额红字反向记录纠错,原始记录保留:${note || id}`,
+      success: async (r) => {
+        if (!r.confirm) return
+        this.setData({ busy: true })
+        try {
+          await api.adminPost(`/admin/finance/transactions/${encodeURIComponent(id)}/reverse`, {})
+          wx.showToast({ title: '已冲销(红字反向记录已生成)', icon: 'none' })
+          this.setData({ busy: false })
+          this.loadTxns(this.data.month)
+        } catch (err) {
+          this.setData({ busy: false })
+          wx.showToast({ title: (err && err.message) || '冲销失败', icon: 'none' })
+        }
+      },
+      fail: (err) => console.warn('[showModal fail]', err)
+    })
+  },
+
+  /* ===== 退卡(原样) ===== */
   pickCard(e) {
     const id = e.currentTarget.dataset.id || ''
     this.setData({ cardId: id, card: this.data.cards.find((c) => c.id === id) || null })
@@ -134,11 +264,5 @@ Page({
       this.setData({ busy: false })
       wx.showToast({ title: (e && e.message) || '退卡失败', icon: 'none' })
     }
-  },
-
-  goElsewhere() {
-    const t = this.data.tab
-    if (t === 'recharge' || t === 'bonus') wx.navigateTo({ url: '/pages/merchant/member/index' })
-    else wx.navigateTo({ url: '/pages/merchant/finance-txns/index' })
   }
 })

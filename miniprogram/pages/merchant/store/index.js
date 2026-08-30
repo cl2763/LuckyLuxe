@@ -1,8 +1,5 @@
 const api = require('../../../utils/api')
 
-const DAY = ['周日', '周一', '周二', '周三', '周四', '周五', '周六']
-const ORDER = [1, 2, 3, 4, 5, 6, 0] // 周一→周日
-
 Page({
   data: {
     storeId: '', name: '', address: '', phone: '',
@@ -14,7 +11,7 @@ Page({
     loading: true
   },
 
-  async onShow() { if (!(await api.guardOwner())) return; this.load(); this.loadRules() },
+  async onShow() { if (!(await api.guardOwner())) return; this.setData({ hoursTxt: api.hoursGateText() }); this.load(); this.loadRules() },
 
   async loadRules() {
     try {
@@ -37,17 +34,9 @@ Page({
       const r = await api.adminGet('/admin/business-hours')
       const s = (r.stores || [])[0]
       if (!s) { this.setData({ loading: false }); return }
-      const byDay = {}
-      ;(s.hours || []).forEach((h) => { byDay[h.weekday] = h })
-      const hours = ORDER.map((wd) => {
-        const h = byDay[wd] || {}
-        return {
-          weekday: wd, label: DAY[wd],
-          isClosed: h.isClosed === undefined ? (wd === 1 ? true : false) : h.isClosed,
-          openTime: h.openTime || '10:00',
-          closeTime: h.closeTime || '19:00'
-        }
-      })
+      /* 裁定2 收敛(08-30c):表单=components/hours-form;缺行/时间不再前端编数
+         (原来缺行预填 周一休+10:00-19:00 —— 与后端 A3 同族的前端回落,随收敛处死) */
+      const hours = s.hours || []
       const specials = (s.specialDates || []).map((d) => ({
         date: d.date,
         text: d.isClosed ? '休息' : `${d.openTime}-${d.closeTime}`,
@@ -75,34 +64,18 @@ Page({
     })
   },
 
-  toggleDay(e) {
-    const i = Number(e.currentTarget.dataset.i)
-    const hours = this.data.hours.slice()
-    hours[i].isClosed = !hours[i].isClosed
-    this.setData({ hours })
-    this.saveHours()
-  },
-
-  onOpen(e) {
-    const i = Number(e.currentTarget.dataset.i)
-    const hours = this.data.hours.slice()
-    hours[i].openTime = e.detail.value
-    this.setData({ hours }); this.saveHours()
-  },
-
-  onClose(e) {
-    const i = Number(e.currentTarget.dataset.i)
-    const hours = this.data.hours.slice()
-    hours[i].closeTime = e.detail.value
-    this.setData({ hours }); this.saveHours()
-  },
-
-  async saveHours() {
-    const hours = this.data.hours.map((h) => ({
-      weekday: h.weekday, isClosed: h.isClosed, openTime: h.openTime, closeTime: h.closeTime
-    }))
-    try { await api.adminRequest('/admin/business-hours', 'PUT', { storeId: this.data.storeId, hours }) }
-    catch (err) { wx.showToast({ title: (err && err.message) || '保存失败', icon: 'none' }) }
+  /* 裁定2:营业时间保存走组件 save 事件(七天整份;A2 后端终闸兜底) */
+  async onHoursSave(e) {
+    if (this.data.hoursSaving) return
+    this.setData({ hoursSaving: true })
+    try {
+      await api.adminRequest('/admin/business-hours', 'PUT', { storeId: this.data.storeId, hours: e.detail.hours })
+      wx.showToast({ title: '营业时间已保存', icon: 'none' })
+      this.setData({ hoursSaving: false }); this.load()
+    } catch (err) {
+      this.setData({ hoursSaving: false })
+      wx.showToast({ title: (err && err.message) || '保存失败', icon: 'none' })
+    }
   },
 
   addSpecial() {

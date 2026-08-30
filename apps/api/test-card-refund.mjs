@@ -518,7 +518,9 @@ check('⑩-2 🔴 行为必须不同:keep=仍是会员 / drop=余额归零即失
     ...[...adminHtmlSrc.matchAll(/<script src="\/web\/([\w.-]+\.js)/g)].map((m) => `apps/web/${m[1]}`)]
   if (webFiles.length < 10) throw new Error(`扫描面缩水:admin.html 只挂了 ${webFiles.length} 个脚本`)
   const web = webFiles.map((f) => rf3(j4(ROOT3, f), 'utf8')).join('\n')
-  const moneyIds = ['aaAmount', 'aaCardAmount', 'finAmount', 'finRuleAmount', 'mSvAmount', 'mSvBonus', 'cpnGrantAmount', 'dcNewTotal',
+  /* 08-30c 入口总收敛:mSvAmount/mSvBonus 随「给会员充值」表单删除(死口总表#7),
+     账调弹层新增 aaRvAmount/aaRvBonus 顶位(同为 MoneyInput.field 出口) */
+  const moneyIds = ['aaAmount', 'aaCardAmount', 'aaRvAmount', 'aaRvBonus', 'finAmount', 'finRuleAmount', 'cpnGrantAmount', 'dcNewTotal',
     'kbFactDeposit', 'goalMonth', 'goalYear', 'finTargetMonth', 'finTargetYear', 'spBase', 'spHandwork', 'spOtRate']
   const stillNumber = moneyIds.filter((id) => new RegExp(`id="${id}"[^>]*type="number"`).test(web))
   check(`v1.2③-1 🔴 ${moneyIds.length} 个钱的输入框都不再是 type=number(去掉那对上下箭头)`,

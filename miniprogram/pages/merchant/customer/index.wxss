@@ -31,4 +31,5 @@ page{background:#fbf8f5}
 
 .row2btn{display:flex;gap:14rpx;margin:16rpx 24rpx 0}
 .hbtn{flex:1;text-align:center;padding:22rpx;border-radius:14rpx;font-size:28rpx;font-weight:700;background:#2d2826;color:#fff}
-.hbtn.ghost{background:#fff;color:#5c4630;border:1rpx solid #e7d3b8}
+/* 六统一(08-30c):四个同排动作同一形制同一配色 —— 不许一组里两黑两白(店主原话) */
+.hbtn.ghost{background:#2d2826;color:#fff}

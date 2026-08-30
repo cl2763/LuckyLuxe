@@ -116,10 +116,8 @@ const db = new DatabaseSync(process.env.TEST_DB_PATH || (() => { throw new Error
   const ALLOW = {
     /* 白名单式(判据三律·三):按文件钉条数+验存在性标记,新增/挪窝即红 */
     'local-server.mjs': { max: 1, marker: '打卡域成文口径',
-      reason: '打卡域「规定下班」成文口径(注释:排班>门店>19:00);读口带 is_closed=0 闸,非门店营业时间读口回落' },
-    'supabase-server.mjs': { max: 1, marker: '停用中,请勿部署',
-      reason: '早期 Supabase 版后端,文件头明标停用、无部署口(package.json 两条脚本为历史遗留);不在运行面' }
-  }
+      reason: '打卡域「规定下班」成文口径(注释:排班>门店>19:00);读口带 is_closed=0 闸,非门店营业时间读口回落' }
+  }   /* 08-30c 裁定3:supabase 停用件已尸清,白名单随尸减一(棘轮只减)—— 现仅打卡域 1 条 */
   const hits = []
   for (const f of files) {
     const src = stripJs(readFileSync(new URL(f, import.meta.url), 'utf8'))
@@ -241,6 +239,32 @@ const db = new DatabaseSync(process.env.TEST_DB_PATH || (() => { throw new Error
   } else {
     check('A4 员工号登录夹具建失败(staff-accounts 未回初始密码)—— 不许静默跳过', false, JSON.stringify(staffMk.data).slice(0, 120))
   }
+}
+
+/* ===== 裁定2(08-30c)收敛锚点:营业时间表单=一份组件两处挂载,旧编辑器死净 ===== */
+{
+  const compJs = readFileSync(new URL('../../miniprogram/components/hours-form/index.js', import.meta.url), 'utf8')
+  const compWxml = readFileSync(new URL('../../miniprogram/components/hours-form/index.wxml', import.meta.url), 'utf8')
+  check('🔴 裁定2:hours-form 组件在(七行 switch+picker+save 事件)',
+    compJs.includes("triggerEvent('save'") && compWxml.includes('<switch') && compWxml.includes('<picker'))
+  const setupWxml = readFileSync(new URL('../../miniprogram/pages/merchant/hours-setup/index.wxml', import.meta.url), 'utf8')
+  const storeWxml = readFileSync(new URL('../../miniprogram/pages/merchant/store/index.wxml', import.meta.url), 'utf8')
+  const setupJson = readFileSync(new URL('../../miniprogram/pages/merchant/hours-setup/index.json', import.meta.url), 'utf8')
+  const storeJson = readFileSync(new URL('../../miniprogram/pages/merchant/store/index.json', import.meta.url), 'utf8')
+  /* 刀3 咬出的判据洞:includes('<hours-form') 连 <hours-formX 都算命中(子串病)—— 改标签边界匹配 */
+  const hfTag = /<hours-form[\s/>]/
+  check('🔴 裁定2:小程序两处挂载同一组件(强制页+门店设置,usingComponents 同路径)',
+    hfTag.test(setupWxml) && hfTag.test(storeWxml)
+    && setupJson.includes('/components/hours-form/index') && storeJson.includes('/components/hours-form/index'))
+  const storeJs = stripJs(readFileSync(new URL('../../miniprogram/pages/merchant/store/index.js', import.meta.url), 'utf8'))
+  check('裁定2:门店设置旧编辑器死净(零 toggleDay/saveHours 旧手柄,零 10:00 前端预填编数)',
+    !storeJs.includes('saveHours') && !storeJs.includes("openTime: h.openTime || '10:00'"))
+  const webHs = stripJs(readFileSync(new URL('../web/hours-setup.js', import.meta.url), 'utf8'))
+  const webAdmin2 = stripJs(readFileSync(new URL('../web/admin.js', import.meta.url), 'utf8'))
+  check('🔴 裁定2:网页两处挂载同一渲染出口(daysHtml;门店设置走 HoursSetup.mountSettings)',
+    webHs.includes('function daysHtml(') && (webHs.match(/daysHtml\(/g) || []).length >= 3 && webAdmin2.includes('HoursSetup.mountSettings('))
+  check('裁定2:网页旧周网格编辑器死净(零 business-hours-grid 模板 / data-hours-closed / saveBusinessHoursSettings)',
+    !webAdmin2.includes('business-hours-grid') && !webAdmin2.includes('data-hours-closed') && !webAdmin2.includes('saveBusinessHoursSettings'))
 }
 
 console.log(`\n✅ test-hours-gate 通过 ${checks} 项`)

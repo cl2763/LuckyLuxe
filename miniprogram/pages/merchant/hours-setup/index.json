@@ -1,1 +1,1 @@
-{ "navigationBarTitleText": "设置营业时间", "usingComponents": {} }
+{ "navigationBarTitleText": "设置营业时间", "usingComponents": { "hours-form": "/components/hours-form/index" } }

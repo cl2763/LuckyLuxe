@@ -1,5 +1,5 @@
 const api = require('../../../utils/api')
-const { storeMoney, storeCurrencyPrefix, ensureCurrencyCached } = require('../../../utils/storeclock')
+const { storeMoney, ensureCurrencyCached } = require('../../../utils/storeclock')
 
 Page({
   data: {
@@ -11,10 +11,7 @@ Page({
     recharges: [], timesCards: [], coupons: [],
     customers: [],
     // 屏 C3 自定义发放(小程序老板版)
-    grantQuery: '', grantResults: [], grantPicked: null, grants: [],
-    // F4 给会员加储值(平铺块,与自定义发放同层)
-    rvQuery: '', rvResults: [], rvPicked: null, rvAmount: '', rvAmountText: '',
-    rvCurrency: '', rvTechs: [], rvTechNames: ['店里直收(不计提成)'], rvTechIndex: 0
+    grantQuery: '', grantResults: [], grantPicked: null, grants: []
   },
 
   onLoad(opt) {
@@ -26,8 +23,6 @@ Page({
     this.loadMembershipView()
     if (!(await api.guardOwner())) return
     await ensureCurrencyCached().catch(() => {})
-    // R4:要的是**币符**(¥/CAD $),不是币种代码(CNY)——以前显示成「CNY 如 1000」
-    this.setData({ rvCurrency: storeCurrencyPrefix() })
     this.loadAll()
   },
 
@@ -207,85 +202,8 @@ Page({
     }
   },
 
-  /* ===== F4 给会员加储值(平铺块)=====
-     金额红线:本块一处金额运算都没有 —— 只把店主输入的数字换算成分发给后端,
-     余额与到账结果全部由 /admin/stored-value/* 返回。 */
-  onRvSearch(e) {
-    const q = String(e.detail.value || '').trim()
-    const ql = q.toLowerCase() // D62:大小写不敏感(全仓搜索口同刀)
-    const hit = ql ? (this.data.customers || []).filter((c) =>
-      String(c.displayName || '').toLowerCase().includes(ql) || String(c.phone || '').includes(q)).slice(0, 6) : []
-    // 输入过程中不许改写内容:回写的是**原样**,trim 只用于匹配(打空格不该被吃掉)
-    this.setData({ rvQuery: String(e.detail.value || ''), rvResults: hit.map((c) => this.rvShape(c)) })
-  },
-  rvShape(c) {
-    return { id: c.id, displayName: c.displayName || '会员', balanceText: storeMoney(c.storedValueBalanceCents || 0, 0) }
-  },
-  async pickRv(e) {
-    const c = (this.data.customers || []).find((x) => x.id === e.currentTarget.dataset.id)
-    if (!c) return
-    /* D25(《财务总逻辑》3-1b):未绑定微信的轻档案不可充值 —— 选人时就把绑定态带出来,
-       未绑定的把按钮压成禁用态并给提示;后端 UNBOUND_NO_RECHARGE 同拦(这里只是体验层)。 */
-    let bound = true
-    try {
-      const hit = (await api.adminGet(`/admin/customers/lookup?userId=${encodeURIComponent(c.id)}`)).hit
-      bound = Boolean(hit && hit.bound)
-    } catch (err) { /* 查不到绑定态就按未绑定处理,宁严勿松 */ bound = false }
-    this.setData({ rvPicked: Object.assign(this.rvShape(c), { bound }), rvResults: [] })
-    this.loadRvTechs()
-  },
-  unpickRv() { this.setData({ rvPicked: null, rvQuery: '', rvResults: [], rvAmount: '', rvAmountText: '', rvTechIndex: 0 }) },
-  async loadRvTechs() {
-    if (this.data.rvTechs.length) return
-    try {
-      const t = await api.adminGet('/admin/technicians')
-      const techs = (t.technicians || []).filter((x) => x.is_active !== 0 && x.isActive !== false)
-      this.setData({ rvTechs: techs, rvTechNames: ['店里直收(不计提成)'].concat(techs.map((x) => `${x.name} 促成`)) })
-    } catch (e) { /* 拉不到技师不挡充值 */ }
-  },
-  onRvTech(e) { this.setData({ rvTechIndex: Number(e.detail.value) || 0 }) },
-  /* 🔴 钱的输入框族(店主 2026-08-27 立:**输入过程中不许重画**)——小程序这一处就是同病:
-     原来把敲进来的字符过滤一遍再 setData **写回同一个框**,每敲一下重画一次、
-     连着敲就丢字符(网页端那次她实测「打了 1 就被重画一次,5 和 0 丢了」是同一个病)。
-     改法:值只进 this.data(不 setData,视图不重画,输入框内容不被顶掉),
-     setData 只更新旁边那句预览文字。type="digit" 的键盘本来就只出数字和小数点,过滤那步是多余的。 */
-  onRvAmount(e) {
-    const raw = String(e.detail.value || '')
-    this.data.rvAmount = raw
-    const v = Number(raw.replace(/[^\d.]/g, ''))
-    this.setData({ rvAmountText: v > 0 ? ` ${storeMoney(Math.round(v * 100), 0)}` : '' })
-  },
+  /* 入口总收敛(店主 08-30c 裁):「给会员加储值」平铺块整体删除 ——
+     针对特定顾客改余额的动作唯一 UI 入口=客户档案 → 账户调整(充值/赠送内嵌在那儿,
+     调同一条 POST /admin/stored-value/recharge,后端路由一个没动)。 */
 
-  async doRecharge() {
-    const cust = this.data.rvPicked
-    const amount = Number(this.data.rvAmount)
-    if (!cust) { wx.showToast({ title: '先选一位会员', icon: 'none' }); return }
-    // D25:未绑定轻档案不可充值(技师/老板同受约束)
-    if (cust.bound === false) { wx.showToast({ title: '请先让顾客扫码绑定(会员码/签署码)再充值', icon: 'none', duration: 2500 }); return }
-    if (!(amount > 0)) { wx.showToast({ title: '金额无效', icon: 'none' }); return }
-    // 加储值是资金操作:门禁开的店没解锁要先去财务页;门禁关的店直接充(D29 lock-aware)
-    if (!(api.getFinanceKey && api.getFinanceKey())) {
-      let lockEnabled = false
-      try { lockEnabled = Boolean((await api.adminGet('/admin/finance/lock-status')).enabled) } catch (e) { lockEnabled = false }
-      if (!lockEnabled) { /* 门禁没开:不拦,直接往下走充值 */ }
-      else {
-      wx.showModal({
-        title: '需先解锁财务', content: '加储值属于资金操作,请先到财务页输入财务密码解锁本次会话。',
-        confirmText: '去财务页', success: (r) => { if (r.confirm) wx.navigateTo({ url: '/pages/merchant/finance/index' }) },
-        fail: (e) => console.warn('[showModal fail]', e) // S组卫生批:fail=开发者域错误,console 留痕不弹 UI(toast 会撞转场,D27 家族)
-      })
-      return
-      }
-    }
-    const tech = this.data.rvTechs[this.data.rvTechIndex - 1]
-    try {
-      const body = { userId: cust.id, amountCents: Math.round(amount * 100), payChannel: 'manual', note: '线下手动补录' }
-      if (tech) body.technicianId = tech.id
-      const resp = await api.adminPost('/admin/stored-value/recharge', body)
-      const bal = resp && resp.balanceCents != null ? storeMoney(resp.balanceCents, 0) : ''
-      wx.showToast({ title: '已到账,余额 ' + bal, icon: 'none' })
-      this.unpickRv()
-      this.loadAll()
-    } catch (err) { wx.showToast({ title: (err && err.message) || '充值失败', icon: 'none' }) }
-  }
 })

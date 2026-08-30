@@ -71,9 +71,24 @@ const aa = mini('pages/merchant/account-adjust/index.js')
 check('① 四个参考数与黄条:同一条 facts 口(/admin/account-adjust/facts)', (aa.match(/account-adjust\/facts/g) || []).length >= 2)
 check('① 退储值:同一条 /admin/stored-value/refund(带幂等 requestId)', aa.includes("'/admin/stored-value/refund'") && aa.includes('requestId'))
 check('① 退次卡:同一条 /admin/timecards/:id/refund', aa.includes('/admin/timecards/') && aa.includes('/refund`'))
-check('① 充值/赠送/冲销=指路不造第二写口(与网页同策略)', aa.includes('goElsewhere') && !aa.includes("stored-value/recharge'"))
+/* 08-30c 入口总收敛翻面:指路已死,四 tab 全内嵌 —— 调的仍是各自既有唯一写口(路由零增零改) */
+check('🔴 ① 入口总收敛:充值/赠送内嵌(POST /admin/stored-value/recharge)且指路句已死(零 goElsewhere/navigateTo member)',
+  aa.includes("'/admin/stored-value/recharge'") && !aa.includes('goElsewhere') && !aa.includes('merchant/member/index'))
+check('🔴 ① 入口总收敛:冲销内嵌(既有唯一冲销口 /admin/finance/transactions/:id/reverse)且不跳财务页',
+  aa.includes('/admin/finance/transactions/') && aa.includes('/reverse') && !aa.includes('finance-txns/index'))
+const memberJs = mini('pages/merchant/member/index.js')
+const memberWxml = mini('pages/merchant/member/index.wxml')
+check('🔴 ① 死口删除:会员页「给会员加储值」表单已删(零 doRecharge/rvPicked;wxml 零充值表单)',
+  !memberJs.includes('doRecharge') && !memberJs.includes('rvPicked') && !memberWxml.includes('给会员加储值'))
 check('① 页面 guardOwner(店员连入口页都进不来)+ 财务门禁先例(lock-status + getFinanceKey)',
   aa.includes('guardOwner') && aa.includes('finance/lock-status') && aa.includes('getFinanceKey'))
+/* 网页侧同批同刀(双端同批律):web 三处死口删净 + 弹层内嵌同两条写口 */
+const webAdmin = stripJs(readFileSync(new URL('../web/admin.js', import.meta.url), 'utf8'))
+const webAa = stripJs(readFileSync(new URL('../web/account-adjust.js', import.meta.url), 'utf8'))
+check('🔴 ① 网页死口删除:给TA充值按钮 + 会员页充值表单 + prefill 流全净(零残留)',
+  !webAdmin.includes('data-customer-recharge') && !webAdmin.includes('renderSvOpsCard') && !webAdmin.includes('data-msv-recharge') && !webAdmin.includes('prefillUserId'))
+check('🔴 ① 网页弹层内嵌:充值(stored-value/recharge)+ 冲销(finance/transactions/:id/reverse)且 goto 指路已死',
+  webAa.includes("'/admin/stored-value/recharge'") && webAa.includes('/reverse`') && !webAa.includes('data-aa-goto'))
 const custWxml = mini('pages/merchant/customer/index.wxml')
 check('① 入口挂在客户档案页(customer 页本身 guardOwner)', custWxml.includes('accountAdjust') && custWxml.includes('账户调整'))
 /* 店主 08-30 点名:一套按钮规格 —— 客户档案四个动作(写小记/画像/账户调整/发券)全部 hbtn 同形制 */

@@ -6398,7 +6398,11 @@ function getAvailability(query) {
     const occupiedRows = db.prepare('SELECT starts_at FROM booking_slots WHERE technician_id = ? AND starts_at >= ? AND starts_at < ?').all(tech.id, dayStart, dayEnd)
     const occupied = new Set(occupiedRows.map((row) => row.starts_at))
     const slots = []
+    /* D88 同族:今天已过去的时刻不再可约(以前晚上查今天照样列出上午 —— 编出根本约不上的位) */
+    const nowA = localParts(new Date())
+    const pastMin = date === nowA.date ? minutesFromTime(nowA.time) : -1
     for (let startMin = minutesFromTime(openTime); startMin + durationMin <= minutesFromTime(closeTime); startMin += SLOT_MINUTES) {
+      if (startMin < pastMin) continue
       const time = timeFromMinutes(startMin)
       const required = buildSlotStarts(localDateTime(date, time), durationMin).map(iso)
       if (required.every((slot) => !occupied.has(slot))) slots.push(time)
@@ -6737,7 +6741,15 @@ function createBooking(body, opts = {}) {
     db.exec('COMMIT')
   } catch (error) {
     db.exec('ROLLBACK')
-    if (String(error.message || '').includes('UNIQUE constraint failed')) throw apiError(409, 'SLOT_UNAVAILABLE', '该技师这个时段刚被约走了,换个时间试试。')
+    if (String(error.message || '').includes('UNIQUE constraint failed')) {
+      /* D88(店主 08-30c 并批):失败句说清真因 —— 「已过」和「被占」是两回事,不许答非所因 */
+      const nowD = localParts(new Date())
+      if (`${input.date} ${input.time}` < `${nowD.date} ${nowD.time}`) {
+        throw apiError(409, 'SLOT_UNAVAILABLE', `这个时段已经过去了(门店现在 ${nowD.time}),选一个之后的时段。`)
+      }
+
+      throw apiError(409, 'SLOT_UNAVAILABLE', `该技师这个时段和已有预约重叠(所选服务需 ${durationMin} 分钟),换个时间或换个更短的项目试试。`)
+    }
     throw error
   }
 
@@ -13886,6 +13898,7 @@ async function route(req, res) {
        (两端渲染引导墙「还没设置营业时间」+ 直达设置);休息态只留给真休息。
        参照 isClosedDay(D34)早就写对的口径:「没配过排班的店不算休息」。 */
     const hoursUnset = !special && hoursUnsetOfStore(db, storeId)
+    const nowParts = localParts(new Date())   // D88:门店时区「现在」,台面裁过去空档用这一份,不裸 new Date
     const isClosed = special ? Boolean(special.is_closed) : (hoursUnset ? false : (!hours || Boolean(hours.is_closed)))
     const openTime = (special && !special.is_closed && special.open_time) || (hours && !hours.is_closed ? hours.open_time : null)
     const closeTime = (special && !special.is_closed && special.close_time) || (hours && !hours.is_closed ? hours.close_time : null)
@@ -13952,6 +13965,7 @@ async function route(req, res) {
     const activeCount = bookings.filter((b) => b.arrivalState === 'active').length
     const pendingCount = bookings.filter((b) => b.arrivalState === 'pending').length
     return json(res, 200, {
+      storeNow: nowParts.time, storeToday: nowParts.date,
       date, weekday, isClosed, hoursUnset, openTime, closeTime,
       specialNote: special?.note || '',
       technicians,

@@ -99,4 +99,44 @@ check('⑤ schedule-day 下发两端共用的口径字段(bookings 带 group/arr
   JSON.stringify(day.bookings?.[0] || {}).slice(0, 160))
 check('⑤ 营业时段字段在(网格范围口径的输入)', 'openTime' in day && 'closeTime' in day && 'isClosed' in day)
 
+/* ===== D88(店主 08-30c 并批):过去空档不出排单口 + 409 说人话 + 双击双发拦 ===== */
+{
+  const today = (await request('/admin/store-clock', {}, PLATFORM, H)).data.today
+  const day = await request(`/admin/schedule-day?date=${today}`, {}, PLATFORM, H)
+  check('🔴 D88 后端:schedule-day 下发 storeNow/storeToday(台面裁过去空档的唯一时刻源)',
+    /^\d{2}:\d{2}$/.test(day.data.storeNow || '') && day.data.storeToday === today,
+    JSON.stringify({ now: day.data.storeNow, td: day.data.storeToday }))
+  const clip = 'Math.ceil(toMin(r.storeNow) / 30) * 30'
+  const miniOrders2 = stripJs(readFileSync(new URL('../../miniprogram/pages/merchant/orders/index.js', import.meta.url), 'utf8'))
+  check('🔴 D88 双端同刀:裁过去空档的截齐式两端逐字同串(各恰 1 处)',
+    (tbCode.match(/Math\.ceil\(toMin\(r\.storeNow\) \/ 30\) \* 30/g) || []).length === 1
+    && (miniOrders2.match(/Math\.ceil\(toMin\(r\.storeNow\) \/ 30\) \* 30/g) || []).length === 1, clip)
+  check('D88 双击双发拦:网页 f.busy 闸 + 小程序 _directBusy 闸都在',
+    tbCode.includes('if (f.busy) return') && miniOrders2.includes('this._directBusy) return'))
+
+  /* 行为:409 两句两因 —— 补录过去单(放行)后再撞同位=「已经过去」;未来重叠=「重叠」 */
+  const svcD = (await request('/admin/services', { method: 'POST', body: JSON.stringify({ type: 'NAIL', nameZh: `D88测${RUN}`, nameEn: 'd', priceCents: 9900, baseDurationMin: 60, categoryId: catId }) }, PLATFORM, H)).data.service
+  const techD = (await request('/admin/technicians', { method: 'POST', body: JSON.stringify({ name: `D88技${RUN}`, isActive: true }) }, PLATFORM, H)).data.technician
+  const impD = (await request(`/platform/tenants/${tid}/import/customers`, { method: 'POST', body: JSON.stringify({ dryRun: false, rows: [{ name: `D88客${RUN}`, phone: `137${RUN.slice(-8)}` }] }) })).data
+  const uD = impD.users[0].userId
+  const past = await request('/admin/bookings/direct', { method: 'POST', body: JSON.stringify({ userId: uD, serviceId: svcD.id, technicianId: techD.id, date: today, time: '00:00', durationMin: 30 }) }, PLATFORM, H)
+  check('D88 行为:老板补录过去时段放行(00:00,补录=合法)', past.status === 201, String(past.status))
+  const pastAgain = await request('/admin/bookings/direct', { method: 'POST', body: JSON.stringify({ userId: uD, serviceId: svcD.id, technicianId: techD.id, date: today, time: '00:00', durationMin: 30 }) }, PLATFORM, H)
+  check('🔴 D88 行为:过去时段撞位 → 409 说「已经过去了(门店现在 HH:MM)」,不再答非所因',
+    pastAgain.status === 409 && /已经过去了.门店现在 \d{2}:\d{2}/.test(pastAgain.data?.error?.message || ''), JSON.stringify(pastAgain.data).slice(0, 140))
+  const fut = await request('/admin/bookings/direct', { method: 'POST', body: JSON.stringify({ userId: uD, serviceId: svcD.id, technicianId: techD.id, date: today, time: '23:00', durationMin: 30 }) }, PLATFORM, H)
+  check('D88 行为夹具:23:00 先占位', fut.status === 201, String(fut.status))
+  const futClash = await request('/admin/bookings/direct', { method: 'POST', body: JSON.stringify({ userId: uD, serviceId: svcD.id, technicianId: techD.id, date: today, time: '23:00', durationMin: 30 }) }, PLATFORM, H)
+  check('🔴 D88 行为:未来撞位 → 409 说「和已有预约重叠(所选服务需 N 分钟)」',
+    futClash.status === 409 && /重叠.+分钟/.test(futClash.data?.error?.message || ''), JSON.stringify(futClash.data).slice(0, 140))
+
+  /* 可约时段同族:今天已过去的时刻不再出现在顾客可约里(先设满全周时段,夹具能自证非空) */
+  await request('/admin/business-hours', { method: 'PUT', body: JSON.stringify({ hours: [0, 1, 2, 3, 4, 5, 6].map((w) => ({ weekday: w, openTime: '00:30', closeTime: '23:30', isClosed: false })) }) }, PLATFORM, H)
+  const sidD = ((await request('/admin/business-hours', {}, PLATFORM, H)).data.stores || [])[0].id
+  const availD = await request(`/availability?storeId=${sidD}&serviceId=${svcD.id}&date=${today}`, {}, null, { 'x-tenant-id': tid })
+  const nowT = day.data.storeNow
+  const badSlots = (availD.data.slots || []).flatMap((s2) => (s2.slots || []).filter((t3) => t3 < nowT))
+  check('🔴 D88 同族:可约时段零过去时刻(晚上查今天不再列出上午)', badSlots.length === 0, badSlots.slice(0, 5).join(','))
+}
+
 console.log(`\n✅ test-today-board 通过 ${checks} 项`)

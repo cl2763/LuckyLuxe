@@ -2,10 +2,10 @@ page{background:#fbf8f5}
 .page{padding:24rpx 26rpx 60rpx}
 .ps{font-size:22rpx;color:#8c8279;margin-bottom:18rpx;line-height:1.6}
 .seg{display:flex;background:#efe7dd;border-radius:16rpx;padding:5rpx;margin-bottom:20rpx}
-.seg-b{flex:1;text-align:center;font-size:27rpx;font-weight:700;padding:16rpx 0;border-radius:12rpx;color:#8a7d70}
-.seg-b.on{background:#fff;box-shadow:0 2rpx 8rpx rgba(0,0,0,.08)}
-.seg-b.on.out{color:#c0392b}
-.seg-b.on.in{color:#1f7a4d}
+.seg-b{flex:1;text-align:center;font-size:27rpx;font-weight:700;padding:16rpx 0;border-radius:12rpx;color:#2d2826;background:#fff;border:1rpx solid #2d2826}
+.seg-b.on{background:#2d2826;color:#fff;border-color:#2d2826}
+/* 六统一(08-30c):收/支选中色语义并入统一黑白规格;金额红绿语义仍在列表数字上 */
+
 .amt{background:#fff;border:1rpx solid #e7ddd4;border-radius:20rpx;padding:22rpx 26rpx;margin-bottom:8rpx}
 .amt-l{font-size:21rpx;color:#8c8279}
 .amt-row{display:flex;align-items:baseline;gap:8rpx;margin-top:6rpx}

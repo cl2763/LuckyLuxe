@@ -2376,11 +2376,15 @@ const main = async () => {
       const srvD60 = readFileSync(join(ROOT42, 'apps/api/local-server.mjs'), 'utf8')
       // D65 改版:双叙事合并=flow 一条五步账,头条=本单到店支付;签署页/快照直贴 flow 块(后端句唯一)
       check('㋄→㋇ D65 签署页/快照:flow 一条五步账+头条「本单到店支付」(「合计」不再当头条)', signHtml.includes('s.flow.lines') && signHtml.includes('s.flow.heroLabel') && !signHtml.includes('>支付构成<') && srvD60.includes("heroLabel: '本单到店支付'") && srvD60.includes("key: 'svcPayable', label: '服务应付'"))
-      // ㋅ D62 wiring:四处前端搜索口全 toLowerCase(类定义=用户关键字匹配名称/手机号的本地过滤)
+      /* ㋅ D62 wiring:前端搜索口全 toLowerCase(类定义=用户关键字匹配名称/手机号的本地过滤)。
+         08-30c 入口总收敛:会员页「代充选客」搜索口随充值表单一并删除(死口总表#10)——
+         四口收为三口;账调页不带搜索(从客户档案进来,人已选定)。 */
       const custJs = readFileSync(join(ROOT42, 'miniprogram/pages/merchant/customers/index.js'), 'utf8')
       const membJs = readFileSync(join(ROOT42, 'miniprogram/pages/merchant/member/index.js'), 'utf8')
       const wbJs = readFileSync(join(ROOT42, 'miniprogram/pages/merchant/workbench/index.js'), 'utf8')
-      check('㋅ D62 前端四搜索口大小写不敏感(客户/代充选客/工作台/开单找客)', custJs.includes('.trim().toLowerCase()') && membJs.includes('q.toLowerCase()') && wbJs.includes(".trim().toLowerCase()") && miniOrders.includes('q.toLowerCase()'))
+      check('㋅ D62 前端三搜索口大小写不敏感(客户/工作台/开单找客;代充口已随死口删除)',
+        custJs.includes('.trim().toLowerCase()') && wbJs.includes(".trim().toLowerCase()") && miniOrders.includes('q.toLowerCase()'))
+      check('㋅ D62 反向守:会员页搜索口确已死净(死而复生要带 toLowerCase 回来重新入册)', !membJs.includes('onRvSearch'))
       // ㋆ D64 wiring:payIntent 映射意愿唯一(不勾储值=offline_full,挂充不强制)+储值行显隐含挂充+组卡 cover 行+出码 n/N+预告句
       check('㋆ D64 前端映射意愿唯一+储值行显隐含挂充', settleJs.includes("if (!m.useBalance) return 'offline_full'") && settleWxml.includes('view.hasBalance || view.hasRecharge'))
       // D68 文案改版:出码行=「服务确认单 n/N」;预告句=「本次其余单据还将抵…」
@@ -2572,9 +2576,9 @@ const main = async () => {
       check('㋐ §十-2 过渡期红线:全仓零「支付成功」字样', paidWordHits.length === 0, paidWordHits.join(' | ').slice(0, 200))
       /* ===== ㋐ D69 同族:恒 0 字段冒充卡包数(黑卡格回落)——双端销案 ===== */
       const srvUser69 = readFileSync(join(ROOT42, 'apps/api/local-server.mjs'), 'utf8')
-      const supaUser69 = readFileSync(join(ROOT42, 'apps/api/supabase-server.mjs'), 'utf8')
-      check('㋐ D69族:serializeUser 不再下发恒 0 的 couponCount(两个后端同刀)',
-        !/^\s*couponCount: 0,\s*$/m.test(srvUser69) && !/^\s*couponCount: 0,\s*$/m.test(supaUser69))
+      /* 08-30c 裁定3:supabase-server.mjs 停用件已尸清(整文件删除),双后端断言收为单后端 */
+      check('㋐ D69族:serializeUser 不再下发恒 0 的 couponCount',
+        !/^\s*couponCount: 0,\s*$/m.test(srvUser69))
       const meWx69 = readFileSync(join(ROOT42, 'miniprogram/pages/me/index.wxml'), 'utf8')
       const meJs69 = readFileSync(join(ROOT42, 'miniprogram/pages/me/index.js'), 'utf8')
       const apiJs69 = readFileSync(join(ROOT42, 'miniprogram/utils/api.js'), 'utf8')

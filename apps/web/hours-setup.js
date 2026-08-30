@@ -65,20 +65,80 @@ window.HoursSetup = (function () {
       <div class="hsw-box">
         <div class="hsw-title">${deps.escapeHtml(txt.ownerTitle || '')}</div>
         <div class="hsw-hint">${deps.escapeHtml(txt.ownerHint || '')}</div>
-        ${DAY_ORDER.map(function (w) {
-          const d = days[w]
-          return `<div class="hsw-day">
-            <button class="hsw-sw ${d.open ? 'on' : ''}" data-hsw-toggle="${w}" type="button" role="switch" aria-checked="${d.open}"></button>
-            <span class="hsw-dn">${DAY_NAMES[w]}</span>
-            ${d.open
-              ? `<span class="hsw-times"><input type="time" data-hsw-open="${w}" value="${d.openTime}"> – <input type="time" data-hsw-close="${w}" value="${d.closeTime}"></span>`
-              : `<span class="hsw-ph">${deps.escapeHtml(txt.timePlaceholder || '')}</span>`}
-          </div>`
-        }).join('')}
-        <button class="hsw-save ${anyOpen(days) ? 'go' : 'dis'}" data-hsw-save type="button" ${anyOpen(days) && !state.saving ? '' : 'disabled'}>${state.saving ? '保存中…' : deps.escapeHtml(txt.saveButton || '')}</button>
-        ${anyOpen(days) ? '' : `<div class="hsw-note">${deps.escapeHtml(txt.saveDisabledNote || '')}</div>`}
+        ${daysHtml(days, txt, deps.escapeHtml, state.saving, txt.saveButton || '')}
       </div>`
     bind(el, owner, deps)
+  }
+
+  /* 裁定2(08-30c)收敛:七行表单唯一渲染出口 —— 墙与门店设置两处挂载都吃这一份 */
+  function daysHtml(days, txt, esc, saving, saveLabel) {
+    return `${DAY_ORDER.map(function (w) {
+      const d = days[w]
+      return `<div class="hsw-day">
+        <button class="hsw-sw ${d.open ? 'on' : ''}" data-hsw-toggle="${w}" type="button" role="switch" aria-checked="${d.open}"></button>
+        <span class="hsw-dn">${DAY_NAMES[w]}</span>
+        ${d.open
+          ? `<span class="hsw-times"><input type="time" data-hsw-open="${w}" value="${d.openTime}"> – <input type="time" data-hsw-close="${w}" value="${d.closeTime}"></span>`
+          : `<span class="hsw-ph">${esc(txt.timePlaceholder || '')}</span>`}
+      </div>`
+    }).join('')}
+    <button class="hsw-save ${anyOpen(days) ? 'go' : 'dis'}" data-hsw-save type="button" ${anyOpen(days) && !saving ? '' : 'disabled'}>${saving ? '保存中…' : esc(saveLabel)}</button>
+    ${anyOpen(days) ? '' : `<div class="hsw-note">${esc(txt.saveDisabledNote || '')}</div>`}`
+  }
+
+  /* 门店设置挂载(常驻改口,合同六)。rows=库里真实行;缺行=不勾+空时间(不编 10:00-19:00 ——
+     旧编辑器的前端预填回落随收敛处死)。保存走同一条 PUT,A2 后端终闸兜底。 */
+  const setState = { days: null, saving: false }
+  function mountSettings(container, opts) {
+    const txt = opts.txt || {}
+    if (!setState.days || opts.reset) {
+      setState.days = blankDays()
+      for (const r of opts.rows || []) {
+        const d = setState.days[Number(r.weekday)]
+        if (!d) continue
+        d.open = !r.isClosed
+        d.openTime = !r.isClosed ? (r.openTime || '') : ''
+        d.closeTime = !r.isClosed ? (r.closeTime || '') : ''
+      }
+    }
+    const draw = function () {
+      container.innerHTML = `<div class="hsw-settings">${daysHtml(setState.days, txt, opts.escapeHtml, setState.saving, opts.saveLabel || '保存营业时间')}</div>`
+      container.querySelectorAll('[data-hsw-toggle]').forEach(function (btn) {
+        btn.addEventListener('click', function () {
+          const w = Number(btn.dataset.hswToggle)
+          setState.days[w].open = !setState.days[w].open
+          draw()
+        })
+      })
+      container.querySelectorAll('[data-hsw-open],[data-hsw-close]').forEach(function (inp) {
+        inp.addEventListener('change', function () {
+          const w = Number(inp.dataset.hswOpen ?? inp.dataset.hswClose)
+          if (inp.dataset.hswOpen !== undefined) setState.days[w].openTime = inp.value
+          else setState.days[w].closeTime = inp.value
+        })
+      })
+      container.querySelector('[data-hsw-save]')?.addEventListener('click', async function () {
+        const days = setState.days
+        for (const w of DAY_ORDER) {
+          const d = days[w]
+          if (d.open && (!d.openTime || !d.closeTime)) { opts.toast(`${DAY_NAMES[w]}还没选时间`); return }
+          if (d.open && d.openTime >= d.closeTime) { opts.toast(`${DAY_NAMES[w]}的开始时间要早于结束时间`); return }
+        }
+        setState.saving = true; draw()
+        try {
+          await opts.request('/admin/business-hours', {
+            method: 'PUT',
+            body: JSON.stringify({ storeId: opts.storeId, hours: DAY_ORDER.map(function (w) {
+              const d = days[w]
+              return d.open ? { weekday: w, openTime: d.openTime, closeTime: d.closeTime, isClosed: false } : { weekday: w, isClosed: true }
+            }) })
+          })
+          setState.saving = false; setState.days = null
+          await opts.afterSave()
+        } catch (e) { setState.saving = false; draw(); opts.toast((e && e.message) || '保存失败') }
+      })
+    }
+    draw()
   }
 
   function bind(el, owner, deps) {
@@ -132,5 +192,5 @@ window.HoursSetup = (function () {
     }
   }
 
-  return { gate, _state: state }
+  return { gate, mountSettings, _state: state }
 })()

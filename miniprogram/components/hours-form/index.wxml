@@ -1,0 +1,15 @@
+<!-- 图 v1.1 屏①同形:七行开关 + 时间 picker + 灰钮注(文案=后端 hoursGateText,零拼串) -->
+<view class="hf">
+  <view class="hf-day" wx:for="{{days}}" wx:key="weekday" wx:for-item="d" wx:for-index="i">
+    <switch class="hf-sw" checked="{{d.open}}" data-i="{{i}}" bindchange="toggleDay" color="#0e6e62" />
+    <text class="hf-dn">{{d.name}}</text>
+    <block wx:if="{{d.open}}">
+      <picker class="hf-tm set" mode="time" value="{{d.openTime}}" data-i="{{i}}" bindchange="pickOpen">{{d.openTime || txt.timePlaceholder}}</picker>
+      <text class="hf-dash">–</text>
+      <picker class="hf-tm set" mode="time" value="{{d.closeTime}}" data-i="{{i}}" bindchange="pickClose">{{d.closeTime || txt.timePlaceholder}}</picker>
+    </block>
+    <text class="hf-tm ph" wx:else>{{txt.timePlaceholder}}</text>
+  </view>
+  <view class="hf-save {{anyOpen && !saving ? 'go' : 'dis'}}" bindtap="save">{{saving ? '保存中…' : (saveLabel || txt.saveButton)}}</view>
+  <view class="hf-note" wx:if="{{!anyOpen}}">{{txt.saveDisabledNote}}</view>
+</view>

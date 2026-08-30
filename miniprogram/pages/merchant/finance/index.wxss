@@ -72,8 +72,8 @@ page{background:#fbf8f5}
 .md-x{font-size:30rpx;color:#8c8279;padding:6rpx 10rpx}
 .md-lab{font-size:22rpx;color:#8c8279;font-weight:700;margin:20rpx 0 10rpx}
 .seg{display:flex;background:#efe7dd;border-radius:16rpx;padding:5rpx}
-.seg-b{flex:1;text-align:center;font-size:25rpx;font-weight:700;padding:14rpx 0;border-radius:12rpx;color:#8a7d70}
-.seg-b.on{background:#fff;color:#b5885d;box-shadow:0 2rpx 8rpx rgba(0,0,0,.08)}
+.seg-b{flex:1;text-align:center;font-size:25rpx;font-weight:700;padding:14rpx 0;border-radius:12rpx;color:#2d2826;background:#fff;border:1rpx solid #2d2826}
+.seg-b.on{background:#2d2826;color:#fff;border-color:#2d2826}
 .md-inp{height:84rpx;background:#fff;border:1rpx solid #e7ddd4;border-radius:16rpx;padding:0 24rpx;font-size:30rpx;font-weight:700;color:#2d2826}
 .raterow{display:flex;gap:14rpx;align-items:center}
 .raterow .rate{flex:1}

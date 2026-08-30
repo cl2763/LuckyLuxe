@@ -1,8 +1,8 @@
 page{background:#fbf8f5}
 .page{padding:16rpx 26rpx 140rpx}
 .seg{display:flex;background:#f1e7df;border-radius:12rpx;padding:5rpx;margin-bottom:16rpx}
-.s{flex:1;text-align:center;font-size:24rpx;color:#8c8279;padding:14rpx 0;border-radius:9rpx}
-.s.on{background:#fff;color:#2d2826;font-weight:600}
+.s{flex:1;text-align:center;font-size:24rpx;color:#2d2826;background:#fff;border:1rpx solid #2d2826;padding:14rpx 0;border-radius:9rpx}
+.s.on{background:#2d2826;color:#fff;border-color:#2d2826;font-weight:600}
 .empty{text-align:center;color:#8c8279;font-size:24rpx;padding:60rpx 20rpx}
 /* 展示图墙 */
 /* 真机 WebView 对 calc(50% - 6rpx) 支持不稳(工具正常真机变单列),改用百分比+space-between 双列 */

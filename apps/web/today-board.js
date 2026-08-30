@@ -66,13 +66,18 @@ window.TodayBoard = (function () {
           depositUnpaid: b.depositUnpaid, afterSalesTag: b.afterSalesTag || ''
         }
       })
+      /* D88(08-30c):过去的时段不出「+直接排单」——今天的空档起点截到「现在」之后的下一个半点;
+         「现在」只认后端 storeNow(门店时区),不裸 new Date 推 */
+      const minStart = date === r.storeToday && r.storeNow ? Math.ceil(toMin(r.storeNow) / 30) * 30 : -1
       const frees = []; let cursor = openMin
       list.forEach((b) => {
         const s = toMin(b.startTime)
-        if (s - cursor >= 30) { frees.push({ startTime: m2t(cursor), top: Math.round((cursor - openMin) / 60 * PX_PER_HOUR), height: Math.round((s - cursor) / 60 * PX_PER_HOUR) }); freeTotal += (s - cursor) }
+        const from = Math.max(cursor, minStart)
+        if (s - from >= 30) { frees.push({ startTime: m2t(from), top: Math.round((from - openMin) / 60 * PX_PER_HOUR), height: Math.round((s - from) / 60 * PX_PER_HOUR) }); freeTotal += (s - from) }
         cursor = Math.max(cursor, toMin(b.endTime))
       })
-      if (closeMin - cursor >= 30) { frees.push({ startTime: m2t(cursor), top: Math.round((cursor - openMin) / 60 * PX_PER_HOUR), height: Math.round((closeMin - cursor) / 60 * PX_PER_HOUR) }); freeTotal += (closeMin - cursor) }
+      const tailFrom = Math.max(cursor, minStart)
+      if (closeMin - tailFrom >= 30) { frees.push({ startTime: m2t(tailFrom), top: Math.round((tailFrom - openMin) / 60 * PX_PER_HOUR), height: Math.round((closeMin - tailFrom) / 60 * PX_PER_HOUR) }); freeTotal += (closeMin - tailFrom) }
       return { id: t.id, name: t.name, role: t.title || '', busy: t.bookingCount > 0, blocks, frees }
     })
     const d = new Date(`${date}T00:00:00`)
@@ -222,15 +227,18 @@ window.TodayBoard = (function () {
       const f = stateT.free
       if (!f.serviceId) { deps.toast('先选服务项目'); return }
       if (!f.userId && !f.q.trim()) { deps.toast('选一位顾客,或填新客姓名'); return }
+      if (f.busy) return   // D88:双击双 POST 拦(第一发在途时第二发不出手)
+      f.busy = true
       try {
         const body = { serviceId: f.serviceId, technicianId: f.techId, date: stateT.date, time: f.time }
         if (f.userId) body.userId = f.userId
         else body.newCustomerName = f.q.trim()
         await deps.request('/admin/bookings/direct', { method: 'POST', body: JSON.stringify(body) })
+        f.busy = false
         deps.toast('已排进空档 —— 点这个块可去结算')
         stateT.free = null
         load(stateT.date, deps)
-      } catch (e2) { deps.toast((e2 && e2.message) || '排单失败') }
+      } catch (e2) { f.busy = false; deps.toast((e2 && e2.message) || '排单失败') }
     })
   }
 

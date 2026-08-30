@@ -1,4 +1,6 @@
 {
   "navigationBarTitleText": "门店设置",
-  "usingComponents": {}
+  "usingComponents": {
+    "hours-form": "/components/hours-form/index"
+  }
 }

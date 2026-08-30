@@ -1,7 +1,8 @@
 <view class="pg">
   <view class="hd"><text class="t">账户调整</text><text class="nm">{{name}}</text></view>
 
-  <!-- 四个参考数 + 界限句 + 提示(句子全部后端给,前端零拼串 —— 与网页同一份 facts) -->
+  <!-- 四个参考数 + 界限句 + 提示(句子全部后端给,前端零拼串 —— 与网页同一份 facts)
+       五(08-30c):2×2 排布,真机宽度下每格一行字完整可见 -->
   <block wx:if="{{facts}}">
     <view class="facts">
       <view class="fact"><text class="fl">顾客实付累计</text><text class="fv">{{facts.paidText}}</text></view>
@@ -14,7 +15,7 @@
   </block>
   <view wx:else class="hint">读取中…</view>
 
-  <!-- 四 tab:充值 / 赠送 / 退卡 / 冲销(与网页同序同名) -->
+  <!-- 四 tab(与网页同序同名;六:选中黑底白字/未选白底描边) -->
   <view class="seg">
     <view class="segbtn {{tab === 'recharge' ? 'on' : ''}}" data-k="recharge" bindtap="pickTab">充值</view>
     <view class="segbtn {{tab === 'bonus' ? 'on' : ''}}" data-k="bonus" bindtap="pickTab">赠送</view>
@@ -22,13 +23,63 @@
     <view class="segbtn {{tab === 'reversal' ? 'on' : ''}}" data-k="reversal" bindtap="pickTab">冲销</view>
   </view>
 
-  <!-- 充值/赠送/冲销 = 指路(写口唯一,不在这儿再造一份) -->
-  <view wx:if="{{tab !== 'refund'}}" class="card">
-    <view class="elsewhere">{{elsewhere[tab]}}</view>
-    <view class="gobtn" bindtap="goElsewhere">去那个入口</view>
+  <!-- 充值 / 赠送:内嵌表单(入口总收敛 08-30c —— 唯一 UI 入口,不再指路) -->
+  <view wx:if="{{tab === 'recharge' || tab === 'bonus'}}" class="card">
+    <view wx:if="{{tab === 'bonus'}}" class="fldem lead">赠送=营销让利,跟充值一起记(充 X 赠 Y):入储值负债、明细单独列示,不算实收、不计业绩与积分。</view>
+    <view wx:if="{{!bound}}" class="warn">该档案未绑定微信 —— 请先让顾客扫码绑定(会员码/签署码)再充值。</view>
+    <view wx:if="{{rvPkgs.length}}" class="fld">
+      <text class="fldl">按套餐(可选,点选自动填金额与赠送)</text>
+      <view class="chips">
+        <view class="chip {{rvPkgId === p.id ? 'on' : ''}}" wx:for="{{rvPkgs}}" wx:for-item="p" wx:key="id" data-id="{{p.id}}" bindtap="pickPkg">{{p.label}}</view>
+      </view>
+    </view>
+    <view class="fld">
+      <text class="fldl">充值金额</text>
+      <input class="in" type="digit" placeholder="0.00" value="{{rvAmount}}" bindinput="onRvAmount" />
+    </view>
+    <view class="fld">
+      <text class="fldl">赠送(可空)</text>
+      <input class="in" type="digit" placeholder="0.00" value="{{rvBonus}}" bindinput="onRvBonus" />
+    </view>
+    <view class="fld">
+      <text class="fldl">付款方式</text>
+      <picker range="{{rvChannels}}" range-key="label" value="{{rvChannelIdx}}" bindchange="onRvChannel">
+        <view class="pk">{{rvChannels[rvChannelIdx].label}} ›</view>
+      </picker>
+    </view>
+    <view class="fld">
+      <text class="fldl">经手技师</text>
+      <picker range="{{techNames}}" value="{{techIdx}}" bindchange="onTech">
+        <view class="pk">{{techNames[techIdx]}} ›</view>
+      </picker>
+      <view class="fldem">这笔充值算谁促成,充值提成据此计算。</view>
+    </view>
+    <view class="cta {{busy ? 'ing' : ''}}" bindtap="submitRecharge">{{busy ? '提交中…' : ('确认到账' + rvAmountText)}}</view>
   </view>
 
-  <!-- 退卡:储值退 + 次卡退(与网页同形) -->
+  <!-- 冲销:内嵌(本月与这位顾客订单关联的账本流水;冲销=红字反向记录,原始保留) -->
+  <view wx:elif="{{tab === 'reversal'}}" class="card">
+    <view class="fldem lead">冲销是「我们记错了」的红字改正,不是退钱给顾客;点「冲销」生成等额反向记录纠错,原始记录永远保留。</view>
+    <view class="mrow">
+      <text class="mnav" bindtap="prevMonth">‹</text>
+      <text class="mcur">{{month}}</text>
+      <text class="mnav" bindtap="nextMonth">›</text>
+    </view>
+    <view wx:if="{{txnsLoading}}" class="hint">读取中…</view>
+    <block wx:elif="{{txns.length}}">
+      <view class="trow {{x.isReversal ? 'rev' : ''}}" wx:for="{{txns}}" wx:for-item="x" wx:key="id">
+        <view class="tinfo">
+          <text class="tdate">{{x.occurredOn}}{{x.isReversal ? ' · 冲销单' : ''}}{{x.reversed ? ' · 已冲销' : ''}}</text>
+          <text class="tnote">{{x.note}}</text>
+        </view>
+        <text class="tamt {{x.negative ? 'neg' : ''}}">{{x.negative ? '−' : ''}}{{x.amountText}}</text>
+        <view wx:if="{{!x.isReversal && !x.reversed}}" class="tbtn" data-id="{{x.id}}" data-note="{{x.note}}" bindtap="reverseTxn">冲销</view>
+      </view>
+    </block>
+    <view wx:else class="hint">{{month}} 没有与这位顾客订单关联的账本流水。</view>
+  </view>
+
+  <!-- 退卡:储值退 + 次卡退(原样) -->
   <view wx:else class="card">
     <view class="sub">
       <view class="subbtn {{cardId ? '' : 'on'}}" data-id="" bindtap="pickCard">退储值</view>
