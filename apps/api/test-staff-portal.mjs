@@ -5,6 +5,7 @@
 // 4. staff 只能看到自己的订单(既有隔离不回归)
 const BASE_URL = process.env.TEST_BASE_URL || 'http://127.0.0.1:4128'
 /* 测试护栏(裁 C):套件永远不许写进真库 —— 开跑前问服务器「你往哪个库写」 */
+import { readFileSync } from 'node:fs'
 import { assertTestTarget } from './test-guard.mjs'
 await assertTestTarget(BASE_URL)
 const OWNER = 'owner-demo-token'
@@ -70,6 +71,31 @@ async function main() {
   check('duplicate pending request rejected', duplicate.status === 409)
   const forOther = await request('/admin/schedule-requests', { method: 'POST', body: JSON.stringify({ date: futureDate(10), technicianId: 'tech-other', note: 'x' }) }, STAFF)
   check('staff cannot request for another technician', forOther.status === 403)
+
+  /* ===== 小记图片(店主 08-30f 二部三,小合同五条) ===== */
+  {
+    const PX = 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNk+M9QDwADhgGAWjR9awAAAABJRU5ErkJggg=='
+    // 员工给自己服务过的顾客写带图小记(合同①入口 ②归属小记 ⑤复用 base64 通道)
+    const myBk = (await request('/admin/bookings', {}, STAFF)).data.bookings.find((b) => b.user?.id)
+    check('小记图片 前置:员工有带客订单', Boolean(myBk), '员工无带客单,夹具缺')
+    const made = await request('/admin/service-notes', { method: 'POST', body: JSON.stringify({ userId: myBk.user.id, bookingId: myBk.id, rawText: `图测小记-${RUN_ID}`, images: [PX] }) }, STAFF)
+    check('🔴 小记图片:员工真传一张 → 201 且随小记返回', made.status === 201 && (made.data.note.images || [])[0] === PX, JSON.stringify(made.data).slice(0, 120))
+    const back = await request(`/admin/customers/${encodeURIComponent(myBk.user.id)}/notes`, {}, STAFF)
+    const mine = (back.data.notes || []).find((n) => n.rawText === `图测小记-${RUN_ID}`)
+    check('🔴 小记图片:限权读口回图(写的技师可见);无图小记 images=[](空态零占位)', 
+      mine && mine.images[0] === PX && (back.data.notes || []).every((n) => Array.isArray(n.images)), JSON.stringify(mine || {}).slice(0, 100))
+    // 合同①终闸:>9 拒 / 非图拒(前端拦只算体验)
+    const ten = await request('/admin/service-notes', { method: 'POST', body: JSON.stringify({ userId: myBk.user.id, bookingId: myBk.id, rawText: 'x', images: Array(10).fill(PX) }) }, STAFF)
+    check('小记图片 终闸:第 10 张 → 400「最多 9 张」', ten.status === 400 && /9 张/.test(ten.data?.error?.message || ''))
+    const evil = await request('/admin/service-notes', { method: 'POST', body: JSON.stringify({ userId: myBk.user.id, bookingId: myBk.id, rawText: 'x', images: ['https://evil.example/x.png'] }) }, STAFF)
+    check('小记图片 终闸:非 data:image 拒(只收拍照/相册通道)', evil.status === 400)
+    // 合同③⑤:默认私密不上墙 —— galleryStatus 分立零牵动;顾客端零暴露(压根没有顾客侧小记口)
+    const pub = await fetch(`${BASE_URL}/my/service-notes`, { headers: {} })
+    check('小记图片 合同⑤:顾客端零小记口(/my/service-notes 不存在)', pub.status === 404 || pub.status === 401)
+    const srcLS = readFileSync(new URL('./local-server.mjs', import.meta.url), 'utf8')
+    check('小记图片 合同③:本批零上墙牵动(小记写口不碰 gallery_status/work_images)', 
+      !/service-notes'[\s\S]{0,2000}gallery_status/.test(srcLS))
+  }
   const staffList = (await request('/admin/schedule-requests', {}, STAFF)).data.requests
   check('staff sees own request pending', staffList.some((row) => row.date === reqDate && row.status === 'pending'))
   const ownerList = (await request('/admin/schedule-requests')).data.requests

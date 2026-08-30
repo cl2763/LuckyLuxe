@@ -48,11 +48,13 @@ export function createStaffScope({ db, apiError, currentTenantId, memberCodeForU
        结果全仓早就有一张同名的(服务小记 P0-②,还带 AI 结构化)—— `CREATE TABLE IF NOT EXISTS`
        悄悄什么也没做,查询立刻 `no such column: kind`。改成接现有那一张:
        小记 = raw_text,偏好 = AI 拆出来的 structured.preferences,不再并排造第二份真相。 */
-    const noteRows = db.prepare(`SELECT id, raw_text, structured_json, service_name, technician_name, created_at
+    const noteRows = db.prepare(`SELECT id, raw_text, structured_json, service_name, technician_name, created_at, images_json
       FROM service_notes WHERE tenant_id = ? AND user_id = ? ORDER BY created_at DESC LIMIT 50`).all(currentTenantId(), u.id)
     const parse = (t) => { try { return JSON.parse(t || '{}') } catch { return {} } }
     const notes = noteRows.map((r) => ({
       id: r.id, body: r.raw_text, serviceName: r.service_name || '',
+      /* 小记图片(08-30f):随小记下发;员工限权读口,顾客端零暴露;空=[] 前端整块不出现 */
+      images: (() => { try { return JSON.parse(r.images_json || '[]') } catch { return [] } })(),
       technicianName: r.technician_name || '', createdText: storeTimeText(r.created_at)
     }))
     const preferences = [...new Set(noteRows.flatMap((r) => {

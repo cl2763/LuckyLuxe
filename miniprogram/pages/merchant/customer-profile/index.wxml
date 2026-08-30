@@ -28,6 +28,10 @@
       <view class="d">{{item.date}}{{item.technicianName ? ' · ' + item.technicianName : ''}}</view>
       <view class="s" wx:if="{{item.serviceName}}">{{item.serviceName}}</view>
       <view class="n">{{item.structured.summary || item.rawText}}</view>
+      <!-- 小记图片(08-30f):无图=整块不出现(零占位假图) -->
+      <view class="nimgs" wx:if="{{item.images.length}}">
+        <image class="nimg" wx:for="{{item.images}}" wx:for-item="im" wx:key="*this" src="{{im}}" mode="aspectFill" />
+      </view>
       <view class="mini">
         <text wx:for="{{item.structured.safetyFlags}}" wx:for-item="t" wx:key="*this" class="c warn">{{t}}</text>
         <text wx:for="{{item.structured.styles}}" wx:for-item="t" wx:key="*this" class="c">{{t}}</text>

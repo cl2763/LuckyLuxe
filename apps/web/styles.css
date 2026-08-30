@@ -7608,3 +7608,10 @@ section.card > .section-row:first-child { margin-top: 0; }
 .aa-txn.rev{opacity:.65}
 .aa-txn-info{flex:1;min-width:0;display:flex;flex-direction:column}
 .aa-txn .neg{color:#a6352b}
+/* 小记图片(08-30f) */
+.mn-imgrow{display:flex;flex-wrap:wrap;gap:8px;margin:6px 0}
+.mn-tile{position:relative;display:inline-block}
+.mn-thumb{width:72px;height:72px;object-fit:cover;border-radius:8px;border:1px solid var(--line)}
+.mn-thumbs{display:flex;flex-wrap:wrap;gap:8px;margin-top:6px}
+.mn-del{position:absolute;top:-6px;right:-6px;width:20px;height:20px;line-height:18px;border:none;border-radius:50%;background:rgba(0,0,0,.55);color:#fff;font-size:11px;cursor:pointer}
+.dc-due-note{font-size:11.5px;color:var(--muted);margin:-2px 0 6px;padding-left:2px}

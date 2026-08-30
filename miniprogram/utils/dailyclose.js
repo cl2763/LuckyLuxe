@@ -120,7 +120,7 @@ const dailyCloseMixin = {
             title: dc.cashDrawer.title || dc.cashDrawer.label,
             should: dc.cashDrawer.shouldHaveText,
             totalLabel: dc.cashDrawer.totalLabel || '',
-            rows: (dc.cashDrawer.rows || []).map((r) => ({ label: r.label, amt: `${r.sign} ${r.amountText}`, neg: Boolean(r.negative) })),
+            rows: (dc.cashDrawer.rows || []).map((r) => ({ label: r.label, amt: `${r.sign} ${r.amountText}`, neg: Boolean(r.negative), note: r.note || '' })),   // 裁定B:负行点名注随行
             footnote: dc.cashDrawer.footnote || '',
             amendNote: dc.cashDrawer.amendNote || '',  // 更正后「营业额 ≠ 抽屉数」的那句解释(后端出句,双端同句)
             splitNote: dc.cashDrawer.splitNote || ''   // 「记一笔」与「现金手记」的分工(店主 08-28 六问的那件,后端出句)

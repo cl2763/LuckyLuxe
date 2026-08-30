@@ -24,3 +24,10 @@
 .btn{flex:1;text-align:center;padding:24rpx;border-radius:14rpx;font-size:28rpx;font-weight:700}
 .btn.ghost{background:#fff;color:#5c4630;border:1rpx solid #e7d3b8}
 .btn.dark{background:#2d2826;color:#fff}
+/* 小记图片(08-30f) */
+.imgrow { display: flex; flex-wrap: wrap; gap: 12rpx; margin-top: 16rpx; }
+.imgtile { position: relative; width: 140rpx; height: 140rpx; }
+.imgthumb { width: 140rpx; height: 140rpx; border-radius: 10rpx; }
+.imgdel { position: absolute; top: -10rpx; right: -10rpx; width: 36rpx; height: 36rpx; line-height: 36rpx; text-align: center; background: rgba(0,0,0,.55); color: #fff; border-radius: 50%; font-size: 22rpx; }
+.imgadd { width: 140rpx; height: 140rpx; border: 2rpx dashed #cdbfae; border-radius: 10rpx; display: flex; flex-direction: column; align-items: center; justify-content: center; font-size: 22rpx; color: #8a7d70; text-align: center; }
+.imgcap { font-size: 18rpx; color: #b3a795; margin-top: 6rpx; }

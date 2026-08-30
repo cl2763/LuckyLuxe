@@ -9,6 +9,14 @@
       <view class="hint">做完直接说一句,不用打字</view>
       <textarea class="ta" placeholder="例:她安静怕疼下手轻,跟闺蜜来,不喜欢亮片喜欢素色…" value="{{text}}" bindinput="onInput" maxlength="500" auto-height></textarea>
       <view class="voice" bindtap="voiceHint">🎙 用语音输入</view>
+      <!-- 小记图片(08-30f):空态=整块只剩「＋添加图片」钮,零占位假图 -->
+      <view class="imgrow">
+        <view class="imgtile" wx:for="{{images}}" wx:key="index">
+          <image class="imgthumb" src="{{item}}" mode="aspectFill" />
+          <view class="imgdel" data-i="{{index}}" catchtap="removeImage">✕</view>
+        </view>
+        <view class="imgadd" wx:if="{{images.length < 9}}" bindtap="addImages">＋ 添加图片<text class="imgcap">拍照/相册 · 最多9张</text></view>
+      </view>
     </view>
     <view class="save {{saving?'ing':''}}" bindtap="save">{{saving ? 'AI 整理中…' : '保存小记 · AI 自动整理'}}</view>
     <view class="tip">保存后 AI 自动拆成 款式/性格/偏好/同行/安全项,存入顾客画像永久留存</view>

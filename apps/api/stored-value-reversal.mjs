@@ -32,12 +32,21 @@ export function createStoredValueReversal({ db, apiError, insertStoredValueTrans
       .get(tenantId, txn.user_id, txn.created_at, bonus.created_at)) {
       throw apiError(400, 'BONUS_AMBIGUOUS', '这笔充值与赠送的归属存在歧义(相邻另一笔充值),请在财务页人工核对后处理。')
     }
-    /* ② 前置闸(保守可证):该笔之后零消费/零退款 —— 池式记账没法按笔归属,
-       只要之后动过钱就无法证明这笔分毫未动,一律拒(合同句原文) */
-    const touched = db.prepare(`SELECT 1 FROM stored_value_transactions
-      WHERE tenant_id = ? AND user_id = ? AND type IN ('consume', 'refund') AND created_at >= ? LIMIT 1`)
-      .get(tenantId, txn.user_id, txn.created_at)
-    if (touched) throw apiError(400, 'CONSUMED_NO_REVERSAL', '已产生消费,请走退卡。')
+    /* ② 前置闸(裁定A 08-30f 放宽为「双水位证明」):
+       实付余额 ≥ 该笔实付 且 赠送余额 ≥ 该笔赠送 —— 两侧各自足额,证明这笔钱还整个躺在池里,
+       冲掉不可能把任何一侧打负;任一侧不足即拒。水位口径=refundFacts 同源(paidRefundable/bonusRemaining)。 */
+    const w = db.prepare(`SELECT
+        COALESCE(SUM(CASE WHEN t.type = 'bonus' THEN t.amount_cents
+                          WHEN t.type = 'reversal' AND o.type = 'bonus' THEN t.amount_cents ELSE 0 END), 0) AS bonus,
+        COALESCE(SUM(t.amount_cents), 0) AS balance,
+        COALESCE(SUM(CASE WHEN t.type = 'refund' THEN t.bonus_part_cents ELSE 0 END), 0) AS bonus_refunded
+      FROM stored_value_transactions t LEFT JOIN stored_value_transactions o ON o.id = t.reversal_of
+      WHERE t.tenant_id = ? AND t.user_id = ?`).get(tenantId, txn.user_id)
+    const bonusRemaining = Math.max(0, Math.min(w.bonus - (w.bonus_refunded || 0), w.balance))
+    const paidRefundable = Math.max(0, w.balance - bonusRemaining)
+    if (paidRefundable < txn.amount_cents || bonusRemaining < (bonus ? bonus.amount_cents : 0)) {
+      throw apiError(400, 'CONSUMED_NO_REVERSAL', '余额已不足以证明这笔未消费,请走退卡。')
+    }
     db.exec('BEGIN IMMEDIATE')
     try {
       const rev = insertStoredValueTransaction({

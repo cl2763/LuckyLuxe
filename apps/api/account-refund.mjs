@@ -242,11 +242,19 @@ export function createAccountRefund({ db, apiError, iso, randomId, currentTenant
     const isDrawer = (ch) => ['cash', 'offline', 'unknown', ''].includes(String(ch || ''))
     /* 裁定2(08-30d):冲销红字行带原渠道负数,当日抽屉自动 −(充值本就不写账本行,
        抽屉的钱一直从储值行累加 —— 反向行走同一口径;赠送反向 pay_channel=marketing 天然不进抽屉) */
-    const svRows = db.prepare(`SELECT amount_cents, pay_channel, created_at, type FROM stored_value_transactions
-      WHERE tenant_id = ? AND type IN ('refund', 'recharge', 'reversal')`).all(tenantId)
+    const svRows = db.prepare(`SELECT t.id, t.amount_cents, t.pay_channel, t.created_at, t.type, t.reversal_of,
+        o.created_at AS orig_created_at
+      FROM stored_value_transactions t LEFT JOIN stored_value_transactions o ON o.id = t.reversal_of
+      WHERE t.tenant_id = ? AND t.type IN ('refund', 'recharge', 'reversal')`).all(tenantId)
       .filter((r) => storeDateOf(r.created_at, tenantId) === date)
-    const rechargeCash = svRows.filter((r) => (r.type === 'recharge' || r.type === 'reversal') && isDrawer(r.pay_channel))
+    /* 裁定B(08-30f 动作落点律):冲销红字从「现金充值」里拆出来单列负行 ——
+       负数可以出现,但不许无解释地出现:行内点名冲销单与原充值日期。 */
+    const rechargePos = svRows.filter((r) => r.type === 'recharge' && isDrawer(r.pay_channel))
       .reduce((n, r) => n + r.amount_cents, 0)
+    const svRevRows = svRows.filter((r) => r.type === 'reversal' && isDrawer(r.pay_channel))
+    const reversalOutCents = svRevRows.reduce((n, r) => n - r.amount_cents, 0)
+    const rechargeCash = rechargePos - reversalOutCents   // 应有数算式不变(净额同旧)
+    const reversalNote = svRevRows.map((r) => `冲销单 ${r.id}(原充值 ${storeDateOf(r.orig_created_at || r.created_at, tenantId)})`).join('、')
     const refundCash = svRows.filter((r) => r.type === 'refund' && isDrawer(r.pay_channel))
       .reduce((n, r) => n + Math.abs(r.amount_cents), 0)
     const tcRows = db.prepare('SELECT amount_cents, pay_channel, created_at FROM timecard_refunds WHERE tenant_id = ?').all(tenantId)
@@ -279,7 +287,12 @@ export function createAccountRefund({ db, apiError, iso, randomId, currentTenant
       totalLabel: '抽屉里应该有',
       rows: [
         { label: '到店支付', sign: '+', amountCents: storefrontCents, amountText: money(storefrontCents) },
-        { label: '现金充值', sign: '+', amountCents: rechargeCash, amountText: money(rechargeCash) },
+        { label: '现金充值', sign: '+', amountCents: rechargePos, amountText: money(rechargePos) },
+        ...(reversalOutCents ? [{
+          label: '储值冲销红字(非当日经营收支)',
+          sign: '−', amountCents: reversalOutCents, amountText: money(reversalOutCents), negative: true,
+          note: reversalNote   // 裁定B:负数旁点名冲销单与原日期
+        }] : []),
         { label: '现金退卡', sign: '−', amountCents: outCash, amountText: money(outCash), negative: true },
         ...(manualCashCount ? [{
           label: `记一笔·现金收支(${manualCashCount} 笔)`,

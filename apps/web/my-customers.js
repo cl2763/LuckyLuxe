@@ -61,25 +61,49 @@ window.MyCustomers = (function () {
         ${(d.preferences || []).length ? `<h3>${zh ? '偏好' : 'Preferences'}</h3><div class="customer-tags">${(d.preferences || []).map((t) => `<span class="customer-tag">${escapeHtml(t)}</span>`).join('')}</div>` : ''}
         <h3>${zh ? '服务小记' : 'Notes'}</h3>
         <textarea id="myNoteBody" rows="2" placeholder="${zh ? '例:偏爱裸色、指甲偏薄,卸甲要轻' : 'Notes'}"></textarea>
+        ${/* 小记图片(08-30f):≤9 张,拍照/相册;空态=只剩添加钮,零占位假图;已存小记只追加不可删改 */''}
+        <div class="mn-imgrow" id="mnImgRow"></div>
         <div class="inline-actions">
+          <button class="ghost slim" data-my-imgs type="button">${zh ? '＋ 添加图片(最多9张)' : '+ Images (max 9)'}</button>
+          <input id="mnImgFile" type="file" accept="image/*" multiple style="display:none">
           <button class="ghost slim" data-my-note="1" type="button">${zh ? '记一条小记' : 'Add note'}</button>
         </div>
         ${(d.notes || []).map((n) => `
           <div class="info-card-web card">
             <p><span>${escapeHtml(n.serviceName || (zh ? '小记' : 'Note'))}</span><span class="subtle">${escapeHtml(n.createdText || '')}</span></p>
             <p>${escapeHtml(n.body)}</p>
+            ${(n.images || []).length ? `<div class="mn-thumbs">${n.images.map((im) => `<img class="mn-thumb" src="${im}" alt="小记图片">`).join('')}</div>` : ''}
           </div>`).join('')}`
+      let draftImages = []
+      const drawDraft = () => {
+        const row = document.querySelector('#mnImgRow')
+        if (row) row.innerHTML = draftImages.map((im, i) => `<span class="mn-tile"><img class="mn-thumb" src="${im}"><button class="mn-del" data-my-imgdel="${i}" type="button">✕</button></span>`).join('')
+      }
       box.onclick = async (e) => {
         if (e.target.closest('[data-my-back]')) { render(box, { zh, request, escapeHtml, dateOnly, toast }); return }
+        if (e.target.closest('[data-my-imgs]')) { document.querySelector('#mnImgFile')?.click(); return }
+        const del = e.target.closest('[data-my-imgdel]')
+        if (del) { draftImages.splice(Number(del.dataset.myImgdel), 1); drawDraft(); return }   // 草稿可移;已存只追加
         const btn = e.target.closest('[data-my-note]')
         if (!btn) return
         const body = (document.querySelector('#myNoteBody') || {}).value || ''
         try {
           // 写口复用现成的服务小记接口(它带 AI 结构化,偏好就是从这里拆出来的);不另开第二个口
-          await request('/admin/service-notes', { method: 'POST', body: JSON.stringify({ userId, rawText: body }) })
+          await request('/admin/service-notes', { method: 'POST', body: JSON.stringify({ userId, rawText: body, images: draftImages }) })
+          draftImages = []
           open(box, userId, { zh, request, escapeHtml, dateOnly, toast })
         } catch (err) { toast(err.message) }
       }
+      box.addEventListener('change', (e) => {
+        if (e.target.id !== 'mnImgFile') return
+        const files = [...(e.target.files || [])].slice(0, 9 - draftImages.length)
+        files.forEach((f) => {
+          const rd = new FileReader()
+          rd.onload = () => { if (draftImages.length < 9) { draftImages.push(String(rd.result)); drawDraft() } }
+          rd.readAsDataURL(f)
+        })
+        e.target.value = ''
+      })
     } catch (e) {
       box.innerHTML = `<div class="empty-state"><strong>${escapeHtml(e.message)}</strong></div>`
     }

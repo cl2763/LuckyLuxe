@@ -190,4 +190,46 @@ const moneyNotDigit = inputs
   .map((i) => `${i.page}:${i.field}(type=${i.type})`)
 check('④ 一眼是金额的框,键盘必须带小数点(type="digit")', moneyNotDigit.length === 0, moneyNotDigit.join(' | '))
 
+/* ===== ⑤ D89(店主 08-30f):placeholder 截半 —— 全局规格 + 行高配对机械扫 ===== */
+{
+  const appWxss = readFileSync(new URL('../../miniprogram/app.wxss', import.meta.url), 'utf8')
+  check('🔴 ⑤ D89 全局规格在 app.wxss(line-height:normal + min-height + border-box 一条管所有框)',
+    appWxss.includes('input { line-height: normal; min-height: 76rpx; box-sizing: border-box; }')
+    && appWxss.includes('textarea { line-height: 1.5; box-sizing: border-box; }'))
+  /* 白名单机械:凡 wxml 里 input/textarea 用到的类,其 wxss 规则若显式设了 height 与 line-height,
+     两者必须相等(或 line-height:normal)—— 行高矮于框高=placeholder 又要截半 */
+  const { readdirSync: rd, statSync: st2 } = await import('node:fs')
+  const { join: j2 } = await import('node:path')
+  const ROOT2 = new URL('../../miniprogram/', import.meta.url).pathname
+  const wxmls = []
+  const walk2 = (d) => { for (const f of rd(d)) { const p = j2(d, f); if (st2(p).isDirectory()) walk2(p); else if (/\.wxml$/.test(f)) wxmls.push(p) } }
+  walk2(j2(ROOT2, 'pages')); walk2(j2(ROOT2, 'components'))
+  const bad = []
+  let ruleCount = 0
+  for (const f of wxmls) {
+    const src = readFileSync(f, 'utf8')
+    const clsSet = new Set()
+    for (const m of src.matchAll(/<(?:input|textarea)[^>]*class="([^"]*)"/g)) {
+      m[1].split(/\s+/).filter((c) => c && !c.includes('{{')).forEach((c) => clsSet.add(c))
+    }
+    if (!clsSet.size) continue
+    let css = ''
+    try { css = readFileSync(f.replace(/\.wxml$/, '.wxss'), 'utf8') } catch { continue }
+    for (const cls of clsSet) {
+      /* 刀口教训(第一刀没红):同类可以有多条规则,只扫第一条=后补的病规则隐身 —— matchAll 扫全 */
+      const all2 = [...css.matchAll(new RegExp(`\\.${cls.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}\\s*{[^}]*}`, 'g'))]
+      for (const mm of all2) {
+        ruleCount += 1
+        const rule = mm[0]
+        const h = (rule.match(/[^-]height:\s*(\d+)rpx/) || [])[1]
+        const lh = (rule.match(/line-height:\s*([^;}]+)/) || [])[1]
+        /* 无单位行高(1.5 等)=多行排版合法形(textarea);只有 rpx 定值行高才必须与框高配对 */
+        if (h && lh && /rpx$/.test(lh.trim()) && lh.trim() !== `${h}rpx`) bad.push(`${f.slice(ROOT2.length)} .${cls} height:${h}rpx line-height:${lh.trim()}`)
+      }
+    }
+  }
+  check(`🔴 ⑤ D89 行高配对扫(${ruleCount} 条输入类规则):显式 height 的框行高必须=框高或 normal(矮行高=截半复活)`,
+    bad.length === 0, bad.join(' | '))
+}
+
 console.log(`\n✅ test-mini-money-inputs 通过 ${checks} 项(扫了 ${inputs.length} 个输入框 / ${new Set(inputs.map((i) => i.page)).size} 个页面)`)

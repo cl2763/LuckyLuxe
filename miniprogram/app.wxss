@@ -209,3 +209,10 @@ button::after {
   position: relative;
   z-index: 1;
 }
+
+/* D89(店主 08-30f 实测:placeholder 上下截半,打字后正常)—— 一条全局规格管所有框(批次五手法):
+   根因=placeholder 层吃 CSS line-height(会从父容器继承紧行高),已输入文字走原生排版不受影响;
+   padding 撑高、无显式行高的框在部分机型上 placeholder 半截。
+   规格:行高归 normal + 最小高度兜底 + border-box —— 类规则里显式 height 的框优先级更高,不受扰。 */
+input { line-height: normal; min-height: 76rpx; box-sizing: border-box; }
+textarea { line-height: 1.5; box-sizing: border-box; }

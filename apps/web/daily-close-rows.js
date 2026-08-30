@@ -21,7 +21,7 @@ window.DailyCloseRows = (function () {
   function cashAndRefundRows(v, { zh, money, escapeHtml }) {
     const d = v.cashDrawer
     if (!d) return ''
-    const rows = (d.rows || []).map((r) => `<div class="dc-due-row${r.negative ? ' neg' : ''}"><span>${escapeHtml(r.label)}</span><span>${escapeHtml(r.sign)} ${escapeHtml(r.amountText)}</span></div>`).join('')
+    const rows = (d.rows || []).map((r) => `<div class="dc-due-row${r.negative ? ' neg' : ''}"><span>${escapeHtml(r.label)}</span><span>${escapeHtml(r.sign)} ${escapeHtml(r.amountText)}</span></div>${r.note ? `<div class="dc-due-note">${escapeHtml(r.note)}</div>` : ''}`).join('')   // 裁定B:负行随行点名注
     const stats = (v.headline || []).map((h) => `<div class="dc-stat"><div class="l">${escapeHtml(h.label)}</div><div class="v">${escapeHtml(h.value)}</div></div>`).join('')
     return `
       <div class="dc-due">

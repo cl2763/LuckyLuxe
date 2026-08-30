@@ -28,6 +28,10 @@
         <view class="due-row {{r.neg ? 'neg' : ''}}" wx:for="{{v.drawer.rows}}" wx:for-item="r" wx:key="label">
           <text>{{r.label}}</text><text>{{r.amt}}</text>
         </view>
+        <!-- 裁定B(动作落点律):负数不许无解释地出现 —— 冲销负行随行点名冲销单与原日期 -->
+        <block wx:for="{{v.drawer.rows}}" wx:for-item="r" wx:key="label">
+          <text class="due-aside" wx:if="{{r.note}}">{{r.note}}</text>
+        </block>
         <view class="due-row tot"><text>{{v.drawer.totalLabel}}</text><text>{{v.drawer.should}}</text></view>
       </view>
       <text class="due-aside" wx:if="{{v.drawer.footnote}}">{{v.drawer.footnote}}</text>

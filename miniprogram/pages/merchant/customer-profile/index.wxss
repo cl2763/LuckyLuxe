@@ -28,3 +28,6 @@
 .tcard .mini{display:flex;gap:8rpx;flex-wrap:wrap;margin-top:8rpx}
 .tcard .mini .c{font-size:20rpx;padding:2rpx 12rpx;border-radius:999rpx;background:#f3ece2;color:#5c4630}
 .tcard .mini .c.warn{background:#fdecec;color:#c0392b;font-weight:700}
+/* 小记图片(08-30f) */
+.nimgs { display: flex; flex-wrap: wrap; gap: 10rpx; margin-top: 10rpx; }
+.nimg { width: 120rpx; height: 120rpx; border-radius: 8rpx; }
