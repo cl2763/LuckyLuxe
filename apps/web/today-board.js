@@ -38,7 +38,7 @@ window.TodayBoard = (function () {
 
   /* 与小程序 loadDayView 同构:网格范围 = 营业时段 ∪ 预约跨度;空档 ≥30 分才显示 */
   function assemble(date, r, deps) {
-    const bizOpen = toMin(r.openTime || '10:00'); const bizClose = toMin(r.closeTime || '19:00')
+    const bizOpen = toMin(r.openTime); const bizClose = toMin(r.closeTime)   /* A3 尸清(08-30h):兜底10:00-19:00是死代码 —— 无时段必走未设置墙/休息条,网格不画 */
     let openMin = bizOpen; let closeMin = bizClose
     for (const b of (r.bookings || [])) {
       openMin = Math.min(openMin, toMin(b.startTime))

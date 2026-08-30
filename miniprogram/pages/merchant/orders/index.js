@@ -434,7 +434,7 @@ Page(Object.assign({
          整块落在网格外看不见 —— 而这些单照样进日结、照样算业绩,台面上看不见
          等于店主对不上账。改成:网格范围 = 营业时段 ∪ 当天所有预约的时间跨度,
          营业时段外的整点行用淡色标出(沿用现有网格语言,不引入新设计)。 */
-      const bizOpen = toMin(r.openTime || '10:00'); const bizClose = toMin(r.closeTime || '19:00')
+      const bizOpen = toMin(r.openTime); const bizClose = toMin(r.closeTime)   /* A3 尸清(08-30h):兜底10:00-19:00是死代码 —— 无时段必走未设置墙/休息条,网格不画 */
       let openMin = bizOpen; let closeMin = bizClose
       for (const b of (r.bookings || [])) {
         openMin = Math.min(openMin, toMin(b.startTime))

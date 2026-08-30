@@ -219,6 +219,27 @@ let bk1
   db.prepare(`UPDATE notification_rules SET channel_priority_json = '["inapp"]' WHERE tenant_id = ? AND type = 'booking_created'`).run(tA)
 }
 
+/* ===== ⑥b 扫描类默认关(店主 08-30h 照准七条的补条判据):
+   新店建出来,通知域零扫描任务 —— 防未来谁顺手改默认,把几百条回访砸进老店。
+   反例数据律:给新店塞一个**今天生日**的顾客(最可能露馅的形)再 tick,默认关就必须一条不出;
+   变异刀=把 NOTIFY_TYPES 里扫描类默认改开 → 本条必红 ===== */
+{
+  const tC = `nfc-${RUN}`
+  check('⑥b 夹具:新店 C 建店 201',
+    (await request('/platform/tenants', { method: 'POST', body: JSON.stringify({ id: tC, name: `默认面店${RUN}`, plan: 'chain', timezone: 'America/Toronto' }) })).status === 201)
+  const HC = { 'x-admin-tenant-id': tC, 'x-tenant-id': tC }
+  const uC = (await request(`/platform/tenants/${tC}/import/customers`, { method: 'POST', body: JSON.stringify({ dryRun: false, rows: [{ name: `默认面客${RUN}`, phone: `134${RUN.slice(-8)}` }] }) })).data.users[0].userId
+  const todayC = (await request('/admin/store-clock', {}, PLATFORM, HC)).data.today
+  await request(`/admin/customers/${uC}/profile`, { method: 'PATCH', body: JSON.stringify({ birthday: todayC }) }, PLATFORM, HC)
+  db.prepare('DELETE FROM notify_scan_marks WHERE tenant_id = ?').run(tC)
+  await tick(HC)
+  const scanTasks = db.prepare(`SELECT COUNT(*) AS n FROM reminder_tasks WHERE tenant_id = ? AND type IN ('card_expiring','birthday','revisit','coupon_expiring')`).get(tC).n
+  const defaults = (await request('/admin/notify/rules', {}, PLATFORM, HC)).data.rules
+  check('🔴 ⑥b 扫描类默认关:新店有「今天生日」的顾客,tick 后通知域扫描任务仍为 0 且四类读口全 enabled=false(改默认开即红)',
+    scanTasks === 0 && defaults.filter((r) => ['card_expiring', 'birthday', 'revisit', 'coupon_expiring'].includes(r.type)).every((r) => r.enabled === false),
+    `scanTasks=${scanTasks}`)
+}
+
 /* ===== ⑦ 一份数据两端渲染(机械链):同两口 + 页面绑定 + 版本 ===== */
 {
   const strip = (t) => t.replace(/\/\*[\s\S]*?\*\//g, '').replace(/\/\/[^\n]*/g, '')

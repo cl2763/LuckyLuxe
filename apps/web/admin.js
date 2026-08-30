@@ -1,6 +1,6 @@
 // 构建号:每次交付递增。侧栏可见,排查"改了没生效"时先对版本。
 // 兜底用(服务端会注入 window.LL_BUILD = 资源内容指纹,页面优先显示那个)
-const ADMIN_BUILD = '20260830g-p3n01'
+const ADMIN_BUILD = '20260830h-rfm01'
 let pricingState = { module: 'storefront', tab: 'items', categories: [], items: [], rules: {}, editing: null, preview: null, storefrontPicker: false }
 console.log(`[admin] build ${ADMIN_BUILD}`)
 
@@ -4874,13 +4874,10 @@ function renderCustomers() {
     els.customerList.innerHTML = `<div class="empty-state"><strong>${search ? (owner.lang === 'zh' ? '没有匹配的客户' : 'No matches') : t('noCustomers')}</strong></div>`
     return
   }
-  // 分层汇总条(全量客户口径,不受搜索影响)
-  const tierCounts = { a: 0, b: 0, n: 0, s: 0 }
-  ;(owner.customers || []).forEach((c) => { const tr = rfmTierOf(c); if (tr) tierCounts[tr.k] += 1 })
-  const tierBar = `<div class="subtle" style="margin:0 0 10px 2px">${owner.lang === 'zh'
-    ? `客户分层:高价值A <strong>${tierCounts.a}</strong> · 回头客B <strong>${tierCounts.b}</strong> · 新客N <strong>${tierCounts.n}</strong> · 沉睡S <strong>${tierCounts.s}</strong>(自动按 最近到店/频率/累计消费;名单动作与阈值微调在小程序客户库)`
-    : `Tiers: VIP ${tierCounts.a} · Repeat ${tierCounts.b} · New ${tierCounts.n} · Dormant ${tierCounts.s}`}</div>`
-  els.customerList.innerHTML = tierBar + customers.map((customer) => `
+  // 分层汇总条(全量客户口径,不受搜索影响;名单动作与阈值就地可操作 —— 08-30h RFM 接回)
+  const tierBar = window.CustomerTags.tierBar(owner.customers || [], { lang: owner.lang, request, rerender: renderCustomers })
+  const shown = window.CustomerTags.applyFilter(customers, owner.lang)
+  els.customerList.innerHTML = tierBar + (shown.length ? shown : []).map((customer) => `
     <article class="customer-profile-card card">
       <div class="customer-avatar">${customerName(customer).slice(0, 1).toUpperCase()}</div>
       <div>
@@ -6687,6 +6684,7 @@ els.customerList.addEventListener('click', (event) => {
   }
   // N-5 退卡口:入口与弹层全在 ./account-adjust.js(公约①;admin.js 只许搬出不许新增)
   if (window.AccountAdjust.handleClick(event, { owner, request, money, toast, escapeHtml, customerName, dateOnly, renderCustomers, render })) return
+  if (event.target.closest('[data-rfm-filter],[data-rfm-rules],[data-rfm-save]')) { window.CustomerTags.handleClick(event, { request, toast, rerender: renderCustomers }); return }
   const customerDetail = event.target.closest('[data-customer-detail]')
   if (customerDetail) {
     owner.selectedCustomerId = customerDetail.dataset.customerDetail

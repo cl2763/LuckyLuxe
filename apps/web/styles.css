@@ -7620,6 +7620,9 @@ section.card > .section-row:first-child { margin-top: 0; }
 .notify-settings-block { margin-top: 18px; padding-top: 14px; border-top: 1px solid var(--line, #e5e5ea); }
 .nfy-rules { display: flex; flex-direction: column; gap: 8px; margin: 10px 0 12px; }
 .nfy-rule { display: flex; align-items: center; gap: 10px; font-size: 14px; }
+.nfy-rule input[type="checkbox"] { margin-left: auto; width: 18px; height: 18px; }
+.nfy-field { flex: 1; }
+.rfm-rules-editor label { display: flex; align-items: center; gap: 6px; flex-wrap: wrap; }
 .nfy-label { min-width: 130px; }
 .nfy-field { color: #555; font-size: 13px; }
 .nfy-num { width: 74px; padding: 4px 6px; }
@@ -7629,3 +7632,11 @@ section.card > .section-row:first-child { margin-top: 0; }
 .nfy-table th, .nfy-table td { text-align: left; padding: 6px 8px; border-bottom: 1px solid var(--line, #eee); }
 .nfy-row.failed td { color: #b42318; }
 .nfy-row.cancelled td { color: #8a8a8e; }
+
+/* ===== RFM 接回网页(customer-tags.js;08-30h 拉平批①)===== */
+.rfm-bar { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; margin: 0 0 10px 2px; font-size: 13px; }
+.rfm-chip { border: 1px solid #d9d9de; background: #fff; border-radius: 14px; padding: 3px 10px; font-size: 12px; cursor: pointer; }
+.rfm-chip.on { background: #111; color: #fff; border-color: #111; }
+.rfm-rules-editor { display: flex; flex-direction: column; gap: 6px; margin: 0 0 12px 2px; padding: 10px 12px; border: 1px solid var(--line, #e5e5ea); border-radius: 10px; font-size: 13px; }
+.rfm-rules-editor input { width: 64px; padding: 2px 6px; text-align: center; }
+.rfm-rules-editor button { align-self: flex-start; }

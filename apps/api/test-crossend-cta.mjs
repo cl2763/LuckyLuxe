@@ -49,8 +49,6 @@ const stripHtml = (t) => t.replace(/<!--[\s\S]*?-->/g, '')
 const ALLOW = [
   { file: 'apps/web/admin.js', marker: '打卡在员工小程序端', max: 1,
     reason: '硬件能力边界:打卡/设打卡WiFi 要真机读店内 WiFi,浏览器拿不到 BSSID(判定表既有裁定);本页能修正/补卡' },
-  { file: 'apps/web/admin.js', marker: '名单动作与阈值微调在小程序客户库', max: 1,
-    reason: '店主 08-30 已裁:接回网页、排进拉平批;句子说的是现状,拉平批落地时随功能删(到期不删=这条红)' },
   { file: 'apps/web/admin.html', marker: '顾客在小程序「积分商城」兑换', max: 1,
     reason: '受众=顾客在顾客端的行为(积分商城=顾客端功能),非指路商家换端;本页即商家配奖品本端入口' },
   { file: 'apps/web/ai-desk.js', marker: '请在小程序中确认时间并支付定金', max: 1,

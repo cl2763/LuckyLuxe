@@ -115,6 +115,11 @@ check('⑤ 营业时段字段在(网格范围口径的输入)', 'openTime' in da
   check('🔴 乙案 反向守:半点对齐式(ceil/30*30)两端零残留(改回对齐即红)',
     (tbCode.match(/Math\.ceil\(toMin\(r\.storeNow\) \/ 30\) \* 30/g) || []).length === 0
     && (miniOrders2.match(/Math\.ceil\(toMin\(r\.storeNow\) \/ 30\) \* 30/g) || []).length === 0)
+  /* A3 尸清(08-30h 搬家批连带):网格开闭时刻不再有 10:00/19:00 兜底 —— 无时段必走墙/休息条 */
+  check('🔴 A3 尸清:网格兜底 || \'10:00\' 两端零残留(读的是后端 openTime/closeTime,不编数)',
+    !tbCode.includes("|| '10:00'") && !miniOrders2.includes("|| '10:00'")
+    && (tbCode.match(/const bizOpen = toMin\(r\.openTime\); const bizClose = toMin\(r\.closeTime\)/g) || []).length === 1
+    && (miniOrders2.match(/const bizOpen = toMin\(r\.openTime\); const bizClose = toMin\(r\.closeTime\)/g) || []).length === 1)
   check('D88 双击双发拦:网页 f.busy 闸 + 小程序 _directBusy 闸都在',
     tbCode.includes('if (f.busy) return') && miniOrders2.includes('this._directBusy) return'))
 

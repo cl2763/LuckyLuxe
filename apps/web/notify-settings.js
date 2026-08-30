@@ -33,9 +33,9 @@
         <div class="nfy-rules">
           ${stateN.rules.map((r) => `
             <label class="nfy-rule">
-              <input type="checkbox" data-nfy-on="${r.type}" ${r.enabled ? 'checked' : ''}>
               <span class="nfy-label">${escapeHtml(r.label)}</span>
               <span class="nfy-field">${fieldHtml(r)}</span>
+              <input type="checkbox" data-nfy-on="${r.type}" ${r.enabled ? 'checked' : ''}>
             </label>`).join('')}
         </div>
         <button class="primary slim" data-nfy-save type="button">保存通知设置</button>

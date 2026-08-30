@@ -89,6 +89,22 @@ check('🔴 ④ 商家端(小程序 member 页真调 /admin/membership/config)�
   JSON.stringify(merchantMc).slice(0, 140))
 check('④ 渲染链闭合:小程序 member 页真调这条口', jsOf('pages/merchant/member/index.js').includes("'/admin/membership/config'"))
 
+/* ===== ④b RFM 分层阈值(08-30h 拉平批①:两端就地可操作,同两口一份数据) ===== */
+{
+  const putR = await request('/admin/segment-rules', { method: 'PUT', body: JSON.stringify({ aDays: 50, aVisits: 4, aSpendCents: 66600, nDays: 25, sDays: 70 }) }, PLATFORM, H)
+  check('④b 网页保存分层阈值 200', putR.status === 200 && putR.data.rules.sDays === 70, JSON.stringify(putR.data))
+  const getR = (await request('/admin/segment-rules', {}, PLATFORM, H)).data.rules
+  check('🔴 ④b 一端改 → 另一端真调的同一条口跟着变(小程序客户库 GET /admin/segment-rules 逐字段钉)',
+    getR.aDays === 50 && getR.aVisits === 4 && getR.aSpendCents === 66600 && getR.nDays === 25 && getR.sDays === 70,
+    JSON.stringify(getR))
+  check('④b 渲染链闭合:小程序客户库与网页 customer-tags 都真调这条口(读),网页 ⚙ 编辑器真调写口',
+    jsOf('pages/merchant/customers/index.js').includes("'/admin/segment-rules'")
+    && readFileSync(new URL('../web/customer-tags.js', import.meta.url), 'utf8').includes("'/admin/segment-rules'")
+    && readFileSync(new URL('../web/customer-tags.js', import.meta.url), 'utf8').includes('data-rfm-save'))
+  check('④b 死口句已随功能删:网页零「名单动作与阈值微调在小程序客户库」',
+    !readFileSync(new URL('../web/admin.js', import.meta.url), 'utf8').includes('名单动作与阈值微调在小程序客户库'))
+}
+
 /* ===== ⑤ 「合理只在网页」清单逐项过 —— 效果面在哪、有没有断言,一项不落 ===== */
 const roster = [
   ['轮播自管', '✅ 本套件①(数据面)+ ①链(渲染面)'],
