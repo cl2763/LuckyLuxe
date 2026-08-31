@@ -35,3 +35,9 @@
 .sal-card { margin-top: 24rpx; }
 .sal-row { display: flex; justify-content: space-between; font-size: 28rpx; padding: 8rpx 0; }
 .sal-row.total { font-weight: 600; border-top: 1rpx solid #f0f0f2; margin-top: 4rpx; padding-top: 12rpx; }
+
+/* D91 薪资卡月切换(形制照 salary-month 的 monthbar) */
+.sal-monthbar{display:flex;align-items:center;justify-content:center;gap:26rpx}
+.sal-monthbar .h{margin:0}
+.marrow{width:56rpx;height:56rpx;border-radius:50%;background:#fff;border:1rpx solid #eadfd7;display:flex;align-items:center;justify-content:center;font-size:30rpx;color:#5c4630}
+.marrow.dim{opacity:.35}

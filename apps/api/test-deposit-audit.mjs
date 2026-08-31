@@ -63,7 +63,7 @@ check('② 再确认一次(重开免了:同日重复确认走 UPDATE,自检重�
 const broken = await dcOf()
 check('🔴 ② 不平:红字出现,句子后端出、**金额正好是差的 $77**',
   broken.depositAlert && broken.depositAlert.missingCents === 7700
-  && broken.depositAlert.text.includes('定金对不上') && broken.depositAlert.text.includes('77'),
+  && broken.depositAlert.text.includes('定金对不上') && /(?:^|[^0-9])77(?:[^0-9]|$)/.test(broken.depositAlert.text),
   JSON.stringify(broken.depositAlert))
 check('② 笔数也对(1 笔)', broken.depositAlert.brokenCount === 1, String(broken.depositAlert?.brokenCount))
 

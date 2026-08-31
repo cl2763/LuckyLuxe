@@ -1656,6 +1656,7 @@ function appendWecomConversationMessage(conversationId, message, patch = {}) {
   const current = db.prepare('SELECT * FROM wechat_conversations WHERE id = ?').get(conversationId)
   const transcript = parseJson(current?.transcript_json)
   const now = iso(new Date())
+  if (message.role === 'assistant') message = { ...message, content: injectRepriceIfExpired(conversationId, message.content) }
   transcript.push({ ...message, at: message.at || now })
   const provider = patch.provider || current?.provider || 'wecom_customer_service'
   const externalUserId = patch.externalUserId || current?.external_user_id || conversationId.replace(/^wecom:/, '')
@@ -2238,7 +2239,7 @@ function recordWecomConversation(inbound, reply, status = 'ai_replied') {
     if (shouldSendReturningCustomerWelcome(inbound, transcript)) {
       transcript.push({
         role: 'assistant',
-        content: returningCustomerWelcome(inbound.lang || 'zh'),
+        content: injectRepriceIfExpired(conversationId, returningCustomerWelcome(inbound.lang || 'zh')),
         intent: 'returning_customer_welcome',
         handoffRequired: false,
         at: iso(new Date())
@@ -2246,7 +2247,7 @@ function recordWecomConversation(inbound, reply, status = 'ai_replied') {
     } else if (shouldSendNewCustomerWelcome(inbound, transcript)) {
       transcript.push({
         role: 'assistant',
-        content: newCustomerWelcome(inbound.lang || 'zh'),
+        content: injectRepriceIfExpired(conversationId, newCustomerWelcome(inbound.lang || 'zh')),
         intent: 'new_customer_welcome',
         handoffRequired: false,
         at: iso(new Date())
@@ -2254,7 +2255,7 @@ function recordWecomConversation(inbound, reply, status = 'ai_replied') {
     }
     transcript.push({
       role: 'assistant',
-      content: replyData.answerZh || replyData.answerEn || '',
+      content: injectRepriceIfExpired(conversationId, replyData.answerZh || replyData.answerEn || ''),
       intent: replyData.intent,
       handoffRequired: Boolean(replyData.handoffRequired),
       at: iso(new Date())
@@ -3501,9 +3502,28 @@ function quoteWaitingReply(lang = 'zh') {
   }
 }
 
-function assistantReplyText(reply = null, lang = 'zh') {
+/* 31q 裁定2 落地勘正:第一版收口选在 assistantReplyText,被新句断言当场咬出盲区 ——
+   有的助手话(quote_intake 模板等)不经它就进 transcript。**可证的收口=transcript 助手写入漏斗**:
+   全仓恰两条(appendWecomConversationMessage / recordWecomConversation),注入下沉到那里,
+   并配「漏斗外零 assistant 写入」机械断言 —— 「漏」从不可证变可证。文字参数保留(调用位已带,无害)。 */
+function assistantReplyText(reply = null, lang = 'zh', conversationId = null) {
   const data = reply?.data || reply || {}
   return lang === 'en' ? (data.answerEn || data.answerZh || '') : (data.answerZh || data.answerEn || '')
+}
+
+/* 改口注入唯一实现(仅 B 态;幂等:已带句不重复;查态失败照发原文并留痕,不吞话) */
+function injectRepriceIfExpired(conversationId, content) {
+  const text = String(content || '')
+  if (!text || !conversationId) return text
+  try {
+    const qs = quoteState.quoteStateOf(conversationId, currentTenantId())
+    if (qs.state === 'expired' && !text.startsWith(quoteState.EXPIRED_REPRICE_SENTENCE)) {
+      return `${quoteState.EXPIRED_REPRICE_SENTENCE}${text}`
+    }
+  } catch (error) {
+    console.warn('[quote-state] 改口注入检查失败(照发原文,不吞话):', error.message)
+  }
+  return text
 }
 
 function hasBookingDraftIntent(text = '') {
@@ -3782,7 +3802,7 @@ async function handleWecomInbound(inbound, req) {
         raw: inbound.raw || {}
       })
       const waitReply = quoteWaitingReply(inbound.lang || 'zh')
-      const waitReplyText = assistantReplyText(waitReply, inbound.lang || 'zh')
+      const waitReplyText = assistantReplyText(waitReply, inbound.lang || 'zh', conversationId)
       upsertConversationState(conversationId, {
         quoteStage: 'waiting_staff_quote',
         nextAction: 'waiting_staff_quote',
@@ -3883,7 +3903,7 @@ async function handleWecomInbound(inbound, req) {
       inbound.referenceImages || []
     )
     const reply = afterSalesHandoffReply(afterSalesProblem, inbound.lang || 'zh')
-    const replyText = assistantReplyText(reply, inbound.lang || 'zh')
+    const replyText = assistantReplyText(reply, inbound.lang || 'zh', conversationId)
     let conversation = appendWecomConversationMessage(conversationId, {
       role: 'customer',
       content: inbound.content,
@@ -4032,7 +4052,7 @@ async function handleWecomInbound(inbound, req) {
       sourceChannel: inbound.sourceChannel,
       intent: 'tenant_kb_answer',
       lastCustomerMessage: inbound.content || '',
-      lastAssistantMessage: assistantReplyText(kbReply, inbound.lang || 'zh'),
+      lastAssistantMessage: assistantReplyText(kbReply, inbound.lang || 'zh', conversationId),
       state: getConversationState(conversationId)?.state || {},
       summaryText: getConversationState(conversationId)?.summaryText || ''
     })
@@ -4044,7 +4064,7 @@ async function handleWecomInbound(inbound, req) {
   const preQuoteWorkflow = resolveQuoteWorkflow(inbound, existingTranscript, null, {}, persistedState)
   if (preQuoteWorkflow.reply) {
     const reply = preQuoteWorkflow.reply
-    const replyText = assistantReplyText(reply, inbound.lang || 'zh')
+    const replyText = assistantReplyText(reply, inbound.lang || 'zh', conversationId)
     recordWecomConversation(inbound, reply, preQuoteWorkflow.shouldCreateQuote ? 'needs_human' : 'ai_replied')
     const missingQuestions = quoteMissingQuestions(preQuoteWorkflow.state || {})
     const nextAction = deriveNextAction({
@@ -4148,7 +4168,7 @@ async function handleWecomInbound(inbound, req) {
   if (!bypassSilentHandoff && shouldSilentHandoffAfterAi({ inbound, reply, quoteWorkflow, knowledgeContext, transcript: existingTranscript, persistedState })) {
     return silentHandoffUnknown(inbound, 'unknown_after_ai')
   }
-  const replyText = assistantReplyText(reply, inbound.lang || 'zh')
+  const replyText = assistantReplyText(reply, inbound.lang || 'zh', conversationId)
   recordWecomConversation(inbound, reply, quoteWorkflow.shouldCreateQuote ? 'needs_human' : 'ai_replied')
   const missingQuestions = quoteMissingQuestions(quoteWorkflow.state || {})
   const nextAction = deriveNextAction({
@@ -5114,7 +5134,7 @@ async function respondQuoteRequest(id, body, admin) {
   `).run(canDo ? 'QUOTED' : 'DECLINED', body.technicianId || admin.technicianId || null, canDo, staffPriceCents, staffDurationMin, staffMessage, JSON.stringify(aiReply), iso(new Date()), id)
   const quote = getQuoteRequestById(id)
   let conversation = appendQuoteAssistantReply(quote, aiReply)
-  const quoteReplyText = assistantReplyText({ data: aiReply }, quote?.customerLang || quoteSnapshot.customerLang || 'zh')
+  const quoteReplyText = assistantReplyText({ data: aiReply }, quote?.customerLang || quoteSnapshot.customerLang || 'zh', quote?.conversation_id || null)
   let aiReplyText = quoteReplyText
   const firstLashNoticeConversation = appendFirstTimeLashNoticeIfNeeded(quote)
   if (firstLashNoticeConversation) {
@@ -5180,7 +5200,7 @@ function createQuoteDraftHold(id, body, admin) {
   })
   const quote = getQuoteRequestById(id)
   const conversation = appendQuoteDraftAssistantReply(quote, draft)
-  const draftReplyText = assistantReplyText(conversation?.aiReply, quote?.customerLang || 'zh')
+  const draftReplyText = assistantReplyText(conversation?.aiReply, quote?.customerLang || 'zh', quote?.conversation_id || null)
   if (quote?.conversationId) {
     upsertConversationState(quote.conversationId, {
       quoteStage: 'draft_created',
@@ -10121,7 +10141,7 @@ function perfRanking({ period = 'month', date = null, metric = 'perf' } = {}, te
   const today = todayOf(tenantId)
   const key = p === 'day'
     ? (/^\d{4}-\d{2}-\d{2}$/.test(String(date || '')) ? date : today)
-    : (/^\d{4}-\d{2}$/.test(String(date || '')) ? date : monthKeyOf())
+    : (/^\d{4}-(0[1-9]|1[0-2])$/.test(String(date || '')) ? date : monthKeyOf())
   const month = p === 'day' ? key.slice(0, 7) : key
 
   const targets = {}
@@ -12326,7 +12346,7 @@ async function route(req, res) {
     if (adminSession.role !== 'owner' && techId !== adminSession.technicianId) {
       throw apiError(403, 'FORBIDDEN', '只能查看自己的业绩。')
     }
-    const month = /^\d{4}-\d{2}$/.test(String(query.month || '')) ? query.month : monthKeyOf()
+    const month = /^\d{4}-(0[1-9]|1[0-2])$/.test(String(query.month || '')) ? query.month : monthKeyOf()
     return json(res, 200, { performance: staffPerformanceView(techId, month, tid) })
   }
   // 员工可见性三态(店铺级):纯业绩 / 业绩+工资 / 纯工资
@@ -12347,7 +12367,7 @@ async function route(req, res) {
   if (req.method === 'GET' && path === '/admin/perf-targets') {
     if (adminSession.role !== 'owner') throw apiError(403, 'FORBIDDEN', '业绩目标由店长设置。')
     const tid = currentTenantId()
-    const month = /^\d{4}-\d{2}$/.test(String(query.month || '')) ? query.month : monthKeyOf()
+    const month = /^\d{4}-(0[1-9]|1[0-2])$/.test(String(query.month || '')) ? query.month : monthKeyOf()
     const rows = db.prepare('SELECT * FROM perf_targets WHERE tenant_id = ? AND month = ?').all(tid, month)
     const byTech = {}
     for (const r of rows) byTech[r.technician_id] = r
@@ -12372,7 +12392,7 @@ async function route(req, res) {
     if (adminSession.role !== 'owner') throw apiError(403, 'FORBIDDEN', '业绩目标由店长设置。')
     const tid = currentTenantId()
     const body = await readBody(req)
-    const month = /^\d{4}-\d{2}$/.test(String(body.month || '')) ? body.month : monthKeyOf()
+    const month = /^\d{4}-(0[1-9]|1[0-2])$/.test(String(body.month || '')) ? body.month : monthKeyOf()
     const now = iso(new Date())
     const stmt = db.prepare(`INSERT INTO perf_targets
       (id, tenant_id, technician_id, month, mode, display_mode, perf_target_cents, card_target_cents, order_target, updated_by, updated_at)
@@ -12405,7 +12425,7 @@ async function route(req, res) {
   }
   if (req.method === 'GET' && path === '/admin/daily-close/month') {
     if (adminSession.role !== 'owner') throw apiError(403, 'FORBIDDEN', '日结由店长操作。')
-    const month = /^\d{4}-\d{2}$/.test(String(query.month || '')) ? query.month : monthKeyOf()
+    const month = /^\d{4}-(0[1-9]|1[0-2])$/.test(String(query.month || '')) ? query.month : monthKeyOf()
     return json(res, 200, monthlyCloseStatus(month, currentTenantId()))
   }
   if (req.method === 'POST' && path === '/admin/daily-close') {
@@ -14059,7 +14079,7 @@ async function route(req, res) {
      金额纯 cents 下发(消耗为负),币符前端 storeMoney(币种红线)。 */
   if (req.method === 'GET' && path === '/admin/stored-value/txns') {
     if (adminSession.role !== 'owner') throw apiError(403, 'FORBIDDEN', 'Owner permission is required.')
-    const month = /^\d{4}-\d{2}$/.test(String(query.month || '')) ? String(query.month) : localParts(new Date()).date.slice(0, 7)
+    const month = /^\d{4}-(0[1-9]|1[0-2])$/.test(String(query.month || '')) ? String(query.month) : localParts(new Date()).date.slice(0, 7)
     /* 裁定2(08-30d)读口扩形(路由集不变):带 user_id / 赠送与冲销行 / 已冲销标 ——
        账调冲销 tab「储值行与账本行同列一表」的数据源就是这条 */
     const rows = db.prepare(`
@@ -14538,7 +14558,7 @@ async function route(req, res) {
       if (query.range === '12m') n = 12
       else if (query.range === 'ytd') n = Number(cur.slice(5, 7))
       else if (query.range === 'custom') {
-        const from = /^\d{4}-\d{2}$/.test(String(query.from || '')) ? query.from : cur
+        const from = /^\d{4}-(0[1-9]|1[0-2])$/.test(String(query.from || '')) ? query.from : cur
         n = Math.max(1, Math.min(24, dayGap(`${from}-01`, `${cur}-01`) / 28 + 1 | 0))
       }
       return json(res, 200, { trend: financeTrend('month', n, tid), range: query.range })
@@ -14551,7 +14571,7 @@ async function route(req, res) {
   if (req.method === 'GET' && path === '/admin/finance/coupon-discounts') {
     if (adminSession.role !== 'owner') throw apiError(403, 'FORBIDDEN', 'Owner permission is required.')
     const tid = currentTenantId()
-    const month = /^\d{4}-\d{2}$/.test(String(query.month || '')) ? String(query.month) : todayOf(tid).slice(0, 7)
+    const month = /^\d{4}-(0[1-9]|1[0-2])$/.test(String(query.month || '')) ? String(query.month) : todayOf(tid).slice(0, 7)
     const tz = tenantTimezone(tid)
     const rows = db.prepare(`SELECT s.code, s.signed_at, s.coupon_discount_cents, s.coupon_name, g.grant_kind, g.granted_by, g.grant_reason
       FROM settlements s LEFT JOIN coupon_grants g ON g.id = s.coupon_grant_id
@@ -14585,7 +14605,7 @@ async function route(req, res) {
   if (req.method === 'GET' && path === '/admin/finance/progress') {
     if (adminSession.role !== 'owner') throw apiError(403, 'FORBIDDEN', 'Owner permission is required.')
     materializeRecurringTransactions()
-    const month = /^\d{4}-\d{2}$/.test(String(query.month || '')) ? query.month : localParts(new Date()).date.slice(0, 7)
+    const month = /^\d{4}-(0[1-9]|1[0-2])$/.test(String(query.month || '')) ? query.month : localParts(new Date()).date.slice(0, 7)
     return json(res, 200, { progress: computeFinanceProgress(month) })
   }
   if (path === '/admin/finance/compensation' && (req.method === 'GET' || req.method === 'PUT')) {
@@ -14628,14 +14648,14 @@ async function route(req, res) {
   if (req.method === 'GET' && path === '/admin/finance/payroll') {
     if (adminSession.role !== 'owner') throw apiError(403, 'FORBIDDEN', 'Owner permission is required.')
     if (!checkEntitlement(currentTenantId(), 'staff_schedule')) throw apiError(403, 'PLAN_LIMIT', 'Staff payroll requires a plan with staff features.')
-    const month = /^\d{4}-\d{2}$/.test(String(query.month || '')) ? query.month : localParts(new Date()).date.slice(0, 7)
+    const month = /^\d{4}-(0[1-9]|1[0-2])$/.test(String(query.month || '')) ? query.month : localParts(new Date()).date.slice(0, 7)
     return json(res, 200, { month, drafts: payrollDraftsForMonth(month) })
   }
   if (req.method === 'POST' && path === '/admin/finance/payroll/confirm') {
     if (adminSession.role !== 'owner') throw apiError(403, 'FORBIDDEN', 'Owner permission is required.')
     if (!checkEntitlement(currentTenantId(), 'staff_schedule')) throw apiError(403, 'PLAN_LIMIT', 'Staff payroll requires a plan with staff features.')
     const body = await readBody(req)
-    const month = /^\d{4}-\d{2}$/.test(String(body.month || '')) ? body.month : localParts(new Date()).date.slice(0, 7)
+    const month = /^\d{4}-(0[1-9]|1[0-2])$/.test(String(body.month || '')) ? body.month : localParts(new Date()).date.slice(0, 7)
     const drafts = payrollDraftsForMonth(month).filter((item) => !item.settled && item.totalCents > 0)
     for (const draft of drafts) {
       insertFinanceTransaction({
@@ -14659,7 +14679,7 @@ async function route(req, res) {
   if (req.method === 'GET' && path === '/admin/finance/transactions') {
     if (adminSession.role !== 'owner') throw apiError(403, 'FORBIDDEN', 'Owner permission is required.')
     materializeRecurringTransactions()
-    const month = /^\d{4}-\d{2}$/.test(String(query.month || '')) ? query.month : localParts(new Date()).date.slice(0, 7)
+    const month = /^\d{4}-(0[1-9]|1[0-2])$/.test(String(query.month || '')) ? query.month : localParts(new Date()).date.slice(0, 7)
     const args = [currentTenantId(), `${month}-01`, `${month}-31`]
     let sql = 'SELECT * FROM finance_transactions WHERE tenant_id = ? AND occurred_on >= ? AND occurred_on <= ?'
     /* D90:「该顾客流水」= 账调域的客户视角读口(按该客预约归属圈行)—— 带 userId 的这形不挂财务门;
@@ -15378,7 +15398,7 @@ async function route(req, res) {
     if (adminSession.role !== 'owner') throw apiError(403, 'FORBIDDEN', '仅老板可试算工资。')
     requireFinanceKey(req)
     const tid = currentTenantId()
-    const month = /^\d{4}-\d{2}$/.test(query.month || '') ? query.month : localParts(new Date()).date.slice(0, 7)
+    const month = /^\d{4}-(0[1-9]|1[0-2])$/.test(query.month || '') ? query.month : localParts(new Date()).date.slice(0, 7)
     const snap = db.prepare('SELECT * FROM salary_payrolls WHERE tenant_id = ? AND month = ? ORDER BY technician_name ASC').all(tid, month)
     if (snap.length) {
       const rows = snap.map((r) => Object.assign(parseJson2(r.breakdown_json), { name: r.technician_name || '', totalCents: r.total_cents }))
@@ -15409,7 +15429,7 @@ async function route(req, res) {
     requireFinanceKey(req)
     const body = await readBody(req)
     const tid = currentTenantId()
-    const month = /^\d{4}-\d{2}$/.test(body.month || '') ? body.month : localParts(new Date()).date.slice(0, 7)
+    const month = /^\d{4}-(0[1-9]|1[0-2])$/.test(body.month || '') ? body.month : localParts(new Date()).date.slice(0, 7)
     if (db.prepare('SELECT 1 FROM salary_payrolls WHERE tenant_id = ? AND month = ? LIMIT 1').get(tid, month)) {
       throw apiError(409, 'ALREADY_LOCKED', `${month} 工资表已锁定;如需重算请先解锁。`)
     }
@@ -15437,7 +15457,7 @@ async function route(req, res) {
     if (adminSession.role !== 'owner') throw apiError(403, 'FORBIDDEN', '仅老板可解锁工资表。')
     requireFinanceKey(req)
     const body = await readBody(req)
-    const month = /^\d{4}-\d{2}$/.test(body.month || '') ? body.month : ''
+    const month = /^\d{4}-(0[1-9]|1[0-2])$/.test(body.month || '') ? body.month : ''
     if (!month) throw apiError(400, 'BAD_REQUEST', '缺少月份。')
     const paid = db.prepare('SELECT 1 FROM salary_payrolls WHERE tenant_id = ? AND month = ? AND paid_at IS NOT NULL LIMIT 1').get(currentTenantId(), month)
     if (paid) throw apiError(403, 'ALREADY_PAID', `${month} 工资已入账本,不能解锁;如需更正,先在财务里红字冲销对应支出。`)
@@ -15451,7 +15471,7 @@ async function route(req, res) {
     requireFinanceKey(req)
     const body = await readBody(req)
     const tid = currentTenantId()
-    const month = /^\d{4}-\d{2}$/.test(body.month || '') ? body.month : ''
+    const month = /^\d{4}-(0[1-9]|1[0-2])$/.test(body.month || '') ? body.month : ''
     if (!month) throw apiError(400, 'BAD_REQUEST', '缺少月份。')
     const rows = db.prepare('SELECT * FROM salary_payrolls WHERE tenant_id = ? AND month = ? ORDER BY technician_name ASC').all(tid, month)
     if (!rows.length) throw apiError(400, 'BAD_REQUEST', '该月工资表未锁定;先在工资试算里「确认并锁定」。')
@@ -15492,7 +15512,7 @@ async function route(req, res) {
     requireFinanceKey(req)
     const body = await readBody(req)
     const tid = currentTenantId()
-    const month = /^\d{4}-\d{2}$/.test(body.month || '') ? body.month : ''
+    const month = /^\d{4}-(0[1-9]|1[0-2])$/.test(body.month || '') ? body.month : ''
     const techId = String(body.technicianId || '').trim()
     if (!month || !techId) throw apiError(400, 'BAD_REQUEST', '缺少月份或技师。')
     if (db.prepare('SELECT 1 FROM salary_payrolls WHERE tenant_id = ? AND month = ? LIMIT 1').get(tid, month)) {
@@ -15532,7 +15552,7 @@ async function route(req, res) {
     if (staffVisibilityOf(currentTenantId()) === 'perf_only') {
       throw apiError(403, 'FORBIDDEN', '本店设置为只向员工展示业绩,不展示工资。')
     }
-    const month = /^\d{4}-\d{2}$/.test(query.month || '') ? query.month : localParts(new Date()).date.slice(0, 7)
+    const month = /^\d{4}-(0[1-9]|1[0-2])$/.test(query.month || '') ? query.month : localParts(new Date()).date.slice(0, 7)
     const pr = db.prepare('SELECT total_cents, paid_at FROM salary_payrolls WHERE tenant_id = ? AND month = ? AND technician_id = ?')
       .get(currentTenantId(), month, adminSession.technicianId)
     return json(res, 200, {

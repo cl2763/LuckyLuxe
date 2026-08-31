@@ -5,6 +5,7 @@
    金额红线:一处运算都没有。「还差 X 达标」也是后端算好的 gapCents。 */
 const api = require('../../../utils/api')
 const { formatMoney, displayOf } = require('../../../utils/money')
+const { storeMonth } = require('../../../utils/storeclock')
 
 Page({
   data: {
@@ -25,17 +26,35 @@ Page({
      (v2 薪资方案引擎;可见性=perf_only 时后端 403,句原样落 note;老板代看别人业绩时不拉)。 */
   async loadSalary() {
     if (this.techId) { this.setData({ sal: null }); return }
+    // D91:工资历史月切换(API 零动,my-estimate 本就吃 ?month=;形制照工资表页 monthbar)
+    const cur = storeMonth()
+    const month = this.salMonth || cur
+    const isCur = month === cur
+    const mLabel = isCur ? '本月' : `${month} `
     try {
-      const r = await api.adminGet('/admin/salary/my-estimate')
+      const r = await api.adminGet(`/admin/salary/my-estimate${isCur ? '' : `?month=${month}`}`)
       const est = r.estimate || {}
-      if (est.noPlan) { this.setData({ sal: { note: '暂无薪资方案 —— 找老板在「员工管理→薪资方案」配一份。' } }); return }
+      if (est.noPlan) { this.setData({ sal: { month, isCur, note: '暂无薪资方案 —— 找老板在「员工管理→薪资方案」配一份。' } }); return }
       const d = displayOf(est)
       const m = (c) => formatMoney(c || 0, d, d.trimZeroDecimals ? 0 : 2)
       this.setData({ sal: {
+        month, isCur,
         base: m(est.baseSalaryCents), commission: m(est.commissionCents), total: m(est.totalCents),
-        payrollText: r.payrollPaid ? '本月工资表已发放' : (r.payrollLocked ? '本月工资表已锁定' : '以月结工资表为准')
+        payrollText: r.payrollPaid ? `${mLabel}工资表已发放` : (r.payrollLocked ? `${mLabel}工资表已锁定` : '以月结工资表为准')
       } })
-    } catch (e) { this.setData({ sal: { note: (e && e.message) || '' } }) }
+    } catch (e) { this.setData({ sal: { month, isCur, note: (e && e.message) || '' } }) }
+  },
+
+  salPrevMonth() { this.shiftSalMonth(-1) },
+  salNextMonth() { this.shiftSalMonth(1) },
+  shiftSalMonth(n) {
+    const cur = storeMonth()
+    const [y, m] = ((this.salMonth || cur)).split('-').map(Number)
+    const d = new Date(y, m - 1 + n, 1)
+    const next = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`
+    if (next > cur) return // 未来月不看:工资是历史账,往前翻才有意义
+    this.salMonth = next === cur ? '' : next
+    this.loadSalary()
   },
 
   async load() {

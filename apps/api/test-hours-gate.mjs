@@ -170,7 +170,7 @@ const db = new DatabaseSync(process.env.TEST_DB_PATH || (() => { throw new Error
   const wall = ctx.document.querySelector('#hoursSetupWall')
   check('🔴 A1 行为:未设置态 gate=接管,整屏出「设置营业时间」+ 七天行 + 灰钮注「至少选择一天营业」',
     took === true && wall && wall.innerHTML.includes('设置营业时间') && (wall.innerHTML.match(/data-hsw-toggle/g) || []).length === 7
-    && wall.innerHTML.includes('至少选择一天营业') && wall.innerHTML.includes('disabled'),
+    && wall.innerHTML.includes('至少选择一天营业') && /<button[^>]*\bdisabled/.test(wall.innerHTML),
     (wall ? wall.innerHTML.slice(0, 120) : 'no wall'))
   check('A1 行为:图合同三 —— 初始七天全不勾、占位「选择时间」、零预填默认',
     (wall.innerHTML.match(/选择时间/g) || []).length === 7 && !wall.innerHTML.includes('10:00'))

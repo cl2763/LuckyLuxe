@@ -131,6 +131,39 @@ async function main() {
     est2.noPlan === true || est2.totalCents === (est2.baseSalaryCents + est2.handworkCents + est2.commissionCents
       + est2.firstRechargePayCents + est2.renewRechargePayCents + est2.customCommissionPayCents + est2.overtimePayCents + est2.adjustCents))
 
+  // ===== D91 工资历史月切换(31q):API 吃 ?month= + 双端渲染链静态钉(判据带界定:引号闭合/属性闭合) =====
+  const histMonth = '2025-01'
+  const hist = await request(`/admin/salary/my-estimate?month=${histMonth}`, {}, STAFF)
+  check('D91 历史月可查:?month=2025-01 回 200 且结构同当月', hist.status === 200 && hist.data.estimate
+    && (hist.data.estimate.noPlan === true || typeof hist.data.estimate.totalCents === 'number'), JSON.stringify(hist.data).slice(0, 120))
+  const badMonth = await request('/admin/salary/my-estimate?month=2025-13', {}, STAFF)
+  check('D91 畸形月份不炸:回落当月(正则闸)', badMonth.status === 200)
+  const { readFileSync: rfs91 } = await import('node:fs')
+  const { join: j91 } = await import('node:path')
+  const R91 = new URL('../..', import.meta.url).pathname
+  const wbJs = rfs91(j91(R91, 'apps/web/staff-workbench.js'), 'utf8')
+  check('D91 网页薪资卡:月切换取数走 ?month=(引号界定)', wbJs.includes('`/admin/salary/my-estimate${st.salMonth ? `?month=${st.salMonth}` : \'\'}`'))
+  check('D91 网页薪资卡:前后箭头控件在(属性界定)', wbJs.includes('data-swb-mprev type="button"') && wbJs.includes('data-swb-mnext type="button"'))
+  check('D91 网页薪资卡:未来月钉死(next > cur 即拦)', wbJs.includes('if (next > cur) return'))
+  const mpJs = rfs91(j91(R91, 'miniprogram/pages/merchant/my-performance/index.js'), 'utf8')
+  const mpWxml = rfs91(j91(R91, 'miniprogram/pages/merchant/my-performance/index.wxml'), 'utf8')
+  check('D91 小程序薪资卡:月切换取数走 ?month=(模板串界定)', mpJs.includes('`/admin/salary/my-estimate${isCur ? \'\' : `?month=${month}`}`'))
+  check('D91 小程序薪资卡:monthbar 形制(bindtap 属性界定)', mpWxml.includes('bindtap="salPrevMonth"') && mpWxml.includes('bindtap="salNextMonth"'))
+  check('D91 小程序薪资卡:未来月钉死 + 当月基准=storeMonth(门店时区)', mpJs.includes('if (next > cur) return') && mpJs.includes('const cur = storeMonth()'))
+  const qsPutStaff = await request('/admin/quote-settings', { method: 'PUT', body: JSON.stringify({ gapHours: 5 }) }, STAFF)
+  check('裁定1 员工改报价设置=403(老板权限,后端最终闸)', qsPutStaff.status === 403, String(qsPutStaff.status))
+  const qsGetStaff = await request('/admin/quote-settings', {}, STAFF)
+  check('裁定1 员工可读报价设置(工作台横幅要用同一份数)', qsGetStaff.status === 200 && qsGetStaff.data.gapHours >= 1)
+  // 「客服与报价」设置行(31q 裁定1):网页行+模块挂载+工作台横幅角同端捷径
+  const html91 = rfs91(j91(R91, 'apps/web/admin.html'), 'utf8')
+  const qsJs = rfs91(j91(R91, 'apps/web/quote-settings.js'), 'utf8')
+  const deskJs = rfs91(j91(R91, 'apps/web/ai-desk.js'), 'utf8')
+  const adminJs91 = rfs91(j91(R91, 'apps/web/admin.js'), 'utf8')
+  check('裁定1 门店设置有「客服与报价」行(id 属性界定)', html91.includes('id="quoteSettingsBody"') && html91.includes('id="quoteSettingsTitle"'))
+  check('裁定1 quote-settings 模块读写唯一口(引号界定)', qsJs.includes("request('/admin/quote-settings')") && qsJs.includes("request('/admin/quote-settings', { method: 'PUT'"))
+  check('裁定1 admin.js 挂载设置行', adminJs91.includes("window.QuoteSettings.mount(document.querySelector('#quoteSettingsBody')"))
+  check('裁定1 工作台横幅角同端捷径=同一表单弹层(属性界定)', deskJs.includes('data-quote-settings') && deskJs.includes('window.QuoteSettings.openModal'))
+
   console.log(`[staff-portal] all ${checks} checks passed`)
 }
 

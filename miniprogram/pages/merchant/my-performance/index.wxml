@@ -55,7 +55,11 @@
   </block>
 
   <view class="card sal-card" wx:if="{{sal}}">
-    <view class="h">本月薪资估算</view>
+    <view class="sal-monthbar">
+      <view class="marrow" bindtap="salPrevMonth">‹</view>
+      <view class="h">{{sal.isCur ? '本月' : sal.month}} 薪资估算</view>
+      <view class="marrow {{sal.isCur ? 'dim' : ''}}" bindtap="salNextMonth">›</view>
+    </view>
     <view wx:if="{{sal.note}}" class="subtle">{{sal.note}}</view>
     <block wx:else>
       <view class="sal-row"><text>底薪</text><text>{{sal.base}}</text></view>

@@ -1,0 +1,32 @@
+全阴影	test-noshow-aftersales.mjs	1776	cancel	apps/web/order-state.js	1	0
+全阴影	test-noshow-aftersales.mjs	1776	cancel	miniprogram/pages/checkout/index.js	1	0
+全阴影	test-noshow-aftersales.mjs	1776	cancel	miniprogram/pages/me/index.js	4	0
+全阴影	test-noshow-aftersales.mjs	1776	cancel	miniprogram/pages/me/index.wxml	2	0
+全阴影	test-noshow-aftersales.mjs	1776	cancel	miniprogram/pages/merchant/daily-close/index.wxml	1	0
+全阴影	test-noshow-aftersales.mjs	1776	cancel	miniprogram/pages/merchant/orders/index.wxml	1	0
+全阴影	test-noshow-aftersales.mjs	1776	cancel	miniprogram/pages/orders/index.js	1	0
+全阴影	test-noshow-aftersales.mjs	1776	cancel	miniprogram/pages/points/index.js	1	0
+全阴影	test-noshow-aftersales.mjs	1776	cancel	miniprogram/utils/dailyclose.js	1	0
+全阴影	test-noshow-aftersales.mjs	2230	redeem	apps/web/admin.js	6	0
+全阴影	test-noshow-aftersales.mjs	2230	redeem	miniprogram/pages/me/index.wxml	6	0
+全阴影	test-noshow-aftersales.mjs	2230	redeem	miniprogram/pages/merchant/settlement/index.wxml	1	0
+全阴影	test-noshow-aftersales.mjs	2230	redeem	miniprogram/utils/dailyclose.js	3	0
+全阴影	test-noshow-aftersales.mjs	2338	order-badge badge-	apps/web/admin.js	2	0
+全阴影	test-noshow-aftersales.mjs	2927	d.label	miniprogram/pages/merchant/my-performance/index.wxml	1	0
+有阴影	test-currency-scan.mjs	127	currencyDisplay	apps/api/local-server.mjs	14	14
+有阴影	test-noshow-aftersales.mjs	1776	cancel	apps/api/local-server.mjs	54	9
+有阴影	test-noshow-aftersales.mjs	1776	cancel	apps/web/admin.js	8	10
+有阴影	test-noshow-aftersales.mjs	1776	cancel	apps/web/customer.js	8	3
+有阴影	test-noshow-aftersales.mjs	1776	cancel	miniprogram/pages/order-detail/index.js	6	2
+有阴影	test-noshow-aftersales.mjs	1776	cancel	miniprogram/utils/api.js	4	1
+有阴影	test-noshow-aftersales.mjs	2230	redeem	apps/api/local-server.mjs	32	9
+有阴影	test-noshow-aftersales.mjs	2230	redeem	apps/web/customer.js	11	3
+有阴影	test-noshow-aftersales.mjs	2230	redeem	miniprogram/pages/merchant/member/index.js	4	1
+有阴影	test-noshow-aftersales.mjs	2230	redeem	miniprogram/pages/merchant/member/index.wxml	1	1
+有阴影	test-noshow-aftersales.mjs	2230	redeem	miniprogram/pages/merchant/settlement/index.js	2	1
+有阴影	test-noshow-aftersales.mjs	2230	redeem	miniprogram/pages/points/index.js	8	1
+有阴影	test-noshow-aftersales.mjs	2230	redeem	miniprogram/pages/points/index.wxml	1	1
+有阴影	test-noshow-aftersales.mjs	2230	redeem	miniprogram/utils/api.js	6	1
+有阴影	test-noshow-aftersales.mjs	2515	goMall	miniprogram/pages/card-pack/index.wxml	1	1
+# 全阴影(断言可能纯靠别人的串绿着): 15
+# 有阴影(真匹配在,但刀砍真目标后阴影会顶班): 15

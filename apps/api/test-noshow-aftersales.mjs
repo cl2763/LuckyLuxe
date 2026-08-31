@@ -2512,7 +2512,7 @@ const main = async () => {
         && custWeb.includes('data-mall-focus="timecard"') && custWeb.includes('data-mall-filter'))
       // 裁定A 返工后:入口收敛到「我的资产」一格,角标挂它(卡包入口从「我的」页撤下)
       check('㋐→勘误 A1 wiring:「我的」页卡包入口+角标(0 不渲染;名字与页归一)', meWx.includes('bindtap="goCardPack"') && meWx.includes('wx:if="{{cardPackBadge}}"') && !meWx.includes('goAssets'))
-      check('㋐ B1-1 wiring:储值页=充值套餐唯一出口(去充值→商城)', svWx.includes('goMall') && !svWx.includes('微信支付'))
+      check('㋐ B1-1 wiring:储值页=充值套餐唯一出口(去充值→商城)', svWx.includes('bindtap="goMall"') && !svWx.includes('微信支付'))
       check('㋐ B3 wiring:商城按钮句与说明句全用后端字段(前端不拼两套话)', mlWx.includes('it.buyButtonText') && mlWx.includes('it.offlineNote') && !mlWx.includes('立即购买') && !mlWx.includes('到店购买'))
       check('㋐ D 组 wiring:网页顾客端卡包/商城同构(视图+菜单+同源字段)', custWeb.includes('renderCardPackWeb') && custWeb.includes('renderMallWeb') && custWeb.includes("'cardPack'") && custWeb.includes('data-mall-buy'))
       /* 待拍②(改「敬请期待」)→ 裁定A 返工后那张资产卡整块被分类总页取代:
@@ -2924,7 +2924,7 @@ const main = async () => {
       check('㊾ 小程序日结显式行渲染在场(deducts 映射 + 标题读后端 deductTitle)',
         miniDC.includes('afterSalesDeductions') && miniDC.includes('deductListTitle') && miniDCW.includes('{{v.deductTitle}}'))
       check('㊾ 小程序我的业绩显式行渲染在场(deductions 映射 + 行文案读后端 label)',
-        miniMPJ.includes('deductions') && miniMPJ.includes('d.label') && miniMPW.includes('{{dd.label}}'))
+        miniMPJ.includes('deductions') && miniMPJ.includes('label: d.label ||') && miniMPW.includes('{{dd.label}}'))
       /* D70:发起售后改走 action 口(不再是 status==='AFTER_SALES' 分支),留痕链本身不变 —— 判据跟着改写法 */
       check('㊹ 发起售后仍落 status_history(发起原因唯一持有链;改走 action 口后依旧)',
         /actionKey === 'openAfterSales'[\s\S]{0,600}booking_status_history[\s\S]{0,200}'AFTER_SALES'/.test(srv)

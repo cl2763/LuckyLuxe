@@ -113,7 +113,7 @@ check('①-4 差额行自证来源(单号 + 改前改后 + 原因都在备注里
 const perfAfter = await perfOf(today)
 check('①-5 🔴 业绩同步减:198 → 150', perfAfter.perfCents === 15000, String(perfAfter.perfCents))
 check('①-6 减在哪自证:日结显式一行「更正扣回 · 单号」+ 技师行「含更正扣回 −$48」',
-  (perfAfter.view.afterSalesDeductions || []).some((d) => d.code === a.code && d.label.includes('更正扣回') && d.amountText.includes('48'))
+  (perfAfter.view.afterSalesDeductions || []).some((d) => d.code === a.code && d.label.includes('更正扣回') && /(?:^|[^0-9])48(?:[^0-9]|$)/.test(d.amountText))
   && String(perfAfter.tech.deductNoteText || '').includes('更正扣回'),
   JSON.stringify({ list: perfAfter.view.afterSalesDeductions, note: perfAfter.tech.deductNoteText }).slice(0, 220))
 

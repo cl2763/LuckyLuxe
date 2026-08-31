@@ -7696,3 +7696,12 @@ section.card > .section-row:first-child { margin-top: 0; }
 .qs-banner.quoted { background: #eef4f2; color: #0a5a50; }
 .qs-banner.expired { background: #fdf3e7; color: #b45309; font-weight: 600; }
 .qs-banner.reference { background: #f1efe9; color: #6b6f66; }
+
+/* 客服与报价(31q 裁定1) */
+.qset .br-row { display: flex; align-items: center; gap: 8px; margin: 8px 0; font-size: 13px; }
+.qs-gear { margin-left: auto; float: right; }
+.qset-sheet { max-width: 420px; }
+
+/* D91 薪资卡月切换(同形 monthbar) */
+.swb-monthbar { display: flex; align-items: center; gap: 10px; }
+.swb-monthbar h3 { margin: 0; }

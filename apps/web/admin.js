@@ -1,6 +1,6 @@
 // 构建号:每次交付递增。侧栏可见,排查"改了没生效"时先对版本。
 // 兜底用(服务端会注入 window.LL_BUILD = 资源内容指纹,页面优先显示那个)
-const ADMIN_BUILD = '20260831m-fig01'
+const ADMIN_BUILD = '20260901q-qs01'
 let pricingState = { module: 'storefront', tab: 'items', categories: [], items: [], rules: {}, editing: null, preview: null, storefrontPicker: false }
 console.log(`[admin] build ${ADMIN_BUILD}`)
 
@@ -3663,6 +3663,7 @@ function renderStoreSettings() {
   window.NotifySettings.mount(document.querySelector('#notifySettingsBody'), { request, escapeHtml, toast })
   window.BookingRules.mount(document.querySelector('#bookingRulesBody'), { request, toast })
   window.DutySetting.mount(document.querySelector('#dutySettingBody'), { request, toast })
+  window.QuoteSettings.mount(document.querySelector('#quoteSettingsBody'), { request, toast })
 }
 
 async function addSpecialDate() {

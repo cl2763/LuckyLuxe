@@ -9,7 +9,7 @@ window.StaffWorkbench = (function () {
   'use strict'
   const TIERS = [{ key: 'list', label: '原价' }, { key: 'share', label: '分享价' }, { key: 'member', label: '会员价' }]
   const TIER_PRICE_FIELD = { list: 'listPriceCents', share: 'sharePriceCents', member: 'memberPriceCents' }
-  let st = { perf: null, cats: [], items: [], catId: '', tierKey: 'list', picked: {}, view: null, deps: null, mount: null }
+  let st = { perf: null, cats: [], items: [], catId: '', tierKey: 'list', picked: {}, view: null, deps: null, mount: null, salMonth: '', sal: undefined }
 
   async function render(mount, deps) {
     st.deps = deps; st.mount = mount
@@ -53,7 +53,7 @@ window.StaffWorkbench = (function () {
     const { escapeHtml, money, owner } = st.deps
     const p = st.perf || {}
     const hero = p.hero || null
-    const est = owner.myCompEstimate
+    const est = st.sal !== undefined ? st.sal : owner.myCompEstimate
     const field = TIER_PRICE_FIELD[st.tierKey]
     const mains = st.items.filter((i) => (i.itemKind || 'main') === 'main' && (i.categoryId || '') === st.catId)
     const priceOf = (it) => { const c = it[field] === null || it[field] === undefined ? it.listPriceCents : it[field]; return c === 0 ? '免收' : money(c) }
@@ -70,13 +70,18 @@ window.StaffWorkbench = (function () {
           ${(p.trend || []).length ? `<p class="subtle small">近 6 月:${p.trend.map((t) => `${t.month.slice(5)}月 ${money(t.perfCents || 0)}`).join(' · ')}</p>` : ''}
         </section>
         <section class="card swb-card">
-          <h3>本月薪资估算</h3>
+          <div class="swb-monthbar">
+            <button class="ghost slim" data-swb-mprev type="button">‹</button>
+            <h3>${st.salMonth ? escapeHtml(st.salMonth) : '本月'} 薪资估算</h3>
+            <button class="ghost slim" data-swb-mnext type="button" ${st.salMonth ? '' : 'disabled'}>›</button>
+          </div>
+          ${st.salNote ? `<p class="subtle">${escapeHtml(st.salNote)}</p>` : ''}
           ${est ? `<div class="finance-metrics">
             <div class="finance-metric"><span>底薪</span><strong>${money(est.baseSalaryCents || 0)}</strong></div>
             <div class="finance-metric"><span>本月业绩</span><strong>${money(est.perfCents || 0)}</strong></div>
             <div class="finance-metric"><span>提成估算</span><strong>${money(est.commissionCents || 0)}</strong></div>
             <div class="finance-metric good"><span>合计估算</span><strong>${money(est.totalCents || 0)}</strong></div>
-          </div><p class="subtle small">估算=薪资方案引擎(底薪/手工费/阶梯提成/加班/冲卡提成/调整项)按已确认日结现算;以月结工资表为准。</p>` : '<p class="subtle">暂无薪资方案,或本店未开放展示。</p>'}
+          </div><p class="subtle small">估算=薪资方案引擎(底薪/手工费/阶梯提成/加班/冲卡提成/调整项)按已确认日结现算;以月结工资表为准。</p>` : (st.salNote ? '' : '<p class="subtle">暂无薪资方案,或本店未开放展示。</p>')}
         </section>
         <section class="card swb-card">
           <h3>我的排班 <span class="subtle small">本周</span></h3>
@@ -100,9 +105,31 @@ window.StaffWorkbench = (function () {
     bind()
   }
 
+  async function loadSalary() {
+    const { request } = st.deps
+    try {
+      const r = await request(`/admin/salary/my-estimate${st.salMonth ? `?month=${st.salMonth}` : ''}`)
+      st.sal = (r.estimate && !r.estimate.noPlan) ? r.estimate : null
+      st.salNote = ''
+    } catch (e) { st.sal = null; st.salNote = (e && e.message) || '' }
+    paint()
+  }
+
+  function shiftSalMonth(n) {
+    const cur = storeToday().slice(0, 7)
+    const [y, m] = (st.salMonth || cur).split('-').map(Number)
+    const d = new Date(y, m - 1 + n, 1)
+    const next = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`
+    if (next > cur) return // 未来月不看:工资是历史账
+    st.salMonth = next === cur ? '' : next
+    loadSalary()
+  }
+
   function bind() {
     const { toast } = st.deps
     const m = st.mount
+    const mp = m.querySelector('[data-swb-mprev]'); if (mp) mp.addEventListener('click', () => shiftSalMonth(-1))
+    const mn = m.querySelector('[data-swb-mnext]'); if (mn) mn.addEventListener('click', () => shiftSalMonth(1))
     m.querySelectorAll('[data-swb-tier]').forEach((b) => b.addEventListener('click', () => { st.tierKey = b.dataset.swbTier; paint(); preview() }))
     m.querySelectorAll('[data-swb-cat]').forEach((b) => b.addEventListener('click', () => { st.catId = b.dataset.swbCat; paint() }))
     m.querySelectorAll('[data-swb-item]').forEach((b) => b.addEventListener('change', () => {

@@ -117,4 +117,40 @@ if (!qr) {
     && !webDesk.includes('本次会话已报价') && !miniConvJs.includes('本次会话已报价'))
 }
 
+/* ===== 31q AI 改口(裁定2 单收口;条件:B 态才注入 + 新句单独断言 + matrix 66 原样全绿) ===== */
+{
+  // 造 B 态:同会话再钉一笔已过期报价(会话已在①切段成新会话 —— 先把报价拉回本会话再拨过期)
+  const convRow = db.prepare('SELECT transcript_json FROM wechat_conversations WHERE id = ?').get(convId)
+  const times = JSON.parse(convRow.transcript_json).map((m) => new Date(m.at).getTime()).filter(Boolean)
+  let sessStart = times[0]
+  for (let i = 1; i < times.length; i += 1) { if (times[i] - times[i - 1] > 6 * 3600000) sessStart = times[i] }
+  const sk = new Date(sessStart).toISOString()
+  db.prepare('UPDATE quote_requests SET session_key = ?, quoted_at = ?, expires_at = ? WHERE conversation_id = ? AND tenant_id = ? AND staff_price_cents IS NOT NULL')
+    .run(sk, new Date(Date.now() - 3600000).toISOString(), new Date(Date.now() - 60000).toISOString(), convId, tid)
+  const st = (await request('/admin/wechat/conversations', {}, PLATFORM, H)).data.conversations.find((c) => c.id === convId)
+  check('改口夹具:会话回到 B 态(已过期)', st.quoteState?.state === 'expired', JSON.stringify(st.quoteState).slice(0, 100))
+  const rep = await request('/admin/wechat/mock-chat-message', { method: 'POST', body: JSON.stringify({ externalUserId: extUser, message: '那就按上次说的价格约吧' }) }, PLATFORM, H)
+  const aiText = rep.data?.reply?.data?.answerZh || rep.data?.conversation?.lastAssistantMessage || ''
+  const trans = JSON.parse(db.prepare('SELECT transcript_json FROM wechat_conversations WHERE id = ?').get(convId).transcript_json)
+  const lastAssistant = [...trans].reverse().find((m) => m.role === 'assistant')
+  check('🔴 31q 改口注入:B 态进线,助手回复以「上次报价已过期,我帮您重新确认。」开头(transcript 现测)',
+    Boolean(lastAssistant) && lastAssistant.content.startsWith('上次报价已过期,我帮您重新确认。'), (lastAssistant?.content || '').slice(0, 80))
+  // 反向守:非 B 态会话零注入
+  const ext2 = `qs-clean-${RUN}`
+  await request('/admin/wechat/mock-chat-message', { method: 'POST', body: JSON.stringify({ externalUserId: ext2, message: '你们几点开门?' }) }, PLATFORM, H)
+  const conv2 = (await request('/admin/wechat/conversations', {}, PLATFORM, H)).data.conversations.find((c) => c.externalUserId === ext2)
+  const trans2 = JSON.parse(db.prepare('SELECT transcript_json FROM wechat_conversations WHERE id = ?').get(conv2.id).transcript_json)
+  const la2 = [...trans2].reverse().find((m) => m.role === 'assistant')
+  check('31q 反向守:无过期报价的会话,回复零改口句', !la2 || !la2.content.includes('上次报价已过期'), (la2?.content || '').slice(0, 60))
+  /* 机械(裁定2 可证性,落地勘正版):transcript 助手写入漏斗全仓恰两条函数;
+     漏斗外零 `role: 'assistant'` 的 transcript push(新写法自动红)—— 「漏一个分支」从不可证变可证 */
+  const srv = readFileSync(new URL('./local-server.mjs', import.meta.url), 'utf8').replace(/\/\*[\s\S]*?\*\//g, '').replace(/\/\/[^\n]*/g, '')
+  const pushSites = [...srv.matchAll(/transcript\.push\(\{\s*role: 'assistant'/g)].length
+  check('31q 机械①:裸 transcript.push(assistant) 恰 3 处、全在 recordWecomConversation 漏斗内且逐条带注入',
+    pushSites === 3 && (srv.match(/injectRepriceIfExpired\(conversationId,/g) || []).length >= 4, String(pushSites))
+  const appendFn = srv.slice(srv.indexOf('function appendWecomConversationMessage'), srv.indexOf('function appendWecomConversationMessage') + 900)
+  check('31q 机械②:appendWecomConversationMessage 漏斗内有注入(assistant 才注)',
+    appendFn.includes("message.role === 'assistant'") && appendFn.includes('injectRepriceIfExpired('))
+}
+
 console.log(`✅ test-quote-state 通过 ${checks} 项`)

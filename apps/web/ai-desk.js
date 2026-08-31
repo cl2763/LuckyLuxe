@@ -546,6 +546,10 @@ function renderWechatBackendWorkflow(conversationId = '') {
   `
 }
 
+document.addEventListener('click', (e) => {
+  if (e.target.closest('[data-quote-settings]')) window.QuoteSettings.openModal({ request, toast })
+})
+
 function renderWechatLiveDetail(conversation) {
   const transcript = conversation.transcript || []
   const needsHuman = ['needs_human', 'human_active'].includes(conversation.status)
@@ -563,7 +567,8 @@ function renderWechatLiveDetail(conversation) {
       </div>
     </div>
     ${conversation.quoteState && conversation.quoteState.banner ? `
-    <div class="qs-banner ${conversation.quoteState.state}">${escapeHtml(conversation.quoteState.banner)}</div>` : ''}
+    <div class="qs-banner ${conversation.quoteState.state}">${escapeHtml(conversation.quoteState.banner)}
+      <button class="ghost slim qs-gear" data-quote-settings type="button" title="客服与报价设置">⚙</button></div>` : ''}
     <div class="wechat-timeline cs-chat-timeline">
       ${renderWechatTranscript(transcript, conversation)}
     </div>
