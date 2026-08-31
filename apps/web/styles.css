@@ -7683,3 +7683,10 @@ section.card > .section-row:first-child { margin-top: 0; }
 .sn-sheet { max-width: 520px; }
 .sn-ta { width: 100%; box-sizing: border-box; padding: 10px 12px; border: 1px solid var(--line, #e2e0d8); border-radius: 8px; font-size: 13px; line-height: 1.6; margin: 8px 0; resize: vertical; }
 .sw-btnrow { display: flex; gap: 10px; margin-top: 10px; align-items: center; }
+
+/* ===== 值日行(today-board;31l)===== */
+.tb-duty { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; margin: 10px 0 2px; font-size: 13px; }
+.tb-duty-lab { font-weight: 700; }
+.tb-duty-chip { border: 1px solid #d9d9de; background: #fff; border-radius: 14px; padding: 2px 12px; font-size: 12px; cursor: pointer; }
+.tb-duty-chip.on { background: #0e6e62; color: #fff; border-color: #0e6e62; }
+.tb-duty-chip.ro { cursor: default; opacity: .9; }

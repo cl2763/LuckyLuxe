@@ -90,7 +90,8 @@ window.TodayBoard = (function () {
       isClosed: r.isClosed, specialNote: r.specialNote || '',
       gridH, hours, cols,
       total: (r.bookings || []).length, working: cols.length,
-      freeHours: Math.round(freeTotal / 60 * 10) / 10, activeCount: r.activeCount || 0
+      freeHours: Math.round(freeTotal / 60 * 10) / 10, activeCount: r.activeCount || 0,
+      duty: r.duty || null   // 31l 值日:开关关=后端整块不下发=零渲染
     }
   }
 
@@ -159,6 +160,12 @@ window.TodayBoard = (function () {
       <div class="tb-legend top"><span class="tb-legend-hd">图例 · 平时不用看</span>
         <span><i class="lg hand"></i>手部美甲</span><span><i class="lg foot"></i>足部美甲</span>
         <span><i class="lg lash"></i>美睫</span><span><i class="lg care"></i>护理</span><span><i class="lg free"></i>空档·点排</span></div>
+      ${dv.duty ? `
+      <div class="tb-duty">
+        <span class="tb-duty-lab">值日</span>
+        ${dv.cols.map((c) => `<button type="button" class="tb-duty-chip ${dv.duty.techIds.includes(c.id) ? 'on' : ''} ${dv.duty.canEdit ? '' : 'ro'}" data-duty-tech="${c.id}" ${dv.duty.canEdit ? '' : 'disabled'}>${escapeHtml(c.name)}</button>`).join('')}
+        ${dv.duty.note ? `<span class="subtle">${escapeHtml(dv.duty.note)}</span>` : ''}
+      </div>` : ''}
       <div class="tb-legend">淡色=未到 · <i class="tb-sdot active">●</i>进行中 · <i class="tb-sdot done">✓</i>完成 · 点空档=直接排单</div>
       ` : '<div class="empty-state">本日无在岗技师</div>'}`}
     `
@@ -201,6 +208,15 @@ window.TodayBoard = (function () {
       /* 点块 = 打开该单(与小程序 tapBlock 出操作面板同一动作数:1 下)——
          去结算按钮仍在展开的订单卡上原位(后端 settleAction 出,店主刚学会的那个位置) */
       el.addEventListener('click', function () { deps.openBooking(el.dataset.tbBlock) })
+    })
+    mount.querySelectorAll('[data-duty-tech]:not([disabled])').forEach(function (el) {
+      el.addEventListener('click', async function () {
+        const on = !el.classList.contains('on')
+        try {
+          await deps.request('/admin/duty/mark', { method: 'POST', body: JSON.stringify({ date: stateT.date, technicianId: el.dataset.dutyTech, on }) })
+          load(stateT.date, deps)
+        } catch (e2) { deps.toast((e2 && e2.message) || '值日保存失败') }
+      })
     })
     mount.querySelectorAll('[data-tb-free]').forEach(function (el) {
       el.addEventListener('click', function () { deps.onFreeSlot(el.dataset.tbFree, el.dataset.time, stateT.date, el.dataset.end) })

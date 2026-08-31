@@ -26,6 +26,12 @@
       <view class="add" bindtap="addSpecial">＋ 新增休息日</view>
     </view>
 
+    <view class="gtitle">值日表</view>
+    <view class="card navrow">
+      <text>开启后今天台面底部出现「值日」行,点名勾选</text>
+      <switch checked="{{dutyOn}}" bindchange="onDutyToggle" />
+    </view>
+
     <view class="gtitle">通知与回访</view>
     <view class="card navrow" bindtap="goNotify">
       <text>预约通知 · 到店提醒 · 生日/回访 · 文案模板</text><text class="arrow">›</text>

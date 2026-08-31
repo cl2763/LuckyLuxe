@@ -13,7 +13,18 @@ Page({
 
   goNotify() { wx.navigateTo({ url: '/pages/merchant/notify-settings/index' }) },
 
-  async onShow() { if (!(await api.guardOwner())) return; this.setData({ hoursTxt: api.hoursGateText() }); this.load(); this.loadRules() },
+  /* 31l 值日表开关(与网页同口) */
+  async loadDuty() {
+    try { this.setData({ dutyOn: Boolean((await api.adminGet('/admin/duty-setting')).enabled) }) } catch (e) { /* 默认关 */ }
+  },
+  async onDutyToggle(e) {
+    try {
+      await api.adminPut('/admin/duty-setting', { enabled: e.detail.value })
+      wx.showToast({ title: e.detail.value ? '值日表已开启' : '值日表已关闭', icon: 'none' })
+    } catch (err) { wx.showToast({ title: (err && err.message) || '保存失败', icon: 'none' }); this.loadDuty() }
+  },
+
+  async onShow() { if (!(await api.guardOwner())) return; this.setData({ hoursTxt: api.hoursGateText() }); this.load(); this.loadRules(); this.loadDuty() },
 
   async loadRules() {
     try {

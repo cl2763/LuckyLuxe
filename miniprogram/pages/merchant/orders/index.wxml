@@ -75,7 +75,12 @@
           </view>
         </scroll-view>
       </view>
-      <view class="dv-legend top">
+      <view class="dv-duty" wx:if="{{dv.duty}}">
+      <text class="dv-duty-lab">值日</text>
+      <text wx:for="{{dv.cols}}" wx:for-item="c" wx:key="id" class="dv-duty-chip {{dv.duty.techIds.indexOf(c.id) > -1 ? 'on' : ''}} {{dv.duty.canEdit ? '' : 'ro'}}" data-id="{{c.id}}" bindtap="tapDuty">{{c.name}}</text>
+      <text wx:if="{{dv.duty.note}}" class="dv-duty-note">{{dv.duty.note}}</text>
+    </view>
+    <view class="dv-legend top">
         <text class="dv-legend-hd">图例 · 平时不用看</text>
         <text><text class="lg hand"></text>手部美甲</text>
         <text><text class="lg foot"></text>足部美甲</text>

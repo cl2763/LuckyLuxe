@@ -7179,7 +7179,7 @@ const refundRoutes = createRefundRoutes({
 })
 const scheduleBoard = createScheduleBoard({
   db, json, iso, addMinutes, localParts, localDateTime, currentTenantId, defaultStoreId,
-  specialDateFor, hoursUnsetOfStore, getService, isGenericDisplayName, memberCodeForUserId
+  specialDateFor, hoursUnsetOfStore, getService, isGenericDisplayName, memberCodeForUserId, apiError, readBody
 })
 const notifyScheduler = createNotifyScheduler({
   db, randomId, iso, apiError, json, readBody, parseJson: parseJson2, localParts, tenantTimezone,
@@ -13807,7 +13807,7 @@ async function route(req, res) {
   }
   // 周排班视图:一次取 7 天所有技师的排班 + 店休信息 + 当日预约数(用于冲突提示)
   /* 排班域两路由(schedule-week/day)08-30h 搬进 ./schedule-board.mjs(公约②;纯迁移,字节对比过)*/
-  if (await scheduleBoard.route(req, res, { path, query })) return
+  if (await scheduleBoard.route(req, res, { path, query, adminSession })) return
   // 排班申请:员工发起(只能为自己),老板审批
   if (req.method === 'POST' && path === '/admin/schedule-requests') {
     const body = await readBody(req)
@@ -16396,6 +16396,7 @@ for (const table of ['stores', 'services', 'technicians', 'users', 'bookings', '
 }
 /* P3 通知调度器建表/扩列 —— 放在 reminder_tasks 建表与 tenant_id ALTER 之后(迁移顺序学费:images_json 那次) */
 notifyScheduler.ensureSchema()
+scheduleBoard.ensureSchema()   // 值日表 duty_marks(31l)
 try {
   db.exec('ALTER TABLE tenants ADD COLUMN plan_expires_at TEXT')
 } catch (error) {

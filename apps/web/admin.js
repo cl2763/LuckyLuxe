@@ -3662,6 +3662,7 @@ function renderStoreSettings() {
   /* 31m N6:通知与回访/预约规则各自独立 settings-item 行(此前挂营业时间抽屉体内被折叠吞掉=挂载位错) */
   window.NotifySettings.mount(document.querySelector('#notifySettingsBody'), { request, escapeHtml, toast })
   window.BookingRules.mount(document.querySelector('#bookingRulesBody'), { request, toast })
+  window.DutySetting.mount(document.querySelector('#dutySettingBody'), { request, toast })
 }
 
 async function addSpecialDate() {

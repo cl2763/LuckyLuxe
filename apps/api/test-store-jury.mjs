@@ -122,9 +122,17 @@ for (const tid of allTenants) {
       throw new Error(`${label} I8 可见档库值非法:「${String(visRow.value).slice(0, 40)}」不在三枚内`)
     }
   }
+  /* I9 值日域(31l):标记只许指向本店技师;开关值只许 '0'/'1' */
+  const badDuty = db.prepare(`SELECT COUNT(*) AS n FROM duty_marks m WHERE m.tenant_id = ?
+    AND NOT EXISTS (SELECT 1 FROM technicians t2 WHERE t2.id = m.technician_id AND t2.tenant_id = ?)`).get(tid, tid).n
+  if (badDuty !== 0) throw new Error(`${label} I9 值日标记指向别家/不存在的技师:${badDuty} 行`)
+  const dutyVal = db.prepare("SELECT value FROM tenant_settings WHERE tenant_id = ? AND key = 'duty_enabled'").get(tid)
+  if (dutyVal && !['0', '1'].includes(String(dutyVal.value).replace(/"/g, ''))) {
+    throw new Error(`${label} I9 值日开关值非法:「${String(dutyVal.value).slice(0, 20)}」`)
+  }
   iterated += 1
 }
-check(`🔴 ③ 不变量组 I1-I8 × ${iterated} 家全过(一家红整批红;含前序套件的各态店)`, iterated === allTenants.length)
+check(`🔴 ③ 不变量组 I1-I9 × ${iterated} 家全过(一家红整批红;含前序套件的各态店)`, iterated === allTenants.length)
 
 /* ===== ④ 矩阵店特征各验(建店规格 → 现测) ===== */
 for (const b of built) {

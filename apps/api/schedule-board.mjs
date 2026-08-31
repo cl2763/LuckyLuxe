@@ -6,8 +6,27 @@
 export function createScheduleBoard(deps) {
   const {
     db, json, iso, addMinutes, localParts, localDateTime, currentTenantId, defaultStoreId,
-    specialDateFor, hoursUnsetOfStore, getService, isGenericDisplayName, memberCodeForUserId
+    specialDateFor, hoursUnsetOfStore, getService, isGenericDisplayName, memberCodeForUserId, apiError, readBody
   } = deps
+
+  /* 值日表(店主 31l 小合同六条):按天标记 technician×date,不碰排班 is_working 语义;
+     开关=tenant_settings key 'duty_enabled',默认关(合同一);历史日只读(合同五)。 */
+  function ensureSchema() {
+    db.exec(`CREATE TABLE IF NOT EXISTS duty_marks (
+      tenant_id TEXT NOT NULL,
+      date TEXT NOT NULL,
+      technician_id TEXT NOT NULL,
+      created_at TEXT NOT NULL,
+      PRIMARY KEY (tenant_id, date, technician_id)
+    )`) 
+  }
+  function dutyEnabled(tid) {
+    const row = db.prepare("SELECT value FROM tenant_settings WHERE tenant_id = ? AND key = 'duty_enabled'").get(tid)
+    return row ? String(row.value).replace(/"/g, '') === '1' : false
+  }
+  function dutyOf(tid, date) {
+    return db.prepare('SELECT technician_id FROM duty_marks WHERE tenant_id = ? AND date = ?').all(tid, date).map((r) => r.technician_id)
+  }
 
   async function route(req, res, ctx) {
     const { path, query } = ctx
@@ -144,18 +163,57 @@ export function createScheduleBoard(deps) {
         .map((t) => ({ id: t.id, name: t.name, title: t.title, isActive: Boolean(t.is_active), bookingCount: bookingCount[t.id] || 0 }))
       const activeCount = bookings.filter((b) => b.arrivalState === 'active').length
       const pendingCount = bookings.filter((b) => b.arrivalState === 'pending').length
+      /* 值日(31l 合同二/四/六):开关关=响应整块不出现(零渲染);开=名单+空态句后端出(两端同句) */
+      const dutyBlock = dutyEnabled(tid) ? {
+        enabled: true,
+        techIds: dutyOf(tid, date),
+        canEdit: ctx.adminSession?.role === 'owner' && date === nowParts.date,
+        note: dutyOf(tid, date).length ? '' : '今天还没安排值日'
+      } : undefined
       json(res, 200, {
         storeNow: nowParts.time, storeToday: nowParts.date,
         date, weekday, isClosed, hoursUnset, openTime, closeTime,
         specialNote: special?.note || '',
         technicians,
         bookings,
-        activeCount, pendingCount
+        activeCount, pendingCount,
+        ...(dutyBlock ? { duty: dutyBlock } : {})
       })
+      return true
+    }
+    /* 值日开关(门店设置;仅老板) */
+    if (req.method === 'PUT' && path === '/admin/duty-setting') {
+      if (ctx.adminSession?.role !== 'owner') throw apiError(403, 'FORBIDDEN', '仅老板可开关值日表。')
+      const body = await readBody(req)
+      const on = body.enabled === true
+      db.prepare(`INSERT INTO tenant_settings (tenant_id, key, value, updated_at) VALUES (?, 'duty_enabled', ?, ?)
+        ON CONFLICT(tenant_id, key) DO UPDATE SET value = excluded.value, updated_at = excluded.updated_at`)
+        .run(currentTenantId(), on ? '1' : '0', iso(new Date()))
+      json(res, 200, { enabled: on })
+      return true
+    }
+    if (req.method === 'GET' && path === '/admin/duty-setting') {
+      json(res, 200, { enabled: dutyEnabled(currentTenantId()) })
+      return true
+    }
+    /* 勾/取消(仅老板;合同三勾选即存,合同五历史日只读=只许今天) */
+    if (req.method === 'POST' && path === '/admin/duty/mark') {
+      if (ctx.adminSession?.role !== 'owner') throw apiError(403, 'FORBIDDEN', '仅老板可安排值日。')
+      const tid = currentTenantId()
+      if (!dutyEnabled(tid)) throw apiError(400, 'BAD_REQUEST', '本店未开启值日表(门店设置里打开)。')
+      const body = await readBody(req)
+      const date = String(body.date || '')
+      const today = localParts(new Date()).date
+      if (date !== today) throw apiError(400, 'BAD_REQUEST', '值日只能勾当天(历史日只读)。')
+      const techId = String(body.technicianId || '')
+      if (!db.prepare('SELECT 1 FROM technicians WHERE id = ? AND tenant_id = ?').get(techId, tid)) throw apiError(404, 'NOT_FOUND', '技师不存在。')
+      if (body.on === false) db.prepare('DELETE FROM duty_marks WHERE tenant_id = ? AND date = ? AND technician_id = ?').run(tid, date, techId)
+      else db.prepare('INSERT OR IGNORE INTO duty_marks (tenant_id, date, technician_id, created_at) VALUES (?, ?, ?, ?)').run(tid, date, techId, iso(new Date()))
+      json(res, 200, { date, techIds: dutyOf(tid, date) })
       return true
     }
     return false
   }
 
-  return { route }
+  return { route, ensureSchema }
 }

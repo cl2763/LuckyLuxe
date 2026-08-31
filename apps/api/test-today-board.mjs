@@ -43,7 +43,8 @@ check('🔴 ① 骨同源:网页台面调同一条 /admin/schedule-day(与小程
     '/admin/schedule-day?date=': '骨同源:台面唯一数据口(与小程序 loadDayView 同条)',
     '/admin/customers?q=': '直排面板顾客搜索(复用客户档案同一读口,不另造)',
     '/admin/bookings/direct': '直排面板落单(与老板代排同一写口,不另造)',
-    '/admin/pricing/items': '直排面板服务 chips(与开单页同一价目读口,不另造)'
+    '/admin/pricing/items': '直排面板服务 chips(与开单页同一价目读口,不另造)',
+    '/admin/duty/mark': '值日勾选写口(31l 小合同三;读=schedule-day 响应随行,零新读口)'
   }
   const calls = tbCode.match(/\/admin\/[A-Za-z0-9/?=&_-]*/g) || []
   const outside = calls.filter((c) => !Object.keys(TB_API_ALLOW).some((k) => c.startsWith(k.replace(/\?.*$/, ''))))
@@ -51,7 +52,7 @@ check('🔴 ① 骨同源:网页台面调同一条 /admin/schedule-day(与小程
   for (const k of Object.keys(TB_API_ALLOW)) {
     check(`① 白名单条目仍在用:${k}(${TB_API_ALLOW[k].slice(0, 18)}…)`, calls.some((c) => c.startsWith(k.replace(/\?.*$/, ''))), k)
   }
-  check('① 条数钉死:/admin 调用恰 4 条(缩水或新增都要来对表)', calls.length === 4, String(calls.length))
+  check('① 条数钉死:/admin 调用恰 5 条(31l 值日写口入册;缩水或新增都要来对表)', calls.length === 5, String(calls.length))
 }
 
 /* ===== ② 几何口径同参(与小程序 loadDayView 逐条对) ===== */
@@ -146,6 +147,33 @@ check('⑤ 营业时段字段在(网格范围口径的输入)', 'openTime' in da
   const nowT = day.data.storeNow
   const badSlots = (availD.data.slots || []).flatMap((s2) => (s2.slots || []).filter((t3) => t3 < nowT))
   check('🔴 D88 同族:可约时段零过去时刻(晚上查今天不再列出上午)', badSlots.length === 0, badSlots.slice(0, 5).join(','))
+}
+
+/* ===== 值日表(31l 小合同六条)===== */
+{
+  const today2 = (await request('/admin/store-clock', {}, PLATFORM, H)).data.today
+  const off = await request(`/admin/schedule-day?date=${today2}`, {}, PLATFORM, H)
+  check('🔴 值日合同一:开关默认关 → schedule-day 响应零 duty 块(台面零渲染)', off.data.duty === undefined, JSON.stringify(off.data.duty))
+  check('值日开关仅老板可开', (await request('/admin/duty-setting', { method: 'PUT', body: JSON.stringify({ enabled: true }) }, PLATFORM, H)).status === 200)
+  const on1 = (await request(`/admin/schedule-day?date=${today2}`, {}, PLATFORM, H)).data.duty
+  check('值日合同六空态:开了没勾人 → note=「今天还没安排值日」', on1 && on1.enabled === true && on1.note === '今天还没安排值日', JSON.stringify(on1))
+  const mark = await request('/admin/duty/mark', { method: 'POST', body: JSON.stringify({ date: today2, technicianId: t1.id, on: true }) }, PLATFORM, H)
+  check('🔴 值日合同三:勾选即存 + 读回(techIds 含所勾)', mark.status === 200 && mark.data.techIds.includes(t1.id), JSON.stringify(mark.data))
+  const again = (await request(`/admin/schedule-day?date=${today2}`, {}, PLATFORM, H)).data.duty
+  check('值日读回:台面响应 techIds 同源同值 + 空态句消失', again.techIds.includes(t1.id) && again.note === '', JSON.stringify(again))
+  const unmark = await request('/admin/duty/mark', { method: 'POST', body: JSON.stringify({ date: today2, technicianId: t1.id, on: false }) }, PLATFORM, H)
+  check('值日再点=取消', unmark.data.techIds.length === 0)
+  const hist = await request('/admin/duty/mark', { method: 'POST', body: JSON.stringify({ date: '2026-01-01', technicianId: t1.id, on: true }) }, PLATFORM, H)
+  check('值日合同五:历史日只读(非当天 400)', hist.status === 400, String(hist.status))
+  await request('/admin/duty-setting', { method: 'PUT', body: JSON.stringify({ enabled: false }) }, PLATFORM, H)
+  const off2 = await request(`/admin/schedule-day?date=${today2}`, {}, PLATFORM, H)
+  check('🔴 关回开关 → duty 块随之消失(变异刀形:渲染无视开关即红)', off2.data.duty === undefined)
+  /* 两端渲染链(机械):值日行/勾点/空态句两端都在 */
+  const { readFileSync: rfD } = await import('node:fs')
+  const tbD = rfD(new URL('../web/today-board.js', import.meta.url), 'utf8')
+  const miniD = rfD(new URL('../../miniprogram/pages/merchant/orders/index.wxml', import.meta.url), 'utf8')
+  check('值日两端渲染链:web tb-duty 行+duty/mark 调用;mini dv-duty 行+tapDuty', 
+    tbD.includes('tb-duty') && tbD.includes("'/admin/duty/mark'") && miniD.includes('dv-duty') && miniD.includes('tapDuty'))
 }
 
 console.log(`\n✅ test-today-board 通过 ${checks} 项`)

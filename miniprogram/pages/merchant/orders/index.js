@@ -486,7 +486,8 @@ Page(Object.assign({
           hoursUnset: Boolean(r.hoursUnset),   // D84 三态:未设置 ≠ 休息(空态说真话)
           isClosed: r.isClosed, specialNote: r.specialNote || '', openTime: r.openTime, closeTime: r.closeTime,
           gridH, colW: 190, hours, total: (r.bookings || []).length, working: cols.length,
-          freeHours: Math.round(freeTotal / 60 * 10) / 10, activeCount: r.activeCount || 0, cols
+          freeHours: Math.round(freeTotal / 60 * 10) / 10, activeCount: r.activeCount || 0, cols,
+          duty: r.duty || null   // 31l 值日:开关关=后端不下发=零渲染
         }
       })
       this.syncClose(date) // 网格下方那块日结跟着看同一天
@@ -647,6 +648,18 @@ Page(Object.assign({
     this.loadDepositCfg()
   },
   closeDirect() { this.setData({ directSheet: false }) },
+
+  /* 31l 值日:老板点一下勾/取消(仅当天;后端终闸) */
+  async tapDuty(e) {
+    const d = this.data.dv && this.data.dv.duty
+    if (!d || !d.canEdit) return
+    const techId = e.currentTarget.dataset.id
+    const on = !(d.techIds || []).includes(techId)
+    try {
+      await api.adminPost('/admin/duty/mark', { date: this.data.selDate, technicianId: techId, on })
+      this.load(this.data.selDate)
+    } catch (err) { wx.showToast({ title: (err && err.message) || '值日保存失败', icon: 'none' }) }
+  },
 
   /* ===== 屏 S1 现场/电话排单(2026-08-09 图 + 规则①②)=====
      不是新页面 —— 就是这张既有面板的增强。手机号只用来**找档案**,

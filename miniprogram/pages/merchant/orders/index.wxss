@@ -269,3 +269,10 @@ page{background:#fbf8f5}
 .dv-sw-t { font-size: 30rpx; font-weight: 700; }
 .dv-sw-p { font-size: 22rpx; color: #9a938c; margin: 12rpx 0 20rpx; line-height: 1.6; }
 .dv-sw-btn { display: inline-block; background: #2d2a26; color: #fff; border-radius: 10rpx; padding: 14rpx 40rpx; font-size: 26rpx; }
+
+/* 31l 值日行 */
+.dv-duty { display: flex; align-items: center; gap: 12rpx; flex-wrap: wrap; margin: 16rpx 0 4rpx; font-size: 24rpx; }
+.dv-duty-lab { font-weight: 700; }
+.dv-duty-chip { border: 2rpx solid #d9d9de; background: #fff; border-radius: 22rpx; padding: 4rpx 20rpx; font-size: 22rpx; }
+.dv-duty-chip.on { background: #0e6e62; color: #fff; border-color: #0e6e62; }
+.dv-duty-note { color: #8a8a8e; }
