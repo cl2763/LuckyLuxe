@@ -135,9 +135,12 @@ const roster = [
   ['财务深功能', '无顾客可见效果面(老板报表);小程序 finance 简版与网页读同一账本口,finance-core 守'],
   ['商城自购/预约草稿', '网页操作工具,效果落在订单/商城数据 —— 两端读订单同源(84 组共用路由)'],
   ['消息模板', 'P3 未接发送,**暂无效果面** —— P3 落地批必须回来补跨端断言(登记)'],
-  ['微信模拟器', '纯网页演练工具,不产生顾客可见数据']
+  ['微信模拟器', '纯网页演练工具,不产生顾客可见数据'],
+  /* 店主 08-31j 两行落墨(差集表裁定 1/2) */
+  ['深财务+payroll确认', '✅ 合理单端(店主 08-31 裁:「趋势/深财务=网页,手机=指标」延伸;发工资是坐下来干的事;summary/trend/verify/recurring/compensation/coupon-discounts/payroll+confirm 仅网页)'],
+  ['客服AI深功能', '✅ 合理单端(店主 08-31 裁:booking-summary/customer-insight/feedback/logic-notes 仅网页;小程序 conversation 轻版=设计,不是欠账)']
 ]
 console.log('   [清单] ' + roster.map((r) => `${r[0]}:${r[1]}`).join(' | '))
-check(`⑤ 「合理只在网页」清单 ${roster.length} 项逐项有效果面结论(有断言的指到断言,没效果面的写明理由)`, roster.length === 9)
+check(`⑤ 「合理只在网页」清单 ${roster.length} 项逐项有效果面结论(有断言的指到断言,没效果面的写明理由)`, roster.length === 11)
 
 console.log(`\n✅ test-cross-end-effect 通过 ${checks} 项`)
