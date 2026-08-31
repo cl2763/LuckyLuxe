@@ -41,3 +41,7 @@ page{background:#fbf8f5}
 .drow:last-of-type{border-bottom:0}
 .dk{color:#8a7f78;font-size:24rpx;flex:none}
 .dv{color:#2d2826;font-size:24rpx;font-weight:650;text-align:right}
+
+/* 31m:通知与回访入口行 */
+.navrow { display: flex; justify-content: space-between; align-items: center; padding: 22rpx 24rpx; font-size: 26rpx; }
+.navrow .arrow { color: #b3b3ae; font-size: 30rpx; }

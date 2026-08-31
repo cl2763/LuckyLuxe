@@ -470,9 +470,9 @@ Page(Object.assign({
            不裸 new Date 推 */
         const minStart = date === r.storeToday && r.storeNow ? toMin(r.storeNow) : -1
         const frees = []; let cursor = openMin
-        list.forEach((b) => { const s = toMin(b.startTime); const from = Math.max(cursor, minStart); if (s - from >= 30) { frees.push({ startTime: m2t(from), top: Math.round((from - openMin) / 60 * PX_PER_HOUR), height: Math.round((s - from) / 60 * PX_PER_HOUR) }); freeTotal += (s - from) } cursor = Math.max(cursor, toMin(b.endTime)) })
+        list.forEach((b) => { const s = toMin(b.startTime); const from = Math.max(cursor, minStart); if (s - from >= 30) { frees.push({ startTime: m2t(from), endTime: m2t(s), top: Math.round((from - openMin) / 60 * PX_PER_HOUR), height: Math.round((s - from) / 60 * PX_PER_HOUR) }); freeTotal += (s - from) } cursor = Math.max(cursor, toMin(b.endTime)) })
         const tailFrom = Math.max(cursor, minStart)
-        if (closeMin - tailFrom >= 30) { frees.push({ startTime: m2t(tailFrom), top: Math.round((tailFrom - openMin) / 60 * PX_PER_HOUR), height: Math.round((closeMin - tailFrom) / 60 * PX_PER_HOUR) }); freeTotal += (closeMin - tailFrom) }
+        if (closeMin - tailFrom >= 30) { frees.push({ startTime: m2t(tailFrom), endTime: m2t(closeMin), top: Math.round((tailFrom - openMin) / 60 * PX_PER_HOUR), height: Math.round((closeMin - tailFrom) / 60 * PX_PER_HOUR) }); freeTotal += (closeMin - tailFrom) }
         return { id: t.id, name: t.name, role: t.title || '', busy: t.bookingCount > 0, count: t.bookingCount, blocks, frees }
       })
       const d = new Date(`${date}T00:00:00`)
@@ -599,7 +599,7 @@ Page(Object.assign({
   // ===== 直接排单 =====
   async tapFree(e) {
     if (this.data.role !== 'owner') { wx.showToast({ title: '仅老板可直接排单', icon: 'none' }); return }
-    const { tech, time } = e.currentTarget.dataset
+    const { tech, time, end } = e.currentTarget.dataset
     const col = (this.data.dv.cols || []).find((c) => c.id === tech)
     /* D24(店主 2026-08-12):排单选择器与结算单「服务项目」同一数据源同一粒度 ——
        同源 /admin/pricing/categories + items(大类→小类两级,只列主项目;
@@ -637,7 +637,7 @@ Page(Object.assign({
     const first = services[0] || {}
     const dur0 = first.dur || 120
     this.setData({
-      directSheet: true, directTech: tech, directTechName: (col && col.name) || '', directTime: time,
+      directSheet: true, directTech: tech, directTechName: (col && col.name) || '', directTime: time, directGapStart: time, directGapEnd: end || '',
       directCats: cats, directCatId: firstCat.id || '',
       directServices: services, directServiceId: first.id || '', directDurationMin: dur0,
       directEndTime: this.calcDirectEnd(time, dur0), directDurH: Math.round(dur0 / 6) / 10,
@@ -742,7 +742,13 @@ Page(Object.assign({
     })
   },
   clearCust() { this.setData({ selectedCustId: '', selectedCustName: '', custQuery: '', custMatches: [], pendingNewName: '', pendingNewPhone: '' }) },
-  onDirectTime(e) { const t = e.detail.value; this.setData({ directTime: t, directEndTime: this.calcDirectEnd(t, this.data.directDurationMin) }) },
+  onDirectTime(e) {
+    const t = e.detail.value
+    const { directGapStart: gs, directGapEnd: ge } = this.data
+    /* 31m 二:起始时间可改,限该空档内(与网页同钳);后端 409 闸不变 */
+    if (gs && (t < gs || (ge && t >= ge))) { wx.showToast({ title: `起始时间要在 ${gs}–${ge || '收班'} 这个空档内`, icon: 'none' }); return }
+    this.setData({ directTime: t, directEndTime: this.calcDirectEnd(t, this.data.directDurationMin) })
+  },
   // 时长微调(这次多做/少做):±30 分钟,30–360;「标准」恢复所选服务默认时长
   adjustDur(delta) {
     const d = Math.min(360, Math.max(30, this.data.directDurationMin + delta))

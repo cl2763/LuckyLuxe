@@ -11,6 +11,8 @@ Page({
     loading: true
   },
 
+  goNotify() { wx.navigateTo({ url: '/pages/merchant/notify-settings/index' }) },
+
   async onShow() { if (!(await api.guardOwner())) return; this.setData({ hoursTxt: api.hoursGateText() }); this.load(); this.loadRules() },
 
   async loadRules() {

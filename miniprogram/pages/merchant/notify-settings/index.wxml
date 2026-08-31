@@ -1,43 +1,53 @@
 <view class="page">
   <view wx:if="{{loading}}" class="empty">加载中…</view>
   <block wx:else>
-    <view class="card">
-      <view class="h">通知与回访</view>
-      <view class="hint">开关与提前量按本店生效;现阶段通知落在下方「通知记录」里(站内记录通道),微信/短信通道等资质开通后另批接入。</view>
-      <view class="rule" wx:for="{{rules}}" wx:key="type">
-        <view class="rule-main">
-          <text class="rule-label">{{item.label}}</text>
-          <switch checked="{{item.enabled}}" data-type="{{item.type}}" bindchange="onToggle" />
-        </view>
-        <view class="rule-field" wx:if="{{item.type === 'arrival_reminder'}}">
-          提前 <input class="num" type="number" value="{{item.offsetMinutes}}" data-type="{{item.type}}" data-field="offsetMinutes" bindinput="onNum" /> 分钟
-        </view>
-        <view class="rule-field" wx:elif="{{item.type === 'revisit'}}">
-          间隔 <input class="num" type="number" value="{{item.revisitDays}}" data-type="{{item.type}}" data-field="revisitDays" bindinput="onNum" /> 天
-        </view>
-        <view class="rule-field" wx:elif="{{item.advanceDays !== null}}">
-          提前 <input class="num" type="number" value="{{item.advanceDays}}" data-type="{{item.type}}" data-field="advanceDays" bindinput="onNum" /> 天
-        </view>
-      </view>
-      <button class="save" bindtap="save" disabled="{{saving}}">保存通知设置</button>
+    <view class="tabs">
+      <view class="tab {{tab === 'rules' ? 'on' : ''}}" data-k="rules" bindtap="switchTab">规则</view>
+      <view class="tab {{tab === 'records' ? 'on' : ''}}" data-k="records" bindtap="switchTab">记录</view>
     </view>
 
-    <view class="card">
-      <view class="qhead">
-        <view class="h">通知记录</view>
-        <picker range="{{filters}}" range-key="t" bindchange="pickFilter">
-          <view class="filter">{{filter ? filter : '全部状态'}} ▾</view>
-        </picker>
-      </view>
-      <view wx:if="{{!tasks.length}}" class="empty">还没有通知记录 —— 打开上面的开关后,系统会按事件与每日扫描生成。</view>
-      <view class="task {{t.statusCls}}" wx:for="{{tasks}}" wx:for-item="t" wx:key="id">
-        <view class="task-top">
-          <text class="task-type">{{t.typeLabel}}</text>
-          <text class="task-status {{t.statusCls}}">{{t.statusZh}}</text>
+    <block wx:if="{{tab === 'rules'}}">
+      <view class="notice">{{notice}}</view>
+      <block wx:for="{{groups}}" wx:for-item="g" wx:key="key">
+        <view class="grp">{{g.title}}<text class="grp-note"> · {{g.note}}</text></view>
+        <block wx:for="{{rules}}" wx:for-item="r" wx:key="type">
+          <view class="ncard {{r.enabled ? '' : 'off'}}" wx:if="{{r.group === g.key}}">
+            <view class="nhead">
+              <text class="nlabel">{{r.label}}</text>
+              <switch checked="{{r.enabled}}" data-type="{{r.type}}" bindchange="onToggle" />
+            </view>
+            <block wx:if="{{r.enabled}}">
+              <view class="param" wx:if="{{r.type === 'arrival_reminder'}}">提前 <input class="num" type="number" value="{{r.offsetMinutes}}" data-type="{{r.type}}" data-field="offsetMinutes" bindinput="onNum" /> 分钟</view>
+              <view class="param" wx:elif="{{r.type === 'revisit'}}">上次到店后 <input class="num" type="number" value="{{r.revisitDays}}" data-type="{{r.type}}" data-field="revisitDays" bindinput="onNum" /> 天</view>
+              <view class="param" wx:elif="{{r.advanceDays !== null}}">提前 <input class="num" type="number" value="{{r.advanceDays}}" data-type="{{r.type}}" data-field="advanceDays" bindinput="onNum" /> 天</view>
+              <textarea class="tpl" value="{{r.templateText}}" data-type="{{r.type}}" bindinput="onTpl" auto-height maxlength="300" />
+              <view class="chips">
+                <text class="chip" wx:for="{{r.vars}}" wx:for-item="v" wx:key="*this" data-type="{{r.type}}" data-v="{{v}}" bindtap="addChip">{{'{' + v + '}'}}</text>
+              </view>
+              <view class="prev">预览:<text class="prev-em">{{r.preview}}</text></view>
+              <view class="btnrow">
+                <button class="save" size="mini" data-type="{{r.type}}" bindtap="saveCard">保存</button>
+                <text class="reset" data-type="{{r.type}}" bindtap="resetTpl">恢复默认</text>
+              </view>
+            </block>
+          </view>
+        </block>
+      </block>
+    </block>
+
+    <block wx:else>
+      <picker range="{{filters}}" range-key="t" value="{{filterIdx}}" bindchange="pickFilter">
+        <view class="filter">{{filters[filterIdx].t}} ▾</view>
+      </picker>
+      <view wx:if="{{!tasks.length}}" class="empty">还没有通知记录 —— 打开规则页的开关后,系统会按事件与每日扫描生成。</view>
+      <view class="rec" wx:for="{{tasks}}" wx:for-item="t" wx:key="id">
+        <view class="dot {{t.statusCls}}"></view>
+        <view class="rec-main">
+          <view class="rec-top"><text class="rec-type">{{t.typeLabel}}</text> · {{t.customerName || '—'}} · {{t.statusZh}} {{t.whenText}}</view>
+          <view class="rec-why" wx:if="{{t.failReason}}">{{t.statusZh}}原因:{{t.failReason}}</view>
+          <view class="rec-text">{{t.text || '—'}}</view>
         </view>
-        <view class="task-text">{{t.text || '—'}}</view>
-        <view class="task-meta">{{t.whenText}}<text wx:if="{{t.failReason}}"> · {{t.failReason}}</text></view>
       </view>
-    </view>
+    </block>
   </block>
 </view>

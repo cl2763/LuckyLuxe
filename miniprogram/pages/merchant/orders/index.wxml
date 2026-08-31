@@ -58,7 +58,7 @@
             <view class="dv-cols" style="height:{{dv.gridH}}rpx">
               <view wx:for="{{dv.cols}}" wx:key="id" wx:for-item="col" class="dv-col {{col.id===myTechId?'mine':''}}" style="width:{{dv.colW}}rpx">
                 <view wx:for="{{dv.hours}}" wx:key="label" wx:for-item="hl" class="dv-line {{hl.off ? 'off' : ''}}"></view>
-                <view wx:for="{{col.frees}}" wx:key="startTime" wx:for-item="f" class="dv-blk free" style="top:{{f.top}}rpx;height:{{f.height}}rpx" data-tech="{{col.id}}" data-time="{{f.startTime}}" bindtap="tapFree"><text>+ 直接排单</text></view>
+                <view wx:for="{{col.frees}}" wx:key="startTime" wx:for-item="f" class="dv-blk free" style="top:{{f.top}}rpx;height:{{f.height}}rpx" data-tech="{{col.id}}" data-time="{{f.startTime}}" data-end="{{f.endTime}}" bindtap="tapFree"><text>+ 直接排单</text></view>
                 <view wx:for="{{col.blocks}}" wx:key="id" wx:for-item="b" class="dv-blk {{b.cls}}" style="top:{{b.top}}rpx;height:{{b.height}}rpx" data-id="{{b.id}}" bindtap="tapBlock">
                   <view class="dv-bt"><text wx:if="{{b.stateGlyph}}" class="dv-sdot {{b.state}}">{{b.stateGlyph}}</text>{{b.startTime}}–{{b.endTime}}</view>
                   <view class="dv-bn">{{b.customerName}}</view>

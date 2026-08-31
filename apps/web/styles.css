@@ -7616,23 +7616,33 @@ section.card > .section-row:first-child { margin-top: 0; }
 .mn-del{position:absolute;top:-6px;right:-6px;width:20px;height:20px;line-height:18px;border:none;border-radius:50%;background:rgba(0,0,0,.55);color:#fff;font-size:11px;cursor:pointer}
 .dc-due-note{font-size:11.5px;color:var(--muted);margin:-2px 0 6px;padding-left:2px}
 
-/* ===== P3 通知与回访设置(notify-settings.js;08-30g)===== */
-.notify-settings-block { margin-top: 18px; padding-top: 14px; border-top: 1px solid var(--line, #e5e5ea); }
-.nfy-rules { display: flex; flex-direction: column; gap: 8px; margin: 10px 0 12px; }
-.nfy-rule { display: flex; align-items: center; gap: 10px; font-size: 14px; }
-.nfy-rule input[type="checkbox"] { margin-left: auto; width: 18px; height: 18px; }
-.nfy-field { flex: 1; }
-.rfm-rules-editor label { display: flex; align-items: center; gap: 6px; flex-wrap: wrap; }
-.nfy-label { min-width: 130px; }
-.nfy-field { color: #555; font-size: 13px; }
-.nfy-num { width: 74px; padding: 4px 6px; }
-.nfy-queue { margin-top: 16px; }
-.nfy-queue-head { display: flex; align-items: center; justify-content: space-between; gap: 10px; }
-.nfy-table { width: 100%; border-collapse: collapse; font-size: 13px; margin-top: 8px; }
-.nfy-table th, .nfy-table td { text-align: left; padding: 6px 8px; border-bottom: 1px solid var(--line, #eee); }
-.nfy-row.failed td { color: #b42318; }
-.nfy-row.cancelled td { color: #8a8a8e; }
-
+/* ===== 通知与回访(照《通知与回访设置图 v1.0》重做;08-31m)===== */
+.nfy-tabs { display: flex; gap: 8px; margin-bottom: 12px; }
+.nfy-tab { border-radius: 8px; padding: 4px 16px; font-size: 13px; font-weight: 700; border: 1px solid var(--ink, #141413); background: #fff; color: var(--ink, #141413); cursor: pointer; }
+.nfy-tab.on { background: var(--ink, #141413); color: #fff; }
+.nfy-notice { background: #f1efe9; border-radius: 8px; padding: 8px 12px; font-size: 12px; color: #6b6f66; margin-bottom: 12px; }
+.nfy-grp { font-size: 13px; font-weight: 700; letter-spacing: .04em; margin: 14px 0 8px; }
+.nfy-card { border: 1px solid var(--line, #e2e0d8); border-radius: 10px; padding: 12px 14px; margin-bottom: 10px; }
+.nfy-card.off { opacity: .85; }
+.nfy-head { display: flex; align-items: center; }
+.nfy-head b { font-size: 14px; }
+.nfy-sw { margin-left: auto; }
+.nfy-sw input { width: 18px; height: 18px; }
+.nfy-param { font-size: 13px; color: #555; margin-top: 8px; }
+.nfy-num { width: 70px; padding: 3px 6px; text-align: center; }
+.nfy-tpl { width: 100%; box-sizing: border-box; margin-top: 8px; border: 1px dashed var(--line, #e2e0d8); border-radius: 8px; padding: 8px 10px; font-size: 13px; background: #faf9f6; line-height: 1.6; resize: vertical; }
+.nfy-chips { display: flex; gap: 5px; flex-wrap: wrap; margin-top: 6px; }
+.nfy-chips button { font-size: 11px; background: #eef4f2; color: #0a5a50; border: none; border-radius: 5px; padding: 1px 8px; cursor: pointer; }
+.nfy-prev { margin-top: 6px; font-size: 12px; color: #6b6f66; }
+.nfy-prev em { font-style: normal; color: var(--ink, #141413); }
+.nfy-btnrow { display: flex; gap: 10px; align-items: center; margin-top: 8px; }
+.nfy-reset { color: #6b6f66; }
+.nfy-queue-head { margin-bottom: 10px; }
+.nfy-rec { display: flex; gap: 8px; padding: 8px 0; border-bottom: 1px dashed var(--line, #e2e0d8); font-size: 13px; }
+.nfy-dot { width: 9px; height: 9px; border-radius: 50%; margin-top: 6px; flex-shrink: 0; }
+.nfy-dot.d-ok { background: #0e6e62; } .nfy-dot.d-wait { background: #b45309; } .nfy-dot.d-fail { background: #a8322a; } .nfy-dot.d-off { background: #b3b3ae; }
+.nfy-rec-text { color: #444; margin-top: 2px; }
+.nfy-why summary { cursor: pointer; color: #a8322a; font-size: 12px; }
 /* ===== RFM 接回网页(customer-tags.js;08-30h 拉平批①)===== */
 .rfm-bar { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; margin: 0 0 10px 2px; font-size: 13px; }
 .rfm-chip { border: 1px solid #d9d9de; background: #fff; border-radius: 14px; padding: 3px 10px; font-size: 12px; cursor: pointer; }
@@ -7668,3 +7678,8 @@ section.card > .section-row:first-child { margin-top: 0; }
 /* ===== 员工端展示(全店)三选一(staff-visibility.js;08-31k)===== */
 .staff-vis-row { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; padding: 8px 0; border-bottom: 1px solid var(--line, #e5e5ea); margin-bottom: 8px; }
 .staff-vis-note { margin: 2px 0 10px; }
+
+/* ===== 网页写小记弹层(service-note-modal.js;31m 三)===== */
+.sn-sheet { max-width: 520px; }
+.sn-ta { width: 100%; box-sizing: border-box; padding: 10px 12px; border: 1px solid var(--line, #e2e0d8); border-radius: 8px; font-size: 13px; line-height: 1.6; margin: 8px 0; resize: vertical; }
+.sw-btnrow { display: flex; gap: 10px; margin-top: 10px; align-items: center; }

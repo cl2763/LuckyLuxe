@@ -1,6 +1,6 @@
 // 构建号:每次交付递增。侧栏可见,排查"改了没生效"时先对版本。
 // 兜底用(服务端会注入 window.LL_BUILD = 资源内容指纹,页面优先显示那个)
-const ADMIN_BUILD = '20260831k-vis01'
+const ADMIN_BUILD = '20260831m-fig01'
 let pricingState = { module: 'storefront', tab: 'items', categories: [], items: [], rules: {}, editing: null, preview: null, storefrontPicker: false }
 console.log(`[admin] build ${ADMIN_BUILD}`)
 
@@ -3625,8 +3625,6 @@ function renderStoreSettings() {
   els.businessHoursUpdated.textContent = updated ? `${t('lastUpdatedLabel')}: ${String(updated).slice(0, 16).replace('T', ' ')}` : ''
   els.businessHoursEditor.innerHTML = `
     <div id="hoursSettingsMount"></div>
-    <div id="notifySettingsMount"></div>
-    <div id="bookingRulesMount"></div>
     <div class="special-dates-block">
       <h4>${owner.lang === 'zh' ? '特殊日期(节假日休息 / 临时调整)' : 'Special dates (holidays / temporary changes)'}</h4>
       <p class="subtle">${owner.lang === 'zh' ? '优先于每周固定模式,保存后立即影响可预约时段和 AI 的营业时间回答。' : 'Overrides the weekly pattern; affects booking slots and AI answers instantly.'}</p>
@@ -3661,8 +3659,9 @@ function renderStoreSettings() {
       toast(t('businessHoursSaved'))
     }
   })
-  window.NotifySettings.mountSettings(document.querySelector('#notifySettingsMount'), { request, escapeHtml, toast })
-  window.BookingRules.mount(document.querySelector('#bookingRulesMount'), { request, toast })
+  /* 31m N6:通知与回访/预约规则各自独立 settings-item 行(此前挂营业时间抽屉体内被折叠吞掉=挂载位错) */
+  window.NotifySettings.mount(document.querySelector('#notifySettingsBody'), { request, escapeHtml, toast })
+  window.BookingRules.mount(document.querySelector('#bookingRulesBody'), { request, toast })
 }
 
 async function addSpecialDate() {
@@ -4902,6 +4901,7 @@ function renderCustomers() {
           <button class="ghost slim" data-customer-detail="${customer.id}" type="button">${t('viewCustomerFile')}</button>
           ${/* N-5 v1.1 ③:退卡是财务动作 —— 员工连按钮都不渲染(理由见 account-adjust.js) */''}
           ${owner.role === 'owner' ? `<button class="ghost slim" data-account-adjust="${customer.id}" type="button">${owner.lang === 'zh' ? '账户调整' : 'Adjust'}</button>` : ''}
+          <button class="ghost slim" data-write-note="${customer.id}" data-name="${escapeHtml(customerName(customer))}" type="button">${owner.lang === 'zh' ? '写服务小记' : 'Note'}</button>
           <button class="ghost slim" data-ai-customer="${customer.id}" type="button">${owner.aiLoading === `customer:${customer.id}` ? t('aiProcessing') : t('aiCustomerInsight')}</button>
           ${(() => { const tr = rfmTierOf(customer); return tr && tr.k === 's' ? `<button class="ghost slim" data-recall-copy="${customer.id}" type="button">✦ ${owner.lang === 'zh' ? 'AI 召回' : 'Recall'}</button>` : '' })()}
         </div>
@@ -6709,6 +6709,8 @@ els.customerList.addEventListener('click', (event) => {
   // N-5 退卡口:入口与弹层全在 ./account-adjust.js(公约①;admin.js 只许搬出不许新增)
   if (window.AccountAdjust.handleClick(event, { owner, request, money, toast, escapeHtml, customerName, dateOnly, renderCustomers, render })) return
   if (event.target.closest('[data-rfm-filter],[data-rfm-rules],[data-rfm-save]')) { window.CustomerTags.handleClick(event, { request, toast, rerender: renderCustomers }); return }
+  const wnBtn = event.target.closest('[data-write-note]')
+  if (wnBtn) { window.ServiceNoteModal.open(wnBtn.dataset.writeNote, wnBtn.dataset.name, { request, toast, escapeHtml }); return }
   const customerDetail = event.target.closest('[data-customer-detail]')
   if (customerDetail) {
     owner.selectedCustomerId = customerDetail.dataset.customerDetail

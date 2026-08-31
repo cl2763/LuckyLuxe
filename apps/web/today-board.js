@@ -74,11 +74,11 @@ window.TodayBoard = (function () {
       list.forEach((b) => {
         const s = toMin(b.startTime)
         const from = Math.max(cursor, minStart)
-        if (s - from >= 30) { frees.push({ startTime: m2t(from), top: Math.round((from - openMin) / 60 * PX_PER_HOUR), height: Math.round((s - from) / 60 * PX_PER_HOUR) }); freeTotal += (s - from) }
+        if (s - from >= 30) { frees.push({ startTime: m2t(from), endTime: m2t(s), top: Math.round((from - openMin) / 60 * PX_PER_HOUR), height: Math.round((s - from) / 60 * PX_PER_HOUR) }); freeTotal += (s - from) }
         cursor = Math.max(cursor, toMin(b.endTime))
       })
       const tailFrom = Math.max(cursor, minStart)
-      if (closeMin - tailFrom >= 30) { frees.push({ startTime: m2t(tailFrom), top: Math.round((tailFrom - openMin) / 60 * PX_PER_HOUR), height: Math.round((closeMin - tailFrom) / 60 * PX_PER_HOUR) }); freeTotal += (closeMin - tailFrom) }
+      if (closeMin - tailFrom >= 30) { frees.push({ startTime: m2t(tailFrom), endTime: m2t(closeMin), top: Math.round((tailFrom - openMin) / 60 * PX_PER_HOUR), height: Math.round((closeMin - tailFrom) / 60 * PX_PER_HOUR) }); freeTotal += (closeMin - tailFrom) }
       return { id: t.id, name: t.name, role: t.title || '', busy: t.bookingCount > 0, blocks, frees }
     })
     const d = new Date(`${date}T00:00:00`)
@@ -137,7 +137,7 @@ window.TodayBoard = (function () {
               ${dv.cols.map((col) => `
                 <div class="tb-col">
                   ${dv.hours.map((h) => `<div class="tb-line ${h.off ? 'off' : ''}"></div>`).join('')}
-                  ${col.frees.map((f) => `<button class="tb-blk free" style="top:${f.top}px;height:${f.height}px" data-tb-free="${col.id}" data-time="${f.startTime}" type="button"><span>+ 直接排单</span></button>`).join('')}
+                  ${col.frees.map((f) => `<button class="tb-blk free" style="top:${f.top}px;height:${f.height}px" data-tb-free="${col.id}" data-time="${f.startTime}" data-end="${f.endTime}" type="button"><span>+ 直接排单</span></button>`).join('')}
                   ${col.blocks.map((b) => `
                     <button class="tb-blk ${b.cls}" style="top:${b.top}px;height:${b.height}px" data-tb-block="${b.id}" type="button">
                       <span class="tb-bt">${b.stateGlyph ? `<i class="tb-sdot ${b.state}">${b.stateGlyph}</i>` : ''}${b.startTime}–${b.endTime}</span>
@@ -176,6 +176,8 @@ window.TodayBoard = (function () {
       <div class="sw-cpnmask" data-tbf-close></div>
       <div class="sw-cpnsheet">
         <div class="sw-ch">直接排单 · ${escapeHtml(tech.name || '')} · ${escapeHtml(stateT.date)} ${escapeHtml(f.time)}</div>
+        <div class="sw-sec">起始时间(可改,限 ${escapeHtml(f.time)}–${escapeHtml(f.end || "收班")} 空档内)</div>
+        <input class="sw-in" type="time" data-tbf-time value="${escapeHtml(f.timeSel || f.time)}" min="${escapeHtml(f.time)}" ${f.end ? `max="${escapeHtml(f.end)}"` : ""}>
         <div class="sw-sec">顾客(搜现有,或直接填新客姓名)</div>
         <input class="sw-in full" data-tbf-q placeholder="搜姓名 / 手机号,或直接填新客姓名" value="${escapeHtml(f.q || '')}">
         ${(f.hits || []).map(function (h) { return `<button class="sw-cpn ${f.userId === h.id ? 'on' : ''}" data-tbf-pick="${escapeHtml(h.id)}" data-name="${escapeHtml(h.displayName)}" type="button"><span class="l"><span class="n">${escapeHtml(h.displayName)}</span><span class="s">${escapeHtml(h.phoneMasked || '')}</span></span></button>` }).join('')}
@@ -184,7 +186,7 @@ window.TodayBoard = (function () {
         <div class="sw-chiprow">
           ${services.map(function (i) { return `<button class="sw-chip ${f.serviceId === i.id ? 'on' : ''}" data-tbf-svc="${escapeHtml(i.id)}" type="button">${escapeHtml(i.nameZh || i.name)}</button>` }).join('')}
         </div>
-        <button class="sw-cta" data-tbf-submit type="button">排进 ${escapeHtml(f.time)} 这个空档</button>
+        <button class="sw-cta" data-tbf-submit type="button">排进 ${escapeHtml(f.timeSel || f.time)} 这个空档</button>
       </div>`
   }
 
@@ -201,9 +203,15 @@ window.TodayBoard = (function () {
       el.addEventListener('click', function () { deps.openBooking(el.dataset.tbBlock) })
     })
     mount.querySelectorAll('[data-tb-free]').forEach(function (el) {
-      el.addEventListener('click', function () { deps.onFreeSlot(el.dataset.tbFree, el.dataset.time, stateT.date) })
+      el.addEventListener('click', function () { deps.onFreeSlot(el.dataset.tbFree, el.dataset.time, stateT.date, el.dataset.end) })
     })
     mount.querySelector('[data-tbf-close]')?.addEventListener('click', function () { stateT.free = null; render() })
+    mount.querySelector('[data-tbf-time]')?.addEventListener('change', function (e2) {
+      const f = stateT.free
+      const v = e2.target.value
+      if (v < f.time || (f.end && v >= f.end)) { deps.toast('起始时间要在 ' + f.time + '\u2013' + (f.end || '收班') + ' 这个空档内'); e2.target.value = f.timeSel; return }
+      f.timeSel = v; render()
+    })
     mount.querySelector('[data-tbf-q]')?.addEventListener('input', function (e2) {
       const f = stateT.free
       f.q = e2.target.value; f.userId = ''
@@ -231,7 +239,7 @@ window.TodayBoard = (function () {
       if (f.busy) return   // D88:双击双 POST 拦(第一发在途时第二发不出手)
       f.busy = true
       try {
-        const body = { serviceId: f.serviceId, technicianId: f.techId, date: stateT.date, time: f.time }
+        const body = { serviceId: f.serviceId, technicianId: f.techId, date: stateT.date, time: f.timeSel || f.time }
         if (f.userId) body.userId = f.userId
         else body.newCustomerName = f.q.trim()
         await deps.request('/admin/bookings/direct', { method: 'POST', body: JSON.stringify(body) })
@@ -260,12 +268,12 @@ window.TodayBoard = (function () {
         if (btn) btn.click()
       },
       goDailyClose: function () { document.querySelector('#dcJumpGo')?.click() },
-      onFreeSlot: async function (techId, time) {
+      onFreeSlot: async function (techId, time, _date, end) {
         if (!stateT._services) {
           const r = await deps.request('/admin/pricing/items').catch(function () { return { items: [] } })
           stateT._services = (r.items || []).filter(function (i) { return i.isActive !== false })
         }
-        stateT.free = { techId, time, q: '', hits: [], userId: '', name: '', serviceId: '' }
+        stateT.free = { techId, time, end: end || '', timeSel: time, q: '', hits: [], userId: '', name: '', serviceId: '' }
         render()
       }
     }, deps))

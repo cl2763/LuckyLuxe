@@ -26,6 +26,11 @@
       <view class="add" bindtap="addSpecial">＋ 新增休息日</view>
     </view>
 
+    <view class="gtitle">通知与回访</view>
+    <view class="card navrow" bindtap="goNotify">
+      <text>预约通知 · 到店提醒 · 生日/回访 · 文案模板</text><text class="arrow">›</text>
+    </view>
+
     <view class="gtitle">预约规则</view>
     <view class="card">
       <!-- 旧的「线上定金」开关已删(2026-08-09):定金统一由「定金与取消规则」这一处管,

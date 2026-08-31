@@ -1,21 +1,32 @@
+/* 照《通知与回访设置图 v1.0》:页签黑白规格同账调;卡四件套;三色记录。零糙原则:间距/字号统一 */
 .page { padding: 24rpx; }
-.card { background: #fff; border-radius: 16rpx; padding: 24rpx; margin-bottom: 24rpx; }
-.h { font-size: 32rpx; font-weight: 600; margin-bottom: 8rpx; }
-.hint { font-size: 24rpx; color: #8a8a8e; margin-bottom: 16rpx; line-height: 1.5; }
-.rule { padding: 16rpx 0; border-bottom: 1rpx solid #f0f0f2; }
-.rule-main { display: flex; align-items: center; justify-content: space-between; }
-.rule-label { font-size: 28rpx; }
-.rule-field { font-size: 24rpx; color: #555; margin-top: 8rpx; display: flex; align-items: center; gap: 8rpx; }
-.num { display: inline-block; width: 140rpx; border: 1rpx solid #d9d9de; border-radius: 8rpx; padding: 4rpx 12rpx; text-align: center; }
-.save { margin-top: 24rpx; background: #111; color: #fff; font-size: 28rpx; }
-.qhead { display: flex; align-items: center; justify-content: space-between; margin-bottom: 12rpx; }
-.filter { font-size: 26rpx; color: #555; padding: 8rpx 16rpx; border: 1rpx solid #d9d9de; border-radius: 8rpx; }
-.task { padding: 16rpx 0; border-bottom: 1rpx solid #f0f0f2; }
-.task-top { display: flex; align-items: center; justify-content: space-between; }
-.task-type { font-size: 26rpx; font-weight: 500; }
-.task-status { font-size: 22rpx; color: #8a8a8e; }
-.task-status.failed { color: #b42318; }
-.task-status.sent { color: #067647; }
-.task-text { font-size: 26rpx; margin-top: 6rpx; }
-.task-meta { font-size: 22rpx; color: #8a8a8e; margin-top: 4rpx; }
-.empty { font-size: 26rpx; color: #8a8a8e; padding: 24rpx 0; text-align: center; }
+.tabs { display: flex; gap: 12rpx; margin-bottom: 20rpx; }
+.tab { border-radius: 14rpx; padding: 8rpx 32rpx; font-size: 26rpx; font-weight: 700; border: 2rpx solid #141413; background: #fff; color: #141413; }
+.tab.on { background: #141413; color: #fff; }
+.notice { background: #f1efe9; border-radius: 14rpx; padding: 14rpx 20rpx; font-size: 22rpx; color: #6b6f66; margin-bottom: 20rpx; line-height: 1.6; }
+.grp { font-size: 26rpx; font-weight: 700; margin: 20rpx 0 12rpx; }
+.grp-note { font-size: 22rpx; font-weight: 400; color: #8a8a8e; }
+.ncard { background: #fff; border: 2rpx solid #e2e0d8; border-radius: 18rpx; padding: 20rpx 22rpx; margin-bottom: 16rpx; }
+.ncard.off { opacity: .85; }
+.nhead { display: flex; align-items: center; justify-content: space-between; }
+.nlabel { font-size: 28rpx; font-weight: 600; }
+.param { font-size: 24rpx; color: #555; margin-top: 12rpx; display: flex; align-items: center; gap: 8rpx; }
+.num { display: inline-block; width: 120rpx; border: 2rpx solid #d9d9de; border-radius: 8rpx; padding: 4rpx 10rpx; text-align: center; }
+.tpl { width: 100%; box-sizing: border-box; margin-top: 12rpx; border: 2rpx dashed #e2e0d8; border-radius: 12rpx; padding: 14rpx 16rpx; font-size: 24rpx; background: #faf9f6; line-height: 1.6; min-height: 88rpx; }
+.chips { display: flex; gap: 8rpx; flex-wrap: wrap; margin-top: 10rpx; }
+.chip { font-size: 20rpx; background: #eef4f2; color: #0a5a50; border-radius: 8rpx; padding: 2rpx 12rpx; }
+.prev { margin-top: 10rpx; font-size: 22rpx; color: #6b6f66; }
+.prev-em { color: #141413; }
+.btnrow { display: flex; align-items: center; gap: 20rpx; margin-top: 12rpx; }
+.save { background: #141413; color: #fff; font-size: 24rpx; margin: 0; }
+.reset { font-size: 22rpx; color: #6b6f66; }
+.filter { font-size: 26rpx; color: #555; padding: 10rpx 20rpx; border: 2rpx solid #d9d9de; border-radius: 10rpx; display: inline-block; margin-bottom: 16rpx; }
+.rec { display: flex; gap: 14rpx; padding: 14rpx 0; border-bottom: 2rpx dashed #e2e0d8; }
+.dot { width: 16rpx; height: 16rpx; border-radius: 50%; margin-top: 10rpx; flex-shrink: 0; }
+.dot.sent { background: #0e6e62; } .dot.pending { background: #b45309; } .dot.failed { background: #a8322a; } .dot.cancelled { background: #b3b3ae; }
+.rec-main { flex: 1; }
+.rec-top { font-size: 24rpx; }
+.rec-type { font-weight: 600; }
+.rec-why { font-size: 22rpx; color: #a8322a; margin-top: 4rpx; }
+.rec-text { font-size: 24rpx; color: #444; margin-top: 6rpx; line-height: 1.6; }
+.empty { font-size: 26rpx; color: #8a8a8e; padding: 30rpx 0; text-align: center; }

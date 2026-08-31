@@ -168,9 +168,9 @@ const NOT_MONEY_NUMBER = {
   'pages/merchant/orders/index.wxml:shares[p.id + \'|\' + t.id]': '分成百分比 —— 百分数不是金额',
   'pages/merchant/daily-close/index.wxml:shares[p.id + \'|\' + t.id]': '同上(日结页是同一份 mixin 的第二个落点)',
   'pages/merchant/account-adjust/index.wxml:times': '退次卡「退多少次」—— 计数不是金额(退款金额另有 digit 框);2026-08-30 二.1 新增,棘轮 9→10 随批报 Cowork',
-  'pages/merchant/notify-settings/index.wxml:item.offsetMinutes': '预约前提醒提前量(分钟)—— 计数;P3 件3 新增,棘轮 10→13 随批报 Cowork',
-  'pages/merchant/notify-settings/index.wxml:item.revisitDays': '回访间隔(天)—— 计数;P3 件3 新增',
-  'pages/merchant/notify-settings/index.wxml:item.advanceDays': '临期提醒提前天数 —— 计数;P3 件3 新增'
+  'pages/merchant/notify-settings/index.wxml:r.offsetMinutes': '预约前提醒提前量(分钟)—— 计数;P3 件3 新增,棘轮 10→13 随批报 Cowork',
+  'pages/merchant/notify-settings/index.wxml:r.revisitDays': '回访间隔(天)—— 计数;P3 件3 新增',
+  'pages/merchant/notify-settings/index.wxml:r.advanceDays': '临期提醒提前天数 —— 计数;P3 件3 新增'
 }
 const NUMBER_CAP = 13
 const numberInputs = allTags.filter((t) => t.type === 'number').map((t) => `${t.page}:${t.valueExpr}`)

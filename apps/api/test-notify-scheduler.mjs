@@ -86,7 +86,7 @@ let bk1
   const created = q.find((t) => t.type === 'booking_created' && t.bookingId === bk1)
   const rem = q.find((t) => t.type === 'arrival_reminder' && t.bookingId === bk1)
   check('🔴 ② 建单 → created 通知 + 预约前提醒双双入队(文案后端出句)',
-    Boolean(created && rem) && /预约已创建/.test(created.text) && /预约提醒/.test(rem.text), JSON.stringify(q).slice(0, 200))
+    Boolean(created && rem) && /预约已确认/.test(created.text) && /提醒您/.test(rem.text), JSON.stringify(q).slice(0, 200))
   const bkRow = db.prepare('SELECT appointment_start FROM bookings WHERE id = ?').get(bk1)
   const expect = new Date(new Date(bkRow.appointment_start).getTime() - 120 * 60000).toISOString()
   check('🔴 ② 提醒时刻 = 预约开始 − 提前量(默认 120 分钟),毫秒恰等', rem.scheduledAt === expect, `${rem.scheduledAt} vs ${expect}`)
@@ -166,7 +166,7 @@ let bk1
   check('④ 文案后端出句(零回落:句里点名对象与日期)',
     /生日/.test(q.find((t) => t.type === 'birthday').text)
     && /还剩 7 次/.test(q.find((t) => t.type === 'card_expiring').text)
-    && /上次到店是 2026-07-01/.test(q.find((t) => t.type === 'revisit').text))
+    && /上次到店还是 2026-07-01/.test(q.find((t) => t.type === 'revisit').text))
 
   /* 🔴 幂等(幂等判据律:键=事件身份「发生过没有」,不是剩余量):删扫描标记强制重扫 → 零重复 */
   const before = q.length
@@ -240,24 +240,72 @@ let bk1
     `scanTasks=${scanTasks}`)
 }
 
-/* ===== ⑦ 一份数据两端渲染(机械链):同两口 + 页面绑定 + 版本 ===== */
+/* ===== ⑦ 照《通知与回访设置图 v1.0》:两端渲染链(机械)+ N1-N6 ===== */
 {
   const strip = (t) => t.replace(/\/\*[\s\S]*?\*\//g, '').replace(/\/\/[^\n]*/g, '')
   const miniJs = strip(readFileSync(new URL('../../miniprogram/pages/merchant/notify-settings/index.js', import.meta.url), 'utf8'))
+  const miniJsRaw = readFileSync(new URL('../../miniprogram/pages/merchant/notify-settings/index.js', import.meta.url), 'utf8')
   const miniWxml = readFileSync(new URL('../../miniprogram/pages/merchant/notify-settings/index.wxml', import.meta.url), 'utf8')
-  const appJson = readFileSync(new URL('../../miniprogram/app.json', import.meta.url), 'utf8')
+  const storeWxml = readFileSync(new URL('../../miniprogram/pages/merchant/store/index.wxml', import.meta.url), 'utf8')
   const manageJs = readFileSync(new URL('../../miniprogram/pages/merchant/manage/index.js', import.meta.url), 'utf8')
   const webJs = strip(readFileSync(new URL('../../apps/web/notify-settings.js', import.meta.url), 'utf8'))
+  const webJsRaw = readFileSync(new URL('../../apps/web/notify-settings.js', import.meta.url), 'utf8')
   const adminJs = strip(readFileSync(new URL('../../apps/web/admin.js', import.meta.url), 'utf8'))
   const adminHtml = readFileSync(new URL('../../apps/web/admin.html', import.meta.url), 'utf8')
-  check('🔴 ⑦ 两端读写同两口:/admin/notify/rules 与 /admin/notify/queue 在小程序页与网页模块里都在',
-    ['/admin/notify/rules', '/admin/notify/queue'].every((p) => miniJs.includes(p) && webJs.includes(p)))
-  check('⑦ 小程序渲染链闭合:页已注册 + 管理页入口 + wxml 绑定 label/状态/文案',
-    appJson.includes('pages/merchant/notify-settings/index') && manageJs.includes('notify-settings')
-    && ['{{item.label}}', '{{t.statusZh}}', '{{t.text'].every((b) => miniWxml.includes(b)))
-  check('⑦ 网页渲染链闭合:admin.html 挂 notify-settings.js + admin.js 挂载调用 + 仅老板可改由后端闸守',
-    /notify-settings\.js\?v=/.test(adminHtml) && adminJs.includes("NotifySettings.mountSettings"))
-  check('⑦ 双击双发拦:小程序保存钮 saving 闸在(D88 同族)', miniJs.includes('this.data.saving) return'))
+  /* 🔴 J族(刀N4 咬出):includes 子串盲 —— 'rules-v2' 含 'rules' 照样绿。判据加界定符:引号闭合的完整端点串 */
+  check('🔴 ⑦ 两端读写同三口:rules/queue/preview 在小程序页与网页模块里都在(整串带引号钉)',
+    ["'/admin/notify/rules'", "'/admin/notify/queue'", "'/admin/notify/preview'"].every((p2) => miniJs.includes(p2) && webJs.includes(p2)))
+  const NOTICE_SENT = '微信/短信通道开通前,所有通知先记录在「记录」页,一条不丢;通道开通后自动补发未来的、不补发历史的。'
+  check('⑦ 图合同五诚实句:两端同一句、逐字相等(N4 同文案)',
+    miniJsRaw.includes(NOTICE_SENT) && webJsRaw.includes(NOTICE_SENT))
+  check('⑦ 图合同二两组同文案:预约通知/关怀回访组题与说明两端逐字同串',
+    ['预约通知', '关怀回访', '建议开启:预约的创建/改期/取消与到店前提醒,自动生成通知。', '默认关,开了才扫:次卡到期、生日、定期回访、优惠券临期。']
+      .every((t2) => miniJsRaw.includes(t2) && webJsRaw.includes(t2)))
+  check('⑦ 图合同三四件套(机械):模板编辑/变量芯片/预览/恢复默认/保存 两端都在',
+    ['templateText', 'addChip', 'preview', 'resetTpl', 'saveCard'].every((k) => miniJsRaw.includes(k))
+    && ['data-nfy-tpl', 'data-nfy-chip', 'data-nfy-prev', 'data-nfy-reset', 'data-nfy-save'].every((k) => webJsRaw.includes(k)))
+  check('⑦ 图合同六记录页:三色点+失败原因+类型筛选 两端都在',
+    miniWxml.includes('statusCls') && miniWxml.includes('failReason') && miniWxml.includes('pickFilter')
+    && webJsRaw.includes('nfy-dot') && webJsRaw.includes('failReason') && webJsRaw.includes('data-nfy-filter'))
+  check('⑦ 双击双发拦:小程序保存钮 _saving 闸在(D88 同族)', miniJsRaw.includes('this._saving) return'))
+  /* N6 入口:网页=门店设置独立行(不再埋营业时间抽屉);小程序=门店设置页行,manage 网格入口已摘(入口统一) */
+  /* 同族第二处(刀N6 咬出):id 加引号闭合钉,标题文案一并钉 */
+  check('🔴 N6 网页门店设置存在「通知与回访」独立行 + 挂载调用(摘入口即红)',
+    adminHtml.includes('id="notifySettingsTitle">通知与回访<') && adminHtml.includes('id="notifySettingsBody"')
+    && adminJs.includes("NotifySettings.mount(document.querySelector('#notifySettingsBody')"))
+  check('N6b 小程序入口=门店设置页行,manage 网格入口已摘(两端入口统一=图合同一)',
+    storeWxml.includes('goNotify') && !manageJs.includes('notify-settings'))
+
+  /* ===== N1-N3 行为面(用 A 店接着打) ===== */
+  const putT = await request('/admin/notify/rules', { method: 'PUT', body: JSON.stringify({ rules: [{ type: 'booking_created', templateText: 'TESTX{顾客名}@{服务}' }] }) }, PLATFORM, HA)
+  check('N1 夹具:自定义文案保存 200 且回读 customized', putT.status === 200
+    && putT.data.rules.find((r) => r.type === 'booking_created').templateText === 'TESTX{顾客名}@{服务}', JSON.stringify(putT.data.rules?.find((r) => r.type === 'booking_created')).slice(0, 120))
+  const mkN1 = await request('/admin/bookings/direct', { method: 'POST', body: JSON.stringify({ userId: uA, serviceId: svcA, technicianId: techA, date: tmA, time: '19:30', durationMin: 30 }) }, PLATFORM, HA)
+  const n1task = (await queueOf(HA)).find((t) => t.type === 'booking_created' && t.bookingId === mkN1.data.booking.id)
+  check('🔴 N1 文案保存后,新生成的通知用新文案渲染(记录现测)',
+    n1task && n1task.text.startsWith('TESTX') && n1task.text.includes('@'), n1task && n1task.text)
+  check('🔴 N2 变量全替换零残留:渲染后的文案里没有任何 {xx}', !/\{[^{}]+\}/.test(n1task.text), n1task.text)
+  check('🔴 N2 未知变量在保存口就被 400(后端终闸)',
+    (await request('/admin/notify/rules', { method: 'PUT', body: JSON.stringify({ rules: [{ type: 'booking_created', templateText: '好{不存在}呀' }] }) }, PLATFORM, HA)).status === 400)
+  check('N2b 预览口同闸:未知变量 400、正常文案回渲染句',
+    (await request('/admin/notify/preview', { method: 'POST', body: JSON.stringify({ type: 'birthday', templateText: '{顾客名}{没这个}' }) }, PLATFORM, HA)).status === 400
+    && /小美/.test((await request('/admin/notify/preview', { method: 'POST', body: JSON.stringify({ type: 'birthday', templateText: '{顾客名}生日快乐' }) }, PLATFORM, HA)).data.preview))
+  const putEmpty = await request('/admin/notify/rules', { method: 'PUT', body: JSON.stringify({ rules: [{ type: 'booking_created', templateText: '  ' }] }) }, PLATFORM, HA)
+  const backDef = putEmpty.data.rules.find((r) => r.type === 'booking_created')
+  check('🔴 N3 置空=自动恢复默认(不存空):templateText 回到默认且 customized=false',
+    backDef.templateText === backDef.defaultTemplate && backDef.customized === false, JSON.stringify(backDef).slice(0, 140))
+  /* N5 员工:记录可读,规则写口 403 */
+  const STAFF2 = (await request('/admin/auth/login', { method: 'POST', body: JSON.stringify({ email: 'staff@luckyluxeatelier.com', password: 'LuckyluxeStaff0312' }) }, null)).data?.auth?.accessToken
+  const stQ = await request('/admin/notify/queue', {}, STAFF2, HA)
+  check('N5 员工:记录页可读(200)', stQ.status === 200, String(stQ.status))
+  check('N5 员工:规则/文案写口 403',
+    (await request('/admin/notify/rules', { method: 'PUT', body: JSON.stringify({ rules: [{ type: 'birthday', templateText: 'x{顾客名}' }] }) }, STAFF2, HA)).status === 403)
+  /* 部分 PUT 保参数(重做途中咬获的缺陷,断言钉死):只发 enabled 不许把提前量打回默认 */
+  await request('/admin/notify/rules', { method: 'PUT', body: JSON.stringify({ rules: [{ type: 'arrival_reminder', enabled: true, offsetMinutes: 45 }] }) }, PLATFORM, HA)
+  await request('/admin/notify/rules', { method: 'PUT', body: JSON.stringify({ rules: [{ type: 'arrival_reminder', enabled: false }] }) }, PLATFORM, HA)
+  const keepOff = (await request('/admin/notify/rules', {}, PLATFORM, HA)).data.rules.find((r) => r.type === 'arrival_reminder')
+  check('🔴 部分 PUT 保参数:只动开关,提前量 45 不被打回默认 120', keepOff.offsetMinutes === 45, String(keepOff.offsetMinutes))
+  await request('/admin/notify/rules', { method: 'PUT', body: JSON.stringify({ rules: [{ type: 'arrival_reminder', enabled: true, offsetMinutes: 120 }] }) }, PLATFORM, HA)
 }
 
 console.log(`✅ test-notify-scheduler 通过 ${checks} 项`)

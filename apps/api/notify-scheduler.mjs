@@ -14,17 +14,47 @@
    - 确定终点:每 tick 限量批(TICK_LIMIT),函数必然返回;心跳日志一 tick 一行。
    - 静默失败器零容忍:发送失败必落 FAILED + fail_reason + notification_logs,不吞。 */
 
+/* 《通知与回访设置图 v1.0》(店主 08-31 出图,退回件重做):
+   两组八类,每类卡=开关+参数+**可编辑文案模板**(变量芯片+实时预览+恢复默认);
+   group='booking'(预约通知,默认开)/ group='care'(关怀回访,默认关,开了才扫)。
+   vars=该类允许的变量白名单(N2:保存时未知变量 400,渲染后零 {xx} 残留);
+   template=恢复默认的那份(N3:置空=自动恢复默认,不许存空)。 */
 export const NOTIFY_TYPES = [
-  { type: 'booking_created', label: '预约创建通知', kind: 'event', enabled: 1 },
-  { type: 'booking_rescheduled', label: '预约改期通知', kind: 'event', enabled: 1 },
-  { type: 'booking_cancelled', label: '预约取消通知', kind: 'event', enabled: 1 },
-  { type: 'arrival_reminder', label: '预约前提醒', kind: 'planned', enabled: 1, offsetMinutes: 120 },
-  { type: 'card_expiring', label: '次卡将到期提醒', kind: 'scan', enabled: 0, advanceDays: 7 },
-  { type: 'birthday', label: '生日祝福', kind: 'scan', enabled: 0 },
-  { type: 'revisit', label: '回访提醒', kind: 'scan', enabled: 0, revisitDays: 30 },
+  { type: 'booking_created', label: '新预约确认', kind: 'event', enabled: 1, group: 'booking',
+    vars: ['顾客名', '门店名', '日期', '时间', '服务'],
+    template: '{顾客名},您在 {门店名} 的预约已确认:{日期} {时间} · {服务}。' },
+  { type: 'booking_rescheduled', label: '预约改期通知', kind: 'event', enabled: 1, group: 'booking',
+    vars: ['顾客名', '门店名', '日期', '时间', '服务'],
+    template: '{顾客名},您在 {门店名} 的预约({日期} {时间} · {服务})已改期,新时段以新预约为准。' },
+  { type: 'booking_cancelled', label: '预约取消通知', kind: 'event', enabled: 1, group: 'booking',
+    vars: ['顾客名', '门店名', '日期', '时间', '服务'],
+    template: '{顾客名},您在 {门店名} 的预约({日期} {时间} · {服务})已取消。' },
+  { type: 'arrival_reminder', label: '预约前提醒', kind: 'planned', enabled: 1, offsetMinutes: 120, group: 'booking',
+    vars: ['顾客名', '门店名', '日期', '时间', '服务'],
+    template: '{顾客名},提醒您 {日期} {时间} 在 {门店名} 有 {服务} 的预约,期待您的光临。' },
+  { type: 'card_expiring', label: '次卡到期', kind: 'scan', enabled: 0, advanceDays: 7, group: 'care',
+    vars: ['顾客名', '门店名', '余额', '到期日'],
+    template: '{顾客名},您在 {门店名} 的次卡还剩 {余额} 次,{到期日} 到期,记得来用。' },
+  { type: 'birthday', label: '生日祝福', kind: 'scan', enabled: 0, group: 'care',
+    vars: ['顾客名', '门店名'],
+    template: '{顾客名},{门店名} 祝您生日快乐!' },
+  { type: 'revisit', label: '定期回访', kind: 'scan', enabled: 0, revisitDays: 30, group: 'care',
+    vars: ['顾客名', '门店名', '日期'],
+    template: '{顾客名},好久不见啦~上次到店还是 {日期},{门店名} 想你了。' },
   /* 券临期:开工令清单没点名,但范围句点到蓝图 P3 件(P3.3 就是它)—— 按蓝图落,默认关,回执报裁 */
-  { type: 'coupon_expiring', label: '优惠券临期提醒', kind: 'scan', enabled: 0, advanceDays: 7 }
+  { type: 'coupon_expiring', label: '优惠券临期', kind: 'scan', enabled: 0, advanceDays: 7, group: 'care',
+    vars: ['顾客名', '门店名', '到期日'],
+    template: '{顾客名},您在 {门店名} 的优惠券将于 {到期日} 过期,别忘了用。' }
 ]
+
+/* 渲染唯一出口(N2):已知变量全替换,渲染完不许残留任何 {xx} —— 残留即上游没给值,直接抛 */
+export function renderNotifyTemplate(tpl, vars) {
+  let out = String(tpl || '')
+  for (const [k, v] of Object.entries(vars || {})) out = out.split(`{${k}}`).join(String(v ?? ''))
+  const left = out.match(/\{[^{}]{1,12}\}/g)
+  if (left) throw new Error(`通知文案渲染残留变量:${left.join(' ')}`)
+  return out
+}
 const TYPE_SET = NOTIFY_TYPES.map((t) => t.type)
 const TICK_LIMIT = 200
 
@@ -42,6 +72,7 @@ export function createNotifyScheduler(deps) {
         advance_days INTEGER,
         revisit_days INTEGER,
         template_id TEXT,
+        template_text TEXT,
         channel_priority_json TEXT NOT NULL DEFAULT '["inapp"]',
         quiet_hours_json TEXT,
         created_at TEXT NOT NULL,
@@ -77,6 +108,9 @@ export function createNotifyScheduler(deps) {
         if (!String(error.message || '').includes('duplicate column')) throw error
       }
     }
+    try { db.exec('ALTER TABLE notification_rules ADD COLUMN template_text TEXT') } catch (error) {
+      if (!String(error.message || '').includes('duplicate column')) throw error
+    }
     db.exec('CREATE UNIQUE INDEX IF NOT EXISTS idx_reminder_tasks_dedupe ON reminder_tasks(dedupe_key) WHERE dedupe_key IS NOT NULL')
   }
 
@@ -87,11 +121,14 @@ export function createNotifyScheduler(deps) {
     return NOTIFY_TYPES.map((spec) => {
       const r = byType.get(spec.type)
       return {
-        type: spec.type, label: spec.label, kind: spec.kind,
+        type: spec.type, label: spec.label, kind: spec.kind, group: spec.group,
         enabled: r ? Boolean(r.enabled) : Boolean(spec.enabled),
         offsetMinutes: r?.offset_minutes ?? spec.offsetMinutes ?? null,
         advanceDays: r?.advance_days ?? spec.advanceDays ?? null,
         revisitDays: r?.revisit_days ?? spec.revisitDays ?? null,
+        vars: spec.vars, defaultTemplate: spec.template,
+        templateText: (r && r.template_text) || spec.template,
+        customized: Boolean(r && r.template_text),
         channels: (r && parseJson(r.channel_priority_json)) || ['inapp']
       }
     })
@@ -109,18 +146,35 @@ export function createNotifyScheduler(deps) {
     for (const item of list) {
       const spec = NOTIFY_TYPES.find((s) => s.type === item.type)
       if (!spec) throw apiError(400, 'BAD_REQUEST', `未知通知类型:${String(item.type).slice(0, 40)}`)
+      /* 部分 PUT 保底(重做途中咬获的真缺陷):没带的参数按「已存值→默认」回落,
+         不许把老板调过的提前量悄悄打回出厂 —— 「点即存」的开关只动开关 */
+      const cur = db.prepare('SELECT * FROM notification_rules WHERE tenant_id = ? AND type = ?').get(tenantId, spec.type)
       /* 后端是最终闸:提前量/间隔越界直接 400,不靠前端拦 */
-      const offset = spec.type === 'arrival_reminder' ? posInt(item.offsetMinutes ?? spec.offsetMinutes, 5, 7 * 24 * 60) : null
+      const offset = spec.type === 'arrival_reminder' ? posInt(item.offsetMinutes ?? cur?.offset_minutes ?? spec.offsetMinutes, 5, 7 * 24 * 60) : null
       if (spec.type === 'arrival_reminder' && offset === null) throw apiError(400, 'BAD_REQUEST', '预约前提醒的提前量须在 5 分钟 ~ 7 天之间。')
-      const adv = ('advanceDays' in spec) ? posInt(item.advanceDays ?? spec.advanceDays, 1, 60) : null
+      const adv = ('advanceDays' in spec) ? posInt(item.advanceDays ?? cur?.advance_days ?? spec.advanceDays, 1, 60) : null
       if (('advanceDays' in spec) && adv === null) throw apiError(400, 'BAD_REQUEST', `${spec.label}的提前天数须在 1~60 天之间。`)
-      const rev = spec.type === 'revisit' ? posInt(item.revisitDays ?? spec.revisitDays, 3, 365) : null
+      const rev = spec.type === 'revisit' ? posInt(item.revisitDays ?? cur?.revisit_days ?? spec.revisitDays, 3, 365) : null
       if (spec.type === 'revisit' && rev === null) throw apiError(400, 'BAD_REQUEST', '回访间隔须在 3~365 天之间。')
-      db.prepare(`INSERT INTO notification_rules (id, tenant_id, type, enabled, offset_minutes, advance_days, revisit_days, created_at, updated_at)
-        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+      /* 图合同三+N2/N3:文案模板 —— 空=自动恢复默认(存 NULL);变量必须全在该类白名单里 */
+      let tplText = null
+      if (item.templateText !== undefined) {
+        const t = String(item.templateText || '').trim()
+        if (t && t !== spec.template) {
+          const used = t.match(/\{[^{}]{1,12}\}/g) || []
+          const bad = used.filter((u) => !spec.vars.includes(u.slice(1, -1)))
+          if (bad.length) throw apiError(400, 'BAD_REQUEST', `「${spec.label}」文案里有不认识的变量:${bad.join(' ')}(可用:${spec.vars.map((v) => `{${v}}`).join('')})`)
+          tplText = t.slice(0, 300)
+        }
+      }
+      db.prepare(`INSERT INTO notification_rules (id, tenant_id, type, enabled, offset_minutes, advance_days, revisit_days, template_text, created_at, updated_at)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
         ON CONFLICT(tenant_id, type) DO UPDATE SET enabled = excluded.enabled, offset_minutes = excluded.offset_minutes,
-          advance_days = excluded.advance_days, revisit_days = excluded.revisit_days, updated_at = excluded.updated_at`)
-        .run(randomId('nrule'), tenantId, spec.type, item.enabled === false ? 0 : 1, offset, adv, rev, now, now)
+          advance_days = excluded.advance_days, revisit_days = excluded.revisit_days,
+          template_text = CASE WHEN ? THEN excluded.template_text ELSE notification_rules.template_text END,
+          updated_at = excluded.updated_at`)
+        .run(randomId('nrule'), tenantId, spec.type, item.enabled === false ? 0 : 1, offset, adv, rev, tplText, now, now,
+          item.templateText !== undefined ? 1 : 0)
     }
     return rulesOf(tenantId)
   }
@@ -139,9 +193,17 @@ export function createNotifyScheduler(deps) {
   function userName(userId) {
     return (db.prepare('SELECT display_name FROM users WHERE id = ?').get(userId) || {}).display_name || '顾客'
   }
-  function bookingWhen(booking, tz) {
+  function storeNameOf(tenantId) {
+    return (db.prepare('SELECT name FROM stores WHERE tenant_id = ? AND is_active = 1 LIMIT 1').get(tenantId) || {}).name || '本店'
+  }
+  const cnDate = (ymd) => `${Number(String(ymd).slice(5, 7))}月${Number(String(ymd).slice(8, 10))}日`
+  function bookingVars(booking, tid, tz) {
     const p = localParts(booking.appointment_start, tz)
-    return `${p.date} ${p.time}`
+    const svc = booking.service_id ? db.prepare('SELECT name_zh FROM services WHERE id = ?').get(booking.service_id) : null
+    return { '顾客名': userName(booking.user_id), '门店名': storeNameOf(tid), '日期': cnDate(p.date), '时间': p.time, '服务': (svc && svc.name_zh) || '到店服务' }
+  }
+  function textOf(tid, type, vars) {
+    return renderNotifyTemplate(ruleOf(tid, type).templateText, vars)
   }
 
   /* ===== 事件钩(预约创建/改期/取消)+ 预约前提醒的排/重排/撤 ===== */
@@ -151,18 +213,13 @@ export function createNotifyScheduler(deps) {
     const tid = b.tenant_id || DEFAULT_TENANT_ID
     const tz = tenantTimezone(tid)
     const nowIso = iso(new Date())
-    const name = userName(b.user_id)
-    const when = bookingWhen(b, tz)
-    const sentence = {
-      created: `预约已创建:${when} · ${name}`,
-      rescheduled: `预约已改期(原单已取消,新时段以新预约为准):${when} · ${name}`,
-      cancelled: `预约已取消:${when} · ${name}`
-    }[event]
+    const vars = bookingVars(b, tid, tz)
     const rule = ruleOf(tid, `booking_${event}`)
-    if (rule?.enabled && sentence) {
+    if (rule?.enabled) {
       enqueue({
         tenantId: tid, type: `booking_${event}`, userId: b.user_id, bookingId: b.id,
-        scheduledAt: nowIso, dedupeKey: `${tid}|booking_${event}|${b.id}|${b.appointment_start}`, text: sentence
+        scheduledAt: nowIso, dedupeKey: `${tid}|booking_${event}|${b.id}|${b.appointment_start}`,
+        text: textOf(tid, `booking_${event}`, vars)
       })
     }
     if (event === 'created') {
@@ -174,7 +231,7 @@ export function createNotifyScheduler(deps) {
         enqueue({
           tenantId: tid, type: 'arrival_reminder', userId: b.user_id, bookingId: b.id, scheduledAt: schedAt,
           dedupeKey: `${tid}|arrival_reminder|${b.id}|${b.appointment_start}`,
-          text: `预约提醒:${when} · ${name},请提前到店。`
+          text: textOf(tid, 'arrival_reminder', vars)
         })
       }
     }
@@ -206,7 +263,7 @@ export function createNotifyScheduler(deps) {
         enqueue({
           tenantId, type: 'card_expiring', userId: c.user_id, scheduledAt: nowIso,
           dedupeKey: `${tenantId}|card_expiring|${c.id}|${String(c.expires_at).slice(0, 10)}`, refId: c.id,
-          text: `次卡将到期:${userName(c.user_id)} 的「${c.name}」还剩 ${c.total_times - c.used_times} 次,${String(c.expires_at).slice(0, 10)} 到期。`
+          text: textOf(tenantId, 'card_expiring', { '顾客名': userName(c.user_id), '门店名': storeNameOf(tenantId), '余额': c.total_times - c.used_times, '到期日': String(c.expires_at).slice(0, 10) })
         })
       }
     }
@@ -218,7 +275,7 @@ export function createNotifyScheduler(deps) {
         enqueue({
           tenantId, type: 'birthday', userId: u.id, scheduledAt: nowIso,
           dedupeKey: `${tenantId}|birthday|${u.id}|${parts.date.slice(0, 4)}`,
-          text: `今天是 ${u.display_name || '顾客'} 的生日,送上祝福或安排回访吧。`
+          text: textOf(tenantId, 'birthday', { '顾客名': u.display_name || '顾客', '门店名': storeNameOf(tenantId) })
         })
       }
     }
@@ -233,7 +290,7 @@ export function createNotifyScheduler(deps) {
         enqueue({
           tenantId, type: 'revisit', userId: row.user_id, scheduledAt: nowIso,
           dedupeKey: `${tenantId}|revisit|${row.user_id}|${dueDate}`,
-          text: `回访提醒:${userName(row.user_id)} 上次到店是 ${row.last_date},已超过 ${days} 天。`
+          text: textOf(tenantId, 'revisit', { '顾客名': userName(row.user_id), '门店名': storeNameOf(tenantId), '日期': row.last_date })
         })
       }
     }
@@ -247,7 +304,7 @@ export function createNotifyScheduler(deps) {
         enqueue({
           tenantId, type: 'coupon_expiring', userId: g.user_id, scheduledAt: nowIso,
           dedupeKey: `${tenantId}|coupon_expiring|${g.id}`, refId: g.id,
-          text: `优惠券临期:${userName(g.user_id)} 的「${g.coupon_name || '优惠券'}」${String(g.expires_at).slice(0, 10)} 过期,还没用。`
+          text: textOf(tenantId, 'coupon_expiring', { '顾客名': userName(g.user_id), '门店名': storeNameOf(tenantId), '到期日': String(g.expires_at).slice(0, 10) })
         })
       }
     }
@@ -359,7 +416,8 @@ export function createNotifyScheduler(deps) {
     const payload = parseJson(r.payload_json) || {}
     return {
       id: r.id, type: r.type, typeLabel: (NOTIFY_TYPES.find((t) => t.type === r.type) || {}).label || r.type,
-      userId: r.user_id, bookingId: r.booking_id, channel: r.channel, status: r.status,
+      userId: r.user_id, customerName: r.user_id ? userName(r.user_id) : '',
+      bookingId: r.booking_id, channel: r.channel, status: r.status,
       scheduledAt: r.scheduled_at, sentAt: r.sent_at, failReason: r.fail_reason || '',
       text: payload.text || '', createdAt: r.created_at
     }
@@ -383,6 +441,19 @@ export function createNotifyScheduler(deps) {
       const rows = db.prepare(`SELECT * FROM reminder_tasks WHERE tenant_id = ? AND type IN (${TYPE_SET.map(() => '?').join(',')})
         AND status IN (${wanted.map(() => '?').join(',')}) ORDER BY scheduled_at DESC LIMIT 200`).all(tenantId, ...TYPE_SET, ...wanted)
       json(res, 200, { tasks: rows.map(serializeTask) })
+      return true
+    }
+    if (req.method === 'POST' && path === '/admin/notify/preview') {
+      const body = await readBody(req)
+      const spec = NOTIFY_TYPES.find((t) => t.type === body.type)
+      if (!spec) throw apiError(400, 'BAD_REQUEST', '未知通知类型。')
+      const t = String(body.templateText || '').trim() || spec.template
+      const used = t.match(/\{[^{}]{1,12}\}/g) || []
+      const bad = used.filter((u) => !spec.vars.includes(u.slice(1, -1)))
+      if (bad.length) throw apiError(400, 'BAD_REQUEST', `文案里有不认识的变量:${bad.join(' ')}(可用:${spec.vars.map((v) => `{${v}}`).join('')})`)
+      const SAMPLE = { '顾客名': '小美', '门店名': storeNameOf(tenantId), '日期': '9月2日', '时间': '14:00', '服务': '手部美甲', '余额': 6, '到期日': '09-05' }
+      const sample = Object.fromEntries(spec.vars.map((v) => [v, SAMPLE[v]]))
+      json(res, 200, { preview: renderNotifyTemplate(t, sample) })
       return true
     }
     if (req.method === 'POST' && path === '/admin/notify/tick') {
