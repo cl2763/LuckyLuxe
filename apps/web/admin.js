@@ -1,6 +1,6 @@
 // 构建号:每次交付递增。侧栏可见,排查"改了没生效"时先对版本。
 // 兜底用(服务端会注入 window.LL_BUILD = 资源内容指纹,页面优先显示那个)
-const ADMIN_BUILD = '20260831i-d90w1'
+const ADMIN_BUILD = '20260831k-vis01'
 let pricingState = { module: 'storefront', tab: 'items', categories: [], items: [], rules: {}, editing: null, preview: null, storefrontPicker: false }
 console.log(`[admin] build ${ADMIN_BUILD}`)
 
@@ -3029,6 +3029,7 @@ function renderPerfTargets() {
   if (monthEl) monthEl.textContent = perfTargetsState.month || ''
   if (perfTargetsState.loading) { body.innerHTML = `<p class="subtle">${zh ? '加载中…' : 'Loading…'}</p>`; return }
   if (!perfTargetsState.rows.length) { body.innerHTML = `<p class="subtle">${zh ? '本店还没有技师。' : 'No technicians yet.'}</p>`; return }
+  window.StaffVisibility.mount(document.querySelector('#staffVisMount'), { request, toast })   // 31k 店级三选一(合同一:面板同屏,店级行与技师行分开)
   const seg = (techId, group, options, current) => `
     <span class="seg2" data-seg-group="${group}" data-seg-tech="${escapeHtml(techId)}">
       ${options.map(([v, l]) => `<button type="button" class="${v === current ? 'on' : ''}" data-seg-value="${v}">${l}</button>`).join('')}

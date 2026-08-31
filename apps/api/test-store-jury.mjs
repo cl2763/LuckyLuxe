@@ -113,9 +113,18 @@ for (const tid of allTenants) {
   const dumbFail = db.prepare(`SELECT COUNT(*) AS n FROM reminder_tasks WHERE tenant_id = ? AND type IN (${ph7})
     AND status = 'FAILED' AND (fail_reason IS NULL OR fail_reason = '')`).get(tid, ...NOTIFY_TYPES7).n
   if (dumbFail !== 0) throw new Error(`${label} I7 FAILED 无原因(吞了):${dumbFail} 行`)
+  /* I8 可见档库值(31k 裁定二主件):staff_visibility 存了就必须 ∈ 三枚 —— 写口 400 挡 API,
+     这条守直写库的坏值(读口回落会把坏态吞成默认档,warn 只留痕,升面见红靠这里) */
+  const visRow = db.prepare("SELECT value FROM tenant_settings WHERE tenant_id = ? AND key = 'staff_visibility'").get(tid)
+  if (visRow) {
+    const v = String(visRow.value || '').replace(/"/g, '')
+    if (!['perf_only', 'perf_and_salary', 'salary_only'].includes(v)) {
+      throw new Error(`${label} I8 可见档库值非法:「${String(visRow.value).slice(0, 40)}」不在三枚内`)
+    }
+  }
   iterated += 1
 }
-check(`🔴 ③ 不变量组 I1-I7 × ${iterated} 家全过(一家红整批红;含前序套件的各态店)`, iterated === allTenants.length)
+check(`🔴 ③ 不变量组 I1-I8 × ${iterated} 家全过(一家红整批红;含前序套件的各态店)`, iterated === allTenants.length)
 
 /* ===== ④ 矩阵店特征各验(建店规格 → 现测) ===== */
 for (const b of built) {

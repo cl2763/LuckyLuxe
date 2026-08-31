@@ -273,6 +273,27 @@ async function main() {
     JSON.stringify(perfBlocked.data.performance).slice(0, 160))
   await request('/admin/staff-visibility', { method: 'PUT', body: JSON.stringify({ visibility: 'perf_and_salary' }) }, shop.token)
 
+  /* ===== 31k 小合同判据(店级三选一 UI):现值=库值 + 保存回读 + 非法 400 + UI 不许静默 ===== */
+  {
+    const putBack = await request('/admin/staff-visibility', { method: 'PUT', body: JSON.stringify({ visibility: 'salary_only' }) }, shop.token)
+    const readBack = (await request('/admin/staff-visibility', {}, shop.token)).data
+    check('31k 保存回读:PUT 后 GET 回同值(UI 高亮以这份回读为准)', putBack.status === 200 && readBack.visibility === 'salary_only', JSON.stringify(readBack))
+    const bad = await request('/admin/staff-visibility', { method: 'PUT', body: JSON.stringify({ visibility: 'perf_onlyy' }) }, shop.token)
+    check('31k 变异形:非法值 → 后端 400(终闸)', bad.status === 400, String(bad.status))
+    await request('/admin/staff-visibility', { method: 'PUT', body: JSON.stringify({ visibility: 'perf_and_salary' }) }, shop.token)
+    const { readFileSync: rfV } = await import('node:fs')
+    const visJs = rfV(new URL('../web/staff-visibility.js', import.meta.url), 'utf8')
+    const adminHtmlV = rfV(new URL('../web/admin.html', import.meta.url), 'utf8')
+    const adminJsV = rfV(new URL('../web/admin.js', import.meta.url), 'utf8')
+    check('31k UI 链:业绩目标面板挂载位 + 模块调既有两口 + 三档注语齐(合同一/二/三)',
+      adminHtmlV.includes('staffVisMount') && adminJsV.includes('StaffVisibility.mount')
+      && visJs.includes("'/admin/staff-visibility'") && visJs.includes('只业绩=不展示工资估算')
+      && visJs.includes('业绩+工资=现状默认') && visJs.includes('只工资=不展示业绩明细')
+      && visJs.includes('每位技师的「显示」开关管业绩分项细到哪'))
+    check('31k UI 不许静默(合同四):保存失败的 catch 里必须开口(toast 后端句),且回读渲染不以点击为准',
+      /catch \(e\) \{\s*\n?\s*\/\*[^*]*\*\/\s*\n?\s*toast\(e\.message/.test(visJs) && visJs.includes('render(true)'))
+  }
+
   // ---- 按比例分成:金额由后端折算,末行吃余数,合计必须正好等于单额 ----
   const pctGroup = await request('/admin/settlements', {
     method: 'POST',

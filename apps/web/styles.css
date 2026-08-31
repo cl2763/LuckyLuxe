@@ -7664,3 +7664,7 @@ section.card > .section-row:first-child { margin-top: 0; }
 .recall-items { flex-basis: 100%; display: flex; flex-direction: column; gap: 8px; }
 .recall-items.hidden { display: none; }
 .recall-item p { margin: 4px 0; font-size: 13px; }
+
+/* ===== 员工端展示(全店)三选一(staff-visibility.js;08-31k)===== */
+.staff-vis-row { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; padding: 8px 0; border-bottom: 1px solid var(--line, #e5e5ea); margin-bottom: 8px; }
+.staff-vis-note { margin: 2px 0 10px; }

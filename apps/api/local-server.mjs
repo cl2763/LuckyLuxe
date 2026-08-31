@@ -10171,6 +10171,11 @@ function staffVisibilityOf(tenantId = currentTenantId()) {
   const row = db.prepare("SELECT value FROM tenant_settings WHERE tenant_id = ? AND key = 'staff_visibility'").get(tenantId)
   const value = row ? String(row.value || '').replace(/"/g, '') : ''
   // 默认沿用现状:员工能看业绩也能看自己的工资
+  /* 31k 裁定二①辅:写口 400 挡着,坏值只能来自直写库 —— 回落照旧供数(可用性),但必须留痕不许静默吞;
+     ②主=店群陪审团库层判据「值 ∈ 三枚」,坏值逐店审即红 */
+  if (row && !STAFF_VISIBILITY_MODES.includes(value)) {
+    console.warn(`[staff-visibility] 租户 ${tenantId} 库值非法「${String(row.value).slice(0, 40)}」,按默认 perf_and_salary 供数 —— 谁直写了库?`)
+  }
   return STAFF_VISIBILITY_MODES.includes(value) ? value : 'perf_and_salary'
 }
 
