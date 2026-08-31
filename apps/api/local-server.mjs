@@ -38,6 +38,7 @@ import { createPerfAdjust } from './perf-adjust.mjs'                  // 业绩�
 import { createDailyCloseScope } from './daily-close-scope.mjs'       // 日结归属(服务发生日)
 import { createNotifyScheduler } from './notify-scheduler.mjs'        // P3 通知调度器(队列/规则/tick;通道只有站内落地)
 import { createScheduleBoard } from './schedule-board.mjs'            // 排班域(schedule-day/week;08-30h 搬出,纯迁移字节对比过)
+import { createQuoteState } from './quote-state.mjs'                  // 已报价状态机(31p:会话切段/有效期/四态/改价防线)
 import { createFinanceLedger } from './finance-ledger.mjs'            // 财务台账写入口 + 哈希链(唯一写口)
 import { createWriteGates } from './write-gates.mjs'                  // 写口后端最终闸(券面额/套餐售价/项目价)
 import { createAssetFingerprint } from './asset-fingerprint.mjs'      // 前端资源内容指纹(缓存失效)
@@ -1709,8 +1710,10 @@ function getWecomConversation(conversationId) {
   if (!row) return null
   // 会话↔会员互链:该外部账号若已绑定会员,带上会员信息供后台跳转客户档案
   const linkedUser = resolveUserByIdentity(row.provider || 'wecom_customer_service', row.external_user_id)
+  const qsView = quoteState.quoteStateOf(row.id, row.tenant_id || currentTenantId())
   return {
     id: row.id,
+    quoteState: qsView,
     provider: row.provider,
     externalUserId: row.external_user_id,
     linkedUserId: linkedUser?.id || null,
@@ -7177,6 +7180,10 @@ const refundRoutes = createRefundRoutes({
   apiError, json, readBody, refundApi, staffScope,
   usableTimecardsOf: (uid) => usableTimecardsOf(uid), svReversal
 })
+const quoteState = createQuoteState({
+  db, iso, apiError, parseJson: parseJson2, randomId, currentTenantId,
+  moneyText: (cents, tid) => formatMoneyCents(cents, tid, 'auto')
+})
 const scheduleBoard = createScheduleBoard({
   db, json, iso, addMinutes, localParts, localDateTime, currentTenantId, defaultStoreId,
   specialDateFor, hoursUnsetOfStore, getService, isGenericDisplayName, memberCodeForUserId, apiError, readBody
@@ -11921,6 +11928,31 @@ async function route(req, res) {
   if (req.method === 'POST' && path === '/admin/ai/customer-service/logic-notes') {
     return json(res, 201, saveAiLogicNote(await readBody(req), adminSession))
   }
+  /* 31p 每店可配:会话豁口小时 / 报价有效小时(读走 quote-state settingsOf 同源) */
+  if (req.method === 'GET' && path === '/admin/quote-settings') {
+    return json(res, 200, quoteState.settingsOf(currentTenantId()))
+  }
+  if (req.method === 'PUT' && path === '/admin/quote-settings') {
+    if (adminSession.role !== 'owner') throw apiError(403, 'FORBIDDEN', '仅老板可改报价设置。')
+    const body = await readBody(req)
+    const clamp = (v, min, max, name2) => {
+      const n = Math.round(Number(v))
+      if (!Number.isFinite(n) || n < min || n > max) throw apiError(400, 'BAD_REQUEST', `${name2}须在 ${min}~${max} 之间。`)
+      return n
+    }
+    const now2 = iso(new Date())
+    if (body.gapHours !== undefined) {
+      db.prepare(`INSERT INTO tenant_settings (tenant_id, key, value, updated_at) VALUES (?, 'session_gap_hours', ?, ?)
+        ON CONFLICT(tenant_id, key) DO UPDATE SET value = excluded.value, updated_at = excluded.updated_at`)
+        .run(currentTenantId(), String(clamp(body.gapHours, 1, 72, '会话豁口小时')), now2)
+    }
+    if (body.validHours !== undefined) {
+      db.prepare(`INSERT INTO tenant_settings (tenant_id, key, value, updated_at) VALUES (?, 'quote_valid_hours', ?, ?)
+        ON CONFLICT(tenant_id, key) DO UPDATE SET value = excluded.value, updated_at = excluded.updated_at`)
+        .run(currentTenantId(), String(clamp(body.validHours, 1, 336, '报价有效小时')), now2)
+    }
+    return json(res, 200, quoteState.settingsOf(currentTenantId()))
+  }
   if (req.method === 'POST' && path === '/admin/wechat/mock-chat-message') {
     const chatStartedAt = Date.now()
     console.log(`[chat] ${new Date().toISOString()} 收到进线请求`)
@@ -12009,13 +12041,16 @@ async function route(req, res) {
     if (!cents) throw apiError(400, 'BAD_REQUEST', '缺少报价金额。')
     const note = String(body.note || '').trim().slice(0, 300)
     const now = iso(new Date())
-    db.prepare(`UPDATE quote_requests SET staff_price_cents = ?, staff_notes = ?, quoted_by = ?, quoted_at = ?, updated_at = ?
-      WHERE id = ?`).run(cents, note || quote.staff_notes, adminSession.email || 'staff', now, now, id)
+    /* 31p 状态机:算会话键+有效期;同会话有效价不同 → 需 confirmOverride(409 人话句),override 落留痕 */
+    const qs = quoteState.onMarkQuoted({ quote, newCents: cents, actor: adminSession.email || 'staff', confirmOverride: body.confirmOverride === true })
+    db.prepare(`UPDATE quote_requests SET staff_price_cents = ?, staff_notes = ?, quoted_by = ?, quoted_at = ?, session_key = ?, expires_at = ?, updated_at = ?
+      WHERE id = ?`).run(cents, note || quote.staff_notes, adminSession.email || 'staff', now, qs.sessionKey, qs.expiresAt, now, id)
     return json(res, 200, {
       marked: true,
       quoteRequestId: id,
       priceCents: cents,
       quotedAt: now,
+      expiresAt: qs.expiresAt,
       note: '只记录了报价金额与操作人,没有向顾客发送任何消息。'
     })
   }
@@ -16397,6 +16432,7 @@ for (const table of ['stores', 'services', 'technicians', 'users', 'bookings', '
 /* P3 通知调度器建表/扩列 —— 放在 reminder_tasks 建表与 tenant_id ALTER 之后(迁移顺序学费:images_json 那次) */
 notifyScheduler.ensureSchema()
 scheduleBoard.ensureSchema()   // 值日表 duty_marks(31l)
+quoteState.ensureSchema()      // 报价状态机 session_key + 改价留痕表(31p)
 try {
   db.exec('ALTER TABLE tenants ADD COLUMN plan_expires_at TEXT')
 } catch (error) {

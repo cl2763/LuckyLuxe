@@ -1,4 +1,5 @@
 <view class="cpage">
+  <view wx:if="{{quoteBanner}}" class="qs-banner {{quoteBannerCls}}">{{quoteBanner}}</view>
   <view class="cust">
     <view class="prow">
       <view class="tag {{cls}}">{{label}}</view>

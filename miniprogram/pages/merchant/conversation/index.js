@@ -87,6 +87,8 @@ Page({
     }
 
     this.setData({
+      quoteBanner: (c.quoteState && c.quoteState.banner) || '',
+      quoteBannerCls: (c.quoteState && c.quoteState.state) || 'none',
       name, status: c.status, label: s.label, cls: s.cls,
       linkedName: c.linkedUserName || '', linkedUserId: c.linkedUserId || '', profile,
       needsHuman: c.status === 'needs_human', isHuman: c.status === 'human_active',

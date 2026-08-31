@@ -562,6 +562,8 @@ function renderWechatLiveDetail(conversation) {
           : `<button class="ghost slim" data-wechat-take-over="${escapeHtml(conversation.id)}" type="button">${t('takeOverChat')}</button>`}
       </div>
     </div>
+    ${conversation.quoteState && conversation.quoteState.banner ? `
+    <div class="qs-banner ${conversation.quoteState.state}">${escapeHtml(conversation.quoteState.banner)}</div>` : ''}
     <div class="wechat-timeline cs-chat-timeline">
       ${renderWechatTranscript(transcript, conversation)}
     </div>

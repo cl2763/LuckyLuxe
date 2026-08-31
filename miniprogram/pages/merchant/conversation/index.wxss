@@ -33,3 +33,9 @@ page{background:#fbf8f5}
 .ph{color:#b6a99b}
 .send{flex:0 0 auto;height:72rpx;line-height:72rpx;padding:0 28rpx;background:#c8a47e;color:#fff;border-radius:36rpx;font-size:26rpx}
 .send.dim{opacity:.5}
+
+/* 31p 报价状态横幅(三色;句后端出) */
+.qs-banner { margin: 16rpx 0; padding: 14rpx 20rpx; border-radius: 12rpx; font-size: 24rpx; line-height: 1.6; }
+.qs-banner.quoted { background: #eef4f2; color: #0a5a50; }
+.qs-banner.expired { background: #fdf3e7; color: #b45309; }
+.qs-banner.reference { background: #f1efe9; color: #6b6f66; }

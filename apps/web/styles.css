@@ -7690,3 +7690,9 @@ section.card > .section-row:first-child { margin-top: 0; }
 .tb-duty-chip { border: 1px solid #d9d9de; background: #fff; border-radius: 14px; padding: 2px 12px; font-size: 12px; cursor: pointer; }
 .tb-duty-chip.on { background: #0e6e62; color: #fff; border-color: #0e6e62; }
 .tb-duty-chip.ro { cursor: default; opacity: .9; }
+
+/* ===== 报价状态横幅(31p;三色,句后端出)===== */
+.qs-banner { margin: 8px 0; padding: 8px 12px; border-radius: 8px; font-size: 13px; line-height: 1.6; }
+.qs-banner.quoted { background: #eef4f2; color: #0a5a50; }
+.qs-banner.expired { background: #fdf3e7; color: #b45309; font-weight: 600; }
+.qs-banner.reference { background: #f1efe9; color: #6b6f66; }
