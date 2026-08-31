@@ -11893,10 +11893,11 @@ async function route(req, res) {
     // 多租户贯通:本请求内所有 currentTenantId() 都按登录账号的租户走(财务/KB/套餐/券/储值等自动隔离)
     tenantContext.enterWith({ tenantId: adminSession.tenantId || DEFAULT_TENANT_ID })
   }
-  // v1.1 ③ 退卡=财务动作:仅老板 + 过已有那道财务密码门(理由见 ./account-refund.mjs)
+  /* D90(店主 08-31 裁,推翻 v1.1③ 的财务门半边):账调四 tab(充值/赠送/退卡/冲销)门禁一致 ——
+     **仅老板,不挂财务钥匙门**(与充值同权;财务页整体门禁不变)。
+     案底:门只拦了读流水那半,充值 tab 却直通 —— 两半不一致,还把门禁态装成空态(O-fin1)。 */
   const requireRefundRight = () => {
     if (adminSession.role !== 'owner') throw apiError(403, 'FORBIDDEN', '退卡是财务动作,仅老板(或有财务权限的账号)可操作。')
-    requireFinanceKey(req)
   }
   if (req.method === 'GET' && path === '/admin/wechat/status') {
     return json(res, 200, { wechat: wecomConfigStatus() })
@@ -12487,16 +12488,13 @@ async function route(req, res) {
      实际影响比店主报的还大:**员工根本开不了单**,不只是试算卡住。
      口径:价目表是员工干活要看的参照物 —— **读放开给员工,写仍然只有老板**。
      (改价、加项目、调会员价、调充值档位一律 owner-only,一个都没放。) */
-  if (path.startsWith('/admin/pricing/') || path.startsWith('/admin/membership/') || path.startsWith('/admin/recharge-tiers')) {
+  if (path.startsWith('/admin/pricing/') || path.startsWith('/admin/membership/')) {
     const staffMayRead = req.method === 'GET' && (
       path === '/admin/pricing/categories' || path === '/admin/pricing/items' || path === '/admin/pricing/rules'
       /* 会员判定也得放:开单页拿它决定默认价档。原本这条被 403 挡掉后前端 .catch 成 null,
          默认回落「原价」—— 等于**员工给会员开单一律按原价算**,顾客当场就会说"我是会员啊"。
          只放会员**名单查询**;会员等级/权益/充值档位的配置仍然只有老板能碰。 */
       || path === '/admin/membership/members'
-      /* 代充放行(2026-08-12):技师在结算单内嵌面板里要看充值套餐才能选档 ——
-         只放**列表读取**;档位的增删改(POST/PATCH/DELETE)不在 staffMayRead 里,仍 403。 */
-      || path === '/admin/recharge-tiers'
     )
     if (adminSession.role !== 'owner' && !staffMayRead) throw apiError(403, 'FORBIDDEN', 'Owner permission is required.')
   }
@@ -12652,40 +12650,7 @@ async function route(req, res) {
       return json(res, 200, { config: setMembershipConfig(tid, body.config && typeof body.config === 'object' ? body.config : body) })
     }
   }
-  if (path === '/admin/recharge-tiers' || path.startsWith('/admin/recharge-tiers/')) {
-    const tid = currentTenantId()
-    const tierId = path.split('/')[3] || null
-    if (req.method === 'GET' && !tierId) {
-      return json(res, 200, { tiers: db.prepare('SELECT * FROM recharge_tiers WHERE tenant_id = ? ORDER BY sort_order ASC, amount_cents ASC').all(tid).map(serializeRechargeTier) })
-    }
-    if (req.method === 'POST' && !tierId) {
-      const body = await readBody(req)
-      const amountCents = Math.max(0, Math.round(Number(body.amountCents) || 0))
-      if (!amountCents) throw apiError(400, 'BAD_REQUEST', '充值金额必填且大于 0。')
-      const id = randomId('rt')
-      db.prepare('INSERT INTO recharge_tiers (id, tenant_id, amount_cents, gift_json, sort_order, is_active, created_at) VALUES (?, ?, ?, ?, ?, ?, ?)')
-        .run(id, tid, amountCents, JSON.stringify(body.gift && typeof body.gift === 'object' ? body.gift : {}),
-          Math.round(Number(body.sortOrder) || 0), body.isActive === false ? 0 : 1, iso(new Date()))
-      return json(res, 201, { tier: serializeRechargeTier(db.prepare('SELECT * FROM recharge_tiers WHERE id = ?').get(id)) })
-    }
-    if (req.method === 'PATCH' && tierId) {
-      const cur = db.prepare('SELECT * FROM recharge_tiers WHERE id = ? AND tenant_id = ?').get(tierId, tid)
-      if (!cur) throw apiError(404, 'NOT_FOUND', 'Recharge tier not found.')
-      const body = await readBody(req)
-      db.prepare('UPDATE recharge_tiers SET amount_cents = ?, gift_json = ?, sort_order = ?, is_active = ? WHERE id = ?').run(
-        body.amountCents === undefined ? cur.amount_cents : Math.max(0, Math.round(Number(body.amountCents) || 0)),
-        body.gift === undefined ? cur.gift_json : JSON.stringify(body.gift && typeof body.gift === 'object' ? body.gift : {}),
-        body.sortOrder === undefined ? cur.sort_order : Math.round(Number(body.sortOrder) || 0),
-        body.isActive === undefined ? cur.is_active : (body.isActive ? 1 : 0), tierId)
-      return json(res, 200, { tier: serializeRechargeTier(db.prepare('SELECT * FROM recharge_tiers WHERE id = ?').get(tierId)) })
-    }
-    if (req.method === 'DELETE' && tierId) {
-      const cur = db.prepare('SELECT * FROM recharge_tiers WHERE id = ? AND tenant_id = ?').get(tierId, tid)
-      if (!cur) throw apiError(404, 'NOT_FOUND', 'Recharge tier not found.')
-      db.prepare('DELETE FROM recharge_tiers WHERE id = ?').run(tierId)
-      return json(res, 200, { deleted: true })
-    }
-  }
+  /* 死口候刀#1-3(店主 08-31 批):/admin/recharge-tiers 三变体整块退役 —— 已被 recharge-packages 取代,两端零读方(断言防复活)*/
   // ===== 会员套餐(充值套餐 / 会员次卡)定义 CRUD =====
   if (req.method === 'GET' && path === '/admin/packages') {
     if (adminSession.role !== 'owner') throw apiError(403, 'FORBIDDEN', 'Owner permission is required.')
@@ -13730,21 +13695,7 @@ async function route(req, res) {
     return json(res, 200, { lead: serializeMerchantLead(db.prepare('SELECT * FROM merchant_leads WHERE id = ?').get(id)) })
   }
   // 平台运营:商家入驻线索(平台数据,仅默认租户 owner/主钥匙可见)
-  if (req.method === 'GET' && path === '/admin/merchant-leads') {
-    if (adminSession.role !== 'owner' || currentTenantId() !== DEFAULT_TENANT_ID) throw apiError(403, 'FORBIDDEN', 'Platform permission is required.')
-    return json(res, 200, { leads: db.prepare('SELECT * FROM merchant_leads ORDER BY created_at DESC').all().map(serializeMerchantLead) })
-  }
-  if (req.method === 'PATCH' && path.startsWith('/admin/merchant-leads/')) {
-    if (adminSession.role !== 'owner' || currentTenantId() !== DEFAULT_TENANT_ID) throw apiError(403, 'FORBIDDEN', 'Platform permission is required.')
-    const id = path.split('/')[3]
-    const cur = db.prepare('SELECT * FROM merchant_leads WHERE id = ?').get(id)
-    if (!cur) throw apiError(404, 'NOT_FOUND', 'Lead not found.')
-    const body = await readBody(req)
-    const status = ['new', 'contacted', 'onboarded', 'rejected'].includes(body.status) ? body.status : cur.status
-    db.prepare('UPDATE merchant_leads SET status = ?, note = ?, updated_at = ? WHERE id = ?')
-      .run(status, body.note === undefined ? cur.note : String(body.note).slice(0, 300), iso(new Date()), id)
-    return json(res, 200, { lead: serializeMerchantLead(db.prepare('SELECT * FROM merchant_leads WHERE id = ?').get(id)) })
-  }
+  /* 死口候刀#4-5(店主 08-31 批):/admin/merchant-leads 两条退役 —— 平台位面 /platform/leads + page-leads 在用 */
   // 展示图库(对外):本店所有技师已发布作品(owner+staff 均可读;多租户按店)
   if (req.method === 'GET' && path === '/admin/published-works') {
     // 作品管理:员工只看本技师作品;老板看全店(店主 2026-07-29 反馈)
@@ -13898,25 +13849,8 @@ async function route(req, res) {
     return json(res, 200, { request: db.prepare('SELECT * FROM schedule_change_requests WHERE id = ?').get(row.id) })
   }
   // 员工自查:预计本月薪酬(底薪+提成×本月完成业绩;以老板月结确认为准,不需要财务钥匙)
-  if (req.method === 'GET' && path === '/admin/my-compensation-estimate') {
-    const technicianId = adminSession.role === 'staff' ? adminSession.technicianId : query.technicianId
-    if (!technicianId) throw apiError(400, 'BAD_REQUEST', 'technicianId is required.')
-    const comp = db.prepare('SELECT * FROM staff_compensation WHERE technician_id = ? AND tenant_id = ?').get(technicianId, currentTenantId())
-    if (!comp || !comp.active) return json(res, 200, { estimate: null })
-    const monthStart = `${localParts(new Date()).date.slice(0, 7)}-01`
-    const revenue = db.prepare(`SELECT COALESCE(SUM(service_price_cents), 0) AS total FROM bookings
-      WHERE technician_id = ? AND status = 'COMPLETED' AND appointment_start >= ?`).get(technicianId, iso(localDateTime(monthStart, '00:00'))).total
-    const commissionCents = Math.round(revenue * comp.commission_rate)
-    return json(res, 200, {
-      estimate: {
-        monthRevenueCents: revenue,
-        baseSalaryCents: comp.base_salary_cents,
-        commissionRate: comp.commission_rate,
-        commissionCents,
-        totalCents: comp.base_salary_cents + commissionCents
-      }
-    })
-  }
+  /* 清单#2 收敛(店主 08-31 批):/admin/my-compensation-estimate 退役 —— 与 /admin/salary/my-estimate 同义两套口,
+     留 v2 薪资方案引擎那条(computeSalaryEstimate,带可见性闸与工资表状态);旧口走 legacy staff_compensation=第二套真相,分叉债清偿 */
   // 批量排班:把本周模式应用到未来数周
   if (req.method === 'POST' && path === '/admin/schedule-batch') {
     if (adminSession.role !== 'owner') throw apiError(403, 'FORBIDDEN', 'Owner permission is required.')
@@ -14059,28 +13993,19 @@ async function route(req, res) {
     return json(res, 200, { financeKey: issueFinanceKey(), configured: true })
   }
   // 修改财务密码:旧密码或 Owner Token(忘记密码时的主钥匙)验证通过后重设
-  if (req.method === 'POST' && path === '/admin/finance/change-password') {
-    if (adminSession.role !== 'owner') throw apiError(403, 'FORBIDDEN', 'Owner permission is required.')
-    const body = await readBody(req)
-    const current = String(body.currentPassword || '')
-    const next = String(body.newPassword || '')
-    if (next.length < 4) throw apiError(400, 'BAD_REQUEST', '新财务密码至少 4 位。')
-    if (next !== String(body.confirmPassword || '')) throw apiError(400, 'BAD_REQUEST', '两次输入的新密码不一致。')
-    const stored = db.prepare('SELECT finance_password_hash FROM tenants WHERE id = ?').get(currentTenantId())?.finance_password_hash
-    const authorized = current === OWNER_TOKEN || (stored && financePasswordHash(current) === stored) || !stored
-    if (!authorized) throw apiError(401, 'WRONG_FINANCE_PASSWORD', '旧密码不正确(忘记旧密码时可填 Owner Token)。')
-    db.prepare('UPDATE tenants SET finance_password_hash = ?, updated_at = ? WHERE id = ?')
-      .run(financePasswordHash(next), iso(new Date()), currentTenantId())
-    return json(res, 200, { changed: true, financeKey: issueFinanceKey() })
-  }
+  /* 死口候刀#6(店主 08-31 批):/admin/finance/change-password 退役 —— 改密走 lock-settings(admin.js:2921)*/
   // 财务数据统一门禁:除解锁/状态接口外,所有财务相关路由都需要有效的财务会话钥匙
   /* 代充例外(店主 2026-08-12 拍板):结算单内嵌面板放行技师代充 —— 充值=预收进负债不进收入,
      属「涉钱轻动作」;金额只能选套餐/手输、赠额按套餐自动、经手人强制=当前技师(路由里落)。
      耗卡(=确认收入)与财务页所有读写仍在钥匙门禁内,权限不变。 */
-  if ((path.startsWith('/admin/finance/') || path.startsWith('/admin/stored-value') || path === '/admin/demo/finance-seed')
+  /* D90(店主 08-31):储值域只有**总览**(财务页负债块)留在钥匙门内;
+     账调四 tab 的读写一律不挂门(充值/退卡/储值流水在 stored-value 域,已随前缀收窄豁免;
+     账本侧的两条=客户视角流水读〔带 userId〕+ 冲销口,在此点名豁免)—— 门禁一致,不再把门装成空态 */
+  if ((path.startsWith('/admin/finance/') || path === '/admin/stored-value' || path === '/admin/demo/finance-seed')
     && path !== '/admin/finance/unlock' && path !== '/admin/finance/lock-status'
-    && path !== '/admin/finance/lock-settings' && path !== '/admin/finance/change-password'
-    && path !== '/admin/stored-value/recharge') {
+    && path !== '/admin/finance/lock-settings'
+    && !(path === '/admin/finance/transactions' && req.method === 'GET' && query.userId)
+    && !(path.startsWith('/admin/finance/transactions/') && path.endsWith('/reverse'))) {
     requireFinanceKey(req) // 没开门禁时该函数直接返回(判断内聚在函数里)
   }
   if (req.method === 'GET' && path === '/admin/stored-value') {
@@ -14697,6 +14622,9 @@ async function route(req, res) {
     const month = /^\d{4}-\d{2}$/.test(String(query.month || '')) ? query.month : localParts(new Date()).date.slice(0, 7)
     const args = [currentTenantId(), `${month}-01`, `${month}-31`]
     let sql = 'SELECT * FROM finance_transactions WHERE tenant_id = ? AND occurred_on >= ? AND occurred_on <= ?'
+    /* D90:「该顾客流水」= 账调域的客户视角读口(按该客预约归属圈行)—— 带 userId 的这形不挂财务门;
+       全量账本读(不带 userId)仍在门内,财务页口径不变 */
+    if (query.userId) { sql += ' AND booking_id IN (SELECT id FROM bookings WHERE tenant_id = ? AND user_id = ?)'; args.push(currentTenantId(), String(query.userId)) }
     if (query.type) { sql += ' AND type = ?'; args.push(query.type) }
     if (query.category) { sql += ' AND category = ?'; args.push(query.category) }
     sql += ' ORDER BY occurred_on DESC, created_at DESC LIMIT 400'

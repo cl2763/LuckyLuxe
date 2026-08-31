@@ -4,7 +4,7 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>有迹 · 商家后台</title>
-    <link rel="stylesheet" href="/web/styles.css?v=20260830h-rfm01">
+    <link rel="stylesheet" href="/web/styles.css?v=20260831i-d90w1">
     <style>
       /* 2026-08-02 财务指标显隐+动效(店主 v4 定稿):AI智能总结卡 / 目标进度条(带平衡线刻度) / 设目标引导与弹窗。
          放这里不放 styles.css:本批约定只动 admin.js + admin.html 两个文件。 */
@@ -385,6 +385,7 @@
           <button class="sidebar-link" data-admin-page="pricing" id="sidebarPricing" type="button">服务与价目</button>
           <button class="sidebar-link" data-admin-page="membership" id="sidebarMembership" type="button">会员套餐/券</button>
           <!-- v1.2 ④(店主 08-27):店员看得见的只读「我的客人」——只列他服务过的人,零金额口 -->
+          <button class="sidebar-link hidden" data-admin-page="staffWorkbench" id="sidebarStaffWorkbench" type="button">工作台</button>
           <button class="sidebar-link hidden" data-admin-page="myCustomers" id="sidebarMyCustomers" type="button">我的客人</button>
           <button class="sidebar-link" data-admin-page="wechatMock" id="sidebarWechatMock" type="button"><span id="sidebarWechatMockLabel">客服工作台</span><span class="sidebar-badge hidden" id="wechatNeedsHumanBadge"></span></button>
           <button class="sidebar-link" data-admin-page="aiGallery" id="sidebarAiGallery" type="button">AI 图库</button>
@@ -509,6 +510,7 @@
                   <input id="scheduleEnd" type="time" value="19:00">
                 </label>
                 <button class="ghost slim" id="applyWeekPattern" type="button">本周模式应用到未来 4 周</button>
+                <button class="ghost slim" id="afternoonStartBtn" type="button">上下午分界</button>
               </div>
               <div class="schedule-week-grid-wrap">
                 <div id="scheduleWeekGrid"></div>
@@ -699,6 +701,7 @@
 
           <!-- v1.2 ④(店主 08-27):店员只读「我的客人」——只列他服务过的人,零金额编辑口 -->
           <section class="admin-page hidden" id="myCustomersPage"></section>
+          <section class="admin-page hidden" id="staffWorkbenchPage"></section>
           <section class="admin-page hidden" id="customersPage">
             <button class="ghost back-btn" data-admin-page="dashboard" type="button">← Dashboard</button>
             <div class="section-row">
@@ -1001,10 +1004,14 @@
 
     <div class="toast" id="toast"></div>
     <script src="/web/img-placeholder.js?v=20260828b-ph"></script>
-    <script src="/web/hours-setup.js?v=20260830h-rfm01"></script>
-    <script src="/web/notify-settings.js?v=20260830h-rfm01"></script>
-    <script src="/web/today-board.js?v=20260830h-rfm01"></script>
-    <script src="/web/settlement-web.js?v=20260830h-rfm01"></script>
+    <script src="/web/hours-setup.js?v=20260831i-d90w1"></script>
+    <script src="/web/notify-settings.js?v=20260831i-d90w1"></script>
+    <script src="/web/attendance-wifi.js?v=20260831i-d90w1"></script>
+    <script src="/web/staff-workbench.js?v=20260831i-d90w1"></script>
+    <script src="/web/booking-rules.js?v=20260831i-d90w1"></script>
+    <script src="/web/recall-digest.js?v=20260831i-d90w1"></script>
+    <script src="/web/today-board.js?v=20260831i-d90w1"></script>
+    <script src="/web/settlement-web.js?v=20260831i-d90w1"></script>
     <script src="/web/finance-entry-form.js?v=20260829a-ch"></script>
     <script src="/web/store-content.js?v=20260828a-d78"></script>
     <script src="/web/ai-desk.js?v=20260825e-w2"></script>
@@ -1015,8 +1022,8 @@
     <script src="/web/my-customers.js?v=20260827a-n5v12"></script>
     <script src="/web/customer-tags.js?v=20260827a-n5v12"></script>
     <script src="/web/daily-close-rows.js?v=20260827a-n5v12"></script>
-    <script src="/web/account-adjust.js?v=20260830h-rfm01"></script>
+    <script src="/web/account-adjust.js?v=20260831i-d90w1"></script>
     <script src="/web/snapshot-viewer.js?v=20260825e-w2"></script>
-    <script src="/web/admin.js?v=20260830h-rfm01"></script>
+    <script src="/web/admin.js?v=20260831i-d90w1"></script>
   </body>
 </html>

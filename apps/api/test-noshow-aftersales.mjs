@@ -351,8 +351,11 @@ const main = async () => {
     const staffToken = (await request('/admin/auth/login', { method: 'POST', body: JSON.stringify({ email: staffUser, password: sp }) }, null)).data.auth.accessToken
     const cust = await directBooking(shop, { name: `代充客${RUN_ID}`, time: '18:30' })
     const custId = cust.user.id
-    check('⑭ 技师可读充值档位(选套餐用,只读)', (await request('/admin/recharge-tiers', {}, staffToken)).status === 200)
-    check('⑭ 技师改档位配置=403(读写分明)', (await request('/admin/recharge-tiers', { method: 'POST', body: JSON.stringify({ amountCents: 10000 }) }, staffToken)).status === 403)
+    /* 死口候刀#1-3(店主 08-31 批):recharge-tiers 整路退役 —— 原意图(技师选套餐要读得到)
+       由取代口 recharge-packages 承接;旧口必须 404(死透),防复活断言另在 membership-config */
+    check('⑭ 技师可读充值套餐(选档用,取代已退役的 recharge-tiers)', (await request('/admin/recharge-packages', {}, staffToken)).status === 200)
+    check('⑭b 旧充值档位口已死透(技师打也 404,不是 403 —— 路由整没了)', (await request('/admin/recharge-tiers', {}, staffToken)).status === 404)
+    check('⑭ 技师改套餐配置=403(读写分明;写口=取代后的 /admin/packages)', (await request('/admin/packages', { method: 'POST', body: JSON.stringify({ kind: 'recharge', priceCents: 10000 }) }, staffToken)).status === 403)
     // ⑮ D25(《财务总逻辑》3-1b):未绑定轻档案不可充值 —— 技师/老板同拦;绑定后放行
     const rvBody = JSON.stringify({ userId: custId, amountCents: 3300, payChannel: 'manual', note: '结算单内代充·档位 实收30 + 赠3', technicianId: shop.tech2 })
     r = await request('/admin/stored-value/recharge', { method: 'POST', body: rvBody }, staffToken)

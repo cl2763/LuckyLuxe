@@ -177,19 +177,17 @@ async function main() {
   check('迁移客在本系统仍算首充(期初不是本店的充值流水)', migRow?.isFirstRecharge === true)
   check('迁移余额进 legacy 桶', migRow?.legacyBalanceCents === 88000 && migRow?.normalBalanceCents === 0, JSON.stringify(migRow))
 
-  // ---- 4. 充值档位 CRUD + 隔离 ----
-  const t1 = await request('/admin/recharge-tiers', { method: 'POST', body: JSON.stringify({ amountCents: 100000, gift: { type: 'percent', value: 10 }, sortOrder: 1 }) }, shop.token)
-  check('新建充值档位', t1.status === 201 && t1.data.tier.amountCents === 100000 && t1.data.tier.gift.value === 10, JSON.stringify(t1.data))
-  const t2 = await request('/admin/recharge-tiers', { method: 'POST', body: JSON.stringify({ amountCents: 300000, gift: { type: 'service', serviceId: 'svc-demo' }, sortOrder: 2 }) }, shop.token)
-  check('第二个档位', t2.status === 201)
-  const listed = await request('/admin/recharge-tiers', {}, shop.token)
-  check('档位按排序返回', listed.data.tiers.length === 2 && listed.data.tiers[0].amountCents === 100000)
-  const patched = await request(`/admin/recharge-tiers/${t1.data.tier.id}`, { method: 'PATCH', body: JSON.stringify({ isActive: false }) }, shop.token)
-  check('档位可停用', patched.data.tier.isActive === false)
-  const removed = await request(`/admin/recharge-tiers/${t2.data.tier.id}`, { method: 'DELETE' }, shop.token)
-  check('档位可删除', removed.status === 200 && removed.data.deleted === true)
-  const otherTiers = await request('/admin/recharge-tiers', {}, other.token)
-  check('租户隔离:B 店看不到 A 店的档位', otherTiers.data.tiers.length === 0, JSON.stringify(otherTiers.data))
+  // ---- 4. 充值档位三变体已退役(死口候刀#1-3,店主 08-31 批)—— 死透断言防复活 ----
+  const { readFileSync: rfDead } = await import('node:fs')
+  const srvDead = rfDead(new URL('./local-server.mjs', import.meta.url), 'utf8')
+    .replace(/\/\*[\s\S]*?\*\//g, '').replace(/\/\/[^\n]*/g, '')
+  check('🔴 死口#1-3 防复活:recharge-tiers 路由定义零残留(注释墓碑不算)+ 死口#4-6 同扫',
+    !srvDead.includes("'/admin/recharge-tiers'") && !srvDead.includes("'/admin/merchant-leads'")
+    && !srvDead.includes("'/admin/finance/change-password'") && !srvDead.includes("'/admin/my-compensation-estimate'"))
+  for (const [m2, p2] of [['GET', '/admin/recharge-tiers'], ['POST', '/admin/recharge-tiers'], ['PATCH', '/admin/recharge-tiers/x'], ['GET', '/admin/merchant-leads'], ['POST', '/admin/finance/change-password'], ['GET', '/admin/my-compensation-estimate']]) {
+    const dead = await request(p2, m2 === 'GET' ? {} : { method: m2, body: JSON.stringify({}) }, shop.token)
+    check(`死口行为面:${m2} ${p2} → 404(复活即红)`, dead.status === 404, String(dead.status))
+  }
   const otherConfig = await request('/admin/membership/config', {}, other.token)
   check('租户隔离:B 店的会员配置不受 A 店影响', otherConfig.data.config.memberQualify === 'any_recharge' && otherConfig.data.config.qualifyValueCents === 0)
 

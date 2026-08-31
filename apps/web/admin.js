@@ -1,6 +1,6 @@
 // 构建号:每次交付递增。侧栏可见,排查"改了没生效"时先对版本。
 // 兜底用(服务端会注入 window.LL_BUILD = 资源内容指纹,页面优先显示那个)
-const ADMIN_BUILD = '20260830h-rfm01'
+const ADMIN_BUILD = '20260831i-d90w1'
 let pricingState = { module: 'storefront', tab: 'items', categories: [], items: [], rules: {}, editing: null, preview: null, storefrontPicker: false }
 console.log(`[admin] build ${ADMIN_BUILD}`)
 
@@ -141,6 +141,8 @@ const els = {
   customersPage: document.querySelector('#customersPage'),
   myCustomersPage: document.querySelector('#myCustomersPage'),
   sidebarMyCustomers: document.querySelector('#sidebarMyCustomers'),
+  staffWorkbenchPage: document.querySelector('#staffWorkbenchPage'),
+  sidebarStaffWorkbench: document.querySelector('#sidebarStaffWorkbench'),
   wechatMockPage: document.querySelector('#wechatMockPage'),
   wechatMockEyebrow: document.querySelector('#wechatMockEyebrow'),
   wechatMockTitle: document.querySelector('#wechatMockTitle'),
@@ -1142,7 +1144,7 @@ async function loadAll() {
     request('/admin/kb'),
     request(`/admin/schedule-week${owner.scheduleWeekFrom ? `?from=${owner.scheduleWeekFrom}` : ''}`),
     request('/admin/schedule-requests'),
-    isOwnerRole() ? Promise.resolve({ estimate: null }) : request('/admin/my-compensation-estimate'),
+    isOwnerRole() ? Promise.resolve({ estimate: null }) : request('/admin/salary/my-estimate'),
     isOwnerRole() ? request('/admin/staff-accounts') : Promise.resolve({ accounts: [] })
   ])
   owner.wechatStatus = wechatStatus.status === 'fulfilled' ? wechatStatus.value.wechat : null
@@ -1157,7 +1159,7 @@ async function loadAll() {
     owner.scheduleWeekFrom = scheduleWeek.value.weekStart
   }
   owner.scheduleRequests = scheduleRequests.status === 'fulfilled' ? scheduleRequests.value.requests : []
-  owner.myCompEstimate = compEstimate.status === 'fulfilled' ? compEstimate.value.estimate : null
+  owner.myCompEstimate = compEstimate.status === 'fulfilled' && compEstimate.value.estimate && !compEstimate.value.estimate.noPlan ? compEstimate.value.estimate : null
   owner.staffAccounts = staffAccounts.status === 'fulfilled' ? staffAccounts.value.accounts : []
   // 首页营收与待办的财务数据(账本口径,需财务钥匙;没有钥匙则显示锁定态)
   if (owner.financeKey) {
@@ -1325,6 +1327,7 @@ function render() {
   renderMetrics()
   renderAdminPages()
   renderDashboard()
+  if (isOwnerRole()) window.RecallDigest.mount(document.querySelector('#recallDigestMount'), { request, escapeHtml, toast })
   renderBookings()
   renderServices()
   renderScheduleWeek()
@@ -1387,6 +1390,7 @@ function renderTodayTasksCard() {
       <strong class="task-count task-lock">🔒</strong>
     </button>`
   return `
+    <div id="recallDigestMount" style="grid-column: 1 / -1;"></div>
     <div class="today-tasks-card card" style="grid-column: 1 / -1;">
       <div class="section-row compact-row">
         <h2 class="today-tasks-title">${owner.lang === 'zh' ? '今日待办' : 'Today’s Tasks'}</h2>
@@ -1508,6 +1512,7 @@ function retentionStats() {
 
 // v1.2 ④:员工只读「我的客人」——整页在 ./my-customers.js(公约①;admin.js 只许搬出)
 const renderMyCustomers = () => window.MyCustomers.render(els.myCustomersPage, { zh: owner.lang === 'zh', request, escapeHtml, dateOnly, toast })
+const renderStaffWorkbench = () => window.StaffWorkbench.render(els.staffWorkbenchPage, { owner, request, escapeHtml, money, toast })
 
 function renderAdminPages() {
   els.sidebarDashboard.classList.toggle('hidden', !isOwnerRole())
@@ -1520,6 +1525,7 @@ function renderAdminPages() {
   // v1.2 ④:看不见的东西不该出现在菜单里(会员套餐/券对员工隐藏);员工那条只读页只给员工
   els.sidebarMembership?.classList.toggle('hidden', !isOwnerRole())
   els.sidebarMyCustomers?.classList.toggle('hidden', isOwnerRole())
+  els.sidebarStaffWorkbench?.classList.toggle('hidden', isOwnerRole())
   els.sidebarPricing?.classList.toggle('hidden', !isOwnerRole())
   // 2026-08-04 店主定「全部 AI 归智能包」:没开通就把纯 AI 的入口收起来,别让人点了没反应。
   // AI 图库整页只做 AI 文案,没 AI 就没意义;客服工作台保留(它是人工会话收件箱,没 AI 也要用)。
@@ -1538,6 +1544,7 @@ function renderAdminPages() {
     membership: els.membershipPage,
     customers: els.customersPage,
     myCustomers: els.myCustomersPage,
+    staffWorkbench: els.staffWorkbenchPage,
     wechatMock: els.wechatMockPage,
     aiGallery: els.aiGalleryPage,
     finance: els.financePage,
@@ -1547,6 +1554,7 @@ function renderAdminPages() {
   Object.entries(pages).forEach(([key, element]) => element.classList.toggle('hidden', owner.adminPage !== key))
   if (owner.adminPage === 'generalSettings') renderGeneralSettings()   // S5-a
   if (owner.adminPage === 'myCustomers') renderMyCustomers()           // v1.2 ④ 员工只读页
+  if (owner.adminPage === 'staffWorkbench') renderStaffWorkbench()    // 08-31 员工工作台(清单#1+#3)
   els.metricGrid.classList.toggle('hidden', owner.adminPage !== 'dashboard')
   els.sidebarLinks.forEach((link) => {
     const activePage = owner.adminPage === 'dashboardDetail' ? 'dashboard' : owner.adminPage
@@ -2790,9 +2798,11 @@ function renderAttendanceBoard() {
         <p class="subtle">${escapeHtml(data.date || '')} · ${zh ? '门店现在' : 'store time'} ${escapeHtml(data.storeNow || '')} <button class="ghost slim" data-att-refresh type="button">${zh ? '↻ 刷新' : '↻ Refresh'}</button></p>
         ${rows.length ? rows.map(rowHtml).join('') : `<p class="subtle">${zh ? '暂无在职技师。' : 'No active technicians.'}</p>`}
         <p class="subtle">${zh
-          ? '打卡在员工小程序端(需连店内 WiFi 验证);这里可修正时刻或补卡,保存后自动重算加班,计入工资加班费。「设打卡 WiFi」需真机读取 WiFi 信息,请在小程序 管理→考勤 里操作。'
+          ? '打卡在员工小程序端(需连店内 WiFi 验证,真机才读得到 WiFi);这里可修正时刻或补卡,保存后自动重算加班,计入工资加班费。'
           : 'Clock-in/out happens in the staff mini app (WiFi-verified). Fix times or add missing records here; overtime recalculates automatically.'}</p>
+        <div id="attWifiMount"></div>
       `
+      window.AttendanceWifi.mount(els.attendanceBody.querySelector('#attWifiMount'), { request, escapeHtml, toast })
       els.attendanceBody.querySelector('[data-att-refresh]')?.addEventListener('click', () => renderAttendanceBoard())
       els.attendanceBody.querySelectorAll('[data-att-fix]').forEach((btn) => btn.addEventListener('click', async () => {
         const recId = btn.dataset.attRecord
@@ -3615,6 +3625,7 @@ function renderStoreSettings() {
   els.businessHoursEditor.innerHTML = `
     <div id="hoursSettingsMount"></div>
     <div id="notifySettingsMount"></div>
+    <div id="bookingRulesMount"></div>
     <div class="special-dates-block">
       <h4>${owner.lang === 'zh' ? '特殊日期(节假日休息 / 临时调整)' : 'Special dates (holidays / temporary changes)'}</h4>
       <p class="subtle">${owner.lang === 'zh' ? '优先于每周固定模式,保存后立即影响可预约时段和 AI 的营业时间回答。' : 'Overrides the weekly pattern; affects booking slots and AI answers instantly.'}</p>
@@ -3650,6 +3661,7 @@ function renderStoreSettings() {
     }
   })
   window.NotifySettings.mountSettings(document.querySelector('#notifySettingsMount'), { request, escapeHtml, toast })
+  window.BookingRules.mount(document.querySelector('#bookingRulesMount'), { request, toast })
 }
 
 async function addSpecialDate() {
@@ -4741,9 +4753,9 @@ function renderTechnicianPerformance() {
         <span>${zh ? '本月服务' : 'Services'} <strong>${tech.completed} ${zh ? '单' : ''}</strong></span>
         <span>${zh ? '本月业绩' : 'Amount'} <strong>${money(tech.amount)}</strong></span>
         ${!isOwnerRole() && owner.myCompEstimate ? `
-        <span>${zh ? '预计本月薪酬' : 'Est. pay'} <strong title="${zh ? `底薪 ${money(owner.myCompEstimate.baseSalaryCents)} + 提成 ${Math.round(owner.myCompEstimate.commissionRate * 100)}% × 业绩` : ''}">${money(owner.myCompEstimate.totalCents)}</strong></span>` : ''}
+        <span>${zh ? '预计本月薪酬' : 'Est. pay'} <strong title="${zh ? `底薪 ${money(owner.myCompEstimate.baseSalaryCents)} + 提成 ${owner.myCompEstimate.pct || 0}% × 业绩` : ''}">${money(owner.myCompEstimate.totalCents)}</strong></span>` : ''}
       </div>
-      ${!isOwnerRole() && owner.myCompEstimate ? `<p class="subtle comp-estimate-note">${zh ? `底薪 ${money(owner.myCompEstimate.baseSalaryCents)} + 提成 ${money(owner.myCompEstimate.commissionCents)}(${Math.round(owner.myCompEstimate.commissionRate * 100)}%),以老板月结确认为准。` : 'Base + commission; final amount confirmed at monthly settlement.'}</p>` : ''}
+      ${!isOwnerRole() && owner.myCompEstimate ? `<p class="subtle comp-estimate-note">${zh ? `底薪 ${money(owner.myCompEstimate.baseSalaryCents)} + 提成 ${money(owner.myCompEstimate.commissionCents)}(${owner.myCompEstimate.pct || 0}%),以老板月结确认为准。` : 'Base + commission; final amount confirmed at monthly settlement.'}</p>` : ''}
       ${isOwnerRole() ? `
       <div class="tech-manage-row">
         <button class="ghost slim" data-tech-edit="${escapeHtml(tech.id)}" type="button">${zh ? '编辑资料' : 'Edit'}</button>
@@ -6110,6 +6122,17 @@ els.schedulePage.addEventListener('click', (event) => {
   }
   if (event.target.closest('#applyWeekPattern')) {
     applyWeekPatternForward().catch((error) => toast(error.message))
+    return
+  }
+  if (event.target.closest('#afternoonStartBtn')) {
+    /* 清单#10(08-31):上下午分界编辑接回网页 —— 读写与小程序同一条 /admin/schedule-settings(两端写口本就同为 schedule-batch,分叉只剩这项配置面) */
+    request('/admin/schedule-settings').then((cur) => {
+      const v = window.prompt('上下午分界(HH:MM,小程序按日排班的半天块按它切):', cur.afternoonStart || '14:30')
+      if (v === null) return
+      if (!/^\d{2}:\d{2}$/.test(v.trim())) { toast('格式应为 HH:MM,如 14:30'); return }
+      request('/admin/schedule-settings', { method: 'PUT', body: JSON.stringify({ afternoonStart: v.trim() }) })
+        .then(() => toast('已保存,两端同时生效')).catch((error) => toast(error.message))
+    }).catch((error) => toast(error.message))
     return
   }
   if (event.target.closest('#addTechnicianButton')) {

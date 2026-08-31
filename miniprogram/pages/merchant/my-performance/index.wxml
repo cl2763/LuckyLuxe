@@ -53,4 +53,15 @@
       <view wx:if="{{!v.yearly.length}}" class="empty">还没有年度数据。</view>
     </view>
   </block>
+
+  <view class="card sal-card" wx:if="{{sal}}">
+    <view class="h">本月薪资估算</view>
+    <view wx:if="{{sal.note}}" class="subtle">{{sal.note}}</view>
+    <block wx:else>
+      <view class="sal-row"><text>底薪</text><text>{{sal.base}}</text></view>
+      <view class="sal-row"><text>提成估算</text><text>{{sal.commission}}</text></view>
+      <view class="sal-row total"><text>合计估算</text><text>{{sal.total}}</text></view>
+      <view class="subtle small">{{sal.payrollText}}</view>
+    </block>
+  </view>
 </view>

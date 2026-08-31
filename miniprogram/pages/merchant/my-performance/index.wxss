@@ -30,3 +30,8 @@
 /* 售后业绩扣回显式行(裁③:负数+单号) */
 .deduct-row .neg{color:#b3423a;font-weight:700}
 .deduct-row .c{color:#b3423a}
+
+/* 清单#2:薪资估算卡(08-31) */
+.sal-card { margin-top: 24rpx; }
+.sal-row { display: flex; justify-content: space-between; font-size: 28rpx; padding: 8rpx 0; }
+.sal-row.total { font-weight: 600; border-top: 1rpx solid #f0f0f2; margin-top: 4rpx; padding-top: 12rpx; }

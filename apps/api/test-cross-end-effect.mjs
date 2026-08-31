@@ -105,6 +105,26 @@ check('④ 渲染链闭合:小程序 member 页真调这条口', jsOf('pages/mer
     !readFileSync(new URL('../web/admin.js', import.meta.url), 'utf8').includes('名单动作与阈值微调在小程序客户库'))
 }
 
+/* ===== ④c 配置三口接回网页(08-31 清单#9/#10/裁定4):两端同口效果级 ===== */
+{
+  const putBr = await request('/admin/booking-rules', { method: 'PUT', body: JSON.stringify({ onlineDeposit: false }) }, PLATFORM, H)
+  const getBr = (await request('/admin/booking-rules', {}, PLATFORM, H)).data.rules
+  check('🔴 ④c 预约规则:网页关线上定金 → 小程序 store 页真调的同一条口跟着变', putBr.status === 200 && getBr.onlineDeposit === false, JSON.stringify(getBr))
+  await request('/admin/booking-rules', { method: 'PUT', body: JSON.stringify({ onlineDeposit: true }) }, PLATFORM, H)
+  const putSs = await request('/admin/schedule-settings', { method: 'PUT', body: JSON.stringify({ afternoonStart: '15:00' }) }, PLATFORM, H)
+  const getSs = (await request('/admin/schedule-settings', {}, PLATFORM, H)).data
+  check('🔴 ④c 上下午分界:网页改 → 小程序按日排班真调的同一条口跟着变', putSs.status === 200 && getSs.afternoonStart === '15:00', JSON.stringify(getSs))
+  const postWifi = await request('/admin/store-wifi', { method: 'POST', body: JSON.stringify({ bssid: 'aa:bb:cc:dd:ee:ff', ssid: '跨端测' }) }, PLATFORM, H)
+  const wifis = (await request('/admin/store-wifi', {}, PLATFORM, H)).data.wifis
+  check('④c 打卡 WiFi:网页添名单 → 小程序考勤读的同一份', postWifi.status === 201 && wifis.some((w) => w.bssid === 'aa:bb:cc:dd:ee:ff'), JSON.stringify(wifis).slice(0, 120))
+  check('④c 渲染链闭合:三件的网页面都真调这三条口(booking-rules.js / afternoonStartBtn / attendance-wifi.js)',
+    readFileSync(new URL('../web/booking-rules.js', import.meta.url), 'utf8').includes("'/admin/booking-rules'")
+    && readFileSync(new URL('../web/admin.js', import.meta.url), 'utf8').includes("'/admin/schedule-settings'")
+    && readFileSync(new URL('../web/attendance-wifi.js', import.meta.url), 'utf8').includes("'/admin/store-wifi'")
+    && jsOf('pages/merchant/store/index.js').includes('/admin/booking-rules')
+    && jsOf('pages/merchant/schedule-day/index.js').includes('/admin/schedule-settings'))
+}
+
 /* ===== ⑤ 「合理只在网页」清单逐项过 —— 效果面在哪、有没有断言,一项不落 ===== */
 const roster = [
   ['轮播自管', '✅ 本套件①(数据面)+ ①链(渲染面)'],

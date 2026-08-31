@@ -121,8 +121,11 @@ async function main() {
   const routes = collectAdminRoutes()
   check(`从源码抠出 ${routes.length} 条 /admin 路由(新增路由自动纳入扫描)`, routes.length >= 60, String(routes.length))
   /* 下限按 08-27 实测条数钉住:搬家可以,搬没了不行。加路由会自然把这个数推高,
-     哪天它掉回下限以下,说明有一批接口悄悄退出了扫描面。 */
-  check('🔴 扫描面没缩水(路由条数不低于 08-27 实测基线)', routes.length >= 153, String(routes.length))
+     哪天它掉回下限以下,说明有一批接口悄悄退出了扫描面。
+     08-31 降基线 153→150(有批文的整路退役:死口候刀六条〔recharge-tiers×3 并一块、
+     merchant-leads×2、finance/change-password〕+ 清单#2 收敛退役 my-compensation-estimate;
+     退役都有 404 死透断言守着 —— 见 test-membership-config;**没有批文不许再降这个数**)。 */
+  check('🔴 扫描面没缩水(路由条数不低于 08-31 批文后基线)', routes.length >= 150, String(routes.length))
   const moved = ['GET /admin/my-customers', 'POST /admin/stored-value/refund', 'POST /admin/timecards/probe-id/refund']
   const keys = new Set(routes.map((r) => `${r.method} ${r.path}`))
   const missing = moved.filter((k) => !keys.has(k))

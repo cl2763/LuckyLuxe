@@ -80,8 +80,8 @@ const memberJs = mini('pages/merchant/member/index.js')
 const memberWxml = mini('pages/merchant/member/index.wxml')
 check('🔴 ① 死口删除:会员页「给会员加储值」表单已删(零 doRecharge/rvPicked;wxml 零充值表单)',
   !memberJs.includes('doRecharge') && !memberJs.includes('rvPicked') && !memberWxml.includes('给会员加储值'))
-check('① 页面 guardOwner(店员连入口页都进不来)+ 财务门禁先例(lock-status + getFinanceKey)',
-  aa.includes('guardOwner') && aa.includes('finance/lock-status') && aa.includes('getFinanceKey'))
+check('① 页面 guardOwner(店员连入口页都进不来)+ D90:「先去解锁」弹跳已拆(账调不挂财务门;剥注释后零 lock-status 预闸)',
+  aa.includes('guardOwner') && !aa.includes('请先在财务页解锁') && !aa.includes('finance/lock-status'))
 /* 网页侧同批同刀(双端同批律):web 三处死口删净 + 弹层内嵌同两条写口 */
 const webAdmin = stripJs(readFileSync(new URL('../web/admin.js', import.meta.url), 'utf8'))
 const webAa = stripJs(readFileSync(new URL('../web/account-adjust.js', import.meta.url), 'utf8'))

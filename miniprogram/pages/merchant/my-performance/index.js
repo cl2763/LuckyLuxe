@@ -21,8 +21,26 @@ Page({
   onShow() { if (!api.guardMerchant()) return; this.load() },
   switchTab(e) { this.setData({ tab: e.currentTarget.dataset.k }) },
 
+  /* 清单#2(店主 08-31):员工端薪资估算块 —— 读收敛后的唯一口 /admin/salary/my-estimate
+     (v2 薪资方案引擎;可见性=perf_only 时后端 403,句原样落 note;老板代看别人业绩时不拉)。 */
+  async loadSalary() {
+    if (this.techId) { this.setData({ sal: null }); return }
+    try {
+      const r = await api.adminGet('/admin/salary/my-estimate')
+      const est = r.estimate || {}
+      if (est.noPlan) { this.setData({ sal: { note: '暂无薪资方案 —— 找老板在「员工管理→薪资方案」配一份。' } }); return }
+      const d = displayOf(est)
+      const m = (c) => formatMoney(c || 0, d, d.trimZeroDecimals ? 0 : 2)
+      this.setData({ sal: {
+        base: m(est.baseSalaryCents), commission: m(est.commissionCents), total: m(est.totalCents),
+        payrollText: r.payrollPaid ? '本月工资表已发放' : (r.payrollLocked ? '本月工资表已锁定' : '以月结工资表为准')
+      } })
+    } catch (e) { this.setData({ sal: { note: (e && e.message) || '' } }) }
+  },
+
   async load() {
     this.setData({ loading: true })
+    this.loadSalary()
     try {
       const qs = this.techId ? `?technicianId=${encodeURIComponent(this.techId)}` : ''
       const r = await api.adminGet(`/admin/my-performance${qs}`)

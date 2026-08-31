@@ -130,7 +130,7 @@ window.AccountAdjust = (function () {
       /* 裁定2(08-30d):储值行与账本行同列一表 —— 两读口合流,行尾同一个「冲销」钮。
          储值行冲的是「错记的充值」(合同①);账本行冲的是记错的收支(既有口)。 */
       const [r, sv] = await Promise.all([
-        ctx.request(`/admin/finance/transactions?month=${month}`),
+        ctx.request(`/admin/finance/transactions?month=${month}&userId=${encodeURIComponent(stateA.userId)}`),
         ctx.request(`/admin/stored-value/txns?month=${month}`).catch(() => ({ txns: [] }))
       ])
       const all = r.transactions || []

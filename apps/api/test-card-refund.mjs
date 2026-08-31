@@ -416,15 +416,17 @@ check('⑩-2 🔴 行为必须不同:keep=仍是会员 / drop=余额归零即失
   check('v1.1②-3 转账那笔仍在留痕里(负债照减、留痕照留,只是不出抽屉)',
     afterCash.refundOtherCents > 0, String(afterCash.refundOtherCents))
 
-  // ── v1.1 ③:权限 —— 财务门 + 仅老板
+  // ── v1.1 ③:权限 —— D90(店主 08-31)改口径:账调四 tab 不挂财务门(与充值同权,仅老板);财务页门不变
   await request(`/admin/finance/password`, { method: 'POST', body: JSON.stringify({ password: 'Fin-2026-n5' }) }, TOKEN, BH).catch(() => ({}))
   db.prepare('UPDATE tenants SET finance_lock_enabled = 1 WHERE id = ?').run(bId)
-  const locked = await request('/admin/stored-value/refund', { method: 'POST', body: JSON.stringify({ userId: bUser, amountCents: 100, reason: '锁着退' }) }, TOKEN, BH)
-  check('v1.1③-1 🔴 财务门开着、没带钥匙 → 403 FINANCE_LOCKED(走已有那道门)',
-    locked.status === 403 && /FINANCE_LOCKED/.test(JSON.stringify(locked.data)), JSON.stringify(locked.data).slice(0, 120))
-  const key = (await request('/admin/finance/unlock', { method: 'POST', body: JSON.stringify({ password: TOKEN }) }, TOKEN, BH)).data.financeKey
-  const unlocked = await request('/admin/stored-value/refund', { method: 'POST', body: JSON.stringify({ userId: bUser, amountCents: 100, reason: '带钥匙退' }) }, TOKEN, { ...BH, 'x-finance-key': key })
-  check('v1.1③-2 带上财务钥匙就能退(门是同一道,不是新造的)', unlocked.status === 201, JSON.stringify(unlocked.data).slice(0, 120))
+  const noKeyRefund = await request('/admin/stored-value/refund', { method: 'POST', body: JSON.stringify({ userId: bUser, amountCents: 100, reason: '不带钥匙退(D90)' }) }, TOKEN, BH)
+  check('v1.1③-1 🔴 D90:财务门开着、不带钥匙,退卡照走(账调域不挂门,与充值同权)',
+    noKeyRefund.status === 201, JSON.stringify(noKeyRefund.data).slice(0, 120))
+  const noKeyTxns = await request(`/admin/stored-value/txns?userId=${bUser}`, {}, TOKEN, BH)
+  check('v1.1③-1b 🔴 D90:冲销 tab 的流水读口同样不挂门(O-fin1 那半治好)', noKeyTxns.status === 200, String(noKeyTxns.status))
+  const doorStill = await request('/admin/finance/summary?month=2026-08', {}, TOKEN, BH)
+  check('v1.1③-2 🔴 财务页整体门禁不变:summary 没钥匙照样被 FINANCE_LOCKED 拦',
+    doorStill.status === 403 && /FINANCE_LOCKED/.test(JSON.stringify(doorStill.data)), JSON.stringify(doorStill.data).slice(0, 120))
   db.prepare('UPDATE tenants SET finance_lock_enabled = 0 WHERE id = ?').run(bId)
 
   const { readFileSync: rf2 } = await import('node:fs')

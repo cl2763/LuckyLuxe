@@ -42,14 +42,8 @@ Page({
 
   async onShow() {
     if (!(await api.guardOwner())) return
-    /* 财务门禁(D27 先例):退卡/冲销是财务动作;启用了门禁而没解锁 → 指去财务页 */
-    let lockEnabled = false
-    try { lockEnabled = Boolean((await api.adminGet('/admin/finance/lock-status')).enabled) } catch (e) { lockEnabled = false }
-    if (lockEnabled && !api.getFinanceKey()) {
-      wx.showToast({ title: '账户调整是财务动作 —— 请先在财务页解锁', icon: 'none' })
-      setTimeout(() => wx.navigateBack(), 900)
-      return
-    }
+    /* D90(店主 08-31):账调四 tab 不挂财务门(与充值同权,仅老板)—— 原「先去财务页解锁」弹跳拆除;
+       财务页整体门禁不变(那是财务页自己的门) */
     this.load()
   },
 
@@ -143,7 +137,7 @@ Page({
     try {
       /* 裁定2(08-30d):储值行与账本行同列一表,两读口合流(与网页同刀) */
       const [tx, sv, bks] = await Promise.all([
-        api.adminGet(`/admin/finance/transactions?month=${month}`),
+        api.adminGet(`/admin/finance/transactions?month=${month}&userId=${encodeURIComponent(this.data.userId)}`),
         api.adminGet(`/admin/stored-value/txns?month=${month}`).catch(() => ({ txns: [] })),
         this._bookingIds ? Promise.resolve(null) : api.adminGet('/admin/bookings')
       ])

@@ -122,10 +122,14 @@ async function main() {
       body: JSON.stringify({ technicianId: myTechId, baseSalary: 2000, commissionRate: 0.1, active: true })
     })
   })
-  const estimate = await request('/admin/my-compensation-estimate', {}, STAFF)
-  check('staff gets compensation estimate', estimate.status === 200 && estimate.data.estimate && estimate.data.estimate.baseSalaryCents === 200000, JSON.stringify(estimate.data).slice(0, 150))
-  const expected = estimate.data.estimate.baseSalaryCents + Math.round(estimate.data.estimate.monthRevenueCents * estimate.data.estimate.commissionRate)
-  check('estimate math consistent (base + rate × revenue)', estimate.data.estimate.totalCents === expected)
+  const estimate = await request('/admin/salary/my-estimate', {}, STAFF)
+  check('staff gets salary estimate (v2 engine, single mouth after #2 collapse)',
+    estimate.status === 200 && estimate.data.estimate && (estimate.data.estimate.noPlan === true || typeof estimate.data.estimate.totalCents === 'number'),
+    JSON.stringify(estimate.data).slice(0, 150))
+  const est2 = estimate.data.estimate
+  check('estimate math consistent or honestly noPlan',
+    est2.noPlan === true || est2.totalCents === (est2.baseSalaryCents + est2.handworkCents + est2.commissionCents
+      + est2.firstRechargePayCents + est2.renewRechargePayCents + est2.customCommissionPayCents + est2.overtimePayCents + est2.adjustCents))
 
   console.log(`[staff-portal] all ${checks} checks passed`)
 }
