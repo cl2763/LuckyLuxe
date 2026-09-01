@@ -4300,6 +4300,32 @@ function renderBookingDetail(booking) {
      现在接口按售后轨道下发(合同⑤),这里补只读区:发起原因 / 进度时间线 / 处理结果,
      与小程序售后面板同源同句(afterSalesProgress 唯一出口),结案后照样看得到。 */
   const afterSalesBlock = renderAfterSalesReadonly(booking.afterSales)   // D70 合同④:同屏只读区(实现在 order-state.js)
+  /* 🔴 D107(店主 02a 走查抓出,02c 裁③):**电子签是结算闭环的凭据,老板端却看不到。**
+     归因现测:签名与快照都在库、后端 payment 块也给了、顾客端 customer.js 早就渲了 —— **只有老板端这一块没做**。
+     这是《一份数据两端渲染律》方向相反的一案(以往都是老板端有顾客端缺),所以对齐检查从此双向做。
+     实现:同一份 booking.payment + 同一个 data-dc-snapshot 浮层(日结那边在用),两端零第二份实现。 */
+  const pay = booking.payment
+  const sheetRows = (sh) => `
+    <p class="sig-row"><span><strong>${escapeHtml(sh.label || '')}</strong></span><span class="subtle">${escapeHtml(String(sh.signedAt || '').slice(0, 16).replace('T', ' '))}</span></p>
+    ${((sh.flow && sh.flow.lines) || []).map((fl) => `<p class="sig-row"><span>${escapeHtml(fl.label)}</span><strong>${escapeHtml(fl.amountText)}</strong></p>`).join('')}
+    <p class="sig-row total"><span><strong>${escapeHtml((sh.flow && sh.flow.heroLabel) || '')}</strong></span><strong>${escapeHtml((sh.flow && sh.flow.cashDueText) || '')}</strong></p>
+    <p class="sig-row">${sh.snapshotUrl
+      ? `<a href="#" data-dc-snapshot="${escapeHtml(sh.code)}">${t('viewOriginal') || '查看签署原件 ›'}</a>`
+      : `<span class="subtle">这一份还没签字</span>`}</p>`
+  const signBlock = pay ? `
+    <div class="detail-section sig-block">
+      <div class="section-row compact-row">
+        <h3>服务签署单</h3>
+        <span class="subtle">${pay.signedAt ? `已签署 ${escapeHtml(String(pay.signedAt).slice(0, 16).replace('T', ' '))}` : '待签字'}</span>
+      </div>
+      ${(pay.sheets || []).length > 1
+        ? `<p class="sig-row total"><span><strong>${escapeHtml(pay.groupCashLabel || '')}</strong></span><strong>${escapeHtml(pay.groupCashDueText || '')}</strong></p>
+           ${pay.sheets.map(sheetRows).join('')}`
+        : (pay.flow ? `
+           ${(pay.flow.lines || []).map((fl) => `<p class="sig-row"><span>${escapeHtml(fl.label)}</span><strong>${escapeHtml(fl.amountText)}</strong></p>`).join('')}
+           <p class="sig-row total"><span><strong>${escapeHtml(pay.flow.heroLabel || '')}</strong></span><strong>${escapeHtml(pay.flow.cashDueText || '')}</strong></p>
+           <p class="sig-row"><a href="#" data-dc-snapshot="${escapeHtml(pay.code || '')}">查看签署原件 ›</a></p>` : '')}
+    </div>` : ''
   return `
     <section class="booking-detail-panel card">
       <div class="section-row compact-row">
@@ -4323,6 +4349,7 @@ function renderBookingDetail(booking) {
         <p><span>${t('depositCad')}</span><strong>${money(booking.depositCents)}</strong></p>
       </div>
       ${afterSalesBlock ? `<section class="booking-detail-section">${afterSalesBlock}</section>` : ''}
+      ${signBlock ? `<section class="booking-detail-section">${signBlock}</section>` : ''}
       <section class="booking-detail-section">
         <h3>${t('notes')}</h3>
         <div class="booking-notes-box">${escapeHtml(booking.notes || t('noNotes'))}</div>
@@ -4465,7 +4492,8 @@ function editorFromService(service) {
     nameEn: service.nameEn || '',
     descriptionZh: service.descriptionZh || '',
     descriptionEn: service.descriptionEn || '',
-    imageUrl: service.imageUrl || '/assets/images/nail-addon.jpg',
+    /* 裁2(02c):取不到不许编一张图顶上 —— 空值交给渲染层的占位出口(占位零回落律) */
+    imageUrl: service.imageUrl || '',
     price: cents(service.priceCents),
     deposit: cents(service.depositCents),
     duration: String(service.durationMin || 120),

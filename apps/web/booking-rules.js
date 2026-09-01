@@ -11,16 +11,22 @@ window.BookingRules = (function () {
         el.innerHTML = `<p class="subtle">预约规则加载失败:${(e.message || '')}</p>`
         return
       }
+      /* D104(02c 裁④):裸 <input type=checkbox> 自带系统外观、不吃我们的 CSS —— 二形法扫不到它。
+         改成与 D98 值日行同一颗 `.ui-sw`(全站唯一开关),说明句行内小字、开关靠右。 */
       el.innerHTML = `
         <div class="booking-rules-block">
           <h4>预约规则</h4>
-          <label class="br-row"><input type="checkbox" data-br-online ${on ? 'checked' : ''}>
-            线上预约收定金(关掉后顾客线上预约不付定金、直接确认;金额与减免按「定金与取消规则」)</label>
+          <div class="duty-row">
+            <span class="note">线上预约收定金(关掉后顾客线上预约不付定金、直接确认;金额与减免按「定金与取消规则」)</span>
+            <button class="ui-sw ${on ? 'on' : ''}" data-br-online type="button" aria-label="线上预约收定金开关"></button>
+          </div>
         </div>`
-      el.querySelector('[data-br-online]').addEventListener('change', async (ev) => {
+      el.querySelector('[data-br-online]').addEventListener('click', async () => {
+        const next = !on
         try {
-          await request('/admin/booking-rules', { method: 'PUT', body: JSON.stringify({ onlineDeposit: ev.target.checked }) })
+          await request('/admin/booking-rules', { method: 'PUT', body: JSON.stringify({ onlineDeposit: next }) })
           toast('预约规则已保存,两端同时生效')
+          render()
         } catch (e) { toast(e.message || '保存失败'); render() }
       })
     }

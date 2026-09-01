@@ -106,7 +106,8 @@ function applyLanguage() {
 
 function renderImages() {
   const approvedImages = shareVisibleImages()
-  const images = approvedImages.length ? approvedImages : [state.booking?.service?.imageUrl || '/assets/images/nail-french.jpg']
+  /* 裁2(02c):没作品图就没有 —— 不许拿平台自带示例图当这单的作品(顾客会当成她的指甲) */
+  const images = approvedImages.length ? approvedImages : [state.booking?.service?.imageUrl || ''].filter(Boolean)
   const safeIndex = Math.min(Math.max(0, state.selectedImage), images.length - 1)
   state.selectedImage = safeIndex
   els.mainImage.src = images[safeIndex]

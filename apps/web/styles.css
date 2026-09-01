@@ -7690,3 +7690,7 @@ section.card > .section-row:first-child { margin-top: 0; }
 /* 补录小合同(01v):面板里那两句(提示 + 后端出的归属确认句) */
 .tbf-bf { font-size: 12.5px; color: var(--muted); margin: 2px 0; line-height: 1.6; }
 .tbf-bf.note { color: #8a5a00; background: #fdf3e3; border-radius: 8px; padding: 8px 10px; }
+
+/* D107(02c 裁③):老板端订单详情「服务签署单」块 —— 与顾客端同源同形 */
+.sig-block .sig-row { display: flex; justify-content: space-between; gap: 12px; margin: 5px 0; font-size: 13px; }
+.sig-block .sig-row.total { border-top: 1px solid var(--line); padding-top: 7px; font-size: 13.5px; }
