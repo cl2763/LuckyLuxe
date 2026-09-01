@@ -6,7 +6,8 @@
 export function createScheduleBoard(deps) {
   const {
     db, json, iso, addMinutes, localParts, localDateTime, currentTenantId, defaultStoreId,
-    specialDateFor, hoursUnsetOfStore, getService, isGenericDisplayName, memberCodeForUserId, apiError, readBody
+    specialDateFor, hoursUnsetOfStore, getService, isGenericDisplayName, memberCodeForUserId, apiError, readBody,
+    backfillPlanFor
   } = deps
 
   /* 值日表(店主 31l 小合同六条):按天标记 technician×date,不碰排班 is_working 语义;
@@ -170,7 +171,14 @@ export function createScheduleBoard(deps) {
         canEdit: ctx.adminSession?.role === 'owner' && date === nowParts.date,
         note: dutyOf(tid, date).length ? '' : '今天还没安排值日'
       } : undefined
+      /* 补录小合同(店主 01v 合同一/三):**过去日**才出这块 —— 台面把「+ 直接排单」换成「+ 补录」,
+         并把"这单会落哪天"的人话句提前给店主看(判定在后端 backfillPlanFor,前端零判断)。
+         今天/未来日:整块不出现 → 台面绿区照旧从此刻起画,时间诚实不破。 */
+      const backfillBlock = (date < nowParts.date && backfillPlanFor)
+        ? { ...backfillPlanFor(date, tid), label: '+ 补录', hint: '事后补记:这一天的单当时没开,现在补上' }
+        : undefined
       json(res, 200, {
+        ...(backfillBlock ? { backfill: backfillBlock } : {}),
         storeNow: nowParts.time, storeToday: nowParts.date,
         date, weekday, isClosed, hoursUnset, openTime, closeTime,
         specialNote: special?.note || '',

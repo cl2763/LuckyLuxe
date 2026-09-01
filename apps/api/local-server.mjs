@@ -5588,6 +5588,10 @@ function serializeBooking(row, lang = 'zh') {
     id: row.id,
     publicCode: row.public_code,
     status: row.status,
+    /* 补录小合同(01v 合同二):归属日与服务日不同 → 单上注明那一句(后端出,两端同句) */
+    backfillNote: (row.backfill_service_date && row.backfill_service_date !== startLocal.date)
+      ? `服务发生于 ${mdText(row.backfill_service_date)}` : '',
+    backfillServiceDate: row.backfill_service_date || '',
     appointmentStart: row.appointment_start,
     appointmentEnd: row.appointment_end,
     appointmentDate: startLocal.date,
@@ -6696,6 +6700,34 @@ function isClosedDay(storeId, dateStr) {
   return special ? Boolean(special.is_closed) : Boolean(hours && hours.is_closed)
 }
 
+/* ===== 补录小合同(店主 2026-09-01 拍板,01v)=====
+   两裁照录:①开,可补往日 ②未日结记原日、已日结记今天(单上注明服务发生于原日)。
+   已确认的历史账**永不回改** —— 与冲销、金额更正当期冲减同口径(不回改已确认账本)。
+   判定与人话句都在这里出,**前端零判断零拼串**(两端同句)。 */
+function dailyCloseStateOf(date, tenantId = currentTenantId()) {
+  const row = db.prepare('SELECT status FROM daily_closes WHERE tenant_id = ? AND date = ?').get(tenantId, date)
+  // reopened=重开了还没再确认 → 当作"未确认",补录照记原日
+  return row && row.status === 'confirmed' ? 'confirmed' : 'open'
+}
+function mdText(date) {
+  const [, m, d] = String(date || '').split('-')
+  return `${Number(m)} 月 ${Number(d)} 日`
+}
+/* 补录归属:回 { serviceDate, targetDate, closed, note }。note=提交前给店主看的那句人话(合同三)。 */
+function backfillPlanFor(serviceDate, tenantId = currentTenantId()) {
+  const today = todayOf(tenantId)
+  const closed = dailyCloseStateOf(serviceDate, tenantId) === 'confirmed'
+  const targetDate = closed ? today : serviceDate
+  return {
+    serviceDate,
+    targetDate,
+    closed,
+    note: closed
+      ? `这单会记到 ${mdText(today)}(${mdText(serviceDate)} 已日结,已确认的账不回改),单上会注明服务发生于 ${mdText(serviceDate)}。`
+      : `这单会记到 ${mdText(serviceDate)}(当天还没日结),单、钱、业绩都算那一天。`
+  }
+}
+
 function createBooking(body, opts = {}) {
   expireOldHolds()
   const input = validateBookingInput(body)
@@ -7208,7 +7240,8 @@ const quoteState = createQuoteState({
 })
 const scheduleBoard = createScheduleBoard({
   db, json, iso, addMinutes, localParts, localDateTime, currentTenantId, defaultStoreId,
-  specialDateFor, hoursUnsetOfStore, getService, isGenericDisplayName, memberCodeForUserId, apiError, readBody
+  specialDateFor, hoursUnsetOfStore, getService, isGenericDisplayName, memberCodeForUserId, apiError, readBody,
+  backfillPlanFor
 })
 const notifyScheduler = createNotifyScheduler({
   db, randomId, iso, apiError, json, readBody, parseJson: parseJson2, localParts, tenantTimezone,
@@ -15027,21 +15060,34 @@ async function route(req, res) {
     }
     if (!userId) throw apiError(400, 'BAD_REQUEST', '请选择或新建顾客。')
     const storeId = body.storeId || defaultStoreId()
+    /* 补录小合同(01v):backfill=true 走事后补记 —— 归属日由 backfillPlanFor 判(合同二),
+       前端不许自己算落哪天;休息日/撞位两道闸原样吃(合同四,createBooking 里那两处不动)。 */
+    const wantBackfill = body.backfill === true
+    let plan = null
+    if (wantBackfill) {
+      if (!/^\d{4}-(0[1-9]|1[0-2])-\d{2}$/.test(String(body.date || ''))) throw apiError(400, 'BAD_REQUEST', '补录要给一个日期。')
+      if (String(body.date) >= todayOf(tid)) throw apiError(400, 'BAD_REQUEST', '补录只用于**过去**的日子;今天的单直接在台面排。')
+      plan = backfillPlanFor(String(body.date), tid)
+    }
     let booking
     try {
       booking = createBooking({
         userId, tenantId: tid, storeId,
         serviceId: body.serviceId, technicianId: body.technicianId,
-        date: body.date, time: body.time, durationMin: body.durationMin,
-        notes: body.notes || '老板直接排单'
+        date: plan ? plan.targetDate : body.date, time: body.time, durationMin: body.durationMin,
+        notes: body.notes || (plan ? `补录(服务发生于 ${plan.serviceDate})` : '老板直接排单')
       }, { adminDirect: true, depositPaid: body.depositPaid === true })
+      if (plan) {
+        db.prepare('UPDATE bookings SET backfill_service_date = ? WHERE id = ?').run(plan.serviceDate, booking.id)
+        booking = serializeBooking(db.prepare('SELECT * FROM bookings WHERE id = ?').get(booking.id))
+      }
     } catch (error) {
       if (createdUserId) {
         try { db.prepare('DELETE FROM users WHERE id = ? AND tenant_id = ?').run(createdUserId, tid) } catch (e) { /* 回滚失败不掩盖原错误 */ }
       }
       throw error
     }
-    return json(res, 201, { booking })
+    return json(res, 201, { booking, ...(plan ? { backfill: plan } : {}) })
   }
   // 服务小记(P0-②):写小记(原文 → AI 结构化 → 存);员工/老板均可写。
   if (req.method === 'POST' && path === '/admin/service-notes') {
@@ -16331,6 +16377,13 @@ try {
 }
 try {
   db.exec("ALTER TABLE bookings ADD COLUMN reference_images_json TEXT NOT NULL DEFAULT '[]'")
+} catch (error) {
+  if (!String(error.message || '').includes('duplicate column')) throw error
+}
+/* 补录小合同(店主 01v):事后补记的**原服务日**。归属日由后端判(未日结记原日 / 已日结记今天),
+   这一列只记「服务实际发生在哪天」—— 与 appointment_start 不同时,单上出「服务发生于 X 月 X 日」。 */
+try {
+  db.exec('ALTER TABLE bookings ADD COLUMN backfill_service_date TEXT')
 } catch (error) {
   if (!String(error.message || '').includes('duplicate column')) throw error
 }

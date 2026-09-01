@@ -59,7 +59,7 @@
             <view class="dv-cols" style="height:{{dv.gridH}}rpx">
               <view wx:for="{{dv.cols}}" wx:key="id" wx:for-item="col" class="dv-col {{col.id===myTechId?'mine':''}}" style="width:{{dv.colW}}rpx">
                 <view wx:for="{{dv.hours}}" wx:key="label" wx:for-item="hl" class="dv-line {{hl.off ? 'off' : ''}}"></view>
-                <view wx:for="{{col.frees}}" wx:key="startTime" wx:for-item="f" class="dv-blk free" style="top:{{f.top}}rpx;height:{{f.height}}rpx" data-tech="{{col.id}}" data-time="{{f.startTime}}" data-end="{{f.endTime}}" bindtap="tapFree"><text>+ 直接排单</text></view>
+                <view wx:for="{{col.frees}}" wx:key="startTime" wx:for-item="f" class="dv-blk free" style="top:{{f.top}}rpx;height:{{f.height}}rpx" data-tech="{{col.id}}" data-time="{{f.startTime}}" data-end="{{f.endTime}}" bindtap="tapFree"><text>{{dv.backfill ? dv.backfill.label : '+ 直接排单'}}</text></view>
                 <view wx:for="{{col.blocks}}" wx:key="id" wx:for-item="b" class="dv-blk {{b.cls}}" style="top:{{b.top}}rpx;height:{{b.height}}rpx" data-id="{{b.id}}" bindtap="tapBlock">
                   <view class="dv-bt"><text wx:if="{{b.stateGlyph}}" class="dv-sdot {{b.state}}">{{b.stateGlyph}}</text>{{b.startTime}}–{{b.endTime}}</view>
                   <view class="dv-bn">{{b.customerName}}</view>
@@ -90,7 +90,7 @@
         <text><text class="lg free"></text>空档·点排</text>
       </view>
       <view class="dv-legend">
-        <text>淡色=未到 · <text class="dv-sdot active">●</text>进行中 · <text class="dv-sdot done">✓</text>完成 · <text class="lg settled"></text>已结算 · 点空档=直接排单</text>
+        <text>淡色=未到 · <text class="dv-sdot active">●</text>进行中 · <text class="dv-sdot done">✓</text>完成 · <text class="lg settled"></text>已结算 · 点空档={{dv.backfill ? '补录(事后补记)' : '直接排单'}}</text>
       </view>
     </block>
 
@@ -225,6 +225,8 @@
       <view class="ds-t">售后 · {{asPanel.customer}} <text class="as-badge as-{{asPanel.status}}">{{asPanel.statusText}}</text></view>
       <view class="ds-x" bindtap="closeAfterSales">✕</view>
     </view>
+    <view wx:if="{{dv.backfill}}" class="ds-bf">{{dv.backfill.hint}}</view>
+    <view wx:if="{{dv.backfill}}" class="ds-bf note">{{dv.backfill.note}}</view>
     <scroll-view scroll-y class="ds-body">
       <view class="ds-k">订单</view>
       <view class="as-line">{{asPanel.line}}{{asPanel.tech ? ' · ' + asPanel.tech : ''}} · {{asPanel.date}} {{asPanel.time}}</view>
@@ -281,7 +283,7 @@
   <view wx:if="{{directSheet}}" class="mask" bindtap="closeDirect"></view>
   <view wx:if="{{directSheet}}" class="dsheet">
     <view class="ds-head">
-      <view class="ds-t">现场排单 · {{directTechName}}</view>
+      <view class="ds-t">{{dv.backfill ? '补录' : '现场排单'}} · {{directTechName}}</view>
       <view class="ds-x" bindtap="closeDirect">✕</view>
     </view>
     <scroll-view scroll-y class="ds-body">

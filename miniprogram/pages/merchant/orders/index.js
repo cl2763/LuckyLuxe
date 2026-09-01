@@ -493,7 +493,8 @@ Page(Object.assign({
           isClosed: r.isClosed, specialNote: r.specialNote || '', openTime: r.openTime, closeTime: r.closeTime,
           gridH, colW: 190, hours, total: (r.bookings || []).length, working: cols.length,
           freeHours: Math.round(freeTotal / 60 * 10) / 10, activeCount: r.activeCount || 0, cols,
-          duty: r.duty || null   // 31l 值日:开关关=后端不下发=零渲染
+          duty: r.duty || null,  // 31l 值日:开关关=后端不下发=零渲染
+          backfill: r.backfill || null   // 补录小合同(01v):过去日后端才下发;今天/未来整块不出现
         }
       })
       this.syncClose(date) // 网格下方那块日结跟着看同一天
@@ -797,6 +798,7 @@ Page(Object.assign({
   async submitDirect() {
     const d = this.data
     const body = { serviceId: d.directServiceId, technicianId: d.directTech, date: d.selDate, time: d.directTime, durationMin: d.directDurationMin, depositPaid: false }
+    if (d.dv && d.dv.backfill) body.backfill = true   // 合同一:过去日走补录口(同一条后端路由)
     // 顾客三种来法(D9 根治后):库里选中 / 点了「＋建档并排单」/ 输了字没点建档(按同一套规则②映射)
     if (d.selectedCustId) body.userId = d.selectedCustId
     else if (d.pendingNewName) { body.newCustomerName = d.pendingNewName; if (d.pendingNewPhone) body.phone = d.pendingNewPhone }

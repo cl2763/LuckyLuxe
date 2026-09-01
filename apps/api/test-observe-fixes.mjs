@@ -109,6 +109,68 @@ async function main() {
   check('二形法 小程序全局 button 复位=999rpx(裸 button 也不长歪,方角源头已堵)',
     rf('miniprogram/app.wxss').includes('border-radius: 999rpx;') && !/button \{[\s\S]{0,120}border-radius: 0;/.test(rf('miniprogram/app.wxss')))
 
+  /* ===== 01v 补录小合同(店主拍板):两形各一 + 三闸 + 双端链 ===== */
+  {
+    const today01v = (await request('/admin/schedule-day')).data.storeToday
+    const past = new Date(Date.now() - 9 * 86400000).toISOString().slice(0, 10)
+    // 合同一:今天/未来不出补录块(时间诚实不破);过去日才出
+    const sdToday = (await request('/admin/schedule-day')).data
+    check('合同一 今天台面无补录块(时间诚实不破)', !sdToday.backfill)
+    const sdPast = (await request(`/admin/schedule-day?date=${past}`)).data
+    check('合同一 过去日出补录块 + 后端给 label/hint/note(前端零判断)',
+      Boolean(sdPast.backfill && sdPast.backfill.label === '+ 补录' && sdPast.backfill.hint && sdPast.backfill.note),
+      JSON.stringify(sdPast.backfill || null).slice(0, 140))
+    // 形一:未日结 → 单落原日、无「服务发生于」句
+    const openDay = sdPast.backfill && !sdPast.backfill.closed ? past : null
+    if (openDay && !sdPast.hoursUnset && !sdPast.isClosed) {
+      const b1 = await request('/admin/bookings/direct', { method: 'POST', body: JSON.stringify({ backfill: true, newCustomerName: `补录形一${uniq}`, serviceId: svc.id, technicianId: tech.id, date: openDay, time: '15:20' }) })
+      check('🔴 合同二形一 未日结 → 单/钱/业绩全记原日(且不出「服务发生于」句)',
+        b1.status === 201 && b1.data.booking.appointmentDate === openDay && !b1.data.booking.backfillNote,
+        JSON.stringify({ d: b1.data.booking && b1.data.booking.appointmentDate, n: b1.data.booking && b1.data.booking.backfillNote }))
+      check('合同三 返回体带后端判定(targetDate=原日)', b1.data.backfill && b1.data.backfill.targetDate === openDay)
+    }
+    // 形二:已日结 → 落今天 + 单上注明(直接把某过去日确认掉来造这一形;夹具直连回归临时库)
+    const closedDay = new Date(Date.now() - 11 * 86400000).toISOString().slice(0, 10)
+    const { DatabaseSync } = await import('node:sqlite')
+    const bfDb = new DatabaseSync(process.env.TEST_DB_PATH)
+    const tid01v = bfDb.prepare("SELECT tenant_id FROM bookings ORDER BY created_at DESC LIMIT 1").get().tenant_id
+    const nowIso01v = new Date().toISOString()
+    bfDb.prepare(`INSERT OR REPLACE INTO daily_closes (id, tenant_id, date, status, order_count, revenue_cents, created_at, updated_at)
+      VALUES (?, ?, ?, 'confirmed', 0, 0, ?, ?)`).run(`dc-bf-${uniq}`, tid01v, closedDay, nowIso01v, nowIso01v)
+    const sdClosed = (await request(`/admin/schedule-day?date=${closedDay}`)).data
+    check('合同三 已日结日的确认句写明落今天与原因(人话,后端出)',
+      Boolean(sdClosed.backfill && sdClosed.backfill.closed && sdClosed.backfill.targetDate === today01v
+        && /已日结/.test(sdClosed.backfill.note) && /服务发生于/.test(sdClosed.backfill.note)),
+      JSON.stringify(sdClosed.backfill || null).slice(0, 160))
+    if (!sdClosed.hoursUnset && !sdClosed.isClosed) {
+      const b2 = await request('/admin/bookings/direct', { method: 'POST', body: JSON.stringify({ backfill: true, newCustomerName: `补录形二${uniq}`, serviceId: svc.id, technicianId: tech.id, date: closedDay, time: '15:40' }) })
+      check('🔴 合同二形二 已日结 → 落**今天**,历史账不回改',
+        b2.status === 201 && b2.data.booking.appointmentDate === today01v,
+        JSON.stringify({ d: b2.data.booking && b2.data.booking.appointmentDate, want: today01v }))
+      check('🔴 合同二形二 单上注明「服务发生于 X 月 X 日」(后端唯一出口)',
+        b2.status === 201 && /^服务发生于 \d+ 月 \d+ 日$/.test(b2.data.booking.backfillNote || ''),
+        JSON.stringify(b2.data.booking && b2.data.booking.backfillNote))
+      check('合同二形二 原服务日留痕(backfillServiceDate=原日,可追溯)',
+        b2.status === 201 && b2.data.booking.backfillServiceDate === closedDay)
+    }
+    // 合同四:未来日不许走补录口(补录只补往日)
+    const fut01v = new Date(Date.now() + 5 * 86400000).toISOString().slice(0, 10)
+    const b3 = await request('/admin/bookings/direct', { method: 'POST', body: JSON.stringify({ backfill: true, newCustomerName: `补录未来${uniq}`, serviceId: svc.id, technicianId: tech.id, date: fut01v, time: '15:00' }) })
+    check('合同四 补录口只收过去日(未来日 400)', b3.status === 400, String(b3.status))
+  }
+  /* 合同一 双端链(同路由同形制;前端零拼串) */
+  check('合同一 网页 assemble 真把 backfill 带进 dv(自走查咬出:渲染读 dv.backfill,组装漏接=静默不显)',
+    /backfill: r\.backfill \|\| null/.test(tb))
+  check('合同一 网页:块文案/标题/确认句全读后端 backfill(零前端判断)',
+    tb.includes("(stateT.dv && stateT.dv.backfill && stateT.dv.backfill.label)") && tb.includes('escapeHtml(bf.note)')
+    && tb.includes('if (stateT.dv && stateT.dv.backfill) body.backfill = true'))
+  check('合同一 小程序同批:dv.backfill 下发 + 块文案 + 两句 + 提交带 backfill',
+    ordJs.includes('backfill: r.backfill || null') && ordJs.includes('if (d.dv && d.dv.backfill) body.backfill = true')
+    && rf('miniprogram/pages/merchant/orders/index.wxml').includes("{{dv.backfill ? dv.backfill.label : '+ 直接排单'}}")
+    && rf('miniprogram/pages/merchant/orders/index.wxml').includes('{{dv.backfill.note}}'))
+  check('合同二 归属判定唯一出口在后端(前端零处出现日结判断)',
+    !tb.includes('daily_close') && !ordJs.includes('daily_close') && !tb.includes('已日结'))
+
   console.log(`[observe-fixes] all ${checks} checks passed`)
 }
 main().catch((e) => { console.error('[observe-fixes] failed:', e.message); process.exit(1) })

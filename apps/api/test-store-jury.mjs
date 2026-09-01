@@ -130,9 +130,17 @@ for (const tid of allTenants) {
   if (dutyVal && !['0', '1'].includes(String(dutyVal.value).replace(/"/g, ''))) {
     throw new Error(`${label} I9 值日开关值非法:「${String(dutyVal.value).slice(0, 20)}」`)
   }
+  /* I10 补录域(01v 小合同五):已日结那天**永不**再冒出新单 —— 补录该落今天。
+     判据是事实级的:任一已确认日,若存在 backfill 单把预约日也落在该日 → 红。 */
+  const badBackfill = db.prepare(`SELECT COUNT(*) AS n FROM bookings b
+    WHERE b.tenant_id = ? AND b.backfill_service_date IS NOT NULL
+      AND date(b.appointment_start) = b.backfill_service_date
+      AND EXISTS (SELECT 1 FROM daily_closes c WHERE c.tenant_id = b.tenant_id
+                  AND c.date = b.backfill_service_date AND c.status = 'confirmed')`).get(tid).n
+  if (badBackfill !== 0) throw new Error(`${label} I10 补录写回了已日结的那天(历史账被回改):${badBackfill} 行`)
   iterated += 1
 }
-check(`🔴 ③ 不变量组 I1-I9 × ${iterated} 家全过(一家红整批红;含前序套件的各态店)`, iterated === allTenants.length)
+check(`🔴 ③ 不变量组 I1-I10 × ${iterated} 家全过(一家红整批红;含前序套件的各态店)`, iterated === allTenants.length)
 
 /* ===== ④ 矩阵店特征各验(建店规格 → 现测) ===== */
 for (const b of built) {

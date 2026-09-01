@@ -93,7 +93,8 @@ window.TodayBoard = (function () {
       gridH, hours, cols,
       total: (r.bookings || []).length, working: cols.length,
       freeHours: Math.round(freeTotal / 60 * 10) / 10, activeCount: r.activeCount || 0,
-      duty: r.duty || null   // 31l 值日:开关关=后端整块不下发=零渲染
+      duty: r.duty || null,  // 31l 值日:开关关=后端整块不下发=零渲染
+      backfill: r.backfill || null   // 补录小合同(01v):过去日后端才下发;今天/未来整块不出现
     }
   }
 
@@ -141,7 +142,7 @@ window.TodayBoard = (function () {
               ${dv.cols.map((col) => `
                 <div class="tb-col">
                   ${dv.hours.map((h) => `<div class="tb-line ${h.off ? 'off' : ''}"></div>`).join('')}
-                  ${col.frees.map((f) => `<button class="tb-blk free" style="top:${f.top}px;height:${f.height}px" data-tb-free="${col.id}" data-time="${f.startTime}" data-end="${f.endTime}" type="button"><span>+ 直接排单</span></button>`).join('')}
+                  ${col.frees.map((f) => `<button class="tb-blk free" style="top:${f.top}px;height:${f.height}px" data-tb-free="${col.id}" data-time="${f.startTime}" data-end="${f.endTime}" type="button"><span>${escapeHtml((stateT.dv && stateT.dv.backfill && stateT.dv.backfill.label) || '+ 直接排单')}</span></button>`).join('')}
                   ${col.blocks.map((b) => `
                     <button class="tb-blk ${b.cls}" style="top:${b.top}px;height:${b.height}px" data-tb-block="${b.id}" type="button">
                       <span class="tb-bt">${b.stateGlyph ? `<i class="tb-sdot ${b.state}">${b.stateGlyph}</i>` : ''}${b.startTime}–${b.endTime}</span>
@@ -169,7 +170,7 @@ window.TodayBoard = (function () {
         ${dv.cols.map((c) => `<button type="button" class="tb-duty-chip ${dv.duty.techIds.includes(c.id) ? 'on' : ''} ${dv.duty.canEdit ? '' : 'ro'}" data-duty-tech="${c.id}" ${dv.duty.canEdit ? '' : 'disabled'}>${escapeHtml(c.name)}</button>`).join('')}
         ${dv.duty.note ? `<span class="subtle">${escapeHtml(dv.duty.note)}</span>` : ''}
       </div>` : ''}
-      <div class="tb-legend">淡色=未到 · <i class="tb-sdot active">●</i>进行中 · <i class="tb-sdot done">✓</i>完成 · 点空档=直接排单</div>
+      <div class="tb-legend">淡色=未到 · <i class="tb-sdot active">●</i>进行中 · <i class="tb-sdot done">✓</i>完成 · ${(stateT.dv && stateT.dv.backfill) ? '点空档=补录(事后补记)' : '点空档=直接排单'}</div>
       ` : '<div class="empty-state">本日无在岗技师</div>'}`}
     `
     if (stateT.free) mount.insertAdjacentHTML('beforeend', renderFreePanel(escapeHtml))
@@ -194,6 +195,8 @@ window.TodayBoard = (function () {
 
   function renderFreePanel(escapeHtml) {
     const f = stateT.free
+    /* 补录小合同(01v 合同三):落哪天由后端判、那句话也由后端出 —— 这里只显示,不算不拼 */
+    const bf = (stateT.dv && stateT.dv.backfill) || null
     stateT._catsView = (function () {
       const mains = (stateT._services || []).filter(function (i) { return (i.itemKind || 'main') === 'main' })
       const cats = (stateT._cats || []).filter(function (c) { return mains.some(function (m) { return (m.categoryId || '') === c.id }) })
@@ -205,7 +208,8 @@ window.TodayBoard = (function () {
     return `
       <div class="sw-cpnmask" data-tbf-close></div>
       <div class="sw-cpnsheet">
-        <div class="sw-ch">直接排单 · ${escapeHtml(tech.name || '')} · ${escapeHtml(stateT.date)} ${escapeHtml(f.time)}</div>
+        <div class="sw-ch">${escapeHtml(bf ? '补录' : '直接排单')} · ${escapeHtml(tech.name || '')} · ${escapeHtml(stateT.date)} ${escapeHtml(f.time)}</div>
+        ${bf ? `<p class="tbf-bf">${escapeHtml(bf.hint)}</p><p class="tbf-bf note">${escapeHtml(bf.note)}</p>` : ''}
         <div class="sw-sec">起始时间(可改,限 ${escapeHtml(f.time)}–${escapeHtml(f.end || "收班")} 空档内)</div>
         <input class="sw-in" type="time" data-tbf-time value="${escapeHtml(f.timeSel || f.time)}" min="${escapeHtml(f.time)}" ${f.end ? `max="${escapeHtml(f.end)}"` : ""}>
         <div class="sw-sec">顾客(搜现有,或直接填新客姓名)</div>
@@ -224,7 +228,7 @@ window.TodayBoard = (function () {
           <button class="ghost slim" data-tbf-dur="30" type="button">+30</button>
           <button class="ghost slim" data-tbf-dur="0" type="button">标准</button></div>
         <label class="sw-sec dep"><input type="checkbox" data-tbf-dep ${f.deposit ? 'checked' : ''}> 已收定金(走「标记已收定金」同一动作;现场即时单通常不收)</label>
-        <button class="sw-cta" data-tbf-submit type="button">排进 ${escapeHtml(f.timeSel || f.time)} 这个空档</button>
+        <button class="sw-cta" data-tbf-submit type="button">${escapeHtml(bf ? `补录到 ${f.timeSel || f.time}` : `排进 ${f.timeSel || f.time} 这个空档`)}</button>
       </div>`
   }
 
@@ -323,6 +327,7 @@ window.TodayBoard = (function () {
       f.busy = true
       try {
         const body = { serviceId: f.serviceId, technicianId: f.techId, date: stateT.date, time: f.timeSel || f.time, durationMin: f.durationMin, depositPaid: f.deposit === true }
+        if (stateT.dv && stateT.dv.backfill) body.backfill = true   // 合同一:过去日走补录口(同一条路由)
         if (f.userId) body.userId = f.userId
         else body.newCustomerName = f.q.trim()
         const created = await deps.request('/admin/bookings/direct', { method: 'POST', body: JSON.stringify(body) })
