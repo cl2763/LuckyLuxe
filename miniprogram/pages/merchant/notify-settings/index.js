@@ -45,7 +45,7 @@ Page({
         ...t,
         statusZh: STATUS_ZH[t.status] || t.status,
         statusCls: String(t.status || '').toLowerCase(),
-        whenText: String(t.scheduledAt || '').slice(5, 16).replace('T', ' ')
+        whenText: t.whenText || ''
       }))
       this.setData({ tasks })
     } catch (e) { wx.showToast({ title: (e && e.message) || '加载失败', icon: 'none' }) }

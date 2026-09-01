@@ -90,6 +90,18 @@ let bk1
   const bkRow = db.prepare('SELECT appointment_start FROM bookings WHERE id = ?').get(bk1)
   const expect = new Date(new Date(bkRow.appointment_start).getTime() - 120 * 60000).toISOString()
   check('🔴 ② 提醒时刻 = 预约开始 − 提前量(默认 120 分钟),毫秒恰等', rem.scheduledAt === expect, `${rem.scheduledAt} vs ${expect}`)
+  // D93(31s 走查重铺自检):计划时刻人读句由后端按店时区出(whenText),两端不许再裸切 ISO(那切出来是 UTC)
+  {
+    const p93 = new Intl.DateTimeFormat('en-CA', { timeZone: 'America/Toronto', month: '2-digit', day: '2-digit', hour: '2-digit', minute: '2-digit', hour12: false }).formatToParts(new Date(expect))
+    const g93 = (t) => p93.find((x) => x.type === t).value
+    const want93 = `${g93('month')}-${g93('day')} ${g93('hour')}:${g93('minute')}`
+    check('🔴 D93 whenText=店时区人读句(不是 ISO 裸切的 UTC)', rem.whenText === want93, `${rem.whenText} vs ${want93}`)
+    const { readFileSync: rf93 } = await import('node:fs')
+    const R93 = new URL('../..', import.meta.url).pathname
+    const web93 = rf93(`${R93}apps/web/notify-settings.js`, 'utf8')
+    const mini93 = rf93(`${R93}miniprogram/pages/merchant/notify-settings/index.js`, 'utf8')
+    check('D93 两端零裸切残留(L2 机械扫尽:scheduledAt 不再被 slice)', !web93.includes(".slice(5, 16)") && !mini93.includes(".slice(5, 16)") && web93.includes('t.whenText') && mini93.includes('t.whenText'))
+  }
   const tk = await tick(HA)
   check('② tick:created 到点即发(站内通道),summary 六字段齐(心跳契约)',
     ['at', 'tenants', 'scans', 'due', 'sent', 'failed', 'cancelled'].every((k) => k in tk) && tk.sent >= 1, JSON.stringify(tk))

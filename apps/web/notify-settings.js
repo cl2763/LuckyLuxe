@@ -63,7 +63,7 @@
       ${shown.length ? shown.map((t) => {
         const [cls, zh] = STATUS[t.status] || ['d-off', t.status]
         return `<div class="nfy-rec"><span class="nfy-dot ${cls}"></span>
-          <div><b>${escapeHtml(t.typeLabel)}</b> · ${escapeHtml(t.customerName || '—')} · ${zh} ${escapeHtml(String(t.scheduledAt || '').slice(5, 16).replace('T', ' '))}
+          <div><b>${escapeHtml(t.typeLabel)}</b> · ${escapeHtml(t.customerName || '—')} · ${zh} ${escapeHtml(t.whenText || '')}
           ${t.status === 'FAILED' || t.status === 'CANCELLED' ? `<details class="nfy-why"><summary>${t.status === 'FAILED' ? '失败原因' : '撤销原因'}</summary>${escapeHtml(t.failReason || '')}</details>` : ''}
           <div class="nfy-rec-text">${escapeHtml(t.text || '—')}</div></div>
         </div>`

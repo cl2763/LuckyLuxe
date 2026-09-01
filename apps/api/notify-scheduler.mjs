@@ -412,6 +412,14 @@ export function createNotifyScheduler(deps) {
   }
 
   /* ===== 路由(由 local-server 在租户闸门之后分发;纪律7) ===== */
+  /* D93(2026-09-01 走查重铺自检咬出):计划/发出时刻原先只回裸 ISO,网页(notify-settings.js)与
+     小程序(notify-settings 页)各自 slice(5,16) —— 切出来的是 UTC,21:30 单的提醒显示成「23:30」。
+     修法=后端唯一出口:whenText/sentText 按**店时区**算好下发,两端零切串(假数回落红线③同族)。 */
+  function taskTimeText(isoStr, tid) {
+    if (!isoStr) return ''
+    const p = localParts(isoStr, tenantTimezone(tid))
+    return `${p.date.slice(5)} ${p.time}`
+  }
   function serializeTask(r) {
     const payload = parseJson(r.payload_json) || {}
     return {
@@ -419,6 +427,7 @@ export function createNotifyScheduler(deps) {
       userId: r.user_id, customerName: r.user_id ? userName(r.user_id) : '',
       bookingId: r.booking_id, channel: r.channel, status: r.status,
       scheduledAt: r.scheduled_at, sentAt: r.sent_at, failReason: r.fail_reason || '',
+      whenText: taskTimeText(r.scheduled_at, r.tenant_id), sentText: taskTimeText(r.sent_at, r.tenant_id),
       text: payload.text || '', createdAt: r.created_at
     }
   }
