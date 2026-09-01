@@ -83,7 +83,7 @@ Page({
         // A2(08-25):中文状态句读后端唯一出口(与网页顾客端同一份);en 仍走本地词典
         statusText: lang === 'en' ? i18n.statusText(item.status, lang) : (item.statusText || i18n.statusText(item.status, lang)),
         serviceName: localizedService.name || item.serviceInfo.serviceName,
-        serviceImage: service.image || item.serviceImage || '/assets/images/store-cover.jpg'
+        serviceImage: service.image || item.serviceImage || ''   // 裁定二同族:空值交渲染层占位,不回落环境照
       })
     })
     this.setData({

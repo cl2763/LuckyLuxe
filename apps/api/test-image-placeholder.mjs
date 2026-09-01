@@ -120,6 +120,67 @@ check(`② 白名单防线②:界面资产条目数上棘轮 ≤ ${UI_CAP}(只�
   Object.keys(UI_ASSET_ALLOW).length <= UI_CAP, String(Object.keys(UI_ASSET_ALLOW).length))
 check('② 反向守:这条扫描真读到了图片位(不是路径写错扫了个空)', sites.length >= 50, String(sites.length))
 
+/* ===== ②c 数据层同刀(店主 02e 裁定三)=====
+   为什么加这一刀:②那把刀的被测集合是**图片标签位**(<img>/<image>),而八处假图回落
+   一个标签都不是 —— 它们是 **JS 数据层的默认值 / || 回落**,在数据流进 <img> **之前**
+   就把 /assets/... 塞进字段;等它到达标签位,src 已经是一条"看起来正常的路径",②切不到。
+   最刺眼的是本文件 ① 条自己就断言 isOwnUpload('/assets/images/nail-addon.jpg')===false ——
+   **同一把刀明明知道那是假图,而它上面 12 行正被当默认值赋出去。**
+   本刀:全仓前端 .js/.wxs 里每一处 /assets/images/ 字面量,逐个落进三类,落不进=红。
+     A 出口/映射表自己(image-placeholder / api.js 的 .png→.jpg 归一表)
+     B 明标 fixture/demo 分支(同函数里有 demo/fixture 字样,且不走真实 bookingId 路径)
+     C 界面资产 —— **与 UI_ASSET_ALLOW 共用同一张表同一个棘轮**(不另开表,两张表会各自长胖) */
+const DATA_A_FILES = ['apps/api/image-placeholder.mjs', 'miniprogram/utils/api.js']
+const dataSites = []
+/* 剥注释但**保留行数**(不然报出来的行号对不上真文件,店主照着找会找错地方) */
+const stripCmt = (t) => t.replace(/\/\*[\s\S]*?\*\//g, (m) => m.replace(/[^\n]/g, ''))
+  .replace(/^(\s*)\/\/.*$/gm, '$1')
+  /* 行尾 // 注释也要剥 —— 02e 自查咬出:一句「// mock 清除:…」把 B 类豁免误触发,
+     三处真回落被放过。判据里的注释残留 = 判据自己的静默失败器。 */
+  .replace(/([^:'"\`])\/\/[^\n]*/g, '$1')
+for (const f of [...walk('apps/web', /\.js$/), ...walk('miniprogram', /\.(js|wxs)$/)]) {
+  const raw = readFileSync(join(ROOT, f), 'utf8')
+  const src = stripCmt(raw)
+  const lines = src.split('\n')
+  lines.forEach((ln, i) => {
+    for (const m of ln.matchAll(/['"`](\/assets\/images\/[^'"`]+)['"`]/g)) {
+      dataSites.push({ file: f, line: i + 1, lit: m[1],
+        ctx: lines.slice(Math.max(0, i - 6), i + 2).join(' '),
+        /* 近窗(4 行):B 类只看**紧贴**的那几行 —— 02e 自查咬出:6 行窗把兄弟 if 分支里的
+           bookingId 也吃进来,把明标的 demo 夹具误判成"走真实路径"。 */
+        near: lines.slice(Math.max(0, i - 4), i + 1).join(' ') })
+    }
+  })
+}
+/* A 类:归一映射表自己 —— 表里两侧都是平台资产路径,它就是那张表,不是内容图回落。
+   判据认「文件 + 处在 localImageMap 字面量对象内」,不靠上下文碰运气。 */
+const mapRanges = {}
+for (const f of DATA_A_FILES) {
+  try {
+    const t = readFileSync(join(ROOT, f), 'utf8')
+    const m = /const\s+localImageMap\s*=\s*\{/.exec(t)
+    if (m) {
+      const start = t.slice(0, m.index).split('\n').length
+      const end = start + t.slice(m.index).slice(0, t.slice(m.index).indexOf('}') + 1).split('\n').length
+      mapRanges[f] = [start, end]
+    }
+  } catch { /* 文件不在就没有这张表 */ }
+}
+const isMapTable = (s) => mapRanges[s.file] && s.line >= mapRanges[s.file][0] && s.line <= mapRanges[s.file][1]
+/* B 类收紧(02e 裁定三原文:"同一函数里有 demo/fixture 字样,且不走真实 bookingId 路径"):
+   只认**标识符**(变量名/函数名/属性名)含 demo|fixture|mock|seed,不认散落的词与注释残留。 */
+const isDemoFixture = (s) => /\b[A-Za-z_$]*(demo|fixture|mock|seed)[A-Za-z_$]*\s*[=:(]/i.test(s.near)
+  && !/bookingId/.test(s.near)
+const isUiAsset = (s) => Object.keys(UI_ASSET_ALLOW).some((k) => {
+  const [file, needle] = k.split('|')
+  return s.file === file && s.lit.includes(needle)
+})
+const dataBad = dataSites.filter((s) => !isMapTable(s) && !isDemoFixture(s) && !isUiAsset(s))
+  .map((s) => `${s.file}:${s.line} ${s.lit}`)
+check(`②c 数据层同刀:全仓 JS 里 ${dataSites.length} 处 /assets/images/ 字面量逐个落进三类(映射表 / 明标 demo / 界面资产白名单)`,
+  dataBad.length === 0, dataBad.join(' | '))
+check('②c 反向守:这条扫描真读到了字面量(不是正则写错扫了个空)', dataSites.length >= 15, String(dataSites.length))
+
 /* ===== ②b 编造数据零残留:本批咬出的两处「没有真实数据就编一份」 =====
    admin 的 AI 图库(真实作品不足 3 组就拿 mock 凑齐)与顾客端作品墙(没作品就编三位技师)——
    两处用的都是**店主本店**的图。判据反着数:全仓前端不许再有这一族。 */

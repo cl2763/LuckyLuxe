@@ -67,8 +67,10 @@ const localImageMap = {
    顾客看到的是一整套不存在的服务/门店/技师/可约时段,还能照着约进去,
    界面上没有任何"这是假的"痕迹。现在一律如实抛错,由页面渲染失败态。 */
 
+/* 🔴 归因2 的根(店主 02a 走查:同一批服务网页说「还没有图片」、小程序出一张环境照)——
+   就是下面这一行。取不到不许编,返回空由渲染层出占位(与网页 img-placeholder 逐字同款)。 */
 function normalizeImage(url) {
-  if (!url) return '/assets/images/store-cover.jpg'
+  if (!url) return ''
   if (localImageMap[url]) return localImageMap[url]
   if (url.indexOf('/assets/images/') === 0) return localImageMap[url] || url
   return url
@@ -515,7 +517,7 @@ function miniMember(user = {}) {
     memberCode,
     referralCode: user.referralCode || '',
     referralUrl: user.referralUrl || '',
-    avatarUrl: user.avatarUrl || '/assets/images/member-profile.jpg'
+    avatarUrl: user.avatarUrl || ''   // 裁定二同族:没头像=占位,不拿平台示例头像顶
   }
 }
 

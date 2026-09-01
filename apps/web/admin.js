@@ -4473,7 +4473,10 @@ function blankServiceEditor() {
     nameEn: '',
     descriptionZh: '',
     descriptionEn: '',
-    imageUrl: '/assets/images/nail-addon.jpg',
+    /* 🔴 裁定一(店主 02e):**写入层回落比显示层更重** —— 新建服务预填平台示例照,
+       店主不换就保存,这张假图**被写进她的库**,再出现在顾客端「服务」Tab 上。
+       (与 editorFromService 是同文件隔 12 行的兄弟,我上一刀只砍了下面那个。) */
+    imageUrl: '',
     price: '0',
     deposit: '50',
     duration: '120',

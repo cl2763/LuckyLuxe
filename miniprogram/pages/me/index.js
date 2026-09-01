@@ -3,7 +3,7 @@ const { curOf, ensureCurrencyCached } = require('../../utils/storecurrency')
 const i18n = require('../../utils/i18n')
 const api = require('../../utils/api')
 const tabbar = require('../../utils/tabbar')
-const DEFAULT_AVATAR = '/assets/images/member-profile.jpg'
+const DEFAULT_AVATAR = ''
 
 Page({
   data: {
@@ -124,7 +124,7 @@ Page({
       return Object.assign({}, item, {
         statusText: i18n.statusText(item.status, lang),
         serviceName: localizedService.name || item.serviceInfo.serviceName,
-        serviceImage: service.image || item.serviceImage || '/assets/images/store-cover.jpg'
+        serviceImage: service.image || item.serviceImage || ''   // 裁定二同族:空值交渲染层占位,不回落环境照
       })
     })
     member = isLoggedIn

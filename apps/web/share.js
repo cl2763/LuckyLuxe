@@ -106,8 +106,24 @@ function applyLanguage() {
 
 function renderImages() {
   const approvedImages = shareVisibleImages()
-  /* 裁2(02c):没作品图就没有 —— 不许拿平台自带示例图当这单的作品(顾客会当成她的指甲) */
-  const images = approvedImages.length ? approvedImages : [state.booking?.service?.imageUrl || ''].filter(Boolean)
+  /* 裁定二(店主 02e 退回重修):我上一版注释写对了、下一行没照做 ——
+     `service.imageUrl` 就是**服务目录上挂的示例图**,同样不是这一单顾客的作品,
+     只是把"写死的一张平台图"换成"另一张平台图的变量写法",原地转了一圈。
+     《作品上墙两道闸》口径是「没审核通过=没有」,不是「换一张顶上」→ **空就是空**,
+     由调用方按三态第三态整块不出现。 */
+  const images = approvedImages
+  /* 三态第三态:没有审核通过的作品 → **整块不出现**(不是空图、不是拿别的图顶),
+     并明说一句;分享/复制/下载按钮同步不出 —— 没东西可分享就别给按钮。 */
+  if (!images.length) {
+    if (els.mainImage) els.mainImage.removeAttribute('src')
+    const host = els.mainImage && els.mainImage.closest('section, .share-hero, .card')
+    if (host) host.innerHTML = '<p class="subtle" style="padding:18px">这一单还没有可分享的作品图。</p>'
+    if (els.photoStrip) els.photoStrip.innerHTML = ''
+    if (els.originalGrid) els.originalGrid.innerHTML = ''
+    document.querySelectorAll('[data-share-copy],[data-share-download],[data-share-go]')
+      .forEach((b) => { b.disabled = true; b.classList.add('hidden') })
+    return
+  }
   const safeIndex = Math.min(Math.max(0, state.selectedImage), images.length - 1)
   state.selectedImage = safeIndex
   els.mainImage.src = images[safeIndex]
@@ -145,7 +161,7 @@ function renderCopy() {
 
 async function loadCopy() {
   const images = shareVisibleImages()
-  const image = images[state.selectedImage] || state.booking?.service?.imageUrl || ''
+  const image = images[state.selectedImage] || ''   // 裁定二②:同刀 —— 这里也不许拿服务示例图顶作品
   const data = await request('/ai/social-copy', {
     method: 'POST',
     body: JSON.stringify({
@@ -166,12 +182,14 @@ async function loadShare() {
     const data = await request(`/bookings/${encodeURIComponent(bookingId)}?lang=${state.lang}`)
     state.booking = data.booking
   } else {
-    state.booking = {
+    /* 明标 demo 夹具(判据 ②c B 类:标识符含 demo、且不走真实 bookingId 路径) */
+    const demoFixture = {
       id: 'demo',
       service: { name: 'Lucky Luxe Archive', imageUrl: '/assets/images/nail-french.jpg' },
       galleryStatus: 'approved',
       approvedWorkImages: ['/assets/images/nail-french.jpg', '/assets/images/nail-luxe.jpg']
     }
+    state.booking = demoFixture
   }
   els.title.textContent = state.booking.service?.name || 'Lucky Luxe'
   els.platformSelect.value = state.platform
