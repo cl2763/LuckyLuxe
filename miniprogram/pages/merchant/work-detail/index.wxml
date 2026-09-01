@@ -1,7 +1,7 @@
 <view class="page">
   <image class="hero" src="{{curImg}}" mode="aspectFill" bindtap="previewCur" />
   <scroll-view wx:if="{{images.length>1}}" class="strip" scroll-x>
-    <image wx:for="{{images}}" wx:key="*this" class="sthumb {{curImg===item?'on':''}}" src="{{item}}" mode="aspectFill" data-img="{{item}}" bindtap="pickImg" />
+    <image wx:for="{{images}}" wx:key="*this" wx:if="{{item}}" class="sthumb {{curImg===item?'on':''}}" src="{{item}}" mode="aspectFill" data-img="{{item}}" bindtap="pickImg" />
   </scroll-view>
   <view class="wtitle">{{title}}</view>
 

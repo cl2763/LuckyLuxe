@@ -30,7 +30,7 @@
       <view class="n">{{item.structured.summary || item.rawText}}</view>
       <!-- 小记图片(08-30f):无图=整块不出现(零占位假图) -->
       <view class="nimgs" wx:if="{{item.images.length}}">
-        <image wx:if="{{im}}" class="nimg" wx:for="{{item.images}}" wx:for-item="im" wx:key="*this" src="{{im}}" mode="aspectFill" />
+        <block wx:for="{{item.images}}" wx:for-item="im" wx:key="*this"><image wx:if="{{im}}" class="nimg" src="{{im}}" mode="aspectFill" /></block>
       </view>
       <view class="mini">
         <text wx:for="{{item.structured.safetyFlags}}" wx:for-item="t" wx:key="*this" class="c warn">{{t}}</text>

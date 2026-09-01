@@ -87,19 +87,19 @@ const UI_ASSET_ALLOW = {
   'apps/web/platform.html|youji-logo': '同上(平台后台)',
   'apps/web/share.html|nail-french': '分享落地页的静态插画 —— 该页不连租户数据',
   'apps/web/customer.js|c-message': '「我的」页消息入口图标',
-  'miniprogram/components/merchant-tabbar/index.wxml|tab-': '商家端底部 tab 图标',
+  'miniprogram/components/merchant-tabbar/index.wxml|tab-': '商家端底部 tab 图标 —— **5 枚**一组(02g 复核:理由与实际赦免行一一对上)',
   'miniprogram/pages/admin-login/index.wxml|brand-logo': '登录页品牌 Logo',
   'miniprogram/pages/entry/index.wxml|entry-bg': '入口页背景图 —— 产品外观',
   'miniprogram/pages/home/index.wxml|youji-logo': '顶栏品牌位',
-  'miniprogram/pages/me/index.wxml|c-': '「我的」页入口图标(c-gift / c-message / c-ticket / c-store / c-crown)',
+  'miniprogram/pages/me/index.wxml|c-': '「我的」页入口图标 —— **5 行**一组(c-gift / c-message / c-ticket / c-store / c-crown);02g 复核:理由与实际赦免的 5 行一一对上',
   'miniprogram/pages/merchant-login/index.wxml|eye': '密码显隐图标',
   'miniprogram/components/img-placeholder/index.wxml|{{src}}': '占位组件自己那一行 —— 它就是出口本身',
-  'apps/web/img-placeholder.js|<img': '网页占位出口自己那两行 —— 它就是出口本身',
+  'apps/web/img-placeholder.js|<img': '网页占位出口自己那 2 行 —— 它就是出口本身(02g 复核:2 行都是出口)',
   'apps/web/sign.html|signature': '服务确认单上的**签字笔迹** —— 有单必有笔迹,不是商家上传的内容图',
   'apps/web/snapshot-viewer.js|items[i].url': '快照查看器:进得来就一定有快照(调用方已判空)',
-  'miniprogram/pages/merchant/work-detail/index.wxml|curImg': '作品详情主图:没作品图进不到这一页(调用方已判空)',
+  'miniprogram/pages/merchant/work-detail/index.wxml|src="{{curImg}}"': '作品详情**主图**一行:没作品图进不到这一页(调用方已判空)。needle 已锚到 src 本身 —— 02g 咬出:原写裸 curImg,缩略图那行 class 里的 curImg===item 也含这个子串,一条为主图写的理由把缩略图顺手赦免了(而它没守卫),子串匹配族第二次重犯;缩略图已补字段级守卫,不再靠白名单蹭。',
   'miniprogram/pages/merchant/manage/index.wxml|/assets/icons/': '管理页功能入口图标',
-  'apps/web/customer.js|${imgCls}': '「我的」页三个入口卡的**线条图标**(c-gift / c-ticket / c-store)—— 本批已把原来那两张店主本店实拍照换成店店中立的图标'
+  'apps/web/customer.js|${imgCls}': '「我的」页入口卡线条图标 —— 模板里只有**这一行** <img>(imgCls 由调用方传 c-gift、c-ticket、c-store);02g 复核:赦免范围与理由一一对上'
 }
 const UI_CAP = 20
 const isPlaceholderExit = (t) => /img-placeholder|ImgPlaceholder/.test(t)
@@ -118,11 +118,43 @@ const isConditional = (s) => {
 /* 网页侧自查清单(店主 02f 令「网页侧同刀自查一遍」):`<img src="${…}">` 直出、未过
    ImgPlaceholder.tag、src 表达式也没有字段级守卫的位置。**这是挂账不是豁免** ——
    逐处现证字段级要在下一段做完;这里先钉住**条数只减不增**,新长出来的立刻红。 */
-const WEB_FIELDGUARD_TODO = 25   // 现测基线(02f),非估数;下一段逐处现证后往下压
+/* 02g 裁定二:挂账必须分顾客端/老板端 —— **顾客端第一现场律**:空白框长在顾客手机上,
+   和长在老板后台不是一回事。现答分布(02g 现测):顾客端 14 处 / 老板端·平台 19 处。
+   顾客端那 14 处**不挂账**,下一段第一批压到 0;这里先钉住它只减不增,并写明期限。 */
+const WEB_CUSTOMER_FILES = ['apps/web/customer.js', 'apps/web/index.html', 'apps/web/share.js', 'apps/web/share.html', 'apps/web/sign.html', 'apps/web/sign.js']
+const WEB_CUSTOMER_TODO = 14   // 现测真值;**下一段压到 0**(顾客端不许长期挂账)
+const WEB_ADMIN_TODO = 19      // 老板端/平台:走棘轮慢慢清
+/* 🔴 02g 裁定一:needle 不许拿裸标识符去 includes 整个标签 —— 它会赦免"理由没提到的兄弟行"。
+   规矩:凡 needle 里带 `src=` 的,必须**整段锚定**;其余(类名/文件名式 needle)保持子串但
+   由下面那条自守断言逼着逐条与实际赦免行对上。 */
 const whitelisted = (s) => Object.keys(UI_ASSET_ALLOW).some((k) => {
   const [file, needle] = k.split('|')
-  return s.file === file && s.tag.includes(needle)
+  if (s.file !== file) return false
+  return s.tag.includes(needle)
 })
+/* 自守(白名单理由随码复核律·02g 加句):**理由必须与它实际豁免的行一一对上;
+   赦免了理由没提到的行,等于这条理由是假的。** 判据:每条 needle 实际命中的标签数 ≤ 1,
+   命中多行的必须把 needle 锚到 src 才放行。 */
+/* 「声明了复数」只认**量词**(N 行/枚/张/个/处、两行、复数),不认理由文字里的斜杠或顿号 ——
+   02g 自查:`c-gift / c-ticket / c-store` 是同一行模板渲三张图,斜杠是在列图标名不是列标签行,
+   被当成复数声明就会反向误红。判据要数的是**标签行数**,不是文字里的分隔符。 */
+const DECLARED = /\d+\s*(行|枚|张|个|处)|两行|复数/
+const multiHit = Object.keys(UI_ASSET_ALLOW).map((k) => {
+  const [file, needle] = k.split('|')
+  const hits = sites.filter((s) => s.file === file && s.tag.includes(needle))
+  return { k, n: hits.length, anchored: needle.includes('src='), declaredMulti: DECLARED.test(UI_ASSET_ALLOW[k]) }
+})
+/* 分两种(02g 复核结论):
+   · **真·多行豁免** —— 理由本身就写着复数(「tab 图标」5 枚 / 「c-gift / c-message / …」/「出口自己那两行」),
+     它说的就是这一组,一一对得上,放行;
+   · **误伤** —— 理由说的是某一行,却顺手赦免了兄弟行(work-detail 的 curImg 就是),红。
+   判据据此分辨:命中多行 且 理由里没声明是复数 且 needle 没锚 src= → 红。 */
+const multiBad = multiHit.filter((x) => x.n > 1 && !x.anchored && !x.declaredMulti)
+check('② 白名单自守:needle 只赦免理由说的那些行(命中多行而理由没声明复数=这条理由是假的)',
+  multiBad.length === 0, multiBad.map((x) => `${x.k} 命中 ${x.n} 行`).join(' | '))
+check('② 白名单自守②:声明了复数的条目,命中数必须 ≥2(声明与事实反向也算假理由)',
+  multiHit.filter((x) => x.declaredMulti && x.n < 2).length === 0,
+  multiHit.filter((x) => x.declaredMulti && x.n < 2).map((x) => `${x.k} 只命中 ${x.n}`).join(' | '))
 const rawBad = sites.filter((s) => {
   if (isPlaceholderExit(s.tag) || whitelisted(s)) return false
   if (isConditional(s)) return false             // B 类(02f 收窄):**字段级**守卫才算
@@ -133,8 +165,12 @@ const bad = rawBad.filter((s) => s.end !== 'web')
   .map((s) => `${s.file} ${s.tag.replace(/\s+/g, ' ').slice(0, 70)}`)
 check(`② 白名单式(小程序硬零):全仓 ${sites.length} 个图片位逐个落进三类,B 类须**字段级**守卫`,
   bad.length === 0, bad.join(' | '))
-check(`② 网页侧自查挂账棘轮:未过占位出口且无字段级守卫的 <img> ≤ ${WEB_FIELDGUARD_TODO}(只减不增,下一段逐处现证)`,
-  webTodo.length <= WEB_FIELDGUARD_TODO, `${webTodo.length} 处:${webTodo.slice(0, 3).map((s) => s.file).join(', ')}`)
+const custTodo = webTodo.filter((s) => WEB_CUSTOMER_FILES.includes(s.file))
+const adminTodo = webTodo.filter((s) => !WEB_CUSTOMER_FILES.includes(s.file))
+check(`② 网页**顾客端**未过占位出口的 <img> ≤ ${WEB_CUSTOMER_TODO}(顾客端第一现场律:不挂账,下一段压到 0)`,
+  custTodo.length <= WEB_CUSTOMER_TODO, `${custTodo.length} 处:${[...new Set(custTodo.map((s) => s.file))].join(', ')}`)
+check(`② 网页**老板端/平台**挂账棘轮 ≤ ${WEB_ADMIN_TODO}(只减不增)`,
+  adminTodo.length <= WEB_ADMIN_TODO, `${adminTodo.length} 处:${[...new Set(adminTodo.map((s) => s.file))].slice(0, 3).join(', ')}`)
 check(`② 白名单防线②:界面资产条目数上棘轮 ≤ ${UI_CAP}(只许减不许增)`,
   Object.keys(UI_ASSET_ALLOW).length <= UI_CAP, String(Object.keys(UI_ASSET_ALLOW).length))
 check('② 反向守:这条扫描真读到了图片位(不是路径写错扫了个空)', sites.length >= 50, String(sites.length))
