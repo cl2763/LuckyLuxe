@@ -144,17 +144,17 @@ function renderImages() {
   els.mainImage.alt = state.booking?.service?.name || 'Lucky Luxe work'
   els.photoStrip.innerHTML = images.map((image, index) => `
     <button class="${index === safeIndex ? 'active' : ''}" data-share-image="${index}" type="button">
-      <img src="${image}" alt="Work ${index + 1}">
+      ${image ? `<img src="${image}" alt="Work ${index + 1}">` : ''}
     </button>
   `).join('')
   els.originalGrid.innerHTML = images.map((image, index) => `
     <div class="gallery-image-pair">
       <figure>
-        <img src="${image}" alt="${t('original')} ${index + 1}">
+        ${image ? `<img src="${image}" alt="${t('original')} ${index + 1}">` : ''}
         <figcaption>${t('original')} ${index + 1}</figcaption>
       </figure>
       <figure>
-        <img class="edited-preview" src="${image}" alt="${t('edited')} ${index + 1}">
+        ${image ? `<img class="edited-preview" src="${image}" alt="${t('edited')} ${index + 1}">` : ''}
         <figcaption>${t('edited')} ${index + 1}</figcaption>
       </figure>
     </div>

@@ -85,7 +85,10 @@ const UI_ASSET_ALLOW = {
   'apps/web/admin.html|youji-logo': '平台 Logo —— 产品外观,不是商家内容',
   'apps/web/index.html|youji-logo': '同上(顾客端顶栏品牌位)',
   'apps/web/platform.html|youji-logo': '同上(平台后台)',
-  'apps/web/share.html|nail-french': '分享落地页的静态插画 —— 该页不连租户数据',
+  /* 02h:旧理由「该页不连租户数据」已作废 —— 这页现在连了(loadShare 拿 bookingId 打 /bookings/:id),
+     写死的示例图也已拔除。现在这一行是**空壳** <img id="shareMainImage" alt="">,src 由真数据填,
+     没有作品图时整个图区 hidden(见 renderImages 空态分支)。理由随码复核律:理由已按现码重写。 */
+  'apps/web/share.html|id="shareMainImage"': '分享页主图**空壳一行**:无 src 属性,由 renderImages 按数据填;无作品图时图区整块 hidden + 空态节点说话',
   'apps/web/customer.js|c-message': '「我的」页消息入口图标',
   'miniprogram/components/merchant-tabbar/index.wxml|tab-': '商家端底部 tab 图标 —— **5 枚**一组(02g 复核:理由与实际赦免行一一对上)',
   'miniprogram/pages/admin-login/index.wxml|brand-logo': '登录页品牌 Logo',
@@ -113,7 +116,16 @@ const srcExpr = (t) => (/src=["']\{\{([^}]+)\}\}/.exec(t) || [])[1] || ''
 const isConditional = (s) => {
   if (/wx:if|wx:elif/.test(s.tag)) return true          // 标签自己带字段级守卫
   const e = srcExpr(s.tag) || (/src=["'`]?\$\{([^}]+)\}/.exec(s.tag) || [])[1] || ''
-  return Boolean(e) && /\?|&&|\|\|/.test(e)            // src 表达式自己就是守卫式
+  if (Boolean(e) && /\?|&&|\|\|/.test(e)) return true   // src 表达式自己就是守卫式
+  /* 02h 补一维:守卫也可能包在**标签外层**(`${image ? \`<img …>\` : ''}`)——
+     这是网页模板串里最常见的字段级写法,只看 src= 会漏判。取标签前 60 字符看有没有
+     「<字段> ? `」这种紧贴的三元开头,且该字段就是 src 用的那个。 */
+  const before = (s.ctx || '').slice(-140)   // 02h:窗口 60→140,`.map((image, index) => image ? \`<img…` 这种超窗了
+  const v = (/\$\{([A-Za-z_$][\w.$]*)\}/.exec(s.tag) || [])[1]
+  if (!v) return false
+  const esc = v.replace(/[.$]/g, '\\$&')
+  /* 两种字段级写法都认:①模板串里 `${image ? \`<img…` ②map 回调里 `=> image ? \`<img…` */
+  return new RegExp(`(\\$\\{|=>)\\s*${esc}\\s*\\?\\s*\`\\s*$`).test(before)
 }
 /* 网页侧自查清单(店主 02f 令「网页侧同刀自查一遍」):`<img src="${…}">` 直出、未过
    ImgPlaceholder.tag、src 表达式也没有字段级守卫的位置。**这是挂账不是豁免** ——
@@ -122,7 +134,10 @@ const isConditional = (s) => {
    和长在老板后台不是一回事。现答分布(02g 现测):顾客端 14 处 / 老板端·平台 19 处。
    顾客端那 14 处**不挂账**,下一段第一批压到 0;这里先钉住它只减不增,并写明期限。 */
 const WEB_CUSTOMER_FILES = ['apps/web/customer.js', 'apps/web/index.html', 'apps/web/share.js', 'apps/web/share.html', 'apps/web/sign.html', 'apps/web/sign.js']
-const WEB_CUSTOMER_TODO = 14   // 现测真值;**下一段压到 0**(顾客端不许长期挂账)
+/* 🔴 02h 退回(同族第二次:注释写对了下一行没照做,上次在渲染代码、这次在判据代码):
+   我把 check 名字写成「不挂账」,条件却是 `<= 14` —— **那就是挂账,只是改了个名字**,
+   套件在顾客端带着 14 处空白框风险时照样全绿。判据的名字是它的对外声明,声明与行为必须一字对得上。
+   现改硬零。 */
 const WEB_ADMIN_TODO = 19      // 老板端/平台:走棘轮慢慢清
 /* 🔴 02g 裁定一:needle 不许拿裸标识符去 includes 整个标签 —— 它会赦免"理由没提到的兄弟行"。
    规矩:凡 needle 里带 `src=` 的,必须**整段锚定**;其余(类名/文件名式 needle)保持子串但
@@ -167,9 +182,9 @@ check(`② 白名单式(小程序硬零):全仓 ${sites.length} 个图片位逐�
   bad.length === 0, bad.join(' | '))
 const custTodo = webTodo.filter((s) => WEB_CUSTOMER_FILES.includes(s.file))
 const adminTodo = webTodo.filter((s) => !WEB_CUSTOMER_FILES.includes(s.file))
-check(`② 网页**顾客端**未过占位出口的 <img> ≤ ${WEB_CUSTOMER_TODO}(顾客端第一现场律:不挂账,下一段压到 0)`,
-  custTodo.length <= WEB_CUSTOMER_TODO, `${custTodo.length} 处:${[...new Set(custTodo.map((s) => s.file))].join(', ')}`)
-check(`② 网页**老板端/平台**挂账棘轮 ≤ ${WEB_ADMIN_TODO}(只减不增)`,
+check('② 网页**顾客端**未过占位出口的 <img> = 0(顾客端第一现场律:硬零,不挂账)',
+  custTodo.length === 0, `${custTodo.length} 处:${custTodo.map((s) => `${s.file} ${s.tag.replace(/\s+/g, ' ').slice(0, 46)}`).join(' | ')}`)
+check(`② 网页老板端/平台**挂账棘轮** ≤ ${WEB_ADMIN_TODO}(名实相符:这条就是挂账,只减不增)`,
   adminTodo.length <= WEB_ADMIN_TODO, `${adminTodo.length} 处:${[...new Set(adminTodo.map((s) => s.file))].slice(0, 3).join(', ')}`)
 check(`② 白名单防线②:界面资产条目数上棘轮 ≤ ${UI_CAP}(只许减不许增)`,
   Object.keys(UI_ASSET_ALLOW).length <= UI_CAP, String(Object.keys(UI_ASSET_ALLOW).length))
@@ -299,5 +314,27 @@ check('⑥ 占位出口本身发得出来,且画的是相机 + 一句话(店主�
 const servedIndex = await fetch(`${BASE_URL}/web/index.html`).then((r) => r.text())
 check('⑥ 顾客端页面真加载了占位出口(带内容指纹)', /img-placeholder\.js\?v=[0-9a-f]{6,}/.test(servedIndex),
   (servedIndex.match(/img-placeholder\.js\?v=[^"]*/) || ['(没挂上)'])[0])
+
+/* ===== 判据自述须与判据行为一致律(店主 02h 立)=====
+   判据的名称是它的对外声明。声明「硬零/零/不挂账/不许」而条件写成 `<= N`,
+   等于判据自己是个说谎的空态 —— 本文件那条顾客端 check 就是这么绿着的。
+   自守:扫本文件自身源码,凡 check 名称里出现绝对词的,其条件必须是 === 0 / .length === 0。
+   这条能一次咬住这一族,包括以后新写的。 */
+{
+  const selfSrc = readFileSync(new URL(import.meta.url).pathname, 'utf8')
+  /* 绝对词表(02h 自查收窄):「不许减/只许减不许增」是**棘轮**的说法,它名实相符(≤ 就对),
+     不能算绝对词;真正的绝对词是宣称"一个都没有"的那些。收窄后这条自守才只咬说谎的。 */
+  const ABS = /硬零|不挂账|零残留|一律 0|= 0(?![0-9])|全部落进|逐个必须/
+  const liars = []
+  for (const m of selfSrc.matchAll(/check\(([`'"])([\s\S]*?)\1\s*,\s*([^,]+),/g)) {
+    const name = m[2]
+    const cond = m[3]
+    if (!ABS.test(name)) continue
+    if (/===\s*0|length === 0|!\w+\.length/.test(cond)) continue
+    if (/<=|>=|<|>/.test(cond)) liars.push(`${name.slice(0, 40)} → ${cond.trim().slice(0, 40)}`)
+  }
+  check('🔴 判据自述须与判据行为一致(名字里说「硬零/不挂账/不许」的,条件必须 === 0)',
+    liars.length === 0, liars.join(' | '))
+}
 
 console.log(`\n✅ test-image-placeholder 通过 ${checks} 项(扫了 ${sites.length} 个图片位)`)

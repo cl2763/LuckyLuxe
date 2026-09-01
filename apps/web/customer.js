@@ -1079,7 +1079,7 @@ function renderHome() {
       <div class="hero-carousel" aria-label="${brandName()}">
         <div class="hero-slide-track">
           ${slides.map((slide, index) => `
-            <img class="hero-slide ${index === activeSlide ? 'active' : ''}" src="${slide.image}" alt="${escapeHtml(slide.label || '')}">
+            ${slide.image ? `<img class="hero-slide ${index === activeSlide ? 'active' : ''}" src="${slide.image || ''}" alt="${escapeHtml(slide.label || '')}">` : ''}
           `).join('')}
           ${/* 🔴 店主 08-28(六)实测:面板里写的文案顾客端看不到。查明=**渲染在别处** ——
                 label 原来只落在 alt / aria-label(无障碍属性,屏幕上看不见)。
@@ -1363,7 +1363,7 @@ function renderPortfolio() {
         <div class="technician-work-grid">
           ${(selected.images || []).map((image, index) => `
             <a href="${image}" target="_blank" rel="noreferrer">
-              <img src="${image}" alt="${selected.technician?.name || brandName()} ${index + 1}">
+              ${image ? `<img src="${image}" alt="${selected.technician?.name || brandName()} ${index + 1}">` : ''}
             </a>
           `).join('')}
         </div>
@@ -1379,7 +1379,7 @@ function renderPortfolio() {
           <div class="portfolio-preview-grid">
             ${(portfolio.images || []).slice(0, 4).map((image, index) => `
               <button class="portfolio-preview-card" data-portfolio-tech="${portfolio.technician?.id || ''}" type="button">
-                <img src="${image}" alt="${portfolio.technician?.name || brandName()} ${index + 1}">
+                ${image ? `<img src="${image}" alt="${portfolio.technician?.name || brandName()} ${index + 1}">` : ''}
               </button>
             `).join('')}
           </div>
@@ -1557,7 +1557,7 @@ function renderBookingForm() {
           </label>
           ${state.referenceImages.map((image, index) => `
             <div class="reference-thumb card">
-              <img src="${image}" alt="${t('reference')} ${index + 1}">
+              ${image ? `<img src="${image}" alt="${t('reference')} ${index + 1}">` : ''}
               <button class="ghost mini-remove" data-remove-reference="${index}" type="button">×</button>
             </div>
           `).join('')}
@@ -1659,7 +1659,7 @@ function renderCartItem(item) {
         <p>${item.date} · ${item.time} · ${item.technician.name}</p>
         <p><strong>${t('deposit')} ${money(payableDepositFor(item))}</strong> · ${t('servicePrice')} ${money(item.servicePriceCents)}</p>
         ${userWaivesDeposit() ? `<p class="subtle">${state.lang === 'zh' ? '会员等级已减免预约定金' : 'Member tier deposit waiver applied'}</p>` : ''}
-        ${item.referenceImages?.length ? `<div class="cart-reference-row">${item.referenceImages.map((image, index) => `<img src="${image}" alt="${t('reference')} ${index + 1}">`).join('')}</div>` : ''}
+        ${item.referenceImages?.length ? `<div class="cart-reference-row">${item.referenceImages.map((image, index) => image ? `<img src="${image}" alt="${t('reference')} ${index + 1}">` : '').join('')}</div>` : ''}
       </div>
       ${window.ImgPlaceholder.tag(item.service.imageUrl, { alt: item.service.name, zh: state.lang !== 'en' })}
       <button class="ghost" data-remove-cart="${item.id}" type="button">Remove</button>
@@ -1687,7 +1687,7 @@ function renderCheckout() {
               <span>${item.technician.name}</span>
             </div>
             <p><strong>${t('deposit')} ${money(payableDepositFor(item))}</strong><span>${t('servicePrice')} ${money(item.servicePriceCents)}</span></p>
-            ${item.referenceImages?.length ? `<div class="cart-reference-row">${item.referenceImages.map((image, index) => `<img src="${image}" alt="${t('reference')} ${index + 1}">`).join('')}</div>` : ''}
+            ${item.referenceImages?.length ? `<div class="cart-reference-row">${item.referenceImages.map((image, index) => image ? `<img src="${image}" alt="${t('reference')} ${index + 1}">` : '').join('')}</div>` : ''}
           </div>
         </article>
       `).join('') : `<div class="empty-state">${t('emptyCart')}</div>`}
@@ -1905,7 +1905,7 @@ function renderMe() {
             // 其它格是实拍照(铺满),积分格现在放的是线条图标(要留白居中);
             // 将来换成奖品缩略图时把 icon-art 去掉即可,版面不动。
             const imgCls = ' class="menu-img-art"'   // 三格现在都是线条图标(见上面那条注释)
-            return `<button class="menu-card card" data-me-target="${target}" type="button"><img${imgCls} src="${image}" alt="${label}"><strong>${label}</strong><span>${escapeHtml(sub)}</span></button>`
+            return `<button class="menu-card card" data-me-target="${target}" type="button">${image ? `<img${imgCls} src="${image}" alt="${label}">` : ''}<strong>${label}</strong><span>${escapeHtml(sub)}</span></button>`
           }).join('')}
         </div>
       </section>
@@ -2202,7 +2202,7 @@ function renderOrderDetailWeb() {
           <div class="customer-work-grid">
             ${workImages.map((image, index) => `
               <figure class="customer-work-item">
-                <a href="${image}" target="_blank" rel="noreferrer"><img src="${image}" alt="${t('finalPhotos')} ${index + 1}"></a>
+                <a href="${image}" target="_blank" rel="noreferrer">${image ? `<img src="${image}" alt="${t('finalPhotos')} ${index + 1}">` : ''}</a>
                 <a class="ghost mini-download" href="${image}" download="Lucky-Luxe-${order.publicCode || order.id}-${index + 1}.jpg">${t('downloadImage')}</a>
               </figure>
             `).join('')}
