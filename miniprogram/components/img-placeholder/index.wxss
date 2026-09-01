@@ -2,7 +2,9 @@
 /* D120 二刀(改后真截图咬出:轮播占位塌成一条、下面大片空白)——
    :host 只给了宽没给高,swiper-item 里根节点高度 auto → 内层 height:100% 无参照 → 塌到 min-height。
    补 height:100%:在有固定高度的容器(swiper 500rpx / 卡片 170rpx)里根节点才撑得满。 */
-:host { display: block; width: 100%; height: 100%; }
+/* D120 定刀(店主 02m 放行):尺寸类改写在**组件标签本身**上(标签 class 走页面样式,与隔离无关),
+   所以 :host **不再自设 height** —— 免得跟标签上的类打架(店主定死的第三变量就是这类特异性冲突)。 */
+:host { display: block; width: 100%; }
 .ph-img { display: block; width: 100%; height: 100%; }
 .ph-box {
   display: flex; flex-direction: column; align-items: center; justify-content: center;
@@ -10,7 +12,8 @@
      .ph-box 自己写死 height:100%,把调用方传进来的 .recommend-visual{height:170rpx} 压过去了。
      改:**不自设高度**,高度一律由调用方那个类决定(占位=它替代的那张图的形状);
      只有调用方没给高度时,min-height 才兜底。 */
-  width: 100%; min-height: 88rpx; box-sizing: border-box;
+  /* 宿主现在有确定高度了 → 两个分支都用 100% 撑满它,有图/占位同高(D120 判据要的就是这个相等) */
+  width: 100%; height: 100%; min-height: 88rpx; box-sizing: border-box;
   background: repeating-linear-gradient(45deg, rgba(0,0,0,.02) 0 16rpx, rgba(0,0,0,.05) 16rpx 32rpx);
   border: 1rpx dashed #ded7cf; color: #9a938c;
 }
