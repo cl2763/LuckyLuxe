@@ -794,9 +794,24 @@ Page({
             return
           }
           wx.showToast({ title: '顾客已签署,全部完成', icon: 'success' })
-          /* D67①(D61 补尾,店主 08-22):全组签完自动回**排班台面**——不是退一层
-             (从订单页进来的退一层回订单页,店主要的是回台面接着接客)。 */
-          setTimeout(() => { this.setData({ qr: null }); require('../../../utils/nav').relaunch('/pages/merchant/workbench/index') }, 900)
+          /* D97(01t 设计回归恢复):结算完成 → 写小记环节(可跳过);跳过=这单自动进「待写小记」清单。
+             D67① 回台面动作保留在两个分支尾。 */
+          setTimeout(() => {
+            this.setData({ qr: null })
+            const goBoard = () => require('../../../utils/nav').relaunch('/pages/merchant/workbench/index')
+            const { userId, bookingId, customerName } = this.data
+            if (!userId) { goBoard(); return }
+            wx.showModal({
+              title: '给这单写个服务小记?',
+              content: '记录做了什么/用色/下次注意;跳过后这单会进「待写小记」清单,随时可补。',
+              confirmText: '去写', cancelText: '跳过',
+              success: (r2) => {
+                if (r2.confirm) wx.redirectTo({ url: `/pages/merchant/service-note/index?userId=${userId}&bookingId=${bookingId || ''}&name=${encodeURIComponent(customerName || '')}` })
+                else goBoard()
+              },
+              fail: () => goBoard()
+            })
+          }, 900)
           return
         }
       } catch (e) { /* 网络抖动下一轮再问 */ }

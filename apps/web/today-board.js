@@ -28,6 +28,8 @@ window.TodayBoard = (function () {
     const { request, toast } = deps
     try {
       const r = await request(`/admin/schedule-day?date=${date}`)
+      /* D97(01t):待写小记数与台面同批拉(既有口 /admin/service-notes/pending) */
+      try { stateT.pendingNotes = (await request(`/admin/service-notes/pending?date=${date}`)).items || [] } catch { stateT.pendingNotes = [] }
       stateT.dv = assemble(date, r, deps)
     } catch (e) {
       stateT.dv = null
@@ -120,6 +122,7 @@ window.TodayBoard = (function () {
         <span class="tb-pill">在岗 <b>${dv.working}</b> 人</span>
         <span class="tb-pill">空档 <b>${dv.freeHours}</b> h</span>
         ${pendingCloseCount ? `<button class="tb-pill hot" data-tb-close type="button">待日结 <b>${pendingCloseCount}</b></button>` : ''}
+        ${(stateT.pendingNotes || []).length ? `<button class="tb-pill warn" data-tb-notes type="button">待写小记 <b>${stateT.pendingNotes.length}</b></button>` : ''}
       </div>
       ${dv.cols.length ? `
       <div class="tb-grid">
@@ -170,13 +173,33 @@ window.TodayBoard = (function () {
       ` : '<div class="empty-state">本日无在岗技师</div>'}`}
     `
     if (stateT.free) mount.insertAdjacentHTML('beforeend', renderFreePanel(escapeHtml))
+    if (stateT.notesOpen) mount.insertAdjacentHTML('beforeend', `
+      <div class="sw-cpnmask" data-tbn-close></div>
+      <div class="sw-cpnsheet">
+        <div class="sw-ch">待写小记 · ${escapeHtml(stateT.date)}</div>
+        ${(stateT.pendingNotes || []).map(function (n) { return `
+          <div class="tbn-row"><span>${escapeHtml(n.time)} ${escapeHtml(n.customerName)} · ${escapeHtml(n.serviceName)} · ${escapeHtml(n.technicianName)}</span>
+          <button class="ghost slim" data-tbn-write="${escapeHtml(n.bookingId)}" data-uid="${escapeHtml(n.userId)}" data-name="${escapeHtml(n.customerName)}" type="button">写</button></div>` }).join('') || '<p class="subtle">今天没有待写的单。</p>'}
+      </div>`)
     bind(mount)
   }
 
   /* 空档「+ 直接排单」= 小程序 tapFree 的直排面板同功能(死口清剿三.1:不再指小程序)。
      同一条后端路由 POST /admin/bookings/direct;技师与时间就是点的那个空档。 */
+  function calcEnd(time, dur) {
+    if (!/^\d{1,2}:\d{2}$/.test(time || '')) return ''
+    const mm = Number(time.slice(0, 2)) * 60 + Number(time.slice(3)) + (dur || 120)
+    return String(Math.floor(mm / 60)).padStart(2, '0') + ':' + String(mm % 60).padStart(2, '0')
+  }
+
   function renderFreePanel(escapeHtml) {
     const f = stateT.free
+    stateT._catsView = (function () {
+      const mains = (stateT._services || []).filter(function (i) { return (i.itemKind || 'main') === 'main' })
+      const cats = (stateT._cats || []).filter(function (c) { return mains.some(function (m) { return (m.categoryId || '') === c.id }) })
+      if (mains.some(function (m) { return !m.categoryId })) cats.push({ id: '', name: '未分类' })
+      return cats
+    })()
     const tech = (stateT.dv.cols.find(function (c) { return c.id === f.techId }) || {})
     const services = (stateT._services || []).filter(function (i) { return (i.itemKind || 'main') === 'main' })
     return `
@@ -189,10 +212,18 @@ window.TodayBoard = (function () {
         <input class="sw-in full" data-tbf-q placeholder="搜姓名 / 手机号,或直接填新客姓名" value="${escapeHtml(f.q || '')}">
         ${(f.hits || []).map(function (h) { return `<button class="sw-cpn ${f.userId === h.id ? 'on' : ''}" data-tbf-pick="${escapeHtml(h.id)}" data-name="${escapeHtml(h.displayName)}" type="button"><span class="l"><span class="n">${escapeHtml(h.displayName)}</span><span class="s">${escapeHtml(h.phoneMasked || '')}</span></span></button>` }).join('')}
         ${f.userId ? `<p class="sw-grppicked">已选:${escapeHtml(f.name)}(再点搜索结果可换)</p>` : (f.q ? `<p class="sw-hint-line">没选中现有顾客时,「${escapeHtml(f.q)}」将按**新客**建档排单</p>` : '')}
-        <div class="sw-sec">服务项目</div>
+        <div class="sw-sec">服务项目(大类 → 小类,与结算目录同源)</div>
         <div class="sw-chiprow">
-          ${services.map(function (i) { return `<button class="sw-chip ${f.serviceId === i.id ? 'on' : ''}" data-tbf-svc="${escapeHtml(i.id)}" type="button">${escapeHtml(i.nameZh || i.name)}</button>` }).join('')}
+          ${(stateT._catsView || []).map(function (c) { return `<button class="sw-chip cat ${f.catId === c.id ? 'on' : ''}" data-tbf-cat="${escapeHtml(c.id)}" type="button">${escapeHtml(c.name)}</button>` }).join('')}
         </div>
+        <div class="sw-chiprow">
+          ${services.filter(function (i) { return (i.categoryId || '') === f.catId }).map(function (i) { return `<button class="sw-chip ${f.serviceId === i.id ? 'on' : ''}" data-tbf-svc="${escapeHtml(i.id)}" type="button">${escapeHtml(i.nameZh || i.name)}</button>` }).join('')}
+        </div>
+        <div class="sw-sec">时长 ${f.durationMin} 分钟 · 预计结束 ${escapeHtml(calcEnd(f.timeSel || f.time, f.durationMin))}
+          <button class="ghost slim" data-tbf-dur="-30" type="button">−30</button>
+          <button class="ghost slim" data-tbf-dur="30" type="button">+30</button>
+          <button class="ghost slim" data-tbf-dur="0" type="button">标准</button></div>
+        <label class="sw-sec dep"><input type="checkbox" data-tbf-dep ${f.deposit ? 'checked' : ''}> 已收定金(走「标记已收定金」同一动作;现场即时单通常不收)</label>
         <button class="sw-cta" data-tbf-submit type="button">排进 ${escapeHtml(f.timeSel || f.time)} 这个空档</button>
       </div>`
   }
@@ -203,6 +234,14 @@ window.TodayBoard = (function () {
     mount.querySelector('[data-tb-next]')?.addEventListener('click', function () { load(shift(stateT.date, 1), deps) })
     mount.querySelector('[data-tb-today]')?.addEventListener('click', function () { load(deps.storeToday(), deps) })
     mount.querySelector('[data-tb-close]')?.addEventListener('click', function () { deps.goDailyClose() })
+    mount.querySelector('[data-tb-notes]')?.addEventListener('click', function () { stateT.notesOpen = true; render() })
+    mount.querySelector('[data-tbn-close]')?.addEventListener('click', function () { stateT.notesOpen = false; render() })
+    mount.querySelectorAll('[data-tbn-write]').forEach(function (el) {
+      el.addEventListener('click', function () {
+        stateT.notesOpen = false; render()
+        if (window.ServiceNoteModal) window.ServiceNoteModal.open(el.dataset.uid, el.dataset.name || '顾客', stateT.deps, el.dataset.tbnWrite)
+      })
+    })
     mount.querySelector('[data-tb-setup]')?.addEventListener('click', function () { deps.goHoursSetup() })
     mount.querySelectorAll('[data-tb-block]').forEach(function (el) {
       /* 点块 = 打开该单(与小程序 tapBlock 出操作面板同一动作数:1 下)——
@@ -245,8 +284,36 @@ window.TodayBoard = (function () {
     mount.querySelectorAll('[data-tbf-pick]').forEach(function (el) {
       el.addEventListener('click', function () { stateT.free.userId = el.dataset.tbfPick; stateT.free.name = el.dataset.name; render() })
     })
+    mount.querySelectorAll('[data-tbf-cat]').forEach(function (el) {
+      el.addEventListener('click', function () {
+        const f = stateT.free
+        f.catId = el.dataset.tbfCat
+        const first = (stateT._services || []).filter(function (i) { return (i.itemKind || 'main') === 'main' && (i.categoryId || '') === f.catId })[0] || {}
+        f.serviceId = first.id || ''
+        f.durationMin = first.baseDurationMin || 120
+        render()
+      })
+    })
+    mount.querySelectorAll('[data-tbf-dur]').forEach(function (el) {
+      el.addEventListener('click', function () {
+        const f = stateT.free
+        const d = Number(el.dataset.tbfDur)
+        if (d === 0) {
+          const cur = (stateT._services || []).find(function (i) { return i.id === f.serviceId }) || {}
+          f.durationMin = cur.baseDurationMin || 120
+        } else f.durationMin = Math.min(360, Math.max(30, f.durationMin + d))
+        render()
+      })
+    })
+    mount.querySelector('[data-tbf-dep]')?.addEventListener('change', function (e2) { stateT.free.deposit = e2.target.checked })
     mount.querySelectorAll('[data-tbf-svc]').forEach(function (el) {
-      el.addEventListener('click', function () { stateT.free.serviceId = el.dataset.tbfSvc; render() })
+      el.addEventListener('click', function () {
+        const f = stateT.free
+        f.serviceId = el.dataset.tbfSvc
+        const cur = (stateT._services || []).find(function (i) { return i.id === f.serviceId }) || {}
+        f.durationMin = cur.baseDurationMin || 120
+        render()
+      })
     })
     mount.querySelector('[data-tbf-submit]')?.addEventListener('click', async function () {
       const f = stateT.free
@@ -255,13 +322,14 @@ window.TodayBoard = (function () {
       if (f.busy) return   // D88:双击双 POST 拦(第一发在途时第二发不出手)
       f.busy = true
       try {
-        const body = { serviceId: f.serviceId, technicianId: f.techId, date: stateT.date, time: f.timeSel || f.time }
+        const body = { serviceId: f.serviceId, technicianId: f.techId, date: stateT.date, time: f.timeSel || f.time, durationMin: f.durationMin, depositPaid: f.deposit === true }
         if (f.userId) body.userId = f.userId
         else body.newCustomerName = f.q.trim()
         await deps.request('/admin/bookings/direct', { method: 'POST', body: JSON.stringify(body) })
         f.busy = false
         deps.toast('已排进空档 —— 点这个块可去结算')
         stateT.free = null
+        if (deps.refreshBookings) deps.refreshBookings()   // D96:回灌全局预约缓存,「全部预约/日历」立即读得到
         load(stateT.date, deps)
       } catch (e2) { f.busy = false; deps.toast((e2 && e2.message) || '排单失败') }
     })
@@ -285,11 +353,23 @@ window.TodayBoard = (function () {
       },
       goDailyClose: function () { document.querySelector('#dcJumpGo')?.click() },
       onFreeSlot: async function (techId, time, _date, end) {
+        /* D95(01t):与小程序 tapFree 同源同粒度 —— 大类→小类两级 + 服务时长定结束时间 */
         if (!stateT._services) {
-          const r = await deps.request('/admin/pricing/items').catch(function () { return { items: [] } })
-          stateT._services = (r.items || []).filter(function (i) { return i.isActive !== false })
+          const rr = await Promise.all([
+            deps.request('/admin/pricing/items').catch(function () { return { items: [] } }),
+            deps.request('/admin/pricing/categories').catch(function () { return { categories: [] } })
+          ])
+          stateT._services = (rr[0].items || []).filter(function (i) { return i.isActive !== false })
+          stateT._cats = (rr[1].categories || []).filter(function (c) { return c.isBookable !== false })
         }
-        stateT.free = { techId, time, end: end || '', timeSel: time, q: '', hits: [], userId: '', name: '', serviceId: '' }
+        const mains = stateT._services.filter(function (i) { return (i.itemKind || 'main') === 'main' })
+        const catIds = stateT._cats.filter(function (c) { return mains.some(function (m) { return (m.categoryId || '') === c.id }) })
+        if (mains.some(function (m) { return !m.categoryId })) catIds.push({ id: '', name: '未分类' })
+        const cat0 = (catIds[0] || { id: '' }).id
+        const svc0 = mains.find(function (m) { return (m.categoryId || '') === cat0 }) || {}
+        const dur0 = svc0.baseDurationMin || 120
+        stateT.free = { techId, time, end: end || '', timeSel: time, q: '', hits: [], userId: '', name: '',
+          catId: cat0, serviceId: svc0.id || '', durationMin: dur0, deposit: false }
         render()
       }
     }, deps))

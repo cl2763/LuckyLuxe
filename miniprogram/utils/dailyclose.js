@@ -17,6 +17,8 @@ function shiftDate(d, n) {
 
 // 两处共用的初始 data(展开进各自 Page 的 data)
 const dailyCloseData = {
+  // D94 连带(01t):snapViewer 无初值 → 组件收 undefined,控制台属性类型警告×每次渲染;初值只住这一处
+  snapViewer: { open: false, items: [], index: 0 },
   date: '', loading: true, isToday: true, v: null, open: {}, shares: {},
   correcting: null, newTotal: '', reason: '',
   // D79 现金手记的表单态(金额/备注只进 data,不回写输入框 —— 敲的过程中不许重画)
@@ -200,7 +202,7 @@ const dailyCloseMixin = {
       wx.showToast({ title: (err && err.message) || '打开签署单失败', icon: 'none' })
     }
   },
-  closeSnapViewer() { this.setData({ snapViewer: null }) },
+  closeSnapViewer() { this.setData({ snapViewer: { open: false, items: [], index: 0 } }) }, // D94:设回 null=组件又收 undefined,警告复发
   // 单据预览卡里的「查看签署原图」冒泡到这里 —— 与日结行同一入口实现(不另开一份)
   onPreviewViewSnapshot(e) {
     const code = (e.detail && e.detail.code) || ''

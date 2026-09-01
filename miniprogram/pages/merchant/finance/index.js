@@ -13,6 +13,7 @@ function localToday() {
 
 Page({
   data: {
+    snapViewer: { open: false, items: [], index: 0 },
     svTxns: [], svFilter: 'all', svRechargeTotal: '', svConsumeTotal: '',
     unlocked: false,
     lockEnabled: false,
@@ -227,7 +228,7 @@ Page({
       this.setData({ snapViewer: { open: true, items, index: Math.max(0, items.findIndex((it) => it.code === String(code))) } })
     } catch (err) { wx.showToast({ title: (err && err.message) || '打开凭证失败', icon: 'none' }) }
   },
-  closeSnapViewer() { this.setData({ snapViewer: null }) },
+  closeSnapViewer() { this.setData({ snapViewer: { open: false, items: [], index: 0 } }) },
   toEntry() { wx.navigateTo({ url: '/pages/merchant/finance-entry/index' }) },
   toTxns() { wx.navigateTo({ url: '/pages/merchant/finance-txns/index' }) },
   toSalary() { wx.navigateTo({ url: '/pages/merchant/salary-month/index' }) },

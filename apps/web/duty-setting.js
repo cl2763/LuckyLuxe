@@ -7,13 +7,18 @@ window.DutySetting = (function () {
     const render = async () => {
       let on = false
       try { on = Boolean((await request('/admin/duty-setting')).enabled) } catch (e) { el.innerHTML = ''; return }
+      /* D98(01t):原来是页中巨方框(checkbox+大段 label)——改与其他设置行同形制:说明句行内小字 + 行右标准开关 */
       el.innerHTML = `
-        <label class="br-row"><input type="checkbox" data-duty-on ${on ? 'checked' : ''}>
-          开启值日表(开启后,今天台面底部出现「值日」行,点技师名勾选当日值日;员工端同位置只读可见)</label>`
-      el.querySelector('[data-duty-on]').addEventListener('change', async (ev) => {
+        <div class="duty-row">
+          <span class="note">开启后,今天台面底部出现「值日」行,点技师名勾选当日值日;员工端两端台面同位只读可见。</span>
+          <button class="ui-sw ${on ? 'on' : ''}" data-duty-on type="button" aria-label="值日表开关"></button>
+        </div>`
+      el.querySelector('[data-duty-on]').addEventListener('click', async (ev) => {
+        const next = !on
         try {
-          await request('/admin/duty-setting', { method: 'PUT', body: JSON.stringify({ enabled: ev.target.checked }) })
-          toast(ev.target.checked ? '值日表已开启' : '值日表已关闭(台面不再显示值日行)')
+          await request('/admin/duty-setting', { method: 'PUT', body: JSON.stringify({ enabled: next }) })
+          toast(next ? '值日表已开启' : '值日表已关闭(台面不再显示值日行)')
+          render()
         } catch (e) { toast(e.message || '保存失败'); render() }
       })
     }

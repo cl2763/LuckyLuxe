@@ -7421,7 +7421,7 @@ section.card > .section-row:first-child { margin-top: 0; }
 .sw-hint-line { font-size: 12px; color: var(--muted); margin: 4px 0; }
 .sw-gh { font-size: 12px; color: var(--muted); margin: 10px 0 4px; }
 .sw-chiprow { display: flex; flex-wrap: wrap; gap: 8px; }
-.sw-chip { border: 1px solid var(--line); border-radius: 16px; padding: 4px 14px; font-size: 13px; background: #fff; cursor: pointer; }
+.sw-chip { border: 1px solid var(--line); border-radius: 999px; padding: 4px 14px; font-size: 13px; background: #fff; cursor: pointer; }
 .sw-chip.on { background: #2d2a26; color: #fff; border-color: #2d2a26; }
 .sw-tcbadge { margin-left: 4px; font-size: 11px; color: #b08d57; }
 /* 项目/加项 = 列表行(小程序 .item 同形):勾框 + 名称 + 划线原价 + 现价;宽屏两栏 */
@@ -7485,7 +7485,7 @@ section.card > .section-row:first-child { margin-top: 0; }
 .sw-tl { display: flex; justify-content: space-between; padding: 3px 0; }
 .sw-tl.save { color: #b08d57; }
 .sw-tl.big { font-size: 17px; font-weight: 700; border-top: 1px solid var(--line); margin-top: 8px; padding-top: 8px; }
-.sw-cta { border: none; background: #2d2a26; color: #fff; border-radius: 10px; padding: 14px; font-size: 16px; cursor: pointer; width: 100%; }
+.sw-cta { border: none; background: #2d2a26; color: #fff; border-radius: 8px; padding: 14px; font-size: 16px; cursor: pointer; width: 100%; }
 .sw-cta:disabled { opacity: .6; }
 .sw-foot { text-align: center; font-size: 12px; color: var(--muted); }
 .sw-empty { font-size: 13px; color: var(--muted); padding: 6px 0; }
@@ -7588,10 +7588,10 @@ section.card > .section-row:first-child { margin-top: 0; }
 .hsw-title { font-size: 20px; font-weight: 700; margin-bottom: 2px; }
 .hsw-hint { font-size: 13px; color: var(--muted); margin-bottom: 14px; }
 .hsw-day { display: flex; align-items: center; gap: 10px; padding: 8px 0; border-bottom: 1px dashed var(--line); }
-.hsw-sw { width: 34px; height: 20px; border-radius: 10px; border: none; background: var(--line); position: relative; cursor: pointer; flex-shrink: 0; }
-.hsw-sw::after { content: ""; position: absolute; width: 16px; height: 16px; border-radius: 50%; background: #fff; top: 2px; left: 2px; transition: left .15s; }
-.hsw-sw.on { background: #0e6e62; }
-.hsw-sw.on::after { left: 16px; }
+.hsw-sw, .ui-sw { width: 34px; height: 20px; border-radius: 10px; border: none; background: var(--line); position: relative; cursor: pointer; flex-shrink: 0; }
+.hsw-sw::after, .ui-sw::after { content: ""; position: absolute; width: 16px; height: 16px; border-radius: 50%; background: #fff; top: 2px; left: 2px; transition: left .15s; }
+.hsw-sw.on, .ui-sw.on { background: #0e6e62; }
+.hsw-sw.on::after, .ui-sw.on::after { left: 16px; }
 .hsw-dn { width: 2.4em; font-size: 14px; }
 .hsw-times { margin-left: auto; display: flex; align-items: center; gap: 4px; font-size: 13px; }
 .hsw-times input { border: 1px solid var(--line); border-radius: 6px; padding: 3px 6px; font-size: 13px; }
@@ -7632,7 +7632,7 @@ section.card > .section-row:first-child { margin-top: 0; }
 .nfy-num { width: 70px; padding: 3px 6px; text-align: center; }
 .nfy-tpl { width: 100%; box-sizing: border-box; margin-top: 8px; border: 1px dashed var(--line, #e2e0d8); border-radius: 8px; padding: 8px 10px; font-size: 13px; background: #faf9f6; line-height: 1.6; resize: vertical; }
 .nfy-chips { display: flex; gap: 5px; flex-wrap: wrap; margin-top: 6px; }
-.nfy-chips button { font-size: 11px; background: #eef4f2; color: #0a5a50; border: none; border-radius: 5px; padding: 1px 8px; cursor: pointer; }
+.nfy-chips button { font-size: 11px; background: #eef4f2; color: #0a5a50; border: none; border-radius: 999px; padding: 1px 10px; cursor: pointer; }
 .nfy-prev { margin-top: 6px; font-size: 12px; color: #6b6f66; }
 .nfy-prev em { font-style: normal; color: var(--ink, #141413); }
 .nfy-btnrow { display: flex; gap: 10px; align-items: center; margin-top: 8px; }
@@ -7645,11 +7645,12 @@ section.card > .section-row:first-child { margin-top: 0; }
 .nfy-why summary { cursor: pointer; color: #a8322a; font-size: 12px; }
 /* ===== RFM 接回网页(customer-tags.js;08-30h 拉平批①)===== */
 .rfm-bar { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; margin: 0 0 10px 2px; font-size: 13px; }
-.rfm-chip { border: 1px solid #d9d9de; background: #fff; border-radius: 14px; padding: 3px 10px; font-size: 12px; cursor: pointer; }
+.rfm-chip { border: 1px solid #d9d9de; background: #fff; border-radius: 999px; padding: 3px 12px; font-size: 12px; cursor: pointer; }
 .rfm-chip.on { background: #111; color: #fff; border-color: #111; }
-.rfm-rules-editor { display: flex; flex-direction: column; gap: 6px; margin: 0 0 12px 2px; padding: 10px 12px; border: 1px solid var(--line, #e5e5ea); border-radius: 10px; font-size: 13px; }
+/* 01t 店主裁定:阈值编辑器横排一行 */
+.rfm-rules-editor { display: flex; flex-direction: row; flex-wrap: wrap; align-items: center; gap: 6px 18px; margin: 0 0 12px 2px; padding: 10px 12px; border: 1px solid var(--line, #e5e5ea); border-radius: 10px; font-size: 13px; }
 .rfm-rules-editor input { width: 64px; padding: 2px 6px; text-align: center; }
-.rfm-rules-editor button { align-self: flex-start; }
+.rfm-rules-editor button { align-self: center; margin-left: auto; }
 
 /* ===== 打卡 WiFi 名单(attendance-wifi.js;08-31 裁清单#11)===== */
 .att-wifi { margin-top: 14px; padding-top: 10px; border-top: 1px solid var(--line, #e5e5ea); }
@@ -7687,8 +7688,8 @@ section.card > .section-row:first-child { margin-top: 0; }
 /* ===== 值日行(today-board;31l)===== */
 .tb-duty { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; margin: 10px 0 2px; font-size: 13px; }
 .tb-duty-lab { font-weight: 700; }
-.tb-duty-chip { border: 1px solid #d9d9de; background: #fff; border-radius: 14px; padding: 2px 12px; font-size: 12px; cursor: pointer; }
-.tb-duty-chip.on { background: #0e6e62; color: #fff; border-color: #0e6e62; }
+.tb-duty-chip { border: 1px solid #d9d9de; background: #fff; border-radius: 999px; padding: 2px 12px; font-size: 12px; cursor: pointer; }
+.tb-duty-chip.on { background: #1f1b16; color: #fff; border-color: #1f1b16; font-weight: 700; }
 .tb-duty-chip.ro { cursor: default; opacity: .9; }
 
 /* ===== 报价状态横幅(31p;三色,句后端出)===== */
@@ -7705,3 +7706,15 @@ section.card > .section-row:first-child { margin-top: 0; }
 /* D91 薪资卡月切换(同形 monthbar) */
 .swb-monthbar { display: flex; align-items: center; gap: 10px; }
 .swb-monthbar h3 { margin: 0; }
+
+/* D98:值日设置行=行内说明小字 + 右侧标准开关(.ui-sw=全站唯一开关) */
+.duty-row { display: flex; align-items: center; justify-content: space-between; gap: 14px; padding: 4px 0; }
+.duty-row .note { font-size: 12.5px; color: var(--muted); line-height: 1.6; }
+
+/* D97:台面待写小记 pill + 面板行 */
+.tb-pill.warn { background: #fdf3e3; color: #8a5a00; border-color: #eadfc7; cursor: pointer; }
+.tbn-row { display: flex; align-items: center; justify-content: space-between; gap: 10px; padding: 8px 0; border-bottom: 1px dashed var(--line); font-size: 13px; }
+
+/* D101② 会话侧顾客卡 kv 行 */
+.cs-kv { display: flex; justify-content: space-between; gap: 10px; margin: 3px 0; font-size: 12.5px; }
+.cs-kv span { color: var(--muted); }

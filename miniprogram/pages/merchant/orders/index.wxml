@@ -21,6 +21,7 @@
       <text class="dv-pill">在岗 <text class="b">{{dv.working}}</text> 人</text>
       <text class="dv-pill">空档 <text class="b">{{dv.freeHours}}</text> h</text>
       <text class="dv-pill hot" wx:if="{{isOwner && v && v.pending.length}}" bindtap="scrollToClose">待日结 <text class="b">{{v.pending.length}}</text></text>
+      <text class="dv-pill warn" wx:if="{{pendingNotes.length}}" bindtap="tapPendingNotes">待写小记 <text class="b">{{pendingNotes.length}}</text></text>
       <view class="dv-share" bindtap="shareSchedule">⤴ 分享</view>
     </view>
     <!-- D2:台面空态与日结自洽 —— 「本日休息」但日结里有单时,这里就把原因说出来,

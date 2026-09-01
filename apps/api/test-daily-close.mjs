@@ -434,10 +434,15 @@ async function main() {
   const firstOfThisMonth = new Date(Date.UTC(Number(tParts[0]), Number(tParts[1]) - 1, 1))
   const lastOfPrevMonth = new Date(firstOfThisMonth.getTime() - 86400000).toISOString().slice(0, 10)
   const prevMonthKey = lastOfPrevMonth.slice(0, 7)
-  const xmBk = (await request('/admin/bookings/direct', {
+  const xmBkRes = await request('/admin/bookings/direct', {
     method: 'POST',
-    body: JSON.stringify({ userId: cust, serviceId: svc.id, technicianId: techA.id, date: lastOfPrevMonth, time: '21:00', durationMin: 60, depositPaid: false })
-  }, shop.token)).data.booking
+    /* 日界夹具雷(01t 全量红咬出,只在每月 1 号引爆):yesterday==lastOfPrevMonth 时,
+       本单(21:00)与归属⑤的 techA 20:30–21:30 撞位 → UNIQUE 409(D88 措辞选择器还把它说成"时段已过")。
+       挪到 22:30 与所有昨天夹具错开;教训:日期推导的两个夹具必须错位,别赌日历。 */
+    body: JSON.stringify({ userId: cust, serviceId: svc.id, technicianId: techA.id, date: lastOfPrevMonth, time: '22:30', durationMin: 60, depositPaid: false })
+  }, shop.token)
+  if (!xmBkRes.data || !xmBkRes.data.booking) { console.error('[诊断] 跨月直排回:', xmBkRes.status, JSON.stringify(xmBkRes.data).slice(0, 200)) }
+  const xmBk = xmBkRes.data.booking
   const xmSheet = (await request('/admin/settlements', {
     method: 'POST',
     body: JSON.stringify({ cardOwnerUserId: cust, settlements: [{ bookingId: xmBk.id, tierKey: 'list', payIntent: 'offline_full', items: [{ serviceId: svc.id }], technicians: [{ technicianId: techA.id, role: 'main', itemNos: [1] }] }] })

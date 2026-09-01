@@ -271,8 +271,13 @@ page{background:#fbf8f5}
 .dv-sw-btn { display: inline-block; background: #2d2a26; color: #fff; border-radius: 10rpx; padding: 14rpx 40rpx; font-size: 26rpx; }
 
 /* 31l 值日行 */
-.dv-duty { display: flex; align-items: center; gap: 12rpx; flex-wrap: wrap; margin: 16rpx 0 4rpx; font-size: 24rpx; }
-.dv-duty-lab { font-weight: 700; }
-.dv-duty-chip { border: 2rpx solid #d9d9de; background: #fff; border-radius: 22rpx; padding: 4rpx 20rpx; font-size: 22rpx; }
-.dv-duty-chip.on { background: #0e6e62; color: #fff; border-color: #0e6e62; }
-.dv-duty-note { color: #8a8a8e; }
+.dv-duty { display: flex; align-items: center; gap: 14rpx; row-gap: 12rpx; flex-wrap: wrap; margin: 24rpx 0 8rpx; padding: 16rpx 24rpx; border-top: 1rpx dashed #e4dccf; font-size: 24rpx; }
+.dv-duty-lab { font-weight: 700; padding: 4rpx 0; }
+/* D94 + UI规范:chips=胶囊 999rpx,选中=黑底白字(台面黑白规格),行距给呼吸(照图例区留白) */
+.dv-duty-chip { border: 2rpx solid #d9d9de; background: #fff; color: #2d2826; border-radius: 999rpx; padding: 8rpx 24rpx; font-size: 22rpx; line-height: 1.4; }
+.dv-duty-chip.on { background: #1f1b16; color: #fff; border-color: #1f1b16; font-weight: 700; }
+.dv-duty-chip.ro { opacity: .7; }
+.dv-duty-note { width: 100%; color: #8a8a8e; font-size: 20rpx; }
+
+/* D97 待写小记 pill(warn 色与网页同语) */
+.dv-pill.warn{background:#fdf3e3;color:#8a5a00;border:1rpx solid #eadfc7}

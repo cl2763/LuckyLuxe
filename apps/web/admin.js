@@ -1,6 +1,6 @@
 // 构建号:每次交付递增。侧栏可见,排查"改了没生效"时先对版本。
 // 兜底用(服务端会注入 window.LL_BUILD = 资源内容指纹,页面优先显示那个)
-const ADMIN_BUILD = '20260901q-qs01'
+const ADMIN_BUILD = '20260901t-obs01'
 let pricingState = { module: 'storefront', tab: 'items', categories: [], items: [], rules: {}, editing: null, preview: null, storefrontPicker: false }
 console.log(`[admin] build ${ADMIN_BUILD}`)
 
@@ -4167,7 +4167,9 @@ function renderBookings() {
   // 「今天」= 小程序今日台面同款网格(骨=同一条 /admin/schedule-day;整条链住 /web/today-board.js,含点块回跳)
   if (owner.adminView === 'today') {
     window.TodayBoard.mountInto(els.bookingList, { request, escapeHtml, toast, storeToday,
-      openBooking: (id) => jumpToBooking(id) })
+      openBooking: (id) => jumpToBooking(id),
+      /* D96(01t):直排写库成功但「全部预约」看不见 —— owner.bookings 是启动缓存,这里回灌 */
+      refreshBookings: async () => { try { const d = await request('/admin/bookings'); owner.bookings = d.bookings || owner.bookings } catch { /* 列表口失败不拦排单 */ } } })
     return
   }
 
@@ -4278,6 +4280,7 @@ function renderBookingCard(booking) {
         ${/* 🔴 D70(店主 08-24 合同):按钮**全部从后端推导**(allowedActions / settleAction),页面零 if 补按钮。
               案底:裸按钮让已售后的单一点就消失、已完成的单一点「已取消」冲掉已确认收入。 */''}
         <button class="ghost" data-view-booking="${booking.id}" type="button">${t('details')}</button>
+        ${booking.user && booking.user.id ? `<button class="ghost" data-note-booking="${booking.id}" data-note-uid="${booking.user.id}" data-note-name="${escapeHtml(booking.user.display_name || booking.user.displayName || '顾客')}" type="button">写服务小记</button>` : ''}
         ${booking.settleAction ? `<button class="primary slim" data-settle-booking="${booking.id}" type="button">${escapeHtml(booking.settleAction.label)}</button>` : ''}
         ${bookingActionButtons(booking)}
         <!-- 裁 A:「处置定金」由状态机出(disposeDeposit,金额在后端 label 里)——不再前端自判,那是与小程序分叉的第二份判据 -->
@@ -6606,6 +6609,12 @@ els.bookingList.addEventListener('click', (event) => {
     const images = [...(booking.workImages || [])]
     images.splice(Number(removeWorkImage.dataset.removeWorkImage), 1)
     saveWorkImages(booking.id, images).catch((error) => toast(error.message))
+    return
+  }
+  const noteBtn = event.target.closest('[data-note-booking]')
+  if (noteBtn) {
+    /* D97(01t):订单卡「写服务小记」=导航类按钮(与「详情」同类,非状态机动作,D70 合同不涉);小记挂单 */
+    window.ServiceNoteModal?.open(noteBtn.dataset.noteUid, noteBtn.dataset.noteName || '顾客', { request, toast, escapeHtml }, noteBtn.dataset.noteBooking)
     return
   }
   const dateCell = event.target.closest('[data-calendar-date]')

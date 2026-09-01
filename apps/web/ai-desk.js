@@ -398,6 +398,16 @@ function renderWechatMock() {
   }
 }
 
+function fillTimecardCell() {
+  const cell = document.querySelector('[data-cs-tc]')
+  if (!cell || cell.dataset.filled) return
+  cell.dataset.filled = '1'
+  request(`/admin/customers/${cell.dataset.csTc}/timecards`).then((r) => {
+    const live = (r.timecards || []).filter((t2) => (t2.totalTimes - t2.usedTimes) > 0)
+    cell.textContent = live.length ? live.map((t2) => `${t2.name} 余${t2.totalTimes - t2.usedTimes}次`).join(' / ') : '无'
+  }).catch(() => { cell.textContent = '—' })
+}
+
 function renderWechatContextPanel(conversation) {
   if (!els.wechatContextPanel) return
   const state = conversation.conversationState || {}
@@ -408,11 +418,24 @@ function renderWechatContextPanel(conversation) {
   const conversationReminders = (owner.reminderTasks || []).filter((item) => item.conversationId === conversation.id && String(item.status || '') === 'PENDING')
   const memberTier = memoryCustomer.memberTier || stateData.memberTier || '-'
   const customerType = memoryCustomer.customerType || stateData.customerType || '-'
+  setTimeout(fillTimecardCell, 0)
   els.wechatContextPanel.innerHTML = `
     <div class="cs-context-card">
       <div class="cs-context-card-head"><span>${t('customerProfileCard')}</span></div>
       <strong class="cs-context-name">${escapeHtml(conversationDisplayName(conversation))}</strong>
       <p class="subtle">${escapeHtml(conversation.sourceChannel || conversation.provider || '-')} · ${escapeHtml(String(memberTier))} · ${escapeHtml(String(customerType))}</p>
+      ${(function () { /* D101②(01t 小合同):卡上六件 —— 会员/会员码/储值/次卡/报价状态,读口全既有 */
+        const cu = conversation.linkedUserId ? (owner.customers || []).find((x) => x.id === conversation.linkedUserId) : null
+        const qs = conversation.quoteState || {}
+        const qsLabel = qs.state === 'quoted' ? '本会话已报价' : qs.state === 'expired' ? '报价已过期' : qs.state === 'reference' ? '有历史报价' : '未报价'
+        if (!cu) return `<p class="cs-kv"><span>报价状态</span><b>${escapeHtml(qsLabel)}</b></p>`
+        return `
+          <p class="cs-kv"><span>会员</span><b>${cu.memberTier && cu.memberTier !== 'guest' ? '是 · ' + escapeHtml(String(cu.memberTier)) : '非会员'}</b></p>
+          <p class="cs-kv"><span>会员码</span><b>${escapeHtml(cu.memberCode || '—')}</b></p>
+          <p class="cs-kv"><span>储值余额</span><b>${money(cu.storedValueBalanceCents || 0)}</b></p>
+          <p class="cs-kv"><span>次卡</span><b data-cs-tc="${escapeHtml(cu.id)}">…</b></p>
+          <p class="cs-kv"><span>报价状态</span><b>${escapeHtml(qsLabel)}</b></p>`
+      })()}
       ${conversation.linkedUserId && isOwnerRole() ? `<button class="ghost slim" data-open-customer-file="${escapeHtml(conversation.linkedUserId)}" type="button">${owner.lang === 'zh' ? '查看客户档案 →' : 'Customer file →'}</button>` : ''}
       ${!conversation.linkedUserId && isOwnerRole() && (owner.customers || []).length ? `
       <details class="cs-inline-details">

@@ -26,9 +26,12 @@ function lastVisitText(iso) {
 function buildProfile(cust) {
   return {
     tier: TIER[cust.memberTier] || cust.memberTier || '会员',
+    isMember: cust.memberTier && cust.memberTier !== 'guest',
+    memberCode: cust.memberCode || '—',   // D101②(01t):卡上六件之一
     visits: cust.visitCount || 0,
     lastText: lastVisitText(cust.lastVisitAt),
     storedText: storeMoney(cust.storedValueBalanceCents || 0),
+    tcText: '…',
     tags: Array.isArray(cust.tags) ? cust.tags : [],
     note: cust.notes || ''
   }
@@ -86,15 +89,23 @@ Page({
       } catch (e) { /* 忽略,退回名字 */ }
     }
 
+    const qsState = (c.quoteState && c.quoteState.state) || 'none'
     this.setData({
+      quoteLabel: qsState === 'quoted' ? '本会话已报价' : qsState === 'expired' ? '报价已过期' : qsState === 'reference' ? '有历史报价' : '未报价',
       quoteBanner: (c.quoteState && c.quoteState.banner) || '',
-      quoteBannerCls: (c.quoteState && c.quoteState.state) || 'none',
+      quoteBannerCls: qsState,
       name, status: c.status, label: s.label, cls: s.cls,
       linkedName: c.linkedUserName || '', linkedUserId: c.linkedUserId || '', profile,
       needsHuman: c.status === 'needs_human', isHuman: c.status === 'human_active',
       transcript
     })
     wx.setNavigationBarTitle({ title: name })
+    if (c.linkedUserId && profile) {
+      api.adminGet(`/admin/customers/${encodeURIComponent(c.linkedUserId)}/timecards`).then((r2) => {
+        const live = (r2.timecards || []).filter((t2) => (t2.totalTimes - t2.usedTimes) > 0)
+        this.setData({ 'profile.tcText': live.length ? live.map((t2) => `${t2.name} 余${t2.totalTimes - t2.usedTimes}次`).join(' / ') : '无' })
+      }).catch(() => this.setData({ 'profile.tcText': '—' }))
+    }
   },
 
   viewProfile() {

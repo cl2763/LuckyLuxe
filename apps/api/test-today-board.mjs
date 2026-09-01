@@ -44,7 +44,9 @@ check('🔴 ① 骨同源:网页台面调同一条 /admin/schedule-day(与小程
     '/admin/customers?q=': '直排面板顾客搜索(复用客户档案同一读口,不另造)',
     '/admin/bookings/direct': '直排面板落单(与老板代排同一写口,不另造)',
     '/admin/pricing/items': '直排面板服务 chips(与开单页同一价目读口,不另造)',
-    '/admin/duty/mark': '值日勾选写口(31l 小合同三;读=schedule-day 响应随行,零新读口)'
+    '/admin/duty/mark': '值日勾选写口(31l 小合同三;读=schedule-day 响应随行,零新读口)',
+    '/admin/service-notes/pending?date=': 'D97(01t):待写小记 pill 与面板(复用既有待写读口,不另造)',
+    '/admin/pricing/categories': 'D95(01t):直排两级选择器大类(与开单页同一读口,D24 同源粒度)'
   }
   const calls = tbCode.match(/\/admin\/[A-Za-z0-9/?=&_-]*/g) || []
   const outside = calls.filter((c) => !Object.keys(TB_API_ALLOW).some((k) => c.startsWith(k.replace(/\?.*$/, ''))))
@@ -52,7 +54,7 @@ check('🔴 ① 骨同源:网页台面调同一条 /admin/schedule-day(与小程
   for (const k of Object.keys(TB_API_ALLOW)) {
     check(`① 白名单条目仍在用:${k}(${TB_API_ALLOW[k].slice(0, 18)}…)`, calls.some((c) => c.startsWith(k.replace(/\?.*$/, ''))), k)
   }
-  check('① 条数钉死:/admin 调用恰 5 条(31l 值日写口入册;缩水或新增都要来对表)', calls.length === 5, String(calls.length))
+  check('① 条数钉死:/admin 调用恰 7 条(01t D95/D97 两读口入册;缩水或新增都要来对表)', calls.length === 7, String(calls.length))
 }
 
 /* ===== ② 几何口径同参(与小程序 loadDayView 逐条对) ===== */

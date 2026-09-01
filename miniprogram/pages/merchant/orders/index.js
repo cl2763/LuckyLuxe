@@ -100,6 +100,8 @@ Page(Object.assign({
     ...dailyCloseData // 日结板块的状态(date/v/open/shares/correcting…)
   },
 
+
+
   onShow() {
     if (!api.guardMerchant()) return
     refreshStoreClock().catch(() => {})
@@ -429,6 +431,10 @@ Page(Object.assign({
     try {
       const me = await api.adminMe().catch(() => ({ role: 'owner' }))
       const r = await api.adminGet(`/admin/schedule-day?date=${date}`)
+      // D97(01t):待写小记数与台面同批拉(既有口;员工=只见自己的单,后端裁)
+      let pendingNotes = []
+      try { pendingNotes = (await api.adminGet(`/admin/service-notes/pending?date=${date}`)).items || [] } catch (e) { pendingNotes = [] }
+      this.setData({ pendingNotes })
       /* 今日台面必须显示**当天全部预约**,含营业时段外的(店主 2026-08-09 拍板)。
          原来网格只画 开门→打烊 这一段,于是提早到店、加钟做到打烊后的单
          整块落在网格外看不见 —— 而这些单照样进日结、照样算业绩,台面上看不见
@@ -650,6 +656,19 @@ Page(Object.assign({
   closeDirect() { this.setData({ directSheet: false }) },
 
   /* 31l 值日:老板点一下勾/取消(仅当天;后端终闸) */
+  tapPendingNotes() {
+    const items = this.data.pendingNotes || []
+    if (!items.length) return
+    wx.showActionSheet({
+      itemList: items.slice(0, 6).map((n) => `${n.time} ${n.customerName} · ${n.serviceName}`),
+      success: (r) => {
+        const n = items[r.tapIndex]
+        if (n) wx.navigateTo({ url: `/pages/merchant/service-note/index?userId=${n.userId}&bookingId=${n.bookingId}&name=${encodeURIComponent(n.customerName)}` })
+      },
+      fail: (e2) => console.warn('[actionSheet fail]', e2)
+    })
+  },
+
   async tapDuty(e) {
     const d = this.data.dv && this.data.dv.duty
     if (!d || !d.canEdit) return
@@ -657,7 +676,7 @@ Page(Object.assign({
     const on = !(d.techIds || []).includes(techId)
     try {
       await api.adminPost('/admin/duty/mark', { date: this.data.selDate, technicianId: techId, on })
-      this.load(this.data.selDate)
+      this.loadDayView(this.data.selDate)  // D94:此前误写 this.load(页上没有这个方法)→ 点击即炸
     } catch (err) { wx.showToast({ title: (err && err.message) || '值日保存失败', icon: 'none' }) }
   },
 

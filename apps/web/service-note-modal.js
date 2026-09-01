@@ -3,7 +3,7 @@
    员工端网页「我的客人」的写口不动(那是 my-customers.js 自己的)。 */
 window.ServiceNoteModal = (function () {
   'use strict'
-  let st = { open: false, userId: '', name: '', text: '', images: [], busy: false, deps: null }
+  let st = { open: false, userId: '', name: '', text: '', images: [], busy: false, deps: null, bookingId: '' } // D97:订单场景的小记必须挂单
 
   function render() {
     const { escapeHtml } = st.deps
@@ -18,6 +18,7 @@ window.ServiceNoteModal = (function () {
       <div class="sw-cpnmask" data-sn-close></div>
       <div class="sw-cpnsheet sn-sheet">
         <div class="sw-ch">写服务小记 · ${escapeHtml(st.name)}</div>
+        ${st.bookingId ? '<p class="subtle small" style="margin:0">本条挂在这张订单上;点「取消」=先跳过,这单会进「待写小记」清单,随时可补。</p>' : ''}
         <textarea class="sn-ta" data-sn-text placeholder="做了什么 / 用色 / 甲型 / 下次注意…" rows="4">${escapeHtml(st.text)}</textarea>
         <div class="mn-thumbs">
           ${st.images.map((img, i) => `<span class="mn-thumb"><img src="${img}" alt=""><button type="button" data-sn-rm="${i}">✕</button></span>`).join('')}
@@ -52,7 +53,7 @@ window.ServiceNoteModal = (function () {
       if (!st.text.trim() && !st.images.length) { toast('写一句,或加一张图'); return }
       st.busy = true
       try {
-        await st.deps.request('/admin/service-notes', { method: 'POST', body: JSON.stringify({ userId: st.userId, rawText: st.text.trim(), images: st.images }) })
+        await st.deps.request('/admin/service-notes', { method: 'POST', body: JSON.stringify({ userId: st.userId, rawText: st.text.trim(), images: st.images, bookingId: st.bookingId || undefined }) })
         toast('小记已保存(技师与老板可见)')
         st.open = false
         render()
@@ -62,8 +63,9 @@ window.ServiceNoteModal = (function () {
   }
 
   return {
-    open(userId, name, deps) {
-      st = { open: true, userId, name: name || '顾客', text: '', images: [], busy: false, deps }
+    open(userId, name, deps, bookingId) {
+      /* D97 自走查咬出的雷:原先先赋 st.bookingId 再整对象重建 —— 赋值被冲掉,落库恒 null */
+      st = { open: true, userId, name: name || '顾客', text: '', images: [], busy: false, deps, bookingId: bookingId || '' }
       render()
     }
   }

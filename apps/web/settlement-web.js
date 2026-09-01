@@ -738,6 +738,10 @@ window.SettlementWeb = (function () {
       const r = await request('/admin/settlements', { method: 'POST', body: JSON.stringify(buildBody(state)) })
       state.pendingSheets = r.settlements || []
       toast(`待签结算单已生成(${state.pendingSheets.length} 张)—— 顾客侧签署,签字那一刻才记账`)
+      /* D97(01t 设计回归恢复):结算完成 → 写小记环节(可跳过;跳过自动进「待写小记」清单) */
+      if (window.ServiceNoteModal && state.userId) {
+        window.ServiceNoteModal.open(state.userId, state.customerName || '顾客', state._deps, state.bookingId || '')
+      }
     } catch (e) {
       toast((e && e.message) || '开单失败')
     } finally {

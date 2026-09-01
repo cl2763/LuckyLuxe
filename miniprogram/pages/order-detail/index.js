@@ -10,6 +10,7 @@ Page({
     this.setData({ cur: curOf() })   // 币种跟门店走,不写死币符
   },
   data: {
+    viewer: { open: false, items: [], index: 0 },
     order: null,
     lang: 'zh',
     t: i18n.pageCopy('orderDetail', 'zh')
@@ -115,7 +116,7 @@ Page({
     this.setData({ viewer: { open: true, index, items } })
   },
   // D68③:切页/滑动/箭头全在共用组件里(components/snapshot-viewer),页面只负责开关与喂数据
-  closeViewer() { this.setData({ viewer: null }) },
+  closeViewer() { this.setData({ viewer: { open: false, items: [], index: 0 } }) },
   asAction() {
     const o = this.data.order
     if (!o) return

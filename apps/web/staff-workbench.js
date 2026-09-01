@@ -16,11 +16,13 @@ window.StaffWorkbench = (function () {
     const { request, escapeHtml } = deps
     if (!st.perf) {
       try {
-        const [perf, cats, items] = await Promise.all([
+        const [perf, cats, items, pend] = await Promise.all([
           request('/admin/my-performance'),
           request('/admin/pricing/categories'),
-          request('/admin/pricing/items')
+          request('/admin/pricing/items'),
+          request('/admin/service-notes/pending?days=7').catch(() => ({ items: [] }))
         ])
+        st.pendingNotes = pend.items || []
         st.perf = perf.performance
         st.cats = (cats.categories || []).filter((c) => c.isBookable !== false)
         st.items = (items.items || []).filter((i) => i.isActive !== false)
@@ -84,6 +86,12 @@ window.StaffWorkbench = (function () {
           </div><p class="subtle small">估算=薪资方案引擎(底薪/手工费/阶梯提成/加班/冲卡提成/调整项)按已确认日结现算;以月结工资表为准。</p>` : (st.salNote ? '' : '<p class="subtle">暂无薪资方案,或本店未开放展示。</p>')}
         </section>
         <section class="card swb-card">
+          <h3>待写小记 <span class="subtle small">近 7 天完成单,写完自动消行</span></h3>
+          ${(st.pendingNotes || []).length ? (st.pendingNotes || []).map((n) => `
+            <div class="tbn-row"><span>${escapeHtml(n.date.slice(5))} ${escapeHtml(n.time)} ${escapeHtml(n.customerName)} · ${escapeHtml(n.serviceName)}</span>
+            <button class="ghost slim" data-swb-note="${escapeHtml(n.bookingId)}" data-uid="${escapeHtml(n.userId)}" data-name="${escapeHtml(n.customerName)}" type="button">写</button></div>`).join('') : '<p class="subtle">没有待写的单,干净。</p>'}
+        </section>
+        <section class="card swb-card">
           <h3>我的排班 <span class="subtle small">本周</span></h3>
           <div class="swb-week">${myScheduleRows().map((r) => `
             <div class="swb-day ${r.off ? 'off' : ''}"><span>${escapeHtml(r.date.slice(5))} 周${r.wd}</span><strong>${escapeHtml(r.text)}</strong></div>`).join('') || '<p class="subtle">本周排班还没生成。</p>'}
@@ -128,6 +136,9 @@ window.StaffWorkbench = (function () {
   function bind() {
     const { toast } = st.deps
     const m = st.mount
+    m.querySelectorAll('[data-swb-note]').forEach((b) => b.addEventListener('click', () => {
+      window.ServiceNoteModal?.open(b.dataset.uid, b.dataset.name || '顾客', st.deps, b.dataset.swbNote)
+    }))
     const mp = m.querySelector('[data-swb-mprev]'); if (mp) mp.addEventListener('click', () => shiftSalMonth(-1))
     const mn = m.querySelector('[data-swb-mnext]'); if (mn) mn.addEventListener('click', () => shiftSalMonth(1))
     m.querySelectorAll('[data-swb-tier]').forEach((b) => b.addEventListener('click', () => { st.tierKey = b.dataset.swbTier; paint(); preview() }))
