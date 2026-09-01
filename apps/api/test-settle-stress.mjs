@@ -90,6 +90,7 @@ async function main() {
   const seen = new Map()      // 入参指纹 → 合计,用来验幂等
   let changedWhenShould = 0
   let sameSetRepeats = 0
+  let identityRounds = 0
   let prevKey = null
   let prevTotal = null
   const picked = new Map()
@@ -110,6 +111,7 @@ async function main() {
     const s = await preview(body)
 
     // ① 恒等式:各行金额之和 = 档位小计;应收 = 小计 − 定金 − 券
+    identityRounds += 1   // 02p:恒等式真的验过一轮才 +1(原来结尾 check 条件写死 true,空判)
     const lineSum = (s.lines || []).reduce((n, l) => n + l.amountCents, 0)
     if (lineSum !== s.subtotalCents) {
       throw new Error(`第 ${round} 轮 行金额之和 ${lineSum} ≠ 档位小计 ${s.subtotalCents}(入参 ${key})`)
@@ -140,9 +142,13 @@ async function main() {
     prevTotal = s.totalCents
   }
 
-  check(`① 恒等式 ${ROUNDS} 轮零破例(行和≡小计,小计−定金−券≡应收,行数≡选中数)`, true)
+  /* 🔴 02p 裁定一:原来条件写死 true —— 破例会在循环里 throw 不假,但**断言本身什么都没判**;
+     万一循环因为别的原因提前退出(0 轮),这条照样绿。改成判"真的验满了 ROUNDS 轮"。 */
+  check(`① 恒等式 ${ROUNDS} 轮零破例(行和≡小计,小计−定金−券≡应收,行数≡选中数)`,
+    identityRounds === ROUNDS, `实际验了 ${identityRounds}/${ROUNDS} 轮`)
   check(`③ 幂等 ${ROUNDS} 轮零破例(同入参同结果,覆盖 ${seen.size} 种不同组合)`, seen.size > 20, `${seen.size} 种`)
-  check(`② 入参没变时金额也没变(${sameSetRepeats} 次重复入参全部稳定)`, true)
+  check(`② 入参没变时金额也没变(${sameSetRepeats} 次重复入参全部稳定)`,
+    sameSetRepeats > 0, `重复入参出现 ${sameSetRepeats} 次(为 0 则这条什么都没验到)`)
 
   /* ② 的正面用例单独钉死:逐个加项目,合计必须**严格递增** ——
      这正是店主开检踩到的那条(选了新项目合计纹丝不动)。 */
@@ -155,14 +161,18 @@ async function main() {
     last = s.totalCents
   }
   check('② 红线:逐个加项目,合计每次都严格变大(不许沿用上一次的数)', mains.length === 4 && last > 0, `最终 ${last}`)
+  let decRounds = 0
   // 反向:逐个减回去,合计必须严格变小
   for (let i = mains.length - 1; i > 0; i -= 1) {
     acc.pop()
     const s = await preview({ tierKey: 'list', items: acc.slice() })
     if (s.totalCents >= last) throw new Error(`逐个减项目时合计没有变小:${last} → ${s.totalCents}`)
     last = s.totalCents
+    decRounds += 1
   }
-  check('② 红线:逐个减项目,合计每次都严格变小', true, `回到 ${last}`)
+  /* 🔴 02p 自守②咬出:原条件写死 true —— 循环 0 次(mains 只有 1 项)照样绿。改判"真减了几次"。 */
+  check(`② 红线:逐个减项目,合计每次都严格变小(实减 ${decRounds} 次)`,
+    decRounds === mains.length - 1 && decRounds > 0, `回到 ${last},减了 ${decRounds}/${mains.length - 1} 次`)
 
   console.log(`\n金额压测通过:${checks} 项断言全绿(${ROUNDS} 轮随机增删改)`)
 }

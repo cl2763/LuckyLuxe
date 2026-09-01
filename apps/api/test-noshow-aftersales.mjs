@@ -416,7 +416,14 @@ const main = async () => {
       dbf.prepare("INSERT INTO stored_value_transactions (id,tenant_id,user_id,type,amount_cents,pay_channel,note,created_by,created_at) VALUES (?,?,?,?,?,?,?,?,?)")
         .run(`sv_fx17_${RUN_ID}`, shop.tenantId, custId, 'consume', -700, 'stored_value', '逐笔视图消耗断言(fixture 直插=引擎写法)', 'ci-17', new Date().toISOString())
       dbf.close()
-      check('⑰ 耗卡 fixture 落账(直插=引擎写法)', true)
+      /* 02p:原条件写死 true(恒真兜底)。改判**夹具真落账了** —— 这一行插进去没有,查得到才算。
+         (我第一版把句柄写成已 close 的 dbf 之外的 dbx、表写成 member_timecards —— 夹具插的是
+          stored_value_transactions;判据自述须与行为一致,名字同步改准。) */
+      const dbv = new DatabaseSync(process.env.TEST_DB_PATH, { readOnly: true })
+      const fxRow = dbv.prepare('SELECT amount_cents AS a FROM stored_value_transactions WHERE id = ?').get(`sv_fx17_${RUN_ID}`)
+      dbv.close()
+      check('⑰ 储值消耗 fixture 真落账(直插=引擎写法;判这一行查得到且金额=-700)',
+        !!fxRow && fxRow.a === -700, JSON.stringify(fxRow))
       const txns = await request('/admin/stored-value/txns', { headers: kh }, shop.token)
       const overview = await request('/admin/stored-value', { headers: kh }, shop.token)
       const sv = overview.data.storedValue

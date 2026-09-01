@@ -156,6 +156,7 @@ for (const tid of allTenants) {
 check(`🔴 ③ 不变量组 I1-I11 × ${iterated} 家全过(一家红整批红;含前序套件的各态店)`, iterated === allTenants.length)
 
 /* ===== ④ 矩阵店特征各验(建店规格 → 现测) ===== */
+let featChecked = 0
 for (const b of built) {
   const H = { 'x-admin-tenant-id': b.tid, 'x-tenant-id': b.tid }
   const me = await request('/admin/auth/me', {}, H)
@@ -177,10 +178,14 @@ for (const b of built) {
       throw new Error(`[${b.tid}] 特征:币种句 ${pv.data.sheets[0].currency}/${disp.symbol} ≠ ${b.spec.currency}/${wantSym}`)
     }
   }
+  featChecked += 1
 }
-check(`④ 矩阵店特征逐家现测(未设置/全关=墙旗标;特休=isClosed+注;币种句随店)`, true)
+/* 🔴 02p 自守②咬出:原条件写死 true —— built 为空则一家没验也全绿。照 ③ 的写法改成计数即证。 */
+check(`④ 矩阵店特征逐家现测 × ${featChecked} 家(未设置/全关=墙旗标;特休=isClosed+注;币种句随店)`,
+  featChecked === built.length && featChecked > 0, `验了 ${featChecked}/${built.length} 家`)
 
 /* ===== ⑤ 欠账补课:强制页链 L5 五连(API 层,未设置店夹具 ×5) ===== */
+let chainRuns = 0
 for (let i = 0; i < 5; i += 1) {
   const t5 = `jl5-${RUN.slice(-4)}-${i}`
   if ((await request('/platform/tenants', { method: 'POST', body: JSON.stringify({ id: t5, name: `五连店${i}`, plan: 'chain' }) })).status !== 201) throw new Error(`五连建店失败 ${i}`)
@@ -191,7 +196,9 @@ for (let i = 0; i < 5; i += 1) {
   if (put.status !== 200) throw new Error(`五连#${i}:保存 ${put.status}`)
   const m2 = await request('/admin/auth/me', {}, H5)
   if (m2.data.hoursUnset !== false) throw new Error(`五连#${i}:保存后旗标应翻 false`)
+  chainRuns += 1
 }
-check('🔴 ⑤ 强制页链五连(欠账补课):未设置→墙旗标→保存→立即生效 ×5 全成', true)
+check(`🔴 ⑤ 强制页链五连(欠账补课):未设置→墙旗标→保存→立即生效 ×${chainRuns} 全成`,
+  chainRuns === 5, `实跑 ${chainRuns}/5 连`)
 
 console.log(`\n✅ test-store-jury 通过 ${checks} 项(矩阵 ${JURY_MATRIX.length} 家 + 运行时全集 ${allTenants.length} 家)`)

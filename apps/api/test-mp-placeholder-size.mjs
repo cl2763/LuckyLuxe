@@ -59,18 +59,11 @@ if (!realCards.length) {
   if (!sandboxUp) {
     /* 本刀排在回归清单中段,那时 run-all-tests 已把 4310 打死 —— 自己拉起来再量,
        量完不还原(回归脚本收尾的 restore_sandbox 会统一还)。 */
-    const { spawn } = await import('node:child_process')
-    spawn('bash', ['start-sandbox.sh', 'sandbox-data'], { cwd: process.cwd(), detached: true, stdio: 'ignore' }).unref()
-    let up = false
-    for (let i = 0; i < 12 && !up; i += 1) {
-      await new Promise((r) => setTimeout(r, 2000))
-      up = await fetch('http://127.0.0.1:4310/health').then((r) => r.ok).catch(() => false)
-    }
-    console.log(`   [前置] 自拉沙箱后存活=${up}`)
-    if (!up) {
-      console.log('⚠️  [mp-placeholder-size] 沙箱拉不起来 —— **这一刀本轮未跑**')
-      await mp.disconnect(); process.exit(0)
-    }
+    /* 02p 追问的答案:沙箱前置抽成**共用件**(test-need-sandbox.mjs),不再本刀私有 */
+    const { ensureSandbox } = await import('./test-need-sandbox.mjs')
+    const sb = await ensureSandbox({ label: '[mp-placeholder-size]' })
+    console.log(`   [前置] 自拉沙箱后存活=${sb.ok}(共用前置件)`)
+    if (!sb.ok) { await mp.disconnect(); process.exit(0) }
   }
   /* 沙箱刚拉起来:重进一次页让它取数;reLaunch 会销毁旧 page 对象 → **必须重新取 pg**,
      不能再用外层那个(02o 自查:page destroyed 就是拿了被销毁的旧引用)。 */
@@ -83,6 +76,7 @@ if (!realCards.length) {
     await mp.disconnect(); process.exit(0)
   }
 }
+const proof = []
 const measure = async (img) => {
   await pg.setData({ heroSlides: [], recommendedLash: [], recommendedNail: [{ ...realCards[0], image: img }] })
   await new Promise((r) => setTimeout(r, 1800))
@@ -91,12 +85,19 @@ const measure = async (img) => {
   if (cards.length !== 1 || (cards[0].image || '') !== img) throw new Error(`造态自证失败:卡数=${cards.length} image=${cards[0] && cards[0].image}`)
   /* 造态自证第二问(02o 教训):字段对了还不够,**渲染出来了没有** —— 卡片节点必须真在 */
   const rendered = await heightsOf(pg, '.recommend-card')
-  if (!rendered.length) throw new Error(`造态自证失败:字段对了但卡片没渲染出来(.recommend-card 命中 0)`)
+  if (!rendered.length) throw new Error('造态自证失败:字段对了但卡片没渲染出来(.recommend-card 命中 0)')
+  /* 🔴 02p 裁定一:自证的三件事必须**喂给断言**,不能只在内部算完就丢(上一版那条 check 条件写死 true) */
+  proof.push({ img, cards: cards.length, imageMatched: (cards[0].image || '') === img, rendered: rendered.length })
   return { host: await heightsOf(pg, 'img-placeholder'), img: await heightsOf(pg, '.ph-img'), box: await heightsOf(pg, '.ph-box') }
 }
 const withImg = await measure('https://picsum.photos/seed/probe/400/300')
 const noImg = await measure('')
-check('抽检①② 造态自证:两态都只留一张卡且 image 字段确实换了', true)
+/* 🔴 02p 裁定一(J 族复发 + 判据自述须与行为一致第二案):上一版这条 check 的条件写死 `true` ——
+   名字说"两态都只留一张卡且 image 确实换了",那两件事上面确实算了,**但没喂给断言**,恒真兜底。
+   我刚立的名实一致自守抓不到它,因为它名字里没有绝对词 → 自守补第二支(条件是字面量 true 一律红)。 */
+check('抽检①② 造态自证:两态各只留一张卡、image 字段确实换了、卡片确实渲染出来了',
+  proof.length === 2 && proof.every((x) => x.cards === 1 && x.imageMatched && x.rendered >= 1),
+  JSON.stringify(proof))
 /* 🔴 未闭合项(02n 如实记):造态自证过了(setData + 读回字段都对),但 $$ 元素查询在**套件上下文里**
    返回空,而同一份量法在 02m 的手工脚本里能拿到 72/97/169 —— 两者矛盾,原因未明。
    按"能力与外因断言须现场取证"律:**不猜、不粉饰、也不让它假绿**;
@@ -117,8 +118,13 @@ if (!withImg.host.length && !noImg.host.length) {
   await mp.disconnect()
   process.exit(0)
 }
-check(`🔴 D120 两态宿主高相等(抽检位:${SPOTS[1]});命中数各 1,不存在写"不存在"`,
-  withImg.host.length === 1 && noImg.host.length === 1 && withImg.host[0] === noImg.host[0],
+/* 🔴 02p 裁定二:只判"两态相等"守不住 —— 有人把尺寸类删掉或改 auto,**两态会一起塌成同一个值**,
+   这刀照样全绿,而那正是 D120 本身的病。店主 02m 的原文是"相等**且等于 97**",我只落了一半。
+   锚:170rpx 折算 px(随屏宽算,不写死 97),容差 2px。 */
+const EXPECT_H = Number((170 * (await mp.evaluate(() => wx.getSystemInfoSync().windowWidth / 750))).toFixed(1))
+check(`🔴 D120 两态宿主高相等**且锚定 170rpx(${EXPECT_H}px)**(抽检位:${SPOTS[1]});命中数各 1,不存在写"不存在"`,
+  withImg.host.length === 1 && noImg.host.length === 1 && withImg.host[0] === noImg.host[0]
+  && Math.abs(withImg.host[0] - EXPECT_H) <= 2,
   `有图 宿主[${withImg.host.join(',') || '不存在'}]/ph-img[${withImg.img.join(',') || '不存在'}]/ph-box[${withImg.box.join(',') || '不存在'}] · 占位 宿主[${noImg.host.join(',') || '不存在'}]/ph-img[${noImg.img.join(',') || '不存在'}]/ph-box[${noImg.box.join(',') || '不存在'}]`)
 check('D120 互斥自证:有图态 .ph-box 不存在、占位态 .ph-img 不存在(证明量的是同一个位而非别处节点)',
   withImg.box.length === 0 && noImg.img.length === 0,

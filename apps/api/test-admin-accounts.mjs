@@ -37,7 +37,12 @@ async function main() {
   const credFile = new URL('./local-data/初始老板账号.txt', import.meta.url).pathname
   let bossToken = OWNER
   if (existsSync(credFile)) {
-    check('owner credentials file written on bootstrap', true)
+    /* 02p:原来条件写死 true —— 它在 if (existsSync) 里,恒真兜底(空文件/占位文件也照过)。
+       改判**内容**:文件非空且含账号与初始密码两行,才算"自举真的写了凭证"。 */
+    const credRaw = readFileSync(credFile, 'utf8')
+    check('owner credentials file written on bootstrap(判内容:非空 + 含账号与初始密码)',
+      credRaw.trim().length > 0 && /初始密码: \S+/.test(credRaw) && /(账号|用户名|boss)/.test(credRaw),
+      `${credRaw.length} 字节`)
     const initialOwnerPass = readFileSync(credFile, 'utf8').match(/初始密码: (\S+)/)?.[1]
     check('initial owner password readable', Boolean(initialOwnerPass))
     const bossLogin = await request('/admin/auth/login', { method: 'POST', body: JSON.stringify({ email: 'boss', password: initialOwnerPass }) }, null)

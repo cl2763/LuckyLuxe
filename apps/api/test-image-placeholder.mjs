@@ -335,6 +335,22 @@ check('⑥ 顾客端页面真加载了占位出口(带内容指纹)', /img-place
   }
   check('🔴 判据自述须与判据行为一致(名字里说「硬零/不挂账/不许」的,条件必须 === 0)',
     liars.length === 0, liars.join(' | '))
+  /* 🔴 02p 裁定一 自守第二支:**任何断言的条件是字面量 true,一律红**(恒真兜底)。
+     第一支只看"名字带绝对词"的,抓不到 02o 那条 —— 它名字里没有绝对词,条件却写死 true。
+     本支扫**全部套件**(不只本文件):条件恰为 true / !!true / 1 的,直接点名。 */
+  const alwaysTrue = []
+  for (const f of readdirSync(join(ROOT, 'apps/api')).filter((x) => /^test-.*\.mjs$/.test(x))) {
+    const src = readFileSync(join(ROOT, 'apps/api', f), 'utf8')
+    /* 名字里不许跨行匹配(02p 自查:[\s\S]*? 把后面几条 check 的换行也吃了,误报三条) */
+    for (const m of src.matchAll(/check\(([`'"])([^`'"\n]*?)\1\s*,\s*(true|!!true|1)\s*[,)]/g)) {
+      alwaysTrue.push(`${f}: ${m[2].slice(0, 46)}`)
+    }
+  }
+  /* 例外:名字里明写「跳过」的,是**出声跳过**那一族(它本来就在说"这轮没测"),不算恒真兜底。
+     除此之外一律红 —— 恒真兜底 = 这条判据什么都没守。 */
+  const realLiars = alwaysTrue.filter((x) => !/跳过|skip/i.test(x))
+  check('🔴 判据自述自守②:任何断言的条件不许是字面量 true(恒真兜底;名字明写「跳过」的除外)',
+    realLiars.length === 0, realLiars.join(' | '))
 }
 
 /* ===== ②d 占位尺寸静态刀(店主 02n 裁定一)=====
