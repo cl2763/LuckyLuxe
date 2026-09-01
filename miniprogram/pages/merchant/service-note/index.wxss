@@ -20,8 +20,7 @@
 .chips{display:flex;flex-wrap:wrap;gap:10rpx}
 .chip{font-size:24rpx;padding:6rpx 18rpx;border-radius:999rpx;background:#f3ece2;color:#5c4630}
 .chip.warn{background:#fdecec;color:#c0392b;font-weight:700}
-.row2{display:flex;gap:14rpx;margin-top:18rpx}
-.btn{flex:1;text-align:center;padding:24rpx;border-radius:14rpx;font-size:28rpx;font-weight:700}
+.row2{display:flex;gap:14rpx;margin-top:18rpx}.btn {flex:1;text-align:center;padding:24rpx;border-radius:999rpx;font-size:28rpx;font-weight:700}
 .btn.ghost{background:#fff;color:#5c4630;border:1rpx solid #e7d3b8}
 .btn.dark{background:#2d2826;color:#fff}
 /* 小记图片(08-30f) */

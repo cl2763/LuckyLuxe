@@ -920,9 +920,7 @@
   font-size: 23rpx;
   font-weight: 720;
   line-height: 1.35;
-}
-
-.native-action-button {
+}.native-action-button {
   width: 100%;
   height: 78rpx;
   min-width: 0;
@@ -931,7 +929,7 @@
   align-items: center;
   justify-content: center;
   border: 1rpx solid #d7c3b0;
-  border-radius: 18rpx;
+  border-radius: 999rpx;
   background: #fff;
   color: #7a6250;
   font-size: 24rpx;
@@ -1008,32 +1006,28 @@
   display: flex;
   flex-direction: column;
   gap: 14rpx;
-}
-
-.sms-btn {
+}.sms-btn {
   width: 100%;
   height: 76rpx;
   padding: 0;
   display: flex;
   align-items: center;
   justify-content: center;
-  border-radius: 16rpx;
+  border-radius: 999rpx;
   background: #2b2b2b;
   color: #fff;
   font-size: 22rpx;
   font-weight: 800;
   line-height: 1.1;
   text-align: center;
-}
-
-.verify-btn {
+}.verify-btn {
   width: 100%;
   height: 76rpx;
   padding: 0;
   display: flex;
   align-items: center;
   justify-content: center;
-  border-radius: 16rpx;
+  border-radius: 999rpx;
   background: #c6a27e;
   color: #fff;
   font-size: 23rpx;

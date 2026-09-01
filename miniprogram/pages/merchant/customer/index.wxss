@@ -15,8 +15,7 @@ page{background:#fbf8f5}
 .tg{font-size:22rpx;color:#a34c48;background:#f3e1df;border-radius:40rpx;padding:4rpx 16rpx}
 .notes{font-size:25rpx;color:#5c4630;line-height:1.6}
 .row-sb{display:flex;justify-content:space-between;font-size:25rpx;color:#2d2826}
-.ck{color:#8c8279}
-.linkbtn{text-align:center;font-size:26rpx;color:#9b7655;background:#f1e7df;border:1rpx solid #e7ddd4;border-radius:14rpx;padding:18rpx;margin-top:6rpx}
+.ck{color:#8c8279}.linkbtn {text-align:center;font-size:26rpx;color:#9b7655;background:#f1e7df;border:1rpx solid #e7ddd4;border-radius:999rpx;padding:18rpx;margin-top:6rpx}
 .cnt{color:#c8a47e;font-weight:600;margin-left:6rpx}
 .ohint{font-size:23rpx;color:#b6a99b;text-align:center;padding:16rpx 0}
 .orow{display:flex;align-items:center;justify-content:space-between;padding:16rpx 0;border-top:1rpx solid #f1e7df}
@@ -29,7 +28,6 @@ page{background:#fbf8f5}
 .ost{font-size:21rpx;color:#8c8279}
 .ost.done{color:#47735f}
 
-.row2btn{display:flex;gap:14rpx;margin:16rpx 24rpx 0}
-.hbtn{flex:1;text-align:center;padding:22rpx;border-radius:14rpx;font-size:28rpx;font-weight:700;background:#2d2826;color:#fff}
+.row2btn{display:flex;gap:14rpx;margin:16rpx 24rpx 0}.hbtn {flex:1;text-align:center;padding:22rpx;border-radius:999rpx;font-size:28rpx;font-weight:700;background:#2d2826;color:#fff}
 /* 六统一(08-30c):四个同排动作同一形制同一配色 —— 不许一组里两黑两白(店主原话) */
 .hbtn.ghost{background:#2d2826;color:#fff}

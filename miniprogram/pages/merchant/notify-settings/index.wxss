@@ -1,7 +1,6 @@
 /* 照《通知与回访设置图 v1.0》:页签黑白规格同账调;卡四件套;三色记录。零糙原则:间距/字号统一 */
 .page { padding: 24rpx; }
-.tabs { display: flex; gap: 12rpx; margin-bottom: 20rpx; }
-.tab { border-radius: 14rpx; padding: 8rpx 32rpx; font-size: 26rpx; font-weight: 700; border: 2rpx solid #141413; background: #fff; color: #141413; }
+.tabs { display: flex; gap: 12rpx; margin-bottom: 20rpx; }.tab { border-radius: 999rpx; padding: 8rpx 32rpx; font-size: 26rpx; font-weight: 700; border: 2rpx solid #141413; background: #fff; color: #141413; }
 .tab.on { background: #141413; color: #fff; }
 .notice { background: #f1efe9; border-radius: 14rpx; padding: 14rpx 20rpx; font-size: 22rpx; color: #6b6f66; margin-bottom: 20rpx; line-height: 1.6; }
 .grp { font-size: 26rpx; font-weight: 700; margin: 20rpx 0 12rpx; }
@@ -13,8 +12,7 @@
 .param { font-size: 24rpx; color: #555; margin-top: 12rpx; display: flex; align-items: center; gap: 8rpx; }
 .num { display: inline-block; width: 120rpx; border: 2rpx solid #d9d9de; border-radius: 8rpx; padding: 4rpx 10rpx; text-align: center; }
 .tpl { width: 100%; box-sizing: border-box; margin-top: 12rpx; border: 2rpx dashed #e2e0d8; border-radius: 12rpx; padding: 14rpx 16rpx; font-size: 24rpx; background: #faf9f6; line-height: 1.6; min-height: 88rpx; }
-.chips { display: flex; gap: 8rpx; flex-wrap: wrap; margin-top: 10rpx; }
-.chip { font-size: 20rpx; background: #eef4f2; color: #0a5a50; border-radius: 8rpx; padding: 2rpx 12rpx; }
+.chips { display: flex; gap: 8rpx; flex-wrap: wrap; margin-top: 10rpx; }.chip { font-size: 20rpx; background: #eef4f2; color: #0a5a50; border-radius: 999rpx; padding: 2rpx 12rpx; }
 .prev { margin-top: 10rpx; font-size: 22rpx; color: #6b6f66; }
 .prev-em { color: #141413; }
 .btnrow { display: flex; align-items: center; gap: 20rpx; margin-top: 12rpx; }

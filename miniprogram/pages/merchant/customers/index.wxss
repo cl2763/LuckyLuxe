@@ -3,8 +3,7 @@ page{background:#fbf8f5}
 .srch{background:#fff;border:1rpx solid #e7ddd4;border-radius:14rpx;padding:0 20rpx;height:76rpx;display:flex;align-items:center;margin-bottom:14rpx}
 .inp{flex:1;font-size:26rpx;color:#2d2826}
 .ph{color:#b6a99b}
-.chips{white-space:nowrap;margin-bottom:12rpx}
-.chip{display:inline-block;font-size:22rpx;color:#8c8279;background:#fff;border:1rpx solid #e7ddd4;border-radius:40rpx;padding:8rpx 20rpx;margin-right:12rpx}
+.chips{white-space:nowrap;margin-bottom:12rpx}.chip {display:inline-block;font-size:22rpx;color:#8c8279;background:#fff;border:1rpx solid #e7ddd4;border-radius:999rpx;padding:8rpx 20rpx;margin-right:12rpx}
 .chip.on{background:#f1e7df;color:#9b7655;border-color:#c8a47e}
 .sortbar{font-size:22rpx;color:#8c8279;margin-bottom:14rpx}
 .sopt{margin-left:14rpx;color:#8c8279}

@@ -325,12 +325,20 @@ window.TodayBoard = (function () {
         const body = { serviceId: f.serviceId, technicianId: f.techId, date: stateT.date, time: f.timeSel || f.time, durationMin: f.durationMin, depositPaid: f.deposit === true }
         if (f.userId) body.userId = f.userId
         else body.newCustomerName = f.q.trim()
-        await deps.request('/admin/bookings/direct', { method: 'POST', body: JSON.stringify(body) })
+        const created = await deps.request('/admin/bookings/direct', { method: 'POST', body: JSON.stringify(body) })
         f.busy = false
-        deps.toast('已排进空档 —— 点这个块可去结算')
         stateT.free = null
-        if (deps.refreshBookings) deps.refreshBookings()   // D96:回灌全局预约缓存,「全部预约/日历」立即读得到
-        load(stateT.date, deps)
+        const newId = created && created.booking && created.booking.id
+        /* D96 二段(01u 裁④「排完自动跟去」):先回灌全局缓存,再切到该单所在日期并展开高亮 ——
+           复用既有跳转链 jumpToBooking(与「去结算」跳转同一形制),不另造一套。 */
+        if (newId && deps.refreshBookings && deps.followBooking) {
+          deps.toast('已排进 —— 已跳到这一单')
+          deps.refreshBookings().then(function () { deps.followBooking(newId) })
+        } else {
+          deps.toast('已排进空档 —— 点这个块可去结算')
+          if (deps.refreshBookings) deps.refreshBookings()
+          load(stateT.date, deps)
+        }
       } catch (e2) { f.busy = false; deps.toast((e2 && e2.message) || '排单失败') }
     })
   }

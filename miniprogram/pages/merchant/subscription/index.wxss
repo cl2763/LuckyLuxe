@@ -50,12 +50,9 @@ page{background:#fbf8f5}
 .ai-exp{font-size:20rpx;color:#9b7655;margin-top:6rpx;font-weight:600}
 .ai-p{flex:0 0 auto;text-align:right;font-size:26rpx;font-weight:800;color:#b5885d}
 .ai-py{font-size:19rpx;color:#8c8279;font-weight:600;margin-top:2rpx}
-.ai-btns{display:flex;gap:12rpx;margin-top:16rpx;flex-wrap:wrap}
-.ai-btn{flex:1;min-width:180rpx;text-align:center;font-size:22rpx;font-weight:700;color:#9b7655;border:1rpx solid #d9bf9f;border-radius:40rpx;padding:14rpx 10rpx;background:#fff}
+.ai-btns{display:flex;gap:12rpx;margin-top:16rpx;flex-wrap:wrap}.ai-btn {flex:1;min-width:180rpx;text-align:center;font-size:22rpx;font-weight:700;color:#9b7655;border:1rpx solid #d9bf9f;border-radius:999rpx;padding:14rpx 10rpx;background:#fff}
 .ai-btn.hl{background:#2d2826;color:#fff;border-color:#2d2826}
-.ai-btn.wait{background:#f6efe6;color:#a08a6d;border-color:#e7d9c6}
-.tr-btn{display:inline-block;margin-top:8rpx;font-size:20rpx;font-weight:700;color:#9b7655;border:1rpx solid #d9bf9f;border-radius:40rpx;padding:7rpx 18rpx}
-.paybtn{height:92rpx;line-height:92rpx;text-align:center;background:#07c160;color:#fff;border-radius:18rpx;font-size:30rpx;font-weight:800}
+.ai-btn.wait{background:#f6efe6;color:#a08a6d;border-color:#e7d9c6}.tr-btn {display:inline-block;margin-top:8rpx;font-size:20rpx;font-weight:700;color:#9b7655;border:1rpx solid #d9bf9f;border-radius:999rpx;padding:7rpx 18rpx}.paybtn {height:92rpx;line-height:92rpx;text-align:center;background:#07c160;color:#fff;border-radius:999rpx;font-size:30rpx;font-weight:800}
 .tip{font-size:20rpx;color:#8c8279;line-height:1.7;margin-top:14rpx}
 .hist{background:#fff;border:1rpx solid #e7ddd4;border-radius:20rpx;overflow:hidden}
 .hrow{display:flex;justify-content:space-between;align-items:center;padding:20rpx 24rpx;border-bottom:1rpx solid #f2ebe4}

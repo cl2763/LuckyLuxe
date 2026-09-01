@@ -28,10 +28,7 @@ page{background:#fbf8f5}
 .c1{flex:3}.c2{flex:3}.c3{flex:2}.c4{flex:none;width:44rpx}
 .li{height:64rpx;line-height:64rpx;background:#fbf8f5;border:1rpx solid #eadfd7;border-radius:10rpx;text-align:center;font-size:26rpx;font-weight:700;color:#241f1d}
 .del{width:44rpx;height:44rpx;border-radius:50%;background:#fdeeea;color:#c0392b;display:flex;align-items:center;justify-content:center;font-size:22rpx}
-.addrow{text-align:center;font-size:24rpx;color:#b5885d;font-weight:700;padding:18rpx}
-
-/* 加班粒度 */
-.seg{display:flex;background:#fbf8f5;border:1rpx solid #eadfd7;border-radius:10rpx;padding:4rpx}
+.addrow{text-align:center;font-size:24rpx;color:#b5885d;font-weight:700;padding:18rpx}/* 加班粒度 */ .seg {display:flex;background:#fbf8f5;border:1rpx solid #eadfd7;border-radius:999rpx;padding:4rpx}
 .sopt{font-size:22rpx;padding:10rpx 18rpx;border-radius:8rpx;color:#8a7f78}
 .sopt.on{background:#2d2826;color:#fff;font-weight:700}
 

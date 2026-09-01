@@ -41,8 +41,7 @@
 .inputline{display:flex;gap:10rpx;align-items:center}
 .in{flex:1;background:#faf6f1;border:1rpx solid #ece2d6;border-radius:12rpx;padding:16rpx 14rpx;font-size:26rpx;color:#241f1d}
 .in.amt{flex:.55}
-.in.full{width:100%}
-.addbtn{flex:none;background:#2d2826;color:#fff;border-radius:12rpx;padding:16rpx 20rpx;font-size:25rpx;font-weight:700}
+.in.full{width:100%}.addbtn {flex:none;background:#2d2826;color:#fff;border-radius:999rpx;padding:16rpx 20rpx;font-size:25rpx;font-weight:700}
 .cst{display:flex;justify-content:space-between;font-size:25rpx;color:#241f1d;padding:14rpx 0;border-bottom:1rpx solid #f2ebe3}
 .cst .del{color:#c0392b;font-size:23rpx}
 
@@ -59,8 +58,7 @@
 .techrow .tn{font-size:26rpx;font-weight:800;color:#241f1d;margin-bottom:10rpx}
 .techrow .role{font-size:20rpx;background:#2d2826;color:#fff;border-radius:999rpx;padding:2rpx 12rpx;margin-left:10rpx}
 .techrow .role.sub{background:#b3a89c}
-.minichips{display:flex;flex-wrap:wrap;gap:10rpx}
-.mchip{min-width:56rpx;text-align:center;font-size:22rpx;padding:8rpx 0;border-radius:10rpx;background:#fff;border:1rpx solid #e7ddd4;color:#9a8c7c}
+.minichips{display:flex;flex-wrap:wrap;gap:10rpx}.mchip {min-width:56rpx;text-align:center;font-size:22rpx;padding:8rpx 0;border-radius:999rpx;background:#fff;border:1rpx solid #e7ddd4;color:#9a8c7c}
 .mchip.on{background:#2d2826;border-color:#2d2826;color:#fff;font-weight:700}
 
 .payline{display:flex;justify-content:space-between;align-items:center;font-size:26rpx;padding:12rpx 0;border-bottom:1rpx solid #f2ebe3}
@@ -78,9 +76,7 @@
 .tl{display:flex;justify-content:space-between;font-size:26rpx;color:#5c4630;padding:8rpx 0}
 .tl .strike{text-decoration:line-through;color:#b3a89c}
 .tl.save{color:#1f7a4d;font-weight:700}
-.tl.big{font-size:32rpx;font-weight:850;color:#241f1d;border-top:1rpx solid #f2ebe3;margin-top:8rpx;padding-top:14rpx}
-
-.cta{margin-top:18rpx;background:#2d2826;color:#fff;text-align:center;padding:28rpx;border-radius:16rpx;font-size:30rpx;font-weight:800}
+.tl.big{font-size:32rpx;font-weight:850;color:#241f1d;border-top:1rpx solid #f2ebe3;margin-top:8rpx;padding-top:14rpx}.cta {margin-top:18rpx;background:#2d2826;color:#fff;text-align:center;padding:28rpx;border-radius:999rpx;font-size:30rpx;font-weight:800}
 .cta.ing{background:#8a7f78}
 .foot{margin-top:14rpx;text-align:center;font-size:21rpx;color:#b3a89c}
 
@@ -192,12 +188,10 @@
 
 /* 规则⑦:绑定码入口与拦截提示条 */
 .bindlink{color:#5b7a99;text-decoration:underline;font-size:22rpx}
-.bindbar{margin-top:10rpx;padding:12rpx 16rpx;background:#fdf1e7;color:#b5541f;border-radius:12rpx;font-size:22rpx;display:flex;align-items:center;justify-content:space-between}
-.bindbtn{background:#2f2a22;color:#fff;border-radius:10rpx;padding:8rpx 20rpx;font-size:22rpx;margin-left:16rpx;flex-shrink:0}
+.bindbar{margin-top:10rpx;padding:12rpx 16rpx;background:#fdf1e7;color:#b5541f;border-radius:12rpx;font-size:22rpx;display:flex;align-items:center;justify-content:space-between}.bindbtn {background:#2f2a22;color:#fff;border-radius:999rpx;padding:8rpx 20rpx;font-size:22rpx;margin-left:16rpx;flex-shrink:0}
 .qrbox{display:flex;justify-content:center;margin:20rpx 0}
 .qrph{width:280rpx;height:280rpx;border:2rpx dashed #c9c0af;border-radius:16rpx;display:flex;align-items:center;justify-content:center;color:#9a917f;font-size:22rpx;text-align:center;white-space:pre-line}
-.qbtns{display:flex;justify-content:center;margin:12rpx 0}
-.qbtn{background:#f4efe6;border-radius:12rpx;padding:14rpx 32rpx;font-size:24rpx;color:#2f2a22}
+.qbtns{display:flex;justify-content:center;margin:12rpx 0}.qbtn {background:#f4efe6;border-radius:999rpx;padding:14rpx 32rpx;font-size:24rpx;color:#2f2a22}
 
 /* 规则⑧:条目编号清单 + 技师数字排(原样恢复) */
 .numlist{background:#faf7f0;border-radius:12rpx;padding:12rpx 16rpx;margin-bottom:10rpx}

@@ -75,6 +75,40 @@ async function main() {
   check('D101② 小程序卡六件 + 报价短标(quoteLabel)', convJs.includes("memberCode: cust.memberCode || '—'") && convWx.includes('{{quoteLabel}}') && convWx.includes('{{profile.tcText}}'))
   check('D101① 横幅链仍在(banner 属性界定)', convWx.includes('class="qs-banner {{quoteBannerCls}}"'))
 
+  /* ===== 01u 裁① D88:过去优先(行为两向;过去+撞位 → 只报「已过去」,不拼两因) ===== */
+  {
+    const techs = (await request('/admin/technicians')).data
+    const t2 = (techs.technicians || techs)[1] || tech
+    // 未来撞位:同技师同时段两单 → 报「重叠」
+    const fut = new Date(Date.now() + 3 * 86400000).toISOString().slice(0, 10)
+    const f1 = await request('/admin/bookings/direct', { method: 'POST', body: JSON.stringify({ newCustomerName: `D88未来${uniq}`, serviceId: svc.id, technicianId: t2.id, date: fut, time: '11:00' }) })
+    const f2 = await request('/admin/bookings/direct', { method: 'POST', body: JSON.stringify({ newCustomerName: `D88未来b${uniq}`, serviceId: svc.id, technicianId: t2.id, date: fut, time: '11:00' }) })
+    if (f1.status === 201) {
+      check('D88 未来撞位 → 只报「重叠」(不报已过去)', f2.status === 409 && /重叠/.test(f2.data.error.message) && !/已经过去/.test(f2.data.error.message), JSON.stringify(f2.data).slice(0, 120))
+    }
+    // 过去撞位:同技师过去时段两单 → 只报「已过去」(过去优先,一句一因)
+    const past = new Date(Date.now() - 7 * 86400000).toISOString().slice(0, 10)
+    const p1 = await request('/admin/bookings/direct', { method: 'POST', body: JSON.stringify({ newCustomerName: `D88过去${uniq}`, serviceId: svc.id, technicianId: t2.id, date: past, time: '11:00' }) })
+    if (p1.status === 201) {
+      const p2 = await request('/admin/bookings/direct', { method: 'POST', body: JSON.stringify({ newCustomerName: `D88过去b${uniq}`, serviceId: svc.id, technicianId: t2.id, date: past, time: '11:00' }) })
+      check('🔴 D88 裁①过去优先:过去+撞位只报「已过去」,一句一因不拼两因', p2.status === 409 && /已经过去/.test(p2.data.error.message) && !/重叠/.test(p2.data.error.message), JSON.stringify(p2.data).slice(0, 140))
+      check('D88 补录能力在:过去营业日空档直排 201(老板补录路径,后端不拦)', p1.status === 201)
+    }
+  }
+  /* ===== 01u 裁④ D96 二段:排完自动跟去(跳转链复用,零新形制) ===== */
+  check('D96 裁④ 直排成功→回灌缓存后跟去该单(followBooking=既有 jumpToBooking)',
+    tb.includes('deps.refreshBookings().then(function () { deps.followBooking(newId) })')
+    && rf('apps/web/admin.js').includes('followBooking: (id) => jumpToBooking(id)'))
+  check('D96 裁④ 跟去=切视图+切日期+展开高亮+滚动(链本身未分叉,仍是同一处实现)',
+    /function jumpToBooking\(id\)[\s\S]{0,400}els\.filterDate\.value = bk \? bk\.appointmentDate/.test(rf('apps/web/admin.js')))
+  /* ===== 01u 裁定一 二形法:能点的都是胶囊(点名处;全端硬零由 test-ui-spec 守) ===== */
+  const css01u = rf('apps/web/styles.css')
+  check('二形法 主操作/页签/开关/pill 四类点名处=胶囊', /\.primary \{[^}]*border-radius: 999px/.test(css01u)
+    && /\.nfy-tab \{[^}]*border-radius: 999px/.test(css01u) && /\.tb-pill \{[^}]*border-radius: 999px/.test(css01u)
+    && /\.hsw-sw, \.ui-sw \{[^}]*border-radius: 999px/.test(css01u))
+  check('二形法 小程序全局 button 复位=999rpx(裸 button 也不长歪,方角源头已堵)',
+    rf('miniprogram/app.wxss').includes('border-radius: 999rpx;') && !/button \{[\s\S]{0,120}border-radius: 0;/.test(rf('miniprogram/app.wxss')))
+
   console.log(`[observe-fixes] all ${checks} checks passed`)
 }
 main().catch((e) => { console.error('[observe-fixes] failed:', e.message); process.exit(1) })

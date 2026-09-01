@@ -2,8 +2,7 @@ page{background:#fbf8f5}
 .page{padding:24rpx 26rpx 160rpx}
 .topbar{display:flex;justify-content:space-between;align-items:center;margin-bottom:20rpx}
 .greeting{font-size:36rpx;font-weight:600;color:#2d2826}
-.date{font-size:24rpx;color:#8c8279;margin-top:8rpx}
-.rolechip{font-size:22rpx;font-weight:700;color:#fff;background:#c8a47e;border-radius:40rpx;padding:6rpx 22rpx}
+.date{font-size:24rpx;color:#8c8279;margin-top:8rpx}.rolechip {font-size:22rpx;font-weight:700;color:#fff;background:#c8a47e;border-radius:999rpx;padding:6rpx 22rpx}
 .rolechip.owner{background:#2d2826}
 
 /* AI 总结(压缩) */

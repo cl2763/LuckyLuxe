@@ -6,8 +6,7 @@
 .k{color:#8a8172;font-size:26rpx}
 .v{color:#2f2a22;font-size:28rpx;font-weight:600}
 .safe{margin:24rpx 0;padding:18rpx 22rpx;background:#eef5ee;color:#2f6b3c;border-radius:14rpx;font-size:24rpx;line-height:1.6}
-.safe.warn{background:#fdf1e7;color:#b5541f}
-.btn{margin-top:12rpx;background:#2f2a22;color:#fff;text-align:center;border-radius:16rpx;padding:26rpx 0;font-size:30rpx;font-weight:600}
+.safe.warn{background:#fdf1e7;color:#b5541f}.btn {margin-top:12rpx;background:#2f2a22;color:#fff;text-align:center;border-radius:999rpx;padding:26rpx 0;font-size:30rpx;font-weight:600}
 .mut{color:#9a917f;font-size:24rpx;margin-top:20rpx}
 .center{text-align:center}
 .done{text-align:center;padding:80rpx 36rpx}

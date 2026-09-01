@@ -1,8 +1,7 @@
 page{background:#fbf8f5}
 .page{padding:24rpx 26rpx 60rpx}
 .pt{font-size:32rpx;font-weight:800;color:#241f1d}
-.ps{font-size:22rpx;color:#9a8c7c;margin-top:6rpx;line-height:1.5}
-.addbtn{margin:20rpx 0 16rpx;text-align:center;font-size:26rpx;color:#b5885d;font-weight:700;border:1rpx dashed #d9bf9f;border-radius:16rpx;padding:20rpx;background:#fff}
+.ps{font-size:22rpx;color:#9a8c7c;margin-top:6rpx;line-height:1.5}.addbtn {margin:20rpx 0 16rpx;text-align:center;font-size:26rpx;color:#b5885d;font-weight:700;border:1rpx dashed #d9bf9f;border-radius:999rpx;padding:20rpx;background:#fff}
 .empty{text-align:center;color:#9a8c7c;font-size:24rpx;padding:40rpx 0}
 .pcard{display:flex;align-items:center;gap:16rpx;background:#fff;border:1rpx solid #eadfd7;border-radius:18rpx;padding:20rpx 22rpx;margin-bottom:12rpx}
 .pcard.off{opacity:.55}
@@ -31,10 +30,7 @@ page{background:#fbf8f5}
 .tog.on{background:#1f7a4d}
 .tog.on .dot{left:46rpx}
 .save{margin-top:24rpx;background:#2d2826;color:#fff;text-align:center;padding:24rpx;border-radius:14rpx;font-size:28rpx;font-weight:800}
-.save.dim{opacity:.6}
-
-/* 券来源模式/类型切换/文本输入 */
-.modeseg{display:flex;background:#fbf8f5;border:1rpx solid #eadfd7;border-radius:12rpx;padding:4rpx}
+.save.dim{opacity:.6}/* 券来源模式/类型切换/文本输入 */ .modeseg {display:flex;background:#fbf8f5;border:1rpx solid #eadfd7;border-radius:999rpx;padding:4rpx}
 .mopt{flex:1;text-align:center;font-size:24rpx;padding:14rpx 0;border-radius:10rpx;color:#8a7f78}
 .mopt.on{background:#2d2826;color:#fff;font-weight:700}
 .typeseg{display:flex;gap:10rpx}

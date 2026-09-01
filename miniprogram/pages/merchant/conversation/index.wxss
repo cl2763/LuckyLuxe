@@ -24,8 +24,7 @@ page{background:#fbf8f5}
 .bub.staff{background:#e3eee8;color:#2f5245;border-top-right-radius:6rpx}
 .needbanner{text-align:center;font-size:22rpx;color:#a34c48;background:#f3e1df;border-radius:40rpx;padding:8rpx 0;margin:8rpx auto;width:60%}
 .bottom{flex:0 0 auto;background:#fff;border-top:1rpx solid #e7ddd4;padding:14rpx 20rpx calc(14rpx + env(safe-area-inset-bottom))}
-.acts{display:flex;gap:14rpx;margin-bottom:12rpx}
-.abtn{flex:1;text-align:center;height:66rpx;line-height:66rpx;border-radius:14rpx;font-size:26rpx;font-weight:500}
+.acts{display:flex;gap:14rpx;margin-bottom:12rpx}.abtn {flex:1;text-align:center;height:66rpx;line-height:66rpx;border-radius:999rpx;font-size:26rpx;font-weight:500}
 .abtn.p{background:#c8a47e;color:#fff}
 .abtn.ghost{background:#fbf8f5;border:1rpx solid #c8a47e;color:#9b7655}
 .replybar{display:flex;align-items:center;gap:12rpx}

@@ -8,8 +8,7 @@
 .sv-stage{flex:1;position:relative;display:flex;flex-direction:column}
 .sv-swiper{flex:1;height:100%;background:#fff;border-radius:16rpx;overflow:hidden}
 .sv-scroll{height:100%}
-.sv-img{width:100%}
-.sv-arrow{position:absolute;top:50%;transform:translateY(-50%);width:72rpx;height:96rpx;line-height:92rpx;text-align:center;font-size:52rpx;color:#fff;background:rgba(20,16,14,.42);border-radius:12rpx;z-index:2}
+.sv-img{width:100%}.sv-arrow {position:absolute;top:50%;transform:translateY(-50%);width:72rpx;height:96rpx;line-height:92rpx;text-align:center;font-size:52rpx;color:#fff;background:rgba(20,16,14,.42);border-radius:999rpx;z-index:2}
 .sv-arrow.left{left:12rpx}
 .sv-arrow.right{right:12rpx}
 .sv-tip{text-align:center;color:rgba(255,255,255,.65);font-size:22rpx;padding-top:14rpx}

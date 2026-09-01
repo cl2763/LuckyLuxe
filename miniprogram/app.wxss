@@ -19,7 +19,8 @@ button {
   padding: 0;
   margin: 0;
   border: none;
-  border-radius: 0;
+  /* 二形法(店主 01u):能点的都是胶囊 —— 全局复位从 0 改 999rpx,裸 button 也不长歪 */
+  border-radius: 999rpx;
   background: transparent;
   color: inherit;
   line-height: 1.2;
@@ -77,12 +78,10 @@ button::after {
 
 .muted {
   color: #8a7f78;
-}
-
-.btn {
+}.btn {
   height: 88rpx;
   padding: 0 34rpx;
-  border-radius: 18rpx;
+  border-radius: 999rpx;
   display: flex;
   align-items: center;
   justify-content: center;

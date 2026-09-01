@@ -13,12 +13,10 @@
 .fv.small { font-size: 22rpx; }
 .split, .hint { font-size: 22rpx; color: #9a938c; margin: 6rpx 0; }
 /* 六:选中=黑底白字,未选=白底黑字描边(店主规格) */
-.seg { display: flex; gap: 10rpx; margin: 16rpx 0; }
-.segbtn { flex: 1; text-align: center; padding: 12rpx 0; border: 1rpx solid #2d2a26; border-radius: 10rpx; font-size: 26rpx; background: #fff; color: #2d2a26; }
+.seg { display: flex; gap: 10rpx; margin: 16rpx 0; }.segbtn { flex: 1; text-align: center; padding: 12rpx 0; border: 1rpx solid #2d2a26; border-radius: 999rpx; font-size: 26rpx; background: #fff; color: #2d2a26; }
 .segbtn.on { background: #2d2a26; color: #fff; border-color: #2d2a26; }
 .card { background: #fff; border: 1rpx solid #ece7e1; border-radius: 12rpx; padding: 20rpx; }
-.sub { display: flex; flex-wrap: wrap; gap: 10rpx; margin-bottom: 16rpx; }
-.subbtn { padding: 8rpx 20rpx; border: 1rpx solid #2d2a26; border-radius: 16rpx; font-size: 24rpx; background: #fff; color: #2d2a26; }
+.sub { display: flex; flex-wrap: wrap; gap: 10rpx; margin-bottom: 16rpx; }.subbtn { padding: 8rpx 20rpx; border: 1rpx solid #2d2a26; border-radius: 999rpx; font-size: 24rpx; background: #fff; color: #2d2a26; }
 .subbtn.on { background: #2d2a26; color: #fff; border-color: #2d2a26; }
 .fld { margin: 16rpx 0; }
 .fldl { font-size: 24rpx; color: #6b645d; display: block; margin-bottom: 6rpx; }
@@ -31,12 +29,10 @@
 .warn { border-left: 4rpx solid #b08d57; background: rgba(176,141,87,.08); padding: 10rpx 14rpx; font-size: 22rpx; color: #6b5432; margin: 10rpx 0; }
 .calc { border-top: 1rpx solid #ece7e1; margin-top: 14rpx; padding-top: 10rpx; }
 .crow { display: flex; justify-content: space-between; font-size: 26rpx; padding: 4rpx 0; }
-.crow.tot { font-weight: 700; font-size: 28rpx; }
-.cta { margin-top: 16rpx; background: #2d2a26; color: #fff; border-radius: 10rpx; text-align: center; padding: 18rpx 0; font-size: 28rpx; }
+.crow.tot { font-weight: 700; font-size: 28rpx; }.cta { margin-top: 16rpx; background: #2d2a26; color: #fff; border-radius: 999rpx; text-align: center; padding: 18rpx 0; font-size: 28rpx; }
 .cta.ing { opacity: .6; }
 /* 充值套餐 chips(label=后端句) */
-.chips { display: flex; flex-wrap: wrap; gap: 10rpx; }
-.chip { border: 1rpx solid #2d2a26; border-radius: 16rpx; padding: 8rpx 20rpx; font-size: 24rpx; background: #fff; color: #2d2a26; }
+.chips { display: flex; flex-wrap: wrap; gap: 10rpx; }.chip { border: 1rpx solid #2d2a26; border-radius: 999rpx; padding: 8rpx 20rpx; font-size: 24rpx; background: #fff; color: #2d2a26; }
 .chip.on { background: #2d2a26; color: #fff; }
 /* 冲销列表 */
 .mrow { display: flex; align-items: center; justify-content: center; gap: 28rpx; margin: 8rpx 0 14rpx; }
@@ -48,5 +44,4 @@
 .tdate { display: block; font-size: 20rpx; color: #9a938c; }
 .tnote { display: block; font-size: 24rpx; }
 .tamt { font-size: 26rpx; font-weight: 700; }
-.tamt.neg { color: #a6352b; }
-.tbtn { border: 1rpx solid #2d2a26; border-radius: 10rpx; padding: 8rpx 18rpx; font-size: 22rpx; color: #2d2a26; }
+.tamt.neg { color: #a6352b; }.tbtn { border: 1rpx solid #2d2a26; border-radius: 999rpx; padding: 8rpx 18rpx; font-size: 22rpx; color: #2d2a26; }

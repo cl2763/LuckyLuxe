@@ -1,0 +1,78 @@
+== 网页容器侧存量非 8px:58 条 ==
+  12px   .wechat-phone-preview
+  6px    .segment
+  6px    .gallery-image-pair img
+  6px    .gallery-review-card > img
+  6px    .calendar-event, .calendar-more
+  10px   .ai-assistant-panel
+  6px    .cart-reference-row img
+  6px    .mini-qr
+  1px    .mini-qr i
+  2px    .qr-mock span
+  12px   .business-hours-row
+  12px   .cs-context-card
+  12px   .cs-context-details
+  12px   .cs-workflow-full .quote-workbench
+  12px   .cs-workflow-details
+  6px    .cs-quote-thumbs img
+  12px   .cs-workflow-full .manual-draft-card
+  10px   .cs-lightbox img
+  6px    .store-info-table td code
+  12px   .finance-metric
+  12px   .finance-progress-card
+  14px   .fin-guide-panel
+  14px   .fin-lock-card
+  12px   .today-task
+  10px   .swg-cell
+  10px   .customer-profile-form input, .customer-profile-form tex
+  10px   .special-date-row
+  10px   .services-ai-hint
+  10px   .staff-timeline-row
+  10px   .schedule-request-row
+  10px   .quote-history-row
+  7px    .dc-alloc .head .dc-xday
+  18px   .store-switch-panel
+  12px   .store-switch-row
+  10px   .form-modal-panel input[type="text"],.form-modal-panel i
+  3px    .mix-legend-row i
+  6px    .trend-hover
+  7px    .aa-field input,.aa-field select
+  5px    .dc-stat
+  10px   .sw-s2badge
+  10px   .sw-card, .sw-group
+  6px    .sw-ck
+  6px    .sw-grppicked
+  6px    .sw-sb
+  10px   .sw-addmain
+  12px   .sw-cpnsheet
+  14px   .tb-today
+  10px   .tb-closed
+  10px   .tb-grid
+  6px    .tb-tag
+  3px    .tb-legend .lg
+  10px   .tb-setup-wall
+  6px    .sw-bindbar
+  14px   .hsw-box
+  6px    .hsw-times input
+  4px    .hsw-ph
+  10px   .nfy-card
+  10px   .rfm-rules-editor
+
+== 小程序容器侧存量非 12rpx:289 条 ==
+  16rpx    ×64
+  14rpx    ×55
+  18rpx    ×40
+  10rpx    ×31
+  40rpx    ×23
+  20rpx    ×19
+  8rpx     ×17
+  6rpx     ×8
+  24rpx    ×8
+  22rpx    ×8
+  9rpx     ×6
+  26rpx    ×3
+  28rpx    ×2
+  36rpx    ×2
+  3rpx     ×1
+  4rpx     ×1
+  5rpx     ×1

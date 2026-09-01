@@ -6768,7 +6768,9 @@ function createBooking(body, opts = {}) {
   } catch (error) {
     db.exec('ROLLBACK')
     if (String(error.message || '').includes('UNIQUE constraint failed')) {
-      /* D88(店主 08-30c 并批):失败句说清真因 —— 「已过」和「被占」是两回事,不许答非所因 */
+      /* D88(店主 08-30c 并批):失败句说清真因 —— 「已过」和「被占」是两回事,不许答非所因。
+         01u 裁①:判定顺序**过去优先** —— 同时满足「已过去」与「已被占」时只报「已过去」,
+         一句一因不拼两因(此顺序即现状,店主终裁确认;test-observe-fixes 常驻钉住,别翻面)。 */
       const nowD = localParts(new Date())
       if (`${input.date} ${input.time}` < `${nowD.date} ${nowD.time}`) {
         throw apiError(409, 'SLOT_UNAVAILABLE', `这个时段已经过去了(门店现在 ${nowD.time}),选一个之后的时段。`)

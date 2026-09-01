@@ -30,8 +30,7 @@ page{background:#fbf8f5}
 .lockedbar{background:#e3eee8;border:1rpx solid #cfe3d8;color:#1f7a4d;border-radius:14rpx;padding:16rpx 20rpx;font-size:23rpx;font-weight:600;margin-bottom:14rpx}
 .lockedbar.paidbar{background:#fbf1e4;border-color:#ecd9bd;color:#8a5a24}
 .lockbtn.pay{background:linear-gradient(135deg,#c8a47e,#b5885d)}
-.unlk{color:#b5885d;font-weight:700}
-.lockbtn{margin-top:20rpx;background:#2d2826;color:#fff;text-align:center;padding:26rpx;border-radius:14rpx;font-size:28rpx;font-weight:800}
+.unlk{color:#b5885d;font-weight:700}.lockbtn {margin-top:20rpx;background:#2d2826;color:#fff;text-align:center;padding:26rpx;border-radius:999rpx;font-size:28rpx;font-weight:800}
 .lockbtn.dim{opacity:.6}
 .lockhint{font-size:20rpx;color:#9a8c7c;text-align:center;margin-top:10rpx;line-height:1.6}
 .adjbtn{font-size:22rpx;font-weight:700;color:#b5885d;border:1rpx dashed #d9bf9f;border-radius:999rpx;padding:4rpx 18rpx}

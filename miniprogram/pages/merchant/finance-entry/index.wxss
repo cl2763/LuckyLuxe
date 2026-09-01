@@ -1,8 +1,6 @@
 page{background:#fbf8f5}
 .page{padding:24rpx 26rpx 60rpx}
-.ps{font-size:22rpx;color:#8c8279;margin-bottom:18rpx;line-height:1.6}
-.seg{display:flex;background:#efe7dd;border-radius:16rpx;padding:5rpx;margin-bottom:20rpx}
-.seg-b{flex:1;text-align:center;font-size:27rpx;font-weight:700;padding:16rpx 0;border-radius:12rpx;color:#2d2826;background:#fff;border:1rpx solid #2d2826}
+.ps{font-size:22rpx;color:#8c8279;margin-bottom:18rpx;line-height:1.6}.seg {display:flex;background:#efe7dd;border-radius:999rpx;padding:5rpx;margin-bottom:20rpx}.seg-b {flex:1;text-align:center;font-size:27rpx;font-weight:700;padding:16rpx 0;border-radius:999rpx;color:#2d2826;background:#fff;border:1rpx solid #2d2826}
 .seg-b.on{background:#2d2826;color:#fff;border-color:#2d2826}
 /* 六统一(08-30c):收/支选中色语义并入统一黑白规格;金额红绿语义仍在列表数字上 */
 
@@ -13,8 +11,7 @@ page{background:#fbf8f5}
 .amt-inp{flex:1;font-size:56rpx;font-weight:700;color:#2d2826;height:80rpx}
 .ph{color:#d8cec2}
 .k{font-size:22rpx;color:#8c8279;font-weight:700;margin:20rpx 0 12rpx}
-.chips{display:flex;flex-wrap:wrap;gap:14rpx}
-.chip{font-size:24rpx;font-weight:600;color:#6d5f52;background:#fff;border:1rpx solid #e7ddd4;border-radius:40rpx;padding:12rpx 26rpx}
+.chips{display:flex;flex-wrap:wrap;gap:14rpx}.chip {font-size:24rpx;font-weight:600;color:#6d5f52;background:#fff;border:1rpx solid #e7ddd4;border-radius:999rpx;padding:12rpx 26rpx}
 .chip.on{background:#2d2826;color:#fff;border-color:#2d2826}
 .inp{background:#fff;border:1rpx solid #e7ddd4;border-radius:16rpx;padding:20rpx 24rpx;display:flex;justify-content:space-between;align-items:center;margin-bottom:14rpx}
 .inp-l{font-size:24rpx;color:#8c8279}

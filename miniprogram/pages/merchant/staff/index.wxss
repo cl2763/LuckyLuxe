@@ -1,8 +1,7 @@
 page{background:#fbf8f5}
 .page{padding:20rpx 26rpx 60rpx}
 .topbar{display:flex;justify-content:space-between;align-items:center;margin-bottom:16rpx}
-.h1{font-size:34rpx;font-weight:600;color:#2d2826}
-.addbtn{font-size:23rpx;color:#fff;background:#c8a47e;border-radius:40rpx;padding:8rpx 20rpx}
+.h1{font-size:34rpx;font-weight:600;color:#2d2826}.addbtn {font-size:23rpx;color:#fff;background:#c8a47e;border-radius:999rpx;padding:8rpx 20rpx}
 .empty{text-align:center;color:#8c8279;font-size:24rpx;padding:60rpx 0}
 .card{background:#fff;border:1rpx solid #e7ddd4;border-radius:16rpx;padding:22rpx 22rpx;margin-bottom:18rpx}
 .top{display:flex;align-items:center;gap:14rpx}
@@ -23,8 +22,7 @@ page{background:#fbf8f5}
 .note{font-size:22rpx;color:#8c8279;line-height:1.6;margin-top:8rpx}
 .defplan{display:flex;justify-content:space-between;align-items:center;background:#fbf4ec;border:1rpx solid #e7d3ba;border-radius:16rpx;padding:20rpx 22rpx;margin-bottom:16rpx}
 .dp-t{font-size:26rpx;font-weight:700;color:#5c4630}
-.dp-d{font-size:21rpx;color:#b5885d;font-weight:600}
-.planbtn{margin-top:12rpx;text-align:center;font-size:23rpx;font-weight:700;color:#b5885d;background:#fbf8f5;border:1rpx dashed #e7d3ba;border-radius:12rpx;padding:12rpx 0}
+.dp-d{font-size:21rpx;color:#b5885d;font-weight:600}.planbtn {margin-top:12rpx;text-align:center;font-size:23rpx;font-weight:700;color:#b5885d;background:#fbf8f5;border:1rpx dashed #e7d3ba;border-radius:999rpx;padding:12rpx 0}
 
 /* ===== P2③ 员工管理板块化(屏 4b/4c + P2.5 屏 V2,2026-08-08)===== */
 .tabs{white-space:nowrap;margin:4rpx 0 14rpx}
@@ -114,7 +112,5 @@ page{background:#fbf8f5}
 .wkbar .nav{width:56rpx;height:56rpx;border-radius:14rpx;background:#f3ece2;color:#5c4630;display:flex;align-items:center;justify-content:center;font-size:30rpx}
 .wkbar .wk{flex:1;text-align:center;font-size:27rpx;font-weight:800;color:#241f1d}
 .wkbar .btn{font-size:23rpx;padding:10rpx 22rpx;border-radius:999rpx;background:#2d2826;color:#fff;font-weight:700}
-.todaytag{font-size:19rpx;color:#fff;background:#b5885d;border-radius:6rpx;padding:2rpx 10rpx;margin-left:10rpx;font-weight:700}
-.applybtn{margin:6rpx 0 10rpx;text-align:center;font-size:25rpx;font-weight:700;color:#9b7655;border:1rpx dashed #e7d3b8;border-radius:14rpx;padding:20rpx}
-.savebtn{margin-top:16rpx;background:#2d2826;color:#fff;text-align:center;padding:26rpx;border-radius:14rpx;font-size:28rpx;font-weight:800}
+.todaytag{font-size:19rpx;color:#fff;background:#b5885d;border-radius:6rpx;padding:2rpx 10rpx;margin-left:10rpx;font-weight:700}.applybtn {margin:6rpx 0 10rpx;text-align:center;font-size:25rpx;font-weight:700;color:#9b7655;border:1rpx dashed #e7d3b8;border-radius:999rpx;padding:20rpx}.savebtn {margin-top:16rpx;background:#2d2826;color:#fff;text-align:center;padding:26rpx;border-radius:999rpx;font-size:28rpx;font-weight:800}
 .sheet .shs{font-size:22rpx;color:#9a8c7c;margin:6rpx 0 14rpx}

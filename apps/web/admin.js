@@ -4169,7 +4169,9 @@ function renderBookings() {
     window.TodayBoard.mountInto(els.bookingList, { request, escapeHtml, toast, storeToday,
       openBooking: (id) => jumpToBooking(id),
       /* D96(01t):直排写库成功但「全部预约」看不见 —— owner.bookings 是启动缓存,这里回灌 */
-      refreshBookings: async () => { try { const d = await request('/admin/bookings'); owner.bookings = d.bookings || owner.bookings } catch { /* 列表口失败不拦排单 */ } } })
+      refreshBookings: async () => { try { const d = await request('/admin/bookings'); owner.bookings = d.bookings || owner.bookings } catch { /* 列表口失败不拦排单 */ } },
+      /* D96 二段(01u 裁④):排完自动跟去 —— 既有跳转链(切视图+切日期+展开高亮+滚动) */
+      followBooking: (id) => jumpToBooking(id) })
     return
   }
 

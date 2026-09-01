@@ -153,16 +153,14 @@
   color: #5e514b;
   font-size: 24rpx;
   font-weight: 760;
-}
-
-.checkout-btn {
+}.checkout-btn {
   width: 136rpx;
   min-width: 0;
   max-width: 136rpx;
   height: 72rpx;
   padding: 0;
   font-size: 23rpx;
-  border-radius: 18rpx;
+  border-radius: 999rpx;
   box-sizing: border-box;
 }
 
