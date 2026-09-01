@@ -11,7 +11,7 @@
     <view wx:if="{{!showcase.length}}" class="empty">还没有已发布的作品,去「作品管理」上传发布</view>
     <view class="grid">
       <view class="gcell" wx:for="{{showcase}}" wx:key="id" data-id="{{item.id}}" bindtap="openWork">
-        <img-placeholder src="{{item.cover}}" img-class="gimg"></img-placeholder>
+        <img-placeholder class="gimg" src="{{item.cover}}" img-class="gimg"></img-placeholder>
         <view wx:if="{{item.count>1}}" class="gcount">{{item.count}}图</view>
         <view class="gcap">{{item.service}}{{item.tech ? ' · ' + item.tech : ''}}</view>
       </view>

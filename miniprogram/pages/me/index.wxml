@@ -2,7 +2,7 @@
   <view class="member-card">
     <block wx:if="{{isLoggedIn}}">
       <view class="member-top">
-        <img-placeholder src="{{member.avatarUrl}}" img-class="avatar" text="没有头像"></img-placeholder>
+        <img-placeholder class="avatar" src="{{member.avatarUrl}}" img-class="avatar" text="没有头像"></img-placeholder>
         <view>
           <view class="nickname">{{member.nickname}}</view>
           <!-- 勘误:等级徽章恢复直达权益页(黑卡不许变哑) -->
@@ -116,7 +116,7 @@
       <block wx:if="{{recentOrders.length}}">
         <block wx:for="{{recentOrders}}" wx:key="_id">
           <view class="recent-card card me-module-card" bindtap="goOrderDetail" data-id="{{item._id}}">
-            <img-placeholder src="{{item.serviceImage}}" img-class="recent-image"></img-placeholder>
+            <img-placeholder class="recent-image" src="{{item.serviceImage}}" img-class="recent-image"></img-placeholder>
             <view class="recent-info">
               <view class="recent-top">
                 <text>{{item.serviceName}}</text>
@@ -185,7 +185,7 @@
       <button class="auth-close" bindtap="closeLoginPanel">×</button>
 
       <view wx:if="{{authModalMode === 'login'}}" class="simple-login-body">
-        <img-placeholder src="" img-class="simple-login-avatar" text="没有头像"></img-placeholder>
+        <img-placeholder class="simple-login-avatar" src="" img-class="simple-login-avatar" text="没有头像"></img-placeholder>
         <view class="simple-login-title">{{lang === 'en' ? 'Youji 有迹' : '有迹'}}</view>
         <view class="simple-login-desc">{{lang === 'en' ? 'Sign in with WeChat to view orders and member benefits.' : '微信一键登录后可查看订单与会员权益。'}}</view>
       </view>
@@ -195,7 +195,7 @@
         <view class="profile-edit-desc">{{lang === 'en' ? 'Choose an avatar and enter a nickname for in-store member verification.' : '选择头像并填写昵称，方便到店核对会员资料。'}}</view>
 
         <view class="profile-avatar-row">
-          <img-placeholder src="{{authProfile.avatarUrl}}" img-class="profile-edit-avatar" text="没有头像"></img-placeholder>
+          <img-placeholder class="profile-edit-avatar" src="{{authProfile.avatarUrl}}" img-class="profile-edit-avatar" text="没有头像"></img-placeholder>
           
           <view class="profile-avatar-copy">
             <text>{{authProfile.avatarUrl ? (lang === 'en' ? 'Avatar selected' : '已选择头像') : (lang === 'en' ? 'Avatar' : '头像')}}</text>

@@ -7,7 +7,7 @@
         </view>
         <view class="cart-main">
           <view class="cart-content">
-            <img-placeholder src="{{item.service.image}}" img-class="cart-visual"></img-placeholder>
+            <img-placeholder class="cart-visual" src="{{item.service.image}}" img-class="cart-visual"></img-placeholder>
             <view class="cart-info">
               <view class="cart-title-row">
                 <text class="cart-title">{{item.service.name}}</text>

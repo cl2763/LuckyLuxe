@@ -337,4 +337,35 @@ check('⑥ 顾客端页面真加载了占位出口(带内容指纹)', /img-place
     liars.length === 0, liars.join(' | '))
 }
 
+/* ===== ②d 占位尺寸静态刀(店主 02n 裁定一)=====
+   D120 的根因是"占位框不守原位尺寸";定刀是**尺寸类写在组件标签本身**
+   (标签 class 走页面样式,与 styleIsolation 无关,宿主拿到确定高度,两个分支同高)。
+   但 02m 我只改了被点名的首页 3 处,全仓另外 16 处同病未动 —— **同一形状第三次**
+   (假图族漏了紧挨着的那个 · cart-reference-row 三处只改两处 · 这次 19 处只改 3 处)。
+   本刀:全仓每个 <img-placeholder 标签**必须带尺寸类**;例外进白名单逐条写理由 + 条目数棘轮。
+   不用跑小程序、不用造态,一次钉死 19 处并管住第 20 处。 */
+const PH_SIZE_ALLOW = {
+  // 'pages/x/index.wxml:12': '理由(为什么这一处不需要尺寸类)'
+}
+const PH_ALLOW_CAP = 8
+const phSites = []
+for (const f of walk('miniprogram', /\.wxml$/)) {
+  const src = readFileSync(join(ROOT, f), 'utf8').replace(/<!--[\s\S]*?-->/g, '')
+  src.split('\n').forEach((ln, i) => {
+    if (!ln.includes('<img-placeholder')) return
+    const tag = (/<img-placeholder\b[^>]*>/.exec(ln) || [ln])[0]
+    phSites.push({ file: f, line: i + 1, tag, /* 🔴 判据第 6 处毛病(子串族第三次,落刀当场自咬):`img-class=` 里含 `class=`,
+         `\bclass=` 被它满足 → 19 处全被判成"带类",刀绿着。
+         收紧:必须是**独立属性** class=(前面是空白或标签名,不是 `-`)。 */
+    hasClass: /<img-placeholder(?:\s+[a-zA-Z:-]+="[^"]*")*\s+class=/.test(tag) && !/^<img-placeholder\s+img-class=/.test(tag.replace(/\s+/g, ' ')) })
+  })
+}
+const phBad = phSites.filter((s) => !s.hasClass && !PH_SIZE_ALLOW[`${s.file}:${s.line}`])
+  .map((s) => `${s.file.replace('miniprogram/pages/', '').replace('/index.wxml', '')}:${s.line} ${(/img-class="([^"]*)"/.exec(s.tag) || [, '?'])[1]}`)
+check(`②d 占位尺寸:全仓 ${phSites.length} 个 <img-placeholder 标签必须自带尺寸类(D120 定刀;标签 class 不依赖样式隔离)`,
+  phBad.length === 0, `${phBad.length} 处未带:${phBad.join(' | ')}`)
+check(`②d 白名单棘轮 ≤ ${PH_ALLOW_CAP}(例外逐条写理由,只减不增)`,
+  Object.keys(PH_SIZE_ALLOW).length <= PH_ALLOW_CAP, String(Object.keys(PH_SIZE_ALLOW).length))
+check('②d 反向守:这条扫描真读到了标签(不是路径写错扫了个空)', phSites.length >= 15, String(phSites.length))
+
 console.log(`\n✅ test-image-placeholder 通过 ${checks} 项(扫了 ${sites.length} 个图片位)`)

@@ -29,7 +29,7 @@
             <text class="status" wx:else>{{item.statusText}}</text>
           </view>
           <view class="order-body">
-            <img-placeholder src="{{item.serviceImage}}" img-class="mini-visual"></img-placeholder>
+            <img-placeholder class="mini-visual" src="{{item.serviceImage}}" img-class="mini-visual"></img-placeholder>
             <view class="order-info">
               <view class="order-time">{{item.appointment.date}} {{item.appointment.time}}</view>
               <view class="muted">{{item.store.storeName}}</view>

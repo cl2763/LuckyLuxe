@@ -14,7 +14,7 @@
         <block wx:if="{{serviceList.length}}">
           <block wx:for="{{serviceList}}" wx:key="_id">
             <view class="service-card card" bindtap="goDetail" data-id="{{item._id}}">
-              <img-placeholder src="{{item.image}}" img-class="service-visual"></img-placeholder>
+              <img-placeholder class="service-visual" src="{{item.image}}" img-class="service-visual"></img-placeholder>
               <view class="service-info">
                 <view class="service-eyebrow" wx:if="{{item.category}}">{{item.category}}</view>
                 <view class="service-name">{{item.name}}</view>
