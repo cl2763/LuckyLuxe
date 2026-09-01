@@ -7,8 +7,15 @@ const RUN_ID = Date.now().toString(36)
 const IMAGE_A = 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+/p9sAAAAASUVORK5CYII='
 const IMAGE_B = 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAIAAAACCAQAAABp0P2WAAAADUlEQVR42mP8z8BQDwAFgwJ/lmVfWQAAAABJRU5ErkJggg=='
 
+/* 🔴 店主 02s 裁定一:这四套用自有输出格式、不打 ok 行,断言基线的尺子看不见它们
+   (02r 落刀当天现扫出的覆盖面洞:66/70)。店主原话:「"数不到"和"改造它们"之间还有第三条路:
+   **让它们说出自己有多少条**」——所以只改这一个助手,**断言逻辑与 66 项 matrix 一行不动**,
+   过一条就打一行 ok。覆盖面 66/70 → 70/70。 */
+let asserted = 0
 function assert(condition, message) {
   if (!condition) throw new Error(message)
+  asserted += 1
+  console.log(`ok ${asserted} - ${message}`)
 }
 
 // 与 local-server.mjs 的 dateFromMonthDay 同规则:按门店时区取"今天",
@@ -352,7 +359,7 @@ async function main() {
   assert(/第一次做美睫的小提醒/.test(firstLashTranscript), 'first-time lash staff quote should append first-time lash notice')
   assert(!/美瞳|隐形眼镜|护理盒/.test(firstLashTranscript), 'first-time lash notice should not mention contact lenses or lens case')
 
-  console.log('[working-memory] all regression checks passed')
+  console.log(`[working-memory] all regression checks passed(${asserted} 项断言)`)
 }
 
 main().catch((error) => {

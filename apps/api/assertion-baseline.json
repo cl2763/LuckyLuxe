@@ -3,13 +3,13 @@
   "播种于": "2026-09-02(02r 裁定一)",
   "suites": {
     "customer-service-matrix": 66,
-    "working-memory": 0,
+    "working-memory": 55,
     "business-hours": 18,
     "intent-guards": 9,
     "quote-polish": 10,
-    "silent-handoff": 0,
-    "human-handoff": 0,
-    "after-sales-handoff": 0,
+    "silent-handoff": 11,
+    "human-handoff": 12,
+    "after-sales-handoff": 24,
     "identity-links": 9,
     "entitlements": 21,
     "tenant-kb": 19,
@@ -72,5 +72,6 @@
     "schema-consistency": 4,
     "perf-base-migration": 13,
     "tenant-isolation": 10
-  }
+  },
+  "上次更新": "2026-09-02"
 }

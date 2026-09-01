@@ -6,8 +6,15 @@ const TOKEN = process.env.TEST_ADMIN_TOKEN || 'owner-demo-token'
 const RUN_ID = Date.now().toString(36)
 const IMAGE = 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAIAAAACCAQAAABp0P2WAAAADUlEQVR42mP8z8BQDwAFgwJ/lmVfWQAAAABJRU5ErkJggg=='
 
+/* 🔴 店主 02s 裁定一:这四套用自有输出格式、不打 ok 行,断言基线的尺子看不见它们
+   (02r 落刀当天现扫出的覆盖面洞:66/70)。店主原话:「"数不到"和"改造它们"之间还有第三条路:
+   **让它们说出自己有多少条**」——所以只改这一个助手,**断言逻辑与 66 项 matrix 一行不动**,
+   过一条就打一行 ok。覆盖面 66/70 → 70/70。 */
+let asserted = 0
 function assert(condition, message) {
   if (!condition) throw new Error(message)
+  asserted += 1
+  console.log(`ok ${asserted} - ${message}`)
 }
 
 async function request(path, options = {}) {
@@ -133,7 +140,7 @@ async function main() {
   assert(conversation, 'unified greeting conversation should exist')
   assert(conversation.lastIntent !== 'after_sales_handoff', `unified greeting must not become after_sales_handoff, got ${conversation.lastIntent}`)
 
-  console.log('[after-sales] all regression checks passed')
+  console.log(`[after-sales] all regression checks passed(${asserted} 项断言)`)
 }
 
 main().catch((error) => {

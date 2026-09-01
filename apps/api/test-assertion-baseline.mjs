@@ -105,16 +105,20 @@ if (partial) {
    并登记待改造(把它们的输出改成 ok 行,基线才真的盖住 70 套)。
    店主 02r 收编的《判据覆盖面要有判据》就是冲这个来的,自己先照一遍。 */
 const NO_OK_ALLOW = {
-  'working-memory': '自有格式:[working-memory] all regression checks passed;失败靠 throw。待改造成 ok 行',
-  'silent-handoff': '同上(AI 客服四套同一写法)',
-  'human-handoff': '同上',
-  'after-sales-handoff': '同上',
+  /* 空 —— 店主 02s 裁定一已清零。
+     02r 落刀当天这里有四个:working-memory / silent-handoff / human-handoff / after-sales-handoff,
+     它们用自有输出格式、不打 ok 行,尺子看不见,覆盖面只有 66/70。
+     店主裁:「"数不到"和"改造它们"之间还有第三条路:**让它们说出自己有多少条**」——
+     02s 只改各自那一个 assert() 助手(断言逻辑与 matrix 66 项一行不动),四套共 102 条现身,
+     覆盖面 70/70。棘轮随之从 4 收到 0:**这张表只减不增,再有新成员必须店主点头**。 */
 }
-const NO_OK_CAP = 4
+const NO_OK_CAP = 0
 const zeros = Object.entries(now).filter(([s, n]) => n === 0 && !NO_OK_ALLOW[s]).map(([s]) => s)
 check(`④ 零断言套件白名单式:在场 ${Object.keys(now).length} 套里,打不出 ^ok 行的必须在白名单内(新出现的自动红)`,
   zeros.length === 0, zeros.join(' | '))
-check(`⑤ 零断言白名单棘轮 ≤ ${NO_OK_CAP}(只减不增;这四套的断言基线**盖不住**,待改造成 ok 行)`,
+/* 名字跟着事实走(判据自述须与判据行为一致):02r 那版名字写的是「这四套盖不住,待改造」,
+   02s 改造完就不成立了 —— 名字不改就是判据在说谎。 */
+check(`⑤ 零断言白名单棘轮 ≤ ${NO_OK_CAP}(现为空;只减不增,再进新成员要店主点头)`,
   Object.keys(NO_OK_ALLOW).length <= NO_OK_CAP, String(Object.keys(NO_OK_ALLOW).length))
 
 if (born.length) console.log(`[新套件] ${born.join(' | ')}`)
@@ -141,10 +145,13 @@ if (!partial && (dropped.length === 0 || accept) && gone.length === 0) {
 
 /* 🔴 覆盖面同理:减的必须是**在场**的零断言套件,不是白名单总条数
    —— 子集里只到场 1 套白名单成员时,减 4 就把覆盖面说小了。 */
-const blindHere = Object.keys(now).filter((k) => NO_OK_ALLOW[k])
+/* 🔴 覆盖面必须数**事实**(真的 0 条的套件),不是数白名单成员:
+   白名单 02s 清空后,按成员数算会永远打「N/N 全覆盖」——
+   造病时 working-memory 明明瞎着,它照样报 5/5。判据看着在守其实没守,同族第三案,当场改。 */
+const blindHere = Object.keys(now).filter((k) => now[k] === 0)
 console.log(`[覆盖面] 基线真正盖住 ${Object.keys(now).length - blindHere.length}/${Object.keys(now).length} 套;`
-  + `${blindHere.length} 套用自有输出格式尺子看不见${blindHere.length ? `(${blindHere.join('/')})` : ''};`
-  + `全仓待改造 ${Object.keys(NO_OK_ALLOW).length} 套`)
+  + `${blindHere.length} 套打不出 ok 行、尺子看不见${blindHere.length ? `(${blindHere.join('/')})` : ''};`
+  + `白名单在册 ${Object.keys(NO_OK_ALLOW).length} 套`)
 console.log(`\n✅ test-assertion-baseline 通过 ${checks} 项(在场 ${Object.keys(now).length} 套,合计 ${total} 条)`)
 if (fails.length) {
   console.error(`\n❌ ${fails.length} 项未过 —— 断言变少必须解释:合并/删除/改写?说清哪套、少几条、为什么,`)
