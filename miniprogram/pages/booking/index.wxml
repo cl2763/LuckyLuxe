@@ -85,7 +85,7 @@
     <view class="image-list">
       <block wx:for="{{referenceImages}}" wx:key="*this">
         <view class="image-wrap">
-          <image class="ref-image" src="{{item}}" mode="aspectFill"></image>
+          <image wx:if="{{item}}" class="ref-image" src="{{item}}" mode="aspectFill"></image>
           <button class="remove-image" bindtap="removeImage" data-index="{{index}}">×</button>
         </view>
       </block>

@@ -27,9 +27,13 @@
       <h1 id="shareTitle">Lucky Luxe 作品留档</h1>
       <p class="subtle" id="shareSubtitle">选择平台，复制文案后即可发布。</p>
 
-      <div class="share-photo-layout">
+      <!-- 退回三(02f):专用空态节点 + 图区最小容器 —— 不整块重写 innerHTML(会抹掉标题/平台选择器,
+           且把 els.mainImage 的引用打空,中英切换再渲染就落到已移除的节点上,与 01t 弹层那族同雷)。 -->
+      <p class="subtle hidden" id="shareEmptyNote"></p>
+      <div class="share-photo-layout" id="shareImageArea">
         <div class="share-main-photo">
-          <img id="shareMainImage" src="/assets/images/nail-french.jpg" alt="Lucky Luxe work">
+          <!-- 退回二同刀:html 里这张写死的平台示例图也拔掉,src 由真数据填 -->
+          <img id="shareMainImage" alt="">
         </div>
         <div class="share-photo-strip" id="sharePhotoStrip"></div>
       </div>

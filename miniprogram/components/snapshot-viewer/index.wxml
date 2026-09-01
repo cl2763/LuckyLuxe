@@ -9,7 +9,7 @@
       <swiper class="sv-swiper" current="{{cur}}" bindchange="onSwipe" indicator-dots="{{items.length > 1}}" indicator-color="rgba(255,255,255,.35)" indicator-active-color="#fff">
         <swiper-item wx:for="{{items}}" wx:for-item="it" wx:key="code">
           <scroll-view scroll-y class="sv-scroll">
-            <image class="sv-img" src="{{it.url}}" mode="widthFix" show-menu-by-longpress></image>
+            <image wx:if="{{it.url}}" class="sv-img" src="{{it.url}}" mode="widthFix" show-menu-by-longpress></image>
           </scroll-view>
         </swiper-item>
       </swiper>

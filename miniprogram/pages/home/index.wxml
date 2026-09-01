@@ -30,7 +30,9 @@
       <swiper wx:if="{{heroSlides.length}}" class="shop-card-swiper" indicator-dots="{{heroSlides.length > 1}}" circular autoplay="{{heroSlides.length > 1}}" interval="4600" current="{{activeHero}}" bindchange="onHeroChange">
         <block wx:for="{{heroSlides}}" wx:key="image">
           <swiper-item>
-            <image class="shop-card-visual" src="{{item.image}}" mode="aspectFill"></image>
+            <!-- 退回一(店主 02f):裸 <image src> 字段为空=空白框,踩中占位律后半句「也不许什么都不显示」。
+         B 类豁免只判外层数组空不空,数组有三条、每条图都空照样渲三个空框 → 收窄到**字段级**。 -->
+            <img-placeholder src="{{item.image}}" img-class="shop-card-visual"></img-placeholder>
             <!-- 08-28(六):文案原来只在网页的 alt 里、小程序根本没渲染 —— 商家在面板写的字要看得见 -->
             <text class="shop-card-caption" wx:if="{{item.label}}">{{item.label}}</text>
           </swiper-item>

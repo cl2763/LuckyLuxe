@@ -31,7 +31,7 @@
       <block wx:for="{{col0}}" wx:key="id">
         <view class="work-card">
           <view class="work-visual-wrap" bindtap="onWork" data-id="{{item.id}}">
-            <image class="work-visual" src="{{item.image}}" mode="widthFix"></image>
+            <image wx:if="{{item.image}}" class="work-visual" src="{{item.image}}" mode="widthFix"></image>
             <text wx:if="{{item.catLabel}}" class="work-cat">{{item.catLabel}}</text>
           </view>
           <view class="work-meta">
@@ -46,7 +46,7 @@
       <block wx:for="{{col1}}" wx:key="id">
         <view class="work-card">
           <view class="work-visual-wrap" bindtap="onWork" data-id="{{item.id}}">
-            <image class="work-visual" src="{{item.image}}" mode="widthFix"></image>
+            <image wx:if="{{item.image}}" class="work-visual" src="{{item.image}}" mode="widthFix"></image>
             <text wx:if="{{item.catLabel}}" class="work-cat">{{item.catLabel}}</text>
           </view>
           <view class="work-meta">

@@ -97,7 +97,7 @@
       <view class="work-grid">
         <block wx:for="{{order.visibleWorkImages}}" wx:key="*this">
           <button class="work-thumb" bindtap="previewWork" data-url="{{item}}">
-            <image src="{{item}}" mode="aspectFill"></image>
+            <image wx:if="{{item}}" src="{{item}}" mode="aspectFill"></image>
           </button>
         </block>
       </view>

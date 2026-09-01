@@ -12,7 +12,7 @@
       <!-- 小记图片(08-30f):空态=整块只剩「＋添加图片」钮,零占位假图 -->
       <view class="imgrow">
         <view class="imgtile" wx:for="{{images}}" wx:key="index">
-          <image class="imgthumb" src="{{item}}" mode="aspectFill" />
+          <image wx:if="{{item}}" class="imgthumb" src="{{item}}" mode="aspectFill" />
           <view class="imgdel" data-i="{{index}}" catchtap="removeImage">✕</view>
         </view>
         <view class="imgadd" wx:if="{{images.length < 9}}" bindtap="addImages">＋ 添加图片<text class="imgcap">拍照/相册 · 最多9张</text></view>

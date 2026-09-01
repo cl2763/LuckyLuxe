@@ -14,6 +14,8 @@ const els = {
   title: document.querySelector('#shareTitle'),
   subtitle: document.querySelector('#shareSubtitle'),
   mainImage: document.querySelector('#shareMainImage'),
+  emptyNote: document.querySelector('#shareEmptyNote'),
+  imageArea: document.querySelector('#shareImageArea'),
   photoStrip: document.querySelector('#sharePhotoStrip'),
   originalGrid: document.querySelector('#shareOriginalGrid'),
   platformEyebrow: document.querySelector('#platformEyebrow'),
@@ -115,15 +117,27 @@ function renderImages() {
   /* 三态第三态:没有审核通过的作品 → **整块不出现**(不是空图、不是拿别的图顶),
      并明说一句;分享/复制/下载按钮同步不出 —— 没东西可分享就别给按钮。 */
   if (!images.length) {
+    /* 退回三(02f):**不整块重写 innerHTML** —— 那会抹掉同一 section 里的标题与平台选择器,
+       并把 els.mainImage 的引用打空(中英切换再跑 renderImages 就落到已移除的节点上,
+       与 01t 弹层 bookingId 被整对象重建冲掉是同一族)。
+       改成:图区整块 hidden + 专用空态节点说话,DOM 结构不动、引用不失效。 */
     if (els.mainImage) els.mainImage.removeAttribute('src')
-    const host = els.mainImage && els.mainImage.closest('section, .share-hero, .card')
-    if (host) host.innerHTML = '<p class="subtle" style="padding:18px">这一单还没有可分享的作品图。</p>'
+    if (els.imageArea) els.imageArea.classList.add('hidden')
+    if (els.emptyNote) {
+      els.emptyNote.textContent = state.lang === 'zh' ? '这一单还没有可分享的作品图。' : 'No approved work photo for this order yet.'
+      els.emptyNote.classList.remove('hidden')
+    }
     if (els.photoStrip) els.photoStrip.innerHTML = ''
     if (els.originalGrid) els.originalGrid.innerHTML = ''
     document.querySelectorAll('[data-share-copy],[data-share-download],[data-share-go]')
       .forEach((b) => { b.disabled = true; b.classList.add('hidden') })
     return
   }
+  /* 有图:空态必须复位 —— 中英切换/换单重渲染时不能留着上一次的空态(同族回归) */
+  if (els.imageArea) els.imageArea.classList.remove('hidden')
+  if (els.emptyNote) els.emptyNote.classList.add('hidden')
+  document.querySelectorAll('[data-share-copy],[data-share-download],[data-share-go]')
+    .forEach((b) => { b.disabled = false; b.classList.remove('hidden') })
   const safeIndex = Math.min(Math.max(0, state.selectedImage), images.length - 1)
   state.selectedImage = safeIndex
   els.mainImage.src = images[safeIndex]
@@ -175,6 +189,21 @@ async function loadCopy() {
   renderCopy()
 }
 
+/* 退回二(02f):缺订单信息 = 整页不渲染内容,只说一句真话。
+   不给图、不给"已审核通过"、不给分享按钮 —— 没有订单就没有作品可分享。 */
+function renderMissingBooking() {
+  if (els.title) els.title.textContent = state.lang === 'zh' ? '这个链接缺少订单信息' : 'This link is missing order info'
+  if (els.emptyNote) {
+    els.emptyNote.textContent = state.lang === 'zh'
+      ? '这个链接缺少订单信息,打不开作品。请从订单页重新分享。'
+      : 'This link has no order info. Please re-share from the order page.'
+    els.emptyNote.classList.remove('hidden')
+  }
+  if (els.imageArea) els.imageArea.classList.add('hidden')
+  document.querySelectorAll('[data-share-copy],[data-share-download],[data-share-go]')
+    .forEach((b) => { b.disabled = true; b.classList.add('hidden') })
+}
+
 async function loadShare() {
   applyLanguage()
   const bookingId = params.get('bookingId')
@@ -182,14 +211,13 @@ async function loadShare() {
     const data = await request(`/bookings/${encodeURIComponent(bookingId)}?lang=${state.lang}`)
     state.booking = data.booking
   } else {
-    /* 明标 demo 夹具(判据 ②c B 类:标识符含 demo、且不走真实 bookingId 路径) */
-    const demoFixture = {
-      id: 'demo',
-      service: { name: 'Lucky Luxe Archive', imageUrl: '/assets/images/nail-french.jpg' },
-      galleryStatus: 'approved',
-      approvedWorkImages: ['/assets/images/nail-french.jpg', '/assets/images/nail-luxe.jpg']
-    }
-    state.booking = demoFixture
+    /* 🔴 退回二(店主 02f):我上一版给它加了「明标」,把一处**真回落**从红改成了判据豁免项 ——
+       判据认了,顾客照样被骗:任何人打开 share.html 不带参数,看到的就是平台示例图,
+       而且挂着 galleryStatus:'approved'(以"已审核通过的作品"的名义)。
+       **白名单是放行真正无害的东西,不是把红变绿的手段;明标是给判据看的,不是给顾客看的。**
+       裁:demo 分支不许在真环境出现 —— 缺订单参数就整页说真话,不编内容。 */
+    renderMissingBooking()
+    return
   }
   els.title.textContent = state.booking.service?.name || 'Lucky Luxe'
   els.platformSelect.value = state.platform

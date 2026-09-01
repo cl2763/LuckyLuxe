@@ -73,7 +73,9 @@ for (const f of walk('apps/web', /\.(js|html)$/)) {
   }
 }
 for (const f of walk('miniprogram', /\.wxml$/)) {
-  const src = readFileSync(join(ROOT, f), 'utf8')
+  /* 剥 wxml 注释(02f 自查第 4 处判据毛病):我写在注释里的示例 `<image src>` 被当成真标签扫进来了 ——
+     注释里的样例代码不是产品面。与 JS 侧剥注释同刀。 */
+  const src = readFileSync(join(ROOT, f), 'utf8').replace(/<!--[\s\S]*?-->/g, '')
   for (const m of src.matchAll(/<image\b[^>]*>/g)) {
     sites.push({ end: 'mini', file: f, tag: m[0], ctx: src.slice(Math.max(0, m.index - 320), m.index) })
   }
@@ -103,19 +105,36 @@ const UI_CAP = 20
 const isPlaceholderExit = (t) => /img-placeholder|ImgPlaceholder/.test(t)
 /* B 类:这一处只在「数据真的有」的时候才渲染 —— 三态里的第三态(不该有图=整块不出现)。
    判据:标签自己带 wx:for/wx:if,或者它就长在一个 `.map(` / `wx:for` / 三元守卫里面。 */
-const isConditional = (s) => /wx:for|wx:if|wx:else/.test(s.tag)
-  || /\.map\(|wx:for|wx:if|\?\s*`|&&\s*`/.test(s.ctx)
+/* 🔴 退回一(店主 02f):B 类原来判的是「外层数组空不空」—— 数组有三条、每条图字段都空,
+   照样渲三个**空白框**,踩中占位律后半句「也不许什么都不显示」。两把刀都放行过它。
+   收窄到**字段级**:这个 <image> 自己带 wx:if,或它的 src 表达式本身就在三元/&& 守卫里;
+   外层有个 wx:for **不算数**。 */
+const srcExpr = (t) => (/src=["']\{\{([^}]+)\}\}/.exec(t) || [])[1] || ''
+const isConditional = (s) => {
+  if (/wx:if|wx:elif/.test(s.tag)) return true          // 标签自己带字段级守卫
+  const e = srcExpr(s.tag) || (/src=["'`]?\$\{([^}]+)\}/.exec(s.tag) || [])[1] || ''
+  return Boolean(e) && /\?|&&|\|\|/.test(e)            // src 表达式自己就是守卫式
+}
+/* 网页侧自查清单(店主 02f 令「网页侧同刀自查一遍」):`<img src="${…}">` 直出、未过
+   ImgPlaceholder.tag、src 表达式也没有字段级守卫的位置。**这是挂账不是豁免** ——
+   逐处现证字段级要在下一段做完;这里先钉住**条数只减不增**,新长出来的立刻红。 */
+const WEB_FIELDGUARD_TODO = 25   // 现测基线(02f),非估数;下一段逐处现证后往下压
 const whitelisted = (s) => Object.keys(UI_ASSET_ALLOW).some((k) => {
   const [file, needle] = k.split('|')
   return s.file === file && s.tag.includes(needle)
 })
-const bad = sites.filter((s) => {
+const rawBad = sites.filter((s) => {
   if (isPlaceholderExit(s.tag) || whitelisted(s)) return false
-  if (isConditional(s)) return false             // B 类:数据没有就整块不渲染
+  if (isConditional(s)) return false             // B 类(02f 收窄):**字段级**守卫才算
   return true
-}).map((s) => `${s.file} ${s.tag.replace(/\s+/g, ' ').slice(0, 70)}`)
-check(`② 白名单式:全仓 ${sites.length} 个图片位(网页 ${sites.filter((s) => s.end === 'web').length} / 小程序 ${sites.filter((s) => s.end === 'mini').length})逐个落进三类(占位出口 / 有数据才渲染 / 界面资产白名单)`,
+})
+const webTodo = rawBad.filter((s) => s.end === 'web')
+const bad = rawBad.filter((s) => s.end !== 'web')
+  .map((s) => `${s.file} ${s.tag.replace(/\s+/g, ' ').slice(0, 70)}`)
+check(`② 白名单式(小程序硬零):全仓 ${sites.length} 个图片位逐个落进三类,B 类须**字段级**守卫`,
   bad.length === 0, bad.join(' | '))
+check(`② 网页侧自查挂账棘轮:未过占位出口且无字段级守卫的 <img> ≤ ${WEB_FIELDGUARD_TODO}(只减不增,下一段逐处现证)`,
+  webTodo.length <= WEB_FIELDGUARD_TODO, `${webTodo.length} 处:${webTodo.slice(0, 3).map((s) => s.file).join(', ')}`)
 check(`② 白名单防线②:界面资产条目数上棘轮 ≤ ${UI_CAP}(只许减不许增)`,
   Object.keys(UI_ASSET_ALLOW).length <= UI_CAP, String(Object.keys(UI_ASSET_ALLOW).length))
 check('② 反向守:这条扫描真读到了图片位(不是路径写错扫了个空)', sites.length >= 50, String(sites.length))
