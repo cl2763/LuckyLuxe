@@ -1,3 +1,4 @@
+import { otherTenantNames, findForeignNames } from './other-tenant-names.mjs'
 // 多租户假设大扫除的回归锁(2026-08-07):
 // 每一条对应审计报告里的一处 A 级修复,防止同类"跨店串味"再犯。
 // 1. 客服会话按租户隔离(此前 INSERT 不带 tenant_id,列默认值把别家店的进线记到旗舰店名下)
@@ -130,8 +131,14 @@ async function main() {
     body: JSON.stringify({ externalUserId: `hy-welcome-${RUN_ID}`, message: '你好', customerType: 'new', lang: 'zh', forceAi: true })
   }, shopA.token)
   const blob = JSON.stringify(welcome.data || {})
-  const leakCtx = (blob.match(/.{0,90}Lucky\s*Luxe.{0,90}/i) || [''])[0]
-  check('新客链路不再冒出 Lucky Luxe 字样', !/Lucky\s*Luxe/i.test(blob), leakCtx)
+  /* 🔴 02v 裁定五:原来判「blob 里不许出现 Lucky Luxe」—— **店名一改这条就永远绿而什么都不守了**。
+     改锚在关系上:现取「本租户之外的所有店名」,断言一个都不许出现。店名再改、再开新店,刀都还在。 */
+  const foreignNames = otherTenantNames(process.env.TEST_DB_PATH, shopA.tenantId)
+  const leaked = findForeignNames(blob, foreignNames)
+  check(`新客链路不冒出别家店名(现取 ${foreignNames.length} 个别家店名逐个查;不锚在某一个具体店名上)`,
+    leaked.length === 0, leaked.map((x) => `${x.name} @ ${x.ctx}`).join(' | '))
+  check('新客链路·反向守:别家店名集合非空(取空即红,防扫描面缩水成零)',
+    foreignNames.length > 0, String(foreignNames.length))
 
   // ---- 9. 七张子表补 tenant_id(P0.9 / 审计 B-5):零 NULL + 新写入带正确租户 ----
   // 给甲店写一次营业时间,制造一批新的 business_hours 行

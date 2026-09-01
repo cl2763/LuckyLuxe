@@ -306,6 +306,10 @@ function toMiniStore(store) {
   return {
     id: store.id || '',   // D19:不再用写死的旗舰店 id 兜底
     storeName: store.name || store.storeName || '',
+    /* 🔴 02v 甲案:英文店名新列 name_en 必须**透传到映射层** ——
+       后端有列、顾客端拿不到,等于没做(映射层裁字段的老教训:toMiniBooking 同款)。
+       空态说真话:name_en 为空的租户,页面按 lang 退回中文店名,不空白也不贴别家的名字。 */
+    storeNameEn: store.name_en || store.storeNameEn || '',
     address: store.address || '门店地址待补充',
     phone: store.phone || '门店电话待补充',
     businessHours: store.businessHours || store.business_hours || '',

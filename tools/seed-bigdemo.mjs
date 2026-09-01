@@ -65,7 +65,7 @@ const rnd = () => { seedState = (seedState * 1103515245 + 12345) % 2147483648; r
 const pick = (arr) => arr[Math.floor(rnd() * arr.length) % arr.length]
 
 const STORES = [
-  { tenantId: 'lucky-luxe', label: '旗舰店 Lucky Luxe', phonePrefix: '1470', names: ['Ada', 'Bella', 'Cathy', 'Doris', 'Elena', 'Fiona', 'Grace', 'Hana', 'Iris', 'Joy'] },
+  { tenantId: 'lucky-luxe', label: '旗舰店 LUVIA 半径', phonePrefix: '1470', names: ['Ada', 'Bella', 'Cathy', 'Doris', 'Elena', 'Fiona', 'Grace', 'Hana', 'Iris', 'Joy'] },
   { tenantId: 'jics-nail', label: "Jie'Nail 小婕", phonePrefix: '1360', names: ['林小雅', '周乐乐', '陈果果', '苏念', '许安', '何多多', '罗西', '钱一一', '孙棠', '吴桐'] }
 ]
 

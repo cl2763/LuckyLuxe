@@ -443,12 +443,15 @@ export async function createCustomerServiceReply({ lang = 'zh', message = '', sa
   // 境内店(CNY)的价格答成「CAD $368」。改为按本店事实渲染;旗舰店的事实就是
   // brandName=Lucky Luxe / region=Ontario / currency=CAD,所以它这三行逐字不变。
   const kbFacts = knowledgeContext?.tenantFacts || {}
-  const brandName = kbFacts.brandName || 'Lucky Luxe'
+  /* 🔴 02v 拔回落:原来 `|| 'Lucky Luxe'` —— 多租户下别家店没配 brandName 就被贴上旗舰店名。
+     拿不到就用空串,下面的 identityLine 会退成不带店名的说法(空态说真话,不回落)。 */
+  const brandName = kbFacts.brandName || ''
   const region = kbFacts.region || ''
   const currencyCode = kbFacts.currency || ''
+  const whoLine = brandName ? `${brandName} AI customer service` : 'the salon AI customer service'
   const identityLine = region
-    ? `You are ${brandName} AI customer service for a nail and lash atelier in ${region}.`
-    : `You are ${brandName} AI customer service for a nail and lash atelier.`
+    ? `You are ${whoLine} for a nail and lash atelier in ${region}.`
+    : `You are ${whoLine} for a nail and lash atelier.`
   const currencyLine = currencyCode
     ? `All prices and deposits for this store are in ${currencyCode}. Never quote another currency.`
     : 'Do not state a currency symbol or code unless it appears in the tenant knowledge context.'
@@ -576,8 +579,8 @@ export async function createCustomerServiceReply({ lang = 'zh', message = '', sa
         const hoursFact = tenantFacts.defaultHours
         const liveHoursZh = (hoursFact && typeof hoursFact === 'object' ? hoursFact.zh : hoursFact) || '周二至周日 10:00-19:00，周一休息'
         const liveHoursEn = (hoursFact && typeof hoursFact === 'object' ? hoursFact.en : hoursFact) || 'Tuesday to Sunday 10:00-19:00, Monday closed'
-        answerZh = `${firstStore.name || 'Lucky Luxe Ontario'} 营业时间为${liveHoursZh}。${address ? `当前门店地址先按 ${address}。` : '门店详细地址请向门店确认。'}`
-        answerEn = `${firstStore.name || 'Lucky Luxe Ontario'} business hours: ${liveHoursEn}.${address ? ` Current store address: ${address}.` : ' Please confirm the exact address with the store.'}`
+        answerZh = `${firstStore.name || '本店'} 营业时间为${liveHoursZh}。${address ? `当前门店地址先按 ${address}。` : '门店详细地址请向门店确认。'}`
+        answerEn = `${firstStore.name || 'Our salon'} business hours: ${liveHoursEn}.${address ? ` Current store address: ${address}.` : ' Please confirm the exact address with the store.'}`
       } else if (asksOrder) {
         intent = 'order'
         if (customer && bookings.length) {
@@ -606,7 +609,11 @@ export async function createCustomerServiceReply({ lang = 'zh', message = '', sa
   return { ...result, knowledgeContext }
 }
 
-export async function polishStaffQuoteReply({ lang = 'zh', quote = {}, staffMessage = '' }) {
+/* 🔴 02v:原来这里写死 'You are Lucky Luxe AI customer service.' —— 多租户下每一家商家的
+   报价润色都被冠上旗舰店的身份。改成**由调用方把本店名传进来**(读那一个字段),
+   拿不到就退成不带店名的说法,不回落到任何写死的名字。 */
+export async function polishStaffQuoteReply({ lang = 'zh', quote = {}, staffMessage = '', brandName = '' }) {
+  const brandLabel = () => (brandName ? `${brandName}` : 'the salon')
   const schema = {
     canDo: true,
     answerZh: 'string',
@@ -618,7 +625,7 @@ export async function polishStaffQuoteReply({ lang = 'zh', quote = {}, staffMess
   const referenceImageCount = Array.isArray(quote.referenceImages) ? quote.referenceImages.length : 0
   return aiJson({
     system: [
-      'You are Lucky Luxe AI customer service.',
+      `You are ${brandLabel()} AI customer service.`,
       'A technician has replied internally with a free-text note. Your ONLY job is to connect the technician\'s words into warm, fluent, complete sentences.',
       'You must preserve every fact, number, price, duration, condition, and suggestion from the technician message verbatim. Never paraphrase away content, never change the meaning, never drop details, never add facts the technician did not mention.',
       'If the technician says the style CANNOT be done, apologize gently, state it clearly (do not soften it into "needs more information"), and guide the customer to consider a similar or simpler alternative style and send a new reference photo.',
@@ -716,9 +723,16 @@ export async function createSocialCopy({ lang = 'zh', image = '', booking = {}, 
     images: image ? [image] : [],
     temperature: 0.82,
     fallback: () => {
-      const serviceName = booking?.service?.name || 'Lucky Luxe'
+      /* 🔴 02v:分享文案里原来写死 9 个 `#LuckyLuxe` / `#LuckyLuxeAtelier` 标签与 5 句英文文案 ——
+         **这是直接发给顾客的字**,多租户下等于让别家店替旗舰店打广告。
+         改成从本店店名派生;**店名拿不到就不出这个标签**(空态说真话,不回落)。 */
+      const brandWord = brandName ? String(brandName).replace(/\s+/g, '') : ''
+      const brandTag = brandWord ? `#${brandWord}` : ''
+      const brandTxt = brandName || 'the studio'
+      const tags = (arr) => arr.filter(Boolean)
+      const serviceName = booking?.service?.name || ''
       const category = booking?.service?.category || 'soft luxury'
-      const techName = booking?.technician?.name || booking?.technicianName || 'Lucky Luxe artist'
+      const techName = booking?.technician?.name || booking?.technicianName || ''
       const date = booking?.appointmentDate || ''
       const variants = {
         xiaohongshu: [
@@ -726,22 +740,22 @@ export async function createSocialCopy({ lang = 'zh', image = '', booking = {}, 
             titleZh: `${serviceName}｜温柔高级感可以直接抄作业`,
             captionZh: `这组作品重点是干净、耐看，细节不会抢日常穿搭。\n\n${audience === 'staff' ? `${techName} 完成于 ${date || '本次预约'}，发布时可以强调“自然高级、可日常复制”。` : '喜欢精致但不夸张的客人可以先收藏，预约时直接给技师看。'}\n\n到店会根据肤色、手型或眼型再微调。`,
             titleEn: `${serviceName} | Soft Luxe Reference`,
-            captionEn: 'Clean, wearable, and softly detailed. Save this Lucky Luxe look as a reference for your next appointment.',
-            hashtags: ['#多伦多美甲', '#美睫分享', '#小红书美甲', '#温柔高级感', '#LuckyLuxe']
+            captionEn: `Clean, wearable, and softly detailed. Save this ${brandTxt} look as a reference for your next appointment.`,
+            hashtags: tags(['#多伦多美甲', '#美睫分享', '#小红书美甲', '#温柔高级感', brandTag])
           },
           {
             titleZh: `${serviceName}｜低调但很显精致`,
             captionZh: `这类效果最适合想要“看起来很干净，但近看有细节”的客人。\n\n${audience === 'staff' ? '发帖时可以把重点放在质感、留档图和适合人群，减少夸张承诺。' : '如果你平时穿搭偏简约，这组会很适合做长期参考。'}\n\n收藏后下次预约直接带图沟通。`,
             titleEn: `${serviceName} | Quiet Detail`,
             captionEn: 'A refined look with quiet detail. Easy to wear, easy to save, and easy to personalize in studio.',
-            hashtags: ['#美甲灵感', '#多伦多美睫', '#通勤美甲', '#LuckyLuxe', '#自然高级']
+            hashtags: tags(['#美甲灵感', '#多伦多美睫', '#通勤美甲', brandTag, '#自然高级'])
           },
           {
             titleZh: `${serviceName}｜本次完工留档`,
             captionZh: `完成后越看越耐看的一组。\n\n${audience === 'staff' ? `建议 ${techName} 发布时搭配细节图，突出款式层次和到店调整空间。` : '适合第一次尝试轻奢自然风格、又不想太高调的客人。'}\n\n预约时可以带参考图，我们会根据实际状态调整。`,
             titleEn: `${serviceName} | Finished Archive`,
             captionEn: 'A finished archive with soft detail and a balanced everyday look. Bring it in as a reference and we can tailor the details.',
-            hashtags: ['#LuckyLuxeAtelier', '#小红书美甲', '#美甲参考', '#轻奢感', '#TorontoBeauty']
+            hashtags: tags([brandTag, '#小红书美甲', '#美甲参考', '#轻奢感', '#TorontoBeauty'])
           }
         ],
         douyin: [
@@ -750,44 +764,44 @@ export async function createSocialCopy({ lang = 'zh', image = '', booking = {}, 
             captionZh: `不夸张，但很显精致。\n\n${audience === 'staff' ? '短视频标题可以用“近看有细节，远看很干净”。' : '喜欢自然高级感的可以保存这一组，预约时直接给技师看。'}`,
             titleEn: `${serviceName} | Clean Everyday Finish`,
             captionEn: 'Subtle detail, clean finish, and easy everyday wear. Save this as your next reference.',
-            hashtags: ['#今日美甲', '#美睫款式', '#同城美甲', '#变美日记', '#LuckyLuxe']
+            hashtags: tags(['#今日美甲', '#美睫款式', '#同城美甲', '#变美日记', brandTag])
           },
           {
             titleZh: `${serviceName} 近看细节更好看`,
             captionZh: `镜头里是干净的，实际手上/眼部会更柔和。\n\n${audience === 'staff' ? '适合做前后对比或完工细节短视频。' : '如果你想要自然但有变化，这组可以先收藏。'}`,
             titleEn: `${serviceName} | Detail Close-up`,
-            captionEn: 'Clean on camera, softer in person. A simple Lucky Luxe detail worth saving.',
-            hashtags: ['#美甲日常', '#美睫分享', '#质感变美', '#LuckyLuxe', '#同城探店']
+            captionEn: `Clean on camera, softer in person. A simple ${brandTxt} detail worth saving.`,
+            hashtags: tags(['#美甲日常', '#美睫分享', '#质感变美', brandTag, '#同城探店'])
           },
           {
             titleZh: `${serviceName} 一眼干净的款式`,
             captionZh: `${audience === 'staff' ? '发布时建议把第一秒放在完工主图，文案保持短、干净、直接。' : '想要干净耐看的效果，可以从这一组开始参考。'}\n\n到店后可按个人状态微调。`,
             titleEn: `${serviceName} | Clean First Look`,
             captionEn: 'A clean first look with soft polish. Simple, refined, and ready to save.',
-            hashtags: ['#美甲款式', '#美睫日记', '#干净感', '#LuckyLuxe', '#TorontoSalon']
+            hashtags: tags(['#美甲款式', '#美睫日记', '#干净感', brandTag, '#TorontoSalon'])
           }
         ],
         instagram: [
           {
-            titleZh: `${serviceName}｜Lucky Luxe 作品留档`,
+            titleZh: `${serviceName}｜${brandTxt} 作品留档`,
             captionZh: `Soft, clean, and refined from every angle.\n\n${audience === 'staff' ? '可搭配 carousel 发布，第一张主图，后面放细节图。' : '适合日常，也适合镜头记录的一组完工作品。'}`,
-            titleEn: `${serviceName} | Lucky Luxe Archive`,
-            captionEn: 'Soft, clean, and refined from every angle. A polished Lucky Luxe finish made for everyday wear and a beautiful close-up.',
-            hashtags: ['#LuckyLuxeAtelier', '#nailarchive', '#lashstudio', '#torontobeauty', '#softluxury']
+            titleEn: `${serviceName} | ${brandTxt} Archive`,
+            captionEn: `Soft, clean, and refined from every angle. A polished ${brandTxt} finish made for everyday wear and a beautiful close-up.`,
+            hashtags: tags([brandTag, '#nailarchive', '#lashstudio', '#torontobeauty', '#softluxury'])
           },
           {
             titleZh: `${serviceName}｜Soft Detail`,
             captionZh: `Clean lines, soft mood, polished finish.\n\n${audience === 'staff' ? 'Instagram 文案可突出作品质感和技师审美。' : 'A quiet kind of beauty for your next save.'}`,
             titleEn: `${serviceName} | Soft Detail`,
             captionEn: 'Clean lines, soft mood, polished finish. A quiet kind of beauty for your next save.',
-            hashtags: ['#LuckyLuxe', '#torontonails', '#lashartist', '#beautyarchive', '#minimalbeauty']
+            hashtags: tags([brandTag, '#torontonails', '#lashartist', '#beautyarchive', '#minimalbeauty'])
           },
           {
             titleZh: `${serviceName}｜Artist Pick`,
-            captionZh: `${techName} 的本次作品留档。\n\n${audience === 'staff' ? '适合放进技师作品集，作为同风格客户的预约参考。' : 'Save this artist pick for your next Lucky Luxe visit.'}`,
+            captionZh: `${techName} 的本次作品留档。\n\n${audience === 'staff' ? '适合放进技师作品集，作为同风格客户的预约参考。' : 'Save this artist pick for your next ${brandTxt} visit.'}`,
             titleEn: `${serviceName} | Artist Pick`,
-            captionEn: `${techName}'s finished archive. Save this artist pick for your next Lucky Luxe visit.`,
-            hashtags: ['#LuckyLuxeAtelier', '#artistpick', '#nailinspo', '#lashinspo', '#torontobeauty']
+            captionEn: `${techName}'s finished archive. Save this artist pick for your next ${brandTxt} visit.`,
+            hashtags: tags([brandTag, '#artistpick', '#nailinspo', '#lashinspo', '#torontobeauty'])
           }
         ]
       }

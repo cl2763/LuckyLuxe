@@ -18,6 +18,7 @@ import { assertTestTarget } from './test-guard.mjs'
 import { readFileSync, readdirSync } from 'node:fs'
 import { dirname, join } from 'node:path'
 import { fileURLToPath } from 'node:url'
+import { otherTenantNames, findForeignNames } from './other-tenant-names.mjs'
 
 const BASE_URL = process.env.TEST_BASE_URL || 'http://127.0.0.1:4128'
 await assertTestTarget(BASE_URL)
@@ -59,9 +60,17 @@ const emptyB = await request('/stores', {}, null, { 'x-tenant-id': tidB })
 check('① 没配轮播的店:公开 /stores 回空数组(不是"给三张默认图")',
   emptyB.status === 200 && Array.isArray(emptyB.data.heroSlides) && emptyB.data.heroSlides.length === 0,
   JSON.stringify(emptyB.data.heroSlides))
-check('① 负向红线:没配轮播的店,顾客端拿到的整份响应里**不含任何 Lucky Luxe 的图源**',
+/* 🔴 02v 裁定五:名字里那句「Lucky Luxe 的图源」是锚在店名上的说法;判据本身判的是**图源文件名**
+   (那个不随改名变),所以行为没问题,但名字要跟着事实走(判据自述须与行为一致)。
+   另加一条:整份响应里也不许出现**别家店名**(现取,不锚具体名字)。 */
+check('① 负向红线:没配轮播的店,顾客端整份响应里不含任何**别家的图源**',
   !/hero-carousel-(interior|nail|lash)\.jpg/.test(JSON.stringify(emptyB.data)),
   JSON.stringify(emptyB.data).slice(0, 200))
+const foreignB = otherTenantNames(process.env.TEST_DB_PATH, tidB)
+const leakedB = findForeignNames(emptyB.data, foreignB)
+check(`①b 负向红线:整份响应里不含别家店名(现取 ${foreignB.length} 个逐个查)`,
+  leakedB.length === 0, leakedB.map((x) => x.name).join(' | '))
+check('①c 反向守:别家店名集合非空(取空即红)', foreignB.length > 0, String(foreignB.length))
 
 /* ===== ② 正向:配了就出自己的图,且只出自己的 ===== */
 const put = await request('/admin/hero-slides', {

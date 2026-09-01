@@ -70,7 +70,7 @@ const TOKEN = process.env.OWNER_TOKEN || (readFileSync(join(ROOT, 'apps/api/.env
    下面这张表现在只提供**铺什么数据**(币种/时区/孪生档案的数字),**不再决定能不能写**:
    能不能写由 kind 说了算,非 demo 直接拒绝并说明是被拦了;真店黑名单保留作第二道锁。 */
 const DEMO_TENANTS = [
-  { tenantId: 'demo-lucky-luxe', label: 'Lucky Luxe(演示)', currency: 'CAD', timezone: 'America/Toronto',
+  { tenantId: 'demo-lucky-luxe', label: 'LUVIA 半径(演示)', currency: 'CAD', timezone: 'America/Toronto',
     twin: { balance: 88800, timecardTimes: 5, coupons: 1, orders: 2, timecardRemaining: 4, name: '演示·跨店阿珍' } },
   { tenantId: 'jics-sandbox', label: '小婕的店(演示)', currency: 'CNY', timezone: 'Asia/Shanghai',
     twin: { balance: 36600, timecardTimes: 5, coupons: 3, orders: 1, timecardRemaining: 2, name: '演示·跨店阿珍' } }

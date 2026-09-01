@@ -250,7 +250,7 @@ function roleLabel(message = {}, conversation = {}) {
   const role = message.role || 'assistant'
   if (role === 'customer') return conversation.externalUserId || state.customerId || 'Customer'
   if (role === 'staff') return message.staffName || '后台人工'
-  return 'Lucky Luxe 预约助手'
+  return '预约助手'   /* 02v:去写死店名前缀;带店名的版本由 assistantName 下发 */
 }
 
 function renderTranscript() {

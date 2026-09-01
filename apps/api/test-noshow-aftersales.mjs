@@ -859,8 +859,10 @@ const main = async () => {
          08-23 护栏升级(假数回落红线):**连回落值都不许有** —— 原来允许 1 处 'Lucky Luxe' 作为
          `currentStore().name || 'Lucky Luxe'` 的兜底,多租户下那就是把旗舰店品牌名贴到别家店头上。
          现在渲染层字面量必须为 0,拿不到店名就空着。 */
-      const brandHits = (custCode.match(/Lucky Luxe/g) || []).length
-      check('㉟ 品牌文案单源 + 零回落值(渲染层 Lucky Luxe 字面量=0)', brandHits === 0 && custCode.includes('function brandName()'), `hits=${brandHits}`)
+      /* 🔴 02v 裁定五:原来只数 `Lucky Luxe` —— **店名一改这条永远是 0,而它守的那件事没人守了**。
+         改成锚在「店名这个形状」上:旧名 + 新名都算,将来再改名照样命中,不用回来改判据。 */
+      const brandHits = (custCode.match(/Lucky\s*Luxe|LUVIA/g) || []).length
+      check('㉟ 品牌文案单源 + 零回落值(渲染层**任何店名字面量**=0;旧名新名都算)', brandHits === 0 && custCode.includes('function brandName()'), `hits=${brandHits}`)
     }
 
     // ===== ㊱ v1.4 大类改造:平台字典+全条目∈大类+空类隐藏 =====

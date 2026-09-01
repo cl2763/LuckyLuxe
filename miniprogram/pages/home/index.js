@@ -49,7 +49,10 @@ Page({
       const tid = api.currentTenantId()
       const r = await api.getShops()
       const hit = (r.shops || []).find((s) => s.tenantId === tid)
-      this.setData({ shopName: (hit && hit.name) || '' })
+      /* 🔴 02v:英文态显示英文店名;没配 name_en 的租户退回中文店名(空态说真话,不空白) */
+      const zh = (hit && (hit.name || hit.storeName)) || ''
+      const en = (hit && (hit.name_en || hit.storeNameEn)) || ''
+      this.setData({ shopName: (this.data.lang === 'en' && en) ? en : zh })
     } catch (e) { this.setData({ shopName: '' }) }
   },
 

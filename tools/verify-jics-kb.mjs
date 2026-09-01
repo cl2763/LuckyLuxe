@@ -10,7 +10,7 @@
 //   1. 门店配置:aiEnabled / 币种 CNY / 时区 Asia/Shanghai
 //   2. 套餐:工作室档 + 无到期时间;AI 智能包已开通且不限期
 //   3. 只读得到小婕自己的价目事实(精品单色 368/268/198)
-//   4. 读不到 Lucky Luxe 种子层(allowSeedFallback=false,AI 回复里不出现旗舰店资料)
+//   4. 读不到旗舰店种子层(allowSeedFallback=false,AI 回复里不出现旗舰店资料)
 //   5. 平台通用层(platformPreset)照常可用
 const BASE_URL = (process.env.BASE_URL || 'http://127.0.0.1:4128').replace(/\/$/, '')
 const OWNER_TOKEN = process.env.OWNER_TOKEN || 'owner-demo-token'
@@ -43,7 +43,11 @@ async function call(path, { method = 'GET', body = null, asTenant = false, asCus
 
 // 旗舰店种子层的特征词:小婕店的任何回答里都不该出现。
 // 「136 veterans place」与「CAD」是 2026-08-07 复验真实抓到的两处兜底串店(已修),留在这里防回归。
-const SEED_LEAK_PATTERNS = [/Lucky\s*Luxe/i, /Ontario/i, /luckyluxe/i, /136\s*veterans/i, /\bCAD\b/]
+/* 🔴 02v 裁定五:这一串检测词里的 `Lucky Luxe` 是**会变的业务值** ——
+   店名一改它就再也命中不了,而这条刀守的"小婕店不许泄漏旗舰店内容"就此失明。
+   现在:旧名 + 新名都留(旧数据里还有旧名),并且**新名从形状上认**;
+   其余几项(Ontario / 地址 / 币种)是旗舰店的事实特征,不随改名变,保持。 */
+const SEED_LEAK_PATTERNS = [/Lucky\s*Luxe/i, /LUVIA/i, /半径/, /Ontario/i, /luckyluxe/i, /136\s*veterans/i, /\bCAD\b/]
 
 async function main() {
   console.log(`== 小婕店复验 ${TENANT_ID} → ${BASE_URL} ==`)
@@ -102,7 +106,8 @@ async function main() {
   const answer = `${priceAsk.data.reply?.data?.answerZh || ''} ${priceAsk.data.reply?.data?.answerEn || ''}`
   console.log(`   ↳ AI 回复:${(priceAsk.data.reply?.data?.answerZh || '(空)').replace(/\s+/g, ' ').slice(0, 160)}`)
   const leaked = SEED_LEAK_PATTERNS.filter((p) => p.test(answer))
-  check('AI 回复里没有旗舰店(Lucky Luxe / Ontario)内容', leaked.length === 0, answer.slice(0, 200))
+  check(`AI 回复里没有旗舰店内容(${SEED_LEAK_PATTERNS.length} 个特征逐个查:店名旧/新 + 地区 + 地址 + 币种)`,
+    leaked.length === 0, answer.slice(0, 200))
 
   // 6. 平台通用层可用:通用问题仍能被平台预置层接住
   const generic = await call('/ai/customer-service', {

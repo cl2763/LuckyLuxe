@@ -141,7 +141,7 @@ function renderImages() {
   const safeIndex = Math.min(Math.max(0, state.selectedImage), images.length - 1)
   state.selectedImage = safeIndex
   els.mainImage.src = images[safeIndex]
-  els.mainImage.alt = state.booking?.service?.name || 'Lucky Luxe work'
+  els.mainImage.alt = state.booking?.service?.name || ''   /* 02v 拔回落:拿不到服务名就空 alt,不贴店名 */
   els.photoStrip.innerHTML = images.map((image, index) => `
     <button class="${index === safeIndex ? 'active' : ''}" data-share-image="${index}" type="button">
       ${image ? `<img src="${image}" alt="Work ${index + 1}">` : ''}
@@ -219,7 +219,7 @@ async function loadShare() {
     renderMissingBooking()
     return
   }
-  els.title.textContent = state.booking.service?.name || 'Lucky Luxe'
+  els.title.textContent = state.booking.service?.name || (state.store?.storeName || '')   /* 02v:退到本店名,不写死 */
   els.platformSelect.value = state.platform
   renderImages()
   await loadCopy()

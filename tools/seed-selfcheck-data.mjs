@@ -52,7 +52,7 @@ const log = (...a) => console.log(' ', ...a)
 const STORES = [
   {
     tenantId: 'lucky-luxe',
-    label: '旗舰店 Lucky Luxe',
+    label: '旗舰店 LUVIA 半径',
     // 薪资方案本批不动旗舰店(指令第 3 条:只配 Jie'Nail)
     salaryPlans: null,
     // 员工账号:指令点名 avalin

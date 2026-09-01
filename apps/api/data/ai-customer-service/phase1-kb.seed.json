@@ -1,6 +1,6 @@
 {
   "version": "2026-06-26.phase1",
-  "product": "Lucky Luxe AI Customer Service",
+  "product": "LUVIA 半径 AI Customer Service",
   "tenantId": "luckyluxe",
   "layers": {
     "platformPreset": {
@@ -18,9 +18,9 @@
       ]
     },
     "tenantPrivate": {
-      "description": "Lucky Luxe specific operating knowledge. All concrete member rules in this file belong to Lucky Luxe only and must not be copied into platform defaults.",
-      "brandName": "Lucky Luxe",
-      "assistantName": "Lucky Luxe 预约助手",
+      "description": "LUVIA 半径 specific operating knowledge. All concrete member rules in this file belong to Lucky Luxe only and must not be copied into platform defaults.",
+      "brandName": "LUVIA 半径",
+      "assistantName": "LUVIA 预约助手",
       "currency": "CAD",
       "region": "Ontario",
       "storeAddress": "136 veterans place",

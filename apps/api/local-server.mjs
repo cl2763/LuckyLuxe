@@ -1,6 +1,7 @@
 import { createServer } from 'node:http'
 import { AsyncLocalStorage } from 'node:async_hooks'
 import { DatabaseSync } from 'node:sqlite'
+import { runStoreRenameMigration, welcomeText } from './store-identity.mjs'
 import { nameToUsername, isValidUsername } from './pinyin-names.mjs'
 import { createDecipheriv, createHash, createHmac } from 'node:crypto'
 import { copyFileSync, existsSync, mkdirSync, readdirSync, readFileSync, renameSync, statSync, unlinkSync, writeFileSync } from 'node:fs'
@@ -535,7 +536,7 @@ function setupDatabase() {
       phone TEXT,
       timezone TEXT NOT NULL,
       currency TEXT NOT NULL,
-      is_active INTEGER NOT NULL DEFAULT 1
+      is_active INTEGER NOT NULL DEFAULT 1, name_en TEXT
     );
     CREATE TABLE IF NOT EXISTS business_hours (
       store_id TEXT NOT NULL,
@@ -991,8 +992,7 @@ function platformKbOverride() {
   }
 }
 
-// 静态种子知识库(phase1-kb.seed.json)是旗舰店 Lucky Luxe 的口径(安省/CAD/美甲价目表)。
-// 只有旗舰店本身允许回落到种子,其他租户一律用自己库里的实时数据,否则会把别家的价格/地区念给顾客听。
+// 静态种子知识库(phase1-kb.seed.json)是旗舰店 Lucky Luxe 的口径(安省/CAD/美甲价目表);只有旗舰店本身允许回落到种子,其他租户一律用自己库里的实时数据,否则会把别家的价格/地区念给顾客听。
 const KB_SEED_TENANT_IDS = new Set(['lucky-luxe', 'luckyluxe'])
 
 // AI 每次回答都实时读这里:商家在小程序或网页改完基础信息,下一句回答就是新的,无需重新发布知识库。
@@ -1170,7 +1170,7 @@ function matchTenantKbEntry(text = '') {
 }
 
 function seedDatabase() {
-  db.prepare('INSERT OR IGNORE INTO tenants (id, name, plan, status) VALUES (?, ?, ?, ?)').run(DEFAULT_TENANT_ID, 'Lucky Luxe', 'chain', 'active')
+  db.prepare('INSERT OR IGNORE INTO tenants (id, name, plan, status) VALUES (?, ?, ?, ?)').run(DEFAULT_TENANT_ID, 'LUVIA 半径', 'chain', 'active')
   const planStmt = db.prepare('INSERT OR IGNORE INTO plans (id, name_zh, name_en, features_json, limits_json, sort_order) VALUES (?, ?, ?, ?, ?, ?)')
   // 2026-08-03 档位=Youji Pricing 定价页(店主确认的唯一口径):免费版/单店版/工作室版/连锁版/定制版
   planStmt.run('free', '免费版', 'Free', JSON.stringify(['booking', 'gallery']), JSON.stringify({ maxStores: 1, maxStaff: 1, maxServices: 20, maxOrdersPerMonth: 50, aiMessagesPerMonth: 0 }), 1)
@@ -1189,13 +1189,13 @@ function seedDatabase() {
   // 租户私有事实种子（来自 phase1-kb tenantPrivate 层）：商家可在门店设置里自助修改，AI 实时读取。
   const kbFactStmt = db.prepare('INSERT OR IGNORE INTO tenant_kb_facts (tenant_id, key, value, updated_by, updated_at) VALUES (?, ?, ?, ?, ?)')
   for (const [key, value] of [
-    ['brandName', 'Lucky Luxe'],
-    ['assistantName', 'Lucky Luxe 预约助手'],
+    ['brandName', 'LUVIA 半径'],
+    ['assistantName', 'LUVIA 预约助手'],
     ['storeAddress', '136 veterans place'],
     ['depositAmount', '50'],
     ['currency', 'CAD']
   ]) kbFactStmt.run(DEFAULT_TENANT_ID, key, value, 'seed', iso(new Date()))
-  db.prepare('INSERT OR IGNORE INTO stores (id, name, address, phone, timezone, currency) VALUES (?, ?, ?, ?, ?, ?)').run('store-ontario-01', 'Lucky Luxe Ontario', 'Address TBD', 'Phone TBD', 'America/Toronto', 'CAD')
+  db.prepare('INSERT OR IGNORE INTO stores (id, name, name_en, address, phone, timezone, currency) VALUES (?, ?, ?, ?, ?, ?, ?)').run('store-ontario-01', 'LUVIA 半径', 'LUVIA', 'Address TBD', 'Phone TBD', 'America/Toronto', 'CAD')
   const hourStmt = db.prepare('INSERT OR IGNORE INTO business_hours (store_id, weekday, open_time, close_time, is_closed) VALUES (?, ?, ?, ?, ?)')
   for (let weekday = 0; weekday <= 6; weekday += 1) hourStmt.run('store-ontario-01', weekday, '10:00', '19:00', weekday === 1 ? 1 : 0)
 
@@ -2398,20 +2398,18 @@ function isNewCustomerInbound(inbound = {}) {
 }
 
 function newCustomerWelcome(lang = 'zh') {
-  // 2026-08-07:以前写死 Lucky Luxe,别家店的新客一进来就被欢迎到旗舰店去了
   const brand = tenantKbFacts(currentTenantId())?.brandName
-    || db.prepare('SELECT name FROM stores WHERE tenant_id = ? AND is_active = 1 ORDER BY rowid ASC LIMIT 1').get(currentTenantId())?.name
-    || 'Lucky Luxe'
-  return lang === 'en'
-    ? `Hello, welcome to ${brand}. I am your booking assistant. You can ask me about nail/lash services, pricing rules, available times, deposits, and aftercare. For complex nail styles, you can also send a reference photo and I will help organize the details first.`
-    : `您好欢迎来到 ${brand}，我是您的预约助手。您可以咨询美甲/美睫服务、价格规则、预约时间、定金和护理说明；如果是复杂美甲款式，也可以先发参考图，我会先帮您整理需求。`
+    || db.prepare('SELECT name FROM stores WHERE tenant_id = ? AND is_active = 1 ORDER BY rowid ASC LIMIT 1').get(currentTenantId())?.name || ''   // 02v 拔回落:拿不到就空,措辞由 store-identity 按空态给
+  return welcomeText({ brand, lang })
 }
 
 function shouldSendNewCustomerWelcome(inbound = {}, transcript = []) {
   if (!isNewCustomerInbound(inbound)) return false
   return !(Array.isArray(transcript) ? transcript : []).some((item) => (
     ['assistant', 'staff'].includes(item?.role)
-    && /欢迎来到\s*Lucky\s*Luxe|welcome to lucky luxe|预约助手/i.test(String(item?.content || ''))
+    /* 🔴 02v 裁定五:原来靠「欢迎来到 <店名>」判断"欢迎语发过没有" —— 店名一改就再也匹配不上,
+       会对老顾客重发。改锚在**结构词**(助手自称)上,店名再改也不受影响。 */
+    && /预约助手|booking assistant/i.test(String(item?.content || ''))
   ))
 }
 
@@ -4348,7 +4346,7 @@ async function appendManualWecomReply(conversationId, body = {}, adminSession = 
   const conversation = appendWecomConversationMessage(conversationId, {
     role: 'staff',
     content: message,
-    staffName: body.staffName || adminSession?.email || 'Lucky Luxe Staff',
+    staffName: body.staffName || adminSession?.email || '员工',
     intent: 'manual_reply'
   }, {
     status: body.releaseToAi ? 'ai_replied' : 'human_active',
@@ -5117,7 +5115,7 @@ async function respondQuoteRequest(id, body, admin) {
   // 未开通 AI 智能包:技师的报价照常发出去,只是不经过 AI 润色(原文直发),不能因为没买 AI 就回不了顾客。
   if (hasAi()) countAiUsage()
   const polished = hasAi()
-    ? await polishStaffQuoteReply({ lang: quoteSnapshot.customerLang || 'zh', quote: quoteSnapshot, staffMessage })
+    ? await polishStaffQuoteReply({ lang: quoteSnapshot.customerLang || 'zh', quote: quoteSnapshot, staffMessage, brandName: tenantKbFacts(currentTenantId()).brandName || '' })
     : null
   const conversationStateForSlot = quoteSnapshot.conversationId
     ? (getConversationState(quoteSnapshot.conversationId)?.state || {})
@@ -11293,7 +11291,7 @@ async function route(req, res) {
     const role = OWNER_EMAILS.includes(loginId) ? 'owner' : STAFF_EMAILS.includes(loginId) ? 'staff' : ''
     if (!role) throw apiError(403, 'FORBIDDEN', 'This account is not allowed to access admin.')
     if (role === 'staff' && password !== STAFF_DEMO_PASSWORD) throw apiError(403, 'FORBIDDEN', 'Staff demo password is incorrect.')
-    const user = registerEmailUser({ email: loginId, displayName: role === 'staff' ? 'Lucky Luxe Staff' : 'Lucky Luxe Owner' })
+    const user = registerEmailUser({ email: loginId, displayName: role === 'staff' ? '员工' : '老板' })
     return json(res, 200, { user, auth: demoAuthFor(loginId, role), admin: adminForEmail(loginId, `demo-${role}`), mode: `demo-${role}` })
   }
   // 自助改密(账号体系):旧密码验证,改完清除强制改密标记并作废其他会话
@@ -11396,7 +11394,7 @@ async function route(req, res) {
     const body = await readBody(req)
     const email = String(body.email || '').trim().toLowerCase()
     if (!OWNER_EMAILS.includes(email)) throw apiError(403, 'FORBIDDEN', 'This email is not approved for owner admin.')
-    const user = registerEmailUser({ email, displayName: 'Lucky Luxe Owner' })
+    const user = registerEmailUser({ email, displayName: '老板' })
     return json(res, 201, { user, auth: demoAuthFor(email, 'owner'), admin: { role: 'owner', email }, mode: 'demo-owner' })
   }
   if (req.method === 'GET' && path === '/admin/auth/me') {
@@ -17823,6 +17821,8 @@ db.exec(`
 `)
 // 定金守恒定时自检的落库列(店主 08-29;公约⑧:老库走 ALTER)
 try { db.exec('ALTER TABLE daily_closes ADD COLUMN deposit_audit_json TEXT') } catch (e) { if (!String(e.message).includes('duplicate column')) throw e }
+// 店名改名迁移与英文名新列:搬进 store-identity.mjs(公约①新模块 + 巨型文件只许搬出)
+try { runStoreRenameMigration(db) } catch (e) { console.error('[店名迁移] 失败:', e.message); throw e }
 
 // 分成基数迁移放在这里跑:它要读 daily_closes / perf_targets / technicians,得等这些表建完
 migratePerfBaseToSubtotal()

@@ -12,10 +12,10 @@ export function createAdminAuth({ db, randomId, iso, createHash, defaultTenantId
     if (db.prepare("SELECT id FROM admin_accounts WHERE role = 'owner'").get()) return file
     const initialPassword = randomPassword()
     db.prepare(`INSERT INTO admin_accounts (id, username, display_name, role, technician_id, password_hash, must_change_password, status, created_at, updated_at)
-      VALUES (?, 'boss', 'Lucky Luxe Owner', 'owner', NULL, ?, 1, 'active', ?, ?)`)
+      VALUES (?, 'boss', '老板', 'owner', NULL, ?, 1, 'active', ?, ?)`)
       .run(randomId('acct'), adminPasswordHash('boss', initialPassword), iso(new Date()), iso(new Date()))
     try {
-      writeFileSync(file, `Lucky Luxe 老板主账号(首次登录后必须改密码,改完本文件自动删除)\n用户名: boss\n初始密码: ${initialPassword}\n`)
+      writeFileSync(file, `老板主账号(首次登录后必须改密码,改完本文件自动删除)\n用户名: boss\n初始密码: ${initialPassword}\n`)
     } catch { /* 写不进就只打日志 */ }
     console.log(`[账号] 老板主账号已创建 用户名: boss 初始密码: ${initialPassword} (也写入 local-data/初始老板账号.txt)`)
     return file
