@@ -18,6 +18,8 @@ export function runStoreRenameMigration(db) {
     .run('LUVIA 预约助手', T, 'Lucky Luxe 预约助手')
   db.prepare('UPDATE tenants SET name = ? WHERE id = ? AND name = ?').run('LUVIA 半径(演示)', 'demo-lucky-luxe', 'Lucky Luxe(演示)')
   db.prepare('UPDATE stores SET name = ? WHERE tenant_id = ? AND name = ?').run('LUVIA 半径(演示)', 'demo-lucky-luxe', 'Lucky Luxe(演示)')
+  /* 02w:镜像店的英文名补上(**条件更新** —— 只在为空时补,不覆盖商家已改过的值;店主 02w 收编的那条律) */
+  db.prepare("UPDATE stores SET name_en = ? WHERE tenant_id = ? AND (name_en IS NULL OR name_en = '')").run('LUVIA (Demo)', 'demo-lucky-luxe')
 }
 
 /* 新客欢迎语措辞。**店名拿不到就退成不带店名的说法**,绝不贴任何写死的名字

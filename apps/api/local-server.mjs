@@ -13438,8 +13438,8 @@ async function route(req, res) {
     // D76:演示店建出来就不在选店页(可见性独立于账本归属)
     const tenantListed = tenantKind === 'demo' ? 0 : 1
     db.prepare("INSERT INTO tenants (id, name, plan, status, plan_expires_at, kind, listed) VALUES (?, ?, ?, 'active', ?, ?, ?)").run(id, name.slice(0, 60), plan, planExpiresAt, tenantKind, tenantListed)
-    db.prepare('INSERT INTO stores (id, name, address, phone, timezone, currency, is_active, tenant_id) VALUES (?, ?, ?, ?, ?, ?, 1, ?)')
-      .run(`store-${id}`, name.slice(0, 60), String(body.city || '').slice(0, 80), String(body.phone || '').slice(0, 30),
+    db.prepare('INSERT INTO stores (id, name, name_en, address, phone, timezone, currency, is_active, tenant_id) VALUES (?, ?, ?, ?, ?, ?, ?, 1, ?)')
+      .run(`store-${id}`, name.slice(0, 60), String(body.nameEn || '').slice(0, 60) || null, String(body.city || '').slice(0, 80), String(body.phone || '').slice(0, 30),
         String(body.timezone || APP_TIMEZONE).slice(0, 64), String(body.currency || 'CAD').toUpperCase().slice(0, 6), id)
     // 分类唯一真相律③:建店即落平台三大类(起点,不是上限;商家可再细分)
     try { pricingCategoryApi.seedDefaults(id, platformCategories()) } catch (e) { console.warn('[建店] 默认大类铺设失败(不阻塞):', e.message) }

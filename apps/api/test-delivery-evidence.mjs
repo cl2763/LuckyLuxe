@@ -66,7 +66,7 @@ if (tracked === null) {
 }
 
 /* ③ 反向守:日志目录不许缩水(判据的覆盖面本身要有判据) —— 08-27 至今在案 39 份 */
-const LOG_MIN = 41
+const LOG_MIN = 42
 check(`③ 反向守:日志份数 ${logs.length} >= 在案 ${LOG_MIN}(只增不减;目录被清空时判据不许空转)`,
   logs.length >= LOG_MIN, String(logs.length))
 
@@ -98,7 +98,7 @@ check(`④ 回执自证块 ${blocks.length} 个逐项对账:套件数/断言数/
 /* ⑤ 自证块棘轮:每批一个,只增不减。设为 0 等于这条判据从此空转 —— 那正是它要防的。 */
 /* 落刀当批补了 02q/02r/02s 三批的真块(它们的日志已在库,数从原件现取);
    02t 起每批一个,这个下限随之上棘轮 —— 涨要顺手改这个数,等于每批自报一次。 */
-const BLOCK_MIN = 5
+const BLOCK_MIN = 6
 check(`⑤ 自证块份数 ${blocks.length} >= ${BLOCK_MIN}(每批写一个;降到 0 = 这条判据空转,不许)`,
   blocks.length >= BLOCK_MIN, String(blocks.length))
 

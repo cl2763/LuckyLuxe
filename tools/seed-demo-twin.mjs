@@ -70,7 +70,10 @@ const TOKEN = process.env.OWNER_TOKEN || (readFileSync(join(ROOT, 'apps/api/.env
    下面这张表现在只提供**铺什么数据**(币种/时区/孪生档案的数字),**不再决定能不能写**:
    能不能写由 kind 说了算,非 demo 直接拒绝并说明是被拦了;真店黑名单保留作第二道锁。 */
 const DEMO_TENANTS = [
-  { tenantId: 'demo-lucky-luxe', label: 'LUVIA 半径(演示)', currency: 'CAD', timezone: 'America/Toronto',
+  /* 🔴 02w:镜像店是**店主本店的镜像** —— 本店有 name_en='LUVIA',镜像就该有,
+     否则英文态显示中文名,看着像"空态规则在起作用",其实是**景没铺全**(D108 同族)。
+     小婕演示店**故意不给 nameEn** —— 她真的没有英文名,那才是空态的天然夹具。 */
+  { tenantId: 'demo-lucky-luxe', label: 'LUVIA 半径(演示)', nameEn: 'LUVIA (Demo)', currency: 'CAD', timezone: 'America/Toronto',
     twin: { balance: 88800, timecardTimes: 5, coupons: 1, orders: 2, timecardRemaining: 4, name: '演示·跨店阿珍' } },
   { tenantId: 'jics-sandbox', label: '小婕的店(演示)', currency: 'CNY', timezone: 'Asia/Shanghai',
     twin: { balance: 36600, timecardTimes: 5, coupons: 3, orders: 1, timecardRemaining: 2, name: '演示·跨店阿珍' } }
@@ -172,7 +175,7 @@ async function ensureTenant(spec) {
   const created = await platform('/platform/tenants', {
     method: 'POST',
     // D73:建店当场定归属(不靠名字前缀事后猜)
-    body: JSON.stringify({ id: spec.tenantId, name: spec.label, plan: 'chain', initialTerm: 'year', currency: spec.currency, timezone: spec.timezone, isDemo: true })
+    body: JSON.stringify({ id: spec.tenantId, name: spec.label, nameEn: spec.nameEn || '', plan: 'chain', initialTerm: 'year', currency: spec.currency, timezone: spec.timezone, isDemo: true })
   })
   log(`  ✅ 新建演示租户:${spec.tenantId}(${spec.label});老板账号 ${created.owner.username}(初始密码只显示这一次,演示店无需交付)`)
   /* 🔴 执行令②(店主 08-25):新建的演示店**必须不在顾客选店页**,否则铺完选店页从 2 家演示变 4 家。
