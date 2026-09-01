@@ -171,6 +171,76 @@ async function main() {
   check('合同二 归属判定唯一出口在后端(前端零处出现日结判断)',
     !tb.includes('daily_close') && !ordJs.includes('daily_close') && !tb.includes('已日结'))
 
+  /* ===== 01w 裁②:「已日结日补录到今天 → 今天再日结」端到端(钱的链,逐环出证据)=====
+     链:①造一个已日结的过去日 ②往那天补录一单 → 落今天 ③给这单开单+签字入账
+         ④今天的日结里:这单在不在 / 业绩归谁 / 抽屉对不对得上 ⑤原那天的历史账一分未动 */
+  {
+    const e2eDay = new Date(Date.now() - 13 * 86400000).toISOString().slice(0, 10)
+    const { DatabaseSync: DBe2e } = await import('node:sqlite')
+    const e2eDb = new DBe2e(process.env.TEST_DB_PATH)
+    const tidE = e2eDb.prepare('SELECT tenant_id FROM bookings ORDER BY created_at DESC LIMIT 1').get().tenant_id
+    const nowE = new Date().toISOString()
+    e2eDb.prepare(`INSERT OR REPLACE INTO daily_closes (id, tenant_id, date, status, order_count, revenue_cents, confirmed_at, confirmed_by, created_at, updated_at)
+      VALUES (?, ?, ?, 'confirmed', 0, 0, ?, 'e2e', ?, ?)`).run(`dc-e2e-${uniq}`, tidE, e2eDay, nowE, nowE, nowE)
+    const closedBefore = e2eDb.prepare('SELECT order_count, revenue_cents FROM daily_closes WHERE tenant_id = ? AND date = ?').get(tidE, e2eDay)
+    const todayE = (await request('/admin/schedule-day')).data.storeToday
+    const dcBefore = (await request(`/admin/daily-close?date=${todayE}`)).data.dailyClose
+    const sdE = (await request(`/admin/schedule-day?date=${e2eDay}`)).data
+    if (sdE.backfill && sdE.backfill.closed && !sdE.hoursUnset && !sdE.isClosed) {
+      // ② 补录 → 落今天
+      const bfRes = await request('/admin/bookings/direct', { method: 'POST', body: JSON.stringify({ backfill: true, newCustomerName: `链验客${uniq}`, serviceId: svc.id, technicianId: tech.id, date: e2eDay, time: '16:20' }) })
+      check('🔴 裁② 链①补录落今天(不落已日结的原日)', bfRes.status === 201 && bfRes.data.booking.appointmentDate === todayE,
+        JSON.stringify({ got: bfRes.data.booking && bfRes.data.booking.appointmentDate, want: todayE, err: bfRes.data.error }))
+      if (bfRes.status === 201) {
+        const bid = bfRes.data.booking.id
+        const uidE = bfRes.data.booking.userId || (bfRes.data.booking.user && bfRes.data.booking.user.id)
+        // ③ 开单 + 签字入账
+        const sheet = await request('/admin/settlements', { method: 'POST', body: JSON.stringify({ userId: uidE, settlements: [{ bookingId: bid, payIntent: 'offline_full', items: [{ serviceId: svc.id, qty: 1 }], technicians: [{ technicianId: tech.id, role: 'main', itemNos: [1] }] }] }) })
+        check('裁② 链②补录单能开单(与普通单同路)', sheet.status === 200 || sheet.status === 201, JSON.stringify(sheet.data).slice(0, 140))
+        /* 判据自身的静默失败器(01w 自查咬出):原先 sid 取错字段名 → if(sid) 整块被跳过,
+           钱的链一条没跑而套件仍绿(数字对不上才发现)。改:取真字段 + **取不到就红**,不许静默跳。 */
+        const sheet0 = ((sheet.data && sheet.data.settlements) || [])[0]
+        const sid = sheet0 && (sheet0.code || sheet0.id)
+        check('裁② 链②开单返回体拿得到结算单号(拿不到=下面整条钱链会被跳过,必须出声)',
+          Boolean(sid), JSON.stringify(Object.keys(sheet.data || {})))
+        if (sid) {
+          /* 签字口=顾客侧 /settlements/<单号>/sign(不是 /admin/…;入账唯一路径就这一条,不另造) */
+          const signed = await request(`/settlements/${encodeURIComponent(sid)}/sign`, { method: 'POST', body: JSON.stringify({ disclaimerAccepted: true, signature: 'data:image/png;base64,iVBORw0KGgo=', signedBy: '链验客' }) })
+          check('裁② 链③签字入账 200(签字才记账,口径不变)', signed.status === 200, JSON.stringify(signed.data).slice(0, 120))
+          // ④ 今天的日结:单在、业绩归本人、抽屉跟着动
+          const dcAfter = (await request(`/admin/daily-close?date=${todayE}`)).data.dailyClose
+          check('🔴 裁② 链④补录单进**今天**的日结(单数 +1)', dcAfter.orderCount === dcBefore.orderCount + 1,
+            `${dcBefore.orderCount} → ${dcAfter.orderCount}`)
+          const mine = (dcAfter.settlements || []).some((x) => x.bookingId === bid || (x.bookings || []).some((y) => y.id === bid))
+          check('裁② 链④这单出现在今天日结的结算列表里(能被店主看见)', mine || dcAfter.orderCount > dcBefore.orderCount)
+          const techLine = (dcAfter.technicians || []).find((t2) => t2.technicianId === tech.id || t2.id === tech.id)
+          check('🔴 裁② 链④业绩归**做这单的技师**(今天这条业绩行里)', Boolean(techLine && (techLine.perfCents || 0) > 0),
+            JSON.stringify(techLine || (dcAfter.technicians || []).slice(0, 2)).slice(0, 160))
+          check('裁② 链④抽屉数在场且自洽(现金口径块整块下发)', Boolean(dcAfter.cashDrawer && typeof dcAfter.cashDrawer.storefrontCents === 'number'))
+          check('🔴 裁② 链④营收也进今天(不是只进了单数)', (dcAfter.revenueCents || 0) > (dcBefore.revenueCents || 0),
+            `${dcBefore.revenueCents} → ${dcAfter.revenueCents}`)
+          // ⑤ 原那天:历史账一分未动
+          const closedAfter = e2eDb.prepare('SELECT order_count, revenue_cents, status FROM daily_closes WHERE tenant_id = ? AND date = ?').get(tidE, e2eDay)
+          check('🔴 裁② 链⑤原已日结那天**一分未动**(单数/营收/状态三样都没变)',
+            closedAfter.order_count === closedBefore.order_count && closedAfter.revenue_cents === closedBefore.revenue_cents && closedAfter.status === 'confirmed',
+            JSON.stringify({ before: closedBefore, after: closedAfter }))
+          const dcOld = (await request(`/admin/daily-close?date=${e2eDay}`)).data.dailyClose
+          check('🔴 裁② 链⑤原那天不被标「数字已过期」(补录没污染它,R1 不该被惊动)', !dcOld.staleClose,
+            JSON.stringify({ stale: dcOld.staleClose, post: dcOld.postCloseAdditions }))
+        }
+      }
+    } else {
+      check('裁② 链:夹具日不可用(店休/未设置),本轮跳过并出声(不静默绿)', false, JSON.stringify({ e2eDay, closed: sdE.backfill && sdE.backfill.closed, hoursUnset: sdE.hoursUnset, isClosed: sdE.isClosed }))
+    }
+  }
+  /* 裁① 补录语境措辞:两语境各说各的真因 */
+  check('裁① 补录语境不许报「已经过去了」(源码层:past 分支带 !opts.backfill 界定)',
+    rf('apps/api/local-server.mjs').includes("if (!opts.backfill && `${input.date} ${input.time}` < `${nowD.date} ${nowD.time}`)"))
+  check('裁① 补录撞位句去掉「换个时间」的废建议(补录是往回记,时间是既成事实)',
+    rf('apps/api/local-server.mjs').includes('该技师那个时段已经有单了') && rf('apps/api/local-server.mjs').includes('核对一下当时的实际时间,或换一位技师'))
+  check('裁① opts.backfill 真传进 createBooking(不传=上面两处永远走 else,静默失败器族)',
+    rf('apps/api/local-server.mjs').includes('backfill: Boolean(plan) })'))
+
   console.log(`[observe-fixes] all ${checks} checks passed`)
 }
 main().catch((e) => { console.error('[observe-fixes] failed:', e.message); process.exit(1) })

@@ -138,9 +138,22 @@ for (const tid of allTenants) {
       AND EXISTS (SELECT 1 FROM daily_closes c WHERE c.tenant_id = b.tenant_id
                   AND c.date = b.backfill_service_date AND c.status = 'confirmed')`).get(tid).n
   if (badBackfill !== 0) throw new Error(`${label} I10 补录写回了已日结的那天(历史账被回改):${badBackfill} 行`)
+  /* I11 已日结日封口(01w 裁③,D102 护栏):**任何路径**往「过去的已日结日」写新单 → 红。
+     判据带界定,只打真目标:
+       · 写入日 > 服务日 = 往回写(补录口/将来别处任何写口)—— 这才是钱的漏洞
+       · 写入日 = 服务日(当天日结后又来加钟客)**不算** —— 现实合法,由 R1「数字已过期」兜住
+     防的是将来别处再开一个绕过 backfillPlanFor 归属判定的写口。 */
+  const wroteIntoClosed = db.prepare(`SELECT COUNT(*) AS n FROM bookings b
+    JOIN daily_closes c ON c.tenant_id = b.tenant_id AND c.date = date(b.appointment_start)
+                       AND c.status = 'confirmed'
+    WHERE b.tenant_id = ? AND b.created_at > c.confirmed_at
+      AND date(b.created_at) > date(b.appointment_start)`).get(tid).n
+  if (wroteIntoClosed !== 0) {
+    throw new Error(`${label} I11 有单被写进**已日结的过去日**(绕过补录归属判定,历史账被回改):${wroteIntoClosed} 行`)
+  }
   iterated += 1
 }
-check(`🔴 ③ 不变量组 I1-I10 × ${iterated} 家全过(一家红整批红;含前序套件的各态店)`, iterated === allTenants.length)
+check(`🔴 ③ 不变量组 I1-I11 × ${iterated} 家全过(一家红整批红;含前序套件的各态店)`, iterated === allTenants.length)
 
 /* ===== ④ 矩阵店特征各验(建店规格 → 现测) ===== */
 for (const b of built) {

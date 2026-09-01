@@ -6801,14 +6801,18 @@ function createBooking(body, opts = {}) {
     db.exec('ROLLBACK')
     if (String(error.message || '').includes('UNIQUE constraint failed')) {
       /* D88(店主 08-30c 并批):失败句说清真因 —— 「已过」和「被占」是两回事,不许答非所因。
-         01u 裁①:判定顺序**过去优先** —— 同时满足「已过去」与「已被占」时只报「已过去」,
-         一句一因不拼两因(此顺序即现状,店主终裁确认;test-observe-fixes 常驻钉住,别翻面)。 */
+         01u 裁①:判定顺序**过去优先** —— 同时满足「已过去」与「已被占」时只报「已过去」,一句一因。
+         01w 裁①(语境修正,店主原话):「过去优先」是给**今天台面**语境定的 —— 那里"已经过去了"
+         就是真原因;**补录语境里"过去"根本不是错误**,所以 backfill 时只报真实原因(重叠/休息日),
+         也不建议"选之后的时段"(补录本来就是往回记)。一句一因不变,变的是这个语境里哪句才是真因。 */
       const nowD = localParts(new Date())
-      if (`${input.date} ${input.time}` < `${nowD.date} ${nowD.time}`) {
+      if (!opts.backfill && `${input.date} ${input.time}` < `${nowD.date} ${nowD.time}`) {
         throw apiError(409, 'SLOT_UNAVAILABLE', `这个时段已经过去了(门店现在 ${nowD.time}),选一个之后的时段。`)
       }
 
-      throw apiError(409, 'SLOT_UNAVAILABLE', `该技师这个时段和已有预约重叠(所选服务需 ${durationMin} 分钟),换个时间或换个更短的项目试试。`)
+      throw apiError(409, 'SLOT_UNAVAILABLE', opts.backfill
+        ? `该技师那个时段已经有单了(这一单需 ${durationMin} 分钟)。核对一下当时的实际时间,或换一位技师。`
+        : `该技师这个时段和已有预约重叠(所选服务需 ${durationMin} 分钟),换个时间或换个更短的项目试试。`)
     }
     throw error
   }
@@ -15076,7 +15080,7 @@ async function route(req, res) {
         serviceId: body.serviceId, technicianId: body.technicianId,
         date: plan ? plan.targetDate : body.date, time: body.time, durationMin: body.durationMin,
         notes: body.notes || (plan ? `补录(服务发生于 ${plan.serviceDate})` : '老板直接排单')
-      }, { adminDirect: true, depositPaid: body.depositPaid === true })
+      }, { adminDirect: true, depositPaid: body.depositPaid === true, backfill: Boolean(plan) })
       if (plan) {
         db.prepare('UPDATE bookings SET backfill_service_date = ? WHERE id = ?').run(plan.serviceDate, booking.id)
         booking = serializeBooking(db.prepare('SELECT * FROM bookings WHERE id = ?').get(booking.id))
