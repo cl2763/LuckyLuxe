@@ -35,17 +35,26 @@ const CAPS = [
 ]
 
 /* ===== 棘轮表:超线文件的**个别天花板**,只许降不许升 =====
-   两个巨型文件的数是店主逐个批过的;其余四个是 09-02 首次落刀时按现状冻结,
-   公约③ 对它们的约束不变:超线文件不许再加新功能,只许改 bug 与拆分。 */
+
+   🔴 两类语义必须分开(店主 02r 裁定二,原话):
+     「**冻结值的意思是「不再涨」,不是「这个体量是对的」。** 2,811 行的 customer.js 不是我认可的
+       合理体量,它只是今天的事实。写清楚,免得半年后有人翻到这张表,以为那是被批准过的合理大小。」
+
+   · **点名钉死(approved)** —— 店主逐个批过的数,就是这两个巨型文件。
+   · **现状冻结候拆(frozen)** —— 09-02 首次落刀时按当天事实冻的,**店主没有批准这个体量**,
+     只批准了"不再涨"。队尾 UI 总审 / 后续拆分时该拆照拆,拆完天花板跟着降。
+
+   类别做成**字段**而不是注释里一句话 —— 注释会烂,字段能被判据⑥守住。
+   规矩(店主 02r):**涨要报批,降不用报**(降自动更新并打印收紧提示)。 */
+const PINNED = '点名钉死(店主逐个批准此数)'
+const FROZEN = '现状冻结候拆(只批准不再涨,未批准此体量;该拆照拆)'
 const RATCHET = {
-  // —— 店主批准值(改这两个数 = 申请提高上限,必须店主点头)——
-  'apps/api/local-server.mjs': { cap: 18243, note: '巨型文件·店主 08-24 立棘轮 / 09-02 复核在案数一致' },
-  'apps/web/admin.js': { cap: 8552, note: '巨型文件·店主 09-02 补批(01u 8521 → 02c 签署块 +28 → 02e 假图第八处 +3)' },
-  // —— 09-02 首次落刀按现状冻结(店主未逐个批过数字,只受"不许再涨"约束)——
-  'apps/web/customer.js': { cap: 2811, note: '09-02 现状冻结' },
-  'miniprogram/pages/me/index.js': { cap: 638, note: '09-02 现状冻结' },
-  'miniprogram/pages/merchant/settlement/index.js': { cap: 929, note: '09-02 现状冻结' },
-  'miniprogram/pages/merchant/orders/index.js': { cap: 829, note: '09-02 现状冻结' },
+  'apps/api/local-server.mjs': { cap: 18243, kind: PINNED, note: '巨型文件·店主 08-24 立棘轮 / 09-02 复核在案数一致' },
+  'apps/web/admin.js': { cap: 8552, kind: PINNED, note: '巨型文件·店主 09-02 补批(01u 8521 → 02c 签署块 +28 → 02e 假图第八处 +3)' },
+  'apps/web/customer.js': { cap: 2811, kind: FROZEN, note: '09-02 店主批准现状冻结;2811 行不是被认可的合理体量,是当天的事实' },
+  'miniprogram/pages/me/index.js': { cap: 638, kind: FROZEN, note: '09-02 店主批准现状冻结;超公约 600 上限 38 行,候拆' },
+  'miniprogram/pages/merchant/settlement/index.js': { cap: 929, kind: FROZEN, note: '09-02 店主批准现状冻结;超公约 600 上限 329 行,候拆' },
+  'miniprogram/pages/merchant/orders/index.js': { cap: 829, kind: FROZEN, note: '09-02 店主批准现状冻结;超公约 600 上限 229 行,候拆' },
 }
 
 function lsFlat(dir, re, keep = () => true) {
@@ -114,10 +123,19 @@ const zombies = Object.keys(RATCHET).filter((k) => !seen.some((s) => s.key === k
 check('⑤ 棘轮表零僵尸条目(表里的文件都还在扫描面上;改名/删除必须同步改表)',
   zombies.length === 0, zombies.join(' | '))
 
+/* ⑥ 两类语义不许含糊:每项必须自报是「点名钉死」还是「现状冻结候拆」。
+   店主 02r 的顾虑是"半年后有人翻到这张表以为 2811 是批准过的合理大小" —— 少写 kind 就红,
+   新加一项也必须表态属于哪一类(不许糊过去)。 */
+const noKind = Object.entries(RATCHET).filter(([, v]) => v.kind !== PINNED && v.kind !== FROZEN).map(([k]) => k)
+check('⑥ 棘轮表两类语义齐:每项都标明「点名钉死」或「现状冻结候拆」(冻结=不再涨,不等于体量对)',
+  noKind.length === 0, noKind.join(' | '))
+
 /* 每次回归都把棘轮数字打出来 —— 店主 02q:「以后棘轮数字每次都要报,且涨就说涨、降才说降」。
    回执里那一行直接抄这里,不再靠人肉 wc -l 与措辞自觉。 */
-console.log('\n[棘轮现值] ' + Object.entries(RATCHET)
-  .map(([k, v]) => `${k.split('/').pop()} ${lines(k)}/${v.cap}`).join('  ·  '))
+const fmt = (kind) => Object.entries(RATCHET).filter(([, v]) => v.kind === kind)
+  .map(([k, v]) => `${k.replace('miniprogram/pages/', '').replace('/index.js', '')} ${lines(k)}/${v.cap}`).join('  ·  ')
+console.log(`\n[棘轮·点名钉死] ${fmt(PINNED)}`)
+console.log(`[棘轮·现状冻结候拆] ${fmt(FROZEN)}   ← 冻结=不再涨,**不等于这个体量是对的**`)
 if (couldTighten.length) console.log(`[收紧提示] ${couldTighten.join(' | ')}`)
 
 console.log(`\n✅ test-file-ratchet 通过 ${checks} 项(业务文件 ${seen.length} 个,棘轮 ${Object.keys(RATCHET).length} 项)`)

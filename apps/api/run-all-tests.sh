@@ -95,24 +95,35 @@ curl -s -X POST -H "authorization: Bearer owner-demo-token" -H "content-type: ap
 # 可用 CI_SUITES="a b c" 环境变量跑子集(调试用)
 DEFAULT_SUITES="customer-service-matrix working-memory business-hours intent-guards quote-polish silent-handoff human-handoff after-sales-handoff identity-links entitlements tenant-kb finance-core finance-goals stored-value schedule-week special-dates customer-profile staff-portal admin-accounts pricing-model membership-config customer-import tenant-hygiene tenant-timezone deposit-config message-templates settlement daily-close salary-v2 schedule-v2 finance-trend finance-lock perf-viz coupon-settle audit-fix scan-sign double-sheet auth-surface currency-scan settle-stress sign-stability noshow-aftersales demo-seed-guard card-refund amend-linkage ledger-guards backend-gate hero-slides cash-notes mini-money-inputs image-placeholder deposit-audit web-settlement cross-end-effect mini-account-adjust today-board hours-gate crossend-cta tab-colors notify-scheduler quote-state ui-spec observe-fixes file-ratchet mp-placeholder-size store-jury"
 read -r -a SUITES <<< "${CI_SUITES:-$DEFAULT_SUITES}"
+
+# 🔴 断言基线(店主 02r 裁定一):每套跑完**就地数** `^ok ` 条数,不事后解析日志 ——
+# 日志里 auto-return / tenant-isolation 两套没有 `== test-X ==` 行,解析法会张冠李戴。
+TALLY="$DATA_DIR/assertion-tally.tsv"; : > "$TALLY"
+SUITE_OUT="$DATA_DIR/suite-out.txt"
+run_suite() {   # $1=套件名 $2..=node 前缀环境(可空)
+  local name="$1"; shift
+  "$@" node "test-${name}.mjs" 2>&1 | tee "$SUITE_OUT"
+  printf '%s\t%s\n' "$name" "$(grep -c '^ok ' "$SUITE_OUT" || true)" >> "$TALLY"
+}
+
 for suite in "${SUITES[@]}"; do
   echo "== test-${suite} =="
-  node "test-${suite}.mjs"
+  run_suite "$suite" env
 done
 
 echo "== 自动回归专用实例 (4129) =="
 cleanup; sleep 1
 PORT=4129 HUMAN_REPLY_COOLDOWN_MINUTES=0 node local-server.mjs > /tmp/ll-ci-4129.log 2>&1 &
 wait_health 4129 "自动回归实例"
-TEST_BASE_URL=http://127.0.0.1:4129 node test-auto-return.mjs
+run_suite auto-return env TEST_BASE_URL=http://127.0.0.1:4129
 
 # 结构一致性:自己起一份全新库的实例(独立 DATA_DIR + 端口 4177),与其它套件互不干扰
 echo "== test-schema-consistency =="
-node test-schema-consistency.mjs
+run_suite schema-consistency env
 
 # 分成基数迁移:要重启实例才能验(迁移只在启动时跑),同样自带 DATA_DIR + 端口 4178
 echo "== test-perf-base-migration =="
-node test-perf-base-migration.mjs
+run_suite perf-base-migration env
 
 echo "== 租户隔离双实例 (4128+4131) =="
 cleanup; sleep 1
@@ -120,7 +131,13 @@ PORT=4128 node local-server.mjs > /tmp/ll-ci-a.log 2>&1 &
 wait_health 4128 "租户A"
 PORT=4131 DEFAULT_TENANT_ID=tenant-iso-b node local-server.mjs > /tmp/ll-ci-b.log 2>&1 &
 wait_health 4131 "租户B"
-node test-tenant-isolation.mjs
+run_suite tenant-isolation env
+
+echo ""
+# 🔴 断言基线判定(店主 02r 裁定一):降=红并指名哪一套;涨自动更新基线。
+# 排在全部套件之后 —— 它要看的是"全场的逐套件数",站在中间看不全。
+echo "== test-assertion-baseline =="
+node test-assertion-baseline.mjs "$TALLY" "$(( $(echo $DEFAULT_SUITES | wc -w) + 4 ))"
 
 echo ""
 # 套件数从清单现算,不写死 —— 写死的数字会随加套件慢慢变成假话
