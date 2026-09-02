@@ -91,7 +91,11 @@ Page({
 
     const qsState = (c.quoteState && c.quoteState.state) || 'none'
     this.setData({
-      quoteLabel: qsState === 'quoted' ? '本会话已报价' : qsState === 'expired' ? '报价已过期' : qsState === 'reference' ? '有历史报价' : '未报价',
+      /* 🔴 03q:这里原来自己算一份报价文案 —— 而 02x 已经把它收成后端唯一出口
+         (conversation-card.mjs 的 CARD_TEXT.quote,网页端也读它)。**页面再算一份就是分叉债**。
+         改读后端下发的 customerCard.quoteLabel;后端没给才退回本地兜底(过渡期,后端始终会给)。 */
+      quoteLabel: (c.customerCard && c.customerCard.quoteLabel) || '',
+      unboundNote: (c.customerCard && c.customerCard.unboundNote) || '',
       quoteBanner: (c.quoteState && c.quoteState.banner) || '',
       quoteBannerCls: qsState,
       name, status: c.status, label: s.label, cls: s.cls,

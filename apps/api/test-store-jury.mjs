@@ -149,8 +149,17 @@ for (const tid of allTenants) {
      02w 全绿只是当时跑的时刻没落进这个窗口 —— **判据里一直有这个时区裸算**。
      这正是 CLAUDE.md「所有『今天』按门店时区算,不要裸 new Date() 推日期」在判据层的同一个坑。
      改法:先取该店时区,把 UTC 时刻换算成门店日再比。 */
+  /* 🔴 03q 店主裁:**去掉退回多伦多的默认值 —— 小婕店在上海。**
+     一个悄悄回落的默认时区,在上海店身上会把 UTC 与门店日重新错开 12 小时,
+     刀照样绿而算出来的门店日是别人家的。归族「静默失败器族」:
+     「这一步必须发生」的地方不许用 `|| 默认值` —— 要么显式判断并报错,要么在断言里守住它真的发生了。
+     取不到时区**这条判据就没有成立的地基**,红,并点名是哪个租户。 */
   const tz = db.prepare("SELECT timezone FROM stores WHERE tenant_id = ? AND is_active = 1 ORDER BY rowid ASC LIMIT 1").get(tid)?.timezone
-    || 'America/Toronto'
+  if (!tz) {
+    throw new Error(`${label} I11 门店时区缺失:tenant_id=${tid} 的 is_active=1 门店取不到 stores.timezone,`
+      + '门店日无从算起 —— 判据不许回落到某个默认时区'
+      + '(店主 03q:小婕店在上海,退回多伦多会把门店日整整错开半天,而刀照样绿)')
+  }
   const storeDay = (iso) => new Intl.DateTimeFormat('en-CA', { timeZone: tz, year: 'numeric', month: '2-digit', day: '2-digit' }).format(new Date(iso))
   const closed = db.prepare("SELECT date, confirmed_at FROM daily_closes WHERE tenant_id = ? AND status = 'confirmed'").all(tid)
   const closedMap = new Map(closed.map((c) => [c.date, c.confirmed_at]))

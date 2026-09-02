@@ -26,7 +26,11 @@ const ROOT = join(here, '..')
 const BASE = requireTarget({ envName: 'SEED_BASE_URL', value: process.env.SEED_BASE_URL,
   hint: '(沙箱 http://127.0.0.1:4310 / 本机库 http://127.0.0.1:4128 —— 端口会骗人,跑起来看它自报的库路径)' })
 if (!/127\.0\.0\.1|localhost/.test(BASE)) throw new Error('这个脚本只给本机沙盘用,不要指向生产。')
-const DB_PATH = join(ROOT, 'apps/api/local-data/lucky-luxe.sqlite')
+/* 🔴 03q:这条腿原来硬编码着**本机库** —— 而上面的 SEED_BASE_URL 那条腿早就接了护栏。
+   一个脚本两个目标解析点、只守住一个,按文件判的护栏刀照样绿,
+   **这正是 03q「本机库又被写了」那次事故的通道**(seed-bigdemo 是同一形状,已修;这两个漏网)。 */
+const DB_PATH = requireTarget({ envName: 'SEED_DB_PATH', value: process.env.SEED_DB_PATH,
+  hint: '(必须与 SEED_BASE_URL 指的是同一个库:沙箱 apps/api/sandbox-data/lucky-luxe.sqlite)' })
 
 const envLine = readFileSync(join(ROOT, 'apps/api/.env'), 'utf8').split('\n').find((l) => l.startsWith('OWNER_DEMO_TOKEN='))
 const TOKEN = envLine.slice('OWNER_DEMO_TOKEN='.length).trim().replace(/^["']|["']$/g, '')

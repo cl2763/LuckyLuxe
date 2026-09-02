@@ -81,8 +81,10 @@ const STORES = [
 ]
 
 const CONVOS = [
-  { status: 'open', intent: 'price', msg: '想做一个法式加两颗钻,大概多少钱呀?', quote: 'PENDING_STAFF' },
-  { status: 'open', intent: 'price', msg: '猫眼渐变加延长,报个价我看看', quote: 'QUOTED' },
+  /* 🔴 03q:#0 原来是 PENDING_STAFF(待报价),而 ⑤「报价+已绑档案」要的是**已报价**;
+     之前它显示 quoted 是靠别处的残留行 —— 夹具本身没造出来。改成真 QUOTED。 */
+  { status: 'open', intent: 'price', msg: '想做一个法式加两颗钻,大概多少钱呀?', quote: 'QUOTED' },
+  { status: 'open', intent: 'price', msg: '猫眼渐变加延长,报个价我看看', quote: 'QUOTED', expired: true },   // ③ 已过期
   { status: 'human', intent: 'aftersales', msg: '前天做的甲片翘边了,能来补吗?', quote: null },
   { status: 'open', intent: 'booking', msg: '这周六下午还有位置吗?', quote: null },
   { status: 'closed', intent: 'hours', msg: '你们几点关门?', quote: null },
@@ -92,7 +94,11 @@ const CONVOS = [
   { status: 'open', intent: 'price', msg: '延长加猫眼,上次问过一次', quote: 'QUOTED', twice: true },  // **多次报价取最新**
   /* 🔴 第七态「仅历史参考」:报价落在**上一个会话段**里 —— transcript 要有个 >6h 的静默豁口,
      豁口之后的新消息开了新会话,老报价就退成"历史参考"(quote-state 的 sessionKeyOf 判的就是这个)。 */
-  { status: 'open', intent: 'price', msg: '上次那个价还作数吗?', quote: 'QUOTED', historyOnly: true }
+  { status: 'open', intent: 'price', msg: '上次那个价还作数吗?', quote: 'QUOTED', historyOnly: true },
+  /* 🔴 03q:七态截图要求**每态一条独占会话**(店主查出七张只有 2 种 md5)。
+     原来 ⑥「报价+未绑档案」与 ⑦「多次报价取最新」抢同一条 #6 → 两张图必然一样。
+     补一条纯粹的「报价+未绑档案」,让 ⑦ 独占那条多次报价的。 */
+  { status: 'open', intent: 'price', msg: '想做个简单款,多少钱?', quote: 'QUOTED', unbound: true }
 ]
 
 const report = []
@@ -467,8 +473,8 @@ for (const store of STORES) {
         (id, provider, external_user_id, source_channel, status, last_intent, last_message, ai_reply_json, transcript_json, raw_event_json, created_at, updated_at, tenant_id)
         VALUES (?, 'wecom', ?, '微信', ?, ?, ?, '{}', ?, '{}', ?, ?, ?)`)
       const qs = db.prepare(`INSERT OR IGNORE INTO quote_requests
-        (id, conversation_id, user_id, source_channel, service_type, status, customer_message, customer_lang, reference_images_json, created_at, updated_at, tenant_id, staff_price_cents, quoted_by, quoted_at)
-        VALUES (?, ?, ?, '微信', 'nail', ?, ?, 'zh', '[]', ?, ?, ?, ?, ?, ?)`)
+        (id, conversation_id, user_id, source_channel, service_type, status, customer_message, customer_lang, reference_images_json, created_at, updated_at, tenant_id, staff_price_cents, quoted_by, quoted_at, expires_at)
+        VALUES (?, ?, ?, '微信', 'nail', ?, ?, 'zh', '[]', ?, ?, ?, ?, ?, ?, ?)`)
       CONVOS.forEach((c, i) => {
         const cid = `bigdemo:${tenantId}:${i}`
         const at = `${shift(today, -(i + 1))}T0${i + 1}:10:00.000Z`
@@ -479,15 +485,21 @@ for (const store of STORES) {
            于是当前会话段里没有报价,老报价退成「历史参考」。 */
         const oldAt = `${shift(today, -(i + 5))}T01:00:00.000Z`
         const tr = c.historyOnly
-          ? [{ role: 'customer', text: '上次问过价', at: oldAt }, { role: 'customer', text: c.msg, at }]
-          : [{ role: 'customer', text: c.msg, at }]
+          ? [{ role: 'customer', content: '上次问过价', at: oldAt }, { role: 'customer', content: c.msg, at }]
+          : [{ role: 'customer', content: c.msg, at }]
         cs.run(cid, ext, c.status === 'human' ? 'human_active' : c.status, c.intent, c.msg,
           JSON.stringify(tr), at, at, tenantId)
         if (c.quote) {
           /* historyOnly 的报价钉在**老那一段**的时刻,当前段才会看不到它 */
           const qAt = c.historyOnly ? oldAt : at
+          /* 🔴 03q:原来 INSERT 不写 expires_at → 永不过期,**「已过期」这一态夹具从来没真造出来**
+             (之前那次显示 expired 是撞上了别处的残留行 —— 我 DELETE 重铺后它才露真身)。
+             现在:有效期 = 报价时刻 + 48h;expired 态显式给一个**已经过去**的有效期。 */
+          const exp = c.quote !== 'QUOTED' ? null
+            : (c.expired ? new Date(Date.parse(qAt) + 3600 * 1000).toISOString()
+              : new Date(Date.now() + 48 * 3600 * 1000).toISOString())
           qs.run(`bigdemo-q-${tenantId}-${i}`, cid, c.unbound ? null : cust.id, c.quote, c.msg, qAt, qAt, tenantId,
-            c.quote === 'QUOTED' ? 68800 : null, c.quote === 'QUOTED' ? 'owner' : null, c.quote === 'QUOTED' ? qAt : null)
+            c.quote === 'QUOTED' ? 68800 : null, c.quote === 'QUOTED' ? 'owner' : null, c.quote === 'QUOTED' ? qAt : null, exp)
           /* twice 态:同一会话**两条已报价**,时间与价钱都不同 —— 判据要验"取的是最新那条" */
           if (c.twice) {
             const earlier = `${shift(today, -(i + 3))}T02:10:00.000Z`

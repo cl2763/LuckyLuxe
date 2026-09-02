@@ -5,7 +5,7 @@
     <view wx:if="{{pendingReq}}" class="reqbar">✓ {{pendingReq}}</view>
 
     <view class="plan {{statusCls === 'warn' ? 'warn' : ''}}">
-      <view class="pl-top"><text class="pl-name">{{planName}}</text><text class="pl-tag {{statusCls}}">{{statusTag}}</text></view>
+      <view class="pl-top"><text class="pl-name">{{planName}}</text><text class="pl-tag {{statusCls}}" wx:if="{{statusTag}}">{{statusTag}}</text></view>
       <view class="pl-exp" wx:if="{{expiresAt}}">有效期至 {{expiresAt}}</view>
       <view class="pl-exp" wx:else>长期授权(内部/旗舰店,无需续费)</view>
       <view class="pl-days" wx:if="{{daysLeft !== null && daysLeft > 0}}">剩余 {{daysLeft}} 天</view>

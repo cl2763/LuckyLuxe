@@ -4,7 +4,8 @@
     <view class="prow">
       <view class="tag {{cls}}">{{label}}</view>
       <text class="cust-name">{{name}}</text>
-      <text class="bind" wx:if="{{!profile}}">未绑定会员</text>
+      <!-- 🔴 03q:句子读后端唯一出口(两端同一句);后端没给才退回旧文案 -->
+      <text class="bind" wx:if="{{!profile}}">{{unboundNote || '未绑定会员'}}</text>
     </view>
     <block wx:if="{{profile}}">
       <view class="prow info">
@@ -14,7 +15,10 @@
         <text class="pi">储值{{profile.storedText}}</text>
         <text class="pi">会员码 {{profile.memberCode}}</text>
         <text class="pi">次卡 {{profile.tcText}}</text>
-        <text class="pi">{{quoteLabel}}</text>
+        <!-- 🔴 03q:原来没有 wx:if —— 已绑档案但本会话没报过价时,渲染成一枚**空药丸**
+             (现测 18×6px,有框没字)。归族「不可用即不呈现,呈现即说明」:
+             一枚药丸的存在本身就是"这里有一条信息"的承诺,空着就是第三种。 -->
+        <text class="pi qpi" wx:if="{{quoteLabel}}">{{quoteLabel}}</text>
         <text class="viewdoc" bindtap="viewProfile">查看档案 ›</text>
       </view>
       <view class="prow tags" wx:if="{{profile.tags.length || profile.note}}">

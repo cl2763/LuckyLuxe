@@ -17,7 +17,10 @@ const HERE = dirname(fileURLToPath(import.meta.url))
 /* 🔴 D124:目标库路径原来直接拼死;改为必须显式给(拼出来的那个只作 hint) */
 const SANDBOX = requireTarget({ envName: 'DB_PATH', value: process.env.DB_PATH,
   hint: '(沙箱 apps/api/sandbox-data/lucky-luxe.sqlite / 本机库 apps/api/local-data/lucky-luxe.sqlite)' })
-const SOURCE = join(HERE, 'local-data/lucky-luxe.sqlite')
+/* 🔴 03q:镜像**源**库原来也是拼死的。它虽然只以 mode=ro 挂载(不写),
+   但「从哪个库镜像过来」同样是一次目标决定 —— 打错了同样不报错。一并显式化。 */
+const SOURCE = requireTarget({ envName: 'MIRROR_SOURCE_DB', value: process.env.MIRROR_SOURCE_DB,
+  hint: '(镜像源,只读挂载:本机库 apps/api/local-data/lucky-luxe.sqlite)' })
 const MIRROR_TENANTS = ['lucky-luxe', 'jics-nail']
 
 if (!existsSync(SANDBOX) || !existsSync(SOURCE)) { console.error('❌ 库文件不在:', SANDBOX, SOURCE); process.exit(1) }

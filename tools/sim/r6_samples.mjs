@@ -13,7 +13,11 @@ import { requireTarget } from '../db-target.mjs'
    不是在旁边插一个没人读的变量(我上一版就是那么糊的,已回滚)。 */
 const BASE = requireTarget({ envName: 'API_BASE', value: process.env.API_BASE,
   hint: '(沙箱 http://127.0.0.1:4310 / 本机库 http://127.0.0.1:4128;端口会骗人,以库路径为准)' });
-const DB = '/Users/changliu/Documents/Codex/2026-04-29/new-chat/apps/api/local-data/lucky-luxe.sqlite';
+/* 🔴 03q:这条腿原来硬编码着**本机库绝对路径** —— 而上面的 API_BASE 那条腿早接了护栏。
+   按文件判的护栏刀只问"文件里有没有 requireTarget 三个字",于是它绿着;
+   改按**解析点**判之后这一族(4 个 tools/sim 脚本)才露出来。 */
+const DB = requireTarget({ envName: 'SIM_DB_PATH', value: process.env.SIM_DB_PATH,
+  hint: '(必须与 API_BASE 指的是同一个库:沙箱 apps/api/sandbox-data/lucky-luxe.sqlite)' })
 const HOP_TENANT = 'hoptest-demo2';
 const A = (c, m) => { if (!c) throw new Error(m); };
 const db = new DatabaseSync(DB);

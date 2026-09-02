@@ -125,6 +125,78 @@ check(`①c 🔴 A 类独立可跑脚本 ${A.length} 个全部接了 requireTarg
   + '扫"有没有护栏"是白名单,扫"默认值长什么样"是黑名单——变量改个名黑名单就瞎)',
   noGuard.length === 0, `${noGuard.length} 个没接:${noGuard.map((w) => w.file).join(' | ')}`)
 
+/* ══ ①d 🔴 03q:改按**解析点**判,不按文件判 ══
+   店主咬出:「它按文件记『接没接护栏』,同一脚本两个目标解析点、一个有护栏就算过。」
+   —— 而这**正是这次事故的通道**:`seed-bigdemo` 的 HTTP 那条腿(SEED_BASE_URL)接了 requireTarget,
+   直连 sqlite 那条腿(DB_PATH)却硬编码着本机库。①c 只问"这个文件里有没有 requireTarget 三个字",
+   于是它绿着,而 5 行演示数据写进了本机库,回执还写着「本机库未动」。
+
+   解析点的机制定义(先写类定义,再给机械证据):
+   **一个脚本每决定一次"写到哪儿去",就是一个解析点。** 两类:
+   · 类 A「硬编码目标」—— `http://127.0.0.1:端口` 或 `.sqlite` / local-data / sandbox-data 路径字面量。
+     它自带答案,**永远不算被守住**(打错了照样不报错,正是病根)。
+   · 类 B「取值目标」—— 读 env/argv/取参函数拿目标。**必须在同一条语句里流进 requireTarget**
+     (同行或紧邻 2 行内),否则等于取了值没人验。 */
+const RP_HARD = /(['"`])https?:\/\/(?:127\.0\.0\.1|localhost)(?::\d+)?[^'"`]*\1|(['"`])[^'"`]*(?:local-data|sandbox-data)\/[^'"`]*\2|(['"`])[^'"`]*\.sqlite\3/g
+const RP_READ = new RegExp(`process\\.env\\.${TARGETISH}|process\\.argv\\[[^\\]]+\\]|\\b(?:val|arg|opt|getArg)\\s*\\(\\s*['"\`](?:db|database|data-dir|sqlite|base|url)['"\`]\\s*\\)`, 'g')
+
+const points = []
+for (const w of A) {
+  if (NOT_A_DB[w.file]) continue
+  const raw = readFileSync(join(ROOT, w.file), 'utf8')
+  const src = raw.replace(/\/\*[\s\S]*?\*\//g, (m) => m.replace(/[^\n]/g, ' '))   // 注释置空但保住行号
+    .replace(/^\s*(\/\/|#).*$/gm, '')
+  const lines = src.split('\n')
+  /* 守护窗口:requireTarget 所在行 ±2 行 —— 「取了值紧接着送去验」的形状 */
+  const guardWin = new Set()
+  lines.forEach((l, i) => { if (l.includes('requireTarget')) for (let d = -2; d <= 2; d += 1) guardWin.add(i + d) })
+  lines.forEach((l, i) => {
+    /* 🔴 首跑现测:17 个"没守住"里 15 个命中在 `hint:` 的**提示文案**上 ——
+       requireTarget 拒绝执行时打给人看的那句「(沙箱 …/ 本机库 …)」。
+       那是**说明**不是目标,和「刀数到自己的案底注释」同族(判据不许被自己的解释误报)。
+       但这一条只放行 hint 文案本身,不放行同文件其它硬编码 —— 否则又退回按文件判。 */
+    if (/\bhint\s*:/.test(l)) return
+    /* 两条**精确**豁免(各写理由,不许按目录放行):
+       · `{ readOnly: true }` / `mode=ro` 同行 —— 只读诊断,它压根不是"写到哪儿去"的解析点;
+         写库自报律管的是**写**,`railway ssh` 里跑只读查询同样算诊断而不算写生产。
+       · 从**已被守住的变量**派生出来的名字(`SANDBOX.replace('.sqlite', …)` 取快照名)——
+         那是一个派生,不是第二次决定目标;守住源变量就守住了它。 */
+    const readOnly = /readOnly\s*:\s*true|mode=ro/.test(l)
+    const derived = /\b[A-Z_]{3,}\s*\.replace\s*\(/.test(l)
+    for (const m of l.matchAll(RP_HARD)) {
+      points.push({ file: w.file, line: i + 1, kind: readOnly ? '只读诊断' : derived ? '派生名' : '硬编码目标',
+        txt: m[0].slice(0, 46), guarded: readOnly || derived })
+    }
+    for (const m of l.matchAll(RP_READ)) points.push({ file: w.file, line: i + 1, kind: '取值目标', txt: m[0].slice(0, 46), guarded: guardWin.has(i) })
+  })
+}
+/* 硬编码目标的白名单:确有理由的逐条写(目前只有一条 —— 沙箱起停脚本本身就是"把 4310 定义出来"的那处) */
+const HARD_OK = {
+  'apps/api/start-sandbox.sh': '沙箱启动脚本:它**就是**「4310 是什么」的定义处,不是"选择写哪个库"的解析点',
+}
+const unguarded = points.filter((p) => !p.guarded && !HARD_OK[p.file])
+check(`①d 🔴 按解析点判(不按文件):A 类脚本共 ${points.length} 个目标解析点,`
+  + `每一个都得自己被守住 —— 同一脚本两条腿、一条接了护栏另一条硬编码,按文件判会绿,`
+  + '而那正是 03q 那次「本机库又被写了」的通道',
+  unguarded.length === 0,
+  `${unguarded.length} 个没守住:${unguarded.slice(0, 10).map((p) => `${p.file}:${p.line}[${p.kind}]${p.txt}`).join(' | ')}`)
+
+/* ①e 自守:造两个已知阳性 —— 「一条腿有护栏另一条硬编码」必须被咬出来 */
+const CANARY_RP = [
+  "const BASE = requireTarget({ envName: 'X', value: process.env.X_BASE_URL })",   // 守住的
+  "const DB_PATH = '/Users/x/apps/api/local-data/lucky-luxe.sqlite'",              // 没守住的(事故原形)
+]
+const cw = new Set(); CANARY_RP.forEach((l, i) => { if (l.includes('requireTarget')) for (let d = -2; d <= 2; d += 1) cw.add(i + d) })
+const cp = []
+CANARY_RP.forEach((l, i) => {
+  for (const m of l.matchAll(RP_HARD)) cp.push({ kind: '硬编码目标', guarded: false, txt: m[0] })
+  for (const m of l.matchAll(RP_READ)) cp.push({ kind: '取值目标', guarded: cw.has(i), txt: m[0] })
+})
+const bad2 = cp.filter((p) => !p.guarded)
+check('①e 🔴 零命中先证刀能咬:造「一条腿接了护栏 + 另一条腿硬编码本机库」的原形,'
+  + '必须**只咬出硬编码那一条**(全咬中=见谁都红,一条不咬=按文件判的老毛病)',
+  cp.length === 2 && bad2.length === 1 && bad2[0].kind === '硬编码目标', JSON.stringify(cp))
+
 check(`①b 默认目标白名单棘轮 ≤ ${ALLOW_CAP}(现为空:一个都不该有;要加必须写理由并报批)`,
   Object.keys(ALLOW_DEFAULT).length <= ALLOW_CAP, String(Object.keys(ALLOW_DEFAULT).length))
 
