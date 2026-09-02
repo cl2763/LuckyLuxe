@@ -2,7 +2,12 @@
  * ①无顶部段选;②左栏=平台大类(字典驱动,空类不显示);③项目卡带二级眉标+「¥xxx 起」;
  * ④分类里 0「加项服务」;⑤大类实点切换×3;截图两店留证(四之十)。 */
 import { connect, shot, sleep } from './lib.mjs';
-const BASE = 'http://127.0.0.1:4128';
+import { requireTarget } from '../db-target.mjs'
+/* 🔴 D124(店主 03o):目标 URL 原来**焊死在代码里**(连 env 都没有)——
+   那连"打错"的机会都不给,它永远打 4128。护栏必须**控制目标本身**,
+   不是在旁边插一个没人读的变量(我上一版就是那么糊的,已回滚)。 */
+const BASE = requireTarget({ envName: 'API_BASE', value: process.env.API_BASE,
+  hint: '(沙箱 http://127.0.0.1:4310 / 本机库 http://127.0.0.1:4128;端口会骗人,以库路径为准)' });
 const A = (c, m) => { if (!c) throw new Error(m); };
 const mp = await connect();
 

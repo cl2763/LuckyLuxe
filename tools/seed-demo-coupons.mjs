@@ -9,8 +9,13 @@
      node tools/seed-demo-coupons.mjs
    平台主钥匙从 apps/api/.env 的 OWNER_DEMO_TOKEN 读,不落盘、不打印。 */
 import { readFileSync } from 'node:fs'
+import { requireTarget, reportTarget, resolveDbPath } from './db-target.mjs'
 
-const BASE = process.env.SEED_BASE_URL || 'http://127.0.0.1:4128'
+/* 🔴 03b/03e 裁定二:**造景/写库脚本不许有默认目标库**。
+   原来这里是 `process.env.SEED_BASE_URL || 'http://127.0.0.1:4128'` —— 打错了不报错,02x 就是这么把 148 行
+   演示数据写进本机库的。现在:不显式指定就拒绝跑。 */
+const BASE = requireTarget({ envName: 'SEED_BASE_URL', value: process.env.SEED_BASE_URL,
+  hint: '(沙箱 http://127.0.0.1:4310 / 本机库 http://127.0.0.1:4128 —— 端口会骗人,跑起来看它自报的库路径)' })
 const envLine = readFileSync(new URL('../apps/api/.env', import.meta.url), 'utf8')
   .split('\n').find((l) => l.startsWith('OWNER_DEMO_TOKEN='))
 if (!envLine) throw new Error('apps/api/.env 里没有 OWNER_DEMO_TOKEN')

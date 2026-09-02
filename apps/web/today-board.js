@@ -169,6 +169,7 @@ window.TodayBoard = (function () {
         <span class="tb-duty-lab">值日</span>
         ${dv.cols.map((c) => `<button type="button" class="tb-duty-chip ${dv.duty.techIds.includes(c.id) ? 'on' : ''} ${dv.duty.canEdit ? '' : 'ro'}" data-duty-tech="${c.id}" ${dv.duty.canEdit ? '' : 'disabled'}>${escapeHtml(c.name)}</button>`).join('')}
         ${dv.duty.note ? `<span class="subtle">${escapeHtml(dv.duty.note)}</span>` : ''}
+        ${dv.duty.backToToday ? `<button type="button" class="tb-duty-back" data-tb-today>${escapeHtml(dv.duty.backToToday.label)}</button>` : ''}
       </div>` : ''}
       <div class="tb-legend">淡色=未到 · <i class="tb-sdot active">●</i>进行中 · <i class="tb-sdot done">✓</i>完成 · ${(stateT.dv && stateT.dv.backfill) ? '点空档=补录(事后补记)' : '点空档=直接排单'}</div>
       ` : '<div class="empty-state">本日无在岗技师</div>'}`}

@@ -123,7 +123,7 @@ async function main() {
   } finally {
     // 清理:冲销耗卡产生的收入;把测试卡余额调整归零(adjust 分录)
     for (const id of consumeTxnIds) {
-      await request(`/admin/finance/transactions/${id}/reverse`, { method: 'POST' }).catch(() => {})
+      await request(`/admin/finance/transactions/${id}/reverse`, { method: 'POST', body: JSON.stringify({ reason: 'CI 夹具:冲销口径回归' }) }).catch(() => {})
     }
   }
 }

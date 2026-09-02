@@ -1,6 +1,11 @@
 /* 沙盒「切换演示身份」入口实点走查(弹层实点律):me 页工具条 tap → 名册页 → tap 行 → 回 me 页断言身份已切。×5 */
 import { connect, sleep } from './lib.mjs';
-const BASE = 'http://127.0.0.1:4128';
+import { requireTarget } from '../db-target.mjs'
+/* 🔴 D124(店主 03o):目标 URL 原来**焊死在代码里**(连 env 都没有)——
+   那连"打错"的机会都不给,它永远打 4128。护栏必须**控制目标本身**,
+   不是在旁边插一个没人读的变量(我上一版就是那么糊的,已回滚)。 */
+const BASE = requireTarget({ envName: 'API_BASE', value: process.env.API_BASE,
+  hint: '(沙箱 http://127.0.0.1:4310 / 本机库 http://127.0.0.1:4128;端口会骗人,以库路径为准)' });
 const A = (c, m) => { if (!c) throw new Error(m); };
 const mp = await connect();
 const go = async (r, ms = 3000) => { await mp.reLaunch(r); await sleep(ms); return mp.currentPage(); };

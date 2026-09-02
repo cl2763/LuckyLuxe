@@ -7,6 +7,7 @@
    ⚠️ standalone:CI_SUITES="today-board" bash apps/api/run-all-tests.sh */
 import { assertTestTarget } from './test-guard.mjs'
 import { readFileSync } from 'node:fs'
+import { DUTY_NOTE } from './schedule-board.mjs'
 
 const BASE_URL = process.env.TEST_BASE_URL || 'http://127.0.0.1:4128'
 await assertTestTarget(BASE_URL)
@@ -158,7 +159,10 @@ check('⑤ 营业时段字段在(网格范围口径的输入)', 'openTime' in da
   check('🔴 值日合同一:开关默认关 → schedule-day 响应零 duty 块(台面零渲染)', off.data.duty === undefined, JSON.stringify(off.data.duty))
   check('值日开关仅老板可开', (await request('/admin/duty-setting', { method: 'PUT', body: JSON.stringify({ enabled: true }) }, PLATFORM, H)).status === 200)
   const on1 = (await request(`/admin/schedule-day?date=${today2}`, {}, PLATFORM, H)).data.duty
-  check('值日合同六空态:开了没勾人 → note=「今天还没安排值日」', on1 && on1.enabled === true && on1.note === '今天还没安排值日', JSON.stringify(on1))
+  /* 🔴 02y 裁定二:原来把文案字面量抄进了判据 —— 文案一改要么误红、要么被顺手改成新文案(引信重设)。
+     文案本身是被测对象,所以判据要碰它;**正解是引用唯一出处,不复制**。 */
+  check(`值日合同六空态:开了没勾人 → note=「${DUTY_NOTE.emptyToday}」(引用后端常量,不抄字面量)`,
+    on1 && on1.enabled === true && on1.note === DUTY_NOTE.emptyToday, JSON.stringify(on1))
   const mark = await request('/admin/duty/mark', { method: 'POST', body: JSON.stringify({ date: today2, technicianId: t1.id, on: true }) }, PLATFORM, H)
   check('🔴 值日合同三:勾选即存 + 读回(techIds 含所勾)', mark.status === 200 && mark.data.techIds.includes(t1.id), JSON.stringify(mark.data))
   const again = (await request(`/admin/schedule-day?date=${today2}`, {}, PLATFORM, H)).data.duty

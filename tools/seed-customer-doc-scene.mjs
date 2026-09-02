@@ -23,9 +23,14 @@ import { readFileSync } from 'node:fs'
 import { DatabaseSync } from 'node:sqlite'
 import { fileURLToPath } from 'node:url'
 import { dirname, join } from 'node:path'
+import { requireTarget, reportTarget, resolveDbPath } from './db-target.mjs'
 
 const ROOT = join(dirname(fileURLToPath(import.meta.url)), '..')
-const BASE = process.env.SEED_BASE_URL || 'http://127.0.0.1:4128'
+/* 🔴 03b/03e 裁定二:**造景/写库脚本不许有默认目标库**。
+   原来这里是 `process.env.SEED_BASE_URL || 'http://127.0.0.1:4128'` —— 打错了不报错,02x 就是这么把 148 行
+   演示数据写进本机库的。现在:不显式指定就拒绝跑。 */
+const BASE = requireTarget({ envName: 'SEED_BASE_URL', value: process.env.SEED_BASE_URL,
+  hint: '(沙箱 http://127.0.0.1:4310 / 本机库 http://127.0.0.1:4128 —— 端口会骗人,跑起来看它自报的库路径)' })
 if (!/127\.0\.0\.1|localhost/.test(BASE)) throw new Error('这个脚本只给本机沙盘用,不要指向生产。')
 const DB_PATH = join(ROOT, 'apps/api/local-data/lucky-luxe.sqlite')
 const TOKEN = readFileSync(join(ROOT, 'apps/api/.env'), 'utf8').split('\n')

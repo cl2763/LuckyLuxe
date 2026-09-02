@@ -68,9 +68,9 @@ async function main() {
       JSON.stringify({ before, after }))
 
     // 2. 红字冲销
-    const reversed = await request(`/admin/finance/transactions/${income.data.transaction.id}/reverse`, { method: 'POST' })
+    const reversed = await request(`/admin/finance/transactions/${income.data.transaction.id}/reverse`, { method: 'POST', body: JSON.stringify({ reason: 'CI 夹具:冲销口径回归' }) })
     check('manual reversal created with opposite amount', reversed.status === 201 && reversed.data.transaction?.amountCents === -20000)
-    const doubleReverse = await request(`/admin/finance/transactions/${income.data.transaction.id}/reverse`, { method: 'POST' })
+    const doubleReverse = await request(`/admin/finance/transactions/${income.data.transaction.id}/reverse`, { method: 'POST', body: JSON.stringify({ reason: 'CI 夹具:冲销口径回归' }) })
     check('double reversal rejected', doubleReverse.status === 400, String(doubleReverse.status))
 
     // 3. 订单完成自动入账 → 幂等 → 取消冲销归零
@@ -137,7 +137,7 @@ async function main() {
       const isTestManual = txn.tags === `test-${RUN_ID}` && !txn.reversalOf
       const isTestRecurring = txn.recurringRuleId === ruleId && !txn.reversalOf
       if ((isTestManual || isTestRecurring) && !list.some((other) => other.reversalOf === txn.id)) {
-        await request(`/admin/finance/transactions/${txn.id}/reverse`, { method: 'POST' }).catch(() => {})
+        await request(`/admin/finance/transactions/${txn.id}/reverse`, { method: 'POST', body: JSON.stringify({ reason: 'CI 夹具:冲销口径回归' }) }).catch(() => {})
       }
     }
     if (ruleId) await request(`/admin/finance/recurring/${ruleId}`, { method: 'PATCH', body: JSON.stringify({ active: false }) }).catch(() => {})

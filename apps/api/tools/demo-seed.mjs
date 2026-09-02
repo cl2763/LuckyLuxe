@@ -26,6 +26,7 @@ import { existsSync } from 'node:fs'
 import { dirname, join, resolve } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { createHash, randomUUID } from 'node:crypto'
+import { requireTarget, reportTarget } from '../../../tools/db-target.mjs'
 
 const __dirname = dirname(fileURLToPath(import.meta.url))
 const args = process.argv.slice(2)
@@ -35,7 +36,11 @@ const val = (name, dflt = '') => {
   return hit ? hit.slice(name.length + 3) : dflt
 }
 
-const DB_PATH = val('db') || join(__dirname, '..', 'local-data', 'lucky-luxe.sqlite')
+/* 🔴 D124(店主 03g §二.1):这里原来 `--db` 不给就默认**本机库文件** —— 病根原型,比 HTTP 版还直接。
+   默认值的第三种形态:不是 `process.env.X ||`,是 `val('db') ||` —— 我的探测正则连栽三次,
+   记一笔:**默认目标至少有三种形态(env|| / argv|| / 取参函数||),扫的时候三种都要认**。 */
+const DB_PATH = requireTarget({ envName: '--db=<库文件绝对路径>', value: val('db'),
+  hint: '(沙箱 apps/api/sandbox-data/lucky-luxe.sqlite / 本机库 apps/api/local-data/lucky-luxe.sqlite)' })
 if (!existsSync(DB_PATH)) {
   console.error(`[demo-seed] 找不到数据库:${DB_PATH}`)
   process.exit(1)

@@ -19,7 +19,8 @@ export function createRefundRoutes({ apiError, json, readBody, refundApi, staffS
       const r = svReversal.reverseRechargeTxn({
         txnId: decodeURIComponent(svRevMatch[1]),
         tenantId: ctx.tenantId,
-        operator: adminSession.email || adminSession.username || 'owner'
+        operator: adminSession.email || adminSession.username || 'owner',
+        reason: (await readBody(req)).reason   // D122:事由必填,后端硬拦
       })
       json(res, 201, r)
       return true

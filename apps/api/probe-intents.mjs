@@ -1,5 +1,10 @@
+import { requireTarget, reportTarget, resolveDbPath } from '../../tools/db-target.mjs'
 // 探针:各种常见新客首条消息,看AI实际走了哪条路(不是回归测试,仅诊断用)
-const BASE_URL = process.env.TEST_BASE_URL || 'http://127.0.0.1:4128'
+/* 🔴 03b/03e 裁定二:**造景/写库脚本不许有默认目标库**。
+   原来这里是 `process.env.TEST_BASE_URL || 'http://127.0.0.1:4128'` —— 打错了不报错,02x 就是这么把 148 行
+   演示数据写进本机库的。现在:不显式指定就拒绝跑。 */
+const BASE_URL = requireTarget({ envName: 'TEST_BASE_URL', value: process.env.TEST_BASE_URL,
+  hint: '(沙箱 http://127.0.0.1:4310 / 本机库 http://127.0.0.1:4128 —— 端口会骗人,跑起来看它自报的库路径)' })
 const TOKEN = process.env.TEST_ADMIN_TOKEN || 'owner-demo-token'
 
 const probes = [

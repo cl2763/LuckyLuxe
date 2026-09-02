@@ -1,4 +1,7 @@
-const base = process.env.API_BASE || 'http://127.0.0.1:4000'
+import { requireTarget } from '../../tools/db-target.mjs'
+/* 🔴 D124:压测脚本会真写库,目标必须显式给(默认 4000 就是本机服务) */
+const base = requireTarget({ envName: 'API_BASE', value: process.env.API_BASE,
+  hint: '(沙箱 http://127.0.0.1:4310;压测会真建单,别打本机库)' })
 
 async function post(path, body) {
   const response = await fetch(base + path, {

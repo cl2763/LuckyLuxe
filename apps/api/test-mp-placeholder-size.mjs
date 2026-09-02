@@ -78,11 +78,18 @@ if (!realCards.length) {
 }
 const proof = []
 const measure = async (img) => {
-  await pg.setData({ heroSlides: [], recommendedLash: [], recommendedNail: [{ ...realCards[0], image: img }] })
+  /* 🔴 03p:本批给首页加了「兜底·我们的服务」块(D103② 少于 2 张不出分区时顶上),
+     它也用 .recommend-card / img-placeholder —— 不清空就会量到兜底卡(现测命中 4 张)。
+     量数带界定:把兜底也清掉,全页只留被测那一张。 */
+  /* 🔴 03p 第二次改造态:本批立了「少于 2 张整个分区不出现」(D103②),
+     所以只留 1 张卡时**人气区整块消失** —— 造态自证当场咬到了(卡片没渲染出来)。
+     刀的造态必须跟着产品规则走:造 **2 张**(被测那张 + 一张陪衬),量的仍是第一张。 */
+  await pg.setData({ heroSlides: [], recommendedLash: [], fallbackServices: [],
+    recommendedNail: [{ ...realCards[0], image: img }, { ...realCards[0], _id: 'probe-pad', name: '陪衬卡', image: img }] })
   await new Promise((r) => setTimeout(r, 1800))
   const d = await pg.data()
   const cards = d.recommendedNail || []
-  if (cards.length !== 1 || (cards[0].image || '') !== img) throw new Error(`造态自证失败:卡数=${cards.length} image=${cards[0] && cards[0].image}`)
+  if (cards.length !== 2 || (cards[0].image || '') !== img) throw new Error(`造态自证失败:卡数=${cards.length} image=${cards[0] && cards[0].image}`)
   /* 造态自证第二问(02o 教训):字段对了还不够,**渲染出来了没有** —— 卡片节点必须真在 */
   const rendered = await heightsOf(pg, '.recommend-card')
   if (!rendered.length) throw new Error('造态自证失败:字段对了但卡片没渲染出来(.recommend-card 命中 0)')
@@ -95,8 +102,8 @@ const noImg = await measure('')
 /* 🔴 02p 裁定一(J 族复发 + 判据自述须与行为一致第二案):上一版这条 check 的条件写死 `true` ——
    名字说"两态都只留一张卡且 image 确实换了",那两件事上面确实算了,**但没喂给断言**,恒真兜底。
    我刚立的名实一致自守抓不到它,因为它名字里没有绝对词 → 自守补第二支(条件是字面量 true 一律红)。 */
-check('抽检①② 造态自证:两态各只留一张卡、image 字段确实换了、卡片确实渲染出来了',
-  proof.length === 2 && proof.every((x) => x.cards === 1 && x.imageMatched && x.rendered >= 1),
+check('抽检①② 造态自证:两态各造 2 张卡(被测+陪衬;1 张时分区整块不出现)、image 字段确实换了、卡片确实渲染出来了',
+  proof.length === 2 && proof.every((x) => x.cards === 2 && x.imageMatched && x.rendered >= 1),
   JSON.stringify(proof))
 /* 🔴 未闭合项(02n 如实记):造态自证过了(setData + 读回字段都对),但 $$ 元素查询在**套件上下文里**
    返回空,而同一份量法在 02m 的手工脚本里能拿到 72/97/169 —— 两者矛盾,原因未明。
@@ -122,8 +129,10 @@ if (!withImg.host.length && !noImg.host.length) {
    这刀照样全绿,而那正是 D120 本身的病。店主 02m 的原文是"相等**且等于 97**",我只落了一半。
    锚:170rpx 折算 px(随屏宽算,不写死 97),容差 2px。 */
 const EXPECT_H = Number((170 * (await mp.evaluate(() => wx.getSystemInfoSync().windowWidth / 750))).toFixed(1))
-check(`🔴 D120 两态宿主高相等**且锚定 170rpx(${EXPECT_H}px)**(抽检位:${SPOTS[1]});命中数各 1,不存在写"不存在"`,
-  withImg.host.length === 1 && noImg.host.length === 1 && withImg.host[0] === noImg.host[0]
+/* 界定:造 2 张后宿主命中数是 2(被测卡 + 陪衬卡),量的是**第一张**;
+   两张同图同态所以高度应一致 —— 顺带成了同态内的一致性对照。 */
+check(`🔴 D120 两态宿主高相等**且锚定 170rpx(${EXPECT_H}px)**(抽检位:${SPOTS[1]});命中数各 2(被测+陪衬),不存在写"不存在"`,
+  withImg.host.length === 2 && noImg.host.length === 2 && withImg.host[0] === noImg.host[0]
   && Math.abs(withImg.host[0] - EXPECT_H) <= 2,
   `有图 宿主[${withImg.host.join(',') || '不存在'}]/ph-img[${withImg.img.join(',') || '不存在'}]/ph-box[${withImg.box.join(',') || '不存在'}] · 占位 宿主[${noImg.host.join(',') || '不存在'}]/ph-img[${noImg.img.join(',') || '不存在'}]/ph-box[${noImg.box.join(',') || '不存在'}]`)
 check('D120 互斥自证:有图态 .ph-box 不存在、占位态 .ph-img 不存在(证明量的是同一个位而非别处节点)',

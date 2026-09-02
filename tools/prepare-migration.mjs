@@ -4,8 +4,13 @@
 // 删除: 测试会话(wechat_conversations)/AI会话状态/报价单/预约草稿/提醒任务 —— 真实微信尚未接入,这些 100% 是测试数据
 import { DatabaseSync } from 'node:sqlite'
 import { copyFileSync, statSync } from 'node:fs'
+import { requireTarget } from './db-target.mjs'
 
-const [src, out] = process.argv.slice(2)
+/* 🔴 D124:源库与输出库都必须显式给(这个脚本会建一个新库并搬数据) */
+const [src, out] = [
+  requireTarget({ envName: '第 1 个参数 <源 sqlite 绝对路径>', value: process.argv[2] }),
+  requireTarget({ envName: '第 2 个参数 <输出 sqlite 绝对路径>', value: process.argv[3] }),
+]
 if (!src || !out) { console.error('用法: node tools/prepare-migration.mjs <源sqlite> <输出sqlite>'); process.exit(1) }
 
 copyFileSync(src, out)

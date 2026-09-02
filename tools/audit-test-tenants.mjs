@@ -8,7 +8,10 @@
    店主的两家真店(lucky-luxe / jics-nail)与演示样板店(demo-ai / demo-basic)一律标"保留"。 */
 import { DatabaseSync } from 'node:sqlite'
 import { PROTECTED_REAL_TENANTS } from '../apps/api/demo-reset.mjs'   // 真店那一份唯一出口(店主 08-25 复核令①:不许本地再抄)
-const path = process.argv[2] || 'apps/api/local-data/lucky-luxe.sqlite'
+import { requireTarget } from './db-target.mjs'
+/* 🔴 D124:argv 形态的默认目标 —— 不给就默认**本机库文件**,与 demo-seed 同病 */
+const path = requireTarget({ envName: '第一个命令行参数 <库文件路径>', value: process.argv[2],
+  hint: '(沙箱 apps/api/sandbox-data/lucky-luxe.sqlite / 本机库 apps/api/local-data/lucky-luxe.sqlite)' })
 const db = new DatabaseSync(path, { readOnly: true })
 
 const KEEP = new Set([...PROTECTED_REAL_TENANTS, 'demo-ai', 'demo-basic'])   // 真店来自唯一出口,本文件只补演示样板店

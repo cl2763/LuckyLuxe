@@ -4,9 +4,13 @@
  * D14(顾客分项页无筛选)/D16(entitlements GET)。
  * 跑法:占用声明改「占用中」→ cli auto 9420 → OWNER_TOKEN 会话注入 → node 本文件;跑完改回。 */
 import { connect, shot as rawShot, sleep } from './lib.mjs';
+import { requireCred } from './require-cred.mjs'
+import { requireTarget } from '../db-target.mjs'
 async function shot(mp, n) { for (let k = 0; k < 3; k += 1) { try { return await rawShot(mp, n); } catch (e) { await sleep(1200); } } }
-const BASE = process.env.API_BASE || 'http://127.0.0.1:4128';
-const OWNER = process.env.OWNER_SESS || 'sess_msnk2ktp_tha9l7_3d1gp3gu';
+/* 🔴 D124(店主 03g §二.3):与 seed-bigdemo 同病 —— 默认 4128 就是本机库。 */
+const BASE = requireTarget({ envName: 'API_BASE', value: process.env.API_BASE,
+  hint: '(沙箱 http://127.0.0.1:4310 / 本机库 http://127.0.0.1:4128;端口会骗人,以脚本自报的库路径为准)' });
+const OWNER = requireCred({ envName: 'OWNER_SESS', value: process.env.OWNER_SESS, what: '店主会话令牌' })
 const TENANT = process.env.TENANT || 'jics-nail';
 /* v1.1(核查二):双租户参数化 —— TENANT=lucky-luxe OWNER_SESS=owner-demo-token 跑旗舰店;
    fixture 全部发现式(服务/技师/顾客/休息日/签单日动态发现),不再硬编码 jics id。
@@ -161,7 +165,11 @@ await run('D16', 'AI 智能包状态 GET(丁 D16)', async () => {
 });
 
 /* ===== 员工端 ===== */
-const STAFF_CRED = TENANT === 'jics-nail' ? { email: 'staff', password: 'Jie2026staff' } : null; // 授权凭据仅 jics 沙盒店(脚本红线:不动真实账号)
+/* 🔴 D123 同族(店主 03g 裁定四):这是**小婕店那个真员工账号的真密码**(库里 jics-nail/staff/active),
+   不是明示演示值 —— 与那枚会话令牌同族,同法处理:不给就拒绝跑,不许写死。 */
+const STAFF_CRED = TENANT === 'jics-nail'
+  ? { email: 'staff', password: requireCred({ envName: 'JICS_STAFF_PASSWORD', value: process.env.JICS_STAFF_PASSWORD, what: '小婕店员工密码' }) }
+  : null; // 授权凭据仅 jics 沙盒店(脚本红线:不动真实账号)
 const staffLogin = STAFF_CRED ? await api('POST', '/admin/auth/login', STAFF_CRED, null) : { data: {} };
 const STAFF = staffLogin.data && staffLogin.data.auth && staffLogin.data.auth.accessToken;
 const skipStaff = !STAFF;

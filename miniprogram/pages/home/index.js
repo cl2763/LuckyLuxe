@@ -15,6 +15,7 @@ Page({
     technicianWorks: '',
     recommendedNail: [],
     recommendedLash: [],
+    fallbackServices: [],
     shopName: '',
     todayHoursText: '',
     openNow: false,
@@ -131,6 +132,14 @@ Page({
       recommendedNail: i18n.localizeServices(nailServices.filter((item) => item.isRecommended), lang),
       recommendedLash: i18n.localizeServices(lashServices.filter((item) => item.isRecommended), lang)
     }))
+    /* 🔴 兜底(店主 02z):两个「人气」分区都够不到 2 张时,首页会只剩一张店卡 + 一个点进去空空如也的
+       作品入口 —— **新店第一天开张必然经过这一天,第一个撞上的很可能是小婕的店**。
+       这不是「少于 2 张不出现」的 bug,是它落地后必然出现的新态,得有东西接住。
+       接法(我判):**列服务目录前几项,标题中性「我们的服务」** —— 不承诺"人气",但顾客真能点进去下单。
+       ⚠️ 第三种情况必须分开:**一个服务都没有时不给入口卡** ——
+       那正是店主点破的「点进去空空如也」,入口卡等于把空推给下一页。那时如实说一句。 */
+    const allSvc = i18n.localizeServices([...nailServices, ...lashServices], lang)
+    this.setData({ fallbackServices: allSvc.slice(0, 4) })
   },
 
   switchLanguage(event) {

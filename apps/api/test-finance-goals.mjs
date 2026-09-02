@@ -68,7 +68,7 @@ async function main() {
     if (draft.settled) {
       const priorTxns = (await request('/admin/finance/transactions')).data.transactions || []
       for (const txn of priorTxns.filter((item) => item.tags === draft.marker && !item.reversalOf && !priorTxns.some((other) => other.reversalOf === item.id))) {
-        await request(`/admin/finance/transactions/${txn.id}/reverse`, { method: 'POST' })
+        await request(`/admin/finance/transactions/${txn.id}/reverse`, { method: 'POST', body: JSON.stringify({ reason: 'CI 夹具:冲销口径回归' }) })
       }
       payroll = await request('/admin/finance/payroll')
       draft = (payroll.data.drafts || []).find((item) => item.technicianId === 'tech-mia')
@@ -103,7 +103,7 @@ async function main() {
     console.log(`[finance-goals] all ${checks} checks passed`)
   } finally {
     for (const id of cleanupPayrollIds) {
-      await request(`/admin/finance/transactions/${id}/reverse`, { method: 'POST' }).catch(() => {})
+      await request(`/admin/finance/transactions/${id}/reverse`, { method: 'POST', body: JSON.stringify({ reason: 'CI 夹具:冲销口径回归' }) }).catch(() => {})
     }
     await request('/admin/finance/compensation', { method: 'PUT', body: JSON.stringify({ technicianId: 'tech-mia', baseSalary: 0, commissionRate: 0, active: false }) }).catch(() => {})
     await request('/admin/tenant/entitlements', { method: 'PUT', body: JSON.stringify({ feature: 'staff_schedule', remove: true }) }).catch(() => {})

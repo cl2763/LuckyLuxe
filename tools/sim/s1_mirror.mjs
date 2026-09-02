@@ -6,11 +6,18 @@
  * ④ 顾客端服务 Tab:列表价格全部「¥xxx 起」、零加项/次卡;截图留证。
  * 前置:4128 已还回 + devtools 自动化端口 9420 + handoff/自动化占用中.txt 占用中。 */
 import { connect, shot, sleep } from './lib.mjs';
-const BASE = 'http://127.0.0.1:4128';
+/* 🔴 D123 同族(03j 复扫咬出):这里原来写死**小婕店老板账号的真密码**,与那枚会话令牌同族。 */
+import { requireCred } from './require-cred.mjs'
+import { requireTarget } from '../db-target.mjs'
+/* 🔴 D124(店主 03o):目标 URL 原来**焊死在代码里**(连 env 都没有)——
+   那连"打错"的机会都不给,它永远打 4128。护栏必须**控制目标本身**,
+   不是在旁边插一个没人读的变量(我上一版就是那么糊的,已回滚)。 */
+const BASE = requireTarget({ envName: 'API_BASE', value: process.env.API_BASE,
+  hint: '(沙箱 http://127.0.0.1:4310 / 本机库 http://127.0.0.1:4128;端口会骗人,以库路径为准)' });
 const TENANT = 'jics-nail';
 const A = (c, m) => { if (!c) throw new Error(m); };
 
-const login = await fetch(BASE + '/admin/auth/login', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ email: 'boss-jienail', password: '123456', remember: true }) }).then((r) => r.json());
+const login = await fetch(BASE + '/admin/auth/login', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ email: 'boss-jienail', password: requireCred({ envName: 'JICS_OWNER_PASSWORD', value: process.env.JICS_OWNER_PASSWORD, what: '小婕店老板密码' }), remember: true }) }).then((r) => r.json());
 const TOK = login.auth && login.auth.accessToken;
 A(TOK, '老板登录失败');
 const api = async (m, p, b) => {

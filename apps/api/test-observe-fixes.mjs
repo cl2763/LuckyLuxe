@@ -121,8 +121,21 @@ async function main() {
       Boolean(sdPast.backfill && sdPast.backfill.label === '+ 补录' && sdPast.backfill.hint && sdPast.backfill.note),
       JSON.stringify(sdPast.backfill || null).slice(0, 140))
     // 形一:未日结 → 单落原日、无「服务发生于」句
-    const openDay = sdPast.backfill && !sdPast.backfill.closed ? past : null
-    if (openDay && !sdPast.hoursUnset && !sdPast.isClosed) {
+    /* 🔴 03p(店主 01w《断言增量律》抓到的):这两条断言原来包在
+       `if (openDay && !hoursUnset && !isClosed)` 里 —— **9 天前撞上门店休息日就整块静默跳过,
+       套件照样绿**。基线刀报「observe-fixes 56 → 54」才把它照出来。
+       静默失败器族:判据里的静默跳过和产品里的一样致命。
+       改法:往前找**第一个营业的过去日**;一个都找不到才红(不是跳过)。 */
+    let openDay = null
+    let sdOpen = sdPast
+    for (let back = 9; back <= 20 && !openDay; back += 1) {
+      const d = new Date(Date.now() - back * 86400000).toISOString().slice(0, 10)
+      const sd = (await request(`/admin/schedule-day?date=${d}`)).data
+      if (sd.backfill && !sd.backfill.closed && !sd.hoursUnset && !sd.isClosed) { openDay = d; sdOpen = sd }
+    }
+    check('合同二前置:过去 9~20 天里找得到一个营业且未日结的日子(找不到=这两条没验成,不是通过)',
+      Boolean(openDay), `openDay=${openDay}`)
+    if (openDay) {
       const b1 = await request('/admin/bookings/direct', { method: 'POST', body: JSON.stringify({ backfill: true, newCustomerName: `补录形一${uniq}`, serviceId: svc.id, technicianId: tech.id, date: openDay, time: '15:20' }) })
       check('🔴 合同二形一 未日结 → 单/钱/业绩全记原日(且不出「服务发生于」句)',
         b1.status === 201 && b1.data.booking.appointmentDate === openDay && !b1.data.booking.backfillNote,

@@ -4,11 +4,17 @@
  * 01纯新客 02储值 03有券 04定金 05双技师 06兑换 07售后 08更正 */
 import { DatabaseSync } from 'node:sqlite';
 import { createHmac } from 'node:crypto';
-const BASE = 'http://127.0.0.1:4128';
+import { requireCred } from './require-cred.mjs'
+import { requireTarget } from '../db-target.mjs'
+/* 🔴 D124(店主 03o):目标 URL 原来**焊死在代码里**(连 env 都没有)——
+   那连"打错"的机会都不给,它永远打 4128。护栏必须**控制目标本身**,
+   不是在旁边插一个没人读的变量(我上一版就是那么糊的,已回滚)。 */
+const BASE = requireTarget({ envName: 'API_BASE', value: process.env.API_BASE,
+  hint: '(沙箱 http://127.0.0.1:4310 / 本机库 http://127.0.0.1:4128;端口会骗人,以库路径为准)' });
 const DB = '/Users/changliu/Documents/Codex/2026-04-29/new-chat/apps/api/local-data/lucky-luxe.sqlite';
 const TENANTS = [
   { id: 'lucky-luxe', owner: 'owner-demo-token' },
-  { id: 'jics-nail', owner: 'sess_msnk2ktp_tha9l7_3d1gp3gu' }
+  { id: 'jics-nail', owner: requireCred({ envName: 'OWNER_SESS', value: process.env.OWNER_SESS, what: '店主会话令牌' }) }
 ];
 const A = (c, m) => { if (!c) throw new Error(m); };
 const db = new DatabaseSync(DB);

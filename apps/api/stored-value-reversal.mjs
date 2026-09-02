@@ -1,3 +1,4 @@
+import { requireReason, withReason } from './correction-reason.mjs'
 /* 储值行冲销(店主 2026-08-30d 裁定2 准开口,合同五条照办)。
 
    合同对照:
@@ -12,7 +13,9 @@
    ④ 入口:客户档案→账户调整→冲销 tab(储值行与账本行同列一表);两端同批。
    ⑤ 判据:冲销后 四参考数/余额/抽屉/流水标记 全联动断言;变异刀=抽屉不联动→必红。 */
 export function createStoredValueReversal({ db, apiError, insertStoredValueTransaction }) {
-  function reverseRechargeTxn({ txnId, tenantId, operator }) {
+  function reverseRechargeTxn({ txnId, tenantId, operator, reason }) {
+    /* 🔴 D122(店主 03c):纠错口一律事由必填(与账本冲销、金额更正同口径) */
+    const why = requireReason({ reason }, apiError)
     const txn = db.prepare('SELECT * FROM stored_value_transactions WHERE id = ? AND tenant_id = ?').get(txnId, tenantId)
     if (!txn) throw apiError(404, 'NOT_FOUND', '没有这笔储值流水。')
     if (txn.type === 'bonus') throw apiError(400, 'BAD_REQUEST', '赠送随它那笔充值一起冲 —— 请对充值行点冲销。')

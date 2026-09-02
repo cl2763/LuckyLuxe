@@ -1,3 +1,4 @@
+import { requireTarget, reportTarget, resolveDbPath } from './db-target.mjs'
 /* 平台侧清除某商家的财务密码(「忘记密码找平台」的标准路径)。
    设计成在**生产容器内**跑:平台钥匙从容器的环境变量读,不经过本机、不落盘、不打印。
 
@@ -18,7 +19,10 @@ if (!TOKEN) {
   console.error('容器里没有 OWNER_TOKEN,拒绝继续(不要把钥匙写进命令行)')
   process.exit(1)
 }
-const BASE = process.env.OPS_BASE_URL || `http://127.0.0.1:${process.env.PORT || 3000}`
+/* 🔴 03b/03e 裁定二:去默认目标库。这个脚本的用法注释里明写「可指生产」——
+   有默认值 + 能指生产 = 打错一次就是生产事故。不显式指定一律拒绝跑。 */
+const BASE = String(requireTarget({ envName: 'OPS_BASE_URL', value: process.env.OPS_BASE_URL,
+  hint: '(沙箱 http://127.0.0.1:4310 / 本机库 http://127.0.0.1:4128;端口会骗人,以脚本自报的库路径为准)' })).replace(/\/$/, '')
 
 async function call(path, options = {}, extraHeaders = {}) {
   const res = await fetch(`${BASE}${path}`, {

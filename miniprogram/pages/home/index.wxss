@@ -308,8 +308,8 @@
   justify-content: center;
   background: #f3ebe4;
   color: #c6a27e;
-  font-size: 22rpx;
-  font-weight: 700;
+  font-size: 26rpx;   /* D110:换成字符图标后略放大,与 .shop-row-icon 视觉一致 */
+  font-weight: 400;
 }
 
 .portfolio-button {
@@ -485,3 +485,14 @@
   padding: 40rpx 24rpx 20rpx; color: #fff; font-size: 26rpx;
   background: linear-gradient(to top, rgba(0,0,0,.55), rgba(0,0,0,0));
 }
+
+/* 兜底空态:一个服务都没有时如实说一句(不给空入口卡)*/
+.fallback-empty {
+  padding: 32rpx 0;
+  color: #8a8580;
+  font-size: 26rpx;
+}
+
+/* D108:值没有时那一行只说明、不可点 —— 视觉上也要弱下去 */
+.shop-card-row.muted { color: #a8a29c; }
+.shop-card-row.muted .shop-row-text { color: #a8a29c; }

@@ -11,6 +11,7 @@
 import { DatabaseSync } from 'node:sqlite'
 import { fileURLToPath } from 'node:url'
 import { dirname, join } from 'node:path'
+import { requireTarget } from './db-target.mjs'
 
 const argv = process.argv.slice(2)
 const tenantId = argv[0]
@@ -18,7 +19,10 @@ const newName = argv[1]
 const dbFlag = argv.indexOf('--db')
 const storeFlag = argv.indexOf('--store-name')
 const here = dirname(fileURLToPath(import.meta.url))
-const dbPath = dbFlag > -1 ? argv[dbFlag + 1] : join(here, '..', 'apps/api/local-data/lucky-luxe.sqlite')
+/* 🔴 D124:三元默认(--db 不给就落本机库);变量名是小写 dbPath —— 我的正则只认大写,又漏一次 */
+const dbPath = requireTarget({ envName: '--db <sqlite 绝对路径>',
+  value: dbFlag > -1 ? argv[dbFlag + 1] : '',
+  hint: '(沙箱 apps/api/sandbox-data/lucky-luxe.sqlite / 本机库 apps/api/local-data/lucky-luxe.sqlite)' })
 const storeName = storeFlag > -1 ? argv[storeFlag + 1] : newName
 
 if (!tenantId || !newName) {

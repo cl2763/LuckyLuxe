@@ -2,7 +2,12 @@
  * 每店全部演示2档案逐户按人登录(mini-login asUserId 正门)→ me 页+积分页断言 ≡ 后端真相
  * (指定样板户与 06兑换户另按对照卡常量双重断);矩阵结果表打印进回归报告。 */
 import { connect, sleep } from './lib.mjs';
-const BASE = 'http://127.0.0.1:4128';
+import { requireTarget } from '../db-target.mjs'
+/* 🔴 D124(店主 03o):目标 URL 原来**焊死在代码里**(连 env 都没有)——
+   那连"打错"的机会都不给,它永远打 4128。护栏必须**控制目标本身**,
+   不是在旁边插一个没人读的变量(我上一版就是那么糊的,已回滚)。 */
+const BASE = requireTarget({ envName: 'API_BASE', value: process.env.API_BASE,
+  hint: '(沙箱 http://127.0.0.1:4310 / 本机库 http://127.0.0.1:4128;端口会骗人,以库路径为准)' });
 const A = (c, m) => { if (!c) throw new Error(m); };
 const LEVELS = {
   'jics-nail::演示2-jics-美甲券户': '顾客',   // 只消费过,从未充值 —— D41 两态之「顾客」

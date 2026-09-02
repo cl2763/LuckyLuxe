@@ -1,11 +1,15 @@
 #!/usr/bin/env node
+import { requireTarget, reportTarget, resolveDbPath } from './db-target.mjs'
 // Jie'Nail 店铺配置(P1.2 第四节)。幂等,可重复执行。
 //   BASE_URL=https://www.luckyluxeatelier.com OWNER_TOKEN=<生产主钥匙> node tools/configure-jienail.mjs
 //
 // 定金规则文案取自已确认的 UI 设计图(屏3),emoji 原样入库。
 // 需要临时覆盖时设 JIENAIL_DEPOSIT_TEXT 环境变量。
 
-const BASE_URL = (process.env.BASE_URL || 'http://127.0.0.1:4128').replace(/\/$/, '')
+/* 🔴 03b/03e 裁定二:去默认目标库。这个脚本的用法注释里明写「可指生产」——
+   有默认值 + 能指生产 = 打错一次就是生产事故。不显式指定一律拒绝跑。 */
+const BASE_URL = String(requireTarget({ envName: 'BASE_URL', value: process.env.BASE_URL,
+  hint: '(沙箱 http://127.0.0.1:4310 / 本机库 http://127.0.0.1:4128;端口会骗人,以脚本自报的库路径为准)' })).replace(/\/$/, '')
 const OWNER_TOKEN = process.env.OWNER_TOKEN || 'owner-demo-token'
 const TENANT_ID = process.env.SEED_TENANT_ID || 'jics-nail'
 

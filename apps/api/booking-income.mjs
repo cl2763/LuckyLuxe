@@ -1,3 +1,4 @@
+import { withReason } from './correction-reason.mjs'
 /* 订单入账触点(从 local-server.mjs 原样搬出,行为一字未改 —— 公约②「边改边拆」)。
 
    这一域现在只有两个触点:订单完成 → 确认收入;订单取消/过期 → 红字冲销。
@@ -21,7 +22,7 @@ export function createBookingIncome({ db, getService, insertFinanceTransaction, 
 
   // 已入账订单被取消 → 自动红字冲销(这里按 source='booking' 找原始行是**对的**:
   // 冲销的就是那笔按钮入账;止血那条判据第一版全文搜就误伤过这个函数)
-  function reverseBookingIncome(bookingId, createdBy = 'system') {
+  function reverseBookingIncome(bookingId, createdBy = 'system', reason = '') {
     const original = db.prepare(`
       SELECT t.* FROM finance_transactions t
       WHERE t.booking_id = ? AND t.source = 'booking'
@@ -37,7 +38,9 @@ export function createBookingIncome({ db, getService, insertFinanceTransaction, 
       amountCents: -original.amount_cents,
       payChannel: original.pay_channel,
       occurredOn: localParts(new Date()).date,
-      note: `冲销：${original.note || original.id}`,
+      /* 🔴 D122:这是**系统自动**冲销(订单取消/过期触发),没有人可问事由 ——
+         但"纠错要说明白为什么"照样成立:由系统把触发原因写进 note,与人工口同一个拼法。 */
+      note: withReason(`冲销：${original.note || original.id}`, reason || '订单取消或过期,系统自动冲销'),
       bookingId,
       reversalOf: original.id,
       createdBy

@@ -21,11 +21,22 @@ import { readFileSync } from 'node:fs'
 import { DatabaseSync } from 'node:sqlite'
 import { dirname, join } from 'node:path'
 import { fileURLToPath } from 'node:url'
+import { requireTarget, reportTarget, resolveDbPath } from './db-target.mjs'
 
 const ROOT = join(dirname(fileURLToPath(import.meta.url)), '..')
-const BASE = process.env.SEED_BASE_URL || 'http://127.0.0.1:4128'
+/* 🔴 03b/03e 裁定二:**造景/写库脚本不许有默认目标库**。
+   原来这里是 `process.env.SEED_BASE_URL || 'http://127.0.0.1:4128'` —— 打错了不报错,02x 就是这么把 148 行
+   演示数据写进本机库的。现在:不显式指定就拒绝跑。 */
+const BASE = requireTarget({ envName: 'SEED_BASE_URL', value: process.env.SEED_BASE_URL,
+  hint: '(沙箱 http://127.0.0.1:4310 / 本机库 http://127.0.0.1:4128 —— 端口会骗人,跑起来看它自报的库路径)' })
 if (!/127\.0\.0\.1|localhost/.test(BASE)) throw new Error('这个脚本只给本机沙盘用,不要指向生产。')
-const DB_PATH = join(ROOT, 'apps/api/local-data/lucky-luxe.sqlite')
+/* 🔴 02x 事故的**另一半根因**(03o 现测查明):这个脚本有**两个目标** ——
+   HTTP 走 SEED_BASE_URL(我改过,已必填),而直连写库的 DB_PATH **焊死在本机库**。
+   所以「HTTP 打沙箱、直连写本机库」会同时发生;而且幂等守卫读的是 DB_PATH 那个库,
+   数出本机库的 7 条就说「已有 7 个,跳过」,沙箱其实只有 5 条 —— **数错了库,跳过了该铺的景**。
+   改:DB_PATH 也必填,并且**与 SEED_BASE_URL 指的必须是同一个库**(下面一行现验)。 */
+const DB_PATH = requireTarget({ envName: 'SEED_DB_PATH', value: process.env.SEED_DB_PATH,
+  hint: '(必须与 SEED_BASE_URL 指的是同一个库:沙箱 apps/api/sandbox-data/lucky-luxe.sqlite)' })
 const TOKEN = readFileSync(join(ROOT, 'apps/api/.env'), 'utf8').split('\n')
   .find((l) => l.startsWith('OWNER_DEMO_TOKEN=')).slice('OWNER_DEMO_TOKEN='.length).trim().replace(/^["']|["']$/g, '')
 
@@ -74,7 +85,14 @@ const CONVOS = [
   { status: 'open', intent: 'price', msg: '猫眼渐变加延长,报个价我看看', quote: 'QUOTED' },
   { status: 'human', intent: 'aftersales', msg: '前天做的甲片翘边了,能来补吗?', quote: null },
   { status: 'open', intent: 'booking', msg: '这周六下午还有位置吗?', quote: null },
-  { status: 'closed', intent: 'hours', msg: '你们几点关门?', quote: null }
+  { status: 'closed', intent: 'hours', msg: '你们几点关门?', quote: null },
+  /* 🔴 D106 七态铺满(店主 02x):上面五条盖了 none / 已报价 / 待报价 / 转人工 / 已关闭,
+     还差两态 —— 造景律:走查单上要看到的态,夹具里得真有路走到。 */
+  { status: 'open', intent: 'price', msg: '单色加两颗钻,报个价?', quote: 'QUOTED', unbound: true },  // 报价 + **未绑档案**(profile:null)
+  { status: 'open', intent: 'price', msg: '延长加猫眼,上次问过一次', quote: 'QUOTED', twice: true },  // **多次报价取最新**
+  /* 🔴 第七态「仅历史参考」:报价落在**上一个会话段**里 —— transcript 要有个 >6h 的静默豁口,
+     豁口之后的新消息开了新会话,老报价就退成"历史参考"(quote-state 的 sessionKeyOf 判的就是这个)。 */
+  { status: 'open', intent: 'price', msg: '上次那个价还作数吗?', quote: 'QUOTED', historyOnly: true }
 ]
 
 const report = []
@@ -455,11 +473,26 @@ for (const store of STORES) {
         const cid = `bigdemo:${tenantId}:${i}`
         const at = `${shift(today, -(i + 1))}T0${i + 1}:10:00.000Z`
         const cust = demoCustomers[i] || demoCustomers[0]
-        cs.run(cid, `demo-ext-${i}`, c.status === 'human' ? 'human_active' : c.status, c.intent, c.msg,
-          JSON.stringify([{ role: 'customer', text: c.msg, at }]), at, at, tenantId)
+        /* unbound 态:用一个**没有身份绑定**的外部号,这样 resolveUserByIdentity 取不到人 → profile:null */
+        const ext = c.unbound ? `demo-ext-unbound-${i}` : `demo-ext-${i}`
+        /* historyOnly:transcript 造两段 —— 老消息(报价那时)与今天的新消息之间隔 >6h,
+           于是当前会话段里没有报价,老报价退成「历史参考」。 */
+        const oldAt = `${shift(today, -(i + 5))}T01:00:00.000Z`
+        const tr = c.historyOnly
+          ? [{ role: 'customer', text: '上次问过价', at: oldAt }, { role: 'customer', text: c.msg, at }]
+          : [{ role: 'customer', text: c.msg, at }]
+        cs.run(cid, ext, c.status === 'human' ? 'human_active' : c.status, c.intent, c.msg,
+          JSON.stringify(tr), at, at, tenantId)
         if (c.quote) {
-          qs.run(`bigdemo-q-${tenantId}-${i}`, cid, cust.id, c.quote, c.msg, at, at, tenantId,
-            c.quote === 'QUOTED' ? 68800 : null, c.quote === 'QUOTED' ? 'owner' : null, c.quote === 'QUOTED' ? at : null)
+          /* historyOnly 的报价钉在**老那一段**的时刻,当前段才会看不到它 */
+          const qAt = c.historyOnly ? oldAt : at
+          qs.run(`bigdemo-q-${tenantId}-${i}`, cid, c.unbound ? null : cust.id, c.quote, c.msg, qAt, qAt, tenantId,
+            c.quote === 'QUOTED' ? 68800 : null, c.quote === 'QUOTED' ? 'owner' : null, c.quote === 'QUOTED' ? qAt : null)
+          /* twice 态:同一会话**两条已报价**,时间与价钱都不同 —— 判据要验"取的是最新那条" */
+          if (c.twice) {
+            const earlier = `${shift(today, -(i + 3))}T02:10:00.000Z`
+            qs.run(`bigdemo-q-${tenantId}-${i}-old`, cid, cust.id, 'QUOTED', `${c.msg}(上一次)`, earlier, earlier, tenantId, 39800, 'owner', earlier)
+          }
         }
       })
     })

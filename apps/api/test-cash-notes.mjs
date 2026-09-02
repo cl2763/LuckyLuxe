@@ -106,7 +106,7 @@ check('⑤ 被拒的七次一分钱都没写进去(应有数与拒之前相同)'
 
 /* ===== ⑥ 只追加不修改:冲销 = 追加一条反向行 ===== */
 const noteId = add1.data.note.id
-const rev = await request(`/admin/cash-notes/${noteId}/reverse`, { method: 'POST', body: JSON.stringify({}) }, PLATFORM, H)
+const rev = await request(`/admin/cash-notes/${noteId}/reverse`, { method: 'POST', body: JSON.stringify({ reason: 'CI 夹具:冲销口径回归', }) }, PLATFORM, H)
 check('⑥ 冲销成功,且冲销行金额与原条相反', rev.status === 201 && rev.data.note.amountCents === 5000 && rev.data.note.isReversal === true,
   JSON.stringify(rev.data).slice(0, 160))
 const afterRev = await drawerOf()
@@ -115,8 +115,8 @@ check('⑥ 冲销之后:应有数回到"没记过那 50"的状态(基线 + 200)'
 const list = (await request(`/admin/cash-notes?date=${today}`, {}, PLATFORM, H)).data.items
 check('⑥ 原始那条**还在**(只追加不删除:3 条记录 = 2 笔 + 1 冲销)',
   list.length === 3 && list.some((x) => x.id === noteId), JSON.stringify(list.map((x) => [x.kind, x.amountCents])))
-check('⑥ 同一条不许冲两次', (await request(`/admin/cash-notes/${noteId}/reverse`, { method: 'POST', body: JSON.stringify({}) }, PLATFORM, H)).status === 409)
-check('⑥ 冲销行本身不许再冲', (await request(`/admin/cash-notes/${rev.data.note.id}/reverse`, { method: 'POST', body: JSON.stringify({}) }, PLATFORM, H)).status === 409)
+check('⑥ 同一条不许冲两次', (await request(`/admin/cash-notes/${noteId}/reverse`, { method: 'POST', body: JSON.stringify({ reason: 'CI 夹具:冲销口径回归', }) }, PLATFORM, H)).status === 409)
+check('⑥ 冲销行本身不许再冲', (await request(`/admin/cash-notes/${rev.data.note.id}/reverse`, { method: 'POST', body: JSON.stringify({ reason: 'CI 夹具:冲销口径回归', }) }, PLATFORM, H)).status === 409)
 
 /* ===== ⑦ 门禁:读写两道闸分别验 ===== */
 check('⑦ 未登录 GET → 401', (await request(`/admin/cash-notes?date=${today}`, {}, null, H)).status === 401)

@@ -1,4 +1,5 @@
 #!/usr/bin/env node
+import { requireTarget, reportTarget, resolveDbPath } from '../../tools/db-target.mjs'
 // Lucky Luxe — 真实 Qwen 冒烟测试(十几条对话验措辞)
 //
 // 为什么单独一个脚本:回归套件(test-*.mjs)跑在 mock 模式,锁的是"行为/结构";
@@ -19,7 +20,10 @@
 //     说明真实通道没生效(key 缺失/网络不通/AI_REQUIRE_REAL 未开)——冒烟不算过。
 //   - 每条对话下方的自动检查是"软提示"(LLM 措辞会变),最终仍需人眼扫一遍中文回复。
 
-const BASE_URL = (process.env.SMOKE_BASE_URL || 'http://127.0.0.1:4000').replace(/\/$/, '')
+/* 🔴 03b/03e 裁定二:去默认目标库。这个脚本的用法注释里明写「可指生产」——
+   有默认值 + 能指生产 = 打错一次就是生产事故。不显式指定一律拒绝跑。 */
+const BASE_URL = String(requireTarget({ envName: 'SMOKE_BASE_URL', value: process.env.SMOKE_BASE_URL,
+  hint: '(沙箱 http://127.0.0.1:4310 / 本机库 http://127.0.0.1:4128;端口会骗人,以脚本自报的库路径为准)' })).replace(/\/$/, '')
 const ENDPOINT = `${BASE_URL}/ai/customer-service`
 
 const C = { reset: '\x1b[0m', dim: '\x1b[2m', red: '\x1b[31m', green: '\x1b[32m', yellow: '\x1b[33m', cyan: '\x1b[36m', bold: '\x1b[1m' }

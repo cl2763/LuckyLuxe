@@ -164,11 +164,11 @@ if (staffLg?.auth) {
 
   /* 合同①:赠送行/退款行不许直接冲 —— 两口不许混 */
   const bnRow = tx0.find((t) => t.type === 'bonus')
-  const tryBonus = await request(`/admin/stored-value/txns/${bnRow.id}/reverse`, { method: 'POST' }, PLATFORM, H)
+  const tryBonus = await request(`/admin/stored-value/txns/${bnRow.id}/reverse`, { method: 'POST', body: JSON.stringify({ reason: 'CI 夹具:冲销口径回归' }) }, PLATFORM, H)
   check('④ 合同①:对赠送行点冲销 → 400 指回充值行(赠随充一起冲)', tryBonus.status === 400 && /充值行/.test(tryBonus.data?.error?.message || ''))
 
   /* 合同③:一刀双行 + 全联动 */
-  const rev = await request(`/admin/stored-value/txns/${rcRow.id}/reverse`, { method: 'POST' }, PLATFORM, H)
+  const rev = await request(`/admin/stored-value/txns/${rcRow.id}/reverse`, { method: 'POST', body: JSON.stringify({ reason: 'CI 夹具:冲销口径回归' }) }, PLATFORM, H)
   check('🔴 ④ 冲销成功:一刀双行(充值反向 + 赠送反向,同一事务)', rev.status === 201 && rev.data.reversedAmountCents === 50000 && rev.data.reversedBonusCents === 5000, JSON.stringify(rev.data).slice(0, 140))
   const f1 = (await request(`/admin/account-adjust/facts?userId=${u2}`, {}, PLATFORM, H)).data.facts
   check('🔴 ④ 判据⑤ 四参考数联动:实付 0 / 赠送 0 / 余额 0(负债−)', f1.paidCents === 0 && f1.bonusCents === 0 && f1.balanceCents === 0, JSON.stringify({ p: f1.paidCents, b: f1.bonusCents, bal: f1.balanceCents }))
@@ -190,7 +190,7 @@ if (staffLg?.auth) {
     && tx1.some((t) => t.type === 'reversal' && t.amountCents === -50000)
     && tx1.some((t) => t.type === 'reversal' && t.amountCents === -5000),
     JSON.stringify(tx1.map((t) => [t.type, t.amountCents, t.reversed])).slice(0, 180))
-  check('④ 幂等:再冲同一笔 → 400 ALREADY_REVERSED', (await request(`/admin/stored-value/txns/${rcRow.id}/reverse`, { method: 'POST' }, PLATFORM, H)).data?.error?.code === 'ALREADY_REVERSED')
+  check('④ 幂等:再冲同一笔 → 400 ALREADY_REVERSED', (await request(`/admin/stored-value/txns/${rcRow.id}/reverse`, { method: 'POST', body: JSON.stringify({ reason: 'CI 夹具:冲销口径回归' }) }, PLATFORM, H)).data?.error?.code === 'ALREADY_REVERSED')
 
   /* 裁定A(08-30f):前置闸=双水位证明 —— 实付余额≥该笔实付 且 赠送余额≥该笔赠送 */
   const imp3 = (await request(`/platform/tenants/${tid}/import/customers`, { method: 'POST', body: JSON.stringify({ dryRun: false, rows: [{ name: `动过钱客${RUN}`, phone: `135${RUN.slice(-8)}` }] }) })).data
@@ -199,7 +199,7 @@ if (staffLg?.auth) {
   await request('/admin/stored-value/recharge', { method: 'POST', body: JSON.stringify({ userId: u3, amountCents: 30000, payChannel: 'cash' }) }, PLATFORM, H)
   const tx3 = (await request(`/admin/stored-value/txns?month=${today.slice(0, 7)}`, {}, PLATFORM, H)).data.txns.find((t) => t.userId === u3 && t.type === 'recharge')
   await request('/admin/stored-value/refund', { method: 'POST', body: JSON.stringify({ userId: u3, amountCents: 1000, payChannel: 'cash', reason: '动一分钱', requestId: `rv3-${RUN}` }) }, PLATFORM, H)
-  const gate = await request(`/admin/stored-value/txns/${tx3.id}/reverse`, { method: 'POST' }, PLATFORM, H)
+  const gate = await request(`/admin/stored-value/txns/${tx3.id}/reverse`, { method: 'POST', body: JSON.stringify({ reason: 'CI 夹具:验业务闸(不是验事由闸)' }) }, PLATFORM, H)
   check('🔴 ④ 裁定A 水位不足即拒(退 10 后实付水位 290 < 该笔 300)→ 新句「余额已不足以证明…」',
     gate.status === 400 && gate.data?.error?.message === '余额已不足以证明这笔未消费,请走退卡。', JSON.stringify(gate.data).slice(0, 120))
 
@@ -211,7 +211,7 @@ if (staffLg?.auth) {
   const tx4 = (await request(`/admin/stored-value/txns?month=${today.slice(0, 7)}`, {}, PLATFORM, H)).data.txns.find((t) => t.userId === u4 && t.type === 'recharge')
   await request('/admin/stored-value/recharge', { method: 'POST', body: JSON.stringify({ userId: u4, amountCents: 20000, payChannel: 'cash' }) }, PLATFORM, H)
   await request('/admin/stored-value/refund', { method: 'POST', body: JSON.stringify({ userId: u4, amountCents: 3000, payChannel: 'cash', reason: '之后动过钱但水位足', requestId: `rv4-${RUN}` }) }, PLATFORM, H)
-  const relax = await request(`/admin/stored-value/txns/${tx4.id}/reverse`, { method: 'POST' }, PLATFORM, H)
+  const relax = await request(`/admin/stored-value/txns/${tx4.id}/reverse`, { method: 'POST', body: JSON.stringify({ reason: 'CI 夹具:验业务闸(不是验事由闸)' }) }, PLATFORM, H)
   check('🔴 ④ 裁定A 放宽生效:之后动过钱但两侧水位仍足 → 201(旧保守闸会拒的形)',
     relax.status === 201 && relax.data.reversedAmountCents === 10000 && relax.data.reversedBonusCents === 5000, JSON.stringify(relax.data).slice(0, 120))
 
@@ -225,7 +225,7 @@ if (staffLg?.auth) {
   /* 直插一条吃掉赠送水位的退款行(bonus_part=60):总余额仍富余,赠送侧 40 < 该笔赠送 100 */
   db.prepare(`INSERT INTO stored_value_transactions (id, tenant_id, user_id, type, amount_cents, pay_channel, note, created_by, created_at, bonus_part_cents)
     VALUES (?, ?, ?, 'refund', -6000, 'cash', '夹具:吃赠送水位', 'suite', ?, 6000)`).run(`svfix-${RUN}`, tid, u5, new Date().toISOString())
-  const sideGate = await request(`/admin/stored-value/txns/${tx5.id}/reverse`, { method: 'POST' }, PLATFORM, H)
+  const sideGate = await request(`/admin/stored-value/txns/${tx5.id}/reverse`, { method: 'POST', body: JSON.stringify({ reason: 'CI 夹具:验业务闸(不是验事由闸)' }) }, PLATFORM, H)
   check('🔴 ④ 裁定A 侧水位:总余额足(540)但赠送侧 40<100 → 拒(冲了赠送侧就打负)',
     sideGate.status === 400 && /余额已不足以证明/.test(sideGate.data?.error?.message || ''), JSON.stringify(sideGate.data).slice(0, 120))
 

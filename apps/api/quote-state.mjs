@@ -1,8 +1,20 @@
+export { conversationCard, CARD_TEXT } from './conversation-card.mjs'   // D106:顾客卡句子转出口(local-server 已引本模块,不必再加 import 行)
 /* 已报价状态机(店主 31p 开工令;方案=handoff/已报价状态机_实施小方案_2026-08-31l.md,三点核答照录)
    —— 会话=6h 静默切段(每店可配 1~72)/ 有效期 48h(可配 1~336,读时判)/ 四态读推导不另存状态列。
    实现细节一处报明:会话键**由 transcript 读推导**(不给 wechat_conversations 加列)——
    transcript 本身就是真相(append-only),少一份可腐化的状态;报价行钉 session_key(mark 时刻的会话键)。
    改价防线:同会话有效价不同 → 需 confirmOverride,句后端出人话;override 落 quote_price_changes 留痕。 */
+
+/* 🔴 D106:会话列表每行右侧那枚小标 —— **后端出句出色,两端零判断**。
+   色语言与横幅同一套(横幅说什么,小标就是什么颜色):
+   已报价未过期=实色 / 已过期=警色 / 仅历史参考=灰 / none=**无标**(不是灰标,是根本没有)。
+   文案具名导出,判据引用这里(店主 02y:被测对象是文案时引用唯一出处,不复制)。 */
+export const QUOTE_BADGE = {
+  quoted: { text: '已报价', tone: 'solid' },
+  expired: { text: '已过期', tone: 'warn' },
+  reference: { text: '历史报价', tone: 'muted' },
+}
+const badgeOf = (state) => QUOTE_BADGE[state] || null
 
 export function createQuoteState(deps) {
   const { db, iso, apiError, parseJson, randomId, currentTenantId, moneyText } = deps
@@ -64,7 +76,7 @@ export function createQuoteState(deps) {
   /* 四态读推导(方案 §3):A 本次已报价 / B 已报价·已过期 / C 历史报价参考 / D 无 */
   function quoteStateOf(conversationId, tid, now = new Date()) {
     const conv = db.prepare('SELECT * FROM wechat_conversations WHERE id = ? AND tenant_id = ?').get(conversationId, tid)
-    if (!conv) return { state: 'none' }
+    if (!conv) return { state: 'none', listBadge: null }
     const sk = sessionKeyOf(conv, now)
     const quoted = db.prepare(`SELECT * FROM quote_requests WHERE conversation_id = ? AND tenant_id = ?
       AND staff_price_cents IS NOT NULL AND quoted_at IS NOT NULL ORDER BY quoted_at DESC`).all(conversationId, tid)
@@ -77,23 +89,23 @@ export function createQuoteState(deps) {
       const who = techNameOf(latest, tid)
       if (!expired) {
         return {
-          state: 'quoted', sessionKey: sk, quoteRequestId: latest.id, priceCents: latest.staff_price_cents,
+          state: 'quoted', sessionKey: sk, quoteRequestId: latest.id, priceCents: latest.staff_price_cents, listBadge: badgeOf('quoted'),
           banner: `本次会话已报价 ${price} · ${who} · ${hoursAgo(latest.quoted_at, now)} 小时前 · 有效期至 ${latest.expires_at ? cnWhen(latest.expires_at) : '—'}`
         }
       }
       return {
-        state: 'expired', sessionKey: sk, quoteRequestId: latest.id, priceCents: latest.staff_price_cents,
+        state: 'expired', sessionKey: sk, quoteRequestId: latest.id, priceCents: latest.staff_price_cents, listBadge: badgeOf('expired'),
         banner: `本次会话已报价(已过期)${price} · ${who} · ${daysAgo(latest.quoted_at, now)} 天前 — 需重新确认`
       }
     }
     const hist = quoted[0]
     if (hist) {
       return {
-        state: 'reference', sessionKey: sk, quoteRequestId: hist.id, priceCents: hist.staff_price_cents,
+        state: 'reference', sessionKey: sk, quoteRequestId: hist.id, priceCents: hist.staff_price_cents, listBadge: badgeOf('reference'),
         banner: `历史报价参考:上次(${daysAgo(hist.quoted_at, now)} 天前)报过 ${moneyText(hist.staff_price_cents, tid)} · ${techNameOf(hist, tid)} — 本次尚未报价`
       }
     }
-    return { state: 'none', sessionKey: sk }
+    return { state: 'none', sessionKey: sk, listBadge: null }   // none 态**无标**,不是灰标
   }
 
   /* mark-quoted 附加件:算会话键与有效期;改价防线(31p 追加句照录) */

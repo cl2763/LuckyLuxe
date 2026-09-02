@@ -1,8 +1,9 @@
 /* 基线随机对账撤场:该 booking 的存活单全部撤回 → 预约 CANCELLED;券 grant 如未核销则作废接口?
  * 券:随机轮里若被核销进 voided 单会自动退回;残余 active grant 留档(演示户券包多一张,无碍口径)。 */
 const BASE = 'http://127.0.0.1:4128';
-const TOKEN = 'sess_msnk2ktp_tha9l7_3d1gp3gu';
+const TOKEN = requireCred({ envName: 'FX_TOKEN', value: process.env.FX_TOKEN, what: '店主会话令牌' })
 import { readFileSync } from 'node:fs';
+import { requireCred } from './require-cred.mjs'
 const env = Object.fromEntries(readFileSync('/tmp/base-grpfx.env', 'utf8').split('\n').filter(Boolean).map((l) => l.replace('export ', '').split('=')));
 const api = async (m, p, b) => { const r = await fetch(BASE + p, { method: m, headers: { authorization: `Bearer ${TOKEN}`, 'content-type': 'application/json', 'x-tenant-id': 'jics-nail' }, body: b ? JSON.stringify(b) : undefined }); return { status: r.status, data: await r.json().catch(() => ({})) }; };
 (async () => {

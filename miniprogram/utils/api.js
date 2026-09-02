@@ -310,8 +310,14 @@ function toMiniStore(store) {
        后端有列、顾客端拿不到,等于没做(映射层裁字段的老教训:toMiniBooking 同款)。
        空态说真话:name_en 为空的租户,页面按 lang 退回中文店名,不空白也不贴别家的名字。 */
     storeNameEn: store.name_en || store.storeNameEn || '',
-    address: store.address || '门店地址待补充',
-    phone: store.phone || '门店电话待补充',
+    /* 🔴 D108(店主 02x):原来空值被兜成「门店地址待补充」——**那句话让人以为有值**,
+       而旁边「导航·复制」「一键拨打」照样挂着,点了什么也不发生(死口)。
+       店主 02y 新律「不可用即不呈现,呈现即说明」:值没有 → **整块动作不出现**。
+       这里保留原样空串,由页面按空态决定出不出那一行(缺席可见律:该没有的就整块没有)。 */
+    address: store.address || '',
+    phone: store.phone || '',
+    addressText: store.address || '门店地址待补充',   // 只作展示句,不驱动动作
+    phoneText: store.phone || '门店电话待补充',
     businessHours: store.businessHours || store.business_hours || '',
     hours: store.hours || [],
     todayHours: store.todayHours || null,

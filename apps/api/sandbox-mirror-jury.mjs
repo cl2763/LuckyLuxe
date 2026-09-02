@@ -11,9 +11,12 @@ import { DatabaseSync } from 'node:sqlite'
 import { copyFileSync, existsSync } from 'node:fs'
 import { dirname, join } from 'node:path'
 import { fileURLToPath } from 'node:url'
+import { requireTarget } from '../../tools/db-target.mjs'
 
 const HERE = dirname(fileURLToPath(import.meta.url))
-const SANDBOX = join(HERE, 'sandbox-data/lucky-luxe.sqlite')
+/* 🔴 D124:目标库路径原来直接拼死;改为必须显式给(拼出来的那个只作 hint) */
+const SANDBOX = requireTarget({ envName: 'DB_PATH', value: process.env.DB_PATH,
+  hint: '(沙箱 apps/api/sandbox-data/lucky-luxe.sqlite / 本机库 apps/api/local-data/lucky-luxe.sqlite)' })
 const SOURCE = join(HERE, 'local-data/lucky-luxe.sqlite')
 const MIRROR_TENANTS = ['lucky-luxe', 'jics-nail']
 

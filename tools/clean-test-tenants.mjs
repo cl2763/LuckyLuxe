@@ -17,12 +17,26 @@ import { DatabaseSync } from 'node:sqlite'
 import { copyFileSync, mkdirSync, existsSync } from 'node:fs'
 import { join, dirname } from 'node:path'
 import { PROTECTED_REAL_TENANTS } from '../apps/api/demo-reset.mjs'   // 真店黑名单唯一出口,本地零副本
+import { requireTarget } from './db-target.mjs'
 
 const argv = process.argv.slice(2)
 const EXECUTE = argv.includes('--execute')
-const DB_PATH = (() => { const i = argv.indexOf('--db'); return i >= 0 ? argv[i + 1] : 'apps/api/local-data/lucky-luxe.sqlite' })()
-/* 直接跑才执行主流程;被 import 时只导出纯函数(护栏② 的会红测试要 import 它们)。 */
+/* 🔴 D124(店主 03o)· 默认目标的**第五种形态**:IIFE 里的三元默认 ——
+   `--db` 不给就落 apps/api/local-data(本机库)。我的探测器至此连栽五次:
+   env|| / .replace() 包裹 / argv|| / 取参函数|| / IIFE 三元。
+   **这正是"扫默认值长什么样"是黑名单的实证** —— 形态永远数不完;
+   白名单该问的是"这个会写库的脚本有没有护栏"。 */
+/* 🔴 03p 现测:护栏原来在**模块顶层**执行 —— 这个文件既能直接跑、又被 test-demo-seed-guard
+   `await import(...)`,于是 import 那一刻就被拦,整条回归红。
+   **护栏该在"真要写"的时候拦,不是在被 import 时拦**(与「B 类模块由调用方给目标」同一个道理)。
+   跟着脚本自己已有的 RUN_DIRECT 走:直接跑才必填。 */
 const RUN_DIRECT = String(process.argv[1] || '').endsWith('clean-test-tenants.mjs')
+const DB_PATH = RUN_DIRECT
+  ? requireTarget({ envName: '--db <sqlite 绝对路径>',
+      value: (() => { const i = process.argv.indexOf('--db'); return i >= 0 ? process.argv[i + 1] : '' })(),
+      hint: '(沙箱 apps/api/sandbox-data/lucky-luxe.sqlite / 本机库 apps/api/local-data/lucky-luxe.sqlite)' })
+  : ((() => { const i = process.argv.indexOf('--db'); return i >= 0 ? process.argv[i + 1] : '' })() || '')
+/* 直接跑才执行主流程;被 import 时只导出纯函数(护栏② 的会红测试要 import 它们)。 */
 
 /* 🔴 护栏一:清理保留名单。命中即抛错,不是"跳过" ——
    跳过会让人以为清干净了;抛错才逼人看一眼为什么会碰到它。

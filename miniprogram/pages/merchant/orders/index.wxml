@@ -80,6 +80,8 @@
       <text class="dv-duty-lab">值日</text>
       <text wx:for="{{dv.cols}}" wx:for-item="c" wx:key="id" class="dv-duty-chip {{dv.duty.techIds.indexOf(c.id) > -1 ? 'on' : ''}} {{dv.duty.canEdit ? '' : 'ro'}}" data-id="{{c.id}}" bindtap="tapDuty">{{c.name}}</text>
       <text wx:if="{{dv.duty.note}}" class="dv-duty-note">{{dv.duty.note}}</text>
+      <!-- D105(店主 02x):非今天时就地给一枚「回到今天」,复用已有 dvToday,句子与网页同一份(后端出) -->
+      <text wx:if="{{dv.duty.backToToday}}" class="dv-duty-back" bindtap="dvToday">{{dv.duty.backToToday.label}}</text>
     </view>
     <view class="dv-legend top">
         <text class="dv-legend-hd">图例 · 平时不用看</text>

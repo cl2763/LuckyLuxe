@@ -7694,3 +7694,6 @@ section.card > .section-row:first-child { margin-top: 0; }
 /* D107(02c 裁③):老板端订单详情「服务签署单」块 —— 与顾客端同源同形 */
 .sig-block .sig-row { display: flex; justify-content: space-between; gap: 12px; margin: 5px 0; font-size: 13px; }
 .sig-block .sig-row.total { border-top: 1px solid var(--line); padding-top: 7px; font-size: 13.5px; }
+
+/* D105:值日块内就地「回到今天」*/
+.tb-duty-back { margin-left: 8px; border: 0; background: none; color: #8a6a3a; text-decoration: underline; cursor: pointer; font-size: 13px; }

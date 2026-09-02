@@ -1,6 +1,6 @@
 // 构建号:每次交付递增。侧栏可见,排查"改了没生效"时先对版本。
 // 兜底用(服务端会注入 window.LL_BUILD = 资源内容指纹,页面优先显示那个)
-const ADMIN_BUILD = '20260901t-obs01'
+const ADMIN_BUILD = '20260902e-d122'
 let pricingState = { module: 'storefront', tab: 'items', categories: [], items: [], rules: {}, editing: null, preview: null, storefrontPicker: false }
 console.log(`[admin] build ${ADMIN_BUILD}`)
 
@@ -6306,10 +6306,8 @@ els.financePage.addEventListener('click', (event) => {
   }
   const reverseButton = event.target.closest('[data-fin-reverse]')
   if (reverseButton) {
-    request(`/admin/finance/transactions/${encodeURIComponent(reverseButton.dataset.finReverse)}/reverse`, { method: 'POST' })
-      .then(loadFinancePage)
-      .then(() => toast(owner.lang === 'zh' ? '已生成冲销单' : 'Reversal created'))
-      .catch((error) => toast(error.message))
+    // D122:事由必填 —— 整段搬进 correction-reason.js(公约②边改边拆)
+    window.CorrectionReason.reverseFinanceTxn({ id: reverseButton.dataset.finReverse, zh: owner.lang === 'zh', request, toast, reload: loadFinancePage })
     return
   }
   if (event.target.closest('[data-fin-rule-add]')) {

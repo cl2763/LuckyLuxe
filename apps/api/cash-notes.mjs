@@ -1,3 +1,4 @@
+import { requireReason, withReason } from './correction-reason.mjs'
 /* 线下现金腿 · 日结手记(D79,店主 2026-08-28 排进批次二)。
 
    🔴 病:「今晚数钱按这个数」只算**系统内**的现金进出(到店支付 + 现金充值 − 现金退卡)。
@@ -188,7 +189,10 @@ export function createCashNotes({ db, apiError, iso, randomId, currentTenantId, 
 
   /* 记错了怎么办:**不删不改**,追加一条金额相反的冲销行,指回原条。
      判据:冲销之后当日净额必须回到"没记过这一笔"的状态,而两条记录都还在。 */
-  function reverseCashNote(id, { createdBy, note } = {}, tenantId = currentTenantId()) {
+  function reverseCashNote(id, { createdBy, note, reason } = {}, tenantId = currentTenantId()) {
+    /* 🔴 D122(店主 03c):纠错口一律事由必填 —— 与金额更正、账本冲销同口径。
+       判词:「同一件事 —— 纠错要说明白为什么 —— 在两个口子上,一个收了一个没收。」 */
+    const why = requireReason({ reason }, apiError)
     const src = db.prepare('SELECT * FROM cash_notes WHERE id = ? AND tenant_id = ?').get(id, tenantId)
     if (!src) throw apiError(404, 'NOT_FOUND', '这条手记不存在。')
     if (src.reverses_id) throw apiError(409, 'ALREADY_REVERSAL', '这条本身就是冲销行,不能再冲。')
@@ -198,7 +202,7 @@ export function createCashNotes({ db, apiError, iso, randomId, currentTenantId, 
     db.prepare(`INSERT INTO cash_notes (id, tenant_id, store_date, kind, amount_cents, note, created_by, reverses_id, created_at)
       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`)
       .run(rid, tenantId, src.store_date, src.kind, -src.amount_cents,
-        String(note || `冲销:${src.note}`).slice(0, 120), String(createdBy || ''), id, iso(new Date()))
+        withReason(String(note || `冲销:${src.note}`), why).slice(0, 200), String(createdBy || ''), id, iso(new Date()))
     return serialize(db.prepare('SELECT * FROM cash_notes WHERE id = ?').get(rid), tenantId)
   }
 

@@ -3,7 +3,12 @@
  * jics-nail  = 不分级店 → 三减法 ×5
  * 不再临时开关配置 —— 这就是两店的常驻口径。 */
 import { connect, shot, sleep } from './lib.mjs';
-const BASE = 'http://127.0.0.1:4128';
+import { requireTarget } from '../db-target.mjs'
+/* 🔴 D124(店主 03o):目标 URL 原来**焊死在代码里**(连 env 都没有)——
+   那连"打错"的机会都不给,它永远打 4128。护栏必须**控制目标本身**,
+   不是在旁边插一个没人读的变量(我上一版就是那么糊的,已回滚)。 */
+const BASE = requireTarget({ envName: 'API_BASE', value: process.env.API_BASE,
+  hint: '(沙箱 http://127.0.0.1:4310 / 本机库 http://127.0.0.1:4128;端口会骗人,以库路径为准)' });
 const A = (c, m) => { if (!c) throw new Error(m); };
 async function login(tenant) {
   return fetch(BASE + '/auth/wechat/mini-login', { method: 'POST', headers: { 'content-type': 'application/json', 'x-tenant-id': tenant }, body: JSON.stringify({ demoLogin: true, tenantId: tenant }) }).then((r) => r.json());

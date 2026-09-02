@@ -2,7 +2,12 @@
  * 每跳断言 me 页【姓名+累计消费+积分+称谓+余额】≡ 当前店后端真相(演示阵容换代后,
  * 演示身份=「演示2-」优先;测试店无演示2阵容,按其本店选人真相断)。×5 轮。 */
 import { connect, shot, sleep } from './lib.mjs';
-const BASE = 'http://127.0.0.1:4128';
+import { requireTarget } from '../db-target.mjs'
+/* 🔴 D124(店主 03o):目标 URL 原来**焊死在代码里**(连 env 都没有)——
+   那连"打错"的机会都不给,它永远打 4128。护栏必须**控制目标本身**,
+   不是在旁边插一个没人读的变量(我上一版就是那么糊的,已回滚)。 */
+const BASE = requireTarget({ envName: 'API_BASE', value: process.env.API_BASE,
+  hint: '(沙箱 http://127.0.0.1:4310 / 本机库 http://127.0.0.1:4128;端口会骗人,以库路径为准)' });
 const A = (c, m) => { if (!c) throw new Error(m); };
 const HOPS = ['jics-nail', 'hoptest-demo2', 'jics-nail', 'lucky-luxe'];
 /* 对照卡(handoff/演示身份对照卡_2026-08-12.md)—— 断言值写死,店主拿同一张卡对屏幕 */

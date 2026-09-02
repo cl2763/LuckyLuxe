@@ -293,7 +293,9 @@ window.AccountAdjust = (function () {
         const url2 = revBtn.dataset.kind === 'sv'
           ? `/admin/stored-value/txns/${encodeURIComponent(revBtn.dataset.aaReverse)}/reverse`
           : `/admin/finance/transactions/${encodeURIComponent(revBtn.dataset.aaReverse)}/reverse`
-        await request(url2, { method: 'POST' })
+        const aaWhy = window.CorrectionReason.ask(zh, row ? row.note : '')   // D122
+        if (!aaWhy) { stateA.busy = false; mount(); return }
+        await request(url2, { method: 'POST', body: JSON.stringify({ reason: aaWhy }) })
         toast(zh ? '已冲销(红字反向记录已生成)' : 'Reversed')
         stateA.busy = false
         const f2 = await request(`/admin/account-adjust/facts?userId=${encodeURIComponent(stateA.userId)}`).catch(() => null)

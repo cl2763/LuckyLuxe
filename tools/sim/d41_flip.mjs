@@ -2,8 +2,14 @@
  * 老板充值 ¥50 → me 页称谓「会员」×5(充值那一刻翻转)。留库为两态活样本。 */
 import { connect, shot, sleep } from './lib.mjs';
 import { DatabaseSync } from 'node:sqlite';
-const BASE = 'http://127.0.0.1:4128';
-const OWNER = 'sess_msnk2ktp_tha9l7_3d1gp3gu';
+import { requireCred } from './require-cred.mjs'
+import { requireTarget } from '../db-target.mjs'
+/* 🔴 D124(店主 03o):目标 URL 原来**焊死在代码里**(连 env 都没有)——
+   那连"打错"的机会都不给,它永远打 4128。护栏必须**控制目标本身**,
+   不是在旁边插一个没人读的变量(我上一版就是那么糊的,已回滚)。 */
+const BASE = requireTarget({ envName: 'API_BASE', value: process.env.API_BASE,
+  hint: '(沙箱 http://127.0.0.1:4310 / 本机库 http://127.0.0.1:4128;端口会骗人,以库路径为准)' });
+const OWNER = requireCred({ envName: 'OWNER_SESS', value: process.env.OWNER_SESS, what: '店主会话令牌' })
 const A = (c, m) => { if (!c) throw new Error(m); };
 const db = new DatabaseSync('/Users/changliu/Documents/Codex/2026-04-29/new-chat/apps/api/local-data/lucky-luxe.sqlite');
 const api = async (m, p, b, tok) => {

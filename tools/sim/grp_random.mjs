@@ -14,9 +14,10 @@
  * 种子固定可复现:LCG seed=20260812。用法: node grp_random.mjs [起始序号] [组数]
  */
 import { connect, sleep } from './lib.mjs';
+import { requireCred } from './require-cred.mjs'
 
 const BASE = 'http://127.0.0.1:4128';
-const TOKEN = process.env.FX_TOKEN || 'sess_msnk2ktp_tha9l7_3d1gp3gu';
+const TOKEN = requireCred({ envName: 'FX_TOKEN', value: process.env.FX_TOKEN, what: '店主会话令牌' })
 const FX_USER = process.env.FX_USER || 'user_msojbzxv_h59nc8';
 const FX_BOOKING = process.env.FX_BOOKING || 'booking_msoud7nw_pblnec';
 const GRANT = process.env.FX_GRANT || 'grant_msouczag_nun3sw';

@@ -847,11 +847,15 @@ const main = async () => {
       /* 🔴 判据加固(2026-08-28 六):原来写的是「recommend-card 后 200 字符内出现 fromPriceLabel」——
          **距离阈值不是判据**。占位出口一进来,那一行长了几十个字符,它就红了,而口径根本没变。
          改成看**这张卡这一整块**里有没有它:块的边界是 `<button class="recommend-card` 到 `</button>`。 */
+      /* 🔴 03p:人气区已从 customer.js **搬进** apps/web/customer-recommend.js(D103② 边改边拆)——
+         断言原来只在 customer.js 里找那一块,搬完就找不到了。
+         **断言要跟着唯一出口走**:两份都读,块在哪就在哪读到(这也顺带守住"没有第二处实现")。 */
+      const recSrc = cust + '\n' + readFileSync(join(ROOT, 'apps/web/customer-recommend.js'), 'utf8')
       const recCard = (() => {
-        const i = cust.indexOf('class="recommend-card')
+        const i = recSrc.indexOf('class="recommend-card')
         if (i < 0) return ''
-        const j = cust.indexOf('</button>', i)
-        return j < 0 ? '' : cust.slice(i, j)
+        const j = recSrc.indexOf('</button>', i)
+        return j < 0 ? '' : recSrc.slice(i, j)
       })()
       check('㉞ D46 人气区与服务页同口径(fromPriceLabel 在推荐卡这一块里)',
         Boolean(recCard) && recCard.includes('fromPriceLabel'), recCard.slice(0, 120))

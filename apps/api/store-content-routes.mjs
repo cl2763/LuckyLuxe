@@ -72,7 +72,7 @@ export function createStoreContentRoutes({ apiError, json, readBody, heroSlidesA
     }
     if (req.method === 'POST' && noteId && path.endsWith('/reverse')) {
       const body = await readBody(req)
-      json(res, 201, { note: cashNotesApi.reverseCashNote(noteId, { createdBy: adminSession.username || '', note: body.note }) })
+      json(res, 201, { note: cashNotesApi.reverseCashNote(noteId, { createdBy: adminSession.username || '', note: body.note, reason: body.reason }) })
       return true
     }
   }

@@ -143,13 +143,30 @@ for (const tid of allTenants) {
        · 写入日 > 服务日 = 往回写(补录口/将来别处任何写口)—— 这才是钱的漏洞
        · 写入日 = 服务日(当天日结后又来加钟客)**不算** —— 现实合法,由 R1「数字已过期」兜住
      防的是将来别处再开一个绕过 backfillPlanFor 归属判定的写口。 */
-  const wroteIntoClosed = db.prepare(`SELECT COUNT(*) AS n FROM bookings b
-    JOIN daily_closes c ON c.tenant_id = b.tenant_id AND c.date = date(b.appointment_start)
-                       AND c.status = 'confirmed'
-    WHERE b.tenant_id = ? AND b.created_at > c.confirmed_at
-      AND date(b.created_at) > date(b.appointment_start)`).get(tid).n
+  /* 🔴 03p 现测查明的判据自身缺陷:这里原来用 `date(b.appointment_start)` —— 那是 **UTC 日期**,
+     而 `daily_closes.date` 存的是**门店日**。多伦多 08-31 22:30 那单在 UTC 里是 09-01,
+     于是两个含义不同的「09-01」被 JOIN 上了 → 误报「往已日结的过去日写单」。
+     02w 全绿只是当时跑的时刻没落进这个窗口 —— **判据里一直有这个时区裸算**。
+     这正是 CLAUDE.md「所有『今天』按门店时区算,不要裸 new Date() 推日期」在判据层的同一个坑。
+     改法:先取该店时区,把 UTC 时刻换算成门店日再比。 */
+  const tz = db.prepare("SELECT timezone FROM stores WHERE tenant_id = ? AND is_active = 1 ORDER BY rowid ASC LIMIT 1").get(tid)?.timezone
+    || 'America/Toronto'
+  const storeDay = (iso) => new Intl.DateTimeFormat('en-CA', { timeZone: tz, year: 'numeric', month: '2-digit', day: '2-digit' }).format(new Date(iso))
+  const closed = db.prepare("SELECT date, confirmed_at FROM daily_closes WHERE tenant_id = ? AND status = 'confirmed'").all(tid)
+  const closedMap = new Map(closed.map((c) => [c.date, c.confirmed_at]))
+  const bookingRows = db.prepare('SELECT id, appointment_start, created_at, source_channel FROM bookings WHERE tenant_id = ?').all(tid)
+  const offenders = bookingRows.filter((b) => {
+    const svcDay = storeDay(b.appointment_start)
+    const madeDay = storeDay(b.created_at)
+    const confirmedAt = closedMap.get(svcDay)
+    return confirmedAt && b.created_at > confirmedAt && madeDay > svcDay
+  })
+  const wroteIntoClosed = offenders.length
   if (wroteIntoClosed !== 0) {
-    throw new Error(`${label} I11 有单被写进**已日结的过去日**(绕过补录归属判定,历史账被回改):${wroteIntoClosed} 行`)
+    /* 🔴 03p:判据红了却说不出**是哪一行**,人就只能靠猜(临时库跑完就删,事后查不到)。
+       红的时候把命中行原样打出来 —— 判据要能自己指认现场。 */
+    console.error(`  [I11 命中行 · 门店时区 ${tz}] ${JSON.stringify(offenders.map((b) => ({ ...b, 服务日: storeDay(b.appointment_start), 建单日: storeDay(b.created_at) })))}`)
+    throw new Error(`${label} I11 有单被写进**已日结的过去日**(绕过补录归属判定,历史账被回改):${wroteIntoClosed} 行(命中行见上一行)`)
   }
   iterated += 1
 }

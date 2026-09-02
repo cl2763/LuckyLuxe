@@ -1,4 +1,5 @@
 #!/usr/bin/env node
+import { requireTarget, reportTarget, resolveDbPath } from './db-target.mjs'
 // 小婕体验店(jics-nail)配置与知识库隔离复验 —— 开 AI 之后必跑。
 //
 // 用法(本机):
@@ -12,7 +13,10 @@
 //   3. 只读得到小婕自己的价目事实(精品单色 368/268/198)
 //   4. 读不到旗舰店种子层(allowSeedFallback=false,AI 回复里不出现旗舰店资料)
 //   5. 平台通用层(platformPreset)照常可用
-const BASE_URL = (process.env.BASE_URL || 'http://127.0.0.1:4128').replace(/\/$/, '')
+/* 🔴 03b/03e 裁定二:去默认目标库。这个脚本的用法注释里明写「可指生产」——
+   有默认值 + 能指生产 = 打错一次就是生产事故。不显式指定一律拒绝跑。 */
+const BASE_URL = String(requireTarget({ envName: 'BASE_URL', value: process.env.BASE_URL,
+  hint: '(沙箱 http://127.0.0.1:4310 / 本机库 http://127.0.0.1:4128;端口会骗人,以脚本自报的库路径为准)' })).replace(/\/$/, '')
 const OWNER_TOKEN = process.env.OWNER_TOKEN || 'owner-demo-token'
 const TENANT_ID = process.env.SEED_TENANT_ID || 'jics-nail'
 const EXPECT_PLAN = process.env.EXPECT_PLAN || 'studio'

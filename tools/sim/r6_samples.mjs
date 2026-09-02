@@ -6,7 +6,13 @@
 import { DatabaseSync } from 'node:sqlite';
 import { createHmac } from 'node:crypto';
 import { appendFileSync } from 'node:fs';
-const BASE = 'http://127.0.0.1:4128';
+import { requireCred } from './require-cred.mjs'
+import { requireTarget } from '../db-target.mjs'
+/* 🔴 D124(店主 03o):目标 URL 原来**焊死在代码里**(连 env 都没有)——
+   那连"打错"的机会都不给,它永远打 4128。护栏必须**控制目标本身**,
+   不是在旁边插一个没人读的变量(我上一版就是那么糊的,已回滚)。 */
+const BASE = requireTarget({ envName: 'API_BASE', value: process.env.API_BASE,
+  hint: '(沙箱 http://127.0.0.1:4310 / 本机库 http://127.0.0.1:4128;端口会骗人,以库路径为准)' });
 const DB = '/Users/changliu/Documents/Codex/2026-04-29/new-chat/apps/api/local-data/lucky-luxe.sqlite';
 const HOP_TENANT = 'hoptest-demo2';
 const A = (c, m) => { if (!c) throw new Error(m); };
@@ -48,7 +54,7 @@ let hopOwnerToken = '';
 const STORES = [
   { tid: 'lucky-luxe', owner: 'owner-demo-token', name: '演示2-lucky-美睫储值户',
     plan: { items: [['美睫·轻盈浓密(演示样单)', 26800], ['美睫·裸感自然(演示样单)', 19800], ['美睫·山茶花嫁接(演示样单)', 23800]], recharge: 80000, redeemCost: 600, coupon: false } },
-  { tid: 'jics-nail', owner: 'sess_msnk2ktp_tha9l7_3d1gp3gu', name: '演示2-jics-美甲券户',
+  { tid: 'jics-nail', owner: requireCred({ envName: 'OWNER_SESS', value: process.env.OWNER_SESS, what: '店主会话令牌' }), name: '演示2-jics-美甲券户',
     plan: { items: [['美甲·日式渐变(演示样单)', 15800]], recharge: 0, redeemCost: 0, coupon: true } },
   { tid: HOP_TENANT, owner: () => hopOwnerToken, name: '演示2-试店-样板户',
     plan: { items: [['试店演示样单A', 8800], ['试店演示样单B', 6600]], recharge: 0, redeemCost: 0, coupon: false } }

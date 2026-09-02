@@ -39,7 +39,8 @@ import { createPerfAdjust } from './perf-adjust.mjs'                  // 业绩�
 import { createDailyCloseScope } from './daily-close-scope.mjs'       // 日结归属(服务发生日)
 import { createNotifyScheduler } from './notify-scheduler.mjs'        // P3 通知调度器(队列/规则/tick;通道只有站内落地)
 import { createScheduleBoard } from './schedule-board.mjs'            // 排班域(schedule-day/week;08-30h 搬出,纯迁移字节对比过)
-import { createQuoteState } from './quote-state.mjs'                  // 已报价状态机(31p:会话切段/有效期/四态/改价防线)
+import { createQuoteState, conversationCard } from './quote-state.mjs'
+import { reverseFinanceTxn } from './finance-reverse.mjs'                  // 已报价状态机(31p:会话切段/有效期/四态/改价防线)
 import { createFinanceLedger } from './finance-ledger.mjs'            // 财务台账写入口 + 哈希链(唯一写口)
 import { createWriteGates } from './write-gates.mjs'                  // 写口后端最终闸(券面额/套餐售价/项目价)
 import { createAssetFingerprint } from './asset-fingerprint.mjs'      // 前端资源内容指纹(缓存失效)
@@ -1714,7 +1715,7 @@ function getWecomConversation(conversationId) {
   const qsView = quoteState.quoteStateOf(row.id, row.tenant_id || currentTenantId())
   return {
     id: row.id,
-    quoteState: qsView,
+    quoteState: qsView, customerCard: conversationCard(!!linkedUser, qsView.state),   // D106:顾客卡句子唯一出口(原地改行,不加行)
     provider: row.provider,
     externalUserId: row.external_user_id,
     linkedUserId: linkedUser?.id || null,
@@ -14742,28 +14743,10 @@ async function route(req, res) {
     })
   }
   // 手工「记一笔」的写口搬进 ./store-content-routes.mjs(08-29 边改边拆;付款方式闸也在那条链上)
+  /* D122:账本冲销整段搬进 finance-reverse.mjs(公约②边改边拆;事由必填在那里硬拦) */
   const financeReverseMatch = path.match(/^\/admin\/finance\/transactions\/([^/]+)\/reverse$/)
   if (req.method === 'POST' && financeReverseMatch) {
-    if (adminSession.role !== 'owner') throw apiError(403, 'FORBIDDEN', 'Owner permission is required.')
-    const txnId = decodeURIComponent(financeReverseMatch[1])
-    const original = db.prepare('SELECT * FROM finance_transactions WHERE id = ? AND tenant_id = ?').get(txnId, currentTenantId())
-    if (!original) throw apiError(404, 'NOT_FOUND', 'Transaction not found.')
-    const alreadyReversed = db.prepare('SELECT id FROM finance_transactions WHERE reversal_of = ?').get(txnId)
-    if (alreadyReversed) throw apiError(400, 'BAD_REQUEST', 'Transaction already reversed.')
-    const row = insertFinanceTransaction({
-      type: original.type,
-      source: 'reversal',
-      category: original.category,
-      tags: original.tags,
-      amountCents: -original.amount_cents,
-      payChannel: original.pay_channel,
-      occurredOn: localParts(new Date()).date,
-      note: `冲销：${original.note || original.id}`,
-      bookingId: original.booking_id,
-      reversalOf: original.id,
-      createdBy: adminSession.email || 'owner'
-    })
-    return json(res, 201, { transaction: serializeFinanceTransaction(row) })
+    return json(res, 201, await reverseFinanceTxn({ txnId: decodeURIComponent(financeReverseMatch[1]), body: await readBody(req), adminSession, db, tenantId: currentTenantId(), apiError, insertFinanceTransaction, serializeFinanceTransaction, occurredOn: localParts(new Date()).date }))
   }
   if (req.method === 'GET' && path === '/admin/finance/recurring') {
     if (adminSession.role !== 'owner') throw apiError(403, 'FORBIDDEN', 'Owner permission is required.')

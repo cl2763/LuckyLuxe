@@ -3,6 +3,17 @@
    **纯迁移零行为变化**:两段路由体逐字照搬,只把依赖改成注入;搬前后接口响应逐字节对比过
    (证据见 handoff/核验截图_2026-08-30/排班域搬家_字节对比_2026-08-30h.md)。 */
 
+/* 🔴 值日提示语的**唯一出处**(店主 02y 裁定二)。
+   判据不许锚在会变的业务字面量上 —— 但**文案本身就是被测对象**时是唯一例外:
+   **引用其唯一出处,不得复制**。所以这三句在这里具名导出,
+   `test-today-board.mjs` 引用常量而不是再抄一遍;改文案改一处,判据自动跟上。 */
+export const DUTY_NOTE = {
+  emptyToday: '今天还没安排值日',
+  notToday: (date) => `值日只能改今天的(你现在看的是 ${Number(date.slice(5, 7))} 月 ${Number(date.slice(8, 10))} 日)`,
+  notOwner: '你现在的身份不能改值日,要老板来改',
+  backToTodayLabel: '回到今天',
+}
+
 export function createScheduleBoard(deps) {
   const {
     db, json, iso, addMinutes, localParts, localDateTime, currentTenantId, defaultStoreId,
@@ -165,11 +176,29 @@ export function createScheduleBoard(deps) {
       const activeCount = bookings.filter((b) => b.arrivalState === 'active').length
       const pendingCount = bookings.filter((b) => b.arrivalState === 'pending').length
       /* 值日(31l 合同二/四/六):开关关=响应整块不出现(零渲染);开=名单+空态句后端出(两端同句) */
+      /* 🔴 D105(店主 02x):`canEdit=false` 有**两种成因**,原来两种都只出「今天还没安排值日」
+         或干脆不出话 —— 商家点不动而不知道为什么。现在**两句不同的人话,后端唯一持有,两端同句**;
+         非今天那句还带一枚「回到今天」的就地跳(带上今天的日期,前端零计算)。
+         话仍走已有的 `note` 字段位,不另开字段(一件事一处真相)。 */
+      const dutyList = dutyOf(tid, date)
+      const isToday = date === nowParts.date
+      const isOwner = ctx.adminSession?.role === 'owner'
+      /* 🔴 02y 更正:**一态一句,不拼**。原来非今天态拼成
+         「这一天没有安排值日;值日只能改今天的…」—— 第一句在"改不了"的语境下是误导:
+         读的人第一反应是"那我去安排一下",然后才被告知改不了;而且这天能不能安排,
+         在一个改不了的日子里根本不是有用信息。
+         **顺序律:先说为什么点不动;现状陈述只在还能动手时才有用。** */
+      const dutyCanEdit = isOwner && isToday
+      const dutyNote = !isToday ? DUTY_NOTE.notToday(date)
+        : (!isOwner ? DUTY_NOTE.notOwner
+          : (dutyList.length ? '' : DUTY_NOTE.emptyToday))
       const dutyBlock = dutyEnabled(tid) ? {
         enabled: true,
-        techIds: dutyOf(tid, date),
-        canEdit: ctx.adminSession?.role === 'owner' && date === nowParts.date,
-        note: dutyOf(tid, date).length ? '' : '今天还没安排值日'
+        techIds: dutyList,
+        canEdit: dutyCanEdit,
+        note: dutyNote,
+        /* 非今天时给一枚就地跳;今天则整个字段不出现(不该有的东西不要出现,不是给个空的) */
+        ...(isToday ? {} : { backToToday: { label: DUTY_NOTE.backToTodayLabel, date: nowParts.date } })
       } : undefined
       /* 补录小合同(店主 01v 合同一/三):**过去日**才出这块 —— 台面把「+ 直接排单」换成「+ 补录」,
          并把"这单会落哪天"的人话句提前给店主看(判定在后端 backfillPlanFor,前端零判断)。

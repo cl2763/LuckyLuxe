@@ -44,20 +44,30 @@
           <text wx:if="{{hasHours}}" class="shop-status {{openNow ? 'open' : 'closed'}}">● {{openNow ? (lang === 'en' ? 'Open' : '营业中') : (lang === 'en' ? 'Closed' : '休息中')}}</text>
           <text class="shop-card-switch" bindtap="switchShop">{{lang === 'en' ? 'Switch shop ›' : '扫码/切换门店 ›'}}</text>
         </view>
-        <view class="shop-card-row" bindtap="copyAddress">
+        <!-- 🔴 D108:有地址才出「导航·复制」;没有就只留一句如实说明,**不挂 bindtap**
+             (不可用即不呈现,呈现即说明 —— 摆着又不响是第三种,永远错) -->
+        <view class="shop-card-row" wx:if="{{store.address}}" bindtap="copyAddress">
           <text class="shop-row-icon">◉</text>
           <text class="shop-row-text">{{store.address}}</text>
           <text class="shop-row-act">{{lang === 'en' ? 'Map · Copy' : '导航 · 复制'}}</text>
+        </view>
+        <view class="shop-card-row muted" wx:else>
+          <text class="shop-row-icon">◉</text>
+          <text class="shop-row-text">{{store.addressText}}</text>
         </view>
         <view class="shop-card-row" bindtap="goStore">
           <text class="shop-row-icon">◷</text>
           <text class="shop-row-text">{{todayHoursText}}</text>
           <text class="shop-row-act">{{lang === 'en' ? 'All hours ›' : '全部时间 ›'}}</text>
         </view>
-        <view class="shop-card-row" bindtap="callStore">
+        <view class="shop-card-row" wx:if="{{store.phone}}" bindtap="callStore">
           <text class="shop-row-icon">✆</text>
           <text class="shop-row-text">{{store.phone}}</text>
           <text class="shop-row-act">{{lang === 'en' ? 'Call' : '一键拨打'}}</text>
+        </view>
+        <view class="shop-card-row muted" wx:else>
+          <text class="shop-row-icon">✆</text>
+          <text class="shop-row-text">{{store.phoneText}}</text>
         </view>
       </view>
     </view>
@@ -65,7 +75,10 @@
     <view class="quick-section home-section-container">
       <!-- 美甲/美睫快捷按钮已删(2026-07-20 店主定:多商户下服务不一,预约走下方推荐或服务页) -->
       <button class="portfolio-button card" bindtap="goPortfolio">
-        <text class="quick-icon">P</text>
+        <!-- 🔴 D110 归因一句(店主 02x 令:先归因再改):那个「P」是**硬编码的字母**
+             (Portfolio 首字母),不是头像、不是数据、也不随语言变 —— 中文界面里它什么都不表示,
+             看着却像一个"没加载出来的头像"。换成与本页其余图标同款的字符图标(◉ ◷ ✆ 那一套)。 -->
+        <text class="quick-icon">❖</text>
         <view class="portfolio-copy">
           <text>{{technicianWorks}}</text>
           <text>{{portfolioIntro}}</text>
@@ -79,7 +92,11 @@
 
   <!-- 失败态下这两块也要收起来:否则页面上只剩两个「人气美甲/人气美睫」空标题
        悬在失败提示下面 —— 正是《闭环回归纪律》说的"单独蹦出来找不到上下文"的状态 -->
-  <view wx:if="{{!loadFailed}}" class="section home-section-container">
+  <!-- 🔴 D103②(店主 02y 裁定三):少于 2 张时**整个分区不出现**。
+       1 张卡占半幅、右半空着,店主会觉得坏了;占满整行又比 2 卡态大一倍,两个分区一大一小更怪。
+       而「人气美甲」这个标题本身承诺"有得挑",只有一个项目时这个承诺是假的。
+       归族「不该有=整块不出现」+ 店主 02y 新律「不可用即不呈现」。完整目录在「服务」页,不丢东西。 -->
+  <view wx:if="{{!loadFailed && recommendedNail.length >= 2}}" class="section home-section-container">
     <view class="section-head">
       <view class="section-title">{{t.popularNail}}</view>
       <view class="section-note">Popular nail</view>
@@ -98,7 +115,7 @@
     </view>
   </view>
 
-  <view wx:if="{{!loadFailed}}" class="section home-section-container">
+  <view wx:if="{{!loadFailed && recommendedLash.length >= 2}}" class="section home-section-container">
     <view class="section-head">
       <view class="section-title">{{t.popularLash}}</view>
       <view class="section-note">Popular lash</view>
@@ -106,6 +123,32 @@
     <view class="recommend-grid">
       <block wx:for="{{recommendedLash}}" wx:key="_id">
         <view class="recommend-card card" bindtap="goDetail" data-id="{{item._id}}">
+          <img-placeholder class="recommend-visual" src="{{item.image}}" img-class="recommend-visual"></img-placeholder>
+          <view class="recommend-name">{{item.name}}</view>
+          <view class="recommend-meta">
+            <text class="price">{{cur.p}}{{cur.s}}{{item.price}}</text>
+            <text>{{item.duration}}{{t.minutes}}</text>
+          </view>
+        </view>
+      </block>
+    </view>
+  </view>
+
+  <!-- 🔴 兜底(店主 02z):两个「人气」分区都够不到 2 张时,首页会只剩店卡 + 一个空作品入口。
+       新店第一天开张必然经过这一天。这里用**中性标题**列服务目录前几项 —— 不承诺"人气",顾客真能点进去。
+       服务一个都没有时:**不给入口卡**(那是把空推给下一页),如实说一句。 -->
+  <view wx:if="{{!loadFailed && recommendedNail.length < 2 && recommendedLash.length < 2}}" class="section home-section-container">
+    <view class="section-head">
+      <view class="section-title">{{t.ourServices}}</view>
+      <view class="section-note" wx:if="{{fallbackServices.length}}" bindtap="goServices">{{t.allServices}}</view>
+    </view>
+    <!-- 🔴 03a:这句原来挂在 JS 派生态 fallbackEmptyNote 上 —— **造态时它不跟着变**,
+         现测服务总数=0 时这句根本没出现(与 fallbackOn 一模一样的病,上一轮改了一个漏了另一个)。
+         改成直接读数组长度 + i18n 唯一出处;它有自己的身份类,**既算"首页有东西可看"也能被判据点名**。 -->
+    <view wx:if="{{!fallbackServices.length}}" class="fallback-empty">{{t.emptyServiceNote}}</view>
+    <view wx:else class="recommend-grid">
+      <block wx:for="{{fallbackServices}}" wx:key="_id">
+        <view class="recommend-card card fallback-card" bindtap="goDetail" data-id="{{item._id}}">
           <img-placeholder class="recommend-visual" src="{{item.image}}" img-class="recommend-visual"></img-placeholder>
           <view class="recommend-name">{{item.name}}</view>
           <view class="recommend-meta">

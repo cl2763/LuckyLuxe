@@ -21,9 +21,14 @@ import { readFileSync } from 'node:fs'
 import { isDemoTenant, PROTECTED_REAL_TENANTS } from '../apps/api/demo-reset.mjs'   // 判据与黑名单都直接用那一份,不抄
 import { dirname, join } from 'node:path'
 import { fileURLToPath } from 'node:url'
+import { requireTarget, reportTarget, resolveDbPath } from './db-target.mjs'
 
 const ROOT = join(dirname(fileURLToPath(import.meta.url)), '..')
-const BASE = process.env.SEED_BASE_URL || 'http://127.0.0.1:4310'
+/* 🔴 03b/03e 裁定二:**造景/写库脚本不许有默认目标库**。
+   原来这里是 `process.env.SEED_BASE_URL || 'http://127.0.0.1:4310'` —— 打错了不报错,02x 就是这么把 148 行
+   演示数据写进本机库的。现在:不显式指定就拒绝跑。 */
+const BASE = requireTarget({ envName: 'SEED_BASE_URL', value: process.env.SEED_BASE_URL,
+  hint: '(沙箱 http://127.0.0.1:4310 / 本机库 http://127.0.0.1:4128 —— 端口会骗人,跑起来看它自报的库路径)' })
 const ARGV = process.argv.slice(2)
 
 /* ═══ 🔴 生产例外 · 七条(店主 2026-08-25 定,缺一条即拒)═══
@@ -73,9 +78,34 @@ const DEMO_TENANTS = [
   /* 🔴 02w:镜像店是**店主本店的镜像** —— 本店有 name_en='LUVIA',镜像就该有,
      否则英文态显示中文名,看着像"空态规则在起作用",其实是**景没铺全**(D108 同族)。
      小婕演示店**故意不给 nameEn** —— 她真的没有英文名,那才是空态的天然夹具。 */
+  /* 🔴 两店景补齐(店主 02x §6;03p 现测定死根因):
+     走查时看到的「人气各只有一张卡」(D111)与「地址/电话待补充」(D108)**是同一个根** ——
+     小程序连的是镜像演示店,而这家店**服务 0 条、地址电话全空**:景没铺,不是代码病。
+     现测四店:lucky-luxe 3+2 张 · demo-lucky-luxe 0+0 · jics-nail 3+0 · jics-sandbox 0+0。
+     所以这里补两样:`contact`(地址/电话 —— D108 那两枚死口的另一半:**值补上了动作才该出现**)
+     与 `services`(每类 ≥3 条、价格时长各不相同 —— D111 要的就是这个)。
+     小婕店用**她自己的信息**,不许拿本店的顶。 */
   { tenantId: 'demo-lucky-luxe', label: 'LUVIA 半径(演示)', nameEn: 'LUVIA (Demo)', currency: 'CAD', timezone: 'America/Toronto',
+    contact: { address: '136 Veterans Place, Toronto', phone: '+1 647 000 0188' },
+    services: [
+      { type: 'nail', nameZh: '演示·奶油法式', nameEn: 'Demo Cream French', price: 168, min: 90 },
+      { type: 'nail', nameZh: '演示·柔金贝母', nameEn: 'Demo Soft Gold', price: 238, min: 150 },
+      { type: 'nail', nameZh: '演示·微闪渐变', nameEn: 'Demo Shimmer', price: 198, min: 120 },
+      { type: 'lash', nameZh: '演示·裸感自然睫', nameEn: 'Demo Natural Lash', price: 198, min: 120 },
+      { type: 'lash', nameZh: '演示·轻盈浓密睫', nameEn: 'Demo Volume Lash', price: 268, min: 150 },
+      { type: 'lash', nameZh: '演示·加密睫', nameEn: 'Demo Dense Lash', price: 328, min: 180 },
+    ],
     twin: { balance: 88800, timecardTimes: 5, coupons: 1, orders: 2, timecardRemaining: 4, name: '演示·跨店阿珍' } },
   { tenantId: 'jics-sandbox', label: '小婕的店(演示)', currency: 'CNY', timezone: 'Asia/Shanghai',
+    contact: { address: '上海市静安区南京西路 1266 号 3F', phone: '+86 21 0000 6688' },
+    services: [
+      { type: 'nail', nameZh: '演示·纯色甲', price: 128, min: 90 },
+      { type: 'nail', nameZh: '演示·猫眼渐变', price: 198, min: 120 },
+      { type: 'nail', nameZh: '演示·延长加钻', price: 328, min: 180 },
+      { type: 'lash', nameZh: '演示·日常自然睫', price: 168, min: 120 },
+      { type: 'lash', nameZh: '演示·浓密开扇睫', price: 258, min: 150 },
+      { type: 'lash', nameZh: '演示·嫁接加密', price: 358, min: 180 },
+    ],
     twin: { balance: 36600, timecardTimes: 5, coupons: 3, orders: 1, timecardRemaining: 2, name: '演示·跨店阿珍' } }
 ]
 
@@ -198,17 +228,50 @@ async function catalogPlan(spec) {
   const coupons = (await api(spec.tenantId, '/admin/coupons')).coupons || []
   // 分类唯一真相律③:项目必须挂大类才准建 —— 演示项目照样挂,不走"平台代配"那条回落
   const cats = (await api(spec.tenantId, '/admin/pricing/categories')).categories || []
-  const catOf = (key) => (cats.find((c) => c.key === key) || cats[0] || {}).id || null
+  /* 🔴 03p 现测:演示店可能一个大类都没有(建店时 seedDefaults 失败会"不阻塞"地跳过)——
+     那样建服务会 400 CATEGORY_REQUIRED。**大类缺就先补大类**,不是让整批铺设停在这儿。
+     (分类唯一真相律③:项目必须挂大类才准建;所以大类是服务的前置,写成前置项而不是回落。) */
+  const catOf = (key) => (cats.find((c) => c.key === key) || cats.find((c) => (c.name || '').includes(key === 'nail' ? '美甲' : '美睫')) || cats[0] || {}).id || null
 
+  /* D108 的另一半:地址/电话补上,首页那两枚动作才该出现(值有了动作才出现) */
+  const store = ((await api(spec.tenantId, '/admin/business-hours')).stores || [])[0] || {}
   const items = []
-  for (const s of [
+  for (const c of [{ key: 'nail', name: '美甲' }, { key: 'lash', name: '美睫' }]) {
+    if (cats.some((x) => x.key === c.key || (x.name || '').includes(c.name))) continue
+    items.push({
+      label: `大类「${c.name}」`,
+      have: false,
+      create: async () => {
+        const r = await api(spec.tenantId, '/admin/pricing/categories', { method: 'POST', body: JSON.stringify(c) })
+        cats.push(r.category || { key: c.key, id: (r.category || {}).id })
+      },
+    })
+  }
+  if (spec.contact && (!store.address || !store.phone)) {
+    items.push({
+      label: `门店联系方式(地址/电话)`,
+      have: false,
+      /* 走平台口 PUT /platform/tenants/:id/store —— 与「重置老板密码」同一条平台通道 */
+      create: () => platform(`/platform/tenants/${spec.tenantId}/store`, { method: 'PUT', body: JSON.stringify(spec.contact) }),
+    })
+  }
+  /* 🔴 D111 真正的根因(03p 现测查明):这里原来只铺 **2 个服务**(1 nail + 1 lash),
+     而且 `have: mains.length >= 2` —— **只要库里有 2 个就整批跳过**。
+     首页「人气」按 sortOrder<=3 选,于是每类只落 1 张 → 走查看到的「各只有一张卡」。
+     改:按 spec.services 铺(每类 3 条、价格时长各不相同),幂等**逐条按名字判**,
+     不再用"总数够了就跳过"这种会把缺口盖住的守卫。 */
+  const planned = (spec.services || []).map((x) => ({
+    nameZh: x.nameZh, nameEn: x.nameEn || x.nameZh, type: x.type.toUpperCase(),
+    priceCents: x.price * 100, baseDurationMin: x.min, catKey: x.type,
+  }))
+  for (const s of (planned.length ? planned : [
     { nameZh: '演示·经典单色', nameEn: 'Demo Classic', type: 'NAIL', priceCents: 16800, baseDurationMin: 90, catKey: 'nail' },
     { nameZh: '演示·美睫自然款', nameEn: 'Demo Lash', type: 'LASH', priceCents: 19800, baseDurationMin: 120, catKey: 'lash' }
-  ]) {
+  ])) {
     const { catKey, ...svc } = s
     items.push({
       label: `服务「${s.nameZh}」`,
-      have: mains.length >= 2 || mains.some((m) => m.nameZh === s.nameZh),
+      have: mains.some((m) => m.nameZh === s.nameZh),   // 逐条判,不看总数
       create: () => api(spec.tenantId, '/admin/services', { method: 'POST', body: JSON.stringify({ ...svc, categoryId: catOf(catKey), storefront: true, isActive: true }) })
     })
   }

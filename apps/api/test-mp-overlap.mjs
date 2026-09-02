@@ -77,7 +77,16 @@ async function measure(label, img) {
     await mp.disconnect(); process.exit(0)
   }
   /* 界定:同时清空美睫,全页只留一张卡 */
-  await pg.setData({ recommendedNail: [{ ...nail[0], image: img }], recommendedLash: [] })
+  /* 03p:同理 —— 1 张时分区整块不出现,造 2 张;量的是第一张 */
+  /* 🔴 03p 第三次改造态:我清空了美睫 → **下一节整块不出现**(本批立的「少于 2 张不出分区」),
+     于是「卡→下节标题」这一项**量不到**(不是变小了,是没有可量的东西)。
+     四个间隙里有一项跨节,所以两节都得在:美睫也造 2 张。 */
+  const pad = (x, i) => ({ ...x, _id: `ov-pad-${i}`, name: `陪衬${i}`, image: img })
+  await pg.setData({
+    recommendedNail: [{ ...nail[0], image: img }, pad(nail[0], 1)],
+    recommendedLash: [pad(nail[0], 2), pad(nail[0], 3)],
+    fallbackServices: [],
+  })
   await new Promise((r) => setTimeout(r, 1200))
 
   const back = (await pg.data('recommendedNail')) || []
@@ -95,8 +104,8 @@ async function measure(label, img) {
   })
   console.log(`   [${label}] 卡片[${show(card)}] 宿主[${show(host)}] 名[${show(name)}] 价格行[${show(meta)}]`
     + ` · ph-img ${phImg}/ph-box ${phBox}`)
-  if (card.length !== 1) return null
-  const hostBox = host[host.length - 1]   // 店卡轮播也是 img-placeholder;卡内那个是最后一个
+  if (card.length !== 4) return null
+  const hostBox = host.find((h) => h.top > card[0].top - 1 && h.bottom < card[0].bottom + 1) || host[host.length - 1]   // 取**第一张卡内**那个宿主(界定到被测卡)
   const next = titles.find((t) => t.top > card[0].bottom - 1)
   return {
     label,
@@ -112,9 +121,9 @@ async function measure(label, img) {
 const withImg = await measure('有图态', IMG)
 const noImg = await measure('占位态', '')
 
-/* ① 造态自证(两态各只留一张卡 · image 字段真换了 · 卡片真渲染) */
-check(`① 造态自证:两态各只留一张卡、image 字段确实换了、卡片确实渲染出来了(抽检位:${SPOT})`,
-  proof.length === 2 && proof.every((p) => p.dataCards === 1 && p.imageMatched && p.cardHits === 1),
+/* ① 造态自证(两态各造 2 张:被测 + 陪衬 —— 1 张时分区整块不出现;image 真换了;卡片真渲染) */
+check(`① 造态自证:两态各造 2+2 张卡(美甲被测+陪衬 · 美睫两张让下一节存在)、image 真换了、卡片真渲染(抽检位:${SPOT})`,
+  proof.length === 2 && proof.every((p) => p.dataCards === 2 && p.imageMatched && p.cardHits === 4),
   JSON.stringify(proof))
 
 /* ② 互斥自证:两态渲染确实不同 —— 否则"间隙全等"可能只是 setData 没作用到渲染层

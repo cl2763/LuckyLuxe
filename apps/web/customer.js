@@ -1308,22 +1308,7 @@ function storeContactLine(store) {
   return [real(store.address), real(store.phone)].filter(Boolean).join(' · ')
 }
 
-function renderRecommendSection(title, type) {
-  return `
-    <section class="section">
-      <div class="section-row"><h2>${title}</h2><span class="subtle">${type}</span></div>
-      <div class="recommend-strip">
-        ${recommended(type).map((service) => `
-          <button class="recommend-card card" data-service-id="${service.id}" type="button">
-            ${window.ImgPlaceholder.tag(service.imageUrl, { alt: service.name, zh: state.lang !== 'en' })}
-            <strong>${service.name}</strong>
-            <span>${fromPriceLabel(service)} · ${service.durationMin}${t('minutes')}</span>
-          </button>
-        `).join('')}
-      </div>
-    </section>
-  `
-}
+const renderRecommendSection = (title, type) => window.CustomerRecommend.render({ title, type, items: recommended(type), lang: state.lang, t, fromPriceLabel })   // D103②:整段搬进 customer-recommend.js(公约②边改边拆)
 
 function portfolioImages() {
   return effectivePortfolios().flatMap((portfolio) => (portfolio.images || []).map((image) => ({

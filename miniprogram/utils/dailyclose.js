@@ -291,7 +291,14 @@ const dailyCloseMixin = {
   async reverseCashNote(e) {
     const id = e.currentTarget.dataset.id
     try {
-      await api.adminPost(`/admin/cash-notes/${encodeURIComponent(id)}/reverse`, {})
+      /* D122(店主 03c):事由必填 —— 与网页端同一口径,后端也硬拦。
+         小程序用 showModal 的 editable 取字;取消或空则不发请求。 */
+      const r = await new Promise((ok) => wx.showModal({
+        title: '冲销事由(必填)', editable: true, placeholderText: '写明为什么冲销,会进账本备注',
+        success: (m) => ok(m.confirm ? String(m.content || '').trim() : null), fail: () => ok(null)
+      }))
+      if (!r) { wx.showToast({ title: '事由必填,已取消', icon: 'none' }); return }
+      await api.adminPost(`/admin/cash-notes/${encodeURIComponent(id)}/reverse`, { reason: r })
       wx.showToast({ title: '已冲销(原记录留痕)', icon: 'none' })
       this.loadClose(this.data.date)
     } catch (err) { wx.showToast({ title: (err && err.message) || '冲销失败', icon: 'none' }) }

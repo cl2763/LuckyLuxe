@@ -12,6 +12,7 @@
 //   4) 关联表逐个按同一批 id 清理孤儿行;表不存在或无该列时跳过并说明。
 
 import { DatabaseSync } from 'node:sqlite'
+import { requireTarget, reportTarget } from '../../../tools/db-target.mjs'
 
 const TARGET_IDS = ['wecom:不存在', 'wecom:smoke-b2', 'wecom:smoke-probe']
 const RELATED_TABLES = [
@@ -23,7 +24,10 @@ const RELATED_TABLES = [
   'reminder_tasks',
 ]
 
-const DB_FILE = process.env.DB_FILE || '/app/apps/api/local-data/lucky-luxe.sqlite'
+/* 🔴 D124(店主 03g §二.2)最急的一处:默认目标是**生产容器路径**,而且 --apply 真删。
+   我上一批自己说过「有默认值 + 能指生产,打错一次就是生产事故」——**这一个连"能指"都不用,默认就是生产**。 */
+const DB_FILE = requireTarget({ envName: 'DB_FILE', value: process.env.DB_FILE,
+  hint: '(此脚本会真删数据;目标库必须显式写全路径,绝不给默认值)' })
 const APPLY = process.argv.includes('--apply')
 const ph = TARGET_IDS.map(() => '?').join(',')
 

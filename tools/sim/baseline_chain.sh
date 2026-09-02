@@ -24,7 +24,7 @@ echo "DEVTOOLS_FRESH" | tee -a $LOG
 
 echo "== ② 双租户全路径 ==" | tee -a $LOG
 cd $SP
-TENANT=jics-nail OWNER_SESS=sess_msnk2ktp_tha9l7_3d1gp3gu node full_path_regression.mjs > /tmp/base-fp-jics.log 2>&1
+TENANT=jics-nail OWNER_SESS="${OWNER_SESS:?凭据不入库:请用 OWNER_SESS=... 传入店主会话令牌}" node full_path_regression.mjs > /tmp/base-fp-jics.log 2>&1
 grep -q "13/13" /tmp/base-fp-jics.log || { echo "FP_JICS_FAIL" | tee -a $LOG; tail -3 /tmp/base-fp-jics.log | tee -a $LOG; exit 1; }
 echo "FP_JICS 13/13" | tee -a $LOG
 TENANT=lucky-luxe OWNER_SESS=owner-demo-token node full_path_regression.mjs > /tmp/base-fp-lucky.log 2>&1

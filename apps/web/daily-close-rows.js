@@ -159,7 +159,9 @@ window.DailyCloseRows = (function () {
     }
     const rev = event.target.closest('[data-cash-note-reverse]')
     if (rev) {
-      request(`/admin/cash-notes/${encodeURIComponent(rev.dataset.cashNoteReverse)}/reverse`, { method: 'POST', body: JSON.stringify({}) })
+      const cnWhy = window.CorrectionReason.ask(zh)   // D122
+      if (!cnWhy) return true
+      request(`/admin/cash-notes/${encodeURIComponent(rev.dataset.cashNoteReverse)}/reverse`, { method: 'POST', body: JSON.stringify({ reason: cnWhy }) })
         .then(() => { toast(zh ? '已冲销(原记录留痕)' : 'Reversed'); return loadDailyClose(state.date) })
         .catch((error) => toast(error.message))
       return true

@@ -279,3 +279,10 @@ page{background:#fbf8f5}
 /* 补录小合同(01v):弹窗里两句(提示 + 后端出的归属确认句) */
 .ds-bf{font-size:22rpx;color:#8c8279;line-height:1.6;padding:8rpx 24rpx}
 .ds-bf.note{color:#8a5a00;background:#fdf3e3;margin:0 24rpx 8rpx;border-radius:12rpx;padding:14rpx 18rpx}
+
+/* D105:值日块内就地「回到今天」—— 与 .dv-duty-note 同排,做成可点的文字链 */
+.dv-duty-back {
+  margin-left: 12rpx;
+  color: #8a6a3a;
+  text-decoration: underline;
+}

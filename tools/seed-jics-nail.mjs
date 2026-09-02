@@ -1,4 +1,5 @@
 #!/usr/bin/env node
+import { requireTarget, reportTarget, resolveDbPath } from './db-target.mjs'
 // 体验店种子:Jic's Nail 小婕(tenant = jics-nail)
 //
 // 用法(本机):
@@ -8,7 +9,10 @@
 //
 // 幂等:重复跑不会重复建店/重复建项目——大类按 key 认、项目按名称+类型认,存在就改价不新建。
 // 不建技师、不配薪资(参数未到);不写任何订单/财务数据。
-const BASE_URL = (process.env.BASE_URL || 'http://127.0.0.1:4128').replace(/\/$/, '')
+/* 🔴 03b/03e 裁定二:去默认目标库。这个脚本的用法注释里明写「可指生产」——
+   有默认值 + 能指生产 = 打错一次就是生产事故。不显式指定一律拒绝跑。 */
+const BASE_URL = String(requireTarget({ envName: 'BASE_URL', value: process.env.BASE_URL,
+  hint: '(沙箱 http://127.0.0.1:4310 / 本机库 http://127.0.0.1:4128;端口会骗人,以脚本自报的库路径为准)' })).replace(/\/$/, '')
 const OWNER_TOKEN = process.env.OWNER_TOKEN || 'owner-demo-token'
 const TENANT_ID = process.env.SEED_TENANT_ID || 'jics-nail'
 const TENANT_NAME = "Jic's Nail 小婕"
