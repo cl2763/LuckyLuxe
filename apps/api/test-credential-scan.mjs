@@ -52,8 +52,10 @@ const SHAPES = {
 /* 白名单:key = `文件:命中值`,value = 理由(随码复核) */
 const ALLOW = {
   'owner-demo-token': '明示演示主钥匙:服务启动日志公开打印它,文档与测试引用的就是这一个',
-  'LuckyluxeStaff0312': '⚠ 暂放行,待只读核生产:local-server:337 STAFF_DEMO_PASSWORD 的默认值。'
-    + '店主 03i 裁:生产若没显式设该 env,它就是活的 —— **两件只读证明惰性才算演示值**,否则按 D123 第二枚同法处理',
+  'LuckyluxeStaff0312': '`STAFF_DEMO_PASSWORD` 的默认值。'
+    + '该口令闸整个包在 `if (!DEMO_LOGIN_ALLOWED) throw 403`(local-server.mjs:11215)之内;'
+    + '2026-09-03 生产只读核实:`ALLOW_DEMO_ADMIN_LOGIN` 未设 → 请求在比对口令**之前**即被 403 挡下。'
+    + '**惰性成立的前提 = 生产永不设该 env**;这条前提由上线硬门槛批的「生产 env 核验清单」守(店主 03w 裁)',
   'demo-customer': '负向断言的伪造令牌:test-card-refund.mjs:772「伪造 customer 令牌必须被拒」——'
     + '豁免的是这条断言的用途,不是这串字符;换地方用则豁免失效',
   'not-the-key': '负向断言的错误平台钥匙:test-demo-seed-guard.mjs:230「错钥匙不许放行」',

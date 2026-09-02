@@ -287,13 +287,13 @@ window.AccountAdjust = (function () {
     const revBtn = event.target.closest('[data-aa-reverse]')
     if (revBtn) {
       const row = stateA.txns.find((x) => x.id === revBtn.dataset.aaReverse)
-      if (!confirm(zh ? `确认冲销?将生成一条等额红字反向记录纠错,原始记录保留:${row ? row.note : ''}` : 'Reverse this entry?')) return
+      if (!await window.UIDialog.confirm(zh ? '确认冲销?' : 'Reverse this entry?', { hint: zh ? `将生成一条等额红字反向记录纠错,原始记录保留:${row ? row.note : ''}` : '', danger: true })) return
       stateA.busy = true; mount()
       try {
         const url2 = revBtn.dataset.kind === 'sv'
           ? `/admin/stored-value/txns/${encodeURIComponent(revBtn.dataset.aaReverse)}/reverse`
           : `/admin/finance/transactions/${encodeURIComponent(revBtn.dataset.aaReverse)}/reverse`
-        const aaWhy = window.CorrectionReason.ask(zh, row ? row.note : '')   // D122
+        const aaWhy = await window.CorrectionReason.ask(zh, row ? row.note : '')   // D122
         if (!aaWhy) { stateA.busy = false; mount(); return }
         await request(url2, { method: 'POST', body: JSON.stringify({ reason: aaWhy }) })
         toast(zh ? '已冲销(红字反向记录已生成)' : 'Reversed')

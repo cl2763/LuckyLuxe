@@ -14,6 +14,11 @@
      我的探测器为此连栽三次:每次只认当时见过的那一种,正是
      「白名单判据 > 黑名单判据」在扫描器上的同一个教训。 */
 
+/* ⚠️ 剥行注释必须用 `[^\S\n]` 星号,不能用 `\s` 星号 —— **`\s` 包含换行**:
+   那样写会把前面的空行连同换行一起吃掉,剥完的文本比原文少行,
+   于是**按它算出来的行号全是错的**(03t 现测:admin.js 8551 → 8504,少 47 行,
+   我因此连报错三次条数与位置)。同族:块注释也必须**保住换行**再置空。
+   (本注释刻意不写出那个正则原文(略)。 */
 import { readFileSync } from 'node:fs'
 import { join } from 'node:path'
 import { fileURLToPath } from 'node:url'
@@ -82,7 +87,7 @@ for (const f of CAND) {
   /* 🔴 首跑现测:18 个"仍有默认目标"里多数是**我改过的文件** ——
      刀数到的是注释里那句案底「原来这里是 `process.env.X || '默认'`」。
      判据不许被自己的案底注释误报:**剥掉注释再判**(与 02q 那次「白名单理由被自己数进去」同族)。 */
-  const src = raw.replace(/\/\*[\s\S]*?\*\//g, '').replace(/^\s*(\/\/|#).*$/gm, '')
+  const src = raw.replace(/\/\*[\s\S]*?\*\//g, (m) => m.replace(/[^\n]/g, ' ')).replace(/^[^\S\n]*(\/\/|#).*$/gm, '')
   if (!WRITES.test(src)) continue
   const hasDefault = DEFAULTS.filter((d) => d.rx.test(src)).map((d) => d.name)
   writers.push({ file: f, hasDefault, guarded: /requireTarget/.test(src) })
@@ -145,7 +150,7 @@ for (const w of A) {
   if (NOT_A_DB[w.file]) continue
   const raw = readFileSync(join(ROOT, w.file), 'utf8')
   const src = raw.replace(/\/\*[\s\S]*?\*\//g, (m) => m.replace(/[^\n]/g, ' '))   // 注释置空但保住行号
-    .replace(/^\s*(\/\/|#).*$/gm, '')
+    .replace(/^[^\S\n]*(\/\/|#).*$/gm, '')
   const lines = src.split('\n')
   /* 守护窗口:requireTarget 所在行 ±2 行 —— 「取了值紧接着送去验」的形状 */
   const guardWin = new Set()

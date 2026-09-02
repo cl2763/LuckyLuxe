@@ -18,6 +18,11 @@
 
    两条都是**白名单式**:扫的是"全仓这种形状的写法",逐个必须落进白名单,新写的自动红。 */
 
+/* ⚠️ 剥行注释必须用 `[^\S\n]` 星号,不能用 `\s` 星号 —— **`\s` 包含换行**:
+   那样写会把前面的空行连同换行一起吃掉,剥完的文本比原文少行,
+   于是**按它算出来的行号全是错的**(03t 现测:admin.js 8551 → 8504,少 47 行,
+   我因此连报错三次条数与位置)。同族:块注释也必须**保住换行**再置空。
+   (本注释刻意不写出那个正则原文(略)。 */
 import { readFileSync } from 'node:fs'
 import { join } from 'node:path'
 import { fileURLToPath } from 'node:url'
@@ -38,7 +43,7 @@ const tracked = execFileSync('git', ['-c', 'core.quotepath=false', 'ls-files', '
 const CODE = tracked.filter((f) => /^(apps\/(web|api)|miniprogram)\/.*\.(js|mjs)$/.test(f)
   && !/\/(test-|run-)/.test(f) && !f.endsWith('test-display-text.mjs'))
 /* 注释置空(保住行号)—— 判据不许被自己的案底注释误报(02q 同族教训) */
-const bare = (src) => src.replace(/\/\*[\s\S]*?\*\//g, (m) => m.replace(/[^\n]/g, ' ')).replace(/^\s*\/\/.*$/gm, '')
+const bare = (src) => src.replace(/\/\*[\s\S]*?\*\//g, (m) => m.replace(/[^\n]/g, ' ')).replace(/^[^\S\n]*\/\/.*$/gm, '')
 
 /* ═══ 病一 ═══ */
 

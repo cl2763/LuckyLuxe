@@ -24,9 +24,15 @@ window.CustomerTags = (function () {
        ⬜ **未做、已登记待裁**:分级店用的是租户自定义梯子键(后端 memberTiers[] 带 label)。
           自定义等级到底该显示 `key` 还是 `label`,是业务口径 —— 不自己判断,等店主裁。
           在那之前保持原样显示键,不改现状。 */
+    /* 🔴 D129(店主 03s §一 裁):**显示 label,永远不显示 key。**
+       03r 时我把自定义梯子键挂了 ⬜ 待裁;店主裁了 —— 键是程序用的,名字是人看的。
+       取 label 的次序:租户梯子里这一档的 label → 四个内置等级的中文名 →
+       「会员」兜底(conversation-card.mjs 的 tierUnknown 同一句),**永不落到 key**。 */
     const CN = { silver: '银卡', gold: '金卡', platinum: '铂金', diamond: '钻石' }
+    const ladder = Array.isArray(customer.memberTiers) ? customer.memberTiers : []
+    const fromLadder = String((ladder.find((x) => String(x.key || '').toLowerCase() === k) || {}).label || '').trim()
     const styleKey = Object.keys(styles || {}).find((x) => x.toLowerCase() === k)
-    const shown = lang === 'zh' && CN[k] ? CN[k] : tier
+    const shown = fromLadder || (lang === 'zh' && CN[k] ? CN[k] : (lang === 'zh' ? '会员' : 'Member'))
     return `<span class="member-tier-badge ${(styles || {})[styleKey] || 'tier-silver'}">${escapeHtml(shown)}</span>`
   }
 

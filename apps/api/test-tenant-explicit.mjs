@@ -22,6 +22,11 @@
    写不了的逐条登记理由,新写的自动红。
    —— 不是数「我改的那三处对了」,是数「全部必须落进白名单」。 */
 
+/* ⚠️ 剥行注释必须用 `[^\S\n]` 星号,不能用 `\s` 星号 —— **`\s` 包含换行**:
+   那样写会把前面的空行连同换行一起吃掉,剥完的文本比原文少行,
+   于是**按它算出来的行号全是错的**(03t 现测:admin.js 8551 → 8504,少 47 行,
+   我因此连报错三次条数与位置)。同族:块注释也必须**保住换行**再置空。
+   (本注释刻意不写出那个正则原文(略)。 */
 import { readFileSync } from 'node:fs'
 import { join } from 'node:path'
 import { fileURLToPath } from 'node:url'
@@ -42,7 +47,7 @@ const CODE = tracked.filter((f) => /\.(mjs|js)$/.test(f) && (f.startsWith('apps/
   && !f.endsWith('test-tenant-explicit.mjs'))
 
 /* 注释置空但保住行号(判据不许被自己的案底注释误报) */
-const bare = (src) => src.replace(/\/\*[\s\S]*?\*\//g, (m) => m.replace(/[^\n]/g, ' ')).replace(/^\s*\/\/.*$/gm, '')
+const bare = (src) => src.replace(/\/\*[\s\S]*?\*\//g, (m) => m.replace(/[^\n]/g, ' ')).replace(/^[^\S\n]*\/\/.*$/gm, '')
 const INS = /INSERT\s+(?:OR\s+\w+\s+)?INTO\s+users\s*\(([^)]*)\)/gi
 
 const scan = (text) => {

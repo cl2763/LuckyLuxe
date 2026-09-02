@@ -119,7 +119,7 @@ window.DailyCloseRows = (function () {
   /* 屏 1b 金额更正 + 日结确认/重开的点击处理(2026-08-27 从 admin.js 搬出,公约①②:
      本批动的就是日结这一屏,按「边改边拆」把同屏的行为一起搬过来,admin.js 只留一行分发)。
      返回 true = 这一族接住了这次点击,admin.js 那边就不用再往下找了。 */
-  function handleClick(event, ctx) {
+  async function handleClick(event, ctx) {
     const { state, request, toast, renderDailyClose, loadDailyClose, yuanToCents, zh } = ctx
     const dcCorrect = event.target.closest('[data-dc-correct]')
     if (dcCorrect) {
@@ -159,7 +159,7 @@ window.DailyCloseRows = (function () {
     }
     const rev = event.target.closest('[data-cash-note-reverse]')
     if (rev) {
-      const cnWhy = window.CorrectionReason.ask(zh)   // D122
+      const cnWhy = await window.CorrectionReason.ask(zh)   // D122
       if (!cnWhy) return true
       request(`/admin/cash-notes/${encodeURIComponent(rev.dataset.cashNoteReverse)}/reverse`, { method: 'POST', body: JSON.stringify({ reason: cnWhy }) })
         .then(() => { toast(zh ? '已冲销(原记录留痕)' : 'Reversed'); return loadDailyClose(state.date) })
@@ -173,7 +173,7 @@ window.DailyCloseRows = (function () {
       return true
     }
     if (event.target.closest('#dcReopen')) {
-      const reason = window.prompt(zh ? '重开日结必须写原因(会留痕):' : 'Reason (recorded):')
+      const reason = await window.UIDialog.text(zh ? '重开日结必须写原因' : 'Reason (recorded)', { hint: zh ? '会留痕' : '' })
       if (!reason || !reason.trim()) return true
       request('/admin/daily-close/reopen', { method: 'POST', body: JSON.stringify({ date: state.date, reason: reason.trim() }) })
         .then(() => { toast(zh ? '已重开,可以改分成了' : 'Reopened'); return loadDailyClose(state.date) })

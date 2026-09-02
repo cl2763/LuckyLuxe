@@ -2481,7 +2481,7 @@ async function handleScreenClick(event) {
     if (key === 'openAfterSales') { state.asPanelOpen = !state.asPanelOpen; render(); return }
     if (key === 'cancel') {
       const zh = state.lang === 'zh'
-      if (!window.confirm(zh ? `确定取消这个预约吗?\n${order.appointmentDate} ${order.appointmentTime}\n取消后时段将释放,定金规则以门店说明为准。` : 'Cancel this booking?')) return
+      if (!await window.UIDialog.confirm(zh ? '确定取消这个预约吗?' : 'Cancel this booking?', { hint: `${order.appointmentDate} ${order.appointmentTime}` + (zh ? ' · 取消后时段将释放' : ''), danger: true })) return
       try {
         /* 真取消:改服务器状态 + 放开占位。顾客小程序那边同刀(D70 顺手修的那处:
            原来只改本地缓存,服务器上单还在、时段还锁着)。 */

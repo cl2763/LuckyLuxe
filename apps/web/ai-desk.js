@@ -437,14 +437,18 @@ function renderWechatContextPanel(conversation) {
            更要命的是两份还不一样:后端 none 态说「本会话暂无报价」,这里说「未报价」。
            同一个状态两端两句话,正是当初收唯一出口要防的事。改读下发的 customerCard。 */
         const card = conversation.customerCard || {}
-        const qsLabel = card.quoteLabel || '本会话暂无报价'
-        if (!cu) return `<p class="cs-kv"><span>报价状态</span><b>${escapeHtml(qsLabel)}</b></p>`
+        /* 🔴 03s §一 顺带一处同族:`|| '本会话暂无报价'` 是那句 none 态文案的**第二份** ——
+           后端 none 态本来就下发 quoteLabel(CARD_TEXT.quote.none),网页不该再存一份。
+           取不到时**不呈现**(不可用即不呈现),不自己补句。 */
+        const qsLabel = card.quoteLabel || ''
+        const qsRow = qsLabel ? `<p class="cs-kv"><span>报价状态</span><b>${escapeHtml(qsLabel)}</b></p>` : ''
+        if (!cu) return qsRow
         return `
           <p class="cs-kv"><span>会员</span><b>${cu.memberTier && cu.memberTier !== 'guest' ? '是 · ' + escapeHtml(card.tierText || '会员') : '非会员'}</b></p>
           <p class="cs-kv"><span>会员码</span><b>${escapeHtml(cu.memberCode || '—')}</b></p>
           <p class="cs-kv"><span>储值余额</span><b>${money(cu.storedValueBalanceCents || 0)}</b></p>
           <p class="cs-kv"><span>次卡</span><b data-cs-tc="${escapeHtml(cu.id)}">…</b></p>
-          <p class="cs-kv"><span>报价状态</span><b>${escapeHtml(qsLabel)}</b></p>`
+          ${qsRow}`
       })()}
       ${conversation.linkedUserId && isOwnerRole() ? `<button class="ghost slim" data-open-customer-file="${escapeHtml(conversation.linkedUserId)}" type="button">${owner.lang === 'zh' ? '查看客户档案 →' : 'Customer file →'}</button>` : ''}
       ${!conversation.linkedUserId && isOwnerRole() && (owner.customers || []).length ? `

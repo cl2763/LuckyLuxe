@@ -7187,7 +7187,7 @@ const { storedValueBalanceCents, insertStoredValueTransaction, storedValueOvervi
 })
 const { MEMBER_QUALIFY_MODES, DEFAULT_MEMBERSHIP_CONFIG, getMembershipConfig, setMembershipConfig, customerTotalSpendCents, isMemberOf } = createMembershipConfig({
   db, iso, currentTenantId, storedValueBalanceDetail: (u, t) => storedValueBalanceDetail(u, t)
-})
+, apiError })
 const staffScope = createStaffScope({
   db, apiError, currentTenantId, bookingStatusText,
   memberCodeForUserId: (id) => memberCodeForUserId(id),

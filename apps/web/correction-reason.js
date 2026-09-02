@@ -8,21 +8,21 @@
 window.CorrectionReason = (() => {
   const MAX = 200
   /* 返回事由字符串;用户取消返回 null(调用方据此中止,不发请求) */
-  function ask(zh, what) {
+  async function ask(zh, what) {
     const title = zh
       ? `请写明冲销事由(必填,会进账本备注,以后查得到)\n${what || ''}`
       : `Reason for this correction (required, goes into the ledger note)\n${what || ''}`
-    const raw = window.prompt(title, '')
+    const raw = await window.UIDialog.text(title, { placeholder: zh ? '写清为什么要改这一笔' : 'Why this correction' })
     if (raw === null) return null                       // 取消
     const reason = String(raw).trim()
-    if (!reason) { window.alert(zh ? '事由必填 —— 账本只追加,现在不写,以后补不上。' : 'Reason is required.'); return null }
-    if (reason.length > MAX) { window.alert(zh ? `事由太长了,请控制在 ${MAX} 字以内。` : `Max ${MAX} characters.`); return null }
+    if (!reason) { await window.UIDialog.alert(zh ? '事由必填 —— 账本只追加,现在不写,以后补不上。' : 'Reason is required.'); return null }
+    if (reason.length > MAX) { await window.UIDialog.alert(zh ? `事由太长了,请控制在 ${MAX} 字以内。` : `Max ${MAX} characters.`); return null }
     return reason
   }
   /* 账本冲销的整段动作(D122):从 admin.js 搬出 —— 那个文件是现状冻结候拆的棘轮项,
      加功能就得先腾地方(公约②边改边拆)。事由必填在这里问一次,后端再硬拦一次。 */
-  function reverseFinanceTxn({ id, zh, request, toast, reload }) {
-    const why = ask(zh)
+  async function reverseFinanceTxn({ id, zh, request, toast, reload }) {
+    const why = await ask(zh)
     if (!why) return
     request(`/admin/finance/transactions/${encodeURIComponent(id)}/reverse`, { method: 'POST', body: JSON.stringify({ reason: why }) })
       .then(reload)

@@ -5,7 +5,7 @@
    退完卡那条记录还在,系统会认为他仍是会员。有的店觉得对(充过钱就是老客),
    有的店觉得不对(钱都退了还享会员价?)。这不是技术问题,是经营选择,
    所以它进配置、进入驻 SOP,不写死在代码里。 */
-export function createMembershipConfig({ db, iso, currentTenantId, storedValueBalanceDetail }) {
+export function createMembershipConfig({ db, iso, currentTenantId, storedValueBalanceDetail, apiError }) {
   const MEMBER_QUALIFY_MODES = ['any_recharge', 'balance_gt_0', 'total_spend', 'manual']
   const DEFAULT_MEMBERSHIP_CONFIG = {
     tiersEnabled: false,
@@ -59,7 +59,7 @@ export function createMembershipConfig({ db, iso, currentTenantId, storedValueBa
         : (input.expireDays === null || input.expireDays === '' ? null : Math.max(0, Math.round(Number(input.expireDays) || 0)) || null),
       keepMemberAfterRefund: KEEP_MEMBER_MODES.includes(input.keepMemberAfterRefund)
         ? input.keepMemberAfterRefund : (current.keepMemberAfterRefund || 'keep'),
-      tiers: Array.isArray(input.tiers) ? input.tiers.slice(0, 20) : (current.tiers || []),
+      tiers: normalizeTiers(input.tiers, current.tiers),   // D129:label 必填 + 存量条件迁移
       memberPerks: Array.isArray(input.memberPerks) ? input.memberPerks.map((x) => String(x).slice(0, 60)).slice(0, 10) : (current.memberPerks || [])
     }
     db.prepare(`INSERT INTO tenant_settings (tenant_id, key, value, updated_at) VALUES (?, 'membership_config', ?, ?)
@@ -74,6 +74,31 @@ export function createMembershipConfig({ db, iso, currentTenantId, storedValueBa
       : db.prepare("SELECT COALESCE(SUM(final_due_cents), 0) AS spent FROM bookings WHERE tenant_id = ? AND user_id = ? AND status = 'COMPLETED'").get(tenantId, userId)
     const legacy = sinceIso ? 0 : (db.prepare('SELECT legacy_total_spend_cents AS c FROM users WHERE id = ?').get(userId)?.c || 0)
     return (booked?.spent || 0) + legacy
+  }
+
+  /* 梯子档位归一化 · 唯一出口(D129,店主 03s §一 裁:**显示 label,永远不显示 key**)。
+     键是程序用的,名字是人看的;顾客卡上那枚裸的 `gold` 就是这条的反面教材。
+     · **label 必填**:空(或只有空白)一律拒 —— 后端是最终闸,前端拦只算体验;
+     · **存量条件迁移**:调用方没给 tiers 时,把老配置里 label 为空的补成 key
+       (一次性、幂等、不覆盖已有 label),并打 `labelFromKey` 标记供设置页提示「建议改成中文名」。 */
+  function normalizeTiers(input, current) {
+    if (!Array.isArray(input)) {
+      return (current || []).map((t) => (String(t?.label || '').trim()
+        ? t : { ...t, label: String(t?.key || '').trim(), labelFromKey: true }))
+    }
+    return input.slice(0, 20).map((t, i) => {
+      /* 迁移别名:历史上有调用方发 `name`(库里存量用的是 `label`,后端映射也只读 `label`——
+         所以那些档的 label 一直是空的,显示就退回了 key,**正是这次要修的病**)。
+         这里**收 `name` 但归一成 `label`**:老调用方不断,库里仍只存一个真相。
+         不做成"两个字段都读"——那就成了一件事两处真相,下一个 gold 迟早从那儿长出来。 */
+      const label = String(t?.label || t?.name || '').trim()
+      if (!label) {
+        throw apiError(400, 'TIER_LABEL_REQUIRED',
+          `第 ${i + 1} 档没有填等级名。等级名是顾客看得见的字,不能留空 —— 留空就只能显示程序用的键名。`)
+      }
+      const { name, ...rest } = t || {}   // 归一后不再把别名存回库
+      return { ...rest, label }
+    })
   }
 
   function isMemberOf(userId, tenantId = currentTenantId()) {

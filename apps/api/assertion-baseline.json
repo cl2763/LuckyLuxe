@@ -76,6 +76,8 @@
     "display-text": 10,
     "tenant-ownership": 5,
     "tenant-explicit": 5,
+    "tier-label": 8,
+    "native-dialog": 7,
     "mp-placeholder-size": 3,
     "mp-overlap": 4,
     "mp-home-sections": 9,

@@ -66,6 +66,16 @@ code{font-family:ui-monospace,SFMono-Regular,Menlo,monospace;font-size:.84em;bac
 .strip .bar i{position:absolute;top:0;height:100%;border-radius:3px}
 .strip .bar i.d{background:var(--done);opacity:.9}.strip .bar i.g{background:var(--doing)}.strip .bar i.n{background:transparent;border:1px dashed var(--herosub);box-sizing:border-box}
 .strip .bar .now{position:absolute;top:-3px;bottom:-3px;width:2px;background:var(--herolive)}
+.mini5{display:grid;grid-template-columns:repeat(5,1fr);gap:4px;margin-top:10px;padding-top:9px;border-top:1px solid var(--herogrid)}
+.mini5>div{display:flex;flex-direction:column;gap:1px;min-width:0}
+.mini5 .l{font-size:.62rem;color:var(--herosub);white-space:nowrap}
+.mini5 b{font-family:'Fraunces',Georgia,serif;font-variant-numeric:tabular-nums;font-size:1.05rem;font-weight:700;color:var(--heroink);line-height:1.15}
+.mini5 b small{font-size:.65rem;font-weight:500;color:var(--herosub)}
+.mini5 i.delta{font-size:.62rem;padding:0 6px;align-self:flex-start}
+.mini5 i.sub{font-style:normal;font-size:.6rem;color:var(--herosub);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.hero.gate{text-align:center;padding:18px 16px 16px}
+.ring{width:118px;height:118px;border-radius:50%;margin:14px auto 8px;display:flex;align-items:center;justify-content:center;background:radial-gradient(circle at 35% 30%,#e8cd93,#c9a563 70%);color:#2a2521;font-weight:700;font-size:1.05rem;line-height:1.25;box-shadow:0 0 0 8px rgba(217,185,126,.16),0 0 0 16px rgba(217,185,126,.07)}
+.gtxt{font-size:.74rem;color:var(--herosub)}
 .tiles{display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-top:8px}
 .tile{background:var(--card);border:1px solid var(--line);border-radius:12px;padding:9px 11px 8px}
 .tile .n{font-family:'Fraunces',Georgia,serif;font-variant-numeric:tabular-nums;font-size:1.35rem;font-weight:700;line-height:1.15;margin:2px 0}
@@ -100,6 +110,19 @@ code{font-family:ui-monospace,SFMono-Regular,Menlo,monospace;font-size:.84em;bac
 .main{display:flex;flex-direction:column;gap:10px}
 .dhero{background:radial-gradient(90% 120% at 100% 0%,rgba(217,185,126,.22),transparent 55%),linear-gradient(160deg,var(--hero),var(--hero2));color:var(--heroink);border-radius:14px;padding:14px 18px;display:grid;grid-template-columns:1.2fr 1fr;gap:16px;align-items:start}
 .dhero .big{font-size:3.6rem}
+.dhero>div:first-child{display:flex;flex-direction:column;min-height:100%}
+.nowgrid{display:grid;grid-template-columns:repeat(4,1fr);gap:6px;margin-top:auto;padding-top:12px}
+.nowcell{background:rgba(245,239,227,.06);border:1px solid var(--herogrid);border-radius:9px;padding:7px 10px 6px;display:flex;flex-direction:column;gap:0}
+.nowcell .l{font-size:.68rem;color:var(--herosub);display:flex;align-items:center}
+.nowcell b{font-family:'Fraunces',Georgia,serif;font-variant-numeric:tabular-nums;font-size:1.35rem;font-weight:700;color:var(--heroink);line-height:1.15}
+.nextcard{display:flex;align-items:center;gap:14px;margin-top:6px;background:rgba(217,185,126,.13);border:1px solid rgba(217,185,126,.38);border-radius:10px;padding:8px 12px}
+.nextcard .l{font-size:.66rem;color:var(--herosub);display:block}
+.nextcard .nt b{font-family:'Fraunces',Georgia,serif;font-variant-numeric:tabular-nums;font-size:1.35rem;font-weight:700;color:var(--herogold);line-height:1.1}
+.nextcard .nw{flex:1;display:flex;flex-direction:column;line-height:1.35}
+.nextcard .nw b{font-size:.95rem;color:var(--heroink)}
+.nextcard .nw span{font-size:.74rem;color:var(--herosub)}
+.nextcard .go{font-size:.74rem;color:var(--herogold);white-space:nowrap}
+.tv .nowcell b{font-size:1.9rem}.tv .nextcard .nt b{font-size:1.9rem}
 .dtiles{display:grid;grid-template-columns:1fr 1fr;gap:8px}
 .dtile{background:rgba(245,239,227,.06);border:1px solid var(--herogrid);border-radius:10px;padding:8px 10px}
 .dtile .l{font-size:.72rem;color:var(--herosub)}
@@ -128,9 +151,9 @@ code{font-family:ui-monospace,SFMono-Regular,Menlo,monospace;font-size:.84em;bac
 </style>
 <div class="w">
 <h1>商家端主页重画</h1>
-<div class="meta">设计图 v2 · 2026-09-03 · 图=合同 · 覆盖:小程序商家端首页(老板视角 / 员工视角)· 网页后台首页 · 前台全屏大屏态 · 并入并替代「老板主页业绩大屏 v1」</div>
+<div class="meta">设计图 v3.1 · 2026-09-03(店主三处改 + 网页「此刻」由点号文字改成四格+下一位卡;补口径两答) · 图=合同 · 覆盖:小程序商家端首页(老板视角 / 员工视角)· 网页后台首页 · 前台全屏大屏态 · 并入并替代「老板主页业绩大屏 v1」</div>
 
-<p class="note"><b>v1 差的那一点意思,我认为是这个:</b>v1 只是「一块好看的数字牌」。店主 08-10 原话是「主页要有<b>实时订单量</b>的数字化体现」——大数字讲的是<b>结果</b>,主页还得讲<b>此刻</b>。所以 v2 在大数字下面加了两样只有美业店才有的东西:<b>「此刻」脉搏行</b>(在做几个、待到店几个、下一位几点谁做什么,绿点在跳)和<b>「店里的一天」时间轴</b>(营业时段一根横条,做完的、正在做的、还没来的一眼看全,一根绿线标着现在)。再加三样让它有分量:数字<b>滚动到位</b>的动效、<b>本年</b>维度、以及一个<b>前台全屏态</b>——把手机横过来或放在前台 iPad 上,它就是店里的大屏。</p>
+<p class="note"><b>v3 改了什么(店主拍板):</b>①小程序与网页都<b>去掉「店里的一天」时间轴</b>(与今日台面重复);②现金业绩 / 总卡耗 / 新增持卡 / 到店人次 / <b>今日预约量</b>五个小数<b>收进大屏里面</b>,原来时间轴的位置;③大屏下面依次是 AI 今日一句 → 今日预约 → 今日要处理,<b>快捷格取消</b>(底部导航已有);④员工视角加<b>打卡门</b>:没打卡时大屏位置是一个圆形打卡钮,打完卡业绩大屏自动浮现;⑤网页首页右侧不动,只去左侧时间轴。<br><br><b>v2 当时的想法留个底:</b>v1 只是「一块好看的数字牌」。店主 08-10 原话是「主页要有<b>实时订单量</b>的数字化体现」——大数字讲的是<b>结果</b>,主页还得讲<b>此刻</b>。所以 v2 在大数字下面加了两样只有美业店才有的东西:<b>「此刻」脉搏行</b>(在做几个、待到店几个、下一位几点谁做什么,绿点在跳)和<b>「店里的一天」时间轴</b>(营业时段一根横条,做完的、正在做的、还没来的一眼看全,一根绿线标着现在)。再加三样让它有分量:数字<b>滚动到位</b>的动效、<b>本年</b>维度、以及一个<b>前台全屏态</b>——把手机横过来或放在前台 iPad 上,它就是店里的大屏。</p>
 
 <h2>一、小程序商家端首页 · 老板视角(从上到下)</h2>
 <div class="stage">
@@ -150,19 +173,26 @@ code{font-family:ui-monospace,SFMono-Regular,Menlo,monospace;font-size:.84em;bac
         </svg>
       </div>
       <div class="dots"><i class="on"></i><i></i><i></i><i></i><i></i></div>
-      <div class="pulse"><span><span class="live"></span><b>此刻</b> 在做 3 · 待到店 2 · 已完成 6</span><span>下一位 <b>14:45</b> Cathy · 法式</span></div>
-      <div class="strip" aria-label="今日营业时段 10:00–20:00 的预约分布">
-        <div class="bar"><i class="d" style="left:0%;width:9%"></i><i class="d" style="left:11%;width:12%"></i><i class="d" style="left:25%;width:8%"></i><i class="g" style="left:36%;width:11%"></i><i class="g" style="left:40%;width:6%;top:0;height:50%"></i><i class="n" style="left:52%;width:10%"></i><i class="n" style="left:66%;width:9%"></i><i class="n" style="left:80%;width:12%"></i><span class="now" style="left:45%"></span></div>
-        <div class="ax"><span>10:00</span><span>13:00</span><span>16:00</span><span>20:00</span></div>
+      <div class="mini5" aria-label="其余五个数,收在大屏里">
+        <div><span class="l">现金业绩</span><b>3,120</b><i class="delta up">▲9%</i></div>
+        <div><span class="l">总卡耗</span><b>940</b><i class="delta flat">—</i></div>
+        <div><span class="l">新增持卡</span><b>2</b><i class="delta up">▲2</i></div>
+        <div><span class="l">到店人次</span><b>11</b><i class="delta down">▼2</i></div>
+        <div><span class="l">今日预约</span><b>12</b><i class="sub"><span class="live"></span>在做 3 · 待到店 2</i></div>
       </div>
+      <div class="asof" style="color:var(--herosub);margin-top:6px">截至 14:32 · 今日未日结,实时</div>
     </div>
-    <div class="tiles">
-      <div class="tile"><div class="l">现金业绩 · 实收</div><div class="n">CAD 3,120</div><span class="delta up">▲ +9%</span></div>
-      <div class="tile"><div class="l">总卡耗</div><div class="n">CAD 940<small>· 次卡 3 次</small></div><span class="delta flat">— 持平</span></div>
-      <div class="tile"><div class="l">新增持卡</div><div class="n">2<small>人</small></div><span class="delta up">▲ +2</span></div>
-      <div class="tile"><div class="l">到店人次</div><div class="n">11<small>人次</small></div><span class="delta down">▼ 比昨日 −2</span></div>
+
+    <div class="sec"><div class="h">AI 今日一句 <span>自动 · 每天一次</span></div>
+      <div class="ai"><div class="q">10:05 生成</div>比上周四多做了 3 单;Cathy 隔了 34 天回来了,上次做的是法式;下午 4 点后还有 3 个空档。</div>
     </div>
-    <div class="asof">截至 14:32 · 今日未日结,实时</div>
+
+    <div class="sec"><div class="h">今日预约 <span>12 单 · 点开台面可排单</span></div>
+      <div class="bk"><span class="t">14:30</span><span class="who">Cathy · 法式加钻 · 小雅</span><span class="st g">在做</span></div>
+      <div class="bk"><span class="t">14:45</span><span class="who">Mia · 睫毛嫁接 · 苏苏</span><span class="st">待到店</span></div>
+      <div class="bk"><span class="t">15:30</span><span class="who">Joy · 卸甲+单色 · 小雅</span><span class="st">待到店</span></div>
+      <div class="bk"><span class="t" style="color:var(--acc)">看全部 ›</span><span class="who"></span></div>
+    </div>
 
     <div class="sec"><div class="h">今日要处理 <span>按急缓排</span></div>
       <div class="todo">
@@ -174,65 +204,74 @@ code{font-family:ui-monospace,SFMono-Regular,Menlo,monospace;font-size:.84em;bac
       </div>
     </div>
 
-    <div class="sec"><div class="h">今日预约 <span>12 单 · 点开台面可排单</span></div>
-      <div class="bk"><span class="t">14:30</span><span class="who">Cathy · 法式加钻 · 小雅</span><span class="st g">在做</span></div>
-      <div class="bk"><span class="t">14:45</span><span class="who">Mia · 睫毛嫁接 · 苏苏</span><span class="st">待到店</span></div>
-      <div class="bk"><span class="t">15:30</span><span class="who">Joy · 卸甲+单色 · 小雅</span><span class="st">待到店</span></div>
-      <div class="bk"><span class="t" style="color:var(--acc)">看全部 ›</span><span class="who"></span></div>
-    </div>
-
-    <div class="sec"><div class="h">AI 今日一句 <span>自动 · 每天一次</span></div>
-      <div class="ai"><div class="q">10:05 生成</div>比上周四多做了 3 单;Cathy 隔了 34 天回来了,上次做的是法式;下午 4 点后还有 3 个空档。</div>
-    </div>
-
-    <div class="sec"><div class="h">快捷</div>
-      <div class="quick"><div><i></i>开单</div><div><i></i>排单</div><div><i></i>客户</div><div><i></i>作品</div><div><i></i>财务</div><div><i></i>员工</div><div><i></i>客服台</div><div><i></i>设置</div></div>
-    </div>
+    <div class="below">↓ 底部导航四键照旧(台面 / 客户 / 作品 / 我的),快捷格取消</div>
   </div>
   <div class="side">
     <div class="lbl">每一块的规矩</div>
     <ol>
       <li><b>大屏</b>(见 §四口径):四个维度 今日/本周/本月/<b>本年</b>;折线随维度 7 天 / 7 周 / 7 月 / <b>12 月</b>。切换维度、轮播换指标时,数字从当前值<b>滚动</b>到新值(600ms,尊重系统「减少动态效果」则直接跳)。</li>
-      <li><b>此刻行</b>:三个数来自今日台面同一状态机;「下一位」= 最近一个未到店的预约(时间 · 顾客 · 项目),没有则写「今天没有待到店的了」。绿点常亮不闪;数据每次进入首页/下拉时取,不轮询。</li>
-      <li><b>时间轴</b>:横条 = 门店今日营业时段(取自营业时间设置;休息日整条灰并写「今日休息」);块 = 预约,按状态三色:做完实色、在做金色、未到虚框;多技师重叠的块叠半高;绿线 = 现在。点任意位置 → 跳台面对应时段。</li>
-      <li><b>今日要处理</b>:一张清单,不是五张卡。来源固定五项:客服待人工 / 待报价 / 待写小记 / 调休申请 / 昨日日结待确认;<b>数为 0 的行不出现</b>,全为 0 则整块换一句「今天没有要处理的」。红条 = 顾客在等的两项。点行 → 跳对应页。</li>
-      <li><b>今日预约</b>:只列<b>此刻之后</b>的前 3 条 + 「看全部」;过去的在台面看。</li>
-      <li><b>AI 今日一句</b>:现有每日总结,只保留一段两三句、带生成时间;没生成写「今天的总结还没生成」并可点「现在生成」。</li>
-      <li><b>快捷</b>:八格固定顺序,不可配置(配置是以后的事)。</li>
-      <li><b>不再单独出现的旧块</b>:「我的今日台面」卡并入此刻行+时间轴;「待办小记」并入今日要处理;「客服工作台」并入今日要处理;打卡/排班移到员工视角与「我的」页。</li>
+      <li><b>五个小数收在大屏底部一行</b>:现金业绩 / 总卡耗 / 新增持卡 / 到店人次 / <b>今日预约</b>。轮播把谁放大,谁就从这一行暂时空出(位置保留、数字淡出),其余四个照显——五个数任何时刻都在屏上。今日预约那一格的副行「在做 3 · 待到店 2」带绿点,是主页上唯一的实时一眼;维度切到本周/本月/本年时,今日预约格变成「本期预约 N」,副行不显示。</li>
+      <li><b>对比</b>:小数旁的小箭头只给方向与幅度(▲9%),点大数字才看完整对比句;上期是 0 就不显示箭头(不显示 ∞/NaN)。升绿降红平灰,带箭头不只靠颜色。</li>
+      <li><b>折线</b>只有一条,不要图例;末点加白圈。</li>
+      <li><b>截至行</b>说真话:今日是「未日结,实时」;已日结写「已日结 ✓ 老板确认于 21:05」。</li>
+      <li><b>月目标 62%</b>只在店设了目标时出现;没设整块不出现,不占位不写"未设置"。</li>
+      <li><b>财务锁</b>开着时五个数按「财务指标显隐 v4」遮成 ••••,轮播照转,解锁口同一处。</li>
+      <li><b>大屏下面依次</b>:AI 今日一句 → 今日预约(此刻之后前 3 条 + 看全部)→ 今日要处理(五项来源固定成一张清单,0 不出现,全 0 换一句「今天没有要处理的」,红条 = 顾客在等的两项)。<b>不再有快捷格</b>——底部导航四键在。</li>
+      <li><b>不再单独出现的旧块</b>:「我的今日台面」卡并入今日预约格副行;「待办小记」「客服工作台」并入今日要处理;打卡/排班到员工视角。</li>
     </ol>
   </div>
 </div>
 
-<h2>二、小程序商家端首页 · 员工视角</h2>
+<h2>二、小程序商家端首页 · 员工视角(打卡门:两态)</h2>
 <div class="stage">
-  <div class="phone" aria-label="员工视角首页视觉稿">
+  <div class="phone" aria-label="员工视角 · 未打卡态">
+    <div class="top"><span><b>LUVIA 半径</b> · 小雅,早上好</span><span>9 月 3 日 周四</span></div>
+    <div class="hero gate">
+      <div class="k"><span>今天的班 <span style="opacity:.7">· 10:00–19:00 · 5 单已约</span></span><span style="font-size:.72rem">未打卡</span></div>
+      <div class="ring" role="button" aria-label="上班打卡"><span>上班<br>打卡</span></div>
+      <div class="gtxt">打完卡,业绩大屏在这里出现</div>
+    </div>
+    <div class="sec"><div class="h">我的今日预约 <span>5 单</span></div>
+      <div class="bk"><span class="t">10:30</span><span class="who">Mia · 睫毛嫁接</span><span class="st">待到店</span></div>
+      <div class="bk"><span class="t">11:30</span><span class="who">Cathy · 法式加钻</span><span class="st">待到店</span></div>
+    </div>
+    <div class="below">↓ 今日要处理(待写小记 / 我的调休)· 底部导航照旧</div>
+  </div>
+  <div class="phone" aria-label="员工视角 · 已打卡态">
     <div class="top"><span><b>LUVIA 半径</b> · 小雅,下午好</span><span>9 月 3 日 周四</span></div>
     <div class="hero" style="padding-bottom:14px">
-      <div class="period"><span class="on">今日</span><span>本月</span></div>
+      <div class="period"><span class="on">今日</span><span>本月</span><span style="margin-left:auto;border-color:var(--herolive);color:var(--herolive)">✓ 已打卡 09:58</span></div>
       <div class="k"><span>我的业绩 <span style="opacity:.7">· 服务单</span></span><span style="font-size:.72rem">本月目标 48%</span></div>
       <div class="big"><small>CAD</small>860</div>
-      <div class="row"><span class="delta up">▲ 比昨日 +2 单</span><span style="font-size:.78rem;color:var(--herosub)">今日 5 单 · 在做 1 · 待到店 2</span></div>
-      <div class="pulse"><span><span class="live"></span><b>下一位</b> 14:45 Mia · 睫毛嫁接</span><span>已打卡 09:58</span></div>
+      <div class="row"><span class="delta up">▲ 比昨日 +2 单</span><span style="font-size:.78rem;color:var(--herosub)">下班打卡 ›</span></div>
+      <div class="mini5" style="grid-template-columns:repeat(3,1fr)">
+        <div><span class="l">今日单数</span><b>5</b><i class="sub"><span class="live"></span>在做 1 · 待到店 2</i></div>
+        <div><span class="l">下一位</span><b>14:45</b><i class="sub">Mia · 睫毛嫁接</i></div>
+        <div><span class="l">本周工时</span><b>31<small>h</small></b><i class="sub">超时算加班</i></div>
+      </div>
     </div>
-    <div class="sec"><div class="h">今日要处理</div>
-      <div class="todo"><div><span>做完待写小记</span><b>2</b></div><div><span>我的调休申请</span><b>审批中</b></div></div>
+    <div class="sec"><div class="h">AI 今日一句 <span>只说与我有关的</span></div>
+      <div class="ai">今天 5 单里 Cathy 是隔了 34 天回来的老客,上次做的是法式;下午 3 点后你还有 1 个空档。</div>
     </div>
     <div class="sec"><div class="h">我的今日预约 <span>5 单</span></div>
       <div class="bk"><span class="t">14:30</span><span class="who">Cathy · 法式加钻</span><span class="st g">在做</span></div>
       <div class="bk"><span class="t">15:30</span><span class="who">Joy · 卸甲+单色</span><span class="st">待到店</span></div>
     </div>
-    <div class="sec"><div class="h">快捷</div><div class="quick"><div><i></i>打卡</div><div><i></i>我的排班</div><div><i></i>我的客人</div><div><i></i>我的作品</div></div></div>
+    <div class="sec"><div class="h">今日要处理</div>
+      <div class="todo"><div><span>做完待写小记</span><b>2</b></div><div><span>我的调休申请</span><b>审批中</b></div></div>
+    </div>
   </div>
-  <div class="side">
-    <div class="lbl">员工视角的规矩</div>
-    <ul>
-      <li>员工<b>看不到店的五个指标</b>,只看自己的业绩(现有「我的业绩」口径:服务单业绩,与薪资方案同源)。维度只有今日/本月。</li>
-      <li>「此刻」变成「下一位是我的哪一单」+ 打卡状态;时间轴不给员工(看台面即可)。</li>
-      <li>今日要处理只有两项来源:待写小记、我的调休申请状态。</li>
-      <li>快捷四格:打卡 / 我的排班 / 我的客人 / 我的作品。</li>
-    </ul>
-  </div>
+</div>
+<div class="side" style="margin-top:10px">
+  <div class="lbl">打卡门的规矩</div>
+  <ul>
+    <li><b>没打卡时</b>大屏位置只有一个圆形「上班打卡」钮和今天的班次一句;点一下走<b>现有考勤打卡接口</b>(不另做一套),成功后钮收起、业绩大屏<b>原地浮现</b>(300ms,减少动效则直接换),不用刷新。这样员工不会忘打卡,主页也少一个条目。</li>
+    <li><b>打了卡</b>之后,大屏右上角有「✓ 已打卡 09:58」,折线行右侧一个小字「下班打卡 ›」;下班打卡后大屏仍在,角标变「已下班 19:02」。</li>
+    <li><b>休息日 / 没排班</b>:不出打卡钮,大屏直接显示,顶部一句「今天没有你的班」;这一句与台面同源,不另判。</li>
+    <li><b>打卡失败</b>(定位、网络):钮不收起,钮下一句说清原因,不进大屏——不可用即不呈现的反面:没成功就不能假装打了。</li>
+    <li>员工看不到店的五个指标,只看自己的业绩(现有「我的业绩」口径,与薪资方案同源),维度只有今日/本月;三个小数是今日单数(副行实时)、下一位、本周工时。</li>
+    <li>今日要处理只有两项来源:待写小记、我的调休申请状态。<b>没有快捷格</b>;打卡不再是快捷,是门。</li>
+  </ul>
 </div>
 
 <h2>三、网页后台首页(替代现有「后台首页」Dashboard)</h2>
@@ -247,8 +286,17 @@ code{font-family:ui-monospace,SFMono-Regular,Menlo,monospace;font-size:.84em;bac
           <div class="big"><small>CAD</small>2,486</div>
           <div class="row"><span class="delta up">▲ 比昨日 +18%</span>
             <svg class="spark" viewBox="0 0 132 38" style="width:200px;height:44px" aria-label="近 7 天营业收入走势"><path d="M2 30 L24 24 L46 27 L68 18 L90 21 L112 12 L130 8" fill="none" stroke="#d9b97e" stroke-width="2" stroke-linejoin="round"/><circle cx="130" cy="8" r="3.5" fill="#d9b97e" stroke="#2a2521" stroke-width="2"/></svg></div>
-          <div class="pulse"><span><span class="live"></span><b>此刻</b> 在做 3 · 待到店 2 · 已完成 6</span><span>下一位 <b>14:45</b> Cathy · 法式</span></div>
-          <div class="strip"><div class="bar"><i class="d" style="left:0%;width:9%"></i><i class="d" style="left:11%;width:12%"></i><i class="d" style="left:25%;width:8%"></i><i class="g" style="left:36%;width:11%"></i><i class="n" style="left:52%;width:10%"></i><i class="n" style="left:66%;width:9%"></i><i class="n" style="left:80%;width:12%"></i><span class="now" style="left:45%"></span></div><div class="ax"><span>10:00</span><span>13:00</span><span>16:00</span><span>20:00</span></div></div>
+          <div class="nowgrid" aria-label="此刻">
+            <div class="nowcell"><span class="l"><span class="live"></span>在做</span><b>3</b></div>
+            <div class="nowcell"><span class="l">待到店</span><b>2</b></div>
+            <div class="nowcell"><span class="l">已完成</span><b>6</b></div>
+            <div class="nowcell"><span class="l">今日预约</span><b>12</b></div>
+          </div>
+          <div class="nextcard">
+            <div class="nt"><span class="l">下一位</span><b>14:45</b></div>
+            <div class="nw"><b>Cathy</b><span>法式加钻 · 小雅 · 60 分钟</span></div>
+            <span class="go">看台面 ›</span>
+          </div>
         </div>
         <div class="dtiles">
           <div class="dtile"><div class="l">现金业绩 · 实收</div><div class="n">CAD 3,120</div><span class="delta up">▲ +9%</span></div>
@@ -276,7 +324,7 @@ code{font-family:ui-monospace,SFMono-Regular,Menlo,monospace;font-size:.84em;bac
 </div>
 <div class="side" style="margin-top:10px">
   <ul>
-    <li>网页首页 = <b>同一份 pulse 数据</b>横着摆:左大数字+此刻+时间轴,右四小牌+AI 一句;下面左边把<b>现有今日台面原样嵌入</b>(不是再画一个),右边今日要处理。现有「本月经营 / 本月账本收入 / 收入解锁 / 来源」那几块<b>退役</b>——它们的信息都在大屏与财务页里。</li>
+    <li>网页首页 = <b>同一份 pulse 数据</b>横着摆:左边大数字之下是<b>「此刻」四格</b>(在做 / 待到店 / 已完成 / 今日预约,数字不是句子)和一张<b>「下一位」卡</b>(时间大字 + 顾客 + 项目/技师/时长 + 看台面),把左栏撑到与右栏齐平,<b>不再有空白、不再是一行点号文字</b>;右四小牌 + AI 一句;下面左边把<b>现有今日台面原样嵌入</b>(不是再画一个),右边今日要处理。现有「本月经营 / 本月账本收入 / 收入解锁 / 来源」那几块<b>退役</b>——它们的信息都在大屏与财务页里。</li>
     <li>右上「⤢ 全屏大屏」进入 §五 的全屏态。</li>
     <li>宽度不够(< 900px)时退化为小程序同款竖排。</li>
   </ul>
@@ -290,12 +338,15 @@ code{font-family:ui-monospace,SFMono-Regular,Menlo,monospace;font-size:.84em;bac
 <tr><td><b>总卡耗</b></td><td>储值消耗金额(<code>pay_channel = stored_value</code>)+ 次卡消耗次数(钱与次两个数)</td><td>储值走账本;次卡走次卡消耗记录,不折钱</td><td>同上</td></tr>
 <tr><td><b>新增持卡</b></td><td>当期首次开卡顾客数(储值首充或首买次卡),按顾客去重</td><td>首条充值/首张次卡落在当期</td><td>绝对数</td></tr>
 <tr><td><b>到店人次</b></td><td>当期到达「已到店 / 已完成」的预约 + 现场开单,按单去重</td><td>台面同一状态机</td><td>绝对数</td></tr>
+<tr><td><b>今日预约</b><br><span class="lbl">v3 新增</span></td><td>今日(维度=今日时)所有未取消的预约数;副行 = 此刻在做 / 待到店。维度切换后 = 本期预约数,无副行</td><td>台面同一状态机、同一时刻同一个数</td><td>比昨日 / 同期,绝对数</td></tr>
 </table></div>
+<p class="note"><b>口径两答(09-03,Code 读图后问的):</b>①跨已日结与未日结的周/月/年——<b>逐日拼</b>:已日结的日子取 <code>daily_closes</code> 快照,未日结的日子(通常只有今天)实时算,两段相加;冲销按 N-5 当期冲减,记在哪一天就落在哪一天的数里,所以拼出来的月与日结月报天然相等——这本身就是判据 1 的月度形态。②「员工身份响应体不含店级 metrics」= <b>后端按身份裁字段</b>,前端隐藏不算数。</p>
 <p class="note warn"><b>Code 动手前先现测答两问:</b>①充值/购卡收款在账本里现在记的是哪个 <code>category</code>/<code>pay_channel</code>;②次卡消耗记在哪张表、有没有能落到「当期」的时间戳。答不上的那一格不上,不许 0 顶。</p>
 <div class="tblwrap"><table>
 <tr><th>接口</th><th>返回</th></tr>
-<tr><td><code>GET /admin/dashboard/pulse?period=today|week|month|year</code></td><td><code>asOf · currency · settled{state,confirmedAt?} · goal{pct}?(未设则无字段)· locked · metrics[5]{key,value,unit,extra?,prev,deltaPct|null,deltaAbs,spark[7|12]}</code>;服务端算好,两端只渲染;locked 时不下发 value</td></tr>
-<tr><td><code>GET /admin/dashboard/now</code></td><td><code>asOf · doing · waiting · done · next{time,customer,service,tech}|null · day{open,close,closed:boolean} · blocks[{start,end,status,tech}]</code>——此刻行与时间轴共用;来自今日台面同一数据源,不另算</td></tr>
+<tr><td><code>GET /admin/dashboard/pulse?period=today|week|month|year</code></td><td><code>asOf · currency · settled{state,confirmedAt?} · goal{pct}?(未设则无字段)· locked · metrics[6]{key,value,unit,extra?,prev,deltaPct|null,deltaAbs,spark[7|12]}</code>(v3:六项,加 <code>bookings</code>=今日/本期预约);服务端算好,两端只渲染;locked 时不下发 value</td></tr>
+<tr><td><code>GET /admin/dashboard/now</code></td><td><code>asOf · total · doing · waiting · done · next{time,customer,service,tech}|null · closed:boolean</code>——今日预约格副行与网页此刻行共用;来自今日台面同一数据源,不另算(v3 去掉 blocks/day 时间轴字段)</td></tr>
+<tr><td><code>POST /admin/attendance/clock-in</code>(现有)</td><td>员工打卡门用<b>现有考勤接口</b>,不新开;响应带 <code>clockedInAt</code>,主页据此切态</td></tr>
 <tr><td><code>GET /admin/dashboard/todo</code></td><td>固定五项各一个数(0 也返回,由前端隐藏)+ 每项的跳转目标</td></tr>
 </table></div>
 
@@ -305,8 +356,13 @@ code{font-family:ui-monospace,SFMono-Regular,Menlo,monospace;font-size:.84em;bac
     <div class="k" style="font-size:.95rem"><span>LUVIA 半径 · 今日营业收入</span><span>14:32</span></div>
     <div class="big"><small>CAD</small>2,486</div>
     <div class="row"><span class="delta up" style="font-size:.95rem">▲ 比昨日 +18%</span></div>
-    <div class="pulse" style="font-size:.95rem"><span><span class="live"></span><b>此刻</b> 在做 3 · 待到店 2 · 已完成 6</span><span>下一位 <b>14:45</b> Cathy</span></div>
-    <div class="strip"><div class="bar"><i class="d" style="left:0%;width:9%"></i><i class="d" style="left:11%;width:12%"></i><i class="d" style="left:25%;width:8%"></i><i class="g" style="left:36%;width:11%"></i><i class="n" style="left:52%;width:10%"></i><i class="n" style="left:66%;width:9%"></i><i class="n" style="left:80%;width:12%"></i><span class="now" style="left:45%"></span></div><div class="ax"><span>10:00</span><span>13:00</span><span>16:00</span><span>20:00</span></div></div>
+    <div class="nowgrid">
+      <div class="nowcell"><span class="l"><span class="live"></span>在做</span><b>3</b></div>
+      <div class="nowcell"><span class="l">待到店</span><b>2</b></div>
+      <div class="nowcell"><span class="l">已完成</span><b>6</b></div>
+      <div class="nowcell"><span class="l">今日预约</span><b>12</b></div>
+    </div>
+    <div class="nextcard"><div class="nt"><span class="l">下一位</span><b>14:45</b></div><div class="nw"><b>Cathy</b><span>法式加钻 · 小雅</span></div></div>
   </div>
   <div class="tvt">
     <div class="dtile"><div class="l">现金业绩</div><div class="n">CAD 3,120</div></div>
@@ -319,16 +375,16 @@ code{font-family:ui-monospace,SFMono-Regular,Menlo,monospace;font-size:.84em;bac
 <div class="side" style="margin-top:10px"><ul>
   <li>入口:小程序把手机<b>横过来</b>或长按大屏;网页点「⤢ 全屏大屏」。退出:竖回来 / Esc / 点任意处。</li>
   <li>全屏态只轮播<b>今日</b>五指标,每 6 秒一换;每 60 秒静默重取一次 pulse 与 now(<b>唯一允许轮询的地方</b>,因为它是挂在前台不动的屏)。</li>
-  <li>顾客可能看到这块屏:所以<b>全屏态默认隐藏现金业绩与新增持卡</b>(只显营业收入、卡耗、到店人次与时间轴),门店设置里一个开关「前台大屏显示金额」默认关;财务锁开着时一律遮。</li>
+  <li>顾客可能看到这块屏:所以<b>全屏态默认隐藏现金业绩与新增持卡</b>(只显营业收入、卡耗、到店人次、今日预约),门店设置里一个开关「前台大屏显示金额」默认关;财务锁开着时一律遮。</li>
   <li>屏保逻辑:无操作 5 分钟后数字放大 10% 并缓慢呼吸(尊重减少动效);不熄屏由设备自己管。</li>
 </ul></div>
 
 <h2>六、三态与行为</h2>
 <div class="states">
   <div class="st"><div class="lbl">加载中</div><div class="mini"><div class="sk" style="width:30%"></div><div class="sk big"></div><div class="sk" style="width:45%"></div></div>骨架屏,不显示 0;此刻行与时间轴同样骨架</div>
-  <div class="st"><div class="lbl">新店 / 当期无数据</div><div class="mini">营业收入<br><span style="font-family:Fraunces,Georgia,serif;font-size:1.6rem">CAD 0</span><br><span style="color:var(--herosub)">今天还没有开单 · 暂无往日数据</span></div>0 是真数照显;折线不画;时间轴只画营业时段空条;今日要处理整块换一句</div>
+  <div class="st"><div class="lbl">新店 / 当期无数据</div><div class="mini">营业收入<br><span style="font-family:Fraunces,Georgia,serif;font-size:1.6rem">CAD 0</span><br><span style="color:var(--herosub)">今天还没有开单 · 暂无往日数据</span></div>0 是真数照显;折线不画;今日要处理整块换一句</div>
   <div class="st"><div class="lbl">取数失败</div><div class="mini">业绩数据暂时取不到<br><span style="color:var(--herosub)">下拉重试 · 或稍后再看</span></div>整块换一句话,不显示旧数、不显示 0;其余块各自独立,不因大屏失败一起空</div>
-  <div class="st"><div class="lbl">休息日</div><div class="mini">今日休息<br><span style="color:var(--herosub)">时间轴不画;大屏照显(维度切本周更有用)</span></div>此刻行写「今日休息」;今日预约块隐藏</div>
+  <div class="st"><div class="lbl">休息日</div><div class="mini">今日休息<br><span style="color:var(--herosub)">大屏照显(维度切本周更有用)</span></div>今日预约格写「今日休息」;今日预约块隐藏;员工不出打卡钮</div>
 </div>
 <div class="tblwrap"><table>
 <tr><th>动作</th><th>结果</th></tr>
@@ -336,7 +392,8 @@ code{font-family:ui-monospace,SFMono-Regular,Menlo,monospace;font-size:.84em;bac
 <tr><td>切维度</td><td>重取 pulse;大数字滚动到新值;折线单位随维度</td></tr>
 <tr><td>点大数字 / 左右滑</td><td>暂停轮播并切指标;再点继续</td></tr>
 <tr><td>长按大数字 / 点小牌</td><td>营业收入、现金 → 财务页当期;卡耗 → 储值流水;新增持卡 → 客户库筛「新持卡」;到店人次 → 今日台面</td></tr>
-<tr><td>点此刻行 / 时间轴</td><td>跳今日台面(时间轴带到对应时段)</td></tr>
+<tr><td>点今日预约格 / 网页此刻行</td><td>跳今日台面</td></tr>
+<tr><td>员工点圆形打卡钮</td><td>走现有考勤接口;成功→钮收起、业绩大屏原地浮现;失败→钮不收起、钮下说明原因</td></tr>
 <tr><td>点今日要处理的行</td><td>客服待人工 → 客服工作台;待报价 → 报价试算;待写小记 → 小记列表;调休 → 排班审批;日结 → 日结页</td></tr>
 </table></div>
 
@@ -344,19 +401,19 @@ code{font-family:ui-monospace,SFMono-Regular,Menlo,monospace;font-size:.84em;bac
 <ol>
   <li>同口径:大屏 <code>revenue.value</code> === 日结页实时营收 === 财务页当期营收(同一夹具三处比对)。</li>
   <li>已日结日 === <code>daily_closes.revenue_cents</code> 快照。</li>
-  <li><code>metrics</code> 恒五项、顺序固定;<code>period=year</code> 的 <code>spark</code> 恒 12 项。</li>
+  <li><code>metrics</code> 恒六项、顺序固定;<code>period=year</code> 的 <code>spark</code> 恒 12 项。</li>
   <li>prev=0 → <code>deltaPct === null</code>,页面「上期 0」节点存在、无 ∞/NaN。</li>
-  <li>此刻行三数 === 今日台面同一时刻的三数(同源函数);「下一位」= 台面里最近一个未到店预约。</li>
-  <li>时间轴块数 === 今日预约数(按单);休息日 <code>day.closed=true</code> 时无块。</li>
+  <li>今日预约格 <code>bookings.value</code> 与副行三数 === 今日台面同一时刻的数(同源函数);「下一位」= 台面里最近一个未到店预约。</li>
+  <li>员工打卡门:未打卡响应体 <code>clockedInAt=null</code> 时页面无业绩节点、有打卡钮节点;打卡成功后<b>不刷新</b>即出现业绩节点、打卡钮节点消失;打卡失败两者都不变且错误句节点存在;休息日无打卡钮。</li>
   <li>今日要处理:为 0 的项无节点;全 0 时真话块存在。</li>
   <li>员工身份响应体不含店级 metrics;老板身份含。</li>
   <li>币种随店;财务锁 locked 时不下发 value 且遮掩节点存在;全屏态默认无现金/新增持卡节点。</li>
-  <li>两端同源:同一 payload 两端五数字文本一致。</li>
-  <li>三态 + 休息日态各自真话节点存在且互斥;截图:老板/员工 × 三态 + 四维度 + 全屏 + 休息日,每张附 DOM 证据。</li>
+  <li>两端同源:同一 payload 两端六数字文本一致。</li>
+  <li>三态 + 休息日态各自真话节点存在且互斥;截图:老板 × 三态 + 四维度 + 全屏 + 休息日;员工 × 未打卡/已打卡/打卡失败/休息日;每张附 DOM 证据。</li>
 </ol>
 
 <h2>八、明确不做</h2>
-<p>不做图表页、不做导出、不做自定义指标或可配置快捷、不做多店汇总、不做首页轮询(全屏态除外)。顾客端首页另一张图。</p>
+<p>不做图表页、不做导出、不做自定义指标、不做快捷格、不做多店汇总、不做首页轮询(全屏态除外)。顾客端首页另一张图。</p>
 
 <p class="foot">图=合同。本图替代「老板主页业绩大屏 v1」。Code 按本图落地:先答口径两问,再按 §四 三个接口 → §一/§二/§三 三个页面 → §五 全屏态的顺序,每一段交齐附截图与 DOM 证据。店主点头前为草案。</p>
 </div>

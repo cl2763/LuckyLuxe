@@ -2386,7 +2386,7 @@ async function loadFinanceTrend(granularity, range) {
   if (body) body.innerHTML = `<p class="subtle">${owner.lang === 'zh' ? '加载中…' : 'Loading…'}</p>`
   let qs = `range=${encodeURIComponent(r)}`
   if (r === 'custom') {
-    const from = window.prompt(owner.lang === 'zh' ? '从哪个月开始?(格式 2026-01)' : 'From month (2026-01)', '')
+    const from = await window.UIDialog.text(owner.lang === 'zh' ? '从哪个月开始?(格式 2026-01)' : 'From month (2026-01)', '')
     if (!from || !/^\d{4}-\d{2}$/.test(from.trim())) return
     qs += `&from=${encodeURIComponent(from.trim())}`
   }
@@ -2700,11 +2700,11 @@ function renderFinancePayroll() {
       `
       els.financePayrollBody.querySelectorAll('[data-sal-adjust]').forEach((btn) => btn.addEventListener('click', async () => {
         const tid = btn.dataset.salAdjust
-        const v = prompt(zh ? `调整 ${btn.dataset.salName} 的工资:金额$(可负,如 50 或 -20)` : 'Adjust amount $')
+        const v = await window.UIDialog.text(zh ? `调整 ${btn.dataset.salName} 的工资:金额$(可负,如 50 或 -20)` : 'Adjust amount $')
         if (v === null) return
         const n = Number(v)
         if (!Number.isFinite(n) || n === 0) { toast(zh ? '金额无效' : 'Invalid amount'); return }
-        const note = prompt(zh ? '调整备注(必填,如:代班补贴 / 迟到扣款)' : 'Note (required)')
+        const note = await window.UIDialog.text(zh ? '调整备注(必填,如:代班补贴 / 迟到扣款)' : 'Note (required)')
         if (!note || !note.trim()) { toast(zh ? '备注必填' : 'Note required'); return }
         try {
           await request('/admin/salary/adjust', { method: 'PUT', body: JSON.stringify({ month, technicianId: tid, adjustCents: Math.round(n * 100), note: note.trim() }) })
@@ -2718,14 +2718,14 @@ function renderFinancePayroll() {
           toast(zh ? '请先完成上方「② 业绩核查」再锁定' : 'Complete the performance review above first')
           return
         }
-        if (!confirm(zh ? `按当前数字锁定 ${month} 工资表?锁定后业绩/考勤变动不影响本月工资。` : 'Lock payroll?')) return
+        if (!await window.UIDialog.confirm(zh ? `按当前数字锁定 ${month} 工资表?锁定后业绩/考勤变动不影响本月工资。` : 'Lock payroll?')) return
         try { await request('/admin/salary/lock', { method: 'POST', body: JSON.stringify({ month }) }); toast(zh ? '已锁定存档' : 'Locked'); renderFinancePayroll() } catch (error) { toast(error.message) }
       })
-      els.financePayrollBody.querySelector('[data-sal-review]')?.addEventListener('click', () => {
+      els.financePayrollBody.querySelector('[data-sal-review]')?.addEventListener('click', async () => {
         const warn = notes.length
           ? (zh ? `本月有 ${notes.length} 条归属备注,确认都已核对(需要修正的已用「± 调整」处理)?` : `${notes.length} attribution notes — all verified?`)
           : (zh ? `确认完成 ${month} 业绩核查?` : `Mark ${month} as reviewed?`)
-        if (!confirm(warn)) return
+        if (!await window.UIDialog.confirm(warn)) return
         localStorage.setItem(`lucky-salary-review-${month}`, new Date().toISOString())
         toast(zh ? '核查完成,可以锁定工资表了' : 'Reviewed — you can lock now')
         renderFinancePayroll()
@@ -2746,12 +2746,12 @@ function renderFinancePayroll() {
       }))
       const unlockBtn = els.financePayrollBody.querySelector('[data-sal-unlock]')
       if (unlockBtn) unlockBtn.addEventListener('click', async () => {
-        if (!confirm(zh ? `删除 ${month} 锁定存档,回到实时试算?` : 'Unlock?')) return
+        if (!await window.UIDialog.confirm(zh ? `删除 ${month} 锁定存档,回到实时试算?` : 'Unlock?')) return
         try { await request('/admin/salary/unlock', { method: 'POST', body: JSON.stringify({ month }) }); toast(zh ? '已解锁' : 'Unlocked'); renderFinancePayroll() } catch (error) { toast(error.message) }
       })
       const payoutBtn = els.financePayrollBody.querySelector('[data-sal-payout]')
       if (payoutBtn) payoutBtn.addEventListener('click', async () => {
-        if (!confirm(zh ? `确认发放 ${month} 工资?将按锁定工资表逐人写入账本(支出·工资),入账后不可解锁,发错需红字冲销。` : 'Pay out into ledger?')) return
+        if (!await window.UIDialog.confirm(zh ? `确认发放 ${month} 工资?将按锁定工资表逐人写入账本(支出·工资),入账后不可解锁,发错需红字冲销。` : 'Pay out into ledger?')) return
         try {
           const r = await request('/admin/salary/payout', { method: 'POST', body: JSON.stringify({ month }) })
           toast(zh ? `已入账 ${r.count} 人` : 'Paid'); renderFinancePayroll(); loadFinancePage()
@@ -2806,9 +2806,9 @@ function renderAttendanceBoard() {
       els.attendanceBody.querySelector('[data-att-refresh]')?.addEventListener('click', () => renderAttendanceBoard())
       els.attendanceBody.querySelectorAll('[data-att-fix]').forEach((btn) => btn.addEventListener('click', async () => {
         const recId = btn.dataset.attRecord
-        const clockIn = prompt(zh ? `${btn.dataset.attName} 上班时刻(HH:mm,24小时制,留空=不改)` : 'Clock-in HH:mm (blank = keep)', btn.dataset.attIn || '')
+        const clockIn = await window.UIDialog.text(zh ? `${btn.dataset.attName} 上班时刻(HH:mm,24小时制,留空=不改)` : 'Clock-in HH:mm (blank = keep)', btn.dataset.attIn || '')
         if (clockIn === null) return
-        const clockOut = prompt(zh ? `${btn.dataset.attName} 下班时刻(HH:mm,留空=不改)` : 'Clock-out HH:mm (blank = keep)', btn.dataset.attOut || '')
+        const clockOut = await window.UIDialog.text(zh ? `${btn.dataset.attName} 下班时刻(HH:mm,留空=不改)` : 'Clock-out HH:mm (blank = keep)', btn.dataset.attOut || '')
         if (clockOut === null) return
         const body = {}
         if (clockIn.trim()) body.clockIn = clockIn.trim()
@@ -3202,7 +3202,7 @@ function renderSalaryPlans() {
         renderSalaryPlanEditor()
       }))
       body.querySelectorAll('[data-sp-reset]').forEach((btn) => btn.addEventListener('click', async () => {
-        if (!confirm(zh ? `删除 ${btn.dataset.spName} 的专属方案,改为跟随全店默认?` : 'Delete this override and follow store default?')) return
+        if (!await window.UIDialog.confirm(zh ? `删除 ${btn.dataset.spName} 的专属方案,改为跟随全店默认?` : 'Delete this override and follow store default?')) return
         try {
           await request(`/admin/salary-plans/${btn.dataset.spReset}`, { method: 'DELETE' })
           toast(zh ? '已恢复跟随默认' : 'Reset to default')
@@ -4669,7 +4669,7 @@ function renderScheduleRequestsPanel() {
 
 async function submitScheduleRequest(date) {
   const zh = owner.lang === 'zh'
-  const note = window.prompt(zh
+  const note = await window.UIDialog.text(zh
     ? `向老板申请调整 ${date} 的排班。留言(例如:想休一天 / 想改成 12:00-18:00):`
     : `Request a change for ${date}. Note for the owner:`)
   if (note === null) return
@@ -4701,7 +4701,7 @@ async function toggleScheduleCell(techId, date) {
   const state = scheduleCellState(techId, day)
   const bookings = (week.bookingCounts || []).find((row) => row.technicianId === techId && row.date === date)?.count || 0
   if (state.working && bookings > 0) {
-    const ok = window.confirm(zh
+    const ok = await window.UIDialog.confirm(zh
       ? `该技师当天已有 ${bookings} 个预约,确定改成休息吗?已有预约不会自动取消,需要另行联系顾客。`
       : `This technician has ${bookings} booking(s) that day. Mark as off anyway? Existing bookings are not cancelled automatically.`)
     if (!ok) return
@@ -4737,7 +4737,7 @@ async function applyWeekPatternForward() {
   const week = owner.scheduleWeek
   if (!week) return
   const zh = owner.lang === 'zh'
-  if (!window.confirm(zh ? '把本周每位技师的上/休模式复制到未来 4 周?(会覆盖那几周已有的排班)' : 'Copy this week pattern to the next 4 weeks? Existing entries will be overwritten.')) return
+  if (!await window.UIDialog.confirm(zh ? '把本周每位技师的上/休模式复制到未来 4 周?(会覆盖那几周已有的排班)' : 'Copy this week pattern to the next 4 weeks? Existing entries will be overwritten.')) return
   const entries = []
   for (const tech of (week.technicians || []).filter((item) => item.isActive)) {
     for (const day of week.days) {
@@ -4755,9 +4755,9 @@ async function applyWeekPatternForward() {
 
 async function addTechnicianPrompt() {
   const zh = owner.lang === 'zh'
-  const name = window.prompt(zh ? '技师姓名:' : 'Technician name:')
+  const name = await window.UIDialog.text(zh ? '技师姓名:' : 'Technician name:')
   if (!name || !name.trim()) return
-  const title = window.prompt(zh ? '职称(可留空,例如:美甲师/美睫师):' : 'Title (optional):') || ''
+  const title = await window.UIDialog.text(zh ? '职称(可留空,例如:美甲师/美睫师):' : 'Title (optional):') || ''
   await request('/admin/technicians', { method: 'POST', body: JSON.stringify({ name: name.trim(), title: title.trim() }) })
   toast(zh ? '技师已添加,默认可做所有在售服务' : 'Technician added')
   await loadAll()
@@ -4839,9 +4839,9 @@ function renderTechAccountControls(techId, zh) {
     <button class="ghost slim ${disabled ? '' : 'danger-ghost'}" data-acct-toggle="${escapeHtml(account.id)}" type="button">${disabled ? (zh ? '启用账号' : 'Enable') : (zh ? '停用账号' : 'Disable')}</button>`
 }
 
-function showCredentialsOnce(username, password) {
+async function showCredentialsOnce(username, password) {
   const zh = owner.lang === 'zh'
-  window.prompt(
+  await window.UIDialog.text(
     zh ? '账号已就绪(初始密码只显示这一次,复制后发给员工;员工首次登录会被要求改密):' : 'Copy and send to the staff member (shown only once):',
     `${zh ? '用户名' : 'Username'}: ${username}  ${zh ? '初始密码' : 'Password'}: ${password}`
   )
@@ -4857,9 +4857,9 @@ async function editTechnicianPrompt(techId) {
   const zh = owner.lang === 'zh'
   const tech = owner.technicians.find((item) => item.id === techId)
   if (!tech) return
-  const name = window.prompt(zh ? '技师姓名:' : 'Name:', tech.name)
+  const name = await window.UIDialog.text(zh ? '技师姓名:' : 'Name:', tech.name)
   if (name === null) return
-  const title = window.prompt(zh ? '职称:' : 'Title:', tech.title || '')
+  const title = await window.UIDialog.text(zh ? '职称:' : 'Title:', tech.title || '')
   if (title === null) return
   await request(`/admin/technicians/${techId}`, { method: 'PATCH', body: JSON.stringify({ name: name.trim() || tech.name, title: title.trim() }) })
   toast(zh ? '已保存' : 'Saved')
@@ -4871,7 +4871,7 @@ async function toggleTechnicianActive(techId) {
   const tech = owner.technicians.find((item) => item.id === techId)
   if (!tech) return
   const nowActive = !(tech.is_active === 0 || tech.is_active === false)
-  if (nowActive && !window.confirm(zh ? `停用「${tech.name}」?停用后不再接受新预约,历史数据保留。` : `Deactivate ${tech.name}? No new bookings; history is kept.`)) return
+  if (nowActive && !await window.UIDialog.confirm(zh ? `停用「${tech.name}」?停用后不再接受新预约,历史数据保留。` : `Deactivate ${tech.name}? No new bookings; history is kept.`)) return
   await request(`/admin/technicians/${techId}`, { method: 'PATCH', body: JSON.stringify({ isActive: !nowActive }) })
   toast(zh ? (nowActive ? '已停用' : '已恢复在职') : 'Updated')
   await loadAll()
@@ -5109,7 +5109,7 @@ async function generateRecallCopy(customerId, btn) {
     if (!msg) throw new Error(zh ? '没有生成结果,稍后再试' : 'No result')
     let copied = false
     try { await navigator.clipboard.writeText(msg); copied = true } catch { /* 剪贴板被拒时降级为手动复制 */ }
-    if (!copied) window.prompt(zh ? '自动复制被浏览器拦截,请手动复制:' : 'Copy manually:', msg)
+    if (!copied) await window.UIDialog.text(zh ? '自动复制被浏览器拦截,请手动复制:' : 'Copy manually:', msg)
     toast(copied ? (zh ? '召回话术已复制,粘贴到微信即可发' : 'Copied to clipboard') : (zh ? '已生成' : 'Generated'))
   } finally {
     if (btn && document.body.contains(btn)) { btn.disabled = false; btn.textContent = original }
@@ -6132,7 +6132,7 @@ els.nextMonth.addEventListener('click', () => {
   owner.calendarDate = new Date(owner.calendarDate.getFullYear(), owner.calendarDate.getMonth() + 1, 1)
   renderBookings()
 })
-els.schedulePage.addEventListener('click', (event) => {
+els.schedulePage.addEventListener('click', async (event) => {
   const weekNav = event.target.closest('[data-week-nav]')
   if (weekNav) {
     const step = Number(weekNav.dataset.weekNav)
@@ -6165,8 +6165,8 @@ els.schedulePage.addEventListener('click', (event) => {
   }
   if (event.target.closest('#afternoonStartBtn')) {
     /* 清单#10(08-31):上下午分界编辑接回网页 —— 读写与小程序同一条 /admin/schedule-settings(两端写口本就同为 schedule-batch,分叉只剩这项配置面) */
-    request('/admin/schedule-settings').then((cur) => {
-      const v = window.prompt('上下午分界(HH:MM,小程序按日排班的半天块按它切):', cur.afternoonStart || '14:30')
+    request('/admin/schedule-settings').then(async (cur) => {
+      const v = await window.UIDialog.text('上下午分界(HH:MM,小程序按日排班的半天块按它切):', cur.afternoonStart || '14:30')
       if (v === null) return
       if (!/^\d{2}:\d{2}$/.test(v.trim())) { toast('格式应为 HH:MM,如 14:30'); return }
       request('/admin/schedule-settings', { method: 'PUT', body: JSON.stringify({ afternoonStart: v.trim() }) })
@@ -6223,7 +6223,7 @@ els.schedulePage.addEventListener('click', (event) => {
     request('/admin/perf-targets', {
       method: 'PUT',
       body: JSON.stringify({ month: perfTargetsState.month, targets: collectPerfTargets() })
-    }).then(() => {
+    }).then(async () => {
       toast(owner.lang === 'zh' ? '业绩目标已保存,员工端立即生效' : 'Saved')
       return loadPerfTargets(perfTargetsState.month)
     }).catch((error) => toast(error.message))
@@ -6255,8 +6255,8 @@ els.schedulePage.addEventListener('click', (event) => {
     const techId = acctCreate.dataset.acctCreate
     const zh = owner.lang === 'zh'
     request(`/admin/staff-accounts/suggest?technicianId=${encodeURIComponent(techId)}`)
-      .then((sug) => {
-        const input = window.prompt(
+      .then(async (sug) => {
+        const input = await window.UIDialog.text(
           zh ? `给「${sug.name}」建登录账号 —— 用户名(英文字母和数字,3–20 位,可改):` : `Username for ${sug.name} (a-z0-9, 3-20):`,
           sug.username)
         if (input === null) return null
@@ -6264,15 +6264,15 @@ els.schedulePage.addEventListener('click', (event) => {
         if (!/^[a-z0-9]{3,20}$/.test(username)) { toast(zh ? '用户名只能用英文字母和数字,3–20 位' : 'Invalid username'); return null }
         return request('/admin/staff-accounts', { method: 'POST', body: JSON.stringify({ technicianId: techId, username }) })
       })
-      .then(async (data) => { if (!data) return; showCredentialsOnce(data.username, data.initialPassword); await refreshStaffAccounts() })
+      .then(async (data) => { if (!data) return; await showCredentialsOnce(data.username, data.initialPassword); await refreshStaffAccounts() })
       .catch((error) => toast(error.message))
     return
   }
   const acctReset = event.target.closest('[data-acct-reset]')
   if (acctReset) {
-    if (!window.confirm(owner.lang === 'zh' ? '重置该员工的登录密码?旧密码立即失效。' : 'Reset this password?')) return
+    if (!await window.UIDialog.confirm(owner.lang === 'zh' ? '重置该员工的登录密码?旧密码立即失效。' : 'Reset this password?')) return
     request(`/admin/staff-accounts/${acctReset.dataset.acctReset}/reset-password`, { method: 'POST' })
-      .then(async (data) => { showCredentialsOnce(data.username, data.initialPassword); await refreshStaffAccounts() })
+      .then(async (data) => { await showCredentialsOnce(data.username, data.initialPassword); await refreshStaffAccounts() })
       .catch((error) => toast(error.message))
     return
   }
@@ -6616,7 +6616,7 @@ els.businessHoursEditor.addEventListener('change', (event) => {
     return
   }
 })
-els.bookingList.addEventListener('click', (event) => {
+els.bookingList.addEventListener('click', async (event) => {
   if (event.target.closest('[data-close-booking-detail]')) {
     owner.selectedBookingId = ''
     renderBookings()
@@ -6665,7 +6665,7 @@ els.bookingList.addEventListener('click', (event) => {
   if (action === 'cancel') {
     const booking = owner.bookings.find((item) => item.id === button.dataset.booking)
     const label = booking ? `${booking.appointmentDate} ${booking.appointmentTime} ${booking.service?.name || ''}` : ''
-    const confirmed = window.confirm(owner.lang === 'zh'
+    const confirmed = await window.UIDialog.confirm(owner.lang === 'zh'
       ? `确定取消这个预约吗?\n${label}\n取消后时段将释放,已入账收入会自动冲销。`
       : `Cancel this booking?\n${label}`)
     if (!confirmed) return
@@ -7700,7 +7700,7 @@ if (els.storeSettingsPage) {
     const tierBtn = event.target.closest('[data-sub-tier]')
     if (tierBtn) {
       const name = tierBtn.dataset.subTierName
-      if (!window.confirm(`申请把套餐变更为「${name}」？\n提交后我们会联系你确认功能与费用，确认前现有服务不受影响。`)) return
+      if (!await window.UIDialog.confirm(`申请把套餐变更为「${name}」？\n提交后我们会联系你确认功能与费用，确认前现有服务不受影响。`)) return
       try {
         await request('/admin/tenant/plan/change-request', { method: 'POST', body: JSON.stringify({ targetPlan: tierBtn.dataset.subTier, note: '网页端申请' }) })
         toast('已提交，我们会尽快联系你')
@@ -7710,7 +7710,7 @@ if (els.storeSettingsPage) {
     }
     // 试用为申请制:不即时开通,生成申请落到平台后台,由我们联系商家配置后发放
     if (event.target.closest('[data-sub-ai-trial]')) {
-      if (!window.confirm('AI 智能包需要按你门店的项目、价格和话术做一次配置。\n提交申请后我们会尽快联系你，配置完成即开通，试用期 3 个月不收费。')) return
+      if (!await window.UIDialog.confirm('AI 智能包需要按你门店的项目、价格和话术做一次配置。\n提交申请后我们会尽快联系你，配置完成即开通，试用期 3 个月不收费。')) return
       try {
         await request('/admin/subscription/ai-trial', { method: 'POST', body: '{}' })
         toast('申请已提交，我们会尽快联系你')
@@ -7741,12 +7741,12 @@ if (els.storeSettingsPage) {
 // 下单后的收尾:沙盘模式可模拟支付;生产未接支付则提示走平台确认收款
 async function settleSubOrder(r, kind) {
   if (r.payment === 'mock') {
-    if (window.confirm(`模拟支付 ${subMoney(r.order.amountCents)}${kind === 'ai' ? ' 开通 AI 智能包' : ' 并顺延到期日'}？\n（本地沙盘，生产环境此处为微信支付）`)) {
+    if (await window.UIDialog.confirm(`模拟支付 ${subMoney(r.order.amountCents)}${kind === 'ai' ? ' 开通 AI 智能包' : ' 并顺延到期日'}？\n（本地沙盘，生产环境此处为微信支付）`)) {
       const p = await request(`/admin/subscription/orders/${r.order.id}/mock-pay`, { method: 'POST', body: '{}' })
       toast(kind === 'ai' ? `已开通至 ${subDate(p.aiExpiresAt)}` : `续费成功，有效期至 ${subDate(p.expiresAt)}`)
     }
   } else {
-    window.alert(`订单 ${subMoney(r.order.amountCents)} 已创建，平台确认收款后自动${kind === 'ai' ? '开通' : '顺延到期日'}。\n请联系我们完成付款，订单号：${r.order.id.slice(-8)}。`)
+    await window.UIDialog.alert(`订单 ${subMoney(r.order.amountCents)} 已创建，平台确认收款后自动${kind === 'ai' ? '开通' : '顺延到期日'}。\n请联系我们完成付款，订单号：${r.order.id.slice(-8)}。`)
   }
   await loadSubscriptionPage()
 }
