@@ -45,6 +45,19 @@ const CODE = tracked.filter((f) => /^(apps\/(web|api)|miniprogram)\/.*\.(js|mjs)
 /* 注释置空(保住行号)—— 判据不许被自己的案底注释误报(02q 同族教训) */
 const bare = (src) => src.replace(/\/\*[\s\S]*?\*\//g, (m) => m.replace(/[^\n]/g, ' ')).replace(/^[^\S\n]*\/\/.*$/gm, '')
 
+/* ══ 剥前剥后行数相等 · 自守(店主 03x 收编)══
+   律:**给刀用的预处理不许改行号**;凡剥注释/剥字符串的辅助函数,自守一条「剥前剥后行数相等」。
+   案由:我的剥行注释吃掉了换行,admin.js 剥完 8551 → 8504(少 47 行),
+   于是按它算的行号全错,我连报三次错数、还照错行号改坏过一个 IIFE。
+   这一条放在每把用 bare() 的刀里当场自证 —— 出口自己坏了,后面所有命中位置都不可信。 */
+
+const __bareProbe = 'a\n\n  // x\n/* y\n z */\nb\n'
+check('⓪ 自守:剥注释的辅助函数**不许改行号**(剥前剥后行数必须相等)—— '
+  + '出口自己吃掉换行,后面每一处「第几行命中」都是错的(店主 03x 收编)',
+bare(__bareProbe).split('\n').length === __bareProbe.split('\n').length,
+`剥前 ${__bareProbe.split('\n').length} 行 → 剥后 ${bare(__bareProbe).split('\n').length} 行`)
+
+
 /* ═══ 病一 ═══ */
 
 /* ① 后端唯一出口自己得对:大小写不敏感 + 认不出的绝不漏原值 */

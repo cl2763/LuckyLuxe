@@ -19,6 +19,7 @@ import { createOrderBadges, bookingSourceText, bookingStatusText } from './order
 import { installLedgerGuards, backfillTenantKindOnce, LEDGER_TRIGGER_NAMES } from './ledger-guards.mjs'
 import { createQuoteSerialize } from './quote-serialize.mjs'          // AI 报价域序列化(公约②)
 import { createDemoReset, isDemoTenant, PROTECTED_REAL_TENANTS } from './demo-reset.mjs'   // 演示店归属判据/黑名单/重置唯一入口(公约①)
+import { demoSeedTag, ensureDemoMarkColumns } from './demo-mark.mjs'   // D121:演示标记唯一出口
 import { createTenantProfile } from './tenant-profile.mjs'          // D127:本店档案唯一出口
 import { createDemoFacts } from './demo-facts.mjs'                    // 演示店事实口(铺设脚本不再直连库)
 import { createPlatformOps } from './platform-ops.mjs'                // 平台运维域(备份/五项/运维日志/重置财务密码)
@@ -6778,9 +6779,9 @@ function createBooking(body, opts = {}) {
   try {
     db.prepare(`
       INSERT INTO bookings
-      (id, tenant_id, public_code, user_id, store_id, technician_id, service_id, status, appointment_start, appointment_end, addons_json, reference_images_json, source_channel, notes, service_price_cents, deposit_cents, deposit_required_cents, deposit_waived_cents, deposit_waive_reason, member_level_at_booking, final_due_cents, total_duration_min, payment_expires_at, direct_deposit_unpaid, created_at, updated_at)
-      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-    `).run(bookingId, input.tenantId || DEFAULT_TENANT_ID, publicCode(), input.userId, input.storeId, input.technicianId, input.serviceId, status, iso(start), iso(end), JSON.stringify(input.addOns), JSON.stringify(input.referenceImages), sourceChannel, input.notes, servicePriceCents, depositCents, depositRequiredCents, depositWaivedCents, waiveReason, serializedUser?.memberLevel || null, servicePriceCents - depositCents, durationMin, paymentExpiresAt, directUnpaid, now, now)
+      (id, tenant_id, public_code, user_id, store_id, technician_id, service_id, status, appointment_start, appointment_end, addons_json, reference_images_json, source_channel, notes, service_price_cents, deposit_cents, deposit_required_cents, deposit_waived_cents, deposit_waive_reason, member_level_at_booking, final_due_cents, total_duration_min, payment_expires_at, direct_deposit_unpaid, created_at, updated_at, demo_seed)
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+    `).run(bookingId, input.tenantId || DEFAULT_TENANT_ID, publicCode(), input.userId, input.storeId, input.technicianId, input.serviceId, status, iso(start), iso(end), JSON.stringify(input.addOns), JSON.stringify(input.referenceImages), sourceChannel, input.notes, servicePriceCents, depositCents, depositRequiredCents, depositWaivedCents, waiveReason, serializedUser?.memberLevel || null, servicePriceCents - depositCents, durationMin, paymentExpiresAt, directUnpaid, now, now, opts.demoSeed || null)
 
     const slotStmt = db.prepare('INSERT INTO booking_slots (id, booking_id, technician_id, starts_at) VALUES (?, ?, ?, ?)')
     for (const slot of slots) slotStmt.run(randomId('slot'), bookingId, input.technicianId, iso(slot))
@@ -8839,6 +8840,9 @@ function createSettlementGroup(body = {}, adminSession = {}) {
             (svcRow && svcRow.price_cents) || 0, durMin, now, now)
         db.prepare('INSERT INTO booking_status_history (id, booking_id, to_status, note, created_at) VALUES (?, ?, ?, ?, ?)')
           .run(randomId('hist'), instantBookingId, 'COMPLETED', '即时预约(开单自动建,裁B 写方闭环)', now)
+        /* D121:即时单自建的这条预约同样要盖章(为什么:见 ./demo-mark.mjs「即时单那条路」) */
+        const __seed = body.__demoSeed || null
+        if (__seed) db.prepare('UPDATE bookings SET demo_seed = ? WHERE id = ?').run(__seed, instantBookingId)
       }
     }
     db.prepare(`INSERT INTO settlement_groups (id, tenant_id, booking_id, card_owner_user_id, status, created_by, created_at, updated_at)
@@ -8915,6 +8919,11 @@ function createSettlementGroup(body = {}, adminSession = {}) {
           computed.purchase ? JSON.stringify(computed.purchase) : null,
           computed.recharge ? JSON.stringify(computed.recharge) : null,
           computed.payment.plan, adminSession.email || 'staff', now, now)
+        /* D121:结算单的演示标记**从它挂的那张预约继承** —— 单据必属某预约,
+           预约是造景造的,它就是造景造的。这样即使调用方忘了带 `x-demo-seed` 也漏不掉;
+           真实预约下的单 demo_seed 恒为 NULL(fail-closed 朝真实那一侧)。 */
+        db.prepare('UPDATE settlements SET demo_seed = (SELECT demo_seed FROM bookings WHERE id = ?) WHERE id = ?')
+          .run(sheet.bookingId || body.bookingId || instantBookingId || null, id)
 
       const itemStmt = db.prepare(`INSERT INTO settlement_items
         (id, tenant_id, settlement_id, item_no, kind, service_id, name_snapshot, tier_key, unit, qty,
@@ -11578,7 +11587,7 @@ async function route(req, res) {
     body.tenantId = resolveTenant(req, query)
     /* D127(03u):顾客档案每店一份;邮箱老路会落进列默认值 lucky-luxe → 串味。理由与规矩见 ./tenant-profile.mjs */
     body.userId = profileIdInTenant(customer.id, body.tenantId) // 多租户:订单归属"当前进的店"
-    return json(res, 201, { booking: createBooking(body) })
+    return json(res, 201, { booking: createBooking(body, { demoSeed: demoSeedTag(req) }) })   // D121:正门盖章
   }
   // ===== 顾客侧"我的资产"(user × 当前店) =====
   /* 批③次段 A3-1/B4-1(店主 08-23 开工令):顾客端卡包与商城两个**只读**口。
@@ -15066,7 +15075,7 @@ async function route(req, res) {
         serviceId: body.serviceId, technicianId: body.technicianId,
         date: plan ? plan.targetDate : body.date, time: body.time, durationMin: body.durationMin,
         notes: body.notes || (plan ? `补录(服务发生于 ${plan.serviceDate})` : '老板直接排单')
-      }, { adminDirect: true, depositPaid: body.depositPaid === true, backfill: Boolean(plan) })
+      }, { adminDirect: true, depositPaid: body.depositPaid === true, backfill: Boolean(plan), demoSeed: demoSeedTag(req) })
       if (plan) {
         db.prepare('UPDATE bookings SET backfill_service_date = ? WHERE id = ?').run(plan.serviceDate, booking.id)
         booking = serializeBooking(db.prepare('SELECT * FROM bookings WHERE id = ?').get(booking.id))
@@ -17454,6 +17463,8 @@ db.exec(`
   );
   CREATE INDEX IF NOT EXISTS idx_settlement_amendments ON settlement_amendments(tenant_id, settlement_id);
 `)
+  /* D121:演示标记两列,**必须排在两张表都建完之后**(为什么:见 ./demo-mark.mjs「排在哪」) */
+  ensureDemoMarkColumns(db)
 /* 🔴 2026-08-08 补迁移:签署快照那四列是后加进 CREATE TABLE 的,
    而 CREATE TABLE IF NOT EXISTS 对已存在的表什么也不做 ——
    凡是在加快照之前建好库的环境(含生产),settlements 表里根本没有这几列,

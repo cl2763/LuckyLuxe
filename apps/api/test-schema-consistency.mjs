@@ -78,6 +78,13 @@ function hasAlterFor(table, column) {
   const direct = new RegExp(`ALTER\\s+TABLE\\s+${table}\\s+ADD\\s+COLUMN\\s+${column}\\b`, 'i')
   if (direct.test(SOURCE)) return true
   const templated = new RegExp(`ALTER\\s+TABLE\\s+${table}\\s+ADD\\s+COLUMN\\s+\\$\\{`, 'i')
+  /* 🔴 03x 补第三种形状:**表名本身也可能是模板变量**。
+     D121 的迁移写成 `ALTER TABLE ${t} ADD COLUMN demo_seed TEXT`(在 demo-mark.mjs 里循环两张表),
+     上面两条都认不出来 —— direct 要求表名是字面量,templated 要求**列名**是模板。
+     这一条认「表名是模板、列名是字面量」:此时表清单在同文件的数组里(DEMO_MARK_TABLES)。
+     判据不许只认自己见过的那一种写法(白名单判据 > 黑名单判据,在扫描器上的同一个教训)。 */
+  const tableTemplated = new RegExp(`ALTER\\s+TABLE\\s+\\$\\{\\w+\\}\\s+ADD\\s+COLUMN\\s+${column}\\b`, 'i')
+  if (tableTemplated.test(SOURCE) && new RegExp(`['"\`]${table}['"\`]`).test(SOURCE)) return true
   if (!templated.test(SOURCE)) return false
   // 模板式迁移:列名会出现在同文件的列清单数组里(如 'snapshot_url TEXT')
   return new RegExp(`['"\`]${column}\\s+[A-Za-z]`, 'i').test(SOURCE)

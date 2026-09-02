@@ -83,6 +83,10 @@ export function createSettlementRoutes({ apiError, json, readBody, db, currentTe
   if (req.method === 'POST' && path === '/admin/settlements') {
     if (adminSession.role !== 'owner' && adminSession.role !== 'staff') throw apiError(403, 'FORBIDDEN', '需要员工或老板权限。')
     const body = await readBody(req)
+    /* D121:开单口把演示批次名带进去 —— 即时单内部会自建一条预约,
+       那条预约是造景最常走的路(seed-bigdemo 的订单流就走这里),漏了它整批就认不出来。
+       用 `__demoSeed` 这个内部字段传:createSettlementGroup 拿不到 req。 */
+    body.__demoSeed = String(req.headers['x-demo-seed'] || '').trim() || null
     json(res, 201, createSettlementGroup(body, adminSession))
     return true
   }

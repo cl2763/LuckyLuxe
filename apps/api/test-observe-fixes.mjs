@@ -251,8 +251,12 @@ async function main() {
     rf('apps/api/local-server.mjs').includes("if (!opts.backfill && `${input.date} ${input.time}` < `${nowD.date} ${nowD.time}`)"))
   check('裁① 补录撞位句去掉「换个时间」的废建议(补录是往回记,时间是既成事实)',
     rf('apps/api/local-server.mjs').includes('该技师那个时段已经有单了') && rf('apps/api/local-server.mjs').includes('核对一下当时的实际时间,或换一位技师'))
+    /* 🔴 03x:原来锚的是 `backfill: Boolean(plan) })` —— **连同那个右括号一起锚死了**,
+       于是同一个 opts 对象后面再加任何一个键(D121 加了 demoSeed)这条就红,
+       而它要守的事情(backfill 真传进去了)其实一点没变。
+       判据不许锚在「这一行末尾长什么样」上,要锚在「这个键真传了」这件事上。 */
   check('裁① opts.backfill 真传进 createBooking(不传=上面两处永远走 else,静默失败器族)',
-    rf('apps/api/local-server.mjs').includes('backfill: Boolean(plan) })'))
+      /adminDirect: true[^)]*backfill: Boolean\(plan\)/.test(rf('apps/api/local-server.mjs')))
 
   console.log(`[observe-fixes] all ${checks} checks passed`)
 }
