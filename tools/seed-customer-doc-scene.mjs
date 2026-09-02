@@ -46,7 +46,7 @@ const TENANTS = ['jics-nail', 'lucky-luxe']
 async function api(tenantId, path, options = {}) {
   const res = await fetch(`${BASE}${path}`, {
     ...options,
-    headers: { 'content-type': 'application/json', authorization: `Bearer ${TOKEN}`, 'x-admin-tenant-id': tenantId, ...(options.headers || {}) }
+    headers: { 'content-type': 'application/json', 'x-demo-seed': 'seed-customer-doc-scene', authorization: `Bearer ${TOKEN}`, 'x-admin-tenant-id': tenantId, ...(options.headers || {}) }
   })
   const text = await res.text()
   let data = null
@@ -55,7 +55,7 @@ async function api(tenantId, path, options = {}) {
   return data
 }
 async function pub(path, options = {}) {
-  const res = await fetch(`${BASE}${path}`, { ...options, headers: { 'content-type': 'application/json', ...(options.headers || {}) } })
+  const res = await fetch(`${BASE}${path}`, { ...options, headers: { 'content-type': 'application/json', 'x-demo-seed': 'seed-customer-doc-scene', ...(options.headers || {}) } })
   const text = await res.text()
   const data = text ? JSON.parse(text) : null
   if (!res.ok) throw new Error(`${path} → ${res.status} ${JSON.stringify(data).slice(0, 240)}`)

@@ -20,7 +20,7 @@ const TOKEN = envLine.slice('OWNER_DEMO_TOKEN='.length).trim().replace(/^["']|["
 async function api(tenantId, path, options = {}) {
   const res = await fetch(`${BASE}${path}`, {
     ...options,
-    headers: { 'content-type': 'application/json', authorization: `Bearer ${TOKEN}`, 'x-admin-tenant-id': tenantId, ...(options.headers || {}) }
+    headers: { 'content-type': 'application/json', 'x-demo-seed': 'seed-addon-groups', authorization: `Bearer ${TOKEN}`, 'x-admin-tenant-id': tenantId, ...(options.headers || {}) }
   })
   const text = await res.text()
   const data = text ? JSON.parse(text) : null

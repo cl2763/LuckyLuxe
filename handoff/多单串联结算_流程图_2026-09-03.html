@@ -1,0 +1,85 @@
+<title>多项目预约与串联结算</title>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Noto+Serif+SC:wght@600;700&family=Noto+Sans+SC:wght@400;500;700&display=swap">
+<style>
+:root{--paper:#faf8f3;--ink:#23241f;--sub:#6d6f66;--line:#e3e0d6;--card:#fff;--wall:#f1eee6;--acc:#0e6e62;--accd:#0a5a50;--gold:#b09468;--goldbg:#f6efe2;--bad:#b3413a;--badbg:#f7e7e5;--good:#2e8b57;--goodbg:#e6f3ea}
+@media (prefers-color-scheme: dark){:root:not([data-theme="light"]){--paper:#191b19;--ink:#e8e7e0;--sub:#9aa096;--line:#33362f;--card:#20241f;--wall:#242822;--acc:#4cc0b0;--accd:#63d2c3;--gold:#d3b483;--goldbg:#2b2618;--bad:#e5867e;--badbg:#33201e;--good:#6fd0a0;--goodbg:#1c2f25}}
+:root[data-theme="dark"]{--paper:#191b19;--ink:#e8e7e0;--sub:#9aa096;--line:#33362f;--card:#20241f;--wall:#242822;--acc:#4cc0b0;--accd:#63d2c3;--gold:#d3b483;--goldbg:#2b2618;--bad:#e5867e;--badbg:#33201e;--good:#6fd0a0;--goodbg:#1c2f25}
+body{background:var(--paper);color:var(--ink);font-family:'Noto Sans SC',-apple-system,sans-serif;line-height:1.7;margin:0}
+.w{max-width:940px;margin:0 auto;padding:38px 18px 80px}
+h1{font-family:'Noto Serif SC',serif;font-size:1.65rem;margin:0 0 4px;text-wrap:balance}
+.meta{color:var(--sub);font-size:.85rem;margin-bottom:22px}
+h2{font-family:'Noto Serif SC',serif;font-size:1.12rem;margin:38px 0 10px;padding-left:10px;border-left:4px solid var(--acc)}
+p{max-width:70ch}
+.note{background:var(--card);border:1px solid var(--line);border-left:4px solid var(--acc);border-radius:8px;padding:11px 15px;font-size:.92rem;margin-bottom:14px}
+.warn{border-left-color:var(--bad)}
+.tblwrap{overflow-x:auto}
+table{border-collapse:collapse;width:100%;font-size:.88rem;margin-top:8px}
+th,td{border:1px solid var(--line);padding:8px 10px;text-align:left;vertical-align:top}
+th{background:var(--wall);font-weight:700;white-space:nowrap}
+code{font-family:ui-monospace,SFMono-Regular,Menlo,monospace;font-size:.84em;background:var(--wall);padding:1px 5px;border-radius:4px}
+.foot{margin-top:36px;padding-top:14px;border-top:1px solid var(--line);color:var(--sub);font-size:.82rem}
+/* flow */
+.flow{display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:10px;margin:12px 0 6px;align-items:stretch}
+.step{background:var(--card);border:1px solid var(--line);border-radius:10px;padding:10px 12px;position:relative;font-size:.86rem}
+.step .n{font-size:.68rem;letter-spacing:.08em;color:var(--sub);text-transform:uppercase;font-weight:700}
+.step b{display:block;font-size:.95rem;margin:2px 0 4px}
+.step .d{color:var(--sub);font-size:.8rem}
+.step.new{border-color:var(--gold);background:var(--goldbg)}
+.step.new .n::after{content:" · 本图新增";color:var(--gold)}
+.arrow{display:none}
+.lane{border:1px dashed var(--line);border-radius:12px;padding:10px 12px;margin-top:12px}
+.lane .t{font-size:.78rem;color:var(--sub);font-weight:700;letter-spacing:.06em;text-transform:uppercase;margin-bottom:6px}
+.pill{display:inline-block;font-size:.7rem;font-weight:700;border-radius:999px;padding:0 8px;margin-left:6px}
+.pill.g{background:var(--goodbg);color:var(--good)}.pill.b{background:var(--badbg);color:var(--bad)}
+.order{background:var(--card);border:1px solid var(--line);border-radius:12px;padding:10px 14px;max-width:420px;font-size:.86rem;margin-top:8px}
+.order .row{display:flex;justify-content:space-between;gap:8px;padding:5px 0;border-top:1px dashed var(--line)}
+.order .row:first-of-type{border-top:0}
+.order .row small{color:var(--sub);display:block;font-size:.74rem}
+.order .tot{border-top:1px solid var(--line);margin-top:4px;padding-top:6px;font-weight:700;display:flex;justify-content:space-between}
+</style>
+<div class="w">
+<h1>多项目预约与串联结算</h1>
+<div class="meta">流程图 · 2026-09-03 · 图=合同 · 对应诉求总账「多项目预约 → 多单串联结算 → 合并推送」(08-11 店主设计)· 以 02b① 现查为底:项号级分账已在用,本图只补三处缺口</div>
+
+<p class="note"><b>先把 08-11 的设计对到现状上:</b>你当时说「一次约多个项目自动拆成 N 张单,逐张签名,合并页显示 N 单合计」。那是在<b>一张单只能一项</b>的年代。现在一张单已经能装 N 项、每项各自挂技师各自分成(02b 现查:284/386 行真在用)——所以<b>「一次到店 = 一张单多项」是主路</b>,不再为多项目拆单;拆成多张单只在<b>不同时间结</b>时发生(先做完的先结),那时它们成为一个「到店组」,合并推送一份「N 单合计」。逐张签名照旧:<b>每张单在它结算那一刻签</b>,组不共用签名。要补的只有三处:卡耗按项、小记按项号、到店组合并推送。</p>
+
+<h2>一、主路:一次到店,一张单,N 项</h2>
+<div class="flow">
+  <div class="step"><div class="n">1 预约</div><b>一张预约,N 个项目</b><div class="d">顾客端/台面一次选多项;每项可指定技师或留空;总时长 = 各项相加(现有)</div></div>
+  <div class="step"><div class="n">2 到店</div><b>台面一格,内含 N 项</b><div class="d">在做/完成按单;到店人次按单去重(与大屏口径一致)</div></div>
+  <div class="step"><div class="n">3 开单</div><b>一张结算单,N 行项</b><div class="d">每行:项目 · 技师 · 价档 · 金额(现有 <code>settlement_items</code> + <code>item_nos_json</code>)</div></div>
+  <div class="step new"><div class="n">4 付法</div><b>每一项各自选付法</b><div class="d">现付 / 储值 / 次卡第 n 次;单头合计由各项汇总,不再只在单头记一次卡耗</div></div>
+  <div class="step"><div class="n">5 签名</div><b>一次签,覆盖整单 N 项</b><div class="d">现有电子签;签名图挂单(D107 已回订单详情)</div></div>
+  <div class="step new"><div class="n">6 小记</div><b>小记挂到「这一单第几项」</b><div class="d">键 = 单号 + 项号(+技师);项目名只是快照,改名不丢</div></div>
+  <div class="step"><div class="n">7 推送</div><b>一份电子票据,N 项明细</b><div class="d">现有票据;每项显示付法(现付 / 储值扣 ¥ / 次卡第 n 次)</div></div>
+</div>
+
+<div class="order" aria-label="结算单示意">
+  <div class="row"><span>① 法式加钻 · 小雅</span><span>CAD 168 <small>储值扣 168</small></span></div>
+  <div class="row"><span>② 睫毛嫁接 · 苏苏</span><span>CAD 120 <small>次卡 第 3/10 次</small></span></div>
+  <div class="row"><span>③ 卸甲(加项)· 小雅</span><span>CAD 20 <small>现付</small></span></div>
+  <div class="tot"><span>合计</span><span>CAD 308 · 实付 20</span></div>
+</div>
+
+<h2>二、支路:先做完的先结 → 到店组</h2>
+<div class="flow">
+  <div class="step"><div class="n">A</div><b>同一次到店,分开结</b><div class="d">例:美甲先做完先结,睫毛一小时后再结——两张单,各自签各自推</div></div>
+  <div class="step new"><div class="n">B 成组</div><b>自动归入同一「到店组」</b><div class="d">规则:同顾客 · 同店 · 同一营业日 · 前一张单结算后 4 小时内;现有 <code>group_id</code> 复用;人工可拆/可并(留痕)</div></div>
+  <div class="step new"><div class="n">C 合并推送</div><b>一条「本次到店 N 单合计」</b><div class="d">组内最后一张单签完后推一条汇总:N 单 · 合计 · 各单入口;每张单自己的票据照发</div></div>
+  <div class="step new"><div class="n">D 顾客端</div><b>「本次到店」合并页</b><div class="d">顾客端订单列表按到店组折叠:一行显示 N 单合计,展开看各单;单张单仍可单独打开、单独售后</div></div>
+</div>
+<p class="note"><b>为什么不共用签名:</b>每张单在结算那一刻各自签,是店主 08-11 的原话,也是现状;组只负责「看起来是一次到店」,不负责法律上的一次签署。这样一张单的售后、冲销、分账都不受组影响。</p>
+
+<h2>三、三处缺口的落法</h2>
+<div class="tblwrap"><table>
+<tr><th>缺口</th><th>现状(02b 现查)</th><th>落法</th><th>判据</th></tr>
+<tr><td><b>① 卡耗按项</b></td><td>卡耗只在单头(<code>timecard_id/timecard_nth</code>、储值扣减挂单),带卡的 12 张单全是多项单——分不清哪一项花了卡</td><td><code>settlement_items</code> 加 <code>pay_source</code>(cash / stored_value / timecard)、<code>timecard_id</code>、<code>timecard_nth</code>、<code>stored_value_cents</code>;单头字段改为各项汇总(条件迁移:存量单头值下放到第一项,标 <code>migrated_from_header=1</code>);大屏「总卡耗」与技师业绩从项级取数</td><td>任一多项单:Σ 项级储值扣 = 单头储值扣;次卡第 n 次只在一项上;造病(两项都标同一张次卡同一 nth)必红</td></tr>
+<tr><td><b>② 小记按项号</b></td><td><code>service_notes</code> 按 <code>booking_id + technician_id + service_name</code> 挂,项目改名或同单两项同名就串</td><td>加 <code>settlement_id</code> + <code>item_no</code>,<code>service_name</code> 降为快照;写小记入口从「这一单的第 n 项」进;存量条件迁移:能唯一对上项号的补上,对不上的留空并标 <code>item_no=null</code>(不猜)</td><td>同单两项同名各写一条小记,读回各归各;改项目名后旧小记仍在原项下</td></tr>
+<tr><td><b>③ 到店组合并推送</b></td><td>9 个多单组存在,签署按单号逐单,组零连带,无合并推送</td><td>成组规则见 §二 B;组内最后一张签完触发一条汇总推送(走通知调度器,事由 <code>visit_summary</code>,幂等键 = group_id);顾客端订单列表按组折叠</td><td>造两张同顾客同日单 → 自动同组 → 第二张签完只推一条汇总;第三张 5 小时后结 → 新组;人工拆组留痕行存在</td></tr>
+</table></div>
+
+<h2>四、明确不做</h2>
+<p>不为多项目自动拆单;不做组级共用签名;不做跨店到店组;不做组级售后(售后仍按单)。</p>
+
+<p class="foot">图=合同。落地顺序:①卡耗按项(动钱,先做、先造病验红、迁移条件更新)→ ②小记按项号 → ③到店组。每步交齐附截图 + DOM/库证据。店主点头前为草案。</p>
+</div>

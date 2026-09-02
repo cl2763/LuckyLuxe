@@ -26,30 +26,48 @@ const snapFile = diffAt >= 0 ? args[diffAt + 1] : (args[0] || 'db-snapshot.json'
 
 const db = new DatabaseSync(dbPath, { readOnly: true })
 const tables = db.prepare("SELECT name FROM sqlite_master WHERE type='table' AND name NOT LIKE 'sqlite_%' ORDER BY name").all().map((r) => r.name)
+/* 🔴 03y(店主补):每表**行数与列数都记**。
+   D121 那批本机库「87 张表逐表零差异」是**只说了行** —— 而启动迁移给两张表各加了一列
+   (产品正常路径,不是事故)。行没变、结构变了,对照表看不出来。
+   以后谁改了 schema,交齐时自然露出来。 */
 const now = {}
 for (const t of tables) {
-  try { now[t] = db.prepare(`SELECT COUNT(*) AS n FROM "${t}"`).get().n } catch { now[t] = null }
+  let rows = null
+  let cols = null
+  try { rows = db.prepare(`SELECT COUNT(*) AS n FROM "${t}"`).get().n } catch { rows = null }
+  try { cols = db.prepare('SELECT COUNT(*) AS n FROM pragma_table_info(?)').get(t).n } catch { cols = null }
+  now[t] = { rows, cols }
 }
 db.close()
 
 if (diffAt < 0) {
   writeFileSync(snapFile, `${JSON.stringify({ dbPath, tables: now }, null, 2)}\n`)
-  console.log(`\n════ 库行数快照 ════\n  库:${dbPath}\n  表:${tables.length} 张 · 总行数 ${Object.values(now).reduce((a, b) => a + (b || 0), 0)}\n  写入:${snapFile}`)
+  const totalRows = Object.values(now).reduce((a, v) => a + (v.rows || 0), 0)
+  const totalCols = Object.values(now).reduce((a, v) => a + (v.cols || 0), 0)
+  console.log(`\n════ 库快照(行 + 列)════\n  库:${dbPath}\n  表:${tables.length} 张 · 总行数 ${totalRows} · 总列数 ${totalCols}\n  写入:${snapFile}`)
   process.exit(0)
 }
 
 const before = JSON.parse(readFileSync(snapFile, 'utf8'))
+/* 老快照只存了一个数字(行数);新快照存 {rows, cols}。两种都读得懂,不然旧快照一律报差异。 */
+const norm = (v) => (v && typeof v === 'object' ? { rows: v.rows ?? 0, cols: v.cols ?? null } : { rows: v ?? 0, cols: null })
 const diffs = []
 for (const t of new Set([...Object.keys(before.tables), ...Object.keys(now)])) {
-  const a = before.tables[t] ?? 0
-  const b = now[t] ?? 0
-  if (a !== b) diffs.push({ 表: t, 开批: a, 现在: b, 差: b - a })
+  const a = norm(before.tables[t])
+  const b = norm(now[t])
+  const rowD = b.rows - a.rows
+  const colD = (a.cols === null || b.cols === null) ? 0 : b.cols - a.cols
+  if (rowD !== 0 || colD !== 0) diffs.push({ 表: t, 行: `${a.rows}→${b.rows}`, 行差: rowD, 列: a.cols === null ? '(旧快照没记列)' : `${a.cols}→${b.cols}`, 列差: colD })
 }
 console.log(`\n════ 「未动须有证」对照表 ════\n  库:${dbPath}\n  快照:${snapFile}`)
 if (!diffs.length) {
-  console.log('  ✅ 逐表零差异 —— 「本库未动」这句话有证据支撑')
+  console.log('  ✅ 逐表零差异(**行与列都比过**)—— 「本库未动」这句话有证据支撑')
   process.exit(0)
 }
 console.log(`  🔴 ${diffs.length} 张表有差异,**不许写「未动」**:`)
-for (const d of diffs) console.log(`     ${d.表}  ${d.开批} → ${d.现在}(${d.差 >= 0 ? '+' : ''}${d.差})`)
+for (const d of diffs) {
+  const r = d.行差 === 0 ? '行 持平' : `行 ${d.行}(${d.行差 > 0 ? '+' : ''}${d.行差})`
+  const c = d.列差 === 0 ? (d.列.startsWith('(') ? d.列 : '列 持平') : `列 ${d.列}(${d.列差 > 0 ? '+' : ''}${d.列差})`
+  console.log(`     ${d.表}  ${r} · ${c}`)
+}
 process.exit(1)

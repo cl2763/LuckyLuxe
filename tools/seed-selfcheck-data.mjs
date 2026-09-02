@@ -38,7 +38,7 @@ const TOKEN = envLine.slice('OWNER_DEMO_TOKEN='.length).trim().replace(/^["']|["
 async function api(tenantId, path, options = {}) {
   const res = await fetch(`${BASE}${path}`, {
     ...options,
-    headers: { 'content-type': 'application/json', authorization: `Bearer ${TOKEN}`, 'x-admin-tenant-id': tenantId, ...(options.headers || {}) }
+    headers: { 'content-type': 'application/json', 'x-demo-seed': 'seed-selfcheck-data', authorization: `Bearer ${TOKEN}`, 'x-admin-tenant-id': tenantId, ...(options.headers || {}) }
   })
   const text = await res.text()
   let data = null
@@ -48,7 +48,7 @@ async function api(tenantId, path, options = {}) {
 }
 // 顾客签署页不需要登录,单独一个不带 admin 头的请求
 async function pub(path, options = {}) {
-  const res = await fetch(`${BASE}${path}`, { ...options, headers: { 'content-type': 'application/json', ...(options.headers || {}) } })
+  const res = await fetch(`${BASE}${path}`, { ...options, headers: { 'content-type': 'application/json', 'x-demo-seed': 'seed-selfcheck-data', ...(options.headers || {}) } })
   const text = await res.text()
   const data = text ? JSON.parse(text) : null
   if (!res.ok) throw new Error(`${path} → ${res.status} ${JSON.stringify(data).slice(0, 260)}`)

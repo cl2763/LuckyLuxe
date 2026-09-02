@@ -53,9 +53,12 @@ if (!existsSync(SB)) {
     execFileSync('node', [join(ROOT, SNAP), SB, tmp], { cwd: ROOT, encoding: 'utf8' })
     const snap = JSON.parse(readFileSync(tmp, 'utf8'))
     /* 落刀凭据(刀留痕律):注入点 = 哪张表、从几改成几 */
-    const victim = Object.keys(snap.tables).find((t) => (snap.tables[t] || 0) > 0)
-    const was = snap.tables[victim]
-    snap.tables[victim] = was + 1
+    /* 🔴 03y:快照格式从「一个数字」升成 `{rows, cols}`(店主要求对照表出行/列两栏)——
+       这把刀的造病段还在按数字加 1,改完之后它注入的是 `NaN`,对账器当然看不出差异。
+       **判据要跟着被测物的格式走**:被测物换了形状,造病也得换。 */
+    const victim = Object.keys(snap.tables).find((t) => ((snap.tables[t] || {}).rows || 0) > 0)
+    const was = snap.tables[victim].rows
+    snap.tables[victim] = { ...snap.tables[victim], rows: was + 1 }
     writeFileSync(tmp, JSON.stringify(snap, null, 2))
     console.log(`   [刀] 注入点=快照文件的 ${victim} 表:${was} → ${was + 1}(库本身一个字没动)`)
     let out = ''
@@ -64,6 +67,23 @@ if (!existsSync(SB)) {
     check('② 🔴 行为层造病验红:快照里改一张表的行数(库本身不动),对账器必须**红且点名那张表** —— '
       + '一把"对什么都说没差异"的对账器比没有还危险',
       red && out.includes(victim) && /不许写「未动」/.test(out), `red=${red} 输出含表名=${out.includes(victim)}`)
+    /* ②c 🔴 03y 店主补的那一栏也要能造病验红:**只改列数、行数不动**,对账器必须照样红。
+       案由:D121 那批本机库「行数零差异」是真的,但启动迁移给两张表各加了一列 ——
+       只比行数的对照表**看不出结构变了**。列这一栏不验,等于加了个不干活的栏目。 */
+    execFileSync('node', [join(ROOT, SNAP), SB, tmp], { cwd: ROOT, encoding: 'utf8' })
+    const s2 = JSON.parse(readFileSync(tmp, 'utf8'))
+    const v2 = Object.keys(s2.tables).find((t) => ((s2.tables[t] || {}).cols || 0) > 0)
+    const wasCols = s2.tables[v2].cols
+    s2.tables[v2] = { ...s2.tables[v2], cols: wasCols + 1 }
+    writeFileSync(tmp, JSON.stringify(s2, null, 2))
+    console.log(`   [刀] 注入点=快照文件的 ${v2} 表**列数**:${wasCols} → ${wasCols + 1}(行数一个没动)`)
+    let colRed = false
+    let colOut = ''
+    try { colOut = execFileSync('node', [join(ROOT, SNAP), SB, '--diff', tmp], { cwd: ROOT, encoding: 'utf8' }) } catch (e) { colRed = true; colOut = String(e.stdout || '') }
+    check('②c 🔴 只改列数(行数不动)对账器也必须红并点名 —— '
+      + 'D121 那批就是「行零差异、结构变了」,只比行数的对照表看不出来',
+    colRed && colOut.includes(v2) && /列/.test(colOut), `red=${colRed} 含表名=${colOut.includes(v2)}`)
+
     /* ②b 还原:同一份快照重打一次,必须回绿(判据要能分出"有差"和"没差",不是一律红) */
     execFileSync('node', [join(ROOT, SNAP), SB, tmp], { cwd: ROOT, encoding: 'utf8' })
     let green = true

@@ -23,8 +23,7 @@ const log = (...args) => console.log(...args)
 async function api(path, options = {}, asTenant = false) {
   const response = await fetch(`${BASE_URL}${path}`, {
     ...options,
-    headers: {
-      'content-type': 'application/json',
+    headers: { 'content-type': 'application/json', 'x-demo-seed': 'seed-jics-nail',
       authorization: `Bearer ${OWNER_TOKEN}`,
       ...(asTenant ? { 'x-admin-tenant-id': TENANT_ID } : {}),
       ...(options.headers || {})

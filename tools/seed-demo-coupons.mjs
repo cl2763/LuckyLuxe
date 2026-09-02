@@ -24,8 +24,7 @@ const TOKEN = envLine.slice('OWNER_DEMO_TOKEN='.length).trim().replace(/^["']|["
 async function api(tenantId, path, options = {}) {
   const res = await fetch(`${BASE}${path}`, {
     ...options,
-    headers: {
-      'content-type': 'application/json',
+    headers: { 'content-type': 'application/json', 'x-demo-seed': 'seed-demo-coupons',
       authorization: `Bearer ${TOKEN}`,
       'x-admin-tenant-id': tenantId,
       ...(options.headers || {})

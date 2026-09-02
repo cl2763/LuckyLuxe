@@ -89,7 +89,20 @@ export function installLedgerGuards(db) {
   const sql = ledgerTriggers()
     .map(([name, ddl]) => `DROP TRIGGER IF EXISTS ${name};\n${ddl};`)
     .join('\n')
-  db.exec(sql)
+  /* 🔴 03y 现测补:`db.exec` 里 24 条语句(12 组 DROP+CREATE)**不是原子的** ——
+     它们顺序执行,第 7 句失败时前 6 条已经 DROP 掉了,**账本锁就少了六条**。
+     上面那句「跑完 db.exec 这一句法就在」只在不失败时成立;
+     一旦中途失败,恰恰变成本模块开头警告的那个样子:「中途崩一次账本锁就悄悄没了」。
+     SQLite 的 DDL 是可以进事务的,包上就是全有或全无。
+     归族「动钱多步写律」的同一条理由:**多步写要么压成一步,要么包在一个事务里,没有第三种。** */
+  db.exec('BEGIN IMMEDIATE')
+  try {
+    db.exec(sql)
+    db.exec('COMMIT')
+  } catch (error) {
+    try { db.exec('ROLLBACK') } catch { /* 已经不在事务里:忽略 */ }
+    throw error
+  }
 }
 
 /* 🔴 D73(店主 2026-08-24 裁,D72 的复发登记):**判据搬了家,判据的输入没搬。**

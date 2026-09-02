@@ -36,8 +36,7 @@ if (!/127\.0\.0\.1|localhost/.test(BASE)) {
 async function call(path, options = {}, tenantId = null) {
   const res = await fetch(`${BASE}${path}`, {
     ...options,
-    headers: {
-      'content-type': 'application/json',
+    headers: { 'content-type': 'application/json', 'x-demo-seed': 'seed-demo-today',
       authorization: `Bearer ${TOKEN}`,
       ...(tenantId ? { 'x-admin-tenant-id': tenantId, 'x-tenant-id': tenantId } : {}),
       ...(options.headers || {})

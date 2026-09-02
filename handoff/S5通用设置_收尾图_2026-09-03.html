@@ -1,0 +1,96 @@
+<title>通用设置收尾</title>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Noto+Serif+SC:wght@600;700&family=Noto+Sans+SC:wght@400;500;700&display=swap">
+<style>
+:root{--paper:#faf8f3;--ink:#23241f;--sub:#6d6f66;--line:#e3e0d6;--card:#fff;--wall:#f1eee6;--acc:#0e6e62;--accd:#0a5a50;--gold:#b09468;--goldbg:#f6efe2;--bad:#b3413a;--badbg:#f7e7e5;--good:#2e8b57;--goodbg:#e6f3ea;--ext:#274f8f;--extbg:#eef2fa}
+@media (prefers-color-scheme: dark){:root:not([data-theme="light"]){--paper:#191b19;--ink:#e8e7e0;--sub:#9aa096;--line:#33362f;--card:#20241f;--wall:#242822;--acc:#4cc0b0;--accd:#63d2c3;--gold:#d3b483;--goldbg:#2b2618;--bad:#e5867e;--badbg:#33201e;--good:#6fd0a0;--goodbg:#1c2f25;--ext:#8fb0e8;--extbg:#1d2434}}
+:root[data-theme="dark"]{--paper:#191b19;--ink:#e8e7e0;--sub:#9aa096;--line:#33362f;--card:#20241f;--wall:#242822;--acc:#4cc0b0;--accd:#63d2c3;--gold:#d3b483;--goldbg:#2b2618;--bad:#e5867e;--badbg:#33201e;--good:#6fd0a0;--goodbg:#1c2f25;--ext:#8fb0e8;--extbg:#1d2434}
+body{background:var(--paper);color:var(--ink);font-family:'Noto Sans SC',-apple-system,sans-serif;line-height:1.7;margin:0}
+.w{max-width:940px;margin:0 auto;padding:38px 18px 80px}
+h1{font-family:'Noto Serif SC',serif;font-size:1.65rem;margin:0 0 4px;text-wrap:balance}
+.meta{color:var(--sub);font-size:.85rem;margin-bottom:22px}
+h2{font-family:'Noto Serif SC',serif;font-size:1.12rem;margin:38px 0 10px;padding-left:10px;border-left:4px solid var(--acc)}
+p{max-width:70ch}
+.note{background:var(--card);border:1px solid var(--line);border-left:4px solid var(--acc);border-radius:8px;padding:11px 15px;font-size:.92rem;margin-bottom:14px}
+.tblwrap{overflow-x:auto}
+table{border-collapse:collapse;width:100%;font-size:.88rem;margin-top:8px}
+th,td{border:1px solid var(--line);padding:8px 10px;text-align:left;vertical-align:top}
+th{background:var(--wall);font-weight:700;white-space:nowrap}
+code{font-family:ui-monospace,SFMono-Regular,Menlo,monospace;font-size:.84em;background:var(--wall);padding:1px 5px;border-radius:4px}
+.foot{margin-top:36px;padding-top:14px;border-top:1px solid var(--line);color:var(--sub);font-size:.82rem}
+.pill{display:inline-block;font-size:.7rem;font-weight:700;border-radius:999px;padding:0 8px;margin-left:6px;vertical-align:1px}
+.pill.g{background:var(--goodbg);color:var(--good)}.pill.b{background:var(--badbg);color:var(--bad)}.pill.e{background:var(--extbg);color:var(--ext)}.pill.y{background:var(--goldbg);color:var(--gold)}
+.stage{display:flex;gap:22px;flex-wrap:wrap;align-items:flex-start;margin:14px 0 6px}
+.page{width:520px;max-width:100%;background:var(--wall);border:1px solid var(--line);border-radius:14px;padding:14px;box-sizing:border-box;flex-shrink:0}
+.page h3{font-size:1rem;margin:0 0 2px}
+.page .sub{font-size:.78rem;color:var(--sub);margin-bottom:10px}
+.blk{background:var(--card);border:1px solid var(--line);border-radius:10px;padding:10px 12px;margin-bottom:8px;font-size:.84rem}
+.blk .h{display:flex;justify-content:space-between;align-items:baseline;font-weight:700;margin-bottom:4px}
+.blk .h span{font-weight:400;color:var(--sub);font-size:.74rem}
+.blk .d{color:var(--sub);font-size:.78rem}
+.blk.staff{border-style:dashed}
+.ava{display:flex;gap:10px;align-items:center}
+.ava i{width:40px;height:40px;border-radius:50%;background:radial-gradient(circle at 35% 30%,#e8cd93,#b09468);display:block}
+.btn{display:inline-block;font-size:.76rem;border:1px solid var(--line);border-radius:7px;padding:1px 9px;color:var(--ink);background:var(--wall)}
+.flow{display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:10px;margin:12px 0 6px}
+.step{background:var(--card);border:1px solid var(--line);border-radius:10px;padding:10px 12px;font-size:.86rem}
+.step .n{font-size:.68rem;letter-spacing:.08em;color:var(--sub);text-transform:uppercase;font-weight:700}
+.step b{display:block;font-size:.95rem;margin:2px 0 4px}
+.step .d{color:var(--sub);font-size:.8rem}
+.side{flex:1;min-width:240px;font-size:.9rem}
+.side ul{padding-left:1.2em;margin:6px 0}.side li{margin-bottom:6px}
+</style>
+<div class="w">
+<h1>通用设置收尾</h1>
+<div class="meta">设计图 · 2026-09-03 · 图=合同 · 对应诉求总账 S5;先按现状改判——S5-a 页面 08-25 已在,本图只管收尾三件半</div>
+
+<p class="note"><b>现状先说准(我现查 `admin.js` S5-a 段):</b>网页后台「通用设置」页<b>已经存在</b>,含语言切换、币种(只显示)、我的密码(验当前密码后改)、昵称(可改;头像用默认图)、财务密码(启用/修改,需当前密码);<b>老板专属</b>(员工看不到整页);「忘记密码」入口按 S5-b 挂起,页上明写「短信自助找回在做,暂未开通」。所以诉求总账里 S5「未动」是错的,改「半成」。剩下的:①员工也要能改自己的密码和昵称;②头像真能换(两端);③币种只有一处真相;④短信自助重置(等外部件,但流程与闸现在就定)。</p>
+
+<h2>一、页面(网页后台)</h2>
+<div class="stage">
+  <div class="page" aria-label="通用设置页视觉稿">
+    <h3>通用设置</h3>
+    <div class="sub">小程序环境与账号相关的设置都在这里;门店营业信息、定金规则、会员套餐在「门店设置」。</div>
+    <div class="blk"><div class="h">语言 <span>现有</span></div><div class="d">中文 / EN——与右上角同一处设置;切换后后台与顾客端预览一起变。</div></div>
+    <div class="blk"><div class="h">币种 <span>只读 · 链到门店设置</span></div><div class="d">CAD · 由「门店设置 → 门店信息」决定,这里不改,点「去改 ›」跳过去。<b>一处真相。</b></div></div>
+    <div class="blk"><div class="h">昵称与头像 <span>本图新增:头像</span></div>
+      <div class="ava"><i></i><div><div>小婕 <span class="btn">换头像</span> <span class="btn">保存昵称</span></div><div class="d">昵称显示在排班、日结与留痕里;头像显示在排班列头、台面、小记签名处。JPG/PNG ≤ 2MB,裁成正方形。</div></div></div>
+    </div>
+    <div class="blk"><div class="h">我的密码 <span>现有</span></div><div class="d">当前密码 → 新密码(≥6 位)→ 再输一次。改完当前登录仍有效。</div></div>
+    <div class="blk"><div class="h">财务密码 <span>现有 · 老板专属</span></div><div class="d">启用后进财务板块需输入;关闭或修改都要验当前密码。</div></div>
+    <div class="blk staff"><div class="h">员工登录看到的这一页 <span>本图新增</span></div><div class="d">只有:语言 · 昵称与头像 · 我的密码。<b>币种与财务密码整块不出现</b>(后端按身份裁字段,前端隐藏不算)。</div></div>
+  </div>
+  <div class="side">
+    <div style="font-size:.72rem;letter-spacing:.08em;text-transform:uppercase;color:var(--sub);font-weight:700">规矩</div>
+    <ul>
+      <li><b>员工可见</b>:侧栏「通用设置」对员工也显示;页面按身份裁块——员工响应体里没有财务密码与币种字段,不是前端藏。</li>
+      <li><b>头像</b>:走现有作品图上传管线(COS,同一套压缩/裁切),存 <code>admin_accounts.avatar_url</code>;小程序「我的」页同一处改;没上传时用默认图,不做首字母头像(D110 那种字母不是头像)。</li>
+      <li><b>币种</b>:唯一出处 = <code>stores.currency</code>(门店设置);通用设置只显示 + 链过去;判据:全仓不得有第二个币种写口。</li>
+      <li><b>昵称</b>:保存后排班列头、日结留痕即时更新(同一份数据)。</li>
+    </ul>
+  </div>
+</div>
+
+<h2>二、短信自助重置(S5-b)<span class="pill e">等外部件:短信签名与模板报备</span></h2>
+<div class="flow">
+  <div class="step"><div class="n">0 闸</div><b><code>SMS_ENABLED</code> 未设 = 整条路不出现</b><div class="d">登录页不放「忘记密码」按钮,只有一句「忘记密码请联系平台重置」(现状);不做发不出短信的按钮</div></div>
+  <div class="step"><div class="n">1 登录页</div><b>忘记密码 ›</b><div class="d">输入账号名 + 绑定手机号(账号得先绑手机,通用设置里加「绑定手机」一行,也归 S5-b)</div></div>
+  <div class="step"><div class="n">2 验证码</div><b>6 位,10 分钟有效</b><div class="d">同号 60 秒内只发一条、一小时最多 5 条;错 5 次锁 30 分钟;走通知调度器的短信通道,事由 <code>password_reset</code></div></div>
+  <div class="step"><div class="n">3 新密码</div><b>设新密码 → 吊销全部在用会话</b><div class="d">与老板口重置同一收尾(<code>must_change_password=0</code>、<code>DELETE admin_sessions WHERE account_id</code>)</div></div>
+  <div class="step"><div class="n">4 留痕</div><b>操作留痕一行</b><div class="d">谁、何时、哪个手机尾号(只存尾号 4 位),不存验证码</div></div>
+</div>
+<p class="note"><b>财务密码</b>也走同一条(忘记财务密码 → 短信验证 → 重设),但入口在通用设置的财务密码块里,不在登录页。短信通道接通前两条路都不出现,老板照旧找平台重置。</p>
+
+<h2>三、判据(锚字段与身份)</h2>
+<ol>
+  <li>员工身份 <code>GET /admin/settings/general</code> 响应体不含 <code>financeLock</code>、<code>currency</code> 字段;老板含。页面对应块节点存在/不存在与之一致。</li>
+  <li>头像:上传后 <code>avatar_url</code> 非空且两端(网页排班列头 / 小程序「我的」)渲染同一 URL;未上传时默认图节点存在、无首字母节点。</li>
+  <li>币种写口全仓只有门店设置一处(静态白名单式);通用设置页无币种写口节点。</li>
+  <li><code>SMS_ENABLED</code> 未设时登录页无「忘记密码」节点、<code>/auth/forgot</code> 返回 404;设了时节点存在、限流按 §二 数字、错 5 次锁、成功后会话表该账号 0 行。</li>
+  <li>造病验红:去掉身份裁字段 → 判据 1 红;把币种改成可写 → 判据 3 红。</li>
+</ol>
+
+<h2>四、明确不做</h2>
+<p>不做首字母头像;不做多语言之外的第三种语言;不做邮箱找回;不做「记住我」之类的会话策略改动。</p>
+
+<p class="foot">图=合同。落地顺序:员工可见 + 身份裁字段 → 头像 → 币种单一出处判据 → S5-b 流程与闸(短信通道接通前只落闸与 404)。店主点头前为草案。</p>
+</div>

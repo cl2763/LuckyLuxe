@@ -140,7 +140,7 @@ const CROSS_OPENID = 'demo-openid-crossshop-a-zhen'   // 同一个微信身份,�
 async function api(tenantId, path, options = {}) {
   const res = await fetch(`${BASE}${path}`, {
     ...options,
-    headers: { 'content-type': 'application/json', authorization: `Bearer ${TOKEN}`, 'x-admin-tenant-id': tenantId, 'x-tenant-id': tenantId, ...(options.headers || {}) }
+    headers: { 'content-type': 'application/json', 'x-demo-seed': 'seed-demo-twin', authorization: `Bearer ${TOKEN}`, 'x-admin-tenant-id': tenantId, 'x-tenant-id': tenantId, ...(options.headers || {}) }
   })
   const text = await res.text()
   let data = {}
@@ -151,7 +151,7 @@ async function api(tenantId, path, options = {}) {
 async function platform(path, options = {}) {
   const res = await fetch(`${BASE}${path}`, {
     ...options,
-    headers: { 'content-type': 'application/json', authorization: `Bearer ${TOKEN}`, ...(options.headers || {}) }
+    headers: { 'content-type': 'application/json', 'x-demo-seed': 'seed-demo-twin', authorization: `Bearer ${TOKEN}`, ...(options.headers || {}) }
   })
   const text = await res.text()
   let data = {}
@@ -347,7 +347,7 @@ async function seedMember(spec, { name, openId, balance, timecardTimes, coupons,
       body: JSON.stringify({ userId, settlements: [{ bookingId, payIntent: 'offline_full', items: [{ serviceId: svc.id, qty: 1 }], technicians: [{ technicianId: tech.id, role: 'main', itemNos: [1] }], ...extra }] })
     })).settlements[0]
     await fetch(`${BASE}/settlements/${encodeURIComponent(sh.code)}/sign`, {
-      method: 'POST', headers: { 'content-type': 'application/json', 'x-tenant-id': spec.tenantId },
+      method: 'POST', headers: { 'content-type': 'application/json', 'x-demo-seed': 'seed-demo-twin', 'x-tenant-id': spec.tenantId },
       body: JSON.stringify({ signature: '演示签名', disclaimerAccepted: true })
     })
   }
