@@ -1,3 +1,4 @@
+  /* D127 闸:比的是这张单要写进去的那个租户(非 currentTenantId);「还没归属」与「属于别家」是两个状态,只拒后者。见 ./tenant-profile.mjs */
 import { createServer } from 'node:http'
 import { AsyncLocalStorage } from 'node:async_hooks'
 import { DatabaseSync } from 'node:sqlite'
@@ -18,6 +19,7 @@ import { createOrderBadges, bookingSourceText, bookingStatusText } from './order
 import { installLedgerGuards, backfillTenantKindOnce, LEDGER_TRIGGER_NAMES } from './ledger-guards.mjs'
 import { createQuoteSerialize } from './quote-serialize.mjs'          // AI 报价域序列化(公约②)
 import { createDemoReset, isDemoTenant, PROTECTED_REAL_TENANTS } from './demo-reset.mjs'   // 演示店归属判据/黑名单/重置唯一入口(公约①)
+import { createTenantProfile } from './tenant-profile.mjs'          // D127:本店档案唯一出口
 import { createDemoFacts } from './demo-facts.mjs'                    // 演示店事实口(铺设脚本不再直连库)
 import { createPlatformOps } from './platform-ops.mjs'                // 平台运维域(备份/五项/运维日志/重置财务密码)
 import { ensureListedColumn } from './tenant-visibility.mjs'          // D76:选店页可见性(与账本归属解耦)
@@ -5439,6 +5441,9 @@ function tenantMemberTiers(tenantId = currentTenantId()) {
 
 /* ===== 会员码域已搬出到 ./member-code.mjs(公约②,2026-08-25)===== */
 const { memberCodeForUserId, displayNameForUserId, userIdFromMemberCode, isGenericDisplayName } = createMemberCode({ db })
+/* D127:本店档案唯一出口。**必须排在 displayNameForUserId 之后** —— 它是 const,
+   之前我把这行放在 4490,服务直接 TDZ 起不来(判据是回归的启动那一步咬出来的)。 */
+const { profileIdInTenant, registerEmailUser } = createTenantProfile({ db, validTenantId, randomId, displayNameForUserId, apiError, serializeUser, upsertUserIdentity })
 const storeDirectory = createStoreDirectory({ db })
 const { pricingCategories, serializePricingCategory, serializePricingItem, pricingItemShape } = createPricingSerialize({
   db, apiError, currentTenantId, cents, formatMoneyCents,
@@ -5582,7 +5587,8 @@ function serializeBooking(row, lang = 'zh') {
   const service = row.service_id ? getService(row.service_id) : null
   const startLocal = localParts(row.appointment_start)
   const endLocal = localParts(row.appointment_end)
-  const user = row.user_id ? db.prepare('SELECT id, display_name, phone, email, wechat_open_id, google_id FROM users WHERE id = ?').get(row.user_id) : null
+  /* D127 第二道闸:读口不能指望写口(存量脏行是既成事实)——按 bookings.tenant_id 连,连不上不下发 user 对象。见 ./tenant-profile.mjs */
+  const user = row.user_id ? db.prepare('SELECT id, display_name, phone, email, wechat_open_id, google_id FROM users WHERE id = ? AND tenant_id = ?').get(row.user_id, row.tenant_id) : null
   return {
     id: row.id,
     publicCode: row.public_code,
@@ -5837,20 +5843,6 @@ function serializeUser(user, tenantId = DEFAULT_TENANT_ID) {
   }
 }
 
-function registerEmailUser(body) {
-  const email = String(body.email || '').trim().toLowerCase()
-  const displayName = String(body.displayName || '').trim() || email.split('@')[0] || 'Lucky Member'
-  if (!email || !email.includes('@')) throw apiError(400, 'BAD_REQUEST', 'A valid email is required.')
-  const existing = db.prepare('SELECT * FROM users WHERE email = ?').get(email)
-  if (existing) {
-    upsertUserIdentity({ userId: existing.id, provider: 'email', providerUserId: email, email })
-    return serializeUser(existing)
-  }
-  const id = randomId('user')
-  db.prepare('INSERT INTO users (id, display_name, email) VALUES (?, ?, ?)').run(id, displayName, email)
-  upsertUserIdentity({ userId: id, provider: 'email', providerUserId: email, email })
-  return serializeUser(db.prepare('SELECT * FROM users WHERE id = ?').get(id))
-}
 
 // 演示铺单:仅本地/演示开关下,给首次登录且无订单的顾客铺 2 完成 + 1 待到店 + 储值,
 // 让会员卡(积分/消费/成长/等级/储值)与订单一致、可直接体验。生产不启用。
@@ -6740,7 +6732,14 @@ function createBooking(body, opts = {}) {
   const slots = buildSlotStarts(start, durationMin)
   const addOnTotal = input.addOns.reduce((total, item) => total + Number(item.priceCents || 0), 0)
   const servicePriceCents = service.price_cents + addOnTotal
-  const user = input.userId ? db.prepare('SELECT * FROM users WHERE id = ?').get(input.userId) : null
+  const bookingTenantForUser = input.tenantId || DEFAULT_TENANT_ID
+  /* D127 闸:比的是**这张单要写进去的那个租户**(下面 INSERT 用的就是它),不是 currentTenantId();
+     「还没归属」(演示邮箱老路,生产恒关)与「属于别家」是两个状态,只拒后者。详见 ./tenant-profile.mjs */
+  const user = input.userId
+    ? db.prepare("SELECT * FROM users WHERE id = ? AND (tenant_id = ? OR tenant_id IS NULL OR tenant_id = '')")
+      .get(input.userId, bookingTenantForUser)
+    : null
+  if (input.userId && !user) throw apiError(400, 'CUSTOMER_NOT_IN_TENANT', '这位顾客不属于本店,不能挂到本店的单上。')
   const serializedUser = serializeUser(user, input.tenantId || DEFAULT_TENANT_ID)
   // 线上定金开关(租户级,默认开):关闭=顾客自约免定金直接确认、到店收款——给没有/不想办支付商户号的商家用
   const bookingTenantId = input.tenantId || DEFAULT_TENANT_ID
@@ -11217,7 +11216,8 @@ async function route(req, res) {
       throw apiError(403, 'DEMO_LOGIN_DISABLED', '邮箱登录目前只在本地/沙箱开放(它不校验密码)。生产顾客端请用微信登录。')
     }
     const body = await readBody(req)
-    const user = registerEmailUser(body)
+    /* D127:注册在哪家店就建在哪家店(列默认值 lucky-luxe 会让「没填」看起来像「填对了」) */
+    const user = registerEmailUser({ ...body, tenantId: resolveTenant(req, query) })
     return json(res, path.endsWith('register') ? 201 : 200, { user, auth: demoAuthFor(user.email || body.email), mode: 'demo' })
   }
   if (req.method === 'POST' && path === '/auth/wechat/mini-login') return json(res, 200, await signInWechatMiniUser(await readBody(req)))
@@ -11443,6 +11443,10 @@ async function route(req, res) {
     // 没开通就别把按钮摆在顾客面前——点了没结果比没有按钮更伤体验。只暴露布尔值,不泄露套餐信息。
     return json(res, 200, {
       aiEnabled: checkEntitlement(tid, AI_ADDON.feature),
+      /* 🔴 03u:样例内容(充值套餐示例 / 我的消息样例)**只许在演示店出**,真店只出真空态。
+         判据落在**数据**(tenants.kind)上,不看店名 —— D73 立的规矩;
+         fail-closed:取不到 kind 按 real 算(isDemoTenant 里就是这么兜的),宁可少给。 */
+      isDemo: isDemoTenant(db.prepare('SELECT kind FROM tenants WHERE id = ?').get(tid)),
       /* 顾客端的币种也从这里拿(店主 2026-08-10 红线修复)。
          顾客端不能调 /admin/store-clock,以前就只好各页写死 "CAD $" ——
          境内 ¥ 店的顾客看到的每个价格币种都是错的。现在跟商家端同一套 currencyDisplay。 */
@@ -11571,8 +11575,9 @@ async function route(req, res) {
     // 安全:必须登录,且强制以登录用户下单(此前不鉴权 + userId 取自请求体,可匿名/冒用他人下单)
     const customer = requireCustomer(req)
     const body = await readBody(req)
-    body.userId = customer.id
-    body.tenantId = resolveTenant(req, query) // 多租户:订单归属"当前进的店"
+    body.tenantId = resolveTenant(req, query)
+    /* D127(03u):顾客档案每店一份;邮箱老路会落进列默认值 lucky-luxe → 串味。理由与规矩见 ./tenant-profile.mjs */
+    body.userId = profileIdInTenant(customer.id, body.tenantId) // 多租户:订单归属"当前进的店"
     return json(res, 201, { booking: createBooking(body) })
   }
   // ===== 顾客侧"我的资产"(user × 当前店) =====

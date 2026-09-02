@@ -19,11 +19,16 @@
     </view>
   </block>
 
-  <view class="t2">充值套餐 <text class="demo">示例</text></view>
-  <view class="card row sp" wx:for="{{packages}}" wx:key="id">
-    <view><view class="pn">{{item.name}}</view><view class="ps">{{item.sub}}</view></view>
-    <view class="buy" bindtap="soon">购买</view>
-  </view>
+  <!-- 🔴 03u:①「购买」原来 bindtap="soon" 而页面**没有 soon 方法** —— 点了什么都不发生。
+       「摆着又不响」是永远错的那第三种,按钮整个拿掉(不换成「即将开放」:
+       线上自助购卡是 S2 的活,做出来再摆按钮)。
+       ② 这一整块是**样例**,只许在演示店出;真店出真空态,不拿假数当内容。 -->
+  <block wx:if="{{isDemo}}">
+    <view class="t2">充值套餐 <text class="demo">示例</text></view>
+    <view class="card row sp" wx:for="{{packages}}" wx:key="id">
+      <view><view class="pn">{{item.name}}</view><view class="ps">{{item.sub}}</view></view>
+    </view>
+  </block>
 
   <view class="t2">收支明细</view>
   <view wx:if="{{txns.length}}" class="list">

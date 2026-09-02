@@ -34,6 +34,11 @@ async function assertServerNewerThanSource(label) {
   let newestFile = ''
   for (const f of readdirSync('.')) {
     if (!f.endsWith('.mjs')) continue
+    /* 🔴 03u:原来把 **测试文件也算进源码** —— 改一把刀就说"沙箱过期",要重起一次才能跑。
+       但 `test-*.mjs` / `run-*.mjs` **不在服务加载的模块图里**,服务加载的是不是旧的与它们无关。
+       判据要认的是「**服务代码**变了没有」,不是「这个目录里任何文件动过没有」。
+       (与前一处 lsof 读到浏览器进程同族:比之前先问清楚,比的到底是不是那个东西。) */
+    if (f.startsWith('test-') || f.startsWith('run-')) continue
     try {
       const m = statSync(f).mtimeMs
       if (m > newest) { newest = m; newestFile = f }

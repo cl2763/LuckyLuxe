@@ -574,6 +574,9 @@ async function getStores() {
   try {
     const data = await request('/stores')
     wx.setStorageSync('lucky_store_ai', data.aiEnabled === true)
+    /* 03u:样例内容(充值套餐示例 / 我的消息样例)只许在演示店出。
+       照 aiEnabled 同一形制缓存,不另起一套(先搜复用,公约④)。 */
+    wx.setStorageSync('lucky_store_demo', data.isDemo === true)
     return (data.stores || []).map(toMiniStore)
   } catch (error) {
     throw error

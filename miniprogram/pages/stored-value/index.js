@@ -8,7 +8,7 @@ const { curOf, ensureCurrencyCached, money, moneyFromYuan } = require('../../uti
 const CH_LABEL = { manual: '门店补录', wechat: '微信支付', stored_value: '门店核销', cash: '现金', card: '银行卡', alipay: '支付宝', marketing: '营销赠送', unknown: '' }
 
 Page({
-  data: { balance: 0, level: '', packages: [], txns: [], pendingConfirm: [], loading: true },
+  data: { balance: 0, level: '', packages: [], txns: [], pendingConfirm: [], loading: true, isDemo: false },
 
   async onShow() {
     ensureCurrencyCached()
@@ -45,7 +45,9 @@ Page({
       }))
       this.setData({ balance: Math.round((r.balanceCents || 0) / 100) })
     } catch (e) { this.setData({ balance: m.balance || 0 }) }
-    this.setData({ level: m.memberLevel || '', packages, txns, pendingConfirm, loading: false })
+    /* 03u:样例块只在演示店出 —— 标志来自公开 /stores 的 isDemo(判据落在 tenants.kind) */
+    const isDemo = wx.getStorageSync('lucky_store_demo') === true
+    this.setData({ level: m.memberLevel || '', packages, txns, pendingConfirm, loading: false, isDemo })
   },
 
   // B3-4 确认回执:幂等口,成功后行内状态就地更新(不整页闪)
