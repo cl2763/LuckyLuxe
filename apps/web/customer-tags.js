@@ -13,9 +13,21 @@ window.CustomerTags = (function () {
   function memberTierBadge(customer, { lang, styles, escapeHtml }) {
     // D41:不分级店两态 —— member=会员 / guest=顾客(充值即会员,消费不算);分级店照旧梯子键
     const tier = customer.memberTier || 'Silver'
-    if (tier === 'member') return `<span class="member-tier-badge tier-silver">${lang === 'zh' ? '会员' : 'Member'}</span>`
-    if (tier === 'guest') return `<span class="member-tier-badge" style="background:#eee;color:#666">${lang === 'zh' ? '顾客' : 'Guest'}</span>`
-    return `<span class="member-tier-badge ${(styles || {})[tier] || 'tier-silver'}">${escapeHtml(tier)}</span>`
+    const k = String(tier).toLowerCase()
+    if (k === 'member') return `<span class="member-tier-badge tier-silver">${lang === 'zh' ? '会员' : 'Member'}</span>`
+    if (k === 'guest') return `<span class="member-tier-badge" style="background:#eee;color:#666">${lang === 'zh' ? '顾客' : 'Guest'}</span>`
+    /* 🔴 03r(gold 裸枚举同族第三处):原来 `tier === 'member'` 等三处比较与 styles 查表**都区分大小写**,
+       而 memberTier 的大小写随来源(AI 记忆抽的是小写,梯子键可能是大写)——
+       小写 'member' 走不进第一条分支,最后落到 `escapeHtml(tier)` 把原值印出来。
+       ① 三处比较与配色查表改成大小写不敏感(纯显示,不涉口径);
+       ② 四个内置等级给中文名,和小程序/后端同一套字面。
+       ⬜ **未做、已登记待裁**:分级店用的是租户自定义梯子键(后端 memberTiers[] 带 label)。
+          自定义等级到底该显示 `key` 还是 `label`,是业务口径 —— 不自己判断,等店主裁。
+          在那之前保持原样显示键,不改现状。 */
+    const CN = { silver: '银卡', gold: '金卡', platinum: '铂金', diamond: '钻石' }
+    const styleKey = Object.keys(styles || {}).find((x) => x.toLowerCase() === k)
+    const shown = lang === 'zh' && CN[k] ? CN[k] : tier
+    return `<span class="member-tier-badge ${(styles || {})[styleKey] || 'tier-silver'}">${escapeHtml(shown)}</span>`
   }
 
   // RFM 分层(与小程序客户库同口径同两口;阈值=服务端 segment_rules)

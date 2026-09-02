@@ -416,7 +416,12 @@ function renderWechatContextPanel(conversation) {
   const memoryCustomer = memory.customer || {}
   const quoteTasks = (owner.quoteRequests || []).filter((item) => item.conversationId === conversation.id && !['COMPLETED', 'CANCELLED', 'SENT'].includes(String(item.status || '').toUpperCase()))
   const conversationReminders = (owner.reminderTasks || []).filter((item) => item.conversationId === conversation.id && String(item.status || '') === 'PENDING')
-  const memberTier = memoryCustomer.memberTier || stateData.memberTier || '-'
+  /* 🔴 03r:这里渲染的是**原始枚举**(截图里那个 `gold`)。等级中文名的唯一出口在后端
+     conversation-card.mjs 的 tierText;这条 subtle 行拿的是 AI 记忆里的值,后端卡片可能没覆盖到,
+     所以本地做同样的大小写不敏感映射并**兜到「会员」而不是原值** —— 绝不把内部枚举漏给人看。 */
+  const TIER_CN = { silver: '银卡', gold: '金卡', platinum: '铂金', diamond: '钻石', member: '会员', guest: '顾客' }
+  const rawTier = memoryCustomer.memberTier || stateData.memberTier || ''
+  const memberTier = rawTier ? (TIER_CN[String(rawTier).toLowerCase()] || '会员') : '-'
   const customerType = memoryCustomer.customerType || stateData.customerType || '-'
   setTimeout(fillTimecardCell, 0)
   els.wechatContextPanel.innerHTML = `
@@ -427,10 +432,15 @@ function renderWechatContextPanel(conversation) {
       ${(function () { /* D101②(01t 小合同):卡上六件 —— 会员/会员码/储值/次卡/报价状态,读口全既有 */
         const cu = conversation.linkedUserId ? (owner.customers || []).find((x) => x.id === conversation.linkedUserId) : null
         const qs = conversation.quoteState || {}
-        const qsLabel = qs.state === 'quoted' ? '本会话已报价' : qs.state === 'expired' ? '报价已过期' : qs.state === 'reference' ? '有历史报价' : '未报价'
+        /* 🔴 03r:这一行是**网页自己写的第二份报价文案** —— 02x 已经把它收成后端唯一出口
+           (conversation-card.mjs 的 CARD_TEXT.quote),小程序早就改读了,网页这份一直没动。
+           更要命的是两份还不一样:后端 none 态说「本会话暂无报价」,这里说「未报价」。
+           同一个状态两端两句话,正是当初收唯一出口要防的事。改读下发的 customerCard。 */
+        const card = conversation.customerCard || {}
+        const qsLabel = card.quoteLabel || '本会话暂无报价'
         if (!cu) return `<p class="cs-kv"><span>报价状态</span><b>${escapeHtml(qsLabel)}</b></p>`
         return `
-          <p class="cs-kv"><span>会员</span><b>${cu.memberTier && cu.memberTier !== 'guest' ? '是 · ' + escapeHtml(String(cu.memberTier)) : '非会员'}</b></p>
+          <p class="cs-kv"><span>会员</span><b>${cu.memberTier && cu.memberTier !== 'guest' ? '是 · ' + escapeHtml(card.tierText || '会员') : '非会员'}</b></p>
           <p class="cs-kv"><span>会员码</span><b>${escapeHtml(cu.memberCode || '—')}</b></p>
           <p class="cs-kv"><span>储值余额</span><b>${money(cu.storedValueBalanceCents || 0)}</b></p>
           <p class="cs-kv"><span>次卡</span><b data-cs-tc="${escapeHtml(cu.id)}">…</b></p>

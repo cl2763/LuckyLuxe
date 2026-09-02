@@ -221,8 +221,21 @@ check('③ 🔴 零命中先证刀能咬:三种默认目标形态各一个已知
   blind.length === 0, `咬不到:${blind.map((c) => c.name).join(' | ')}`)
 
 const guarded = writers.filter((w) => w.guarded).length
-console.log(`\n[写库护栏] 候选 ${CAND.length} · 会写库 ${writers.length}(A 类 ${writers.filter((w) => !reachable.has(w.file)).length} / B 类 ${writers.filter((w) => reachable.has(w.file)).length})`
-  + ` · A 类已接护栏 ${writers.filter((w) => !reachable.has(w.file) && w.guarded).length} · 仍有默认目标 ${withDefault.length}`)
+/* 🔴 03r(店主亲跑咬出):尾行原来用 `!reachable.has()` 分 A/B,而判据 ①c 用的是 `isB()`
+   —— `isB` = `reachable || importedByAny`,比 `reachable` 多一个条件。
+   **同一份数据、两把尺**:尾行报「已接 36/40」,判据判的却是 35/35。
+   报数的那一行和判据必须是同一把尺,否则人看着尾行以为还差 4 个没接,
+   而判据早就绿了 —— 归族「判据自述须与行为一致」,只是这次错在**自述**那一侧。
+   改法:尾行直接用判据算出来的 A/B 两个数组,不再自己算一遍。 */
+const aGuarded = A.filter((w) => w.guarded).length
+/* 分母也得说全:①c 判的是「A 类里**该有护栏的**」,NOT_A_DB(打 COS 对象存储、不碰库的两个)
+   不在判据里。尾行只写 34/36,人会以为还差 2 个没接 —— 差额必须当场解释掉,不留给人猜。 */
+const aNeed = A.filter((w) => !NOT_A_DB[w.file]).length
+console.log(`\n[写库护栏] 候选 ${CAND.length} · 会写库 ${writers.length}(A 类 ${A.length} / B 类 ${B.length};`
+  + `与 ①c 同一把尺:isB = local-server 可达 或 被任何 tracked 文件 import)`
+  + `\n   A 类该有护栏 ${aNeed}/${A.length}(差 ${A.length - aNeed} 个是 NOT_A_DB:${Object.keys(NOT_A_DB).join(' · ')})`
+  + ` —— 已接 ${aGuarded}/${aNeed} · 仍有默认目标 ${withDefault.length}`
+  + `\n   目标解析点 ${points.length} 个,未守住 ${unguarded.length}(①d 按解析点判;按文件判看不见的那一层)`)
 console.log(`   子目录覆盖:${subCount.map((x) => `${x.d}${x.n}`).join(' · ')}`)
 if (fails.length) { console.error(`\n❌ test-db-target-guard ${fails.length}/${checks} 项未过`); process.exit(1) }
 console.log(`\n✅ test-db-target-guard 通过 ${checks} 项`)

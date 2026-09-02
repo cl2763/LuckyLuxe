@@ -53,3 +53,6 @@ handoff/本地自查账号.txt
 /radius-luvia-phase1*/
 /radius-luvia-logo-proof-*/
 /output/
+
+# 浏览器二进制(店主 03r):playwright 自装的 chromium 等,几百 MB,绝不入库
+.playwright-browsers/

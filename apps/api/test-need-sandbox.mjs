@@ -11,22 +11,32 @@ async function assertServerNewerThanSource(label) {
   const { execFileSync } = await import('node:child_process')
   const { readdirSync, statSync } = await import('node:fs')
   let started = 0
+  let pidSeen = ''
   try {
     const pid = execFileSync('lsof', ['-ti', ':4310'], { encoding: 'utf8' }).split('\n').filter(Boolean)[0]
     if (!pid) return true
+    pidSeen = pid
     const lstart = execFileSync('ps', ['-o', 'lstart=', '-p', pid], { encoding: 'utf8' }).trim()
     started = new Date(lstart).getTime()
   } catch { return true }                       // 拿不到就不拦(如实不判,不假装通过)
   if (!started) return true
   let newest = 0
+  let newestFile = ''
   for (const f of readdirSync('.')) {
     if (!f.endsWith('.mjs')) continue
-    try { newest = Math.max(newest, statSync(f).mtimeMs) } catch { /* 读不到就跳过这一个 */ }
+    try {
+      const m = statSync(f).mtimeMs
+      if (m > newest) { newest = m; newestFile = f }
+    } catch { /* 读不到就跳过这一个 */ }
   }
   if (newest > started) {
     const gap = Math.round((newest - started) / 1000)
     console.log(`🔴 ${label} 沙箱进程起于源码**之前** ${gap} 秒 —— 它加载的是旧模块,`
       + '现在跑出来的绿是假的(「改了没重启」= 改了没编译 / 加了没进库 的第三形态)。')
+    /* 🔴 03r:这把刀在整轮回归里红、单跑却 4/4 绿 —— 而它只报一个「差 N 秒」,
+       说不出是**哪个进程**、**哪个文件**,人就只能猜。判据红的时候必须能指认现场。 */
+    console.log(`   现场:4310 pid=${pidSeen} 起于 ${new Date(started).toISOString()}`
+      + ` · 最新源码 ${newestFile} 改于 ${new Date(newest).toISOString()}`)
     console.log('   处置:pkill -f local-server.mjs → bash apps/api/start-sandbox.sh → 重跑')
     return false
   }

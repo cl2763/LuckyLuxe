@@ -1,6 +1,12 @@
 const api = require('../../../utils/api')
 const { storeMoney } = require('../../../utils/storeclock')
-const TIER = { Silver: '银卡', Gold: '金卡', Platinum: '铂金', Diamond: '钻石', member: '会员', guest: '顾客' } // D41:不分级店两态
+/* 🔴 03r:原来键是**首字母大写**(Silver/Gold/…),而 `memberTier` 来自 AI 抽取的记忆,
+   大小写随来源 —— `TIER['gold']` 取不到就兜底到 `u.memberTier`,**把原始枚举当中文名显示**。
+   等级中文名的唯一出口在后端 conversation-card.mjs 的 tierText;这个列表页不走那个接口,
+   所以这里做同样的**大小写不敏感 + 兜到「会员」**,绝不漏枚举。
+   (两处小程序页原本字面完全相同 = 同一份东西抄了两遍;会话页已改读后端下发的 tierText。) */
+const TIER = { silver: '银卡', gold: '金卡', platinum: '铂金', diamond: '钻石', member: '会员', guest: '顾客' }
+const tierCn = (raw) => (raw ? (TIER[String(raw).toLowerCase()] || '会员') : '') // D41:不分级店两态
 const STATUS = { PENDING_PAYMENT: '待付定金', CONFIRMED: '已确认', COMPLETED: '已完成', CANCELLED: '已取消', EXPIRED: '已过期', AFTER_SALES: '售后' }
 function money(c) { return storeMoney(c, 0) } // 门店币种,不写死 $
 function lastText(iso) { if (!iso) return '—'; const d = Math.floor((Date.now() - new Date(iso).getTime()) / 86400000); if (d <= 0) return '今天'; if (d < 365) return `${d}天前`; return iso.slice(0, 10) }
@@ -30,7 +36,7 @@ Page({
         c: {
           name: u.displayName || '顾客',
           av: (u.displayName || '?').slice(0, 1),
-          tier: TIER[u.memberTier] || u.memberTier || '会员',
+          tier: tierCn(u.memberTier) || '会员',
           memberCode: u.memberCode || '',
           phone: u.phone || '',
           visits: u.visitCount || 0,

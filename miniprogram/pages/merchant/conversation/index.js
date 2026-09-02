@@ -23,9 +23,12 @@ function lastVisitText(iso) {
   return `${m}-${d}`
 }
 
-function buildProfile(cust) {
+function buildProfile(cust, card) {
   return {
-    tier: TIER[cust.memberTier] || cust.memberTier || '会员',
+    /* 🔴 03r:原来 `TIER[cust.memberTier] || cust.memberTier` —— 键是首字母大写而真值是小写,
+       取不到就把**原始枚举**当中文名显示(截图里那枚 `gold` 就是这么来的)。
+       改读后端唯一出口 conversation-card.mjs 的 tierText,网页端读的是同一个。 */
+    tier: (card && card.tierText) || TIER[cust.memberTier] || '会员',
     isMember: cust.memberTier && cust.memberTier !== 'guest',
     memberCode: cust.memberCode || '—',   // D101②(01t):卡上六件之一
     visits: cust.visitCount || 0,
@@ -85,7 +88,7 @@ Page({
         const cr = await api.adminGet('/admin/customers')
         const list = cr.customers || cr.data || cr || []
         const cust = list.find((u) => u.id === c.linkedUserId)
-        if (cust) profile = buildProfile(cust)
+        if (cust) profile = buildProfile(cust, c.customerCard)
       } catch (e) { /* 忽略,退回名字 */ }
     }
 

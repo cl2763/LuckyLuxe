@@ -1715,7 +1715,7 @@ function getWecomConversation(conversationId) {
   const qsView = quoteState.quoteStateOf(row.id, row.tenant_id || currentTenantId())
   return {
     id: row.id,
-    quoteState: qsView, customerCard: conversationCard(!!linkedUser, qsView.state),   // D106:顾客卡句子唯一出口(原地改行,不加行)
+    quoteState: qsView, customerCard: conversationCard(!!linkedUser, qsView.state, linkedUser && linkedUser.memberTier),   // D106+03r 等级名同出口(原地改行,不加行)
     provider: row.provider,
     externalUserId: row.external_user_id,
     linkedUserId: linkedUser?.id || null,

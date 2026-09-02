@@ -67,6 +67,56 @@ cleanup; sleep 1
 
 # 等实例真正就绪再发请求:轮询 /health 取代固定 sleep。
 # 固定 sleep 在 CI 慢机器上会让测试抢跑(实例尚未 listen)→ tenant-isolation 报 "fetch failed"。
+# 🔴 2026-09-03 店主亲自撞出的通道(03r):她在**自己的 4128 服务开着**的时候跑了一次全量回归。
+# cleanup 的 pkill 发出去之后,脚本**立刻**起自己的 4128 并调 wait_health ——
+# 而 wait_health 只问「/health 答不答话」,**正在死的那个店主服务照样答话**,
+# 于是第一个套件连上了她的真库。这次是 08-24 那道测试护栏当场拒跑才没出事
+# (本机库逐表对照零写入),但**通道是真的**:护栏顶住 ≠ 通道不存在。
+#
+# 两道闸,店主定的规格:**端口真空再起服 · 起完先验库域**。
+#
+# ① 端口真空:pkill 之后必须等到端口**真的没人答话**,才允许起自己的服务。
+#    「还答得出话」就是还没空出来 —— 不问答话的是谁,问的是端口空没空。
+wait_port_free() {
+  local port="$1" label="${2:-$1}" tries=60
+  for _ in $(seq 1 "$tries"); do
+    curl -sf -o /dev/null --max-time 1 "http://127.0.0.1:${port}/health" || return 0
+    sleep 0.5
+  done
+  echo "!! 端口 ${port}(${label})30s 内没有空出来 —— 上面还挂着一个服务,很可能是店主正在用的。" >&2
+  echo "!! 中止,不敢在别人的服务上面起自己的。" >&2
+  return 1
+}
+
+# ② 验库域:起完之后**不看它自报什么**(/health 压根不下发库路径),
+#    看**这个进程真正打开的是哪个 .sqlite 文件** —— 判据律:能验实物就别验元数据。
+#    只要不在本轮的 CI 临时库目录下,一律中止,一个套件都不跑。
+assert_db_domain() {
+  local pid="$1" port="$2" tries=20 opened=""
+  for _ in $(seq 1 "$tries"); do
+    opened="$(lsof -p "$pid" 2>/dev/null | awk '/\.sqlite$/ {print $NF}' | sort -u | head -1)"
+    [ -n "$opened" ] && break
+    sleep 0.5
+  done
+  if [ -z "$opened" ]; then
+    echo "!! 端口 ${port} 的实例(pid ${pid})拿不到它打开的库文件 —— 验不了库域就不许往下跑。" >&2
+    return 1
+  fi
+  # 🔴 首跑就把自己咬红了,而红的是**合法的一轮**:macOS 上 /tmp 是 /private/tmp 的软链,
+  # lsof 报的是解析后的真路径(/private/tmp/ll-ci-data.X),$DATA_DIR 是 mktemp 给的 /tmp/ll-ci-data.X。
+  # 两个字符串不相等,库域其实完全正确 —— 一把**在正确状态下会红**的刀,
+  # 迟早被人为了让它绿而放宽,那就再也守不住了。两边都取真路径再比。
+  local want; want="$(cd "$DATA_DIR" 2>/dev/null && pwd -P)"
+  local got; got="$(cd "$(dirname "$opened")" 2>/dev/null && pwd -P)/$(basename "$opened")"
+  case "$got" in
+    "$want"/*) echo "   [库域] 端口 ${port} → ${got}  ✔ 在本轮 CI 临时库内(${want})" ;;
+    *)
+      echo "!! 🔴 库域不对:端口 ${port} 的实例打开的是 ${got}" >&2
+      echo "!! 本轮 CI 临时库是 ${want} —— 这正是 03r 那条通道。立刻中止。" >&2
+      return 1 ;;
+  esac
+}
+
 wait_health() {
   local port="$1" label="${2:-$1}" tries=60
   for _ in $(seq 1 "$tries"); do
@@ -86,8 +136,11 @@ export COS_REGION=ap-test
 export COS_BUCKET=test-bucket-1250000000
 
 echo "== 启动主服务器 (4128) =="
+wait_port_free 4128 "主服务器"
 PORT=4128 node local-server.mjs > /tmp/ll-ci-main.log 2>&1 &
+CI_PID_4128=$!
 wait_health 4128 "主服务器"
+assert_db_domain "$CI_PID_4128" 4128
 # 全新库没有订单数据:填充演示数据(幂等,已有数据时自动跳过)
 curl -s -X POST -H "authorization: Bearer owner-demo-token" -H "content-type: application/json" \
   -d '{}' http://127.0.0.1:4128/admin/demo/full-seed > /dev/null || true
@@ -113,7 +166,9 @@ done
 
 echo "== 自动回归专用实例 (4129) =="
 cleanup; sleep 1
+wait_port_free 4129 "冷却实例"
 PORT=4129 HUMAN_REPLY_COOLDOWN_MINUTES=0 node local-server.mjs > /tmp/ll-ci-4129.log 2>&1 &
+CI_PID_4129=$!
 wait_health 4129 "自动回归实例"
 run_suite auto-return env TEST_BASE_URL=http://127.0.0.1:4129
 
@@ -127,9 +182,13 @@ run_suite perf-base-migration env
 
 echo "== 租户隔离双实例 (4128+4131) =="
 cleanup; sleep 1
+wait_port_free 4128 "隔离A"
 PORT=4128 node local-server.mjs > /tmp/ll-ci-a.log 2>&1 &
+CI_PID_4128=$!
 wait_health 4128 "租户A"
+wait_port_free 4131 "隔离B"
 PORT=4131 DEFAULT_TENANT_ID=tenant-iso-b node local-server.mjs > /tmp/ll-ci-b.log 2>&1 &
+CI_PID_4131=$!
 wait_health 4131 "租户B"
 run_suite tenant-isolation env
 

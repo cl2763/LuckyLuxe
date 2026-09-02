@@ -68,6 +68,11 @@ export function createQuoteState(deps) {
   }
   const hoursAgo = (at, now) => Math.max(0, Math.round((now.getTime() - new Date(at).getTime()) / 3600000))
   const daysAgo = (at, now) => Math.max(1, Math.round((now.getTime() - new Date(at).getTime()) / 86400000))
+  /* 🔴 03r(店主从七态截图里记的队尾小病):横幅上写着「172 小时前」—— 人不会这么读时间。
+     这个横幅原来两种单位并存:未过期走 hoursAgo、已过期/历史走 daysAgo,
+     所以同一张卡上「172 小时前」和「2 天前」会并排出现,**同一件事两种说法**。
+     收成一个出口:**不到 48 小时说小时,到了就说天**,四处横幅共用。 */
+  const agoText = (at, now) => (hoursAgo(at, now) < 48 ? `${hoursAgo(at, now)} 小时前` : `${daysAgo(at, now)} 天前`)
   const cnWhen = (isoStr) => {
     const d = new Date(isoStr)
     return `${d.getMonth() + 1}月${d.getDate()}日 ${String(d.getHours()).padStart(2, '0')}:${String(d.getMinutes()).padStart(2, '0')}`
@@ -90,19 +95,19 @@ export function createQuoteState(deps) {
       if (!expired) {
         return {
           state: 'quoted', sessionKey: sk, quoteRequestId: latest.id, priceCents: latest.staff_price_cents, listBadge: badgeOf('quoted'),
-          banner: `本次会话已报价 ${price} · ${who} · ${hoursAgo(latest.quoted_at, now)} 小时前 · 有效期至 ${latest.expires_at ? cnWhen(latest.expires_at) : '—'}`
+          banner: `本次会话已报价 ${price} · ${who} · ${agoText(latest.quoted_at, now)} · 有效期至 ${latest.expires_at ? cnWhen(latest.expires_at) : '—'}`
         }
       }
       return {
         state: 'expired', sessionKey: sk, quoteRequestId: latest.id, priceCents: latest.staff_price_cents, listBadge: badgeOf('expired'),
-        banner: `本次会话已报价(已过期)${price} · ${who} · ${daysAgo(latest.quoted_at, now)} 天前 — 需重新确认`
+        banner: `本次会话已报价(已过期)${price} · ${who} · ${agoText(latest.quoted_at, now)} — 需重新确认`
       }
     }
     const hist = quoted[0]
     if (hist) {
       return {
         state: 'reference', sessionKey: sk, quoteRequestId: hist.id, priceCents: hist.staff_price_cents, listBadge: badgeOf('reference'),
-        banner: `历史报价参考:上次(${daysAgo(hist.quoted_at, now)} 天前)报过 ${moneyText(hist.staff_price_cents, tid)} · ${techNameOf(hist, tid)} — 本次尚未报价`
+        banner: `历史报价参考:上次(${agoText(hist.quoted_at, now)})报过 ${moneyText(hist.staff_price_cents, tid)} · ${techNameOf(hist, tid)} — 本次尚未报价`
       }
     }
     return { state: 'none', sessionKey: sk, listBadge: null }   // none 态**无标**,不是灰标
@@ -124,7 +129,7 @@ export function createQuoteState(deps) {
       if (rival) {
         if (!confirmOverride) {
           throw apiError(409, 'QUOTE_OVERRIDE_NEEDED',
-            `本会话 ${hoursAgo(rival.quoted_at, now)} 小时前已由 ${techNameOf(rival, tid)} 报价 ${moneyText(rival.staff_price_cents, tid)},确认要按新价 ${moneyText(newCents, tid)} 重报吗?`)
+            `本会话 ${agoText(rival.quoted_at, now)}已由 ${techNameOf(rival, tid)} 报价 ${moneyText(rival.staff_price_cents, tid)},确认要按新价 ${moneyText(newCents, tid)} 重报吗?`)
         }
         db.prepare(`INSERT INTO quote_price_changes (id, tenant_id, conversation_id, quote_request_id, old_cents, new_cents, old_by, new_by, created_at)
           VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`)
