@@ -1,0 +1,362 @@
+<title>商家端主页重画</title>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,500;9..144,700&family=Noto+Serif+SC:wght@600;700&family=Noto+Sans+SC:wght@400;500;700&display=swap">
+<style>
+:root{--paper:#faf8f3;--ink:#23241f;--sub:#6d6f66;--line:#e3e0d6;--card:#fff;--wall:#f1eee6;
+--acc:#0e6e62;--accd:#0a5a50;--brand:#b09468;--brandd:#8a6f45;
+--hero:#2a2521;--hero2:#3a332c;--heroink:#f5efe3;--herosub:#bfb4a2;--herogold:#d9b97e;--herogrid:rgba(245,239,227,.12);--herolive:#6fd0a0;
+--good:#2e8b57;--goodbg:#e6f3ea;--bad:#b3413a;--badbg:#f7e7e5;--flat:#7b7f76;--flatbg:#ededea;
+--tagm:#8a5a00;--tagmbg:#faf3e3;--tagw:#274f8f;--tagwbg:#eef2fa;
+--done:#cdbfa3;--doing:#d9b97e;--next:#7b7f76}
+@media (prefers-color-scheme: dark){:root:not([data-theme="light"]){--paper:#191b19;--ink:#e8e7e0;--sub:#9aa096;--line:#33362f;--card:#20241f;--wall:#242822;
+--acc:#4cc0b0;--accd:#63d2c3;--brand:#d3b483;--brandd:#e2c79c;
+--hero:#15130f;--hero2:#221d18;--heroink:#f5efe3;--herosub:#a79c8a;--herogold:#e2c48d;--herogrid:rgba(245,239,227,.10);--herolive:#6fd0a0;
+--good:#6fd0a0;--goodbg:#1c2f25;--bad:#e5867e;--badbg:#33201e;--flat:#9aa096;--flatbg:#2a2d28;
+--tagm:#e0b45f;--tagmbg:#2b2618;--tagw:#8fb0e8;--tagwbg:#1d2434;--done:#6a5f4c;--doing:#e2c48d;--next:#6c7066}}
+:root[data-theme="dark"]{--paper:#191b19;--ink:#e8e7e0;--sub:#9aa096;--line:#33362f;--card:#20241f;--wall:#242822;
+--acc:#4cc0b0;--accd:#63d2c3;--brand:#d3b483;--brandd:#e2c79c;
+--hero:#15130f;--hero2:#221d18;--heroink:#f5efe3;--herosub:#a79c8a;--herogold:#e2c48d;--herogrid:rgba(245,239,227,.10);--herolive:#6fd0a0;
+--good:#6fd0a0;--goodbg:#1c2f25;--bad:#e5867e;--badbg:#33201e;--flat:#9aa096;--flatbg:#2a2d28;
+--tagm:#e0b45f;--tagmbg:#2b2618;--tagw:#8fb0e8;--tagwbg:#1d2434;--done:#6a5f4c;--doing:#e2c48d;--next:#6c7066}
+body{background:var(--paper);color:var(--ink);font-family:'Noto Sans SC',-apple-system,sans-serif;line-height:1.7;margin:0}
+.w{max-width:980px;margin:0 auto;padding:38px 18px 80px}
+h1{font-family:'Noto Serif SC',serif;font-size:1.7rem;margin:0 0 4px;text-wrap:balance}
+.meta{color:var(--sub);font-size:.85rem;margin-bottom:22px}
+h2{font-family:'Noto Serif SC',serif;font-size:1.15rem;margin:40px 0 10px;padding-left:10px;border-left:4px solid var(--acc)}
+h3{font-size:1rem;margin:20px 0 6px}
+p{max-width:70ch}
+.note{background:var(--card);border:1px solid var(--line);border-left:4px solid var(--acc);border-radius:8px;padding:11px 15px;font-size:.92rem;margin-bottom:14px}
+.warn{border-left-color:var(--bad)}
+.tag{display:inline-block;font-size:.7rem;font-weight:700;border-radius:5px;padding:0 7px;margin-left:6px;vertical-align:1px}
+.tag.m{color:var(--tagm);background:var(--tagmbg)}.tag.w{color:var(--tagw);background:var(--tagwbg)}
+.tblwrap{overflow-x:auto}
+table{border-collapse:collapse;width:100%;font-size:.88rem;margin-top:8px}
+th,td{border:1px solid var(--line);padding:8px 10px;text-align:left;vertical-align:top}
+th{background:var(--wall);font-weight:700;white-space:nowrap}
+code{font-family:ui-monospace,SFMono-Regular,Menlo,monospace;font-size:.84em;background:var(--wall);padding:1px 5px;border-radius:4px}
+.foot{margin-top:36px;padding-top:14px;border-top:1px solid var(--line);color:var(--sub);font-size:.82rem}
+.lbl{font-size:.72rem;letter-spacing:.08em;text-transform:uppercase;color:var(--sub);font-weight:700}
+.stage{display:flex;gap:22px;flex-wrap:wrap;align-items:flex-start;margin:14px 0 6px}
+.side{flex:1;min-width:260px;font-size:.9rem}
+.side ol,.side ul{padding-left:1.2em;margin:6px 0}.side li{margin-bottom:6px}
+
+/* phone */
+.phone{width:375px;max-width:100%;background:var(--wall);border:1px solid var(--line);border-radius:22px;padding:14px 12px 16px;box-sizing:border-box;flex-shrink:0}
+.phone .top{display:flex;justify-content:space-between;align-items:baseline;padding:2px 6px 10px;font-size:.86rem;color:var(--sub)}
+.phone .top b{color:var(--ink);font-size:1rem}
+.hero{background:radial-gradient(120% 90% at 85% 0%,rgba(217,185,126,.22),transparent 55%),linear-gradient(160deg,var(--hero),var(--hero2));color:var(--heroink);border-radius:16px;padding:14px 16px 12px;position:relative;overflow:hidden}
+.period{display:flex;gap:6px;margin-bottom:10px}
+.period span{font-size:.72rem;padding:2px 10px;border-radius:999px;border:1px solid var(--herogrid);color:var(--herosub)}
+.period span.on{background:var(--herogold);color:#2a2521;border-color:var(--herogold);font-weight:700}
+.k{font-size:.8rem;color:var(--herosub);display:flex;justify-content:space-between;align-items:center}
+.big{font-family:'Fraunces',Georgia,'Noto Serif SC',serif;font-variant-numeric:tabular-nums;font-size:3.3rem;line-height:1.05;font-weight:700;letter-spacing:-.01em;color:var(--heroink);margin:4px 0 2px}
+.big small{font-size:1.2rem;color:var(--herogold);font-weight:500;margin-right:4px}
+.delta{display:inline-flex;align-items:center;gap:5px;font-size:.78rem;border-radius:999px;padding:1px 9px;font-weight:600}
+.delta.up{background:var(--goodbg);color:var(--good)}.delta.down{background:var(--badbg);color:var(--bad)}.delta.flat{background:var(--flatbg);color:var(--flat)}
+.row{display:flex;justify-content:space-between;align-items:flex-end;gap:10px;margin-top:4px}
+.hero svg.spark{width:132px;height:38px;display:block}
+.dots{display:flex;gap:5px;justify-content:center;margin-top:10px}
+.dots i{width:5px;height:5px;border-radius:50%;background:var(--herogrid);display:block}
+.dots i.on{background:var(--herogold);width:14px;border-radius:3px}
+.pulse{margin-top:10px;padding-top:9px;border-top:1px solid var(--herogrid);font-size:.78rem;color:var(--herosub);display:flex;justify-content:space-between;align-items:center;gap:8px}
+.pulse b{color:var(--heroink);font-weight:600}
+.live{display:inline-block;width:7px;height:7px;border-radius:50%;background:var(--herolive);margin-right:5px;box-shadow:0 0 0 3px rgba(111,208,160,.18)}
+.strip{margin-top:8px}
+.strip .ax{display:flex;justify-content:space-between;font-size:.62rem;color:var(--herosub);margin-top:3px}
+.strip .bar{position:relative;height:16px;border-radius:5px;background:var(--herogrid);overflow:hidden}
+.strip .bar i{position:absolute;top:0;height:100%;border-radius:3px}
+.strip .bar i.d{background:var(--done);opacity:.9}.strip .bar i.g{background:var(--doing)}.strip .bar i.n{background:transparent;border:1px dashed var(--herosub);box-sizing:border-box}
+.strip .bar .now{position:absolute;top:-3px;bottom:-3px;width:2px;background:var(--herolive)}
+.tiles{display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-top:8px}
+.tile{background:var(--card);border:1px solid var(--line);border-radius:12px;padding:9px 11px 8px}
+.tile .n{font-family:'Fraunces',Georgia,serif;font-variant-numeric:tabular-nums;font-size:1.35rem;font-weight:700;line-height:1.15;margin:2px 0}
+.tile .n small{font-size:.8rem;color:var(--sub);font-weight:500;margin-left:2px}
+.tile .l{font-size:.74rem;color:var(--sub)}
+.asof{font-size:.72rem;color:var(--sub);text-align:right;margin-top:6px;padding-right:4px}
+.sec{margin-top:12px;background:var(--card);border:1px solid var(--line);border-radius:12px;padding:10px 12px}
+.sec .h{display:flex;justify-content:space-between;align-items:baseline;font-size:.86rem;font-weight:700;margin-bottom:6px}
+.sec .h span{font-weight:400;color:var(--sub);font-size:.74rem}
+.todo{display:flex;flex-direction:column;gap:6px}
+.todo div{display:flex;justify-content:space-between;align-items:center;font-size:.84rem;padding:6px 8px;border-radius:8px;background:var(--wall)}
+.todo b{font-family:'Fraunces',Georgia,serif;font-size:1.05rem;color:var(--brandd)}
+.todo .urg{border-left:3px solid var(--bad)}
+.bk{display:flex;gap:8px;align-items:center;font-size:.82rem;padding:5px 0;border-top:1px dashed var(--line)}
+.bk:first-of-type{border-top:0}
+.bk .t{width:44px;color:var(--sub);font-variant-numeric:tabular-nums}
+.bk .who{flex:1}
+.bk .st{font-size:.68rem;padding:0 7px;border-radius:999px;background:var(--wall);color:var(--sub)}
+.bk .st.g{background:var(--goodbg);color:var(--good)}
+.quick{display:grid;grid-template-columns:repeat(4,1fr);gap:6px;margin-top:6px}
+.quick div{background:var(--wall);border-radius:10px;padding:8px 4px;text-align:center;font-size:.74rem;color:var(--ink)}
+.quick div i{display:block;width:22px;height:22px;border-radius:7px;margin:0 auto 4px;background:var(--brand);opacity:.85}
+.ai{font-size:.84rem;line-height:1.6}
+.ai .q{color:var(--sub);font-size:.72rem}
+
+/* desktop */
+.desk{width:100%;max-width:100%;background:var(--wall);border:1px solid var(--line);border-radius:14px;padding:12px;box-sizing:border-box;overflow-x:auto}
+.desk .inner{min-width:760px;display:grid;grid-template-columns:200px 1fr;gap:12px}
+.nav{background:var(--card);border:1px solid var(--line);border-radius:10px;padding:10px;font-size:.8rem}
+.nav div{padding:5px 8px;border-radius:6px;color:var(--sub)}
+.nav div.on{background:var(--wall);color:var(--ink);font-weight:700}
+.main{display:flex;flex-direction:column;gap:10px}
+.dhero{background:radial-gradient(90% 120% at 100% 0%,rgba(217,185,126,.22),transparent 55%),linear-gradient(160deg,var(--hero),var(--hero2));color:var(--heroink);border-radius:14px;padding:14px 18px;display:grid;grid-template-columns:1.2fr 1fr;gap:16px;align-items:start}
+.dhero .big{font-size:3.6rem}
+.dtiles{display:grid;grid-template-columns:1fr 1fr;gap:8px}
+.dtile{background:rgba(245,239,227,.06);border:1px solid var(--herogrid);border-radius:10px;padding:8px 10px}
+.dtile .l{font-size:.72rem;color:var(--herosub)}
+.dtile .n{font-family:'Fraunces',Georgia,serif;font-variant-numeric:tabular-nums;font-size:1.3rem;font-weight:700;color:var(--heroink)}
+.cols{display:grid;grid-template-columns:1.5fr 1fr;gap:10px}
+.dcard{background:var(--card);border:1px solid var(--line);border-radius:10px;padding:10px 12px;font-size:.82rem}
+.dcard .h{font-weight:700;margin-bottom:6px;display:flex;justify-content:space-between}
+.dcard .h span{font-weight:400;color:var(--sub);font-size:.74rem}
+.board{display:grid;grid-template-columns:60px repeat(4,1fr);gap:4px;font-size:.7rem}
+.board .hd{color:var(--sub);text-align:center}
+.board .cell{height:26px;border-radius:5px;background:var(--wall)}
+.board .cell.d{background:var(--done)}.board .cell.g{background:var(--doing)}.board .cell.n{border:1px dashed var(--line);background:transparent}
+.board .tm{color:var(--sub);font-variant-numeric:tabular-nums;line-height:26px}
+
+/* fullscreen */
+.tv{background:radial-gradient(70% 100% at 80% 0%,rgba(217,185,126,.25),transparent 60%),linear-gradient(160deg,#1a1613,#2a2521);color:var(--heroink);border-radius:16px;padding:26px 30px;display:grid;grid-template-columns:1.4fr 1fr;gap:24px;overflow:hidden}
+.tv .big{font-size:5.4rem}
+.tv .tvt{display:grid;grid-template-columns:1fr 1fr;gap:10px}
+.tv .dtile .n{font-size:1.8rem}
+.tv .strip .bar{height:22px}
+.states{display:grid;grid-template-columns:repeat(auto-fit,minmax(200px,1fr));gap:10px;margin-top:8px}
+.st{background:var(--card);border:1px solid var(--line);border-radius:10px;padding:10px 12px;font-size:.86rem}
+.mini{background:linear-gradient(160deg,var(--hero),var(--hero2));color:var(--heroink);border-radius:10px;padding:10px 12px;font-size:.82rem;margin-top:6px}
+.mini .sk{height:10px;border-radius:5px;background:var(--herogrid);margin:6px 0}.mini .sk.big{height:28px;width:60%}
+@media (prefers-reduced-motion: no-preference){.dots i.on{transition:width .3s}}
+</style>
+<div class="w">
+<h1>商家端主页重画</h1>
+<div class="meta">设计图 v2 · 2026-09-03 · 图=合同 · 覆盖:小程序商家端首页(老板视角 / 员工视角)· 网页后台首页 · 前台全屏大屏态 · 并入并替代「老板主页业绩大屏 v1」</div>
+
+<p class="note"><b>v1 差的那一点意思,我认为是这个:</b>v1 只是「一块好看的数字牌」。店主 08-10 原话是「主页要有<b>实时订单量</b>的数字化体现」——大数字讲的是<b>结果</b>,主页还得讲<b>此刻</b>。所以 v2 在大数字下面加了两样只有美业店才有的东西:<b>「此刻」脉搏行</b>(在做几个、待到店几个、下一位几点谁做什么,绿点在跳)和<b>「店里的一天」时间轴</b>(营业时段一根横条,做完的、正在做的、还没来的一眼看全,一根绿线标着现在)。再加三样让它有分量:数字<b>滚动到位</b>的动效、<b>本年</b>维度、以及一个<b>前台全屏态</b>——把手机横过来或放在前台 iPad 上,它就是店里的大屏。</p>
+
+<h2>一、小程序商家端首页 · 老板视角(从上到下)</h2>
+<div class="stage">
+  <div class="phone" aria-label="老板视角首页视觉稿">
+    <div class="top"><span><b>LUVIA 半径</b> · 早上好,店主</span><span>9 月 3 日 周四</span></div>
+    <div class="hero">
+      <div class="period"><span class="on">今日</span><span>本周</span><span>本月</span><span>本年</span></div>
+      <div class="k"><span>营业收入 <span style="opacity:.7">· 服务 + 耗卡 + 产品</span></span><span style="font-size:.72rem">月目标 62%</span></div>
+      <div class="big"><small>CAD</small>2,486<span style="font-size:1.6rem;opacity:.75">.00</span></div>
+      <div class="row">
+        <span class="delta up" role="img" aria-label="比昨日同时段多 18%">▲ 比昨日 +18%</span>
+        <svg class="spark" viewBox="0 0 132 38" aria-label="近 7 天营业收入走势">
+          <defs><linearGradient id="g1" x1="0" x2="0" y1="0" y2="1"><stop offset="0" stop-color="#d9b97e" stop-opacity=".35"/><stop offset="1" stop-color="#d9b97e" stop-opacity="0"/></linearGradient></defs>
+          <path d="M2 30 L24 24 L46 27 L68 18 L90 21 L112 12 L130 8 L130 38 L2 38 Z" fill="url(#g1)"/>
+          <path d="M2 30 L24 24 L46 27 L68 18 L90 21 L112 12 L130 8" fill="none" stroke="#d9b97e" stroke-width="2" stroke-linejoin="round"/>
+          <circle cx="130" cy="8" r="3.5" fill="#d9b97e" stroke="#2a2521" stroke-width="2"/>
+        </svg>
+      </div>
+      <div class="dots"><i class="on"></i><i></i><i></i><i></i><i></i></div>
+      <div class="pulse"><span><span class="live"></span><b>此刻</b> 在做 3 · 待到店 2 · 已完成 6</span><span>下一位 <b>14:45</b> Cathy · 法式</span></div>
+      <div class="strip" aria-label="今日营业时段 10:00–20:00 的预约分布">
+        <div class="bar"><i class="d" style="left:0%;width:9%"></i><i class="d" style="left:11%;width:12%"></i><i class="d" style="left:25%;width:8%"></i><i class="g" style="left:36%;width:11%"></i><i class="g" style="left:40%;width:6%;top:0;height:50%"></i><i class="n" style="left:52%;width:10%"></i><i class="n" style="left:66%;width:9%"></i><i class="n" style="left:80%;width:12%"></i><span class="now" style="left:45%"></span></div>
+        <div class="ax"><span>10:00</span><span>13:00</span><span>16:00</span><span>20:00</span></div>
+      </div>
+    </div>
+    <div class="tiles">
+      <div class="tile"><div class="l">现金业绩 · 实收</div><div class="n">CAD 3,120</div><span class="delta up">▲ +9%</span></div>
+      <div class="tile"><div class="l">总卡耗</div><div class="n">CAD 940<small>· 次卡 3 次</small></div><span class="delta flat">— 持平</span></div>
+      <div class="tile"><div class="l">新增持卡</div><div class="n">2<small>人</small></div><span class="delta up">▲ +2</span></div>
+      <div class="tile"><div class="l">到店人次</div><div class="n">11<small>人次</small></div><span class="delta down">▼ 比昨日 −2</span></div>
+    </div>
+    <div class="asof">截至 14:32 · 今日未日结,实时</div>
+
+    <div class="sec"><div class="h">今日要处理 <span>按急缓排</span></div>
+      <div class="todo">
+        <div class="urg"><span>客服待人工回复</span><b>2</b></div>
+        <div class="urg"><span>待报价</span><b>1</b></div>
+        <div><span>做完待写小记</span><b>3</b></div>
+        <div><span>调休申请待批</span><b>1</b></div>
+        <div><span>昨日日结待确认</span><b>1</b></div>
+      </div>
+    </div>
+
+    <div class="sec"><div class="h">今日预约 <span>12 单 · 点开台面可排单</span></div>
+      <div class="bk"><span class="t">14:30</span><span class="who">Cathy · 法式加钻 · 小雅</span><span class="st g">在做</span></div>
+      <div class="bk"><span class="t">14:45</span><span class="who">Mia · 睫毛嫁接 · 苏苏</span><span class="st">待到店</span></div>
+      <div class="bk"><span class="t">15:30</span><span class="who">Joy · 卸甲+单色 · 小雅</span><span class="st">待到店</span></div>
+      <div class="bk"><span class="t" style="color:var(--acc)">看全部 ›</span><span class="who"></span></div>
+    </div>
+
+    <div class="sec"><div class="h">AI 今日一句 <span>自动 · 每天一次</span></div>
+      <div class="ai"><div class="q">10:05 生成</div>比上周四多做了 3 单;Cathy 隔了 34 天回来了,上次做的是法式;下午 4 点后还有 3 个空档。</div>
+    </div>
+
+    <div class="sec"><div class="h">快捷</div>
+      <div class="quick"><div><i></i>开单</div><div><i></i>排单</div><div><i></i>客户</div><div><i></i>作品</div><div><i></i>财务</div><div><i></i>员工</div><div><i></i>客服台</div><div><i></i>设置</div></div>
+    </div>
+  </div>
+  <div class="side">
+    <div class="lbl">每一块的规矩</div>
+    <ol>
+      <li><b>大屏</b>(见 §四口径):四个维度 今日/本周/本月/<b>本年</b>;折线随维度 7 天 / 7 周 / 7 月 / <b>12 月</b>。切换维度、轮播换指标时,数字从当前值<b>滚动</b>到新值(600ms,尊重系统「减少动态效果」则直接跳)。</li>
+      <li><b>此刻行</b>:三个数来自今日台面同一状态机;「下一位」= 最近一个未到店的预约(时间 · 顾客 · 项目),没有则写「今天没有待到店的了」。绿点常亮不闪;数据每次进入首页/下拉时取,不轮询。</li>
+      <li><b>时间轴</b>:横条 = 门店今日营业时段(取自营业时间设置;休息日整条灰并写「今日休息」);块 = 预约,按状态三色:做完实色、在做金色、未到虚框;多技师重叠的块叠半高;绿线 = 现在。点任意位置 → 跳台面对应时段。</li>
+      <li><b>今日要处理</b>:一张清单,不是五张卡。来源固定五项:客服待人工 / 待报价 / 待写小记 / 调休申请 / 昨日日结待确认;<b>数为 0 的行不出现</b>,全为 0 则整块换一句「今天没有要处理的」。红条 = 顾客在等的两项。点行 → 跳对应页。</li>
+      <li><b>今日预约</b>:只列<b>此刻之后</b>的前 3 条 + 「看全部」;过去的在台面看。</li>
+      <li><b>AI 今日一句</b>:现有每日总结,只保留一段两三句、带生成时间;没生成写「今天的总结还没生成」并可点「现在生成」。</li>
+      <li><b>快捷</b>:八格固定顺序,不可配置(配置是以后的事)。</li>
+      <li><b>不再单独出现的旧块</b>:「我的今日台面」卡并入此刻行+时间轴;「待办小记」并入今日要处理;「客服工作台」并入今日要处理;打卡/排班移到员工视角与「我的」页。</li>
+    </ol>
+  </div>
+</div>
+
+<h2>二、小程序商家端首页 · 员工视角</h2>
+<div class="stage">
+  <div class="phone" aria-label="员工视角首页视觉稿">
+    <div class="top"><span><b>LUVIA 半径</b> · 小雅,下午好</span><span>9 月 3 日 周四</span></div>
+    <div class="hero" style="padding-bottom:14px">
+      <div class="period"><span class="on">今日</span><span>本月</span></div>
+      <div class="k"><span>我的业绩 <span style="opacity:.7">· 服务单</span></span><span style="font-size:.72rem">本月目标 48%</span></div>
+      <div class="big"><small>CAD</small>860</div>
+      <div class="row"><span class="delta up">▲ 比昨日 +2 单</span><span style="font-size:.78rem;color:var(--herosub)">今日 5 单 · 在做 1 · 待到店 2</span></div>
+      <div class="pulse"><span><span class="live"></span><b>下一位</b> 14:45 Mia · 睫毛嫁接</span><span>已打卡 09:58</span></div>
+    </div>
+    <div class="sec"><div class="h">今日要处理</div>
+      <div class="todo"><div><span>做完待写小记</span><b>2</b></div><div><span>我的调休申请</span><b>审批中</b></div></div>
+    </div>
+    <div class="sec"><div class="h">我的今日预约 <span>5 单</span></div>
+      <div class="bk"><span class="t">14:30</span><span class="who">Cathy · 法式加钻</span><span class="st g">在做</span></div>
+      <div class="bk"><span class="t">15:30</span><span class="who">Joy · 卸甲+单色</span><span class="st">待到店</span></div>
+    </div>
+    <div class="sec"><div class="h">快捷</div><div class="quick"><div><i></i>打卡</div><div><i></i>我的排班</div><div><i></i>我的客人</div><div><i></i>我的作品</div></div></div>
+  </div>
+  <div class="side">
+    <div class="lbl">员工视角的规矩</div>
+    <ul>
+      <li>员工<b>看不到店的五个指标</b>,只看自己的业绩(现有「我的业绩」口径:服务单业绩,与薪资方案同源)。维度只有今日/本月。</li>
+      <li>「此刻」变成「下一位是我的哪一单」+ 打卡状态;时间轴不给员工(看台面即可)。</li>
+      <li>今日要处理只有两项来源:待写小记、我的调休申请状态。</li>
+      <li>快捷四格:打卡 / 我的排班 / 我的客人 / 我的作品。</li>
+    </ul>
+  </div>
+</div>
+
+<h2>三、网页后台首页(替代现有「后台首页」Dashboard)</h2>
+<div class="desk" aria-label="网页后台首页视觉稿">
+  <div class="inner">
+    <div class="nav"><div class="on">后台首页</div><div>订单管理</div><div>工作台</div><div>客户档案</div><div>服务与价格</div><div>财务</div><div>员工管理</div><div>门店设置</div></div>
+    <div class="main">
+      <div class="dhero">
+        <div>
+          <div class="period"><span class="on">今日</span><span>本周</span><span>本月</span><span>本年</span><span style="margin-left:auto;border-color:var(--herogold);color:var(--herogold)">⤢ 全屏大屏</span></div>
+          <div class="k"><span>营业收入 · 服务 + 耗卡 + 产品</span><span style="font-size:.72rem">月目标 62%</span></div>
+          <div class="big"><small>CAD</small>2,486</div>
+          <div class="row"><span class="delta up">▲ 比昨日 +18%</span>
+            <svg class="spark" viewBox="0 0 132 38" style="width:200px;height:44px" aria-label="近 7 天营业收入走势"><path d="M2 30 L24 24 L46 27 L68 18 L90 21 L112 12 L130 8" fill="none" stroke="#d9b97e" stroke-width="2" stroke-linejoin="round"/><circle cx="130" cy="8" r="3.5" fill="#d9b97e" stroke="#2a2521" stroke-width="2"/></svg></div>
+          <div class="pulse"><span><span class="live"></span><b>此刻</b> 在做 3 · 待到店 2 · 已完成 6</span><span>下一位 <b>14:45</b> Cathy · 法式</span></div>
+          <div class="strip"><div class="bar"><i class="d" style="left:0%;width:9%"></i><i class="d" style="left:11%;width:12%"></i><i class="d" style="left:25%;width:8%"></i><i class="g" style="left:36%;width:11%"></i><i class="n" style="left:52%;width:10%"></i><i class="n" style="left:66%;width:9%"></i><i class="n" style="left:80%;width:12%"></i><span class="now" style="left:45%"></span></div><div class="ax"><span>10:00</span><span>13:00</span><span>16:00</span><span>20:00</span></div></div>
+        </div>
+        <div class="dtiles">
+          <div class="dtile"><div class="l">现金业绩 · 实收</div><div class="n">CAD 3,120</div><span class="delta up">▲ +9%</span></div>
+          <div class="dtile"><div class="l">总卡耗</div><div class="n">CAD 940</div><span class="delta flat">— 持平 · 次卡 3 次</span></div>
+          <div class="dtile"><div class="l">新增持卡</div><div class="n">2 人</div><span class="delta up">▲ +2</span></div>
+          <div class="dtile"><div class="l">到店人次</div><div class="n">11</div><span class="delta down">▼ −2</span></div>
+          <div class="dtile" style="grid-column:1/-1"><div class="l">AI 今日一句 · 10:05</div><div style="font-size:.8rem;line-height:1.5">比上周四多做了 3 单;Cathy 隔了 34 天回来了;下午 4 点后还有 3 个空档。</div></div>
+        </div>
+      </div>
+      <div class="cols">
+        <div class="dcard"><div class="h">今日台面 <span>点空档直接排单(现有台面,原样嵌入)</span></div>
+          <div class="board"><div class="hd"></div><div class="hd">小雅</div><div class="hd">苏苏</div><div class="hd">Lina</div><div class="hd">Ken</div>
+            <div class="tm">14:00</div><div class="cell d"></div><div class="cell g"></div><div class="cell"></div><div class="cell d"></div>
+            <div class="tm">14:30</div><div class="cell g"></div><div class="cell g"></div><div class="cell n"></div><div class="cell"></div>
+            <div class="tm">15:00</div><div class="cell n"></div><div class="cell"></div><div class="cell n"></div><div class="cell"></div>
+            <div class="tm">15:30</div><div class="cell n"></div><div class="cell n"></div><div class="cell"></div><div class="cell n"></div>
+          </div>
+        </div>
+        <div class="dcard"><div class="h">今日要处理 <span>按急缓排</span></div>
+          <div class="todo"><div class="urg"><span>客服待人工回复</span><b>2</b></div><div class="urg"><span>待报价</span><b>1</b></div><div><span>做完待写小记</span><b>3</b></div><div><span>调休申请待批</span><b>1</b></div><div><span>昨日日结待确认</span><b>1</b></div></div>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+<div class="side" style="margin-top:10px">
+  <ul>
+    <li>网页首页 = <b>同一份 pulse 数据</b>横着摆:左大数字+此刻+时间轴,右四小牌+AI 一句;下面左边把<b>现有今日台面原样嵌入</b>(不是再画一个),右边今日要处理。现有「本月经营 / 本月账本收入 / 收入解锁 / 来源」那几块<b>退役</b>——它们的信息都在大屏与财务页里。</li>
+    <li>右上「⤢ 全屏大屏」进入 §五 的全屏态。</li>
+    <li>宽度不够(< 900px)时退化为小程序同款竖排。</li>
+  </ul>
+</div>
+
+<h2>四、大屏口径与数据契约(v1 原样,加本年)</h2>
+<div class="tblwrap"><table>
+<tr><th>指标</th><th>算什么</th><th>锚在哪(不许另写一套)</th><th>对比</th></tr>
+<tr><td><b>营业收入</b><br><span class="lbl">默认第一个</span></td><td>当期服务收入(现付 + 耗卡)+ 产品销售;红字冲销<b>当期冲减</b>(N-5)</td><td>今日=日结页/财务页实时同一函数;已日结日=<code>daily_closes.revenue_cents</code> 快照。<b>大屏今日营收 === 日结页今日营收</b></td><td>比昨日 / 上周同期至今 / 上月同期至今 / <b>去年同期至今</b></td></tr>
+<tr><td><b>现金业绩</b></td><td>当期真进钱:<code>pay_channel ≠ stored_value</code> 的收入(现付服务、产品、充值、购卡)− 退款/冲销</td><td>账本同表同过滤;充值/购卡计入,耗卡不计</td><td>同上</td></tr>
+<tr><td><b>总卡耗</b></td><td>储值消耗金额(<code>pay_channel = stored_value</code>)+ 次卡消耗次数(钱与次两个数)</td><td>储值走账本;次卡走次卡消耗记录,不折钱</td><td>同上</td></tr>
+<tr><td><b>新增持卡</b></td><td>当期首次开卡顾客数(储值首充或首买次卡),按顾客去重</td><td>首条充值/首张次卡落在当期</td><td>绝对数</td></tr>
+<tr><td><b>到店人次</b></td><td>当期到达「已到店 / 已完成」的预约 + 现场开单,按单去重</td><td>台面同一状态机</td><td>绝对数</td></tr>
+</table></div>
+<p class="note warn"><b>Code 动手前先现测答两问:</b>①充值/购卡收款在账本里现在记的是哪个 <code>category</code>/<code>pay_channel</code>;②次卡消耗记在哪张表、有没有能落到「当期」的时间戳。答不上的那一格不上,不许 0 顶。</p>
+<div class="tblwrap"><table>
+<tr><th>接口</th><th>返回</th></tr>
+<tr><td><code>GET /admin/dashboard/pulse?period=today|week|month|year</code></td><td><code>asOf · currency · settled{state,confirmedAt?} · goal{pct}?(未设则无字段)· locked · metrics[5]{key,value,unit,extra?,prev,deltaPct|null,deltaAbs,spark[7|12]}</code>;服务端算好,两端只渲染;locked 时不下发 value</td></tr>
+<tr><td><code>GET /admin/dashboard/now</code></td><td><code>asOf · doing · waiting · done · next{time,customer,service,tech}|null · day{open,close,closed:boolean} · blocks[{start,end,status,tech}]</code>——此刻行与时间轴共用;来自今日台面同一数据源,不另算</td></tr>
+<tr><td><code>GET /admin/dashboard/todo</code></td><td>固定五项各一个数(0 也返回,由前端隐藏)+ 每项的跳转目标</td></tr>
+</table></div>
+
+<h2>五、前台全屏大屏态(手机横屏 / 前台 iPad / 网页「全屏」)</h2>
+<div class="tv" aria-label="全屏大屏视觉稿">
+  <div>
+    <div class="k" style="font-size:.95rem"><span>LUVIA 半径 · 今日营业收入</span><span>14:32</span></div>
+    <div class="big"><small>CAD</small>2,486</div>
+    <div class="row"><span class="delta up" style="font-size:.95rem">▲ 比昨日 +18%</span></div>
+    <div class="pulse" style="font-size:.95rem"><span><span class="live"></span><b>此刻</b> 在做 3 · 待到店 2 · 已完成 6</span><span>下一位 <b>14:45</b> Cathy</span></div>
+    <div class="strip"><div class="bar"><i class="d" style="left:0%;width:9%"></i><i class="d" style="left:11%;width:12%"></i><i class="d" style="left:25%;width:8%"></i><i class="g" style="left:36%;width:11%"></i><i class="n" style="left:52%;width:10%"></i><i class="n" style="left:66%;width:9%"></i><i class="n" style="left:80%;width:12%"></i><span class="now" style="left:45%"></span></div><div class="ax"><span>10:00</span><span>13:00</span><span>16:00</span><span>20:00</span></div></div>
+  </div>
+  <div class="tvt">
+    <div class="dtile"><div class="l">现金业绩</div><div class="n">CAD 3,120</div></div>
+    <div class="dtile"><div class="l">总卡耗</div><div class="n">CAD 940</div></div>
+    <div class="dtile"><div class="l">新增持卡</div><div class="n">2 人</div></div>
+    <div class="dtile"><div class="l">到店人次</div><div class="n">11</div></div>
+    <div class="dtile" style="grid-column:1/-1"><div class="l">今日一句</div><div style="font-size:.9rem">比上周四多做了 3 单;下午 4 点后还有 3 个空档。</div></div>
+  </div>
+</div>
+<div class="side" style="margin-top:10px"><ul>
+  <li>入口:小程序把手机<b>横过来</b>或长按大屏;网页点「⤢ 全屏大屏」。退出:竖回来 / Esc / 点任意处。</li>
+  <li>全屏态只轮播<b>今日</b>五指标,每 6 秒一换;每 60 秒静默重取一次 pulse 与 now(<b>唯一允许轮询的地方</b>,因为它是挂在前台不动的屏)。</li>
+  <li>顾客可能看到这块屏:所以<b>全屏态默认隐藏现金业绩与新增持卡</b>(只显营业收入、卡耗、到店人次与时间轴),门店设置里一个开关「前台大屏显示金额」默认关;财务锁开着时一律遮。</li>
+  <li>屏保逻辑:无操作 5 分钟后数字放大 10% 并缓慢呼吸(尊重减少动效);不熄屏由设备自己管。</li>
+</ul></div>
+
+<h2>六、三态与行为</h2>
+<div class="states">
+  <div class="st"><div class="lbl">加载中</div><div class="mini"><div class="sk" style="width:30%"></div><div class="sk big"></div><div class="sk" style="width:45%"></div></div>骨架屏,不显示 0;此刻行与时间轴同样骨架</div>
+  <div class="st"><div class="lbl">新店 / 当期无数据</div><div class="mini">营业收入<br><span style="font-family:Fraunces,Georgia,serif;font-size:1.6rem">CAD 0</span><br><span style="color:var(--herosub)">今天还没有开单 · 暂无往日数据</span></div>0 是真数照显;折线不画;时间轴只画营业时段空条;今日要处理整块换一句</div>
+  <div class="st"><div class="lbl">取数失败</div><div class="mini">业绩数据暂时取不到<br><span style="color:var(--herosub)">下拉重试 · 或稍后再看</span></div>整块换一句话,不显示旧数、不显示 0;其余块各自独立,不因大屏失败一起空</div>
+  <div class="st"><div class="lbl">休息日</div><div class="mini">今日休息<br><span style="color:var(--herosub)">时间轴不画;大屏照显(维度切本周更有用)</span></div>此刻行写「今日休息」;今日预约块隐藏</div>
+</div>
+<div class="tblwrap"><table>
+<tr><th>动作</th><th>结果</th></tr>
+<tr><td>进入首页 / 下拉</td><td>取 pulse + now + todo 各一次;首页<b>不轮询</b>(全屏态除外)</td></tr>
+<tr><td>切维度</td><td>重取 pulse;大数字滚动到新值;折线单位随维度</td></tr>
+<tr><td>点大数字 / 左右滑</td><td>暂停轮播并切指标;再点继续</td></tr>
+<tr><td>长按大数字 / 点小牌</td><td>营业收入、现金 → 财务页当期;卡耗 → 储值流水;新增持卡 → 客户库筛「新持卡」;到店人次 → 今日台面</td></tr>
+<tr><td>点此刻行 / 时间轴</td><td>跳今日台面(时间轴带到对应时段)</td></tr>
+<tr><td>点今日要处理的行</td><td>客服待人工 → 客服工作台;待报价 → 报价试算;待写小记 → 小记列表;调休 → 排班审批;日结 → 日结页</td></tr>
+</table></div>
+
+<h2>七、验收判据(锚字段与身份,不锚文案;每条先造病验红)</h2>
+<ol>
+  <li>同口径:大屏 <code>revenue.value</code> === 日结页实时营收 === 财务页当期营收(同一夹具三处比对)。</li>
+  <li>已日结日 === <code>daily_closes.revenue_cents</code> 快照。</li>
+  <li><code>metrics</code> 恒五项、顺序固定;<code>period=year</code> 的 <code>spark</code> 恒 12 项。</li>
+  <li>prev=0 → <code>deltaPct === null</code>,页面「上期 0」节点存在、无 ∞/NaN。</li>
+  <li>此刻行三数 === 今日台面同一时刻的三数(同源函数);「下一位」= 台面里最近一个未到店预约。</li>
+  <li>时间轴块数 === 今日预约数(按单);休息日 <code>day.closed=true</code> 时无块。</li>
+  <li>今日要处理:为 0 的项无节点;全 0 时真话块存在。</li>
+  <li>员工身份响应体不含店级 metrics;老板身份含。</li>
+  <li>币种随店;财务锁 locked 时不下发 value 且遮掩节点存在;全屏态默认无现金/新增持卡节点。</li>
+  <li>两端同源:同一 payload 两端五数字文本一致。</li>
+  <li>三态 + 休息日态各自真话节点存在且互斥;截图:老板/员工 × 三态 + 四维度 + 全屏 + 休息日,每张附 DOM 证据。</li>
+</ol>
+
+<h2>八、明确不做</h2>
+<p>不做图表页、不做导出、不做自定义指标或可配置快捷、不做多店汇总、不做首页轮询(全屏态除外)。顾客端首页另一张图。</p>
+
+<p class="foot">图=合同。本图替代「老板主页业绩大屏 v1」。Code 按本图落地:先答口径两问,再按 §四 三个接口 → §一/§二/§三 三个页面 → §五 全屏态的顺序,每一段交齐附截图与 DOM 证据。店主点头前为草案。</p>
+</div>

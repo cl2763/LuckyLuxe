@@ -1238,7 +1238,7 @@ function seedDatabase() {
     }
   }
 
-  db.prepare('INSERT OR IGNORE INTO users (id, display_name, phone, wechat_open_id) VALUES (?, ?, ?, ?)').run('user-demo', 'Lucky Member', '+1 000 000 0000', 'demo-wechat-openid')
+  db.prepare('INSERT OR IGNORE INTO users (id, display_name, phone, wechat_open_id, tenant_id) VALUES (?, ?, ?, ?, ?)').run('user-demo', 'Lucky Member', '+1 000 000 0000', 'demo-wechat-openid', DEFAULT_TENANT_ID)   // D128:显式写,不吃列默认值
 }
 
 function json(res, statusCode, body, extraHeaders) {
@@ -6123,7 +6123,7 @@ function registerGoogleDemoUser(body) {
     return serializeUser(existing)
   }
   const id = randomId('user')
-  db.prepare('INSERT INTO users (id, display_name, email, google_id) VALUES (?, ?, ?, ?)').run(id, displayName, email, googleId)
+  db.prepare('INSERT INTO users (id, display_name, email, google_id, tenant_id) VALUES (?, ?, ?, ?, ?)').run(id, displayName, email, googleId, validTenantId(body.tenantId))   // D128:与邮箱登录同口径,注册在哪家店就建在哪家店
   upsertUserIdentity({ userId: id, provider: 'google', providerUserId: googleId, email })
   return serializeUser(db.prepare('SELECT * FROM users WHERE id = ?').get(id))
 }
@@ -14335,9 +14335,9 @@ async function route(req, res) {
       ['demo-cust-07', '李慧', '+1 437 555 0107', ['孕期'], '孕期客人:避免刺激性气味产品,座位调靠窗。', '07-07'],
       ['demo-cust-08', '赵敏', '+1 416 555 0108', [], '', '']
     ]
-    const insertUser = db.prepare('INSERT INTO users (id, display_name, phone, email, tags_json, notes, birthday) VALUES (?, ?, ?, ?, ?, ?, ?)')
+    const insertUser = db.prepare('INSERT INTO users (id, display_name, phone, email, tags_json, notes, birthday, tenant_id) VALUES (?, ?, ?, ?, ?, ?, ?, ?)')   // D128:铺演示数据也要写明是哪家店
     for (const [id, name, phone, tags, notes, birthday] of demoCustomers) {
-      insertUser.run(id, `${name}（演示）`, phone, `${id}@demo.local`, JSON.stringify(tags), notes, birthday)
+      insertUser.run(id, `${name}（演示）`, phone, `${id}@demo.local`, JSON.stringify(tags), notes, birthday, currentTenantId())
     }
     // 2. 订单:过去8周完成单(撑起趋势/技师业绩/客户消费档),今天/未来单,取消单
     const insertBooking = db.prepare(`INSERT INTO bookings

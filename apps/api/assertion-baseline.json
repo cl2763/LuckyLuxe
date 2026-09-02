@@ -75,6 +75,7 @@
     "untouched-proof": 6,
     "display-text": 10,
     "tenant-ownership": 5,
+    "tenant-explicit": 5,
     "mp-placeholder-size": 3,
     "mp-overlap": 4,
     "mp-home-sections": 9,
