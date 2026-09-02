@@ -13,9 +13,19 @@ async function assertServerNewerThanSource(label) {
   let started = 0
   let pidSeen = ''
   try {
-    const pid = execFileSync('lsof', ['-ti', ':4310'], { encoding: 'utf8' }).split('\n').filter(Boolean)[0]
+    /* 🔴 03t 查实的**判据自身缺陷**(J 族):原来是 `lsof -ti :4310`,不带 `-sTCP:LISTEN` ——
+       而 `lsof -i :端口` 把**客户端连接**也算进去。现测:第一个返回的是 `wechatwebdevtools`
+       的一条 **CLOSED** 客户端连接(pid 59534),真正 LISTEN 的 node 排在后面;
+       代码取 `[0]`,于是它一直拿**微信开发者工具的启动时刻**当"沙箱启动时刻"去比源码。
+       后果两面都有:
+       · 误红 —— 工具开得早,永远"起于源码之前",mp-overlap / mp-home-sections 连着几轮被判 0 断言;
+       · 误绿 —— 哪天某个客户端进程比源码新,它就放行一个真正过期的沙箱。
+       **判据不确定比判据错更糟**:同一份代码单跑绿、整轮红,人只会去怀疑产品。
+       只认监听者。 */
+    const pids = execFileSync('lsof', ['-ti', ':4310', '-sTCP:LISTEN'], { encoding: 'utf8' }).split('\n').filter(Boolean)
+    const pid = pids[0]
     if (!pid) return true
-    pidSeen = pid
+    pidSeen = pids.length > 1 ? `${pid}(另有 ${pids.length - 1} 个监听者)` : pid
     const lstart = execFileSync('ps', ['-o', 'lstart=', '-p', pid], { encoding: 'utf8' }).trim()
     started = new Date(lstart).getTime()
   } catch { return true }                       // 拿不到就不拦(如实不判,不假装通过)

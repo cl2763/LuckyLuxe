@@ -2,7 +2,12 @@ const api = require('../../../utils/api')
 const { storeMoney } = require('../../../utils/storeclock')   // 门店币种,不写死 $
 const QUOTE_DRAFT_KEY = 'lucky_quote_draft'
 
-const TIER = { Silver: '银卡', Gold: '金卡', Platinum: '铂金', Diamond: '钻石', member: '会员', guest: '顾客' } // D41:不分级店两态
+/* 🔴 03t:上一批我在这一页只堵了「漏原始枚举」(末级兜到「会员」),
+   **大小写敏感本身没修** —— `TIER['gold']` 照样取不到,顾客卡会把金卡显示成「会员」。
+   是新落的 test-display-text ①d 咬出来的:同一页两个毛病,我修了一个就报了「同类扫尽」。
+   D41:不分级店两态 —— member=会员 / guest=顾客(充值即会员,消费不算) */
+const TIER = { silver: '银卡', gold: '金卡', platinum: '铂金', diamond: '钻石', member: '会员', guest: '顾客' }
+const tierCn = (raw) => (raw ? (TIER[String(raw).toLowerCase()] || '会员') : '')
 
 function stinfo(s) {
   if (s === 'needs_human') return { label: '待人工', cls: 'd' }
@@ -28,7 +33,7 @@ function buildProfile(cust, card) {
     /* 🔴 03r:原来 `TIER[cust.memberTier] || cust.memberTier` —— 键是首字母大写而真值是小写,
        取不到就把**原始枚举**当中文名显示(截图里那枚 `gold` 就是这么来的)。
        改读后端唯一出口 conversation-card.mjs 的 tierText,网页端读的是同一个。 */
-    tier: (card && card.tierText) || TIER[cust.memberTier] || '会员',
+    tier: (card && card.tierText) || tierCn(cust.memberTier) || '会员',
     isMember: cust.memberTier && cust.memberTier !== 'guest',
     memberCode: cust.memberCode || '—',   // D101②(01t):卡上六件之一
     visits: cust.visitCount || 0,
