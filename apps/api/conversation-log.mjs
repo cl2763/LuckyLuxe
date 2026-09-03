@@ -24,8 +24,17 @@
 export const CONV_MSG_TRIGGERS = [
   ['conv_msg_no_delete', `CREATE TRIGGER conv_msg_no_delete BEFORE DELETE ON conversation_messages
     BEGIN SELECT RAISE(ABORT, 'conversation log is append-only'); END`],
+  /* 🔴 ⓪b 脱敏正门(店主 05b §一):图 §〇 第 4 条要「顾客要求删除时**脱敏不删行**」,
+     可 `content` 被这条锁锁死、提示写着「去脱敏」却**没有一条路能脱敏**。
+     现在开一个**唯一的例外形状**:只有「内容换成固定标记 + `redacted_at` 落了时间 +
+     role/source/会话/租户/时间戳一个字没动」这一种改法放行,其余照拒。
+     ⚠️ 例外必须把**别的列也钉住** —— 否则同一条 UPDATE 里顺手改个 role 就跟着溜过去了。 */
   ['conv_msg_no_update', `CREATE TRIGGER conv_msg_no_update BEFORE UPDATE OF content, role, source, conversation_id, tenant_id, created_at ON conversation_messages
-    BEGIN SELECT RAISE(ABORT, 'conversation log is append-only; redact identity fields instead of editing'); END`],
+    WHEN NOT (NEW.redacted_at IS NOT NULL AND NEW.content LIKE '[已脱敏 %'
+      AND NEW.role = OLD.role AND NEW.source = OLD.source
+      AND NEW.conversation_id = OLD.conversation_id AND NEW.tenant_id = OLD.tenant_id
+      AND NEW.created_at = OLD.created_at)
+    BEGIN SELECT RAISE(ABORT, 'conversation log is append-only; redact via POST /admin/conversations/:id/redact'); END`],
 ]
 
 export function ensureConversationLog(db) {
@@ -41,8 +50,11 @@ export function ensureConversationLog(db) {
       channel_msg_id TEXT,
       staff_name TEXT,
       intent TEXT,
-      created_at TEXT NOT NULL)`)
+      created_at TEXT NOT NULL,
+      redacted_at TEXT)`)
   } catch { /* 表在就跳过 */ }
+  /* ⓪b:脱敏标记列。加列走 try/catch ALTER(交付纪律 8:只写进 CREATE TABLE 等于只对全新库生效) */
+  try { db.exec('ALTER TABLE conversation_messages ADD COLUMN redacted_at TEXT') } catch { /* 列已在 */ }
   /* 幂等键按租户隔离:两家店各自的渠道消息 id 互不干涉(口径③) */
   try { db.exec('CREATE UNIQUE INDEX IF NOT EXISTS idx_conv_msg_channel ON conversation_messages(tenant_id, channel_msg_id) WHERE channel_msg_id IS NOT NULL') } catch { /* 已在 */ }
   try { db.exec('CREATE INDEX IF NOT EXISTS idx_conv_msg_conv ON conversation_messages(conversation_id, created_at)') } catch { /* 已在 */ }
@@ -147,4 +159,40 @@ export function migrateTranscriptsIntoLog(db, { iso, randomId }) {
     throw error
   }
   return { conversations, rows }
+}
+
+/* ⓪b 脱敏正门本体(店主 05b §一)——**唯一入口**,调用方负责鉴权与事由必填。
+   做的事:把这通会话里**顾客侧**的内容换成固定标记、`users` 的身份字段一并抹掉;
+   **行数一个不变**;`transcript_json` 那份读缓存同步成标记。
+   ⚠️ 只动 `content` 与 `redacted_at` 两列 —— 触发器的例外形状就是按这个钉的。 */
+export function redactConversation(db, { conversationId, tenantId, iso }) {
+  const mark = `[已脱敏 ${iso(new Date()).slice(0, 10)}]`
+  const now = iso(new Date())
+  const rows = db.prepare(`SELECT id FROM conversation_messages
+    WHERE conversation_id = ? AND tenant_id = ? AND role = 'customer' AND redacted_at IS NULL`)
+    .all(conversationId, tenantId)
+  const upd = db.prepare('UPDATE conversation_messages SET content = ?, redacted_at = ? WHERE id = ?')
+  for (const r of rows) upd.run(mark, now, r.id)
+  /* 读缓存同步:顾客侧那几句换成同一个标记(缓存与表必须说同一句话) */
+  const conv = db.prepare('SELECT transcript_json FROM wechat_conversations WHERE id = ? AND tenant_id = ?').get(conversationId, tenantId)
+  if (conv) {
+    let list = []
+    try { list = JSON.parse(conv.transcript_json || '[]') } catch { list = [] }
+    const next = Array.isArray(list) ? list.map((m) => (m && m.role === 'customer' ? { ...m, content: mark } : m)) : []
+    db.prepare('UPDATE wechat_conversations SET transcript_json = ? WHERE id = ? AND tenant_id = ?')
+      .run(JSON.stringify(next), conversationId, tenantId)
+  }
+  /* 顾客身份字段一并抹掉(会话认得出是谁 = 没脱干净) */
+  let users = 0
+  const ext = db.prepare('SELECT external_user_id, provider FROM wechat_conversations WHERE id = ? AND tenant_id = ?').get(conversationId, tenantId)
+  if (ext) {
+    const u = db.prepare(`SELECT u.id FROM users u JOIN user_identities i ON i.user_id = u.id
+      WHERE i.provider = ? AND i.provider_user_id = ? AND u.tenant_id = ?`).get(ext.provider, ext.external_user_id, tenantId)
+    if (u) {
+      db.prepare('UPDATE users SET display_name = ?, phone = NULL, email = NULL WHERE id = ? AND tenant_id = ?')
+        .run(mark, u.id, tenantId)
+      users = 1
+    }
+  }
+  return { mark, messages: rows.length, users }
 }

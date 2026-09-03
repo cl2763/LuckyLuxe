@@ -128,6 +128,57 @@ if (!DBP) {
   check('⑦ 幂等:同一个渠道消息 id 在本租户内只许落一行 —— '
     + '企微 `sync_msg` 会重投,不挡就等于对话记录里多出一句',
   /UNIQUE/.test(dupErr) && rows('WHERE channel_msg_id = ?', dupId).length === 1, dupErr.slice(0, 60))
+
+  /* ══ ⓪b 脱敏正门(店主 05b §一)══
+     图 §〇 第 4 条要「顾客要求删除时**脱敏不删行**」,而 `content` 被追加锁锁死、
+     提示写着「去脱敏」却没有一条路能脱敏。现在开唯一入口,并把「唯一」这件事验死。 */
+  const redUid = `red-${RUN}`
+  await api('/admin/wechat/mock-chat-message', { method: 'POST', body: JSON.stringify({ externalUserId: redUid, message: `我叫王小明手机13800001111-${RUN}` }) }, HA)
+  await api('/admin/wechat/mock-chat-message', { method: 'POST', body: JSON.stringify({ externalUserId: redUid, message: '周六下午可以吗' }) }, HA)
+  const rconv = (await api('/admin/wechat/conversations', {}, HA)).data.conversations.find((c) => c.externalUserId === redUid)
+  const enc = encodeURIComponent(rconv.id)
+  const rowsBefore = rows('WHERE conversation_id = ?', rconv.id).length
+
+  const noReason = await api(`/admin/conversations/${enc}/redact`, { method: 'POST', body: '{}' }, HA)
+  check('⑩ 🔴 脱敏正门:**事由必填**(与 D122「改归属必须写一句原因」同一族)→ 400 REASON_REQUIRED',
+    noReason.status === 400 && noReason.data?.error?.code === 'REASON_REQUIRED', JSON.stringify(noReason.data).slice(0, 100))
+
+  const done = await api(`/admin/conversations/${enc}/redact`, { method: 'POST', body: JSON.stringify({ reason: `走查脱敏-${RUN}` }) }, HA)
+  const rowsAfter = rows('WHERE conversation_id = ?', rconv.id)
+  const custRows = rowsAfter.filter((r) => r.role === 'customer')
+  check('⑪ 🔴 脱敏**不删行**:行数一个不变,顾客侧内容全换成固定标记且 `redacted_at` 落了时间',
+    done.status === 200 && rowsAfter.length === rowsBefore
+    && custRows.length > 0 && custRows.every((r) => /^\[已脱敏 /.test(r.content) && r.redacted_at),
+  `${rowsBefore}→${rowsAfter.length} · ${JSON.stringify(custRows.map((r) => r.content))}`)
+
+  const rconv2 = (await api('/admin/wechat/conversations', {}, HA)).data.conversations.find((c) => c.externalUserId === redUid)
+  check('⑪b 读缓存同步:`transcript_json` 里顾客侧也换成同一个标记 —— 缓存与表必须说同一句话',
+    (rconv2.transcript || []).filter((m) => m.role === 'customer').every((m) => /^\[已脱敏 /.test(m.content)),
+    JSON.stringify((rconv2.transcript || []).map((m) => `${m.role}:${String(m.content).slice(0, 12)}`)))
+
+  const db3 = new DatabaseSync(DBP, { readOnly: true })
+  const logged = db3.prepare("SELECT COUNT(*) AS n FROM platform_ops_log WHERE action = 'conversation_redact' AND detail LIKE ?").get(`%${RUN}%`).n
+  db3.close()
+  check('⑫ 脱敏必须留痕:`platform_ops_log` +1(谁 / 何时 / 事由 / 影响行数)', logged >= 1, String(logged))
+
+  /* ⑬ 唯一入口:绕过正门的四种改法全部照拒 —— 「开了个例外」不等于「例外只开给正门」 */
+  const w2 = new DatabaseSync(DBP)
+  /* 挑一条**确实没被脱敏过**的行来试绕过 —— 已脱敏的行本来就允许那一种改法,拿它试等于没试。
+     ⚠️ 不能在脱敏那通会话里挑并回退:那通全是顾客句(静默转人工、没有助手回复),
+     脱敏后一行不剩未脱敏的,回退就会挑到已脱敏的行,判据当场假红。现测栽过一次。 */
+  const victim2 = rows('WHERE tenant_id = ? AND redacted_at IS NULL LIMIT 1', A)[0]
+  const tryIt = (fn) => { try { fn(); return '(没拦住)' } catch (e) { return /append-only/.test(e.message) ? 'ok' : e.message.slice(0, 40) } }
+  const r1 = tryIt(() => w2.prepare('UPDATE conversation_messages SET content = ? WHERE id = ?').run('我偷偷改了', victim2.id))
+  const r2 = tryIt(() => w2.prepare('UPDATE conversation_messages SET content = ? WHERE id = ?').run('[已脱敏 2026-09-03]', victim2.id))
+  const r3 = tryIt(() => w2.prepare('UPDATE conversation_messages SET content = ?, redacted_at = ?, role = ? WHERE id = ?').run('[已脱敏 2026-09-03]', '2026-09-03', 'staff', victim2.id))
+  const still2 = rows('WHERE id = ?', victim2.id)
+  w2.close()
+  check('⑬ 🔴 唯一入口:绕过正门的三种改法全拒 —— '
+    + '①改成别的文案 ②冒充脱敏但不落 `redacted_at` ③**脱敏形状但顺手改 role**;'
+    + '例外必须把别的列也钉住,否则同一条 UPDATE 里就跟着溜过去了',
+  r1 === 'ok' && r2 === 'ok' && r3 === 'ok'
+  && still2.length === 1 && still2[0].content === victim2.content && still2[0].role === victim2.role,
+  `${r1} / ${r2} / ${r3}`)
 }
 
 /* ══ 静态:企微那条路两个洞都补上了(判据锚代码形状,不锚文案)══ */

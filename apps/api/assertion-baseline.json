@@ -79,7 +79,7 @@
     "identity-tenant": 8,
     "version-fingerprint": 8,
     "tenant-fill-trigger": 8,
-    "conversation-log": 9,
+    "conversation-log": 14,
     "quote-tenant": 8,
     "conversation-tenant": 15,
     "tier-label": 8,

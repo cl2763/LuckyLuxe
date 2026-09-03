@@ -17,7 +17,7 @@ import { createStoredValueReversal } from './stored-value-reversal.mjs'   // 储
 import { tenantDefaultTargets, tenantNullableTargets, dropTenantDefaults, backupBeforeRebuild } from './tenant-default-drop.mjs'   // D126/D131 去列默认值(公约①)
 import { rebuildTenantScopedUnique } from './schema-unique-rebuild.mjs'   // 唯一约束按租户重建(公约②)   // D126/D131 去列默认值(公约①)
 import { installTenantFillTriggers } from './tenant-fill-triggers.mjs'   // D137 落值触发器(公约②)
-import { ensureConversationLog, logConversationMessage, transcriptFromLog, migrateTranscriptsIntoLog } from './conversation-log.mjs'   // ⓪ 对话全录(大批05 §〇)
+import { ensureConversationLog, logConversationMessage, transcriptFromLog, migrateTranscriptsIntoLog, redactConversation } from './conversation-log.mjs'   // ⓪ 对话全录(大批05 §〇)
 import { createAppVersion } from './app-version.mjs'   // 04f-3 三端版本指纹(公约①)
 import { createKbRoutes } from './kb-routes.mjs'   // 知识库路由(D134 现修那一批搬出,公约②)
 import { createBusinessHoursRoutes } from './business-hours-routes.mjs'   // 营业时间两条路由(强制设置批边改边拆)
@@ -11974,6 +11974,30 @@ async function route(req, res) {
       providerUserId: row.external_user_id
     })
     return json(res, 200, { conversation: getWecomConversation(conversationId) })
+  }
+  /* ══ ⓪b 脱敏正门(店主 05b §一)——**唯一入口** ══
+     图 §〇 第 4 条:顾客要求删除时**脱敏不删行**(记录仍在,认不出是谁)。
+     老板权限 + 事由必填(与 D122「改归属必须写一句原因」同一族)+ 留痕写 `platform_ops_log`。
+     触发器只认「内容换成固定标记 + redacted_at 落时间 + 别的列一个字没动」这一种改法,
+     绕过这道口直接改成别的文案照样被拒。 */
+  const redactMatch = path.match(/^\/admin\/conversations\/(.+)\/redact$/)
+  if (req.method === 'POST' && redactMatch) {
+    if (adminSession.role !== 'owner') throw apiError(403, 'FORBIDDEN', '仅老板可脱敏对话记录。')
+    const conversationId = decodeURIComponent(redactMatch[1])
+    const tid = currentTenantId()
+    const body = await readBody(req)
+    const why = String(body.reason || '').trim()
+    if (!why) throw apiError(400, 'REASON_REQUIRED', '脱敏必须写一句事由(会写进运维日志)。')
+    const conv = wecomRouting.conversationRow(conversationId, 'id', tid)
+    if (!conv) throw apiError(404, 'NOT_FOUND', '会话不存在。')
+    const before = db.prepare('SELECT COUNT(*) AS n FROM conversation_messages WHERE conversation_id = ? AND tenant_id = ?').get(conversationId, tid).n
+    const r = redactConversation(db, { conversationId, tenantId: tid, iso })
+    const after = db.prepare('SELECT COUNT(*) AS n FROM conversation_messages WHERE conversation_id = ? AND tenant_id = ?').get(conversationId, tid).n
+    db.prepare('INSERT INTO platform_ops_log (id, tenant_id, action, detail, operator, created_at) VALUES (?, ?, ?, ?, ?, ?)')
+      .run(randomId('oplog'), tid, 'conversation_redact',
+        `会话 ${conversationId}:脱敏 ${r.messages} 条顾客消息、身份档案 ${r.users} 份;行数 ${before}→${after}(必须相等);事由:${why}`,
+        adminSession.email || adminSession.username || 'owner', iso(new Date()))
+    return json(res, 200, { redacted: true, mark: r.mark, messages: r.messages, users: r.users, rowsBefore: before, rowsAfter: after })
   }
   const manualReplyMatch = path.match(/^\/admin\/wechat\/conversations\/(.+)\/manual-reply$/)
   if (req.method === 'POST' && manualReplyMatch) {
