@@ -17,6 +17,7 @@ import { createStoredValueReversal } from './stored-value-reversal.mjs'   // 储
 import { tenantDefaultTargets, tenantNullableTargets, dropTenantDefaults, backupBeforeRebuild } from './tenant-default-drop.mjs'   // D126/D131 去列默认值(公约①)
 import { rebuildTenantScopedUnique } from './schema-unique-rebuild.mjs'   // 唯一约束按租户重建(公约②)   // D126/D131 去列默认值(公约①)
 import { installTenantFillTriggers } from './tenant-fill-triggers.mjs'   // D137 落值触发器(公约②)
+import { ensureConversationLog, logConversationMessage, transcriptFromLog, migrateTranscriptsIntoLog } from './conversation-log.mjs'   // ⓪ 对话全录(大批05 §〇)
 import { createAppVersion } from './app-version.mjs'   // 04f-3 三端版本指纹(公约①)
 import { createKbRoutes } from './kb-routes.mjs'   // 知识库路由(D134 现修那一批搬出,公约②)
 import { createBusinessHoursRoutes } from './business-hours-routes.mjs'   // 营业时间两条路由(强制设置批边改边拆)
@@ -1572,10 +1573,13 @@ async function syncAndProcessWecomKfMessages(openKfid, eventToken, req) {
         if (!staffText || !msg.external_userid) continue
         try {
           const cid = wecomConversationId(msg.external_userid)
-          const existed = wecomRouting.conversationRow(cid, 'id')
-          if (!existed) continue // 没有上下文的孤儿消息不建档
+          /* ⓪ 对话全录:原来这里「没有上下文的孤儿消息不建档」直接 continue ——
+             那条技师亲手打的话就**一个字都没留下**。现在照落:会话不存在就由漏斗建出来。
+             店主原话:「软件里回复的所有一切对话记录全都会被记下来。」 */
           appendWecomConversationMessage(cid, {
             role: 'staff',
+            source: 'wecom_app',          // 五条路之一:企微 App 里技师打字
+            channelMsgId: msg.msgid,      // 幂等:sync_msg 会重投
             content: staffText,
             staffName: msg.servicer_userid || '企微接待',
             intent: 'wecom_staff_reply'
@@ -1594,17 +1598,22 @@ async function syncAndProcessWecomKfMessages(openKfid, eventToken, req) {
         continue
       }
       if (msg.origin !== 3) continue // 系统消息不处理
-      let content = ''
-      if (msg.msgtype === 'text') content = msg.text?.content || ''
-      else if (msg.msgtype === 'image') content = '[顾客发来一张图片]'
-      else if (msg.msgtype === 'voice') content = '[顾客发来一条语音]'
-      else continue
+      /* ⓪ 对话全录:原来 text/image/voice 之外**一律 continue** ——
+         顾客发的文件、视频、位置一条不记。现在全部落行:非文本记占位 + 附件引用。 */
+      const PLACEHOLDER = { text: '', image: '[顾客发来一张图片]', voice: '[顾客发来一条语音]',
+        file: '[顾客发来一个文件]', video: '[顾客发来一段视频]', location: '[顾客发来一个位置]' }
+      const content = msg.msgtype === 'text'
+        ? (msg.text?.content || '')
+        : (PLACEHOLDER[msg.msgtype] || `[顾客发来一条${msg.msgtype || '消息'}]`)
+      if (!content) continue
       const inbound = {
         provider: 'wecom_customer_service',
         externalUserId: msg.external_userid || '',
         openKfid,
         content,
         lang: 'zh',
+        channelMsgId: msg.msgid,
+        attachments: msg.msgtype === 'text' ? null : [{ type: msg.msgtype, raw: msg[msg.msgtype] || null }],
         raw: { msgid: msg.msgid, msgtype: msg.msgtype }
       }
       try {
@@ -2131,8 +2140,28 @@ function saveAiLogicNote(body = {}, adminSession = {}) {
 function recordWecomConversation(inbound, reply, status = 'ai_replied') {
   const conversationId = wecomConversationId(inbound.externalUserId)
   const current = wecomRouting.conversationRow(conversationId, 'transcript_json')
-  const transcript = parseJson(current?.transcript_json)
+  const transcript = readWecomTranscript(conversationId)
   const replyData = reply?.data || reply || {}
+  /* ⓪ 对话全录:这里是**第二个漏斗** —— 它用裸 `transcript.push` 攒完再整段覆盖写,
+     不走 `appendWecomConversationMessage`。所以在这儿记下起点,收尾时把**新增的每一条**落成行。
+     (只记新增的那几条:老的已经在表里,重复落行等于把对话记录读成两遍。) */
+  const logFrom = transcript.length
+  const logNew = () => {
+    for (const m of transcript.slice(logFrom)) {
+      logConversationMessage(db, {
+        tenantId: currentTenantId(),
+        conversationId,
+        message: {
+          ...m,
+          channelMsgId: m.role === 'customer' ? (inbound.channelMsgId || null) : null,
+          attachments: m.role === 'customer' ? (inbound.attachments || null) : null,
+        },
+        patch: { sourceChannel: inbound.sourceChannel },
+        iso,
+        randomId,
+      })
+    }
+  }
   transcript.push({
     role: 'customer',
     content: inbound.content,
@@ -2198,6 +2227,7 @@ function recordWecomConversation(inbound, reply, status = 'ai_replied') {
     iso(new Date()),
     iso(new Date())
   )
+  logNew()   // ⓪ 对话全录:缓存写完之后把新增的每一条落成行
   return conversationId
 }
 
@@ -7104,7 +7134,7 @@ const { wecomConversationId, readWecomTranscript, lastTranscriptMessageByRole,
   shouldReleaseHumanConversationToAi, appendWecomConversationMessage, getWecomConversation } =
   createWecomConversation({ db, wecomRouting, parseJson, iso, currentTenantId, quoteState, conversationCard,
     resolveUserByIdentity, getConversationState, injectRepriceIfExpired, HUMAN_REPLY_COOLDOWN_MINUTES,
-    notifyWecomStaff })
+    notifyWecomStaff, logConversationMessage, transcriptFromLog, randomId })
 const scheduleBoard = createScheduleBoard({
   db, json, iso, addMinutes, localParts, localDateTime, currentTenantId, defaultStoreId,
   specialDateFor, hoursUnsetOfStore, getService, isGenericDisplayName, memberCodeForUserId, apiError, readBody,
@@ -17706,6 +17736,12 @@ db.exec(`
   UPDATE booking_drafts SET tenant_id = (SELECT s.tenant_id FROM stores s WHERE s.id = booking_drafts.store_id) WHERE tenant_id IS NULL;
 `)
 const tenantNullRows = installTenantFillTriggers(db)
+/* ⓪ 对话全录:建表 + 账本同款追加锁 + 存量按条件迁移(只跑一次,重跑一分不动) */
+ensureConversationLog(db)
+{
+  const r = migrateTranscriptsIntoLog(db, { iso, randomId })
+  if (r.rows) console.log(`[migrate] 对话全录:存量 ${r.conversations} 通会话拆出 ${r.rows} 行`)
+}
 
 // ===== AI 纠偏样本的租户归属(2026-08-07)=====
 // ai_response_feedback 一直没有 tenant_id,而 ownerApprovedReplyPrompt 会把「最近 10 条已批准样本」

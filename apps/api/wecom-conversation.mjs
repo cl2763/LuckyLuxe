@@ -9,7 +9,7 @@
 export function createWecomConversation(deps) {
   const { db, wecomRouting, parseJson, iso, currentTenantId, quoteState, conversationCard,
     resolveUserByIdentity, getConversationState, injectRepriceIfExpired, HUMAN_REPLY_COOLDOWN_MINUTES,
-    notifyWecomStaff } = deps
+    notifyWecomStaff, logConversationMessage, transcriptFromLog, randomId } = deps
   /* 🔴 D132(店主 04c §二 口径①②):会话 id 不再靠拼 —— 按 (租户, provider, 外部用户) 找,
      找不到才按**新形态** `wecom:<租户>:<外部用户>` 建。存量老形态 `wecom:<uid>` 照样找得到(三元组能命中),
      所以不用改存量 id。唯一出口在 `./wecom-routing.mjs`。 */
@@ -17,7 +17,12 @@ export function createWecomConversation(deps) {
     return wecomRouting.resolveConversationId({ externalUserId, provider })
   }
 
+  /* ⓪ 对话全录:`transcript_json` 降为**读缓存** —— 真相在 `conversation_messages`。
+     表里有行就以表为准;一行都没有(全新会话)才回落缓存。
+     两者对不上时以表为准,并由判据守「逐条一致」。 */
   function readWecomTranscript(conversationId) {
+    const fromLog = transcriptFromLog(db, conversationId, currentTenantId())
+    if (fromLog.length) return fromLog
     const current = wecomRouting.conversationRow(conversationId, 'transcript_json')
     return parseJson(current?.transcript_json)
   }
@@ -42,6 +47,18 @@ export function createWecomConversation(deps) {
     const now = iso(new Date())
     if (message.role === 'assistant') message = { ...message, content: injectRepriceIfExpired(conversationId, message.content) }
     transcript.push({ ...message, at: message.at || now })
+    /* ⓪ 对话全录(大批05 §〇):**一条消息一行,只追加不改不删**。
+       这里是全仓唯一的 transcript 写入漏斗(15 个调用点全从这过),所以行也只在这儿落一次。
+       `transcript_json` 从此降为**读缓存** —— 它仍然写,但真相在 `conversation_messages` 里。
+       渠道重投(同一个 channel_msg_id)返回 false,不算错,也不重复落行。 */
+    logConversationMessage(db, {
+      tenantId: currentTenantId(),
+      conversationId,
+      message: { ...message, at: message.at || now },
+      patch,
+      iso,
+      randomId,
+    })
     const provider = patch.provider || current?.provider || 'wecom_customer_service'
     const externalUserId = patch.externalUserId || current?.external_user_id || conversationId.replace(/^wecom:/, '')
     const aiReplyJson = patch.aiReply !== undefined ? JSON.stringify(patch.aiReply || {}) : (current?.ai_reply_json || '{}')
@@ -109,7 +126,11 @@ export function createWecomConversation(deps) {
       lastIntent: row.last_intent,
       lastMessage: row.last_message,
       aiReply: parseJson(row.ai_reply_json),
-      transcript: parseJson(row.transcript_json),
+      /* 读缓存降级同上:表里有行就以表为准 */
+      transcript: (() => {
+        const fromLog = transcriptFromLog(db, row.id, row.tenant_id || currentTenantId())
+        return fromLog.length ? fromLog : parseJson(row.transcript_json)
+      })(),
       conversationState: getConversationState(conversationId),
       createdAt: row.created_at,
       updatedAt: row.updated_at
