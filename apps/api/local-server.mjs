@@ -20,8 +20,8 @@ import { installTenantFillTriggers } from './tenant-fill-triggers.mjs'   // D137
 import { ensureConversationLog, logConversationMessage, transcriptFromLog, migrateTranscriptsIntoLog, redactConversation } from './conversation-log.mjs'   // ⓪ 对话全录(大批05 §〇)
 import { createConversationRoutes } from './conversation-routes.mjs'   // ⓪b 脱敏正门(大批05 §〇b,公约①)
 import { compactIntentText } from './intent-text.mjs'   // 意图文本归一,全仓唯一一份(05d)
-import { resolveSafetyLine, hasSpecialManualHandoffIntent } from './ai-safety-lines.mjs'   // 安全四线闸(05d 两破口;判定与出句都在模块里)
-import { createAiGate, isGreetingOnly, hasServiceStartIntent } from './ai-gate.mjs'   // 大批05 ① 门(旧关键词门 + 新模型门三档,公约①②)
+import { resolveSafetyLine, hasSpecialManualHandoffIntent, needsHumanInScope } from './ai-safety-lines.mjs'   // 安全四线闸(05d 两破口;判定与出句都在模块里)
+import { createAiGate, isGreetingOnly, hasServiceStartIntent, isExplicitAiResumeIntent, hasAppointmentInquiryIntent } from './ai-gate.mjs'   // 大批05 ① 门(旧关键词门 + 新模型门三档,公约①②)
 import { createAppVersion } from './app-version.mjs'   // 04f-3 三端版本指纹(公约①)
 import { createKbRoutes } from './kb-routes.mjs'   // 知识库路由(D134 现修那一批搬出,公约②)
 import { createBusinessHoursRoutes } from './business-hours-routes.mjs'   // 营业时间两条路由(强制设置批边改边拆)
@@ -2365,10 +2365,6 @@ function hasCapabilityIntent(text = '') {
     || /can you do|can u do|possible|is it possible/.test(String(text || '').toLowerCase())
 }
 
-function hasAppointmentInquiryIntent(text = '') {
-  const compact = compactIntentText(text)
-  return /预约|想约|要约|可以约吗|能约吗|档期|有空吗|时间|book|appointment|available|availability/.test(compact)
-}
 
 
 function isBlankRepairIntakeLabel(text = '') {
@@ -2444,7 +2440,8 @@ function afterSalesHandoffReply(afterSales = {}, lang = 'zh') {
       answerZh: afterSales.urgentHealth ? healthZh : normalZh,
       answerEn: afterSales.urgentHealth ? healthEn : normalEn,
       handoffRequired: true,
-      handoffType: afterSales.needsOwner ? 'owner' : 'frontdesk'
+      handoffType: afterSales.needsOwner ? 'owner' : 'frontdesk',
+      tier: '3b'   // 图 v1.2:售后属「范围内但 AI 不该答」,标出来让判据统一锚 tier
     },
     source: 'after_sales_route'
   }
@@ -2456,11 +2453,6 @@ function isVagueContextFollowup(text = '') {
   return /^(可以吗|好了吗|这个呢|这款呢|那这个呢|那价格呢|价格呢|多少钱|ok|好的|可以)$/.test(compact)
 }
 
-
-function isExplicitAiResumeIntent(text = '') {
-  const compact = compactIntentText(text)
-  return /交回ai|转回ai|ai继续|继续ai|请ai继续|让ai继续|机器人继续|恢复ai|ai接待/.test(compact)
-}
 
 
 
@@ -4075,6 +4067,8 @@ async function handleWecomInbound(inbound, req) {
     gate: baseReply?.data || {},
     keywordFastPath,
     ruleTookOver: Boolean(quoteWorkflow.reply && quoteWorkflow.reply.source),
+    /* 3b 的第三、四类(账户 / 要动某张单某笔钱)—— 健康与售后在更前面已被各自的闸接走 */
+    needsHuman: needsHumanInScope(inbound.content || ''),
   })
   if (tier && !bypassSilentHandoff) {
     recordWecomConversation(inbound, tier.reply, tier.status)

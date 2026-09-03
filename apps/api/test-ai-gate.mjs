@@ -174,10 +174,41 @@ check('①⁰ 🔴 扫描面自检:门住在 `ai-gate.mjs`,且这份源码有料
 check('①⁰b 🔴 巨型文件里不许再留一份门 —— 两处真相必然漂(同族:一件事两处真相)',
   !/gate: 'ask_back'/.test(srv) && !/function shouldSilentHandoffBeforeAi/.test(srv),
   'local-server.mjs 里还留着门的实现')
-check('① 三档各有出口:答(走原路)/ 反问(`gate: ask_back`)/ 礼貌转人工(`gate: out_of_scope`)—— '
-  + '第 3 档**有回复**,不是静默',
-  /gate: 'ask_back'/.test(gateSrc) && /gate: 'out_of_scope'/.test(gateSrc)
-  && /handoffRequired: true, gate: 'out_of_scope'/.test(gateSrc), '')
+/* ① 图 v1.2 把第 3 档拆成 3a/3b —— 判据锚 `tier` 字段,不锚文案。
+   **两者的分界就是转不转人工**,所以这条断言必须把「3a 不转、3b 转」钉死:
+   合成一档的后果 09-04 实测过 ——「你叫什么名字」被转人工,既打扰同事,
+   又让顾客觉得问一句闲话就被推走了。 */
+check('① 各档各有出口且 tier 标记齐:2 反问 / 3a 范围外**不转人工** / 3b 范围内不该答**转人工**',
+  /tier: '2'/.test(gateSrc)
+  && /handoffRequired: false, gate: 'out_of_scope', tier: '3a'/.test(gateSrc)
+  && /handoffRequired: true, gate: 'needs_human_in_scope', tier: '3b'/.test(gateSrc), '')
+
+/* ①a/①b 行为层:静态看得见写法,看不见它真跑成什么样 */
+const ext3a = `gate-3a-${RUN}`
+const r3a = await chat(ext3a, '宠物店在哪', { forceAi: true })
+check('①a 🔴 3a 行为:范围外 → 有回复 · tier=3a · **不转人工**(转人工要占同事时间,顾客问宠物店转过去没有意义)',
+  Boolean(r3a?.reply) && r3a.reply.data?.tier === '3a' && r3a.reply.data?.handoffRequired === false,
+  `tier=${r3a?.reply?.data?.tier} handoff=${r3a?.reply?.data?.handoffRequired}`)
+const ext3b = `gate-3b-${RUN}`
+const r3b = await chat(ext3b, '我卡里还剩多少?', { forceAi: true })
+check('①b 🔴 3b 行为:问自己账户余额 → 有回复 · tier=3b · **转人工**',
+  Boolean(r3b?.reply) && r3b.reply.data?.tier === '3b' && r3b.reply.data?.handoffRequired === true,
+  `tier=${r3b?.reply?.data?.tier} handoff=${r3b?.reply?.data?.handoffRequired}`)
+/* ①c 反向守:政策类问法**不许**掉进 3b —— 「取消要提前多久」store facts 里有答案,该答 */
+const extPol = `gate-pol-${RUN}`
+const rPol = await chat(extPol, '取消要提前多久?', { forceAi: true })
+check('①c 🔴 反向守:政策类(取消要提前多久)**不许**落 3b —— 分界是「政策 vs 动作」,不是关键词',
+  rPol?.reply?.data?.tier !== '3b', `tier=${rPol?.reply?.data?.tier}`)
+
+/* ①d 🔴 **模型明说范围外时,谁也不许盖过它**(05e 实测两处栽在这上面,详见回执 §五):
+   · `Where is the pet store` 里有 `store` → 撞上关键词快速通道,`inScope` 被拉成 true,3a 轮不到;
+   · `Book me a flight` → 规则层抢先接管,出了美甲预约收集表。
+   两处都不是「模型判错了」,是**下游把模型判对的结果盖掉了**。
+   这条判据守的是代码里那两行让位逻辑 —— 它们一旦被改回去,这里立刻红。 */
+check('①d 🔴 模型显式 inScope=false 时,关键词快速通道与规则层接管**都要让位给 3a**',
+  /const modelSaysOutOfScope = gate\.inScope === false/.test(gateSrc)
+  && /if \(ruleTookOver && !modelSaysOutOfScope\) return null/.test(gateSrc)
+  && /modelSaysOutOfScope \? false : \(keywordFastPath/.test(gateSrc), '')
 
 check('①b 关键词表降级为**快速通道**:命中直接放行(省一次判断),没命中不再等于「不是业务」—— '
   + '旧门只在 `AI_GATE=keyword` 下才走(留着是为了两个数并排)',

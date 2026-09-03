@@ -66,8 +66,21 @@ const GLOBALS = new Set([
   'decodeURIComponent', 'encodeURIComponent', 'decodeURI', 'encodeURI', 'structuredClone', 'BigInt', 'Symbol',
 ])
 
+/* 🔴 适用面:**刚搬出来的小模块**。
+   这把刀做的是正则级近似分析,不做真作用域、不解析 SQL 字符串里的标识符。
+   拿它扫 `local-server.mjs` 这种 18,000 行的巨型文件,会吐出一屏 `COUNT` / `VALUES` / `tenants`
+   之类的 SQL 关键词当「自由标识符」—— 噪音淹掉信号,比不扫还坏(05e 现测)。
+   所以超过 2,000 行直接拒跑并说明理由,免得有人(包括我)把那一屏噪音当结论。 */
+const MAX_LINES = 2000
+
 export function freeIdentifiers(file) {
-  const code = strip(readFileSync(file, 'utf8'))
+  const raw = readFileSync(file, 'utf8')
+  const lines = raw.split('\n').length
+  if (lines > MAX_LINES) {
+    throw new Error(`${file} 有 ${lines} 行,超过 ${MAX_LINES} —— 这把刀只适用于刚搬出来的小模块,`
+      + '扫巨型文件会把 SQL 关键词当成自由标识符,噪音淹掉信号。请只扫本批新建/搬出的模块。')
+  }
+  const code = strip(raw)
   const bound = boundNames(code)
   const called = new Set([...code.matchAll(/(?<![.\w$])([A-Za-z_$][\w$]*)\s*\(/g)].map((m) => m[1]))
   return [...called].filter((n) => !bound.has(n) && !GLOBALS.has(n))
@@ -78,9 +91,11 @@ if (import.meta.url === `file://${process.argv[1]}`) {
   if (!files.length) { console.error('用法:node tools/free-identifier-scan.mjs <文件…>'); process.exit(2) }
   let bad = 0
   for (const f of files) {
-    const free = freeIdentifiers(f)
-    if (free.length) { bad++; console.error(`❌ ${f}:${free.join(' ')}`) }
-    else console.log(`✅ ${f}:无自由标识符`)
+    try {
+      const free = freeIdentifiers(f)
+      if (free.length) { bad++; console.error(`❌ ${f}:${free.join(' ')}`) }
+      else console.log(`✅ ${f}:无自由标识符`)
+    } catch (e) { bad++; console.error(`⚠️ ${f}:${e.message}`) }
   }
   process.exit(bad ? 1 : 0)
 }

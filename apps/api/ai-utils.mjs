@@ -498,7 +498,20 @@ export async function createCustomerServiceReply({ lang = 'zh', message = '', sa
       '(3) slots = whatever you can extract from THIS message: serviceType / date / time / technician / addons. '
         + 'Leave a slot empty rather than guessing it.',
       'inScope=false is only for things that have nothing to do with a nail/lash salon '
-        + '(weather, jokes, stocks, other shops, personal chat about you).',
+        + '(weather, jokes, stocks, other shops, travel, restaurants, tech support).',
+      /* 🔴 反例(09-04 实测栽的):「Book me a flight」被判 inScope 且高置信,
+         规则层接管后**开始收集美甲预约信息** —— 因为 book 是预约的核心词。
+         词对了不代表事对了:要看**订的是什么**。 */
+      'COUNTER-EXAMPLES — these are inScope=false even though they contain booking words: '
+        + '"Book me a flight" / "book a table for dinner" / "reserve a hotel room" / "订张机票" / "订个餐厅". '
+        + 'The verb "book/reserve/订" only means OUR business when what is being booked is a nail or lash '
+        + 'service, a technician, or a time slot at this salon. If it is a flight, hotel, table, taxi or '
+        + 'anything else, inScope=false — do NOT start collecting appointment details.',
+      /* 09-04 的另一头:提示词里「small talk that opens such a topic」与
+         「personal chat about you」互相打架,模型只好自己选。现在把优先级写死。 */
+      'Small talk ABOUT YOU (your name, whether you are a robot, chatting for fun) is inScope=false. '
+        + 'Answer it politely in one line and steer back to the salon — do not treat it as a business topic, '
+        + 'and do not hand it to a human.',
       ...(depositPolicyLine ? [depositPolicyLine] : []),
       'Answer in the user language. Be concise, warm, and operationally accurate.',
       'Always use Recent chat as short-term conversation memory. If the incoming message is a follow-up such as "那这个呢", "多少钱", "可以吗", or "怎么约", resolve it from the previous customer messages before answering.',

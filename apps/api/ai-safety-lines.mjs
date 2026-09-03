@@ -120,6 +120,8 @@ export const SAFETY_REPLIES = {
       + "I've passed your question to our staff, and we'd suggest checking with your doctor as well.",
     handoffRequired: true,
     gate: 'safety_health',
+    /* 按图 v1.2 的分类,健康就是 3b(范围内但 AI 不该答)—— 标出来,判据才能统一锚 `tier` */
+    tier: '3b',
   },
   privacy: {
     intent: 'handoff',
@@ -129,6 +131,7 @@ export const SAFETY_REPLIES = {
       + 'booking page and pick the one you\'d like; happy to pass anything else to the store.',
     handoffRequired: true,
     gate: 'safety_privacy',
+    tier: '3b',
   },
 }
 
@@ -151,4 +154,53 @@ export function resolveSafetyLine(text = '') {
   if (hasHealthSafetyIntent(text)) return { status: 'needs_human', reply: { data: { ...SAFETY_REPLIES.health } } }
   if (wantsStaffPrivateIdentity(text)) return { status: 'needs_human', reply: { data: { ...SAFETY_REPLIES.privacy } } }
   return null
+}
+
+/* ── 第 3b 档的第三、四类:账户 与 动作(图 v1.2;Cowork 09-04 正式判准)──────────
+
+   健康与售后各自有闸在更前面接走了,3b 剩下的是这两类:
+   · **账户** —— 要读**这位顾客的**账(我卡里还剩多少 / 我的积分 / 我有几次)。
+     AI 替顾客报余额,报错一次就是钱的事。
+   · **动作** —— 要对**某张单、某笔钱**做事(我想取消 / 改到下周 / 我不去了 / 把钱退我)。
+
+   🔴 **分界是「政策 vs 动作」,不是关键词**:
+   「取消要提前多久?」问的是**规则怎么定的** → 该答(store facts 里有);
+   「我想取消订单」要动**这一张单** → 转人工。
+   两句都带「取消」—— 按词分必然混,09-04 我第一版判准就是这么混的,Cowork 裁开了。
+   所以下面**先认「问规则」的形状并放行**,再认动作。顺序反了就会把政策问题一起转人工。 */
+
+/* 🔴 分三步,顺序不能反。分界线是 Cowork 勾定表里那两句最难的:
+     「**能不能改期到下周?**」→ `handoff`   ——「能不能」是问许可,可它**点了具体目标**(下周),
+                                              那就是要动这一张单了。
+     「**Can I reschedule my booking?**」→ `answer` —— 同样带 my booking,但没点具体时间,
+                                              问的是「你们**允不允许**改期」,是规则。
+   所以判的顺序是:①点了具体目标 → ②我账户里的钱/次数/积分 → ③明确的动作意图 → ④剩下的都是政策(该答)。
+
+   🔴 ③**必须排在**④之前。05e 造病时咬出来的:原来把④排在③前面,
+   于是「**我想取消订单,可以吗**」因为带了「可以吗」被当成政策放行 ——
+   **一个礼貌后缀就把动作变成了问规则**。同族的还有「我要退款,能不能?」「帮我改期,可以吗」。
+   顾客说话本来就爱带这种客气尾巴,按④先判必然大面积漏。 */
+
+/* ① 点了具体目标的改单动作:改到下周 / 改到明天 / 取消 3 号那单 …… */
+const ACTION_WITH_TARGET = /(改期?到|改成|换到|挪到|推到)\s*(下?周|下?个?月|明天|后天|今天|\d)|(cancel|reschedule|move|change)\s+(it\s+)?(to|for)\s+\w/i
+/* ③ 动作意图:我想 / 我要 / 帮我 / 我不去了 —— 第一人称明确要办这件事 */
+const TAKE_ACTION = /我想(取消|退|改期|改到)|我要(取消|退|改期|改到)|帮我(取消|退|改期|改到)|我不(想去|来|去)了|退给我|把钱退|i want to (cancel|reschedule|refund)|i'd like to (cancel|reschedule)|get my money back|refund my/i
+/* ④ 我的账户 —— 只认**钱/次数/积分/券/余额**这一类,**不认「我的预约」**。
+   分界来自勾定表里这一对:
+     「Can I get **my money** back?」→ `handoff`(要动我的钱)
+     「Can I reschedule **my booking**?」→ `answer`(问你们允不允许改期)
+   两句都有第一人称所有格 —— 所以「有没有所有格」不是判据,**所有格后面是不是账户里的东西**才是。
+   `余额` 单独列一支:「储值卡余额怎么查?」没有所有格,可问的就是我的余额。 */
+const MY_ACCOUNT = /(我的|我卡|卡里|我还有|我有几|我攒|攒的)[^,,。;;]{0,6}(余额|次数|积分|点|券|卡|钱|钱数|多少)|余额|my (balance|points|credit|card)|my money|how much.*(left|on mine)/i
+
+export function needsHumanInScope(text = '') {
+  const t = String(text || '')
+  if (ACTION_WITH_TARGET.test(t)) return true      // ① 点了目标 = 要动这一单
+  if (MY_ACCOUNT.test(t)) return true              // ② 我账户里的钱/次数/积分
+  if (TAKE_ACTION.test(t)) return true             // ③ 明确的动作意图
+  /* ④ **政策 = 剩下的全部**。这里原来有一条 `ASKS_POLICY` 正则显式 `return false` ——
+     05e 造病时发现**摘掉它一条断言都不红**:它紧挨着下面这个 `return false`,等于死代码。
+     一段「看起来在守、其实什么都不守」的代码比没有更坏(同族:判据看形态不看效果),
+     所以删掉,把「政策该答」这件事**交给断言去守**(套件⑪:11 句政策一句都不许判 3b)。 */
+  return false
 }

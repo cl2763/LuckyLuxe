@@ -17,34 +17,48 @@
    ⚠️ 这份集子**只描述顾客会怎么说**,不描述系统该回什么文案 ——
    判据锚的是「答 / 反问 / 转人工 / 静默」四个**行为档**,不锚文案(文案会变,档不该变)。 */
 
-/* 每条:[句子, 期望档]  期望档:'answer'(该答或该反问) | 'out'(无关,该礼貌转人工) */
+/* 每条:[句子, 期望档]
+
+   期望档三类(图 v1.2 · Cowork 09-04 逐句勾定):
+   · `answer`  —— 该答或该反问。含**政策类**:问规则怎么定的(提前多久 / 按什么比例 /
+                  可否退 / 多久到账 / 能不能改期这类一般问法),store facts 里有答案。
+   · `handoff` —— 范围内但 **AI 不该答**(图 v1.2 第 3b 档):
+                  **动作/账户**(要对某张单、某笔钱、某个账户做事)· **售后/返修**(要看实物)·
+                  **健康**(安全四线)。有回复,并且标转人工。
+   · `out`     —— 与本店无关(第 3a 档):礼貌拒绝 + 拉回业务,**不转人工**。
+
+   🔴 **`answer` 与 `handoff` 的分界就是「政策 vs 动作」**:
+   「取消要提前多久?」是问规则 → `answer`;「我想取消订单」是要动这张单 → `handoff`。
+   两句都带「取消」,按词分必然混 —— 09-04 我第一版判准就是这么混的,Cowork 裁开了。
+
+   ⚠️ 这份集子**只描述顾客会怎么说 + 该落哪个档**,不描述系统该回什么文案。 */
 export const A_WITH_KEYWORD = [
   ['你们美甲多少钱?', 'answer'], ['做一次美睫大概什么价?', 'answer'],
   ['门店地址在哪里?', 'answer'], ['你们营业时间是几点到几点?', 'answer'],
   ['周日营业吗?', 'answer'], ['定金要多少?', 'answer'],
   ['定金能退吗?', 'answer'], ['可以改期吗?', 'answer'],
-  ['我想取消订单', 'answer'], ['退款要多久到账?', 'answer'],
+  ['我想取消订单', 'handoff'], ['退款要多久到账?', 'answer'],
   ['你们店电话是多少?', 'answer'], ['会员怎么办?', 'answer'],
   ['我有优惠券能用吗?', 'answer'], ['积分能抵扣吗?', 'answer'],
   ['储值卡余额怎么查?', 'answer'], ['有哪位技师比较擅长法式?', 'answer'],
   ['能看看技师的作品吗?', 'answer'], ['做完美甲怎么护理?', 'answer'],
-  ['我要售后,昨天做的有点问题', 'answer'], ['卸甲多少钱?', 'answer'],
+  ['我要售后,昨天做的有点问题', 'handoff'], ['卸甲多少钱?', 'answer'],
   ['延长要加钱吗?', 'answer'], ['断甲能修补吗?', 'answer'],
   ['甲面可以做猫眼吗?', 'answer'], ['有参考图能做吗?', 'answer'],
   ['我发张图片给你们看看款式', 'answer'], ['嫁接美睫能维持多久?', 'answer'],
   ['下睫毛也能做吗?', 'answer'], ['卸睫毛单独收费吗?', 'answer'],
   ['指甲很短能做吗?', 'answer'], ['本甲比较薄能延长吗?', 'answer'],
   ['你们门店有停车位吗?', 'answer'], ['订单在哪里看?', 'answer'],
-  ['支付方式有哪些?', 'answer'], ['能不能改期到下周?', 'answer'],
+  ['支付方式有哪些?', 'answer'], ['能不能改期到下周?', 'handoff'],
   ['会员等级有什么好处?', 'answer'], ['优惠券过期了还能用吗?', 'answer'],
   ['积分怎么获得?', 'answer'], ['储值有什么优惠?', 'answer'],
   ['技师今天在店吗?', 'answer'], ['作品集有法式的吗?', 'answer'],
   ['How much for nails?', 'answer', 'en'], ['What are your store hours?', 'answer', 'en'],
   ['Where is your address?', 'answer', 'en'], ['Is the deposit refundable?', 'answer', 'en'],
-  ['Can I reschedule my booking?', 'answer', 'en'], ['I want to cancel my order', 'answer', 'en'],
+  ['Can I reschedule my booking?', 'answer', 'en'], ['I want to cancel my order', 'handoff', 'en'],
   ['How long does a refund take?', 'answer', 'en'], ['Do you have member discounts?', 'answer', 'en'],
   ['Can I use a coupon?', 'answer', 'en'], ['How much is a lash set?', 'answer', 'en'],
-  ['Which technician does French nails?', 'answer', 'en'], ['Do you do nail repair?', 'answer', 'en'],
+  ['Which technician does French nails?', 'answer', 'en'], ['Do you do nail repair?', 'handoff', 'en'],
   ['How do I care for my nails after?', 'answer', 'en'], ['Is removal included?', 'answer', 'en'],
   ['Can I book for Saturday?', 'answer', 'en'], ['What is the deposit amount?', 'answer', 'en'],
   ['Do you have parking at the store?', 'answer', 'en'], ['Can I see your nail portfolio?', 'answer', 'en'],
@@ -52,13 +66,13 @@ export const A_WITH_KEYWORD = [
   ['做美甲需要多长时间?', 'answer'], ['美睫做完能碰水吗?', 'answer'],
   ['门店周几休息?', 'answer'], ['定金是线上付还是到店付?', 'answer'],
   ['取消要提前多久?', 'answer'], ['退款按什么比例?', 'answer'],
-  ['我的会员卡还有多少?', 'answer'], ['优惠券能叠加吗?', 'answer'],
+  ['我的会员卡还有多少?', 'handoff'], ['优惠券能叠加吗?', 'answer'],
   ['积分商城有什么?', 'answer'], ['储值送多少?', 'answer'],
   ['技师有几位?', 'answer'], ['作品能看往期的吗?', 'answer'],
-  ['护理套餐有吗?', 'answer'], ['售后返修收费吗?', 'answer'],
-  ['开胶了怎么办?', 'answer'], ['起翘能免费修吗?', 'answer'],
-  ['掉钻了能补吗?', 'answer'], ['色差可以重做吗?', 'answer'],
-  ['过敏了怎么处理?', 'answer'], ['红肿要紧吗?', 'answer'],
+  ['护理套餐有吗?', 'answer'], ['售后返修收费吗?', 'handoff'],
+  ['开胶了怎么办?', 'handoff'], ['起翘能免费修吗?', 'handoff'],
+  ['掉钻了能补吗?', 'handoff'], ['色差可以重做吗?', 'handoff'],
+  ['过敏了怎么处理?', 'handoff'], ['红肿要紧吗?', 'handoff'],
 ]
 
 export const B_SYNONYM_NO_KEYWORD = [
@@ -67,15 +81,15 @@ export const B_SYNONYM_NO_KEYWORD = [
   ['你们几点关门?', 'answer'], ['周末开不开?', 'answer'],
   ['在哪儿呀?', 'answer'], ['怎么走?', 'answer'],
   ['贵不贵?', 'answer'], ['要先交钱吗?', 'answer'],
-  ['能不能改天?', 'answer'], ['我不想去了', 'answer'],
+  ['能不能改天?', 'answer'], ['我不想去了', 'handoff'],
   ['钱能拿回来吗?', 'answer'], ['能打个电话吗?', 'answer'],
   ['办卡划算吗?', 'answer'], ['有折扣吗?', 'answer'],
-  ['攒的点能换东西吗?', 'answer'], ['充值有便宜吗?', 'answer'],
+  ['攒的点能换东西吗?', 'handoff'], ['充值有便宜吗?', 'answer'],
   ['谁手艺好?', 'answer'], ['有图看看吗?', 'answer'],
-  ['做完要注意啥?', 'answer'], ['做坏了怎么说?', 'answer'],
-  ['弄掉了一块', 'answer'], ['翘边了', 'answer'],
-  ['颜色不对', 'answer'], ['手指有点痒', 'answer'],
-  ['眼睛不太舒服', 'answer'], ['想弄长一点', 'answer'],
+  ['做完要注意啥?', 'answer'], ['做坏了怎么说?', 'handoff'],
+  ['弄掉了一块', 'handoff'], ['翘边了', 'handoff'],
+  ['颜色不对', 'answer'], ['手指有点痒', 'handoff'],
+  ['眼睛不太舒服', 'handoff'], ['想弄长一点', 'answer'],
   ['我的很短能弄吗?', 'answer'], ['薄不薄影响吗?', 'answer'],
   ['车能停哪儿?', 'answer'], ['我下的那个在哪看?', 'answer'],
   ['能刷卡吗?', 'answer'], ['换到下周行吗?', 'answer'],
@@ -85,22 +99,22 @@ export const B_SYNONYM_NO_KEYWORD = [
   ['要多久啊?', 'answer'], ['能沾水不?', 'answer'],
   ['哪天歇?', 'answer'], ['到店给还是先给?', 'answer'],
   ['提前多久说?', 'answer'], ['扣多少?', 'answer'],
-  ['我卡里还剩多少?', 'answer'], ['能一起用吗?', 'answer'],
+  ['我卡里还剩多少?', 'handoff'], ['能一起用吗?', 'answer'],
   ['能换啥?', 'answer'], ['送多少?', 'answer'],
   ['How much?', 'answer', 'en'], ['What time do you close?', 'answer', 'en'],
   ['Where are you guys?', 'answer', 'en'], ['Do I pay first?', 'answer', 'en'],
   ['Can I switch to another day?', 'answer', 'en'], ['I changed my mind', 'answer', 'en'],
-  ['Can I get my money back?', 'answer', 'en'], ['Any discount?', 'answer', 'en'],
+  ['Can I get my money back?', 'handoff', 'en'], ['Any discount?', 'answer', 'en'],
   ['Who is the best there?', 'answer', 'en'], ['Any pictures?', 'answer', 'en'],
-  ['What should I watch out for after?', 'answer', 'en'], ['One of them came off', 'answer', 'en'],
-  ['The edge is lifting', 'answer', 'en'], ['The color looks off', 'answer', 'en'],
+  ['What should I watch out for after?', 'answer', 'en'], ['One of them came off', 'handoff', 'en'],
+  ['The edge is lifting', 'handoff', 'en'], ['The color looks off', 'handoff', 'en'],
   ['My finger itches a bit', 'answer', 'en'], ['I want them longer', 'answer', 'en'],
   ['Mine are really short, is that ok?', 'answer', 'en'], ['Where can I park?', 'answer', 'en'],
   ['Where do I see the one I placed?', 'answer', 'en'], ['Can I tap my card?', 'answer', 'en'],
   ['Is it worth signing up?', 'answer', 'en'], ['How long does it take?', 'answer', 'en'],
   ['Can it get wet?', 'answer', 'en'], ['Which day are you off?', 'answer', 'en'],
   ['How far ahead do I tell you?', 'answer', 'en'], ['How much do you keep?', 'answer', 'en'],
-  ['How much is left on mine?', 'answer', 'en'], ['Can I use both together?', 'answer', 'en'],
+  ['How much is left on mine?', 'handoff', 'en'], ['Can I use both together?', 'answer', 'en'],
   ['Anyone in today?', 'answer', 'en'], ['Can I see older ones?', 'answer', 'en'],
 ]
 

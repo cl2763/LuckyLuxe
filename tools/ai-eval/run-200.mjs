@@ -17,18 +17,20 @@ const send = async (tid, uid, message, lang) => {
   return { status: r.status, d }
 }
 
-/* 四档判定 —— **锚显式标记,不锚文案标点**。
-   跑机第一版按「以问号结尾且不长」认「反问」:那是在猜文案长相。
-   三档现在各自落了 reply.data.gate(ask_back / out_of_scope),事实就在字段上。
-   按标点猜的后果:模型正常答一句「您是想做美甲还是美睫呢?」会被记成反问,
-   而第 2 档的兜底句一样以问号结尾 —— 两件事记成一件,四个数里就有一个是假的。 */
+/* 行为档判定 —— **锚显式标记,不锚文案标点**(三档各自落 `reply.data.tier`)。
+   图 v1.2 把第 3 档拆成 3a/3b,所以档位也跟着分:
+   · 答      有回复、不转人工、不是 3a(正常业务回答)
+   · 反问    tier=2(`gate: ask_back`)
+   · 转人工  handoffRequired=true(含 3b、售后闸、安全四线闸)
+   · 礼貌拒绝 tier=3a —— **范围外的正确答案**,09-04 那版把它算成「误答」是错的
+   · 静默    没有回复(旧关键词门才会有) */
 const classify = (res) => {
   const rep = res.d?.reply
   if (!rep) return '静默'
-  const g = rep.data?.gate
-  if (g === 'ask_back') return '反问'
-  if (g === 'out_of_scope') return '转人工'
-  if (rep.data?.handoffRequired) return '转人工'
+  const da = rep.data || {}
+  if (da.tier === '3a') return '礼貌拒绝'
+  if (da.handoffRequired) return '转人工'
+  if (da.tier === '2' || da.gate === 'ask_back') return '反问'
   return '答'
 }
 
@@ -45,6 +47,7 @@ for (const [say, want, lang] of ALL_200) {
   detail.push({
     i, b, k, tid, say, want, lang: lang || 'zh',
     gate: res.d?.reply?.data?.gate || null,
+    tier: res.d?.reply?.data?.tier || null,
     intent: res.d?.reply?.data?.intent || null,
     handoff: Boolean(res.d?.reply?.data?.handoffRequired),
     text: String(res.d?.reply?.data?.answerZh || res.d?.reply?.data?.answerEn || '').slice(0, 240),

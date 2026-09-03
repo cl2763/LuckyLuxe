@@ -37,11 +37,30 @@ export function hasServiceStartIntent(text = '') {
   return /想做美甲|要做美甲|做美甲|想弄指甲|做指甲|想做指甲|想做美睫|要做美睫|做美睫|想接睫毛|接睫毛|种睫毛|做睫毛|nailappointment|lashappointment/.test(compact)
 }
 
+/* 「把我交回 AI」的意图 —— 从 `local-server.mjs` 搬来(公约②)。它判的是「门要不要重新开」,属门域。 */
+export function isExplicitAiResumeIntent(text = '') {
+  const compact = compactIntentText(text)
+  return /交回ai|转回ai|ai继续|继续ai|请ai继续|让ai继续|机器人继续|恢复ai|ai接待/.test(compact)
+}
+
+
+/* 🔴 `book` 是个陷阱词(Cowork 05e:「book≠本店业务时**不进采集**」)。
+   05e 实测:「Book me a flight」在**模型还没被问到之前**就被这里认成预约意图,
+   走 `preQuoteWorkflow` 出了一整张美甲预约收集表 —— 提示词里的反例根本没机会起作用。
+   所以 `book/reserve` 只有在**订的是本店的东西**(美甲/美睫/技师/位子/时段)时才算预约;
+   订机票、订餐厅、订酒店一律不算。中文的「订」同理。 */
+const BOOKS_SOMETHING_ELSE = /\b(flight|hotel|room|table|restaurant|taxi|cab|ticket|train|car)\b|机票|酒店|餐厅|饭店|房间|车票|出租车/i
+export function hasAppointmentInquiryIntent(text = '') {
+  const compact = compactIntentText(text)
+  if (BOOKS_SOMETHING_ELSE.test(String(text || ''))) return false
+  return /预约|想约|要约|可以约吗|能约吗|档期|有空吗|时间|book|appointment|available|availability/.test(compact)
+}
+
 export function createAiGate(deps) {
   const {
     flattenPersistedQuoteState,
     hasAfterSalesProblemIntent, hasSpecialManualHandoffIntent, hasExplicitPriceIntent,
-    hasAppointmentInquiryIntent, hasCapabilityIntent,
+    hasCapabilityIntent,
     isReturningCustomerInbound, shouldSendReturningCustomerWelcome,
   } = deps
   /* 🔴 静默失败器族:少注一个依赖,`undefined is not a function` 要等到顾客发那句话才炸。
@@ -118,36 +137,67 @@ export function createAiGate(deps) {
     return replyLooksUnknown(reply) || shouldSilentHandoffBeforeAi({ inbound, transcript, persistedState })
   }
 
-  /* ══ 门的模式 ══ 🔴 **默认仍是旧的关键词门 —— 因为评测没达标,按「达标才换门」不换。**
-
-     店主 05b 的话是规格:「四个数并排**达标才换门**」。09-04 实测(200 句 · 真模型 · 见回执 §二):
-     · 范围内被答或被反问 38.1% → **81.2%**(门槛 ≥90%,**未达**)
-     · 范围内被静默 73 句 → **0 句**(这一项达)
-     · 无关句误答 5.0% → **17.5%**(门槛 ≤2%,**未达**)
-     两项未达,所以**默认档不动**;`AI_GATE=model` 可显式切到新门(`test-ai-gate` 就是这么跑的)。
-
-     ⚠️ 两项「未达」里有多少是评测集自己标错的,回执 §二 逐句列了 ——
-     但**看完结果再去改标签就是「改夹具让它绿」**,所以我没改,等店主裁。
-     注意:D133 的核心修复(`needs_human` 不再锁死会话)**两个档都生效**,不受这里影响;
-     旧门「没命中关键词就静默」那一半仍在,那正是要换门才能解的。 */
+  /* ══ 门的模式 ══ 🔴 **默认仍是旧的关键词门 —— 达标才换门,现在还没跑完这一轮的数。**
+     `AI_GATE=model` 显式切到新门(`test-ai-gate` 就是这么跑的)。
+     D133 的核心修复(`needs_human` 不再锁死会话)**两个档都生效**,不受这里影响。 */
   const gateMode = process.env.AI_GATE === 'model' ? 'model' : 'keyword'
 
-  /* 三档判定 —— 只回「要不要替规则层出这一句」,不碰会话、不写库。
-     出句与落库留在调用方(local-server),因为 recordWecomConversation 还没搬出来。
-     返回 null = 不接管,按第 1 档继续往下走。 */
-  function resolveGateTier({ gate = {}, keywordFastPath = false, ruleTookOver = false }) {
-    if (gateMode !== 'model' || ruleTookOver) return null
-    /* 快速通道命中的当作 inScope、置信度拉满 —— 白名单里的词本来就是本店业务 */
-    const inScope = keywordFastPath || gate.inScope !== false
+  /* 三档判定(图 v1.2:第 3 档拆 3a / 3b)—— 只回「要不要替规则层出这一句」,不碰会话、不写库。
+     返回 null = 不接管,按第 1 档继续往下走。
+
+     ══ 3a 与 3b 的分界,以及为什么必须分 ══
+     · **3a 范围外**(宠物店在哪 / 你是机器人吗)→ 礼貌拒绝 + **拉回业务**,`handoffRequired: false`。
+       转人工是要占用同事时间的:顾客问宠物店,把它转给店员没有任何意义。
+     · **3b 范围内但 AI 不该答**(健康 / 售后 / 账户 / 要动某张单某笔钱)→ 有回复 **+ 转人工**。
+       这类**必须**有人接手,因为顾客真的有事要办。
+
+     09-04 那一版把两者合成一档,后果是「你叫什么名字」也被转人工 ——
+     既打扰了同事,又让顾客觉得问一句闲话就被推走了。
+     判据锚 `tier` 字段(`3a`/`3b`),不锚文案。 */
+  function resolveGateTier({ gate = {}, keywordFastPath = false, ruleTookOver = false, needsHuman = false }) {
+    if (gateMode !== 'model') return null
+    /* 🔴 **模型明说范围外时,谁也不许盖过它**(05e 实测两处都栽在这上面):
+       ① `Where is the pet store` 里有 `store` —— 撞上关键词快速通道,`inScope` 被强行拉成 true,
+          3a 永远轮不到。**快速通道本意是「命中就省一次判断」,不是「关键词能推翻模型的判断」。**
+       ② `Book me a flight` 快速通道没命中,但**规则层抢先接管**,出了美甲预约收集表
+          (Cowork 原话:「book≠本店业务时**不进采集**」)。
+       所以:模型显式 `inScope === false` 时,快速通道不再顶,规则层的接管也让位给 3a。
+       模型没表态(undefined)时,快速通道照旧当作 inScope —— 那才是它该起作用的地方。 */
+    const modelSaysOutOfScope = gate.inScope === false
+    if (ruleTookOver && !modelSaysOutOfScope) return null
+    const inScope = modelSaysOutOfScope ? false : (keywordFastPath || gate.inScope !== false)
     const conf = typeof gate.confidence === 'number' ? gate.confidence : (keywordFastPath ? 1 : 0.5)
-    if (!inScope || conf < 0.4) {
+
+    /* 3b:范围内、但这件事 AI 不该替顾客办。
+       健康与售后在更前面就被各自的闸接走了(安全四线闸 / detectAfterSalesProblem),
+       所以走到这儿的 3b 主要是**账户与动作**,由调用方传 `needsHuman` 告知。
+
+       🔴 **不要求模型也说 inScope** —— `needsHuman` 为真本身就是「在范围内」的证据:
+       顾客问的是**他自己在本店的账**、或要动**本店的某张单**,不可能不是本店业务。
+       05e 现测栽过一次:「我卡里还剩多少?」模型判 `inScope=false`,
+       于是这句被归成 3a「礼貌拒绝」—— 顾客问自己的余额,被回一句「这个我帮不上啦」。
+       规则层比模型更确定的事,不该反过来听模型的。 */
+    if (needsHuman) {
       return {
         status: 'needs_human',
         reply: { data: {
           intent: 'handoff',
-          answerZh: '这个我就不专业啦 😊 店里的事随时问我;我也把您的消息转给同事了。',
-          answerEn: "That's a bit outside what I can help with 😊 Ask me anything about the salon — I've also passed your message to a colleague.",
-          handoffRequired: true, gate: 'out_of_scope',
+          answerZh: '这个我请同事来帮您确认,通常 10 分钟内回复您。',
+          answerEn: "I'll have a colleague confirm this for you — usually within about 10 minutes.",
+          handoffRequired: true, gate: 'needs_human_in_scope', tier: '3b',
+        } },
+      }
+    }
+
+    /* 3a:与本店无关。礼貌拒绝 + 把话头拉回来,**不转人工**。 */
+    if (!inScope || conf < 0.4) {
+      return {
+        status: 'ai_replied',
+        reply: { data: {
+          intent: 'out_of_scope',
+          answerZh: '这个我帮不上啦 😊 店里预约、价格、营业时间随时问我。',
+          answerEn: "That's outside what I can help with 😊 Ask me anything about booking, prices or opening hours.",
+          handoffRequired: false, gate: 'out_of_scope', tier: '3a',
         } },
       }
     }
@@ -161,7 +211,7 @@ export function createAiGate(deps) {
             || '好呀 — 您是想先看看款式和价格,还是直接约个时间来做?',
           answerEn: (gate.suggestedQuestionsEn || [])[0]
             || 'Happy to help — would you like to look at styles and prices first, or book a time directly?',
-          handoffRequired: false, gate: 'ask_back',
+          handoffRequired: false, gate: 'ask_back', tier: '2',
         } },
       }
     }
