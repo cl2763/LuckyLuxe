@@ -16,6 +16,10 @@ import { readFileSync } from 'node:fs'
 const strip = (src) => src
   .replace(/\/\*[\s\S]*?\*\//g, '')
   .replace(/\/\/.*$/gm, '')
+  /* 🔴 正则字面量也要剥:`/\b(no|not)\s+/` 里的 `\b(` 长得跟「调用函数 b」一模一样,
+     不剥就会把 `b` 报成自由标识符(05d 现测踩到)。剥在去注释之后、去字符串之前 ——
+     顺序反了会把字符串里的斜杠当成正则开头。 */
+  .replace(/(^|[=(,:[!&|?{;+\-*%<>~^]\s*)\/(?![*/])(?:\\.|\[(?:\\.|[^\]\\])*\]|[^/\\\n])+\/[gimsuy]*/g, '$1/RE/')
   .replace(/`(?:\\.|[^`\\])*`/g, '``')
   .replace(/"(?:\\.|[^"\\])*"/g, '""')
   .replace(/'(?:\\.|[^'\\])*'/g, "''")
@@ -24,6 +28,18 @@ const strip = (src) => src
 function boundNames(code) {
   const names = new Set()
   for (const m of code.matchAll(/(?:function|const|let|var|class)\s+([A-Za-z_$][\w$]*)/g)) names.add(m[1])
+  /* 🔴 import 绑定也算数(05d 补):`import { compactIntentText } from './x.mjs'` 没有 `=`,
+     下面那条解构规则匹配不到 —— 于是**明明 import 进来了却被报成自由标识符**。
+     误报和漏报一样有害:它训练人无视这把刀(这已经是同一把刀的第三次误报了)。 */
+  for (const m of code.matchAll(/import\s+(?:([A-Za-z_$][\w$]*)\s*,?\s*)?(?:\{([^}]*)\})?\s*from/g)) {
+    if (m[1]) names.add(m[1])
+    for (const piece of (m[2] || '').split(',')) {
+      const t = piece.includes(' as ') ? piece.split(' as ').pop() : piece
+      const n = t.trim()
+      if (/^[A-Za-z_$][\w$]*$/.test(n)) names.add(n)
+    }
+  }
+  for (const m of code.matchAll(/import\s+\*\s+as\s+([A-Za-z_$][\w$]*)/g)) names.add(m[1])
   /* 解构块:`{ ... }` 里逗号分隔的每个名字都算绑定;`a: b` 取 b */
   for (const m of code.matchAll(/\{([^{}]*)\}\s*=/g)) {
     for (const piece of m[1].split(',')) {

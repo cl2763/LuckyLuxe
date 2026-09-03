@@ -46,11 +46,20 @@ cd "$(dirname "$0")"
 ENV_FILE="/tmp/ll-sandbox-4310.env"
 DEFAULT_DATA_DIR="$(pwd)/sandbox-data"
 DATA_DIR_ARG="${1:-}"
-if [ -z "$DATA_DIR_ARG" ] && [ -f "$ENV_FILE" ]; then
+if [ -f "$ENV_FILE" ]; then
   # shellcheck disable=SC1090
   . "$ENV_FILE"
-  DATA_DIR_ARG="${SANDBOX_DATA_DIR:-}"
+  [ -z "$DATA_DIR_ARG" ] && DATA_DIR_ARG="${SANDBOX_DATA_DIR:-}"
+  # 🔴 2026-09-04 修:没传 --ai-env 时**继承上次记住的**,而不是写成空。
+  #    上一版的 printf 写的是脚本自己的 $AI_ENV —— 于是**一次不带参数的 start-sandbox.sh
+  #    就把「这个沙箱带着真模型」这件事悄悄擦掉了**,下次回归拉回来的是 mock,
+  #    接口照样 200,没人会发现。这正是 05c 那条护栏想防的事,却被我自己的写法漏掉。
+  #    「还回原状态」的前提是**状态还记得住**。
+  [ -z "$AI_ENV" ] && AI_ENV="${SANDBOX_AI_ENV:-}"
+  [ -z "${AI_GATE:-}" ] && AI_GATE="${SANDBOX_AI_GATE:-}"
 fi
+# 记录里指向的 AI env 文件若已不在,当它没有(免得拿一个不存在的路径去起服务)
+[ -n "$AI_ENV" ] && [ ! -f "$AI_ENV" ] && AI_ENV=""
 # 记录里若还是旧的临时目录(已被清理或即将被清理),一律回到仓内固定目录
 case "$DATA_DIR_ARG" in
   /private/tmp/*|/tmp/*|'') DATA_DIR_ARG="$DEFAULT_DATA_DIR" ;;
@@ -69,7 +78,7 @@ if [ -n "$AI_ENV" ]; then
   NODE_ARGS+=("--env-file-if-exists=$AI_ENV")
   echo "   ⚠️ 带 AI env 起沙箱:$AI_ENV(真模型会**真花钱**;不传 --ai-env 就是现状 mock)"
 fi
-PORT=4310 DATA_DIR="$DATA_DIR_ARG" ALLOW_DEMO_ADMIN_LOGIN=true TEST_DB_PATH= nohup node ${NODE_ARGS[@]+"${NODE_ARGS[@]}"} local-server.mjs > /tmp/ll-sandbox-4310.log 2>&1 &
+PORT=4310 DATA_DIR="$DATA_DIR_ARG" ALLOW_DEMO_ADMIN_LOGIN=true TEST_DB_PATH= AI_GATE="${AI_GATE:-}" nohup node ${NODE_ARGS[@]+"${NODE_ARGS[@]}"} local-server.mjs > /tmp/ll-sandbox-4310.log 2>&1 &
 for _ in $(seq 1 20); do
   if curl -sf -o /dev/null --max-time 2 "http://127.0.0.1:4310/health"; then
     echo "== 沙箱 4310 已起 =="

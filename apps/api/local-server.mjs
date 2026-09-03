@@ -19,7 +19,9 @@ import { rebuildTenantScopedUnique } from './schema-unique-rebuild.mjs'   // 唯
 import { installTenantFillTriggers } from './tenant-fill-triggers.mjs'   // D137 落值触发器(公约②)
 import { ensureConversationLog, logConversationMessage, transcriptFromLog, migrateTranscriptsIntoLog, redactConversation } from './conversation-log.mjs'   // ⓪ 对话全录(大批05 §〇)
 import { createConversationRoutes } from './conversation-routes.mjs'   // ⓪b 脱敏正门(大批05 §〇b,公约①)
-import { createAiGate } from './ai-gate.mjs'   // 大批05 ① 门(旧关键词门 + 新模型门三档,公约①②)
+import { compactIntentText } from './intent-text.mjs'   // 意图文本归一,全仓唯一一份(05d)
+import { resolveSafetyLine, hasSpecialManualHandoffIntent } from './ai-safety-lines.mjs'   // 安全四线闸(05d 两破口;判定与出句都在模块里)
+import { createAiGate, isGreetingOnly, hasServiceStartIntent } from './ai-gate.mjs'   // 大批05 ① 门(旧关键词门 + 新模型门三档,公约①②)
 import { createAppVersion } from './app-version.mjs'   // 04f-3 三端版本指纹(公约①)
 import { createKbRoutes } from './kb-routes.mjs'   // 知识库路由(D134 现修那一批搬出,公约②)
 import { createBusinessHoursRoutes } from './business-hours-routes.mjs'   // 营业时间两条路由(强制设置批边改边拆)
@@ -2351,10 +2353,6 @@ function shouldSendNewCustomerWelcome(inbound = {}, transcript = []) {
   ))
 }
 
-function compactIntentText(value = '') {
-  return String(value || '').toLowerCase().replace(/\s+/g, '')
-}
-
 function hasExplicitPriceIntent(text = '') {
   const raw = String(text || '').toLowerCase()
   const compact = compactIntentText(raw)
@@ -2372,11 +2370,6 @@ function hasAppointmentInquiryIntent(text = '') {
   return /预约|想约|要约|可以约吗|能约吗|档期|有空吗|时间|book|appointment|available|availability/.test(compact)
 }
 
-function hasSpecialManualHandoffIntent(text = '') {
-  const compact = compactIntentText(text)
-  return /朋友一起|一起做|两个人|2个人|多人|带朋友|同行|同伴|闺蜜一起|情侣一起|团体|包场|上门|外出|孕妇|儿童|过敏严重|临时加人|特殊安排/.test(compact)
-    || /friend|together|group|party|pregnant|kid|child|allergy|special\s*arrangement/i.test(String(text || ''))
-}
 
 function isBlankRepairIntakeLabel(text = '') {
   const compact = compactIntentText(text)
@@ -2457,22 +2450,12 @@ function afterSalesHandoffReply(afterSales = {}, lang = 'zh') {
   }
 }
 
-function hasServiceStartIntent(text = '') {
-  const compact = compactIntentText(text)
-  if (!compact) return false
-  if (/退款|取消|改期|售后|投诉|退定金|开胶|起翘|翘边|掉甲|掉钻|掉色|色差|掉睫|红肿|过敏|发炎|刺痛|不舒服|refund|cancel|reschedule|complaint/.test(compact)) return false
-  return /想做美甲|要做美甲|做美甲|想弄指甲|做指甲|想做指甲|想做美睫|要做美睫|做美睫|想接睫毛|接睫毛|种睫毛|做睫毛|nailappointment|lashappointment/.test(compact)
-}
 
 function isVagueContextFollowup(text = '') {
   const compact = compactIntentText(text)
   return /^(可以吗|好了吗|这个呢|这款呢|那这个呢|那价格呢|价格呢|多少钱|ok|好的|可以)$/.test(compact)
 }
 
-function isGreetingOnly(text = '') {
-  const compact = compactIntentText(text)
-  return /^(你好|您好|哈喽|哈咯|嗨|hi|hello|hey|在吗|在不在|想咨询一下|咨询一下|问一下|打扰一下)$/.test(compact)
-}
 
 function isExplicitAiResumeIntent(text = '') {
   const compact = compactIntentText(text)
@@ -3888,6 +3871,22 @@ async function handleWecomInbound(inbound, req) {
       })
     })
     return { conversationId, inbound, reply, conversation, waitingForHuman: true, quoteRequest }
+  }
+  /* ══ 🔴 安全四线闸(05d 两破口现修)——**排在门之前,两个门档都过这一道** ══
+     四线是「任一破即红,不看比例」,不能挂在只有 model 档才走的三档上,也不能指望模型每次想得起来。
+     判定与出句全在 `ai-safety-lines.mjs`(破口②的根就是「判定散在两张互不知情的词表里」)。
+
+     ⚠️ **位置很讲究:必须排在 `detectAfterSalesProblem` 之后。**
+     我第一版排在它前面,结果把「做完眼睛红肿」这类**售后症状**也截胡了 ——
+     而售后本来就有一条更好的路(转人工 + 要现状照片 + 问哪天做的 + 建报价单),
+     三个套件当场红(matrix / working-memory / after-sales)。
+     这一闸要补的是**售后规则够不着的那一块**:做之前问「能不能做」(孕期/哺乳/敏感肌/术后…),
+     那才是原来一条规则都没有、只能靠「孕妇」两个字碰运气的地方。
+     **别人已经做对的事不要抢着做** —— 抢了就是把好的替换成差的。 */
+  const safetyLine = bypassSilentHandoff ? null : resolveSafetyLine(inbound.content || '')
+  if (safetyLine) {
+    recordWecomConversation(inbound, safetyLine.reply, safetyLine.status)
+    return { conversationId, inbound, reply: safetyLine.reply, conversation: getWecomConversation(conversationId) }
   }
   const quotedBookingState = ['quoted', 'draft_created'].includes(persistedState?.quoteStage || '')
     ? buildQuoteIntakeState(inbound, existingTranscript, persistedState)

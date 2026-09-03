@@ -81,6 +81,7 @@
     "tenant-fill-trigger": 8,
     "conversation-log": 14,
     "ai-gate": 11,
+    "ai-safety-lines": 13,
     "quote-tenant": 8,
     "conversation-tenant": 15,
     "tier-label": 8,

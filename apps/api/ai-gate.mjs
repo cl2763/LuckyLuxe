@@ -1,3 +1,5 @@
+import { compactIntentText } from './intent-text.mjs'
+
 /* AI 客服的**门** —— 旧关键词门 + 新模型门三档,住在同一个文件里
    (大批05 ①,店主 05b §二;代码结构公约①「新功能一律新模块」②「边改边拆」)
 
@@ -20,12 +22,27 @@
    下面 inject 的几个 `has*Intent` 仍在 local-server.mjs 里(它们还被别处用着,
    一起搬会牵出更大的面)。按公约②「边改边拆」,这一批只搬「门」,判据下批跟上。 */
 
+
+/* 从 `local-server.mjs` 搬来(公约②):这两个判据只服务于门,门在这儿它们就该在这儿。
+   搬之前它们是 `createAiGate` 的注入参数 —— 注入是「还没搬完」的临时形态,搬完就不用注了。 */
+export function isGreetingOnly(text = '') {
+  const compact = compactIntentText(text)
+  return /^(你好|您好|哈喽|哈咯|嗨|hi|hello|hey|在吗|在不在|想咨询一下|咨询一下|问一下|打扰一下)$/.test(compact)
+}
+
+export function hasServiceStartIntent(text = '') {
+  const compact = compactIntentText(text)
+  if (!compact) return false
+  if (/退款|取消|改期|售后|投诉|退定金|开胶|起翘|翘边|掉甲|掉钻|掉色|色差|掉睫|红肿|过敏|发炎|刺痛|不舒服|refund|cancel|reschedule|complaint/.test(compact)) return false
+  return /想做美甲|要做美甲|做美甲|想弄指甲|做指甲|想做指甲|想做美睫|要做美睫|做美睫|想接睫毛|接睫毛|种睫毛|做睫毛|nailappointment|lashappointment/.test(compact)
+}
+
 export function createAiGate(deps) {
   const {
-    compactIntentText, flattenPersistedQuoteState,
+    flattenPersistedQuoteState,
     hasAfterSalesProblemIntent, hasSpecialManualHandoffIntent, hasExplicitPriceIntent,
-    hasAppointmentInquiryIntent, hasCapabilityIntent, hasServiceStartIntent,
-    isGreetingOnly, isReturningCustomerInbound, shouldSendReturningCustomerWelcome,
+    hasAppointmentInquiryIntent, hasCapabilityIntent,
+    isReturningCustomerInbound, shouldSendReturningCustomerWelcome,
   } = deps
   /* 🔴 静默失败器族:少注一个依赖,`undefined is not a function` 要等到顾客发那句话才炸。
      所以开工先点名 —— 缺谁当场报谁,不留到运行时。 */
