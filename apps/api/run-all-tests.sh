@@ -196,6 +196,22 @@ echo ""
 # 🔴 断言基线判定(店主 02r 裁定一):降=红并指名哪一套;涨自动更新基线。
 # 排在全部套件之后 —— 它要看的是"全场的逐套件数",站在中间看不全。
 echo "== test-assertion-baseline =="
+# 🔴 D132 口径④(店主 04d §一 第 3 条):回归跑完,**每个还在跑的 CI 服务进程** tenantFallback 必须 0/0。
+# 读 /health 不读日志 —— 日志会被下一次跑覆盖,health 读得到。
+# 这一条与套件级的 ⑤/⑤b 是**两层**:套件验「拒不拒」,这一条验「整轮回归里有没有夹具还在裸奔」。
+FALLBACK_BAD=0
+for p in 4128 4129 4131; do
+  h="$(curl -s --max-time 3 "http://127.0.0.1:$p/health" || true)"
+  [ -z "$h" ] && continue
+  n="$(printf '%s' "$h" | node -e 'let s="";process.stdin.on("data",d=>s+=d).on("end",()=>{try{const t=JSON.parse(s).tenantFallback||{};console.log((t.missing||0)+(t.invalid||0))}catch{console.log(0)}})')"
+  echo "   [口径④] 端口 $p tenantFallback 合计 $n"
+  [ "$n" != "0" ] && FALLBACK_BAD=1
+done
+if [ "$FALLBACK_BAD" != "0" ]; then
+  echo "❌ 口径④:回归里还有顾客侧请求没带/带错门店标识(见上面各端口计数)—— 夹具要补头,不是放宽判据" >&2
+  exit 1
+fi
+
 node test-assertion-baseline.mjs "$TALLY" "$(( $(echo $DEFAULT_SUITES | wc -w) + 4 ))"
 
 echo ""

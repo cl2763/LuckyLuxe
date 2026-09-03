@@ -3,6 +3,10 @@
 // 2. 调整时段 → 可约时段落在特殊时段内
 // 3. business-hours 返回 specialDates;hoursText 并入"特殊安排"供 AI 引用
 // 4. 周排班视图当天标记店休
+/* D132 口径④(店主 04d §一):顾客侧公开路由**必须带门店标识**,不再回落旗舰店。
+   夹具同批补头 —— 补的是「请求带不带 x-tenant-id」,判据一个字没放宽。
+   per-call 的 headers 仍然后到先得(跨租户用例照旧覆盖它)。 */
+const TENANT_HEADER = process.env.TEST_TENANT_ID || 'lucky-luxe'
 const BASE_URL = process.env.TEST_BASE_URL || 'http://127.0.0.1:4128'
 /* 测试护栏(裁 C):套件永远不许写进真库 —— 开跑前问服务器「你往哪个库写」 */
 import { assertTestTarget } from './test-guard.mjs'
@@ -19,7 +23,7 @@ function check(name, condition, detail = '') {
 async function request(path, options = {}) {
   const response = await fetch(`${BASE_URL}${path}`, {
     ...options,
-    headers: { 'content-type': 'application/json', authorization: `Bearer ${TOKEN}`, ...(options.headers || {}) }
+    headers: { 'x-tenant-id': TENANT_HEADER, 'content-type': 'application/json', authorization: `Bearer ${TOKEN}`, ...(options.headers || {}) }
   })
   const text = await response.text()
   let data = null

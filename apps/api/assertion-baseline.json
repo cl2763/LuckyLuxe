@@ -78,7 +78,7 @@
     "tenant-explicit": 11,
     "identity-tenant": 8,
     "quote-tenant": 8,
-    "conversation-tenant": 12,
+    "conversation-tenant": 15,
     "tier-label": 8,
     "native-dialog": 7,
     "demo-mark": 8,

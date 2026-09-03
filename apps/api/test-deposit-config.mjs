@@ -6,6 +6,10 @@
 // ⑤ deductible 开关随接口下发(P1 结算单定金行据此)
 // ⑥ enabled=false → 零定金
 // ⑦ 租户隔离:两店各配各的,互不影响
+/* D132 口径④(店主 04d §一):顾客侧公开路由**必须带门店标识**,不再回落旗舰店。
+   夹具同批补头 —— 补的是「请求带不带 x-tenant-id」,判据一个字没放宽。
+   per-call 的 headers 仍然后到先得(跨租户用例照旧覆盖它)。 */
+const TENANT_HEADER = process.env.TEST_TENANT_ID || 'lucky-luxe'
 const BASE_URL = process.env.TEST_BASE_URL || 'http://127.0.0.1:4128'
 /* 测试护栏(裁 C):套件永远不许写进真库 —— 开跑前问服务器「你往哪个库写」 */
 import { assertTestTarget } from './test-guard.mjs'
@@ -23,7 +27,7 @@ function check(name, condition, detail = '') {
 async function request(path, options = {}, token = PLATFORM, extraHeaders = {}) {
   const response = await fetch(`${BASE_URL}${path}`, {
     ...options,
-    headers: { 'content-type': 'application/json', ...(token ? { authorization: `Bearer ${token}` } : {}), ...extraHeaders, ...(options.headers || {}) }
+    headers: { 'x-tenant-id': TENANT_HEADER, 'content-type': 'application/json', ...(token ? { authorization: `Bearer ${token}` } : {}), ...extraHeaders, ...(options.headers || {}) }
   })
   const text = await response.text()
   let data = null

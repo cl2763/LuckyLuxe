@@ -145,6 +145,22 @@ if (DBP) {
   JSON.stringify({ su, 有会话: !!rowX, unrouted: `${unroutedBefore}→${unroutedAfter}`, conv: `${convBefore}→${convAfter}` }))
 }
 
+/* ══ ⑤ 🔴 D132 口径④ fail-closed(店主 04d §一 裁)══
+   顾客侧公开路由缺失/无效门店标识 → 400 TENANT_REQUIRED,**不再回落旗舰店**。
+   04c 那轮是 report-only:整轮回归实测「没带 16 次 / 无效 0 次」,而两个真实顾客端一直带头
+   (小程序 `utils/api.js` / 网页 `customer.js`)—— 16 次全是夹具。数看完才放的闸。 */
+const plainGet = (p, h = {}) => fetch(`${BASE_URL}${p}`, { headers: h }).then(async (r) => ({ status: r.status, data: await r.json().catch(() => null) }))
+const noHdr = await plainGet('/stores')
+const badHdr = await plainGet('/stores', { 'x-tenant-id': `no-such-shop-${RUN}` })
+const okHdr = await plainGet('/stores', { 'x-tenant-id': A })
+check('⑤ 🔴 顾客侧**没带**门店标识 → 400 TENANT_REQUIRED(不回落旗舰店)—— '
+  + '「拿不到就回落默认」与 D128/D130/D131 同一根子:有默认值,打错了不报错',
+noHdr.status === 400 && noHdr.data?.error?.code === 'TENANT_REQUIRED', JSON.stringify(noHdr).slice(0, 140))
+check('⑤b 🔴 顾客侧**带了无效**门店标识 → 400(不是悄悄换成旗舰店)',
+  badHdr.status === 400 && badHdr.data?.error?.code === 'TENANT_REQUIRED', JSON.stringify(badHdr).slice(0, 140))
+check('⑤c 反向守:带对了就 200 —— 一把「谁来都 400」的闸跟关了门一样,证明不了它在分辨',
+  okHdr.status === 200, `${okHdr.status}`)
+
 /* ④ 静态:全仓顾客侧读会话必须带租户;唯一出口在 wecom-routing.mjs */
 const { readFileSync } = await import('node:fs')
 const { execFileSync } = await import('node:child_process')

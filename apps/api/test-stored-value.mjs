@@ -2,6 +2,10 @@
 // 1. 充值=负债(不产生收入流水);耗卡=确认收入(支付方式=储值卡)
 // 2. 余额不足拒绝耗卡;账户列表含沉睡天数并排序
 // 3. 储值账本只追加;演示数据填充幂等;AI 解读返回文本
+/* D132 口径④(店主 04d §一):顾客侧公开路由**必须带门店标识**,不再回落旗舰店。
+   夹具同批补头 —— 补的是「请求带不带 x-tenant-id」,判据一个字没放宽。
+   per-call 的 headers 仍然后到先得(跨租户用例照旧覆盖它)。 */
+const TENANT_HEADER = process.env.TEST_TENANT_ID || 'lucky-luxe'
 const BASE_URL = process.env.TEST_BASE_URL || 'http://127.0.0.1:4128'
 /* 测试护栏(裁 C):套件永远不许写进真库 —— 开跑前问服务器「你往哪个库写」 */
 import { assertTestTarget } from './test-guard.mjs'
@@ -21,7 +25,7 @@ function check(name, condition, detail = '') {
 async function request(path, options = {}) {
   const response = await fetch(`${BASE_URL}${path}`, {
     ...options,
-    headers: { 'content-type': 'application/json', authorization: `Bearer ${TOKEN}`, ...(FIN_KEY ? { 'x-finance-key': FIN_KEY } : {}), ...(options.headers || {}) }
+    headers: { 'x-tenant-id': TENANT_HEADER, 'content-type': 'application/json', authorization: `Bearer ${TOKEN}`, ...(FIN_KEY ? { 'x-finance-key': FIN_KEY } : {}), ...(options.headers || {}) }
   })
   const text = await response.text()
   let data = null

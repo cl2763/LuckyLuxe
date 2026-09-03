@@ -20,7 +20,8 @@ import { installLedgerGuards, backfillTenantKindOnce, LEDGER_TRIGGER_NAMES } fro
 import { backfillIdentities, createIdentityUpsert } from './user-identity.mjs'
 import { createReminderTasks } from './reminder-tasks.mjs'   // D131 提醒任务域(公约②:边改边拆)
 import { createWecomRouting, ensureWecomRoutingSchema } from './wecom-routing.mjs'   // D132 会话归店(公约①:新功能新模块)
-import { createWecomConversation } from './wecom-conversation.mjs'   // D132 会话读写域(公约②:边改边拆)   // D130 身份归属(公约②:边改边拆)
+import { createWecomConversation } from './wecom-conversation.mjs'   // D132 会话读写域(公约②:边改边拆)
+import { createTenantGate } from './tenant-gate.mjs'   // D132 口径④ 顾客侧租户闸(公约②)   // D130 身份归属(公约②:边改边拆)
 import { createQuoteSerialize } from './quote-serialize.mjs'          // AI 报价域序列化(公约②)
 import { createDemoReset, isDemoTenant, PROTECTED_REAL_TENANTS } from './demo-reset.mjs'   // 演示店归属判据/黑名单/重置唯一入口(公约①)
 import { demoSeedTag, ensureDemoMarkColumns } from './demo-mark.mjs'   // D121:演示标记唯一出口
@@ -131,35 +132,10 @@ function currentTenantId() {
   return (store && store.tenantId) || DEFAULT_TENANT_ID
 }
 
-// 多租户:校验租户 id(存在且启用),否则回退默认。默认安全,现有单租户行为不变。
-function validTenantId(raw) {
-  const id = String(raw || '').trim()
-  if (id) {
-    try {
-      const t = db.prepare("SELECT id FROM tenants WHERE id = ? AND status = 'active'").get(id)
-      if (t) return t.id
-    } catch (e) { /* tenants 表异常时回退 */ }
-  }
-  return DEFAULT_TENANT_ID
-}
-/* 从顾客请求解析"当前进的店"(x-tenant-id 头 或 ?tenantId=)。
-   🔴 D132 口径④(店主 04c §二):**顾客侧不许回落默认租户** ——「拿不到就回落默认」
-   与 D128/D130/D131 同一根子(有默认值,打错了不报错)。
-   本批**先 report-only**:每次「没带」或「带了无效租户」各记一行日志 + 计一次数,
-   报数交店主看完再放 fail-closed(400 TENANT_REQUIRED)。webhook 那一条已按口径③ 直接拒收。 */
-const tenantFallbackTally = { missing: 0, invalid: 0 }
-function resolveTenant(req, query) {
-  const raw = String((req && req.headers && req.headers['x-tenant-id']) || (query && query.tenantId) || '')
-  const resolved = validTenantId(raw)
-  if (!raw) {
-    tenantFallbackTally.missing += 1
-    console.warn(`[tenant-fallback] kind=missing path=${(req && req.url || '').split('?')[0]} → 回落 ${resolved}`)
-  } else if (resolved !== raw) {
-    tenantFallbackTally.invalid += 1
-    console.warn(`[tenant-fallback] kind=invalid raw=${raw.slice(0, 40)} path=${(req && req.url || '').split('?')[0]} → 回落 ${resolved}`)
-  }
-  return resolved
-}
+/* 顾客侧租户闸(D132 口径④)搬去 `./tenant-gate.mjs`(公约②:动哪个领域就把该领域搬出去)。
+   `validTenantId` 仍可回落(后台/平台也在用);**不许回落的是 `resolveTenant` 那一层**(顾客侧)。 */
+const { validTenantId, resolveTenant, tenantFallbackTally } =
+  createTenantGate({ db, apiError, defaultTenantId: DEFAULT_TENANT_ID })
 
 // 套餐与功能开关（留接口纪律 #7）：套餐默认值 + 商户覆盖项（试用/加购）合并。
 function getEntitlements(tenantId = DEFAULT_TENANT_ID) {
@@ -11024,8 +11000,9 @@ async function route(req, res) {
       /* 真机 SVG 空白件后:快照要出 PNG 得有栅格化后端。把它摆进 /health,
          上线后一眼能看出生产装没装上(空=还在回落 SVG,真机图会白),不靠猜。 */
       snapshotRaster: rasterBackend() || 'none',
-      /* D132 口径④ report-only:顾客侧「没带租户 / 带了无效租户」各多少次(本进程累计)。
-         数看完再放 fail-closed —— 摆在 /health 是为了**能被判据读到**,不是只写在日志里。 */
+      /* D132 口径④(**已 fail-closed**):顾客侧「没带租户 / 带了无效租户」被拒的次数(本进程累计)。
+         摆在 /health 是为了**能被判据读到** —— 判据要求回归跑完三个进程都是 0/0;
+         日志会被下一次跑覆盖,health 不会。 */
       tenantFallback: { ...tenantFallbackTally },
       /* 🔴 2026-08-30(退回件②):这台服务**实发的前端是哪一版**,由服务自己说 ——
          adminBuild = admin.html 现算的 LL_BUILD(与页面左下角同源)。restore 拉错版本、

@@ -2,6 +2,10 @@
 // 1. email/google 登录写入 user_identities,重复登录不产生重复身份
 // 2. 历史用户身份回填:所有带 email/openid/google/phone 的用户都有对应 identity 记录
 // 3. 身份带 tenant_id;owner 可通过 /admin/users/:id/identities 查看
+/* D132 口径④(店主 04d §一):顾客侧公开路由**必须带门店标识**,不再回落旗舰店。
+   夹具同批补头 —— 补的是「请求带不带 x-tenant-id」,判据一个字没放宽。
+   per-call 的 headers 仍然后到先得(跨租户用例照旧覆盖它)。 */
+const TENANT_HEADER = process.env.TEST_TENANT_ID || 'lucky-luxe'
 const BASE_URL = process.env.TEST_BASE_URL || 'http://127.0.0.1:4128'
 /* 测试护栏(裁 C):套件永远不许写进真库 —— 开跑前问服务器「你往哪个库写」 */
 import { assertTestTarget } from './test-guard.mjs'
@@ -20,7 +24,7 @@ function check(name, condition, detail = '') {
 async function request(path, options = {}) {
   const response = await fetch(`${BASE_URL}${path}`, {
     ...options,
-    headers: { 'content-type': 'application/json', authorization: `Bearer ${TOKEN}`, ...(options.headers || {}) }
+    headers: { 'x-tenant-id': TENANT_HEADER, 'content-type': 'application/json', authorization: `Bearer ${TOKEN}`, ...(options.headers || {}) }
   })
   const text = await response.text()
   let data = null
