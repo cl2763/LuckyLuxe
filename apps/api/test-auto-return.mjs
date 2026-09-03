@@ -42,9 +42,8 @@ async function send(externalUserId, message, forceAi = false) {
 }
 
 async function conversation(externalUserId) {
-  const id = `wecom:${externalUserId}`
   const list = (await request('/admin/wechat/conversations')).conversations || []
-  return list.find((item) => item.id === id)
+  return list.find((item) => item.externalUserId === externalUserId)
 }
 
 function assistantCount(convo) {

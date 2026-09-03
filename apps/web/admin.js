@@ -1,6 +1,6 @@
 // 构建号:每次交付递增。侧栏可见,排查"改了没生效"时先对版本。
 // 兜底用(服务端会注入 window.LL_BUILD = 资源内容指纹,页面优先显示那个)
-const ADMIN_BUILD = '20260902e-d122'
+const ADMIN_BUILD = '20260903a-d132'
 let pricingState = { module: 'storefront', tab: 'items', categories: [], items: [], rules: {}, editing: null, preview: null, storefrontPicker: false }
 console.log(`[admin] build ${ADMIN_BUILD}`)
 
@@ -1668,7 +1668,7 @@ function renderDashboard() {
 
 
 function currentCustomerChatConversation() {
-  return owner.wechatConversations.find((conversation) => conversation.id === `wecom:${owner.wechatChatCustomerId}`) || null
+  return owner.wechatConversations.find((conversation) => conversation.externalUserId === owner.wechatChatCustomerId) || null   // D132:会话 id 带租户了,按外部用户 id 找
 }
 
 
@@ -5785,7 +5785,7 @@ els.wechatMockPage.addEventListener('click', (event) => {
     owner.wechatChatCustomerId = `mock-customer-${Date.now().toString().slice(-5)}`
     localStorage.setItem('lucky-wechat-chat-customer-id', owner.wechatChatCustomerId)
     owner.wechatMockReferenceImages = []
-    owner.wechatMockSessionId = `live:wecom:${owner.wechatChatCustomerId}`
+    owner.wechatMockSessionId = ''   // D132:会话 id 由后端按租户生成,前端不再猜(新顾客此刻还没有会话)
     renderWechatMock()
     return
   }

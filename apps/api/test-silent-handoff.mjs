@@ -57,9 +57,8 @@ async function send(externalUserId, message, extra = {}) {
 }
 
 async function conversationByExternalId(externalUserId) {
-  const id = `wecom:${externalUserId}`
   const conversations = (await request('/admin/wechat/conversations')).conversations || []
-  return conversations.find((item) => item.id === id)
+  return conversations.find((item) => item.externalUserId === externalUserId)
 }
 
 function transcriptRoles(conversation) {

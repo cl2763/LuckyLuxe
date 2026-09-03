@@ -39,12 +39,12 @@ async function send(externalUserId, message, referenceImages = []) {
 
 async function conversation(externalUserId) {
   const list = (await request('/admin/wechat/conversations')).conversations || []
-  return list.find((item) => item.id === `wecom:${externalUserId}`)
+  return list.find((item) => item.externalUserId === externalUserId)
 }
 
 async function latestQuoteFor(externalUserId) {
   const quotes = (await request('/admin/quote-requests')).quoteRequests || []
-  return quotes.find((item) => item.conversationId === `wecom:${externalUserId}`)
+  return quotes.find((item) => String(item.conversationId || '').endsWith(`:${externalUserId}`))
 }
 
 function latestAssistantText(convo) {

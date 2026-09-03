@@ -30,13 +30,19 @@ const tables = db.prepare("SELECT name FROM sqlite_master WHERE type='table' AND
    D121 那批本机库「87 张表逐表零差异」是**只说了行** —— 而启动迁移给两张表各加了一列
    (产品正常路径,不是事故)。行没变、结构变了,对照表看不出来。
    以后谁改了 schema,交齐时自然露出来。 */
+/* 🔴 04c 再补一栏 **idx**(索引数)。案由与 03y 那次同族:
+   D132 给 `wechat_conversations` 加了唯一索引 `(tenant_id, provider, external_user_id)` ——
+   **行没变、列也没变、结构变了**,行/列两栏一个字都看不出来。
+   「未动须有证」要的是「结构也没动」,索引是结构的一部分。 */
 const now = {}
 for (const t of tables) {
   let rows = null
   let cols = null
+  let idx = null
   try { rows = db.prepare(`SELECT COUNT(*) AS n FROM "${t}"`).get().n } catch { rows = null }
   try { cols = db.prepare('SELECT COUNT(*) AS n FROM pragma_table_info(?)').get(t).n } catch { cols = null }
-  now[t] = { rows, cols }
+  try { idx = db.prepare("SELECT COUNT(*) AS n FROM sqlite_master WHERE type = 'index' AND tbl_name = ?").get(t).n } catch { idx = null }
+  now[t] = { rows, cols, idx }
 }
 db.close()
 
@@ -44,30 +50,50 @@ if (diffAt < 0) {
   writeFileSync(snapFile, `${JSON.stringify({ dbPath, tables: now }, null, 2)}\n`)
   const totalRows = Object.values(now).reduce((a, v) => a + (v.rows || 0), 0)
   const totalCols = Object.values(now).reduce((a, v) => a + (v.cols || 0), 0)
-  console.log(`\n════ 库快照(行 + 列)════\n  库:${dbPath}\n  表:${tables.length} 张 · 总行数 ${totalRows} · 总列数 ${totalCols}\n  写入:${snapFile}`)
+  const totalIdx = Object.values(now).reduce((a, v) => a + (v.idx || 0), 0)
+  console.log(`\n════ 库快照(行 + 列 + 索引)════\n  库:${dbPath}\n  表:${tables.length} 张 · 总行数 ${totalRows} · 总列数 ${totalCols} · 总索引 ${totalIdx}\n  写入:${snapFile}`)
   process.exit(0)
 }
 
 const before = JSON.parse(readFileSync(snapFile, 'utf8'))
-/* 老快照只存了一个数字(行数);新快照存 {rows, cols}。两种都读得懂,不然旧快照一律报差异。 */
-const norm = (v) => (v && typeof v === 'object' ? { rows: v.rows ?? 0, cols: v.cols ?? null } : { rows: v ?? 0, cols: null })
+/* 老快照可能只存一个数字(行数)或 {rows, cols};新快照存 {rows, cols, idx}。
+   三种都读得懂 —— 格式换了不许一律报差异(03y 那次的教训:判据要跟着被测物的格式走)。 */
+const norm = (v) => (v && typeof v === 'object'
+  ? { rows: v.rows ?? 0, cols: v.cols ?? null, idx: v.idx ?? null }
+  : { rows: v ?? 0, cols: null, idx: null })
+/* 🔴 04c 现测撞出的一个洞:**新建的空表对照表看不见** ——
+   `norm(undefined)` 给出 {rows:0, cols:null},于是行差 0、列差 0(列是 null 就不比),一声不吭。
+   D132 新建的 `wecom_unrouted` 就是这么溜过去的。表的增减必须单独报。 */
+const added = Object.keys(now).filter((t) => !(t in before.tables))
+const removed = Object.keys(before.tables).filter((t) => !(t in now))
 const diffs = []
 for (const t of new Set([...Object.keys(before.tables), ...Object.keys(now)])) {
   const a = norm(before.tables[t])
   const b = norm(now[t])
   const rowD = b.rows - a.rows
   const colD = (a.cols === null || b.cols === null) ? 0 : b.cols - a.cols
-  if (rowD !== 0 || colD !== 0) diffs.push({ 表: t, 行: `${a.rows}→${b.rows}`, 行差: rowD, 列: a.cols === null ? '(旧快照没记列)' : `${a.cols}→${b.cols}`, 列差: colD })
+  const idxD = (a.idx === null || b.idx === null) ? 0 : b.idx - a.idx
+  if (rowD !== 0 || colD !== 0 || idxD !== 0) {
+    diffs.push({ 表: t, 行: `${a.rows}→${b.rows}`, 行差: rowD,
+      列: a.cols === null ? '(旧快照没记列)' : `${a.cols}→${b.cols}`, 列差: colD,
+      索引: a.idx === null ? '(旧快照没记索引)' : `${a.idx}→${b.idx}`, 索引差: idxD })
+  }
 }
 console.log(`\n════ 「未动须有证」对照表 ════\n  库:${dbPath}\n  快照:${snapFile}`)
-if (!diffs.length) {
-  console.log('  ✅ 逐表零差异(**行与列都比过**)—— 「本库未动」这句话有证据支撑')
+if (added.length || removed.length) {
+  console.log(`  🔴 表的增减:新增 ${added.length}${added.length ? `(${added.join(' · ')})` : ''}`
+    + ` · 消失 ${removed.length}${removed.length ? `(${removed.join(' · ')})` : ''}`)
+}
+if (!diffs.length && !added.length && !removed.length) {
+  console.log('  ✅ 逐表零差异(**表、行、列、索引都比过**)—— 「本库未动」这句话有证据支撑')
   process.exit(0)
 }
+if (!diffs.length) process.exit(1)
 console.log(`  🔴 ${diffs.length} 张表有差异,**不许写「未动」**:`)
 for (const d of diffs) {
   const r = d.行差 === 0 ? '行 持平' : `行 ${d.行}(${d.行差 > 0 ? '+' : ''}${d.行差})`
   const c = d.列差 === 0 ? (d.列.startsWith('(') ? d.列 : '列 持平') : `列 ${d.列}(${d.列差 > 0 ? '+' : ''}${d.列差})`
-  console.log(`     ${d.表}  ${r} · ${c}`)
+  const x = d.索引差 === 0 ? (d.索引.startsWith('(') ? d.索引 : '索引 持平') : `索引 ${d.索引}(${d.索引差 > 0 ? '+' : ''}${d.索引差})`
+  console.log(`     ${d.表}  ${r} · ${c} · ${x}`)
 }
 process.exit(1)

@@ -77,8 +77,7 @@ async function conversations() {
 }
 
 async function conversationByExternalId(externalUserId) {
-  const id = `wecom:${externalUserId}`
-  return (await conversations()).find((item) => item.id === id)
+  return (await conversations()).find((item) => item.externalUserId === externalUserId)
 }
 
 async function quoteRequests() {
@@ -86,9 +85,8 @@ async function quoteRequests() {
 }
 
 async function latestQuoteFor(externalUserId) {
-  const id = `wecom:${externalUserId}`
   const quotes = await quoteRequests()
-  return quotes.find((item) => item.conversationId === id || item.conversation_id === id)
+  return quotes.find((item) => String(item.conversationId || item.conversation_id || '').endsWith(`:${externalUserId}`))
 }
 
 function stateOf(conversation) {

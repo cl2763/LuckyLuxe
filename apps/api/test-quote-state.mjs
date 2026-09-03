@@ -144,7 +144,12 @@ if (!qr) {
   check('31q 反向守:无过期报价的会话,回复零改口句', !la2 || !la2.content.includes('上次报价已过期'), (la2?.content || '').slice(0, 60))
   /* 机械(裁定2 可证性,落地勘正版):transcript 助手写入漏斗全仓恰两条函数;
      漏斗外零 `role: 'assistant'` 的 transcript push(新写法自动红)—— 「漏一个分支」从不可证变可证 */
-  const srv = readFileSync(new URL('./local-server.mjs', import.meta.url), 'utf8').replace(/\/\*[\s\S]*?\*\//g, '').replace(/\/\/[^\n]*/g, '')
+  /* 🔴 04c:扫描面**跟着文件走** —— D132 把会话读写域搬去了 `wecom-conversation.mjs`,
+     只读 local-server 的话 `appendWecomConversationMessage` 从扫描面上消失、判据静默变绿。
+     这正是 03o「路由搬进新模块,扫描器照样绿」的同一课。 */
+  const SRC_FILES = ['./local-server.mjs', './wecom-conversation.mjs']
+  const srv = SRC_FILES.map((f) => readFileSync(new URL(f, import.meta.url), 'utf8'))
+    .join('\n').replace(/\/\*[\s\S]*?\*\//g, '').replace(/\/\/[^\n]*/g, '')
   const pushSites = [...srv.matchAll(/transcript\.push\(\{\s*role: 'assistant'/g)].length
   check('31q 机械①:裸 transcript.push(assistant) 恰 3 处、全在 recordWecomConversation 漏斗内且逐条带注入',
     pushSites === 3 && (srv.match(/injectRepriceIfExpired\(conversationId,/g) || []).length >= 4, String(pushSites))

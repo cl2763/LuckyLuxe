@@ -63,7 +63,9 @@ if (!DBP) {
   check('前置:拿得到 TEST_DB_PATH 才能验库里的落点 —— 取不到就红,不许静默跳过(断言增量律)', false, '未设')
 } else {
   const db = new DatabaseSync(DBP, { readOnly: true })
-  const quote = db.prepare('SELECT * FROM quote_requests WHERE conversation_id = ? ORDER BY created_at DESC LIMIT 1').get(`wecom:${uid}`)
+  /* D132 起会话 id 带租户(`wecom:<租户>:<外部用户>`)—— 不拼 id,按会话表的外部用户 id 反查 */
+  const quote = db.prepare(`SELECT q.* FROM quote_requests q JOIN wechat_conversations c ON c.id = q.conversation_id
+    WHERE c.external_user_id = ? ORDER BY q.created_at DESC LIMIT 1`).get(uid)
   check('① 🔴 报价单落在**本店**,不是旗舰店 —— '
     + '修前这条 INSERT 不带 tenant_id,落列默认 `lucky-luxe`',
   !!quote && quote.tenant_id === tid, JSON.stringify({ 有单: !!quote, tenant: quote?.tenant_id, 应为: tid }))
@@ -108,7 +110,7 @@ const uid2 = `qtx-${RUN}`
 await request('/admin/wechat/mock-chat-message', { method: 'POST', body: JSON.stringify({ externalUserId: uid2, message: '你好' }) }, H)
 if (DBP) {
   const w = new DatabaseSync(DBP)
-  w.prepare('UPDATE wechat_conversations SET tenant_id = ? WHERE id = ?').run('lucky-luxe', `wecom:${uid2}`)
+  w.prepare('UPDATE wechat_conversations SET tenant_id = ? WHERE external_user_id = ?').run('lucky-luxe', uid2)
   w.close()
 }
 const mism = await request('/admin/wechat/mock-chat-message', { method: 'POST', body: JSON.stringify({ externalUserId: uid2, message: '想做美甲多少钱?' }) }, H)

@@ -121,15 +121,15 @@ function syncFormState() {
   localStorage.setItem('lucky-simulator-member-tier', state.memberTier)
 }
 
+/* D132:会话 id 现在带租户(`wecom:<租户>:<外部用户>`),模拟器不再拼 id —— 按 externalUserId 找。 */
 function currentConversation() {
-  const expected = `wecom:${state.customerId}`
   return state.conversations.find((item) => item.id === state.selectedConversationId)
-    || state.conversations.find((item) => item.id === expected)
+    || state.conversations.find((item) => item.externalUserId === state.customerId)
     || null
 }
 
 function currentConversationId() {
-  return `wecom:${state.customerId}`
+  return currentConversation()?.id || ''
 }
 
 function conversationHasTranscript(conversationId) {
@@ -255,7 +255,7 @@ function roleLabel(message = {}, conversation = {}) {
 
 function renderTranscript() {
   const conversation = currentConversation()
-  const pendingKey = conversation?.id || `wecom:${state.customerId}`
+  const pendingKey = conversation?.id || `pending:${state.customerId}`
   const transcript = [
     ...(conversation?.transcript || []),
     ...(state.pendingByConversation[pendingKey] || [])
@@ -402,8 +402,7 @@ async function refreshConversations(options = {}) {
   const data = await request('/admin/wechat/conversations')
   state.conversations = data.conversations || []
   if (!state.selectedConversationId) {
-    const expected = `wecom:${state.customerId}`
-    state.selectedConversationId = state.conversations.find((item) => item.id === expected)?.id || state.conversations[0]?.id || ''
+    state.selectedConversationId = state.conversations.find((item) => item.externalUserId === state.customerId)?.id || state.conversations[0]?.id || ''
   }
   render()
 }
@@ -603,7 +602,7 @@ function createNewCustomer() {
   const next = Number(localStorage.getItem('lucky-simulator-customer-seq') || '1')
   state.customerId = `sim-customer-${String(next).padStart(3, '0')}`
   localStorage.setItem('lucky-simulator-customer-seq', String(next + 1))
-  state.selectedConversationId = `wecom:${state.customerId}`
+  state.selectedConversationId = ''   // D132:新会话的 id 由后端按租户生成,前端不再猜
   state.images = []
   els.message.value = ''
   els.referenceImages.value = ''

@@ -18,7 +18,9 @@ import { createBusinessHoursRoutes } from './business-hours-routes.mjs'   // 营
 import { createOrderBadges, bookingSourceText, bookingStatusText } from './order-badges.mjs'
 import { installLedgerGuards, backfillTenantKindOnce, LEDGER_TRIGGER_NAMES } from './ledger-guards.mjs'
 import { backfillIdentities, createIdentityUpsert } from './user-identity.mjs'
-import { createReminderTasks } from './reminder-tasks.mjs'   // D131 提醒任务域(公约②:边改边拆)   // D130 身份归属(公约②:边改边拆)
+import { createReminderTasks } from './reminder-tasks.mjs'   // D131 提醒任务域(公约②:边改边拆)
+import { createWecomRouting, ensureWecomRoutingSchema } from './wecom-routing.mjs'   // D132 会话归店(公约①:新功能新模块)
+import { createWecomConversation } from './wecom-conversation.mjs'   // D132 会话读写域(公约②:边改边拆)   // D130 身份归属(公约②:边改边拆)
 import { createQuoteSerialize } from './quote-serialize.mjs'          // AI 报价域序列化(公约②)
 import { createDemoReset, isDemoTenant, PROTECTED_REAL_TENANTS } from './demo-reset.mjs'   // 演示店归属判据/黑名单/重置唯一入口(公约①)
 import { demoSeedTag, ensureDemoMarkColumns } from './demo-mark.mjs'   // D121:演示标记唯一出口
@@ -140,9 +142,23 @@ function validTenantId(raw) {
   }
   return DEFAULT_TENANT_ID
 }
-// 从顾客请求解析"当前进的店"(x-tenant-id 头 或 ?tenantId=)。
+/* 从顾客请求解析"当前进的店"(x-tenant-id 头 或 ?tenantId=)。
+   🔴 D132 口径④(店主 04c §二):**顾客侧不许回落默认租户** ——「拿不到就回落默认」
+   与 D128/D130/D131 同一根子(有默认值,打错了不报错)。
+   本批**先 report-only**:每次「没带」或「带了无效租户」各记一行日志 + 计一次数,
+   报数交店主看完再放 fail-closed(400 TENANT_REQUIRED)。webhook 那一条已按口径③ 直接拒收。 */
+const tenantFallbackTally = { missing: 0, invalid: 0 }
 function resolveTenant(req, query) {
-  return validTenantId((req && req.headers && req.headers['x-tenant-id']) || (query && query.tenantId) || '')
+  const raw = String((req && req.headers && req.headers['x-tenant-id']) || (query && query.tenantId) || '')
+  const resolved = validTenantId(raw)
+  if (!raw) {
+    tenantFallbackTally.missing += 1
+    console.warn(`[tenant-fallback] kind=missing path=${(req && req.url || '').split('?')[0]} → 回落 ${resolved}`)
+  } else if (resolved !== raw) {
+    tenantFallbackTally.invalid += 1
+    console.warn(`[tenant-fallback] kind=invalid raw=${raw.slice(0, 40)} path=${(req && req.url || '').split('?')[0]} → 回落 ${resolved}`)
+  }
+  return resolved
 }
 
 // 套餐与功能开关（留接口纪律 #7）：套餐默认值 + 商户覆盖项（试用/加购）合并。
@@ -1571,7 +1587,7 @@ async function syncAndProcessWecomKfMessages(openKfid, eventToken, req) {
         if (!staffText || !msg.external_userid) continue
         try {
           const cid = wecomConversationId(msg.external_userid)
-          const existed = db.prepare('SELECT id FROM wechat_conversations WHERE id = ?').get(cid)
+          const existed = wecomRouting.conversationRow(cid, 'id')
           if (!existed) continue // 没有上下文的孤儿消息不建档
           appendWecomConversationMessage(cid, {
             role: 'staff',
@@ -1635,109 +1651,6 @@ function withTouchCta(message = '') {
   if (!rules.appendCta || !rules.kfLink) return text
   if (text.includes(rules.kfLink)) return text
   return `${text}\n\n${rules.ctaText || TOUCH_RULES_DEFAULT.ctaText} ${rules.kfLink}`
-}
-
-function wecomConversationId(externalUserId = '') {
-  return `wecom:${externalUserId || 'mock-guest'}`
-}
-
-function readWecomTranscript(conversationId) {
-  const current = db.prepare('SELECT transcript_json FROM wechat_conversations WHERE id = ?').get(conversationId)
-  return parseJson(current?.transcript_json)
-}
-
-function lastTranscriptMessageByRole(transcript = [], role = '') {
-  return [...(Array.isArray(transcript) ? transcript : [])].reverse().find((item) => item?.role === role) || null
-}
-
-function shouldReleaseHumanConversationToAi(status = '', transcript = [], now = new Date()) {
-  if (status !== 'human_active') return false
-  const lastMessage = [...(Array.isArray(transcript) ? transcript : [])].reverse().find((item) => item?.role)
-  const lastStaff = lastTranscriptMessageByRole(transcript, 'staff')
-  if (!lastStaff?.at || lastMessage?.role !== 'staff') return false
-  const lastStaffAt = new Date(lastStaff.at).getTime()
-  if (!Number.isFinite(lastStaffAt)) return false
-  return now.getTime() - lastStaffAt >= HUMAN_REPLY_COOLDOWN_MINUTES * 60 * 1000
-}
-
-function appendWecomConversationMessage(conversationId, message, patch = {}) {
-  const current = db.prepare('SELECT * FROM wechat_conversations WHERE id = ?').get(conversationId)
-  const transcript = parseJson(current?.transcript_json)
-  const now = iso(new Date())
-  if (message.role === 'assistant') message = { ...message, content: injectRepriceIfExpired(conversationId, message.content) }
-  transcript.push({ ...message, at: message.at || now })
-  const provider = patch.provider || current?.provider || 'wecom_customer_service'
-  const externalUserId = patch.externalUserId || current?.external_user_id || conversationId.replace(/^wecom:/, '')
-  const aiReplyJson = patch.aiReply !== undefined ? JSON.stringify(patch.aiReply || {}) : (current?.ai_reply_json || '{}')
-  const rawEventJson = patch.raw !== undefined ? JSON.stringify(patch.raw || {}) : (current?.raw_event_json || '{}')
-  db.prepare(`
-    INSERT INTO wechat_conversations
-      (id, tenant_id, provider, external_user_id, open_kfid, source_channel, status, last_intent, last_message, ai_reply_json, transcript_json, raw_event_json, created_at, updated_at)
-    VALUES
-      (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-    ON CONFLICT(id) DO UPDATE SET
-      provider = excluded.provider,
-      open_kfid = COALESCE(NULLIF(excluded.open_kfid, ''), wechat_conversations.open_kfid),
-      source_channel = COALESCE(NULLIF(excluded.source_channel, ''), wechat_conversations.source_channel),
-      status = excluded.status,
-      last_intent = excluded.last_intent,
-      last_message = excluded.last_message,
-      ai_reply_json = excluded.ai_reply_json,
-      transcript_json = excluded.transcript_json,
-      raw_event_json = excluded.raw_event_json,
-      updated_at = excluded.updated_at
-  `).run(
-    conversationId,
-    currentTenantId(),
-    provider,
-    externalUserId,
-    patch.openKfid || current?.open_kfid || '',
-    patch.sourceChannel || current?.source_channel || '',
-    patch.status || current?.status || 'open',
-    patch.lastIntent || current?.last_intent || message.intent || message.role || 'unknown',
-    patch.lastMessage || message.content || current?.last_message || '',
-    aiReplyJson,
-    JSON.stringify(transcript),
-    rawEventJson,
-    current?.created_at || now,
-    now
-  )
-  const saved = getWecomConversation(conversationId)
-  // 转人工的唯一收口:状态刚变成 needs_human 时,给店主的企业微信推一条提醒(不重复推)。
-  // fire-and-forget:通知失败绝不影响会话主链路。
-  if (saved?.status === 'needs_human' && current?.status !== 'needs_human') {
-    const who = saved.linkedUser?.name || saved.externalUserId || '顾客'
-    const gist = String(patch.lastMessage || message.content || '').slice(0, 60)
-    notifyWecomStaff(`【有迹·需要人工】${who} 的咨询 AI 接不住了${gist ? `\n最后一句:${gist}` : ''}\n打开有迹小程序 → 客服工作台 处理`)
-      .catch(() => {})
-  }
-  return saved
-}
-
-function getWecomConversation(conversationId) {
-  const row = db.prepare('SELECT * FROM wechat_conversations WHERE id = ?').get(conversationId)
-  if (!row) return null
-  // 会话↔会员互链:该外部账号若已绑定会员,带上会员信息供后台跳转客户档案
-  const linkedUser = resolveUserByIdentity(row.provider || 'wecom_customer_service', row.external_user_id)
-  const qsView = quoteState.quoteStateOf(row.id, row.tenant_id || currentTenantId())
-  return {
-    id: row.id,
-    quoteState: qsView, customerCard: conversationCard(!!linkedUser, qsView.state, linkedUser && linkedUser.memberTier),   // D106+03r 等级名同出口(原地改行,不加行)
-    provider: row.provider,
-    externalUserId: row.external_user_id,
-    linkedUserId: linkedUser?.id || null,
-    linkedUserName: linkedUser?.display_name || null,
-    openKfid: row.open_kfid,
-    sourceChannel: row.source_channel,
-    status: row.status,
-    lastIntent: row.last_intent,
-    lastMessage: row.last_message,
-    aiReply: parseJson(row.ai_reply_json),
-    transcript: parseJson(row.transcript_json),
-    conversationState: getConversationState(conversationId),
-    createdAt: row.created_at,
-    updatedAt: row.updated_at
-  }
 }
 
 function serializeConversationState(row) {
@@ -2115,7 +2028,7 @@ function saveAiResponseFeedback(body = {}, adminSession = {}) {
   if (!conversationId) throw apiError(400, 'CONVERSATION_REQUIRED', 'Conversation is required.')
   if (!Number.isInteger(messageIndex) || messageIndex < 0) throw apiError(400, 'MESSAGE_INDEX_REQUIRED', 'A valid message index is required.')
   if (!correctedReply) throw apiError(400, 'CORRECTED_REPLY_REQUIRED', 'Corrected reply is required.')
-  const row = db.prepare('SELECT * FROM wechat_conversations WHERE id = ?').get(conversationId)
+  const row = wecomRouting.conversationRow(conversationId)
   if (!row) throw apiError(404, 'NOT_FOUND', 'Conversation not found.')
   const transcript = parseJson(row.transcript_json)
   const target = transcript[messageIndex]
@@ -2232,7 +2145,7 @@ function saveAiLogicNote(body = {}, adminSession = {}) {
 
 function recordWecomConversation(inbound, reply, status = 'ai_replied') {
   const conversationId = wecomConversationId(inbound.externalUserId)
-  const current = db.prepare('SELECT transcript_json FROM wechat_conversations WHERE id = ?').get(conversationId)
+  const current = wecomRouting.conversationRow(conversationId, 'transcript_json')
   const transcript = parseJson(current?.transcript_json)
   const replyData = reply?.data || reply || {}
   transcript.push({
@@ -3744,7 +3657,7 @@ async function handleWecomInbound(inbound, req) {
     return { conversationId, inbound, reply: null, entitlementBlocked: true, conversation }
   }
   const context = buildCustomerServiceContext(req, inbound.lang || 'zh')
-  const existing = db.prepare('SELECT status, transcript_json FROM wechat_conversations WHERE id = ?').get(conversationId)
+  const existing = wecomRouting.conversationRow(conversationId, 'status, transcript_json')
   const existingTranscript = parseJson(existing?.transcript_json)
   const persistedState = getConversationState(conversationId)
   const allowAi = Boolean(inbound.forceAi)
@@ -4320,11 +4233,11 @@ function manualReplyQuoteSignal(message = '', currentState = null) {
 }
 
 function setConversationHandoffOwner(conversationId, ownerRole = 'human', adminSession = {}) {
-  const current = db.prepare('SELECT * FROM wechat_conversations WHERE id = ?').get(conversationId)
+  const current = wecomRouting.conversationRow(conversationId)
   if (!current) throw apiError(404, 'NOT_FOUND', 'Conversation not found.')
   const now = iso(new Date())
   const status = ownerRole === 'human' ? 'human_active' : 'ai_replied'
-  db.prepare('UPDATE wechat_conversations SET status = ?, updated_at = ? WHERE id = ?').run(status, now, conversationId)
+  db.prepare('UPDATE wechat_conversations SET status = ?, updated_at = ? WHERE id = ? AND tenant_id = ?').run(status, now, conversationId, currentTenantId())
   const currentState = getConversationState(conversationId)
   upsertConversationState(conversationId, {
     quoteStage: currentState?.quoteStage || 'idle',
@@ -4346,7 +4259,7 @@ async function appendManualWecomReply(conversationId, body = {}, adminSession = 
   const message = String(body.message || body.content || '').trim()
   if (!message) throw apiError(400, 'MESSAGE_REQUIRED', 'Manual reply message is required.')
   // 回复一个不存在的会话没有意义:以前会 upsert 出一条空壳会话,污染客服工作台(老板会看到凭空冒出来的对话)。
-  const existing = db.prepare('SELECT id FROM wechat_conversations WHERE id = ?').get(conversationId)
+  const existing = wecomRouting.conversationRow(conversationId, 'id')
   if (!existing) throw apiError(404, 'CONVERSATION_NOT_FOUND', '会话不存在。')
   saveManualReplyLearningSample(conversationId, message, adminSession)
   const currentState = getConversationState(conversationId)
@@ -4911,7 +4824,7 @@ function createBookingDraft(body = {}, admin = {}) {
   if (quoteRow) assertStaffCanAccessQuote(admin, quoteRow)
   const quote = quoteRow ? serializeQuoteRequest(quoteRow) : null
   const requestedConversationId = quote?.conversationId || body.conversationId || body.conversation_id || null
-  const conversationId = requestedConversationId && db.prepare('SELECT id FROM wechat_conversations WHERE id = ?').get(requestedConversationId)
+  const conversationId = requestedConversationId && wecomRouting.conversationRow(requestedConversationId, 'id')
     ? requestedConversationId
     : null
   const service = body.serviceId || body.service_id
@@ -5405,6 +5318,9 @@ const { memberCodeForUserId, displayNameForUserId, userIdFromMemberCode, isGener
 /* D127:本店档案唯一出口。**必须排在 displayNameForUserId 之后** —— 它是 const,
    之前我把这行放在 4490,服务直接 TDZ 起不来(判据是回归的启动那一步咬出来的)。 */
 const upsertUserIdentity = createIdentityUpsert({ db, iso, randomId, currentTenantId })
+/* D132 会话归店:会话身份 = (租户, 渠道, 外部用户)。唯一出口在 `./wecom-routing.mjs` */
+const wecomRouting = createWecomRouting({ db, currentTenantId, iso, randomId })
+
 /* 提醒任务与「租户来源三选一必须一致」的判断 —— D131 起搬去 `./reminder-tasks.mjs`(公约②:边改边拆) */
 const { tenantForSideEffect, scheduleReminderTask, getAdminReminderTasks, markReminderTask } =
   createReminderTasks({ db, iso, randomId, apiError, currentTenantId, parseJson })
@@ -7187,6 +7103,14 @@ const quoteState = createQuoteState({
   db, iso, apiError, parseJson: parseJson2, randomId, currentTenantId,
   moneyText: (cents, tid) => formatMoneyCents(cents, tid, 'auto')
 })
+
+/* D132 会话读写域装配 —— **必须排在 `quoteState` 之后**:它是 const,提前引用就是 TDZ
+   (03t 那次 `displayNameForUserId` 栽过同一跤)。这些函数只在请求期被调用,放在这里安全。 */
+const { wecomConversationId, readWecomTranscript, lastTranscriptMessageByRole,
+  shouldReleaseHumanConversationToAi, appendWecomConversationMessage, getWecomConversation } =
+  createWecomConversation({ db, wecomRouting, parseJson, iso, currentTenantId, quoteState, conversationCard,
+    resolveUserByIdentity, getConversationState, injectRepriceIfExpired, HUMAN_REPLY_COOLDOWN_MINUTES,
+    notifyWecomStaff })
 const scheduleBoard = createScheduleBoard({
   db, json, iso, addMinutes, localParts, localDateTime, currentTenantId, defaultStoreId,
   specialDateFor, hoursUnsetOfStore, getService, isGenericDisplayName, memberCodeForUserId, apiError, readBody,
@@ -11100,6 +11024,9 @@ async function route(req, res) {
       /* 真机 SVG 空白件后:快照要出 PNG 得有栅格化后端。把它摆进 /health,
          上线后一眼能看出生产装没装上(空=还在回落 SVG,真机图会白),不靠猜。 */
       snapshotRaster: rasterBackend() || 'none',
+      /* D132 口径④ report-only:顾客侧「没带租户 / 带了无效租户」各多少次(本进程累计)。
+         数看完再放 fail-closed —— 摆在 /health 是为了**能被判据读到**,不是只写在日志里。 */
+      tenantFallback: { ...tenantFallbackTally },
       /* 🔴 2026-08-30(退回件②):这台服务**实发的前端是哪一版**,由服务自己说 ——
          adminBuild = admin.html 现算的 LL_BUILD(与页面左下角同源)。restore 拉错版本、
          看错端口,店主报的版本串与这里一对就现形,不再猜「你测的和她用的是不是同一份」。 */
@@ -11131,10 +11058,13 @@ async function route(req, res) {
     return
   }
   if (req.method === 'POST' && path === '/wechat/customer-service/webhook') {
-    // 2026-08-04 修:此前这里没有设置租户上下文,handleWecomInbound 里的 AI 闸门会退回默认租户(旗舰店)
-    // 去判断——结果所有商家的微信进线都在拿旗舰店的权限做判断,要么全部白送 AI、要么全部被停。
-    // 现在按回调参数解析真实租户(缺省仍回落默认租户,保持既有单店部署行为不变)。
-    tenantContext.enterWith({ tenantId: resolveTenant(req, query) })
+    /* 2026-08-04 修:此前这里没有设置租户上下文,AI 闸门会退回默认租户(旗舰店)去判断。
+       🔴 D132(店主 04c §二 口径③)再修一层:那一版按 `x-tenant-id` 头 / `?tenantId=` 解析,
+       **企微服务器不会发这个头**,一个企业只有一条回调 URL —— 按 URL 参数分店走不通,
+       实际结果就是「缺省回落默认租户」,所有商家的进线都算在旗舰店头上。
+       真正能分店的是 **`open_kfid`**(每家店一个客服账号)。所以租户改由 `open_kfid → 租户` 映射定,
+       **映射不到 = 拒收**:200 回企微(避免它反复重试),内部记 `wecom_unrouted` 一行,
+       **不建会话、不落默认租户**。租户上下文因此挪到解出 kfid 之后再进。 */
     const rawBody = await readRawBody(req)
     const contentTypeHeader = req.headers['content-type'] || ''
     const body = contentTypeHeader.includes('application/json') && rawBody ? JSON.parse(rawBody) : {}
@@ -11152,6 +11082,16 @@ async function route(req, res) {
     // 真实企微「微信客服」事件:回调仅是通知,立即 200 应答,异步拉取消息+AI回复发送(密钥齐备时)
     const kfEventToken = xmlValue(decryptedBody, 'Token')
     const kfEventOpenKfid = xmlValue(decryptedBody, 'OpenKfId') || WECOM_OPEN_KFID
+    /* 口径③:租户只认 open_kfid 映射;映射不到就拒收(不建会话、不落默认租户) */
+    const routedTenant = wecomRouting.tenantForOpenKfid(kfEventOpenKfid)
+    if (!routedTenant) {
+      wecomRouting.recordUnrouted({ openKfid: kfEventOpenKfid, note: 'webhook: open_kfid 未映射到任何门店' })
+      console.warn(`[wecom] 进线被拒收:open_kfid=${kfEventOpenKfid || '(空)'} 没有映射到门店 —— 已记 wecom_unrouted,不建会话`)
+      res.writeHead(200, { 'content-type': 'text/plain; charset=utf-8' })
+      res.end('success')
+      return
+    }
+    tenantContext.enterWith({ tenantId: routedTenant })
     if (encryptedPayload && kfEventToken && kfEventOpenKfid && wecomOutboundReady()) {
       res.writeHead(200, { 'content-type': 'text/plain; charset=utf-8' })
       res.end('success')
@@ -11999,7 +11939,7 @@ async function route(req, res) {
   if (req.method === 'POST' && linkMemberMatch) {
     if (adminSession.role !== 'owner') throw apiError(403, 'FORBIDDEN', 'Owner permission is required.')
     const conversationId = decodeURIComponent(linkMemberMatch[1])
-    const row = db.prepare('SELECT * FROM wechat_conversations WHERE id = ?').get(conversationId)
+    const row = wecomRouting.conversationRow(conversationId)
     if (!row) throw apiError(404, 'NOT_FOUND', 'Conversation not found.')
     const body = await readBody(req)
     const user = db.prepare('SELECT * FROM users WHERE id = ?').get(String(body.userId || ''))
@@ -13419,6 +13359,23 @@ async function route(req, res) {
       shopEntry: { scene: `t=${id}`, note: '小程序发布后可用此 scene 生成该店专属小程序码。' }
     })
   }
+  // 平台端代填门店的企微客服账号(D132 口径③;商户自己填不来时由平台代设)
+  if (path.startsWith('/platform/tenants/') && path.endsWith('/wecom-kfid') && (req.method === 'GET' || req.method === 'PUT')) {
+    if (!isPlatform()) throw apiError(401, 'UNAUTHORIZED', 'Platform token required.')
+    const id = path.split('/')[3]
+    if (!db.prepare('SELECT id FROM tenants WHERE id = ?').get(id)) throw apiError(404, 'NOT_FOUND', 'Tenant not found.')
+    if (req.method === 'GET') {
+      const row = db.prepare("SELECT value FROM tenant_settings WHERE tenant_id = ? AND key = 'wecom_open_kfid'").get(id)
+      return json(res, 200, { tenantId: id, openKfid: row?.value || '' })
+    }
+    const value = String((await readBody(req)).openKfid || '').trim().slice(0, 120)
+    if (value) {
+      const owner = wecomRouting.tenantForOpenKfid(value)
+      if (owner && owner !== id) throw apiError(409, 'KFID_TAKEN', '这个企微客服账号已经绑在另一家门店上了。')
+    }
+    wecomRouting.setOpenKfidMapping(id, value)
+    return json(res, 200, { tenantId: id, openKfid: value })
+  }
   if (req.method === 'POST' && path.startsWith('/platform/tenants/') && path.endsWith('/toggle')) {
     if (!isPlatform()) throw apiError(401, 'UNAUTHORIZED', 'Platform token required.')
     const id = path.split('/')[3]
@@ -14349,7 +14306,7 @@ async function route(req, res) {
       VALUES (?, 'wecom_customer_service', ?, 'demo-kfid', ?, ?, ?, ?, '{}', ?, '{}', ?, ?, ?)`)
     const t1 = new Date(now.getTime() - 25 * 60000)
     insertConversation.run(
-      'wecom:demo-chat-01', 'demo-chat-01', '小红书', 'needs_human', 'after_sales_review',
+      `wecom:${seedTenantId}:demo-chat-01`, 'demo-chat-01', '小红书', 'needs_human', 'after_sales_review',
       '我前天做的甲今天掉了一颗,怎么办?',
       JSON.stringify([
         { role: 'customer', content: '我前天做的甲今天掉了一颗,怎么办?', at: iso(t1) },
@@ -14359,7 +14316,7 @@ async function route(req, res) {
     )
     const t2 = new Date(now.getTime() - 6 * 60000)
     insertConversation.run(
-      'wecom:demo-chat-02', 'demo-chat-02', '微信', 'open', 'price_inquiry',
+      `wecom:${seedTenantId}:demo-chat-02`, 'demo-chat-02', '微信', 'open', 'price_inquiry',
       '你们家法式美甲多少钱呀?',
       JSON.stringify([
         { role: 'customer', content: '你们家法式美甲多少钱呀?', at: iso(t2) },
@@ -14370,8 +14327,8 @@ async function route(req, res) {
     upsertUserIdentity({ userId: 'demo-cust-01', provider: 'wecom_customer_service', providerUserId: 'demo-chat-01' })
     // 4. 待技师报价任务
     db.prepare(`INSERT INTO quote_requests (id, conversation_id, user_id, source_channel, service_type, status, customer_message, customer_lang, reference_images_json, created_at, updated_at, tenant_id)
-      VALUES (?, 'wecom:demo-chat-02', 'demo-cust-02', '微信', 'nail', 'PENDING_STAFF', '想做渐变猫眼加两颗小钻,大概多少钱?', 'zh', '[]', ?, ?, ?)`)
-      .run(randomId('quote'), nowIso, nowIso, seedTenantId)
+      VALUES (?, ?, 'demo-cust-02', '微信', 'nail', 'PENDING_STAFF', '想做渐变猫眼加两颗小钻,大概多少钱?', 'zh', '[]', ?, ?, ?)`)
+      .run(randomId('quote'), `wecom:${seedTenantId}:demo-chat-02`, nowIso, nowIso, seedTenantId)
     // 5. 储值:两位演示客户(其中一张沉睡卡)
     insertStoredValueTransaction({ userId: 'demo-cust-03', type: 'recharge', amountCents: 100000, payChannel: 'wechat', note: '储值充值（演示）', createdBy: 'demo-seed', createdAt: iso(new Date(now.getTime() - 12 * 86400000)) })
     insertStoredValueTransaction({ userId: 'demo-cust-03', type: 'consume', amountCents: 18800, note: '猫眼美甲耗卡（演示）', createdBy: 'demo-seed', createdAt: iso(new Date(now.getTime() - 5 * 86400000)) })
@@ -15272,6 +15229,28 @@ async function route(req, res) {
   }
   // ===== 触达规则(企微双通道:真人管家=喇叭 / 客服窗口=办事处)=====
   // 每条主动触达文案自动带客服入口,防止顾客回到成员私聊(那条通道我们收不到、AI 接不了)。
+  /* ══ D132 口径③:门店的企微客服账号(open_kfid)——**webhook 靠它定租户** ══
+     值必须全局唯一:两家店填同一个 kfid 就等于没分店。
+     渠道未接通前(等可信 IP)这一段只落代码与判据,不联调。
+     ⚠️ 网页「门店设置」那一行还没做 —— `admin.js` 是只许搬出不许新增的巨型文件,
+     加一行 UI 要同批搬走等量代码;已登记待排,眼下由本接口与平台端代填两条路可设。 */
+  if (req.method === 'GET' && path === '/admin/wecom/open-kfid') {
+    if (adminSession.role !== 'owner') throw apiError(403, 'FORBIDDEN', '仅老板可看企微客服账号。')
+    const row = db.prepare("SELECT value FROM tenant_settings WHERE tenant_id = ? AND key = 'wecom_open_kfid'").get(currentTenantId())
+    return json(res, 200, { openKfid: row?.value || '' })
+  }
+  if (req.method === 'PUT' && path === '/admin/wecom/open-kfid') {
+    if (adminSession.role !== 'owner') throw apiError(403, 'FORBIDDEN', '仅老板可改企微客服账号。')
+    const body = await readBody(req)
+    const value = String(body.openKfid || '').trim().slice(0, 120)
+    const tid = currentTenantId()
+    if (value) {
+      const owner = wecomRouting.tenantForOpenKfid(value)
+      if (owner && owner !== tid) throw apiError(409, 'KFID_TAKEN', '这个企微客服账号已经绑在另一家门店上了。')
+    }
+    wecomRouting.setOpenKfidMapping(tid, value)
+    return json(res, 200, { openKfid: value })
+  }
   if (req.method === 'GET' && path === '/admin/touch-rules') {
     if (adminSession.role !== 'owner') throw apiError(403, 'FORBIDDEN', '仅老板可看触达设置。')
     return json(res, 200, { rules: readTouchRules() })
@@ -18104,6 +18083,13 @@ try {
 /* D72:账本禁删/禁改律**在这里一次装好** —— 位置必须在全部建表/迁移之后,
    否则全新库跑到 settlements 那条时表还不存在,装到一半崩(全新库启动实测抓到的)。 */
 installLedgerGuards(db)
+/* D132:会话唯一索引 (tenant_id, provider, external_user_id) + 未路由留痕表。
+   索引建不上(存量有跨租户重名)时**大声报出来**,不静默跳过 —— 判据由 test-conversation-tenant 守。 */
+{
+  const r = ensureWecomRoutingSchema(db)
+  if (!r.indexed) console.warn(`[D132] 会话唯一索引**未建**:跨租户重名 ${r.conflicts} 组 —— 先清冲突再重启`)
+  else if (r.conflicts === 0) console.log('[D132] 会话唯一索引已在 (tenant_id, provider, external_user_id)')
+}
 
 /* 分类唯一真相律:种子要挂大类,得先保证旗舰店有大类字典(全新库时它还是空的) */
 try { pricingCategoryApi.seedDefaults(DEFAULT_TENANT_ID, platformCategories()) } catch (e) { console.warn('[seed] 默认大类铺设失败:', e.message) }

@@ -116,7 +116,8 @@ export function createQuoteState(deps) {
   /* mark-quoted 附加件:算会话键与有效期;改价防线(31p 追加句照录) */
   function onMarkQuoted({ quote, newCents, actor, confirmOverride, now = new Date() }) {
     const tid = currentTenantId()
-    const conv = quote.conversation_id ? db.prepare('SELECT * FROM wechat_conversations WHERE id = ?').get(quote.conversation_id) : null
+    /* D132:读会话必须带租户(读写两道闸律)——同一个外部用户 id 在两家店各有一行 */
+    const conv = quote.conversation_id ? db.prepare('SELECT * FROM wechat_conversations WHERE id = ? AND tenant_id = ?').get(quote.conversation_id, tid) : null
     const sk = conv ? sessionKeyOf(conv, now) : null
     const validHours = settingsOf(tid).validHours
     const expiresAt = iso(new Date(now.getTime() + validHours * 3600 * 1000))
