@@ -49,6 +49,27 @@ async function main() {
     check('facts seeded (storeAddress)', Boolean(kb.data.facts?.storeAddress))
 
     // 2. 改定金 → AI 定金回答立即用新值
+    /* ══ 🔴 D134(店主 04f §一.1 裁现修):`allowed` 之外的键必须 400 点名,且**库一个字不许动** ══
+       原来是**静默丢弃还回 200** —— 商家看到「保存成功」而库里没有,从响应上分不出「存了」和「没存」。
+       归族**静默失败器族**。裁法是 400 点名,不做 ignoredKeys:
+       「保存成功」这四个字不许在没存的时候出现。 */
+    const kbBefore = (await request('/admin/kb')).data.facts
+    const bad1 = await request('/admin/kb/facts', { method: 'PUT', body: JSON.stringify({ facts: { parkingInfo: '门口有车位' } }) })
+    const bad2 = await request('/admin/kb/facts', { method: 'PUT', body: JSON.stringify({ facts: { storeAddress: '不该被写进去 1 号', kidsPolicy: 'x' } }) })
+    const kbAfter = (await request('/admin/kb')).data.facts
+    check('🔴 D134:陌生键 → 400 UNKNOWN_KB_KEY 并**点名是哪几个键**',
+      bad1.status === 400 && bad1.data?.error?.code === 'UNKNOWN_KB_KEY'
+      && String(bad1.data?.error?.message || '').includes('parkingInfo'), JSON.stringify(bad1.data).slice(0, 150))
+    check('🔴 D134b:认识的键与陌生键**混在一起也整体 400**,库一个字不许动 —— '
+      + '半存半不存比全不存更糟(商家以为都存了)',
+    bad2.status === 400 && JSON.stringify(kbBefore) === JSON.stringify(kbAfter),
+    `前 ${JSON.stringify(kbBefore)}\n后 ${JSON.stringify(kbAfter)}`)
+    const okKey = await request('/admin/kb/facts', { method: 'PUT', body: JSON.stringify({ facts: { storeAddress: '合法地址 9 号' } }) })
+    check('🔴 D134c 反向守:只传认识的键必须 200 且真的存进去 —— '
+      + '一把「谁来都 400」的闸跟关掉这个口一样',
+    okKey.status === 200 && (await request('/admin/kb')).data.facts?.storeAddress === '合法地址 9 号',
+    JSON.stringify(okKey.data).slice(0, 120))
+
     await request('/admin/kb/facts', { method: 'PUT', body: JSON.stringify({ facts: { depositAmount: '60' } }) })
     const depositReply = await request('/ai/customer-service', { method: 'POST', body: JSON.stringify({ lang: 'zh', message: '预约需要付定金吗？定金多少？' }) })
     const depositText = depositReply.data?.reply?.data?.answerZh || ''
