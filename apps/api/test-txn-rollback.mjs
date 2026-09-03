@@ -5,16 +5,18 @@
    静态只能证明**写法**对,证不了事务**起作用** ——
    案底:sqlite3 CLI 遇错不 bail,写了 `BEGIN...COMMIT` 照样一句句往下走。
 
-   ══ 九处清单(《写库脚本护栏三列清单》第三列)══
-   A 类 1:`tools/clean-test-tenants.mjs`
-   B 类 8:`account-refund` / `demo-reset` / `hero-slides` / `import-customers` /
-           `import-services` / `ledger-guards` / `sandbox-mirror-jury` / `stored-value-reversal`
-
-   ⚠️ **现测第一件事就推翻了清单的一个前提**:`ledger-guards.mjs` 当时被列进来,
-   但它 `BEGIN / COMMIT / ROLLBACK` **三样都是 0** —— 根本没有事务。
-   它用一句 `db.exec` 跑 24 条语句(12 组 DROP+CREATE),而 **`exec` 不是原子的**:
-   第 7 句失败时前 6 条已经 DROP 掉,账本锁就少了六条 ——
-   恰恰变成该模块开头警告的那个样子「中途崩一次账本锁就悄悄没了」。已包进事务(本批)。
+   ══ 清单从哪来:**不手写,现扫**(店主 03z 裁 · 04a 收窄)══
+   尺子只有一份 —— `tools/guard-scan.mjs` 的 `scanWriteSites()`,
+   与《写库脚本护栏三列清单》的生成器、`test-db-target-guard` 用的是**同一个函数**,不是同一段正则抄三遍。
+   案由是这两批自己咬出来的三件:
+   ① 手写清单说「包了事务」的九处里,`ledger-guards` 现测**根本没有事务** ——
+      它用一句 `db.exec` 跑 24 条语句(12 组 DROP+CREATE),而 **`exec` 不是原子的**:
+      第 7 句失败时前 6 条已经 DROP 掉,账本锁就少了六条,
+      恰恰变成该模块开头警告的那个样子「中途崩一次账本锁就悄悄没了」。已包进事务(03y 批)。
+   ② 反过来,手写清单**漏了三处**真有事务的(`local-server.mjs` 自己、`demo-seed`、
+      `purge-smoke-conversations`)—— 说有的没有,真有的没写,**同一份手写清单两个方向都错过**。
+   ③ 04a:连「现扫」也数错过 —— 把生成器自己数了进来(它源码里的 `BEGIN IMMEDIATE` 是尺子的字面量)。
+      刀本身的排除面现在写在 `guard-scan.mjs` 的 `KNIVES` 里,**带理由 + 棘轮**。
 
    ══ 造病机制(统一的,不用给每处各编一个坏输入)══
    在**目标表**上装一条 `BEFORE INSERT … RAISE(ABORT)` 的临时触发器,
@@ -32,6 +34,7 @@ import { join } from 'node:path'
 import { tmpdir } from 'node:os'
 import { fileURLToPath } from 'node:url'
 import { DatabaseSync } from 'node:sqlite'
+import { scanWriteSites } from '../../tools/guard-scan.mjs'
 
 const ROOT = join(fileURLToPath(new URL('.', import.meta.url)), '..', '..')
 let checks = 0
@@ -44,25 +47,14 @@ const check = (name, cond, detail = '') => {
 
 /* ═══ ① 静态:九处逐个必须有 BEGIN / COMMIT / ROLLBACK 三件 ═══
    白名单式:清单上的每一处都要有,少一件就点名 —— 不是数「我看过的那几个有」。 */
-const SITES = [
-  { f: 'tools/clean-test-tenants.mjs', 类: 'A', 干什么: '清理测试租户' },
-  { f: 'apps/api/account-refund.mjs', 类: 'B', 干什么: '退卡退款' },
-  { f: 'apps/api/demo-reset.mjs', 类: 'B', 干什么: '演示店重置' },
-  { f: 'apps/api/hero-slides.mjs', 类: 'B', 干什么: '首页轮播图' },
-  { f: 'apps/api/import-customers.mjs', 类: 'B', 干什么: '顾客导入' },
-  { f: 'apps/api/import-services.mjs', 类: 'B', 干什么: '项目导入' },
-  { f: 'apps/api/ledger-guards.mjs', 类: 'B', 干什么: '装 12 条账本触发器(本批才补上事务)' },
-  { f: 'apps/api/sandbox-mirror-jury.mjs', 类: 'B', 干什么: '沙箱镜像' },
-  { f: 'apps/api/stored-value-reversal.mjs', 类: 'B', 干什么: '储值冲销' },
-]
-const noTxn = []
-for (const s of SITES) {
-  const src = existsSync(join(ROOT, s.f)) ? readFileSync(join(ROOT, s.f), 'utf8') : ''
-  const has = /BEGIN IMMEDIATE|BEGIN TRANSACTION/.test(src) && /COMMIT/.test(src) && /ROLLBACK/.test(src)
-  if (!has) noTxn.push(s.f)
-}
-check(`① 白名单式:九处(A 类 ${SITES.filter((s) => s.类 === 'A').length} + B 类 ${SITES.filter((s) => s.类 === 'B').length})`
-  + '逐个必须有 BEGIN / COMMIT / ROLLBACK 三件 —— 少一件就点名',
+/* 🔴 清单**不再手写**,由 `guard-scan.mjs` 的 `scanWriteSites()` 现扫 ——
+   与生成清单的那把尺**是同一个函数**,不是抄一遍(抄一遍就会各自漂:03z 同一提交上清单就过期了)。 */
+const SITES = scanWriteSites(ROOT).withTxn
+const noTxn = SITES.filter((x) => !x.有COMMIT || !x.有ROLLBACK).map((x) => x.f)
+check(`① 白名单式(**清单由同一把尺现扫,不手写**):现扫出 ${SITES.length} 处含事务的写库点,`
+  + '逐个必须 BEGIN + COMMIT + ROLLBACK 三件齐 —— 少一件就点名。'
+  + '手写清单当时写 9 处,现扫**比它多**(漏了 local-server 自己等三处),这就是为什么改成现扫;'
+  + '处数不写死在这句话里 —— 判据不许锚在会变的字面量上',
 noTxn.length === 0, `缺事务:${noTxn.join(' | ')}`)
 
 /* ①b `ledger-guards` 那处是本批补的,单独钉住:它用 db.exec 跑 24 条语句,exec 不是原子的 */
@@ -142,6 +134,6 @@ if (!existsSync(SB)) {
   console.log('   [收尾] 临时副本已删,沙箱库本身一个字节没碰')
 }
 
-console.log(`\n[事务回滚] 九处清单逐个查过(A 类 1 + B 类 8)· 行为层在沙箱**副本**上造病验回滚`)
+console.log(`\n[事务回滚] 含事务的写库点 ${SITES.length} 处(现扫,非手写)· 行为层在沙箱**副本**上造病验回滚`)
 if (fails.length) { console.error(`\n❌ test-txn-rollback ${fails.length}/${checks} 项未过`); process.exit(1) }
 console.log(`\n✅ test-txn-rollback 通过 ${checks} 项`)

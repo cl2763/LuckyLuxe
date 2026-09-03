@@ -10,12 +10,32 @@
 #    临时目录被系统清理 = 4310 屡次「挂掉/数据不见」的根因。该目录已进 .gitignore,数据不入库。
 #    不带参数就用这个默认目录;仍可显式传路径覆盖(老库迁移/多套数据对照时用)。
 #
-# 用法: bash apps/api/start-sandbox.sh [DATA_DIR 路径]
+# 用法: bash apps/api/start-sandbox.sh [DATA_DIR 路径] [--ai-env <env 文件>]
+#
+# --ai-env(04a §四,AI 复测 12 场景用):**可选**,不传 = 现状一个字不变(mock,不花钱)。
+#   传了就 node --env-file-if-exists=<文件> 起 —— 文件里只放五行 AI_*,
+#   **不要**把 apps/api/.env 整份喂进来:那里面同住生产令牌与三家外部密钥,
+#   等于把生产钥匙塞进一个演示/走查用的进程(最小授权)。
 set -euo pipefail
 # 🔴 2026-08-24:传相对路径会踩坑 —— 下面 cd 到 apps/api 之后,
 #   `apps/api/sandbox-data` 会变成 apps/api/apps/api/sandbox-data(新建空库,看起来像"数据又没了")。
 #   所以先在**调用者的当前目录**里把相对路径展开成绝对路径,再 cd。
 ORIG_PWD="$(pwd)"
+# --ai-env <文件>:从参数里摘出来,剩下的仍按「第一个位置参数 = DATA_DIR」处理
+AI_ENV=""
+ARGS=()
+while [ $# -gt 0 ]; do
+  case "$1" in
+    --ai-env) AI_ENV="${2:-}"; shift 2 ;;
+    --ai-env=*) AI_ENV="${1#--ai-env=}"; shift ;;
+    *) ARGS+=("$1"); shift ;;
+  esac
+done
+set -- ${ARGS[@]+"${ARGS[@]}"}
+if [ -n "$AI_ENV" ]; then
+  case "$AI_ENV" in /*) : ;; *) AI_ENV="$ORIG_PWD/$AI_ENV" ;; esac
+  [ -f "$AI_ENV" ] || { echo "!! --ai-env 指的文件不存在:$AI_ENV" >&2; exit 1; }
+fi
 if [ -n "${1:-}" ]; then
   case "$1" in
     /*) : ;;                       # 已是绝对路径
@@ -39,7 +59,12 @@ mkdir -p "$DATA_DIR_ARG"
 printf 'SANDBOX_DATA_DIR=%s\nSANDBOX_PORT=4310\n' "$DATA_DIR_ARG" > "$ENV_FILE"
 pkill -f "PORT=4310" 2>/dev/null || true
 lsof -ti tcp:4310 2>/dev/null | xargs kill 2>/dev/null || true
-PORT=4310 DATA_DIR="$DATA_DIR_ARG" ALLOW_DEMO_ADMIN_LOGIN=true TEST_DB_PATH= nohup node local-server.mjs > /tmp/ll-sandbox-4310.log 2>&1 &
+NODE_ARGS=()
+if [ -n "$AI_ENV" ]; then
+  NODE_ARGS+=("--env-file-if-exists=$AI_ENV")
+  echo "   ⚠️ 带 AI env 起沙箱:$AI_ENV(真模型会**真花钱**;不传 --ai-env 就是现状 mock)"
+fi
+PORT=4310 DATA_DIR="$DATA_DIR_ARG" ALLOW_DEMO_ADMIN_LOGIN=true TEST_DB_PATH= nohup node ${NODE_ARGS[@]+"${NODE_ARGS[@]}"} local-server.mjs > /tmp/ll-sandbox-4310.log 2>&1 &
 for _ in $(seq 1 20); do
   if curl -sf -o /dev/null --max-time 2 "http://127.0.0.1:4310/health"; then
     echo "== 沙箱 4310 已起 =="

@@ -47,6 +47,11 @@ const SHAPES = {
      ③ 现在:要求账号密码对**紧邻**密码词(中间不超过 12 字、且不含 `/` 与空格),
         并排除左侧是已知路径段的情况。真凭据长的是「凭据(a/b)」这个样子,不是「GET /admin/x/y」。 */
   账号密码对: /(?:密码|凭据|口令)[^\n\/\s]{0,12}?[((]?\b([a-z][a-z0-9_-]{2,})\/([A-Za-z0-9!@#$%^&*_.-]{6,})\b/gi,
+  /* 🔴 04a §四 前置(店主点名):**env 文件那一行的形态** —— `AI_API_KEY=sk-…`。
+     上面「密码赋值」那条要求带引号、且 `\bAPI_KEY\b` 在 `AI_API_KEY` 里因为前面是下划线而不成立,
+     所以整整一类 `.env` 形态原来一处都咬不到。AI 复测要往仓边上放一个只装钥匙的 env 文件,
+     这一类必须先能被咬住 —— 万一哪天有人把它 `git add` 了,是这把刀拦下来。 */
+  env钥匙行: /^[A-Z][A-Z0-9_]*(?:API_KEY|SECRET|TOKEN|PASSWORD|PASSWD)[A-Z0-9_]*\s*=\s*['"]?([A-Za-z0-9_-]{12,})['"]?\s*$/gm,
 }
 
 /* 白名单:key = `文件:命中值`,value = 理由(随码复核) */
@@ -78,6 +83,8 @@ const CANARY = [
   { what: '会话令牌', text: "const T = 'sess_fakecanary_zz9zz9_deadbeef'" },
   { what: '密码赋值', text: "login({ password: 'CANARY-not-a-real-pw' })" },
   { what: '账号密码对', text: '本地测试凭据(canaryuser/CanaryFake123)授权自动化' },
+  /* 04a:env 文件那一行(店主点名)。值是明示为假的 canary,形态与真钥匙同形。 */
+  { what: 'env钥匙行', text: 'AI_API_KEY=sk-canaryfake0000000000notreal' },
 ]
 
 const files = execFileSync('git', ['-c', 'core.quotepath=false', 'ls-files', '-z'], { cwd: ROOT, encoding: 'utf8' })
@@ -113,7 +120,7 @@ const missed = CANARY.filter((c) => {
   const rx = SHAPES[c.what]; rx.lastIndex = 0
   return !rx.test(c.text)
 })
-check('② 🔴 零命中先证刀能咬:三个明示为假的已知阳性(会话令牌/密码赋值/账号密码对)必须全被咬中',
+check('② 🔴 零命中先证刀能咬:四个明示为假的已知阳性(会话令牌/密码赋值/账号密码对/**env 钥匙行**)必须全被咬中',
   missed.length === 0, `咬不到:${missed.map((c) => c.what).join(' | ')}`)
 
 /* ③ 反向守:扫描面没缩水(判据覆盖面要有判据) */

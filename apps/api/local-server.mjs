@@ -17,6 +17,7 @@ import { createStoredValueReversal } from './stored-value-reversal.mjs'   // 储
 import { createBusinessHoursRoutes } from './business-hours-routes.mjs'   // 营业时间两条路由(强制设置批边改边拆)
 import { createOrderBadges, bookingSourceText, bookingStatusText } from './order-badges.mjs'
 import { installLedgerGuards, backfillTenantKindOnce, LEDGER_TRIGGER_NAMES } from './ledger-guards.mjs'
+import { backfillIdentities, createIdentityUpsert } from './user-identity.mjs'   // D130 身份归属(公约②:边改边拆)
 import { createQuoteSerialize } from './quote-serialize.mjs'          // AI 报价域序列化(公约②)
 import { createDemoReset, isDemoTenant, PROTECTED_REAL_TENANTS } from './demo-reset.mjs'   // 演示店归属判据/黑名单/重置唯一入口(公约①)
 import { demoSeedTag, ensureDemoMarkColumns } from './demo-mark.mjs'   // D121:演示标记唯一出口
@@ -5444,6 +5445,7 @@ function tenantMemberTiers(tenantId = currentTenantId()) {
 const { memberCodeForUserId, displayNameForUserId, userIdFromMemberCode, isGenericDisplayName } = createMemberCode({ db })
 /* D127:本店档案唯一出口。**必须排在 displayNameForUserId 之后** —— 它是 const,
    之前我把这行放在 4490,服务直接 TDZ 起不来(判据是回归的启动那一步咬出来的)。 */
+const upsertUserIdentity = createIdentityUpsert({ db, iso, randomId, currentTenantId })
 const { profileIdInTenant, registerEmailUser } = createTenantProfile({ db, validTenantId, randomId, displayNameForUserId, apiError, serializeUser, upsertUserIdentity })
 const storeDirectory = createStoreDirectory({ db })
 const { pricingCategories, serializePricingCategory, serializePricingItem, pricingItemShape } = createPricingSerialize({
@@ -5563,26 +5565,8 @@ function resolveUserByUnionId(unionId, tenantId = currentTenantId()) {
   `).get(unionId, tenantId) || null
 }
 
-function upsertUserIdentity({ userId, provider, providerUserId, unionId = '', email = '', phone = '' }) {
-  if (!userId || !provider || !providerUserId) return
-  const now = iso(new Date())
-  // 一店一行:同一 openid 在每家店各挂一行(唯一键=租户+provider+providerUserId)
-  const ownerTenant = (db.prepare('SELECT tenant_id FROM users WHERE id = ?').get(userId) || {}).tenant_id || currentTenantId()
-  const existing = db.prepare('SELECT id FROM user_identities WHERE provider = ? AND provider_user_id = ? AND tenant_id = ?').get(provider, providerUserId, ownerTenant)
-  if (existing) {
-    db.prepare(`
-      UPDATE user_identities
-      SET user_id = ?, union_id = COALESCE(NULLIF(?, ''), union_id), email = COALESCE(NULLIF(?, ''), email),
-          phone = COALESCE(NULLIF(?, ''), phone), updated_at = ?
-      WHERE id = ?
-    `).run(userId, unionId, email, phone, now, existing.id)
-    return
-  }
-  db.prepare(`
-    INSERT INTO user_identities (id, user_id, provider, provider_user_id, union_id, email, phone, created_at, updated_at, tenant_id)
-    VALUES (?, ?, ?, ?, NULLIF(?, ''), NULLIF(?, ''), NULLIF(?, ''), ?, ?, ?)
-  `).run(randomId('identity'), userId, provider, providerUserId, unionId, email, phone, now, now, ownerTenant)
-}
+/* upsertUserIdentity 搬去 `./user-identity.mjs`(D130 同域;逻辑一个字没改)——
+   定义提到 5448 行之前,因为 createTenantProfile 那一行要把它当值传进去(函数提升没了就 TDZ)。 */
 
 function serializeBooking(row, lang = 'zh') {
   const service = row.service_id ? getService(row.service_id) : null
@@ -17328,21 +17312,10 @@ ensureListedColumn(db)
 }
 // installLedgerGuards 挪到所有建表跑完之后(全新库这里还没有 settlements 表,装到一半会崩)
 
-// 统一身份回填:早期用户只有 users 表字段、没有 user_identities 记录,补齐映射。
-db.exec(`
-  INSERT OR IGNORE INTO user_identities (id, user_id, provider, provider_user_id, email, created_at, updated_at)
-  SELECT 'identity-bf-' || lower(hex(randomblob(6))), id, 'email', lower(email), lower(email), datetime('now'), datetime('now')
-  FROM users WHERE email IS NOT NULL AND email != '';
-  INSERT OR IGNORE INTO user_identities (id, user_id, provider, provider_user_id, created_at, updated_at)
-  SELECT 'identity-bf-' || lower(hex(randomblob(6))), id, 'wechat_miniprogram', wechat_open_id, datetime('now'), datetime('now')
-  FROM users WHERE wechat_open_id IS NOT NULL AND wechat_open_id != '';
-  INSERT OR IGNORE INTO user_identities (id, user_id, provider, provider_user_id, created_at, updated_at)
-  SELECT 'identity-bf-' || lower(hex(randomblob(6))), id, 'google', google_id, datetime('now'), datetime('now')
-  FROM users WHERE google_id IS NOT NULL AND google_id != '';
-  INSERT OR IGNORE INTO user_identities (id, user_id, provider, provider_user_id, phone, created_at, updated_at)
-  SELECT 'identity-bf-' || lower(hex(randomblob(6))), id, 'phone', phone, phone, datetime('now'), datetime('now')
-  FROM users WHERE phone IS NOT NULL AND phone != '';
-`)
+/* 统一身份回填 —— D130 起搬去 `./user-identity.mjs`(店主 04a §二)。
+   病根:那四条 INSERT 原来都不带 tenant_id,而列定义带 `DEFAULT 'lucky-luxe'`,
+   于是每次启动都把别店顾客的身份回填成旗舰店的(本机库现测 96 行)。 */
+backfillIdentities(db)
 /* ===== P1 结算闭环(2026-08-08 原稿)=====
    一次结算 = 一个 settlement_group;组内一位被服务者一张 settlement(带朋友来就是多张)。
    金额**全部由后端算**,前端只显示返回值 —— 两条恒等式由 assertSettlementInvariants 在

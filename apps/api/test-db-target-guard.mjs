@@ -19,10 +19,12 @@
    于是**按它算出来的行号全是错的**(03t 现测:admin.js 8551 → 8504,少 47 行,
    我因此连报错三次条数与位置)。同族:块注释也必须**保住换行**再置空。
    (本注释刻意不写出那个正则原文(略)。 */
-import { readFileSync } from 'node:fs'
+import { readFileSync, existsSync } from 'node:fs'
 import { join } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { execFileSync } from 'node:child_process'
+import { isKnife, KNIVES, KNIVES_CAP, NOT_A_DB, scanWriteSites, renderChecklist, STAMP_LINE,
+  isRealWriter, stripRegex, stripStrings, bare as bareOf } from '../../tools/guard-scan.mjs'
 
 const ROOT = join(fileURLToPath(new URL('.', import.meta.url)), '..', '..')
 let checks = 0
@@ -36,8 +38,11 @@ const check = (name, cond, detail = '') => {
 /* 底数:git ls-files 递归全量(排除测试与本刀自身) */
 const tracked = execFileSync('git', ['-c', 'core.quotepath=false', 'ls-files', '-z'], { cwd: ROOT, encoding: 'utf8' })
   .split('\0').filter(Boolean)
-const CAND = tracked.filter((f) => /^(tools|apps\/api)\/.*\.(mjs|sh)$/.test(f)
-  && !/\/(test-|run-)/.test(f) && !f.endsWith('test-db-target-guard.mjs'))
+/* 排除面 = 「刀本身」,来自 `tools/guard-scan.mjs` 的 `isKnife`(**唯一一份**,带理由 + 棘轮)。
+   04a 病二:03z 那份清单把生成器自己列成了「含事务的写库点」,而更坏的一面是
+   **它同时把生成器当成"接了护栏"** —— 因为 `requireTarget` 那个词在生成器里是尺子的字面量。
+   刀咬自己,两个方向都会说谎。 */
+const CAND = tracked.filter((f) => /^(tools|apps\/api)\/.*\.(mjs|sh)$/.test(f) && !isKnife(f))
 
 /* 写库的机制定义(先写类定义,再给机械证据) */
 const WRITES = /DatabaseSync|\.prepare\([^)]*\)\s*\.run\(|db\.exec\(|method:\s*['"](POST|PUT|PATCH|DELETE)['"]/
@@ -95,10 +100,7 @@ for (const f of CAND) {
 
 /* 白名单:确有理由保留默认目标的,逐条写理由(目前为空 —— 一个都不该有) */
 /* 非数据库目标的白名单(理由随码 + 什么时候要动) */
-const NOT_A_DB = {
-  'tools/ops-cos-delete.mjs': '打的是腾讯云 COS 对象存储,不是数据库;钥匙从 env 读、--yes 才真删。什么时候要动:若它开始写库',
-  'tools/smoke-cos-upload.mjs': 'COS 上传冒烟,不碰数据库。什么时候要动:若它开始写库',
-}
+/* NOT_A_DB 搬去 `tools/guard-scan.mjs` —— 清单尾行要用同一份来解释「A 类未接护栏」那个差额 */
 const ALLOW_DEFAULT = {
   /* 唯一例外:AI_BASE_URL 是**模型网关地址,不是数据库/服务库** —— 它命中只因为名字带 BASE_URL。
      模型网关有默认值是对的(默认走 mock,不配 key 就不打真模型),与「写库不许有默认目标」无关。
@@ -232,6 +234,87 @@ const guarded = writers.filter((w) => w.guarded).length
    报数的那一行和判据必须是同一把尺,否则人看着尾行以为还差 4 个没接,
    而判据早就绿了 —— 归族「判据自述须与行为一致」,只是这次错在**自述**那一侧。
    改法:尾行直接用判据算出来的 A/B 两个数组,不再自己算一遍。 */
+/* ══ ④ 🔴 常驻:《写库脚本护栏三列清单》必须 ≡ 当前提交的现扫输出(店主 04a §一 病二 第 1 条)══
+   案由:03z 把清单改成「由刀生成」,可**同一个提交上它就过期了** ——
+   `0ec3bff` 自己新增了两个写库脚本,清单里一个都没有,而 `tools/migrate-cross-tenant-bookings.mjs`
+   恰恰**正是这份清单该管的东西**(真写库点、真事务),清单上没有它,清单的意义就丢了一半。
+   店主的话:**「没有这一条,『由刀生成』只是把手写的时机换了个人。」**
+   ——「生成于提交」那一行按行剔掉(它每次提交都变,不是内容)。 */
+const CHECKLIST = join(ROOT, 'handoff', '写库脚本护栏三列清单.md')
+const stripStamp = (t) => t.split('\n').filter((l) => !STAMP_LINE.test(l)).join('\n')
+const liveScan = scanWriteSites(ROOT)
+const liveMd = stripStamp(renderChecklist(liveScan, 'x'))
+let fileMd = ''
+try { fileMd = stripStamp(readFileSync(CHECKLIST, 'utf8')) } catch { fileMd = '(清单文件不存在)' }
+const firstDiff = (() => {
+  const a = liveMd.split('\n'); const b = fileMd.split('\n')
+  for (let i = 0; i < Math.max(a.length, b.length); i += 1) {
+    if (a[i] !== b[i]) return `第 ${i + 1} 行:现扫「${(a[i] ?? '(无)').slice(0, 70)}」 ≠ 文件「${(b[i] ?? '(无)').slice(0, 70)}」`
+  }
+  return ''
+})()
+check('④ 🔴 《写库脚本护栏三列清单》≡ 当前提交现扫输出 —— 不一致就是**清单过期**,'
+  + '跑 `node tools/gen-guard-checklist.mjs --write` 重生成。'
+  + '(03z 案底:清单在生成它的那个提交上就已经过期,漏掉的正是当批新写的迁移脚本)',
+liveMd === fileMd, firstDiff)
+
+/* ══ ④b 第二层:**机械判据**,不靠列举被测对象 ══
+   第一版我把这一层写成「清单里不许出现 KNIVES 里的那几个文件」——
+   **造病验红当场没红**:把生成器从 KNIVES 里拿掉,判据就不再去找它。
+   那正是店主 08-27 立的「白名单判据 > 黑名单判据」在判据自己身上重演一遍
+   (同族第三案:①c 曾靠「文件里有没有 requireTarget 三个字」判护栏)。
+
+   换成机制判据:**清单里列出的每个文件,写库的证据必须是代码里真的在写,
+   不能是尺子里当判据用的那串字面量。** 剥掉正则字面量与字符串字面量之后还留得下证据的才算数。
+   两层因此能被同一把刀分开(店主 09-01 判据四):
+   谁把某个刀从 KNIVES 里拿掉 → ④ 照样绿(清单跟着重生成就一致了),**④b 红**。 */
+const listed = [...fileMd.matchAll(/^\| `([^`]+)` \|/gm)].map((m) => m[1])
+const fakeWriters = [...new Set(listed)].filter((f) => {
+  try { return !isRealWriter(readFileSync(join(ROOT, f), 'utf8')) } catch { return true }
+})
+check(`④b 🔴 机械判据(**不靠列举被测对象**):清单里列出的 ${new Set(listed).size} 个文件,`
+  + '每一个的「会写库」证据都必须是**代码里真的在写**,不能是尺子里当判据用的字面量 —— '
+  + '剥掉正则/字符串字面量后仍留得下证据才算数。'
+  + '03z 那份清单就把生成器列成了「含事务的写库点」,而它**同时**被当成"接了护栏"'
+  + '(`requireTarget` 在它源码里是尺子的字面量),①c 因此对它是绿的 —— 刀咬自己,两个方向都会说谎',
+fakeWriters.length === 0, fakeWriters.join(' | '))
+
+/* ④b2 反向:排除面**不许藏真写库点**。KNIVES 是人写的表,人会往里塞东西;
+   塞进去一个真会写库的脚本,它就从所有护栏判据上消失了(判据覆盖面要有判据)。 */
+const hidden = Object.keys(KNIVES).filter((f) => {
+  try { return isRealWriter(readFileSync(join(ROOT, f), 'utf8')) } catch { return false }
+})
+check('④b2 反向守:「刀本身」排除面里**不许藏真写库点** —— '
+  + '往表里塞一个真会写库的脚本,它就从所有护栏判据上一起消失了',
+hidden.length === 0, hidden.join(' | '))
+
+/* ④b3 零命中先证刀能咬 + 剥字符串/剥正则的行号自守(给刀用的预处理不许改行号) */
+const CAN_RULER = "const WRITES = /DatabaseSync|db\\.exec\\(/\nconst G = /requireTarget/\n"
+const CAN_REAL = "import { DatabaseSync } from 'node:sqlite'\nconst db = new DatabaseSync(P)\ndb.exec('BEGIN IMMEDIATE')\n"
+const lineSafe = (t) => stripStrings(stripRegex(bareOf(t))).split('\n').length === t.split('\n').length
+check('④b3 🔴 零命中先证刀能咬:尺子形状(字面量长在正则里)必须判成「不是写库点」,'
+  + '真写库形状(new DatabaseSync / db.exec)必须判成「是」;'
+  + '并自守剥正则/剥字符串**不改行号**(店主 03x 收编:预处理吃掉换行,后面每个行号都是错的)',
+!isRealWriter(CAN_RULER) && isRealWriter(CAN_REAL) && lineSafe(CAN_RULER) && lineSafe(CAN_REAL)
+  && lineSafe(readFileSync(join(ROOT, 'apps/api/local-server.mjs'), 'utf8')),
+JSON.stringify({ ruler: isRealWriter(CAN_RULER), real: isRealWriter(CAN_REAL) }))
+
+check(`④c 刀本身排除面棘轮 ≤ ${KNIVES_CAP} 且逐个必须真实存在(声明过期=悄悄扩大排除面)`,
+  Object.keys(KNIVES).length <= KNIVES_CAP && Object.keys(KNIVES).every((k) => existsSync(join(ROOT, k))),
+  Object.keys(KNIVES).filter((k) => !existsSync(join(ROOT, k))).join(' | '))
+
+/* ══ ⑤ 🔴 04a 现测撞出来的一个洞:扫描面是 `git ls-files`,**没 `git add` 的新文件对所有护栏刀是隐形的** ══
+   我造病验红时连造两次都没红,查到最后是因为 `tools/guard-scan.mjs` 当时还没入册 ——
+   刀不是没咬,是**没看见**。一个新写的写库脚本在 add 之前,零默认目标 / 必接护栏 / 含事务验回滚
+   三条判据一条都不管它。归族「判据覆盖面要有判据」(03o:目录不递归 → 20 个脚本整体漏网)。
+   所以交付前工作区不许躺着未入册的 tools/**.mjs|sh 与 apps/api/**.mjs|sh。 */
+const untracked = execFileSync('git', ['-c', 'core.quotepath=false', 'ls-files', '-z', '--others', '--exclude-standard'],
+  { cwd: ROOT, encoding: 'utf8' }).split('\0').filter((f) => /^(tools|apps\/api)\/.*\.(mjs|sh)$/.test(f))
+check('⑤ 🔴 工作区不许有**未入册**的 tools/**.mjs|sh 与 apps/api/**.mjs|sh —— '
+  + '扫描面是 `git ls-files`,没 `git add` 的新文件对每一把护栏刀都是隐形的'
+  + '(04a 现测:造病连两次没红,原因是新写的尺子文件当时还没入册,刀不是没咬,是没看见)',
+untracked.length === 0, untracked.join(' | '))
+
 const aGuarded = A.filter((w) => w.guarded).length
 /* 分母也得说全:①c 判的是「A 类里**该有护栏的**」,NOT_A_DB(打 COS 对象存储、不碰库的两个)
    不在判据里。尾行只写 34/36,人会以为还差 2 个没接 —— 差额必须当场解释掉,不留给人猜。 */

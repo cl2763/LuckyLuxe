@@ -12,6 +12,12 @@ __pycache__/
 apps/api/.env
 .env.bak.*
 apps/api/.env.bak.*
+# AI 复测(04a §四):密钥走**单独最小 env 文件**,不给沙箱整份 .env
+# (整份里同住 PROD_OWNER_TOKEN / WECHAT_MINI_SECRET / WECOM_* / COS_SECRET_* —— 那是把生产令牌塞进演示进程)
+.env.*
+apps/api/.env.*
+!apps/api/.env.example
+!.env.example
 
 # Local demo database/runtime data (真实经营数据/初始密码文件,绝不入库)
 # 注意: apps/api/data/ 里的 AI 知识库种子(ai-customer-service/)必须入库,只挡数据库文件
