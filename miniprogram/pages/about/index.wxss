@@ -1,0 +1,7 @@
+.about-page { padding: 24rpx; }
+.about-card { background: #fff; border-radius: 16rpx; padding: 32rpx; }
+.about-title { font-size: 32rpx; font-weight: 600; margin-bottom: 24rpx; }
+.about-row { display: flex; justify-content: space-between; padding: 16rpx 0; border-bottom: 1rpx solid #f0eeec; }
+.about-k { color: #8a8079; font-size: 26rpx; }
+.about-v { color: #241f1d; font-size: 26rpx; }
+.about-note { margin-top: 24rpx; color: #8a8079; font-size: 24rpx; line-height: 1.6; }

@@ -166,7 +166,8 @@ function kickToLogin(silent) {
 /* 没有门店上下文时的守卫(店主 08-23 裁定):顾客端**一个数据请求都不许发** ——
    空租户头到了后端会被当成默认店,顾客照样看到别人家的服务与价格(静默替换)。
    放行的是平台级接口(选店页自己要用),其余一律先把人送去选店/扫码。 */
-const TENANT_FREE_PATHS = ['/shops']
+/* `/health` 是公开的服务自述口(版本指纹),不属于任何门店 —— 04f-3「关于」页读它 */
+const TENANT_FREE_PATHS = ['/shops', '/health']
 let pickingStore = false
 function goPickStore() {
   if (pickingStore) return
@@ -964,7 +965,12 @@ async function getAdminDashboardData() {
   }
 }
 
+/* 04f-3 三端版本指纹:「关于」页读服务自述的版本。
+   开一个**窄出口**而不是把 raw `request` 暴露给所有页面 —— 出口越窄,波及面越小。 */
+function getHealth() { return request('/health', 'GET') }
+
 module.exports = {
+  getHealth,
   getHeroSlides,
   API_BASE,
   DEMO_USER_ID,

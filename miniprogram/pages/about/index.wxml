@@ -1,0 +1,14 @@
+<view class="about-page">
+  <view class="about-card">
+    <view class="about-title">版本信息</view>
+    <block wx:if="{{failed}}">
+      <view class="about-row"><text class="about-k">状态</text><text class="about-v">{{failed}}</text></view>
+    </block>
+    <block wx:else>
+      <view class="about-row"><text class="about-k">前端版本</text><text class="about-v" id="aboutBuild">{{build || '—'}}</text></view>
+      <view class="about-row"><text class="about-k">提交号</text><text class="about-v">{{commit || '—'}}</text></view>
+      <view class="about-row"><text class="about-k">服务启动</text><text class="about-v">{{builtAt || '—'}}</text></view>
+    </block>
+    <view class="about-note">这三项由服务端下发。网页后台左下角显示的是同一个前端版本号 —— 两边对不上,说明有一端的缓存是旧的。</view>
+  </view>
+</view>

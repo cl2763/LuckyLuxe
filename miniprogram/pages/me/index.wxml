@@ -180,6 +180,12 @@
     <button class="account-btn danger" bindtap="logout">{{lang === 'en' ? 'Sign out' : '退出登录'}}</button>
   </view>
 
+  <!-- 04f-3 三端版本指纹:入口挂在这里(只动 wxml —— `me/index.js` 638 行已超红线、现状冻结) -->
+  <navigator class="account-actions card" url="/pages/about/index" hover-class="none">
+    <view class="auth-title">{{lang === 'en' ? 'About' : '关于'}}</view>
+    <view class="auth-desc">{{lang === 'en' ? 'App version and service fingerprint.' : '版本信息与服务指纹'}}</view>
+  </navigator>
+
   <view wx:if="{{authModalVisible}}" class="auth-mask">
     <view class="auth-panel simple-login-panel">
       <button class="auth-close" bindtap="closeLoginPanel">×</button>

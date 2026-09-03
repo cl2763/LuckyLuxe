@@ -16,6 +16,7 @@ import { hoursUnsetOfStore, hoursSavable, HOURS_GATE_TEXT } from './hours-gate.m
 import { createStoredValueReversal } from './stored-value-reversal.mjs'   // 储值行冲销(裁定2 准开口,08-30d)
 import { tenantDefaultTargets, dropTenantDefaults } from './tenant-default-drop.mjs'   // D126/D131 去列默认值(公约①)
 import { rebuildTenantScopedUnique } from './schema-unique-rebuild.mjs'   // 唯一约束按租户重建(公约②)   // D126/D131 去列默认值(公约①)
+import { createAppVersion } from './app-version.mjs'   // 04f-3 三端版本指纹(公约①)
 import { createKbRoutes } from './kb-routes.mjs'   // 知识库路由(D134 现修那一批搬出,公约②)
 import { createBusinessHoursRoutes } from './business-hours-routes.mjs'   // 营业时间两条路由(强制设置批边改边拆)
 import { createOrderBadges, bookingSourceText, bookingStatusText } from './order-badges.mjs'
@@ -7044,6 +7045,7 @@ const refundApi = createAccountRefund({
 })
 const heroSlidesApi = createHeroSlides({ db, apiError, iso, randomId, currentTenantId })
 const cashNotesApi = createCashNotes({ db, apiError, iso, randomId, currentTenantId, formatMoneyCents: (v, t, m) => formatMoneyCents(v, t, m) })
+const appVersion = createAppVersion({ readFileSync, statSync, join, webRoot, fingerprintHtml })
 const kbRoutes = createKbRoutes({
   apiError, json, readBody, db, currentTenantId, iso, randomId, liveTenantFacts,
   tenantKbFacts: (tid) => tenantKbFacts(tid),
@@ -11019,12 +11021,8 @@ async function route(req, res) {
       /* 🔴 2026-08-30(退回件②):这台服务**实发的前端是哪一版**,由服务自己说 ——
          adminBuild = admin.html 现算的 LL_BUILD(与页面左下角同源)。restore 拉错版本、
          看错端口,店主报的版本串与这里一对就现形,不再猜「你测的和她用的是不是同一份」。 */
-      adminBuild: (() => {
-        try {
-          const m = /LL_BUILD="?([0-9a-f]+)"?/.exec(fingerprintHtml(readFileSync(join(webRoot, 'admin.html'), 'utf8'), { webRoot, statSync }))
-          return m ? m[1] : 'none'
-        } catch (e) { return 'error' }
-      })(),
+      adminBuild: appVersion.servedAdminBuild(),   // 04f-3 三端指纹,出口在 ./app-version.mjs
+      version: appVersion.version(),
       /* 🔴 测试护栏(店主 08-24 裁 C):**这台服务往哪个库写**,由服务器自己说。
          套件开跑前问这一句,不是 'test' 就拒跑 —— 判据律:判据要能证伪"我会不会写进真库",
          而不是问一个"记得设就设、忘了就没有"的环境变量。
