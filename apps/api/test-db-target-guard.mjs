@@ -315,6 +315,23 @@ check('⑤ 🔴 工作区不许有**未入册**的 tools/**.mjs|sh 与 apps/api/
   + '(04a 现测:造病连两次没红,原因是新写的尺子文件当时还没入册,刀不是没咬,是没看见)',
 untracked.length === 0, untracked.join(' | '))
 
+/* ⑤b 🔴 ⑤ 自己的盲区(店主 04b §一.1 现测立刀):⑤ 用的是 `--others --exclude-standard`,
+   所以**谁往 `.gitignore` 里加一行 `tools/foo.mjs`,那个脚本对 ⑤ 和三条护栏刀就都不存在了**。
+   一个被忽略的写库脚本照样能跑、照样能写生产。店主原话:**「趁 0 立刀」**。
+   例外要写理由(目录级的第三方产物,不是我们自己的脚本)。 */
+const IGNORED_OK = {
+  /* 目前为空 —— 我们自己的 .mjs/.sh 一个都不该被 ignore。
+     要加必须写清「为什么这个脚本必须待在仓外」并报批。 */
+}
+const ignoredScripts = execFileSync('git', ['-c', 'core.quotepath=false', 'ls-files', '-z', '--others', '--ignored', '--exclude-standard'],
+  { cwd: ROOT, encoding: 'utf8' }).split('\0')
+  .filter((f) => /^(tools|apps\/api)\/.*\.(mjs|sh)$/.test(f) && !/(^|\/)node_modules\//.test(f) && !IGNORED_OK[f])
+check('⑤b 🔴 不许有**被 .gitignore 挡住**的 tools/**.mjs|sh 与 apps/api/**.mjs|sh —— '
+  + '⑤ 用 `--others --exclude-standard`,往 .gitignore 加一行就能让一个写库脚本'
+  + '对 ⑤ 和三条护栏刀同时消失,而它照样跑得起来、照样写得了生产'
+  + `(例外白名单 ${Object.keys(IGNORED_OK).length} 条,要加必须写理由)`,
+ignoredScripts.length === 0, ignoredScripts.join(' | '))
+
 const aGuarded = A.filter((w) => w.guarded).length
 /* 分母也得说全:①c 判的是「A 类里**该有护栏的**」,NOT_A_DB(打 COS 对象存储、不碰库的两个)
    不在判据里。尾行只写 34/36,人会以为还差 2 个没接 —— 差额必须当场解释掉,不留给人猜。 */

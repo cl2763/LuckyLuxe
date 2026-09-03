@@ -121,23 +121,49 @@ const willCreate = plan.filter((p) => !p.目标档案).length
 const willMove = plan.reduce((s, p) => s + p.follow.reduce((a, x) => a + x.n, 0), 0)
 console.log(`\n  预计:新建档案 ${willCreate} 份 · 复用已有 ${plan.length - willCreate} 份 · 跟单行 ${willMove} 行一起指过去`)
 
-/* ── 第二遍:**落单的跟单行**(04a 造病验红当场撞出来的一个洞)──
+/* ── 第二遍:**落单的跟单行**(04a 造病验红当场撞出来的一个洞;04b §一.2 把口径再收窄一档)──
    造病跑过一次(或旧版脚本跑过一次)之后,单已经指到新档案、跟单行还留在旧档案上。
    这时 `bookings` 那条尺是 0、待处置也是 0 —— **本脚本按单迁移,修不回来**。
-   所以补一遍按行修:只认**证据确凿**的那一种 ——
-   这一行自己串味(`x.tenant_id ≠ 它 user 的 tenant_id`),而**它那张单的顾客恰好就在 x 的租户里**。
-   ⚠️ 不写成「跟单行的 user 必须等于单的 user」:那条不成立 ——
-   带朋友来时一张单上有多张结算单、各是各的人(本机库现测这种情形 0 条,但设计上合法)。
-   窄口径保证碰不到合法的那一种:朋友那张单的人本来就在对的租户里,不满足「自己串味」。 */
-const orphanRows = () => FOLLOW_ALL.filter((t) => HAS_TENANT.has(t)).flatMap((t) => all(
-  `SELECT ? AS t, x.rowid AS rid, x.user_id AS old_uid, b.user_id AS new_uid, x.tenant_id AS tt
+
+   🔴 04b 店主咬出:上一版的口径「这一行自己串味 **且** 这张单的顾客在这一行的租户里」
+   **不够窄** —— 我自己写的那个反例正好能穿过去:
+   A 在小婕店的单上,朋友 B 的结算单一行,而 **B 的档案也被 DEFAULT 吞进了旗舰店**
+   (这正是本脚本要处理的那一群人)→ 「这一行串味」成立、「单的顾客 A 在小婕店」也成立
+   → **B 的结算单会被指给 A**。本机库现测 0 条不等于设计上不会有。
+
+   收窄后的口径 = 上面两条 **再加一条:旧档案与新档案是同一个人**
+   (`wechat_open_id` / `phone` / `email` 任一相等且非空)。
+   新建路径本来就是把这三个字段复制过去的,所以**真正落单的行一定满足**;
+   「带朋友」那种不满足 —— 它们**一行不动**,只打印,归入「⚠️ 要人看」。 */
+const sameIdentity = (a, b) => ['wechat_open_id', 'phone', 'email']
+  .some((k) => a[k] && b[k] && String(a[k]) === String(b[k]))
+const orphanAll = () => FOLLOW_ALL.filter((t) => HAS_TENANT.has(t)).flatMap((t) => all(
+  `SELECT ? AS t, x.rowid AS rid, x.user_id AS old_uid, b.user_id AS new_uid, x.tenant_id AS tt,
+          u.wechat_open_id AS o_openid, u.phone AS o_phone, u.email AS o_email, u.display_name AS o_name,
+          bu.wechat_open_id AS n_openid, bu.phone AS n_phone, bu.email AS n_email, bu.display_name AS n_name
      FROM "${t}" x JOIN users u ON u.id = x.user_id
      JOIN bookings b ON b.id = x.booking_id JOIN users bu ON bu.id = b.user_id
     WHERE x.tenant_id <> u.tenant_id AND bu.tenant_id = x.tenant_id`, t))
-const orphans = orphanRows()
+const orphanSplit = () => {
+  const rows = orphanAll()
+  const same = (r) => sameIdentity(
+    { wechat_open_id: r.o_openid, phone: r.o_phone, email: r.o_email },
+    { wechat_open_id: r.n_openid, phone: r.n_phone, email: r.n_email })
+  return { fix: rows.filter(same), human: rows.filter((r) => !same(r)) }
+}
+const { fix: orphans, human: orphansHuman } = orphanSplit()
 if (orphans.length) {
-  console.log(`\n  🔧 落单的跟单行:${orphans.length} 行(单已经指到新档案、这些行还留在旧档案上)`)
+  console.log(`\n  🔧 落单的跟单行:${orphans.length} 行(单已经指到新档案、这些行还留在旧档案上;**同一个人**)`)
   for (const o of orphans) console.log(`      ${o.t} rowid=${o.rid} ${String(o.old_uid).slice(0, 18)} → ${String(o.new_uid).slice(0, 18)}(租户 ${o.tt})`)
+}
+if (orphansHuman.length) {
+  console.log(`\n  ⚠️ **要人看,本脚本一行不动**:${orphansHuman.length} 行 —— `
+    + `这一行自己串味、单的顾客也在这个租户里,**但旧档案与新档案不是同一个人**`)
+  console.log('     (典型形状:带朋友来 —— 朋友自己的档案也被吞进了旗舰店。指过去就是把两个人合成一个人。)')
+  for (const o of orphansHuman) {
+    console.log(`      ${o.t} rowid=${o.rid} 旧档案「${o.o_name || '?'}」→ 单的顾客「${o.n_name || '?'}」`
+      + ` | 身份字段无一相等(openid/phone/email)`)
+  }
 }
 
 const badBefore = printRuler('迁移前 · 尺')
@@ -212,7 +238,8 @@ const okShape = shapeBad.length === 0
 console.log(`\n  差值形状:${okShape ? `✔ 只多了 ${willCreate} 份档案,别的表行数零变化` : `🔴 不对(${shapeBad.map(([t, d]) => `${t}${d > 0 ? '+' : ''}${d}`).join(' · ')})—— 请拿备份回滚`}`)
 console.log(`  逐表验尺:${badAfter.length === 0 ? '✔ bookings + 跟单表全部 0' : `🔴 还有串味:${badAfter.map((x) => `${x.t}=${x.n}`).join(' · ')}`}`)
 if (badAfter.length && !rows.length && !orphans.length) {
-  console.log('  ⚠️ 尺红,但待处置 0 条、落单行也 0 行 —— 本脚本修不了这一种,**停下来报店主**,不要反复重跑')
+  console.log(`  ⚠️ 尺红,但待处置 0 条、可修的落单行也 0 行${orphansHuman.length ? `(另有 ${orphansHuman.length} 行属「要人看」,按口径不许动)` : ''}`
+    + ' —— 本脚本修不了这一种,**停下来报店主**,不要反复重跑')
 }
 if (SKIP_FOLLOW.length && badAfter.length) console.log('  (造病模式下红是**对的** —— 它证明这把尺真的在看那几张跟单表)')
 db.close()

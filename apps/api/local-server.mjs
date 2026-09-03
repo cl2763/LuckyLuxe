@@ -17,7 +17,8 @@ import { createStoredValueReversal } from './stored-value-reversal.mjs'   // 储
 import { createBusinessHoursRoutes } from './business-hours-routes.mjs'   // 营业时间两条路由(强制设置批边改边拆)
 import { createOrderBadges, bookingSourceText, bookingStatusText } from './order-badges.mjs'
 import { installLedgerGuards, backfillTenantKindOnce, LEDGER_TRIGGER_NAMES } from './ledger-guards.mjs'
-import { backfillIdentities, createIdentityUpsert } from './user-identity.mjs'   // D130 身份归属(公约②:边改边拆)
+import { backfillIdentities, createIdentityUpsert } from './user-identity.mjs'
+import { createReminderTasks } from './reminder-tasks.mjs'   // D131 提醒任务域(公约②:边改边拆)   // D130 身份归属(公约②:边改边拆)
 import { createQuoteSerialize } from './quote-serialize.mjs'          // AI 报价域序列化(公约②)
 import { createDemoReset, isDemoTenant, PROTECTED_REAL_TENANTS } from './demo-reset.mjs'   // 演示店归属判据/黑名单/重置唯一入口(公约①)
 import { demoSeedTag, ensureDemoMarkColumns } from './demo-mark.mjs'   // D121:演示标记唯一出口
@@ -1200,14 +1201,16 @@ function seedDatabase() {
     ['depositAmount', '50'],
     ['currency', 'CAD']
   ]) kbFactStmt.run(DEFAULT_TENANT_ID, key, value, 'seed', iso(new Date()))
-  db.prepare('INSERT OR IGNORE INTO stores (id, name, name_en, address, phone, timezone, currency) VALUES (?, ?, ?, ?, ?, ?, ?)').run('store-ontario-01', 'LUVIA 半径', 'LUVIA', 'Address TBD', 'Phone TBD', 'America/Toronto', 'CAD')
+  /* 🔴 D131(店主 04b §二):首启种子三张表(stores / technicians / services)原来都不写 tenant_id,
+     靠列默认 `lucky-luxe` 凑对。它们本来就是旗舰店的种子 —— 写明白就不再靠默认值。 */
+  db.prepare('INSERT OR IGNORE INTO stores (id, name, name_en, address, phone, timezone, currency, tenant_id) VALUES (?, ?, ?, ?, ?, ?, ?, ?)').run('store-ontario-01', 'LUVIA 半径', 'LUVIA', 'Address TBD', 'Phone TBD', 'America/Toronto', 'CAD', DEFAULT_TENANT_ID)
   const hourStmt = db.prepare('INSERT OR IGNORE INTO business_hours (store_id, weekday, open_time, close_time, is_closed) VALUES (?, ?, ?, ?, ?)')
   for (let weekday = 0; weekday <= 6; weekday += 1) hourStmt.run('store-ontario-01', weekday, '10:00', '19:00', weekday === 1 ? 1 : 0)
 
-  const techStmt = db.prepare('INSERT OR IGNORE INTO technicians (id, store_id, name, title) VALUES (?, ?, ?, ?)')
-  techStmt.run('tech-mia', 'store-ontario-01', 'Mia Chen', 'Nail Artist')
-  techStmt.run('tech-ava', 'store-ontario-01', 'Ava Lin', 'Lash Artist')
-  techStmt.run('tech-lina', 'store-ontario-01', 'Lina Zhou', 'Senior Artist')
+  const techStmt = db.prepare('INSERT OR IGNORE INTO technicians (id, store_id, name, title, tenant_id) VALUES (?, ?, ?, ?, ?)')
+  techStmt.run('tech-mia', 'store-ontario-01', 'Mia Chen', 'Nail Artist', DEFAULT_TENANT_ID)
+  techStmt.run('tech-ava', 'store-ontario-01', 'Ava Lin', 'Lash Artist', DEFAULT_TENANT_ID)
+  techStmt.run('tech-lina', 'store-ontario-01', 'Lina Zhou', 'Senior Artist', DEFAULT_TENANT_ID)
 
   /* 🔴 分类唯一真相律(店主 2026-08-25):**演示种子也是一条写入路径** —— 它原来往
      services.category 里写「法式系列 / 日式款」这类**款式名**,与大类字典各说各的,
@@ -1220,11 +1223,11 @@ function seedDatabase() {
     return row?.id || null
   }
   const serviceStmt = db.prepare(`INSERT OR IGNORE INTO services
-    (id, type, category, category_id, name_zh, name_en, description_zh, description_en, image_url, price_cents, deposit_cents, base_duration_min, sort_order, process_json, notice_json)
-    VALUES (?, ?, '', ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`)
+    (id, type, category, category_id, name_zh, name_en, description_zh, description_en, image_url, price_cents, deposit_cents, base_duration_min, sort_order, process_json, notice_json, tenant_id)
+    VALUES (?, ?, '', ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`)
   for (const service of seedServices) {
     const [id, type] = service
-    serviceStmt.run(id, type, seedCatOf(type), ...service.slice(3, 12), JSON.stringify(service[12]), JSON.stringify(service[13]))
+    serviceStmt.run(id, type, seedCatOf(type), ...service.slice(3, 12), JSON.stringify(service[12]), JSON.stringify(service[13]), DEFAULT_TENANT_ID)
   }
 
   const assignStmt = db.prepare('INSERT OR IGNORE INTO technician_services (technician_id, service_id) VALUES (?, ?)')
@@ -3485,10 +3488,10 @@ function getActiveQuoteForConversation(conversationId) {
   if (!conversationId) return null
   return db.prepare(`
     SELECT * FROM quote_requests
-    WHERE conversation_id = ? AND status = 'PENDING_STAFF'
+    WHERE conversation_id = ? AND tenant_id = ? AND status = 'PENDING_STAFF'
     ORDER BY updated_at DESC
     LIMIT 1
-  `).get(conversationId)
+  `).get(conversationId, currentTenantId())
 }
 
 function quoteWaitingReply(lang = 'zh') {
@@ -3546,15 +3549,15 @@ function hasBookingScheduleFollowupIntent(text = '', state = {}, persistedState 
 function getLatestQuotedQuoteForConversation(conversationId, preferredQuoteId = '') {
   if (!conversationId) return null
   if (preferredQuoteId) {
-    const preferred = db.prepare("SELECT * FROM quote_requests WHERE id = ? AND conversation_id = ? AND status IN ('QUOTED', 'DRAFT_CREATED')").get(preferredQuoteId, conversationId)
+    const preferred = db.prepare("SELECT * FROM quote_requests WHERE id = ? AND conversation_id = ? AND tenant_id = ? AND status IN ('QUOTED', 'DRAFT_CREATED')").get(preferredQuoteId, conversationId)
     if (preferred) return serializeQuoteRequest(preferred)
   }
   const row = db.prepare(`
     SELECT * FROM quote_requests
-    WHERE conversation_id = ? AND status IN ('QUOTED', 'DRAFT_CREATED')
+    WHERE conversation_id = ? AND tenant_id = ? AND status IN ('QUOTED', 'DRAFT_CREATED')
     ORDER BY updated_at DESC
     LIMIT 1
-  `).get(conversationId)
+  `).get(conversationId, currentTenantId())
   return serializeQuoteRequest(row)
 }
 
@@ -4967,26 +4970,17 @@ function createBookingDraft(body = {}, admin = {}) {
   return draft
 }
 
-function scheduleReminderTask({ userId = null, bookingId = null, quoteRequestId = null, conversationId = null, type, channel = 'mock', scheduledAt, payload = {} }) {
-  const id = randomId('reminder')
-  const now = iso(new Date())
-  db.prepare(`
-    INSERT INTO reminder_tasks (id, user_id, booking_id, quote_request_id, conversation_id, type, channel, status, scheduled_at, payload_json, created_at, updated_at)
-    VALUES (?, ?, ?, ?, ?, ?, ?, 'PENDING', ?, ?, ?, ?)
-  `).run(id, userId, bookingId, quoteRequestId, conversationId, type, channel, iso(scheduledAt || new Date()), JSON.stringify(payload), now, now)
-  return id
-}
-
 function createQuoteRequest(body = {}, customer = null) {
   const input = normalizeQuoteRequestInput(body, customer)
   const now = iso(new Date())
+  const tid = tenantForSideEffect('报价单', { userId: input.userId, conversationId: input.conversationId })
   db.prepare(`
     INSERT INTO quote_requests
       (id, conversation_id, user_id, source_channel, service_type, service_id, technician_id, status, customer_message, customer_lang,
        reference_images_json, style_elements_json, missing_questions_json, extension_needed, removal_needed, repair_needed, charms_needed,
-       lower_lash_requested, health_check_clear, ai_reply_json, created_at, updated_at)
+       lower_lash_requested, health_check_clear, ai_reply_json, created_at, updated_at, tenant_id)
     VALUES
-      (?, ?, ?, NULLIF(?, ''), ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+      (?, ?, ?, NULLIF(?, ''), ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
   `).run(
     input.id,
     input.conversationId,
@@ -5009,7 +5003,8 @@ function createQuoteRequest(body = {}, customer = null) {
     input.healthCheckClear,
     JSON.stringify(input.aiReply),
     now,
-    now
+    now,
+    tid
   )
   scheduleReminderTask({
     userId: input.userId,
@@ -5031,10 +5026,10 @@ function upsertActiveQuoteRequest(body = {}, customer = null) {
   if (!input.conversationId) return createQuoteRequest(body, customer)
   const existing = db.prepare(`
     SELECT * FROM quote_requests
-    WHERE conversation_id = ? AND status IN ('PENDING_STAFF', 'NEEDS_INFO')
+    WHERE conversation_id = ? AND tenant_id = ? AND status IN ('PENDING_STAFF', 'NEEDS_INFO')
     ORDER BY updated_at DESC
     LIMIT 1
-  `).get(input.conversationId)
+  `).get(input.conversationId, currentTenantId())
   if (!existing) return createQuoteRequest(body, customer)
 
   const existingImages = parseJson(existing.reference_images_json)
@@ -5221,42 +5216,6 @@ function createQuoteDraftHold(id, body, admin) {
     })
   }
   return { ...quote, bookingDraft: draft, conversation }
-}
-
-function getAdminReminderTasks(admin) {
-  const rows = admin.role === 'staff'
-    ? db.prepare(`
-      SELECT rt.* FROM reminder_tasks rt
-      LEFT JOIN quote_requests qr ON qr.id = rt.quote_request_id
-      WHERE rt.tenant_id = ? AND (qr.technician_id = ? OR qr.technician_id IS NULL)
-      ORDER BY rt.scheduled_at ASC
-      LIMIT 160
-    `).all(currentTenantId(), admin.technicianId)
-    : db.prepare('SELECT * FROM reminder_tasks WHERE tenant_id = ? ORDER BY scheduled_at ASC LIMIT 160').all(currentTenantId())
-  return rows.map((row) => ({
-    id: row.id,
-    userId: row.user_id,
-    bookingId: row.booking_id,
-    quoteRequestId: row.quote_request_id,
-    conversationId: row.conversation_id,
-    type: row.type,
-    channel: row.channel,
-    status: row.status,
-    scheduledAt: row.scheduled_at,
-    sentAt: row.sent_at,
-    payload: parseJson(row.payload_json),
-    createdAt: row.created_at,
-    updatedAt: row.updated_at
-  }))
-}
-
-function markReminderTask(id, status = 'SENT') {
-  const valid = ['PENDING', 'SENT', 'SKIPPED', 'FAILED'].includes(status) ? status : 'SENT'
-  const sentAt = valid === 'SENT' ? iso(new Date()) : null
-  db.prepare('UPDATE reminder_tasks SET status = ?, sent_at = COALESCE(?, sent_at), updated_at = ? WHERE id = ?').run(valid, sentAt, iso(new Date()), id)
-  const row = db.prepare('SELECT * FROM reminder_tasks WHERE id = ?').get(id)
-  if (!row) throw apiError(404, 'NOT_FOUND', 'Reminder task not found.')
-  return row
 }
 
 function normalizeReferenceImages(value) {
@@ -5446,6 +5405,9 @@ const { memberCodeForUserId, displayNameForUserId, userIdFromMemberCode, isGener
 /* D127:本店档案唯一出口。**必须排在 displayNameForUserId 之后** —— 它是 const,
    之前我把这行放在 4490,服务直接 TDZ 起不来(判据是回归的启动那一步咬出来的)。 */
 const upsertUserIdentity = createIdentityUpsert({ db, iso, randomId, currentTenantId })
+/* 提醒任务与「租户来源三选一必须一致」的判断 —— D131 起搬去 `./reminder-tasks.mjs`(公约②:边改边拆) */
+const { tenantForSideEffect, scheduleReminderTask, getAdminReminderTasks, markReminderTask } =
+  createReminderTasks({ db, iso, randomId, apiError, currentTenantId, parseJson })
 const { profileIdInTenant, registerEmailUser } = createTenantProfile({ db, validTenantId, randomId, displayNameForUserId, apiError, serializeUser, upsertUserIdentity })
 const storeDirectory = createStoreDirectory({ db })
 const { pricingCategories, serializePricingCategory, serializePricingItem, pricingItemShape } = createPricingSerialize({
@@ -14333,9 +14295,13 @@ async function route(req, res) {
       insertUser.run(id, `${name}（演示）`, phone, `${id}@demo.local`, JSON.stringify(tags), notes, birthday, currentTenantId())
     }
     // 2. 订单:过去8周完成单(撑起趋势/技师业绩/客户消费档),今天/未来单,取消单
+    /* 🔴 D131(店主 04b §二):演示种子三处(bookings / wechat_conversations / quote_requests)
+       原来都不写 tenant_id。本路由入口已闸死 `currentTenantId() === DEFAULT_TENANT_ID`,
+       所以这里显式写 `currentTenantId()` —— 值与从前一样,但**不再靠列默认值**。 */
+    const seedTenantId = currentTenantId()
     const insertBooking = db.prepare(`INSERT INTO bookings
-      (id, public_code, user_id, store_id, technician_id, service_id, status, appointment_start, appointment_end, addons_json, reference_images_json, source_channel, notes, service_price_cents, deposit_cents, deposit_required_cents, deposit_waived_cents, deposit_waive_reason, member_level_at_booking, final_due_cents, total_duration_min, payment_expires_at, created_at, updated_at)
-      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, '[]', '[]', ?, ?, ?, 5000, 5000, 0, NULL, NULL, ?, ?, ?, ?, ?)`)
+      (id, public_code, user_id, store_id, technician_id, service_id, status, appointment_start, appointment_end, addons_json, reference_images_json, source_channel, notes, service_price_cents, deposit_cents, deposit_required_cents, deposit_waived_cents, deposit_waive_reason, member_level_at_booking, final_due_cents, total_duration_min, payment_expires_at, created_at, updated_at, tenant_id)
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, '[]', '[]', ?, ?, ?, 5000, 5000, 0, NULL, NULL, ?, ?, ?, ?, ?, ?)`)
     const seedBooking = (userIdx, dayOffset, hour, status, svcIdx, techIdx, channel = 'demo-seed') => {
       const service = services[svcIdx % services.length]
       const start = localDateTime(dstr(dayOffset), `${String(hour).padStart(2, '0')}:00`)
@@ -14348,7 +14314,7 @@ async function route(req, res) {
             randomId('booking'), `${publicCode()}${attempt ? Math.floor(Math.random() * 900 + 100) : ''}`, demoCustomers[userIdx % demoCustomers.length][0], storeId,
             techs[techIdx % techs.length], service.id, status, iso(start), iso(end), channel, '演示订单',
             price, price - 5000, service.base_duration_min,
-            status === 'PENDING_PAYMENT' ? iso(addMinutes(now, 60)) : null, iso(start), iso(start)
+            status === 'PENDING_PAYMENT' ? iso(addMinutes(now, 60)) : null, iso(start), iso(start), seedTenantId
           )
           return price
         } catch (error) {
@@ -14379,8 +14345,8 @@ async function route(req, res) {
     seedBooking(7, -1, 17, 'CANCELLED', 5, 0); bookingCount += 1
     // 3. 会话:一条待人工 + 一条 AI 处理中(绑定到林小雅,演示互链)
     const insertConversation = db.prepare(`INSERT INTO wechat_conversations
-      (id, provider, external_user_id, open_kfid, source_channel, status, last_intent, last_message, ai_reply_json, transcript_json, raw_event_json, created_at, updated_at)
-      VALUES (?, 'wecom_customer_service', ?, 'demo-kfid', ?, ?, ?, ?, '{}', ?, '{}', ?, ?)`)
+      (id, provider, external_user_id, open_kfid, source_channel, status, last_intent, last_message, ai_reply_json, transcript_json, raw_event_json, created_at, updated_at, tenant_id)
+      VALUES (?, 'wecom_customer_service', ?, 'demo-kfid', ?, ?, ?, ?, '{}', ?, '{}', ?, ?, ?)`)
     const t1 = new Date(now.getTime() - 25 * 60000)
     insertConversation.run(
       'wecom:demo-chat-01', 'demo-chat-01', '小红书', 'needs_human', 'after_sales_review',
@@ -14389,7 +14355,7 @@ async function route(req, res) {
         { role: 'customer', content: '我前天做的甲今天掉了一颗,怎么办?', at: iso(t1) },
         { role: 'assistant', content: '不好意思给您添麻烦了!这是售后问题,我已经转给我们的技师,会尽快联系您安排补做。方便的话请发一张现在的照片。', at: iso(new Date(t1.getTime() + 30000)) }
       ]),
-      iso(t1), iso(t1)
+      iso(t1), iso(t1), seedTenantId
     )
     const t2 = new Date(now.getTime() - 6 * 60000)
     insertConversation.run(
@@ -14399,13 +14365,13 @@ async function route(req, res) {
         { role: 'customer', content: '你们家法式美甲多少钱呀?', at: iso(t2) },
         { role: 'assistant', content: '基础法式可以按基础价执行哦,详细价格取决于款式复杂度。您可以发个参考图,我帮您让技师看看准确报价~', at: iso(new Date(t2.getTime() + 20000)) }
       ]),
-      iso(t2), iso(t2)
+      iso(t2), iso(t2), seedTenantId
     )
     upsertUserIdentity({ userId: 'demo-cust-01', provider: 'wecom_customer_service', providerUserId: 'demo-chat-01' })
     // 4. 待技师报价任务
-    db.prepare(`INSERT INTO quote_requests (id, conversation_id, user_id, source_channel, service_type, status, customer_message, customer_lang, reference_images_json, created_at, updated_at)
-      VALUES (?, 'wecom:demo-chat-02', 'demo-cust-02', '微信', 'nail', 'PENDING_STAFF', '想做渐变猫眼加两颗小钻,大概多少钱?', 'zh', '[]', ?, ?)`)
-      .run(randomId('quote'), nowIso, nowIso)
+    db.prepare(`INSERT INTO quote_requests (id, conversation_id, user_id, source_channel, service_type, status, customer_message, customer_lang, reference_images_json, created_at, updated_at, tenant_id)
+      VALUES (?, 'wecom:demo-chat-02', 'demo-cust-02', '微信', 'nail', 'PENDING_STAFF', '想做渐变猫眼加两颗小钻,大概多少钱?', 'zh', '[]', ?, ?, ?)`)
+      .run(randomId('quote'), nowIso, nowIso, seedTenantId)
     // 5. 储值:两位演示客户(其中一张沉睡卡)
     insertStoredValueTransaction({ userId: 'demo-cust-03', type: 'recharge', amountCents: 100000, payChannel: 'wechat', note: '储值充值（演示）', createdBy: 'demo-seed', createdAt: iso(new Date(now.getTime() - 12 * 86400000)) })
     insertStoredValueTransaction({ userId: 'demo-cust-03', type: 'consume', amountCents: 18800, note: '猫眼美甲耗卡（演示）', createdBy: 'demo-seed', createdAt: iso(new Date(now.getTime() - 5 * 86400000)) })

@@ -137,10 +137,14 @@ check('①e 🔴 零命中先证刀能咬(user_identities 版):金丝雀正反�
   scan("db.prepare('INSERT OR IGNORE INTO user_identities (id, user_id, provider) VALUES (?,?,?)')", 'user_identities')[0]?.has === false
   && scan("db.prepare('INSERT INTO user_identities (id, user_id, tenant_id) VALUES (?,?,?)')", 'user_identities')[0]?.has === true, '')
 
-/* ══ 🟡 D131 报数(店主 04a §三:**只报数,不修、不白名单,等我看数再裁**)══
+/* ══ 🔴 D131 同族 31 张表(店主 04a §三 报数 → **04b §二 裁:全修、不白名单、棘轮落到 0**)══
    带 `tenant_id … DEFAULT 'lucky-luxe'` 的表**不是 2 张,是 31 张**;
    D128 只盯 users、D130 加 user_identities,剩下 29 张同一根子没人盯。
-   表清单**由刀从 schema 生成**(pragma 找带 DEFAULT 的 tenant_id 列),不手写。 */
+   表清单**由刀从 schema 生成**(pragma 找带 DEFAULT 的 tenant_id 列),不手写。
+   04a 报数 9 处 → 04b 全修完,**从此是硬规则:漏写 0 处,一处都不白名单**。
+   其中两处是红线(`quote_requests` 4984 / `reminder_tasks` 4974)——它们卡在
+   AI 报价状态机的正路上:单落错店 → 本店状态机永远找不到自己刚建的单,
+   而旗舰店报价台列得出别店的报价。行为面由 `test-quote-tenant` 在**非默认租户**里走一遍。 */
 const DBP = process.env.TEST_DB_PATH || join(ROOT, 'apps/api/sandbox-data/lucky-luxe.sqlite')
 let famTables = []
 let famRows = []
@@ -164,20 +168,21 @@ if (famTables.length) {
   }
   const totalHit = famRows.reduce((a, r) => a + r.hit, 0)
   const totalMiss = famRows.reduce((a, r) => a + r.miss, 0)
-  console.log(`\n   ══ 🟡 D131 报数(report-only,不修)══ 带 DEFAULT 的表 ${famTables.length} 张 ·`
+  console.log(`\n   ══ 🔴 D131 同族现测(硬规则:漏写必须 0)══ 带 DEFAULT 的表 ${famTables.length} 张 ·`
     + ` INSERT 共 ${totalHit} 处 · **漏写 tenant_id ${totalMiss} 处**`)
   for (const r of famRows.filter((x) => x.miss).sort((a, b) => b.miss - a.miss || a.t.localeCompare(b.t))) {
     console.log(`      ${r.t.padEnd(24)} INSERT ${String(r.hit).padStart(2)} 处 · 漏 ${r.miss} 处 ← ${r.where.join(' , ')}`)
   }
   console.log(`      (其余 ${famRows.filter((x) => !x.miss).length} 张零漏写)`)
-  /* 棘轮:报数期间**只许降不许升**。这不是白名单(没有任何一处被放行),
-     是「不许再变坏」的那条线 —— 店主看完数再裁是逐处修还是分批。 */
-  const D131_CAP = 9
-  check(`🟡 D131 棘轮:同族 ${famTables.length} 张表漏写 tenant_id 共 ${totalMiss} 处 ≤ ${D131_CAP}(报数期只许降不许升;`
-    + '这不是白名单 —— 一处都没放行,等店主看数后裁逐处修还是分批)',
-  totalMiss <= D131_CAP, `现为 ${totalMiss}`)
-  check(`🟡 D131 反向守:表清单由 schema 现取 ${famTables.length} >= 31 张 · INSERT 底数 ${totalHit} >= 60 处 `
-    + '(清单被写死或扫描面缩水立刻红)',
+  /* 🔴 硬规则(店主 04b §二 裁):**0 处,一处都不白名单**。
+     04a 那条 ≤9 的棘轮是报数期的临时线,已作废 —— 报数期结束了,现在是零容忍。 */
+  const missWhere = famRows.filter((x) => x.miss).flatMap((x) => x.where.map((w) => `${x.t}@${w}`))
+  check(`🔴 D131 白名单式硬规则:同族 ${famTables.length} 张表、${totalHit} 处 INSERT,`
+    + `漏写 tenant_id **必须 0 处**(现为 ${totalMiss})—— 一处都不白名单;`
+    + '这一族的根都是列定义带 `DEFAULT \'lucky-luxe\'`,忘写就静默塞进旗舰店',
+  totalMiss === 0, missWhere.join(' | '))
+  check(`🔴 D131 反向守:表清单由 schema 现取 ${famTables.length} >= 31 张 · INSERT 底数 ${totalHit} >= 60 处 `
+    + '(清单被写死或扫描面缩水立刻红 —— 判据覆盖面要有判据)',
   famTables.length >= 31 && totalHit >= 60, JSON.stringify({ tables: famTables.length, hits: totalHit }))
 }
 

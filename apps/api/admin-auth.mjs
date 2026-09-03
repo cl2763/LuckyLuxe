@@ -11,9 +11,11 @@ export function createAdminAuth({ db, randomId, iso, createHash, defaultTenantId
     const file = new URL('./local-data/初始老板账号.txt', import.meta.url).pathname
     if (db.prepare("SELECT id FROM admin_accounts WHERE role = 'owner'").get()) return file
     const initialPassword = randomPassword()
-    db.prepare(`INSERT INTO admin_accounts (id, username, display_name, role, technician_id, password_hash, must_change_password, status, created_at, updated_at)
-      VALUES (?, 'boss', '老板', 'owner', NULL, ?, 1, 'active', ?, ?)`)
-      .run(randomId('acct'), adminPasswordHash('boss', initialPassword), iso(new Date()), iso(new Date()))
+    /* 🔴 D131(店主 04b §二):原来不写 tenant_id,靠列默认 `lucky-luxe` 凑对。
+       这是**平台首启的旗舰店老板**,租户就该写明白 —— 不许再靠默认值。 */
+    db.prepare(`INSERT INTO admin_accounts (id, username, display_name, role, technician_id, password_hash, must_change_password, status, created_at, updated_at, tenant_id)
+      VALUES (?, 'boss', '老板', 'owner', NULL, ?, 1, 'active', ?, ?, ?)`)
+      .run(randomId('acct'), adminPasswordHash('boss', initialPassword), iso(new Date()), iso(new Date()), defaultTenantId)
     try {
       writeFileSync(file, `老板主账号(首次登录后必须改密码,改完本文件自动删除)\n用户名: boss\n初始密码: ${initialPassword}\n`)
     } catch { /* 写不进就只打日志 */ }
