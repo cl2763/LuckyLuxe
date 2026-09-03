@@ -216,3 +216,15 @@ ${table(B)}
 ${table(withTxn)}
 `
 }
+
+/* 直接 `node tools/guard-scan.mjs` 跑它会静默 exit 0 —— 这是本文件里的**假绿面**:
+   人以为跑了一次全扫「什么都没报」,其实它是纯库、根本没有 main。归族「静默失败器」。
+   所以给它一个显式出口:自己被当命令跑时,报清楚「刀不在我这儿」并指到真正的三把刀。 */
+if (import.meta.url === `file://${process.argv[1]}`) {
+  console.error('guard-scan.mjs 是**共用尺子(库)**,本身不判定任何东西,跑它不等于扫过了。')
+  console.error('真正的刀在这三处,请跑它们:')
+  console.error('  node apps/api/test-db-target-guard.mjs   # 守「清单 ≡ 当前提交现扫」')
+  console.error('  node apps/api/test-txn-rollback.mjs      # 逐个验事务回滚')
+  console.error('  node tools/gen-guard-checklist.mjs       # 重新生成清单')
+  process.exit(2)
+}

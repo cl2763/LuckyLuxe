@@ -18,6 +18,8 @@ import { tenantDefaultTargets, tenantNullableTargets, dropTenantDefaults, backup
 import { rebuildTenantScopedUnique } from './schema-unique-rebuild.mjs'   // 唯一约束按租户重建(公约②)   // D126/D131 去列默认值(公约①)
 import { installTenantFillTriggers } from './tenant-fill-triggers.mjs'   // D137 落值触发器(公约②)
 import { ensureConversationLog, logConversationMessage, transcriptFromLog, migrateTranscriptsIntoLog, redactConversation } from './conversation-log.mjs'   // ⓪ 对话全录(大批05 §〇)
+import { createConversationRoutes } from './conversation-routes.mjs'   // ⓪b 脱敏正门(大批05 §〇b,公约①)
+import { createAiGate } from './ai-gate.mjs'   // 大批05 ① 门(旧关键词门 + 新模型门三档,公约①②)
 import { createAppVersion } from './app-version.mjs'   // 04f-3 三端版本指纹(公约①)
 import { createKbRoutes } from './kb-routes.mjs'   // 知识库路由(D134 现修那一批搬出,公约②)
 import { createBusinessHoursRoutes } from './business-hours-routes.mjs'   // 营业时间两条路由(强制设置批边改边拆)
@@ -2477,73 +2479,12 @@ function isExplicitAiResumeIntent(text = '') {
   return /交回ai|转回ai|ai继续|继续ai|请ai继续|让ai继续|机器人继续|恢复ai|ai接待/.test(compact)
 }
 
-function hasConversationBusinessContext(transcript = [], persistedState = null) {
-  const state = flattenPersistedQuoteState(persistedState)
-  if ((persistedState?.quoteStage || '') && persistedState.quoteStage !== 'idle') return true
-  if (state.serviceType || state.referenceImages?.length || state.pendingPriceIntent || state.pendingCapabilityIntent) return true
-  const recentText = (Array.isArray(transcript) ? transcript : [])
-    .slice(-8)
-    .map((item) => `${item.role || ''}:${item.content || ''}`)
-    .join('\n')
-  return /美甲|指甲|本甲|延长|卸甲|断甲|款式|参考图|美睫|睫毛|预约|报价|价格|定金|技师|nail|lash|booking|appointment|quote|price/i.test(recentText)
-}
 
-function hasCustomerServiceBusinessSignal(inbound = {}, transcript = [], persistedState = null) {
-  const text = String(inbound.content || '')
-  const compact = compactIntentText(text)
-  if (!compact && !(inbound.referenceImages || []).length) return false
-  if ((inbound.referenceImages || []).length) return true
-  if (hasAfterSalesProblemIntent(text, inbound.customerStage || persistedState?.customerStage || persistedState?.state?.customerStage || '')) return true
-  if (hasSpecialManualHandoffIntent(text) || hasServiceStartIntent(text) || hasExplicitPriceIntent(text) || hasAppointmentInquiryIntent(text)) return true
-  if (/美甲|指甲|本甲|延长|卸甲|断甲|修补|甲面|款式|参考图|图片|美睫|睫毛|上睫毛|下睫毛|嫁接|卸睫|门店|地址|营业|电话|客服|订单|支付|定金|退款|取消|改期|会员|优惠券|积分|储值|技师|作品|护理|售后|返修|开胶|起翘|翘边|掉甲|掉钻|掉色|色差|不满意|掉睫|红肿|过敏|nail|lash|booking|appointment|deposit|refund|cancel|reschedule|member|coupon|store|address|hours|technician|artist|aftercare/i.test(compact)) {
-    return true
-  }
-  if (hasCapabilityIntent(text)) {
-    return hasConversationBusinessContext(transcript, persistedState) || /这款|这个款|图片|图|参考|款式|style|design/i.test(compact)
-  }
-  return false
-}
 
-function isKnowledgeOnlyDefaultRule(rule = {}) {
-  return String(rule.id || '') === 'booking.one_service'
-}
 
-function hasConcreteKnowledgeMatch(knowledgeContext = {}) {
-  const matchedRules = Array.isArray(knowledgeContext.matchedRules) ? knowledgeContext.matchedRules : []
-  const concreteRules = matchedRules.filter((rule) => !isKnowledgeOnlyDefaultRule(rule))
-  return concreteRules.length > 0
-    || (Array.isArray(knowledgeContext.matchedQa) && knowledgeContext.matchedQa.length > 0)
-    || (Array.isArray(knowledgeContext.matchedHandoffRules) && knowledgeContext.matchedHandoffRules.length > 0)
-}
 
-function replyLooksUnknown(reply = null) {
-  const data = reply?.data || reply || {}
-  const intent = compactIntentText(data.intent || '')
-  const answer = `${data.answerZh || ''}\n${data.answerEn || ''}`
-  return /unknown|unclear|unsupported|outofscope|out_of_scope|other|smalltalk|chitchat|handoff/.test(intent)
-    || /不确定|无法判断|不太确定|没太理解|not sure|cannot determine|i'm not sure/i.test(answer)
-}
 
-function shouldSilentHandoffBeforeAi({ inbound = {}, transcript = [], persistedState = null } = {}) {
-  const text = String(inbound.content || '').trim()
-  if (!text && !(inbound.referenceImages || []).length) return false
-  if (isGreetingOnly(text)) return false
-  if (isReturningCustomerInbound(inbound) && shouldSendReturningCustomerWelcome(inbound, transcript)) return false
-  if (hasCustomerServiceBusinessSignal(inbound, transcript, persistedState)) return false
-  if (/^(谢谢|感谢|好的|好滴|ok|嗯嗯|哈哈|收到|明白|辛苦了|thank you|thanks)$/i.test(compactIntentText(text))) return true
-  if (/[?？吗呢]|为什么|怎么|如何|觉得|意思|what|why|how|where|when|can/i.test(text)) return true
-  return text.length >= 4
-}
 
-function shouldSilentHandoffAfterAi({ inbound = {}, reply = null, quoteWorkflow = null, knowledgeContext = {}, transcript = [], persistedState = null } = {}) {
-  const text = String(inbound.content || '').trim()
-  if (!text && !(inbound.referenceImages || []).length) return false
-  if (quoteWorkflow?.shouldCreateQuote || quoteWorkflow?.reply?.source) return false
-  if (isReturningCustomerInbound(inbound) && shouldSendReturningCustomerWelcome(inbound, transcript)) return false
-  if (isGreetingOnly(text) || hasCustomerServiceBusinessSignal(inbound, transcript, persistedState)) return false
-  if (hasConcreteKnowledgeMatch(knowledgeContext)) return false
-  return replyLooksUnknown(reply) || shouldSilentHandoffBeforeAi({ inbound, transcript, persistedState })
-}
 
 function dedupeReferenceImages(images = []) {
   const seen = new Set()
@@ -3653,6 +3594,13 @@ function appendQuoteUnavailableSlotAssistantReply(quote, slot = {}, error = {}, 
   })
 }
 
+const aiGate = createAiGate({
+  compactIntentText, flattenPersistedQuoteState,
+  hasAfterSalesProblemIntent, hasSpecialManualHandoffIntent, hasExplicitPriceIntent,
+  hasAppointmentInquiryIntent, hasCapabilityIntent, hasServiceStartIntent,
+  isGreetingOnly, isReturningCustomerInbound, shouldSendReturningCustomerWelcome,
+})
+
 async function handleWecomInbound(inbound, req) {
   const conversationId = wecomConversationId(inbound.externalUserId)
   // 套餐闸门：AI 客服未开通或试用过期时，进线照常记录并静默转人工，AI 不回复。
@@ -3708,6 +3656,11 @@ async function handleWecomInbound(inbound, req) {
       }
     })
   }
+  /* 🔴 D133 的解法在这一行(大批05 图 §一 第 2 档):
+     原来 `needs_human` 与 `human_active` **一同静默** —— 一轮没命中关键词就进 needs_human,
+     从此这通对话的 AI 再也不说话(对照实验四步为证:顾客第二句「周日开吗」就触发)。
+     图裁:**只有人工真正接管(`human_active`)才静默**;`needs_human` 只是「已转给同事」的状态,
+     顾客下一句仍按第 1 档走 —— 范围外转人工**不锁会话**。 */
   if (['needs_human', 'human_active'].includes(existing?.status) && !allowAi && !humanCooldownReleased) {
     const activeQuote = getActiveQuoteForConversation(conversationId)
     if (existing.status === 'needs_human' && activeQuote && isQuoteWaitingCheck(inbound.content || '')) {
@@ -3809,24 +3762,31 @@ async function handleWecomInbound(inbound, req) {
         }
       })
     }
-    const nextStatus = existing.status === 'needs_human' ? 'needs_human' : 'human_active'
-    const conversation = appendWecomConversationMessage(conversationId, {
-      role: 'customer',
-      content: inbound.content,
-      messageId: inbound.messageId,
-      msgType: inbound.msgType,
-      referenceImages: inbound.referenceImages || []
-    }, {
-      provider: inbound.provider,
-      externalUserId: inbound.externalUserId,
-      openKfid: inbound.openKfid,
-      sourceChannel: inbound.sourceChannel,
-      status: nextStatus,
-      lastIntent: 'human_followup',
-      lastMessage: inbound.content,
-      raw: inbound.raw || {}
-    })
-    return { conversationId, inbound, reply: null, waitingForHuman: true, conversation }
+    /* 🔴 D133 的解法在这里(大批05 图 §一 第 2 档)——**只把「静默」那一半去掉,维护那一半留着**。
+       这条分支原来做两件事:①等人工期间不答 ②把顾客补充的图片/上下文并进在办的报价单。
+       图裁的是①(`needs_human` 不该锁死会话),②必须留 ——
+       我第一版把整条分支限成 `human_active`,连②一起绕过去了,`working-memory` 的
+       「历史图 + 新图合并」当场红。**去掉一半的时候要看清另一半在做什么。**
+       所以:`human_active` 照旧静默;`needs_human` 做完维护**继续往下走**,按第 1 档答。 */
+    if (existing.status === 'human_active') {
+      const conversation = appendWecomConversationMessage(conversationId, {
+        role: 'customer',
+        content: inbound.content,
+        messageId: inbound.messageId,
+        msgType: inbound.msgType,
+        referenceImages: inbound.referenceImages || []
+      }, {
+        provider: inbound.provider,
+        externalUserId: inbound.externalUserId,
+        openKfid: inbound.openKfid,
+        sourceChannel: inbound.sourceChannel,
+        status: 'human_active',
+        lastIntent: 'human_followup',
+        lastMessage: inbound.content,
+        raw: inbound.raw || {}
+      })
+      return { conversationId, inbound, reply: null, waitingForHuman: true, conversation }
+    }
   }
   const afterSalesProblem = detectAfterSalesProblem({ inbound, transcript: existingTranscript, persistedState })
   if (!bypassSilentHandoff && afterSalesProblem.matched) {
@@ -3992,7 +3952,15 @@ async function handleWecomInbound(inbound, req) {
     })
     return { conversationId, inbound, reply: kbReply, conversation: getWecomConversation(conversationId) }
   }
-  if (!bypassSilentHandoff && shouldSilentHandoffBeforeAi({ inbound, transcript: existingTranscript, persistedState })) {
+  /* ══ 🔴 大批05 ① 门 + 三档(图 §一):门从模型**前面**挪到**后面** ══
+     旧法:`shouldSilentHandoffBeforeAi` 用几十个关键词判「这句是不是本店业务」,没命中就静默 ——
+     顾客说「多少米」「明儿下午有空位吗」「手上想弄点花样」一律不理(基线实测:同义不含那 80 句
+     **72 句静默**)。新法:让模型自己判 `inScope/confidence`,规则层按三档分。
+     关键词表**降级为快速通道** —— 命中就直接放行(省一次判断、稳定),没命中不再等于「不是业务」。
+     `AI_GATE=keyword` 可切回旧门,用来跑两个数并排(达标才换,店主 05b §二)。 */
+  const keywordFastPath = aiGate.hasCustomerServiceBusinessSignal(inbound, existingTranscript, persistedState)
+  if (aiGate.gateMode === 'keyword' && !bypassSilentHandoff
+      && aiGate.shouldSilentHandoffBeforeAi({ inbound, transcript: existingTranscript, persistedState })) {
     return silentHandoffUnknown(inbound, 'unknown_before_ai')
   }
   const preQuoteWorkflow = resolveQuoteWorkflow(inbound, existingTranscript, null, {}, persistedState)
@@ -4099,7 +4067,21 @@ async function handleWecomInbound(inbound, req) {
   })
   const quoteWorkflow = resolveQuoteWorkflow(inbound, existingTranscript, baseReply, knowledgeContext, persistedState)
   const reply = quoteWorkflow.reply || baseReply
-  if (!bypassSilentHandoff && shouldSilentHandoffAfterAi({ inbound, reply, quoteWorkflow, knowledgeContext, transcript: existingTranscript, persistedState })) {
+  /* 三档在 `ai-gate.mjs`(门的唯一真相);这里只负责出句与落库 ——
+     `recordWecomConversation` 还在本文件,按公约②下批一起搬。
+     ⚠️ `ruleTookOver` 判的是「**规则层自己出了句子**」,不是「quoteWorkflow.reply 有没有值」:
+     `resolveQuoteWorkflow` 不接管时会把 baseReply **原样透传**,拿它当条件永远为真、三档一次都不跑
+     (现测栽过一次:qwReply=true 而 source 为空)。规则层自己出的句子都带 `source`。 */
+  const tier = aiGate.resolveGateTier({
+    gate: baseReply?.data || {},
+    keywordFastPath,
+    ruleTookOver: Boolean(quoteWorkflow.reply && quoteWorkflow.reply.source),
+  })
+  if (tier && !bypassSilentHandoff) {
+    recordWecomConversation(inbound, tier.reply, tier.status)
+    return { conversationId, inbound, reply: tier.reply, conversation: getWecomConversation(conversationId) }
+  }
+  if (aiGate.gateMode === 'keyword' && !bypassSilentHandoff && aiGate.shouldSilentHandoffAfterAi({ inbound, reply, quoteWorkflow, knowledgeContext, transcript: existingTranscript, persistedState })) {
     return silentHandoffUnknown(inbound, 'unknown_after_ai')
   }
   const replyText = assistantReplyText(reply, inbound.lang || 'zh', conversationId)
@@ -10774,6 +10756,11 @@ function serializeSettlement(row, { includeSignature = false } = {}) {
   }
 }
 
+const conversationRoutes = createConversationRoutes({
+  db, iso, randomId, apiError, json, readBody, currentTenantId,
+  conversationRow: wecomRouting.conversationRow, redactConversation,
+})
+
 async function route(req, res) {
   if (req.method === 'OPTIONS') return json(res, 204, {})
   const url = new URL(req.url, `http://${req.headers.host}`)
@@ -11975,30 +11962,9 @@ async function route(req, res) {
     })
     return json(res, 200, { conversation: getWecomConversation(conversationId) })
   }
-  /* ══ ⓪b 脱敏正门(店主 05b §一)——**唯一入口** ══
-     图 §〇 第 4 条:顾客要求删除时**脱敏不删行**(记录仍在,认不出是谁)。
-     老板权限 + 事由必填(与 D122「改归属必须写一句原因」同一族)+ 留痕写 `platform_ops_log`。
-     触发器只认「内容换成固定标记 + redacted_at 落时间 + 别的列一个字没动」这一种改法,
-     绕过这道口直接改成别的文案照样被拒。 */
-  const redactMatch = path.match(/^\/admin\/conversations\/(.+)\/redact$/)
-  if (req.method === 'POST' && redactMatch) {
-    if (adminSession.role !== 'owner') throw apiError(403, 'FORBIDDEN', '仅老板可脱敏对话记录。')
-    const conversationId = decodeURIComponent(redactMatch[1])
-    const tid = currentTenantId()
-    const body = await readBody(req)
-    const why = String(body.reason || '').trim()
-    if (!why) throw apiError(400, 'REASON_REQUIRED', '脱敏必须写一句事由(会写进运维日志)。')
-    const conv = wecomRouting.conversationRow(conversationId, 'id', tid)
-    if (!conv) throw apiError(404, 'NOT_FOUND', '会话不存在。')
-    const before = db.prepare('SELECT COUNT(*) AS n FROM conversation_messages WHERE conversation_id = ? AND tenant_id = ?').get(conversationId, tid).n
-    const r = redactConversation(db, { conversationId, tenantId: tid, iso })
-    const after = db.prepare('SELECT COUNT(*) AS n FROM conversation_messages WHERE conversation_id = ? AND tenant_id = ?').get(conversationId, tid).n
-    db.prepare('INSERT INTO platform_ops_log (id, tenant_id, action, detail, operator, created_at) VALUES (?, ?, ?, ?, ?, ?)')
-      .run(randomId('oplog'), tid, 'conversation_redact',
-        `会话 ${conversationId}:脱敏 ${r.messages} 条顾客消息、身份档案 ${r.users} 份;行数 ${before}→${after}(必须相等);事由:${why}`,
-        adminSession.email || adminSession.username || 'owner', iso(new Date()))
-    return json(res, 200, { redacted: true, mark: r.mark, messages: r.messages, users: r.users, rowsBefore: before, rowsAfter: after })
-  }
+  /* ⓪b 脱敏正门搬到 `conversation-routes.mjs`(公约①);这里只把路由让给它。
+     返回 false = 它不认这条路,继续往下匹配,不吞别人的路由。 */
+  if (await conversationRoutes.handle(req, res, path, adminSession)) return
   const manualReplyMatch = path.match(/^\/admin\/wechat\/conversations\/(.+)\/manual-reply$/)
   if (req.method === 'POST' && manualReplyMatch) {
     return json(res, 201, await appendManualWecomReply(decodeURIComponent(manualReplyMatch[1]), await readBody(req), adminSession))

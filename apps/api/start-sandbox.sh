@@ -56,7 +56,12 @@ case "$DATA_DIR_ARG" in
   /private/tmp/*|/tmp/*|'') DATA_DIR_ARG="$DEFAULT_DATA_DIR" ;;
 esac
 mkdir -p "$DATA_DIR_ARG"
-printf 'SANDBOX_DATA_DIR=%s\nSANDBOX_PORT=4310\n' "$DATA_DIR_ARG" > "$ENV_FILE"
+# 🔴 连 AI env 与门档一起记(2026-09-04 补)。原来只记 DATA_DIR + PORT ——
+#    于是全量回归的 restore_sandbox 把沙箱拉回来时**丢掉了真模型**,变成 mock,
+#    而谁也不会注意到:接口照样 200,只是 AI 换了个脑子。
+#    「还回去」得是**还回原来那个状态**,不是「有个东西在 4310 上听着」。
+printf 'SANDBOX_DATA_DIR=%s\nSANDBOX_PORT=4310\nSANDBOX_AI_ENV=%s\nSANDBOX_AI_GATE=%s\n' \
+  "$DATA_DIR_ARG" "${AI_ENV:-}" "${AI_GATE:-}" > "$ENV_FILE"
 pkill -f "PORT=4310" 2>/dev/null || true
 lsof -ti tcp:4310 2>/dev/null | xargs kill 2>/dev/null || true
 NODE_ARGS=()

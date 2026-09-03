@@ -38,14 +38,20 @@ restore_local() {
 # 教训写进脚本而不是靠记性 —— 靠记性已经漏过两次。
 SANDBOX_WAS_UP=0
 SANDBOX_DATA_DIR=""
+SANDBOX_AI_ENV=""
+SANDBOX_AI_GATE=""
 if curl -sf -o /dev/null --max-time 2 "http://127.0.0.1:4310/health"; then
   SANDBOX_WAS_UP=1
   # macOS 拿不到别的进程的环境变量(ps 探不到 DATA_DIR),所以读启动器留下的记录文件。
   # 沙箱请用 `bash apps/api/start-sandbox.sh <DATA_DIR>` 起,它会写这份记录。
+  # 🔴 2026-09-04 补:AI env 与门档也要读回来 —— 只还 DATA_DIR 的话,
+  #    带真模型起的沙箱会被拉回成 mock,而接口照样 200,没人会发现。
   if [ -f /tmp/ll-sandbox-4310.env ]; then
     SANDBOX_DATA_DIR="$(grep '^SANDBOX_DATA_DIR=' /tmp/ll-sandbox-4310.env | head -1 | cut -d= -f2- || true)"
+    SANDBOX_AI_ENV="$(grep '^SANDBOX_AI_ENV=' /tmp/ll-sandbox-4310.env | head -1 | cut -d= -f2- || true)"
+    SANDBOX_AI_GATE="$(grep '^SANDBOX_AI_GATE=' /tmp/ll-sandbox-4310.env | head -1 | cut -d= -f2- || true)"
   fi
-  echo "== 沙箱 4310 在跑(DATA_DIR=${SANDBOX_DATA_DIR:-未探到}),跑完会还回去 =="
+  echo "== 沙箱 4310 在跑(DATA_DIR=${SANDBOX_DATA_DIR:-未探到} · AI env=${SANDBOX_AI_ENV:-无} · 门档=${SANDBOX_AI_GATE:-默认}),跑完会还回去 =="
 fi
 restore_sandbox() {
   [ "$SANDBOX_WAS_UP" = "1" ] || return 0
@@ -54,7 +60,13 @@ restore_sandbox() {
     echo "!! 沙箱 4310 被回归打死了,但没探到它的 DATA_DIR —— 请手动用原来的命令拉起来" >&2
     return 0
   fi
-  ( cd "$API_DIR" && PORT=4310 DATA_DIR="$SANDBOX_DATA_DIR" ALLOW_DEMO_ADMIN_LOGIN=true TEST_DB_PATH= nohup node local-server.mjs > /tmp/ll-sandbox-restored.log 2>&1 & )
+  # 🔴 把原来的 AI env 与门档一起还回去(2026-09-04 补):
+  #    原来这里只还 DATA_DIR + PORT,沙箱**带真模型起的、拉回来却是 mock** ——
+  #    接口照样 200,只是 AI 换了个脑子,谁也不会注意到。「还回去」= 还回原状态。
+  SB_NODE_ARGS=()
+  [ -n "${SANDBOX_AI_ENV:-}" ] && [ -f "$SANDBOX_AI_ENV" ] && SB_NODE_ARGS+=("--env-file-if-exists=$SANDBOX_AI_ENV")
+  ( cd "$API_DIR" && PORT=4310 DATA_DIR="$SANDBOX_DATA_DIR" ALLOW_DEMO_ADMIN_LOGIN=true TEST_DB_PATH= \
+      AI_GATE="${SANDBOX_AI_GATE:-}" nohup node ${SB_NODE_ARGS[@]+"${SB_NODE_ARGS[@]}"} local-server.mjs > /tmp/ll-sandbox-restored.log 2>&1 & )
   for _ in $(seq 1 20); do
     curl -sf -o /dev/null --max-time 2 "http://127.0.0.1:4310/health" && { echo "== 已把沙箱(4310)重新拉起来 =="; return 0; }
     sleep 0.5
@@ -146,7 +158,7 @@ curl -s -X POST -H "authorization: Bearer owner-demo-token" -H "content-type: ap
   -d '{}' http://127.0.0.1:4128/admin/demo/full-seed > /dev/null || true
 
 # 可用 CI_SUITES="a b c" 环境变量跑子集(调试用)
-DEFAULT_SUITES="customer-service-matrix working-memory business-hours intent-guards quote-polish silent-handoff human-handoff after-sales-handoff identity-links entitlements tenant-kb finance-core finance-goals stored-value schedule-week special-dates customer-profile staff-portal admin-accounts pricing-model membership-config customer-import tenant-hygiene tenant-timezone deposit-config message-templates settlement daily-close salary-v2 schedule-v2 finance-trend finance-lock perf-viz coupon-settle audit-fix scan-sign double-sheet auth-surface currency-scan settle-stress sign-stability noshow-aftersales demo-seed-guard card-refund amend-linkage ledger-guards backend-gate hero-slides cash-notes mini-money-inputs image-placeholder deposit-audit web-settlement cross-end-effect mini-account-adjust today-board hours-gate crossend-cta tab-colors notify-scheduler quote-state ui-spec observe-fixes file-ratchet delivery-evidence store-name correction-reason credential-scan db-target-guard empty-pill untouched-proof display-text tenant-ownership tenant-explicit identity-tenant version-fingerprint tenant-fill-trigger conversation-log quote-tenant conversation-tenant tier-label native-dialog demo-mark txn-rollback mp-placeholder-size mp-overlap mp-home-sections store-jury"
+DEFAULT_SUITES="customer-service-matrix working-memory business-hours intent-guards quote-polish silent-handoff human-handoff after-sales-handoff identity-links entitlements tenant-kb finance-core finance-goals stored-value schedule-week special-dates customer-profile staff-portal admin-accounts pricing-model membership-config customer-import tenant-hygiene tenant-timezone deposit-config message-templates settlement daily-close salary-v2 schedule-v2 finance-trend finance-lock perf-viz coupon-settle audit-fix scan-sign double-sheet auth-surface currency-scan settle-stress sign-stability noshow-aftersales demo-seed-guard card-refund amend-linkage ledger-guards backend-gate hero-slides cash-notes mini-money-inputs image-placeholder deposit-audit web-settlement cross-end-effect mini-account-adjust today-board hours-gate crossend-cta tab-colors notify-scheduler quote-state ui-spec observe-fixes file-ratchet delivery-evidence store-name correction-reason credential-scan db-target-guard empty-pill untouched-proof display-text tenant-ownership tenant-explicit identity-tenant version-fingerprint tenant-fill-trigger conversation-log ai-gate quote-tenant conversation-tenant tier-label native-dialog demo-mark txn-rollback mp-placeholder-size mp-overlap mp-home-sections store-jury"
 read -r -a SUITES <<< "${CI_SUITES:-$DEFAULT_SUITES}"
 
 # 🔴 断言基线(店主 02r 裁定一):每套跑完**就地数** `^ok ` 条数,不事后解析日志 ——

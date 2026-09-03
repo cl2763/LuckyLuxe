@@ -422,7 +422,15 @@ function bestOwnerApprovedSample(message = '', samples = []) {
 
 export async function createCustomerServiceReply({ lang = 'zh', message = '', sampleMatchMessage = message, history = [], customer = null, bookings = [], services = [], stores = [], knowledgeContext = null, depositMode = null }) {
   const schema = {
-    intent: 'booking|pricing|policy|order|store|portfolio|handoff|unknown',
+    /* 🔴 大批05 ① 门 + 三档(图 §一):门从关键词挪到模型后面 —— 由模型自己判「这句话是不是本店业务」。
+       **不多打一次模型**:门和答是同一次请求,这三个字段跟回复一起出。
+       · inScope    是不是本店业务(美甲/美睫/门店/预约/订单/售后/会员…)
+       · confidence 0–1,自己有多大把握**答得准**(不是「有多想答」)
+       · slots      从这句话里抽到的项目/日期/时间/技师/加项(抽不到就空) */
+    inScope: true,
+    confidence: 0.0,
+    slots: { serviceType: 'string', date: 'string', time: 'string', technician: 'string', addons: ['string'] },
+    intent: 'booking|pricing|policy|order|store|portfolio|handoff|smalltalk|unknown',
     answerZh: 'string',
     answerEn: 'string',
     handoffRequired: false,
@@ -476,6 +484,21 @@ export async function createCustomerServiceReply({ lang = 'zh', message = '', sa
     system: [
       identityLine,
       currencyLine,
+      /* 🔴 大批05 ① 门 + 三档(图 §一):门挪到模型后面,靠理解不靠命中关键词。
+         三个字段跟回复一起出,**不多打一次模型**。 */
+      'GATE: also decide three things about the incoming message, and return them as fields.',
+      '(1) inScope = true if the message is about this salon\'s business in any way — services, prices, booking, '
+        + 'store info (hours/address/phone/parking), orders, payments/deposit/refund, membership/coupons/points, '
+        + 'aftercare, complaints, or small talk that opens such a topic. Customers rarely use our exact wording: '
+        + '"多少米" means price, "明儿下午有空位吗" means availability, "手上想弄点花样" means nails. '
+        + 'Judge the MEANING, not the vocabulary.',
+      '(2) confidence = 0-1, how sure you are that your answer is CORRECT (not how willing you are to answer). '
+        + 'If you would have to guess a number, a date, or a policy that is not in the store facts given to you, '
+        + 'confidence must be below 0.7.',
+      '(3) slots = whatever you can extract from THIS message: serviceType / date / time / technician / addons. '
+        + 'Leave a slot empty rather than guessing it.',
+      'inScope=false is only for things that have nothing to do with a nail/lash salon '
+        + '(weather, jokes, stocks, other shops, personal chat about you).',
       ...(depositPolicyLine ? [depositPolicyLine] : []),
       'Answer in the user language. Be concise, warm, and operationally accurate.',
       'Always use Recent chat as short-term conversation memory. If the incoming message is a follow-up such as "那这个呢", "多少钱", "可以吗", or "怎么约", resolve it from the previous customer messages before answering.',
@@ -605,6 +628,13 @@ export async function createCustomerServiceReply({ lang = 'zh', message = '', sa
         }
       }
       return {
+        /* 🔴 大批05 ①:mock 也要出 `inScope/confidence` —— 否则三档在回归里**一次都分不出来**
+           (21 个套件跑的都是 mock,判据看不见的东西等于没做)。
+           口径与真模型一致:`intent` 还停在 `unknown` = 这句话它没认出来是本店业务 → 范围外低分;
+           认出来了 → 高分。这样第 2/3 档在 mock 下也是**确定性**可测的。 */
+        inScope: intent !== 'unknown',
+        confidence: intent === 'unknown' ? 0.2 : 0.85,
+        slots: {},
         intent,
         answerZh,
         answerEn,
