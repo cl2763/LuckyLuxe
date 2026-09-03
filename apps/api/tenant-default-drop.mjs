@@ -33,17 +33,41 @@ export function snapshot4(db, names) {
   }]))
 }
 
+/* 🔴 重建型迁移**必先备份**(店主 04g §二 立刀)
+   案由:04f-2 的开机迁移把 31 张表重建了,**没有留下任何备份文件** ——
+   本机库最近一份备份是当天下午的 `pre-d130`,而重建发生在晚上八点五十。
+   事务回滚只保得住「迁移失败」,**保不住「迁移成功但迁错了」**。
+   所以凡 DROP/CREATE 重建表的迁移,**开机路径也要先复制库文件**;
+   没有要处置的表时不备份(空操作不留垃圾)。 */
+export function backupBeforeRebuild({ copyFileSync, dbPath, tag }) {
+  if (!dbPath) return ''
+  const stamp = new Date().toISOString().replace(/[:.]/g, '-')
+  const to = `${dbPath}.pre-${tag}-${stamp}`
+  copyFileSync(dbPath, to)
+  return to
+}
+
 /* 只摘 `tenant_id` 那一列的 DEFAULT,别的列的默认值一个不碰 */
 export const stripTenantDefault = (sql) => sql.replace(
   /(\btenant_id\b\s+[A-Za-z]+(?:\s+NOT\s+NULL)?)\s+DEFAULT\s+('[^']*'|"[^"]*"|[^\s,)]+)/i,
   (m, keep) => keep)
+
+/* 🔴 04g:`finance_targets.tenant_id` 原来是**可空**列且没有落值触发器。
+   店主 04g 裁:**不补触发器,改成 NOT NULL** —— 补触发器就是再造一个「打错了不报错」。
+   现测三库 NULL 行 0、两处 INSERT 都显式写,所以直接收紧,走同一个重建出口。 */
+export function tenantNullableTargets(db) {
+  return db.prepare(`SELECT m.name AS t FROM sqlite_master m JOIN pragma_table_info(m.name) p
+    WHERE m.type='table' AND m.name = 'finance_targets' AND p.name='tenant_id' AND p."notnull" = 0`).all()
+}
 
 /* 重建本体 —— **调用方负责开事务**(多步写)。`failAt` 仅供造病验回滚。
    返回 { done, triggers }。 */
 export function dropTenantDefaults(db, { failAt = 0 } = {}) {
   const all = (sql, ...a) => db.prepare(sql).all(...a)
   const one = (sql, ...a) => db.prepare(sql).get(...a)
-  const names = tenantDefaultTargets(db).map((r) => r.t)
+  /* 两件事同一个出口:去默认值 + 把 finance_targets 的可空租户列收紧成 NOT NULL */
+  const tighten = new Set(tenantNullableTargets(db).map((r) => r.t))
+  const names = [...new Set([...tenantDefaultTargets(db).map((r) => r.t), ...tighten])]
   if (!names.length) return { done: 0, triggers: 0 }
   const allTriggers = all("SELECT sql FROM sqlite_master WHERE type='trigger' AND sql IS NOT NULL").map((r) => r.sql)
   for (const r of all("SELECT name FROM sqlite_master WHERE type='trigger'")) db.exec(`DROP TRIGGER IF EXISTS "${r.name}"`)
@@ -52,8 +76,15 @@ export function dropTenantDefaults(db, { failAt = 0 } = {}) {
     done += 1
     if (failAt && done === failAt) throw new Error(`造病:在第 ${done} 张表(${t})处故意抛错`)
     const createSql = one("SELECT sql FROM sqlite_master WHERE type='table' AND name = ?", t).sql
-    const stripped = stripTenantDefault(createSql)
-    if (stripped === createSql) throw new Error(`${t}:没能从建表语句里摘掉 DEFAULT,拒绝继续(宁可整批回滚,不留半张)`)
+    let stripped = stripTenantDefault(createSql)
+    if (tighten.has(t)) {
+      /* 收紧成 NOT NULL:只动 `tenant_id` 那一列,且必须真的改到,改不到就整批回滚 */
+      const tightened = stripped.replace(/(\btenant_id\b\s+[A-Za-z]+)(?!\s+NOT\s+NULL)/i, '$1 NOT NULL')
+      if (tightened === stripped) throw new Error(`${t}:没能把 tenant_id 收紧成 NOT NULL,拒绝继续`)
+      stripped = tightened
+    } else if (stripped === createSql) {
+      throw new Error(`${t}:没能从建表语句里摘掉 DEFAULT,拒绝继续(宁可整批回滚,不留半张)`)
+    }
     const cols = all('SELECT name FROM pragma_table_info(?)', t).map((c) => `"${c.name}"`).join(', ')
     const idxSql = all("SELECT sql FROM sqlite_master WHERE type='index' AND tbl_name = ? AND sql IS NOT NULL", t).map((r) => r.sql)
     const tmp = `${t}__dropdef_tmp`

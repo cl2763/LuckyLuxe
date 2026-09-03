@@ -14,8 +14,9 @@ import { inkToPng } from './ink-raster.mjs'
 import { createAfterSales } from './after-sales.mjs'        // 售后域(公约②:边改边拆)
 import { hoursUnsetOfStore, hoursSavable, HOURS_GATE_TEXT } from './hours-gate.mjs'   // 营业时间闸(D84 强制设置图 v1.0)
 import { createStoredValueReversal } from './stored-value-reversal.mjs'   // 储值行冲销(裁定2 准开口,08-30d)
-import { tenantDefaultTargets, dropTenantDefaults } from './tenant-default-drop.mjs'   // D126/D131 去列默认值(公约①)
+import { tenantDefaultTargets, tenantNullableTargets, dropTenantDefaults, backupBeforeRebuild } from './tenant-default-drop.mjs'   // D126/D131 去列默认值(公约①)
 import { rebuildTenantScopedUnique } from './schema-unique-rebuild.mjs'   // 唯一约束按租户重建(公约②)   // D126/D131 去列默认值(公约①)
+import { installTenantFillTriggers } from './tenant-fill-triggers.mjs'   // D137 落值触发器(公约②)
 import { createAppVersion } from './app-version.mjs'   // 04f-3 三端版本指纹(公约①)
 import { createKbRoutes } from './kb-routes.mjs'   // 知识库路由(D134 现修那一批搬出,公约②)
 import { createBusinessHoursRoutes } from './business-hours-routes.mjs'   // 营业时间两条路由(强制设置批边改边拆)
@@ -429,7 +430,11 @@ function setupDatabase() {
     );
     CREATE INDEX IF NOT EXISTS idx_stored_value_user ON stored_value_transactions(tenant_id, user_id);
     CREATE TABLE IF NOT EXISTS finance_targets (
-      tenant_id TEXT PRIMARY KEY,
+      /* 🔴 04g:TEXT PRIMARY KEY 在 SQLite 里**是可空的**(只有 INTEGER PRIMARY KEY 才隐含 NOT NULL),
+         所以这一列原来 notnull=0、又没有落值触发器 —— 漏写就落 NULL。
+         店主 04g 裁:不补触发器,**直接收紧成 NOT NULL**(补触发器就是再造一个「打错了不报错」)。
+         ⚠️ 这段注释在模板字符串里,不许用反引号 —— 会把它提前闭合(我刚栽过一次)。 */
+      tenant_id TEXT NOT NULL PRIMARY KEY,
       target_mode TEXT NOT NULL DEFAULT 'net_profit',
       month_target_cents INTEGER NOT NULL DEFAULT 0,
       year_target_cents INTEGER,
@@ -11023,6 +11028,8 @@ async function route(req, res) {
          看错端口,店主报的版本串与这里一对就现形,不再猜「你测的和她用的是不是同一份」。 */
       adminBuild: appVersion.servedAdminBuild(),   // 04f-3 三端指纹,出口在 ./app-version.mjs
       version: appVersion.version(),
+      /* D137:`tenant_id` 为 NULL 的行 —— **不再自动归旗舰店**,摆出来由人处置(空对象=一行都没有) */
+      tenantNullRows,
       /* 🔴 测试护栏(店主 08-24 裁 C):**这台服务往哪个库写**,由服务器自己说。
          套件开跑前问这一句,不是 'test' 就拒跑 —— 判据律:判据要能证伪"我会不会写进真库",
          而不是问一个"记得设就设、忘了就没有"的环境变量。
@@ -17698,47 +17705,7 @@ db.exec(`
   UPDATE store_special_dates SET tenant_id = (SELECT s.tenant_id FROM stores s WHERE s.id = store_special_dates.store_id) WHERE tenant_id IS NULL;
   UPDATE booking_drafts SET tenant_id = (SELECT s.tenant_id FROM stores s WHERE s.id = booking_drafts.store_id) WHERE tenant_id IS NULL;
 `)
-// 父表已被删/悬空的极少数行:回落默认租户,保证"零 NULL"这条纪律始终成立
-db.exec(`
-  UPDATE payments SET tenant_id = '${DEFAULT_TENANT_ID}' WHERE tenant_id IS NULL;
-  UPDATE booking_slots SET tenant_id = '${DEFAULT_TENANT_ID}' WHERE tenant_id IS NULL;
-  UPDATE booking_status_history SET tenant_id = '${DEFAULT_TENANT_ID}' WHERE tenant_id IS NULL;
-  UPDATE technician_schedules SET tenant_id = '${DEFAULT_TENANT_ID}' WHERE tenant_id IS NULL;
-  UPDATE business_hours SET tenant_id = '${DEFAULT_TENANT_ID}' WHERE tenant_id IS NULL;
-  UPDATE store_special_dates SET tenant_id = '${DEFAULT_TENANT_ID}' WHERE tenant_id IS NULL;
-  UPDATE booking_drafts SET tenant_id = '${DEFAULT_TENANT_ID}' WHERE tenant_id IS NULL;
-`)
-// 新写入自动带租户:AFTER INSERT 从父表回填(每次启动重建,保证与代码同版本)
-db.exec(`
-  DROP TRIGGER IF EXISTS payments_tenant_fill;
-  DROP TRIGGER IF EXISTS booking_slots_tenant_fill;
-  DROP TRIGGER IF EXISTS booking_status_history_tenant_fill;
-  DROP TRIGGER IF EXISTS technician_schedules_tenant_fill;
-  DROP TRIGGER IF EXISTS business_hours_tenant_fill;
-  DROP TRIGGER IF EXISTS store_special_dates_tenant_fill;
-  DROP TRIGGER IF EXISTS booking_drafts_tenant_fill;
-
-  CREATE TRIGGER payments_tenant_fill AFTER INSERT ON payments WHEN NEW.tenant_id IS NULL
-  BEGIN UPDATE payments SET tenant_id = COALESCE((SELECT b.tenant_id FROM bookings b WHERE b.id = NEW.booking_id), '${DEFAULT_TENANT_ID}') WHERE rowid = NEW.rowid; END;
-
-  CREATE TRIGGER booking_slots_tenant_fill AFTER INSERT ON booking_slots WHEN NEW.tenant_id IS NULL
-  BEGIN UPDATE booking_slots SET tenant_id = COALESCE((SELECT b.tenant_id FROM bookings b WHERE b.id = NEW.booking_id), '${DEFAULT_TENANT_ID}') WHERE rowid = NEW.rowid; END;
-
-  CREATE TRIGGER booking_status_history_tenant_fill AFTER INSERT ON booking_status_history WHEN NEW.tenant_id IS NULL
-  BEGIN UPDATE booking_status_history SET tenant_id = COALESCE((SELECT b.tenant_id FROM bookings b WHERE b.id = NEW.booking_id), '${DEFAULT_TENANT_ID}') WHERE rowid = NEW.rowid; END;
-
-  CREATE TRIGGER technician_schedules_tenant_fill AFTER INSERT ON technician_schedules WHEN NEW.tenant_id IS NULL
-  BEGIN UPDATE technician_schedules SET tenant_id = COALESCE((SELECT t.tenant_id FROM technicians t WHERE t.id = NEW.technician_id), '${DEFAULT_TENANT_ID}') WHERE technician_id = NEW.technician_id AND date = NEW.date; END;
-
-  CREATE TRIGGER business_hours_tenant_fill AFTER INSERT ON business_hours WHEN NEW.tenant_id IS NULL
-  BEGIN UPDATE business_hours SET tenant_id = COALESCE((SELECT s.tenant_id FROM stores s WHERE s.id = NEW.store_id), '${DEFAULT_TENANT_ID}') WHERE store_id = NEW.store_id AND weekday = NEW.weekday; END;
-
-  CREATE TRIGGER store_special_dates_tenant_fill AFTER INSERT ON store_special_dates WHEN NEW.tenant_id IS NULL
-  BEGIN UPDATE store_special_dates SET tenant_id = COALESCE((SELECT s.tenant_id FROM stores s WHERE s.id = NEW.store_id), '${DEFAULT_TENANT_ID}') WHERE store_id = NEW.store_id AND date = NEW.date; END;
-
-  CREATE TRIGGER booking_drafts_tenant_fill AFTER INSERT ON booking_drafts WHEN NEW.tenant_id IS NULL
-  BEGIN UPDATE booking_drafts SET tenant_id = COALESCE((SELECT s.tenant_id FROM stores s WHERE s.id = NEW.store_id), '${DEFAULT_TENANT_ID}') WHERE rowid = NEW.rowid; END;
-`)
+const tenantNullRows = installTenantFillTriggers(db)
 
 // ===== AI 纠偏样本的租户归属(2026-08-07)=====
 // ai_response_feedback 一直没有 tenant_id,而 ownerApprovedReplyPrompt 会把「最近 10 条已批准样本」
@@ -17940,8 +17907,12 @@ try {
    没有要处置的表时是彻底的空操作,所以每次启动跑一遍也不花钱。 */
 {
   const db2 = db
-  const pending = tenantDefaultTargets(db2)
+  const pending = [...tenantDefaultTargets(db2), ...tenantNullableTargets(db2)]
   if (pending.length) {
+    /* 🔴 04g §二:重建型迁移**开机路径也必须先复制库文件** —— 事务回滚只保得住
+       「迁移失败」,保不住「迁移成功但迁错了」。备份路径打进启动日志。 */
+    const backup = backupBeforeRebuild({ copyFileSync, dbPath: join(dataDir, 'lucky-luxe.sqlite'), tag: 'dropdefault' })
+    console.log(`[migrate] 重建前已备份:${backup}`)
     db2.exec('PRAGMA foreign_keys=OFF'); db2.exec('BEGIN IMMEDIATE')
     try {
       const r = dropTenantDefaults(db2)

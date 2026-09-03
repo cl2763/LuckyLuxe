@@ -13,7 +13,7 @@
 import { DatabaseSync } from 'node:sqlite'
 import { copyFileSync } from 'node:fs'
 import { requireTarget } from './db-target.mjs'
-import { tenantDefaultTargets, snapshot4, dropTenantDefaults } from '../apps/api/tenant-default-drop.mjs'
+import { tenantDefaultTargets, tenantNullableTargets, snapshot4, dropTenantDefaults } from '../apps/api/tenant-default-drop.mjs'
 
 const DB_PATH = requireTarget({
   envName: 'DROPDEF_DB_PATH',
@@ -24,7 +24,9 @@ const APPLY = process.argv.includes('--apply')
 const FAIL_AT = Number(process.env.DROPDEF_FAIL_AT || 0)
 
 const db = new DatabaseSync(DB_PATH)
-const list = tenantDefaultTargets(db)
+/* 清单 = 去默认值 + 收紧可空租户列(04g:finance_targets),两件事同一个出口 */
+const tighten = tenantNullableTargets(db).map((r) => ({ t: r.t, dv: '可空→NOT NULL' }))
+const list = [...tenantDefaultTargets(db), ...tighten]
 console.log('\n════ 去掉 tenant_id 的列默认值 ════')
 console.log(`  目标库(绝对路径):${DB_PATH}`)
 console.log(`  模式:${APPLY ? '🔴 --apply(**会重建表**)' : '演练 dry-run(默认;不写一个字)'}`)
@@ -75,7 +77,7 @@ console.log('\n  逐表四栏对照(行 / 列 / 索引 / 触发器):')
 if (!diffs.length) console.log(`    ✔ ${names.length} 张表四栏全部持平 —— 只有列定义变了,数据与结构一个没丢`)
 else for (const t of diffs) console.log(`    🔴 ${t}  前 ${JSON.stringify(before[t])} → 后 ${JSON.stringify(after[t])}`)
 
-const left = tenantDefaultTargets(db)
+const left = [...tenantDefaultTargets(db), ...tenantNullableTargets(db)]
 const trgTotal = db.prepare("SELECT COUNT(*) AS n FROM sqlite_master WHERE type='trigger'").get().n
 console.log(`\n  仍带 DEFAULT 的表:${left.length}(必须 0)${left.length ? ' → ' + left.map((r) => r.t).join(' · ') : ''}`)
 console.log(`  全库触发器总数:${trgTotal}`)
