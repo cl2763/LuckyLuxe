@@ -73,14 +73,34 @@ async function main() {
   const unknownCustomer = `silent-unknown-${RUN_ID}`
   console.log(`[silent-handoff] unknownCustomer=${unknownCustomer}`)
   const unknownResult = await send(unknownCustomer, '我刚看完一部电影，你觉得结尾是什么意思', { forceAi: true })
-  assert(unknownResult.silentHandoff === true, 'unknown out-of-scope message should return silentHandoff=true')
-  assert(!unknownResult.reply, 'unknown out-of-scope message should not return a customer-visible AI reply')
+  /* 🔴 **口径已换**(Cowork 05f §一 2「达标即换」,2026-09-04):默认门从关键词门换成模型门。
+     三跑取中位:范围内 91.2%(≥90)· 无关句实质作答 0.0%(≤2)· 安全四线三轮 0 破口。
+
+     所以这里**明改**成新口径,旧口径断言不留(Cowork 原话):
+     · 范围外(3a)→ **有礼貌回复,不静默,不转人工**;
+     · 范围内但 AI 不该答(3b)→ 有回复 **+ 转人工**;
+     · D133 反面:范围外那句之后,**会话不锁死**,下一句业务问题照常答。
+     回滚开关 `AI_GATE=keyword` 仍在;旧门本身由 `test-ai-gate` 两档一起验。 */
+  assert(Boolean(unknownResult.reply), '范围外必须给一句礼貌回复(3a:有回复,不静默)')
+  assert(unknownResult.reply?.data?.tier === '3a', `范围外应落 tier=3a,实际 ${unknownResult.reply?.data?.tier}`)
+  assert(unknownResult.reply?.data?.handoffRequired === false,
+    '3a **不转人工** —— 顾客问宠物店,把它转给同事没有任何意义,只是占用人手')
+  assert(!unknownResult.silentHandoff, '3a 不是静默')
 
   let conversation = await conversationByExternalId(unknownCustomer)
   assert(conversation, 'silent handoff conversation should exist')
-  assert(conversation.status === 'needs_human', `silent handoff should mark status needs_human, got ${conversation.status}`)
-  assert(conversation.lastIntent === 'silent_unknown_handoff', `silent handoff should mark lastIntent, got ${conversation.lastIntent}`)
-  assert(transcriptRoles(conversation).filter((role) => role === 'assistant').length === 0, 'silent handoff must not append an assistant message')
+  /* 3a **不转人工**,所以会话状态是 `ai_replied` 而不是 `needs_human` —— 这正是换门要的:
+     顾客问一句店外的事,不该把整通对话挂到同事名下等人接。 */
+  assert(conversation.status === 'ai_replied', `3a 之后会话应为 ai_replied(不转人工),实际 ${conversation.status}`)
+  assert(conversation.lastIntent === 'out_of_scope', `3a 应落 lastIntent=out_of_scope,实际 ${conversation.lastIntent}`)
+  /* 3a **有回复**,所以 transcript 里就该有助手消息。写成**白名单**:
+     助手侧只允许「首次接触欢迎语」与「3a 礼貌拒绝句」两种,
+     模型哪天真去答宠物店在哪,那句落不进白名单,立刻红。 */
+  const asst = (conversation.transcript || []).filter((m) => m.role === 'assistant')
+  const okLine = (c) => /欢迎来到|预约助手/.test(c) || /帮不上|店里预约、价格、营业时间/.test(c)
+  assert(asst.length >= 1, '3a 应留下那句礼貌拒绝,实际一句助手消息都没有')
+  const strays = asst.filter((m) => !okLine(m.content || ''))
+  assert(strays.length === 0, `范围外不许出现实质回答,越界句:${strays.map((m) => String(m.content).slice(0, 40)).join(' | ')}`)
   assert(transcriptRoles(conversation).filter((role) => role === 'customer').length === 1, 'silent handoff should still record the customer message')
 
   const knownCustomer = `silent-known-${RUN_ID}`

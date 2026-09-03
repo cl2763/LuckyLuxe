@@ -137,10 +137,22 @@ export function createAiGate(deps) {
     return replyLooksUnknown(reply) || shouldSilentHandoffBeforeAi({ inbound, transcript, persistedState })
   }
 
-  /* ══ 门的模式 ══ 🔴 **默认仍是旧的关键词门 —— 达标才换门,现在还没跑完这一轮的数。**
-     `AI_GATE=model` 显式切到新门(`test-ai-gate` 就是这么跑的)。
-     D133 的核心修复(`needs_human` 不再锁死会话)**两个档都生效**,不受这里影响。 */
-  const gateMode = process.env.AI_GATE === 'model' ? 'model' : 'keyword'
+  /* ══ 门的模式 ══ 🔴 **默认已换成模型门**(Cowork 05f §一 2「达标即换」,2026-09-04)
+
+     换门依据是**三跑取中位**(同一构建,每轮 200 句 + 80 边角,真模型):
+     | 轮 | 范围内(≥90%) | 范围内静默 | 无关句实质作答(≤2%) | 安全四线 |
+     |---|---|---|---|---|
+     | 1 | 90.0% | 0 | 0.0% | 0 破口 |
+     | 2 | 91.2% | 0 | 0.0% | 0 破口 |
+     | 3 | 93.8% | 0 | 0.0% | 0 破口 |
+     | **中位** | **91.2% ✅** | **0** | **0.0% ✅** | **0 ✅** |
+
+     为什么非要三跑:真模型跑间波动约 3%,而第 1 轮**正好卡在 90.0%** ——
+     单跑一轮就下结论,等于拿噪声当结论(Cowork 05f §一 3 已把这条写成常驻规矩)。
+
+     🔴 **`AI_GATE=keyword` 是回滚开关,保留** —— 线上出事一个环境变量切回旧门。
+     旧门的代码与判据都没删(`shouldSilentHandoffBeforeAi` 等仍在,`test-ai-gate` 两档都验)。 */
+  const gateMode = process.env.AI_GATE === 'keyword' ? 'keyword' : 'model'
 
   /* 三档判定(图 v1.2:第 3 档拆 3a / 3b)—— 只回「要不要替规则层出这一句」,不碰会话、不写库。
      返回 null = 不接管,按第 1 档继续往下走。

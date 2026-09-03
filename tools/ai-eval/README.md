@@ -39,3 +39,32 @@ GATE_DB=<沙箱库绝对路径> GATE_EDGE_OUT=/tmp/edge-80.json node tools/ai-ev
 
 **「零命中先证刀能咬」是必要条件不是充分条件** —— 还得用足够多的真实好样本证它不乱咬。
 `knife-proof.mjs` 现在是 6 坏 + 7 好,好样本里放着那 4 句曾被误报的真实回复。
+
+## 🔴 跑间噪声与三跑取中位(Cowork 05f §一 3 裁,常驻规矩)
+
+真模型**不是确定性的**。05e 实测:同一门档、同一份集子、代码只差一处安全线,
+两次跑有 **6/200 = 3% 的句子结果不同**(逐句查过,那 6 句 `gate=None`,走的是普通问答路径)。
+
+**规矩:凡与门槛差距 < 5 个点的结论,一律三跑取中位,不许单跑下结论。**
+
+```bash
+# 三跑(每轮 200 句 + 80 边角,逐轮记 token)
+for r in 1 2 3; do
+  AI_GATE=model AI_REQUIRE_REAL=true bash apps/api/start-sandbox.sh --ai-env apps/api/.env.ai-sandbox
+  GATE_TAG="r$r" GATE_DETAIL=/tmp/r$r.jsonl node tools/ai-eval/run-200.mjs
+done
+```
+
+**逐轮四数与 token 都要报,不只报中位** —— 中位数藏住了波动幅度,而波动幅度本身是结论的一部分。
+
+## 12 场景走查(`scenario12/`)
+
+给**店主读**的走查文档,不是给刀读的。跑机会**建预约/报价单/改会话状态**,是造景脚本,
+所以**不许有默认目标**:`AI12_BASE` 必须显式给,且只打沙箱。
+
+```bash
+AI12_BASE=http://127.0.0.1:4310 AI12_OUT=/tmp/ai12.json node tools/ai-eval/scenario12/run.mjs
+```
+
+每轮记 **`tier` / `source` / `provider`** 三字段:
+只记 source/provider 看不出「这句是礼貌拒绝(3a)还是转人工(3b)」。

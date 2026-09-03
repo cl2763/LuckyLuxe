@@ -126,7 +126,7 @@ check('⑨ 🔴 安全线排在门之前:默认档(关键词门)下同样拦得�
    都带第一人称所有格,分界是**所有格后面是不是账户里的东西**。 */
 const ACTION_MUST_HANDOFF = [
   '我想取消订单', '能不能改期到下周?', 'I want to cancel my order', '我不想去了', 'Can I get my money back?',
-  '我卡里还剩多少?', '我的会员卡还有多少?', '攒的点能换东西吗?', '储值卡余额怎么查?',
+  '我卡里还剩多少?', '我的会员卡还有多少?', '攒的点能换东西吗?', 'How much is left on mine?',
   /* 🔴 带**礼貌后缀**的动作 —— 05e 造病咬出来的:原来「可以吗」会把动作变成问规则。
      顾客说话本来就爱带这种客气尾巴,漏了它就是大面积漏。 */
   '我想取消订单,可以吗', '我要退款,能不能?', '帮我改期,可以吗',
@@ -135,6 +135,9 @@ const POLICY_MUST_ANSWER = [
   '可以改期吗?', '退款要多久到账?', 'Is the deposit refundable?', 'Can I reschedule my booking?',
   'How long does a refund take?', '取消要提前多久?', '退款按什么比例?',
   '积分怎么获得?', '储值送多少?', '优惠券能叠加吗?', '积分能抵扣吗?',
+  /* 🔴 05f 三跑咬出来的(J-17):「余额**怎么查**」是问操作方法,不是「告诉我我的余额」——
+     Cowork 勾定表的账户组只有 4 句,这一句不在里面。我当初抄清单时顺手多加了它。 */
+  '储值卡余额怎么查?',
 ]
 check(`⑩ 动作/账户 ${ACTION_MUST_HANDOFF.length} 句全部判 3b(要动某张单某笔钱、或要读我的账)`,
   ACTION_MUST_HANDOFF.every((s) => needsHumanInScope(s)),

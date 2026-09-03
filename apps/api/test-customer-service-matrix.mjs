@@ -217,9 +217,15 @@ async function main() {
   const unknown = `matrix-unknown-${RUN_ID}`
   const unknownResult = await send(unknown, '我刚看完一部电影，你觉得结尾是什么意思', { forceAi: true })
   conversation = await conversationByExternalId(unknown)
-  check('unknown out-of-scope returns silent handoff flag', unknownResult.silentHandoff === true)
-  check('unknown out-of-scope marks needs_human', conversation.status === 'needs_human', conversation.status)
-  check('unknown out-of-scope has no assistant message', assistantMessages(conversation).length === 0)
+  /* 🔴 口径已换(Cowork 05f §一 2「达标即换」,2026-09-04):默认门 = 模型门,第 3 档拆 3a/3b。
+     旧口径断言不留 —— 范围外现在是 **3a:有礼貌回复、不静默、不转人工**。
+     为什么不转人工:顾客问一句店外的事,把整通对话挂到同事名下等人接,是白占人手。 */
+  check('范围外 → 3a:有回复且 tier=3a', Boolean(unknownResult.reply) && unknownResult.reply.data?.tier === '3a',
+    `reply=${Boolean(unknownResult.reply)} tier=${unknownResult.reply?.data?.tier}`)
+  check('范围外 → **不转人工**(3a 与 3b 的分界就在这里)', unknownResult.reply?.data?.handoffRequired === false)
+  check('范围外之后会话不挂人工:status=ai_replied', conversation.status === 'ai_replied', conversation.status)
+  check('🔴 D133 反面:范围外一句之后,同一会话下一句业务问题必须照常答',
+    Boolean((await send(unknown, '你们营业时间几点到几点?', { forceAi: true })).reply))
 
   const quoteFlow = `matrix-quote-flow-${RUN_ID}`
   await send(quoteFlow, '想约美甲，这款可以做吗', { referenceImages: [IMAGE_A], forceAi: true })

@@ -84,7 +84,13 @@ async function main() {
     // 4. FAQ 直答:先确认停车问题原本是静默(无回复),添加条目后直答
     const beforeUser = `kb-before-${RUN_ID}`
     const before = await chat(beforeUser, '你们店附近好停车吗？')
-    check('parking question silent before FAQ entry', !before.data?.reply || before.data?.reply?.data?.intent === 'silent_unknown_handoff', JSON.stringify(before.data?.reply || null).slice(0, 120))
+    /* 🔴 口径已换(05f 换门):没有 KB 条目时,旧门是**静默**,新门是**礼貌拒绝/转人工**。
+       这条断言真正要守的从来不是「静默」,而是「**不瞎编**」—— 没这条知识就别现编停车位。
+       所以改成:要么没回复,要么回复里**不许出现具体的停车细节**(层数/车位数/免费时长)。 */
+    const beforeText = `${before.data?.reply?.data?.answerZh || ''}${before.data?.reply?.data?.answerEn || ''}`
+    check('没有 FAQ 条目时不许瞎编停车细节(旧门静默 / 新门礼貌拒绝,都不许现编)',
+      !before.data?.reply || !/地下|车位|层|免费停|小时|parking lot|spaces|floor/.test(beforeText),
+      JSON.stringify(beforeText).slice(0, 160))
 
     const created = await request('/admin/kb/entries', {
       method: 'POST',
@@ -107,7 +113,12 @@ async function main() {
     await request(`/admin/kb/entries/${entryId}`, { method: 'PATCH', body: JSON.stringify({ enabled: false }) })
     const disabledUser = `kb-disabled-${RUN_ID}`
     const disabled = await chat(disabledUser, '你们店附近好停车吗？')
-    check('disabled entry restores silent handoff', !disabled.data?.reply || disabled.data?.reply?.data?.intent === 'silent_unknown_handoff', JSON.stringify(disabled.data?.reply || null).slice(0, 120))
+    /* 同上:停用条目后回到「没有这条知识」的状态 —— 守的是**不瞎编**,不是「静默」。
+       这条与上面那条是一对:①还没加条目 ②加了又停用,两种都不许现编停车细节。 */
+    const disabledText = `${disabled.data?.reply?.data?.answerZh || ''}${disabled.data?.reply?.data?.answerEn || ''}`
+    check('条目停用后回到「不瞎编」:不许再出现具体停车细节',
+      !disabled.data?.reply || !/地下|车位|层|免费停|小时|parking lot|spaces|floor/.test(disabledText),
+      JSON.stringify(disabledText).slice(0, 160))
 
     // 7. 文件导入:CSV → 拆条;问答体 → 拆条;自由文本 → 知识文档
     const csvImport = await request('/admin/kb/import', {
