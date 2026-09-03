@@ -112,17 +112,33 @@ if (!existsSync(SRC)) {
   db.exec('DELETE FROM user_identities')
   backfillIdentities(db)
   const fixed = identityRulers(db)
+  const fixedRows = db.prepare('SELECT COUNT(*) AS n FROM user_identities').get().n
   db.exec('DELETE FROM user_identities')
-  db.exec(`INSERT OR IGNORE INTO user_identities (id, user_id, provider, provider_user_id, phone, created_at, updated_at)
-    SELECT 'bad-' || lower(hex(randomblob(6))), id, 'phone', phone, phone, datetime('now'), datetime('now')
-    FROM users WHERE phone IS NOT NULL AND phone != ''`)
+  /* 🔴 04f-2 之后这条金丝雀的含义变了,值得记:
+     去掉 `tenant_id` 的列默认值以后,历史坏版那条 SQL(不写 tenant_id)**连错标行都造不出来** ——
+     它现在直接 `NOT NULL constraint failed`。也就是说 D130 的病**在结构上已经不可能再发生**,
+     不再只是「有把刀盯着」。判据因此从「必须造出错标」改成「**必须当场报错**」,
+     这是更强的保证,不是放宽:原来的形状(悄悄落进旗舰店)现在根本走不到。 */
+  let brokenThrew = ''
+  try {
+    db.exec(`INSERT OR IGNORE INTO user_identities (id, user_id, provider, provider_user_id, phone, created_at, updated_at)
+      SELECT 'bad-' || lower(hex(randomblob(6))), id, 'phone', phone, phone, datetime('now'), datetime('now')
+      FROM users WHERE phone IS NOT NULL AND phone != ''`)
+  } catch (error) { brokenThrew = String(error.message || error) }
   const broken = identityRulers(db)
-  console.log(`   [刀] 回填对照:现版错标 ${fixed.mismatch} · 历史坏版错标 ${broken.mismatch}`)
-  check('⑥ 🔴 回填不再造错标:清空身份表后跑现版回填 → 错标 0',
-    fixed.mismatch === 0 && fixed.dup === 0, JSON.stringify(fixed))
-  check('⑥b 反向守:同一份数据喂**历史坏版**(不带 tenant_id)必须造出错标 —— '
-    + '一把「怎么跑都 0」的尺子证明不了回填修好了',
-  broken.mismatch > 0, JSON.stringify(broken))
+  console.log(`   [刀] 回填对照:现版错标 ${fixed.mismatch} · 历史坏版:${brokenThrew ? `当场报错「${brokenThrew.slice(0, 60)}」` : `错标 ${broken.mismatch}`}`)
+  check(`⑥ 🔴 回填不再造错标:清空身份表后跑现版回填 → 错标 0,`
+    + `**且真的插进去了 ${fixedRows} 行** —— 一个「什么都不插」的回填也能让错标为 0`,
+  fixed.mismatch === 0 && fixed.dup === 0 && fixedRows > 0, JSON.stringify({ ...fixed, rows: fixedRows }))
+  const brokenRows = db.prepare('SELECT COUNT(*) AS n FROM user_identities').get().n
+  check('⑥b 反向守:同一份数据喂**历史坏版**(不带 tenant_id)——'
+    + '04f-2 去掉列默认值之后,它**一行都插不进去**(错标行在结构上已经造不出来)。'
+    + '⚠️ 记一笔:`INSERT OR IGNORE` 把 NOT NULL 违规也一起吞了,所以是「静默不落行」而不是报错 ——'
+    + '去 DEFAULT 把「悄悄落错店」换成了「悄悄不落行」,对这条回填是好事(宁可没有,不要错的),'
+    + '但**这类写法本身仍是静默失败器**,新写 INSERT OR IGNORE 时要想到。'
+    + '若列默认值回潮,它会重新「成功」并造出错标 —— 那时 broken.mismatch > 0,这一条同样红。',
+  (brokenRows === 0 && broken.mismatch === 0) || broken.mismatch > 0,
+  `坏版落行 ${brokenRows} · 错标 ${broken.mismatch} · 报错=${brokenThrew.slice(0, 60)}`)
 
   db.close()
   try { unlinkSync(COPY) } catch { /* 临时副本 */ }

@@ -14,6 +14,8 @@ import { inkToPng } from './ink-raster.mjs'
 import { createAfterSales } from './after-sales.mjs'        // 售后域(公约②:边改边拆)
 import { hoursUnsetOfStore, hoursSavable, HOURS_GATE_TEXT } from './hours-gate.mjs'   // 营业时间闸(D84 强制设置图 v1.0)
 import { createStoredValueReversal } from './stored-value-reversal.mjs'   // 储值行冲销(裁定2 准开口,08-30d)
+import { tenantDefaultTargets, dropTenantDefaults } from './tenant-default-drop.mjs'   // D126/D131 去列默认值(公约①)
+import { rebuildTenantScopedUnique } from './schema-unique-rebuild.mjs'   // 唯一约束按租户重建(公约②)   // D126/D131 去列默认值(公约①)
 import { createKbRoutes } from './kb-routes.mjs'   // 知识库路由(D134 现修那一批搬出,公约②)
 import { createBusinessHoursRoutes } from './business-hours-routes.mjs'   // 营业时间两条路由(强制设置批边改边拆)
 import { createOrderBadges, bookingSourceText, bookingStatusText } from './order-badges.mjs'
@@ -394,7 +396,7 @@ function setupDatabase() {
     );
     CREATE TABLE IF NOT EXISTS finance_transactions (
       id TEXT PRIMARY KEY,
-      tenant_id TEXT NOT NULL DEFAULT 'lucky-luxe',
+      tenant_id TEXT NOT NULL,
       store_id TEXT,
       type TEXT NOT NULL,
       source TEXT NOT NULL DEFAULT 'manual',
@@ -414,7 +416,7 @@ function setupDatabase() {
     CREATE INDEX IF NOT EXISTS idx_finance_txn_booking ON finance_transactions(booking_id);
     CREATE TABLE IF NOT EXISTS stored_value_transactions (
       id TEXT PRIMARY KEY,
-      tenant_id TEXT NOT NULL DEFAULT 'lucky-luxe',
+      tenant_id TEXT NOT NULL,
       user_id TEXT NOT NULL,
       type TEXT NOT NULL,
       amount_cents INTEGER NOT NULL,
@@ -436,7 +438,7 @@ function setupDatabase() {
     );
     CREATE TABLE IF NOT EXISTS staff_compensation (
       technician_id TEXT PRIMARY KEY,
-      tenant_id TEXT NOT NULL DEFAULT 'lucky-luxe',
+      tenant_id TEXT NOT NULL,
       base_salary_cents INTEGER NOT NULL DEFAULT 0,
       commission_rate REAL NOT NULL DEFAULT 0,
       active INTEGER NOT NULL DEFAULT 1,
@@ -445,7 +447,7 @@ function setupDatabase() {
     );
     CREATE TABLE IF NOT EXISTS finance_recurring_rules (
       id TEXT PRIMARY KEY,
-      tenant_id TEXT NOT NULL DEFAULT 'lucky-luxe',
+      tenant_id TEXT NOT NULL,
       name TEXT NOT NULL,
       category TEXT NOT NULL,
       tags TEXT NOT NULL DEFAULT '',
@@ -709,7 +711,7 @@ function setupDatabase() {
     CREATE INDEX IF NOT EXISTS idx_ai_response_feedback_status ON ai_response_feedback(status, updated_at);
     CREATE TABLE IF NOT EXISTS ai_conversation_states (
       conversation_id TEXT PRIMARY KEY,
-      tenant_id TEXT NOT NULL DEFAULT 'lucky-luxe',
+      tenant_id TEXT NOT NULL,
       source_channel TEXT,
       service_type TEXT,
       intent TEXT,
@@ -727,7 +729,7 @@ function setupDatabase() {
     CREATE INDEX IF NOT EXISTS idx_ai_conversation_states_updated ON ai_conversation_states(updated_at);
     CREATE TABLE IF NOT EXISTS ai_learning_examples (
       id TEXT PRIMARY KEY,
-      tenant_id TEXT NOT NULL DEFAULT 'lucky-luxe',
+      tenant_id TEXT NOT NULL,
       conversation_id TEXT,
       feedback_id TEXT,
       source TEXT NOT NULL DEFAULT 'owner_feedback',
@@ -16316,6 +16318,9 @@ try {
 // 多租户地基:核心业务表加 tenant_id。DEFAULT 让 SQLite 自动回填存量行,新行自动继承,无需改任何 INSERT。
 for (const table of ['stores', 'services', 'technicians', 'users', 'bookings', 'wechat_conversations', 'quote_requests', 'reminder_tasks', 'user_identities']) {
   try {
+    /* 🔴 ALTER 这一路**必须留 DEFAULT**:SQLite 给非空表加 NOT NULL 列时,没有默认值直接失败。
+       这里的 DEFAULT 只用来给存量行落值(它们本来就都是旗舰店产生的),
+       落完之后由开机迁移 `dropTenantDefaults` 把列定义上的默认值再摘掉 —— 两步是配套的。 */
     db.exec(`ALTER TABLE ${table} ADD COLUMN tenant_id TEXT NOT NULL DEFAULT 'lucky-luxe'`)
   } catch (error) {
     if (!String(error.message || '').includes('duplicate column')) throw error
@@ -16376,7 +16381,7 @@ db.exec(`
 db.exec(`
   CREATE TABLE IF NOT EXISTS staff_nudges (
     id TEXT PRIMARY KEY,
-    tenant_id TEXT NOT NULL DEFAULT 'lucky-luxe',
+    tenant_id TEXT NOT NULL,
     technician_id TEXT NOT NULL,
     type TEXT NOT NULL DEFAULT 'service-note',
     message TEXT NOT NULL,
@@ -16389,7 +16394,7 @@ db.exec(`
 db.exec(`
   CREATE TABLE IF NOT EXISTS attendance_records (
     id TEXT PRIMARY KEY,
-    tenant_id TEXT NOT NULL DEFAULT 'lucky-luxe',
+    tenant_id TEXT NOT NULL,
     technician_id TEXT NOT NULL,
     work_date TEXT NOT NULL,
     clock_in_at TEXT,
@@ -16409,7 +16414,7 @@ db.exec(`
   );
   CREATE TABLE IF NOT EXISTS store_wifi (
     id TEXT PRIMARY KEY,
-    tenant_id TEXT NOT NULL DEFAULT 'lucky-luxe',
+    tenant_id TEXT NOT NULL,
     store_id TEXT,
     ssid TEXT,
     bssid TEXT NOT NULL,
@@ -16420,7 +16425,7 @@ db.exec(`
 db.exec(`
   CREATE TABLE IF NOT EXISTS salary_plans (
     id TEXT PRIMARY KEY,
-    tenant_id TEXT NOT NULL DEFAULT 'lucky-luxe',
+    tenant_id TEXT NOT NULL,
     technician_id TEXT NOT NULL DEFAULT '',
     template TEXT NOT NULL DEFAULT 'base_ladder',
     base_salary_cents INTEGER NOT NULL DEFAULT 0,
@@ -16501,7 +16506,7 @@ try {
 db.exec(`
   CREATE TABLE IF NOT EXISTS salary_payrolls (
     id TEXT PRIMARY KEY,
-    tenant_id TEXT NOT NULL DEFAULT 'lucky-luxe',
+    tenant_id TEXT NOT NULL,
     month TEXT NOT NULL,
     technician_id TEXT NOT NULL,
     technician_name TEXT,
@@ -16608,7 +16613,7 @@ db.exec(`
 db.exec(`
   CREATE TABLE IF NOT EXISTS points_transactions (
     id TEXT PRIMARY KEY,
-    tenant_id TEXT NOT NULL DEFAULT 'lucky-luxe',
+    tenant_id TEXT NOT NULL,
     user_id TEXT NOT NULL,
     type TEXT NOT NULL,
     amount INTEGER NOT NULL,
@@ -16626,7 +16631,7 @@ db.exec(`
      唯一出口:./ledger-guards.mjs 的十二条。 */
   CREATE TABLE IF NOT EXISTS points_prizes (
     id TEXT PRIMARY KEY,
-    tenant_id TEXT NOT NULL DEFAULT 'lucky-luxe',
+    tenant_id TEXT NOT NULL,
     coupon_id TEXT NOT NULL,
     cost_points INTEGER NOT NULL,
     stock INTEGER NOT NULL DEFAULT 0,
@@ -16642,7 +16647,7 @@ db.exec(`
 db.exec(`
   CREATE TABLE IF NOT EXISTS admin_accounts (
     id TEXT PRIMARY KEY,
-    tenant_id TEXT NOT NULL DEFAULT 'lucky-luxe',
+    tenant_id TEXT NOT NULL,
     username TEXT NOT NULL UNIQUE,
     display_name TEXT,
     role TEXT NOT NULL,
@@ -16667,7 +16672,7 @@ db.exec(`
 db.exec(`
   CREATE TABLE IF NOT EXISTS membership_packages (
     id TEXT PRIMARY KEY,
-    tenant_id TEXT NOT NULL DEFAULT 'lucky-luxe',
+    tenant_id TEXT NOT NULL,
     kind TEXT NOT NULL DEFAULT 'recharge',
     name TEXT NOT NULL,
     price_cents INTEGER NOT NULL DEFAULT 0,
@@ -16700,7 +16705,7 @@ db.exec(`
   CREATE INDEX IF NOT EXISTS idx_member_timecards_user ON member_timecards(tenant_id, user_id);
   CREATE TABLE IF NOT EXISTS coupons (
     id TEXT PRIMARY KEY,
-    tenant_id TEXT NOT NULL DEFAULT 'lucky-luxe',
+    tenant_id TEXT NOT NULL,
     name TEXT NOT NULL,
     discount_type TEXT NOT NULL DEFAULT 'amount',
     amount_cents INTEGER NOT NULL DEFAULT 0,
@@ -16714,7 +16719,7 @@ db.exec(`
   );
   CREATE TABLE IF NOT EXISTS coupon_grants (
     id TEXT PRIMARY KEY,
-    tenant_id TEXT NOT NULL DEFAULT 'lucky-luxe',
+    tenant_id TEXT NOT NULL,
     coupon_id TEXT NOT NULL,
     user_id TEXT NOT NULL,
     code TEXT NOT NULL UNIQUE,
@@ -16726,7 +16731,7 @@ db.exec(`
   );
   CREATE TABLE IF NOT EXISTS service_notes (
     id TEXT PRIMARY KEY,
-    tenant_id TEXT NOT NULL DEFAULT 'lucky-luxe',
+    tenant_id TEXT NOT NULL,
     user_id TEXT NOT NULL,
     booking_id TEXT,
     technician_id TEXT,
@@ -17410,48 +17415,7 @@ function migratePerfBaseToSubtotal() {
      · 而「我的」页读的又是 B 店口径的聚合 —— 半串半不串,最难查的那种。
    这里把两张表的唯一约束重建成**带租户**的复合唯一。SQLite 不能改列约束,只能重建表;
    幂等:只有检测到旧的全局 UNIQUE 才重建,重跑一分不动。 */
-try {
-  const usersSql = (db.prepare("SELECT sql FROM sqlite_master WHERE type='table' AND name='users'").get() || {}).sql || ''
-  if (/wechat_open_id\s+TEXT\s+UNIQUE/i.test(usersSql)) {
-    const cols = db.prepare('PRAGMA table_info(users)').all().map((c) => c.name)
-    const defs = db.prepare('PRAGMA table_info(users)').all().map((c) => {
-      const notNull = c.notnull ? ' NOT NULL' : ''
-      const dflt = c.dflt_value === null || c.dflt_value === undefined ? '' : ` DEFAULT ${c.dflt_value}`
-      const pk = c.pk ? ' PRIMARY KEY' : ''
-      return `${c.name} ${c.type || 'TEXT'}${pk}${notNull}${dflt}`
-    })
-    db.exec('PRAGMA foreign_keys=OFF')
-    db.exec('BEGIN')
-    db.exec(`CREATE TABLE users_rebuild (${defs.join(', ')})`)
-    db.exec(`INSERT INTO users_rebuild (${cols.join(', ')}) SELECT ${cols.join(', ')} FROM users`)
-    db.exec('DROP TABLE users')
-    db.exec('ALTER TABLE users_rebuild RENAME TO users')
-    db.exec('COMMIT')
-    db.exec('PRAGMA foreign_keys=ON')
-    console.log('[migrate] users 唯一性重建:openid/google_id 全局唯一 → 按租户唯一')
-  }
-  const identSql = (db.prepare("SELECT sql FROM sqlite_master WHERE type='table' AND name='user_identities'").get() || {}).sql || ''
-  if (/UNIQUE\s*\(provider,\s*provider_user_id\)/i.test(identSql)) {
-    const cols = db.prepare('PRAGMA table_info(user_identities)').all().map((c) => c.name)
-    const defs = db.prepare('PRAGMA table_info(user_identities)').all().map((c) => {
-      const notNull = c.notnull ? ' NOT NULL' : ''
-      const dflt = c.dflt_value === null || c.dflt_value === undefined ? '' : ` DEFAULT ${c.dflt_value}`
-      const pk = c.pk ? ' PRIMARY KEY' : ''
-      return `${c.name} ${c.type || 'TEXT'}${pk}${notNull}${dflt}`
-    })
-    db.exec('PRAGMA foreign_keys=OFF')
-    db.exec('BEGIN')
-    db.exec(`CREATE TABLE user_identities_rebuild (${defs.join(', ')})`)
-    db.exec(`INSERT INTO user_identities_rebuild (${cols.join(', ')}) SELECT ${cols.join(', ')} FROM user_identities`)
-    db.exec('DROP TABLE user_identities')
-    db.exec('ALTER TABLE user_identities_rebuild RENAME TO user_identities')
-    db.exec('COMMIT')
-    db.exec('PRAGMA foreign_keys=ON')
-    console.log('[migrate] user_identities 唯一性重建:(provider,openid) 全局唯一 → 按租户唯一')
-  }
-} catch (error) {
-  console.warn('[migrate] 唯一性重建失败(已跳过,老数据未动):', error.message)
-}
+rebuildTenantScopedUnique(db)
 // 复合唯一索引(新库/老库同一条路;NULL 不参与唯一,轻档案没 openid 不受影响)
 try {
   db.exec(`
@@ -17784,6 +17748,7 @@ db.exec(`
 // 生产实测:小婕店(CNY)问价被真实模型答成「CAD $368」。加列 + 按租户过滤即可,
 // DEFAULT 'lucky-luxe' 让存量行自动归旗舰店(它们本来就都是旗舰店产生的),旗舰店行为一字不变。
 for (const sql of [
+  /* 同上:ALTER 加 NOT NULL 列必须带 DEFAULT,随后由 dropTenantDefaults 摘掉 */
   "ALTER TABLE ai_response_feedback ADD COLUMN tenant_id TEXT NOT NULL DEFAULT 'lucky-luxe'"
 ]) {
   try {
@@ -17801,7 +17766,7 @@ db.exec('CREATE INDEX IF NOT EXISTS idx_ai_response_feedback_tenant ON ai_respon
 db.exec(`
   CREATE TABLE IF NOT EXISTS service_categories (
     id TEXT PRIMARY KEY,
-    tenant_id TEXT NOT NULL DEFAULT 'lucky-luxe',
+    tenant_id TEXT NOT NULL,
     key TEXT NOT NULL,
     name TEXT NOT NULL,
     sort_order INTEGER NOT NULL DEFAULT 0,
@@ -17812,7 +17777,7 @@ db.exec(`
   CREATE UNIQUE INDEX IF NOT EXISTS idx_service_categories_key ON service_categories(tenant_id, key);
   CREATE TABLE IF NOT EXISTS service_prices (
     id TEXT PRIMARY KEY,
-    tenant_id TEXT NOT NULL DEFAULT 'lucky-luxe',
+    tenant_id TEXT NOT NULL,
     service_id TEXT NOT NULL,
     tier_key TEXT NOT NULL,
     price_cents INTEGER NOT NULL DEFAULT 0,
@@ -17830,7 +17795,7 @@ db.exec(`
   );
   CREATE TABLE IF NOT EXISTS recharge_tiers (
     id TEXT PRIMARY KEY,
-    tenant_id TEXT NOT NULL DEFAULT 'lucky-luxe',
+    tenant_id TEXT NOT NULL,
     amount_cents INTEGER NOT NULL DEFAULT 0,
     gift_json TEXT NOT NULL DEFAULT '{}',
     sort_order INTEGER NOT NULL DEFAULT 0,
@@ -17971,6 +17936,26 @@ try {
 
 /* D72:账本禁删/禁改律**在这里一次装好** —— 位置必须在全部建表/迁移之后,
    否则全新库跑到 settlements 那条时表还不存在,装到一半崩(全新库启动实测抓到的)。 */
+/* 🔴 D126/D131 族收尾(店主 04f §一.2):去掉 `tenant_id` 的列默认值。
+   建表语句里已经不写了(新库天生没有);**老库跟着部署自动去掉** —— 逻辑与
+   `tools/drop-tenant-default.mjs` 同一个出口,两个调用方不会各自漂。
+   没有要处置的表时是彻底的空操作,所以每次启动跑一遍也不花钱。 */
+{
+  const db2 = db
+  const pending = tenantDefaultTargets(db2)
+  if (pending.length) {
+    db2.exec('PRAGMA foreign_keys=OFF'); db2.exec('BEGIN IMMEDIATE')
+    try {
+      const r = dropTenantDefaults(db2)
+      db2.exec('COMMIT')
+      console.log(`[migrate] 去掉 tenant_id 列默认值:${r.done} 张表(触发器 ${r.triggers} 条原样装回)`)
+    } catch (error) {
+      try { db2.exec('ROLLBACK') } catch { /* 已不在事务里 */ }
+      console.warn(`[migrate] 去 tenant_id 默认值失败,**已整批回滚**(老库原样保留):${error.message}`)
+    }
+    db2.exec('PRAGMA foreign_keys=ON')
+  }
+}
 installLedgerGuards(db)
 /* D132:会话唯一索引 (tenant_id, provider, external_user_id) + 未路由留痕表。
    索引建不上(存量有跨租户重名)时**大声报出来**,不静默跳过 —— 判据由 test-conversation-tenant 守。 */

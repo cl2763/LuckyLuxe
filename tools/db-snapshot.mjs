@@ -39,10 +39,18 @@ for (const t of tables) {
   let rows = null
   let cols = null
   let idx = null
+  let trg = null
+  let dflt = null
   try { rows = db.prepare(`SELECT COUNT(*) AS n FROM "${t}"`).get().n } catch { rows = null }
   try { cols = db.prepare('SELECT COUNT(*) AS n FROM pragma_table_info(?)').get(t).n } catch { cols = null }
   try { idx = db.prepare("SELECT COUNT(*) AS n FROM sqlite_master WHERE type = 'index' AND tbl_name = ?").get(t).n } catch { idx = null }
-  now[t] = { rows, cols, idx }
+  /* 🔴 04f-2 再补两栏,同族第三、第四次(03y 补列、04c 补索引与表增减,这次补触发器与默认值):
+     · **触发器**:重建表会连它一起带走,不比就看不出丢没丢;
+     · **默认值**:04f-2 改的正是「列默认值」—— 行/列/索引三栏全部持平,对照表却一声不吭。
+       每次都是同一句话:**这一栏不验,等于加了个不干活的栏目。** */
+  try { trg = db.prepare("SELECT COUNT(*) AS n FROM sqlite_master WHERE type = 'trigger' AND tbl_name = ?").get(t).n } catch { trg = null }
+  try { dflt = db.prepare('SELECT COUNT(*) AS n FROM pragma_table_info(?) WHERE dflt_value IS NOT NULL').get(t).n } catch { dflt = null }
+  now[t] = { rows, cols, idx, trg, dflt }
 }
 db.close()
 
@@ -51,7 +59,7 @@ if (diffAt < 0) {
   const totalRows = Object.values(now).reduce((a, v) => a + (v.rows || 0), 0)
   const totalCols = Object.values(now).reduce((a, v) => a + (v.cols || 0), 0)
   const totalIdx = Object.values(now).reduce((a, v) => a + (v.idx || 0), 0)
-  console.log(`\n════ 库快照(行 + 列 + 索引)════\n  库:${dbPath}\n  表:${tables.length} 张 · 总行数 ${totalRows} · 总列数 ${totalCols} · 总索引 ${totalIdx}\n  写入:${snapFile}`)
+  console.log(`\n════ 库快照(行 + 列 + 索引 + 触发器 + 默认值)════\n  库:${dbPath}\n  表:${tables.length} 张 · 总行数 ${totalRows} · 总列数 ${totalCols} · 总索引 ${totalIdx}\n  写入:${snapFile}`)
   process.exit(0)
 }
 
@@ -59,8 +67,8 @@ const before = JSON.parse(readFileSync(snapFile, 'utf8'))
 /* 老快照可能只存一个数字(行数)或 {rows, cols};新快照存 {rows, cols, idx}。
    三种都读得懂 —— 格式换了不许一律报差异(03y 那次的教训:判据要跟着被测物的格式走)。 */
 const norm = (v) => (v && typeof v === 'object'
-  ? { rows: v.rows ?? 0, cols: v.cols ?? null, idx: v.idx ?? null }
-  : { rows: v ?? 0, cols: null, idx: null })
+  ? { rows: v.rows ?? 0, cols: v.cols ?? null, idx: v.idx ?? null, trg: v.trg ?? null, dflt: v.dflt ?? null }
+  : { rows: v ?? 0, cols: null, idx: null, trg: null, dflt: null })
 /* 🔴 04c 现测撞出的一个洞:**新建的空表对照表看不见** ——
    `norm(undefined)` 给出 {rows:0, cols:null},于是行差 0、列差 0(列是 null 就不比),一声不吭。
    D132 新建的 `wecom_unrouted` 就是这么溜过去的。表的增减必须单独报。 */
@@ -73,10 +81,14 @@ for (const t of new Set([...Object.keys(before.tables), ...Object.keys(now)])) {
   const rowD = b.rows - a.rows
   const colD = (a.cols === null || b.cols === null) ? 0 : b.cols - a.cols
   const idxD = (a.idx === null || b.idx === null) ? 0 : b.idx - a.idx
-  if (rowD !== 0 || colD !== 0 || idxD !== 0) {
+  const trgD = (a.trg === null || b.trg === null) ? 0 : b.trg - a.trg
+  const dfD = (a.dflt === null || b.dflt === null) ? 0 : b.dflt - a.dflt
+  if (rowD !== 0 || colD !== 0 || idxD !== 0 || trgD !== 0 || dfD !== 0) {
     diffs.push({ 表: t, 行: `${a.rows}→${b.rows}`, 行差: rowD,
       列: a.cols === null ? '(旧快照没记列)' : `${a.cols}→${b.cols}`, 列差: colD,
-      索引: a.idx === null ? '(旧快照没记索引)' : `${a.idx}→${b.idx}`, 索引差: idxD })
+      索引: a.idx === null ? '(旧快照没记索引)' : `${a.idx}→${b.idx}`, 索引差: idxD,
+      触发器: a.trg === null ? '(旧快照没记触发器)' : `${a.trg}→${b.trg}`, 触发器差: trgD,
+      默认值: a.dflt === null ? '(旧快照没记默认值)' : `${a.dflt}→${b.dflt}`, 默认值差: dfD })
   }
 }
 console.log(`\n════ 「未动须有证」对照表 ════\n  库:${dbPath}\n  快照:${snapFile}`)
@@ -85,7 +97,7 @@ if (added.length || removed.length) {
     + ` · 消失 ${removed.length}${removed.length ? `(${removed.join(' · ')})` : ''}`)
 }
 if (!diffs.length && !added.length && !removed.length) {
-  console.log('  ✅ 逐表零差异(**表、行、列、索引都比过**)—— 「本库未动」这句话有证据支撑')
+  console.log('  ✅ 逐表零差异(**表、行、列、索引、触发器、默认值都比过**)—— 「本库未动」这句话有证据支撑')
   process.exit(0)
 }
 if (!diffs.length) process.exit(1)
@@ -94,6 +106,8 @@ for (const d of diffs) {
   const r = d.行差 === 0 ? '行 持平' : `行 ${d.行}(${d.行差 > 0 ? '+' : ''}${d.行差})`
   const c = d.列差 === 0 ? (d.列.startsWith('(') ? d.列 : '列 持平') : `列 ${d.列}(${d.列差 > 0 ? '+' : ''}${d.列差})`
   const x = d.索引差 === 0 ? (d.索引.startsWith('(') ? d.索引 : '索引 持平') : `索引 ${d.索引}(${d.索引差 > 0 ? '+' : ''}${d.索引差})`
-  console.log(`     ${d.表}  ${r} · ${c} · ${x}`)
+  const g = d.触发器差 === 0 ? (String(d.触发器).startsWith('(') ? d.触发器 : '触发器 持平') : `触发器 ${d.触发器}(${d.触发器差 > 0 ? '+' : ''}${d.触发器差})`
+  const f = d.默认值差 === 0 ? (String(d.默认值).startsWith('(') ? d.默认值 : '默认值 持平') : `默认值 ${d.默认值}(${d.默认值差 > 0 ? '+' : ''}${d.默认值差})`
+  console.log(`     ${d.表}  ${r} · ${c} · ${x} · ${g} · ${f}`)
 }
 process.exit(1)

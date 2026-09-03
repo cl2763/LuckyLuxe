@@ -147,17 +147,31 @@ check('①e 🔴 零命中先证刀能咬(user_identities 版):金丝雀正反�
    而旗舰店报价台列得出别店的报价。行为面由 `test-quote-tenant` 在**非默认租户**里走一遍。 */
 const DBP = process.env.TEST_DB_PATH || join(ROOT, 'apps/api/sandbox-data/lucky-luxe.sqlite')
 let famTables = []
+let famDefaults = []
+let famNullable = []
+let famFillTriggers = []
 let famRows = []
 let famErr = ''
 try {
   const fdb = new DatabaseSync(DBP, { readOnly: true })
-  famTables = fdb.prepare(`SELECT m.name AS t FROM sqlite_master m JOIN pragma_table_info(m.name) p
-    WHERE m.type='table' AND p.name='tenant_id' AND p.dflt_value IS NOT NULL ORDER BY 1`).all().map((r) => r.t)
+  /* 🔴 04f-2 换锚:DEFAULT 已经全去掉了,再按「带 DEFAULT」找表会得到 0 张 —— 判据会**绿在空气上**。
+     换成按「**有没有 `tenant_id` 列**」取:这是更宽的超集(31 → 全部带租户列的表),
+     白名单式也更彻底 —— 新表只要带 tenant_id 就自动进扫描面。 */
+  famTables = fdb.prepare(`SELECT DISTINCT m.name AS t FROM sqlite_master m JOIN pragma_table_info(m.name) p
+    WHERE m.type='table' AND p.name='tenant_id' AND p."notnull" = 1 ORDER BY 1`).all().map((r) => r.t)
+  /* 可空的那一族靠 `<表>_tenant_fill` 触发器从父行落值 —— 另一套机制,单独一条判据守 */
+  famNullable = fdb.prepare(`SELECT DISTINCT m.name AS t FROM sqlite_master m JOIN pragma_table_info(m.name) p
+    WHERE m.type='table' AND p.name='tenant_id' AND p."notnull" = 0 ORDER BY 1`).all().map((r) => r.t)
+  famFillTriggers = fdb.prepare("SELECT tbl_name AS t FROM sqlite_master WHERE type='trigger' AND name LIKE '%_tenant_fill'").all().map((r) => r.t)
+  famDefaults = fdb.prepare(`SELECT DISTINCT m.name AS t FROM sqlite_master m JOIN pragma_table_info(m.name) p
+    WHERE m.type='table' AND p.name='tenant_id' AND p.dflt_value IS NOT NULL`).all().map((r) => r.t)
   fdb.close()
 } catch (error) { famErr = error.message }
 /* 取不到前置就红,**不许静默跳过**(断言增量律:被条件块包住的断言取不到前置必须红) */
 check(`🟡 D131 前置:拿得到 schema(${DBP.replace(ROOT, '.')})才能生成表清单 —— `
-  + '取不到就红,不许静默跳过整段报数(断言增量律)',
+  + '取不到就红,不许静默跳过整段报数(断言增量律)。'
+  + '锚从「带 DEFAULT 的表」换成「带 tenant_id 列的表」:默认值已全部去掉,'
+  + '再按旧锚找会得到 0 张、判据绿在空气上',
 famTables.length >= 31, famErr || `只取到 ${famTables.length} 张`)
 
 if (famTables.length) {
@@ -181,6 +195,27 @@ if (famTables.length) {
     + `漏写 tenant_id **必须 0 处**(现为 ${totalMiss})—— 一处都不白名单;`
     + '这一族的根都是列定义带 `DEFAULT \'lucky-luxe\'`,忘写就静默塞进旗舰店',
   totalMiss === 0, missWhere.join(' | '))
+  /* ══ 🔴 04f-2 新加的一层:可空的 tenant_id 靠触发器落值 —— 那就**必须真有那个触发器** ══
+     去掉 DEFAULT 之后把锚放宽,才看见这一族(payments / business_hours / booking_slots …7 张):
+     它们的 tenant_id 是 ALTER 加的**可空**列,漏写不会报错、会落 NULL,
+     由 `<表>_tenant_fill` 从父行补上。所以这一族的判据不是「INSERT 必须写」,
+     而是「**必须有那个触发器**」—— 新加一张这样的表却忘了配触发器,行就带着 NULL 租户躺进库里。 */
+  /* 白名单:确实不靠触发器、而是**每处 INSERT 都显式写**的,逐条写理由 + 现测证据。
+     加一条就要动棘轮,并在回报里说明为什么。 */
+  const FILL_ALLOW = {
+    finance_targets: '不靠触发器:全仓两处 INSERT(local-server.mjs:14195 / :14487)都在列名里显式写了 tenant_id;'
+      + '现测本机库 4 行、沙箱 2 行,tenant_id 为 NULL 的 0 行。'
+      + '什么时候要动:再多一个写入口、或出现 NULL 行,就该给它配 `finance_targets_tenant_fill`',
+  }
+  const FILL_ALLOW_CAP = Object.keys(FILL_ALLOW).length
+  check(`🔴 落值触发器白名单棘轮 ≤ ${FILL_ALLOW_CAP}(每条要有理由与现测证据;只减不增)`,
+    Object.keys(FILL_ALLOW).length <= FILL_ALLOW_CAP, String(Object.keys(FILL_ALLOW).length))
+  const missFill = famNullable.filter((t) => !famFillTriggers.includes(t) && !FILL_ALLOW[t])
+  check(`🔴 可空租户列必须有落值触发器:${famNullable.length} 张表的 tenant_id 可空,`
+    + `逐个必须有 \`<表>_tenant_fill\`(现有 ${famFillTriggers.length} 条)—— `
+    + '可空列漏写不报错、落 NULL,靠触发器从父行补;没有触发器 = 行带着 NULL 租户躺进库里',
+  missFill.length === 0, `缺触发器:${missFill.join(' · ')}`)
+
   check(`🔴 D131 反向守:表清单由 schema 现取 ${famTables.length} >= 31 张 · INSERT 底数 ${totalHit} >= 60 处 `
     + '(清单被写死或扫描面缩水立刻红 —— 判据覆盖面要有判据)',
   famTables.length >= 31 && totalHit >= 60, JSON.stringify({ tables: famTables.length, hits: totalHit }))
@@ -188,10 +223,27 @@ if (famTables.length) {
 
 /* ④ 列定义还带着 DEFAULT 的,记在案上 —— 去掉它入上线硬门槛批(店主 03v 裁) */
 const schemaSrc = readFileSync(join(ROOT, 'apps/api/local-server.mjs'), 'utf8')
+/* ══ 🔴 04f-2:「在案」翻面 —— DEFAULT 已经去掉了,从「记在案上」升成**硬判据** ══
+   店主 04f §一.2 裁:31 张表去 DEFAULT,迁移脚本 + 彩排。做法是重建表(SQLite 没有 DROP DEFAULT),
+   建表语句里不再写、老库由开机迁移 `dropTenantDefaults` 摘掉,两个调用方同一个出口。
+   从此漏写 tenant_id 不再静默塞进旗舰店,而是当场 `NOT NULL constraint failed`。 */
 const stillDefault = (schemaSrc.match(/tenant_id\s+TEXT\s+NOT\s+NULL\s+DEFAULT\s+'lucky-luxe'/g) || []).length
-console.log(`   [在案] 源码里写着 DEFAULT 'lucky-luxe' 的列定义 ${stillDefault} 处;库里带 DEFAULT 的表 ${famTables.length} 张`
-  + ' —— 去掉要重建表,风险不值,已入**上线硬门槛批**(那一行从「users」改成「31 张表」,店主 04a §三);'
-  + '在那之前由本刀守「不许再有人忘写」')
+const famWithDefault = famDefaults.length
+check('④ 🔴 库里**一张表都不许再带** `tenant_id DEFAULT` —— '
+  + '「有默认值,打错了不报错」是 D127/D128/D130/D131 的同一根子;'
+  + '去掉之后漏写当场报 NOT NULL,不再静默落进旗舰店',
+famWithDefault === 0, `仍带 DEFAULT 的表:${famDefaults.join(' · ')}`)
+
+/* ④b 反向守:源码里**只许**在 ALTER 那一路留 DEFAULT —— SQLite 给非空表加 NOT NULL 列时
+   没有默认值直接失败,那两处的 DEFAULT 只用来给存量行落值,随后由 dropTenantDefaults 摘掉。
+   CREATE TABLE 里再出现一处就是回潮。 */
+const createWithDefault = (schemaSrc.match(/tenant_id\s+TEXT\s+NOT\s+NULL\s+DEFAULT\s+'lucky-luxe'/g) || []).length
+const alterWithDefault = (schemaSrc.match(/ALTER\s+TABLE[^\n]*tenant_id\s+TEXT\s+NOT\s+NULL\s+DEFAULT\s+'lucky-luxe'/g) || []).length
+check(`④b 反向守:源码里带 DEFAULT 的 ${createWithDefault} 处**必须全部是 ALTER**(现为 ${alterWithDefault} 处)—— `
+  + 'ALTER 给非空表加 NOT NULL 列必须带默认值,那是落存量行用的;'
+  + 'CREATE TABLE 里再出现一处就是回潮',
+createWithDefault === alterWithDefault, `CREATE 侧还有 ${createWithDefault - alterWithDefault} 处`)
+console.log(`   [在案] 源码里 DEFAULT 'lucky-luxe' ${stillDefault} 处(全在 ALTER 那一路)· 库里带 DEFAULT 的表 ${famWithDefault} 张`)
 
 console.log(`\n[默认租户] 源文件 ${CODE.length} · INSERT INTO users ${sites.length} 处 · 漏写 ${missing.length} · 白名单 ${Object.keys(ALLOW).length}`)
 if (fails.length) { console.error(`\n❌ test-tenant-explicit ${fails.length}/${checks} 项未过`); process.exit(1) }
