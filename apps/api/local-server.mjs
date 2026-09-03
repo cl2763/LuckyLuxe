@@ -66,7 +66,7 @@ import { seedServices } from './seed-services.mjs'                    // 演示�
 import { createPricingSerialize } from './pricing-serialize.mjs'      // 价目表序列化域(公约②)  // 账本禁删/禁改律唯一出口(D72)      // 顾客端订单表达域(同上)
 import { createBookingIncome } from './booking-income.mjs'  // 订单入账触点(同上)
 import { createBookingState, isAfterSalesOpen, shouldAutoComplete } from './booking-state.mjs'  // 订单状态机(D70 合同,唯一实现)   // 笔迹图:纯 JS 画折线,**透明底**(单据白纸走 svgToPng,两条路不混)
-import { analyzeReferenceImage, createBookingSummary, createCustomerInsight, createCustomerServiceReply, createDailyBrief, createRecallMessages, createServiceNoteInsights, createSocialCopy, extractKbEntriesFromDocument, polishStaffQuoteReply } from './ai-utils.mjs'
+import { analyzeReferenceImage, createBookingSummary, createCustomerInsight, createCustomerServiceReply, createDailyBrief, createRecallMessages, createServiceNoteInsights, createSocialCopy, extractKbEntriesFromDocument, getAiUsage, polishStaffQuoteReply } from './ai-utils.mjs'
 import { buildKnowledgeContext, loadCustomerServiceKnowledgeBase } from './kb-utils.mjs'
 
 // 进程时区只作为「没有门店时区可用时」的兜底。业务上的「今天/本月/日期分桶」一律按门店时区算,
@@ -11004,6 +11004,7 @@ async function route(req, res) {
          摆在 /health 是为了**能被判据读到** —— 判据要求回归跑完三个进程都是 0/0;
          日志会被下一次跑覆盖,health 不会。 */
       tenantFallback: { ...tenantFallbackTally },
+      aiUsage: getAiUsage(),   // 04d §三:真模型 token 累计(mock 时全 0)
       /* 🔴 2026-08-30(退回件②):这台服务**实发的前端是哪一版**,由服务自己说 ——
          adminBuild = admin.html 现算的 LL_BUILD(与页面左下角同源)。restore 拉错版本、
          看错端口,店主报的版本串与这里一对就现形,不再猜「你测的和她用的是不是同一份」。 */

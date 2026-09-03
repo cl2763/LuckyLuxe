@@ -3,6 +3,9 @@ const DEFAULT_PROVIDER = process.env.AI_PROVIDER || (process.env.AI_API_KEY ? 'o
 const AI_BASE_URL = (process.env.AI_BASE_URL || 'https://api.openai.com/v1').replace(/\/$/, '')
 const AI_API_KEY = process.env.AI_API_KEY || process.env.OPENAI_API_KEY || ''
 const AI_REQUIRE_REAL = process.env.AI_REQUIRE_REAL === 'true'
+/* 真模型调用的 token 累计(本进程);`getAiUsage()` 是唯一读出口 */
+const aiUsageTally = { calls: 0, promptTokens: 0, completionTokens: 0, totalTokens: 0 }
+export function getAiUsage() { return { ...aiUsageTally } }
 
 function clip(value, max = 800) {
   return String(value || '').slice(0, max)
@@ -105,6 +108,14 @@ async function callOpenAICompatible({ system, user, schema, images = [], tempera
     throw new Error(`AI provider failed: ${response.status} ${detail.slice(0, 220)}`)
   }
   const data = await response.json()
+  /* 🔴 04d §三:12 场景要报总 token —— **量出来,不是估**。
+     真模型的响应自带 `usage`,在这里累计,由 `/health.aiUsage` 出口读(与口径④ 的计数同一形态:
+     摆在 health 是为了能被判据与回执读到,日志会被下一次跑覆盖)。mock 不产生 usage,自然是 0。 */
+  const u = data.usage || {}
+  aiUsageTally.calls += 1
+  aiUsageTally.promptTokens += Number(u.prompt_tokens || 0)
+  aiUsageTally.completionTokens += Number(u.completion_tokens || 0)
+  aiUsageTally.totalTokens += Number(u.total_tokens || 0)
   const text = data.choices?.[0]?.message?.content || '{}'
   return JSON.parse(text)
 }
