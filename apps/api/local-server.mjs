@@ -21,7 +21,8 @@ import { ensureConversationLog, logConversationMessage, transcriptFromLog, migra
 import { createConversationRoutes } from './conversation-routes.mjs'   // ⓪b 脱敏正门(大批05 §〇b,公约①)
 import { compactIntentText } from './intent-text.mjs'   // 意图文本归一,全仓唯一一份(05d)
 import { resolveSafetyLine, hasSpecialManualHandoffIntent, needsHumanInScope } from './ai-safety-lines.mjs'   // 安全四线闸(05d 两破口;判定与出句都在模块里)
-import { createAiGate, isGreetingOnly, hasServiceStartIntent, isExplicitAiResumeIntent, hasAppointmentInquiryIntent } from './ai-gate.mjs'   // 大批05 ① 门(旧关键词门 + 新模型门三档,公约①②)
+import { createFactGate } from './ai-fact-gate.mjs'   // ② 事实闸:出口校验(图 §三)
+import { createAiGate, isGreetingOnly, hasServiceStartIntent, isExplicitAiResumeIntent, hasAppointmentInquiryIntent, isVagueContextFollowup } from './ai-gate.mjs'   // 大批05 ① 门(旧关键词门 + 新模型门三档,公约①②)
 import { createAppVersion } from './app-version.mjs'   // 04f-3 三端版本指纹(公约①)
 import { createKbRoutes } from './kb-routes.mjs'   // 知识库路由(D134 现修那一批搬出,公约②)
 import { createBusinessHoursRoutes } from './business-hours-routes.mjs'   // 营业时间两条路由(强制设置批边改边拆)
@@ -2448,11 +2449,6 @@ function afterSalesHandoffReply(afterSales = {}, lang = 'zh') {
 }
 
 
-function isVagueContextFollowup(text = '') {
-  const compact = compactIntentText(text)
-  return /^(可以吗|好了吗|这个呢|这款呢|那这个呢|那价格呢|价格呢|多少钱|ok|好的|可以)$/.test(compact)
-}
-
 
 
 
@@ -3569,6 +3565,8 @@ function appendQuoteUnavailableSlotAssistantReply(quote, slot = {}, error = {}, 
   })
 }
 
+const factGate = createFactGate({ tenantKbFacts, getDepositConfig, currentTenantId })
+
 const aiGate = createAiGate({
   compactIntentText, flattenPersistedQuoteState,
   hasAfterSalesProblemIntent, hasSpecialManualHandoffIntent, hasExplicitPriceIntent,
@@ -4057,7 +4055,9 @@ async function handleWecomInbound(inbound, req) {
     ...context
   })
   const quoteWorkflow = resolveQuoteWorkflow(inbound, existingTranscript, baseReply, knowledgeContext, persistedState)
-  const reply = quoteWorkflow.reply || baseReply
+  /* ② 事实闸(图 §三)—— **出口校验,最后一道**:回复里的金额/比例/可否抵扣
+     必须能在事实槽里找到(D136 锚的三项),找不到就换成「这个我帮您问一下」+ 3b,不放出去。 */
+  const reply = factGate.check(quoteWorkflow.reply || baseReply, quoteWorkflow.reply?.source)
   /* 三档在 `ai-gate.mjs`(门的唯一真相);这里只负责出句与落库 ——
      `recordWecomConversation` 还在本文件,按公约②下批一起搬。
      ⚠️ `ruleTookOver` 判的是「**规则层自己出了句子**」,不是「quoteWorkflow.reply 有没有值」:

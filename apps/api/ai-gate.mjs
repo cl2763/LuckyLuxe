@@ -56,6 +56,14 @@ export function hasAppointmentInquiryIntent(text = '') {
   return /预约|想约|要约|可以约吗|能约吗|档期|有空吗|时间|book|appointment|available|availability/.test(compact)
 }
 
+/* 「可以吗 / 这个呢 / 多少钱」这类**没有上下文就看不懂**的短句 —— 从 `local-server.mjs` 搬来(公约②)。
+   它判的是「这句话要不要靠前文才成立」,属门域。 */
+export function isVagueContextFollowup(text = '') {
+  const compact = compactIntentText(text)
+  return /^(可以吗|好了吗|这个呢|这款呢|那这个呢|那价格呢|价格呢|多少钱|ok|好的|可以)$/.test(compact)
+}
+
+
 export function createAiGate(deps) {
   const {
     flattenPersistedQuoteState,

@@ -40,6 +40,11 @@ function boundNames(code) {
     }
   }
   for (const m of code.matchAll(/import\s+\*\s+as\s+([A-Za-z_$][\w$]*)/g)) names.add(m[1])
+  /* 🔴 对象字面量里的**方法简写**(`{ check(a, b) { … } }`)也是绑定,不是调用。
+     05g 现测:`createFactGate` 返回的 `{ check(reply, ruleSource) {} }` 被报成自由标识符。
+     这是这把刀的**第四次误报** —— 前三次:一行两个解构名 / 正则 `\b(` / import 绑定。
+     误报四次说明它该有自己的套件(登记待排,J-11 已记),不能只靠我每次手动自证。 */
+  for (const m of code.matchAll(/^\s*(?:async\s+)?([A-Za-z_$][\w$]*)\s*\([^)]*\)\s*\{/gm)) names.add(m[1])
   /* 解构块:`{ ... }` 里逗号分隔的每个名字都算绑定;`a: b` 取 b */
   for (const m of code.matchAll(/\{([^{}]*)\}\s*=/g)) {
     for (const piece of m[1].split(',')) {

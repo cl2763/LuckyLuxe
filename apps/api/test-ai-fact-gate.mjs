@@ -1,0 +1,140 @@
+/* ② 事实闸常驻套件(图 §三;Cowork 05g §二 定的四条判据)
+
+   门(①)管「该不该答」,事实闸管「**答的内容是不是编的**」。
+   四条判据按 05g 原文:
+   ① 造病:夹具注入槽外数字 → 必须拦下
+   ② **D136 并排表为锚**:金额 / 可否抵扣 / 三档比例,三项逐项一致
+   ③ 租户隔离:A 店地址不得出现在 B 店回复
+   ④ 价目:需报价项目只说「需技师确认」,不出数字 */
+import { assertTestTarget } from './test-guard.mjs'
+import { collectFactSlots, verifyReplyFacts, passFactGate, FACT_GATE_REPLY } from './ai-fact-gate.mjs'
+
+const BASE_URL = process.env.TEST_BASE_URL || 'http://127.0.0.1:4128'
+await assertTestTarget(BASE_URL)
+const RUN = Date.now().toString(36)
+let n = 0
+const fails = []
+const check = (name, ok, detail = '') => {
+  n += 1
+  if (ok) console.log(`ok ${n} - ${name}`)
+  else { fails.push(name); console.log(`not ok ${n} - ${name}${detail ? ` :: ${detail}` : ''}`) }
+}
+const api = async (p, tid, o = {}) => {
+  const r = await fetch(`${BASE_URL}${p}`, {
+    ...o,
+    headers: { 'content-type': 'application/json', authorization: 'Bearer owner-demo-token',
+      ...(tid ? { 'x-admin-tenant-id': tid, 'x-tenant-id': tid } : {}), ...(o.headers || {}) },
+  })
+  try { return await r.json() } catch { return null }
+}
+const chat = (tid, ext, message) => api('/admin/wechat/mock-chat-message', tid,
+  { method: 'POST', body: JSON.stringify({ externalUserId: ext, message }) })
+
+/* ── 夹具:拿真店数据造槽,不自己编 ────────────────────────── */
+const SLOTS = collectFactSlots(
+  { depositAmount: 50, priceList: [{ price: 'CAD $168', deposit: 'CAD $50' }, { price: 'CAD $88' }] },
+  { mode: 'fixed', fixedAmountCents: 5000, fallbackAmountCents: 5000, deductible: true,
+    cancelPolicy: { lateForfeitPct: 50, noShowForfeitPct: 100 } },
+)
+
+/* ── 判据①:造病 —— 槽外数字必须拦下,槽内的必须放行 ────────── */
+const MUST_BLOCK = [
+  ['编了个金额', '美甲定金 CAD $80,可抵扣尾款。'],
+  ['编了个比例', '不足 24 小时取消扣除 30%。'],
+  ['抵扣说反了', '定金 CAD $50,不可抵扣尾款哦。'],
+  ['编了个会员卡面额', '充值 CAD $3000 送 $500。'],
+]
+const MUST_PASS = [
+  ['D136 原文', '美甲定金 CAD $50,可抵扣尾款。提前 24 小时以上取消全额退还;不足 24 小时扣除 50%;爽约扣 100%。'],
+  ['营业时间(数字不是钱)', '我们周一休息,周二至周日 10:00-19:00 营业。'],
+  ['价目内的数', '经典奶油法式 CAD $168 起,手部基础护理 CAD $88。'],
+  ['七项收集表(全是序号)', '1. 项目类型 2. 日期 3. 是否卸甲 4. 是否延长 5. 断甲 6. 参考图 7. 备注'],
+]
+check(`① 造病:${MUST_BLOCK.length} 句槽外事实**全部拦下**`,
+  MUST_BLOCK.every(([, t]) => !verifyReplyFacts(t, SLOTS).ok),
+  `漏放:${MUST_BLOCK.filter(([, t]) => verifyReplyFacts(t, SLOTS).ok).map(([k]) => k).join(' | ')}`)
+check(`①b 🔴 反向守:${MUST_PASS.length} 句**槽内**事实一句都不许拦 —— 判据太紧会变成误报机器`,
+  MUST_PASS.every(([, t]) => verifyReplyFacts(t, SLOTS).ok),
+  `误拦:${MUST_PASS.filter(([, t]) => !verifyReplyFacts(t, SLOTS).ok)
+    .map(([k, t]) => `${k}(${verifyReplyFacts(t, SLOTS).offenders.map((o) => o.kind + '=' + o.value).join(',')})`).join(' | ')}`)
+check('①c 拦下之后出的是「我帮您问一下」+ 转人工(3b),不是静默、也不是把错数字说出去',
+  (() => {
+    const r = passFactGate({ data: { answerZh: '定金 CAD $80' } }, SLOTS)
+    return r.blocked?.length > 0 && r.reply.data.gate === 'fact_gate'
+      && r.reply.data.tier === '3b' && r.reply.data.handoffRequired === true
+      && /帮您问一下/.test(r.reply.data.answerZh)
+  })(), '')
+
+/* ── 判据②:D136 并排表为锚 ────────────────────────────────
+   04e 那份逐项对照写明「留作闭环批『事实只从店数据取』判据的锚,
+   锚三项:金额 / 可否抵扣 / 三档退款比例」。这里就按三项逐项验,
+   而且**两店各验一遍** —— D136 的要害正是两店配置相反。 */
+for (const tid of ['lucky-luxe', 'jics-store']) {
+  const cfg = await api('/admin/deposit-config', tid)
+  const c = cfg?.config || cfg || {}
+  const d = await chat(tid, `fact-dep-${RUN}-${tid}`, '定金要多少?能退吗?')
+  const say = `${d?.reply?.data?.answerZh || ''}${d?.reply?.data?.answerEn || ''}`
+  const cp = c.cancelPolicy || {}
+  const wantDeduct = Boolean(c.deductible)
+  const saysNotDeduct = /不(可以|能)?抵扣|不抵扣|not\s+deduct/i.test(say)
+  const saysDeduct = !saysNotDeduct && /抵扣|deduct/i.test(say)
+  check(`② D136 锚·${tid}·**可否抵扣**:店数据 ${wantDeduct} ↔ 回复说的一致`,
+    !say || (wantDeduct ? saysDeduct : (saysNotDeduct || !saysDeduct)),
+    `店=${wantDeduct} 回复=${saysDeduct ? '可抵扣' : (saysNotDeduct ? '不可抵扣' : '没提')} | ${say.slice(0, 70)}`)
+  check(`② D136 锚·${tid}·**三档比例**:临期 ${cp.lateForfeitPct}% / 爽约 ${cp.noShowForfeitPct}% —— 回复里的百分比不许有第三个数`,
+    [...say.matchAll(/(\d{1,3})\s*%/g)].every((m) => [0, 100, Number(cp.lateForfeitPct), Number(cp.noShowForfeitPct)].includes(Number(m[1]))),
+    say.slice(0, 90))
+  check(`② D136 锚·${tid}·**金额**:回复里的钱数必须过事实闸`,
+    !d?.reply || d.reply.data?.gate !== 'fact_gate',
+    `被事实闸拦下了 → 说明回复里的金额不在槽内:${say.slice(0, 70)}`)
+}
+
+/* ── 判据③:租户隔离 —— A 店地址不得出现在 B 店回复 ────────────
+   🔴 **景是这套件自己造的**(《造景律》:谁出走查单,谁先把景造好)。
+   CI 库里只有一个真租户,所以现建两家店、各设一个不同地址,再问 B 店要地址。
+   05g 现测踩过一坑:`x-admin-tenant-id` **不是**管理路由的换店开关
+   (闸门取的是 `admin.tenantId`,来自令牌),所以建店与设地址都要走 `/platform/*`。 */
+const PLAT = process.env.OWNER_TOKEN || 'owner-demo-token'
+const plat = async (p, o = {}) => {
+  const r = await fetch(`${BASE_URL}${p}`, {
+    ...o, headers: { 'content-type': 'application/json', authorization: `Bearer ${PLAT}`, ...(o.headers || {}) },
+  })
+  let d = null
+  try { d = await r.json() } catch { d = null }
+  return { status: r.status, data: d }
+}
+const TA = `fga-${RUN}`
+const TB = `fgb-${RUN}`
+const ADDR = { [TA]: `A街 ${RUN} 号,多伦多`, [TB]: `B路 ${RUN} 号,多伦多` }
+let isoFixtureOk = true
+for (const tid of [TA, TB]) {
+  const made = await plat('/platform/tenants', { method: 'POST', body: JSON.stringify({ id: tid, name: `事实闸${tid}`, plan: 'chain' }) })
+  if (made.status !== 201) { isoFixtureOk = false; break }
+  const set = await plat(`/platform/tenants/${tid}/store`, { method: 'PUT', body: JSON.stringify({ address: ADDR[tid] }) })
+  if (![200, 201].includes(set.status)) { isoFixtureOk = false; break }
+}
+if (!isoFixtureOk) {
+  check('③ 🔴 租户隔离:造景失败 —— 判据没验到东西,按红处理(不许「造不出来就当过了」)', false, '建店或设地址没成功')
+} else {
+  const d = await chat(TB, `fact-addr-${RUN}`, '门店地址在哪里?')
+  const say = `${d?.reply?.data?.answerZh || ''}${d?.reply?.data?.answerEn || ''}`
+  check('③ 🔴 租户隔离:问 B 店地址,回复里**不许出现** A 店地址',
+    !say.includes(ADDR[TA]), `A=${ADDR[TA]} | 回复=${say.slice(0, 90)}`)
+  check('③b 反向守:B 店自己的地址**应当**能答出来(拦串味不等于把功能拦没)',
+    !say || say.includes(ADDR[TB]) || Boolean(d?.reply?.data?.handoffRequired) || d?.reply?.data?.gate === 'fact_gate',
+    `B=${ADDR[TB]} | 回复=${say.slice(0, 90)}`)
+}
+
+/* ── 判据④:需报价项目只说「需技师确认」,不出数字 ────────────
+   价目里 `price_rule` 需技师确认的项目,AI 不许自己给一个数。 */
+const d4 = await chat('lucky-luxe', `fact-quote-${RUN}`, '复杂的手绘款多少钱?')
+const say4 = `${d4?.reply?.data?.answerZh || ''}${d4?.reply?.data?.answerEn || ''}`
+check('④ 需报价项目:要么走采集/转人工,要么说「需技师确认」—— 不许自己报一个数',
+  !d4?.reply || d4.reply.data?.gate === 'fact_gate' || d4.reply.source
+  || /技师确认|确认后|需要技师|帮您问|artist will confirm|confirmed by/i.test(say4)
+  || ![...say4.matchAll(/(?:CAD|\$)\s?\d/g)].length,
+  say4.slice(0, 110))
+
+console.log(`\n[事实闸] 造病 ${MUST_BLOCK.length} 拦 / ${MUST_PASS.length} 放 · D136 三锚 × 2 店 · 租户隔离 · 需报价不出数`)
+if (fails.length) { console.error(`\n❌ test-ai-fact-gate ${fails.length}/${n} 项未过`); process.exit(1) }
+console.log(`\n✅ test-ai-fact-gate 通过 ${n} 项`)

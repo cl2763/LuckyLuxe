@@ -608,8 +608,28 @@ export async function createCustomerServiceReply({ lang = 'zh', message = '', sa
         answerEn = 'Rescheduling or cancellation needs staff confirmation for your order and technician schedule. In general, more than 24 hours before the appointment can be changed/cancelled free of charge; same-day changes/cancellations are not supported, and being 30 minutes late cancels the booking with deposit non-refundable. I will route this to staff.'
       } else if (asksDeposit) {
         intent = 'deposit_policy'
-        answerZh = `预约需要支付定金哦：${depositLabel ? `新客/Silver 会员定金为 ${depositLabel}` : '新客/Silver 会员定金金额以门店确认为准'}，到店消费时可以抵扣尾款；Gold 及以上会员通常可以免定金。预约时间在定金支付成功（或满足免定金条件）后才会正式锁定。`
-        answerEn = `A booking deposit is required: ${depositLabel ? `new/Silver customers pay ${depositLabel}` : 'the deposit for new/Silver customers is confirmed by the store'}, which is deducted from the final balance in store; Gold members and above are usually deposit-free. Your slot is locked only after the deposit is paid or a valid waiver applies.`
+        /* 🔴 05g 事实闸**第一次跑就咬出来的**:这里原来写死「到店消费时可以抵扣尾款」,
+           而 `deductible` 是**每店可配**的 —— D136 那份并排表里,两家店的设置正好相反。
+           更刺眼的是:第 477 行的注释 2026-08-08 就写着「必须以本店 depositPolicy 为准」,
+           提示词那一路照办了(`depositPolicyLine`),**mock 这一路一直没照办** ——
+           而 90 多个套件跑的都是 mock。一条写在代码里的规矩,被同文件另一处违反了一个月。
+
+           改法不是「把抵扣改成不抵扣」,是**别自己拼这句话**:
+           `depositPolicy.text` 就是定金话术的唯一出口(按本店参数生成),直接用它。 */
+        /* ⚠️ 定金金额**有两处真相**,这一版是把两处都说清楚,不是二选一:
+             · `tenant_kb_facts.depositAmount` —— 商家在知识库里显式填的数(`test-tenant-kb` 断言它算数);
+             · `deposit_config` —— 定金规则(模式/可否抵扣/三档退款比例),`depositPolicy.text` 由它生成。
+           两者可以不一致(商家填 60、配置算出 50),**谁优先是业务口径,不该我定** —— 已在回执登记请店主裁。
+           在裁定之前,这里的做法是:**商家显式填了就先说那个数**,再接上政策原文
+           (抵扣与三档比例只有政策那一份真相,不能丢)。 */
+        const dp = kbFacts?.depositPolicy
+        const amountZh = depositLabel ? `预约定金为 ${depositLabel}。` : ''
+        const amountEn = depositLabel ? `The booking deposit is ${depositLabel}. ` : ''
+        answerZh = dp?.text ? `${amountZh}${dp.text}` : (amountZh || '定金金额以门店确认为准。')
+        answerEn = (dp?.textEn || dp?.text)
+          ? `${amountEn}${dp.textEn || dp.text}`
+          : (amountEn || 'The deposit amount is confirmed by the store.')
+
       } else if (asksBooking) {
         intent = 'booking'
         const serviceContextZh = memoryMentionsLash && !memoryMentionsNail ? '你前面提到的是美睫，' : memoryMentionsNail ? '你前面提到的是美甲，' : ''

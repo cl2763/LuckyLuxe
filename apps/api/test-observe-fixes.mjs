@@ -143,14 +143,29 @@ async function main() {
       check('合同三 返回体带后端判定(targetDate=原日)', b1.data.backfill && b1.data.backfill.targetDate === openDay)
     }
     // 形二:已日结 → 落今天 + 单上注明(直接把某过去日确认掉来造这一形;夹具直连回归临时库)
-    const closedDay = new Date(Date.now() - 11 * 86400000).toISOString().slice(0, 10)
+    /* 🔴 05g 现测:原来固定取「11 天前」当补录目标日 —— **撞上门店每周休息日就整块静默跳过**
+       (下面 3 条被 `if (!hoursUnset && !isClosed)` 包着)。
+       05f 那轮这套件 57 条,09-05 只剩 53 —— 日期翻了一页而已,`断言零缩水`把它咬出来了。
+       本文件第 125 行前人已指认过同一个形状,这一处漏了。
+       试过用 `/admin/special-dates` 把那天造成营业日:**不行** ——
+       特殊日期是用来标「临时休息」的,不能把每周固定休息日强行掰成营业日。
+       所以改成**照 `openDay` 那段的成法**:往回找一个**本来就营业**的日子当目标日。 */
+    let closedDay = null
+    let sdClosed = null
+    for (let back = 11; back <= 20 && !closedDay; back += 1) {
+      const d = new Date(Date.now() - back * 86400000).toISOString().slice(0, 10)
+      const sd = (await request(`/admin/schedule-day?date=${d}`)).data
+      if (sd && !sd.hoursUnset && !sd.isClosed) { closedDay = d; sdClosed = sd }
+    }
+    check('🔴 合同二形二 前置:过去 11~20 天里找得到一个营业日当补录目标(找不到=这 3 条没验成,不是通过)',
+      Boolean(closedDay), String(closedDay))
     const { DatabaseSync } = await import('node:sqlite')
     const bfDb = new DatabaseSync(process.env.TEST_DB_PATH)
     const tid01v = bfDb.prepare("SELECT tenant_id FROM bookings ORDER BY created_at DESC LIMIT 1").get().tenant_id
     const nowIso01v = new Date().toISOString()
     bfDb.prepare(`INSERT OR REPLACE INTO daily_closes (id, tenant_id, date, status, order_count, revenue_cents, created_at, updated_at)
       VALUES (?, ?, ?, 'confirmed', 0, 0, ?, ?)`).run(`dc-bf-${uniq}`, tid01v, closedDay, nowIso01v, nowIso01v)
-    const sdClosed = (await request(`/admin/schedule-day?date=${closedDay}`)).data
+    sdClosed = (await request(`/admin/schedule-day?date=${closedDay}`)).data
     check('合同三 已日结日的确认句写明落今天与原因(人话,后端出)',
       Boolean(sdClosed.backfill && sdClosed.backfill.closed && sdClosed.backfill.targetDate === today01v
         && /已日结/.test(sdClosed.backfill.note) && /服务发生于/.test(sdClosed.backfill.note)),
