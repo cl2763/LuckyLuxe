@@ -35,6 +35,13 @@ const WANTS = [
   ['想约个时间', '做指甲', '明天晚上六点'],
 ]
 
+/* 🔴 判据要能证伪你要证的那件事:
+   上面 6 组各 3 句,**没有一句是「确认」** —— 而图 §二 写死了「顾客确认(intent=confirm)→ drafted」,
+   不确认就不许建草稿。所以这 3 句怎么跑,「建出草稿」都只能是 0:
+   那个 0 是**脚本够不到**,不是产品做不到,两者从数字上分不出来。
+   加一句确认(`BR_CONFIRM=1`)才谈得上量「到底率」;不加时与 05h 基线逐句一致,可直接对比。 */
+const CONFIRM_TURN = process.env.BR_CONFIRM === '1' ? ['好的,就这个时间'] : []
+
 const send = async (tid, uid, message) => {
   const r = await fetch(`${BASE}/admin/wechat/mock-chat-message`, {
     method: 'POST',
@@ -57,7 +64,7 @@ for (const turns of WANTS) {
     let convId = null
     let touchedHuman = false
     let sawForm = false
-    for (const t of turns) {
+    for (const t of [...turns, ...CONFIRM_TURN]) {
       const d = await send(tid, uid, t)
       convId = d?.conversationId || convId
       const st = d?.conversation?.status

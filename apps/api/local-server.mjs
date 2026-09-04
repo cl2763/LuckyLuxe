@@ -22,6 +22,9 @@ import { createConversationRoutes } from './conversation-routes.mjs'   // ⓪b �
 import { compactIntentText } from './intent-text.mjs'   // 意图文本归一,全仓唯一一份(05d)
 import { resolveSafetyLine, hasSpecialManualHandoffIntent, needsHumanInScope } from './ai-safety-lines.mjs'   // 安全四线闸(05d 两破口;判定与出句都在模块里)
 import { createTenantCurrency } from './tenant-currency.mjs'   // D140 币种唯一真相(fail-closed)
+import { createAvailability } from './availability.mjs'
+import { createBookingDraftsModule } from './booking-drafts.mjs'
+import { createBookingIntake, hasBookingSignal } from './booking-intake.mjs'
 import { createFactGate, depositFactFromConfig } from './ai-fact-gate.mjs'   // ② 事实闸:出口校验(图 §三)
 import { createAiGate, isGreetingOnly, hasServiceStartIntent, isExplicitAiResumeIntent, hasAppointmentInquiryIntent, isVagueContextFollowup, hasCapabilityIntent } from './ai-gate.mjs'   // 大批05 ① 门(旧关键词门 + 新模型门三档,公约①②)
 import { createAppVersion } from './app-version.mjs'   // 04f-3 三端版本指纹(公约①)
@@ -3565,6 +3568,38 @@ function appendQuoteUnavailableSlotAssistantReply(quote, slot = {}, error = {}, 
   })
 }
 
+/* ③ 预约采集引擎(图 §二)——状态机住在 `booking-intake.mjs`,这里只喂依赖。
+   `getAvailability` 传的是**真**查询口(和 `/availability` 同一个函数),不是复刻一份。 */
+const { firstActiveStoreId, firstActiveService, firstQualifiedTechnician,
+  getBookingDraftById, createBookingDraft } = createBookingDraftsModule({
+  db, apiError, getService, iso, addMinutes, randomId, currentTenantId,
+  serializeBookingDraft, assertStaffCanAccessQuote,
+  nextBookingDraftSlot, mergeReferenceImages, bookingDraftLink, HOLD_MINUTES,
+  /* 这两个是**在本行之后**才声明的 const,直接传就是 TDZ(现测:服务起不来,
+     `Cannot access 'serializeQuoteRequest' before initialization`)。
+     包一层箭头把取值推迟到调用时 —— 函数声明会提升,const 不会。 */
+  serializeQuoteRequest: (...a) => serializeQuoteRequest(...a),
+  wecomRouting: { conversationRow: (...a) => wecomRouting.conversationRow(...a) },
+})
+const { getAvailability } = createAvailability({
+  db, apiError, getService, localDateTime, localParts, totalDuration, specialDateFor,
+  iso, addMinutes, minutesFromTime, timeFromMinutes, buildSlotStarts, SLOT_MINUTES,
+})
+const bookingIntake = createBookingIntake({
+  getConversationState, getAvailability,
+  firstActiveStoreId, firstActiveService, createBookingDraft,
+  depositPolicyText: () => depositPolicyText(getDepositConfig(currentTenantId()), currentTenantId(), 'zh'),
+  /* 「今天」一律按**门店时区**算(CLAUDE.md 头一条:不许用裸 new Date() 推日期) */
+  todayISO: () => localParts(new Date()).date,
+  onLookupFailed: (info) => console.warn('[预约采集] 查可约失败 →', JSON.stringify(info)),
+  /* 🔴 只用 ③ 自己那条信号,**不要 OR 上 `hasAppointmentInquiryIntent`** ——
+     那个谓词对「请问你们门店的营业时间是什么时候?地址在哪里?」也回 true
+     (它是给报价采集当触发器用的,宽一点无所谓),③ 借来用就会去抢营业时间的问题。
+     `test-business-hours` 当场红:问营业时间,答的是「您想做美甲还是美睫呀?」。 */
+  hasBookingIntentByRule: (txt, today) => hasBookingSignal(txt, today, hasServiceStartIntent(txt)),
+  existingDraftFor: (cid) =>
+    db.prepare('SELECT id FROM booking_drafts WHERE conversation_id = ? ORDER BY created_at ASC LIMIT 1').get(cid)?.id || null,
+})
 const factGate = createFactGate({ tenantKbFacts, getDepositConfig, currentTenantId })
 
 const aiGate = createAiGate({
@@ -3953,6 +3988,46 @@ async function handleWecomInbound(inbound, req) {
     return silentHandoffUnknown(inbound, 'unknown_before_ai')
   }
   const preQuoteWorkflow = resolveQuoteWorkflow(inbound, existingTranscript, null, {}, persistedState)
+  /* 🔴 ③ 预约采集与报价采集的交叉点(图 v1.2 §二)—— 位置很讲究,写清楚免得下次谁改回去。
+
+     `preQuoteWorkflow` 这一段是**模型都还没调用**就先回话的短路:顾客一说「我想预约」,
+     它当场甩出 `quote_intake_template` —— **那一整张 7 项表**。
+     05h 基线 12 通「想约」里 **10 通被丢表、7 通中途进人工**,根就在这三行。
+
+     所以 ③ 必须插在这条短路**之前**,而且只抢这一种接管:
+     `source === 'quote_intake_template'`(表还没发出去的那一下)。
+     报价采集其余出口(追问缺项 / ready_quote / manual_intake_review / 建报价单)一律不抢,
+     那 21 个套件一字不动。需报价的项目仍旧交给它 —— 图 §二 写的就是「转报价采集,采集完回来」。
+
+     ⚠️ 这条路上**模型还没跑**,所以 `modelSlots` 只能是空的,槽全靠规则层抽
+     (`extractSlotsByRule`)。图 §二 说「模型抽槽」——模型抽到的会在后面几轮合并进来,
+     规则层只补它没抽到的,不覆盖。 */
+  const preTemplateTakeover = preQuoteWorkflow.reply?.source === 'quote_intake_template'
+  const preBookingStep = preTemplateTakeover
+    ? bookingIntake.step({
+        tenantId: currentTenantId(),
+        conversationId,
+        text: inbound.content || '',
+        lang: inbound.lang || 'zh',
+        modelSlots: {},
+        intent: '',
+      })
+    : null
+  if (preBookingStep?.reply) {
+    const reply = preBookingStep.reply
+    const replyText = assistantReplyText(reply, inbound.lang || 'zh', conversationId)
+    recordWecomConversation(inbound, reply, preBookingStep.handoff ? 'needs_human' : 'ai_replied')
+    /* 状态由 `bookingIntake.step` 自己写(规则层写状态,图 §七);这里只补会话流水字段。
+       **不许**顺手把 quoteStage 推进 —— 一推进,下一轮报价采集就会接着走到「转人工」。 */
+    upsertConversationState(conversationId, {
+      sourceChannel: inbound.sourceChannel,
+      customerStage: inbound.customerStage,
+      lastCustomerMessage: inbound.content || '',
+      lastAssistantMessage: replyText,
+      state: preBookingStep.statePatch || {},
+    })
+    return { conversationId, inbound, reply, conversation: getWecomConversation(conversationId) }
+  }
   if (preQuoteWorkflow.reply) {
     const reply = preQuoteWorkflow.reply
     const replyText = assistantReplyText(reply, inbound.lang || 'zh', conversationId)
@@ -4057,7 +4132,26 @@ async function handleWecomInbound(inbound, req) {
   const quoteWorkflow = resolveQuoteWorkflow(inbound, existingTranscript, baseReply, knowledgeContext, persistedState)
   /* ② 事实闸(图 §三)—— **出口校验,最后一道**:回复里的金额/比例/可否抵扣
      必须能在事实槽里找到(D136 锚的三项),找不到就换成「这个我帮您问一下」+ 3b,不放出去。 */
-  const reply = factGate.check(quoteWorkflow.reply || baseReply, quoteWorkflow.reply?.source)
+  /* ③ 预约采集(图 §二)——**排在报价采集之后**:报价采集接管了就让位(它那 21 套一字不动),
+     排在事实闸之前:采集出的定金句照样要过闸。规则层写状态,模型只提供 slots。 */
+  /* 🔴 ③ 与报价采集的**唯一交叉点**,写清楚免得下次谁又改回去:
+     顾客说「我想约明天下午三点做美甲」,规则层现在的答案是 `quote_intake_template` ——
+     **那一整张 7 项表**,正是 05h 基线「12 通想约里 10 通被丢表」的那张。
+     图 v1.2 §二 把这一步改成「只问缺的,一次一问」,所以这里**只抢这一种接管**:
+     `source === 'quote_intake_template'`(表还没发出去的那一下)。
+     报价采集的其余出口(追问缺项 / ready_quote / 建报价单)一律照旧不抢 —— 那 21 个套件一字不动。 */
+  const templateTakeover = quoteWorkflow.reply?.source === 'quote_intake_template'
+  const bookingStep = (quoteWorkflow.reply && quoteWorkflow.reply.source && !templateTakeover)
+    ? null
+    : bookingIntake.step({
+        tenantId: currentTenantId(),
+        conversationId,
+        text: inbound.content || '',
+        lang: inbound.lang || 'zh',
+        modelSlots: baseReply?.data?.slots || {},
+        intent: baseReply?.data?.intent || '',
+      })
+  const reply = factGate.check(bookingStep?.reply || quoteWorkflow.reply || baseReply, bookingStep ? 'booking_intake' : quoteWorkflow.reply?.source)
   /* 三档在 `ai-gate.mjs`(门的唯一真相);这里只负责出句与落库 ——
      `recordWecomConversation` 还在本文件,按公约②下批一起搬。
      ⚠️ `ruleTookOver` 判的是「**规则层自己出了句子**」,不是「quoteWorkflow.reply 有没有值」:
@@ -4066,9 +4160,9 @@ async function handleWecomInbound(inbound, req) {
   const tier = aiGate.resolveGateTier({
     gate: baseReply?.data || {},
     keywordFastPath,
-    ruleTookOver: Boolean(quoteWorkflow.reply && quoteWorkflow.reply.source),
+    ruleTookOver: Boolean((quoteWorkflow.reply && quoteWorkflow.reply.source) || bookingStep),
     /* 3b 的第三、四类(账户 / 要动某张单某笔钱)—— 健康与售后在更前面已被各自的闸接走 */
-    needsHuman: needsHumanInScope(inbound.content || ''),
+    needsHuman: Boolean(bookingStep?.handoff) || needsHumanInScope(inbound.content || ''),
   })
   if (tier && !bypassSilentHandoff) {
     recordWecomConversation(inbound, tier.reply, tier.status)
@@ -4093,7 +4187,10 @@ async function handleWecomInbound(inbound, req) {
     intent: quoteWorkflow.state?.priceIntent ? 'pricing' : (reply?.data?.intent || 'unknown'),
     quoteStage: quoteWorkflow.shouldCreateQuote ? 'waiting_staff_quote' : (nextAction === 'collect_quote_requirements' ? 'collecting_requirements' : (getConversationState(conversationId)?.quoteStage || 'idle')),
     nextAction,
-    state: quoteWorkflow.state || {},
+    /* ③ 接管这一轮时,落的是**预约采集的状态**(槽位 + 态);没接管照旧落报价采集的。
+       漏了这一句,槽位每轮都从头来 —— 现测过:第 4 轮「下午三点」会把已经问到的日期丢掉,
+       机器又回去问「想约哪天呢?」。 */
+    state: bookingStep?.statePatch || quoteWorkflow.state || {},
     referenceImages: quoteWorkflow.state?.referenceImages || inbound.referenceImages || [],
     missingQuestions,
     lastCustomerMessage: inbound.content || '',
@@ -4655,26 +4752,8 @@ function appendQuoteDraftAssistantReply(quote, draft = null) {
 
 // 2026-08-07 多租户清账:这两个"随便挑一个"的兜底以前不带租户,非旗舰店会挑到旗舰店的门店/项目,
 // 兜底值还写死了 store-ontario-01。现在一律限定当前租户,挑不到就返回 null 让上层报错,不许跨店。
-function firstActiveStoreId() {
-  return db.prepare('SELECT id FROM stores WHERE is_active = 1 AND tenant_id = ? ORDER BY name ASC LIMIT 1').get(currentTenantId())?.id || null
-}
 
-function firstActiveService(serviceType = 'nail') {
-  const type = String(serviceType || 'nail').toUpperCase()
-  const tid = currentTenantId()
-  return db.prepare('SELECT * FROM services WHERE is_active = 1 AND tenant_id = ? AND type = ? ORDER BY sort_order ASC LIMIT 1').get(tid, type)
-    || db.prepare('SELECT * FROM services WHERE is_active = 1 AND tenant_id = ? ORDER BY sort_order ASC LIMIT 1').get(tid)
-}
 
-function firstQualifiedTechnician(storeId, serviceId) {
-  return db.prepare(`
-    SELECT t.* FROM technicians t
-    JOIN technician_services ts ON ts.technician_id = t.id
-    WHERE t.store_id = ? AND t.is_active = 1 AND ts.service_id = ?
-    ORDER BY t.name ASC
-    LIMIT 1
-  `).get(storeId, serviceId)
-}
 
 function draftSlotCandidates({ storeId, serviceId, technicianId = null, date }) {
   const availability = getAvailability({ storeId, serviceId, date, technicianId: technicianId || undefined })
@@ -4794,75 +4873,7 @@ function serializeBookingDraft(row, lang = 'zh') {
   }
 }
 
-function getBookingDraftById(id, lang = 'zh') {
-  return serializeBookingDraft(db.prepare('SELECT * FROM booking_drafts WHERE id = ?').get(id), lang)
-}
 
-function createBookingDraft(body = {}, admin = {}) {
-  const quoteRow = body.quoteRequestId || body.quote_request_id
-    ? db.prepare('SELECT * FROM quote_requests WHERE id = ?').get(body.quoteRequestId || body.quote_request_id)
-    : null
-  if (quoteRow) assertStaffCanAccessQuote(admin, quoteRow)
-  const quote = quoteRow ? serializeQuoteRequest(quoteRow) : null
-  const requestedConversationId = quote?.conversationId || body.conversationId || body.conversation_id || null
-  const conversationId = requestedConversationId && wecomRouting.conversationRow(requestedConversationId, 'id')
-    ? requestedConversationId
-    : null
-  const service = body.serviceId || body.service_id
-    ? getService(body.serviceId || body.service_id)
-    : firstActiveService(quote?.serviceType || body.serviceType || 'nail')
-  if (!service) throw apiError(404, 'SERVICE_NOT_FOUND', 'No active service is available for the booking draft.')
-  const storeId = body.storeId || body.store_id || firstActiveStoreId()
-  const requestedTechnicianId = body.technicianId || body.technician_id || quote?.technicianId || null
-  const slot = nextBookingDraftSlot({
-    storeId,
-    serviceId: service.id,
-    technicianId: requestedTechnicianId,
-    date: body.date || '',
-    time: body.time || ''
-  })
-  const technician = db.prepare('SELECT * FROM technicians WHERE id = ?').get(slot.technicianId) || firstQualifiedTechnician(storeId, service.id)
-  if (!technician) throw apiError(404, 'TECHNICIAN_NOT_FOUND', 'No qualified technician is available for this service.')
-  const now = iso(new Date())
-  const expiresAt = iso(addMinutes(new Date(), HOLD_MINUTES))
-  const draftId = body.id || randomId('draft')
-  const referenceImages = mergeReferenceImages(
-    body.referenceImages || body.images || [],
-    quote?.referenceImages || []
-  )
-  const notes = String(body.notes || body.staffNotes || quote?.staffNotes || quote?.customerMessage || '').trim()
-  const linkUrl = bookingDraftLink(draftId)
-  db.prepare(`
-    INSERT INTO booking_drafts
-      (id, quote_request_id, conversation_id, user_id, source_channel, service_id, technician_id, store_id, date, time,
-       addons_json, reference_images_json, notes, status, booking_id, link_url, expires_at, created_at, updated_at)
-    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'DRAFT', NULL, ?, ?, ?, ?)
-  `).run(
-    draftId,
-    quote?.id || body.quoteRequestId || null,
-    conversationId,
-    quote?.userId || body.userId || null,
-    body.sourceChannel || quote?.sourceChannel || 'admin_booking_draft',
-    service.id,
-    technician.id,
-    storeId,
-    slot.date,
-    slot.time,
-    JSON.stringify(Array.isArray(body.addOns) ? body.addOns : []),
-    JSON.stringify(referenceImages),
-    notes,
-    linkUrl,
-    expiresAt,
-    now,
-    now
-  )
-  const draft = getBookingDraftById(draftId)
-  if (quote?.id) {
-    db.prepare("UPDATE quote_requests SET status = 'DRAFT_CREATED', expires_at = ?, updated_at = ? WHERE id = ?")
-      .run(expiresAt, now, quote.id)
-  }
-  return draft
-}
 
 function createQuoteRequest(body = {}, customer = null) {
   const input = normalizeQuoteRequestInput(body, customer)
@@ -6228,54 +6239,6 @@ function assertBookable(input, opts = {}) {
   return { service, technician, durationMin, start, end: addMinutes(start, durationMin) }
 }
 
-function getAvailability(query) {
-  const { storeId, serviceId, date, technicianId } = query
-  if (!storeId || !serviceId || !date) throw apiError(400, 'BAD_REQUEST', 'storeId, serviceId and date are required.')
-  const service = getService(serviceId)
-  if (!service) throw apiError(404, 'NOT_FOUND', 'Service not found.')
-  const weekday = localDateTime(date, '12:00').getDay()
-  const hours = db.prepare('SELECT * FROM business_hours WHERE store_id = ? AND weekday = ?').get(storeId, weekday)
-  const extraDurationMin = Math.max(0, Number(query.extraDurationMin || 0))
-  const durationMin = totalDuration(service.type, service.base_duration_min, [{ durationMin: extraDurationMin }])
-  // 特殊日期优先于每周固定模式
-  const special = specialDateFor(storeId, date)
-  const closedThatDay = special ? Boolean(special.is_closed) : (!hours || Boolean(hours.is_closed))
-  if (closedThatDay) return { date, durationMin, slots: [] }
-  /* 零回落:没真实时段=没有可约,不编 10:00-20:00 给顾客约一家从没设置过营业时间的店 */
-  const dayOpen = (special && !special.is_closed && special.open_time) || hours?.open_time || null
-  const dayClose = (special && !special.is_closed && special.close_time) || hours?.close_time || null
-  if (!dayOpen || !dayClose) return { date, durationMin, slots: [] }
-
-  const techRows = db.prepare(`
-    SELECT t.* FROM technicians t
-    JOIN technician_services ts ON ts.technician_id = t.id
-    WHERE t.store_id = ? AND t.is_active = 1 AND ts.service_id = ? ${technicianId ? 'AND t.id = ?' : ''}
-    ORDER BY t.name ASC
-  `).all(...(technicianId ? [storeId, serviceId, technicianId] : [storeId, serviceId]))
-  const result = []
-  for (const tech of techRows) {
-    const schedule = db.prepare('SELECT * FROM technician_schedules WHERE technician_id = ? AND date = ?').get(tech.id, date)
-    if (schedule && !schedule.is_working) continue
-    const openTime = schedule?.start_time || dayOpen
-    const closeTime = schedule?.end_time || dayClose
-    const dayStart = iso(localDateTime(date, '00:00'))
-    const dayEnd = iso(addMinutes(localDateTime(date, '00:00'), 24 * 60))
-    const occupiedRows = db.prepare('SELECT starts_at FROM booking_slots WHERE technician_id = ? AND starts_at >= ? AND starts_at < ?').all(tech.id, dayStart, dayEnd)
-    const occupied = new Set(occupiedRows.map((row) => row.starts_at))
-    const slots = []
-    /* D88 同族:今天已过去的时刻不再可约(以前晚上查今天照样列出上午 —— 编出根本约不上的位) */
-    const nowA = localParts(new Date())
-    const pastMin = date === nowA.date ? minutesFromTime(nowA.time) : -1
-    for (let startMin = minutesFromTime(openTime); startMin + durationMin <= minutesFromTime(closeTime); startMin += SLOT_MINUTES) {
-      if (startMin < pastMin) continue
-      const time = timeFromMinutes(startMin)
-      const required = buildSlotStarts(localDateTime(date, time), durationMin).map(iso)
-      if (required.every((slot) => !occupied.has(slot))) slots.push(time)
-    }
-    result.push({ technician: tech, slots })
-  }
-  return { date, durationMin, slots: result }
-}
 
 /* ===== 积分(店主 2026-08-12 拍板 B+二次/三次改判,《财务总逻辑》恒等式区):
    积分 ≡ 档位小计 × 1元=1分,与业绩基数同源——不按标价、不按实收;储值抵扣照常积分;

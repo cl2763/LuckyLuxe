@@ -223,7 +223,15 @@ check('①c 🔴 门与答**同一次请求**:`inScope/confidence/slots` 跟回�
 check('①d 🔴 三档的守卫判的是「规则层**自己出了句子**」(有 `source`),不是「reply 有没有值」—— '
   + '`resolveQuoteWorkflow` 没接管时会把 baseReply **原样透传**,拿它当条件永远为真,三档一次都不会跑'
   + '(现测栽过一次:qwReply=true 而 source 为空)',
-  /ruleTookOver: Boolean\(quoteWorkflow\.reply && quoteWorkflow\.reply\.source\)/.test(srv), '')
+  (() => {
+    /* ⚠️ 这条原来锚的是**一整串字面量**;05j 给 ③ 预约采集加了一个合法的接管方(`bookingStep`),
+       表达式多了一层括号,判据就红了 —— 而它要守的那件事**一点没变**。
+       判据律:不许锚在会变的字面量上。改成守语义,并且**顺手把坏形状显式禁掉**(比原来更严):
+       ① `ruleTookOver` 这一行必须出现 `.source`;② 不许出现裸的 `Boolean(quoteWorkflow.reply)`。 */
+    const line = srv.match(/ruleTookOver:[^\n]*/)?.[0] || ''
+    return /quoteWorkflow\.reply\.source/.test(line)
+      && !/Boolean\(\s*quoteWorkflow\.reply\s*\)/.test(line)
+  })(), '')
 
 console.log('\n[门+三档] 评测集在册 · D133 反面 · 只有 human_active 静默 · 三档各有出口 · 关键词降级为快速通道')
 cleanupOwn()
