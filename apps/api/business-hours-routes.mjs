@@ -14,7 +14,10 @@ export function createBusinessHoursRoutes({ apiError, json, readBody, db, curren
         address: store.address,
         phone: store.phone,
         // 2026-08-07:老板端要按本店币种/时区显示金额与"今天",这两项以前没下发,前端只能写死 CAD + Toronto
-        currency: store.currency || 'CAD',
+        /* 🔴 D140:原来是 `store.currency || 'CAD'` —— 又一处读侧兜底。
+           唯一真相是 `stores.currency`,拿不到就回 null,让前端显示「未设置」,
+           **不许悄悄给一个加币** —— 境内店会因此按错的单位理解价钱。 */
+        currency: store.currency || null,
         timezone: store.timezone || 'America/Toronto',
         hours: getBusinessHoursRows(store.id).map(serializeBusinessHour),
         hoursText: { zh: businessHoursText(store.id, 'zh'), en: businessHoursText(store.id, 'en') },

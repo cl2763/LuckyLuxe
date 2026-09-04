@@ -153,7 +153,8 @@ const CATS = [
     re: /depositFactFromConfig|depositAmountNote|live\.depositAmount|depositFactsAll\.depositAmount|rawDepositAll|\{ depositAmount: amount|kbFacts\?\.depositAmount/ },
   /* 「已撤走的键」指路表:商家再传它时,400 里要说清去哪改。
      这一类**必须单列**,不能混进注释 —— 它是真代码,而且它的存在本身就是 J-20 的一部分。 */
-  { name: '已撤走键的指路表', re: /const retired = \{/ },
+  /* 「已撤走的键」指路表:现在是多行对象,每个键各占一行,所以按键名认 */
+  { name: '已撤走键的指路表', re: /const retired = \{|^\s*(depositAmount|currency): '/ },
 ]
 /* 🔴 注释不能靠「这一行以 // 或 * 开头」来认 —— 块注释里换行后的**续行**没有任何标记
    (05h 现测:我自己写的两行说明就落进了「未归类」)。所以逐行**跟踪块注释状态**,
@@ -211,6 +212,61 @@ for (const tid of ['lucky-luxe', 'jics-store']) {
     && /门店设置|定金规则/.test(put.error.message || ''),
     JSON.stringify(put?.error || put).slice(0, 130))
   await api('/admin/deposit-config', tid, { method: 'PUT', body: JSON.stringify(cfg0) })   // 还原
+}
+
+/* ── 判据⑥ D140:币种**只有一处真相** = `stores.currency` ────────────────
+   和 J-20 同一形状,但错的是**钱的单位** —— 小婕店是人民币,币种说错等于差一个汇率。
+   静态判据同样白名单式:全仓 `'CAD'` 字面量逐处归类,落不进白名单的自动红。 */
+const CUR_SRC = ['ai-utils.mjs', 'business-hours-routes.mjs', 'kb-routes.mjs', 'kb-utils.mjs',
+  'local-server.mjs', 'store-matrix.mjs', 'tenant-currency.mjs']
+const CUR_CATS = [
+  { name: '建店/种子写入(写进唯一真相那张表)', re: /INSERT .*INTO stores|body\.currency|store\.currency \?\?/ },
+  { name: '夹具生成器(store-matrix 造店矩阵)', re: /store-matrix/ },
+]
+const curHomeless = []
+for (const f of CUR_SRC) {
+  const src = readFileSync(join(ROOT, 'apps/api', f), 'utf8')
+  let inBlock = false
+  src.split('\n').forEach((ln, i) => {
+    const opens = inBlock
+    if (!inBlock && /\/\*/.test(ln) && !/\*\//.test(ln.slice(ln.indexOf('/*') + 2))) inBlock = true
+    else if (inBlock && /\*\//.test(ln)) inBlock = false
+    const isComment = opens || /^\s*(\/\/|\/\*|\*)/.test(ln)
+    if (!/'CAD'/.test(ln) || isComment) return
+    if (f === 'store-matrix.mjs') return                       // 整份是夹具生成器
+    if (!CUR_CATS.some((c) => c.re.test(ln))) curHomeless.push(`${f}:${i + 1} ${ln.trim().slice(0, 66)}`)
+  })
+}
+check('⑥ D140 静态白名单:全仓 `\'CAD\'` 字面量(注释除外)只许出现在「建店/种子写入」与「夹具生成器」',
+  curHomeless.length === 0, curHomeless.join(' | '))
+
+const curSrcMain = readFileSync(join(ROOT, 'apps/api/tenant-currency.mjs'), 'utf8')
+/* 🔴 只看**函数体**,不看注释 —— 这个文件的注释里正写着「原来读 tenant_kb_facts、兜底 'CAD'」
+   (那是在讲被删掉的旧写法)。把注释算进去,判据会因为**我把病史写清楚**而报红。 */
+const curFnBody = (() => {
+  const i = curSrcMain.indexOf('function tenantCurrencyCode(')
+  const body = curSrcMain.slice(i, curSrcMain.indexOf('\n  }', i))
+  return body.replace(/\/\*[\s\S]*?\*\//g, '').replace(/\/\/.*$/gm, '')
+})()
+check('⑥b D140 读侧零兜底:`tenantCurrencyCode` **函数体内**不许出现 `tenant_kb_facts`,也不许有 `\'CAD\'` 兜底',
+  !/tenant_kb_facts/.test(curFnBody) && !/'CAD'/.test(curFnBody), curFnBody.slice(0, 220))
+
+/* 行为:写知识库 currency → 400 指路;两店各跑 */
+for (const tid of ['lucky-luxe', 'jics-store']) {
+  const put = await api('/admin/kb/facts', tid, { method: 'PUT', body: JSON.stringify({ facts: { currency: 'USD' } }) })
+  check(`⑥c D140 行为·${tid}:写知识库 currency → 拒绝并指到「门店设置 → 币种」`,
+    put?.error?.code === 'UNKNOWN_KB_KEY' && /门店设置|币种/.test(put.error.message || ''),
+    JSON.stringify(put?.error || put).slice(0, 120))
+}
+
+/* ── 判据⑦ 废弃键读口过滤(05i §三):库不动,但页面上不许再出现 ── */
+for (const tid of ['lucky-luxe', 'jics-store']) {
+  const kb = await api('/admin/kb', tid)
+  const f = kb?.facts || {}
+  const lf = kb?.liveFacts || {}
+  const leaked = ['depositAmount', 'currency'].filter((k) => k in f || k in lf)
+  check(`⑦ 废弃键读口过滤·${tid}:GET /admin/kb 里 depositAmount/currency 0 处`,
+    leaked.length === 0, `残留:${leaked.join('、')}`)
 }
 
 console.log(`\n[事实闸] 造病 ${MUST_BLOCK.length} 拦 / ${MUST_PASS.length} 放 · D136 三锚 × 2 店 · 租户隔离 · 需报价不出数`)

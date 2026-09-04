@@ -361,6 +361,11 @@ export function createNotifyScheduler(deps) {
       const parts = localParts(now, tenantTimezone(tid))
       if (!db.prepare('SELECT 1 FROM notify_scan_marks WHERE tenant_id = ? AND scan_date = ?').get(tid, parts.date)) {
         runDailyScans(tid, parts, nowIso)
+        /* 🔴 J-23 白名单理由(随码复核律,Cowork 05i §一):
+           这一行就是让 `notify_scan_marks` 进「服务心跳表白名单」的**唯一理由** ——
+           调度器**每天每店写一行**,只要 4128 开着就会长,与任何一批代码改动无关。
+           `tools/receipt-db-proof.sh` 因此把它排除在「有动」之外。
+           ⚠️ 哪天这张表不再由这里写、或写的不只是心跳,**白名单要跟着撤**。 */
         db.prepare('INSERT OR IGNORE INTO notify_scan_marks (tenant_id, scan_date, done_at) VALUES (?, ?, ?)').run(tid, parts.date, nowIso)
         summary.scans += 1
       }

@@ -578,9 +578,15 @@ export async function createCustomerServiceReply({ lang = 'zh', message = '', sa
       const depositFactsAll = knowledgeContext?.tenantFacts || {}
       const rawDepositAll = depositFactsAll.depositAmount
       // 没配定金事实的店(比如刚开的体验店)就别报数字——以前一律回落成 CAD $50,对境内店是错的
-      const depositLabel = typeof rawDepositAll === 'number' || /^\d+(\.\d+)?$/.test(String(rawDepositAll || ''))
-        ? `${depositFactsAll.currency || 'CAD'} $${rawDepositAll}`
-        : (rawDepositAll || '')
+      /* 🔴 D140:这里原来是 `depositFactsAll.currency || 'CAD'` —— 又一处「币种兜底成加币」。
+         上一行注释已经写过「没配定金事实的店就别报数字」,可**币种没配时它照样报**,
+         只是把单位悄悄换成了加币。小婕店是人民币,这一句就能让顾客按错的单位理解价钱。
+         裁定 fail-closed:**币种拿不到就整个不报数**(和金额拿不到时同样处理)。 */
+      const depositCurrency = depositFactsAll.currency
+      const depositLabel = depositCurrency
+        && (typeof rawDepositAll === 'number' || /^\d+(\.\d+)?$/.test(String(rawDepositAll || '')))
+        ? `${depositCurrency} $${rawDepositAll}`
+        : (typeof rawDepositAll === 'number' ? '' : (rawDepositAll || ''))
       const depositZh = depositLabel ? `新客/Silver 会员预约定金为 ${depositLabel}` : '新客/Silver 会员预约定金以门店确认为准'
       const depositEn = depositLabel ? `Silver/new customers pay ${depositLabel} deposit` : 'The deposit for Silver/new customers is confirmed by the store'
       if (asksPrice || hasReferenceImageContext || currentMentionsService) {

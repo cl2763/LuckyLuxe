@@ -129,7 +129,9 @@ function mergeTenantFacts(tenant, live) {
   return {
     brandName: live.brandName || seed.brandName,
     assistantName: live.assistantName || seed.assistantName,
-    currency: live.currency || seed.currency,
+    /* D140:币种不再回落种子,也不再是可写事实 —— 唯一真相是 `stores.currency`。
+       回落种子会让「没配币种的店」用上旗舰店的加币。 */
+    currency: live.currency,
     region: live.region || seed.region,
     storeAddress: live.storeAddress || seed.storeAddress,
     storePhone: live.storePhone || undefined,

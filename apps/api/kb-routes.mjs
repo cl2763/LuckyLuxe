@@ -12,6 +12,20 @@
    调完返回 `true`,原块**一个字都不用动**;落到最后没命中就 `return false`,调用方照旧判。
 
    调用点仍在租户闸门之后(交付纪律 7);门禁扫描器扫全部 `*-routes.mjs`,本文件天生在面上。 */
+/* 🔴 **已撤走的知识库事实键**(J-20 定金 · D140 币种)——写口拒收,读口也不再回给网页。
+   为什么读口也要挡:库里的旧行按裁定**不删**(删行要走 4128 写,不值得),
+   可它们**看得见就会让商家以为改它有用** —— 那正是「一处真相」想消灭的误会。
+   所以:库不动,读口过滤,页面上干脆不出现。上线批清行时这张表跟着退休。 */
+export const RETIRED_FACT_KEYS = {
+  depositAmount: '定金金额请到「门店设置 → 定金规则」改 —— 钱按那里算,AI 也按那里说',
+  currency: '门店币种请到「门店设置 → 币种」改 —— 币种是钱的单位,只能有一处真相',
+}
+const withoutRetired = (facts = {}) => {
+  const out = { ...facts }
+  for (const k of Object.keys(RETIRED_FACT_KEYS)) delete out[k]
+  return out
+}
+
 export function createKbRoutes(deps) {
   const { apiError, readBody, db, currentTenantId, iso, randomId, liveTenantFacts, tenantKbFacts,
     parseKbEntriesFromText, countAiUsage, hasAi, extractKbEntriesFromDocument } = deps
@@ -21,10 +35,10 @@ export function createKbRoutes(deps) {
     const { path, adminSession } = ctx
     if (req.method === 'GET' && path === '/admin/kb') {
       return json(res, 200, {
-        facts: tenantKbFacts(currentTenantId()),
+        facts: withoutRetired(tenantKbFacts(currentTenantId())),
         // 2026-08-06:把"AI 实际拿到的实时事实"一并下发(价目三档价/加项目录/计价规则摘要),
         // 商家与运营可据此核对 AI 口径;只增字段,老前端不受影响。
-        liveFacts: liveTenantFacts(),
+        liveFacts: withoutRetired(liveTenantFacts()),
         entries: db.prepare('SELECT id, question, keywords, answer_zh AS answerZh, answer_en AS answerEn, enabled, updated_at AS updatedAt FROM tenant_kb_entries WHERE tenant_id = ? ORDER BY created_at DESC').all(currentTenantId())
           .map((row) => ({ ...row, enabled: Boolean(row.enabled) })),
         documents: db.prepare('SELECT id, title, length(content) AS size, created_at AS createdAt FROM tenant_kb_documents WHERE tenant_id = ? ORDER BY created_at DESC').all(currentTenantId())
@@ -37,7 +51,10 @@ export function createKbRoutes(deps) {
       /* 🔴 J-20(Cowork 05h §一):`depositAmount` 从白名单撤走 —— 定金金额唯一真相是
          「门店设置 → 定金规则」(`deposit_config`),钱按它算,话也按它说。
          再传它就走 D134 那条既有口径:**400 点名**,不新造错误码,hint 里指路。 */
-      const allowed = ['brandName', 'assistantName', 'storeAddress', 'currency']
+      /* 🔴 D140(Cowork 05i §二):`currency` 也从白名单撤走 —— 门店币种唯一真相是
+         「门店设置 → 币种」(`stores.currency`)。它和 `depositAmount` 同一个形状,
+         而且错的是**钱的单位**:小婕店是人民币,币种说错等于差一个汇率。 */
+      const allowed = ['brandName', 'assistantName', 'storeAddress']
       /* 🔴 D134(店主 04d §三 报、04f §一.1 裁现修):不认识的键**原来静默丢弃还回 200** ——
          商家看到「保存成功」而库里没有,从响应上分不出「存了」和「没存」。归族**静默失败器族**。
          裁法(店主原话):**不认识的键 400 点名**,不做 ignoredKeys ——
@@ -48,7 +65,7 @@ export function createKbRoutes(deps) {
         /* 🔴 J-20:`depositAmount` 是**被撤走的**键,不是「不认识的键」——
            商家以前能在这儿改定金,现在不能了,只回一句「不是门店事实字段」会让人一头雾水。
            所以给它一句专门的指路(D134 定的口径本来就是「400 点名」,这里只是把话说清楚)。 */
-        const retired = { depositAmount: '定金金额请到「门店设置 → 定金规则」改 —— 钱按那里算,AI 也按那里说' }
+        const retired = RETIRED_FACT_KEYS
         const retiredHit = unknown.filter((k) => retired[k])
         throw apiError(400, 'UNKNOWN_KB_KEY',
           `这几项不是门店事实字段,没有保存:${unknown.join('、')}。`

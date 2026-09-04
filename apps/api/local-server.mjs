@@ -21,6 +21,7 @@ import { ensureConversationLog, logConversationMessage, transcriptFromLog, migra
 import { createConversationRoutes } from './conversation-routes.mjs'   // ⓪b 脱敏正门(大批05 §〇b,公约①)
 import { compactIntentText } from './intent-text.mjs'   // 意图文本归一,全仓唯一一份(05d)
 import { resolveSafetyLine, hasSpecialManualHandoffIntent, needsHumanInScope } from './ai-safety-lines.mjs'   // 安全四线闸(05d 两破口;判定与出句都在模块里)
+import { createTenantCurrency } from './tenant-currency.mjs'   // D140 币种唯一真相(fail-closed)
 import { createFactGate, depositFactFromConfig } from './ai-fact-gate.mjs'   // ② 事实闸:出口校验(图 §三)
 import { createAiGate, isGreetingOnly, hasServiceStartIntent, isExplicitAiResumeIntent, hasAppointmentInquiryIntent, isVagueContextFollowup, hasCapabilityIntent } from './ai-gate.mjs'   // 大批05 ① 门(旧关键词门 + 新模型门三档,公约①②)
 import { createAppVersion } from './app-version.mjs'   // 04f-3 三端版本指纹(公约①)
@@ -1013,7 +1014,11 @@ function liveTenantFacts() {
   const tid = currentTenantId()
   const facts = tenantKbFacts(tid)
   const store = db.prepare('SELECT address, phone, currency FROM stores WHERE tenant_id = ? AND is_active = 1 ORDER BY rowid ASC LIMIT 1').get(tid)
-  const currency = facts.currency || store?.currency || ''
+  /* 🔴 D140:这一行就是**币种两处真相的读口** —— 先知识库、再门店。
+     知识库那一行现在是死数据(写口已关、种子已撤),但**只要还在读它,它就还在起作用**:
+     05i 现测,把 `stores.currency` 清空后 AI 照样答「CAD $50」,就是这一行喂上去的。
+     唯一真相 = `stores.currency`,拿不到就空 —— 空了下游一个钱数都不出(fail-closed)。 */
+  const currency = tenantCurrencyCodeOrNull(tid) || ''
   const priceOf = (cents) => (cents || cents === 0 ? Number((cents / 100).toFixed(2)) : null)
   // 价目表:直接由「服务项目」生成,商家改价即时生效
   // 2026-08-06 P0:多价位模型上线后,每项带上三档价与疗程价,AI 回答分享价/会员价才不会瞎编
@@ -1207,7 +1212,7 @@ function seedDatabase() {
     ['assistantName', 'LUVIA 预约助手'],
     ['storeAddress', '136 veterans place'],
     /* J-20:定金金额不再是知识库事实(唯一真相 = deposit_config),种子不再铺这一行 */
-    ['currency', 'CAD']
+    /* D140:币种不再是知识库事实(唯一真相 = stores.currency),种子不铺这一行 */
   ]) kbFactStmt.run(DEFAULT_TENANT_ID, key, value, 'seed', iso(new Date()))
   /* 🔴 D131(店主 04b §二):首启种子三张表(stores / technicians / services)原来都不写 tenant_id,
      靠列默认 `lucky-luxe` 凑对。它们本来就是旗舰店的种子 —— 写明白就不再靠默认值。 */
@@ -4398,29 +4403,14 @@ const { serializeQuoteRequest, getQuoteRequestById } = createQuoteSerialize({
 
 // 2026-08-07:本店币种。以前所有金额文案都写死 CAD,境内店(CNY)对外报价、AI 上下文全是错的。
 // 取值顺序:租户 AI 事实 currency → 门店 currency → CAD(旗舰店就是 CAD,所以它的文案一字不变)。
-function tenantCurrencyCode(tenantId = currentTenantId()) {
-  try {
-    const fact = db.prepare("SELECT value FROM tenant_kb_facts WHERE tenant_id = ? AND key = 'currency'").get(tenantId)
-    if (fact?.value) return String(fact.value).trim().toUpperCase().slice(0, 6) || 'CAD'
-    const store = db.prepare('SELECT currency FROM stores WHERE tenant_id = ? AND is_active = 1 ORDER BY rowid ASC LIMIT 1').get(tenantId)
-    return String(store?.currency || 'CAD').trim().toUpperCase().slice(0, 6) || 'CAD'
-  } catch (e) {
-    return 'CAD'
-  }
-}
-
-/* 2026-08-08 币种显示映射表:同一套代码,按币种查表渲染。
-   CNY → 「¥358」(符号前置、无币种前缀、整数不带小数)
-   CAD → 「CAD $50」/「CAD $50.00」—— 逐字维持现状,所以旗舰店对外文案零 diff。
-   以后想改某个币种的展示格式,改这张表一行即可,不用翻遍全站。 */
-const CURRENCY_DISPLAY = {
-  CNY: { prefix: '', symbol: '¥', trimZeroDecimals: true },
-  DEFAULT: { prefix: '<CODE> ', symbol: '$', trimZeroDecimals: false }
-}
-
-function currencyDisplayOf(code) {
-  return CURRENCY_DISPLAY[String(code || '').toUpperCase()] || CURRENCY_DISPLAY.DEFAULT
-}
+/* 🔴 D140 两个变体的分工(05i 现测栽过一次,记着):
+     · `tenantCurrencyCode`      —— **会抛**。给「没有币种就不该继续」的地方。
+     · `tenantCurrencyCodeOrNull` —— 回 null。给「只是要显示/回一个字段」的地方。
+   我第一版把 26 个调用点全留给会抛的那个,结果**顾客发一句话直接 500** ——
+   而裁定要的是「**不出数**」,不是「整个请求死掉」。
+   金额句的收口在 `formatMoneyCents`(拿不到币种回空串);
+   接口字段一律用 OrNull,降级成 `currency: null`,前端本来就要处理空。 */
+const { tenantCurrencyCode, tenantCurrencyCodeOrNull, currencyDisplayOf } = createTenantCurrency({ db, currentTenantId })
 
 /* decimals: 'auto' = 整数不带小数、有零头带两位(旧 formatCadFromCents 的行为)
              0 / 2  = 固定位数(旧 money()/cadFromCentsText 的行为)
@@ -4428,7 +4418,13 @@ function currencyDisplayOf(code) {
 function formatMoneyCents(value, tenantId = currentTenantId(), decimals = 'auto') {
   const centsValue = Number(value || 0)
   if (!Number.isFinite(centsValue)) return ''
-  const code = tenantCurrencyCode(tenantId)
+  /* 🔴 D140 fail-closed 的**收口处**:全仓的金额句都从这里出去,
+     所以「没配币种就不出数」在这里落一次就够,不必在 29 个调用点各写一遍。
+     拿不到币种 → 回空串(调用方本来就要处理空串:`formatCadFromCents` 0 与负数也回空)。
+     **宁可不出数,也不出一个看着正常的错数** —— 小婕店是人民币,
+     悄悄按加币格式出一个数字,顾客付的钱就差一个汇率(《假数回落红线》同族)。 */
+  const code = tenantCurrencyCodeOrNull(tenantId)
+  if (!code) return ''
   const fmt = currencyDisplayOf(code)
   const amount = centsValue / 100
   let text
@@ -5196,7 +5192,7 @@ function categoryNameOf(row) {
 
 function serializeService(row, lang = 'zh') {
   const type = String(row.type || '').toLowerCase()
-  const serviceCurrency = tenantCurrencyCode(row.tenant_id || currentTenantId())
+  const serviceCurrency = tenantCurrencyCodeOrNull(row.tenant_id || currentTenantId())
   // 价格标签走币种映射表:CAD 仍是「CAD $198」逐字不变,CNY 变成「¥198」
   const serviceMoney = (c) => formatMoneyCents(c, row.tenant_id || currentTenantId(), 'auto')
   // 2026-08-08:对外显示的定金要按本店 deposit_config 算,不能只报项目表里的原始值。
@@ -8575,8 +8571,8 @@ function computeSettlement(input = {}) {
   return assertSettlementInvariants({
     tenantId,
     tierKey,
-    currency: tenantCurrencyCode(tenantId),
-    currencyDisplay: currencyDisplayOf(tenantCurrencyCode(tenantId)),
+    currency: tenantCurrencyCodeOrNull(tenantId),
+    currencyDisplay: currencyDisplayOf(tenantCurrencyCodeOrNull(tenantId)),
     lines,
     rulesApplied,
     listTotalCents,
@@ -9350,8 +9346,8 @@ function financeTrend(granularity, periods, tenantId = currentTenantId()) {
   return {
     granularity: g,
     periods: n,
-    currency: tenantCurrencyCode(tenantId),
-    currencyDisplay: currencyDisplayOf(tenantCurrencyCode(tenantId)),
+    currency: tenantCurrencyCodeOrNull(tenantId),
+    currencyDisplay: currencyDisplayOf(tenantCurrencyCodeOrNull(tenantId)),
     // 目标线与达标月:目标类型是「营收」时才画(净赚口径下平衡线等于 0,画上去没意义)
     monthTargetCents: monthTargetCents || null,
     targetMode: targets.targetMode,
@@ -9748,8 +9744,8 @@ function dailyCloseView(date, tenantId, { lang = 'zh' } = {}) {
     ...(() => { const a = depositAudit.depositAlertOf(closeRow, tenantId); return a ? { depositAlert: a } : {} })(),
     confirmedBy: closeRow ? closeRow.confirmed_by : null,
     reopenCount: closeRow ? closeRow.reopen_count : 0,
-    currency: tenantCurrencyCode(tenantId),
-    currencyDisplay: currencyDisplayOf(tenantCurrencyCode(tenantId)),
+    currency: tenantCurrencyCodeOrNull(tenantId),
+    currencyDisplay: currencyDisplayOf(tenantCurrencyCodeOrNull(tenantId)),
     orderCount: settlements.length,
     revenueCents: settlements.reduce((sum, s) => sum + s.totalCents, 0),
     settlements,
@@ -10088,8 +10084,8 @@ function perfRanking({ period = 'month', date = null, metric = 'perf' } = {}, te
     key,
     metric: m,
     metrics: RANK_METRICS,
-    currency: tenantCurrencyCode(tenantId),
-    currencyDisplay: currencyDisplayOf(tenantCurrencyCode(tenantId)),
+    currency: tenantCurrencyCodeOrNull(tenantId),
+    currencyDisplay: currencyDisplayOf(tenantCurrencyCodeOrNull(tenantId)),
     source: 'daily_close',
     // barPct 只是画图比例,不是金额;金额一律用各自的 *Cents 字段显示(设计图要求数字在条外)
     ranking: sorted.map((r, index) => ({ ...r, rank: index + 1, value: valueOf(r), barPct: Math.round(valueOf(r) * 100 / max) })),
@@ -10206,8 +10202,8 @@ function staffPerformanceView(techId, month, tenantId) {
   const view = {
     month, technicianId: techId, visibility, displayMode,
     timezone: tenantTimezone(tenantId),
-    currency: tenantCurrencyCode(tenantId),
-    currencyDisplay: currencyDisplayOf(tenantCurrencyCode(tenantId)),
+    currency: tenantCurrencyCodeOrNull(tenantId),
+    currencyDisplay: currencyDisplayOf(tenantCurrencyCodeOrNull(tenantId)),
     perfSource: 'daily_close',
     hero,
     daily: staffDailyRows(techId, month, tenantId, withSplit),
@@ -10602,8 +10598,8 @@ function serializeSettlement(row, { includeSignature = false } = {}) {
     storeName: store?.name || '',
     storeAddress: store?.address || '',
     appointmentAt: booking?.appointment_start || null,
-    currency: tenantCurrencyCode(row.tenant_id),
-    currencyDisplay: currencyDisplayOf(tenantCurrencyCode(row.tenant_id)),
+    currency: tenantCurrencyCodeOrNull(row.tenant_id),
+    currencyDisplay: currencyDisplayOf(tenantCurrencyCodeOrNull(row.tenant_id)),
     servedPersonName: row.served_person_name || '',
     isProxyPaid: Boolean(row.is_proxy_paid),
     // 屏 2:代付要在明细区上方单起一行「本单由 X 的卡支付(代付)」,所以要卡主姓名
@@ -10793,8 +10789,8 @@ async function route(req, res) {
     const amountCents = depositAmountForService(service, config, tid)
     return json(res, 200, {
       tenantId: tid,
-      currency: tenantCurrencyCode(tid),
-      currencyDisplay: currencyDisplayOf(tenantCurrencyCode(tid)),
+      currency: tenantCurrencyCodeOrNull(tid),
+      currencyDisplay: currencyDisplayOf(tenantCurrencyCodeOrNull(tid)),
       onlinePaymentReady: ONLINE_PAYMENT_READY,
       enabled: config.enabled,
       deductible: config.deductible,
@@ -11344,8 +11340,8 @@ async function route(req, res) {
       /* 顾客端的币种也从这里拿(店主 2026-08-10 红线修复)。
          顾客端不能调 /admin/store-clock,以前就只好各页写死 "CAD $" ——
          境内 ¥ 店的顾客看到的每个价格币种都是错的。现在跟商家端同一套 currencyDisplay。 */
-      currency: tenantCurrencyCode(tid),
-      currencyDisplay: currencyDisplayOf(tenantCurrencyCode(tid)),
+      currency: tenantCurrencyCodeOrNull(tid),
+      currencyDisplay: currencyDisplayOf(tenantCurrencyCodeOrNull(tid)),
       /* 🔴 R5(店主 2026-08-10 开检:顾客端显示「定金已付 50」,而 Jie'Nail 配的是 ¥100)。
          根因:顾客端**根本拿不到定金配置** —— 公开接口一个字段都没下发,
          于是 utils/api.js 里写了 `booking.deposit || 50` 和 `depositAmount: 50` 兜底。
@@ -12980,8 +12976,8 @@ async function route(req, res) {
       && (!query.userId || r.user_id === query.userId)
       && (!query.grantedBy || (r.granted_by || '') === query.grantedBy))
     return json(res, 200, {
-      currency: tenantCurrencyCode(tid),
-      currencyDisplay: currencyDisplayOf(tenantCurrencyCode(tid)),
+      currency: tenantCurrencyCodeOrNull(tid),
+      currencyDisplay: currencyDisplayOf(tenantCurrencyCodeOrNull(tid)),
       grants: filtered.map((r) => {
         const scope = couponScopeIds(r)
         return {
@@ -13657,7 +13653,7 @@ async function route(req, res) {
         // 🔴 J-20:`depositAmount` 已从这张白名单撤走 —— 定金金额唯一真相是 deposit_config
         const body = await readBody(req)
         const facts = body.facts && typeof body.facts === 'object' ? body.facts : {}
-        const allowed = ['brandName', 'assistantName', 'storeAddress', 'storePhone', 'currency']
+        const allowed = ['brandName', 'assistantName', 'storeAddress', 'storePhone']
         const stmt = db.prepare(`INSERT INTO tenant_kb_facts (tenant_id, key, value, updated_by, updated_at) VALUES (?, ?, ?, 'platform', ?)
           ON CONFLICT(tenant_id, key) DO UPDATE SET value = excluded.value, updated_by = 'platform', updated_at = excluded.updated_at`)
         for (const key of allowed) if (facts[key] !== undefined) stmt.run(tenantId, key, String(facts[key]), iso(new Date()))
@@ -14543,8 +14539,8 @@ async function route(req, res) {
     const templateCents = rows.filter((r) => (r.grant_kind || 'template') !== 'custom').reduce((n, r) => n + r.coupon_discount_cents, 0)
     return json(res, 200, {
       month,
-      currency: tenantCurrencyCode(tid),
-      currencyDisplay: currencyDisplayOf(tenantCurrencyCode(tid)),
+      currency: tenantCurrencyCodeOrNull(tid),
+      currencyDisplay: currencyDisplayOf(tenantCurrencyCodeOrNull(tid)),
       couponDiscounts: {
         month,
         count: rows.length,
@@ -14824,8 +14820,8 @@ async function route(req, res) {
       /* 2026-08-09 集中核验发现:小程序好几页把货币符号写死成 $,人民币店的老板看到自己的
          收入标着「$5,440」。币种跟「今天」一样是**门店级常量**,顺路一起下发并缓存,
          各页从同一处取,不再各写各的。 */
-      currency: tenantCurrencyCode(tid),
-      currencyDisplay: currencyDisplayOf(tenantCurrencyCode(tid)),
+      currency: tenantCurrencyCodeOrNull(tid),
+      currencyDisplay: currencyDisplayOf(tenantCurrencyCodeOrNull(tid)),
       serverProcessTimezone: APP_TIMEZONE,
       nowUtc: iso(at),
       // 只读运维探针:只报「配没配」,不回显任何密钥值。
@@ -15259,8 +15255,8 @@ async function route(req, res) {
     const tid = currentTenantId()
     return json(res, 200, {
       perfCents,
-      currency: tenantCurrencyCode(tid),
-      currencyDisplay: currencyDisplayOf(tenantCurrencyCode(tid)),
+      currency: tenantCurrencyCodeOrNull(tid),
+      currencyDisplay: currencyDisplayOf(tenantCurrencyCodeOrNull(tid)),
       whole: { cents: whole.cents, pct: whole.pct, tierIndex: whole.tierIndex },
       progressive: { cents: progressive.cents, pct: progressive.pct, tierIndex: progressive.tierIndex },
       flat: { cents: Math.round(perfCents * flatPct / 100), pct: flatPct },

@@ -82,7 +82,7 @@
     "conversation-log": 14,
     "ai-gate": 15,
     "ai-safety-lines": 17,
-    "ai-fact-gate": 18,
+    "ai-fact-gate": 24,
     "quote-tenant": 8,
     "conversation-tenant": 15,
     "tier-label": 8,
