@@ -6,11 +6,16 @@
    ② **D136 并排表为锚**:金额 / 可否抵扣 / 三档比例,三项逐项一致
    ③ 租户隔离:A 店地址不得出现在 B 店回复
    ④ 价目:需报价项目只说「需技师确认」,不出数字 */
+import { readFileSync } from 'node:fs'
+import { join } from 'node:path'
+import { fileURLToPath } from 'node:url'
 import { assertTestTarget } from './test-guard.mjs'
 import { collectFactSlots, verifyReplyFacts, passFactGate, FACT_GATE_REPLY } from './ai-fact-gate.mjs'
 
 const BASE_URL = process.env.TEST_BASE_URL || 'http://127.0.0.1:4128'
 await assertTestTarget(BASE_URL)
+const ROOT = join(fileURLToPath(new URL('.', import.meta.url)), '..', '..')
+const srcMain = readFileSync(join(ROOT, 'apps/api/local-server.mjs'), 'utf8')
 const RUN = Date.now().toString(36)
 let n = 0
 const fails = []
@@ -134,6 +139,79 @@ check('④ 需报价项目:要么走采集/转人工,要么说「需技师确认
   || /技师确认|确认后|需要技师|帮您问|artist will confirm|confirmed by/i.test(say4)
   || ![...say4.matchAll(/(?:CAD|\$)\s?\d/g)].length,
   say4.slice(0, 110))
+
+/* ── 判据⑤ J-20:定金金额**只有一处真相** ─────────────────────────
+   Cowork 05h §一 裁「合并」:`deposit_config` 是唯一真相(钱按它算,话也按它说),
+   知识库那个 `depositAmount` 降为**派生只读**,写口关掉。
+
+   静态判据写成**白名单式**(判据三:数「我列的都对」永远漏没列的):
+   把全仓 `depositAmount` 的出现处**逐个归类**,落不进白名单的自动红。 */
+const SRC = ['ai-fact-gate.mjs', 'ai-utils.mjs', 'kb-routes.mjs', 'kb-utils.mjs', 'local-server.mjs']
+const CATS = [
+  { name: '钱的算法(唯一真相)', re: /depositAmountForService/ },
+  { name: '派生口 / 派生结果透传',
+    re: /depositFactFromConfig|depositAmountNote|live\.depositAmount|depositFactsAll\.depositAmount|rawDepositAll|\{ depositAmount: amount|kbFacts\?\.depositAmount/ },
+  /* 「已撤走的键」指路表:商家再传它时,400 里要说清去哪改。
+     这一类**必须单列**,不能混进注释 —— 它是真代码,而且它的存在本身就是 J-20 的一部分。 */
+  { name: '已撤走键的指路表', re: /const retired = \{/ },
+]
+/* 🔴 注释不能靠「这一行以 // 或 * 开头」来认 —— 块注释里换行后的**续行**没有任何标记
+   (05h 现测:我自己写的两行说明就落进了「未归类」)。所以逐行**跟踪块注释状态**,
+   在注释里的行整行跳过。判据自己也要分得清代码和说明,否则每次写注释都要红一次。 */
+const scanFile = (src) => {
+  const out = []
+  let inBlock = false
+  src.split('\n').forEach((ln, i) => {
+    const line = ln
+    const opens = inBlock
+    if (!inBlock && /\/\*/.test(line) && !/\*\//.test(line.slice(line.indexOf('/*') + 2))) inBlock = true
+    else if (inBlock && /\*\//.test(line)) inBlock = false
+    const isComment = opens || /^\s*(\/\/|\/\*|\*)/.test(line) || /^\s*\+ '/.test(line)
+    if (!/depositAmount/.test(line) || isComment) return
+    if (!CATS.some((c) => c.re.test(line))) out.push(`${i + 1} ${line.trim().slice(0, 70)}`)
+  })
+  return out
+}
+const homeless = []
+for (const f of SRC) {
+  for (const hit of scanFile(readFileSync(join(ROOT, 'apps/api', f), 'utf8'))) homeless.push(`${f}:${hit}`)
+}
+check('⑤ J-20 静态白名单:全仓 `depositAmount` 每一处(注释除外)都必须落进「钱的算法/派生口」两类之一',
+  homeless.length === 0, homeless.join(' | '))
+
+/* 四个「必须是 0」的口 —— 写口关了没有、种子清了没有、槽还认不认它 */
+const kbRoutesSrc = readFileSync(join(ROOT, 'apps/api/kb-routes.mjs'), 'utf8')
+const factGateSrc = readFileSync(join(ROOT, 'apps/api/ai-fact-gate.mjs'), 'utf8')
+check('⑤b J-20 四个口全关:商家写口 0 · 平台写口 0 · 种子 0 · 事实槽 0',
+  !/allowed = \[[^\]]*'depositAmount'/.test(kbRoutesSrc)
+  && !/allowed = \[[^\]]*'depositAmount'/.test(srcMain)
+  && !/\['depositAmount', '\d+'\]/.test(srcMain)
+  && !/if \(facts\.depositAmount\) addMoney/.test(factGateSrc),
+  JSON.stringify({
+    商家写口: /allowed = \[[^\]]*'depositAmount'/.test(kbRoutesSrc),
+    平台写口: /allowed = \[[^\]]*'depositAmount'/.test(srcMain),
+    种子: /\['depositAmount', '\d+'\]/.test(srcMain),
+    事实槽: /if \(facts\.depositAmount\) addMoney/.test(factGateSrc),
+  }))
+
+/* 行为层:改配置 → AI 说新数;写知识库那个键 → 400。两店各跑一遍。 */
+for (const tid of ['lucky-luxe', 'jics-store']) {
+  const before = await api('/admin/deposit-config', tid)
+  const cfg0 = before?.config || before || {}
+  const NEW = 7700
+  await api('/admin/deposit-config', tid, { method: 'PUT', body: JSON.stringify({
+    ...cfg0, enabled: true, mode: 'fixed', fixedAmountCents: NEW, fallbackAmountCents: NEW }) })
+  const d = await chat(tid, `j20-${RUN}-${tid}`, '定金要多少?')
+  const say = `${d?.reply?.data?.answerZh || ''}${d?.reply?.data?.answerEn || ''}`
+  check(`⑤c J-20 行为·${tid}:改配置 → AI 说新数(77)且**不被事实闸拦**`,
+    /77/.test(say) && d?.reply?.data?.gate !== 'fact_gate', say.slice(0, 90))
+  const put = await api('/admin/kb/facts', tid, { method: 'PUT', body: JSON.stringify({ facts: { depositAmount: '60' } }) })
+  check(`⑤d J-20 行为·${tid}:写知识库 depositAmount → 拒绝(写口已关)`,
+    Boolean(put?.error) && put.error.code === 'UNKNOWN_KB_KEY'
+    && /门店设置|定金规则/.test(put.error.message || ''),
+    JSON.stringify(put?.error || put).slice(0, 130))
+  await api('/admin/deposit-config', tid, { method: 'PUT', body: JSON.stringify(cfg0) })   // 还原
+}
 
 console.log(`\n[事实闸] 造病 ${MUST_BLOCK.length} 拦 / ${MUST_PASS.length} 放 · D136 三锚 × 2 店 · 租户隔离 · 需报价不出数`)
 if (fails.length) { console.error(`\n❌ test-ai-fact-gate ${fails.length}/${n} 项未过`); process.exit(1) }

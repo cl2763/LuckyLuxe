@@ -1,8 +1,11 @@
-/* 事实命中率(Cowork 05g §二:「评测集里事实类句子(营业时间/定金/地址组)三跑取中位报事实命中率」)
+/* 事实句**放行率** + 定金数字**独立对账**(Cowork 05h §二 裁)
 
-   **命中 = 答了,而且没被事实闸拦下。**
-   被拦下不算「答错」也不算「答对」——它是**没放出去**,对顾客而言就是没得到答案。
-   所以这个数量的是「**顾客问一句事实,拿到可信答案的比例**」。 */
+   ⚠️ **这把尺子原来叫「事实命中率」,那个名字是错的。**
+   它量的是「答了、而且没被事实闸拦下」—— 也就是**放行率**,不是「数字对不对」。
+   对不对是**闸**判的,而尺子和闸**读的是同一份事实槽** —— 等于自己给自己打分。
+   所以:①改名叫放行率;②再加一栏**独立对账** —— 走一条**跟闸不同的读路径**
+   (公开的 `GET /store/deposit-policy`),把回复里的钱数逐句比回去。
+   一条路径说「放行了」,另一条路径说「数字确实对得上」,两个数才有意义。 */
 import { writeFileSync } from 'node:fs'
 import { requireTarget } from '../db-target.mjs'
 import { ALL_200 } from '../../apps/api/ai-eval-set.mjs'
@@ -37,6 +40,28 @@ for (const [say, want, lang] of SET) {
 }
 const hit = rows.filter((r) => r.answered).length
 const blocked = rows.filter((r) => r.blocked).length
-writeFileSync(process.env.FACT_OUT || `/tmp/fact-${TAG}.json`, JSON.stringify({ rows }, null, 2))
-console.log(JSON.stringify({ 事实句: rows.length, 命中: hit, 被事实闸拦下: blocked,
-  命中率: `${(hit / rows.length * 100).toFixed(1)}%` }))
+
+/* ── 独立对账:定金类回答里的钱数,拿**公开口**的政策原文比回去 ──
+   `GET /store/deposit-policy` 与事实闸不共用读路径,所以它说「对得上」才算数。 */
+const recon = { 应对账: 0, 对上: 0, 对不上: [] }
+for (const tid of SHOPS) {
+  const r = await fetch(`${BASE}/store/deposit-policy`, { headers: { 'x-tenant-id': tid } })
+  let pol = null
+  try { pol = await r.json() } catch { pol = null }
+  const text = JSON.stringify(pol || {})
+  const allowed = new Set([...text.matchAll(/(\d{1,5})/g)].map((m) => Number(m[1])))
+  for (const row of rows.filter((x) => x.tid === tid && x.answered && /定金|deposit/i.test(x.say))) {
+    recon.应对账 += 1
+    const nums = [...row.text.matchAll(/(?:CAD|USD|¥|\$)\s?(\d{1,5})/g)].map((m) => Number(m[1]))
+    const bad = nums.filter((n) => !allowed.has(n))
+    if (bad.length) recon.对不上.push({ say: row.say, tid, bad, text: row.text.slice(0, 90) })
+    else recon.对上 += 1
+  }
+}
+writeFileSync(process.env.FACT_OUT || `/tmp/fact-${TAG}.json`, JSON.stringify({ rows, recon }, null, 2))
+console.log(JSON.stringify({
+  事实句: rows.length, 放行: hit, 被事实闸拦下: blocked,
+  事实句放行率: `${(hit / rows.length * 100).toFixed(1)}%`,
+  定金数字对账: `${recon.对上}/${recon.应对账}`,
+  对不上的: recon.对不上,
+}))

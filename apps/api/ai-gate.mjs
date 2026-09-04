@@ -64,11 +64,18 @@ export function isVagueContextFollowup(text = '') {
 }
 
 
+/* 「你们能做…吗」这类能力问法 —— 从 `local-server.mjs` 搬来(公约②)。它只服务于门,属门域。 */
+export function hasCapabilityIntent(text = '') {
+  const compact = compactIntentText(text)
+  return /可以做吗|能做吗|能不能做|可不可以做|可以还原吗|能还原吗|这一款可以吗|这款可以吗|这个可以吗|可以吗|好了吗/.test(compact)
+    || /can you do|can u do|possible|is it possible/.test(String(text || '').toLowerCase())
+}
+
+
 export function createAiGate(deps) {
   const {
     flattenPersistedQuoteState,
     hasAfterSalesProblemIntent, hasSpecialManualHandoffIntent, hasExplicitPriceIntent,
-    hasCapabilityIntent,
     isReturningCustomerInbound, shouldSendReturningCustomerWelcome,
   } = deps
   /* 🔴 静默失败器族:少注一个依赖,`undefined is not a function` 要等到顾客发那句话才炸。

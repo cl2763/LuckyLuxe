@@ -86,10 +86,18 @@ async function main() {
     const stillA = await chat(URL_A, `iso-a2-${RUN_ID}`, '你好')
     check('tenant A AI unaffected by tenant B disable', Boolean(stillA.data?.reply), JSON.stringify(stillA.data?.reply?.data?.intent || null))
 
-    // 4. 事实隔离:B 改定金不影响 A
-    await request(URL_B, '/admin/kb/facts', { method: 'PUT', body: JSON.stringify({ facts: { depositAmount: '999' } }) })
+    /* 4. 事实隔离:B 改事实不影响 A。
+       🔴 载体从 `depositAmount` 换成 `brandName`(J-20:定金金额的写口已关,唯一真相在 `deposit_config`)。
+       这条断言守的从来是**租户之间的事实不串**,定金只是当时顺手拿来的载体;
+       换个还能写的键,守的东西一个字没变。
+       顺带去掉对种子常量 '50' 的依赖 —— 改成「先记下 A 的值,B 改完再看 A 动没动」,
+       这样它不会再因为种子改了而红(J-20 就是这么撞红它的)。 */
+    const beforeA = (await request(URL_A, '/admin/kb')).data.facts?.brandName
+    await request(URL_B, '/admin/kb/facts', { method: 'PUT', body: JSON.stringify({ facts: { brandName: `B店改的品牌-${RUN_ID}` } }) })
     const factsA = await request(URL_A, '/admin/kb')
-    check('tenant A deposit fact unaffected by tenant B change', factsA.data.facts?.depositAmount === '50', factsA.data.facts?.depositAmount)
+    check('tenant A brand fact unaffected by tenant B change',
+      factsA.data.facts?.brandName === beforeA,
+      JSON.stringify({ before: beforeA, after: factsA.data.facts?.brandName }))
 
     console.log(`[tenant-isolation] all ${checks} checks passed`)
   } finally {

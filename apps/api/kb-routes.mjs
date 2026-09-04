@@ -34,7 +34,10 @@ export function createKbRoutes(deps) {
       if (adminSession.role !== 'owner') throw apiError(403, 'FORBIDDEN', 'Owner permission is required.')
       const body = await readBody(req)
       const facts = body.facts && typeof body.facts === 'object' ? body.facts : {}
-      const allowed = ['brandName', 'assistantName', 'storeAddress', 'depositAmount', 'currency']
+      /* 🔴 J-20(Cowork 05h §一):`depositAmount` 从白名单撤走 —— 定金金额唯一真相是
+         「门店设置 → 定金规则」(`deposit_config`),钱按它算,话也按它说。
+         再传它就走 D134 那条既有口径:**400 点名**,不新造错误码,hint 里指路。 */
+      const allowed = ['brandName', 'assistantName', 'storeAddress', 'currency']
       /* 🔴 D134(店主 04d §三 报、04f §一.1 裁现修):不认识的键**原来静默丢弃还回 200** ——
          商家看到「保存成功」而库里没有,从响应上分不出「存了」和「没存」。归族**静默失败器族**。
          裁法(店主原话):**不认识的键 400 点名**,不做 ignoredKeys ——
@@ -42,8 +45,14 @@ export function createKbRoutes(deps) {
          自由知识条目本来就有自己的口(`/admin/kb/entries`),错误信息里指过去。 */
       const unknown = Object.keys(facts).filter((k) => !allowed.includes(k))
       if (unknown.length) {
+        /* 🔴 J-20:`depositAmount` 是**被撤走的**键,不是「不认识的键」——
+           商家以前能在这儿改定金,现在不能了,只回一句「不是门店事实字段」会让人一头雾水。
+           所以给它一句专门的指路(D134 定的口径本来就是「400 点名」,这里只是把话说清楚)。 */
+        const retired = { depositAmount: '定金金额请到「门店设置 → 定金规则」改 —— 钱按那里算,AI 也按那里说' }
+        const retiredHit = unknown.filter((k) => retired[k])
         throw apiError(400, 'UNKNOWN_KB_KEY',
           `这几项不是门店事实字段,没有保存:${unknown.join('、')}。`
+          + (retiredHit.length ? `${retiredHit.map((k) => `【${k}】${retired[k]}` ).join(';')}。` : '')
           + `可保存的是:${allowed.join('、')};自由问答条目请用「知识库条目」(/admin/kb/entries)。`)
       }
       const stmt = db.prepare(`

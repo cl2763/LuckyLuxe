@@ -616,14 +616,14 @@ export async function createCustomerServiceReply({ lang = 'zh', message = '', sa
 
            改法不是「把抵扣改成不抵扣」,是**别自己拼这句话**:
            `depositPolicy.text` 就是定金话术的唯一出口(按本店参数生成),直接用它。 */
-        /* ⚠️ 定金金额**有两处真相**,这一版是把两处都说清楚,不是二选一:
-             · `tenant_kb_facts.depositAmount` —— 商家在知识库里显式填的数(`test-tenant-kb` 断言它算数);
-             · `deposit_config` —— 定金规则(模式/可否抵扣/三档退款比例),`depositPolicy.text` 由它生成。
-           两者可以不一致(商家填 60、配置算出 50),**谁优先是业务口径,不该我定** —— 已在回执登记请店主裁。
-           在裁定之前,这里的做法是:**商家显式填了就先说那个数**,再接上政策原文
-           (抵扣与三档比例只有政策那一份真相,不能丢)。 */
+        /* 🔴 J-20 已裁「合并成一处真相」(Cowork 05h §一,2026-09-05):
+             定金金额的唯一真相是 **`deposit_config`**(钱按它算,话也按它说)。
+             知识库那个 `depositAmount` 已降为**派生只读**、写口关闭 ——
+             所以 `kbFacts.depositAmount` 现在就是配置派生出来的那个数,与账上收的一定一致。
+           这里先说金额(`depositLabel`)、再接政策原文:抵扣与三档比例只有政策那一份真相,不能丢。
+           `depositAmountNote`(per_service 店的「按项目不同」)也要带上,否则兜底额会被说成所有项目的定金。 */
         const dp = kbFacts?.depositPolicy
-        const amountZh = depositLabel ? `预约定金为 ${depositLabel}。` : ''
+        const amountZh = depositLabel ? `预约定金为 ${depositLabel}${kbFacts?.depositAmountNote ? `(${kbFacts.depositAmountNote})` : ''}。` : ''
         const amountEn = depositLabel ? `The booking deposit is ${depositLabel}. ` : ''
         answerZh = dp?.text ? `${amountZh}${dp.text}` : (amountZh || '定金金额以门店确认为准。')
         answerEn = (dp?.textEn || dp?.text)

@@ -16,6 +16,19 @@
    图 §三:换成「这个我帮您问一下」并**转人工(3b)**,不放出去。
    —— 不是静默,也不是让它把错数字说出来再道歉。 */
 
+/* 定金金额的**唯一派生口**(J-20):fixed → 固定额;per_service → 兜底额 + 注明「按项目不同」。
+   注明那句要进提示词 —— 不注明的话,per_service 店的 AI 会把兜底额说成所有项目的定金。 */
+export function depositFactFromConfig(config = {}) {
+  if (!config.enabled) return {}
+  const cents = config.mode === 'fixed' ? config.fixedAmountCents : config.fallbackAmountCents
+  const amount = Math.round(Number(cents || 0) / 100)
+  if (!Number.isFinite(amount) || amount <= 0) return {}
+  return config.mode === 'fixed'
+    ? { depositAmount: amount }
+    : { depositAmount: amount, depositAmountNote: '按项目不同,以预约页显示为准' }
+}
+
+
 /* ── 事实槽:六个,只从**唯一来源**取 ────────────────────────────
    来源就是 `tenantKbFacts(tenantId)` 那一份(它已经是全仓唯一的店数据出口)。
    这里不另开数据库查询 —— 再查一次就是「一件事两处真相」,两份迟早漂。 */
@@ -29,7 +42,10 @@ export function collectFactSlots(facts = {}, deposit = {}) {
   /* 槽③ 定金三项:金额 / 可否抵扣 / 三档比例 */
   if (deposit.mode === 'fixed') addMoney((deposit.fixedAmountCents || 0) / 100)
   addMoney((deposit.fallbackAmountCents || 0) / 100)
-  if (facts.depositAmount) addMoney(facts.depositAmount)
+  /* 🔴 J-20:这里原来把**知识库那个 `depositAmount`** 也算进槽 ——
+     于是「知识库 60」与「配置 50」两个数**都被放行**,等于给漂移开了后门:
+     闸本来是防「说的和收的不一样」,结果它把两个都认了。
+     裁定后定金金额只有一处真相(`deposit_config`),槽③只认下面那几行配置来的数。 */
   const cp = deposit.cancelPolicy || {}
   for (const v of [cp.lateForfeitPct, cp.noShowForfeitPct]) {
     const n = Number(v)

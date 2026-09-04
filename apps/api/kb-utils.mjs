@@ -134,7 +134,10 @@ function mergeTenantFacts(tenant, live) {
     storeAddress: live.storeAddress || seed.storeAddress,
     storePhone: live.storePhone || undefined,
     defaultHours: live.defaultHours || seed.defaultHours,
-    depositAmount: live.depositAmount ?? seed.depositAmount,
+    /* 🔴 J-20:定金金额**不再回落种子**,也不再是可写事实 —— 它由 `deposit_config` 派生,
+       `live` 里那个值就是派生结果。回落种子会让「没配定金的店」说出旗舰店的 50。 */
+    depositAmount: live.depositAmount,
+    depositAmountNote: live.depositAmountNote,
     memberLevels: live.memberLevels || seed.memberLevels,
     priceList: live.priceList || seed.priceList,
     // 2026-08-08:这个白名单是「哪些事实进提示词」的闸门。P0 加的加项目录/计价规则、

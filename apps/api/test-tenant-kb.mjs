@@ -45,7 +45,19 @@ async function main() {
     // 1. 事实种子
     const kb = await request('/admin/kb')
     check('kb endpoint 200', kb.status === 200)
-    check('facts seeded (depositAmount)', kb.data.facts?.depositAmount === '50', kb.data.facts?.depositAmount)
+    /* 🔴 J-20(Cowork 05h §一 裁「合并成一处真相」,2026-09-05):
+       定金金额**不再是知识库事实** —— 唯一真相是「门店设置 → 定金规则」(`deposit_config`),
+       知识库那个键降为**派生只读**、写口已关。所以种子里不再有这一行,
+       断言改成:它现在是**由配置派生**出来的数(拿公开政策口对一遍)。 */
+    /* ⚠️ 库里**旧的 `depositAmount` 行不删**(05h §一 第 5 条:删行要走 4128 写,不值得;
+       读口全断开后它就是死数据,写进两库对照表「废弃键」栏,上线批清)。
+       所以 `/admin/kb` 这个原始视图**可能还看得见它**。
+       🔴 这条要守的不是「行没了」,而是「**它已经不起作用**」——
+       而「不起作用」必须**验得出来**:先记下原始行的值,等下面改完配置,
+       再确认①AI 说的是**配置**的数 ②那一行**原封没动**(证明 AI 没在读它)。
+       (第一版我在这里写了 `check(..., true, ...)` —— 恒真兜底,`test-delivery-evidence`
+        的「判据自述自守②」当场把它咬出来:**一条永远不会红的断言不是断言**。) */
+    const staleDepositRow = kb.data.facts?.depositAmount
     check('facts seeded (storeAddress)', Boolean(kb.data.facts?.storeAddress))
 
     // 2. 改定金 → AI 定金回答立即用新值
@@ -70,10 +82,25 @@ async function main() {
     okKey.status === 200 && (await request('/admin/kb')).data.facts?.storeAddress === '合法地址 9 号',
     JSON.stringify(okKey.data).slice(0, 120))
 
-    await request('/admin/kb/facts', { method: 'PUT', body: JSON.stringify({ facts: { depositAmount: '60' } }) })
+    /* 🔴 J-20 改造景:原来是「改知识库 depositAmount → AI 说新数」——
+       那条路已经关了(写口 400)。改成**改配置 → AI 说新数**,并顺手验写口确实关着。 */
+    const putRetired = await request('/admin/kb/facts', { method: 'PUT', body: JSON.stringify({ facts: { depositAmount: '60' } }) })
+    check('J-20 写口已关:知识库改定金金额 → 400 且指路到门店设置',
+      putRetired.status === 400 && putRetired.data?.error?.code === 'UNKNOWN_KB_KEY'
+      && /门店设置|定金规则/.test(putRetired.data?.error?.message || ''),
+      JSON.stringify(putRetired.data).slice(0, 130))
+    const cfg0 = (await request('/admin/deposit-config')).data
+    const baseCfg = cfg0?.config || cfg0 || {}
+    await request('/admin/deposit-config', { method: 'PUT', body: JSON.stringify({
+      ...baseCfg, enabled: true, mode: 'fixed', fixedAmountCents: 6000, fallbackAmountCents: 6000 }) })
     const depositReply = await request('/ai/customer-service', { method: 'POST', body: JSON.stringify({ lang: 'zh', message: '预约需要付定金吗？定金多少？' }) })
     const depositText = depositReply.data?.reply?.data?.answerZh || ''
-    check('AI deposit answer uses updated fact (60)', /60/.test(depositText), depositText.slice(0, 120))
+    check('J-20 改配置 → AI 定金回答立即用新数(60)', /60/.test(depositText), depositText.slice(0, 120))
+    const kbAfterJ20 = await request('/admin/kb')
+    check('J-20 残留旧行是**死数据**:AI 用的是配置的数,而那一行原封没动(证明没人读它)',
+      String(kbAfterJ20.data.facts?.depositAmount) === String(staleDepositRow),
+      JSON.stringify({ 改配置前: staleDepositRow, 改配置后: kbAfterJ20.data.facts?.depositAmount }))
+    await request('/admin/deposit-config', { method: 'PUT', body: JSON.stringify(baseCfg) })   // 还原配置
 
     // 3. 改地址 → AI 门店回答立即用新值
     await request('/admin/kb/facts', { method: 'PUT', body: JSON.stringify({ facts: { storeAddress: '888 Test Ave Unit 5' } }) })
@@ -161,14 +188,14 @@ async function main() {
     const badAuth = await fetch(`${BASE_URL}/admin/kb/facts`, {
       method: 'PUT',
       headers: { 'content-type': 'application/json', authorization: 'Bearer wrong-token' },
-      body: JSON.stringify({ facts: { depositAmount: '999' } })
+      body: JSON.stringify({ facts: { unknownKeyForTest: '999' } })
     })
     check('bad token rejected', badAuth.status === 401, String(badAuth.status))
 
     console.log(`[tenant-kb] all ${checks} checks passed`)
   } finally {
     // 恢复种子事实,清理测试条目,不影响其他测试
-    await request('/admin/kb/facts', { method: 'PUT', body: JSON.stringify({ facts: { depositAmount: '50', storeAddress: '136 veterans place' } }) }).catch(() => {})
+    await request('/admin/kb/facts', { method: 'PUT', body: JSON.stringify({ facts: { storeAddress: '136 veterans place' } }) }).catch(() => {})
     if (entryId) await request(`/admin/kb/entries/${entryId}`, { method: 'DELETE' }).catch(() => {})
   }
 }

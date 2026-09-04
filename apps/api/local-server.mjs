@@ -21,8 +21,8 @@ import { ensureConversationLog, logConversationMessage, transcriptFromLog, migra
 import { createConversationRoutes } from './conversation-routes.mjs'   // ⓪b 脱敏正门(大批05 §〇b,公约①)
 import { compactIntentText } from './intent-text.mjs'   // 意图文本归一,全仓唯一一份(05d)
 import { resolveSafetyLine, hasSpecialManualHandoffIntent, needsHumanInScope } from './ai-safety-lines.mjs'   // 安全四线闸(05d 两破口;判定与出句都在模块里)
-import { createFactGate } from './ai-fact-gate.mjs'   // ② 事实闸:出口校验(图 §三)
-import { createAiGate, isGreetingOnly, hasServiceStartIntent, isExplicitAiResumeIntent, hasAppointmentInquiryIntent, isVagueContextFollowup } from './ai-gate.mjs'   // 大批05 ① 门(旧关键词门 + 新模型门三档,公约①②)
+import { createFactGate, depositFactFromConfig } from './ai-fact-gate.mjs'   // ② 事实闸:出口校验(图 §三)
+import { createAiGate, isGreetingOnly, hasServiceStartIntent, isExplicitAiResumeIntent, hasAppointmentInquiryIntent, isVagueContextFollowup, hasCapabilityIntent } from './ai-gate.mjs'   // 大批05 ① 门(旧关键词门 + 新模型门三档,公约①②)
 import { createAppVersion } from './app-version.mjs'   // 04f-3 三端版本指纹(公约①)
 import { createKbRoutes } from './kb-routes.mjs'   // 知识库路由(D134 现修那一批搬出,公约②)
 import { createBusinessHoursRoutes } from './business-hours-routes.mjs'   // 营业时间两条路由(强制设置批边改边拆)
@@ -1102,7 +1102,8 @@ function liveTenantFacts() {
     ...(facts.assistantName ? { assistantName: facts.assistantName } : {}),
     ...(facts.storeAddress || store?.address ? { storeAddress: facts.storeAddress || store.address } : {}),
     ...(facts.storePhone || store?.phone ? { storePhone: facts.storePhone || store.phone } : {}),
-    ...(facts.depositAmount ? { depositAmount: Number(facts.depositAmount) || facts.depositAmount } : {}),
+    /* J-20:定金金额唯一真相 = `deposit_config`,这里只取派生结果(理由见 ai-fact-gate.mjs)。 */
+    ...depositFactFromConfig(depositConfigForAi),
     ...(currency ? { currency } : {}),
     ...(facts.region ? { region: facts.region } : {}),
     ...(priceList ? { priceList } : {}),
@@ -1205,7 +1206,7 @@ function seedDatabase() {
     ['brandName', 'LUVIA 半径'],
     ['assistantName', 'LUVIA 预约助手'],
     ['storeAddress', '136 veterans place'],
-    ['depositAmount', '50'],
+    /* J-20:定金金额不再是知识库事实(唯一真相 = deposit_config),种子不再铺这一行 */
     ['currency', 'CAD']
   ]) kbFactStmt.run(DEFAULT_TENANT_ID, key, value, 'seed', iso(new Date()))
   /* 🔴 D131(店主 04b §二):首启种子三张表(stores / technicians / services)原来都不写 tenant_id,
@@ -2358,12 +2359,6 @@ function hasExplicitPriceIntent(text = '') {
   const raw = String(text || '').toLowerCase()
   const compact = compactIntentText(raw)
   return /价|价格|报价|多少钱|费用|预算/.test(compact) || /price|quote|cost|how\s*much/.test(raw)
-}
-
-function hasCapabilityIntent(text = '') {
-  const compact = compactIntentText(text)
-  return /可以做吗|能做吗|能不能做|可不可以做|可以还原吗|能还原吗|这一款可以吗|这款可以吗|这个可以吗|可以吗|好了吗/.test(compact)
-    || /can you do|can u do|possible|is it possible/.test(String(text || '').toLowerCase())
 }
 
 
@@ -13658,10 +13653,11 @@ async function route(req, res) {
         return json(res, 200, { facts, entries })
       }
       if (req.method === 'PUT') {
-        // 更新品牌事实(AI 口径):brandName/assistantName/storeAddress/depositAmount/currency
+        // 更新品牌事实(AI 口径):brandName/assistantName/storeAddress/storePhone/currency
+        // 🔴 J-20:`depositAmount` 已从这张白名单撤走 —— 定金金额唯一真相是 deposit_config
         const body = await readBody(req)
         const facts = body.facts && typeof body.facts === 'object' ? body.facts : {}
-        const allowed = ['brandName', 'assistantName', 'storeAddress', 'storePhone', 'depositAmount', 'currency']
+        const allowed = ['brandName', 'assistantName', 'storeAddress', 'storePhone', 'currency']
         const stmt = db.prepare(`INSERT INTO tenant_kb_facts (tenant_id, key, value, updated_by, updated_at) VALUES (?, ?, ?, 'platform', ?)
           ON CONFLICT(tenant_id, key) DO UPDATE SET value = excluded.value, updated_by = 'platform', updated_at = excluded.updated_at`)
         for (const key of allowed) if (facts[key] !== undefined) stmt.run(tenantId, key, String(facts[key]), iso(new Date()))
