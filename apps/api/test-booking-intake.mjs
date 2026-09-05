@@ -16,6 +16,7 @@ import { readFileSync } from 'node:fs'
 import { join } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { assertTestTarget } from './test-guard.mjs'
+import { isTooLong, createReplyLength } from './reply-length.mjs'
 import { mergeSlots, nextMissing, isReadyToCheck, looksConfirm, looksReschedule, SLOT_KEYS,
   extractSlotsByRule, parseDate, parseTime, normalizeSlots, hasBookingSignal, periodOf } from './booking-intake.mjs'
 
@@ -498,6 +499,82 @@ if (bareOk) {
   check('⑭e 病6:得说清什么时候才算留位', /定金.*才算留位|记下了/.test(okTxt), okTxt.slice(0, 70))
 }
 
+/* ══════════ ⑰ 7 项表退役(图 v1.3;店主 05n 裁 (1))══════════
+   ⑤ 现测:200 句里 **25 句**出表,像人五通里两通中招 —— ③ 只治了预约采集,
+   表活在**报价采集**里。裁定:报价采集的**问法**改成一句一问(报价单本身不动)。
+
+   🔴 判据白名单式 + 认**两张**表(病2:机械三看原来只认美甲那张,美睫那张连发两次也看不见):
+   凡是「一次抛出 ≥5 个编号项」的回复,不管美甲美睫、不管措辞,一律算表。 */
+{
+  const tid = RICH
+  /* 一次抛 ≥5 个编号项 = 表(不锚具体文案 —— 判据不许锚在会变的字面量上) */
+  const isForm = (t) => (String(t || '').match(/^\s*\d[.、]\s*/gm) || []).length >= 5
+  check('⑰0 判据自证:认得出表(拿真模板文本喂它必须判成表)',
+    isForm('1. 项目类型:美甲\n2. 想做日期和时间:\n3. 是否需要卸甲:\n4. 是否需要延长:\n5. 参考图:'))
+  check('⑰0b 判据自证:一句一问不算表', !isForm('请问这款是做本甲还是需要延长?'))
+
+  /* 以前必甩表的四句(美甲两句 + 美睫两句),现在一句都不许出表 */
+  const cases = ['我想预约', '哈喽,想做美甲', '想做美睫', '美睫多少钱']
+  const formy = []
+  for (const m of cases) {
+    const r = await sayTo(tid, `form-${RUN}-${cases.indexOf(m)}`, m)
+    const t = r?.reply?.data?.answerZh || ''
+    if (isForm(t)) formy.push(`${m} → ${t.slice(0, 40)}`)
+  }
+  check('⑰a 🔴 这四句一句都不出 7 项表(美甲美睫两张都算)', formy.length === 0, formy.join(' | '))
+
+  /* 反向守:不出表 ≠ 不采集 —— 还得真问出缺的那一项来 */
+  const r2 = await sayTo(tid, `formq-${RUN}`, '哈喽,想做美甲')
+  const t2 = r2?.reply?.data?.answerZh || ''
+  check('⑰b 反向守:报价采集仍在采(问出了一个缺项,不是沉默也不是泛泛而谈)',
+    /本甲|延长|卸甲|断甲|修补|款式|几点|哪天|美甲还是美睫/.test(t2), t2.slice(0, 60))
+  check('⑰c 反向守:这一问是**短句**,不是把表换个说法',
+    t2.length <= 60, `${t2.length} 字:${t2.slice(0, 60)}`)
+}
+
+/* ══════════ ⑯ 回复长度与定金只说一次(店主 05n 裁 (4);⑤ 像人五通病5)══════════
+   病5:单条普遍 >120 字,五通里 4 通中招;通三**定金政策整段说了两遍**。
+   提示词那一层写死了 120 字,但「说过的话有没有算数得有人数」——
+   所以出口这里量它(`/health.replyLength`),并且把「同一段政策说两遍」这一种
+   确定性的重复真正掐掉(长度本身不砍,砍了话会莫名其妙)。 */
+{
+  /* 纯函数:中英各一条线 */
+  check('⑯a 长度线:中文按字数(121 字超线、120 字不超)',
+    isTooLong('啊'.repeat(121)) === true && isTooLong('啊'.repeat(120)) === false)
+  check('⑯b 长度线:英文按字符数(201 超线、200 不超)',
+    isTooLong('a'.repeat(201)) === true && isTooLong('a'.repeat(200)) === false)
+  check('⑯c 空回复不算超长(空是另一回事,别混进这个数)', isTooLong('') === false)
+
+  const tid = RICH
+  const uid = `dep-${RUN}`
+  const before = (await (await fetch(`${BASE_URL}/health`)).json())?.replyLength
+  check('⑯d 用量口在:/health.replyLength 给得出 total/tooLong', typeof before?.total === 'number',
+    JSON.stringify(before || {}))
+
+  /* 定金政策整段:同一通里问两次,第二次不许再整段复述 */
+  const a1 = (await sayTo(tid, uid, '预约需要付定金吗?定金多少?'))?.reply?.data?.answerZh || ''
+  const a2 = (await sayTo(tid, uid, '那定金能退吗'))?.reply?.data?.answerZh || ''
+  const policyish = (t) => /定金/.test(t) && /取消|退还|爽约|改期/.test(t) && t.length > 60
+  check('⑯e 🔴 定金政策整段,同一通里不许说第二遍',
+    !(policyish(a1) && policyish(a2) && a1 === a2), `第二次:${a2.slice(0, 60)}`)
+
+  const after = (await (await fetch(`${BASE_URL}/health`)).json())?.replyLength
+  check('⑯f 计数在走(说了几句就数了几句)', (after?.total || 0) > (before?.total || 0),
+    `${before?.total} → ${after?.total}`)
+
+  /* 🔴 ⑯e 走的是真模型/mock 的话,**未必两句都带整段政策** —— 那样它就是空转。
+     所以机制本身单独直测一次:确定性输入,确定性结论。 */
+  const POLICY = '定金 ¥50,提前 24 小时可全额退还;不足 24 小时扣 50%。'
+  const rl = createReplyLength({ depositPolicyTextOf: () => POLICY })
+  const one = rl.govern(`好的。${POLICY}`, 'conv-x')
+  const two = rl.govern(`那我说一下,${POLICY}`, 'conv-x')
+  const other = rl.govern(`换一通对话:${POLICY}`, 'conv-y')
+  check('⑯g 机制直测:同一通第一次整段照说', one.includes(POLICY), one.slice(0, 50))
+  check('⑯h 🔴 机制直测:同一通第二次换成回指,不再整段', !two.includes(POLICY) && /定金规则同上/.test(two), two.slice(0, 50))
+  check('⑯i 反向守:**换一通**对话照样整段说(别把别人的会话也掐了)', other.includes(POLICY), other.slice(0, 50))
+  check('⑯j 计数记了这一次去重', rl.snapshot().depositTrimmed === 1, JSON.stringify(rl.snapshot()))
+}
+
 /* ══════════ ⑮ 改口进槽(店主 05n 裁 (2);⑤ 像人五通病3 + J-26 判据盲区)══════════
    🔴 判据盲区先说清楚:边角 ⑤ 组「打断改口」10 条报 10/10 过,是因为
    那 10 句是**孤立发送**的,判据只看「有没有回复 / 转没转人工」——
@@ -553,6 +630,46 @@ if (bareOk) {
   check('⑮e 🔴「算了不约了」→ 不许继续追问采集槽位',
     !/想约哪天|大概几点|做美甲还是美睫/.test(t4), t4.slice(0, 70))
   check('⑮f 反向守:收摊也得答一句,不是沉默', Boolean(t4), '(空回复)')
+}
+
+/* ══════════ ⑱ 开了 WAL 之后,`cp` 出来的备份是废的(05n 现场撞出来)══════════
+   🔴 案底:裁 (6) 给库开了 WAL。当天照老规矩 `cp lucky-luxe.sqlite <备份>` ——
+   拷出来的文件一打开就是 `file is not a database`:4.1 MB 已提交数据还在 `-wal` 里,
+   只拷主文件等于拷了半个库。**而且它看起来是成功的**(exit 0、大小正常),
+   要等真去读、真要回滚那天才知道是废的。
+   备份改走 `VACUUM INTO`(自洽单文件)+ **写完当场打开验一次**。
+   这条判据钉的就是「备份必须打得开」—— 不验的备份不算备份。 */
+{
+  const { DatabaseSync } = await import('node:sqlite')
+  const { mkdtempSync, existsSync, rmSync } = await import('node:fs')
+  const { tmpdir } = await import('node:os')
+  const { join: pjoin } = await import('node:path')
+  const srcPath = process.env.TEST_DB_PATH || '/tmp/ll-ci-data.knife/lucky-luxe.sqlite'
+  const dir = mkdtempSync(pjoin(tmpdir(), 'll-bk-'))
+  const out = pjoin(dir, 'backup.sqlite')
+
+  const src = new DatabaseSync(srcPath, { readOnly: true })
+  src.prepare('VACUUM INTO ?').run(out)
+  src.close()
+  check('⑱a 备份文件写出来了', existsSync(out), out)
+
+  let openable = false
+  let tables = 0
+  try {
+    const bk = new DatabaseSync(out, { readOnly: true })
+    tables = bk.prepare("SELECT COUNT(*) AS n FROM sqlite_master WHERE type='table'").get()?.n || 0
+    bk.close()
+    openable = true
+  } catch (e) { openable = false }
+  check('⑱b 🔴 备份**打得开**(WAL 下 cp 主文件会得到打不开的半个库)', openable && tables > 0, `tables=${tables}`)
+
+  /* 反向守:源库确实开着 WAL —— 否则这条判据在守一个不存在的风险 */
+  const s2 = new DatabaseSync(srcPath, { readOnly: true })
+  const mode = String(s2.prepare('PRAGMA journal_mode').get()?.journal_mode || '')
+  s2.close()
+  check('⑱c 先证风险真在:源库是 WAL 模式(不是就说明这条判据在空守)',
+    mode.toLowerCase() === 'wal', `journal_mode=${mode}`)
+  rmSync(dir, { recursive: true, force: true })
 }
 
 /* ══════════ ⑬ 并发的两层底(05n 裁 (6) + 05l 那个错结论的更正)══════════

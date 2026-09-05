@@ -513,6 +513,15 @@ export async function createCustomerServiceReply({ lang = 'zh', message = '', sa
         + 'Answer it politely in one line and steer back to the salon — do not treat it as a business topic, '
         + 'and do not hand it to a human.',
       ...(depositPolicyLine ? [depositPolicyLine] : []),
+      /* 🔴 店主 05n 裁 (4)(⑤ 像人五通病5):单条普遍超长,五通里 4 通有 >120 字的回复,
+         定金政策整段还被说了两遍。「简洁」这种软话模型不当真,写成硬数字。 */
+      'HARD LIMIT: keep each reply under 120 Chinese characters (or ~200 English chars). '
+        + 'If you cannot fit everything, say the ONE thing the customer asked and offer to go on — '
+        + 'do NOT dump policy text, numbered checklists, or multiple topics into one reply.',
+      'Do NOT send numbered intake checklists ("1. ... 2. ... 3. ...") asking for several details at once. '
+        + 'Ask for ONE missing detail at a time, in a single short sentence.',
+      'If the deposit policy has already been stated earlier in this conversation, do NOT repeat it in full — '
+        + 'refer back to it in a few words instead.',
       'Answer in the user language. Be concise, warm, and operationally accurate.',
       'Always use Recent chat as short-term conversation memory. If the incoming message is a follow-up such as "那这个呢", "多少钱", "可以吗", or "怎么约", resolve it from the previous customer messages before answering.',
       'If the incoming message includes "Working memory for this exact conversation", treat it as authoritative per-conversation state. Do not ask again for any intake field already marked yes/no/partial in that memory.',

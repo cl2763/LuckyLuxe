@@ -3,7 +3,7 @@
   "播种于": "2026-09-02(02r 裁定一)",
   "suites": {
     "customer-service-matrix": 67,
-    "working-memory": 55,
+    "working-memory": 56,
     "business-hours": 18,
     "intent-guards": 9,
     "quote-polish": 10,
@@ -83,7 +83,7 @@
     "ai-gate": 15,
     "ai-safety-lines": 28,
     "ai-fact-gate": 26,
-    "booking-intake": 117,
+    "booking-intake": 142,
     "ai-review": 32,
     "quote-tenant": 8,
     "conversation-tenant": 15,

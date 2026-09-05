@@ -117,7 +117,16 @@ async function main() {
   let conversation = await conversationByExternalId(customer)
   let latestAssistant = ''
   assert(conversation, 'conversation should exist after first message')
-  assert(/按下面格式|预约\/报价|预约.*信息/.test(transcriptText(conversation)), 'first nail inquiry should return intake template')
+  /* 🔴 图 v1.3(店主 05n 裁 (1)):报价采集也**一句一问**,7 项表退役。
+     这条原来断言的是**那张表的文案**;按裁定改成断言**采集真的起步了** ——
+     即回了一句「缺什么」的追问(本甲/延长、卸甲、断甲修补… 任一),
+     而且**不是**整张表(不许再出现编号清单)。
+     口径没变:第一句问美甲仍旧进报价采集(intent 仍是 *_intake_template),变的只是问法。 */
+  const firstReply = transcriptText(conversation)
+  assert(/本甲|延长|卸甲|断甲|修补|款式|下睫毛|眼部/.test(firstReply),
+    `first nail inquiry should start collecting one missing detail, got: ${firstReply.slice(0, 120)}`)
+  assert(!/按下面格式|1\.\s*项目类型/.test(firstReply),
+    `first nail inquiry must NOT send the 7-item form any more, got: ${firstReply.slice(0, 120)}`)
 
   await send(customer, '需要卸甲', [], { forceAi: true })
   conversation = await conversationByExternalId(customer)

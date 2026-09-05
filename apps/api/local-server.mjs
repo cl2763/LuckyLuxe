@@ -4,7 +4,7 @@ import { AsyncLocalStorage } from 'node:async_hooks'
 import { DatabaseSync } from 'node:sqlite'
 import { runStoreRenameMigration, welcomeText } from './store-identity.mjs'
 import { nameToUsername, isValidUsername } from './pinyin-names.mjs'
-import { createDecipheriv, createHash, createHmac } from 'node:crypto'
+import { createDecipheriv, createHash, createHmac, randomUUID } from 'node:crypto'
 import { copyFileSync, existsSync, mkdirSync, readdirSync, readFileSync, renameSync, statSync, unlinkSync, writeFileSync } from 'node:fs'
 import { basename, dirname, extname, join, normalize, resolve } from 'node:path'
 import { fileURLToPath } from 'node:url'
@@ -29,6 +29,7 @@ import { createWecomRecord } from './wecom-record.mjs'
 import { createBookingGuards } from './booking-guards.mjs'
 import { createBookingIntake, hasBookingSignal } from './booking-intake.mjs'
 import { applyConcurrencyPragmas } from './db-concurrency.mjs'
+import { createReplyLength } from './reply-length.mjs'
 import { createFactGate, depositFactFromConfig } from './ai-fact-gate.mjs'   // ② 事实闸:出口校验(图 §三)
 import { createAiGate, isGreetingOnly, hasServiceStartIntent, isExplicitAiResumeIntent, hasAppointmentInquiryIntent, isVagueContextFollowup, hasCapabilityIntent } from './ai-gate.mjs'   // 大批05 ① 门(旧关键词门 + 新模型门三档,公约①②)
 import { createAppVersion } from './app-version.mjs'   // 04f-3 三端版本指纹(公约①)
@@ -3020,13 +3021,27 @@ function quotePayloadFromState(state, inbound = {}, knowledgeContext = {}, trigg
 function quoteIntakeReply(kind, state, missingQuestions) {
   const missing = missingQuestions.zh || []
   if (kind === 'collect_template') {
+    /* 🔴 图 v1.3(店主 05n 裁 (1)):**报价采集也一句一问。**
+       图 §七 原本写「不改现有报价采集的槽位与文案」,与 §五 像人硬线「不发 7 项表单」打架 ——
+       店主 A2/A3 当初抱怨的就是这张表,**硬线赢**。
+       ⑤ 现测:200 句里 25 句出表,像人五通里两通中招(③ 只治了预约采集,表活在这儿)。
+
+       改的只有**问法**:整张表 → `quoteMissingQuestions()` 里的**第一个缺项**。
+       报价单本身(槽位、`expires_at`、报价状态、ready_quote/manual_review 各出口)一个字没动;
+       `intent` 也保持 `*_intake_template` 不变 —— 那是报价采集这条路的身份标记,
+       改了它 `test-intent-guards` 的两条正向断言与状态机都会跟着晃。
+       (模板函数 `quoteCollectionTemplate` 暂时留着:顾客粘回填好的整段仍要认得,
+        `test-quote-tenant` 就是那么喂的。) */
+    const missing = quoteMissingQuestions(state)
+    const askZh = (missing.zh || [])[0] || ''
+    const askEn = (missing.en || [])[0] || ''
     return {
       data: {
         intent: `${state.serviceType || 'nail'}_intake_template`,
-        answerZh: quoteCollectionTemplate(state.serviceType || 'nail', state),
-        answerEn: state.serviceType === 'lash'
+        answerZh: askZh || quoteCollectionTemplate(state.serviceType || 'nail', state),
+        answerEn: askEn || (state.serviceType === 'lash'
           ? 'Sure. Please send your lash style, whether lower lashes/removal are needed, preferred date/time, eye sensitivity, and any notes. If anything is uncertain, send what you know first.'
-          : 'Sure. Please send your nail service type, preferred date/time, whether removal/extensions/repairs are needed, reference photo status, and any notes. If anything is uncertain, send what you know first.',
+          : 'Sure. Please send your nail service type, preferred date/time, whether removal/extensions/repairs are needed, reference photo status, and any notes. If anything is uncertain, send what you know first.'),
         handoffRequired: false
       },
       source: 'quote_intake_template'
@@ -3248,7 +3263,10 @@ function quoteWaitingReply(lang = 'zh') {
    并配「漏斗外零 assistant 写入」机械断言 —— 「漏」从不可证变可证。文字参数保留(调用位已带,无害)。 */
 function assistantReplyText(reply = null, lang = 'zh', conversationId = null) {
   const data = reply?.data || reply || {}
-  return lang === 'en' ? (data.answerEn || data.answerZh || '') : (data.answerZh || data.answerEn || '')
+  const text = lang === 'en' ? (data.answerEn || data.answerZh || '') : (data.answerZh || data.answerEn || '')
+  /* 05n 裁 (4):这是所有回复落库前必经的一处,所以长度统计与「定金政策只说一次」放这儿。
+     只量长度、只去重政策整段,别的一个字不动(截断会把话截得莫名其妙)。 */
+  return replyLength.govern(text, conversationId)
 }
 
 /* 改口注入唯一实现(仅 B 态;幂等:已带句不重复;查态失败照发原文并留痕,不吞话) */
@@ -3483,6 +3501,10 @@ const { recordWecomConversation, shouldSendNewCustomerWelcome, newCustomerWelcom
   welcomeText: (...a) => welcomeText(...a),
 })
 /* ④ 审样本页(图 §四)。建表放在这里,和别的开机迁移一起跑一次。 */
+/* 05n 裁 (4):回复长度量它、定金政策同一通只说一次(理由见 reply-length.mjs) */
+const replyLength = createReplyLength({
+  depositPolicyTextOf: () => depositPolicyText(getDepositConfig(currentTenantId()), currentTenantId(), 'zh'),
+})
 const aiReview = createAiReviewRoutes({
   db, apiError, randomId, iso, currentTenantId,
   readWecomTranscript: (cid) => readWecomTranscript(cid),
@@ -5082,7 +5104,14 @@ function serviceIdFrom(body) {
     .replace(/[^a-z0-9]+/g, '-')
     .replace(/^-+|-+$/g, '')
     .slice(0, 42) || `service-${Date.now()}`
-  return `${String(body.type || 'NAIL').toLowerCase()}-${source}-${Date.now().toString(36)}`
+  /* 🔴 后缀只有毫秒会撞:同一毫秒里建两个同名同类的服务 → `UNIQUE constraint failed: services.id`。
+     05n 现场撞到过一次(`test-settlement` 整套红,重跑就绿)——**偶发红比真红更坏**,
+     它让每一次「全绿」都要打个问号。加一段随机把碰撞概率压掉。 */
+  /* ⚠️ 头一版我只加了 3 位随机(36³=46,656),自己验算 5000 次就撞了 81 个 ——
+     生日碰撞,3 位根本不够。用 `randomUUID` 取 8 位:36^8 量级,同毫秒万次也不撞。
+     (差点把一个仍会撞的「修复」当成修好了 —— 所以每个修复都要自己先验一遍。) */
+  const stamp = `${Date.now().toString(36)}${randomUUID().replace(/-/g, '').slice(0, 8)}`
+  return `${String(body.type || 'NAIL').toLowerCase()}-${source}-${stamp}`
 }
 
 /* 分类唯一真相律③ 的**唯一校验口**:没挂大类 / 挂了本店没有的大类 → 拒。
@@ -10907,6 +10936,7 @@ async function route(req, res) {
       aiUsage: getAiUsage(),   // 04d §三:真模型 token 累计(mock 时全 0)
       /* 05n 裁(6):并发起手式落没落,得能从外面看见 —— 判据不靠猜 */
       dbConcurrency,
+      replyLength: replyLength.snapshot(),   // 05n 裁(4):超长条数得数得出来
       /* 🔴 2026-08-30(退回件②):这台服务**实发的前端是哪一版**,由服务自己说 ——
          adminBuild = admin.html 现算的 LL_BUILD(与页面左下角同源)。restore 拉错版本、
          看错端口,店主报的版本串与这里一对就现形,不再猜「你测的和她用的是不是同一份」。 */

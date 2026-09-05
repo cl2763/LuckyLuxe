@@ -60,6 +60,10 @@ const tracked = execFileSync('git', ['-c', 'core.quotepath=false', 'ls-files', '
 const NO_MARK = {
   'apps/api/seed-services.mjs': '只铺服务项目数据(services),不写 bookings/settlements —— 没有落点。什么时候要动:若它开始铺预约',
   'apps/api/tools/demo-seed.mjs': '演示店种子(生产可跑),同样不写 bookings/settlements。什么时候要动:若它开始铺预约',
+  'tools/seed-jics-mirror.mjs': '沙箱 jics-store 镜像造景(05n §二):**直连库**不走 HTTP,'
+    + '只改门面事实(stores.currency/address + 知识库 storeAddress/brandName/assistantName),'
+    + '一行 bookings/settlements 都不写 —— 盖章没有落点。'
+    + '什么时候要动:若它哪天开始铺预约或结算,立刻改成走 HTTP 并盖 x-demo-seed。',
 }
 const missing = tracked.filter((f) => !NO_MARK[f] && !readFileSync(join(ROOT, f), 'utf8').includes("'x-demo-seed'"))
 check(`④ 白名单式:造景全族 ${tracked.length} 个脚本,走 HTTP 的必须发 \`x-demo-seed\`;`
