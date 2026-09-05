@@ -55,6 +55,11 @@ export function ensureConversationLog(db) {
   } catch { /* 表在就跳过 */ }
   /* ⓪b:脱敏标记列。加列走 try/catch ALTER(交付纪律 8:只写进 CREATE TABLE 等于只对全新库生效) */
   try { db.exec('ALTER TABLE conversation_messages ADD COLUMN redacted_at TEXT') } catch { /* 列已在 */ }
+  /* ④ 审样本页:这一轮是不是**模型放行**的,以及它的置信度。
+     标必须落在**全录这张表**上 —— `readWecomTranscript` 有日志就只读日志,
+     只把标写进 `transcript_json` 等于没写(现测:待审永远 0 条,底下每条判据全空转)。 */
+  try { db.exec('ALTER TABLE conversation_messages ADD COLUMN gate TEXT') } catch { /* 列已在 */ }
+  try { db.exec('ALTER TABLE conversation_messages ADD COLUMN confidence REAL') } catch { /* 列已在 */ }
   /* 幂等键按租户隔离:两家店各自的渠道消息 id 互不干涉(口径③) */
   try { db.exec('CREATE UNIQUE INDEX IF NOT EXISTS idx_conv_msg_channel ON conversation_messages(tenant_id, channel_msg_id) WHERE channel_msg_id IS NOT NULL') } catch { /* 已在 */ }
   try { db.exec('CREATE INDEX IF NOT EXISTS idx_conv_msg_conv ON conversation_messages(conversation_id, created_at)') } catch { /* 已在 */ }
@@ -90,12 +95,14 @@ export function logConversationMessage(db, { tenantId, conversationId, message, 
   const channelMsgId = message.channelMsgId || patch.channelMsgId || null
   try {
     db.prepare(`INSERT INTO conversation_messages
-      (id, tenant_id, conversation_id, role, source, content, attachments_json, channel_msg_id, staff_name, intent, created_at)
-      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`).run(
+      (id, tenant_id, conversation_id, role, source, content, attachments_json, channel_msg_id, staff_name, intent, gate, confidence, created_at)
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`).run(
       randomId('cmsg'), tenantId, conversationId, role, source,
       String(message.content ?? ''),
       message.attachments ? JSON.stringify(message.attachments) : null,
       channelMsgId, message.staffName || null, message.intent || null,
+      message.gate || null,
+      typeof message.confidence === 'number' ? message.confidence : null,
       message.at || iso(new Date()))
     return true
   } catch (error) {
@@ -108,7 +115,7 @@ export function logConversationMessage(db, { tenantId, conversationId, message, 
 /* `transcript_json` 降为读缓存:从这张表生成。
    顺序按 created_at,同刻按插入顺序(rowid)—— 覆盖写时代留下的老行也照样能读。 */
 export function transcriptFromLog(db, conversationId, tenantId) {
-  return db.prepare(`SELECT role, content, source, staff_name, intent, created_at
+  return db.prepare(`SELECT role, content, source, staff_name, intent, gate, confidence, created_at
     FROM conversation_messages WHERE conversation_id = ? AND tenant_id = ?
     ORDER BY created_at ASC, rowid ASC`).all(conversationId, tenantId)
     .map((r) => ({
@@ -117,6 +124,8 @@ export function transcriptFromLog(db, conversationId, tenantId) {
       at: r.created_at,
       ...(r.staff_name ? { staffName: r.staff_name } : {}),
       ...(r.intent ? { intent: r.intent } : {}),
+      ...(r.gate ? { gate: r.gate } : {}),
+      ...(typeof r.confidence === 'number' ? { confidence: r.confidence } : {}),
     }))
 }
 

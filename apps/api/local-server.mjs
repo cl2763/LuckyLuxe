@@ -24,6 +24,8 @@ import { resolveSafetyLine, hasSpecialManualHandoffIntent, needsHumanInScope } f
 import { createTenantCurrency } from './tenant-currency.mjs'   // D140 币种唯一真相(fail-closed)
 import { createAvailability } from './availability.mjs'
 import { createBookingDraftsModule } from './booking-drafts.mjs'
+import { createAiReviewRoutes } from './ai-review-routes.mjs'
+import { createWecomRecord } from './wecom-record.mjs'
 import { createBookingIntake, hasBookingSignal } from './booking-intake.mjs'
 import { createFactGate, depositFactFromConfig } from './ai-fact-gate.mjs'   // ② 事实闸:出口校验(图 §三)
 import { createAiGate, isGreetingOnly, hasServiceStartIntent, isExplicitAiResumeIntent, hasAppointmentInquiryIntent, isVagueContextFollowup, hasCapabilityIntent } from './ai-gate.mjs'   // 大批05 ① 门(旧关键词门 + 新模型门三档,公约①②)
@@ -2151,99 +2153,6 @@ function saveAiLogicNote(body = {}, adminSession = {}) {
   return { logicNote: { id, conversationId, note, createdAt: now } }
 }
 
-function recordWecomConversation(inbound, reply, status = 'ai_replied') {
-  const conversationId = wecomConversationId(inbound.externalUserId)
-  const current = wecomRouting.conversationRow(conversationId, 'transcript_json')
-  const transcript = readWecomTranscript(conversationId)
-  const replyData = reply?.data || reply || {}
-  /* ⓪ 对话全录:这里是**第二个漏斗** —— 它用裸 `transcript.push` 攒完再整段覆盖写,
-     不走 `appendWecomConversationMessage`。所以在这儿记下起点,收尾时把**新增的每一条**落成行。
-     (只记新增的那几条:老的已经在表里,重复落行等于把对话记录读成两遍。) */
-  const logFrom = transcript.length
-  const logNew = () => {
-    for (const m of transcript.slice(logFrom)) {
-      logConversationMessage(db, {
-        tenantId: currentTenantId(),
-        conversationId,
-        message: {
-          ...m,
-          channelMsgId: m.role === 'customer' ? (inbound.channelMsgId || null) : null,
-          attachments: m.role === 'customer' ? (inbound.attachments || null) : null,
-        },
-        patch: { sourceChannel: inbound.sourceChannel },
-        iso,
-        randomId,
-      })
-    }
-  }
-  transcript.push({
-    role: 'customer',
-    content: inbound.content,
-    messageId: inbound.messageId,
-    msgType: inbound.msgType,
-    referenceImages: inbound.referenceImages || [],
-    at: iso(new Date())
-  })
-  if (reply) {
-    if (shouldSendReturningCustomerWelcome(inbound, transcript)) {
-      transcript.push({
-        role: 'assistant',
-        content: injectRepriceIfExpired(conversationId, returningCustomerWelcome(inbound.lang || 'zh')),
-        intent: 'returning_customer_welcome',
-        handoffRequired: false,
-        at: iso(new Date())
-      })
-    } else if (shouldSendNewCustomerWelcome(inbound, transcript)) {
-      transcript.push({
-        role: 'assistant',
-        content: injectRepriceIfExpired(conversationId, newCustomerWelcome(inbound.lang || 'zh')),
-        intent: 'new_customer_welcome',
-        handoffRequired: false,
-        at: iso(new Date())
-      })
-    }
-    transcript.push({
-      role: 'assistant',
-      content: injectRepriceIfExpired(conversationId, replyData.answerZh || replyData.answerEn || ''),
-      intent: replyData.intent,
-      handoffRequired: Boolean(replyData.handoffRequired),
-      at: iso(new Date())
-    })
-  }
-  db.prepare(`
-    INSERT INTO wechat_conversations
-      (id, tenant_id, provider, external_user_id, open_kfid, source_channel, status, last_intent, last_message, ai_reply_json, transcript_json, raw_event_json, created_at, updated_at)
-    VALUES
-      (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-    ON CONFLICT(id) DO UPDATE SET
-      open_kfid = excluded.open_kfid,
-      source_channel = COALESCE(NULLIF(excluded.source_channel, ''), wechat_conversations.source_channel),
-      status = excluded.status,
-      last_intent = excluded.last_intent,
-      last_message = excluded.last_message,
-      ai_reply_json = excluded.ai_reply_json,
-      transcript_json = excluded.transcript_json,
-      raw_event_json = excluded.raw_event_json,
-      updated_at = excluded.updated_at
-  `).run(
-    conversationId,
-    currentTenantId(),
-    inbound.provider,
-    inbound.externalUserId,
-    inbound.openKfid,
-    inbound.sourceChannel,
-    replyData.handoffRequired ? 'needs_human' : status,
-    replyData.intent || 'unknown',
-    inbound.content,
-    JSON.stringify(reply || {}),
-    JSON.stringify(transcript),
-    JSON.stringify(inbound.raw || {}),
-    iso(new Date()),
-    iso(new Date())
-  )
-  logNew()   // ⓪ 对话全录:缓存写完之后把新增的每一条落成行
-  return conversationId
-}
 
 function silentHandoffUnknown(inbound, reason = 'unknown_out_of_scope') {
   const conversationId = wecomConversationId(inbound.externalUserId)
@@ -2305,17 +2214,7 @@ function isReturningCustomerInbound(inbound = {}) {
   return normalizeCustomerContext(inbound).customerType === 'returning'
 }
 
-function returningCustomerWelcome(lang = 'zh') {
-  return lang === 'en' ? 'Welcome back, babe. How can I help you today?' : '欢迎回来宝，有什么可以帮到您~'
-}
 
-function shouldSendReturningCustomerWelcome(inbound = {}, transcript = []) {
-  if (!isReturningCustomerInbound(inbound)) return false
-  return !(Array.isArray(transcript) ? transcript : []).some((item) => (
-    ['assistant', 'staff'].includes(item?.role)
-    && /欢迎回来宝|welcome back/i.test(String(item?.content || ''))
-  ))
-}
 
 function normalizeMemberTierValue(value = '', fallback = 'silver') {
   const compact = compactIntentText(value)
@@ -2347,21 +2246,7 @@ function isNewCustomerInbound(inbound = {}) {
   return normalizeCustomerContext(inbound).customerType === 'new'
 }
 
-function newCustomerWelcome(lang = 'zh') {
-  const brand = tenantKbFacts(currentTenantId())?.brandName
-    || db.prepare('SELECT name FROM stores WHERE tenant_id = ? AND is_active = 1 ORDER BY rowid ASC LIMIT 1').get(currentTenantId())?.name || ''   // 02v 拔回落:拿不到就空,措辞由 store-identity 按空态给
-  return welcomeText({ brand, lang })
-}
 
-function shouldSendNewCustomerWelcome(inbound = {}, transcript = []) {
-  if (!isNewCustomerInbound(inbound)) return false
-  return !(Array.isArray(transcript) ? transcript : []).some((item) => (
-    ['assistant', 'staff'].includes(item?.role)
-    /* 🔴 02v 裁定五:原来靠「欢迎来到 <店名>」判断"欢迎语发过没有" —— 店名一改就再也匹配不上,
-       会对老顾客重发。改锚在**结构词**(助手自称)上,店名再改也不受影响。 */
-    && /预约助手|booking assistant/i.test(String(item?.content || ''))
-  ))
-}
 
 function hasExplicitPriceIntent(text = '') {
   const raw = String(text || '').toLowerCase()
@@ -3570,6 +3455,33 @@ function appendQuoteUnavailableSlotAssistantReply(quote, slot = {}, error = {}, 
 
 /* ③ 预约采集引擎(图 §二)——状态机住在 `booking-intake.mjs`,这里只喂依赖。
    `getAvailability` 传的是**真**查询口(和 `/availability` 同一个函数),不是复刻一份。 */
+/* 进线落库与欢迎语(公约② 边改边拆:④ 打标动的就是这块)。
+   晚绑定的几个(const,声明在本行之后)包一层箭头,免得 TDZ —— ③ 那批栽过一次。 */
+const { recordWecomConversation, shouldSendNewCustomerWelcome, newCustomerWelcome,
+  returningCustomerWelcome, shouldSendReturningCustomerWelcome } = createWecomRecord({
+  db, iso, randomId, currentTenantId, parseJson, logConversationMessage,
+  /* 这几个是**在本行之后**声明的 const,直传就是 TDZ(现测:`t is not defined`,服务起不来)。
+     函数声明会提升,const 不会 —— 一律包一层箭头把取值推迟到调用时。 */
+  t: (...a) => t(...a),
+  storeDisplayName: (...a) => storeDisplayName(...a),
+  readWecomTranscript: (...a) => readWecomTranscript(...a),
+  wecomConversationId: (...a) => wecomConversationId(...a),
+  wecomRouting: { conversationRow: (...a) => wecomRouting.conversationRow(...a) },
+  quoteState: (...a) => quoteState(...a),
+  injectRepriceIfExpired: (...a) => injectRepriceIfExpired(...a),
+  conversationCard: (...a) => conversationCard(...a),
+  resolveUserByIdentity: (...a) => resolveUserByIdentity(...a),
+  isReturningCustomerInbound: (...a) => isReturningCustomerInbound(...a),
+  isNewCustomerInbound: (...a) => isNewCustomerInbound(...a),
+  tenantKbFacts: (...a) => tenantKbFacts(...a),
+  welcomeText: (...a) => welcomeText(...a),
+})
+/* ④ 审样本页(图 §四)。建表放在这里,和别的开机迁移一起跑一次。 */
+const aiReview = createAiReviewRoutes({
+  db, apiError, randomId, iso, currentTenantId,
+  readWecomTranscript: (cid) => readWecomTranscript(cid),
+})
+aiReview.ensureSchema()
 const { firstActiveStoreId, firstActiveService, firstQualifiedTechnician,
   getBookingDraftById, createBookingDraft } = createBookingDraftsModule({
   db, apiError, getService, iso, addMinutes, randomId, currentTenantId,
@@ -4163,7 +4075,20 @@ async function handleWecomInbound(inbound, req) {
     ruleTookOver: Boolean((quoteWorkflow.reply && quoteWorkflow.reply.source) || bookingStep),
     /* 3b 的第三、四类(账户 / 要动某张单某笔钱)—— 健康与售后在更前面已被各自的闸接走 */
     needsHuman: Boolean(bookingStep?.handoff) || needsHumanInScope(inbound.content || ''),
+    /* ④:老板判过「不该答」的原话再进来 → 先反问,不再让模型自由发挥 */
+    askBackFirst: aiReview.shouldAskBackFirst(inbound.content || ''),
   })
+  /* ④ 审样本页要的那个标 —— **夜班令写的是「① 做了」,现测没有**:
+     ① 只在三档命中时打 `gate`(ask_back / out_of_scope / needs_human_in_scope),
+     「模型放行、AI 正常答」那一轮**一个标都不留**,待审队列就无从筛起。
+     所以在这里补上:门是 model 档、三档都没命中、又没有别的出口盖章(报价/预约/事实闸)——
+     这一轮就是**模型自己放行答的**,记 `gate='model'`,并把置信度一并带上。
+     只补标,不改任何行为(顺序、内容、状态一个字没动)。 */
+  if (!tier && aiGate.gateMode === 'model' && reply?.data && !reply.data.gate) {
+    reply.data.gate = 'model'
+    const conf = baseReply?.data?.confidence
+    if (typeof conf === 'number') reply.data.confidence = conf
+  }
   if (tier && !bypassSilentHandoff) {
     recordWecomConversation(inbound, tier.reply, tier.status)
     return { conversationId, inbound, reply: tier.reply, conversation: getWecomConversation(conversationId) }
@@ -11832,6 +11757,30 @@ async function route(req, res) {
   }
   if (req.method === 'GET' && path === '/admin/wechat/conversations') {
     return json(res, 200, { conversations: getWecomConversations() })
+  }
+  /* ④ 审样本页 —— 三条路由。位置:租户闸门(tenantContext.enterWith)**之后**,
+     与别的 /admin/ai/* 同一段;排在闸门前 currentTenantId() 会回落到旗舰店(交付纪律⑦)。 */
+  if (req.method === 'GET' && path === '/admin/ai/review/pending') {
+    requireAdmin(req)
+    const tid = currentTenantId()
+    return json(res, 200, {
+      pending: aiReview.modelTurns(tid, { onlyPending: true }),
+      stats: aiReview.stats(tid),
+    })
+  }
+  if (req.method === 'GET' && path === '/admin/ai/review/stats') {
+    requireAdmin(req)
+    return json(res, 200, aiReview.stats(currentTenantId()))
+  }
+  if (req.method === 'POST' && path === '/admin/ai/review/judge') {
+    requireAdmin(req)
+    const body = await readBody(req)
+    return json(res, 200, aiReview.judge({
+      conversationId: body.conversationId,
+      turnIndex: body.turnIndex,
+      verdict: body.verdict,
+      revisedReply: body.revisedReply,
+    }))
   }
   if (req.method === 'GET' && path === '/admin/ai/customer-service/feedback') {
     requireAi()

@@ -181,7 +181,7 @@ export function createAiGate(deps) {
      09-04 那一版把两者合成一档,后果是「你叫什么名字」也被转人工 ——
      既打扰了同事,又让顾客觉得问一句闲话就被推走了。
      判据锚 `tier` 字段(`3a`/`3b`),不锚文案。 */
-  function resolveGateTier({ gate = {}, keywordFastPath = false, ruleTookOver = false, needsHuman = false }) {
+  function resolveGateTier({ gate = {}, keywordFastPath = false, ruleTookOver = false, needsHuman = false, askBackFirst = false }) {
     if (gateMode !== 'model') return null
     /* 🔴 **模型明说范围外时,谁也不许盖过它**(05e 实测两处都栽在这上面):
        ① `Where is the pet store` 里有 `store` —— 撞上关键词快速通道,`inScope` 被强行拉成 true,
@@ -225,6 +225,22 @@ export function createAiGate(deps) {
           answerZh: '这个我帮不上啦 😊 店里预约、价格、营业时间随时问我。',
           answerEn: "That's outside what I can help with 😊 Ask me anything about booking, prices or opening hours.",
           handoffRequired: false, gate: 'out_of_scope', tier: '3a',
+        } },
+      }
+    }
+    /* ④ 回流:老板判过「不该答」的那句话,**同句再来先反问**(图 §四)。
+       走的是第 2 档同一个出口 —— 不另写一句反问,免得两处真相。
+       判据在 `test-ai-review`:判「不该答」→ 同句再问 → 必须是 ask_back。 */
+    if (askBackFirst) {
+      return {
+        status: 'ai_replied',
+        reply: { data: {
+          intent: gate.intent || 'unknown',
+          answerZh: (gate.suggestedQuestionsZh || [])[0]
+            || '好呀 — 您是想先看看款式和价格,还是直接约个时间来做?',
+          answerEn: (gate.suggestedQuestionsEn || [])[0]
+            || 'Happy to help — would you like to look at styles and prices first, or book a time directly?',
+          handoffRequired: false, gate: 'ask_back', tier: '2', askBackReason: 'owner_rejected_before',
         } },
       }
     }

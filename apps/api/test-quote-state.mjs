@@ -147,7 +147,8 @@ if (!qr) {
   /* 🔴 04c:扫描面**跟着文件走** —— D132 把会话读写域搬去了 `wecom-conversation.mjs`,
      只读 local-server 的话 `appendWecomConversationMessage` 从扫描面上消失、判据静默变绿。
      这正是 03o「路由搬进新模块,扫描器照样绿」的同一课。 */
-  const SRC_FILES = ['./local-server.mjs', './wecom-conversation.mjs']
+  /* 05k:`recordWecomConversation` 搬去了 `wecom-record.mjs`,扫描面照这条注释跟着走。 */
+  const SRC_FILES = ['./local-server.mjs', './wecom-conversation.mjs', './wecom-record.mjs']
   const srv = SRC_FILES.map((f) => readFileSync(new URL(f, import.meta.url), 'utf8'))
     .join('\n').replace(/\/\*[\s\S]*?\*\//g, '').replace(/\/\/[^\n]*/g, '')
   const pushSites = [...srv.matchAll(/transcript\.push\(\{\s*role: 'assistant'/g)].length

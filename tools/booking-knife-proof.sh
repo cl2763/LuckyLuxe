@@ -27,7 +27,9 @@ cleanup() { cp "$BAK" "$SRC"; stop_server; rm -f "$BAK"; }
 trap cleanup EXIT
 
 pid_on_port() { lsof -ti ":$PORT" -sTCP:LISTEN 2>/dev/null | head -1; }
-started_at()  { local p; p=$(pid_on_port); [ -n "$p" ] && ps -o lstart= -p "$p" 2>/dev/null | tr -s ' '; }
+# 「真的换了进程」用 **PID** 判,不用启动时刻:`ps -o lstart=` 只精确到秒,
+# 重启够快时前后两次一模一样,守卫会把好好的一刀误报成「验的是旧构建」(现测栽过)。
+started_at()  { pid_on_port; }
 
 stop_server() {
   local p; p=$(pid_on_port)
