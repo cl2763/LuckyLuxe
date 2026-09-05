@@ -498,6 +498,63 @@ if (bareOk) {
   check('⑭e 病6:得说清什么时候才算留位', /定金.*才算留位|记下了/.test(okTxt), okTxt.slice(0, 70))
 }
 
+/* ══════════ ⑮ 改口进槽(店主 05n 裁 (2);⑤ 像人五通病3 + J-26 判据盲区)══════════
+   🔴 判据盲区先说清楚:边角 ⑤ 组「打断改口」10 条报 10/10 过,是因为
+   那 10 句是**孤立发送**的,判据只看「有没有回复 / 转没转人工」——
+   **从没验过改口之后槽里是什么**。所以通四里「还是改成美睫吧」「那周日行吗」
+   连着被当耳旁风(四次「大概几点方便?」),而尺子说满分。
+   这一组把判据换成**断言槽位值**:改口后槽里必须是新值。 */
+{
+  const tid = RICH
+  const uid = `mind-${RUN}`
+  const { DatabaseSync } = await import('node:sqlite')
+  const slotsOf = () => {
+    const d = new DatabaseSync(process.env.TEST_DB_PATH || '/tmp/ll-ci-data.knife/lucky-luxe.sqlite')
+    const row = d.prepare('SELECT state_json FROM ai_conversation_states WHERE conversation_id = ?')
+      .get(`wecom:${tid}:${uid}`)
+    d.close()
+    try { return JSON.parse(row?.state_json || '{}')?.bookingSlots || {} } catch { return {} }
+  }
+
+  await sayTo(tid, uid, '我想预约')
+  await sayTo(tid, uid, '做美甲')
+  await sayTo(tid, uid, '周六')
+  const s0 = slotsOf()
+  check('⑮0 前置:先把项目=美甲、日期=周六 采进槽(采不进就没得改口)',
+    /美甲/.test(String(s0.serviceType || '')) && Boolean(s0.date), JSON.stringify(s0))
+
+  /* ① 改项目 */
+  await sayTo(tid, uid, '还是改成美睫吧')
+  const s1 = slotsOf()
+  check('⑮a 🔴 改口换项目:「还是改成美睫吧」→ 项目槽变成美睫',
+    /美睫/.test(String(s1.serviceType || '')), `槽里还是:${s1.serviceType}`)
+
+  /* ② 改日期。**先把时间给足** —— 三槽齐了才谈得上「改完要回去重查」;
+     只给项目和日期时,机器问「几点」是对的,拿那个当缺陷是我判据写错了(第一版就错在这)。 */
+  await sayTo(tid, uid, '下午三点')
+  const beforeDate = slotsOf().date
+  const r2 = await sayTo(tid, uid, '那周日行吗')
+  const s2 = slotsOf()
+  check('⑮b 🔴 改口换日期:「那周日行吗」→ 日期槽换成新的一天',
+    Boolean(s2.date) && s2.date !== beforeDate, `${beforeDate} → ${s2.date}`)
+  check('⑮c 🔴 三槽齐时改日期 → **拿新日期回去查可约**,不是再问一遍几点',
+    /\d{1,2}[::]\d{2}|没位|约满|休息|记下|哪一个/.test(String(r2?.reply?.data?.answerZh || '')),
+    String(r2?.reply?.data?.answerZh || '').slice(0, 70))
+
+  /* ③ 「等等我再想想」= 让开一轮,不许追问 */
+  const r3 = await sayTo(tid, uid, '等等 我再想想')
+  const t3 = String(r3?.reply?.data?.answerZh || '')
+  check('⑮d 🔴「等等我再想想」→ 让开一轮,不许拿采集问题顶回去',
+    !/想约哪天|大概几点|做美甲还是美睫/.test(t3), t3.slice(0, 70))
+
+  /* ④ 「算了不约了」= 收摊,不许还在追问槽位(五通通四最后一句就是它) */
+  const r4 = await sayTo(tid, uid, '算了不约了')
+  const t4 = String(r4?.reply?.data?.answerZh || '')
+  check('⑮e 🔴「算了不约了」→ 不许继续追问采集槽位',
+    !/想约哪天|大概几点|做美甲还是美睫/.test(t4), t4.slice(0, 70))
+  check('⑮f 反向守:收摊也得答一句,不是沉默', Boolean(t4), '(空回复)')
+}
+
 /* ══════════ ⑬ 并发的两层底(05n 裁 (6) + 05l 那个错结论的更正)══════════
    🔴 我在 05l 报过「`booking_slots` 没有唯一索引,数据库拦不住」—— **错的**。
    它有内联 `UNIQUE (technician_id, starts_at)`;SQLite 为内联约束建的是**自动索引**,
