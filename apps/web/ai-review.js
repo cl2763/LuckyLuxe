@@ -19,16 +19,20 @@
 
 (function aiReviewPanel() {
   const API = (typeof window !== 'undefined' && window.LL_API_BASE) || ''
+  /* 🔴 D144:钥匙只许有一把 —— 用 admin.js 的 `ownerBearer()`,**不自己读 localStorage**。
+     案底(店主登录后第一眼就看见的 401):我前后猜了两次键名,`ll_admin_token`、`lucky-owner-token`,
+     两次都不是登录态存的地方。真相是:
+       · `lucky-owner-token` **只**由「粘 OWNER_TOKEN」那个开发者输入框写(admin.js:1119);
+       · **真登录**写的是 `lucky-owner-auth`,而且勾了「保持登录 30 天」才进 localStorage,
+         没勾就在 **sessionStorage**(admin.js:1226/1229)。
+     两种情况我那把钥匙都够不着,所以页面 401 而接口是好的。
+     `ownerBearer()` 两种都覆盖(它读的是已经装配好的 `owner.auth`),所以接它,不再并排造第二把。
+     ⚠️ 本文件在 admin.html 里排在 admin.js **之前**加载,但这里是**请求时**才调用,
+     那时 admin.js 早已执行完 —— 函数声明在全局,取得到。 */
   const authHeaders = () => {
     const h = { 'content-type': 'application/json' }
-    try {
-      /* 用**这套后台自己的**那把钥匙:`lucky-owner-token`(admin.js 就存在这个键上)。
-         头一版我照别处的习惯猜了个 `ll_admin_token` —— 页面当场 401,
-         这也是为什么 UI 一定要在浏览器里看一眼:断言绿不代表老板打开是好的(L1)。 */
-      const tok = localStorage.getItem('lucky-owner-token')
-        || (typeof owner === 'object' && owner && owner.token) || ''
-      if (tok) h.authorization = `Bearer ${tok}`
-    } catch (e) { /* 没登录就不带,后端会回 401,页面如实说 */ }
+    const tok = typeof ownerBearer === 'function' ? ownerBearer() : ''
+    if (tok) h.authorization = `Bearer ${tok}`
     return h
   }
 

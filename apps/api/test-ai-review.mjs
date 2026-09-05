@@ -10,6 +10,9 @@
    ⚠️ 换店的开关是 `x-admin-tenant-id`(闸门取 admin.tenantId),**不是** `x-tenant-id` ——
    只发后者,请求照样按令牌那家店跑,「跨店」判据就变成自己跟自己比,永远绿(③ 那批栽过)。 */
 import { assertTestTarget } from './test-guard.mjs'
+import { readFileSync } from 'node:fs'
+import { join } from 'node:path'
+import { fileURLToPath } from 'node:url'
 
 const BASE_URL = process.env.TEST_BASE_URL || 'http://127.0.0.1:4128'
 await assertTestTarget(BASE_URL)
@@ -37,6 +40,30 @@ const plat = async (p, o = {}) => {
     ...o, headers: { 'content-type': 'application/json', authorization: `Bearer ${process.env.OWNER_TOKEN || 'owner-demo-token'}`, ...(o.headers || {}) },
   })
   return r.status
+}
+
+/* ── D144:页面那把钥匙 = 登录态那把钥匙(静态,白名单式)──────────
+   🔴 案底(店主登录后**第一眼**看见的):待审区显示「HTTP 401」,而接口是好的 ——
+   `ai-review.js` 自己去 localStorage 猜键名,猜了两次都不是登录态存的地方:
+     · `lucky-owner-token` **只**由「粘 OWNER_TOKEN」那个开发者框写;
+     · 真登录写 `lucky-owner-auth`,没勾「保持登录」还在 **sessionStorage**。
+   24 条判据全绿却挂在第一眼,因为**没有一条判据经过页面那把钥匙** ——
+   正向路径全是脚本拿令牌直打接口。
+   判据改成白名单式:**这个文件根本不许自己碰 localStorage**,必须走唯一出口 `ownerBearer()`。
+   (黑名单式「不许出现 lucky-owner-token」挡不住第三次猜别的键名。) */
+{
+  const webDir = join(fileURLToPath(new URL('.', import.meta.url)), '..', 'web')
+  const src = readFileSync(join(webDir, 'ai-review.js'), 'utf8')
+  const code = src.replace(/\/\*[\s\S]*?\*\//g, '').replace(/^\s*\/\/.*$/gm, '')
+  check('⓪a 🔴 D144:待审页不许自己读 localStorage(钥匙只许有一把)',
+    !/localStorage\s*\.\s*getItem/.test(code),
+    (code.match(/localStorage\s*\.\s*getItem\([^)]*\)/g) || []).join(' | '))
+  check('⓪b 🔴 D144:待审页必须走登录态唯一出口 `ownerBearer()`',
+    /ownerBearer\s*\(\s*\)/.test(code), '没找到 ownerBearer() 调用')
+  /* 反向守:出口本身得真在(admin.js 改了名这里要红,而不是假装还好) */
+  const adminSrc = readFileSync(join(webDir, 'admin.js'), 'utf8')
+  check('⓪c 反向守:`ownerBearer()` 在 admin.js 里确实存在,且读的是登录态那把',
+    /function ownerBearer\s*\(\s*\)/.test(adminSrc) && /owner\.auth\?\.accessToken/.test(adminSrc), '')
 }
 
 /* ── 造景:两家自建的店(造景律:走查要看的状态,自己造出来)── */
