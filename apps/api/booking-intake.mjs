@@ -235,7 +235,7 @@ export function createBookingIntake(deps) {
   const {
     getConversationState, getAvailability,
     firstActiveStoreId, firstActiveService, createBookingDraft, depositPolicyText,
-    existingDraftFor, hasBookingIntentByRule, todayISO, onLookupFailed,
+    existingDraftFor, hasBookingIntentByRule, todayISO, onLookupFailed, holdMinutes,
   } = deps
   for (const [name, fn] of Object.entries(deps)) {
     if (typeof fn !== 'function') throw new Error(`createBookingIntake 缺依赖或类型不对:${name}`)
@@ -256,7 +256,7 @@ export function createBookingIntake(deps) {
       for (const tech of av?.slots || []) {
         for (const s of tech.slots || []) flat.push(String(s.time || s))
       }
-      return { storeId, service, times: [...new Set(flat)].sort() }
+      return { storeId, service, closed: Boolean(av?.closed), times: [...new Set(flat)].sort() }
     } catch (e) {
       /* 查不动就转人工是对的,但**不许连原因都吞掉** —— 静默失败器族。
          现测就吃过这个亏:10/12 通转人工,而日志里一个字都没有,只能靠猜。 */
@@ -277,8 +277,8 @@ export function createBookingIntake(deps) {
   /* 单一入口:回 { reply, state } 或 null(null = 这一句不归我管,交回原流程) */
   function step({ tenantId, conversationId, text, lang, modelSlots, intent }) {
     const st = getConversationState(conversationId) || {}
-    const s = st.state || {}
-    const stage = s.bookingStage || 'idle'
+    let s = st.state || {}
+    let stage = s.bookingStage || 'idle'
     const zh = lang !== 'en'
 
     /* 已经有草稿:带着草稿上下文答,**不再建**(图 §二 drafted 那一行) */
@@ -288,7 +288,7 @@ export function createBookingIntake(deps) {
         return {
           reply: say(zh, '好的,那您想改到几点呢?', 'Sure — what time would you like instead?'),
           stage: 'collecting',
-          statePatch: { ...s, bookingStage: 'collecting', bookingSlots: { ...(s.bookingSlots || {}), time: '' } },
+          statePatch: { ...s, bookingTouchedAt: stamp(), bookingStage: 'collecting', bookingSlots: { ...(s.bookingSlots || {}), time: '' } },
         }
       }
       /* 又确认一次(「好的」「确认」)→ 把**同一张**草稿再说一遍,不建第二张。
@@ -298,7 +298,7 @@ export function createBookingIntake(deps) {
         return {
           reply: say(zh, '这单我已经给您留着了,不用重复约哦。', "I've already held this for you — no need to book again.", { draftId: held }),
           stage: 'drafted',
-          statePatch: { ...s, bookingStage: 'drafted', bookingDraftId: held },
+          statePatch: { ...s, bookingTouchedAt: stamp(), bookingStage: 'drafted', bookingDraftId: held },
         }
       }
       /* 问别的(地址/价格/……)→ 交回原流程照答,**带着草稿上下文,不再建**(图 §二 drafted) */
@@ -310,6 +310,37 @@ export function createBookingIntake(deps) {
        那正是 05h 基线(到底 0/12、被丢表 10/12)的样子。规则层写状态(图 §二),不把状态托付给模型。
        规则这一路的边界见 `hasBookingSignal`:**只认在说「约时间」的句子**,
        「想做美甲」这种需报价的开场不抢,留给报价采集。 */
+    /* 30 分钟保留到期 → 就地降级成 idle,并**留痕**(图 §二 「超时 → idle 并留痕」)。
+       留痕是为了下次能说清「上次那单没留住」,不是悄悄把状态抹了 ——
+       静默重置和「从来没约过」在顾客那儿是两回事。
+       ⚠️ 不能在这儿 `return { reply: null }`:调用方只有拿到 reply 才落库,
+       而 `ruleTookOver` 又会因为这个对象非空而误判成「规则层出过句子」,把三档整个跳过。
+       所以这里只把**手上的状态**降级,留痕字段随下一次真出句一起落库。 */
+    const startedAt = String(s.bookingTouchedAt || '')
+    const expired = Boolean(startedAt) && stage !== 'idle'
+      && (Date.now() - Date.parse(startedAt)) > holdMinutes() * 60000
+    if (expired) {
+      /* 留痕必须**真的落进库**。头一版只把手上的 `s` 降级就继续往下走 ——
+         而降级成 idle 之后这句话往往不再触发接管,`statePatch` 压根没机会落库,痕就丢了
+         (现测:`bookingExpiredAt` 一直是 undefined)。
+         所以过期这一下**自己出一句**:如实说没留住、问要不要重约。
+         这既是该有的 UX(顾客不该发现自己的单凭空消失),也是痕能落库的唯一时机。 */
+      return {
+        reply: say(zh,
+          '不好意思,刚才那个时间我只能帮您留 30 分钟,现在已经放开了。要重新约一下吗?',
+          "Sorry — I could only hold that time for 30 minutes and it's been released. Shall we book again?"),
+        stage: 'idle',
+        statePatch: {
+          ...s,
+          bookingStage: 'idle',
+          bookingSlots: {},
+          bookingTouchedAt: '',
+          bookingExpiredAt: new Date(Date.parse(startedAt) + holdMinutes() * 60000).toISOString(),
+          bookingExpiredFrom: stage,
+        },
+      }
+    }
+
     const today = todayISO()
     const isBooking = intent === 'booking' || hasBookingIntentByRule(text, today)
       || stage === 'collecting' || stage === 'checking'
@@ -321,7 +352,7 @@ export function createBookingIntake(deps) {
       return {
         reply: say(zh, '好的,那您想换到几点呢?', 'Sure — what time would you prefer?'),
         stage: 'collecting',
-        statePatch: { ...s, bookingStage: 'collecting', bookingSlots: slots },
+        statePatch: { ...s, bookingTouchedAt: stamp(), bookingStage: 'collecting', bookingSlots: slots },
       }
     }
 
@@ -339,7 +370,7 @@ export function createBookingIntake(deps) {
         return {
           reply: say(zh, '这单我已经给您留着了,不用重复约哦。', "I've already held this for you — no need to book again.", { draftId: already }),
           stage: 'drafted',
-          statePatch: { ...s, bookingSlots: slots, bookingStage: 'drafted', bookingDraftId: already },
+          statePatch: { ...s, bookingTouchedAt: stamp(), bookingSlots: slots, bookingStage: 'drafted', bookingDraftId: already },
         }
       }
       const real = realSlots({ tenantId, slots })
@@ -352,12 +383,12 @@ export function createBookingIntake(deps) {
         if (near.length) {
           return {
             reply: say(zh, `您要 ${near.join(' / ')} 里的哪一个呢?`, `Which one would you like — ${near.join(' / ')}?`),
-            stage: 'checking', statePatch: { ...s, bookingSlots: { ...slots, time: '' } },
+            stage: 'checking', statePatch: { ...s, bookingTouchedAt: stamp(), bookingSlots: { ...slots, time: '' } },
           }
         }
         return {
           reply: say(zh, '这个时间我这边核不上,我请同事帮您确认一下。', "I couldn't verify that time — I'll have a colleague confirm."),
-          handoff: true, statePatch: { ...s, bookingSlots: slots },
+          handoff: true, statePatch: { ...s, bookingTouchedAt: stamp(), bookingSlots: slots },
         }
       }
       const draft = createBookingDraft({
@@ -371,7 +402,7 @@ export function createBookingIntake(deps) {
           `Great — ${slots.date} ${hit} is held for you. ${dep || ''}`,
           { draftId: draft?.id || null }),
         stage: 'drafted',
-        statePatch: { ...s, bookingSlots: slots, bookingStage: 'drafted', bookingDraftId: draft?.id || null },
+        statePatch: { ...s, bookingTouchedAt: stamp(), bookingSlots: slots, bookingStage: 'drafted', bookingDraftId: draft?.id || null },
       }
     }
 
@@ -398,6 +429,15 @@ export function createBookingIntake(deps) {
       /* 无位:给最近 3 个 —— **都必须在返回集合里**(图 §二 checking) */
       const near = real.times.slice(0, 3)
       if (!near.length) {
+        /* 🔴 店休 ≠ 约满。原来两种都说「已经约满」—— 那天门店根本没开门,这是对顾客说瞎话。
+           店休就说店休,并把日期清掉**回 collecting 重问**,别把人推给人工。 */
+        if (real.closed) {
+          return {
+            reply: say(zh, `${slots.date} 门店休息哦,换一天好吗?`, `We're closed on ${slots.date} — would another day work?`),
+            stage: 'collecting',
+            statePatch: { ...s, bookingTouchedAt: stamp(), bookingSlots: { ...slots, date: '', time: '' }, bookingStage: 'collecting' },
+          }
+        }
         return {
           reply: say(zh, '这天已经约满了,我请同事看看别的安排。', "That day is fully booked — I'll ask a colleague about alternatives."),
           handoff: true, statePatch: checkingPatch,
@@ -429,6 +469,13 @@ export function createBookingIntake(deps) {
           stage: 'checking', statePatch: patch,
         }
       }
+      if (real?.closed) {
+        return {
+          reply: say(zh, `${slots.date} 门店休息哦,换一天好吗?`, `We're closed on ${slots.date} — would another day work?`),
+          stage: 'collecting',
+          statePatch: { ...s, bookingTouchedAt: stamp(), bookingSlots: { ...slots, date: '', time: '' }, bookingStage: 'collecting' },
+        }
+      }
       if (real) {
         const near = real.times.slice(0, 3)
         if (near.length) {
@@ -445,13 +492,14 @@ export function createBookingIntake(deps) {
     const miss = nextMissing(slots)
     return {
       reply: say(zh, miss.zh, miss.en), stage: 'collecting',
-      statePatch: { ...s, bookingSlots: slots, bookingStage: 'collecting' },
+      statePatch: { ...s, bookingTouchedAt: stamp(), bookingSlots: slots, bookingStage: 'collecting' },
     }
   }
 
   /* `extra` 现在只用来带 `draftId` —— 草稿 id 必须能被顾客端与判据看见:
      图 §二 drafted 那一行要求「说清下一步(草稿链接 / 定金怎么付)」,
      判据这边也靠它验「只建了一次」(全仓没有 GET 列表口,拿计数验等于永远 0 —— 现测栽过)。 */
+  const stamp = () => new Date().toISOString()
   const say = (zh, textZh, textEn, extra = {}) => ({
     data: {
       intent: 'booking',

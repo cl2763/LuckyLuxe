@@ -121,6 +121,20 @@ for (const tid of [TA, TB]) {
 if (!isoFixtureOk) {
   check('③ 🔴 租户隔离:造景失败 —— 判据没验到东西,按红处理(不许「造不出来就当过了」)', false, '建店或设地址没成功')
 } else {
+  /* 🔴 零命中先证刀能咬(店主 05l 现修):
+     这一组比的是「问 B 店地址,回复里不许出现 A 店地址」。
+     可**万一换店压根没换成**,那两边就是同一家店,A 的地址当然不会出现 ——
+     判据绿得毫无意义。所以先证:同一个请求换个店,**读到的地址确实变了**。
+     (`x-admin-tenant-id` 才是后台换店开关;只发 `x-tenant-id` 换不动 —— ③④ 两批都栽过。) */
+  const kbA = await api('/admin/kb', TA)
+  const kbB = await api('/admin/kb', TB)
+  const addrA = String(kbA?.liveFacts?.storeAddress || kbA?.facts?.storeAddress || '')
+  const addrB = String(kbB?.liveFacts?.storeAddress || kbB?.facts?.storeAddress || '')
+  check('③0 先证换店真的换了:A/B 两店读到的 storeAddress 不同(否则底下是自己跟自己比)',
+    Boolean(addrA) && Boolean(addrB) && addrA !== addrB, `A=${addrA} | B=${addrB}`)
+  check('③0b 且分别等于夹具写进去的那两个地址', addrA === ADDR[TA] && addrB === ADDR[TB],
+    `期望 A=${ADDR[TA]} B=${ADDR[TB]}`)
+
   const d = await chat(TB, `fact-addr-${RUN}`, '门店地址在哪里?')
   const say = `${d?.reply?.data?.answerZh || ''}${d?.reply?.data?.answerEn || ''}`
   check('③ 🔴 租户隔离:问 B 店地址,回复里**不许出现** A 店地址',

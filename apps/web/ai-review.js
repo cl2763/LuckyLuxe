@@ -47,12 +47,13 @@
     const body = mounted.querySelector('[data-ai-review-body]')
     const head = mounted.querySelector('[data-ai-review-stats]')
     try {
-      const r = await fetch(`${API}/admin/ai/review/pending`, { headers: authHeaders() })
+      /* 一律带窗:页面上写「近 7 天」,数就必须是近 7 天的(05k 那版写「本周」其实是全部历史) */
+      const r = await fetch(`${API}/admin/ai/review/pending?since=7d`, { headers: authHeaders() })
       if (!r.ok) throw new Error(`HTTP ${r.status}`)
       const data = await r.json()
       const s = data.stats || {}
       head.innerHTML = `
-        <span class="pill">本周模型放行 <b>${s.modelPassThisWeek ?? '—'}</b></span>
+        <span class="pill">近 7 天模型放行 <b>${s.modelPassInWindow ?? s.modelPassThisWeek ?? '—'}</b></span>
         <span class="pill">老板认可率 <b>${pct(s.approvalRate)}</b></span>
         <span class="pill">反问率 <b>${pct(s.askBackRate)}</b></span>`
       const rows = data.pending || []

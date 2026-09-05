@@ -30,8 +30,18 @@ const AUTO_PATH = process.env.MP_AUTOMATOR || ''
 let automator = null
 try { automator = AUTO_PATH ? requireCjs(AUTO_PATH) : null } catch { automator = null }
 if (!automator) {
-  console.log(`⚠️  [mp-home-sections] automator 不可用(MP_AUTOMATOR=${AUTO_PATH || '未设'})—— **这一刀本轮未跑**`)
-  process.exit(0)
+  /* 🔴 店主 05l 裁 (5):**检测不到就红,不许「没跑也算过」。**
+     `exit 0` + 0 条断言看起来跟通过一模一样 —— 这正是零断言那一族。
+     只有显式 `MP_AUTOMATOR=skip` 才不红,且仍然打印「本轮未跑」,回执必须写原因。 */
+  if (AUTO_PATH === 'skip') {
+    console.log(`⚠️  [mp-home-sections] MP_AUTOMATOR=skip —— **这一刀本轮未跑**(店主显式豁免,回执须写原因)`)
+    process.exit(0)
+  }
+  console.error(`\n🔴 [mp-home-sections] automator 取不到(MP_AUTOMATOR=${AUTO_PATH || '未设'})—— **按红处理**。`)
+  console.error('   跑法:npm i miniprogram-automator(装在仓外),MP_AUTOMATOR=<该模块绝对路径>;')
+  console.error('   开自动化端口:cli auto --project miniprogram --auto-port 9420;')
+  console.error('   确实要跳过:显式 MP_AUTOMATOR=skip,并在回执里写清为什么。')
+  process.exit(1)
 }
 const { ensureSandbox } = await import('./test-need-sandbox.mjs')
 const sb = await ensureSandbox({ label: '[mp-home-sections]' })

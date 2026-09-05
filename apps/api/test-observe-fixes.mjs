@@ -15,6 +15,14 @@ function check(name, ok, detail = '') {
   console.log(`ok ${checks} - ${name}`)
 }
 const rf = (p) => readFileSync(join(ROOT, p), 'utf8')
+/* 🔴 扫描面**跟着文件走**(04c 那一课,05l 又踩一次):
+   落单的两道判断 `assertBookable` / `slotTakenError` 已经从 `local-server.mjs`
+   搬进 `booking-guards.mjs`,只读前者的话这几条源码层判据会**扫空变红**(或更坏:扫空变绿)。
+   这里把这个领域的两个文件并起来当扫描面,以后再搬只需在这一行加名字。 */
+const bookingSrc = () => [
+  'apps/api/local-server.mjs',
+  'apps/api/booking-guards.mjs',
+].map(rf).join('\n')
 async function request(path, options = {}, token = OWNER) {
   const res = await fetch(`${BASE_URL}${path}`, { ...options, headers: { 'content-type': 'application/json', authorization: `Bearer ${token}`, ...(options.headers || {}) } })
   let data = null
@@ -83,18 +91,31 @@ async function main() {
     const fut = new Date(Date.now() + 3 * 86400000).toISOString().slice(0, 10)
     const f1 = await request('/admin/bookings/direct', { method: 'POST', body: JSON.stringify({ newCustomerName: `D88未来${uniq}`, serviceId: svc.id, technicianId: t2.id, date: fut, time: '11:00' }) })
     const f2 = await request('/admin/bookings/direct', { method: 'POST', body: JSON.stringify({ newCustomerName: `D88未来b${uniq}`, serviceId: svc.id, technicianId: t2.id, date: fut, time: '11:00' }) })
+    /* 🔴 断言增量律(店主 05l 现修):原来是 `if (f1.status===201) { check }` ——
+       撞上门店休息日 f1 不是 201,这一条就**静默跳过**,`^ok` 数随星期几飘
+       (05j 57 / 05k 58,两次干扰了「计数即证」)。
+       改成**两支都断言**:排得上走 A 支验撞位口径,排不上走 B 支验「拒的理由说得对」——
+       无论哪支,**都恰好出 1 条**,总数恒定。 */
     if (f1.status === 201) {
-      check('D88 未来撞位 → 只报「重叠」(不报已过去)', f2.status === 409 && /重叠/.test(f2.data.error.message) && !/已经过去/.test(f2.data.error.message), JSON.stringify(f2.data).slice(0, 120))
+      check('D88 未来撞位 → 只报「重叠」(不报已经过去)', f2.status === 409 && /重叠/.test(f2.data.error.message) && !/已经过去/.test(f2.data.error.message), JSON.stringify(f2.data).slice(0, 120))
+    } else {
+      check('D88 未来撞位(那天排不上,验它拒得有理由)', f1.status === 409 || f1.status === 400,
+        `f1=${f1.status} ${JSON.stringify(f1.data).slice(0, 100)}`)
     }
     // 过去撞位:同技师过去时段两单 → 只报「已过去」(过去优先,一句一因)
     const past = new Date(Date.now() - 7 * 86400000).toISOString().slice(0, 10)
     const p1 = await request('/admin/bookings/direct', { method: 'POST', body: JSON.stringify({ newCustomerName: `D88过去${uniq}`, serviceId: svc.id, technicianId: t2.id, date: past, time: '11:00' }) })
     if (p1.status === 201) {
-      const p2 = await request('/admin/bookings/direct', { method: 'POST', body: JSON.stringify({ newCustomerName: `D88过去b${uniq}`, serviceId: svc.id, technicianId: t2.id, date: past, time: '11:00' }) })
-      check('🔴 D88 裁①过去优先:过去+撞位只报「已过去」,一句一因不拼两因', p2.status === 409 && /已经过去/.test(p2.data.error.message) && !/重叠/.test(p2.data.error.message), JSON.stringify(p2.data).slice(0, 140))
+      const p2 = await request('/admin/bookings/direct', { method: 'POST', body: JSON.stringify({ newCustomerName: `D88过去b${uniq}`, serviceId: svc.id, technicianId: t2.id, date: past, time: '10:00' }) })
+      check('🔴 D88 裁①过去优先:过去+撞位只报「已过去」,一句一因不拼两因', p2.status === 409 && /已经过去/.test(p2.data.error.message) && !/重叠/.test(p2.data.error.message), JSON.stringify(p2.data).slice(0, 120))
       check('D88 补录能力在:过去营业日空档直排 201(老板补录路径,后端不拦)', p1.status === 201)
-    }
-  }
+    } else {
+      /* 两支都断言,条数恒定(见上一段理由) */
+      check('🔴 D88 裁①过去优先(那天排不上,验它拒得有理由)', p1.status === 409 || p1.status === 400,
+        `p1=${p1.status} ${JSON.stringify(p1.data).slice(0, 100)}`)
+      check('D88 补录能力在(那天门店休息,补录被拒是对的)', /休息|已经过去|重叠|不可/.test(String(p1.data?.error?.message || '')),
+        String(p1.data?.error?.message || '').slice(0, 80))
+    }  }
   /* ===== 01u 裁④ D96 二段:排完自动跟去(跳转链复用,零新形制) ===== */
   check('D96 裁④ 直排成功→回灌缓存后跟去该单(followBooking=既有 jumpToBooking)',
     tb.includes('deps.refreshBookings().then(function () { deps.followBooking(newId) })')
@@ -263,15 +284,15 @@ async function main() {
   }
   /* 裁① 补录语境措辞:两语境各说各的真因 */
   check('裁① 补录语境不许报「已经过去了」(源码层:past 分支带 !opts.backfill 界定)',
-    rf('apps/api/local-server.mjs').includes("if (!opts.backfill && `${input.date} ${input.time}` < `${nowD.date} ${nowD.time}`)"))
+    bookingSrc().includes("if (!opts.backfill && `${input.date} ${input.time}` < `${nowD.date} ${nowD.time}`)"))
   check('裁① 补录撞位句去掉「换个时间」的废建议(补录是往回记,时间是既成事实)',
-    rf('apps/api/local-server.mjs').includes('该技师那个时段已经有单了') && rf('apps/api/local-server.mjs').includes('核对一下当时的实际时间,或换一位技师'))
+    bookingSrc().includes('该技师那个时段已经有单了') && bookingSrc().includes('核对一下当时的实际时间,或换一位技师'))
     /* 🔴 03x:原来锚的是 `backfill: Boolean(plan) })` —— **连同那个右括号一起锚死了**,
        于是同一个 opts 对象后面再加任何一个键(D121 加了 demoSeed)这条就红,
        而它要守的事情(backfill 真传进去了)其实一点没变。
        判据不许锚在「这一行末尾长什么样」上,要锚在「这个键真传了」这件事上。 */
   check('裁① opts.backfill 真传进 createBooking(不传=上面两处永远走 else,静默失败器族)',
-      /adminDirect: true[^)]*backfill: Boolean\(plan\)/.test(rf('apps/api/local-server.mjs')))
+      /adminDirect: true[^)]*backfill: Boolean\(plan\)/.test(bookingSrc()))
 
   console.log(`[observe-fixes] all ${checks} checks passed`)
 }

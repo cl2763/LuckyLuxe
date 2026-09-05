@@ -24,11 +24,14 @@ export function createAvailability(deps) {
     // 特殊日期优先于每周固定模式
     const special = specialDateFor(storeId, date)
     const closedThatDay = special ? Boolean(special.is_closed) : (!hours || Boolean(hours.is_closed))
-    if (closedThatDay) return { date, durationMin, slots: [] }
+    /* 🔴 「店休」和「约满」是两件事,不许说同一句话(D88 一句一因同族)。
+       原来两种情况都回 `slots: []`,调用方分不出来,于是 ③ 把店休日答成「这天已经约满了」——
+       对顾客说了不实的话。这里如实带上 `closed`,由调用方说对应的那句。 */
+    if (closedThatDay) return { date, durationMin, slots: [], closed: true }
     /* 零回落:没真实时段=没有可约,不编 10:00-20:00 给顾客约一家从没设置过营业时间的店 */
     const dayOpen = (special && !special.is_closed && special.open_time) || hours?.open_time || null
     const dayClose = (special && !special.is_closed && special.close_time) || hours?.close_time || null
-    if (!dayOpen || !dayClose) return { date, durationMin, slots: [] }
+    if (!dayOpen || !dayClose) return { date, durationMin, slots: [], closed: true }
   
     const techRows = db.prepare(`
       SELECT t.* FROM technicians t
@@ -58,7 +61,7 @@ export function createAvailability(deps) {
       }
       result.push({ technician: tech, slots })
     }
-    return { date, durationMin, slots: result }
+    return { date, durationMin, slots: result, closed: false }
   }
 
   return { getAvailability }

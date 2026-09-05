@@ -248,6 +248,275 @@ if (bareOk) {
     !/\d{1,2}[::]\d{2}/.test(txt) || /查不到|同事|约满|排班/.test(txt), txt.slice(0, 90))
 }
 
+/* ══════════ ⑪ 30 分钟保留到期 → 回 idle 并留痕(图 §二)══════════
+   到期不是「悄悄忘了」:状态回 idle,但**留下痕迹**(什么时候过的、从哪个态过的),
+   下次才说得清「上次那单没留住」。 */
+{
+  const tid = RICH
+  const uid = `stale-${RUN}`
+  for (const m of ['我想预约', '做美甲', '明天']) await sayTo(tid, uid, m)
+  const conv = `wecom:${tid}:${uid}`
+  const { DatabaseSync } = await import('node:sqlite')
+  const d5 = new DatabaseSync(process.env.TEST_DB_PATH || '/tmp/ll-ci-data.knife/lucky-luxe.sqlite')
+  const before = JSON.parse(d5.prepare('SELECT state_json FROM ai_conversation_states WHERE conversation_id = ?').get(conv)?.state_json || '{}')
+  check('⑪0 前置:采集中且盖了时间戳(没戳就无从判过期)',
+    before.bookingStage === 'collecting' && Boolean(before.bookingTouchedAt),
+    `stage=${before.bookingStage} at=${before.bookingTouchedAt}`)
+
+  /* 把时间戳拨回 31 分钟前 —— 读时判,不等真时钟 */
+  const stale = { ...before, bookingTouchedAt: new Date(Date.now() - 31 * 60000).toISOString() }
+  d5.prepare('UPDATE ai_conversation_states SET state_json = ? WHERE conversation_id = ?').run(JSON.stringify(stale), conv)
+  d5.close()
+
+  const r = await sayTo(tid, uid, '下午三点')
+  const txt = r?.reply?.data?.answerZh || ''
+  const d6 = new DatabaseSync(process.env.TEST_DB_PATH || '/tmp/ll-ci-data.knife/lucky-luxe.sqlite')
+  const after = JSON.parse(d6.prepare('SELECT state_json FROM ai_conversation_states WHERE conversation_id = ?').get(conv)?.state_json || '{}')
+  d6.close()
+  check('⑪1 过期后回 idle,旧槽清空(不拿半小时前的意向接着往下走)',
+    after.bookingStage === 'idle' && !after.bookingSlots?.date,
+    `stage=${after.bookingStage} slots=${JSON.stringify(after.bookingSlots)}`)
+  check('⑪1b 如实告诉顾客「没留住」,不是装作无事发生',
+    /留|放开|重新约|30 分钟/.test(txt), txt.slice(0, 60))
+  check('⑪2 🔴 留痕在:记下了什么时候过的、从哪个态过的(不是悄悄抹掉)',
+    Boolean(after.bookingExpiredAt) && after.bookingExpiredFrom === 'collecting',
+    `at=${after.bookingExpiredAt} from=${after.bookingExpiredFrom}`)
+  check('⑪3 反向守:过期不等于哑巴,这一句照样有回复', Boolean(txt), txt.slice(0, 50))
+}
+
+/* ══════════ ⑩ 店休 ≠ 约满(现测挖出来的:那天门店没开门,机器说「已经约满了」)══════════
+   对顾客说不实的话比不回答更坏。店休就说店休,并且**把人留在对话里**(回 collecting 重问日期),
+   不推给人工 —— 换一天就能约上的事,没必要惊动同事。 */
+{
+  const tid = RICH
+  const { DatabaseSync } = await import('node:sqlite')
+  const d4 = new DatabaseSync(process.env.TEST_DB_PATH || '/tmp/ll-ci-data.knife/lucky-luxe.sqlite')
+  const store = d4.prepare('SELECT id FROM stores WHERE tenant_id = ? AND is_active = 1 LIMIT 1').get(tid)?.id || ''
+  const closedRow = d4.prepare('SELECT weekday FROM business_hours WHERE store_id = ? AND is_closed = 1 LIMIT 1').get(store)
+  d4.close()
+  check('⑩0 前置:这店有休息日(没有就造不出这个态)', Boolean(store) && Boolean(closedRow), `store=${store} closed=${closedRow?.weekday}`)
+
+  if (closedRow) {
+    /* 找出下一个落在休息日的日期(按门店时区的星期几,不猜) */
+    let target = ''
+    for (let k = 1; k <= 8; k += 1) {
+      const dt = new Date(Date.now() + k * 86400000)
+      const wd = Number(new Intl.DateTimeFormat('en-US', { timeZone: 'America/Toronto', weekday: 'short' })
+        .formatToParts(dt).find((x) => x.type === 'weekday')?.value
+        .replace(/Sun|Mon|Tue|Wed|Thu|Fri|Sat/, (m) => ({ Sun: 0, Mon: 1, Tue: 2, Wed: 3, Thu: 4, Fri: 5, Sat: 6 }[m])))
+      if (wd === closedRow.weekday) { target = dt.toLocaleDateString('en-CA', { timeZone: 'America/Toronto' }); break }
+    }
+    check('⑩1 前置:找到了下一个休息日', Boolean(target), target)
+
+    const uid = `closed-${RUN}`
+    await sayTo(tid, uid, '我想预约')
+    await sayTo(tid, uid, '做美甲')
+    await sayTo(tid, uid, target)
+    /* 三槽齐了才会去查可约 —— 只给日期的话机器还在问「几点」,压根走不到店休那一步 */
+    const r = await sayTo(tid, uid, '下午三点')
+    const txt = r?.reply?.data?.answerZh || ''
+    check('⑩2 🔴 店休日:说的是「门店休息」,**不许说「约满了」**',
+      /休息|不营业|没开门/.test(txt) && !/约满/.test(txt), txt.slice(0, 80))
+    check('⑩3 店休不推人工(换一天就能约的事,别惊动同事)',
+      r?.reply?.data?.handoffRequired !== true, `handoff=${r?.reply?.data?.handoffRequired}`)
+    const r2 = await sayTo(tid, uid, '那明天呢')
+    const txt2 = r2?.reply?.data?.answerZh || ''
+    check('⑩4 反向守:换一天后照常往下走(没把人卡死在店休那句上)', Boolean(txt2) && txt2 !== txt, txt2.slice(0, 70))
+  }
+}
+
+/* ══════════ ⑥ D135 三句反面(图 §六;05j 自述没逐条回归,05l 定为合同项)══════════
+   报价段(quoted / expired)里顾客随口一句,**不许把状态带歪**:
+   ① quoted 段问地址 → 只答地址,**不出草稿、报价状态不变**;
+   ② expired 段问价   → 重新报价,`expires_at` **逐字节不变**(顾客的话不许改有效期);
+   ③ 「周六可以吗」   → 先 checking 查真有位才 confirm,不许直接甩草稿。 */
+{
+  const { DatabaseSync } = await import('node:sqlite')
+  const dbf = new DatabaseSync(process.env.TEST_DB_PATH || '/tmp/ll-ci-data.knife/lucky-luxe.sqlite')
+  const tid = RICH
+  const uid = `d135-${RUN}`
+  await sayTo(tid, uid, '我想做美甲')                       // 让会话与报价单先存在
+  const convId = `wecom:${tid}:${uid}`
+
+  let qr = dbf.prepare('SELECT id FROM quote_requests WHERE conversation_id = ? AND tenant_id = ?').get(convId, tid)
+  if (!qr) {
+    const qid = `qr-d135-${RUN}`
+    const now = new Date().toISOString()
+    dbf.prepare(`INSERT INTO quote_requests (id, tenant_id, conversation_id, service_type, status, customer_message, created_at, updated_at)
+      VALUES (?, ?, ?, 'nail', 'PENDING_STAFF', '想做手部美甲', ?, ?)`).run(qid, tid, convId, now, now)
+    qr = { id: qid }
+  }
+  check('⑥0 造景:报价单挂上了这通会话(造不出来按红)', Boolean(qr?.id), String(qr?.id || ''))
+
+  /* —— A 态 quoted —— */
+  const mk = await api(`/admin/quote-requests/${qr.id}/mark-quoted`, tid, {
+    method: 'POST', body: JSON.stringify({ priceCents: 128800, note: 'D135 夹具' }),
+  })
+  check('⑥1 前置:mark-quoted 成功(否则下面两条空转)', Boolean(mk?.expiresAt || mk?.quoteRequest), JSON.stringify(mk || {}).slice(0, 70))
+
+  const beforeExp = dbf.prepare('SELECT expires_at FROM quote_requests WHERE id = ?').get(qr.id)?.expires_at || ''
+  const addrReply = await sayTo(tid, uid, '你们店地址在哪里?')
+  const addrData = addrReply?.reply?.data || {}
+  check('⑥2 D135①:quoted 段问地址 → **不出草稿**', !addrData.draftId, `draftId=${addrData.draftId}`)
+  const afterAddrExp = dbf.prepare('SELECT expires_at FROM quote_requests WHERE id = ?').get(qr.id)?.expires_at || ''
+  check('⑥3 D135①:问地址不改报价有效期(逐字节)', afterAddrExp === beforeExp, `${beforeExp} → ${afterAddrExp}`)
+
+  /* —— B 态 expired:把 expires_at 拨到过去(读时判,不等真时钟)—— */
+  dbf.prepare('UPDATE quote_requests SET expires_at = ? WHERE id = ?')
+    .run(new Date(Date.now() - 3600000).toISOString(), qr.id)
+  const expBefore = dbf.prepare('SELECT expires_at FROM quote_requests WHERE id = ?').get(qr.id)?.expires_at || ''
+  const priceReply = await sayTo(tid, uid, '同款现在多少钱?')
+  const priceText = priceReply?.reply?.data?.answerZh || ''
+  const expAfter = dbf.prepare('SELECT expires_at FROM quote_requests WHERE id = ?').get(qr.id)?.expires_at || ''
+  check('⑥4 🔴 D135②:expired 段问价,`expires_at` **逐字节不变**(顾客的话不许改有效期)',
+    expAfter === expBefore, `${expBefore} → ${expAfter}`)
+  check('⑥5 D135②:expired 段问价 → 不出草稿', !priceReply?.reply?.data?.draftId,
+    `draftId=${priceReply?.reply?.data?.draftId}`)
+
+  /* —— ③「周六可以吗」:必须先 checking —— */
+  const satReply = await sayTo(tid, uid, '周六可以吗')
+  const satData = satReply?.reply?.data || {}
+  const satText = satData.answerZh || ''
+  check('⑥6 D135③:「周六可以吗」→ 先查可约(报时段/说满/问缺项),**不直接甩草稿**',
+    !satData.draftId, `draftId=${satData.draftId} 答=${satText.slice(0, 60)}`)
+  dbf.close()
+}
+
+/* ══════════ ⑦ 无位分支:必须给「最近 3 个」且都在集合里 ══════════
+   ②e 原来写的是「报时段**或**如实说满」—— 两头都算过,不可证伪。这里拆成各自可证的两条。 */
+{
+  const tid = RICH
+  const uid = `full-${RUN}`
+  for (const m of ['我想预约', '做美甲', '明天']) await sayTo(tid, uid, m)
+  const r = await sayTo(tid, uid, '凌晨三点')        // 铁定不可约的钟点 → 必走无位分支
+  const txt = r?.reply?.data?.answerZh || ''
+  const times = [...txt.matchAll(/([01]?\d|2[0-3]):([0-5]\d)/g)].map((m) => m[0])
+  check('⑦a 无位时**给出了**替代时段(不是只说一句"约满了")', times.length >= 1, txt.slice(0, 90))
+  check('⑦b 替代时段**最多 3 个**(合同写的是最近 3 个)', times.length <= 3, `给了 ${times.length} 个:${times.join('/')}`)
+
+  const conv = `wecom:${tid}:${uid}`
+  const { DatabaseSync } = await import('node:sqlite')
+  const d2 = new DatabaseSync(process.env.TEST_DB_PATH || '/tmp/ll-ci-data.knife/lucky-luxe.sqlite')
+  const st = d2.prepare('SELECT state_json FROM ai_conversation_states WHERE conversation_id = ?').get(conv)
+  d2.close()
+  let slots = {}
+  try { slots = JSON.parse(st?.state_json || '{}')?.bookingSlots || {} } catch { slots = {} }
+  /* 🔴 `/admin/stores` **这个接口根本不存在**(回 NOT_FOUND)—— 我一直拿空 storeId 去查,
+     于是集合恒空、⑦d 恒真。所以门店与服务都从库里现取,并且取**美甲**那条 ——
+     机器走的是 `firstActiveService('nail')`,拿「列表第一条」会查成美睫,集合照样空。 */
+  const d3 = new DatabaseSync(process.env.TEST_DB_PATH || '/tmp/ll-ci-data.knife/lucky-luxe.sqlite')
+  const sid = d3.prepare('SELECT id FROM stores WHERE tenant_id = ? AND is_active = 1 ORDER BY name ASC LIMIT 1').get(tid)?.id || ''
+  const vid = d3.prepare("SELECT id FROM services WHERE tenant_id = ? AND is_active = 1 AND UPPER(type) = 'NAIL' ORDER BY sort_order ASC LIMIT 1").get(tid)?.id || ''
+  d3.close()
+  const av = sid && vid && slots.date
+    ? await api(`/availability?storeId=${encodeURIComponent(sid)}&serviceId=${encodeURIComponent(vid)}&date=${encodeURIComponent(slots.date)}`, tid)
+    : null
+  const set = new Set((av?.slots || []).flatMap((t) => (t.slots || []).map(String)))
+  check('⑦c 先证刀能咬:那天的可约集合非空', set.size > 0, `date=${slots.date} size=${set.size}`)
+  check('⑦d 🔴 报出来的每一个时段都在 `/availability` 集合里(一个不在就红)',
+    times.length > 0 && times.every((t) => set.has(t)),
+    `报 ${times.join('/')} · 集合前四 ${[...set].slice(0, 4).join('/')}`)
+}
+
+/* ══════════ ⑧ drafted 之后问别的:答得出,草稿仍只有一张 ══════════ */
+{
+  const tid = RICH
+  const uid = `after-${RUN}`
+  for (const m of ['我想预约', '做美甲', '明天', '下午三点']) await sayTo(tid, uid, m)
+  const ok = await sayTo(tid, uid, '好的')
+  const id1 = draftIdOf(ok)
+  check('⑧0 前置:先建出一张草稿', Boolean(id1), `id=${id1}`)
+  if (id1) {
+    const addr = await sayTo(tid, uid, '你们店地址在哪里?')
+    const hours = await sayTo(tid, uid, '营业时间是几点到几点')
+    const aTxt = addr?.reply?.data?.answerZh || ''
+    const hTxt = hours?.reply?.data?.answerZh || ''
+    check('⑧a drafted 后问地址:**答得出**(不是沉默,也不是又建一张)', Boolean(aTxt) && !draftIdOf(addr),
+      `draftId=${draftIdOf(addr)} 答=${aTxt.slice(0, 40)}`)
+    check('⑧b drafted 后问营业时间:答得出且不复建', Boolean(hTxt) && !draftIdOf(hours),
+      `draftId=${draftIdOf(hours)} 答=${hTxt.slice(0, 40)}`)
+    const again = await sayTo(tid, uid, '好的')
+    check('⑧c 问完别的再确认,拿到的还是**同一张**草稿', draftIdOf(again) === id1,
+      `id1=${id1} again=${draftIdOf(again)}`)
+  }
+}
+
+/* ══════════ ⑨ 每轮 aiUsage.calls 增量 = 1(反问档也是 1)══════════
+   🔴 这条**不在这个套件里断言**,原因写清楚:回归跑的是 `AI_MODE=mock`,
+   而 mock 这一路**根本不产生 usage**(`ai-utils` 里就是这么写的),计数恒为 0 ——
+   在这里断言「增量 = 1」只会是一条永远红、或者被我改成永远绿的废判据。
+   **真正的断言放在 ⑤ 正式评测那一跑**(真模型、沙箱库),那里 usage 是真的。
+   这里只守住**管道还在**:`/health` 得给得出这个数,不然 ⑤ 到时候无从数起。 */
+{
+  const h = await (await fetch(`${BASE_URL}/health`)).json()
+  check('⑨a 用量管道在:/health.aiUsage.calls 是个数(⑤ 真模型那跑才断言增量=1)',
+    typeof h?.aiUsage?.calls === 'number', JSON.stringify(h?.aiUsage || {}))
+}
+
+/* ══════════ ⑤ 并发:草稿不占位,占位在落单那一刻(店主 05l 裁 (1))══════════
+   口径:`drafted` 是**意向**,两个人同时确认同一时段 → **允许两张草稿都建出来**。
+   真正不许双占的是**落单**:必须在 `BEGIN IMMEDIATE` 事务里同事务复查可约,
+   两人抢同一时段 → **恰好一个成功**,另一个 409。
+
+   🔴 现测(改之前):`assertBookable` 在事务**外面**跑,而 `booking_slots` **没有唯一索引** ——
+   两单双双落库。这一组就是冲那个来的。 */
+const jreq = async (path, opts = {}, token = null, extraHeaders = {}) => {
+  const r = await fetch(`${BASE_URL}${path}`, {
+    ...opts,
+    headers: { 'content-type': 'application/json',
+      authorization: `Bearer ${token || (process.env.OWNER_TOKEN || 'owner-demo-token')}`,
+      ...extraHeaders, ...(opts.headers || {}) },
+  })
+  let d = null
+  try { d = await r.json() } catch { d = null }
+  return { status: r.status, data: d }
+}
+{
+  const id = `bkc-${RUN}`
+  const made = await jreq('/platform/tenants', { method: 'POST', body: JSON.stringify({ id, name: `并发店${RUN}`, plan: 'chain' }) })
+  let fixtureOk = made.status === 201
+  let techId = '', serviceId = '', userToken = ''
+  if (fixtureOk) {
+    await jreq(`/platform/tenants/${id}/business-hours`, { method: 'PUT',
+      body: JSON.stringify({ hours: [0, 1, 2, 3, 4, 5, 6].map((weekday) => ({ weekday, openTime: '00:00', closeTime: '23:30', isClosed: false })) }) })
+    const tech = await jreq(`/platform/tenants/${id}/technicians`, { method: 'POST', body: JSON.stringify({ name: `技师${RUN}`, isActive: true }) })
+    const svc = await jreq(`/platform/tenants/${id}/services`, { method: 'POST',
+      body: JSON.stringify({ type: 'NAIL', nameZh: `并发项目${RUN}`, nameEn: 'item', priceCents: 40000, depositCents: 5000, baseDurationMin: 60, isActive: true }) })
+    techId = tech.data?.technician?.id || ''
+    serviceId = svc.data?.service?.id || ''
+    /* 注册口要 `displayName`(不是 name),且**必须带 `x-tenant-id`** ——
+       顾客侧一律要带,不回落默认门店(现测回的就是 `TENANT_REQUIRED`)。 */
+    const reg = await jreq('/auth/email/register', { method: 'POST',
+      body: JSON.stringify({ email: `bkc-${RUN}@example.com`, displayName: `并发客${RUN}` }) }, null, { 'x-tenant-id': id })
+    userToken = reg.data?.auth?.accessToken || ''
+    fixtureOk = Boolean(techId && serviceId && userToken)
+  }
+  check('⑤0 造景:并发店(营业时间/技师/项目/顾客)齐 —— 造不出来按红', fixtureOk,
+    `tech=${techId} svc=${serviceId} token=${userToken ? 'ok' : '空'}`)
+
+  if (fixtureOk) {
+    const date = new Date(Date.now() + 2 * 86400000).toLocaleDateString('en-CA', { timeZone: 'America/Toronto' })
+    const book = () => jreq('/bookings', { method: 'POST',
+      body: JSON.stringify({ storeId: `store-${id}`, serviceId, technicianId: techId, date, time: '10:00' }) },
+    userToken, { 'x-tenant-id': id })
+
+    /* 真并发:两个请求同时发出去,不排队 */
+    const [r1, r2] = await Promise.all([book(), book()])
+    const oks = [r1, r2].filter((r) => r.status === 201).length
+    const conflicts = [r1, r2].filter((r) => r.status === 409).length
+    check('⑤a 🔴 两人抢同一时段:**恰好一张成功**', oks === 1, `201×${oks} / 409×${conflicts} (${r1.status}/${r2.status})`)
+    check('⑤b 另一张是 409,且话说得像人(不是数据库报错)', conflicts === 1
+      && /约走|被占|换一个|已经过去|时段/.test(String([r1, r2].find((r) => r.status === 409)?.data?.error?.message || '')),
+      String([r1, r2].find((r) => r.status === 409)?.data?.error?.message || '').slice(0, 60))
+
+    /* 反向守:换一个时段就该落得下去(拦双占不等于把功能拦没) */
+    const other = await jreq('/bookings', { method: 'POST',
+      body: JSON.stringify({ storeId: `store-${id}`, serviceId, technicianId: techId, date, time: '14:00' }) },
+    userToken, { 'x-tenant-id': id })
+    check('⑤c 反向守:换个时段照样约得上', other.status === 201, `status=${other.status}`)
+  }
+}
+
 console.log(`\n[③ 预约采集] 共 ${n} 项:状态机 + 规则补槽 + 配齐店走到 drafted + 空店零回落`)
 if (fails.length) { console.error(`\n❌ test-booking-intake ${fails.length}/${n} 项未过`); process.exit(1) }
 console.log(`\n✅ test-booking-intake 通过 ${n} 项`)

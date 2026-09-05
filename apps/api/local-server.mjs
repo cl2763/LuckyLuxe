@@ -26,6 +26,7 @@ import { createAvailability } from './availability.mjs'
 import { createBookingDraftsModule } from './booking-drafts.mjs'
 import { createAiReviewRoutes } from './ai-review-routes.mjs'
 import { createWecomRecord } from './wecom-record.mjs'
+import { createBookingGuards } from './booking-guards.mjs'
 import { createBookingIntake, hasBookingSignal } from './booking-intake.mjs'
 import { createFactGate, depositFactFromConfig } from './ai-fact-gate.mjs'   // ② 事实闸:出口校验(图 §三)
 import { createAiGate, isGreetingOnly, hasServiceStartIntent, isExplicitAiResumeIntent, hasAppointmentInquiryIntent, isVagueContextFollowup, hasCapabilityIntent } from './ai-gate.mjs'   // 大批05 ① 门(旧关键词门 + 新模型门三档,公约①②)
@@ -3482,6 +3483,10 @@ const aiReview = createAiReviewRoutes({
   readWecomTranscript: (cid) => readWecomTranscript(cid),
 })
 aiReview.ensureSchema()
+const { assertBookable, slotTakenError } = createBookingGuards({
+  db, apiError, getService, localDateTime, localParts, minutesFromTime,
+  totalDuration, addMinutes, specialDateFor,
+})
 const { firstActiveStoreId, firstActiveService, firstQualifiedTechnician,
   getBookingDraftById, createBookingDraft } = createBookingDraftsModule({
   db, apiError, getService, iso, addMinutes, randomId, currentTenantId,
@@ -3503,6 +3508,7 @@ const bookingIntake = createBookingIntake({
   depositPolicyText: () => depositPolicyText(getDepositConfig(currentTenantId()), currentTenantId(), 'zh'),
   /* 「今天」一律按**门店时区**算(CLAUDE.md 头一条:不许用裸 new Date() 推日期) */
   todayISO: () => localParts(new Date()).date,
+  holdMinutes: () => HOLD_MINUTES,
   onLookupFailed: (info) => console.warn('[预约采集] 查可约失败 →', JSON.stringify(info)),
   /* 🔴 只用 ③ 自己那条信号,**不要 OR 上 `hasAppointmentInquiryIntent`** ——
      那个谓词对「请问你们门店的营业时间是什么时候?地址在哪里?」也回 true
@@ -6122,47 +6128,6 @@ function validateBookingInput(body) {
   }
 }
 
-function assertBookable(input, opts = {}) {
-  const service = getService(input.serviceId)
-  if (!service || !service.is_active) throw apiError(404, 'NOT_FOUND', '该服务不存在或已下架。')
-  // 老板直接排单:放宽"技师-服务绑定"(老板可指派任意在岗技师),仍要求技师在职且属本店
-  const technician = opts.adminDirect
-    ? db.prepare('SELECT * FROM technicians t WHERE t.id = ? AND t.store_id = ? AND t.is_active = 1').get(input.technicianId, input.storeId)
-    : db.prepare(`
-    SELECT t.* FROM technicians t
-    JOIN technician_services ts ON ts.technician_id = t.id
-    WHERE t.id = ? AND t.store_id = ? AND t.is_active = 1 AND ts.service_id = ?
-  `).get(input.technicianId, input.storeId, input.serviceId)
-  if (!technician) throw apiError(404, 'NOT_FOUND', '该技师不在本店或不做这项服务。')
-
-  const weekday = localDateTime(input.date, '12:00').getDay()
-  const hours = db.prepare('SELECT * FROM business_hours WHERE store_id = ? AND weekday = ?').get(input.storeId, weekday)
-  // 特殊日期优先于每周固定模式(节假日休息/调整时段)
-  const special = specialDateFor(input.storeId, input.date)
-  const closedThatDay = special ? Boolean(special.is_closed) : (!hours || Boolean(hours.is_closed))
-  // 老板直接排单:放宽"闭店/技师未排班/营业时段"限制(老板当面约的客,可能留晚点/加班);仍占位、仍防时段冲突
-  if (closedThatDay && !opts.adminDirect) throw apiError(400, 'BAD_REQUEST', '该日期门店休息。')
-  const schedule = db.prepare('SELECT * FROM technician_schedules WHERE technician_id = ? AND date = ?').get(input.technicianId, input.date)
-  if (schedule && !schedule.is_working && !opts.adminDirect) throw apiError(400, 'BAD_REQUEST', '该技师这天休息。')
-
-  /* 零回落(图 v1.0 合同三):未设置不许编时段。老板直排(adminDirect)本就跳过边界校验,
-     普通预约走到这里必有真实营业行(closedThatDay 已拦) —— 万一没有,按休息拒,不编数。 */
-  const baseOpen = (special && !special.is_closed && special.open_time) || hours?.open_time || null
-  const baseClose = (special && !special.is_closed && special.close_time) || hours?.close_time || null
-  const openTime = schedule?.start_time || baseOpen
-  const closeTime = schedule?.end_time || baseClose
-  if (!opts.adminDirect && (!openTime || !closeTime)) throw apiError(400, 'BAD_REQUEST', '该日期门店休息。')
-  // 老板直接排单可覆盖时长(这次多做/少做);普通预约按服务标准时长
-  const durationMin = (opts.adminDirect && input.durationMin) ? input.durationMin : totalDuration(service.type, service.base_duration_min, input.addOns)
-  const startMinutes = minutesFromTime(input.time)
-  const endMinutes = startMinutes + durationMin
-  if (!opts.adminDirect && (startMinutes < minutesFromTime(openTime) || endMinutes > minutesFromTime(closeTime))) {
-    throw apiError(400, 'BAD_REQUEST', 'Requested time is outside available working hours.')
-  }
-
-  const start = localDateTime(input.date, input.time)
-  return { service, technician, durationMin, start, end: addMinutes(start, durationMin) }
-}
 
 
 /* ===== 积分(店主 2026-08-12 拍板 B+二次/三次改判,《财务总逻辑》恒等式区):
@@ -6451,6 +6416,15 @@ function backfillPlanFor(serviceDate, tenantId = currentTenantId()) {
   }
 }
 
+/* 「这个时段占了」到底该说哪句 —— **唯一出口**,事务内复查与唯一索引兜底共用一套话。
+   D88(店主 08-30c)+ 01u 裁① + 01w 裁①(语境修正)三条口径原样搬到这里,一个字没改:
+   · 今天台面语境、且时刻已过去 → 只说「已经过去」(过去优先,一句一因);
+   · 补录(backfill)语境 → 「过去」不是错误,说真实原因(那个时段已经有单了);
+   · 老板直排 → 「和已有预约重叠」;
+   · 顾客侧下单 → 「刚被约走了,换一个时间好吗?」(店主 05l 裁 (1) 的措辞)。
+   🔴 我头一版在事务内自己另写了一句,把 D88 的「重叠」盖掉了 —— `test-observe-fixes` 当场咬红。
+   一件事只许有一处出句,这就是那一处。 */
+
 function createBooking(body, opts = {}) {
   expireOldHolds()
   const input = validateBookingInput(body)
@@ -6508,6 +6482,18 @@ function createBooking(body, opts = {}) {
 
   db.exec('BEGIN IMMEDIATE')
   try {
+    /* 🔴 占位在**落单这一刻**,不在草稿(店主 05l 裁 (1))。
+       `assertBookable` 在事务**之外**跑过一次,那只是体验:两个人同时点确认,
+       两边都能过那一关,然后双双 INSERT —— 而 `booking_slots` **没有唯一索引**,
+       数据库也拦不住(现测:同技师同时段能落两单)。
+       所以这里在**同一个事务里**再查一次:`BEGIN IMMEDIATE` 已经拿到写锁,
+       此刻读到的占用就是最终状态,查到被占就落不下去。
+       两人抢同一时段 → 恰好一个成功,另一个拿 409 + 「刚被约走,换一个」并回 checking。 */
+    const wanted = slots.map((slot) => iso(slot))
+    const taken = db.prepare(
+      `SELECT starts_at FROM booking_slots WHERE technician_id = ? AND starts_at IN (${wanted.map(() => '?').join(',')})`
+    ).all(input.technicianId, ...wanted)
+    if (taken.length) throw slotTakenError(input, opts, durationMin)
     db.prepare(`
       INSERT INTO bookings
       (id, tenant_id, public_code, user_id, store_id, technician_id, service_id, status, appointment_start, appointment_end, addons_json, reference_images_json, source_channel, notes, service_price_cents, deposit_cents, deposit_required_cents, deposit_waived_cents, deposit_waive_reason, member_level_at_booking, final_due_cents, total_duration_min, payment_expires_at, direct_deposit_unpaid, created_at, updated_at, demo_seed)
@@ -6529,20 +6515,15 @@ function createBooking(body, opts = {}) {
     db.exec('COMMIT')
   } catch (error) {
     db.exec('ROLLBACK')
+    /* 唯一索引这条路今天走不到(`booking_slots` 没有唯一索引),留着兜底;
+       真正拦住双占的是事务内那次复查,两边**共用同一套出句** `slotTakenError`。 */
     if (String(error.message || '').includes('UNIQUE constraint failed')) {
       /* D88(店主 08-30c 并批):失败句说清真因 —— 「已过」和「被占」是两回事,不许答非所因。
          01u 裁①:判定顺序**过去优先** —— 同时满足「已过去」与「已被占」时只报「已过去」,一句一因。
          01w 裁①(语境修正,店主原话):「过去优先」是给**今天台面**语境定的 —— 那里"已经过去了"
          就是真原因;**补录语境里"过去"根本不是错误**,所以 backfill 时只报真实原因(重叠/休息日),
          也不建议"选之后的时段"(补录本来就是往回记)。一句一因不变,变的是这个语境里哪句才是真因。 */
-      const nowD = localParts(new Date())
-      if (!opts.backfill && `${input.date} ${input.time}` < `${nowD.date} ${nowD.time}`) {
-        throw apiError(409, 'SLOT_UNAVAILABLE', `这个时段已经过去了(门店现在 ${nowD.time}),选一个之后的时段。`)
-      }
-
-      throw apiError(409, 'SLOT_UNAVAILABLE', opts.backfill
-        ? `该技师那个时段已经有单了(这一单需 ${durationMin} 分钟)。核对一下当时的实际时间,或换一位技师。`
-        : `该技师这个时段和已有预约重叠(所选服务需 ${durationMin} 分钟),换个时间或换个更短的项目试试。`)
+      throw slotTakenError(input, opts, durationMin)
     }
     throw error
   }
@@ -11760,17 +11741,19 @@ async function route(req, res) {
   }
   /* ④ 审样本页 —— 三条路由。位置:租户闸门(tenantContext.enterWith)**之后**,
      与别的 /admin/ai/* 同一段;排在闸门前 currentTenantId() 会回落到旗舰店(交付纪律⑦)。 */
+  /* `since=7d` → 近 7 天;不带 = 全部历史。页面一律传 7d(店主 05l 裁:文案「近 7 天」要名副其实)。 */
+  const reviewWindow = (q) => aiReview.windowStart(String(q.since || '').endsWith('d') ? parseInt(q.since, 10) : q.since)
   if (req.method === 'GET' && path === '/admin/ai/review/pending') {
     requireAdmin(req)
     const tid = currentTenantId()
     return json(res, 200, {
       pending: aiReview.modelTurns(tid, { onlyPending: true }),
-      stats: aiReview.stats(tid),
+      stats: aiReview.stats(tid, reviewWindow(query)),
     })
   }
   if (req.method === 'GET' && path === '/admin/ai/review/stats') {
     requireAdmin(req)
-    return json(res, 200, aiReview.stats(currentTenantId()))
+    return json(res, 200, aiReview.stats(currentTenantId(), reviewWindow(query)))
   }
   if (req.method === 'POST' && path === '/admin/ai/review/judge') {
     requireAdmin(req)

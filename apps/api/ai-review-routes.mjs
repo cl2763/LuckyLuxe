@@ -94,7 +94,18 @@ export function createAiReviewRoutes(deps) {
     return out
   }
 
-  /* 页顶三个数 —— 全部从库里现算(计数即证:不许有计数器当第二份真相) */
+  /* 「近 7 天」的起点。窗口按**门店时区的天**切,不用裸 new Date() 推日期(CLAUDE.md 头一条)。
+     `days` 给 0 或负数 = 不切窗(全部历史),留给以后要看总量的地方。 */
+  function windowStart(days) {
+    const n = Number(days)
+    if (!Number.isFinite(n) || n <= 0) return ''
+    return iso(new Date(Date.now() - n * 86400000))
+  }
+
+  /* 页顶三个数 —— 全部从库里现算(计数即证:不许有计数器当第二份真相)。
+     🔴 05k 报的「本周模型放行」其实是**全部历史** —— 名不副实(店主 05l 裁:接上窗、文案改「近 7 天」)。
+     窗口锚的是**判据真正读的那一列**:全录行的 `created_at`(经 `transcriptFromLog` 出来叫 `at`),
+     不是会话的 updated_at —— 会话一有新消息就整条变新,拿它切窗等于没切。 */
   function stats(tenantId, sinceISO) {
     const convs = db.prepare('SELECT id FROM wechat_conversations WHERE tenant_id = ?').all(tenantId)
     let modelPass = 0
@@ -107,12 +118,18 @@ export function createAiReviewRoutes(deps) {
         else if (turn.gate === 'ask_back') askBack += 1
       }
     }
-    const rows = db.prepare(
-      'SELECT verdict, COUNT(*) AS n FROM ai_review_marks WHERE tenant_id = ? GROUP BY verdict'
-    ).all(tenantId)
+    const rows = sinceISO
+      ? db.prepare('SELECT verdict, COUNT(*) AS n FROM ai_review_marks WHERE tenant_id = ? AND created_at >= ? GROUP BY verdict')
+        .all(tenantId, sinceISO)
+      : db.prepare('SELECT verdict, COUNT(*) AS n FROM ai_review_marks WHERE tenant_id = ? GROUP BY verdict')
+        .all(tenantId)
     const by = Object.fromEntries(rows.map((r) => [r.verdict, r.n]))
     const judged = (by.ok || 0) + (by.revised || 0) + (by.rejected || 0)
     return {
+      windowDays: sinceISO ? 7 : null,
+      since: sinceISO || null,
+      modelPassInWindow: modelPass,
+      /* 旧名留一轮兼容(④ 那版页面读的是它);下一批删 —— 登记在回执 */
       modelPassThisWeek: modelPass,
       judged,
       approved: by.ok || 0,
@@ -185,5 +202,5 @@ export function createAiReviewRoutes(deps) {
     return rejectedAsks(tenantId).some((m) => norm(m) === n)
   }
 
-  return { ensureSchema, modelTurns, stats, judge, rejectedAsks, shouldAskBackFirst }
+  return { ensureSchema, modelTurns, stats, judge, rejectedAsks, shouldAskBackFirst, windowStart }
 }

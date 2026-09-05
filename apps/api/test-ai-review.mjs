@@ -98,6 +98,49 @@ const sB = (await api('/admin/ai/review/stats', B)).data
 check('④b 零回落:一条都没审时,认可率是 null 不是 0', sB?.judged === 0 && sB?.approvalRate === null,
   JSON.stringify(sB || {}))
 
+/* ── ⑨ 近 7 天窗口(店主 05l 裁 (3):文案说「近 7 天」,数就得是近 7 天的)──
+   造态要**造在判据真正读的那一列**:全录行的 `created_at`(不是会话 updated_at ——
+   会话一有新消息就整条变新,拿它切窗等于没切)。 */
+{
+  const cid = `air-win-${RUN}`
+  await say(A, cid, '营业时间是几点到几点')
+  const full = (await api('/admin/ai/review/stats', A)).data
+  const win0 = (await api('/admin/ai/review/stats?since=7d', A)).data
+  check('⑨ 前置:刚发生的那轮,近 7 天窗里数得到(先证刀能咬)',
+    (win0?.modelPassInWindow || 0) >= 1, JSON.stringify(win0 || {}).slice(0, 90))
+  check('⑨b 窗口字段在(windowDays=7)', win0?.windowDays === 7 && full?.windowDays === null,
+    `win=${win0?.windowDays} full=${full?.windowDays}`)
+
+  const moved = await api('/admin/ai/review/pending', A)
+  const mine = (moved.data?.pending || []).filter((x) => String(x.conversationId || '').includes(cid))
+  check('⑨c 前置:这条待审找得到(找不到就没得造,判据空转)', mine.length >= 1, `${mine.length} 条`)
+
+  /* 造一条 **8 天前** 的模型放行行。
+     ⚠️ 不能改写既有行:⓪b 的 append-only 触发器会拒
+     (`conversation log is append-only; redact via POST /admin/conversations/:id/redact`)——
+     那道闩是对的,所以改成**追加一行**旧时刻的,这才是它允许的造景方式。 */
+  const convId = mine.length ? mine[0].conversationId : ''
+  if (convId) {
+    const { DatabaseSync } = await import('node:sqlite')
+    const db8 = new DatabaseSync(process.env.TEST_DB_PATH || '/tmp/ll-ci-data.knife/lucky-luxe.sqlite')
+    const old8 = new Date(Date.now() - 8 * 86400000).toISOString()
+    db8.prepare(`INSERT INTO conversation_messages
+      (id, tenant_id, conversation_id, role, source, content, intent, gate, confidence, created_at)
+      VALUES (?, ?, ?, 'assistant', 'ai', ?, 'store', 'model', 0.9, ?)`)
+      .run(`cmsg-old-${RUN}`, A, convId, '八天前那句', old8)
+    db8.close()
+
+    const win1 = (await api('/admin/ai/review/stats?since=7d', A)).data
+    const full1 = (await api('/admin/ai/review/stats', A)).data
+    check('⑨d 8 天前的放行**不计入**近 7 天',
+      (win1?.modelPassInWindow || 0) === (win0?.modelPassInWindow || 0),
+      `窗内 ${win0?.modelPassInWindow} → ${win1?.modelPassInWindow}(不该变)`)
+    check('⑨e 先证刀能咬:同一条在**不带窗**时确实被数进去了(否则 ⑨d 是空转)',
+      (full1?.modelPassThisWeek || 0) === (full?.modelPassThisWeek || 0) + 1,
+      `全量 ${full?.modelPassThisWeek} → ${full1?.modelPassThisWeek}(该 +1)`)
+  }
+}
+
 /* ── ③ 「不该答」→ 同句再来先反问 ───────────────────────── */
 const REJ = '美甲能保持多久'
 await say(A, `${UID}-r`, REJ)

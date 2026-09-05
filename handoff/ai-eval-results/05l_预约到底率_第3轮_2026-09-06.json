@@ -1,0 +1,172 @@
+{
+  "rows": [
+    {
+      "tid": "lucky-luxe",
+      "uid": "br-05l-fin3-0",
+      "convId": "wecom:lucky-luxe:br-05l-fin3-0",
+      "turns": [
+        "明天下午三点有空吗?",
+        "我想做美甲",
+        "就明天三点吧"
+      ],
+      "drafts": 1,
+      "touchedHuman": false,
+      "sawForm": false,
+      "done": true
+    },
+    {
+      "tid": "jics-store",
+      "uid": "br-05l-fin3-1",
+      "convId": "wecom:jics-store:br-05l-fin3-1",
+      "turns": [
+        "明天下午三点有空吗?",
+        "我想做美甲",
+        "就明天三点吧"
+      ],
+      "drafts": 0,
+      "touchedHuman": false,
+      "sawForm": false,
+      "done": false
+    },
+    {
+      "tid": "lucky-luxe",
+      "uid": "br-05l-fin3-2",
+      "convId": "wecom:lucky-luxe:br-05l-fin3-2",
+      "turns": [
+        "我想约周六做美甲",
+        "单色胶就行",
+        "下午两点可以吗"
+      ],
+      "drafts": 1,
+      "touchedHuman": false,
+      "sawForm": false,
+      "done": true
+    },
+    {
+      "tid": "jics-store",
+      "uid": "br-05l-fin3-3",
+      "convId": "wecom:jics-store:br-05l-fin3-3",
+      "turns": [
+        "我想约周六做美甲",
+        "单色胶就行",
+        "下午两点可以吗"
+      ],
+      "drafts": 1,
+      "touchedHuman": false,
+      "sawForm": false,
+      "done": true
+    },
+    {
+      "tid": "lucky-luxe",
+      "uid": "br-05l-fin3-4",
+      "convId": "wecom:lucky-luxe:br-05l-fin3-4",
+      "turns": [
+        "帮我约个时间做美睫",
+        "自然款",
+        "后天上午十点"
+      ],
+      "drafts": 0,
+      "touchedHuman": false,
+      "sawForm": false,
+      "done": false
+    },
+    {
+      "tid": "jics-store",
+      "uid": "br-05l-fin3-5",
+      "convId": "wecom:jics-store:br-05l-fin3-5",
+      "turns": [
+        "帮我约个时间做美睫",
+        "自然款",
+        "后天上午十点"
+      ],
+      "drafts": 0,
+      "touchedHuman": false,
+      "sawForm": false,
+      "done": false
+    },
+    {
+      "tid": "lucky-luxe",
+      "uid": "br-05l-fin3-6",
+      "convId": "wecom:lucky-luxe:br-05l-fin3-6",
+      "turns": [
+        "这周还有位子吗?",
+        "想做美甲",
+        "周五下午都行"
+      ],
+      "drafts": 0,
+      "touchedHuman": false,
+      "sawForm": false,
+      "done": false
+    },
+    {
+      "tid": "jics-store",
+      "uid": "br-05l-fin3-7",
+      "convId": "wecom:jics-store:br-05l-fin3-7",
+      "turns": [
+        "这周还有位子吗?",
+        "想做美甲",
+        "周五下午都行"
+      ],
+      "drafts": 1,
+      "touchedHuman": false,
+      "sawForm": false,
+      "done": true
+    },
+    {
+      "tid": "lucky-luxe",
+      "uid": "br-05l-fin3-8",
+      "convId": "wecom:lucky-luxe:br-05l-fin3-8",
+      "turns": [
+        "能约明天吗",
+        "美睫",
+        "下午四点"
+      ],
+      "drafts": 1,
+      "touchedHuman": false,
+      "sawForm": false,
+      "done": true
+    },
+    {
+      "tid": "jics-store",
+      "uid": "br-05l-fin3-9",
+      "convId": "wecom:jics-store:br-05l-fin3-9",
+      "turns": [
+        "能约明天吗",
+        "美睫",
+        "下午四点"
+      ],
+      "drafts": 1,
+      "touchedHuman": false,
+      "sawForm": false,
+      "done": true
+    },
+    {
+      "tid": "lucky-luxe",
+      "uid": "br-05l-fin3-10",
+      "convId": "wecom:lucky-luxe:br-05l-fin3-10",
+      "turns": [
+        "想约个时间",
+        "做指甲",
+        "明天晚上六点"
+      ],
+      "drafts": 0,
+      "touchedHuman": false,
+      "sawForm": false,
+      "done": false
+    },
+    {
+      "tid": "jics-store",
+      "uid": "br-05l-fin3-11",
+      "convId": "wecom:jics-store:br-05l-fin3-11",
+      "turns": [
+        "想约个时间",
+        "做指甲",
+        "明天晚上六点"
+      ],
+      "drafts": 0,
+      "touchedHuman": false,
+      "sawForm": false,
+      "done": false
+    }
+  ]
+}
