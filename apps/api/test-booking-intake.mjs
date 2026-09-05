@@ -248,6 +248,25 @@ if (bareOk) {
     !/\d{1,2}[::]\d{2}/.test(txt) || /查不到|同事|约满|排班/.test(txt), txt.slice(0, 90))
 }
 
+/* ══════════ ⑫ 采集中不许见谁都复读(⑤ 像人五通咬出来的)══════════
+   🔴 案底:一进 collecting,顾客说什么都回「想约哪天呢?」——
+   「我第一次来,有点紧张」「大概要多久」「谢谢你啦」全是这一句。
+   规矩:**这一句没给出新槽,就不是在答我的问题** —— 让开,交回原流程去答。 */
+{
+  const tid = RICH
+  const uid = `parrot-${RUN}`
+  const a1 = (await sayTo(tid, uid, '我想预约'))?.reply?.data?.answerZh || ''
+  const a2 = (await sayTo(tid, uid, '我第一次来,有点紧张'))?.reply?.data?.answerZh || ''
+  const a3 = (await sayTo(tid, uid, '大概要多久'))?.reply?.data?.answerZh || ''
+  check('⑫0 前置:第一句确实进了采集(问了个槽)', Boolean(a1), a1.slice(0, 40))
+  check('⑫1 🔴 顾客说别的事,**不许原样复读同一句**', a2 !== a1, `两次都是:${a1.slice(0, 30)}`)
+  check('⑫2 🔴 顾客问「大概要多久」,不许拿采集问题顶回去', a3 !== a1, `又是:${a1.slice(0, 30)}`)
+  /* 反向守:真给了槽还是要接着采集(让开不等于把采集丢了) */
+  const a4 = (await sayTo(tid, uid, '做美甲'))?.reply?.data?.answerZh || ''
+  check('⑫3 反向守:真答了槽就接着往下问(让开没把采集状态丢掉)',
+    Boolean(a4) && a4 !== a1, a4.slice(0, 40))
+}
+
 /* ══════════ ⑪ 30 分钟保留到期 → 回 idle 并留痕(图 §二)══════════
    到期不是「悄悄忘了」:状态回 idle,但**留下痕迹**(什么时候过的、从哪个态过的),
    下次才说得清「上次那单没留住」。 */

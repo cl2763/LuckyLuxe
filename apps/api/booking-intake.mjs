@@ -488,6 +488,18 @@ export function createBookingIntake(deps) {
       }
     }
 
+    /* 🔴 采集中**不许见谁都复读**(⑤ 像人五通当场咬出来的:
+       顾客说「我第一次来,有点紧张」「大概要多久」「谢谢你啦」,机器一律回「想约哪天呢?」)。
+       判断很简单:这一句**有没有给出新槽**?没有、又不是确认/改期,那它就是**另一个问题** ——
+       让开,交回原流程去答;采集状态原样留着,顾客答了日期自然接着走。
+       让开时**不写 statePatch**,免得把「上一次问到哪」擦掉。 */
+    const gaveSlot = SLOT_KEYS.some((k) => {
+      const before = String((s.bookingSlots || {})[k] || '').trim()
+      const after = String(slots[k] || '').trim()
+      return after && after !== before
+    })
+    if (!gaveSlot && (stage === 'collecting' || stage === 'checking')) return null
+
     /* 还缺槽 → **只问缺的,一次一问** */
     const miss = nextMissing(slots)
     return {
