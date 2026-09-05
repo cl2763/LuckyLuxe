@@ -104,8 +104,21 @@ export function createQuoteIntakeReply(deps) {
          (模板函数 `quoteCollectionTemplate` 暂时留着:顾客粘回填好的整段仍要认得,
           `test-quote-tenant` 就是那么喂的。) */
       const missing = quoteMissingQuestions(state)
-      const askZh = (missing.zh || [])[0] || ''
-      const askEn = (missing.en || [])[0] || ''
+      /* 🔴 缺项列表是**按项目类型**给的:`quoteMissingQuestions` 只在 serviceType
+         是 nail 或 lash 时才有问题可问;项目还没定时它回空。
+         头一版我在这儿兜底回了整张表,于是 200 句里还剩 **7 句**在出表(裁定要的是 0)。
+         项目没定就先问项目 —— **这本来就是该问的第一个缺项**。 */
+      const svc = String(state.serviceType || '')
+      /* 三种情况,**一种都不许甩表**(裁定 (1) 要的是 200 句出表 = 0):
+         ① 有缺项 → 问第一个缺项;
+         ② 项目还没定 → 先问项目(这本来就是第一个缺项);
+         ③ 项目定了、缺项也空了 → 那就更没道理甩表(根本没东西要问)——
+            说一句「我整理给技师」并请他补充,由后面的 ready_quote / 人工那条路接。
+         现测:①② 修完 200 句还剩 7 句出表,全是 ③ 这种状态。 */
+      const askZh = (missing.zh || [])[0]
+        || (svc ? '好的,我把这些整理给技师确认;还有别的要补充吗?' : '您想做美甲还是美睫呀?')
+      const askEn = (missing.en || [])[0]
+        || (svc ? "Got it — I'll pass this to the technician. Anything else to add?" : 'Would you like nails or lashes?')
       return {
         data: {
           intent: `${state.serviceType || 'nail'}_intake_template`,

@@ -42,6 +42,17 @@ const WANTS = [
    加一句确认(`BR_CONFIRM=1`)才谈得上量「到底率」;不加时与 05h 基线逐句一致,可直接对比。 */
 const CONFIRM_TURN = process.env.BR_CONFIRM === '1' ? ['好的,就这个时间'] : []
 
+/* 🔴 新尺(店主 05n 裁「③ 尺子改不改 → 改,但两列并排」):
+   老尺第 4 句固定说「好的,就这个时间」—— 可机器常常先给出三个替代时段,
+   这句话**没说要哪个**,于是机器只能再问一遍,到底率被尺子本身压住了。
+   真人这时会说「那就 X 点」。新尺:**回复里有替代时段就挑第一个**,没有才照老尺说。
+   两把尺的数都要报,不许只报新尺(老尺是与历史比的唯一锚)。 */
+const pickSlot = (reply) => {
+  const m = String(reply || '').match(/([01]?\d|2[0-3]):([0-5]\d)/)
+  return m ? `那就 ${m[0]}` : '好的,就这个时间'
+}
+const RULER = process.env.BR_RULER === 'new' ? 'new' : 'old'
+
 const send = async (tid, uid, message) => {
   const r = await fetch(`${BASE}/admin/wechat/mock-chat-message`, {
     method: 'POST',
@@ -64,12 +75,16 @@ for (const turns of WANTS) {
     let convId = null
     let touchedHuman = false
     let sawForm = false
-    for (const t of [...turns, ...CONFIRM_TURN]) {
+    let lastSay = ''
+    for (const t0 of [...turns, ...CONFIRM_TURN]) {
+      /* 新尺只改**最后那句确认**的说法,前面几句一字不动 */
+      const t = (RULER === 'new' && CONFIRM_TURN.length && t0 === CONFIRM_TURN[0]) ? pickSlot(lastSay) : t0
       const d = await send(tid, uid, t)
       convId = d?.conversationId || convId
       const st = d?.conversation?.status
       if (st === 'needs_human' || st === 'human_active') touchedHuman = true
       const say = String(d?.reply?.data?.answerZh || '')
+      lastSay = say
       /* 7 项表的形状:一次抛出 6 个以上编号项 —— ③ 要消灭的正是它 */
       if ((say.match(/^\s*\d\.\s/gm) || []).length >= 6) sawForm = true
     }
@@ -82,6 +97,7 @@ for (const turns of WANTS) {
 const done = rows.filter((r) => r.done).length
 writeFileSync(process.env.BR_OUT || `/tmp/booking-rate-${TAG}.json`, JSON.stringify({ rows }, null, 2))
 console.log(JSON.stringify({
+  尺子: RULER === 'new' ? '新尺(挑第一个替代时段)' : '老尺(固定说"好的,就这个时间")',
   想约通数: rows.length,
   到底: done,
   预约到底率: `${(done / rows.length * 100).toFixed(1)}%`,

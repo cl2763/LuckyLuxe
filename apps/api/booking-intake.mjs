@@ -56,6 +56,12 @@ export function nextMissing(slots = {}) {
 /* 「顾客在确认」的形状 —— 只认明确的应答,含糊的(「嗯」「哦」)不算,
    宁可多问一句,也不要替顾客把单建了。 */
 const CONFIRM_HEAD = /^(好的?|行|可以|就这个|就这样|就它|定了|确定|确认|对|是的|没错|ok|okay|yes|sure|sounds good|book it)/i
+/* 🔴 顾客**挑时段**的说法(05n 新尺当场咬出来的):
+   我们刚给了三个替代时段,真人回的是「**那就 10:30**」「就 15:00 吧」——
+   而 `CONFIRM_HEAD` 一个都不认(它只认「好的」那类),于是新尺三跑到底率 **0/12**。
+   这类话既是确认、又指定了时间,所以单列一条:**带钟点的「那就 / 就」= 确认**。
+   ⚠️ 必须带钟点 —— 「那就算了」「那就这个吧」不算,免得把放弃当成确认。 */
+const CONFIRM_PICK = /^(那?就|那)\s*([01]?\d|2[0-3])\s*[::点]\s*([0-5]\d)?/
 /* 带问号/疑问词的一律不是确认 —— 「好的话要等多久」开头也是「好」,但它在问事。 */
 const ASKING = /[??]|吗|呢|多久|多少|几点|哪天|怎么|能不能|可不可以|还是/
 /* 确认后面常跟一小截附和(「好的,就这个时间」「行,就这样吧」)——
@@ -65,6 +71,7 @@ const CONFIRM_TAIL = /^[,,、\s]*(就(这个|这样|它|这个时间|那个时�
 export const looksConfirm = (text = '') => {
   const t = String(text || '').trim()
   if (!t || ASKING.test(t)) return false
+  if (CONFIRM_PICK.test(t)) return true      // 「那就 10:30」= 确认 + 指定时间
   const head = t.match(CONFIRM_HEAD)
   if (!head) return false
   return CONFIRM_TAIL.test(t.slice(head[0].length))
