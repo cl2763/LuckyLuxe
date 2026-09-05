@@ -472,6 +472,63 @@ if (bareOk) {
     typeof h?.aiUsage?.calls === 'number', JSON.stringify(h?.aiUsage || {}))
 }
 
+/* ══════════ ⑭ 病6/病7:两处文案与「打听不是要约」(⑤ 像人五通读出来的)══════════ */
+{
+  const tid = RICH
+  /* 病7:「想问问美甲」是来打听的,不许上来就追日期 —— **模型说 booking 也不算** */
+  const uid = `browse-${RUN}`
+  const r1 = await sayTo(tid, uid, '你好呀,想问问美甲')
+  const t1 = r1?.reply?.data?.answerZh || ''
+  check('⑭a 🔴 病7:「想问问美甲」不进采集(不许回「想约哪天呢?」)',
+    !/想约哪天|大概几点|做美甲还是美睫/.test(t1), t1.slice(0, 60))
+  check('⑭b 反向守:但它得**答点什么**,不是沉默', Boolean(t1), '(空回复)')
+  /* 同一句加上具体时间,就该按约时间办 */
+  const r2 = await sayTo(tid, `${uid}-2`, '想问问美甲,明天下午三点有位吗')
+  const t2 = r2?.reply?.data?.answerZh || ''
+  check('⑭c 反向守:打听里带了具体时间,照样进采集/查可约',
+    /\d{1,2}[::]\d{2}|没位|约满|休息|几点|哪天/.test(t2), t2.slice(0, 60))
+
+  /* 病6:确认后不许说「留着了」—— 05l 刚裁「草稿不占位,占位在落单」 */
+  const bk = `hold-${RUN}`
+  for (const m of ['我想预约', '做美甲', '明天', '下午三点']) await sayTo(tid, bk, m)
+  const ok = await sayTo(tid, bk, '好的')
+  const okTxt = ok?.reply?.data?.answerZh || ''
+  check('⑭d 🔴 病6:确认后不许承诺「留着了」(草稿不占位)',
+    Boolean(draftIdOf(ok)) && !/留着了/.test(okTxt), okTxt.slice(0, 70))
+  check('⑭e 病6:得说清什么时候才算留位', /定金.*才算留位|记下了/.test(okTxt), okTxt.slice(0, 70))
+}
+
+/* ══════════ ⑬ 并发的两层底(05n 裁 (6) + 05l 那个错结论的更正)══════════
+   🔴 我在 05l 报过「`booking_slots` 没有唯一索引,数据库拦不住」—— **错的**。
+   它有内联 `UNIQUE (technician_id, starts_at)`;SQLite 为内联约束建的是**自动索引**,
+   `sqlite_master.sql` 是 **NULL**,而我当初正是拿「sql 里含 UNIQUE」去筛的 ——
+   **判据结构上看不见它要找的东西,我却拿空结果下了结论。**
+   所以这条改用 `PRAGMA index_list`(它看得见自动索引),把这个教训钉住:
+   谁要是哪天把这个约束去掉,这里立刻红。 */
+{
+  const { DatabaseSync } = await import('node:sqlite')
+  const d5 = new DatabaseSync(process.env.TEST_DB_PATH || '/tmp/ll-ci-data.knife/lucky-luxe.sqlite')
+  const idx = d5.prepare("PRAGMA index_list('booking_slots')").all()
+  let hit = null
+  for (const i of idx) {
+    if (!i.unique) continue
+    const cols = d5.prepare(`PRAGMA index_info('${i.name}')`).all().map((x) => x.name)
+    if (cols.includes('technician_id') && cols.includes('starts_at')) hit = { name: i.name, cols }
+  }
+  d5.close()
+  check('⑬a 🔴 双占的库层底还在:booking_slots 上有 (technician_id, starts_at) 唯一约束',
+    Boolean(hit), `index_list 里没找到;现有:${idx.map((i) => `${i.name}(u=${i.unique})`).join(' ')}`)
+  check('⑬b 这条底是**自动索引**(所以只查 sqlite_master.sql 的判据看不见它 —— 05l 那个错就出在这)',
+    Boolean(hit) && /^sqlite_autoindex_/.test(hit.name), hit ? hit.name : '')
+
+  /* 05n 裁 (6):多 writer 起手式落没落,从 /health 看得见 */
+  const h = await (await fetch(`${BASE_URL}/health`)).json()
+  check('⑬c 🔴 WAL 已开(没有它,两进程抢同一时段输的那个直接 500 database is locked)',
+    String(h?.dbConcurrency?.journalMode || '').toLowerCase() === 'wal', JSON.stringify(h?.dbConcurrency || {}))
+  check('⑬d 🔴 busy_timeout ≥ 5 秒(撞锁要等,等到了才轮到人话 409)',
+    Number(h?.dbConcurrency?.busyTimeout || 0) >= 5000, JSON.stringify(h?.dbConcurrency || {}))
+}
+
 /* ══════════ ⑤ 并发:草稿不占位,占位在落单那一刻(店主 05l 裁 (1))══════════
    口径:`drafted` 是**意向**,两个人同时确认同一时段 → **允许两张草稿都建出来**。
    真正不许双占的是**落单**:必须在 `BEGIN IMMEDIATE` 事务里同事务复查可约,

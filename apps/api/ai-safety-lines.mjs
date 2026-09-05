@@ -64,7 +64,31 @@ const stripNegated = (t) => String(t || '')
   .replace(new RegExp(`(没有|没|无|不会|不需要|无需|不)[^,,。;;!!??\n]{0,4}?(${SYMPTOM})`, 'g'), '')
   .replace(/\b(no|not|without)\s+\w*\s*(allergy|allergic|irritation|pain|swelling|wound|discomfort)\b/gi, '')
 
+/* 🔴 体验类 ≠ 医疗类(店主 05n 裁 (3),⑤ 像人五通病4 咬出来的)
+
+   案底:顾客第一次做美甲,问「**会不会很疼呀**」——
+   机器答「这关系到您的身体状况,我不好替您判断…也建议您先问问医生」。
+   **疼不疼是体验问题**,店里天天有人问;答不上来就说「我帮您问技师」,
+   扯到医生上去,人家只会觉得这机器不懂事。
+
+   分界不在词上,在**时态与人称**上:
+   · 「会不会疼 / 疼吗 / 伤不伤指甲 / 多久掉」= **还没做,在打听** → 体验类;
+   · 「我现在很疼 / 已经红肿了 / 一直痒」= **当下的症状** → 照旧走健康档。
+   所以这里不是把「疼」从词表里删掉(删了「眼睛一直疼」也就漏了),
+   而是加一道**打听语气**的否决,并且**当下症状标记**能把它否决回来。 */
+const EXPERIENCE_ASK = /会不会|会很|疼吗|痛吗|疼不疼|痛不痛|伤不伤|伤指甲|伤不伤指甲|多久掉|能维持多久|保持多久|有味道吗|有没有味道|需要多久|要多长时间/
+/* 当下症状:第一人称 + 现在/已经/一直 —— 有这些就不是打听,是真出事了 */
+const PRESENT_SYMPTOM = /我(现在|已经|一直|这两天|最近)|现在很|已经(红肿|发炎|破|出血|过敏)|一直(疼|痒|流泪)/
+
+export function isExperienceQuestion(text = '') {
+  const t = String(text || '')
+  if (!EXPERIENCE_ASK.test(t)) return false
+  return !PRESENT_SYMPTOM.test(t)
+}
+
 export function hasHealthSafetyIntent(text = '') {
+  /* 打听体验的,先让开 —— 但当下症状会把它否决回来(见上) */
+  if (isExperienceQuestion(text)) return false
   const raw = stripNegated(text)
   const zh = raw.replace(/\s+/g, '')
   if (HEALTH_ZH.some((w) => zh.includes(w))) return true

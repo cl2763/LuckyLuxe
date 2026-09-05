@@ -28,6 +28,7 @@ import { createAiReviewRoutes } from './ai-review-routes.mjs'
 import { createWecomRecord } from './wecom-record.mjs'
 import { createBookingGuards } from './booking-guards.mjs'
 import { createBookingIntake, hasBookingSignal } from './booking-intake.mjs'
+import { applyConcurrencyPragmas } from './db-concurrency.mjs'
 import { createFactGate, depositFactFromConfig } from './ai-fact-gate.mjs'   // ② 事实闸:出口校验(图 §三)
 import { createAiGate, isGreetingOnly, hasServiceStartIntent, isExplicitAiResumeIntent, hasAppointmentInquiryIntent, isVagueContextFollowup, hasCapabilityIntent } from './ai-gate.mjs'   // 大批05 ① 门(旧关键词门 + 新模型门三档,公约①②)
 import { createAppVersion } from './app-version.mjs'   // 04f-3 三端版本指纹(公约①)
@@ -116,6 +117,10 @@ if (existsSync(pendingImportPath)) {
 }
 
 const db = new DatabaseSync(join(dataDir, 'lucky-luxe.sqlite'))
+/* 多 writer 起手式(05n 裁 (6)):WAL + busy_timeout。
+   没有这两行,两个进程同打一个库时输的那个直接 500 `database is locked` ——
+   事务内那次可约复查压根轮不上说话,顾客拿不到人话 409。理由全文见 db-concurrency.mjs。 */
+const dbConcurrency = applyConcurrencyPragmas(db, { label: 'local-server' })
 
 /* 订单状态机(D70):合法前置 / 能做什么动作 / 动作后去哪,全在 ./booking-state.mjs;
    路由只做「取参 → 调状态机 → 回结果」,不许在路由里写状态判断(店主 08-24 硬约束)。 */
@@ -6482,13 +6487,20 @@ function createBooking(body, opts = {}) {
 
   db.exec('BEGIN IMMEDIATE')
   try {
-    /* 🔴 占位在**落单这一刻**,不在草稿(店主 05l 裁 (1))。
-       `assertBookable` 在事务**之外**跑过一次,那只是体验:两个人同时点确认,
-       两边都能过那一关,然后双双 INSERT —— 而 `booking_slots` **没有唯一索引**,
-       数据库也拦不住(现测:同技师同时段能落两单)。
-       所以这里在**同一个事务里**再查一次:`BEGIN IMMEDIATE` 已经拿到写锁,
-       此刻读到的占用就是最终状态,查到被占就落不下去。
-       两人抢同一时段 → 恰好一个成功,另一个拿 409 + 「刚被约走,换一个」并回 checking。 */
+    /* 占位在**落单这一刻**,不在草稿(店主 05l 裁 (1))。
+
+       🔴 **05n 更正 —— 我在 05l 报错过一个事实,原样留在这儿当账**:
+       当时我写「`booking_slots` **没有唯一索引**,数据库拦不住,同技师同时段能落两单」。
+       **错的。** 它有:`UNIQUE (technician_id, starts_at)` 就写在建表里(本文件 :678)。
+       我那条自查筛的是 `sqlite_master` 里 `sql` 含 UNIQUE 的索引行 ——
+       而 SQLite 给内联约束建的是**自动索引**(`sqlite_autoindex_booking_slots_2`),
+       它的 `sql` 是 **NULL**,所以那条判据**结构上就看不见它要找的东西**,
+       我却拿它的空结果当「没有」下了结论。(同族:判据看不见 ≠ 事情不存在。)
+
+       所以这一段真正的作用是**措辞**,不是「防双占」:
+       双占在库层一直挡得住,只是撞约束时抛的是 SQLite 报错;
+       这里先查一次,让顾客拿到的是人话 409。两条路**共用同一个出句** `slotTakenError`,
+       这也是「去掉这段复查、结果还是 409」的原因 —— 不是刀砍空,是设计上只有一处出句。 */
     const wanted = slots.map((slot) => iso(slot))
     const taken = db.prepare(
       `SELECT starts_at FROM booking_slots WHERE technician_id = ? AND starts_at IN (${wanted.map(() => '?').join(',')})`
@@ -6515,7 +6527,7 @@ function createBooking(body, opts = {}) {
     db.exec('COMMIT')
   } catch (error) {
     db.exec('ROLLBACK')
-    /* 唯一索引这条路今天走不到(`booking_slots` 没有唯一索引),留着兜底;
+    /* 唯一索引兜底(`booking_slots` 有内联 `UNIQUE (technician_id, starts_at)`,05n 查实);
        真正拦住双占的是事务内那次复查,两边**共用同一套出句** `slotTakenError`。 */
     if (String(error.message || '').includes('UNIQUE constraint failed')) {
       /* D88(店主 08-30c 并批):失败句说清真因 —— 「已过」和「被占」是两回事,不许答非所因。
@@ -10893,6 +10905,8 @@ async function route(req, res) {
          日志会被下一次跑覆盖,health 不会。 */
       tenantFallback: { ...tenantFallbackTally },
       aiUsage: getAiUsage(),   // 04d §三:真模型 token 累计(mock 时全 0)
+      /* 05n 裁(6):并发起手式落没落,得能从外面看见 —— 判据不靠猜 */
+      dbConcurrency,
       /* 🔴 2026-08-30(退回件②):这台服务**实发的前端是哪一版**,由服务自己说 ——
          adminBuild = admin.html 现算的 LL_BUILD(与页面左下角同源)。restore 拉错版本、
          看错端口,店主报的版本串与这里一对就现形,不再猜「你测的和她用的是不是同一份」。 */

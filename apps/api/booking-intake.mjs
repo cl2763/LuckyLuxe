@@ -209,6 +209,13 @@ const BOOKING_WEAK = /想约|要约|约个|约一个/
    三条都是回归咬出来的:定金(intent-guards)、营业时间(business-hours)、地址(intent-guards)。 */
 const POLICY_ASK = /定金|押金|订金|取消|改期|退款|退钱|多少钱|价格|价目|怎么算|规则|政策|收费|贵不贵|营业|开门|关门|地址|怎么走|联系方式/
 
+/* 病7(⑤ 像人五通读出来的):「你好呀,**想问问**美甲」→ 机器回「想约哪天呢?」。
+   顾客只是来打听,上来就追日期,急。
+   这类开场词自己就说明了来意 —— **打听,不是要时间**。除非同一句里给了具体日期/时间,
+   否则不进采集,让模型正常介绍一下再问一句「想看价格还是想约时间?」。
+   ⚠️ 这一条要能**盖过模型的 intent**:规则层本来就没接管它,是模型报了 `intent:'booking'`。 */
+const BROWSE_OPENER = /想问问|问问|了解一下|咨询一下|随便看看|看看有什么|想了解/
+
 export function hasBookingSignal(text = '', todayISO = '', serviceStart = false) {
   const t = String(text || '')
   if (POLICY_ASK.test(t)) return false
@@ -296,7 +303,7 @@ export function createBookingIntake(deps) {
       if (looksConfirm(text)) {
         const held = existingDraftFor(conversationId)
         return {
-          reply: say(zh, '这单我已经给您留着了,不用重复约哦。', "I've already held this for you — no need to book again.", { draftId: held }),
+          reply: say(zh, '这单我已经记下了,不用重复约哦 —— 定金确认后才算留位。', "Already noted — no need to book again; the slot is confirmed once the deposit is settled.", { draftId: held }),
           stage: 'drafted',
           statePatch: { ...s, bookingTouchedAt: stamp(), bookingStage: 'drafted', bookingDraftId: held },
         }
@@ -342,8 +349,12 @@ export function createBookingIntake(deps) {
     }
 
     const today = todayISO()
-    const isBooking = intent === 'booking' || hasBookingIntentByRule(text, today)
-      || stage === 'collecting' || stage === 'checking'
+    /* 打听型开场:没给具体日期/时间就不接管 —— **模型说 booking 也不算**(病7) */
+    const browsing = BROWSE_OPENER.test(text)
+      && !(() => { const r = extractSlotsByRule(text, today); return r.date || r.time })()
+    const isBooking = !browsing
+      && (intent === 'booking' || hasBookingIntentByRule(text, today)
+        || stage === 'collecting' || stage === 'checking')
     if (!isBooking) return null
 
     /* 顾客要改时间 → 回 collecting,把 time 清掉重问 */
@@ -368,7 +379,7 @@ export function createBookingIntake(deps) {
       const already = existingDraftFor(conversationId)
       if (already) {
         return {
-          reply: say(zh, '这单我已经给您留着了,不用重复约哦。', "I've already held this for you — no need to book again.", { draftId: already }),
+          reply: say(zh, '这单我已经记下了,不用重复约哦 —— 定金确认后才算留位。', "Already noted — no need to book again; the slot is confirmed once the deposit is settled.", { draftId: already }),
           stage: 'drafted',
           statePatch: { ...s, bookingTouchedAt: stamp(), bookingSlots: slots, bookingStage: 'drafted', bookingDraftId: already },
         }
@@ -398,8 +409,8 @@ export function createBookingIntake(deps) {
       const dep = depositPolicyText()
       return {
         reply: say(zh,
-          `好的,${slots.date} ${hit} 给您留着了。${dep ? dep : ''}`,
-          `Great — ${slots.date} ${hit} is held for you. ${dep || ''}`,
+          `好的,${slots.date} ${hit} 我先记下了 —— 定金确认后才算留位。${dep ? dep : ''}`,
+          `Noted — ${slots.date} ${hit}. The slot is confirmed once the deposit is settled. ${dep || ''}`,
           { draftId: draft?.id || null }),
         stage: 'drafted',
         statePatch: { ...s, bookingTouchedAt: stamp(), bookingSlots: slots, bookingStage: 'drafted', bookingDraftId: draft?.id || null },
