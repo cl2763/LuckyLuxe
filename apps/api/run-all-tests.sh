@@ -3,9 +3,24 @@
 # 用法: bash apps/api/run-all-tests.sh
 # 要求: Node 22+;在全新数据库上也能跑(自动填充演示数据)
 set -euo pipefail
+RUN_T0=$SECONDS   # 墙钟起点(计时即证:套件时间 ≠ 整跑时间)
 export ALLOW_DEMO_ADMIN_LOGIN=true  # 测试套件依赖演示登录路径(生产环境默认禁用)
 cd "$(dirname "$0")"
 API_DIR="$(pwd)"   # 绝对路径:restore_local 结束时要用,那时 cwd 可能已经变了
+
+# ══ 预检先跑(店主 05o 裁 §三 之一)══
+# 05n 那一批跑了 5 次全量,其中 **3 次红是可预判的**(护栏清单没重生成 / 棘轮超 /
+# 扫描面没跟着搬)—— 每次都要等 15 分钟才知道,然后改一行再等 15 分钟。
+# 这把刀 6 秒钟就能把那三类问一遍。不绿就别起全量。
+# 确实要跳过(比如正在排查全量本身):PRE_REGRESSION=skip
+if [ "${PRE_REGRESSION:-}" != "skip" ]; then
+  if ! bash "$API_DIR/../../tools/pre-regression.sh"; then
+    echo ""
+    echo "🔴 预检没过 —— 全量不起了。修完再来(或 PRE_REGRESSION=skip 强跑)。"
+    exit 1
+  fi
+  echo ""
+fi
 
 # 回归全程跑独立临时库(DATA_DIR),不碰 local-data 真实/演示库;结束时自动删除
 export DATA_DIR="$(mktemp -d /tmp/ll-ci-data.XXXXXX)"
@@ -165,10 +180,17 @@ read -r -a SUITES <<< "${CI_SUITES:-$DEFAULT_SUITES}"
 # 日志里 auto-return / tenant-isolation 两套没有 `== test-X ==` 行,解析法会张冠李戴。
 TALLY="$DATA_DIR/assertion-tally.tsv"; : > "$TALLY"
 SUITE_OUT="$DATA_DIR/suite-out.txt"
+TIMING="$DATA_DIR/suite-timing.tsv"; : > "$TIMING"
 run_suite() {   # $1=套件名 $2..=node 前缀环境(可空)
   local name="$1"; shift
+  # 计时即证(店主 05o 裁 §三 之三):每套打印耗时,末尾出总耗时与最慢 5 套。
+  # 「跑了两个半小时」这种话,得能拆开看是谁慢、跑了几次 —— 数不出来就治不了。
+  local t0=$SECONDS
   "$@" node "test-${name}.mjs" 2>&1 | tee "$SUITE_OUT"
+  local dt=$(( SECONDS - t0 ))
   printf '%s\t%s\n' "$name" "$(grep -c '^ok ' "$SUITE_OUT" || true)" >> "$TALLY"
+  printf '%s\t%s\n' "$name" "$dt" >> "$TIMING"
+  echo "   ⏱ test-${name} ${dt}s"
 }
 
 for suite in "${SUITES[@]}"; do
@@ -228,4 +250,19 @@ node test-assertion-baseline.mjs "$TALLY" "$(( $(echo $DEFAULT_SUITES | wc -w) +
 
 echo ""
 # 套件数从清单现算,不写死 —— 写死的数字会随加套件慢慢变成假话
+# ⏱ 计时汇总(店主 05o 裁 §三 之三:回执固定一行「全量 N 分钟 · 最慢:…」)
+if [ -s "$TIMING" ]; then
+  TOTAL_S=$(awk -F'\t' '{s+=$2} END{print s+0}' "$TIMING")
+  echo ""
+  WALL_S=$(( SECONDS - RUN_T0 ))
+  # 🔴 套件时间 ≠ 整跑时间。头一次量出来:套件 109 秒,而整跑要几分钟 ——
+  #    差额全在**建库铺夹具 + 起三台服务 + 收尾还服务**上。
+  #    店主问「为什么一跑两个半小时」,答案得把这两段分开报,不然优化会优化错地方。
+  echo "⏱ 整跑 $(( WALL_S / 60 )) 分 $(( WALL_S % 60 )) 秒(其中套件 $(( TOTAL_S / 60 )) 分 $(( TOTAL_S % 60 )) 秒 · 夹具与起停服务 $(( (WALL_S - TOTAL_S) / 60 )) 分 $(( (WALL_S - TOTAL_S) % 60 )) 秒)"
+  echo "   最慢 5 套:"
+  sort -k2 -rn -t$'\t' "$TIMING" | head -5 | awk -F'\t' '{printf "     %-34s %ss\n", $1, $2}'
+  SLOW=$(awk -F'\t' '$2>180 {print $1" ("$2"s)"}' "$TIMING" | tr '\n' ' ')
+  [ -n "$SLOW" ] && echo "   ⚠️ 超 3 分钟的(下批看能不能拆):$SLOW"
+fi
+
 echo "✅ 全部 $(( $(echo $DEFAULT_SUITES | wc -w) + 4 )) 个套件通过(清单 $(echo $DEFAULT_SUITES | wc -w) + auto-return/schema-consistency/perf-base-migration/tenant-isolation)"
