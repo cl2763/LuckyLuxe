@@ -66,6 +66,28 @@ const plat = async (p, o = {}) => {
     /function ownerBearer\s*\(\s*\)/.test(adminSrc) && /owner\.auth\?\.accessToken/.test(adminSrc), '')
 }
 
+/* ── Cowork 09-07 热修的三条判据(夜班令 3 段 0 指定)───────────────
+   店主亲测:「按钮点了没反应;改一句改完像没保存」。热修把「改一句」改成
+   亮框 → 填字 → **点「保存这句」才提交**,并把每次结果当场写在卡片上。
+   这三条守的就是那三件事。**这一层是结构判据**(CI 里没有浏览器);
+   行为层我在真浏览器里另点一遍,证据附回执。 */
+{
+  const webDir2 = join(fileURLToPath(new URL('.', import.meta.url)), '..', 'web')
+  const src2 = readFileSync(join(webDir2, 'ai-review.js'), 'utf8')
+  const judgeFn = src2.slice(src2.indexOf('async function judge('))
+  const firstClick = judgeFn.slice(judgeFn.indexOf("verdict === 'revised'"), judgeFn.indexOf("revised-cancel"))
+  check('㉑a 🔴「改一句」头一击只亮框、**不发请求**(这一段里不许出现 fetch)',
+    firstClick.includes('return') && !firstClick.includes('fetch'), firstClick.replace(/\s+/g, ' ').slice(0, 80))
+  check('㉑b 🔴 有「保存这句」这一步,空着不许提交',
+    /revised-save/.test(src2) && /先写上改成哪句/.test(src2), '')
+  check('㉑c 🔴 成功后卡片上写「已记上」', /已记上/.test(src2), '')
+  check('㉑d 🔴 失败要写「没记上」并带上 HTTP 码与后端 message(不许静默)',
+    /没记上/.test(src2) && /HTTP \$\{r\.status\}/.test(src2) && /e\.message \|\| e\.error/.test(src2), '')
+  check('㉑e fetch 抛错也要显示(断网/服务没起来时原来是静默的)',
+    /catch \(e\)[\s\S]{0,120}没记上/.test(judgeFn), '')
+  check('㉑f 提交中按钮禁用(防重复点)', /disabled = true/.test(judgeFn), '')
+}
+
 /* ── 造景:两家自建的店(造景律:走查要看的状态,自己造出来)── */
 const A = `air-a-${RUN}`
 const B = `air-b-${RUN}`

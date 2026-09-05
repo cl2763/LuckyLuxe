@@ -52,7 +52,7 @@
     const head = mounted.querySelector('[data-ai-review-stats]')
     try {
       /* 一律带窗:页面上写「近 7 天」,数就必须是近 7 天的(05k 那版写「本周」其实是全部历史) */
-      const r = await fetch(`${API}/admin/ai/review/pending?since=7d`, { headers: authHeaders() })
+      const r = await fetch(`${API}/admin/ai/review/pending?since=7d`, { headers: authHeaders(), cache: 'no-store' })
       if (!r.ok) throw new Error(`HTTP ${r.status}`)
       const data = await r.json()
       const s = data.stats || {}
@@ -76,19 +76,49 @@
             <button type="button" class="ghost" data-verdict="revised">改一句</button>
             <button type="button" class="ghost" data-verdict="rejected">不该答</button>
           </div>
-          <textarea class="hidden" data-revise placeholder="改成该说的那句话"></textarea>
+          <div class="hidden" data-revise-wrap>
+            <textarea data-revise rows="3" style="width:100%;margin-top:8px" placeholder="改成该说的那句话,然后点「保存这句」"></textarea>
+            <div class="row-actions">
+              <button type="button" class="primary" data-verdict="revised-save">保存这句</button>
+              <button type="button" class="ghost" data-verdict="revised-cancel">取消</button>
+            </div>
+          </div>
+          <p class="subtle hidden" data-review-msg></p>
         </div>`).join('')
     } catch (e) {
       body.innerHTML = `<p class="subtle">待审列表没取到(${esc(e.message)})—— 刷新看看。</p>`
     }
   }
 
+  /* Cowork 09-07 热修(店主亲测「按钮没反应、改一句像没保存」):
+     · 「改一句」改成 亮框 → 填字 → 点「保存这句」才提交,多一个「取消」;
+     · 每次提交在卡片上当场写结果(「已记上」/ 失败原因),不再只靠整页刷新让人猜;
+     · fetch 抛错(断网、服务重启)也要显示,原来会静默;
+     · 列表与三个数仍由后端现算(load()),前端不自己加减。 */
+  const say = (card, text, ok) => {
+    const m = card.querySelector('[data-review-msg]')
+    if (!m) return
+    m.textContent = text
+    m.classList.remove('hidden')
+    m.style.color = ok ? '#2e7d32' : '#b3261e'
+  }
+
   async function judge(card, verdict) {
+    const wrap = card.querySelector('[data-revise-wrap]')
     const box = card.querySelector('[data-revise]')
-    if (verdict === 'revised' && box.classList.contains('hidden')) {
-      box.classList.remove('hidden')   // 头一下先把框亮出来,让老板写
+    if (verdict === 'revised') {           // 头一下:亮框,让老板写
+      wrap.classList.remove('hidden')
       box.focus()
       return
+    }
+    if (verdict === 'revised-cancel') {
+      wrap.classList.add('hidden')
+      box.value = ''
+      return
+    }
+    if (verdict === 'revised-save') {
+      if (!box.value.trim()) { say(card, '先写上改成哪句,再点保存。', false); box.focus(); return }
+      verdict = 'revised'
     }
     const payload = {
       conversationId: card.dataset.conv,
@@ -96,15 +126,26 @@
       verdict,
       revisedReply: verdict === 'revised' ? box.value.trim() : '',
     }
-    if (verdict === 'revised' && !payload.revisedReply) { box.focus(); return }
-    const r = await fetch(`${API}/admin/ai/review/judge`, {
-      method: 'POST', headers: authHeaders(), body: JSON.stringify(payload),
-    })
-    if (!r.ok) {
-      card.insertAdjacentHTML('beforeend', `<p class="subtle">没记上(HTTP ${r.status})—— 再点一次试试。</p>`)
-      return
+    card.querySelectorAll('button').forEach((b) => { b.disabled = true })
+    try {
+      const r = await fetch(`${API}/admin/ai/review/judge`, {
+        method: 'POST', headers: authHeaders(), body: JSON.stringify(payload), cache: 'no-store',
+      })
+      if (!r.ok) {
+        let why = `HTTP ${r.status}`
+        try { const e = await r.json(); if (e && (e.message || e.error)) why += ` · ${e.message || e.error}` } catch (_) {}
+        say(card, `没记上(${why})—— 再点一次试试。`, false)
+        card.querySelectorAll('button').forEach((b) => { b.disabled = false })
+        return
+      }
+      const label = { ok: '对', revised: '改一句', rejected: '不该答' }[verdict] || verdict
+      say(card, `已记上:「${label}」${verdict === 'revised' ? ' —— 改后的话已进样本' : ''}`, true)
+      card.style.opacity = '0.55'
+      setTimeout(() => { card.remove(); load() }, 900)   // 让老板看见「已记上」再收走;三个数由后端重算
+    } catch (e) {
+      say(card, `没记上(${e.message || e})—— 服务可能没起来,刷新再试。`, false)
+      card.querySelectorAll('button').forEach((b) => { b.disabled = false })
     }
-    await load()   // 重新取:三个数与列表都由后端现算,前端不自己加减
   }
 
   function mount() {
