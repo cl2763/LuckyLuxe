@@ -151,6 +151,15 @@ function mergeTenantFacts(tenant, live) {
   }
 }
 
+/* 口吻(店主 05p 补一:她亲审 18 条后的评语「事实上没什么大问题,**语气要温和一些、不要太正式**」)。
+   三店共用这一条,**不写店名** —— 它讲的是「怎么说话」,不是「你是哪家店」。
+   为什么放进提示词而不是靠后处理:公文腔是**整句的气质**,不是几个词,
+   删词删不出温和来;能靠机器排掉的只有那几个明显的开场白(判据在 test-turn-answer)。 */
+export const TONE_GUIDE_EN = 'Tone: like the front-desk person a regular chats with — warm, spoken, short. No formal openers, no stacked polite forms, answer what was asked first.'
+export const TONE_GUIDE = '口吻:像店里熟客常聊的那个前台 —— 温和、口语、简短。'
+  + '不要用「您好!」开场,不要连着堆「请问/请您」,不要公文腔;'
+  + '能一句说完就别说两句,顾客问什么先答什么。'
+
 function buildPromptText({ kb, intents, matchedRules, matchedQa, matchedHandoffRules, context }) {
   const tenant = kb.layers?.tenantPrivate || {}
   const platform = kb.layers?.platformPreset || {}
@@ -159,6 +168,8 @@ function buildPromptText({ kb, intents, matchedRules, matchedQa, matchedHandoffR
   const platformNoteEn = 'Platform preset knowledge only covers generic beauty workflows, tone templates, and handoff boundaries; exact member tiers, deposit waivers, pricing, stores, and staff rules must come from current tenant-private knowledge. Structured live settings (such as business hours) always override static knowledge text.'
   const base = {
     version: kb.version,
+    /* 口吻条**只在上面那句自然语言里出现一次** —— 这里不再重复放一份。
+       判据 ⑥d 当场咬出:两处都有时,「抠掉一处」的刀砍不动,而那正是「一件事两处真相」的形状。 */
     platformScope: platform.description,
     // 2026-08-07:此前恒等于种子里的 'luckyluxe',等于告诉每一家店的模型「你是旗舰店」
     tenantId: live.tenantId || kb.tenantId,
@@ -178,14 +189,18 @@ function buildPromptText({ kb, intents, matchedRules, matchedQa, matchedHandoffR
     matchedQa,
     matchedHandoffRules
   }
+  /* 口吻那一条**摆在最前面的自然语言里**,不只塞进 JSON:
+     模型对开头的整句指令跟得住,对 JSON 里的一个字段跟不住(05p 补一 落地时现试过)。 */
   return {
     zh: [
       '请严格参考以下客服知识库上下文作答。',
+      TONE_GUIDE,
       platformNoteZh,
       safeJson(base)
     ].join('\n'),
     en: [
       'Use the following customer-service knowledge context strictly.',
+      TONE_GUIDE_EN,
       platformNoteEn,
       safeJson(base)
     ].join('\n')

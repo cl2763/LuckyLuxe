@@ -186,6 +186,17 @@ async function main() {
   const info = await PUT('/admin/store-info', { name: TENANT_NAME, address: STORE_ADDRESS, phone: STORE_PHONE })
   log(`- 门店:${storeRes.store.currency} · ${storeRes.store.timezone} · ${info.store.address}`)
 
+  /* ── 2b. AI 智能包 ──────────────────────────────────────────
+     🔴 09-08 现测踩到:新店建出来 AI **一句话都不答**(`entitlementBlocked: true`)。
+     病根是建店走的 `plan: 'single'`,而 `ai_customer_service` 只在 chain/custom 档里,
+     于是店主打开北京店试 AI 客服会看到「机器不理人」,而后台一点报错都没有。
+     开通走平台正门(只有平台主钥匙写得动;商家侧自己开不了 —— 08-04 安全裁定)。 */
+  await PUT('/admin/tenant/entitlements', { feature: 'ai_customer_service', enabled: true, note: '北京旗舰店走查店:开 AI 智能包' })
+  const ents = (await T('/admin/tenant/entitlements')).entitlements || {}
+  const aiOn = Boolean(ents.features?.ai_customer_service?.enabled)
+  if (!aiOn) throw new Error('AI 智能包没开成 —— 新店 AI 会一句不答,不许当成功')
+  log('- AI 智能包:已开通(现读回验过)')
+
   // ── 3. 营业时间:周一休,其余 10:00–20:00 ───────────────────
   await PUT('/admin/business-hours', {
     hours: [0, 1, 2, 3, 4, 5, 6].map((weekday) => (weekday === 1

@@ -15,7 +15,7 @@ export function createQuoteIntakeReply(deps) {
      `storeDisplayName` / `quotePreviewLine` / `staffDisplayName` **全仓根本不存在**,
      服务当场起不来(`ReferenceError: storeDisplayName is not defined`)。
      依赖清单要照代码里真在用的写,不照记忆写。 */
-  const { canSpecifyTechnician, quoteIntakeSummary, isIntakeFormLikeResponse } = deps
+  const { canSpecifyTechnician, quoteIntakeSummary, isIntakeFormLikeResponse, answerForTurn } = deps
   for (const [name, fn] of Object.entries(deps)) {
     if (typeof fn !== 'function') throw new Error(`createQuoteIntakeReply 缺依赖或类型不对:${name}`)
   }
@@ -117,6 +117,22 @@ export function createQuoteIntakeReply(deps) {
          `intent` 保持 `*_intake_template` 不变 —— 那是这条路的身份标记,
          改了 `test-intent-guards` 两条正向断言会跟着晃(05n 已经栽过一次)。 */
       const turnKind = classifyTurn(state.currentText || '', { gaveSlot: false })
+      /* D145 后半:在问事 / 问预算 → **先答,再至多一问**(答从价目/知识库取,取不到就让原流程走) */
+      if (turnKind === 'question' || turnKind === 'budget') {
+        const ans = answerForTurn(turnKind, { text: state.currentText || '', serviceName: state.serviceType || '' })
+        if (ans && String(ans.text || '').trim()) {
+          const one = (quoteMissingQuestions(state).zh || [])[0] || ''
+          return {
+            data: {
+              intent: `${state.serviceType || 'nail'}_intake_template`,
+              answerZh: `${ans.text}${one ? ` ${one}` : ''}`,
+              answerEn: `${ans.en || ans.text}${one ? ` ${(quoteMissingQuestions(state).en || [])[0] || ''}` : ''}`,
+              handoffRequired: false
+            },
+            source: 'quote_intake_template'
+          }
+        }
+      }
       if (turnKind === 'farewell' || turnKind === 'hesitate') {
         return {
           data: {

@@ -18,6 +18,7 @@
 
 /* 槽位:图 §二 collecting 那一行点名的五个 */
 import { classifyTurn, TURN_TEXT, slotEcho } from './turn-classify.mjs'   // D145:采集态每句先分类
+import { policyOnce } from './turn-answer.mjs'                            // D145:政策一会话一次(两路共用)
 
 export const SLOT_KEYS = ['serviceType', 'date', 'time', 'technician', 'addons']
 
@@ -252,6 +253,7 @@ export function createBookingIntake(deps) {
     getConversationState, getAvailability,
     firstActiveStoreId, firstActiveService, createBookingDraft, depositPolicyText,
     existingDraftFor, hasBookingIntentByRule, todayISO, onLookupFailed, holdMinutes,
+    answerForTurn,   // D145 后半:question / budget 两档「先答再问」的答从哪来
   } = deps
   for (const [name, fn] of Object.entries(deps)) {
     if (typeof fn !== 'function') throw new Error(`createBookingIntake 缺依赖或类型不对:${name}`)
@@ -415,14 +417,18 @@ export function createBookingIntake(deps) {
         conversationId, storeId: real.storeId, serviceId: real.service.id,
         date: slots.date, time: hit, sourceChannel: 'ai_booking_intake',
       }, {})
-      const dep = depositPolicyText()
+      /* 🔴 D145(05p §一 第四条):政策原文**一会话只说一次**。
+         案底:通三顾客说「好的,就这个时间」,机器把定金规则整段又念了一遍。
+         病 5 当时只治了报价路,预约路没落 —— 这次两路共用 `policyOnce`。 */
+      const pol = policyOnce(s)
+      const dep = pol.shown ? pol.text : depositPolicyText()
       return {
         reply: say(zh,
           `好的,${slots.date} ${hit} 我先记下了 —— 定金确认后才算留位。${dep ? dep : ''}`,
           `Noted — ${slots.date} ${hit}. The slot is confirmed once the deposit is settled. ${dep || ''}`,
           { draftId: draft?.id || null }),
         stage: 'drafted',
-        statePatch: { ...s, bookingTouchedAt: stamp(), bookingSlots: slots, bookingStage: 'drafted', bookingDraftId: draft?.id || null },
+        statePatch: { ...s, ...pol.patch, bookingTouchedAt: stamp(), bookingSlots: slots, bookingStage: 'drafted', bookingDraftId: draft?.id || null },
       }
     }
 
@@ -438,12 +444,13 @@ export function createBookingIntake(deps) {
       }
       const hit = timeHit(slots.time, real.times)
       if (hit) {
-        const dep = depositPolicyText()
+        const pol = policyOnce(s)
+        const dep = pol.shown ? pol.text : depositPolicyText()
         return {
           reply: say(zh,
             `${slots.date} ${hit} 有位子。${dep ? dep + ' ' : ''}要我先帮您留着吗?`,
             `${slots.date} ${hit} is available. ${dep ? dep + ' ' : ''}Shall I hold it for you?`),
-          stage: 'checking', statePatch: checkingPatch,
+          stage: 'checking', statePatch: { ...checkingPatch, ...pol.patch },
         }
       }
       /* 无位:给最近 3 个 —— **都必须在返回集合里**(图 §二 checking) */
@@ -527,6 +534,22 @@ export function createBookingIntake(deps) {
       return {
         reply: say(zh, TURN_TEXT[kind].zh, TURN_TEXT[kind].en),
         stage, statePatch: { ...s },
+      }
+    }
+    /* 🔴 D145 后半(05p §一):在问事 / 问预算 → **先答,再至多一问**。
+       此前这两档跟「其它」一样让开,让开之后原流程未必答得上来,顾客那侧看到的还是答非所问。
+       答不上来(`answerForTurn` 回 null,或它自己回的是「我帮您问技师」)才让开 —— 不许编。 */
+    if (kind === 'question' || kind === 'budget') {
+      const ans = answerForTurn(kind, { text, tenantId, serviceName: slots.serviceType || '' })
+      if (ans && String(ans.text || '').trim()) {
+        const missAfter = nextMissing(slots)
+        return {
+          reply: say(zh,
+            `${ans.text}${missAfter ? ` ${missAfter.zh}` : ''}`,
+            `${ans.en || ans.text}${missAfter ? ` ${missAfter.en}` : ''}`),
+          stage: 'collecting',
+          statePatch: { ...s, bookingTouchedAt: stamp(), bookingSlots: slots, bookingStage: 'collecting' },
+        }
       }
     }
     if (!gaveSlot && (stage === 'collecting' || stage === 'checking')) return null

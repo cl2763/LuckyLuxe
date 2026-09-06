@@ -46,6 +46,9 @@ import { createTenantGate } from './tenant-gate.mjs'   // D132 口径④ 顾客�
 import { createQuoteSerialize } from './quote-serialize.mjs'          // AI 报价域序列化(公约②)
 import { createDemoReset, isDemoTenant, PROTECTED_REAL_TENANTS } from './demo-reset.mjs'   // 演示店归属判据/黑名单/重置唯一入口(公约①)
 import { demoSeedTag, ensureDemoMarkColumns } from './demo-mark.mjs'   // D121:演示标记唯一出口
+import { createKbMatch } from './kb-match.mjs'                        // 知识库匹配两个口
+import { createTurnAnswer } from './turn-answer.mjs'                  // D145 后半:先答再问,答从数据来
+import { createEscalateIntake } from './escalate-intake.mjs'          // 转人工判断 + D145 那条闸
 import { createTenantProfile } from './tenant-profile.mjs'          // D127:本店档案唯一出口
 import { createDemoFacts } from './demo-facts.mjs'                    // 演示店事实口(铺设脚本不再直连库)
 import { createPlatformOps } from './platform-ops.mjs'                // 平台运维域(备份/五项/运维日志/重置财务密码)
@@ -597,7 +600,7 @@ function setupDatabase() {
       sort_order INTEGER NOT NULL,
       is_active INTEGER NOT NULL DEFAULT 1,
       process_json TEXT NOT NULL,
-      notice_json TEXT NOT NULL
+      notice_json TEXT NOT NULL, price_mode TEXT NOT NULL DEFAULT 'fixed'   -- D146:fixed=有价 / quote=需技师报价(与下面 ALTER 同源,公约⑧)
     );
     CREATE TABLE IF NOT EXISTS technician_services (
       technician_id TEXT NOT NULL,
@@ -1188,18 +1191,8 @@ function tenantKbDocumentsForPrompt(tenantId = DEFAULT_TENANT_ID) {
     .map((row) => ({ title: row.title, content: String(row.content || '').slice(0, 1500) }))
 }
 
-// 商家自助 FAQ 匹配：仅当消息不含服务/报价/预约意图时直答，避免抢占询单流程。
-function matchTenantKbEntry(text = '') {
-  const compact = compactIntentText(text)
-  if (!compact) return null
-  if (/美甲|美睫|睫毛|指甲|款式|参考图|报价|价格|多少钱|卸甲|延长|断甲|修补|预约|想约|要约|确认预约|nail|lash|quote|price|book/.test(compact)) return null
-  const rows = db.prepare('SELECT * FROM tenant_kb_entries WHERE tenant_id = ? AND enabled = 1 ORDER BY updated_at DESC').all(currentTenantId())
-  for (const row of rows) {
-    const keywords = String(row.keywords || '').split(/[,，、/\s]+/).map((keyword) => keyword.trim()).filter(Boolean)
-    if (keywords.some((keyword) => compact.includes(compactIntentText(keyword)))) return row
-  }
-  return null
-}
+// 知识库匹配两个口都搬进 ./kb-match.mjs(公约②:动了这个领域就把它带走)
+const { matchTenantKbEntry, matchKbForAnswer } = createKbMatch({ db, currentTenantId, compactIntentText })
 
 function seedDatabase() {
   db.prepare('INSERT OR IGNORE INTO tenants (id, name, plan, status) VALUES (?, ?, ?, ?)').run(DEFAULT_TENANT_ID, 'LUVIA 半径', 'chain', 'active')
@@ -2900,21 +2893,11 @@ function extractBookingDateTime(text = '') {
 }
 
 
-function shouldEscalateUnclearIntake(state = {}, persistedState = null, missingQuestions = { zh: [] }) {
-  const memory = persistedState?.state?.workingMemory || {}
-  const promptCount = Number(memory.workflow?.intakePromptCount || persistedState?.state?.intakePromptCount || 0) || 0
-  const completion = intakeCompletion(state)
-  const hasSomeContext = state.hasReferenceContext
-    || state.serviceStartIntent
-    || state.appointmentIntent
-    || state.priceIntent
-    || state.capabilityIntent
-    || state.contextualFollowup
-    || completion.filled >= 2
-  const vagueAgain = isVagueContextFollowup(state.currentText)
-    || (!isIntakeFormLikeResponse(state.currentText) && !state.referenceImages?.length && missingQuestions.zh?.length)
-  return promptCount >= 2 && hasSomeContext && vagueAgain
-}
+// 转人工判断搬进 ./escalate-intake.mjs(公约②;D145 那条「道别不转人工」的闸也在那儿)
+const { shouldEscalateUnclearIntake } = createEscalateIntake({   // 三个都用箭头包一层:它们定义在本行之后,直接传会 TDZ
+  intakeCompletion: (x) => intakeCompletion(x),
+  isVagueContextFollowup: (x) => isVagueContextFollowup(x),
+  isIntakeFormLikeResponse: (x) => isIntakeFormLikeResponse(x) })
 
 function quotePayloadFromState(state, inbound = {}, knowledgeContext = {}, trigger = 'intake_ready') {
   const customerMessage = String(state.customerCorpus || inbound.content || '').trim()
@@ -3321,7 +3304,7 @@ const { recordWecomConversation, shouldSendNewCustomerWelcome, newCustomerWelcom
 /* 05n 裁 (4):回复长度量它、定金政策同一通只说一次(理由见 reply-length.mjs) */
 /* 报价采集出句(05n 裁 (1) 搬出;图 v1.3 一句一问) */
 const { quoteCollectionTemplate, intakeCompletion, shouldHandOffForQuote, quoteIntakeReply, quoteMissingQuestions } =
-  createQuoteIntakeReply({ canSpecifyTechnician, quoteIntakeSummary, isIntakeFormLikeResponse })
+  createQuoteIntakeReply({ canSpecifyTechnician, quoteIntakeSummary, isIntakeFormLikeResponse, answerForTurn: (k, c) => answerForTurn(k, c) })   // D145 后半;闭包引下面的 const,请求时才调,无 TDZ
 const replyLength = createReplyLength({
   depositPolicyTextOf: () => depositPolicyText(getDepositConfig(currentTenantId()), currentTenantId(), 'zh'),
 })
@@ -3349,8 +3332,16 @@ const { getAvailability } = createAvailability({
   db, apiError, getService, localDateTime, localParts, totalDuration, specialDateFor,
   iso, addMinutes, minutesFromTime, timeFromMinutes, buildSlotStarts, SLOT_MINUTES,
 })
+/* D145 后半(05p §一):采集态「先答,再至多一问」—— 答一律**从库里取**。
+   取不到就说「我帮您问技师」,绝不编:这既是《假数回落红线》,也是那四条判据能证伪的地方。 */
+const turnAnswer = createTurnAnswer({
+  listItems: (tid) => db.prepare('SELECT * FROM services WHERE tenant_id = ? AND is_active = 1 ORDER BY sort_order ASC, rowid ASC').all(tid || currentTenantId()),
+  matchKb: (tid, text) => matchKbForAnswer(tid || currentTenantId(), text),
+  money: (cents, tid) => formatMoneyCents(cents, tid || currentTenantId(), 'auto'),
+})
+const answerForTurn = (kind, ctx = {}) => turnAnswer.answerForTurn(kind, { ...ctx, tenantId: ctx.tenantId || currentTenantId() })
 const bookingIntake = createBookingIntake({
-  getConversationState, getAvailability,
+  getConversationState, getAvailability, answerForTurn,
   firstActiveStoreId, firstActiveService, createBookingDraft,
   depositPolicyText: () => depositPolicyText(getDepositConfig(currentTenantId()), currentTenantId(), 'zh'),
   /* 「今天」一律按**门店时区**算(CLAUDE.md 头一条:不许用裸 new Date() 推日期) */
@@ -12249,15 +12240,15 @@ async function route(req, res) {
       const listCents = Math.max(0, Math.round(Number(body.listPriceCents ?? body.priceCents ?? 0) || 0))
       db.prepare(`INSERT INTO services
         (id, tenant_id, type, category, name_zh, name_en, description_zh, description_en, image_url, price_cents, deposit_cents, base_duration_min, sort_order, is_active, process_json, notice_json,
-         item_kind, category_id, unit, price_rule, price_rule_value, addon_scope_json, addon_group, storefront, is_timecard)
-        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`).run(
+         item_kind, category_id, unit, price_rule, price_rule_value, addon_scope_json, addon_group, storefront, is_timecard, price_mode)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`).run(
         id, tid, shape.type, shape.categoryName, nameZh, String(body.nameEn || nameZh), String(body.descriptionZh || ''), String(body.descriptionEn || ''),
         String(body.imageUrl || ''), listCents,   // 同上:加项也不塞默认图
         Math.max(0, Math.round(Number(body.depositCents ?? 0) || 0)),
         Math.max(0, Math.round(Number(body.baseDurationMin ?? 60) || 0)),
         Math.round(Number(body.sortOrder) || 0), body.isActive === false ? 0 : 1, '[]', '[]',
         shape.itemKind, shape.categoryId, shape.unit, shape.priceRule, shape.priceRuleValue, JSON.stringify(shape.addonScope), shape.addonGroup || null,
-        shape.itemKind === 'main' ? (body.storefront === false ? 0 : 1) : 0, 0)
+        shape.itemKind === 'main' ? (body.storefront === false ? 0 : 1) : 0, 0, shape.priceMode)
       writePricingItemPrices(tid, id, body, listCents)
       // 主项目自动分配给全部在职技师(与 /admin/services 同规则);加项不占技师能力位
       if (shape.itemKind === 'main') {
@@ -12277,7 +12268,7 @@ async function route(req, res) {
         ? cur.price_cents
         : Math.max(0, Math.round(Number(body.listPriceCents ?? body.priceCents) || 0))
       db.prepare(`UPDATE services SET type = ?, category = ?, name_zh = ?, name_en = ?, price_cents = ?, deposit_cents = ?, base_duration_min = ?,
-        sort_order = ?, is_active = ?, storefront = ?, item_kind = ?, category_id = ?, unit = ?, price_rule = ?, price_rule_value = ?, addon_scope_json = ?, addon_group = ? WHERE id = ?`).run(
+        sort_order = ?, is_active = ?, storefront = ?, item_kind = ?, category_id = ?, unit = ?, price_rule = ?, price_rule_value = ?, addon_scope_json = ?, addon_group = ?, price_mode = ? WHERE id = ?`).run(
         shape.type, shape.categoryName,
         body.nameZh === undefined ? cur.name_zh : String(body.nameZh).trim().slice(0, 60) || cur.name_zh,
         body.nameEn === undefined ? cur.name_en : String(body.nameEn).trim().slice(0, 80),
@@ -12287,7 +12278,7 @@ async function route(req, res) {
         body.sortOrder === undefined ? cur.sort_order : Math.round(Number(body.sortOrder) || 0),
         body.isActive === undefined ? cur.is_active : (body.isActive ? 1 : 0),
         body.storefront === undefined ? (cur.storefront === null ? (cur.item_kind === 'main' && cur.is_active ? 1 : 0) : cur.storefront) : (body.storefront ? 1 : 0),
-        shape.itemKind, shape.categoryId, shape.unit, shape.priceRule, shape.priceRuleValue, JSON.stringify(shape.addonScope), shape.addonGroup || null, itemId)
+        shape.itemKind, shape.categoryId, shape.unit, shape.priceRule, shape.priceRuleValue, JSON.stringify(shape.addonScope), shape.addonGroup || null, shape.priceMode, itemId)
       writePricingItemPrices(tid, itemId, body, listCents)
       return json(res, 200, { item: serializePricingItem(db.prepare('SELECT * FROM services WHERE id = ?').get(itemId)) })
     }
@@ -17528,7 +17519,7 @@ for (const sql of [
   'ALTER TABLE membership_packages ADD COLUMN valid_days INTEGER',
   "ALTER TABLE membership_packages ADD COLUMN project_group TEXT",
   'ALTER TABLE membership_packages ADD COLUMN mall_visible INTEGER NOT NULL DEFAULT 1',
-  'ALTER TABLE services ADD COLUMN is_timecard INTEGER NOT NULL DEFAULT 0'
+  'ALTER TABLE services ADD COLUMN is_timecard INTEGER NOT NULL DEFAULT 0', "ALTER TABLE services ADD COLUMN price_mode TEXT NOT NULL DEFAULT 'fixed'"   // D146:理由见 price-mode.mjs
 ]) {
   try {
     db.exec(sql)

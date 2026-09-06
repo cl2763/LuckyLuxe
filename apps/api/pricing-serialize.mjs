@@ -1,3 +1,4 @@
+import { normalizePriceMode } from './price-mode.mjs'   // D146:需报价一列,归一唯一出口
 /* 价目表序列化与入参整形(从 local-server.mjs 搬出,2026-08-25)。
 
    本批动的就是这一域(【分类唯一真相律】改了 pricingItemShape 的分类判定),
@@ -42,6 +43,9 @@ export function createPricingSerialize({ db, apiError, currentTenantId, cents, f
       categoryName,
       unit: ['once', 'per_finger', 'per_session'].includes(body.unit) ? body.unit : (cur.unit || 'once'),
       priceRule: ['fixed', 'pct_of_tier_price'].includes(body.priceRule) ? body.priceRule : (cur.price_rule || 'fixed'),
+      /* D146:需报价是**一列**,不是拿价格 0 猜的(理由见 price-mode.mjs)。
+         归一走唯一出口 `normalizePriceMode`,fail-closed 朝 fixed —— 只有明写 quote 才是 quote。 */
+      priceMode: body.priceMode === undefined ? normalizePriceMode(cur.price_mode) : normalizePriceMode(body.priceMode),
       priceRuleValue: body.priceRuleValue === undefined ? (cur.price_rule_value || 0) : (Number(body.priceRuleValue) || 0),
       addonScope,
       // 加项组名:商家自填(如「延长类」「补甲类」「卸甲类」);留空 = 归「其他加项」
@@ -76,6 +80,7 @@ export function createPricingSerialize({ db, apiError, currentTenantId, cents, f
       category: categoryNameOf(row),   // 分类唯一真相律:派生自 category_id,不读自由文本列
       unit: row.unit || 'once',
       priceRule: row.price_rule || 'fixed',
+      priceMode: normalizePriceMode(row.price_mode),   // D146
       priceRuleValue: row.price_rule_value || 0,
       addonScope,
       addonGroup: row.addon_group || '',

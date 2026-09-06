@@ -72,6 +72,7 @@ const ALLOW = {
   'apps/api/supabase/001_init.sql': { n: 1, why: 'B·旧栈:当前零引用、回归跑不到。**什么时候要动:一旦这套 SQL 被复活(重新建库/迁回 supabase),须同步改成新店名**' },
   'apps/api/test-hero-slides.mjs': { n: 3, why: '判据面:本刀说明 + 改锚后的注释' },
   'apps/api/test-noshow-aftersales.mjs': { n: 11, why: '判据面:㉟ 的检测词(旧名+新名形状)与说明当年病灶的注释;检测词删了这条刀就失明' },
+  'apps/api/test-turn-answer.mjs': { n: 1, why: '判据面:⑥c 那条「口吻条不许带店名」的**检测词清单**(含三家店名的形状)。删了这条刀就失明 —— 与 test-noshow-aftersales 的检测词同一性质' },
   'apps/api/test-store-name.mjs': { n: 8, why: '判据面·自指:本刀的说明与白名单理由里必然写到旧名与新名(它就是管店名的刀)。处数按实算,多一处即红' },
   'apps/api/test-tenant-hygiene.mjs': { n: 2, why: '判据面:改锚后的注释' },
   'apps/api/test-web-settlement.mjs': { n: 1, why: '判据面:跨店串味检测的租户字面量清单(含 ID 与店名,旧名要留)' },
