@@ -17,6 +17,8 @@
    ③ 时段只许来自 `/availability` 的返回集合 —— 编一个「明天三点有位」比不回答坏得多。 */
 
 /* 槽位:图 §二 collecting 那一行点名的五个 */
+import { classifyTurn, TURN_TEXT, slotEcho } from './turn-classify.mjs'   // D145:采集态每句先分类
+
 export const SLOT_KEYS = ['serviceType', 'date', 'time', 'technician', 'addons']
 
 /* 一次只问一个 —— **顺序固定**,不然同一通对话里问题会跳来跳去。
@@ -516,12 +518,27 @@ export function createBookingIntake(deps) {
       const after = String(slots[k] || '').trim()
       return after && after !== before
     })
+    /* 🔴 D145:「给槽 / 没给槽」两档不够用。先分类,再决定这一轮说什么。
+       ⑫ 那条「让开」只覆盖了 `other`(交回原流程去答);
+       **道别与犹豫必须自己出句** —— 让开会让原流程再答一堆,而顾客要的是「别问了」。 */
+    const kind = classifyTurn(text, { gaveSlot })
+    if (kind === 'farewell' || kind === 'hesitate') {
+      /* 这一轮一个问号都不出;采集状态**原样留着**(顾客回头说个日期还能接着走) */
+      return {
+        reply: say(zh, TURN_TEXT[kind].zh, TURN_TEXT[kind].en),
+        stage, statePatch: { ...s },
+      }
+    }
     if (!gaveSlot && (stage === 'collecting' || stage === 'checking')) return null
 
-    /* 还缺槽 → **只问缺的,一次一问** */
+    /* 还缺槽 → **先复述听懂了什么,再只问缺的那一格**(一次一问)。
+       复述是 D145 通四咬出来的:顾客「还是改成美睫吧」「那周日行吗」,
+       机器连问两次「大概几点方便?」——**改的那两样有没有被听进去,顾客完全不知道**。 */
     const miss = nextMissing(slots)
+    const echoZh = slotEcho(s.bookingSlots || {}, slots, 'zh')
+    const echoEn = slotEcho(s.bookingSlots || {}, slots, 'en')
     return {
-      reply: say(zh, miss.zh, miss.en), stage: 'collecting',
+      reply: say(zh, `${echoZh}${miss.zh}`, `${echoEn}${miss.en}`), stage: 'collecting',
       statePatch: { ...s, bookingTouchedAt: stamp(), bookingSlots: slots, bookingStage: 'collecting' },
     }
   }

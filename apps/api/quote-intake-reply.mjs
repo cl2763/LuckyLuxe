@@ -8,6 +8,8 @@
    `quoteCollectionTemplate` 仍然留着:顾客把填好的整段粘回来时要认得
    (`test-quote-tenant` 就是那么喂的),而且它是「缺项一个都取不到」时的兜底。 */
 
+import { classifyTurn, TURN_TEXT } from './turn-classify.mjs'   // D145:采集态每句先分类
+
 export function createQuoteIntakeReply(deps) {
   /* 只列**真用到**的三个 —— 头一版我按印象多写了六个,其中
      `storeDisplayName` / `quotePreviewLine` / `staffDisplayName` **全仓根本不存在**,
@@ -108,6 +110,24 @@ export function createQuoteIntakeReply(deps) {
          是 nail 或 lash 时才有问题可问;项目还没定时它回空。
          头一版我在这儿兜底回了整张表,于是 200 句里还剩 **7 句**在出表(裁定要的是 0)。
          项目没定就先问项目 —— **这本来就是该问的第一个缺项**。 */
+      /* 🔴 D145:**先看这句话是不是在给槽**,再决定要不要追下一个缺项。
+         病根就在这儿 —— 原来不管顾客说什么,一律 `missing[0]` 顶上去,于是
+         「好的谢谢你啦」被回「请问是否有断甲?」、「我再想想」被继续追问。
+         道别就收尾、犹豫就让开一轮,**这一轮一个问号都不出**。
+         `intent` 保持 `*_intake_template` 不变 —— 那是这条路的身份标记,
+         改了 `test-intent-guards` 两条正向断言会跟着晃(05n 已经栽过一次)。 */
+      const turnKind = classifyTurn(state.currentText || '', { gaveSlot: false })
+      if (turnKind === 'farewell' || turnKind === 'hesitate') {
+        return {
+          data: {
+            intent: `${state.serviceType || 'nail'}_intake_template`,
+            answerZh: TURN_TEXT[turnKind].zh,
+            answerEn: TURN_TEXT[turnKind].en,
+            handoffRequired: false
+          },
+          source: 'quote_intake_template'
+        }
+      }
       const svc = String(state.serviceType || '')
       /* 三种情况,**一种都不许甩表**(裁定 (1) 要的是 200 句出表 = 0):
          ① 有缺项 → 问第一个缺项;
