@@ -69,17 +69,28 @@ export function createTurnAnswer(deps) {
   }
 
   /* ② 预算 —— 最便宜的 1–2 项。金额走 `money()`(全仓金额唯一出口,拿不到币种回空串) */
-  function answerCheapest({ tenantId } = {}) {
-    const items = listItems(tenantId).filter((i) => (i.item_kind || 'main') !== 'addon')
+  function answerCheapest({ tenantId, serviceName = '', again = false } = {}) {
+    const all = listItems(tenantId).filter((i) => (i.item_kind || 'main') !== 'addon')
+    /* 🔴 顾客问「美甲最便宜的是哪种」,就别拿护理项目去顶(五通 v3 现读:
+       通二问的是美甲,机器推荐了「手部基础护理」)。**知道类型就按类型筛**;
+       筛完为空再退回全店 —— 宁可范围宽一点,也不许答一个别的品类。 */
+    const want = /睫|lash/i.test(serviceName) ? 'LASH' : (/甲|nail/i.test(serviceName) ? 'NAIL' : '')
+    const scoped = want ? all.filter((i) => String(i.type || '').toUpperCase() === want) : []
+    const items = scoped.length ? scoped : all
     const picks = cheapestItems(items, 2)
     /* 🔴 金额拿不到就**整句不出** —— 宁可说「问技师」,也不出一个没有币种的裸数字(D140 同族) */
     const lines = picks
       .map((i) => ({ name: String(i.name_zh || ''), price: money(Number(i.price_cents || 0), tenantId) }))
       .filter((x) => x.name && x.price)
     if (!lines.length) return { text: ASK_ARTIST.zh, en: ASK_ARTIST.en, source: 'ask_artist' }
-    const zh = lines.length === 1
-      ? `我们这儿最实惠的是${lines[0].name} ${lines[0].price}。`
-      : `我们这儿最实惠的是${lines[0].name} ${lines[0].price},其次是${lines[1].name} ${lines[1].price}。`
+    /* 🔴 五通 v3 现读(通二):顾客连问两句预算(「能推荐吗」「那个最便宜的是哪种」),
+       机器**一字不差地重复了同一句**。真人不会这么说话 —— 第二次就直接点名那一个。
+       `again` 由调用方按会话状态给(说过没有),同《幂等判据律》:判「说过没有」,不判别的。 */
+    const zh = again
+      ? `最便宜的就是${lines[0].name},${lines[0].price}。`
+      : (lines.length === 1
+        ? `我们这儿最实惠的是${lines[0].name} ${lines[0].price}。`
+        : `我们这儿最实惠的是${lines[0].name} ${lines[0].price},其次是${lines[1].name} ${lines[1].price}。`)
     const en = lines.map((x) => `${x.name} ${x.price}`).join(', ')
     return { text: zh, en: `Our most affordable options: ${en}.`, source: 'price_list', picks }
   }
@@ -94,7 +105,7 @@ export function createTurnAnswer(deps) {
   /* 派发:分类给了档,这里给句子。回 null = 这一档不归我答(调用方照原流程走)。 */
   function answerForTurn(kind, ctx = {}) {
     const t = String(ctx.text || '')
-    if (kind === 'budget') return answerCheapest(ctx)
+    if (kind === 'budget') return answerCheapest(ctx)   // ctx.again 由调用方给(这会话是不是已经报过一次)
     if (kind !== 'question') return null
     /* 🔴 体验类**排在时长前面**:「能维持多久」两条都命中,但顾客问的是「做完能撑多久」,
        不是「做这个要坐多久」。先判时长会把它答成工时,答非所问换了个花样而已。 */

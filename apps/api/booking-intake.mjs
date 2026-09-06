@@ -195,6 +195,15 @@ export function normalizeSlots(slots = {}, todayISO = '') {
     out.time = /^([01]?\d|2[0-3]):[0-5]\d$/.test(t) ? t.padStart(5, '0') : parseTime(t)
     if (!out.time) delete out.time
   }
+  /* 🔴 项目名归一成**顾客看得懂的词**。案底(五通 v3 现读):
+     规则层抽出来的是「美甲」,而**模型抽出来的是 `nail` / `lash`**,`mergeSlots` 让模型赢,
+     于是复述那句直接对顾客说「好的,改成 **nail** 了」——把程序用的键甩到了顾客脸上。
+     同 D129 那条:**显示 label,永远不显示 key**。归一放在这道门里,下游读到的就只有中文。 */
+  const svc = String(out.serviceType || '').trim()
+  if (svc) {
+    if (/^(lash|lashes|eyelash)$/i.test(svc) || /睫/.test(svc)) out.serviceType = '美睫'
+    else if (/^(nail|nails|manicure)$/i.test(svc) || /甲/.test(svc)) out.serviceType = '美甲'
+  }
   return out
 }
 
@@ -548,6 +557,20 @@ export function createBookingIntake(deps) {
             `${ans.text}${missAfter ? ` ${missAfter.zh}` : ''}`,
             `${ans.en || ans.text}${missAfter ? ` ${missAfter.en}` : ''}`),
           stage: 'collecting',
+          statePatch: { ...s, bookingTouchedAt: stamp(), bookingSlots: slots, bookingStage: 'collecting' },
+        }
+      }
+    }
+    /* 🔴 五通 v3 现读(通三):机器刚说完「9月7日门店休息哦,换一天好吗?」,
+       顾客回「好的,就这个时间」——**他是在应我们那句话**,不是在问别的。
+       原来这里因为「没给新槽」就让开,交回原流程,于是报价采集接了话:
+       「请问这次是否需要下睫毛服务?」——答非所问又换了个花样。
+       采集态里的应答(「好的」「行」)= 没给新信息,那就**把缺的那一格再问一遍**,别撒手。 */
+    if (!gaveSlot && stage === 'collecting' && looksConfirm(text)) {
+      const missNow = nextMissing(slots)
+      if (missNow) {
+        return {
+          reply: say(zh, missNow.zh, missNow.en), stage: 'collecting',
           statePatch: { ...s, bookingTouchedAt: stamp(), bookingSlots: slots, bookingStage: 'collecting' },
         }
       }

@@ -3,17 +3,17 @@
   local-server.mjs                   ✅ 17742 ≤ 17751
   admin.js                           ✅ 8550 ≤ 8550
   语法(全仓 .mjs/.js)            ✅ 全过
-  自由标识符(本批新模块)   ✅ 4 个
+  自由标识符                    — 本批没有新模块
   交付完整性(import 都入库)  ✅
 
 ✅ 预检全绿,可以起全量
 
-== 测试数据目录: /tmp/ll-ci-data.I4MjJ4 ==
+== 测试数据目录: /tmp/ll-ci-data.pm60c2 ==
 == 沙箱 4310 在跑(DATA_DIR=/Users/changliu/Documents/Codex/2026-04-29/new-chat/apps/api/sandbox-data · AI env=/Users/changliu/Documents/Codex/2026-04-29/new-chat/apps/api/.env.ai-sandbox · 门档=model),跑完会还回去 ==
 == 启动主服务器 (4128) ==
-   [库域] 端口 4128 → /private/tmp/ll-ci-data.I4MjJ4/lucky-luxe.sqlite  ✔ 在本轮 CI 临时库内(/private/tmp/ll-ci-data.I4MjJ4)
+   [库域] 端口 4128 → /private/tmp/ll-ci-data.pm60c2/lucky-luxe.sqlite  ✔ 在本轮 CI 临时库内(/private/tmp/ll-ci-data.pm60c2)
 == test-customer-service-matrix ==
-[matrix] run=mtpt2iyh
+[matrix] run=mtptfkk2
 ok 1 - stale aftercare greeting creates conversation
 ok 2 - stale aftercare greeting is not after-sales handoff
 ok 3 - stale aftercare greeting does not mention after-sales in reply
@@ -82,9 +82,9 @@ ok 65 - AI does not reply during human takeover
 ok 66 - manual release allows AI reply again
 ok 67 - matrix contains at least 50 regression checks
 [matrix] all 67 regression checks passed
-   ⏱ test-customer-service-matrix 1s
+   ⏱ test-customer-service-matrix 0s
 == test-working-memory ==
-[working-memory] customer=sim-test-mtpt2j8o
+[working-memory] customer=sim-test-mtptfkue
 ok 1 - conversation should exist after first message
 ok 2 - first nail inquiry should start collecting one missing detail, got: customer:哈喽，想做美甲
 assistant:您好欢迎来到 LUVIA 半径，我是您的预约助手。您可以咨询美甲/美睫服务、价格规则、预约时间、定金和护理说明；如果是复杂美甲款式，也可以先发参考图，我会先帮您整理需求。
@@ -146,7 +146,7 @@ ok 54 - first lash visit should be captured, got yes
 ok 55 - first-time lash staff quote should append first-time lash notice
 ok 56 - first-time lash notice should not mention contact lenses or lens case
 [working-memory] all regression checks passed(56 项断言)
-   ⏱ test-working-memory 0s
+   ⏱ test-working-memory 1s
 == test-business-hours ==
 ok 1 - GET /admin/business-hours returns 200
 ok 2 - at least one store with 7 weekday rows
@@ -192,9 +192,9 @@ ok 8 - mark-quoted 记下报价金额
 ok 9 - mark-quoted 不给顾客发任何消息(会话条数没变)
 ok 10 - mark-quoted 不改报价单状态(仍待技师处理,发送归 P4)
 [quote-polish] all 10 checks passed
-   ⏱ test-quote-polish 1s
+   ⏱ test-quote-polish 0s
 == test-silent-handoff ==
-[silent-handoff] unknownCustomer=silent-unknown-mtpt2jvz
+[silent-handoff] unknownCustomer=silent-unknown-mtptflhz
 ok 1 - 范围外必须给一句礼貌回复(3a:有回复,不静默)
 ok 2 - 范围外应落 tier=3a,实际 3a
 ok 3 - 3a **不转人工** —— 顾客问宠物店,把它转给同事没有任何意义,只是占用人手
@@ -205,7 +205,7 @@ ok 7 - 3a 应落 lastIntent=out_of_scope,实际 out_of_scope
 ok 8 - 3a 应留下那句礼貌拒绝,实际一句助手消息都没有
 ok 9 - 范围外不许出现实质回答,越界句:
 ok 10 - silent handoff should still record the customer message
-[silent-handoff] knownCustomer=silent-known-mtpt2jvz
+[silent-handoff] knownCustomer=silent-known-mtptflhz
 ok 11 - normal nail inquiry should not be silently handed off
 ok 12 - normal nail inquiry should receive AI reply
 ok 13 - normal nail inquiry should stay in AI flow, got ai_replied
@@ -214,7 +214,7 @@ ok 14 - normal nail inquiry should still return the intake/booking context
 [silent-handoff] all regression checks passed(14 项断言)
    ⏱ test-silent-handoff 0s
 == test-human-handoff ==
-[human-handoff] customer=handoff-test-mtpt2jzd
+[human-handoff] customer=handoff-test-mtptflld
 ok 1 - conversation should exist
 ok 2 - first message should receive AI reply
 ok 3 - manual keep-human reply should set human_active, got human_active
@@ -228,9 +228,9 @@ ok 10 - returning customer should receive fixed welcome message
 ok 11 - returning customer should receive welcome plus contextual reply
 ok 12 - latest assistant reply should be contextual, not only welcome
 [human-handoff] all regression checks passed(12 项断言)
-   ⏱ test-human-handoff 0s
+   ⏱ test-human-handoff 1s
 == test-after-sales-handoff ==
-[after-sales] nailCustomer=after-sales-nail-mtpt2k4s
+[after-sales] nailCustomer=after-sales-nail-mtptflqo
 ok 1 - nail after-sales conversation should exist
 ok 2 - nail after-sales should mark needs_human, got needs_human
 ok 3 - nail after-sales lastIntent should be after_sales_handoff, got after_sales_handoff
@@ -240,7 +240,7 @@ ok 6 - nail after-sales should create a staff task
 ok 7 - nail after-sales task should be nail, got nail
 ok 8 - nail after-sales task should be marked workflowType=after_sales
 ok 9 - nail after-sales task should include current/historical images
-[after-sales] lashCustomer=after-sales-lash-mtpt2k4s
+[after-sales] lashCustomer=after-sales-lash-mtptflqo
 ok 10 - lash after-sales conversation should exist
 ok 11 - lash after-sales should mark needs_human, got needs_human
 ok 12 - lash after-sales lastIntent should be after_sales_handoff, got after_sales_handoff
@@ -249,14 +249,14 @@ ok 14 - lash after-sales must not restart lash intake template
 ok 15 - lash after-sales should create a staff task
 ok 16 - lash after-sales task should be lash, got lash
 ok 17 - lash after-sales category should be health_or_discomfort, got health_or_discomfort
-[after-sales] intakeCustomer=after-sales-intake-mtpt2k4s
+[after-sales] intakeCustomer=after-sales-intake-mtptflqo
 ok 18 - normal intake mentioning broken-nail repair label must not be misclassified as after-sales
-[after-sales] stagePollutionCustomer=after-sales-stage-pollution-mtpt2k4s
+[after-sales] stagePollutionCustomer=after-sales-stage-pollution-mtptflqo
 ok 19 - stage-pollution greeting conversation should exist
 ok 20 - greeting with aftercare test stage must not become after_sales_handoff, got out_of_scope
 ok 21 - greeting with aftercare test stage must not silently become after-sales handoff
 ok 22 - greeting with stale aftercare stage must not create after-sales task
-[after-sales] unifiedGreetingCustomer=after-sales-unified-greeting-mtpt2k4s
+[after-sales] unifiedGreetingCustomer=after-sales-unified-greeting-mtptflqo
 ok 23 - unified greeting conversation should exist
 ok 24 - unified greeting must not become after_sales_handoff, got out_of_scope
 [after-sales] all regression checks passed(24 项断言)
@@ -322,7 +322,7 @@ ok 21 - import artifacts cleaned up
 ok 22 - entry deleted
 ok 23 - bad token rejected
 [tenant-kb] all 23 checks passed
-   ⏱ test-tenant-kb 1s
+   ⏱ test-tenant-kb 0s
 == test-finance-core ==
 ok 1 - manual income created
 ok 2 - manual expense stored as negative
@@ -378,7 +378,7 @@ ok 13 - demo seed idempotent
 ok 14 - insights returns readable text
 ok 15 - insights mentions stored value liability
 [stored-value] all 15 checks passed
-   ⏱ test-stored-value 0s
+   ⏱ test-stored-value 1s
 == test-schedule-week ==
 ok 1 - schedule-week returns 200 with 7 days
 ok 2 - week starts on Monday
@@ -465,7 +465,7 @@ ok 35 - 裁定1 quote-settings 模块读写唯一口(引号界定)
 ok 36 - 裁定1 admin.js 挂载设置行
 ok 37 - 裁定1 工作台横幅角同端捷径=同一表单弹层(属性界定)
 [staff-portal] all 37 checks passed
-   ⏱ test-staff-portal 1s
+   ⏱ test-staff-portal 0s
 == test-admin-accounts ==
 ok 1 - owner credentials file written on bootstrap(判内容:非空 + 含账号与初始密码)
 ok 2 - initial owner password readable
@@ -531,7 +531,7 @@ ok 42 - AI 事实里有加项目录
 ok 43 - AI 事实里有计价规则摘要
 
 价格模型回归通过:43 项断言全绿
-   ⏱ test-pricing-model 0s
+   ⏱ test-pricing-model 1s
 == test-membership-config ==
 ok 1 - 临时店建好
 ok 2 - 商家端改会员资格被拒(已收归平台)
@@ -841,7 +841,7 @@ ok 63 - 归属⑧ 跨月补签:2026-08-31 服务、2026-09-06 签 → 记回**�
 ok 64 - 归属⑨ 跨月补签的业绩落在**上月**排行里(2026-08),不串到本月
 
 日结回归通过:64 项断言全绿
-   ⏱ test-daily-close 0s
+   ⏱ test-daily-close 1s
 == test-salary-v2 ==
 ok 1 - 临时店建好
 ok 2 - ① 阶段:业绩 ¥12,000 落第二档 → 全额 ×12% = ¥1,440
@@ -917,7 +917,7 @@ ok 16 - ⑤ 上一周期为 0 时环比百分比给 null,不硬写数字
 ok 17 - ⑥ B 店趋势里没有 A 店的钱
 
 财务趋势回归通过:17 项断言全绿
-   ⏱ test-finance-trend 1s
+   ⏱ test-finance-trend 0s
 == test-finance-lock ==
 ok 1 - 两家临时店建好
 ok 2 - ① 新店默认不开财务密码
@@ -962,9 +962,9 @@ ok 3 - ① 按业绩排:甲(¥300) > 乙(¥200) > 丙(¥100)
 ok 4 - ① 名次与条宽比例跟着排序走(第一名 100%)
 ok 5 - ① 按单数排:3 / 2 / 1
 ok 6 - ① 按冲卡排:促成充值的丙师排第一
-ok 7 - ② 甲师mtpt2nva 排行业绩与工资试算逐分一致(30000)
-ok 8 - ② 乙师mtpt2nva 排行业绩与工资试算逐分一致(20000)
-ok 9 - ② 丙师mtpt2nva 排行业绩与工资试算逐分一致(10000)
+ok 7 - ② 甲师mtptfpjf 排行业绩与工资试算逐分一致(30000)
+ok 8 - ② 乙师mtptfpjf 排行业绩与工资试算逐分一致(20000)
+ok 9 - ② 丙师mtptfpjf 排行业绩与工资试算逐分一致(10000)
 ok 10 - ⑥ 本日维度金额与本月一致(数据都在今天)
 ok 11 - ⑥ 本日维度不给目标(目标本身是月目标)
 ok 12 - ③ 没设目标时 target 为 null(前端显示「未设目标」,不画 0% 的条)
@@ -978,7 +978,7 @@ ok 19 - ⑦ 员工看不到全店排行(403)
 ok 20 - ⑦ B 店排行里没有 A 店的人
 
 技师业绩可视化回归通过:20 项断言全绿
-   ⏱ test-perf-viz 0s
+   ⏱ test-perf-viz 1s
 == test-coupon-settle ==
 ok 1 - 临时店建好
 ok 2 - 价目按算例搭好
@@ -1162,7 +1162,7 @@ ok 89 - 异常输入:悬空 technicianId 被拒
 ok 90 - 异常输入:悬空 serviceId 被拒
 
 对图修复批回归通过:90 项断言全绿
-   ⏱ test-audit-fix 1s
+   ⏱ test-audit-fix 0s
 == test-scan-sign ==
 ok 1 - S1 现场排单建轻档案(姓名+手机号)
 ok 2 - S1 手机号命中已有档案(带出,不新建)
@@ -1219,7 +1219,7 @@ ok 52 - 已签单下发 snapshotHasInk(前端据此决定贴笔迹还是标「�
 ok 53 - 红线:跑完整条扫码签链路,定金守恒仍 ok
 
 扫码签闭环回归通过:53 项断言全绿
-   ⏱ test-scan-sign 0s
+   ⏱ test-scan-sign 1s
 == test-double-sheet ==
 ok 1 - ① 第一张单开得出来
 ok 2 - ① 同一预约再开第二张:409 被拒(未签态提示先撤回)
@@ -2437,7 +2437,7 @@ ok 14 - A7b 两次密码不一致 🔴 绕过前端直接打接口 → 后端拒
 ok 15 - A8 自定义发券没写原因 🔴 绕过前端直接打接口 → 后端拒(400)
 
 后端最终闸(A 级)回归通过:15 项断言全绿
-   ⏱ test-backend-gate 0s
+   ⏱ test-backend-gate 1s
 == test-hero-slides ==
 ok 1 - ① 没配轮播的店:公开 /stores 回空数组(不是"给三张默认图")
 ok 2 - ① 负向红线:没配轮播的店,顾客端整份响应里不含任何**别家的图源**
@@ -2867,7 +2867,7 @@ ok 49 - N5 员工:记录页可读(200)
 ok 50 - N5 员工:规则/文案写口 403
 ok 51 - 🔴 部分 PUT 保参数:只动开关,提前量 45 不被打回默认 120
 ✅ test-notify-scheduler 通过 51 项
-   ⏱ test-notify-scheduler 0s
+   ⏱ test-notify-scheduler 1s
 == test-quote-state ==
 ok 1 - 夹具:建店 201
 ok 2 - 夹具:mock 进线 201
@@ -2982,13 +2982,13 @@ ok 6 - ⑥ 棘轮表两类语义齐:每项都标明「点名钉死」或「现�
 ✅ test-file-ratchet 通过 6 项(业务文件 199 个,棘轮 6 项)
    ⏱ test-file-ratchet 0s
 == test-delivery-evidence ==
-ok 1 - ① 81 份回归日志:文件名声称的套件数 = 日志收尾行实测(转述与原件对账)
-ok 2 - ② 81 份日志全部在库(git ls-files 现测;不许凭 git add 没报错就算数)
-ok 3 - ③ 反向守:日志份数 81 >= 在案 43(只增不减;目录被清空时判据不许空转)
+ok 1 - ① 82 份回归日志:文件名声称的套件数 = 日志收尾行实测(转述与原件对账)
+ok 2 - ② 82 份日志全部在库(git ls-files 现测;不许凭 git add 没报错就算数)
+ok 3 - ③ 反向守:日志份数 82 >= 在案 43(只增不减;目录被清空时判据不许空转)
 ok 4 - ④ 回执自证块 32 个逐项对账:套件数/断言数/日志路径与原件一致(对不上即红)
 ok 5 - ⑤ 自证块份数 32 >= 7(每批写一个;降到 0 = 这条判据空转,不许)
 
-[交付证据] 日志 81 份(在库 81 份)· 回执自证块 32 个:03q/03r/03t/03t2/03u/03v/03y/04a/04b/04c/04d1/04d2/04e/04f1/04f2/04f3/04g/05a/05c/05d/05e/05f/05g/05h/05i/02v/02w/03p/02q/02r/02s/02t
+[交付证据] 日志 82 份(在库 82 份)· 回执自证块 32 个:03q/03r/03t/03t2/03u/03v/03y/04a/04b/04c/04d1/04d2/04e/04f1/04f2/04f3/04g/05a/05c/05d/05e/05f/05g/05h/05i/02v/02w/03p/02q/02r/02s/02t
 
 ✅ test-delivery-evidence 通过 5 项
    ⏱ test-delivery-evidence 1s
@@ -3021,12 +3021,12 @@ ok 7 - ④ 文案唯一出处:后端报错语出自 correction-reason.mjs 的具
 ✅ test-correction-reason 通过 7 项
    ⏱ test-correction-reason 2s
 == test-credential-scan ==
-ok 1 - ① 凭据形态零入库:扫描面 1525 个 tracked 文件(git ls-files 全量,含文档与日志),命中 43 处,每处必须落进白名单(刀认形态,人认活性;"号已不存在"不是豁免理由)
+ok 1 - ① 凭据形态零入库:扫描面 1528 个 tracked 文件(git ls-files 全量,含文档与日志),命中 43 处,每处必须落进白名单(刀认形态,人认活性;"号已不存在"不是豁免理由)
 ok 2 - ①b 白名单棘轮 ≤ 13(只减不增;每条理由随码,负向测试类须指向断言行号)
 ok 3 - ② 🔴 零命中先证刀能咬:四个明示为假的已知阳性(会话令牌/密码赋值/账号密码对/**env 钥匙行**)必须全被咬中
-ok 4 - ③ 反向守:扫描面 1525 >= 1100 个 tracked 文件(目录被排除/仓库被裁时立刻红)
+ok 4 - ③ 反向守:扫描面 1528 >= 1100 个 tracked 文件(目录被排除/仓库被裁时立刻红)
 
-[凭据形态] tracked 1525 个 · 命中 43 处 · 白名单 13 条
+[凭据形态] tracked 1528 个 · 命中 43 处 · 白名单 13 条
    分形态:Bearer字面量 24 · 密码赋值 19
 
 ✅ test-credential-scan 通过 4 项
@@ -3074,11 +3074,11 @@ ok 2 - ② 🔴 行为层造病验红:快照里改一张表的行数(库本身�
    [刀] 注入点=快照文件的 admin_accounts 表**列数**:12 → 13(行数一个没动)
 ok 3 - ②c 🔴 只改列数(行数不动)对账器也必须红并点名 —— D121 那批就是「行零差异、结构变了」,只比行数的对照表看不出来
 ok 4 - ②b 反向守:还原后同一份快照必须报「逐表零差异」(否则它是把见谁都红的废刀)
-ok 5 - ③ 回执自证棘轮:259 篇 handoff 文档里,写了「〈库名〉未动」却没有对照表的存量 34 篇 ≤ 34(立律 03q 前的按当时规矩不追溯;**只许降不许升** —— 新写一篇无证回执立刻红)
+ok 5 - ③ 回执自证棘轮:261 篇 handoff 文档里,写了「〈库名〉未动」却没有对照表的存量 34 篇 ≤ 34(立律 03q 前的按当时规矩不追溯;**只许降不许升** —— 新写一篇无证回执立刻红)
 ok 6 - ③b 🔴 零命中先证刀能咬:「写了未动没对照表」必须咬中,「写了未动且有对照表」必须放行
-ok 7 - ④ 反向守:扫描面 259 >= 176 篇 handoff 文档(目录被排除或仓库被裁立刻红;下限取实测值,不留空隙)
+ok 7 - ④ 反向守:扫描面 261 >= 176 篇 handoff 文档(目录被排除或仓库被裁立刻红;下限取实测值,不留空隙)
 
-[未动须有证] handoff 文档 259 篇 · 说了「未动」无对照表的存量 34 篇(棘轮 34)
+[未动须有证] handoff 文档 261 篇 · 说了「未动」无对照表的存量 34 篇(棘轮 34)
 
 ✅ test-untouched-proof 通过 7 项
    ⏱ test-untouched-proof 1s
@@ -3106,7 +3106,7 @@ ok 2 - ①b 读口闸在:serializeBooking 按 `users.tenant_id = bookings.tenant
 ok 3 - ③ 行为层·跨店建单被拒:A 店(lucky-luxe)拿 B 店(jics-nail)顾客「小红」建单 → 必须 4xx(实测 400 USER_TENANT_MISMATCH)
    [反向守] 用 16:00 这个时段(前面的撞排期,与所有权无关)
 ok 4 - ③b 反向守:同样的请求换成**本店**顾客必须建得成 —— 一把见谁都拒的闸,跟没有闸一样守不住任何东西(实测 201 OK)
-   [收尾] 已删除本轮造的对照单 booking_mtpt32h2_6f2u0w
+   [收尾] 已删除本轮造的对照单 booking_mtptg4eq_9ez1x9
    [刀] 注入点=沙箱 bookings.booking_mrkb0xlw_09ygp 的 user_id → user_mskgamyd_bahd(属 jics-nail);回读=user_mskgamyd_bahd
    [收尾] 已还原 user_id;回读=demo-cust-01
 ok 5 - ③c 🔴 读口零下发(自己造景验):把一张 A 店单的 user_id 临时指到 B 店顾客身上,A 店订单接口对这一单**不许带 user 对象** —— 造完当场还原
@@ -3124,7 +3124,7 @@ ok 5 - ②b 反向守:写了 tenant_id 的**不许**被咬中(判据要能分出
 ok 6 - ③ 反向守:扫描面 154 >= 100 个**产品**源文件 · 命中 9 >= 8 处 (目录被排除或语句被改写成看不见的形状时立刻红;04a 起排除「刀本身」,底数 200 → 110)
 ok 7 - ①d 🔴 D130:全仓 6 处 `INSERT INTO user_identities` **每一处都必须显式写 tenant_id** —— 与 `users` 同一根子(列定义带 DEFAULT),忘写就把别店顾客的身份标成旗舰店的
 ok 8 - ①e 🔴 零命中先证刀能咬(user_identities 版):金丝雀正反各一
-ok 9 - 🟡 D131 前置:拿得到 schema(/tmp/ll-ci-data.I4MjJ4/lucky-luxe.sqlite)才能生成表清单 —— 取不到就红,不许静默跳过整段报数(断言增量律)。锚从「带 DEFAULT 的表」换成「带 tenant_id 列的表」:默认值已全部去掉,再按旧锚找会得到 0 张、判据绿在空气上
+ok 9 - 🟡 D131 前置:拿得到 schema(/tmp/ll-ci-data.pm60c2/lucky-luxe.sqlite)才能生成表清单 —— 取不到就红,不许静默跳过整段报数(断言增量律)。锚从「带 DEFAULT 的表」换成「带 tenant_id 列的表」:默认值已全部去掉,再按旧锚找会得到 0 张、判据绿在空气上
 
    ══ 🔴 D131 同族现测(硬规则:漏写必须 0)══ 带 DEFAULT 的表 73 张 · INSERT 共 177 处 · **漏写 tenant_id 0 处**
       (其余 73 张零漏写)
@@ -3159,7 +3159,7 @@ ok 8 - ⑥b 反向守:同一份数据喂**历史坏版**(不带 tenant_id)——
 ✅ test-identity-tenant 通过 8 项
    ⏱ test-identity-tenant 0s
 == test-version-fingerprint ==
-   [指纹] build=f45ec736 · commit=local · builtAt=2026-09-06T12:46:18.332Z
+   [指纹] build=f45ec736 · commit=local · builtAt=2026-09-06T12:56:26.923Z
 ok 1 - ① 后端出三项:`/health.version` 必须同时有 build / commit / builtAt —— 少一项就没法回答「哪一版、哪个提交、什么时候起的」
 ok 2 - ①b `version.build` 与 `adminBuild` 同源(都由服务自己算实发的 admin.html 指纹,不读手写常量)
 ok 3 - ② 网页端渲染链闭合:`admin.js` 里有把版本号写进 DOM 的那一行(`versionTag.textContent`),且优先取服务下发的 `window.LL_BUILD`,手写常量只当兜底
@@ -3463,21 +3463,29 @@ ok 5 - ② 复述·改项目:「还是改成美睫吧」→ 回句里出现「�
 ok 6 - ②b 复述·加日期:新给的日期要复述出来
 ok 7 - ②c 没变化就不复述(不许每轮都念一遍)
 ok 8 - ②d 复述句自己不带问号(它是陈述,问句在后面那一格)
-ok 9 - ③ farewell 出句中英都在,且**不含问号**(这一档的要害就是别再问)
-ok 10 - ③ hesitate 出句中英都在,且**不含问号**(这一档的要害就是别再问)
+ok 9 - ②e 🔴 项目名归一:「nail」→「美甲」(程序用的键不许甩到顾客脸上)
+ok 10 - ②e 🔴 项目名归一:「NAIL」→「美甲」(程序用的键不许甩到顾客脸上)
+ok 11 - ②e 🔴 项目名归一:「lash」→「美睫」(程序用的键不许甩到顾客脸上)
+ok 12 - ②e 🔴 项目名归一:「lashes」→「美睫」(程序用的键不许甩到顾客脸上)
+ok 13 - ②e 🔴 项目名归一:「manicure」→「美甲」(程序用的键不许甩到顾客脸上)
+ok 14 - ②e 🔴 项目名归一:「美甲」→「美甲」(程序用的键不许甩到顾客脸上)
+ok 15 - ②e 🔴 项目名归一:「美睫」→「美睫」(程序用的键不许甩到顾客脸上)
+ok 16 - ②f 反向守:复述句里**不许**出现 nail / lash 这两个键(出现即说明归一被绕过)
+ok 17 - ③ farewell 出句中英都在,且**不含问号**(这一档的要害就是别再问)
+ok 18 - ③ hesitate 出句中英都在,且**不含问号**(这一档的要害就是别再问)
    [刀] 注入=classifyTurn 退化成「只认 slot / 其余 other」(D145 修复前的行为)
-ok 11 - ④ 🔴 刀落下去,9 句里至少 4 句掉档(实际掉 7 句)—— 掉不动说明这把刀根本没在守
-ok 12 - ④b 刀落下时,道别与犹豫都退回 other(正是「见谁都追下一格」的那个状态)
+ok 19 - ④ 🔴 刀落下去,9 句里至少 4 句掉档(实际掉 7 句)—— 掉不动说明这把刀根本没在守
+ok 20 - ④b 刀落下时,道别与犹豫都退回 other(正是「见谁都追下一格」的那个状态)
    [刀] 已还原
-ok 13 - ④c 还原后立刻回绿(刀不许留在库里)
-ok 14 - ⑤0 造景:两轮之后机器确实在采集态(在问东西)—— 不在采集态,下面验的就不是这件事
-ok 15 - ⑤a 🔴 顾客道别 → 这一轮**不许再问**(五通里它回的是「请问是否有断甲?」)
-ok 16 - ⑤b 反向守:道别那一轮**有话说**(整句空也叫「没问」,那是把功能拦没了)
-ok 17 - ⑤c 🔴 顾客犹豫 → 让开一轮,不追下一格
+ok 21 - ④c 还原后立刻回绿(刀不许留在库里)
+ok 22 - ⑤0 造景:两轮之后机器确实在采集态(在问东西)—— 不在采集态,下面验的就不是这件事
+ok 23 - ⑤a 🔴 顾客道别 → 这一轮**不许再问**(五通里它回的是「请问是否有断甲?」)
+ok 24 - ⑤b 反向守:道别那一轮**有话说**(整句空也叫「没问」,那是把功能拦没了)
+ok 25 - ⑤c 🔴 顾客犹豫 → 让开一轮,不追下一格
 
 [D145 采集态分类] 锚 9 句 · 复述 · 两档出句无问号 · 造病退化验红 · 行为层道别/犹豫
 
-✅ test-turn-classify 通过 17 项
+✅ test-turn-classify 通过 25 项
    ⏱ test-turn-classify 0s
 == test-turn-answer ==
 ok 1 - ①a 时长:对上项目 → 报**那个项目的** base_duration_min(90),不是别的项目的
@@ -3504,7 +3512,7 @@ ok 21 - ④d 🔴 时长:回复里的数字来自库(60 或 180 或它们组成�
 ok 22 - ④e 语气·预算句:不以「您好!」「尊敬的」开场,且「请问」≤1 次
 ok 23 - ④e 语气·时长句:不以「您好!」「尊敬的」开场,且「请问」≤1 次
 ok 24 - ⑤0 造病前置:找得到那一项(找不到=下面的刀没落下去,不算验过)
-   [刀] 注入=把「便宜款mtpt353f」标成 price_mode=quote(它就不该再出现在「最便宜」里)
+   [刀] 注入=把「便宜款mtptg71u」标成 price_mode=quote(它就不该再出现在「最便宜」里)
 ok 25 - ⑤a 刀落得下去:接口收得下 priceMode=quote(收不下说明 D146 那一列没接通)
 ok 26 - ⑤b 🔴 刀落下后:「最便宜」里**不许再有它**,改报下一个有价的
    [刀] 已还原
@@ -3565,7 +3573,7 @@ ok 38 - ⑧ 未登录取待审 → 401/403
 ✅ test-ai-review 通过 38 项
    ⏱ test-ai-review 0s
 == test-quote-tenant ==
-ok 1 - 前置:建了一家**非默认租户** `qt-mtpt35c1`(默认租户会把「靠默认值凑对」的病全遮住)
+ok 1 - 前置:建了一家**非默认租户** `qt-mtptg7ak`(默认租户会把「靠默认值凑对」的病全遮住)
 ok 2 - 前置:两轮进线走完报价采集(第二轮才建单)
 ok 3 - ① 🔴 报价单落在**本店**,不是旗舰店 —— 修前这条 INSERT 不带 tenant_id,落列默认 `lucky-luxe`
 ok 4 - ② 🔴 同一动作产生的**提醒任务**也落本店 —— 调度器逐租户扫,挂错店就永远轮不到它
@@ -3574,7 +3582,7 @@ ok 6 - ④ 🔴 旗舰店报价台**列不出**别店的报价单(跨租户泄�
 ok 7 - ④b 反向守:**本店**报价台列得出它 —— 一把「谁都列不出」的尺子证明不了隔离(全拒也能让 ④ 绿)
 ok 8 - ⑤ 🔴 租户来源不一致 → **抛错**(TENANT_MISMATCH),不许"取到哪个算哪个" —— 会话说 A 店、请求上下文说 B 店时,报价单该记谁?一个字段只回答一个问题
 
-[报价租户] 全程在非默认租户 qt-mtpt35c1 里走:两轮进线 → 技师报价 → 第三轮进线;四处落点 + 两条反向守
+[报价租户] 全程在非默认租户 qt-mtptg7ak 里走:两轮进线 → 技师报价 → 第三轮进线;四处落点 + 两条反向守
 
 ✅ test-quote-tenant 通过 8 项
    ⏱ test-quote-tenant 1s
@@ -3595,7 +3603,7 @@ ok 13 - ⑤c 反向守:带对了就 200 —— 一把「谁来都 400」的闸�
 ok 14 - ④ 🔴 白名单式:全仓 100 个后端源文件里,`FROM wechat_conversations … WHERE id = ?` **每一处都必须同句带 tenant_id** —— 例外 1 条,逐条写了理由
 ok 15 - ④b 🔴 零命中先证刀能咬:不带租户的那种写法必须被咬中,带了的不许被咬中
 
-[会话归店] 两店同号 shared-mtpt35fg:两行会话 / 各自 transcript / 新 id 带租户 / 旁店逐字节不变 / 读闸 / kfid 路由 / 静态白名单
+[会话归店] 两店同号 shared-mtptg7dv:两行会话 / 各自 transcript / 新 id 带租户 / 旁店逐字节不变 / 读闸 / kfid 路由 / 静态白名单
 
 ✅ test-conversation-tenant 通过 15 项
    ⏱ test-conversation-tenant 0s
@@ -3690,7 +3698,7 @@ ok 1 - 抽检①② 造态自证:两态各造 2 张卡(被测+陪衬;1 张时分
 ok 2 - 🔴 D120 两态宿主高相等**且锚定 170rpx(97.5px)**(抽检位:首页人气美甲卡);命中数各 2(被测+陪衬),不存在写"不存在"
 ok 3 - D120 互斥自证:有图态 .ph-box 不存在、占位态 .ph-img 不存在(证明量的是同一个位而非别处节点)
 [mp-placeholder-size] all 3 checks passed（抽检位：首页店卡轮播 / 首页人气美甲卡 / 首页人气美睫卡 / 服务列表 / 订单列表 / 我的·最近消费）
-   ⏱ test-mp-placeholder-size 18s
+   ⏱ test-mp-placeholder-size 16s
 == test-mp-overlap ==
    [前置] 沙箱 4310 存活=true(共用前置件)
    [有图态] 卡片[344→531,344→531,578→765,578→765] 宿主[353→450,353→450,587→684,587→684] 名[460→482,460→482,694→716,694→716] 价格行[487→522,487→522,721→756,721→756] · ph-img 4/ph-box 0
@@ -3733,7 +3741,7 @@ ok 5 - 🔴 ⑤ 强制页链五连(欠账补课):未设置→墙旗标→保存�
 ✅ test-store-jury 通过 5 项(矩阵 22 家 + 运行时全集 105 家)
    ⏱ test-store-jury 2s
 == 自动回归专用实例 (4129) ==
-apps/api/run-all-tests.sh: line 202: 27151 Terminated: 15          PORT=4128 node local-server.mjs > /tmp/ll-ci-main.log 2>&1
+apps/api/run-all-tests.sh: line 202: 33477 Terminated: 15          PORT=4128 node local-server.mjs > /tmp/ll-ci-main.log 2>&1
 ok 1 - scenario1: conversation created with AI reply
 ok 2 - scenario1: manual reply keeps human_active
 ok 3 - scenario1: after cooldown elapsed AI auto-returns and replies
@@ -3772,7 +3780,7 @@ ok 13 - 迁移幂等:再跑一遍数字不动
 分成基数迁移回归通过:13 项断言全绿
    ⏱ test-perf-base-migration 4s
 == 租户隔离双实例 (4128+4131) ==
-apps/api/run-all-tests.sh: line 218: 30615 Terminated: 15          PORT=4129 HUMAN_REPLY_COOLDOWN_MINUTES=0 node local-server.mjs > /tmp/ll-ci-4129.log 2>&1
+apps/api/run-all-tests.sh: line 218: 36934 Terminated: 15          PORT=4129 HUMAN_REPLY_COOLDOWN_MINUTES=0 node local-server.mjs > /tmp/ll-ci-4129.log 2>&1
 ok 1 - instance A runs as lucky-luxe
 ok 2 - instance B runs as tenant-iso-b
 ok 3 - tenant A entry created
@@ -3794,23 +3802,23 @@ ok 2 - ② 零整套消失:基线里的套件全部到场(摘套件=改清单,�
 ok 3 - ③ 反向守:在场套件数 100 = 清单套件数 100(防"只扫到一半却报没有差异")
 ok 4 - ④ 零断言套件白名单式:在场 100 套里,打不出 ^ok 行的必须在白名单内(新出现的自动红)
 ok 5 - ⑤ 零断言白名单棘轮 ≤ 0(现为空;只减不增,再进新成员要店主点头)
-[新套件] turn-answer 新增 31 条
-[断言基线] 合计 3243 → 3274(+31);尺子=纯 ^ok,汇总行不算
+[断言增长] turn-classify 17 → 25(+8)
+[断言基线] 合计 3274 → 3282(+8);尺子=纯 ^ok,汇总行不算
 [基线已更新] 涨的部分自动收进基线
 [覆盖面] 基线真正盖住 100/100 套;0 套打不出 ok 行、尺子看不见;白名单在册 0 套
 
-✅ test-assertion-baseline 通过 5 项(在场 100 套,合计 3274 条)
+✅ test-assertion-baseline 通过 5 项(在场 100 套,合计 3282 条)
 
 
-⏱ 整跑 2 分 10 秒(其中套件 1 分 52 秒 · 夹具与起停服务 0 分 18 秒)
+⏱ 整跑 2 分 8 秒(其中套件 1 分 53 秒 · 夹具与起停服务 0 分 15 秒)
    最慢 5 套:
      mp-home-sections                   41s
-     mp-placeholder-size                18s
      mp-overlap                         17s
+     mp-placeholder-size                16s
      perf-base-migration                4s
      noshow-aftersales                  4s
 ✅ 全部 100 个套件通过(清单       96 + auto-return/schema-consistency/perf-base-migration/tenant-isolation)
-apps/api/run-all-tests.sh: line 91: 30836 Terminated: 15          PORT=4128 node local-server.mjs > /tmp/ll-ci-a.log 2>&1
-apps/api/run-all-tests.sh: line 37: 30896 Terminated: 15          PORT=4131 DEFAULT_TENANT_ID=tenant-iso-b node local-server.mjs > /tmp/ll-ci-b.log 2>&1
+apps/api/run-all-tests.sh: line 91: 37133 Terminated: 15          PORT=4128 node local-server.mjs > /tmp/ll-ci-a.log 2>&1
+apps/api/run-all-tests.sh: line 91: 37169 Terminated: 15          PORT=4131 DEFAULT_TENANT_ID=tenant-iso-b node local-server.mjs > /tmp/ll-ci-b.log 2>&1
 == 已把店主的本地服务(4128)重新拉起来 ==
 == 已把沙箱(4310)重新拉起来 ==

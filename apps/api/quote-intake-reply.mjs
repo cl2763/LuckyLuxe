@@ -119,7 +119,9 @@ export function createQuoteIntakeReply(deps) {
       const turnKind = classifyTurn(state.currentText || '', { gaveSlot: false })
       /* D145 后半:在问事 / 问预算 → **先答,再至多一问**(答从价目/知识库取,取不到就让原流程走) */
       if (turnKind === 'question' || turnKind === 'budget') {
-        const ans = answerForTurn(turnKind, { text: state.currentText || '', serviceName: state.serviceType || '' })
+        /* `again`:这一会话是不是已经报过一次最便宜(报过就换个说法,别一字不差重复) */
+        const ans = answerForTurn(turnKind, { text: state.currentText || '', serviceName: state.serviceType || '', again: Boolean(state.cheapestShown) })
+        if (turnKind === 'budget') state.cheapestShown = true
         if (ans && String(ans.text || '').trim()) {
           const one = (quoteMissingQuestions(state).zh || [])[0] || ''
           return {

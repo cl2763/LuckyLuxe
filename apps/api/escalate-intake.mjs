@@ -29,8 +29,11 @@ export function createEscalateIntake({ intakeCompletion, isVagueContextFollowup,
       || completion.filled >= 2
     const vagueAgain = isVagueContextFollowup(state.currentText)
       || (!isIntakeFormLikeResponse(state.currentText) && !state.referenceImages?.length && missingQuestions.zh?.length)
-    // 🔴 D145:道别与犹豫不许转人工(理由见本文件抬头)
-    if (['farewell', 'hesitate'].includes(classifyTurn(state.currentText || '', { gaveSlot: false }))) return false
+    /* 🔴 D145:**道别 / 犹豫 / 在问事 / 问预算,四档都不许转人工**(理由见本文件抬头)。
+       question / budget 是 05p 跑完五通 v3 才补上的:通二顾客问「会不会很快就掉」,
+       这里先一步判成「又含糊了一次」→ 转人工,而我在出句那层写的「答不上来就说问技师」根本轮不到。
+       **一个问得清清楚楚的问题,不是「说不清楚」** —— 那是我们答不上来,不该让顾客去等人。 */
+    if (['farewell', 'hesitate', 'question', 'budget'].includes(classifyTurn(state.currentText || '', { gaveSlot: false }))) return false
     return promptCount >= 2 && hasSomeContext && vagueAgain
   }
 

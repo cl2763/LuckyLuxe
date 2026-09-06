@@ -13,6 +13,7 @@
    不另写一份平行实现 —— 平行实现验的是判据自己。 */
 import { assertTestTarget } from './test-guard.mjs'
 import { classifyTurn, slotEcho, TURN_TEXT, TURN_KINDS, DEGRADED_FOR_KNIFE } from './turn-classify.mjs'
+import { normalizeSlots } from './booking-intake.mjs'
 
 const BASE_URL = process.env.TEST_BASE_URL || 'http://127.0.0.1:4128'
 await assertTestTarget(BASE_URL)
@@ -62,6 +63,16 @@ check('②c 没变化就不复述(不许每轮都念一遍)',
   slotEcho({ serviceType: '美睫' }, { serviceType: '美睫' }, 'zh') === '',
   slotEcho({ serviceType: '美睫' }, { serviceType: '美睫' }, 'zh'))
 check('②d 复述句自己不带问号(它是陈述,问句在后面那一格)', !/[??]/.test(e1 + e2), e1 + e2)
+/* 🔴 D129 同族(五通 v3 现读咬出):模型抽出来的 serviceType 是 `nail`/`lash`,
+   而 `mergeSlots` 让模型赢 —— 复述那句直接对顾客说「好的,改成 **nail** 了」。
+   **显示 label,永远不显示 key**。归一在 `normalizeSlots` 那道门里,这里守住它。 */
+for (const [raw, want] of [['nail', '美甲'], ['NAIL', '美甲'], ['lash', '美睫'], ['lashes', '美睫'], ['manicure', '美甲'], ['美甲', '美甲'], ['美睫', '美睫']]) {
+  const got = normalizeSlots({ serviceType: raw }, '2026-09-08').serviceType
+  check(`②e 🔴 项目名归一:「${raw}」→「${want}」(程序用的键不许甩到顾客脸上)`, got === want, `实际 ${got}`)
+}
+check('②f 反向守:复述句里**不许**出现 nail / lash 这两个键(出现即说明归一被绕过)',
+  !/nail|lash/i.test(slotEcho({}, normalizeSlots({ serviceType: 'nail' }, '2026-09-08'), 'zh')),
+  slotEcho({}, normalizeSlots({ serviceType: 'nail' }, '2026-09-08'), 'zh'))
 
 /* ── 出句:道别/犹豫两档这一轮一个问号都不许出 ──────────────── */
 for (const kind of ['farewell', 'hesitate']) {
