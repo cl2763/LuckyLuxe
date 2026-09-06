@@ -14,6 +14,12 @@ export const DUTY_NOTE = {
   backToTodayLabel: '回到今天',
 }
 
+/* 🔴「到没到店」这条规则**只许有一处**(合同⑤:售后单主状态本就是 COMPLETED)。
+   主页大屏的「此刻」格与今日台面必须是同一个数(图 §七 第 5 条:
+   「bookings.value 与副行三数 === 今日台面同一时刻的数(同源函数)」)——
+   所以这条规则抽出来共用,而不是在大屏那边照抄一份。照抄的那一份迟早跟这边走散。 */
+export const arrivalStateOf = (row) => (row.status === 'COMPLETED' ? 'done' : (row.arrived_at ? 'active' : 'pending'))
+
 export function createScheduleBoard(deps) {
   const {
     db, json, iso, addMinutes, localParts, localDateTime, currentTenantId, defaultStoreId,
@@ -136,7 +142,7 @@ export function createScheduleBoard(deps) {
         const u = row.user_id ? db.prepare('SELECT id, display_name FROM users WHERE id = ?').get(row.user_id) : null
         const startLocal = localParts(row.appointment_start)
         const endLocal = localParts(row.appointment_end)
-        const arrivalState = row.status === 'COMPLETED' ? 'done' : (row.arrived_at ? 'active' : 'pending')   // 合同⑤:售后单主状态本就是 COMPLETED
+        const arrivalState = arrivalStateOf(row)   // 规则唯一出口在本文件顶部(大屏「此刻」格与这里共用)
         // 新客:该顾客在本店有没有更早的单(按 appointment_start)
         const earlier = row.user_id
           ? db.prepare(`SELECT 1 FROM bookings WHERE tenant_id = ? AND user_id = ? AND appointment_start < ?
@@ -252,5 +258,28 @@ export function createScheduleBoard(deps) {
     return false
   }
 
-  return { route, ensureSchema }
+  /* 大屏「此刻」四格 + 「下一位」——**与今日台面同一条规则、同一份查询**,不另算。
+     只回数与下一位,不回台面那一整套渲染字段(那是台面自己的事)。 */
+  function dayCounts(tenantId, date) {
+    const rows = db.prepare(`SELECT id, status, arrived_at, appointment_start, user_id, service_id, technician_id
+      FROM bookings WHERE tenant_id = ? AND substr(appointment_start, 1, 10) = ?
+        AND status NOT IN ('CANCELLED', 'NO_SHOW') ORDER BY appointment_start ASC`).all(tenantId, date)
+    const st = rows.map((r) => ({ r, s: arrivalStateOf(r) }))
+    const nextRow = st.find((x) => x.s === 'pending')?.r || null
+    const nameOf = (id, sql) => { try { return db.prepare(sql).get(id)?.n || '' } catch { return '' } }
+    return {
+      total: rows.length,
+      doing: st.filter((x) => x.s === 'active').length,
+      waiting: st.filter((x) => x.s === 'pending').length,
+      done: st.filter((x) => x.s === 'done').length,
+      next: nextRow ? {
+        time: String(nextRow.appointment_start || '').slice(11, 16),
+        customer: nameOf(nextRow.user_id, 'SELECT display_name AS n FROM users WHERE id = ?'),
+        service: nameOf(nextRow.service_id, 'SELECT name_zh AS n FROM services WHERE id = ?'),
+        tech: nameOf(nextRow.technician_id, 'SELECT name AS n FROM technicians WHERE id = ?'),
+      } : null,
+    }
+  }
+
+  return { route, ensureSchema, dayCounts }
 }

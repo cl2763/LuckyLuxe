@@ -72,7 +72,7 @@ import { createRefundRoutes } from './refund-routes.mjs'              // 退卡/
 import { createPerfAdjust } from './perf-adjust.mjs'                  // 业绩基数/分成/业绩调整行(唯一实现)
 import { createDailyCloseScope } from './daily-close-scope.mjs'       // 日结归属(服务发生日)
 import { createNotifyScheduler } from './notify-scheduler.mjs'        // P3 通知调度器(队列/规则/tick;通道只有站内落地)
-import { createScheduleBoard } from './schedule-board.mjs'            // 排班域(schedule-day/week;08-30h 搬出,纯迁移字节对比过)
+import { createScheduleBoard } from './schedule-board.mjs'; import { createDashboardPulse } from './dashboard-pulse.mjs'   // 排班域(08-30h 搬出)+ 主页大屏三接口(图 v3.1 §四)
 import { createQuoteState, conversationCard } from './quote-state.mjs'
 import { reverseFinanceTxn } from './finance-reverse.mjs'                  // 已报价状态机(31p:会话切段/有效期/四态/改价防线)
 import { createFinanceLedger } from './finance-ledger.mjs'            // 财务台账写入口 + 哈希链(唯一写口)
@@ -6803,6 +6803,7 @@ const scheduleBoard = createScheduleBoard({
   specialDateFor, hoursUnsetOfStore, getService, isGenericDisplayName, memberCodeForUserId, apiError, readBody,
   backfillPlanFor
 })
+const dashboardPulse = createDashboardPulse({ db, currentTenantId, todayOf, tenantCurrencyCodeOrNull, financeLocked: (tid) => financeLockEnabled(tid), todayBoardOf: (tid, date) => scheduleBoard.dayCounts(tid, date), storeClosedOn: (tid, date) => { try { return isClosedDay(defaultStoreId(), date) } catch { return false } } })   /* 主页大屏三接口(图 v3.1 §四);口径两问答案在模块抬头;「此刻」与台面同一条规则 */
 const notifyScheduler = createNotifyScheduler({
   db, randomId, iso, apiError, json, readBody, parseJson: parseJson2, localParts, tenantTimezone,
   DEFAULT_TENANT_ID, dataScope: DATA_SCOPE
@@ -13545,6 +13546,7 @@ async function route(req, res) {
   // 周排班视图:一次取 7 天所有技师的排班 + 店休信息 + 当日预约数(用于冲突提示)
   /* 排班域两路由(schedule-week/day)08-30h 搬进 ./schedule-board.mjs(公约②;纯迁移,字节对比过)*/
   if (await scheduleBoard.route(req, res, { path, query, adminSession })) return
+  if (await dashboardPulse.route(req, res, { path, query, adminSession, json })) return   // 大屏三接口(闸后)
   // 排班申请:员工发起(只能为自己),老板审批
   if (req.method === 'POST' && path === '/admin/schedule-requests') {
     const body = await readBody(req)
