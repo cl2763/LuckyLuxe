@@ -65,6 +65,7 @@ const ALLOW = {
   'apps/api/package.json': { n: 1, why: 'B:包描述' },
   'apps/api/prisma/seed.ts': { n: 1, why: 'B·旧栈:seed 里的门店名,零引用。**什么时候要动:一旦 prisma 这条链被复活,须同步改成新店名**' },
   'apps/api/run-all-tests.sh': { n: 1, why: 'B:脚本抬头注释' },
+  'tools/seed-luvia-bj.mjs': { n: 4, why: 'B·造景件:北京旗舰店 `luvia-bj` 的**建店参数**(抬头注释 1 + 中文店名 1 + 英文名 1 + 助手名 1)。这是「这家店叫什么」的源头,不是渲染层的硬编码 —— 建店脚本必须把名字写出来才建得出店;渲染侧一律从库现取。处数写死 4,多一处即红' },
   'apps/api/smoke-qwen.mjs': { n: 2, why: 'B:冒烟脚本抬头与终端标题,开发者面' },
   'apps/api/src/main.ts': { n: 1, why: 'B·旧栈:启动日志。**什么时候要动:这套 Nest 入口被复活时**;它只打给开发者看,顾客与老板都看不到' },
   'apps/api/store-identity.mjs': { n: 8, why: '本批从 local-server 搬出的店名模块:迁移必须拿旧名做条件 + 记录 2026-08-07 那次的注释' },

@@ -224,11 +224,37 @@ async function main() {
      链:①造一个已日结的过去日 ②往那天补录一单 → 落今天 ③给这单开单+签字入账
          ④今天的日结里:这单在不在 / 业绩归谁 / 抽屉对不对得上 ⑤原那天的历史账一分未动 */
   {
-    const e2eDay = new Date(Date.now() - 13 * 86400000).toISOString().slice(0, 10)
+    /* 🔴 05o-2 修:原来这里写死 `今天 − 13 天`。**那是一条按星期几会自己坏掉的夹具** ——
+       09-06 跑到 2026-08-24(周一),而夹具店周一休息,于是「找不到可用的那天」把整套件打断。
+       它不是判据错(判据拒绝静默绿是对的),是**景没造好**:《造景律》要求出走查单的人先把景造好。
+       改法与本套件下面两处同形:**在过去 9~20 天里搜一个营业日**,搜不到才红(那才是真异常)。 */
     const { DatabaseSync: DBe2e } = await import('node:sqlite')
     const e2eDb = new DBe2e(process.env.TEST_DB_PATH)
     const tidE = e2eDb.prepare('SELECT tenant_id FROM bookings ORDER BY created_at DESC LIMIT 1').get().tenant_id
     const nowE = new Date().toISOString()
+    let e2eDay = ''
+    /* 🔴 从**远端往近端**找,并且跳过「那天已经有单」的日子 ——
+       前面「合同二形一」是从 9 天前往回找的,两处若撞上同一天,
+       这里再把那天标成「已日结」,就会把**形一那张合法的原日补录**变成
+       「补录写回了已日结的那天」,`test-store-jury` 的 I10 当场红(09-06 现测踩到)。
+       夹具之间抢同一天,是共享 CI 库里最容易踩的一类;判据没错,是景要错开。 */
+    for (let back = 20; back >= 9; back -= 1) {
+      const day = new Date(Date.now() - back * 86400000).toISOString().slice(0, 10)
+      const probe = (await request(`/admin/schedule-day?date=${day}`)).data
+      if (!probe || probe.isClosed || probe.hoursUnset) continue
+      const busy = e2eDb.prepare(
+        "SELECT COUNT(*) AS n FROM bookings WHERE tenant_id = ? AND substr(appointment_start, 1, 10) = ?"
+      ).get(tidE, day)?.n || 0
+      const back0 = e2eDb.prepare(
+        'SELECT COUNT(*) AS n FROM bookings WHERE tenant_id = ? AND backfill_service_date = ?'
+      ).get(tidE, day)?.n || 0
+      if (busy || back0) continue
+      e2eDay = day
+      break
+    }
+    check('裁② 链前置:过去 9~20 天里找得到一个**营业**的日子当补录目标(找不到=夹具坏了,不是通过)',
+      Boolean(e2eDay), '9~20 天全是店休/未设置营业时间')
+    if (!e2eDay) e2eDay = new Date(Date.now() - 13 * 86400000).toISOString().slice(0, 10)
     e2eDb.prepare(`INSERT OR REPLACE INTO daily_closes (id, tenant_id, date, status, order_count, revenue_cents, confirmed_at, confirmed_by, created_at, updated_at)
       VALUES (?, ?, ?, 'confirmed', 0, 0, ?, 'e2e', ?, ?)`).run(`dc-e2e-${uniq}`, tidE, e2eDay, nowE, nowE, nowE)
     const closedBefore = e2eDb.prepare('SELECT order_count, revenue_cents FROM daily_closes WHERE tenant_id = ? AND date = ?').get(tidE, e2eDay)

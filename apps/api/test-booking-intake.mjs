@@ -167,6 +167,34 @@ check('②0 造景:空配置店建出来了(造不出来按红,不许「造不�
 
 const RICH = 'lucky-luxe'
 
+/* 🔴 05o-2 造景补:这套件有 8 处对话说的是「**明天**」,而 `RICH` 用的是 CI 库的默认店 ——
+   它周一休息。于是**每逢周日跑回归,「明天」就是店休**,13 条判据集体红,
+   AI 答的却是完全正确的一句「9月7日 门店休息哦,换一天好吗?」。
+   这不是判据错(它拒绝把店休当「有位」是对的),是**景没造好**:
+   《造景律》——「你要验证的话自己先造好再自己做测试」。
+   09-06(周日)现测:干净树 HEAD 上单跑同样 13 条红,证明与本批改动无关。
+
+   改法只动景不动判据:**若「明天」正好店休,就给这一天下一个「特殊日:照常营业」**,
+   跑完删掉(夹具收尾 —— 08-28 已因「夹具不收尾导致判据非幂等」记过一次)。
+   不改任何一句对话、不放宽任何一条断言。 */
+let riskDayOverride = ''
+{
+  const today = (await api('/admin/schedule-day', RICH))?.storeToday || ''
+  const tmr = today ? new Date(`${today}T00:00:00Z`) : null
+  if (tmr) {
+    tmr.setUTCDate(tmr.getUTCDate() + 1)
+    const day = tmr.toISOString().slice(0, 10)
+    const sd = await api(`/admin/schedule-day?date=${day}`, RICH)
+    if (sd && sd.isClosed) {
+      const made = await plat('/admin/special-dates', { method: 'POST',
+        body: JSON.stringify({ date: day, isClosed: false, openTime: '10:00', closeTime: '19:00', note: 'CI 造景:本套件的对话说的是「明天」' }) })
+      if (made === 201) riskDayOverride = day
+      check(`②0b 造景:「明天」(${day})本是店休,已下特殊日改为营业 —— 下不成就红,不许带着店休往下跑`,
+        riskDayOverride === day, `POST /admin/special-dates → ${made}`)
+    }
+  }
+}
+
 let sid = '', vid = '', dat = ''
 /* ── 配齐的店:一句一问 → checking → 确认 → drafted ── */
 {
@@ -334,7 +362,10 @@ if (bareOk) {
       const wd = Number(new Intl.DateTimeFormat('en-US', { timeZone: 'America/Toronto', weekday: 'short' })
         .formatToParts(dt).find((x) => x.type === 'weekday')?.value
         .replace(/Sun|Mon|Tue|Wed|Thu|Fri|Sat/, (m) => ({ Sun: 0, Mon: 1, Tue: 2, Wed: 3, Thu: 4, Fri: 5, Sat: 6 }[m])))
-      if (wd === closedRow.weekday) { target = dt.toLocaleDateString('en-CA', { timeZone: 'America/Toronto' }); break }
+      const cand = dt.toLocaleDateString('en-CA', { timeZone: 'America/Toronto' })
+      /* 🔴 跳过被上面造景改成「照常营业」的那一天 —— 它星期几还是休息日,
+         但这一天有特殊日覆盖,拿它验「店休怎么说」等于验了个营业日(09-06 现测踩到)。 */
+      if (wd === closedRow.weekday && cand !== riskDayOverride) { target = cand; break }
     }
     check('⑩1 前置:找到了下一个休息日', Boolean(target), target)
 
@@ -782,6 +813,12 @@ const jreq = async (path, opts = {}, token = null, extraHeaders = {}) => {
     userToken, { 'x-tenant-id': id })
     check('⑤c 反向守:换个时段照样约得上', other.status === 201, `status=${other.status}`)
   }
+}
+
+/* 夹具收尾:把造景时下的「特殊日」删回去 —— 不收尾的夹具会让下一轮判据不幂等(08-28 J 族案底) */
+if (riskDayOverride) {
+  const gone = await plat(`/admin/special-dates/${riskDayOverride}`, { method: 'DELETE' })
+  check(`⑥收尾:造景下的特殊日(${riskDayOverride})已删回去(夹具不收尾 = 判据不幂等)`, gone === 200, `DELETE → ${gone}`)
 }
 
 console.log(`\n[③ 预约采集] 共 ${n} 项:状态机 + 规则补槽 + 配齐店走到 drafted + 空店零回落`)
