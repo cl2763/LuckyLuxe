@@ -19,6 +19,7 @@
 /* 槽位:图 §二 collecting 那一行点名的五个 */
 import { classifyTurn, TURN_TEXT, slotEcho } from './turn-classify.mjs'   // D145:采集态每句先分类
 import { policyOnce } from './turn-answer.mjs'                            // D145:政策一会话一次(两路共用)
+import { humanizeDates } from './date-human.mjs'                          // D148:对顾客说日期要说人话
 
 export const SLOT_KEYS = ['serviceType', 'date', 'time', 'technician', 'addons']
 
@@ -441,6 +442,25 @@ export function createBookingIntake(deps) {
       }
     }
 
+    /* 🔴 D148 之四(店主 05p 补二;五通 v3 通三读出来的自相矛盾):
+       顾客说「明天」,机器答「好的,明天可以。大概几点方便?」;
+       等顾客把钟点也说了,机器才回「明天门店休息哦,换一天好吗?」——
+       **前后两句自己打自己**,而顾客白说了一轮。
+       填日期那一刻就该知道那天开不开门:日期是新给的,就先查一次店休。
+       (只查店休,不查有没有位 —— 有没有位要连钟点一起才问得出来,那仍留给下面三槽齐那一步。) */
+    const dateJustGiven = String(slots.date || '').trim()
+      && String(slots.date || '').trim() !== String((s.bookingSlots || {}).date || '').trim()
+    if (dateJustGiven) {
+      const probe = realSlots({ tenantId, slots })
+      if (probe && probe.closed) {
+        return {
+          reply: say(zh, `${slots.date} 门店休息哦,换一天好吗?`, `We're closed on ${slots.date} — would another day work?`),
+          stage: 'collecting',
+          statePatch: { ...s, bookingTouchedAt: stamp(), bookingSlots: { ...slots, date: '', time: '' }, bookingStage: 'collecting' },
+        }
+      }
+    }
+
     /* 三槽齐 → 查真可约 */
     if (isReadyToCheck(slots)) {
       const real = realSlots({ tenantId, slots })
@@ -593,11 +613,15 @@ export function createBookingIntake(deps) {
      图 §二 drafted 那一行要求「说清下一步(草稿链接 / 定金怎么付)」,
      判据这边也靠它验「只建了一次」(全仓没有 GET 列表口,拿计数验等于永远 0 —— 现测栽过)。 */
   const stamp = () => new Date().toISOString()
+  /* 🔴 D148 之三:**对顾客不许出现 `YYYY-MM-DD`**。
+     出句散在这条路的十几处,逐处改一遍必漏(下次新加一句又漏)——
+     所以收在 `say()` 这一个出口上整句替换:`2026-09-12` → 「这周六(9月12日)」。
+     判据也只需盯这一个出口:回复里 `\d{4}-\d{2}-\d{2}` 0 命中。 */
   const say = (zh, textZh, textEn, extra = {}) => ({
     data: {
       intent: 'booking',
-      answerZh: textZh,
-      answerEn: textEn,
+      answerZh: humanizeDates(textZh, todayISO(), 'zh'),
+      answerEn: humanizeDates(textEn, todayISO(), 'en'),
       handoffRequired: false,
       gate: 'booking_intake',
       ...extra,

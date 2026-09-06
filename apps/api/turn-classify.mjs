@@ -76,12 +76,16 @@ export const TURN_TEXT = {
 /* 复述变化(D145 通四:「还是改成美睫吧」「那周日行吗」→ 机器连问两次「大概几点方便?」,
    顾客根本不知道自己改的那两样有没有被听进去)。
    规则:**槽变了就先说出来**,再问下一格。前端零拼串,句子只在这里长一次。 */
+/* 🔴 D148(店主 05p 补二,五通 v3 读出):**「改成」只有真的换了才配说**。
+   v3 原文里,顾客头一次说「做美甲」,机器回「好的,**改成**美甲了」——
+   人家没改过任何东西,这句话听着像在纠正顾客。
+   所以每格两种说法:**首次填** = 直接复述;**换掉** = 才说「改成…了」。 */
 const SLOT_LABEL = {
-  serviceType: (v) => `改成${v}了`,
-  date: (v) => `${v} 可以`,
-  time: (v) => `${v} 记下了`,
-  technician: (v) => `指定 ${v}`,
-  addons: (v) => `加上${v}`
+  serviceType: (v, changed) => (changed ? `改成${v}了` : `${v}`),
+  date: (v, changed) => (changed ? `改到${v}` : `${v} 可以`),
+  time: (v, changed) => (changed ? `改到${v}` : `${v} 记下了`),
+  technician: (v, changed) => (changed ? `改指定 ${v}` : `指定 ${v}`),
+  addons: (v, changed) => (changed ? `加项改成${v}` : `加上${v}`)
 }
 export function slotEcho(before = {}, after = {}, lang = 'zh') {
   const parts = []
@@ -90,8 +94,10 @@ export function slotEcho(before = {}, after = {}, lang = 'zh') {
     const a = String(after[k] || '').trim()
     if (!a || a === b) continue
     /* 只在**改动**(原来有值、现在换了)与**首次给出**时复述;两者顾客都需要听到确认 */
-    parts.push(lang === 'en' ? `${k}: ${a}` : SLOT_LABEL[k](a))
+    parts.push(lang === 'en' ? `${k}: ${a}` : SLOT_LABEL[k](a, Boolean(b)))
   }
   if (!parts.length) return ''
-  return lang === 'en' ? `Got it — ${parts.join(', ')}. ` : `好的,${parts.join('、')}。`
+  /* 🔴 D148 之二:顿号「、」是**列举**用的,这里是两件并列的事,该用逗号。
+     v3 原文「好的,改成美甲了、2026-09-12 可以。」读起来像半句话没说完。 */
+  return lang === 'en' ? `Got it — ${parts.join(', ')}. ` : `好的,${parts.join(',')}。`
 }

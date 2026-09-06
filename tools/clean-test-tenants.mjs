@@ -14,6 +14,7 @@
      node tools/clean-test-tenants.mjs --db <路径>     # 指定库(默认本机真库)
 */
 import { DatabaseSync } from 'node:sqlite'
+import { backupDb } from './db-backup.mjs'   // 05p 段 4:库文件备份一律走这把刀(WAL 之后 cp 是废的)
 import { copyFileSync, mkdirSync, existsSync } from 'node:fs'
 import { join, dirname } from 'node:path'
 import { PROTECTED_REAL_TENANTS } from '../apps/api/demo-reset.mjs'   // 真店黑名单唯一出口,本地零副本
@@ -157,7 +158,7 @@ if (RUN_DIRECT) {
     db.close()
     process.exit(1)
   }
-  copyFileSync(DB_PATH, backupPath)
+  backupDb(DB_PATH, backupPath)
   console.log(`\n① 已备份:${backupPath}`)
 
   // —— ③ 整包一个事务:任何一步不对就 ROLLBACK

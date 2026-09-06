@@ -30,10 +30,10 @@ const check = (name, ok, detail = '') => {
   else { fails.push(name); console.log(`not ok ${n} - ${name}${detail ? ` :: ${detail}` : ''}`) }
 }
 
-async function request(path, options = {}, token = PLATFORM) {
+async function request(path, options = {}, token = PLATFORM, tid = '') {
   const r = await fetch(`${BASE_URL}${path}`, {
     ...options,
-    headers: { 'content-type': 'application/json', ...(token ? { authorization: `Bearer ${token}` } : {}), ...(options.headers || {}) }
+    headers: { 'content-type': 'application/json', ...(token ? { authorization: `Bearer ${token}` } : {}), ...(tid ? { 'x-admin-tenant-id': tid } : {}), ...(options.headers || {}) }
   })
   let data = null
   try { data = await r.json() } catch { data = null }
@@ -201,6 +201,29 @@ check('⑤ 境内档定金出句里**没有** CAD / 加币 / Toronto / 多伦多
   Boolean(textC) && !/CAD|加币|Toronto|多伦多/i.test(textC), textC.slice(0, 140))
 check('⑤b 反向守:境内档的钱**说得出来**(整句为空 = 把功能拦没了,不算过)',
   /[¥￥]|元/.test(textC), textC.slice(0, 140))
+/* 🔴 补一家**没填地址**的店(05p 段 4 挨刀时发现的判据盲区):
+   ⑤c 原来只验「三家都填了地址、彼此不串」——**而回落只在「这家没地址」时才发生**。
+   现测:给「地址为空就取全表第一家店的地址」这个经典回落写法落刀,⑤c 一条都没红,
+   因为夹具里三家都有地址,那个分支根本没被走到。
+   案底不是假想的:`jics-nail` 在沙箱库里的 storeAddress 就是空的(05o-2 现测登记过)。
+   所以再造一家空地址的店,专门守这条:**没地址就是没地址,不许穿别人家的**。 */
+const EMPTY_ID = `ts3e-${RUN}`
+{
+  const made = await request('/platform/tenants', {
+    method: 'POST', body: JSON.stringify({ id: EMPTY_ID, name: `三店E没填地址${RUN}`, plan: 'single', currency: 'CNY', timezone: 'Asia/Shanghai' })
+  })
+  check('⑤d0 造景:建出一家**没填地址**的店(建不出来按红)', made.status === 201, String(made.status))
+  if (made.status === 201) {
+    const kb = await request('/admin/kb', {}, PLATFORM, EMPTY_ID)
+    const addr = String(kb.data?.liveFacts?.storeAddress || kb.data?.facts?.storeAddress || '')
+    /* 判据写成**「必须是空」**,不写成「不含那三个地址」——
+       后者是黑名单式的:回落到**第四家**店的地址照样绿(首跑就这么放过了一把真刀)。
+       契约本来就是「拿不到真值就空着」,那就直接验空。 */
+    check('⑤d 🔴 没填地址的店,读到的地址**必须是空**(零回落红线:拿不到真值就空着,不许穿别人家的)',
+      addr.trim() === '', `读到「${addr}」`)
+  }
+}
+
 check('⑤c 🔴 三店地址两两之间零串味:各店读到的地址里不含另两店的城市锚字',
   SHOPS.every((s) => SHOPS.filter((o) => o.key !== s.key).every((o) => !s.addrRead.includes(o.city))),
   SHOPS.map((s) => `${s.key}:${s.addrRead}`).join(' | '))

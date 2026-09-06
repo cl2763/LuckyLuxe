@@ -372,14 +372,22 @@ if (bareOk) {
     const uid = `closed-${RUN}`
     await sayTo(tid, uid, '我想预约')
     await sayTo(tid, uid, '做美甲')
-    await sayTo(tid, uid, target)
-    /* 三槽齐了才会去查可约 —— 只给日期的话机器还在问「几点」,压根走不到店休那一步 */
-    const r = await sayTo(tid, uid, '下午三点')
+    /* 🔴 口径改过一次(D148④,店主 05p 补二 裁,2026-09-08):
+       原来这里等到「三槽齐」才去查可约,所以店休那句要到**第四轮**(说完钟点)才出来 ——
+       而那正是被裁掉的行为:机器先说「好的,那天可以」,等顾客又白说一轮才改口说休息,
+       **前后两句自己打自己**。现在**填日期那一轮就查店休**。
+       所以这条断言跟着挪到给日期那一轮:守的东西没变(店休要说店休、不许说约满),
+       变的是「该在哪一轮说」。 */
+    const r = await sayTo(tid, uid, target)
     const txt = r?.reply?.data?.answerZh || ''
-    check('⑩2 🔴 店休日:说的是「门店休息」,**不许说「约满了」**',
+    check('⑩2 🔴 店休日:**给日期那一轮**就说「门店休息」,不许说「约满了」(D148④:不许先说可以再改口)',
       /休息|不营业|没开门/.test(txt) && !/约满/.test(txt), txt.slice(0, 80))
     check('⑩3 店休不推人工(换一天就能约的事,别惊动同事)',
       r?.reply?.data?.handoffRequired !== true, `handoff=${r?.reply?.data?.handoffRequired}`)
+    /* 反向守:那一轮说了休息之后,**日期要被清掉**——顾客接着说钟点不该再被当成「那天几点」 */
+    const rAfter = await sayTo(tid, uid, '下午三点')
+    check('⑩3b 反向守:说完店休就把那天清掉了(下一句给钟点时,不会又冒出那天的安排)',
+      !/休息|约满/.test(rAfter?.reply?.data?.answerZh || ''), String(rAfter?.reply?.data?.answerZh || '').slice(0, 70))
     const r2 = await sayTo(tid, uid, '那明天呢')
     const txt2 = r2?.reply?.data?.answerZh || ''
     check('⑩4 反向守:换一天后照常往下走(没把人卡死在店休那句上)', Boolean(txt2) && txt2 !== txt, txt2.slice(0, 70))

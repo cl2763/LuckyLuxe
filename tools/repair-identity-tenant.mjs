@@ -15,6 +15,7 @@
    前后逐表打数 · 收尾两把尺(零错标 + 唯一键无重复)· 幂等(零条就退)。 */
 
 import { DatabaseSync } from 'node:sqlite'
+import { backupDb } from './db-backup.mjs'   // 05p 段 4:库文件备份一律走这把刀(WAL 之后 cp 是废的)
 import { copyFileSync } from 'node:fs'
 import { requireTarget } from './db-target.mjs'
 import { scanIdentityMismatch, planIdentityRepair, repairIdentityTenant, identityRulers } from '../apps/api/user-identity.mjs'
@@ -66,7 +67,7 @@ if (!rows.length) {
 
 const stamp = new Date().toISOString().replace(/[:.]/g, '-')
 const backup = `${DB_PATH}.pre-d130-${stamp}`
-copyFileSync(DB_PATH, backup)
+backupDb(DB_PATH, backup)
 console.log(`\n  备份已出:${backup}`)
 console.log(`  修前行数:user_identities=${total} · users=${cnt('SELECT COUNT(*) AS n FROM users')}`)
 

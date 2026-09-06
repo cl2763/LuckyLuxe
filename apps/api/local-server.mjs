@@ -49,6 +49,7 @@ import { demoSeedTag, ensureDemoMarkColumns } from './demo-mark.mjs'   // D121:�
 import { createKbMatch } from './kb-match.mjs'                        // 知识库匹配两个口
 import { createTurnAnswer } from './turn-answer.mjs'                  // D145 后半:先答再问,答从数据来
 import { createEscalateIntake } from './escalate-intake.mjs'          // 转人工判断 + D145 那条闸
+import { entitlementBlockedReply, AI_OFF_NOTE } from './entitlement-gate.mjs'  // D147:没开 AI 包不许沉默
 import { isQuoteItem } from './price-mode.mjs'                        // D146:需报价的项不下发价格
 import { createTenantProfile } from './tenant-profile.mjs'          // D127:本店档案唯一出口
 import { createDemoFacts } from './demo-facts.mjs'                    // 演示店事实口(铺设脚本不再直连库)
@@ -3385,7 +3386,7 @@ async function handleWecomInbound(inbound, req) {
       externalUserId: inbound.externalUserId,
       raw: inbound.raw
     })
-    return { conversationId, inbound, reply: null, entitlementBlocked: true, conversation }
+    return entitlementBlockedReply({ conversationId, inbound, conversation })   // D147:没开 AI 包不许沉默,理由见 entitlement-gate.mjs
   }
   const context = buildCustomerServiceContext(req, inbound.lang || 'zh')
   const existing = wecomRouting.conversationRow(conversationId, 'status, transcript_json')
@@ -10721,6 +10722,8 @@ async function route(req, res) {
       tenantFallback: { ...tenantFallbackTally },
       aiUsage: getAiUsage(),   // 04d §三:真模型 token 累计(mock 时全 0)
       /* 05n 裁(6):并发起手式落没落,得能从外面看见 —— 判据不靠猜 */
+      // 🔴 这台服务开的是哪个库(《写库自报律》的「路径」那一格,`resolveDbPath()` 读它;只对回环下发,线上 /health 是公开的)
+      ...(/^(127\.0\.0\.1|::1|::ffff:127\.0\.0\.1)$/.test(String(req.socket?.remoteAddress || '')) ? { dataFile: join(dataDir, 'lucky-luxe.sqlite') } : {}),
       dbConcurrency,
       replyLength: replyLength.snapshot(),   // 05n 裁(4):超长条数得数得出来
       /* 🔴 2026-08-30(退回件②):这台服务**实发的前端是哪一版**,由服务自己说 ——

@@ -69,7 +69,7 @@ export function createTurnAnswer(deps) {
   }
 
   /* ② 预算 —— 最便宜的 1–2 项。金额走 `money()`(全仓金额唯一出口,拿不到币种回空串) */
-  function answerCheapest({ tenantId, serviceName = '', again = false } = {}) {
+  function answerCheapest({ tenantId, serviceName = '', lastReply = '' } = {}) {
     const all = listItems(tenantId).filter((i) => (i.item_kind || 'main') !== 'addon')
     /* 🔴 顾客问「美甲最便宜的是哪种」,就别拿护理项目去顶(五通 v3 现读:
        通二问的是美甲,机器推荐了「手部基础护理」)。**知道类型就按类型筛**;
@@ -85,7 +85,12 @@ export function createTurnAnswer(deps) {
     if (!lines.length) return { text: ASK_ARTIST.zh, en: ASK_ARTIST.en, source: 'ask_artist' }
     /* 🔴 五通 v3 现读(通二):顾客连问两句预算(「能推荐吗」「那个最便宜的是哪种」),
        机器**一字不差地重复了同一句**。真人不会这么说话 —— 第二次就直接点名那一个。
-       `again` 由调用方按会话状态给(说过没有),同《幂等判据律》:判「说过没有」,不判别的。 */
+
+       怎么知道「刚说过」:**看上一句我们自己说的话里有没有点过这个项目名**。
+       第一版靠会话里塞一个 `cheapestShown` 标记,现测**存不住**(报价路那份 state 会被重建),
+       于是这条修了等于没修。改成看 `lastReply` —— 它本来就在工作记忆里存着,
+       而且判的是「**这个项目名刚被说过没有**」这件事本身,不是锚在某句固定话术上。 */
+    const again = Boolean(lines[0].name) && String(lastReply || '').includes(lines[0].name)
     const zh = again
       ? `最便宜的就是${lines[0].name},${lines[0].price}。`
       : (lines.length === 1
@@ -105,7 +110,7 @@ export function createTurnAnswer(deps) {
   /* 派发:分类给了档,这里给句子。回 null = 这一档不归我答(调用方照原流程走)。 */
   function answerForTurn(kind, ctx = {}) {
     const t = String(ctx.text || '')
-    if (kind === 'budget') return answerCheapest(ctx)   // ctx.again 由调用方给(这会话是不是已经报过一次)
+    if (kind === 'budget') return answerCheapest(ctx)   // ctx.lastReply = 我们上一句说的话(用来判「刚说过没有」)
     if (kind !== 'question') return null
     /* 🔴 体验类**排在时长前面**:「能维持多久」两条都命中,但顾客问的是「做完能撑多久」,
        不是「做这个要坐多久」。先判时长会把它答成工时,答非所问换了个花样而已。 */

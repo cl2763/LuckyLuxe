@@ -54,13 +54,45 @@ while IFS= read -r line; do
   fi
 done <<< "$DIFFS"
 
-if [ -n "$NON_HB" ]; then
+# 🔴 J-29(店主 05p 补三 登记):**快照那把刀看不见 UPDATE。**
+#    05o-2 实测:在库的副本上把一行既有数据改掉(不加行不删行),
+#    逐行指纹当场红,而 `db-snapshot.mjs` **照样绿** —— 它比的是
+#    逐表 行/列/索引/触发器/默认值,「行数没变、内容改了」它一栏都看不出来。
+#    也就是说:以往凡靠它背书的「某某库未动」,严格说只证到了「结构与行数未动」。
+#    裁定:**两把都绿才许打印「未动」**。
+#    指纹快照默认取 `<快照>.fp.json`;**没有它就不许下任何「未动」结论**(fail-closed)。
+FP="${3:-${SNAP%.json}.fp.json}"
+if [ ! -f "$FP" ]; then
+  echo "🔴 找不到逐行指纹快照 \`$FP\` —— **不许据此写「未动」**。" >&2
+  echo "   开批时先打:node tools/tenant-fingerprint.mjs <库绝对路径> $FP" >&2
+  exit 2
+fi
+FPOUT="$(node "$ROOT/tools/tenant-fingerprint.mjs" "$DB" --diff "$FP" 2>&1 || true)"
+if ! echo "$FPOUT" | grep -q '逐租户指纹对照'; then
+  echo "🔴 指纹对照**没跑成**(输出里没有表头)—— 不许据此下任何「未动」结论。原文:" >&2
+  echo "$FPOUT" | head -5 >&2
+  exit 2
+fi
+echo '**逐行指纹对照原文**(`node tools/tenant-fingerprint.mjs <库绝对路径> --diff '"$FP"'`):'
+echo
+echo '```'
+echo "$FPOUT" | tail -n +2
+echo '```'
+echo
+FP_DIRTY="$(echo "$FPOUT" | grep -E '旧行消失|整表消失|有租户整个消失' || true)"
+
+if [ -n "$FP_DIRTY" ]; then
+  echo "🔴 **本机库:有动** —— 逐行指纹查出既有行被改/被删(快照那把刀看不见这一类):"
+  echo '```'
+  echo "$FP_DIRTY"
+  echo '```'
+elif [ -n "$NON_HB" ]; then
   echo "🔴 **本机库:有动** —— 以下表不在服务心跳白名单里,**本批不许写「未动」**:"
   echo '```'
   echo "$NON_HB" | sed '/^$/d'
   echo '```'
 elif [ -n "$HB_SEEN" ]; then
-  echo "✅ **本机库:未动**(服务心跳表 \`${HB_SEEN% }\` 的行数增长除外 —— 调度器每天每店写一行,与本批代码无关)"
+  echo "✅ **本机库:未动**(快照与逐行指纹**两把都绿**;服务心跳表 \`${HB_SEEN% }\` 的行数增长除外 —— 调度器每天每店写一行,与本批代码无关)"
 else
-  echo "✅ **本机库:未动** —— 逐表零差异"
+  echo "✅ **本机库:未动** —— 快照逐表零差异 **且** 逐行指纹零旧行消失(两把都绿)"
 fi

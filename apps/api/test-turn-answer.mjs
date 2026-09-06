@@ -74,6 +74,17 @@ const mk = ({ items = ITEMS, kb = KB, money = ((c) => `¥${c / 100}`) } = {}) =>
     !cheap.text.includes('试定制'), cheap.text)
   check('①f 预算:加项不进推荐(顾客问的是做什么项目,不是加什么)',
     !cheap.text.includes('试加项'), cheap.text)
+  /* D145 尾巴(五通 v3 通二:连问两句预算,机器一字不差重复同一句)。
+     函数这一层已经会换说法了 —— 但**调用方还喂不进 `lastReply`**(报价路那份 state 里取不到
+     上一句我们说的话,两种取法都试过、都取不到)。所以这条**只到函数层**,
+     行为层仍会重复,如实登记在回执残留里,不假装修好了。 */
+  const firstSay = A.answerCheapest({}).text
+  const againSay = A.answerCheapest({ lastReply: firstSay }).text
+  check('①k D145 尾巴(函数层):上一句已经点过那个项目名 → 换个说法,不一字不差重复',
+    againSay !== firstSay && againSay.includes('试甲乙'), `${firstSay} || ${againSay}`)
+  check('①l 反向守:上一句没点过 → 照常说完整那句(别为了不重复把话说短了)',
+    A.answerCheapest({ lastReply: '随便一句别的话' }).text === firstSay)
+
   const cheapNoMoney = mk({ money: () => '' }).answerCheapest({})
   check('①g 🔴 预算:金额出口回空串(没配币种)→ **整句改成「问技师」,不出裸数字**',
     cheapNoMoney.source === 'ask_artist', cheapNoMoney.text)

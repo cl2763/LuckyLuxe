@@ -39,6 +39,7 @@
    7. 收尾**逐表验尺**:跟单表 + bookings 的 `x.tenant_id <> u.tenant_id` 逐个必须 0。 */
 
 import { DatabaseSync } from 'node:sqlite'
+import { backupDb } from './db-backup.mjs'   // 05p 段 4:库文件备份一律走这把刀(WAL 之后 cp 是废的)
 import { copyFileSync } from 'node:fs'
 import { requireTarget } from './db-target.mjs'
 
@@ -187,7 +188,7 @@ const snapshot = () => Object.fromEntries(COUNTED.map((t) => {
 
 const stamp = new Date().toISOString().replace(/[:.]/g, '-')
 const backup = `${DB_PATH}.pre-crosstenant-${stamp}`
-copyFileSync(DB_PATH, backup)
+backupDb(DB_PATH, backup)
 console.log(`\n  备份已出:${backup}`)
 
 const before = snapshot()

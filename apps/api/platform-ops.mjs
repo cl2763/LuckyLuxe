@@ -129,13 +129,23 @@ export function createPlatformOps({ db, apiError, randomId, iso, snapshotDb, dbP
         (SELECT COUNT(*) FROM stores s WHERE s.tenant_id = t.id AND s.is_active = 1) AS store_count,
         (SELECT COUNT(*) FROM bookings b WHERE b.tenant_id = t.id) AS booking_count,
         (SELECT COUNT(*) FROM bookings b WHERE b.tenant_id = t.id AND b.appointment_start >= ?) AS month_booking_count,
-        (SELECT username FROM admin_accounts a WHERE a.tenant_id = t.id AND a.role = 'owner' LIMIT 1) AS owner_username
+        (SELECT username FROM admin_accounts a WHERE a.tenant_id = t.id AND a.role = 'owner' LIMIT 1) AS owner_username,
+        /* 🔴 D147:每家店的 AI 包开没开,**平台这一屏就得看得见**。
+           案底:北京新店建出来 AI 一句不答,而这张表上什么异样都没有 ——
+           「哪家店的 AI 是哑的」以前只能一家一家进去试。
+           口径:套餐自带(chain/custom)算开;单独授权行 enabled=1 也算开。 */
+        (CASE WHEN t.plan IN ('chain', 'custom') THEN 1
+              WHEN EXISTS (SELECT 1 FROM tenant_entitlements e
+                           WHERE e.tenant_id = t.id AND e.feature = 'ai_customer_service' AND e.enabled = 1) THEN 1
+              ELSE 0 END) AS ai_on
       FROM tenants t ORDER BY t.rowid ASC
     `).all(monthStartIso)
     return rows.map((r) => ({
       id: r.id, name: r.name, plan: r.plan, status: r.status, kind: r.kind || 'real', listed: r.listed === 1,
       planExpiresAt: r.plan_expires_at, storeCount: r.store_count, bookingCount: r.booking_count,
-      monthBookingCount: r.month_booking_count, ownerUsername: r.owner_username || ''
+      monthBookingCount: r.month_booking_count, ownerUsername: r.owner_username || '',
+      aiEnabled: r.ai_on === 1,
+      aiLabel: r.ai_on === 1 ? 'AI 包:已开通' : 'AI 包:未开通'   // 后端出句,前端零判断
     }))
   }
 

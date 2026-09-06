@@ -11,6 +11,7 @@
    **生产随部署走开机迁移,不用手跑这个脚本。** */
 
 import { DatabaseSync } from 'node:sqlite'
+import { backupDb } from './db-backup.mjs'   // 05p 段 4:库文件备份一律走这把刀(WAL 之后 cp 是废的)
 import { copyFileSync } from 'node:fs'
 import { requireTarget } from './db-target.mjs'
 import { tenantDefaultTargets, tenantNullableTargets, snapshot4, dropTenantDefaults } from '../apps/api/tenant-default-drop.mjs'
@@ -48,7 +49,7 @@ const names = list.map((r) => r.t)
 const before = snapshot4(db, names)
 const stamp = new Date().toISOString().replace(/[:.]/g, '-')
 const backup = `${DB_PATH}.pre-dropdefault-${stamp}`
-copyFileSync(DB_PATH, backup)
+backupDb(DB_PATH, backup)
 console.log(`\n  备份已出:${backup}`)
 
 let result = null

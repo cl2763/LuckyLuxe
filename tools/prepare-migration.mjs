@@ -3,6 +3,7 @@
 // 保留: 订单/客户/财务账本/排班/账号/知识库/AI纠偏反馈(ai_response_feedback)/学习样本文本
 // 删除: 测试会话(wechat_conversations)/AI会话状态/报价单/预约草稿/提醒任务 —— 真实微信尚未接入,这些 100% 是测试数据
 import { DatabaseSync } from 'node:sqlite'
+import { backupDb } from './db-backup.mjs'   // 05p 段 4:库文件备份一律走这把刀(WAL 之后 cp 是废的)
 import { copyFileSync, statSync } from 'node:fs'
 import { requireTarget } from './db-target.mjs'
 
@@ -13,7 +14,7 @@ const [src, out] = [
 ]
 if (!src || !out) { console.error('用法: node tools/prepare-migration.mjs <源sqlite> <输出sqlite>'); process.exit(1) }
 
-copyFileSync(src, out)
+backupDb(src, out)
 const db = new DatabaseSync(out)
 
 const report = []

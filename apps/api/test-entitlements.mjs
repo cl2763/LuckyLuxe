@@ -58,11 +58,17 @@ async function main() {
     const before = await chat(`ent-on-${RUN_ID}`, '你好，想了解美甲')
     check('AI replies when entitled', Boolean(before.data?.reply?.data?.answerZh), JSON.stringify(before.data).slice(0, 150))
 
-    // 2. 关闭 AI → 静默转人工
+    /* 2. 关闭 AI → 转人工。
+       🔴 口径改过一次(店主 05p 补二 裁 D147,2026-09-08):原来这里断言的是
+       **「静默」**(`!reply`) —— 而那正是被裁掉的行为:商家会以为机器坏了。
+       现在的合同是「**转人工,但要出声**」。这条断言按新口径改写,不是删掉:
+       它守的东西从「不许说话」翻成了「必须说话且必须转人工」。 */
     const disabled = await setAi({ enabled: false })
     check('disable override applied', disabled.data.entitlements?.features?.ai_customer_service?.enabled === false)
     const blocked = await chat(`ent-off-${RUN_ID}`, '你好，想了解美甲')
-    check('AI silent when disabled', !blocked.data?.reply, JSON.stringify(blocked.data).slice(0, 200))
+    check('AI 关闭时**出声且转人工**(D147:不许沉默 —— 沉默会被当成「机器坏了」)',
+      Boolean(blocked.data?.reply?.data?.answerZh) && blocked.data?.reply?.data?.handoffRequired === true,
+      JSON.stringify(blocked.data?.reply || null).slice(0, 160))
     check('blocked flag returned', blocked.data?.entitlementBlocked === true)
     check('customer message still recorded and marked needs_human', blocked.data?.conversation?.status === 'needs_human', blocked.data?.conversation?.status)
 
@@ -110,6 +116,52 @@ async function main() {
       body: JSON.stringify({ feature: 'ai_customer_service', enabled: false })
     })
     check('bad token rejected', badAuth.status === 401, String(badAuth.status))
+
+    /* ══ D147(店主 05p 补二):没开 AI 包**不许沉默** ══════════════
+       案底 09-08:北京新店建出来 AI 一句话都不答,后台一点报错都没有 ——
+       商家会以为「机器坏了」,真相是套餐不含 AI 智能包。静默失败器族。
+       这里自己建一家 single 店当景(《造景律》),三条一起验:
+       ①平台那一屏看得见「未开通」②顾客进线有话说、且转同事 ③商家侧说清了原因。 */
+    const D147 = `d147-${RUN_ID}`
+    const born = await fetch(`${BASE_URL}/platform/tenants`, {
+      method: 'POST',
+      headers: { 'content-type': 'application/json', authorization: `Bearer ${TOKEN}` },
+      body: JSON.stringify({ id: D147, name: `没开AI的店${RUN_ID}`, plan: 'single' })
+    })
+    check('D147⓪ 造景:建出一家不含 AI 包的 single 店(建不出来按红)', born.status === 201, String(born.status))
+    if (born.status === 201) {
+      const listed = await fetch(`${BASE_URL}/platform/tenants`, { headers: { authorization: `Bearer ${TOKEN}` } })
+        .then((r) => r.json()).catch(() => null)
+      const row = (listed?.tenants || []).find((t) => t.id === D147)
+      check('D147① 平台那一屏能看见这家店「AI 包:未开通」(以前只能一家家进去试)',
+        row?.aiEnabled === false && /未开通/.test(String(row?.aiLabel || '')), JSON.stringify({ e: row?.aiEnabled, l: row?.aiLabel }))
+      const hit = await fetch(`${BASE_URL}/admin/wechat/mock-chat-message`, {
+        method: 'POST',
+        headers: { 'content-type': 'application/json', authorization: `Bearer ${TOKEN}`, 'x-admin-tenant-id': D147 },
+        body: JSON.stringify({ externalUserId: `c-${RUN_ID}`, message: '你们几点开门' })
+      }).then((r) => r.json()).catch(() => null)
+      check('D147② 🔴 顾客进线**有话说**,不是 reply=null 的沉默',
+        Boolean(hit?.reply?.data?.answerZh), JSON.stringify(hit?.reply || null).slice(0, 80))
+      check('D147③ 那句话转同事,且**不跟顾客提套餐**(商家买没买是商家的事)',
+        hit?.reply?.data?.handoffRequired === true
+        && !/套餐|开通|AI 包|智能包/.test(String(hit?.reply?.data?.answerZh || '')),
+        String(hit?.reply?.data?.answerZh || '').slice(0, 70))
+      check('D147④ 商家那侧说清了原因(后台状态灯与模拟面板读这一句)',
+        /未开通/.test(String(hit?.entitlementNote || '')), String(hit?.entitlementNote || '').slice(0, 60))
+      /* 反向守:开通之后立刻不再走这条闸 —— 不然「永远回这句」也能骗过上面四条 */
+      await fetch(`${BASE_URL}/admin/tenant/entitlements`, {
+        method: 'PUT',
+        headers: { 'content-type': 'application/json', authorization: `Bearer ${TOKEN}`, 'x-admin-tenant-id': D147 },
+        body: JSON.stringify({ feature: 'ai_customer_service', enabled: true })
+      })
+      const after = await fetch(`${BASE_URL}/admin/wechat/mock-chat-message`, {
+        method: 'POST',
+        headers: { 'content-type': 'application/json', authorization: `Bearer ${TOKEN}`, 'x-admin-tenant-id': D147 },
+        body: JSON.stringify({ externalUserId: `c2-${RUN_ID}`, message: '你们几点开门' })
+      }).then((r) => r.json()).catch(() => null)
+      check('D147⑤ 反向守:开通之后就不再走这条闸了(否则「永远回这句」也能骗过上面四条)',
+        after?.entitlementBlocked !== true, JSON.stringify({ blocked: after?.entitlementBlocked }))
+    }
 
     console.log(`[entitlements] all ${checks} checks passed`)
   } finally {
