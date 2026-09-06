@@ -176,6 +176,17 @@ if (made.status === 201) {
     check('⑤a 刀落得下去:接口收得下 priceMode=quote(收不下说明 D146 那一列没接通)',
       [200, 201].includes(patched.status) && patched.data?.item?.priceMode === 'quote',
       `status=${patched.status} 回 ${JSON.stringify(patched.data?.item?.priceMode)}`)
+    /* 🔴 D146 的另一半:**发给模型的价目里,需报价的项不许带价格**。
+       只把它从「最便宜」里挑掉不够 —— 事实闸看到 `price: 0` 就有据可依地报「¥0」。 */
+    const facts = (await request('/admin/kb', {}, PLATFORM, TID)).data
+    const listed = ((facts?.liveFacts?.priceList?.items) || []).find((x) => x.nameZh === `便宜款${RUN}`)
+    check('⑤a2 造病前置:那一项在发给模型的价目里找得到(找不到 = 下面两条什么都没验)',
+      Boolean(listed), JSON.stringify((facts?.liveFacts?.priceList?.items || []).map((x) => x.nameZh)).slice(0, 120))
+    check('⑤a3 🔴 需报价的项**整个 price 字段都不下发**(不是下发 0)',
+      listed ? listed.price === undefined : false, JSON.stringify(listed))
+    check('⑤a4 反向守:它得有一句话说明为什么没价(只是没价 = 模型会自己猜)',
+      listed ? /技师|报价/.test(String(listed.priceNote || '')) : false, JSON.stringify(listed?.priceNote))
+
     const uid3 = `ta-k-${RUN}`
     await chat(uid3, '我想做美甲')
     const after = sayOf(await chat(uid3, '预算不多,能推荐吗'))

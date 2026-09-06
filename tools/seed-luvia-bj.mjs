@@ -82,16 +82,20 @@ const CATEGORIES = [
   { key: 'removal', name: '卸除', sortOrder: 5 }
 ]
 
-// [名称, 大类key, 类型, 原价, 分享价, 会员价, 时长分钟]
+/* [名称, 大类key, 类型, 原价, 分享价, 会员价, 时长分钟, 需报价?]
+   末位 'quote' = D146 的 `price_mode`:**要技师看过才报价**,AI 一个数字都不许出,
+   也不参与「最便宜的是哪种」。05o §一 要的那 1–2 个「需报价」项,现在有列可放了。 */
 const MAIN_ITEMS = [
   ['精致单色', 'nail_solid', 'NAIL', 29800, 25800, 19800, 90],
   ['猫眼渐变', 'nail_solid', 'NAIL', 39800, 33800, 26800, 100],
   ['简约款式', 'nail_style', 'NAIL', 49800, 42800, 33800, 120],
   ['法式镶钻', 'nail_style', 'NAIL', 69800, 58800, 45800, 150],
+  ['参考图定制款', 'nail_style', 'NAIL', 0, 0, 0, 180, 'quote'],
   ['单根嫁接 · 自然', 'lash_basic', 'LASH', 39800, 33800, 25800, 90],
   ['日式平扇', 'lash_basic', 'LASH', 49800, 42800, 33800, 100],
   ['浓密款式', 'lash_style', 'LASH', 59800, 49800, 39800, 110],
-  ['开扇混合款', 'lash_style', 'LASH', 79800, 65800, 52800, 130]
+  ['开扇混合款', 'lash_style', 'LASH', 79800, 65800, 52800, 130],
+  ['眼型定制设计款', 'lash_style', 'LASH', 0, 0, 0, 150, 'quote']
 ]
 
 // [名称, 大类key, 类型, 原价, 分享价, 会员价, 单位, 适用大类keys]
@@ -240,16 +244,21 @@ async function main() {
   const existingItems = (await T('/admin/pricing/items')).items
   const findItem = (nameZh, itemKind) => existingItems.find((i) => i.nameZh === nameZh && i.itemKind === itemKind)
   let created = 0
-  for (const [nameZh, catKey, type, list, share, member, durationMin] of MAIN_ITEMS) {
+  for (const [nameZh, catKey, type, list, share, member, durationMin, priceMode] of MAIN_ITEMS) {
     if (findItem(nameZh, 'main')) continue
     await POST('/admin/pricing/items', {
       nameZh, nameEn: nameZh, type, itemKind: 'main', categoryId: catIdByKey[catKey], unit: 'once',
       listPriceCents: list, sharePriceCents: share, memberPriceCents: member,
       baseDurationMin: durationMin, depositCents: 0, isActive: true,
+      priceMode: priceMode === 'quote' ? 'quote' : 'fixed',
       sortOrder: MAIN_ITEMS.findIndex((r) => r[0] === nameZh) + 1
     })
     created += 1
   }
+  /* 自证:这两项确实是 quote —— 建过一次之后再跑是幂等跳过,所以**读回来验**,不靠「我发过了」 */
+  const quoted = (await T('/admin/pricing/items')).items.filter((i) => i.priceMode === 'quote').map((i) => i.nameZh)
+  if (quoted.length < 2) throw new Error(`需报价项目应有 2 个,实际 ${quoted.length}:${quoted.join('/')}`)
+  log(`- 需报价项目 ${quoted.length} 个:${quoted.join(' · ')}`)
   for (const [nameZh, catKey, type, list, share, member, unit, scopeKeys] of ADDON_ITEMS) {
     if (findItem(nameZh, 'addon')) continue
     await POST('/admin/pricing/items', {

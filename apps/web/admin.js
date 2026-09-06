@@ -1,6 +1,6 @@
 // 构建号:每次交付递增。侧栏可见,排查"改了没生效"时先对版本。
 // 兜底用(服务端会注入 window.LL_BUILD = 资源内容指纹,页面优先显示那个)
-const ADMIN_BUILD = '20260905a-air04'
+const ADMIN_BUILD = '20260908a-d146'
 let pricingState = { module: 'storefront', tab: 'items', categories: [], items: [], rules: {}, editing: null, preview: null, storefrontPicker: false }
 console.log(`[admin] build ${ADMIN_BUILD}`)
 
@@ -7840,7 +7840,7 @@ function renderPricingItems() {
       <div>
         <strong>${escapeHtml(item.nameZh)}</strong>
         <span class="subtle">${escapeHtml(catName(item.categoryId))}${item.unit === 'per_finger' ? (pzh() ? ' · 按指' : ' · per finger') : ''}${item.isActive ? '' : (pzh() ? ' · 已停用' : ' · hidden')}${item.itemKind === 'main' ? (item.storefront ? (pzh() ? ' · 橱窗已上架' : ' · listed') : (pzh() ? ' · 橱窗未上架' : ' · unlisted')) : ''}</span>
-        ${item.itemKind === 'main' ? `<div style="margin-top:4px">${tierChips(item)}</div>` : `<div class="subtle">${money(item.listPriceCents)}${item.priceRule === 'pct_of_tier_price' ? ` · ${pzh() ? '按主项目比例' : 'pct of main'} ${item.priceRuleValue || '默认'}%` : ''}</div>`}
+        ${item.priceMode === 'quote' ? `<div class="subtle" style="margin-top:4px">${pzh() ? '需技师报价(AI 不报数)' : 'Quote on request'}</div>` : ''}${item.itemKind === 'main' ? `<div style="margin-top:4px">${tierChips(item)}</div>` : `<div class="subtle">${money(item.listPriceCents)}${item.priceRule === 'pct_of_tier_price' ? ` · ${pzh() ? '按主项目比例' : 'pct of main'} ${item.priceRuleValue || '默认'}%` : ''}</div>`}
         <div class="subtle">${item.baseDurationMin ? `${item.baseDurationMin}min` : ''}</div>
       </div>
       <div class="row-actions">
@@ -7896,9 +7896,8 @@ function renderPricingItemEditor() {
         <label><span>${pzh() ? '分享价' : 'Share price'}</span><input id="piShare" inputmode="decimal" value="${draft.sharePriceCents ? draft.sharePriceCents / 100 : ''}"></label>
         <label><span>${pzh() ? '会员价' : 'Member price'}</span><input id="piMember" inputmode="decimal" value="${draft.memberPriceCents ? draft.memberPriceCents / 100 : ''}"></label>
         <label><span>${pzh() ? '疗程价(选填)' : 'Course price'}</span><input id="piCourse" inputmode="decimal" value="${draft.coursePriceCents ? draft.coursePriceCents / 100 : ''}"></label>
-        <label><span>${pzh() ? '疗程次数' : 'Course times'}</span><input id="piCourseTimes" inputmode="numeric" value="${draft.courseTimes || ''}"></label>
-        <label><span>${pzh() ? '时长(分钟)' : 'Duration (min)'}</span><input id="piDuration" inputmode="numeric" value="${draft.baseDurationMin ?? (isAddon ? 0 : 60)}"></label>
-      </div>
+        <label><span>${pzh() ? '疗程次数' : 'Course times'}</span><input id="piCourseTimes" inputmode="numeric" value="${draft.courseTimes || ''}"></label><label><span>${pzh() ? '时长(分钟)' : 'Duration (min)'}</span><input id="piDuration" inputmode="numeric" value="${draft.baseDurationMin ?? (isAddon ? 0 : 60)}"></label>
+      </div>${isAddon ? '' : `<label class="subtle"><input type="checkbox" id="piQuoteMode" ${draft.priceMode === 'quote' ? 'checked' : ''}> ${pzh() ? '这项<b>需技师看过才报价</b>(勾上后 AI 不自己报数,也不进「最便宜的是哪种」)' : 'Quote on request (AI will not price it)'}</label>`}
       ${isAddon ? `
       <div class="pricing-addon-block">
         <label><span>${pzh() ? '加项组名(结算表单里按它分组,如 延长类 / 补甲类 / 卸甲类;留空归「其他加项」)' : 'Addon group'}</span>
@@ -7934,7 +7933,8 @@ function collectPricingItemForm() {
     memberPriceCents: pCents(document.querySelector('#piMember')?.value),
     coursePriceCents: pCents(document.querySelector('#piCourse')?.value),
     courseTimes: Number(document.querySelector('#piCourseTimes')?.value || 0) || null,
-    baseDurationMin: Number(document.querySelector('#piDuration')?.value || 0)
+    baseDurationMin: Number(document.querySelector('#piDuration')?.value || 0),
+    ...(pricingState.editing.itemKind === 'addon' ? {} : { priceMode: document.querySelector('#piQuoteMode')?.checked ? 'quote' : 'fixed' })   // D146:加项没有这一格,不发
   }
   if (pricingState.editing.itemKind === 'addon') {
     body.priceRule = document.querySelector('#piPctRule')?.checked ? 'pct_of_tier_price' : 'fixed'

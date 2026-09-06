@@ -23,7 +23,10 @@ const DB = requireTarget({
   hint: '(与 BR_BASE 是同一个库)',
 })
 const TAG = process.env.BR_TAG || 'base'
-const SHOPS = ['lucky-luxe', 'jics-store']
+/* 🔴 三店并行(05o §一⑥)。但**默认仍是历史那两家** —— 到底率是要跟 05h/05l/05n 逐次比的数,
+   分母一变(12→18)前后就不可比了。第三店单独跑一趟、单独报,不混进那条历史曲线。
+   用法:BR_SHOPS=luvia-bj node tools/ai-eval/booking-rate.mjs */
+const SHOPS = String(process.env.BR_SHOPS || 'lucky-luxe,jics-store').split(',').map((x) => x.trim()).filter(Boolean)
 
 /* 12 个「想约」开场 —— 照顾客真会说的样子写,不写成收集表的填空 */
 const WANTS = [
@@ -76,6 +79,7 @@ for (const turns of WANTS) {
     let touchedHuman = false
     let sawForm = false
     let lastSay = ''
+    let swappedDay = false
     for (const t0 of [...turns, ...CONFIRM_TURN]) {
       /* 新尺只改**最后那句确认**的说法,前面几句一字不动 */
       const t = (RULER === 'new' && CONFIRM_TURN.length && t0 === CONFIRM_TURN[0]) ? pickSlot(lastSay) : t0
@@ -87,6 +91,20 @@ for (const turns of WANTS) {
       lastSay = say
       /* 7 项表的形状:一次抛出 6 个以上编号项 —— ③ 要消灭的正是它 */
       if ((say.match(/^\s*\d\.\s/gm) || []).length >= 6) sawForm = true
+      /* 🔴 新尺再加一条(05p 现测发现的**尺子病**):12 组开场里有 3 组说的是「明天」,
+         而两家夹具店都是**周一休息** —— 于是**每逢周日跑这把尺,那 3 组必然到不了底**,
+         机器答的是完全正确的「门店休息哦,换一天好吗?」。
+         也就是说:老尺这条历史曲线**本身随星期几上下跳**,05h/05l/05n 那几个数之间
+         严格说不可比(它们跑在不同的星期几)。
+         真顾客碰上店休会换一天,所以新尺补一句「那周六呢」再往下走;
+         **老尺一个字不动** —— 它是与历史对齐的唯一锚,尺子改了就断了。 */
+      if (RULER === 'new' && /休息|不营业|没开门/.test(say) && !swappedDay) {
+        swappedDay = true
+        const d2 = await send(tid, uid, '那周六呢')
+        lastSay = String(d2?.reply?.data?.answerZh || '')
+        const st2 = d2?.conversation?.status
+        if (st2 === 'needs_human' || st2 === 'human_active') touchedHuman = true
+      }
     }
     const drafts = convId ? draftsFor(convId) : 0
     rows.push({ tid, uid, convId, turns, drafts, touchedHuman, sawForm,

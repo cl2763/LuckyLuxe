@@ -49,6 +49,7 @@ import { demoSeedTag, ensureDemoMarkColumns } from './demo-mark.mjs'   // D121:�
 import { createKbMatch } from './kb-match.mjs'                        // 知识库匹配两个口
 import { createTurnAnswer } from './turn-answer.mjs'                  // D145 后半:先答再问,答从数据来
 import { createEscalateIntake } from './escalate-intake.mjs'          // 转人工判断 + D145 那条闸
+import { isQuoteItem } from './price-mode.mjs'                        // D146:需报价的项不下发价格
 import { createTenantProfile } from './tenant-profile.mjs'          // D127:本店档案唯一出口
 import { createDemoFacts } from './demo-facts.mjs'                    // 演示店事实口(铺设脚本不再直连库)
 import { createPlatformOps } from './platform-ops.mjs'                // 平台运维域(备份/五项/运维日志/重置财务密码)
@@ -1049,7 +1050,7 @@ function liveTenantFacts() {
       courseTimes: map.course ? (map.course.courseTimes || undefined) : undefined
     }
   }
-  const allItems = db.prepare("SELECT id, name_zh, name_en, price_cents, deposit_cents, base_duration_min, item_kind, category_id, unit, addon_scope_json FROM services WHERE tenant_id = ? AND is_active = 1 ORDER BY sort_order ASC, rowid ASC").all(tid)
+  const allItems = db.prepare("SELECT id, name_zh, name_en, price_cents, deposit_cents, base_duration_min, item_kind, category_id, unit, addon_scope_json, price_mode FROM services WHERE tenant_id = ? AND is_active = 1 ORDER BY sort_order ASC, rowid ASC").all(tid)
   const services = allItems.filter((s) => (s.item_kind || 'main') !== 'addon')
   const addons = allItems.filter((s) => (s.item_kind || 'main') === 'addon')
   const priceList = services.length ? {
@@ -1059,7 +1060,10 @@ function liveTenantFacts() {
       nameZh: s.name_zh,
       nameEn: s.name_en || undefined,
       category: s.category_id && categoryById[s.category_id] ? categoryById[s.category_id].name : undefined,
-      price: priceOf(s.price_cents),
+      /* 🔴 D146:需报价的项**不下发价格**,而不是下发一个 0。
+         下发 0 的话事实闸看到的是「这项 0 元」,AI 就有据可依地报出「¥0」——
+         那正是「一个字段回答两个问题」会长出来的错。没有价就一个数都不给,只给一句话。 */
+      ...(isQuoteItem(s) ? { priceNote: '需技师看过后报价,不报预估数' } : { price: priceOf(s.price_cents) }),
       deposit: priceOf(s.deposit_cents),
       durationMin: s.base_duration_min || undefined,
       ...tierPrices(s.id)
