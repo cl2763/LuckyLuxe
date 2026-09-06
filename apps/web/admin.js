@@ -1,6 +1,6 @@
 // 构建号:每次交付递增。侧栏可见,排查"改了没生效"时先对版本。
 // 兜底用(服务端会注入 window.LL_BUILD = 资源内容指纹,页面优先显示那个)
-const ADMIN_BUILD = '20260908a-d146'
+const ADMIN_BUILD = '20260908b-home'
 let pricingState = { module: 'storefront', tab: 'items', categories: [], items: [], rules: {}, editing: null, preview: null, storefrontPicker: false }
 console.log(`[admin] build ${ADMIN_BUILD}`)
 
@@ -1368,7 +1368,6 @@ function renderMetrics() {
   els.metricGrid.innerHTML = `
     <button class="metric" data-dashboard-detail="confirmed" type="button"><span class="subtle">${t('confirmed')}</span><strong>${stats.confirmed}</strong></button>
     <button class="metric" data-dashboard-detail="pending" type="button"><span class="subtle">${t('pending')}</span><strong>${stats.pending}</strong></button>
-    <button class="metric revenue-metric" data-admin-page="finance" type="button"><span class="subtle">${owner.lang === 'zh' ? '本月收入(账本)' : 'Income (ledger)'}</span><strong>${revenueDisplay}</strong></button>
     <button class="metric" data-dashboard-detail="monthServices" type="button"><span class="subtle">${t('monthServices')}</span><strong>${stats.monthServices}</strong></button>
     <button class="metric" data-dashboard-detail="totalServices" type="button"><span class="subtle">${t('totalServices')}</span><strong>${stats.totalServices}</strong></button>
   `
@@ -1563,102 +1562,18 @@ function renderAdminPages() {
 }
 
 function renderDashboard() {
-  const stats = dashboardStats()
-  const channelRows = trafficChannels()
-  const techRows = technicianPerformanceRows()
-  const dailyRows = monthRevenueRows()
-  const popular = popularStyle()
-  const topTech = topRatedTechnician()
-  const retention = retentionStats()
-  const maxChannel = Math.max(...channelRows.map((item) => item.count), 1)
-  const maxTech = Math.max(...techRows.map((item) => item.completed), 1)
-  const maxDaily = Math.max(...dailyRows.map((item) => item.amount), 1)
-  const ledgerTxns = owner.dashFinance?.transactions || []
-  const dailyLedger = Object.entries(ledgerTxns.filter((txn) => txn.amountCents > 0).reduce((groups, txn) => {
-    groups[txn.occurredOn] = (groups[txn.occurredOn] || 0) + txn.amountCents
-    return groups
-  }, {})).sort(([a], [b]) => a.localeCompare(b)).map(([date, amount]) => ({ date, amount }))
-  const maxLedgerDaily = Math.max(...dailyLedger.map((row) => row.amount), 1)
-  const ledgerIncomeCents = owner.dashFinance?.summary?.incomeCents
-  els.dashboardCharts.innerHTML = `
-    ${renderTodayTasksCard()}
-    <button class="dashboard-chart-card card" data-dashboard-detail="today" type="button">
-      <div class="section-row compact-row">
-        <div>
-          <p class="eyebrow">${t('todayOverview')}</p>
-          <h2>${stats.todayBookings.length}</h2>
-        </div>
-        <span class="dashboard-card-cue">${t('viewDetails')}</span>
-      </div>
-      <div class="chart-stat-row">
-        <span>${t('activeBookings')}</span>
-        <strong>${stats.todayBookings.filter((item) => activeStatuses().includes(item.status)).length}</strong>
-      </div>
-      <div class="chart-stat-row">
-        <span>${t('confirmed')}</span>
-        <strong>${stats.todayBookings.filter((item) => item.status === 'CONFIRMED').length}</strong>
-      </div>
-    </button>
-    <button class="dashboard-chart-card card" data-admin-page="finance" type="button">
-      <div class="section-row compact-row">
-        <div>
-          <p class="eyebrow">${owner.lang === 'zh' ? '本月经营' : 'This Month'}</p>
-          <h2>${owner.financeKey && ledgerIncomeCents !== undefined ? money(ledgerIncomeCents) : `${stats.monthServices}${owner.lang === 'zh' ? ' 单' : ''}`}</h2>
-        </div>
-        <span class="dashboard-card-cue">${owner.financeKey ? (owner.lang === 'zh' ? '查看财务' : 'Finance') : (owner.lang === 'zh' ? '🔒 收入解锁' : '🔒 Unlock')}</span>
-      </div>
-      <div class="chart-stat-row"><span>${t('popularStyle')}</span><strong>${escapeHtml(popular.name)} · ${popular.count}</strong></div>
-      <div class="chart-stat-row"><span>${t('topRatedTechnician')}</span><strong>${escapeHtml(topTech.name)} · ${topTech.completed}${owner.lang === 'zh' ? ' 单' : ''}</strong></div>
-      ${owner.financeKey
-        ? (dailyLedger.slice(-3).map((row) => chartBar(row.date.slice(5), money(row.amount), maxLedgerDaily, Math.max(8, Math.round((row.amount / maxLedgerDaily) * 100)))).join('') || `<div class="chart-stat-row"><span>${owner.lang === 'zh' ? '本月账本收入' : 'Ledger income'}</span><strong>${ledgerIncomeCents !== undefined ? money(ledgerIncomeCents) : '-'}</strong></div>`)
-        : `<div class="chart-stat-row locked-stat-row"><span>${owner.lang === 'zh' ? '收入金额与日趋势' : 'Income & trend'}</span><strong>${owner.lang === 'zh' ? '🔒 点击解锁' : '🔒 Unlock'}</strong></div>`}
-    </button>
-    <button class="dashboard-chart-card card" data-dashboard-detail="monthServices" type="button">
-      <div class="section-row compact-row">
-        <div>
-          <p class="eyebrow">${t('monthOverview')}</p>
-          <h2>${stats.monthBookings.length}</h2>
-        </div>
-        <span class="dashboard-card-cue">${t('viewDetails')}</span>
-      </div>
-      ${chartBar(t('monthServices'), stats.monthServices, Math.max(stats.monthBookings.length, 1))}
-      ${chartBar(t('pending'), stats.monthBookings.filter((item) => item.status === 'PENDING_PAYMENT').length, Math.max(stats.monthBookings.length, 1))}
-      ${owner.financeKey ? chartBar(t('revenue'), money(stats.monthRevenue), Math.max(stats.monthBookings.length, 1), 100) : ''}
-    </button>
-    <button class="dashboard-chart-card card" data-dashboard-detail="technicians" type="button">
-      <div class="section-row compact-row">
-        <div>
-          <p class="eyebrow">${t('technicianPerformance')}</p>
-          <h2>${techRows.reduce((sum, item) => sum + item.completed, 0)}</h2>
-        </div>
-        <span class="dashboard-card-cue">${t('viewDetails')}</span>
-      </div>
-      ${techRows.map((tech) => chartBar(`${tech.name} · ${tech.status}`, tech.completed, maxTech)).join('')}
-    </button>
-    <button class="dashboard-chart-card card" data-dashboard-detail="channels" type="button">
-      <div class="section-row compact-row">
-        <div>
-          <p class="eyebrow">${t('channelTraffic')}</p>
-          <h2>${channelRows.reduce((sum, item) => sum + item.count, 0)}</h2>
-        </div>
-        <span class="dashboard-card-cue">${t('viewDetails')}</span>
-      </div>
-      ${channelRows.length ? channelRows.map((channel) => chartBar(channel.name, channel.count, maxChannel)).join('')
-        : `<p class="subtle">${owner.lang === 'zh' ? '还没有订单,暂无来源数据' : 'No bookings yet'}</p>`}
-    </button>
-    <button class="dashboard-chart-card card" data-dashboard-detail="retention" type="button">
-      <div class="section-row compact-row">
-        <div>
-          <p class="eyebrow">${t('retentionReminder')}</p>
-          <h2>${retention.rate}%</h2>
-        </div>
-        <span class="dashboard-card-cue">${t('viewDetails')}</span>
-      </div>
-      <div class="chart-stat-row"><span>${t('retentionRate')}</span><strong>${retention.repeat}/${retention.total}</strong></div>
-      <div class="chart-stat-row"><span>${t('revisitDue')}</span><strong>${retention.due.length}</strong></div>
-      ${retention.due.slice(0, 3).map((customer) => chartBar(customerName(customer), customer.visitCount || 0, Math.max(...retention.due.map((item) => item.visitCount || 0), 1))).join('') || `<div class="empty-state small-empty">${t('noDetailItems')}</div>`}
-    </button>
-  `
+  /* 🔴 主页重画(图 v3.1 §三):整页只吃后端三个接口,前端零计算、零拼数。
+     原来这里那几块(本月经营 / 本月账本收入 / 收入解锁 / 来源 / 留存)各算各的 ——
+     同一个「营收」在首页、日结页、财务页能算出三个数,那正是这次重画要治的。
+     页面本体搬去 `apps/web/dashboard-home.js`(巨型文件只许搬出不许新增)。 */
+  window.DashboardHome.mountInto(els.dashboardCharts, {
+    request,
+    escapeHtml,
+    money,                       // 币种红线:金额只走全仓那一个出口,页面里不许出现币符
+
+    isZh: owner.lang === 'zh',
+    goto: (to) => { const page = { 'ai-desk': 'wechatMock', quote: 'wechatMock', notes: 'customers', schedule: 'schedule', 'daily-close': 'finance' }[to]; if (page) { owner.adminPage = page; if (page === 'finance') loadFinancePage().catch(() => {}); render() } },
+  })
   renderDashboardDetail()
 }
 

@@ -7697,3 +7697,30 @@ section.card > .section-row:first-child { margin-top: 0; }
 
 /* D105:值日块内就地「回到今天」*/
 .tb-duty-back { margin-left: 8px; border: 0; background: none; color: #8a6a3a; text-decoration: underline; cursor: pointer; font-size: 13px; }
+
+/* ── 主页业绩大屏(图 v3.1 §三;页面本体在 apps/web/dashboard-home.js)────── */
+.dh-card { padding: 16px; margin-bottom: 12px; }
+.dh-periods { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; margin-bottom: 12px; }
+.dh-period { border: 1px solid var(--line, #e5e0da); background: transparent; border-radius: 999px; padding: 4px 14px; cursor: pointer; font-size: 13px; }
+.dh-period.on { background: var(--ink, #2b2b2b); color: #fff; border-color: transparent; }
+.dh-full { margin-left: auto; opacity: .45; }
+.dh-head { display: flex; align-items: baseline; gap: 10px; flex-wrap: wrap; }
+.dh-big { font-size: 40px; line-height: 1.1; margin: 4px 0; }
+.dh-delta { font-size: 13px; }
+.dh-delta.up { color: #2f8f5b; } .dh-delta.down { color: #c0563f; }
+.dh-delta-none, .dh-locked { color: var(--muted, #8a8079); }
+.dh-truth { color: var(--muted, #8a8079); margin: 8px 0; }
+.dh-skeleton .dh-sk-line { height: 18px; margin: 10px 0; background: linear-gradient(90deg,#eee,#f6f6f6,#eee); }
+.dh-tiles { display: grid; grid-template-columns: repeat(auto-fit, minmax(140px, 1fr)); gap: 10px; margin-top: 14px; }
+/* 🔴 容器圆角**不新增声明**(`test-ui-spec` 的形制集条数棘轮只减不增,我第一版加了两处当场红)——
+   小牌直接复用已有的 `.card` 形制,骨架条不要圆角。 */
+.dh-tile { border: 1px solid var(--line, #e5e0da); padding: 10px 12px; display: flex; flex-direction: column; gap: 2px; }
+.dh-tile-k { font-size: 12px; color: var(--muted, #8a8079); }
+.dh-tile-v { font-size: 20px; }
+.dh-tile-x { font-size: 12px; color: var(--muted, #8a8079); }
+.dh-now4 { display: grid; grid-template-columns: repeat(4, 1fr); gap: 10px; }
+.dh-now-cell { text-align: center; } .dh-now-cell span { display: block; font-size: 12px; color: var(--muted, #8a8079); }
+.dh-now-cell strong { font-size: 22px; }
+.dh-next { margin-top: 10px; font-size: 14px; }
+.dh-next-none { color: var(--muted, #8a8079); }
+.dh-todo-row { display: flex; justify-content: space-between; width: 100%; border: 0; background: transparent; padding: 8px 0; cursor: pointer; border-bottom: 1px solid var(--line, #f0ece7); }
