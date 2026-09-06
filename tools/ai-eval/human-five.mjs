@@ -9,6 +9,7 @@
  */
 import { writeFileSync } from 'node:fs'
 import { requireTarget } from '../db-target.mjs'
+import { evalOutPath } from './archive.mjs'   // J-30:默认落档案目录
 
 /* 🔴 造景/评测脚本**不许有默认目标**(店主立;写库脚本护栏扫的就是这个)。
    我头一版把沙箱地址写成了默认值 —— `test-db-target-guard` 当场点名
@@ -18,11 +19,10 @@ const BASE = requireTarget({
   value: process.env.HF_BASE,
   hint: '(评测只打沙箱,例:HF_BASE=http://127.0.0.1:4310)',
 })
-const OUT = requireTarget({
-  envName: 'HF_OUT=<输出 md 路径>',
-  value: process.env.HF_OUT,
-  hint: '(原文落盘给店主打分,例:handoff/ai-eval-results/…_像人五通_原文_…md)',
-})
+/* 🔴 J-30(05p 补三):默认就落档案目录,`HF_OUT` 只许覆盖不许留空。
+   这一把本来就没有 /tmp 分支(它是 requireTarget),但「必须显式给」在赶时间时
+   照样会被人随手指到别处 —— 给个**正确的默认**比逼人每次打一遍稳。 */
+const OUT = evalOutPath({ batch: process.env.HF_BATCH || '像人多通', name: '原文', ext: 'md', override: process.env.HF_OUT })
 const RUN = Date.now().toString(36)
 
 /* 五通:照真顾客会说的样子写,不写成测试用例 */

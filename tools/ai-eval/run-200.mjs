@@ -1,3 +1,4 @@
+import { evalOutPath, runStamp } from './archive.mjs'   // J-30:明细落仓
 /* 门的评测跑机(图 §五)—— 四个数并排:答 / 反问 / 转人工 / 静默
    **每句一通干净会话**:一轮没命中就整通哑掉(D133),共用会话会把后面的全吞掉,
    量出来的就不是门的能力,是 D133 的影子。 */
@@ -55,5 +56,6 @@ for (const [say, want, lang] of ALL_200) {
   i += 1
   if (i % 40 === 0) console.error(`   …${i}/200`)
 }
-writeFileSync(process.env.GATE_DETAIL || `/tmp/gate-detail-${TAG}.jsonl`, detail.map((d) => JSON.stringify(d)).join('\n'))
+const OUT = evalOutPath({ batch: TAG, name: '逐句明细', ext: 'jsonl', override: process.env.GATE_DETAIL })   // J-30
+writeFileSync(OUT, [JSON.stringify({ __stamp: runStamp() }), ...detail.map((d) => JSON.stringify(d))].join('\n'))
 console.log(JSON.stringify(out))

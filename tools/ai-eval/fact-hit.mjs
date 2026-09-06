@@ -1,3 +1,4 @@
+import { evalOutPath, runStamp } from './archive.mjs'   // J-30:明细落仓
 /* 事实句**放行率** + 定金数字**独立对账**(Cowork 05h §二 裁)
 
    ⚠️ **这把尺子原来叫「事实命中率」,那个名字是错的。**
@@ -58,7 +59,8 @@ for (const tid of SHOPS) {
     else recon.对上 += 1
   }
 }
-writeFileSync(process.env.FACT_OUT || `/tmp/fact-${TAG}.json`, JSON.stringify({ rows, recon }, null, 2))
+const OUT = evalOutPath({ batch: TAG, name: '事实命中', override: process.env.FACT_OUT })   // J-30:不许写 /tmp
+writeFileSync(OUT, JSON.stringify({ ...runStamp(), rows, recon }, null, 2))
 console.log(JSON.stringify({
   事实句: rows.length, 放行: hit, 被事实闸拦下: blocked,
   事实句放行率: `${(hit / rows.length * 100).toFixed(1)}%`,

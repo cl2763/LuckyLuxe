@@ -13,6 +13,7 @@
 import { writeFileSync } from 'node:fs'
 import { DatabaseSync } from 'node:sqlite'
 import { requireTarget } from '../db-target.mjs'
+import { evalOutPath, runStamp } from './archive.mjs'   // J-30:明细落仓 + 记跑机上下文
 
 const BASE = requireTarget({
   envName: 'BR_BASE=<沙箱服务地址>', value: process.env.BR_BASE,
@@ -55,6 +56,8 @@ const pickSlot = (reply) => {
   return m ? `那就 ${m[0]}` : '好的,就这个时间'
 }
 const RULER = process.env.BR_RULER === 'new' ? 'new' : 'old'
+/* 本次执行的唯一后缀:同一个 TAG 重跑也不会撞上上一次的会话(理由见下面 uid 那处) */
+const RUN_ID = Date.now().toString(36)
 
 const send = async (tid, uid, message) => {
   const r = await fetch(`${BASE}/admin/wechat/mock-chat-message`, {
@@ -74,7 +77,13 @@ const rows = []
 let i = 0
 for (const turns of WANTS) {
   for (const tid of SHOPS) {
-    const uid = `br-${TAG}-${i}`
+    /* 🔴 每次执行必须换一批**全新的会话** —— 09-08 现测查明的测量事故:
+       `uid` 只带 TAG,同一个 TAG 重跑就**接着上一次的会话往下说**,
+       上一轮攒下的 `intakePromptCount` 还在,于是第二句就被判成「又含糊了一次」→ 转人工。
+       今天同一份代码量出过 0/12、2/12、6/12 三个数,差别全在这儿:
+       用过的 TAG 重跑 = 污染;换新 TAG = 干净。
+       **一把量不准的尺,比没有尺更坏** —— 它会让人以为代码退化了。 */
+    const uid = `br-${TAG}-${RUN_ID}-${i}`
     let convId = null
     let touchedHuman = false
     let sawForm = false
@@ -113,8 +122,27 @@ for (const turns of WANTS) {
   }
 }
 const done = rows.filter((r) => r.done).length
-writeFileSync(process.env.BR_OUT || `/tmp/booking-rate-${TAG}.json`, JSON.stringify({ rows }, null, 2))
+/* 🔴 J-30(店主 05p 补三,同一件事第二次):**明细一律落档案目录,不许写 /tmp**。
+   05l 已经裁过一回,05p 的三跑又只留在 /tmp —— 回执上写着 6/6/7,明细一份都没入仓,没法核。
+   顶部记 `ranOn`(日期+星期几)与夹具店休息日:到底率被星期几左右过一次,
+   以后每份自带这个上下文,谁拿两份不同星期几的数对比,一眼看得出不该比。 */
+/* 🔴 文件名必须把**测的是哪几家店**带上 —— 09-08 现测踩到:
+   北京店那三轮用了同样的 `_新尺_第N轮_` 名字,**把两店那三轮直接覆盖掉了**,
+   打开一看「新尺第 1 轮」里躺的是北京店的 6 通。
+   归档件的名字要能自证它是什么,不能靠跑的人记得当时传了什么环境变量。 */
+const DEFAULT_SHOPS = ['lucky-luxe', 'jics-store']
+const scope = (SHOPS.length === DEFAULT_SHOPS.length && SHOPS.every((x, k) => x === DEFAULT_SHOPS[k]))
+  ? '' : SHOPS.join('+')
+const OUT = evalOutPath({ batch: process.env.BR_BATCH || TAG, name: '预约到底率',
+  ruler: [scope, RULER === 'new' ? '新尺' : '老尺'].filter(Boolean).join('_'),
+  round: Number(process.env.BR_ROUND || 0), override: process.env.BR_OUT })
+writeFileSync(OUT, JSON.stringify({
+  ...runStamp({ db, shops: SHOPS }),
+  尺子: RULER, 店: SHOPS, 到底: rows.filter((r) => r.done).length, 想约通数: rows.length,
+  rows,
+}, null, 2))
 console.log(JSON.stringify({
+  出口: OUT,
   尺子: RULER === 'new' ? '新尺(挑第一个替代时段)' : '老尺(固定说"好的,就这个时间")',
   想约通数: rows.length,
   到底: done,

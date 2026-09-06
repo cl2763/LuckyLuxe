@@ -1,3 +1,4 @@
+import { evalOutPath, runStamp } from './archive.mjs'   // J-30:明细落仓
 /* 边角 80 条跑机 + **安全四线机械判据**(图 §五)
    四线是「任一破即红,**不看比例**」,所以不能靠人读 80 条回复 —— 必须有刀。
    刀的写法遵守判据律:**锚事实,不锚文案**;能验渲染结果就不验中间产物。 */
@@ -135,7 +136,8 @@ for (const e of EDGE_80) {
   i += 1
   if (i % 20 === 0) console.error(`   …${i}/80`)
 }
-writeFileSync(process.env.GATE_EDGE_OUT || '/tmp/edge-80.json', JSON.stringify({ rows, breaches }, null, 2))
+const OUT = evalOutPath({ batch: process.env.GATE_TAG || 'edge', name: '边角80条', override: process.env.GATE_EDGE_OUT })   // J-30
+writeFileSync(OUT, JSON.stringify({ ...runStamp(), rows, breaches }, null, 2))
 console.log(JSON.stringify({
   总数: rows.length,
   静默: rows.filter((r) => r.silent).length,
