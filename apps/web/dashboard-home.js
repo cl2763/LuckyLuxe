@@ -49,6 +49,17 @@ window.DashboardHome = (function () {
     if (cents === undefined || cents === null || !cur) return '—'
     return st.deps.money(cents)
   }
+  /* 🔴 大数那一处:**币种只出一遍**(店主 05r 补一 现看:大数整串带币码、旁边再挂一个小字币码 = 出两遍,还没千分位)。
+     图上是「小字币码 + 2,486」——所以大数只摆**数字**(带千分位),币码单独作小字。
+     两段都由注入的 `moneyParts()` 给,页面**仍然一个币符都不自己拼**(币种红线)。 */
+  function bigMoney(m, cur) {
+    if (!m) return '—'
+    if (m.locked) return '🔒'
+    if (m.value === undefined || m.value === null || !cur) return '—'
+    const p = st.deps.moneyParts(m.value)
+    /* 币码在**前**、小字;数字在后、大字 —— 图上就是这么摆的(「小字币码 + 2,486」) */
+    return `<small class="dh-cur" data-dh-cur>${esc(p.prefix)}${esc(p.symbol)}</small>${esc(p.amount)}`
+  }
   const valueText = (m, cur) => {
     if (m.locked) return '🔒'
     if (m.unit === 'money') return moneyOf(m.value, cur)
@@ -88,10 +99,14 @@ window.DashboardHome = (function () {
   const skeleton = () => `<section class="card dh-card" data-dh-state="loading">
       ${periodBar()}<div class="dh-skeleton" data-dh-skeleton>${'<div class="dh-sk-line"></div>'.repeat(4)}</div>
     </section>`
+  /* 🔴 与图不符一处,已报待裁 #2:图上按钮文案是「下拉重试 · 或稍后再看」——
+     那是小程序的说法,**网页没有下拉刷新**,等于教店主做一个做不到的动作(D148 说人话族)。
+     网页这一端改成按钮真能干的事;小程序端到段 9–11 落地时按图保留「下拉重试」。
+     判据 ⑫ 守「网页首页里不许出现『下拉』」。 */
   const failed = () => `<section class="card dh-card" data-dh-state="failed">
       ${periodBar()}
       <p class="dh-truth" data-dh-truth>${zh() ? '业绩数据暂时取不到' : 'Metrics are unavailable right now'}</p>
-      <button type="button" class="ghost slim" data-dh-retry>${zh() ? '下拉重试 · 或稍后再看' : 'Retry'}</button>
+      <button type="button" class="ghost slim" data-dh-retry>${zh() ? '点一下重试 · 或稍后再看' : 'Retry'}</button>
     </section>`
 
   /* ── 此刻四格 + 下一位卡(休息日只换这两块,图 §六)────────── */
@@ -126,7 +141,7 @@ window.DashboardHome = (function () {
       <div class="dh-hero" data-dh-hero>
         <div class="dh-hero-left" data-dh-hero-left>
           <p class="eyebrow">${label('revenue')}</p>
-          <h2 class="dh-big" data-dh-metric="revenue">${head ? valueText(head, cur) : '—'}${cur ? `<small class="dh-cur" data-dh-cur>${esc(cur)}</small>` : ''}</h2>
+          <h2 class="dh-big" data-dh-metric="revenue">${bigMoney(head, cur)}</h2>
           ${head ? deltaText(head) : ''}
           ${head ? sparkSvg(head.spark) : ''}
           ${empty ? `<p class="dh-truth" data-dh-truth-empty>${zh() ? '今天还没有开单 · 暂无往日数据' : 'No orders yet today'}</p>` : ''}

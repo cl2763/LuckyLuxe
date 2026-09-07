@@ -92,6 +92,7 @@ import { seedServices } from './seed-services.mjs'                    // 演示�
 import { createPricingSerialize } from './pricing-serialize.mjs'      // 价目表序列化域(公约②)  // 账本禁删/禁改律唯一出口(D72)      // 顾客端订单表达域(同上)
 import { createBookingIncome } from './booking-income.mjs'  // 订单入账触点(同上)
 import { createBookingState, isAfterSalesOpen, shouldAutoComplete } from './booking-state.mjs'  // 订单状态机(D70 合同,唯一实现)   // 笔迹图:纯 JS 画折线,**透明底**(单据白纸走 svgToPng,两条路不混)
+import { writePointsPolicyMark } from './boot-marks.mjs'
 import { analyzeReferenceImage, createBookingSummary, createCustomerInsight, createCustomerServiceReply, createDailyBrief, createRecallMessages, createServiceNoteInsights, createSocialCopy, extractKbEntriesFromDocument, getAiUsage, polishStaffQuoteReply } from './ai-utils.mjs'
 import { buildKnowledgeContext, loadCustomerServiceKnowledgeBase } from './kb-utils.mjs'
 
@@ -6249,8 +6250,8 @@ function backfillPlanFor(serviceDate, tenantId = currentTenantId()) {
 function createBooking(body, opts = {}) {
   expireOldHolds()
   const input = validateBookingInput(body)
-  // D34:休息日一律拦(排单/开单/即时单单点入口);历史单不动
-  if (input.storeId && input.date && isClosedDay(input.storeId, input.date)) {
+  // D34 休息日闸;🔴 例外(店主 09-08 裁,待裁 #1):**补录不过这道闸** —— 闸管的是「顾客约不上」,而补录是记账不是约(不采「落下一个营业日」:那是把今天的账写到明天)
+  if (!opts.backfill && input.storeId && input.date && isClosedDay(input.storeId, input.date)) {
     throw apiError(400, 'REST_DAY', '本日为休息日,如需接单请到设置将今日改为营业。')
   }
   const { service, durationMin, start, end } = assertBookable(input, opts)
@@ -17557,15 +17558,8 @@ try {
       .run(JSON.stringify({ decidedBy: '店主 2026-08-12 拍板②', note: '开分级显示;初始梯子=原全局 MEMBER_TIERS;F3 分叉债收敛为租户单源' }), iso(new Date()))
   }
 } catch (e) { console.error('拍板②迁移失败(不阻塞启动):', e.message) }
-// 改判①留痕(店主 2026-08-12 二次/三次拍板):积分历史全量追溯——累计获得≡累计消费;
-// 「不追溯」作废,切换时点常量已拆除。留痕升 v2(REPLACE 覆盖拍板①旧行)。
-try {
-  const tenantIds = db.prepare('SELECT DISTINCT tenant_id AS t FROM tenant_settings UNION SELECT DISTINCT tenant_id FROM bookings').all().map((r) => r.t)
-  const mark = db.prepare("INSERT OR REPLACE INTO tenant_settings (tenant_id, key, value, updated_at) VALUES (?, 'points_policy', ?, ?)")
-  for (const t of tenantIds) {
-    mark.run(t, JSON.stringify({ policy: 'subtotal_full_retro', decidedBy: '店主 2026-08-12 改判①(二次+三次拍板)', note: '积分历史全量追溯:累计获得≡累计消费(Σ已签档位小计);余额=获得−已兑换;硬守恒 余额≤累计消费;混合口径负余额钳 0 留痕' }), iso(new Date()))
-  }
-} catch (e) { console.error('改判①留痕失败(不阻塞启动):', e.message) }
+// 改判①留痕:已搬去 `boot-marks.mjs`(公约②边改边拆)。**幂等**:值没变一个字都不写。
+try { writePointsPolicyMark(db, iso(new Date())) } catch (e) { console.error('改判①留痕失败(不阻塞启动):', e.message) }
 /* v1.4 大类改造(店主 08-16 点头):平台大类字典 —— 大类=平台级,商家只读;
    以后加「美发」类=这张表 INSERT 一行,前后端零代码。services.type → key 映射:
    NAIL→nail,LASH→lash,CARE/OTHER→care(顾客端「护理·其他」聚合口径不变)。 */

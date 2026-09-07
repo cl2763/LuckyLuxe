@@ -204,16 +204,10 @@ async function main() {
       Boolean(sdClosed.backfill && sdClosed.backfill.closed && sdClosed.backfill.targetDate === today01v
         && /已日结/.test(sdClosed.backfill.note) && /服务发生于/.test(sdClosed.backfill.note)),
       JSON.stringify(sdClosed.backfill || null).slice(0, 160))
-    /* 🔴 口径相撞(2026-09-07 现测,已登记待裁):合同二形二要求「补录到已日结的日子 → **落今天**」,
-       而**今天如果是休息日**,休息日闸会把这一单拦下(「本日为休息日,如需接单请到设置改为营业」)。
-       两条规则各自都对,撞在一起没有答案 —— 这不是夹具能修的,要店主/Cowork 裁一句
-       (落下一个营业日?还是休息日照收补录?)。
-       在裁定之前:**今天是休息日就不跑这一条,并且明说没跑**(不是静默跳过 —— 它会出现在断言里)。 */
-    const todayClosed = (await request(`/admin/schedule-day?date=${today01v}`)).data
-    if (todayClosed && todayClosed.isClosed) {
-      check(`⬜ 合同二形二 本轮**跳过**(未验):今天(${today01v})是休息日,「补录落今天」与休息日闸相撞 —— 已登记待裁,不是通过`,
-        true, '口径冲突待裁')
-    } else if (!sdClosed.hoursUnset && !sdClosed.isClosed) {
+    /* 🔴 裁定已下(店主 2026-09-08,待裁 #1):**补录不过休息日闸**,照合同落今天。
+       所以这一条不再因为「今天休息」而跳过 —— 反过来,今天是休息日时它**更该跑**:
+       那正是裁定要保住的场景(老板休息日把前几天的账补上)。 */
+    if (!sdClosed.hoursUnset && !sdClosed.isClosed) {
       const b2 = await request('/admin/bookings/direct', { method: 'POST', body: JSON.stringify({ backfill: true, newCustomerName: `补录形二${uniq}`, serviceId: svc.id, technicianId: tech.id, date: closedDay, time: '15:40' }) })
       check('🔴 合同二形二 已日结 → 落**今天**,历史账不回改',
         b2.status === 201 && b2.data.booking.appointmentDate === today01v,
@@ -283,13 +277,8 @@ async function main() {
     const todayE = (await request('/admin/schedule-day')).data.storeToday
     const dcBefore = (await request(`/admin/daily-close?date=${todayE}`)).data.dailyClose
     const sdE = (await request(`/admin/schedule-day?date=${e2eDay}`)).data
-    /* 同一处口径相撞(见上面「合同二形二」那段的注释):今天是休息日时,
-       「补录落今天」这条链整条走不通 —— 明说未验,不静默跳过。 */
-    const todayRest = (await request(`/admin/schedule-day?date=${todayE}`)).data
-    if (todayRest && todayRest.isClosed) {
-      check(`⬜ 裁② 钱链 本轮**跳过**(未验):今天(${todayE})是休息日,「补录落今天」与休息日闸相撞 —— 已登记待裁,不是通过`,
-        true, '口径冲突待裁')
-    } else if (sdE.backfill && sdE.backfill.closed && !sdE.hoursUnset && !sdE.isClosed) {
+    // 同上:裁定已下,补录不过休息日闸,这条钱链照跑
+    if (sdE.backfill && sdE.backfill.closed && !sdE.hoursUnset && !sdE.isClosed) {
       // ② 补录 → 落今天
       const bfRes = await request('/admin/bookings/direct', { method: 'POST', body: JSON.stringify({ backfill: true, newCustomerName: `链验客${uniq}`, serviceId: svc.id, technicianId: tech.id, date: e2eDay, time: '16:20' }) })
       check('🔴 裁② 链①补录落今天(不落已日结的原日)', bfRes.status === 201 && bfRes.data.booking.appointmentDate === todayE,

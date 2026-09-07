@@ -16,6 +16,16 @@ SNAP="${1:?用法: bash tools/receipt-db-proof.sh <快照 json> [库绝对路径
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"
 DB="${2:-$ROOT/apps/api/local-data/lucky-luxe.sqlite}"
 
+# 🔴 库名不许写死(店主《库名口径》:报数与安全保证一律写全名,四个库四个名字)。
+#    05r 补一 现踩:对沙箱库跑这把刀,它照样打印「**本机库:未动**」——
+#    一份**专门用来防假「未动」的工具,自己把库名说错了**。名字含糊,这句保证就是含糊的。
+case "$DB" in
+  */local-data/*)   DBNAME="本机库" ;;
+  */sandbox-data/*) DBNAME="沙箱库" ;;
+  /app/apps/api/local-data/*) DBNAME="生产库" ;;   # 容器内 Volume 挂载点
+  *)                DBNAME="未知库($DB)" ;;
+esac
+
 # 快照刀**有差异时退出码非 0** —— 那是正常情况(差异要由下面判定是不是心跳表),
 # 不能让 `set -e` 在这里把脚本掐死。第一版就栽在这:刀什么都没打印,exit=1。
 OUT="$(node "$ROOT/tools/db-snapshot.mjs" "$DB" --diff "$SNAP" 2>&1 || true)"
@@ -29,7 +39,7 @@ if ! echo "$OUT" | grep -q '「未动须有证」对照表'; then
   echo "$OUT" | head -5 >&2
   exit 2
 fi
-echo '**本机库对照表原文**(`node tools/db-snapshot.mjs <库绝对路径> --diff '"$SNAP"'`):'
+echo "**${DBNAME}对照表原文**(\`node tools/db-snapshot.mjs <库绝对路径> --diff $SNAP\`):"
 echo
 echo '```'
 echo "$OUT" | tail -n +2
@@ -82,17 +92,17 @@ echo
 FP_DIRTY="$(echo "$FPOUT" | grep -E '旧行消失|整表消失|有租户整个消失' || true)"
 
 if [ -n "$FP_DIRTY" ]; then
-  echo "🔴 **本机库:有动** —— 逐行指纹查出既有行被改/被删(快照那把刀看不见这一类):"
+  echo "🔴 **${DBNAME}:有动** —— 逐行指纹查出既有行被改/被删(快照那把刀看不见这一类):"
   echo '```'
   echo "$FP_DIRTY"
   echo '```'
 elif [ -n "$NON_HB" ]; then
-  echo "🔴 **本机库:有动** —— 以下表不在服务心跳白名单里,**本批不许写「未动」**:"
+  echo "🔴 **${DBNAME}:有动** —— 以下表不在服务心跳白名单里,**本批不许写「未动」**:"
   echo '```'
   echo "$NON_HB" | sed '/^$/d'
   echo '```'
 elif [ -n "$HB_SEEN" ]; then
-  echo "✅ **本机库:未动**(快照与逐行指纹**两把都绿**;服务心跳表 \`${HB_SEEN% }\` 的行数增长除外 —— 调度器每天每店写一行,与本批代码无关)"
+  echo "✅ **${DBNAME}:未动**(快照与逐行指纹**两把都绿**;服务心跳表 \`${HB_SEEN% }\` 的行数增长除外 —— 调度器每天每店写一行,与本批代码无关)"
 else
-  echo "✅ **本机库:未动** —— 快照逐表零差异 **且** 逐行指纹零旧行消失(两把都绿)"
+  echo "✅ **${DBNAME}:未动** —— 快照逐表零差异 **且** 逐行指纹零旧行消失(两把都绿)"
 fi

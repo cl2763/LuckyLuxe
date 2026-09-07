@@ -185,12 +185,17 @@ let riskDayOverride = ''
     tmr.setUTCDate(tmr.getUTCDate() + 1)
     const day = tmr.toISOString().slice(0, 10)
     const sd = await api(`/admin/schedule-day?date=${day}`, RICH)
+    /* 🔴 这一条**无条件出**(断言增量律):原来只在「明天正好店休」时才 check,
+       于是断言条数随星期几摇摆(154/152),`assertion-baseline` 的零缩水刀当场红。
+       条件块里的断言不许时有时无 —— 要么两种情况各说各的话,要么就是漏验。 */
     if (sd && sd.isClosed) {
       const made = await plat('/admin/special-dates', { method: 'POST',
         body: JSON.stringify({ date: day, isClosed: false, openTime: '10:00', closeTime: '19:00', note: 'CI 造景:本套件的对话说的是「明天」' }) })
       if (made === 201) riskDayOverride = day
       check(`②0b 造景:「明天」(${day})本是店休,已下特殊日改为营业 —— 下不成就红,不许带着店休往下跑`,
         riskDayOverride === day, `POST /admin/special-dates → ${made}`)
+    } else {
+      check(`②0b 造景:「明天」(${day})本来就营业,不用下特殊日`, Boolean(sd) && !sd.isClosed, JSON.stringify({ isClosed: sd && sd.isClosed }))
     }
   }
 }
@@ -827,6 +832,8 @@ const jreq = async (path, opts = {}, token = null, extraHeaders = {}) => {
 if (riskDayOverride) {
   const gone = await plat(`/admin/special-dates/${riskDayOverride}`, { method: 'DELETE' })
   check(`⑥收尾:造景下的特殊日(${riskDayOverride})已删回去(夹具不收尾 = 判据不幂等)`, gone === 200, `DELETE → ${gone}`)
+} else {
+  check('⑥收尾:本轮没下过特殊日,库里也确实没留下(条件是真的 —— 不许写字面量 true 兜底)', riskDayOverride === '')
 }
 
 console.log(`\n[③ 预约采集] 共 ${n} 项:状态机 + 规则补槽 + 配齐店走到 drafted + 空店零回落`)

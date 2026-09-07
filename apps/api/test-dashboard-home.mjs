@@ -5,7 +5,7 @@
    金额不许写死币符、首页不许轮询、旧的那几块真的退役了。
    像素与交互由段 6 的现测 DOM 证据背书(`handoff/night-runs/段6_网页首页_DOM证据_2026-09-08.md`),
    两者分工写在这里,免得下一个人以为静态全绿就等于页面对了(L1 末端验证律)。 */
-import { readFileSync } from 'node:fs'
+import { readFileSync, readdirSync } from 'node:fs'
 import { join } from 'node:path'
 import { fileURLToPath } from 'node:url'
 
@@ -101,6 +101,54 @@ check('⑨c 宿主从三列图表网格改回块流(否则新页面会被塞进�
   readFileSync(join(ROOT, 'apps/web/styles.css'), 'utf8').includes('#dashboardCharts.dashboard-chart-grid { display: block; }'))
 check('⑨d <900px 退化竖排(窄屏一张截图为证)',
   /@media \(max-width: 900px\)[\s\S]{0,200}?grid-template-columns: 1fr/.test(readFileSync(join(ROOT, 'apps/web/styles.css'), 'utf8')))
+
+/* ══ 05r 补一 ①:六张截图**在不在仓里**(店主 09-08 三条现修之第一条)══
+   案由:D154 回执写「交了两张截图」,`git show --stat` 与整仓找图**一张都没有** ——
+   我看见的图只存在于聊天窗里。**「交了」而没有文件,与 J-27 同族**。
+   所以这一组不看代码、只数文件:约定的六张,一张都不许缺,尺寸也得对得上。
+   白名单式(判据三):目录里出现约定之外的 .png **也红** —— 免得改名当交付。 */
+const SHOT_DIR = join(ROOT, 'handoff/night-runs/D154截图')
+/* 契约:名字 · CSS 宽(截图按 2 倍图落盘,所以像素宽 = CSS 宽 × 2) */
+const SHOTS = [
+  ['01_旗舰店_本月.png', 1440], ['02_小婕店_本月.png', 1440], ['03_北京店_本月.png', 1440],
+  ['04_窄屏420_旗舰店_本月.png', 420], ['05_休息日_旗舰店_今日.png', 1440], ['06_失败态_旗舰店_今日.png', 1440],
+]
+const pngSize = (file) => {
+  const b = readFileSync(file)
+  /* 只认真 PNG:魔数 + IHDR 里的宽高。不看扩展名 —— 扩展名是改得出来的
+     (判据律:能按像素/字节验的就别验元数据) */
+  if (b.length < 24 || b.readUInt32BE(0) !== 0x89504e47) return null
+  return { w: b.readUInt32BE(16), h: b.readUInt32BE(20), bytes: b.length }
+}
+for (const [name, cssW] of SHOTS) {
+  let size = null
+  try { size = pngSize(join(SHOT_DIR, name)) } catch { size = null }
+  check(`⑩ 截图在仓:${name}(真 PNG · 宽 ${cssW * 2}px · 非空)`,
+    Boolean(size) && size.w === cssW * 2 && size.bytes > 20000,
+    size ? `${size.w}x${size.h} ${size.bytes}B` : '文件不在,或不是 PNG')
+}
+check('⑩b 🔴 白名单式:截图目录里不许有约定之外的 .png(改名不算交付)',
+  readdirSync(SHOT_DIR).filter((f) => f.endsWith('.png')).every((f) => SHOTS.some(([n]) => n === f)),
+  readdirSync(SHOT_DIR).filter((f) => f.endsWith('.png')).join(' · '))
+check('⑩c 截图刀不写死令牌(走查凭证不进代码;拿不到就拒绝跑)',
+  readFileSync(join(ROOT, 'tools/web-shot.mjs'), 'utf8').includes("envName: 'SHOT_TOKEN'")
+  && !/owner-demo-token/.test(readFileSync(join(ROOT, 'tools/web-shot.mjs'), 'utf8')))
+
+/* ══ 05r 补一 ②:币种出两遍 + 没千分位(店主现看:`CAD $25885` 又加小字 `CAD`)══ */
+const mf = readFileSync(join(ROOT, 'apps/web/money-format.js'), 'utf8')
+check('⑪ `moneyParts` 出口在 money-format.js,币码/币符/数字**拆开给**',
+  /function parts\(/.test(mf) && /return \{ code[\s\S]{0,120}?symbol[\s\S]{0,120}?amount/.test(mf))
+check('⑪b 千分位只加在整数部分(小数位不许被逗号切开)',
+  /replace\(\/\\B\(\?=\(\\d\{3\}\)\+\(\?!\\d\)\)\/g, ','\)/.test(mf) && /bits\[0\]/.test(mf))
+check('⑪c 映射表只剩一份:admin.js 从 money-format 取,不再自己写一张',
+  /CURRENCY_DISPLAY = window\.MoneyFormat\.CURRENCY_DISPLAY/.test(admin)
+  && (admin.match(/CNY: \{/g) || []).length === 0)
+check('⑪d 🔴 首页大数**不自己拼币符**:走 moneyParts,币码单独一个小字节点',
+  /st\.deps\.moneyParts\(m\.value\)/.test(home) && /data-dh-cur>\$\{esc\(p\.prefix\)\}\$\{esc\(p\.symbol\)\}<\/small>\$\{esc\(p\.amount\)\}/.test(home))
+
+/* ══ 端不对的动作词:网页没有下拉刷新,不许教店主做一个做不到的动作(D148 说人话族)══ */
+check('⑫ 网页首页里没有「下拉」这类小程序动作词',
+  !/下拉/.test(home.replace(/<!--[\s\S]*?-->/g, '').replace(/\/\*[\s\S]*?\*\//g, '')))
 
 console.log(`\n[网页首页] 四态节点 · 币种红线 · 不轮询 · 旧块退役 · 三接口都调 · 全屏占位 · D154 十七块逐块`)
 if (fails.length) {

@@ -200,6 +200,26 @@ async function main() {
   db3.close()
   check('迁移幂等:再跑一遍数字不动', again === 20000 && againLines === 34000, JSON.stringify({ again, againLines }))
 
+  /* 🔴 幂等的第二层:**开机留痕不许每次重写**(05r 补一 现查出来的)。
+     `points_policy` 那条改判①留痕原来每次开机 `INSERT OR REPLACE` 一遍 ——
+     值一个字没变,只有 `updated_at` 跟着当前时刻走。数据不算错,坏的是**「未动」这句话永远证不了**:
+     逐行指纹每重启一次就报「每个租户各消失 1 行」(J-29 那把刀正是看这一类)。
+     判据按「做过没有」判,不按「还剩多少」判(幂等判据律)。
+     取不到留痕就红,不许 `if (row)` 静默跳过(断言增量律:被条件包住的断言取不到前置要红)。 */
+  const db4 = new DatabaseSync(DB_PATH)
+  const markBefore = db4.prepare("SELECT tenant_id, value, updated_at FROM tenant_settings WHERE key = 'points_policy' ORDER BY tenant_id").all()
+  db4.close()
+  check('开机留痕:points_policy 每个租户都有一行(取不到就红,不静默跳过)', markBefore.length > 0, `${markBefore.length} 行`)
+  await halt()
+  await boot()
+  const db5 = new DatabaseSync(DB_PATH)
+  const markAfter = db5.prepare("SELECT tenant_id, value, updated_at FROM tenant_settings WHERE key = 'points_policy' ORDER BY tenant_id").all()
+  db5.close()
+  const moved = markAfter.filter((a, i) => !markBefore[i] || markBefore[i].updated_at !== a.updated_at || markBefore[i].value !== a.value)
+  check('🔴 开机留痕幂等:再开一次机,points_policy 连 updated_at 都不许动(否则「未动」永远证不了)',
+    markAfter.length === markBefore.length && moved.length === 0,
+    `${moved.length} 行被重写:${moved.slice(0, 3).map((r) => r.tenant_id).join(' · ')}`)
+
   console.log(`\n分成基数迁移回归通过:${checks} 项断言全绿`)
 }
 

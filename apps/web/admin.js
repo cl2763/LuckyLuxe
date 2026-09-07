@@ -1,6 +1,6 @@
 // 构建号:每次交付递增。侧栏可见,排查"改了没生效"时先对版本。
 // 兜底用(服务端会注入 window.LL_BUILD = 资源内容指纹,页面优先显示那个)
-const ADMIN_BUILD = '20260908c-d154'
+const ADMIN_BUILD = '20260908e-05r1'
 let pricingState = { module: 'storefront', tab: 'items', categories: [], items: [], rules: {}, editing: null, preview: null, storefrontPicker: false }
 console.log(`[admin] build ${ADMIN_BUILD}`)
 
@@ -825,17 +825,9 @@ function storeDisplayName() {
 }
 // 币种显示映射表(与后端 CURRENCY_DISPLAY 同一套口径):
 // CNY → 「¥358」;其它币种 → 「CAD 358」逐字维持现状,旗舰店零 diff。
-const CURRENCY_DISPLAY = {
-  CNY: { prefix: '', symbol: '¥', trimZeroDecimals: true },
-  DEFAULT: { prefix: '<CODE> ', symbol: '$', trimZeroDecimals: false }   /* currency-map:映射表默认档 */
-}
-function money(cents, decimals = 0) {
-  const code = storeCurrency()
-  const fmt = CURRENCY_DISPLAY[String(code).toUpperCase()] || CURRENCY_DISPLAY.DEFAULT
-  let text = Number(cents / 100).toFixed(Number(decimals) || 0)
-  if (fmt.trimZeroDecimals) text = text.replace(/\.00$/, '')
-  return `${fmt.prefix.replace('<CODE>', code)}${fmt.symbol}${text}`
-}
+const CURRENCY_DISPLAY = window.MoneyFormat.CURRENCY_DISPLAY   // 映射表唯一一份,住在 money-format.js
+const money = (cents, decimals = 0) => { const p = moneyParts(cents, decimals); return `${p.prefix}${p.symbol}${p.amount}` }
+const moneyParts = (cents, decimals = 0) => window.MoneyFormat.parts(cents, decimals, storeCurrency())
 
 // 本店是否开通 AI 智能包。2026-08-04 店主定:全部 AI 能力归智能包,前端据此隐藏纯 AI 入口。
 // 数据来自启动时拉的 /admin/tenant/entitlements(owner.tenantPlan),与后端 requireAi() 同一个判断依据。
@@ -1564,7 +1556,7 @@ function renderDashboard() {
   window.DashboardHome.mountInto(els.dashboardCharts, {
     request,
     escapeHtml,
-    money,                       // 币种红线:金额只走全仓那一个出口,页面里不许出现币符
+    money, moneyParts,           // 币种红线:金额只走全仓那一个出口,页面里不许出现币符(moneyParts 拆段带千分位)
     /* 今日台面**原样嵌入**(自画=两处真相);AI 一句只读已生成的,首页不新起模型调用(日报没落库,故恒空→「今天还没有一句」,已登记待裁) */
     boardDeps: () => ({ request, escapeHtml, toast, storeToday, openBooking: (id) => jumpToBooking(id),
       refreshBookings: async () => { try { const d = await request('/admin/bookings'); owner.bookings = d.bookings || owner.bookings } catch { /* 列表口失败不拦排单 */ } },

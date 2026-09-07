@@ -22,6 +22,16 @@ const dbPath = requireTarget({ envName: '第 1 个参数 <库文件绝对路径>
   hint: '(沙箱 apps/api/sandbox-data/… / 本机库 apps/api/local-data/…)' })
 const args = process.argv.slice(3)
 const diffAt = args.indexOf('--diff')
+/* 🔴 静默失败器族(05r 补一 现踩):输出文件名取的是 `args[0]`,所以手滑写成
+   `--out 路径` 时,它**一声不吭地把快照写进一个叫 `--out` 的文件**,
+   下一步对照当然 ENOENT。「必须发生的事」不许静默走偏 —— 认不出来的旗标直接拒绝。 */
+const KNOWN_FLAGS = new Set(['--diff'])
+for (const a of args) {
+  if (a.startsWith('--') && !KNOWN_FLAGS.has(a)) {
+    console.error(`\n❌ 认不出这个旗标:${a}\n   用法:node tools/db-snapshot.mjs <库绝对路径> [输出文件] | <库绝对路径> --diff <快照文件>\n`)
+    process.exit(2)
+  }
+}
 const snapFile = diffAt >= 0 ? args[diffAt + 1] : (args[0] || 'db-snapshot.json')
 
 const db = new DatabaseSync(dbPath, { readOnly: true })

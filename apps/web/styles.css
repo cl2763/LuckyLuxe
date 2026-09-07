@@ -7733,7 +7733,7 @@ section.card > .section-row:first-child { margin-top: 0; }
 /* D154:按图 §三 两栏排 —— 左栏(大数+折线+此刻+下一位)| 右栏(四小牌);<900px 退化竖排 */
 .dh-hero { display: grid; grid-template-columns: minmax(0, 1.15fr) minmax(0, 1fr); gap: 18px; align-items: stretch; }
 .dh-hero-left { display: flex; flex-direction: column; gap: 8px; }
-.dh-cur { font-size: 13px; margin-left: 6px; color: var(--muted, #8a8079); font-weight: 400; }
+.dh-cur { font-size: 13px; margin-right: 6px; color: var(--muted, #8a8079); font-weight: 400; }
 .dh-spark { display: block; color: var(--ink, #2b2b2b); opacity: .55; margin: 2px 0 6px; max-width: 100%; }
 .dh-next { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; padding: 10px 12px; border: 1px solid var(--line, #e5e0da); margin-top: 6px; }
 .dh-next-time { font-size: 20px; }
