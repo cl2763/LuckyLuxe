@@ -6,7 +6,10 @@
     </view>
     <view wx:if="{{sending}}" class="row a">
       <view class="av">AI</view>
-      <view class="bubble a typing">正在输入…</view>
+      <!-- 🔴 D151(店主 05r 补五 §三):窗开着的时候说的是「正在看你的消息…」,不是「正在输入」。
+           窗的意思是**我在等你说完**,不是「我已经在打字了」—— 说错了顾客会以为答案马上到,
+           结果还要再等几秒。 -->
+      <view class="bubble a typing">正在看你的消息…</view>
     </view>
     <view style="height:20rpx"></view>
   </scroll-view>

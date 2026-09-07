@@ -29,11 +29,26 @@ export const CONV_MSG_TRIGGERS = [
      现在开一个**唯一的例外形状**:只有「内容换成固定标记 + `redacted_at` 落了时间 +
      role/source/会话/租户/时间戳一个字没动」这一种改法放行,其余照拒。
      ⚠️ 例外必须把**别的列也钉住** —— 否则同一条 UPDATE 里顺手改个 role 就跟着溜过去了。 */
+  /* 🔴 D150(店主 09-08 裁待裁 #5):复读那句要换成「接人工」,而且**改的是同一行**
+     —— 不另写一行,免得「顾客看到的」与「流水里的」分叉成两处真相。
+     所以这里开**第二个例外形状**,与脱敏那个同样窄,而且这一条更硬:
+     **原文必须原封不动地留在 `meta.rewrittenFrom` 里**(触发器自己用 json_extract 对一遍),
+     role/source/会话/租户/时间戳照样一个字不许动,`redacted_at` 必须仍是空(它不是脱敏)。
+     换句话说:这个口子改得掉「顾客现在看到哪句」,**改不掉「当时说过哪句」** —— 追加锁的本意还在。 */
   ['conv_msg_no_update', `CREATE TRIGGER conv_msg_no_update BEFORE UPDATE OF content, role, source, conversation_id, tenant_id, created_at ON conversation_messages
-    WHEN NOT (NEW.redacted_at IS NOT NULL AND NEW.content LIKE '[已脱敏 %'
-      AND NEW.role = OLD.role AND NEW.source = OLD.source
-      AND NEW.conversation_id = OLD.conversation_id AND NEW.tenant_id = OLD.tenant_id
-      AND NEW.created_at = OLD.created_at)
+    WHEN NOT (
+      (NEW.redacted_at IS NOT NULL AND NEW.content LIKE '[已脱敏 %'
+        AND NEW.role = OLD.role AND NEW.source = OLD.source
+        AND NEW.conversation_id = OLD.conversation_id AND NEW.tenant_id = OLD.tenant_id
+        AND NEW.created_at = OLD.created_at)
+      OR
+      (NEW.redacted_at IS NULL AND OLD.redacted_at IS NULL AND OLD.role = 'assistant'
+        AND json_extract(NEW.meta, '$.rewrittenFrom') = OLD.content
+        AND json_extract(NEW.meta, '$.rewrittenBy') = 'repeat-guard'
+        AND NEW.role = OLD.role AND NEW.source = OLD.source
+        AND NEW.conversation_id = OLD.conversation_id AND NEW.tenant_id = OLD.tenant_id
+        AND NEW.created_at = OLD.created_at)
+    )
     BEGIN SELECT RAISE(ABORT, 'conversation log is append-only; redact via POST /admin/conversations/:id/redact'); END`],
 ]
 
@@ -60,6 +75,10 @@ export function ensureConversationLog(db) {
      只把标写进 `transcript_json` 等于没写(现测:待审永远 0 条,底下每条判据全空转)。 */
   try { db.exec('ALTER TABLE conversation_messages ADD COLUMN gate TEXT') } catch { /* 列已在 */ }
   try { db.exec('ALTER TABLE conversation_messages ADD COLUMN confidence REAL') } catch { /* 列已在 */ }
+  /* D150:改写留证。壳把复读那句换成「接人工」时**改的是这一行**(不是另写一行),
+     原文进 `meta.rewrittenFrom` —— 「顾客看到的」与「流水里的」保持一处真相。
+     加列同样走 try/catch ALTER(交付纪律 8:只写进 CREATE TABLE 等于只对全新库生效)。 */
+  try { db.exec('ALTER TABLE conversation_messages ADD COLUMN meta TEXT') } catch { /* 列已在 */ }
   /* 幂等键按租户隔离:两家店各自的渠道消息 id 互不干涉(口径③) */
   try { db.exec('CREATE UNIQUE INDEX IF NOT EXISTS idx_conv_msg_channel ON conversation_messages(tenant_id, channel_msg_id) WHERE channel_msg_id IS NOT NULL') } catch { /* 已在 */ }
   try { db.exec('CREATE INDEX IF NOT EXISTS idx_conv_msg_conv ON conversation_messages(conversation_id, created_at)') } catch { /* 已在 */ }

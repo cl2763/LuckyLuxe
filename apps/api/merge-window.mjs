@@ -20,16 +20,34 @@
    「用到什么就说清从哪来」—— 靠全局隐式拿到的东西,搬到别处就可能不在了。 */
 import { clearTimeout as clearTimer, setTimeout as setTimer } from 'node:timers'
 
-const MIN_S = 5
-const MAX_S = 15
-const DEFAULT_S = 8
+const MIN_S = 2
+const MAX_S = 10
+const DEFAULT_S = 4
+/* 🔴 封顶(店主 05r 补五 §三 裁):窗按最后一句刷新,但**从第一句起算最多等 12 秒**。
+   没有封顶的话,顾客一直在打字就一直不答 —— 刷新型的窗天生会被拖到无限长。
+   封顶到了:先答手上这几句,再来的算下一窗。 */
+const CAP_S = 12
 
-/** 窗长(秒)。环境变量可配,越界钳到 5–15;`/health` 报的就是这个数。 */
+/** 窗长(秒)。环境变量可配,越界钳到 2–10。
+ *  🔴 报的是**实际生效**的那个数:测试用 `MERGE_WINDOW_MS` 覆盖时,报的必须是它换算出来的秒,
+ *     不然 `/health` 说 8 而实际是 0 —— 一个会骗人的自报比没有还糟(现测踩过:判据据此红了一次)。 */
 export function mergeWindowSeconds() {
+  const forcedMs = Number(process.env.MERGE_WINDOW_MS)
+  if (Number.isFinite(forcedMs)) return Math.max(0, Math.round(forcedMs / 1000))
   const raw = Number(process.env.MERGE_WINDOW_SECONDS)
   if (!Number.isFinite(raw)) return DEFAULT_S
   return Math.min(MAX_S, Math.max(MIN_S, Math.round(raw)))
 }
+
+/** 封顶(秒)。`MERGE_WINDOW_CAP_MS` 只给判据用(造病:把封顶去掉 → 5 句并成一条 → 红)。 */
+export function mergeWindowCapSeconds() {
+  const forced = Number(process.env.MERGE_WINDOW_CAP_MS)
+  if (Number.isFinite(forced)) return Math.max(0, Math.round(forced / 1000))
+  return CAP_S
+}
+
+/** 这会儿还开着几个窗(`/health` 第三个数:看得见「有没有人正在被等着」)。 */
+export function openMergeWindows() { return open.size }
 
 /* key → { parts: string[], timer, waiters: [], closed: boolean } */
 const open = new Map()
@@ -42,26 +60,30 @@ const open = new Map()
 export function enterMergeWindow(key, content) {
   const forcedMs = Number(process.env.MERGE_WINDOW_MS)
   const ms = Number.isFinite(forcedMs) ? forcedMs : mergeWindowSeconds() * 1000
+  const capMs = mergeWindowCapSeconds() * 1000
   const text = String(content || '')
   if (ms <= 0) return Promise.resolve({ merged: text, superseded: false, parts: [text] })
 
   return new Promise((resolve) => {
     let win = open.get(key)
     if (!win) {
-      win = { parts: [], waiters: [], timer: null }
+      win = { parts: [], waiters: [], timer: null, openedAt: Date.now() }
       open.set(key, win)
     }
     win.parts.push(text)
     /* 早到的那几次先记下来 —— 窗一关,除了最后一个,其余全部按「作废不发」回。 */
     win.waiters.push(resolve)
     if (win.timer) clearTimer(win.timer)   // 按最后一句刷新
+    /* 刷新不许突破封顶:从第一句起算,最多等 capMs。封顶为 0 = 不封顶(造病用)。 */
+    const leftToCap = capMs > 0 ? Math.max(0, win.openedAt + capMs - Date.now()) : Infinity
+    const waitMs = Math.min(ms, leftToCap)
     win.timer = setTimer(() => {
       open.delete(key)
       const merged = win.parts.join(' ')
       const last = win.waiters.pop()
       for (const w of win.waiters) w({ merged: null, superseded: true, parts: win.parts.slice() })
       if (last) last({ merged, superseded: false, parts: win.parts.slice() })
-    }, ms)
+    }, waitMs)
     /* 定时器不许把进程钉住(回归跑完要能退) */
     if (typeof win.timer.unref === 'function') win.timer.unref()
   })

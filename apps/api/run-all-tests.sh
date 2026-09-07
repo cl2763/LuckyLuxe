@@ -4,6 +4,36 @@
 # 要求: Node 22+;在全新数据库上也能跑(自动填充演示数据)
 set -euo pipefail
 RUN_T0=$SECONDS   # 墙钟起点(计时即证:套件时间 ≠ 整跑时间)
+
+# ══ 🔴 看门狗(店主 05r 补五 §四 立)══
+# 案由,照录:D151 那一批我把 8 秒的合并窗开在回归里,**整轮从 2 分钟变成跑不完**,
+# 「22 分钟才反应过来是自己干的」。整跑有基线(~2 分),超它一倍就该有人喊一声 ——
+# 以后这一声由脚本喊,不靠人盯。
+# 超时自杀,并打印**当时哪一套在跑、跑了多久**(判据红的时候必须能指认现场)。
+# 可配 REGRESSION_WATCHDOG_SECONDS;0 = 关掉(只给「我就是要跑很久」那种情况)。
+WATCHDOG_S=${REGRESSION_WATCHDOG_SECONDS:-300}
+CURRENT_SUITE_FILE="$(mktemp /tmp/ll-ci-current.XXXXXX)"
+if [ "$WATCHDOG_S" -gt 0 ]; then
+  (
+    sleep "$WATCHDOG_S"
+    # 还活着 = 超时了。把现场打出来再送它上路。
+    if kill -0 $$ 2>/dev/null; then
+      echo "" >&2
+      echo "🔴 看门狗:整跑超过 ${WATCHDOG_S} 秒(基线约 2 分钟)—— 自杀,免得像 D151 那次跑 22 分钟没人知道。" >&2
+      NOW_RUNNING="$(cat "$CURRENT_SUITE_FILE" 2>/dev/null)"
+      echo "   当时在跑:${NOW_RUNNING:-(还没跑到套件,卡在预检或起服务那一段)}" >&2
+      echo "   常见原因:某个改动让每条 AI 进线都要等(合并窗那一类),或某个套件在等一个永远不来的东西。" >&2
+      echo "   要放宽:REGRESSION_WATCHDOG_SECONDS=900 bash apps/api/run-all-tests.sh" >&2
+      # 🔴 只 TERM 父进程,让它的 EXIT/TERM 陷阱把 4128/4310 还回去(脚本红线②)。
+      #    踩过两次才写对:
+      #    ① 直接 `kill -9` —— 陷阱根本不跑,两个端口都留在死的状态;
+      #    ② 先 `pkill -P $$` —— **看门狗自己就是 $$ 的子进程**,那一枪把自己也打死了,
+      #       后面的 TERM 压根没执行。所以这里什么都不 pkill,清理交给陷阱。
+      kill -TERM $$ 2>/dev/null || true
+    fi
+  ) &
+  WATCHDOG_PID=$!
+fi
 export ALLOW_DEMO_ADMIN_LOGIN=true  # 测试套件依赖演示登录路径(生产环境默认禁用)
 # 🔴 D151 入站合并窗在回归里**关掉**(MERGE_WINDOW_MS=0)。
 #    原因是现测出来的:窗一开,每一条 AI 进线都要等 8 秒 —— 整轮回归从 2 分钟变成跑不完
@@ -94,8 +124,16 @@ restore_sandbox() {
   done
   echo "!! 沙箱 4310 没拉回来,演示/走查前请手动拉起" >&2
 }
-finish() { cleanup; [ -n "${DATA_DIR:-}" ] && rm -rf "$DATA_DIR"; restore_local; restore_sandbox; }
-trap finish EXIT
+finish() {
+  # 看门狗先撤(不撤的话,跑完之后它还在后台等着,到点了对着别人的进程开枪)
+  [ -n "${WATCHDOG_PID:-}" ] && kill "$WATCHDOG_PID" 2>/dev/null
+  rm -f "${CURRENT_SUITE_FILE:-}" 2>/dev/null
+  cleanup; [ -n "${DATA_DIR:-}" ] && rm -rf "$DATA_DIR"; restore_local; restore_sandbox
+}
+# 🔴 INT/TERM 也要收(店主 05r 补五 §四 的看门狗会 TERM 自己):
+#    只挂 EXIT 的话,被信号打死时陷阱**不跑**,4128/4310 就留在死的状态 ——
+#    现测过一次,两个端口都没还回去。脚本红线②要防的就是这个。
+trap finish EXIT INT TERM
 cleanup; sleep 1
 
 # 等实例真正就绪再发请求:轮询 /health 取代固定 sleep。
@@ -179,7 +217,7 @@ curl -s -X POST -H "authorization: Bearer owner-demo-token" -H "content-type: ap
   -d '{}' http://127.0.0.1:4128/admin/demo/full-seed > /dev/null || true
 
 # 可用 CI_SUITES="a b c" 环境变量跑子集(调试用)
-DEFAULT_SUITES="customer-service-matrix working-memory business-hours intent-guards quote-polish silent-handoff human-handoff after-sales-handoff identity-links entitlements tenant-kb finance-core finance-goals stored-value schedule-week special-dates customer-profile staff-portal admin-accounts pricing-model membership-config customer-import tenant-hygiene tenant-timezone deposit-config message-templates settlement daily-close salary-v2 schedule-v2 finance-trend finance-lock perf-viz coupon-settle audit-fix scan-sign double-sheet auth-surface currency-scan settle-stress sign-stability noshow-aftersales demo-seed-guard card-refund amend-linkage ledger-guards backend-gate hero-slides cash-notes mini-money-inputs image-placeholder deposit-audit web-settlement cross-end-effect mini-account-adjust today-board dashboard-pulse dashboard-home hours-gate crossend-cta tab-colors notify-scheduler quote-state ui-spec observe-fixes file-ratchet delivery-evidence store-name correction-reason credential-scan db-target-guard empty-pill untouched-proof display-text tenant-ownership tenant-explicit identity-tenant version-fingerprint tenant-fill-trigger conversation-log ai-gate ai-safety-lines ai-fact-gate booking-intake turn-classify turn-answer ai-review quote-tenant conversation-tenant mini-ai-same-outlet merge-window three-stores tier-label native-dialog demo-mark txn-rollback mp-placeholder-size mp-overlap mp-home-sections store-jury"
+DEFAULT_SUITES="customer-service-matrix working-memory business-hours intent-guards quote-polish silent-handoff human-handoff after-sales-handoff identity-links entitlements tenant-kb finance-core finance-goals stored-value schedule-week special-dates customer-profile staff-portal admin-accounts pricing-model membership-config customer-import tenant-hygiene tenant-timezone deposit-config message-templates settlement daily-close salary-v2 schedule-v2 finance-trend finance-lock perf-viz coupon-settle audit-fix scan-sign double-sheet auth-surface currency-scan settle-stress sign-stability noshow-aftersales demo-seed-guard card-refund amend-linkage ledger-guards backend-gate hero-slides cash-notes mini-money-inputs image-placeholder deposit-audit web-settlement cross-end-effect mini-account-adjust today-board dashboard-pulse dashboard-home hours-gate crossend-cta tab-colors notify-scheduler quote-state ui-spec observe-fixes file-ratchet delivery-evidence store-name correction-reason credential-scan db-target-guard empty-pill untouched-proof display-text tenant-ownership tenant-explicit identity-tenant version-fingerprint tenant-fill-trigger conversation-log ai-gate ai-safety-lines ai-fact-gate booking-intake turn-classify turn-answer ai-review quote-tenant conversation-tenant mini-ai-same-outlet repeat-guard merge-window three-stores tier-label native-dialog demo-mark txn-rollback mp-placeholder-size mp-overlap mp-home-sections store-jury"
 read -r -a SUITES <<< "${CI_SUITES:-$DEFAULT_SUITES}"
 
 # 🔴 断言基线(店主 02r 裁定一):每套跑完**就地数** `^ok ` 条数,不事后解析日志 ——
@@ -192,6 +230,7 @@ run_suite() {   # $1=套件名 $2..=node 前缀环境(可空)
   # 计时即证(店主 05o 裁 §三 之三):每套打印耗时,末尾出总耗时与最慢 5 套。
   # 「跑了两个半小时」这种话,得能拆开看是谁慢、跑了几次 —— 数不出来就治不了。
   local t0=$SECONDS
+  printf '%s(第 %s 秒起跑)' "$name" "$t0" > "$CURRENT_SUITE_FILE" 2>/dev/null || true
   "$@" node "test-${name}.mjs" 2>&1 | tee "$SUITE_OUT"
   local dt=$(( SECONDS - t0 ))
   printf '%s\t%s\n' "$name" "$(grep -c '^ok ' "$SUITE_OUT" || true)" >> "$TALLY"

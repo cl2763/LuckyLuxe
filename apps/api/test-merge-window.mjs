@@ -36,9 +36,16 @@ check('①a 合并窗装在 `handleWecomInbound` 入口(五个进线口一起吃
   /async function handleWecomInbound[\s\S]{0,400}?await enterMergeWindow\(conversationId/.test(bare))
 check('①b 早到的那几次「作废不发」——回 `reply: null`,不是回一句空话',
   /if \(win\.superseded\) return \{[^}]*reply: null/.test(bare))
-check('①c 窗长默认 8 秒、可配、越界钳到 5–15(店主 05q 原文)',
-  /const DEFAULT_S = 8/.test(readFileSync(join(ROOT, 'apps/api/merge-window.mjs'), 'utf8'))
-  && mergeWindowSeconds() >= 5 && mergeWindowSeconds() <= 15, String(mergeWindowSeconds()))
+/* 🔴 口径改过一次(店主 05r 补五 §三):8 秒是我 05q 写的,店主自己推翻了 ——
+   「单句顾客也等 8 秒太久」。现在:默认 **4** 秒、可配 **2–10**、**12 秒封顶**。
+   判据跟着翻,不是删掉:守的东西从「8 秒」变成「4 秒 + 封顶在」。 */
+const mwSrc = readFileSync(join(ROOT, 'apps/api/merge-window.mjs'), 'utf8')
+check('①c 窗长默认 4 秒、可配 2–10(店主 05r 补五 §三 改的口径)',
+  /const DEFAULT_S = 4/.test(mwSrc) && /const MIN_S = 2/.test(mwSrc) && /const MAX_S = 10/.test(mwSrc))
+check('①c2 🔴 封顶 12 秒在:刷新型的窗没有封顶会被一直打字的顾客拖到无限长',
+  /const CAP_S = 12/.test(mwSrc) && /leftToCap/.test(mwSrc) && /Math\.min\(ms, leftToCap\)/.test(mwSrc))
+check('①c3 🔴 `/health` 报的是**实际生效**的窗长(被 MERGE_WINDOW_MS 覆盖时也得说实话)',
+  /MERGE_WINDOW_MS[\s\S]{0,200}?Math\.round\(forcedMs \/ 1000\)/.test(mwSrc))
 check('①d 合并出来的那条是**几句原文按顺序连起来**,不摘要不改写(D153 引用不重写同族)',
   /win\.parts\.join\(' '\)/.test(readFileSync(join(ROOT, 'apps/api/merge-window.mjs'), 'utf8')))
 const mpChat = readFileSync(join(ROOT, 'miniprogram/pages/ai-chat/index.js'), 'utf8')
@@ -123,8 +130,10 @@ if (!up) {
   await fetch(`${OWN}/admin/demo/full-seed`, { method: 'POST', headers: { authorization: `Bearer ${TOKEN}`, 'content-type': 'application/json' }, body: '{}' }).catch(() => null)
   const db = new DatabaseSync(join(DATA_DIR, 'lucky-luxe.sqlite'), { readOnly: true })
   const health = await fetch(`${OWN}/health`).then((r) => r.json())
-  check('④a `/health` 自报窗长(判据与店主都不用猜「到底等了几秒」)',
-    Number(health.mergeWindowSeconds) >= 5 && Number(health.mergeWindowSeconds) <= 15, String(health.mergeWindowSeconds))
+  check('④a `/health` 自报三个数:窗长(实际生效的)、封顶、这会儿开着几个窗',
+    Number(health.mergeWindowSeconds) === Math.round(WIN_MS / 1000)
+    && Number(health.mergeWindowCapSeconds) > 0 && typeof health.mergeWindowsOpen === 'number',
+    JSON.stringify({ 窗: health.mergeWindowSeconds, 封顶: health.mergeWindowCapSeconds, 开着: health.mergeWindowsOpen }))
   check('④b `/health` 有上线批那格 `guestIdUnsigned`(上线批那条判据看它变 false)',
     health.guestIdUnsigned === true, String(health.guestIdUnsigned))
   const tenant = db.prepare(`SELECT t.id FROM tenants t JOIN stores s ON s.tenant_id = t.id AND s.is_active = 1 ORDER BY t.id LIMIT 1`).get()?.id
@@ -158,6 +167,52 @@ if (!up) {
 }
 child.kill()
 rmSync(DATA_DIR, { recursive: true, force: true })   // 夹具收尾:临时库跑完就删
+
+check('①g 小程序那一行说的是「正在看你的消息…」(窗的意思是**我在等你说完**,不是「我已经在打字」)',
+  /正在看你的消息/.test(readFileSync(join(ROOT, 'miniprogram/pages/ai-chat/index.wxml'), 'utf8'))
+  && !/正在输入/.test(readFileSync(join(ROOT, 'miniprogram/pages/ai-chat/index.wxml'), 'utf8').replace(/<!--[\s\S]*?-->/g, '')))
+
+/* ═══ ⑤ 封顶(店主 05r 补五 §三)——**再起一台**,窗 1 秒 / 封顶 3 秒 ═══
+   为什么要单独一台:封顶是「窗一直被刷新时的上限」,得让窗短、封顶更短,才跑得完。
+   造病同法:同一台参数、封顶置 0(= 不封顶),同样连发 → 只出一条 → 红。 */
+async function capRun(capMs, label) {
+  const port = Number(process.env.MW_CAP_PORT || 4183) + (capMs > 0 ? 0 : 1)
+  const dir = mkdtempSync(join(tmpdir(), 'll-ci-data.'))
+  const kid = spawn(process.execPath, ['local-server.mjs'], {
+    cwd: join(ROOT, 'apps/api'),
+    env: { ...process.env, PORT: String(port), DATA_DIR: dir, TEST_DB_PATH: join(dir, 'lucky-luxe.sqlite'),
+      MERGE_WINDOW_MS: '1000', MERGE_WINDOW_CAP_MS: String(capMs), ALLOW_DEMO_ADMIN_LOGIN: 'true' },
+    stdio: 'ignore',
+  })
+  const base = `http://127.0.0.1:${port}`
+  let ok = false
+  for (let i = 0; i < 60 && !ok; i += 1) { ok = await fetch(`${base}/health`).then((r) => r.ok).catch(() => false); if (!ok) await sleep(500) }
+  if (!ok) { kid.kill(); rmSync(dir, { recursive: true, force: true }); return null }
+  await fetch(`${base}/admin/demo/full-seed`, { method: 'POST', headers: { authorization: `Bearer ${TOKEN}`, 'content-type': 'application/json' }, body: '{}' }).catch(() => null)
+  const d2 = new DatabaseSync(join(dir, 'lucky-luxe.sqlite'), { readOnly: true })
+  const tid = d2.prepare(`SELECT t.id FROM tenants t JOIN stores s ON s.tenant_id = t.id AND s.is_active = 1 ORDER BY t.id LIMIT 1`).get()?.id
+  d2.close()
+  const uid = `mw-cap-${label}-${Date.now().toString(36)}`
+  /* 连发 5 句,每隔 800ms(< 1 秒窗,所以每句都在刷新窗)。
+     总跨度 ~3.2 秒 > 3 秒封顶 → 封顶那一刻先答手上的,后面的算下一窗 → **两条**。 */
+  const flying = []
+  for (let i = 0; i < 5; i += 1) {
+    flying.push(fetch(`${base}/ai/customer-service`, {
+      method: 'POST', headers: { 'content-type': 'application/json', 'x-tenant-id': tid },
+      body: JSON.stringify({ message: `第${i + 1}句想问问美甲`, lang: 'zh', clientId: uid }),
+    }).then((r) => r.json()).catch(() => null))
+    if (i < 4) await sleep(800)
+  }
+  const out = await Promise.all(flying)
+  kid.kill(); rmSync(dir, { recursive: true, force: true })
+  return out.filter((r) => r && r.reply).length
+}
+const capped = await capRun(3000, 'on')
+check('⑤ 🔴 封顶:5 句每隔 0.8 秒(一直在刷新窗)→ 12 秒封顶那一刻切开 → **不止一条**',
+  capped !== null && capped >= 2, `出了 ${capped} 条`)
+const uncapped = await capRun(0, 'off')
+check('⑤b 造病 · 反向守:把封顶去掉(CAP=0)→ 同样连发**只出一条** —— 证明上面那条是封顶挣来的',
+  uncapped === 1, `出了 ${uncapped} 条`)
 
 console.log(`\n[段 7] D151 合并窗 · 待裁#4 并句 · D152 折扣事实 · guestIdUnsigned 占位`)
 if (fails.length) { console.error(`\n❌ test-merge-window ${fails.length}/${n} 项未过`); process.exit(1) }

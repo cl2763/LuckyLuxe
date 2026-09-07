@@ -6,7 +6,8 @@
    · `tenantFallback` —— 顾客侧「没带租户/带了无效租户」被拒的次数,回归要求全 0;
    · `adminBuild` / `version` —— 三端指纹,排「你测的和她用的是不是同一份」;
    · `snapshotRaster` —— 生产装没装栅格化后端,空=真机快照会白;
-   · `mergeWindowSeconds`(D151)—— 入站合并窗多长,判据与店主都不用猜;
+   · `mergeWindowSeconds` / `mergeWindowCapSeconds` / `mergeWindowsOpen`(D151 + 05r 补五 §三)
+     —— 窗多长、封顶几秒、这会儿有几个人正被等着;三个都报,判据与店主都不用猜;
    · `guestIdUnsigned` —— 上线批占位:访客身份串现在是客户端自己生成的,
      上生产前要改成服务端签发,那条判据看它变 false。
 
@@ -17,7 +18,7 @@ const LOOPBACK = /^(127\.0\.0\.1|::1|::ffff:127\.0\.0\.1)$/
 
 export function healthReport(req, deps) {
   const {
-    rasterBackend, tenantFallbackTally, getAiUsage, mergeWindowSeconds,
+    rasterBackend, tenantFallbackTally, getAiUsage, mergeWindowSeconds, mergeWindowCapSeconds, openMergeWindows,
     dataDir, dbConcurrency, replyLength, appVersion, tenantNullRows, dataScope, iso,
   } = deps
   return {
@@ -28,6 +29,8 @@ export function healthReport(req, deps) {
     tenantFallback: { ...tenantFallbackTally },
     aiUsage: getAiUsage(),
     mergeWindowSeconds: mergeWindowSeconds(),
+    mergeWindowCapSeconds: mergeWindowCapSeconds(),
+    mergeWindowsOpen: openMergeWindows(),
     guestIdUnsigned: true,
     ...(LOOPBACK.test(String(req.socket?.remoteAddress || '')) ? { dataFile: join(dataDir, 'lucky-luxe.sqlite') } : {}),
     dbConcurrency,

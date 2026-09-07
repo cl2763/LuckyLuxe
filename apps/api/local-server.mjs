@@ -4,8 +4,11 @@ import { AsyncLocalStorage } from 'node:async_hooks'
 import { DatabaseSync } from 'node:sqlite'
 import { customerChatIdentity } from './customer-chat.mjs'
 import { discountFacts } from './discount-facts.mjs'
+import { enrichPrompt } from './prompt-assembly.mjs'
+import { guardedHandle } from './repeat-guard.mjs'
+import { classifyTurn } from './turn-classify.mjs'   // D150 壳:同主题第几次,用的是同一把分类尺
 import { healthReport } from './health-report.mjs'
-import { enterMergeWindow, mergeWindowSeconds } from './merge-window.mjs'
+import { enterMergeWindow, mergeWindowCapSeconds, mergeWindowSeconds, openMergeWindows } from './merge-window.mjs'
 import { merchantIdentity, runStoreRenameMigration, welcomeText } from './store-identity.mjs'
 import { nameToUsername, isValidUsername } from './pinyin-names.mjs'
 import { createDecipheriv, createHash, createHmac, randomUUID } from 'node:crypto'
@@ -3375,11 +3378,9 @@ const aiGate = createAiGate({
   isGreetingOnly, isReturningCustomerInbound, shouldSendReturningCustomerWelcome,
 })
 
-async function handleWecomInbound(inbound, req) {
+async function handleWecomInboundCore(inbound, req) {
   const conversationId = wecomConversationId(inbound.externalUserId)
-  /* 🔴 D151 入站合并窗:装在**这一处**,五个进线口一起吃到(D155 之后小程序自然也吃到)。
-     顾客连发三句 → 只出一条回复,三句按原文顺序连起来一并作答;早到的那几次「作废不发」。
-     窗长见 `merge-window.mjs`(默认 8 秒,可配 5–15,`/health` 报的就是它)。 */
+  /* 🔴 D151 入站合并窗:装在**这一处**,五个进线口一起吃到。细节见 `merge-window.mjs` 抬头。 */
   const win = await enterMergeWindow(conversationId, inbound.content || '')
   if (win.superseded) return { conversationId, inbound, reply: null, mergedIntoLater: true, mergedParts: win.parts }
   if (win.merged !== null && win.merged !== inbound.content) inbound = { ...inbound, content: win.merged }
@@ -3874,18 +3875,10 @@ async function handleWecomInbound(inbound, req) {
   }
   const memoryContextText = workingMemoryPromptText(persistedState)
   const normalizedCustomerStage = String(inbound.customerStage || '').trim()
-  const testContextNotes = [
-    normalizedCustomerStage && normalizedCustomerStage !== 'unified_test' ? `测试顾客阶段：${normalizedCustomerStage}` : '',
-    inbound.referenceImages?.length ? `顾客已上传 ${inbound.referenceImages.length} 张参考图，当前阶段只能整理需求并转技师确认，不可直接按图最终报价。` : '',
-    memoryContextText ? `系统 working memory:\n${memoryContextText}` : '',
-    persistedState?.summaryText ? `系统已记住的本会话需求：${persistedState.summaryText}` : '',
-    persistedState?.quoteStage && persistedState.quoteStage !== 'idle' ? `当前报价阶段：${persistedState.quoteStage}；下一步：${persistedState.nextAction || 'continue_ai_chat'}。` : '',
-    persistedState?.referenceImages?.length ? `本会话历史参考图数量：${persistedState.referenceImages.length}。即使当前消息没有带图，后台报价也要带入历史参考图。` : ''
-  ].filter(Boolean)
-  /* D152:报价三段(折扣 → 原价 → 折后价)。这一句是**事实**不是话术 ——
-     库里真有券才说有,没有就明写「不许提券」。出口在 `discount-facts.mjs`。 */
-  const discountNote = discountFacts(db, currentTenantId(), (cents) => formatMoneyCents(cents)).note
-  const enrichedMessage = [inbound.content || '', discountNote, ...testContextNotes].filter(Boolean).join('\n')
+  /* 这一轮喂给模型的那段话(顾客原话 + D152 折扣事实 + D150 换角度 + 会话上下文);
+     四类各是什么、为什么按这个顺序,写在 `prompt-assembly.mjs`。 */
+  const enrichedMessage = enrichPrompt({ inbound, state: persistedState, memoryContextText, customerStage: normalizedCustomerStage,
+    discountNote: discountFacts(db, currentTenantId(), (cents) => formatMoneyCents(cents)).note })
   const knowledgeContext = attachOwnerApprovedSamples(buildKnowledgeContext({
     lang: inbound.lang || 'zh',
     message: enrichedMessage,
@@ -4031,6 +4024,12 @@ async function handleWecomInbound(inbound, req) {
     })
   }
   return { conversationId, inbound, reply, conversation: getWecomConversation(conversationId) }
+}
+
+/* 🔴 D150 出口薄壳:Core 里 14 个 return,插在中间的任何一处收口都会漏(上一批就这么栽的)。
+   为什么是壳、壳做了什么,全写在 `repeat-guard.mjs` 抬头。⚠️ Core **只许这里调**(有静态判据守)。 */
+async function handleWecomInbound(inbound, req) {
+  return guardedHandle({ db, iso, classifyTurn, currentTenantId, wecomConversationId, getWecomConversation }, handleWecomInboundCore, inbound, req)
 }
 
 function getWecomConversations() {
@@ -10729,7 +10728,7 @@ async function route(req, res) {
     /* 这一份自报搬去 `health-report.mjs`(公约②边改边拆)。它是**判据的读口**,
        每一格为什么在那儿,写在那个文件的抬头。 */
     return json(res, 200, healthReport(req, {
-      rasterBackend, tenantFallbackTally, getAiUsage, mergeWindowSeconds,
+      rasterBackend, tenantFallbackTally, getAiUsage, mergeWindowSeconds, mergeWindowCapSeconds, openMergeWindows,
       dataDir, dbConcurrency, replyLength, appVersion, tenantNullRows, dataScope: DATA_SCOPE, iso,
     }))
   }
