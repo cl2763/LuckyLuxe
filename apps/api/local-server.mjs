@@ -2,6 +2,7 @@
 import { createServer } from 'node:http'
 import { AsyncLocalStorage } from 'node:async_hooks'
 import { DatabaseSync } from 'node:sqlite'
+import { customerChatIdentity } from './customer-chat.mjs'
 import { merchantIdentity, runStoreRenameMigration, welcomeText } from './store-identity.mjs'
 import { nameToUsername, isValidUsername } from './pinyin-names.mjs'
 import { createDecipheriv, createHash, createHmac, randomUUID } from 'node:crypto'
@@ -11512,49 +11513,27 @@ async function route(req, res) {
     return json(res, 200, { copy: await createSocialCopy({ lang: body.lang || 'zh', image: body.image || '', booking, platform: body.platform || 'xiaohongshu', audience: body.audience || 'customer', avoidCaptions: body.avoidCaptions || [], variantSeed: body.variantSeed || '' }) })
   }
   if (req.method === 'POST' && path === '/ai/customer-service') {
-    // 多租户:AI 客服按"顾客当前进的店"取知识/服务/事实回答
+    /* 🔴 D155(店主 09-08:「小程序接入外部 API 时,要就像网页一样」)——**同一个出口**。
+       这条路以前自己拼 knowledgeContext 再直调 `createCustomerServiceReply`,
+       于是 `handleWecomInbound` 里的东西一个都没走:预约采集、报价采集、事实闸、转人工、
+       会话流水、待审、D147 未开通话术、D148 口吻。同一句话,顾客在小程序问和在企微问答得不一样。
+       现在这里只做三件事:**定租户 → 定「这是谁」→ 交给同一个出口**。
+       `history` 不再由客户端带 —— 记忆的唯一真相是会话流水(与企微、模拟器同)。 */
     tenantContext.enterWith({ tenantId: resolveTenant(req, query) })
-    if (!checkEntitlement(currentTenantId(), 'ai_customer_service')) {
-      // 2026-08-04 修:原文案是「已为你转接人工，店员看到后会尽快回复」——但这里直接 return 了,
-      // 消息根本没写进会话库,商家的客服工作台是空的,顾客在等一个永远不会来的回复。
-      // 现在改成不撒谎:告诉顾客怎么真的联系到店(小程序自助预约 / 门店电话)。
-      const st = db.prepare('SELECT phone FROM stores WHERE tenant_id = ? AND is_active = 1 AND phone IS NOT NULL AND phone <> \'\' LIMIT 1').get(currentTenantId())
-      const tel = st?.phone ? `，或致电 ${st.phone} 联系门店` : ''
-      const telEn = st?.phone ? `, or call us at ${st.phone}` : ''
-      return json(res, 200, {
-        reply: {
-          data: {
-            intent: 'entitlement_disabled',
-            answerZh: `这边暂时不支持在线答复~你可以直接在小程序里选择项目预约${tel}，我们会尽快为你安排。`,
-            answerEn: `Online replies are unavailable here right now. You can book directly in the mini-program${telEn}, and we'll take care of you.`,
-            handoffRequired: false
-          },
-          source: 'entitlement_gate'
-        }
-      })
-    }
     const body = await readBody(req)
-    const context = buildCustomerServiceContext(req, body.lang || 'zh')
-    const knowledgeContext = attachOwnerApprovedSamples(buildKnowledgeContext({
+    const inbound = normalizeWecomInbound({
+      externalUserId: customerChatIdentity(req, body, { requireCustomer, randomId }),
+      content: body.message || body.content || '',
+      sourceChannel: body.sourceChannel || body.source || 'miniprogram',
       lang: body.lang || 'zh',
-      message: body.message || '',
-      ...context,
-      sourceChannel: body.sourceChannel || body.source || '',
-      customerStage: body.customerStage || body.stage || '',
       referenceImages: body.referenceImages || body.images || [],
-      liveTenantFacts: liveTenantFacts(),
-      platformKb: platformKbOverride(),
-      tenantDocuments: tenantKbDocumentsForPrompt(currentTenantId())
-    }), body.lang || 'zh')
-    const reply = await createCustomerServiceReply({
-      lang: body.lang || 'zh',
-      message: body.message || '',
-      sampleMatchMessage: body.message || '',
-      history: body.history || [],
-      knowledgeContext,
-      ...context
+      customerStage: body.customerStage || body.stage || '',
+      raw: { miniprogram: true, ...body },
     })
-    return json(res, 200, { reply })
+    const result = await handleWecomInbound(inbound, req)
+    /* 只回 `reply`:`handleWecomInbound` 还会带 `conversation`(整份聊天记录),
+       而这是**公开接口** —— 原样吐出去等于谁都能读别人的会话(读写两道闸律:这是读那道)。 */
+    return json(res, 200, { reply: result.reply })
   }
   let adminSession = null
   if (path.startsWith('/admin/')) {

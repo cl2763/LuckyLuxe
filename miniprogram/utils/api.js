@@ -764,9 +764,24 @@ function getShops(includeDemo) {
   return request(includeDemo ? '/shops?include=demo' : '/shops')
 }
 
-// AI 客服(按当前店回答;登录时自动带顾客身份与订单上下文)
-function aiCustomerService(message, history) {
-  return request('/ai/customer-service', 'POST', { message, lang: 'zh', history: history || [] })
+/* AI 客服(按当前店回答;登录时自动带顾客身份与订单上下文)
+
+   🔴 D155(店主 09-08:「小程序接入外部 API 时,要就像网页一样」):
+   ① **不再把 history 带上来**。这条接口后端已经并进 `handleWecomInbound` —— 与企微、模拟器同一个出口,
+      记忆的唯一真相是**会话流水**。客户端再带一份 history,就是第二处真相,而且必然对不上
+      (页面一刷新就没了,后端那份还在)。
+   ② 带一个**在本地存住的 clientId**:没登录时,后端要靠它把同一个人的几句话归到同一通对话上。
+      登录了就用不上它 —— 那时身份是服务端从令牌解出来的,伪造不了。 */
+function clientChatId() {
+  let id = wx.getStorageSync('lucky_client_id')
+  if (!id) {
+    id = 'c' + Date.now().toString(36) + Math.random().toString(36).slice(2, 8)
+    wx.setStorageSync('lucky_client_id', id)
+  }
+  return id
+}
+function aiCustomerService(message) {
+  return request('/ai/customer-service', 'POST', { message, lang: 'zh', clientId: clientChatId() })
 }
 
 // 我的资产(user × 当前店)

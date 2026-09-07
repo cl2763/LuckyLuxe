@@ -72,12 +72,26 @@ async function main() {
     check('blocked flag returned', blocked.data?.entitlementBlocked === true)
     check('customer message still recorded and marked needs_human', blocked.data?.conversation?.status === 'needs_human', blocked.data?.conversation?.status)
 
-    const webBlocked = await request('/ai/customer-service', { method: 'POST', body: JSON.stringify({ lang: 'zh', message: '营业时间？' }) })
-    // 2026-08-04 店主批准的口径变更:原断言要求兜底文案含「人工客服」,但 AI 关闭时消息并不入会话库,
-    // 承诺"人工会回复"是假的;新口径 = 给顾客一条真能走通的路(小程序自助预约/门店电话),且不暴露商家订阅状态。
-    check('web channel returns actionable notice when disabled',
-      webBlocked.data?.reply?.data?.intent === 'entitlement_disabled' && /预约/.test(webBlocked.data?.reply?.data?.answerZh || ''),
-      JSON.stringify(webBlocked.data).slice(0, 200))
+    /* 🔴 口径第二次改(D155,店主 09-08:顾客端并进 handleWecomInbound 同一个出口)。
+       08-04 那次把文案从「人工客服会回复」改成「自助预约/门店电话」,**理由是**:
+       AI 关掉时顾客那句话**根本不入会话库**,所以「人工会回复」是句假话。
+       D155 把这条路并进同一个出口之后,**那个理由不成立了** —— 顾客那句话真的落进
+       `wechat_conversations` 并标 `needs_human`,店员在客服工作台看得见,承诺是真的。
+       所以断言从「比对文案长什么样」翻成**「那句承诺兑不兑得了」**:
+       ① 出声且转人工(不许沉默)② 顾客那句话真的入了库且待人工 ③ 不暴露商家订阅状态。
+       —— 判据锚在「这句话是不是真的」上,不锚在当前措辞上(措辞由图/口径管,见待裁)。 */
+    const webUid = `ent-web-${RUN_ID}`
+    const webBlocked = await request('/ai/customer-service', { method: 'POST', body: JSON.stringify({ lang: 'zh', message: '营业时间？', clientId: webUid }) })
+    const webReply = webBlocked.data?.reply?.data || {}
+    check('web channel: AI 关闭时**出声且转人工**(不许沉默)',
+      Boolean(webReply.answerZh) && webReply.handoffRequired === true, JSON.stringify(webBlocked.data).slice(0, 200))
+    check('web channel: 不暴露商家订阅状态(不许把「没开通/没买」说给顾客听)',
+      !/未开通|没有开通|订阅|套餐|付费/.test(String(webReply.answerZh || '')), String(webReply.answerZh || ''))
+    /* 🔴 这一条才是 08-04 那个担忧的**可证形式**:承诺「同事会回」,就得真有一通待人工的会话在那儿。 */
+    const webConv = await request('/admin/wechat/conversations')   // request() 自带主钥匙与租户头
+    const webRow = (webConv.data?.conversations || []).find((c) => String(c.externalUserId || c.external_user_id || '').includes(webUid))
+    check('web channel: 顾客那句话**真的入了会话库并待人工**(承诺兑得了,才不算假话)',
+      Boolean(webRow) && webRow.status === 'needs_human', JSON.stringify(webRow || null).slice(0, 200))
 
     // 3. 试用过期 → 拦;试用未过期 → 放
     await setAi({ enabled: true, expiresAt: '2020-01-01T00:00:00.000Z' })

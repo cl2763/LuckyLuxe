@@ -26,22 +26,55 @@ AFTER=$(md5 -q "handoff/写库脚本护栏三列清单.md" 2>/dev/null || echo n
 if [ "$BEFORE" = "$AFTER" ]; then say "护栏三列清单" "✅ 已是最新"
 else say "护栏三列清单" "⚠️ 刚重生成过(记得 git add;这是 05n 三次红里的一次)"; fi
 
-# ② 棘轮:两个巨型文件只许降不许升
-# 🔴 基线**从上一个提交现取**,不再写死在这里(05r 补二 现查:写死的两个数停在 17751 / 8550,
-#    而上一批已经把 local-server 降到 17745、admin.js 降到 8457 —— 一把不会收紧的棘轮
-#    等于「涨了也不红」,只是涨得慢一点才红。判据覆盖面要有判据:基线跟着交付走。)
-#    要故意放宽(经店主批准的增长)才用 RATCHET_SERVER=/RATCHET_ADMIN= 覆盖。
+# ② 棘轮:两个巨型文件只许降不许升 —— **双基线**(店主 09-08 裁,05r 补三)
+# 一开始基线写死在这里,结果停在 17751/8550 而实际早降到 17745/8457:**不会收紧的棘轮**,
+# 等于「涨了也不红,只是涨得慢一点才红」。改成从上一提交现取,治好了那个;
+# 但又留下一个口子:**红着提交一次,下一次基线就跟着抬**。
+# 所以取两者中的**小者**:min(上一提交行数, assertion-baseline.json 里记的历史最低)。
+# 历史最低值**只许写小不许写大** —— 写大就是偷偷放宽,预检自己红。
+# 确有经店主批准的增长,才用 RATCHET_SERVER= / RATCHET_ADMIN= 显式覆盖。
 git_lines() { git show "HEAD:$1" 2>/dev/null | wc -l | tr -d ' '; }
-BASE_SRV=${RATCHET_SERVER:-$(git_lines apps/api/local-server.mjs)}
-BASE_ADM=${RATCHET_ADMIN:-$(git_lines apps/web/admin.js)}
-[ -n "$BASE_SRV" ] && [ "$BASE_SRV" -gt 0 ] 2>/dev/null || BASE_SRV=17745   # 取不到 HEAD(浅克隆等)才退回写死值
-[ -n "$BASE_ADM" ] && [ "$BASE_ADM" -gt 0 ] 2>/dev/null || BASE_ADM=8457
-SRV=$(wc -l < apps/api/local-server.mjs | tr -d ' ')
-ADM=$(wc -l < apps/web/admin.js | tr -d ' ')
-if [ "$SRV" -le "$BASE_SRV" ]; then say "local-server.mjs" "✅ $SRV ≤ $BASE_SRV"
-else say "local-server.mjs" "🔴 $SRV > $BASE_SRV(涨了 $((SRV-BASE_SRV)) 行)"; FAIL=1; fi
-if [ "$ADM" -le "$BASE_ADM" ]; then say "admin.js" "✅ $ADM ≤ $BASE_ADM"
-else say "admin.js" "🔴 $ADM > $BASE_ADM"; FAIL=1; fi
+floor_of() { node -e 'const d=require("./apps/api/assertion-baseline.json");const v=(d["巨型文件历史最低"]||{})[process.argv[1]];console.log(Number.isInteger(v)?v:"")' "$1" 2>/dev/null; }
+pick_base() {   # $1=文件 $2=覆盖值 → 打印「基线 上一提交 历史最低」
+  local f="$1" over="$2" head_n floor_n base
+  head_n=$(git_lines "$f"); floor_n=$(floor_of "$f")
+  [ -n "$head_n" ] && [ "$head_n" -gt 0 ] 2>/dev/null || head_n=""
+  [ -n "$floor_n" ] && [ "$floor_n" -gt 0 ] 2>/dev/null || floor_n=""
+  if [ -n "$over" ]; then base="$over"
+  elif [ -n "$head_n" ] && [ -n "$floor_n" ]; then base=$(( head_n < floor_n ? head_n : floor_n ))
+  else base="${head_n:-${floor_n:-999999}}"; fi
+  echo "$base ${head_n:-?} ${floor_n:-?}"
+}
+ratchet() {   # $1=中文名 $2=文件 $3=覆盖值
+  local now base head_n floor_n
+  now=$(wc -l < "$2" | tr -d ' ')
+  read -r base head_n floor_n <<< "$(pick_base "$2" "$3")"
+  # 历史最低值写大了 = 偷偷放宽,先咬这一条(判据自己也会坏,也该有判据)
+  if [ "$floor_n" != "?" ] && [ "$head_n" != "?" ] && [ "$floor_n" -gt "$head_n" ]; then
+    say "$1" "🔴 历史最低 $floor_n > 上一提交 $head_n —— 历史最低只许写小不许写大"; FAIL=1; return
+  fi
+  if [ "$now" -le "$base" ]; then say "$1" "✅ $now ≤ $base(上一提交 $head_n · 历史最低 $floor_n)"
+  else say "$1" "🔴 $now > $base(涨了 $((now-base)) 行;上一提交 $head_n · 历史最低 $floor_n)"; FAIL=1; fi
+}
+ratchet "local-server.mjs" apps/api/local-server.mjs "${RATCHET_SERVER:-}"
+ratchet "admin.js" apps/web/admin.js "${RATCHET_ADMIN:-}"
+
+# ②b J-34:造病还原只许走 tools/knife-backup.sh(店主 09-08 立,05r 补三)
+#     `git checkout --` / `git restore` 还原到的是 **HEAD**,不是「造病之前那一刻」;
+#     只要文件本批有未提交改动,一条命令就把本批的活儿抹了。08-30 栽过一次(自伤事故),
+#     09-08 又栽一次 —— **上一次没兜住是因为教训只写进了回执,没装成护栏**,这就是那条护栏。
+#     扫的是**会被执行的东西**(脚本与模块),不扫 handoff/ 文档:那里写的是案情,不是行为。
+KNIFE_BAD=$(grep -rln --include='*.sh' --include='*.mjs' --include='*.command' \
+              -e 'git checkout --' -e 'git restore' tools apps .command 2>/dev/null \
+            | grep -vE '^tools/(pre-regression|knife-backup)\.sh$' || true)
+#     白名单精确到文件、各写理由(不许按目录放行):
+#       tools/pre-regression.sh —— 本判据自己,检测词就写在这儿;
+#       tools/knife-backup.sh   —— 那条**合法路径**本身,它的说明必须点名被禁的命令,否则没人知道禁的是什么。
+if [ -z "$KNIFE_BAD" ]; then say "J-34 造病还原路径" "✅ 可执行件里零处 git checkout --/git restore"
+else say "J-34 造病还原路径" "🔴 $(echo "$KNIFE_BAD" | tr '\n' ' ')—— 造病还原走 tools/knife-backup.sh"; FAIL=1; fi
+KNIFE_LEFT=$(find . -name '*.pre-k' -not -path './.git/*' -not -path './node_modules/*' 2>/dev/null || true)
+if [ -z "$KNIFE_LEFT" ]; then say "J-34 造病备份收尾" "✅ 没有残留的 .pre-k"
+else say "J-34 造病备份收尾" "🔴 $(echo "$KNIFE_LEFT" | tr '\n' ' ')—— 某把刀没还原"; FAIL=1; fi
 
 # ③ 语法:所有本仓 .mjs 先过一遍 node --check(比起服务快得多)
 BAD=$(for f in apps/api/*.mjs apps/web/*.js tools/*.mjs tools/ai-eval/*.mjs; do

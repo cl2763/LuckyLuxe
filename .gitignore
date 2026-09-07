@@ -63,3 +63,4 @@ handoff/本地自查账号.txt
 # 浏览器二进制(店主 03r):playwright 自装的 chromium 等,几百 MB,绝不入库
 .playwright-browsers/
 handoff/night-runs/.env.relay
+*.pre-k

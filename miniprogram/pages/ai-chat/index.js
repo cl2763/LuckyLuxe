@@ -12,7 +12,8 @@ Page({
   },
 
   onLoad() {
-    this.hist = [] // 传给后端的对话历史 [{role,content}]
+    /* D155:**不再自己攒 history**。这一页问的那条接口已经和企微、模拟器并成同一个出口,
+       记忆的唯一真相是后端的会话流水;页面这边再存一份,刷新就没、还和后端对不上(两处真相)。 */
     this.seq = 0
     this.push('a', '你好呀~我是本店的 AI 客服 ✨\n价格、款式、空位、预约都可以直接问我;需要人工的话我也会帮你转接。')
   },
@@ -32,13 +33,11 @@ Page({
     if (!text || this.data.sending) return
     this.setData({ input: '', sending: true })
     this.push('c', text)
-    this.hist.push({ role: 'customer', content: text })
     try {
-      const r = await api.aiCustomerService(text, this.hist.slice(-10))
+      const r = await api.aiCustomerService(text)
       const d = (r.reply && r.reply.data) || {}
       const answer = d.answerZh || d.answer || d.answerEn || '不好意思,我没太明白,能换个说法吗?'
       this.push('a', answer, !!d.handoffRequired)
-      this.hist.push({ role: 'assistant', content: answer })
       if (d.handoffRequired) {
         this.push('a', '已为你转接人工,店员看到后会尽快回复;着急的话也可以直接到店或电话联系门店哦。', false)
       }

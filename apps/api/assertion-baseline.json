@@ -11,7 +11,7 @@
     "human-handoff": 12,
     "after-sales-handoff": 24,
     "identity-links": 9,
-    "entitlements": 27,
+    "entitlements": 29,
     "tenant-kb": 23,
     "finance-core": 14,
     "finance-goals": 18,
@@ -91,6 +91,7 @@
     "ai-review": 38,
     "quote-tenant": 8,
     "conversation-tenant": 15,
+    "mini-ai-same-outlet": 42,
     "three-stores": 26,
     "tier-label": 8,
     "native-dialog": 7,
@@ -105,5 +106,10 @@
     "perf-base-migration": 15,
     "tenant-isolation": 10
   },
-  "上次更新": "2026-09-02"
+  "上次更新": "2026-09-02",
+  "巨型文件历史最低": {
+    "说明": "棘轮双基线(店主 09-08 裁,05r 补三):预检取 min(上一提交行数, 这里记的历史最低)。只许写小不许写大 —— 写大预检自己红。治的是「红着提交一次,下一次基线跟着抬」那个口子。",
+    "apps/api/local-server.mjs": 17724,
+    "apps/web/admin.js": 7928
+  }
 }
