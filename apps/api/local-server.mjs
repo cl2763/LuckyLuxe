@@ -3,6 +3,9 @@ import { createServer } from 'node:http'
 import { AsyncLocalStorage } from 'node:async_hooks'
 import { DatabaseSync } from 'node:sqlite'
 import { customerChatIdentity } from './customer-chat.mjs'
+import { discountFacts } from './discount-facts.mjs'
+import { healthReport } from './health-report.mjs'
+import { enterMergeWindow, mergeWindowSeconds } from './merge-window.mjs'
 import { merchantIdentity, runStoreRenameMigration, welcomeText } from './store-identity.mjs'
 import { nameToUsername, isValidUsername } from './pinyin-names.mjs'
 import { createDecipheriv, createHash, createHmac, randomUUID } from 'node:crypto'
@@ -3374,6 +3377,12 @@ const aiGate = createAiGate({
 
 async function handleWecomInbound(inbound, req) {
   const conversationId = wecomConversationId(inbound.externalUserId)
+  /* 🔴 D151 入站合并窗:装在**这一处**,五个进线口一起吃到(D155 之后小程序自然也吃到)。
+     顾客连发三句 → 只出一条回复,三句按原文顺序连起来一并作答;早到的那几次「作废不发」。
+     窗长见 `merge-window.mjs`(默认 8 秒,可配 5–15,`/health` 报的就是它)。 */
+  const win = await enterMergeWindow(conversationId, inbound.content || '')
+  if (win.superseded) return { conversationId, inbound, reply: null, mergedIntoLater: true, mergedParts: win.parts }
+  if (win.merged !== null && win.merged !== inbound.content) inbound = { ...inbound, content: win.merged }
   // 套餐闸门：AI 客服未开通或试用过期时，进线照常记录并静默转人工，AI 不回复。
   if (!checkEntitlement(currentTenantId(), 'ai_customer_service')) {
     const conversation = appendWecomConversationMessage(conversationId, {
@@ -3388,7 +3397,9 @@ async function handleWecomInbound(inbound, req) {
       externalUserId: inbound.externalUserId,
       raw: inbound.raw
     })
-    return entitlementBlockedReply({ conversationId, inbound, conversation })   // D147:没开 AI 包不许沉默,理由见 entitlement-gate.mjs
+    /* D147 不许沉默 + 待裁 #4 并句:那句话里要带上「怎么自己走通」——店里有电话就一并给 */
+    const gatePhone = db.prepare("SELECT phone FROM stores WHERE tenant_id = ? AND is_active = 1 AND phone IS NOT NULL AND phone <> '' LIMIT 1").get(currentTenantId())?.phone || ''
+    return entitlementBlockedReply({ conversationId, inbound, conversation, storePhone: gatePhone })
   }
   const context = buildCustomerServiceContext(req, inbound.lang || 'zh')
   const existing = wecomRouting.conversationRow(conversationId, 'status, transcript_json')
@@ -3871,7 +3882,10 @@ async function handleWecomInbound(inbound, req) {
     persistedState?.quoteStage && persistedState.quoteStage !== 'idle' ? `当前报价阶段：${persistedState.quoteStage}；下一步：${persistedState.nextAction || 'continue_ai_chat'}。` : '',
     persistedState?.referenceImages?.length ? `本会话历史参考图数量：${persistedState.referenceImages.length}。即使当前消息没有带图，后台报价也要带入历史参考图。` : ''
   ].filter(Boolean)
-  const enrichedMessage = `${inbound.content || ''}${testContextNotes.length ? `\n${testContextNotes.join('\n')}` : ''}`
+  /* D152:报价三段(折扣 → 原价 → 折后价)。这一句是**事实**不是话术 ——
+     库里真有券才说有,没有就明写「不许提券」。出口在 `discount-facts.mjs`。 */
+  const discountNote = discountFacts(db, currentTenantId(), (cents) => formatMoneyCents(cents)).note
+  const enrichedMessage = [inbound.content || '', discountNote, ...testContextNotes].filter(Boolean).join('\n')
   const knowledgeContext = attachOwnerApprovedSamples(buildKnowledgeContext({
     lang: inbound.lang || 'zh',
     message: enrichedMessage,
@@ -10712,38 +10726,12 @@ async function route(req, res) {
      只回 commit 短号与服务名,不回任何配置值或密钥。Railway 会注入
      RAILWAY_GIT_COMMIT_SHA;本机没有这个变量就回 'local'。 */
   if (req.method === 'GET' && path === '/health') {
-    return json(res, 200, {
-      ok: true,
-      service: 'lucky-luxe-api-local',
-      commit: String(process.env.RAILWAY_GIT_COMMIT_SHA || 'local').slice(0, 7),
-      /* 真机 SVG 空白件后:快照要出 PNG 得有栅格化后端。把它摆进 /health,
-         上线后一眼能看出生产装没装上(空=还在回落 SVG,真机图会白),不靠猜。 */
-      snapshotRaster: rasterBackend() || 'none',
-      /* D132 口径④(**已 fail-closed**):顾客侧「没带租户 / 带了无效租户」被拒的次数(本进程累计)。
-         摆在 /health 是为了**能被判据读到** —— 判据要求回归跑完三个进程都是 0/0;
-         日志会被下一次跑覆盖,health 不会。 */
-      tenantFallback: { ...tenantFallbackTally },
-      aiUsage: getAiUsage(),   // 04d §三:真模型 token 累计(mock 时全 0)
-      /* 05n 裁(6):并发起手式落没落,得能从外面看见 —— 判据不靠猜 */
-      // 🔴 这台服务开的是哪个库(《写库自报律》的「路径」那一格,`resolveDbPath()` 读它;只对回环下发,线上 /health 是公开的)
-      ...(/^(127\.0\.0\.1|::1|::ffff:127\.0\.0\.1)$/.test(String(req.socket?.remoteAddress || '')) ? { dataFile: join(dataDir, 'lucky-luxe.sqlite') } : {}),
-      dbConcurrency,
-      replyLength: replyLength.snapshot(),   // 05n 裁(4):超长条数得数得出来
-      /* 🔴 2026-08-30(退回件②):这台服务**实发的前端是哪一版**,由服务自己说 ——
-         adminBuild = admin.html 现算的 LL_BUILD(与页面左下角同源)。restore 拉错版本、
-         看错端口,店主报的版本串与这里一对就现形,不再猜「你测的和她用的是不是同一份」。 */
-      adminBuild: appVersion.servedAdminBuild(),   // 04f-3 三端指纹,出口在 ./app-version.mjs
-      version: appVersion.version(),
-      /* D137:`tenant_id` 为 NULL 的行 —— **不再自动归旗舰店**,摆出来由人处置(空对象=一行都没有) */
-      tenantNullRows,
-      /* 🔴 测试护栏(店主 08-24 裁 C):**这台服务往哪个库写**,由服务器自己说。
-         套件开跑前问这一句,不是 'test' 就拒跑 —— 判据律:判据要能证伪"我会不会写进真库",
-         而不是问一个"记得设就设、忘了就没有"的环境变量。
-         'test' 只认回归脚本建的临时库(/tmp/ll-ci-data.XXXX)或显式 LL_TEST_DATA=1;
-         生产永远是 'live'。 */
-      dataScope: DATA_SCOPE,
-      time: iso(new Date())
-    })
+    /* 这一份自报搬去 `health-report.mjs`(公约②边改边拆)。它是**判据的读口**,
+       每一格为什么在那儿,写在那个文件的抬头。 */
+    return json(res, 200, healthReport(req, {
+      rasterBackend, tenantFallbackTally, getAiUsage, mergeWindowSeconds,
+      dataDir, dbConcurrency, replyLength, appVersion, tenantNullRows, dataScope: DATA_SCOPE, iso,
+    }))
   }
   if (req.method === 'GET' && path === '/wechat/customer-service/webhook') {
     const valid = verifyWecomSignature({

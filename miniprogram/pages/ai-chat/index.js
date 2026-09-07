@@ -30,11 +30,19 @@ Page({
 
   async send(preset) {
     const text = String(preset || this.data.input || '').trim()
-    if (!text || this.data.sending) return
+    /* 🔴 D151:**不许拿 `sending` 挡住第二句**。合并窗要的就是「顾客连发几句」,
+       而窗一开就是 8 秒 —— 挡住的话顾客在这 8 秒里根本发不出第二句,窗永远合不到东西,
+       等于功能做了个寂寞。所以这里只挡空串;`sending` 只用来显示「正在输入」那一行。 */
+    if (!text) return
+    this.inflight = (this.inflight || 0) + 1
     this.setData({ input: '', sending: true })
     this.push('c', text)
     try {
       const r = await api.aiCustomerService(text)
+      /* 🔴 D151 入站合并窗:连着发几句时,后端**只对最后一句出一条回复**,
+         早到的那几次回 `reply: null`(「作废不发」)。这里必须**什么都不画** ——
+         画一个「我没太明白」出来,就是把「正在等你说完」演成了「机器听不懂」。 */
+      if (!r || !r.reply) return
       const d = (r.reply && r.reply.data) || {}
       const answer = d.answerZh || d.answer || d.answerEn || '不好意思,我没太明白,能换个说法吗?'
       this.push('a', answer, !!d.handoffRequired)
@@ -44,7 +52,10 @@ Page({
     } catch (err) {
       this.push('a', '网络有点不稳定,稍后再试一下~')
     } finally {
-      this.setData({ sending: false })
+      /* 几句同时在飞时,最后一个回来才收掉「正在输入」—— 早回的那几次是被合并窗作废的,
+         它们一回来就把点点点关掉,顾客会以为「答完了」,而真正的回复还在路上。 */
+      this.inflight = Math.max(0, (this.inflight || 1) - 1)
+      if (this.inflight === 0) this.setData({ sending: false })
     }
   }
 })

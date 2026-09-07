@@ -80,10 +80,15 @@ export const TURN_TEXT = {
    v3 原文里,顾客头一次说「做美甲」,机器回「好的,**改成**美甲了」——
    人家没改过任何东西,这句话听着像在纠正顾客。
    所以每格两种说法:**首次填** = 直接复述;**换掉** = 才说「改成…了」。 */
+/* 🔴 中文里全角括号后面**不加空格**(店主 09-08 现读:「明天(9月8日,周二) 可以」多一个空格)。
+   这个空格原来是有理由的:D148 之前这里填的是 `2026-09-12`,数字后面紧跟中文确实要隔一下。
+   D148 把日期换成人话之后,值以「)」收尾,那个空格就成了多余的。
+   所以按**值的结尾**决定加不加:结尾是 ASCII 字母数字才加空格,中文/全角标点收尾就不加。 */
+const gap = (v) => (/[A-Za-z0-9]$/.test(String(v)) ? ' ' : '')
 const SLOT_LABEL = {
   serviceType: (v, changed) => (changed ? `改成${v}了` : `${v}`),
-  date: (v, changed) => (changed ? `改到${v}` : `${v} 可以`),
-  time: (v, changed) => (changed ? `改到${v}` : `${v} 记下了`),
+  date: (v, changed) => (changed ? `改到${v}` : `${v}${gap(v)}可以`),
+  time: (v, changed) => (changed ? `改到${v}` : `${v}${gap(v)}记下了`),
   technician: (v, changed) => (changed ? `改指定 ${v}` : `指定 ${v}`),
   addons: (v, changed) => (changed ? `加项改成${v}` : `加上${v}`)
 }
