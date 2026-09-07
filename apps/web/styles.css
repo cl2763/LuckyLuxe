@@ -7724,3 +7724,28 @@ section.card > .section-row:first-child { margin-top: 0; }
 .dh-next { margin-top: 10px; font-size: 14px; }
 .dh-next-none { color: var(--muted, #8a8079); }
 .dh-todo-row { display: flex; justify-content: space-between; width: 100%; border: 0; background: transparent; padding: 8px 0; cursor: pointer; border-bottom: 1px solid var(--line, #f0ece7); }
+
+/* 🔴 D154:宿主 `#dashboardCharts` 原来是三列的图表网格(旧首页的形状),
+   新首页自己就是「两栏 + 通栏 + 下两栏」——所以先把宿主改回单列块流,
+   否则我的 section 会被塞进旧网格的三个格子里(现测:1082px 下被切成三条 351px)。 */
+#dashboardCharts.dashboard-chart-grid { display: block; }
+
+/* D154:按图 §三 两栏排 —— 左栏(大数+折线+此刻+下一位)| 右栏(四小牌);<900px 退化竖排 */
+.dh-hero { display: grid; grid-template-columns: minmax(0, 1.15fr) minmax(0, 1fr); gap: 18px; align-items: stretch; }
+.dh-hero-left { display: flex; flex-direction: column; gap: 8px; }
+.dh-cur { font-size: 13px; margin-left: 6px; color: var(--muted, #8a8079); font-weight: 400; }
+.dh-spark { display: block; color: var(--ink, #2b2b2b); opacity: .55; margin: 2px 0 6px; max-width: 100%; }
+.dh-next { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; padding: 10px 12px; border: 1px solid var(--line, #e5e0da); margin-top: 6px; }
+.dh-next-time { font-size: 20px; }
+.dh-next-who { font-weight: 600; }
+.dh-next-what, .dh-ai-at { color: var(--muted, #8a8079); font-size: 13px; }
+.dh-next-go { margin-left: auto; border: 0; background: transparent; cursor: pointer; color: var(--ink, #2b2b2b); }
+.dh-closed { font-size: 18px; }
+.dh-tiles { grid-template-columns: repeat(2, minmax(0, 1fr)); align-content: start; }
+.dh-ai { display: flex; gap: 10px; align-items: baseline; }
+.dh-bottom { display: grid; grid-template-columns: minmax(0, 1.6fr) minmax(0, 1fr); gap: 12px; align-items: start; }
+.dh-todo-row[data-urgent="1"] strong { color: #c0563f; }
+@media (max-width: 900px) {
+  .dh-hero, .dh-bottom { grid-template-columns: 1fr; }
+  .dh-tiles { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+}

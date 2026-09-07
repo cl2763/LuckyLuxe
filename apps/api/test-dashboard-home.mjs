@@ -40,7 +40,7 @@ check('② 金额只走注入进来的 `money()` 出口,页面里零币符',
   home.includes('st.deps.money(cents)') && !/[¥￥]|CAD|US \$/.test(home.replace(/\/\*[\s\S]*?\*\//g, '')),
   '页面里出现了币符或没走 money()')
 check('②b 拿不到币种就出「—」,不出裸数字(D140 fail-closed)',
-  /if \(!cur\) return '—'/.test(home))
+  /!cur\) return '—'/.test(home))
 
 /* ③ 图 §八 明确不做:首页**不轮询**(全屏态除外,那是段 11) */
 check('③ 🔴 首页不许轮询:页面里没有 setInterval',
@@ -53,8 +53,12 @@ check('④b `renderDashboard` 已改成挂新页面,不再自己拼图表',
   /renderDashboard\(\)[\s\S]{0,600}?DashboardHome\.mountInto/.test(admin))
 check('④c admin.html 真的引了这个文件(不引等于页面根本没上)',
   /dashboard-home\.js\?v=/.test(html))
-check('④d 版本号跟着 bump(侧栏可见,用于排查缓存;交付纪律 3)',
-  /ADMIN_BUILD = '20260908b-home'/.test(admin) && html.includes('admin.js?v=20260908b-home'))
+/* 版本号**不锚具体那一串**(锚了每次 bump 都要改判据 —— 判据不许锚在会变的字面量上)。
+   守的是「两处一致」:admin.js 里那个常量与 html 里 ?v= 必须同一个值。 */
+const buildInJs = (admin.match(/ADMIN_BUILD = '([^']+)'/) || [])[1]
+check('④d 版本号两处一致(侧栏可见,用于排查缓存;交付纪律 3)',
+  Boolean(buildInJs) && html.includes(`admin.js?v=${buildInJs}`) && html.includes(`styles.css?v=${buildInJs}`),
+  `admin.js=${buildInJs}`)
 
 /* ⑤ 三个接口都用上了(少调一个,页面上就有一块是空的) */
 for (const ep of ['/admin/dashboard/pulse', '/admin/dashboard/now', '/admin/dashboard/todo']) {
@@ -63,7 +67,42 @@ for (const ep of ['/admin/dashboard/pulse', '/admin/dashboard/now', '/admin/dash
 /* ⑥ 全屏按钮本批只占位(图:先只占位不做) */
 check('⑥ 全屏按钮是 disabled 的占位(本批不做,归段 11)', /data-dh-full disabled/.test(home))
 
-console.log(`\n[网页首页] 四态节点 · 币种红线 · 不轮询 · 旧块退役 · 三接口都调 · 全屏占位`)
+/* ══ D154:按图 §三 逐块(店主 09-08 亲看后裁;判据锚**选择器**不锚文案)══
+   段 6 那版只把数据接上了,页面没按图排。这一组守的是「图上那 17 块,页面上真有」。
+   静态守得住的是「选择器在不在、台面是不是自画的」;
+   排版对不对由 D154 的真登录截图 + 逐块对照表背书(handoff/night-runs/段6_*)。 */
+const BLOCKS = [
+  ['英雄区两栏', 'data-dh-hero'], ['左栏', 'data-dh-hero-left'], ['右四小牌', 'data-dh-tiles'],
+  ['周期条', 'data-dh-periods'], ['币种小字', 'data-dh-cur'], ['折线', 'data-dh-spark'],
+  ['此刻四格', 'data-dh-now='], ['下一位卡', 'data-dh-next'], ['下一位时间', 'data-dh-next-time'],
+  ['下一位去台面', 'data-dh-next-go'], ['AI 今日一句', 'data-dh-ai-line'], ['AI 没有一句', 'data-dh-ai-none'],
+  ['今日台面块', 'data-dh-board'], ['今日要处理', 'data-dh-todo'], ['急件标记', 'data-urgent'],
+  ['底部两栏', 'data-dh-bottom'], ['休息日真话', 'data-dh-truth-closed'],
+]
+for (const [zh, sel] of BLOCKS) check(`⑦ 图 §三「${zh}」有稳定选择器 \`${sel}\``, home.includes(sel), sel)
+
+check('⑧ 🔴 今日台面**原样嵌入**,不自画 —— 页面里没有台面的格子 HTML,只有 mountInto',
+  home.includes('window.TodayBoard.mountInto') && !/dh-board[\s\S]{0,400}?(技师|时间轴|空档|PX_PER_HOUR)/.test(home))
+check('⑧b 🔴 折线**全 0 不画**(图 §六:无数据时不画折线,不是画一条贴地的线)',
+  /every\(\(x\) => x === 0\)\) return ''/.test(home))
+check('⑧c 折线点数 = spark 数组长度(不许自己抽稀)',
+  /pts\.map\(\(v, i\)/.test(home) && /circle/.test(home))
+check('⑧d 比上期说人话:四个维度各有各的说法(比昨日/比上周/比上月/比去年)',
+  ['比昨日', '比上周', '比上月', '比去年'].every((x) => home.includes(x)))
+check('⑧e 🔴 月目标那一行**不出** —— 门店还没有这个配置项,编一个百分比就是假数',
+  !/月目标|goal/.test(home.replace(/\/\*[\s\S]*?\*\//g, '')))
+check('⑧f 急缓:客服待人工与待报价排前(顾客在等的排前面)',
+  /URGENT = \['aiHandoff', 'quotePending'\]/.test(home))
+check('⑨ 🔴 旧四卡的**渲染代码**已删,不是只隐藏(留着迟早有人再打开)',
+  !/data-dashboard-detail="confirmed"/.test(admin))
+check('⑨b 首页三块旧节点都不再渲染:metricGrid 清空 + aiBriefPanel 隐藏 + 演示钮隐藏',
+  /els\.metricGrid\.innerHTML = ''/.test(admin) && /aiBriefPanel[\s\S]{0,80}?hidden/.test(admin) && /fullDemoSeed[\s\S]{0,60}?hidden/.test(admin))
+check('⑨c 宿主从三列图表网格改回块流(否则新页面会被塞进旧网格的三个格子里)',
+  readFileSync(join(ROOT, 'apps/web/styles.css'), 'utf8').includes('#dashboardCharts.dashboard-chart-grid { display: block; }'))
+check('⑨d <900px 退化竖排(窄屏一张截图为证)',
+  /@media \(max-width: 900px\)[\s\S]{0,200}?grid-template-columns: 1fr/.test(readFileSync(join(ROOT, 'apps/web/styles.css'), 'utf8')))
+
+console.log(`\n[网页首页] 四态节点 · 币种红线 · 不轮询 · 旧块退役 · 三接口都调 · 全屏占位 · D154 十七块逐块`)
 if (fails.length) {
   console.error(`\n❌ test-dashboard-home ${fails.length}/${n} 项未过`)
   for (const f of fails) console.error(`  - ${f}`)

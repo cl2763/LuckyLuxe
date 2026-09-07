@@ -215,7 +215,10 @@ export function createDashboardPulse(deps) {
     return {
       asOf: new Date().toISOString(),
       items: [
-        { key: 'aiHandoff', n: one("SELECT COUNT(*) AS n FROM wechat_conversations WHERE tenant_id = ? AND status IN ('needs_human','human_active')"), to: 'ai-desk' },
+        /* 🔴 口径(店主 05r §一 末裁):**待人工只数 `needs_human`**。
+           `human_active` 是同事已经在接了 —— 那不是「待处理」,把它算进来等于让老板
+           在首页看见一个自己已经在做的事。 */
+        { key: 'aiHandoff', n: one("SELECT COUNT(*) AS n FROM wechat_conversations WHERE tenant_id = ? AND status = 'needs_human'"), to: 'ai-desk' },
         { key: 'quotePending', n: one("SELECT COUNT(*) AS n FROM quote_requests WHERE tenant_id = ? AND status = 'pending'"), to: 'quote' },
         { key: 'notePending', n: one("SELECT COUNT(*) AS n FROM bookings WHERE tenant_id = ? AND status = 'COMPLETED' AND substr(appointment_start,1,10) = ? AND id NOT IN (SELECT booking_id FROM service_notes WHERE booking_id IS NOT NULL)", today), to: 'notes' },
         { key: 'shiftApproval', n: one("SELECT COUNT(*) AS n FROM shift_requests WHERE tenant_id = ? AND status = 'pending'"), to: 'schedule' },

@@ -2,6 +2,8 @@
 # 夜班接力拉起脚本(Cowork 用)。只在仓目录内、无人确认模式跑 Claude Code。
 # 用法:bash handoff/night-runs/relay.sh [自定义提示词]
 export PATH="/usr/local/bin:/opt/homebrew/bin:$PATH"
+# 店主用 `claude setup-token` 生成的长期令牌放在 handoff/night-runs/.env.relay(gitignored),形如 CLAUDE_CODE_OAUTH_TOKEN=...
+[ -f handoff/night-runs/.env.relay ] && set -a && . handoff/night-runs/.env.relay && set +a
 cd /Users/changliu/Documents/Codex/2026-04-29/new-chat || exit 1
 TS=$(date +%Y%m%dT%H%M%S)
 LOG="handoff/night-runs/run_${TS}.log"

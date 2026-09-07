@@ -1,6 +1,6 @@
 // 构建号:每次交付递增。侧栏可见,排查"改了没生效"时先对版本。
 // 兜底用(服务端会注入 window.LL_BUILD = 资源内容指纹,页面优先显示那个)
-const ADMIN_BUILD = '20260908b-home'
+const ADMIN_BUILD = '20260908c-d154'
 let pricingState = { module: 'storefront', tab: 'items', categories: [], items: [], rules: {}, editing: null, preview: null, storefrontPicker: false }
 console.log(`[admin] build ${ADMIN_BUILD}`)
 
@@ -1359,18 +1359,10 @@ function renderMetrics() {
     `
     return
   }
-  const stats = dashboardStats()
-  // 营收统一走财务账本口径;未解锁财务时显示锁定,点击跳财务页解锁
-  const ledgerIncome = owner.dashFinance?.summary?.incomeCents
-  // 没开财务密码门禁的店直接显示金额;开了才在未解锁时打码
-  const financeGated = owner.financeLedger.lockEnabled !== false && !owner.financeKey
-  const revenueDisplay = !financeGated && ledgerIncome !== undefined ? money(ledgerIncome) : '🔒'
-  els.metricGrid.innerHTML = `
-    <button class="metric" data-dashboard-detail="confirmed" type="button"><span class="subtle">${t('confirmed')}</span><strong>${stats.confirmed}</strong></button>
-    <button class="metric" data-dashboard-detail="pending" type="button"><span class="subtle">${t('pending')}</span><strong>${stats.pending}</strong></button>
-    <button class="metric" data-dashboard-detail="monthServices" type="button"><span class="subtle">${t('monthServices')}</span><strong>${stats.monthServices}</strong></button>
-    <button class="metric" data-dashboard-detail="totalServices" type="button"><span class="subtle">${t('totalServices')}</span><strong>${stats.totalServices}</strong></button>
-  `
+  /* 🔴 D154:老板首页那四张卡(已确认/待支付/月服务/总服务)**退役** ——
+     它们是前端从 `owner.bookings` 自算的,违反图 §三「整页只吃三个接口、前端零计算」;
+     同一个「今天有几单」在这儿和大屏能算出两个数,那正是这次重画要治的。
+     员工那一档(上面 early return)照旧 —— 那不是首页大屏,是员工自己的几个数。 */
 }
 
 function renderTodayTasksCard() {
@@ -1554,7 +1546,10 @@ function renderAdminPages() {
   if (owner.adminPage === 'generalSettings') renderGeneralSettings()   // S5-a
   if (owner.adminPage === 'myCustomers') renderMyCustomers()           // v1.2 ④ 员工只读页
   if (owner.adminPage === 'staffWorkbench') renderStaffWorkbench()    // 08-31 员工工作台(清单#1+#3)
-  els.metricGrid.classList.toggle('hidden', owner.adminPage !== 'dashboard')
+  /* 🔴 D154:首页退役三块 —— 旧四卡(前端自算,违反「整页只吃三个接口」)、独立 AI 日报块(改右栏通栏)、演示数据钮(归通用设置) */
+  els.metricGrid.classList.add('hidden'); els.metricGrid.innerHTML = ''
+  if (els.aiBriefPanel) { els.aiBriefPanel.classList.add('hidden'); els.aiBriefPanel.innerHTML = '' }
+  const demoBtn = document.querySelector('#fullDemoSeed'); if (demoBtn) demoBtn.classList.add('hidden')
   els.sidebarLinks.forEach((link) => {
     const activePage = owner.adminPage === 'dashboardDetail' ? 'dashboard' : owner.adminPage
     link.classList.toggle('active', link.dataset.adminPage === activePage)
@@ -1570,6 +1565,11 @@ function renderDashboard() {
     request,
     escapeHtml,
     money,                       // 币种红线:金额只走全仓那一个出口,页面里不许出现币符
+    /* 今日台面**原样嵌入**(自画=两处真相);AI 一句只读已生成的,首页不新起模型调用(日报没落库,故恒空→「今天还没有一句」,已登记待裁) */
+    boardDeps: () => ({ request, escapeHtml, toast, storeToday, openBooking: (id) => jumpToBooking(id),
+      refreshBookings: async () => { try { const d = await request('/admin/bookings'); owner.bookings = d.bookings || owner.bookings } catch { /* 列表口失败不拦排单 */ } },
+      followBooking: (id) => jumpToBooking(id) }),
+    readAiLine: () => owner.dashAiLine || null,
 
     isZh: owner.lang === 'zh',
     goto: (to) => { const page = { 'ai-desk': 'wechatMock', quote: 'wechatMock', notes: 'customers', schedule: 'schedule', 'daily-close': 'finance' }[to]; if (page) { owner.adminPage = page; if (page === 'finance') loadFinancePage().catch(() => {}); render() } },

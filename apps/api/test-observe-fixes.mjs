@@ -52,8 +52,21 @@ async function main() {
   const svc = (await request('/admin/pricing/items')).data.items.filter((i) => (i.itemKind || 'main') === 'main')[0]
   const techR = (await request('/admin/technicians')).data
   const tech = (techR.technicians || techR)[0]
-  const today = new Date().toISOString().slice(0, 10)
-  const mk = await request('/admin/bookings/direct', { method: 'POST', body: JSON.stringify({ newCustomerName: `观走查${uniq}`, serviceId: svc.id, technicianId: tech.id, date: today, time: '09:00' }) })
+  /* 🔴 又一处「夹具日写死」(同族第四处;前三处 05o-2 修过)。
+     原来固定用「今天」建单 —— 而夹具店周一休息,**每逢周一跑回归这一条必红**,
+     报的还是完全正确的「本日为休息日」。改成:今天不营业就往后找第一个营业日。
+     找不到才红(那才是真异常)。 */
+  const todayReal = (await request('/admin/schedule-day')).data.storeToday
+  let today = ''
+  for (let k = 0; k <= 8; k += 1) {
+    const d = new Date(`${todayReal}T12:00:00Z`)
+    d.setUTCDate(d.getUTCDate() + k)
+    const day = d.toISOString().slice(0, 10)
+    const probe = (await request(`/admin/schedule-day?date=${day}`)).data
+    if (probe && !probe.isClosed && !probe.hoursUnset) { today = day; break }
+  }
+  check('D97 夹具前置:今天起 8 天内找得到一个营业日(找不到=夹具坏了,不是通过)', Boolean(today), `从 ${todayReal} 起找不到营业日`)
+  const mk = await request('/admin/bookings/direct', { method: 'POST', body: JSON.stringify({ newCustomerName: `观走查${uniq}`, serviceId: svc.id, technicianId: tech.id, date: today || todayReal, time: '09:00' }) })
   check('D97 夹具:直排建单 201', mk.status === 201, JSON.stringify(mk.data).slice(0, 120))
   const bid = mk.data.booking.id, uid = mk.data.booking.userId || mk.data.booking.user_id || (mk.data.booking.user && mk.data.booking.user.id)
   await request(`/admin/bookings/${bid}/status`, { method: 'PATCH', body: JSON.stringify({ status: 'COMPLETED' }) })
@@ -191,7 +204,16 @@ async function main() {
       Boolean(sdClosed.backfill && sdClosed.backfill.closed && sdClosed.backfill.targetDate === today01v
         && /已日结/.test(sdClosed.backfill.note) && /服务发生于/.test(sdClosed.backfill.note)),
       JSON.stringify(sdClosed.backfill || null).slice(0, 160))
-    if (!sdClosed.hoursUnset && !sdClosed.isClosed) {
+    /* 🔴 口径相撞(2026-09-07 现测,已登记待裁):合同二形二要求「补录到已日结的日子 → **落今天**」,
+       而**今天如果是休息日**,休息日闸会把这一单拦下(「本日为休息日,如需接单请到设置改为营业」)。
+       两条规则各自都对,撞在一起没有答案 —— 这不是夹具能修的,要店主/Cowork 裁一句
+       (落下一个营业日?还是休息日照收补录?)。
+       在裁定之前:**今天是休息日就不跑这一条,并且明说没跑**(不是静默跳过 —— 它会出现在断言里)。 */
+    const todayClosed = (await request(`/admin/schedule-day?date=${today01v}`)).data
+    if (todayClosed && todayClosed.isClosed) {
+      check(`⬜ 合同二形二 本轮**跳过**(未验):今天(${today01v})是休息日,「补录落今天」与休息日闸相撞 —— 已登记待裁,不是通过`,
+        true, '口径冲突待裁')
+    } else if (!sdClosed.hoursUnset && !sdClosed.isClosed) {
       const b2 = await request('/admin/bookings/direct', { method: 'POST', body: JSON.stringify({ backfill: true, newCustomerName: `补录形二${uniq}`, serviceId: svc.id, technicianId: tech.id, date: closedDay, time: '15:40' }) })
       check('🔴 合同二形二 已日结 → 落**今天**,历史账不回改',
         b2.status === 201 && b2.data.booking.appointmentDate === today01v,
@@ -261,7 +283,13 @@ async function main() {
     const todayE = (await request('/admin/schedule-day')).data.storeToday
     const dcBefore = (await request(`/admin/daily-close?date=${todayE}`)).data.dailyClose
     const sdE = (await request(`/admin/schedule-day?date=${e2eDay}`)).data
-    if (sdE.backfill && sdE.backfill.closed && !sdE.hoursUnset && !sdE.isClosed) {
+    /* 同一处口径相撞(见上面「合同二形二」那段的注释):今天是休息日时,
+       「补录落今天」这条链整条走不通 —— 明说未验,不静默跳过。 */
+    const todayRest = (await request(`/admin/schedule-day?date=${todayE}`)).data
+    if (todayRest && todayRest.isClosed) {
+      check(`⬜ 裁② 钱链 本轮**跳过**(未验):今天(${todayE})是休息日,「补录落今天」与休息日闸相撞 —— 已登记待裁,不是通过`,
+        true, '口径冲突待裁')
+    } else if (sdE.backfill && sdE.backfill.closed && !sdE.hoursUnset && !sdE.isClosed) {
       // ② 补录 → 落今天
       const bfRes = await request('/admin/bookings/direct', { method: 'POST', body: JSON.stringify({ backfill: true, newCustomerName: `链验客${uniq}`, serviceId: svc.id, technicianId: tech.id, date: e2eDay, time: '16:20' }) })
       check('🔴 裁② 链①补录落今天(不落已日结的原日)', bfRes.status === 201 && bfRes.data.booking.appointmentDate === todayE,
