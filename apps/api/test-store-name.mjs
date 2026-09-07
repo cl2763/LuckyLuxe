@@ -20,6 +20,7 @@ import { readFileSync, readdirSync, statSync, existsSync } from 'node:fs'
 import { join } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { DatabaseSync } from 'node:sqlite'
+import { assertTestTarget, isTestTarget } from './test-guard.mjs'
 
 const ROOT = join(fileURLToPath(new URL('.', import.meta.url)), '..', '..')
 let checks = 0
@@ -159,6 +160,124 @@ if (!existsSync(DB)) {
     others.length === 0 ? '取不到别家店 —— 这条本轮什么都没验到' : collided.map((c) => `${c.tenant_id}=${c.name}`).join(' | '))
   check('③b 反向守:被测集合非空(至少取得到另一家店的店名;取空即红)',
     others.length > 0, String(others.length))
+}
+
+/* ═══ ④ 显示侧:商家看见的那行店名,只有一处真相(D156,店主 2026-09-08 裁)═══
+
+   案由(接本刀开头那句「数据里有四处真相」):商家在门店设置改店名,改的是 `stores.name`
+   (`PUT /admin/store-info`);而 `tenants.name` **从建店起就没人再动过**。
+   谁显示 `tenantName`,谁显示的就是**改名之前那个旧名字** —— 小程序商家端两处正是如此。
+   本组把「商家看见的店名」收成一处:后端 `/admin/auth/me` 下发 `storeName`(取 `stores.name`),
+   网页顶栏与小程序商家端两处都读它。`tenantName` 留给平台侧(那是商户名,不是门店名)。 */
+const srv = readFileSync(join(ROOT, 'apps/api/local-server.mjs'), 'utf8')
+const adminJs = readFileSync(join(ROOT, 'apps/web/admin.js'), 'utf8')
+const adminHtml = readFileSync(join(ROOT, 'apps/web/admin.html'), 'utf8')
+const stripComments = (src) => src.replace(/\/\*[\s\S]*?\*\//g, '').replace(/^\s*\/\/.*$/gm, '')
+
+/* 🔴 判据的扫描面要跟着代码走(判据三推论:判据的覆盖面本身要有判据)。
+   这条一开始只读 `local-server.mjs`;`merchantIdentity` 一搬进 `store-identity.mjs`,
+   它立刻红了 —— 红得对:**代码搬家了判据没跟上**。现在两头都读:名字在模块里取,路由必须用它。 */
+const identity = readFileSync(join(ROOT, 'apps/api/store-identity.mjs'), 'utf8')
+check('④ 后端「商家看见的名字」取自 **stores** 表(不是 tenants),且 `/admin/auth/me` 真的用了那个出口',
+  /SELECT id, name FROM stores WHERE tenant_id = \? AND is_active = 1/.test(identity)
+  && /storeName: store\?\.name \|\| ''/.test(identity)
+  && /merchantIdentity\(db, me\.tenantId \|\| currentTenantId\(\)\)/.test(srv)
+  && /storeName: who\.storeName/.test(srv))
+
+/* 顶栏那一行:白名单式 —— 它只许从 `owner.storeName` 出。
+   写死店名、回落到租户名/人名,都是这条判据要咬的(零回落红线 + 一处真相)。 */
+const brandFn = (adminJs.match(/function renderBrandSubtitle\(\)[\s\S]*?\n}/) || [''])[0]
+check('④b 网页顶栏那行有专门的出口 `renderBrandSubtitle()`,且只从 `owner.storeName` 取名',
+  brandFn.includes('owner.storeName') && !/tenantName|displayName/.test(brandFn), brandFn.slice(0, 120))
+NAME_SHAPE.lastIndex = 0   // 带 g 的正则 `.test()` 是有状态的:上面那轮扫完 lastIndex 不在 0,这里不重置会漏判
+check('④b2 🔴 顶栏那行不许写死店名(造病:把店名写进这个函数 → 红)',
+  Boolean(brandFn) && !NAME_SHAPE.test(brandFn.replace(/\/\*[\s\S]*?\*\//g, '')))
+check('④c 顶栏那行有稳定锚点 `data-tenant-name`(判据锚选择器,不锚文案)',
+  /id="adminBrandSubtitle" data-tenant-name/.test(adminHtml))
+check('④d 一锁回登录页就把店名清空(换个人登进来不许看到上一家店)',
+  /owner\.storeName = ''/.test(adminJs) && /if \(locked\) \{ owner\.storeName = ''; renderBrandSubtitle\(\) \}/.test(adminJs))
+
+/* ④e 白名单式全仓扫(判据三:数「全部必须落进白名单」,不数「我列的都对」):
+   **商家可见的渲染面**里不许再出现 `tenantName`。平台面(platform.html / platform-ops)是另一回事 ——
+   那里显示的本来就是商户名,不在这个扫描面里。 */
+const MERCHANT_FACE = [
+  'apps/web/admin.js', 'apps/web/admin.html', 'apps/web/admin-copy.js',
+  ...walk('miniprogram/pages').filter((f) => f.includes('/merchant')),
+]
+const tenantNameHits = MERCHANT_FACE.filter((f) => /\btenantName\b/.test(stripComments(readFileSync(join(ROOT, f), 'utf8'))))
+check(`④e 🔴 商家可见的渲染面(${MERCHANT_FACE.length} 个文件)里零处 \`tenantName\` —— 那是商户名,不是门店名`,
+  tenantNameHits.length === 0, tenantNameHits.join(' | '))
+check('④e2 反向守:扫描面真的盖住了小程序商家端(取不到文件就不是「全绿」,是「没扫到」)',
+  MERCHANT_FACE.length >= 10, String(MERCHANT_FACE.length))
+for (const [zh, f, needle] of [
+  ['小程序 · 管理页', 'miniprogram/pages/merchant/manage/index.js', 'm.storeName'],
+  ['小程序 · 我的页', 'miniprogram/pages/merchant/me/index.js', 'm.storeName'],
+]) {
+  check(`④f 双端同批:${zh} 读的是 \`storeName\``,
+    stripComments(readFileSync(join(ROOT, f), 'utf8')).includes(needle))
+}
+check('④f2 小程序「我的」那行不再回落到人名/编出来的店铺名(零回落红线)',
+  !/storeName \|\| .*displayName|我的店铺/.test(stripComments(readFileSync(join(ROOT, 'miniprogram/pages/merchant/me/index.js'), 'utf8'))))
+
+/* ═══ ④g/④h 行为层:接口真的按店给出各自的名字 ═══
+   现取,零业务字面量;跑不成就明说「本轮未跑」,不冒充通过(静默失败器族的反面)。 */
+const BASE_URL = process.env.TEST_BASE_URL || 'http://127.0.0.1:4128'
+const TOKEN = process.env.OWNER_TOKEN || process.env.OWNER_DEMO_TOKEN || 'owner-demo-token'
+const meOf = async (tenantId) => fetch(`${BASE_URL}/admin/auth/me`, {
+  headers: { authorization: `Bearer ${TOKEN}`, 'x-admin-tenant-id': tenantId },
+}).then((r) => (r.ok ? r.json() : null)).catch(() => null)
+
+/* 🔴 测试护栏(店主 08-24 裁 C:套件永远不许写进真库)。
+   ④h 会改一次店名,所以这一段**只在服务往测试库写时才跑**;
+   判断走 `test-guard.mjs` 的同一处口径,不在这里另写一套。
+   不是测试库就明说「本轮未跑」——**不是通过**,也不偷偷跑下去。 */
+const onTestTarget = await isTestTarget(BASE_URL)
+if (!onTestTarget || !existsSync(DB)) {
+  console.log(`⚠️  [store-name] ${BASE_URL} 不是测试库(或取不到库)—— **④g/④h 本轮未跑**(不是通过)`)
+  console.log('   正确跑法:bash apps/api/run-all-tests.sh store-name(它用 /tmp/ll-ci-data.XXXX 临时库)')
+} else {
+  await assertTestTarget(BASE_URL)   // 同一把闸再确认一次:这一段往下会写库
+  const live = new DatabaseSync(DB)
+  /* 三店各一条:店从库里现取(有几家取几家,最多三家),名字也现取 —— 判据里一个店名都不写死 */
+  const trio = live.prepare(`SELECT t.id AS tenantId, t.name AS tenantName, s.name AS storeName
+    FROM tenants t JOIN stores s ON s.tenant_id = t.id AND s.is_active = 1 ORDER BY t.id LIMIT 3`).all()
+  check('④g 造景自证:库里取得到三家店(取不到就没验到任何东西 —— 店主要的就是「三店各一条」)',
+    trio.length === 3, `${trio.length} 家`)
+  /* 🔴 条数固定成 3,不跟着库里有几家店摆动:
+     断言条数会浮动的套件,哪天库里少一家就被「断言零缩水」判成红,人还得回头查是不是真出事了。
+     取不到第三家 → 那一条自己红并说清楚,而不是**少打印一条**。 */
+  for (let i = 0; i < 3; i += 1) {
+    const row = trio[i]
+    const me = row ? await meOf(row.tenantId) : null
+    check(`④g 第 ${i + 1} 家(${row?.tenantId || '库里没有这一家'}):/admin/auth/me 的 storeName ≡ 该店 stores.name`,
+      Boolean(row) && Boolean(me) && me.admin.storeName === row.storeName,
+      /* 用 String() 兜一层:接口没返回这个字段时 JSON.stringify 会把键**整个丢掉**,
+         报错行看起来就像只有「库」一栏 —— 判据红的时候必须能指认现场 */
+      JSON.stringify({ 接口: String(me?.admin?.storeName), 库: row?.storeName, HTTP: me ? 'ok' : '没拿到响应' }))
+  }
+  /* 🔴 ④h 分叉守 —— 这一条才是「读对了列」的证明。
+     `tenants.name` 与 `stores.name` 平时一模一样,所以上面那条读哪一列都会绿(判据看着在守其实没守)。
+     把 `stores.name` 改成一个只可能来自这次的值:`storeName` 必须跟着变,`tenantName` 必须不动。
+     只在 CI 临时库上做(`TEST_DB_PATH` 有值);跑完**必还原**——夹具不收尾会让判据非幂等(J 族已有案底)。 */
+  const target = trio[0]
+  if (!process.env.TEST_DB_PATH) {
+    console.log('⚠️  [store-name] 没有 TEST_DB_PATH(不是 CI 临时库)—— **④h 本轮未跑**:它要改一次店名,不许在本机库/生产库上做')
+  } else if (!target) {
+    check('④h 分叉守', false, '没有可用的店')
+  } else {
+    const marker = `店名分叉刀-${process.pid}`
+    live.prepare('UPDATE stores SET name = ? WHERE tenant_id = ? AND is_active = 1').run(marker, target.tenantId)
+    const after = await meOf(target.tenantId)
+    live.prepare('UPDATE stores SET name = ? WHERE tenant_id = ? AND is_active = 1').run(target.storeName, target.tenantId)
+    const restored = await meOf(target.tenantId)
+    check('④h 🔴 分叉守:只改 `stores.name` → `storeName` 跟着变、`tenantName` 不动(证明读的是 stores 那一列,不是两列碰巧一样)',
+      Boolean(after) && after.admin.storeName === marker && after.admin.tenantName === target.tenantName,
+      JSON.stringify({ storeName: after?.admin?.storeName, tenantName: after?.admin?.tenantName, 期望租户名: target.tenantName }))
+    check('④h2 收尾:店名已还原(夹具不收尾 = 判据非幂等,J 族有案底)',
+      Boolean(restored) && restored.admin.storeName === target.storeName,
+      JSON.stringify({ 现在: restored?.admin?.storeName, 原值: target.storeName }))
+  }
+  live.close()
 }
 
 console.log(`\n[店名] 扫描面 ${FILES.length} 文件 · 店名字面量 ${hits.length} 处 · 白名单 ${Object.keys(ALLOW).length} 条`)

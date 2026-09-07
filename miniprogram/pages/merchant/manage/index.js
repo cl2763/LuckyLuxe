@@ -54,7 +54,10 @@ Page({
       owner = m && m.role === 'owner'
       // 名字=账号自己设的显示名(原先硬编码 'Chang',别的商家登录会串);副标题=店铺名 · 角色
       name = (m && m.displayName ? String(m.displayName).replace(/\s*Owner$/i, '') : '') || (owner ? '老板' : '员工')
-      shopName = `${(m && m.tenantName) || ''} · ${owner ? '老板' : '员工'}`
+      /* 🔴 D156(店主 09-08 裁,双端同批):店名取 `storeName`(=`stores.name`),不再取 `tenantName`。
+         `tenantName` 是**租户名**,商家在门店设置改店名改的是 `stores.name`,租户名从建店起没人动过 ——
+         也就是说这一行以前显示的是**改名之前那个旧名字**。取不到出「—」,不回落到人名。 */
+      shopName = `${(m && m.storeName) || '—'} · ${owner ? '老板' : '员工'}`
     } catch (e) { owner = api.isOwner() }
     const groups = owner ? [
       // 排班已移入「员工管理 → 排班」板块(P2③ 屏 4a);员工管理随之从「店铺设置」提到

@@ -27,8 +27,15 @@ if [ "$BEFORE" = "$AFTER" ]; then say "护栏三列清单" "✅ 已是最新"
 else say "护栏三列清单" "⚠️ 刚重生成过(记得 git add;这是 05n 三次红里的一次)"; fi
 
 # ② 棘轮:两个巨型文件只许降不许升
-BASE_SRV=${RATCHET_SERVER:-17751}
-BASE_ADM=${RATCHET_ADMIN:-8550}
+# 🔴 基线**从上一个提交现取**,不再写死在这里(05r 补二 现查:写死的两个数停在 17751 / 8550,
+#    而上一批已经把 local-server 降到 17745、admin.js 降到 8457 —— 一把不会收紧的棘轮
+#    等于「涨了也不红」,只是涨得慢一点才红。判据覆盖面要有判据:基线跟着交付走。)
+#    要故意放宽(经店主批准的增长)才用 RATCHET_SERVER=/RATCHET_ADMIN= 覆盖。
+git_lines() { git show "HEAD:$1" 2>/dev/null | wc -l | tr -d ' '; }
+BASE_SRV=${RATCHET_SERVER:-$(git_lines apps/api/local-server.mjs)}
+BASE_ADM=${RATCHET_ADMIN:-$(git_lines apps/web/admin.js)}
+[ -n "$BASE_SRV" ] && [ "$BASE_SRV" -gt 0 ] 2>/dev/null || BASE_SRV=17745   # 取不到 HEAD(浅克隆等)才退回写死值
+[ -n "$BASE_ADM" ] && [ "$BASE_ADM" -gt 0 ] 2>/dev/null || BASE_ADM=8457
 SRV=$(wc -l < apps/api/local-server.mjs | tr -d ' ')
 ADM=$(wc -l < apps/web/admin.js | tr -d ' ')
 if [ "$SRV" -le "$BASE_SRV" ]; then say "local-server.mjs" "✅ $SRV ≤ $BASE_SRV"

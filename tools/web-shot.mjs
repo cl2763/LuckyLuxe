@@ -138,15 +138,18 @@ for (const spec of shots) {
   const shot = await send('Page.captureScreenshot', { format: 'png', captureBeyondViewport: false })
   const file = join(OUT, `${name}.png`)
   writeFileSync(file, Buffer.from(shot.result.data, 'base64'))
-  /* 🔴 现测取证:网页后台**页面上不显示店名**(全仓无 tenantName 渲染),
-     所以三张图不能靠"看店名"自证是三家店。这里把店名从接口取回来,
-     连同**页面上真渲染出来的数字**一起记进回执,再由外部 curl 逐店对一次 ——
-     数字只可能来自那家店,这才是三张图分得开的凭据。 */
+  /* 取证:D156 之后顶栏那行显的就是当前店名,所以三张图**靠图本身**就分得开。
+     这里仍把接口值一起探回来,是为了对一次「页面上写的」与「接口给的」是不是同一个;
+     顺带把 `storeName`(门店名)与 `tenantName`(商户名)并排记下 —— 它们会分叉,
+     本机库 demo-ai 现测就是两个不同的名字。 */
   const probe = await evaluate(`(async () => { const h = document.querySelector('#dashboardCharts');
     const big = h.querySelector('[data-dh-hero-left] .dh-big');
     const me = await fetch('/admin/auth/me', { headers: { authorization: 'Bearer ' + ${JSON.stringify(TOKEN)} } }).then((r) => r.json()).catch(() => null);
     return JSON.stringify({
-      店id: me && me.admin && me.admin.tenantId, 店名: me && me.admin && me.admin.tenantName,
+      店id: me && me.admin && me.admin.tenantId,
+      顶栏店名: (document.querySelector('[data-tenant-name]') || {}).textContent || null,
+      接口storeName: me && me.admin && me.admin.storeName,
+      接口tenantName: me && me.admin && me.admin.tenantName,
       态: Array.from(h.querySelectorAll('[data-dh-state]')).map((e) => e.dataset.dhState),
       大数: big ? big.textContent.trim() : null,
       币码: (h.querySelector('[data-dh-cur]') || {}).textContent || null,

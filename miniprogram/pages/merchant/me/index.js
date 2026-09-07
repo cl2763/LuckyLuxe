@@ -14,8 +14,12 @@ Page({
       const m = await api.adminMe()
       const isOwner = m.role === 'owner' || m.role === 'boss'
       this.setData({
-        // 顶部大字=店铺名(商家注册时提供的名字),不写"某某老板"这类通用词
-        shopName: m.tenantName || m.displayName || '我的店铺',
+        /* 顶部大字=**当前店名**,不写"某某老板"这类通用词。
+           🔴 D156(店主 09-08 裁,双端同批)两处修正:
+           ① 取 `storeName`(=`stores.name`,商家在门店设置改的就是它),不再取 `tenantName`(租户名,改名后不跟着变);
+           ② 拆掉 `|| m.displayName || '我的店铺'` 这条回落链 —— 取不到店名就把**人名**顶上来,
+              甚至编一个「我的店铺」,那是零回落红线明令禁止的「拿另一个语义的字段顶上」。 */
+        shopName: m.storeName || '—',
         displayName: m.displayName || '',
         role: isOwner ? '老板 · 主账号' : '员工账号',
         account: m.username || m.email || '',

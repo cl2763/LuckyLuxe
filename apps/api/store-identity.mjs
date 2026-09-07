@@ -1,5 +1,6 @@
 /* 店名与身份(店主 02v 改名批从 local-server 搬出;公约①新功能一律新模块 + 棘轮只许降不许升)。
-   搬出来的两件都属「本店叫什么」这一个领域:① 一次性改名迁移 ② 新客欢迎语措辞(店名拿不到时的空态说法)。 */
+   搬出来的三件都属「本店叫什么」这一个领域:① 一次性改名迁移 ② 新客欢迎语措辞(店名拿不到时的空态说法)
+   ③ **商家看见的是哪个名字**(D156)。 */
 
 /* 🔴 店名改「LUVIA 半径」一次性迁移(店主 02v 定案)。三条约束缺一不可:
    ① **三行都带 tenant_id / id 限定** —— 不许改成全局默认值(店主红线三:小婕店一个字不许变);
@@ -30,4 +31,20 @@ export function welcomeText({ brand = '', lang = 'zh' } = {}) {
   return lang === 'en'
     ? `${greetEn} I am your booking assistant. You can ask me about nail/lash services, pricing rules, available times, deposits, and aftercare. For complex nail styles, you can also send a reference photo and I will help organize the details first.`
     : `${greetZh}我是您的预约助手。您可以咨询美甲/美睫服务、价格规则、预约时间、定金和护理说明；如果是复杂美甲款式，也可以先发参考图，我会先帮您整理需求。`
+}
+
+/** 商家侧身份:**商家看见的名字 = 当前门店名**(D156,店主 2026-09-08 裁)。
+
+    两个名字不是一回事,而且**会分叉**:
+    · `storeName` = `stores.name` —— 商家在门店设置改店名(`PUT /admin/store-info`)改的就是它;
+    · `tenantName` = `tenants.name` —— 商户名,建店时写下,**之后没人再动**。
+    所以商家侧任何地方显示 `tenantName`,显示的都是**改名之前那个旧名字**
+    (网页顶栏与小程序商家端两处以前正是如此)。平台侧看商户,用 `tenantName` 是对的。
+
+    取不到就给空串,由渲染侧出「—」——**不许回落到商户名或人名**(零回落红线)。
+    `storeId` 一并给出:D84 强制设置旗标也认这家店,免得同一个「当前门店」在两处各查一次。 */
+export function merchantIdentity(db, tenantId) {
+  const tenant = db.prepare('SELECT name FROM tenants WHERE id = ?').get(tenantId)
+  const store = db.prepare('SELECT id, name FROM stores WHERE tenant_id = ? AND is_active = 1 LIMIT 1').get(tenantId)
+  return { tenantName: tenant?.name || '', storeName: store?.name || '', storeId: store?.id || '' }
 }

@@ -8,6 +8,17 @@
 
    判据律:这里问的是**服务器往哪个库写**(/health 的 dataScope,由服务端自己判定),
    不是问一个"记得设就设"的环境变量 —— 忘了设的时候,废判据照样绿,这条不会。 */
+/** 「这台服务往测试库写吗」的**唯一判断**。
+    给那种「静态那半还想跑、只想把打接口那半跳掉」的套件用(例:test-store-name):
+    先问一句,不是测试库就明说「这几条本轮未跑」,而不是整刀 exit —— 也不是偷偷跑下去。
+    判断口径与 `assertTestTarget` 同一处,不许两边各写一套(一件事一处真相)。 */
+export async function isTestTarget(baseUrl) {
+  try {
+    const r = await fetch(`${baseUrl}/health`, { signal: AbortSignal.timeout(4000) })
+    return (await r.json())?.dataScope === 'test'
+  } catch { return false }
+}
+
 export async function assertTestTarget(baseUrl) {
   let health = null
   try {

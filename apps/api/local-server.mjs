@@ -2,7 +2,7 @@
 import { createServer } from 'node:http'
 import { AsyncLocalStorage } from 'node:async_hooks'
 import { DatabaseSync } from 'node:sqlite'
-import { runStoreRenameMigration, welcomeText } from './store-identity.mjs'
+import { merchantIdentity, runStoreRenameMigration, welcomeText } from './store-identity.mjs'
 import { nameToUsername, isValidUsername } from './pinyin-names.mjs'
 import { createDecipheriv, createHash, createHmac, randomUUID } from 'node:crypto'
 import { copyFileSync, existsSync, mkdirSync, readdirSync, readFileSync, renameSync, statSync, unlinkSync, writeFileSync } from 'node:fs'
@@ -10995,12 +10995,12 @@ async function route(req, res) {
   if (req.method === 'GET' && path === '/admin/auth/me') {
     // 2026-08-03 附带店铺名:商家端「我的/管理」页顶部显示自己的店名(而非"老板"这类通用词)
     const me = requireAdmin(req)
-    const t = db.prepare('SELECT name FROM tenants WHERE id = ?').get(me.tenantId || currentTenantId())
-    /* D84 强制设置(图 v1.0):未设置态旗标随会话下发 —— 两端强制页/员工墙都由这一个字段驱动 */
-    const gateStore = db.prepare('SELECT id FROM stores WHERE tenant_id = ? AND is_active = 1 LIMIT 1').get(me.tenantId || currentTenantId())
+    /* 两个名字的口径与为什么会分叉,写在 `store-identity.mjs` 的 `merchantIdentity` 上(D156)。
+       D84 强制设置旗标吃的也是那家店的 storeId —— 同一个「当前门店」不在这里查第二遍。 */
+    const who = merchantIdentity(db, me.tenantId || currentTenantId())
     return json(res, 200, {
-      admin: Object.assign({}, me, { tenantName: t?.name || '' }),
-      hoursUnset: hoursUnsetOfStore(db, gateStore?.id),
+      admin: Object.assign({}, me, { tenantName: who.tenantName, storeName: who.storeName }),
+      hoursUnset: hoursUnsetOfStore(db, who.storeId),
       hoursGateText: HOURS_GATE_TEXT
     })
   }
