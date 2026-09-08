@@ -264,13 +264,46 @@ read -r -a SUITES <<< "${CI_SUITES:-$DEFAULT_SUITES}"
 TALLY="$DATA_DIR/assertion-tally.tsv"; : > "$TALLY"
 SUITE_OUT="$DATA_DIR/suite-out.txt"
 TIMING="$DATA_DIR/suite-timing.tsv"; : > "$TIMING"
+# ══ 🔴 D167 · 单套超时(店主 05s 补五 §四 立)══
+# 案由:`mp-*` 三套靠 DevTools 自动化会话跑,会话一旦僵死,automator 的调用**没有超时**,
+# 于是整轮回归被三套与本批无关的刀拖到 300 秒、被看门狗一枪打死 ——
+# 看门狗尽了职,但**其余 105 套的结果一起没了**。
+# 裁:`mp-*` 各带 60 秒单套超时;超时算「**本轮未跑**」并在末尾点名,整轮照跑。
+SUITE_TIMEOUT_S=${REGRESSION_SUITE_TIMEOUT_SECONDS:-60}
+NOT_RUN_FILE="$DATA_DIR/not-run.txt"; : > "$NOT_RUN_FILE"
+
 run_suite() {   # $1=套件名 $2..=node 前缀环境(可空)
   local name="$1"; shift
   # 计时即证(店主 05o 裁 §三 之三):每套打印耗时,末尾出总耗时与最慢 5 套。
   # 「跑了两个半小时」这种话,得能拆开看是谁慢、跑了几次 —— 数不出来就治不了。
   local t0=$SECONDS
   printf '%s(第 %s 秒起跑)' "$name" "$t0" > "$CURRENT_SUITE_FILE" 2>/dev/null || true
-  "$@" node "test-${name}.mjs" 2>&1 | tee "$SUITE_OUT"
+  case "$name" in
+    mp-*)
+      # macOS 没有 `timeout` 命令(现测:command not found)—— 自己数秒:后台跑 + 轮询 + 到点开枪。
+      : > "$SUITE_OUT"
+      ( "$@" node "test-${name}.mjs" > "$SUITE_OUT" 2>&1 ) &
+      local pid=$!
+      local waited=0
+      while kill -0 "$pid" 2>/dev/null && [ "$waited" -lt "$SUITE_TIMEOUT_S" ]; do sleep 1; waited=$(( waited + 1 )); done
+      if kill -0 "$pid" 2>/dev/null; then
+        kill -9 "$pid" 2>/dev/null || true
+        wait "$pid" 2>/dev/null || true
+        cat "$SUITE_OUT"
+        echo "⏳ test-${name} 超过 ${SUITE_TIMEOUT_S} 秒没结束 —— **本轮未跑**(多半是 DevTools 自动化会话僵死),整轮继续。"
+        echo "$name" >> "$NOT_RUN_FILE"
+        local dtx=$(( SECONDS - t0 ))
+        printf '%s\t%s\n' "$name" "$dtx" >> "$TIMING"
+        echo "   ⏱ test-${name} ${dtx}s(超时未跑)"
+        return 0     # 🔴 未跑 ≠ 失败,也 ≠ 通过:不写 TALLY,由断言基线刀按「未跑」点名
+      fi
+      wait "$pid" 2>/dev/null || true
+      cat "$SUITE_OUT"
+      ;;
+    *)
+      "$@" node "test-${name}.mjs" 2>&1 | tee "$SUITE_OUT"
+      ;;
+  esac
   local dt=$(( SECONDS - t0 ))
   printf '%s\t%s\n' "$name" "$(grep -c '^ok ' "$SUITE_OUT" || true)" >> "$TALLY"
   printf '%s\t%s\n' "$name" "$dt" >> "$TIMING"
@@ -330,7 +363,7 @@ if [ "$FALLBACK_BAD" != "0" ]; then
   exit 1
 fi
 
-node test-assertion-baseline.mjs "$TALLY" "$(( $(echo $DEFAULT_SUITES | wc -w) + 4 ))"
+node test-assertion-baseline.mjs "$TALLY" "$(( $(echo $DEFAULT_SUITES | wc -w) + 4 ))" --not-run="$(tr '\n' ',' < "$NOT_RUN_FILE" 2>/dev/null)"
 
 echo ""
 # 套件数从清单现算,不写死 —— 写死的数字会随加套件慢慢变成假话

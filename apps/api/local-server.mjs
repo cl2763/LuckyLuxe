@@ -3037,7 +3037,7 @@ function resolveQuoteWorkflow(inbound = {}, transcript = [], fallbackReply = nul
     // 🔴 D165(05s 补四):`quote` 问价那半句以前根本没人调 —— 顾客问的是价,只回一个问句等于没答
     const collect = withQuotePriceLine(quoteIntakeReply('collect_template', state, missingQuestions), { text: state.currentText || inbound.content || '', lang: inbound.lang || 'zh', discounts: discountFacts(db, currentTenantId(), (c) => formatMoneyCents(c)).items })   // 🔴 D162+D157:采集中被问 可约/优惠/时长 → 先答再原样接回(来源见 intake-interrupt.mjs)
     const back = [...transcript].reverse()
-    const cut = intakeInterrupt(intakeInterruptDeps({ db, tenantId: currentTenantId(), today: localParts(new Date()).date, getAvailability, humanDate, discountFacts, matchService, parseBookingDate, formatMoneyCents, firstActiveStoreId, firstActiveService, history: back.filter((m) => m.role === 'customer').map((m) => String(m.content || '')) }), { text: state.currentText || inbound.content || '', lang: inbound.lang || 'zh' })
+    const cut = intakeInterrupt(intakeInterruptDeps({ db, tenantId: currentTenantId(), today: localParts(new Date()).date, getAvailability, humanDate, discountFacts, matchService, parseBookingDate, formatMoneyCents, firstActiveStoreId, firstActiveService, history: back.filter((m) => m.role === 'customer').map((m) => String(m.content || '')), serviceType: state.serviceType || '' })   /* D166:点不了名时按采集已定的大类给区间 */, { text: state.currentText || inbound.content || '', lang: inbound.lang || 'zh' })
     // D164:待答那句从**会话流水**取(最近一条 AI 说的话的采集问句尾巴),不取模板算出来的下一问
     return { reply: cut ? withResume(collect, cut, inbound.lang || 'zh', pendingQuestion(String(back.find((m) => m.role === 'assistant')?.content || ''))) : collect, shouldCreateQuote: false, state, quotePayload: null }
   }

@@ -57,6 +57,17 @@ for (const ln of readFileSync(tallyPath, 'utf8').split('\n')) {
 }
 const partial = !!process.env.CI_SUITES
 
+/* 🔴 D167(店主 05s 补五 §四):`mp-*` 那三套带 60 秒单套超时,超时算「**本轮未跑**」。
+   未跑的套件**不参与升降判定、也不写基线** —— 但必须**点名打印**,不许静默豁免
+   (静默失败器族:「没跑」和「跑过且通过」长得一样就是最坏的一种绿)。
+   再配一条**上限棘轮**:最多豁免 3 套(就是 mp- 那三套)。多了说明有人在用超时消音。 */
+const notRun = new Set(((process.argv.find((a) => a.startsWith('--not-run=')) || '').split('=')[1] || '')
+  .split(',').map((x) => x.trim()).filter(Boolean))
+if (notRun.size) {
+  console.log(`⏳ 本轮**未跑**的套件(单套超时,不参与断言升降判定):${[...notRun].join(' · ')}`)
+  console.log('   —— 这不是通过。回执里必须点名说明为什么没跑成。')
+}
+
 if (!existsSync(BASELINE)) {
   const seed = { 尺子: '每套件 stdout 的 ^ok 行数;汇总行不算', 播种于: '2026-09-02(02r 裁定一)', suites: now }
   writeFileSync(BASELINE, `${JSON.stringify(seed, null, 2)}\n`)
@@ -74,11 +85,12 @@ const gone = []      // 整套消失
 const born = []      // 新套件
 
 for (const [s, n] of Object.entries(now)) {
+  if (notRun.has(s)) continue
   if (!(s in prev)) { born.push(`${s} 新增 ${n} 条`); continue }
   if (n < prev[s]) dropped.push(`${s} ${prev[s]} → ${n}(少 ${prev[s] - n} 条)`)
   else if (n > prev[s]) grew.push(`${s} ${prev[s]} → ${n}(+${n - prev[s]})`)
 }
-if (!partial) for (const s of Object.keys(prev)) if (!(s in now)) gone.push(s)
+if (!partial) for (const s of Object.keys(prev)) if (!(s in now) && !notRun.has(s)) gone.push(s)
 
 /* ① 主判:任何套件的断言条数都不许变少 */
 check(`① 断言零缩水:${Object.keys(now).length} 套逐套对基线,没有一套变少(降=红,要降先报批;涨自动更新)`,
@@ -93,9 +105,11 @@ if (partial) {
   console.log(`⚠️  子集模式(CI_SUITES=${process.env.CI_SUITES}):在场 ${Object.keys(now).length} 套,`
     + '**③ 套件数反向守本轮未做、基线不写回** —— 这不是通过,是明说没做。')
 } else {
-  check(`③ 反向守:在场套件数 ${Object.keys(now).length} = 清单套件数 ${expectSuites}(防"只扫到一半却报没有差异")`,
-    expectSuites > 0 && Object.keys(now).length === expectSuites,
-    `在场 ${Object.keys(now).length} vs 期望 ${expectSuites}`)
+  check(`③ 反向守:在场 ${Object.keys(now).length} + 未跑 ${notRun.size} = 清单套件数 ${expectSuites}(防"只扫到一半却报没有差异")`,
+    expectSuites > 0 && Object.keys(now).length + notRun.size === expectSuites,
+    `在场 ${Object.keys(now).length} + 未跑 ${notRun.size} vs 期望 ${expectSuites}`)
+  check(`③b 未跑豁免有上限:${notRun.size} 套 ≤ 3(防止有人拿超时把套件一个个消音)`,
+    notRun.size <= 3, [...notRun].join(' '))
 }
 
 /* ④⑤ 零断言套件(播种当天现扫发现的):这四套用**自有输出格式**打结果
@@ -138,7 +152,11 @@ if (partial) {
 /* 写回:只在全量跑、且没有缩水时。缩水要店主批,批了用 --accept 收进基线。 */
 if (!partial && (dropped.length === 0 || accept) && gone.length === 0) {
   if (grew.length || born.length || accept) {
-    writeFileSync(BASELINE, `${JSON.stringify({ ...base, suites: now, 上次更新: '2026-09-02' }, null, 2)}\n`)
+    /* 🔴 未跑的套件**不许写回基线**:它这一轮的 tally 根本不存在,
+       写回等于把基线里那一套的条数抹成 0,下一轮它跑起来反而成了「涨」——
+       基线就这么被悄悄冲掉了。保留基线里原来的数。 */
+    const merged = { ...prev, ...now }
+    writeFileSync(BASELINE, `${JSON.stringify({ ...base, suites: merged, 上次更新: '2026-09-02' }, null, 2)}\n`)
     console.log(`[基线已更新] ${accept ? '店主批准的下调已收进基线' : '涨的部分自动收进基线'}`)
   }
 }

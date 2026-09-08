@@ -129,10 +129,30 @@ export function discountAnswer(facts, lang = 'zh') {
  *  🔴 **只在顾客点了名的项目上答**。没点名就不答(回空串)——
  *  现测第一版拿「店里第一个项目」的时长顶上去,答出「这个大概 90 分钟」,
  *  而顾客问的根本不是那个项目:那是编,不是答(零编造红线)。 */
-export function durationAnswer(service, lang = 'zh') {
+export function durationAnswer(service, lang = 'zh', scoped = null) {
   const min = Number(service?.durationMin || service?.base_duration_min || 0)
-  if (!min || !String(service?.name || '').trim()) return ''
-  return lang === 'en' ? `${service.name} takes about ${min} minutes.` : `${service.name}大概 ${min} 分钟。`
+  if (min && String(service?.name || '').trim()) {
+    return lang === 'en' ? `${service.name} takes about ${min} minutes.` : `${service.name}大概 ${min} 分钟。`
+  }
+  /* 🔴 D166 第二半(店主 05s 补四 那四轮的**真出口**,05t 段 5 现测定位):
+     顾客说的「手绘定制」在价目表里**根本没有这个名字**(北京店叫「参考图定制款」),
+     所以「点名」这条路走不通 —— 而当时的写法是「点不了名就回空串」,
+     于是整个中断口让开,这一轮掉进了报价采集模板:
+     它答了**全店 90–180 分钟**(跨美甲美睫),还**另起了一个新问题**
+     (问「要不要卸甲」,而顾客上一句「本甲还是延长」根本还没答)—— 那是 D164 在这条路上的复发。
+
+     裁:点不了名时**不再让开**,改成答**采集里已经确定的那个大类**的真实区间
+     (美甲就只说美甲,不把美睫的时长掺进来),再由 `withResume` 把待答那句原样接回。
+     这仍然是从库里来的数,没有一个字是编的;而「跨大类的范围」本身就是答非所问。 */
+  const mins = (scoped?.mins || []).map(Number).filter((x) => x > 0)
+  if (!mins.length) return ''
+  const lo = Math.min(...mins)
+  const hi = Math.max(...mins)
+  const label = scoped?.label || ''
+  const span = lo === hi ? `${lo} 分钟左右` : `${lo}–${hi} 分钟`
+  return lang === 'en'
+    ? `${scoped?.labelEn || 'These'} run about ${lo === hi ? `${lo}` : `${lo}–${hi}`} minutes.`
+    : `${label}的项目大概 ${span}。`
 }
 
 /** 中断口总入口。答得出来才回一句,答不出来回 null(让原流程照旧)。
@@ -146,7 +166,7 @@ export function intakeInterrupt(deps, { text, lang = 'zh' } = {}) {
   /* D166(店主 05s 补四):**「点名」要看整段会话,不只看当句** ——
      会话里已经说过「手绘定制」,再问「做一次要多久」就该用它的时长。
      仍然守住「真没点名过就不答」:`service()` 找不到就回 null。 */
-  else if (kind === 'duration') answer = durationAnswer(deps.service?.(text) || deps.serviceFromHistory?.(), lang)
+  else if (kind === 'duration') answer = durationAnswer(deps.service?.(text) || deps.serviceFromHistory?.(), lang, deps.scopedRange?.())
   return answer ? { kind, answer } : null
 }
 
@@ -164,8 +184,8 @@ export function withResume(collectReply, cut, lang = 'zh', pending = '') {
  *  全从库/真函数取 —— 这个装配函数本身**不产生任何事实**。
  *  放这儿而不是放 `local-server.mjs`:巨型文件只许搬出(公约③)。 */
 export function intakeInterruptDeps({ db, tenantId, today, getAvailability, humanDate, discountFacts,
-  matchService, parseBookingDate, formatMoneyCents, firstActiveStoreId, firstActiveService, history = [] }) {
-  const rows = () => db.prepare("SELECT id, name_zh, base_duration_min, price_mode FROM services WHERE tenant_id = ? AND is_active = 1 AND (item_kind IS NULL OR item_kind = 'main')").all(tenantId)
+  matchService, parseBookingDate, formatMoneyCents, firstActiveStoreId, firstActiveService, history = [], serviceType = '' }) {
+  const rows = () => db.prepare("SELECT id, name_zh, base_duration_min, price_mode, type FROM services WHERE tenant_id = ? AND is_active = 1 AND (item_kind IS NULL OR item_kind = 'main')").all(tenantId)
   return {
     getAvailability, humanDate, todayISO: today,
     storeId: firstActiveStoreId(),
@@ -183,6 +203,16 @@ export function intakeInterruptDeps({ db, tenantId, today, getAvailability, huma
         if (hit) return hit
       }
       return null
+    },
+    /* D166:点不了名时的**大类区间**。类型取采集里已经确定的那个(nail/lash),
+       没确定就不给 —— 不确定还敢报范围,那又是「跨大类答非所问」。 */
+    scopedRange: () => {
+      const t = String(serviceType || '').toUpperCase()
+      if (t !== 'NAIL' && t !== 'LASH') return null
+      const mins = rows().filter((r) => String(r.type || '').toUpperCase() === t)
+        .map((r) => Number(r.base_duration_min || 0)).filter((x) => x > 0)
+      if (!mins.length) return null
+      return { mins, label: t === 'NAIL' ? '美甲' : '美睫', labelEn: t === 'NAIL' ? 'Nail services' : 'Lash services' }
     },
   }
 }

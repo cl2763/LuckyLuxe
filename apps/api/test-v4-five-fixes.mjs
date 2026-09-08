@@ -15,7 +15,7 @@ import { assertTestTarget, isTestTarget } from './test-guard.mjs'
 import { answered, reaskText, repeatPre, sameTopic } from './repeat-guard.mjs'
 import { farewellText, hygiene, isFarewell, stripIntakeTail } from './reply-hygiene.mjs'
 import { bestDiscount, fixedPriceSentence, matchService, pickByRank, quotePathDiscountLine } from './fixed-price-reply.mjs'
-import { availabilityAnswer, classifyInterrupt, discountAnswer, durationAnswer, pendingQuestion, resumeText, withResume } from './intake-interrupt.mjs'
+import { availabilityAnswer, classifyInterrupt, discountAnswer, durationAnswer, intakeInterruptDeps, pendingQuestion, resumeText, withResume } from './intake-interrupt.mjs'
 import { depositBrief } from './deposit-brief.mjs'
 
 const ROOT = join(fileURLToPath(new URL('.', import.meta.url)), '..', '..')
@@ -162,8 +162,31 @@ check('D162 ③d 店休 → 说店休(不许说成「约满」,一句一因)',
 check('D162 ④ 优惠:有券说券名,没券**说没有**(不许编一个)',
   discountAnswer({ hasAny: true, items: [{ name: '新客券', off: '立减 ¥50' }] }).includes('新客券')
   && discountAnswer({ hasAny: false, items: [] }).includes('没有'))
-check('D162 ⑤ 🔴 时长:**没点名项目就不答**(拿别的项目的时长顶上去 = 编;现测栽过)',
-  durationAnswer({ name: '', durationMin: 90 }) === '' && durationAnswer({ name: '精致单色', durationMin: 90 }).includes('90'))
+check('D162 ⑤ 🔴 时长:点了名就用那一个项目的时长(不许拿别的项目顶)',
+  durationAnswer({ name: '精致单色', durationMin: 90 }).includes('90'))
+/* ═══ D166(店主 05s 补四 那四轮的**真出口**,05t 段 5 定位到行)═══
+   顾客说的「手绘定制」在价目表里没有这个名字(北京店叫「参考图定制款」)——
+   于是「点名」这条走不通,旧写法回空串让开,这一轮掉进报价采集模板:
+   答了**跨大类的 90–180 分钟**,还另起一个新问题(而上一问根本没答)。
+   裁:点不了名就答**采集里已定的那个大类**的真实区间,再把待答那句原样接回。 */
+check('D166 ① 点不了名 + 没有大类 → 仍然不答(不许拿全店范围顶上;零编造)',
+  durationAnswer({ name: '', durationMin: 0 }, 'zh', null) === '')
+check('D166 ② 点不了名但采集已定大类 → 答**该大类**的真实区间',
+  durationAnswer({ name: '' }, 'zh', { mins: [90, 120, 150], label: '美甲' }) === '美甲的项目大概 90–150 分钟。')
+check('D166 ③ 大类里只有一个时长 → 不说「90–90」(同一个数写两遍是机器味)',
+  durationAnswer({ name: '' }, 'zh', { mins: [90], label: '美睫' }).includes('90 分钟左右'))
+check('D166 ④ 点了名优先于大类区间(名字在,就不该退回范围)',
+  durationAnswer({ name: '猫眼渐变', durationMin: 100 }, 'zh', { mins: [90, 180], label: '美甲' }).includes('猫眼渐变'))
+check('D166 ⑤ 大类只认 NAIL/LASH,别的类型不给区间(不确定还报范围 = 又一次答非所问)',
+  (() => {
+    const deps = intakeInterruptDeps({ db: { prepare: () => ({ all: () => [
+      { id: 's1', name_zh: '甲', base_duration_min: 90, price_mode: 'fixed', type: 'NAIL' },
+      { id: 's2', name_zh: '睫', base_duration_min: 60, price_mode: 'fixed', type: 'LASH' },
+    ] }) }, tenantId: 't', today: '2026-09-09', getAvailability: () => ({}), humanDate: () => '',
+      discountFacts: () => ({}), matchService: () => null, parseBookingDate: () => '', formatMoneyCents: () => '',
+      firstActiveStoreId: () => 's', firstActiveService: () => ({ id: 'x' }), serviceType: 'care' })
+    return deps.scopedRange() === null
+  })())
 /* D164 之后 `withResume` 多收一个「待答那句」参数(它不再从模板里猜),这条跟着改口径:
    仍然守「其它字段原样保留」,但接回那句由调用方给。 */
 check('D162 ⑥ 合成时保留原 reply 的其它字段,只换文本那一格',

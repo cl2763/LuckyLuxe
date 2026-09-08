@@ -124,6 +124,18 @@ else say "交付完整性" "🔴 没进 git:$MISS"; FAIL=1; fi
 if GHOST=$(node tools/eval-citation-check.mjs 2>&1); then say "回执引用的评测明细" "✅ ${GHOST#*✅ }"
 else say "回执引用的评测明细" "🔴"; echo "$GHOST" | sed 's/^/    /'; FAIL=1; fi
 
+# ⑨ D167(店主 05s 补五 §四):`mp-*` 三套必须带**单套超时**,超时算「本轮未跑」,
+#    不许再让三把与本批无关的刀把整轮拖到看门狗自杀(现测过:整轮 105 套的结果一起没了)。
+#    三条一起守,少一条这条护栏就是半截的:
+#      ①单套超时分支在,且默认 60 秒;②未跑的套件名传给断言基线刀;③基线刀对未跑有上限棘轮。
+MP_T=0
+grep -q 'SUITE_TIMEOUT_S=${REGRESSION_SUITE_TIMEOUT_SECONDS:-60}' apps/api/run-all-tests.sh || MP_T=1
+grep -q '本轮未跑' apps/api/run-all-tests.sh || MP_T=1
+grep -q 'not-run=' apps/api/run-all-tests.sh || MP_T=1
+grep -q '未跑豁免有上限' apps/api/test-assertion-baseline.mjs || MP_T=1
+if [ "$MP_T" = "0" ]; then say "mp-* 单套超时(D167)" "✅ 60 秒 · 未跑点名 · 基线有上限棘轮"
+else say "mp-* 单套超时(D167)" "🔴 三件里缺件 —— 超时/点名/上限棘轮必须同时在"; FAIL=1; fi
+
 # ⑧ D168(店主 05t 段 3 第 2 条):**设计令牌与合同图逐条比对**。
 #    「皮跟图不一样」这件事被店主亲眼比出来三次 —— 人眼比 #faf8f3 与 #fbf8f5 是比不出来的。
 #    这把刀现从合同图抽 `:root` 三段,与仓里的令牌文件逐条比名与值,差一位就红。
