@@ -72,10 +72,14 @@
       <div style="font-size:19px;font-weight:750;color:#5c4630">有迹</div>
       <div class="muted" style="margin-top:3px">平台运营控制台 Platform Console</div>
     </div>
-    <label for="tokenInput" style="display:block;margin-bottom:4px;font-size:13px;color:#666">平台令牌(不是登录密码;浏览器若自动填了密码,请清掉重贴)</label>
-    <input id="tokenInput" type="password" autocomplete="off" name="platform-token" placeholder="平台令牌(OWNER_TOKEN)" style="width:100%;margin-bottom:10px">
+    <!-- D149(店主 05q §三,她提过两次):**令牌不是密码**。这里改成用户名 + 密码;
+         `OWNER_TOKEN` 只留给脚本 / API,登录框里贴它会 401。 -->
+    <label for="pfUser" style="display:block;margin-bottom:4px;font-size:13px;color:#666">用户名</label>
+    <input id="pfUser" type="text" autocomplete="username" placeholder="platform-admin" style="width:100%;margin-bottom:10px">
+    <label for="pfPass" style="display:block;margin-bottom:4px;font-size:13px;color:#666">密码</label>
+    <input id="pfPass" type="password" autocomplete="current-password" placeholder="密码" style="width:100%;margin-bottom:10px">
     <label style="display:flex;align-items:center;gap:6px;margin-bottom:10px;font-size:13px;color:#666">
-      <input id="rememberBox" type="checkbox" checked> 记住这台电脑 30 天(令牌不会存进浏览器)
+      <input id="rememberBox" type="checkbox" checked> 记住这台电脑 30 天(密码不会存进浏览器)
     </label>
     <button class="p" style="width:100%" onclick="login()">进入控制台</button>
     <p class="muted" style="text-align:center;margin-top:10px">仅平台方使用 · 商家后台请访问 /admin</p>
@@ -393,20 +397,37 @@
    所以这里**不再把令牌写进 localStorage**;旧版本存过的,进来先清掉。 */
 try { localStorage.removeItem('ll-platform-token') } catch (e) {}
 let TOKEN = ''
+let PW1 = ''   // 首登改密时要用的「旧密码」,只在内存里活这一次
 const $ = (id) => document.getElementById(id)
 const WK = ['周日','周一','周二','周三','周四','周五','周六']
 function toast(m){const t=$('toast');t.textContent=m;t.classList.add('show');setTimeout(()=>t.classList.remove('show'),2200)}
 function esc(s){return String(s??'').replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]))}
 async function api(p,o={}){const r=await fetch(p,{...o,credentials:'same-origin',headers:{'content-type':'application/json',...(TOKEN?{authorization:'Bearer '+TOKEN}:{}),...(o.headers||{})}});const d=await r.json().catch(()=>null);if(!r.ok)throw new Error((d&&d.error&&d.error.message)||('HTTP '+r.status));return d}
 async function login(){
-  TOKEN=$('tokenInput').value.trim()
+  const username=$('pfUser').value.trim(), password=$('pfPass').value
+  PW1=password
   const remember=$('rememberBox') ? $('rememberBox').checked : false
   try{
-    await api('/platform/tenants')                       // 先验这把钥匙对不对
-    if(remember){ await api('/platform/session',{method:'POST',body:JSON.stringify({token:TOKEN,remember:true})}) }
-    $('tokenInput').value=''                             // 验完就从输入框抹掉
+    /* 用户名 + 密码换一张会话;拿到的 `psess_` 只在内存里当这次的 Bearer,**不进 localStorage** */
+    const r=await api('/platform/auth/login',{method:'POST',body:JSON.stringify({username,password,remember})})
+    TOKEN=r.session.token
+    $('pfPass').value=''                                 // 验完就从输入框抹掉
+    if(r.session.mustChangePassword){ await forceChangePassword(username) }
+    if(remember){ await api('/platform/session',{method:'POST',body:JSON.stringify({sessionToken:TOKEN,remember:true})}) }
     $('loginWrap').classList.add('hidden');$('app').classList.remove('hidden');refreshAll()
-  }catch(e){toast('平台令牌不对或服务不可用:'+e.message)}
+  }catch(e){toast('用户名或密码不对:'+e.message)}
+}
+/* 首登强制改密:不改就进不去(平台侧和商家侧同一条规矩) */
+async function forceChangePassword(username){
+  for(;;){
+    const np=prompt('首次登录请设置新密码(至少 8 位):')
+    if(np===null){ TOKEN=''; throw new Error('首次登录必须改密码') }
+    try{
+      await api('/platform/auth/change-password',{method:'POST',body:JSON.stringify({username,oldPassword:$('pfPass').dataset.first||PW1,newPassword:np})})
+      const r=await api('/platform/auth/login',{method:'POST',body:JSON.stringify({username,password:np})})
+      TOKEN=r.session.token; toast('密码已更新'); return
+    }catch(e){ alert('改密失败:'+e.message) }
+  }
 }
 function logout(){ TOKEN=''; location.reload() }
 async function revokeAllDevices(){
@@ -949,7 +970,8 @@ async function runImportExec(){
   }catch(e){toast(e.message)}
 }
 
-if(TOKEN){$('tokenInput').value=TOKEN;login()}
+/* D149:自动登录那一行退役 —— 它把内存里的令牌塞回登录框再登一次,
+   而登录框现在只收用户名 + 密码。留着它 = 页面一加载就报一次「密码不对」。 */
 </script>
 </body>
 </html>

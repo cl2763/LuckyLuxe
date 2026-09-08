@@ -3409,8 +3409,15 @@ const main = async () => {
 
           /* 顺带两小件(店主 08-25):①平台令牌栏别再长得像密码框 ②「占位功能」要么做要么藏 */
           const platHtml = readFileSync(join(ROOT42, 'apps/web/platform.html'), 'utf8')
-          check('㋨⑪ 平台后台那栏叫「平台令牌」,并写明不是登录密码(店主被自动填的密码误导过)',
-            /平台令牌/.test(platHtml) && /不是登录密码/.test(platHtml) && !/平台主钥匙/.test(platHtml))
+          /* 🔴 口径翻面(D149,店主 09-08 段 8):这一条原来守的是
+             「那栏叫**平台令牌**、并写明不是登录密码」—— 立它的原因是**店主被浏览器自动填的密码误导过**:
+             一个装令牌的框,浏览器往里填密码。
+             D149 把登录改成了**用户名 + 密码**,那个框本来就该被自动填 —— **立这条的病因没有了**。
+             所以翻成新口径,守的仍是同一件事(别让浏览器填错东西):
+             收的是账号密码,且 `autocomplete` 标对(username / current-password)。 */
+          check('㋨⑪ 平台后台登录收账号密码,且 autocomplete 标对(D149 翻面:原「平台令牌」栏已退役)',
+            /id="pfUser"/.test(platHtml) && /autocomplete="username"/.test(platHtml)
+            && /autocomplete="current-password"/.test(platHtml) && !/id="tokenInput"/.test(platHtml))
           const custStrip = custD77.replace(/\/\*[\s\S]*?\*\//g, '').split('\n').filter((l) => !l.trim().startsWith('//')).join('\n')
           check('㋨⑫ 顾客端「占位功能」整条退役:词条/视图分支/占位渲染器/合法视图集合都没了',
             !/comingSoon/.test(custStrip) && !/renderPlaceholderWeb/.test(custStrip)

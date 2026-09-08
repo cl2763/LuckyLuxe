@@ -62,6 +62,7 @@ import { createTenantProfile } from './tenant-profile.mjs'          // D127:本�
 import { createDemoFacts } from './demo-facts.mjs'                    // 演示店事实口(铺设脚本不再直连库)
 import { createPlatformOps } from './platform-ops.mjs'                // 平台运维域(备份/五项/运维日志/重置财务密码)
 import { ensureListedColumn } from './tenant-visibility.mjs'          // D76:选店页可见性(与账本归属解耦)
+import { createPlatformAuth } from './platform-auth.mjs'       // D149 平台账号:用户名+密码(令牌只留给脚本)
 import { createPlatformSessions } from './platform-session.mjs'       // 平台后台「记住这台电脑」(令牌不换,只是不用每次掏)
 import { createAdminAuth } from './admin-auth.mjs'                    // 商家端账号与会话(口令哈希/一次性口令/签票/认票)
 import { createAccountRefund } from './account-refund.mjs'            // N-5 退卡口(退卡≠手动耗卡:不碰收入)
@@ -6733,6 +6734,8 @@ const { importTenantCustomers } = createImportCustomers({ db, apiError, randomId
 const { adminPasswordHash, randomPassword, issueAdminSession, adminFromSessionToken, bootstrapOwnerAccount, demoAuthFor, demoEmailFromToken } = createAdminAuth({
   db, randomId, iso, createHash, defaultTenantId: DEFAULT_TENANT_ID
 })
+const platformAuth = createPlatformAuth({ db, randomId, iso, createHash })
+platformAuth.bootstrapAndReport(console)   // D149 自举第一个平台账号;一次性密码只打进启动日志,由人抄进本地文件
 const platformSessions = createPlatformSessions({
   db, randomId, iso, sha256: (v) => createHash('sha256').update(String(v)).digest('hex')
 })
@@ -12778,14 +12781,14 @@ async function route(req, res) {
     return json(res, 200, { ok: true, revokedAt: now })
   }
   // ===== 平台超管端(platform.html):仅 OWNER_TOKEN 主钥匙可用 =====
-  /* 平台门禁:①贴令牌(Bearer)②这台电脑上已签的长期会话(httpOnly Cookie,绑设备)。
-     两条都是"同一把钥匙"——会话是拿令牌换来的,强度没降;换的只是"每次都要掏出来"。 */
+  /* 平台门禁三条:①脚本贴令牌 ②密码登录的会话 ③这台电脑上记住的 cookie(D149 起由②换来) */
   const isPlatform = () => {
     const auth = req.headers.authorization || ''
-    if (auth === `Bearer ${OWNER_TOKEN}`) return true
+    if (auth === `Bearer ${OWNER_TOKEN}`) return true   // D149:令牌**只留给脚本 / API**
+    if (platformAuth.fromSession(auth.startsWith('Bearer ') ? auth.slice(7) : '')) return true
     return platformSessions.verify({ cookieHeader: req.headers.cookie, userAgent: req.headers['user-agent'] })
   }
-  const isHttps = () => String(req.headers['x-forwarded-proto'] || '').split(',')[0].trim() === 'https'
+  const isHttps = () => String(req.headers['x-forwarded-proto'] || '').split(',')[0].trim() === 'https'   // set-cookie 的 Secure 位
   if (req.method === 'GET' && path === '/platform/overview') {
     if (!isPlatform()) throw apiError(401, 'UNAUTHORIZED', 'Platform token required.')
     const monthStart = `${localParts(new Date()).date.slice(0, 7)}-01`
@@ -13111,18 +13114,15 @@ async function route(req, res) {
     return json(res, 200, importTenantCustomers(tenantId, body))
   }
   // ---- 平台端·商家配置(替商家配好入驻资料):门店/营业时间/服务价目/技师/AI知识库 ----
-  /* 「记住这台电脑」:贴一次令牌换一张长期会话(httpOnly,前端读不到);
-     不勾就只当次有效。令牌本身**不再进 localStorage** —— 那正是店主担心的"钥匙散出去"。 */
+  if (await platformAuth.handle(req, res, path, { readBody, json, apiError })) return   // D149 登录/改密/我是谁全在 platform-auth.mjs
   if (req.method === 'POST' && path === '/platform/session') {
-    const b = await readBody(req).catch(() => ({}))
-    if (String(b.token || '') !== OWNER_TOKEN) throw apiError(401, 'UNAUTHORIZED', '平台令牌不对。')
+    const b = await readBody(req).catch(() => ({}))   // 🔴 D149:换 cookie 用**密码登录换来的会话**(psess_),不再收 OWNER_TOKEN
+    if (!platformAuth.fromSession(String(b.sessionToken || ''))) throw apiError(401, 'UNAUTHORIZED', '请先用用户名和密码登录。')
     if (b.remember === false) return json(res, 200, { remembered: false })
     const sess = platformSessions.issue({ userAgent: req.headers['user-agent'], days: 30, secure: isHttps() })
     return json(res, 200, { remembered: true, expiresAt: sess.expiresAt }, { 'set-cookie': sess.cookie })
   }
-  if (req.method === 'GET' && path === '/platform/session') {
-    return json(res, 200, { active: isPlatform(), devices: isPlatform() ? platformSessions.list().length : 0 })
-  }
+  if (req.method === 'GET' && path === '/platform/session') return json(res, 200, { active: isPlatform(), devices: isPlatform() ? platformSessions.list().length : 0 })
   if (req.method === 'POST' && path === '/platform/session/revoke-all') {
     if (!isPlatform()) throw apiError(401, 'UNAUTHORIZED', 'Platform token required.')
     const n = platformSessions.revokeAll()

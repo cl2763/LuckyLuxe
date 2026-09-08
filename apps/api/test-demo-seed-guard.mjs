@@ -223,15 +223,35 @@ const realBefore = await statsOf('lucky-luxe')
   check('B⑩ 异常输入:租户不存在 = 404', gone.status === 404, `${gone.status}`)
 }
 
-/* 🔴「记住这台电脑」(店主 08-25 裁:平台后台**不改密码登录**,只让钥匙不用每次掏)。
-   判据真跑:拿令牌换会话 → 只带 Cookie 也能过门禁 → 换个 UA 就不认 → 吊销后立即失效。 */
+/* 🔴「记住这台电脑」。**换钥匙那一步的口径 09-08 变了**(D149,店主 05q §三 提过两次):
+   08-25 那次裁的是「平台后台不改密码登录,只让钥匙不用每次掏」;
+   D149 把登录改成了**用户名 + 密码**,于是换 cookie 用的也是**密码会话**(`psess_`),不再收令牌。
+   下面这一串该守的东西一条没少(HttpOnly / SameSite / 绑设备 / 吊销即失效),
+   只有「拿什么去换」这一步跟着新口径走。 */
 {
   const UA = `d77-ua-${RUN_ID}`
-  const bad = await fetch(`${BASE_URL}/platform/session`, { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ token: 'not-the-key', remember: true }) })
-  check('会话① 拿错令牌换不到会话 = 401', bad.status === 401, `${bad.status}`)
-  const ok = await fetch(`${BASE_URL}/platform/session`, { method: 'POST', headers: { 'content-type': 'application/json', 'user-agent': UA }, body: JSON.stringify({ token: PLATFORM, remember: true }) })
+  /* 本轮专用的平台账号:直接按模块里写明的哈希口径插一行,跑完删掉(判据里不写死任何密码) */
+  const { createHash } = await import('node:crypto')
+  const pfUser = `d77-pf-${RUN_ID}`
+  const pfPass = `Pf${Math.random().toString(36).slice(2, 12)}`
+  {
+    const db2 = new DatabaseSync(DB_PATH)
+    const nowIso = new Date().toISOString()
+    db2.prepare(`INSERT INTO platform_accounts (id, username, display_name, password_hash, must_change_password, status, created_at, updated_at)
+      VALUES (?, ?, '判据账号', ?, 0, 'active', ?, ?)`).run(`pacct-${pfUser}`, pfUser,
+      createHash('sha256').update(`platform:${pfUser.toLowerCase()}:${pfPass}`).digest('hex'), nowIso, nowIso)
+    db2.close()
+  }
+  const logged = await fetch(`${BASE_URL}/platform/auth/login`, { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ username: pfUser, password: pfPass }) }).then((r) => r.json())
+  const pfSession = logged?.session?.token || ''
+  check('会话⓪ 密码登录先换到一张平台会话(D149:换 cookie 的前提)', pfSession.startsWith('psess_'), JSON.stringify(logged).slice(0, 120))
+  const bad = await fetch(`${BASE_URL}/platform/session`, { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ sessionToken: 'not-the-key', remember: true }) })
+  check('会话① 拿错会话换不到 cookie = 401', bad.status === 401, `${bad.status}`)
+  const bad2 = await fetch(`${BASE_URL}/platform/session`, { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ sessionToken: PLATFORM, remember: true }) })
+  check('会话①b 🔴 D149:拿**令牌**也换不到 cookie(令牌只留给脚本 / API)', bad2.status === 401, `${bad2.status}`)
+  const ok = await fetch(`${BASE_URL}/platform/session`, { method: 'POST', headers: { 'content-type': 'application/json', 'user-agent': UA }, body: JSON.stringify({ sessionToken: pfSession, remember: true }) })
   const setCookie = ok.headers.get('set-cookie') || ''
-  check('会话② 对的令牌换到 httpOnly 会话(带 HttpOnly + SameSite=Strict)',
+  check('会话② 对的**密码会话**换到 httpOnly cookie(带 HttpOnly + SameSite=Strict)',
     ok.status === 200 && /HttpOnly/i.test(setCookie) && /SameSite=Strict/i.test(setCookie), setCookie.slice(0, 120))
   const sid = (setCookie.match(/ll_platform=([^;]+)/) || [])[1]
   const withCookie = await fetch(`${BASE_URL}/platform/tenants`, { headers: { cookie: `ll_platform=${sid}`, 'user-agent': UA } })
@@ -243,6 +263,13 @@ const realBefore = await statsOf('lucky-luxe')
   await request('/platform/session/revoke-all', { method: 'POST' })
   const afterRevoke = await fetch(`${BASE_URL}/platform/tenants`, { headers: { cookie: `ll_platform=${sid}`, 'user-agent': UA } })
   check('会话⑥ 吊销所有设备之后,那张票立刻失效', afterRevoke.status === 401, `${afterRevoke.status}`)
+  /* 夹具收尾:判据自己建的平台账号自己删干净(夹具不收尾 = 判据非幂等) */
+  {
+    const db3 = new DatabaseSync(DB_PATH)
+    db3.prepare('DELETE FROM platform_auth_sessions WHERE account_id = ?').run(`pacct-${pfUser}`)
+    db3.prepare('DELETE FROM platform_accounts WHERE username = ?').run(pfUser)
+    db3.close()
+  }
   const plat = readFileSync(join(ROOT, 'apps/web/platform.html'), 'utf8')
   check('会话⑦ 平台端不再把令牌写进 localStorage(钥匙不散到浏览器里)',
     !/localStorage\.setItem\('ll-platform-token'/.test(plat) && /removeItem\('ll-platform-token'\)/.test(plat))
