@@ -65,7 +65,26 @@ for (const ep of ['/admin/dashboard/pulse', '/admin/dashboard/now', '/admin/dash
   check(`⑤ 页面真的调了 ${ep}`, home.includes(ep))
 }
 /* ⑥ 全屏按钮本批只占位(图:先只占位不做) */
-check('⑥ 全屏按钮是 disabled 的占位(本批不做,归段 11)', /data-dh-full disabled/.test(home))
+/* 段 11 起,全屏按钮**启用**了(D154 时按图「先只占位不做」,那一条到期) */
+check('⑥ 全屏按钮已启用(段 11:图 §五 落地)', /data-dh-full title=/.test(home) && !/data-dh-full disabled/.test(home))
+const fs = readFileSync(join(ROOT, 'apps/web/dashboard-fullscreen.js'), 'utf8')
+check('⑥a 🔴 顾客可能看到这块屏:现金业绩与新增持卡**默认不显**',
+  /CUSTOMER_SENSITIVE = \['cash', 'newCard'\]/.test(fs)
+  && /showMoney \|\| !CUSTOMER_SENSITIVE\.includes\(k\)/.test(fs))
+check('⑥b 开关默认关,只有显式 true 才开(fail-closed)',
+  /showMoney: v\.showMoney === true/.test(readFileSync(join(ROOT, 'apps/api/dashboard-pulse.mjs'), 'utf8'))
+  && /catch \{ showMoney = false \}/.test(home))
+check('⑥c 轮播 6 秒 / 重取 60 秒 / 屏保 5 分钟(图 §五 三个数)',
+  /ROTATE_MS = 6000/.test(fs) && /REFRESH_MS = 60000/.test(fs) && /SAVER_MS = 5 \* 60000/.test(fs))
+check('⑥d 🔴 轮询**只许在这块屏上**:首页那个文件仍然零 setInterval',
+  !/setInterval/.test(home) && /setInterval\(refresh, REFRESH_MS\)/.test(fs))
+check('⑥e 三条退出路都在(Esc / 点任意处 / 退出全屏)',
+  /e\.key === 'Escape'/.test(fs) && /addEventListener\('click', stop\)/.test(fs) && /exitFullscreen\(\)/.test(fs))
+check('⑥f 财务锁一律遮成 ••••(与首页同口径,不在大屏另判一次)', /if \(m\.locked\) return '••••'/.test(fs))
+check('⑥g 屏保尊重「减少动态效果」', /prefers-reduced-motion/.test(fs)
+  && readFileSync(join(ROOT, 'apps/web/styles.css'), 'utf8').includes('prefers-reduced-motion: reduce) { .dh-fs'))
+check('⑥h 取数失败**留着上一帧**,不把这块没人守的屏清成 0',
+  /catch \{ \/\* 取数失败:\*\*留着上一帧\*\*/.test(fs))
 
 /* ══ D154:按图 §三 逐块(店主 09-08 亲看后裁;判据锚**选择器**不锚文案)══
    段 6 那版只把数据接上了,页面没按图排。这一组守的是「图上那 17 块,页面上真有」。
@@ -115,6 +134,9 @@ const SHOTS = [
   /* D156 三张:顶栏那行显当前店名之后,三家店**靠图本身**就分得开(之前只能靠数字) */
   ['07_旗舰店_今日_顶栏店名.png', 1440], ['08_小婕店_今日_顶栏店名.png', 1440], ['09_北京店_今日_顶栏店名.png', 1440],
 ]
+/* 段 11 全屏大屏那一张单独一册(它不在首页那个目录里) */
+const FS_DIR = join(ROOT, 'handoff/night-runs/段11截图')
+const FS_SHOTS = [['01_全屏大屏_旗舰店.png', 1440]]
 const pngSize = (file) => {
   const b = readFileSync(file)
   /* 只认真 PNG:魔数 + IHDR 里的宽高。不看扩展名 —— 扩展名是改得出来的
@@ -128,6 +150,12 @@ for (const [name, cssW] of SHOTS) {
   check(`⑩ 截图在仓:${name}(真 PNG · 宽 ${cssW * 2}px · 非空)`,
     Boolean(size) && size.w === cssW * 2 && size.bytes > 20000,
     size ? `${size.w}x${size.h} ${size.bytes}B` : '文件不在,或不是 PNG')
+}
+for (const [name, cssW] of FS_SHOTS) {
+  let size = null
+  try { size = pngSize(join(FS_DIR, name)) } catch { size = null }
+  check(`⑩f 段 11 截图在仓:${name}(真 PNG · 宽 ${cssW * 2}px)`,
+    Boolean(size) && size.w === cssW * 2 && size.bytes > 20000, size ? `${size.w}x${size.h}` : '文件不在')
 }
 check('⑩b 🔴 白名单式:截图目录里不许有约定之外的 .png(改名不算交付)',
   readdirSync(SHOT_DIR).filter((f) => f.endsWith('.png')).every((f) => SHOTS.some(([n]) => n === f)),

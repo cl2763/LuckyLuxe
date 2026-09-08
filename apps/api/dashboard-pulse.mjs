@@ -235,6 +235,16 @@ export function createDashboardPulse(deps) {
      ⚠️ 调用点必须排在**租户上下文闸门之后**(交付纪律 7)—— local-server 那一行就在闸后。 */
   async function route(req, res, ctx) {
     const { path, query, adminSession, json } = ctx
+    /* 段 11 图 §五:前台大屏「显示金额」开关。**默认关** —— 那块屏顾客可能看到,
+       现金业绩与新增持卡不该默认摆在店门口。只有显式 true 才算开(fail-closed)。
+       放这个模块:它和大屏三接口同一族,别再往巨型文件里塞(公约③只许搬出)。 */
+    if (req.method === 'GET' && path === '/admin/store-settings/front-screen') {
+      const row = db.prepare("SELECT value FROM tenant_settings WHERE tenant_id = ? AND key = 'front_screen'").get(currentTenantId())
+      let v = {}
+      try { v = row ? JSON.parse(row.value) : {} } catch { v = {} }
+      json(res, 200, { showMoney: v.showMoney === true })
+      return true
+    }
     if (req.method !== 'GET' || !path.startsWith('/admin/dashboard/')) return false
     const role = adminSession?.role === 'owner' ? 'owner' : 'staff'
     if (path === '/admin/dashboard/pulse') { json(res, 200, pulse({ period: query.period, role })); return true }

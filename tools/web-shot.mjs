@@ -135,6 +135,12 @@ for (const spec of shots) {
   await waitFor('维度画完', `(() => { const s = document.querySelector('#dashboardCharts [data-dh-state]'); return s && s.dataset.dhState !== 'loading' })()`)
   await sleep(600)   // 折线/台面的最后一帧
 
+  /* 段 11:`fullscreen` 那一张 —— 点「⤢ 全屏大屏」把前台大屏态拍下来 */
+  if (mode === 'fullscreen') {
+    await evaluate(`document.querySelector('#dashboardCharts [data-dh-full]').click()`)
+    await waitFor('全屏大屏出来', `document.querySelector('[data-dh-fullscreen] [data-fs-metric]')`, 15000)
+    await sleep(800)
+  }
   const shot = await send('Page.captureScreenshot', { format: 'png', captureBeyondViewport: false })
   const file = join(OUT, `${name}.png`)
   writeFileSync(file, Buffer.from(shot.result.data, 'base64'))

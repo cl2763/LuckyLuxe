@@ -93,7 +93,7 @@ window.DashboardHome = (function () {
 
   const periodBar = () => `<div class="dh-periods" data-dh-periods>${PERIODS.map((p) => `
       <button type="button" class="dh-period${p.key === st.period ? ' on' : ''}" data-dh-period="${p.key}">${zh() ? p.zh : p.en}</button>`).join('')}
-      <button type="button" class="dh-full ghost slim" data-dh-full disabled title="${zh() ? '全屏大屏(下一批)' : 'Fullscreen (next batch)'}">⤢ ${zh() ? '全屏大屏' : 'Fullscreen'}</button>
+      <button type="button" class="dh-full ghost slim" data-dh-full title="${zh() ? '前台全屏大屏' : 'Fullscreen'}">⤢ ${zh() ? '全屏大屏' : 'Fullscreen'}</button>
     </div>`
 
   const skeleton = () => `<section class="card dh-card" data-dh-state="loading">
@@ -195,6 +195,18 @@ window.DashboardHome = (function () {
         ${todoBlock()}
       </div>`
     /* 台面**原样嵌入**:交给 today-board.js 自己画 —— 这里一行台面 HTML 都没有 */
+    /* 段 11:全屏大屏(图 §五)。**顾客可能看到这块屏** —— 现金业绩与新增持卡默认不显,
+       由门店设置那个开关决定(默认关);拿不到设置就按关来(fail-closed)。 */
+    const full = st.host.querySelector('[data-dh-full]')
+    if (full && window.DashboardFullscreen) {
+      full.onclick = async () => {
+        let showMoney = false
+        try { showMoney = Boolean((await st.deps.request('/admin/store-settings/front-screen')).showMoney) } catch { showMoney = false }
+        /* 店名走 D156 定的那一处真相(门店名,商家自己看的那个),不另取一份 */
+        const storeName = (document.querySelector('[data-tenant-name]') || {}).textContent || ''
+        window.DashboardFullscreen.open({ ...st.deps, storeName }, { showMoney })
+      }
+    }
     const board = st.host.querySelector('[data-dh-board]')
     if (board && window.TodayBoard && st.deps.boardDeps) {
       try { window.TodayBoard.mountInto(board, st.deps.boardDeps()) } catch (e) { board.innerHTML = '' }
