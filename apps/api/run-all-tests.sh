@@ -41,6 +41,16 @@ export ALLOW_DEMO_ADMIN_LOGIN=true  # 测试套件依赖演示登录路径(生�
 #    D151 的行为层由 `test-merge-window` **自己起一台带窗的实例**来验(与 perf-base-migration 同法),
 #    所以关掉这里**不等于没验** —— 那一套里 ④d/④e/④f 三条就是干这个的。
 export MERGE_WINDOW_MS=0
+# 🔴 D163(店主 05s 补二 亲测咬出来的,红线级):**回归专用的环境变量不许跟着「还回去」进活服务。**
+#    案发:上面 `export MERGE_WINDOW_MS=0` 是为了回归不等窗,而跑完重启 4128/4310 时
+#    nohup 继承了它 —— 两台活服务的合并窗变成 0,**D151 在店主那儿等于没上线**,
+#    她连发三句得到三条回复;而回执里「都还回去了」在窗这件事上是假话。
+#    收法:回归专用变量在这里**登记成一张表**,还回去时逐个 `env -u` 掉;
+#    真要带的(沙箱的 ALLOW_DEMO_ADMIN_LOGIN)由那条重启命令**自己显式写**,不靠继承。
+#    同族一起收:凡是这个脚本 export 出来、只为回归服务的,都进这张表。
+REGRESSION_ONLY_ENV="MERGE_WINDOW_MS TEST_DB_PATH ALLOW_DEMO_ADMIN_LOGIN COS_SECRET_ID COS_SECRET_KEY COS_REGION COS_BUCKET"
+env_clean() { local a=(); for v in $REGRESSION_ONLY_ENV; do a+=(-u "$v"); done; printf '%s ' "${a[@]}"; }
+
 cd "$(dirname "$0")"
 API_DIR="$(pwd)"   # 绝对路径:restore_local 结束时要用,那时 cwd 可能已经变了
 
@@ -74,7 +84,7 @@ restore_local() {
   [ "$LOCAL_WAS_UP" = "1" ] || return 0
   curl -sf -o /dev/null --max-time 2 "http://127.0.0.1:4128/health" && return 0
   # 脚本开头已经 cd 进 apps/api 了,这里再 dirname $0 会踩空 —— 直接用绝对路径
-  ( cd "$API_DIR" && PORT=4128 DATA_DIR="./local-data" TEST_DB_PATH= nohup node local-server.mjs > /tmp/ll-local-restored.log 2>&1 & )
+  ( cd "$API_DIR" && nohup env $(env_clean) PORT=4128 DATA_DIR="./local-data" node local-server.mjs > /tmp/ll-local-restored.log 2>&1 & )
   for _ in $(seq 1 20); do
     curl -sf -o /dev/null --max-time 2 "http://127.0.0.1:4128/health" && { echo "== 已把店主的本地服务(4128)重新拉起来 =="; return 0; }
     sleep 0.5
@@ -116,8 +126,8 @@ restore_sandbox() {
   #    接口照样 200,只是 AI 换了个脑子,谁也不会注意到。「还回去」= 还回原状态。
   SB_NODE_ARGS=()
   [ -n "${SANDBOX_AI_ENV:-}" ] && [ -f "$SANDBOX_AI_ENV" ] && SB_NODE_ARGS+=("--env-file-if-exists=$SANDBOX_AI_ENV")
-  ( cd "$API_DIR" && PORT=4310 DATA_DIR="$SANDBOX_DATA_DIR" ALLOW_DEMO_ADMIN_LOGIN=true TEST_DB_PATH= \
-      AI_GATE="${SANDBOX_AI_GATE:-}" nohup node ${SB_NODE_ARGS[@]+"${SB_NODE_ARGS[@]}"} local-server.mjs > /tmp/ll-sandbox-restored.log 2>&1 & )
+  ( cd "$API_DIR" && nohup env $(env_clean) PORT=4310 DATA_DIR="$SANDBOX_DATA_DIR" ALLOW_DEMO_ADMIN_LOGIN=true \
+      AI_GATE="${SANDBOX_AI_GATE:-}" node ${SB_NODE_ARGS[@]+"${SB_NODE_ARGS[@]}"} local-server.mjs > /tmp/ll-sandbox-restored.log 2>&1 & )
   for _ in $(seq 1 20); do
     curl -sf -o /dev/null --max-time 2 "http://127.0.0.1:4310/health" && { echo "== 已把沙箱(4310)重新拉起来 =="; return 0; }
     sleep 0.5
@@ -129,6 +139,35 @@ finish() {
   [ -n "${WATCHDOG_PID:-}" ] && kill "$WATCHDOG_PID" 2>/dev/null
   rm -f "${CURRENT_SUITE_FILE:-}" 2>/dev/null
   cleanup; [ -n "${DATA_DIR:-}" ] && rm -rf "$DATA_DIR"; restore_local; restore_sandbox
+  restore_selfcheck
+}
+
+# 🔴 D163 收尾自证:「还回去了」这句话**由这段话打印,人不许手写**(与 receipt-db-proof 同姿态)。
+#    还回去 ≠ 端口能连上 —— 上一次两台都活着,而合并窗是 0,D151 在店主那儿等于没上线。
+#    所以验的是**还回去的服务是不是原来那台**:窗 4 秒 / 封顶 12 秒(默认值)。
+#    判据锚的是「默认值」这件事,不锚 4 这个数字本身 —— 默认值改了,这里跟着 merge-window.mjs 走。
+restore_selfcheck() {
+  local want_win want_cap bad=0
+  # 🔴 取默认值也得**把回归那身环境脱掉**再取 —— 不然这段自己就被 `MERGE_WINDOW_MS=0` 污染,
+  #    量出来的「默认」正是那个错值,判据反过来把还对的服务判成错的。
+  #    第一版就是这么写的,一跑就露馅(它自己的输出把自己咬了)。
+  want_win=$(env $(env_clean) node -e "import('./merge-window.mjs').then(m=>console.log(m.mergeWindowSeconds()))" 2>/dev/null)
+  want_cap=$(env $(env_clean) node -e "import('./merge-window.mjs').then(m=>console.log(m.mergeWindowCapSeconds()))" 2>/dev/null)
+  [ -n "$want_win" ] || { echo "!! D163 收尾自证:取不到默认窗长,跳过(不算通过)" >&2; return 0; }
+  for port in 4128 4310; do
+    curl -sf -o /dev/null --max-time 2 "http://127.0.0.1:$port/health" || continue   # 本来就没起的不算
+    local got_win got_cap
+    got_win=$(curl -sf --max-time 2 "http://127.0.0.1:$port/health" | node -e 'let s="";process.stdin.on("data",d=>s+=d).on("end",()=>{try{console.log(JSON.parse(s).mergeWindowSeconds)}catch{console.log("")}})')
+    got_cap=$(curl -sf --max-time 2 "http://127.0.0.1:$port/health" | node -e 'let s="";process.stdin.on("data",d=>s+=d).on("end",()=>{try{console.log(JSON.parse(s).mergeWindowCapSeconds)}catch{console.log("")}})')
+    if [ "$got_win" = "$want_win" ] && [ "$got_cap" = "$want_cap" ]; then
+      echo "   [收尾自证] $port 合并窗 ${got_win}s / 封顶 ${got_cap}s ✔ 与默认值一致"
+    else
+      echo "🔴 [收尾自证] $port 合并窗 ${got_win}s / 封顶 ${got_cap}s ✖ 默认应为 ${want_win}s / ${want_cap}s" >&2
+      echo "   —— 回归专用环境变量漏进了活服务(D163)。**这一轮不许说「都还回去了」。**" >&2
+      bad=1
+    fi
+  done
+  [ "$bad" = "0" ] || return 1
 }
 # 🔴 INT/TERM 也要收(店主 05r 补五 §四 的看门狗会 TERM 自己):
 #    只挂 EXIT 的话,被信号打死时陷阱**不跑**,4128/4310 就留在死的状态 ——
