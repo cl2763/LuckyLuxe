@@ -1,6 +1,6 @@
 const api = require('../../../utils/api')
 const { storeMoney } = require('../../../utils/storeclock')
-const { buildOwnerHome } = require('../../../utils/dashboard-view')
+const { buildOwnerHome, clockGate, clockFailText, staffSmalls, STAFF_PERIODS } = require('../../../utils/dashboard-view')
 
 Page({
   data: {
@@ -28,6 +28,14 @@ Page({
     digest: { count: 0, items: [] },
     /* ── 老板视角业绩大屏(图 v3.2 §一,段 9)。三态:loading / failed / ready ── */
     storeLine: '',
+    /* ── 员工视角 · 打卡门(图 v3.2 §二,段 10)── */
+    gate: { state: 'gate', showButton: true, showBoard: false, badge: '', note: '' },
+    shiftLine: '',
+    clockErr: '',
+    staffPeriod: 'today',
+    staffPeriods: STAFF_PERIODS.map((p) => ({ ...p, on: p.key === 'today' })),
+    staffPerf: '—',
+    staffStats: [],
     dhState: 'loading',
     dhPeriod: 'today',
     dhClosed: false,
@@ -36,7 +44,7 @@ Page({
 
   onShow() {
     if (!api.guardMerchant()) return
-    this.loadPulse()
+    if (this.data.isOwner) this.loadPulse(); else this.loadStaff()
     this.setData({ aiEnabled: api.merchantHasAi() })
     // 刷一次权限:没开通 AI 智能包就不显示 AI 每日总结 / 召回周报
     api.refreshMerchantAi().then((on) => this.setData({ aiEnabled: on }))
@@ -80,6 +88,56 @@ Page({
     }
   },
 
+  /* 打卡门:**走现有考勤接口**(不另做一套)。三态由 `clockGate` 判,页面不自己想。 */
+  async loadStaff() {
+    const period = this.data.staffPeriod
+    try {
+      const [att, now, perf] = await Promise.all([
+        api.adminGet('/admin/attendance/today').catch(() => null),
+        api.adminGet('/admin/dashboard/now').catch(() => null),
+        api.adminGet('/admin/my-performance').catch(() => null),
+      ])
+      const scheduled = Boolean(att && att.scheduledEnd)
+      const gate = clockGate(att, { scheduled, closed: Boolean(now && now.closed) })
+      const p = (perf && perf.performance) || null
+      const money = p && p.currencyDisplay ? null : null
+      this.setData({
+        gate,
+        shiftLine: scheduled ? `今天的班 · 到 ${att.scheduledEnd}` : '今天没有你的班',
+        staffPeriods: STAFF_PERIODS.map((x) => ({ ...x, on: x.key === period })),
+        /* 业绩数字走现有「我的业绩」口径(与薪资方案同源);拿不到出「—」,不编 0 */
+        staffPerf: p && p.perfText ? p.perfText : (p && p.perfCents !== undefined && p.perfCents !== null ? storeMoney(p.perfCents) : '—'),
+        staffStats: staffSmalls({ perf: p, now, week: (att && att.week ? { hours: att.weekHours } : null) }),
+      })
+    } catch (e) {
+      this.setData({ gate: { state: 'gate', showButton: true, showBoard: false, badge: '', note: '' } })
+    }
+  },
+
+  async clockIn() { await this.doClock('in') },
+  async clockOut() { await this.doClock('out') },
+  async doClock(action) {
+    this.setData({ clockErr: '' })
+    try {
+      const wifi = await new Promise((resolve) => wx.getConnectedWifi({
+        success: (r) => resolve(r && r.wifi ? { ssid: r.wifi.SSID, bssid: r.wifi.BSSID } : {}),
+        fail: () => resolve({}),   // wx.* 一律有 fail 处理(波及面回归律四之八⑤)
+      }))
+      await api.adminPost('/admin/attendance/clock', { action, wifi })
+      await this.loadStaff()      // 成功才让大屏浮现 —— 不成功不许假装打了
+    } catch (e) {
+      /* 打卡失败:钮不收起、说清原因、**不进大屏** */
+      this.setData({ clockErr: clockFailText(e) })
+    }
+  },
+
+  switchStaffPeriod(e) {
+    const p = e.currentTarget.dataset.p
+    if (!p || p === this.data.staffPeriod) return
+    this.setData({ staffPeriod: p })
+    this.loadStaff()
+  },
+
   switchPeriod(e) {
     const p = e.currentTarget.dataset.p
     if (!p || p === this.data.dhPeriod) return
@@ -104,6 +162,7 @@ Page({
     try {
       const me = await api.adminMe()
       isOwner = me && me.role === 'owner'
+      if (isOwner) this.loadPulse(); else this.loadStaff()   // 角色拿到才知道该拉哪一份
       this.setData({
         isOwner,
         myTechId: (me && me.technicianId) || '',

@@ -98,6 +98,32 @@ for (const st of ['failed', 'loading']) {
   await withTimeout(mp.screenshot({ path: join(OUT, `${t0}_${st}.png`) }), 20000, `截图 ${t0}_${st}`)
   console.log(`   [图] ${join(OUT, `${t0}_${st}.png`)}`)
 }
+/* ══ 段 10 · 员工打卡门两态 ══
+   🔴 **如实说清这两张是怎么来的**:沙箱库里没有员工账号(见 handoff/本地自查账号.txt),
+   所以没能用真员工号登一次。这两张是把页面切到员工分支、并喂进两种考勤态拍的 ——
+   渲染出来的是**页面自己的分支**,不是我另画的假界面;但它**不等于真员工登录走查**。
+   缺的那一半已登记(段 10 残留),不冒充。 */
+if (process.env.MPH_STAFF === '1') {
+  const gateOff = { state: 'gate', note: '', showButton: true, showBoard: false, badge: '', action: 'in' }
+  const gateOn = { state: 'open', note: '', showButton: false, showBoard: true, badge: '✓ 已打卡 09:58', action: 'out' }
+  for (const [name, gate, extra] of [
+    ['staff_gate', gateOff, { shiftLine: '今天的班 · 到 19:00', clockErr: '' }],
+    ['staff_gate_fail', gateOff, { shiftLine: '今天的班 · 到 19:00', clockErr: '未连接门店 WiFi,无法打卡。请连上店内 WiFi 再试;确实连不上找老板手动补卡。' }],
+    ['staff_open', gateOn, { staffPerf: '¥860', staffStats: [
+      { key: 'myOrders', label: '今日单数', value: '5 单', sub: '在做 1 · 待到店 2', live: true },
+      { key: 'next', label: '下一位', value: '14:45', sub: 'Mia · 睫毛嫁接' },
+      { key: 'weekHours', label: '本周工时', value: '31 h', sub: '超时算加班' }] }],
+  ]) {
+    await page.setData({ isOwner: false, roleLabel: '员工', gate, ...extra })
+    await sleep(700)
+    const cur = await page.data()
+    check(`段10 · ${name} 是页面自己的分支(isOwner=false 且 gate.state=${gate.state})`,
+      cur.isOwner === false && cur.gate.state === gate.state, JSON.stringify({ isOwner: cur.isOwner, state: cur.gate && cur.gate.state }))
+    await withTimeout(mp.screenshot({ path: join(OUT, `${name}.png`) }), 20000, `截图 ${name}`)
+    console.log(`   [图] ${join(OUT, `${name}.png`)}`)
+  }
+}
+
 await mp.disconnect()
 console.log(`\n[段9 截图] ${TENANTS.length} 店 × 正常态 + 失败/加载两态`)
 if (fails.length) { console.error(`\n❌ 段9 截图 ${fails.length}/${n} 项未过`); process.exit(1) }

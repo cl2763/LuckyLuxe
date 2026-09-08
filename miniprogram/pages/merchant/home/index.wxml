@@ -75,8 +75,39 @@
     </block>
   </block>
 
-  <!-- ================= 员工端 ================= -->
+  <!-- ============ 员工视角 · 打卡门(图 v3.2 §二,段 10)============
+       打卡不是一条待办,是一道门:没打卡就没有大屏。 -->
   <block wx:if="{{!isOwner}}">
+    <!-- ① 没打卡:大屏位置只有一个钮 + 今天的班次一句 -->
+    <view wx:if="{{gate.state==='gate'}}" class="dh-card clock-gate" data-clock-gate>
+      <view class="clock-shift" data-clock-shift>{{shiftLine}}</view>
+      <view class="clock-btn" bindtap="clockIn" data-clock-in>上班打卡</view>
+      <view class="clock-hint">打完卡,业绩大屏在这里出现</view>
+      <!-- 打卡失败:钮不收起,底下说清原因,**不进大屏** -->
+      <view wx:if="{{clockErr}}" class="clock-err" data-clock-err>{{clockErr}}</view>
+    </view>
+    <!-- ② 今天没班:不出钮,大屏直接显示,顶部一句 -->
+    <view wx:if="{{gate.state==='off'}}" class="dh-card" data-clock-off>{{gate.note}}</view>
+    <!-- ③ 打了卡(或今天没班):我的业绩大屏 -->
+    <view wx:if="{{gate.showBoard}}" class="dh-card" data-staff-board>
+      <view class="dh-periods" data-staff-periods>
+        <view wx:for="{{staffPeriods}}" wx:key="key" class="dh-period {{item.on?'on':''}}"
+              data-p="{{item.key}}" bindtap="switchStaffPeriod">{{item.label}}</view>
+        <view wx:if="{{gate.badge}}" class="clock-badge" data-clock-badge>{{gate.badge}}</view>
+      </view>
+      <view class="dh-eyebrow">我的业绩 · 服务单</view>
+      <view class="dh-big" data-staff-metric="perf">{{staffPerf}}</view>
+      <view wx:if="{{gate.action==='out'}}" class="clock-out" bindtap="clockOut" data-clock-out>下班打卡 ›</view>
+      <view class="dh-smalls" data-staff-smalls>
+        <view wx:for="{{staffStats}}" wx:key="key" class="dh-small" data-staff-small="{{item.key}}">
+          <view class="dh-sl">{{item.label}}</view>
+          <view class="dh-sv">{{item.value}}</view>
+          <view wx:if="{{item.sub}}" class="dh-sub"><text wx:if="{{item.live}}" class="dh-dot"></text>{{item.sub}}</view>
+        </view>
+      </view>
+    </view>
+
+
     <!-- 老板站内提醒横幅 -->
     <view class="nudge" wx:for="{{nudges}}" wx:key="id">
       <text class="nudge-ico">📣</text>
@@ -84,20 +115,9 @@
       <view class="nudge-ok" data-id="{{item.id}}" catchtap="dismissNudge">知道了</view>
     </view>
 
-    <!-- ① 我的今日台面(置顶) -->
-    <view class="sec">我的今日台面 · 点击看全店</view>
-    <view class="board" bindtap="goOrders">
-      <view class="bitem"><view class="bn live">{{board.active}}</view><view class="bl">在做</view></view>
-      <view class="bdiv"></view>
-      <view class="bitem"><view class="bn wait">{{board.waiting}}</view><view class="bl">待到店</view></view>
-      <view class="bdiv"></view>
-      <view class="bitem"><view class="bn">{{board.done}}</view><view class="bl">已完成</view></view>
-      <view class="bdiv"></view>
-      <view class="bitem"><view class="bn go">›</view><view class="bl">看台面</view></view>
-    </view>
-
-    <!-- ② 待办横条 -->
-    <view class="sec">待办</view>
+    <!-- 「我的今日台面」卡退役(图 §二):并进上面三个小数里「今日单数」那一格的实时副行 -->
+    <!-- 今日要处理(图 §二:员工端**只有两项来源** —— 待写小记 / 我的调休申请状态) -->
+    <view class="sec">今日要处理</view>
     <view class="rowcard">
       <view class="rowhead" data-k="notes" bindtap="toggle">
         <view class="rowico warn">📝</view>
@@ -114,13 +134,7 @@
         </view>
       </view>
     </view>
-    <view class="rowcard">
-      <view class="rowhead" bindtap="goAttendance">
-        <view class="rowico">⏱</view>
-        <view class="rowt"><view class="rowname">打卡</view><view class="rowhint">上下班打卡 · 本周工时 · 超时算加班</view></view>
-        <view class="chev">›</view>
-      </view>
-    </view>
+    <!-- 「打卡」那一条退役(图 §二 原话:**打卡不再是快捷,是门**)—— 它现在在最上面那道门里 -->
     <view class="rowcard">
       <view class="rowhead" bindtap="goSchedule">
         <view class="rowico"></view>
@@ -129,13 +143,7 @@
       </view>
     </view>
 
-    <!-- ③ 快捷 -->
-    <view class="sec">快捷</view>
-    <view class="quick">
-      <view class="qcard" bindtap="goPerformance"><view class="qi">📈</view><view class="ql">我的业绩</view></view>
-      <view class="qcard" bindtap="goCustomers"><view class="qi">👥</view><view class="ql">我的客户</view></view>
-      <view class="qcard" bindtap="goGallery"><view class="qi">🖼</view><view class="ql">我的作品</view></view>
-    </view>
+    <!-- 快捷格取消(图 §一/§二 都写了:底部导航四键还在,首页不再摆快捷格) -->
   </block>
 
   <!-- ================= 老板端旧块:整段退役(图 v3.2 §一,段 9)=================

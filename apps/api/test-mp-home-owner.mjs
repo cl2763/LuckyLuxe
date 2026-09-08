@@ -136,10 +136,54 @@ check('⑤d 换一家 CNY 店,钱就该按 ¥ 出(不是回落成旗舰店的 CA
       moneyFor: (c, code) => { const f = { CNY: { p: '', s: '¥' }, CAD: { p: 'CAD ', s: '$' } }[code]; return `${f.p}${f.s}${(c / 100).toFixed(0)}` } })
     return cny.headValue === '¥2486' })())
 
+/* ═══ ⑦ 段 10 · 员工打卡门(图 v3.2 §二 两态)═══ */
+check('⑦ 没打卡:大屏位置只有一个钮 + 今天的班次一句',
+  wxml.includes('data-clock-gate') && wxml.includes('data-clock-shift') && wxml.includes('data-clock-in'))
+check('⑦b 🔴 打卡失败:钮不收起、说清原因、**不进大屏**(没成功不许演成成功)',
+  wxml.includes('data-clock-err') && /clockErr: clockFailText\(e\)/.test(pageJs)
+  && !/showBoard: true[\s\S]{0,80}?clockErr/.test(pageJs))
+check('⑦c 打了卡:角标说真话(已打卡几点 / 已下班几点)',
+  wxml.includes('data-clock-badge') && /已下班 \$\{/.test(readFileSync(join(ROOT, 'miniprogram/utils/dashboard-view.js'), 'utf8')))
+check('⑦d 🔴 休息日 / 没排班**不出打卡钮**,大屏直接显示,顶一句「今天没有你的班」',
+  (() => { const g = view.clockGate(null, { scheduled: false })
+    return g.state === 'off' && g.showButton === false && g.showBoard === true && g.note === '今天没有你的班' })())
+check('⑦e 没打卡 → 门关着(大屏不出)',
+  (() => { const g = view.clockGate({ today: null }, { scheduled: true })
+    return g.state === 'gate' && g.showBoard === false && g.showButton === true })())
+check('⑦f 打了上班卡 → 门开,角标带打卡时刻,右侧给「下班打卡」',
+  (() => { const g = view.clockGate({ today: { clockInAt: '2026-09-08T09:58:00.000Z' } }, { scheduled: true })
+    return g.state === 'open' && g.showBoard === true && g.badge.includes('09:58') && g.action === 'out' })())
+check('⑦g 打了下班卡 → 角标变「已下班」,不再给下班钮',
+  (() => { const g = view.clockGate({ today: { clockInAt: '2026-09-08T09:58:00.000Z', clockOutAt: '2026-09-08T19:02:00.000Z' } }, { scheduled: true })
+    return g.badge.includes('已下班') && g.badge.includes('19:02') && g.action === '' })())
+check('⑦h 🔴 员工看不到店的五个指标(那一支里没有 revenue/cash/cardUse 这些)',
+  !/data-staff-board[\s\S]{0,900}?data-dh-metric="revenue"/.test(wxml))
+check('⑦i 员工维度只有今日 / 本月(不是四个)',
+  view.STAFF_PERIODS.map((p) => p.key).join(',') === 'today,month')
+check('⑦j 员工三个小数 = 今日单数 / 下一位 / 本周工时',
+  view.staffSmalls({ perf: null, now: { total: 5, doing: 1, waiting: 2 }, week: { hours: 31 } })
+    .map((x) => x.key).join(',') === 'myOrders,next,weekHours')
+check('⑦k 拿不到工时出「—」,不编 0(零回落)',
+  view.staffSmalls({ perf: null, now: null, week: null })[2].value === '—')
+check('⑦l 走**现有考勤接口**,没另做一套',
+  /\/admin\/attendance\/clock/.test(pageJs) && /\/admin\/attendance\/today/.test(pageJs))
+check('⑦m `wx.getConnectedWifi` 带 fail 处理(波及面回归律四之八⑤)',
+  /fail: \(\) => resolve\(\{\}\)/.test(pageJs))
+check('⑦n 打卡失败那句**原样透后端**,自己不翻译不编',
+  /const msg = \(err && \(err\.message \|\| err\.errMsg\)\) \|\| ''/.test(readFileSync(join(ROOT, 'miniprogram/utils/dashboard-view.js'), 'utf8')))
+
+check('⑦o 员工端旧块退役:台面卡 / 打卡待办条 / 快捷格都不在了(图 §二)',
+  !/我的今日台面 · 点击看全店/.test(wxml) && !/rowname">打卡</.test(wxml) && !/<view class="sec">快捷</.test(wxml))
+check('⑦p 员工端「今日要处理」只留两项来源(待写小记 / 我的调休)',
+  /<view class="sec">今日要处理<\/view>/.test(wxml))
+
 /* ═══ ⑥ 截图落仓(夜班令 5 规矩 5:带图的段必交截图;DOM 证据不替代截图,J-32)═══
    判据**直接数文件**并读 PNG 魔数 —— 「交了」而没有文件与 J-27 同族。 */
 const SHOT_DIR = join(ROOT, 'handoff/night-runs/段9截图')
-const SHOTS = ['lucky-luxe_ready.png', 'jics-store_ready.png', 'luvia-bj_ready.png', 'luvia-bj_failed.png', 'luvia-bj_loading.png']
+const SHOTS = ['lucky-luxe_ready.png', 'jics-store_ready.png', 'luvia-bj_ready.png', 'luvia-bj_failed.png', 'luvia-bj_loading.png',
+  /* 段 10 打卡门两态 + 打卡失败态。⚠️ 这三张是**造态截图**:沙箱库里没有员工账号,
+     所以没能用真员工号登一次;渲染的是页面自己的分支,但不等于真员工走查(段 10 残留已登记)。 */
+  'staff_gate.png', 'staff_gate_fail.png', 'staff_open.png']
 for (const f of SHOTS) {
   let ok = false
   let why = '文件不在'

@@ -114,3 +114,13 @@ page{background:#fbf8f5}
 .dh-todo.urgent .dh-todo-n{color:#c0503c}
 .dh-todo-l{font-size:26rpx;color:#4a423b}
 .dh-todo-n{font-size:28rpx;font-weight:700;color:#2b2b2b}
+
+/* ===== 员工视角 · 打卡门(图 v3.2 §二,段 10)===== */
+.clock-gate{text-align:center;padding:48rpx 24rpx}
+.clock-shift{font-size:26rpx;color:#6b6259;margin-bottom:28rpx}
+.clock-btn{width:220rpx;height:220rpx;line-height:220rpx;margin:0 auto;border-radius:50%;
+  background:#2b2b2b;color:#fff;font-size:32rpx;font-weight:700}
+.clock-hint{margin-top:24rpx;font-size:23rpx;color:#a09488}
+.clock-err{margin-top:18rpx;font-size:24rpx;color:#c0503c;line-height:1.5}
+.clock-badge{margin-left:auto;font-size:22rpx;color:#2f8f5b}
+.clock-out{margin-top:10rpx;font-size:24rpx;color:#a58e6f}

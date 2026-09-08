@@ -149,3 +149,66 @@ function buildOwnerHome({ pulse, now, todo, period, nowHM, storeMoney, moneyFor 
 }
 
 module.exports = { makeMoneyFor, PERIODS, SMALL_KEYS, LABELS, TODO_LABEL, URGENT, DELTA_WORD, bookingsLabel, moneyText, countText, deltaOf, asOfText, buildOwnerHome }
+
+/* ══════════ 段 10 · 员工视角:打卡门(图 v3.2 §二 两态)══════════
+
+   店主要的东西一句话:**打卡不再是一条待办,是一道门**。
+   没打卡 → 大屏位置只有一个「上班打卡」钮 + 今天的班次一句;
+   打了卡 → 钮收起、业绩大屏**原地浮现**,右上角「✓ 已打卡 09:58」。
+
+   三条容易做错的地方,写在这儿:
+   ① **休息日 / 没排班不出打卡钮** —— 大屏直接显示,顶部一句「今天没有你的班」。
+      这一句与台面同源(`closed` / 没有班次),**不另判**;
+   ② **打卡失败不许假装打了** —— 钮不收起、钮下说清原因、不进大屏
+      (「不可用即不呈现」的反面:没成功就不能演成成功);
+   ③ 员工**看不到店的五个指标**,只看自己的业绩;维度只有今日 / 本月。 */
+
+const STAFF_PERIODS = [{ key: 'today', label: '今日' }, { key: 'month', label: '本月' }]
+
+/** 打卡门是什么态:`gate`(要先打卡)/ `open`(大屏可见)/ `off`(今天没班)。
+ *  @param att 现有考勤接口 `/admin/attendance/today` 的原样返回,不另造一套形状 */
+function clockGate(att, { scheduled = true, closed = false } = {}) {
+  if (closed || !scheduled) {
+    return { state: 'off', note: '今天没有你的班', showButton: false, showBoard: true, badge: '' }
+  }
+  const t = (att && att.today) || null
+  const inAt = t && (t.clockInAt || t.clock_in_at || t.inAt)
+  const outAt = t && (t.clockOutAt || t.clock_out_at || t.outAt)
+  if (!inAt) {
+    return { state: 'gate', note: '', showButton: true, showBoard: false, badge: '', action: 'in' }
+  }
+  return {
+    state: 'open',
+    note: '',
+    showButton: false,
+    showBoard: true,
+    /* 角标说真话:下班打过卡就说已下班,没打就说已打卡几点 */
+    badge: outAt ? `已下班 ${String(outAt).slice(11, 16) || outAt}` : `✓ 已打卡 ${String(inAt).slice(11, 16) || inAt}`,
+    action: outAt ? '' : 'out',
+  }
+}
+
+/** 打卡失败时说什么。**原样透出后端那句**,自己不翻译、不编 —— 后端才知道为什么不让打。 */
+function clockFailText(err) {
+  const msg = (err && (err.message || err.errMsg)) || ''
+  return msg || '打卡没成功,请再试一次(连上店内 WiFi 会更顺)'
+}
+
+/** 员工那三个小数:今日单数(副行实时)/ 下一位 / 本周工时。**不是店里的五个指标**。 */
+function staffSmalls({ perf, now, week }) {
+  const next = (now && now.next) || null
+  return [
+    { key: 'myOrders', label: '今日单数', value: now && now.total !== undefined ? `${now.total} 单` : '—',
+      sub: now ? `在做 ${now.doing || 0} · 待到店 ${now.waiting || 0}` : '', live: true },
+    { key: 'next', label: '下一位', value: next ? `${next.time || ''}` : '—',
+      sub: next ? [next.customer, next.service].filter(Boolean).join(' · ') : '后面没有了' },
+    { key: 'weekHours', label: '本周工时',
+      value: week && week.hours !== undefined && week.hours !== null ? `${week.hours} h` : '—',
+      sub: '超时算加班' },
+  ]
+}
+
+module.exports.STAFF_PERIODS = STAFF_PERIODS
+module.exports.clockGate = clockGate
+module.exports.clockFailText = clockFailText
+module.exports.staffSmalls = staffSmalls
