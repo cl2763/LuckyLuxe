@@ -70,7 +70,12 @@ export function farewellText(lang = 'zh') {
 
 /** 出口卫生总入口:给一段回复文本和这一轮的上下文,回该发出去的那一段。
  *  @returns {{ text: string, why: string }} why='' 表示没动过 */
-export function hygiene({ text = '', customerText = '', status = '', lang = 'zh' } = {}) {
+export function hygiene({ text = '', customerText = '', status = '', lang = 'zh', source = '' } = {}) {
+  /* 🔴 采集模板那条路**本来就该以采集问句收尾** —— 它整句就是那一问(或「答一句 + 接回那一问」)。
+     D159 要治的是「事情说完了还追着问表项」,不是「该问的时候问」。
+     现测栽过:D165 给采集模板前面加了一句带价的话,这条守立刻把后面的问句砍了,
+     顾客拿到一句价格、没有下一步 —— 守过头和不守一样坏。 */
+  if (/collect_template|intake/.test(String(source))) return { text, why: '' }
   /* D161 先判:待人工态 + 顾客在告别 → 整句换告别语(不管原来那句说了什么) */
   if (isFarewell(customerText) && (status === 'needs_human' || status === 'human_active')) {
     return { text: farewellText(lang), why: 'farewell-in-handoff' }

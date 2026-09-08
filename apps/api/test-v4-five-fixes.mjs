@@ -15,7 +15,7 @@ import { assertTestTarget, isTestTarget } from './test-guard.mjs'
 import { answered, reaskText, repeatPre, sameTopic } from './repeat-guard.mjs'
 import { farewellText, hygiene, isFarewell, stripIntakeTail } from './reply-hygiene.mjs'
 import { bestDiscount, fixedPriceSentence, matchService, pickByRank, quotePathDiscountLine } from './fixed-price-reply.mjs'
-import { availabilityAnswer, classifyInterrupt, discountAnswer, durationAnswer, resumeText, withResume } from './intake-interrupt.mjs'
+import { availabilityAnswer, classifyInterrupt, discountAnswer, durationAnswer, pendingQuestion, resumeText, withResume } from './intake-interrupt.mjs'
 import { depositBrief } from './deposit-brief.mjs'
 
 const ROOT = join(fileURLToPath(new URL('.', import.meta.url)), '..', '..')
@@ -164,10 +164,33 @@ check('D162 ④ 优惠:有券说券名,没券**说没有**(不许编一个)',
   && discountAnswer({ hasAny: false, items: [] }).includes('没有'))
 check('D162 ⑤ 🔴 时长:**没点名项目就不答**(拿别的项目的时长顶上去 = 编;现测栽过)',
   durationAnswer({ name: '', durationMin: 90 }) === '' && durationAnswer({ name: '精致单色', durationMin: 90 }).includes('90'))
+/* D164 之后 `withResume` 多收一个「待答那句」参数(它不再从模板里猜),这条跟着改口径:
+   仍然守「其它字段原样保留」,但接回那句由调用方给。 */
 check('D162 ⑥ 合成时保留原 reply 的其它字段,只换文本那一格',
   (() => { const r = withResume({ source: 'collect_template', data: { intent: 'x', answerZh: '请问是否需要卸甲?' } },
-    { kind: 'discount', answer: '现在有「新客券」立减 ¥50。' })
+    { kind: 'discount', answer: '现在有「新客券」立减 ¥50。' }, 'zh', '请问是否需要卸甲?')
     return r.data.intent === 'x' && r.source.includes('interrupt_discount') && r.data.answerZh.includes('那我们接着说') })())
+
+/* ═══ D164 / D165 · 店主 05s 补四 四轮亲测当夹具 ═══ */
+check('D164 ① 待答那句从**会话流水**取(最近一条 AI 的采集问句尾巴)',
+  pendingQuestion('请问这款是做本甲还是需要延长\uff1f') === '请问这款是做本甲还是需要延长\uff1f')
+check('D164 ①b 🔴 中断过一次之后,取到的**还是同一句**(顾客没答就不许往前跳)',
+  pendingQuestion('现在有「开业礼」立减 ¥50。 那我们接着说,请问这款是做本甲还是需要延长\uff1f')
+    === '请问这款是做本甲还是需要延长\uff1f')
+check('D164 ①c 上一句不是采集问句 → 空(拿不到就别说「接着说」)',
+  pendingQuestion('我们家 20:00 关门。') === '')
+check('D164 ② 🔴 接不到待答那句时**一个字都不加**(店主亲测轮3:接了个空的「那我们接着说,」)',
+  (() => { const r = withResume({ source: 'collect_template', data: { answerZh: '请问是否需要卸甲\uff1f' } },
+    { kind: 'discount', answer: '现在有「开业礼」立减 ¥50。' }, 'zh', '')
+    return r.data.answerZh === '现在有「开业礼」立减 ¥50。' && !r.data.answerZh.includes('接着说') })())
+check('D164 ②b 接得到就原样接回**那一句**,不是模板算出来的下一问',
+  withResume({ source: 'collect_template', data: { answerZh: '请问是否需要卸甲\uff1f' } },
+    { kind: 'discount', answer: '现在有券。' }, 'zh', '请问这款是做本甲还是需要延长\uff1f')
+    .data.answerZh === '现在有券。 那我们接着说,请问这款是做本甲还是需要延长\uff1f')
+check('D165 🔴 `quote` 项目问价:**没券也要说「具体价格技师看过后报」**(顾客问的是价,不能只回一个问句)',
+  (() => { const no = quotePathDiscountLine([], 'zh'); const yes = quotePathDiscountLine(coup, 'zh')
+    return no.includes('技师') && yes.includes('新客首单立减 50') && yes.includes('技师') })(),
+  quotePathDiscountLine([], 'zh'))
 
 /* ═══ 通三 · 定金一句话说清(≤120 字)═══ */
 const depCfg = { enabled: true, mode: 'fallback', fallbackAmountCents: 5000, deductible: false,

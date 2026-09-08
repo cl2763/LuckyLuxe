@@ -19,6 +19,12 @@
    不接回去,采集就断在半路上 —— 顾客答完这一岔,机器已经忘了它在问什么(D157)。
    接回去时用「那我们接着说,」起头,让顾客知道这是回到刚才那件事。 */
 
+/* 待答问句长什么样、句读怎么切 —— 与 `reply-hygiene` 认的是同一个形状。
+   两处都要用,所以放在这儿一份(一件事一处真相)。 */
+const INTAKE_WORD = /(卸甲|卸睫|延长|下睫毛|断甲|参考图|指定技师|第一次做美睫|眼睛.{0,4}敏感|本甲|款式|哪天|几点方便)/
+const Q_END = /[?\uff1f]\s*$/
+const SEPS = ['\u3002', '!', '\uff01', '?', '\uff1f', '~', '\uff5e']
+
 /** 顾客这句是不是在打岔问别的。**只认这三类**,别的一律 null(不抢原流程的活)。 */
 export function classifyInterrupt(text = '') {
   const t = String(text || '')
@@ -30,8 +36,35 @@ export function classifyInterrupt(text = '') {
   return null
 }
 
+/* 🔴 D164(店主 05s 补四 亲测四轮咬出来的两处):
+   ① 接回来的是**下一问**,而顾客连**当前这问**都还没答(「本甲还是延长」没答,却接了「是否需要卸甲」);
+   ② 第二次中断后接了个**空的**「那我们接着说,」。
+   病因是同一个:接回的那句取自「这一轮采集模板算出来的下一问」,
+   而中断那一句本身会被采集当成一轮(「明天下午三点有位吗」还顺手填了日期/时间槽),
+   于是问题往前跳了一格;跳到没有了就成了空串。
+
+   改法:**待答那句从会话流水里取** —— 最近一条 AI 说的话,如果它以采集问句收尾,
+   那一句就是「发出去了、顾客还没答」的那问(顾客要是答了,下一条 AI 就不会再问它)。
+   这跟 D150 用同一个读口(全录是唯一读口),也天然扛住连续几次中断:
+   每次接回的都还是同一句,直到顾客真答了为止。 */
+
+/** 从最近一条 AI 原话里取出「待答的那句采集问句」。取不到就空串(空 = 不接)。 */
+export function pendingQuestion(lastAssistantText = '') {
+  const t = String(lastAssistantText || '').trim()
+  if (!t) return ''
+  let at = t.lastIndexOf('请问')
+  if (at < 0) {
+    const sep = Math.max(...SEPS.map((c) => t.lastIndexOf(c, t.length - 2)))
+    at = sep >= 0 ? sep + 1 : 0
+  }
+  const tail = t.slice(at).trim()
+  if (!Q_END.test(tail) || !INTAKE_WORD.test(tail)) return ''
+  return tail
+}
+
 /** 把「那我们接着说」和待答的采集问句接回去。
- *  采集问句**原样**接,不重写 —— 重写就成了第二处真相(D153 同族)。 */
+ *  采集问句**原样**接,不重写 —— 重写就成了第二处真相(D153 同族)。
+ *  🔴 没有待答那句就**一个字都不加** —— 「那我们接着说,」后面接空,比不接更糟。 */
 export function resumeText(answer, pendingQuestion, lang = 'zh') {
   const a = String(answer || '').trim()
   const q = String(pendingQuestion || '').trim()
@@ -110,24 +143,28 @@ export function intakeInterrupt(deps, { text, lang = 'zh' } = {}) {
   let answer = ''
   if (kind === 'availability') answer = availabilityAnswer({ ...deps, date: deps.resolveDate?.(text) }, lang)
   else if (kind === 'discount') answer = discountAnswer(deps.facts?.(), lang)
-  else if (kind === 'duration') answer = durationAnswer(deps.service?.(text), lang)
+  /* D166(店主 05s 补四):**「点名」要看整段会话,不只看当句** ——
+     会话里已经说过「手绘定制」,再问「做一次要多久」就该用它的时长。
+     仍然守住「真没点名过就不答」:`service()` 找不到就回 null。 */
+  else if (kind === 'duration') answer = durationAnswer(deps.service?.(text) || deps.serviceFromHistory?.(), lang)
   return answer ? { kind, answer } : null
 }
 
 /** 把中断的答案与那句采集问句合成一条回复。**采集问句原样搬**,不重写。
  *  `reply` 的其它字段(source / intent / 英文句)一并保留 —— 只换文本那一格。 */
-export function withResume(collectReply, cut, lang = 'zh') {
+export function withResume(collectReply, cut, lang = 'zh', pending = '') {
   const d = collectReply?.data || {}
-  const zh = resumeText(cut.answer, d.answerZh || '', lang)
+  /* 待答那句由调用方从会话流水取(D164);取不到就只发答案,不说「接着说」 */
+  const zh = resumeText(cut.answer, pending, lang)
   return { ...collectReply, source: `${collectReply?.source || 'collect_template'}+interrupt_${cut.kind}`,
-    data: { ...d, answerZh: zh || d.answerZh, answerEn: resumeText(cut.answer, d.answerEn || '', 'en') || d.answerEn } }
+    data: { ...d, answerZh: zh || cut.answer, answerEn: cut.answer, handoffRequired: false } }
 }
 
 /** 中断口要的三样东西:查可约(真口)、本店折扣、命中的项目。
  *  全从库/真函数取 —— 这个装配函数本身**不产生任何事实**。
  *  放这儿而不是放 `local-server.mjs`:巨型文件只许搬出(公约③)。 */
 export function intakeInterruptDeps({ db, tenantId, today, getAvailability, humanDate, discountFacts,
-  matchService, parseBookingDate, formatMoneyCents, firstActiveStoreId, firstActiveService }) {
+  matchService, parseBookingDate, formatMoneyCents, firstActiveStoreId, firstActiveService, history = [] }) {
   const rows = () => db.prepare("SELECT id, name_zh, base_duration_min, price_mode FROM services WHERE tenant_id = ? AND is_active = 1 AND (item_kind IS NULL OR item_kind = 'main')").all(tenantId)
   return {
     getAvailability, humanDate, todayISO: today,
@@ -137,5 +174,15 @@ export function intakeInterruptDeps({ db, tenantId, today, getAvailability, huma
     facts: () => discountFacts(db, tenantId, (c) => formatMoneyCents(c)),
     /* 没点名就回 null —— 拿别的项目的时长顶上去是编,不是答 */
     service: (txt) => matchService(txt, rows().map((r) => ({ id: r.id, name: r.name_zh, durationMin: r.base_duration_min, priceMode: r.price_mode || 'fixed' }))) || null,
+    /* D166:当句没点名,就回头在**这段会话里顾客说过的话**里找(最近的优先)。
+       整段都没提过任何项目 → 仍然回 null,照旧不答(不许拿第一个项目顶)。 */
+    serviceFromHistory: () => {
+      const list = rows().map((r) => ({ id: r.id, name: r.name_zh, durationMin: r.base_duration_min, priceMode: r.price_mode || 'fixed' }))
+      for (const txt of (history || [])) {
+        const hit = matchService(txt, list)
+        if (hit) return hit
+      }
+      return null
+    },
   }
 }

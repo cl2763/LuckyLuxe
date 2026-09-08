@@ -106,11 +106,15 @@ export function fixedPriceSentence({ service, discounts = [], money, lang = 'zh'
 /** `quote` 项目那条路上的一句话:**先说有券,再说价格要技师看**(不出数字)。
  *  ——「折扣事实注入在这条路上就有人听了」那句话的落法。 */
 export function quotePathDiscountLine(discounts = [], lang = 'zh') {
-  if (!discounts.length) return ''
+  /* 🔴 D165(店主 05s 补四 亲测):这句以前**写了却没人调** ——
+     「手绘定制多少钱」只回了一个采集问句,顾客问的是价,却一个字没答到价上。
+     没券也要出后半句:**「具体价格要技师看过后报」** —— 那才是对「多少钱」的回答。 */
+  const tail = lang === 'en' ? 'the exact price needs a technician to confirm.' : '具体价格要技师看过后报给您。'
+  if (!discounts.length) return lang === 'en' ? `This one ${tail}` : `这款${tail}`
   const d = discounts[0]
   return lang === 'en'
-    ? `We do have "${d.name}" (${d.off}) available; the exact price needs a technician to confirm.`
-    : `现在有「${d.name}」${d.off}可以用;具体价格要技师看过后报给您。`
+    ? `We do have "${d.name}" (${d.off}) available; ${tail}`
+    : `现在有「${d.name}」${d.off}可以用;${tail}`
 }
 
 /** 接线用的那一层:从库里现取 `fixed` 项目与本店折扣,拼出该发的那一句。
@@ -138,4 +142,16 @@ export function fixedPriceAnswer({ db, tenantId, discountFacts, money }, { text,
   return { source: 'fixed_price_direct', data: { intent: 'pricing', answerZh: zh + tail(ranked, 'zh'),
     answerEn: fixedPriceSentence({ service: hit, discounts: facts.items, money, lang: 'en' }) + tail(ranked, 'en'),
     handoffRequired: false } }
+}
+
+
+/** D165 · `quote` 项目问价时,把那半句放在采集问句**前面**:先答价这件事,再问表项。
+ *  只看**当句**是不是在问价 —— `state.priceIntent` 是粘的,后面几轮会一直为真,
+ *  拿它当条件的话每一轮都会重复贴一遍(现测见过)。 */
+export function withQuotePriceLine(collectReply, { text = '', lang = 'zh', discounts = [] } = {}) {
+  if (!/多少钱|什么价|价格|价位|报价|几多钱/.test(String(text))) return collectReply
+  const line = quotePathDiscountLine(discounts, lang)
+  const zh0 = collectReply?.data?.answerZh || ''
+  if (!line || zh0.includes(line)) return collectReply
+  return { ...collectReply, data: { ...collectReply.data, answerZh: `${line} ${zh0}`.trim() } }
 }

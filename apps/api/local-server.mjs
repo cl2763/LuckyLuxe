@@ -4,8 +4,8 @@ import { AsyncLocalStorage } from 'node:async_hooks'
 import { DatabaseSync } from 'node:sqlite'
 import { customerChatIdentity } from './customer-chat.mjs'
 import { discountFacts, hasAnyDiscountOf } from './discount-facts.mjs'
-import { fixedPriceAnswer, matchService } from './fixed-price-reply.mjs'
-import { intakeInterrupt, intakeInterruptDeps, withResume } from './intake-interrupt.mjs'
+import { fixedPriceAnswer, matchService, withQuotePriceLine } from './fixed-price-reply.mjs'
+import { intakeInterrupt, intakeInterruptDeps, pendingQuestion, withResume } from './intake-interrupt.mjs'
 import { enrichPrompt } from './prompt-assembly.mjs'
 import { guardedHandle } from './repeat-guard.mjs'
 import { hygiene as replyHygiene } from './reply-hygiene.mjs'
@@ -2988,14 +2988,8 @@ function resolveQuoteWorkflow(inbound = {}, transcript = [], fallbackReply = nul
   const fixedHit = fixedPriceAnswer({ db, tenantId: currentTenantId(), discountFacts, money: formatMoneyCents }, { text: state.currentText || inbound.content || '', priceIntent: state.priceIntent })   // 🔴 D152 正面(05s 裁待裁 #8):命中 fixed 直接报三段式、不进采集
   if (fixedHit) return { reply: fixedHit, shouldCreateQuote: false, state, quotePayload: null }
   const hasMissingRequired = missingQuestions.zh.length > 0
-  const hasQuoteStateUpdate = [
-    state.extensionNeeded,
-    state.removalNeeded,
-    state.repairNeeded,
-    state.lowerLashRequested,
-    state.lashRemovalNeeded,
-    state.healthCheckClear
-  ].some((value) => ['yes', 'no', 'partial'].includes(value))
+  const hasQuoteStateUpdate = [state.extensionNeeded, state.removalNeeded, state.repairNeeded,
+    state.lowerLashRequested, state.lashRemovalNeeded, state.healthCheckClear].some((v) => ['yes', 'no', 'partial'].includes(v))
   const quoteRelated = state.hasReferenceContext || state.priceIntent || state.capabilityIntent || state.appointmentIntent || state.serviceStartIntent || state.contextualFollowup || hasQuoteStateUpdate
   if (!quoteRelated) return { reply: fallbackReply, shouldCreateQuote: false, state, quotePayload: null }
 
@@ -3040,9 +3034,12 @@ function resolveQuoteWorkflow(inbound = {}, transcript = [], fallbackReply = nul
   }
 
   if (state.priceIntent || state.contextualFollowup || state.capabilityIntent || state.appointmentIntent || state.serviceStartIntent || state.hasReferenceContext || hasQuoteStateUpdate) {
-    const collect = quoteIntakeReply('collect_template', state, missingQuestions)   // 🔴 D162+D157:采集中被问 可约/优惠/时长 → 先答再原样接回(来源见 intake-interrupt.mjs)
-    const cut = intakeInterrupt(intakeInterruptDeps({ db, tenantId: currentTenantId(), today: localParts(new Date()).date, getAvailability, humanDate, discountFacts, matchService, parseBookingDate, formatMoneyCents, firstActiveStoreId, firstActiveService }), { text: state.currentText || inbound.content || '', lang: inbound.lang || 'zh' })
-    return { reply: cut ? withResume(collect, cut, inbound.lang || 'zh') : collect, shouldCreateQuote: false, state, quotePayload: null }
+    // 🔴 D165(05s 补四):`quote` 问价那半句以前根本没人调 —— 顾客问的是价,只回一个问句等于没答
+    const collect = withQuotePriceLine(quoteIntakeReply('collect_template', state, missingQuestions), { text: state.currentText || inbound.content || '', lang: inbound.lang || 'zh', discounts: discountFacts(db, currentTenantId(), (c) => formatMoneyCents(c)).items })   // 🔴 D162+D157:采集中被问 可约/优惠/时长 → 先答再原样接回(来源见 intake-interrupt.mjs)
+    const back = [...transcript].reverse()
+    const cut = intakeInterrupt(intakeInterruptDeps({ db, tenantId: currentTenantId(), today: localParts(new Date()).date, getAvailability, humanDate, discountFacts, matchService, parseBookingDate, formatMoneyCents, firstActiveStoreId, firstActiveService, history: back.filter((m) => m.role === 'customer').map((m) => String(m.content || '')) }), { text: state.currentText || inbound.content || '', lang: inbound.lang || 'zh' })
+    // D164:待答那句从**会话流水**取(最近一条 AI 说的话的采集问句尾巴),不取模板算出来的下一问
+    return { reply: cut ? withResume(collect, cut, inbound.lang || 'zh', pendingQuestion(String(back.find((m) => m.role === 'assistant')?.content || ''))) : collect, shouldCreateQuote: false, state, quotePayload: null }
   }
   return { reply: fallbackReply, shouldCreateQuote: false, state, quotePayload: null }
 }

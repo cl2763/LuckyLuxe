@@ -185,7 +185,7 @@ export function applyRepeatGuard({ db, iso, getWecomConversation, hygiene }, { i
      放在壳里的理由和 D150 一样:采集问句从十几条支路拼上来,逐处改必漏。 */
   if (hygiene && replyText) {
     const status = statusOf(db, conversationId, tenantId)
-    const h = hygiene({ text: replyText, customerText: inbound.content || '', status, lang: inbound.lang || 'zh' })
+    const h = hygiene({ text: replyText, customerText: inbound.content || '', status, lang: inbound.lang || 'zh', source: result?.reply?.source || '' })
     if (h.why) {
       const row0 = recentAssistant(db, conversationId, tenantId, 1)[0]
       rewriteAssistantRow(db, { id: row0?.id, expect: replyText, content: h.text, why: h.why, iso })
