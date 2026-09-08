@@ -4,7 +4,8 @@ import { AsyncLocalStorage } from 'node:async_hooks'
 import { DatabaseSync } from 'node:sqlite'
 import { customerChatIdentity } from './customer-chat.mjs'
 import { discountFacts, hasAnyDiscountOf } from './discount-facts.mjs'
-import { fixedPriceAnswer } from './fixed-price-reply.mjs'
+import { fixedPriceAnswer, matchService } from './fixed-price-reply.mjs'
+import { intakeInterrupt, intakeInterruptDeps, withResume } from './intake-interrupt.mjs'
 import { enrichPrompt } from './prompt-assembly.mjs'
 import { guardedHandle } from './repeat-guard.mjs'
 import { hygiene as replyHygiene } from './reply-hygiene.mjs'
@@ -36,7 +37,9 @@ import { createBookingDraftsModule } from './booking-drafts.mjs'
 import { createAiReviewRoutes } from './ai-review-routes.mjs'
 import { createWecomRecord } from './wecom-record.mjs'
 import { createBookingGuards } from './booking-guards.mjs'
-import { createBookingIntake, hasBookingSignal } from './booking-intake.mjs'
+import { createBookingIntake, hasBookingSignal, parseDate as parseBookingDate } from './booking-intake.mjs'
+import { humanDate } from './date-human.mjs'
+import { depositBrief } from './deposit-brief.mjs'
 import { applyConcurrencyPragmas } from './db-concurrency.mjs'
 import { createReplyLength } from './reply-length.mjs'
 import { createQuoteIntakeReply } from './quote-intake-reply.mjs'
@@ -2978,17 +2981,11 @@ function resolveQuoteWorkflow(inbound = {}, transcript = [], fallbackReply = nul
   }
   // 纯门店信息问题（营业时间/地址/电话等）直接走普通回答，不进询单流程。
   // “营业时间”里的“时间”曾被误判为预约意图导致新客被回美甲询单模板。
-  if (isStoreInfoOnlyInquiry(state.currentText || inbound.content || '')) {
-    state.appointmentIntent = false
-    return { reply: fallbackReply, shouldCreateQuote: false, state, quotePayload: null }
-  }
+  const passThrough = () => { state.appointmentIntent = false; return { reply: fallbackReply, shouldCreateQuote: false, state, quotePayload: null } }
+  if (isStoreInfoOnlyInquiry(state.currentText || inbound.content || '')) return passThrough()
   // 纯政策/定金问题（取消、改期、定金多少等）同理直接走普通回答。
-  if (isPolicyOrDepositOnlyInquiry(state.currentText || inbound.content || '')) {
-    state.appointmentIntent = false
-    return { reply: fallbackReply, shouldCreateQuote: false, state, quotePayload: null }
-  }
-  // 🔴 D152 正面(05s 裁待裁 #8):问价命中 `fixed` 项目 → 直接报三段式、不进采集(`quote` 不走这里,D146)
-  const fixedHit = fixedPriceAnswer({ db, tenantId: currentTenantId(), discountFacts, money: formatMoneyCents }, { text: state.currentText || inbound.content || '', priceIntent: state.priceIntent })
+  if (isPolicyOrDepositOnlyInquiry(state.currentText || inbound.content || '')) return passThrough()
+  const fixedHit = fixedPriceAnswer({ db, tenantId: currentTenantId(), discountFacts, money: formatMoneyCents }, { text: state.currentText || inbound.content || '', priceIntent: state.priceIntent })   // 🔴 D152 正面(05s 裁待裁 #8):命中 fixed 直接报三段式、不进采集
   if (fixedHit) return { reply: fixedHit, shouldCreateQuote: false, state, quotePayload: null }
   const hasMissingRequired = missingQuestions.zh.length > 0
   const hasQuoteStateUpdate = [
@@ -3043,7 +3040,9 @@ function resolveQuoteWorkflow(inbound = {}, transcript = [], fallbackReply = nul
   }
 
   if (state.priceIntent || state.contextualFollowup || state.capabilityIntent || state.appointmentIntent || state.serviceStartIntent || state.hasReferenceContext || hasQuoteStateUpdate) {
-    return { reply: quoteIntakeReply('collect_template', state, missingQuestions), shouldCreateQuote: false, state, quotePayload: null }
+    const collect = quoteIntakeReply('collect_template', state, missingQuestions)   // 🔴 D162+D157:采集中被问 可约/优惠/时长 → 先答再原样接回(来源见 intake-interrupt.mjs)
+    const cut = intakeInterrupt(intakeInterruptDeps({ db, tenantId: currentTenantId(), today: localParts(new Date()).date, getAvailability, humanDate, discountFacts, matchService, parseBookingDate, formatMoneyCents, firstActiveStoreId, firstActiveService }), { text: state.currentText || inbound.content || '', lang: inbound.lang || 'zh' })
+    return { reply: cut ? withResume(collect, cut, inbound.lang || 'zh') : collect, shouldCreateQuote: false, state, quotePayload: null }
   }
   return { reply: fallbackReply, shouldCreateQuote: false, state, quotePayload: null }
 }
@@ -3362,7 +3361,8 @@ const answerForTurn = (kind, ctx = {}) => turnAnswer.answerForTurn(kind, { ...ct
 const bookingIntake = createBookingIntake({
   getConversationState, getAvailability, answerForTurn,
   firstActiveStoreId, firstActiveService, createBookingDraft,
-  depositPolicyText: () => depositPolicyText(getDepositConfig(currentTenantId()), currentTenantId(), 'zh'),
+  // 通三(05s 补二 §三.5):对顾客说定金**一句话说清**;长的那份没动,后台预览与设置页照旧用 depositPolicyText
+  depositPolicyText: () => depositBrief(getDepositConfig(currentTenantId()), (c) => formatMoneyCents(c, currentTenantId(), 'auto'), 'zh') || depositPolicyText(getDepositConfig(currentTenantId()), currentTenantId(), 'zh'),
   /* 「今天」一律按**门店时区**算(CLAUDE.md 头一条:不许用裸 new Date() 推日期) */
   todayISO: () => localParts(new Date()).date,
   holdMinutes: () => HOLD_MINUTES,
@@ -3734,7 +3734,7 @@ async function handleWecomInboundCore(inbound, req) {
       }
     }
   }
-  // 商家自助 FAQ 直答;D160(05s §四)合并后逐句答全的三档口径在 `kb-match.mjs` 的 `mergedKbAnswer`
+  // FAQ 直答;D160 合并后逐句答全的三档口径在 kb-match.mjs
   const tenantKbEntry = mergedKbAnswer(inbound.mergedParts, (x) => matchTenantKbEntry(x), inbound.content || '')
   if (tenantKbEntry) {
     const kbReply = {

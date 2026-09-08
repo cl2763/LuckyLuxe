@@ -15,6 +15,8 @@ import { assertTestTarget, isTestTarget } from './test-guard.mjs'
 import { answered, reaskText, repeatPre, sameTopic } from './repeat-guard.mjs'
 import { farewellText, hygiene, isFarewell, stripIntakeTail } from './reply-hygiene.mjs'
 import { bestDiscount, fixedPriceSentence, matchService, pickByRank, quotePathDiscountLine } from './fixed-price-reply.mjs'
+import { availabilityAnswer, classifyInterrupt, discountAnswer, durationAnswer, resumeText, withResume } from './intake-interrupt.mjs'
+import { depositBrief } from './deposit-brief.mjs'
 
 const ROOT = join(fileURLToPath(new URL('.', import.meta.url)), '..', '..')
 const BASE_URL = process.env.TEST_BASE_URL || 'http://127.0.0.1:4128'
@@ -129,6 +131,55 @@ check('补一②b 全角问号收尾的采集尾巴也砍(U+FF1F)',
   stripIntakeTail('周二至周日20:00关门。预约定金¥50。停车挺方便。想约哪天做指甲还是睫毛呀\uff1f').cut === true)
 check('补一②c 全角问号的「谢谢?」不算告别(带问号就是在问)',
   isFarewell('谢谢\uff1f') === false)
+
+/* ═══ D162 + D157 · 采集中断口(店主 05s 补二 §三 裁待裁 #10)═══ */
+check('D162 ① 三类各认得出来',
+  classifyInterrupt('明天下午三点有位吗') === 'availability'
+  && classifyInterrupt('有优惠吗') === 'discount'
+  && classifyInterrupt('大概要多久') === 'duration')
+check('D162 ①b 不是这三类就不抢(回 null,原流程照旧)',
+  classifyInterrupt('我想做美甲') === null && classifyInterrupt('好的') === null)
+check('D162 ② 🔴 答完把采集问句**原样**接回去(不重写那一句)',
+  resumeText('现在有「新客券」立减 ¥50。', '请问是否需要卸甲?') === '现在有「新客券」立减 ¥50。 那我们接着说,请问是否需要卸甲?')
+check('D162 ②b 没答出来就不接(空答案不许硬凑一句)', resumeText('', '请问是否需要卸甲?') === '')
+/* 🔴 可约:**只许报 `getAvailability` 返回的时段**。这里用一个假的查询口喂各种返回,
+   验的是「它照着回的什么说」——编时段的话这几条会当场红。 */
+const availDeps = (res) => ({ getAvailability: () => res, storeId: 's', serviceId: 'v', date: '2026-09-09',
+  humanDate: (d) => d, todayISO: '2026-09-08' })
+check('D162 ③ 有位:报的是**它返回的那两个时段**',
+  availabilityAnswer({ ...availDeps({ closed: false, slots: [{ technician: {}, slots: ['10:00', '10:30', '11:00'] }] }) })
+    === '2026-09-09还有 10:00、10:30 有位。')
+check('D162 ③b 🔴 时段是**按技师分组**的,不是一维表 —— 切错了会切出乱码(现测栽过)',
+  !/ect\]/.test(availabilityAnswer({ ...availDeps({ closed: false, slots: [{ technician: {}, slots: ['10:00'] }] }) })))
+check('D162 ③c 没位 → 说没位 + **两个真替代**(替代也来自同一个真函数)',
+  (() => { let n = 0
+    const dep = { getAvailability: () => (n++ === 0 ? { closed: false, slots: [] } : { closed: false, slots: [{ slots: ['16:30'] }] }),
+      storeId: 's', serviceId: 'v', date: '2026-09-09', humanDate: (d) => d, todayISO: '2026-09-08' }
+    const t = availabilityAnswer(dep)
+    return t.includes('已经约满') && t.includes('最近有位的是') && t.includes('16:30') })())
+check('D162 ③d 店休 → 说店休(不许说成「约满」,一句一因)',
+  availabilityAnswer({ ...availDeps({ closed: true, slots: [] }) }).includes('门店休息'))
+check('D162 ④ 优惠:有券说券名,没券**说没有**(不许编一个)',
+  discountAnswer({ hasAny: true, items: [{ name: '新客券', off: '立减 ¥50' }] }).includes('新客券')
+  && discountAnswer({ hasAny: false, items: [] }).includes('没有'))
+check('D162 ⑤ 🔴 时长:**没点名项目就不答**(拿别的项目的时长顶上去 = 编;现测栽过)',
+  durationAnswer({ name: '', durationMin: 90 }) === '' && durationAnswer({ name: '精致单色', durationMin: 90 }).includes('90'))
+check('D162 ⑥ 合成时保留原 reply 的其它字段,只换文本那一格',
+  (() => { const r = withResume({ source: 'collect_template', data: { intent: 'x', answerZh: '请问是否需要卸甲?' } },
+    { kind: 'discount', answer: '现在有「新客券」立减 ¥50。' })
+    return r.data.intent === 'x' && r.source.includes('interrupt_discount') && r.data.answerZh.includes('那我们接着说') })())
+
+/* ═══ 通三 · 定金一句话说清(≤120 字)═══ */
+const depCfg = { enabled: true, mode: 'fallback', fallbackAmountCents: 5000, deductible: false,
+  cancelPolicy: { refundable: true, freeCancelHours: 24, lateForfeitPct: 50, noShowForfeitPct: 100 } }
+const depMoney = (c) => `¥${(c / 100).toFixed(0)}`
+check('通三 ① 🔴 对顾客那句定金 ≤120 字', depositBrief(depCfg, depMoney).length <= 120,
+  `${depositBrief(depCfg, depMoney).length} 字:${depositBrief(depCfg, depMoney)}`)
+check('通三 ②数字全来自配置(金额 / 小时 / 罚则),一个都不编',
+  (() => { const t = depositBrief(depCfg, depMoney); return t.includes('¥50') && t.includes('24 小时') && t.includes('扣一半') })())
+check('通三 ③ 没配退款规则就**整句不提退款**(不许编一个 24 小时)',
+  !/退/.test(depositBrief({ ...depCfg, cancelPolicy: {} }, depMoney)))
+check('通三 ④ 不收定金的店说自己的那句', depositBrief({ enabled: false }, depMoney).includes('不收定金'))
 
 /* 接线:那条路真的排在报价采集**之前** */
 const srv = readFileSync(join(ROOT, 'apps/api/local-server.mjs'), 'utf8')

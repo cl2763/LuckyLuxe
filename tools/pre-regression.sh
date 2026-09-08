@@ -76,6 +76,18 @@ KNIFE_LEFT=$(find . -name '*.pre-k' -not -path './.git/*' -not -path './node_mod
 if [ -z "$KNIFE_LEFT" ]; then say "J-34 造病备份收尾" "✅ 没有残留的 .pre-k"
 else say "J-34 造病备份收尾" "🔴 $(echo "$KNIFE_LEFT" | tr '\n' ' ')—— 某把刀没还原"; FAIL=1; fi
 
+# ②c D163 同族:回归脚本里 `export X=` 的 X 必须**登记进 `REGRESSION_ONLY_ENV`**
+#     (店主 05s 补三:「以后脚本里新增 export 必须先登记,预检加一条」)。
+#     不登记 = 还回去时不会被 `env -u` 掉 = 又一次漏进店主的活服务。
+#     白名单三个:DATA_DIR / TEST_DB_PATH 由重启命令自己显式写;`REGRESSION_ONLY_ENV` 是表本身。
+UNREG=$(grep -oE '^export [A-Z_][A-Z0-9_]*=' apps/api/run-all-tests.sh 2>/dev/null | sed 's/^export //;s/=$//' | sort -u \
+        | while read -r v; do
+            if [ "$v" = "DATA_DIR" ] || [ "$v" = "REGRESSION_ONLY_ENV" ]; then continue; fi
+            grep -q "REGRESSION_ONLY_ENV=.*$v" apps/api/run-all-tests.sh || echo "$v"
+          done)
+if [ -z "$UNREG" ]; then say "回归 export 已登记" "✅ 都在 REGRESSION_ONLY_ENV 表里"
+else say "回归 export 未登记" "🔴 $(echo "$UNREG" | tr '\n' ' ')—— 新增 export 必须先登记(D163 同族)"; FAIL=1; fi
+
 # ③ 语法:所有本仓 .mjs 先过一遍 node --check(比起服务快得多)
 BAD=$(for f in apps/api/*.mjs apps/web/*.js tools/*.mjs tools/ai-eval/*.mjs; do
         [ -f "$f" ] || continue
