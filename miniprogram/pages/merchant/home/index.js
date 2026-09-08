@@ -1,6 +1,7 @@
 const api = require('../../../utils/api')
 const { storeMoney } = require('../../../utils/storeclock')
 const { buildOwnerHome, clockGate, clockFailText, staffSmalls, STAFF_PERIODS } = require('../../../utils/dashboard-view')
+const { loadNumberFont } = require('../../../utils/numfont')   // D168 段 4:数字大字字体,拿不到就如实说
 
 Page({
   data: {
@@ -39,7 +40,14 @@ Page({
     dhState: 'loading',
     dhPeriod: 'today',
     dhClosed: false,
-    dh: null
+    dh: null,
+    /* 轮播:大数字现在放大的是哪一个指标(dots 与它一一对应) */
+    dhMetric: 'revenue'
+  },
+
+  onLoad() {
+    /* 数字大字的字体:能加载就加载,加载不成**把原因说出来**(不假装)。见 utils/numfont.js 抬头。 */
+    loadNumberFont().then((r) => { this._numFont = r })
   },
 
   onShow() {
@@ -57,16 +65,21 @@ Page({
     const period = this.data.dhPeriod
     this.setData({ dhState: this.data.dh ? this.data.dhState : 'loading' })
     try {
-      const [pulse, now, todo] = await Promise.all([
+      /* 🔴 双端同病(店主《双端同病检查律》):网页端那边查出 AI 今日一句从来没落过库、
+         页面读的是一个没人赋值的变量。小程序这边是**同一个病的另一种长法** ——
+         它读的是 `pulse.aiLine`,而 pulse 响应里**从来就没有这个字段**。
+         两端一起修:后端新增只读口 `/admin/dashboard/ai-line`,两端都读它。 */
+      const [pulse, now, todo, ai] = await Promise.all([
         api.adminGet(`/admin/dashboard/pulse?period=${period}`),
         api.adminGet('/admin/dashboard/now'),
         api.adminGet('/admin/dashboard/todo'),
+        api.adminGet('/admin/dashboard/ai-line').catch(() => null),
       ])
       const d = new Date()
       const hm = `${String(d.getHours()).padStart(2, '0')}:${String(d.getMinutes()).padStart(2, '0')}`
       /* 币种红线:钱怎么写全由 `dashboard-view` 按**本次下发的** currencyDisplay 决定,
          这一页一个格式化动作都不做(storeMoney 只作它拿不到下发时的兜底)。 */
-      const dh = buildOwnerHome({ pulse, now, todo, period, nowHM: hm, storeMoney })
+      const dh = buildOwnerHome({ pulse, now, todo, period, nowHM: hm, storeMoney, headKey: this.data.dhMetric })
       /* 折线在小程序里画成一排小竖条(没有 svg):把值归一到 0–100 的高度。
          全 0 的那一支上面已经把 spark 清空了,所以这里不会出现「一排贴地的条」。 */
       const max = Math.max(1, ...(dh.spark || []).map((x) => Math.abs(Number(x) || 0)))
@@ -80,10 +93,14 @@ Page({
         status: b.statusText || '待到店',
       }))
       dh.nextHint = dh.next3.length ? '此刻之后的前 3 条' : ''
-      dh.aiLine = (pulse && pulse.aiLine && pulse.aiLine.text) || ''
+      dh.aiLine = (ai && ai.line && ai.line.text) || ''
+      dh.aiAt = (ai && ai.line && ai.line.at) || ''
+      this._pulse = pulse; this._now = now; this._todo = todo
       this.setData({ dh, dhState: 'ready', dhClosed: Boolean(now && now.closed) })
+      this.scheduleRotate()
     } catch (e) {
       /* 取数失败:**整块换一句话,不显示旧数、不显示 0**(图 §六) */
+      this.clearRotate()
       this.setData({ dh: null, dhState: 'failed' })
     }
   },
@@ -144,6 +161,40 @@ Page({
     this.setData({ dhPeriod: p })
     this.loadPulse()
   },
+
+  /* 轮播换指标:**只重画手上的数,一个请求都不发**(与网页端同一条规矩)。
+     `buildOwnerHome` 是纯函数,换个 headKey 重跑一遍就行。 */
+  switchMetric(e) {
+    const k = e.currentTarget.dataset.k
+    if (!k || k === this.data.dhMetric) return
+    this.setData({ dhMetric: k })
+    this.repaintMetric()
+  },
+  repaintMetric() {
+    if (!this.data.dh) return
+    const dh = buildOwnerHome({ pulse: this._pulse, now: this._now, todo: this._todo,
+      period: this.data.dhPeriod, nowHM: this.data.dh.asOfHM || '', storeMoney, headKey: this.data.dhMetric })
+    /* 折线、下一位、AI 一句这几段不随轮播变,原样带过来(重算一遍等于再拼一次串) */
+    this.setData({ dh: { ...this.data.dh, ...dh, sparkBars: this.data.dh.sparkBars,
+      next3: this.data.dh.next3, nextHint: this.data.dh.nextHint,
+      aiLine: this.data.dh.aiLine, aiAt: this.data.dh.aiAt } })
+  },
+  /* 6 秒自己走一格。用 `setTimeout` 一次一排:页面隐藏/卸载时清掉,
+     不留一条永远在跑的线(小程序里挂着的 interval 是最常见的耗电来源)。 */
+  scheduleRotate() {
+    this.clearRotate()
+    if (this.data.dhState !== 'ready' || !this.data.isOwner) return
+    const KEYS = ['revenue', 'cash', 'cardUse', 'newCard', 'visits']
+    this._rotate = setTimeout(() => {
+      const i = KEYS.indexOf(this.data.dhMetric)
+      this.setData({ dhMetric: KEYS[(i + 1) % KEYS.length] })
+      this.repaintMetric()
+      this.scheduleRotate()
+    }, 6000)
+  },
+  clearRotate() { if (this._rotate) { clearTimeout(this._rotate); this._rotate = null } },
+  onHide() { this.clearRotate() },
+  onUnload() { this.clearRotate() },
 
   goTodo(e) {
     const k = e.currentTarget.dataset.k

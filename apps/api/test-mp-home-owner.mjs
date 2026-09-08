@@ -199,5 +199,49 @@ check('⑥b 白名单式:截图目录里不许有约定之外的 .png(改名不�
   readdirSync(SHOT_DIR).filter((f) => f.endsWith('.png')).join(' · '))
 
 console.log(`\n[段9 小程序老板视角] 图 §一 逐块 · 三态互斥 · 出句口径 · 与网页同源`)
+/* ══ D168 段 4 · 小程序皮按图搬(店主 05t)══
+   守「皮在不在」+「说没说实话」——**字体那件做不到的事,判据要求它被说出来**,
+   而不是让它悄悄退成系统字体(店主原话:「不许假装是 Noto」)。 */
+const tokensWxss = readFileSync(join(ROOT, 'miniprogram/styles/tokens.wxss'), 'utf8')
+const appWxss = readFileSync(join(ROOT, 'miniprogram/app.wxss'), 'utf8')
+const homeWxss = readFileSync(join(ROOT, 'miniprogram/pages/merchant/home/index.wxss'), 'utf8')
+const numfont = readFileSync(join(ROOT, 'miniprogram/utils/numfont.js'), 'utf8')
+check('⑮ 令牌单独成件,且 app.wxss 第一件就 @import 它(不引 = 所有 var(--x) 落空)',
+  /@import\s+"styles\/tokens\.wxss"/.test(appWxss) && tokensWxss.includes('page{--paper'))
+check('⑮b 深色那一段在(小程序只有「跟系统」这一种深色)',
+  /@media \(prefers-color-scheme: dark\)\{page\{/.test(tokensWxss))
+check('⑮c 🔴 首页大屏那一段不许再写死颜色 —— 一律走令牌',
+  !/\.dh-[a-z-]*\{[^}]*#[0-9a-fA-F]{3,6}/.test(homeWxss),
+  (homeWxss.match(/\.dh-[a-z-]*\{[^}]*#[0-9a-fA-F]{3,6}[^}]*\}/g) || []).slice(0, 2).join(' | '))
+check('⑮d 英雄块是深色:背景 = --hero,大数字 = --heroink,金色在 dots 与选中的维度上',
+  /\.dh-hero\{background:var\(--hero\)/.test(homeWxss)
+  && /\.dh-big\{[^}]*color:var\(--heroink\)/.test(homeWxss)
+  && /\.dh-dot-i\.on\{background:var\(--herogold\)/.test(homeWxss))
+check('⑮e dots 恒 5 个且选中那个会移动(轮播名单与网页端同一份)',
+  view.buildOwnerHome({ pulse: { currency: 'CNY', metrics: [] }, now: {}, todo: {}, period: 'today',
+    nowHM: '10:00', storeMoney: () => '—' }).dots.length === 5
+  && /\.dh-dot-i\.on\{[^}]*width:28rpx/.test(homeWxss)
+  && webHome.includes("CAROUSEL = ['revenue', 'cash', 'cardUse', 'newCard', 'visits']"))
+check('⑮f 轮播换指标**不发请求**:只把 headKey 换一个再跑一遍纯函数',
+  /switchMetric\(e\)/.test(pageJs) && /repaintMetric\(\)/.test(pageJs)
+  && !/repaintMetric\(\)\s*\{[\s\S]{0,400}?adminGet/.test(pageJs))
+check('⑮g 轮播计时器**会被清掉**(onHide / onUnload),不留一条永远在跑的线',
+  /onHide\(\) \{ this\.clearRotate\(\) \}/.test(pageJs) && /onUnload\(\) \{ this\.clearRotate\(\) \}/.test(pageJs))
+check('⑯ 🔴 字体做不到那件事**被说出来**:numfont 明写「小程序不能引 Google Fonts」与「系统字体」',
+  /不能引 Google Fonts/.test(numfont) && /系统字体/.test(numfont) && /上线批/.test(numfont))
+check('⑯b 🔴 地址为空时不许假装加载成功(静默失败器族):回的是 loaded:false + why',
+  /if \(!FRAUNCES_URL\)/.test(numfont) && /loaded: false, why/.test(numfont)
+  && /fail: \(e\) =>/.test(numfont))
+check('⑯c 首页真的调了它(留了口却没人调 = 等于没做)',
+  /loadNumberFont\(\)/.test(pageJs) && /require\('\.\.\/\.\.\/\.\.\/utils\/numfont'\)/.test(pageJs))
+/* 🔴 D173 双端同病:网页端查出「AI 今日一句从来没落过库」,小程序这边是同一个病的另一种长法
+   —— 它读的是 pulse.aiLine,而 pulse 响应里从来没有这个字段。两端一起收在 /admin/dashboard/ai-line。 */
+check('⑰ AI 今日一句两端读同一个口(小程序不再读 pulse 里那个根本不存在的字段)',
+  pageJs.includes("adminGet('/admin/dashboard/ai-line')")
+  /* 判据要看**代码**,不看注释 —— 注释里写着病因(「它读的是 pulse.aiLine」),
+     那句话是要留给下一个人看的,不该把判据顶红(否则以后没人敢在注释里写病因)。 */
+  && !/pulse\.aiLine/.test(pageJs.replace(/\/\*[\s\S]*?\*\//g, ''))
+  && webHome.includes("/admin/dashboard/ai-line"))
+
 if (fails.length) { console.error(`\n❌ test-mp-home-owner ${fails.length}/${n} 项未过`); process.exit(1) }
 console.log(`\n✅ test-mp-home-owner 通过 ${n} 项`)

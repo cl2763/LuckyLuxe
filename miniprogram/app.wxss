@@ -1,3 +1,7 @@
+/* 🔴 D168 段 4:设计令牌**先引进来**(值与网页 `design-tokens.css` 逐条相等,同一把刀比三份)。
+   `@import` 必须排在最前:后面所有页面的 `var(--x)` 都靠它。 */
+@import "styles/tokens.wxss";
+
 page {
   min-height: 100%;
   background: #f7f3ef;

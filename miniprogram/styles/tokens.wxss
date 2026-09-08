@@ -1,0 +1,24 @@
+/* 设计令牌 · 小程序端 —— 值与 `apps/web/design-tokens.css` **逐条相等**(店主 05t 段 4 第 1 条)
+ *
+ * 同一把刀 `tools/design-token-diff.mjs` 同时比三份:合同图 / 网页 / 小程序,**三方一致**。
+ * 值一个字都没改;**只有选择器换了**,因为 WXSS 里没有 `:root`:
+ *   `:root{...}`                                   → `page{...}`
+ *   `@media (prefers-color-scheme: dark){:root:not([data-theme="light"]){...}}` → 同一段,选择器换 `page`
+ *
+ * 🔴 **第三段(`:root[data-theme="dark"]`)小程序没有对应物,这是如实说明不是漏做**:
+ *    微信小程序的深色由**系统**给(`app.json` 的 `darkmode` + `@media (prefers-color-scheme: dark)`),
+ *    没有「站内再选一次主题」这个入口 —— 页面根节点上挂不了 `data-theme`。
+ *    所以小程序只有「跟系统」这一种深色。要做站内主题开关是**新功能**,不在本批。
+ *    刀里对这一段有专门的说明分支,不会因为「找不到」而误判成绿(静默失败器族)。
+ */
+page{--paper:#faf8f3;--ink:#23241f;--sub:#6d6f66;--line:#e3e0d6;--card:#fff;--wall:#f1eee6;
+--acc:#0e6e62;--accd:#0a5a50;--brand:#b09468;--brandd:#8a6f45;
+--hero:#2a2521;--hero2:#3a332c;--heroink:#f5efe3;--herosub:#bfb4a2;--herogold:#d9b97e;--herogrid:rgba(245,239,227,.12);--herolive:#6fd0a0;
+--good:#2e8b57;--goodbg:#e6f3ea;--bad:#b3413a;--badbg:#f7e7e5;--flat:#7b7f76;--flatbg:#ededea;
+--tagm:#8a5a00;--tagmbg:#faf3e3;--tagw:#274f8f;--tagwbg:#eef2fa;
+--done:#cdbfa3;--doing:#d9b97e;--next:#7b7f76}
+@media (prefers-color-scheme: dark){page{--paper:#191b19;--ink:#e8e7e0;--sub:#9aa096;--line:#33362f;--card:#20241f;--wall:#242822;
+--acc:#4cc0b0;--accd:#63d2c3;--brand:#d3b483;--brandd:#e2c79c;
+--hero:#15130f;--hero2:#221d18;--heroink:#f5efe3;--herosub:#a79c8a;--herogold:#e2c48d;--herogrid:rgba(245,239,227,.10);--herolive:#6fd0a0;
+--good:#6fd0a0;--goodbg:#1c2f25;--bad:#e5867e;--badbg:#33201e;--flat:#9aa096;--flatbg:#2a2d28;
+--tagm:#e0b45f;--tagmbg:#2b2618;--tagw:#8fb0e8;--tagwbg:#1d2434;--done:#6a5f4c;--doing:#e2c48d;--next:#6c7066}}

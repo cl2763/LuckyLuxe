@@ -7805,17 +7805,20 @@ section.card > .section-row:first-child { margin-top: 0; }
   .dh-tiles { grid-template-columns: repeat(2, minmax(0, 1fr)); }
 }
 
-/* 段 11 · 前台全屏大屏(图 v3.2 §五)。这块屏挂在前台不动,顾客可能看到。 */
-.dh-fs { position: fixed; inset: 0; z-index: 9999; background: #14110f; color: #f6f1ea; display: flex; align-items: center; justify-content: center; cursor: pointer; }
+/* 段 11 · 前台全屏大屏(图 v3.2 §五)。这块屏挂在前台不动,顾客可能看到。
+   🔴 D168 段 4 第 4 条:全屏态**同步换皮** —— 底色走 `--hero` 系(图 §五 的 `.tv` 就是
+   「深底 + 右上角一团金光」),大数字走 `--herogold`。原来这里写死 `#14110f`/`#f6f1ea`,
+   与令牌各说各话:深色主题一开,首页跟着变、这块屏不变。 */
+.dh-fs { position: fixed; inset: 0; z-index: 9999; background-color: var(--hero); background-image: radial-gradient(70% 100% at 80% 0%, rgba(217, 185, 126, .25), transparent 60%), linear-gradient(160deg, var(--hero), var(--hero2)); color: var(--heroink); display: flex; align-items: center; justify-content: center; cursor: pointer; }
 .dh-fs .fs-wrap { text-align: center; padding: 40px; transition: transform 1.6s ease-in-out; }
 .dh-fs .fs-wrap.fs-saver { transform: scale(1.1); }
 .dh-fs .fs-top { display: flex; justify-content: space-between; font-size: 18px; opacity: .7; margin-bottom: 28px; gap: 40px; }
 .dh-fs .fs-label { font-size: 22px; opacity: .75; margin: 0 0 10px; }
-.dh-fs .fs-big { font-size: clamp(64px, 14vw, 180px); margin: 0; font-weight: 750; line-height: 1; }
+.dh-fs .fs-big { font-family: 'Fraunces', Georgia, 'Noto Serif SC', serif; font-variant-numeric: tabular-nums; font-size: clamp(64px, 14vw, 180px); margin: 0; font-weight: 700; line-height: 1; color: var(--herogold); }
 .dh-fs .fs-now { display: flex; gap: 32px; justify-content: center; font-size: 26px; margin-top: 28px; opacity: .9; }
 .dh-fs .fs-next { margin-top: 18px; font-size: 22px; opacity: .75; }
 .dh-fs .fs-dots { display: flex; gap: 8px; justify-content: center; margin-top: 34px; }
-.dh-fs .fs-dots i { width: 8px; height: 8px; border-radius: 50%; background: #f6f1ea; opacity: .25; }
+.dh-fs .fs-dots i { width: 8px; height: 8px; border-radius: 50%; background: var(--herogold); opacity: .25; }
 .dh-fs .fs-dots i.on { opacity: .9; }
 .dh-fs .fs-exit { margin-top: 26px; font-size: 15px; opacity: .45; }
 @media (prefers-reduced-motion: reduce) { .dh-fs .fs-wrap { transition: none; } .dh-fs .fs-wrap.fs-saver { transform: none; } }

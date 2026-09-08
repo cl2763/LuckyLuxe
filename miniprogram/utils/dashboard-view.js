@@ -24,6 +24,13 @@ const PERIODS = [
 
 /* 五个小数(图 §一:大数底下一行五个)。顺序就是图上的顺序,不许改。 */
 const SMALL_KEYS = ['cash', 'cardUse', 'newCard', 'visits', 'bookings']
+/* 🔴 D168 段 4:轮播位 —— 图 §一 底下画的是 **5 个 dots**,而接口给的是六个指标。
+   取「营业收入 + 现金业绩 + 总卡耗 + 新增持卡 + 到店人次」五个轮播,
+   **今日预约不进轮播**:它那一格带「在做 N · 待到店 N」的实时副行,
+   图 §一 第 2 条说那是「主页上唯一的实时一眼」,轮走了就没了。
+   与网页端 `dashboard-home.js` 的 CAROUSEL **是同一份名单**(两端同一个轮播顺序)。 */
+const CAROUSEL = ['revenue', 'cash', 'cardUse', 'newCard', 'visits']
+const MONEY_KEYS = ['revenue', 'cash', 'cardUse']
 const LABELS = {
   revenue: '营业收入 · 服务 + 耗卡 + 产品',
   cash: '现金业绩',
@@ -100,7 +107,7 @@ function makeMoneyFor(currencyDisplay, code) {
   }
 }
 
-function buildOwnerHome({ pulse, now, todo, period, nowHM, storeMoney, moneyFor }) {
+function buildOwnerHome({ pulse, now, todo, period, nowHM, storeMoney, moneyFor, headKey = 'revenue' }) {
   /* 钱的出口:按**这次下发的币种**绑一个;调用方给了 `moneyFor` 就用它(判据造景用)。
      两个都没有 → 一个钱数都不出(fail-closed)。 */
   const cur = pulse && pulse.currency
@@ -109,7 +116,10 @@ function buildOwnerHome({ pulse, now, todo, period, nowHM, storeMoney, moneyFor 
   const metrics = (pulse && pulse.metrics) || []
   const byKey = {}
   for (const m of metrics) byKey[m.key] = m
-  const head = byKey.revenue || null
+  /* 轮播:大数字放大的是哪一个由 `headKey` 定;名单外的一律回落到营业收入
+     (回落到**同族的第一个**,不是回落到别的语义 —— 零回落律管的是「拿别的字段顶上」) */
+  const hk = CAROUSEL.includes(headKey) ? headKey : 'revenue'
+  const head = byKey[hk] || null
 
   const smalls = SMALL_KEYS.map((key) => {
     const m = byKey[key]
@@ -132,9 +142,15 @@ function buildOwnerHome({ pulse, now, todo, period, nowHM, storeMoney, moneyFor 
 
   return {
     periods: PERIODS.map((p) => ({ ...p, on: p.key === period })),
-    headLabel: LABELS.revenue,
-    headValue: cur ? moneyText(head, fmt) : '—',
+    headKey: hk,
+    headLabel: LABELS[hk],
+    /* 大数字也分钱与不是钱:新增持卡/到店人次是人数,不许套币符 */
+    headValue: MONEY_KEYS.includes(hk)
+      ? (cur ? moneyText(head, fmt) : '—')
+      : countText(head, hk === 'newCard' || hk === 'visits' ? ' 人' : ''),
     headDelta: deltaOf(head, period),
+    /* dots:5 个,选中的那个会移动(图 §一) */
+    dots: CAROUSEL.map((k) => ({ key: k, on: k === hk })),
     /* 全 0 不画折线(图 §六:无数据时不画,不是画一条贴地的线) */
     spark: head && (head.spark || []).some((x) => Number(x) !== 0) ? head.spark : [],
     smalls,
