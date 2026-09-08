@@ -93,7 +93,7 @@
     "conversation-tenant": 15,
     "mini-ai-same-outlet": 42,
     "repeat-guard": 14,
-    "merge-window": 25,
+    "merge-window": 31,
     "three-stores": 26,
     "tier-label": 8,
     "native-dialog": 7,
@@ -111,7 +111,7 @@
   "上次更新": "2026-09-02",
   "巨型文件历史最低": {
     "说明": "棘轮双基线(店主 09-08 裁,05r 补三):预检取 min(上一提交行数, 这里记的历史最低)。只许写小不许写大 —— 写大预检自己红。治的是「红着提交一次,下一次基线跟着抬」那个口子。",
-    "apps/api/local-server.mjs": 17712,
+    "apps/api/local-server.mjs": 17711,
     "apps/web/admin.js": 7928
   }
 }

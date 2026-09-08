@@ -64,6 +64,9 @@ const NO_MARK = {
     + '只改门面事实(stores.currency/address + 知识库 storeAddress/brandName/assistantName),'
     + '一行 bookings/settlements 都不写 —— 盖章没有落点。'
     + '什么时候要动:若它哪天开始铺预约或结算,立刻改成走 HTTP 并盖 x-demo-seed。',
+  'tools/seed-newcomer-coupon.mjs': '段 7b 建新客券(D152 与六通 v4 通六要用):**直连库**不走 HTTP,'
+    + '只 INSERT 一行 `coupons`,一行 bookings/settlements 都不写 —— 盖章没有落点。'
+    + '什么时候要动:若它哪天开始铺预约或结算,立刻改成走 HTTP 并盖 x-demo-seed。',
 }
 const missing = tracked.filter((f) => !NO_MARK[f] && !readFileSync(join(ROOT, f), 'utf8').includes("'x-demo-seed'"))
 check(`④ 白名单式:造景全族 ${tracked.length} 个脚本,走 HTTP 的必须发 \`x-demo-seed\`;`

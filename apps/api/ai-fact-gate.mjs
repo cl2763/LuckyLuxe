@@ -97,6 +97,15 @@ export function verifyReplyFacts(text = '', slots = {}) {
     if (!Number.isFinite(n)) continue
     if (!slots.pct?.has(n)) offenders.push({ kind: '比例', value: n, snippet: m[0] })
   }
+  /* 🔴 D152 的反面那一半(店主 05q §二):**没折扣就不许提折扣**。
+     这一条以前只写在喂给模型的那句事实里 —— 那是「请你别说」,不是「说了会被拦下来」。
+     模型照样说得出「券后 ¥348」,而顾客真的会照着这个价来付钱(零编造红线)。
+     所以搬到闸上:店里没有任何可用券时,回复里出现这几个字就是编事实,按同一档拦。
+     只在 `noDiscount === true` 时生效 —— 有券的店照常说券,一个字都不拦。 */
+  if (slots.noDiscount === true) {
+    const m = s.match(/券后|折后|优惠券|打折|折扣|优惠价/)
+    if (m) offenders.push({ kind: '编折扣', value: m[0], snippet: '本店当前没有任何可用券' })
+  }
   /* 可否抵扣:说反了也是编事实 —— D136 里两店配置正相反,这一项最容易串 */
   const saysNo = SAYS_NOT_DEDUCTIBLE.test(s)
   const saysYes = !saysNo && SAYS_DEDUCTIBLE.test(s)
@@ -130,7 +139,7 @@ export function passFactGate(reply, slots) {
    调用方只剩一行 `factGate.check(...)`,事实槽怎么取、拦下出什么句子都在这个文件里。
    `tenantKbFacts` / `getDepositConfig` 仍在 `local-server.mjs`,按公约②下批一起搬。 */
 export function createFactGate(deps) {
-  const { tenantKbFacts, getDepositConfig, currentTenantId } = deps
+  const { tenantKbFacts, getDepositConfig, currentTenantId, hasAnyDiscount } = deps
   for (const [name, fn] of Object.entries(deps)) {
     if (typeof fn !== 'function') throw new Error(`createFactGate 缺依赖或类型不对:${name}`)
   }
@@ -140,7 +149,9 @@ export function createFactGate(deps) {
     check(reply, ruleSource) {
       if (ruleSource) return reply
       const tid = currentTenantId()
-      const r = passFactGate(reply, collectFactSlots(tenantKbFacts(tid), getDepositConfig(tid)))
+      const slots = collectFactSlots(tenantKbFacts(tid), getDepositConfig(tid))
+      slots.noDiscount = hasAnyDiscount(tid) === false   // D152:这家店有没有真折扣,现取
+      const r = passFactGate(reply, slots)
       if (r.blocked) console.warn(`[事实闸] 拦下一句:${r.blocked.map((o) => `${o.kind}=${o.value}`).join(' · ')}`)
       return r.reply
     },

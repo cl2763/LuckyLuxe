@@ -56,3 +56,10 @@ export function discountFacts(db, tenantId, moneyText = (c) => String(c)) {
       + '折后价要按上面的数额算准,算不出来就只说原价并说「具体优惠到店确认」——**不许估、不许编**。',
   }
 }
+
+/** 这家店有没有**真能用**的折扣。事实闸拿它决定「说了『券后』算不算编事实」(D152)。
+    与 `discountFacts` 同一把尺 —— 不许在别处另写一遍「什么算可用折扣」。 */
+export function hasAnyDiscountOf(db, tenantId, moneyText) {
+  return discountFacts(db, tenantId, moneyText).hasAny
+}
+

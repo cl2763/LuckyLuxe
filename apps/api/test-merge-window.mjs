@@ -172,6 +172,37 @@ check('①g 小程序那一行说的是「正在看你的消息…」(窗的意�
   /正在看你的消息/.test(readFileSync(join(ROOT, 'miniprogram/pages/ai-chat/index.wxml'), 'utf8'))
   && !/正在输入/.test(readFileSync(join(ROOT, 'miniprogram/pages/ai-chat/index.wxml'), 'utf8').replace(/<!--[\s\S]*?-->/g, '')))
 
+/* ═══ ⑥ D152 端到端那一半(段 7b):**没折扣就不许提折扣**,而且是闸上拦不是嘴上说 ═══
+   上一批只做了「喂给模型的那句事实」—— 那是「请你别说」,不是「说了会被拦下来」。
+   模型照样说得出「券后 ¥348」,顾客真会照这个价来付钱(零编造红线)。
+   所以这一批把它搬到**事实闸**上:店里没有任何可用券时,回复里出现那几个字就按编事实拦。 */
+const { verifyReplyFacts, passFactGate } = await import('./ai-fact-gate.mjs')
+const noCoupon = { money: new Set(), pct: new Set(), noDiscount: true }
+const hasCoupon = { money: new Set(), pct: new Set(), noDiscount: false }
+check('⑥ 🔴 没券的店说「券后」→ 判为编事实(以前只在提示词里劝,劝不住)',
+  verifyReplyFacts('原价 ¥398,券后 ¥348 哦', noCoupon).ok === false)
+check('⑥b 🔴 反向守:**有券**的店说同一句话**不许**被拦(拦了就是把能说的也堵了)',
+  verifyReplyFacts('原价 ¥398,券后 ¥348 哦', hasCoupon).offenders.filter((o) => o.kind === '编折扣').length === 0)
+check('⑥c 没券的店只说原价 → 放行(证明拦的是「提了折扣」,不是「提了钱」)',
+  verifyReplyFacts('这一款原价就是这个数,到店再看具体做什么', noCoupon).ok === true)
+check('⑥d 拦下之后换的是那句「我帮您问一下」+ 转人工(与事实闸同一档,不另造一句)',
+  (() => {
+    const r = passFactGate({ data: { answerZh: '券后 ¥348', answerEn: '' } }, noCoupon)
+    return Boolean(r.blocked) && r.reply.data.handoffRequired === true && r.reply.data.gate === 'fact_gate'
+  })())
+check('⑥e 闸真的接上了这条(`hasAnyDiscount` 现取,不是写死 false)',
+  /hasAnyDiscount: \(tid\) => hasAnyDiscountOf\(db, tid/.test(readFileSync(join(ROOT, 'apps/api/local-server.mjs'), 'utf8'))
+  && /slots\.noDiscount = hasAnyDiscount\(tid\) === false/.test(readFileSync(join(ROOT, 'apps/api/ai-fact-gate.mjs'), 'utf8')))
+/* ⑥f 数字对账:注入的那句事实里的数额,**逐字**来自库里那一行(现取,判据里零字面量) */
+check('⑥f 数字对账:事实句里的券名与数额逐字来自库里那一行(判据自己不写任何数)',
+  (() => {
+    const row = { name: '造景券', discount_type: 'amount', amount_cents: 12345, percent_off: 0,
+      min_spend_cents: 0, total_qty: 0, issued_qty: 0 }
+    const fake = { prepare: () => ({ all: () => [row] }) }
+    const f = discountFacts(fake, 't', (c) => `¥${(c / 100).toFixed(2)}`)
+    return f.hasAny && f.note.includes(row.name) && f.note.includes('¥123.45')
+  })())
+
 /* ═══ ⑤ 封顶(店主 05r 补五 §三)——**再起一台**,窗 1 秒 / 封顶 3 秒 ═══
    为什么要单独一台:封顶是「窗一直被刷新时的上限」,得让窗短、封顶更短,才跑得完。
    造病同法:同一台参数、封顶置 0(= 不封顶),同样连发 → 只出一条 → 红。 */

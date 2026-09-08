@@ -3,7 +3,7 @@ import { createServer } from 'node:http'
 import { AsyncLocalStorage } from 'node:async_hooks'
 import { DatabaseSync } from 'node:sqlite'
 import { customerChatIdentity } from './customer-chat.mjs'
-import { discountFacts } from './discount-facts.mjs'
+import { discountFacts, hasAnyDiscountOf } from './discount-facts.mjs'
 import { enrichPrompt } from './prompt-assembly.mjs'
 import { guardedHandle } from './repeat-guard.mjs'
 import { classifyTurn } from './turn-classify.mjs'   // D150 壳:同主题第几次,用的是同一把分类尺
@@ -3369,7 +3369,7 @@ const bookingIntake = createBookingIntake({
   existingDraftFor: (cid) =>
     db.prepare('SELECT id FROM booking_drafts WHERE conversation_id = ? ORDER BY created_at ASC LIMIT 1').get(cid)?.id || null,
 })
-const factGate = createFactGate({ tenantKbFacts, getDepositConfig, currentTenantId })
+const factGate = createFactGate({ tenantKbFacts, getDepositConfig, currentTenantId, hasAnyDiscount: (tid) => hasAnyDiscountOf(db, tid, formatMoneyCents) })   // D152:没折扣的店说「券后」= 编事实
 
 const aiGate = createAiGate({
   compactIntentText, flattenPersistedQuoteState,
