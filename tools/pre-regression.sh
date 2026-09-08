@@ -124,6 +124,16 @@ else say "交付完整性" "🔴 没进 git:$MISS"; FAIL=1; fi
 if GHOST=$(node tools/eval-citation-check.mjs 2>&1); then say "回执引用的评测明细" "✅ ${GHOST#*✅ }"
 else say "回执引用的评测明细" "🔴"; echo "$GHOST" | sed 's/^/    /'; FAIL=1; fi
 
+# ⑪ D172(店主 05u 补一 §二 + 夜班令6 段 3):**深色态一次走完**,所以 `styles.css` 里的写死色
+#    只许降不许升。案由:店主在系统深色下看到「深底 + 白侧栏 + 浅色台面卡」——
+#    根因就是表面底色写死成 `#fff`/`#fffaf6`,令牌翻了它们不翻。
+#    本批把 background 位上的写死色换成令牌(497 → 382);这条棘轮盯着它别再涨回去。
+#    ⚠️ 数的是**全部** `#RRGGBB`,包含 color 位与品类色 —— 那些不是都该改,
+#      所以这是**棘轮**不是硬零:降了就把数字调小,永远不许升。
+HARDCOLOR=$(grep -oE "#[0-9a-fA-F]{3,8}\b" apps/web/styles.css | wc -l | tr -d ' ')
+if [ "$HARDCOLOR" -le 382 ]; then say "styles.css 写死色棘轮" "✅ $HARDCOLOR ≤ 382(只许降)"
+else say "styles.css 写死色棘轮" "🔴 $HARDCOLOR > 382 —— 新增了写死色,深色态会在那一处漏出来"; FAIL=1; fi
+
 # ⑩ 🔴 内联脚本语法(05t 段 6 现场自伤,当场立的护栏):
 #    `platform.html` / `admin.html` 里的 `<script>` 整段是**没人检查语法**的 ——
 #    我在一个模板字符串里的 HTML 注释里写了一对反引号,反引号把模板字符串提前收了口,

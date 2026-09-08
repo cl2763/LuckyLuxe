@@ -1,4 +1,4 @@
-<view class="page">
+<view class="page {{themeClass}}">
   <view class="hero">
     <view class="av">{{shopName ? shopName[0] : '店'}}</view>
     <view class="info">
@@ -27,6 +27,10 @@
       <text class="t">财务密码</text>
       <text class="tag {{financeLockEnabled ? 'on' : ''}}">{{financeLockEnabled ? (financeOn ? '已启用 · 本次已解锁' : '已启用') : '未启用(默认)'}}</text>
       <text class="arr">›</text>
+    </view>
+    <!-- D183(店主 2026-09-09):明暗双模式三档。深色只换配色,不改任何功能与数字。 -->
+    <view class="row" bindtap="pickTheme" data-t-theme>
+      <text class="t">外观</text><text class="v">{{themeLabel}}</text><text class="arr">›</text>
     </view>
     <view class="row" bindtap="lang">
       <text class="t">语言 / Language</text><text class="v">简体中文</text><text class="arr">›</text>

@@ -209,6 +209,27 @@ check('⑲ 员工首页待办里 0 个「打卡」节点(它只在那道门里)'
   wxmlCode.split('\n').filter((ln) => /打卡/.test(ln) && !/clock-/.test(ln)).length === 0,
   wxmlCode.split('\n').filter((ln) => /打卡/.test(ln) && !/clock-/.test(ln)).map((x) => x.trim().slice(0, 60)).join(' | '))
 
+/* ══ D183 · 小程序也有明暗双模式(夜班令6 段 3;双端同批律)══ */
+const themeUtil = readFileSync(join(ROOT, 'miniprogram/utils/theme.js'), 'utf8')
+const meJs = readFileSync(join(ROOT, 'miniprogram/pages/merchant/me/index.js'), 'utf8')
+const meWxml = readFileSync(join(ROOT, 'miniprogram/pages/merchant/me/index.wxml'), 'utf8')
+const appJson = JSON.parse(readFileSync(join(ROOT, 'miniprogram/app.json'), 'utf8'))
+check('⑳ 三档与网页端同一套语义(system 默认 / light / dark)',
+  /MODES = \['system', 'light', 'dark'\]/.test(themeUtil))
+check('⑳b 🔴 只有 utils/theme.js 读写这个 storage 键(一处真相)',
+  /THEME_KEY = 'll-theme'/.test(themeUtil)
+  && !/ll-theme/.test(meJs) && !/ll-theme/.test(readFileSync(join(ROOT, 'miniprogram/pages/merchant/home/index.js'), 'utf8')))
+check('⑳c 跟随系统那一档**不加 class**(交给 @media;app.json 得开 darkmode 它才生效)',
+  /m === 'light' \? 'theme-light' : \(m === 'dark' \? 'theme-dark' : ''\)/.test(themeUtil)
+  && appJson.darkmode === true)
+const tokensWxssEarly = readFileSync(join(ROOT, 'miniprogram/styles/tokens.wxss'), 'utf8')
+check('⑳d 令牌里有站内选的那两段(.theme-light / .theme-dark)',
+  /\.theme-light\{--paper/.test(tokensWxssEarly) && /\.theme-dark\{--paper/.test(tokensWxssEarly))
+check('⑳e 首页与「我的」都把 class 挂在最外层 view 上(挂不上等于设置了没反应)',
+  /<view class="page \{\{themeClass\}\}">/.test(wxml) && /<view class="page \{\{themeClass\}\}">/.test(meWxml))
+check('⑳f 「我的」里那一行能点开三档,且 wx.showActionSheet 接了 fail(《波及面回归律》④)',
+  /pickTheme\(\)/.test(meJs) && /wx\.showActionSheet/.test(meJs) && /fail: \(\) => \{\}/.test(meJs))
+
 /* ══ 05t 段 6 · 段 9 补件之二:七柱全 0 不许「看起来有数」══
    店主 05s 现看:七根柱全 0 时首柱仍是实心高亮。两层一起守:
    ①全 0 → `spark` 整个清空(上游,图 §六「全 0 不画」);②**单根为 0 → 高度就是 0**

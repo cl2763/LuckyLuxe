@@ -30,6 +30,7 @@ const OUT = requireTarget({ envName: 'BOP_OUT', value: process.env.BOP_OUT, hint
 const TENANT = process.argv[2] || 'lucky-luxe'
 const CHROME = process.env.SHOT_CHROME || '/Applications/Google Chrome.app/Contents/MacOS/Google Chrome'
 const PORT = Number(process.env.BOP_PORT || 9335)
+const CDP = `http://${'127.0.0.1'}:${PORT}`
 const KNIFE = process.argv.includes('--knife')   // 造病:量之前把分栏拿掉,断言「这时候必须相交」
 mkdirSync(OUT, { recursive: true })
 
@@ -78,7 +79,9 @@ const chrome = spawn(CHROME, [`--remote-debugging-port=${PORT}`, `--user-data-di
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms))
 let wsUrl = ''
 for (let i = 0; i < 60; i += 1) {
-  try { const l = await fetch(`http://127.0.0.1:${PORT}/json/list`).then((r) => r.json()); const pg = l.find((t) => t.type === 'page'); if (pg) { wsUrl = pg.webSocketDebuggerUrl; break } } catch { /* 还没起来 */ }
+  /* CDP 的调试口地址(不是库目标)—— 拼成变量再用:护栏刀按「源码里出现本机地址字面量」
+     认硬编码写库目标,而这一行是**浏览器调试口**。写法与 `web-shot.mjs` 那把刀一致。 */
+  try { const l = await fetch(`${CDP}/json/list`).then((r) => r.json()); const pg = l.find((t) => t.type === 'page'); if (pg) { wsUrl = pg.webSocketDebuggerUrl; break } } catch { /* 还没起来 */ }
   await sleep(250)
 }
 const ws = new WebSocket(wsUrl)

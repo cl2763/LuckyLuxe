@@ -33,11 +33,12 @@ const MINI = join(ROOT, 'miniprogram/styles/tokens.wxss')
 const BLOCKS = [
   { key: 'light', head: ':root{', mini: 'page{' },
   { key: 'system-dark', head: ':root:not([data-theme="light"]){', mini: '@media (prefers-color-scheme: dark){page{' },
-  /* 🔴 第三段小程序没有对应物,**如实说明,不当成绿也不当成红**:
-     微信小程序的深色只有「跟系统」一种(`app.json` 的 darkmode + prefers-color-scheme),
-     页面根节点上挂不了 `data-theme`,所以「站内再选一次主题」这个入口本身不存在。
-     写成 `mini: null` 而不是悄悄跳过 —— 缺件不许长得像通过。 */
-  { key: 'theme-dark', head: ':root[data-theme="dark"]{', mini: null },
+  /* 🔴 D183(夜班令6 段 3)之后,小程序**也有**站内选的那两档了。
+     WXSS 没有 `:root`、根节点挂不了属性,所以它落在**页面最外层 view 的 class** 上
+     (`.theme-light` / `.theme-dark`,见 `utils/theme.js` 抬头)。
+     选择器不同、**值必须逐字相同** —— 同一个语义只许有一组值,这条正是这把刀要守的。 */
+  { key: 'theme-dark', head: ':root[data-theme="dark"]{', mini: '.theme-dark{' },
+  { key: 'theme-light(站内选浅色)', head: ':root{', mini: '.theme-light{', webSkip: true },
 ]
 
 /** 从一段 CSS 文本里抽出某个选择器块的令牌表。
@@ -79,6 +80,7 @@ function compare(label, path, { required = true } = {}) {
   const css = readFileSync(path, 'utf8')
   const isMini = path.endsWith('.wxss')
   for (const b of BLOCKS) {
+    if (!isMini && b.webSkip) continue      // 「站内选浅色」是小程序专有的一段(网页那边就是 :root 本身)
     const head = isMini ? b.mini : b.head
     if (isMini && head === null) {
       console.log(`  ⬜ ${b.key}:小程序没有这一段(只有跟系统的深色,没有站内主题开关)—— 见 tokens.wxss 抬头`)

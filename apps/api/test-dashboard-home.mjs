@@ -224,6 +224,24 @@ check('⑬k AI 今日一句显示的是**门店当地时刻**,不是一串 ISO(�
   /storeClockText\(tenantId\)/.test(readFileSync(join(ROOT, 'apps/api/dashboard-pulse.mjs'), 'utf8'))
   && !/toLocaleTimeString|toISOString/.test(home))
 
+/* ══ D183 · 明暗双模式(夜班令6 段 3)══ */
+const themeJs = readFileSync(join(ROOT, 'apps/web/theme-switch.js'), 'utf8')
+check('⑭ 三档在:跟随系统(默认)/ 浅色 / 深色',
+  /\['system', '跟随系统'/.test(themeJs) && /\['light', '浅色'/.test(themeJs) && /\['dark', '深色'/.test(themeJs))
+check('⑭b 🔴 只有 theme-switch.js 会写 data-theme(一处真相)',
+  (readFileSync(join(ROOT, 'apps/web/admin.js'), 'utf8') + css).indexOf('dataset.theme') < 0
+  && /dataset\.theme/.test(themeJs))
+check('⑭c 它排在所有脚本最前(晚一步页面会先闪一下浅色)',
+  html.indexOf('theme-switch.js') > 0 && html.indexOf('theme-switch.js') < html.indexOf('admin.js?v='))
+check('⑭d 跟随系统 = **不写** data-theme(交给 @media 那一段,不是自己判一次系统色)',
+  /if \(m === 'system'\) delete document\.documentElement\.dataset\.theme/.test(themeJs)
+  && !/matchMedia/.test(themeJs))
+check('⑭e 点击委托只绑一次(renderInto 会被反复调,每次都绑就会点一下触发好几遍)',
+  /renderInto\._on/.test(themeJs))
+/* D172:深色一次走完 —— 台面那四个品类色在深色下有暗版,不再是深底上四块高亮补丁 */
+check('⑮ 台面品类色有深色版(店主那张截图里「浅色台面卡」就是它)',
+  ['hand', 'foot', 'lash', 'care'].every((k) => new RegExp(`:root\\[data-theme="dark"\\] \\.tb-blk\\.${k}`).test(css)))
+
 /* ══ 端不对的动作词:网页没有下拉刷新,不许教店主做一个做不到的动作(D148 说人话族)══ */
 check('⑫ 网页首页里没有「下拉」这类小程序动作词',
   !/下拉/.test(home.replace(/<!--[\s\S]*?-->/g, '').replace(/\/\*[\s\S]*?\*\//g, '')))

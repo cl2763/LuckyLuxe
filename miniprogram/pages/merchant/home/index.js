@@ -2,6 +2,7 @@ const api = require('../../../utils/api')
 const { storeMoney } = require('../../../utils/storeclock')
 const { buildOwnerHome, clockGate, clockFailText, staffSmalls, STAFF_PERIODS } = require('../../../utils/dashboard-view')
 const { loadNumberFont } = require('../../../utils/numfont')   // D168 段 4:数字大字字体,拿不到就如实说
+const { currentTheme, themeClass } = require('../../../utils/theme')   // D183:明暗双模式
 
 Page({
   data: {
@@ -40,6 +41,7 @@ Page({
     dhState: 'loading',
     dhPeriod: 'today',
     dhClosed: false,
+    themeClass: '',
     dh: null,
     /* 轮播:大数字现在放大的是哪一个指标(dots 与它一一对应) */
     dhMetric: 'revenue'
@@ -51,6 +53,8 @@ Page({
   },
 
   onShow() {
+    /* D183:每次回到首页都按当下的偏好挂 class(在「我的」里改完回来就该是新的) */
+    this.setData({ themeClass: themeClass(currentTheme()) })
     if (!api.guardMerchant()) return
     if (this.data.isOwner) this.loadPulse(); else this.loadStaff()
     this.setData({ aiEnabled: api.merchantHasAi() })

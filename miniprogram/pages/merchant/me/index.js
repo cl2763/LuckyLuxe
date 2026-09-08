@@ -1,9 +1,32 @@
 const api = require('../../../utils/api')
 
-Page({
-  data: { shopName: '', displayName: '', role: '', account: '', financeOn: false, financeLockEnabled: false, isOwnerRole: false, subText: '', subWarn: false },
+const { currentTheme, setTheme, themeClass } = require('../../../utils/theme')
+const THEME_LABEL = { system: '跟随系统', light: '浅色', dark: '深色' }
 
-  onShow() { if (!api.guardMerchant()) return; this.load() },
+Page({
+  data: { themeClass: '', themeLabel: '跟随系统', shopName: '', displayName: '', role: '', account: '', financeOn: false, financeLockEnabled: false, isOwnerRole: false, subText: '', subWarn: false },
+
+  onShow() {
+    if (!api.guardMerchant()) return
+    this.syncTheme()
+    this.load()
+  },
+
+  /* D183:外观三档。存的是**这台手机的偏好**(不是店的设置),即时生效不用重进页面。
+     `system` 那一档不加 class —— 让 WXSS 里 `@media (prefers-color-scheme: dark)` 说了算。 */
+  syncTheme() {
+    const m = currentTheme()
+    this.setData({ themeClass: themeClass(m), themeLabel: THEME_LABEL[m] || THEME_LABEL.system })
+  },
+  pickTheme() {
+    const keys = ['system', 'light', 'dark']
+    wx.showActionSheet({
+      itemList: keys.map((k) => THEME_LABEL[k]),
+      success: (r) => { setTheme(keys[r.tapIndex]); this.syncTheme() },
+      /* wx.* 一律接 fail(《波及面回归律》④);取消也会走 fail,不弹提示免得吵 */
+      fail: () => {},
+    })
+  },
 
   async load() {
     this.setData({ financeOn: !!(api.getFinanceKey && api.getFinanceKey()) })

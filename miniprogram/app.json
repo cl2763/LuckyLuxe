@@ -102,5 +102,6 @@
   },
   "style": "v2",
   "__usePrivacyCheck__": false,
-  "sitemapLocation": "sitemap.json"
+  "sitemapLocation": "sitemap.json",
+  "darkmode": true
 }

@@ -1,6 +1,6 @@
 // 构建号:每次交付递增。侧栏可见,排查"改了没生效"时先对版本。
 // 兜底用(服务端会注入 window.LL_BUILD = 资源内容指纹,页面优先显示那个)
-const ADMIN_BUILD = '20260909a-d168'
+const ADMIN_BUILD = '20260909a-d183'
 let pricingState = { module: 'storefront', tab: 'items', categories: [], items: [], rules: {}, editing: null, preview: null, storefrontPicker: false }
 console.log(`[admin] build ${ADMIN_BUILD}`)
 
@@ -2305,13 +2305,13 @@ async function loadFinanceLockSettings() {
    🔴 S5-b 短信自助重置本轮挂起:这一页**不放**「忘记密码」入口,不做发不出短信的按钮。 */
 function renderGeneralSettings() {
   const zh = owner.lang === 'zh'
+  window.ThemeSwitch.renderInto(document.querySelector('#gsThemeBody'), document.querySelector('#gsThemeSummary'), zh, renderGeneralSettings)   // D183 外观三档
   const lang = document.querySelector('#gsLangBody')
   if (lang) {
     document.querySelector('#gsLangSummary').textContent = zh ? '中文' : 'English'
     lang.innerHTML = `<p class="subtle">${zh ? '切换后台与顾客端后台预览的显示语言(与右上角的中文/EN 同一处设置)。' : 'Switches admin display language.'}</p>
       <div class="row" style="gap:8px;margin-top:8px">
-        <button class="${owner.lang === 'zh' ? 'primary' : 'ghost'} slim" data-gs-lang="zh" type="button">中文</button>
-        <button class="${owner.lang === 'en' ? 'primary' : 'ghost'} slim" data-gs-lang="en" type="button">English</button>
+        <button class="${owner.lang === 'zh' ? 'primary' : 'ghost'} slim" data-gs-lang="zh" type="button">中文</button><button class="${owner.lang === 'en' ? 'primary' : 'ghost'} slim" data-gs-lang="en" type="button">English</button>
       </div>`
   }
   const cur = document.querySelector('#gsCurrencyBody')
