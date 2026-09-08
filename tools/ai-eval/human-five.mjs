@@ -43,8 +43,13 @@ const TALKS = [
      北京店这一通专看两样:金额是不是 ¥、时间是不是北京时间。 */
   /* v4:通六北京店**现在有新客券了**(段 7b 建的),所以这一通同时看 D152 ——
      有券的店问价时该不该提券、提得对不对,由店主读。 */
-  { tid: 'luvia-bj', name: '六、北京店:问价问时间(v4:店里有新客券)',
-    turns: ['你们那儿最便宜的美甲多少钱', '有优惠吗', '做一次大概要多久', '明天下午三点有位吗', '好的谢谢你啦'] },
+  /* v5(店主 05s 补五 §二):通六改成把 05s 修的四病一次走完 ——
+     ①点名 `fixed` 项目问价(D152 正面)②「最便宜的」那条路(05s 补一)
+     ③`quote` 项目问价要带券名句(D165)④采集中插「明天下午三点有位吗」(D162)
+     ⑤接回的必须是待答那句原文(D164)。
+     🔴 轮 4「做一次大概要多久」是**故意留着的缺件位**:D166 未修,这里会答全店范围,不是会话里点名的项目。 */
+  { tid: 'luvia-bj', name: '六、北京店:点名问价 → 最便宜 → 需报价项 → 采集中插(v5)',
+    turns: ['猫眼渐变多少钱', '你们那儿最便宜的美甲多少钱', '参考图定制多少钱', '做一次大概要多久', '明天下午三点有位吗', '好的谢谢你啦'] },
 ]
 
 const say = async (tid, uid, message) => {
@@ -61,10 +66,37 @@ const say = async (tid, uid, message) => {
 const FORM = [/几点|什么时间/, /哪天|日期/, /美甲还是美睫|项目类型/, /技师|指定/, /卸甲|延长/]
 const WD = ['周日', '周一', '周二', '周三', '周四', '周五', '周六']
 const now = new Date()
-const ranOn = `${now.toISOString().slice(0, 10)}(${WD[now.getDay()]})`
+/* 🔴 v5 现测咬出来的**脚本自己的缺陷**:日期取的是 `toISOString()`(UTC),
+   星期取的是 `getDay()`(本机时区)—— 跑机所在时区跨了日界时,这两个会对不上。
+   v5 那一跑抬头就写成了「2026-09-08(周三)」,而 09-08 在门店时区是**周二**。
+   改法:星期从**同一个日期串**推出来,不许一个取 UTC 一个取本机(同族:一件事一处真相)。 */
+const ranISO = now.toISOString().slice(0, 10)
+const ranOn = `${ranISO}(${WD[new Date(`${ranISO}T12:00:00Z`).getUTCDay()]},UTC 日历)`
+
+/* 🔴 v5(店主 05s 补五 §二 2.):「明天能不能约」这类答案跟**夹具店当天休不休息**有关。
+   以前只在正文里写了一句提醒,店主还是得自己去翻店的营业时间 —— 现在现取现写。
+   取的是顾客端公开口 `/stores`(位面要对:顾客看到的就是这一份)。 */
+const storeFixture = async (tid) => {
+  try {
+    const r = await fetch(`${BASE}/stores`, { headers: { 'x-tenant-id': tid } })
+    const d = await r.json()
+    const st = (d?.stores || [])[0]
+    if (!st) return `\`${tid}\` —— 取不到门店信息`
+    const rest = (st.hours || []).filter((h) => h.is_closed).map((h) => WD[h.weekday])
+    return `\`${tid}\` ${st.name} · ${st.timezone} · ${st.currency} · `
+      + `今日:${st.todayHours?.zh?.text || '—'}${st.todayHours?.zh?.isClosed ? '(**今日休息**)' : ''} · `
+      + `每周休:${rest.length ? rest.join('、') : '不休'}`
+  } catch (e) { return `\`${tid}\` —— 取门店信息失败:${e.message}` }
+}
+const fixtures = []
+for (const tid of [...new Set(TALKS.map((t) => t.tid))]) fixtures.push(`> - ${await storeFixture(tid)}`)
+
 const lines = [`# ⑤ 像人${TALKS.length}通 —— 整段对话原文(店主打分用)`, '',
   `> **跑于**:${ranOn} · 每通都是**全新会话**(J-31:会话 id 带这一跑的随机段 \`${RUN}\`,不接上一跑的对话)`,
-  '> 「明天能不能约」这类答案跟**跑的那天**和**夹具店当天休不休息**有关 —— 读的时候把日期一起看。', '',
+  `> **跑在**:\`${BASE}\`(活服务,合并窗按 \`/health\` 现值)`, '',
+  '> 🔴 **本次缺件如实写在这里**:**D166(问时长该取会话里已点名的项目)未修** ——',
+  '> 通六轮 4「做一次大概要多久」会答**全店范围时长**,不是它上一句刚点名的那个项目。读到全店范围以此为准,不必当新病记。', '',
+  '> **夹具店当天状态**(「明天能不能约」这类答案跟它直接相关):', ...fixtures, '',
   '> 机器不判「像不像人」—— 这一页是**原文**,请您读完在每通末尾打分。',
   '> 顺带列了三条能机械看的(不发 7 项表 / 单条 ≤120 字 / 同一句不重复),',
   '> **它们全过也不等于像人**,只是排掉明显不像的。', '']
@@ -84,10 +116,17 @@ for (const talk of TALKS) {
         if (i < t.length - 1) await new Promise((r) => setTimeout(r, 1000))
       }
       const outs = (await Promise.all(flying)).filter(Boolean)
-      const a = outs[outs.length - 1] || ''
+      /* 🔴 v5(店主 05s 补三 §口径):新会话第一句前有一条**欢迎语**单独占一行,
+         它不是回答 —— 「只出一条回复」这条要把它排除在外。这里原样列出全部返回,
+         并把欢迎语单独标出来,店主读的时候一眼能看见「除欢迎语外只有一条」。 */
+      const isWelcome = (x) => /欢迎|您好.{0,6}(很高兴|请问有什么)|Welcome/i.test(x) && !/\d/.test(x)
+      const answers = outs.filter((x) => !isWelcome(x))
+      const a = answers[answers.length - 1] || outs[outs.length - 1] || ''
       said.push(a)
       lines.push(`**顾客**(连着发 ${t.length} 句,间隔 1 秒):${t.join(' / ')}`, '',
-        `**AI**(合并窗合成一条后作答):${a || '(没有回复)'}`, '')
+        `**AI**(合并窗合成一条后作答):${a || '(没有回复)'}`, '',
+        `　　↳ 这一轮服务端一共回了 ${outs.length} 条,其中欢迎语 ${outs.length - answers.length} 条、真回答 ${answers.length} 条`
+        + (answers.length > 1 ? ` —— ⚠️ **真回答不止一条**,全文:${answers.map((x) => `「${x}」`).join(' + ')}` : ' ✅'), '')
       continue
     }
     const a = await say(talk.tid, uid, t)
