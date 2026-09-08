@@ -1035,7 +1035,7 @@ function renderDashboard() {
     readAiLine: () => owner.dashAiLine || null,
 
     isZh: owner.lang === 'zh',
-    goto: (to) => { const page = { 'ai-desk': 'wechatMock', quote: 'wechatMock', notes: 'customers', schedule: 'schedule', 'daily-close': 'finance' }[to]; if (page) { owner.adminPage = page; if (page === 'finance') loadFinancePage().catch(() => {}); render() } },
+    goto: (to) => { const page = { 'ai-desk': 'wechatMock', quote: 'wechatMock', notes: 'customers', schedule: 'schedule', 'daily-close': 'finance', finance: 'finance', customers: 'customers', board: 'schedule' }[to]; if (page) { owner.adminPage = page; if (page === 'finance') loadFinancePage().catch(() => {}); render() } },   /* D179:四小牌/此刻格的落点也走这一处 */
   })
   renderDashboardDetail()
 }

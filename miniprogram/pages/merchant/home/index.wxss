@@ -125,8 +125,13 @@ page{background:#fbf8f5}
 
 /* dots:5 个,选中那个变成金色胶囊并会移动(图 §一) */
 .dh-dots{display:flex;gap:10rpx;justify-content:center;margin-top:18rpx}
-.dh-dot-i{width:10rpx;height:10rpx;border-radius:50%;background:var(--herogrid)}
-.dh-dot-i.on{background:var(--herogold);width:28rpx;border-radius:999rpx;transition:width .3s}
+/* 🔴 现测(automator 量出来的):选中那颗的 class 明明是 `dh-dot-i on`,宽度却还是 10rpx ——
+   **`width` 没顶住**。dots 是 flex 子项,`flex-shrink` 默认 1、`flex-basis` 是 auto,
+   小程序 WebView 渲染下会把 `width` 当成可压缩的建议值。加 `flex:none` 钉死。
+   这条正是店主说的「**让人看不出来这个版面是有自动轮播的**」的一半原因:
+   五颗点长得一模一样,当前是哪一颗根本看不出来。 */
+.dh-dot-i{width:10rpx;height:10rpx;border-radius:50%;background:var(--herogrid);flex:none}
+.dh-dot-i.on{background:var(--herogold);width:28rpx;min-width:28rpx;border-radius:999rpx;transition:width .3s;flex:none}
 
 /* 🔴 D178:五个小数**严格一行五列**(图 line 69 `grid-template-columns:repeat(5,1fr)`)。
    她截图里排成了两行(3+2),还把「现金业绩 CAD $5,760.00」折成两行 ——

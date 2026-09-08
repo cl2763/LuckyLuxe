@@ -302,6 +302,26 @@ window.DashboardHome = (function () {
     st.host.querySelectorAll('[data-dh-dot]').forEach((el) => {
       el.addEventListener('click', () => { st.slot = Number(el.dataset.dhDot) || 0; paint() })
     })
+    /* ══ D179 图 §六 第 4/5 行(夜班令6 段 5)══
+       长按大数字 / 点四小牌 → 各指标各去各的地方;点「此刻」四格 → 今日台面。
+       落点表**与小程序端同一份**(那边在 `jumpMetric`),改一处必须两处一起改。 */
+    const GO = { revenue: 'finance', cash: 'finance', cardUse: 'finance', newCard: 'customers', visits: 'board', bookings: 'board' }
+    const jump = (key) => { const to = GO[key]; if (to && st.deps.goto) st.deps.goto(to) }
+    st.host.querySelectorAll('[data-dh-tiles] [data-dh-metric]').forEach((el) => {
+      el.style.cursor = 'pointer'
+      el.addEventListener('click', () => jump(el.dataset.dhMetric))
+    })
+    const big = st.host.querySelector('[data-dh-hero-left] [data-dh-metric]')
+    if (big) {
+      /* 长按 = 按住 500ms 松手(网页没有 longpress 事件,自己记时间) */
+      let t0 = 0
+      big.addEventListener('mousedown', () => { t0 = Date.now() })
+      big.addEventListener('mouseup', () => { if (Date.now() - t0 >= 500) jump(big.dataset.dhMetric) })
+    }
+    st.host.querySelectorAll('[data-dh-now]').forEach((el) => {
+      el.style.cursor = 'pointer'
+      el.addEventListener('click', () => { if (st.deps.goto) st.deps.goto('board') })
+    })
     const retry = st.host.querySelector('[data-dh-retry]')
     if (retry) retry.addEventListener('click', () => load())
     st.host.querySelectorAll('[data-dh-to]').forEach((el) => {

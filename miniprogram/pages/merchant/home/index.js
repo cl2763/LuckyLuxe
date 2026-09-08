@@ -44,7 +44,8 @@ Page({
     themeClass: '',
     dh: null,
     /* 轮播:大数字现在放大的是哪一个指标(dots 与它一一对应) */
-    dhMetric: 'revenue'
+    dhMetric: 'revenue',
+    dhPaused: false
   },
 
   onLoad() {
@@ -173,6 +174,55 @@ Page({
     this.loadPulse()
   },
 
+  /* ══ D179 · 图 §六「动作 → 结果」那张表(店主 2026-09-09:「你需要去增加一些交互」)══
+     她要的东西图上早就写了,只是一条都没做。这里落三条(其余四条本来就有):
+       · 点大数字 / 左右滑 → **暂停轮播并切指标**;再点继续;
+       · 长按大数字 / 点小牌 → 跳这个指标对应的那一页;
+       · 点「今日预约」那格 → 跳今日台面。
+     🔴 「暂停/继续」与「切指标」**只有一处实现**(`switchMetric` + `paused`),
+     滑动与点击都走它 —— 不许为手势另写一套。 */
+  tapBig() {
+    const paused = !this.data.dhPaused
+    this.setData({ dhPaused: paused })
+    if (paused) {
+      this.clearRotate()
+      wx.showToast({ title: '轮播已暂停,再点一下继续', icon: 'none', duration: 1400, fail: () => {} })
+      /* 下一个指标先切过去(店主那句「点大数字**并切指标**」) */
+      this.nextMetric()
+    } else {
+      this.scheduleRotate()
+      wx.showToast({ title: '轮播继续', icon: 'none', duration: 1000, fail: () => {} })
+    }
+  },
+  nextMetric() {
+    const KEYS = ['revenue', 'cash', 'cardUse', 'newCard', 'visits']
+    const i = KEYS.indexOf(this.data.dhMetric)
+    this.setData({ dhMetric: KEYS[(i + 1) % KEYS.length] })
+    this.repaintMetric()
+  },
+  swipeStart(e) { this._sx = (e.touches && e.touches[0] && e.touches[0].clientX) || 0 },
+  swipeEnd(e) {
+    const x = (e.changedTouches && e.changedTouches[0] && e.changedTouches[0].clientX) || 0
+    if (Math.abs(x - (this._sx || 0)) < 40) return       // 没滑动,当点击处理(bindtap 会接)
+    this.setData({ dhPaused: true })
+    this.clearRotate()
+    this.nextMetric()
+  },
+  /* 长按大数字 / 点小牌 → 各指标各去各的地方(图 §六 第 4 行原文) */
+  jumpMetric(e) {
+    const k = (e.currentTarget.dataset || {}).k || this.data.dhMetric
+    const to = {
+      revenue: '/pages/merchant/finance/index',
+      cash: '/pages/merchant/finance/index',
+      cardUse: '/pages/merchant/finance-txns/index',
+      newCard: '/pages/merchant/customers/index',
+      visits: '/pages/merchant/schedule-day/index',
+      bookings: '/pages/merchant/schedule-day/index',   // 今日预约那格 → 今日台面(第 5 行)
+    }[k]
+    if (!to) return
+    wx.navigateTo({ url: to, fail: () => wx.switchTab({ url: to, fail: () => wx.showToast({ title: '这一项暂时打不开', icon: 'none' }) }) })
+  },
+
   /* 轮播换指标:**只重画手上的数,一个请求都不发**(与网页端同一条规矩)。
      `buildOwnerHome` 是纯函数,换个 headKey 重跑一遍就行。 */
   switchMetric(e) {
@@ -194,7 +244,7 @@ Page({
      不留一条永远在跑的线(小程序里挂着的 interval 是最常见的耗电来源)。 */
   scheduleRotate() {
     this.clearRotate()
-    if (this.data.dhState !== 'ready' || !this.data.isOwner) return
+    if (this.data.dhState !== 'ready' || !this.data.isOwner || this.data.dhPaused) return   // 暂停了就不排下一次
     const KEYS = ['revenue', 'cash', 'cardUse', 'newCard', 'visits']
     this._rotate = setTimeout(() => {
       const i = KEYS.indexOf(this.data.dhMetric)

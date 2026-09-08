@@ -238,6 +238,23 @@ check('㉑g 顶行留了安全区,长店名单行省略号(她截图里「LUVIA�
 check('㉑f 大数字默认停在营业收入(轮播位的起点)',
   /headKey = 'revenue'/.test(readFileSync(join(ROOT, 'miniprogram/utils/dashboard-view.js'), 'utf8')))
 
+/* ══ D179 · 图 §六 七行 · 小程序端(夜班令6 段 5)══ */
+check('㉒ 第 3 行:点大数字 = 暂停轮播并切指标,再点继续',
+  /tapBig\(\)/.test(pageJs) && /dhPaused/.test(pageJs) && /nextMetric\(\)/.test(pageJs)
+  && /bindtap="tapBig"/.test(wxml))
+check('㉒b 第 3 行:左右滑与点一下**同一处实现**(不许为手势另写一套)',
+  /swipeEnd\(e\)[\s\S]{0,320}?this\.nextMetric\(\)/.test(pageJs))
+check('㉒c 暂停之后轮播真的不再排下一次',
+  /this\.data\.dhPaused\) return/.test(pageJs))
+check('㉒d 第 4/5 行:长按大数字 / 点小牌 / 点今日预约格 → 各去各的地方',
+  /bindlongpress="jumpMetric"/.test(wxml) && /data-dh-small="\{\{item\.key\}\}" data-k="\{\{item\.key\}\}" bindtap="jumpMetric"/.test(wxml)
+  && /bookings: '\/pages\/merchant\/schedule-day\/index'/.test(pageJs))
+check('㉒e 落点表与网页端**同一份**(改一处必须两处一起改;这条就是那把尺)',
+  ['revenue', 'cash', 'cardUse', 'newCard', 'visits', 'bookings'].every((k) => new RegExp(`${k}: '/pages/merchant/`).test(pageJs))
+  && /GO = \{ revenue: 'finance'/.test(webHome))
+check('㉒f wx.navigateTo 接了 fail(《波及面回归律》④:tab 页要 switchTab,失败还要有话说)',
+  /wx\.navigateTo\(\{ url: to, fail: \(\) => wx\.switchTab/.test(pageJs))
+
 /* ══ D183 · 小程序也有明暗双模式(夜班令6 段 3;双端同批律)══ */
 const themeUtil = readFileSync(join(ROOT, 'miniprogram/utils/theme.js'), 'utf8')
 const meJs = readFileSync(join(ROOT, 'miniprogram/pages/merchant/me/index.js'), 'utf8')

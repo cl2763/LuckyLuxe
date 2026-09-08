@@ -28,7 +28,11 @@
         </view>
         <view class="dh-eyebrow">{{dh.headLabel}}</view>
         <!-- D178:大数字**三段**(图 line 51–52):币码小字金色 + 主数 Fraunces 大字 + 分位小一档淡一档 -->
-        <view class="dh-big" data-dh-metric="{{dh.headKey}}" data-dh-big>
+        <!-- D179 图 §六 第 3/4 行:点大数字 = 暂停轮播并切下一个指标(再点继续);
+             长按大数字 = 跳这个指标对应的那一页;左右滑同「点一下」那条路(一处实现) -->
+        <view class="dh-big" data-dh-metric="{{dh.headKey}}" data-dh-big
+              bindtap="tapBig" bindlongpress="jumpMetric" data-k="{{dh.headKey}}"
+              bindtouchstart="swipeStart" bindtouchend="swipeEnd">
           <text class="dh-big-code" wx:if="{{dh.headParts.code}}">{{dh.headParts.code}}</text><text class="dh-big-num">{{dh.headParts.amount}}</text><text class="dh-big-cent" wx:if="{{dh.headParts.cents}}">{{dh.headParts.cents}}</text>
         </view>
         <view wx:if="{{dh.headDelta}}" class="dh-delta {{dh.headDelta.tone}}" data-delta>{{dh.headDelta.arrow}} {{dh.headDelta.text}}</view>
@@ -42,7 +46,9 @@
         </view>
         <!-- 五个小数收在大屏底部一行;今日预约那一格带实时副行 -->
         <view class="dh-smalls" data-dh-smalls>
-          <view wx:for="{{dh.smalls}}" wx:key="key" class="dh-small {{item.dimmed?'dim':''}}" data-dh-small="{{item.key}}">
+          <!-- D179 第 4 行:点小牌 → 跳它对应的那一页(今日预约那格 → 今日台面,第 5 行) -->
+          <view wx:for="{{dh.smalls}}" wx:key="key" class="dh-small {{item.dimmed?'dim':''}}"
+                data-dh-small="{{item.key}}" data-k="{{item.key}}" bindtap="jumpMetric">
             <view class="dh-sl">{{item.label}}</view>
             <view class="dh-sv">{{item.value}}</view>
             <view wx:if="{{item.sub}}" class="dh-sub" data-dh-live><text class="dh-dot"></text>{{item.sub}}</view>

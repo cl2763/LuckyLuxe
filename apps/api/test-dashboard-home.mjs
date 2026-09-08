@@ -242,6 +242,19 @@ check('⑭e 点击委托只绑一次(renderInto 会被反复调,每次都绑就�
 check('⑮ 台面品类色有深色版(店主那张截图里「浅色台面卡」就是它)',
   ['hand', 'foot', 'lash', 'care'].every((k) => new RegExp(`:root\\[data-theme="dark"\\] \\.tb-blk\\.${k}`).test(css)))
 
+/* ══ D179 · 图 §六「动作 → 结果」七行(夜班令6 段 5)══
+   店主原话:「你需要去增加一些交互」—— 她要的东西图上早就写了,只是一条都没做。
+   这里守网页端那几行;小程序端由 `test-mp-home-owner` 那组守(两端落点表必须同一份)。 */
+check('⑯ 第 4 行:点四小牌 → 各指标各去各的地方',
+  /GO = \{ revenue: 'finance', cash: 'finance', cardUse: 'finance', newCard: 'customers', visits: 'board', bookings: 'board' \}/.test(home)
+  && /data-dh-tiles\] \[data-dh-metric\]/.test(home))
+check('⑯b 第 4 行:长按大数字 → 同一张落点表(网页没有 longpress,按住 500ms 算长按)',
+  /mousedown/.test(home) && /Date\.now\(\) - t0 >= 500/.test(home))
+check('⑯c 第 5 行:点「此刻」四格 → 今日台面',
+  /data-dh-now\]'\)\.forEach\(\(el\) => \{[\s\S]{0,200}?goto\('board'\)/.test(home))
+check('⑯d 落点在 admin.js 那张表里认得出来(finance / customers / board 三个新落点)',
+  /finance: 'finance', customers: 'customers', board: 'schedule'/.test(readFileSync(join(ROOT, 'apps/web/admin.js'), 'utf8')))
+
 /* ══ 端不对的动作词:网页没有下拉刷新,不许教店主做一个做不到的动作(D148 说人话族)══ */
 check('⑫ 网页首页里没有「下拉」这类小程序动作词',
   !/下拉/.test(home.replace(/<!--[\s\S]*?-->/g, '').replace(/\/\*[\s\S]*?\*\//g, '')))
