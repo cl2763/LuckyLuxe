@@ -35,12 +35,16 @@ const TALKS = [
     turns: ['我想预约', '做美甲', '明天', '下午三点', '好的,就这个时间'] },
   { tid: 'lucky-luxe', name: '四、说着说着改主意',
     turns: ['我想约周六做美甲', '等等 我再想想', '还是改成美睫吧', '那周日行吗', '算了不约了'] },
-  { tid: 'jics-store', name: '五、一句话里塞了三个问题',
-    turns: ['几点关门 顺便问下定金 还有停车', '哦哦 那定金能退吗', '会员有折扣吗', '谢谢'] },
+  /* 🔴 v4(店主 05q §四):通五改成**三句分开发、间隔 1 秒** —— 真顾客不是一句话问三个问题,
+     是连着发三句。D151 的合并窗要的就是这种输入;并成一条之后 AI 该把三问一起答。 */
+  { tid: 'jics-store', name: '五、连着发三句(v4 改:间隔 1 秒,验合并窗)',
+    turns: [['几点关门', '顺便问下定金', '还有停车'], '哦哦 那定金能退吗', '会员有折扣吗', '谢谢'] },
   /* 🔴 v3 新增第六通(05p:三店走查并行)。**前五通一个字不改**,店主才好跟 v2 并排读;
      北京店这一通专看两样:金额是不是 ¥、时间是不是北京时间。 */
-  { tid: 'luvia-bj', name: '六、北京店:问价问时间(v3 新增)',
-    turns: ['你们那儿最便宜的美甲多少钱', '做一次大概要多久', '明天下午三点有位吗', '好的谢谢你啦'] },
+  /* v4:通六北京店**现在有新客券了**(段 7b 建的),所以这一通同时看 D152 ——
+     有券的店问价时该不该提券、提得对不对,由店主读。 */
+  { tid: 'luvia-bj', name: '六、北京店:问价问时间(v4:店里有新客券)',
+    turns: ['你们那儿最便宜的美甲多少钱', '有优惠吗', '做一次大概要多久', '明天下午三点有位吗', '好的谢谢你啦'] },
 ]
 
 const say = async (tid, uid, message) => {
@@ -55,7 +59,12 @@ const say = async (tid, uid, message) => {
 }
 
 const FORM = [/几点|什么时间/, /哪天|日期/, /美甲还是美睫|项目类型/, /技师|指定/, /卸甲|延长/]
+const WD = ['周日', '周一', '周二', '周三', '周四', '周五', '周六']
+const now = new Date()
+const ranOn = `${now.toISOString().slice(0, 10)}(${WD[now.getDay()]})`
 const lines = [`# ⑤ 像人${TALKS.length}通 —— 整段对话原文(店主打分用)`, '',
+  `> **跑于**:${ranOn} · 每通都是**全新会话**(J-31:会话 id 带这一跑的随机段 \`${RUN}\`,不接上一跑的对话)`,
+  '> 「明天能不能约」这类答案跟**跑的那天**和**夹具店当天休不休息**有关 —— 读的时候把日期一起看。', '',
   '> 机器不判「像不像人」—— 这一页是**原文**,请您读完在每通末尾打分。',
   '> 顺带列了三条能机械看的(不发 7 项表 / 单条 ≤120 字 / 同一句不重复),',
   '> **它们全过也不等于像人**,只是排掉明显不像的。', '']
@@ -66,6 +75,21 @@ for (const talk of TALKS) {
   lines.push(`## ${talk.name}(${talk.tid})`, '')
   const said = []
   for (const t of talk.turns) {
+    if (Array.isArray(t)) {
+      /* 连发几句:每句间隔 1 秒(< 合并窗),窗关时**只出一条回复** ——
+         早到的那几次回 `reply: null`,这里取最后那条真回复。 */
+      const flying = []
+      for (let i = 0; i < t.length; i += 1) {
+        flying.push(say(talk.tid, uid, t[i]))
+        if (i < t.length - 1) await new Promise((r) => setTimeout(r, 1000))
+      }
+      const outs = (await Promise.all(flying)).filter(Boolean)
+      const a = outs[outs.length - 1] || ''
+      said.push(a)
+      lines.push(`**顾客**(连着发 ${t.length} 句,间隔 1 秒):${t.join(' / ')}`, '',
+        `**AI**(合并窗合成一条后作答):${a || '(没有回复)'}`, '')
+      continue
+    }
     const a = await say(talk.tid, uid, t)
     said.push(a)
     lines.push(`**顾客**:${t}`, '', `**AI**:${a || '(没有回复)'}`, '')
