@@ -124,6 +124,28 @@ else say "交付完整性" "🔴 没进 git:$MISS"; FAIL=1; fi
 if GHOST=$(node tools/eval-citation-check.mjs 2>&1); then say "回执引用的评测明细" "✅ ${GHOST#*✅ }"
 else say "回执引用的评测明细" "🔴"; echo "$GHOST" | sed 's/^/    /'; FAIL=1; fi
 
+# ⑩ 🔴 内联脚本语法(05t 段 6 现场自伤,当场立的护栏):
+#    `platform.html` / `admin.html` 里的 `<script>` 整段是**没人检查语法**的 ——
+#    我在一个模板字符串里的 HTML 注释里写了一对反引号,反引号把模板字符串提前收了口,
+#    整段脚本语法错 → 浏览器一个函数都没定义 → **平台控制台点「进入控制台」毫无反应**。
+#    页面照样 200、照样渲染出登录框,肉眼完全看不出来。这类错必须机器检查。
+INLINE_BAD=""
+for f in apps/web/platform.html apps/web/admin.html; do
+  node -e '
+    const fs = require("fs"); const vm = require("vm");
+    const s = fs.readFileSync(process.argv[1], "utf8");
+    let i = 0, bad = 0;
+    for (const m of s.matchAll(/<script>([\s\S]*?)<\/script>/g)) {
+      i += 1
+      try { new vm.Script(m[1]) } catch (e) { bad += 1; console.error(`第 ${i} 段:${e.message}`) }
+    }
+    process.exit(bad ? 1 : 0)
+  ' "$f" 2>/tmp/ll-inline-$$.err || INLINE_BAD="$INLINE_BAD $f($(head -1 /tmp/ll-inline-$$.err))"
+  rm -f /tmp/ll-inline-$$.err
+done
+if [ -z "$INLINE_BAD" ]; then say "内联脚本语法" "✅ platform.html · admin.html 逐段可解析"
+else say "内联脚本语法" "🔴$INLINE_BAD"; FAIL=1; fi
+
 # ⑨ D167(店主 05s 补五 §四):`mp-*` 三套必须带**单套超时**,超时算「本轮未跑」,
 #    不许再让三把与本批无关的刀把整轮拖到看门狗自杀(现测过:整轮 105 套的结果一起没了)。
 #    三条一起守,少一条这条护栏就是半截的:

@@ -149,6 +149,36 @@ function main() {
   check('日界唯一实现:产品代码没有裸写的业务日期(一律走门店时区辅助函数)',
     dateHits.length === 0, `${dateHits.length} 处:\n${dateHits.join('\n')}`)
 
+  /* ══ 05t 段 6(店主 05t §六 1.):小程序里的金额**不许自己 `toFixed`** ══
+     钱怎么写由后端下发的 `currencyDisplay` 决定,两端各只有一个出口
+     (`utils/money.js` / `utils/storeclock.js` / `utils/dashboard-view.js`)。
+     判据按**白名单式**(判据三):把小程序里所有 `toFixed` 抠出来,
+     **逐个必须落进「不是钱」或「是出口本身」的白名单**,新来的自动红。
+     ——「我列的这几处都对」那种数法永远漏没列的。 */
+  const TOFIXED_OK = {
+    'miniprogram/utils/money.js': '金额出口本身',
+    'miniprogram/utils/storeclock.js': '商家端金额出口本身',
+    'miniprogram/utils/dashboard-view.js': '出口本身 + 百分比(不是钱)',
+    'miniprogram/pages/merchant/orders/index.js': '时长(小时),不是钱',
+    'miniprogram/pages/merchant/account-adjust/index.js': '往**输入框**里填的数值(输入框里塞币符会让解析炸掉)',
+  }
+  const fixedHits = []
+  for (const abs of walk(join(ROOT, 'miniprogram'))) {
+    const rel = relative(ROOT, abs)
+    if (!/\.js$/.test(rel) || /node_modules/.test(rel)) continue
+    readFileSync(abs, 'utf8').split('\n').forEach((line, i) => {
+      const code = line.replace(/\/\/.*$/, '')
+      if (/^\s*[*/]/.test(line)) return
+      if (!/toFixed/.test(code)) return
+      if (TOFIXED_OK[rel]) return
+      fixedHits.push(`${rel}:${i + 1}  ${line.trim().slice(0, 90)}`)
+    })
+  }
+  check('小程序金额零自算:所有 toFixed 都落在白名单里(钱只走那一个出口)',
+    fixedHits.length === 0, `${fixedHits.length} 处:\n${fixedHits.join('\n')}`)
+  check('白名单条数棘轮 ≤5(只许降;哪天某一处也收进出口了,这里跟着减)',
+    Object.keys(TOFIXED_OK).length <= 5, String(Object.keys(TOFIXED_OK).length))
+
   console.log(`\n币符硬编码扫描通过:${checks} 项断言全绿`)
 }
 

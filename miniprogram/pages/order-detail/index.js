@@ -52,14 +52,16 @@ Page({
       /* 批③首件 A2/A6(§二重做):签署单卡=后端 flow 一条五步账直贴(与签署页/快照同源,零拼装);
          旧「实付」行随 flow 消亡(480 表达错误销案)。y() 仅格式化,无运算。 */
       if (order.payment) {
-        const y = (c) => (c % 100 ? (c / 100).toFixed(2) : String(Math.round(c / 100)))
+        /* 🔴 05t 段 6(店主 05t §六 1.):这里原来有个 `y()` 自己把分转成元、自己 `toFixed(2)` ——
+           **金额不许自己格式化**(币种红线:钱怎么写由后端下发的 currencyDisplay 决定,
+           两端只有一个出口)。现查它算出来的 `listTotal` **wxml 里一处都没用**,
+           是一段死码 —— 连同 `y()` 一起删掉,而不是给它补一个币符(补了才是真的两处真相)。 */
         order.pay = {
           code: order.payment.code,
           signedAt: String(order.payment.signedAt || '').slice(0, 16).replace('T', ' '),
           flowLines: (order.payment.flow && order.payment.flow.lines) || [],
           heroLabel: (order.payment.flow && order.payment.flow.heroLabel) || '本单到店支付',
           heroText: (order.payment.flow && order.payment.flow.cashDueText) || '',
-          listTotal: y(order.payment.listTotalCents),
           // D67③:组内逐张原件行(映射层零裁剪——toMiniBooking 裁字段教训同族,挑字段处必须点名带上)
           sheetLinks: order.payment.sheetLinks || [],
           /* L3 裁(店主 08-22):多张单详情=逐张签署单卡+顶部组汇总行(=Σ各张头条,与组卡同构) */

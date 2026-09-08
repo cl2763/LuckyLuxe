@@ -83,7 +83,14 @@ Page({
       /* 折线在小程序里画成一排小竖条(没有 svg):把值归一到 0–100 的高度。
          全 0 的那一支上面已经把 spark 清空了,所以这里不会出现「一排贴地的条」。 */
       const max = Math.max(1, ...(dh.spark || []).map((x) => Math.abs(Number(x) || 0)))
-      dh.sparkBars = (dh.spark || []).map((x) => Math.max(4, Math.round((Math.abs(Number(x) || 0) / max) * 100)))
+      /* 🔴 05t 段 6(店主 05s §段9 之二):**0 的那一根高度就是 0**,不许给它一个 4% 的底。
+         原来 `Math.max(4, …)` 让每一根都至少 4% —— 七天全 0 时看上去是七根矮实心柱,
+         「像有数」比「没有数」更坏(全 0 那一支上游已经把 spark 清空了,
+         但只要有一天是 0,那一天照样不许长出一根柱子来)。 */
+      dh.sparkBars = (dh.spark || []).map((x) => {
+        const v = Math.abs(Number(x) || 0)
+        return v === 0 ? 0 : Math.max(4, Math.round((v / max) * 100))
+      })
       /* 🔴 字段名照接口来:`/admin/dashboard/now` 给的是 customer / service / tech
          (第一版我按 customerName/serviceName 取,截图里那一行成了「02:00 ·」——
          名字和项目全空。**接口给什么就取什么**,不许照着自己记的字段名写。) */

@@ -80,13 +80,36 @@ cleanup() { pkill -f "local-server.mjs" 2>/dev/null || true; }
 # 现在:开跑前记下本地服务在不在,跑完自动拉回来(用真实 local-data,不是测试临时库)。
 LOCAL_WAS_UP=0
 if curl -sf -o /dev/null --max-time 2 "http://127.0.0.1:4128/health"; then LOCAL_WAS_UP=1; fi
+# 🔴 D176(05t 段 6 现场撞出来,D163 同族第三例):**端口活着 ≠ 还回去了**。
+#    回归中途被打断(看门狗开枪)时,租户隔离那一段起的 CI 实例会**赖在 4128 上**,
+#    而它开的是 `/tmp/ll-ci-data.XXXX/lucky-luxe.sqlite`(回归临时库)。
+#    `restore_local` 一看「4128 有人应答」就早退 —— 于是店主打开本地服务,
+#    看到的是一个**空的临时库**,而且那个目录马上会被删。
+#    现测:2026-09-08 02:22 的 4128 就是这样,`/health` 自报 dataFile 指着 /tmp/ll-ci-data.CyLqxX。
+#    改法:认**库**,不认端口。
+local_health_field() {   # $1=端口 $2=字段名
+  curl -sf --max-time 2 "http://127.0.0.1:$1/health"     | node -e "let s='';process.stdin.on('data',d=>s+=d).on('end',()=>{try{console.log(JSON.parse(s)['$2']||'')}catch{console.log('')}})"
+}
+local_is_owners() {      # 4128 上跑的是不是**店主那台**(库路径必须是本机库)
+  case "$(local_health_field 4128 dataFile)" in
+    */local-data/lucky-luxe.sqlite) return 0 ;;
+    *) return 1 ;;
+  esac
+}
 restore_local() {
   [ "$LOCAL_WAS_UP" = "1" ] || return 0
-  curl -sf -o /dev/null --max-time 2 "http://127.0.0.1:4128/health" && return 0
+  if local_is_owners; then return 0; fi
+  # 端口有人应答但库不对 = CI 实例赖在 4128 上,先请它走(不然下面拉不起来)
+  if curl -sf -o /dev/null --max-time 2 "http://127.0.0.1:4128/health"; then
+    echo "== 4128 上是回归实例(库:$(local_health_field 4128 dataFile))—— 先停掉,再还店主那台 =="
+    pkill -f "local-server.mjs" 2>/dev/null || true
+    sleep 1
+  fi
   # 脚本开头已经 cd 进 apps/api 了,这里再 dirname $0 会踩空 —— 直接用绝对路径
   ( cd "$API_DIR" && nohup env $(env_clean) PORT=4128 DATA_DIR="./local-data" node local-server.mjs > /tmp/ll-local-restored.log 2>&1 & )
   for _ in $(seq 1 20); do
-    curl -sf -o /dev/null --max-time 2 "http://127.0.0.1:4128/health" && { echo "== 已把店主的本地服务(4128)重新拉起来 =="; return 0; }
+    # 认库不认端口:必须是**本机库**那台起来了才算还回去了
+    local_is_owners && { echo "== 已把店主的本地服务(4128)重新拉起来(库:$(local_health_field 4128 dataFile))=="; return 0; }
     sleep 0.5
   done
   echo "!! 本地服务没拉回来,店主要用的话请双击 启动服务器.command" >&2
@@ -159,8 +182,15 @@ restore_selfcheck() {
     local got_win got_cap
     got_win=$(curl -sf --max-time 2 "http://127.0.0.1:$port/health" | node -e 'let s="";process.stdin.on("data",d=>s+=d).on("end",()=>{try{console.log(JSON.parse(s).mergeWindowSeconds)}catch{console.log("")}})')
     got_cap=$(curl -sf --max-time 2 "http://127.0.0.1:$port/health" | node -e 'let s="";process.stdin.on("data",d=>s+=d).on("end",()=>{try{console.log(JSON.parse(s).mergeWindowCapSeconds)}catch{console.log("")}})')
+    local got_db want_db
+    got_db=$(local_health_field "$port" dataFile)
+    if [ "$port" = "4128" ]; then want_db="local-data"; else want_db="sandbox-data"; fi
+    case "$got_db" in
+      *"/$want_db/"*) : ;;
+      *) echo "🔴 [收尾自证] $port 开的是 ${got_db} —— 不是 ${want_db} 那个库(D176:端口活着≠还回去了)" >&2; bad=1 ;;
+    esac
     if [ "$got_win" = "$want_win" ] && [ "$got_cap" = "$want_cap" ]; then
-      echo "   [收尾自证] $port 合并窗 ${got_win}s / 封顶 ${got_cap}s ✔ 与默认值一致"
+      echo "   [收尾自证] $port 合并窗 ${got_win}s / 封顶 ${got_cap}s ✔ 与默认值一致 · 库 ${got_db##*/new-chat/}"
     else
       echo "🔴 [收尾自证] $port 合并窗 ${got_win}s / 封顶 ${got_cap}s ✖ 默认应为 ${want_win}s / ${want_cap}s" >&2
       echo "   —— 回归专用环境变量漏进了活服务(D163)。**这一轮不许说「都还回去了」。**" >&2

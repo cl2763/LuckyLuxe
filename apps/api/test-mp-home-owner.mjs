@@ -199,6 +199,27 @@ check('⑥b 白名单式:截图目录里不许有约定之外的 .png(改名不�
   readdirSync(SHOT_DIR).filter((f) => f.endsWith('.png')).join(' · '))
 
 console.log(`\n[段9 小程序老板视角] 图 §一 逐块 · 三态互斥 · 出句口径 · 与网页同源`)
+/* ══ 05t 段 6 · 段 10 补件之二:员工首页「打卡」那一条退役 ══
+   图 §二 原话:**打卡不再是一条待办,是一道门**。所以「打卡」只许出现在那道门里
+   (`clock-*` 那几个类),横条待办里一条都不许有 —— 判据数的是**节点**,不是文案。 */
+/* 注释先剥掉再数 —— 注释里写着「打卡不是一条待办,是一道门」,那句话是留给下一个人看的,
+   把它数成违规,以后就没人敢在注释里写口径了(判据看代码,不看散文)。 */
+const wxmlCode = wxml.replace(/<!--[\s\S]*?-->/g, '')
+check('⑲ 员工首页待办里 0 个「打卡」节点(它只在那道门里)',
+  wxmlCode.split('\n').filter((ln) => /打卡/.test(ln) && !/clock-/.test(ln)).length === 0,
+  wxmlCode.split('\n').filter((ln) => /打卡/.test(ln) && !/clock-/.test(ln)).map((x) => x.trim().slice(0, 60)).join(' | '))
+
+/* ══ 05t 段 6 · 段 9 补件之二:七柱全 0 不许「看起来有数」══
+   店主 05s 现看:七根柱全 0 时首柱仍是实心高亮。两层一起守:
+   ①全 0 → `spark` 整个清空(上游,图 §六「全 0 不画」);②**单根为 0 → 高度就是 0**
+   (页面层,原来 `Math.max(4, …)` 给每根都垫了 4%)。只守一层都会漏。 */
+check('⑱ 全 0 → spark 清空(一根都不画)',
+  view.buildOwnerHome({ pulse: { currency: 'CNY', currencyDisplay: { symbol: '¥' },
+    metrics: [{ key: 'revenue', value: 0, spark: [0, 0, 0, 0, 0, 0, 0] }] },
+  now: {}, todo: {}, period: 'today', nowHM: '10:00', storeMoney: () => '¥0' }).spark.length === 0)
+check('⑱b 页面层:0 的那一根高度就是 0(不许垫 4% 让它看起来有数)',
+  /v === 0 \? 0 : Math\.max\(4,/.test(pageJs) && !/map\(\(x\) => Math\.max\(4,/.test(pageJs))
+
 /* ══ D168 段 4 · 小程序皮按图搬(店主 05t)══
    守「皮在不在」+「说没说实话」——**字体那件做不到的事,判据要求它被说出来**,
    而不是让它悄悄退成系统字体(店主原话:「不许假装是 Noto」)。 */
