@@ -3,7 +3,7 @@
  * ══ 结论(2026-09-09):**路① 成了**,数字现在是真 Fraunces ══
  *
  * · **路①(采用):woff2 子集 base64 内嵌 WXSS** ——
- *   `pyftsubset` 只留 0–9 与 `, . ¥ $ € £`,woff2 后 **2,748 字节**,
+ *   `pyftsubset` 只留 0–9 与逗号、句点、四个常用币符,woff2 后 **2,748 字节**,
  *   base64 写进 `styles/fraunces-digits.wxss` 的 `@font-face`,由 `app.wxss` 引入。
  *   小程序**不能**在 WXSS 里引网络字体,但 base64 是官方支持的那条路。
  *   重新生成用 `tools/make-fraunces-subset.sh`,那份 wxss 是生成物不要手改。

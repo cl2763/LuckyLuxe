@@ -233,7 +233,7 @@ check('㉑d 三段由**后端下发的 currencyDisplay** 拆出来,页面零拼�
 check('㉑e 轮播放大谁,那一格**位置保留、数字淡出**(不是整格消失、不是重排)',
   /dimmed: key === hk/.test(readFileSync(join(ROOT, 'miniprogram/utils/dashboard-view.js'), 'utf8'))
   && /item\.dimmed\?'dim':''/.test(wxml) && /\.dh-small\.dim\{opacity:/.test(wxssD178))
-check('㉑g 顶行留了安全区,长店名单行省略号(她截图里「LUVIA」的 L 缺一块)',
+check('㉑g 顶行留了安全区,长店名单行省略号(她截图里店名首字母缺了一块)',
   /\.page\{padding:calc\(24rpx \+ env\(safe-area-inset-top\)\)/.test(wxssD178)
   && /\.greeting\{[^}]*white-space:nowrap[^}]*text-overflow:ellipsis/.test(wxssD178)
   && /\.topbar > view:first-child\{flex:1;min-width:0\}/.test(wxssD178))

@@ -1,8 +1,8 @@
 page{background:#fbf8f5}
-/* 🔴 D178 第 3 条(店主 09-09):顶行「LUVIA 半径…」左边被切了一块。
+/* 🔴 D178 第 3 条(店主 09-09):顶行那个店名左边被切了一块。
    两件事一起治:①**安全区**——顶上留出 `env(safe-area-inset-top)`(现在用的是系统导航栏,
    切不到;但换成自定义导航或全面屏机型就会切,这一行是把它钉死);
-   ②**长店名**——北京店那个名字有 16 个字,原来靠 `space-between` 挤,挤不下就被裁;
+   ②**长店名**——北京那家店的名字有 16 个字,原来靠 `space-between` 挤,挤不下就被裁;
    改成「左边可收缩 + 单行省略号」,名字再长也只会变成「…」,不会缺一块。 */
 .page{padding:calc(24rpx + env(safe-area-inset-top)) 26rpx 160rpx}
 .topbar{display:flex;justify-content:space-between;align-items:center;margin-bottom:20rpx;gap:16rpx}
@@ -148,7 +148,7 @@ page{background:#fbf8f5}
 .dh-dot-i.on{background:var(--herogold);width:28rpx;min-width:28rpx;border-radius:999rpx;transition:width .3s;flex:none;position:relative;overflow:hidden}
 
 /* 🔴 D178:五个小数**严格一行五列**(图 line 69 `grid-template-columns:repeat(5,1fr)`)。
-   她截图里排成了两行(3+2),还把「现金业绩 CAD $5,760.00」折成两行 ——
+   她截图里排成了两行(3+2),还把「现金业绩 + 币码 + 五千多」那一格折成两行 ——
    图 §一 第 2 条要的是「五个数**任何时刻都在屏上**」,折成两行就不是那句话了。
    长金额靠 `tabular-nums` + 缩字号 + 省略号顶住,**不许折行**。 */
 .dh-smalls{display:grid;grid-template-columns:repeat(5,1fr);gap:8rpx;margin-top:8rpx;padding-top:18rpx;border-top:1rpx solid var(--herogrid)}
