@@ -108,7 +108,8 @@ export function sameTopic(a, b) {
 export function answered(text = '') {
   const t = String(text || '')
   if (!t) return false
-  if (/^[^。!?]{0,40}[??]\s*$/.test(t.trim())) return false          // 整句就是一个问句
+  /* 全半角都写全(现测栽过:文件里的全角标点被编辑成了半角,`？` 根本不匹配) */
+  if (/^[^\u3002!\uff01?\uff1f]{0,40}[?\uff1f]\s*$/.test(t.trim())) return false   // 整句就是一个问句
   return /\d/.test(t) || t.length >= 24
 }
 

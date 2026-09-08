@@ -128,7 +128,8 @@ if (!up) {
   check('④ 自带实例起得来(起不来就是本轮没验到,不是通过)', false, `${OWN} 没起来`)
 } else {
   await fetch(`${OWN}/admin/demo/full-seed`, { method: 'POST', headers: { authorization: `Bearer ${TOKEN}`, 'content-type': 'application/json' }, body: '{}' }).catch(() => null)
-  const db = new DatabaseSync(join(DATA_DIR, 'lucky-luxe.sqlite'), { readOnly: true })
+  /* 可写:D160 那一组要自己造三条 FAQ 再删掉(这台实例的库是本刀自己起的临时库) */
+  const db = new DatabaseSync(join(DATA_DIR, 'lucky-luxe.sqlite'))
   const health = await fetch(`${OWN}/health`).then((r) => r.json())
   check('④a `/health` 自报三个数:窗长(实际生效的)、封顶、这会儿开着几个窗',
     Number(health.mergeWindowSeconds) === Math.round(WIN_MS / 1000)
@@ -155,6 +156,56 @@ if (!up) {
   const custA = db.prepare("SELECT content FROM conversation_messages WHERE conversation_id = ? AND role = 'customer' ORDER BY rowid").all(cidA || '').map((r) => r.content)
   check('④e 三句**按原文顺序并成一条**记进流水(不摘要、不去重、不改写)',
     custA.length === 1 && custA[0] === '我想做美甲 明天下午有空位吗 大概多少钱', JSON.stringify(custA))
+
+  /* 🔴 D160(店主 05s §四):**合并了就得答全**。
+     05q 原文写着「三问都答」,而这套刀从来没验过它 —— v4 通五三句合并只答了停车,
+     判据照样绿。那是废判据(只验了「并成一条」,没验「答全」)。这里补上。
+     病因现查:FAQ 直答那条路拿**整段**去匹配,命中最后一句就 return,前两句一个字没答。
+
+     夹具**自己造三条 FAQ**(带本跑随机段,跑完删干净):
+     不这么做的话,答不答得全要看这家店的知识库碰巧收了几条 ——
+     那样判据验的是**夹具的运气**,不是这次修的那个机制(判据律)。 */
+  const kbRun = `d160-${Date.now().toString(36)}`
+  /* 🔴 列名从 **schema** 取,不从「随便一行」取 —— 表是空的时候 `SELECT * LIMIT 1`
+     回的是 undefined,列名成了空数组,夹具一条都建不上而判据只会说「0 条」。现测栽过一次。 */
+  const kbCols = db.prepare("SELECT name FROM pragma_table_info('tenant_kb_entries')").all().map((r) => r.name)
+  const kbSeed = [
+    ['几点关门', '关门,打烊,几点关', `本店 ${kbRun} 每天 20:00 关门。`],
+    ['定金要多少', '定金,押金', `本店 ${kbRun} 定金 50 元。`],
+    ['好停车吗', '停车,车位', `本店 ${kbRun} 楼下有停车场。`],
+  ]
+  const kbIds = []
+  if (kbCols.length) {
+    const now = new Date().toISOString()
+    for (const [q, kw, a] of kbSeed) {
+      const id = `kb-${kbRun}-${kbIds.length}`
+      kbIds.push(id)
+      const row = { id, tenant_id: tenant, question: q, keywords: kw, answer_zh: a, answer_en: a,
+        enabled: 1, updated_by: 'test', created_at: now, updated_at: now }
+      db.prepare(`INSERT INTO tenant_kb_entries (${kbCols.map((c) => `"${c}"`).join(',')}) VALUES (${kbCols.map(() => '?').join(',')})`)
+        .run(...kbCols.map((c) => (row[c] === undefined ? null : row[c])))
+    }
+  }
+  check('④g0 造景自证:三条 FAQ 真的建上了(建不上,下面验的是别的东西)', kbIds.length === 3, `${kbIds.length} 条`)
+
+  const uidC = `mw-c-${Date.now().toString(36)}`
+  const three = []
+  three.push(ask(uidC, '你们几点关门')); await sleep(300)
+  three.push(ask(uidC, '定金要多少')); await sleep(300)
+  three.push(ask(uidC, '你们那儿好停车吗'))
+  const gotC = (await Promise.all(three)).filter((r) => r && r.reply)
+  const answerC = String(gotC[0]?.reply?.data?.answerZh || '')
+  check('④g 造景自证:三句确实并成了一条(不然下面验的是单句)', gotC.length === 1, `出了 ${gotC.length} 条`)
+  /* 机械判三个话题各命中一次 —— 店主给的判法。锚的是**本跑造的那三条**的内容,
+     不锚「营业时间」这类通用词(通用词可能被别的句子蹭中,那就成了假绿)。 */
+  const missed = [['关门', /关门/], ['定金', /定金/], ['停车', /停车/]]
+    .filter(([, re]) => !re.test(answerC)).map(([t]) => t)
+  check('④h 🔴 D160:三句合并 → 回复里**每句各有一段对应答案**(关门 / 定金 / 停车各命中一次)',
+    missed.length === 0, JSON.stringify({ 漏了: missed, 回复: answerC.slice(0, 140) }))
+  /* 收尾:自己造的 FAQ 自己删(夹具不收尾 = 判据非幂等,J 族有案底) */
+  for (const id of kbIds) db.prepare('DELETE FROM tenant_kb_entries WHERE id = ?').run(id)
+  check('④h2 收尾:造的三条 FAQ 已删干净',
+    db.prepare(`SELECT COUNT(*) AS n FROM tenant_kb_entries WHERE id LIKE 'kb-${kbRun}-%'`).get().n === 0)
 
   const uidB = `mw-b-${Date.now().toString(36)}`
   const r1 = await ask(uidB, '你们几点关门')

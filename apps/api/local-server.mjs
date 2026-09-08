@@ -55,7 +55,7 @@ import { createTenantGate } from './tenant-gate.mjs'   // D132 口径④ 顾客�
 import { createQuoteSerialize } from './quote-serialize.mjs'          // AI 报价域序列化(公约②)
 import { createDemoReset, isDemoTenant, PROTECTED_REAL_TENANTS } from './demo-reset.mjs'   // 演示店归属判据/黑名单/重置唯一入口(公约①)
 import { demoSeedTag, ensureDemoMarkColumns } from './demo-mark.mjs'   // D121:演示标记唯一出口
-import { createKbMatch } from './kb-match.mjs'                        // 知识库匹配两个口
+import { createKbMatch, mergedKbAnswer } from './kb-match.mjs'                        // 知识库匹配两个口
 import { createTurnAnswer } from './turn-answer.mjs'                  // D145 后半:先答再问,答从数据来
 import { createEscalateIntake } from './escalate-intake.mjs'          // 转人工判断 + D145 那条闸
 import { entitlementBlockedReply, AI_OFF_NOTE } from './entitlement-gate.mjs'  // D147:没开 AI 包不许沉默
@@ -3389,7 +3389,7 @@ async function handleWecomInboundCore(inbound, req) {
   /* 🔴 D151 入站合并窗:装在**这一处**,五个进线口一起吃到。细节见 `merge-window.mjs` 抬头。 */
   const win = await enterMergeWindow(conversationId, inbound.content || '')
   if (win.superseded) return { conversationId, inbound, reply: null, mergedIntoLater: true, mergedParts: win.parts }
-  if (win.merged !== null && win.merged !== inbound.content) inbound = { ...inbound, content: win.merged }
+  if (win.merged !== null && win.merged !== inbound.content) inbound = { ...inbound, content: win.merged, mergedParts: win.parts }   // D160:带上「这是几句话」
   // 套餐闸门：AI 客服未开通或试用过期时，进线照常记录并静默转人工，AI 不回复。
   if (!checkEntitlement(currentTenantId(), 'ai_customer_service')) {
     const conversation = appendWecomConversationMessage(conversationId, {
@@ -3734,8 +3734,8 @@ async function handleWecomInboundCore(inbound, req) {
       }
     }
   }
-  // 商家自助 FAQ 直答：命中商家维护的知识条目时，用商家原文回答，替代静默转人工。
-  const tenantKbEntry = matchTenantKbEntry(inbound.content || '')
+  // 商家自助 FAQ 直答;D160(05s §四)合并后逐句答全的三档口径在 `kb-match.mjs` 的 `mergedKbAnswer`
+  const tenantKbEntry = mergedKbAnswer(inbound.mergedParts, (x) => matchTenantKbEntry(x), inbound.content || '')
   if (tenantKbEntry) {
     const kbReply = {
       data: {

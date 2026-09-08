@@ -13,7 +13,17 @@ export function enrichPrompt({ inbound = {}, discountNote = '', customerStage = 
   const message = inbound.content || ''
   const repeatAngle = inbound.repeatAngle || ''
   const referenceImageCount = inbound.referenceImages?.length || 0
+  /* D160(店主 05s §四):几句并成一条时,**逐句都要答到**。
+     05q 原文早写着「三问都答」,但那句话从来没变成过给模型的指令 ——
+     v4 通五三句合并只答了停车,就是这么漏的。这一条只在真合并(≥2 句)时出。 */
+  const parts = (inbound.mergedParts || []).filter((x) => String(x || '').trim())
+  const coverage = parts.length >= 2
+    ? `【顾客这次一口气说了 ${parts.length} 句,逐句都要答到,一句都不许漏】\n`
+      + parts.map((p, i) => `${i + 1}. ${p}`).join('\n')
+      + '\n对上面每一条各给一句答案(可以合成一段),不要只挑其中一条答。'
+    : ''
   const notes = [
+    coverage,
     customerStage && customerStage !== 'unified_test' ? `测试顾客阶段：${customerStage}` : '',
     referenceImageCount ? `顾客已上传 ${referenceImageCount} 张参考图，当前阶段只能整理需求并转技师确认，不可直接按图最终报价。` : '',
     memoryContextText ? `系统 working memory:\n${memoryContextText}` : '',

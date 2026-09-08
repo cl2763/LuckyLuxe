@@ -32,6 +32,38 @@ export function matchService(text = '', items = []) {
   return best
 }
 
+/* 🔴 05s 补一 §二①(店主在北京店当顾客亲测出来的):
+   「精致单色多少钱?」有券,「你们最便宜的美甲多少钱」**没券** ——
+   同一家店同一个项目,顾客换个问法答案就变。
+   病因:那条路没点名项目,`matchService` 命中不了,于是掉回报价采集自己答。
+   裁:**凡是答案会落到一个 `fixed` 项目的问价,都走同一个出口**。
+   这里补的就是「问的是最便宜/最贵/推荐,没点名字」那一类。 */
+const RANK = [
+  { re: /最便宜|最实惠|便宜(点|一点|的)|最低|入门|性价比/, pick: 'cheapest' },
+  { re: /最贵|最好的|最高端|顶配/, pick: 'priciest' },
+]
+/* 大类词 → `services.type`。顾客说「美甲」就只在美甲里挑,别把美睫的价报过去。 */
+const CATEGORY = [
+  { re: /美甲|指甲|甲油|做甲/, type: 'NAIL' },
+  { re: /美睫|睫毛|嫁接/, type: 'LASH' },
+]
+
+/** 问的是「最便宜/最贵的 X」时,挑出该报的那个 `fixed` 项目 + 陪衬的第二个。
+ *  @returns {{ top, second }|null} */
+export function pickByRank(text = '', items = []) {
+  const t = String(text || '')
+  const rank = RANK.find((r) => r.re.test(t))
+  if (!rank) return null
+  const cat = CATEGORY.find((c) => c.re.test(t))
+  const pool = items
+    .filter((i) => i.priceMode === 'fixed' && Number(i.priceCents) > 0)
+    .filter((i) => (cat ? String(i.type || '').toUpperCase() === cat.type : true))
+    .sort((a, b) => Number(a.priceCents) - Number(b.priceCents))
+  if (!pool.length) return null
+  const ordered = rank.pick === 'cheapest' ? pool : [...pool].reverse()
+  return { top: ordered[0], second: ordered[1] || null }
+}
+
 /** 折后价:能算准才给,算不准就不给(不许估)。
  *  只算**门槛够得着**的券;百分比与立减各算各的,取对顾客最省的那一张。 */
 export function bestDiscount(priceCents, discountItems = []) {
@@ -87,15 +119,23 @@ export function quotePathDiscountLine(discounts = [], lang = 'zh') {
  *  而且这一段的全部逻辑本来就属于 D152 这个域。 */
 export function fixedPriceAnswer({ db, tenantId, discountFacts, money }, { text, priceIntent }) {
   if (!priceIntent) return null
-  const rows = db.prepare(`SELECT id, name_zh, price_cents, base_duration_min, price_mode FROM services
+  const rows = db.prepare(`SELECT id, name_zh, price_cents, base_duration_min, price_mode, type FROM services
     WHERE tenant_id = ? AND is_active = 1 AND (item_kind IS NULL OR item_kind = 'main')`).all(tenantId)
-  const hit = matchService(text, rows.map((r) => ({ id: r.id, name: r.name_zh, priceCents: r.price_cents,
-    durationMin: r.base_duration_min, priceMode: r.price_mode || 'fixed' })))
+  const items = rows.map((r) => ({ id: r.id, name: r.name_zh, priceCents: r.price_cents,
+    durationMin: r.base_duration_min, priceMode: r.price_mode || 'fixed', type: r.type }))
+  /* 两条路都归这个出口:①顾客点了名 ②顾客问「最便宜/最贵的」。
+     ②那条以前掉回报价采集自己答,于是同一个项目有时带券有时不带(05s 补一 §二①)。 */
+  const named = matchService(text, items)
+  const ranked = (!named || named.priceMode !== 'fixed') ? pickByRank(text, items) : null
+  const hit = (named && named.priceMode === 'fixed' && named.priceCents) ? named : (ranked ? ranked.top : null)
   if (!hit || hit.priceMode !== 'fixed' || !hit.priceCents) return null
   const facts = discountFacts(db, tenantId, money)
+  const tail = (r, lang) => (r && r.second
+    ? (lang === 'en' ? ` Next up is ${r.second.name} at ${money(r.second.priceCents)}.` : `其次是${r.second.name} ${money(r.second.priceCents)}。`)
+    : '')
   const zh = fixedPriceSentence({ service: hit, discounts: facts.items, money, lang: 'zh' })
   if (!zh) return null
-  return { source: 'fixed_price_direct', data: { intent: 'pricing', answerZh: zh,
-    answerEn: fixedPriceSentence({ service: hit, discounts: facts.items, money, lang: 'en' }),
+  return { source: 'fixed_price_direct', data: { intent: 'pricing', answerZh: zh + tail(ranked, 'zh'),
+    answerEn: fixedPriceSentence({ service: hit, discounts: facts.items, money, lang: 'en' }) + tail(ranked, 'en'),
     handoffRequired: false } }
 }

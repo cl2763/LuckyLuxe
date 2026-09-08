@@ -15,7 +15,15 @@
 
 /* 采集问句长什么样:句尾那一问,来自 `quote-intake` / `booking-intake` 的表项。
    认的是**形状**(「请问…?」+ 表项关键词),不是某一句原文 —— 判据不许锚在会变的字面量上。 */
-const INTAKE_TAIL = /\s*(请问)?[^。!?~]{0,12}(是否需要卸甲|是否需要下睫毛|是否需要延长|是否有断甲|是否有参考图|是否第一次做美睫|眼睛是否容易敏感|是否指定技师|本甲还是延长|想做什么款式|想做哪天)[^。!?]*[??]\s*$/
+/* 🔴 05s 补一 §二②(店主亲测):这条正则原来写死成「本甲还是延长」,
+   而模板真正说的是「做本甲**还是需要**延长」—— 差两个字,整条守就形同虚设。
+   改成认**形状**:句尾一个问句 + 里面出现采集表项的关键词(卸甲/延长/下睫毛/断甲/参考图/款式/哪天…)。
+   判据不许锚在某一句原文上,这就是又一次现证。 */
+const INTAKE_WORD = /(卸甲|卸睫|延长|下睫毛|断甲|参考图|指定技师|第一次做美睫|眼睛.{0,4}敏感|本甲|款式|哪天|几点方便)/
+/* 🔴 全半角都要写全:现测栽过一次 —— 文件里那几个「全角」标点在编辑过程中变成了半角,
+   于是 `？`(U+FF1F)根本不匹配,合并那条回复的采集尾巴照样发出去。用转义写死。 */
+const Q_END = /[?\uff1f]\s*$/
+const SEPS = ['\u3002', '!', '\uff01', '?', '\uff1f', '~', '\uff5e']
 
 /* 「这句话已经把事说完了」的三种形态 —— 后面再拼采集问句就是 D159。 */
 const HANDOFF = /(帮您?(问|接)一下|帮您接人工|转(给|接)(同事|人工)|同事看到会|确认清楚再回复)/
@@ -26,7 +34,7 @@ const HAS_FACT = /\d+\s*(分钟|小时|元|块|次)|[¥$]\s*\d|\d+\s*[-–~]\s*\
 /** 顾客这句是不是在告别。**不含问号**才算 —— 「谢谢,那定金多少?」不是告别。 */
 export function isFarewell(text = '') {
   const t = String(text).trim()
-  if (!t || /[??]/.test(t)) return false
+  if (!t || /[?\uff1f]/.test(t)) return false
   return /^(谢谢|多谢|感谢|好的?谢谢|thx|thanks|thank you|再见|拜拜|bye)[\s~!!。.]*$/i.test(t)
 }
 
@@ -37,7 +45,17 @@ export function stripIntakeTail(text = '') {
   if (!t) return { text: t, cut: false }
   const closed = HANDOFF.test(t) || FAREWELL_REPLY.test(t) || HAS_FACT.test(t)
   if (!closed) return { text: t, cut: false }
-  const stripped = t.replace(INTAKE_TAIL, '').trim()
+  /* 尾巴从哪儿起:优先「请问」,否则从最后一个句读(。!?~)之后起。
+     不这么切的话,整句都会被当成尾巴 —— 第一版就是这么把「帮您问一下技师~ 请问…」整句吃掉的。 */
+  let at = t.lastIndexOf('请问')
+  if (at <= 0) {
+    const sep = Math.max(...SEPS.map((c) => t.lastIndexOf(c, t.length - 2)))
+    at = sep > 0 ? sep + 1 : -1
+  }
+  if (at <= 0) return { text: t, cut: false }
+  const tail = t.slice(at)
+  if (!Q_END.test(tail) || !INTAKE_WORD.test(tail)) return { text: t, cut: false }
+  const stripped = t.slice(0, at).trim()
   /* 砍完不能把整句砍没了 —— 那说明这句话**本来就只是**一个采集问句,那是正常的,不动它 */
   if (!stripped || stripped.length < 6) return { text: t, cut: false }
   return { text: stripped, cut: stripped !== t.trim() }

@@ -14,7 +14,7 @@ import { DatabaseSync } from 'node:sqlite'
 import { assertTestTarget, isTestTarget } from './test-guard.mjs'
 import { answered, reaskText, repeatPre, sameTopic } from './repeat-guard.mjs'
 import { farewellText, hygiene, isFarewell, stripIntakeTail } from './reply-hygiene.mjs'
-import { bestDiscount, fixedPriceSentence, matchService, quotePathDiscountLine } from './fixed-price-reply.mjs'
+import { bestDiscount, fixedPriceSentence, matchService, pickByRank, quotePathDiscountLine } from './fixed-price-reply.mjs'
 
 const ROOT = join(fileURLToPath(new URL('.', import.meta.url)), '..', '..')
 const BASE_URL = process.env.TEST_BASE_URL || 'http://127.0.0.1:4128'
@@ -103,6 +103,32 @@ check('D152 ⑥ `quote` 那条路只说有券、**不出数字**',
   (() => { const s = quotePathDiscountLine(coup)
     return s.includes('新客首单立减 50') && !/\d+\s*元|¥\s*\d{2,}/.test(s.replace('立减 ¥50', '')) })(),
   quotePathDiscountLine(coup))
+
+/* ═══ 05s 补一 §二 · 店主在北京店当顾客亲测出来的两处 ═══ */
+const pool = [
+  { id: 'n1', name: '精致单色', priceCents: 29800, priceMode: 'fixed', durationMin: 90, type: 'NAIL' },
+  { id: 'n2', name: '猫眼渐变', priceCents: 39800, priceMode: 'fixed', durationMin: 120, type: 'NAIL' },
+  { id: 'l1', name: '单根嫁接', priceCents: 19800, priceMode: 'fixed', durationMin: 120, type: 'LASH' },
+  { id: 'q1', name: '手绘定制', priceCents: 69800, priceMode: 'quote', durationMin: 150, type: 'NAIL' },
+]
+check('补一①  🔴「最便宜的美甲」挑的是**美甲里**最便宜那个(不许把美睫的价报过去)',
+  (() => { const r = pickByRank('你们最便宜的美甲多少钱', pool); return r && r.top.id === 'n1' && r.second.id === 'n2' })(),
+  JSON.stringify(pickByRank('你们最便宜的美甲多少钱', pool)))
+check('补一①b 不带大类词时在全部 fixed 里挑最便宜',
+  pickByRank('最便宜的多少钱', pool)?.top?.id === 'l1')
+check('补一①c 「最贵的」挑另一头', pickByRank('最贵的美甲多少钱', pool)?.top?.id === 'n2')
+check('补一①d 🔴 `quote` 项目**不许**被挑中(它的价格根本没下发模型)',
+  pickByRank('最贵的美甲多少钱', pool)?.top?.priceMode === 'fixed')
+check('补一①e 不是「最…」的问法就不走这条路(别抢点名那一路)',
+  pickByRank('精致单色多少钱', pool) === null)
+check('补一② 🔴 店主亲测那句原文:价格答完拼的采集问句被砍掉',
+  stripIntakeTail('我们这儿最实惠的是精致单色 ¥298,其次是猫眼渐变 ¥398。 请问这款是做本甲还是需要延长?').cut === true)
+/* 🔴 全半角:现测栽过一次 —— 文件里的全角标点在编辑中变成了半角,`？`(U+FF1F) 根本不匹配,
+   于是合并那条回复的采集尾巴照样发出去。这两条专守这件事。 */
+check('补一②b 全角问号收尾的采集尾巴也砍(U+FF1F)',
+  stripIntakeTail('周二至周日20:00关门。预约定金¥50。停车挺方便。想约哪天做指甲还是睫毛呀\uff1f').cut === true)
+check('补一②c 全角问号的「谢谢?」不算告别(带问号就是在问)',
+  isFarewell('谢谢\uff1f') === false)
 
 /* 接线:那条路真的排在报价采集**之前** */
 const srv = readFileSync(join(ROOT, 'apps/api/local-server.mjs'), 'utf8')

@@ -47,3 +47,24 @@ export function createKbMatch({ db, currentTenantId, compactIntentText }) {
 
   return { matchTenantKbEntry, matchKbForAnswer }
 }
+
+/** D160 · 合并了就得**答全**(店主 05s §四,v4 通五现场)。
+ *
+ *  病因:FAQ 直答那条路拿**整段**去匹配,顾客一口气问了三件事,
+ *  命中最后一句「停车」就直接 return —— 前两句一个字没答,而 05q 原文写的是「三问都答」。
+ *
+ *  三档,顺序不许调:
+ *  ① 合并且**每句都有 FAQ** → 并起来一条条答;
+ *  ② 合并但只答得上一部分 → **回 null 不许短路**,交给模型(那边有逐句指令兜着);
+ *  ③ 没合并 → 照旧整句匹配。
+ *  @returns {{answer_zh: string, answer_en: string}|null} */
+export function mergedKbAnswer(parts, matchOne, whole) {
+  const list = (parts || []).filter((x) => String(x || '').trim())
+  if (list.length < 2) return matchOne(whole || '')
+  const hits = list.map((p) => matchOne(p)).filter(Boolean)
+  if (hits.length !== list.length) return null
+  return {
+    answer_zh: hits.map((e) => e.answer_zh).join('\n'),
+    answer_en: hits.map((e) => e.answer_en || e.answer_zh).join('\n'),
+  }
+}
