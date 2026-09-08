@@ -75,3 +75,42 @@ page{background:#fbf8f5}
 .qcard{flex:1;background:#fff;border:1rpx solid #eadfd7;border-radius:22rpx;padding:24rpx 8rpx;text-align:center}
 .qi{font-size:40rpx;line-height:1.2}
 .ql{font-size:23rpx;font-weight:600;color:#241f1d;margin-top:8rpx}
+
+/* ===== 老板视角 · 业绩大屏(图 v3.2 §一,段 9)===== */
+.dh-card{background:#fff;border-radius:14rpx;padding:24rpx;margin:0 0 20rpx}
+.dh-skel{height:56rpx;background:#f2efeb;border-radius:8rpx;margin-bottom:16rpx}
+.dh-skel.short{width:40%}
+.dh-truth{color:#8a8079;font-size:26rpx}
+.dh-retry{margin-top:14rpx;display:inline-block;padding:10rpx 22rpx;border:1rpx solid #e5e0da;border-radius:999rpx;font-size:24rpx;color:#6b6259}
+.dh-periods{display:flex;gap:12rpx;margin-bottom:18rpx}
+.dh-period{padding:8rpx 22rpx;border:1rpx solid #e5e0da;border-radius:999rpx;font-size:24rpx;color:#6b6259}
+.dh-period.on{background:#2b2b2b;color:#fff;border-color:#2b2b2b}
+.dh-eyebrow{font-size:22rpx;color:#a58e6f;margin-bottom:6rpx}
+.dh-big{font-size:62rpx;font-weight:750;line-height:1.1;color:#2b2b2b}
+.dh-delta{font-size:24rpx;margin-top:6rpx}
+.dh-delta.up,.dh-sd.up{color:#2f8f5b}
+.dh-delta.down,.dh-sd.down{color:#c0503c}
+.dh-delta.flat,.dh-sd.flat{color:#8a8079}
+.dh-spark{display:flex;align-items:flex-end;gap:6rpx;height:72rpx;margin:16rpx 0}
+.dh-bar{flex:1;background:#d8cfc4;border-radius:4rpx 4rpx 0 0}
+.dh-smalls{display:flex;flex-wrap:wrap;gap:14rpx;margin-top:8rpx}
+.dh-small{flex:1 1 30%;min-width:170rpx;padding:12rpx 0}
+.dh-sl{font-size:22rpx;color:#8a8079}
+.dh-sv{font-size:32rpx;font-weight:700;color:#2b2b2b;margin-top:4rpx}
+.dh-sub{font-size:21rpx;color:#6b6259;margin-top:4rpx;display:flex;align-items:center;gap:6rpx}
+.dh-dot{width:10rpx;height:10rpx;border-radius:50%;background:#2f8f5b;display:inline-block}
+.dh-sd{font-size:21rpx;margin-top:2rpx}
+.dh-asof{margin-top:16rpx;font-size:21rpx;color:#a09488}
+.dh-ai{font-size:26rpx;color:#4a423b;line-height:1.5}
+.dh-h{font-size:27rpx;font-weight:700;color:#2b2b2b;margin-bottom:12rpx}
+.dh-h-sub{font-size:21rpx;color:#a09488;font-weight:400;margin-left:10rpx}
+.dh-row{display:flex;align-items:center;gap:14rpx;padding:12rpx 0;border-top:1rpx solid #f2efeb}
+.dh-time{font-size:28rpx;font-weight:700;color:#2b2b2b;min-width:100rpx}
+.dh-who{flex:1;font-size:25rpx;color:#4a423b}
+.dh-st{font-size:22rpx;color:#8a8079}
+.dh-empty{font-size:25rpx;color:#a09488;padding:8rpx 0}
+.dh-go{margin-top:14rpx;font-size:25rpx;color:#a58e6f}
+.dh-todo{display:flex;align-items:center;justify-content:space-between;padding:14rpx 0;border-top:1rpx solid #f2efeb}
+.dh-todo.urgent .dh-todo-n{color:#c0503c}
+.dh-todo-l{font-size:26rpx;color:#4a423b}
+.dh-todo-n{font-size:28rpx;font-weight:700;color:#2b2b2b}

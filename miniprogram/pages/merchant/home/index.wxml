@@ -1,11 +1,79 @@
 <view class="page">
   <view class="topbar">
     <view>
-      <view class="greeting">{{greeting}}</view>
-      <view class="date">{{dateText}}</view>
+      <!-- 图 §一 顶栏:**店名 · 问候**在上,日期在下(原来只有「嗨,老板」,看不出这是哪家店) -->
+      <view class="greeting" data-dh-hello>{{storeLine}}</view>
+      <view class="date" data-dh-date>{{dateText}}</view>
     </view>
     <view class="rolechip {{isOwner?'owner':''}}">{{roleLabel}}</view>
   </view>
+
+  <!-- ============ 老板视角 · 业绩大屏(图 v3.2 §一,段 9)============
+       三条接口与网页端**同一份数据**;这一页零计算、零拼串,句子都由 utils/dashboard-view.js 出。 -->
+  <block wx:if="{{isOwner}}">
+    <!-- 加载中 / 取数失败 / 正常,三态互斥 -->
+    <view wx:if="{{dhState==='loading'}}" class="dh-card" data-dh-state="loading">
+      <view class="dh-skel"></view><view class="dh-skel short"></view>
+    </view>
+    <view wx:elif="{{dhState==='failed'}}" class="dh-card" data-dh-state="failed">
+      <view class="dh-truth">业绩数据暂时取不到</view>
+      <view class="dh-retry" bindtap="loadPulse">下拉重试 · 或稍后再看</view>
+    </view>
+    <block wx:else>
+      <view class="dh-card" data-dh-state="ready">
+        <view class="dh-periods" data-dh-periods>
+          <view wx:for="{{dh.periods}}" wx:key="key" class="dh-period {{item.on?'on':''}}"
+                data-p="{{item.key}}" bindtap="switchPeriod">{{item.label}}</view>
+        </view>
+        <view class="dh-eyebrow">{{dh.headLabel}}</view>
+        <view class="dh-big" data-dh-metric="revenue">{{dh.headValue}}</view>
+        <view wx:if="{{dh.headDelta}}" class="dh-delta {{dh.headDelta.tone}}" data-delta>{{dh.headDelta.arrow}} {{dh.headDelta.text}}</view>
+        <view wx:if="{{dh.spark.length}}" class="dh-spark" data-dh-spark>
+          <view wx:for="{{dh.sparkBars}}" wx:key="i" class="dh-bar" style="height:{{item}}%"></view>
+        </view>
+        <!-- 五个小数收在大屏底部一行;今日预约那一格带实时副行 -->
+        <view class="dh-smalls" data-dh-smalls>
+          <view wx:for="{{dh.smalls}}" wx:key="key" class="dh-small" data-dh-small="{{item.key}}">
+            <view class="dh-sl">{{item.label}}</view>
+            <view class="dh-sv">{{item.value}}</view>
+            <view wx:if="{{item.sub}}" class="dh-sub" data-dh-live><text class="dh-dot"></text>{{item.sub}}</view>
+            <view wx:if="{{item.delta}}" class="dh-sd {{item.delta.tone}}">{{item.delta.arrow}} {{item.delta.text}}</view>
+          </view>
+        </view>
+        <view class="dh-asof" data-dh-asof>{{dh.asOf}}</view>
+      </view>
+
+      <!-- AI 今日一句(只读已生成的,不为首页新起模型调用) -->
+      <view class="dh-card dh-ai" wx:if="{{dh.aiLine}}" data-dh-ai-line>{{dh.aiLine}}</view>
+      <view class="dh-card dh-ai" wx:else data-dh-ai-none>今天还没有一句 —— 去「AI 日报」生成一次就有了</view>
+
+      <!-- 今日预约:此刻之后前 3 条 + 看全部 -->
+      <view class="dh-card" data-dh-next3>
+        <view class="dh-h">今日预约<text class="dh-h-sub">{{dh.nextHint}}</text></view>
+        <view wx:if="{{dhClosed}}" class="dh-truth" data-dh-truth-closed>今日休息</view>
+        <block wx:else>
+          <view wx:for="{{dh.next3}}" wx:key="id" class="dh-row" data-dh-next-row>
+            <view class="dh-time">{{item.time}}</view>
+            <view class="dh-who">{{item.text}}</view>
+            <view class="dh-st">{{item.status}}</view>
+          </view>
+          <view wx:if="{{!dh.next3.length}}" class="dh-empty">后面没有待到店的了</view>
+        </block>
+        <view class="dh-go" bindtap="goOrders">看全部 ›</view>
+      </view>
+
+      <!-- 今日要处理:0 不出现,全 0 换一句;顾客在等的两项标红排前 -->
+      <view class="dh-card" data-dh-todo>
+        <view class="dh-h">今日要处理<text class="dh-h-sub">按急缓排</text></view>
+        <view wx:if="{{dh.todoEmpty}}" class="dh-empty">今天没有要处理的</view>
+        <view wx:for="{{dh.todos}}" wx:key="key" class="dh-todo {{item.urgent?'urgent':''}}"
+              data-urgent="{{item.urgent?1:0}}" data-k="{{item.key}}" bindtap="goTodo">
+          <view class="dh-todo-l">{{item.label}}</view>
+          <view class="dh-todo-n">{{item.n}}</view>
+        </view>
+      </view>
+    </block>
+  </block>
 
   <!-- ================= 员工端 ================= -->
   <block wx:if="{{!isOwner}}">
@@ -70,122 +138,13 @@
     </view>
   </block>
 
-  <!-- ================= 老板端:一屏横条 ================= -->
-  <block wx:else>
-    <!-- AI 每日总结:未开通 AI 智能包时整卡不显示(下面的经营数字横条照常) -->
-    <view class="ai" wx:if="{{aiEnabled}}">
-      <view class="ai-h"><text class="ai-dot">✦</text> AI 每日总结 · 自动</view>
-      <block wx:if="{{brief}}">
-        <view class="ai-txt">{{brief}}</view>
-        <view class="ai-act" wx:for="{{briefActions}}" wx:key="*this"><text class="ai-adot"></text><text class="ai-atxt">{{item}}</text></view>
-      </block>
-      <view class="ai-txt dim" wx:elif="{{briefLoading}}">正在生成今日总结…</view>
-      <view class="ai-txt dim" wx:else>今日 {{board.total}} 单 · 在做 {{board.active}} · 完成 {{board.done}}{{notes.count ? ' · ' + notes.count + ' 单待写小记' : ''}}</view>
-    </view>
-
-    <!-- ① 今日预约 -->
-    <view class="rowcard">
-      <view class="rowhead" data-k="today" bindtap="toggle">
-        <view class="rowico">📅</view>
-        <view class="rowt"><view class="rowname">今日预约</view><view class="rowhint">{{board.techs}} 技师 · 在做 {{board.active}} · 完成 {{board.done}}</view></view>
-        <view class="nbadge">{{board.total}}</view>
-        <view class="chev {{expand==='today'?'open':''}}">›</view>
-      </view>
-      <view class="rowbody" wx:if="{{expand==='today'}}">
-        <view class="subrow">
-          <view class="subinfo"><view class="subname">在做 {{board.active}} 人 · 待到店 {{board.waiting}} · 已完成 {{board.done}}</view><view class="submeta">点开台面可标记到店/完成/直接排单</view></view>
-          <view class="gobtn solid" catchtap="goOrders">看台面 ›</view>
-        </view>
-      </view>
-    </view>
-
-    <!-- ② 客服工作台(待人工+待报价) -->
-    <view class="rowcard">
-      <view class="rowhead" data-k="cs" bindtap="toggle">
-        <view class="rowico warn">💬</view>
-        <view class="rowt"><view class="rowname">客服工作台</view><view class="rowhint">待人工 {{cs.human}} · 待报价 {{cs.quote}}</view></view>
-        <view class="nbadge {{cs.total?'warn':'mut'}}">{{cs.total}}</view>
-        <view class="chev {{expand==='cs'?'open':''}}">›</view>
-      </view>
-      <view class="rowbody" wx:if="{{expand==='cs'}}">
-        <view class="subrow">
-          <view class="subinfo"><view class="subname">待人工回复 {{cs.human}} 条</view><view class="submeta">AI 转来的、需要你拿主意</view></view>
-          <view class="gobtn solid" catchtap="goWorkbench">去处理 ›</view>
-        </view>
-        <view class="subrow">
-          <view class="subinfo"><view class="subname">待报价 {{cs.quote}} 条</view><view class="submeta">顾客发图问价,等你定</view></view>
-          <view class="gobtn solid" catchtap="goWorkbench">去处理 ›</view>
-        </view>
-      </view>
-    </view>
-
-    <!-- ③ 服务小记 -->
-    <view class="rowcard">
-      <view class="rowhead" data-k="notes" bindtap="toggle">
-        <view class="rowico">📝</view>
-        <view class="rowt"><view class="rowname">服务小记</view><view class="rowhint" wx:if="{{notes.count}}">{{notes.groups.length}} 位技师欠 {{notes.count}} 单 · 可一键提醒</view><view class="rowhint" wx:else>今天完成的单都写了 ✓</view></view>
-        <view class="nbadge {{notes.count?'warn':'mut'}}">{{notes.count}}</view>
-        <view class="chev {{expand==='notes'?'open':''}}">›</view>
-      </view>
-      <view class="rowbody" wx:if="{{expand==='notes'}}">
-        <view wx:if="{{!notes.groups.length}}" class="subempty">今天没有待写的小记 ✓</view>
-        <view class="subrow" wx:for="{{notes.groups}}" wx:key="name">
-          <view class="av">{{item.av}}</view>
-          <view class="subinfo"><view class="subname">{{item.name}} · 欠 {{item.count}} 单</view><view class="submeta">{{item.meta}}</view></view>
-          <view wx:if="{{item.reminded}}" class="gobtn done">已提醒 ✓</view>
-          <view wx:elif="{{item.sending}}" class="gobtn dim">发送中…</view>
-          <view wx:else class="gobtn" data-name="{{item.name}}" catchtap="remindTech">提醒 ›</view>
-        </view>
-        <view class="subrow center" wx:if="{{notes.groups.length}}">
-          <view class="gobtn solid gold {{remindingAll?'dim':''}}" catchtap="remindAll">{{remindingAll ? '发送中…' : '一键提醒全部 →'}}</view>
-        </view>
-      </view>
-    </view>
-
-    <!-- ③b 沉睡召回周报(有沉睡客才出现,不占常驻位) -->
-    <view class="rowcard" wx:if="{{digest.count}}">
-      <view class="rowhead" data-k="digest" bindtap="toggle">
-        <view class="rowico">💤</view>
-        <view class="rowt"><view class="rowname">本周召回建议</view><view class="rowhint">{{digest.count}} 位沉睡老客 · {{aiEnabled ? '话术已备好,复制即发' : '开通 AI 智能包可自动写话术'}}</view></view>
-        <view class="nbadge warn">{{digest.count}}</view>
-        <view class="chev {{expand==='digest'?'open':''}}">›</view>
-      </view>
-      <view class="rowbody" wx:if="{{expand==='digest'}}">
-        <view class="subrow" wx:for="{{digest.items}}" wx:key="userId">
-          <view class="av">{{item.av}}</view>
-          <view class="subinfo"><view class="subname">{{item.name}} · {{item.lastVisitDays}}天没来 · 累计{{item.spendText}}</view><view class="submeta wrap">{{item.message}}</view></view>
-        </view>
-        <view class="subrow center">
-          <view class="gobtn solid gold" catchtap="copyDigest">📋 复制全部话术</view>
-          <view class="gobtn" catchtap="goCustomersS">去客户库 ›</view>
-        </view>
-      </view>
-    </view>
-
-    <!-- ④ 排班申请 -->
-    <view class="rowcard">
-      <view class="rowhead" data-k="sched" bindtap="toggle">
-        <view class="rowico">🗓</view>
-        <view class="rowt"><view class="rowname">排班申请</view><view class="rowhint">员工调休/换班审批</view></view>
-        <view class="nbadge {{sched.count?'warn':'mut'}}">{{sched.count}}</view>
-        <view class="chev {{expand==='sched'?'open':''}}">›</view>
-      </view>
-      <view class="rowbody" wx:if="{{expand==='sched'}}">
-        <view wx:if="{{!sched.items.length}}" class="subempty">暂无待审批的排班申请 ✓</view>
-        <view class="subrow" wx:for="{{sched.items}}" wx:key="id">
-          <view class="subinfo"><view class="subname">{{item.line}}</view><view class="submeta" wx:if="{{item.note}}">留言:{{item.note}}</view></view>
-          <view class="gobtn solid" catchtap="goSchedule">去处理 ›</view>
-        </view>
-      </view>
-    </view>
-
-    <!-- ⑤ 财务(锁) -->
-    <view class="lockrow" bindtap="goFinance">
-      <view class="rowico dark">🔒</view>
-      <view class="rowt"><view class="rowname">本月营收 · 沉睡卡 · 待结工资</view><view class="rowhint">账本口径 · 点开需财务密码</view></view>
-      <view class="chev">›</view>
-    </view>
-  </block>
+  <!-- ================= 老板端旧块:整段退役(图 v3.2 §一,段 9)=================
+       图上写明「不再单独出现的旧块」:
+       ·「我的今日台面」卡 → 并进上面五个小数里「今日预约」那一格的副行(在做 N · 待到店 N);
+       ·「待办小记」「客服工作台」→ 并进「今日要处理」那张清单;
+       · 打卡 / 排班 → 归员工视角(段 10 打卡门);
+       · 快捷格取消(底部导航四键还在)。
+       删掉而不是隐藏 —— 留着迟早有人再打开,一页就成了两套(D154 在网页端同样处置)。 -->
 
   <merchant-tabbar active="home"></merchant-tabbar>
 </view>

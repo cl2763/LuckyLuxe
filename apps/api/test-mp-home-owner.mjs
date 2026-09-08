@@ -1,0 +1,159 @@
+/* 段 9 · 小程序商家端首页「老板视角」按图 v3.2 §一 重画
+
+   为什么这把刀能在常驻回归里跑:页面要显示的**每一句话**都由
+   `miniprogram/utils/dashboard-view.js` 的纯函数算出来 —— 喂它三份数据,逐句对。
+   像素与交互由 DevTools 截图背书(`handoff/night-runs/段9截图/`),两者分工写在这儿,
+   免得下一个人以为静态全绿就等于页面对了(L1 末端验证律)。
+
+   守三层:
+   ① **图 §一 那几块在**(选择器,不锚文案);旧块真的退役了(删掉不是隐藏);
+   ② **出句口径**:零回落 / 不自己拼币符 / 不编月目标 / 上期 0 不显示箭头 / 全 0 不画折线;
+   ③ **与网页端同一份数据**:两端读的是同样三条接口(一份数据两端渲染律)。 */
+import { readFileSync, readdirSync } from 'node:fs'
+import { join } from 'node:path'
+import { fileURLToPath } from 'node:url'
+import { createRequire } from 'node:module'
+
+const ROOT = join(fileURLToPath(new URL('.', import.meta.url)), '..', '..')
+const requireCjs = createRequire(import.meta.url)
+const view = requireCjs(join(ROOT, 'miniprogram/utils/dashboard-view.js'))
+const wxml = readFileSync(join(ROOT, 'miniprogram/pages/merchant/home/index.wxml'), 'utf8')
+const pageJs = readFileSync(join(ROOT, 'miniprogram/pages/merchant/home/index.js'), 'utf8')
+const webHome = readFileSync(join(ROOT, 'apps/web/dashboard-home.js'), 'utf8')
+
+let n = 0
+const fails = []
+const check = (name, ok, detail = '') => {
+  n += 1
+  if (ok) console.log(`ok ${n} - ${name}`)
+  else { fails.push(name); console.log(`not ok ${n} - ${name}${detail ? ` :: ${detail}` : ''}`) }
+}
+
+/* ═══ ① 图 §一 逐块(判据锚**选择器**,不锚文案)═══ */
+const BLOCKS = [
+  ['周期条(今日/本周/本月/本年)', 'data-dh-periods'],
+  ['营业收入大数', 'data-dh-metric="revenue"'],
+  ['比上期', 'data-delta'],
+  ['折线', 'data-dh-spark'],
+  ['五个小数一行', 'data-dh-smalls'],
+  ['今日预约那格的实时副行', 'data-dh-live'],
+  ['截至行', 'data-dh-asof'],
+  ['AI 今日一句', 'data-dh-ai-line'],
+  ['AI 没有一句', 'data-dh-ai-none'],
+  ['今日预约前 3 条', 'data-dh-next3'],
+  ['今日要处理', 'data-dh-todo'],
+  ['急件标记', 'data-urgent'],
+  ['休息日真话', 'data-dh-truth-closed'],
+]
+for (const [zh, sel] of BLOCKS) check(`①「${zh}」有稳定选择器 \`${sel}\``, wxml.includes(sel), sel)
+for (const [zh, st] of [['加载中', 'loading'], ['取数失败', 'failed'], ['正常', 'ready']]) {
+  check(`①b ${zh}态有自己的节点标记`, wxml.includes(`data-dh-state="${st}"`))
+}
+check('①c 三态**互斥**(wx:if / wx:elif / wx:else,不是三个各自判断)',
+  /dhState==='loading'/.test(wxml) && /wx:elif="\{\{dhState==='failed'\}\}"/.test(wxml))
+check('①d 🔴 失败态不画数(那一支里没有任何指标节点)',
+  !/data-dh-state="failed"[\s\S]{0,400}?data-dh-metric/.test(wxml))
+check('①e 🔴 取数失败时先把手上的数清掉(不显示旧数)', /dh: null, dhState: 'failed'/.test(pageJs))
+check('①f 小程序端失败态用「下拉重试」(网页端才是「点一下重试」—— 待裁 #2 裁的两端不同)',
+  /下拉重试/.test(wxml))
+
+/* ═══ ② 旧块真的退役了(删掉不是隐藏)═══ */
+check('② 🔴 老板端旧的「一屏横条」整段已删(留着就成了一页两套)',
+  !/老板端:一屏横条 ================= -->\s*\n\s*<block wx:else>/.test(wxml)
+  && wxml.includes('老板端旧块:整段退役'))
+check('②b 快捷格取消(图 §一:底部导航四键还在,快捷格没了)', !/quickGrid|快捷格</.test(wxml))
+
+/* ═══ ③ 出句口径:纯函数逐句对 ═══ */
+const money = (c) => `CAD $${(c / 100).toFixed(0)}`
+const mk = (over = {}) => ({
+  currency: 'CAD', currencyDisplay: { prefix: '<CODE> ', symbol: '$', trimZeroDecimals: false },
+  settled: { state: 'open' }, locked: false,
+  metrics: [
+    { key: 'revenue', value: 248600, spark: [1, 2, 3, 4, 5, 6, 7], delta: { percent: 18, basis: 100 } },
+    { key: 'cash', value: 312000, spark: [], delta: { percent: 9, basis: 100 } },
+    { key: 'cardUse', value: 94000, spark: [], extra: { times: 3, timesUnit: '次' } },
+    { key: 'newCard', value: 2, spark: [] },
+    { key: 'visits', value: 11, spark: [], delta: { percent: -2, basis: 50 } },
+    { key: 'bookings', value: 12, spark: [] },
+  ],
+  ...over,
+})
+const now = { closed: false, total: 12, doing: 3, waiting: 2, done: 7, next: null }
+const todo = { items: [{ key: 'notePending', n: 3 }, { key: 'aiHandoff', n: 2 }, { key: 'quotePending', n: 0 }] }
+const built = view.buildOwnerHome({ pulse: mk(), now, todo, period: 'today', nowHM: '14:32', storeMoney: money })
+
+check('③ 大数按**下发的那份 currencyDisplay** 出(页面自己不拼币符)',
+  built.headValue === 'CAD $2,486.00', built.headValue)
+check('③b 五个小数**顺序就是图上的顺序**',
+  built.smalls.map((s) => s.key).join(',') === 'cash,cardUse,newCard,visits,bookings',
+  built.smalls.map((s) => s.key).join(','))
+check('③c 今日预约那格带实时副行「在做 N · 待到店 N」',
+  built.smalls[4].sub === '在做 3 · 待到店 2', built.smalls[4].sub)
+check('③d 🔴 换到本周,今日预约格改叫「本期预约」且副行不显示',
+  (() => { const w = view.buildOwnerHome({ pulse: mk(), now, todo, period: 'week', nowHM: '14:32', storeMoney: money })
+    return w.smalls[4].label === '本期预约' && w.smalls[4].sub === '' })())
+check('③e 比上期在四个维度上说人话(比昨日/比上周/比上月/比去年)',
+  ['today', 'week', 'month', 'year'].map((p) => view.buildOwnerHome({ pulse: mk(), now, todo, period: p, nowHM: '1', storeMoney: money }).headDelta.text)
+    .every((t, i) => t.includes(['比昨日', '比上周', '比上月', '比去年'][i])))
+check('③f 🔴 上期是 0 → **不显示箭头**(不显示 ∞/NaN)',
+  view.deltaOf({ delta: { percent: 999, basis: 0 } }, 'today') === null)
+check('③g 🔴 全 0 不画折线(不是画一条贴地的线)',
+  view.buildOwnerHome({ pulse: mk({ metrics: mk().metrics.map((m) => ({ ...m, spark: [0, 0, 0, 0, 0, 0, 0] })) }), now, todo, period: 'today', nowHM: '1', storeMoney: money }).spark.length === 0)
+check('③h 🔴 拿不到值出「—」,不编 0(零回落)',
+  view.moneyText({ value: null }, money) === '—' && view.countText({ value: undefined }) === '—')
+check('③i 财务锁遮成 ••••(不是显示 0)',
+  view.moneyText({ locked: true, value: 123 }, money) === '••••')
+check('③j 🔴 月目标恒不出现(门店没有这个配置项 —— 编一个百分比就是假数)',
+  built.goal === null && !/月目标/.test(wxml))
+check('③k 截至行说真话:未日结说未日结', built.asOf.includes('今日未日结,实时'), built.asOf)
+check('③l 已日结要说「确认于」',
+  view.asOfText({ settled: { state: 'closed', confirmedAt: '21:05' } }, '1').includes('确认于 21:05'))
+check('③m 要处理:0 的不出现,顾客在等的两项排前面',
+  built.todos.map((t) => t.key).join(',') === 'aiHandoff,notePending', built.todos.map((t) => t.key).join(','))
+check('③n 全 0 换一句话', view.buildOwnerHome({ pulse: mk(), now, todo: { items: [] }, period: 'today', nowHM: '1', storeMoney: money }).todoEmpty === true)
+
+/* ═══ ④ 与网页端同一份数据(一份数据两端渲染律)═══ */
+for (const ep of ['/admin/dashboard/pulse', '/admin/dashboard/now', '/admin/dashboard/todo']) {
+  check(`④ 小程序读的是同一条接口 ${ep}`, pageJs.includes(ep) && webHome.includes(ep))
+}
+check('④b 🔴 页面零计算零拼串:句子都从 `buildOwnerHome` 出',
+  /buildOwnerHome\(/.test(pageJs) && !/toFixed\(/.test(pageJs))
+check('④c 单页没超 600 行(公约③)', pageJs.split('\n').length <= 600, String(pageJs.split('\n').length))
+
+/* ═══ ⑤ 币种红线:钱按**这次接口下发的币种**走,不吃客户端缓存 ═══ */
+const pulseMod = readFileSync(join(ROOT, 'apps/api/dashboard-pulse.mjs'), 'utf8')
+check('⑤ 后端 pulse 一并下发 `currencyDisplay`(币符怎么摆也由后端说了算)',
+  /currencyDisplay: currencyDisplayOf\(tenantCurrencyCodeOrNull\(tid\)\)/.test(pulseMod))
+const viewSrc = readFileSync(join(ROOT, 'miniprogram/utils/dashboard-view.js'), 'utf8')
+check('⑤b 按**下发的那份**格式化,出口在 dashboard-view;页面一个格式化动作都不做',
+  /makeMoneyFor\(pulse && pulse\.currencyDisplay, cur\)/.test(viewSrc)
+  && !/storeCurrencyDisplay\(/.test(pageJs) && !/toFixed\(/.test(pageJs))
+check('⑤c 🔴 拿不到币种 → 一个钱数都不出(fail-closed,与 D140 同口径)',
+  view.buildOwnerHome({ pulse: mk({ currency: null }), now, todo, period: 'today', nowHM: '1', storeMoney: money }).headValue === '—')
+check('⑤d 换一家 CNY 店,钱就该按 ¥ 出(不是回落成旗舰店的 CAD)',
+  (() => { const cny = view.buildOwnerHome({ pulse: mk({ currency: 'CNY', currencyDisplay: { prefix: '', symbol: '¥', trimZeroDecimals: true } }),
+      now, todo, period: 'today', nowHM: '1',
+      moneyFor: (c, code) => { const f = { CNY: { p: '', s: '¥' }, CAD: { p: 'CAD ', s: '$' } }[code]; return `${f.p}${f.s}${(c / 100).toFixed(0)}` } })
+    return cny.headValue === '¥2486' })())
+
+/* ═══ ⑥ 截图落仓(夜班令 5 规矩 5:带图的段必交截图;DOM 证据不替代截图,J-32)═══
+   判据**直接数文件**并读 PNG 魔数 —— 「交了」而没有文件与 J-27 同族。 */
+const SHOT_DIR = join(ROOT, 'handoff/night-runs/段9截图')
+const SHOTS = ['lucky-luxe_ready.png', 'jics-store_ready.png', 'luvia-bj_ready.png', 'luvia-bj_failed.png', 'luvia-bj_loading.png']
+for (const f of SHOTS) {
+  let ok = false
+  let why = '文件不在'
+  try {
+    const b = readFileSync(join(SHOT_DIR, f))
+    ok = b.length > 20000 && b.readUInt32BE(0) === 0x89504e47
+    why = `${b.length}B magic=${b.readUInt32BE(0).toString(16)}`
+  } catch { /* 不在 */ }
+  check(`⑥ 截图在仓:${f}(真 PNG · 非空)`, ok, why)
+}
+check('⑥b 白名单式:截图目录里不许有约定之外的 .png(改名不算交付)',
+  readdirSync(SHOT_DIR).filter((f) => f.endsWith('.png')).every((f) => SHOTS.includes(f)),
+  readdirSync(SHOT_DIR).filter((f) => f.endsWith('.png')).join(' · '))
+
+console.log(`\n[段9 小程序老板视角] 图 §一 逐块 · 三态互斥 · 出句口径 · 与网页同源`)
+if (fails.length) { console.error(`\n❌ test-mp-home-owner ${fails.length}/${n} 项未过`); process.exit(1) }
+console.log(`\n✅ test-mp-home-owner 通过 ${n} 项`)

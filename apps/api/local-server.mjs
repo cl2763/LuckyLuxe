@@ -6821,7 +6821,7 @@ const scheduleBoard = createScheduleBoard({
   specialDateFor, hoursUnsetOfStore, getService, isGenericDisplayName, memberCodeForUserId, apiError, readBody,
   backfillPlanFor
 })
-const dashboardPulse = createDashboardPulse({ db, currentTenantId, todayOf, tenantCurrencyCodeOrNull, financeLocked: (tid) => financeLockEnabled(tid), todayBoardOf: (tid, date) => scheduleBoard.dayCounts(tid, date), storeClosedOn: (tid, date) => { try { return isClosedDay(defaultStoreId(), date) } catch { return false } } })   /* 主页大屏三接口(图 v3.1 §四);口径两问答案在模块抬头;「此刻」与台面同一条规则 */
+const dashboardPulse = createDashboardPulse({ db, currentTenantId, todayOf, tenantCurrencyCodeOrNull, currencyDisplayOf, financeLocked: (tid) => financeLockEnabled(tid), todayBoardOf: (tid, date) => scheduleBoard.dayCounts(tid, date), storeClosedOn: (tid, date) => { try { return isClosedDay(defaultStoreId(), date) } catch { return false } } })   /* 主页大屏三接口(图 v3.1 §四);口径两问答案在模块抬头;「此刻」与台面同一条规则 */
 const notifyScheduler = createNotifyScheduler({
   db, randomId, iso, apiError, json, readBody, parseJson: parseJson2, localParts, tenantTimezone,
   DEFAULT_TENANT_ID, dataScope: DATA_SCOPE

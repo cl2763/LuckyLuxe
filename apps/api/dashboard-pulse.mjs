@@ -65,7 +65,7 @@ export function deltaOf(value, prev) {
 
 export function createDashboardPulse(deps) {
   const {
-    db, currentTenantId, todayOf, tenantCurrencyCodeOrNull, financeLocked,
+    db, currentTenantId, todayOf, tenantCurrencyCodeOrNull, currencyDisplayOf, financeLocked,
     todayBoardOf, storeClosedOn,
   } = deps
   for (const [name, fn] of Object.entries(deps)) {
@@ -183,6 +183,10 @@ export function createDashboardPulse(deps) {
       asOf: new Date().toISOString(),
       period: p,
       currency: tenantCurrencyCodeOrNull(tid),
+      /* 🔴 币种红线:**币符怎么摆也由后端下发**(与 `/admin/store-clock`、公开 `/stores` 同一个出口)。
+         段 9 现测:小程序端拿客户端缓存去拼,平台侧换店后小婕店/北京店(CNY)被显示成 `CAD $` ——
+         缓存是「上次看的那家店」的。给了这一份,两端就都不用自己认识任何币种。 */
+      currencyDisplay: currencyDisplayOf(tenantCurrencyCodeOrNull(tid)),
       settled: (() => { const s = closedRevenue().get(tid, today); return s ? { state: 'confirmed' } : { state: 'open' } })(),
       locked,
     }

@@ -1,5 +1,6 @@
 const api = require('../../../utils/api')
 const { storeMoney } = require('../../../utils/storeclock')
+const { buildOwnerHome } = require('../../../utils/dashboard-view')
 
 Page({
   data: {
@@ -24,21 +25,80 @@ Page({
     // 排班申请(老板)
     sched: { count: 0, items: [] },
     // 沉睡召回周报(老板;每周自动生成,有沉睡客才显示这一条)
-    digest: { count: 0, items: [] }
+    digest: { count: 0, items: [] },
+    /* ── 老板视角业绩大屏(图 v3.2 §一,段 9)。三态:loading / failed / ready ── */
+    storeLine: '',
+    dhState: 'loading',
+    dhPeriod: 'today',
+    dhClosed: false,
+    dh: null
   },
 
   onShow() {
     if (!api.guardMerchant()) return
+    this.loadPulse()
     this.setData({ aiEnabled: api.merchantHasAi() })
     // 刷一次权限:没开通 AI 智能包就不显示 AI 每日总结 / 召回周报
     api.refreshMerchantAi().then((on) => this.setData({ aiEnabled: on }))
     this.load()
   },
 
+  /* 业绩大屏:三条接口与网页端**同一份数据**(一份数据两端渲染律)。
+     句子全由 `utils/dashboard-view.js` 出 —— 这一页零计算、零拼串、不碰币符。 */
+  async loadPulse() {
+    const period = this.data.dhPeriod
+    this.setData({ dhState: this.data.dh ? this.data.dhState : 'loading' })
+    try {
+      const [pulse, now, todo] = await Promise.all([
+        api.adminGet(`/admin/dashboard/pulse?period=${period}`),
+        api.adminGet('/admin/dashboard/now'),
+        api.adminGet('/admin/dashboard/todo'),
+      ])
+      const d = new Date()
+      const hm = `${String(d.getHours()).padStart(2, '0')}:${String(d.getMinutes()).padStart(2, '0')}`
+      /* 币种红线:钱怎么写全由 `dashboard-view` 按**本次下发的** currencyDisplay 决定,
+         这一页一个格式化动作都不做(storeMoney 只作它拿不到下发时的兜底)。 */
+      const dh = buildOwnerHome({ pulse, now, todo, period, nowHM: hm, storeMoney })
+      /* 折线在小程序里画成一排小竖条(没有 svg):把值归一到 0–100 的高度。
+         全 0 的那一支上面已经把 spark 清空了,所以这里不会出现「一排贴地的条」。 */
+      const max = Math.max(1, ...(dh.spark || []).map((x) => Math.abs(Number(x) || 0)))
+      dh.sparkBars = (dh.spark || []).map((x) => Math.max(4, Math.round((Math.abs(Number(x) || 0) / max) * 100)))
+      /* 🔴 字段名照接口来:`/admin/dashboard/now` 给的是 customer / service / tech
+         (第一版我按 customerName/serviceName 取,截图里那一行成了「02:00 ·」——
+         名字和项目全空。**接口给什么就取什么**,不许照着自己记的字段名写。) */
+      dh.next3 = ((now && now.next3) || (now && now.next ? [now.next] : [])).slice(0, 3).map((b, i) => ({
+        id: b.id || `n${i}`, time: b.time || '',
+        text: [b.customer, b.service, b.tech].filter(Boolean).join(' · '),
+        status: b.statusText || '待到店',
+      }))
+      dh.nextHint = dh.next3.length ? '此刻之后的前 3 条' : ''
+      dh.aiLine = (pulse && pulse.aiLine && pulse.aiLine.text) || ''
+      this.setData({ dh, dhState: 'ready', dhClosed: Boolean(now && now.closed) })
+    } catch (e) {
+      /* 取数失败:**整块换一句话,不显示旧数、不显示 0**(图 §六) */
+      this.setData({ dh: null, dhState: 'failed' })
+    }
+  },
+
+  switchPeriod(e) {
+    const p = e.currentTarget.dataset.p
+    if (!p || p === this.data.dhPeriod) return
+    this.setData({ dhPeriod: p })
+    this.loadPulse()
+  },
+
+  goTodo(e) {
+    const k = e.currentTarget.dataset.k
+    const to = { aiHandoff: '/pages/merchant/conversation/index', quotePending: '/pages/merchant/quote-calc/index',
+      notePending: '/pages/merchant/orders/index', shiftApproval: '/pages/merchant/schedule-day/index',
+      dailyClose: '/pages/merchant/daily-close/index' }[k]
+    if (to) wx.navigateTo({ url: to, fail: () => wx.showToast({ title: '这一项暂时打不开', icon: 'none' }) })
+  },
+
   async load() {
     const d = new Date()
     const wk = '日一二三四五六'[d.getDay()]
-    this.setData({ dateText: `周${wk} ${d.getMonth() + 1}月${d.getDate()}日 · 今天该干什么` })
+    this.setData({ dateText: `${d.getMonth() + 1} 月 ${d.getDate()} 日 周${wk}` })   // 图 §一:日期就是日期,不带口号
 
     let isOwner = true
     try {
@@ -49,7 +109,10 @@ Page({
         myTechId: (me && me.technicianId) || '',
         roleLabel: isOwner ? '老板' : '员工',
         // 昵称(店主 2026-08-10):老板位原来写死「嗨,老板」,昵称改了也不动 —— 现在两端都跟昵称走
-        greeting: `嗨,${(me && me.displayName) || (isOwner ? '老板' : '伙伴')} 👋`
+        greeting: `嗨,${(me && me.displayName) || (isOwner ? '老板' : '伙伴')} 👋`,
+        /* 图 §一 顶栏那一行:**店名 · 问候**。店名走 D156 定的 `storeName`(门店名,商家自己看的那个),
+           取不到就只显示问候 —— 不回落到商户名,也不编一个店名(零回落)。 */
+        storeLine: [(me && me.storeName) || '', `${(me && me.displayName) || (isOwner ? '店主' : '伙伴')},${new Date().getHours() < 12 ? '早上好' : (new Date().getHours() < 18 ? '下午好' : '晚上好')}`].filter(Boolean).join(' · ')
       })
     } catch (e) { /* 未登录/超时:保持默认 */ }
 
