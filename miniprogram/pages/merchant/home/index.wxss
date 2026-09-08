@@ -107,10 +107,13 @@ page{background:#fbf8f5}
 .dh-eyebrow{font-size:22rpx;color:var(--herosub);margin-bottom:6rpx}
 /* D178 大数字三段式(图 line 51–52):币码 1.2rem 金色 · 主数 3.3rem · 分位 1.6rem 淡一档。
    小程序用 rpx:主数 62rpx ≈ 图上的 3.3rem;币码与分位按同一比例缩(约 3:1 与 2:1)。 */
+/* D180 第 3 条:第一次轮播换指标时淡入一句「自动轮播中」,2 秒后消失,**每台设备只出一次** */
+.dh-hint{font-size:20rpx;color:var(--herosub);margin-left:12rpx;opacity:0;animation:dhhint 2s ease forwards}
+@keyframes dhhint{0%{opacity:0}15%{opacity:1}70%{opacity:1}100%{opacity:0}}
 .dh-big{line-height:1.1;color:var(--heroink);font-variant-numeric:tabular-nums;display:flex;align-items:baseline;white-space:nowrap}
-.dh-big-code{font-size:22rpx;color:var(--herogold);font-weight:500;margin-right:8rpx}
-.dh-big-num{font-size:62rpx;font-weight:700;letter-spacing:-0.01em}
-.dh-big-cent{font-size:30rpx;font-weight:500;opacity:.75}
+.dh-big-code{font-family:'FrauncesNum';font-size:22rpx;color:var(--herogold);font-weight:500;margin-right:8rpx}
+.dh-big-num{font-family:'FrauncesNum';font-size:62rpx;font-weight:700;letter-spacing:-0.01em}
+.dh-big-cent{font-family:'FrauncesNum';font-size:30rpx;font-weight:500;opacity:.75}
 .dh-delta{font-size:24rpx;margin-top:6rpx;display:inline-block;padding:2rpx 14rpx;border-radius:999rpx}
 .dh-delta.up{background:var(--goodbg);color:var(--good)}
 .dh-delta.down{background:var(--badbg);color:var(--bad)}
@@ -123,15 +126,25 @@ page{background:#fbf8f5}
 .dh-spark{display:flex;align-items:flex-end;gap:6rpx;height:72rpx;margin:16rpx 0}
 .dh-bar{flex:1;background:linear-gradient(180deg,var(--herogold),rgba(217,185,126,0));border-radius:0}
 
-/* dots:5 个,选中那个变成金色胶囊并会移动(图 §一) */
-.dh-dots{display:flex;gap:10rpx;justify-content:center;margin-top:18rpx}
+/* dots:5 个,选中那个变成金色胶囊并会移动(图 §一)。
+   🔴 D180(店主 2026-09-09 三句话都在说这个):「动态轮播效果也不是很自然,感觉要等很久
+   才自动展示下一个数据,而且**让人看不出来这个版面是有自动轮播的**」。
+   三件一起治:①间隔 6 秒 → **4 秒**;②选中那颗上叠一条**4 秒走满的进度**(看得见它在走);
+   ③暂停时整排 dots 变灰(「已暂停」得看得出来)。
+   进度用 **animation 不用 transition**:每次轮播都会重画这一排,
+   transition 在重画后不会自己跑,animation 会(元素一新建就从头放)。 */
+.dh-dots{display:flex;gap:10rpx;justify-content:center;margin-top:18rpx;align-items:center}
+.dh-dots.paused{opacity:.45}
+.dh-prog{position:absolute;left:0;top:0;bottom:0;background:var(--heroink);opacity:.55;border-radius:999rpx;width:0;animation:dhprog 4s linear forwards}
+@keyframes dhprog{from{width:0}to{width:100%}}
+@media (prefers-reduced-motion: reduce){.dh-prog{animation:none;width:0}}
 /* 🔴 现测(automator 量出来的):选中那颗的 class 明明是 `dh-dot-i on`,宽度却还是 10rpx ——
    **`width` 没顶住**。dots 是 flex 子项,`flex-shrink` 默认 1、`flex-basis` 是 auto,
    小程序 WebView 渲染下会把 `width` 当成可压缩的建议值。加 `flex:none` 钉死。
    这条正是店主说的「**让人看不出来这个版面是有自动轮播的**」的一半原因:
    五颗点长得一模一样,当前是哪一颗根本看不出来。 */
 .dh-dot-i{width:10rpx;height:10rpx;border-radius:50%;background:var(--herogrid);flex:none}
-.dh-dot-i.on{background:var(--herogold);width:28rpx;min-width:28rpx;border-radius:999rpx;transition:width .3s;flex:none}
+.dh-dot-i.on{background:var(--herogold);width:28rpx;min-width:28rpx;border-radius:999rpx;transition:width .3s;flex:none;position:relative;overflow:hidden}
 
 /* 🔴 D178:五个小数**严格一行五列**(图 line 69 `grid-template-columns:repeat(5,1fr)`)。
    她截图里排成了两行(3+2),还把「现金业绩 CAD $5,760.00」折成两行 ——
@@ -141,7 +154,7 @@ page{background:#fbf8f5}
 .dh-small{min-width:0;padding:12rpx 0;transition:opacity .3s}
 .dh-small.dim{opacity:.28}
 .dh-sl{font-size:20rpx;color:var(--herosub);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
-.dh-sv{font-size:30rpx;font-weight:700;color:var(--heroink);margin-top:4rpx;font-variant-numeric:tabular-nums;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.dh-sv{font-family:'FrauncesNum';font-size:30rpx;font-weight:700;color:var(--heroink);margin-top:4rpx;font-variant-numeric:tabular-nums;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
 .dh-sub{font-size:19rpx;color:var(--herosub);margin-top:4rpx;display:flex;align-items:center;gap:4rpx;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
 .dh-dot{width:10rpx;height:10rpx;border-radius:50%;background:var(--herolive);display:inline-block}
 .dh-sd{font-size:19rpx;margin-top:2rpx;white-space:nowrap}

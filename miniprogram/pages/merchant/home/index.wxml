@@ -40,9 +40,12 @@
           <view wx:for="{{dh.sparkBars}}" wx:key="i" class="dh-bar" style="height:{{item}}%"></view>
         </view>
         <!-- dots:5 个,点一下换指标;轮播 6 秒自己走一格(图 §一) -->
-        <view class="dh-dots" data-dh-dots>
+        <view class="dh-dots {{dhPaused?'paused':''}}" data-dh-dots data-dh-paused="{{dhPaused}}">
           <view wx:for="{{dh.dots}}" wx:key="key" class="dh-dot-i {{item.on?'on':''}}"
-                data-k="{{item.key}}" bindtap="switchMetric"></view>
+                data-k="{{item.key}}" bindtap="switchMetric">
+            <!-- 选中那颗上叠一条 4 秒走满的进度:**看得见它在走**(暂停时不放) -->
+            <view wx:if="{{item.on && !dhPaused}}" class="dh-prog" data-dh-prog></view>
+          </view>
         </view>
         <!-- 五个小数收在大屏底部一行;今日预约那一格带实时副行 -->
         <view class="dh-smalls" data-dh-smalls>

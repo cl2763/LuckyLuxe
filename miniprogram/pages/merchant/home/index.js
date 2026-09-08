@@ -4,6 +4,12 @@ const { buildOwnerHome, clockGate, clockFailText, staffSmalls, STAFF_PERIODS } =
 const { loadNumberFont } = require('../../../utils/numfont')   // D168 段 4:数字大字字体,拿不到就如实说
 const { currentTheme, themeClass } = require('../../../utils/theme')   // D183:明暗双模式
 
+/* 🔴 D180(店主 2026-09-09):轮播间隔 6 秒 → **4 秒**。
+   图 §一 **没写间隔**(6 秒只写在 §五 全屏态),所以原来那个 6 秒是自己定的;
+   手机上第一屏 4 秒一换,既看得清又能感到它在动。**全屏态维持 6 秒不动**(那是图上写死的)。 */
+const ROTATE_MS = 4000
+const HINT_KEY = 'll-dh-carousel-hint'   // 「自动轮播中」那句提示,每台设备只出一次
+
 Page({
   data: {
     greeting: '嗨,老板 👋',
@@ -45,7 +51,8 @@ Page({
     dh: null,
     /* 轮播:大数字现在放大的是哪一个指标(dots 与它一一对应) */
     dhMetric: 'revenue',
-    dhPaused: false
+    dhPaused: false,
+    dhHint: false
   },
 
   onLoad() {
@@ -250,10 +257,19 @@ Page({
       const i = KEYS.indexOf(this.data.dhMetric)
       this.setData({ dhMetric: KEYS[(i + 1) % KEYS.length] })
       this.repaintMetric()
+      this.firstHint()
       this.scheduleRotate()
-    }, 6000)
+    }, ROTATE_MS)
   },
   clearRotate() { if (this._rotate) { clearTimeout(this._rotate); this._rotate = null } },
+  /* 第一次轮播换指标时淡入一句提示,2 秒后消失,**每台设备只出一次**(存 storage)。
+     为什么只出一次:它是「告诉你这里会自动转」,不是每次都要念一遍的通知。 */
+  firstHint() {
+    try { if (wx.getStorageSync(HINT_KEY)) return } catch (e) { return }
+    this.setData({ dhHint: true })
+    try { wx.setStorageSync(HINT_KEY, 1) } catch (e) { /* 存不上就下次再提示一次,不影响功能 */ }
+    setTimeout(() => this.setData({ dhHint: false }), 2200)
+  },
   onHide() { this.clearRotate() },
   onUnload() { this.clearRotate() },
 

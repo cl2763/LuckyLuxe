@@ -221,8 +221,10 @@ check('㉑b 五个小数不许折行(长金额靠缩字号 + 省略号,不是换
   && /\.dh-sl\{[^}]*white-space:nowrap/.test(wxssD178))
 check('㉑c 大数字**三段式**:币码 / 主数 / 分位,三个节点三个字号(图 line 51–52)',
   /dh-big-code/.test(wxml) && /dh-big-num/.test(wxml) && /dh-big-cent/.test(wxml)
-  && /\.dh-big-code\{font-size:22rpx/.test(wxssD178) && /\.dh-big-num\{font-size:62rpx/.test(wxssD178)
-  && /\.dh-big-cent\{font-size:30rpx/.test(wxssD178))
+  /* 字号那三条:D181 之后前面多了 `font-family:'FrauncesNum';`,所以不锚「规则开头就是 font-size」,
+     只锚「这条规则里有这个字号」—— 判据不许锚在会变的写法顺序上。 */
+  && /\.dh-big-code\{[^}]*font-size:22rpx/.test(wxssD178) && /\.dh-big-num\{[^}]*font-size:62rpx/.test(wxssD178)
+  && /\.dh-big-cent\{[^}]*font-size:30rpx/.test(wxssD178))
 check('㉑d 三段由**后端下发的 currencyDisplay** 拆出来,页面零拼串(币种红线)',
   /makePartsFor\(pulse && pulse\.currencyDisplay, cur\)/.test(readFileSync(join(ROOT, 'miniprogram/utils/dashboard-view.js'), 'utf8'))
   /* 币符扫的是**样式规则**,不扫注释 —— 注释里写着她截图那句「现金业绩 CAD $5,760.00」,
@@ -254,6 +256,47 @@ check('㉒e 落点表与网页端**同一份**(改一处必须两处一起改;�
   && /GO = \{ revenue: 'finance'/.test(webHome))
 check('㉒f wx.navigateTo 接了 fail(《波及面回归律》④:tab 页要 switchTab,失败还要有话说)',
   /wx\.navigateTo\(\{ url: to, fail: \(\) => wx\.switchTab/.test(pageJs))
+
+/* ══ D180 · 轮播手感(夜班令6 段 6;店主三句话都在说这个)══
+   「等很久才自动展示下一个」→ 间隔 6 秒改 4 秒;
+   「看不出来这个版面有自动轮播」→ 选中那颗上叠一条 4 秒走满的进度 + 首次一句提示;
+   「增加一些交互」→ 点/滑暂停(段 5),**暂停时整排变灰**让「已暂停」看得见。 */
+check('㉓ 间隔 4 秒(图 §一 没写间隔;6 秒只写在 §五 全屏态,那边不动)',
+  /const ROTATE_MS = 4000/.test(pageJs) && !/\}, 6000\)/.test(pageJs))
+check('㉓b 全屏态那 6 秒没被顺手改掉(它是图 §五 写死的)',
+  /ROTATE_MS = 6000/.test(readFileSync(join(ROOT, 'apps/web/dashboard-fullscreen.js'), 'utf8')))
+check('㉓c 进度用 animation 不用 transition(每次轮播都会重画这一排,transition 不会自己跑)',
+  /animation:dhprog 4s linear forwards/.test(wxssD178) && /@keyframes dhprog/.test(wxssD178))
+check('㉓d 「减少动态效果」时不画进度(仍然换指标)',
+  /@media \(prefers-reduced-motion: reduce\)\{\.dh-prog\{animation:none/.test(wxssD178))
+check('㉓e 暂停时整排 dots 变灰(「已暂停」得看得出来)',
+  /\.dh-dots\.paused\{opacity:/.test(wxssD178) && /dhPaused\?'paused':''/.test(wxml))
+check('㉓f 暂停时不画进度(进度还在走 = 骗人)',
+  /wx:if="\{\{item\.on && !dhPaused\}\}"/.test(wxml))
+check('㉓g 首次提示每台设备只出一次(存 storage),2 秒后消失',
+  /HINT_KEY = 'll-dh-carousel-hint'/.test(pageJs) && /wx\.setStorageSync\(HINT_KEY, 1\)/.test(pageJs)
+  && /setTimeout\(\(\) => this\.setData\(\{ dhHint: false \}\), 2200\)/.test(pageJs))
+
+/* ══ D181 · 小程序数字用真 Fraunces(夜班令6 段 7:三条路都试过再下结论)══
+   路①(woff2 子集 base64 内嵌)**成了**;路②(wx.loadFontFace + 本机地址)不成,原因写在代码里;
+   路③(退回系统字体)不用走。中文仍是系统字体 —— 这句话不许被改成「已按图落地」。 */
+const fontWxss = readFileSync(join(ROOT, 'miniprogram/styles/fraunces-digits.wxss'), 'utf8')
+const numfontJs = readFileSync(join(ROOT, 'miniprogram/utils/numfont.js'), 'utf8')
+check('㉔ 字体是**内嵌的 woff2 子集**(不是网络地址 —— WXSS 里引网络字体不生效)',
+  /@font-face/.test(fontWxss) && /url\("data:font\/woff2;charset=utf-8;base64,/.test(fontWxss)
+  && !/https?:\/\//.test(fontWxss.replace(/\/\*[\s\S]*?\*\//g, '')))
+check('㉔b 子集够小(< 8KB base64):只有 0–9 与几个币符,中文一个字都没有',
+  fontWxss.length < 8192, `${fontWxss.length} 字节`)
+check('㉔c app.wxss 引了它,大数字与小牌数字都用上了',
+  /@import "styles\/fraunces-digits\.wxss"/.test(readFileSync(join(ROOT, 'miniprogram/app.wxss'), 'utf8'))
+  && /\.dh-big-num\{font-family:'FrauncesNum'/.test(wxssD178)
+  && /\.dh-sv\{font-family:'FrauncesNum'/.test(wxssD178))
+check('㉔d 🔴 中文那句实话还在(中文是系统字体,不是 Noto)',
+  /中文标题与正文用的还是系统字体/.test(numfontJs) && /不是 Noto Serif SC \/ Noto Sans SC/.test(numfontJs))
+check('㉔e 路②为什么不成,写在代码里(不是一句「做不到」)',
+  /只吃 https|要求 \*\*https\*\*/.test(numfontJs) && /白名单/.test(numfontJs) && /开发者工具/.test(numfontJs))
+check('㉔f 生成物有重生成的脚本(那串 base64 是生成的,不许手改)',
+  /make-fraunces-subset\.sh/.test(fontWxss))
 
 /* ══ D183 · 小程序也有明暗双模式(夜班令6 段 3;双端同批律)══ */
 const themeUtil = readFileSync(join(ROOT, 'miniprogram/utils/theme.js'), 'utf8')

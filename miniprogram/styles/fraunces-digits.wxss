@@ -1,0 +1,23 @@
+/* D181 · 小程序数字大字用真 Fraunces —— **路①:woff2 子集 base64 内嵌**(夜班令6 段 7)
+ *
+ * ══ 三条路,店主要求都试过再下结论 ══
+ * · **路①(这一份)**:`pyftsubset` 把 Fraunces 700 只留 **0–9 与 , . ¥ $ € £**,
+ *   转 woff2 后 **2,748 字节**,base64 内嵌进 WXSS 的 `@font-face`。
+ *   小程序**不能**在 WXSS 里引网络字体,但 base64 是官方文档写明支持的那条路。
+ * · 路②:`wx.loadFontFace` + 局域网地址 —— 它只吃 https 且域名要进后台白名单,本机给不出;
+ *   开发者工具里可以勾「不校验合法域名」,但那只在**开发工具里**成立,真机不成立。
+ * · 路③:退回系统字体(**只有前两条都不成才走**,而且要如实写在代码与回执里)。
+ *
+ * ══ 字体来源与授权 ══
+ * Fraunces 是 SIL Open Font License 1.1(可自由内嵌与再分发),
+ * 取自 Google Fonts 的 `fonts.gstatic.com`(原始 TTF 71,588 字节 → 子集 woff2 2,748 字节)。
+ * 只取拉丁数字与几个币符 —— **中文一个字都没有**(中文仍是系统字体,这条没变,见 utils/numfont.js)。
+ *
+ * ⚠️ 这一份是**生成物**:重新生成的命令写在 `tools/make-fraunces-subset.sh` 里,不要手改。
+ */
+@font-face {
+  font-family: 'FrauncesNum';
+  font-weight: 700;
+  font-style: normal;
+  src: url("data:font/woff2;charset=utf-8;base64,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") format('woff2');
+}

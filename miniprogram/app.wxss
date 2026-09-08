@@ -1,6 +1,8 @@
 /* 🔴 D168 段 4:设计令牌**先引进来**(值与网页 `design-tokens.css` 逐条相等,同一把刀比三份)。
    `@import` 必须排在最前:后面所有页面的 `var(--x)` 都靠它。 */
 @import "styles/tokens.wxss";
+/* D181:数字大字的 Fraunces(woff2 子集 base64 内嵌;只有数字与几个币符,中文一个字都没有) */
+@import "styles/fraunces-digits.wxss";
 
 page {
   min-height: 100%;
