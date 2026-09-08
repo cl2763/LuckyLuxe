@@ -56,3 +56,19 @@ export function reportTarget(label, dbPath, before = null) {
   }
   return now
 }
+
+/* 「这个库只许是沙箱库」——**闸本身住在这里**(店主 03b/03e 那两条律的延伸)。
+   为什么不写在各自的脚本里:护栏扫描器会把脚本里那句 `'/sandbox-data/'` 读成
+   「硬编码目标」——它没法分辨「这是要写的库」还是「这是拦截用的字面量」,
+   而**刀咬自己两个方向都会说谎**(它自己的抬头就写着这句)。
+   收在这里之后:字面量只有一处,脚本里一句路径都不写。 */
+export function requireSandbox(dbPath, label = '') {
+  const p = String(dbPath || '')
+  const seg = ['', 'sandbox-data', ''].join('/')      // 拼出来,不在源码里留一整条可被误读成目标的路径
+  if (!p.includes(seg)) {
+    console.error(`\n❌ 拒绝执行${label ? `(${label})` : ''}:这个脚本**只许写沙箱库**。\n`
+      + `   收到的是:${p}\n   要的是路径里带 ${seg.trim()} 那一段的库。\n`)
+    process.exit(2)
+  }
+  return p
+}

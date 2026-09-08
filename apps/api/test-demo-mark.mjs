@@ -68,10 +68,25 @@ const NO_MARK = {
     + '只 INSERT 一行 `coupons`,一行 bookings/settlements 都不写 —— 盖章没有落点。'
     + '什么时候要动:若它哪天开始铺预约或结算,立刻改成走 HTTP 并盖 x-demo-seed。',
 }
-const missing = tracked.filter((f) => !NO_MARK[f] && !readFileSync(join(ROOT, f), 'utf8').includes("'x-demo-seed'"))
+/* 🔴 05t 段 2 补:盖章有**两种合法形态**,原来这条只认第一种。
+   ① 走 HTTP 的:请求头带 `x-demo-seed`(正门盖章,服务端落列);
+   ② **直连库**的:自己在 INSERT 里就把 `demo_seed` 写进去(`seed-demo-rich` 是这一种)。
+   两种达到的是同一件事 —— 判据 ⑤ 那条「一条查询整批认出来」现测已经捞到 `rich-v1`。
+   只认第一种的话,直连库的脚本要么被逼着走 HTTP(12 个月历史那种量走不动),
+   要么进白名单(而它**确实写了这两张表**,进白名单才是真的放行)。
+   所以这里认「盖没盖上」,不认「用哪只手盖的」;两种都没有才算漏。 */
+const marks = (f) => {
+  const src = readFileSync(join(ROOT, f), 'utf8')
+  if (src.includes("'x-demo-seed'")) return 'http头'
+  /* 直连库那一种要**真的写进 INSERT**:光有一个 demo_seed 变量不算(那可能只是读) */
+  if (/INSERT INTO (bookings|settlements)[\s\S]{0,900}?demo_seed/i.test(src)) return '直连库INSERT'
+  return ''
+}
+const missing = tracked.filter((f) => !NO_MARK[f] && !marks(f))
 check(`④ 白名单式:造景全族 ${tracked.length} 个脚本,走 HTTP 的必须发 \`x-demo-seed\`;`
   + `不发的逐条写理由(现 ${Object.keys(NO_MARK).length} 个,都是不写这两张表的)`,
 missing.length === 0, `${missing.length} 个没发:${missing.join(' | ')}`)
+console.log(`   [盖章形态] ${tracked.filter((f) => !NO_MARK[f]).map((f) => `${f.split('/').pop()}=${marks(f)}`).join(' · ')}`)
 
 /* ⑤ 🔴 行为层:真跑一次造景,那条查询必须把它整批捞出来 —— 判据原文就是这句 */
 const { ensureSandbox } = await import('./test-need-sandbox.mjs')

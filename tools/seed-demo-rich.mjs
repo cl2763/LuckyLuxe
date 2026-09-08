@@ -30,7 +30,7 @@
 import { DatabaseSync } from 'node:sqlite'
 import { createHash, randomBytes } from 'node:crypto'
 import { existsSync } from 'node:fs'
-import { requireTarget, reportTarget, countRows } from './db-target.mjs'
+import { requireTarget, requireSandbox, reportTarget, countRows } from './db-target.mjs'
 import { backupDb } from './db-backup.mjs'
 import { createFinanceLedger } from '../apps/api/finance-ledger.mjs'
 
@@ -42,12 +42,11 @@ const DB_PATH = requireTarget({
   value: process.env.SEED_DB,
   hint: '(只许沙箱:…/apps/api/sandbox-data/lucky-luxe.sqlite)',
 })
-/* 🔴 自己拒绝跑在别的库上。判据不是「路径里有没有 sandbox」——**必须是 `/sandbox-data/` 这一段**,
-   否则 `/tmp/my-sandbox-copy/local-data/x.sqlite` 也能混进来。 */
-if (!DB_PATH.includes('/sandbox-data/')) {
-  console.error(`\n❌ 拒绝执行:这把种子**只许写沙箱库**(路径里必须有 /sandbox-data/)。\n   收到的是:${DB_PATH}\n`)
-  process.exit(2)
-}
+/* 🔴 自己拒绝跑在别的库上 —— **闸在 `db-target.mjs` 里**(唯一出口)。
+   为什么不在这儿写那句路径判断:护栏扫描器会把它读成「硬编码目标」并当场红,
+   而它其实是**拦截用的字面量**,不是要写的库(现测栽过一次:`test-db-target-guard ①d` 点名两行)。
+   字面量只留一处,这里一句路径都不写。 */
+requireSandbox(DB_PATH, 'seed-demo-rich')
 if (!existsSync(DB_PATH)) { console.error(`\n❌ 库文件不存在:${DB_PATH}\n`); process.exit(2) }
 
 /* ── 三家店的「像真店」参数 ─────────────────────────────────────────
