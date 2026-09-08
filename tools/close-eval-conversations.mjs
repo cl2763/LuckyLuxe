@@ -104,8 +104,11 @@ console.log(`   其中**今天之前**积压的:${qStale} 条(这次要置终态
    为什么改名不是删:这些用户挂着预约、结算单、储值 —— 删了就是一串悬空引用。
    判据认的是**名字**(店主原话:首页与台面 0 处「测试/演示/闸测/随机段」),所以改名正对着判据。
    🔴 匹配的是**痕迹形状**,不是一份名单:`xxx-mrm0lewr` 这种「名字-随机段」是跑机产物的通用长相。 */
+/* 现测补两族(D171 那把刀量台面时露出来的):`LL-USERDEMO` 这种**全大写**的、
+   `demo`/`test` 英文小写的。SQLite 的 LIKE 对 ASCII 不区分大小写,所以这两条就够。 */
 const FIXTURE_RE = "(display_name LIKE '%测试%' OR display_name LIKE '%演示%' OR display_name LIKE '%闸测%'"
-  + " OR display_name LIKE '%mock%' OR display_name LIKE '%-mr%' OR display_name LIKE '%storeless%')"
+  + " OR display_name LIKE '%mock%' OR display_name LIKE '%-mr%' OR display_name LIKE '%storeless%'"
+  + " OR display_name LIKE '%demo%' OR display_name LIKE '%test%')"
 const CLEAN_NAMES = ['周静', '李婉宁', '孙予安', '何一诺', '沈嘉言', '许若曦', '柳南舟', '范知雅', '苗昭', '傅望',
   '姜屿', '谭听白', '章思南', '洛小满', '祝云舒', '易安然', '毕雨桐', '庄栖', '宁远', '于清和']
 /* 🔴 **只改店主会看到的那三家店**。别的演示租户(`demo-*` / `jics-sandbox` / 彩排店)不碰:

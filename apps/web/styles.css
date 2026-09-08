@@ -7519,7 +7519,14 @@ section.card > .section-row:first-child { margin-top: 0; }
 .tb-col { width: 150px; flex: none; position: relative; border-right: 1px solid rgba(0,0,0,.04); }
 .tb-line { height: 48px; border-bottom: 1px dashed rgba(0,0,0,.06); box-sizing: border-box; }
 .tb-line.off { background: rgba(0,0,0,.03); }
+/* 🔴 D171:交叠的单在同一技师列里**并排分栏**(左/宽由 JS 按泳道算,写在 style 上)。
+   这里只管「不许互相压」之后的可读性:分栏后列窄了,文字一律**单行 + 省略号**,
+   不换行、不折字 —— 折行才是店主截图里「两串字叠在一起」的另一半原因。 */
 .tb-blk { position: absolute; left: 4px; right: 4px; border: none; border-radius: 8px; padding: 4px 8px; text-align: left; cursor: pointer; overflow: hidden; font-size: 12px; display: flex; flex-direction: column; gap: 1px; }
+.tb-blk > span { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; display: block; max-width: 100%; }
+/* 分栏后字号收一档:两栏并排时 12px 会把「10:00–13:00」挤出去 */
+.tb-blk.split { font-size: 11px; padding: 3px 5px; }
+.tb-blk.split .tb-bs, .tb-blk.split .tb-tags { display: none; }   /* 层级:时间 > 顾客名 > 项目;窄栏先舍项目与标签 */
 .tb-blk.free { background: rgba(29,122,79,.06); border: 1px dashed rgba(29,122,79,.4); color: #1d7a4f; align-items: center; justify-content: center; }
 .tb-blk.hand { background: #f3e8d9; }
 .tb-blk.foot { background: #e7dff0; }

@@ -56,13 +56,45 @@ window.TodayBoard = (function () {
     let freeTotal = 0
     const cols = (r.technicians || []).map((t) => {
       const list = (byTech[t.id] || []).slice().sort((a, b) => toMin(a.startTime) - toMin(b.startTime))
-      const blocks = list.map((b) => {
+      /* 🔴 D171(店主两次都拍到了):同一技师、时段交叠的单**原来全画在同一列同一层** ——
+         「11:30–13:30 箫宴」直接压在「12:00–15:00 罗清和」上,时间与顾客名叠成一团。
+         空店时看不出来,数据一灌满每天都会看见。
+
+         改法是台面/日历那套通用做法:**先按重叠成簇,再在簇内分泳道**。
+         · 簇 = 时间上连成一片的一组单(前一单还没结束,下一单就开始了);
+         · 泳道 = 簇内用「首个空出来的泳道」贪心分配(区间图着色);
+         · 每单的宽度 = 1/簇内泳道数,左偏移 = 泳道序号 × 宽度 —— **两两不相交**。
+         为什么按簇不按整列:整列按最大泳道数分,会让一天里只有一处重叠的列全都缩成一半宽。 */
+      const raw = list.map((b) => {
         const s = toMin(b.startTime); const e = Math.max(s + 20, toMin(b.endTime))
+        return { b, s, e }
+      })
+      /* 分簇:按开始时间排好之后,只要下一单的开始 < 当前簇的最大结束,就还在同一簇 */
+      const clusters = []
+      for (const it of raw) {
+        const cur = clusters[clusters.length - 1]
+        if (cur && it.s < cur.end) { cur.items.push(it); cur.end = Math.max(cur.end, it.e) }
+        else clusters.push({ items: [it], end: it.e })
+      }
+      for (const c of clusters) {
+        const laneEnds = []               // 每条泳道目前排到几点
+        for (const it of c.items) {
+          let lane = laneEnds.findIndex((end) => end <= it.s)
+          if (lane < 0) { lane = laneEnds.length; laneEnds.push(0) }
+          laneEnds[lane] = it.e
+          it.lane = lane
+        }
+        c.lanes = laneEnds.length
+        for (const it of c.items) it.lanes = c.lanes
+      }
+      const blocks = raw.map(({ b, s, e, lane, lanes }) => {
         const state = b.arrivalState || 'pending'
         return {
           id: b.id, cls: `${b.group || 'hand'} ${state}`, state,
           stateGlyph: state === 'active' ? '●' : (state === 'done' ? '✓' : ''),
           top: Math.round((s - openMin) / 60 * PX_PER_HOUR), height: Math.max(20, Math.round((e - s) / 60 * PX_PER_HOUR)),
+          /* 百分比宽度:列宽变了也不用重算(判据验的是「包围盒不相交」,不是具体像素) */
+          lane: lane || 0, lanes: lanes || 1,
           startTime: b.startTime, endTime: b.endTime, customerName: b.customerName, serviceName: b.serviceName,
           isNewCustomer: b.isNewCustomer, isDesignated: b.isDesignated, ownerDirect: b.ownerDirect,
           depositUnpaid: b.depositUnpaid, afterSalesTag: b.afterSalesTag || ''
@@ -81,7 +113,14 @@ window.TodayBoard = (function () {
       })
       const tailFrom = Math.max(cursor, minStart)
       if (closeMin - tailFrom >= 30) { frees.push({ startTime: m2t(tailFrom), endTime: m2t(closeMin), top: Math.round((tailFrom - openMin) / 60 * PX_PER_HOUR), height: Math.round((closeMin - tailFrom) / 60 * PX_PER_HOUR) }); freeTotal += (closeMin - tailFrom) }
-      return { id: t.id, name: t.name, role: t.title || '', busy: t.bookingCount > 0, blocks, frees }
+      /* 🔴 分栏之后还有一条要管:**列宽**。现测(北京店灌满数据后)一位技师有 6 张交叠单,
+         六条泳道挤在 150px 里,每条只剩 20 多像素 —— 不重叠了,但字被压成一条竖线,
+         「不重叠」与「看得清」是两件事,只做前一件等于把病换了个长相。
+         裁:列宽 = max(150, 泳道数 × 92) —— 每条泳道至少留 92px(装得下「10:00–13:00」+ 一个名字),
+         台面本来就横向滚动(`.tb-rin { min-width: max-content }`),宽出来的部分滑得到。 */
+      const lanes = Math.max(1, ...blocks.map((b) => b.lanes || 1))
+      return { id: t.id, name: t.name, role: t.title || '', busy: t.bookingCount > 0, blocks, frees,
+        lanes, width: Math.max(150, lanes * 92) }
     })
     const d = new Date(`${date}T00:00:00`)
     const todayStr = deps.storeToday()
@@ -136,15 +175,15 @@ window.TodayBoard = (function () {
         <div class="tb-right">
           <div class="tb-rin">
             <div class="tb-heads">
-              ${dv.cols.map((c) => `<div class="tb-th"><div class="tb-nm">${escapeHtml(c.name)}</div><div class="tb-rl">${escapeHtml(c.role)}</div><div class="tb-st ${c.busy ? 'busy' : 'free'}">${c.busy ? '忙' : '空'}</div></div>`).join('')}
+              ${dv.cols.map((c) => `<div class="tb-th" style="width:${c.width}px"><div class="tb-nm">${escapeHtml(c.name)}</div><div class="tb-rl">${escapeHtml(c.role)}</div><div class="tb-st ${c.busy ? 'busy' : 'free'}">${c.busy ? '忙' : '空'}</div></div>`).join('')}
             </div>
             <div class="tb-cols" style="height:${dv.gridH}px">
               ${dv.cols.map((col) => `
-                <div class="tb-col">
+                <div class="tb-col" style="width:${col.width}px">
                   ${dv.hours.map((h) => `<div class="tb-line ${h.off ? 'off' : ''}"></div>`).join('')}
                   ${col.frees.map((f) => `<button class="tb-blk free" style="top:${f.top}px;height:${f.height}px" data-tb-free="${col.id}" data-time="${f.startTime}" data-end="${f.endTime}" type="button"><span>${escapeHtml((stateT.dv && stateT.dv.backfill && stateT.dv.backfill.label) || '+ 直接排单')}</span></button>`).join('')}
                   ${col.blocks.map((b) => `
-                    <button class="tb-blk ${b.cls}" style="top:${b.top}px;height:${b.height}px" data-tb-block="${b.id}" type="button">
+                    <button class="tb-blk ${b.cls}${b.lanes > 1 ? ' split' : ''}" style="top:${b.top}px;height:${b.height}px;left:calc(${(b.lane / b.lanes) * 100}% + 4px);width:calc(${100 / b.lanes}% - 8px);right:auto" data-tb-block="${b.id}" data-tb-lane="${b.lane}/${b.lanes}" type="button">
                       <span class="tb-bt">${b.stateGlyph ? `<i class="tb-sdot ${b.state}">${b.stateGlyph}</i>` : ''}${b.startTime}–${b.endTime}</span>
                       <span class="tb-bn">${escapeHtml(b.customerName || '')}</span>
                       <span class="tb-bs">${escapeHtml(b.serviceName || '')}</span>
