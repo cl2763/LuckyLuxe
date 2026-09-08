@@ -124,6 +124,14 @@ else say "交付完整性" "🔴 没进 git:$MISS"; FAIL=1; fi
 if GHOST=$(node tools/eval-citation-check.mjs 2>&1); then say "回执引用的评测明细" "✅ ${GHOST#*✅ }"
 else say "回执引用的评测明细" "🔴"; echo "$GHOST" | sed 's/^/    /'; FAIL=1; fi
 
+# ⑦ D169(店主 05t 段 2 第 8 条):**全量回归不许依赖演示种子**。
+#    回归跑的是自己新建的临时库,里面没有也不该有演示数据;真让它依赖上,
+#    以后谁删一次种子就连累整轮回归 —— 而那时红的会是二十个套件,没人会想到是种子。
+#    判据按**机械搜索**:run-all-tests.sh 里对 seed-demo-rich / test-seed-rich 的引用必须是 0 处。
+SEEDREF=$(grep -c "seed-demo-rich\|test-seed-rich" apps/api/run-all-tests.sh || true)
+if [ "$SEEDREF" = "0" ]; then say "回归不依赖演示种子" "✅ 0 处引用"
+else say "回归不依赖演示种子" "🔴 run-all-tests.sh 里有 $SEEDREF 处引用 —— 种子只许手动对沙箱跑"; FAIL=1; fi
+
 echo ""
 if [ "$FAIL" = "1" ]; then echo "❌ 预检红 —— **先修这些再起全量**(它们不用等 15 分钟就知道)"; exit 1; fi
 echo "✅ 预检全绿,可以起全量"

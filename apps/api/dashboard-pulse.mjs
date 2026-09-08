@@ -25,6 +25,12 @@
 export const METRIC_KEYS = ['revenue', 'cash', 'cardUse', 'newCard', 'visits', 'bookings']
 export const PERIODS = ['today', 'week', 'month', 'year']
 
+/* 五项待办各自的来源表 —— **判据从这里取**,不许在判据里再手抄一份(手抄那份不会跟着改)。
+   `shift_requests` 现在不存在:登记在 `TODO_MISSING_TABLES` 里,判据按例外清单核,
+   条数只许降不许升(建好那天这条自动该删)。 */
+export const TODO_SOURCES = { aiHandoff: 'wechat_conversations', quotePending: 'quote_requests', notePending: 'service_notes', shiftApproval: 'shift_requests', dailyClose: 'daily_closes' }
+export const TODO_MISSING_TABLES = ['shift_requests']   // 待裁 #12:调休申请功能没做,不是没数据
+
 /* 日期算术只做纯字符串加减,基准日由调用方按**门店时区**给(CLAUDE.md 头一条) */
 const shiftDay = (iso, n) => {
   const d = new Date(`${iso}T12:00:00Z`)
@@ -211,24 +217,79 @@ export function createDashboardPulse(deps) {
     }
   }
 
-  /* todo:固定五项,**0 也返回**(由前端决定隐不隐;后端不许因为是 0 就不给这一项) */
+  /* 五项待办各自的**来源表** —— 判据拿这份去核「表在不在」(见下方 D172 那段)。
+     写成数据而不是散在 SQL 里:判据不许靠列举被测对象(白名单判据律)。 */
+
+  /* todo:固定五项,**0 也返回**(由前端决定隐不隐;后端不许因为是 0 就不给这一项)
+
+     🔴 05t 段 2 现查:五项里**三项是死线**,而它们报出来的都是 0 —— 与「真的没有」长得一模一样。
+     这正是静默失败器族:`try { ... } catch { return 0 }` 把「表不存在」「状态值对不上」
+     一起吞成了「没有待办」。逐条:
+     · **D170 `quotePending`**:数的是 `status='pending'`,而库里真值是 **`PENDING_STAFF`**
+       (沙箱现查:PENDING_STAFF 287 / QUOTED 59 / DRAFT_CREATED 38 / DECLINED 4,**没有一行叫 pending**)。
+       → 改数 `PENDING_STAFF`。
+     · **D171 `dailyClose`**:数的是「今天有一行 daily_closes 且 status<>confirmed」,
+       而 `daily_closes` **只在确认那一刻才插行**(status 只有 confirmed / reopened)——
+       「还没日结」的日子在库里**根本没有行**,所以这一格永远是 0。
+       → 按店主原话改成「**昨天有已完成单、却还没确认日结**」:1 或 0。
+     · **D172 `shiftApproval`**:`shift_requests` 这张表**全仓不存在**(只有这一行 SQL 提到它),
+       调休申请功能没做。它不是「暂时没数据」,是「这条线没接」。
+       → 本批不擅自建表(那是新功能,超出本批),**如实下发 `available: false`**,
+         并登记待裁 #12;判据里挂例外清单 + 条数上棘轮,建好那天例外自动该删。 */
   function todo({ tenantId = currentTenantId() } = {}) {
     const tid = tenantId
+    const has = (t) => { try { return Boolean(db.prepare("SELECT 1 AS n FROM sqlite_master WHERE type = 'table' AND name = ?").get(t)) } catch { return false } }
     const one = (sql, ...args) => { try { return db.prepare(sql).get(tid, ...args).n } catch { return 0 } }
     const today = todayOf(tid)
+    const yday = shiftDay(today, -1)
+    const item = (key, table, n, to) => ({ key, n: has(table) ? n() : 0, to, available: has(table) })
     return {
       asOf: new Date().toISOString(),
       items: [
         /* 🔴 口径(店主 05r §一 末裁):**待人工只数 `needs_human`**。
            `human_active` 是同事已经在接了 —— 那不是「待处理」,把它算进来等于让老板
            在首页看见一个自己已经在做的事。 */
-        { key: 'aiHandoff', n: one("SELECT COUNT(*) AS n FROM wechat_conversations WHERE tenant_id = ? AND status = 'needs_human'"), to: 'ai-desk' },
-        { key: 'quotePending', n: one("SELECT COUNT(*) AS n FROM quote_requests WHERE tenant_id = ? AND status = 'pending'"), to: 'quote' },
-        { key: 'notePending', n: one("SELECT COUNT(*) AS n FROM bookings WHERE tenant_id = ? AND status = 'COMPLETED' AND substr(appointment_start,1,10) = ? AND id NOT IN (SELECT booking_id FROM service_notes WHERE booking_id IS NOT NULL)", today), to: 'notes' },
-        { key: 'shiftApproval', n: one("SELECT COUNT(*) AS n FROM shift_requests WHERE tenant_id = ? AND status = 'pending'"), to: 'schedule' },
-        { key: 'dailyClose', n: one("SELECT COUNT(*) AS n FROM daily_closes WHERE tenant_id = ? AND date = ? AND status <> 'confirmed'", today), to: 'daily-close' },
+        item('aiHandoff', 'wechat_conversations', () => one("SELECT COUNT(*) AS n FROM wechat_conversations WHERE tenant_id = ? AND status = 'needs_human'"), 'ai-desk'),
+        item('quotePending', 'quote_requests', () => one("SELECT COUNT(*) AS n FROM quote_requests WHERE tenant_id = ? AND status = 'PENDING_STAFF'"), 'quote'),
+        item('notePending', 'service_notes', () => one("SELECT COUNT(*) AS n FROM bookings WHERE tenant_id = ? AND status = 'COMPLETED' AND substr(appointment_start,1,10) = ? AND id NOT IN (SELECT booking_id FROM service_notes WHERE booking_id IS NOT NULL)", today), 'notes'),
+        item('shiftApproval', 'shift_requests', () => one("SELECT COUNT(*) AS n FROM shift_requests WHERE tenant_id = ? AND status = 'pending'"), 'schedule'),
+        /* 昨天有已完成的单、却没有一张 confirmed 的日结 → 待日结 1 天。
+           **「有单」这一半不能省**:店休那天没单,不该在首页催老板去日结。 */
+        item('dailyClose', 'daily_closes', () => (
+          one("SELECT COUNT(*) AS n FROM bookings WHERE tenant_id = ? AND status = 'COMPLETED' AND substr(appointment_start,1,10) = ?", yday) > 0
+          && one("SELECT COUNT(*) AS n FROM daily_closes WHERE tenant_id = ? AND date = ? AND status = 'confirmed'", yday) === 0 ? 1 : 0
+        ), 'daily-close'),
       ],
     }
+  }
+
+  /* ── AI 今日一句:**落库 + 只读**(店主 05t 段 2 第 4 条)──────────────
+     原状:`/admin/ai/daily-brief` 生成完直接回给页面,**一个字都没存**;
+     首页那块读的是 `owner.dashAiLine`,而这个变量**全仓没有任何地方赋过值** ——
+     所以它永远显示「今天还没有一句」。灌再多数据也治不了,因为这条线根本没接上。
+     裁:生成那一刻按**门店当天**存一条(一天一条,同一天再生成就覆盖当天这条);
+     首页只读,不新起模型调用(图/裁定原文)。存哪儿:`tenant_settings`,
+     不为一句话新开一张表。 */
+  const AI_LINE_KEY = 'ai_daily_line'
+  function rememberAiLine(brief, tenantId = currentTenantId()) {
+    /* 取哪一段:`createDailyBrief` 回的是 `headlineZh/headlineEn`(见 ai-utils.mjs 的 schema)。
+       **按字段名取,不猜** —— 取错了就是首页恒空,而恒空和「今天还没生成」长得一样(静默失败器族)。 */
+    const text = String(brief?.headlineZh || brief?.headlineEn || '').trim()
+    if (!text) return brief                       // 没生成出东西就不存(不许存空壳去骗首页)
+    const at = new Date().toISOString()
+    const value = JSON.stringify({ date: todayOf(tenantId), text, at })
+    db.prepare(`INSERT INTO tenant_settings (tenant_id, key, value, updated_at) VALUES (?, ?, ?, ?)
+      ON CONFLICT(tenant_id, key) DO UPDATE SET value = excluded.value, updated_at = excluded.updated_at`)
+      .run(tenantId, AI_LINE_KEY, value, at)
+    return brief
+  }
+  /** 首页那一句。**只回今天的** —— 昨天那句今天不算数(隔夜还挂着等于说谎)。 */
+  function aiLine({ tenantId = currentTenantId() } = {}) {
+    const row = db.prepare('SELECT value FROM tenant_settings WHERE tenant_id = ? AND key = ?').get(tenantId, AI_LINE_KEY)
+    let v = null
+    try { v = row ? JSON.parse(row.value) : null } catch { v = null }
+    if (!v || v.date !== todayOf(tenantId) || !v.text) return { line: null }
+    return { line: { text: v.text, at: v.at } }
   }
 
   /* 三条路由也住在本模块(公约①:新功能一律新模块,巨型文件只许搬出不许新增)。
@@ -250,8 +311,9 @@ export function createDashboardPulse(deps) {
     if (path === '/admin/dashboard/pulse') { json(res, 200, pulse({ period: query.period, role })); return true }
     if (path === '/admin/dashboard/now') { json(res, 200, now({})); return true }
     if (path === '/admin/dashboard/todo') { json(res, 200, todo({})); return true }
+    if (path === '/admin/dashboard/ai-line') { json(res, 200, aiLine({})); return true }
     return false
   }
 
-  return { pulse, now, todo, route, periodRange, deltaOf }
+  return { pulse, now, todo, aiLine, rememberAiLine, route, periodRange, deltaOf }
 }

@@ -11837,7 +11837,7 @@ async function route(req, res) {
     const services = db.prepare('SELECT * FROM services WHERE tenant_id = ? ORDER BY type ASC, sort_order ASC').all(currentTenantId()).map(serializeService)
     countAiUsage()
     // D18:「今天」按门店时区算好传进去,AI 侧不再自己用 UTC 日期
-    return json(res, 200, { brief: await createDailyBrief({ ...(await readBody(req)), bookings, customers: adminSession.role === 'owner' ? getAdminCustomers() : [], services, storeToday: todayOf(currentTenantId()) }) })
+    return json(res, 200, { brief: dashboardPulse.rememberAiLine(await createDailyBrief({ ...(await readBody(req)), bookings, customers: adminSession.role === 'owner' ? getAdminCustomers() : [], services, storeToday: todayOf(currentTenantId()) })) })   /* 生成即落库(05t 段 2):首页那块以前恒空,因为日报一个字都没存 */
   }
   if (req.method === 'POST' && path === '/admin/ai/booking-summary') {
     requireAi()

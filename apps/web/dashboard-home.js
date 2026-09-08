@@ -229,13 +229,17 @@ window.DashboardHome = (function () {
     st.phase = 'loading'
     paint()
     try {
-      const [p, nw, td] = await Promise.all([
+      const [p, nw, td, al] = await Promise.all([
         st.deps.request(`/admin/dashboard/pulse?period=${encodeURIComponent(st.period)}`),
         st.deps.request('/admin/dashboard/now'),
         st.deps.request('/admin/dashboard/todo'),
+        /* 🔴 05t 段 2:AI 今日一句改成**从后端读**。原来读的是 `owner.dashAiLine`,
+           而那个变量全仓没人赋过值 —— 于是这块永远是「今天还没有一句」,灌多少数据都没用。
+           后端只回**今天**那条(隔夜的不算),前端零判断。 */
+        st.deps.request('/admin/dashboard/ai-line').catch(() => null),
       ])
       st.pulse = p; st.now = nw; st.todo = td
-      st.aiLine = (st.deps.readAiLine && st.deps.readAiLine()) || null
+      st.aiLine = (al && al.line) || (st.deps.readAiLine && st.deps.readAiLine()) || null
       st.phase = 'ready'
     } catch (e) {
       /* 失败态**不显示旧数、不显示 0**(图 §六):先把手上的数清掉再画 */

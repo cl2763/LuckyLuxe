@@ -261,9 +261,17 @@ export function createScheduleBoard(deps) {
   /* 大屏「此刻」四格 + 「下一位」——**与今日台面同一条规则、同一份查询**,不另算。
      只回数与下一位,不回台面那一整套渲染字段(那是台面自己的事)。 */
   function dayCounts(tenantId, date) {
+    /* 🔴 D175(05t 段 2 现查):这段抬头写着「与今日台面同一条规则、同一份查询」,
+       **可它俩当时不是同一条**:台面按门店时区取当天 `[00:00, 次日00:00)` 的窗口、
+       状态白名单 `PENDING_PAYMENT/CONFIRMED/COMPLETED/AFTER_SALES`;
+       这里却按 `substr(appointment_start,1,10)`(**UTC 日期前缀**)+ 黑名单 `NOT IN (CANCELLED,NO_SHOW)`。
+       多伦多店晚上 20:00 的单,UTC 已经是次日 —— 台面上有、大屏「此刻」里没有。
+       口径写在注释里而没写在代码里,就是没写(一件事一处真相)。改成**照抄台面那一份**。 */
+    const dayStart = iso(localDateTime(date, '00:00'))
+    const dayEnd = iso(addMinutes(localDateTime(date, '00:00'), 24 * 60))
     const rows = db.prepare(`SELECT id, status, arrived_at, appointment_start, user_id, service_id, technician_id
-      FROM bookings WHERE tenant_id = ? AND substr(appointment_start, 1, 10) = ?
-        AND status NOT IN ('CANCELLED', 'NO_SHOW') ORDER BY appointment_start ASC`).all(tenantId, date)
+      FROM bookings WHERE tenant_id = ? AND status IN ('PENDING_PAYMENT','CONFIRMED','COMPLETED','AFTER_SALES')
+        AND appointment_start >= ? AND appointment_start < ? ORDER BY appointment_start ASC`).all(tenantId, dayStart, dayEnd)
     const st = rows.map((r) => ({ r, s: arrivalStateOf(r) }))
     const nextRow = st.find((x) => x.s === 'pending')?.r || null
     const nameOf = (id, sql) => { try { return db.prepare(sql).get(id)?.n || '' } catch { return '' } }
@@ -273,7 +281,10 @@ export function createScheduleBoard(deps) {
       waiting: st.filter((x) => x.s === 'pending').length,
       done: st.filter((x) => x.s === 'done').length,
       next: nextRow ? {
-        time: String(nextRow.appointment_start || '').slice(11, 16),
+        /* 🔴 D174:这里原来切的是 `appointment_start` 的**UTC 原文**(slice(11,16))——
+           北京店 10:00 的单在首页写成「02:00」,多伦多 13:00 的写成「17:00」。
+           全仓别处一律走 `localParts()` 转门店时区,只有这一处在裸切字符串。 */
+        time: localParts(nextRow.appointment_start).time,
         customer: nameOf(nextRow.user_id, 'SELECT display_name AS n FROM users WHERE id = ?'),
         service: nameOf(nextRow.service_id, 'SELECT name_zh AS n FROM services WHERE id = ?'),
         tech: nameOf(nextRow.technician_id, 'SELECT name AS n FROM technicians WHERE id = ?'),
