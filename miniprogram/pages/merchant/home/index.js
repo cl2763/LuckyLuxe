@@ -52,7 +52,9 @@ Page({
     /* 轮播:大数字现在放大的是哪一个指标(dots 与它一一对应) */
     dhMetric: 'revenue',
     dhPaused: false,
-    dhHint: false
+    dhHint: false,
+    sparkCanvas: true,     // D182:先按「能画 canvas」渲染;真拿不到上下文时自动落回柱形
+    sparkInk: 0            // 画完自己数的金色像素数(判据据此断言「真画上了」;-1 = 取不到像素)
   },
 
   onLoad() {
@@ -115,7 +117,9 @@ Page({
       dh.aiLine = (ai && ai.line && ai.line.text) || ''
       dh.aiAt = (ai && ai.line && ai.line.at) || ''
       this._pulse = pulse; this._now = now; this._todo = todo
-      this.setData({ dh, dhState: 'ready', dhClosed: Boolean(now && now.closed) })
+      /* D182:数据到手就重画折线(切维度、轮播、重取都会走到这儿) */
+      this._spark = dh.spark || []
+      this.setData({ dh, dhState: 'ready', dhClosed: Boolean(now && now.closed) }, () => this.drawSpark())
       this.scheduleRotate()
     } catch (e) {
       /* 取数失败:**整块换一句话,不显示旧数、不显示 0**(图 §六) */
@@ -243,6 +247,10 @@ Page({
     const dh = buildOwnerHome({ pulse: this._pulse, now: this._now, todo: this._todo,
       period: this.data.dhPeriod, nowHM: this.data.dh.asOfHM || '', storeMoney, headKey: this.data.dhMetric })
     /* 折线、下一位、AI 一句这几段不随轮播变,原样带过来(重算一遍等于再拼一次串) */
+    /* 轮播换指标之后折线要跟着重画 —— **走势是按指标算的**,换了指标不重画就是拿上一个指标的线骗人。
+       `_spark` 也要跟着换,不然 `drawSpark` 画的还是旧那条(现测差点漏掉这一步)。 */
+    this._spark = dh.spark || []
+    setTimeout(() => this.drawSpark(), 30)
     this.setData({ dh: { ...this.data.dh, ...dh, sparkBars: this.data.dh.sparkBars,
       next3: this.data.dh.next3, nextHint: this.data.dh.nextHint,
       aiLine: this.data.dh.aiLine, aiAt: this.data.dh.aiAt } })
@@ -262,6 +270,74 @@ Page({
     }, ROTATE_MS)
   },
   clearRotate() { if (this._rotate) { clearTimeout(this._rotate); this._rotate = null } },
+
+  /* ══ D182 · 折线按图(夜班令6 段 9)══
+     图 §一 line 168–172:`linearGradient` 从 .35 到 0 的渐变填充 + `stroke-width 2` 金色描边
+     + 末点 `circle r=3.5` 描边同底色。小程序没有 SVG,用 `<canvas type="2d">` 手画同一条。
+     · 按 `pixelRatio` 缩放(不缩就是糊的);
+     · 全 0 不画(图 §六)—— 上游 `buildOwnerHome` 已经把 spark 清空了,这里再守一次;
+     · **拿不到上下文就落回柱形**(店主裁:柱形保底不许拆),并把 `sparkCanvas` 置 false。 */
+  drawSpark() {
+    const pts = (this._spark || []).map((x) => Math.abs(Number(x) || 0))
+    if (!pts.length || !pts.some((v) => v > 0)) return          // 全 0 不画
+    const q = wx.createSelectorQuery().in(this)
+    q.select('#dhSpark').fields({ node: true, size: true }).exec((res) => {
+      const item = res && res[0]
+      if (!item || !item.node) { this.setData({ sparkCanvas: false }); return }
+      let ctx
+      try { ctx = item.node.getContext('2d') } catch (e) { ctx = null }
+      if (!ctx) { this.setData({ sparkCanvas: false }); return }
+      const dpr = (wx.getSystemInfoSync().pixelRatio) || 2
+      const w = item.width
+      const h = item.height
+      item.node.width = w * dpr
+      item.node.height = h * dpr
+      ctx.scale(dpr, dpr)
+      ctx.clearRect(0, 0, w, h)
+      const max = Math.max(...pts, 1)
+      const step = pts.length > 1 ? w / (pts.length - 1) : 0
+      const xy = pts.map((v, i) => [i * step, h - (v / max) * (h - 6) - 3])
+      /* ① 渐变填充 .35 → 0(图上那一层) */
+      const g = ctx.createLinearGradient(0, 0, 0, h)
+      g.addColorStop(0, 'rgba(217,185,126,0.35)')
+      g.addColorStop(1, 'rgba(217,185,126,0)')
+      ctx.beginPath()
+      xy.forEach(([x, y], i) => (i ? ctx.lineTo(x, y) : ctx.moveTo(x, y)))
+      ctx.lineTo(xy[xy.length - 1][0], h)
+      ctx.lineTo(xy[0][0], h)
+      ctx.closePath()
+      ctx.fillStyle = g
+      ctx.fill()
+      /* ② 金色描边 */
+      ctx.beginPath()
+      xy.forEach(([x, y], i) => (i ? ctx.lineTo(x, y) : ctx.moveTo(x, y)))
+      ctx.strokeStyle = '#d9b97e'
+      ctx.lineWidth = 2
+      ctx.lineJoin = 'round'
+      ctx.stroke()
+      /* ③ 末点圆环(描边用英雄块底色,看起来像在深底上挖了个圈) */
+      const last = xy[xy.length - 1]
+      ctx.beginPath()
+      ctx.arc(last[0] - 2, last[1], 3.5, 0, Math.PI * 2)
+      ctx.fillStyle = '#d9b97e'
+      ctx.fill()
+      ctx.lineWidth = 2
+      ctx.strokeStyle = '#2a2521'
+      ctx.stroke()
+      /* 🔴 画完**自己数一遍金色像素**,把数放进 data —— 判据据此断言「真画上了」。
+         为什么要这一步:`mp.screenshot()` 在开发机上卡死(D167/待裁 #21),
+         没有截图就没法从外面看这块 canvas。从画布**里面**取像素是唯一还剩的实证。
+         数的是「偏金色且不透明」的点:R>150 且 R>B(金色 #d9b97e 满足,深底不满足)。 */
+      try {
+        const img = ctx.getImageData(0, 0, item.node.width, item.node.height).data
+        let ink = 0
+        for (let i = 0; i < img.length; i += 16) {          // 每 4 个像素取一个,够用且快
+          if (img[i + 3] > 40 && img[i] > 150 && img[i] > img[i + 2]) ink += 1
+        }
+        this.setData({ sparkInk: ink })
+      } catch (e) { this.setData({ sparkInk: -1 }) }        // 取不到就报 -1,不报 0(0 会被当成「画空了」)
+    })
+  },
   /* 第一次轮播换指标时淡入一句提示,2 秒后消失,**每台设备只出一次**(存 storage)。
      为什么只出一次:它是「告诉你这里会自动转」,不是每次都要念一遍的通知。 */
   firstHint() {

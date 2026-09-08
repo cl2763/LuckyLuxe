@@ -123,7 +123,8 @@ page{background:#fbf8f5}
 .dh-sd.flat{color:var(--flat)}
 /* 折线:小程序端画不了 SVG,仍是柱形,但**颜色改成金色渐变**,与图上那条金线同一族。
    与图的差异写进回执:图上是带渐变填充的折线,这里是渐变柱(待裁 #19,要不要上 canvas)。 */
-.dh-spark{display:flex;align-items:flex-end;gap:6rpx;height:72rpx;margin:16rpx 0}
+.dh-spark{display:flex;align-items:flex-end;gap:6rpx;height:72rpx;margin:16rpx 0;position:relative}
+.dh-canvas{width:100%;height:72rpx}
 .dh-bar{flex:1;background:linear-gradient(180deg,var(--herogold),rgba(217,185,126,0));border-radius:0}
 
 /* dots:5 个,选中那个变成金色胶囊并会移动(图 §一)。

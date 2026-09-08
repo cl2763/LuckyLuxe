@@ -114,6 +114,18 @@ const wide = dw.filter((w) => w > Math.min(...dw) + 2)
 check('⑤b 恰好一颗是胶囊(比别的宽 —— 「看得出来它在转」的那一半)',
   wide.length === 1, `五颗宽度:${dw.join(' / ')}`)
 
+/* ⑥ D182 折线:**画布里真有金色墨** —— 页面画完自己数了一遍(`sparkInk`),这里读它。
+   为什么不用截图:`mp.screenshot()` 在这台机器上卡死(待裁 #21),
+   从画布**里面**取像素是唯一还剩的实证。 */
+const data = await T(page.data(), 8000, 'page.data')
+const ink = Number((data || {}).sparkInk)
+if ((data || {}).sparkCanvas === false) {
+  console.log('   [说明] 这台设备拿不到 canvas 上下文,折线**落回柱形**(保底那条路)—— 不算红')
+} else {
+  check('⑥ 折线画布里有金色墨(> 0 说明真画上了,不是一块空画布)', ink > 0, `sparkInk=${ink}`)
+  console.log(`   [取证] 金色像素 ${ink} 个;造病(去掉渐变填充)时同一处量到 1994、装着渐变时 2683 —— 差的就是那层填充`)
+}
+
 console.log(`\n[小程序布局实测] 五小数 ${smalls.length} 格 · 大数 ${bigCode.length + bigNum.length + bigCent.length} 段 · dots ${dots.length} 个 · 屏宽 ${winW}`)
 console.log('⚠️  截图交不出来:这台机器上 automator 的 `screenshot()` 卡死(别的调用都正常),')
 console.log('    所以本段证据是**布局实测数字**,不是图。像素给不到就明说(J-32 不许拿 DOM 冒充截图)。')

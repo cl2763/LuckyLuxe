@@ -298,6 +298,21 @@ check('㉔e 路②为什么不成,写在代码里(不是一句「做不到」)',
 check('㉔f 生成物有重生成的脚本(那串 base64 是生成的,不许手改)',
   /make-fraunces-subset\.sh/.test(fontWxss))
 
+/* ══ D182 · 小程序折线按图(夜班令6 段 9)══
+   图 §一 line 168–172:渐变填充 .35→0 + 金色描边 stroke-width 2 + 末点圆环 r=3.5。
+   小程序没有 SVG,用 canvas 2d 画同一条;**柱形保底不拆**(店主 05u 裁)。 */
+check('㉕ 用的是 canvas 2d(不是自己造一套图形)',
+  /<canvas wx:if="\{\{sparkCanvas\}\}" type="2d"/.test(wxml))
+check('㉕b 三件齐:渐变 .35→0 · 金色描边 lineWidth 2 · 末点圆环 r=3.5',
+  /rgba\(217,185,126,0\.35\)/.test(pageJs) && /rgba\(217,185,126,0\)/.test(pageJs)
+  && /strokeStyle = '#d9b97e'/.test(pageJs) && /ctx\.arc\([^)]*3\.5/.test(pageJs))
+check('㉕c 按 pixelRatio 缩放(不缩就是糊的)', /pixelRatio/.test(pageJs) && /ctx\.scale\(dpr, dpr\)/.test(pageJs))
+check('㉕d 全 0 不画(图 §六)', /!pts\.some\(\(v\) => v > 0\)\) return/.test(pageJs))
+check('㉕e 🔴 柱形保底不拆:拿不到 canvas 上下文就落回柱形',
+  /this\.setData\(\{ sparkCanvas: false \}\)/.test(pageJs) && /wx:else/.test(wxml) && /dh-bar/.test(wxml))
+check('㉕f 换指标要重画(走势按指标算,不重画就是拿上一个指标的线骗人)',
+  /this\._spark = dh\.spark \|\| \[\][\s\S]{0,120}?drawSpark\(\)/.test(pageJs))
+
 /* ══ D183 · 小程序也有明暗双模式(夜班令6 段 3;双端同批律)══ */
 const themeUtil = readFileSync(join(ROOT, 'miniprogram/utils/theme.js'), 'utf8')
 const meJs = readFileSync(join(ROOT, 'miniprogram/pages/merchant/me/index.js'), 'utf8')
@@ -348,11 +363,14 @@ check('⑮d 英雄块是深色:背景 = --hero,大数字 = --heroink,金色在 d
   /\.dh-hero\{background:var\(--hero\)/.test(homeWxss)
   && /\.dh-big\{[^}]*color:var\(--heroink\)/.test(homeWxss)
   && /\.dh-dot-i\.on\{background:var\(--herogold\)/.test(homeWxss))
-check('⑮e dots 恒 5 个且选中那个会移动(轮播名单与网页端同一份)',
+/* 🔴 D177(段 8)之后**网页端不再有 CAROUSEL** —— 轮播只剩小程序与全屏态。
+   所以这条不再拿网页那份名单对齐,改成对齐**小程序自己的那份**(`dashboard-view.js`)。
+   两端不再共用一份名单这件事本身是对的:图 §三 没有轮播。 */
+check('⑮e dots 恒 5 个且选中那个会变胶囊(名单在 dashboard-view.js 那一处)',
   view.buildOwnerHome({ pulse: { currency: 'CNY', metrics: [] }, now: {}, todo: {}, period: 'today',
     nowHM: '10:00', storeMoney: () => '—' }).dots.length === 5
   && /\.dh-dot-i\.on\{[^}]*width:28rpx/.test(homeWxss)
-  && webHome.includes("CAROUSEL = ['revenue', 'cash', 'cardUse', 'newCard', 'visits']"))
+  && /CAROUSEL = \['revenue', 'cash', 'cardUse', 'newCard', 'visits'\]/.test(readFileSync(join(ROOT, 'miniprogram/utils/dashboard-view.js'), 'utf8')))
 check('⑮f 轮播换指标**不发请求**:只把 headKey 换一个再跑一遍纯函数',
   /switchMetric\(e\)/.test(pageJs) && /repaintMetric\(\)/.test(pageJs)
   && !/repaintMetric\(\)\s*\{[\s\S]{0,400}?adminGet/.test(pageJs))

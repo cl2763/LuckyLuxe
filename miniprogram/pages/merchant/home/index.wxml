@@ -36,8 +36,15 @@
           <text class="dh-big-code" wx:if="{{dh.headParts.code}}">{{dh.headParts.code}}</text><text class="dh-big-num">{{dh.headParts.amount}}</text><text class="dh-big-cent" wx:if="{{dh.headParts.cents}}">{{dh.headParts.cents}}</text>
         </view>
         <view wx:if="{{dh.headDelta}}" class="dh-delta {{dh.headDelta.tone}}" data-delta>{{dh.headDelta.arrow}} {{dh.headDelta.text}}</view>
+        <!-- 🔴 D182(夜班令6 段 9):折线按图 —— **渐变填充 + 金色描边 + 末点圆环**。
+             小程序 WXML 没有 SVG,所以用 `<canvas type="2d">` 画。
+             柱形**保底不拆**:canvas 拿不到上下文(旧基础库/渲染异常)时回落到柱,
+             页面上永远有一条走势可看(店主 05u 裁「柱形保底不许拆」)。 -->
         <view wx:if="{{dh.spark.length}}" class="dh-spark" data-dh-spark>
-          <view wx:for="{{dh.sparkBars}}" wx:key="i" class="dh-bar" style="height:{{item}}%"></view>
+          <canvas wx:if="{{sparkCanvas}}" type="2d" id="dhSpark" class="dh-canvas" data-dh-canvas></canvas>
+          <block wx:else>
+            <view wx:for="{{dh.sparkBars}}" wx:key="i" class="dh-bar" style="height:{{item}}%"></view>
+          </block>
         </view>
         <!-- dots:5 个,点一下换指标;轮播 6 秒自己走一格(图 §一) -->
         <view class="dh-dots {{dhPaused?'paused':''}}" data-dh-dots data-dh-paused="{{dhPaused}}">
