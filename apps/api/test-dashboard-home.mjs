@@ -215,11 +215,21 @@ check('⑬g 折线三件齐:渐变 .35→0 + 金色描边 + 末点圆环(少一�
 check('⑬h 数字滚动 600ms + 系统「减少动态效果」直接跳(图 §一 第 1 条)',
   /ROLL_MS = 600/.test(home) && /prefers-reduced-motion: reduce/.test(home)
   && /requestAnimationFrame\(step\)/.test(home) && /if \(reduce \|\| from === undefined/.test(home))
-check('⑬i dots 恒 5 个、选中那个会移动(轮播位数 = dots 数,不许两处各写一个数)',
-  /CAROUSEL = \['revenue', 'cash', 'cardUse', 'newCard', 'visits'\]/.test(home)
-  && /data-dh-dot="\$\{i\}"/.test(home) && /\.dh-dots button\.on \{/.test(css))
-check('⑬j 🔴 dots 的样式选择器跟着真实节点走:渲染的是 button,CSS 就不许只写 i',
-  !/\.dh-dots i \{/.test(css) && /\.dh-dots button \{/.test(css))
+/* 🔴 D177(夜班令6 段 8)把 ⑬i/⑬j **翻面**:网页首页**不该有** dots。
+   案由:图 §三 里 dots 出现 0 次(它只在 §一 小程序与 §五 全屏态);
+   我上一批把 §一 的规矩搬到了 §三,店主盯着的那个数会自己变成「总卡耗」。
+   翻面之后,旧的两条(dots 恒 5 个 / 选择器跟节点走)在网页端**不再适用** ——
+   它们搬去了 `test-mp-home-owner`(小程序那边 dots 照旧 5 颗)。 */
+check('⑬i 🔴 网页首页**没有** dots(图 §三 一个都没画)',
+  !/data-dh-dots/.test(home) && !/data-dh-dot=/.test(home))
+check('⑬i2 大数字**固定为营业收入**,不再有轮播位',
+  /HEAD_METRIC = 'revenue'/.test(home) && !/CAROUSEL/.test(home) && !/st\.slot/.test(home))
+check('⑬i3 轮播定时器删干净(不是留着不调 —— 留着迟早有人再打开)',
+  !/ROTATE_MS/.test(home) && !/scheduleRotate/.test(home) && !/rotateAt/.test(home))
+check('⑬j 小程序端 dots 照旧 5 颗(§一 明写;这条是**反向守**:别把两端一起削了)',
+  /CAROUSEL = \['revenue', 'cash', 'cardUse', 'newCard', 'visits'\]/.test(readFileSync(join(ROOT, 'miniprogram/utils/dashboard-view.js'), 'utf8')))
+check('⑬j2 全屏态轮播照旧(§五 line 377 明写「每 6 秒一换」)',
+  /ROTATE_MS = 6000/.test(fs))
 check('⑬k AI 今日一句显示的是**门店当地时刻**,不是一串 ISO(后端出文本,前端零格式化)',
   /storeClockText\(tenantId\)/.test(readFileSync(join(ROOT, 'apps/api/dashboard-pulse.mjs'), 'utf8'))
   && !/toLocaleTimeString|toISOString/.test(home))

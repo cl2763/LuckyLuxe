@@ -37,13 +37,18 @@ window.DashboardHome = (function () {
   /* 急缓:客服待人工与待报价是**顾客在等**,排前面(图 §三 右下块) */
   const URGENT = ['aiHandoff', 'quotePending']
 
-  /* 🔴 D168 段 3 第 6 条:轮播 + 数字滚动。
-     `slot` = 大数字现在放大的是哪一个指标(图上 5 个 dots = 5 个轮播位);
-     `rolled` = 上一次画出来的数,滚动要从它滚到新值 —— 没有它就只能「直接换」。 */
-  const CAROUSEL = ['revenue', 'cash', 'cardUse', 'newCard', 'visits']
-  const ROLL_MS = 600            // 图 §一 第 1 条原文:600ms
-  const ROTATE_MS = 6000         // 与全屏态同一个数(图 §五)
-  let st = { period: 'today', slot: 0, pulse: null, now: null, todo: null, aiLine: null, phase: 'loading', deps: null, host: null, rolled: {}, rotateAt: 0 }
+  /* 🔴 D177(店主 05u 补一,夜班令6 段 8):**网页首页没有轮播**。
+     现查合同图:`dots` 只出现在 **§一(小程序)** 与 **§五(全屏态)**;
+     §三(网页后台首页)那一段里 **0 次** —— 视觉稿是「左边营业收入大数字固定 + 右边四小牌同时在屏」,
+     side 注也只说「同一份 pulse 数据**横着摆**」,一个字没提轮播。
+     我上一批把 §一 的规矩搬到了 §三,于是店主盯着看的那个数会在她不动手时变成「总卡耗」。
+     **窄屏才需要轮播**(五个数塞不下);网页是宽屏,六个数本来就同时在屏上 ——
+     轮播在这里不增加信息,只制造「页面自己在动」。
+     所以:大数字固定为营业收入,dots 整个去掉,轮播定时器一并删干净。
+     小程序端(§一)与全屏态(§五)**保留**轮播,那是图上写死的。 */
+  const HEAD_METRIC = 'revenue'
+  const ROLL_MS = 600            // 图 §一 第 1 条:切维度时数字仍然滚动 600ms
+  let st = { period: 'today', pulse: null, now: null, todo: null, aiLine: null, phase: 'loading', deps: null, host: null, rolled: {} }
 
   const esc = (s) => st.deps.escapeHtml(String(s == null ? '' : s))
   const zh = () => st.deps.isZh !== false
@@ -97,7 +102,7 @@ window.DashboardHome = (function () {
     const d = xy.map(([x, y], i) => `${i ? 'L' : 'M'}${x} ${y}`).join(' ')
     const last = xy[xy.length - 1]
     /* 渐变 id 每次画都换一个:同页面里若出现第二条折线(全屏态),id 撞了会串色 */
-    const gid = `dh-sp-${st.period}-${st.slot}`
+    const gid = `dh-sp-${st.period}`
     return `<svg class="dh-spark" data-dh-spark viewBox="0 0 ${w} ${h}" width="${w}" height="${h}" aria-hidden="true">
       <defs><linearGradient id="${gid}" x1="0" x2="0" y1="0" y2="1">
         <stop offset="0" stop-color="var(--herogold)" stop-opacity=".35"/>
@@ -147,20 +152,10 @@ window.DashboardHome = (function () {
     : `<div class="dh-next dh-next-none" data-dh-next-none>${zh() ? '后面没有待到店的了' : 'No one waiting'}</div>`}`
   }
 
-  /* ── 英雄区:**一整块深色**(图 §三)。左(维度条 + 大数 + 折线 + dots + 此刻四格 + 下一位)
+  /* ── 英雄区:**一整块深色**(图 §三)。左(维度条 + 大数 + 折线 + 此刻四格 + 下一位)
        右(四小牌 + AI 今日一句横跨两列)。上一版是白卡片黑字,那是骨架不是皮。 ── */
-  function heroMetric(ms) {
-    /* 轮播位落在哪个指标上:图上 5 个 dots。
-       ⚠️ **假设(图上没写死)**:后端给的是六个指标,而图上画的是 **5 个 dots**。
-       这里取「营业收入 + 现金业绩 + 总卡耗 + 新增持卡 + 到店人次」五个轮播,
-       **今日预约不进轮播** —— 它那一格带「在做 N · 待到店 N」的实时副行,
-       图 §一 第 2 条说那是「主页上唯一的实时一眼」,不该被轮走。已记入假设清单。 */
-    const key = CAROUSEL[st.slot % CAROUSEL.length]
-    return ms.find((m) => m.key === key) || ms[0] || null
-  }
-
-  const dots = () => `<div class="dh-dots" data-dh-dots>${CAROUSEL.map((k, i) => `
-      <button type="button" class="${i === (st.slot % CAROUSEL.length) ? 'on' : ''}" data-dh-dot="${i}" aria-label="${esc(label(k))}"></button>`).join('')}</div>`
+  /* 大数字**固定为营业收入**(图 §三 的视觉稿就是它)—— 网页这边没有「现在轮到哪一个」这回事 */
+  const heroMetric = (ms) => ms.find((m) => m.key === HEAD_METRIC) || ms[0] || null
 
   function hero() {
     const p = st.pulse || {}
@@ -179,7 +174,6 @@ window.DashboardHome = (function () {
             ${head ? deltaText(head) : ''}
             ${head ? sparkSvg(head.spark) : ''}
           </div>
-          ${dots()}
           ${empty ? `<p class="dh-truth" data-dh-truth-empty>${zh() ? '今天还没有开单 · 暂无往日数据' : 'No orders yet today'}</p>` : ''}
           ${nowPart()}
         </div>
@@ -252,17 +246,6 @@ window.DashboardHome = (function () {
     }
     bind()
     rollNumbers()
-    scheduleRotate()
-  }
-
-  /* 轮播:6 秒换一个指标。**只重画手上的数,一个请求都不发** ——
-     图 §八 的「首页不轮询」管的是取数,不是画面(§一 第 1 条明写「轮播换指标时数字滚动」)。
-     用 `setTimeout` 一次一排(不是 `setInterval` 挂着):重画时先清掉旧的那一枚,
-     免得两枚计时器叠着跑,越点越快。 */
-  function scheduleRotate() {
-    if (st.rotateAt) { window.clearTimeout(st.rotateAt); st.rotateAt = 0 }
-    if (st.phase !== 'ready') return
-    st.rotateAt = window.setTimeout(() => { st.slot = (st.slot + 1) % CAROUSEL.length; paint() }, ROTATE_MS)
   }
 
   /* ── 数字滚动(图 §一 第 1 条:600ms;系统「减少动态效果」则直接跳)──────
@@ -297,10 +280,6 @@ window.DashboardHome = (function () {
   function bind() {
     st.host.querySelectorAll('[data-dh-period]').forEach((el) => {
       el.addEventListener('click', () => { st.period = el.dataset.dhPeriod; load() })
-    })
-    /* dots:点一下换指标 —— 轮播与手点走同一条路(一处真相) */
-    st.host.querySelectorAll('[data-dh-dot]').forEach((el) => {
-      el.addEventListener('click', () => { st.slot = Number(el.dataset.dhDot) || 0; paint() })
     })
     /* ══ D179 图 §六 第 4/5 行(夜班令6 段 5)══
        长按大数字 / 点四小牌 → 各指标各去各的地方;点「此刻」四格 → 今日台面。
