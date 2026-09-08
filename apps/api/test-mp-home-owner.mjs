@@ -32,7 +32,10 @@ const check = (name, ok, detail = '') => {
 /* ═══ ① 图 §一 逐块(判据锚**选择器**,不锚文案)═══ */
 const BLOCKS = [
   ['周期条(今日/本周/本月/本年)', 'data-dh-periods'],
-  ['营业收入大数', 'data-dh-metric="revenue"'],
+  /* D178 之后大数字那一格是**轮播位**(`data-dh-metric="{{dh.headKey}}"`),
+     不再写死 revenue —— 锚点换成 `data-dh-big`,它标的就是「那一块大数字」这件事本身。
+     轮播默认停在营业收入,由 `⑳g` 那条(headKey 默认 revenue)守。 */
+  ['大数字那一块', 'data-dh-big'],
   ['比上期', 'data-delta'],
   ['折线', 'data-dh-spark'],
   ['五个小数一行', 'data-dh-smalls'],
@@ -208,6 +211,32 @@ const wxmlCode = wxml.replace(/<!--[\s\S]*?-->/g, '')
 check('⑲ 员工首页待办里 0 个「打卡」节点(它只在那道门里)',
   wxmlCode.split('\n').filter((ln) => /打卡/.test(ln) && !/clock-/.test(ln)).length === 0,
   wxmlCode.split('\n').filter((ln) => /打卡/.test(ln) && !/clock-/.test(ln)).map((x) => x.trim().slice(0, 60)).join(' | '))
+
+/* ══ D178 · 按图重排(夜班令6 段 4)══ */
+const wxssD178 = readFileSync(join(ROOT, 'miniprogram/pages/merchant/home/index.wxss'), 'utf8')
+check('㉑ 五个小数**严格一行五列**(图 line 69;她截图里是两行 3+2)',
+  /\.dh-smalls\{[^}]*grid-template-columns:repeat\(5,1fr\)/.test(wxssD178))
+check('㉑b 五个小数不许折行(长金额靠缩字号 + 省略号,不是换行)',
+  /\.dh-sv\{[^}]*white-space:nowrap[^}]*text-overflow:ellipsis/.test(wxssD178)
+  && /\.dh-sl\{[^}]*white-space:nowrap/.test(wxssD178))
+check('㉑c 大数字**三段式**:币码 / 主数 / 分位,三个节点三个字号(图 line 51–52)',
+  /dh-big-code/.test(wxml) && /dh-big-num/.test(wxml) && /dh-big-cent/.test(wxml)
+  && /\.dh-big-code\{font-size:22rpx/.test(wxssD178) && /\.dh-big-num\{font-size:62rpx/.test(wxssD178)
+  && /\.dh-big-cent\{font-size:30rpx/.test(wxssD178))
+check('㉑d 三段由**后端下发的 currencyDisplay** 拆出来,页面零拼串(币种红线)',
+  /makePartsFor\(pulse && pulse\.currencyDisplay, cur\)/.test(readFileSync(join(ROOT, 'miniprogram/utils/dashboard-view.js'), 'utf8'))
+  /* 币符扫的是**样式规则**,不扫注释 —— 注释里写着她截图那句「现金业绩 CAD $5,760.00」,
+     那是案由,不是代码(判据看代码不看散文,与 ⑰/⑲ 同一条) */
+  && !/[¥$]/.test(wxssD178.replace(/\/\*[\s\S]*?\*\//g, '')))
+check('㉑e 轮播放大谁,那一格**位置保留、数字淡出**(不是整格消失、不是重排)',
+  /dimmed: key === hk/.test(readFileSync(join(ROOT, 'miniprogram/utils/dashboard-view.js'), 'utf8'))
+  && /item\.dimmed\?'dim':''/.test(wxml) && /\.dh-small\.dim\{opacity:/.test(wxssD178))
+check('㉑g 顶行留了安全区,长店名单行省略号(她截图里「LUVIA」的 L 缺一块)',
+  /\.page\{padding:calc\(24rpx \+ env\(safe-area-inset-top\)\)/.test(wxssD178)
+  && /\.greeting\{[^}]*white-space:nowrap[^}]*text-overflow:ellipsis/.test(wxssD178)
+  && /\.topbar > view:first-child\{flex:1;min-width:0\}/.test(wxssD178))
+check('㉑f 大数字默认停在营业收入(轮播位的起点)',
+  /headKey = 'revenue'/.test(readFileSync(join(ROOT, 'miniprogram/utils/dashboard-view.js'), 'utf8')))
 
 /* ══ D183 · 小程序也有明暗双模式(夜班令6 段 3;双端同批律)══ */
 const themeUtil = readFileSync(join(ROOT, 'miniprogram/utils/theme.js'), 'utf8')

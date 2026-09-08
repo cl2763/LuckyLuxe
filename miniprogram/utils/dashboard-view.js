@@ -107,6 +107,28 @@ function makeMoneyFor(currencyDisplay, code) {
   }
 }
 
+/* 🔴 D178(店主 2026-09-09 逐条对图):大数字在图上是**三段**——
+   `CAD`(1.2rem 金色 `--herogold`)+ `1,318`(3.3rem Fraunces)+ `.00`(1.6rem,淡一档)。
+   她截图里是 `CAD $1,318.00` **整串一样大**,与网页端也不一致(网页那边早就是三段了)。
+   这里把同一份 `currencyDisplay` 拆成三段给页面 —— 页面仍然一个币符都不自己拼。
+   与网页 `money-format.js:parts()` 是**同一套规则**(千分位只给整数部分、trimZeroDecimals 同款);
+   两端各写一份是端能力使然(小程序引不了网页那个文件),规则若要改必须两处一起改。 */
+function makePartsFor(currencyDisplay, code) {
+  if (!currencyDisplay || !code) return null
+  return (cents) => {
+    const v = Number(cents || 0) / 100
+    let txt = v.toFixed(currencyDisplay.trimZeroDecimals ? 0 : 2)
+    if (currencyDisplay.trimZeroDecimals) txt = txt.replace(/\.00$/, '')
+    const bits = txt.split('.')
+    const grouped = bits[0].replace(/\B(?=(\d{3})+(?!\d))/g, ',')
+    return {
+      code: `${String(currencyDisplay.prefix || '').replace('<CODE>', code)}${currencyDisplay.symbol || ''}`.trim(),
+      amount: grouped,
+      cents: bits[1] ? `.${bits[1]}` : '',
+    }
+  }
+}
+
 function buildOwnerHome({ pulse, now, todo, period, nowHM, storeMoney, moneyFor, headKey = 'revenue' }) {
   /* 钱的出口:按**这次下发的币种**绑一个;调用方给了 `moneyFor` 就用它(判据造景用)。
      两个都没有 → 一个钱数都不出(fail-closed)。 */
@@ -123,6 +145,9 @@ function buildOwnerHome({ pulse, now, todo, period, nowHM, storeMoney, moneyFor,
 
   const smalls = SMALL_KEYS.map((key) => {
     const m = byKey[key]
+    /* 图 §一 第 2 条原文:「轮播把谁放大,谁就从这一行**暂时空出**(位置保留、数字淡出),
+       其余四个照显 —— 五个数任何时刻都在屏上」。所以这里给一个 `dimmed` 标记,
+       **不是把那一格删掉**(删掉就变成四格重排,图上不是那样)。 */
     const isMoney = key === 'cash' || key === 'cardUse'
     const unit = key === 'newCard' || key === 'visits' ? ' 人' : (key === 'bookings' ? ' 单' : '')
     return {
@@ -134,6 +159,7 @@ function buildOwnerHome({ pulse, now, todo, period, nowHM, storeMoney, moneyFor,
       sub: key === 'bookings' && period === 'today' && now
         ? `在做 ${now.doing || 0} · 待到店 ${now.waiting || 0}` : '',
       live: key === 'bookings' && period === 'today',
+      dimmed: key === hk,        // 正被放大的那一个:位置留着,数字淡出
     }
   })
 
@@ -144,6 +170,14 @@ function buildOwnerHome({ pulse, now, todo, period, nowHM, storeMoney, moneyFor,
     periods: PERIODS.map((p) => ({ ...p, on: p.key === period })),
     headKey: hk,
     headLabel: LABELS[hk],
+    /* 三段式给页面(拿不到币种就三段全空,由 `headValue` 出「—」——零回落) */
+    headParts: (() => {
+      if (!MONEY_KEYS.includes(hk)) return { code: '', amount: String((head && head.value) != null ? head.value : '—'), cents: '' }
+      const mk = makePartsFor(pulse && pulse.currencyDisplay, cur)
+      if (!mk || !head || head.value == null) return { code: '', amount: '—', cents: '' }
+      if (head.locked) return { code: '', amount: '••••', cents: '' }
+      return mk(head.value)
+    })(),
     /* 大数字也分钱与不是钱:新增持卡/到店人次是人数,不许套币符 */
     headValue: MONEY_KEYS.includes(hk)
       ? (cur ? moneyText(head, fmt) : '—')

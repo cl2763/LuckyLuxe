@@ -1,8 +1,14 @@
 page{background:#fbf8f5}
-.page{padding:24rpx 26rpx 160rpx}
-.topbar{display:flex;justify-content:space-between;align-items:center;margin-bottom:20rpx}
-.greeting{font-size:36rpx;font-weight:600;color:#2d2826}
-.date{font-size:24rpx;color:#8c8279;margin-top:8rpx}.rolechip {font-size:22rpx;font-weight:700;color:#fff;background:#c8a47e;border-radius:999rpx;padding:6rpx 22rpx}
+/* 🔴 D178 第 3 条(店主 09-09):顶行「LUVIA 半径…」左边被切了一块。
+   两件事一起治:①**安全区**——顶上留出 `env(safe-area-inset-top)`(现在用的是系统导航栏,
+   切不到;但换成自定义导航或全面屏机型就会切,这一行是把它钉死);
+   ②**长店名**——北京店那个名字有 16 个字,原来靠 `space-between` 挤,挤不下就被裁;
+   改成「左边可收缩 + 单行省略号」,名字再长也只会变成「…」,不会缺一块。 */
+.page{padding:calc(24rpx + env(safe-area-inset-top)) 26rpx 160rpx}
+.topbar{display:flex;justify-content:space-between;align-items:center;margin-bottom:20rpx;gap:16rpx}
+.topbar > view:first-child{flex:1;min-width:0}
+.greeting{font-size:36rpx;font-weight:600;color:var(--ink);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.date{font-size:24rpx;color:var(--sub);margin-top:8rpx;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}.rolechip {font-size:22rpx;font-weight:700;color:#fff;background:#c8a47e;border-radius:999rpx;padding:6rpx 22rpx}
 .rolechip.owner{background:#2d2826}
 
 /* AI 总结(压缩) */
@@ -99,7 +105,12 @@ page{background:#fbf8f5}
 .dh-period{padding:8rpx 22rpx;border:1rpx solid var(--herogrid);border-radius:999rpx;font-size:24rpx;color:var(--herosub)}
 .dh-period.on{background:var(--herogold);color:var(--hero);border-color:var(--herogold);font-weight:700}
 .dh-eyebrow{font-size:22rpx;color:var(--herosub);margin-bottom:6rpx}
-.dh-big{font-size:62rpx;font-weight:700;line-height:1.1;color:var(--heroink);font-variant-numeric:tabular-nums}
+/* D178 大数字三段式(图 line 51–52):币码 1.2rem 金色 · 主数 3.3rem · 分位 1.6rem 淡一档。
+   小程序用 rpx:主数 62rpx ≈ 图上的 3.3rem;币码与分位按同一比例缩(约 3:1 与 2:1)。 */
+.dh-big{line-height:1.1;color:var(--heroink);font-variant-numeric:tabular-nums;display:flex;align-items:baseline;white-space:nowrap}
+.dh-big-code{font-size:22rpx;color:var(--herogold);font-weight:500;margin-right:8rpx}
+.dh-big-num{font-size:62rpx;font-weight:700;letter-spacing:-0.01em}
+.dh-big-cent{font-size:30rpx;font-weight:500;opacity:.75}
 .dh-delta{font-size:24rpx;margin-top:6rpx;display:inline-block;padding:2rpx 14rpx;border-radius:999rpx}
 .dh-delta.up{background:var(--goodbg);color:var(--good)}
 .dh-delta.down{background:var(--badbg);color:var(--bad)}
@@ -117,13 +128,18 @@ page{background:#fbf8f5}
 .dh-dot-i{width:10rpx;height:10rpx;border-radius:50%;background:var(--herogrid)}
 .dh-dot-i.on{background:var(--herogold);width:28rpx;border-radius:999rpx;transition:width .3s}
 
-.dh-smalls{display:flex;flex-wrap:wrap;gap:14rpx;margin-top:8rpx;padding-top:18rpx;border-top:1rpx solid var(--herogrid)}
-.dh-small{flex:1 1 30%;min-width:170rpx;padding:12rpx 0}
-.dh-sl{font-size:22rpx;color:var(--herosub)}
-.dh-sv{font-size:32rpx;font-weight:700;color:var(--heroink);margin-top:4rpx;font-variant-numeric:tabular-nums}
-.dh-sub{font-size:21rpx;color:var(--herosub);margin-top:4rpx;display:flex;align-items:center;gap:6rpx}
+/* 🔴 D178:五个小数**严格一行五列**(图 line 69 `grid-template-columns:repeat(5,1fr)`)。
+   她截图里排成了两行(3+2),还把「现金业绩 CAD $5,760.00」折成两行 ——
+   图 §一 第 2 条要的是「五个数**任何时刻都在屏上**」,折成两行就不是那句话了。
+   长金额靠 `tabular-nums` + 缩字号 + 省略号顶住,**不许折行**。 */
+.dh-smalls{display:grid;grid-template-columns:repeat(5,1fr);gap:8rpx;margin-top:8rpx;padding-top:18rpx;border-top:1rpx solid var(--herogrid)}
+.dh-small{min-width:0;padding:12rpx 0;transition:opacity .3s}
+.dh-small.dim{opacity:.28}
+.dh-sl{font-size:20rpx;color:var(--herosub);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.dh-sv{font-size:30rpx;font-weight:700;color:var(--heroink);margin-top:4rpx;font-variant-numeric:tabular-nums;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.dh-sub{font-size:19rpx;color:var(--herosub);margin-top:4rpx;display:flex;align-items:center;gap:4rpx;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
 .dh-dot{width:10rpx;height:10rpx;border-radius:50%;background:var(--herolive);display:inline-block}
-.dh-sd{font-size:21rpx;margin-top:2rpx}
+.dh-sd{font-size:19rpx;margin-top:2rpx;white-space:nowrap}
 .dh-asof{margin-top:16rpx;font-size:21rpx;color:var(--herosub)}
 
 .dh-ai{font-size:26rpx;color:var(--ink);line-height:1.5}
