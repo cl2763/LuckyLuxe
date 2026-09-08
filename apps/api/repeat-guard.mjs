@@ -41,10 +41,17 @@ const ANGLES = [
     为什么需要它:换角度是塞给模型的,模型**可能照样吐同一句**(mock 模型必然如此)。
     这时候店主要的是「换一种答法去想他到底要什么」——**不是**转人工(那是第三次的事)。
     所以这句只做一件事:承认没答到点,并把选择权交回顾客。它不编任何事实。 */
-export function reaskText(lang = 'zh') {
-  return lang === 'en'
-    ? "I don't think I answered what you actually meant — is it the price, the timing, or the result you care about most?"
-    : '这个我可能没答到点上~您最在意的是价格、时间,还是做出来的效果呢?'
+/* 🔴 D158 之三(店主 05s):**换答法必须仍然回答**。
+   v4 通二现场:换答法把一句实答换成了一句空话「您最在意的是价格、时间,还是效果?」——
+   顾客问了两遍,结果**连第一遍的答案都被拿走了**。
+   改法:上一答**留着**,后面才接换角度那一问。我们造不出新答案,
+   但绝不能把已有的答案换成一句反问。 */
+export function reaskText(lang = 'zh', lastAnswer = '') {
+  const ask = lang === 'en'
+    ? 'Which matters most to you — price, timing, or the result?'
+    : '您最在意的是价格、时间,还是做出来的效果呢?'
+  const keep = String(lastAnswer || '').trim()
+  return keep ? `${keep} ${ask}` : ask
 }
 
 /** 转人工那句 —— 店主原话的形状:「我可以帮您接人工」 */
@@ -77,14 +84,44 @@ export function recentCustomer(db, conversationId, tenantId, limit = 4) {
 /** 生成前:这是同主题第几次、上一条 AI 原话是什么。
  *  @returns {{ run: number, angle: string, lastText: string }}
  *  `run` 从 1 起(1 = 头一次问)。 */
+/* 🔴 D158(店主 05s §四 读六通 v4 读出来的):**同一档 ≠ 同一件事**。
+   v4 通二现场:顾客问「那个最便宜的是哪种」——这是**新问题**,不是复读,
+   却被判成同题、换成一句空话「我可能没答到点上~您最在意的是价格、时间,还是效果?」。
+   两条收紧:
+   ① 光是「都落在 question 档」不算同题 —— 还要**两句话真的在说同一件事**
+      (共同的实词够多);
+   ② 上一次 AI **答出了东西**才谈得上「又问了一遍」;上一答本来就是反问/空话,
+      顾客再问是理所当然的,不该当复读处理。 */
+const STOP = /[的了吗呢吧啊呀是不有我你他她它这那个们么多少大小好很就都还也要会能可以哪什么怎么样嘛]/g
+const contentChars = (t) => new Set(String(t || '').replace(/\s|[,。!?、~,.!?]/g, '').replace(STOP, '').split(''))
+export function sameTopic(a, b) {
+  const A = contentChars(a)
+  const B = contentChars(b)
+  if (!A.size || !B.size) return false
+  let hit = 0
+  for (const c of A) if (B.has(c)) hit += 1
+  /* 重合过半才算同一件事。「多久」vs「最便宜的是哪种」几乎不重合 → 不算同题 */
+  return hit / Math.min(A.size, B.size) >= 0.5
+}
+/** 上一句 AI 到底**答没答出东西**:给了数字/时长/价格/明确说法才算答过。
+    只是反问一句(采集问句、"您最在意哪一点")不算 —— 那本来就没答。 */
+export function answered(text = '') {
+  const t = String(text || '')
+  if (!t) return false
+  if (/^[^。!?]{0,40}[??]\s*$/.test(t.trim())) return false          // 整句就是一个问句
+  return /\d/.test(t) || t.length >= 24
+}
+
 export function repeatPre({ db, conversationId, tenantId, text, classifyTurn }) {
   const kind = classifyTurn(text || '')
   if (!CHASING.has(kind)) return { run: 1, angle: '', lastText: '' }
-  /* 往回数:顾客上几句里,连着几句和这句同档。数的是**连续**的,中间插一句给时段就断了。 */
+  /* 往回数:顾客上几句里,连着几句**和这句说的是同一件事**。
+     数的是**连续**的,中间插一句给时段就断了;换了话题也断(D158)。 */
   const prev = recentCustomer(db, conversationId, tenantId, 4)
   let run = 1
   for (const row of prev) {
     if (classifyTurn(row.content || '') !== kind) break
+    if (!sameTopic(text, row.content)) break
     run += 1
   }
   const last = recentAssistant(db, conversationId, tenantId, 1)[0]
@@ -100,6 +137,8 @@ export function repeatPre({ db, conversationId, tenantId, text, classifyTurn }) 
  *  @returns {{ action: 'none'|'reask'|'escalate', why: string }} */
 export function repeatVerdict({ run, lastText, replyText }) {
   if (!replyText) return { action: 'none', why: 'no-reply' }
+  /* D158 之二:上一答**没答出东西**的话,顾客再问是理所当然的 —— 不算复读,不动它。 */
+  if (!answered(lastText)) return { action: 'none', why: 'last-had-no-answer' }
   const same = Boolean(lastText) && squash(lastText) === squash(replyText)
   if (run >= 3) return { action: 'escalate', why: same ? 'third-and-same' : 'third-time' }
   if (same) return { action: 'reask', why: 'same-as-last' }
@@ -132,13 +171,33 @@ export const REPEAT_ANGLES = ANGLES
  *  放这儿而不是放 `local-server.mjs`:巨型文件「只许搬出、不许新增」(公约③),
  *  而且这一段的**全部逻辑**本来就属于 D150 这个域。
  *  `local-server` 那边只剩「算 pre → 调 Core → 交给这里」三行。 */
-export function applyRepeatGuard({ db, iso, getWecomConversation }, { inbound, result, pre, conversationId, tenantId }) {
-  const replyText = String(result?.reply?.data?.answerZh || result?.reply?.data?.answer || result?.reply?.data?.answerEn || '')
+/** 这通对话现在是什么状态(待人工?)—— D161 要用。读口收在这儿,
+ *  调用方不用再传一个 lambda 进来(巨型文件那边只留一行)。 */
+function statusOf(db, conversationId, tenantId) {
+  try { return (db.prepare('SELECT status FROM wechat_conversations WHERE id = ? AND tenant_id = ?').get(conversationId, tenantId) || {}).status || '' } catch { return '' }
+}
+
+export function applyRepeatGuard({ db, iso, getWecomConversation, hygiene }, { inbound, result, pre, conversationId, tenantId }) {
+  let replyText = String(result?.reply?.data?.answerZh || result?.reply?.data?.answer || result?.reply?.data?.answerEn || '')
+  /* D159 / D161 出口卫生:先把「答完还追着问表项」那半句砍掉、
+     待人工态下的告别换成告别句 —— 这一步**只做减法**,不生成新事实。
+     放在壳里的理由和 D150 一样:采集问句从十几条支路拼上来,逐处改必漏。 */
+  if (hygiene && replyText) {
+    const status = statusOf(db, conversationId, tenantId)
+    const h = hygiene({ text: replyText, customerText: inbound.content || '', status, lang: inbound.lang || 'zh' })
+    if (h.why) {
+      const row0 = recentAssistant(db, conversationId, tenantId, 1)[0]
+      rewriteAssistantRow(db, { id: row0?.id, expect: replyText, content: h.text, why: h.why, iso })
+      const cleaned = { ...(result.reply || {}), data: { ...(result.reply?.data || {}), answerZh: h.text } }
+      result = { ...result, reply: cleaned, hygiene: h.why }
+      replyText = h.text
+    }
+  }
   const verdict = repeatVerdict({ run: pre.run, lastText: pre.lastText, replyText })
   if (verdict.action === 'none') return result
   const escalate = verdict.action === 'escalate'
   const lang = inbound.lang || 'zh'
-  const text = escalate ? escalationText(lang) : reaskText(lang)
+  const text = escalate ? escalationText(lang) : reaskText(lang, pre.lastText)
   const row = recentAssistant(db, conversationId, tenantId, 1)[0]
   const rewritten = rewriteAssistantRow(db, { id: row?.id, expect: replyText, content: text, why: verdict.why, iso })
   if (escalate) {

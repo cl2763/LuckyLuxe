@@ -4,8 +4,10 @@ import { AsyncLocalStorage } from 'node:async_hooks'
 import { DatabaseSync } from 'node:sqlite'
 import { customerChatIdentity } from './customer-chat.mjs'
 import { discountFacts, hasAnyDiscountOf } from './discount-facts.mjs'
+import { fixedPriceAnswer } from './fixed-price-reply.mjs'
 import { enrichPrompt } from './prompt-assembly.mjs'
 import { guardedHandle } from './repeat-guard.mjs'
+import { hygiene as replyHygiene } from './reply-hygiene.mjs'
 import { classifyTurn } from './turn-classify.mjs'   // D150 壳:同主题第几次,用的是同一把分类尺
 import { healthReport } from './health-report.mjs'
 import { enterMergeWindow, mergeWindowCapSeconds, mergeWindowSeconds, openMergeWindows } from './merge-window.mjs'
@@ -2985,6 +2987,9 @@ function resolveQuoteWorkflow(inbound = {}, transcript = [], fallbackReply = nul
     state.appointmentIntent = false
     return { reply: fallbackReply, shouldCreateQuote: false, state, quotePayload: null }
   }
+  // 🔴 D152 正面(05s 裁待裁 #8):问价命中 `fixed` 项目 → 直接报三段式、不进采集(`quote` 不走这里,D146)
+  const fixedHit = fixedPriceAnswer({ db, tenantId: currentTenantId(), discountFacts, money: formatMoneyCents }, { text: state.currentText || inbound.content || '', priceIntent: state.priceIntent })
+  if (fixedHit) return { reply: fixedHit, shouldCreateQuote: false, state, quotePayload: null }
   const hasMissingRequired = missingQuestions.zh.length > 0
   const hasQuoteStateUpdate = [
     state.extensionNeeded,
@@ -4027,15 +4032,10 @@ async function handleWecomInboundCore(inbound, req) {
   return { conversationId, inbound, reply, conversation: getWecomConversation(conversationId) }
 }
 
-/* 🔴 D150 出口薄壳:Core 里 14 个 return,插在中间的任何一处收口都会漏(上一批就这么栽的)。
-   为什么是壳、壳做了什么,全写在 `repeat-guard.mjs` 抬头。⚠️ Core **只许这里调**(有静态判据守)。 */
-async function handleWecomInbound(inbound, req) {
-  return guardedHandle({ db, iso, classifyTurn, currentTenantId, wecomConversationId, getWecomConversation }, handleWecomInboundCore, inbound, req)
-}
+// 🔴 D150 出口薄壳 + D159/D161 出口卫生;为什么是壳写在 repeat-guard.mjs 抬头。⚠️ Core 只许这里调(有静态判据守)
+const handleWecomInbound = (inbound, req) => guardedHandle({ db, iso, classifyTurn, currentTenantId, wecomConversationId, getWecomConversation, hygiene: replyHygiene }, handleWecomInboundCore, inbound, req)
 
-function getWecomConversations() {
-  return db.prepare('SELECT * FROM wechat_conversations WHERE tenant_id = ? ORDER BY updated_at DESC LIMIT 80').all(currentTenantId()).map((row) => getWecomConversation(row.id)).filter(Boolean)
-}
+const getWecomConversations = () => db.prepare('SELECT * FROM wechat_conversations WHERE tenant_id = ? ORDER BY updated_at DESC LIMIT 80').all(currentTenantId()).map((row) => getWecomConversation(row.id)).filter(Boolean)
 
 function saveManualReplyLearningSample(conversationId, correctedReply, adminSession = {}) {
   const conversation = getWecomConversation(conversationId)

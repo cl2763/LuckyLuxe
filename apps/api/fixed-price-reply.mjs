@@ -1,0 +1,101 @@
+/* D152 正面 · AI 直接报 `price_mode=fixed` 的价(店主 05s §二 裁待裁 #8)
+
+   店主问的是「AI 到底许不许自己报价」。**D146 已经答了一半**:
+   `services.price_mode` 分 `fixed | quote` —— `quote` 项目的价格**根本不下发模型**,
+   所以它本来就报不出数字;`fixed` 项目的价格是下发的。裁下来就是:
+
+   · 命中 **`fixed`** 项目 → **AI 直接报**,顺序 **折扣 → 原价 → 折后价**;**不进报价采集**;
+   · 命中 **`quote`** 或没命中具体项目 → 照旧走采集、最后转人工不报数字;
+     但有新客券时**先说一句**「新客首次有 XX 券可用,具体价格技师看过后报」。
+
+   ══ 为什么这一句由**规则**出,不交给模型 ══
+   段 7b 试过交给模型:三段式的顺序在事实里写着,但**引擎根本走不到报价那一步**
+   (问价先进采集、最后转人工)。而且钱的话交给模型 = 每次措辞都可能不一样、数字可能算错。
+   这一句里每个数字都从库里来、折后价当场算 —— 算不出来就只说原价(不许估、不许编)。 */
+
+/** 顾客这句话有没有点到某个**在售项目**。
+ *  匹配的是项目名里的**实词**,不做模糊猜:猜错了就是报错价。
+ *  @param items `[{ id, name, priceCents, priceMode, durationMin }]`
+ *  @returns 命中的那个,或 null */
+export function matchService(text = '', items = []) {
+  const t = String(text || '')
+  if (!t) return null
+  let best = null
+  for (const it of items) {
+    const name = String(it.name || '').trim()
+    if (name.length < 2) continue
+    /* 整名命中优先;整名没中就看去掉修饰后的核心词(「精致单色」→「单色」) */
+    const core = name.replace(/^(精致|基础|经典|高级|定制|日式|法式加钻)/, '')
+    const hit = t.includes(name) ? name.length : (core.length >= 2 && t.includes(core) ? core.length : 0)
+    if (hit > (best ? best.hit : 0)) best = { ...it, hit }
+  }
+  return best
+}
+
+/** 折后价:能算准才给,算不准就不给(不许估)。
+ *  只算**门槛够得着**的券;百分比与立减各算各的,取对顾客最省的那一张。 */
+export function bestDiscount(priceCents, discountItems = []) {
+  let best = null
+  for (const d of discountItems) {
+    if (Number(d.minSpend || 0) > Number(priceCents)) continue     // 门槛不够,这张用不上
+    const m = /(\d+(?:\.\d+)?)%\s*off/i.exec(String(d.off || ''))
+    let cut = 0
+    if (m) cut = Math.round(Number(priceCents) * (Number(m[1]) / 100))
+    else {
+      const a = /(\d[\d,]*(?:\.\d+)?)/.exec(String(d.off || '').replace(/[^\d.,]/g, ' '))
+      if (a) cut = Math.round(Number(String(a[1]).replace(/,/g, '')) * 100)
+    }
+    if (cut > 0 && cut < Number(priceCents) && (!best || cut > best.cut)) best = { ...d, cut }
+  }
+  return best
+}
+
+/** 三段式那一句。**没折扣就只说原价**,一个「券」字都不出现。
+ *  @returns {string} */
+export function fixedPriceSentence({ service, discounts = [], money, lang = 'zh' }) {
+  if (!service || service.priceCents === undefined || service.priceCents === null) return ''
+  const price = Number(service.priceCents)
+  const name = service.name
+  const dur = service.durationMin ? `,大概 ${service.durationMin} 分钟` : ''
+  const best = bestDiscount(price, discounts)
+  if (!best) {
+    /* 无折扣:只报原价。**不许出现券/折扣/优惠/券后**(零编造红线,反面刀已在守) */
+    return lang === 'en'
+      ? `${name} is ${money(price)}${service.durationMin ? `, about ${service.durationMin} min` : ''}.`
+      : `${name}原价 ${money(price)}${dur}。`
+  }
+  const after = price - best.cut
+  /* 顺序就是店主要的:①先说折扣 ②再说原价 ③最后说折后价 */
+  return lang === 'en'
+    ? `We have "${best.name}" (${best.off}) — ${name} is ${money(price)}, ${money(after)} after the coupon.`
+    : `现在有「${best.name}」${best.off},${name}原价 ${money(price)},券后 ${money(after)}${dur}。`
+}
+
+/** `quote` 项目那条路上的一句话:**先说有券,再说价格要技师看**(不出数字)。
+ *  ——「折扣事实注入在这条路上就有人听了」那句话的落法。 */
+export function quotePathDiscountLine(discounts = [], lang = 'zh') {
+  if (!discounts.length) return ''
+  const d = discounts[0]
+  return lang === 'en'
+    ? `We do have "${d.name}" (${d.off}) available; the exact price needs a technician to confirm.`
+    : `现在有「${d.name}」${d.off}可以用;具体价格要技师看过后报给您。`
+}
+
+/** 接线用的那一层:从库里现取 `fixed` 项目与本店折扣,拼出该发的那一句。
+ *  没命中 / 不是问价 / 命中的是 `quote` 项目 → 回 `null`,让原流程照旧走。
+ *  放这儿而不是放 `local-server.mjs`:巨型文件只许搬出(公约③),
+ *  而且这一段的全部逻辑本来就属于 D152 这个域。 */
+export function fixedPriceAnswer({ db, tenantId, discountFacts, money }, { text, priceIntent }) {
+  if (!priceIntent) return null
+  const rows = db.prepare(`SELECT id, name_zh, price_cents, base_duration_min, price_mode FROM services
+    WHERE tenant_id = ? AND is_active = 1 AND (item_kind IS NULL OR item_kind = 'main')`).all(tenantId)
+  const hit = matchService(text, rows.map((r) => ({ id: r.id, name: r.name_zh, priceCents: r.price_cents,
+    durationMin: r.base_duration_min, priceMode: r.price_mode || 'fixed' })))
+  if (!hit || hit.priceMode !== 'fixed' || !hit.priceCents) return null
+  const facts = discountFacts(db, tenantId, money)
+  const zh = fixedPriceSentence({ service: hit, discounts: facts.items, money, lang: 'zh' })
+  if (!zh) return null
+  return { source: 'fixed_price_direct', data: { intent: 'pricing', answerZh: zh,
+    answerEn: fixedPriceSentence({ service: hit, discounts: facts.items, money, lang: 'en' }),
+    handoffRequired: false } }
+}

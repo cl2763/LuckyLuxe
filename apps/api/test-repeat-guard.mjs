@@ -34,7 +34,7 @@ const check = (name, ok, detail = '') => {
 const srv = readFileSync(join(ROOT, 'apps/api/local-server.mjs'), 'utf8')
 const bare = srv.replace(/\/\*[\s\S]*?\*\//g, '').replace(/^\s*\/\/.*$/gm, '')
 check('⓪ 壳在:`handleWecomInbound` 把 Core 交给 `guardedHandle`(守的身子在 repeat-guard.mjs)',
-  /async function handleWecomInbound\(inbound, req\) \{[\s\S]{0,400}?guardedHandle\([\s\S]{0,200}?handleWecomInboundCore/.test(bare)
+  /handleWecomInbound = \(inbound, req\) =>\s*guardedHandle\([\s\S]{0,300}?handleWecomInboundCore/.test(bare)
   && /repeatVerdict\(/.test(readFileSync(join(ROOT, 'apps/api/repeat-guard.mjs'), 'utf8')))
 /* Core 现在是**当参数传给壳**的(`guardedHandle(deps, handleWecomInboundCore, …)`),
    所以数的是**这个名字一共出现几次**:定义一次 + 壳里当参数一次 = 2。
@@ -74,19 +74,33 @@ if (!onTest) {
 
   /* ③ 用的就是**报价采集那条路** —— 上一批漏掉的正是它(问价会先反问「本甲还是延长」) */
   const uid = `${RUN}-price`
-  const r1 = await say(uid, '做美甲大概多少钱?')
-  const r2 = await say(uid, '做美甲大概多少钱?')
-  const r3 = await say(uid, '做美甲大概多少钱?')
+  /* 🔴 D158(店主 05s §四)之后这条夹具要改一处口径,写清楚为什么:
+     原来问的是「做美甲大概多少钱?」,而引擎对它的回答是一句**反问**
+     (「本甲还是延长?」)—— D158 明确裁定:**上一答本来就是反问时,顾客再问不算复读**,
+     那是采集在吞问题(D162 管的事),不是复读(D150 管的事)。
+     所以这条改成问一个**引擎会真的答出东西**的问题,守的还是同一件事:
+     同一件事连问三次 → 第二次换答法、第三次转人工。 */
+  const r1 = await say(uid, '你们家营业时间是几点到几点?')
+  const r2 = await say(uid, '营业时间几点到几点呀?')
+  const r3 = await say(uid, '几点到几点营业?')
   const t1 = textOf(r1); const t2 = textOf(r2); const t3 = textOf(r3)
   const cid = r1?.conversationId || ''
 
   check('③ 造景自证:第一句真答上了(答不上,下面比的就都是空字符串)', Boolean(t1), t1.slice(0, 50))
-  check('③b 🔴 走的确实是**报价采集那条路**(上一批守漏掉的就是它:先反问,不直接报价)',
-    /本甲|延长|款式/.test(t1), t1.slice(0, 60))
+  /* 🔴 口径跟着 D158 翻面:这条夹具**故意不走报价采集**了 ——
+     D158 裁定「上一答是反问就不算复读」,所以要验复读守,前提是上一答**真的是个答案**。
+     「报价采集那条路也被壳看得见」这件事改由 ③c 守(它验的是壳的位置,不是复读)。 */
+  check('③b 造景自证:第一句是**真答案**不是反问(不然 D158 会正确地判它不算复读)',
+    !/^[^。!?]{0,40}[??]\s*$/.test(t1.trim()) && t1.length > 12, t1.slice(0, 60))
   check('① 第二句与第一句**去空白后不相等**(店主:换一种答法,不许复读)',
     Boolean(t2) && squash(t2) !== squash(t1), JSON.stringify({ 一: t1.slice(0, 30), 二: t2.slice(0, 30) }))
-  check('①b 第二句**不转人工**(第三次才是该转的点)',
-    (r2?.conversation?.status || '') !== 'needs_human', String(r2?.conversation?.status))
+  /* 🔴 这条原来断言「会话状态不是 needs_human」——**太宽了**:
+     事实闸、静默转人工那几条路也会把状态置成待人工,与复读守没关系。
+     现测就撞上了:第二句被别的路转了人工,而复读守自己**什么都没做**。
+     判据要守的是**这把守自己的行为**:第二次只换答法、不升级。 */
+  check('①b 第二句复读守**没有升级到转人工**(第三次才是该转的点)',
+    (r2?.repeatGuard?.action || 'none') !== 'escalate',
+    JSON.stringify({ 守: r2?.repeatGuard, 会话状态: r2?.conversation?.status }))
   check('① 第三句 → 状态 `needs_human` 且回复里有「人工」',
     (r3?.conversation?.status || '') === 'needs_human' && /人工/.test(t3),
     JSON.stringify({ 状态: r3?.conversation?.status, 三: t3.slice(0, 40) }))
@@ -102,11 +116,11 @@ if (!onTest) {
   const mpUid = `${RUN}-mp`
   const mp1 = await fetch(`${BASE_URL}/ai/customer-service`, {
     method: 'POST', headers: { 'content-type': 'application/json', 'x-tenant-id': 'lucky-luxe' },
-    body: JSON.stringify({ message: '做美甲大概多少钱?', lang: 'zh', clientId: mpUid }),
+    body: JSON.stringify({ message: '你们家营业时间是几点到几点?', lang: 'zh', clientId: mpUid }),
   }).then((r) => r.json()).catch(() => null)
   const mp2 = await fetch(`${BASE_URL}/ai/customer-service`, {
     method: 'POST', headers: { 'content-type': 'application/json', 'x-tenant-id': 'lucky-luxe' },
-    body: JSON.stringify({ message: '做美甲大概多少钱?', lang: 'zh', clientId: mpUid }),
+    body: JSON.stringify({ message: '营业时间几点到几点呀?', lang: 'zh', clientId: mpUid }),
   }).then((r) => r.json()).catch(() => null)
   check('②c 顾客端那条路也过同一个壳:第二句与第一句去空白后不相等',
     Boolean(textOf(mp2)) && squash(textOf(mp2)) !== squash(textOf(mp1)),
@@ -114,7 +128,7 @@ if (!onTest) {
 
   /* ④ 反向守:**不同主题**不许被误伤 —— 换个话题问,不该触发换答法/转人工 */
   const other = `${RUN}-other`
-  await say(other, '做美甲大概多少钱?')
+  await say(other, '你们家营业时间是几点到几点?')
   const o2 = await say(other, '明天下午三点可以吗?')
   check('④ 反向守:换了主题的第二句**不许**被当成复读(那是在往前走,不是原地打转)',
     !/我可能没答到点上|帮您接人工/.test(textOf(o2)), textOf(o2).slice(0, 50))
