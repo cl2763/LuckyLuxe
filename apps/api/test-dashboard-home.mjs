@@ -42,9 +42,19 @@ check('② 金额只走注入进来的 `money()` 出口,页面里零币符',
 check('②b 拿不到币种就出「—」,不出裸数字(D140 fail-closed)',
   /!cur\) return '—'/.test(home))
 
-/* ③ 图 §八 明确不做:首页**不轮询**(全屏态除外,那是段 11) */
-check('③ 🔴 首页不许轮询:页面里没有 setInterval',
-  !/setInterval/.test(home), '出现了 setInterval')
+/* ③ 图 §八 明确不做:首页**不轮询**(全屏态除外,那是段 11)
+
+   🔴 05t 段 3 修订判据(说明为什么改):图 §八 说「首页不轮询」,而图 §一 第 1 条同时要求
+   「**轮播换指标**时数字滚动 600ms」—— 轮播必须有计时器。两条不矛盾:
+   §八 禁的是**自动重取数据**,不是画面动。所以判据从「文件里不许出现 setInterval」
+   改成**按语义**守两条:①任何计时器回调里不许出现 `load(`/`request(`(那才是轮询)
+   ②代码里(去掉注释后)零 `setInterval` —— 轮播只许 `setTimeout` 一次一排,
+   挂一个 interval 上去等于给页面留一条永不停的线。 */
+const homeCode = home.replace(/\/\*[\s\S]*?\*\//g, '').replace(/^\s*\/\/.*$/gm, '')
+check('③ 🔴 首页不许轮询接口:计时器回调里没有 load( / request(',
+  !/set(Interval|Timeout)\([^;]{0,200}?(load\(|request\()/.test(homeCode), '计时器里在重取数据')
+check('③b 轮播只许 setTimeout 一次一排,代码里零 setInterval',
+  !/setInterval/.test(homeCode), '出现了 setInterval')
 
 /* ④ 旧的那几块真的退役了(图 §三:营收只留大屏一处出口) */
 check('④ 🔴「本月收入(账本)」那一格已从旧汇总行退役(两处各算各的正是这次要治的)',
@@ -76,8 +86,8 @@ check('⑥b 开关默认关,只有显式 true 才开(fail-closed)',
   && /catch \{ showMoney = false \}/.test(home))
 check('⑥c 轮播 6 秒 / 重取 60 秒 / 屏保 5 分钟(图 §五 三个数)',
   /ROTATE_MS = 6000/.test(fs) && /REFRESH_MS = 60000/.test(fs) && /SAVER_MS = 5 \* 60000/.test(fs))
-check('⑥d 🔴 轮询**只许在这块屏上**:首页那个文件仍然零 setInterval',
-  !/setInterval/.test(home) && /setInterval\(refresh, REFRESH_MS\)/.test(fs))
+check('⑥d 🔴 轮询**只许在这块屏上**:首页代码零 setInterval,全屏态那一枚在',
+  !/setInterval/.test(homeCode) && /setInterval\(refresh, REFRESH_MS\)/.test(fs))
 check('⑥e 三条退出路都在(Esc / 点任意处 / 退出全屏)',
   /e\.key === 'Escape'/.test(fs) && /addEventListener\('click', stop\)/.test(fs) && /exitFullscreen\(\)/.test(fs))
 check('⑥f 财务锁一律遮成 ••••(与首页同口径,不在大屏另判一次)', /if \(m\.locked\) return '••••'/.test(fs))
@@ -175,6 +185,44 @@ check('⑪c 映射表只剩一份:admin.js 从 money-format 取,不再自己写�
   && (admin.match(/CNY: \{/g) || []).length === 0)
 check('⑪d 🔴 首页大数**不自己拼币符**:走 moneyParts,币码单独一个小字节点',
   /st\.deps\.moneyParts\(m\.value\)/.test(home) && /data-dh-cur>\$\{esc\(p\.prefix\)\}\$\{esc\(p\.symbol\)\}<\/small>\$\{esc\(p\.amount\)\}/.test(home))
+
+/* ══ D168 段 3 · 皮按图原样搬(店主 05t)══
+   这一组守的是**「皮在不在」**,不守「皮好不好看」——好不好看由并排截图背书。
+   每一条都能在源码上证伪;比不出来的(像素、动画真跑起来的样子)明说交给截图。 */
+const tokens = readFileSync(join(ROOT, 'apps/web/design-tokens.css'), 'utf8')
+const css = readFileSync(join(ROOT, 'apps/web/styles.css'), 'utf8')
+check('⑬ 令牌单独成件且被 admin.html 引上(不引等于皮没上)',
+  /design-tokens\.css\?v=/.test(html) && tokens.includes(':root[data-theme="dark"]'))
+check('⑬b 三段令牌齐:浅色 / 系统深色 / 站内选深色(缺一段,某一态就回落到另一套色)',
+  [':root{', ':root:not([data-theme="light"]){', ':root[data-theme="dark"]{'].every((x) => tokens.includes(x)))
+check('⑬c 🔴 `dh-` 块里零兜底值 —— `var(--x, #硬编码)` 等于偷偷藏了第二套配色',
+  !/\.dh-[^{}]*\{[^}]*var\(--[a-z0-9-]+,\s*#/.test(css),
+  (css.match(/\.dh-[^{}]*\{[^}]*var\(--[a-z0-9-]+,\s*#[^)]*\)/g) || []).slice(0, 3).join(' | '))
+check('⑬d 字体三件套在 admin.html 里引上了(方案①:合同图那一行 Google Fonts)',
+  ['Fraunces', 'Noto+Serif+SC', 'Noto+Sans+SC'].every((f) => html.includes(f)))
+check('⑬e 大数字/小牌/此刻/下一位都用 Fraunces + 等宽数字位(滚动时不许左右跳)',
+  ['.dh-big', '.dh-tile-v', '.dh-now-cell strong', '.dh-next-time'].every((sel) => {
+    const at = css.indexOf(sel + ' {')
+    return at > 0 && /Fraunces/.test(css.slice(at, at + 260)) && /tabular-nums/.test(css.slice(at, at + 260))
+  }))
+check('⑬f 英雄块是深色:底色 = --hero,大数字 = --heroink,细网格 = --herogrid',
+  /\.dh-hero \{[^}]*background-color: var\(--hero\)/.test(css)
+  && /\.dh-big \{[^}]*color: var\(--heroink\)/.test(css)
+  && /\.dh-now-cell \{[^}]*border: 1px solid var\(--herogrid\)/.test(css))
+check('⑬g 折线三件齐:渐变 .35→0 + 金色描边 + 末点圆环(少一件就不是图上那条线)',
+  /<linearGradient/.test(home) && /stop-opacity=".35"/.test(home) && /stop-opacity="0"/.test(home)
+  && /stroke="var\(--herogold\)"/.test(home) && /<circle cx="\$\{last\[0\]\}"/.test(home))
+check('⑬h 数字滚动 600ms + 系统「减少动态效果」直接跳(图 §一 第 1 条)',
+  /ROLL_MS = 600/.test(home) && /prefers-reduced-motion: reduce/.test(home)
+  && /requestAnimationFrame\(step\)/.test(home) && /if \(reduce \|\| from === undefined/.test(home))
+check('⑬i dots 恒 5 个、选中那个会移动(轮播位数 = dots 数,不许两处各写一个数)',
+  /CAROUSEL = \['revenue', 'cash', 'cardUse', 'newCard', 'visits'\]/.test(home)
+  && /data-dh-dot="\$\{i\}"/.test(home) && /\.dh-dots button\.on \{/.test(css))
+check('⑬j 🔴 dots 的样式选择器跟着真实节点走:渲染的是 button,CSS 就不许只写 i',
+  !/\.dh-dots i \{/.test(css) && /\.dh-dots button \{/.test(css))
+check('⑬k AI 今日一句显示的是**门店当地时刻**,不是一串 ISO(后端出文本,前端零格式化)',
+  /storeClockText\(tenantId\)/.test(readFileSync(join(ROOT, 'apps/api/dashboard-pulse.mjs'), 'utf8'))
+  && !/toLocaleTimeString|toISOString/.test(home))
 
 /* ══ 端不对的动作词:网页没有下拉刷新,不许教店主做一个做不到的动作(D148 说人话族)══ */
 check('⑫ 网页首页里没有「下拉」这类小程序动作词',

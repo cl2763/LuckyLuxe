@@ -124,6 +124,13 @@ else say "交付完整性" "🔴 没进 git:$MISS"; FAIL=1; fi
 if GHOST=$(node tools/eval-citation-check.mjs 2>&1); then say "回执引用的评测明细" "✅ ${GHOST#*✅ }"
 else say "回执引用的评测明细" "🔴"; echo "$GHOST" | sed 's/^/    /'; FAIL=1; fi
 
+# ⑧ D168(店主 05t 段 3 第 2 条):**设计令牌与合同图逐条比对**。
+#    「皮跟图不一样」这件事被店主亲眼比出来三次 —— 人眼比 #faf8f3 与 #fbf8f5 是比不出来的。
+#    这把刀现从合同图抽 `:root` 三段,与仓里的令牌文件逐条比名与值,差一位就红。
+#    放预检:皮不对不用等十五分钟的全量。
+if TOK=$(node tools/design-token-diff.mjs 2>&1); then say "设计令牌=合同图" "✅ $(echo "$TOK" | tail -1 | sed 's/✅ //')"
+else say "设计令牌=合同图" "🔴"; echo "$TOK" | grep '🔴' | sed 's/^/    /'; FAIL=1; fi
+
 # ⑦ D169(店主 05t 段 2 第 8 条):**全量回归不许依赖演示种子**。
 #    回归跑的是自己新建的临时库,里面没有也不该有演示数据;真让它依赖上,
 #    以后谁删一次种子就连累整轮回归 —— 而那时红的会是二十个套件,没人会想到是种子。

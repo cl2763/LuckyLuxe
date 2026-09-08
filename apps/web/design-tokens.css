@@ -1,0 +1,35 @@
+/* 设计令牌 · **从合同图里原样搬**(店主 05t 段 3 裁:「不许参考、不许取近似色」)
+ *
+ * 合同 = `handoff/商家端主页重画_两端设计图_2026-09-03.html` v3.1 的头三段 `:root`。
+ * 下面这一整块是**逐字符搬过来的**,一个变量不增、不减、不改值 ——
+ * 谁想改一个色,先去改合同图,再让 `node tools/design-token-diff.mjs` 把它搬过来。
+ *
+ * 🔴 判据:`tools/design-token-diff.mjs` 现从合同图抽这三段,与本文件**逐条比名与值**,
+ *    多一个少一个、值差一位都红,已进预检。这把刀就是「图=合同」的机械化 ——
+ *    以后图改了而皮没跟上,当场红,不用等店主自己去比。
+ *
+ * 三段各是什么(和图上同一个顺序、同一个选择器):
+ *   ① `:root`                                        —— 浅色(默认)
+ *   ② `@media (prefers-color-scheme: dark)` 里的 `:root:not([data-theme="light"])` —— 跟系统
+ *   ③ `:root[data-theme="dark"]`                     —— 用户在站内显式选了深色
+ * 顺序不许调:③ 必须排在 ② 后面,站内的选择才压得过系统的。
+ *
+ * ⚠️ 本文件**只放令牌**。任何 `.dh-*` 的样式都在 styles.css 里,
+ *    那边引用令牌时**不许再写 `var(--x, #兜底色)`** —— 兜底值等于偷偷藏了第二套配色。
+ */
+:root{--paper:#faf8f3;--ink:#23241f;--sub:#6d6f66;--line:#e3e0d6;--card:#fff;--wall:#f1eee6;
+--acc:#0e6e62;--accd:#0a5a50;--brand:#b09468;--brandd:#8a6f45;
+--hero:#2a2521;--hero2:#3a332c;--heroink:#f5efe3;--herosub:#bfb4a2;--herogold:#d9b97e;--herogrid:rgba(245,239,227,.12);--herolive:#6fd0a0;
+--good:#2e8b57;--goodbg:#e6f3ea;--bad:#b3413a;--badbg:#f7e7e5;--flat:#7b7f76;--flatbg:#ededea;
+--tagm:#8a5a00;--tagmbg:#faf3e3;--tagw:#274f8f;--tagwbg:#eef2fa;
+--done:#cdbfa3;--doing:#d9b97e;--next:#7b7f76}
+@media (prefers-color-scheme: dark){:root:not([data-theme="light"]){--paper:#191b19;--ink:#e8e7e0;--sub:#9aa096;--line:#33362f;--card:#20241f;--wall:#242822;
+--acc:#4cc0b0;--accd:#63d2c3;--brand:#d3b483;--brandd:#e2c79c;
+--hero:#15130f;--hero2:#221d18;--heroink:#f5efe3;--herosub:#a79c8a;--herogold:#e2c48d;--herogrid:rgba(245,239,227,.10);--herolive:#6fd0a0;
+--good:#6fd0a0;--goodbg:#1c2f25;--bad:#e5867e;--badbg:#33201e;--flat:#9aa096;--flatbg:#2a2d28;
+--tagm:#e0b45f;--tagmbg:#2b2618;--tagw:#8fb0e8;--tagwbg:#1d2434;--done:#6a5f4c;--doing:#e2c48d;--next:#6c7066}}
+:root[data-theme="dark"]{--paper:#191b19;--ink:#e8e7e0;--sub:#9aa096;--line:#33362f;--card:#20241f;--wall:#242822;
+--acc:#4cc0b0;--accd:#63d2c3;--brand:#d3b483;--brandd:#e2c79c;
+--hero:#15130f;--hero2:#221d18;--heroink:#f5efe3;--herosub:#a79c8a;--herogold:#e2c48d;--herogrid:rgba(245,239,227,.10);--herolive:#6fd0a0;
+--good:#6fd0a0;--goodbg:#1c2f25;--bad:#e5867e;--badbg:#33201e;--flat:#9aa096;--flatbg:#2a2d28;
+--tagm:#e0b45f;--tagmbg:#2b2618;--tagw:#8fb0e8;--tagwbg:#1d2434;--done:#6a5f4c;--doing:#e2c48d;--next:#6c7066}

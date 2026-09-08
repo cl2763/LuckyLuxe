@@ -1,9 +1,9 @@
+/* 🔴 D168 段 3:`--ink / --line / --paper / --card` 四个**搬去 `design-tokens.css`** 了 ——
+   那四个在合同图里也有一份,值略有出入(paper #fbf8f5 vs #faf8f3、ink #2d2826 vs #23241f、
+   line #e4d9d2 vs #e3e0d6)。两处各写一份 = 一件事两处真相,谁改了谁都不知道。
+   现在唯一定义在 `design-tokens.css`(它在本文件**之后**加载),这里只留本仓自己的那几个。 */
 :root {
-  --ink: #2d2826;
   --muted: #897f7a;
-  --line: #e4d9d2;
-  --paper: #fbf8f5;
-  --card: #ffffff;
   --soft: #f1e7df;
   --accent: #c8a47e;
   --accent-dark: #9b7655;
@@ -1341,18 +1341,24 @@
   box-sizing: border-box;
 }
 
+/* 🔴 D168 段 3(字体三件套,合同图第 2 行那三个 family):
+   正文 `Noto Sans SC` / 标题 `Noto Serif SC` / **数字 `Fraunces`**(数字那一支挂在 `.dh-*` 上)。
+   今天走 Google Fonts 链接(方案①,admin.html 里那一行);自托管 woff2 是方案②,已进上线批。
+   后面的系统字体是**兜底**,不是「假装是 Noto」—— 网络取不到时页面照样能读。 */
 body {
   margin: 0;
   background: var(--paper);
   color: var(--ink);
-  font-family: Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "PingFang SC", "Microsoft YaHei", sans-serif;
+  font-family: 'Noto Sans SC', Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "PingFang SC", "Microsoft YaHei", sans-serif;
   letter-spacing: 0;
 }
+h1, h2, h3, .section-title { font-family: 'Noto Serif SC', Georgia, serif; }
 
 .card {
   border: 1px solid var(--line);
   border-radius: 8px;
-  background: #fff;
+  /* 令牌化:原来写死 `#fff`,深色态下就是一张白卡贴在深底上(一件事一处真相) */
+  background: var(--card);
 }
 
 button,
@@ -7698,53 +7704,102 @@ section.card > .section-row:first-child { margin-top: 0; }
 /* D105:值日块内就地「回到今天」*/
 .tb-duty-back { margin-left: 8px; border: 0; background: none; color: #8a6a3a; text-decoration: underline; cursor: pointer; font-size: 13px; }
 
-/* ── 主页业绩大屏(图 v3.1 §三;页面本体在 apps/web/dashboard-home.js)────── */
+/* ── 主页业绩大屏 · **皮按合同图原样搬**(D168 段 3;图 v3.1 §三;页面本体在 apps/web/dashboard-home.js)──
+
+   店主 05t 原话:「做的是骨架,皮一点没搬」。上一版是白卡片黑字 + 一条灰描边折线,
+   合同图上是**深色英雄块 + 金色数字 + 带渐变填充的折线 + 5 个 dots + 600ms 数字滚动**。
+   这一段整块重写,颜色**只用令牌**(`design-tokens.css`,逐字符搬自合同图):
+
+   🔴 **兜底值全删**。原来这里写的是 `var(--line, #e5e0da)` 这种带兜底的 —— 兜底值等于
+   偷偷藏了第二套配色:令牌没加载上时页面照样「好看」,于是没人发现令牌根本没生效。
+   现在取不到就该露出来。
+
+   ⚠️ **与图不符一处,已报待裁 #16**:合同图的圆角是 16/14/12/10/9px,
+   而本仓《形制集》只许 {999px, 8px, 50%, 0} 且**条数棘轮只减不增**(店主立的)。
+   两条规矩打架,这里按**形制集**取 8px —— 要按图的圆角,得先改形制集,那是店主的裁。 */
 .dh-card { padding: 16px; margin-bottom: 12px; }
-.dh-periods { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; margin-bottom: 12px; }
-.dh-period { border: 1px solid var(--line, #e5e0da); background: transparent; border-radius: 999px; padding: 4px 14px; cursor: pointer; font-size: 13px; }
-.dh-period.on { background: var(--ink, #2b2b2b); color: #fff; border-color: transparent; }
-.dh-full { margin-left: auto; opacity: .45; }
-.dh-head { display: flex; align-items: baseline; gap: 10px; flex-wrap: wrap; }
-.dh-big { font-size: 40px; line-height: 1.1; margin: 4px 0; }
-.dh-delta { font-size: 13px; }
-.dh-delta.up { color: #2f8f5b; } .dh-delta.down { color: #c0563f; }
-.dh-delta-none, .dh-locked { color: var(--muted, #8a8079); }
-.dh-truth { color: var(--muted, #8a8079); margin: 8px 0; }
-.dh-skeleton .dh-sk-line { height: 18px; margin: 10px 0; background: linear-gradient(90deg,#eee,#f6f6f6,#eee); }
-.dh-tiles { display: grid; grid-template-columns: repeat(auto-fit, minmax(140px, 1fr)); gap: 10px; margin-top: 14px; }
-/* 🔴 容器圆角**不新增声明**(`test-ui-spec` 的形制集条数棘轮只减不增,我第一版加了两处当场红)——
-   小牌直接复用已有的 `.card` 形制,骨架条不要圆角。 */
-.dh-tile { border: 1px solid var(--line, #e5e0da); padding: 10px 12px; display: flex; flex-direction: column; gap: 2px; }
-.dh-tile-k { font-size: 12px; color: var(--muted, #8a8079); }
-.dh-tile-v { font-size: 20px; }
-.dh-tile-x { font-size: 12px; color: var(--muted, #8a8079); }
-.dh-now4 { display: grid; grid-template-columns: repeat(4, 1fr); gap: 10px; }
-.dh-now-cell { text-align: center; } .dh-now-cell span { display: block; font-size: 12px; color: var(--muted, #8a8079); }
-.dh-now-cell strong { font-size: 22px; }
-.dh-next { margin-top: 10px; font-size: 14px; }
-.dh-next-none { color: var(--muted, #8a8079); }
-.dh-todo-row { display: flex; justify-content: space-between; width: 100%; border: 0; background: transparent; padding: 8px 0; cursor: pointer; border-bottom: 1px solid var(--line, #f0ece7); }
+/* 英雄区自己就是那块深色卡,外面不再套一层白卡(套了就是「深块贴在白卡里」) */
+.dh-hero-card { padding: 0; border: 0; background: transparent; margin-bottom: 12px; }
+
+.dh-hero {
+  /* `background-color` 单独写一遍不是冗余:渐变落在 `background-image` 上,
+     `getComputedStyle().backgroundColor` 读出来会是**透明** —— 判据要能读到底色
+     (店主 05t 段 3 第 4 条原话:「backgroundColor 转 hex === --hero 当前值」)。
+     顺带:渐变没加载出来时,底色也还是对的那一个。 */
+  background-color: var(--hero);
+  background-image: radial-gradient(90% 120% at 100% 0%, rgba(217, 185, 126, .22), transparent 55%), linear-gradient(160deg, var(--hero), var(--hero2));
+  color: var(--heroink);
+  border-radius: 8px;
+  padding: 16px 18px 14px;
+  display: grid; grid-template-columns: minmax(0, 1.2fr) minmax(0, 1fr); gap: 16px; align-items: start;
+}
+.dh-hero-left { display: flex; flex-direction: column; min-height: 100%; }
+
+/* 维度条:图上就在深块里(不是深块外面那一行灰按钮) */
+.dh-periods { display: flex; gap: 6px; align-items: center; flex-wrap: wrap; margin-bottom: 10px; }
+.dh-period { font-size: 12px; padding: 2px 10px; border-radius: 999px; border: 1px solid var(--herogrid); color: var(--herosub); background: transparent; cursor: pointer; }
+.dh-period.on { background: var(--herogold); color: var(--hero); border-color: var(--herogold); font-weight: 700; }
+.dh-full { margin-left: auto; border-radius: 999px; border: 1px solid var(--herogold); color: var(--herogold); background: transparent; font-size: 12px; padding: 2px 10px; cursor: pointer; opacity: 1; }
+
+.dh-k { font-size: 13px; color: var(--herosub); margin: 0; }
+/* 大数字 = Fraunces + 等宽数字位(滚动时不许左右跳) */
+.dh-big { font-family: 'Fraunces', Georgia, 'Noto Serif SC', serif; font-variant-numeric: tabular-nums; font-size: 3.3rem; line-height: 1.05; font-weight: 700; letter-spacing: -.01em; color: var(--heroink); margin: 4px 0 2px; }
+.dh-cur { font-size: 1.2rem; color: var(--herogold); font-weight: 500; margin-right: 4px; }
+.dh-row { display: flex; justify-content: space-between; align-items: flex-end; gap: 10px; margin-top: 4px; }
+.dh-delta { display: inline-flex; align-items: center; gap: 5px; font-size: 12px; border-radius: 999px; padding: 1px 9px; font-weight: 600; }
+.dh-delta.up { background: var(--goodbg); color: var(--good); }
+.dh-delta.down { background: var(--badbg); color: var(--bad); }
+.dh-delta-none { background: var(--flatbg); color: var(--flat); }
+.dh-locked { color: var(--herosub); }
+.dh-truth { color: var(--herosub); margin: 8px 0; }
+.dh-skeleton .dh-sk-line { height: 18px; margin: 10px 0; background: var(--herogrid); }
+
+/* 折线:描边金色 + 渐变填充(.35 → 0)+ 末点圆环 —— 三件缺一件都不是图上那条线 */
+.dh-spark { display: block; margin: 2px 0 6px; max-width: 100%; }
+
+/* 轮播 dots:5 个,选中那个变成金色的胶囊 */
+/* 🔴 现测踩到:图上 dots 是 `<i>`,而这里得能点(轮播要能手动切),所以渲染的是 `<button>` ——
+   选择器还写着 `i` 的话,五个 dot 就顶着浏览器默认按钮样式出场(截图上是五道灰杠)。
+   选择器跟着真实节点走,不跟着图上的标签名走。 */
+.dh-dots { display: flex; gap: 5px; justify-content: center; margin-top: 10px; }
+.dh-dots button { width: 5px; height: 5px; border-radius: 50%; background: var(--herogrid); display: block; border: 0; padding: 0; cursor: pointer; appearance: none; }
+.dh-dots button.on { background: var(--herogold); width: 14px; border-radius: 999px; }
+@media (prefers-reduced-motion: no-preference) { .dh-dots button.on { transition: width .3s; } }
+
+/* 此刻四格 + 下一位卡:都在深块里(图 §三) */
+.dh-now4 { display: grid; grid-template-columns: repeat(4, 1fr); gap: 6px; margin-top: auto; padding-top: 12px; }
+.dh-now-cell { background: rgba(245, 239, 227, .06); border: 1px solid var(--herogrid); border-radius: 8px; padding: 7px 10px 6px; display: flex; flex-direction: column; text-align: left; }
+.dh-now-cell span { display: block; font-size: 11px; color: var(--herosub); }
+.dh-now-cell strong { font-family: 'Fraunces', Georgia, serif; font-variant-numeric: tabular-nums; font-size: 1.35rem; font-weight: 700; color: var(--heroink); line-height: 1.15; }
+.dh-next { display: flex; align-items: center; gap: 14px; flex-wrap: wrap; margin-top: 6px; background: rgba(217, 185, 126, .13); border: 1px solid rgba(217, 185, 126, .38); border-radius: 8px; padding: 8px 12px; }
+.dh-next-time { font-family: 'Fraunces', Georgia, serif; font-variant-numeric: tabular-nums; font-size: 1.35rem; font-weight: 700; color: var(--herogold); line-height: 1.1; }
+.dh-next-who { font-weight: 600; color: var(--heroink); font-size: .95rem; }
+.dh-next-what { color: var(--herosub); font-size: 12px; }
+.dh-next-none { color: var(--herosub); }
+.dh-next-go { margin-left: auto; border: 0; background: transparent; cursor: pointer; color: var(--herogold); font-size: 12px; }
+.dh-closed { font-size: 18px; color: var(--herosub); }
+
+/* 右栏四小牌:图 §三 里它们**也在深块内**,是半透明面板不是白卡 */
+.dh-tiles { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px; align-content: start; }
+.dh-tile { background: rgba(245, 239, 227, .06); border: 1px solid var(--herogrid); border-radius: 8px; padding: 8px 10px; display: flex; flex-direction: column; gap: 2px; }
+.dh-tile-k { font-size: 12px; color: var(--herosub); }
+.dh-tile-v { font-family: 'Fraunces', Georgia, serif; font-variant-numeric: tabular-nums; font-size: 1.3rem; font-weight: 700; color: var(--heroink); }
+.dh-tile-x { font-size: 11px; color: var(--herosub); }
+/* AI 今日一句:图上是横跨两列的最后一格 */
+.dh-ai { grid-column: 1 / -1; background: rgba(245, 239, 227, .06); border: 1px solid var(--herogrid); border-radius: 8px; padding: 8px 10px; font-size: 13px; line-height: 1.5; color: var(--heroink); }
+.dh-ai-at { color: var(--herosub); font-size: 11px; display: block; }
+
+.dh-todo-row { display: flex; justify-content: space-between; align-items: center; width: 100%; border: 0; background: var(--wall); padding: 6px 8px; cursor: pointer; border-radius: 8px; }
+.dh-todo-row + .dh-todo-row { margin-top: 6px; }
+.dh-todo-row strong { font-family: 'Fraunces', Georgia, serif; font-size: 1.05rem; color: var(--brandd); }
+.dh-todo-row[data-urgent="1"] { border-left: 3px solid var(--bad); }
 
 /* 🔴 D154:宿主 `#dashboardCharts` 原来是三列的图表网格(旧首页的形状),
    新首页自己就是「两栏 + 通栏 + 下两栏」——所以先把宿主改回单列块流,
    否则我的 section 会被塞进旧网格的三个格子里(现测:1082px 下被切成三条 351px)。 */
 #dashboardCharts.dashboard-chart-grid { display: block; }
 
-/* D154:按图 §三 两栏排 —— 左栏(大数+折线+此刻+下一位)| 右栏(四小牌);<900px 退化竖排 */
-.dh-hero { display: grid; grid-template-columns: minmax(0, 1.15fr) minmax(0, 1fr); gap: 18px; align-items: stretch; }
-.dh-hero-left { display: flex; flex-direction: column; gap: 8px; }
-.dh-cur { font-size: 13px; margin-right: 6px; color: var(--muted, #8a8079); font-weight: 400; }
-.dh-spark { display: block; color: var(--ink, #2b2b2b); opacity: .55; margin: 2px 0 6px; max-width: 100%; }
-.dh-next { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; padding: 10px 12px; border: 1px solid var(--line, #e5e0da); margin-top: 6px; }
-.dh-next-time { font-size: 20px; }
-.dh-next-who { font-weight: 600; }
-.dh-next-what, .dh-ai-at { color: var(--muted, #8a8079); font-size: 13px; }
-.dh-next-go { margin-left: auto; border: 0; background: transparent; cursor: pointer; color: var(--ink, #2b2b2b); }
-.dh-closed { font-size: 18px; }
-.dh-tiles { grid-template-columns: repeat(2, minmax(0, 1fr)); align-content: start; }
-.dh-ai { display: flex; gap: 10px; align-items: baseline; }
 .dh-bottom { display: grid; grid-template-columns: minmax(0, 1.6fr) minmax(0, 1fr); gap: 12px; align-items: start; }
-.dh-todo-row[data-urgent="1"] strong { color: #c0563f; }
 @media (max-width: 900px) {
   .dh-hero, .dh-bottom { grid-template-columns: 1fr; }
   .dh-tiles { grid-template-columns: repeat(2, minmax(0, 1fr)); }

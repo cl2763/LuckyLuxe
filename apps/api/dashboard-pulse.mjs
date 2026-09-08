@@ -72,7 +72,7 @@ export function deltaOf(value, prev) {
 export function createDashboardPulse(deps) {
   const {
     db, currentTenantId, todayOf, tenantCurrencyCodeOrNull, currencyDisplayOf, financeLocked,
-    todayBoardOf, storeClosedOn,
+    todayBoardOf, storeClosedOn, storeClockText,
   } = deps
   for (const [name, fn] of Object.entries(deps)) {
     if (name !== 'db' && typeof fn !== 'function') throw new Error(`createDashboardPulse 缺依赖或类型不对:${name}`)
@@ -277,7 +277,11 @@ export function createDashboardPulse(deps) {
     const text = String(brief?.headlineZh || brief?.headlineEn || '').trim()
     if (!text) return brief                       // 没生成出东西就不存(不许存空壳去骗首页)
     const at = new Date().toISOString()
-    const value = JSON.stringify({ date: todayOf(tenantId), text, at })
+    /* 🔴 页面上要显示的是「10:05」这样的**门店当地时刻**(图 §三 那格写的就是「AI 今日一句 · 10:05」),
+       不是一串 ISO。时区只有后端知道(顾客/店主可能在别的时区),所以**生成那一刻就把文本定死**,
+       前端零计算、零格式化(同「后端出句」那一族)。 */
+    const atText = storeClockText(tenantId)
+    const value = JSON.stringify({ date: todayOf(tenantId), text, at, atText })
     db.prepare(`INSERT INTO tenant_settings (tenant_id, key, value, updated_at) VALUES (?, ?, ?, ?)
       ON CONFLICT(tenant_id, key) DO UPDATE SET value = excluded.value, updated_at = excluded.updated_at`)
       .run(tenantId, AI_LINE_KEY, value, at)
@@ -289,7 +293,7 @@ export function createDashboardPulse(deps) {
     let v = null
     try { v = row ? JSON.parse(row.value) : null } catch { v = null }
     if (!v || v.date !== todayOf(tenantId) || !v.text) return { line: null }
-    return { line: { text: v.text, at: v.at } }
+    return { line: { text: v.text, at: v.atText || '', iso: v.at || '' } }
   }
 
   /* 三条路由也住在本模块(公约①:新功能一律新模块,巨型文件只许搬出不许新增)。

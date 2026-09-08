@@ -116,6 +116,13 @@ for (const spec of shots) {
   priorScript = (await send('Page.addScriptToEvaluateOnNewDocument', { source: boot })).result?.identifier
 
   await send('Emulation.setDeviceMetricsOverride', { width: w, height: h, deviceScaleFactor: 2, mobile: false })
+  /* 🔴 D168 段 3 第 7 条:深浅两态各拍一张。两种「深」不是一回事,分开拍:
+     · `sysdark` —— **系统**深色(`prefers-color-scheme: dark`),走令牌第 ② 段;
+     · `dark`    —— 站内**显式**选深色(`<html data-theme="dark">`),走令牌第 ③ 段。
+     ③ 必须压得过 ②,所以两张都得拍;只拍一张证不了「站内的选择赢了系统」。 */
+  await send('Emulation.setEmulatedMedia', mode === 'sysdark'
+    ? { features: [{ name: 'prefers-color-scheme', value: 'dark' }] }
+    : { features: [{ name: 'prefers-color-scheme', value: 'light' }] })
   await send('Page.navigate', { url: `${BASE}/admin` })
   /* 🔴 令牌框是 admin.html 里的静态节点,**解析到就有了,而那时 admin.js 还没绑上事件** ——
      所以「等它出现再点一次」会点在空气上,页面永远停在登录页(第一次跑就是这么挂的)。
@@ -130,9 +137,23 @@ for (const spec of shots) {
     await evaluate(login)
   }
   await waitFor('首页出态', `document.querySelector('#dashboardCharts [data-dh-state]')`, 8000)
+  if (mode === 'dark') await evaluate(`(() => { document.documentElement.dataset.theme = 'dark'; return 1 })()`)
   await evaluate(`(() => { const b = document.querySelector('#dashboardCharts [data-dh-period="${period}"]'); if (b) b.click(); return 1 })()`)
   /* 切了维度要等它把新数画上来(loading 退场);失败态本来就停在 failed,一起认 */
   await waitFor('维度画完', `(() => { const s = document.querySelector('#dashboardCharts [data-dh-state]'); return s && s.dataset.dhState !== 'loading' })()`)
+  /* 🔴 05t 现踩:光等一次「不是 loading」不够 —— `renderDashboard()` 在别处还会被再调一次,
+     页面会**再闪一次骨架**,而截图正好落在那一帧上(拍到的是加载中,探针几百毫秒后拍到的却是 ready
+     —— 图与证据自相矛盾)。改成**等它稳住**:连续 4 次(每 400ms)都还在 ready 才算。
+     这是判据律那条:能验渲染结果就别验中间产物,而「稳住了没有」本身也得验。 */
+  for (let tries = 0; tries < 40; tries += 1) {
+    let stable = 0
+    for (let i = 0; i < 4; i += 1) {
+      if (await evaluate(`Boolean(document.querySelector('#dashboardCharts [data-dh-hero]'))`)) stable += 1
+      else stable = 0
+      await sleep(400)
+    }
+    if (stable >= 4) break
+  }
   await sleep(600)   // 折线/台面的最后一帧
 
   /* 段 11:`fullscreen` 那一张 —— 点「⤢ 全屏大屏」把前台大屏态拍下来 */
@@ -161,6 +182,17 @@ for (const spec of shots) {
       币码: (h.querySelector('[data-dh-cur]') || {}).textContent || null,
       四小牌: Array.from(h.querySelectorAll('[data-dh-tiles] .dh-tile')).map((e) => e.textContent.replace(/\\s+/g, ' ').trim()),
       折线点: h.querySelectorAll('[data-dh-spark] circle').length,
+      /* D168 判据取证:皮对不对不靠肉眼 —— 把算出来的样式一起带回来。
+         大数字第一支字体必须是 Fraunces;英雄块底色必须等于令牌 hero 的当前值。 */
+      大数字体: big ? getComputedStyle(big).fontFamily.split(',')[0].replace(/["']/g, '') : null,
+      标题字体: getComputedStyle(document.querySelector('h1, h2, h3') || document.body).fontFamily.split(',')[0].replace(/["']/g, ''),
+      英雄底色: (() => { const e = h.querySelector('[data-dh-hero]'); return e ? getComputedStyle(e).backgroundColor : null })(),
+      令牌hero: getComputedStyle(document.documentElement).getPropertyValue('--hero').trim(),
+      令牌herogold: getComputedStyle(document.documentElement).getPropertyValue('--herogold').trim(),
+      渐变: h.querySelectorAll('[data-dh-spark] linearGradient stop').length,
+      dots: h.querySelectorAll('[data-dh-dots] [data-dh-dot]').length,
+      dots选中: h.querySelectorAll('[data-dh-dots] .on').length,
+      主题: document.documentElement.dataset.theme || '(跟系统)',
       视口: innerWidth + 'x' + innerHeight,
     }) })()`)
   done.push({ file, spec, probe })

@@ -37,7 +37,13 @@ window.DashboardHome = (function () {
   /* 急缓:客服待人工与待报价是**顾客在等**,排前面(图 §三 右下块) */
   const URGENT = ['aiHandoff', 'quotePending']
 
-  let st = { period: 'today', pulse: null, now: null, todo: null, aiLine: null, phase: 'loading', deps: null, host: null }
+  /* 🔴 D168 段 3 第 6 条:轮播 + 数字滚动。
+     `slot` = 大数字现在放大的是哪一个指标(图上 5 个 dots = 5 个轮播位);
+     `rolled` = 上一次画出来的数,滚动要从它滚到新值 —— 没有它就只能「直接换」。 */
+  const CAROUSEL = ['revenue', 'cash', 'cardUse', 'newCard', 'visits']
+  const ROLL_MS = 600            // 图 §一 第 1 条原文:600ms
+  const ROTATE_MS = 6000         // 与全屏态同一个数(图 §五)
+  let st = { period: 'today', slot: 0, pulse: null, now: null, todo: null, aiLine: null, phase: 'loading', deps: null, host: null, rolled: {}, rotateAt: 0 }
 
   const esc = (s) => st.deps.escapeHtml(String(s == null ? '' : s))
   const zh = () => st.deps.isZh !== false
@@ -75,7 +81,11 @@ window.DashboardHome = (function () {
     return `<span class="dh-delta ${up ? 'up' : 'down'}" data-delta="${m.deltaPct}">${up ? '▲' : '▼'} ${Math.abs(m.deltaPct)}% ${zh() ? pm.prevZh : pm.prevEn}</span>`
   }
 
-  /* 折线:点数 = spark 数组长度;**全 0 不画**(图 §六:无数据时折线不画) */
+  /* 折线:点数 = spark 数组长度;**全 0 不画**(图 §六:无数据时折线不画)。
+     🔴 D168 段 3 第 5 条:图上这条线有**三件**,原来一件都没有 ——
+     ①`<defs><linearGradient>` 渐变填充(stop-opacity .35 → 0)②描边金色 ③**末点一个圆环**
+     (描边同底色,看起来像在深底上挖了个圈)。少一件就不是图上那条线。
+     图上还只有**一条线、没有图例**(§一 第 4 条),所以中间点不画圆点了。 */
   function sparkSvg(spark) {
     const pts = (spark || []).map((x) => Number(x) || 0)
     if (!pts.length || pts.every((x) => x === 0)) return ''
@@ -85,9 +95,17 @@ window.DashboardHome = (function () {
     const step = pts.length > 1 ? w / (pts.length - 1) : 0
     const xy = pts.map((v, i) => [Math.round(i * step), Math.round(h - (v / max) * (h - 6) - 3)])
     const d = xy.map(([x, y], i) => `${i ? 'L' : 'M'}${x} ${y}`).join(' ')
+    const last = xy[xy.length - 1]
+    /* 渐变 id 每次画都换一个:同页面里若出现第二条折线(全屏态),id 撞了会串色 */
+    const gid = `dh-sp-${st.period}-${st.slot}`
     return `<svg class="dh-spark" data-dh-spark viewBox="0 0 ${w} ${h}" width="${w}" height="${h}" aria-hidden="true">
-      <path d="${d}" fill="none" stroke="currentColor" stroke-width="2"/>
-      ${xy.map(([x, y]) => `<circle cx="${x}" cy="${y}" r="2"/>`).join('')}
+      <defs><linearGradient id="${gid}" x1="0" x2="0" y1="0" y2="1">
+        <stop offset="0" stop-color="var(--herogold)" stop-opacity=".35"/>
+        <stop offset="1" stop-color="var(--herogold)" stop-opacity="0"/>
+      </linearGradient></defs>
+      <path d="${d} L${last[0]} ${h} L${xy[0][0]} ${h} Z" fill="url(#${gid})" stroke="none"/>
+      <path d="${d}" fill="none" stroke="var(--herogold)" stroke-width="2" stroke-linejoin="round"/>
+      <circle cx="${last[0]}" cy="${last[1]}" r="3.5" fill="var(--herogold)" stroke="var(--hero)" stroke-width="2"/>
     </svg>`
   }
 
@@ -129,46 +147,66 @@ window.DashboardHome = (function () {
     : `<div class="dh-next dh-next-none" data-dh-next-none>${zh() ? '后面没有待到店的了' : 'No one waiting'}</div>`}`
   }
 
-  /* ── 英雄区:左(大数 + 折线 + 此刻 + 下一位)| 右(四小牌)—— 图 §三 两栏 ── */
+  /* ── 英雄区:**一整块深色**(图 §三)。左(维度条 + 大数 + 折线 + dots + 此刻四格 + 下一位)
+       右(四小牌 + AI 今日一句横跨两列)。上一版是白卡片黑字,那是骨架不是皮。 ── */
+  function heroMetric(ms) {
+    /* 轮播位落在哪个指标上:图上 5 个 dots。
+       ⚠️ **假设(图上没写死)**:后端给的是六个指标,而图上画的是 **5 个 dots**。
+       这里取「营业收入 + 现金业绩 + 总卡耗 + 新增持卡 + 到店人次」五个轮播,
+       **今日预约不进轮播** —— 它那一格带「在做 N · 待到店 N」的实时副行,
+       图 §一 第 2 条说那是「主页上唯一的实时一眼」,不该被轮走。已记入假设清单。 */
+    const key = CAROUSEL[st.slot % CAROUSEL.length]
+    return ms.find((m) => m.key === key) || ms[0] || null
+  }
+
+  const dots = () => `<div class="dh-dots" data-dh-dots>${CAROUSEL.map((k, i) => `
+      <button type="button" class="${i === (st.slot % CAROUSEL.length) ? 'on' : ''}" data-dh-dot="${i}" aria-label="${esc(label(k))}"></button>`).join('')}</div>`
+
   function hero() {
     const p = st.pulse || {}
     const cur = p.currency
     const ms = p.metrics || []
-    const head = ms[0]
+    const head = heroMetric(ms)
     const empty = ms.every((m) => !m.locked && !m.value)
-    return `<section class="card dh-card" data-dh-state="ready">
-      ${periodBar()}
+    const tiles = ms.filter((m) => !head || m.key !== head.key).slice(0, 4)
+    return `<section class="dh-card dh-hero-card" data-dh-state="ready">
       <div class="dh-hero" data-dh-hero>
         <div class="dh-hero-left" data-dh-hero-left>
-          <p class="eyebrow">${label('revenue')}</p>
-          <h2 class="dh-big" data-dh-metric="revenue">${bigMoney(head, cur)}</h2>
-          ${head ? deltaText(head) : ''}
-          ${head ? sparkSvg(head.spark) : ''}
+          ${periodBar()}
+          <p class="dh-k">${head ? label(head.key) : ''}</p>
+          <h2 class="dh-big" data-dh-metric="${head ? esc(head.key) : ''}" data-dh-roll="${head && head.unit === 'money' ? 'money' : 'count'}" data-dh-roll-to="${head && head.value !== undefined && head.value !== null ? String(head.value) : ''}">${head && head.unit === 'money' ? bigMoney(head, cur) : (head ? esc(valueText(head, cur)) : '—')}</h2>
+          <div class="dh-row">
+            ${head ? deltaText(head) : ''}
+            ${head ? sparkSvg(head.spark) : ''}
+          </div>
+          ${dots()}
           ${empty ? `<p class="dh-truth" data-dh-truth-empty>${zh() ? '今天还没有开单 · 暂无往日数据' : 'No orders yet today'}</p>` : ''}
           ${nowPart()}
         </div>
         <div class="dh-tiles" data-dh-tiles>
-          ${ms.slice(1, 5).map((m) => `<div class="dh-tile" data-dh-metric="${m.key}">
+          ${tiles.map((m) => `<div class="dh-tile" data-dh-metric="${m.key}">
               <span class="dh-tile-k">${label(m.key)}</span>
-              <strong class="dh-tile-v">${valueText(m, cur)}</strong>
+              <strong class="dh-tile-v" data-dh-roll="${m.unit === 'money' ? 'money' : 'count'}" data-dh-roll-to="${m.value !== undefined && m.value !== null ? String(m.value) : ''}">${valueText(m, cur)}</strong>
               ${m.key === 'cardUse' ? `<span class="dh-tile-x" data-dh-times>${m.extra && m.extra.times ? `${zh() ? '次卡' : 'Card'} ${m.extra.times} ${esc((m.extra && m.extra.timesUnit) || '次')}` : '—'}</span>` : ''}
               ${deltaText(m)}
             </div>`).join('')}
+          ${aiLine()}
         </div>
       </div>
     </section>`
   }
 
-  /* ── AI 今日一句(通栏)——**只读已生成的**,不为首页新起模型调用(图/裁定) ── */
+  /* ── AI 今日一句 ——**只读已生成的**,不为首页新起模型调用(图/裁定)。
+       图 §三 里它是英雄块右栏**最后一格、横跨两列**,不是底下单独一条白通栏。 ── */
   function aiLine() {
     const a = st.aiLine
     if (a && a.text) {
-      return `<section class="card dh-card dh-ai" data-dh-ai-line>
+      return `<div class="dh-ai" data-dh-ai-line>
         <span class="dh-ai-text">${esc(a.text)}</span>
-        ${a.at ? `<span class="subtle dh-ai-at">${esc(a.at)}</span>` : ''}</section>`
+        ${a.at ? `<span class="dh-ai-at">${esc(a.at)}</span>` : ''}</div>`
     }
-    return `<section class="card dh-card dh-ai" data-dh-ai-none>
-      <span class="subtle">${zh() ? '今天还没有一句 —— 去「AI 日报」生成一次就有了' : 'No line yet today'}</span></section>`
+    return `<div class="dh-ai" data-dh-ai-none>
+      <span class="dh-ai-at">${zh() ? '今天还没有一句 —— 去「AI 日报」生成一次就有了' : 'No line yet today'}</span></div>`
   }
 
   function todoBlock() {
@@ -189,7 +227,8 @@ window.DashboardHome = (function () {
     if (!st.host) return
     if (st.phase === 'loading') { st.host.innerHTML = skeleton(); return }
     if (st.phase === 'failed') { st.host.innerHTML = failed(); bind(); return }
-    st.host.innerHTML = `${hero()}${aiLine()}
+    /* AI 今日一句**画在英雄块右栏里**(图 §三),这里不再单独摆一块 */
+    st.host.innerHTML = `${hero()}
       <div class="dh-bottom" data-dh-bottom>
         <section class="card dh-card dh-board" data-dh-board></section>
         ${todoBlock()}
@@ -212,11 +251,56 @@ window.DashboardHome = (function () {
       try { window.TodayBoard.mountInto(board, st.deps.boardDeps()) } catch (e) { board.innerHTML = '' }
     }
     bind()
+    rollNumbers()
+    scheduleRotate()
+  }
+
+  /* 轮播:6 秒换一个指标。**只重画手上的数,一个请求都不发** ——
+     图 §八 的「首页不轮询」管的是取数,不是画面(§一 第 1 条明写「轮播换指标时数字滚动」)。
+     用 `setTimeout` 一次一排(不是 `setInterval` 挂着):重画时先清掉旧的那一枚,
+     免得两枚计时器叠着跑,越点越快。 */
+  function scheduleRotate() {
+    if (st.rotateAt) { window.clearTimeout(st.rotateAt); st.rotateAt = 0 }
+    if (st.phase !== 'ready') return
+    st.rotateAt = window.setTimeout(() => { st.slot = (st.slot + 1) % CAROUSEL.length; paint() }, ROTATE_MS)
+  }
+
+  /* ── 数字滚动(图 §一 第 1 条:600ms;系统「减少动态效果」则直接跳)──────
+     滚的是**已经在手上的数**,不重取接口。
+     第一次画不滚(`from === undefined`)—— 从 0 滚上来会让人以为这些钱是刚刚才赚到的。 */
+  function rollNumbers() {
+    const reduce = Boolean(window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches)
+    st.host.querySelectorAll('[data-dh-roll-to]').forEach((el) => {
+      const to = Number(el.dataset.dhRollTo)
+      const key = `${el.dataset.dhMetric || el.className}:${st.period}`
+      const from = st.rolled[key]
+      const cur = (st.pulse || {}).currency
+      const fmt = (v) => {
+        if (el.dataset.dhRoll !== 'money') return String(Math.round(v))
+        const q = st.deps.moneyParts(Math.round(v))
+        return `<small class="dh-cur" data-dh-cur>${esc(q.prefix)}${esc(q.symbol)}</small>${esc(q.amount)}`
+      }
+      if (Number.isFinite(to)) st.rolled[key] = to
+      if (!Number.isFinite(to) || !cur) return
+      if (reduce || from === undefined || from === to) return
+      const t0 = (window.performance && window.performance.now()) || 0
+      const step = (t) => {
+        const k = Math.min(1, ((t || 0) - t0) / ROLL_MS)
+        const eased = 1 - Math.pow(1 - k, 3)
+        el.innerHTML = fmt(from + (to - from) * eased)
+        if (k < 1) window.requestAnimationFrame(step)
+      }
+      window.requestAnimationFrame(step)
+    })
   }
 
   function bind() {
     st.host.querySelectorAll('[data-dh-period]').forEach((el) => {
       el.addEventListener('click', () => { st.period = el.dataset.dhPeriod; load() })
+    })
+    /* dots:点一下换指标 —— 轮播与手点走同一条路(一处真相) */
+    st.host.querySelectorAll('[data-dh-dot]').forEach((el) => {
+      el.addEventListener('click', () => { st.slot = Number(el.dataset.dhDot) || 0; paint() })
     })
     const retry = st.host.querySelector('[data-dh-retry]')
     if (retry) retry.addEventListener('click', () => load())

@@ -339,13 +339,16 @@ function seedNotesAndTodos(tid, today) {
 
 /* ── AI 今日一句:落 `tenant_settings.ai_daily_line`,与 `dashboard-pulse.rememberAiLine`
      写的是**同一个形状**(那边是唯一定义处;这里只是把今天这条先铺上)。 ── */
-function seedAiLine(tid, today) {
+function seedAiLine(tid, today, tz) {
   const bk = one("SELECT COUNT(*) AS n FROM bookings WHERE tenant_id = ? AND substr(appointment_start,1,10) = ? AND status NOT IN ('CANCELLED','NO_SHOW')", tid, today).n
   const note = one("SELECT COUNT(*) AS n FROM bookings WHERE tenant_id = ? AND status = 'COMPLETED' AND substr(appointment_start,1,10) = ? AND id NOT IN (SELECT booking_id FROM service_notes WHERE booking_id IS NOT NULL)", tid, today).n
   const text = `今日 ${bk} 个预约,${note} 单做完还没写小记;昨天的日结还没确认,记得顺手点一下。`
+  /* `atText` = **门店当地的时刻**(页面上显示的是「· 10:05」,不是一串 ISO)。
+     形状与 `dashboard-pulse.rememberAiLine` 写的那一份保持一致 —— 那边是唯一定义处。 */
+  const atText = new Intl.DateTimeFormat('en-CA', { timeZone: tz, hour: '2-digit', minute: '2-digit', hour12: false }).format(new Date())
   run(`INSERT INTO tenant_settings (tenant_id, key, value, updated_at) VALUES (?, 'ai_daily_line', ?, ?)
     ON CONFLICT(tenant_id, key) DO UPDATE SET value = excluded.value, updated_at = excluded.updated_at`,
-  tid, JSON.stringify({ date: today, text, at: new Date().toISOString() }), new Date().toISOString())
+  tid, JSON.stringify({ date: today, text, at: new Date().toISOString(), atText }), new Date().toISOString())
   return text
 }
 
@@ -380,9 +383,11 @@ for (const tid of Object.keys(SHOPS)) {
     if (!done(tid, `day:${today}`)) {
       r.todayMade = seedToday(tid, store, today)
       r.todos = seedNotesAndTodos(tid, today)
-      r.aiLine = seedAiLine(tid, today)
       mark(tid, `day:${today}`, { at: new Date().toISOString() })
     } else r.todayMade = '今天已灌过,跳过'
+    /* AI 今日一句**不进幂等门**:它是覆盖写(一天一条),每次跑都该按当下的数重算一遍。
+       放进门里的话,今天早上灌过之后,下午再跑它就还挂着早上那句(数字都对不上了)。 */
+    r.aiLine = seedAiLine(tid, today, store.timezone)
     db.exec('COMMIT')
   } catch (e) { db.exec('ROLLBACK'); r.error = e.message; }
   report.push(r)
