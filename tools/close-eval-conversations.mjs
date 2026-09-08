@@ -57,7 +57,10 @@ const RUNNER_PREFIXES = ['br-', 'hf-', 'ta-', 'd145-', 'd147-', 'd148-', 'dp-', 
    为什么只给沙箱:那个库里**没有真顾客**(店主 05r 明写「4128 不动 —— 那里的 1 条是小婕店真会话」);
    在有真顾客的库上永远只许用前缀白名单那一路。 */
 const MODE = process.env.CEC_MODE === 'keep-list' ? 'keep-list' : 'prefix'
-const KEEP_PREFIXES = ['demo-chat-']   // 演示种子铺的,店主演示时要看得见
+/* `rich-v1-guest-` 是 D169 种子铺的「客服待人工」—— 与 `demo-chat-` 同族:
+   演示数据,店主要在首页看得见,不是跑机垃圾。收尾刀不许把它一起关了
+   (关了首页那一项就掉回 0,而 0 正是这一批要治的病)。 */
+const KEEP_PREFIXES = ['demo-chat-', 'rich-v1-guest-']
 
 const db = new DatabaseSync(DB, { readOnly: !APPLY })
 const like = MODE === 'keep-list'
@@ -81,6 +84,40 @@ for (const r of mine) console.log(`  ${String(r.tenant_id).padEnd(16)} ${r.n}`)
 console.log(`\n**这次不碰的**(列出来给人看):${notMine.length ? '' : '(无)'}`)
 for (const r of notMine) console.log(`  ${r.tenant_id} · ${r.external_user_id}`)
 
+/* ══ D170(店主 05u §四):收尾律**扩到报价请求与夹具用户** ══
+   案由:店主亲看旗舰店首页 —— 「待报价 **162**」、下一位卡写着「运营字段测试-mrm0lewr」、
+   台面里是「闸测未来」「演示2-lucky-美睫储值户」。
+   **页面没错,是库里的垃圾终于被显示出来了**:那 162 条 PENDING_STAFF 跨 7-14 到 9-6,
+   是历次评测积压的;那些名字是历次夹具建的用户。
+   跑机开的会话要自己关,**跑机开的报价请求同样要自己关**;夹具建的用户不许出现在展示面。 */
+
+/* ① 报价请求:**只关积压的**(今天之前建的),今天的留着 —— 今天那几条可能是刚跑的正事。
+   口径与会话那一路同族:沙箱库里没有真顾客,所以按「今天之前 + 仍是 PENDING_STAFF」认。 */
+const todayISO = new Date(new Date().getTime() - new Date().getTimezoneOffset() * 60000).toISOString().slice(0, 10)
+const qBefore = db.prepare("SELECT tenant_id, COUNT(*) AS n FROM quote_requests WHERE status = 'PENDING_STAFF' GROUP BY tenant_id ORDER BY n DESC").all()
+const qStale = db.prepare(`SELECT COUNT(*) AS n FROM quote_requests WHERE status = 'PENDING_STAFF'
+  AND substr(created_at,1,10) < ? AND tenant_id IN ('lucky-luxe','jics-store','luvia-bj')`).get(todayISO).n
+console.log(`\n── 报价请求(PENDING_STAFF)改前:${qBefore.map((r) => `${r.tenant_id}=${r.n}`).join(' · ') || '(无)'}`)
+console.log(`   其中**今天之前**积压的:${qStale} 条(这次要置终态的就是它们;今天的留着)`)
+
+/* ② 夹具用户:名字里带跑机/夹具痕迹的,在**展示面**上改成像真顾客的名字。
+   为什么改名不是删:这些用户挂着预约、结算单、储值 —— 删了就是一串悬空引用。
+   判据认的是**名字**(店主原话:首页与台面 0 处「测试/演示/闸测/随机段」),所以改名正对着判据。
+   🔴 匹配的是**痕迹形状**,不是一份名单:`xxx-mrm0lewr` 这种「名字-随机段」是跑机产物的通用长相。 */
+const FIXTURE_RE = "(display_name LIKE '%测试%' OR display_name LIKE '%演示%' OR display_name LIKE '%闸测%'"
+  + " OR display_name LIKE '%mock%' OR display_name LIKE '%-mr%' OR display_name LIKE '%storeless%')"
+const CLEAN_NAMES = ['周静', '李婉宁', '孙予安', '何一诺', '沈嘉言', '许若曦', '柳南舟', '范知雅', '苗昭', '傅望',
+  '姜屿', '谭听白', '章思南', '洛小满', '祝云舒', '易安然', '毕雨桐', '庄栖', '宁远', '于清和']
+/* 🔴 **只改店主会看到的那三家店**。别的演示租户(`demo-*` / `jics-sandbox` / 彩排店)不碰:
+   那些名字是别的夹具与套件在用的(`seed-demo-twin` 里就写着「演示·跨店阿珍」),
+   一起改会把跟它们对名字的判据打红 —— 清垃圾不该顺手把别人的夹具也清了。 */
+const SURFACE_TENANTS = ['lucky-luxe', 'jics-store', 'luvia-bj']
+const dirty = db.prepare(`SELECT id, tenant_id, display_name FROM users
+  WHERE tenant_id IN (${SURFACE_TENANTS.map(() => '?').join(',')}) AND ${FIXTURE_RE} ORDER BY rowid`).all(...SURFACE_TENANTS)
+console.log(`\n── 名字带夹具痕迹的用户:${dirty.length} 位`)
+for (const u of dirty.slice(0, 6)) console.log(`   ${u.tenant_id} · ${u.display_name}`)
+if (dirty.length > 6) console.log(`   …还有 ${dirty.length - 6} 位`)
+
 if (!APPLY) {
   console.log(`\n试跑而已,没写库。要真关:CEC_APPLY=1`)
   process.exit(0)
@@ -89,4 +126,21 @@ const res = db.prepare(`UPDATE wechat_conversations SET status = 'closed'
   WHERE status IN ('needs_human','human_active') AND (${like})`).run(...args)
 const after = db.prepare(`SELECT COUNT(*) AS n FROM wechat_conversations WHERE status IN ('needs_human','human_active')`).get().n
 console.log(`\n✅ 已关 ${res.changes} 通;库里还剩待人工/接管中 ${after} 通(那些不是跑机开的)`)
+
+const qRes = db.prepare(`UPDATE quote_requests SET status = 'CLOSED', updated_at = ?
+  WHERE status = 'PENDING_STAFF' AND substr(created_at,1,10) < ? AND tenant_id IN ('lucky-luxe','jics-store','luvia-bj')`)
+  .run(new Date().toISOString(), todayISO)
+const qAfter = db.prepare("SELECT COUNT(*) AS n FROM quote_requests WHERE status = 'PENDING_STAFF'").get().n
+console.log(`✅ 已把 ${qRes.changes} 条积压报价请求置终态;库里还剩 PENDING_STAFF ${qAfter} 条(今天的)`)
+
+let renamed = 0
+const setName = db.prepare('UPDATE users SET display_name = ? WHERE id = ?')
+dirty.forEach((u, i) => {
+  /* 同名不同人也没关系(真店里就会有重名),但加一位数字后缀免得一屏里全是同一个名字 */
+  const base = CLEAN_NAMES[i % CLEAN_NAMES.length]
+  const name = i < CLEAN_NAMES.length ? base : `${base}${Math.floor(i / CLEAN_NAMES.length) + 1}`
+  setName.run(name, u.id)
+  renamed += 1
+})
+console.log(`✅ 已把 ${renamed} 位夹具用户改成像真顾客的名字(挂着的单/结算/储值一个都没动,只改 display_name)`)
 db.close()

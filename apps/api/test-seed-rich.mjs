@@ -60,6 +60,10 @@ const check = (name, ok, detail = '') => {
   if (ok) console.log(`ok ${n} - ${name}`)
   else { fails.push(name); console.log(`not ok ${n} - ${name}${detail ? ` :: ${detail}` : ''}`) }
 }
+const storeToday = async (tid) => {
+  const d = await req('/admin/store-clock', tid)
+  return (d && d.today) || new Date().toISOString().slice(0, 10)
+}
 const req = async (path, tid) => {
   const r = await fetch(`${BASE}${path}`, { headers: { authorization: `Bearer ${TOKEN}`, 'x-admin-tenant-id': tid, 'x-tenant-id': tid } })
   try { return await r.json() } catch { return null }
@@ -124,6 +128,29 @@ for (const tid of TENANTS) {
   const gal = await req('/portfolio', tid)
   const works = (gal && (gal.works || gal.items)) || []
   check(`${tid} · 作品 ≥6`, works.length >= 6, String(works.length))
+  /* ══ D170(店主 05u §四 + 夜班令6 段 1):**演示面必须干净** ══
+     店主亲看旗舰店首页:「待报价 162」、下一位卡是「运营字段测试-mrm0lewr」、
+     台面里是「闸测未来」「演示2-lucky-美睫储值户」。页面没错,是库里的垃圾被显示出来了。
+     判据按**店主会看到的那几处**逐处扫:下一位卡 / 今日预约前三条 / 今日台面整份。
+     🔴 认的是**痕迹形状**(测试/演示/闸测/mock/名字后面挂随机段),不是一份名单。 */
+  const DIRTY = /(测试|演示|闸测|mock|storeless|-mr[a-z0-9]{6,}|[\u4e00-\u9fa5A-Za-z]-m[a-z0-9]{7,})/
+  /* 🔴 只扫**店主眼睛看得到的那几个字段**,不扫整份 JSON:
+     现测第一版把整份响应扔进正则,咬中的是 `tech_mt4ma32n_qiqibc` / `lash-lash-mt4ma32u`
+     —— 那是**内部 id**,页面上一个字都不显示。判据要对着「界面上出现的字」,
+     不是对着「响应里的字节」(判据律:能验渲染结果就别验中间产物)。 */
+  const board = await req(`/admin/schedule-day?date=${encodeURIComponent(await storeToday(tid))}`, tid)
+  const seen = (o) => [o && o.customerName, o && o.serviceName, o && o.name, o && o.title].filter(Boolean)
+  const boardText = [...((board && board.bookings) || []).flatMap(seen),
+    ...((board && board.technicians) || []).flatMap(seen)].join(' | ')
+  const nowText = [now && now.next && now.next.customer, now && now.next && now.next.service,
+    now && now.next && now.next.tech].filter(Boolean).join(' | ')
+  const dirtyIn = (txt) => (String(txt).match(new RegExp(DIRTY.source, 'g')) || []).slice(0, 3).join(' | ')
+  check(`${tid} · 「下一位」与今日预约里 0 处夹具痕迹`, !DIRTY.test(nowText), dirtyIn(nowText))
+  check(`${tid} · 今日台面整份 0 处夹具痕迹`, !DIRTY.test(boardText), dirtyIn(boardText))
+  /* 待办数值要像一家店,不是像一个积压的收件箱(店主原话:报价 ≤ 20) */
+  const q = items.find((x) => x.key === 'quotePending')
+  check(`${tid} · 待报价 ≤ 20(162 那种是历次评测积压,不是店里真有人在等)`, Number(q && q.n) <= 20, JSON.stringify(q))
+
   /* 小记只有写口(`POST /admin/service-notes`),**没有读列表的接口** ——
      所以这一条只能落到库上数。如实说明:这是判据里唯一一条不在接口层的,
      等哪天有了读口就该搬上去(判据也该往「店主看得见那一层」走)。 */

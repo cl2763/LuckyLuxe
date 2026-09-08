@@ -1,0 +1,649 @@
+{
+  "dbPath": "/Users/changliu/Documents/Codex/2026-04-29/new-chat/apps/api/local-data/lucky-luxe.sqlite",
+  "tables": {
+    "admin_accounts": {
+      "rows": 14,
+      "cols": 12,
+      "idx": 2,
+      "trg": 0,
+      "dflt": 2
+    },
+    "admin_sessions": {
+      "rows": 161,
+      "cols": 4,
+      "idx": 1,
+      "trg": 0,
+      "dflt": 0
+    },
+    "after_sales_events": {
+      "rows": 7,
+      "cols": 10,
+      "idx": 2,
+      "trg": 0,
+      "dflt": 0
+    },
+    "ai_conversation_states": {
+      "rows": 285,
+      "cols": 14,
+      "idx": 2,
+      "trg": 0,
+      "dflt": 5
+    },
+    "ai_learning_examples": {
+      "rows": 33,
+      "cols": 13,
+      "idx": 2,
+      "trg": 0,
+      "dflt": 6
+    },
+    "ai_response_feedback": {
+      "rows": 33,
+      "cols": 15,
+      "idx": 3,
+      "trg": 0,
+      "dflt": 4
+    },
+    "ai_review_marks": {
+      "rows": 0,
+      "cols": 10,
+      "idx": 3,
+      "trg": 0,
+      "dflt": 5
+    },
+    "ai_usage": {
+      "rows": 2,
+      "cols": 5,
+      "idx": 1,
+      "trg": 0,
+      "dflt": 2
+    },
+    "archive_bind_tokens": {
+      "rows": 47,
+      "cols": 9,
+      "idx": 2,
+      "trg": 0,
+      "dflt": 0
+    },
+    "attendance_records": {
+      "rows": 83,
+      "cols": 17,
+      "idx": 2,
+      "trg": 0,
+      "dflt": 3
+    },
+    "booking_drafts": {
+      "rows": 25,
+      "cols": 20,
+      "idx": 3,
+      "trg": 1,
+      "dflt": 3
+    },
+    "booking_slots": {
+      "rows": 545,
+      "cols": 5,
+      "idx": 2,
+      "trg": 1,
+      "dflt": 0
+    },
+    "booking_status_history": {
+      "rows": 353,
+      "cols": 7,
+      "idx": 1,
+      "trg": 1,
+      "dflt": 0
+    },
+    "bookings": {
+      "rows": 1482,
+      "cols": 39,
+      "idx": 2,
+      "trg": 0,
+      "dflt": 7
+    },
+    "business_hours": {
+      "rows": 49,
+      "cols": 8,
+      "idx": 1,
+      "trg": 1,
+      "dflt": 1
+    },
+    "cash_notes": {
+      "rows": 0,
+      "cols": 9,
+      "idx": 2,
+      "trg": 0,
+      "dflt": 2
+    },
+    "conversation_messages": {
+      "rows": 1293,
+      "cols": 15,
+      "idx": 3,
+      "trg": 2,
+      "dflt": 0
+    },
+    "coupon_grant_logs": {
+      "rows": 18,
+      "cols": 8,
+      "idx": 2,
+      "trg": 1,
+      "dflt": 0
+    },
+    "coupon_grants": {
+      "rows": 46,
+      "cols": 17,
+      "idx": 2,
+      "trg": 1,
+      "dflt": 2
+    },
+    "coupons": {
+      "rows": 24,
+      "cols": 14,
+      "idx": 1,
+      "trg": 0,
+      "dflt": 10
+    },
+    "daily_close_lines": {
+      "rows": 124,
+      "cols": 11,
+      "idx": 2,
+      "trg": 0,
+      "dflt": 5
+    },
+    "daily_closes": {
+      "rows": 73,
+      "cols": 15,
+      "idx": 3,
+      "trg": 0,
+      "dflt": 4
+    },
+    "deposit_disposals": {
+      "rows": 2,
+      "cols": 11,
+      "idx": 2,
+      "trg": 0,
+      "dflt": 0
+    },
+    "deposit_receipts": {
+      "rows": 41,
+      "cols": 14,
+      "idx": 2,
+      "trg": 2,
+      "dflt": 0
+    },
+    "deposit_retains": {
+      "rows": 1,
+      "cols": 12,
+      "idx": 2,
+      "trg": 0,
+      "dflt": 3
+    },
+    "duty_marks": {
+      "rows": 1,
+      "cols": 4,
+      "idx": 1,
+      "trg": 0,
+      "dflt": 0
+    },
+    "finance_recurring_rules": {
+      "rows": 11,
+      "cols": 13,
+      "idx": 1,
+      "trg": 0,
+      "dflt": 6
+    },
+    "finance_targets": {
+      "rows": 4,
+      "cols": 7,
+      "idx": 1,
+      "trg": 0,
+      "dflt": 4
+    },
+    "finance_transactions": {
+      "rows": 1306,
+      "cols": 18,
+      "idx": 3,
+      "trg": 2,
+      "dflt": 4
+    },
+    "hero_slides": {
+      "rows": 0,
+      "cols": 9,
+      "idx": 2,
+      "trg": 0,
+      "dflt": 4
+    },
+    "identity_merge_queue": {
+      "rows": 0,
+      "cols": 10,
+      "idx": 2,
+      "trg": 1,
+      "dflt": 0
+    },
+    "member_timecards": {
+      "rows": 0,
+      "cols": 14,
+      "idx": 2,
+      "trg": 0,
+      "dflt": 2
+    },
+    "membership_packages": {
+      "rows": 10,
+      "cols": 15,
+      "idx": 1,
+      "trg": 0,
+      "dflt": 7
+    },
+    "merchant_leads": {
+      "rows": 1,
+      "cols": 11,
+      "idx": 1,
+      "trg": 0,
+      "dflt": 1
+    },
+    "message_templates": {
+      "rows": 16,
+      "cols": 10,
+      "idx": 2,
+      "trg": 0,
+      "dflt": 5
+    },
+    "notification_logs": {
+      "rows": 76,
+      "cols": 11,
+      "idx": 3,
+      "trg": 0,
+      "dflt": 1
+    },
+    "notification_rules": {
+      "rows": 0,
+      "cols": 13,
+      "idx": 2,
+      "trg": 0,
+      "dflt": 2
+    },
+    "notify_scan_marks": {
+      "rows": 54,
+      "cols": 3,
+      "idx": 1,
+      "trg": 0,
+      "dflt": 0
+    },
+    "payments": {
+      "rows": 236,
+      "cols": 10,
+      "idx": 1,
+      "trg": 1,
+      "dflt": 0
+    },
+    "perf_targets": {
+      "rows": 9,
+      "cols": 11,
+      "idx": 3,
+      "trg": 0,
+      "dflt": 5
+    },
+    "plan_change_requests": {
+      "rows": 10,
+      "cols": 9,
+      "idx": 1,
+      "trg": 0,
+      "dflt": 3
+    },
+    "plans": {
+      "rows": 5,
+      "cols": 6,
+      "idx": 1,
+      "trg": 0,
+      "dflt": 3
+    },
+    "platform_accounts": {
+      "rows": 1,
+      "cols": 9,
+      "idx": 2,
+      "trg": 0,
+      "dflt": 2
+    },
+    "platform_auth_sessions": {
+      "rows": 0,
+      "cols": 4,
+      "idx": 1,
+      "trg": 0,
+      "dflt": 0
+    },
+    "platform_categories": {
+      "rows": 3,
+      "cols": 5,
+      "idx": 1,
+      "trg": 0,
+      "dflt": 1
+    },
+    "platform_kb_entries": {
+      "rows": 14,
+      "cols": 12,
+      "idx": 1,
+      "trg": 0,
+      "dflt": 6
+    },
+    "platform_ops_log": {
+      "rows": 2,
+      "cols": 6,
+      "idx": 1,
+      "trg": 0,
+      "dflt": 0
+    },
+    "platform_sessions": {
+      "rows": 0,
+      "cols": 5,
+      "idx": 1,
+      "trg": 0,
+      "dflt": 0
+    },
+    "points_prizes": {
+      "rows": 14,
+      "cols": 11,
+      "idx": 1,
+      "trg": 0,
+      "dflt": 4
+    },
+    "points_transactions": {
+      "rows": 32,
+      "cols": 9,
+      "idx": 2,
+      "trg": 2,
+      "dflt": 0
+    },
+    "pricing_rules": {
+      "rows": 3,
+      "cols": 5,
+      "idx": 1,
+      "trg": 0,
+      "dflt": 2
+    },
+    "quote_price_changes": {
+      "rows": 0,
+      "cols": 9,
+      "idx": 1,
+      "trg": 0,
+      "dflt": 0
+    },
+    "quote_requests": {
+      "rows": 146,
+      "cols": 32,
+      "idx": 3,
+      "trg": 0,
+      "dflt": 15
+    },
+    "recharge_tiers": {
+      "rows": 0,
+      "cols": 7,
+      "idx": 2,
+      "trg": 0,
+      "dflt": 5
+    },
+    "reminder_tasks": {
+      "rows": 270,
+      "cols": 17,
+      "idx": 4,
+      "trg": 0,
+      "dflt": 5
+    },
+    "salary_adjust_items": {
+      "rows": 2,
+      "cols": 9,
+      "idx": 2,
+      "trg": 0,
+      "dflt": 3
+    },
+    "salary_adjusts": {
+      "rows": 2,
+      "cols": 6,
+      "idx": 1,
+      "trg": 0,
+      "dflt": 1
+    },
+    "salary_payrolls": {
+      "rows": 0,
+      "cols": 14,
+      "idx": 2,
+      "trg": 0,
+      "dflt": 3
+    },
+    "salary_plans": {
+      "rows": 10,
+      "cols": 22,
+      "idx": 2,
+      "trg": 0,
+      "dflt": 18
+    },
+    "schedule_change_requests": {
+      "rows": 5,
+      "cols": 9,
+      "idx": 1,
+      "trg": 0,
+      "dflt": 1
+    },
+    "service_categories": {
+      "rows": 24,
+      "cols": 8,
+      "idx": 2,
+      "trg": 0,
+      "dflt": 3
+    },
+    "service_notes": {
+      "rows": 1000,
+      "cols": 12,
+      "idx": 1,
+      "trg": 0,
+      "dflt": 1
+    },
+    "service_prices": {
+      "rows": 150,
+      "cols": 6,
+      "idx": 3,
+      "trg": 0,
+      "dflt": 1
+    },
+    "services": {
+      "rows": 64,
+      "cols": 26,
+      "idx": 1,
+      "trg": 0,
+      "dflt": 8
+    },
+    "settlement_amendments": {
+      "rows": 9,
+      "cols": 11,
+      "idx": 2,
+      "trg": 0,
+      "dflt": 2
+    },
+    "settlement_groups": {
+      "rows": 261,
+      "cols": 8,
+      "idx": 1,
+      "trg": 0,
+      "dflt": 1
+    },
+    "settlement_items": {
+      "rows": 419,
+      "cols": 16,
+      "idx": 2,
+      "trg": 0,
+      "dflt": 9
+    },
+    "settlement_payments": {
+      "rows": 302,
+      "cols": 9,
+      "idx": 2,
+      "trg": 0,
+      "dflt": 2
+    },
+    "settlement_sign_tokens": {
+      "rows": 86,
+      "cols": 8,
+      "idx": 2,
+      "trg": 0,
+      "dflt": 0
+    },
+    "settlement_technicians": {
+      "rows": 329,
+      "cols": 10,
+      "idx": 2,
+      "trg": 0,
+      "dflt": 2
+    },
+    "settlements": {
+      "rows": 269,
+      "cols": 43,
+      "idx": 3,
+      "trg": 1,
+      "dflt": 13
+    },
+    "staff_compensation": {
+      "rows": 2,
+      "cols": 7,
+      "idx": 1,
+      "trg": 0,
+      "dflt": 4
+    },
+    "staff_nudges": {
+      "rows": 9,
+      "cols": 8,
+      "idx": 1,
+      "trg": 0,
+      "dflt": 1
+    },
+    "store_special_dates": {
+      "rows": 0,
+      "cols": 7,
+      "idx": 1,
+      "trg": 1,
+      "dflt": 1
+    },
+    "store_wifi": {
+      "rows": 3,
+      "cols": 6,
+      "idx": 1,
+      "trg": 0,
+      "dflt": 0
+    },
+    "stored_value_transactions": {
+      "rows": 128,
+      "cols": 16,
+      "idx": 3,
+      "trg": 2,
+      "dflt": 3
+    },
+    "stores": {
+      "rows": 6,
+      "cols": 9,
+      "idx": 1,
+      "trg": 0,
+      "dflt": 1
+    },
+    "subscription_orders": {
+      "rows": 0,
+      "cols": 12,
+      "idx": 1,
+      "trg": 0,
+      "dflt": 1
+    },
+    "technician_schedules": {
+      "rows": 195,
+      "cols": 6,
+      "idx": 1,
+      "trg": 1,
+      "dflt": 1
+    },
+    "technician_services": {
+      "rows": 226,
+      "cols": 2,
+      "idx": 1,
+      "trg": 0,
+      "dflt": 0
+    },
+    "technicians": {
+      "rows": 23,
+      "cols": 6,
+      "idx": 1,
+      "trg": 0,
+      "dflt": 1
+    },
+    "tenant_entitlements": {
+      "rows": 4,
+      "cols": 9,
+      "idx": 2,
+      "trg": 0,
+      "dflt": 3
+    },
+    "tenant_kb_documents": {
+      "rows": 0,
+      "cols": 6,
+      "idx": 1,
+      "trg": 0,
+      "dflt": 1
+    },
+    "tenant_kb_entries": {
+      "rows": 11,
+      "cols": 10,
+      "idx": 1,
+      "trg": 0,
+      "dflt": 4
+    },
+    "tenant_kb_facts": {
+      "rows": 13,
+      "cols": 5,
+      "idx": 1,
+      "trg": 0,
+      "dflt": 1
+    },
+    "tenant_settings": {
+      "rows": 33,
+      "cols": 4,
+      "idx": 1,
+      "trg": 0,
+      "dflt": 1
+    },
+    "tenants": {
+      "rows": 6,
+      "cols": 12,
+      "idx": 1,
+      "trg": 0,
+      "dflt": 7
+    },
+    "timecard_refunds": {
+      "rows": 0,
+      "cols": 10,
+      "idx": 1,
+      "trg": 0,
+      "dflt": 0
+    },
+    "user_identities": {
+      "rows": 254,
+      "cols": 10,
+      "idx": 3,
+      "trg": 0,
+      "dflt": 0
+    },
+    "users": {
+      "rows": 206,
+      "cols": 12,
+      "idx": 4,
+      "trg": 0,
+      "dflt": 3
+    },
+    "wechat_conversations": {
+      "rows": 321,
+      "cols": 14,
+      "idx": 2,
+      "trg": 0,
+      "dflt": 6
+    },
+    "wecom_unrouted": {
+      "rows": 0,
+      "cols": 5,
+      "idx": 1,
+      "trg": 0,
+      "dflt": 0
+    }
+  }
+}

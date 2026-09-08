@@ -315,11 +315,18 @@ function seedNotesAndTodos(tid, today) {
   /* 待人工 ≥2:客服台那一项 */
   let convs = 0
   const needHuman = one("SELECT COUNT(*) AS n FROM wechat_conversations WHERE tenant_id = ? AND status = 'needs_human'", tid).n
+  /* 🔴 外部用户 id 要**接着往下编**,不能从 0 数起:
+     收尾刀(J-33)把上一轮那两通关掉之后,`needs_human` 掉回 0,而 `rich-v1-guest-0/1` 这两行**还在**
+     (只是 status 变了)—— 从 0 数起就撞 UNIQUE,整个事务回滚,首页那两项永远补不上。
+     现测栽过一次:lucky-luxe 报 `UNIQUE constraint failed: wechat_conversations…`。
+     **也不去把已关的那通重新打开** —— 那是改历史;补一通新的才是真事(店里确实又来人了)。 */
+  /* 用「已有几条」当序号也不行:序号不是密的(现测库里只剩 `-guest-1`,数出来是 1,又撞上了)。
+     直接给一段随机后缀 —— 这个 id 只是「哪一位访客」,不需要连号。 */
   for (let i = needHuman; i < 2; i += 1) {
     run(`INSERT INTO wechat_conversations (id, provider, external_user_id, source_channel, status,
         last_intent, last_message, tenant_id, created_at, updated_at)
       VALUES (?, 'mock', ?, 'wechat', 'needs_human', 'other', ?, ?, ?, ?)`,
-    rid('conv'), `${SEED}-guest-${i}`, `[${SEED}] 想问问能不能改期,顺便问下会员折扣`, tid,
+    rid('conv'), `${SEED}-guest-${randomBytes(3).toString('hex')}`, `[${SEED}] 想问问能不能改期,顺便问下会员折扣`, tid,
     new Date().toISOString(), new Date().toISOString())
     convs += 1
   }
@@ -381,9 +388,14 @@ for (const tid of Object.keys(SHOPS)) {
     } else r.history = '已灌过,跳过'
     if (!done(tid, `day:${today}`)) {
       r.todayMade = seedToday(tid, store, today)
-      r.todos = seedNotesAndTodos(tid, today)
       mark(tid, `day:${today}`, { at: new Date().toISOString() })
     } else r.todayMade = '今天已灌过,跳过'
+    /* 🔴 待办那三项**不进幂等门**,每次跑都补到「至少 2 条」。
+       这不是违反《幂等判据律》——那条律禁的是「拿剩余量当**做过没有**的判据」;
+       这里做的是**状态保证**(补到 2 就停),有上界、重跑不增长。
+       为什么必须每次补:收尾刀(J-33)会把跑机开的会话与积压报价请求关掉,
+       关完首页那两项就掉回 0 —— 而 0 正是这一批在治的病。两把刀一收一补,得对得上。 */
+    r.todos = seedNotesAndTodos(tid, today)
     /* AI 今日一句**不进幂等门**:它是覆盖写(一天一条),每次跑都该按当下的数重算一遍。
        放进门里的话,今天早上灌过之后,下午再跑它就还挂着早上那句(数字都对不上了)。 */
     r.aiLine = seedAiLine(tid, today, store.timezone)
