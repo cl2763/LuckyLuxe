@@ -214,6 +214,39 @@ if [ -f "$RED_LIST" ]; then
   else say "对比度全扫过期了" "🔴 这些样式文件比红榜新:$NEWER —— 重跑 tools/contrast-sweep.mjs 再交"; FAIL=1; fi
 else say "对比度红榜在不在" "🔴 找不到 $RED_LIST"; FAIL=1; fi
 
+# ⑫ 裁(店主 05y §三③)· **开批快照进预检**。
+#    「未动须有证」那句话要**每一批都有证**,而不是想起来才有证 ——
+#    上一批沙箱那一行只能写「按形状看像心跳,不是刀验过的」,原因就是开批时没打快照,
+#    而「下一批补上」这种承诺在这个项目里掉过好几次。所以改成开跑前就查:
+#    本机库 / 沙箱库 各要有一份**开批快照 + 指纹快照**,缺哪个红并点名缺的是哪个库。
+SNAP_DIR="handoff/night-runs/开批快照"
+MISS=""
+for db in 本机库 沙箱库; do
+  [ -f "$SNAP_DIR/${db}_开批.json" ] || MISS="$MISS ${db}(结构快照)"
+  [ -f "$SNAP_DIR/${db}_开批.fp.json" ] || MISS="$MISS ${db}(指纹快照)"
+done
+if [ -z "$MISS" ]; then
+  say "开批快照齐不齐" "✅ 本机库 / 沙箱库 各有结构 + 指纹两份"
+else
+  say "开批快照缺件" "🔴 缺:$MISS —— 开批先打:node tools/db-snapshot.mjs <库绝对路径> $SNAP_DIR/<库名>_开批.json;node tools/tenant-fingerprint.mjs <库绝对路径> $SNAP_DIR/<库名>_开批.fp.json"
+  FAIL=1
+fi
+
+# ⑬ 裁(店主 05y §三①)· **flaky 要计数**:同一套件崩过第二次就不许再靠重跑洗白。
+#    这里只做「有没有人记着」这一半:凡 handoff/night-runs/flaky/*.md 里记了 ≥2 次的,预检点名。
+FLAKY_DIR="handoff/night-runs/flaky"
+if [ -d "$FLAKY_DIR" ]; then
+  HOT=""
+  for f in "$FLAKY_DIR"/*.md; do
+    [ -e "$f" ] || continue
+    # 表格里以 "| <数字> |" 开头的行就是一次记录
+    cnt=$(grep -cE '^\| [0-9]+ \|' "$f" || true)
+    [ "$cnt" -ge 2 ] && HOT="$HOT $(basename "$f" .md)($cnt 次)"
+  done
+  if [ -z "$HOT" ]; then say "flaky 计数" "✅ 没有崩过两次的套件"
+  else say "flaky 崩过两次" "🔴 $HOT —— 按裁定停线定位,不许再靠重跑洗白"; FAIL=1; fi
+else say "flaky 计数目录" "⚠️ 还没有 $FLAKY_DIR(第一次崩的时候建)"; fi
+
 # ⑧ 判据住在跑不到的地方(店主 05w §二 同族一句)。
 #    D184 那两把刀写得很好、判据也对,可它们只落在 `test-seed-rich.mjs` 里 ——
 #    而 seed-rich 按 D169 **不进全量**,于是全量一次都不会跑到它们。**没人跑的刀等于没立。**

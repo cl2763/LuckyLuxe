@@ -195,6 +195,26 @@ if (!AUTO || AUTO === 'skip') {
     chromeL && chromeL.eff === 'light' && String(chromeL.backgroundColor).toLowerCase() === String(tokenIn(LIGHT, 'paper')).toLowerCase(),
     JSON.stringify(chromeL))
 
+  /* ── 裁(店主 05y §三②)· **tabbar 的底色是量出来的,不再只靠人看图** ──
+     上一批我写「automator 拿不到 tabbar 的 computed 底色」——**结论下早了**:
+     页面 `$` 进不了自定义组件,但**在 app 里跑一段** `selectComponent('#mtabbar')`
+     再 `createSelectorQuery().fields({computedStyle})` 就拿得到。
+     (店主给的另一条路是从整机 PNG 取像素,`tools/mp-tabbar-pixel.mjs` 走那条;
+      两条互为旁证 —— 那把刀在找不到手机屏时**拒绝下结论**,不猜。) */
+  for (const mode of ['dark', 'light']) {
+    await setTheme(mode)
+    await T(mp.reLaunch('/pages/merchant/home/index'), 18000, 'reLaunch'); await sleep(2200)
+    const got = await T(mp.evaluate(() => new Promise((res) => {
+      const pages = getCurrentPages(); const p = pages[pages.length - 1]
+      const comp = p.selectComponent('#mtabbar')
+      if (!comp) return res({ ok: false, why: 'selectComponent(#mtabbar) 拿不到 —— wxml 上那个 id 是判据的抓手,别删' })
+      comp.createSelectorQuery().select('.mtab')
+        .fields({ computedStyle: ['backgroundColor'] }, (d) => res({ ok: true, bg: d && d.backgroundColor })).exec()
+    })), 15000, `tabbar computed ${mode}`)
+    check(`⑥ 商家 tabbar 底色(**量的是组件里算出来的值**)== ${mode} 档 --card(${want[mode].card})`,
+      got && got.ok && got.bg === want[mode].card, JSON.stringify(got))
+  }
+
   await setTheme('system')   /* J-33:收摊 —— 把夹具改过的设置还回默认 */
   console.log('   [收摊] 主题已还回「跟随系统」')
   /* 🔴 J-33 收摊 = **收文件 + 收进程**(店主 05w §六):

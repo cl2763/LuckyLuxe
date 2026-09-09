@@ -179,5 +179,5 @@
        · 快捷格取消(底部导航四键还在)。
        删掉而不是隐藏 —— 留着迟早有人再打开,一页就成了两套(D154 在网页端同样处置)。 -->
 
-  <merchant-tabbar active="home"></merchant-tabbar>
+  <merchant-tabbar id="mtabbar" active="home"></merchant-tabbar>
 </view>
