@@ -3830,8 +3830,19 @@ const main = async () => {
       const suiteFiles = readdirSync(join(ROOT42, 'apps/api')).filter((f) => /^test-.*\.mjs$/.test(f) && f !== 'test-guard.mjs')
       const unguarded = suiteFiles.filter((f) => {
         const src = readFileSync(join(ROOT42, 'apps/api', f), 'utf8')
-        if (!/const (BASE_URL|URL_A) = /.test(src)) return false        // 自带服务/纯静态扫描的不算
-        return !src.includes('assertTestTarget')
+        /* 🔴 夜7 段1 再修一处:光看「声明过 BASE_URL」会误伤 —— `test-merge-window` 声明了却
+           **一次都没用它**(它自己 spawn 一台带窗的实例、打自己那台 `OWN`)。
+           判据要问的是「**真的拿它去打请求了吗**」:出现 `${BASE_URL}` / `(BASE_URL` 这种用法才算。
+           误伤和漏网一样坏 —— 误伤会逼人给不需要护栏的套件塞一句假护栏。 */
+        const declares = /const (BASE_URL|URL_A) = /.test(src)
+        const uses = /\$\{(BASE_URL|URL_A)\}|\((BASE_URL|URL_A)[,)]/.test(src)
+        if (!declares || !uses) return false        // 自带服务/纯静态扫描的不算
+        /* 🔴 06a/夜7 段1 造病咬出来的判据缺陷:原来只问「文件里有没有 assertTestTarget 这几个字」——
+           而 `import { assertTestTarget } from './test-guard.mjs'` 那一行**本身就含这几个字**,
+           于是把调用摘掉、只留 import,这条照样绿(刀落了不红 → 先怀疑判据,果然是判据)。
+           改成问**有没有真的调用**:`assertTestTarget(` 且不是 import 行。 */
+        const called = src.split('\n').some((ln) => /assertTestTarget\s*\(/.test(ln) && !/^\s*import\b/.test(ln))
+        return !called
       })
       check('㋙C① 每个打接口的套件都装了测试护栏(裁 C:套件永远不许写进真库)',
         unguarded.length === 0, `没装的:${unguarded.join(', ')}`)
