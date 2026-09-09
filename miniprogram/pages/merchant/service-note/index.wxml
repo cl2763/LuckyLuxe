@@ -1,4 +1,4 @@
-<view class="pg">
+<view class="pg {{themeClass}}">
   <view class="cust">
     <view class="av">{{customerName[0]}}</view>
     <view class="ci"><view class="nm">{{customerName}}</view><view class="mt">{{serviceName}}{{techName ? ' · ' + techName : ''}}</view></view>

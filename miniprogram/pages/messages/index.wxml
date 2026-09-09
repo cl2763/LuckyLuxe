@@ -1,4 +1,4 @@
-<view class="pg">
+<view class="pg {{themeClass}}">
   <view wx:if="{{list.length}}" class="demobar">演示数据 · 正式版由站内消息表返回</view>
   <block wx:if="{{list.length}}">
     <view class="li" wx:for="{{list}}" wx:key="id">

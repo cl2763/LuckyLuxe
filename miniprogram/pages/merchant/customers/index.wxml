@@ -1,4 +1,4 @@
-<view class="page">
+<view class="page {{themeClass}}">
   <!-- 拍板②:员工受限视图 —— 分层/金额/群发券整块不渲染(那些全靠金额算,员工既拿不到也不该看) -->
   <view wx:if="{{staffView}}" class="staffnote">{{scopeNote}}</view>
   <view wx:if="{{!staffView}}" class="sechead">

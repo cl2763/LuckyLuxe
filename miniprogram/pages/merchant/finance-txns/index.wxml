@@ -1,4 +1,4 @@
-<view class="page">
+<view class="page {{themeClass}}">
   <view class="ps">收支明细 · 点「冲销」纠错(生成一笔红字,原单保留)</view>
 
   <view class="mon">

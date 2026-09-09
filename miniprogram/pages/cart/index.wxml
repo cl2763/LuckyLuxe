@@ -1,4 +1,4 @@
-<view class="page cart-page">
+<view class="page cart-page {{themeClass}}">
   <block wx:if="{{cart.length}}">
     <block wx:for="{{cart}}" wx:key="_id">
       <view class="cart-card card">

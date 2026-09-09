@@ -1,4 +1,4 @@
-<view class="pg">
+<view class="pg {{themeClass}}">
   <view class="head">
     <view class="ht" bindtap="tapTitle">选择要进入的门店</view>
     <view class="hd">扫店内小程序码可直接进店;也可在下方选择。</view>

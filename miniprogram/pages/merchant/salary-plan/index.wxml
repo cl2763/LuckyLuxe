@@ -1,4 +1,4 @@
-<view class="page">
+<view class="page {{themeClass}}">
   <view class="pt">{{isDefault ? '全店默认薪资方案' : '薪资方案 · ' + techName}}</view>
   <view class="ps" wx:if="{{isDefault}}">没单独设方案的员工都按这套算</view>
   <view class="ps" wx:elif="{{source === 'custom'}}">该员工使用专属方案 · <text class="lnk" bindtap="resetToDefault">恢复跟随全店默认</text></view>

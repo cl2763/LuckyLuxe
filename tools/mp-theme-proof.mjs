@@ -76,6 +76,38 @@ for (const [file, sel] of [['app.wxss', '.card {'], ['app.wxss', 'page {'],
     rule ? `规则原文:${rule.replace(/\s+/g, ' ').slice(0, 120)}` : '没找到这条规则')
 }
 
+/* ── 裁 #25 之三(静态):导航栏那两个色**必须逐字等于令牌** ──
+   `wx.setNavigationBarColor` 只吃十六进制串,JS 里读不到 WXSS 变量,所以 `utils/theme.js`
+   里有一份 `CHROME` 映射 —— 它天然是「第二处真相」的种子。这条判据把它按住:
+   两个 backgroundColor 必须逐字等于 tokens.wxss 里两档的 `--paper`。 */
+const THEMEJS = readFileSync(new URL('../miniprogram/utils/theme.js', import.meta.url), 'utf8')
+const chromeHex = (mode) => (THEMEJS.match(new RegExp(`${mode}:\\s*\\{[^}]*backgroundColor:\\s*'([^']+)'`)) || [])[1] || ''
+for (const mode of ['light', 'dark']) {
+  const want = tokenIn(mode === 'light' ? LIGHT : DARK, 'paper')
+  check(`①c 导航栏 ${mode} 档的底色 ≡ 令牌 --paper(${want})—— JS 那份映射不许自成一套`,
+    chromeHex(mode).toLowerCase() === String(want).toLowerCase(), `theme.js 写的是 ${chromeHex(mode)}`)
+}
+/* 裁 #25 之三(静态):两条 tabbar 的样式里不许再有字面色,根节点要挂 theme-root + themeClass */
+for (const [name, wxss, wxml, root] of [
+  ['顾客端 tabbar', '../miniprogram/custom-tab-bar/index.wxss', '../miniprogram/custom-tab-bar/index.wxml', '.custom-tabbar'],
+  ['商家端 tabbar', '../miniprogram/components/merchant-tabbar/index.wxss', '../miniprogram/components/merchant-tabbar/index.wxml', '.mtab'],
+]) {
+  const css = readFileSync(new URL(wxss, import.meta.url), 'utf8')
+  const xml = readFileSync(new URL(wxml, import.meta.url), 'utf8')
+  const rule = ruleOf(css, `${root}{`) || ruleOf(css, `${root} {`)
+  /* 🔴 白名单式的一处例外,写明理由:`box-shadow` 的颜色**不算**字面色违规 ——
+     合同图那套令牌里**没有阴影色**(三份令牌逐条比的刀 `design-token-diff` 只认那几个),
+     为了这一条另加一个 `--shadow` 会让三方比对当场红。阴影带 alpha、在深色底上几乎不可见,
+     影响面小于「另起一套令牌」。**登记为已知缺口**,等合同图补阴影令牌再收。 */
+  const noShadow = String(rule || '').replace(/box-shadow:[^;]*;?/g, '')
+  check(`①d ${name}:根规则读令牌、零字面色(box-shadow 的颜色按已知缺口豁免,理由随码)`,
+    Boolean(rule) && !LITERAL.test(noShadow) && rule.includes('var(--'),
+    rule ? rule.replace(/\s+/g, ' ').slice(0, 110) : '没找到根规则')
+  check(`①e ${name}:根节点挂了 theme-root + {{themeClass}}(组件吃不到 page{} 那段令牌,这是它的入口)`,
+    /theme-root/.test(xml) && /\{\{themeClass\}\}/.test(xml) && css.includes('@import'),
+    xml.split('\n')[0].slice(0, 110))
+}
+
 /* ── 行为层:三档各切一次,量算出来的底色 ─────────────────────────── */
 const AUTO = process.env.MP_AUTOMATOR
 if (!AUTO || AUTO === 'skip') {
@@ -134,6 +166,35 @@ if (!AUTO || AUTO === 'skip') {
   check('③ 反向守:浅档与深档量出来的底色不一样(一样 = 切了个寂寞)',
     seen.light?.pageBg !== seen.dark?.pageBg && seen.light?.cardBg !== seen.dark?.cardBg,
     JSON.stringify({ 浅: seen.light, 深: seen.dark }))
+  /* ── 裁 #25 之一(行为):**随机抽 5 个页面**,它们自己一行主题代码都没写,
+     `reLaunch` 之后根节点必须带上档位类 —— 这才证明「挂在一处公共入口」真的生效。 ── */
+  const SAMPLE = ['/pages/merchant/orders/index', '/pages/me/index', '/pages/home/index',
+    '/pages/merchant/workbench/index', '/pages/merchant/manage/index']
+  await setTheme('dark')
+  const rooted = []
+  for (const path of SAMPLE) {
+    try {
+      await T(mp.reLaunch(path), 18000, `reLaunch ${path}`); await sleep(2000)
+      const pg = await T(mp.currentPage(), 8000, 'currentPage')
+      const el = await T(pg.$('.page, .pg, .wrap'), 8000, 'root')
+      const cls = el ? String(await T(el.attribute('class'), 5000, 'class') || '') : '(没取到根节点)'
+      rooted.push({ path, cls, 挂上了: /theme-dark/.test(cls) })
+    } catch (e) { rooted.push({ path, cls: `(打不开:${e.message})`, 挂上了: false }) }
+  }
+  check(`④ 裁#25:随机 5 个页面(它们自己一行主题代码没写)根节点都带上了档位类`,
+    rooted.every((r) => r.挂上了), JSON.stringify(rooted))
+  /* 导航栏读不回来颜色,能验的是**它最后一次被设成什么**(theme.js 每次 applyChrome 都记一笔) */
+  const chrome = await T(mp.evaluate(() => wx.getStorageSync('ll-theme-chrome')), 8000, 'chrome')
+  check('④b 裁#25:深色档下导航栏最后一次被设成深色那两个值(WXSS 管不到它,只能这么验)',
+    chrome && chrome.eff === 'dark' && String(chrome.backgroundColor).toLowerCase() === String(tokenIn(DARK, 'paper')).toLowerCase(),
+    JSON.stringify(chrome))
+  await setTheme('light')
+  await T(mp.reLaunch('/pages/merchant/home/index'), 18000, 'reLaunch'); await sleep(1800)
+  const chromeL = await T(mp.evaluate(() => wx.getStorageSync('ll-theme-chrome')), 8000, 'chrome')
+  check('④c 反向守:切回浅色档,导航栏跟着换成浅色那两个值(不换 = 只设过一次)',
+    chromeL && chromeL.eff === 'light' && String(chromeL.backgroundColor).toLowerCase() === String(tokenIn(LIGHT, 'paper')).toLowerCase(),
+    JSON.stringify(chromeL))
+
   await setTheme('system')   /* J-33:收摊 —— 把夹具改过的设置还回默认 */
   console.log('   [收摊] 主题已还回「跟随系统」')
   /* 🔴 J-33 收摊 = **收文件 + 收进程**(店主 05w §六):
@@ -150,8 +211,12 @@ const withTheme = execFileSync('bash', ['-lc',
   `grep -rl themeClass ${ROOT}miniprogram/pages --include=*.wxml | wc -l`], { encoding: 'utf8' }).trim()
 const totalPages = execFileSync('bash', ['-lc',
   `find ${ROOT}miniprogram/pages -name index.wxml | wc -l`], { encoding: 'utf8' }).trim()
-check(`④ 站内三档的覆盖率棘轮:${withTheme}/${totalPages} 个页面挂了主题类(只许升 —— 没挂的页面切档纹丝不动)`,
-  Number(withTheme) >= 2, `挂了 ${withTheme} · 共 ${totalPages}`)
+/* 🔴 棘轮方向(店主 05x §二 第 2 条要求写清楚):
+   这一条是**覆盖率**棘轮 —— **只许升不许降**;
+   而 `tools/pre-regression.sh` 里那条「写死色」棘轮是**只许降不许升**。
+   两个方向相反,搬代码的时候最容易搬错,所以各自在注释里写死一句。 */
+check(`⑤ 覆盖率棘轮(**只许升**,与写死色棘轮的方向相反):${withTheme}/${totalPages} 个页面的 wxml 挂了 {{themeClass}}`,
+  Number(withTheme) >= 66, `挂了 ${withTheme} · 共 ${totalPages}(差的那一个是 pages/sign —— 根节点是 <web-view>,挂不上,如实列在这)`)
 console.log(`   [如实说] 站内浅/深两档目前只在 ${withTheme} 个页面生效;其余页面切档没反应(「跟随系统」那一档不受影响,它走 @media,全仓都生效)。`)
 
 console.log(`\n[小程序三档实测] ${JSON.stringify(want)}`)

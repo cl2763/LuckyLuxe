@@ -1,4 +1,4 @@
-<view class="page">
+<view class="page {{themeClass}}">
   <view class="form">
     <view class="frow"><text class="lb">套餐名称</text><input class="in" value="{{name}}" placeholder="{{kind==='times'?'如 纯色×5次卡':'如 充1000送50'}}" bindinput="onName" /></view>
     <view class="frow"><text class="lb">售价 (CAD)</text><input class="in" type="digit" value="{{price}}" placeholder="顾客支付" bindinput="onPrice" /></view>

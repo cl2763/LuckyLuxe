@@ -1,4 +1,4 @@
-<view wx:if="{{order}}" class="page order-detail-page">
+<view wx:if="{{order}}" class="page order-detail-page {{themeClass}}">
   <!-- 批③首件 A1(§二):头卡=服务名+状态徽标(后端三态同源)+单号 -->
   <view class="detail-card card">
     <view class="status-line">

@@ -1,4 +1,4 @@
-<view class="pg">
+<view class="pg {{themeClass}}">
   <view class="hd"><text class="t">账户调整</text><text class="nm">{{name}}</text></view>
 
   <!-- 四个参考数 + 界限句 + 提示(句子全部后端给,前端零拼串 —— 与网页同一份 facts)

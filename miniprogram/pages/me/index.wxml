@@ -1,4 +1,4 @@
-<view class="page me-page">
+<view class="page me-page {{themeClass}}">
   <view class="member-card">
     <block wx:if="{{isLoggedIn}}">
       <view class="member-top">

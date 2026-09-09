@@ -1,4 +1,4 @@
-<view class="wrap">
+<view class="wrap {{themeClass}}">
   <view wx:if="{{state === 'loading'}}" class="mut center">正在核对绑定码…</view>
 
   <view wx:if="{{state === 'confirm'}}" class="card">

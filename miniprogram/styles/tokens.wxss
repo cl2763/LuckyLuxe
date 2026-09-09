@@ -11,13 +11,17 @@
  *    所以小程序只有「跟系统」这一种深色。要做站内主题开关是**新功能**,不在本批。
  *    刀里对这一段有专门的说明分支,不会因为「找不到」而误判成绿(静默失败器族)。
  */
-page{--paper:#faf8f3;--ink:#23241f;--sub:#6d6f66;--line:#e3e0d6;--card:#fff;--wall:#f1eee6;
+/* 🔴 裁 #25 之三:自定义组件(tabbar)**吃不到 `page{}` 这条规则**——
+   组件样式默认隔离,`page` 选择器只作用于页面根节点。
+   所以基线这一段同时挂到 `.theme-root` 上,组件根节点带上这个类就能拿到同一套值。
+   **值一个字都没改,只是多了一个选择器** —— 不许在组件里另抄一份色(那就是第二处真相)。 */
+page,.theme-root{--paper:#faf8f3;--ink:#23241f;--sub:#6d6f66;--line:#e3e0d6;--card:#fff;--wall:#f1eee6;
 --acc:#0e6e62;--accd:#0a5a50;--brand:#b09468;--brandd:#8a6f45;
 --hero:#2a2521;--hero2:#3a332c;--heroink:#f5efe3;--herosub:#bfb4a2;--herogold:#d9b97e;--herogrid:rgba(245,239,227,.12);--herolive:#6fd0a0;
 --good:#2e8b57;--goodbg:#e6f3ea;--bad:#b3413a;--badbg:#f7e7e5;--flat:#7b7f76;--flatbg:#ededea;
 --tagm:#8a5a00;--tagmbg:#faf3e3;--tagw:#274f8f;--tagwbg:#eef2fa;
 --done:#cdbfa3;--doing:#d9b97e;--next:#7b7f76}
-@media (prefers-color-scheme: dark){page{--paper:#191b19;--ink:#e8e7e0;--sub:#9aa096;--line:#33362f;--card:#20241f;--wall:#242822;
+@media (prefers-color-scheme: dark){page,.theme-root{--paper:#191b19;--ink:#e8e7e0;--sub:#9aa096;--line:#33362f;--card:#20241f;--wall:#242822;
 --acc:#4cc0b0;--accd:#63d2c3;--brand:#d3b483;--brandd:#e2c79c;
 --hero:#15130f;--hero2:#221d18;--heroink:#f5efe3;--herosub:#a79c8a;--herogold:#e2c48d;--herogrid:rgba(245,239,227,.10);--herolive:#6fd0a0;
 --good:#6fd0a0;--goodbg:#1c2f25;--bad:#e5867e;--badbg:#33201e;--flat:#9aa096;--flatbg:#2a2d28;
@@ -31,20 +35,25 @@ page{--paper:#faf8f3;--ink:#23241f;--sub:#6d6f66;--line:#e3e0d6;--card:#fff;--wa
    值与上面两段**逐字相同**,只是选择器换了 —— 这样「同一个语义只有一组值」。
    ⚠️ 令牌刀(`design-token-diff`)比的是 `page{}` 与 `@media` 那两段;
       这两段是它们的副本,改上面必须同步改这里(下一批把这条也纳进刀里)。 */
-.theme-light{min-height:100vh;background:var(--paper);color:var(--ink);--paper:#faf8f3;--ink:#23241f;--sub:#6d6f66;--line:#e3e0d6;--card:#fff;--wall:#f1eee6;
+.theme-light{--paper:#faf8f3;--ink:#23241f;--sub:#6d6f66;--line:#e3e0d6;--card:#fff;--wall:#f1eee6;
 --acc:#0e6e62;--accd:#0a5a50;--brand:#b09468;--brandd:#8a6f45;
 --hero:#2a2521;--hero2:#3a332c;--heroink:#f5efe3;--herosub:#bfb4a2;--herogold:#d9b97e;--herogrid:rgba(245,239,227,.12);--herolive:#6fd0a0;
 --good:#2e8b57;--goodbg:#e6f3ea;--bad:#b3413a;--badbg:#f7e7e5;--flat:#7b7f76;--flatbg:#ededea;
 --tagm:#8a5a00;--tagmbg:#faf3e3;--tagw:#274f8f;--tagwbg:#eef2fa;
 --done:#cdbfa3;--doing:#d9b97e;--next:#7b7f76}
-/* 🔴 现测(裁 #21 拍到真机之后才看见的):只换令牌**不够** ——
+/* 🔴 现测(店主 05x §二 落地时踩的):这两段**只许定义变量**,不许带 `min-height/background/color`。
+   带上之后,tabbar 组件根节点一挂 `.theme-dark` 就跟着 `min-height:100vh` ——
+   一条底部导航条撑满整屏、把正文全盖住(09截图 第一版就是这么拍出来的)。
+   页面级的「铺满 + 上底色」搬去 `app.wxss`:那份样式只作用于页面,组件样式隔离够不到它。
+   ── 下面这段说明保留(它记的是当初为什么要铺满)──
+   只换令牌**不够** ——
    `page{background:...}` 挂在页面根节点上,而主题类挂在里面那个 `view.page` 上,
    于是深色下「文字翻成浅色、底还是白的」→ 浅字压白底,几乎看不见。
    所以两个类各自**把底色与字色也带上**、并撑满一屏。
    ⚠️ 这三条写在**各自块里**,不写成 `.theme-light,.theme-dark{...}` 的共用规则 ——
       令牌刀按 `.theme-dark{` 这个串找块,共用规则会让它找错块(现测红过一次)。
       刀只认 `--x: y` 这种声明,所以块里多几条普通样式不影响比对。 */
-.theme-dark{min-height:100vh;background:var(--paper);color:var(--ink);--paper:#191b19;--ink:#e8e7e0;--sub:#9aa096;--line:#33362f;--card:#20241f;--wall:#242822;
+.theme-dark{--paper:#191b19;--ink:#e8e7e0;--sub:#9aa096;--line:#33362f;--card:#20241f;--wall:#242822;
 --acc:#4cc0b0;--accd:#63d2c3;--brand:#d3b483;--brandd:#e2c79c;
 --hero:#15130f;--hero2:#221d18;--heroink:#f5efe3;--herosub:#a79c8a;--herogold:#e2c48d;--herogrid:rgba(245,239,227,.10);--herolive:#6fd0a0;
 --good:#6fd0a0;--goodbg:#1c2f25;--bad:#e5867e;--badbg:#33201e;--flat:#9aa096;--flatbg:#2a2d28;

@@ -1,4 +1,4 @@
-<view class="pg">
+<view class="pg {{themeClass}}">
   <view class="hd">
     <text class="t">报价试算</text>
     <text class="s">{{fromLabel ? '来自会话：' + fromLabel : '与结算同一计价引擎 · 试算不留痕'}}</text>

@@ -1,4 +1,4 @@
-<view class="custom-tabbar">
+<view class="custom-tabbar theme-root {{themeClass}}">
   <block wx:for="{{list}}" wx:key="pagePath">
     <view class="tabbar-item {{selected === index ? 'active' : ''}}" data-index="{{index}}" data-path="{{item.pagePath}}" bindtap="switchTab">
       <view class="tabbar-pill">

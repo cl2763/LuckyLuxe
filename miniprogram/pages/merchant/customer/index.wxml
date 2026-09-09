@@ -1,4 +1,4 @@
-<view class="page" wx:if="{{c}}">
+<view class="page {{themeClass}}" wx:if="{{c}}">
   <view class="hero">
     <view class="av">{{c.av}}</view>
     <view class="hmain">

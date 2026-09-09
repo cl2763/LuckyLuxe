@@ -1,4 +1,4 @@
-<view class="page home-page">
+<view class="page home-page {{themeClass}}">
   <!-- D17 失败态:接口挂了如实说,不拿假数据糊住(书面标准代图)。
        ⚠️ 与正文**互斥**(wx:else),不是叠在正文上方 —— 2026-08-11 停服实测发现:
        只加 wx:if 不排除正文,失败态下面还渲染出一整个残缺骨架(缓存门店名 +

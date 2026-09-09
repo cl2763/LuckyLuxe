@@ -1,6 +1,11 @@
-.mtab{position:fixed;left:0;right:0;bottom:0;display:flex;background:#fff;border-top:1rpx solid #e7ddd4;padding:10rpx 0 calc(10rpx + env(safe-area-inset-bottom));z-index:50}
+@import "../../styles/tokens.wxss";
+/* 裁 #25 之三(店主 05x §二):**这一条就是截图里那道白边**。
+   自定义组件吃不到 `page{}` 那段令牌(样式隔离),所以:①自己 import 令牌
+   ②根节点挂 `theme-root` 拿基线与「跟系统」那一档 ③再挂 `{{themeClass}}` 吃站内选的那两档。
+   值一个字面色都不留。 */
+.mtab{position:fixed;left:0;right:0;bottom:0;display:flex;background:var(--card);border-top:1rpx solid var(--line);padding:10rpx 0 calc(10rpx + env(safe-area-inset-bottom));z-index:50}
 .tab{flex:1;display:flex;flex-direction:column;align-items:center;gap:4rpx}
 .ic{width:44rpx;height:44rpx;opacity:.4}
-.tx{font-size:20rpx;color:#b6a99b}
+.tx{font-size:20rpx;color:var(--sub)}
 .tab.on .ic{opacity:1}
-.tab.on .tx{color:#9b7655}
+.tab.on .tx{color:var(--brandd)}

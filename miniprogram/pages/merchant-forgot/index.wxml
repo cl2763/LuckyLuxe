@@ -1,4 +1,4 @@
-<view class="fp">
+<view class="fp {{themeClass}}">
   <view class="title">忘记密码怎么办</view>
 
   <view class="card">

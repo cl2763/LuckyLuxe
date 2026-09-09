@@ -1,3 +1,8 @@
+@import "../styles/tokens.wxss";
+/* 裁 #25 之三(店主 05x §二):**tabbar 不在页面 class 的覆盖范围内** ——
+   它是自定义组件,自己有一套样式作用域。08截图/01 里正文全深了、这一条还是白的,
+   店主一眼就看见。改法与页面一样:读令牌,不写字面色;档位由组件自己挂到根节点上
+   (见 index.js —— 组件也要有一处公共入口的等价物)。 */
 .custom-tabbar {
   position: fixed;
   right: 0;
@@ -9,8 +14,8 @@
   display: grid;
   grid-template-columns: repeat(4, minmax(0, 1fr));
   gap: 8rpx;
-  border-top: 1rpx solid #eee6df;
-  background: rgba(255, 255, 255, 0.96);
+  border-top: 1rpx solid var(--line);
+  background: var(--card);
   box-shadow: 0 -10rpx 30rpx rgba(45, 36, 31, 0.06);
   box-sizing: border-box;
 }
@@ -34,13 +39,13 @@
   align-items: center;
   justify-content: center;
   gap: 2rpx;
-  color: #8a7f78;
+  color: var(--sub);
   box-sizing: border-box;
 }
 
 .tabbar-item.active .tabbar-pill {
-  background: #f3ebe4;
-  color: #2b2b2b;
+  background: var(--wall);
+  color: var(--ink);
   box-shadow: 0 8rpx 22rpx rgba(198, 162, 126, 0.22);
 }
 
@@ -59,8 +64,8 @@
   height: 26rpx;
   padding: 0 8rpx;
   border-radius: 999rpx;
-  background: #c6a27e;
-  color: #fff;
+  background: var(--brand);
+  color: var(--hero);
   font-size: 16rpx;
   font-weight: 850;
   line-height: 26rpx;

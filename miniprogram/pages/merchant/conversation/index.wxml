@@ -1,4 +1,4 @@
-<view class="cpage">
+<view class="cpage {{themeClass}}">
   <view wx:if="{{quoteBanner}}" class="qs-banner {{quoteBannerCls}}">{{quoteBanner}}</view>
   <view class="cust">
     <view class="prow">

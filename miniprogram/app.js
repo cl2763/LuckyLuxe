@@ -1,4 +1,36 @@
 const i18n = require('./utils/i18n')
+const theme = require('./utils/theme')
+
+/* ══ 裁 #25 之一(店主 05x §二)· 主题**挂在一处公共入口**,不许 67 个页面各写一遍 ══
+ *
+ * 上一批量出来:全仓 67 个页面**只有 2 个**挂了主题类,其余切档纹丝不动。
+ * 店主裁:「逐页挂 = 必漏,这就是现在 2/67 的由来 —— 要挂在一处公共入口。」
+ *
+ * 小程序没有「页面基类」这种东西,但 `Page` 就是一个全局函数 —— 在 app.js 里**把它包一层**,
+ * 之后每个页面注册时自动获得:
+ *   ① `data.themeClass` 初值(页面第一帧就是对的档,不闪)
+ *   ② `onShow` 时重新取一次(从「我的」改完档位返回,立刻跟着变)
+ *   ③ 顺手把**原生导航栏**也设成这一档(WXSS 管不到它,见 utils/theme.js 抬头)
+ * 页面自己一行都不用写。已经自己写了的那两页(商家首页 / 商家「我的」)也不冲突:
+ * 它们 setData 的是同一个字段、同一个出口算出来的值。
+ *
+ * ⚠️ 必须在 `App({})` 之前包好:小程序先跑 app.js,再跑各页面的 js(注册 Page 就发生在那时)。
+ */
+const rawPage = Page
+Page = function (options) {
+  const opts = options || {}
+  const userOnShow = opts.onShow
+  opts.data = Object.assign({ themeClass: theme.themeClass() }, opts.data || {})
+  opts.onShow = function pageOnShowWithTheme(...args) {
+    try {
+      const cls = theme.themeClass()
+      if (this.data.themeClass !== cls) this.setData({ themeClass: cls })
+      theme.applyChrome()
+    } catch (e) { console.warn('[theme] 套档位失败', e && e.message) }
+    return userOnShow ? userOnShow.apply(this, args) : undefined
+  }
+  return rawPage(opts)
+}
 
 App({
   globalData: {

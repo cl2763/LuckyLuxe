@@ -1,4 +1,4 @@
-<view class="page checkout-page">
+<view class="page checkout-page {{themeClass}}">
   <view class="section-head first-head">
     <view class="section-title">{{t.confirm}}</view>
     <view class="section-note">{{t.mockPay}}</view>

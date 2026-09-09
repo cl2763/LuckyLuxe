@@ -1,4 +1,4 @@
-<view wx:if="{{service}}" class="page detail-page">
+<view wx:if="{{service}}" class="page detail-page {{themeClass}}">
   <img-placeholder class="detail-visual" src="{{service.image}}" img-class="detail-visual"></img-placeholder>
 
   <view class="detail-main card">

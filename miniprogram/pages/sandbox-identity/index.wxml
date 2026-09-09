@@ -1,4 +1,4 @@
-<view class="pg">
+<view class="pg {{themeClass}}">
   <view class="head">
     <view class="ht">切换演示身份(沙盒)</view>
     <view class="hd">当前:{{current || '未登录'}} · 点一行即切换为该演示档案(仅本店阵容)</view>

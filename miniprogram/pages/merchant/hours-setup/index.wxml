@@ -1,10 +1,10 @@
 <!-- 图 v1.1 屏①(老板)/屏②(员工)。员工分支零表单元素(A4)。表单=hours-form 组件(裁定2 收敛)。 -->
-<view class="wrap" wx:if="{{isOwner}}">
+<view class="wrap {{themeClass}}" wx:if="{{isOwner}}">
   <view class="title">{{txt.ownerTitle}}</view>
   <view class="hint">{{txt.ownerHint}}</view>
   <hours-form initial="{{null}}" txt="{{txt}}" saving="{{saving}}" bind:save="onSave" />
 </view>
-<view class="wrap wall" wx:else>
+<view class="wrap wall {{themeClass}}" wx:else>
   <view class="emoji">🕘</view>
   <view class="title">{{txt.staffTitle}}</view>
   <view class="hint">{{txt.staffHint}}</view>

@@ -1,4 +1,4 @@
-<view class="page card-pack-page">
+<view class="page card-pack-page {{themeClass}}">
   <view wx:if="{{loading}}" class="empty">加载中…</view>
   <view wx:elif="{{error}}" class="empty">{{error}}</view>
   <block wx:elif="{{pack}}">

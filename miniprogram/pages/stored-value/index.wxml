@@ -1,4 +1,4 @@
-<view class="pg">
+<view class="pg {{themeClass}}">
   <view class="hero">
     <view class="row"><text class="hl">储值余额</text><text class="lv" wx:if="{{level}}">{{level}}</text></view>
     <view class="hv">{{cur.p}}{{cur.s}}{{balance}}</view>

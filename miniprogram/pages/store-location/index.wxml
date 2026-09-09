@@ -1,10 +1,10 @@
 <!-- D17 失败态:与正文互斥,取不到真门店就如实说,不拿假门店占位 -->
-<view wx:if="{{loadFailed}}" class="page store-page d17fail">
+<view wx:if="{{loadFailed}}" class="page store-page d17fail {{themeClass}}">
   <view class="d17msg">加载失败，请检查网络后重试</view>
   <view class="d17btn" bindtap="load">重试</view>
 </view>
 
-<view wx:else class="page store-page">
+<view wx:else class="page store-page {{themeClass}}">
   <!-- 占位零回落:门店封面原来写死店主本店那张沙龙照,每家店都用它。没配就出占位 -->
   <img-placeholder class="store-hero" src="{{storeCover}}" img-class="store-hero" text="还没有门店照片"></img-placeholder>
 

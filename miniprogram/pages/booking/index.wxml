@@ -1,12 +1,12 @@
 <!-- D17 失败态:接口挂了如实说,不拿假数据糊住(书面标准代图)。
      ⚠️ 必须排在 wx:if="{{service}}" 这道闸门**外面** —— 2026-08-11 停服实测就是栽在这:
      service 本身取不到时闸门为假,失败态跟着一起不渲染,顾客看到的是一整片白屏。 -->
-<view wx:if="{{loadFailed}}" class="page booking-page d17fail">
+<view wx:if="{{loadFailed}}" class="page booking-page d17fail {{themeClass}}">
   <view class="d17msg">加载失败，请检查网络后重试</view>
   <view class="d17btn" bindtap="retryLoad">重试</view>
 </view>
 
-<view wx:elif="{{service}}" class="page booking-page">
+<view wx:elif="{{service}}" class="page booking-page {{themeClass}}">
   <view wx:if="{{stylePreset}}" class="style-preset card">
     <img-placeholder class="sp-img" src="{{stylePreset.image}}" img-class="sp-img"></img-placeholder>
     <view class="sp-info">

@@ -1,4 +1,4 @@
-<view class="mtab">
+<view class="mtab theme-root {{themeClass}}">
   <view class="tab {{active==='home'?'on':''}}" data-key="home" bindtap="go">
     <image class="ic" src="/assets/icons/tab-home.png" /><text class="tx">首页</text>
   </view>

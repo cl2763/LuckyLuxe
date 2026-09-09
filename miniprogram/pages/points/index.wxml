@@ -2,7 +2,7 @@
      主体=可兑换的奖品;顶部只留一行「我的可用积分 X」让顾客知道自己换不换得起;
      积分明细(每一笔怎么来的)降级到**次级入口**,点开才看,不占商城主视觉。
      只动表达层与信息层级:余额 / canRedeem / 兑换事务全部沿用既有唯一出口,一分账都不动。 -->
-<view class="pg">
+<view class="pg {{themeClass}}">
   <view class="bal">
     <view class="bal-l">我的可用积分 <text class="bal-v">{{balance}}</text></view>
     <view class="bal-r" bindtap="toggleHistory">{{historyOpen ? '收起明细' : '明细 ›'}}</view>

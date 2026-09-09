@@ -1,4 +1,4 @@
-<view class="page services-page">
+<view class="page services-page {{themeClass}}">
   <!-- v1.4:顶部段选已撤(店主判词①);左栏=平台大类,右=项目卡,与网页同构 -->
   <view class="service-layout">
     <scroll-view class="category-list" scroll-y enhanced show-scrollbar="{{false}}" wx:if="{{cats.length}}">

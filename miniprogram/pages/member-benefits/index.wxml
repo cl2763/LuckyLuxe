@@ -1,4 +1,4 @@
-<view class="page benefits-page">
+<view class="page benefits-page {{themeClass}}">
   <view class="benefit-hero">
     <swiper class="level-swiper" current="{{currentLevelIndex}}" bindchange="onLevelChange" previous-margin="28rpx" next-margin="28rpx">
       <block wx:for="{{levels}}" wx:key="key">

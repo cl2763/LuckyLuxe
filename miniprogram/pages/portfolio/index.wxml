@@ -1,4 +1,4 @@
-<view class="page portfolio-page">
+<view class="page portfolio-page {{themeClass}}">
   <!-- 方案B(2026-07-20 店主定稿):技师头像条 + 动态品类筛选 + 全店作品墙 -->
 
   <!-- 技师头像条:第一格=全店,其余按作品数排序 -->

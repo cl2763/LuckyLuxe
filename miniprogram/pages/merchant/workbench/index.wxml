@@ -1,4 +1,4 @@
-<view class="page">
+<view class="page {{themeClass}}">
   <view class="topbar">
     <view class="h1">客服工作台</view>
     <view class="stat">今日会话 {{stat.total}} · 待人工 {{stat.human}}</view>
