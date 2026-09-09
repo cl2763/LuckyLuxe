@@ -284,6 +284,42 @@ check('⑫ 网页首页里没有「下拉」这类小程序动作词',
   !/下拉/.test(home.replace(/<!--[\s\S]*?-->/g, '').replace(/\/\*[\s\S]*?\*\//g, '')))
 
 console.log(`\n[网页首页] 四态节点 · 币种红线 · 不轮询 · 旧块退役 · 三接口都调 · 全屏占位 · D154 十七块逐块`)
+/* ═══ 05x §四 · 网页端同一条:大数与小牌**同一个金额出口、同一个串** ═══
+   店主是在小程序截图上看出来的(大数 `…5,668.00` / 小牌 `5,668`),
+   网页这边现在是对的(两处都走 `moneyParts`,`decimals` 默认 0)——
+   但**没有判据守着**,谁给大数单独加一次 `toFixed(2)` 就又岔开了。
+   所以按《双端同病检查律》补上:两端各一条,守的是同一件事。 */
+{
+  const src = readFileSync(join(ROOT, 'apps/web/dashboard-home.js'), 'utf8')
+  /* 取函数体按**它真实的写法**取(`function 名字(...)`);头一版按 `const 名字 = (...) =>` 取,
+     取到空串,判据于是红在「取错了」上 —— 又一次「判据自己错了」。 */
+  const bodyOf = (name) => (src.match(new RegExp(`function ${name}\\([^)]*\\) \\{[\\s\\S]*?\\n  \\}`)) || [''])[0]
+  /* 🔴 判 `$` 的时候要**避开模板串的 `${}`** —— 头一版把 `${esc(p.symbol)}` 里那个
+     插值的 `$` 当成写死币符,判据自己误报。币符看的是「不跟着 `{` 的 $」与「¥」。 */
+  const noComment = (x) => String(x).replace(/\/\*[\s\S]*?\*\//g, '')
+  const CURRENCY_LITERAL = /¥|\$(?!\{)/
+  const big = bodyOf('bigMoney'); const tile = bodyOf('moneyOf')
+  check('05x§四a 网页大数字:只从注入的 moneyParts 出(不自己 toFixed、不自己拼币符)',
+    big.includes('st.deps.moneyParts') && !/toFixed/.test(big) && !CURRENCY_LITERAL.test(noComment(big)),
+    big.replace(/\s+/g, ' ').slice(0, 110))
+  check('05x§四b 网页小牌:只从注入的 money() 出,同样不自己 toFixed、不拼币符',
+    tile.includes('st.deps.money(') && !/toFixed/.test(tile) && !CURRENCY_LITERAL.test(noComment(tile)),
+    tile.replace(/\s+/g, ' ').slice(0, 110))
+  const adminSrc = readFileSync(join(ROOT, 'apps/web/admin.js'), 'utf8')
+  check('05x§四b2 两条路**汇到同一个出口**:money() 与 moneyParts() 都只是 MoneyFormat.parts 的皮',
+    /const money = \(cents[^)]*\) => \{ const p = moneyParts\(/.test(adminSrc)
+    && /const moneyParts = \(cents[^)]*\) => window\.MoneyFormat\.parts\(/.test(adminSrc))
+  /* 行为层:同一个 metric 喂进去,大数与小牌的**数字段**必须是同一个串 */
+  const parts = (cents, decimals = 0) => {
+    const text = Number(cents / 100).toFixed(Number(decimals) || 0)
+    const bits = text.split('.')
+    const grouped = bits[0].replace(/\B(?=(\d{3})+(?!\d))/g, ',')
+    return { prefix: 'CAD ', symbol: '$', amount: bits[1] ? `${grouped}.${bits[1]}` : grouped }
+  }
+  check('05x§四c 网页行为:566800 分 → 大数与小牌的数字段都是 5,668(不带 .00)',
+    parts(566800).amount === '5,668', parts(566800).amount)
+}
+
 if (fails.length) {
   console.error(`\n❌ test-dashboard-home ${fails.length}/${n} 项未过`)
   for (const f of fails) console.error(`  - ${f}`)

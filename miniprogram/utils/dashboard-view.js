@@ -118,7 +118,13 @@ function makePartsFor(currencyDisplay, code) {
   return (cents) => {
     const v = Number(cents || 0) / 100
     let txt = v.toFixed(currencyDisplay.trimZeroDecimals ? 0 : 2)
-    if (currencyDisplay.trimZeroDecimals) txt = txt.replace(/\.00$/, '')
+    /* 🔴 05x §四(店主开 08截图/01 看出来的):同一屏上大数字写 `…5,668.00`、正下方小牌写 `5,668`,
+       同一个数两种写法。裁:**大数与小牌共用同一出口,店主看的整数金额不带小数**
+       (`.00` 只在需要分位的结算单据里出现)。
+       所以这一处**不分币种**都把整分的 `.00` 去掉 —— 这是「仪表盘口径」,
+       与 `makeMoneyFor`(通用金额出口,单据要 `.00` 时走它)分工写在这儿。
+       真有分位的(如 `5,668.40`)照留,大数与小牌一起留。 */
+    txt = txt.replace(/\.00$/, '')
     const bits = txt.split('.')
     const grouped = bits[0].replace(/\B(?=(\d{3})+(?!\d))/g, ',')
     return {
@@ -163,9 +169,11 @@ function buildOwnerHome({ pulse, now, todo, period, nowHM, storeMoney, moneyFor,
       if (!m || m.locked) return m && m.locked ? '••••' : '—'
       if (m.value === undefined || m.value === null || !partsOf) return '—'
       const q = partsOf(m.value)
-      /* 五格里**连分位都不要**:「5,668.00」比「5,668」多两位,格子就是被这两位挤爆的。
-         图上 `.mini5 b` 写的就是「3,120」—— 整数。大数字那一处仍然带分位(它有的是地方)。 */
-      return q.amount
+      /* 图上 `.mini5 b` 写的是「3,120」—— **只有数字,没有币码**(币种由上面那个大数字交代)。
+         🔴 05x §四 改这一行:数字部分要**跟大数字一模一样** —— 原来这里把分位丢了,
+         于是大数 `5,668.00` / 小牌 `5,668` 同屏打架。现在整分的 `.00` 在出口就没了,
+         真有分位时两处一起显示。判据按「同一 metric 两处数字串必须相等」守。 */
+      return `${q.amount}${q.cents}`
     }
     return {
       key,
@@ -195,7 +203,11 @@ function buildOwnerHome({ pulse, now, todo, period, nowHM, storeMoney, moneyFor,
       if (head.locked) return { code: '', amount: '••••', cents: '' }
       return mk(head.value)
     })(),
-    /* 大数字也分钱与不是钱:新增持卡/到店人次是人数,不许套币符 */
+    /* 大数字也分钱与不是钱:新增持卡/到店人次是人数,不许套币符。
+       ⚠️ `headValue` 现在**页面不用了**(页面渲染的是上面那三段 `headParts`)——
+       它只剩「拿不到币种时出『—』」这一个用途与判据在用。
+       05x §四 之后**它与 headParts 口径可能不同**(它走通用金额出口,带 `.00`),
+       所以这里点名:**要显示就用 headParts,别捡 headValue 去渲染**,否则又是两种写法。 */
     headValue: MONEY_KEYS.includes(hk)
       ? (cur ? moneyText(head, fmt) : '—')
       : countText(head, hk === 'newCard' || hk === 'visits' ? ' 人' : ''),

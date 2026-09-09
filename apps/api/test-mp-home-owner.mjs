@@ -85,8 +85,33 @@ const now = { closed: false, total: 12, doing: 3, waiting: 2, done: 7, next: nul
 const todo = { items: [{ key: 'notePending', n: 3 }, { key: 'aiHandoff', n: 2 }, { key: 'quotePending', n: 0 }] }
 const built = view.buildOwnerHome({ pulse: mk(), now, todo, period: 'today', nowHM: '14:32', storeMoney: money })
 
+/* ═══ 05x §四(店主开 08截图/01 查出来的):**大数与小牌不许两种写法** ═══
+   截图上大数 `CAD $ 5,668.00`、正下方小牌 `5,668` —— 同一屏、同一个数、两种写法。
+   裁:两处共用同一出口,整数金额不带小数(`.00` 只在结算单据里出现)。
+   判据按**同一 metric 两处数字串必须相等**守;币码只在大数那一段(图 §一 `.mini5 b` 就是纯数字)。 */
+/* 只比**同时出现在两处**的那几个 metric:五小牌是 cash/cardUse/newCard/visits/bookings,
+   `revenue` 只当大数字用(小牌里没有它)—— 拿它去比会比出一个 undefined 来,
+   那种「绿在空气上/红在空气上」的判据这一夜已经踩过两回了。 */
+const moneyKeys = ['cash', 'cardUse']
+for (const k of moneyKeys) {
+  const b = view.buildOwnerHome({ pulse: mk(), now, todo, period: 'today', nowHM: '14:32', storeMoney: money, headKey: k })
+  const heroNum = `${b.headParts.amount}${b.headParts.cents}`
+  const tile = (b.smalls.find((s) => s.key === k) || {}).value
+  check(`③z 05x §四 · ${k}:大数字的数字串 ≡ 小牌那一格(两处都从 makePartsFor 出)`,
+    heroNum === tile, `大数「${heroNum}」 vs 小牌「${tile}」`)
+  check(`③z2 05x §四 · ${k}:整数金额不带 .00(店主看的是仪表盘,不是单据)`,
+    !/\.00$/.test(heroNum) && !/\.00$/.test(String(tile)), `大数「${heroNum}」 小牌「${tile}」`)
+}
+check('③z3 真有分位时两处一起显示(不是把分位一刀切掉 —— 那会把 5,668.40 说成 5,668)',
+  (() => {
+    const p = mk(); p.metrics = p.metrics.map((m) => (m.key === 'cash' ? { ...m, value: 566840 } : m))
+    const b = view.buildOwnerHome({ pulse: p, now, todo, period: 'today', nowHM: '1', storeMoney: money, headKey: 'cash' })
+    return `${b.headParts.amount}${b.headParts.cents}` === '5,668.40'
+      && (b.smalls.find((s) => s.key === 'cash') || {}).value === '5,668.40'
+  })())
+
 check('③ 大数按**下发的那份 currencyDisplay** 出(页面自己不拼币符)',
-  built.headValue === 'CAD $2,486.00', built.headValue)
+  built.headValue === 'CAD $2,486.00', built.headValue)   /* headValue 走的是通用金额出口(单据口径),页面不用它渲染 —— 见 dashboard-view.js 那处注释 */
 check('③b 五个小数**顺序就是图上的顺序**',
   built.smalls.map((s) => s.key).join(',') === 'cash,cardUse,newCard,visits,bookings',
   built.smalls.map((s) => s.key).join(','))
@@ -316,11 +341,16 @@ check('㉕f 换指标要重画(走势按指标算,不重画就是拿上一个指
 /* ══ 裁 #21 拍到真机之后才看见的一条:五格里的金额被省略号吃掉了数字 ══
    「现金业绩 CAD $5,760.00」整串塞不下 → 切成「CAD $…」,**数字本身没了**,比折行更糟。
    回图:`.mini5 b` 写的是「3,120」——只有数字,币种由上面那个大数字交代。按图改。 */
-check('㉖ 五格里的金额只报数(币种由大数字那一处交代 —— 图 line 71–72)',
-  /const partsOf = makePartsFor\(pulse && pulse\.currencyDisplay, cur\)/.test(readFileSync(join(ROOT, 'miniprogram/utils/dashboard-view.js'), 'utf8'))
-  /* 五格里连分位都不要(「5,668.00」比「5,668」多两位,格子就是被这两位挤爆的)——
-     所以这里认的是 `return q.amount`,不是带分位那一版 */
-  && /return q\.amount/.test(readFileSync(join(ROOT, 'miniprogram/utils/dashboard-view.js'), 'utf8')))
+/* ㉖ 改成**行为判据**(05x §四 之后):五格里的金额**只报数、不带币码**,
+   数字串与大数字**逐字相等**。原来这一条锚的是源码里 `return q.amount` 那一行 ——
+   口径一改它就红,而且它证明不了「屏幕上是什么」(判据律:能验渲染结果就别验中间产物)。 */
+check('㉖ 五格里的金额只报数、不带币码,且数字串与大数字逐字相等(图 line 71–72)',
+  (() => {
+    const b = view.buildOwnerHome({ pulse: mk(), now, todo, period: 'today', nowHM: '1', storeMoney: money, headKey: 'cash' })
+    const tile = String((b.smalls.find((s) => s.key === 'cash') || {}).value || '')
+    return tile.length > 0 && !/[A-Za-z$¥]/.test(tile)
+      && tile === `${b.headParts.amount}${b.headParts.cents}`
+  })())
 check('㉖b 仍然只走后端下发的 currencyDisplay(页面零拼串)',
   !/'CAD|\bUS \$/.test(readFileSync(join(ROOT, 'miniprogram/utils/dashboard-view.js'), 'utf8').replace(/\/\*[\s\S]*?\*\//g, '')))
 
@@ -365,10 +395,13 @@ const tokensWxss = readFileSync(join(ROOT, 'miniprogram/styles/tokens.wxss'), 'u
 const appWxss = readFileSync(join(ROOT, 'miniprogram/app.wxss'), 'utf8')
 const homeWxss = readFileSync(join(ROOT, 'miniprogram/pages/merchant/home/index.wxss'), 'utf8')
 const numfont = readFileSync(join(ROOT, 'miniprogram/utils/numfont.js'), 'utf8')
+/* 🔴 05x §二 之后这两条的形状变了(裁 #25 落地):基线那一段不再只挂 `page{`,
+   而是 `page,.theme-root{` —— 自定义组件(两条 tabbar)吃不到 `page` 选择器,
+   得靠 `.theme-root` 拿同一套值。判据跟着改成认这个形状,值一个字没动。 */
 check('⑮ 令牌单独成件,且 app.wxss 第一件就 @import 它(不引 = 所有 var(--x) 落空)',
-  /@import\s+"styles\/tokens\.wxss"/.test(appWxss) && tokensWxss.includes('page{--paper'))
-check('⑮b 深色那一段在(小程序只有「跟系统」这一种深色)',
-  /@media \(prefers-color-scheme: dark\)\{page\{/.test(tokensWxss))
+  /@import\s+"styles\/tokens\.wxss"/.test(appWxss) && /page,\.theme-root\{--paper/.test(tokensWxss))
+check('⑮b 深色那一段在,且同样带上 .theme-root(组件也要能跟系统深色)',
+  /@media \(prefers-color-scheme: dark\)\{page,\.theme-root\{/.test(tokensWxss))
 check('⑮c 🔴 首页大屏那一段不许再写死颜色 —— 一律走令牌',
   !/\.dh-[a-z-]*\{[^}]*#[0-9a-fA-F]{3,6}/.test(homeWxss),
   (homeWxss.match(/\.dh-[a-z-]*\{[^}]*#[0-9a-fA-F]{3,6}[^}]*\}/g) || []).slice(0, 2).join(' | '))
