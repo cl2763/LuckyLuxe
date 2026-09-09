@@ -1,26 +1,30 @@
 #!/usr/bin/env node
-/* 裁(店主 05y §三②)· tabbar 那一条**取像素**验,不再只靠「静态 + 人看图」
+/* 夜7 段3 · 整机图取像素 —— **先把「手机屏在图上哪一块」做对**,自证不过就拒绝取样
  *
- * 我上一批写的是「tabbar 的 computed 底色 automator 拿不到,像素给不到的明说」——
- * 店主的裁定:**结论下早了**。整机图是一张 PNG,直接取样 tabbar 那块区域的像素、
- * 跟 `tokens.wxss` 里那一档的值比就行(跟 D182 数金色像素、web-shot 的 PNG 魔数判官同一招)。
+ * ══ 上一轮为什么没做成 ══
+ * 我用「跟开发者工具底色不一样」去找手机屏,两次都咬到工具自己的面板
+ * (宽高比自证 0.02 / 2.85,真值约 2.17)—— 刀**拒绝取样**,那个处置是对的,但结论是「没验成」。
  *
- * ══ 怎么取的(说清楚,免得下次以为是魔法)══
- * Node 没有内置 PNG 解码,所以借**无头 Chrome**:把 PNG 当图片加载 → 画进 canvas → 读 ImageData。
- * 取样区域**不写死像素坐标**(截的是整个开发者工具窗口,布局一变坐标就废):
- *   ① 先在图里找**手机屏**:从右半边逐列统计「近黑像素」,连续成片的那一块就是模拟器;
- *   ② 在手机屏内取**底部那一条**(高度的 88%–95% 之间,避开底部那道 home 指示条);
- *   ③ 取该带的**众数颜色**,与令牌里当档的 `--card` / `--paper` 比(容差 ±6/通道)。
+ * ══ 这一版换成店主给的那条路:**做差** ══
+ * 同一页拍两张(浅档一张、深档一张)。**开发者工具的界面两张一模一样,只有手机屏里的内容会变** ——
+ * 所以两张相减,**变化的那块包围盒就是手机屏**。这是「已知锚」,不靠猜边界、也不靠令牌色(不循环)。
+ * 自证:包围盒的宽高比必须落在真值 **932/430 = 2.167** 的 ±5%(即 2.06–2.28)之内 —— 不落进去就拒绝取样。
+ * (真值不是我编的:`wx.getWindowInfo()` 现报 430×932 · pixelRatio 3。)
  *
- * 用法:node tools/mp-tabbar-pixel.mjs <整机图.png> [light|dark]
+ * 用法:node tools/mp-tabbar-pixel.mjs <浅档图.png> <深档图.png> [要判的档 light|dark]
  */
 import { spawn } from 'node:child_process'
 import { readFileSync, existsSync } from 'node:fs'
 import { resolve } from 'node:path'
 
-const IMG = process.argv[2]
-const MODE = (process.argv[3] || 'dark').toLowerCase()
-if (!IMG || !existsSync(IMG)) { console.error('用法: node tools/mp-tabbar-pixel.mjs <整机图.png> [light|dark]'); process.exit(2) }
+const IMG_L = process.argv[2]
+const IMG_D = process.argv[3]
+const MODE = (process.argv[4] || 'dark').toLowerCase()
+if (!IMG_L || !IMG_D || !existsSync(IMG_L) || !existsSync(IMG_D)) {
+  console.error('用法: node tools/mp-tabbar-pixel.mjs <浅档图.png> <深档图.png> [light|dark]')
+  process.exit(2)
+}
+const IMG = MODE === 'light' ? IMG_L : IMG_D
 
 /* 令牌值现读(判据不许自己抄一份色值) */
 const TOK = readFileSync(new URL('../miniprogram/styles/tokens.wxss', import.meta.url), 'utf8')
@@ -62,7 +66,9 @@ const ev = async (x) => {
 }
 await send('Runtime.enable')
 
-const b64 = readFileSync(resolve(IMG)).toString('base64')
+const b64L = readFileSync(resolve(IMG_L)).toString('base64')
+const b64D = readFileSync(resolve(IMG_D)).toString('base64')
+const b64 = MODE === 'light' ? b64L : b64D
 const probe = `(async () => {
   const img = new Image()
   await new Promise((res, rej) => { img.onload = res; img.onerror = rej; img.src = 'data:image/png;base64,${b64}' })
@@ -72,38 +78,51 @@ const probe = `(async () => {
   ctx.drawImage(img, 0, 0)
   const px = (x, y) => { const d = ctx.getImageData(x, y, 1, 1).data; return [d[0], d[1], d[2]] }
   const near = (a, b, t) => Math.abs(a[0] - b[0]) <= t && Math.abs(a[1] - b[1]) <= t && Math.abs(a[2] - b[2]) <= t
-  /* ① 找手机屏 —— **不拿令牌色去找**(那是循环论证:用答案找答案)。
-     用的是「跟开发者工具自己的底色不一样」:最右边那一列必然是工具的底色,
-     以它为参照,在右侧那一带里找出上下两条边界。 */
-  const chrome = px(img.width - 6, Math.floor(img.height * 0.5))
-  const xa = Math.floor(img.width * 0.70); const xb = Math.floor(img.width * 0.95)
-  const midX = Math.floor((xa + xb) / 2)
-  let top = -1; let bottom = -1
-  for (let y = Math.floor(img.height * 0.03); y < img.height * 0.95; y += 2) {
-    if (!near(px(midX, y), chrome, 8)) { top = y; break }
+  /* ① 定位 = **两张做差**:工具界面两张一样,只有手机屏里的内容变了 */
+  const img2 = new Image()
+  await new Promise((res, rej) => { img2.onload = res; img2.onerror = rej; img2.src = 'data:image/png;base64,OTHER_B64' })
+  const c2 = document.createElement('canvas'); c2.width = img2.width; c2.height = img2.height
+  const ctx2 = c2.getContext('2d'); ctx2.drawImage(img2, 0, 0)
+  const px2 = (x, y) => { const d = ctx2.getImageData(x, y, 1, 1).data; return [d[0], d[1], d[2]] }
+  if (img2.width !== img.width || img2.height !== img.height) {
+    return { ok: false, why: '两张图尺寸不一样(' + img.width + 'x' + img.height + ' vs ' + img2.width + 'x' + img2.height + '),没法做差' }
   }
-  /* 下沿要**从上往下**找:从手机屏顶开始走,遇到「连着 8 个采样点都回到工具底色」才算出了手机屏。
-     头一版从图的底部往上找第一个非工具底色,结果咬到的是工具**底部那一排控件**
-     (「iPhone 15 Pro ▾」那一行),于是手机屏被算到 y=1912、宽高比 2.85(真值约 2.2)。
-     ——「找错了块」是像素判据最容易犯的错,所以下面还有一条宽高比自证。 */
-  {
-    let run = 0
-    for (let y = top + 20; y < img.height - 2; y += 2) {
-      if (near(px(midX, y), chrome, 8)) { run += 1; if (run >= 8) { bottom = y - 16; break } } else run = 0
+  /* 🔴 头一版直接取「所有变化点的包围盒」—— 结果 x 从 720 拉到 2649:
+     开发者工具的**编辑器与控制台**两张之间也变了(日志多了几行),它们也算变化点。
+     改成**按列/按行的变化密度**取最长的一段连续高密度区:手机屏是整块变的,编辑器那边是零星变的。 */
+  const colHits = new Array(Math.ceil(img.width / 3)).fill(0)
+  const rowHits = new Array(Math.ceil(img.height / 3)).fill(0)
+  let diffN = 0
+  for (let y = 0; y < img.height; y += 3) {
+    for (let x = 0; x < img.width; x += 3) {
+      if (!near(px(x, y), px2(x, y), 12)) {
+        diffN += 1; colHits[Math.floor(x / 3)] += 1; rowHits[Math.floor(y / 3)] += 1
+      }
     }
-    if (bottom < 0) bottom = Math.floor(img.height * 0.95)
   }
-  if (top < 0 || bottom <= top) return { ok: false, why: '拿工具底色当参照也找不到手机屏的上下沿', chrome }
-  /* 左右沿:从中线往两边走,直到又变回工具底色 */
-  let left = midX; let right = midX
-  const rowY = Math.round(top + (bottom - top) * 0.5)
-  while (left > 2 && !near(px(left - 2, rowY), chrome, 8)) left -= 2
-  while (right < img.width - 3 && !near(px(right + 2, rowY), chrome, 8)) right += 2
-  const best = { from: left, to: right }
-  /* 形状自证:手机屏该是「高比宽多一倍上下」——比例离谱说明找错了块,当场说清楚 */
-  const ratio = (bottom - top) / Math.max(1, right - left)
-  if (ratio < 1.85 || ratio > 2.6) return { ok: false, why: 'ratio=' + ratio.toFixed(2) + ' 不像手机屏(iPhone 那种屏约 2.1–2.3),不敢往下取样',
-    phone: { from: left, to: right, top, bottom } }
+  if (diffN < 200) return { ok: false, why: '两张图几乎没差别(' + diffN + ' 个采样点不同)—— 是不是两张都拍成同一档了?' }
+  const longestRun = (arr, thresh) => {
+    let best = { from: -1, to: -1, len: 0 }; let cur = null
+    for (let i = 0; i < arr.length; i += 1) {
+      if (arr[i] >= thresh) { if (!cur) cur = { from: i, to: i }; else cur.to = i }
+      else if (cur) { const len = cur.to - cur.from; if (len > best.len) best = { ...cur, len }; cur = null }
+    }
+    if (cur) { const len = cur.to - cur.from; if (len > best.len) best = { ...cur, len } }
+    return best
+  }
+  const colT = Math.max(...colHits) * 0.30
+  const rowT = Math.max(...rowHits) * 0.30
+  const cRun = longestRun(colHits, colT)
+  const rRun = longestRun(rowHits, rowT)
+  if (cRun.len < 5 || rRun.len < 5) return { ok: false, why: '按密度也找不出整块变化区(列 ' + cRun.len + ' · 行 ' + rRun.len + ')' }
+  const best = { from: cRun.from * 3, to: cRun.to * 3 }
+  const top = rRun.from * 3; const bottom = rRun.to * 3
+  const ratioSeen = (bottom - top) / Math.max(1, best.to - best.from)
+  const TRUE_RATIO = 932 / 430
+  if (Math.abs(ratioSeen - TRUE_RATIO) / TRUE_RATIO > 0.05) {
+    return { ok: false, why: '做差得到的包围盒宽高比 ' + ratioSeen.toFixed(2) + ' 不在真值 ' + TRUE_RATIO.toFixed(2)
+      + ' 的 ±5% 内 —— 定位没过自证,拒绝取样', phone: { from: best.from, to: best.to, top, bottom }, diffN }
+  }
   /* ② 底部那一条(88%–95%),避开 home 指示条 */
   const h = bottom - top
   const y1 = Math.round(top + h * 0.86); const y2 = Math.round(top + h * 0.93)
@@ -122,7 +141,7 @@ const probe = `(async () => {
     ratio: Math.round(((bottom - top) / Math.max(1, best.to - best.from)) * 100) / 100,
     size: [img.width, img.height] }
 })()`
-const res = await ev(probe)
+const res = await ev(probe.replace('OTHER_B64', MODE === 'light' ? b64D : b64L))
 ws.close(); chrome.kill()
 
 let checks = 0
@@ -132,7 +151,8 @@ const check = (name, ok, detail = '') => {
   if (ok) console.log(`ok ${checks} - ${name}`)
   else { fails.push(name); console.log(`not ok ${checks} - ${name}${detail ? ` :: ${detail}` : ''}`) }
 }
-check('① 在整机图里定位到手机屏与底部那一条(以工具底色为参照,不拿令牌色找)', Boolean(res && res.ok), JSON.stringify(res))
+check('① 定位:两张做差找到手机屏,且宽高比过自证(真值 2.167 ±5%)', Boolean(res && res.ok),
+  JSON.stringify(res).slice(0, 240))
 if (res && res.ok) {
   const got = res.modal
   const near = (a, b) => Math.abs(a[0] - b[0]) <= 6 && Math.abs(a[1] - b[1]) <= 6 && Math.abs(a[2] - b[2]) <= 6
