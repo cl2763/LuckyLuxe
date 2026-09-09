@@ -272,22 +272,35 @@ if (TARGET === 'customer') {
   console.log(`   [顾客端] 标题「${title}」· ${views.length} 个 tab:${views.map((v) => v.key).join(' / ')}`)
   /* 🔴 前置自证(这一夜第三次栽在「没等到内容就开扫」上):首屏必须真有内容,
      少于 30 个自持文字的可见节点 = 页面还没渲染完,**拒绝往下扫**,不拿骨架冒充全站。 */
-  const firstCount = await ev(`Array.from(document.querySelectorAll('body *')).filter((el) => {
+  const COUNT_TEXT = `Array.from(document.querySelectorAll('body *')).filter((el) => {
     const cs = getComputedStyle(el); if (cs.display === 'none' || cs.visibility === 'hidden') return false
     const r = el.getBoundingClientRect(); if (r.width < 2 || r.height < 2) return false
     let t = ''; for (const n of el.childNodes) if (n.nodeType === 3) t += n.textContent
-    return t.trim().length > 0 }).length`)
+    return t.trim().length > 0 }).length`
+  const firstCount = await ev(COUNT_TEXT)
   if (Number(firstCount) < 30) {
     console.error(`🔴 顾客端首屏只有 ${firstCount} 个文字节点 —— 内容还没渲染完,这一跑不算数(不许拿骨架当全站)`)
     ws.close(); chrome.kill(); process.exit(2)
   }
   console.log(`   [前置] 首屏 ${firstCount} 个文字节点,够了`)
+  const HOME_MIN = 30
   for (const mode of ['light', 'dark']) {
     /* 顾客端跟系统走,所以直接模拟系统偏好(比在页面里塞属性诚实:线上就是这么来的) */
     await send('Emulation.setEmulatedMedia', { features: [{ name: 'prefers-color-scheme', value: mode }] })
+    /* 🔴 每一档**重新进页面**再扫:现测过一次「浅色档首页 38 个节点、深色档同一页只剩 17 个」——
+       那不是深色档掉了内容,是切来切去之后这一屏还没重渲染完。
+       判据只在**同一种加载状态**下比才算数,所以每档都从头来一遍,并且首页再自证一次。 */
+    await send('Page.navigate', { url: `${BASE}/?tenant=${process.env.CS_TENANT || 'lucky-luxe'}` })
+    await sleep(4200)
+    const homeCount = await ev(COUNT_TEXT)
+    if (Number(homeCount) < HOME_MIN) {
+      console.error(`🔴 ${mode} 档首页只有 ${homeCount} 个文字节点(要 ≥ ${HOME_MIN})—— 没渲染完,这一跑不算数`)
+      ws.close(); chrome.kill(); process.exit(2)
+    }
+    console.log(`   [前置] ${mode} 档首页 ${homeCount} 个文字节点,够了`)
     for (const v of views) {
       await ev(`(() => { const b = document.querySelector('[data-view="${v.key}"]'); if (b) b.click(); return 1 })()`)
-      await sleep(2200)
+      await sleep(2500)
       const res = await ev(SWEEP)
       scanned += res.scanned; grad += res.gradients || 0
       for (const b of res.bad) bad.push({ 页: `顾客端·${v.name || v.key}`, 标签: '(整页)', 档: mode, ...b })
@@ -356,6 +369,13 @@ const lines = ['# 深色/浅色 对比度红榜(逐页逐元素全扫)', '',
   `> **被测代码:\`${CODE_REV}\`** · **界面文件内容指纹 \`${STYLE_SHA}\`**(${STYLE_FILES.join(' + ')} 的 sha256 前 12 位)`,
   '> 门槛:正文 **4.5:1**;大字(≥24px,或 ≥18.66px 且 700 粗)放宽到 **3:1**(每条都标了它用的是哪一档)',
   '> 扫的是**每一个自己持有文字的可见节点**,背景取「实际绘制的那一层」(自己透明就往上找祖先)',
+  ...(TARGET === 'customer' ? [
+    '>',
+    '> 🔴 **这一轮扫到哪、没扫到哪(如实写)**:扫的是顾客端网页**未登录**状态下底部四个 tab 能到的页',
+    '>(首页 / 服务 / 购物车 / 我的),浅深两档各一遍、每档**重新进页面**再扫。',
+    '> **没扫到的**:要登录才进得去的那些(会员档案 / 我的订单 / 钱包 / 结算页),以及购物车**有货**时的样子 ——',
+    '> 它们需要一个登录态夹具,这一轮没造;**不是绿,是没扫**。下一轮按造景律先造夹具再扫。',
+  ] : []),
   '>',
   '> **两档**(理由见 `tools/contrast-sweep.mjs` 抬头):',
   '> · **甲档「看不见」** < 2:1(大字 < 1.6:1)—— 店主撞见的那种,**必须清零**;',
