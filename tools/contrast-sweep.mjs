@@ -50,6 +50,10 @@ const OUT = process.env.CS_OUT || ''
 const ONLY = (process.env.CS_PAGES || '').split(',').map((x) => x.trim()).filter(Boolean)
 /* 被测的那一版代码也要写进抬头 —— 否则「修前/修后」两份报告光看刀号还是分不出量的是哪一版 */
 const CODE_REV = (() => {
+  /* 🔴 「退回旧版重量一次」这种跑法(J-39 §二 的做法一)下,git 只会说「工作区脏了」,
+     说不出**量的是哪一版**。所以留一个显式标签:CS_CODE_REV=「apps/web @ 07d8067(退回重量)」。
+     不给就照旧从 git 取 —— 但**绝不许猜**,取到什么写什么。 */
+  if (process.env.CS_CODE_REV) return process.env.CS_CODE_REV
   try {
     const sha = execFileSync('git', ['log', '-1', '--format=%h', '--', 'apps/web'], { encoding: 'utf8' }).trim()
     const dirty = execFileSync('git', ['status', '--porcelain', '--', 'apps/web'], { encoding: 'utf8' }).trim()
