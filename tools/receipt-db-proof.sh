@@ -13,9 +13,13 @@
 #   🔴 裁 #23(店主 05w §四):`reminder_tasks` 准进,但**不许整表放行** ——
 #   它是「同一行状态往前推」,不是「只多几行」,所以另加一把形状刀 `tools/heartbeat-shape.mjs`:
 #   只有「只动 status/sent_at/updated_at、其余列一个字节不变」的行才放行,**并把放行的行逐条打印**。
-HEARTBEAT_TABLES="notify_scan_marks reminder_tasks"   # 理由见 apps/api/notify-scheduler.mjs(每天每店一行/到点发一条,4128 开着就长)
+#   🔴 裁 #26(店主 05x §三):`notification_logs` 也准进,但它是**只追加的日志**,
+#   与 `reminder_tasks` 的「状态翻面」不同族 —— 形状刀里按「只许追加」那一支验:
+#   开批那些行的哈希一条不少地还在,改一个字节或删一行都红。
+HEARTBEAT_TABLES="notify_scan_marks reminder_tasks notification_logs"   # 三张表的理由各写一句在 apps/api/notify-scheduler.mjs 抬头
+# 需要过形状刀的表(在上面白名单里、且要逐行验形状的)
+SHAPED_TABLES="reminder_tasks notification_logs notify_scan_marks"
 # 需要过形状刀的表(在上面白名单里、且是「改既有行」那一类)
-SHAPED_TABLES="reminder_tasks"
 set -euo pipefail
 SNAP="${1:?用法: bash tools/receipt-db-proof.sh <快照 json> [库绝对路径]}"
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"
