@@ -93,9 +93,13 @@ if (!AUTO || AUTO === 'skip') {
     /* 一处真相:主题只由 `utils/theme.js` 的 THEME_KEY 决定,判据也走同一个键 */
     await T(mp.evaluate((m) => { wx.setStorageSync('ll-theme', m) }, mode), 8000, `setTheme ${mode}`)
   }
+  /* J-37(店主 05w §五):量颜色之前先确认这个面**真占着地方** ——
+     一个宽高为 0 的节点照样有 computed 底色,拿它当「深色生效了」的证据是废判据。 */
   const bgOf = async (page, sel) => {
     const el = await T(page.$(sel), 8000, `$(${sel})`)
     if (!el) return ''
+    const size = await T(el.size(), 6000, `size(${sel})`).catch(() => null)
+    if (!size || !(size.width > 0 && size.height > 0)) return `(${sel} 宽高为 0,不算看得见)`
     return String(await T(el.style('background-color'), 6000, `style(${sel})`) || '')
   }
   const seen = {}

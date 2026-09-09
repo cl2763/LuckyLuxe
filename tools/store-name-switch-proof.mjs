@@ -63,6 +63,20 @@ async function loginAs(tenant) {
   await sleep(1200)
   return {
     顶栏: await ev(`(document.querySelector('[data-tenant-name]') || {}).textContent || null`),
+    /* 🔴 J-37(店主 05w §五 立):**「在不在」不等于「看得见」。**
+       `textContent` 对着一个被 `overflow` 剪掉、被别的层压住、或者宽高为 0 的节点**照样返回文字** ——
+       店名这种「必须让人一眼看见」的东西,判据要量它**落没落在可见区里**:
+       ①宽高都 > 0 ②包围盒在视口内 ③中心点上 `elementFromPoint` 命中的就是它自己(没被压住)。 */
+    可见: await ev(`(() => {
+      const el = document.querySelector('[data-tenant-name]'); if (!el) return { 有: false }
+      const r = el.getBoundingClientRect()
+      const cs = getComputedStyle(el)
+      const top = document.elementFromPoint(Math.round(r.left + r.width / 2), Math.round(r.top + r.height / 2))
+      return { 有: true, 宽: Math.round(r.width), 高: Math.round(r.height),
+        进视口: r.left >= 0 && r.top >= 0 && r.right <= innerWidth + 1 && r.bottom <= innerHeight + 1,
+        没被压住: Boolean(top) && (top === el || el.contains(top) || top.contains(el)),
+        显示: cs.display !== 'none' && cs.visibility !== 'hidden' && Number(cs.opacity) > 0.05 }
+    })()`),
     接口: await ev(`fetch('/admin/auth/me', { headers: { authorization: 'Bearer ' + ${JSON.stringify(TOKEN)} } }).then(r => r.json()).then(j => j.admin.storeName)`),
   }
 }
@@ -77,6 +91,10 @@ const check = (name, ok, detail = '') => {
 
 const a = await loginAs(A)
 check(`① 登 ${A}:顶栏那行 ≡ 该店 storeName`, Boolean(a.接口) && a.顶栏 === a.接口, JSON.stringify(a))
+/* J-37:上面那条只证明「字在 DOM 里」,下面这条才证明「人看得见」 */
+check(`①v J-37 店名**看得见**:宽高 > 0 · 包围盒在视口内 · 中心点没被别的层压住`,
+  Boolean(a.可见?.有) && a.可见.宽 > 0 && a.可见.高 > 0 && a.可见.进视口 && a.可见.没被压住 && a.可见.显示,
+  JSON.stringify(a.可见))
 /* ①b 退出那一下 —— 这才是「留着上一家的名字」真正会发生的地方。
    换店走的是整页重载,重载天然把内存清空,所以**只靠重载证明不了清理逻辑在**;
    点「退出」不重载页面,`setLocked(true)` 该把店名抹掉。抹不掉,这一条就红。 */
