@@ -6,7 +6,7 @@
 }
 
 .me-page button::after {
-  border: 0;
+  border:0;
 }
 
 .me-page button {
@@ -35,7 +35,7 @@
   padding: 0;
   min-width: 0;
   flex: none;
-  color: #8a7f78;
+  color:var(--ink);
   font-size: 24rpx;
   font-weight: 650;
   line-height: 1;
@@ -47,8 +47,8 @@
   width: 100%;
   padding: 30rpx 26rpx 28rpx;
   border-radius: 24rpx;
-  background: #2b2b2b;
-  color: #fff;
+  background:var(--hero);
+  color:var(--heroink);
   overflow: hidden;
   box-sizing: border-box;
 }
@@ -78,7 +78,7 @@
 .level,
 .level-pill {
   margin-top: 8rpx;
-  color: #ead8cc;
+  color:var(--brandd);
   font-size: 25rpx;
   font-weight: 650;
 }
@@ -90,17 +90,17 @@
   display: inline-flex;
   align-items: center;
   gap: 10rpx;
-  background: rgba(255, 255, 255, 0.1);
+  background:rgba(255, 255, 255, 0.1);
   line-height: 1;
 }
 
 .level-pill.pending {
-  background: rgba(234, 216, 204, 0.16);
-  color: #f3e5dc;
+  background:rgba(234, 216, 204, 0.16);
+  color:var(--heroink);
 }
 
 .level-more {
-  color: #c6a27e;
+  color:var(--brandd);
   font-size: 20rpx;
   font-weight: 850;
 }
@@ -110,7 +110,7 @@
   width: 106rpx;
   padding: 9rpx;
   border-radius: 16rpx;
-  background: rgba(255, 255, 255, 0.12);
+  background:rgba(255, 255, 255, 0.12);
   text-align: center;
   flex: none;
 }
@@ -128,18 +128,18 @@
   margin: 0 auto 8rpx;
   padding: 7rpx;
   border-radius: 10rpx;
-  background: #fff;
+  background:var(--card);
 }
 
 .code-grid view {
   border-radius: 3rpx;
-  background: #2b2b2b;
+  background:var(--hero);
 }
 
 .member-code text {
   display: block;
   overflow: hidden;
-  color: #ead8cc;
+  color:var(--brandd);
   font-size: 16rpx;
   font-weight: 800;
   text-overflow: ellipsis;
@@ -150,19 +150,19 @@
   margin-top: 28rpx;
   padding: 24rpx;
   border-radius: 18rpx;
-  background: rgba(255, 255, 255, 0.1);
+  background:rgba(255, 255, 255, 0.1);
   box-sizing: border-box;
 }
 
 .profile-pending-title {
-  color: #fff;
+  color:var(--heroink);
   font-size: 27rpx;
   font-weight: 850;
 }
 
 .profile-pending-desc {
   margin-top: 10rpx;
-  color: rgba(255, 255, 255, 0.7);
+  color:var(--heroink);
   font-size: 22rpx;
   font-weight: 620;
   line-height: 1.45;
@@ -177,8 +177,8 @@
   align-items: center;
   justify-content: center;
   border-radius: 999rpx;
-  background: #ead8cc;
-  color: #2b2b2b;
+  background:#ead8cc;
+  color:var(--ink);
   font-size: 24rpx;
   font-weight: 850;
   line-height: 1.1;
@@ -193,7 +193,7 @@
 .growth-head {
   display: flex;
   justify-content: space-between;
-  color: rgba(255, 255, 255, 0.86);
+  color:var(--heroink);
   font-size: 24rpx;
   font-weight: 650;
 }
@@ -203,7 +203,7 @@
   margin-top: 14rpx;
   overflow: hidden;
   border-radius: 999rpx;
-  background: rgba(255, 255, 255, 0.18);
+  background:rgba(255, 255, 255, 0.18);
 }
 
 .growth-fill {
@@ -214,7 +214,7 @@
 
 .growth-note {
   margin-top: 12rpx;
-  color: rgba(255, 255, 255, 0.62);
+  color:var(--heroink);
   font-size: 22rpx;
 }
 
@@ -232,7 +232,7 @@
 }
 
 .member-assets text:first-child {
-  color: #ead8cc;
+  color:var(--brandd);
   font-size: 30rpx;
   font-weight: 850;
   line-height: 1.2;
@@ -241,7 +241,7 @@
 /* 标签行:原来写的是 :last-child,积分格加了第三行提示后会选错(标签失样式、提示拿到标签样式)。
    条件渲染下每格的第 2 个 text 恒为标签,改用 nth-child(2) 才稳。 */
 .member-assets text:nth-child(2) {
-  color: rgba(255, 255, 255, 0.7);
+  color:var(--heroink);
   font-size: 23rpx;
   font-weight: 600;
 }
@@ -249,7 +249,7 @@
 /* 裁定①:积分格下的「可兑 N 件」小字(句后端唯一,没有就整行不出) */
 .member-assets .asset-hint {
   margin-top: 4rpx;
-  color: #d8b48a;
+  color:var(--brandd);
   font-size: 20rpx;
   font-weight: 700;
 }
@@ -259,7 +259,7 @@
   flex-wrap: wrap;
   gap: 14rpx;
   margin-top: 28rpx;
-  color: rgba(255, 255, 255, 0.72);
+  color:var(--heroink);
   font-size: 23rpx;
 }
 
@@ -267,7 +267,7 @@
   max-width: 100%;
   padding: 10rpx 16rpx;
   border-radius: 999rpx;
-  background: rgba(255, 255, 255, 0.1);
+  background:rgba(255, 255, 255, 0.1);
 }
 
 .guest-profile {
@@ -284,8 +284,8 @@
   align-items: center;
   justify-content: center;
   border-radius: 50%;
-  background: #ead8cc;
-  color: #2b2b2b;
+  background:#ead8cc;
+  color:var(--ink);
   font-size: 27rpx;
   font-weight: 900;
   letter-spacing: 0;
@@ -298,7 +298,7 @@
 
 .guest-desc {
   margin-top: 10rpx;
-  color: rgba(255, 255, 255, 0.68);
+  color:var(--heroink);
   font-size: 24rpx;
   font-weight: 620;
   line-height: 1.42;
@@ -313,8 +313,8 @@
   align-items: center;
   justify-content: center;
   border-radius: 999rpx;
-  background: #ead8cc;
-  color: #2b2b2b;
+  background:#ead8cc;
+  color:var(--ink);
   font-size: 26rpx;
   font-weight: 850;
   line-height: 1.1;
@@ -324,7 +324,7 @@
 
 .guest-footnote {
   margin-top: 16rpx;
-  color: rgba(255, 255, 255, 0.54);
+  color:var(--heroink);
   font-size: 21rpx;
   font-weight: 620;
   line-height: 1.35;
@@ -336,7 +336,7 @@
   padding: 26rpx;
   display: flex;
   align-items: center;
-  color: #8a7f78;
+  color:var(--ink);
   font-size: 24rpx;
   font-weight: 700;
   box-sizing: border-box;
@@ -354,14 +354,14 @@
 }
 
 .auth-title {
-  color: #342b28;
+  color:var(--ink);
   font-size: 27rpx;
   font-weight: 850;
 }
 
 .auth-desc {
   margin-top: 6rpx;
-  color: #8a7f78;
+  color:var(--ink);
   font-size: 22rpx;
   font-weight: 600;
   line-height: 1.35;
@@ -376,8 +376,8 @@
   align-items: center;
   justify-content: center;
   border-radius: 999rpx;
-  background: #2b2b2b;
-  color: #fff;
+  background:var(--hero);
+  color:var(--heroink);
   font-size: 23rpx;
   font-weight: 760;
   line-height: 1.1;
@@ -385,9 +385,9 @@
 }
 
 .auth-btn.ghost {
-  border: 1rpx solid #e6ddd5;
-  background: #fff;
-  color: #5e514b;
+  border:1rpx solid var(--line);
+  background:var(--card);
+  color:var(--ink);
 }
 
 .account-actions {
@@ -407,10 +407,10 @@
   display: flex;
   align-items: center;
   justify-content: center;
-  border: 1rpx solid #e6ddd5;
+  border:1rpx solid var(--line);
   border-radius: 999rpx;
-  background: #fff;
-  color: #5e514b;
+  background:var(--card);
+  color:var(--ink);
   font-size: 25rpx;
   font-weight: 800;
   line-height: 1.1;
@@ -418,14 +418,14 @@
 }
 
 .account-btn.primary {
-  border-color: #2b2b2b;
-  background: #2b2b2b;
-  color: #fff;
+  border-color:var(--hero2);
+  background:var(--hero);
+  color:var(--heroink);
 }
 
 .account-btn.danger {
   margin-top: 18rpx;
-  color: #8a684c;
+  color:var(--brandd);
 }
 
 .order-entry {
@@ -453,13 +453,13 @@
 }
 
 .order-entry text:first-child {
-  color: #c6a27e;
+  color:var(--brandd);
   font-size: 32rpx;
   font-weight: 850;
 }
 
 .order-entry text:last-child {
-  color: #5e514b;
+  color:var(--ink);
   font-size: 22rpx;
   font-weight: 650;
 }
@@ -516,7 +516,7 @@
   display: flex;
   justify-content: space-between;
   gap: 12rpx;
-  color: #342b28;
+  color:var(--ink);
   font-size: 27rpx;
   font-weight: 800;
   line-height: 1.25;
@@ -529,14 +529,14 @@
 }
 
 .recent-top text:last-child {
-  color: #c6a27e;
+  color:var(--brandd);
   flex: none;
   font-size: 23rpx;
 }
 
 .recent-meta,
 .recent-pay {
-  color: #8a7f78;
+  color:var(--ink);
   font-size: 22rpx;
   font-weight: 700;
 }
@@ -548,7 +548,7 @@
 }
 
 .recent-pay {
-  color: #7a6250;
+  color:var(--brandd);
 }
 
 .menu-grid {
@@ -577,8 +577,8 @@
   width: 72rpx;
   height: 72rpx;
   border-radius: 50%;
-  background: #f4ece3;
-  border: 1rpx solid #ecdfd0;
+  background:var(--tagmbg);
+  border:1rpx solid var(--line);
   display: flex;
   align-items: center;
   justify-content: center;
@@ -592,7 +592,7 @@
 }
 
 .menu-title {
-  color: #342b28;
+  color:var(--ink);
   font-size: 25rpx;
   font-weight: 700;
 }
@@ -606,7 +606,7 @@
   justify-content: center;
   padding: 0;
   box-sizing: border-box;
-  background: rgba(24, 22, 20, 0.48);
+  background:rgba(24, 22, 20, 0.48);
   pointer-events: auto;
 }
 
@@ -618,7 +618,7 @@
   flex-direction: column;
   overflow: hidden;
   border-radius: 36rpx 36rpx 0 0;
-  background: #fff;
+  background:var(--card);
   box-shadow: 0 28rpx 72rpx rgba(52, 43, 40, 0.22);
   box-sizing: border-box;
   pointer-events: auto;
@@ -642,7 +642,7 @@
 }
 
 .auth-panel-title {
-  color: #2b2b2b;
+  color:var(--ink);
   font-size: 32rpx;
   font-weight: 900;
   line-height: 1.2;
@@ -650,7 +650,7 @@
 
 .auth-panel-desc {
   margin-top: 8rpx;
-  color: #8a7f78;
+  color:var(--ink);
   font-size: 22rpx;
   font-weight: 620;
   line-height: 1.4;
@@ -671,8 +671,8 @@
   align-items: center;
   justify-content: center;
   border-radius: 50%;
-  background: #f3eee9;
-  color: #8a7f78;
+  background:var(--wall);
+  color:var(--ink);
   font-size: 32rpx;
   font-weight: 500;
   line-height: 58rpx;
@@ -682,7 +682,7 @@
 }
 
 .auth-close::after {
-  border: 0;
+  border:0;
 }
 
 .simple-login-body {
@@ -700,12 +700,12 @@
   height: 184rpx;
   display: block;
   border-radius: 50%;
-  background: #f3eee9;
+  background:var(--wall);
 }
 
 .simple-login-title {
   margin-top: 34rpx;
-  color: #2b2b2b;
+  color:var(--ink);
   font-size: 36rpx;
   font-weight: 900;
   line-height: 1.15;
@@ -714,7 +714,7 @@
 .simple-login-desc {
   max-width: 520rpx;
   margin-top: 16rpx;
-  color: #8a7f78;
+  color:var(--ink);
   font-size: 24rpx;
   font-weight: 650;
   line-height: 1.45;
@@ -728,7 +728,7 @@
 }
 
 .profile-edit-title {
-  color: #2b2b2b;
+  color:var(--ink);
   font-size: 36rpx;
   font-weight: 900;
   line-height: 1.15;
@@ -736,7 +736,7 @@
 
 .profile-edit-desc {
   margin-top: 12rpx;
-  color: #8a7f78;
+  color:var(--ink);
   font-size: 24rpx;
   font-weight: 650;
   line-height: 1.45;
@@ -749,9 +749,9 @@
   display: flex;
   align-items: center;
   gap: 20rpx;
-  border: 1rpx solid #eadfd6;
+  border:1rpx solid var(--line);
   border-radius: 22rpx;
-  background: #fffaf6;
+  background:var(--card);
   text-align: left;
   box-sizing: border-box;
 }
@@ -765,8 +765,8 @@
   align-items: center;
   justify-content: center;
   border-radius: 999rpx;
-  background: #2b2b2b;
-  color: #fff;
+  background:var(--hero);
+  color:var(--heroink);
   font-size: 25rpx;
   font-weight: 850;
   line-height: 1.1;
@@ -784,7 +784,7 @@
   flex: none;
   display: block;
   border-radius: 50%;
-  background: #f3eee9;
+  background:var(--wall);
 }
 
 .profile-avatar-copy {
@@ -795,13 +795,13 @@
 }
 
 .profile-avatar-copy text:first-child {
-  color: #2b2b2b;
+  color:var(--ink);
   font-size: 27rpx;
   font-weight: 850;
 }
 
 .profile-avatar-copy text:last-child {
-  color: #8a7f78;
+  color:var(--ink);
   font-size: 22rpx;
   font-weight: 620;
 }
@@ -811,7 +811,7 @@
 }
 
 .profile-label {
-  color: #342b28;
+  color:var(--ink);
   font-size: 24rpx;
   font-weight: 850;
 }
@@ -821,10 +821,10 @@
   height: 82rpx;
   margin-top: 10rpx;
   padding: 0 24rpx;
-  border: 1rpx solid #eadfd6;
+  border:1rpx solid var(--line);
   border-radius: 18rpx;
-  background: #fff;
-  color: #342b28;
+  background:var(--card);
+  color:var(--ink);
   font-size: 28rpx;
   font-weight: 720;
   box-sizing: border-box;
@@ -841,10 +841,10 @@
 .auth-step {
   margin-top: 18rpx;
   padding: 22rpx;
-  border: 1rpx solid #e6ddd5;
+  border:1rpx solid var(--line);
   border-radius: 20rpx;
   box-sizing: border-box;
-  background: #fffaf6;
+  background:var(--card);
 }
 
 .step-head {
@@ -860,8 +860,8 @@
   align-items: center;
   justify-content: center;
   border-radius: 50%;
-  background: #ead8cc;
-  color: #9a7858;
+  background:#ead8cc;
+  color:var(--brandd);
   font-size: 25rpx;
   font-weight: 900;
 }
@@ -871,7 +871,7 @@
 }
 
 .step-title {
-  color: #342b28;
+  color:var(--ink);
   font-size: 27rpx;
   font-weight: 850;
   line-height: 1.2;
@@ -879,7 +879,7 @@
 
 .step-desc {
   margin-top: 12rpx;
-  color: #8a7f78;
+  color:var(--ink);
   font-size: 22rpx;
   font-weight: 620;
   line-height: 1.35;
@@ -903,8 +903,8 @@
   justify-content: center;
   overflow: hidden;
   border-radius: 50%;
-  background: #ead8cc;
-  color: #2b2b2b;
+  background:#ead8cc;
+  color:var(--ink);
   font-size: 26rpx;
   font-weight: 900;
 }
@@ -916,7 +916,7 @@
 .avatar-status {
   min-width: 0;
   flex: 1;
-  color: #8a7f78;
+  color:var(--ink);
   font-size: 23rpx;
   font-weight: 720;
   line-height: 1.35;
@@ -928,10 +928,10 @@
   display: flex;
   align-items: center;
   justify-content: center;
-  border: 1rpx solid #d7c3b0;
+  border:1rpx solid #d7c3b0;
   border-radius: 999rpx;
-  background: #fff;
-  color: #7a6250;
+  background:var(--card);
+  color:var(--brandd);
   font-size: 24rpx;
   font-weight: 850;
   line-height: 1.1;
@@ -961,44 +961,44 @@
   height: 78rpx;
   margin-top: 8rpx;
   padding: 0 22rpx;
-  border: 1rpx solid #e6ddd5;
+  border:1rpx solid var(--line);
   border-radius: 18rpx;
-  background: #fff;
-  color: #342b28;
+  background:var(--card);
+  color:var(--ink);
   font-size: 26rpx;
   font-weight: 720;
   box-sizing: border-box;
 }
 
 .field-label {
-  color: #342b28;
+  color:var(--ink);
   font-size: 24rpx;
   font-weight: 850;
 }
 
 .phone-action {
   margin-top: 16rpx;
-  background: #2b2b2b;
-  border-color: #2b2b2b;
-  color: #fff;
+  background:var(--hero);
+  border-color:var(--hero2);
+  color:var(--heroink);
 }
 
 .phone-action.done {
-  border-color: #d8eadf;
-  background: #eaf5ef;
-  color: #47745e;
+  border-color:var(--line);
+  background:var(--wall);
+  color:var(--good);
 }
 
 .phone-message {
   margin-top: 12rpx;
-  color: #8a7f78;
+  color:var(--ink);
   font-size: 21rpx;
   font-weight: 620;
   line-height: 1.45;
 }
 
 .phone-message.success {
-  color: #47745e;
+  color:var(--good);
 }
 
 .manual-phone-box {
@@ -1014,8 +1014,8 @@
   align-items: center;
   justify-content: center;
   border-radius: 999rpx;
-  background: #2b2b2b;
-  color: #fff;
+  background:var(--hero);
+  color:var(--heroink);
   font-size: 22rpx;
   font-weight: 800;
   line-height: 1.1;
@@ -1028,8 +1028,8 @@
   align-items: center;
   justify-content: center;
   border-radius: 999rpx;
-  background: #c6a27e;
-  color: #fff;
+  background:#c6a27e;
+  color:var(--heroink);
   font-size: 23rpx;
   font-weight: 850;
   line-height: 1.1;
@@ -1037,20 +1037,20 @@
 }
 
 .verify-btn.done {
-  background: #eaf5ef;
-  color: #47745e;
+  background:var(--wall);
+  color:var(--good);
 }
 
 .auth-footer {
   flex: none;
   padding: 20rpx 30rpx calc(28rpx + env(safe-area-inset-bottom));
-  border-top: 1rpx solid #f0e8e1;
-  background: #fff;
+  border-top:1rpx solid var(--line);
+  background:var(--card);
   box-sizing: border-box;
 }
 
 .simple-login-footer {
-  border-top: 0;
+  border-top:0;
   padding: 24rpx 54rpx calc(34rpx + env(safe-area-inset-bottom));
 }
 
@@ -1063,10 +1063,10 @@
   align-items: center;
   justify-content: center;
   gap: 12rpx;
-  border: 0;
+  border:0;
   border-radius: 0;
-  background: transparent;
-  color: #8a7f78;
+  background:transparent;
+  color:var(--ink);
   font-size: 21rpx;
   line-height: 1.35;
   text-align: left;
@@ -1074,7 +1074,7 @@
 }
 
 .privacy-check::after {
-  border: 0;
+  border:0;
 }
 
 .privacy-box {
@@ -1084,9 +1084,9 @@
   display: flex;
   align-items: center;
   justify-content: center;
-  border: 2rpx solid #d9c8b8;
+  border:2rpx solid #d9c8b8;
   border-radius: 50%;
-  color: #fff;
+  color:var(--heroink);
   font-size: 20rpx;
   font-weight: 900;
   line-height: 1;
@@ -1094,8 +1094,8 @@
 }
 
 .privacy-box.checked {
-  border-color: #2b2b2b;
-  background: #2b2b2b;
+  border-color:var(--hero2);
+  background:var(--hero);
 }
 
 .privacy-copy {
@@ -1104,7 +1104,7 @@
   display: flex;
   flex-direction: column;
   gap: 2rpx;
-  color: #8a7f78;
+  color:var(--ink);
   line-height: 1.32;
   text-align: left;
 }
@@ -1114,13 +1114,13 @@
 }
 
 .privacy-main {
-  color: #6f625c;
+  color:var(--ink);
   font-size: 21rpx;
   font-weight: 720;
 }
 
 .privacy-sub {
-  color: #9a8f89;
+  color:var(--ink);
   font-size: 19rpx;
   font-weight: 600;
 }
@@ -1134,8 +1134,8 @@
   align-items: center;
   justify-content: center;
   border-radius: 999rpx;
-  background: #2b2b2b;
-  color: #fff;
+  background:var(--hero);
+  color:var(--heroink);
   font-size: 28rpx;
   font-weight: 850;
   line-height: 1.1;
@@ -1144,9 +1144,9 @@
 }
 
 .finish-button.disabled {
-  background: #d8d0c9;
-  color: #fff;
+  background:#d8d0c9;
+  color:var(--heroink);
 }
 
 /* 批③次段 A1-2:卡包入口角标(数字由后端 cardPack.badgeCount 给,0 不渲染) */
-.menu-dot{display:inline-block;min-width:32rpx;height:32rpx;line-height:32rpx;text-align:center;margin-left:10rpx;padding:0 8rpx;border-radius:16rpx;background:#8a5a2b;color:#fff;font-size:20rpx;font-weight:700}
+.menu-dot{display:inline-block;min-width:32rpx;height:32rpx;line-height:32rpx;text-align:center;margin-left:10rpx;padding:0 8rpx;border-radius:16rpx;background:var(--hero2);color:var(--heroink);font-size:20rpx;font-weight:700}

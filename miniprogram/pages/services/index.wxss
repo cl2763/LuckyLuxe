@@ -9,9 +9,9 @@
   gap: 8rpx;
   margin: 0 18rpx;
   padding: 8rpx;
-  border: 1rpx solid #eadfd7;
+  border:1rpx solid var(--line);
   border-radius: 12rpx;
-  background: #fff;
+  background:var(--card);
 }.type-tab {
   display: flex;
   align-items: center;
@@ -19,7 +19,7 @@
   min-width: 0;
   height: 76rpx;
   border-radius: 999rpx;
-  color: #8a7f78;
+  color:var(--ink);
   font-size: 30rpx;
   font-weight: 760;
   line-height: 1;
@@ -27,8 +27,8 @@
 }
 
 .type-tab.active {
-  background: #2b2b2b;
-  color: #fff;
+  background:var(--hero);
+  color:var(--heroink);
 }
 
 .service-layout {
@@ -47,7 +47,7 @@
   flex: none;
   height: 100%;
   border-radius: 0;
-  background: rgba(255, 255, 255, 0.5);
+  background:var(--card);
   box-sizing: border-box;
 }
 
@@ -61,10 +61,10 @@
   height: 94rpx;
   margin: 0;
   padding: 0;
-  border: 0;
+  border:0;
   border-radius: 0;
-  background: transparent;
-  color: #8a7f78;
+  background:transparent;
+  color:var(--ink);
   font-size: 26rpx;
   font-weight: 700;
   line-height: 1.15;
@@ -87,8 +87,8 @@
 }
 
 .category-item.active {
-  background: #fff;
-  color: #342b28;
+  background:var(--card);
+  color:var(--ink);
   font-weight: 780;
 }
 
@@ -125,8 +125,8 @@
   max-width: 100%;
   margin: 0;
   padding: 16rpx;
-  border-right: 0;
-  border-left: 0;
+  border-right:0;
+  border-left:0;
   border-radius: 0;
   text-align: left;
   line-height: 1.2;
@@ -145,7 +145,7 @@
 }
 
 .service-name {
-  color: #342b28;
+  color:var(--ink);
   font-size: 30rpx;
   font-weight: 800;
   line-height: 1.25;
@@ -155,7 +155,7 @@
   display: -webkit-box;
   margin-top: 10rpx;
   overflow: hidden;
-  color: #8a7f78;
+  color:var(--ink);
   font-size: 24rpx;
   font-weight: 600;
   line-height: 1.5;
@@ -169,19 +169,19 @@
   flex-wrap: wrap;
   gap: 12rpx 18rpx;
   margin-top: 16rpx;
-  color: #8a7f78;
+  color:var(--ink);
   font-size: 23rpx;
   font-weight: 700;
   line-height: 1.35;
 }
 
 .service-meta .price {
-  color: #c39b76;
+  color:var(--brandd);
 }
 
 .quote-hint {
   margin-top: 10rpx;
-  color: #a78260;
+  color:var(--brandd);
   font-size: 22rpx;
   font-weight: 800;
   line-height: 1.35;
@@ -189,8 +189,8 @@
 
 /* D17 失败态:复用 .empty 的位置与留白,只加一行文案 + 重试按钮 */
 .empty.failbox{display:flex;flex-direction:column;align-items:center;gap:20rpx}
-.empty .failmsg{color:#8c8279;font-size:26rpx}
-.empty .failbtn{border:1rpx solid #d8cec4;border-radius:999rpx;padding:12rpx 40rpx;font-size:26rpx;color:#9b7655}
+.empty .failmsg{color:var(--ink);font-size:26rpx}
+.empty .failbtn{border:1rpx solid var(--line);border-radius:999rpx;padding:12rpx 40rpx;font-size:26rpx;color:var(--brandd)}
 
 /* v1.4:二级分类并入卡片眉标(左栏只放大类) */
-.service-eyebrow{font-size:20rpx;color:#9b7655;margin-bottom:4rpx}
+.service-eyebrow{font-size:20rpx;color:var(--brandd);margin-bottom:4rpx}

@@ -1,22 +1,22 @@
 .card-pack-page{padding:24rpx 24rpx 60rpx}
 .sec{margin-bottom:28rpx}
-.sec-t{font-size:26rpx;color:#8a7f78;margin:8rpx 4rpx 12rpx}
-.cp-card{padding:24rpx;border-radius:18rpx;background:#fff;margin-bottom:16rpx}
+.sec-t{font-size:26rpx;color:var(--ink);margin:8rpx 4rpx 12rpx}
+.cp-card{padding:24rpx;border-radius:18rpx;background:var(--card);margin-bottom:16rpx}
 .cp-row{display:flex;justify-content:space-between;align-items:baseline}
-.cp-name{font-size:30rpx;font-weight:600;color:#2d2825}
-.cp-badge{font-size:26rpx;color:#8a5a2b;font-weight:600}
-.cp-face{font-size:32rpx;color:#8a5a2b;font-weight:700}
-.cp-sub{font-size:24rpx;color:#8a7f78;margin-top:8rpx}
-.cp-src{font-size:22rpx;color:#a9a09a;margin-top:6rpx}
-.cp-more{margin-top:14rpx;padding-top:14rpx;border-top:1rpx solid #f0e9e3;display:flex;flex-direction:column}
-.cp-more text{font-size:24rpx;color:#6b615b;line-height:1.6}
-.cp-note{color:#9a908a}
+.cp-name{font-size:30rpx;font-weight:600;color:var(--ink)}
+.cp-badge{font-size:26rpx;color:var(--brandd);font-weight:600}
+.cp-face{font-size:32rpx;color:var(--brandd);font-weight:700}
+.cp-sub{font-size:24rpx;color:var(--ink);margin-top:8rpx}
+.cp-src{font-size:22rpx;color:var(--sub);margin-top:6rpx}
+.cp-more{margin-top:14rpx;padding-top:14rpx;border-top:1rpx solid var(--line);display:flex;flex-direction:column}
+.cp-more text{font-size:24rpx;color:var(--ink);line-height:1.6}
+.cp-note{color:var(--ink)}
 .cp-acts{display:flex;gap:28rpx;margin-top:16rpx}
-.cp-link{font-size:26rpx;color:#8a5a2b}
-.empty,.empty-state{padding:80rpx 24rpx;text-align:center;color:#8a7f78}
-.empty-t{font-size:28rpx;margin-bottom:20rpx}.empty-btn {display:inline-block;padding:16rpx 36rpx;background:#2d2826;color:#fff;border-radius:999rpx;font-size:26rpx}
+.cp-link{font-size:26rpx;color:var(--brandd)}
+.empty,.empty-state{padding:80rpx 24rpx;text-align:center;color:var(--ink)}
+.empty-t{font-size:28rpx;margin-bottom:20rpx}.empty-btn {display:inline-block;padding:16rpx 36rpx;background:var(--hero);color:var(--heroink);border-radius:999rpx;font-size:26rpx}
 
 /* 分区标题行(次卡区右侧挂「去商城 ›」) */
 .sec-hd{display:flex;align-items:baseline;justify-content:space-between;margin:8rpx 4rpx 12rpx}
 .sec-hd .sec-t{margin:0}
-.sec-link{font-size:24rpx;color:#8a5a2b}
+.sec-link{font-size:24rpx;color:var(--brandd)}

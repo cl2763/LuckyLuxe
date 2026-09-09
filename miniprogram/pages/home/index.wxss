@@ -42,20 +42,20 @@
   width: 62rpx;
   height: 62rpx;
   border-radius: 50%;
-  background: #1f1f1f;
+  background:var(--hero);
   flex: none;
 }
 
 /* 临时 logo(浅底,无需深色底) */
 .brand-logo-img {
-  background: #fff;
-  border: 1rpx solid #eadfd7;
+  background:var(--card);
+  border:1rpx solid var(--line);
   padding: 6rpx;
   box-sizing: border-box;
 }
 
 .brand-name {
-  color: #241f1d;
+  color:var(--ink);
   font-size: 32rpx;
   font-weight: 850;
   line-height: 1.1;
@@ -63,7 +63,7 @@
 
 .brand-sub {
   margin-top: 5rpx;
-  color: #8a7f78;
+  color:var(--ink);
   font-size: 20rpx;
   font-weight: 600;
 }
@@ -72,7 +72,7 @@
 .shop-card {
   border-radius: 28rpx;
   overflow: hidden;
-  background: #fff;
+  background:var(--card);
   box-shadow: 0 10rpx 30rpx rgba(92, 70, 48, 0.08);
   margin-bottom: 24rpx;
 }
@@ -104,7 +104,7 @@
 .shop-card-name {
   font-size: 40rpx;
   font-weight: 850;
-  color: #241f1d;
+  color:var(--ink);
   letter-spacing: 1rpx;
   overflow: hidden;
   text-overflow: ellipsis;
@@ -119,14 +119,14 @@
   border-radius: 999rpx;
 }
 
-.shop-status.open { color: #1f7a4d; background: #e3eee8; }
-.shop-status.closed { color: #8a7f78; background: #f1ece7; }
+.shop-status.open { color:var(--good); background:var(--wall); }
+.shop-status.closed { color:var(--ink); background:var(--wall); }
 
 .shop-card-switch {
   margin-left: auto;
   flex: none;
   font-size: 22rpx;
-  color: #c8a47e;
+  color:var(--brandd);
   font-weight: 600;
 }
 
@@ -140,14 +140,14 @@
 .shop-row-icon {
   flex: none;
   width: 34rpx;
-  color: #c8a47e;
+  color:var(--brandd);
   font-size: 24rpx;
   text-align: center;
 }
 
 .shop-row-text {
   font-size: 26rpx;
-  color: #5c4630;
+  color:var(--ink);
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
@@ -157,7 +157,7 @@
   margin-left: auto;
   flex: none;
   font-size: 22rpx;
-  color: #c8a47e;
+  color:var(--brandd);
 }
 
 .language-switch {
@@ -165,9 +165,9 @@
   width: 164rpx;
   flex: none;
   padding: 6rpx;
-  border: 1rpx solid #eadfd7;
+  border:1rpx solid var(--line);
   border-radius: 999rpx;
-  background: #fff;
+  background:var(--card);
 }
 
 .lang-option {
@@ -177,15 +177,15 @@
   display: flex;
   align-items: center;
   justify-content: center;
-  color: #8a7f78;
+  color:var(--ink);
   font-size: 22rpx;
   font-weight: 760;
   line-height: 1;
 }
 
 .lang-option.active {
-  background: #2b2b2b;
-  color: #fff;
+  background:var(--hero);
+  color:var(--heroink);
 }
 
 .hero {
@@ -197,8 +197,8 @@
   min-height: 0;
   padding: 22rpx;
   border-radius: 22rpx;
-  background: #2b2b2b;
-  color: #fff;
+  background:var(--hero);
+  color:var(--heroink);
   overflow: hidden;
   box-sizing: border-box;
 }
@@ -214,17 +214,17 @@
   width: 78rpx;
   height: 78rpx;
   margin-bottom: 44rpx;
-  border: 1rpx solid rgba(255, 255, 255, 0.55);
+  border:1rpx solid var(--line);
   border-radius: 50%;
   display: flex;
   align-items: center;
   justify-content: center;
-  color: #ead8cc;
+  color:var(--brandd);
   font-weight: 700;
 }
 
 .eyebrow {
-  color: #ead8cc;
+  color:var(--brandd);
   font-size: 22rpx;
   font-weight: 760;
   text-transform: uppercase;
@@ -239,7 +239,7 @@
 
 .hero-text {
   margin-top: 14rpx;
-  color: rgba(255, 255, 255, 0.76);
+  color:var(--heroink);
   font-size: 25rpx;
   line-height: 1.45;
 }
@@ -265,7 +265,7 @@
   margin-top: 22rpx;
   border-radius: 18rpx;
   overflow: hidden;
-  background: #1f1f1f;
+  background:var(--hero);
 }
 
 .hero-visual {
@@ -306,8 +306,8 @@
   display: flex;
   align-items: center;
   justify-content: center;
-  background: #f3ebe4;
-  color: #c6a27e;
+  background:var(--wall);
+  color:var(--brandd);
   font-size: 26rpx;   /* D110:换成字符图标后略放大,与 .shop-row-icon 视觉一致 */
   font-weight: 400;
 }
@@ -347,20 +347,20 @@
 }
 
 .portfolio-copy text:first-child {
-  color: #342b28;
+  color:var(--ink);
   font-size: 30rpx;
   font-weight: 850;
 }
 
 .portfolio-copy text:last-child {
-  color: #8a7f78;
+  color:var(--ink);
   font-size: 23rpx;
   font-weight: 600;
   line-height: 1.35;
 }
 
 .portfolio-arrow {
-  color: #c6a27e;
+  color:var(--brandd);
   font-size: 50rpx;
   line-height: 1;
   text-align: right;
@@ -401,7 +401,7 @@
   display: grid;
   gap: 6rpx;
   margin-top: 10rpx;
-  color: #8a7f78;
+  color:var(--ink);
   font-size: 23rpx;
   line-height: 1.25;
 }
@@ -431,7 +431,7 @@
 
 .store-row {
   margin-top: 14rpx;
-  color: #5e514b;
+  color:var(--ink);
   font-size: 25rpx;
 }
 
@@ -445,8 +445,8 @@
   gap: 10rpx;
   margin: 14rpx 0 4rpx;
   padding: 14rpx 20rpx;
-  background: #fff;
-  border: 1rpx solid #e7ddd4;
+  background:var(--card);
+  border:1rpx solid var(--line);
   border-radius: 40rpx;
 }
 
@@ -454,14 +454,14 @@
   width: 12rpx;
   height: 12rpx;
   border-radius: 50%;
-  background: #47735f;
+  background:var(--hero2);
   flex: none;
 }
 
 .shop-name {
   flex: 1;
   font-size: 23rpx;
-  color: #2d2826;
+  color:var(--ink);
   font-weight: 600;
   overflow: hidden;
   text-overflow: ellipsis;
@@ -470,29 +470,29 @@
 
 .shop-switch {
   font-size: 22rpx;
-  color: #9b7655;
+  color:var(--brandd);
   flex: none;
 }
 
 /* D17 失败态:主体区居中一行文案 + 重试按钮(书面标准,不做局部假数据) */
 .d17fail{display:flex;flex-direction:column;align-items:center;justify-content:center;gap:20rpx;padding:140rpx 40rpx}
-.d17msg{color:#8c8279;font-size:27rpx}
-.d17btn{border:1rpx solid #d8cec4;border-radius:999rpx;padding:14rpx 48rpx;font-size:27rpx;color:#9b7655}
+.d17msg{color:var(--ink);font-size:27rpx}
+.d17btn{border:1rpx solid var(--line);border-radius:999rpx;padding:14rpx 48rpx;font-size:27rpx;color:var(--brandd)}
 
 /* 轮播文案(2026-08-28 六):商家在自管面板写的字要看得见,不能只活在无障碍属性里 */
 .shop-card-caption {
   position: absolute; left: 0; right: 0; bottom: 0;
-  padding: 40rpx 24rpx 20rpx; color: #fff; font-size: 26rpx;
+  padding: 40rpx 24rpx 20rpx; color:var(--heroink); font-size: 26rpx;
   background: linear-gradient(to top, rgba(0,0,0,.55), rgba(0,0,0,0));
 }
 
 /* 兜底空态:一个服务都没有时如实说一句(不给空入口卡)*/
 .fallback-empty {
   padding: 32rpx 0;
-  color: #8a8580;
+  color:var(--ink);
   font-size: 26rpx;
 }
 
 /* D108:值没有时那一行只说明、不可点 —— 视觉上也要弱下去 */
-.shop-card-row.muted { color: #a8a29c; }
-.shop-card-row.muted .shop-row-text { color: #a8a29c; }
+.shop-card-row.muted { color:var(--sub); }
+.shop-card-row.muted .shop-row-text { color:var(--sub); }
