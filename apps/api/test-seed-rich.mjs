@@ -130,6 +130,15 @@ for (const tid of TENANTS) {
   const gal = await req('/portfolio', tid)
   const works = (gal && (gal.works || gal.items)) || []
   check(`${tid} · 作品 ≥6`, works.length >= 6, String(works.length))
+  /* ══ 段 1 改名白名单(店主 05v 补二 §二 裁 · 补三 §一 给了还原表)══
+     标着「(演示)」的那些**不许改名** —— 它们本来就诚实地标着自己是演示数据,
+     改成像真人的名字是把这条信息抹掉,方向反了。段 1 那次一刀切误伤了八位,已按 4128 原名改回。 */
+  const demoNamed = roDb.prepare(`SELECT COUNT(*) AS n FROM users WHERE tenant_id = ?
+    AND (display_name LIKE '%（演示）' OR display_name LIKE '%(演示)')`).get(tid).n
+  if (tid === 'lucky-luxe') {
+    check(`${tid} · 标着「(演示)」的顾客还在(段 1 误改的八位已改回)`, demoNamed >= 8, `现有 ${demoNamed} 位`)
+  }
+
   /* ══ D184(店主 05v 补一 §三 + 补二 §三)· 「新增持卡 604」那个数 ══
      店主亲查:图上写 604,同一个库拿 `newCardCount()` 原样那段 SQL 查出来是 1。
      两道判据,死判据排前面(它不用比时点、不用查历史,一跑就咬得住):
@@ -166,6 +175,11 @@ for (const tid of TENANTS) {
      台面里是「闸测未来」「演示2-lucky-美睫储值户」。页面没错,是库里的垃圾被显示出来了。
      判据按**店主会看到的那几处**逐处扫:下一位卡 / 今日预约前三条 / 今日台面整份。
      🔴 认的是**痕迹形状**(测试/演示/闸测/mock/名字后面挂随机段),不是一份名单。 */
+  /* 🔴 口径切了一刀(店主 05v 补二 §二):**结尾那个「(演示)」标记不算脏** ——
+     它是诚实标注,店主看着不刺眼也不会误当真顾客;抹掉它反而是把信息弄没了。
+     脏的是「测试 / 闸测 / mock / 名字挂随机 id 段 / 演示2-」那一类。
+     做法:先把**结尾的**「(演示)」摘掉,再用脏名正则去咬 —— 摘完还脏的才算脏。 */
+  const stripDemoTag = (t) => String(t).replace(/[（(]演示[)）]/g, '')
   const DIRTY = /(测试|演示|闸测|mock|storeless|-mr[a-z0-9]{6,}|[\u4e00-\u9fa5A-Za-z]-m[a-z0-9]{7,})/
   /* 🔴 只扫**店主眼睛看得到的那几个字段**,不扫整份 JSON:
      现测第一版把整份响应扔进正则,咬中的是 `tech_mt4ma32n_qiqibc` / `lash-lash-mt4ma32u`
@@ -173,10 +187,10 @@ for (const tid of TENANTS) {
      不是对着「响应里的字节」(判据律:能验渲染结果就别验中间产物)。 */
   const board = await req(`/admin/schedule-day?date=${encodeURIComponent(await storeToday(tid))}`, tid)
   const seen = (o) => [o && o.customerName, o && o.serviceName, o && o.name, o && o.title].filter(Boolean)
-  const boardText = [...((board && board.bookings) || []).flatMap(seen),
-    ...((board && board.technicians) || []).flatMap(seen)].join(' | ')
-  const nowText = [now && now.next && now.next.customer, now && now.next && now.next.service,
-    now && now.next && now.next.tech].filter(Boolean).join(' | ')
+  const boardText = stripDemoTag([...((board && board.bookings) || []).flatMap(seen),
+    ...((board && board.technicians) || []).flatMap(seen)].join(' | '))
+  const nowText = stripDemoTag([now && now.next && now.next.customer, now && now.next && now.next.service,
+    now && now.next && now.next.tech].filter(Boolean).join(' | '))
   const dirtyIn = (txt) => (String(txt).match(new RegExp(DIRTY.source, 'g')) || []).slice(0, 3).join(' | ')
   check(`${tid} · 「下一位」与今日预约里 0 处夹具痕迹`, !DIRTY.test(nowText), dirtyIn(nowText))
   check(`${tid} · 今日台面整份 0 处夹具痕迹`, !DIRTY.test(boardText), dirtyIn(boardText))

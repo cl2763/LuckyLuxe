@@ -106,9 +106,16 @@ console.log(`   其中**今天之前**积压的:${qStale} 条(这次要置终态
    🔴 匹配的是**痕迹形状**,不是一份名单:`xxx-mrm0lewr` 这种「名字-随机段」是跑机产物的通用长相。 */
 /* 现测补两族(D171 那把刀量台面时露出来的):`LL-USERDEMO` 这种**全大写**的、
    `demo`/`test` 英文小写的。SQLite 的 LIKE 对 ASCII 不区分大小写,所以这两条就够。 */
-const FIXTURE_RE = "(display_name LIKE '%测试%' OR display_name LIKE '%演示%' OR display_name LIKE '%闸测%'"
+/* 🔴 白名单**先切一刀**(店主 05v 补二 §二 裁,补三 §一 给了还原表):
+   **显示名以「(演示)」结尾的那些不许改名。**
+   理由:它们本来就老老实实标着「(演示)」—— 店主看着不刺眼,也不会误当成真顾客;
+   改成像真人的名字,反而把「这是演示数据」这条信息**抹掉了**,方向正好反了。
+   要改的只有「名字里带随机 id 段」或「测试 / 闸测 / 演示2-」那一类。
+   案底:段 1 那次一刀切下去,把 `demo-cust-01..08` 八位一起改了 —— 本批已按 4128 的原名改回。 */
+const KEEP_NAME_RE = "display_name NOT LIKE '%（演示）' AND display_name NOT LIKE '%(演示)'"
+const FIXTURE_RE = "(" + KEEP_NAME_RE + " AND (display_name LIKE '%测试%' OR display_name LIKE '%演示%' OR display_name LIKE '%闸测%'"
   + " OR display_name LIKE '%mock%' OR display_name LIKE '%-mr%' OR display_name LIKE '%storeless%'"
-  + " OR display_name LIKE '%demo%' OR display_name LIKE '%test%')"
+  + " OR display_name LIKE '%demo%' OR display_name LIKE '%test%'))"
 const CLEAN_NAMES = ['周静', '李婉宁', '孙予安', '何一诺', '沈嘉言', '许若曦', '柳南舟', '范知雅', '苗昭', '傅望',
   '姜屿', '谭听白', '章思南', '洛小满', '祝云舒', '易安然', '毕雨桐', '庄栖', '宁远', '于清和']
 /* 🔴 **只改店主会看到的那三家店**。别的演示租户(`demo-*` / `jics-sandbox` / 彩排店)不碰:

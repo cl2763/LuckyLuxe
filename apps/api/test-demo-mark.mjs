@@ -53,6 +53,17 @@ check('③ 建单两个口(顾客侧 POST /bookings · 商家侧 /admin/bookings
 check('③b 结算单的标记**从它挂的那张预约继承** —— 调用方忘了带头也漏不掉',
   /UPDATE settlements SET demo_seed = \(SELECT demo_seed FROM bookings WHERE id = \?\)/.test(server), '')
 
+/* ══ 段 1 改名白名单(店主 05v 补二 §二 裁)══
+   标着「(演示)」的顾客**不许改名** —— 它们诚实标着自己是演示数据,改成像真人的名字
+   是把这条信息抹掉。段 1 那次一刀切误伤了八位(demo-cust-01..08),已按 4128 的原名改回。
+   这条判据守的是「白名单还在」;造病(把那条 KEEP 拿掉)→ 改名刀会把那八位重新列进待改名单。 */
+const cecSrc = readFileSync(join(ROOT, 'tools/close-eval-conversations.mjs'), 'utf8')
+check('⑥ 改名刀的白名单排除「(演示)」结尾(全半角括号都排)',
+  /KEEP_NAME_RE = "display_name NOT LIKE '%（演示）' AND display_name NOT LIKE '%\(演示\)'"/.test(cecSrc)
+  && /FIXTURE_RE = "\(" \+ KEEP_NAME_RE/.test(cecSrc))
+check('⑥b 脏名单里仍然认得出「演示2-」这类(白名单只放行结尾那个标记,不是放行所有带「演示」的)',
+  /display_name LIKE '%演示%'/.test(cecSrc))
+
 /* ④ 造景全族清单:走 HTTP 的必须带头;不写这两张表的逐个写理由 */
 const tracked = execFileSync('git', ['-c', 'core.quotepath=false', 'ls-files', '-z', 'tools', 'apps/api'], { cwd: ROOT, encoding: 'utf8' })
   .split('\0').filter((f) => /(seed-|demo-seed)/.test(f) && f.endsWith('.mjs') && !f.includes('/test-'))
