@@ -131,8 +131,8 @@ else say "回执引用的评测明细" "🔴"; echo "$GHOST" | sed 's/^/    /'; 
 #    ⚠️ 数的是**全部** `#RRGGBB`,包含 color 位与品类色 —— 那些不是都该改,
 #      所以这是**棘轮**不是硬零:降了就把数字调小,永远不许升。
 HARDCOLOR=$(grep -oE "#[0-9a-fA-F]{3,8}\b" apps/web/styles.css | wc -l | tr -d ' ')
-if [ "$HARDCOLOR" -le 382 ]; then say "styles.css 写死色棘轮" "✅ $HARDCOLOR ≤ 382(只许降)"
-else say "styles.css 写死色棘轮" "🔴 $HARDCOLOR > 382 —— 新增了写死色,深色态会在那一处漏出来"; FAIL=1; fi
+if [ "$HARDCOLOR" -le 40 ]; then say "styles.css 写死色棘轮" "✅ $HARDCOLOR ≤ 40(只许降)"
+else say "styles.css 写死色棘轮" "🔴 $HARDCOLOR > 40 —— 新增了写死色,深色态会在那一处漏出来"; FAIL=1; fi
 
 # ⑩ 🔴 内联脚本语法(05t 段 6 现场自伤,当场立的护栏):
 #    `platform.html` / `admin.html` 里的 `<script>` 整段是**没人检查语法**的 ——
@@ -189,8 +189,8 @@ else say "回归不依赖演示种子" "🔴 run-all-tests.sh 里有 $SEEDREF �
 #    `styles/fraunces-digits.wxss` 不算(字面色本来就该住在令牌文件里)。
 MPCOLOR=$(find miniprogram -name "*.wxss" ! -path "*/styles/tokens.wxss" ! -path "*/styles/fraunces-digits.wxss" -print0 \
   | xargs -0 grep -ohE "#[0-9a-fA-F]{3,8}\b|rgba?\([0-9 .,]+\)" | wc -l | tr -d ' ')
-if [ "$MPCOLOR" -le 2742 ]; then say "小程序 wxss 写死色棘轮" "✅ $MPCOLOR ≤ 2742(只许降)"
-else say "小程序 wxss 写死色棘轮" "🔴 $MPCOLOR > 2742 —— 新写死了颜色,那一处的深色态就会漏白"; FAIL=1; fi
+if [ "$MPCOLOR" -le 2731 ]; then say "小程序 wxss 写死色棘轮" "✅ $MPCOLOR ≤ 2731(只许降)"
+else say "小程序 wxss 写死色棘轮" "🔴 $MPCOLOR > 2731 —— 新写死了颜色,那一处的深色态就会漏白"; FAIL=1; fi
 
 # ⑩ #14(店主 05u 裁:「今天先加静态判据禁新写 + 交存量清单」)。
 #    `substr(appointment_start, 1, 10)` 取的是 **UTC 日期前缀**,不是门店当天 ——
@@ -202,6 +202,17 @@ UTCDAY=$(grep -rnE "substr\(appointment_start" --include="*.mjs" --include="*.js
   | grep -vE ":[0-9]+: *(/\*|\*|//)" | wc -l | tr -d ' ')
 if [ "$UTCDAY" -le 12 ]; then say "UTC 日期前缀判天棘轮(#14)" "✅ $UTCDAY ≤ 12(只许降;存量清单 handoff/UTC判天存量清单_2026-09-09.md)"
 else say "UTC 日期前缀判天棘轮(#14)" "🔴 $UTCDAY > 12 —— 又有人按 UTC 前缀判天了,门店时区那条口径会在那一处破"; FAIL=1; fi
+
+# ⑪ 05z §二:对比度全扫要**跟着样式走**。这把刀要开 Chrome + 活服务,进不了全量回归,
+#    所以预检这里做一件它做得到的事:**样式文件比红榜新 = 全扫没重跑** → 红。
+#    (J-38 同族:过期的证据和不咬人的判据是一回事。)
+RED_LIST="handoff/night-runs/对比度红榜_修后_2026-09-09.md"
+if [ -f "$RED_LIST" ]; then
+  RAN_AT=$(grep -m1 '^> \*\*跑于\*\*\|^> 跑于' "$RED_LIST" | grep -oE '[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9:.]+Z' | head -1)
+  NEWER=$(find apps/web/styles.css apps/web/admin.html apps/web/admin.js -newer "$RED_LIST" 2>/dev/null | tr '\n' ' ')
+  if [ -z "$NEWER" ]; then say "对比度全扫跟得上样式" "✅ 红榜(跑于 ${RAN_AT:-?})比样式文件新"
+  else say "对比度全扫过期了" "🔴 这些样式文件比红榜新:$NEWER —— 重跑 tools/contrast-sweep.mjs 再交"; FAIL=1; fi
+else say "对比度红榜在不在" "🔴 找不到 $RED_LIST"; FAIL=1; fi
 
 # ⑧ 判据住在跑不到的地方(店主 05w §二 同族一句)。
 #    D184 那两把刀写得很好、判据也对,可它们只落在 `test-seed-rich.mjs` 里 ——

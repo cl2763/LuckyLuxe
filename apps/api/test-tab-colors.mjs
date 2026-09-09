@@ -59,8 +59,12 @@ const isBlackOn = (rule) => new RegExp(`background:\\s*(${BLACK_MINI}|${BLACK_MI
     const at = css.indexOf(`${sel} {`) >= 0 ? css.indexOf(`${sel} {`) : css.indexOf(`${sel}{`)
     const rule = at >= 0 ? css.slice(at, css.indexOf('}', at)) : ''
     /* 小程序侧同病同治:黑在 background、白在 color(色序反了=红);--ink 与 --black 同为墨黑 */
+    /* 🔴 05z 之后白字写成了令牌 `var(--heroink)`(压在深面上的字色,浅深两档都是浅的)——
+       原来这条判据锚死 `color:#fff` 这个**字面量**,令牌化当场把它咬红。
+       判据不许锚在会变的字面量上:白字认「#fff 或 --heroink」两种写法,
+       它们是同一个语义(深面上的浅字),值也几乎相同(#fff / #f5efe3)。 */
     check(`六 网页「${sel}」选中=黑底白字`,
-      at >= 0 && /background:\s*var\(--(black|ink)\)/.test(rule) && /color:\s*#fff/.test(rule),
+      at >= 0 && /background:\s*var\(--(black|ink)\)/.test(rule) && /color:\s*(#fff|var\(--heroink\))/.test(rule),
       rule.slice(0, 110) || '选择器消失')
   }
 }

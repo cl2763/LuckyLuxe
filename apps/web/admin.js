@@ -1,6 +1,6 @@
 // 构建号:每次交付递增。侧栏可见,排查"改了没生效"时先对版本。
 // 兜底用(服务端会注入 window.LL_BUILD = 资源内容指纹,页面优先显示那个)
-const ADMIN_BUILD = '20260909a-d183'
+const ADMIN_BUILD = '20260909b-contrast'
 let pricingState = { module: 'storefront', tab: 'items', categories: [], items: [], rules: {}, editing: null, preview: null, storefrontPicker: false }
 console.log(`[admin] build ${ADMIN_BUILD}`)
 
@@ -1459,7 +1459,7 @@ function renderStoredValue() {
       <div class="finance-metric"><span>${owner.lang === 'zh' ? '耗卡率' : 'Consume rate'}</span><strong>${sv.consumeRate}%</strong></div>
     </div>
     <!-- S2批① 收编(拍板):「给会员充值」并入 会员与营销/客户档案;「耗卡」按钮取消(结算单签字自动扣,手动耗卡=账目风险口,后端 410) -->
-    <div class="service-admin-item" style="background:#FDFBF8">
+    <div class="service-admin-item" style="background:var(--card)">
       <div><span class="subtle">${owner.lang === 'zh' ? '充值入口已移至「会员与营销 → 充值套餐」;储值扣款只随结算单签字自动入账(无手动耗卡)。' : 'Recharge moved to Membership & Marketing.'}</span></div>
       <button class="ghost slim" data-admin-page="membership" type="button">${owner.lang === 'zh' ? '去会员与营销' : 'Open'}</button>
     </div>
@@ -1616,7 +1616,7 @@ function renderDailyClose() {
   const pend = v.pendingAllocation || []
   const anomalies = v.anomalies || {}
   body.innerHTML = `
-    ${confirmed ? `<div class="dc-warnbar" style="background:#e3eee8;border-color:#bcdccd;color:#2f7d5c">
+    ${confirmed ? `<div class="dc-warnbar" style="background:var(--goodbg);border-color:var(--line);color:var(--good)">
       ${zh ? `已确认日结 · ${String(v.confirmedAt || '').slice(0, 16).replace('T', ' ')} · ${escapeHtml(v.confirmedBy || '')}${v.reopenCount ? ` · 重开过 ${v.reopenCount} 次` : ''}` : 'Confirmed'}
       <button class="ghost slim" id="dcReopen" type="button" style="margin-left:10px">${zh ? '重开日结' : 'Reopen'}</button>
     </div>` : ''}
@@ -1643,7 +1643,7 @@ function renderDailyClose() {
           <span><b class="dc-tm">${escapeHtml(p.timeText || '')}</b>${escapeHtml(p.servedPersonName || p.customerName || '')} · ${p.technicians.length > 1 ? (zh ? '双技师' : 'Two techs') : (zh ? '单技师' : 'Single')}${p.crossDayNote ? `<em class="dc-xday">${escapeHtml(p.crossDayNote)}</em>` : ''}</span>
           <span>${money(p.perfBaseCents, 2)}${p.couponDiscountCents ? `<span class="subtle" style="margin-left:6px">${zh ? '业绩基数(不含券)' : 'perf base'}</span>` : ''} <span class="arr">${open ? (zh ? '收起 ∧' : 'Hide ∧') : (zh ? '点开分配 ∨' : 'Open ∨')}</span></span>
         </div>
-        ${p.rechargeUnassignedText ? `<div class="subtle" style="color:#8a3a33;padding:0 12px 6px">${escapeHtml(p.rechargeUnassignedText)}</div>` : ''}
+        ${p.rechargeUnassignedText ? `<div class="subtle" style="color:var(--bad);padding:0 12px 6px">${escapeHtml(p.rechargeUnassignedText)}</div>` : ''}
         <div class="body">
           ${p.technicians.map((t, i) => `
             <div class="dc-line">
@@ -1709,7 +1709,7 @@ function renderDailyClose() {
     </div>
 
     ${(v.unsignedList || []).length ? `
-    <div class="dc-warnbar" style="background:#fbf4f3;border-color:#ecd5d2">
+    <div class="dc-warnbar" style="background:var(--badbg);border-color:var(--line)">
       <strong>${zh ? `未签署 ${v.unsignedList.length} 单(不计入本日账,点开签署页可重推)` : `${v.unsignedList.length} unsigned`}</strong>
       ${v.unsignedList.map((u) => `<div style="margin-top:4px"><a href="/sign/${encodeURIComponent(u.code)}" target="_blank">${escapeHtml(`${u.timeText} ${u.customerName} · ${u.code}`)} ›</a></div>`).join('')}
     </div>` : ''}
@@ -2032,7 +2032,7 @@ function renderFinancePayroll() {
         </div>`
       }
       const reviewHtml = locked ? '' : `
-        <div style="margin:12px 0;padding:10px 12px;border:1px solid #eadfce;border-radius:10px">
+        <div style="margin:12px 0;padding:10px 12px;border:1px solid var(--line);border-radius:10px">
           <p class="subtle" style="margin:0 0 6px"><strong>${zh ? '② 业绩核查' : '② Performance review'}</strong>${reviewedAt ? ` · ✅ ${zh ? '已核查' : 'reviewed'} ${String(reviewedAt).slice(0, 16).replace('T', ' ')}` : ''}</p>
           ${Object.keys(pendByTech).length ? `
           <p class="subtle" style="margin:6px 0 0">${zh ? '近14天完成单还没写服务小记:' : 'Missing service notes (last 14 days):'}</p>
@@ -2046,7 +2046,7 @@ function renderFinancePayroll() {
             : `<button class="primary slim" data-sal-review type="button">✓ ${zh ? `完成 ${month} 业绩核查` : `Mark ${month} reviewed`}</button> <span class="subtle">${zh ? '核查完成后才能锁定工资表' : 'Required before locking'}</span>`}
         </div>`
       const closeHtml = `
-        <div style="margin:0 0 12px;padding:10px 12px;border:1px solid #eadfce;border-radius:10px">
+        <div style="margin:0 0 12px;padding:10px 12px;border:1px solid var(--line);border-radius:10px">
           <p class="subtle" style="margin:0 0 6px"><strong>${zh ? '日结业绩' : 'Daily closes'}</strong>${openDays.length ? ` <span class="dc-badge warn">${openDays.length}</span>` : ''} · ${zh ? '业绩=已确认日结累加' : 'perf = confirmed closes'}</p>
           ${(closeInfo.days || []).length ? (closeInfo.days || []).map((d) => `
           <div class="finance-rule-row">
@@ -2157,13 +2157,13 @@ function renderAttendanceBoard() {
       const stateColor = { working: '#3f6b52', overtime: '#b0483c', done: '#8a8578', rest: '#a89d8c', none: '#a89d8c' }
       const fmtMin = (m) => m >= 60 ? `${Math.floor(m / 60)}h${m % 60 ? `${m % 60}m` : ''}` : `${m}m`
       const rowHtml = (r) => `
-        <div class="finance-rule-row${r.state === 'none' || r.state === 'rest' ? ' disabled' : ''}"${r.state === 'overtime' ? ' style="background:#fdf0ee;border-radius:8px"' : ''}>
+        <div class="finance-rule-row${r.state === 'none' || r.state === 'rest' ? ' disabled' : ''}"${r.state === 'overtime' ? ' style="background:var(--badbg);border-radius:8px"' : ''}>
           <span>
             <strong>${escapeHtml(r.name)}</strong>${r.title ? ` <span class="subtle">${escapeHtml(r.title)}</span>` : ''}
             · <span style="font-weight:700;color:${stateColor[r.state] || '#8a8578'}">${stateText(r.state)}</span>
             ${r.clockIn ? ` · ${r.clockIn}${r.clockOut ? `–${r.clockOut}` : ''}` : ''}
             ${r.workedMin ? ` · ${zh ? '已工作' : 'worked'} ${fmtMin(r.workedMin)}` : ''}
-            ${r.overtimeMin > 0 ? ` · <strong style="color:#b0483c">${zh ? '加班' : 'OT'} ${fmtMin(r.overtimeMin)}</strong>` : ''}
+            ${r.overtimeMin > 0 ? ` · <strong style="color:var(--bad)">${zh ? '加班' : 'OT'} ${fmtMin(r.overtimeMin)}</strong>` : ''}
             ${r.adjusted ? ` · <span class="subtle">${zh ? '已修正' : 'adjusted'}</span>` : ''}
           </span>
           <button class="ghost slim" data-att-fix="${escapeHtml(r.technicianId)}" data-att-record="${escapeHtml(r.recordId || '')}" data-att-name="${escapeHtml(r.name)}" data-att-in="${escapeHtml(r.clockIn || '')}" data-att-out="${escapeHtml(r.clockOut || '')}" type="button">${r.recordId ? (zh ? '修正' : 'Fix') : (zh ? '补卡' : 'Add')}</button>
@@ -4309,7 +4309,7 @@ function renderCustomers() {
     <article class="customer-profile-card card">
       <div class="customer-avatar">${customerName(customer).slice(0, 1).toUpperCase()}</div>
       <div>
-        <h3>${escapeHtml(customerName(customer))} ${memberTierBadge(customer)}${(() => { const tr = rfmTierOf(customer); return tr ? ` <span style="font-size:11px;font-weight:800;color:#fff;background:${tr.color};border-radius:5px;padding:2px 8px;vertical-align:middle">${tr.label}</span>` : '' })()}</h3>
+        <h3>${escapeHtml(customerName(customer))} ${memberTierBadge(customer)}${(() => { const tr = rfmTierOf(customer); return tr ? ` <span style="font-size:11px;font-weight:800;color:var(--heroink);background:${tr.color};border-radius:5px;padding:2px 8px;vertical-align:middle">${tr.label}</span>` : '' })()}</h3>
         <p class="subtle">${escapeHtml(customer.memberCode || '')}${customer.birthday ? ` · 🎂 ${escapeHtml(customer.birthday)}` : ''}</p>
         <p class="customer-contact">${escapeHtml([customer.phone, customer.email].filter(Boolean).join(' · ') || '-')}</p>
         ${(customer.tags || []).length ? `<div class="customer-tags">${customer.tags.slice(0, 3).map((tag) => `<span class="customer-tag">${escapeHtml(tag)}</span>`).join('')}${customer.tags.length > 3 ? `<span class="customer-tag">+${customer.tags.length - 3}</span>` : ''}</div>` : ''}
@@ -4442,7 +4442,7 @@ function loadCustomerNotes(customerId) {
       const target = document.querySelector('#customerNotesBody')
       if (!target || owner.selectedCustomerId !== customerId) return // 用户已切走,丢弃
       const p = data.profile || {}
-      const tag = (text, danger) => `<span class="customer-tag"${danger ? ' style="background:#b0483c;color:#fff;font-weight:700"' : ''}>${escapeHtml(text)}</span>`
+      const tag = (text, danger) => `<span class="customer-tag"${danger ? ' style="background:var(--bad);color:var(--heroink);font-weight:700"' : ''}>${escapeHtml(text)}</span>`
       const groups = [
         [zh ? '⚠ 安全' : '⚠ Safety', p.safetyFlags || [], true],
         [zh ? '款式' : 'Styles', p.styles || [], false],
@@ -4458,7 +4458,7 @@ function loadCustomerNotes(customerId) {
       target.innerHTML = `
         ${groups.length
           ? `<div class="customer-tags" style="flex-wrap:wrap;gap:6px;margin-bottom:6px">${groups.map(([label, items, danger]) =>
-              `<span class="subtle" style="margin:0 2px 0 6px${danger ? ';color:#b0483c;font-weight:700' : ''}">${label}</span>${items.map((x) => tag(x, danger)).join('')}`).join('')}</div>`
+              `<span class="subtle" style="margin:0 2px 0 6px${danger ? ';color:var(--bad);font-weight:700' : ''}">${label}</span>${items.map((x) => tag(x, danger)).join('')}`).join('')}</div>`
           : `<p class="subtle">${zh ? '还没有画像标签。技师写服务小记(小程序或网页「我的客人」)后,画像会自动生成。' : 'No profile yet — technicians add service notes (mini app, or "My Customers" on web) when completing orders.'}</p>`}
         ${stats.length ? `<p class="subtle">${stats.join(' · ')}</p>` : ''}
         ${notes.length ? notes.map((n) => `
@@ -6550,7 +6550,7 @@ function renderMallSwitch() {
   if (!row) return
   const st = membershipData.mall || { enabled: false, locked: true }
   row.innerHTML = `
-    <div class="service-admin-item" style="background:#FDFBF8;margin-top:10px">
+    <div class="service-admin-item" style="background:var(--card);margin-top:10px">
       <div><strong>线上自助购买</strong>
         <div class="subtle">${st.locked ? '微信支付通道未接通,此开关锁定——商城仅展示+「到店购买」提示(批⑤接通后解锁)' : '通道已接通,可开放顾客线上自助购买'}</div>
       </div>
@@ -6565,7 +6565,7 @@ function renderTimecardSettings() {
   if (!row) return
   const st = membershipData.timecardSettings || { allowStoredPurchase: false }
   row.innerHTML = `
-    <div class="service-admin-item" style="background:#FDFBF8;margin-top:10px">
+    <div class="service-admin-item" style="background:var(--card);margin-top:10px">
       <div><strong>允许用储值余额购买次卡</strong>
         <div class="subtle">${st.allowStoredPurchase ? '开:现场购卡可用顾客储值余额抵扣(负债转卡债)' : '关(默认):购卡只收现金/其他,储值余额不抵购卡金额'}</div>
       </div>
@@ -6592,7 +6592,7 @@ function openFormModal({ title, hint, fields, saveText, onSave }) {
             ? `<label><span>${escapeHtml(f.label)}</span><select data-fm-field="${f.key}">${(f.options || []).map(([v, l]) => `<option value="${escapeHtml(String(v))}" ${String(v) === String(f.value ?? '') ? 'selected' : ''}>${escapeHtml(l)}</option>`).join('')}</select></label>`
             : `<label><span>${escapeHtml(f.label)}</span><input data-fm-field="${f.key}" type="${f.type === 'number' ? 'number' : 'text'}" ${f.type === 'number' ? 'step="0.01" min="0"' : ''} value="${escapeHtml(String(f.value ?? ''))}" placeholder="${escapeHtml(f.placeholder || '')}"></label>`}</span>`).join('')}
       </div>
-      ${fields.some((f) => f.hint) ? fields.filter((f) => f.hint).map((f) => `<p class="subtle" style="margin:6px 0 0${f.danger ? ';color:#b3423a;font-weight:700' : ''}">· ${escapeHtml(f.label)}:${escapeHtml(f.hint)}</p>`).join('') : ''}
+      ${fields.some((f) => f.hint) ? fields.filter((f) => f.hint).map((f) => `<p class="subtle" style="margin:6px 0 0${f.danger ? ';color:var(--bad);font-weight:700' : ''}">· ${escapeHtml(f.label)}:${escapeHtml(f.hint)}</p>`).join('') : ''}
       <div class="action-row" style="margin-top:14px">
         <button class="primary slim" data-fm-save type="button">${escapeHtml(saveText || '保存')}</button>
         <button class="ghost slim" data-fm-cancel type="button">取消</button>
@@ -7245,7 +7245,7 @@ function renderPricingTimecards() {
   const cards = pricingState.items.filter((i) => i.isTimecard)
   box.innerHTML = `
     <h3 class="pricing-group-title">${pzh() ? '次卡' : 'Punch cards'} <span class="tier-chip on" style="font-size:11px">${pzh() ? '已迁出' : 'migrated'}</span></h3>
-    <div class="service-admin-item" style="background:#FDFBF8">
+    <div class="service-admin-item" style="background:var(--card)">
       <div>
         <span class="subtle">${pzh() ? '按次核销的次卡不属于服务目录，由「会员与营销」页管理 →' : 'Punch cards (pay-per-visit) live under Membership & Marketing →'}</span>
         ${cards.length ? `<div class="subtle" style="margin-top:4px">${cards.map((c) => escapeHtml(c.nameZh)).join(' · ')}（${pzh() ? '暂存待 S2，本页不可编辑；老结算单显示不受影响' : 'read-only until S2'}）</div>` : `<div class="subtle" style="margin-top:4px">${pzh() ? '本店服务目录中当前没有次卡条目。' : 'No punch-card entries in this catalog.'}</div>`}
