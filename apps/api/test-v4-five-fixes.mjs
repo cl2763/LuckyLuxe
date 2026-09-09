@@ -241,6 +241,26 @@ check('D173 下⑥ 替代日从状态里取,**不许现编**(取不到就照旧�
 check('D173 附 出口把连着说两遍的同一句去掉(重放时看见「要我先帮您留着吗?」说了两遍)',
   dedupeTail('定金 ¥50。要我先帮您留着吗? 要我先帮您留着吗?').split('要我先帮您留着吗').length === 2)
 
+/* ═══ D187(v6 重放通三时自己看见的:一条回复里同一句问了两遍)═══
+   两层病,缺一层就不红:①去重那一刀放在「采集模板早退」后面,而重复恰恰出自采集模板;
+   ②去重不报 `why`,壳里 `if (h.why)` 把改好的文本原样扔了。 */
+const DUP = '9月10日(周四) 15:00 有位子。定金 ¥50(到店付);提前 24 小时可全退。要我先帮您留着吗? 要我先帮您留着吗?'
+check('D187 ① 采集模板的回复里同一句连着两遍 → 去掉后一遍(这条路以前整段早退,刀落不到)',
+  (() => { const r = hygiene({ text: DUP, customerText: '下午三点', status: 'ai', source: 'collect_template', todayISO: '2026-09-09' })
+    return (r.text.match(/要我先帮您留着吗/g) || []).length === 1 })())
+check('D187 ② 去重必须报进 why(不报 = 壳里那句 `if (h.why)` 会把它扔掉)',
+  /dup-sentence-cut/.test(hygiene({ text: DUP, customerText: '下午三点', status: 'ai', source: 'collect_template', todayISO: '2026-09-09' }).why))
+check('D187 ③ 壳按「文本变没变」落地,不按「它有没有报告自己变了」',
+  (() => { const r = applyRepeatGuard({ db: null, iso: () => '', getWecomConversation: () => null,
+      hygiene: ({ text }) => ({ text: String(text).replace('两遍', '一遍'), why: '' }), todayISO: () => '2026-09-09' },
+    { inbound: { content: 'x', lang: 'zh' }, result: { reply: { data: { answerZh: '同一句问了两遍' } } },
+      pre: { run: false, lastText: '' }, conversationId: 'c', tenantId: 't' })
+    return (r?.reply?.data?.answerZh || '') === '同一句问了一遍' })())
+check('D187 ④ 去重是减法,不许顺手改排版(句号后面不许自己长出空格)',
+  !/。\s/.test(dedupeTail('有位子。定金 ¥50。')) && dedupeTail('有位子。定金 ¥50。') === '有位子。定金 ¥50。')
+check('D187 ⑤ 不误伤「两句相似但不同」的问句',
+  dedupeTail('要我帮您留着吗?要我帮您约周六吗?') === '要我帮您留着吗?要我帮您约周六吗?')
+
 /* ═══ D174 / D176(店主 05u §三 亲读 v5 读出来的另两条)═══ */
 check('D174 ① 顾客告别、机器一句话都没有时,出口补一句告别 —— **静默一律算红**',
   (() => {

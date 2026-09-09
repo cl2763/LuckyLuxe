@@ -203,7 +203,10 @@ export function applyRepeatGuard({ db, iso, getWecomConversation, hygiene, today
     /* D173:日期这两条要按**门店时区的今天**算,基准日由外面注入(这里不推日期) */
     const h = hygiene({ text: replyText, customerText: inbound.content || '', status, lang: inbound.lang || 'zh',
       source: result?.reply?.source || '', todayISO: (todayISO && todayISO()) || '' })
-    if (h.why) {
+    /* 🔴 判据同族:**看「文本变没变」,不看「它有没有报告自己变了」** ——
+       原先只认 `h.why`,去重那一刀不报 why 时改好的文本被原样丢掉(现测于通三)。
+       两个条件都留:文本变了要落,报了 why 也要落(有的 why 是纯记录)。 */
+    if (h.why || h.text !== replyText) {
       const row0 = recentAssistant(db, conversationId, tenantId, 1)[0]
       rewriteAssistantRow(db, { id: row0?.id, expect: replyText, content: h.text, why: h.why, iso })
       const cleaned = { ...(result.reply || {}), data: { ...(result.reply?.data || {}), answerZh: h.text } }

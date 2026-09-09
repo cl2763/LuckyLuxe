@@ -94,8 +94,13 @@ for (const tid of [...new Set(TALKS.map((t) => t.tid))]) fixtures.push(`> - ${aw
 const lines = [`# ⑤ 像人${TALKS.length}通 —— 整段对话原文(店主打分用)`, '',
   `> **跑于**:${ranOn} · 每通都是**全新会话**(J-31:会话 id 带这一跑的随机段 \`${RUN}\`,不接上一跑的对话)`,
   `> **跑在**:\`${BASE}\`(活服务,合并窗按 \`/health\` 现值)`, '',
-  '> 🔴 **本次缺件如实写在这里**:**D166(问时长该取会话里已点名的项目)未修** ——',
-  '> 通六轮 4「做一次大概要多久」会答**全店范围时长**,不是它上一句刚点名的那个项目。读到全店范围以此为准,不必当新病记。', '',
+  '> 🔴 **本次缺件如实写在这里**:**D166(问时长该取会话里已点名的项目)仍未修** ——',
+  '> 通六轮 4「做一次大概要多久」会答**全店范围时长**,不是它上一句刚点名的那个项目。读到全店范围以此为准,不必当新病记。',
+  '> 通一轮 4「大概要多久」同理:那句时长是**全店区间**,不是某个项目的 `base_duration_min`(店主 05u 问的就是这一句)。', '',
+  '> ✅ **v6 这一跑新修的三条,请重点读**:',
+  '> · **D173 星期几** —— 凡出现「X月X日(周几)」,周几由门店时区当天现推,不许照抄模型(通三/通四会出现)。',
+  '> · **D174 告别** —— 顾客说「谢谢」时**必须有一句回应**,静默算红(通五末轮)。',
+  '> · **D176 最便宜** —— 上文在聊哪个品类,「最便宜的是哪种」就只在那个品类里挑(通二轮 3)。', '',
   '> **夹具店当天状态**(「明天能不能约」这类答案跟它直接相关):', ...fixtures, '',
   '> 机器不判「像不像人」—— 这一页是**原文**,请您读完在每通末尾打分。',
   '> 顺带列了三条能机械看的(不发 7 项表 / 单条 ≤120 字 / 同一句不重复),',
@@ -136,22 +141,26 @@ for (const talk of TALKS) {
   const formy = said.filter((x) => FORM.filter((re) => re.test(x)).length >= 3)
   const longs = said.filter((x) => x.length > 120)
   const dup = said.length !== new Set(said.map((x) => x.trim())).size
+  const silent = said.filter((x) => !String(x || '').trim())
   const note = [
     formy.length ? `⚠️ 有 ${formy.length} 句像 7 项表` : '✅ 没发 7 项表',
     longs.length ? `⚠️ 有 ${longs.length} 句超过 120 字` : '✅ 每句都 ≤120 字',
     dup ? '⚠️ 同一通里出现了重复句' : '✅ 没有重复句',
+    /* 第四看(v6 · D174):**告别轮不许静默** —— 沉默看着像机器坏了,比说错还坏 */
+    silent.length ? `🔴 有 ${silent.length} 轮**一个字都没回**` : '✅ 每一轮都有回应',
   ]
-  flags.push({ talk: talk.name, formy: formy.length, longs: longs.length, dup })
+  flags.push({ talk: talk.name, formy: formy.length, longs: longs.length, dup, silent: silent.length })
   lines.push(`机械三看:${note.join(' · ')}`, '', '**店主打分(1–5)**:⬜　　**一句话评语**:', '', '---', '')
 }
 
 lines.push('## 机械三看汇总(不代表像人)', '')
-lines.push('| 通 | 7 项表 | 超 120 字 | 重复句 |', '|---|---|---|---|')
+lines.push('| 通 | 7 项表 | 超 120 字 | 重复句 | 静默轮(D174) |', '|---|---|---|---|---|')
 for (const f of flags) {
-  lines.push(`| ${f.talk} | ${f.formy ? `⚠️ ${f.formy}` : '✅ 0'} | ${f.longs ? `⚠️ ${f.longs}` : '✅ 0'} | ${f.dup ? '⚠️ 有' : '✅ 无'} |`)
+  lines.push(`| ${f.talk} | ${f.formy ? `⚠️ ${f.formy}` : '✅ 0'} | ${f.longs ? `⚠️ ${f.longs}` : '✅ 0'} | ${f.dup ? '⚠️ 有' : '✅ 无'} | ${f.silent ? `🔴 ${f.silent}` : '✅ 0'} |`)
 }
 writeFileSync(OUT, lines.join('\n'), 'utf8')
 console.log(JSON.stringify({ 五通: TALKS.length, 出口: OUT,
   有7项表的通数: flags.filter((f) => f.formy).length,
   有超长句的通数: flags.filter((f) => f.longs).length,
-  有重复句的通数: flags.filter((f) => f.dup).length }, null, 0))
+  有重复句的通数: flags.filter((f) => f.dup).length,
+  有静默轮的通数: flags.filter((f) => f.silent).length }, null, 0))

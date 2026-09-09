@@ -67,14 +67,17 @@ export function stripIntakeTail(text = '') {
 export function dedupeTail(text = '') {
   const t = String(text || '')
   if (!t) return t
-  const parts = t.split(/(?<=[。!!??~~])\s*/).filter((x) => x !== '')
+  /* 切句时**把原来的空白一起带上**,重拼时原样放回 ——
+     早一版用 `join(' ')` 把句号后面统统补了个空格,中文读起来是「有位子。 定金…」。
+     去重是减法,不许顺手改排版(同族:出口卫生只做减法)。 */
+  const parts = String(t).match(/[^。!!??~~]*[。!!??~~]*\s*/g)?.filter((x) => x !== '') || [t]
   const out = []
   for (const p of parts) {
     const last = out[out.length - 1]
-    if (last && last.trim() === p.trim()) continue
+    if (last && last.trim() && last.trim() === p.trim()) continue
     out.push(p)
   }
-  return out.join(' ').replace(/\s+/g, ' ').trim()
+  return out.join('').trim()
 }
 
 /** D161:待人工态下顾客说「谢谢」,回告别句,不再重复一遍转人工。 */
@@ -106,20 +109,26 @@ export function hygiene({ text = '', customerText = '', status = '', lang = 'zh'
   text = dated.text
   const weekdayNote = dated.fixedWeekdays.length
     ? `weekday-fixed:${dated.fixedWeekdays.map((x) => `${x.iso} ${x.said}→${x.real}`).join(',')}` : ''
+  /* 🔴 现测(D173 重放通三时看见的):「…要我先帮您留着吗? 要我先帮您留着吗?」——
+     定金那句自带这一问,调用方又拼了一遍;两处各拼一次,合起来就重复了。
+     出口收一条:**同一句话在一条回复里连着出现两遍,去掉后一遍**。
+     只去「连着的完全相同句」,不去两句相似的 —— 那是改写,不是减法。
+     🔴 位置很要紧:这一刀要在**所有早退之前**落。
+     头一版把它放在采集模板那条早退**后面**,而通三那句重复恰恰出自采集模板 ——
+     刀写对了、放错了地方,等于没写(同族:静默失败器 —— 改了但没人要,结果被丢掉)。
+     配套:去重必须**报进 `why`**,否则壳里 `if (h.why)` 会把改好的那段原样扔掉。 */
+  const deduped = dedupeTail(text)
+  const dupNote = deduped !== text ? 'dup-sentence-cut' : ''
+  text = deduped
   /* 🔴 采集模板那条路**本来就该以采集问句收尾** —— 它整句就是那一问(或「答一句 + 接回那一问」)。
      D159 要治的是「事情说完了还追着问表项」,不是「该问的时候问」。
      现测栽过:D165 给采集模板前面加了一句带价的话,这条守立刻把后面的问句砍了,
      顾客拿到一句价格、没有下一步 —— 守过头和不守一样坏。 */
-  if (/collect_template|intake/.test(String(source))) return { text, why: weekdayNote }
+  if (/collect_template|intake/.test(String(source))) return { text, why: [dupNote, weekdayNote].filter(Boolean).join(' · ') }
   /* D161 先判:待人工态 + 顾客在告别 → 整句换告别语(不管原来那句说了什么) */
   if (isFarewell(customerText) && (status === 'needs_human' || status === 'human_active')) {
     return { text: farewellText(lang), why: ['farewell-in-handoff', weekdayNote].filter(Boolean).join(' · ') }
   }
-  /* 🔴 现测(D173 重放通三时看见的):「…要我先帮您留着吗? 要我先帮您留着吗?」——
-     定金那句自带这一问,调用方又拼了一遍。两处各拼一次,合起来就重复了。
-     出口收一条:**同一句话在一条回复里连着出现两遍,去掉后一遍**。
-     只去「连着的完全相同句」,不去两句相似的 —— 那是改写,不是减法。 */
-  text = dedupeTail(text)
   const cut = stripIntakeTail(text)
-  return { text: cut.text, why: [cut.cut ? 'intake-tail-cut' : '', weekdayNote].filter(Boolean).join(' · ') }
+  return { text: cut.text, why: [cut.cut ? 'intake-tail-cut' : '', dupNote, weekdayNote].filter(Boolean).join(' · ') }
 }
