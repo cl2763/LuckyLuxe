@@ -2,6 +2,7 @@
 
    这一页不是「活没活着」那么简单 —— 它是**判据的读口**。好几条护栏靠它取事实:
    · `dataScope`  —— 测试护栏问「这台服务往哪个库写」,不是 'test' 就拒跑(店主 08-24 裁 C);
+   · `dataScopeName` —— 细分:ci / sandbox / local / production(06a §四:三个库不许都叫 live);
    · `dataFile`   —— 《写库自报律》的「路径」那一格(只对回环下发;线上 /health 是公开的);
    · `tenantFallback` —— 顾客侧「没带租户/带了无效租户」被拒的次数,回归要求全 0;
    · `adminBuild` / `version` —— 三端指纹,排「你测的和她用的是不是同一份」;
@@ -19,7 +20,7 @@ const LOOPBACK = /^(127\.0\.0\.1|::1|::ffff:127\.0\.0\.1)$/
 export function healthReport(req, deps) {
   const {
     rasterBackend, tenantFallbackTally, getAiUsage, mergeWindowSeconds, mergeWindowCapSeconds, openMergeWindows,
-    dataDir, dbConcurrency, replyLength, appVersion, tenantNullRows, dataScope, iso,
+    dataDir, dbConcurrency, replyLength, appVersion, tenantNullRows, dataScope, dataScopeName, iso,
   } = deps
   return {
     ok: true,
@@ -39,6 +40,11 @@ export function healthReport(req, deps) {
     version: appVersion.version(),
     tenantNullRows,
     dataScope,
+    /* 🔴 06a §四:`dataScope` 只有 test/live 两档,**分不出本机库 / 沙箱库 / 生产库** ——
+       三个都叫 live,店主一看就以为「护栏对三个都失效」(其实 live 是拒绝档)。
+       所以再下发一个细分名 ci/sandbox/local/production,由 `data-scope.mjs` 按**库路径**算,
+       预检据此断言「4128 与 4310 不许同名」。 */
+    dataScopeName,
     time: iso(new Date()),
   }
 }

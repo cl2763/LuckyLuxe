@@ -37,7 +37,8 @@
  *   CS_PAGES=a,b  只扫这几页(定位用;正式跑不要给)
  */
 import { spawn, execFileSync } from 'node:child_process'
-import { writeFileSync, mkdirSync } from 'node:fs'
+import { writeFileSync, mkdirSync, readFileSync } from 'node:fs'
+import { createHash } from 'node:crypto'
 import { dirname } from 'node:path'
 import { requireTarget } from './db-target.mjs'
 
@@ -72,6 +73,19 @@ const KNIFE_REV = (() => {
     const dirty = execFileSync('git', ['status', '--porcelain', '--', 'tools/contrast-sweep.mjs'], { encoding: 'utf8' }).trim()
     return `${sha || '(无提交记录)'}${dirty ? '+dirty(刀有未提交改动)' : ''}`
   } catch { return '(取不到 git 信息)' }
+})()
+
+/* 🔴 「这份红榜跟不跟得上样式」原来靠 **mtime** 比 —— 而 `knife-backup.sh` 还原、`git checkout`
+   都会把 mtime 改新,内容一个字节没变也会被判成「过期」(现测:全量预检因此红了一次)。
+   改成**按内容算指纹**:抬头写下三份界面文件的 sha,预检重算一遍对比。
+   同族 J-38/J-39:锚在**内容**上,别锚在代理指标上。 */
+const STYLE_FILES = ['apps/web/styles.css', 'apps/web/admin.html', 'apps/web/admin.js']
+const STYLE_SHA = (() => {
+  try {
+    const h = createHash('sha256')
+    for (const f of STYLE_FILES) h.update(readFileSync(new URL(`../${f}`, import.meta.url)))
+    return h.digest('hex').slice(0, 12)
+  } catch (e) { return `(算不出:${e.message})` }
 })()
 
 const profile = `/private/tmp/ll-cs-profile-${process.pid}`
@@ -292,7 +306,7 @@ const uA = uniq(A); const uB = uniq(B)
 const lines = ['# 深色/浅色 对比度红榜(逐页逐元素全扫)', '',
   `> 跑于 ${new Date().toISOString()} · 跑在 \`${BASE}\``,
   `> 🔴 **产出这份数的刀:\`tools/contrast-sweep.mjs\` @ ${KNIFE_REV}**(J-39:数要带尺子 —— 跟别的数比之前先比这一行)`,
-  `> **被测代码:\`${CODE_REV}\`**`,
+  `> **被测代码:\`${CODE_REV}\`** · **界面文件内容指纹 \`${STYLE_SHA}\`**(${STYLE_FILES.join(' + ')} 的 sha256 前 12 位)`,
   '> 门槛:正文 **4.5:1**;大字(≥24px,或 ≥18.66px 且 700 粗)放宽到 **3:1**(每条都标了它用的是哪一档)',
   '> 扫的是**每一个自己持有文字的可见节点**,背景取「实际绘制的那一层」(自己透明就往上找祖先)',
   '>',

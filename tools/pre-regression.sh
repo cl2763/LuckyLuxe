@@ -131,8 +131,8 @@ else say "回执引用的评测明细" "🔴"; echo "$GHOST" | sed 's/^/    /'; 
 #    ⚠️ 数的是**全部** `#RRGGBB`,包含 color 位与品类色 —— 那些不是都该改,
 #      所以这是**棘轮**不是硬零:降了就把数字调小,永远不许升。
 HARDCOLOR=$(grep -oE "#[0-9a-fA-F]{3,8}\b" apps/web/styles.css | wc -l | tr -d ' ')
-if [ "$HARDCOLOR" -le 40 ]; then say "styles.css 写死色棘轮" "✅ $HARDCOLOR ≤ 40(只许降)"
-else say "styles.css 写死色棘轮" "🔴 $HARDCOLOR > 40 —— 新增了写死色,深色态会在那一处漏出来"; FAIL=1; fi
+if [ "$HARDCOLOR" -le 34 ]; then say "styles.css 写死色棘轮" "✅ $HARDCOLOR ≤ 34(只许降)"
+else say "styles.css 写死色棘轮" "🔴 $HARDCOLOR > 34 —— 新增了写死色,深色态会在那一处漏出来"; FAIL=1; fi
 
 # ⑩ 🔴 内联脚本语法(05t 段 6 现场自伤,当场立的护栏):
 #    `platform.html` / `admin.html` 里的 `<script>` 整段是**没人检查语法**的 ——
@@ -204,14 +204,16 @@ if [ "$UTCDAY" -le 12 ]; then say "UTC 日期前缀判天棘轮(#14)" "✅ $UTCD
 else say "UTC 日期前缀判天棘轮(#14)" "🔴 $UTCDAY > 12 —— 又有人按 UTC 前缀判天了,门店时区那条口径会在那一处破"; FAIL=1; fi
 
 # ⑪ 05z §二:对比度全扫要**跟着样式走**。这把刀要开 Chrome + 活服务,进不了全量回归,
-#    所以预检这里做一件它做得到的事:**样式文件比红榜新 = 全扫没重跑** → 红。
-#    (J-38 同族:过期的证据和不咬人的判据是一回事。)
+#    所以预检这里做一件它做得到的事:**红榜抬头记的界面文件指纹 ≠ 现在的指纹 = 全扫没重跑** → 红。
+#    (06a 改:原来比 mtime —— 还原备份、git checkout 都会把 mtime 改新而内容没变,误红过一次。
+#     现在比**内容 sha**:锚在内容上,不锚在代理指标上,同族 J-38/J-39。)
 RED_LIST="handoff/night-runs/对比度红榜_修后_2026-09-09.md"
 if [ -f "$RED_LIST" ]; then
-  RAN_AT=$(grep -m1 '^> \*\*跑于\*\*\|^> 跑于' "$RED_LIST" | grep -oE '[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9:.]+Z' | head -1)
-  NEWER=$(find apps/web/styles.css apps/web/admin.html apps/web/admin.js -newer "$RED_LIST" 2>/dev/null | tr '\n' ' ')
-  if [ -z "$NEWER" ]; then say "对比度全扫跟得上样式" "✅ 红榜(跑于 ${RAN_AT:-?})比样式文件新"
-  else say "对比度全扫过期了" "🔴 这些样式文件比红榜新:$NEWER —— 重跑 tools/contrast-sweep.mjs 再交"; FAIL=1; fi
+  WANT_SHA=$(grep -oE '界面文件内容指纹 `[0-9a-f]+`' "$RED_LIST" | grep -oE '[0-9a-f]{6,}' | head -1)
+  NOW_SHA=$(cat apps/web/styles.css apps/web/admin.html apps/web/admin.js | shasum -a 256 | cut -c1-12)
+  if [ -z "$WANT_SHA" ]; then say "红榜没记界面指纹" "🔴 抬头里没有「界面文件内容指纹」那一行 —— 重跑一次 tools/contrast-sweep.mjs"; FAIL=1
+  elif [ "$WANT_SHA" = "$NOW_SHA" ]; then say "对比度全扫跟得上样式" "✅ 指纹一致($NOW_SHA)"
+  else say "对比度全扫过期了" "🔴 红榜记的是 $WANT_SHA,现在是 $NOW_SHA —— 样式改过了,重跑 tools/contrast-sweep.mjs 再交"; FAIL=1; fi
 else say "对比度红榜在不在" "🔴 找不到 $RED_LIST"; FAIL=1; fi
 
 # ⑫ 裁(店主 05y §三③)· **开批快照进预检**。
@@ -246,6 +248,21 @@ if [ -d "$FLAKY_DIR" ]; then
   if [ -z "$HOT" ]; then say "flaky 计数" "✅ 没有崩过两次的套件"
   else say "flaky 崩过两次" "🔴 $HOT —— 按裁定停线定位,不许再靠重跑洗白"; FAIL=1; fi
 else say "flaky 计数目录" "⚠️ 还没有 $FLAKY_DIR(第一次崩的时候建)"; fi
+
+# ⑭ 06a §四(店主提到 P0)· **两台不许同名**,而且要分得出是哪个库。
+#    背景要写清楚:`dataScope` 只有 test/live 两档,本机库 / 沙箱库 / 生产库**三个都叫 live**,
+#    于是「两台都是 live」看着像「护栏对两台都失效」——**其实 live 正是拒绝档**(现测护栏对两台都拒跑)。
+#    但「分不出是哪个库」这件事本身要治:细分名 dataScopeName 由库路径算,4128 必须是 local、4310 必须是 sandbox。
+#    服务没起来不判(那是另一件事),起来了就必须对得上,并把两台的值一起打印。
+SCOPE_LOCAL=$(curl -s --max-time 3 http://127.0.0.1:4128/health | node -e "let s='';process.stdin.on('data',d=>s+=d).on('end',()=>{try{console.log(JSON.parse(s).dataScopeName||'(没有这个字段)')}catch{console.log('(取不到)')}})" 2>/dev/null)
+SCOPE_SAND=$(curl -s --max-time 3 http://127.0.0.1:4310/health | node -e "let s='';process.stdin.on('data',d=>s+=d).on('end',()=>{try{console.log(JSON.parse(s).dataScopeName||'(没有这个字段)')}catch{console.log('(取不到)')}})" 2>/dev/null)
+if [ "$SCOPE_LOCAL" = "(取不到)" ] && [ "$SCOPE_SAND" = "(取不到)" ]; then
+  say "两台库名分得清" "— 两台都没起,这一条本轮没验(不是通过)"
+elif [ "$SCOPE_LOCAL" = "$SCOPE_SAND" ]; then
+  say "两台库名撞名了" "🔴 4128=$SCOPE_LOCAL · 4310=$SCOPE_SAND —— 分不出是哪个库,护栏与报数都会含糊"; FAIL=1
+else
+  say "两台库名分得清" "✅ 4128=$SCOPE_LOCAL · 4310=$SCOPE_SAND"
+fi
 
 # ⑧ 判据住在跑不到的地方(店主 05w §二 同族一句)。
 #    D184 那两把刀写得很好、判据也对,可它们只落在 `test-seed-rich.mjs` 里 ——

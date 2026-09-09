@@ -100,6 +100,12 @@ if (!sb.ok) {
       body: JSON.stringify({ config: before.config }),
     }).catch(() => null)
     console.log('   [收尾] 演示店会员配置已还原成现测前的值')
+    /* 🔴 06a §六 查明并留痕:**值还原得回来,`updated_at` 还不回去** ——
+       所以沙箱库的逐行指纹上,这一行会显示「旧行消失 1 行」。
+       上一批我在回执里写「没有直接证据指到是哪一步写的」,答案就是这里。
+       以后每跑一次都把这句打出来,回执照抄即可,不用再查一遍。 */
+    console.log('   [夹具动过] 沙箱库 · demo-lucky-luxe · tenant_settings/membership_config —— '
+      + '值已还原,但 updated_at 会刷新;逐行指纹会把它记成「旧行消失 1 行」,这是**夹具动的**,不是业务写的。')
   }
 }
 

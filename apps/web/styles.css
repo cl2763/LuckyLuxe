@@ -2,14 +2,24 @@
    那四个在合同图里也有一份,值略有出入(paper #fbf8f5 vs #faf8f3、ink #2d2826 vs #23241f、
    line #e4d9d2 vs #e3e0d6)。两处各写一份 = 一件事两处真相,谁改了谁都不知道。
    现在唯一定义在 `design-tokens.css`(它在本文件**之后**加载),这里只留本仓自己的那几个。 */
+/* 🔴 06a §五 现查出来的一件「一件事两处真相」:
+   这一组本仓自己的调色板,和合同图那份令牌**语义重复**——
+   `--muted #897f7a` 压白底只有 **3.9:1**(乙档里最大的一坨:348 条全是它),
+   而合同图的 `--sub #6d6f66` 压白底是 **6.0:1**。同一个「次要文字」两个值,
+   低的那个还把 AA 拖下去了。所以能对上语义的**一律指到合同图那份**,值不再本仓自己定。
+   ⚠️ `--accent / --accent-dark`(品牌金)**故意不动** —— 换成 `--brand` 会让整套皮的金变沉,
+   那是**改合同图**的事,已列进「乙档配色对_请店主裁」那张表的走法 1,等她裁。 */
 :root {
-  --muted: #897f7a;
-  --soft: #f1e7df;
+  --muted: var(--sub);
+  --soft: var(--wall);
   --accent: #c8a47e;
   --accent-dark: #9b7655;
-  --black: #252525;
-  --success: #47735f;
-  --danger: #a34c48;
+  /* 🔴  是**面**不是字:它给「选中的黑胶囊」当底(黑底白字)。
+     我头一版指到 --ink,深色档下 --ink 翻成浅色 → 浅底 + 浅字 = 看不见(甲档当场从 0 涨到 16)。
+     这跟  那个病一模一样 —— **字色令牌不许当面用**。面要的是 --hero(两档都深)。 */
+  --black: var(--hero);
+  --success: var(--good);
+  --danger: var(--bad);
   --shadow: 0 16px 42px rgba(45, 40, 38, 0.09);
 }
 
@@ -5782,7 +5792,7 @@ textarea:focus {
   font-weight: 700;
   flex-shrink: 0;
 }
-.cs-avatar.danger { background: #eed6cf; color: var(--danger); }
+.cs-avatar.danger { background: var(--badbg); color: var(--bad); }   /* 06a:最后一处「浅底写死、字跟着令牌翻」的头像片 */
 .cs-chat-row-main { min-width: 0; flex: 1; display: flex; flex-direction: column; gap: 2px; }
 .cs-chat-row-top { display: flex; justify-content: space-between; align-items: baseline; gap: 8px; }
 .cs-chat-row-top strong { font-size: 13px; color: var(--ink); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }

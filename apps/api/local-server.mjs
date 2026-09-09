@@ -115,15 +115,14 @@ const APP_TIMEZONE = process.env.APP_TIMEZONE || 'America/Toronto'
 process.env.TZ = APP_TIMEZONE
 
 const __dirname = dirname(fileURLToPath(import.meta.url))
+const { legacyScope, scopeOf } = await import('./data-scope.mjs')
 const workspaceRoot = join(__dirname, '..', '..')
 const webRoot = join(workspaceRoot, 'apps', 'web')
 const assetRoot = join(workspaceRoot, 'miniprogram', 'assets')
 // DATA_DIR 环境变量可指定数据目录(测试跑临时库用);不设则维持原路径,本机/云端(Volume 挂载点)行为不变
 const dataDir = process.env.DATA_DIR ? resolve(process.env.DATA_DIR) : join(__dirname, 'local-data')
-/* 🔴 这台服务往哪个库写(测试护栏与 D72 建店 kind 共用的唯一判据):
-   'test' 只认回归脚本建的临时库(/tmp/ll-ci-data.XXXX)或显式 LL_TEST_DATA=1;真库/沙箱/生产都是 'live'。 */
-const DATA_SCOPE = (!(process.env.NODE_ENV === 'production' || process.env.RAILWAY_ENVIRONMENT)
-  && (process.env.LL_TEST_DATA === '1' || /^ll-ci-data\./.test(basename(dataDir)))) ? 'test' : 'live'
+/* 🔴 往哪个库写:判据搬进 `data-scope.mjs` 按**库路径**判(店主 06a §四)。DATA_SCOPE 语义不变(护栏/D72 在用),NAME 是细分名给预检分库用 */
+const DATA_SCOPE = legacyScope(dataDir); const DATA_SCOPE_NAME = scopeOf(dataDir)
 mkdirSync(dataDir, { recursive: true })
 
 // 数据迁移:发现待导入文件时,先给现库留底份,再原子替换(配合 /admin/ops/import-db)
@@ -10729,7 +10728,7 @@ async function route(req, res) {
        每一格为什么在那儿,写在那个文件的抬头。 */
     return json(res, 200, healthReport(req, {
       rasterBackend, tenantFallbackTally, getAiUsage, mergeWindowSeconds, mergeWindowCapSeconds, openMergeWindows,
-      dataDir, dbConcurrency, replyLength, appVersion, tenantNullRows, dataScope: DATA_SCOPE, iso,
+      dataDir, dbConcurrency, replyLength, appVersion, tenantNullRows, dataScope: DATA_SCOPE, dataScopeName: DATA_SCOPE_NAME, iso,
     }))
   }
   if (req.method === 'GET' && path === '/wechat/customer-service/webhook') {

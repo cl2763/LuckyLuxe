@@ -3837,8 +3837,23 @@ const main = async () => {
         unguarded.length === 0, `没装的:${unguarded.join(', ')}`)
       check('㋙C② 护栏判据问的是服务器"往哪个库写"(dataScope),不是问环境变量(判据律)',
         guardSrc.includes("health?.dataScope !== 'test'") && srv.includes('dataScope:'))
-      check('㋙C③ 真库/沙箱都判为 live:只有回归脚本的临时库(ll-ci-data.*)或显式 LL_TEST_DATA=1 才是 test',
-        /\/\^ll-ci-data\\\./.test(srv) && srv.includes("LL_TEST_DATA === '1'"))
+      /* 🔴 06a §四改:这一条原来锚的是 `local-server.mjs` 的**源码文本**(那段正则与那个环境变量名),
+         判据一搬家(现在住在 `apps/api/data-scope.mjs`)它就红 —— 判据不许锚在字面量与位置上。
+         改成**行为判据**:直接喂路径给出口函数,看它判成什么。顺带把新收的那个口子也守住:
+         `LL_TEST_DATA=1` **不许**把本机库/沙箱库变成 test(原来一个环境变量就能顶开全部保护)。 */
+      const scopeMod = await import('./data-scope.mjs')
+      const L = '/x/apps/api/local-data'; const S = '/x/apps/api/sandbox-data'; const C = '/tmp/ll-ci-data.abc123'
+      check('㋙C③ 本机库/沙箱库都判为 live,只有回归临时库是 test(按**库路径**判,不看环境变量)',
+        scopeMod.legacyScope(L, {}) === 'live' && scopeMod.legacyScope(S, {}) === 'live'
+        && scopeMod.legacyScope(C, {}) === 'test')
+      check('㋙C③b 🔴 LL_TEST_DATA=1 顶不动本机库与沙箱库(一个环境变量不许打开全部保护)',
+        scopeMod.legacyScope(L, { LL_TEST_DATA: '1' }) === 'live'
+        && scopeMod.legacyScope(S, { LL_TEST_DATA: '1' }) === 'live')
+      check('㋙C③c 细分名分得出是哪个库(06a:三个库不许都叫 live)',
+        scopeMod.scopeOf(L, {}) === 'local' && scopeMod.scopeOf(S, {}) === 'sandbox'
+        && scopeMod.scopeOf(C, {}) === 'ci' && scopeMod.scopeOf(L, { RAILWAY_ENVIRONMENT: 'x' }) === 'production')
+      check('㋙C③d 护栏**认库不认名**:服务自称 test 但库路径不是回归临时库 → 仍然拒绝',
+        readFileSync(join(ROOT42, 'apps/api/test-guard.mjs'), 'utf8').includes('isCiDataDir'))
       check('㋙A wiring 两端不再各写一份爽约/处置定金的显示条件(判据只在状态机)',
         !adminJs.includes("depositDisposal.state === 'pending' ? `<button")
         && !miniOrders.includes("['CONFIRMED', 'IN_PROGRESS', 'SERVING'].includes(status)")
