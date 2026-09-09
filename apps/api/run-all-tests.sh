@@ -5,6 +5,18 @@
 set -euo pipefail
 RUN_T0=$SECONDS   # 墙钟起点(计时即证:套件时间 ≠ 整跑时间)
 
+# ══ 🔴 跑机口径之一(店主 05w §六 立):**这把脚本不许接 `| tail` / `| head` 之类的管道** ══
+# 案由:它会起后台服务(4128/4310/CI 那台),那些子进程**继承了管道的写端** ——
+# 脚本自己早跑完了,`tail` 还在等 EOF,看上去像「卡死 25 分钟」。
+# 正确跑法:`bash apps/api/run-all-tests.sh > /tmp/ci.log 2>&1`,然后看日志。
+# 判据就写在这儿:标准输出是管道(既不是终端也不是文件)就当场喊一声。
+if [ ! -t 1 ] && [ -p /dev/stdout ]; then
+  echo '🔴 别把这把脚本接进管道(| tail / | head 之类)——它起的后台服务会攥着管道写端,' >&2
+  echo '   于是你那头永远等不到 EOF,看着像卡死。改成:bash apps/api/run-all-tests.sh > /tmp/ci.log 2>&1' >&2
+  echo '   (要硬跑:PIPE_OK=1 bash apps/api/run-all-tests.sh | 你的管道)' >&2
+  [ "${PIPE_OK:-0}" = "1" ] || exit 2
+fi
+
 # ══ 🔴 看门狗(店主 05r 补五 §四 立)══
 # 案由,照录:D151 那一批我把 8 秒的合并窗开在回归里,**整轮从 2 分钟变成跑不完**,
 # 「22 分钟才反应过来是自己干的」。整跑有基线(~2 分),超它一倍就该有人喊一声 ——
@@ -410,6 +422,19 @@ if [ -s "$TIMING" ]; then
   sort -k2 -rn -t$'\t' "$TIMING" | head -5 | awk -F'\t' '{printf "     %-34s %ss\n", $1, $2}'
   SLOW=$(awk -F'\t' '$2>180 {print $1" ("$2"s)"}' "$TIMING" | tr '\n' ' ')
   [ -n "$SLOW" ] && echo "   ⚠️ 超 3 分钟的(下批看能不能拆):$SLOW"
+fi
+
+# ══ 🔴 收摊自证(店主 05w §六:J-33 的「收摊」= **收文件 + 收进程**)══
+# 案由:05w 抓到一个**跑了 12 小时的造病刀进程** —— 它跑完没退出,attach 着的连接一直挂着。
+# 以后每一跑收尾都自己数一遍:本机还剩几个「刀/跑机」进程活着,活着就点名。
+LEFTOVER="$(pgrep -fl 'tools/.*-proof\.mjs|tools/.*-shot\.mjs|knife' 2>/dev/null | grep -v pgrep || true)"
+if [ -n "$LEFTOVER" ]; then
+  echo ""
+  echo "⚠️ 收摊自证:还有跑机/造病进程活着 —— 请确认是不是忘了退(J-33:收摊 = 收文件 + 收进程):"
+  echo "$LEFTOVER" | sed 's/^/     /'
+else
+  echo ""
+  echo "🧹 收摊自证:本机没有残留的跑机/造病进程(J-33)"
 fi
 
 echo "✅ 全部 $(( $(echo $DEFAULT_SUITES | wc -w) + 4 )) 个套件通过(清单 $(echo $DEFAULT_SUITES | wc -w) + auto-return/schema-consistency/perf-base-migration/tenant-isolation)"

@@ -189,8 +189,19 @@ else say "回归不依赖演示种子" "🔴 run-all-tests.sh 里有 $SEEDREF �
 #    `styles/fraunces-digits.wxss` 不算(字面色本来就该住在令牌文件里)。
 MPCOLOR=$(find miniprogram -name "*.wxss" ! -path "*/styles/tokens.wxss" ! -path "*/styles/fraunces-digits.wxss" -print0 \
   | xargs -0 grep -ohE "#[0-9a-fA-F]{3,8}\b|rgba?\([0-9 .,]+\)" | wc -l | tr -d ' ')
-if [ "$MPCOLOR" -le 2769 ]; then say "小程序 wxss 写死色棘轮" "✅ $MPCOLOR ≤ 2769(只许降)"
-else say "小程序 wxss 写死色棘轮" "🔴 $MPCOLOR > 2769 —— 新写死了颜色,那一处的深色态就会漏白"; FAIL=1; fi
+if [ "$MPCOLOR" -le 2742 ]; then say "小程序 wxss 写死色棘轮" "✅ $MPCOLOR ≤ 2742(只许降)"
+else say "小程序 wxss 写死色棘轮" "🔴 $MPCOLOR > 2742 —— 新写死了颜色,那一处的深色态就会漏白"; FAIL=1; fi
+
+# ⑩ #14(店主 05u 裁:「今天先加静态判据禁新写 + 交存量清单」)。
+#    `substr(appointment_start, 1, 10)` 取的是 **UTC 日期前缀**,不是门店当天 ——
+#    多伦多店晚上 8 点的单,UTC 已经是第二天,按它判天就会把单算到明天去。
+#    正确出口是门店时区那一套(`storeToday()` / `todayOf(tenantId)` / `periodRange`)。
+#    存量 12 处逐条见 `handoff/UTC判天存量清单_2026-09-09.md`(每条写用途与为什么暂时还在);
+#    棘轮 = 实际条数,**只许降**;新写一处立刻红。
+UTCDAY=$(grep -rnE "substr\(appointment_start" --include="*.mjs" --include="*.js" apps/api tools miniprogram apps/web 2>/dev/null \
+  | grep -vE ":[0-9]+: *(/\*|\*|//)" | wc -l | tr -d ' ')
+if [ "$UTCDAY" -le 12 ]; then say "UTC 日期前缀判天棘轮(#14)" "✅ $UTCDAY ≤ 12(只许降;存量清单 handoff/UTC判天存量清单_2026-09-09.md)"
+else say "UTC 日期前缀判天棘轮(#14)" "🔴 $UTCDAY > 12 —— 又有人按 UTC 前缀判天了,门店时区那条口径会在那一处破"; FAIL=1; fi
 
 # ⑧ 判据住在跑不到的地方(店主 05w §二 同族一句)。
 #    D184 那两把刀写得很好、判据也对,可它们只落在 `test-seed-rich.mjs` 里 ——
