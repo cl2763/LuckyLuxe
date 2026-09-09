@@ -318,7 +318,9 @@ check('㉕f 换指标要重画(走势按指标算,不重画就是拿上一个指
    回图:`.mini5 b` 写的是「3,120」——只有数字,币种由上面那个大数字交代。按图改。 */
 check('㉖ 五格里的金额只报数(币种由大数字那一处交代 —— 图 line 71–72)',
   /const partsOf = makePartsFor\(pulse && pulse\.currencyDisplay, cur\)/.test(readFileSync(join(ROOT, 'miniprogram/utils/dashboard-view.js'), 'utf8'))
-  && /return `\$\{q\.amount\}\$\{q\.cents\}`/.test(readFileSync(join(ROOT, 'miniprogram/utils/dashboard-view.js'), 'utf8')))
+  /* 五格里连分位都不要(「5,668.00」比「5,668」多两位,格子就是被这两位挤爆的)——
+     所以这里认的是 `return q.amount`,不是带分位那一版 */
+  && /return q\.amount/.test(readFileSync(join(ROOT, 'miniprogram/utils/dashboard-view.js'), 'utf8')))
 check('㉖b 仍然只走后端下发的 currencyDisplay(页面零拼串)',
   !/'CAD|\bUS \$/.test(readFileSync(join(ROOT, 'miniprogram/utils/dashboard-view.js'), 'utf8').replace(/\/\*[\s\S]*?\*\//g, '')))
 
@@ -337,7 +339,9 @@ check('⑳c 跟随系统那一档**不加 class**(交给 @media;app.json 得开 
   && appJson.darkmode === true)
 const tokensWxssEarly = readFileSync(join(ROOT, 'miniprogram/styles/tokens.wxss'), 'utf8')
 check('⑳d 令牌里有站内选的那两段(.theme-light / .theme-dark)',
-  /\.theme-light\{--paper/.test(tokensWxssEarly) && /\.theme-dark\{--paper/.test(tokensWxssEarly))
+  /* 两个块现在**块里先有几条普通样式**(min-height/background/color)再到令牌 ——
+     判据不许锚在「块的第一条就是 --paper」这种写法顺序上 */
+  /\.theme-light\{[^}]*--paper/.test(tokensWxssEarly) && /\.theme-dark\{[^}]*--paper/.test(tokensWxssEarly))
 check('⑳e 首页与「我的」都把 class 挂在最外层 view 上(挂不上等于设置了没反应)',
   /<view class="page \{\{themeClass\}\}">/.test(wxml) && /<view class="page \{\{themeClass\}\}">/.test(meWxml))
 check('⑳f 「我的」里那一行能点开三档,且 wx.showActionSheet 接了 fail(《波及面回归律》④)',
