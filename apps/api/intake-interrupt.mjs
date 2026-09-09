@@ -99,7 +99,7 @@ export function availabilityAnswer({ getAvailability, storeId, serviceId, date, 
 
 /** 没位(或店休)时:**给最近两个真有位的日子**(店主 05s 补二 §三:「没位就给两个替代」)。
  *  往后找 7 天,每天都问一次同一个真函数 —— 替代日也不是编的。找不到就只说没位。 */
-function fullBooked(day, { getAvailability, storeId, serviceId, date, humanDate, todayISO }, lang = 'zh', closed = false) {
+export function fullBooked(day, { getAvailability, storeId, serviceId, date, humanDate, todayISO }, lang = 'zh', closed = false) {
   const head = closed
     ? (lang === 'en' ? `We're closed on ${day}.` : `${day}门店休息哦。`)
     : (lang === 'en' ? `${day} is fully booked.` : `${day}已经约满了。`)
@@ -114,7 +114,12 @@ function fullBooked(day, { getAvailability, storeId, serviceId, date, humanDate,
   }
   if (!alts.length) return head
   const say = alts.map((a) => `${humanDate ? humanDate(a.d, todayISO, lang) : a.d} ${a.t}`).join('、')
-  return lang === 'en' ? `${head} The next openings are ${say}.` : `${head}最近有位的是 ${say}。`
+  const line = lang === 'en' ? `${head} The next openings are ${say}.` : `${head}最近有位的是 ${say}。`
+  /* D173 下半:把这两个替代日**带出去**存进状态 —— 顾客下一句说「就这个时间」时要拿它回话,
+     不许现编一个日期(零编造红线)。函数仍然返回字符串,附带信息挂在 `.alts` 上。 */
+  const boxed = new String(line)
+  boxed.alts = alts.map((a) => ({ date: a.d, time: a.t }))
+  return boxed
 }
 
 /** 优惠那一条:库里真有的券才说。 */

@@ -19,7 +19,8 @@
 /* 槽位:图 §二 collecting 那一行点名的五个 */
 import { classifyTurn, TURN_TEXT, slotEcho } from './turn-classify.mjs'   // D145:采集态每句先分类
 import { policyOnce } from './turn-answer.mjs'                            // D145:政策一会话一次(两路共用)
-import { humanizeDates } from './date-human.mjs'                          // D148:对顾客说日期要说人话
+import { humanizeDates, humanDate } from './date-human.mjs'                 // D148:对顾客说日期要说人话
+import { fullBooked } from './intake-interrupt.mjs'                        // D173 下半:店休也走「两个真替代」那一份
 
 export const SLOT_KEYS = ['serviceType', 'date', 'time', 'technician', 'addons']
 
@@ -442,6 +443,33 @@ export function createBookingIntake(deps) {
       }
     }
 
+
+  /* 🔴 D173 下半(店主 05v 补三 §三)· 店休那句**只有这一处出**。
+     现查:全仓有**三处**各写了一遍「X 门店休息哦,换一天好吗?」(填日期那一刻查一次、
+     三槽齐再查一次、无位那一支再查一次)。我第一版只给其中一处加了「两个真替代」,
+     重放通三时发的仍然是没有替代的那一句 —— **一件事三处真相,改一处等于没改**。
+     现在三处都调这里:替代日走中断口那份 `fullBooked`(同一份实现,往后找 7 天问真函数),
+     找不到替代就退回原来那句(宁可不给,也不许编一个日子)。
+     返回 `{ reply, alts }`,调用方把 `alts` 存进状态 —— 顾客下一句说「就这个时间」时要拿它回话。 */
+  function closedDayReply(slots, probe, s, zh) {
+    const lang = zh ? 'zh' : 'en'
+    let alt = null
+    try {
+      alt = fullBooked(humanDate(slots.date, todayISO(), lang), {
+        getAvailability, storeId: probe && probe.storeId, serviceId: probe && probe.service && probe.service.id,
+        date: slots.date, humanDate, todayISO: todayISO(),
+      }, lang, true)
+    } catch (e) { alt = null }
+    const alts = (alt && alt.alts) || []
+    return {
+      reply: say(zh, alts.length ? `${String(alt)}换一天好吗?` : `${slots.date} 门店休息哦,换一天好吗?`,
+        alts.length ? `${String(alt)} Would one of those work?` : `We're closed on ${slots.date} — would another day work?`),
+      stage: 'collecting',
+      statePatch: { ...s, bookingTouchedAt: stamp(), bookingSlots: { ...slots, date: '', time: '' },
+        bookingStage: 'collecting', bookingClosedAlts: alts },
+    }
+  }
+
     /* 🔴 D148 之四(店主 05p 补二;五通 v3 通三读出来的自相矛盾):
        顾客说「明天」,机器答「好的,明天可以。大概几点方便?」;
        等顾客把钟点也说了,机器才回「明天门店休息哦,换一天好吗?」——
@@ -452,13 +480,7 @@ export function createBookingIntake(deps) {
       && String(slots.date || '').trim() !== String((s.bookingSlots || {}).date || '').trim()
     if (dateJustGiven) {
       const probe = realSlots({ tenantId, slots })
-      if (probe && probe.closed) {
-        return {
-          reply: say(zh, `${slots.date} 门店休息哦,换一天好吗?`, `We're closed on ${slots.date} — would another day work?`),
-          stage: 'collecting',
-          statePatch: { ...s, bookingTouchedAt: stamp(), bookingSlots: { ...slots, date: '', time: '' }, bookingStage: 'collecting' },
-        }
-      }
+      if (probe && probe.closed) return closedDayReply(slots, probe, s, zh)
     }
 
     /* 三槽齐 → 查真可约 */
@@ -487,13 +509,7 @@ export function createBookingIntake(deps) {
       if (!near.length) {
         /* 🔴 店休 ≠ 约满。原来两种都说「已经约满」—— 那天门店根本没开门,这是对顾客说瞎话。
            店休就说店休,并把日期清掉**回 collecting 重问**,别把人推给人工。 */
-        if (real.closed) {
-          return {
-            reply: say(zh, `${slots.date} 门店休息哦,换一天好吗?`, `We're closed on ${slots.date} — would another day work?`),
-            stage: 'collecting',
-            statePatch: { ...s, bookingTouchedAt: stamp(), bookingSlots: { ...slots, date: '', time: '' }, bookingStage: 'collecting' },
-          }
-        }
+        if (real.closed) return closedDayReply(slots, real, s, zh)
         return {
           reply: say(zh, '这天已经约满了,我请同事看看别的安排。', "That day is fully booked — I'll ask a colleague about alternatives."),
           handoff: true, statePatch: checkingPatch,
@@ -525,13 +541,7 @@ export function createBookingIntake(deps) {
           stage: 'checking', statePatch: patch,
         }
       }
-      if (real?.closed) {
-        return {
-          reply: say(zh, `${slots.date} 门店休息哦,换一天好吗?`, `We're closed on ${slots.date} — would another day work?`),
-          stage: 'collecting',
-          statePatch: { ...s, bookingTouchedAt: stamp(), bookingSlots: { ...slots, date: '', time: '' }, bookingStage: 'collecting' },
-        }
-      }
+      if (real?.closed) return closedDayReply(slots, real, s, zh)
       if (real) {
         const near = real.times.slice(0, 3)
         if (near.length) {
@@ -579,6 +589,25 @@ export function createBookingIntake(deps) {
           stage: 'collecting',
           statePatch: { ...s, bookingTouchedAt: stamp(), bookingSlots: slots, bookingStage: 'collecting' },
         }
+      }
+    }
+    /* 🔴 D173 下半之二(店主 05v 补三 §三):**顾客的确认句不许被退回第一问**。
+       v5 通三第 97 行:上一句刚说完「那天门店休息」,顾客说「好的,就这个时间」,
+       机器回「想约哪天呢?」—— 那句话被整句吞掉了。
+       病因是设计的直接后果:店休那一步把日期清空,确认句没有东西可挂,于是退回第一问。
+       裁:日期为空 + 上一步是店休 + 这一句是确认句 → **拿上一句给过的那两个替代日回话**
+       (从 `bookingClosedAlts` 里取,**不许现编**;取不到就照旧问哪天)。 */
+    const closedAlts = Array.isArray(s.bookingClosedAlts) ? s.bookingClosedAlts : []
+    /* 「是不是确认句」用**全仓已有的那一个** `looksConfirm`,不自己再写一条正则
+       —— 同一个判断两处各写一份,迟早说两句话(一件事一处真相)。 */
+    const isConfirm = looksConfirm(text)
+    if (!slots.date && closedAlts.length && isConfirm) {
+      const two = closedAlts.slice(0, 2).map((a) => `${humanDate(a.date, todayISO(), zh ? 'zh' : 'en')} ${a.time}`)
+      return {
+        reply: say(zh, `刚才那天门店休息,您看 ${two.join(' 或 ')} 哪个方便?`,
+          `We're closed that day — would ${two.join(' or ')} work?`),
+        stage: 'collecting',
+        statePatch: { ...s, bookingTouchedAt: stamp(), bookingSlots: slots, bookingStage: 'collecting' },
       }
     }
     /* 🔴 五通 v3 现读(通三):机器刚说完「9月7日门店休息哦,换一天好吗?」,

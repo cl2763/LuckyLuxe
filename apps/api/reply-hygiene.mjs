@@ -1,3 +1,5 @@
+import { humanizeDates, fixWeekdays } from './date-human.mjs'
+
 /* 出口卫生(D159 / D161,店主 05s §四 读六通 v4 读出来的两病)
 
    两病都长在**同一个地方**:一句话已经说完了,后面又被拼上一句采集问句。
@@ -61,6 +63,20 @@ export function stripIntakeTail(text = '') {
   return { text: stripped, cut: stripped !== t.trim() }
 }
 
+/** 同一句连着说两遍 → 只留一遍。按句读切,只比**相邻**两句,完全相同才去。 */
+export function dedupeTail(text = '') {
+  const t = String(text || '')
+  if (!t) return t
+  const parts = t.split(/(?<=[。!!??~~])\s*/).filter((x) => x !== '')
+  const out = []
+  for (const p of parts) {
+    const last = out[out.length - 1]
+    if (last && last.trim() === p.trim()) continue
+    out.push(p)
+  }
+  return out.join(' ').replace(/\s+/g, ' ').trim()
+}
+
 /** D161:待人工态下顾客说「谢谢」,回告别句,不再重复一遍转人工。 */
 export function farewellText(lang = 'zh') {
   return lang === 'en'
@@ -70,16 +86,40 @@ export function farewellText(lang = 'zh') {
 
 /** 出口卫生总入口:给一段回复文本和这一轮的上下文,回该发出去的那一段。
  *  @returns {{ text: string, why: string }} why='' 表示没动过 */
-export function hygiene({ text = '', customerText = '', status = '', lang = 'zh', source = '' } = {}) {
+/* ══ D173 上半(店主 05v 补三 §二):日期这件事**收在这个出口** ══
+   两条都在这儿做,而且**在最前面做** —— 后面那几条(砍采集尾巴、换告别语)是减法,
+   日期这两条是**改写**,顺序反了就会出现「砍完再改」的空转。
+     ①`humanizeDates`:句子里还剩 `YYYY-MM-DD` 的,换成人话。
+       现查:它原来**只挂在 `booking-intake` 一条路上**(623/624 两行),
+       中断口 / 报价路 / 模型直答那几条路出去的句子**没经过它** —— 收到出口才是 D148 当初裁的样子。
+     ②`fixWeekdays`:凡「M月D日(周X)」里的星期与算出来的不符,**由出口改成算出来的那个**。
+       它不认 ISO 形状,所以模型自己写的那种「9月9日(周一)」也咬得住 —— 这正是 v5 通三那个洞。
+   `todayISO` 由调用方按**门店时区**给;给不出就只做星期纠正(那一条不需要基准日的年份也能算,
+   退而用当前年),绝不在这里 `new Date()` 推门店的今天(CLAUDE.md 头一条)。 */
+export function hygiene({ text = '', customerText = '', status = '', lang = 'zh', source = '', todayISO = '' } = {}) {
+  const dated = (() => {
+    let t = String(text || '')
+    if (todayISO) t = humanizeDates(t, todayISO, lang)
+    const f = fixWeekdays(t, todayISO)
+    return { text: f.text, fixedWeekdays: f.fixed }
+  })()
+  text = dated.text
+  const weekdayNote = dated.fixedWeekdays.length
+    ? `weekday-fixed:${dated.fixedWeekdays.map((x) => `${x.iso} ${x.said}→${x.real}`).join(',')}` : ''
   /* 🔴 采集模板那条路**本来就该以采集问句收尾** —— 它整句就是那一问(或「答一句 + 接回那一问」)。
      D159 要治的是「事情说完了还追着问表项」,不是「该问的时候问」。
      现测栽过:D165 给采集模板前面加了一句带价的话,这条守立刻把后面的问句砍了,
      顾客拿到一句价格、没有下一步 —— 守过头和不守一样坏。 */
-  if (/collect_template|intake/.test(String(source))) return { text, why: '' }
+  if (/collect_template|intake/.test(String(source))) return { text, why: weekdayNote }
   /* D161 先判:待人工态 + 顾客在告别 → 整句换告别语(不管原来那句说了什么) */
   if (isFarewell(customerText) && (status === 'needs_human' || status === 'human_active')) {
-    return { text: farewellText(lang), why: 'farewell-in-handoff' }
+    return { text: farewellText(lang), why: ['farewell-in-handoff', weekdayNote].filter(Boolean).join(' · ') }
   }
+  /* 🔴 现测(D173 重放通三时看见的):「…要我先帮您留着吗? 要我先帮您留着吗?」——
+     定金那句自带这一问,调用方又拼了一遍。两处各拼一次,合起来就重复了。
+     出口收一条:**同一句话在一条回复里连着出现两遍,去掉后一遍**。
+     只去「连着的完全相同句」,不去两句相似的 —— 那是改写,不是减法。 */
+  text = dedupeTail(text)
   const cut = stripIntakeTail(text)
-  return { text: cut.text, why: cut.cut ? 'intake-tail-cut' : '' }
+  return { text: cut.text, why: [cut.cut ? 'intake-tail-cut' : '', weekdayNote].filter(Boolean).join(' · ') }
 }

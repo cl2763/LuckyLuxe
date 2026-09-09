@@ -4030,7 +4030,7 @@ async function handleWecomInboundCore(inbound, req) {
 }
 
 // 🔴 D150 出口薄壳 + D159/D161 出口卫生;为什么是壳写在 repeat-guard.mjs 抬头。⚠️ Core 只许这里调(有静态判据守)
-const handleWecomInbound = (inbound, req) => guardedHandle({ db, iso, classifyTurn, currentTenantId, wecomConversationId, getWecomConversation, hygiene: replyHygiene }, handleWecomInboundCore, inbound, req)
+const handleWecomInbound = (inbound, req) => guardedHandle({ db, iso, classifyTurn, currentTenantId, wecomConversationId, getWecomConversation, hygiene: replyHygiene, todayISO: () => todayOf(currentTenantId()) }, handleWecomInboundCore, inbound, req)   /* D173:出口按门店时区改日期与星期 */
 
 const getWecomConversations = () => db.prepare('SELECT * FROM wechat_conversations WHERE tenant_id = ? ORDER BY updated_at DESC LIMIT 80').all(currentTenantId()).map((row) => getWecomConversation(row.id)).filter(Boolean)
 

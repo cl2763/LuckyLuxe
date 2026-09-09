@@ -15,7 +15,10 @@ import { assertTestTarget, isTestTarget } from './test-guard.mjs'
 import { answered, reaskText, repeatPre, sameTopic } from './repeat-guard.mjs'
 import { farewellText, hygiene, isFarewell, stripIntakeTail } from './reply-hygiene.mjs'
 import { bestDiscount, fixedPriceSentence, matchService, pickByRank, quotePathDiscountLine } from './fixed-price-reply.mjs'
-import { availabilityAnswer, classifyInterrupt, discountAnswer, durationAnswer, intakeInterruptDeps, pendingQuestion, resumeText, withResume } from './intake-interrupt.mjs'
+import { availabilityAnswer, classifyInterrupt, discountAnswer, durationAnswer, fullBooked, intakeInterruptDeps, pendingQuestion, resumeText, withResume } from './intake-interrupt.mjs'
+import { fixWeekdays } from './date-human.mjs'
+import { dedupeTail } from './reply-hygiene.mjs'
+import { looksConfirm } from './booking-intake.mjs'
 import { depositBrief } from './deposit-brief.mjs'
 
 const ROOT = join(fileURLToPath(new URL('.', import.meta.url)), '..', '..')
@@ -193,6 +196,49 @@ check('D162 ⑥ 合成时保留原 reply 的其它字段,只换文本那一格',
   (() => { const r = withResume({ source: 'collect_template', data: { intent: 'x', answerZh: '请问是否需要卸甲?' } },
     { kind: 'discount', answer: '现在有「新客券」立减 ¥50。' }, 'zh', '请问是否需要卸甲?')
     return r.data.intent === 'x' && r.source.includes('interrupt_discount') && r.data.answerZh.includes('那我们接着说') })())
+
+/* ═══ D173(店主 05v 补三 §二 §三)· v5 通三那三行当夹具 ═══
+   89 行「明天(9月9日,周三)」· 93 行「9月9日(周一)门店休息」· 97 行 顾客确认句被吞。 */
+check('D173 上① 出口把写错的星期改成算出来的那个(不是删掉整句 —— 顾客要拿它对日历)',
+  (() => { const r = hygiene({ text: '9月9日(周一) 门店休息哦,换一天好吗?', customerText: '下午三点',
+    status: 'ai_replied', lang: 'zh', source: 'booking_intake', todayISO: '2026-09-08' })
+    return r.text.includes('9月9日(周三)') && /weekday-fixed/.test(r.why) })())
+check('D173 上② 对的那句一个字不动',
+  hygiene({ text: '好的,明天(9月9日,周三) 可以。', customerText: '明天', status: 'ai_replied',
+    lang: 'zh', source: 'x', todayISO: '2026-09-08' }).text === '好的,明天(9月9日,周三) 可以。')
+check('D173 上③ 这条不认 ISO 形状 —— 模型自己写的那种也咬得住(v5 那个洞就在这儿)',
+  fixWeekdays('9月9日(周一)门店休息', '2026-09-08').fixed.length === 1
+  && fixWeekdays('2026-09-09 门店休息', '2026-09-08').fixed.length === 0)
+check('D173 上④ ISO 日期在**出口**也变人话(原来只挂在 booking-intake 一条路上)',
+  hygiene({ text: '好的,2026-09-12 可以。', customerText: '周六', status: 'ai_replied',
+    lang: 'zh', source: 'x', todayISO: '2026-09-08' }).text.includes('这周六(9月12日)'))
+check('D173 下① 店休那句自带两个真替代日(走的是中断口那份 fullBooked,同一份实现)',
+  (() => {
+    const av = ({ date }) => ({ closed: date === '2026-09-09', slots: [{ technician: 'A', slots: ['10:00', '11:00'] }] })
+    const r = fullBooked('9月9日(周三)', { getAvailability: av, storeId: 's', serviceId: 'x',
+      date: '2026-09-09', humanDate: (d) => d, todayISO: '2026-09-08' }, 'zh', true)
+    return String(r).includes('门店休息') && (r.alts || []).length === 2 })())
+check('D173 下② 替代日**带得出来**(存进状态,下一句确认时不许现编)',
+  (() => {
+    const av = ({ date }) => ({ closed: date === '2026-09-09', slots: [{ technician: 'A', slots: ['10:00'] }] })
+    const r = fullBooked('x', { getAvailability: av, storeId: 's', serviceId: 'x', date: '2026-09-09',
+      humanDate: (d) => d, todayISO: '2026-09-08' }, 'zh', true)
+    return r.alts.every((a) => /^\d{4}-\d{2}-\d{2}$/.test(a.date) && /^\d{2}:\d{2}$/.test(a.time)) })())
+check('D173 下③ 确认句判断复用全仓那一个 looksConfirm(不自己再写一条正则)',
+  looksConfirm('好的,就这个时间') === true && looksConfirm('我想约周六') === false)
+
+const intakeSrc = readFileSync(join(ROOT, 'apps/api/booking-intake.mjs'), 'utf8')
+const intakeCode = intakeSrc.replace(/\/\*[\s\S]*?\*\//g, '')
+check('D173 下④ 店休那句**只有一处出**(现查全仓原来有三处各写了一遍,改一处等于没改)',
+  (intakeCode.match(/门店休息哦,换一天好吗/g) || []).length === 1
+  && (intakeCode.match(/closedDayReply\(/g) || []).length >= 4)
+check('D173 下⑤ 确认句那一支排在「再问一遍缺的格」**前面**(排后面就永远轮不到它)',
+  intakeCode.indexOf('bookingClosedAlts') < intakeCode.indexOf("!gaveSlot && stage === 'collecting' && looksConfirm(text)"))
+check('D173 下⑥ 替代日从状态里取,**不许现编**(取不到就照旧问哪天)',
+  /const closedAlts = Array\.isArray\(s\.bookingClosedAlts\)/.test(intakeCode)
+  && /if \(!slots\.date && closedAlts\.length && isConfirm\)/.test(intakeCode))
+check('D173 附 出口把连着说两遍的同一句去掉(重放时看见「要我先帮您留着吗?」说了两遍)',
+  dedupeTail('定金 ¥50。要我先帮您留着吗? 要我先帮您留着吗?').split('要我先帮您留着吗').length === 2)
 
 /* ═══ D164 / D165 · 店主 05s 补四 四轮亲测当夹具 ═══ */
 check('D164 ① 待答那句从**会话流水**取(最近一条 AI 的采集问句尾巴)',

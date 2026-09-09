@@ -58,3 +58,37 @@ export function humanDate(iso, todayISO = '', lang = 'zh') {
 export function humanizeDates(text = '', todayISO = '', lang = 'zh') {
   return String(text || '').replace(/\d{4}-\d{2}-\d{2}/g, (m) => humanDate(m, todayISO, lang))
 }
+
+/* ══ D173 上半(店主 05v 补三 §二)· 「同一句里日期与星期打架」══
+
+   v5 通三原文逐字:
+     89 行 AI:「好的,**明天(9月9日,周三)** 可以。大概几点方便?」
+     93 行 AI:「**9月9日(周一)** 门店休息哦,换一天好吗?」
+   同一个日期,两个星期几。店主现查:`weekdayOf('2026-09-09')` = 周三,
+   **第 89 行就是这只函数出的**;第 93 行那个「周一」不可能来自它 ——
+   而「周一」正好是这三家店的每周休息日,所以要么是模型自己写的,要么另有一条路自己拼了星期。
+
+   🔴 关键在这儿:`humanizeDates` **只替换 `YYYY-MM-DD` 这个形状**,
+   句子里没有 ISO 日期时,出口对它**完全没设防**。这个洞与「到底是谁写的那句」无关。
+
+   裁(店主原话):出去的每一句里,凡出现「M月D日(周X)」这个形状,
+   那个「周X」必须等于按门店时区算出来的星期;**不等就由出口改写成算出来的那个**
+   —— 不是删掉整句(顾客要拿它对日历)。 */
+export function fixWeekdays(text = '', todayISO = '') {
+  const src = String(text || '')
+  if (!src) return { text: src, fixed: [] }
+  const fixed = []
+  /* 认「M月D日」后面紧跟一个括号里的「周X」——中英文括号、中间允许有逗号或空格。
+     年份不在句子里,所以用**基准日的年**去补(顾客那句说的一定是当下这一年前后)。 */
+  const out = src.replace(/(\d{1,2})月(\d{1,2})日\s*[（(]\s*([^）)]*?)(周[日一二三四五六])([^）)]*?)\s*[)）]/g,
+    (all, m, d, pre, wd, post) => {
+      const year = /^\d{4}-/.test(todayISO) ? todayISO.slice(0, 4) : String(new Date().getUTCFullYear())
+      const iso = `${year}-${String(Number(m)).padStart(2, '0')}-${String(Number(d)).padStart(2, '0')}`
+      const want = weekdayOf(iso)
+      if (!want || want === wd) return all
+      fixed.push({ iso, said: wd, real: want })
+      return `${Number(m)}月${Number(d)}日(${pre}${want}${post})`
+    })
+  return { text: out, fixed }
+}
+

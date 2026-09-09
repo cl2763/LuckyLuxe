@@ -270,6 +270,28 @@ function seedCardsToday(tid, store, today) {
   return 4
 }
 
+/* ── 排班:今天 + 往后 7 天全天班 ──────────────────────────────
+   🔴 为什么要有这一段(D173 重放时咬出来的):`getAvailability` 要有**在岗的技师**才给得出时段。
+   夹具里一行排班都没有 → 顾客问「下周一」时,店休那条路想给「最近两个有位的日子」,
+   往后找 7 天**一天都找不到**,只能退回「换一天好吗」——
+   看起来像功能没做,其实是**景没造**(店主《造景律》:谁出走查单谁先把景造好)。
+   INSERT-only + 主键 (technician_id, date) 去重,重跑一分不动。 */
+function seedSchedule(tid, today) {
+  const techs = techIds(tid)
+  let n = 0
+  for (let i = 0; i <= 7; i += 1) {
+    const day = shiftDay(today, i)
+    for (const t of techs) {
+      const has = one('SELECT 1 AS n FROM technician_schedules WHERE technician_id = ? AND date = ?', t, day)
+      if (has) continue
+      run(`INSERT INTO technician_schedules (technician_id, date, start_time, end_time, is_working, tenant_id)
+        VALUES (?, ?, '10:00', '19:00', 1, ?)`, t, day, tid)
+      n += 1
+    }
+  }
+  return n
+}
+
 /* ── 今天:三态齐全 + 一个「下一位」 ───────────────────────────── */
 function seedToday(tid, store, today) {
   const svcs = mainServices(tid); const techs = techIds(tid); const cs = custIds(tid)
@@ -408,6 +430,8 @@ for (const tid of Object.keys(SHOPS)) {
        为什么必须每次补:收尾刀(J-33)会把跑机开的会话与积压报价请求关掉,
        关完首页那两项就掉回 0 —— 而 0 正是这一批在治的病。两把刀一收一补,得对得上。 */
     r.todos = seedNotesAndTodos(tid, today)
+    /* 排班也不进幂等门:它按 (技师, 日期) 去重,每天跑一次就把窗口往后推一天 */
+    r.schedule = seedSchedule(tid, today)
     /* AI 今日一句**不进幂等门**:它是覆盖写(一天一条),每次跑都该按当下的数重算一遍。
        放进门里的话,今天早上灌过之后,下午再跑它就还挂着早上那句(数字都对不上了)。 */
     r.aiLine = seedAiLine(tid, today, store.timezone)

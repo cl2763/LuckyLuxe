@@ -178,14 +178,16 @@ function statusOf(db, conversationId, tenantId) {
   try { return (db.prepare('SELECT status FROM wechat_conversations WHERE id = ? AND tenant_id = ?').get(conversationId, tenantId) || {}).status || '' } catch { return '' }
 }
 
-export function applyRepeatGuard({ db, iso, getWecomConversation, hygiene }, { inbound, result, pre, conversationId, tenantId }) {
+export function applyRepeatGuard({ db, iso, getWecomConversation, hygiene, todayISO }, { inbound, result, pre, conversationId, tenantId }) {
   let replyText = String(result?.reply?.data?.answerZh || result?.reply?.data?.answer || result?.reply?.data?.answerEn || '')
   /* D159 / D161 出口卫生:先把「答完还追着问表项」那半句砍掉、
      待人工态下的告别换成告别句 —— 这一步**只做减法**,不生成新事实。
      放在壳里的理由和 D150 一样:采集问句从十几条支路拼上来,逐处改必漏。 */
   if (hygiene && replyText) {
     const status = statusOf(db, conversationId, tenantId)
-    const h = hygiene({ text: replyText, customerText: inbound.content || '', status, lang: inbound.lang || 'zh', source: result?.reply?.source || '' })
+    /* D173:日期这两条要按**门店时区的今天**算,基准日由外面注入(这里不推日期) */
+    const h = hygiene({ text: replyText, customerText: inbound.content || '', status, lang: inbound.lang || 'zh',
+      source: result?.reply?.source || '', todayISO: (todayISO && todayISO()) || '' })
     if (h.why) {
       const row0 = recentAssistant(db, conversationId, tenantId, 1)[0]
       rewriteAssistantRow(db, { id: row0?.id, expect: replyText, content: h.text, why: h.why, iso })
