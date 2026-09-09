@@ -10,7 +10,12 @@
 #
 # 服务心跳表白名单:只有这里列的表,差异才不算「有动」。
 #   每张表的**理由必须写在写它的那段代码旁**(随码复核律),这里只留指针。
-HEARTBEAT_TABLES="notify_scan_marks"   # 理由见 apps/api/notify-scheduler.mjs(每天每店一行,4128 开着就长)
+#   🔴 裁 #23(店主 05w §四):`reminder_tasks` 准进,但**不许整表放行** ——
+#   它是「同一行状态往前推」,不是「只多几行」,所以另加一把形状刀 `tools/heartbeat-shape.mjs`:
+#   只有「只动 status/sent_at/updated_at、其余列一个字节不变」的行才放行,**并把放行的行逐条打印**。
+HEARTBEAT_TABLES="notify_scan_marks reminder_tasks"   # 理由见 apps/api/notify-scheduler.mjs(每天每店一行/到点发一条,4128 开着就长)
+# 需要过形状刀的表(在上面白名单里、且是「改既有行」那一类)
+SHAPED_TABLES="reminder_tasks"
 set -euo pipefail
 SNAP="${1:?用法: bash tools/receipt-db-proof.sh <快照 json> [库绝对路径]}"
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"
@@ -91,6 +96,28 @@ echo '```'
 echo
 FP_DIRTY="$(echo "$FPOUT" | grep -E '旧行消失|整表消失|有租户整个消失' || true)"
 
+# 🔴 裁 #23 的形状闸:指纹说「旧行消失」的那几行,如果**全都落在需过形状刀的表**上,
+#    就交给 `heartbeat-shape.mjs` 逐行验形状 —— 过了才当心跳,没过照红。
+#    形状刀的输出(含**放行清单**)原样贴进回执:店主要的是「几行、哪几个时刻」,不是一句「已放行」。
+if [ -n "$FP_DIRTY" ]; then
+  OTHER="$FP_DIRTY"
+  for t in $SHAPED_TABLES; do OTHER="$(echo "$OTHER" | grep -v " $t " || true)"; done
+  OTHER="$(echo "$OTHER" | sed '/^$/d')"
+  if [ -z "$OTHER" ]; then
+    SHAPEOUT="$(node "$ROOT/tools/heartbeat-shape.mjs" "$DB" "$FP" 2>&1 || echo "__SHAPE_FAILED__")"
+    echo '**心跳形状刀原文**(`node tools/heartbeat-shape.mjs <库绝对路径> '"$FP"'`):'
+    echo
+    echo '```'
+    echo "$SHAPEOUT"
+    echo '```'
+    echo
+    case "$SHAPEOUT" in
+      *__SHAPE_FAILED__*) : ;;                 # 形状没过 → FP_DIRTY 原样留着,下面照红
+      *) FP_DIRTY="" ;;                        # 形状全过 → 这些「旧行消失」是心跳推进,不算有动
+    esac
+  fi
+fi
+
 if [ -n "$FP_DIRTY" ]; then
   echo "🔴 **${DBNAME}:有动** —— 逐行指纹查出既有行被改/被删(快照那把刀看不见这一类):"
   echo '```'
@@ -102,7 +129,7 @@ elif [ -n "$NON_HB" ]; then
   echo "$NON_HB" | sed '/^$/d'
   echo '```'
 elif [ -n "$HB_SEEN" ]; then
-  echo "✅ **${DBNAME}:未动**(快照与逐行指纹**两把都绿**;服务心跳表 \`${HB_SEEN% }\` 的行数增长除外 —— 调度器每天每店写一行,与本批代码无关)"
+  echo "✅ **${DBNAME}:未动**(快照与逐行指纹**两把都绿**;服务心跳表 \`${HB_SEEN% }\` 除外 —— 调度器每天每店写一行、到点把 PENDING 推成 SENT,行行都过了形状刀,放行清单见上,与本批代码无关)"
 else
   echo "✅ **${DBNAME}:未动** —— 快照逐表零差异 **且** 逐行指纹零旧行消失(两把都绿)"
 fi
