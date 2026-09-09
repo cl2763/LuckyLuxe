@@ -172,8 +172,10 @@ window.TodayBoard = (function () {
             ${dv.hours.map((h) => `<div class="tb-hr ${h.off ? 'off' : ''}">${h.label}</div>`).join('')}
           </div>
         </div>
-        <div class="tb-right">
-          <div class="tb-rin">
+        <div class="tb-right" data-tb-right>
+          <!-- D186:可滚时才出这条提示(挂载后量 scrollWidth 决定),纯装饰不挡点击 -->
+          <div class="tb-more" data-tb-more hidden><span>右边还有 ›</span></div>
+          <div class="tb-rin" data-tb-rin>
             <div class="tb-heads">
               ${dv.cols.map((c) => `<div class="tb-th" style="width:${c.width}px"><div class="tb-nm">${escapeHtml(c.name)}</div><div class="tb-rl">${escapeHtml(c.role)}</div><div class="tb-st ${c.busy ? 'busy' : 'free'}">${c.busy ? '忙' : '空'}</div></div>`).join('')}
             </div>
@@ -223,6 +225,21 @@ window.TodayBoard = (function () {
           <button class="ghost slim" data-tbn-write="${escapeHtml(n.bookingId)}" data-uid="${escapeHtml(n.userId)}" data-name="${escapeHtml(n.customerName)}" type="button">写</button></div>` }).join('') || '<p class="subtle">今天没有待写的单。</p>'}
       </div>`)
     bind(mount)
+    showMoreHint(mount)
+  }
+
+  /* D186:可滚才提示。**量出来再决定**,不硬写 —— 技师少的时候一屏就装得下,
+     那时候摆一条「右边还有」是骗人。 */
+  function showMoreHint(mount) {
+    const box = mount.querySelector('[data-tb-right]')
+    const hint = mount.querySelector('[data-tb-more]')
+    if (!box || !hint) return
+    const more = box.scrollWidth - box.clientWidth > 4
+    hint.hidden = !more
+    /* 滑到底就把提示收起来(还剩一点点也不提示 —— 那条渐变会压住最后一张卡的字) */
+    box.addEventListener('scroll', () => {
+      hint.hidden = box.scrollWidth - box.clientWidth - box.scrollLeft <= 4
+    })
   }
 
   /* 空档「+ 直接排单」= 小程序 tapFree 的直排面板同功能(死口清剿三.1:不再指小程序)。

@@ -7506,8 +7506,16 @@ section.card > .section-row:first-child { margin-top: 0; }
 .tb-gutter { position: relative; }
 .tb-hr { height: 48px; font-size: 11px; color: var(--muted); padding: 2px 6px; box-sizing: border-box; }
 .tb-hr.off { background: rgba(0,0,0,.03); }
-.tb-right { overflow-x: auto; flex: 1; }
-.tb-rin { min-width: max-content; }
+/* 🔴 D186(店主 05v 补一 §四 亲看):分栏之后一位技师并排 5 张卡,把右边那列挤出了屏,
+   右边缘只露出半张 —— **叠字治好了,「看不全」是新病**。
+   台面本来就横向可滚,但**看不出来还有**。裁的原话:「要么看得全,要么看得出还有」。
+   做法:①可滚时右侧浮一条渐变 + 一句提示(纯装饰,不挡点击);②内容右侧留 8px,
+   最后一张卡不贴着边(贴边看着就像被切了一半)。 */
+.tb-right { overflow-x: auto; flex: 1; position: relative; }
+.tb-rin { min-width: max-content; padding-right: 8px; }
+.tb-more { position: absolute; right: 0; top: 56px; bottom: 0; width: 44px; pointer-events: none;
+  background: linear-gradient(to right, transparent, var(--card)); display: flex; align-items: center; justify-content: flex-end; }
+.tb-more span { font-size: 11px; color: var(--muted); writing-mode: vertical-rl; padding: 0 2px; }
 .tb-heads { display: flex; border-bottom: 1px solid var(--line); }
 .tb-th { width: 150px; flex: none; padding: 6px 10px; height: 56px; box-sizing: border-box; border-right: 1px solid rgba(0,0,0,.04); }
 .tb-nm { font-weight: 600; font-size: 14px; }

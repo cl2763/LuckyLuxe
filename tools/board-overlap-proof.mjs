@@ -131,7 +131,26 @@ async function open(mode) {
 const measure = async () => ev(`(() => {
   const inter = (a, b) => !(a.right <= b.left + 0.5 || b.right <= a.left + 0.5 || a.bottom <= b.top + 0.5 || b.bottom <= a.top + 0.5);
   const cols = Array.from(document.querySelectorAll('.tb-col'));
-  const out = { cols: cols.length, blocks: 0, frees: 0, blockPairs: [], freeHits: [], texts: [] };
+  const out = { cols: cols.length, blocks: 0, frees: 0, blockPairs: [], freeHits: [], texts: [], clipped: [], scrollable: false, hintShown: false };
+  /* ══ D186(店主 05v 补一 §四):分栏之后不许有卡被横向裁掉 ══
+     裁的原话:「要么看得全,要么看得出还有」。台面本来就横向可滚,所以判据是两条:
+     ① 每张卡都完整落在**可滚画布**(tb-rin)里 —— 画布里被切,那是真的看不全;
+     ② 画布比视口宽时,**必须有一条看得见的提示**(tb-more),否则店主不知道右边还有。
+     ⚠️ 这段注释在模板字符串里,**不许写反引号** —— 同一个坑今晚踩到第三次了。 */
+  const rin = document.querySelector('[data-tb-rin]');
+  const box = document.querySelector('[data-tb-right]');
+  const hint = document.querySelector('[data-tb-more]');
+  if (rin) {
+    const rr = rin.getBoundingClientRect();
+    document.querySelectorAll('[data-tb-block]').forEach((e) => {
+      const r = e.getBoundingClientRect();
+      if (r.right > rr.right + 1 || r.left < rr.left - 1) {
+        out.clipped.push(\`「\${(e.textContent || '').replace(/\\s+/g, ' ').trim().slice(0, 24)}」右=\${Math.round(r.right)} 画布右=\${Math.round(rr.right)}\`)
+      }
+    })
+  }
+  out.scrollable = box ? (box.scrollWidth - box.clientWidth > 4) : false;
+  out.hintShown = Boolean(hint && !hint.hidden);
   cols.forEach((col, ci) => {
     const blocks = Array.from(col.querySelectorAll('[data-tb-block]'));
     const frees = Array.from(col.querySelectorAll('[data-tb-free]'));
@@ -151,12 +170,23 @@ const measure = async () => ev(`(() => {
 
 for (const mode of ['light', 'dark']) {
   await open(mode)
-  const m = JSON.parse(await measure() || '{}')
+  /* 🔴 量到 0 块就再等一下重量:首页那块屏在数据回来后会**重挂一次台面**,
+     正好卡在那一下就会量到空的(现测:旗舰店可复现地量到 0 块)。
+     重试而不是把判据放松 —— 「量到空的」和「真的没有」是两件事。 */
+  let m = {}
+  for (let i = 0; i < 6; i += 1) {
+    m = JSON.parse(await measure() || '{}')
+    if (Number(m.blocks) > 0) break
+    await sleep(1200)
+  }
   const tag = mode === 'light' ? '浅色' : '深色'
   check(`${TENANT} · ${tag}:台面画出来了(块 ${m.blocks} 个,列 ${m.cols} 列)`, Number(m.blocks) >= 3, JSON.stringify(m).slice(0, 160))
   check(`${TENANT} · ${tag}:同一列里任意两块**包围盒不相交**`, (m.blockPairs || []).length === 0, (m.blockPairs || []).slice(0, 3).join(' | '))
   check(`${TENANT} · ${tag}:「+ 直接排单」空档框与任何卡片不相交`, (m.freeHits || []).length === 0, (m.freeHits || []).slice(0, 3).join(' | '))
   check(`${TENANT} · ${tag}:块里每一行都是单行(不折行)`, (m.texts || []).length === 0, (m.texts || []).slice(0, 3).join(' | '))
+  check(`${TENANT} · ${tag}:没有卡被画布裁掉(D186)`, (m.clipped || []).length === 0, (m.clipped || []).slice(0, 3).join(' | '))
+  check(`${TENANT} · ${tag}:要滚就得看得出来(可滚=${m.scrollable} · 提示=${m.hintShown})`,
+    !m.scrollable || m.hintShown, '横向能滚却没有「右边还有」的提示 —— 店主不知道右边还有')
   const shot = await send('Page.captureScreenshot', { format: 'png' })
   const file = join(OUT, `段2_D171_台面_${TENANT}_${tag}.png`)
   writeFileSync(file, Buffer.from(shot.result.data, 'base64'))
