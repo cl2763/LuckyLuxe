@@ -4,6 +4,11 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>预约</title>
+    <!-- 🔴 夜7 段2 现测出来的事故:`styles.css` 在 05z 那一轮令牌化之后,
+         整份都在用 `var(--paper/--ink/--card/--line/--sub)` —— 而**这一页从来没引过令牌文件**,
+         于是那些 var() 全是空的:顾客端底色透明、字色回落成纯黑,整页塌掉。
+         令牌必须排在 styles.css **前面**(后者靠它取值)。 -->
+    <link rel="stylesheet" href="/web/design-tokens.css?v=20260825e-w2">
     <link rel="stylesheet" href="/web/styles.css?v=20260825e-w2">
   </head>
   <body>

@@ -49,6 +49,10 @@ const PORT = Number(process.env.SHOT_PORT || 9336)
 const CAP = process.env.CS_CAP ? Number(process.env.CS_CAP) : null
 const OUT = process.env.CS_OUT || ''
 const ONLY = (process.env.CS_PAGES || '').split(',').map((x) => x.trim()).filter(Boolean)
+/* 夜7 段2:同一把刀两个靶子 —— `admin`(商家后台,默认)/ `customer`(顾客端网页)。
+   店主的话:「顾客端是**外人**看的,比后台更不能出白字压浅底」,而它**一次都没扫过**。
+   顾客端没有站内三档(那是后台才有的),所以浅/深两档用 **CDP 模拟系统偏好** 切。 */
+const TARGET = (process.env.CS_TARGET || 'admin').toLowerCase()
 /* 被测的那一版代码也要写进抬头 —— 否则「修前/修后」两份报告光看刀号还是分不出量的是哪一版 */
 const CODE_REV = (() => {
   /* 🔴 「退回旧版重量一次」这种跑法(J-39 §二 的做法一)下,git 只会说「工作区脏了」,
@@ -249,6 +253,50 @@ const setTheme = (mode) => ev(`(() => { if (window.ThemeSwitch) window.ThemeSwit
 /* 🔴 登进去了没有,**必须当场断言** —— 头一跑它没登进去,却一路往下扫了登录页那 16 个节点、
    还报了个「甲档 4 条」出来,看着像结论其实是空气(静默失败器族;这一夜第三次)。
    现在:两次重试 + 硬断言,进不去就退出码 2,绝不假装扫过。 */
+const bad = []
+let scanned = 0
+let grad = 0   /* 背景是渐变、这把刀判不了的节点数(如实报,不混进绿也不混进红) */
+
+/* ── 顾客端那一支:不登录、按底部四个 tab 走 ────────────────────────── */
+if (TARGET === 'customer') {
+  await send('Page.navigate', { url: `${BASE}/?tenant=${process.env.CS_TENANT || 'lucky-luxe'}` })
+  await sleep(4200)   /* 顾客端的内容是拉回来才渲染的;等不够就只扫到骨架(现测:17 个 vs 47 个) */
+  const title = await ev('document.title')
+  const views = await ev(`Array.from(document.querySelectorAll('[data-view]'))
+    .map((b) => ({ key: b.dataset.view, name: (b.textContent || '').trim().slice(0, 8) }))
+    .filter((x, i, a) => x.key && a.findIndex((y) => y.key === x.key) === i)`)
+  if (!views.length) {
+    console.error(`🔴 顾客端没出 tab(标题「${title}」)—— 这一跑什么都没扫,不许下结论`)
+    ws.close(); chrome.kill(); process.exit(2)
+  }
+  console.log(`   [顾客端] 标题「${title}」· ${views.length} 个 tab:${views.map((v) => v.key).join(' / ')}`)
+  /* 🔴 前置自证(这一夜第三次栽在「没等到内容就开扫」上):首屏必须真有内容,
+     少于 30 个自持文字的可见节点 = 页面还没渲染完,**拒绝往下扫**,不拿骨架冒充全站。 */
+  const firstCount = await ev(`Array.from(document.querySelectorAll('body *')).filter((el) => {
+    const cs = getComputedStyle(el); if (cs.display === 'none' || cs.visibility === 'hidden') return false
+    const r = el.getBoundingClientRect(); if (r.width < 2 || r.height < 2) return false
+    let t = ''; for (const n of el.childNodes) if (n.nodeType === 3) t += n.textContent
+    return t.trim().length > 0 }).length`)
+  if (Number(firstCount) < 30) {
+    console.error(`🔴 顾客端首屏只有 ${firstCount} 个文字节点 —— 内容还没渲染完,这一跑不算数(不许拿骨架当全站)`)
+    ws.close(); chrome.kill(); process.exit(2)
+  }
+  console.log(`   [前置] 首屏 ${firstCount} 个文字节点,够了`)
+  for (const mode of ['light', 'dark']) {
+    /* 顾客端跟系统走,所以直接模拟系统偏好(比在页面里塞属性诚实:线上就是这么来的) */
+    await send('Emulation.setEmulatedMedia', { features: [{ name: 'prefers-color-scheme', value: mode }] })
+    for (const v of views) {
+      await ev(`(() => { const b = document.querySelector('[data-view="${v.key}"]'); if (b) b.click(); return 1 })()`)
+      await sleep(2200)
+      const res = await ev(SWEEP)
+      scanned += res.scanned; grad += res.gradients || 0
+      for (const b of res.bad) bad.push({ 页: `顾客端·${v.name || v.key}`, 标签: '(整页)', 档: mode, ...b })
+      console.log(`   [扫] ${mode} · 顾客端 ${v.name || v.key} —— 文字节点 ${res.scanned} 个,红 ${res.bad.length} 条`)
+    }
+  }
+  await send('Emulation.setEmulatedMedia', { features: [] })
+} else {
+
 await login()
 for (let tries = 1; tries <= 2 && !(await ev(LOGGED_IN)); tries += 1) {
   console.error(`   [重试 ${tries}] 没登进去,再来一次`)
@@ -265,9 +313,7 @@ const pages = await ev(`Array.from(document.querySelectorAll('[data-admin-page]'
 const targets = ONLY.length ? pages.filter((p) => ONLY.includes(p.key)) : pages
 console.log(`   [侧栏] 共 ${pages.length} 页,这一跑扫 ${targets.length} 页`)
 
-const bad = []
-let scanned = 0
-let grad = 0   /* 背景是渐变、这把刀判不了的节点数(如实报,不混进绿也不混进红) */
+
 for (const mode of ['light', 'dark']) {
   await setTheme(mode)
   for (const p of targets) {
@@ -293,6 +339,7 @@ for (const mode of ['light', 'dark']) {
       console.log(`   [扫] ${mode} · ${p.name || p.key} · ${tab.label} —— 文字节点 ${res.scanned} 个,红 ${res.bad.length} 条`)
     }
   }
+}
 }
 
 /* ── 红榜 ────────────────────────────────────────────────── */
