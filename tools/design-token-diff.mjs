@@ -31,8 +31,12 @@ const MINI = join(ROOT, 'miniprogram/styles/tokens.wxss')
 /* 三段各自的选择器 —— **顺序与名字都是基准的一部分**:
    ③ 必须排在 ② 后面,站内显式选的深色才压得过系统的。 */
 const BLOCKS = [
-  { key: 'light', head: ':root{', mini: 'page{' },
-  { key: 'system-dark', head: ':root:not([data-theme="light"]){', mini: '@media (prefers-color-scheme: dark){page{' },
+  /* 🔴 05x §二(裁 #25)之后,小程序基线这两段的选择器多了一个 `.theme-root` ——
+     自定义组件(两条 tabbar)吃不到 `page` 选择器,得靠它拿同一套值。
+     **值一个字都没动,只是多了一个选择器**,所以这把刀改成认「选择器组里含 page」,
+     不再锚死 `page{` 这个字面串(判据不许锚在会变的字面量上)。 */
+  { key: 'light', head: ':root{', mini: 'page,.theme-root{' },
+  { key: 'system-dark', head: ':root:not([data-theme="light"]){', mini: '@media (prefers-color-scheme: dark){page,.theme-root{' },
   /* 🔴 D183(夜班令6 段 3)之后,小程序**也有**站内选的那两档了。
      WXSS 没有 `:root`、根节点挂不了属性,所以它落在**页面最外层 view 的 class** 上
      (`.theme-light` / `.theme-dark`,见 `utils/theme.js` 抬头)。

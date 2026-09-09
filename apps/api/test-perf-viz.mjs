@@ -36,8 +36,17 @@ async function request(path, options = {}, token = PLATFORM, extraHeaders = {}) 
 async function ensureCategory(token, body) {
   const made = await request('/admin/pricing/categories', { method: 'POST', body: JSON.stringify(body) }, token)
   if (made.data && made.data.category) return made.data.category
-  const list = (await request('/admin/pricing/categories', {}, token)).data.categories || []
-  return list.find((c) => c.key === body.key) || list.find((c) => c.name === body.name) || list[0]
+  const got = await request('/admin/pricing/categories', {}, token)
+  const list = (got.data && got.data.categories) || []
+  const hit = list.find((c) => c.key === body.key) || list.find((c) => c.name === body.name) || list[0]
+  /* 🔴 2026-09-09 全量里见过一次:这里回了个 undefined,后面一路 `Cannot read properties of undefined`,
+     **整套当场炸掉、连是哪一步都看不出来**(重跑两次都绿,是个偶发)。
+     静默失败器族的反面:取不到就**当场说清现场**,别把一个 TypeError 甩给下一个人。 */
+  if (!hit) {
+    throw new Error(`[夹具] 建分类没成、回读也没有:建=${made.status} ${JSON.stringify(made.data).slice(0, 120)}`
+      + ` · 回读=${got.status} 共 ${list.length} 条`)
+  }
+  return hit
 }
 
 async function newShop(label) {
