@@ -150,7 +150,19 @@ const measure = async () => ev(`(() => {
     })
   }
   out.scrollable = box ? (box.scrollWidth - box.clientWidth > 4) : false;
-  out.hintShown = Boolean(hint && !hint.hidden);
+  /* 🔴 判据升级(D188,05v 收尾时肉眼撞见):原来只问「hidden 这个属性是不是 false」——
+     而这条提示是 position:absolute 挂在**横向滚动容器**里的,absolute 认的是滚动内容的右边,
+     不是屏幕上看得见的那条右边。于是它 hidden=false、却停在画布外面,店主一辈子看不见,
+     判据照样绿。**「在缺陷存在时照样绿」的判据就是废判据** —— 改成量它到底有没有落在可见区里。 */
+  const vis = (e) => { if (!e || e.hidden) return null; const r = e.getBoundingClientRect(); const cs = getComputedStyle(e);
+    return { r, ok: r.width > 0 && r.height > 0 && cs.visibility !== 'hidden' && Number(cs.opacity) > 0.05 } };
+  const hv = vis(hint);
+  out.hintShown = Boolean(hv && hv.ok);
+  if (hv && box) {
+    const br = box.getBoundingClientRect();
+    out.hintInView = hv.r.left < br.right - 2 && hv.r.right > br.left + 2 && hv.r.top < br.bottom - 2 && hv.r.bottom > br.top + 2;
+    out.hintWhere = ' 提示右=' + Math.round(hv.r.right) + ' 可见区右=' + Math.round(br.right);
+  } else { out.hintInView = false; out.hintWhere = '(没有提示元素或它是 hidden)' }
   cols.forEach((col, ci) => {
     const blocks = Array.from(col.querySelectorAll('[data-tb-block]'));
     const frees = Array.from(col.querySelectorAll('[data-tb-free]'));
@@ -187,6 +199,9 @@ for (const mode of ['light', 'dark']) {
   check(`${TENANT} · ${tag}:没有卡被画布裁掉(D186)`, (m.clipped || []).length === 0, (m.clipped || []).slice(0, 3).join(' | '))
   check(`${TENANT} · ${tag}:要滚就得看得出来(可滚=${m.scrollable} · 提示=${m.hintShown})`,
     !m.scrollable || m.hintShown, '横向能滚却没有「右边还有」的提示 —— 店主不知道右边还有')
+  /* D188:提示不但要「在」,还要**落在店主看得见的那块区域里** */
+  check(`${TENANT} · ${tag}:那条提示真的在可见区里(D188 · 不是挂在画布外面)`,
+    !m.scrollable || m.hintInView, `${m.hintWhere || ''} —— 提示挂在滚动内容的右边,屏幕上看不见`)
   const shot = await send('Page.captureScreenshot', { format: 'png' })
   const file = join(OUT, `段2_D171_台面_${TENANT}_${tag}.png`)
   writeFileSync(file, Buffer.from(shot.result.data, 'base64'))
