@@ -178,11 +178,26 @@ function statusOf(db, conversationId, tenantId) {
   try { return (db.prepare('SELECT status FROM wechat_conversations WHERE id = ? AND tenant_id = ?').get(conversationId, tenantId) || {}).status || '' } catch { return '' }
 }
 
+import { isFarewell, farewellText } from './reply-hygiene.mjs'
+
 export function applyRepeatGuard({ db, iso, getWecomConversation, hygiene, todayISO }, { inbound, result, pre, conversationId, tenantId }) {
   let replyText = String(result?.reply?.data?.answerZh || result?.reply?.data?.answer || result?.reply?.data?.answerEn || '')
   /* D159 / D161 出口卫生:先把「答完还追着问表项」那半句砍掉、
      待人工态下的告别换成告别句 —— 这一步**只做减法**,不生成新事实。
      放在壳里的理由和 D150 一样:采集问句从十几条支路拼上来,逐处改必漏。 */
+  /* ══ D174(店主 05u §三 亲读 v5 通五)· **顾客说「谢谢」,AI 一个字没回** ══
+     D161 修的是「待人工态说谢谢别复读转人工句」,现在从复读变成了**完全静默** ——
+     比复读更坏:店主早裁过「沉默会被当成机器坏了」(D133/D147)。
+     裁:**任何态下顾客的告别句都必须有一句回应;静默一律算红。**
+     为什么补在这儿:出口卫生那一段的前提是「已经有一句话」(`if (hygiene && replyText)`),
+     而这一病恰恰是**一句话都没有** —— 补在它前面,把空的那一支也接住。 */
+  if (!replyText && isFarewell(inbound.content || '')) {
+    const line = farewellText(inbound.lang || 'zh')
+    const cleaned = { ...(result?.reply || {}), source: `${result?.reply?.source || 'silent'}+farewell`,
+      data: { ...(result?.reply?.data || {}), answerZh: line, answerEn: farewellText('en'), handoffRequired: false } }
+    result = { ...result, reply: cleaned, hygiene: 'farewell-on-silence' }
+    replyText = line
+  }
   if (hygiene && replyText) {
     const status = statusOf(db, conversationId, tenantId)
     /* D173:日期这两条要按**门店时区的今天**算,基准日由外面注入(这里不推日期) */

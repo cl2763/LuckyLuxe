@@ -50,11 +50,18 @@ const CATEGORY = [
 
 /** 问的是「最便宜/最贵的 X」时,挑出该报的那个 `fixed` 项目 + 陪衬的第二个。
  *  @returns {{ top, second }|null} */
-export function pickByRank(text = '', items = []) {
+export function pickByRank(text = '', items = [], contextType = '') {
   const t = String(text || '')
   const rank = RANK.find((r) => r.re.test(t))
   if (!rank) return null
+  /* 🔴 D176(店主 05u §三 亲读 v5 通二):上文在说**美睫**(刚报过「裸感自然睫 CAD $198」),
+     顾客接着问「那个最便宜的是哪种」,AI 却答「手部基础护理 $88」——
+     **跨了品类,还和自己上一句的 $198 打架**。
+     病因:品类只从**当句**认。而「最便宜的」这句话里根本没有品类词,于是掉回全店挑。
+     裁:当句没说品类,就用**会话里已经确定的那个**(采集状态的 serviceType,
+     或最近一次自己报过的那个项目的 type);两个都没有才全店挑。 */
   const cat = CATEGORY.find((c) => c.re.test(t))
+    || (contextType ? { type: String(contextType).toUpperCase() } : null)
   const pool = items
     .filter((i) => i.priceMode === 'fixed' && Number(i.priceCents) > 0)
     .filter((i) => (cat ? String(i.type || '').toUpperCase() === cat.type : true))
@@ -121,7 +128,7 @@ export function quotePathDiscountLine(discounts = [], lang = 'zh') {
  *  没命中 / 不是问价 / 命中的是 `quote` 项目 → 回 `null`,让原流程照旧走。
  *  放这儿而不是放 `local-server.mjs`:巨型文件只许搬出(公约③),
  *  而且这一段的全部逻辑本来就属于 D152 这个域。 */
-export function fixedPriceAnswer({ db, tenantId, discountFacts, money }, { text, priceIntent }) {
+export function fixedPriceAnswer({ db, tenantId, discountFacts, money }, { text, priceIntent, contextType = '' }) {
   if (!priceIntent) return null
   const rows = db.prepare(`SELECT id, name_zh, price_cents, base_duration_min, price_mode, type FROM services
     WHERE tenant_id = ? AND is_active = 1 AND (item_kind IS NULL OR item_kind = 'main')`).all(tenantId)
@@ -130,7 +137,8 @@ export function fixedPriceAnswer({ db, tenantId, discountFacts, money }, { text,
   /* 两条路都归这个出口:①顾客点了名 ②顾客问「最便宜/最贵的」。
      ②那条以前掉回报价采集自己答,于是同一个项目有时带券有时不带(05s 补一 §二①)。 */
   const named = matchService(text, items)
-  const ranked = (!named || named.priceMode !== 'fixed') ? pickByRank(text, items) : null
+  /* D176:把「会话里已经确定的品类」带进去 —— 当句没说品类时用它,别掉回全店 */
+  const ranked = (!named || named.priceMode !== 'fixed') ? pickByRank(text, items, contextType) : null
   const hit = (named && named.priceMode === 'fixed' && named.priceCents) ? named : (ranked ? ranked.top : null)
   if (!hit || hit.priceMode !== 'fixed' || !hit.priceCents) return null
   const facts = discountFacts(db, tenantId, money)

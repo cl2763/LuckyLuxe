@@ -18,6 +18,7 @@ import { bestDiscount, fixedPriceSentence, matchService, pickByRank, quotePathDi
 import { availabilityAnswer, classifyInterrupt, discountAnswer, durationAnswer, fullBooked, intakeInterruptDeps, pendingQuestion, resumeText, withResume } from './intake-interrupt.mjs'
 import { fixWeekdays } from './date-human.mjs'
 import { dedupeTail } from './reply-hygiene.mjs'
+import { applyRepeatGuard } from './repeat-guard.mjs'
 import { looksConfirm } from './booking-intake.mjs'
 import { depositBrief } from './deposit-brief.mjs'
 
@@ -239,6 +240,32 @@ check('D173 下⑥ 替代日从状态里取,**不许现编**(取不到就照旧�
   && /if \(!slots\.date && closedAlts\.length && isConfirm\)/.test(intakeCode))
 check('D173 附 出口把连着说两遍的同一句去掉(重放时看见「要我先帮您留着吗?」说了两遍)',
   dedupeTail('定金 ¥50。要我先帮您留着吗? 要我先帮您留着吗?').split('要我先帮您留着吗').length === 2)
+
+/* ═══ D174 / D176(店主 05u §三 亲读 v5 读出来的另两条)═══ */
+check('D174 ① 顾客告别、机器一句话都没有时,出口补一句告别 —— **静默一律算红**',
+  (() => {
+    const r = applyRepeatGuard({ db: null, iso: () => '', getWecomConversation: () => null, hygiene: null },
+      { inbound: { content: '谢谢', lang: 'zh' }, result: { reply: { data: { answerZh: '' } } },
+        pre: { run: false, lastText: '' }, conversationId: 'c', tenantId: 't' })
+    const zh = r?.reply?.data?.answerZh || ''
+    return zh.length > 0 && /不客气|随时/.test(zh) })())
+check('D174 ② 不是告别就不硬塞话(空就是空,别为了「有回复」编一句)',
+  (() => {
+    const r = applyRepeatGuard({ db: null, iso: () => '', getWecomConversation: () => null, hygiene: null },
+      { inbound: { content: '这个多少钱', lang: 'zh' }, result: { reply: { data: { answerZh: '' } } },
+        pre: { run: false, lastText: '' }, conversationId: 'c', tenantId: 't' })
+    return !(r?.reply?.data?.answerZh || '') })())
+const RANK_ITEMS = [
+  { id: 'a', name: '手部基础护理', priceCents: 8800, priceMode: 'fixed', type: 'NAIL' },
+  { id: 'b', name: '裸感自然睫', priceCents: 19800, priceMode: 'fixed', type: 'LASH' },
+  { id: 'c', name: '轻盈浓密睫', priceCents: 26800, priceMode: 'fixed', type: 'LASH' },
+]
+check('D176 ① 上文在说美睫 → 「最便宜的是哪种」只在美睫里挑(v5 通二那条:跨了品类还和自己上一句打架)',
+  pickByRank('那个最便宜的是哪种', RANK_ITEMS, 'lash')?.top?.name === '裸感自然睫')
+check('D176 ② 当句明说品类时**当句优先**(上文是美睫,这句问美甲 → answer 美甲)',
+  pickByRank('最便宜的美甲多少钱', RANK_ITEMS, 'lash')?.top?.name === '手部基础护理')
+check('D176 ③ 上文也没有品类 → 才全店挑(不许因为没上下文就不答)',
+  pickByRank('那个最便宜的是哪种', RANK_ITEMS)?.top?.name === '手部基础护理')
 
 /* ═══ D164 / D165 · 店主 05s 补四 四轮亲测当夹具 ═══ */
 check('D164 ① 待答那句从**会话流水**取(最近一条 AI 的采集问句尾巴)',

@@ -2985,7 +2985,7 @@ function resolveQuoteWorkflow(inbound = {}, transcript = [], fallbackReply = nul
   if (isStoreInfoOnlyInquiry(state.currentText || inbound.content || '')) return passThrough()
   // 纯政策/定金问题（取消、改期、定金多少等）同理直接走普通回答。
   if (isPolicyOrDepositOnlyInquiry(state.currentText || inbound.content || '')) return passThrough()
-  const fixedHit = fixedPriceAnswer({ db, tenantId: currentTenantId(), discountFacts, money: formatMoneyCents }, { text: state.currentText || inbound.content || '', priceIntent: state.priceIntent })   // 🔴 D152 正面(05s 裁待裁 #8):命中 fixed 直接报三段式、不进采集
+  const fixedHit = fixedPriceAnswer({ db, tenantId: currentTenantId(), discountFacts, money: formatMoneyCents }, { text: state.currentText || inbound.content || '', priceIntent: state.priceIntent, contextType: state.serviceType || '' })   // 🔴 D152 正面(05s 裁待裁 #8):命中 fixed 直接报三段式、不进采集;D176:当句没说品类就用会话里已定的那个
   if (fixedHit) return { reply: fixedHit, shouldCreateQuote: false, state, quotePayload: null }
   const hasMissingRequired = missingQuestions.zh.length > 0
   const hasQuoteStateUpdate = [state.extensionNeeded, state.removalNeeded, state.repairNeeded,
