@@ -313,6 +313,15 @@ check('㉕e 🔴 柱形保底不拆:拿不到 canvas 上下文就落回柱形',
 check('㉕f 换指标要重画(走势按指标算,不重画就是拿上一个指标的线骗人)',
   /this\._spark = dh\.spark \|\| \[\][\s\S]{0,120}?drawSpark\(\)/.test(pageJs))
 
+/* ══ 裁 #21 拍到真机之后才看见的一条:五格里的金额被省略号吃掉了数字 ══
+   「现金业绩 CAD $5,760.00」整串塞不下 → 切成「CAD $…」,**数字本身没了**,比折行更糟。
+   回图:`.mini5 b` 写的是「3,120」——只有数字,币种由上面那个大数字交代。按图改。 */
+check('㉖ 五格里的金额只报数(币种由大数字那一处交代 —— 图 line 71–72)',
+  /const partsOf = makePartsFor\(pulse && pulse\.currencyDisplay, cur\)/.test(readFileSync(join(ROOT, 'miniprogram/utils/dashboard-view.js'), 'utf8'))
+  && /return `\$\{q\.amount\}\$\{q\.cents\}`/.test(readFileSync(join(ROOT, 'miniprogram/utils/dashboard-view.js'), 'utf8')))
+check('㉖b 仍然只走后端下发的 currencyDisplay(页面零拼串)',
+  !/'CAD|\bUS \$/.test(readFileSync(join(ROOT, 'miniprogram/utils/dashboard-view.js'), 'utf8').replace(/\/\*[\s\S]*?\*\//g, '')))
+
 /* ══ D183 · 小程序也有明暗双模式(夜班令6 段 3;双端同批律)══ */
 const themeUtil = readFileSync(join(ROOT, 'miniprogram/utils/theme.js'), 'utf8')
 const meJs = readFileSync(join(ROOT, 'miniprogram/pages/merchant/me/index.js'), 'utf8')

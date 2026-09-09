@@ -31,13 +31,20 @@ page{--paper:#faf8f3;--ink:#23241f;--sub:#6d6f66;--line:#e3e0d6;--card:#fff;--wa
    值与上面两段**逐字相同**,只是选择器换了 —— 这样「同一个语义只有一组值」。
    ⚠️ 令牌刀(`design-token-diff`)比的是 `page{}` 与 `@media` 那两段;
       这两段是它们的副本,改上面必须同步改这里(下一批把这条也纳进刀里)。 */
-.theme-light{--paper:#faf8f3;--ink:#23241f;--sub:#6d6f66;--line:#e3e0d6;--card:#fff;--wall:#f1eee6;
+.theme-light{min-height:100vh;background:var(--paper);color:var(--ink);--paper:#faf8f3;--ink:#23241f;--sub:#6d6f66;--line:#e3e0d6;--card:#fff;--wall:#f1eee6;
 --acc:#0e6e62;--accd:#0a5a50;--brand:#b09468;--brandd:#8a6f45;
 --hero:#2a2521;--hero2:#3a332c;--heroink:#f5efe3;--herosub:#bfb4a2;--herogold:#d9b97e;--herogrid:rgba(245,239,227,.12);--herolive:#6fd0a0;
 --good:#2e8b57;--goodbg:#e6f3ea;--bad:#b3413a;--badbg:#f7e7e5;--flat:#7b7f76;--flatbg:#ededea;
 --tagm:#8a5a00;--tagmbg:#faf3e3;--tagw:#274f8f;--tagwbg:#eef2fa;
 --done:#cdbfa3;--doing:#d9b97e;--next:#7b7f76}
-.theme-dark{--paper:#191b19;--ink:#e8e7e0;--sub:#9aa096;--line:#33362f;--card:#20241f;--wall:#242822;
+/* 🔴 现测(裁 #21 拍到真机之后才看见的):只换令牌**不够** ——
+   `page{background:...}` 挂在页面根节点上,而主题类挂在里面那个 `view.page` 上,
+   于是深色下「文字翻成浅色、底还是白的」→ 浅字压白底,几乎看不见。
+   所以两个类各自**把底色与字色也带上**、并撑满一屏。
+   ⚠️ 这三条写在**各自块里**,不写成 `.theme-light,.theme-dark{...}` 的共用规则 ——
+      令牌刀按 `.theme-dark{` 这个串找块,共用规则会让它找错块(现测红过一次)。
+      刀只认 `--x: y` 这种声明,所以块里多几条普通样式不影响比对。 */
+.theme-dark{min-height:100vh;background:var(--paper);color:var(--ink);--paper:#191b19;--ink:#e8e7e0;--sub:#9aa096;--line:#33362f;--card:#20241f;--wall:#242822;
 --acc:#4cc0b0;--accd:#63d2c3;--brand:#d3b483;--brandd:#e2c79c;
 --hero:#15130f;--hero2:#221d18;--heroink:#f5efe3;--herosub:#a79c8a;--herogold:#e2c48d;--herogrid:rgba(245,239,227,.10);--herolive:#6fd0a0;
 --good:#6fd0a0;--goodbg:#1c2f25;--bad:#e5867e;--badbg:#33201e;--flat:#9aa096;--flatbg:#2a2d28;

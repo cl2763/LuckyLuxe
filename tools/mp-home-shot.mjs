@@ -38,6 +38,15 @@ const sleep = (ms) => new Promise((r) => setTimeout(r, ms))
 const withTimeout = (p, ms, what) => Promise.race([
   p, new Promise((_, rej) => setTimeout(() => rej(new Error(`automator 卡住了(${ms}ms):${what}`)), ms)),
 ])
+/* 🔴 裁 #21 第 1 条(店主 05v 补一 §二):**截图卡住只算「本次没拍到」,不许吊死整刀**。
+   这台机器上 `mp.screenshot()` 必卡(现测:别的调用秒回,只有它不返回)。
+   包一层:超时就点名记一笔、继续往下跑;真要图走第三条路
+   —— `tools/mp-window-shot.mjs`(macOS `screencapture -l <windowid>`,已跑通)。 */
+const missed = []
+const shotOrSkip = async (p, what) => {
+  try { await withTimeout(p, 20000, what); return true }
+  catch (e) { missed.push(`${what}(${e.message})`); console.log(`⏳ ${what} —— **本次没拍到**,继续往下跑`); return false }
+}
 
 const seen = []
 let n = 0
@@ -78,7 +87,7 @@ for (const tenant of TENANTS) {
   const d = await page.data()
   check(`${tenant} · 正常态出来了(dhState=ready)`, d.dhState === 'ready', String(d.dhState))
   check(`${tenant} · 大数不是空的`, Boolean(d.dh && d.dh.headValue), String(d.dh && d.dh.headValue))
-  await withTimeout(mp.screenshot({ path: join(OUT, `${tenant}_ready.png`) }), 20000, `截图 ${tenant}`)
+  await shotOrSkip(mp.screenshot({ path: join(OUT, `${tenant}_ready.png`) }), `截图 ${tenant}`)
   seen.push({ tenant, head: d.dh && d.dh.headValue, small: d.dh && d.dh.smalls && d.dh.smalls[0] && d.dh.smalls[0].value })
   console.log(`   [图] ${join(OUT, `${tenant}_ready.png`)} · 大数 ${d.dh && d.dh.headValue} · 现金 ${d.dh && d.dh.smalls[0].value}`)
 }
@@ -95,7 +104,7 @@ for (const st of ['failed', 'loading']) {
   await sleep(600)
   const cur = await page.data()
   check(`${t0} · ${st} 态是页面自己的分支`, cur.dhState === st, String(cur.dhState))
-  await withTimeout(mp.screenshot({ path: join(OUT, `${t0}_${st}.png`) }), 20000, `截图 ${t0}_${st}`)
+  await shotOrSkip(mp.screenshot({ path: join(OUT, `${t0}_${st}.png`) }), `截图 ${t0}_${st}`)
   console.log(`   [图] ${join(OUT, `${t0}_${st}.png`)}`)
 }
 /* ══ 段 10 · 员工打卡门两态 ══
@@ -119,7 +128,7 @@ if (process.env.MPH_STAFF === '1') {
     const cur = await page.data()
     check(`段10 · ${name} 是页面自己的分支(isOwner=false 且 gate.state=${gate.state})`,
       cur.isOwner === false && cur.gate.state === gate.state, JSON.stringify({ isOwner: cur.isOwner, state: cur.gate && cur.gate.state }))
-    await withTimeout(mp.screenshot({ path: join(OUT, `${name}.png`) }), 20000, `截图 ${name}`)
+    await shotOrSkip(mp.screenshot({ path: join(OUT, `${name}.png`) }), `截图 ${name}`)
     console.log(`   [图] ${join(OUT, `${name}.png`)}`)
   }
 }

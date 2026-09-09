@@ -150,10 +150,25 @@ function buildOwnerHome({ pulse, now, todo, period, nowHM, storeMoney, moneyFor,
        **不是把那一格删掉**(删掉就变成四格重排,图上不是那样)。 */
     const isMoney = key === 'cash' || key === 'cardUse'
     const unit = key === 'newCard' || key === 'visits' ? ' 人' : (key === 'bookings' ? ' 单' : '')
+    /* 🔴 现测(裁 #21 拍到真机之后才看见的):五格一行里,「现金业绩 CAD $5,760.00」
+       整串塞不下,省略号一切就成了「CAD $…」—— **数字本身没了**,那比折行更糟。
+       回去看图:`.mini5 b` 里写的是「3,120」—— **只有数字,没有币符**。
+       币种由上面那个大数字交代(它有币码小字),这一行只报数。按图改。
+       金额仍然只走后端下发的 `currencyDisplay`(拆段那一处),这里取它的 `amount` 段,
+       页面照样一个币符都不自己拼。 */
+    const partsOf = makePartsFor(pulse && pulse.currencyDisplay, cur)
+    const smallMoney = () => {
+      if (!m || m.locked) return m && m.locked ? '••••' : '—'
+      if (m.value === undefined || m.value === null || !partsOf) return '—'
+      const q = partsOf(m.value)
+      /* 五格里**连分位都不要**:「5,668.00」比「5,668」多两位,格子就是被这两位挤爆的。
+         图上 `.mini5 b` 写的就是「3,120」—— 整数。大数字那一处仍然带分位(它有的是地方)。 */
+      return q.amount
+    }
     return {
       key,
       label: key === 'bookings' ? bookingsLabel(period) : LABELS[key],
-      value: isMoney ? (cur ? moneyText(m, fmt) : '—') : countText(m, unit),
+      value: isMoney ? smallMoney() : countText(m, unit),
       delta: deltaOf(m, period),
       /* 今日预约那一格的副行「在做 3 · 待到店 2」——**只在今日维度出**(图 §一) */
       sub: key === 'bookings' && period === 'today' && now

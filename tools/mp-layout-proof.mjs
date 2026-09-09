@@ -127,8 +127,9 @@ if ((data || {}).sparkCanvas === false) {
 }
 
 console.log(`\n[小程序布局实测] 五小数 ${smalls.length} 格 · 大数 ${bigCode.length + bigNum.length + bigCent.length} 段 · dots ${dots.length} 个 · 屏宽 ${winW}`)
-console.log('⚠️  截图交不出来:这台机器上 automator 的 `screenshot()` 卡死(别的调用都正常),')
-console.log('    所以本段证据是**布局实测数字**,不是图。像素给不到就明说(J-32 不许拿 DOM 冒充截图)。')
+console.log('ℹ️  automator 的 `screenshot()` 在这台机器上仍然卡死,但**图有了另一条路**:')
+console.log('    `tools/mp-window-shot.mjs` 用 macOS `screencapture -l <windowid>` 直接拍开发者工具那个窗口')
+console.log('    (裁 #21 的第三条路,已跑通)。这把刀出的是**布局数字**,与那边的图互为两层证据。')
 if (fails.length) { console.error(`\n❌ mp-layout-proof ${fails.length}/${n} 条未过`); process.exit(1) }
 console.log(`\n✅ mp-layout-proof 通过 ${n} 条`)
 process.exit(0)

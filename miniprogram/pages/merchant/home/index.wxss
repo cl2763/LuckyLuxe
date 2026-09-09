@@ -1,4 +1,4 @@
-page{background:#fbf8f5}
+page{background:var(--paper)}
 /* 🔴 D178 第 3 条(店主 09-09):顶行那个店名左边被切了一块。
    两件事一起治:①**安全区**——顶上留出 `env(safe-area-inset-top)`(现在用的是系统导航栏,
    切不到;但换成自定义导航或全面屏机型就会切,这一行是把它钉死);
