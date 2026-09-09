@@ -169,7 +169,7 @@ window.DashboardHome = (function () {
         <div class="dh-hero-left" data-dh-hero-left>
           ${periodBar()}
           <p class="dh-k">${head ? label(head.key) : ''}</p>
-          <h2 class="dh-big" data-dh-metric="${head ? esc(head.key) : ''}" data-dh-roll="${head && head.unit === 'money' ? 'money' : 'count'}" data-dh-roll-to="${head && head.value !== undefined && head.value !== null ? String(head.value) : ''}">${head && head.unit === 'money' ? bigMoney(head, cur) : (head ? esc(valueText(head, cur)) : '—')}</h2>
+          <h2 class="dh-big" data-dh-metric="${head ? esc(head.key) : ''}" data-dh-roll-key="${head ? esc(head.key) : 'head'}" data-dh-roll="${head && head.unit === 'money' ? 'money' : 'count'}" data-dh-roll-to="${head && head.value !== undefined && head.value !== null ? String(head.value) : ''}">${head && head.unit === 'money' ? bigMoney(head, cur) : (head ? esc(valueText(head, cur)) : '—')}</h2>
           <div class="dh-row">
             ${head ? deltaText(head) : ''}
             ${head ? sparkSvg(head.spark) : ''}
@@ -180,7 +180,7 @@ window.DashboardHome = (function () {
         <div class="dh-tiles" data-dh-tiles>
           ${tiles.map((m) => `<div class="dh-tile" data-dh-metric="${m.key}">
               <span class="dh-tile-k">${label(m.key)}</span>
-              <strong class="dh-tile-v" data-dh-roll="${m.unit === 'money' ? 'money' : 'count'}" data-dh-roll-to="${m.value !== undefined && m.value !== null ? String(m.value) : ''}">${valueText(m, cur)}</strong>
+              <strong class="dh-tile-v" data-dh-roll-key="${m.key}" data-dh-roll="${m.unit === 'money' ? 'money' : 'count'}" data-dh-roll-to="${m.value !== undefined && m.value !== null ? String(m.value) : ''}">${valueText(m, cur)}</strong>
               ${m.key === 'cardUse' ? `<span class="dh-tile-x" data-dh-times>${m.extra && m.extra.times ? `${zh() ? '次卡' : 'Card'} ${m.extra.times} ${esc((m.extra && m.extra.timesUnit) || '次')}` : '—'}</span>` : ''}
               ${deltaText(m)}
             </div>`).join('')}
@@ -255,7 +255,15 @@ window.DashboardHome = (function () {
     const reduce = Boolean(window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches)
     st.host.querySelectorAll('[data-dh-roll-to]').forEach((el) => {
       const to = Number(el.dataset.dhRollTo)
-      const key = `${el.dataset.dhMetric || el.className}:${st.period}`
+      /* 🔴 D184(店主 05v 补一 亲查:「新增持卡 604」,而库里那段 SQL 只有 1)——
+         **604 是一帧动画,不是一个数**。病根在这一行:滚动的记忆键原来取
+         `dataset.dhMetric || el.className`,而四张小牌上带 `data-dh-metric` 的是**外层 div**,
+         真正在滚的 `<strong class="dh-tile-v">` **一个 metric 都没带** → 四张牌共用一个键
+         `dh-tile-v:today`。于是「现金业绩 5,760」写进去的旧值,成了「新增持卡 1」的起点,
+         滚动过程中屏幕上就会出现 604 这种**谁都不是**的中间数;截图正好截在那一帧。
+         改法:滚动元素**自己带键**(`data-dh-roll-key`),一牌一记忆,不再串味。
+         这条归族「一个字段只许回答一个问题」—— 键是「我是谁」,不是「我长什么样」。 */
+      const key = `${el.dataset.dhRollKey || el.dataset.dhMetric || el.className}:${st.period}`
       const from = st.rolled[key]
       const cur = (st.pulse || {}).currency
       const fmt = (v) => {

@@ -243,7 +243,18 @@ function seedCards(tid, store, today) {
     rid('tc'), tid, cs[(m * 5 + 1) % cs.length], '十次卡 · 演示', 2 + (m % 4), SHOPS[tid].high * 8, at(day, 12))
     n += 2
   }
-  /* **今天**各来一笔,今日维度的「总卡耗 / 新增持卡 / 现金业绩」才不是 0 */
+  return n
+}
+
+/* ── 今天那一笔卡:**跟着「当天」走,不跟着「历史」走** ────────────────
+   🔴 现测(09-09 跨天后):`seedCards` 整个挂在一次性的历史闸里,于是第二天
+   「总卡耗 / 新增持卡」双双掉回 0 —— 判据「今日六指标非 0 ≥5」当场红。
+   卡这件事有两半:**往月里散的那些是历史**(一次就够),**今天这一笔是当天的**(天天要有)。
+   两半挂在两个闸上,这才是「跨天重跑只补当天」的正确切法。 */
+function seedCardsToday(tid, store, today) {
+  const cs = custIds(tid); const svcs = mainServices(tid); const techs = techIds(tid)
+  const hours = UTC_HOURS[store.timezone] || UTC_HOURS['America/Toronto']
+  const big = SHOPS[tid].high * 10
   const uToday = cs[cs.length - 1]
   run(`INSERT INTO stored_value_transactions (id, tenant_id, user_id, type, amount_cents, pay_channel, note, created_by, created_at, bucket)
     VALUES (?, ?, ?, 'recharge', ?, 'wechat', ?, 'seed', ?, 'normal')`,
@@ -256,7 +267,7 @@ function seedCards(tid, store, today) {
     status: 'COMPLETED', payChannel: 'stored_value' })
   fullOrder({ tid, store, day: today, hour: hours[0], svc: pick(svcs), cust: cs[cs.length - 2], tech: pick(techs),
     status: 'COMPLETED', payChannel: 'times_card' })
-  return n + 4
+  return 4
 }
 
 /* ── 今天:三态齐全 + 一个「下一位」 ───────────────────────────── */
@@ -388,6 +399,7 @@ for (const tid of Object.keys(SHOPS)) {
     } else r.history = '已灌过,跳过'
     if (!done(tid, `day:${today}`)) {
       r.todayMade = seedToday(tid, store, today)
+      r.cardsToday = seedCardsToday(tid, store, today)   // 今天那一笔卡跟着当天走(不然跨天后卡耗/新增持卡掉回 0)
       mark(tid, `day:${today}`, { at: new Date().toISOString() })
     } else r.todayMade = '今天已灌过,跳过'
     /* 🔴 待办那三项**不进幂等门**,每次跑都补到「至少 2 条」。

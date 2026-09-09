@@ -252,6 +252,20 @@ check('⑭e 点击委托只绑一次(renderInto 会被反复调,每次都绑就�
 check('⑮ 台面品类色有深色版(店主那张截图里「浅色台面卡」就是它)',
   ['hand', 'foot', 'lash', 'care'].every((k) => new RegExp(`:root\\[data-theme="dark"\\] \\.tb-blk\\.${k}`).test(css)))
 
+/* ══ D184 · 「新增持卡 604」的**真正病根在前端**(05v 补一 §三)══
+   接口那边查出来是 1,屏幕上是 604 —— **604 是一帧动画,不是一个数**:
+   四张小牌的滚动记忆共用了一个键(`dh-tile-v:today`),
+   「现金业绩 5,760」写进去的旧值成了「新增持卡 1」的起点,截图正好截在中间那一帧。
+   所以这一组守的是「**每个会滚的数字都自带身份**」。 */
+check('⑰ 每个会滚的元素都带自己的键(不许靠 className 当身份)',
+  (home.match(/data-dh-roll-to=/g) || []).length === (home.match(/data-dh-roll-key=/g) || []).length
+  && (home.match(/data-dh-roll-key=/g) || []).length >= 2,
+  `roll-to ${(home.match(/data-dh-roll-to=/g) || []).length} 个 · roll-key ${(home.match(/data-dh-roll-key=/g) || []).length} 个`)
+check('⑰b 记忆键**先取自带的那个**(className 只是最后的兜底)',
+  /const key = `\$\{el\.dataset\.dhRollKey \|\| el\.dataset\.dhMetric \|\| el\.className\}:\$\{st\.period\}`/.test(home))
+check('⑰c 小牌那一处真的带上了 metric key(它就是当初串味的那一处)',
+  /<strong class="dh-tile-v" data-dh-roll-key="\$\{m\.key\}"/.test(home))
+
 /* ══ D179 · 图 §六「动作 → 结果」七行(夜班令6 段 5)══
    店主原话:「你需要去增加一些交互」—— 她要的东西图上早就写了,只是一条都没做。
    这里守网页端那几行;小程序端由 `test-mp-home-owner` 那组守(两端落点表必须同一份)。 */

@@ -49,6 +49,8 @@ process.on('exit', restoreKnife)
 
 /* 库层只读句柄:小记没有读接口,只能开库数(见下面那一条的说明) */
 const { DatabaseSync: RO } = await import('node:sqlite')
+/* 期间起止取后端那一份(`periodRange`)—— 判据自己再算一遍日界就是第二处真相 */
+const { periodRange } = await import('./dashboard-pulse.mjs')
 const dbFile = (await fetch(`${BASE}/health`).then((r) => r.json())).dataFile
 const roDb = new RO(dbFile, { readOnly: true })
 const noteCount = (tid) => roDb.prepare('SELECT COUNT(*) AS n FROM service_notes WHERE tenant_id = ?').get(tid).n
@@ -128,6 +130,37 @@ for (const tid of TENANTS) {
   const gal = await req('/portfolio', tid)
   const works = (gal && (gal.works || gal.items)) || []
   check(`${tid} · 作品 ≥6`, works.length >= 6, String(works.length))
+  /* ══ D184(店主 05v 补一 §三 + 补二 §三)· 「新增持卡 604」那个数 ══
+     店主亲查:图上写 604,同一个库拿 `newCardCount()` 原样那段 SQL 查出来是 1。
+     两道判据,死判据排前面(它不用比时点、不用查历史,一跑就咬得住):
+
+     ① **死判据**:「新增持卡」在任何店、任何周期,**不许大于该店的顾客总数** ——
+        它的口径是「当期首次开卡的顾客,按顾客去重」,去重后的人数不可能超过人数本身。
+        604 > 75 这一条就定案了(店主原话)。
+     ② **12 组全等**:三店 × 四周期,接口给的 `newCard.value` 必须等于直接跑那段 SQL 的结果;
+        不等就红并**把两个数一起打印**。 */
+  const NEWCARD_SQL = `SELECT COUNT(*) AS n FROM (
+      SELECT user_id, MIN(first_at) AS first_at FROM (
+        SELECT user_id, MIN(substr(created_at, 1, 10)) AS first_at FROM stored_value_transactions
+          WHERE tenant_id = ? AND type = 'recharge' GROUP BY user_id
+        UNION ALL
+        SELECT user_id, MIN(substr(created_at, 1, 10)) AS first_at FROM member_timecards
+          WHERE tenant_id = ? GROUP BY user_id
+      ) GROUP BY user_id
+    ) WHERE first_at >= ? AND first_at <= ?`
+  const userTotal = roDb.prepare('SELECT COUNT(*) AS n FROM users WHERE tenant_id = ?').get(tid).n
+  for (const p of PERIODS) {
+    const d = await req(`/admin/dashboard/pulse?period=${p}`, tid)
+    const nc = ((d && d.metrics) || []).find((m) => m.key === 'newCard')
+    const got = Number(nc && nc.value)
+    check(`${tid} · ${p} 新增持卡 ${got} ≤ 该店顾客总数 ${userTotal}(死判据:去重后的人数不可能超过人数本身)`,
+      Number.isFinite(got) && got <= userTotal, `算出来 ${got} · 顾客总数 ${userTotal}`)
+    /* 期间起止由后端那份 `periodRange` 算(判据不许自己再算一遍日界 —— 那就成了第二处真相) */
+    const r = periodRange(p, await storeToday(tid))
+    const want = roDb.prepare(NEWCARD_SQL).get(tid, tid, r.from, r.to).n
+    check(`${tid} · ${p} 新增持卡:接口 ${got} === 直接跑 SQL ${want}`, got === want, `接口=${got} SQL=${want}(${r.from}~${r.to})`)
+  }
+
   /* ══ D170(店主 05u §四 + 夜班令6 段 1):**演示面必须干净** ══
      店主亲看旗舰店首页:「待报价 162」、下一位卡是「运营字段测试-mrm0lewr」、
      台面里是「闸测未来」「演示2-lucky-美睫储值户」。页面没错,是库里的垃圾被显示出来了。
