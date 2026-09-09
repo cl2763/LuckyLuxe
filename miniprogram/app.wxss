@@ -1,3 +1,11 @@
+/* 🔴 裁 #22(店主 05w §三)· 病根是**写死色**,不是变量继承 ══
+   店主亲看:小程序挂上 `theme-dark` 之后,只有英雄块变深,别的面还是白底深字。
+   查明:`.theme-dark` 那 30 个令牌一条不少、类也挂对了 —— **可这些面根本没读令牌**,
+   读的是**字面色**(纸底、白卡、描边那几个十六进制值),字面色不会跟着主题走。
+   英雄块之所以是深的,正因为**只有它用了 `var(--…)`**。
+   改法就一条:这些面改成读令牌,**值只从 `styles/tokens.wxss` 出,一个新字面色都不许加**。
+   店主否掉的两条:①再写死一份深色(把症状盖住,方向与病根相反)②砍掉站内三档(与她「白天/晚上两种模式」直接冲突)。
+   同族棘轮见 `tools/pre-regression.sh` 的「小程序 wxss 写死色」那一条。 */
 /* 🔴 D168 段 4:设计令牌**先引进来**(值与网页 `design-tokens.css` 逐条相等,同一把刀比三份)。
    `@import` 必须排在最前:后面所有页面的 `var(--x)` 都靠它。 */
 @import "styles/tokens.wxss";
@@ -6,8 +14,8 @@
 
 page {
   min-height: 100%;
-  background: #f7f3ef;
-  color: #3a2e2a;
+  background: var(--paper);
+  color: var(--ink);
   font-family: -apple-system, BlinkMacSystemFont, "Helvetica Neue", Helvetica, Arial, sans-serif;
   font-size: 28rpx;
   overflow-x: hidden;
@@ -48,7 +56,7 @@ button::after {
   display: flex;
   align-items: center;
   justify-content: center;
-  color: #1d1a18;
+  color: var(--ink);
   font-size: 30rpx;
   font-weight: 650;
   letter-spacing: 0;
@@ -72,18 +80,18 @@ button::after {
 }
 
 .section-note {
-  color: #8a7f78;
+  color: var(--sub);
   font-size: 24rpx;
 }
 
 .card {
-  border: 1rpx solid #e5e0db;
+  border: 1rpx solid var(--line);
   border-radius: 16rpx;
-  background: #fff;
+  background: var(--card);
 }
 
 .muted {
-  color: #8a7f78;
+  color: var(--sub);
 }.btn {
   height: 88rpx;
   padding: 0 34rpx;
@@ -96,23 +104,23 @@ button::after {
 }
 
 .btn-primary {
-  background: #c6a27e;
-  color: #fff;
+  background: var(--brand);
+  color: var(--hero);
 }
 
 .btn-ghost {
-  border: 1rpx solid #d8cabf;
-  background: #fff;
-  color: #3a2e2a;
+  border: 1rpx solid var(--line);
+  background: var(--card);
+  color: var(--ink);
 }
 
 .btn-dark {
-  background: #2b2b2b;
-  color: #fff;
+  background: var(--hero);
+  color: var(--heroink);
 }
 
 .price {
-  color: #c6a27e;
+  color: var(--brand);
   font-weight: 700;
 }
 
@@ -126,8 +134,8 @@ button::after {
   gap: 18rpx;
   align-items: center;
   padding: 18rpx 28rpx calc(18rpx + env(safe-area-inset-bottom));
-  border-top: 1rpx solid #eee6df;
-  background: rgba(255, 255, 255, 0.96);
+  border-top: 1rpx solid var(--line);
+  background: var(--card);
   box-sizing: border-box;
 }
 
@@ -139,7 +147,7 @@ button::after {
 .empty {
   padding: 96rpx 32rpx;
   text-align: center;
-  color: #8a7f78;
+  color: var(--sub);
 }
 
 .visual {
@@ -205,7 +213,7 @@ button::after {
   left: 22rpx;
   bottom: 18rpx;
   z-index: 1;
-  color: #7f736d;
+  color: var(--sub);
   font-size: 24rpx;
   font-weight: 700;
 }

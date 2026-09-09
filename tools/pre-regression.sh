@@ -183,6 +183,15 @@ SEEDREF=$(grep -c "seed-demo-rich\|test-seed-rich" apps/api/run-all-tests.sh || 
 if [ "$SEEDREF" = "0" ]; then say "回归不依赖演示种子" "✅ 0 处引用"
 else say "回归不依赖演示种子" "🔴 run-all-tests.sh 里有 $SEEDREF 处引用 —— 种子只许手动对沙箱跑"; FAIL=1; fi
 
+# ⑨ 裁 #22(店主 05w §三 · 同族扫尽)。「禁新增写死色」那把静态刀原来**只盯网页**,
+#    小程序一处没盯 —— 而店主看见的深色不生效,病根正是小程序里的写死色。
+#    棘轮 = **实际条数**(03m:不许留空隙);令牌文件 `styles/tokens.wxss` 与生成物
+#    `styles/fraunces-digits.wxss` 不算(字面色本来就该住在令牌文件里)。
+MPCOLOR=$(find miniprogram -name "*.wxss" ! -path "*/styles/tokens.wxss" ! -path "*/styles/fraunces-digits.wxss" -print0 \
+  | xargs -0 grep -ohE "#[0-9a-fA-F]{3,8}\b|rgba?\([0-9 .,]+\)" | wc -l | tr -d ' ')
+if [ "$MPCOLOR" -le 2769 ]; then say "小程序 wxss 写死色棘轮" "✅ $MPCOLOR ≤ 2769(只许降)"
+else say "小程序 wxss 写死色棘轮" "🔴 $MPCOLOR > 2769 —— 新写死了颜色,那一处的深色态就会漏白"; FAIL=1; fi
+
 # ⑧ 判据住在跑不到的地方(店主 05w §二 同族一句)。
 #    D184 那两把刀写得很好、判据也对,可它们只落在 `test-seed-rich.mjs` 里 ——
 #    而 seed-rich 按 D169 **不进全量**,于是全量一次都不会跑到它们。**没人跑的刀等于没立。**
