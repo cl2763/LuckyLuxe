@@ -36,7 +36,7 @@
  *   CS_OUT=<路径> 红榜落盘(markdown)
  *   CS_PAGES=a,b  只扫这几页(定位用;正式跑不要给)
  */
-import { spawn } from 'node:child_process'
+import { spawn, execFileSync } from 'node:child_process'
 import { writeFileSync, mkdirSync } from 'node:fs'
 import { dirname } from 'node:path'
 import { requireTarget } from './db-target.mjs'
@@ -48,6 +48,27 @@ const PORT = Number(process.env.SHOT_PORT || 9336)
 const CAP = process.env.CS_CAP ? Number(process.env.CS_CAP) : null
 const OUT = process.env.CS_OUT || ''
 const ONLY = (process.env.CS_PAGES || '').split(',').map((x) => x.trim()).filter(Boolean)
+/* 被测的那一版代码也要写进抬头 —— 否则「修前/修后」两份报告光看刀号还是分不出量的是哪一版 */
+const CODE_REV = (() => {
+  try {
+    const sha = execFileSync('git', ['log', '-1', '--format=%h', '--', 'apps/web'], { encoding: 'utf8' }).trim()
+    const dirty = execFileSync('git', ['status', '--porcelain', '--', 'apps/web'], { encoding: 'utf8' }).trim()
+    return `apps/web @ ${sha}${dirty ? '+dirty(工作区有未提交改动)' : ''}`
+  } catch { return '(取不到 git 信息)' }
+})()
+
+/* ══ J-39「同一把尺子」(店主 06a §二 立)══
+   案底就是我自己:回执把「修前 237(3:1 那把尺子量的)」和「修后 0(2:1 这把尺子量的)」
+   并排放,还写「同一把修好的刀量的」——**两份红榜自己的抬头就否掉了这句话**。
+   落地办法:**每份带数的报告,抬头打印产出它的那把刀的提交号**;
+   两个数要比,先比刀号;刀号不同就得重量一次。`+dirty` = 刀有未提交改动,那更不能拿来跟历史比。 */
+const KNIFE_REV = (() => {
+  try {
+    const sha = execFileSync('git', ['log', '-1', '--format=%h', '--', 'tools/contrast-sweep.mjs'], { encoding: 'utf8' }).trim()
+    const dirty = execFileSync('git', ['status', '--porcelain', '--', 'tools/contrast-sweep.mjs'], { encoding: 'utf8' }).trim()
+    return `${sha || '(无提交记录)'}${dirty ? '+dirty(刀有未提交改动)' : ''}`
+  } catch { return '(取不到 git 信息)' }
+})()
 
 const profile = `/private/tmp/ll-cs-profile-${process.pid}`
 const chrome = spawn(CHROME, [
@@ -266,6 +287,8 @@ const uniq = (arr) => { const m = new Map(); for (const b of arr) if (!m.has(key
 const uA = uniq(A); const uB = uniq(B)
 const lines = ['# 深色/浅色 对比度红榜(逐页逐元素全扫)', '',
   `> 跑于 ${new Date().toISOString()} · 跑在 \`${BASE}\``,
+  `> 🔴 **产出这份数的刀:\`tools/contrast-sweep.mjs\` @ ${KNIFE_REV}**(J-39:数要带尺子 —— 跟别的数比之前先比这一行)`,
+  `> **被测代码:\`${CODE_REV}\`**`,
   '> 门槛:正文 **4.5:1**;大字(≥24px,或 ≥18.66px 且 700 粗)放宽到 **3:1**(每条都标了它用的是哪一档)',
   '> 扫的是**每一个自己持有文字的可见节点**,背景取「实际绘制的那一层」(自己透明就往上找祖先)',
   '>',
@@ -288,7 +311,8 @@ table(uA, `甲档「看不见」—— 去重后 ${uA.length} 处(必须清零)`
 table(uB, `乙档「AA 欠账」—— 去重后 ${uB.length} 处(待裁:改它等于改合同图令牌)`)
 if (OUT) { mkdirSync(dirname(OUT), { recursive: true }); writeFileSync(OUT, lines.join('\n'), 'utf8'); console.log(`   [红榜] → ${OUT}`) }
 
-console.log(`\n[对比度全扫] 文字节点 ${scanned} 个 · 压在渐变面上判不了的 ${grad} 个(如实报)`)
+console.log(`\n[对比度全扫] 刀 ${KNIFE_REV} · 被测 ${CODE_REV}`)
+console.log(`  文字节点 ${scanned} 个 · 压在渐变面上判不了的 ${grad} 个(如实报)`)
 console.log(`  甲档「看不见」 ${A.length} 条(去重 ${uA.length} 处)· 乙档「AA 欠账」 ${B.length} 条(去重 ${uB.length} 处)`)
 for (const b of uA.sort((x, y) => x.ratio - y.ratio).slice(0, 15)) {
   console.log(`  🔴甲 ${b.档} · ${b.页}/${b.标签} · ${b.sel} 「${b.text}」 ${b.fg} 压 ${b.bg} = ${b.ratio}:1(要 ${b.need}:1)`)
@@ -299,12 +323,19 @@ ws.close(); chrome.kill()
 if (CAP !== null) {
   /* 棘轮压的是**甲档去重后的处数** —— 乙档另有一条 CS_CAP_B(给了才判) */
   const capB = process.env.CS_CAP_B ? Number(process.env.CS_CAP_B) : null
+  const capG = process.env.CS_CAP_GRAD ? Number(process.env.CS_CAP_GRAD) : null
   let bad2 = false
   if (uA.length <= CAP) console.log(`\n✅ 甲档 ${uA.length} 处 ≤ 棘轮 ${CAP}(只许降)`)
   else { console.error(`\n❌ 甲档 ${uA.length} 处 > 棘轮 ${CAP} —— 又多了看不见的字`); bad2 = true }
   if (capB !== null) {
     if (uB.length <= capB) console.log(`✅ 乙档 ${uB.length} 处 ≤ 棘轮 ${capB}`)
     else { console.error(`❌ 乙档 ${uB.length} 处 > 棘轮 ${capB}`); bad2 = true }
+  }
+  /* 渐变面上判不了的那些也上棘轮(店主 06a §三):
+     「全站扫过」这句话现在有 14% 是空的,而渐变面正是最容易出白字压浅底的地方 —— 只许降。 */
+  if (capG !== null) {
+    if (grad <= capG) console.log(`✅ 渐变面上判不了的 ${grad} 个 ≤ 棘轮 ${capG}(只许降)`)
+    else { console.error(`❌ 渐变面上判不了的 ${grad} 个 > 棘轮 ${capG} —— 又多了刀看不见的字`); bad2 = true }
   }
   process.exit(bad2 ? 1 : 0)
 }
