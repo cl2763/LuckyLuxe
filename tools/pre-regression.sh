@@ -183,6 +183,22 @@ SEEDREF=$(grep -c "seed-demo-rich\|test-seed-rich" apps/api/run-all-tests.sh || 
 if [ "$SEEDREF" = "0" ]; then say "回归不依赖演示种子" "✅ 0 处引用"
 else say "回归不依赖演示种子" "🔴 run-all-tests.sh 里有 $SEEDREF 处引用 —— 种子只许手动对沙箱跑"; FAIL=1; fi
 
+# ⑧ 判据住在跑不到的地方(店主 05w §二 同族一句)。
+#    D184 那两把刀写得很好、判据也对,可它们只落在 `test-seed-rich.mjs` 里 ——
+#    而 seed-rich 按 D169 **不进全量**,于是全量一次都不会跑到它们。**没人跑的刀等于没立。**
+#    这一扫**只提醒不拦**(FAIL 不置位):非全量套件里出现「死判据」字样时点名,
+#    由人回答一句「全量那边有没有一份」。拦下来会误伤 —— 那边留一份副本是允许的。
+NONSUITE_HITS=""
+for f in apps/api/test-*.mjs; do
+  base=$(basename "$f" .mjs); name=${base#test-}
+  case " $(grep -o 'DEFAULT_SUITES="[^"]*"' apps/api/run-all-tests.sh | sed 's/DEFAULT_SUITES="//;s/"$//') " in
+    *" $name "*) continue ;;
+  esac
+  if grep -q "死判据" "$f"; then NONSUITE_HITS="$NONSUITE_HITS $name"; fi
+done
+if [ -z "$NONSUITE_HITS" ]; then say "死判据都在全量跑得到的套件里" "✅ 非全量套件里没有「死判据」字样"
+else say "死判据住在跑不到的套件里" "⚠️ 提醒(不拦):$NONSUITE_HITS —— 全量那边也得有一份,否则等于没立"; fi
+
 echo ""
 if [ "$FAIL" = "1" ]; then echo "❌ 预检红 —— **先修这些再起全量**(它们不用等 15 分钟就知道)"; exit 1; fi
 echo "✅ 预检全绿,可以起全量"

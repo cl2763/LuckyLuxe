@@ -192,6 +192,69 @@ if (fixtureOk) {
   }
 }
 
+/* ══ D184 两把刀搬家(店主 05w §二 裁)══
+   原来这两条只写在 `test-seed-rich.mjs` 里,而 `seed-rich` 按 D169 **不进全量** ——
+   **没人跑的刀等于没立**。搬到这一套(它在 DEFAULT_SUITES 里,而且只要活服务 + 库句柄)。
+   `seed-rich` 那份留着(那边跑的是三家真夹具店,数更像真的),这边保证**全量一定跑得到一份**。
+
+   🔴 造景律:这一套的三家店是**空的**,空店里 newCard=0、顾客数=0,
+   「0 ≤ 0」和「0 === 0」在缺陷存在时照样绿 —— 那就是废判据。
+   所以先自己把景造出来:三位顾客 + 一笔今天的首充 + 一笔去年的首充(非当期反例),
+   再验 `newCard` 只数当期那一位。 */
+if (fixtureOk) {
+  const A = SHOPS[0].id
+  const dbFile = (await fetch(`${BASE_URL}/health`).then((r) => r.json())).dataFile
+  const { DatabaseSync } = await import('node:sqlite')
+  /* 护栏:上面 `assertTestTarget` 已经确认这台服务只往测试库写,所以这里开可写句柄是安全的;
+     它写的也只是自己刚建的那家一次性店。 */
+  const wdb = new DatabaseSync(dbFile)
+  const today = (await req('/admin/store-clock', {}, PLATFORM, A)).data?.today
+  const lastYear = `${Number(today.slice(0, 4)) - 1}${today.slice(4)}`
+  const mkUser = (i) => {
+    const id = `dpu-${RUN}-${i}`
+    wdb.prepare('INSERT INTO users (id, display_name, tenant_id) VALUES (?, ?, ?)').run(id, `持卡${i}`, A)
+    return id
+  }
+  const u1 = mkUser(1); const u2 = mkUser(2); mkUser(3)
+  const mkRecharge = (uid, day, i) => wdb.prepare(
+    `INSERT INTO stored_value_transactions (id, tenant_id, user_id, type, amount_cents, pay_channel, created_at)
+     VALUES (?, ?, ?, 'recharge', 50000, 'cash', ?)`).run(`dpsv-${RUN}-${i}`, A, uid, `${day}T12:00:00.000Z`)
+  mkRecharge(u1, today, 1)
+  mkRecharge(u2, lastYear, 2)      // 反例:非当期的首充,当期不许数进去
+  wdb.close()
+
+  const NEWCARD_SQL = `SELECT COUNT(*) AS n FROM (
+      SELECT user_id, MIN(first_at) AS first_at FROM (
+        SELECT user_id, MIN(substr(created_at, 1, 10)) AS first_at FROM stored_value_transactions
+          WHERE tenant_id = ? AND type = 'recharge' GROUP BY user_id
+        UNION ALL
+        SELECT user_id, MIN(substr(created_at, 1, 10)) AS first_at FROM member_timecards
+          WHERE tenant_id = ? GROUP BY user_id
+      ) GROUP BY user_id
+    ) WHERE first_at >= ? AND first_at <= ?`
+  const rodb = new DatabaseSync(dbFile, { readOnly: true })
+  const userTotal = rodb.prepare('SELECT COUNT(*) AS n FROM users WHERE tenant_id = ?').get(A).n
+  check('⑩0 造景:这家店真有顾客、也真有一笔当期首充(景造不出来 = 下面两条等于没跑)',
+    userTotal === 3, `顾客 ${userTotal} 位(该是 3)`)
+  for (const p of PERIODS) {
+    const d = (await req(`/admin/dashboard/pulse?period=${p}`, {}, PLATFORM, A)).data
+    const got = Number(((d && d.metrics) || []).find((m) => m.key === 'newCard')?.value)
+    /* ① 死判据:去重后的人数不可能超过人数本身(店主亲查那张图:604 > 顾客总数 75) */
+    check(`⑩ ${p} 新增持卡 ${got} ≤ 顾客总数 ${userTotal}(死判据:去重后的人数不可能超过人数本身)`,
+      Number.isFinite(got) && got <= userTotal, `算出来 ${got} · 顾客总数 ${userTotal}`)
+    /* ② 全等:接口值 === 直接跑那段 SQL;期间起止取后端那一份,判据不自己再算日界 */
+    const r = periodRange(p, today)
+    const want = rodb.prepare(NEWCARD_SQL).get(A, A, r.from, r.to).n
+    check(`⑩b ${p} 新增持卡:接口 ${got} === 直接跑 SQL ${want}`, got === want,
+      `接口=${got} SQL=${want}(${r.from}~${r.to})`)
+  }
+  /* 反例数据律:当期该是 1(去年那位不许数进来)—— 这一条也守住「别把两位都算上」 */
+  const todayVal = Number((((await req('/admin/dashboard/pulse?period=today', {}, PLATFORM, A)).data?.metrics) || [])
+    .find((m) => m.key === 'newCard')?.value)
+  check('⑩c 反例:去年那笔首充不许算进「今日新增持卡」(今日该是 1,不是 2)', todayVal === 1, `今日=${todayVal}`)
+  rodb.close()
+}
+
 console.log(`\n[主页大屏] 期间/delta 纯函数 · 六项恒序 · year spark 12 · 币种随店 · 同口径 · now 同源 · todo 五项 · 身份裁字段`)
 if (fails.length) {
   console.error(`\n❌ test-dashboard-pulse ${fails.length}/${n} 项未过`)
