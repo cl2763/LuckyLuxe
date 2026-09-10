@@ -7,13 +7,21 @@
    `--muted #897f7a` 压白底只有 **3.9:1**(乙档里最大的一坨:348 条全是它),
    而合同图的 `--sub #6d6f66` 压白底是 **6.0:1**。同一个「次要文字」两个值,
    低的那个还把 AA 拖下去了。所以能对上语义的**一律指到合同图那份**,值不再本仓自己定。
-   ⚠️ `--accent / --accent-dark`(品牌金)**故意不动** —— 换成 `--brand` 会让整套皮的金变沉,
-   那是**改合同图**的事,已列进「乙档配色对_请店主裁」那张表的走法 1,等她裁。 */
+
+   🔴 06f §三 店主裁:`--accent / --accent-dark`(品牌金)**归一到 `--brand / --brandd`,两个名字从仓里消失**。
+   上一版这里写着「故意不动 —— 换成 --brand 会让整套皮的金变沉」,**那个顾虑在「当字」这件事上是反的**:
+   店主现查出三条 ——
+     ① 这两个只在 `:root` 里定义**一次**,两个深色块里各 **0 处** → **它压根没有深色档的值**,
+        深色下是「浅色档的金压在新暖棕面上」,`--accent-dark` 压深卡只有 **3.81**,而它主要当**字**用、全仓 76 处;
+     ② 浅色档里 `--accent` 压白 **2.32**,比 `--brand` 的 2.88 **还差** —— 那个"更亮更好看"的金,当字反而更看不清;
+     ③ 归一后 `--brandd` 深档 **9.59**、浅档 **4.73**。
+   走法:当字的 → `--brandd`;当面 / 边框 / 描边的 → `--brand`。
+   「金看着够不够亮」是**审美问题,归店主**:要亮就去改合同图里 `--brand` 的值,
+   **任何时候不许两个值并存** —— 那正是一路在拆的第二套真相。
+   判据 `test-color-usage` ⑤:本仓 `--accent` 定义 0 处、使用 0 处,塞回一处当场红并点名行号。 */
 :root {
   --muted: var(--sub);
   --soft: var(--wall);
-  --accent: #c8a47e;
-  --accent-dark: #9b7655;
   /* 🔴  是**面**不是字:它给「选中的黑胶囊」当底(黑底白字)。
      我头一版指到 --ink,深色档下 --ink 翻成浅色 → 浅底 + 浅字 = 看不见(甲档当场从 0 涨到 16)。
      这跟  那个病一模一样 —— **字色令牌不许当面用**。面要的是 --hero(两档都深)。 */
@@ -114,7 +122,7 @@
 }
 
 .wechat-phone-head span {
-  color: var(--accent-dark);
+  color: var(--brandd);
 }
 
 .wechat-phone-timeline {
@@ -641,7 +649,7 @@
 
 .simulator-bubble.pending p::after {
   content: ' · 发送中';
-  color: var(--accent-dark);
+  color: var(--brandd);
   font-size: 12px;
   font-weight: 900;
 }
@@ -847,7 +855,7 @@
   border-radius: 999px;
   padding: 0 14px;
   background: var(--card);
-  color: var(--accent-dark);
+  color: var(--brandd);
   font-size: 13px;
   font-weight: 900;
   cursor: pointer;
@@ -913,7 +921,7 @@
 
 .ai-feedback-editor summary {
   cursor: pointer;
-  color: var(--accent-dark);
+  color: var(--brandd);
   font-size: 12px;
   font-weight: 900;
 }
@@ -1529,7 +1537,7 @@ button {
 
 .eyebrow {
   margin: 0 0 8px;
-  color: var(--accent-dark);
+  color: var(--brandd);
   font-size: 12px;
   font-weight: 800;
   text-transform: uppercase;
@@ -1581,7 +1589,7 @@ button {
 }
 
 .service-card.active {
-  border-color: var(--accent);
+  border-color: var(--brand);
   box-shadow: 0 0 0 2px rgba(200, 164, 126, 0.22);
 }
 
@@ -1620,13 +1628,13 @@ button {
 }
 
 .meta .price {
-  color: var(--accent-dark);
+  color: var(--brandd);
 }
 
 .quote-hint {
   display: block;
   margin-top: 8px;
-  color: var(--accent-dark);
+  color: var(--brandd);
   font-size: 13px;
   font-weight: 850;
   line-height: 1.35;
@@ -1656,7 +1664,7 @@ button {
 }
 
 .price-boundary-box small {
-  color: var(--accent-dark);
+  color: var(--brandd);
   font-weight: 850;
 }
 
@@ -1747,7 +1755,7 @@ textarea {
 input:focus,
 select:focus,
 textarea:focus {
-  border-color: var(--accent);
+  border-color: var(--brand);
   box-shadow: 0 0 0 3px rgba(200, 164, 126, 0.18);
 }
 
@@ -1787,9 +1795,9 @@ textarea:focus {
 
 .slot.active,
 .addon.active {
-  border-color: var(--accent);
+  border-color: var(--brand);
   background: var(--tagmbg);
-  color: var(--accent-dark);
+  color: var(--brandd);
 }
 
 .addon {
@@ -1826,7 +1834,7 @@ textarea:focus {
   display: block;
   margin-top: 2px;
   font-size: 24px;
-  color: var(--accent-dark);
+  color: var(--brandd);
 }
 /* 🔴 主按钮(店主 06c §二 认的建议,06e 落地)· **金底不动,字改深**
    原来是奶白字压金底 = **2.02:1**(比更早的白字 2.32 还低)——读得清但过不了 AA,
@@ -1836,7 +1844,16 @@ textarea:focus {
      (色值不写进注释 —— 写死色棘轮连注释一起数,而且值本来就该只在令牌文件里有一份)
    再把字号/字重推到 WCAG 的**大字档**(≥18.66px 且 ≥700),门槛从 4.5 降到 3.0 —— 双保险。
    ⚠️ 底色走 `--brand`(合同图令牌),不再走本仓自己那个 `--accent`:
-      一件事一处真相,金色只有令牌那一份。 */
+      一件事一处真相,金色只有令牌那一份。
+
+   ⚠️⚠️ **为什么拿 `--hero` 当字色 —— 别顺手「修」掉**(店主 06f §二 要求写清)
+   `--hero` 名义上是个**面色**令牌(它给英雄区当底),这里却拿来当**字色**用。
+   看着像手滑,不是:它是**两档里最深的那个暖棕**(深色档里比浅色档还更深一层),
+   而金底在两档里都是浅的 —— 所以「最深的暖棕压在金底上」正是这颗按钮该有的字色,
+   **一个令牌同时管住两档**,不用按档各指一个字色。
+   (色值一律不写进注释:写死色棘轮连注释一起数,而且值本来就只该在令牌文件里有一份。)
+   下一个人若把它改回 `--heroink`(奶白,同族里最像样的那个误改),两档分别只剩 2.52 / 1.73 ——
+   深档那 1.73 几乎看不见。`test-color-usage` ①b 会当场红并点到本文件的行号。 */
 .primary {
   min-height: 46px;
   border: 0;
@@ -1922,7 +1939,7 @@ textarea:focus {
   align-items: center;
   border-radius: 999px;
   background: var(--soft);
-  color: var(--accent-dark);
+  color: var(--brandd);
   padding: 4px 10px;
   font-weight: 850;
   white-space: nowrap;
@@ -2094,7 +2111,7 @@ textarea:focus {
 .dashboard-card-cue {
   border-radius: 999px;
   background: var(--soft);
-  color: var(--accent-dark);
+  color: var(--brandd);
   padding: 8px 12px;
   font-size: 13px;
   font-weight: 900;
@@ -2282,7 +2299,7 @@ textarea:focus {
 }
 
 .ai-mock-banner strong {
-  color: var(--accent-dark);
+  color: var(--brandd);
   font-size: 13px;
 }
 
@@ -2696,7 +2713,7 @@ textarea:focus {
 }
 
 .share-photo-strip button.active {
-  border-color: var(--accent);
+  border-color: var(--brand);
 }
 
 .share-actions {
@@ -3188,7 +3205,7 @@ textarea:focus {
 }
 
 .attention-note {
-  color: var(--accent-dark) !important;
+  color: var(--brandd) !important;
 }
 
 .calendar-controls {
@@ -3223,7 +3240,7 @@ textarea:focus {
 }
 
 .calendar-cell.today-cell {
-  border-color: var(--accent);
+  border-color: var(--brand);
   box-shadow: 0 0 0 2px rgba(200, 164, 126, 0.18);
 }
 
@@ -3374,7 +3391,7 @@ textarea:focus {
 .ai-message small {
   display: block;
   margin-top: 8px;
-  color: var(--accent-dark);
+  color: var(--brandd);
   font-weight: 850;
   line-height: 1.4;
 }
@@ -3523,7 +3540,7 @@ textarea:focus {
   border-radius: 50%;
   margin-left: 4px;
   background: var(--soft);
-  color: var(--accent-dark);
+  color: var(--brandd);
   font-size: 12px;
 }
 
@@ -3694,7 +3711,7 @@ textarea:focus {
   place-items: center;
   border-radius: 50%;
   background: var(--soft);
-  color: var(--accent-dark);
+  color: var(--brandd);
 }.portfolio-wide-button {
   display: grid;
   grid-template-columns: auto 1fr auto;
@@ -3933,7 +3950,7 @@ textarea:focus {
   place-items: center;
   border-radius: 50%;
   background: var(--soft);
-  color: var(--accent-dark);
+  color: var(--brandd);
 }
 
 .reference-grid-web {
@@ -4133,8 +4150,11 @@ textarea:focus {
 }
 
 .check.checked {
-  background: var(--accent);
-  border-color: var(--accent);
+  background: var(--brand);
+  border-color: var(--brand);
+  /* 金底上的字一律 --hero(规矩丙)。未选中时 .check 的奶白字压白卡=看不见,那是它要的效果,
+     所以字色只在**选中**这条上改,不去动 .check 那条。 */
+  color: var(--hero);
 }
 
 .cart-copy h2,
@@ -4268,7 +4288,7 @@ textarea:focus {
 }
 
 .web-level-pill small {
-  color: var(--accent);
+  color: var(--brandd);
   font-size: 12px;
   font-weight: 900;
 }
@@ -4341,7 +4361,7 @@ textarea:focus {
 }
 
 .member-code-detail .eyebrow {
-  color: var(--accent);
+  color: var(--brandd);
 }
 
 .member-code-detail .member-referral-row code {
@@ -4371,7 +4391,7 @@ textarea:focus {
 
 .growth-fill {
   height: 100%;
-  background: var(--accent);
+  background: var(--brand);
 }
 
 .growth-note,
@@ -4383,7 +4403,7 @@ textarea:focus {
 }
 
 .deposit-rule-note {
-  color: var(--accent);
+  color: var(--brandd);
 }
 
 .member-benefits-link {
@@ -4450,7 +4470,7 @@ textarea:focus {
 
 .order-entry strong {
   font-size: 26px;
-  color: var(--accent-dark);
+  color: var(--brandd);
 }
 
 .recent-list-web,
@@ -4622,7 +4642,7 @@ textarea:focus {
   border-radius: 999px;
   background: var(--soft);
   padding: 7px 12px;
-  color: var(--accent-dark);
+  color: var(--brandd);
   font-weight: 850;
 }
 
@@ -4739,7 +4759,7 @@ textarea:focus {
 }
 
 .member-benefits-hero-web .eyebrow {
-  color: var(--accent);
+  color: var(--brandd);
 }
 
 .benefits-progress-card {
@@ -4778,7 +4798,7 @@ textarea:focus {
 }
 
 .tier-card-web.active {
-  border-color: var(--accent);
+  border-color: var(--brand);
   background: var(--wall);
   box-shadow: 0 12px 28px rgba(45, 40, 38, 0.08);
 }
@@ -4800,7 +4820,7 @@ textarea:focus {
 
 .tier-card-head span {
   background: var(--soft);
-  color: var(--accent-dark);
+  color: var(--brandd);
 }
 
 .tier-card-head strong {
@@ -4823,7 +4843,7 @@ textarea:focus {
 }
 
 .tier-deposit strong {
-  color: var(--accent-dark);
+  color: var(--brandd);
 }
 
 .tier-benefit-list {
@@ -4849,7 +4869,7 @@ textarea:focus {
   width: 6px;
   height: 6px;
   border-radius: 50%;
-  background: var(--accent);
+  background: var(--brand);
   content: "";
 }
 
@@ -4890,7 +4910,7 @@ textarea:focus {
 }
 
 .order-head-web span {
-  color: var(--accent-dark);
+  color: var(--brandd);
   font-weight: 850;
 }
 
@@ -5061,7 +5081,7 @@ textarea:focus {
 }
 
 .customer-share-copy small {
-  color: var(--accent-dark);
+  color: var(--brandd);
   font-weight: 800;
 }
 
@@ -5743,11 +5763,11 @@ textarea:focus {
   cursor: pointer;
 }
 .cs-filter-pill.active {
-  background: var(--accent);
-  border-color: var(--accent);
-  color: var(--heroink);
+  background: var(--brand);
+  border-color: var(--brand);
+  color: var(--hero);   /* 规矩丙:金底上的字一律 --hero */
 }
-.cs-filter-pill b { color: var(--heroink); }
+.cs-filter-pill b { color: var(--hero); }   /* 同上;非选中态另有 :not(.active) 那条盖掉 */
 .cs-filter-pill:not(.active) b { color: var(--danger); }
 .cs-workbench-grid {
   display: grid;
@@ -5795,7 +5815,7 @@ textarea:focus {
   height: 32px;
   border-radius: 50%;
   background: var(--soft);
-  color: var(--accent-dark);
+  color: var(--brandd);
   display: flex;
   align-items: center;
   justify-content: center;
@@ -5872,7 +5892,7 @@ textarea:focus {
   font-size: 12px;
   color: var(--ink);
   background: var(--paper);
-  border-left: 2px solid var(--accent);
+  border-left: 2px solid var(--brand);
   padding: 6px 8px;
   margin-bottom: 6px;
 }
@@ -6202,7 +6222,7 @@ textarea:focus {
   padding: 4px 12px;
   border-radius: 999px;
   background: var(--soft);
-  color: var(--accent-dark);
+  color: var(--brandd);
 }
 .plan-feature.off {
   background: var(--wall);
@@ -6280,7 +6300,7 @@ textarea:focus {
   gap: 12px;
   padding: 10px 12px;
   background: var(--paper);
-  border-left: 2px solid var(--accent);
+  border-left: 2px solid var(--brand);
   border-radius: 0 8px 8px 0;
 }
 .kb-entry.disabled {
@@ -6326,7 +6346,7 @@ textarea:focus {
   padding: 6px 12px;
   cursor: pointer;
 }
-.kb-upload-button:hover { border-color: var(--accent); color: var(--accent-dark); }
+.kb-upload-button:hover { border-color: var(--brand); color: var(--brandd); }
 .kb-doc-list { display: flex; flex-direction: column; gap: 6px; margin-top: 10px; }
 .kb-doc-list strong { font-size: 13px; }
 .kb-doc-row {
@@ -6337,7 +6357,7 @@ textarea:focus {
   font-size: 12px;
   color: var(--ink);
   background: var(--paper);
-  border-left: 2px solid var(--accent-dark);
+  border-left: 2px solid var(--brandd);
   padding: 6px 10px;
 }
 .store-info-table { width: 100%; font-size: 13px; border-collapse: collapse; }
@@ -6408,7 +6428,7 @@ textarea:focus {
   color: var(--ink);
   padding: 8px 10px;
   background: var(--paper);
-  border-left: 2px solid var(--accent);
+  border-left: 2px solid var(--brand);
   margin-bottom: 6px;
 }
 .finance-rule-row.disabled { opacity: 0.5; border-left-color: var(--muted); }
@@ -6459,11 +6479,11 @@ textarea:focus {
   padding: 4px 12px;
   border-radius: 999px;
   background: var(--soft);
-  color: var(--accent-dark);
+  color: var(--brandd);
 }
 .finance-alert.good { background: var(--wall); color: var(--success); }
 .finance-alert.warn { background: var(--wall); color: var(--danger); font-weight: 700; }
-.finance-alert.info { background: var(--soft); color: var(--accent-dark); }
+.finance-alert.info { background: var(--soft); color: var(--brandd); }
 .finance-progress-row { display: flex; flex-direction: column; gap: 4px; }
 .finance-progress-head {
   display: flex;
@@ -6480,7 +6500,7 @@ textarea:focus {
 .finance-progress-fill {
   height: 100%;
   border-radius: 999px;
-  background: var(--accent);
+  background: var(--brand);
   transition: width 0.4s ease;
 }
 .finance-progress-fill.done { background: var(--success); }
@@ -6524,7 +6544,7 @@ textarea:focus {
 }
 .finance-ring .ring-fill {
   fill: none;
-  stroke: var(--accent);
+  stroke: var(--brand);
   stroke-width: 8;
   stroke-linecap: round;
   transition: stroke-dashoffset 0.6s ease;
@@ -6560,7 +6580,7 @@ textarea:focus {
   padding: 0 2px;
   vertical-align: 1px;
 }
-.fin-info:hover { color: var(--accent-dark); }
+.fin-info:hover { color: var(--brandd); }
 .fin-guide-panel {
   background: var(--card);
   border-radius: 14px;
@@ -6578,11 +6598,11 @@ textarea:focus {
 }
 .fin-guide-head strong { font-size: 15px; color: var(--ink); }
 .fin-guide-section { margin-bottom: 14px; }
-.fin-guide-section strong { font-size: 13px; color: var(--accent-dark); display: block; margin-bottom: 4px; }
+.fin-guide-section strong { font-size: 13px; color: var(--brandd); display: block; margin-bottom: 4px; }
 .fin-guide-section p { font-size: 13px; color: var(--ink); line-height: 1.7; margin: 0; }
 .fin-insight-box {
   background: var(--paper);
-  border-left: 2px solid var(--accent);
+  border-left: 2px solid var(--brand);
   padding: 10px 14px;
   font-size: 13px;
   color: var(--ink);
@@ -6701,14 +6721,14 @@ textarea:focus {
   cursor: pointer;
   transition: all 0.15s ease;
 }
-.fin-nav-btn:hover { border-color: var(--accent); color: var(--accent-dark); }
+.fin-nav-btn:hover { border-color: var(--brand); color: var(--brandd); }
 .fin-nav-btn.active {
-  background: var(--accent);
-  border-color: var(--accent);
-  color: var(--heroink);
+  background: var(--brand);
+  border-color: var(--brand);
+  color: var(--hero);   /* 规矩丙:金底上的字一律 --hero */
   font-weight: 700;
 }
-.fin-nav-btn.fin-nav-ai { border-color: var(--accent); color: var(--accent-dark); }
+.fin-nav-btn.fin-nav-ai { border-color: var(--brand); color: var(--brandd); }
 .fin-tab-content { min-width: 0; }
 .fin-tab-content > .admin-card { margin-top: 0 !important; }
 @media (max-width: 900px) {
@@ -6764,13 +6784,13 @@ textarea:focus {
   color: var(--ink);
   transition: border-color .15s ease, transform .15s ease;
 }
-.today-task:hover { border-color: var(--accent); transform: translateY(-1px); }
+.today-task:hover { border-color: var(--brand); transform: translateY(-1px); }
 .today-task .task-count { font-size: 1.45rem; font-weight: 700; line-height: 1; }
 .today-task .task-label { font-size: .78rem; color: var(--muted); }
-.today-task.has-items { border-color: var(--accent); background: var(--soft); }
+.today-task.has-items { border-color: var(--brand); background: var(--soft); }
 .today-task.tone-danger.has-items { border-color: var(--danger); }
 .today-task.tone-danger.has-items .task-count { color: var(--danger); }
-.today-task.tone-warn.has-items .task-count { color: var(--accent-dark); }
+.today-task.tone-warn.has-items .task-count { color: var(--brandd); }
 .today-task.is-locked { opacity: .75; }
 .today-task .task-lock { font-size: 1.1rem; }
 
@@ -6787,7 +6807,7 @@ textarea:focus {
   max-width: 100%;
 }
 .booking-search:focus,
-.customer-search:focus { outline: none; border-color: var(--accent); }
+.customer-search:focus { outline: none; border-color: var(--brand); }
 .customer-toolbar { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
 
 .member-tier-badge {
@@ -6849,7 +6869,7 @@ textarea:focus {
   gap: 1px;
   font-size: .8rem;
 }
-.swg-day.is-today strong { color: var(--accent-dark); }
+.swg-day.is-today strong { color: var(--brandd); }
 .swg-day.is-closed-day { color: var(--muted); }
 .swg-closed-tag { color: var(--muted); font-size: .68rem; }
 .swg-day small { color: var(--muted); }
@@ -6882,14 +6902,14 @@ textarea:focus {
   min-width: 0;
 }
 .swg-cell strong { font-size: .74rem; font-weight: 600; }
-.swg-cell.is-working { background: var(--soft); border-color: var(--accent); }
+.swg-cell.is-working { background: var(--soft); border-color: var(--brand); }
 .swg-cell.is-off { color: var(--muted); background: var(--paper); }
 .swg-cell.is-off strong { font-weight: 500; }
 .swg-cell.is-conflict { border-color: #caa53d; background: var(--tagmbg); }
-.swg-cell.is-today { box-shadow: 0 0 0 1px var(--accent-dark); }
-.swg-cell:hover { border-color: var(--accent-dark); }
+.swg-cell.is-today { box-shadow: 0 0 0 1px var(--brandd); }
+.swg-cell:hover { border-color: var(--brandd); }
 div.swg-cell { cursor: default; }
-.swg-count { font-size: .68rem; color: var(--accent-dark); }
+.swg-count { font-size: .68rem; color: var(--brandd); }
 .swg-warn { font-size: .68rem; color: var(--brandd); }
 
 .tech-manage-row { display: flex; gap: 8px; margin-top: 8px; }
@@ -6918,7 +6938,7 @@ div.swg-cell { cursor: default; }
   border-radius: 999px;
   background: var(--soft);
   border: 1px solid var(--line);
-  color: var(--accent-dark);
+  color: var(--brandd);
 }
 .customer-profile-form { display: grid; grid-template-columns: 1fr 220px; gap: 12px; margin-top: 10px; }
 .customer-profile-form .customer-notes-label,
@@ -6974,11 +6994,11 @@ div.swg-cell { cursor: default; }
   border-radius: 10px;
   background: var(--soft);
   border: 1px solid var(--line);
-  color: var(--accent-dark);
+  color: var(--brandd);
   font-size: .84rem;
 }
 .service-active-toggle { display: flex; align-items: center; gap: 7px; cursor: pointer; }
-.service-active-toggle input { accent-color: var(--accent-dark); width: 16px; height: 16px; cursor: pointer; }
+.service-active-toggle input { accent-color: var(--brandd); width: 16px; height: 16px; cursor: pointer; }
 
 /* ===== UI 打磨:动效 / 溢出防护 / 交互反馈 (20260706) ===== */
 @keyframes pageIn {
@@ -6997,7 +7017,7 @@ button.dashboard-chart-card:hover { transform: translateY(-2px); box-shadow: 0 1
 .technician-performance-card:hover { box-shadow: 0 6px 18px rgba(45, 40, 38, .07); }
 
 .metric { transition: transform .15s ease, border-color .15s ease; }
-.metric:hover { transform: translateY(-1px); border-color: var(--accent); }
+.metric:hover { transform: translateY(-1px); border-color: var(--brand); }
 .today-task:active,
 .swg-cell:active { transform: scale(.97); }
 .ghost.slim:active, .primary.slim:active { transform: scale(.96); }
@@ -7057,7 +7077,7 @@ button.dashboard-chart-card:hover { transform: translateY(-2px); box-shadow: 0 1
 }
 .today-task.has-items { background: var(--soft); }
 .today-task.tone-danger.has-items .task-count { color: var(--danger); }
-.today-task.tone-warn.has-items .task-count { color: var(--accent-dark); }
+.today-task.tone-warn.has-items .task-count { color: var(--brandd); }
 .today-task.is-locked .task-count { font-size: 1.3rem; }
 
 /* 排班周网格:右缘圆角/今日描边不被裁掉 */
@@ -7098,7 +7118,7 @@ section.card > .section-row:first-child { margin-top: 0; }
 /* ===== 员工端P0批:服务安全条/今日时间线/排班申请 ===== */
 .customer-care-strip { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 6px; align-items: center; }
 .care-tag { background: var(--tagmbg); border-color: var(--brand); color: var(--brandd); font-weight: 600; }
-.care-note { font-size: .78rem; color: var(--accent-dark); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; max-width: 100%; }
+.care-note { font-size: .78rem; color: var(--brandd); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; max-width: 100%; }
 
 .staff-timeline-card { padding: 16px 18px; margin-bottom: 16px; }
 .staff-timeline-row {
@@ -7139,7 +7159,7 @@ section.card > .section-row:first-child { margin-top: 0; }
 .schreq-approved { background: var(--wall); color: var(--success); }
 .schreq-rejected { background: var(--wall); color: var(--danger); }
 .comp-estimate-note { margin-top: 6px; font-size: .76rem; }
-.wechat-session-group-title.mine-title { color: var(--accent-dark); }
+.wechat-session-group-title.mine-title { color: var(--brandd); }
 @media (max-width: 720px) {
   .staff-timeline-row { grid-template-columns: 70px minmax(0, 1fr); }
   .staff-timeline-row .status { grid-column: 2; justify-self: start; }
@@ -7212,7 +7232,7 @@ section.card > .section-row:first-child { margin-top: 0; }
 .qh-date { color: var(--muted); }
 .qh-message { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .qh-price { font-weight: 700; text-align: right; }
-.qh-status { font-size: .74rem; color: var(--accent-dark); }
+.qh-status { font-size: .74rem; color: var(--brandd); }
 
 /* 移动端补齐(手机实机走查前的静态审计) */
 @media (max-width: 720px) {
@@ -7240,7 +7260,7 @@ section.card > .section-row:first-child { margin-top: 0; }
   cursor: pointer;
   transition: border-color .15s ease;
 }
-.staff-day-chip:hover { border-color: var(--accent-dark); }
+.staff-day-chip:hover { border-color: var(--brandd); }
 .staff-day-chip.chip-warn { background: var(--tagmbg); border-color: var(--brand); color: var(--brandd); font-weight: 600; }
 
 /* F4: 技师卡管理按钮不再挤成竖排字 */

@@ -131,8 +131,9 @@ else say "回执引用的评测明细" "🔴"; echo "$GHOST" | sed 's/^/    /'; 
 #    ⚠️ 数的是**全部** `#RRGGBB`,包含 color 位与品类色 —— 那些不是都该改,
 #      所以这是**棘轮**不是硬零:降了就把数字调小,永远不许升。
 HARDCOLOR=$(grep -oE "#[0-9a-fA-F]{3,8}\b" apps/web/styles.css | wc -l | tr -d ' ')
-if [ "$HARDCOLOR" -le 34 ]; then say "styles.css 写死色棘轮" "✅ $HARDCOLOR ≤ 34(只许降)"
-else say "styles.css 写死色棘轮" "🔴 $HARDCOLOR > 34 —— 新增了写死色,深色态会在那一处漏出来"; FAIL=1; fi
+# 06f §三 归一 `--accent / --accent-dark` 之后,两条定义连值一起没了 → 34 收到 31。**棘轮只许往下收。**
+if [ "$HARDCOLOR" -le 31 ]; then say "styles.css 写死色棘轮" "✅ $HARDCOLOR ≤ 31(只许降)"
+else say "styles.css 写死色棘轮" "🔴 $HARDCOLOR > 31 —— 新增了写死色,深色态会在那一处漏出来"; FAIL=1; fi
 
 # ⑩ 🔴 内联脚本语法(05t 段 6 现场自伤,当场立的护栏):
 #    `platform.html` / `admin.html` 里的 `<script>` 整段是**没人检查语法**的 ——
