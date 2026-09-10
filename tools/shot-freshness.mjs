@@ -46,7 +46,7 @@ if (!RULER_FILES.length) {
   for (const t of args) {
     const note = join(t, '对照说明.md')
     if (!existsSync(note)) continue
-    const m = readFileSync(note, 'utf8').match(/^\s*(?:文件清单|改过的文件)\s*[::]\s*(.+)$/m)
+    const m = readFileSync(note, 'utf8').match(/^[>\-*\s]*(?:文件清单|改过的文件)\s*[::]\s*(.+)$/m)
     if (m) RULER_FILES = m[1].split(/[,,]/).map((x) => x.trim().replace(/^`|`$/g, '')).filter(Boolean)
     if (RULER_FILES.length) break
   }
