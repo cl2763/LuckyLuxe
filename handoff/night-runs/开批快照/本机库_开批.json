@@ -261,7 +261,7 @@
       "dflt": 2
     },
     "notify_scan_marks": {
-      "rows": 64,
+      "rows": 66,
       "cols": 3,
       "idx": 1,
       "trg": 0,

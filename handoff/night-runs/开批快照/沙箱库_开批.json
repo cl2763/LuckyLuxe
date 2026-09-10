@@ -247,7 +247,7 @@
       "dflt": 5
     },
     "notification_logs": {
-      "rows": 304,
+      "rows": 310,
       "cols": 11,
       "idx": 3,
       "trg": 0,
@@ -261,7 +261,7 @@
       "dflt": 2
     },
     "notify_scan_marks": {
-      "rows": 537,
+      "rows": 552,
       "cols": 3,
       "idx": 1,
       "trg": 0,
@@ -380,7 +380,7 @@
       "dflt": 5
     },
     "reminder_tasks": {
-      "rows": 895,
+      "rows": 906,
       "cols": 17,
       "idx": 4,
       "trg": 0,
