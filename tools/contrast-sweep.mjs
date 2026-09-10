@@ -321,6 +321,29 @@ if (TARGET === 'pages') {
         localStorage.setItem('lucky-web-auth', JSON.stringify({ __tenant: T, __value: ${JSON.stringify(sess.auth)} }));
         return 1 })()` })
     console.log(`   [夹具] 登录态已注入:${sess.user.displayName || AUTH_EMAIL}(沙箱邮箱口,不校验密码)`)
+    /* CS_CART=1:再造一个「购物车有货」的景。
+       为什么直接写 localStorage 而不去点「加入购物车」:那颗按钮是 `data-start-booking="cart"`,
+       它**开的是预约流程**(还要选技师、选时段),点一下并不会加货 —— 现测角标一直是 0,
+       而我头一版把「其实是空的购物车」当成「购物车有货」扫了一遍,**那比没扫更坏**(名不副实)。
+       购物车本来就是**客户端自己的一份 JSON**(`lucky-web-cart:<租户>`,见 customer.js),
+       所以夹具照它自己的格式造一件真服务进去,再由页面正常渲染。 */
+    if (process.env.CS_CART === '1') {
+      let svc = null
+      try {
+        const r2 = await fetch(`${BASE}/services`, { headers: { 'x-tenant-id': tenant } }).then((x) => x.json())
+        const arr = Array.isArray(r2) ? r2 : (r2.services || [])
+        svc = arr.find((x) => Number(x.priceCents) > 0) || arr[0]
+      } catch { svc = null }
+      if (!svc) { stepMiss.push('购物车有货:取不到本店服务,夹具没造成 —— **没扫成**,不是绿') } else {
+        const day = new Date(Date.now() + 86400000).toISOString().slice(0, 10)
+        const item = { id: 'cart_fixture_06i', service: svc, technician: null, date: day, time: '14:00',
+          addOns: [], referenceImages: [], remark: '', referenceAnalysis: null,
+          servicePriceCents: Number(svc.priceCents) || 0, depositCents: Number(svc.depositCents) || 0, selected: true }
+        await send('Page.addScriptToEvaluateOnNewDocument', { source:
+          `(() => { localStorage.setItem('lucky-web-cart:' + ${JSON.stringify(tenant)}, ${JSON.stringify(JSON.stringify([item]))}); return 1 })()` })
+        console.log(`   [夹具] 购物车已放一件:${svc.nameZh || svc.name}`)
+      }
+    }
   }
   await send('Page.navigate', { url: `${BASE}/?tenant=${process.env.CS_TENANT || 'lucky-luxe'}` })
   await sleep(4200)   /* 顾客端的内容是拉回来才渲染的;等不够就只扫到骨架(现测:17 个 vs 47 个) */
