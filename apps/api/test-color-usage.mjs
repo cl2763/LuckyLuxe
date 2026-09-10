@@ -232,7 +232,7 @@ for (const f of SURFACE) {
     if (m) for (const one of m) goldHits.push({ at: `${f}:${i + 1}`, hit: one, f, line: ln.trim() })
   })
 }
-const GOLD_CAP0 = 185   /* 06g 棘轮初值(实测);**只许降** —— 提在这里是因为下面做差要先看它 */
+const GOLD_CAP0 = 184   /* 06g 棘轮初值(实测);**只许降** —— 提在这里是因为下面做差要先看它 */
 const goldLeft = goldHits.filter((h) => !GOLD_OK.some(([g]) => h.at.startsWith(g)))
 /* 🔴 「超出棘轮」必须**点名到底是哪一处新加的**,不能只报一个总数。
    刀 GG 现测:头一版把命中列表的**末尾四条**标成「最近新增的」——那只是扫描顺序的尾巴,
@@ -290,7 +290,12 @@ const GOLD_LITERAL = new RegExp('(?:' + [...Object.keys(LEGACY_GOLD),
    就会把「深底上的浅金字」误判成「金底上的浅字」。所以只有**不透明的金**才算金底:
    6 位色、或 8 位色而 alpha ≥ 0x80、或 rgba() 而 alpha ≥ 0.5。 */
 const opaqueGold = (bgs) => {
-  const hex = bgs.match(new RegExp(`#(?:${GOLD_LITERAL.source.replace(/^\(\?:|\)$/g, '')})([0-9a-f]{2})?\b`, 'ig')) || []
+  /* 🔴 刀 HH 现测咬出来的判据缺陷:这里原来写的是模板串里的 `\b` —— 在**模板串**里
+     `\b` 是**退格符**(U+0008),不是正则的词边界。于是整条正则永远匹配不上,
+     「写死的金色底」这一支**静默地全部落在扫描面之外**(现测:金底规则从 71 条掉到 57 条,
+     少的那 14 条正是只写死了金、没用令牌的那些)。必须写成 `\\b`。
+     归族:静默失败器族 —— 判据不是报错,是**悄悄什么都不匹配**,数字还看着挺像样。 */
+  const hex = bgs.match(new RegExp(`#(?:${GOLD_LITERAL.source.replace(/^\(\?:|\)$/g, '')})([0-9a-f]{2})?\\b`, 'ig')) || []
   for (const h of hex) {
     const a = h.length === 9 ? parseInt(h.slice(7), 16) : 255
     if (a >= 0x80) return true
@@ -355,7 +360,8 @@ let goldNoText = 0
 /* `::before` / `::after` 且 `content` 是空串 —— 它画的是一个纯色块(小圆点、竖条),
    **不承载任何字**,所以不许拿它继承来的字色去判它。这条是刀现测逼出来的:
    `.tier-benefit-list li::before` 继承了 li 的 var(--ink),但那颗点里一个字也没有。 */
-const isPureBlock = (r) => /::(before|after)\b/.test(r.sel) && /content\s*:\s*(""|'')/.test(r.body)
+/* 单冒号 `:before` 是老写法,仓里两种都有 —— 判据只认一种,等于漏掉另一种(刀现测漏了 .fin-ai-li:before) */
+const isPureBlock = (r) => /::?(before|after)\b/.test(r.sel) && /content\s*:\s*(""|'')/.test(r.body)
 for (const r of goldRules) {
   if (isPureBlock(r)) { goldNoText += 1; continue }
   if (r.own) { if (!isHero(r.own)) goldBad.push({ ...r, why: `自己写的字色是 ${r.own.slice(0, 24)}` }); continue }
@@ -366,7 +372,10 @@ for (const r of goldRules) {
 check(`⑥ 规矩丙:${goldRules.length} 条画金底的规则,每条要么自己写 color: var(--hero),要么在「没有字的色块」白名单里`,
   goldRules.length > 0 && goldBad.length === 0,
   goldBad.map((r) => `${r.f}:${r.at} ${r.sel} —— ${r.why}`).join(' || '))
-const NO_TEXT_CAP = 3   /* 06g 棘轮初值(实测);**只许降** */
+/* 🔴 棘轮初值我先写成 3 —— **那是拿一把坏了的判据量出来的**(模板串里的 `\b` 让「写死的金底」
+   整支落在扫描面外)。刀 HH 咬出那个 bug 之后重量:**16**。
+   记一笔:**判据坏了,棘轮跟着坏**,而坏成「更小的数」时看起来还像是收得更紧 —— 更隐蔽。 */
+const NO_TEXT_CAP = 16   /* 06g 棘轮初值(判据修好后重量);**只许降** */
 check(`⑥b 丙筐「金底上没有字」${goldNoText} 条 ≤ 棘轮 ${NO_TEXT_CAP}(只许降;新加一条金底色块要让店主看见)`,
   goldNoText <= NO_TEXT_CAP, `${goldNoText} > ${NO_TEXT_CAP}`)
 check(`⑥d 三筐穷尽:甲/乙筐 ${goldBad.length} 红 + 过了的 ${goldRules.length - goldBad.length - goldNoText} + 丙筐 ${goldNoText} = 全部 ${goldRules.length} 条`,
