@@ -170,9 +170,18 @@ for (const w of A) {
          那是一个派生,不是第二次决定目标;守住源变量就守住了它。 */
     const readOnly = /readOnly\s*:\s*true|mode=ro/.test(l)
     const derived = /\b[A-Z_]{3,}\s*\.replace\s*\(/.test(l)
+    /* 第三条**精确**豁免(06i 加,照旧逐条写理由、不按目录放行):
+       **无头浏览器自己的调试口** —— `http://127.0.0.1:<端口>/json/list` 与 `/json/version`
+       是 Chrome DevTools Protocol 的**发现口**,它决定的是「连哪一个浏览器」,
+       **不是「写到哪个库/哪台服务」** —— 写库自报律管的是后者。
+       为什么现在才冒出来:06i 给 contrast-sweep 加了登录态夹具(一条 POST),
+       它因此第一次被判成 writer 进了 A 类,于是这条一直都在的 CDP 行才被扫到。
+       判法按**路径**精确匹配,不按文件放行:同一文件里别的硬编码目标照旧要红。 */
+    const cdpPort = /https?:\/\/(?:127\.0\.0\.1|localhost)(?::\d+|:\$\{[^}]+\})?\/json\/(list|version)/.test(l)
     for (const m of l.matchAll(RP_HARD)) {
-      points.push({ file: w.file, line: i + 1, kind: readOnly ? '只读诊断' : derived ? '派生名' : '硬编码目标',
-        txt: m[0].slice(0, 46), guarded: readOnly || derived })
+      points.push({ file: w.file, line: i + 1,
+        kind: readOnly ? '只读诊断' : derived ? '派生名' : cdpPort ? '浏览器调试口' : '硬编码目标',
+        txt: m[0].slice(0, 46), guarded: readOnly || derived || cdpPort })
     }
     for (const m of l.matchAll(RP_READ)) points.push({ file: w.file, line: i + 1, kind: '取值目标', txt: m[0].slice(0, 46), guarded: guardWin.has(i) })
   })
