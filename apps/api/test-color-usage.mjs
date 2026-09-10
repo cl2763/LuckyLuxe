@@ -384,6 +384,42 @@ check(`⑥c 反向守:金底上如果用奶白 --heroink,两档分别只有 ${ra
   ratio(tok(LIGHT, 'heroink'), tok(LIGHT, 'brand')) < 3 && ratio(tok(DARK, 'heroink'), tok(DARK, 'brand')) < 3,
   `${ratio(tok(LIGHT, 'heroink'), tok(LIGHT, 'brand'))} / ${ratio(tok(DARK, 'heroink'), tok(DARK, 'brand'))}`)
 
+/* ═══ ⑧ **钉浅色上闸**(店主 06h 裁 #36)═══
+ *
+ * 06g 我在 `platform.html` / `sign.html` 的 <html> 上钉了 `data-theme="light"`,
+ * 理由是那两页整页仍是浅色版式,只翻令牌会变成「金翻了、面没翻」。店主准了,但同时上闸,原话:
+ *   **「钉浅色是躲深色最便宜的一条路,不上闸它会长。」**
+ *
+ * 判法是白名单式,两层都要过:
+ *   ①**只许这两页钉**(名单写死,钉到第三页当场红并点名 file:line);
+ *   ②**条数上棘轮**(= 2,只许降)——名单里的页要是自己多钉一处也红。
+ * 只认 <html> 标签上的钉子:CSS 里的 `:root:not([data-theme="light"])` 是**选择器**不是钉子,
+ * 注释里提到这个词更不是 —— 判据看代码不看注释,也别把选择器当成钉子。
+ */
+const PIN_OK = [
+  ['apps/web/platform.html', '平台运营控制台:整页浅色版式(白卡 + 一大片写死的浅底),只翻令牌会金翻面不翻', 'D188 双档化时拆'],
+  ['apps/web/sign.html', '顾客签单页:同上,而且它是 web-view 里那一页,双档要连小程序一起改', 'D188 双档化时拆'],
+]
+const pinHits = []
+for (const f of SURFACE.filter((x) => /\.html$/i.test(x))) {
+  let src = ''
+  try { src = read(f) } catch { continue }
+  stripComments(src).split('\n').forEach((ln, i) => {
+    if (/<html[^>]*\bdata-theme\s*=\s*["']light["']/i.test(ln)) pinHits.push(`${f}:${i + 1}`)
+  })
+}
+const pinBad = pinHits.filter((h) => !PIN_OK.some(([f]) => h.startsWith(`${f}:`)))
+check(`⑧ 钉浅色只许 ${PIN_OK.length} 处:现测 ${pinHits.length} 处,且都在名单里`,
+  pinBad.length === 0, `名单外的:${pinBad.join(' || ')}`)
+check(`⑧b 钉浅色条数棘轮 ≤ ${PIN_OK.length}(只许降;要加第三页得店主点头)`,
+  pinHits.length <= PIN_OK.length, `现测 ${pinHits.length} 处:${pinHits.join(' || ')}`)
+check('⑧c 反向守:名单里那两页**确实还钉着**(判据不能因为钉子被悄悄拆了就一直绿)',
+  PIN_OK.every(([f]) => pinHits.some((h) => h.startsWith(`${f}:`))),
+  `现测钉子:${pinHits.join(' || ')}`)
+check('⑧d 每颗钉子旁边都写清了「为什么钉 + 谁来拆」(拆的去处必须写明 D188,不许只写「暂时」)',
+  PIN_OK.every(([f]) => { const src = read(f); return /D188/.test(src) && /故意钉|为什么钉/.test(src) }),
+  PIN_OK.filter(([f]) => !/D188/.test(read(f))).map(([f]) => f).join(' || '))
+
 /* ═══ ⑦ 判据自己也守规矩:**锚规矩,不锚数字**(店主 06f §二 第二件)═══
  *
  * 「主按钮 = --brand 底 + --hero 字」是规矩,会一直成立;「等于 9.39」是数字,
