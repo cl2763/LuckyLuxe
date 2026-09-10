@@ -220,6 +220,31 @@ if [ -n "$RED_LIST" ]; then
   else say "对比度全扫过期了" "🔴 $(basename "$RED_LIST") 记的是 $WANT_SHA,现在是 $NOW_SHA —— 样式改过了,重跑再交"; FAIL=1; fi
 else say "对比度红榜在不在" "🔴 找不到 $RED_LIST"; FAIL=1; fi
 
+# ⑪b D188 ③(06h §六)· **运行判据也要跟着界面走**。它同样要开 Chrome + 活服务,进不了全量;
+#     所以照 ⑪ 那把的做法:报告抬头记的八个界面文件的内容指纹 ≠ 现在的 = 没重跑 → 红。
+#     ⚠️ 这一条防的正是「统一入口挂上了,但后来谁改了页面而没重量」——
+#     静态判据在全量里守着「文件里有没有那一行」,这一条守着「浏览器里真取得到没有」。
+D188_RPT=$(ls -t handoff/night-runs/D188运行判据_*.md 2>/dev/null | head -1)
+if [ -n "$D188_RPT" ]; then
+  WANT8=$(grep -oE '界面文件内容指纹 `[0-9a-f]+`' "$D188_RPT" | grep -oE '[0-9a-f]{6,}' | head -1)
+  NOW8=$(cat apps/web/design-tokens.css apps/web/styles.css apps/web/admin.html apps/web/index.html \
+              apps/web/platform.html apps/web/sign.html apps/web/share.html apps/web/wechat-simulator.html \
+         | shasum -a 256 | cut -c1-12)
+  if [ -z "$WANT8" ]; then say "D188 运行判据没记指纹" "🔴 $(basename "$D188_RPT") 抬头没有指纹那一行 —— 重跑 tools/token-runtime-probe.mjs"; FAIL=1
+  elif [ "$WANT8" = "$NOW8" ]; then say "D188 运行判据跟得上界面" "✅ 指纹一致($NOW8)· 用的是 $(basename "$D188_RPT")"
+  else say "D188 运行判据过期了" "🔴 $(basename "$D188_RPT") 记的是 $WANT8,现在是 $NOW8 —— 页面改过了,重跑再交"; FAIL=1; fi
+else say "D188 运行判据报告在不在" "🔴 找不到 handoff/night-runs/D188运行判据_*.md —— 跑一次 tools/token-runtime-probe.mjs"; FAIL=1; fi
+
+# ⑪c J-43(店主 06h 裁 #38)· **棘轮初值必须由「已经造病验过红」的那一版判据产出**。
+#     这里只做机械对账并**提醒,不拦**:git blame 取「这个数写于哪次提交」,
+#     git log 取「产出它的判据文件最后改于哪次」——判据比数字新 = 这个数是旧版判据量的,该重量。
+#     不拦的理由:文件级粒度会**过报**(动了同一个文件的别处也会标脏),拦了会变成天天红的噪音;
+#     但提醒必须在,否则 J-43 只活在回执里。重量一次很便宜,漏掉一次很贵(06g 那个 3 就是)。
+STALE_R=$(node tools/ratchet-audit.mjs 2>/dev/null | grep -c "判据比数字新" || true)
+if [ "${STALE_R:-0}" -gt 0 ]; then
+  say "J-43 棘轮对账" "⚠️ 提醒(不拦):$STALE_R 个棘轮的数比它的判据旧 —— 交付前跑一次 node tools/ratchet-audit.mjs 并重量"
+else say "J-43 棘轮对账" "✅ 在册棘轮的数都出自当前这一版判据"; fi
+
 # ⑫ 裁(店主 05y §三③)· **开批快照进预检**。
 #    「未动须有证」那句话要**每一批都有证**,而不是想起来才有证 ——
 #    上一批沙箱那一行只能写「按形状看像心跳,不是刀验过的」,原因就是开批时没打快照,
