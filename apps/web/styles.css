@@ -5814,8 +5814,10 @@ textarea:focus {
   width: 32px;
   height: 32px;
   border-radius: 50%;
-  background: var(--soft);
-  color: var(--brandd);
+  /* 06g §二 筐一「放错面」:金字压 --wall 4.08 → 改成规矩丙那一族「金底 + --hero 字」= 5.26 / 9.39。
+     小程序 `.av` 本批也是这个写法(双端同批律:同一个东西两端别长成两样)。 */
+  background: var(--brand);
+  color: var(--hero);
   display: flex;
   align-items: center;
   justify-content: center;
@@ -6221,8 +6223,10 @@ textarea:focus {
   font-size: 12px;
   padding: 4px 12px;
   border-radius: 999px;
-  background: var(--soft);
-  color: var(--brandd);
+  /* 06g §二 筐一「放错面」:--brandd 压 --wall 4.08。改用合同图**成对设计**的标记色 ——
+     --tagm 压 --tagmbg = 5.36 / 7.8。金不是不能用,是它压错了那层面。 */
+  background: var(--tagmbg);
+  color: var(--tagm);
 }
 .plan-feature.off {
   background: var(--wall);
@@ -6822,7 +6826,7 @@ textarea:focus {
   border: 1px solid transparent;
 }
 .member-tier-badge.tier-silver { background: var(--wall); color: var(--ink); border-color: var(--line); }
-.member-tier-badge.tier-gold { background: var(--tagmbg); color: var(--brandd); border-color: var(--brand); }
+.member-tier-badge.tier-gold { background: var(--tagmbg); color: var(--tagm); border-color: var(--brand); }   /* 06g §二 筐一:--tagmbg 的配对色是 --tagm(5.36),不是 --brandd(4.28) */
 .member-tier-badge.tier-platinum { background: var(--wall); color: var(--tagw); border-color: var(--line); }
 .member-tier-badge.tier-diamond { background: var(--wall); color: #6b4f8a; border-color: var(--line); }
 
@@ -6936,7 +6940,9 @@ div.swg-cell { cursor: default; }
   font-size: .7rem;
   padding: 2px 9px;
   border-radius: 999px;
-  background: var(--soft);
+  /* 06g §二 筐一「放错面」:金字压 --wall 只有 4.08;压白卡 4.73。
+     它本来就有 --line 边框,换成白底也不会糊在卡上。 */
+  background: var(--card);
   border: 1px solid var(--line);
   color: var(--brandd);
 }
@@ -7206,7 +7212,7 @@ section.card > .section-row:first-child { margin-top: 0; }
   border-radius: 999px;
   background: var(--tagmbg);
   border: 1px solid var(--brand);
-  color: var(--brandd);
+  color: var(--tagm);   /* 06g §二 筐一:同上,--tagmbg 的配对色 */
   font-weight: 600;
 }
 .my-quote-history {
