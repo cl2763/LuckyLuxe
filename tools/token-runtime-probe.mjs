@@ -95,8 +95,11 @@ for (const [name, path] of PAGES) {
     await send('Emulation.setEmulatedMedia', { features: [{ name: 'prefers-color-scheme', value: mode }] })
     await send('Page.navigate', { url: `${BASE}${path}` })
     await sleep(2200)
-    const r = await ev(READ)
-    if (!r) { bad.push(`${name} · ${mode}:页面里什么都取不到,**没验成**`); continue }
+    /* 现测偶发:第一次 evaluate 回 undefined(页面还没交出 document.body)。
+       **重试是重量一次,不是放宽** —— 三次都取不到仍然按「没验成」报红,绝不静默当绿。 */
+    let r = await ev(READ)
+    for (let t = 0; t < 3 && !r; t += 1) { await sleep(1200); r = await ev(READ) }
+    if (!r) { bad.push(`${name} · ${mode}:连取三次都什么都取不到,**没验成**(不是绿)`); continue }
     const empty = ['paper', 'ink', 'brand', 'hero'].filter((k) => !r[k])
     const transparent = /rgba\([^)]*,\s*0\s*\)|transparent/i.test(String(r.bodyBg || ''))
     const ok = empty.length === 0 && !transparent && r.textLen > 10
