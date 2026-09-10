@@ -124,7 +124,9 @@ button::after {
 }
 
 .price {
-  color: var(--brand);
+  /* 规矩甲(店主 06e §二 2.):浅色档 --brand 压白只有 2.88:1,**不许当正文字色** ——
+     当字要用 --brandd(浅档 4.73:1)。价格是顾客要看清的数,更不能例外。 */
+  color: var(--brandd);
   font-weight: 700;
 }
 
