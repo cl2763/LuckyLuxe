@@ -91,9 +91,38 @@ const declsOf = (src) => {
 }
 const TOK = declsOf(readFileSync(join(WEB, 'design-tokens.css'), 'utf8'))
 const CSS = declsOf(readFileSync(join(WEB, 'styles.css'), 'utf8'))
-const clash = [...CSS].filter((x) => TOK.has(x))
-check(`③ 令牌文件(${TOK.size} 个)与 styles.css(${CSS.size} 个)**零同名定义** —— 名字不撞车,引用顺序怎么排都对`,
-  clash.length === 0, `撞车的:${clash.join(' ')}`)
+/* 🔴 06i 裁 #41 · J-44「判据的覆盖面要跟着被改动的范围走」:
+   上一版这条只比**两份 css 文件**,而**撞车真的发生在第三层** —— 页面自带的 `<style>` 里。
+   现测过:platform / sign 各自的 `:root` 定义了 `--ink` / `--paper` / `--line`,
+   而那段 `<style>` 排在 `<link design-tokens.css>` 之后 → **页面自己的值赢了**,
+   值又很接近(肉眼和图都看不出来),于是「两页接令牌」其实只接上了金。
+   所以扫描面扩到「**同一个页面会同时加载的所有样式来源**」:令牌文件 + styles.css + 每一页的内联 <style>。 */
+const sourceOf = (file) => {
+  const src = readFileSync(join(WEB, file), 'utf8')
+  if (!/\.html$/i.test(file)) return src
+  return (src.match(/<style[^>]*>[\s\S]*?<\/style>/gi) || []).join('\n')
+}
+const SOURCES = [['styles.css', CSS], ...pages.map((f) => [f, declsOf(sourceOf(f))])]
+const clashRows = []
+for (const [name, set] of SOURCES) {
+  for (const x of set) if (TOK.has(x)) clashRows.push({ name, tok: x })
+}
+/* 点名到 file:line —— 「报得出是哪一处」是造病的验收条件 */
+const lineOfDecl = (file, tok2) => {
+  const lines = readFileSync(join(WEB, file), 'utf8').split('\n')
+  const i = lines.findIndex((ln) => new RegExp(`(^|[;{\\s])${tok2}\\s*:`).test(ln) && /\{/.test(ln + lines.slice(0, 1)))
+  const j = i >= 0 ? i : lines.findIndex((ln) => new RegExp(`(^|[;{\\s])${tok2}\\s*:`).test(ln))
+  return j >= 0 ? j + 1 : 0
+}
+check(`③ 令牌文件(${TOK.size} 个)与**页面会同时加载的所有样式来源**(styles.css + ${pages.length} 个页面的内联 style)零同名定义`,
+  clashRows.length === 0,
+  clashRows.map((c) => `apps/web/${c.name}:${lineOfDecl(c.name, c.tok)} 重定义了令牌 ${c.tok}`).join(' || '))
+check(`③c 覆盖面自证:这一条现在比的是 **${SOURCES.length} 个来源**(1 份 css + ${pages.length} 个页面内联);少一个说明扫描面缩水了`,
+  SOURCES.length >= 7, String(SOURCES.length))
+check('③d 反向守:**非令牌名不许被误咬** —— 两页自带的 --soft / --muted 这些不在合同图里,不算撞车',
+  !TOK.has('--soft') && !TOK.has('--muted')
+  && SOURCES.some(([, set]) => set.has('--soft') || set.has('--muted')),
+  '要么令牌文件里冒出了同名,要么页面里那几个局部名没了')
 check('③b 反向守:这两份文件确实都读到了东西(空集上「零撞车」也成立,那是空转)',
   TOK.size > 20 && CSS.size > 0, `令牌 ${TOK.size} · styles ${CSS.size}`)
 

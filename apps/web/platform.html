@@ -13,7 +13,14 @@
        · **不许再钉第三页**:店主 06h 裁 #36 原话 ——「钉浅色是躲深色最便宜的一条路,不上闸它会长」。 -->
 <link rel="stylesheet" href="/web/design-tokens.css?v=20260910f-gold">
 <style>
-  :root{--ink:#2d2826;--paper:#fbf8f5;--soft:#f1e7df;--line:#e7ddd4;--muted:#8c8279;--success:#47735f;--danger:#a34c48;--warn:#b5731f}
+  /* 🔴 06i 裁 #41(店主现查):`--ink` / `--paper` / `--line` **是合同图令牌名**,
+     而这段 <style> 排在 <link design-tokens.css> 之后 —— **页面自己的值赢了**。
+     值很接近(paper #fbf8f5 vs 令牌 #faf8f3、ink #2d2826 vs #241f1a、line #e7ddd4 vs #e3e0d6),
+     所以肉眼和图都看不出来:「两页接令牌」这一段**其实只接上了金**,底/字/描边三个最基本的被顶掉了。
+     现已删掉这三条,由令牌供值。
+     ⚠️ 剩下的 --soft / --muted / --success / --danger / --warn / --ok **不是令牌名**,先留着,
+        已逐条登记进 D188(整页双档化时要么并进令牌、要么写明留作页面局部色)。 */
+  :root{--soft:#f1e7df;--muted:#8c8279;--success:#47735f;--danger:#a34c48;--warn:#b5731f}
   *{box-sizing:border-box;margin:0;padding:0}
   body{background:var(--paper);color:var(--ink);font-family:-apple-system,"PingFang SC","Microsoft YaHei",sans-serif}
   .layout{display:flex;min-height:100vh}
