@@ -43,7 +43,7 @@
     "currency-scan": 6,
     "settle-stress": 6,
     "sign-stability": 6,
-    "noshow-aftersales": 756,
+    "noshow-aftersales": 759,
     "demo-seed-guard": 76,
     "card-refund": 127,
     "amend-linkage": 34,
@@ -110,7 +110,8 @@
     "schema-consistency": 4,
     "perf-base-migration": 15,
     "tenant-isolation": 10,
-    "color-usage": 27
+    "color-usage": 31,
+    "token-entry": 7
   },
   "上次更新": "2026-09-02",
   "巨型文件历史最低": {
