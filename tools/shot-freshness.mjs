@@ -14,7 +14,7 @@
  * 用法:node tools/shot-freshness.mjs <图目录|图文件> [...]  [--since <git-ref>]
  *   --since 给的那个 ref 之后的提交才算「本批」;不给就用「与 origin/main 的分叉点」。
  */
-import { readdirSync, statSync, existsSync } from 'node:fs'
+import { readdirSync, statSync, existsSync, readFileSync } from 'node:fs'
 import { join, basename, extname } from 'node:path'
 import { execFileSync } from 'node:child_process'
 
@@ -24,17 +24,40 @@ const SINCE = sinceIdx >= 0 ? args[sinceIdx + 1] : ''
 /* 🔴 现测栽了一次:`i !== sinceIdx + 1` 在没给 --since 时(sinceIdx = -1)会把**第 0 个参数**吃掉,
    于是「五页两档」那整个目录被静默丢掉,刀只比了 1 张图还报绿 ——
    **少比了不报**正是静默失败器族。现在只有真给了 --since 才跳过它后面那一个。 */
-const targets = args.filter((a, i) => a !== '--since' && !(sinceIdx >= 0 && i === sinceIdx + 1))
+const targets = args.filter((a, i) => a !== '--since' && a !== '--files'
+  && !(sinceIdx >= 0 && i === sinceIdx + 1) && !(args.indexOf('--files') >= 0 && i === args.indexOf('--files') + 1))
 if (!targets.length) { console.error('用法: node tools/shot-freshness.mjs <图目录|图文件> [--since <git-ref>]'); process.exit(2) }
 
 const git = (...a) => execFileSync('git', a, { encoding: 'utf8' }).trim()
-/* 本批最后一次代码提交的时刻(只看会影响界面的那些路径 —— 文档提交不该逼着重拍图) */
+/* ── 裁 #32(店主 06g §五)· **尺子改成锚「这一段改过的文件」** ────────────────
+   06f 撞上的:提交一次 `apps/api/assertion-baseline.json`(测试基线,改不了任何像素)
+   就把 6 张刚拍的图判成「修前的图」。我当时**没有松判据,去重拍了一次** —— 店主认了这个反应,
+   但也裁了:判据本身太粗,它拿「任意一次最后提交」去比图的时刻。
+   现在细成两档尺子:
+     · **细尺**:给了这一段改过的文件清单(`--files a,b,c`,或对照说明里那行「文件清单:」)
+       → 只看**最后一次触碰这些文件**的提交;
+     · **粗尺**:拿不到清单 → 退回三棵树的老口径(**宁严勿松**:宁可多逼一次重拍)。
+   抬头必须报清楚这次用的是哪把尺子、比的是哪个提交号(J-39:数要带尺子)。 */
 const CODE_PATHS = ['apps/web', 'miniprogram', 'apps/api']
+const filesIdx = args.indexOf('--files')
+let RULER_FILES = filesIdx >= 0 ? String(args[filesIdx + 1] || '').split(',').map((x) => x.trim()).filter(Boolean) : []
+/* 清单也可以写在对照说明里:一行 `文件清单: a, b, c`(拍图的刀顺手写,回执直接引） */
+if (!RULER_FILES.length) {
+  for (const t of args) {
+    const note = join(t, '对照说明.md')
+    if (!existsSync(note)) continue
+    const m = readFileSync(note, 'utf8').match(/^\s*(?:文件清单|改过的文件)\s*[::]\s*(.+)$/m)
+    if (m) RULER_FILES = m[1].split(/[,,]/).map((x) => x.trim().replace(/^`|`$/g, '')).filter(Boolean)
+    if (RULER_FILES.length) break
+  }
+}
+const RULER = RULER_FILES.length ? RULER_FILES : CODE_PATHS
+const RULER_KIND = RULER_FILES.length ? '细尺(只看这一段改过的文件)' : '粗尺(三棵树全看;没拿到文件清单,宁严勿松)'
 let lastCodeAt = ''
 let lastCodeSha = ''
 try {
   const range = SINCE ? `${SINCE}..HEAD` : 'HEAD'
-  const out = git('log', '-1', '--format=%H %cI', range, '--', ...CODE_PATHS)
+  const out = git('log', '-1', '--format=%H %cI', range, '--', ...RULER)
   const [sha, iso] = out.split(' ')
   lastCodeSha = (sha || '').slice(0, 7); lastCodeAt = iso || ''
 } catch { /* 没有 git 信息就在下面报出来 */ }
@@ -58,8 +81,9 @@ const stampOf = (file) => {
 
 let n = 0
 const fails = []
-console.log(`本批最后一次**代码**提交:${lastCodeSha || '(取不到)'} @ ${lastCodeAt || '(取不到)'}`)
-console.log(`(只看 ${CODE_PATHS.join(' / ')};纯文档提交不逼着重拍图)\n`)
+console.log(`用的是**${RULER_KIND}**`)
+console.log(`比的那次提交:${lastCodeSha || '(取不到)'} @ ${lastCodeAt || '(取不到)'}`)
+console.log(`尺子看的路径:${RULER.join(' / ')}\n`)
 for (const f of files.sort()) {
   n += 1
   const { at, from } = stampOf(f)
