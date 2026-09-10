@@ -4,6 +4,8 @@
    按公约②「边改边拆」把它整域搬出来;**行为一字未改**,依赖由调用方注入。 */
 /* transformHtml:发 HTML 的那一刻过一道(2026-08-27 给前端资源打内容指纹用)。
    放在这里而不是各调用点 —— 页面有好几个入口,漏一个就等于那一页永远吃旧缓存。 */
+import { ensureTokenLink } from './web-head.mjs'
+
 export function createStaticServe({ existsSync, statSync, readFileSync, join, normalize, extname, transformHtml = null }) {
   function contentType(filePath) {
     const ext = extname(filePath)
@@ -42,8 +44,15 @@ export function createStaticServe({ existsSync, statSync, readFileSync, join, no
       'content-type': type,
       ...(type.startsWith('text/') || type.includes('javascript') ? { 'cache-control': 'no-store' } : {})
     })
-    if (type.startsWith('text/html') && transformHtml) {
-      res.end(transformHtml(readFileSync(filePath, 'utf8'), { baseDir }))
+    if (type.startsWith('text/html')) {
+      /* 🔴 D188 ①(店主 06b §三 / 06h §六):**令牌引用的统一入口就在这一行**。
+         页面有六个入口(/、/admin、/platform、/share、/sign、/wechat-simulator),
+         挂在这里 = 六个入口全覆盖,新加一页也不用记得 —— 「忘了引」这件事从此不可能到达浏览器。
+         平时它应该一次都不触发(六页都自带那一行,判据 test-token-entry ① 守着),
+         真触发了会在服务日志里点名是哪一页,那是缺陷不是常态。 */
+      const raw = readFileSync(filePath, 'utf8')
+      const guarded = ensureTokenLink(raw, { file: filePath, log: console.warn }).html
+      res.end(transformHtml ? transformHtml(guarded, { baseDir, filePath }) : guarded)
       return true
     }
     res.end(readFileSync(filePath))
