@@ -3539,8 +3539,10 @@ textarea:focus {
   place-items: center;
   border-radius: 50%;
   margin-left: 4px;
-  background: var(--soft);
-  color: var(--brandd);
+  /* 06g §二 筐一「放错面」·**双端同病**:后台那七处金压 --wall 修了,顾客端这三处是同一个病。
+     圆牌里就一个数字,和 .cs-avatar / 小程序 .av 同族 —— 金底 + --hero 字(5.26 / 9.39)。 */
+  background: var(--brand);
+  color: var(--hero);
   font-size: 12px;
 }
 
@@ -3710,8 +3712,9 @@ textarea:focus {
   height: 42px;
   place-items: center;
   border-radius: 50%;
-  background: var(--soft);
-  color: var(--brandd);
+  /* 06g §二 筐一「放错面」·**双端同病**:同上,42px 的圆里就一个字母。 */
+  background: var(--brand);
+  color: var(--hero);
 }.portfolio-wide-button {
   display: grid;
   grid-template-columns: auto 1fr auto;
