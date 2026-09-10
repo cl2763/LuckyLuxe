@@ -33,7 +33,7 @@ page{background:#fbf8f5}
 .dv-col{flex:none;border-right:1rpx solid #e9dccb;position:relative;box-sizing:border-box}
 .dv-th.mine{background:#fbf1e4;border-bottom:3rpx solid #c8a47e}
 .dv-col.mine{background:rgba(200,164,126,.10)}
-.dv-me{display:inline-block;margin-left:6rpx;font-size:16rpx;background:#c8a47e;color:#fff;border-radius:999rpx;padding:0 8rpx;vertical-align:middle}
+.dv-me{display:inline-block;margin-left:6rpx;font-size:16rpx;background:var(--brand);color:var(--hero);border-radius:999rpx;padding:0 8rpx;vertical-align:middle}
 .dv-line{height:120rpx;border-bottom:1rpx dashed #f2ebe1;box-sizing:border-box}
 .dv-blk{position:absolute;left:6rpx;right:6rpx;border-radius:12rpx;padding:7rpx 9rpx;overflow:hidden;box-shadow:0 1rpx 4rpx rgba(92,70,48,.12);box-sizing:border-box}
 .dv-bt{font-size:17rpx;opacity:.72;font-weight:600}
@@ -120,7 +120,7 @@ page{background:#fbf8f5}
 .ds-durstd{flex:none;font-size:22rpx;color:#b5885d;font-weight:700;padding:10rpx 8rpx}
 .ds-svcs{white-space:nowrap}
 .ds-c{display:inline-block;font-size:24rpx;padding:8rpx 20rpx;border-radius:999rpx;background:#fbf8f5;border:1rpx solid #eadfd7;color:#5c4630;margin-right:12rpx}
-.ds-c.on{background:#c8a47e;color:#fff;border-color:#c8a47e;font-weight:700}
+.ds-c.on{background:var(--brand);color:var(--hero);border-color:var(--brand);font-weight:700}
 .ds-toggle{display:flex;background:#fbf8f5;border:1rpx solid #eadfd7;border-radius:12rpx;padding:4rpx}
 .ds-opt{flex:1;text-align:center;font-size:25rpx;padding:14rpx 0;border-radius:10rpx;color:#8a7f78}
 .ds-opt.on{background:#2d2826;color:#fff;font-weight:700}

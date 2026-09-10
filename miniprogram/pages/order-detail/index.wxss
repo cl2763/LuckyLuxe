@@ -82,7 +82,7 @@
 .info-row.hero{font-size:32rpx;font-weight:850;border-top:1rpx solid #f2ebe3;margin-top:8rpx;padding-top:14rpx}
 .info-row.hero .price{color:#9b7655}
 .as-link{margin-top:14rpx;text-align:center;font-size:24rpx;color:#9b7655;text-decoration:underline}.as-btn {background:#2d2826;color:#fff;text-align:center;padding:22rpx;border-radius:999rpx;font-size:28rpx;font-weight:800}
-.as-desc{width:100%;min-height:160rpx;background:#faf6f1;border:1rpx solid #ece2d6;border-radius:12rpx;padding:16rpx;font-size:26rpx;margin-top:16rpx;box-sizing:border-box}.as-submit {margin-top:14rpx;background:#9b7655;color:#fff;text-align:center;padding:20rpx;border-radius:999rpx;font-size:27rpx;font-weight:700}
+.as-desc{width:100%;min-height:160rpx;background:#faf6f1;border:1rpx solid #ece2d6;border-radius:12rpx;padding:16rpx;font-size:26rpx;margin-top:16rpx;box-sizing:border-box}.as-submit {margin-top:14rpx;background:var(--brand);color:var(--hero);text-align:center;padding:20rpx;border-radius:999rpx;font-size:27rpx;font-weight:700}
 .as-submit.ing{background:#b3a89c}
 .as-note{margin-top:10rpx;font-size:21rpx;color:#9a8c7c;line-height:1.6}
 .as-step{display:flex;gap:14rpx;padding:10rpx 0}

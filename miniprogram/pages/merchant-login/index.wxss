@@ -10,7 +10,7 @@ page{background:#fbf8f5}
 .eye{width:42rpx;height:42rpx;margin-left:12rpx;flex:0 0 auto}
 .remember{display:flex;align-items:center;font-size:26rpx;color:#8c8279;margin:6rpx 0 40rpx 4rpx}
 .box{width:34rpx;height:34rpx;border:2rpx solid #c8a47e;border-radius:8rpx;margin-right:14rpx;display:flex;align-items:center;justify-content:center;color:#fff;font-size:22rpx}
-.box.on{background:#c8a47e}.btn {height:92rpx;line-height:92rpx;background:#c8a47e;color:#fff;font-size:32rpx;border-radius:999rpx;font-weight:500}
+.box.on{background:var(--brand);color:var(--hero)}   /* 规矩丙:勾在金底上,深字才看得见 */.btn {height:92rpx;line-height:92rpx;background:var(--brand);color:var(--hero);font-size:32rpx;border-radius:999rpx;font-weight:500}
 .btn::after{border:none}
 .hint{text-align:center;font-size:24rpx;color:#9b7655;margin-top:32rpx;text-decoration:underline}
 .applybar{display:flex;align-items:center;justify-content:center;gap:8rpx;margin-top:48rpx;padding-top:28rpx;border-top:1rpx solid #ece3d9}

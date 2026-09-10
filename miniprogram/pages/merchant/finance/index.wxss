@@ -5,7 +5,7 @@ page{background:#fbf8f5}
 .gate-t{font-size:32rpx;font-weight:600;color:#2d2826;margin-top:16rpx}
 .gate-s{font-size:24rpx;color:#8c8279;margin-top:10rpx;line-height:1.6}
 .ginp{height:88rpx;background:#fff;border:1rpx solid #e7ddd4;border-radius:16rpx;padding:0 24rpx;font-size:28rpx;margin-top:22rpx}
-.ph{color:#b6a99b}.gbtn {height:88rpx;line-height:88rpx;background:#c8a47e;color:#fff;border-radius:999rpx;font-size:30rpx;font-weight:500;margin-top:24rpx}
+.ph{color:#b6a99b}.gbtn {height:88rpx;line-height:88rpx;background:var(--brand);color:var(--hero);border-radius:999rpx;font-size:30rpx;font-weight:500;margin-top:24rpx}
 .gate-hint{font-size:21rpx;color:#8c8279;margin-top:20rpx;line-height:1.6}
 /* hero */
 .hero{background:linear-gradient(135deg,#2d2826,#4a3f34);border-radius:24rpx;padding:26rpx 28rpx;margin-bottom:16rpx}
@@ -38,7 +38,7 @@ page{background:#fbf8f5}
 .guide-l{flex:1;min-width:0}
 .guide-b{display:block;font-size:25rpx;font-weight:700;color:#8a6f4d}
 .guide-s{display:block;font-size:20rpx;color:#a08966;margin-top:4rpx;line-height:1.5}
-.guide-go{flex:0 0 auto;background:#b5885d;color:#fff;border-radius:40rpx;padding:12rpx 26rpx;font-size:23rpx;font-weight:700}
+.guide-go{flex:0 0 auto;background:var(--brand);color:var(--hero);border-radius:40rpx;padding:12rpx 26rpx;font-size:23rpx;font-weight:700}
 /* 记一笔/流水入口 */
 .entry2{display:flex;gap:14rpx;margin-bottom:16rpx}.ebtn {flex:1;background:#fff;border:1rpx solid #e7ddd4;border-radius:999rpx;padding:20rpx 16rpx;text-align:center}
 .ebtn.hl{border-color:#d9bf9f;background:#fbf4ec}
@@ -54,7 +54,7 @@ page{background:#fbf8f5}
 .dormrow{display:flex;align-items:center;justify-content:space-between;gap:12rpx}
 .dorm-l{flex:1;min-width:0}
 .dorm-t{font-size:24rpx;color:#8c8279}
-.dorm-s{display:block;font-size:22rpx;color:#9b7655;margin-top:4rpx}.wakebtn {flex:0 0 auto;background:#c8a47e;color:#fff;border-radius:999rpx;padding:8rpx 24rpx;font-size:23rpx}
+.dorm-s{display:block;font-size:22rpx;color:#9b7655;margin-top:4rpx}.wakebtn {flex:0 0 auto;background:var(--brand);color:var(--hero);border-radius:999rpx;padding:8rpx 24rpx;font-size:23rpx}
 .insight{background:#f7ede0;border:1rpx solid #e7ddd4;border-radius:14rpx;padding:16rpx;font-size:24rpx;color:#5c4630;line-height:1.6;margin-bottom:14rpx}
 .t2{font-size:26rpx;font-weight:600;color:#2d2826;margin:6rpx 0 10rpx}
 .divi{height:1rpx;background:#f1e7df;margin:10rpx 0}

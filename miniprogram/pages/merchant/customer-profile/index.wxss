@@ -1,7 +1,7 @@
 .pg{padding:16rpx 24rpx 60rpx;background:#fbf8f5;min-height:100vh}
 .pcard{background:linear-gradient(135deg,#fff,#fbf3ea);border-radius:18rpx;padding:18rpx;box-shadow:0 4rpx 14rpx rgba(92,70,48,.08);border:1rpx solid #e9dccb}
 .pcard .top{display:flex;align-items:center;gap:14rpx}
-.pcard .av{width:64rpx;height:64rpx;border-radius:50%;background:linear-gradient(135deg,#e7c9a4,#c8a47e);color:#fff;font-weight:800;display:flex;align-items:center;justify-content:center;font-size:28rpx}
+.pcard .av{width:64rpx;height:64rpx;border-radius:50%;background: var(--brand);color:var(--hero);font-weight:800;display:flex;align-items:center;justify-content:center;font-size:28rpx}
 .pcard .nm{font-size:34rpx;font-weight:800;color:#241f1d}
 .pcard .st{font-size:22rpx;color:#9a8c7c;margin-top:2rpx}
 .pstat{display:flex;gap:10rpx;margin-top:14rpx}

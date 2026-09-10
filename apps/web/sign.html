@@ -1,13 +1,18 @@
 <!DOCTYPE html>
-<html lang="zh">
+<html lang="zh" data-theme="light">
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
 <title>服务确认单</title>
+<!-- 06g §四① 店主裁:金色统一到合同图令牌 —— 这一页从此不再自带一套金。
+     ⚠️ `data-theme="light"` 是**故意钉的**:本页整页仍是浅色版式(白卡、写死的浅底一大片),
+     只把金接到令牌上。不钉的话,深色档下**金会跟着翻成浅金,而面色不翻** ——
+     浅金压浅底 = 看不见,比不接还糟。整页双档化归 D188 那一批,那时把这个属性去掉。 -->
+<link rel="stylesheet" href="/web/design-tokens.css?v=20260910f-gold">
 <style>
   /* 金额红线:本页**不做任何金额计算**,所有数字直接显示 /settlements/:code 的返回值。
      页面里找不到任何加减乘除 —— 这是结构性保证,不是靠自觉。 */
-  :root{--gold:#c8a47e;--bronze:#9b7655;--ink:#2d2826;--paper:#fbf8f5;--soft:#f1e7df;--line:#e7ddd4;--muted:#8c8279;--danger:#a34c48;--ok:#2f7d5c}
+  :root{--ink:#2d2826;--paper:#fbf8f5;--soft:#f1e7df;--line:#e7ddd4;--muted:#8c8279;--danger:#a34c48;--ok:#2f7d5c}
   *{box-sizing:border-box;margin:0;padding:0;-webkit-tap-highlight-color:transparent}
   body{background:var(--soft);color:var(--ink);font-family:-apple-system,"PingFang SC","Microsoft YaHei",sans-serif;font-size:15px;line-height:1.55}
   .wrap{max-width:460px;margin:0 auto;padding:14px 14px 120px}
@@ -36,13 +41,13 @@
   .totals .row{font-size:13.5px;color:var(--muted)}
   .totals .row b{color:var(--ink)}
   .totals .grand{font-size:19px;font-weight:850;color:var(--ink);padding-top:8px}
-  .totals .grand span:last-child{color:var(--bronze)}
+  .totals .grand span:last-child{color:var(--brandd)}
   .disc{background:var(--paper);border:1px solid var(--line);border-radius:12px;padding:12px;margin-top:16px;font-size:13px;display:flex;gap:9px;align-items:flex-start}
   .disc input{width:17px;height:17px;margin-top:2px;flex:none}
   .pad{margin-top:14px}
   .pad canvas{width:100%;height:150px;background:#fff;border:1px dashed var(--line);border-radius:12px;touch-action:none;display:block}
   .pad .hint{display:flex;justify-content:space-between;font-size:12px;color:var(--muted);margin-top:6px}
-  .pad .hint button{border:none;background:none;color:var(--bronze);font-size:12px;text-decoration:underline;cursor:pointer}
+  .pad .hint button{border:none;background:none;color:var(--brandd);font-size:12px;text-decoration:underline;cursor:pointer}
   .cta{position:fixed;left:0;right:0;bottom:0;background:#fff;border-top:1px solid var(--line);padding:12px 14px calc(12px + env(safe-area-inset-bottom))}
   .cta .inner{max-width:460px;margin:0 auto}
   .cta button{width:100%;border:none;border-radius:12px;background:var(--ink);color:#fff;font-size:16px;font-weight:800;padding:14px;cursor:pointer}
@@ -50,7 +55,7 @@
   /* 还差一步时:按钮不死灰(点得动、点了给提示),只是淡一档 + 上方常驻一行说明 */
   .cta button.waiting{background:#a8a099}
   .cta .need{font-size:12.5px;color:#a8551f;background:#fdf3ec;border-radius:9px;padding:7px 10px;margin-bottom:8px;text-align:center}
-  .disc.flash{outline:2px solid var(--bronze);outline-offset:2px;border-radius:12px}
+  .disc.flash{outline:2px solid var(--brandd);outline-offset:2px;border-radius:12px}
   /* 屏 D1/D1b 更正记录卡:独立追加在快照下方,原单区一字不改 */
   .pill.amend{background:#fdf3ec;color:#a8551f;border-color:#f0d9c4}
   .amend-card{background:#fff;border-radius:16px;padding:14px 16px;margin-top:12px;box-shadow:0 2px 14px rgba(45,40,38,.06)}
@@ -64,7 +69,7 @@
   .amend-card .row .d.refund{color:var(--ok)}
   .amend-card .row .d.charge{color:#a8551f}
   .amend-card .actual{display:flex;justify-content:space-between;align-items:baseline;padding-top:12px;font-size:15px;font-weight:800;color:var(--ink)}
-  .amend-card .actual b{font-size:20px;color:var(--bronze)}
+  .amend-card .actual b{font-size:20px;color:var(--brandd)}
   .amend-card .foot{margin-top:8px;font-size:11.5px;color:var(--muted);line-height:1.6}
   /* 已签单右上角的真实笔迹:嵌快照本体,裁到签名那一块 */
   .sign-slot .val{overflow:hidden}
@@ -82,9 +87,9 @@
   .claim p{font-size:13px;color:var(--muted);line-height:1.7;margin:8px 0 14px}
   .claim button.main{width:100%;border:none;border-radius:12px;background:var(--ink);color:#fff;font-size:15.5px;font-weight:800;padding:14px;cursor:pointer}
   .claim .alt{margin-top:12px;font-size:12px;color:var(--muted);line-height:1.7;text-align:center}
-  .claim .alt a{color:var(--bronze)}
+  .claim .alt a{color:var(--brandd)}
   .claim .phone-auth{margin-top:10px;text-align:center}
-  .claim .phone-auth button{border:1px solid var(--line);background:var(--paper);color:var(--bronze);border-radius:10px;padding:9px 16px;font-size:12.5px;cursor:pointer}
+  .claim .phone-auth button{border:1px solid var(--line);background:var(--paper);color:var(--brandd);border-radius:10px;padding:9px 16px;font-size:12.5px;cursor:pointer}
   .claim .note{margin-top:10px;font-size:12px;border-radius:10px;padding:9px 11px;line-height:1.6}
   .claim .note.ok{background:#e7f0ea;color:var(--ok)}
   .claim .note.warn{background:#fdf3ec;color:#a8551f}

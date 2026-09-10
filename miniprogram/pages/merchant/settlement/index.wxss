@@ -69,7 +69,7 @@
 .alert .ah{font-size:24rpx;color:#a8551f;font-weight:700;line-height:1.6}
 .opts{display:flex;flex-wrap:wrap;gap:10rpx;margin-top:12rpx}
 .opt{font-size:23rpx;padding:10rpx 18rpx;border-radius:999rpx;background:#fff;border:1rpx solid #e7ddd4;color:#5c4630}
-.opt.on{background:#9b7655;border-color:#9b7655;color:#fff;font-weight:700}
+.opt.on{background:var(--brand);border-color:var(--brand);color:var(--hero);font-weight:700}
 .warn{margin-top:10rpx;font-size:23rpx;color:#a8551f;line-height:1.6}
 
 .total{background:#fff;border-radius:18rpx;padding:18rpx;box-shadow:0 3rpx 10rpx rgba(92,70,48,.06)}

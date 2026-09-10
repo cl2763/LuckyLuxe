@@ -21,8 +21,8 @@
   width: 96rpx;
   height: 96rpx;
   border-radius: 50%;
-  background: linear-gradient(135deg, #e7c9a4, #c8a47e);
-  color: #fff;
+  background: var(--brand);
+  color: var(--hero);
   font-size: 36rpx;
   font-weight: 800;
   display: flex;
@@ -140,8 +140,8 @@
   width: 34rpx;
   height: 34rpx;
   border-radius: 50%;
-  background: linear-gradient(135deg, #e7c9a4, #c8a47e);
-  color: #fff;
+  background: var(--brand);
+  color: var(--hero);
   font-size: 20rpx;
   font-weight: 700;
   display: flex;

@@ -18,5 +18,5 @@ page{background:#fbf8f5}
 .style{font-size:21rpx;color:#b6a99b;margin-top:14rpx}
 .btns{display:flex;gap:14rpx;margin-top:16rpx}
 .b{flex:1;text-align:center;font-size:25rpx;color:#8c8279;background:#fff;border:1rpx solid #e7ddd4;border-radius:14rpx;padding:22rpx 0}
-.b.p{background:#c8a47e;color:#fff;border-color:#c8a47e}
+.b.p{background:var(--brand);color:var(--hero);border-color:var(--brand)}
 .note{font-size:21rpx;color:#b6a99b;line-height:1.6;margin-top:20rpx}

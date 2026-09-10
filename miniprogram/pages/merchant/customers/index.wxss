@@ -29,12 +29,12 @@ page{background:#fbf8f5}
 .tcard .tn{font-size:44rpx;font-weight:800;line-height:1.1}
 .tcard .tt{font-size:24rpx;font-weight:700;margin-top:2rpx}
 .tcard .td{font-size:18rpx;opacity:.85;margin-top:2rpx}
-.tcard.a{background:linear-gradient(135deg,#b5885d,#c8a47e)}
+.tcard.a{background:var(--brand);color:var(--hero)}   /* 规矩丙:金底上的字一律 --hero */
 .tcard.b{background:linear-gradient(135deg,#3f6b52,#5d8a70)}
 .tcard.n{background:linear-gradient(135deg,#3b6ea5,#6b95c4)}
 .tcard.s{background:linear-gradient(135deg,#8a5a52,#a5786f)}
 .tbadge{font-size:18rpx;font-weight:800;color:#fff;border-radius:8rpx;padding:2rpx 12rpx;margin-left:8rpx}
-.tbadge.a{background:#b5885d}
+.tbadge.a{background:var(--brand);color:var(--hero)}   /* 规矩丙 */
 .tbadge.b{background:#3f6b52}
 .tbadge.n{background:#3b6ea5}
 .tbadge.s{background:#8a5a52}
@@ -65,7 +65,7 @@ page{background:#fbf8f5}
 .cp-row{display:flex;align-items:center;justify-content:space-between;border:1rpx solid #eadfd7;border-radius:14rpx;padding:20rpx;margin-bottom:12rpx}
 .cp-n{font-size:27rpx;font-weight:700;color:#241f1d}
 .cp-d{font-size:21rpx;color:#9a8c7c;margin-top:3rpx}
-.cp-go{font-size:24rpx;font-weight:800;color:#fff;background:#c8a47e;border-radius:999rpx;padding:10rpx 26rpx}
+.cp-go{font-size:24rpx;font-weight:800;color:var(--hero);background:var(--brand);border-radius:999rpx;padding:10rpx 26rpx}
 
 /* 拍板②:员工受限视图的说明条 */
 .staffnote{margin:16rpx 24rpx 0;font-size:22rpx;color:#8a5a2b;background:#fdf3ec;border-radius:10rpx;padding:12rpx 16rpx}

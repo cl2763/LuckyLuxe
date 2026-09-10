@@ -11,7 +11,7 @@ page{background:#fbf8f5}
 .cmut{color:#b6a99b}
 .cbtns{display:flex;gap:12rpx;margin-top:12rpx}
 .cb{flex:1;text-align:center;font-size:23rpx;color:#8c8279;background:#fbf8f5;border:1rpx solid #e7ddd4;border-radius:12rpx;padding:12rpx 0}
-.cb.p{background:#c8a47e;color:#fff;border-color:#c8a47e}
+.cb.p{background:var(--brand);color:var(--hero);border-color:var(--brand)}
 .card{background:#fff;border:1rpx solid #e7ddd4;border-radius:16rpx;overflow:hidden}
 .lrow{display:flex;align-items:center;gap:14rpx;padding:22rpx 20rpx;border-bottom:1rpx solid #f1e7df}
 .lrow:last-child{border-bottom:none}

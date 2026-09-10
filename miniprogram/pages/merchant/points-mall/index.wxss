@@ -35,6 +35,6 @@ page{background:#fbf8f5}
 .mopt.on{background:#2d2826;color:#fff;font-weight:700}
 .typeseg{display:flex;gap:10rpx}
 .topt{flex:1;text-align:center;font-size:23rpx;padding:14rpx 0;border-radius:12rpx;background:#fbf8f5;border:1rpx solid #eadfd7;color:#5c4630}
-.topt.on{background:#c8a47e;color:#fff;border-color:#c8a47e;font-weight:700}
+.topt.on{background:var(--brand);color:var(--hero);border-color:var(--brand);font-weight:700}
 .txt{flex:none;width:340rpx;height:60rpx;line-height:60rpx;background:#fff;border:1rpx solid #eadfd7;border-radius:10rpx;padding:0 14rpx;font-size:25rpx;color:#241f1d}
 .freehint{font-size:20rpx;color:#8a6a3f;background:#fbf4ec;border:1rpx dashed #d9bf9f;border-radius:10rpx;padding:12rpx 16rpx;margin-top:12rpx;line-height:1.5}

@@ -29,5 +29,5 @@ page{background:#fbf8f5}
 .noimg{margin-top:14rpx;font-size:22rpx;color:#b6a99b;background:#fbf8f5;border:1rpx dashed #e7ddd4;border-radius:12rpx;padding:26rpx 0;text-align:center}
 .acts{display:flex;gap:12rpx;margin-top:14rpx}
 .b{flex:1;text-align:center;font-size:24rpx;border-radius:12rpx;padding:16rpx 0;background:#fbf8f5;border:1rpx solid #e7ddd4;color:#8c8279}
-.b.p{background:#c8a47e;color:#fff;border-color:#c8a47e}
+.b.p{background:var(--brand);color:var(--hero);border-color:var(--brand)}
 .note{font-size:21rpx;color:#b6a99b;line-height:1.6;margin-top:18rpx}

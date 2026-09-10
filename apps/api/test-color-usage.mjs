@@ -140,7 +140,7 @@ check('④ 扫描面自证:四个文件行数合计 ≥ 8000(文件被裁或路�
  */
 import { readdirSync, statSync } from 'node:fs'
 const SKIP_DIR = new Set(['node_modules', '.git', 'local-data', 'sandbox-data', 'backups', 'miniprogram_npm'])
-const CODE_EXT = /\.(css|wxss|html|wxml|js|mjs|json)$/i
+const CODE_EXT = /\.(css|wxss|html|wxml|js|mjs|json|svg)$/i
 const walk = (rel, out) => {
   let ents = []
   try { ents = readdirSync(join(ROOT, rel)) } catch { return out }
@@ -190,11 +190,56 @@ check('⑤b 反向守:归一的去处确实更好 —— --brandd 当字两档�
   `深 ${ratio(tok(DARK, 'brandd'), tok(DARK, 'card'))}:1 · 浅 ${ratio(tok(LIGHT, 'brandd'), tok(LIGHT, 'card'))}:1`)
 /* 覆盖面自证要**按棵树**报,不报一个笼统总数:一棵树整个从扫描面上掉了(路径写错、目录改名),
    总数还能靠另外两棵撑住而判据照样绿 —— 那就是「判据的覆盖面本身没有判据」。 */
-const TREE_FLOOR = { 'apps/web': 40, miniprogram: 280, 'apps/api': 200 }
+const TREE_FLOOR = { 'apps/web': 40, miniprogram: 290, 'apps/api': 200 }
 for (const [tree, floor] of Object.entries(TREE_FLOOR)) {
   check(`⑤c 扫描面自证:${tree} 下的代码文件 ≥ ${floor} 个 · 现测 ${perTree[tree]}`,
     perTree[tree] >= floor, `${perTree[tree]} < ${floor}`)
 }
+
+/* ═══ ⑤d **归一的判据锚值,不锚名**(店主 06g §〇 立 J-40)═══
+ *
+ * 立律的由来是店主自己记的一笔:06f 里她把归一的判据写成
+ * 「`--accent` / `--accent-dark` 这两个**名字**不许再出现」—— **改个名字就能过关**。
+ * 我照做之后在回执里写了一句「本批只做到名字消失,值还活着;只换字面量写法等于把第二套真相搬个家」,
+ * 她据此把判据翻面:**扫被淘汰的那个色值本身,名字只是它今天的马甲。**
+ * 同族条款:`#c8a47e` 与 `rgba(200,164,126,…)` 是同一个真相的两种写法,**要一起认**。
+ *
+ * 形状:硬零 + 白名单;但**存量太大,本批不清零** —— 按店主指定,
+ * 把当前实测条数设成**棘轮初值**(照「小程序 wxss 写死色棘轮」那把的写法),以后**只许降**。
+ * 白名单目前是空的:21 个 SVG 图标那件事是**待裁**,不是**永久豁免**,所以不许先塞进白名单充数。
+ */
+const LEGACY_GOLD = { c8a47e: [200, 164, 126], '9b7655': [155, 118, 85], b5885d: [181, 136, 93] }
+const GOLD_PAT = new RegExp([
+  `#(?:${Object.keys(LEGACY_GOLD).join('|')})\\b`,
+  ...Object.values(LEGACY_GOLD).map(([r, g, b]) => `rgba?\\(\\s*${r}\\s*,\\s*${g}\\s*,\\s*${b}\\s*(?:,[^)]*)?\\)`),
+].join('|'), 'ig')
+/* 白名单:**逐条写理由**,条数上棘轮。空着不是忘了写 —— 是现在一条都不该有。 */
+const GOLD_OK = []
+const goldHits = []
+/* 🔴 判据文件自己要**点名**这三个值(锚值判据不点名就没法扫),所以把它排除在被扫面之外。
+   会不会有人把真用法藏进判据文件?——它是测试件,不进任何页面;而且下面 ⑦ 仍然盯着这个文件里
+   **除这三个死值以外**的任何色值字面量。两条合起来没留缝。 */
+const GOLD_SELF = 'apps/api/test-color-usage.mjs'
+for (const f of SURFACE) {
+  if (f.endsWith(GOLD_SELF) || GOLD_SELF.endsWith(f)) continue
+  let src = ''
+  try { src = read(f) } catch { continue }
+  if (!GOLD_PAT.test(src)) { GOLD_PAT.lastIndex = 0; continue }
+  GOLD_PAT.lastIndex = 0
+  src.split('\n').forEach((ln, i) => {
+    const m = ln.match(GOLD_PAT)
+    if (m) for (const one of m) goldHits.push({ at: `${f}:${i + 1}`, hit: one, f })
+  })
+}
+const goldLeft = goldHits.filter((h) => !GOLD_OK.some(([g]) => h.at.startsWith(g)))
+const GOLD_CAP = 185   /* 06g 棘轮初值(实测,已含本批降下来的那一截)· **只许降**;降了就把这个数改小,不许改大 */
+check(`⑤d J-40 锚值:三个被淘汰的金(#c8a47e / #9b7655 / #b5885d,含 rgb()/rgba() 同色写法)全仓 ${goldLeft.length} 处 ≤ 棘轮 ${GOLD_CAP}(只许降)`,
+  goldLeft.length <= GOLD_CAP, `${goldLeft.length} > ${GOLD_CAP};最近新增的看这几处:${goldLeft.slice(-4).map((h) => `${h.at} ${h.hit}`).join(' || ')}`)
+check(`⑤e 白名单只许 ${GOLD_OK.length} 条(逐条写理由;21 个 SVG 图标是**待裁**不是永久豁免,不许塞进来充数)`,
+  GOLD_OK.length === 0, String(GOLD_OK.length))
+/* 反向守:棘轮不是摆设 —— 现测条数必须真的大于 0,否则「≤ 195」这句话在空集上也成立 */
+check('⑤f 反向守:这把刀确实扫到了东西(存量为 0 时要把棘轮改成硬零,别让判据在空集上空转)',
+  goldHits.length > 0, `扫到 ${goldHits.length} 处`)
 
 /* ═══ ⑥ 规矩丙:**金底上的字一律 --hero**(白名单式)═══
  *
@@ -212,30 +257,102 @@ const NO_TEXT_OK = [
   ['.tier-benefit-list li::before', '权益列表前面那颗小圆点,是装饰不是字'],
   ['.primary:hover', '悬停态只换底,字色继承自 .primary 那条(那条已经是 --hero)'],
 ]
-const styleFiles = SURFACE.filter((f) => /\.(css|wxss)$/i.test(f) && !/design-tokens\.css$|tokens\.wxss$|tokens-component\.wxss$/.test(f))
+/* 06g §四② 扩面两件(店主指定):
+   ①**html 里的内联 `<style>` 也算样式面** —— platform.html / sign.html 整页样式都住在内联块里,
+     只扫 .css/.wxss 等于这两页在规矩丙面前是隐身的;
+   ②**写死的金色底也算金底** —— 小程序那 33 条「写死金底 + 写死白字」正是这么躲过 06f 判据 ⑥ 的
+     (它当时只认 `background: var(--brand…)`)。金的判法不写死:三个**被淘汰的**金 +
+     **从令牌文件现读**的四个合同金(brand/brandd × 浅深),合同图改了值这把刀自己跟着变。 */
+const styleFiles = SURFACE.filter((f) => /\.(css|wxss|html)$/i.test(f) && !/design-tokens\.css$|tokens\.wxss$|tokens-component\.wxss$/.test(f))
+const GOLD_LITERAL = new RegExp('(?:' + [...Object.keys(LEGACY_GOLD),
+  ...['brand', 'brandd'].flatMap((t) => [tok(LIGHT, t), tok(DARK, t)]).filter(Boolean).map((h) => h.replace('#', '')),
+].join('|') + ')', 'i')
+/* 🔴 刀现测抓到的判据假红:储值页 `.lv` 的底是「旧金 + 两位 alpha 后缀」—— 8 位色的后两位是 **alpha**,
+   那两位约等于 13%,是一层金**薄纱**,真正的面是它后面那张深色 hero 卡。把薄纱当金底判,
+   就会把「深底上的浅金字」误判成「金底上的浅字」。所以只有**不透明的金**才算金底:
+   6 位色、或 8 位色而 alpha ≥ 0x80、或 rgba() 而 alpha ≥ 0.5。 */
+const opaqueGold = (bgs) => {
+  const hex = bgs.match(new RegExp(`#(?:${GOLD_LITERAL.source.replace(/^\(\?:|\)$/g, '')})([0-9a-f]{2})?\b`, 'ig')) || []
+  for (const h of hex) {
+    const a = h.length === 9 ? parseInt(h.slice(7), 16) : 255
+    if (a >= 0x80) return true
+  }
+  const rgba = bgs.match(/rgba?\([^)]*\)/gi) || []
+  for (const one of rgba) {
+    if (!GOLD_LITERAL.test(one.replace(/[^0-9,.\s()rgba]/gi, ''))) { /* rgb 写法另判,见下 */ }
+    const parts = one.replace(/^rgba?\(|\)$/gi, '').split(',').map((x) => parseFloat(x))
+    if (parts.length >= 3 && Object.values(LEGACY_GOLD).some(([r, g, b]) => parts[0] === r && parts[1] === g && parts[2] === b)
+      && (parts.length < 4 || parts[3] >= 0.5)) return true
+  }
+  return false
+}
+const goldBgOf = (body) => {
+  const bgs = (body.match(/background(?:-color|-image)?\s*:[^;}]*/gi) || []).join(' ')
+  if (!bgs) return false
+  return /var\(--brandd?\)/.test(bgs) || opaqueGold(bgs)
+}
 const goldRules = []
+const allRules = []   /* 乙筐要拿「同文件里更短的那条选择器」来判,所以每条规则都收下 */
 for (const f of styleFiles) {
   /* 🔴 刀 ZZ/WW 现测抓到的判据缺陷:这里原来把块注释**整段删掉**,换行也一并删了 ——
      于是 ⑥ 报出来的行号比真的位置**早几十行**(.primary 真在 1857,它报 1812)。
      「报得出是哪一处」是造病的验收条件之一,报错地方等于没报。改成剥内容、留换行。 */
-  const src = stripComments(read(f))
+  let src = stripComments(read(f))
+  /* html 只取 <style> 里那一段,别把正文当 CSS 解析 */
+  if (/\.html$/i.test(f)) src = (src.match(/<style[^>]*>[\s\S]*?<\/style>/gi) || []).join('\n')
   const re = /([^{}]*)\{([^{}]*)\}/g
   let m
   while ((m = re.exec(src)) !== null) {
     const body = m[2]
-    if (!/background(-color)?:\s*var\(--brandd?\)/.test(body)) continue
+    const selAll = (m[1].split('\n').filter(Boolean).pop() || '').trim()
+    const ownAll = (body.match(/(?:^|[^-a-zA-Z])color\s*:\s*([^;}]+)/) || [])[1]
+    if (selAll) allRules.push({ f, sel: selAll, own: ownAll ? ownAll.trim() : '' })
+    if (!goldBgOf(body)) continue
     const sel = m[1].split('\n').filter(Boolean).pop().trim()
     /* 行号要落在**选择器那一行**上:m.index 指的是「上一条规则的 } 之后」,
        中间那一大段(空行 + 被剥空的注释)全算进去,报出来会比真位置早几十行 —— 刀 WW 现测过。 */
     const at = src.slice(0, m.index + Math.max(0, m[1].lastIndexOf(sel))).split('\n').length
-    goldRules.push({ f, sel, body, at, hasHero: /(^|[^-a-zA-Z])color:\s*var\(--hero\)/.test(body) })
+    const own = (body.match(/(?:^|[^-a-zA-Z])color\s*:\s*([^;}]+)/) || [])[1]
+    goldRules.push({ f, sel, body, at, own: own ? own.trim() : '' })
   }
 }
-const goldBad = goldRules.filter((r) => !r.hasHero && !NO_TEXT_OK.some(([s2]) => r.sel === s2))
+/* ── 落筐(三筐,穷尽)────────────────────────────────────────────
+   甲 · 这条规则**自己声明了字色** → 必须是 var(--hero);写死白、var(--heroink) 都算红。
+   乙 · 自己没声明,但**同文件里有一条更短的选择器**(它的基态)声明了字色 → 拿那条的字色来判。
+        这一筐补的是 06f 那个洞:`.check.checked` 只换底,字色继承自 `.check` ——
+        只看本条规则的判据看不见它,当时是靠我手工发现的,现在机械化。
+   丙 · 从头到尾没有任何字色可继承 → **这块金底上没有字**(进度条填充、小圆点、色卡)。
+        这一筐**不逐条列白名单**(现测 50 条,列出来只会变成噪音),改成**条数上棘轮**:
+        只许降不许升,新加一条金底色块就得让店主看见。 */
+const baseColorOf = (r) => {
+  const cands = goldRules.concat(allRules.filter((x) => x.f === r.f))
+    .filter((x) => x.f === r.f && x.own && x.sel !== r.sel && r.sel.startsWith(x.sel)
+      && /^[.:#[]/.test(r.sel.slice(x.sel.length) || ':'))
+    .sort((a, b) => b.sel.length - a.sel.length)
+  return cands.length ? cands[0] : null
+}
+const isHero = (c) => /^var\(--hero\)$/.test(String(c).replace(/\s*\/\*[\s\S]*$/, '').trim())
+const goldBad = []
+let goldNoText = 0
+/* `::before` / `::after` 且 `content` 是空串 —— 它画的是一个纯色块(小圆点、竖条),
+   **不承载任何字**,所以不许拿它继承来的字色去判它。这条是刀现测逼出来的:
+   `.tier-benefit-list li::before` 继承了 li 的 var(--ink),但那颗点里一个字也没有。 */
+const isPureBlock = (r) => /::(before|after)\b/.test(r.sel) && /content\s*:\s*(""|'')/.test(r.body)
+for (const r of goldRules) {
+  if (isPureBlock(r)) { goldNoText += 1; continue }
+  if (r.own) { if (!isHero(r.own)) goldBad.push({ ...r, why: `自己写的字色是 ${r.own.slice(0, 24)}` }); continue }
+  const base = baseColorOf(r)
+  if (base) { if (!isHero(base.own)) goldBad.push({ ...r, why: `字色继承自 ${base.sel}(${base.own.slice(0, 24)})` }); continue }
+  goldNoText += 1
+}
 check(`⑥ 规矩丙:${goldRules.length} 条画金底的规则,每条要么自己写 color: var(--hero),要么在「没有字的色块」白名单里`,
   goldRules.length > 0 && goldBad.length === 0,
-  goldBad.map((r) => `${r.f}:${r.at} ${r.sel}`).join(' || '))
-check(`⑥b 白名单只许 ${NO_TEXT_OK.length} 条(棘轮:再加要写理由并让店主看见)`, NO_TEXT_OK.length <= 4, String(NO_TEXT_OK.length))
+  goldBad.map((r) => `${r.f}:${r.at} ${r.sel} —— ${r.why}`).join(' || '))
+const NO_TEXT_CAP = 3   /* 06g 棘轮初值(实测);**只许降** */
+check(`⑥b 丙筐「金底上没有字」${goldNoText} 条 ≤ 棘轮 ${NO_TEXT_CAP}(只许降;新加一条金底色块要让店主看见)`,
+  goldNoText <= NO_TEXT_CAP, `${goldNoText} > ${NO_TEXT_CAP}`)
+check(`⑥d 三筐穷尽:甲/乙筐 ${goldBad.length} 红 + 过了的 ${goldRules.length - goldBad.length - goldNoText} + 丙筐 ${goldNoText} = 全部 ${goldRules.length} 条`,
+  goldBad.length + (goldRules.length - goldBad.length - goldNoText) + goldNoText === goldRules.length, '')
 check(`⑥c 反向守:金底上如果用奶白 --heroink,两档分别只有 ${ratio(tok(LIGHT, 'heroink'), tok(LIGHT, 'brand'))} / ${ratio(tok(DARK, 'heroink'), tok(DARK, 'brand'))} —— 证明这条规矩在分好坏`,
   ratio(tok(LIGHT, 'heroink'), tok(LIGHT, 'brand')) < 3 && ratio(tok(DARK, 'heroink'), tok(DARK, 'brand')) < 3,
   `${ratio(tok(LIGHT, 'heroink'), tok(LIGHT, 'brand'))} / ${ratio(tok(DARK, 'heroink'), tok(DARK, 'brand'))}`)
@@ -248,9 +365,14 @@ check(`⑥c 反向守:金底上如果用奶白 --heroink,两档分别只有 ${ra
  * WCAG 的 3.0 / 4.5 不在此列 —— 那是**标准**里的门槛,不是我们的色值。
  */
 const SELF = read('apps/api/test-color-usage.mjs')
+/* ⑦ 放行**被淘汰的那三个死值**(⑤d 必须点名它们才扫得动),其余色值字面量一律不许。
+   为什么这个例外不算松:⑦ 防的是「判据锚在**会变**的值上」——合同图的色会变,
+   而这三个是**已经作废、永远不会再变**的历史常量,锚它们正是 J-40 要的。 */
+const LEGACY_HEX = /^#(?:c8a47e|9b7655|b5885d)$/i
 const hexInSelf = SELF.split('\n')
   .map((ln, i) => [i + 1, ln])
-  .filter(([, ln]) => /#[0-9a-fA-F]{3,8}\b/.test(ln))
+  .map(([i, ln]) => [i, ln, (ln.match(/#[0-9a-fA-F]{3,8}\b/g) || []).filter((h) => !LEGACY_HEX.test(h))])
+  .filter(([, , rest]) => rest.length > 0)
   .map(([i, ln]) => `${i}: ${ln.trim().slice(0, 50)}`)
 check('⑦ 判据锚规矩不锚数字:本判据文件里零个调色板色值字面量(比值一律从令牌文件现读现算)',
   hexInSelf.length === 0, hexInSelf.join(' || '))
