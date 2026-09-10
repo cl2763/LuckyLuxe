@@ -1,0 +1,35 @@
+[刀] WW 落刀 16:50:59 · 注入点 apps/web/styles.css:1861 · 把主按钮字色改成奶白 --heroink(店主 06f §二 指定的那个最像样的误改,深档只剩 1.73)
+[刀] WW 新判据 → 退出码 1 · 红 2 条
+        not ok 3 - ①b 网页主按钮:**字是深的**(--hero),不再是奶白 --heroink :: apps/web/styles.css:1862 —— color: var(--heroink);
+        not ok 20 - ⑥ 规矩丙:15 条画金底的规则,每条要么自己写 color: var(--hero),要么在「没有字的色块」白名单里 :: apps/web/styles.css:1812 .primary
+[刀] WW 归因·上一版判据 → 退出码 1 · 红 1 条 (not ok 3 - ①b 网页主按钮:**字是深的**(--hero),不再是奶白 --heroink ::  min-height: 46px; border: 0; border-radius: 999px; background: var(--brand); color: var(-)
+[刀] WW 还原后重跑 → 退出码 0 (回绿)
+[刀] WW 判定:✅ 咬住了(点名 ①b)
+
+[刀] XX 落刀 16:50:59 · 注入点 apps/web/styles.css:7121 · 把归一掉的 --accent-dark 塞回一处当字色用
+[刀] XX 新判据 → 退出码 1 · 红 1 条
+        not ok 15 - ⑤ 归一:应用源码里 --accent / --accent-dark **定义 0 处、使用 0 处**(扫了 599 个文件) :: apps/web/styles.css:7121 .care-note { font-size: .78rem; color: var(--accent-dark); overflow: h
+[刀] XX 归因·上一版判据 → 退出码 0 · 红 0 条 —— 上一版是绿的 = 这一层是新层在守
+[刀] XX 还原后重跑 → 退出码 0 (回绿)
+[刀] XX 判定:✅ 咬住了(点名 ⑤ 归一)
+
+[刀] YY 落刀 16:51:00 · 注入点 apps/web/styles.css:23 · 把 --accent 的定义塞回 :root(第二套真相复活)
+[刀] YY 新判据 → 退出码 1 · 红 1 条
+        not ok 15 - ⑤ 归一:应用源码里 --accent / --accent-dark **定义 0 处、使用 0 处**(扫了 599 个文件) :: apps/web/styles.css:25 --accent: #c8a47e;
+[刀] YY 归因·上一版判据 → 退出码 0 · 红 0 条 —— 上一版是绿的 = 这一层是新层在守
+[刀] YY 还原后重跑 → 退出码 0 (回绿)
+[刀] YY 判定:✅ 咬住了(点名 ⑤ 归一)
+
+[刀] ZZ 落刀 16:51:00 · 注入点 apps/web/styles.css:5768 · 新写一条金底规则却用奶白字(规矩丙的同族病)
+[刀] ZZ 新判据 → 退出码 1 · 红 1 条
+        not ok 20 - ⑥ 规矩丙:15 条画金底的规则,每条要么自己写 color: var(--hero),要么在「没有字的色块」白名单里 :: apps/web/styles.css:5717 .cs-filter-pill.active
+[刀] ZZ 归因·上一版判据 → 退出码 0 · 红 0 条 —— 上一版是绿的 = 这一层是新层在守
+[刀] ZZ 还原后重跑 → 退出码 0 (回绿)
+[刀] ZZ 判定:✅ 咬住了(点名 ⑥ 规矩丙)
+
+[刀] AB 落刀 16:51:00 · 注入点 apps/api/test-color-usage.mjs:68 · 把判据里现读令牌改成抄一个色值字面量(判据锚数字而不锚规矩)
+[刀] AB 新判据 → 退出码 1 · 红 1 条
+        not ok 23 - ⑦ 判据锚规矩不锚数字:本判据文件里零个调色板色值字面量(比值一律从令牌文件现读现算) :: 68: const lightBtn = ratio('#2a2521', '#b09468')
+[刀] AB 归因·上一版判据 → 退出码 0 · 红 0 条 —— 上一版是绿的 = 这一层是新层在守
+[刀] AB 还原后重跑 → 退出码 0 (回绿)
+[刀] AB 判定:✅ 咬住了(点名 ⑦)
