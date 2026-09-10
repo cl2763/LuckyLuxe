@@ -53,6 +53,24 @@ const ONLY = (process.env.CS_PAGES || '').split(',').map((x) => x.trim()).filter
    店主的话:「顾客端是**外人**看的,比后台更不能出白字压浅底」,而它**一次都没扫过**。
    顾客端没有站内三档(那是后台才有的),所以浅/深两档用 **CDP 模拟系统偏好** 切。 */
 const TARGET = (process.env.CS_TARGET || 'admin').toLowerCase()
+/* ── 06i 加的三样(**全部选配,默认一个字不变**)────────────────────────────
+   店主 06i 裁 #42:登录态那几页一直是「**没扫**」不是绿,这一批要造夹具补上;
+   同时 §一 末尾要求把 platform / sign 两个独立入口页也纳入扫描面。
+   ⚠️ 加这三样会改这把刀的提交号 —— 按 J-39,凡要和历史数并排比的,
+      **两侧都得用新版重量一次**;本批回执就是这么做的。加的是**覆盖面**不是判法:
+      门槛、取背景、去重、两档的分法一个字没动。
+   · CS_AUTH=<邮箱>   顾客端登录态夹具。沙箱的 /auth/email/login **不校验密码**
+                      (DEMO_LOGIN_ALLOWED 才开),所以夹具里没有、也不需要任何口令。
+   · CS_STEPS=名字:选择器|…  tab 扫完之后,逐个点开再扫(每步先回「我的」再点)。
+                      选择器写在**调用处**、不写死在刀里 —— 刀保持通用。
+   · CS_URLS=名字:/路径|…    CS_TARGET=pages 时扫的独立入口页(platform / sign 那种)。
+   · CS_COVER=名字|…         **该扫的全清单**;报告里用它算「扫到 X / 该扫 Y / 没扫哪几页」。 */
+const AUTH_EMAIL = process.env.CS_AUTH || ''
+const STEPS = (process.env.CS_STEPS || '').split('|').map((x) => x.trim()).filter(Boolean)
+  .map((x) => { const i = x.indexOf(':'); return { name: x.slice(0, i), sel: x.slice(i + 1) } })
+const URLS = (process.env.CS_URLS || '').split('|').map((x) => x.trim()).filter(Boolean)
+  .map((x) => { const i = x.indexOf(':'); return { name: x.slice(0, i), path: x.slice(i + 1) } })
+const COVER = (process.env.CS_COVER || '').split('|').map((x) => x.trim()).filter(Boolean)
 /* 被测的那一版代码也要写进抬头 —— 否则「修前/修后」两份报告光看刀号还是分不出量的是哪一版 */
 const CODE_REV = (() => {
   /* 🔴 「退回旧版重量一次」这种跑法(J-39 §二 的做法一)下,git 只会说「工作区脏了」,
@@ -258,7 +276,52 @@ let scanned = 0
 let grad = 0   /* 背景是渐变、这把刀判不了的节点数(如实报,不混进绿也不混进红) */
 
 /* ── 顾客端那一支:不登录、按底部四个 tab 走 ────────────────────────── */
-if (TARGET === 'customer') {
+const scannedPages = []   /* 这一跑真正扫到的页名(算「没扫的页」那一节要用) */
+const stepMiss = []       /* 点不开的那些 —— 如实记成「没扫成」,不算绿 */
+if (TARGET === 'pages') {
+  /* ── 独立入口页(platform / sign 那种):它们不是 admin 的子页,也不在顾客端四个 tab 里,
+        所以此前**一份红榜都没进过**。店主 06i §一 末尾点名要纳入。 */
+  if (!URLS.length) { console.error('🔴 CS_TARGET=pages 要给 CS_URLS=名字:/路径|…'); ws.close(); chrome.kill(); process.exit(2) }
+  for (const mode of ['light', 'dark']) {
+    await send('Emulation.setEmulatedMedia', { features: [{ name: 'prefers-color-scheme', value: mode }] })
+    for (const u of URLS) {
+      await send('Page.navigate', { url: `${BASE}${u.path}` })
+      await sleep(3200)
+      const cnt = await ev(`(document.body && document.body.innerText || '').trim().length`)
+      if (Number(cnt) < 20) { console.error(`🔴 ${u.name} 正文只有 ${cnt} 字 —— 这一页**没验成**,不许下结论`); continue }
+      const res = await ev(SWEEP)
+      scanned += res.scanned; grad += res.gradients || 0
+      for (const b of res.bad) bad.push({ 页: u.name, 标签: '(整页)', 档: mode, ...b })
+      if (mode === 'light') scannedPages.push(u.name)
+      console.log(`   [扫] ${mode} · ${u.name} —— 文字节点 ${res.scanned} 个,红 ${res.bad.length} 条`)
+    }
+  }
+  await send('Emulation.setEmulatedMedia', { features: [] })
+} else if (TARGET === 'customer') {
+  /* 🔴 06i:登录态夹具。**沙箱那条邮箱登录口不校验密码**(只在 DEMO_LOGIN_ALLOWED 下开),
+     所以这里既没有也不需要任何口令 —— 拿回来的会话按顾客端自己的存法写进 localStorage
+     (`{__tenant, __value}`,见 customer.js 的 readTenantJson:没有租户标的缓存会被整份丢掉)。
+     用 addScriptToEvaluateOnNewDocument 是因为它必须**赶在页面脚本之前**落地。 */
+  if (AUTH_EMAIL) {
+    const tenant = process.env.CS_TENANT || 'lucky-luxe'
+    let sess = null
+    try {
+      sess = await fetch(`${BASE}/auth/email/login`, { method: 'POST',
+        headers: { 'content-type': 'application/json', 'x-tenant-id': tenant },
+        body: JSON.stringify({ email: AUTH_EMAIL }) }).then((r) => r.json())
+    } catch (e) { sess = null }
+    if (!sess || !sess.user || !sess.auth) {
+      console.error(`🔴 登录态夹具没造成(${AUTH_EMAIL})—— 这一跑不许当成「登录态扫过了」`)
+      ws.close(); chrome.kill(); process.exit(2)
+    }
+    await send('Page.addScriptToEvaluateOnNewDocument', { source:
+      `(() => { const T = ${JSON.stringify(tenant)};
+        localStorage.setItem('lucky-web-tenant', T);
+        localStorage.setItem('lucky-web-user', JSON.stringify({ __tenant: T, __value: ${JSON.stringify(sess.user)} }));
+        localStorage.setItem('lucky-web-auth', JSON.stringify({ __tenant: T, __value: ${JSON.stringify(sess.auth)} }));
+        return 1 })()` })
+    console.log(`   [夹具] 登录态已注入:${sess.user.displayName || AUTH_EMAIL}(沙箱邮箱口,不校验密码)`)
+  }
   await send('Page.navigate', { url: `${BASE}/?tenant=${process.env.CS_TENANT || 'lucky-luxe'}` })
   await sleep(4200)   /* 顾客端的内容是拉回来才渲染的;等不够就只扫到骨架(现测:17 个 vs 47 个) */
   const title = await ev('document.title')
@@ -304,7 +367,48 @@ if (TARGET === 'customer') {
       const res = await ev(SWEEP)
       scanned += res.scanned; grad += res.gradients || 0
       for (const b of res.bad) bad.push({ 页: `顾客端·${v.name || v.key}`, 标签: '(整页)', 档: mode, ...b })
+      if (mode === 'light') scannedPages.push(`顾客端·${v.name || v.key}`)
       console.log(`   [扫] ${mode} · 顾客端 ${v.name || v.key} —— 文字节点 ${res.scanned} 个,红 ${res.bad.length} 条`)
+    }
+    /* 06i:tab 之下还有一层 —— 会员权益 / 会员码 / 积分商城 / 卡包 / 订单详情 那些,
+       此前**一次都没扫过**(它们要登录才出得来)。每一步都先回「我的」再点,免得上一步的弹层挡住。
+       点不开就**如实记成没扫成**,不静默跳过。 */
+    for (const st of STEPS) {
+      await ev(`(() => { const b = document.querySelector('[data-view="me"]'); if (b) b.click(); return 1 })()`)
+      await sleep(1200)
+      /* 一步可以连点几下(`a>>b>>c`),每一小步支持三种写法:
+           `.sel`         第一个匹配
+           `.sel@2`       第 3 个匹配(有三张一模一样的 menu-card 时要用)
+           `text=加入购物车` 按按钮上的字找(class 太通用时最稳)
+         点不到就**如实记成没扫成**,并说清是卡在第几步 —— 不静默跳过。 */
+      let hit = 1
+      let where = ''
+      for (const one of String(st.sel).split('>>').map((x) => x.trim()).filter(Boolean)) {
+        where = one
+        hit = await ev(`(() => { const raw = ${JSON.stringify(one)}
+          let el = null
+          if (raw.indexOf('text=') === 0) {
+            const want = raw.slice(5)
+            el = Array.from(document.querySelectorAll('button, a, [role=button]'))
+              .filter((x) => { const r = x.getBoundingClientRect(); return r.width > 2 && r.height > 2 })
+              .find((x) => (x.textContent || '').trim().indexOf(want) >= 0)
+          } else {
+            const at = raw.lastIndexOf('@')
+            if (at > 0 && /^[0-9]+$/.test(raw.slice(at + 1))) el = document.querySelectorAll(raw.slice(0, at))[Number(raw.slice(at + 1))]
+            else el = document.querySelector(raw)
+          }
+          if (!el) return 0
+          el.click(); return 1 })()`)
+        if (!hit) break
+        await sleep(1500)
+      }
+      if (!hit) { stepMiss.push(`${st.name}(${mode}):卡在「${where}」这一步点不到 —— **没扫成**,不是绿`); continue }
+      await sleep(2200)
+      const res = await ev(SWEEP)
+      scanned += res.scanned; grad += res.gradients || 0
+      for (const b of res.bad) bad.push({ 页: `顾客端·${st.name}`, 标签: '(登录态)', 档: mode, ...b })
+      if (mode === 'light') scannedPages.push(`顾客端·${st.name}`)
+      console.log(`   [扫] ${mode} · 顾客端 ${st.name}(登录态)—— 文字节点 ${res.scanned} 个,红 ${res.bad.length} 条`)
     }
   }
   await send('Emulation.setEmulatedMedia', { features: [] })
@@ -349,6 +453,7 @@ for (const mode of ['light', 'dark']) {
       scanned += res.scanned
       grad += res.gradients || 0
       for (const b of res.bad) bad.push({ 页: p.name || p.key, 标签: tab.label, 档: mode, ...b })
+      if (mode === 'light') scannedPages.push(tab.label && tab.label !== '(整页)' ? `${p.name || p.key} · ${tab.label}` : (p.name || p.key))
       console.log(`   [扫] ${mode} · ${p.name || p.key} · ${tab.label} —— 文字节点 ${res.scanned} 个,红 ${res.bad.length} 条`)
     }
   }
@@ -363,19 +468,29 @@ const B = bad.filter((b) => b.tier === 'B')
 const keyOf = (b) => `${b.档}|${b.sel}|${b.fg}|${b.bg}`
 const uniq = (arr) => { const m = new Map(); for (const b of arr) if (!m.has(keyOf(b))) m.set(keyOf(b), b); return [...m.values()] }
 const uA = uniq(A); const uB = uniq(B)
+/* ── 「没扫的页」固定一节(店主 06i 裁 #42)────────────────────────────
+   原话:「红榜报告里,『没扫的页』必须单列一节,写清页数与页名,
+   不许和『已扫且绿』混进同一个数。」——一个只读数字的人会以为全扫完了。
+   所以每份报告都给三个数:**扫到 X 页 / 该扫 Y 页 / 没扫的是这几页**。
+   `CS_COVER` 给的是「该扫的全清单」;没给就只报扫到几页,并明说「没有声明应扫清单,算不出漏了几页」。 */
+const uniqPages = [...new Set(scannedPages)]
+const missPages = COVER.filter((x) => !uniqPages.some((y) => y === x || y.endsWith(x) || x.endsWith(y)))
+const coverLines = ['>', '> 🔴 **覆盖面(这一节是固定的,不许省)**',
+  COVER.length
+    ? `> **扫到 ${uniqPages.length} 页 / 该扫 ${COVER.length} 页 / 没扫 ${missPages.length} 页**`
+    : `> **扫到 ${uniqPages.length} 页**;这一跑没声明应扫清单(CS_COVER),**算不出漏了几页**`,
+  `> 扫到的:${uniqPages.join(' · ') || '(一页都没扫到)'}`,
+  ...(missPages.length ? [`> 🔴 **没扫的(不是绿,是没扫)**:${missPages.join(' · ')}`] : []),
+  ...(stepMiss.length ? ['>', '> 🔴 **点不开、没扫成的**:', ...stepMiss.map((x) => `> · ${x}`)] : []),
+  ...(AUTH_EMAIL ? ['>', `> 登录态夹具:\`${AUTH_EMAIL}\`(沙箱邮箱口,**不校验密码**;夹具里没有口令)`] : []),
+]
 const lines = ['# 深色/浅色 对比度红榜(逐页逐元素全扫)', '',
   `> 跑于 ${new Date().toISOString()} · 跑在 \`${BASE}\``,
   `> 🔴 **产出这份数的刀:\`tools/contrast-sweep.mjs\` @ ${KNIFE_REV}**(J-39:数要带尺子 —— 跟别的数比之前先比这一行)`,
   `> **被测代码:\`${CODE_REV}\`** · **界面文件内容指纹 \`${STYLE_SHA}\`**(${STYLE_FILES.join(' + ')} 的 sha256 前 12 位)`,
   '> 门槛:正文 **4.5:1**;大字(≥24px,或 ≥18.66px 且 700 粗)放宽到 **3:1**(每条都标了它用的是哪一档)',
   '> 扫的是**每一个自己持有文字的可见节点**,背景取「实际绘制的那一层」(自己透明就往上找祖先)',
-  ...(TARGET === 'customer' ? [
-    '>',
-    '> 🔴 **这一轮扫到哪、没扫到哪(如实写)**:扫的是顾客端网页**未登录**状态下底部四个 tab 能到的页',
-    '>(首页 / 服务 / 购物车 / 我的),浅深两档各一遍、每档**重新进页面**再扫。',
-    '> **没扫到的**:要登录才进得去的那些(会员档案 / 我的订单 / 钱包 / 结算页),以及购物车**有货**时的样子 ——',
-    '> 它们需要一个登录态夹具,这一轮没造;**不是绿,是没扫**。下一轮按造景律先造夹具再扫。',
-  ] : []),
+  ...coverLines,
   '>',
   '> **两档**(理由见 `tools/contrast-sweep.mjs` 抬头):',
   '> · **甲档「看不见」** < 2:1(大字 < 1.6:1)—— 店主撞见的那种,**必须清零**;',
