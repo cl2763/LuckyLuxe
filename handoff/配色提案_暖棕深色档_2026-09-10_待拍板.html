@@ -1,0 +1,308 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<!-- 配色提案 · 暖棕深色档 · 2026-09-10 · **待店主拍板,拍板前不是合同** -->
+<title>暖棕深色档配色案</title>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,400;9..144,600&family=Noto+Sans+SC:wght@400;500;700&display=swap">
+<style>
+:root{
+  --pg:#faf8f3; --pgink:#23241f; --pgsub:#6f655a; --pgline:#e3e0d6; --pgcard:#fff; --pgwall:#f1eee6;
+  --gold:#8a6f45; --teal:#0e6e62;
+}
+@media (prefers-color-scheme:dark){:root:not([data-theme="light"]){
+  --pg:#1a1512; --pgink:#f0e7da; --pgsub:#bcae9c; --pgline:#3a2f27; --pgcard:#2a221c; --pgwall:#221c17;
+  --gold:#d3b483; --teal:#55c3ac;
+}}
+:root[data-theme="dark"]{
+  --pg:#1a1512; --pgink:#f0e7da; --pgsub:#bcae9c; --pgline:#3a2f27; --pgcard:#2a221c; --pgwall:#221c17;
+  --gold:#d3b483; --teal:#55c3ac;
+}
+*{box-sizing:border-box}
+body{margin:0;background:var(--pg);color:var(--pgink);font-family:'Noto Sans SC',-apple-system,BlinkMacSystemFont,sans-serif;line-height:1.75;-webkit-font-smoothing:antialiased}
+.w{max-width:940px;margin:0 auto;padding-block:44px 88px;padding-left:20px;padding-right:20px}
+h1{font-family:Fraunces,'Noto Serif SC',Georgia,serif;font-weight:600;font-size:clamp(1.75rem,4.4vw,2.5rem);line-height:1.2;margin:0 0 10px;text-wrap:balance;letter-spacing:-.01em}
+.lede{color:var(--pgsub);font-size:1.02rem;margin:0 0 6px;max-width:62ch}
+.stamp{display:inline-block;margin-top:18px;font-size:.78rem;letter-spacing:.09em;text-transform:uppercase;color:var(--gold);border:1px solid var(--gold);border-radius:2px;padding:4px 12px}
+h2{font-family:Fraunces,'Noto Serif SC',Georgia,serif;font-weight:600;font-size:1.32rem;margin:56px 0 6px;display:flex;align-items:baseline;gap:12px;text-wrap:balance}
+h2 .n{font-size:.72rem;font-family:'Noto Sans SC',sans-serif;letter-spacing:.12em;color:var(--gold);flex:none;transform:translateY(-2px)}
+h3{font-size:.94rem;font-weight:700;margin:30px 0 10px;letter-spacing:.01em}
+p{margin:10px 0;max-width:66ch}
+.sub{color:var(--pgsub)}
+.hr{height:1px;background:var(--pgline);border:0;margin:0}
+code{font-family:ui-monospace,SFMono-Regular,Menlo,monospace;font-size:.86em;background:var(--pgwall);padding:1px 5px;border-radius:3px}
+
+/* ── 诊断:两个色系 ── */
+.fam{display:grid;grid-template-columns:1fr;gap:14px;margin-top:16px}
+@media(min-width:640px){.fam{grid-template-columns:1fr 1fr}}
+.famcard{border:1px solid var(--pgline);border-radius:6px;padding:16px}
+.famcard h4{margin:0 0 4px;font-size:.94rem}
+.famcard .why{color:var(--pgsub);font-size:.86rem;margin:0 0 12px}
+.chips{display:flex;gap:0;border-radius:4px;overflow:hidden}
+.chip{flex:1;height:56px;position:relative}
+.chiplab{display:flex;gap:0;margin-top:6px}
+.chiplab span{flex:1;font-size:.66rem;color:var(--pgsub);font-family:ui-monospace,monospace;text-align:center}
+.rgb{margin-top:10px;font-size:.8rem;color:var(--pgsub);font-family:ui-monospace,monospace}
+.rgb b{color:var(--pgink);font-weight:700}
+
+/* ── 色阶 ── */
+.ladder{display:grid;grid-template-columns:1fr;gap:0;border:1px solid var(--pgline);border-radius:6px;overflow:hidden;margin-top:14px}
+.rung{display:grid;grid-template-columns:64px 1fr auto;align-items:center;gap:14px;padding:12px 16px}
+.rung .sw{height:34px;border-radius:4px}
+.rung .nm{font-size:.9rem}
+.rung .nm em{font-style:normal;color:var(--pgsub);font-size:.82rem;display:block}
+.rung .hx{font-family:ui-monospace,monospace;font-size:.8rem;color:var(--pgsub);font-variant-numeric:tabular-nums}
+
+/* ── 眼见为实:手机稿 ── */
+.mocks{display:grid;grid-template-columns:1fr;gap:22px;margin-top:18px}
+@media(min-width:760px){.mocks{grid-template-columns:1fr 1fr}}
+.mockwrap h4{margin:0 0 8px;font-size:.88rem;display:flex;align-items:center;gap:8px}
+.tag{font-size:.68rem;letter-spacing:.06em;padding:2px 8px;border-radius:999px;font-weight:700}
+.tag.now{background:#3a3d36;color:#c6cbc0}
+.tag.new{background:#3a2f27;color:#e2c79c}
+.phone{border-radius:14px;overflow:hidden;border:1px solid var(--pgline)}
+.scr{padding:16px 14px 20px;font-size:13px;line-height:1.5}
+.grouplab{font-size:11px;letter-spacing:.04em;margin:14px 0 8px}
+.row{display:flex;align-items:center;gap:11px;border-radius:11px;padding:11px 12px;margin-bottom:8px}
+.ico{width:30px;height:30px;border-radius:8px;flex:none;display:grid;place-items:center;font-size:12px;font-weight:700}
+.rowtx{flex:1;min-width:0}
+.rowtx .t{font-weight:700;font-size:13.5px;line-height:1.35}
+.rowtx .d{font-size:11px;line-height:1.4;margin-top:1px}
+.arw{font-size:13px;flex:none}
+.who{display:flex;align-items:center;gap:11px;padding:4px 2px 12px}
+.who .av{width:38px;height:38px;border-radius:999px;display:grid;place-items:center;font-weight:700;font-size:14px}
+.who .n1{font-weight:700;font-size:15px;line-height:1.3}
+.who .n2{font-size:11.5px}
+.banner{border-radius:999px;padding:11px 16px;margin-bottom:12px}
+.banner .b1{font-weight:700;font-size:13px}
+.banner .b2{font-size:11px;margin-top:1px}
+.stats{display:grid;grid-template-columns:1fr 1fr 1fr;border-radius:11px;padding:12px 0;margin-bottom:10px;text-align:center}
+.stats>div+div{border-left:1px solid}
+.stats .v{font-family:Fraunces,serif;font-size:22px;font-weight:600;line-height:1.1;font-variant-numeric:tabular-nums}
+.stats .k{font-size:10.5px;margin-top:2px}
+.pill{font-size:11px;padding:4px 11px;border-radius:999px;flex:none;font-weight:500}
+.foot{font-size:10.5px;text-align:center;margin-top:10px;line-height:1.5}
+
+/* ── 表 ── */
+.tw{overflow-x:auto;margin-top:14px;border:1px solid var(--pgline);border-radius:6px}
+table{border-collapse:collapse;width:100%;font-size:.88rem;min-width:520px}
+th,td{padding:9px 14px;text-align:left;border-bottom:1px solid var(--pgline)}
+tbody tr:last-child td{border-bottom:0}
+th{font-size:.74rem;letter-spacing:.07em;text-transform:uppercase;color:var(--pgsub);font-weight:700;white-space:nowrap}
+td.num{font-family:ui-monospace,monospace;font-variant-numeric:tabular-nums;white-space:nowrap}
+.up{color:var(--teal);font-weight:700}
+.dot{display:inline-block;width:11px;height:11px;border-radius:3px;vertical-align:-1px;margin-right:7px;border:1px solid rgba(128,128,128,.35)}
+
+/* ── 规矩 ── */
+.rules{list-style:none;padding:0;margin:14px 0 0;display:grid;gap:2px}
+.rules li{display:grid;grid-template-columns:auto 1fr;gap:12px;padding:12px 0;border-top:1px solid var(--pgline);align-items:baseline}
+.rules li:first-child{border-top:0}
+.rules .k{font-family:Fraunces,serif;font-size:.95rem;color:var(--gold);font-weight:600;font-variant-numeric:tabular-nums}
+.ask{margin-top:52px;border:1px solid var(--gold);border-radius:6px;padding:20px 22px}
+.ask h3{margin-top:0}
+.ask ul{margin:8px 0 0;padding-left:20px}
+.ask li{margin:6px 0}
+</style>
+
+</head>
+<body>
+<div class="w">
+
+<h1>暖棕深色档</h1>
+<p class="lede">深色档的底从「偏绿的近黑」换成暖深棕,字从纯白往下收成米白,卡片不再是纯白 —— 让深浅两套是同一家人,而不是黑白硬碰。</p>
+<p class="lede sub">下面所有对比度都是我用 WCAG 公式实算的,不是估的。<b>这是提案,你点头才算合同。</b></p>
+<span class="stamp">待店主拍板 · 2026-09-10</span>
+
+<h2><span class="n">诊断</span>现在为什么不融合</h2>
+<p>不是"深色不好看"这么笼统。<b>现在这套皮里有两个色系在打架</b>:hero 块和品牌金是暖棕,而底、卡片、次级字全是<b>偏绿的灰</b>。放大看 RGB 就藏不住了 —— 绿通道最高。</p>
+
+<div class="fam">
+  <div class="famcard">
+    <h4>底 / 卡片 / 次级字(现在)</h4>
+    <p class="why">冷,偏绿。它们占了屏幕九成面积。</p>
+    <div class="chips">
+      <div class="chip" style="background:#191b19"></div>
+      <div class="chip" style="background:#20241f"></div>
+      <div class="chip" style="background:#242822"></div>
+      <div class="chip" style="background:#33362f"></div>
+      <div class="chip" style="background:#9aa096"></div>
+    </div>
+    <div class="chiplab"><span>#191b19</span><span>#20241f</span><span>#242822</span><span>#33362f</span><span>#9aa096</span></div>
+    <p class="rgb">以 <code>#20241f</code> 为例:R 32 · <b>G 36</b> · B 31 —— 绿最高</p>
+  </div>
+  <div class="famcard">
+    <h4>hero 块 / 品牌金(现在)</h4>
+    <p class="why">暖,偏棕。设计图定的就是这一家。</p>
+    <div class="chips">
+      <div class="chip" style="background:#15130f"></div>
+      <div class="chip" style="background:#221d18"></div>
+      <div class="chip" style="background:#d3b483"></div>
+      <div class="chip" style="background:#e2c48d"></div>
+      <div class="chip" style="background:#f5efe3"></div>
+    </div>
+    <div class="chiplab"><span>#15130f</span><span>#221d18</span><span>#d3b483</span><span>#e2c48d</span><span>#f5efe3</span></div>
+    <p class="rgb">以 <code>#221d18</code> 为例:<b>R 34</b> · G 29 · B 24 —— 红最高</p>
+  </div>
+</div>
+
+<p style="margin-top:18px">再加一件:那些页面的卡片是<b>纯白</b>压在近黑上 —— 21:1,顶到头。眼睛在深色环境里被这么打一下,就是你说的"对比度太强"。你的两页截图正是这个样子。</p>
+
+<h2><span class="n">新案</span>面的阶梯:越靠上越亮</h2>
+<p>成熟软件的深色档都不靠"描边"分层,靠<b>亮度</b>:底最深,分组面亮一档,卡片再亮一档。这样卡片自然浮起来,不用给每块都画一圈线。</p>
+
+<div class="ladder">
+  <div class="rung" style="background:#1a1512"><div class="sw" style="background:#1a1512;border:1px solid #3a2f27"></div><div class="nm" style="color:#f0e7da">页面底<em style="color:#bcae9c">--paper · 最深的一层,大面积</em></div><div class="hx" style="color:#bcae9c">#1a1512</div></div>
+  <div class="rung" style="background:#221c17"><div class="sw" style="background:#221c17;border:1px solid #3a2f27"></div><div class="nm" style="color:#f0e7da">分组面<em style="color:#bcae9c">--wall · 输入框、分段底</em></div><div class="hx" style="color:#bcae9c">#221c17</div></div>
+  <div class="rung" style="background:#2a221c"><div class="sw" style="background:#2a221c;border:1px solid #3a2f27"></div><div class="nm" style="color:#f0e7da">卡片<em style="color:#bcae9c">--card · 内容卡、菜单行</em></div><div class="hx" style="color:#bcae9c">#2a221c</div></div>
+  <div class="rung" style="background:#2a221c"><div class="sw" style="background:#3a2f27"></div><div class="nm" style="color:#f0e7da">分隔线<em style="color:#bcae9c">--line · 只在必须切断时用</em></div><div class="hx" style="color:#bcae9c">#3a2f27</div></div>
+</div>
+
+<h3>字的三档</h3>
+<div class="ladder">
+  <div class="rung" style="background:#2a221c"><div class="sw" style="background:#f0e7da"></div><div class="nm" style="color:#f0e7da">正文 / 标题<em style="color:#bcae9c">--ink · 米白,不是纯白</em></div><div class="hx" style="color:#bcae9c">#f0e7da</div></div>
+  <div class="rung" style="background:#2a221c"><div class="sw" style="background:#bcae9c"></div><div class="nm" style="color:#f0e7da">次级说明<em style="color:#bcae9c">--sub · <b style="color:#e2c79c">这一档提亮了,就是你说"看不清"的那些字</b></em></div><div class="hx" style="color:#bcae9c">#bcae9c</div></div>
+  <div class="rung" style="background:#2a221c"><div class="sw" style="background:#d3b483"></div><div class="nm" style="color:#f0e7da">品牌金<em style="color:#bcae9c">--brand · 大数字、强调、主按钮底</em></div><div class="hx" style="color:#bcae9c">#d3b483</div></div>
+</div>
+
+<h2><span class="n">眼见为实</span>你那两页,换成新配色</h2>
+<p class="sub">左边是你今早发我的样子(白卡压近黑),右边是新案。内容一个字没改。</p>
+
+<h3>管理 · 老板菜单</h3>
+<div class="mocks">
+  <div class="mockwrap">
+    <h4>现在 <span class="tag now">白卡压近黑</span></h4>
+    <div class="phone">
+      <div class="scr" style="background:#191b19">
+        <div class="who"><div class="av" style="background:#e8e0d2;color:#5a4a35">老</div><div><div class="n1" style="color:#4a4d46">老板</div><div class="n2" style="color:#8f948a">LUVIA 半径 · 老板</div></div></div>
+        <div class="grouplab" style="color:#7c8177">日常经营</div>
+        <div class="row" style="background:#fff"><div class="ico" style="background:#f2ece2;color:#8a6f45">订</div><div class="rowtx"><div class="t" style="color:#23241f">订单管理</div><div class="d" style="color:#6d6f66">今日台面 · 全部订单 · 日结</div></div><div class="arw" style="color:#b8b5ac">›</div></div>
+        <div class="row" style="background:#fff"><div class="ico" style="background:#f2ece2;color:#8a6f45">员</div><div class="rowtx"><div class="t" style="color:#23241f">员工管理</div><div class="d" style="color:#6d6f66">排班 · 业绩目标 · 薪资方案</div></div><div class="arw" style="color:#b8b5ac">›</div></div>
+        <div class="row" style="background:#fff"><div class="ico" style="background:#f2ece2;color:#8a6f45">财</div><div class="rowtx"><div class="t" style="color:#23241f">财务</div><div class="d" style="color:#6d6f66">指标 · 记一笔 · 储值卡</div></div><div class="arw" style="color:#b8b5ac">›</div></div>
+        <div class="grouplab" style="color:#7c8177">营销与会员</div>
+        <div class="row" style="background:#fff"><div class="ico" style="background:#f2ece2;color:#8a6f45">营</div><div class="rowtx"><div class="t" style="color:#23241f">营销管理</div><div class="d" style="color:#6d6f66">渠道发帖 · 营销措施</div></div><div class="arw" style="color:#b8b5ac">›</div></div>
+      </div>
+    </div>
+  </div>
+  <div class="mockwrap">
+    <h4>新案 <span class="tag new">暖棕阶梯</span></h4>
+    <div class="phone">
+      <div class="scr" style="background:#1a1512">
+        <div class="who"><div class="av" style="background:#3a2f27;color:#e2c79c">老</div><div><div class="n1" style="color:#f0e7da">老板</div><div class="n2" style="color:#bcae9c">LUVIA 半径 · 老板</div></div></div>
+        <div class="grouplab" style="color:#bcae9c">日常经营</div>
+        <div class="row" style="background:#2a221c"><div class="ico" style="background:#3a2f27;color:#e2c79c">订</div><div class="rowtx"><div class="t" style="color:#f0e7da">订单管理</div><div class="d" style="color:#bcae9c">今日台面 · 全部订单 · 日结</div></div><div class="arw" style="color:#8d8072">›</div></div>
+        <div class="row" style="background:#2a221c"><div class="ico" style="background:#3a2f27;color:#e2c79c">员</div><div class="rowtx"><div class="t" style="color:#f0e7da">员工管理</div><div class="d" style="color:#bcae9c">排班 · 业绩目标 · 薪资方案</div></div><div class="arw" style="color:#8d8072">›</div></div>
+        <div class="row" style="background:#2a221c"><div class="ico" style="background:#3a2f27;color:#e2c79c">财</div><div class="rowtx"><div class="t" style="color:#f0e7da">财务</div><div class="d" style="color:#bcae9c">指标 · 记一笔 · 储值卡</div></div><div class="arw" style="color:#8d8072">›</div></div>
+        <div class="grouplab" style="color:#bcae9c">营销与会员</div>
+        <div class="row" style="background:#2a221c"><div class="ico" style="background:#3a2f27;color:#e2c79c">营</div><div class="rowtx"><div class="t" style="color:#f0e7da">营销管理</div><div class="d" style="color:#bcae9c">渠道发帖 · 营销措施</div></div><div class="arw" style="color:#8d8072">›</div></div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<h3>今日考勤</h3>
+<div class="mocks">
+  <div class="mockwrap">
+    <h4>现在 <span class="tag now">标题几乎看不见</span></h4>
+    <div class="phone">
+      <div class="scr" style="background:#191b19">
+        <div class="grouplab" style="color:#3f433c;font-size:13px;font-weight:700;margin-top:2px">今日考勤 · 9月10日 周四</div>
+        <div class="banner" style="background:#c3a071"><div class="b1" style="color:#fff">设当前 WiFi 为打卡 WiFi</div><div class="b2" style="color:#f3e7d5">设置后员工须连店内 WiFi 才能打卡</div></div>
+        <div class="stats" style="background:#fff"><div><div class="v" style="color:#2e8b57">0</div><div class="k" style="color:#6d6f66">在岗</div></div><div style="border-color:#e3e0d6"><div class="v" style="color:#23241f">0</div><div class="k" style="color:#6d6f66">已下班</div></div><div style="border-color:#e3e0d6"><div class="v" style="color:#b3413a">0</div><div class="k" style="color:#6d6f66">超时未走</div></div></div>
+        <div class="row" style="background:#fff"><div class="ico" style="background:#d9cbb6;color:#5a4a35;border-radius:999px">A</div><div class="rowtx"><div class="t" style="color:#23241f">Ava Lin</div><div class="d" style="color:#6d6f66">未上班 · 点击可补卡</div></div><div class="pill" style="background:#faf3e3;color:#8a5a00">未上班</div></div>
+        <div class="row" style="background:#fff"><div class="ico" style="background:#d9cbb6;color:#5a4a35;border-radius:999px">C</div><div class="rowtx"><div class="t" style="color:#23241f">Coco</div><div class="d" style="color:#6d6f66">未上班 · 点击可补卡</div></div><div class="pill" style="background:#faf3e3;color:#8a5a00">未上班</div></div>
+        <div class="foot" style="color:#5d6158">点任意一行可修正/补卡 · 超时=超过排班或营业结束时间</div>
+      </div>
+    </div>
+  </div>
+  <div class="mockwrap">
+    <h4>新案 <span class="tag new">标题回来了</span></h4>
+    <div class="phone">
+      <div class="scr" style="background:#1a1512">
+        <div class="grouplab" style="color:#f0e7da;font-size:13px;font-weight:700;margin-top:2px">今日考勤 · 9月10日 周四</div>
+        <div class="banner" style="background:#d3b483"><div class="b1" style="color:#241e1a">设当前 WiFi 为打卡 WiFi</div><div class="b2" style="color:#4a3d2c">设置后员工须连店内 WiFi 才能打卡</div></div>
+        <div class="stats" style="background:#2a221c"><div><div class="v" style="color:#7ed3a6">0</div><div class="k" style="color:#bcae9c">在岗</div></div><div style="border-color:#3a2f27"><div class="v" style="color:#f0e7da">0</div><div class="k" style="color:#bcae9c">已下班</div></div><div style="border-color:#3a2f27"><div class="v" style="color:#e89185">0</div><div class="k" style="color:#bcae9c">超时未走</div></div></div>
+        <div class="row" style="background:#2a221c"><div class="ico" style="background:#3a2f27;color:#e2c79c;border-radius:999px">A</div><div class="rowtx"><div class="t" style="color:#f0e7da">Ava Lin</div><div class="d" style="color:#bcae9c">未上班 · 点击可补卡</div></div><div class="pill" style="background:#2b2618;color:#e0b45f">未上班</div></div>
+        <div class="row" style="background:#2a221c"><div class="ico" style="background:#3a2f27;color:#e2c79c;border-radius:999px">C</div><div class="rowtx"><div class="t" style="color:#f0e7da">Coco</div><div class="d" style="color:#bcae9c">未上班 · 点击可补卡</div></div><div class="pill" style="background:#2b2618;color:#e0b45f">未上班</div></div>
+        <div class="foot" style="color:#bcae9c">点任意一行可修正/补卡 · 超时=超过排班或营业结束时间</div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<h2><span class="n">对比度</span>数字都实算过</h2>
+<p>门槛:正文 4.5:1,大字 3:1。我另外给自己划了一条<b>舒服带 7–14:1</b> —— 低于 7 会发虚,高于 16 就开始扎眼(纯白压纯黑是 21:1)。</p>
+
+<div class="tw"><table>
+<thead><tr><th>看哪一处</th><th>现在</th><th>新案</th><th>说明</th></tr></thead>
+<tbody>
+<tr><td><span class="dot" style="background:#f0e7da"></span>正文压卡片</td><td class="num">12.70</td><td class="num">12.76</td><td class="sub">基本不变,但底和字都转暖了</td></tr>
+<tr><td><span class="dot" style="background:#bcae9c"></span>次级说明压卡片</td><td class="num">5.88</td><td class="num up">7.20</td><td>你说"看不清"的那一档,<b>提了 22%</b></td></tr>
+<tr><td><span class="dot" style="background:#bcae9c"></span>分组标题压页面底</td><td class="num">6.47</td><td class="num up">8.34</td><td>「日常经营」「今日考勤」那种</td></tr>
+<tr><td><span class="dot" style="background:#d3b483"></span>品牌金压卡片</td><td class="num">7.97</td><td class="num">7.91</td><td class="sub">金色不动 —— 那是你的品牌色</td></tr>
+<tr><td><span class="dot" style="background:#e2c48d"></span>金色大数字压 hero</td><td class="num">11.31</td><td class="num">11.26</td><td class="sub">大屏那个数字,维持</td></tr>
+<tr><td><span class="dot" style="background:#55c3ac"></span>青色强调压卡片</td><td class="num">7.05</td><td class="num up">7.28</td><td class="sub">「已完成」这类</td></tr>
+<tr><td><span class="dot" style="background:#fff"></span>白卡压近黑(旧)</td><td class="num" style="color:#c0392b;font-weight:700">21.0</td><td class="num up">— 取消</td><td>顶到头的那一下,就是"太强"</td></tr>
+</tbody>
+</table></div>
+
+<h3>顺带把主按钮定了</h3>
+<p>「立即预约」「创建账号」这颗,现在是<b>奶白字压金底 2.02:1</b>(读得清但不达标)。金色不动,只把字色改深:</p>
+<div class="tw"><table>
+<thead><tr><th>档位</th><th>做法</th><th>比值</th></tr></thead>
+<tbody>
+<tr><td>深色档</td><td><span style="background:#d3b483;color:#221c17;padding:3px 14px;border-radius:999px;font-weight:700;font-size:.85rem">立即预约</span></td><td class="num up">8.52</td></tr>
+<tr><td>浅色档</td><td><span style="background:#b09468;color:#2a2521;padding:3px 14px;border-radius:999px;font-weight:700;font-size:.85rem">立即预约</span></td><td class="num up">5.26</td></tr>
+<tr><td class="sub">(对照:原来的白字)</td><td class="sub"><span style="background:#b09468;color:#fff;padding:3px 14px;border-radius:999px;font-weight:700;font-size:.85rem">立即预约</span></td><td class="num" style="color:#c0392b;font-weight:700">2.88</td></tr>
+</tbody>
+</table></div>
+
+<h2><span class="n">改动面</span>只换值,不换名</h2>
+<p>这一点很关键:深色档那 30 个令牌 <b>一个名字都不新增、不删除</b>,只把其中 <b>13 个的值</b>从绿灰改成暖棕。这意味着 ——</p>
+<ul>
+<li>比对设计图和代码的那把刀<b>照旧有效</b>,不用重写;</li>
+<li>所有页面的样式<b>一行都不用动</b>(它们读的是令牌名);</li>
+<li><b>浅色档一个字不改</b>。</li>
+</ul>
+
+<div class="tw"><table>
+<thead><tr><th>令牌</th><th>现在</th><th>新案</th><th>用在哪</th></tr></thead>
+<tbody>
+<tr><td><code>--paper</code></td><td class="num"><span class="dot" style="background:#191b19"></span>#191b19</td><td class="num"><span class="dot" style="background:#1a1512"></span>#1a1512</td><td class="sub">页面底</td></tr>
+<tr><td><code>--wall</code></td><td class="num"><span class="dot" style="background:#242822"></span>#242822</td><td class="num"><span class="dot" style="background:#221c17"></span>#221c17</td><td class="sub">分组面 / 输入框</td></tr>
+<tr><td><code>--card</code></td><td class="num"><span class="dot" style="background:#20241f"></span>#20241f</td><td class="num"><span class="dot" style="background:#2a221c"></span>#2a221c</td><td class="sub">卡片 / 菜单行</td></tr>
+<tr><td><code>--line</code></td><td class="num"><span class="dot" style="background:#33362f"></span>#33362f</td><td class="num"><span class="dot" style="background:#3a2f27"></span>#3a2f27</td><td class="sub">分隔线</td></tr>
+<tr><td><code>--ink</code></td><td class="num"><span class="dot" style="background:#e8e7e0"></span>#e8e7e0</td><td class="num"><span class="dot" style="background:#f0e7da"></span>#f0e7da</td><td class="sub">正文 / 标题</td></tr>
+<tr><td><code>--sub</code></td><td class="num"><span class="dot" style="background:#9aa096"></span>#9aa096</td><td class="num"><span class="dot" style="background:#bcae9c"></span>#bcae9c</td><td>次级说明 · <b>提亮</b></td></tr>
+<tr><td><code>--hero2</code></td><td class="num"><span class="dot" style="background:#221d18"></span>#221d18</td><td class="num"><span class="dot" style="background:#241d16"></span>#241d16</td><td class="sub">hero 次层</td></tr>
+<tr><td><code>--herosub</code></td><td class="num"><span class="dot" style="background:#a79c8a"></span>#a79c8a</td><td class="num"><span class="dot" style="background:#b5a794"></span>#b5a794</td><td class="sub">hero 里的小字</td></tr>
+<tr><td><code>--flat</code> / <code>--flatbg</code></td><td class="num"><span class="dot" style="background:#9aa096"></span>#9aa096 / #2a2d28</td><td class="num"><span class="dot" style="background:#a99b8a"></span>#a99b8a / #2b241e</td><td class="sub">中性标签</td></tr>
+<tr><td><code>--goodbg</code> / <code>--badbg</code></td><td class="num">#1c2f25 / #33201e</td><td class="num">#1e2c22 / #33211d</td><td class="sub">成功 / 失败底</td></tr>
+<tr><td><code>--next</code> / <code>--done</code></td><td class="num">#6c7066 / #6a5f4c</td><td class="num">#7a6f62 / #7a6c56</td><td class="sub">台面状态块</td></tr>
+<tr><td class="sub" colspan="4" style="padding-top:12px">其余 17 个(<code>--brand</code> <code>--herogold</code> <code>--acc</code> <code>--tagm</code> …)<b>原值不动</b> —— 它们本来就是暖的。</td></tr>
+</tbody>
+</table></div>
+
+<h2><span class="n">规矩</span>这套定了之后要守的五条</h2>
+<ol class="rules">
+<li><span class="k">一</span><div><b>深色档不用纯黑,浅色档不用纯白当字。</b>底最深 <code>#1a1512</code>,字最亮 <code>#f0e7da</code> —— 两头都留一口气。</div></li>
+<li><span class="k">二</span><div><b>面靠亮度分层,不靠描边。</b>底 → 分组面 → 卡片,一层比一层亮一档;线只在"必须切断"时才画。</div></li>
+<li><span class="k">三</span><div><b>中性色跟着品牌走。</b>金是暖的,那么灰也必须是暖的。以后新加任何一个中性色,红通道要 ≥ 绿通道。</div></li>
+<li><span class="k">四</span><div><b>正文落在 7–14:1 这个舒服带。</b>低于 7 发虚,高于 16 扎眼。不是越高越好。</div></li>
+<li><span class="k">五</span><div><b><code>--next</code> <code>--done</code> 只许当色块,不许当正文字色</b>(它们本来就该"退到后面",做字会不够)。</div></li>
+</ol>
+
+<div class="ask">
+<h3>你只要回我一句</h3>
+<ul>
+<li><b>「这套可以」</b> —— 我就把它写进设计图当合同,然后让 Code 按图改值 + 全站重扫一遍对比度。</li>
+<li><b>「底再深一点 / 再浅一点」</b> —— 我调完再给你看一版。</li>
+<li><b>「棕味再重 / 再淡一点」</b> —— 同上,我只动中性色那一列,金色不碰。</li>
+</ul>
+<p class="sub" style="margin-bottom:0">另外顺带确认一句:主按钮那颗按上面的<b>深字压金底</b>走,行吗?(它是顾客要点的那颗,现在 2.02 偏低。)</p>
+</div>
+
+</div>
+
+</body>
+</html>

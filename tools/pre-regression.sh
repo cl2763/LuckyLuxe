@@ -207,13 +207,15 @@ else say "UTC 日期前缀判天棘轮(#14)" "🔴 $UTCDAY > 12 —— 又有人
 #    所以预检这里做一件它做得到的事:**红榜抬头记的界面文件指纹 ≠ 现在的指纹 = 全扫没重跑** → 红。
 #    (06a 改:原来比 mtime —— 还原备份、git checkout 都会把 mtime 改新而内容没变,误红过一次。
 #     现在比**内容 sha**:锚在内容上,不锚在代理指标上,同族 J-38/J-39。)
-RED_LIST="handoff/night-runs/对比度红榜_修后_2026-09-09.md"
-if [ -f "$RED_LIST" ]; then
+# 🔴 06e:红榜文件名带日期,写死一个名字下一批就指到旧文件上(这次就红在这)。
+#    改成**取最新那一份**并把用的是哪一份打印出来 —— 宁可啰嗦,也不要静默比错文件。
+RED_LIST=$(ls -t handoff/night-runs/对比度红榜_*后台*.md handoff/night-runs/对比度红榜_修后_*.md 2>/dev/null | head -1)
+if [ -n "$RED_LIST" ]; then
   WANT_SHA=$(grep -oE '界面文件内容指纹 `[0-9a-f]+`' "$RED_LIST" | grep -oE '[0-9a-f]{6,}' | head -1)
   NOW_SHA=$(cat apps/web/styles.css apps/web/admin.html apps/web/admin.js | shasum -a 256 | cut -c1-12)
-  if [ -z "$WANT_SHA" ]; then say "红榜没记界面指纹" "🔴 抬头里没有「界面文件内容指纹」那一行 —— 重跑一次 tools/contrast-sweep.mjs"; FAIL=1
-  elif [ "$WANT_SHA" = "$NOW_SHA" ]; then say "对比度全扫跟得上样式" "✅ 指纹一致($NOW_SHA)"
-  else say "对比度全扫过期了" "🔴 红榜记的是 $WANT_SHA,现在是 $NOW_SHA —— 样式改过了,重跑 tools/contrast-sweep.mjs 再交"; FAIL=1; fi
+  if [ -z "$WANT_SHA" ]; then say "红榜没记界面指纹" "🔴 $(basename "$RED_LIST") 抬头里没有指纹那一行 —— 重跑 tools/contrast-sweep.mjs"; FAIL=1
+  elif [ "$WANT_SHA" = "$NOW_SHA" ]; then say "对比度全扫跟得上样式" "✅ 指纹一致($NOW_SHA)· 用的是 $(basename "$RED_LIST")"
+  else say "对比度全扫过期了" "🔴 $(basename "$RED_LIST") 记的是 $WANT_SHA,现在是 $NOW_SHA —— 样式改过了,重跑再交"; FAIL=1; fi
 else say "对比度红榜在不在" "🔴 找不到 $RED_LIST"; FAIL=1; fi
 
 # ⑫ 裁(店主 05y §三③)· **开批快照进预检**。

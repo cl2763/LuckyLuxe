@@ -109,7 +109,8 @@
     "auto-return": 7,
     "schema-consistency": 4,
     "perf-base-migration": 15,
-    "tenant-isolation": 10
+    "tenant-isolation": 10,
+    "color-usage": 14
   },
   "上次更新": "2026-09-02",
   "巨型文件历史最低": {

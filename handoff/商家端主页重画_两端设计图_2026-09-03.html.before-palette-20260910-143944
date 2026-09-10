@@ -1,32 +1,22 @@
 <title>商家端主页重画</title>
-<!-- 图 v3.4 · 2026-09-10 · **配色改版:店主已拍板(深色「可以」+ 浅色「浅色也可以」)**
-     改的只有上面三段 `:root` 的**值**,令牌名一个不增不减(30 条照旧)。
-     浅色改 6 条:--ink --sub --good --flat --flatbg --next(转暖 + 修四处 <4.5:1 不达标)
-     深色改 14 条:--paper --ink --sub --line --card --wall --hero2 --herosub
-                  --goodbg --badbg --flat --flatbg --done --next(绿灰 → 暖棕 + --sub 提亮)
-     依据与实测对比度见:handoff/配色提案_暖棕深色档_2026-09-10_待拍板.html
-                       handoff/配色提案_浅色档复核_2026-09-10_待拍板.html
-     🔴 代码那两份(apps/web/design-tokens.css · miniprogram/styles/tokens.wxss)还没跟上,
-        `node tools/design-token-diff.mjs` 现在应当报红 —— 那是对的,搬完才准绿。 -->
-
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,500;9..144,700&family=Noto+Serif+SC:wght@600;700&family=Noto+Sans+SC:wght@400;500;700&display=swap">
 <style>
-:root{--paper:#faf8f3;--ink:#241f1a;--sub:#6f6055;--line:#e3e0d6;--card:#fff;--wall:#f1eee6;
+:root{--paper:#faf8f3;--ink:#23241f;--sub:#6d6f66;--line:#e3e0d6;--card:#fff;--wall:#f1eee6;
 --acc:#0e6e62;--accd:#0a5a50;--brand:#b09468;--brandd:#8a6f45;
 --hero:#2a2521;--hero2:#3a332c;--heroink:#f5efe3;--herosub:#bfb4a2;--herogold:#d9b97e;--herogrid:rgba(245,239,227,.12);--herolive:#6fd0a0;
---good:#26794c;--goodbg:#e6f3ea;--bad:#b3413a;--badbg:#f7e7e5;--flat:#6f6255;--flatbg:#efeae2;
+--good:#2e8b57;--goodbg:#e6f3ea;--bad:#b3413a;--badbg:#f7e7e5;--flat:#7b7f76;--flatbg:#ededea;
 --tagm:#8a5a00;--tagmbg:#faf3e3;--tagw:#274f8f;--tagwbg:#eef2fa;
---done:#cdbfa3;--doing:#d9b97e;--next:#6f6255}
-@media (prefers-color-scheme: dark){:root:not([data-theme="light"]){--paper:#1a1512;--ink:#f0e7da;--sub:#bcae9c;--line:#3a2f27;--card:#2a221c;--wall:#221c17;
+--done:#cdbfa3;--doing:#d9b97e;--next:#7b7f76}
+@media (prefers-color-scheme: dark){:root:not([data-theme="light"]){--paper:#191b19;--ink:#e8e7e0;--sub:#9aa096;--line:#33362f;--card:#20241f;--wall:#242822;
 --acc:#4cc0b0;--accd:#63d2c3;--brand:#d3b483;--brandd:#e2c79c;
---hero:#15130f;--hero2:#241d16;--heroink:#f5efe3;--herosub:#b5a794;--herogold:#e2c48d;--herogrid:rgba(245,239,227,.10);--herolive:#6fd0a0;
---good:#6fd0a0;--goodbg:#1e2c22;--bad:#e5867e;--badbg:#33211d;--flat:#a99b8a;--flatbg:#2b241e;
---tagm:#e0b45f;--tagmbg:#2b2618;--tagw:#8fb0e8;--tagwbg:#1d2434;--done:#7a6c56;--doing:#e2c48d;--next:#7a6f62}}
-:root[data-theme="dark"]{--paper:#1a1512;--ink:#f0e7da;--sub:#bcae9c;--line:#3a2f27;--card:#2a221c;--wall:#221c17;
+--hero:#15130f;--hero2:#221d18;--heroink:#f5efe3;--herosub:#a79c8a;--herogold:#e2c48d;--herogrid:rgba(245,239,227,.10);--herolive:#6fd0a0;
+--good:#6fd0a0;--goodbg:#1c2f25;--bad:#e5867e;--badbg:#33201e;--flat:#9aa096;--flatbg:#2a2d28;
+--tagm:#e0b45f;--tagmbg:#2b2618;--tagw:#8fb0e8;--tagwbg:#1d2434;--done:#6a5f4c;--doing:#e2c48d;--next:#6c7066}}
+:root[data-theme="dark"]{--paper:#191b19;--ink:#e8e7e0;--sub:#9aa096;--line:#33362f;--card:#20241f;--wall:#242822;
 --acc:#4cc0b0;--accd:#63d2c3;--brand:#d3b483;--brandd:#e2c79c;
---hero:#15130f;--hero2:#241d16;--heroink:#f5efe3;--herosub:#b5a794;--herogold:#e2c48d;--herogrid:rgba(245,239,227,.10);--herolive:#6fd0a0;
---good:#6fd0a0;--goodbg:#1e2c22;--bad:#e5867e;--badbg:#33211d;--flat:#a99b8a;--flatbg:#2b241e;
---tagm:#e0b45f;--tagmbg:#2b2618;--tagw:#8fb0e8;--tagwbg:#1d2434;--done:#7a6c56;--doing:#e2c48d;--next:#7a6f62}
+--hero:#15130f;--hero2:#221d18;--heroink:#f5efe3;--herosub:#a79c8a;--herogold:#e2c48d;--herogrid:rgba(245,239,227,.10);--herolive:#6fd0a0;
+--good:#6fd0a0;--goodbg:#1c2f25;--bad:#e5867e;--badbg:#33201e;--flat:#9aa096;--flatbg:#2a2d28;
+--tagm:#e0b45f;--tagmbg:#2b2618;--tagw:#8fb0e8;--tagwbg:#1d2434;--done:#6a5f4c;--doing:#e2c48d;--next:#6c7066}
 body{background:var(--paper);color:var(--ink);font-family:'Noto Sans SC',-apple-system,sans-serif;line-height:1.7;margin:0}
 .w{max-width:980px;margin:0 auto;padding:38px 18px 80px}
 h1{font-family:'Noto Serif SC',serif;font-size:1.7rem;margin:0 0 4px;text-wrap:balance}
