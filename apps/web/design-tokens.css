@@ -17,19 +17,19 @@
  * ⚠️ 本文件**只放令牌**。任何 `.dh-*` 的样式都在 styles.css 里,
  *    那边引用令牌时**不许再写 `var(--x, #兜底色)`** —— 兜底值等于偷偷藏了第二套配色。
  */
-:root{--paper:#faf8f3;--ink:#23241f;--sub:#6d6f66;--line:#e3e0d6;--card:#fff;--wall:#f1eee6;
+:root{--paper:#faf8f3;--ink:#241f1a;--sub:#6f6055;--line:#e3e0d6;--card:#fff;--wall:#f1eee6;
 --acc:#0e6e62;--accd:#0a5a50;--brand:#b09468;--brandd:#8a6f45;
 --hero:#2a2521;--hero2:#3a332c;--heroink:#f5efe3;--herosub:#bfb4a2;--herogold:#d9b97e;--herogrid:rgba(245,239,227,.12);--herolive:#6fd0a0;
---good:#2e8b57;--goodbg:#e6f3ea;--bad:#b3413a;--badbg:#f7e7e5;--flat:#7b7f76;--flatbg:#ededea;
+--good:#26794c;--goodbg:#e6f3ea;--bad:#b3413a;--badbg:#f7e7e5;--flat:#6f6255;--flatbg:#efeae2;
 --tagm:#8a5a00;--tagmbg:#faf3e3;--tagw:#274f8f;--tagwbg:#eef2fa;
---done:#cdbfa3;--doing:#d9b97e;--next:#7b7f76}
-@media (prefers-color-scheme: dark){:root:not([data-theme="light"]){--paper:#191b19;--ink:#e8e7e0;--sub:#9aa096;--line:#33362f;--card:#20241f;--wall:#242822;
+--done:#cdbfa3;--doing:#d9b97e;--next:#6f6255}
+@media (prefers-color-scheme: dark){:root:not([data-theme="light"]){--paper:#1a1512;--ink:#f0e7da;--sub:#bcae9c;--line:#3a2f27;--card:#2a221c;--wall:#221c17;
 --acc:#4cc0b0;--accd:#63d2c3;--brand:#d3b483;--brandd:#e2c79c;
---hero:#15130f;--hero2:#221d18;--heroink:#f5efe3;--herosub:#a79c8a;--herogold:#e2c48d;--herogrid:rgba(245,239,227,.10);--herolive:#6fd0a0;
---good:#6fd0a0;--goodbg:#1c2f25;--bad:#e5867e;--badbg:#33201e;--flat:#9aa096;--flatbg:#2a2d28;
---tagm:#e0b45f;--tagmbg:#2b2618;--tagw:#8fb0e8;--tagwbg:#1d2434;--done:#6a5f4c;--doing:#e2c48d;--next:#6c7066}}
-:root[data-theme="dark"]{--paper:#191b19;--ink:#e8e7e0;--sub:#9aa096;--line:#33362f;--card:#20241f;--wall:#242822;
+--hero:#15130f;--hero2:#241d16;--heroink:#f5efe3;--herosub:#b5a794;--herogold:#e2c48d;--herogrid:rgba(245,239,227,.10);--herolive:#6fd0a0;
+--good:#6fd0a0;--goodbg:#1e2c22;--bad:#e5867e;--badbg:#33211d;--flat:#a99b8a;--flatbg:#2b241e;
+--tagm:#e0b45f;--tagmbg:#2b2618;--tagw:#8fb0e8;--tagwbg:#1d2434;--done:#7a6c56;--doing:#e2c48d;--next:#7a6f62}}
+:root[data-theme="dark"]{--paper:#1a1512;--ink:#f0e7da;--sub:#bcae9c;--line:#3a2f27;--card:#2a221c;--wall:#221c17;
 --acc:#4cc0b0;--accd:#63d2c3;--brand:#d3b483;--brandd:#e2c79c;
---hero:#15130f;--hero2:#221d18;--heroink:#f5efe3;--herosub:#a79c8a;--herogold:#e2c48d;--herogrid:rgba(245,239,227,.10);--herolive:#6fd0a0;
---good:#6fd0a0;--goodbg:#1c2f25;--bad:#e5867e;--badbg:#33201e;--flat:#9aa096;--flatbg:#2a2d28;
---tagm:#e0b45f;--tagmbg:#2b2618;--tagw:#8fb0e8;--tagwbg:#1d2434;--done:#6a5f4c;--doing:#e2c48d;--next:#6c7066}
+--hero:#15130f;--hero2:#241d16;--heroink:#f5efe3;--herosub:#b5a794;--herogold:#e2c48d;--herogrid:rgba(245,239,227,.10);--herolive:#6fd0a0;
+--good:#6fd0a0;--goodbg:#1e2c22;--bad:#e5867e;--badbg:#33211d;--flat:#a99b8a;--flatbg:#2b241e;
+--tagm:#e0b45f;--tagmbg:#2b2618;--tagw:#8fb0e8;--tagwbg:#1d2434;--done:#7a6c56;--doing:#e2c48d;--next:#7a6f62}
