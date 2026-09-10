@@ -44,7 +44,12 @@ window.CustomerTags = (function () {
     const days = (iso2) => iso2 ? Math.floor((Date.now() - new Date(iso2).getTime()) / 86400000) : 9999
     const lastD = days(c.lastCompletedAt)
     if (lastD > r.sDays) return { k: 's', label: lang === 'zh' ? '沉睡S' : 'Dormant', color: '#8a5a52' }
-    if (lastD <= r.aDays && visits >= r.aVisits && (c.totalSpentCents || 0) >= r.aSpendCents) return { k: 'a', label: lang === 'zh' ? '高价值A' : 'VIP', color: '#b5885d' }
+    /* 🔴 06h 裁 #39:A 档原来是写死的第三把金 #b5885d,奶白字压上去只有 **2.76** ——
+       而且它**没有深色档**(J-42 探测器现测:浅深两档比值一模一样)。
+       换成合同图里**已有的成对令牌** --tagm / --tagmbg(5.36 浅 / 7.8 深),**不新造色**。
+       另外三档(B/N/S)比值 5.34 / 4.63 / 5.00 够用,但同样没有深色档 ——
+       归 D188「品类色与渐变色双档化」,由店主一次拿浅深两张图拍板,不零敲碎打(J-41)。 */
+    if (lastD <= r.aDays && visits >= r.aVisits && (c.totalSpentCents || 0) >= r.aSpendCents) return { k: 'a', label: lang === 'zh' ? '高价值A' : 'VIP', color: 'var(--tagmbg)', ink: 'var(--tagm)' }
     if (days(c.firstVisitAt) <= r.nDays) return { k: 'n', label: lang === 'zh' ? '新客N' : 'New', color: '#3b6ea5' }
     return { k: 'b', label: lang === 'zh' ? '回头客B' : 'Repeat', color: '#3f6b52' }
   }

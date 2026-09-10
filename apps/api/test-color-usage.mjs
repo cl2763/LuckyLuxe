@@ -227,12 +227,16 @@ for (const f of SURFACE) {
   try { src = read(f) } catch { continue }
   if (!GOLD_PAT.test(src)) { GOLD_PAT.lastIndex = 0; continue }
   GOLD_PAT.lastIndex = 0
-  src.split('\n').forEach((ln, i) => {
+  /* 🔴 06h 现测出来的判据缺陷:这里原来扫的是**原文**,注释里提一句旧色值也被算成一处 ——
+     而 ⑤(扫名字)那条早就剥了注释。**同一个文件里两条判据,一条看代码一条看注释**,
+     数当然对不上(现测差 1:我在 customer-tags.js 里写了一句「原来是 #b5885d」的说明,棘轮就多了 1)。
+     归族「判据看代码不看注释」。剥完重量 → 棘轮跟着往下收。 */
+  stripComments(src).split('\n').forEach((ln, i) => {
     const m = ln.match(GOLD_PAT)
     if (m) for (const one of m) goldHits.push({ at: `${f}:${i + 1}`, hit: one, f, line: ln.trim() })
   })
 }
-const GOLD_CAP0 = 184   /* 06g 棘轮初值(实测);**只许降** —— 提在这里是因为下面做差要先看它 */
+const GOLD_CAP0 = 183   /* 06g 棘轮初值(实测);**只许降** —— 提在这里是因为下面做差要先看它 */
 const goldLeft = goldHits.filter((h) => !GOLD_OK.some(([g]) => h.at.startsWith(g)))
 /* 🔴 「超出棘轮」必须**点名到底是哪一处新加的**,不能只报一个总数。
    刀 GG 现测:头一版把命中列表的**末尾四条**标成「最近新增的」——那只是扫描顺序的尾巴,

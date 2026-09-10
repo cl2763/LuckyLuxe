@@ -4309,7 +4309,7 @@ function renderCustomers() {
     <article class="customer-profile-card card">
       <div class="customer-avatar">${customerName(customer).slice(0, 1).toUpperCase()}</div>
       <div>
-        <h3>${escapeHtml(customerName(customer))} ${memberTierBadge(customer)}${(() => { const tr = rfmTierOf(customer); return tr ? ` <span style="font-size:11px;font-weight:800;color:var(--heroink);background:${tr.color};border-radius:5px;padding:2px 8px;vertical-align:middle">${tr.label}</span>` : '' })()}</h3>
+        <h3>${escapeHtml(customerName(customer))} ${memberTierBadge(customer)}${(() => { const tr = rfmTierOf(customer); return tr ? ` <span style="font-size:11px;font-weight:800;color:${tr.ink || 'var(--heroink)'};background:${tr.color};border-radius:5px;padding:2px 8px;vertical-align:middle">${tr.label}</span>` : '' })()}</h3>
         <p class="subtle">${escapeHtml(customer.memberCode || '')}${customer.birthday ? ` · 🎂 ${escapeHtml(customer.birthday)}` : ''}</p>
         <p class="customer-contact">${escapeHtml([customer.phone, customer.email].filter(Boolean).join(' · ') || '-')}</p>
         ${(customer.tags || []).length ? `<div class="customer-tags">${customer.tags.slice(0, 3).map((tag) => `<span class="customer-tag">${escapeHtml(tag)}</span>`).join('')}${customer.tags.length > 3 ? `<span class="customer-tag">+${customer.tags.length - 3}</span>` : ''}</div>` : ''}
