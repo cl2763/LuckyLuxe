@@ -3854,15 +3854,35 @@ const main = async () => {
          `LL_TEST_DATA=1` **不许**把本机库/沙箱库变成 test(原来一个环境变量就能顶开全部保护)。 */
       const scopeMod = await import('./data-scope.mjs')
       const L = '/x/apps/api/local-data'; const S = '/x/apps/api/sandbox-data'; const C = '/tmp/ll-ci-data.abc123'
+      /* 🔴 06h 裁 #37 现查:这一条的**话**是「不看环境变量」,可它三次调用喂的都是 `{}` ——
+         「不看环境变量」这句从来没被量过,所以永远绿。判据说的和判据量的不是一回事(J-39/J-40 同族)。
+         现在**真喂**一个最狠的环境变量(`NODE_ENV=production`),断言三个路径的结论**一个都不变**。 */
+      const ENVP = { NODE_ENV: 'production' }
       check('㋙C③ 本机库/沙箱库都判为 live,只有回归临时库是 test(按**库路径**判,不看环境变量)',
         scopeMod.legacyScope(L, {}) === 'live' && scopeMod.legacyScope(S, {}) === 'live'
         && scopeMod.legacyScope(C, {}) === 'test')
+      check('㋙C③a 🔴 把这句话真量一遍:喂 NODE_ENV=production,三个路径的结论一个都不许变',
+        scopeMod.legacyScope(L, ENVP) === 'live' && scopeMod.legacyScope(S, ENVP) === 'live'
+        && scopeMod.legacyScope(C, ENVP) === 'test',
+        `现测 本机=${scopeMod.legacyScope(L, ENVP)} 沙箱=${scopeMod.legacyScope(S, ENVP)} CI=${scopeMod.legacyScope(C, ENVP)}`)
       check('㋙C③b 🔴 LL_TEST_DATA=1 顶不动本机库与沙箱库(一个环境变量不许打开全部保护)',
         scopeMod.legacyScope(L, { LL_TEST_DATA: '1' }) === 'live'
         && scopeMod.legacyScope(S, { LL_TEST_DATA: '1' }) === 'live')
+      /* 🔴 06h 裁 #37:这一条原来把「环境变量说了算」写成了**预期**
+         (`scopeOf(本机库, {RAILWAY_ENVIRONMENT}) === 'production'`)——
+         和上面 ㋙C③ 那句「不看环境变量」正好相反。**同一个文件里两条判据互相打架**,
+         而说话那条因为没喂参数永远绿,所以一直没人发现。
+         改成现在的口径:**环境变量只在路径判不出(unknown)时说了算**。 */
       check('㋙C③c 细分名分得出是哪个库(06a:三个库不许都叫 live)',
         scopeMod.scopeOf(L, {}) === 'local' && scopeMod.scopeOf(S, {}) === 'sandbox'
-        && scopeMod.scopeOf(C, {}) === 'ci' && scopeMod.scopeOf(L, { RAILWAY_ENVIRONMENT: 'x' }) === 'production')
+        && scopeMod.scopeOf(C, {}) === 'ci')
+      check('㋙C③c2 环境变量**只在未知路径上**说了算:未知路径 + RAILWAY_ENVIRONMENT → production',
+        scopeMod.scopeOf('/x/nowhere/at/all', { RAILWAY_ENVIRONMENT: 'x' }) === 'production',
+        `现测 ${scopeMod.scopeOf('/x/nowhere/at/all', { RAILWAY_ENVIRONMENT: 'x' })}`)
+      check('㋙C③c3 🔴 认库不认变量:本机库路径 + RAILWAY_ENVIRONMENT **仍是 local**(不许被环境变量顶掉)',
+        scopeMod.scopeOf(L, { RAILWAY_ENVIRONMENT: 'x' }) === 'local'
+        && scopeMod.scopeOf(C, { RAILWAY_ENVIRONMENT: 'x' }) === 'ci',
+        `现测 本机=${scopeMod.scopeOf(L, { RAILWAY_ENVIRONMENT: 'x' })} CI=${scopeMod.scopeOf(C, { RAILWAY_ENVIRONMENT: 'x' })}`)
       check('㋙C③d 护栏**认库不认名**:服务自称 test 但库路径不是回归临时库 → 仍然拒绝',
         readFileSync(join(ROOT42, 'apps/api/test-guard.mjs'), 'utf8').includes('isCiDataDir'))
       check('㋙A wiring 两端不再各写一份爽约/处置定金的显示条件(判据只在状态机)',

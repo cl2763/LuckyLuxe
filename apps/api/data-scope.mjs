@@ -13,7 +13,8 @@
  * ③ 只要谁在店主那台服务上设了 `LL_TEST_DATA=1`,那道门就开了 —— 一个环境变量顶掉了全部保护。
  *
  * 所以这里给两样东西:
- * · `scopeOf(dataDir)` → 细分名字:`ci` / `sandbox` / `local` / `production`(按路径判,不看环境变量);
+ * · `scopeOf(dataDir)` → 细分名字:`ci` / `sandbox` / `local` / `production`
+ *   (**路径优先**:路径判得出就用路径的结论;只有路径判不出时才看环境变量 —— 06h 裁 #37);
  * · `isCiDataDir(dir)` → 只有回归临时库那一种目录才是真的可写测试库。
  *   `LL_TEST_DATA=1` 仍然保留(有人手工建临时库跑),但**它只能把 ci 认出来,不能把 local/sandbox 变成可写**。
  */
@@ -27,10 +28,17 @@ export function isCiDataDir(dataDir) {
 /** 细分名字 —— 报数、护栏、预检都用这一个出口(一件事一处真相) */
 export function scopeOf(dataDir, env = process.env) {
   const dir = resolve(String(dataDir || ''))
-  if (env.NODE_ENV === 'production' || env.RAILWAY_ENVIRONMENT) return 'production'
+  /* 🔴 06h 裁 #37:**路径判据在前,环境变量在后**。
+     上一版把环境变量排在第一行 —— 跟本文件抬头那句「按库文件的绝对路径判,不按环境变量的一句话」
+     正好相反。现测后果:谁的 shell 里常设着 `NODE_ENV=production`(店主那台就是),
+     回归临时库 `/tmp/ll-ci-data.XXXX` 会被判成 `production`,护栏拒跑,**整轮回归起不来**。
+     方向是朝安全那边失败(拒绝,不是放行),所以不是安全洞,是**口径自相矛盾**。
+     现在:路径判得出 ci / sandbox / local 就**用路径的结论**;只有路径判不出(unknown)才看环境变量 ——
+     真生产在 Railway 上路径本来就是 unknown,那一支保留是对的,只是不该排在前面。 */
   if (isCiDataDir(dir)) return 'ci'
   if (/[/\\]sandbox-data$/.test(dir)) return 'sandbox'
   if (/[/\\]local-data$/.test(dir)) return 'local'
+  if (env.NODE_ENV === 'production' || env.RAILWAY_ENVIRONMENT) return 'production'
   return 'unknown'
 }
 
