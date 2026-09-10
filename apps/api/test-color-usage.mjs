@@ -9,6 +9,7 @@
  * 判据都从**令牌文件现读色值**再算比值 —— 不抄一份色值进判据(一件事一处真相)。
  */
 import { readFileSync } from 'node:fs'
+import { execFileSync } from 'node:child_process'
 import { join } from 'node:path'
 import { fileURLToPath } from 'node:url'
 
@@ -228,13 +229,30 @@ for (const f of SURFACE) {
   GOLD_PAT.lastIndex = 0
   src.split('\n').forEach((ln, i) => {
     const m = ln.match(GOLD_PAT)
-    if (m) for (const one of m) goldHits.push({ at: `${f}:${i + 1}`, hit: one, f })
+    if (m) for (const one of m) goldHits.push({ at: `${f}:${i + 1}`, hit: one, f, line: ln.trim() })
   })
 }
+const GOLD_CAP0 = 185   /* 06g 棘轮初值(实测);**只许降** —— 提在这里是因为下面做差要先看它 */
 const goldLeft = goldHits.filter((h) => !GOLD_OK.some(([g]) => h.at.startsWith(g)))
-const GOLD_CAP = 185   /* 06g 棘轮初值(实测,已含本批降下来的那一截)· **只许降**;降了就把这个数改小,不许改大 */
+/* 🔴 「超出棘轮」必须**点名到底是哪一处新加的**,不能只报一个总数。
+   刀 GG 现测:头一版把命中列表的**末尾四条**标成「最近新增的」——那只是扫描顺序的尾巴,
+   跟新增毫无关系,等于报错了地方(「报得出是哪一处」是造病的验收条件之一)。
+   现在拿 HEAD 里那一版同一个文件做差:**working tree 里有、HEAD 里没有**的那一行才是新增的。 */
+const newGoldHits = (() => {
+  if (goldLeft.length <= GOLD_CAP0) return []
+  const out = []
+  for (const h of goldLeft) {
+    let head = ''
+    try { head = execFileSync('git', ['show', `HEAD:${h.f}`], { encoding: 'utf8', cwd: ROOT }) } catch { continue }
+    if (!head.split('\n').some((ln) => ln.includes(h.line))) out.push(h)
+  }
+  return out
+})()
+const GOLD_CAP = GOLD_CAP0   /* 06g 棘轮初值(实测,已含本批降下来的那一截)· **只许降**;降了就把这个数改小,不许改大 */
 check(`⑤d J-40 锚值:三个被淘汰的金(#c8a47e / #9b7655 / #b5885d,含 rgb()/rgba() 同色写法)全仓 ${goldLeft.length} 处 ≤ 棘轮 ${GOLD_CAP}(只许降)`,
-  goldLeft.length <= GOLD_CAP, `${goldLeft.length} > ${GOLD_CAP};最近新增的看这几处:${goldLeft.slice(-4).map((h) => `${h.at} ${h.hit}`).join(' || ')}`)
+  goldLeft.length <= GOLD_CAP, `${goldLeft.length} > ${GOLD_CAP};**HEAD 里没有、这次新加的**:${
+    (newGoldHits.length ? newGoldHits : goldLeft.slice(-3)).map((h) => `${h.at} ${h.hit}`).join(' || ')
+  }${newGoldHits.length ? '' : '(做不出差,退回列末尾三条,仅供定位)'}`)
 check(`⑤e 白名单只许 ${GOLD_OK.length} 条(逐条写理由;21 个 SVG 图标是**待裁**不是永久豁免,不许塞进来充数)`,
   GOLD_OK.length === 0, String(GOLD_OK.length))
 /* 反向守:棘轮不是摆设 —— 现测条数必须真的大于 0,否则「≤ 195」这句话在空集上也成立 */
