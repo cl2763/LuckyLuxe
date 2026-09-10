@@ -1,4 +1,4 @@
-@import "../styles/tokens.wxss";
+@import "../styles/tokens-component.wxss";
 /* 裁 #25 之三(店主 05x §二):**tabbar 不在页面 class 的覆盖范围内** ——
    它是自定义组件,自己有一套样式作用域。08截图/01 里正文全深了、这一条还是白的,
    店主一眼就看见。改法与页面一样:读令牌,不写字面色;档位由组件自己挂到根节点上

@@ -88,6 +88,24 @@ for (const f of FILES) {
 check(`③ 规矩乙:--done / --next 零处当字色(浅档 --done 压白 ${ratio(tok(LIGHT, 'done'), tok(LIGHT, 'card'))}:1)`,
   blockOnly.length === 0, blockOnly.join(' · '))
 
+/* ═══ ③b 组件那份令牌是 tokens.wxss 的镜像,不许两处各写一套 ═══
+   (06e 现测:自定义组件 wxss 不许出现标签名选择器,所以给组件拆了一份只含 class 的;
+    值必须逐字相同 —— 否则就是「一件事两处真相」,而令牌刀只比 tokens.wxss 那一份。) */
+const TW = read('miniprogram/styles/tokens.wxss')
+const TC = read('miniprogram/styles/tokens-component.wxss')
+const declsOf = (src, head) => {
+  const m = src.match(new RegExp(`^${head}\\{([^}]*)\\}`, 'm'))
+  return m ? m[1].split(';').map((x) => x.trim()).filter((x) => x.startsWith('--')).sort().join(';') : ''
+}
+for (const [a, b, label] of [['page,\\.theme-root', '\\.theme-root', '基线(浅)'],
+  ['\\.theme-dark', '\\.theme-dark', '站内深色'], ['\\.theme-light', '\\.theme-light', '站内浅色']]) {
+  const x = declsOf(TW, a); const y = declsOf(TC, b)
+  check(`③b 组件令牌镜像一致:${label}(${x.split(';').length} 条)`, Boolean(x) && x === y,
+    x === y ? '' : `tokens.wxss 与 tokens-component.wxss 对不上`)
+}
+check('③c 组件那份**零标签选择器**(component wxss 不许有,现测开发者工具会告警)',
+  !/^\s*page[,{\s]/m.test(TC), (TC.match(/^\s*page[,{\s].*/m) || [''])[0].slice(0, 60))
+
 /* ═══ ④ 覆盖面自证:扫描面别缩水(判据的覆盖面本身要有判据)═══ */
 const totalLines = FILES.reduce((s2, f) => s2 + read(f).split('\n').length, 0)
 check('④ 扫描面自证:四个文件行数合计 ≥ 8000(文件被裁或路径写错立刻红)', totalLines >= 8000, String(totalLines))

@@ -1,0 +1,28 @@
+/* 组件专用令牌(06e 现测出来的):自定义组件的 wxss **不许出现标签名选择器** ——
+   我给两条 tabbar `@import` 了 `styles/tokens.wxss`,而那份里有 `page,.theme-root{...}`,
+   开发者工具当场告警「Some selectors are not allowed in component wxss…(tag name selectors)」。
+   `.theme-root` 那一半是生效的(tabbar 的底色量出来一直对),但**告警是真的**,而且以后可能真被拒。
+   所以拆一份**只含 class 选择器**的给组件用;**值从 `tokens.wxss` 逐字搬,不另起一套**
+   (`tools/design-token-diff.mjs` 那把刀比的是 tokens.wxss,这份是它的镜像,靠下面这条判据锁住)。 */
+.theme-root{--paper:#faf8f3;--ink:#241f1a;--sub:#6f6055;--line:#e3e0d6;--card:#fff;--wall:#f1eee6;
+--acc:#0e6e62;--accd:#0a5a50;--brand:#b09468;--brandd:#8a6f45;
+--hero:#2a2521;--hero2:#3a332c;--heroink:#f5efe3;--herosub:#bfb4a2;--herogold:#d9b97e;--herogrid:rgba(245,239,227,.12);--herolive:#6fd0a0;
+--good:#26794c;--goodbg:#e6f3ea;--bad:#b3413a;--badbg:#f7e7e5;--flat:#6f6255;--flatbg:#efeae2;
+--tagm:#8a5a00;--tagmbg:#faf3e3;--tagw:#274f8f;--tagwbg:#eef2fa;
+--done:#cdbfa3;--doing:#d9b97e;--next:#6f6255}
+@media (prefers-color-scheme: dark){.theme-root{--paper:#1a1512;--ink:#f0e7da;--sub:#bcae9c;--line:#3a2f27;--card:#2a221c;--wall:#221c17;
+--acc:#4cc0b0;--accd:#63d2c3;--brand:#d3b483;--brandd:#e2c79c;
+--hero:#15130f;--hero2:#241d16;--heroink:#f5efe3;--herosub:#b5a794;--herogold:#e2c48d;--herogrid:rgba(245,239,227,.10);--herolive:#6fd0a0;
+--good:#6fd0a0;--goodbg:#1e2c22;--bad:#e5867e;--badbg:#33211d;--flat:#a99b8a;--flatbg:#2b241e;
+--tagm:#e0b45f;--tagmbg:#2b2618;--tagw:#8fb0e8;--tagwbg:#1d2434;--done:#7a6c56;--doing:#e2c48d;--next:#7a6f62}}
+.theme-dark{--paper:#1a1512;--ink:#f0e7da;--sub:#bcae9c;--line:#3a2f27;--card:#2a221c;--wall:#221c17;
+--acc:#4cc0b0;--accd:#63d2c3;--brand:#d3b483;--brandd:#e2c79c;
+--hero:#15130f;--hero2:#241d16;--heroink:#f5efe3;--herosub:#b5a794;--herogold:#e2c48d;--herogrid:rgba(245,239,227,.10);--herolive:#6fd0a0;
+--good:#6fd0a0;--goodbg:#1e2c22;--bad:#e5867e;--badbg:#33211d;--flat:#a99b8a;--flatbg:#2b241e;
+--tagm:#e0b45f;--tagmbg:#2b2618;--tagw:#8fb0e8;--tagwbg:#1d2434;--done:#7a6c56;--doing:#e2c48d;--next:#7a6f62}
+.theme-light{--paper:#faf8f3;--ink:#241f1a;--sub:#6f6055;--line:#e3e0d6;--card:#fff;--wall:#f1eee6;
+--acc:#0e6e62;--accd:#0a5a50;--brand:#b09468;--brandd:#8a6f45;
+--hero:#2a2521;--hero2:#3a332c;--heroink:#f5efe3;--herosub:#bfb4a2;--herogold:#d9b97e;--herogrid:rgba(245,239,227,.12);--herolive:#6fd0a0;
+--good:#26794c;--goodbg:#e6f3ea;--bad:#b3413a;--badbg:#f7e7e5;--flat:#6f6255;--flatbg:#efeae2;
+--tagm:#8a5a00;--tagmbg:#faf3e3;--tagw:#274f8f;--tagwbg:#eef2fa;
+--done:#cdbfa3;--doing:#d9b97e;--next:#6f6255}
