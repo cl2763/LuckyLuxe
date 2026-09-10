@@ -330,14 +330,22 @@ if (TARGET === 'pages') {
        所以夹具照它自己的格式造一件真服务进去,再由页面正常渲染。 */
     if (process.env.CS_CART === '1') {
       let svc = null
+      let tech = null
       try {
         const r2 = await fetch(`${BASE}/services`, { headers: { 'x-tenant-id': tenant } }).then((x) => x.json())
         const arr = Array.isArray(r2) ? r2 : (r2.services || [])
         svc = arr.find((x) => Number(x.priceCents) > 0) || arr[0]
+        const r3 = await fetch(`${BASE}/technicians`, { headers: { 'x-tenant-id': tenant } }).then((x) => x.json())
+        const ts = Array.isArray(r3) ? r3 : (r3.technicians || [])
+        tech = ts.find((x) => x.is_active) || ts[0]
       } catch { svc = null }
-      if (!svc) { stepMiss.push('购物车有货:取不到本店服务,夹具没造成 —— **没扫成**,不是绿') } else {
+      /* 🔴 夜8 现测:头一版把 `technician` 塞成 null —— 而 `renderCartItem` 里有
+         `item.technician.name`,于是**整个购物车渲染当场抛错**,连带那条带「去结算」的 summary-bar
+         也不出现;页面停在上一屏,而我还以为「结算入口点不到」。
+         夹具造得不完整,表现出来却像是「产品少了个按钮」——**夹具必须造成真数据的样子**。 */
+      if (!svc || !tech) { stepMiss.push('购物车有货:取不到本店服务或技师,夹具没造成 —— **没扫成**,不是绿') } else {
         const day = new Date(Date.now() + 86400000).toISOString().slice(0, 10)
-        const item = { id: 'cart_fixture_06i', service: svc, technician: null, date: day, time: '14:00',
+        const item = { id: 'cart_fixture_06i', service: svc, technician: tech, date: day, time: '14:00',
           addOns: [], referenceImages: [], remark: '', referenceAnalysis: null,
           servicePriceCents: Number(svc.priceCents) || 0, depositCents: Number(svc.depositCents) || 0, selected: true }
         await send('Page.addScriptToEvaluateOnNewDocument', { source:
