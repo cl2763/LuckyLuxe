@@ -67,7 +67,8 @@ const TARGET = (process.env.CS_TARGET || 'admin').toLowerCase()
    · CS_COVER=名字|…         **该扫的全清单**;报告里用它算「扫到 X / 该扫 Y / 没扫哪几页」。 */
 const AUTH_EMAIL = process.env.CS_AUTH || ''
 const STEPS = (process.env.CS_STEPS || '').split('|').map((x) => x.trim()).filter(Boolean)
-  .map((x) => { const i = x.indexOf(':'); return { name: x.slice(0, i), sel: x.slice(i + 1) } })
+  .map((x) => { const i = x.indexOf(':'); const rest = x.slice(i + 1); const h = rest.lastIndexOf('#')
+    return { name: x.slice(0, i), sel: h > 0 ? rest.slice(0, h) : rest, want: h > 0 ? rest.slice(h + 1) : '' } })
 const URLS = (process.env.CS_URLS || '').split('|').map((x) => x.trim()).filter(Boolean)
   .map((x) => { const i = x.indexOf(':'); return { name: x.slice(0, i), path: x.slice(i + 1) } })
 const COVER = (process.env.CS_COVER || '').split('|').map((x) => x.trim()).filter(Boolean)
@@ -427,6 +428,14 @@ if (TARGET === 'pages') {
       }
       if (!hit) { stepMiss.push(`${st.name}(${mode}):卡在「${where}」这一步点不到 —— **没扫成**,不是绿`); continue }
       await sleep(2200)
+      /* 🔴 **到没到那一页,要自证**。步骤名后面用 `#期望文字` 声明这一页该有的字,
+         查不到就按「没扫成」记 —— 不许拿另一页冒充。
+         这条是现测逼出来的:我头一版点 `[data-view="cart"]` 之后其实还停在首页,
+         却把它记成了「购物车有货」——**名不副实比没扫更坏**(和空购物车那次同族)。 */
+      if (st.want) {
+        const seen = await ev(`((document.body && document.body.innerText) || '').indexOf(${JSON.stringify(st.want)}) >= 0`)
+        if (!seen) { stepMiss.push(`${st.name}(${mode}):点完之后页面上找不到「${st.want}」—— 没到那一页,**没扫成**,不是绿`); continue }
+      }
       const res = await ev(SWEEP)
       scanned += res.scanned; grad += res.gradients || 0
       for (const b of res.bad) bad.push({ 页: `顾客端·${st.name}`, 标签: '(登录态)', 档: mode, ...b })
