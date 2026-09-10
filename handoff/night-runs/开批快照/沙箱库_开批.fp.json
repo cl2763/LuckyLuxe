@@ -2113,10 +2113,10 @@
       },
       "ai_usage": {
         "rows": 2,
-        "sha": "079ddb67fa623d6f",
+        "sha": "c5cfe78543abdef6",
         "lines": [
           "c86aa0aa612d",
-          "4356ae81d558"
+          "d8ad9eff8f45"
         ]
       },
       "attendance_records": {
@@ -14242,8 +14242,8 @@
         ]
       },
       "notification_logs": {
-        "rows": 183,
-        "sha": "012b24df49551529",
+        "rows": 192,
+        "sha": "030a05213565abe8",
         "lines": [
           "fd5f27533a59",
           "0331cf79f84f",
@@ -14427,7 +14427,16 @@
           "a25c24ffb847",
           "ab4477da1d4d",
           "866374b29ae5",
-          "4f93d3d56ea2"
+          "4f93d3d56ea2",
+          "8e8b551e3707",
+          "80229b65e965",
+          "8b1d928ef300",
+          "804bbf1bd0f8",
+          "acc2eed73de5",
+          "d60c016720af",
+          "5a6266718210",
+          "f5f530fde335",
+          "418c18cdff78"
         ]
       },
       "notification_rules": {
@@ -14439,8 +14448,8 @@
         ]
       },
       "notify_scan_marks": {
-        "rows": 11,
-        "sha": "9c9152eeb8c45d75",
+        "rows": 12,
+        "sha": "ffef40de136b3651",
         "lines": [
           "a6571064b518",
           "7092b9e139e1",
@@ -14452,7 +14461,8 @@
           "3b6a1f8b7559",
           "3ee8060d65ab",
           "bd23186a264b",
-          "6f0452fac618"
+          "6f0452fac618",
+          "c415fe3f5361"
         ]
       },
       "payments": {
@@ -14834,8 +14844,8 @@
         ]
       },
       "reminder_tasks": {
-        "rows": 623,
-        "sha": "3eadaf61df85713f",
+        "rows": 641,
+        "sha": "a5f2550c2185638c",
         "lines": [
           "d2c655b6239b",
           "3dda1a127038",
@@ -15146,6 +15156,24 @@
           "c6461b808d1e",
           "243f3f24bc50",
           "597d454bce8f",
+          "3fa206146035",
+          "348131f1b078",
+          "93bcbc6cfbf5",
+          "db19af69be83",
+          "8a8a2b484d27",
+          "fe36ddf0c681",
+          "c8143b46d151",
+          "93baf3837dcf",
+          "5b5687908170",
+          "3c214bfce395",
+          "0ab47751e20f",
+          "cfd0589bf207",
+          "3fcb299116c5",
+          "41bd984055d1",
+          "47e5033d7eaf",
+          "4b0d3b7e4c62",
+          "35ae66fec2e7",
+          "78b6d4f48468",
           "debfa8d4d9fb",
           "db6fbdf18cbe",
           "27e5118951a6",
@@ -38052,8 +38080,8 @@
         ]
       },
       "notify_scan_marks": {
-        "rows": 11,
-        "sha": "3f33fa4afbe3a598",
+        "rows": 12,
+        "sha": "b6461b7d8508d5ca",
         "lines": [
           "2b98a4bea08c",
           "0831b1b5dc9e",
@@ -38065,7 +38093,8 @@
           "54ed0231f9f2",
           "26caa9c88aab",
           "df51903cf149",
-          "cdafa0335271"
+          "cdafa0335271",
+          "65b7a1ef87c8"
         ]
       },
       "payments": {
@@ -38245,10 +38274,10 @@
       },
       "tenant_settings": {
         "rows": 6,
-        "sha": "2394949e35b232c2",
+        "sha": "0a502fd6235e51a9",
         "lines": [
           "2a49ca2cf482",
-          "1c4a050d1f5a",
+          "f1e24bfae7c9",
           "26376f6bc42b",
           "9a6dfb3c5eca",
           "84e22a6d12b8",
@@ -38368,8 +38397,8 @@
         ]
       },
       "notify_scan_marks": {
-        "rows": 11,
-        "sha": "4996b93d9339180f",
+        "rows": 12,
+        "sha": "49ad31a05da06dd9",
         "lines": [
           "a494f06d24be",
           "fbf348a5a2d4",
@@ -38381,7 +38410,8 @@
           "fdb29584263e",
           "814f2e41af6b",
           "42d45c79daa1",
-          "264e2888bd9f"
+          "264e2888bd9f",
+          "e3b400464325"
         ]
       },
       "payments": {
@@ -38608,8 +38638,8 @@
         ]
       },
       "notify_scan_marks": {
-        "rows": 11,
-        "sha": "121783dd9f68a229",
+        "rows": 12,
+        "sha": "933f3a6f514f781b",
         "lines": [
           "69bf9c40d540",
           "868df56614f0",
@@ -38621,7 +38651,8 @@
           "fdbdc841b1fb",
           "87ec64182a80",
           "393b4052f97e",
-          "5c7e2162bbaf"
+          "5c7e2162bbaf",
+          "f12acaac61ee"
         ]
       },
       "payments": {
@@ -38864,8 +38895,8 @@
         ]
       },
       "notify_scan_marks": {
-        "rows": 11,
-        "sha": "86c228f3d13c6e76",
+        "rows": 12,
+        "sha": "9a59cb2887411ed2",
         "lines": [
           "3be5f4dcc01b",
           "820d923b9555",
@@ -38877,7 +38908,8 @@
           "5a3661118d66",
           "e43bb8504915",
           "aa90d2f30767",
-          "4eabac8c5794"
+          "4eabac8c5794",
+          "6ff7d4ffcd8b"
         ]
       },
       "payments": {
@@ -39128,8 +39160,8 @@
         ]
       },
       "notify_scan_marks": {
-        "rows": 11,
-        "sha": "77512e420c2bdd92",
+        "rows": 12,
+        "sha": "7799130725b76848",
         "lines": [
           "4d7eacd1a047",
           "61dd5517bc0f",
@@ -39141,7 +39173,8 @@
           "a58cbcff44a8",
           "ece185eca549",
           "d575fc49e13c",
-          "93fcbee2536d"
+          "93fcbee2536d",
+          "8f11687fb716"
         ]
       },
       "payments": {
@@ -39392,8 +39425,8 @@
         ]
       },
       "notify_scan_marks": {
-        "rows": 11,
-        "sha": "9b987143e8acf963",
+        "rows": 12,
+        "sha": "5d9f76147d009821",
         "lines": [
           "4af6c96e7fc5",
           "17f719e6e66a",
@@ -39405,7 +39438,8 @@
           "1d0b3d71f084",
           "a0da9604a3bd",
           "a9b54e76ed5e",
-          "b6b57059659e"
+          "b6b57059659e",
+          "45753b166ded"
         ]
       },
       "payments": {
@@ -39956,8 +39990,8 @@
         ]
       },
       "notify_scan_marks": {
-        "rows": 11,
-        "sha": "46d5d02b27df9f64",
+        "rows": 12,
+        "sha": "f3a0b5149576b31b",
         "lines": [
           "5cc829fe83ee",
           "86794516dd5e",
@@ -39969,7 +40003,8 @@
           "03c63c50e4f7",
           "f98496424a5d",
           "fecabda4dea4",
-          "b4d31e9c35f1"
+          "b4d31e9c35f1",
+          "1df9100b1a22"
         ]
       },
       "payments": {
@@ -40450,8 +40485,8 @@
         ]
       },
       "notify_scan_marks": {
-        "rows": 11,
-        "sha": "f7ee0dea0b18eab5",
+        "rows": 12,
+        "sha": "874c734531967462",
         "lines": [
           "c982196619db",
           "13335a6850ac",
@@ -40463,7 +40498,8 @@
           "31780d29b167",
           "8eb926650760",
           "13546aeff84b",
-          "2d290e363fec"
+          "2d290e363fec",
+          "e470f694849b"
         ]
       },
       "payments": {
@@ -40559,8 +40595,8 @@
         ]
       },
       "notify_scan_marks": {
-        "rows": 11,
-        "sha": "52a9d89877ca6389",
+        "rows": 12,
+        "sha": "2e6fb111c8be524a",
         "lines": [
           "b7d61f448330",
           "7c9cf0455ca4",
@@ -40572,7 +40608,8 @@
           "2fc1755d7132",
           "06c52e20d78f",
           "f5812c4e2ed0",
-          "bb3d179403cf"
+          "bb3d179403cf",
+          "748a25fd071e"
         ]
       },
       "payments": {
@@ -40675,8 +40712,8 @@
         ]
       },
       "notify_scan_marks": {
-        "rows": 11,
-        "sha": "8fb4ad2ea088bf75",
+        "rows": 12,
+        "sha": "b8a0fb0249c60f98",
         "lines": [
           "cc1adcff2c5c",
           "cdd0aeeb51f0",
@@ -40688,7 +40725,8 @@
           "03bab3afedbd",
           "01a498f7a71a",
           "44afa32ce3f9",
-          "1e177257326d"
+          "1e177257326d",
+          "821481c3efa6"
         ]
       },
       "payments": {
@@ -40956,8 +40994,8 @@
         ]
       },
       "notify_scan_marks": {
-        "rows": 11,
-        "sha": "262f563b23476691",
+        "rows": 12,
+        "sha": "5ee4642e169497d3",
         "lines": [
           "745359b4543b",
           "c4bad7e3ccd8",
@@ -40969,7 +41007,8 @@
           "bc8100505495",
           "6391c827407b",
           "f998ea59f392",
-          "9ab876e21a33"
+          "9ab876e21a33",
+          "76d4454bb616"
         ]
       },
       "payments": {
@@ -41157,8 +41196,8 @@
         ]
       },
       "notify_scan_marks": {
-        "rows": 11,
-        "sha": "318dede272b79b65",
+        "rows": 12,
+        "sha": "19f3e74dce832437",
         "lines": [
           "d424341d1ea8",
           "e572e194e030",
@@ -41170,7 +41209,8 @@
           "4f23effe7b60",
           "4b3c9b3ddc0d",
           "17855bb26f86",
-          "ed6cd20d3399"
+          "ed6cd20d3399",
+          "6d5bdb7d53ca"
         ]
       },
       "service_categories": {
@@ -41266,8 +41306,8 @@
         ]
       },
       "notify_scan_marks": {
-        "rows": 11,
-        "sha": "22c692a8203a80d7",
+        "rows": 12,
+        "sha": "4519e32c8be3dd17",
         "lines": [
           "61ee8f60a1d3",
           "f403dddf5d40",
@@ -41279,7 +41319,8 @@
           "ec282d7a7521",
           "d42504bd8d25",
           "4cbff8d188a7",
-          "9d24bf733e6b"
+          "9d24bf733e6b",
+          "e3de243fb1e9"
         ]
       },
       "payments": {
@@ -41547,8 +41588,8 @@
         ]
       },
       "notify_scan_marks": {
-        "rows": 11,
-        "sha": "43e9f602ee50f6cb",
+        "rows": 12,
+        "sha": "31725934dcfae2ad",
         "lines": [
           "1c3764b7871e",
           "7daa78c3841b",
@@ -41560,7 +41601,8 @@
           "fe9a8dc86957",
           "f7430ba0bb0e",
           "ebc740bf2fc1",
-          "38bfa7ef19a2"
+          "38bfa7ef19a2",
+          "2ee26e0352bc"
         ]
       },
       "payments": {
@@ -41760,8 +41802,8 @@
         ]
       },
       "notify_scan_marks": {
-        "rows": 11,
-        "sha": "597530c2b05ae1d1",
+        "rows": 12,
+        "sha": "9c0787aeaaa6073d",
         "lines": [
           "4cbb6a6770db",
           "ffffb7b3767c",
@@ -41773,7 +41815,8 @@
           "3e623c0a2ca0",
           "32f7d45f2678",
           "563ce0de2a3e",
-          "1e217bd94dbe"
+          "1e217bd94dbe",
+          "1abb3e17d3e5"
         ]
       },
       "payments": {
@@ -41945,8 +41988,8 @@
         ]
       },
       "notify_scan_marks": {
-        "rows": 11,
-        "sha": "521b3dfa8d913d84",
+        "rows": 12,
+        "sha": "f128dfcb5aa03164",
         "lines": [
           "2c1f80043431",
           "95ad06f85e7d",
@@ -41958,7 +42001,8 @@
           "13450bedd61e",
           "4dc1279b1f73",
           "adf830102275",
-          "4726e5ea03fb"
+          "4726e5ea03fb",
+          "48b3283216f1"
         ]
       },
       "payments": {
@@ -42051,8 +42095,8 @@
         ]
       },
       "notify_scan_marks": {
-        "rows": 11,
-        "sha": "5cd9f914751d69de",
+        "rows": 12,
+        "sha": "59a66037de29180f",
         "lines": [
           "ea6a2ee59dd8",
           "d8f232dc6e59",
@@ -42064,7 +42108,8 @@
           "098cc58d7a5a",
           "50060961582d",
           "322fdf3b43c3",
-          "defadd3f9cbb"
+          "defadd3f9cbb",
+          "9ea5dbff49b0"
         ]
       },
       "platform_ops_log": {
@@ -42154,8 +42199,8 @@
         ]
       },
       "notify_scan_marks": {
-        "rows": 11,
-        "sha": "32c5b0dd8ba317f7",
+        "rows": 12,
+        "sha": "fc98c45ac6e73f03",
         "lines": [
           "5502dcbd4e0f",
           "540e194e56c9",
@@ -42167,7 +42212,8 @@
           "a0800e5708f7",
           "c08ba35e7846",
           "45f887ec4c85",
-          "5a3490af2616"
+          "5a3490af2616",
+          "a8c3640f19eb"
         ]
       },
       "payments": {
@@ -42288,8 +42334,8 @@
         ]
       },
       "notify_scan_marks": {
-        "rows": 11,
-        "sha": "df9a6acd1190704a",
+        "rows": 12,
+        "sha": "fc4c12f0a07ef1e4",
         "lines": [
           "2407994c5ad2",
           "5aaa6f233048",
@@ -42301,7 +42347,8 @@
           "f0e8ae9317c4",
           "7c5828cfaa60",
           "e1f1790ee535",
-          "c1562316d6cb"
+          "c1562316d6cb",
+          "06b20c93abb7"
         ]
       },
       "payments": {
@@ -42645,8 +42692,8 @@
         ]
       },
       "notify_scan_marks": {
-        "rows": 11,
-        "sha": "2c1c730f8ac7f7d8",
+        "rows": 12,
+        "sha": "e22ea42ef2175605",
         "lines": [
           "008571988366",
           "2ffe5864a50e",
@@ -42658,7 +42705,8 @@
           "36a4d18de7cb",
           "3b67a8dff4d3",
           "77457483aaaf",
-          "81b3fd5fdccd"
+          "81b3fd5fdccd",
+          "edee507e07dd"
         ]
       },
       "payments": {
@@ -42779,8 +42827,8 @@
         ]
       },
       "notify_scan_marks": {
-        "rows": 11,
-        "sha": "7305591fcda5040c",
+        "rows": 12,
+        "sha": "f167f8fb39497ae4",
         "lines": [
           "7948ca698772",
           "22ea23b0398d",
@@ -42792,7 +42840,8 @@
           "1d174b908d78",
           "74004eaade75",
           "8aed9cc89a63",
-          "03eefa0483db"
+          "03eefa0483db",
+          "007b5627d242"
         ]
       },
       "payments": {
@@ -42897,8 +42946,8 @@
         ]
       },
       "notify_scan_marks": {
-        "rows": 11,
-        "sha": "6144b3ea3fdc3c56",
+        "rows": 12,
+        "sha": "5b027cee5529304b",
         "lines": [
           "a585b3e0f149",
           "b199076a38bb",
@@ -42910,7 +42959,8 @@
           "b56bcb6a9812",
           "f10b28ad80a1",
           "005b3e79c140",
-          "72d87faae966"
+          "72d87faae966",
+          "e5b4cb75d9ce"
         ]
       },
       "payments": {
@@ -43066,8 +43116,8 @@
         ]
       },
       "notify_scan_marks": {
-        "rows": 11,
-        "sha": "60bb63f8c1745db9",
+        "rows": 12,
+        "sha": "a3ed49228cb9cdff",
         "lines": [
           "15decc3fbcdb",
           "633b8bdd3173",
@@ -43079,7 +43129,8 @@
           "af24dfb94521",
           "d2cbea3b9236",
           "ae0d2ea6b64a",
-          "0f3e02a48c63"
+          "0f3e02a48c63",
+          "8c84ddfb1ddd"
         ]
       },
       "service_categories": {
@@ -43272,8 +43323,8 @@
         ]
       },
       "notify_scan_marks": {
-        "rows": 11,
-        "sha": "94f8efc033faf5f2",
+        "rows": 12,
+        "sha": "71d0cd559f5c28c3",
         "lines": [
           "70cf9ce2a7d2",
           "8155f09126c2",
@@ -43285,7 +43336,8 @@
           "eea826627979",
           "34f8c436c17f",
           "0ce6ce450af5",
-          "a4f94494156c"
+          "a4f94494156c",
+          "c447e42aa95b"
         ]
       },
       "service_categories": {
@@ -43399,8 +43451,8 @@
         ]
       },
       "notify_scan_marks": {
-        "rows": 11,
-        "sha": "f386fd4772e9c6bb",
+        "rows": 12,
+        "sha": "524ea5df8d69ff46",
         "lines": [
           "0c4c6bc41dff",
           "8ed12401336c",
@@ -43412,7 +43464,8 @@
           "320b6009caa0",
           "113d3451bd13",
           "7011385d9cf1",
-          "10a02c5c40ae"
+          "10a02c5c40ae",
+          "7983b0de5a00"
         ]
       },
       "payments": {
@@ -43725,8 +43778,8 @@
         ]
       },
       "notify_scan_marks": {
-        "rows": 11,
-        "sha": "40ccc56a83c42be6",
+        "rows": 12,
+        "sha": "2c3162b95fe499b6",
         "lines": [
           "a34fd8baae20",
           "047926ed3021",
@@ -43738,7 +43791,8 @@
           "f1a6c7f7fe7a",
           "dfb0ef318ef9",
           "febc66dbb770",
-          "7b5d77cc15f3"
+          "7b5d77cc15f3",
+          "df38f7ac2bea"
         ]
       },
       "payments": {
@@ -43861,8 +43915,8 @@
         ]
       },
       "notify_scan_marks": {
-        "rows": 11,
-        "sha": "5e73e294ddc13475",
+        "rows": 12,
+        "sha": "83271f10fa58d708",
         "lines": [
           "683e801c69cb",
           "d4d342596124",
@@ -43874,7 +43928,8 @@
           "080c2f338e56",
           "0bf0b58bfe87",
           "6b8137657371",
-          "a485bf2a0498"
+          "a485bf2a0498",
+          "82c55739654d"
         ]
       },
       "payments": {
@@ -43997,8 +44052,8 @@
         ]
       },
       "notify_scan_marks": {
-        "rows": 11,
-        "sha": "da4ee6ca5f7ad99d",
+        "rows": 12,
+        "sha": "3eca0dcc5e53adb1",
         "lines": [
           "7a7c92c7b157",
           "e00035dbfeb1",
@@ -44010,7 +44065,8 @@
           "11930c660e99",
           "7df5d692030f",
           "a6cdb9346a65",
-          "db3dc06f3d28"
+          "db3dc06f3d28",
+          "db727a32418a"
         ]
       },
       "payments": {
@@ -44135,8 +44191,8 @@
         ]
       },
       "notify_scan_marks": {
-        "rows": 11,
-        "sha": "c03cea5fe07765f4",
+        "rows": 12,
+        "sha": "79bc786065787057",
         "lines": [
           "cd0d3267b0ab",
           "34ca1553a8aa",
@@ -44148,7 +44204,8 @@
           "fc1c38ce7c57",
           "7d2e6a8341c8",
           "1ea229f3fb70",
-          "4707af5a99cb"
+          "4707af5a99cb",
+          "5f4aa6b55db6"
         ]
       },
       "payments": {
@@ -44271,8 +44328,8 @@
         ]
       },
       "notify_scan_marks": {
-        "rows": 11,
-        "sha": "cf4be18efdc971ab",
+        "rows": 12,
+        "sha": "35960c553bc68333",
         "lines": [
           "18b8acd5460f",
           "ea9510c64d09",
@@ -44284,7 +44341,8 @@
           "a35ad13a00be",
           "c7b00b78ba25",
           "12b7ccb948ff",
-          "64f09769eebf"
+          "64f09769eebf",
+          "d2cc7896882c"
         ]
       },
       "payments": {
@@ -46528,8 +46586,8 @@
         ]
       },
       "notification_logs": {
-        "rows": 72,
-        "sha": "abc99a11c4270d4e",
+        "rows": 80,
+        "sha": "6fdfc43a26f4a52e",
         "lines": [
           "99724758a37c",
           "52b61bd442d3",
@@ -46602,7 +46660,15 @@
           "fe6fdf9fc70c",
           "c90aba8e1c8c",
           "85dc06417567",
-          "118c88f4d16a"
+          "118c88f4d16a",
+          "d471884c8f71",
+          "ea2f81bee4d3",
+          "35e3a2eebcad",
+          "284061a818bf",
+          "d349679caf28",
+          "a1f967116ffc",
+          "562d03d74350",
+          "96c32e40a91d"
         ]
       },
       "notify_scan_marks": {
@@ -46695,7 +46761,7 @@
       },
       "reminder_tasks": {
         "rows": 84,
-        "sha": "b0b95e19611242f3",
+        "sha": "00022eb30513367f",
         "lines": [
           "d83273ed12cf",
           "165b663ebed5",
@@ -46742,20 +46808,20 @@
           "9ddb6e82ddc7",
           "96dfa4c19a6b",
           "067b49086e6c",
-          "312b28812a29",
+          "336830337f1b",
           "28b16e9c0b74",
-          "5d3dc1bc5ba7",
+          "4a6f2736421e",
           "a4c45ee1ad87",
-          "3f3d41f051a6",
-          "d88199c60186",
+          "d02132b22017",
+          "e394986e68bb",
           "c9abd4b9df0c",
           "f3d9741f714c",
-          "2222aff2bef0",
+          "41e60ea98473",
           "1b3dbbe23f8f",
-          "634587442927",
+          "220d55e2836d",
           "08c6454f2f89",
-          "f5b48f940cc2",
-          "2ed18d9f040c",
+          "1114b9d05193",
+          "574ddfc7d824",
           "f1c4c7181171",
           "f83c6efaa18e",
           "ff0559f7626a",
@@ -47815,13 +47881,14 @@
         ]
       },
       "notify_scan_marks": {
-        "rows": 4,
-        "sha": "ee8b5a4705b5fedd",
+        "rows": 5,
+        "sha": "0ee40c5f430d8253",
         "lines": [
           "31098ae94871",
           "8537333bd9f3",
           "b21d39f3edba",
-          "90ae67edc714"
+          "90ae67edc714",
+          "16896ea479db"
         ]
       },
       "service_categories": {
