@@ -274,7 +274,8 @@ export function createScheduleBoard(deps) {
         AND appointment_start >= ? AND appointment_start < ? ORDER BY appointment_start ASC`).all(tenantId, dayStart, dayEnd)
     const st = rows.map((r) => ({ r, s: arrivalStateOf(r) }))
     const nextRow = st.find((x) => x.s === 'pending')?.r || null
-    const nameOf = (id, sql) => { try { return db.prepare(sql).get(id)?.n || '' } catch { return '' } }
+    /* 06i/日1 段3:补租户条件之后要多带一个参数 —— 用**参数**带,不许把租户号拼进 SQL 串 */
+    const nameOf = (sql, ...args) => { try { return db.prepare(sql).get(...args)?.n || '' } catch { return '' } }
     return {
       total: rows.length,
       doing: st.filter((x) => x.s === 'active').length,
@@ -285,9 +286,9 @@ export function createScheduleBoard(deps) {
            北京店 10:00 的单在首页写成「02:00」,多伦多 13:00 的写成「17:00」。
            全仓别处一律走 `localParts()` 转门店时区,只有这一处在裸切字符串。 */
         time: localParts(nextRow.appointment_start).time,
-        customer: nameOf(nextRow.user_id, 'SELECT display_name AS n FROM users WHERE id = ?'),
-        service: nameOf(nextRow.service_id, 'SELECT name_zh AS n FROM services WHERE id = ?'),
-        tech: nameOf(nextRow.technician_id, 'SELECT name AS n FROM technicians WHERE id = ?'),
+        customer: nameOf('SELECT display_name AS n FROM users WHERE id = ? AND tenant_id = ?', nextRow.user_id, tenantId),
+        service: nameOf('SELECT name_zh AS n FROM services WHERE id = ? AND tenant_id = ?', nextRow.service_id, tenantId),
+        tech: nameOf('SELECT name AS n FROM technicians WHERE id = ? AND tenant_id = ?', nextRow.technician_id, tenantId),
       } : null,
     }
   }

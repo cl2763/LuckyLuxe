@@ -245,6 +245,54 @@ check(`④b 反向守:源码里带 DEFAULT 的 ${createWithDefault} 处**必须�
 createWithDefault === alterWithDefault, `CREATE 侧还有 ${createWithDefault - alterWithDefault} 处`)
 console.log(`   [在案] 源码里 DEFAULT 'lucky-luxe' ${stillDefault} 处(全在 ALTER 那一路)· 库里带 DEFAULT 的表 ${famWithDefault} 张`)
 
+/* ══ 07a 裁 #47(日1 段3)· **按 id 查 technicians / stores 必须带租户条件** ══
+   现查:`local-server.mjs` 里这类查询**带**租户条件的有 5 处、**不带**的有 10 处
+   (另加一个子查询)——店主的定性是**「纵深没做满」不是「门开着」**:
+   那些 id 来自本店自己的单,要真漏出去得先有一张挂错店的单,而那正是 D126/D130/D131/D132 治过的。
+   但纵深就是拿来防「哪天真挂错了一张单」的,所以逐处补齐,并立**白名单式**判据:
+   **不带租户条件的必须 0 处**,新写一处当场红并点名 file:line。
+   ⚠️ 判据看代码不看注释;扫描面按**文件**走(全仓 apps/api/*.mjs),不按记忆里的那张清单 ——
+      现测:清单上写的是 10 处,机械扫出来是 **15 处**(local-server 12 + 另外三个模块各 1)。
+      **靠列举被测对象的判据永远漏没列的那几个。** */
+/* ⚠️ 扫描面**限于店主裁定的那两张表**(technicians / stores)。
+   我把它放宽到 users / services 试扫过一次:**56 处**不带租户条件 —— 同一族、但population 大得多,
+   不是这一段 45 分钟能做完的,**顺手改掉才是真的危险**。所以:按裁定的范围收口,
+   users/services 那 56 处**单独登记待排**(见回执 §段3),不在这里悄悄扩面也不悄悄放过。 */
+const TENANT_SCOPED = /FROM\s+(technicians|stores)\s+WHERE\s+id\s*=\s*\?/gi
+/* 白名单:确实不该带租户条件的,**逐条写理由**,条数上棘轮。 */
+const TENANT_OK = [
+  { at: 'apps/api/local-server.mjs', sql: 'SELECT tenant_id FROM stores WHERE id = ?',
+    why: '这一句的**用途就是问「这个门店属于哪一家租户」** —— 给它加 AND tenant_id = ? 等于先要答案再问问题(循环),它是租户判定的**源头**,不是一次跨店取数' },
+]
+
+const tenantLeaks = []
+for (const f of CODE) {
+  /* 刀不许咬自己:本文件里那两条**反向守**就写着一句不带租户条件的样例 ——
+     它是尺子不是产品(同族:guard-scan 那次「刀咬自己两个方向都会说谎」)。 */
+  if (f.endsWith('test-tenant-explicit.mjs')) continue
+  const src = readFileSync(join(ROOT, f), 'utf8')
+    .replace(/\/\*[\s\S]*?\*\//g, (m) => m.replace(/[^\n]/g, ' '))
+  src.split('\n').forEach((ln, i) => {
+    if (/^\s*(\/\/|\*)/.test(ln)) return
+    for (const m of ln.matchAll(TENANT_SCOPED)) {
+      const after = ln.slice(m.index + m[0].length, m.index + m[0].length + 40)
+      if (/AND\s+tenant_id\s*=/i.test(after)) continue
+      if (TENANT_OK.some((w) => f.endsWith(w.at) && ln.includes(w.sql))) continue
+      tenantLeaks.push(`${f}:${i + 1} ${m[0]}`)
+    }
+  })
+}
+check(`⑦ 按 id 查 technicians / stores **必须带租户条件**(店主 07a 裁 #47 的范围):全仓现扫 ${tenantLeaks.length} 处不带的(要 0)`,
+  tenantLeaks.length === 0, tenantLeaks.slice(0, 8).join(' | '))
+check(`⑦b 白名单只许 ${TENANT_OK.length} 条(逐条写了理由;要加先报店主)`, TENANT_OK.length <= 1, String(TENANT_OK.length))
+check('⑦c 🔴 反向守:这把刀确实会咬 —— 一句不带租户条件的写法必须被认出来(否则「0 处」是空转)',
+  /FROM\s+technicians\s+WHERE\s+id\s*=\s*\?/i.test("db.prepare('SELECT * FROM technicians WHERE id = ?').get(x)"))
+check('⑦d 🔴 反向守之二:带了租户条件的**不许**被误咬',
+  !(() => { const ln = "db.prepare('SELECT * FROM technicians WHERE id = ? AND tenant_id = ?').get(x, t)"
+    const re = /FROM\s+(technicians|stores)\s+WHERE\s+id\s*=\s*\?/gi
+    for (const m of ln.matchAll(re)) { if (!/AND\s+tenant_id\s*=/i.test(ln.slice(m.index + m[0].length, m.index + m[0].length + 40))) return true }
+    return false })())
+
 console.log(`\n[默认租户] 源文件 ${CODE.length} · INSERT INTO users ${sites.length} 处 · 漏写 ${missing.length} · 白名单 ${Object.keys(ALLOW).length}`)
 if (fails.length) { console.error(`\n❌ test-tenant-explicit ${fails.length}/${checks} 项未过`); process.exit(1) }
 console.log(`\n✅ test-tenant-explicit 通过 ${checks} 项`)

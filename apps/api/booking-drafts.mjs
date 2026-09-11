@@ -61,7 +61,7 @@ export function createBookingDraftsModule(deps) {
       date: body.date || '',
       time: body.time || ''
     })
-    const technician = db.prepare('SELECT * FROM technicians WHERE id = ?').get(slot.technicianId) || firstQualifiedTechnician(storeId, service.id)
+    const technician = db.prepare('SELECT * FROM technicians WHERE id = ? AND tenant_id = ?').get(slot.technicianId, currentTenantId()) || firstQualifiedTechnician(storeId, service.id)
     if (!technician) throw apiError(404, 'TECHNICIAN_NOT_FOUND', 'No qualified technician is available for this service.')
     const now = iso(new Date())
     const expiresAt = iso(addMinutes(new Date(), HOLD_MINUTES))

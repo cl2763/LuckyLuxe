@@ -61,7 +61,7 @@ export function createQuoteState(deps) {
 
   function techNameOf(q, tid) {
     if (q.technician_id) {
-      const t = db.prepare('SELECT name FROM technicians WHERE id = ?').get(q.technician_id)
+      const t = db.prepare('SELECT name FROM technicians WHERE id = ? AND tenant_id = ?').get(q.technician_id, tid)
       if (t) return t.name
     }
     return String(q.quoted_by || '').split('@')[0] || '技师'

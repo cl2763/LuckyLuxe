@@ -4602,8 +4602,8 @@ function nextBookingDraftSlot({ storeId, serviceId, technicianId = null, date = 
 function serializeBookingDraft(row, lang = 'zh') {
   if (!row) return null
   const service = getService(row.service_id)
-  const technician = db.prepare('SELECT * FROM technicians WHERE id = ?').get(row.technician_id) || null
-  const store = db.prepare('SELECT * FROM stores WHERE id = ?').get(row.store_id) || null
+  const technician = db.prepare('SELECT * FROM technicians WHERE id = ? AND tenant_id = ?').get(row.technician_id, row.tenant_id) || null
+  const store = db.prepare('SELECT * FROM stores WHERE id = ? AND tenant_id = ?').get(row.store_id, row.tenant_id) || null
   return {
     id: row.id,
     quoteRequestId: row.quote_request_id,
@@ -5306,8 +5306,8 @@ function serializeBooking(row, lang = 'zh') {
         paidCents: (sRow.total_cents || 0) - stored
       }
     })(),
-    technician: db.prepare('SELECT * FROM technicians WHERE id = ?').get(row.technician_id) || null,
-    store: db.prepare('SELECT * FROM stores WHERE id = ?').get(row.store_id) || null,
+    technician: db.prepare('SELECT * FROM technicians WHERE id = ? AND tenant_id = ?').get(row.technician_id, row.tenant_id) || null,
+    store: db.prepare('SELECT * FROM stores WHERE id = ? AND tenant_id = ?').get(row.store_id, row.tenant_id) || null,
     payments: db.prepare('SELECT * FROM payments WHERE booking_id = ? ORDER BY created_at DESC').all(row.id),
     createdAt: row.created_at
   }
@@ -5541,7 +5541,7 @@ function seedDemoServiceNotes(tenantId = DEFAULT_TENANT_ID) {
     //  老板端/员工端就永远看不到"命名老客有小记"这一态。其余老客保持无小记,天然形成对照。)
     const rows = db.prepare(`
       SELECT b.user_id AS userId, b.id AS bookingId, b.technician_id AS techId, b.service_id AS svcId,
-             (SELECT name FROM technicians WHERE id = b.technician_id) AS techName,
+             (SELECT name FROM technicians WHERE id = b.technician_id AND tenant_id = b.tenant_id) AS techName,
              (SELECT display_name FROM users WHERE id = b.user_id) AS custName,
              (SELECT name_zh FROM services WHERE id = b.service_id) AS svcName
       FROM bookings b
@@ -13320,7 +13320,7 @@ async function route(req, res) {
           .run(id, store.id, name.slice(0, 40), String(body.title || '').slice(0, 40), tenantId)
         const assign = db.prepare('INSERT OR IGNORE INTO technician_services (technician_id, service_id) VALUES (?, ?)')
         for (const svc of db.prepare('SELECT id FROM services WHERE tenant_id = ? AND is_active = 1').all(tenantId)) assign.run(id, svc.id)
-        return json(res, 201, { technician: db.prepare('SELECT * FROM technicians WHERE id = ?').get(id) })
+        return json(res, 201, { technician: db.prepare('SELECT * FROM technicians WHERE id = ? AND tenant_id = ?').get(id, currentTenantId()) })
       }
       if (req.method === 'PATCH' && subId) {
         const cur = db.prepare('SELECT * FROM technicians WHERE id = ? AND tenant_id = ?').get(subId, tenantId)
@@ -13328,7 +13328,7 @@ async function route(req, res) {
         const body = await readBody(req)
         db.prepare('UPDATE technicians SET name = ?, title = ?, is_active = ? WHERE id = ?')
           .run(body.name === undefined ? cur.name : String(body.name).slice(0, 40), body.title === undefined ? cur.title : String(body.title).slice(0, 40), body.isActive === undefined ? cur.is_active : (body.isActive ? 1 : 0), subId)
-        return json(res, 200, { technician: db.prepare('SELECT * FROM technicians WHERE id = ?').get(subId) })
+        return json(res, 200, { technician: db.prepare('SELECT * FROM technicians WHERE id = ? AND tenant_id = ?').get(subId, currentTenantId()) })
       }
     }
 
@@ -13594,7 +13594,7 @@ async function route(req, res) {
     // 默认可做本店所有在售服务(与新增服务时的自动指派保持一致)
     const assign = db.prepare('INSERT OR IGNORE INTO technician_services (technician_id, service_id) VALUES (?, ?)')
     for (const service of db.prepare('SELECT id FROM services WHERE is_active = 1 AND tenant_id = ?').all(currentTenantId())) assign.run(id, service.id)
-    return json(res, 201, { technician: db.prepare('SELECT * FROM technicians WHERE id = ?').get(id) })
+    return json(res, 201, { technician: db.prepare('SELECT * FROM technicians WHERE id = ? AND tenant_id = ?').get(id, currentTenantId()) })
   }
   // 客户运营字段:标签/备注/生日
   if (req.method === 'PATCH' && path.startsWith('/admin/customers/') && path.endsWith('/profile')) {
@@ -13623,7 +13623,7 @@ async function route(req, res) {
     const title = body.title === undefined ? current.title : (String(body.title || '').trim() || null)
     const isActive = body.isActive === undefined ? current.is_active : Number(Boolean(body.isActive))
     db.prepare('UPDATE technicians SET name = ?, title = ?, is_active = ? WHERE id = ?').run(name, title, isActive, technicianId)
-    return json(res, 200, { technician: db.prepare('SELECT * FROM technicians WHERE id = ?').get(technicianId) })
+    return json(res, 200, { technician: db.prepare('SELECT * FROM technicians WHERE id = ? AND tenant_id = ?').get(technicianId, currentTenantId()) })
   }
   /* 🟠 D16(店主 2026-08-11 立案):前端 api.js 的 refreshMerchantAi() 调的是
      GET /admin/tenant/entitlements —— 而后端只有 PUT,**从来没有 GET**,一直 404。
@@ -14265,7 +14265,7 @@ async function route(req, res) {
     if (req.method === 'PUT') {
       const body = await readBody(req)
       const technicianId = String(body.technicianId || '').trim()
-      if (!db.prepare('SELECT id FROM technicians WHERE id = ?').get(technicianId)) throw apiError(404, 'NOT_FOUND', 'Technician not found.')
+      if (!db.prepare('SELECT id FROM technicians WHERE id = ? AND tenant_id = ?').get(technicianId, currentTenantId())) throw apiError(404, 'NOT_FOUND', 'Technician not found.')
       db.prepare(`
         INSERT INTO staff_compensation (technician_id, tenant_id, base_salary_cents, commission_rate, active, updated_by, updated_at)
         VALUES (?, ?, ?, ?, ?, ?, ?)
@@ -14495,7 +14495,7 @@ async function route(req, res) {
     `)
     if (address) factStmt.run(currentTenantId(), 'storeAddress', address, adminSession.email || 'owner', iso(new Date()))
     if (phone) factStmt.run(currentTenantId(), 'storePhone', phone, adminSession.email || 'owner', iso(new Date()))
-    return json(res, 200, { store: db.prepare('SELECT id, name, address, phone FROM stores WHERE id = ?').get(storeId) })
+    return json(res, 200, { store: db.prepare('SELECT id, name, address, phone FROM stores WHERE id = ? AND tenant_id = ?').get(storeId, currentTenantId()) })
   }
   // 本店时钟(只读):运维/回归用来确认「服务端认为本店现在几号」——按店时区改造后的对外口径
   if (req.method === 'GET' && path === '/admin/store-clock') {
@@ -14607,7 +14607,7 @@ async function route(req, res) {
       if (!mine) throw apiError(404, 'NOT_FOUND', '没有这位顾客的记录。')
     }
     const svc = booking && booking.service_id ? getService(booking.service_id) : null
-    const tech = booking && booking.technician_id ? db.prepare('SELECT name FROM technicians WHERE id = ?').get(booking.technician_id) : null
+    const tech = booking && booking.technician_id ? db.prepare('SELECT name FROM technicians WHERE id = ? AND tenant_id = ?').get(booking.technician_id, booking.tenant_id) : null
     const u = db.prepare('SELECT display_name FROM users WHERE id = ?').get(userId)
     // AI 结构化(失败自动 fallback,不阻塞保存)。未开通 AI 智能包时**跳过 AI、照常保存原文**——
     // 小记本身是客户档案的地基,不能因为没买 AI 就写不了;只是不再自动拆成 款式/性格/偏好/同行/安全项。
@@ -16758,7 +16758,7 @@ function serializeCoupon(row) {
 function defaultDisplayNameFor(me) {
   const tid = me.tenantId || currentTenantId()
   if (me.role === 'staff' && me.technicianId) {
-    const t = db.prepare('SELECT name FROM technicians WHERE id = ?').get(me.technicianId)
+    const t = db.prepare('SELECT name FROM technicians WHERE id = ? AND tenant_id = ?').get(me.technicianId, currentTenantId())
     if (t && t.name) return t.name
   }
   const tenant = db.prepare('SELECT name FROM tenants WHERE id = ?').get(tid)

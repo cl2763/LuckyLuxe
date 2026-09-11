@@ -340,7 +340,7 @@ function seedNotesAndTodos(tid, today) {
         service_name, raw_text, structured_json, images_json, created_by, created_at)
       VALUES (?, ?, ?, ?, ?, ?, ?, ?, '{}', ?, 'seed', ?)`,
     rid('note'), tid, b.user_id, b.id, b.technician_id,
-    one('SELECT name AS n FROM technicians WHERE id = ?', b.technician_id)?.n || '',
+    one('SELECT name AS n FROM technicians WHERE id = ? AND tenant_id = ?', b.technician_id, tid)?.n || '',
     b.name_zh || '', `[${SEED}] 顾客甲面偏薄,下次先做加固;喜欢暖调裸色。`,
     withImg ? JSON.stringify([shot('小记', (i * 53) % 360)]) : '[]', new Date().toISOString())
     notes += 1
