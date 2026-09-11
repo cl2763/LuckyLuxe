@@ -21,6 +21,25 @@ const CUR = { prefix: '', symbol: '', code: '', trimZeroDecimals: false }
 function curPrefix() {
   return `${String(CUR.prefix || '').replace('<CODE>', CUR.code || '')}${CUR.symbol || ''}`
 }
+/* 🔴 07a 裁 #45 · 顾客端「技师 / 门店」的**唯一出口**。
+   病是这样的:服务端给这两个字段用的是 `.get()`,**查不到返回 undefined**;
+   而 `booking_drafts.technician_id` 本来就可空(「顾客还没选技师」是**正常业务态**)。
+   前端原来有 9 处直接写 `order.technician.name` —— 取到 undefined/null 就当场抛错,
+   **整页白**,而不是少显示一个名字。06i 我的购物车夹具就这么把整页搞崩过,
+   当时还被我误判成「点不到结算入口」(那正是 J-47 的由来)。
+   修法**按类不按处**:九处收到这一个出口,拿不到就显示「未指定」——
+   **不许九处各加一个 `?.`**(那是把同一件事说九遍,下一处新写的照样会漏)。
+   服务端那四行同批改成 `|| null`,不再把 undefined 漏出来。 */
+function partyName(party) {
+  return party && party.name ? party.name : t('unassigned')
+}
+function partyField(party, key) {
+  return party && party[key] ? party[key] : ''
+}
+function partyId(party) {
+  return party && party.id ? party.id : null
+}
+
 function money(cents, decimals) {
   const n = Number(cents || 0) / 100
   const d = decimals === undefined ? (CUR.trimZeroDecimals ? 0 : 0) : decimals
@@ -154,6 +173,7 @@ const copy = {
     arrival: '到店时间',
     duration: '服务时长',
     technician: '服务人员',
+    unassigned: '未指定',
     address: '地址',
     none: '无',
     paidDeposit: '实付定金',
@@ -302,6 +322,7 @@ const copy = {
     arrival: 'Arrival',
     duration: 'Duration',
     technician: 'Technician',
+    unassigned: 'Unassigned',
     address: 'Address',
     none: 'None',
     paidDeposit: 'Paid Deposit',
@@ -1493,13 +1514,13 @@ async function loadAvailability() {
     .reduce((total, item) => total + item.durationMin, 0)
   const data = await request(`/availability?storeId=${storeId}&serviceId=${state.service.id}&date=${state.date}&extraDurationMin=${extraDuration}`)
   state.slotsByTech = data.slots
-  const entry = state.slotsByTech.find((item) => item.technician.id === state.selectedTechId)
+  const entry = state.slotsByTech.find((item) => partyId(item.technician) === state.selectedTechId)
   if (!entry?.slots.includes(state.selectedSlot)) state.selectedSlot = entry?.slots[0] || ''
 }
 
 function renderBookingForm() {
   const service = state.service
-  const entry = state.slotsByTech.find((item) => item.technician.id === state.selectedTechId)
+  const entry = state.slotsByTech.find((item) => partyId(item.technician) === state.selectedTechId)
   const slots = entry?.slots || []
   els.screen.innerHTML = `
     <section class="booking-flow">
@@ -1641,7 +1662,7 @@ function renderCartItem(item) {
       <button class="check ${item.selected ? 'checked' : ''}" data-toggle-cart="${item.id}" type="button">${item.selected ? '✓' : ''}</button>
       <div class="cart-copy">
         <div class="cart-title-row"><h2>${item.service.name}</h2><span class="status">${t('pendingCheckout')}</span></div>
-        <p>${item.date} · ${item.time} · ${item.technician.name}</p>
+        <p>${item.date} · ${item.time} · ${partyName(item.technician)}</p>
         <p><strong>${t('deposit')} ${money(payableDepositFor(item))}</strong> · ${t('servicePrice')} ${money(item.servicePriceCents)}</p>
         ${userWaivesDeposit() ? `<p class="subtle">${state.lang === 'zh' ? '会员等级已减免预约定金' : 'Member tier deposit waiver applied'}</p>` : ''}
         ${item.referenceImages?.length ? `<div class="cart-reference-row">${item.referenceImages.map((image, index) => image ? `<img src="${image}" alt="${t('reference')} ${index + 1}">` : '').join('')}</div>` : ''}
@@ -1669,7 +1690,7 @@ function renderCheckout() {
             <div class="checkout-meta-web">
               <span>${item.date}</span>
               <span>${item.time}</span>
-              <span>${item.technician.name}</span>
+              <span>${partyName(item.technician)}</span>
             </div>
             <p><strong>${t('deposit')} ${money(payableDepositFor(item))}</strong><span>${t('servicePrice')} ${money(item.servicePriceCents)}</span></p>
             ${item.referenceImages?.length ? `<div class="cart-reference-row">${item.referenceImages.map((image, index) => image ? `<img src="${image}" alt="${t('reference')} ${index + 1}">` : '').join('')}</div>` : ''}
@@ -1717,7 +1738,7 @@ async function submitPayment() {
         userId: state.user.id,
         storeId,
         serviceId: item.service.id,
-        technicianId: item.technician.id,
+        technicianId: partyId(item.technician),
         date: item.date,
         time: item.time,
         addOns: item.addOns,
@@ -1854,7 +1875,7 @@ function renderMe() {
               ${window.ImgPlaceholder.tag(order.status === 'COMPLETED' && customerVisibleWorkImages(order)[0] ? customerVisibleWorkImages(order)[0] : order.service.imageUrl, { alt: order.service.name, zh: state.lang !== 'en' })}
               <div>
                 <div class="recent-top"><strong>${order.service.name}</strong><span>${escapeHtml(orderStatusText(order))}</span></div>
-                <p>${order.appointmentDate} ${order.appointmentTime} · ${order.technician.name}</p>
+                <p>${order.appointmentDate} ${order.appointmentTime} · ${partyName(order.technician)}</p>
                 <!-- 同一张单在「近期消费」和「订单列表」必须说同一句话:金额句后端唯一(永久律 08-23) -->
                 <p>${escapeHtml(order.actualDueText || order.listAmountText || '')}</p>
                 ${order.status === 'COMPLETED' && customerVisibleWorkImages(order).length ? `<p>${t('finalPhotos')} · ${customerVisibleWorkImages(order).length}</p>` : ''}
@@ -2026,7 +2047,7 @@ function renderOrdersWeb() {
               ${window.ImgPlaceholder.tag(order.status === 'COMPLETED' && customerVisibleWorkImages(order)[0] ? customerVisibleWorkImages(order)[0] : order.service.imageUrl, { alt: order.service.name, zh: state.lang !== 'en' })}
               <div>
                 <p>${order.appointmentDate} ${order.appointmentTime}</p>
-                <p>${order.technician.name} · ${order.store.name}</p>
+                <p>${partyName(order.technician)} · ${partyName(order.store)}</p>
                 <p class="price">${escapeHtml(order.actualDueText || order.listAmountText || '')}</p>
                 ${order.status === 'COMPLETED' && customerVisibleWorkImages(order).length ? `<p>${t('finalPhotos')} · ${customerVisibleWorkImages(order).length}</p>` : ''}
               </div>
@@ -2146,9 +2167,9 @@ function renderOrderDetailWeb() {
         <div class="info-card-web card">
           <p><span>${t('arrival')}</span><strong>${order.appointmentDate} ${order.appointmentTime}</strong></p>
           <p><span>${t('duration')}</span><strong>${order.totalDurationMin}${t('minutes')}</strong></p>
-          <p><span>${t('technician')}</span><strong>${order.technician.name}</strong></p>
-          <p><span>${t('store')}</span><strong>${order.store.name}</strong></p>
-          ${order.store.address && !/TBD/i.test(order.store.address) ? `<p><span>${t('address')}</span><strong>${order.store.address}</strong></p>` : ''}
+          <p><span>${t('technician')}</span><strong>${partyName(order.technician)}</strong></p>
+          <p><span>${t('store')}</span><strong>${partyName(order.store)}</strong></p>
+          ${partyField(order.store, 'address') && !/TBD/i.test(partyField(order.store, 'address')) ? `<p><span>${t('address')}</span><strong>${partyField(order.store, 'address')}</strong></p>` : ''}
           <p><span>${t('remark')}</span><strong>${order.notes || t('none')}</strong></p>
         </div>
       </section>
@@ -2182,7 +2203,7 @@ function renderOrderDetailWeb() {
             裁:技师小记不给顾客看,留档只留照片。 */''}
       ${workImages.length ? `
       <section class="section">
-        <div class="section-row"><h2>${t('workArchive')}</h2><span class="subtle">${order.technician.name}</span></div>
+        <div class="section-row"><h2>${t('workArchive')}</h2><span class="subtle">${partyName(order.technician)}</span></div>
         <div class="archive-card-web card">
           <div class="customer-work-grid">
             ${workImages.map((image, index) => `

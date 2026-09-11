@@ -4602,8 +4602,8 @@ function nextBookingDraftSlot({ storeId, serviceId, technicianId = null, date = 
 function serializeBookingDraft(row, lang = 'zh') {
   if (!row) return null
   const service = getService(row.service_id)
-  const technician = db.prepare('SELECT * FROM technicians WHERE id = ?').get(row.technician_id)
-  const store = db.prepare('SELECT * FROM stores WHERE id = ?').get(row.store_id)
+  const technician = db.prepare('SELECT * FROM technicians WHERE id = ?').get(row.technician_id) || null
+  const store = db.prepare('SELECT * FROM stores WHERE id = ?').get(row.store_id) || null
   return {
     id: row.id,
     quoteRequestId: row.quote_request_id,
@@ -5306,8 +5306,8 @@ function serializeBooking(row, lang = 'zh') {
         paidCents: (sRow.total_cents || 0) - stored
       }
     })(),
-    technician: db.prepare('SELECT * FROM technicians WHERE id = ?').get(row.technician_id),
-    store: db.prepare('SELECT * FROM stores WHERE id = ?').get(row.store_id),
+    technician: db.prepare('SELECT * FROM technicians WHERE id = ?').get(row.technician_id) || null,
+    store: db.prepare('SELECT * FROM stores WHERE id = ?').get(row.store_id) || null,
     payments: db.prepare('SELECT * FROM payments WHERE booking_id = ? ORDER BY created_at DESC').all(row.id),
     createdAt: row.created_at
   }

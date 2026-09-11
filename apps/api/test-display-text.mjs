@@ -144,6 +144,40 @@ check('③b 反向守:全小写键的映射表不许被咬中(否则修完还红
 check(`④ 反向守:扫描面 ${CODE.length} >= 120 个源文件(git ls-files 全量;目录被排除立刻红)`,
   CODE.length >= 120, String(CODE.length))
 
+/* ══ 病三(07a 裁 #45,日1 段1)· 顾客端「技师 / 门店」也要走唯一出口 ══
+   服务端给这两个字段用的是 `.get()`,**查不到返回 undefined**;而 `booking_drafts.technician_id`
+   本来就可空(「顾客还没选技师」是**正常业务态**)。前端原来 9 处直接写 `order.technician.name`,
+   取到 undefined/null 就当场抛错 —— **整页白**,而不是少显示一个名字。
+   现在收到 `partyName()` / `partyField()` / `partyId()` 三个出口,拿不到就显示「未指定」。
+   判据形状与病一病二同族:**零处直取**,新写一处当场红并点名 file:line。
+   ⚠️ 判据看代码不看注释 —— 先把注释剥掉再扫(本文件顶上那段说明里就写着 `order.technician.name`)。 */
+const CUSTOMER_FILES = ['apps/web/customer.js']
+const stripJs = (src) => src
+  .replace(/\/\*[\s\S]*?\*\//g, (m) => m.replace(/[^\n]/g, ' '))
+  .replace(/(^|[^:"'`\\])\/\/[^\n]*/g, (m, a) => a + ' '.repeat(m.length - a.length))
+const directParty = []
+for (const f of CUSTOMER_FILES) {
+  const src = stripJs(readFileSync(join(ROOT, f), 'utf8'))
+  src.split('\n').forEach((ln, i) => {
+    for (const m of ln.matchAll(/\.(technician|store)\.([a-zA-Z_]+)/g)) {
+      directParty.push(`${f}:${i + 1} 直取 .${m[1]}.${m[2]}`)
+    }
+  })
+}
+check(`病三① 顾客端**零处**直取 .technician. / .store. 的属性(一律过 partyName/partyField/partyId)`,
+  directParty.length === 0, directParty.slice(0, 6).join(' | '))
+const CUSTSRC = readFileSync(join(ROOT, 'apps/web/customer.js'), 'utf8')
+check('病三② 那三个出口确实在,而且拿不到时给的是「未指定」不是空串',
+  /function partyName\(/.test(CUSTSRC) && /function partyField\(/.test(CUSTSRC)
+  && /function partyId\(/.test(CUSTSRC) && /unassigned:\s*'未指定'/.test(CUSTSRC))
+check('病三③ 服务端那四行不许再把 undefined 漏给前端(技师/门店各两处,一律 || null)',
+  (readFileSync(join(ROOT, 'apps/api/local-server.mjs'), 'utf8')
+    .match(/FROM (?:technicians|stores) WHERE id = \?'\)\.get\(row\.(?:technician|store)_id\) \|\| null/g) || []).length === 4,
+  '四行里有漏掉 || null 的')
+/* 病三④ 反向守:这把刀真的会咬 —— 拿一句已知阳性走一遍(零命中先证刀能咬) */
+check('病三④ 🔴 反向守:一句直取写法必须被咬中(否则「零处」是空转)',
+  /\.(technician|store)\.[a-zA-Z_]+/.test('<p>${order.technician.name}</p>'))
+
 console.log(`\n[说法唯一出口] 源文件 ${CODE.length} 个 · 等级大写键在册 ${Object.keys(KEY_ALLOW).length} · 横幅自拼 ${selfMade.length}`)
 if (fails.length) { console.error(`\n❌ test-display-text ${fails.length}/${checks} 项未过`); process.exit(1) }
 console.log(`\n✅ test-display-text 通过 ${checks} 项`)
