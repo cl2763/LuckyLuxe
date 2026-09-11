@@ -218,6 +218,8 @@ async function login() {
 
 const rows = []
 const notes = []
+let candidates = 0      /* 每一屏打上记号、且在屏内的节点总数 —— 去重**之前**的底数 */
+let skippedDup = 0      /* 因为跨屏重复只少写了一行报告的 */
 const clipped = new Map()   /* 被祖先裁掉、压根没画出来的:单独计数,不参与判定也不算没验成 */
 let measured = 0
 
@@ -248,6 +250,7 @@ async function sweepHere(pageName, mode) {
        数量被去重藏住了,看起来还像没事)。**判据不许悄悄缩覆盖面**:先照旧全量量,
        只有量出「零差异像素」时,才回头问一句它是不是压根没画出来。 */
     const nodes = (await ev(MARK) || []).filter((n) => n.onScreen)
+    candidates += nodes.length
     if (!nodes.length) { await ev(CLEAN); continue }
     const shotA = (await send('Page.captureScreenshot', { format: 'png' })).result?.data
     const hidden = await ev(HIDE)
@@ -274,7 +277,7 @@ async function sweepHere(pageName, mode) {
         }
         continue
       }
-      if (seen.has(key)) continue      /* 同一个节点跨两屏各出现一次:报告里只写一行 */
+      if (seen.has(key)) { skippedDup += 1; continue }   /* 同一个节点跨两屏各出现一次:报告里只写一行 */
       seen.add(key)
       total += 1
       measured += 1
@@ -342,7 +345,19 @@ if (measured < DEDUPED) {
   console.error(`\n🔴 J-48 破了:量过 ${measured} 个 < 去重后 ${DEDUPED} 行 —— 去重一定是挪到量之前去了`)
   process.exitCode = 1
 }
+/* J-48 的**真判据**在这一行:底数必须闭合 ——
+   `量过 + 没验成 + 被裁 + 只少写一行的重复 = 打过记号的候选总数`。
+   只断言「量过 ≥ 去重后」抓不住把去重挪到量之前那一刀(那时两个数会一起变小);
+   底数闭合才抓得住:去重一旦挪前面,measured 掉下来而 candidates 不动,**当场对不上**。 */
+const accounted = measured + notes.length + clipped.size + skippedDup
+if (accounted !== candidates) {
+  console.error(`\n🔴 J-48 底数没闭合:打过记号 ${candidates} 个,而 量过 ${measured} + 没验成 ${notes.length}`
+    + ` + 被裁 ${clipped.size} + 重复只少写一行 ${skippedDup} = ${accounted} —— 差 ${candidates - accounted} 个,`
+    + '**多半是去重挪到量之前去了**')
+  process.exitCode = 1
+}
 console.log(`  **量过的个数 ${measured}** / **去重后的行数 ${DEDUPED}**(J-48:前者必须 ≥ 后者)`)
+console.log(`  底数闭合:打过记号 ${candidates} = 量过 ${measured} + 没验成 ${notes.length} + 被裁 ${clipped.size} + 重复少写 ${skippedDup}`)
 console.log(`  甲档 ${A.length} 条(去重 ${uA.length})· 乙档 ${B.length} 条(去重 ${uB.length})`
   + ` · 被裁掉没画出来的 ${clipped.size} 个(不参与判定)· 没验成 ${notes.length} 条`)
 for (const r of uA.slice(0, 12)) console.log(`  🔴甲 ${r.mode} · ${r.page} · ${r.sel}「${r.text}」${r.fg} 压最差像素 ${r.bg} = ${r.ratio}:1(要 ${r.need}:1)`)
