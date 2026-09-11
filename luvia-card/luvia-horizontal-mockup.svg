@@ -1,0 +1,109 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1800" height="840" viewBox="0 0 1800 840">
+  <defs>
+    <filter id="shadow" x="-20%" y="-20%" width="140%" height="150%">
+      <feDropShadow dx="0" dy="18" stdDeviation="18" flood-color="#3b241b" flood-opacity="0.18"/>
+    </filter>
+    <linearGradient id="paper" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0" stop-color="#FCF9F2"/>
+      <stop offset="1" stop-color="#F6EFE3"/>
+    </linearGradient>
+    <linearGradient id="foil" x1="0" y1="0" x2="1" y2="0">
+      <stop offset="0" stop-color="#9F7642"/>
+      <stop offset=".34" stop-color="#D8BC8D"/>
+      <stop offset=".67" stop-color="#A97D47"/>
+      <stop offset="1" stop-color="#DCC59F"/>
+    </linearGradient>
+    <filter id="paperGrain" x="0" y="0" width="100%" height="100%">
+      <feTurbulence type="fractalNoise" baseFrequency=".8" numOctaves="2" seed="8" result="noise"/>
+      <feColorMatrix in="noise" type="saturate" values="0" result="mono"/>
+      <feComponentTransfer in="mono"><feFuncA type="table" tableValues="0 .045"/></feComponentTransfer>
+    </filter>
+    <style>
+      .cn { font-family: "Songti SC", "Noto Serif CJK SC", serif; fill:#3B2924; }
+      .sans { font-family: "Helvetica Neue", "PingFang SC", sans-serif; fill:#3B2924; }
+      .en { font-family: Didot, "Bodoni 72", serif; fill:#3B2924; letter-spacing:5px; }
+      .gold { fill:#B28A52; }
+      .hair { stroke:#B28A52; stroke-width:1.5; fill:none; }
+      .wine { fill:#5A282E; }
+    </style>
+  </defs>
+
+  <rect width="1800" height="840" fill="#E4DED5"/>
+  <text x="80" y="68" class="sans" font-size="18" letter-spacing="5" fill="#766A62">LUVIA · 半径 伴手礼卡｜横版方案</text>
+
+  <!-- FRONT -->
+  <g transform="translate(70 105)" filter="url(#shadow)">
+    <rect width="800" height="535" rx="5" fill="url(#paper)"/>
+    <path d="M0,0 H800 V535 H0 Z" fill="none" stroke="url(#foil)" stroke-width="2.4"/>
+    <path d="M24,24 H776 V511 H24 Z" fill="none" stroke="#B28A52" stroke-opacity=".45"/>
+    <rect width="800" height="535" fill="#8B7965" filter="url(#paperGrain)" opacity=".42"/>
+    <path d="M698 535 C710 498, 742 470, 800 459" class="hair" opacity=".30"/>
+    <circle cx="693" cy="474" r="3" class="gold" opacity=".75"/>
+    <circle cx="724" cy="455" r="2" class="gold" opacity=".55"/>
+    <image href="assets/luvia-logo-full.png" x="56" y="24" width="365" height="245" preserveAspectRatio="xMidYMid meet"/>
+    <line x1="68" y1="260" x2="390" y2="260" stroke="url(#foil)" stroke-width="1.8"/>
+
+    <text x="68" y="302" class="cn" font-size="21">感谢您选择 LUVIA·半径北京旗舰店，</text>
+    <text x="68" y="341" class="cn" font-size="21">一份小小心意，献给独一无二的你。</text>
+    <text x="68" y="379" class="en" font-size="11" letter-spacing="3">WITH LOVE, JUST FOR YOU</text>
+
+    <g transform="translate(68 430)">
+      <circle cx="8" cy="8" r="8" fill="none" stroke="#B28A52"/>
+      <circle cx="8" cy="8" r="2.5" class="gold"/>
+      <text x="28" y="14" class="sans" font-size="17">北京市朝阳区万达广场6号楼2005</text>
+      <text x="28" y="48" class="sans" font-size="17" letter-spacing="1">156 9855 0698</text>
+    </g>
+
+    <g transform="translate(618 346)">
+      <rect width="128" height="128" rx="2" fill="#F8F3E9" stroke="#5A282E" stroke-width="1.5"/>
+      <path d="M15 15h31v31H15z M82 15h31v31H82z M15 82h31v31H15z" fill="none" stroke="#5A282E" stroke-width="4"/>
+      <path d="M22 22h17v17H22z M89 22h17v17H89z M22 89h17v17H22z" fill="#5A282E"/>
+      <text x="64" y="69" text-anchor="middle" class="sans" font-size="12" fill="#8B786E">二维码</text>
+      <text x="64" y="150" text-anchor="middle" class="sans" font-size="12" letter-spacing="2">扫码了解更多</text>
+    </g>
+  </g>
+  <text x="70" y="680" class="sans" font-size="15" letter-spacing="4" fill="#6E625A">正面 FRONT</text>
+
+  <!-- BACK -->
+  <g transform="translate(930 105)" filter="url(#shadow)">
+    <rect width="800" height="535" rx="5" fill="url(#paper)"/>
+    <path d="M0,0 H800 V535 H0 Z" fill="none" stroke="url(#foil)" stroke-width="2.4"/>
+    <path d="M24,24 H776 V511 H24 Z" fill="none" stroke="#B28A52" stroke-opacity=".45"/>
+    <rect width="800" height="535" fill="#8B7965" filter="url(#paperGrain)" opacity=".42"/>
+    <path d="M694 0 C665 42, 678 83, 800 118" class="hair" opacity=".28"/>
+    <circle cx="704" cy="76" r="3" class="gold" opacity=".75"/>
+
+    <text x="64" y="88" class="en" font-size="25">GIFT LIST</text>
+    <text x="66" y="126" class="cn" font-size="22" letter-spacing="5">伴 手 礼 清 单</text>
+    <line x1="66" y1="151" x2="735" y2="151" class="hair"/>
+
+    <g class="sans" font-size="17">
+      <g transform="translate(66 192)"><circle cx="4" cy="-5" r="3" class="gold"/><text x="18">Diptyque 蒂普提克护手霜</text><text x="330" text-anchor="end" class="en" font-size="14">× 1</text></g>
+      <g transform="translate(66 237)"><circle cx="4" cy="-5" r="3" class="gold"/><text x="18">Erno Laszlo 奥伦纳素冰白眼膜</text><text x="330" text-anchor="end" class="en" font-size="14">× 2</text></g>
+      <g transform="translate(66 282)"><circle cx="4" cy="-5" r="3" class="gold"/><text x="18">Expressions 爱碧生嫩白手膜</text><text x="330" text-anchor="end" class="en" font-size="14">× 1</text></g>
+      <g transform="translate(66 327)"><circle cx="4" cy="-5" r="3" class="gold"/><text x="18">Ronronner 指缘油</text><text x="330" text-anchor="end" class="en" font-size="14">× 1</text></g>
+      <g transform="translate(430 192)"><circle cx="4" cy="-5" r="3" class="gold"/><text x="18">Travel Candle 香薰蜡烛</text><text x="305" text-anchor="end" class="en" font-size="14">× 1</text></g>
+      <g transform="translate(430 237)"><circle cx="4" cy="-5" r="3" class="gold"/><text x="18">真丝护养发圈</text><text x="305" text-anchor="end" class="en" font-size="14">× 1</text></g>
+      <g transform="translate(430 282)"><circle cx="4" cy="-5" r="3" class="gold"/><text x="18">坐便器按钮按压器</text><text x="305" text-anchor="end" class="en" font-size="14">× 1</text></g>
+      <g transform="translate(430 327)"><circle cx="4" cy="-5" r="3" class="gold"/><text x="18">礼卡</text><text x="305" text-anchor="end" class="en" font-size="14">× 1</text></g>
+    </g>
+
+    <g transform="translate(66 389)">
+      <rect width="668" height="91" rx="8" fill="#E7D7CC" stroke="#CFAD91" stroke-width="1"/>
+      <rect x="7" y="7" width="654" height="77" rx="5" fill="none" stroke="#FFFFFF" stroke-opacity=".6"/>
+      <text x="334" y="31" text-anchor="middle" font-family="Helvetica Neue, PingFang SC, sans-serif" font-size="10" letter-spacing="5" fill="#A17653">SIGNATURE PHRASE · DEBOSSED</text>
+      <text x="334" y="65" text-anchor="middle" font-family="Songti SC, serif" font-size="20" letter-spacing="3" fill="#5C4038">店铺招牌语 · 待确认</text>
+    </g>
+  </g>
+  <text x="930" y="680" class="sans" font-size="15" letter-spacing="4" fill="#6E625A">反面 BACK</text>
+
+  <g transform="translate(70 748)">
+    <text x="0" y="0" class="sans" font-size="13" letter-spacing="3" fill="#6E625A">MATERIAL NOTES</text>
+    <g transform="translate(0 22)" class="sans" font-size="14">
+      <rect width="212" height="42" rx="21" fill="#F8F2E8"/><circle cx="23" cy="21" r="8" fill="#F3EBDD"/><text x="43" y="26">350g 暖白棉感纸</text>
+      <g transform="translate(230 0)"><rect width="230" height="42" rx="21" fill="#F8F2E8"/><circle cx="23" cy="21" r="8" fill="url(#foil)"/><text x="43" y="26">Logo 与细线哑金烫印</text></g>
+      <g transform="translate(478 0)"><rect width="218" height="42" rx="21" fill="#F8F2E8"/><circle cx="23" cy="21" r="8" fill="#E7D7CC" stroke="#CFAD91"/><text x="43" y="26">底部招牌语轻压凹</text></g>
+      <g transform="translate(714 0)"><rect width="190" height="42" rx="21" fill="#F8F2E8"/><circle cx="23" cy="21" r="8" fill="#FCF9F2" stroke="#B28A52"/><text x="43" y="26">圆角 R2mm</text></g>
+    </g>
+  </g>
+</svg>

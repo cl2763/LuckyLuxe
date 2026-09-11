@@ -1,0 +1,99 @@
+%PDF-1.4
+%‚„œ”
+1 0 obj
+<<
+/Producer (pypdf)
+/Title (LUVIA mask 70x65mm 2mm bleed)
+>>
+endobj
+2 0 obj
+<<
+/Type /Pages
+/Count 1
+/Kids [ 4 0 R ]
+>>
+endobj
+3 0 obj
+<<
+/Type /Catalog
+/Pages 2 0 R
+>>
+endobj
+4 0 obj
+<<
+/Contents 5 0 R
+/MediaBox [ 0 0 209.7638 195.5906 ]
+/Resources <<
+/ColorSpace <<
+/TextureArea 6 0 R
+>>
+/Font 8 0 R
+/ProcSet [ /PDF /Text /ImageB /ImageC /ImageI ]
+>>
+/Rotate 0
+/Trans <<
+>>
+/Type /Page
+/TrimBox [ 5.66929134 5.66929134 204.094488 189.92126 ]
+/BleedBox [ 0.0 0.0 209.76378 195.590551 ]
+/Parent 2 0 R
+>>
+endobj
+5 0 obj
+<<
+/Filter [ /ASCII85Decode /FlateDecode ]
+/Length 262
+>>
+stream
+Gaq2u6#$KV%(uHPEt3;uP%CbDCnX#R;D@/Ob_@+#KksrVo..@cJqXDia.j5TZpVO9$h.3%r?)ZH*^MOel438?>QYKsMMcTAbN"lme\];>j>%FHBJs:M\EX.;"t;j32MKMN!_PF>1KZ>jLqO2NRpe(m$r%<(hSAKFSRmU5j.CTjhP_)EH/]-HAV@=AW;k"p'D<@r@9_oeYO?U_?0;=Dbs]%L=P.t$LGNE6@eI%&d79?o.^k#,I"q,B:>r\hT)mmedFU\;~>
+endstream
+endobj
+6 0 obj
+[ /Separation /TextureArea /DeviceCMYK 7 0 R ]
+endobj
+7 0 obj
+<<
+/Domain [ 0 1 ]
+/FunctionType 4
+/Range [ 0 1 0 1 0 1 0 1 ]
+/Length 44
+>>
+stream
+{0.0 exch 0.0 exch dup 1.0 mul exch pop 0.0}
+endstream
+endobj
+8 0 obj
+<<
+/F1 9 0 R
+>>
+endobj
+9 0 obj
+<<
+/BaseFont /Helvetica
+/Encoding /WinAnsiEncoding
+/Name /F1
+/Subtype /Type1
+/Type /Font
+>>
+endobj
+xref
+0 10
+0000000000 65535 f 
+0000000015 00000 n 
+0000000092 00000 n 
+0000000151 00000 n 
+0000000200 00000 n 
+0000000535 00000 n 
+0000000888 00000 n 
+0000000950 00000 n 
+0000001103 00000 n 
+0000001134 00000 n 
+trailer
+<<
+/Size 10
+/Root 3 0 R
+/Info 1 0 R
+>>
+startxref
+1241
+%%EOF

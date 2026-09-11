@@ -1,0 +1,321 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>LUVIA 半径｜护理卡背面三主题·油画肌理版</title>
+  <style>
+    @font-face {
+      font-family: "Jost";
+      src: url("./assets/Jost-Light.ttf") format("truetype");
+      font-weight: 300;
+    }
+    @font-face {
+      font-family: "Jost";
+      src: url("./assets/Jost-Regular.ttf") format("truetype");
+      font-weight: 400;
+    }
+    * { box-sizing: border-box; }
+    html, body { margin: 0; background: #d8d5d0; }
+    body {
+      color: var(--ink);
+      font-family: "Songti SC", "STSong", "Noto Serif CJK SC", "Source Han Serif SC", serif;
+    }
+    .board {
+      --paper: #f4efe8;
+      --paper-2: #ece2d9;
+      --ink: #493b39;
+      --muted: #7b6865;
+      --accent: #ad8c88;
+      --accent-soft: rgba(173,140,136,.14);
+      width: 1536px;
+      height: 1024px;
+      padding: 18px;
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 18px;
+      position: relative;
+      overflow: hidden;
+      background-color: #ddd7d0;
+      background-image: url("./assets/back_oil_01_ballet.png");
+      background-size: cover;
+      background-position: center;
+      page-break-after: always;
+    }
+    .board.book {
+      --paper: #f3eee4;
+      --paper-2: #e7dfd2;
+      --ink: #403c37;
+      --muted: #6f6a62;
+      --accent: #718196;
+      --accent-soft: rgba(113,129,150,.13);
+      background-color: #d8d1c6;
+      background-image: url("./assets/back_oil_02_book.png");
+    }
+    .board.celadon {
+      --paper: #edf1ec;
+      --paper-2: #dfe8e2;
+      --ink: #344742;
+      --muted: #687b75;
+      --accent: #718b84;
+      --accent-soft: rgba(113,139,132,.14);
+      background-color: #cfd9d3;
+      background-image: url("./assets/back_oil_03_celadon.png");
+    }
+    .card {
+      height: 988px;
+      position: relative;
+      overflow: hidden;
+      padding: 36px 42px 30px;
+      background: linear-gradient(105deg, rgba(255,252,247,.48), rgba(255,252,247,.27) 52%, rgba(255,252,247,.45));
+      border: 1px solid rgba(77,60,54,.18);
+      box-shadow: 0 8px 20px rgba(37,31,28,.10);
+    }
+    .card::before {
+      content: "";
+      position: absolute;
+      inset: 0;
+      pointer-events: none;
+      opacity: .34;
+      background: linear-gradient(90deg, rgba(255,255,255,.38), transparent 20% 82%, rgba(255,255,255,.25));
+    }
+    .card::after {
+      display: none;
+    }
+    .book .card { background-color: rgba(249,243,231,.12); }
+    .celadon .card { background-color: rgba(244,249,246,.10); }
+    .topline, .header, .content, .footer { position: relative; z-index: 1; }
+    .topline {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      color: var(--muted);
+      font-size: 14px;
+      letter-spacing: .16em;
+      padding-bottom: 12px;
+      border-bottom: 1px solid rgba(75,59,53,.18);
+    }
+    .topline .en { font: 300 12px/1 Jost, sans-serif; letter-spacing: .2em; }
+    .header {
+      min-height: 124px;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 24px;
+    }
+    .header h1 {
+      margin: 0 0 7px;
+      font-weight: 400;
+      font-size: 36px;
+      letter-spacing: .13em;
+    }
+    .header .sub {
+      color: var(--accent);
+      font: 300 13px/1 Jost, sans-serif;
+      letter-spacing: .28em;
+    }
+    .logo {
+      width: 180px;
+      height: 102px;
+      object-fit: contain;
+      object-position: center;
+      opacity: .92;
+      flex: 0 0 auto;
+    }
+    .section {
+      margin-top: 14px;
+      padding: 16px 16px 14px;
+      background: rgba(255,253,249,.44);
+      border: 0;
+      border-top: 1px solid rgba(75,59,53,.24);
+      border-bottom: 1px solid rgba(75,59,53,.12);
+    }
+    .section.tools { margin-top: 13px; }
+    .section-title {
+      display: flex;
+      align-items: baseline;
+      justify-content: space-between;
+      margin-bottom: 12px;
+    }
+    .section-title h2 {
+      margin: 0;
+      color: var(--ink);
+      font-size: 20px;
+      font-weight: 500;
+      letter-spacing: .12em;
+    }
+    .section-title span {
+      color: var(--accent);
+      font: 300 11px/1 Jost, sans-serif;
+      letter-spacing: .22em;
+    }
+    ol.care {
+      list-style: none;
+      counter-reset: care;
+      padding: 0;
+      margin: 0;
+      display: grid;
+      gap: 7px;
+    }
+    ol.care li {
+      counter-increment: care;
+      position: relative;
+      padding-left: 34px;
+      font-size: 16px;
+      line-height: 1.48;
+      letter-spacing: .025em;
+    }
+    ol.care li::before {
+      content: counter(care, decimal-leading-zero);
+      position: absolute;
+      left: 0;
+      top: 1px;
+      color: var(--accent);
+      font: 400 12px/1.7 Jost, sans-serif;
+      letter-spacing: .05em;
+    }
+    .tool-list { display: grid; gap: 8px; }
+    .tool {
+      display: grid;
+      grid-template-columns: 118px 1fr;
+      gap: 12px;
+      align-items: start;
+      padding-bottom: 8px;
+      border-bottom: 1px dashed rgba(75,59,53,.15);
+    }
+    .tool:last-child { padding-bottom: 0; border-bottom: 0; }
+    .tool strong {
+      color: var(--accent);
+      font-size: 16px;
+      font-weight: 500;
+      letter-spacing: .06em;
+    }
+    .tool p {
+      margin: 0;
+      font-size: 15px;
+      line-height: 1.48;
+      letter-spacing: .015em;
+    }
+    .reminder {
+      margin-top: 13px;
+      padding: 12px 16px;
+      color: var(--muted);
+      background: var(--accent-soft);
+      border-left: 3px solid var(--accent);
+      font-size: 14px;
+      line-height: 1.5;
+      letter-spacing: .03em;
+    }
+    .footer {
+      position: absolute;
+      left: 42px;
+      right: 42px;
+      bottom: 24px;
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      padding-top: 11px;
+      border-top: 1px solid rgba(75,59,53,.18);
+      color: var(--muted);
+      font-size: 13px;
+      letter-spacing: .08em;
+    }
+    .footer .tagline { font-size: 13px; }
+    .footer .wechat { font-family: Jost, "PingFang SC", sans-serif; letter-spacing: .1em; }
+  </style>
+</head>
+<body>
+  <div class="board ballet" id="back-01" data-name="芭蕾午后">
+    <article class="card nail-card"></article>
+    <article class="card lash-card"></article>
+  </div>
+
+  <div class="board book" id="back-02" data-name="书页与缎带">
+    <article class="card nail-card"></article>
+    <article class="card lash-card"></article>
+  </div>
+
+  <div class="board celadon" id="back-03" data-name="青瓷花影">
+    <article class="card nail-card"></article>
+    <article class="card lash-card"></article>
+  </div>
+
+  <template id="nail-template">
+    <div class="topline"><span class="series"></span><span class="en">BACK · NAIL</span></div>
+    <header class="header">
+      <div><h1>美甲护理指南</h1><div class="sub">NAIL AFTERCARE</div></div>
+      <img class="logo" src="./assets/LUVIA_A2_gold.svg" alt="LUVIA 半径" />
+    </header>
+    <main class="content">
+      <section class="section">
+        <div class="section-title"><h2>护理注意事项</h2><span>CARE NOTES</span></div>
+        <ol class="care">
+          <li>完成后 4 小时内避免长时间泡水、蒸桑拿及接触高温蒸汽。</li>
+          <li>做家务或接触清洁剂时建议佩戴手套，减少磕碰与化学腐蚀。</li>
+          <li>不要撕扯、啃咬或用指甲撬取硬物；如有翘边，请及时联系门店处理。</li>
+          <li>每日涂抹指缘护理油，保持甲周柔润，避免频繁打磨甲面。</li>
+          <li>如出现持续红肿、疼痛或明显不适，请停止使用并及时咨询专业人士。</li>
+          <li>建议 3–4 周回店卸甲或维护，请勿自行强行剥除甲面产品。</li>
+        </ol>
+      </section>
+      <section class="section tools">
+        <div class="section-title"><h2>护理包工具</h2><span>TOOL GUIDE</span></div>
+        <div class="tool-list">
+          <div class="tool"><strong>迷你搓条</strong><p>用于轻柔修整指甲自由缘。建议保持同一方向轻磨，避免反复锯拉。</p></div>
+          <div class="tool"><strong>橘木棒</strong><p>用于轻推甲缘或清理甲缝。动作保持轻柔，避免深入或用力刮擦。</p></div>
+          <div class="tool"><strong>指缘护理油</strong><p>取少量涂抹于甲周并轻轻按摩至吸收，建议每日使用 1–2 次。</p></div>
+        </div>
+      </section>
+      <div class="reminder">工具仅限个人使用，请保持干燥清洁；本卡为日常护理建议，具体情况以门店技师说明为准。</div>
+    </main>
+    <footer class="footer"><span class="tagline">以自己为圆心，探索更多可能的自己</span><span class="wechat">微信：XXXXXXXX</span></footer>
+  </template>
+
+  <template id="lash-template">
+    <div class="topline"><span class="series"></span><span class="en">BACK · LASH</span></div>
+    <header class="header">
+      <div><h1>美睫护理指南</h1><div class="sub">LASH AFTERCARE</div></div>
+      <img class="logo" src="./assets/LUVIA_A2_gold.svg" alt="LUVIA 半径" />
+    </header>
+    <main class="content">
+      <section class="section">
+        <div class="section-title"><h2>护理注意事项</h2><span>CARE NOTES</span></div>
+        <ol class="care">
+          <li>完成后 6 小时内避免沾水、蒸汽、汗蒸及高温冲洗，让睫毛保持干爽。</li>
+          <li>洁面卸妆时避免使用油性产品，不要横向揉搓或拉扯睫毛根部。</li>
+          <li>每日早晚沿睫毛生长方向轻梳；睡觉时尽量避免趴睡或长时间压眼。</li>
+          <li>嫁接后不使用睫毛夹，不自行剪、扯、拔睫毛，以免损伤自身睫毛。</li>
+          <li>眼妆建议选择易卸配方；卸妆时由上向下轻柔带过，避免残留堆积。</li>
+          <li>建议 2–3 周回店补睫；如持续刺痛、红肿或流泪，请及时联系门店或专业人士。</li>
+        </ol>
+      </section>
+      <section class="section tools">
+        <div class="section-title"><h2>护理包工具</h2><span>TOOL GUIDE</span></div>
+        <div class="tool-list">
+          <div class="tool"><strong>睫毛梳</strong><p>用于日常梳理睫毛方向。保持刷头干燥，从根部上方轻轻向外梳开。</p></div>
+          <div class="tool"><strong>睫毛清洁刷</strong><p>搭配温和无油洁面产品，轻刷睫毛根部与缝隙后冲净，并自然晾干。</p></div>
+          <div class="tool"><strong>睫毛雨衣</strong><p>用于漫画款睫毛的整理、聚拢与收尖。取少量轻刷毛尖，避开眼睑与胶点。</p></div>
+        </div>
+      </section>
+      <div class="reminder">“睫毛雨衣”仅用于毛尖造型，请少量使用；护理工具仅限个人使用，并保持清洁干燥。</div>
+    </main>
+    <footer class="footer"><span class="tagline">以自己为圆心，探索更多可能的自己</span><span class="wechat">微信：XXXXXXXX</span></footer>
+  </template>
+
+  <script>
+    const titles = {
+      "back-01": "油画系列 01 · 芭蕾午后",
+      "back-02": "油画系列 02 · 书页与缎带",
+      "back-03": "油画系列 03 · 青瓷花影"
+    };
+    document.querySelectorAll(".board").forEach(board => {
+      const nail = document.querySelector("#nail-template").content.cloneNode(true);
+      const lash = document.querySelector("#lash-template").content.cloneNode(true);
+      nail.querySelector(".series").textContent = titles[board.id] + " / 美甲";
+      lash.querySelector(".series").textContent = titles[board.id] + " / 美睫";
+      board.querySelector(".nail-card").appendChild(nail);
+      board.querySelector(".lash-card").appendChild(lash);
+    });
+  </script>
+</body>
+</html>

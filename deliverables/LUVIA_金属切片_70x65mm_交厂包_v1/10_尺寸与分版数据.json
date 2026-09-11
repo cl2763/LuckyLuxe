@@ -1,0 +1,120 @@
+{
+  "version": "1.0",
+  "selected_design": "last generated image: metallic slice, not torn-edge D",
+  "finished_mm": [
+    70,
+    65
+  ],
+  "bleed_mm": 2,
+  "artboard_mm": [
+    74,
+    69
+  ],
+  "units": "mm",
+  "origin": "top-left of finished bounding rectangle; +X right, +Y down",
+  "logo_source": "/Users/changliu/Desktop/LUVIA_半径_品牌视觉资产包 3/01_LOGO_标志系统/04_单色_黑/A1_主LOGO-完整版.svg",
+  "logo_source_sha256": "c04518d9adf99120376af9cc73c3ffe93f5eb7b4ae77e0e2e486ddfb62f38563",
+  "source_path_count": 23,
+  "logo_bbox_mm": {
+    "x": 24.5,
+    "y": 25.0,
+    "width": 40.5,
+    "height": 25.8238
+  },
+  "logo_scale_uniform": 0.07641740128003864,
+  "logo_source_bounds": [
+    -81.8,
+    -167.1749,
+    448.184,
+    170.756
+  ],
+  "comparison_layout_only": {
+    "previous_width_mm": 36.5,
+    "previous_top_mm": 29,
+    "scale_increase_percent": 10.96,
+    "top_shift_mm": -4
+  },
+  "minimum_sampled_logo_to_cut_mm": 4.809,
+  "minimum_sampled_logo_to_texture_zone_mm": 3.323,
+  "logo_outside_cut_samples": 0,
+  "logo_in_texture_zone_samples": 0,
+  "texture_cell_count": 272,
+  "texture_stroke_mm": 0.2,
+  "texture_is": "shallow emboss artwork; polarity/depth to be set by die maker, not printed cyan",
+  "cut_path_svg": "M40 0 C48 0 55 6 60 11 L64 15 C68 24 70 34 70 42 C70 56 58 65 41 65 C22 65 8 58 2 45 C0 40 0 35 0 31 C0 17 12 7 27 2 C31 1 36 0 40 0 Z",
+  "texture_zone_path_svg": "M0 0 L40 0 C37 12 26 26 15 35 C10 39 6 42 2 45 L0 45 Z",
+  "box_mm": [
+    175,
+    180,
+    70
+  ],
+  "suggested_label_top_left_on_box_mm": [
+    52.5,
+    50.5
+  ],
+  "suggested_label_center_on_box_mm": [
+    87.5,
+    83
+  ],
+  "color_reference": {
+    "ink_spot": "LUVIA_Espresso",
+    "ink_screen_hex": "#3B2A1E",
+    "stock": "matte champagne gold adhesive foil-laminated paper; physical sample controls"
+  },
+  "pdf_checks": [
+    {
+      "file": "06_1比1剪贴纸样_A4.pdf",
+      "pages": 1,
+      "image_objects": 0,
+      "media_mm": [
+        210.0,
+        297.0
+      ]
+    },
+    {
+      "file": "05_肌理范围.pdf",
+      "pages": 1,
+      "image_objects": 0,
+      "media_mm": [
+        74.0,
+        69.0
+      ]
+    },
+    {
+      "file": "00_制作规格与定位说明.pdf",
+      "pages": 3,
+      "image_objects": 0,
+      "media_mm": [
+        210.0,
+        297.0
+      ]
+    },
+    {
+      "file": "03_模切刀线.pdf",
+      "pages": 1,
+      "image_objects": 0,
+      "media_mm": [
+        74.0,
+        69.0
+      ]
+    },
+    {
+      "file": "02_Logo印刷版.pdf",
+      "pages": 1,
+      "image_objects": 0,
+      "media_mm": [
+        74.0,
+        69.0
+      ]
+    },
+    {
+      "file": "04_肌理线稿.pdf",
+      "pages": 1,
+      "image_objects": 0,
+      "media_mm": [
+        74.0,
+        69.0
+      ]
+    }
+  ]
+}

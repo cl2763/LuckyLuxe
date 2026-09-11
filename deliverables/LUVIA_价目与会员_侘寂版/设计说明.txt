@@ -1,0 +1,7 @@
+LUVIA 价目表与会员体系 · 侘寂系列
+成品：价目表 3600×2544 PNG；会员体系 2544×3600 PNG。
+原始参考图不覆盖。文字和价格以可编辑 HTML 排版，Logo 使用品牌资产包 A2 原始 SVG。
+风格承接 new-chat/deliverables 中青瓷花影护理卡：暖米白、青瓷灰绿、沙金、矿物肌理。
+背景由内置 imagegen 生成；未使用 CLI API。
+背景提示词：Flat full bleed landscape luxury stationery background only, no text/logos/objects; wabi sabi, warm ivory paper #f5f1e7, subtle mineral limewash and oil paint texture, pale celadon #b9c2b6 and warm sand edges, faint champagne pigment, light quiet center for readable typography, handmade paper, no mockup.
+可编辑文件：LUVIA_价目与会员_可编辑.html；数据及构建源：价目数据.json、build.py。
