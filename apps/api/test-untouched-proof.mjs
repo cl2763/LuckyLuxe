@@ -102,13 +102,38 @@ const docs = execFileSync('git', ['-c', 'core.quotepath=false', 'ls-files', '-z'
   .split('\0').filter((f) => f.endsWith('.md'))
 /* 「说了未动」的形态:「〈库名〉未动」。四库四名 —— 生产库/本机库/沙箱库/回归临时库 */
 const SAYS = /(生产库|本机库|沙箱库)\s*(?:·\s*)?未动/
-/* 「有对照表」的形态:库文件绝对路径 + 行数,或那句「逐表零差异」 */
-const PROOF = /逐表零差异|逐表行数|未动须有证|行数快照|db-snapshot/
+/* 🔴 J-49(店主 07a §六 立)· **声称要靠标记,不靠措辞** ——
+   这一条是被一句**诚实话**逼出来的。夜 8 回执里写的是:
+     「但『本机库未动』这句话这一夜**我不能说**,因为它确实多了 4 行心跳。」
+   那是**否认**自己能作这句声称,而上一版判据按字面搜「未动」,把否认当成了声称,当场判红。
+   店主的话:**判据认词不认标记,就会专门惩罚说话最谨慎的那个人。**
+   所以现在分两步走:
+     ① **逐行**看:哪一行在**作声称**、哪一行只是在**否认/引述/讨论**这句话;
+     ② 作声称的,必须有**机器可读的标记**(下面 MARK_RE),而且标记指的那份对照表**文件真的在**。
+   留一条 PROOF_LEGACY:立律之前那批用「逐表零差异」这类措辞举过证的,不追溯 ——
+   **不是放宽,是不把旧账算成新账**(把它们一并判红会让棘轮 34 立刻涨,而那正是 J-49 要防的「拿棘轮吸收判据缺陷」)。 */
+const DENY = /不能说|不敢说|不该说|没法说|不许说|不写这句|否认|假红|误判|不是一次声称|这句话.{0,6}不/
+/* 标记格式**写死在这里**,是这条判据唯一认的声称凭据。
+   ⚠️ 只认**像真路径**的那种(带 `/`、以 `.md` 收尾)—— 台账里那句
+   「未动对照:<文件路径>」是在**描述格式**,不是在作声称;拿占位符当声称就又成了认词不认物。
+   现测:上一版的正则把台账那行也咬了,③a 当场报「标记指空」。 */
+const MARK_RE = /未动对照\s*[::]\s*([A-Za-z0-9_./\u4e00-\u9fa5-]*\/[A-Za-z0-9_./\u4e00-\u9fa5-]*\.md)/
+const PROOF_LEGACY = /逐表零差异|逐表行数|未动须有证|行数快照|db-snapshot/
+/* 一份文档里「真的在作声称」的行 —— 否认/引述的那些不算 */
+const claimLinesOf = (src) => src.split('\n').filter((ln) => SAYS.test(ln) && !DENY.test(ln))
 /* 白名单:立律(03q)之前写的回执按当时的规矩办,不追溯 —— 但**必须逐条列出**,
    靠日期猜"哪些是旧的"就是黑名单判据。上限即实际条数,新增要报批。 */
+const markerMissing = []
 const LEGACY = docs.filter((f) => {
   const src = readFileSync(join(ROOT, f), 'utf8')
-  return SAYS.test(src) && !PROOF.test(src)
+  const m = src.match(MARK_RE)
+  if (m) {
+    /* 写了标记就得**指得到东西**(J-27 同族:说「交了」而仓里没有那份文件,等于没交) */
+    if (!existsSync(join(ROOT, m[1]))) markerMissing.push(`${f} → ${m[1]}`)
+    return false
+  }
+  if (PROOF_LEGACY.test(src)) return false
+  return claimLinesOf(src).length > 0
 })
 /* 立律当天先量底数并上棘轮:存量只许降不许升,新写的回执一旦无证即红 */
 /* 🔴 落刀现测校正:这个数我原来是**猜的**(写了 61,实测 34)。
@@ -119,12 +144,34 @@ check(`③ 回执自证棘轮:${docs.length} 篇 handoff 文档里,写了「〈�
   + `${LEGACY.length} 篇 ≤ ${LEGACY_CAP}(立律 03q 前的按当时规矩不追溯;**只许降不许升** —— 新写一篇无证回执立刻红)`,
   LEGACY.length <= LEGACY_CAP, `${LEGACY.length} 篇:${LEGACY.slice(0, 5).join(' | ')}`)
 
+/* ③a 写了标记就得指得到东西 —— 标记指向一份不存在的对照表,等于没证(J-27 同族) */
+check(`③a 写了「未动对照:」标记的文档,标记指的那份对照表**文件真的在**(现测 ${markerMissing.length} 处指空)`,
+  markerMissing.length === 0, markerMissing.slice(0, 5).join(' | '))
+
 /* ③b 零命中先证刀能咬:造两句已知阳性,一句无证一句有证,必须分得出来 */
 const CANARY_BAD = '本批交付完成。生产库未动 · 本机库未动。'
 const CANARY_OK = '本批交付完成。生产库未动 · 本机库未动 —— 逐表零差异(对照表见下)。'
 check('③b 🔴 零命中先证刀能咬:「写了未动没对照表」必须咬中,「写了未动且有对照表」必须放行',
-  SAYS.test(CANARY_BAD) && !PROOF.test(CANARY_BAD) && SAYS.test(CANARY_OK) && PROOF.test(CANARY_OK),
-  JSON.stringify({ 无证被咬: SAYS.test(CANARY_BAD) && !PROOF.test(CANARY_BAD), 有证放行: PROOF.test(CANARY_OK) }))
+  claimLinesOf(CANARY_BAD).length > 0 && !PROOF_LEGACY.test(CANARY_BAD) && !MARK_RE.test(CANARY_BAD)
+  && claimLinesOf(CANARY_OK).length > 0 && PROOF_LEGACY.test(CANARY_OK),
+  JSON.stringify({ 无证被咬: claimLinesOf(CANARY_BAD).length > 0 && !PROOF_LEGACY.test(CANARY_BAD),
+    有证放行: PROOF_LEGACY.test(CANARY_OK) }))
+
+/* ③c/③d/③e · J-49 那三条造病(店主 日班令1 段0 点名要的),在判据里常驻:
+   判据自己拿三句已知样本走一遍 —— 光靠「跑起来是绿的」证明不了它**分得出**这三种情况。 */
+const C_CLAIM_NOMARK = '本批交付完成。**本机库未动**,沙箱库只有心跳。'
+const C_MARK_DEAD = '本机库未动。未动对照:handoff/night-runs/这份根本不存在.md'
+const C_DENY = '但「本机库未动」这句话这一夜**我不能说**,因为它确实多了 4 行心跳。照实写。'
+check('③c 造病一:写了「未动」当声称、却**没有标记** → 必须算违规',
+  claimLinesOf(C_CLAIM_NOMARK).length > 0 && !MARK_RE.test(C_CLAIM_NOMARK))
+check('③d 造病二:写了标记、但对照表文件**不存在** → 必须算违规(J-27 同族)',
+  MARK_RE.test(C_MARK_DEAD) && !existsSync(join(ROOT, (C_MARK_DEAD.match(MARK_RE) || [])[1] || 'x')))
+check('③e 🔴 反向守:像夜 8 那样**否认**自己能说这句话的 —— **不许红**(J-49 的由来)',
+  claimLinesOf(C_DENY).length === 0,
+  `现测把它当成了 ${claimLinesOf(C_DENY).length} 条声称`)
+/* ③f 反向守的反向守:别把 DENY 写得太宽,把真声称也一并放走了 */
+check('③f 反向守的反向守:一句**平铺直叙的真声称**不许被「否认」那条规则吞掉',
+  claimLinesOf('生产库未动 · 本机库未动。').length === 1)
 
 /* 下限同样取实测值(176),不留空隙:文档只增不减,真要删得有人有意识地改这个数。
    留 24 格余量的写法,等于允许 handoff 被悄悄砍掉四分之一而判据不响。 */
