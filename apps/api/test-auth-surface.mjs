@@ -7,6 +7,7 @@
 
    放行清单只有登录相关的公开入口(登录/注册/改密本身不能要求先登录)。 */
 import { readFileSync, readdirSync } from 'node:fs'
+import { createHmac } from 'node:crypto'
 import { dirname, join } from 'node:path'
 import { fileURLToPath } from 'node:url'
 
@@ -332,6 +333,48 @@ async function main() {
 
   /* 拍板②(店主 2026-08-10):员工「我的客户」—— 只看自己服务过的顾客;手机号脱敏;
      **财务字段在响应里整体不存在**(不是置空)。裁剪在接口层,前端隐藏不算数。 */
+  /* ══ 夜9 段1(结论 B)· **顾客身份这一路必须是服务端签发** ══
+     段 0 逐条查完的结论:三条路都已经是服务端签发/校验,那条上线门槛是假红。
+     结论要**被机器守住**,否则下一次谁加一条不签名的路,没有人拦。
+     这里守三层(静态 + 行为),全部对着 `local-server.mjs` 现读:
+       ① 签名路:验签、验过期、openid 对得上 —— 三件缺一不可;
+       ② 不签名的演示令牌:**只能**在 `DEMO_LOGIN_ALLOWED` 下可达;
+       ③ `/health` 那一格是**现测**,不是常量(J-52)。 */
+  const SRV = readFileSync(join(HERE, 'local-server.mjs'), 'utf8')
+  const miniFn = (SRV.match(/function customerFromMiniToken\(token\)[\s\S]*?\n\}/) || [''])[0]
+  check('㊙① 签名路:验签不过当场 401', /signMiniPayload\(payload\)\s*!==\s*signature/.test(miniFn) && /401/.test(miniFn))
+  check('㊙② 签名路:过期当场 401', /data\.exp|Date\.now\(\)\s*>\s*Number\(data\.exp\)/.test(miniFn))
+  check('㊙③ 签名路:还要 openid 对得上(光有签名不够)', /wechat_open_id\s*=\s*\?/.test(miniFn))
+  const reqCust = (SRV.match(/function requireCustomer\(req\)[\s\S]*?\n\}/) || [''])[0]
+  check('㊙④ 不签名的演示令牌**只在 DEMO_LOGIN_ALLOWED 下可达**(生产结构性不成立)',
+    /DEMO_LOGIN_ALLOWED\s*\?\s*demoEmailFromToken/.test(reqCust), reqCust.slice(0, 120).replace(/\s+/g, ' '))
+  check('㊙⑤ requireCustomer 只有这两条路,别的一律 401(新加一条路会把这条判据顶红)',
+    (reqCust.match(/customerFromMiniToken|demoEmailFromToken/g) || []).length === 2
+    && /UNAUTHORIZED/.test(reqCust))
+  const HEALTHSRC = readFileSync(join(HERE, 'health-report.mjs'), 'utf8')
+  check('㊙⑥ J-52:`/health` 的 guestIdUnsigned 是**量出来的**,读口里不许有写死的常量',
+    !/guestIdUnsigned:\s*(true|false)\b/.test(HEALTHSRC) && /const guestIdUnsigned = /.test(HEALTHSRC),
+    (HEALTHSRC.match(/guestIdUnsigned[^\n]*/g) || []).slice(0, 2).join(' | '))
+  check('㊙⑦ 🔴 反向守:把它写回常量必须被 ㊙⑥ 咬中(否则那条是空转)',
+    /guestIdUnsigned:\s*(true|false)\b/.test('    guestIdUnsigned: true,'))
+  /* ㊙⑧ 行为层:真拿一个**伪造的**签名串去打,必须 401 —— 静态读源码证不了运行时真在验 */
+  const forged = 'mini.' + Buffer.from(JSON.stringify({ sub: 'demo-cust-06', openid: 'demo-openid-x', exp: Date.now() + 60000 })).toString('base64url') + '.notavalidsignature'
+  const forgedRes = await fetch(`${BASE_URL}/my/card-pack`, { headers: { authorization: `Bearer ${forged}`, 'x-tenant-id': 'lucky-luxe' } })
+  check('㊙⑧ 行为层:**伪造签名**的顾客令牌必须被拒(现测状态码)', forgedRes.status === 401, String(forgedRes.status))
+  /* ㊙⑨ 反向守:同一条口,**不带任何令牌**也必须 401(否则 ㊙⑧ 那个 401 可能只是「这条口本来就谁都拒」) */
+  const nakedRes = await fetch(`${BASE_URL}/my/card-pack`, { headers: { 'x-tenant-id': 'lucky-luxe' } })
+  check('㊙⑨ 反向守:同一条口不带令牌也 401(证明 ㊙⑧ 拒的是**令牌不合法**这件事)',
+    nakedRes.status === 401, String(nakedRes.status))
+  /* ㊙⑩ 正向:**合法签发**的令牌在同一条口上必须过 —— 否则前面那些 401 只说明这条口是死的 */
+  const okTok = (() => {
+    const payload = Buffer.from(JSON.stringify({ sub: 'demo-cust-06', openid: 'demo-openid-06', exp: Date.now() + 60000 })).toString('base64url')
+    const sig = createHmac('sha256', process.env.WECHAT_MINI_TOKEN_SECRET || process.env.OWNER_TOKEN || 'owner-demo-token').update(payload).digest('base64url')
+    return `mini.${payload}.${sig}`
+  })()
+  const okRes = await fetch(`${BASE_URL}/my/card-pack`, { headers: { authorization: `Bearer ${okTok}`, 'x-tenant-id': 'lucky-luxe' } })
+  check('㊙⑩ 正向守:**合法签发**的令牌在同一条口上不是 401(证明这条口不是「见谁都拒」)',
+    okRes.status !== 401, String(okRes.status))
+
   console.log(`\n门禁全量扫描通过:${checks} 项断言全绿`)
 }
 

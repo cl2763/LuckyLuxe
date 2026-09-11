@@ -10728,7 +10728,7 @@ async function route(req, res) {
        每一格为什么在那儿,写在那个文件的抬头。 */
     return json(res, 200, healthReport(req, {
       rasterBackend, tenantFallbackTally, getAiUsage, mergeWindowSeconds, mergeWindowCapSeconds, openMergeWindows,
-      dataDir, dbConcurrency, replyLength, appVersion, tenantNullRows, dataScope: DATA_SCOPE, dataScopeName: DATA_SCOPE_NAME, iso,
+      dataDir, dbConcurrency, replyLength, appVersion, tenantNullRows, dataScope: DATA_SCOPE, dataScopeName: DATA_SCOPE_NAME, iso, demoLoginAllowed: DEMO_LOGIN_ALLOWED,
     }))
   }
   if (req.method === 'GET' && path === '/wechat/customer-service/webhook') {

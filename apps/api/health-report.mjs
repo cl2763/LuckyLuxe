@@ -9,8 +9,14 @@
    · `snapshotRaster` —— 生产装没装栅格化后端,空=真机快照会白;
    · `mergeWindowSeconds` / `mergeWindowCapSeconds` / `mergeWindowsOpen`(D151 + 05r 补五 §三)
      —— 窗多长、封顶几秒、这会儿有几个人正被等着;三个都报,判据与店主都不用猜;
-   · `guestIdUnsigned` —— 上线批占位:访客身份串现在是客户端自己生成的,
-     上生产前要改成服务端签发,那条判据看它变 false。
+   · `guestIdUnsigned` —— **现测**(夜9 段1 按 J-52 改):这个进程**还接不接受「非服务端签发」的顾客身份**。
+     它以前是一个**写死的 `true`** —— 而上线清单第 4 行那条 🔴 硬门槛正是读这一格,
+     也就是说**那条红从来没有量过任何东西**。夜 9 段 0 逐条查完三条身份路(结论见
+     `handoff/night-runs/访客身份串_现查结论_2026-09-12.md`):
+       · 小程序/微信:`mini.<payload>.<sig>`,HMAC 签名 + 验签 + 过期 + openid 对得上 —— **服务端签发**;
+       · 网页顾客端:只发 `x-tenant-id` + `Bearer`,**没有任何客户端自造串**;
+       · 唯一不签名的那条是演示令牌 `demo-<scope>:<邮箱>`,它**只在 `DEMO_LOGIN_ALLOWED` 下可达**。
+     所以这一格 = `demoLoginAllowed` 本身 —— **同一处真相,不在这里另抄一份判断**。
 
    所以这里**只出事实,不出配置值与密钥**。 */
 import { join } from 'node:path'
@@ -21,7 +27,12 @@ export function healthReport(req, deps) {
   const {
     rasterBackend, tenantFallbackTally, getAiUsage, mergeWindowSeconds, mergeWindowCapSeconds, openMergeWindows,
     dataDir, dbConcurrency, replyLength, appVersion, tenantNullRows, dataScope, dataScopeName, iso,
+    demoLoginAllowed,
   } = deps
+  /* 🔴 J-52:读口里每一格都必须是量出来的。**取不到就报 null,不许兜成 true/false** ——
+     兜一个默认值等于又变回写死的常量(静默失败器族)。null 的意思是「这一格没量到」,
+     判据看见 null 要报「没量成」,不许当事实用。 */
+  const guestIdUnsigned = typeof demoLoginAllowed === 'boolean' ? demoLoginAllowed : null
   return {
     ok: true,
     service: 'lucky-luxe-api-local',
@@ -32,7 +43,7 @@ export function healthReport(req, deps) {
     mergeWindowSeconds: mergeWindowSeconds(),
     mergeWindowCapSeconds: mergeWindowCapSeconds(),
     mergeWindowsOpen: openMergeWindows(),
-    guestIdUnsigned: true,
+    guestIdUnsigned,
     ...(LOOPBACK.test(String(req.socket?.remoteAddress || '')) ? { dataFile: join(dataDir, 'lucky-luxe.sqlite') } : {}),
     dbConcurrency,
     replyLength: replyLength.snapshot(),

@@ -7,7 +7,7 @@
       这一条守的是**注入给模型的那句事实**(零编造红线的源头),
       「模型有没有照着说」由六通打分看 —— 那是人的判断,不是断言能定的事。
 
-   还有一格 `guestIdUnsigned`:上线批占位(访客身份串现在客户端生成,上生产前改服务端签发)。 */
+   还有一格 `guestIdUnsigned`:夜9 段1 起是**现测**(J-52)—— 这个进程还接不接受非服务端签发的顾客身份。 */
 import { readFileSync } from 'node:fs'
 import { join } from 'node:path'
 import { fileURLToPath } from 'node:url'
@@ -135,7 +135,16 @@ if (!up) {
     Number(health.mergeWindowSeconds) === Math.round(WIN_MS / 1000)
     && Number(health.mergeWindowCapSeconds) > 0 && typeof health.mergeWindowsOpen === 'number',
     JSON.stringify({ 窗: health.mergeWindowSeconds, 封顶: health.mergeWindowCapSeconds, 开着: health.mergeWindowsOpen }))
-  check('④b `/health` 有上线批那格 `guestIdUnsigned`(上线批那条判据看它变 false)',
+  /* 🔴 夜9 段1(J-52):这一格从**写死的 true** 改成了**现测** ——
+     它等于「这个进程还接不接受非服务端签发的顾客身份」= `DEMO_LOGIN_ALLOWED`。
+     所以断言也跟着改:**不再锚那个常量**,而是锚两件事 ——
+       ①它是个 boolean(**不许是 null**:null 的意思是「这一格没量到」);
+       ②它跟这个进程的实际状态对得上 —— 回归跑在 `ALLOW_DEMO_ADMIN_LOGIN=true` 的非生产进程里,
+         所以这里应当是 `true`;真生产进程里它会是 `false`(夜9 现测过,见回执)。
+     锚常量的判据在事实改变时只会拦着人改对,不会告诉人哪里错了。 */
+  check('④b `/health` 的 `guestIdUnsigned` 是**量出来的 boolean**(不是写死的常量,也不许是 null)',
+    typeof health.guestIdUnsigned === 'boolean', String(health.guestIdUnsigned))
+  check('④b2 它跟这个进程的实际状态对得上:回归进程开着演示登录 → 这一格应当是 true',
     health.guestIdUnsigned === true, String(health.guestIdUnsigned))
   const tenant = db.prepare(`SELECT t.id FROM tenants t JOIN stores s ON s.tenant_id = t.id AND s.is_active = 1 ORDER BY t.id LIMIT 1`).get()?.id
   check('④c 造景自证:取得到一家店', Boolean(tenant), String(tenant))
