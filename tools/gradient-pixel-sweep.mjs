@@ -259,8 +259,11 @@ async function sweepHere(pageName, mode) {
     await ev(CLEAN)
     if (!res || !res.out) { notes.push(`${pageName} · ${mode} · 第 ${k + 1} 屏:解码没成 —— **没验成**`); continue }
     for (const nd of nodes) {
-      const key = `${nd.sel}|${nd.text}`
-      if (seen.has(key)) continue      /* 同一个节点会跨两屏出现,只算一次 */
+      /* 🔴 去重只用来**少写几行报告**,不许用来少量几个节点 ——
+         上一版把 `seen` 卡在量之前,于是 255 个一模一样的「还没有图片」只算 1 个,
+         量成数从 594 掉到 68,而我差点把这当成「painted 过滤太狠」。
+         **同一种选择器出现在渐变面的不同位置,底色是不一样的** —— 必须每个都量。 */
+      const key = `${nd.sel}|${nd.text}|${nd.y}`
       const b = res.out.find((x) => x.id === nd.id)
       if (!b || b.err) {
         if (b && b.err && /差异像素/.test(b.err) && nd.painted === false) {
@@ -271,13 +274,14 @@ async function sweepHere(pageName, mode) {
         }
         continue
       }
+      if (seen.has(key)) continue      /* 同一个节点跨两屏各出现一次:报告里只写一行 */
       seen.add(key)
       total += 1
+      measured += 1
+      ok += 1
       const large = nd.size >= 24 || (nd.size >= 18.66 && nd.weight >= 700)
       const need = large ? 3 : 4.5
       const hard = large ? 1.6 : 2
-      measured += 1
-      ok += 1
       if (b.worst + 0.05 < need) {
         rows.push({ page: pageName, mode, sel: nd.sel, text: nd.text, fg: nd.fg,
           bg: `rgb(${(b.bg || []).join(', ')})`, ratio: b.worst, need, px: b.px,
