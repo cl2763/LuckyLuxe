@@ -333,7 +333,17 @@ const uniq = (arr) => { const m = new Map(); for (const r of arr) if (!m.has(key
 const uA = uniq(A); const uB = uniq(B)
 
 console.log(`\n[渐变面取像素] 刀 ${KNIFE_REV} · 被测 ${CODE_REV} · 界面指纹 ${STYLE_SHA}`)
-console.log(`  量到 ${measured} 个压在渐变面上的字 · 甲档 ${A.length} 条(去重 ${uA.length})· 乙档 ${B.length} 条(去重 ${uB.length})`
+/* 🔴 J-48(店主 07a §五 立,原话收进码里):**量在前,去重在后。**
+   去重只许用来**少写几行报告**,不许用来**少量几个节点**。
+   报告里必须**同时给两个数**:量过的个数 与 去重后的行数,且前者 ≥ 后者。
+   案底是我自己踩的两面:`painted` 当门槛 594→66(数量被去重藏住)、`seen` 卡在量之前 594→68。 */
+const DEDUPED = uA.length + uB.length + clipped.size
+if (measured < DEDUPED) {
+  console.error(`\n🔴 J-48 破了:量过 ${measured} 个 < 去重后 ${DEDUPED} 行 —— 去重一定是挪到量之前去了`)
+  process.exitCode = 1
+}
+console.log(`  **量过的个数 ${measured}** / **去重后的行数 ${DEDUPED}**(J-48:前者必须 ≥ 后者)`)
+console.log(`  甲档 ${A.length} 条(去重 ${uA.length})· 乙档 ${B.length} 条(去重 ${uB.length})`
   + ` · 被裁掉没画出来的 ${clipped.size} 个(不参与判定)· 没验成 ${notes.length} 条`)
 for (const r of uA.slice(0, 12)) console.log(`  🔴甲 ${r.mode} · ${r.page} · ${r.sel}「${r.text}」${r.fg} 压最差像素 ${r.bg} = ${r.ratio}:1(要 ${r.need}:1)`)
 for (const x of notes.slice(0, 8)) console.log(`  ⚠️ ${x}`)
@@ -346,7 +356,8 @@ if (OUT) {
     '> **判法**:前景色取 computed(那是确定值);背景**把字设成透明后整页截图**,',
     '> 在页面里用 canvas 解码,对每个字的矩形取**最不利的那一个像素**(比值最小的那个)。',
     '> **取最差不取平均** —— 渐变面上「平均够亮」没有意义,人眼看见的是最糊的那一小段。这是保守判法。', '',
-    `**量到 ${measured} 个 · 甲档 ${A.length} 条(去重 ${uA.length})· 乙档 ${B.length} 条(去重 ${uB.length})`
+    `**量过的个数 ${measured} / 去重后的行数 ${DEDUPED}**(J-48:量在前、去重在后,前者必须 ≥ 后者)`, '',
+    `**甲档 ${A.length} 条(去重 ${uA.length})· 乙档 ${B.length} 条(去重 ${uB.length})`
     + ` · 被裁掉没画出来的 ${clipped.size} 个 · 没验成 ${notes.length} 条**`, '',
     '| 页 | 档 | 选择器 | 文字 | 前景 | 最差背景像素 | 比值 | 门槛 | 档次 |', '|---|---|---|---|---|---|---|---|---|']
   for (const r of [...uA, ...uB].sort((a, b) => a.ratio - b.ratio)) {
