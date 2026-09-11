@@ -227,10 +227,23 @@ async function sweepHere(pageName, mode) {
     if (!inWin.length) continue
     await ev(`(() => { window.scrollTo(0, ${top}); return 1 })()`)
     await sleep(260)
-    const realTop = await ev('Math.round(window.scrollY)')
-    /* 视口坐标 = 页面坐标 − 实际滚到的位置(用**实际**值,不用我以为滚到了哪) */
-    const local = inWin.map((n) => ({ ...n, x: n.x, y: n.y - realTop }))
-      .filter((n) => n.y + n.h > 0 && n.y < vh)
+    /* 🔴 **矩形要在截图那一刻现读**,不能用 MARK 时记下的那一份 ——
+       页面会在这中间重排(门店设置那几张卡是拉回订阅数据之后才定位的),
+       坐标一旧,差出来的就是别处;现测:那 4 个节点因此「一个差异像素都没有」。
+       现在按 data-gradprobe 逐个重新问一次**视口坐标**,顺带把不在屏内的剔掉。 */
+    const fresh = await ev(`(() => { const ids = ${JSON.stringify(inWin.map((n) => n.id))}
+      const out = []
+      for (const id of ids) {
+        const el = document.querySelector('[data-gradprobe="' + id + '"]')
+        if (!el) continue
+        const r = el.getBoundingClientRect()
+        if (r.width < 2 || r.height < 2) continue
+        if (r.bottom <= 0 || r.top >= window.innerHeight) continue
+        out.push({ id: id, x: Math.round(r.left), y: Math.round(r.top), w: Math.round(r.width), h: Math.round(r.height) })
+      }
+      return out })()`) || []
+    const byId = new Map(inWin.map((n) => [n.id, n]))
+    const local = fresh.map((f) => ({ ...byId.get(f.id), x: f.x, y: f.y, w: f.w, h: f.h }))
     if (!local.length) continue
     const shotA = (await send('Page.captureScreenshot', { format: 'png' })).result?.data
     const hidden = await ev(HIDE)
