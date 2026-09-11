@@ -21,24 +21,8 @@ const CUR = { prefix: '', symbol: '', code: '', trimZeroDecimals: false }
 function curPrefix() {
   return `${String(CUR.prefix || '').replace('<CODE>', CUR.code || '')}${CUR.symbol || ''}`
 }
-/* 🔴 07a 裁 #45 · 顾客端「技师 / 门店」的**唯一出口**。
-   病是这样的:服务端给这两个字段用的是 `.get()`,**查不到返回 undefined**;
-   而 `booking_drafts.technician_id` 本来就可空(「顾客还没选技师」是**正常业务态**)。
-   前端原来有 9 处直接写 `order.technician.name` —— 取到 undefined/null 就当场抛错,
-   **整页白**,而不是少显示一个名字。06i 我的购物车夹具就这么把整页搞崩过,
-   当时还被我误判成「点不到结算入口」(那正是 J-47 的由来)。
-   修法**按类不按处**:九处收到这一个出口,拿不到就显示「未指定」——
-   **不许九处各加一个 `?.`**(那是把同一件事说九遍,下一处新写的照样会漏)。
-   服务端那四行同批改成 `|| null`,不再把 undefined 漏出来。 */
-function partyName(party) {
-  return party && party.name ? party.name : t('unassigned')
-}
-function partyField(party, key) {
-  return party && party[key] ? party[key] : ''
-}
-function partyId(party) {
-  return party && party.id ? party.id : null
-}
+/* 「技师 / 门店」的唯一出口 partyName / partyField / partyId 住在 `apps/web/party.js`
+   —— 搬出去是因为本文件有行数棘轮(2,811,只许降);理由与病历写在那个文件抬头。 */
 
 function money(cents, decimals) {
   const n = Number(cents || 0) / 100
@@ -173,7 +157,6 @@ const copy = {
     arrival: '到店时间',
     duration: '服务时长',
     technician: '服务人员',
-    unassigned: '未指定',
     address: '地址',
     none: '无',
     paidDeposit: '实付定金',
@@ -322,7 +305,6 @@ const copy = {
     arrival: 'Arrival',
     duration: 'Duration',
     technician: 'Technician',
-    unassigned: 'Unassigned',
     address: 'Address',
     none: 'None',
     paidDeposit: 'Paid Deposit',

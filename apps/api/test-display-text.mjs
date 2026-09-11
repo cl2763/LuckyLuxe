@@ -167,12 +167,21 @@ for (const f of CUSTOMER_FILES) {
 check(`病三① 顾客端**零处**直取 .technician. / .store. 的属性(一律过 partyName/partyField/partyId)`,
   directParty.length === 0, directParty.slice(0, 6).join(' | '))
 const CUSTSRC = readFileSync(join(ROOT, 'apps/web/customer.js'), 'utf8')
+/* 出口搬去 `apps/web/party.js` 了(customer.js 有行数棘轮,只许降)—— 判据跟着搬,
+   并且**多验一条**:index.html 里 party.js 必须排在 customer.js **之前**,否则调用时还没定义。 */
+const PARTYSRC = readFileSync(join(ROOT, 'apps/web/party.js'), 'utf8')
+const INDEXSRC = readFileSync(join(ROOT, 'apps/web/index.html'), 'utf8')
 check('病三② 那三个出口确实在,而且拿不到时给的是「未指定」不是空串',
-  /function partyName\(/.test(CUSTSRC) && /function partyField\(/.test(CUSTSRC)
-  && /function partyId\(/.test(CUSTSRC) && /unassigned:\s*'未指定'/.test(CUSTSRC))
+  /partyName = function|function partyName\(/.test(PARTYSRC) && /function partyField\(/.test(PARTYSRC)
+  && /function partyId\(/.test(PARTYSRC) && /zh:\s*'未指定'/.test(PARTYSRC))
+check('病三②b 出口的 script 标签排在 customer.js **之前**(排后面等于调用时还没定义)',
+  INDEXSRC.indexOf('/web/party.js') > 0 && INDEXSRC.indexOf('/web/party.js') < INDEXSRC.indexOf('/web/customer.js'),
+  `party.js@${INDEXSRC.indexOf('/web/party.js')} customer.js@${INDEXSRC.indexOf('/web/customer.js')}`)
 check('病三③ 服务端那四行不许再把 undefined 漏给前端(技师/门店各两处,一律 || null)',
   (readFileSync(join(ROOT, 'apps/api/local-server.mjs'), 'utf8')
-    .match(/FROM (?:technicians|stores) WHERE id = \?'\)\.get\(row\.(?:technician|store)_id\) \|\| null/g) || []).length === 4,
+    /* 段3 之后这几句还带上了 `AND tenant_id = ?`,所以判据锚的是**形状**不是整串字面量:
+       「查 technicians/stores + 取 row 上的 id + 以 || null 收尾」。 */
+    .match(/FROM (?:technicians|stores) WHERE id = \?[^']*'\)\.get\(row\.(?:technician|store)_id[^)]*\) \|\| null/g) || []).length === 4,
   '四行里有漏掉 || null 的')
 /* 病三④ 反向守:这把刀真的会咬 —— 拿一句已知阳性走一遍(零命中先证刀能咬) */
 check('病三④ 🔴 反向守:一句直取写法必须被咬中(否则「零处」是空转)',
