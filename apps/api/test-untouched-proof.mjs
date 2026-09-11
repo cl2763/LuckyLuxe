@@ -125,6 +125,10 @@ const claimLinesOf = (src) => src.split('\n').filter((ln) => SAYS.test(ln) && !D
    靠日期猜"哪些是旧的"就是黑名单判据。上限即实际条数,新增要报批。 */
 const markerMissing = []
 const LEGACY = docs.filter((f) => {
+  /* 🔴 现测栽了一次:`git ls-files` 列的是**索引里**的文件,而刚被删掉的那一份还在索引里 ——
+     直接 readFileSync 会 ENOENT **整把刀崩掉**(崩掉不是红,是连结论都没有)。
+     文件不在就跳过,并不当成违规:它已经不在仓里了,谈不上「声称」。 */
+  if (!existsSync(join(ROOT, f))) return false
   const src = readFileSync(join(ROOT, f), 'utf8')
   const m = src.match(MARK_RE)
   if (m) {
