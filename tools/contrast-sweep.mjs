@@ -142,6 +142,26 @@ const ev = async (expression) => {
 }
 await send('Page.enable'); await send('Runtime.enable')
 
+/* ── J-47(店主 07a §三 立)· **扫页面的刀必须同时收页面错误** ──────────────
+   由来是我自己的一句话:06i「整个购物车渲染当场抛错,连带『去结算』那条 summary-bar 也不出现,
+   **看起来却像点不到结算入口**」—— 我差点被它骗过去,只读红榜的人也会被骗过去。
+   店主的裁定:**有错先报错**。「元素没找到」和「这一页渲染崩了」是**两个结论**,不许混成一个;
+   一页只要抛过错,那一页这一轮的所有「没找到」结论**一律作废**,按「这一页崩了」报。
+   ⚠️ 收集脚本必须**赶在页面脚本之前**装上(addScriptToEvaluateOnNewDocument),
+      否则首屏那一次抛错根本收不到 —— 那是最要命的一次。 */
+await send('Page.addScriptToEvaluateOnNewDocument', { source:
+  `(() => { if (window.__pageErrors) return 1
+    window.__pageErrors = []
+    window.addEventListener('error', (e) => { window.__pageErrors.push('onerror: ' + (e.message || e.type)) })
+    window.addEventListener('unhandledrejection', (e) => { window.__pageErrors.push('unhandledrejection: ' + String((e.reason && e.reason.message) || e.reason)) })
+    const ce = console.error
+    console.error = function () { try { window.__pageErrors.push('console.error: ' + Array.from(arguments).map(String).join(' ')) } catch (x) {} return ce.apply(console, arguments) }
+    return 1 })()` })
+const crashed = []
+/* 取一次并清空 —— 每一页各算各的,不许把上一页的错算到这一页头上 */
+const takeErrors = async () => (await ev(`(() => { const e = (window.__pageErrors || []).slice(0, 5)
+  window.__pageErrors = []; return e })()`)) || []
+
 /* ── 页内那段扫描脚本(整段在浏览器里跑;这里是字符串,**里面一个反引号都不许有**)── */
 const SWEEP = `(() => {
   const parse = (c) => {
@@ -292,6 +312,8 @@ if (TARGET === 'pages') {
       if (Number(cnt) < 20) { console.error(`🔴 ${u.name} 正文只有 ${cnt} 字 —— 这一页**没验成**,不许下结论`); continue }
       const res = await ev(SWEEP)
       scanned += res.scanned; grad += res.gradients || 0
+      const errs = await takeErrors()
+      if (errs.length) crashed.push({ page: u.name, mode, errs })
       for (const b of res.bad) bad.push({ 页: u.name, 标签: '(整页)', 档: mode, ...b })
       if (mode === 'light') scannedPages.push(u.name)
       console.log(`   [扫] ${mode} · ${u.name} —— 文字节点 ${res.scanned} 个,红 ${res.bad.length} 条`)
@@ -397,6 +419,8 @@ if (TARGET === 'pages') {
       await ev(`(() => { const b = document.querySelector('[data-view="${v.key}"]'); if (b) b.click(); return 1 })()`)
       await sleep(2500)
       const res = await ev(SWEEP)
+      const errs = await takeErrors()
+      if (errs.length) crashed.push({ page: `顾客端·${v.name || v.key}`, mode, errs })
       scanned += res.scanned; grad += res.gradients || 0
       for (const b of res.bad) bad.push({ 页: `顾客端·${v.name || v.key}`, 标签: '(整页)', 档: mode, ...b })
       if (mode === 'light') scannedPages.push(`顾客端·${v.name || v.key}`)
@@ -445,6 +469,8 @@ if (TARGET === 'pages') {
         if (!seen) { stepMiss.push(`${st.name}(${mode}):点完之后页面上找不到「${st.want}」—— 没到那一页,**没扫成**,不是绿`); continue }
       }
       const res = await ev(SWEEP)
+      const errs = await takeErrors()
+      if (errs.length) crashed.push({ page: `顾客端·${st.name}`, mode, errs })
       scanned += res.scanned; grad += res.gradients || 0
       for (const b of res.bad) bad.push({ 页: `顾客端·${st.name}`, 标签: '(登录态)', 档: mode, ...b })
       if (mode === 'light') scannedPages.push(`顾客端·${st.name}`)
@@ -492,6 +518,8 @@ for (const mode of ['light', 'dark']) {
       const res = await ev(SWEEP)
       scanned += res.scanned
       grad += res.gradients || 0
+      const errs = await takeErrors()
+      if (errs.length) crashed.push({ page: `${p.name || p.key} · ${tab.label}`, mode, errs })
       for (const b of res.bad) bad.push({ 页: p.name || p.key, 标签: tab.label, 档: mode, ...b })
       if (mode === 'light') scannedPages.push(tab.label && tab.label !== '(整页)' ? `${p.name || p.key} · ${tab.label}` : (p.name || p.key))
       console.log(`   [扫] ${mode} · ${p.name || p.key} · ${tab.label} —— 文字节点 ${res.scanned} 个,红 ${res.bad.length} 条`)
@@ -515,7 +543,12 @@ const uA = uniq(A); const uB = uniq(B)
    `CS_COVER` 给的是「该扫的全清单」;没给就只报扫到几页,并明说「没有声明应扫清单,算不出漏了几页」。 */
 const uniqPages = [...new Set(scannedPages)]
 const missPages = COVER.filter((x) => !uniqPages.some((y) => y === x || y.endsWith(x) || x.endsWith(y)))
-const coverLines = ['>', '> 🔴 **覆盖面(这一节是固定的,不许省)**',
+const crashLines = crashed.length
+  ? ['>', `> 🔴🔴 **这一跑有 ${crashed.length} 个「页 × 档」抛过错(J-47)** —— 它们这一轮的结论**一律作废**,`,
+    '> 「元素没找到」和「这一页渲染崩了」是两个结论,不许混成一个:',
+    ...crashed.map((c) => `> · **${c.page} · ${c.mode}** —— ${c.errs.join(' ;; ')}`)]
+  : ['>', '> ✅ **页面错误:这一跑没有任何一页抛错**(J-47:有错先报错;收的是 onerror / unhandledrejection / console.error)']
+const coverLines = [...crashLines, '>', '> 🔴 **覆盖面(这一节是固定的,不许省)**',
   COVER.length
     ? `> **扫到 ${uniqPages.length} 页 / 该扫 ${COVER.length} 页 / 没扫 ${missPages.length} 页**`
     : `> **扫到 ${uniqPages.length} 页**;这一跑没声明应扫清单(CS_COVER),**算不出漏了几页**`,
@@ -551,6 +584,12 @@ table(uA, `甲档「看不见」—— 去重后 ${uA.length} 处(必须清零)`
 table(uB, `乙档「AA 欠账」—— 去重后 ${uB.length} 处(待裁:改它等于改合同图令牌)`)
 if (OUT) { mkdirSync(dirname(OUT), { recursive: true }); writeFileSync(OUT, lines.join('\n'), 'utf8'); console.log(`   [红榜] → ${OUT}`) }
 
+/* 🔴 J-47:**有错先报错**。抛过错的页,这一轮它的「没找到」结论一律作废 —— 先把这件事摆在最前面。 */
+if (crashed.length) {
+  console.error(`\n🔴🔴 这一跑有 ${crashed.length} 个「页 × 档」**抛过错** —— 它们这一轮的对比度结论**一律作废**,`
+    + '按「这一页崩了」报,不许说成「少了某个元素」:')
+  for (const c of crashed) { console.error(`   · ${c.page} · ${c.mode}`); for (const e of c.errs) console.error(`       ${e}`) }
+}
 console.log(`\n[对比度全扫] 刀 ${KNIFE_REV} · 被测 ${CODE_REV}`)
 console.log(`  文字节点 ${scanned} 个 · 压在渐变面上判不了的 ${grad} 个(如实报)`)
 console.log(`  甲档「看不见」 ${A.length} 条(去重 ${uA.length} 处)· 乙档「AA 欠账」 ${B.length} 条(去重 ${uB.length} 处)`)
@@ -560,6 +599,11 @@ for (const b of uA.sort((x, y) => x.ratio - y.ratio).slice(0, 15)) {
 if (uA.length > 15) console.log(`  …… 甲档另有 ${uA.length - 15} 处,全文见红榜`)
 
 ws.close(); chrome.kill()
+/* 抛过错就不许报绿 —— 哪怕甲档是 0(那个 0 本身就不算数了) */
+if (crashed.length && CAP !== null) {
+  console.error(`\n❌ 有 ${crashed.length} 个「页 × 档」抛过错 —— 这一跑不许当绿`)
+  ws.close(); chrome.kill(); process.exit(1)
+}
 if (CAP !== null) {
   /* 棘轮压的是**甲档去重后的处数** —— 乙档另有一条 CS_CAP_B(给了才判) */
   const capB = process.env.CS_CAP_B ? Number(process.env.CS_CAP_B) : null
