@@ -130,7 +130,18 @@ const MARK = `(() => {
     el.setAttribute('data-gradprobe', String(i))
     out.push({ id: i, sel: selOf(el), text: text.slice(0, 20), fg: cs.color, size: Math.round(size), weight,
       x: Math.round(r.left), y: Math.round(r.top), w: Math.round(r.width), h: Math.round(r.height),
-      onScreen: r.bottom > 0 && r.top < window.innerHeight })
+      onScreen: r.bottom > 0 && r.top < window.innerHeight,
+      /* 🔴 「矩形在屏幕里」≠「真的画出来了」:有祖先 overflow:hidden 的时候,
+         元素可能被**裁在框外**,布局位置照给,像素上却什么都没有(现测:门店设置那台手机预览里的几行字,
+         截图在那个坐标上是纯白,两张图逐字节相同)。J-37「在不在 ≠ 看得见」的同族。
+         所以再问一句:那个点上**最上面**的元素是不是它(或它的后代)。不是 = 被遮挡/被裁剪,
+         这一类**不参与对比度判定**,单独计数、如实写进报告 —— 它不是「没验成」,是「压根没画出来」。 */
+      painted: (() => {
+        const cx = Math.min(window.innerWidth - 1, Math.max(0, r.left + Math.min(r.width / 2, 40)))
+        const cy = Math.min(window.innerHeight - 1, Math.max(0, r.top + r.height / 2))
+        const hit = document.elementFromPoint(cx, cy)
+        return Boolean(hit && (hit === el || el.contains(hit) || hit.contains(el)))
+      })() })
     i += 1
   }
   return out
@@ -207,6 +218,7 @@ async function login() {
 
 const rows = []
 const notes = []
+const clipped = new Map()   /* 被祖先裁掉、压根没画出来的:单独计数,不参与判定也不算没验成 */
 let measured = 0
 
 /* 🔴 整页一张大图行不通:AI 图库那一页有 **28,013 像素高**,255 个节点里 224 个量不出差异 ——
@@ -231,7 +243,9 @@ async function sweepHere(pageName, mode) {
   for (let k = 0; k < windows; k += 1) {
     await ev(`(() => { window.scrollTo(0, ${k * vh}); return 1 })()`)
     await sleep(320)
-    const nodes = (await ev(MARK) || []).filter((n) => n.onScreen)
+    const all = (await ev(MARK) || []).filter((n) => n.onScreen)
+    const nodes = all.filter((n) => n.painted)
+    for (const n of all) if (!n.painted) { const k2 = `${n.sel}|${n.text}`; if (!clipped.has(k2)) clipped.set(k2, { page: pageName, ...n }) }
     if (!nodes.length) { await ev(CLEAN); continue }
     const shotA = (await send('Page.captureScreenshot', { format: 'png' })).result?.data
     const hidden = await ev(HIDE)
@@ -305,7 +319,8 @@ const uniq = (arr) => { const m = new Map(); for (const r of arr) if (!m.has(key
 const uA = uniq(A); const uB = uniq(B)
 
 console.log(`\n[渐变面取像素] 刀 ${KNIFE_REV} · 被测 ${CODE_REV} · 界面指纹 ${STYLE_SHA}`)
-console.log(`  量到 ${measured} 个压在渐变面上的字 · 甲档 ${A.length} 条(去重 ${uA.length})· 乙档 ${B.length} 条(去重 ${uB.length})· 没验成 ${notes.length} 条`)
+console.log(`  量到 ${measured} 个压在渐变面上的字 · 甲档 ${A.length} 条(去重 ${uA.length})· 乙档 ${B.length} 条(去重 ${uB.length})`
+  + ` · 被裁掉没画出来的 ${clipped.size} 个(不参与判定)· 没验成 ${notes.length} 条`)
 for (const r of uA.slice(0, 12)) console.log(`  🔴甲 ${r.mode} · ${r.page} · ${r.sel}「${r.text}」${r.fg} 压最差像素 ${r.bg} = ${r.ratio}:1(要 ${r.need}:1)`)
 for (const x of notes.slice(0, 8)) console.log(`  ⚠️ ${x}`)
 
@@ -317,10 +332,17 @@ if (OUT) {
     '> **判法**:前景色取 computed(那是确定值);背景**把字设成透明后整页截图**,',
     '> 在页面里用 canvas 解码,对每个字的矩形取**最不利的那一个像素**(比值最小的那个)。',
     '> **取最差不取平均** —— 渐变面上「平均够亮」没有意义,人眼看见的是最糊的那一小段。这是保守判法。', '',
-    `**量到 ${measured} 个 · 甲档 ${A.length} 条(去重 ${uA.length})· 乙档 ${B.length} 条(去重 ${uB.length})· 没验成 ${notes.length} 条**`, '',
+    `**量到 ${measured} 个 · 甲档 ${A.length} 条(去重 ${uA.length})· 乙档 ${B.length} 条(去重 ${uB.length})`
+    + ` · 被裁掉没画出来的 ${clipped.size} 个 · 没验成 ${notes.length} 条**`, '',
     '| 页 | 档 | 选择器 | 文字 | 前景 | 最差背景像素 | 比值 | 门槛 | 档次 |', '|---|---|---|---|---|---|---|---|---|']
   for (const r of [...uA, ...uB].sort((a, b) => a.ratio - b.ratio)) {
     lines.push(`| ${r.page} | ${r.mode} | \`${r.sel}\` | ${r.text} | ${r.fg} | ${r.bg} | **${r.ratio}** | ${r.need} | ${r.tier === 'A' ? '甲(看不见)' : '乙(AA 欠账)'} |`)
+  }
+  if (clipped.size) {
+    lines.push('', '## 被祖先裁掉、压根没画出来的(**不参与判定**,也不是「没验成」)', '',
+      '> 布局位置照给,像素上什么都没有 —— 典型是门店设置那台手机预览里被裁在框外的几行。',
+      '> 判法:问那一点上最上面的元素是不是它(elementFromPoint)。J-37「在不在 ≠ 看得见」同族。', '')
+    for (const c of clipped.values()) lines.push(`- ${c.page} · \`${c.sel}\`「${c.text}」`)
   }
   if (notes.length) { lines.push('', '## 没验成的(不是绿)', ''); for (const x of notes) lines.push(`- ${x}`) }
   mkdirSync(dirname(OUT), { recursive: true }); writeFileSync(OUT, lines.join('\n'), 'utf8')
