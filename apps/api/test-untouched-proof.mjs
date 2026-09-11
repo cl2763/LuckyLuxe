@@ -123,7 +123,56 @@ const DENY = /不能说|不敢说|不该说|没法说|不许说|不写这句|否
    「未动对照:<文件路径>」是在**描述格式**,不是在作声称;拿占位符当声称就又成了认词不认物。
    现测:上一版的正则把台账那行也咬了,③a 当场报「标记指空」。 */
 const MARK_RE = /未动对照\s*[::]\s*([A-Za-z0-9_./\u4e00-\u9fa5-]*\/[A-Za-z0-9_./\u4e00-\u9fa5-]*\.md)/
-const PROOF_LEGACY = /逐表零差异|逐表行数|未动须有证|行数快照|db-snapshot/
+/* 🔴 J-51(店主 07b §一 立)· **豁免也是判据的一部分,要具名冻结,不许用内容模式。**
+   上一版这条豁免是个**内容模式**:/逐表零差异|逐表行数|未动须有证|行数快照|db-snapshot/ ——
+   而这些**正是每一批例行都会出现的词**(`db-snapshot` 就是每批要跑的那把刀的名字,
+   「逐表零差异」是它的输出原话)。**结构上等于:下一篇回执只要提到 db-snapshot,就自动豁免、不用带标记**
+   —— 标记要求恰好对它最该管的那批文件失效,而且走进豁免时一声不响。
+   现测证过:写「本机库未动」+「逐表零差异」、不带标记的新文档,在旧口径下是**绿的**(刀 WW)。
+   所以改成**具名清单**:立律之前那批逐个列名冻住,**清单只许变短**(有人补了标记就划掉),
+   **新文件一律走标记,没有例外**。
+   这是 J-49 的下一层:**J-49 说「声称要靠标记不靠词」,J-51 说「豁免也要靠名单不靠词」。** */
+const PROOF_FROZEN = new Set([
+  "handoff/AI复测_真模型12场景_2026-09-03.md",
+  "handoff/P0-P2开检反馈总表.md",
+  "handoff/night-runs/05t回执_2026-09-09.md",
+  "handoff/night-runs/05v回执_2026-09-09.md",
+  "handoff/night-runs/07截图/对照说明.md",
+  "handoff/night-runs/D154截图/说明.md",
+  "handoff/night-runs/D185_4128待清单_2026-09-09.md",
+  "handoff/night-runs/夜班总结_2026-09-08.md",
+  "handoff/night-runs/夜班总结_2026-09-09.md",
+  "handoff/night-runs/待裁_2026-09-09.md",
+  "handoff/回执04a_三病现修+D130身份串味+D131报数_2026-09-03.md",
+  "handoff/回执04b_D131九处全修+三处小病+D132请裁_2026-09-03.md",
+  "handoff/回执04c_D132会话归店+source地图_2026-09-03.md",
+  "handoff/回执04d-1_口径④放闸+source地图补跑_2026-09-03.md",
+  "handoff/回执04d-2_AI复测12场景_2026-09-03.md",
+  "handoff/回执04e_C2重跑+D136销号+结案批交齐_2026-09-03.md",
+  "handoff/回执04f-1_D134现修_2026-09-03.md",
+  "handoff/回执04f-2_去DEFAULT31张表_2026-09-03.md",
+  "handoff/回执04f-3_三端版本指纹_2026-09-03.md",
+  "handoff/回执04g_D137触发器回落红线+重建前必备份+finance_targets_2026-09-03.md",
+  "handoff/回执05a_大批05⓪对话全录_2026-09-03.md",
+  "handoff/回执05c_⓪b脱敏正门+①门与三档_2026-09-03.md",
+  "handoff/回执05d_安全两破口现修+重标名单_2026-09-04.md",
+  "handoff/回执05e_按表改标+提示词+两门重跑_2026-09-04.md",
+  "handoff/回执05f_三跑取中位+换门_2026-09-04.md",
+  "handoff/回执05g_②事实闸_2026-09-04.md",
+  "handoff/回执05h_J-20一处真相+尺子改名+③基线_2026-09-05.md",
+  "handoff/回执05j_③预约采集_一句一问+查真可约+草稿只建一次_2026-09-05.md",
+  "handoff/回执05k_④审样本页_待审与回流_2026-09-06.md",
+  "handoff/回执05o-2_新店luvia-bj两库建店_三店判据_2026-09-08.md",
+  "handoff/回执05r补一_六张截图落仓+千分位+三店各开一次_2026-09-08.md",
+  "handoff/回执05r补三_D155小程序AI同一出口_2026-09-08.md",
+  "handoff/回执05r补二_D156顶栏显当前店名_2026-09-08.md",
+  "handoff/回执05r补四_段7部分交付_D151合并窗_2026-09-08.md",
+  "handoff/夜班令9_八小时_上线硬门槛先查后做_2026-09-11.md",
+  "handoff/小批05i_05h验收_J-23未动与对照表矛盾_D140币种一处真相现修_放行③实现_2026-09-05.md",
+  "handoff/小批07b_豁免要具名_棘轮降了也要举证_2026-09-12.md",
+  "handoff/店主拍板台账.md"
+])
+const PROOF_FROZEN_CAP = 38   /* 只许变短(J-43:这个数由已验红的这一版判据量出) */
 /* 一份文档里「真的在作声称」的行 —— 否认/引述的那些不算 */
 /* 🔴 否认必须**挨着那句话**,不能是这一行里随便哪儿的一个「不」。
    现测栽了一次:`安全保证:生产库未动 · 本机库未动。未推 main。**做完不说可以关帐**。`——
@@ -158,7 +207,7 @@ const LEGACY = docs.filter((f) => {
     if (claimLinesOf(src).length > 0 && !existsSync(join(ROOT, m[1]))) markerMissing.push(`${f} → ${m[1]}`)
     return false
   }
-  if (PROOF_LEGACY.test(src)) return false
+  if (PROOF_FROZEN.has(f)) return false
   return claimLinesOf(src).length > 0
 })
 /* 立律当天先量底数并上棘轮:存量只许降不许升,新写的回执一旦无证即红 */
@@ -176,18 +225,31 @@ check(`③a 写了「未动对照:」标记的文档,标记指的那份对照表
 
 /* ③b 零命中先证刀能咬:造两句已知阳性,一句无证一句有证,必须分得出来 */
 const CANARY_BAD = '本批交付完成。生产库未动 · 本机库未动。'
-const CANARY_OK = '本批交付完成。生产库未动 · 本机库未动 —— 逐表零差异(对照表见下)。'
-check('③b 🔴 零命中先证刀能咬:「写了未动没对照表」必须咬中,「写了未动且有对照表」必须放行',
-  claimLinesOf(CANARY_BAD).length > 0 && !PROOF_LEGACY.test(CANARY_BAD) && !MARK_RE.test(CANARY_BAD)
-  && claimLinesOf(CANARY_OK).length > 0 && PROOF_LEGACY.test(CANARY_OK),
-  JSON.stringify({ 无证被咬: claimLinesOf(CANARY_BAD).length > 0 && !PROOF_LEGACY.test(CANARY_BAD),
-    有证放行: PROOF_LEGACY.test(CANARY_OK) }))
+/* 标记**另起一行**——真实回执就是这么写的:声称一行、标记一行。
+   (写在同一行也行,但那一行会被「未动对照」这个名词规则判成非声称,
+    文档级的 MARK_RE 照样放行 —— 两条路结果一致,这里取更像真实的那种。) */
+const CANARY_OK = '本批交付完成。生产库未动 · 本机库未动。\n未动对照:handoff/night-runs/日1_三库逐表对照表_2026-09-12.md'
+check('③b 🔴 零命中先证刀能咬:「写了未动**没标记**」必须咬中,「写了未动**且带标记**」必须放行',
+  claimLinesOf(CANARY_BAD).length > 0 && !MARK_RE.test(CANARY_BAD)
+  && claimLinesOf(CANARY_OK).length > 0 && MARK_RE.test(CANARY_OK),
+  JSON.stringify({ 无标记被咬: claimLinesOf(CANARY_BAD).length > 0 && !MARK_RE.test(CANARY_BAD),
+    带标记放行: MARK_RE.test(CANARY_OK) }))
 
 /* ③c/③d/③e · J-49 那三条造病(店主 日班令1 段0 点名要的),在判据里常驻:
    判据自己拿三句已知样本走一遍 —— 光靠「跑起来是绿的」证明不了它**分得出**这三种情况。 */
 const C_CLAIM_NOMARK = '本批交付完成。**本机库未动**,沙箱库只有心跳。'
 const C_MARK_DEAD = '本机库未动。未动对照:handoff/night-runs/这份根本不存在.md'
 const C_DENY = '但「本机库未动」这句话这一夜**我不能说**,因为它确实多了 4 行心跳。照实写。'
+check(`③j J-51:豁免是**具名清单**,只许变短 —— 现册 ${PROOF_FROZEN.size} 篇 ≤ ${PROOF_FROZEN_CAP}`,
+  PROOF_FROZEN.size <= PROOF_FROZEN_CAP, String(PROOF_FROZEN.size))
+check('③k J-51 反向守:**新文件走不进豁免** —— 名单里没有的,写多少个「逐表零差异 / db-snapshot」都不算举证',
+  !PROOF_FROZEN.has('handoff/night-runs/这是一篇新写的回执.md'))
+/* ③l 清单里的名字必须**真的还在仓里**:文件改名/删掉之后条目还留着,等于替不存在的东西背书
+   (和 ⑥「白名单不许有死条目」同一条道理) */
+const frozenDead = [...PROOF_FROZEN].filter((f) => !existsSync(join(ROOT, f)))
+check(`③l 具名清单里没有死条目(现测 ${frozenDead.length} 条指空)`,
+  frozenDead.length === 0, frozenDead.slice(0, 4).join(' | '))
+
 check('③c 造病一:写了「未动」当声称、却**没有标记** → 必须算违规',
   claimLinesOf(C_CLAIM_NOMARK).length > 0 && !MARK_RE.test(C_CLAIM_NOMARK))
 check('③d 造病二:写了标记、但对照表文件**不存在** → 必须算违规(J-27 同族)',
