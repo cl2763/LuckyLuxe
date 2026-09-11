@@ -209,36 +209,55 @@ const rows = []
 const notes = []
 let measured = 0
 
+/* 🔴 整页一张大图行不通:AI 图库那一页有 **28,013 像素高**,255 个节点里 224 个量不出差异 ——
+   超长页面的整页截图在两次之间对不齐(懒渲染 / 重排),坐标一偏,差出来的就是别处。
+   改成**按一屏一屏来**:滚到某一屏,截两张(字在 / 字透明),只量**落在这一屏里**的节点,
+   坐标用**视口坐标**(不加 scrollY)—— 这样两张图永远是同一块地方。
+   量不成的照旧记「没验成」,不许当绿。 */
 async function sweepHere(pageName, mode) {
   const nodes = await ev(MARK)
   if (!nodes || !nodes.length) { await ev(CLEAN); return 0 }
-  const shotA = (await send('Page.captureScreenshot', { format: 'png', captureBeyondViewport: true })).result?.data
-  const hidden = await ev(HIDE)
-  await sleep(280)
-  const shotB = (await send('Page.captureScreenshot', { format: 'png', captureBeyondViewport: true })).result?.data
-  await ev(SHOW)
-  await ev(CLEAN)
-  if (!shotA || !shotB) { notes.push(`${pageName} · ${mode}:截图没成 —— **没验成**,不是绿`); return 0 }
-  if (!hidden) { notes.push(`${pageName} · ${mode}:一个节点都没打上记号 —— **没验成**`); return 0 }
-  const res = await ev(MEASURE2(shotA, shotB, nodes))
-  if (!res || !res.out) { notes.push(`${pageName} · ${mode}:解码没成 —— **没验成**,不是绿`); return 0 }
+  const vh = await ev('window.innerHeight') || 900
+  const docH = await ev('Math.max(document.body.scrollHeight, document.documentElement.scrollHeight)') || vh
   let ok = 0
-  for (const nd of nodes) {
-    const b = res.out.find((x) => x.id === nd.id)
-    if (!b || b.err) { notes.push(`${pageName} · ${mode} · ${nd.sel}「${nd.text}」:${(b && b.err) || '没量到'} —— **没验成**`); continue }
-    const large = nd.size >= 24 || (nd.size >= 18.66 && nd.weight >= 700)
-    const need = large ? 3 : 4.5
-    const hard = large ? 1.6 : 2
-    measured += 1
-    ok += 1
-    if (b.worst + 0.05 < need) {
-      rows.push({ page: pageName, mode, sel: nd.sel, text: nd.text, fg: nd.fg,
-        bg: `rgb(${(b.bg || []).join(', ')})`, ratio: b.worst, need, px: b.px,
-        tier: b.worst + 0.05 < hard ? 'A' : 'B' })
+  const windows = Math.max(1, Math.ceil(docH / vh))
+  for (let k = 0; k < windows; k += 1) {
+    const top = k * vh
+    const inWin = nodes.filter((n) => n.y + n.h > top + 2 && n.y < top + vh - 2)
+    if (!inWin.length) continue
+    await ev(`(() => { window.scrollTo(0, ${top}); return 1 })()`)
+    await sleep(260)
+    const realTop = await ev('Math.round(window.scrollY)')
+    /* 视口坐标 = 页面坐标 − 实际滚到的位置(用**实际**值,不用我以为滚到了哪) */
+    const local = inWin.map((n) => ({ ...n, x: n.x, y: n.y - realTop }))
+      .filter((n) => n.y + n.h > 0 && n.y < vh)
+    if (!local.length) continue
+    const shotA = (await send('Page.captureScreenshot', { format: 'png' })).result?.data
+    const hidden = await ev(HIDE)
+    await sleep(220)
+    const shotB = (await send('Page.captureScreenshot', { format: 'png' })).result?.data
+    await ev(SHOW)
+    if (!shotA || !shotB || !hidden) { notes.push(`${pageName} · ${mode} · 第 ${k + 1} 屏:截图没成 —— **没验成**`); continue }
+    const res = await ev(MEASURE2(shotA, shotB, local))
+    if (!res || !res.out) { notes.push(`${pageName} · ${mode} · 第 ${k + 1} 屏:解码没成 —— **没验成**`); continue }
+    for (const nd of local) {
+      const b = res.out.find((x) => x.id === nd.id)
+      if (!b || b.err) { notes.push(`${pageName} · ${mode} · ${nd.sel}「${nd.text}」:${(b && b.err) || '没量到'} —— **没验成**`); continue }
+      const large = nd.size >= 24 || (nd.size >= 18.66 && nd.weight >= 700)
+      const need = large ? 3 : 4.5
+      const hard = large ? 1.6 : 2
+      measured += 1
+      ok += 1
+      if (b.worst + 0.05 < need) {
+        rows.push({ page: pageName, mode, sel: nd.sel, text: nd.text, fg: nd.fg,
+          bg: `rgb(${(b.bg || []).join(', ')})`, ratio: b.worst, need, px: b.px,
+          tier: b.worst + 0.05 < hard ? 'A' : 'B' })
+      }
     }
   }
-  console.log(`   [取像素] ${mode} · ${pageName} —— 渐变面上的字 ${nodes.length} 个 · 量成 ${ok} 个`
-    + ` · 图 ${res.imgW}×${res.imgH}`)
+  await ev(CLEAN)
+  await ev('(() => { window.scrollTo(0, 0); return 1 })()')
+  console.log(`   [取像素] ${mode} · ${pageName} —— 渐变面上的字 ${nodes.length} 个 · 量成 ${ok} 个 · 走了 ${windows} 屏`)
   return nodes.length
 }
 
