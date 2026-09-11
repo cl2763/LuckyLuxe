@@ -13320,7 +13320,7 @@ async function route(req, res) {
           .run(id, store.id, name.slice(0, 40), String(body.title || '').slice(0, 40), tenantId)
         const assign = db.prepare('INSERT OR IGNORE INTO technician_services (technician_id, service_id) VALUES (?, ?)')
         for (const svc of db.prepare('SELECT id FROM services WHERE tenant_id = ? AND is_active = 1').all(tenantId)) assign.run(id, svc.id)
-        return json(res, 201, { technician: db.prepare('SELECT * FROM technicians WHERE id = ? AND tenant_id = ?').get(id, currentTenantId()) })
+        return json(res, 201, { technician: db.prepare('SELECT * FROM technicians WHERE id = ? AND tenant_id = ?').get(id, tenantId) })
       }
       if (req.method === 'PATCH' && subId) {
         const cur = db.prepare('SELECT * FROM technicians WHERE id = ? AND tenant_id = ?').get(subId, tenantId)
@@ -13328,7 +13328,7 @@ async function route(req, res) {
         const body = await readBody(req)
         db.prepare('UPDATE technicians SET name = ?, title = ?, is_active = ? WHERE id = ?')
           .run(body.name === undefined ? cur.name : String(body.name).slice(0, 40), body.title === undefined ? cur.title : String(body.title).slice(0, 40), body.isActive === undefined ? cur.is_active : (body.isActive ? 1 : 0), subId)
-        return json(res, 200, { technician: db.prepare('SELECT * FROM technicians WHERE id = ? AND tenant_id = ?').get(subId, currentTenantId()) })
+        return json(res, 200, { technician: db.prepare('SELECT * FROM technicians WHERE id = ? AND tenant_id = ?').get(subId, tenantId) })
       }
     }
 
@@ -16758,7 +16758,7 @@ function serializeCoupon(row) {
 function defaultDisplayNameFor(me) {
   const tid = me.tenantId || currentTenantId()
   if (me.role === 'staff' && me.technicianId) {
-    const t = db.prepare('SELECT name FROM technicians WHERE id = ? AND tenant_id = ?').get(me.technicianId, currentTenantId())
+    const t = db.prepare('SELECT name FROM technicians WHERE id = ? AND tenant_id = ?').get(me.technicianId, tid)
     if (t && t.name) return t.name
   }
   const tenant = db.prepare('SELECT name FROM tenants WHERE id = ?').get(tid)
