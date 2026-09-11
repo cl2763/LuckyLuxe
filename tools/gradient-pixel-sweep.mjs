@@ -243,9 +243,11 @@ async function sweepHere(pageName, mode) {
   for (let k = 0; k < windows; k += 1) {
     await ev(`(() => { window.scrollTo(0, ${k * vh}); return 1 })()`)
     await sleep(320)
-    const all = (await ev(MARK) || []).filter((n) => n.onScreen)
-    const nodes = all.filter((n) => n.painted)
-    for (const n of all) if (!n.painted) { const k2 = `${n.sel}|${n.text}`; if (!clipped.has(k2)) clipped.set(k2, { page: pageName, ...n }) }
+    /* 🔴 `painted` **只用来解释「零差异」,不用来过滤** ——
+       拿它当门槛那一版把量成数从 594 砍到 66(而「被裁」那一筐按 选择器+文字 去重只显示 4 个,
+       数量被去重藏住了,看起来还像没事)。**判据不许悄悄缩覆盖面**:先照旧全量量,
+       只有量出「零差异像素」时,才回头问一句它是不是压根没画出来。 */
+    const nodes = (await ev(MARK) || []).filter((n) => n.onScreen)
     if (!nodes.length) { await ev(CLEAN); continue }
     const shotA = (await send('Page.captureScreenshot', { format: 'png' })).result?.data
     const hidden = await ev(HIDE)
@@ -260,7 +262,15 @@ async function sweepHere(pageName, mode) {
       const key = `${nd.sel}|${nd.text}`
       if (seen.has(key)) continue      /* 同一个节点会跨两屏出现,只算一次 */
       const b = res.out.find((x) => x.id === nd.id)
-      if (!b || b.err) { notes.push(`${pageName} · ${mode} · ${nd.sel}「${nd.text}」:${(b && b.err) || '没量到'} —— **没验成**`); continue }
+      if (!b || b.err) {
+        if (b && b.err && /差异像素/.test(b.err) && nd.painted === false) {
+          const k3 = `${nd.sel}|${nd.text}`
+          if (!clipped.has(k3)) clipped.set(k3, { page: pageName, ...nd })
+        } else {
+          notes.push(`${pageName} · ${mode} · ${nd.sel}「${nd.text}」:${(b && b.err) || '没量到'} —— **没验成**`)
+        }
+        continue
+      }
       seen.add(key)
       total += 1
       const large = nd.size >= 24 || (nd.size >= 18.66 && nd.weight >= 700)
