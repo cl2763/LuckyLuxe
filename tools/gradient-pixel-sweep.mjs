@@ -129,8 +129,8 @@ const MARK = `(() => {
     const weight = Number(cs.fontWeight) || 400
     el.setAttribute('data-gradprobe', String(i))
     out.push({ id: i, sel: selOf(el), text: text.slice(0, 20), fg: cs.color, size: Math.round(size), weight,
-      x: Math.round(r.left + window.scrollX), y: Math.round(r.top + window.scrollY),
-      w: Math.round(r.width), h: Math.round(r.height) })
+      x: Math.round(r.left), y: Math.round(r.top), w: Math.round(r.width), h: Math.round(r.height),
+      onScreen: r.bottom > 0 && r.top < window.innerHeight })
     i += 1
   }
   return out
@@ -214,48 +214,41 @@ let measured = 0
    改成**按一屏一屏来**:滚到某一屏,截两张(字在 / 字透明),只量**落在这一屏里**的节点,
    坐标用**视口坐标**(不加 scrollY)—— 这样两张图永远是同一块地方。
    量不成的照旧记「没验成」,不许当绿。 */
+/* 🔴 两次栽在同一件事上,写清楚免得第三次:
+   ① 整页一张大图 —— AI 图库那页 28,013px 高,两张对不齐,255 个里 224 个量不出差异;
+   ② 先 MARK 再滚屏截图 —— **门店设置那一页会重新渲染**(拉回订阅数据后整块 innerHTML 换掉),
+      我打在元素上的记号跟着没了,于是「设成透明」对那几个节点根本没生效,
+      表现出来又是「一个差异像素都没有」。
+   所以现在**每一屏都当场重新 MARK**:滚到位 → 就地打记号并读视口坐标 → 截 A → 隐藏 → 截 B → 还原。
+   记号与截图之间只隔半秒,重渲染的窗口被压到最小;真被换掉的节点这一屏里自然就不在了。 */
 async function sweepHere(pageName, mode) {
-  const nodes = await ev(MARK)
-  if (!nodes || !nodes.length) { await ev(CLEAN); return 0 }
   const vh = await ev('window.innerHeight') || 900
   const docH = await ev('Math.max(document.body.scrollHeight, document.documentElement.scrollHeight)') || vh
-  let ok = 0
   const windows = Math.max(1, Math.ceil(docH / vh))
+  let ok = 0
+  let total = 0
+  const seen = new Set()
   for (let k = 0; k < windows; k += 1) {
-    const top = k * vh
-    const inWin = nodes.filter((n) => n.y + n.h > top + 2 && n.y < top + vh - 2)
-    if (!inWin.length) continue
-    await ev(`(() => { window.scrollTo(0, ${top}); return 1 })()`)
-    await sleep(260)
-    /* 🔴 **矩形要在截图那一刻现读**,不能用 MARK 时记下的那一份 ——
-       页面会在这中间重排(门店设置那几张卡是拉回订阅数据之后才定位的),
-       坐标一旧,差出来的就是别处;现测:那 4 个节点因此「一个差异像素都没有」。
-       现在按 data-gradprobe 逐个重新问一次**视口坐标**,顺带把不在屏内的剔掉。 */
-    const fresh = await ev(`(() => { const ids = ${JSON.stringify(inWin.map((n) => n.id))}
-      const out = []
-      for (const id of ids) {
-        const el = document.querySelector('[data-gradprobe="' + id + '"]')
-        if (!el) continue
-        const r = el.getBoundingClientRect()
-        if (r.width < 2 || r.height < 2) continue
-        if (r.bottom <= 0 || r.top >= window.innerHeight) continue
-        out.push({ id: id, x: Math.round(r.left), y: Math.round(r.top), w: Math.round(r.width), h: Math.round(r.height) })
-      }
-      return out })()`) || []
-    const byId = new Map(inWin.map((n) => [n.id, n]))
-    const local = fresh.map((f) => ({ ...byId.get(f.id), x: f.x, y: f.y, w: f.w, h: f.h }))
-    if (!local.length) continue
+    await ev(`(() => { window.scrollTo(0, ${k * vh}); return 1 })()`)
+    await sleep(320)
+    const nodes = (await ev(MARK) || []).filter((n) => n.onScreen)
+    if (!nodes.length) { await ev(CLEAN); continue }
     const shotA = (await send('Page.captureScreenshot', { format: 'png' })).result?.data
     const hidden = await ev(HIDE)
     await sleep(220)
     const shotB = (await send('Page.captureScreenshot', { format: 'png' })).result?.data
     await ev(SHOW)
-    if (!shotA || !shotB || !hidden) { notes.push(`${pageName} · ${mode} · 第 ${k + 1} 屏:截图没成 —— **没验成**`); continue }
-    const res = await ev(MEASURE2(shotA, shotB, local))
+    if (!shotA || !shotB || !hidden) { notes.push(`${pageName} · ${mode} · 第 ${k + 1} 屏:截图没成 —— **没验成**`); await ev(CLEAN); continue }
+    const res = await ev(MEASURE2(shotA, shotB, nodes))
+    await ev(CLEAN)
     if (!res || !res.out) { notes.push(`${pageName} · ${mode} · 第 ${k + 1} 屏:解码没成 —— **没验成**`); continue }
-    for (const nd of local) {
+    for (const nd of nodes) {
+      const key = `${nd.sel}|${nd.text}`
+      if (seen.has(key)) continue      /* 同一个节点会跨两屏出现,只算一次 */
       const b = res.out.find((x) => x.id === nd.id)
       if (!b || b.err) { notes.push(`${pageName} · ${mode} · ${nd.sel}「${nd.text}」:${(b && b.err) || '没量到'} —— **没验成**`); continue }
+      seen.add(key)
+      total += 1
       const large = nd.size >= 24 || (nd.size >= 18.66 && nd.weight >= 700)
       const need = large ? 3 : 4.5
       const hard = large ? 1.6 : 2
@@ -268,10 +261,9 @@ async function sweepHere(pageName, mode) {
       }
     }
   }
-  await ev(CLEAN)
   await ev('(() => { window.scrollTo(0, 0); return 1 })()')
-  console.log(`   [取像素] ${mode} · ${pageName} —— 渐变面上的字 ${nodes.length} 个 · 量成 ${ok} 个 · 走了 ${windows} 屏`)
-  return nodes.length
+  console.log(`   [取像素] ${mode} · ${pageName} —— 量成 ${ok} 个(走了 ${windows} 屏)`)
+  return ok
 }
 
 if (TARGET === 'customer') {
