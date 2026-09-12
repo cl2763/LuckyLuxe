@@ -1,0 +1,53 @@
+<!doctype html><meta charset="utf-8"><title>配色批备料 · 改前 / 建议后</title>
+<style>
+:root{--hero:#2a2521;--hero2:#3a332c;--heroink:#f5efe3;--herosub:#bfb4a2;--herogold:#d9b97e;
+--tagm:#8a5a00;--tagmbg:#faf3e3;--tagw:#274f8f;--tagwbg:#eef2fa;
+--good:#26794c;--goodbg:#e6f3ea;--bad:#b3413a;--badbg:#f7e7e5;
+--pg:#fbf8f5;--card:#fff;--ink:#2b2723;--line:#e6ded3;--sub:#7d7364}
+:root[data-theme=dark]{--hero:#15130f;--hero2:#241d16;--heroink:#f5efe3;--herosub:#b5a794;--herogold:#e2c48d;
+--tagm:#e0b45f;--tagmbg:#2b2618;--tagw:#8fb0e8;--tagwbg:#1d2434;
+--good:#6fd0a0;--goodbg:#1e2c22;--bad:#e5867e;--badbg:#33211d;
+--pg:#14120f;--card:#1c1915;--ink:#f0e9dd;--line:#332c24;--sub:#a29684}
+body{margin:0;background:var(--pg);color:var(--ink);font:14px/1.6 -apple-system,"PingFang SC",sans-serif;padding:26px}
+h1{font-size:19px;margin:0 0 4px}h2{font-size:15px;margin:26px 0 10px;color:var(--sub)}
+.note{color:var(--sub);font-size:12.5px;margin:0 0 18px}
+table{border-collapse:collapse;width:100%;max-width:940px;background:var(--card);border:1px solid var(--line);border-radius:10px;overflow:hidden}
+td,th{padding:11px 14px;border-bottom:1px solid var(--line);text-align:left;vertical-align:middle;font-size:13px}
+th{background:var(--hero);color:var(--heroink);font-size:12.5px}
+tr:last-child td{border-bottom:0}
+.r{font-variant-numeric:tabular-nums;font-weight:700}
+.ok{color:var(--good)}.no{color:var(--bad)}
+.tag{display:inline-block;font-size:11px;font-weight:800;border-radius:5px;padding:3px 9px}
+.old-a{background:#b5885d;color:#f5efe3}.old-b{background:#3f6b52;color:#f5efe3}
+.old-n{background:#3b6ea5;color:#f5efe3}.old-s{background:#8a5a52;color:#f5efe3}
+.new-a{background:var(--tagmbg);color:var(--tagm)}.new-b{background:var(--goodbg);color:var(--good)}
+.new-n{background:var(--tagwbg);color:var(--tagw)}.new-s{background:var(--badbg);color:var(--bad)}
+.hero{background:var(--hero);border-radius:12px;padding:16px 18px;color:var(--heroink);max-width:300px}
+.hero .hv{font-size:27px;font-weight:800;margin:6px 0 8px}
+.hero .lv{font-size:11px;border-radius:40px;padding:2px 10px;border:1px solid #c8a47e44;background:#c8a47e22}
+.hero .bar{height:8px;background:rgba(255,255,255,.22);border-radius:99px;overflow:hidden;margin-top:10px}
+.hero .bar i{display:block;height:100%;width:62%;border-radius:99px}
+.old .hv,.old .lv,.old .goal{color:#e7c9a4}.old .bar i{background:#e7c9a4}
+.new .hv,.new .lv,.new .goal{color:var(--herogold)}.new .bar i{background:var(--herogold)}
+.goal{font-size:11px;margin-top:7px}
+.pair{display:flex;gap:22px;flex-wrap:wrap}
+.cap{font-size:12px;color:var(--sub);margin:8px 0 0}
+</style>
+<h1>配色批备料 · 改前 / 建议后(夜 9 段 6)</h1>
+<p class="note">这张图是<b>新做的对照图</b>,不是合同图 —— 合同图一个像素没动。同一张页面在浅/深两档各拍一次。</p>
+
+<h2>一、品类色四档(顾客列表上的 RFM 标签)</h2>
+<table>
+<tr><th>档</th><th>改前(写死 hex + 奶白字)</th><th>比值</th><th>建议后(接现有成对令牌)</th><th>浅档</th><th>深档</th></tr>
+<tr><td>高价值 A</td><td><span class="tag old-a">高价值A</span> <code>#b5885d</code></td><td class="r no">2.76</td><td><span class="tag new-a">高价值A</span> <code>--tagm/--tagmbg</code></td><td class="r ok">5.36</td><td class="r ok">7.80</td></tr>
+<tr><td>回头客 B</td><td><span class="tag old-b">回头客B</span> <code>#3f6b52</code></td><td class="r">5.34</td><td><span class="tag new-b">回头客B</span> <code>--good/--goodbg</code></td><td class="r ok">4.68</td><td class="r ok">7.79</td></tr>
+<tr><td>新客 N</td><td><span class="tag old-n">新客N</span> <code>#3b6ea5</code></td><td class="r">4.63</td><td><span class="tag new-n">新客N</span> <code>--tagw/--tagwbg</code></td><td class="r ok">7.20</td><td class="r ok">7.05</td></tr>
+<tr><td>沉睡 S</td><td><span class="tag old-s">沉睡S</span> <code>#8a5a52</code></td><td class="r">5.00</td><td><span class="tag new-s">沉睡S</span> <code>--bad/--badbg</code></td><td class="r ok">4.69</td><td class="r ok">5.84</td></tr>
+</table>
+<p class="cap">改前四个的浅深两档<b>比值一模一样</b>(写死 hex,深色档根本不存在)—— 这就是 J-42 说的漏档。</p>
+
+<h2>二、待裁 #35 渐变浅金 <code>#e7c9a4</code>(小程序 5 处)</h2>
+<div class="pair">
+  <div><div class="hero old"><span class="lv">白银会员</span><div class="hv">¥1,280.00</div><div class="bar"><i></i></div><div class="goal">本月目标 62%</div></div><p class="cap">改前:写死 <code>#e7c9a4</code></p></div>
+  <div><div class="hero new"><span class="lv">白银会员</span><div class="hv">¥1,280.00</div><div class="bar"><i></i></div><div class="goal">本月目标 62%</div></div><p class="cap">建议后:接 <code>--herogold</code>(令牌已存在,浅深两档都有)</p></div>
+</div>
