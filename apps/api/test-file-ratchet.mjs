@@ -48,9 +48,16 @@ const CAPS = [
    规矩(店主 02r):**涨要报批,降不用报**(降自动更新并打印收紧提示)。 */
 const PINNED = '点名钉死(店主逐个批准此数)'
 const FROZEN = '现状冻结候拆(只批准不再涨,未批准此体量;该拆照拆)'
+/* 第三类(夜9 段4 立):**新件薄壳**。
+   `party.js` 这类新开的「唯一出口」模块,离公约上限(1500)还差得远 —— 也就是说
+   **公约那一档根本管不到它**,它可以一路长到 1499 行都不红。而它存在的理由恰恰是「薄」:
+   三个出口的壳,长胖就说明有人把逻辑往里堆,那就是下一个 admin.js 的开头。
+   所以给它一个**贴着当前行数**的紧棘轮:要加行 = 改这张表 = diff 顶到店主眼前。 */
+const NEWTHIN = '新件薄壳(只许当出口,不许长成第二个巨型文件;贴身棘轮,加行即报批)'
 const RATCHET = {
   'apps/api/local-server.mjs': { cap: 18243, kind: PINNED, note: '巨型文件·店主 08-24 立棘轮 / 09-02 复核在案数一致' },
   'apps/web/admin.js': { cap: 8552, kind: PINNED, note: '巨型文件·店主 09-02 补批(01u 8521 → 02c 签署块 +28 → 02e 假图第八处 +3)' },
+  'apps/web/party.js': { cap: 31, kind: NEWTHIN, note: '夜9 段4 立。初值 31 由本刀②造病验红那一版量得(J-43):加一行 → ② 当场红并报 32 > 31,删回 → 绿' },
   'apps/web/customer.js': { cap: 2811, kind: FROZEN, note: '09-02 店主批准现状冻结;2811 行不是被认可的合理体量,是当天的事实' },
   'miniprogram/pages/me/index.js': { cap: 638, kind: FROZEN, note: '09-02 店主批准现状冻结;超公约 600 上限 38 行,候拆' },
   'miniprogram/pages/merchant/settlement/index.js': { cap: 929, kind: FROZEN, note: '09-02 店主批准现状冻结;超公约 600 上限 329 行,候拆' },
@@ -126,8 +133,8 @@ check('⑤ 棘轮表零僵尸条目(表里的文件都还在扫描面上;改名/
 /* ⑥ 两类语义不许含糊:每项必须自报是「点名钉死」还是「现状冻结候拆」。
    店主 02r 的顾虑是"半年后有人翻到这张表以为 2811 是批准过的合理大小" —— 少写 kind 就红,
    新加一项也必须表态属于哪一类(不许糊过去)。 */
-const noKind = Object.entries(RATCHET).filter(([, v]) => v.kind !== PINNED && v.kind !== FROZEN).map(([k]) => k)
-check('⑥ 棘轮表两类语义齐:每项都标明「点名钉死」或「现状冻结候拆」(冻结=不再涨,不等于体量对)',
+const noKind = Object.entries(RATCHET).filter(([, v]) => ![PINNED, FROZEN, NEWTHIN].includes(v.kind)).map(([k]) => k)
+check('⑥ 棘轮表三类语义齐:每项都标明「点名钉死」/「现状冻结候拆」/「新件薄壳」(冻结=不再涨,不等于体量对)',
   noKind.length === 0, noKind.join(' | '))
 
 /* 每次回归都把棘轮数字打出来 —— 店主 02q:「以后棘轮数字每次都要报,且涨就说涨、降才说降」。
@@ -136,6 +143,7 @@ const fmt = (kind) => Object.entries(RATCHET).filter(([, v]) => v.kind === kind)
   .map(([k, v]) => `${k.replace('miniprogram/pages/', '').replace('/index.js', '')} ${lines(k)}/${v.cap}`).join('  ·  ')
 console.log(`\n[棘轮·点名钉死] ${fmt(PINNED)}`)
 console.log(`[棘轮·现状冻结候拆] ${fmt(FROZEN)}   ← 冻结=不再涨,**不等于这个体量是对的**`)
+console.log(`[棘轮·新件薄壳] ${fmt(NEWTHIN)}   ← 贴身棘轮:加一行就红,要加=改表=报批`)
 if (couldTighten.length) console.log(`[收紧提示] ${couldTighten.join(' | ')}`)
 
 console.log(`\n✅ test-file-ratchet 通过 ${checks} 项(业务文件 ${seen.length} 个,棘轮 ${Object.keys(RATCHET).length} 项)`)

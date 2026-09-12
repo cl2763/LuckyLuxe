@@ -40,10 +40,11 @@ const RATCHETS = [
   { file: 'apps/api/test-untouched-proof.mjs', re: /const LEGACY_CAP = (\d+)/, name: '「未动」无标记存量', by: 'apps/api/test-untouched-proof.mjs' },
   { file: 'apps/api/test-untouched-proof.mjs', re: /const PROOF_FROZEN_CAP = (\d+)/, name: '「未动」豁免具名清单(J-51)', by: 'apps/api/test-untouched-proof.mjs' },
   { file: 'apps/api/test-file-ratchet.mjs', re: /'apps\/web\/customer\.js':\s*\{\s*cap:\s*(\d+)/, name: 'customer.js 行数', by: 'apps/api/test-file-ratchet.mjs' },
+  { file: 'apps/api/test-file-ratchet.mjs', re: /'apps\/web\/party\.js':\s*\{\s*cap:\s*(\d+)/, name: 'party.js 行数(新件薄壳)', by: 'apps/api/test-file-ratchet.mjs' },
 ]
 /* 在册条数下限(白名单判据的配套):注册表**只许变长**,缩水立刻红 ——
    删一条就等于把那个棘轮从扫描面上抹掉,而表照样打印得整整齐齐。 */
-const REGISTRY_MIN = 10
+const REGISTRY_MIN = 11
 
 const lineOf = (file, re) => {
   const lines = readFileSync(file, 'utf8').split('\n')
