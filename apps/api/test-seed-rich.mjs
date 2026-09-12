@@ -19,6 +19,8 @@ if (!BASE) {
   console.error('\n❌ 拒绝执行:要显式给 SEED_BASE(评测/走查只打沙箱)。\n   例:SEED_BASE=http://127.0.0.1:4310 node apps/api/test-seed-rich.mjs\n')
   process.exit(2)
 }
+/* 07f §五 批量切:token 改成问 helper 要(试点形状,见 owner-token.mjs) */
+const { requireOwnerToken } = await import('./owner-token.mjs')
 const TOKEN = process.env.OWNER_TOKEN || requireOwnerToken()
 const TENANTS = ['lucky-luxe', 'jics-store', 'luvia-bj']
 const PERIODS = ['today', 'week', 'month', 'year']
@@ -51,8 +53,6 @@ process.on('exit', restoreKnife)
 const { DatabaseSync: RO } = await import('node:sqlite')
 /* 期间起止取后端那一份(`periodRange`)—— 判据自己再算一遍日界就是第二处真相 */
 const { periodRange } = await import('./dashboard-pulse.mjs')
-/* 07f §五 批量切:token 改成问 helper 要(试点形状,见 owner-token.mjs) */
-const { requireOwnerToken } = await import('./owner-token.mjs')
 const dbFile = (await fetch(`${BASE}/health`).then((r) => r.json())).dataFile
 const roDb = new RO(dbFile, { readOnly: true })
 const noteCount = (tid) => roDb.prepare('SELECT COUNT(*) AS n FROM service_notes WHERE tenant_id = ?').get(tid).n

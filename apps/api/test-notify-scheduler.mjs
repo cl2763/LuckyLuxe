@@ -8,6 +8,8 @@ import { readFileSync } from 'node:fs'
 
 const BASE_URL = process.env.TEST_BASE_URL || 'http://127.0.0.1:4128'
 await assertTestTarget(BASE_URL)
+/* 07f §五 批量切:token 改成问 helper 要(试点形状,见 owner-token.mjs) */
+const { requireOwnerToken } = await import('./owner-token.mjs')
 const PLATFORM = process.env.TEST_ADMIN_TOKEN || requireOwnerToken()
 const RUN = Date.now().toString(36)
 
@@ -29,8 +31,6 @@ async function request(path, options = {}, token = PLATFORM, extra = {}) {
 }
 
 const { DatabaseSync } = await import('node:sqlite')
-/* 07f §五 批量切:token 改成问 helper 要(试点形状,见 owner-token.mjs) */
-const { requireOwnerToken } = await import('./owner-token.mjs')
 const db = new DatabaseSync(process.env.TEST_DB_PATH || (() => { throw new Error('需要 TEST_DB_PATH(run-all-tests.sh 会给)') })())
 
 /* ===== 夹具:A 店(多伦多)+ B 店(上海)—— 时区断言的两只脚 ===== */

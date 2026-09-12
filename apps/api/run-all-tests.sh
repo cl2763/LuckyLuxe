@@ -434,7 +434,8 @@ if printf '%s' "$DEMO_GATE_MODES" | grep -q false; then
   echo "false" >> /tmp/ll-demo-gate-modes.txt
   echo ""
   echo "   [门关档小结] ${#DEMO_GATE_SUITES} 条清单中红 ${DEMO_GATE_RED} 套 —— **这一档的红是真相,单独列,不并进主档**"
-  pkill -f "PORT=4132" 2>/dev/null || true
+  # 🔴 这里**不用 pkill**:危险命令白名单上限 4、只减不增(要增先报店主),
+  #    而按端口收本来就更准 —— 只打监听 4132 的那一个,不靠模式串去猜。
   lsof -ti :4132 2>/dev/null | xargs kill 2>/dev/null || true
 fi
 
