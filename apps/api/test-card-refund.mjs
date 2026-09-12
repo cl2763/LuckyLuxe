@@ -755,7 +755,14 @@ check('⑩-2 🔴 行为必须不同:keep=仍是会员 / drop=余额归零即失
   const port = 4406
   const child = spawn(process.execPath, ['local-server.mjs'], {
     cwd: here, stdio: 'ignore',
-    env: { ...process.env, NODE_ENV: 'production', ALLOW_DEMO_ADMIN_LOGIN: 'true', DATA_DIR: dir, PORT: String(port), TEST_DB_PATH: '' }
+    /* 🔴 07c 裁 #54(J-53)之后这台起不来了:它是**生产库域**,而顾客令牌签名密钥
+       「没显式设就拒绝启动」。这不是判据变娇气,**正是它该拦的那件事** ——
+       只不过这里拦的是我们自己造的靶子。夹具跟着给一把**明示为测试用**的密钥。
+       ⚠️ 不能用 `OWNER_TOKEN` 那串(J-53 口径③:密钥不许复用,设一样照样拒绝启动)。 */
+    env: { ...process.env,
+      NODE_ENV: 'production',
+      WECHAT_MINI_TOKEN_SECRET: 'PRODGATE-FIXTURE-NOT-A-REAL-SECRET',
+      ALLOW_DEMO_ADMIN_LOGIN: 'true', DATA_DIR: dir, PORT: String(port), TEST_DB_PATH: '' }
   })
   const wait = async () => {
     for (let i = 0; i < 60; i += 1) {

@@ -43,15 +43,19 @@ window.CustomerTags = (function () {
     if (!visits) return null
     const days = (iso2) => iso2 ? Math.floor((Date.now() - new Date(iso2).getTime()) / 86400000) : 9999
     const lastD = days(c.lastCompletedAt)
-    if (lastD > r.sDays) return { k: 's', label: lang === 'zh' ? '沉睡S' : 'Dormant', color: '#8a5a52' }
+    /* 07c 裁 #56 问②:**沉睡不是错误**,不借报错色(店主原话:它是机会,不是故障;
+       报错色一旦被日常状态占用,真出错时就没有更重的颜色可用了)。用「无状态/静默」那一对
+       `--flat / --flatbg` —— 语义正对(沉睡 = 安静了),而且不用新造色。 */
+    if (lastD > r.sDays) return { k: 's', label: lang === 'zh' ? '沉睡S' : 'Dormant', color: 'var(--flatbg)', ink: 'var(--flat)' }
     /* 🔴 06h 裁 #39:A 档原来是写死的第三把金 #b5885d,奶白字压上去只有 **2.76** ——
        而且它**没有深色档**(J-42 探测器现测:浅深两档比值一模一样)。
        换成合同图里**已有的成对令牌** --tagm / --tagmbg(5.36 浅 / 7.8 深),**不新造色**。
-       另外三档(B/N/S)比值 5.34 / 4.63 / 5.00 够用,但同样没有深色档 ——
-       归 D188「品类色与渐变色双档化」,由店主一次拿浅深两张图拍板,不零敲碎打(J-41)。 */
+       另外三档(B/N/S)比值 5.34 / 4.63 / 5.00 够用,但同样没有深色档。
+       **07c 裁 #56 定案**(店主看过浅深并排图后拍的):四档统一成「淡底深字」,一律接现有成对令牌,
+       **一个新色都不造** —— B→`--good/--goodbg` · N→`--tagw/--tagwbg` · S→`--flat/--flatbg`。 */
     if (lastD <= r.aDays && visits >= r.aVisits && (c.totalSpentCents || 0) >= r.aSpendCents) return { k: 'a', label: lang === 'zh' ? '高价值A' : 'VIP', color: 'var(--tagmbg)', ink: 'var(--tagm)' }
-    if (days(c.firstVisitAt) <= r.nDays) return { k: 'n', label: lang === 'zh' ? '新客N' : 'New', color: '#3b6ea5' }
-    return { k: 'b', label: lang === 'zh' ? '回头客B' : 'Repeat', color: '#3f6b52' }
+    if (days(c.firstVisitAt) <= r.nDays) return { k: 'n', label: lang === 'zh' ? '新客N' : 'New', color: 'var(--tagwbg)', ink: 'var(--tagw)' }
+    return { k: 'b', label: lang === 'zh' ? '回头客B' : 'Repeat', color: 'var(--goodbg)', ink: 'var(--good)' }
   }
 
   async function ensureRules(request, rerender) {

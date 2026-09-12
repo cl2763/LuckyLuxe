@@ -65,8 +65,29 @@ const latestRed = (() => {
   return { file: pick, a: m ? m[2] : '?', b: m ? m[4] : '?' }
 })()
 
+/* 4b 现查:只读两台本机服务的库域,推断它们这把钥匙是怎么来的。**一个字都不读密钥本身。** */
+const miniKeyOf = async (port) => {
+  try {
+    const h = await fetch(`http://127.0.0.1:${port}/health`).then((r) => r.json())
+    const scope = h.dataScopeName || 'unknown'
+    /* 🔴 这里**不许靠推断**。头一版我写的是「它起得来,说明已显式配置」—— 那是错的:
+       进程可能起于这道闸落地**之前**,活着什么都证明不了(J-52:读口里每一格都要量出来)。
+       改成读 `/health` 现测的那一格;这一格不在,就照实说「这台还是旧码」。 */
+    if (h.miniSecretSet === true) return `库域 ${scope} · **已显式配置**(现测)`
+    if (h.miniSecretSet === false) {
+      return scope === 'ci' || scope === 'sandbox'
+        ? `库域 ${scope} · 用明写的开发值(**不需要配**,现测)`
+        : `🔴 库域 ${scope} · **没显式配**(现测)—— 这台起于这道闸落地之前`
+    }
+    return `库域 ${scope} · (这台没有 miniSecretSet 这一格 —— **还是旧码**,没验成)`
+  } catch { return '(取不到 /health)' }
+}
+const localMiniKey = await miniKeyOf(4128)
+const sandMiniKey = await miniKeyOf(4310)
+
 const L = (x) => (x === null || x === undefined ? '(读不到)' : String(x))
 const rows = [
+
   ['1', '**推 main**', `本地领先 \`origin/main\` **${ahead}** 个提交(HEAD \`${head}\`)${AT}`,
     '批准后一次推;推前手动备份生产库、CI 全绿、推后只读核验四项', '🔴 要店主先批'],
   ['2', '推前**手动备份一次生产库**', `这一批**没连过生产**${AT}`, '推之前手动备份一次,路径写进回报', '🔴 批准后 Code'],
@@ -84,6 +105,14 @@ const rows = [
     + '也就是这个进程开没开演示登录。所以两台报什么取决于它们各自是怎么起的;'
     + '模拟生产进程(`NODE_ENV=production`)现测为 **false**。**读这一行要连进程一起读**',
     '上线后只读核一次 `/health` 这一格是 false 即可;**不需要再写实现**', '🟡 只读核'],
+  /* 🔴 07c 裁 #54 §一.5:J-53 的上线硬门槛。
+     这一条与第 4 行是**两件事**:第 4 行问「谁来签」(已查实是服务端),
+     这一条问「**用哪把钥匙签**」—— 而那把钥匙原来的回落链末端是仓库里的字面量。 */
+  ['4b', '🔴 **生产必须显式设 `WECHAT_MINI_TOKEN_SECRET`**(J-53)',
+    `本机 4128 ${localMiniKey} · 沙箱 4310 ${sandMiniKey}(截至 ${hhmm} 现查,只读本机)`,
+    '① 店主**亲手**生成一把并灌进生产环境变量(Code 不查看、不打印、不拷贝)'
+    + ' ② **不得等于 `OWNER_TOKEN`** —— 设一样服务会拒绝启动'
+    + ' ③ 上线后只读核一次:服务起得来 = 设对了(起不来会明写缺哪个变量)', '🔴 店主本人'],
   ['5', '生产 `ALLOW_DEMO_ADMIN_LOGIN` **必须未设**',
     '沙箱启动脚本里显式 `true`(**只影响本机沙箱**);生产值**没查**(不碰生产)',
     '上线前在生产上只读确认未设', '🔴 批准后只读核'],

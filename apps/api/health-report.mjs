@@ -28,11 +28,15 @@ export function healthReport(req, deps) {
     rasterBackend, tenantFallbackTally, getAiUsage, mergeWindowSeconds, mergeWindowCapSeconds, openMergeWindows,
     dataDir, dbConcurrency, replyLength, appVersion, tenantNullRows, dataScope, dataScopeName, iso,
     demoLoginAllowed,
+    miniSecretExplicit,
   } = deps
   /* 🔴 J-52:读口里每一格都必须是量出来的。**取不到就报 null,不许兜成 true/false** ——
      兜一个默认值等于又变回写死的常量(静默失败器族)。null 的意思是「这一格没量到」,
      判据看见 null 要报「没量成」,不许当事实用。 */
   const guestIdUnsigned = typeof demoLoginAllowed === 'boolean' ? demoLoginAllowed : null
+  /* J-53(07c 裁 #54):顾客令牌签名密钥**是不是显式配的**。同样是量出来的,取不到报 null。
+     ⚠️ 只回 boolean —— 密钥本身、连它的长度都不许出现在任何输出里。 */
+  const miniSecretSet = typeof miniSecretExplicit === 'boolean' ? miniSecretExplicit : null
   return {
     ok: true,
     service: 'lucky-luxe-api-local',
@@ -44,6 +48,7 @@ export function healthReport(req, deps) {
     mergeWindowCapSeconds: mergeWindowCapSeconds(),
     mergeWindowsOpen: openMergeWindows(),
     guestIdUnsigned,
+    miniSecretSet,
     ...(LOOPBACK.test(String(req.socket?.remoteAddress || '')) ? { dataFile: join(dataDir, 'lucky-luxe.sqlite') } : {}),
     dbConcurrency,
     replyLength: replyLength.snapshot(),

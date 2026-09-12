@@ -35,9 +35,10 @@ page{background:#fbf8f5}
 .tcard.s{background:linear-gradient(135deg,#8a5a52,#a5786f)}
 .tbadge{font-size:18rpx;font-weight:800;color:#fff;border-radius:8rpx;padding:2rpx 12rpx;margin-left:8rpx}
 .tbadge.a{background:var(--brand);color:var(--hero)}   /* 规矩丙 */
-.tbadge.b{background:#3f6b52}
-.tbadge.n{background:#3b6ea5}
-.tbadge.s{background:#8a5a52}
+/* 07c 裁 #56:四档统一「淡底深字」,接现有成对令牌,不新造色(与网页 customer-tags.js 同一套) */
+.tbadge.b{background:var(--goodbg);color:var(--good)}
+.tbadge.n{background:var(--tagwbg);color:var(--tagw)}
+.tbadge.s{background:var(--flatbg);color:var(--flat)}
 .ops{display:flex;gap:12rpx;margin-bottom:10rpx}
 .op{flex:1;text-align:center;font-size:24rpx;font-weight:700;border-radius:14rpx;padding:18rpx 0}
 .op.o1{background:#fff;border:1rpx solid #e7ddd4;color:#5c4630}

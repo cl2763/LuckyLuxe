@@ -17,7 +17,7 @@
    每条理由随码。负向测试的伪造值,理由**必须指向那条负向断言的行号** ——
    豁免的是「验它该被拒」这个用途,不是那串字符;字符换了地方用,豁免失效。 */
 
-import { readFileSync } from 'node:fs'
+import { readFileSync, readdirSync } from 'node:fs'
 import { join } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { execFileSync } from 'node:child_process'
@@ -128,7 +128,160 @@ check(`③ 反向守:扫描面 ${files.length} >= 1100 个 tracked 文件(目录
   files.length >= 1100, String(files.length))
 
 const byShape = real.reduce((a, h) => { a[h.shape] = (a[h.shape] || 0) + 1; return a }, {})
+/* ④h 同类扫尽(07c 裁 #54 落地时咬出来的):**凡自己 spawn 一台 local-server 的夹具**,
+   它给的 `DATA_DIR` 必须落在 `ci` / `sandbox` 库域,或者**显式带一把测试密钥** ——
+   否则 J-53 的闸会把它拦在门外,而现象是「30 秒内没起来」,看着像超时,其实是拒绝启动。
+   现查踩到两处:`test-card-refund`(故意起生产模式 → 给显式密钥)、
+   `test-schema-consistency`(临时目录叫 `ll-schema-` → 改名 `ll-ci-data.schema-`,本来就是回归临时库)。
+   判法:找 `mkdtempSync(..., '<前缀>')` 与同一文件里的 spawn local-server —— 前缀必须是
+   `ll-ci-data.`,或者那段上下文里带 `WECHAT_MINI_TOKEN_SECRET`。 */
+/* 排除自己:本文件的注释与夹具里就写着这些前缀(这一批第 N 次踩自扫) */
+const spawnFiles = readdirSync(join(ROOT, 'apps/api'))
+  .filter((b) => /^test-.*\.mjs$/.test(b) && b !== 'test-credential-scan.mjs').map((b) => `apps/api/${b}`)
+const spawnBad = []
+for (const f of spawnFiles) {
+  const src = readFileSync(join(ROOT, f), 'utf8')
+  if (!/local-server\.mjs/.test(src) || !/spawn/.test(src)) continue
+  /* 🔴 头一版写的是 `mkdtempSync\([^)]*?['"]…` —— `[^)]` **跨不过 `tmpdir()` 那个右括号**,
+     而真实写法就是 `mkdtempSync(join(tmpdir(), '前缀'))`,于是一处都匹配不到,判据**空转报绿**。
+     造病刀(把前缀改回 `ll-schema-`)当场咬出来:该红没红 = 判据是废的,不是代码干净。 */
+  for (const m of src.matchAll(/mkdtempSync\([\s\S]{0,90}?['"]([^'"]+)['"]\s*\)/g)) {
+    const pre = m[1]
+    if (pre.startsWith('ll-ci-data.')) continue
+    const near = src.slice(Math.max(0, m.index - 600), m.index + 1400)
+    /* 「带密钥」要认**真的赋值**,不能被 `delete env.WECHAT_MINI_TOKEN_SECRET` 那种写法蒙混过去 */
+    if (/WECHAT_MINI_TOKEN_SECRET\s*:/.test(near)) continue
+    /* 夹具自己在临时目录里再造 `local-data` / `sandbox-data` 子目录的(J-53 那块就是),
+       真正决定库域的是子目录名,不是这个前缀 —— 放行,并要求它确实建了那两个名字 */
+    if (/['"`]local-data['"`]|['"`]sandbox-data['"`]/.test(near)) continue
+    spawnBad.push(`${f} 临时目录前缀 '${pre}'`)
+  }
+}
+check('④h 同类扫尽:自己起 local-server 的夹具,临时库要么用 `ll-ci-data.` 前缀(⇒ci 库域),'
+  + '要么显式带测试密钥 —— 否则 J-53 的闸会把它拦掉,而现象是「没起来」不是「被拒」',
+spawnBad.length === 0, spawnBad.join(' | '))
+
 console.log(`\n[凭据形态] tracked ${files.length} 个 · 命中 ${real.length} 处 · 白名单 ${Object.keys(ALLOW).length} 条`)
+
+/* ═══ ④ J-53:**密钥类常量不许回落到字面量**(店主 07c 裁 #54 立)═══
+
+   ══ 案由 ══
+   `local-server.mjs:391` 原来是一条五段回落链,末端是写在仓库里的字面量:
+     `WECHAT_MINI_TOKEN_SECRET || WX_MINI_TOKEN_SECRET || WECHAT_MINI_SECRET || OWNER_TOKEN || 'luckyluxe-mini-dev'`
+   走一遍:生产两个变量没设 → AppSecret 是 `''` → 落到 `OWNER_TOKEN` → 它自己也没设
+   → **落到 `'owner-demo-token'`**。**「服务端签发」签的是一把谁都知道的钥匙。**
+
+   ══ 这一条与上面①②③的区别(类按机制定义,不按长相)══
+   ①②③ 认的是「**文件里出现了一串长得像凭据的字符**」;
+   ④ 认的是「**一个密钥常量的解析链末端是固定字面量**」——
+   同一串字符在 ① 里可能被豁免(它是明示演示钥匙),在 ④ 里照样要问「**它当不当密钥用**」。
+   两件事,两把尺子。
+
+   ══ 判据形态(判据三:白名单 > 黑名单)══
+   不是「列出已知的几个密钥去检查」,而是**全仓服务端模块现扫**,
+   **每一处命中都必须落进具名白名单**(带理由 + 条数上限),新写一处自动红。
+   收窄靠**机制**不靠长相:
+     · 名字必须是 SCREAMING_CASE 且含 SECRET/TOKEN/PASSWORD/CREDENTIAL/API_KEY/_KEY;
+     · 末段必须是**单双引号的固定字面量** —— 模板串(含 `${}`)是**算出来的键**,
+       定义上就不是固定密钥(`objectKey` / `keyTime` / 缓存键那一片全在这里被排除)。 */
+const credFiles = () => {
+  const out = []
+  for (const d of ['apps/api', 'tools']) {
+    for (const b of readdirSync(join(ROOT, d))) {
+      if (!b.endsWith('.mjs')) continue
+      if (d === 'apps/api' && /^(test-|run-|probe-|e2e-)/.test(b)) continue
+      out.push(`${d}/${b}`)
+    }
+  }
+  return out
+}
+const CRED_NAME = /^[A-Z][A-Z0-9_]*$/
+const CRED_WORD = /(SECRET|TOKEN|PASSWORD|PASSWD|CREDENTIAL|API_?KEY|_KEY$)/
+const scanCredDefaults = (lines, file = '') => {
+  const hits = []
+  lines.forEach((ln, i) => {
+    if (/^\s*(\/\/|\*|\/\*)/.test(ln)) return
+    const m = ln.match(/(?:const|let)\s+([A-Za-z_][A-Za-z0-9_]*)\s*=\s*(.+)$/)
+    if (!m) return
+    const name = m[1]
+    if (!CRED_NAME.test(name) || !CRED_WORD.test(name)) return
+    const tail = m[2].split('||').pop().trim()
+    const lit = tail.match(/^(['"])([^'"]*)\1/)
+    if (lit && lit[2].length > 0 && !/\$\{/.test(lit[2])) hits.push({ file, line: i + 1, name, lit: lit[2] })
+  })
+  return hits
+}
+
+/* 具名白名单:key = `文件:常量名`,value = 理由(随码复核)。**只许变短。** */
+const CRED_DEFAULT_ALLOW = {
+  /* —— 不是密钥,是「名字里带 KEY/TOKEN」的东西 —— */
+  'apps/api/dashboard-pulse.mjs:AI_LINE_KEY': '不是密钥:库里一行记录的**键名**(`ai_daily_line`),公开常量',
+  'apps/api/ledger-guards.mjs:KIND_BACKFILL_KEY': '不是密钥:一次性迁移的**标记名**,靠它判「跑过没有」(幂等判据律)',
+  'apps/api/legacy-demo-retire.mjs:DEMO_RETIRE_KEY': '不是密钥:一次性下线脚本的**标记名**(`demo_retire_backfill_v1`),同样是拿来判「跑过没有」的',
+  'apps/api/web-head.mjs:TOKEN_HREF': '不是密钥:设计令牌 **CSS 的路径**(`/web/design-tokens.css`)',
+  /* —— 是凭据,但有明写的闸 —— */
+  'apps/api/mini-token-secret.mjs:DEV_ONLY_SECRET': '**J-53 的开发值本身**:只在 `ci`/`sandbox` 两个库域可达'
+    + '(`DEV_SCOPES`),名字自带「NOT-A-SECRET」。它存在的理由就是让回归与沙箱不必配密钥;'
+    + '`local`/`production`/`unknown` 拿不到它 —— 由本文件 ④c/④d 与 test-auth-surface ㊙⑪ 守',
+  'apps/api/local-server.mjs:STAFF_DEMO_PASSWORD': '演示员工口令:整个包在 `if (!DEMO_LOGIN_ALLOWED) throw 403` 之内;'
+    + '与上面 ALLOW 里那条同一个理由,前提是「生产永不设 ALLOW_DEMO_ADMIN_LOGIN」,由上线硬门槛守',
+  /* —— 客户端拿演示主钥匙:它们是**发请求的一方**,不是签发的一方 —— */
+  'tools/configure-jienail.mjs:OWNER_TOKEN': '客户端脚本:拿演示主钥匙当 Bearer 发请求,不是签发密钥',
+  'tools/seed-jics-nail.mjs:OWNER_TOKEN': '客户端脚本:`tools/seed-jics-nail.mjs` 拿演示主钥匙当 Bearer 去调本机接口,它是**发请求的一方**,不签发任何令牌',
+  'tools/seed-luvia-bj.mjs:OWNER_TOKEN': '客户端脚本:`tools/seed-luvia-bj.mjs` 拿演示主钥匙当 Bearer 去调本机接口,它是**发请求的一方**,不签发任何令牌',
+  'tools/verify-jics-kb.mjs:OWNER_TOKEN': '客户端脚本:`tools/verify-jics-kb.mjs` 拿演示主钥匙当 Bearer 去调本机接口,它是**发请求的一方**,不签发任何令牌',
+  'tools/seed-demo-today.mjs:TOKEN': '客户端脚本:铺演示数据时拿演示主钥匙当 Bearer,**发请求的一方**,不签发任何令牌',
+  /* —— 🔴 同病未治,已报店主等裁 —— */
+  'apps/api/local-server.mjs:OWNER_TOKEN': '🔴 **同一个病,本批没治,已在回执里点名请裁**:'
+    + '平台最高信任根 `OWNER_TOKEN` 自己也回落到字面量 `owner-demo-token`。'
+    + '按 J-53 它该跟顾客令牌密钥一样 fail closed;**没有当批就改,是因为全仓 90+ 个测试与工具'
+    + '把这串值当管理员 Bearer 在用**,一改全红,且会让店主本机 4128 也起不来 —— '
+    + '这属于「修复会改业务口径」那一类,按纪律**先报不自己判**。豁免有效期 = 到店主裁为止',
+}
+const CRED_DEFAULT_CAP = 12   /* 上限 = 实际条数,不留空隙(店主 03m) */
+
+const credHits = credFiles().flatMap((f) => scanCredDefaults(readFileSync(join(ROOT, f), 'utf8').split('\n'), f))
+const credBad = credHits.filter((h) => !CRED_DEFAULT_ALLOW[`${h.file}:${h.name}`])
+check(`④a J-53:${credFiles().length} 个服务端模块现扫,「密钥类常量回落到固定字面量」`
+  + `${credHits.length} 处**逐个落进具名白名单**(白名单式;新写一处当场红点名)`,
+credBad.length === 0, credBad.map((h) => `${h.file}:${h.line} ${h.name}`).join(' | '))
+check(`④b 白名单只许变短:${Object.keys(CRED_DEFAULT_ALLOW).length} 条 <= 上限 ${CRED_DEFAULT_CAP};每条都有理由`,
+  Object.keys(CRED_DEFAULT_ALLOW).length <= CRED_DEFAULT_CAP
+  && Object.values(CRED_DEFAULT_ALLOW).every((v) => String(v).length > 12),
+  `${Object.keys(CRED_DEFAULT_ALLOW).length} 条`)
+/* ④c 自守(本文件律③:零命中先证刀能咬)—— 造一行**真会发生的**违规 */
+const credCanary = scanCredDefaults([
+  "const PAYMENT_WEBHOOK_SECRET = process.env.PAYMENT_WEBHOOK_SECRET || 'pay-dev-secret'",
+], 'canary.mjs')
+check('④c 自守:构造一行「新密钥常量回落到字面量」**必须被咬到**(咬不到说明这把刀是废的)',
+  credCanary.length === 1 && credCanary[0].name === 'PAYMENT_WEBHOOK_SECRET', JSON.stringify(credCanary))
+/* ④d 反向守:算出来的键**不许**被当成密钥(否则白名单会被误报塞满,真的那条就埋没了) */
+const credNeg = scanCredDefaults([
+  'const objectKey = `settlements/${tenantId}/${code}.svg`',
+  "const AI_LINE_KEY = 'ai_daily_line'",                       // 在白名单里,但这里验的是它确实被扫到
+  'const KEY_TIME = `${now - 60};${now + 900}`',
+], 'neg.mjs')
+check('④d 反向守:模板串算出来的键(`objectKey` / `KEY_TIME`)**不许**被认成密钥 —— 只剩那个固定字面量的',
+  credNeg.length === 1 && credNeg[0].name === 'AI_LINE_KEY', JSON.stringify(credNeg.map((h) => h.name)))
+
+/* ④e/④f 口径单测:密钥解析器本身按**库域**判,不按 NODE_ENV(接 06h 裁 #37) */
+const { resolveMiniTokenSecret, DEV_ONLY_SECRET } = await import('./mini-token-secret.mjs')
+const devScopes = ['ci', 'sandbox'].map((s) => resolveMiniTokenSecret({ env: {}, scopeName: s }))
+const hardScopes = ['local', 'production', 'unknown'].map((s) => resolveMiniTokenSecret({ env: {}, scopeName: s }))
+check('④e 口径②:没显式设密钥时,只有 `ci`/`sandbox` 拿得到开发值;'
+  + '`local`/`production`/`unknown` **一律 ok=false**(拿不到就拒绝启动,不换个值继续跑)',
+devScopes.every((r) => r.ok && r.secret === DEV_ONLY_SECRET) && hardScopes.every((r) => !r.ok && r.secret === ''),
+JSON.stringify([devScopes.map((r) => r.ok), hardScopes.map((r) => r.ok)]))
+check('④f 口径③:显式设了、但设成跟 `OWNER_TOKEN` 一样 —— **照样拒绝**(密钥不复用);'
+  + '设成别的值则放行',
+  resolveMiniTokenSecret({ env: { WECHAT_MINI_TOKEN_SECRET: 'same' }, scopeName: 'production', ownerToken: 'same' }).ok === false
+  && resolveMiniTokenSecret({ env: { WECHAT_MINI_TOKEN_SECRET: 'other' }, scopeName: 'production', ownerToken: 'same' }).ok === true,
+  '')
+check('④g 反向守:拒绝启动那段话里**一个字都不带密钥本身**(J-53 停线:密钥不进任何输出)',
+  !(await import('./mini-token-secret.mjs')).refusalText(
+    resolveMiniTokenSecret({ env: {}, scopeName: 'production' }), { scopeName: 'production' },
+  ).includes(DEV_ONLY_SECRET), '')
+
 console.log(`   分形态:${Object.entries(byShape).map(([k, v]) => `${k} ${v}`).join(' · ') || '(零命中)'}`)
 if (fails.length) { console.error(`\n❌ test-credential-scan ${fails.length}/${checks} 项未过`); process.exit(1) }
 console.log(`\n✅ test-credential-scan 通过 ${checks} 项`)

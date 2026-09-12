@@ -115,7 +115,7 @@ const APP_TIMEZONE = process.env.APP_TIMEZONE || 'America/Toronto'
 process.env.TZ = APP_TIMEZONE
 
 const __dirname = dirname(fileURLToPath(import.meta.url))
-const { legacyScope, scopeOf } = await import('./data-scope.mjs')
+const { legacyScope, scopeOf } = await import('./data-scope.mjs'); const { requireMiniTokenSecret, miniSecretIsExplicit } = await import('./mini-token-secret.mjs')
 const workspaceRoot = join(__dirname, '..', '..')
 const webRoot = join(workspaceRoot, 'apps', 'web')
 const assetRoot = join(workspaceRoot, 'miniprogram', 'assets')
@@ -388,7 +388,7 @@ const SLOT_MINUTES = 30
 const APP_PUBLIC_URL = (process.env.APP_PUBLIC_URL || 'https://www.luckyluxeatelier.com').replace(/\/$/, '')
 const WECHAT_MINI_APPID = process.env.WECHAT_MINI_APPID || process.env.WX_MINI_APPID || ''
 const WECHAT_MINI_SECRET = process.env.WECHAT_MINI_SECRET || process.env.WX_MINI_APPSECRET || ''
-const WECHAT_MINI_TOKEN_SECRET = process.env.WECHAT_MINI_TOKEN_SECRET || process.env.WX_MINI_TOKEN_SECRET || WECHAT_MINI_SECRET || OWNER_TOKEN || 'luckyluxe-mini-dev'
+const WECHAT_MINI_TOKEN_SECRET = requireMiniTokenSecret({ scopeName: DATA_SCOPE_NAME, dataDir, ownerToken: OWNER_TOKEN })  // J-53:原来是五段回落链,末端是仓库里的字面量;出口与那道闸都在 ./mini-token-secret.mjs
 const WECOM_CORP_ID = process.env.WECOM_CORP_ID || ''
 const WECOM_CUSTOMER_SERVICE_SECRET = process.env.WECOM_CUSTOMER_SERVICE_SECRET || ''
 const WECOM_CUSTOMER_SERVICE_TOKEN = process.env.WECOM_CUSTOMER_SERVICE_TOKEN || ''
@@ -10728,7 +10728,7 @@ async function route(req, res) {
        每一格为什么在那儿,写在那个文件的抬头。 */
     return json(res, 200, healthReport(req, {
       rasterBackend, tenantFallbackTally, getAiUsage, mergeWindowSeconds, mergeWindowCapSeconds, openMergeWindows,
-      dataDir, dbConcurrency, replyLength, appVersion, tenantNullRows, dataScope: DATA_SCOPE, dataScopeName: DATA_SCOPE_NAME, iso, demoLoginAllowed: DEMO_LOGIN_ALLOWED,
+      dataDir, dbConcurrency, replyLength, appVersion, tenantNullRows, dataScope: DATA_SCOPE, dataScopeName: DATA_SCOPE_NAME, iso, demoLoginAllowed: DEMO_LOGIN_ALLOWED, miniSecretExplicit: miniSecretIsExplicit(),
     }))
   }
   if (req.method === 'GET' && path === '/wechat/customer-service/webhook') {

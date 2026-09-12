@@ -56,6 +56,11 @@ ratchet() {   # $1=中文名 $2=文件 $3=覆盖值
   if [ "$now" -le "$base" ]; then say "$1" "✅ $now ≤ $base(上一提交 $head_n · 历史最低 $floor_n)"
   else say "$1" "🔴 $now > $base(涨了 $((now-base)) 行;上一提交 $head_n · 历史最低 $floor_n)"; FAIL=1; fi
 }
+# ① 外部件预检(店主 07c 裁 #56):**开跑之前先看一眼依赖齐不齐**,不许跑到第 n 套件才发现。
+#    读的是 handoff/外部件清单.md 那张表 —— 一件事一处真相,表改了这里自动跟着查。
+if node "$(dirname "$0")/ext-deps-check.mjs" --strict; then say "外部件齐" "✅ 清单逐条现查通过"
+else say "外部件缺件" "🔴 见上:缺哪一个已经点名(装法见 handoff/外部件清单.md §二)"; FAIL=1; fi
+
 ratchet "local-server.mjs" apps/api/local-server.mjs "${RATCHET_SERVER:-}"
 ratchet "admin.js" apps/web/admin.js "${RATCHET_ADMIN:-}"
 
@@ -191,8 +196,8 @@ else say "回归不依赖演示种子" "🔴 run-all-tests.sh 里有 $SEEDREF �
 MPCOLOR=$(find miniprogram -name "*.wxss" ! -path "*/styles/tokens.wxss" ! -path "*/styles/tokens-component.wxss" ! -path "*/styles/fraunces-digits.wxss" -print0 \
   | xargs -0 grep -ohE "#[0-9a-fA-F]{3,8}\b|rgba?\([0-9 .,]+\)" | wc -l | tr -d ' ')
 # 06g §四② 把 33 条「写死金底 + 写死白字」+ 8 条同规则里的旧金换成令牌 → 2443 收到 2356。棘轮只许往下收。
-if [ "$MPCOLOR" -le 2356 ]; then say "小程序 wxss 写死色棘轮" "✅ $MPCOLOR ≤ 2356(只许降)"
-else say "小程序 wxss 写死色棘轮" "🔴 $MPCOLOR > 2356 —— 新写死了颜色,那一处的深色态就会漏白"; FAIL=1; fi
+if [ "$MPCOLOR" -le 2353 ]; then say "小程序 wxss 写死色棘轮" "✅ $MPCOLOR ≤ 2353(只许降)"
+else say "小程序 wxss 写死色棘轮" "🔴 $MPCOLOR > 2353 —— 新写死了颜色,那一处的深色态就会漏白"; FAIL=1; fi
 
 # ⑩ #14(店主 05u 裁:「今天先加静态判据禁新写 + 交存量清单」)。
 #    `substr(appointment_start, 1, 10)` 取的是 **UTC 日期前缀**,不是门店当天 ——

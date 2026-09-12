@@ -73,7 +73,8 @@ if (!realCards.length) {
     const { ensureSandbox } = await import('./test-need-sandbox.mjs')
     const sb = await ensureSandbox({ label: '[mp-placeholder-size]' })
     console.log(`   [前置] 自拉沙箱后存活=${sb.ok}(共用前置件)`)
-    if (!sb.ok) { await mp.disconnect(); process.exit(0) }
+    /* 🔴 07c 裁 #55 §三:同上 —— 前置没成不许当通过 */
+    if (!sb.ok) { await mp.disconnect(); console.error('\n🔴 [mp-placeholder-size] 前置沙箱 4310 没起来 —— **按红处理**'); process.exit(1) }
   }
   /* 沙箱刚拉起来:重进一次页让它取数;reLaunch 会销毁旧 page 对象 → **必须重新取 pg**,
      不能再用外层那个(02o 自查:page destroyed 就是拿了被销毁的旧引用)。 */

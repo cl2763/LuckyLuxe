@@ -46,7 +46,9 @@ if (!automator) {
 const { ensureSandbox } = await import('./test-need-sandbox.mjs')
 const sb = await ensureSandbox({ label: '[mp-home-sections]' })
 console.log(`   [前置] 沙箱 4310 存活=${sb.ok}(共用前置件)`)
-if (!sb.ok) process.exit(0)
+/* 🔴 07c 裁 #55 §三:这里原来是 `process.exit(0)` —— **前置沙箱没起来就悄悄绿**。
+   与 `MP_AUTOMATOR` 取不到那一条同族(店主 05l 裁(5):检测不到就红,不许「没跑也算过」)。 */
+if (!sb.ok) { console.error('\n🔴 [mp-home-sections] 前置沙箱 4310 没起来 —— **按红处理**(前置不成 = 这一刀没验成,不是通过)'); process.exit(1) }
 
 const mp = await (automator.connect || automator.default.connect)
   .call(automator, { wsEndpoint: `ws://127.0.0.1:${PORT}`, timeout: 40000 })

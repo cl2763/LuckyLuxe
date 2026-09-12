@@ -1,0 +1,49 @@
+<title>07c 配色验收 · 四档标签(渲染层现测)</title>
+<link rel="stylesheet" href="../../../apps/web/design-tokens.css">
+<style>
+body{margin:0;padding:26px;background:var(--paper,var(--bg,#fbf8f5));color:var(--ink,#2b2723);font:14px/1.7 -apple-system,"PingFang SC",sans-serif}
+h1{font-size:18px;margin:0 0 14px}
+table{border-collapse:collapse;background:var(--card,#fff);border:1px solid var(--line,#e6ded3);border-radius:10px;overflow:hidden;min-width:640px}
+td,th{padding:11px 16px;border-bottom:1px solid var(--line,#e6ded3);text-align:left;font-size:13px}
+th{background:var(--hero);color:var(--heroink)}
+tr:last-child td{border-bottom:0}
+.r{font-variant-numeric:tabular-nums;font-weight:700}
+.tag{display:inline-block;font-size:11px;font-weight:800;border-radius:5px;padding:2px 8px;vertical-align:middle}
+</style>
+<h1>07c 配色验收 —— 四档标签,颜色从真令牌现取</h1>
+<table id="t"><tr><th>档</th><th>标签(照 admin.js:4312 的写法)</th><th>底色 computed</th><th>字色 computed</th><th>比值</th><th>AA</th></tr></table>
+<p id="mode" style="color:var(--sub,#7d7364);font-size:12.5px"></p>
+<script>
+/* 照 admin.js:4312 那句原样拼:背景 = tr.color,字色 = tr.ink || var(--heroink) */
+const TIERS = [
+  ['高价值 A', 'var(--tagmbg)', 'var(--tagm)'],
+  ['回头客 B', 'var(--goodbg)', 'var(--good)'],
+  ['新客 N',   'var(--tagwbg)', 'var(--tagw)'],
+  ['沉睡 S',   'var(--flatbg)', 'var(--flat)'],
+]
+const LABEL = { '高价值 A': '高价值A', '回头客 B': '回头客B', '新客 N': '新客N', '沉睡 S': '沉睡S' }
+const px = (s) => s.match(/\d+(\.\d+)?/g).slice(0, 3).map(Number)
+const lum = (c) => { const f = (v) => { const s = v / 255; return s <= 0.03928 ? s / 12.92 : Math.pow((s + 0.055) / 1.055, 2.4) }
+  return 0.2126 * f(c[0]) + 0.7152 * f(c[1]) + 0.0722 * f(c[2]) }
+const ratio = (a, b) => { const l1 = lum(a), l2 = lum(b); const hi = Math.max(l1, l2), lo = Math.min(l1, l2); return (hi + 0.05) / (lo + 0.05) }
+const t = document.getElementById('t')
+const out = []
+for (const [name, bg, ink] of TIERS) {
+  const tr = document.createElement('tr')
+  tr.innerHTML = `<td>${name}</td><td><span class="tag" style="background:${bg};color:${ink}">${LABEL[name]}</span></td>`
+    + '<td class="bg"></td><td class="ink"></td><td class="r rr"></td><td class="aa"></td>'
+  t.appendChild(tr)
+  const el = tr.querySelector('.tag')
+  const cs = getComputedStyle(el)
+  const b = px(cs.backgroundColor), k = px(cs.color)
+  const r = ratio(b, k)
+  tr.querySelector('.bg').textContent = cs.backgroundColor
+  tr.querySelector('.ink').textContent = cs.color
+  tr.querySelector('.rr').textContent = r.toFixed(2)
+  tr.querySelector('.aa').textContent = r >= 4.5 ? '✅ 过' : (r >= 3 ? '⚠️ 仅大字' : '🔴 不过')
+  out.push(`${name} ${r.toFixed(2)}`)
+}
+document.getElementById('mode').textContent =
+  '当前档:' + (document.documentElement.getAttribute('data-theme') || '(跟系统)') + ' · ' + out.join(' · ')
+window.__ratios = out
+</script>

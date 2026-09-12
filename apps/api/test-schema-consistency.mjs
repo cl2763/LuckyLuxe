@@ -42,7 +42,12 @@ function check(name, condition, detail = '') {
 
 // 起一次全新库的实例,等它把 schema 建完就关掉
 async function dumpFreshSchema() {
-  const dir = mkdtempSync(join(tmpdir(), 'll-schema-'))
+  /* 🔴 07c 裁 #54(J-53)之后:临时目录叫 `ll-schema-` 时 `scopeOf()` 判成 `unknown`,
+     而 unknown 库域**没显式设密钥就拒绝启动** —— 这台起不来,判据报「30 秒内没起来」。
+     改法不是给它塞一把密钥,是**把名字叫对**:它本来就是一个回归临时库,
+     用 `ll-ci-data.` 前缀 ⇒ 库域 `ci` ⇒ 与全量回归那个临时库同一档(《库名口径》四个库那张表)。
+     好处是**所有按库域判的护栏都会一致地把它当回归库**,不只这一条。 */
+  const dir = mkdtempSync(join(tmpdir(), 'll-ci-data.schema-'))
   const child = spawn(process.execPath, [join(here, 'local-server.mjs')], {
     env: { ...process.env, DATA_DIR: dir, PORT, ALLOW_DEMO_ADMIN_LOGIN: 'true' },
     stdio: 'ignore'

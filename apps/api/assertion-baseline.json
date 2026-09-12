@@ -39,7 +39,7 @@
     "audit-fix": 90,
     "scan-sign": 53,
     "double-sheet": 54,
-    "auth-surface": 44,
+    "auth-surface": 47,
     "currency-scan": 6,
     "settle-stress": 6,
     "sign-stability": 6,
@@ -71,7 +71,7 @@
     "delivery-evidence": 5,
     "store-name": 24,
     "correction-reason": 7,
-    "credential-scan": 4,
+    "credential-scan": 12,
     "db-target-guard": 15,
     "empty-pill": 6,
     "untouched-proof": 18,
@@ -112,7 +112,8 @@
     "tenant-isolation": 10,
     "color-usage": 31,
     "token-entry": 9,
-    "danger-cmd": 8
+    "danger-cmd": 8,
+    "exit-code": 8
   },
   "上次更新": "2026-09-02",
   "巨型文件历史最低": {

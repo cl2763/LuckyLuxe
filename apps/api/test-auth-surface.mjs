@@ -357,6 +357,51 @@ async function main() {
     (HEALTHSRC.match(/guestIdUnsigned[^\n]*/g) || []).slice(0, 2).join(' | '))
   check('㊙⑦ 🔴 反向守:把它写回常量必须被 ㊙⑥ 咬中(否则那条是空转)',
     /guestIdUnsigned:\s*(true|false)\b/.test('    guestIdUnsigned: true,'))
+  /* ═══ ㊙⑪㊙⑫ J-53 行为层:**拿不到密钥就拒绝启动**(店主 07c 裁 #54 §一.3)═══
+     静态那几条在 `test-credential-scan ④`(扫写法 + 解析器口径单测);
+     这里验的是**真起一个进程会不会死** —— 判据律:能验行为就别只验中间产物。
+
+     ⚠️ 夹具**绝不指向真的 `apps/api/local-data`**:开库在密钥闸**之前**,
+     拿真库当靶子等于让判据每跑一次就去开一次店主的本机库(停线:写 4128 既有行仍停)。
+     改成在临时目录里造一个**名字就叫 `local-data` 的空目录** —— `scopeOf()` 认的是**路径名**,
+     所以库域照样是 `local`,而真库一个字节都不碰。 */
+  {
+    const { mkdtempSync, mkdirSync, rmSync } = await import('node:fs')
+    const { tmpdir } = await import('node:os')
+    const { spawnSync } = await import('node:child_process')
+    const base = mkdtempSync(join(tmpdir(), 'll-j53-'))
+    const fakeLocal = join(base, 'local-data')      // 名字叫 local-data ⇒ scopeOf 判成 local
+    const fakeSand = join(base, 'sandbox-data')     // 名字叫 sandbox-data ⇒ 判成 sandbox
+    mkdirSync(fakeLocal); mkdirSync(fakeSand)
+    const API = dirname(fileURLToPath(import.meta.url))
+    const env0 = { ...process.env, NOTIFY_TICK: 'off' }
+    delete env0.WECHAT_MINI_TOKEN_SECRET; delete env0.WX_MINI_TOKEN_SECRET
+    console.log(`   [刀留痕] J-53 夹具 ${base}(local-data / sandbox-data 两个空目录;**真库未碰**)`)
+
+    const hard = spawnSync(process.execPath, ['local-server.mjs'],
+      { cwd: API, env: { ...env0, DATA_DIR: fakeLocal, PORT: '4139' }, encoding: 'utf8', timeout: 25000 })
+    const hardOut = `${hard.stdout || ''}${hard.stderr || ''}`
+    check('㊙⑪ 🔴 J-53 造病:**不设密钥变量 + `local` 库域 → 必须拒绝启动**(退出码非 0),'
+      + '且报文**点名缺哪个变量**(不是含糊一句「配置错误」)',
+    hard.status !== 0 && /拒绝启动/.test(hardOut) && /WECHAT_MINI_TOKEN_SECRET/.test(hardOut),
+    `退出码=${hard.status} · 首行=${(hardOut.split('\n').find((l) => l.trim()) || '(空)').slice(0, 80)}`)
+    check('㊙⑪b 反向守:那段拒绝启动的话里**不许出现密钥本身**(J-53 停线:密钥不进任何输出)',
+      !hardOut.includes('DEV-ONLY-NOT-A-SECRET'), '')
+
+    /* ㊙⑫ 反向守:sandbox 库域照常起 —— 否则「不许回落」会把回归与沙箱一起焊死。
+       只看它**活过 3.5 秒且没打印拒绝启动**就够(不等 /health,省时间)。 */
+    const soft = spawnSync(process.execPath, ['-e',
+      "const t=setTimeout(()=>{console.log('STILL-ALIVE');process.exit(0)},3500);"
+      + "import('./local-server.mjs').catch((e)=>{console.error('IMPORT-FAIL '+e.message);clearTimeout(t);process.exit(2)})"],
+    { cwd: API, env: { ...env0, DATA_DIR: fakeSand, PORT: '4140' }, encoding: 'utf8', timeout: 25000 })
+    const softOut = `${soft.stdout || ''}${soft.stderr || ''}`
+    check('㊙⑫ 反向守:同样不设密钥,但 `sandbox` 库域 → **照常起得来**(活过 3.5 秒、没打印拒绝启动)'
+      + ' —— 否则这条律会把回归与沙箱一起焊死',
+    /STILL-ALIVE/.test(softOut) && !/拒绝启动/.test(softOut), softOut.slice(-160))
+    rmSync(base, { recursive: true, force: true })
+    console.log('   [收尾] J-53 夹具已删')
+  }
+
   /* ㊙⑧ 行为层:真拿一个**伪造的**签名串去打,必须 401 —— 静态读源码证不了运行时真在验 */
   const forged = 'mini.' + Buffer.from(JSON.stringify({ sub: 'demo-cust-06', openid: 'demo-openid-x', exp: Date.now() + 60000 })).toString('base64url') + '.notavalidsignature'
   const forgedRes = await fetch(`${BASE_URL}/my/card-pack`, { headers: { authorization: `Bearer ${forged}`, 'x-tenant-id': 'lucky-luxe' } })
@@ -366,14 +411,23 @@ async function main() {
   check('㊙⑨ 反向守:同一条口不带令牌也 401(证明 ㊙⑧ 拒的是**令牌不合法**这件事)',
     nakedRes.status === 401, String(nakedRes.status))
   /* ㊙⑩ 正向:**合法签发**的令牌在同一条口上必须过 —— 否则前面那些 401 只说明这条口是死的 */
+  /* 🔴 07c §一.4:这里原来是 `… || process.env.OWNER_TOKEN || 'owner-demo-token'` ——
+     **判据里写着默认值,等于把钥匙又抄了一份**。而且它抄的正是那条回落链的末端,
+     所以它一直「验得过」:不是因为签发对,是因为两边抄了同一个字面量。
+     改成**从唯一出口现取**:密钥由 `mini-token-secret.mjs` 按**被测进程的库域**算出来
+     (库域从它自己的 `/health` 现读,不猜)。判据这一侧零字面量。 */
+  const { resolveMiniTokenSecret } = await import('./mini-token-secret.mjs')
+  const liveScope = await fetch(`${BASE_URL}/health`).then((r) => r.json()).then((h) => h.dataScopeName || 'unknown').catch(() => 'unknown')
+  const liveSecret = resolveMiniTokenSecret({ scopeName: liveScope }).secret
   const okTok = (() => {
     const payload = Buffer.from(JSON.stringify({ sub: 'demo-cust-06', openid: 'demo-openid-06', exp: Date.now() + 60000 })).toString('base64url')
-    const sig = createHmac('sha256', process.env.WECHAT_MINI_TOKEN_SECRET || process.env.OWNER_TOKEN || 'owner-demo-token').update(payload).digest('base64url')
+    const sig = createHmac('sha256', liveSecret).update(payload).digest('base64url')
     return `mini.${payload}.${sig}`
   })()
   const okRes = await fetch(`${BASE_URL}/my/card-pack`, { headers: { authorization: `Bearer ${okTok}`, 'x-tenant-id': 'lucky-luxe' } })
   check('㊙⑩ 正向守:**合法签发**的令牌在同一条口上不是 401(证明这条口不是「见谁都拒」)',
     okRes.status !== 401, String(okRes.status))
+
 
   console.log(`\n门禁全量扫描通过:${checks} 项断言全绿`)
 }

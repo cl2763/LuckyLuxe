@@ -22,7 +22,7 @@ const PORT = process.env.PERF_BASE_TEST_PORT || '4178'
 const BASE = `http://127.0.0.1:${PORT}`
 const PLATFORM = 'owner-demo-token'
 const RUN = Date.now().toString(36)
-const DATA_DIR = mkdtempSync(join(tmpdir(), 'll-perfbase-'))
+const DATA_DIR = mkdtempSync(join(tmpdir(), 'll-ci-data.perfbase-'))
 const DB_PATH = join(DATA_DIR, 'lucky-luxe.sqlite')
 
 let checks = 0
