@@ -290,8 +290,10 @@ check('④t helper 读的是**文件里的现值**,不是字面量 —— 文件
 readOT({ env: {}, dataDir: otCi }) === 'pilot-probe-value', readOT({ env: {}, dataDir: otCi }))
 
 const pilotSrc = readFileSync(join(ROOT, 'apps/api/test-admin-accounts.mjs'), 'utf8')
-check('④u 试点那一套(`test-admin-accounts`)**主来源是 helper**,不是照抄的字面量',
-  /readOwnerToken\(\)/.test(pilotSrc) && !/const OWNER = ['"]owner-demo-token['"]/.test(pilotSrc), '')
+/* 认**两个** helper:`readOwnerToken()`(拿不到回空串)与 `requireOwnerToken()`(拿不到抛人话)。
+   批量切时试点这一套被一起升级成了后者 —— 那是**更严**的形态,判据要跟上,不是把它算成没切。 */
+check('④u 试点那一套(`test-admin-accounts`)**主来源是 helper**(read/require 皆可),不是照抄的字面量',
+  /(read|require)OwnerToken\(\)/.test(pilotSrc) && !/const OWNER = ['"]owner-demo-token['"]/.test(pilotSrc), '')
 
 /* ④v 迁移棘轮:还照抄字面量的文件数**只许降**。归零那天 = 批量切完那天,
    那时把 ④s–④v 连同 `local-server.mjs:OWNER_TOKEN` 那条豁免一起删。 */
