@@ -58,8 +58,12 @@ ratchet() {   # $1=中文名 $2=文件 $3=覆盖值
 }
 # ① 外部件预检(店主 07c 裁 #56):**开跑之前先看一眼依赖齐不齐**,不许跑到第 n 套件才发现。
 #    读的是 handoff/外部件清单.md 那张表 —— 一件事一处真相,表改了这里自动跟着查。
+# 🔴 **提醒,不拦**(裁 #58② 同一条道理,这一处是我 07c 自己装反了):
+#    缺 automator 时,**三支 mp 刀自己就会红** —— 覆盖面一点没少,判决只是往后挪几分钟。
+#    这道闸的价值是「**第 5 秒就点名缺哪一个**」,不是再判一次同样的红;
+#    拦住整轮回归等于让一件环境没配好的事,挡住一百多套跟它无关的判据。
 if node "$(dirname "$0")/ext-deps-check.mjs" --strict; then say "外部件齐" "✅ 清单逐条现查通过"
-else say "外部件缺件" "🔴 见上:缺哪一个已经点名(装法见 handoff/外部件清单.md §二)"; FAIL=1; fi
+else say "外部件缺件" "⚠️ 提醒(不拦):缺哪一个已经点名(装法见 handoff/外部件清单.md §二);缺 automator 时那三支刀会自己红"; fi
 
 ratchet "local-server.mjs" apps/api/local-server.mjs "${RATCHET_SERVER:-}"
 ratchet "admin.js" apps/web/admin.js "${RATCHET_ADMIN:-}"
@@ -196,8 +200,8 @@ else say "回归不依赖演示种子" "🔴 run-all-tests.sh 里有 $SEEDREF �
 MPCOLOR=$(find miniprogram -name "*.wxss" ! -path "*/styles/tokens.wxss" ! -path "*/styles/tokens-component.wxss" ! -path "*/styles/fraunces-digits.wxss" -print0 \
   | xargs -0 grep -ohE "#[0-9a-fA-F]{3,8}\b|rgba?\([0-9 .,]+\)" | wc -l | tr -d ' ')
 # 06g §四② 把 33 条「写死金底 + 写死白字」+ 8 条同规则里的旧金换成令牌 → 2443 收到 2356。棘轮只许往下收。
-if [ "$MPCOLOR" -le 2353 ]; then say "小程序 wxss 写死色棘轮" "✅ $MPCOLOR ≤ 2353(只许降;07c 从 2356 降到 2353)"
-else say "小程序 wxss 写死色棘轮" "🔴 $MPCOLOR > 2353 —— 新写死了颜色,那一处的深色态就会漏白"; FAIL=1; fi
+if [ "$MPCOLOR" -le 2350 ]; then say "小程序 wxss 写死色棘轮" "✅ $MPCOLOR ≤ 2350(只许降;07c 2356→2353 · 07d 2353→2350)"
+else say "小程序 wxss 写死色棘轮" "🔴 $MPCOLOR > 2350 —— 新写死了颜色,那一处的深色态就会漏白"; FAIL=1; fi
 
 # ⑩ #14(店主 05u 裁:「今天先加静态判据禁新写 + 交存量清单」)。
 #    `substr(appointment_start, 1, 10)` 取的是 **UTC 日期前缀**,不是门店当天 ——
@@ -288,14 +292,28 @@ else say "flaky 计数目录" "⚠️ 还没有 $FLAKY_DIR(第一次崩的时候
 #    于是「两台都是 live」看着像「护栏对两台都失效」——**其实 live 正是拒绝档**(现测护栏对两台都拒跑)。
 #    但「分不出是哪个库」这件事本身要治:细分名 dataScopeName 由库路径算,4128 必须是 local、4310 必须是 sandbox。
 #    服务没起来不判(那是另一件事),起来了就必须对得上,并把两台的值一起打印。
-SCOPE_LOCAL=$(curl -s --max-time 3 http://127.0.0.1:4128/health | node -e "let s='';process.stdin.on('data',d=>s+=d).on('end',()=>{try{console.log(JSON.parse(s).dataScopeName||'(没有这个字段)')}catch{console.log('(取不到)')}})" 2>/dev/null)
-SCOPE_SAND=$(curl -s --max-time 3 http://127.0.0.1:4310/health | node -e "let s='';process.stdin.on('data',d=>s+=d).on('end',()=>{try{console.log(JSON.parse(s).dataScopeName||'(没有这个字段)')}catch{console.log('(取不到)')}})" 2>/dev/null)
-if [ "$SCOPE_LOCAL" = "(取不到)" ] && [ "$SCOPE_SAND" = "(取不到)" ]; then
-  say "两台库名分得清" "— 两台都没起,这一条本轮没验(不是通过)"
-elif [ "$SCOPE_LOCAL" = "$SCOPE_SAND" ]; then
-  say "两台库名撞名了" "🔴 4128=$SCOPE_LOCAL · 4310=$SCOPE_SAND —— 分不出是哪个库,护栏与报数都会含糊"; FAIL=1
+# 端口做成可覆盖:硬写死的端口**没法造病** —— 造「两台撞名」得能把两台起在别处。
+# 默认仍是 4128 / 4310,日常一个字都不用改。
+PRE_LOCAL_PORT="${PRE_LOCAL_PORT:-4128}"; PRE_SAND_PORT="${PRE_SAND_PORT:-4310}"
+SCOPE_LOCAL=$(curl -s --max-time 3 http://127.0.0.1:$PRE_LOCAL_PORT/health | node -e "let s='';process.stdin.on('data',d=>s+=d).on('end',()=>{try{console.log(JSON.parse(s).dataScopeName||'(没有这个字段)')}catch{console.log('(取不到)')}})" 2>/dev/null)
+SCOPE_SAND=$(curl -s --max-time 3 http://127.0.0.1:$PRE_SAND_PORT/health | node -e "let s='';process.stdin.on('data',d=>s+=d).on('end',()=>{try{console.log(JSON.parse(s).dataScopeName||'(没有这个字段)')}catch{console.log('(取不到)')}})" 2>/dev/null)
+# 🔴 裁 #58②(店主 07d):这一条要**分三态**,不许把「没起来」和「配坏了」判成同一件事。
+#    立这条的由来:J-53 之后 4128 没配钥匙就起不来,而**全量本身跑在 ci 临时库上,根本不依赖这两台** ——
+#    把「没起来」当红,等于让一把还没配的钥匙卡住整个开发回路。
+#    ② 那一档还要把 `refusalText()` 里那段「怎么办」打出来,下一台新机器第一次跑就自己解了。
+if [ "$SCOPE_LOCAL" = "$SCOPE_SAND" ] && [ "$SCOPE_LOCAL" != "(取不到)" ]; then
+  # ③ 起来了却撞名 —— 这条判据当初就是为它立的,原样保留红
+  say "两台库名撞名了" "🔴 $PRE_LOCAL_PORT=$SCOPE_LOCAL · $PRE_SAND_PORT=$SCOPE_SAND —— 分不出是哪个库,护栏与报数都会含糊"; FAIL=1
+elif [ "$SCOPE_LOCAL" != "(取不到)" ] && [ "$SCOPE_SAND" != "(取不到)" ]; then
+  # ① 两台都在、名字分得清
+  say "两台库名分得清" "✅ $PRE_LOCAL_PORT=$SCOPE_LOCAL · $PRE_SAND_PORT=$SCOPE_SAND"
 else
-  say "两台库名分得清" "✅ 4128=$SCOPE_LOCAL · 4310=$SCOPE_SAND"
+  # ② 有一台没起来 —— **提醒,不拦**;并打印「怎么办」
+  DOWN=""
+  [ "$SCOPE_LOCAL" = "(取不到)" ] && DOWN="$PRE_LOCAL_PORT"
+  [ "$SCOPE_SAND" = "(取不到)" ] && DOWN="${DOWN:+$DOWN 与 }$PRE_SAND_PORT"
+  say "有服务没起来" "⚠️ 提醒(不拦):$DOWN 没起来;全量跑在 ci 临时库上,**不依赖这两台**"
+  node "$(dirname "$0")/../apps/api/mini-token-secret.mjs" --howto 2>/dev/null | sed 's/^/     /'
 fi
 
 # ⑧ 判据住在跑不到的地方(店主 05w §二 同族一句)。

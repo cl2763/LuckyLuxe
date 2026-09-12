@@ -54,7 +54,10 @@ page{background:#fbf8f5}
 .dv-blk.hand.active{background:#e8d3b0;color:#7a5a2e}
 .dv-blk.foot.active{background:#e0b39a;color:#8a5030}
 .dv-blk.lash.active{background:#d9c8e0;color:#5b4370}
-.dv-blk.care.active{background:#cfe0d6;color:#3f6b52}
+/* J-54:语义=「进行中 / 选中」。不跟品类色走(那是身份),走「正常/进行」那一对。
+   ⚠️ 注释里**不写色值** —— wxss 写死色那把尺子连注释一起数,写一个 hex 棘轮就涨一个(现测踩过)。
+   换前只有 4.45(差 0.05 不到 AA);换 --good/--goodbg 后 浅 4.68 / 深 7.79,数在 07d 回执 §三 */
+.dv-blk.care.active{background:var(--goodbg);color:var(--good)}
 /* 已完成:灰掉 + 勾 */
 .dv-blk.done{background:#efeae4 !important;color:#a79f95 !important;border:1rpx solid #e4ddd3}
 /* 时间行到店小标 */
@@ -73,7 +76,9 @@ page{background:#fbf8f5}
 .dv-legend .lg.care{background:#cfe0d6}
 .dv-legend .lg.free{background:#f3ece2;border:1rpx dashed #dcc9ad}
 .dv-tag.owner{background:#7a5cff}
-.dv-tag.as-blue{background:#3b6ea5} /* 裁C:售后单蓝徽标 */
+/* J-54:语义=「提示 / 信息」(不是「新客」那个身份)。接合同图里现成的蓝那一对。
+   换前 5.30 且无深色档;换 --tagw/--tagwbg 后 浅 7.20 / 深 7.05(同上:注释里不写色值) */
+.dv-tag.as-blue{background:var(--tagwbg);color:var(--tagw)} /* 裁C:售后单蓝徽标 */
 .dv-unpaid{position:absolute;left:14rpx;bottom:6rpx;font-size:15rpx;background:#fdecec;color:#c0392b;border-radius:5rpx;padding:1rpx 8rpx;font-weight:700}
 .dv-blk.active .dv-unpaid{left:20rpx}
 /* 列表 */

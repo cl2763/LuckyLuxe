@@ -161,6 +161,111 @@ check('④h 同类扫尽:自己起 local-server 的夹具,临时库要么用 `ll
   + '要么显式带测试密钥 —— 否则 J-53 的闸会把它拦掉,而现象是「没起来」不是「被拒」',
 spawnBad.length === 0, spawnBad.join(' | '))
 
+/* ═══ ④i/④j J-53 的那段「怎么办」本身要上判据(店主 07d 裁 #58③)═══
+   `refusalText()` 现在是**新机器唯一的说明书** —— 小婕那台第一次跑,看到的就是它。
+   所以它说的话必须是真的:提到的**生成命令要真能跑通**,提到的**文件路径要真的在 .gitignore 里**。
+   (同族:文档里的东西也要有判据 —— J-27「回执引用的文件必须存在」的延伸。) */
+const { refusalText: rText, resolveMiniTokenSecret: rSecret } = await import('./mini-token-secret.mjs')
+const howto = rText(rSecret({ env: {}, scopeName: 'production' }), { scopeName: 'production' })
+
+/* ④i 命令真能跑通:把说明书里那行 `node -e "…"` 抠出来**真跑一遍**,要求它吐出一串够长的随机串 */
+const cmdLine = (howto.match(/node -e "([^"]+)"/) || [])[1] || ''
+let cmdOut = ''
+let cmdErr = ''
+try { cmdOut = execFileSync(process.execPath, ['-e', cmdLine], { encoding: 'utf8' }).trim() } catch (e) { cmdErr = String(e.message || e).slice(0, 120) }
+check('④i 说明书里那行**生成密钥的命令真能跑通**,且吐出的串够长(>=32 字符)'
+  + ' —— 新机器照着敲的就是这一行,它错一个字,那台机器就卡在这里',
+cmdLine.length > 0 && cmdOut.length >= 32 && !cmdErr, `cmd=${cmdLine.slice(0, 60)} out=${cmdOut.length} 字 ${cmdErr}`)
+
+/* ④j 说明书里叫人写进去的那个文件,**必须真的被 gitignore 盖住** —— 否则这段话在教人把密钥提交进仓 */
+const ignPath = (howto.match(/写进\s*([A-Za-z0-9_./-]+)/) || [])[1] || ''
+let ignored = false
+try { execFileSync('git', ['check-ignore', '-q', ignPath], { cwd: ROOT }); ignored = true } catch { ignored = false }
+check(`④j 说明书叫人把密钥写进 \`${ignPath || '(没解析到路径)'}\`,这个路径**必须真的被 .gitignore 盖住**`
+  + ' —— 不然这段话是在教人把密钥提交进仓',
+Boolean(ignPath) && ignored, `路径=${ignPath} git check-ignore=${ignored}`)
+
+/* ④k 反向守:说明书这两样是**从 refusalText 现读**的,不是判据里另抄一份 ——
+   抄一份就会出现「说明书改了、判据还在验旧的」。这里断言两者同源。 */
+check('④k 反向守:④i/④j 验的是 `refusalText()` **现出的那段话**,不是判据里抄的副本'
+  + '(说明书改一次,这两条自动跟着验新的)',
+howto.includes(cmdLine) && howto.includes(ignPath), '')
+
+/* ═══ ④l/④m/④n 本机服务的启动参数**只许有一处**(店主 07d 裁 #58④)═══
+   案由:同一台 4128 原来有两套启动参数,而且不一样 ——
+   `启动服务器.command` 带 `--env-file-if-exists=apps/api/.env`,`restore_local` 不带。
+   **J-53 之前这个分叉是隐形的**(服务照样起,只是少几样);J-53 之后它变成
+   「每跑一次回归,店主的本机服务就死一次,而且拉不回来」——
+   因为 restore 那一套读不到 `.env` 里那把钥匙,闸直接拒了。
+   放在这支判据里,是因为**那个 `--env-file-if-exists` 就是钥匙的入口**:它掉了,钥匙就进不去。 */
+const startSh = readFileSync(join(ROOT, 'tools/start-local.sh'), 'utf8')
+const cmdFile = readFileSync(join(ROOT, '启动服务器.command'), 'utf8')
+const runAll = readFileSync(join(ROOT, 'apps/api/run-all-tests.sh'), 'utf8')
+
+check('④l 启动参数收在一处:`启动服务器.command` 与 `run-all-tests.sh` 的 restore **都调** '
+  + '`tools/start-local.sh`,两边都不再自己拼一套 `node … local-server.mjs`',
+/tools\/start-local\.sh/.test(cmdFile) && /tools\/start-local\.sh/.test(runAll)
+&& !/node[^\n]*--watch[^\n]*local-server\.mjs/.test(cmdFile)
+&& !/nohup[^\n]*node[^\n]*local-server\.mjs/.test(runAll),
+`command 调=${/start-local/.test(cmdFile)} runAll 调=${/start-local/.test(runAll)}`)
+
+const NEEDED = ['--env-file-if-exists', 'HOST', 'ALLOW_DEMO_ADMIN_LOGIN', 'DATA_DIR', 'PORT']
+const miss = NEEDED.filter((k) => !startSh.includes(k))
+check(`④m 那一处**四样参数一样不少**(${NEEDED.join(' / ')})——`
+  + '`--env-file-if-exists` 掉了钥匙进不去;`HOST=0.0.0.0` 掉了手机连不上做真机调试',
+miss.length === 0, `缺:${miss.join(' | ')}`)
+
+/* ④m2 两支**逐字同序**:`--bg` 与前台那一支的 env 参数顺序必须一样。
+   自查时栽过:`--bg` 把赋值放在 `env -u` 之前,被 -u 抹掉 → 那台起来 demoLogin=false,
+   而前台那支是 true —— **收敛完又分叉了**,而且分叉藏在参数顺序里,肉眼不易见。 */
+const envLines = startSh.split('\n').filter((l) => /env "\$\{CLEAN\[@\]\}"/.test(l))
+const sig = (l) => l.replace(/^\s*(nohup |exec )?env /, '').replace(/\s*\\$/, '').trim()
+check('④m2 `--bg` 与前台两支的 env 参数**逐字同序**(赋值一律排在 `-u` 之后,否则会被抹掉)',
+  envLines.length === 2 && sig(envLines[0]).startsWith(sig(envLines[1]).slice(0, 80)),
+  envLines.map(sig).join('  ||  ').slice(0, 200))
+
+check('④n 拉不回来时**把原因打到屏幕上**:restore 失败那一支要 `tail` 日志,'
+  + '不许只留一句「没拉回来」把原因埋在 /tmp 里',
+/tail -n 10[^\n]*ll-local-restored\.log/.test(runAll), '')
+
+/* ═══ ④o–④r `OWNER_TOKEN` 那道闸(店主 07d 裁 #60)· **闸已写好,还没接上** ═══
+   店主准许停在「闸写好、测试还没切」这一步,所以这几条验的是**闸本身**,
+   不是「服务已经按它跑」。接上去那一批要连同「90+ 个测试统一改接 readOwnerToken()」一起做。 */
+const { ownerTokenGate, readOwnerToken, devOwnerToken, OWNER_TOKEN_FILE } = await import('./owner-token.mjs')
+const { mkdtempSync: mkd } = await import('node:fs')
+const { tmpdir: tmp } = await import('node:os')
+
+check('④o 第一层:`local` / `production` / `unknown` 三个库域,没显式设 `OWNER_TOKEN` ⇒ **拒绝启动**',
+  ['local', 'production', 'unknown'].every((sc) => {
+    const r = ownerTokenGate.resolve({ env: {}, scopeName: sc })
+    return r.ok === false && r.secret === '' && r.missing.includes('OWNER_TOKEN')
+  }), '')
+
+const otDirA = mkd(join(tmp(), 'll-ot-a-'))
+const otDirB = mkd(join(tmp(), 'll-ot-b-'))
+const a1 = ownerTokenGate.resolve({ env: {}, scopeName: 'ci', dataDir: otDirA }).secret
+const a2 = ownerTokenGate.resolve({ env: {}, scopeName: 'ci', dataDir: otDirA }).secret
+const b1 = ownerTokenGate.resolve({ env: {}, scopeName: 'ci', dataDir: otDirB }).secret
+check('④p 第二层:`ci`/`sandbox` **每轮随机生成**并落到那一轮的 DATA_DIR ——'
+  + '同一个 DATA_DIR 两次拿到同一把(一轮之内要稳定),换一个 DATA_DIR 就换一把(不同轮不许相同)',
+Boolean(a1) && a1 === a2 && b1 !== a1 && a1.length >= 24, `a=${a1.length} b=${b1.length}`)
+
+check(`④q 测试从 \`readOwnerToken()\` 拿(不再各自写字面量):显式环境变量优先,没有就读 DATA_DIR 下的 \`${OWNER_TOKEN_FILE}\``,
+  readOwnerToken({ env: {}, dataDir: otDirA }) === a1
+  && readOwnerToken({ env: { OWNER_TOKEN: 'explicit-wins' }, dataDir: otDirA }) === 'explicit-wins', '')
+
+/* ④r 🔴 不变量(店主 07d §三 点名写进判据):
+   **仓里不许存在任何一个「写在代码里、谁都读得到、且在非 ci/sandbox 库域上可能生效」的凭据常量。**
+   这里验它的**机制面**:两把钥匙的闸必须都来自同一个工厂(不许有人再写一套),
+   且随机那一支不许被改回固定字面量。 */
+const otSrc = readFileSync(join(ROOT, 'apps/api/owner-token.mjs'), 'utf8')
+const mtSrc = readFileSync(join(ROOT, 'apps/api/mini-token-secret.mjs'), 'utf8')
+check('④r 不变量:两把钥匙的闸**都来自 `secret-gate.mjs` 那一个工厂**(不许再写一套);'
+  + '且 `devOwnerToken` 走的是 `randomBytes`,不是固定字面量',
+/createSecretGate\(/.test(otSrc) && /createSecretGate\(/.test(mtSrc)
+&& /randomBytes\(/.test(otSrc) && !/devValue:\s*['"]/.test(otSrc),
+`ot=${/createSecretGate\(/.test(otSrc)} mt=${/createSecretGate\(/.test(mtSrc)} rnd=${/randomBytes\(/.test(otSrc)}`)
+
 console.log(`\n[凭据形态] tracked ${files.length} 个 · 命中 ${real.length} 处 · 白名单 ${Object.keys(ALLOW).length} 条`)
 
 /* ═══ ④ J-53:**密钥类常量不许回落到字面量**(店主 07c 裁 #54 立)═══
@@ -219,6 +324,8 @@ const CRED_DEFAULT_ALLOW = {
   'apps/api/ledger-guards.mjs:KIND_BACKFILL_KEY': '不是密钥:一次性迁移的**标记名**,靠它判「跑过没有」(幂等判据律)',
   'apps/api/legacy-demo-retire.mjs:DEMO_RETIRE_KEY': '不是密钥:一次性下线脚本的**标记名**(`demo_retire_backfill_v1`),同样是拿来判「跑过没有」的',
   'apps/api/web-head.mjs:TOKEN_HREF': '不是密钥:设计令牌 **CSS 的路径**(`/web/design-tokens.css`)',
+  'apps/api/owner-token.mjs:OWNER_TOKEN_FILE': '不是密钥:ci/sandbox 那一轮随机 token 的**文件名**(`.owner-token`),'
+    + '文件内容才是 token,而那是每次启动随机生成、跟着临时 DATA_DIR 一起被清掉的',
   /* —— 是凭据,但有明写的闸 —— */
   'apps/api/mini-token-secret.mjs:DEV_ONLY_SECRET': '**J-53 的开发值本身**:只在 `ci`/`sandbox` 两个库域可达'
     + '(`DEV_SCOPES`),名字自带「NOT-A-SECRET」。它存在的理由就是让回归与沙箱不必配密钥;'
@@ -232,13 +339,15 @@ const CRED_DEFAULT_ALLOW = {
   'tools/verify-jics-kb.mjs:OWNER_TOKEN': '客户端脚本:`tools/verify-jics-kb.mjs` 拿演示主钥匙当 Bearer 去调本机接口,它是**发请求的一方**,不签发任何令牌',
   'tools/seed-demo-today.mjs:TOKEN': '客户端脚本:铺演示数据时拿演示主钥匙当 Bearer,**发请求的一方**,不签发任何令牌',
   /* —— 🔴 同病未治,已报店主等裁 —— */
-  'apps/api/local-server.mjs:OWNER_TOKEN': '🔴 **同一个病,本批没治,已在回执里点名请裁**:'
+  'apps/api/local-server.mjs:OWNER_TOKEN': '🔴 **同一个病,闸已写好但还没接上**(07d §三):'
     + '平台最高信任根 `OWNER_TOKEN` 自己也回落到字面量 `owner-demo-token`。'
-    + '按 J-53 它该跟顾客令牌密钥一样 fail closed;**没有当批就改,是因为全仓 90+ 个测试与工具'
-    + '把这串值当管理员 Bearer 在用**,一改全红,且会让店主本机 4128 也起不来 —— '
-    + '这属于「修复会改业务口径」那一类,按纪律**先报不自己判**。豁免有效期 = 到店主裁为止',
+    + '按 J-53 它该 fail closed。**闸在 `apps/api/owner-token.mjs`(两层:非 ci/sandbox 拒绝启动;'
+    + 'ci/sandbox 每轮随机生成落到 DATA_DIR)**,形状复用 `secret-gate.mjs`,已有单测。'
+    + '**还没接进 local-server**:一接上全仓 90+ 个拿这串值当 Bearer 的测试当场全红,'
+    + '那一步要连同「测试统一改接 `readOwnerToken()`」一起做,不能半截上线(店主 07d 裁 #60 准许停在这一步)。'
+    + '豁免有效期 = 到测试切完为止',
 }
-const CRED_DEFAULT_CAP = 12   /* 上限 = 实际条数,不留空隙(店主 03m) */
+const CRED_DEFAULT_CAP = 13   /* 上限 = 实际条数,不留空隙(店主 03m) */
 
 const credHits = credFiles().flatMap((f) => scanCredDefaults(readFileSync(join(ROOT, f), 'utf8').split('\n'), f))
 const credBad = credHits.filter((h) => !CRED_DEFAULT_ALLOW[`${h.file}:${h.name}`])

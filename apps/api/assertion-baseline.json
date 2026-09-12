@@ -71,7 +71,7 @@
     "delivery-evidence": 5,
     "store-name": 24,
     "correction-reason": 7,
-    "credential-scan": 12,
+    "credential-scan": 23,
     "db-target-guard": 15,
     "empty-pill": 6,
     "untouched-proof": 18,

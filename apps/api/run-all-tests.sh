@@ -118,13 +118,20 @@ restore_local() {
     sleep 1
   fi
   # 脚本开头已经 cd 进 apps/api 了,这里再 dirname $0 会踩空 —— 直接用绝对路径
-  ( cd "$API_DIR" && nohup env $(env_clean) PORT=4128 DATA_DIR="./local-data" node local-server.mjs > /tmp/ll-local-restored.log 2>&1 & )
+  # 🔴 裁 #58④:启动参数**收到 tools/start-local.sh 一处**。
+  # 这里原来是自己拼一套 `PORT=4128 DATA_DIR=./local-data node local-server.mjs`,
+  # **没带 `--env-file-if-exists=apps/api/.env`** —— J-53 之后读不到店主那把钥匙,闸直接拒了,
+  # 于是「每跑一次回归,本机服务就死一次,而且拉不回来」。
+  bash "$API_DIR/../../tools/start-local.sh" --bg
   for _ in $(seq 1 20); do
     # 认库不认端口:必须是**本机库**那台起来了才算还回去了
     local_is_owners && { echo "== 已把店主的本地服务(4128)重新拉起来(库:$(local_health_field 4128 dataFile))=="; return 0; }
     sleep 0.5
   done
-  echo "!! 本地服务没拉回来,店主要用的话请双击 启动服务器.command" >&2
+  # 🔴 裁 #58④②:原因不许再埋在 /tmp 里 —— 屏幕上只说「没拉回来」,没人会去翻那个文件。
+  echo "!! 本地服务没拉回来 —— 下面是它自己说的原因(/tmp/ll-local-restored.log 末 10 行):" >&2
+  tail -n 10 /tmp/ll-local-restored.log 2>/dev/null | sed 's/^/   | /' >&2
+  echo "!! 处理完之后双击 启动服务器.command 即可(它和这里走的是同一个出口 tools/start-local.sh)" >&2
 }
 
 # 🔴 2026-08-23 复发(第二次踩同一个坑):cleanup 的 pkill 打的是**所有** local-server.mjs,

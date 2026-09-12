@@ -2154,7 +2154,7 @@ function renderAttendanceBoard() {
         rest: zh ? '休息' : 'Rest',
         none: zh ? '未上班' : 'Not in'
       })[s] || s
-      const stateColor = { working: '#3f6b52', overtime: '#b0483c', done: '#8a8578', rest: '#a89d8c', none: '#a89d8c' }
+      const stateColor = { working: 'var(--good)', overtime: '#b0483c', done: '#8a8578', rest: '#a89d8c', none: '#a89d8c' }  // J-54:working 语义=「在岗/正常」→ --good(压 --paper 浅 5.05/深 9.66);另四个现量见 07d 回执 §三,等店主拍语义
       const fmtMin = (m) => m >= 60 ? `${Math.floor(m / 60)}h${m % 60 ? `${m % 60}m` : ''}` : `${m}m`
       const rowHtml = (r) => `
         <div class="finance-rule-row${r.state === 'none' || r.state === 'rest' ? ' disabled' : ''}"${r.state === 'overtime' ? ' style="background:var(--badbg);border-radius:8px"' : ''}>
