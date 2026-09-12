@@ -6451,7 +6451,13 @@ textarea:focus {
   border-left: 2px solid var(--brand);
   margin-bottom: 6px;
 }
-.finance-rule-row.disabled { opacity: 0.5; border-left-color: var(--muted); }
+/* 🔴 07f 裁 #67:这里原来是 `opacity: 0.5`。店主口径:**「不重要」用颜色的深浅表达,不用透明度** ——
+   透明度会把底色拖进前景,**两边一起变**,谁也算不准(对比度尺子就是被它坑的:
+   同一行状态词旧尺子量 2.52,折进 opacity 之后是 1.52 甲档「看不见」)。
+   改用 --flat(「无状态/静默」那一档的字色):压 --paper 浅 5.57 / 深 6.68,两档都过 AA。
+   血缘:这个类有三个使用方 —— 薪资「未配方案」行(admin.js:2020)、考勤 rest/none 行(:2160)、
+   财务设置「未启用的固定支出」行(:2881)。三处语义一致(这行不适用),同一句话治。 */
+.finance-rule-row.disabled { color: var(--flat); border-left-color: var(--muted); }
 .finance-rule-add {
   display: grid;
   grid-template-columns: 2fr 1.4fr 1fr 0.7fr auto;

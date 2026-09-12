@@ -11,6 +11,8 @@ import { join } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { assertTestTarget } from './test-guard.mjs'
 import { collectFactSlots, verifyReplyFacts, passFactGate, FACT_GATE_REPLY } from './ai-fact-gate.mjs'
+/* 07f §五 批量切:token 改成问 helper 要(试点形状,见 owner-token.mjs) */
+const { requireOwnerToken } = await import('./owner-token.mjs')
 
 const BASE_URL = process.env.TEST_BASE_URL || 'http://127.0.0.1:4128'
 await assertTestTarget(BASE_URL)
@@ -99,7 +101,7 @@ for (const tid of ['lucky-luxe', 'jics-store']) {
    CI 库里只有一个真租户,所以现建两家店、各设一个不同地址,再问 B 店要地址。
    05g 现测踩过一坑:`x-admin-tenant-id` **不是**管理路由的换店开关
    (闸门取的是 `admin.tenantId`,来自令牌),所以建店与设地址都要走 `/platform/*`。 */
-const PLAT = process.env.OWNER_TOKEN || 'owner-demo-token'
+const PLAT = process.env.OWNER_TOKEN || requireOwnerToken()
 const plat = async (p, o = {}) => {
   const r = await fetch(`${BASE_URL}${p}`, {
     ...o, headers: { 'content-type': 'application/json', authorization: `Bearer ${PLAT}`, ...(o.headers || {}) },

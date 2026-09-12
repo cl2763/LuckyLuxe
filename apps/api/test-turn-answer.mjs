@@ -14,10 +14,12 @@ import { assertTestTarget } from './test-guard.mjs'
 import { createTurnAnswer, policyOnce, POLICY_AGAIN_TEXT } from './turn-answer.mjs'
 import { cheapestItems, isQuoteItem, normalizePriceMode } from './price-mode.mjs'
 import { buildKnowledgeContext, TONE_GUIDE, TONE_GUIDE_EN } from './kb-utils.mjs'
+/* 07f §五 批量切:token 改成问 helper 要(试点形状,见 owner-token.mjs) */
+const { requireOwnerToken } = await import('./owner-token.mjs')
 
 const BASE_URL = process.env.TEST_BASE_URL || 'http://127.0.0.1:4128'
 await assertTestTarget(BASE_URL)
-const PLATFORM = process.env.OWNER_TOKEN || 'owner-demo-token'
+const PLATFORM = process.env.OWNER_TOKEN || requireOwnerToken()
 const RUN = Date.now().toString(36)
 let n = 0
 const fails = []

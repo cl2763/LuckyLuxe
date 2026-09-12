@@ -16,10 +16,12 @@
    ⚠️ standalone:CI_SUITES="cash-notes" bash apps/api/run-all-tests.sh */
 import { assertTestTarget } from './test-guard.mjs'
 import { CASH_NOTE_KIND_LABELS as KIND_LABELS } from './cash-notes.mjs'
+/* 07f §五 批量切:token 改成问 helper 要(试点形状,见 owner-token.mjs) */
+const { requireOwnerToken } = await import('./owner-token.mjs')
 
 const BASE_URL = process.env.TEST_BASE_URL || 'http://127.0.0.1:4128'
 await assertTestTarget(BASE_URL)
-const PLATFORM = process.env.TEST_ADMIN_TOKEN || 'owner-demo-token'
+const PLATFORM = process.env.TEST_ADMIN_TOKEN || requireOwnerToken()
 const RUN = Date.now().toString(36)
 
 let checks = 0

@@ -21,6 +21,8 @@ import { join } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { DatabaseSync } from 'node:sqlite'
 import { assertTestTarget, isTestTarget } from './test-guard.mjs'
+/* 07f §五 批量切:token 改成问 helper 要(试点形状,见 owner-token.mjs) */
+const { requireOwnerToken } = await import('./owner-token.mjs')
 
 const ROOT = join(fileURLToPath(new URL('.', import.meta.url)), '..', '..')
 let checks = 0
@@ -222,7 +224,7 @@ check('④f2 小程序「我的」那行不再回落到人名/编出来的店铺
 /* ═══ ④g/④h 行为层:接口真的按店给出各自的名字 ═══
    现取,零业务字面量;跑不成就明说「本轮未跑」,不冒充通过(静默失败器族的反面)。 */
 const BASE_URL = process.env.TEST_BASE_URL || 'http://127.0.0.1:4128'
-const TOKEN = process.env.OWNER_TOKEN || process.env.OWNER_DEMO_TOKEN || 'owner-demo-token'
+const TOKEN = process.env.OWNER_TOKEN || process.env.OWNER_DEMO_TOKEN || requireOwnerToken()
 const meOf = async (tenantId) => fetch(`${BASE_URL}/admin/auth/me`, {
   headers: { authorization: `Bearer ${TOKEN}`, 'x-admin-tenant-id': tenantId },
 }).then((r) => (r.ok ? r.json() : null)).catch(() => null)

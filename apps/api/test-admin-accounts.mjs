@@ -16,8 +16,8 @@ await assertTestTarget(BASE_URL)
    **今天**文件里是现在那个值,所以这一套照常过;
    **切换那一批**闸接上去之后文件里变成每轮随机的那一把,**这一行一个字都不用改**。
    这就是「证明形状可行」的意思。 */
-const { readOwnerToken } = await import('./owner-token.mjs')
-const OWNER = readOwnerToken() || 'owner-demo-token'   // 兜底只为「闸还没接上、文件还没落」的过渡期,切完即删
+const { requireOwnerToken } = await import('./owner-token.mjs')
+const OWNER = requireOwnerToken()   // 兜底只为「闸还没接上、文件还没落」的过渡期,切完即删
 const RUN_ID = Date.now().toString(36)
 
 let checks = 0

@@ -37,7 +37,7 @@
  *   CS_PAGES=a,b  只扫这几页(定位用;正式跑不要给)
  */
 import { spawn, execFileSync } from 'node:child_process'
-import { writeFileSync, mkdirSync, readFileSync } from 'node:fs'
+import { readFileSync, writeFileSync, mkdirSync } from 'node:fs'
 import { createHash } from 'node:crypto'
 import { dirname } from 'node:path'
 import { requireTarget } from './db-target.mjs'
@@ -47,6 +47,14 @@ const TOKEN = requireTarget({ envName: 'SHOT_TOKEN', value: process.env.SHOT_TOK
 const CHROME = process.env.SHOT_CHROME || '/Applications/Google Chrome.app/Contents/MacOS/Google Chrome'
 const PORT = Number(process.env.SHOT_PORT || 9336)
 const CAP = process.env.CS_CAP ? Number(process.env.CS_CAP) : null
+/* J-56:退回旧行为(不折 opacity)**只为出同尺对照** —— 两个数必须同一版判据产出(J-39)。
+   正式跑一律不要给这个变量。 */
+const LEGACY_OPACITY_JS = process.env.CS_LEGACY_OPACITY === '1' ? 'true' : 'false'
+/* 页内标签页的选择器**抽成具名常量** —— 下面那条覆盖面反向守要守的就是它。
+   头一版我让守去查 SWEEP,而选择器住在另一段模板里,**守错了目标**(守和用不是同一处,
+   于是它报「一族都没认」而其实四族都在)。一件事一处真相。 */
+const TAB_SELECTOR = 'button[data-fin-tab], button[data-member-tab], button[data-staff-tab],'
+  + ' button[data-pricing-tab], button[data-tab], [role="tab"]'
 const OUT = process.env.CS_OUT || ''
 const ONLY = (process.env.CS_PAGES || '').split(',').map((x) => x.trim()).filter(Boolean)
 /* 夜7 段2:同一把刀两个靶子 —— `admin`(商家后台,默认)/ `customer`(顾客端网页)。
@@ -186,7 +194,37 @@ const SWEEP = `(() => {
     g: top.g * top.a + bottom.g * (1 - top.a),
     b: top.b * top.a + bottom.b * (1 - top.a), a: 1,
   })
-  const bgOf = (el) => {
+  /* 🔴 J-56(店主 07f 裁 #66)· **这把尺子原来漏了一整层:ˋopacityˋ。**
+   全文唯一一处 opacity 是 :223 那句「< 0.1 就跳过」—— 它**从不把 opacity 折进颜色**,
+   也**不看祖先**。后果不是「少扫了几页」那么小:
+   **凡祖先带 opacity 的元素,历次红榜的比值全部被高估** ——
+   尺子拿的是满强度的字色压满强度的底色,而眼睛看到的是两边都被拖向页面底色之后的样子。
+   现测案例:排班看板 ˋ.finance-rule-row.disabled { opacity: .5 }ˋ 里的状态词,
+   旧尺子量 2.52(乙档),折进 opacity 之后是 **1.52(甲档「看不见」)**。
+
+   ══ CSS 的真实语义 ══
+   祖先 A 的 ˋopacity: αˋ 会把 A **整个子树先画进一个缓冲**(包括 A 自己的底与里面的字),
+   再整体以 α 合成到 **A 背后**的东西上。所以:
+     有效前景 = over(字色 @ α, A 背后的底)
+     有效背景 = over(组内合成底 @ α, A 背后的底)
+   两边**一起**被拖向背后那层 —— 这正是「透明度谁也算不准」的由来(店主 07f §二口径)。
+
+   ⚠️ ˋCS_LEGACY_OPACITY=1ˋ 可以退回旧行为,**只为出同尺对照**(J-39:两个数要同一版判据产出),
+   不是给人绕过用的。 */
+const LEGACY_OPACITY = ${LEGACY_OPACITY_JS}
+/* 从 el 往上累乘 opacity;同时记住**最外层那个带 opacity 的元素** */
+const opacityChain = (el) => {
+  let cum = 1
+  let outer = null
+  let cur = el
+  while (cur && cur !== document.documentElement) {
+    const o = Number(getComputedStyle(cur).opacity)
+    if (Number.isFinite(o) && o < 0.999) { cum *= o; outer = cur }
+    cur = cur.parentElement
+  }
+  return { cum, outer }
+}
+const bgOf = (el) => {
     const stack = []
     let cur = el
     let gradient = null
@@ -236,7 +274,23 @@ const SWEEP = `(() => {
     const weight = Number(cs.fontWeight) || 400
     const large = size >= 24 || (size >= 18.66 && weight >= 700)
     const need = large ? 3 : 4.5
-    const got = ratio(fg, bg.c)
+    /* J-56:把祖先 opacity 折进来再算。cum>=0.999 时与旧行为逐位相同(不动已有的数)。 */
+    let efg = fg
+    let ebg = bg.c
+    let opacityFolded = 0
+    if (!LEGACY_OPACITY) {
+      const oc = opacityChain(el)
+      if (oc.cum < 0.999 && oc.outer) {
+        const behind = bgOf(oc.outer.parentElement || document.body)
+        if (behind.gradient) { gradients += 1; continue }   /* 背后是渐变面:这把刀判不了,如实计数 */
+        if (behind.c) {
+          efg = over({ r: fg.r, g: fg.g, b: fg.b, a: oc.cum }, behind.c)
+          ebg = over({ r: bg.c.r, g: bg.c.g, b: bg.c.b, a: oc.cum }, behind.c)
+          opacityFolded = Math.round(oc.cum * 100) / 100
+        }
+      }
+    }
+    const got = ratio(efg, ebg)
     const key = selOf(el) + '|' + text.slice(0, 20)
     if (seen.has(key)) continue
     seen.add(key)
@@ -251,9 +305,9 @@ const SWEEP = `(() => {
          所以:甲档 = 真的看不见(< 2:1);奶白压金按钮这类落到乙档等店主裁。
          ⚠️ 这段注释整个住在模板串里,一个反引号都不许有(今晚第五次踩)。 */
       const hard = large ? 1.6 : 2
-      const bgTxt = 'rgb(' + [bg.c.r, bg.c.g, bg.c.b].map((x) => Math.round(x)).join(', ') + ')'
+      const bgTxt = 'rgb(' + [ebg.r, ebg.g, ebg.b].map((x) => Math.round(x)).join(', ') + ')'
       out.push({ sel: selOf(el), text: text.slice(0, 20), fg: cs.color, bg: bgTxt,
-        bgFrom: selOf(bg.from), ratio: Math.round(got * 100) / 100, need, size: Math.round(size), weight,
+        bgFrom: selOf(bg.from), ratio: Math.round(got * 100) / 100, need, size: Math.round(size), weight, opacity: opacityFolded,
         tier: got + 0.05 < hard ? 'A' : 'B' })
     }
   }
@@ -490,6 +544,20 @@ if (!(await ev(LOGGED_IN))) {
   console.error(`   现在页面上有:${await ev(`(document.body.innerText||'').slice(0,120).replace(/\\s+/g,' ')`)}`)
   ws.close(); chrome.kill(); process.exit(2)
 }
+/* 🔴 覆盖面反向守(店主 07f 裁 #66②;判据三推论:判据的覆盖面本身要有判据)——
+   admin.html 里出现的**每一族** data-*-tab 都必须在上面 SWEEP 的选择器里。
+   07f 现查:四族(fin 7 · member 5 · staff 4 · pricing 3)只认了 fin —— **三族一次没走到**,
+   于是「考勤」「技师排班」「会员套餐」「价目」那几个标签页下的字,历次全扫一次都没量过。
+   以后再加一族而选择器没跟上,这里当场红。 */
+const tabFamilies = [...new Set([...readFileSync(new URL('../apps/web/admin.html', import.meta.url), 'utf8')
+  .matchAll(/data-([a-z0-9-]*tab)="/g)].map((m) => m[1]))]
+const covered = tabFamilies.filter((f) => TAB_SELECTOR.includes(`data-${f}]`))
+if (covered.length !== tabFamilies.length) {
+  console.error(`\n🔴 标签页族没扫全:admin.html 有 ${tabFamilies.map((f) => `data-${f}`).join(' / ')},`)
+  console.error(`   而选择器只认 ${covered.map((f) => `data-${f}`).join(' / ')} —— 没认的那几族**一次都没被走到**`)
+  ws.close(); chrome.kill(); process.exit(2)
+}
+console.log(`   [标签页族] admin.html ${tabFamilies.length} 族全部在扫描面上:${tabFamilies.join(' / ')}`)
 const pages = await ev(`Array.from(document.querySelectorAll('[data-admin-page]'))
   .map((b) => ({ key: b.dataset.adminPage, name: (b.textContent || '').trim() }))
   .filter((x, i, a) => x.key && a.findIndex((y) => y.key === x.key) === i)`)
@@ -505,7 +573,12 @@ for (const mode of ['light', 'dark']) {
     await sleep(900)
     /* 页内标签页:财务那种有 `data-fin-tab`,别的页有各自的;统一按「按钮上带 data-*-tab」找 */
     const tabs = await ev(`(() => {
-      const t = Array.from(document.querySelectorAll('button[data-fin-tab], button[data-tab], [role="tab"]'))
+      /* 🔴 J-37 第二款(到了那一页 ≠ 到了那一页的那个状态)· 店主 07f 裁 #66②:
+         这里原来只认 ˋdata-fin-tabˋ / ˋdata-tabˋ / ˋrole=tabˋ ——
+         而 admin.html 里现有**四族**标签页:fin(7) · member(5) · staff(4) · pricing(3)。
+         **三族从来没被走到**,所以「考勤」「技师排班」「会员套餐」「价目」那些标签页下的字
+         历次全扫一次都没量过。补齐,并在 JS 侧加一条覆盖面反向守(见 tabFamilies 那段)。 */
+      const t = Array.from(document.querySelectorAll(${JSON.stringify(TAB_SELECTOR)}))
         .filter((b) => b.offsetParent !== null)
       return t.map((b) => ({ id: b.id || '', label: (b.textContent || '').trim().slice(0, 12) }))
     })()`)

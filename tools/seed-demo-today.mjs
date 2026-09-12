@@ -1,4 +1,6 @@
 import { requireTarget, reportTarget, resolveDbPath } from './db-target.mjs'
+/* 07f §五 批量切:token 改成问 helper 要(试点形状,见 owner-token.mjs) */
+const { readOwnerToken } = await import('../apps/api/owner-token.mjs')
 /* 给本地沙盘铺一组「今天」的演示单,供小程序/网页走查与截图用。
    店主 2026-08-08 明确授权:**只对本地测试库**造数据,生产一行都不碰。
 
@@ -17,7 +19,7 @@ import { requireTarget, reportTarget, resolveDbPath } from './db-target.mjs'
    演示数据写进本机库的。现在:不显式指定就拒绝跑。 */
 const BASE = requireTarget({ envName: 'SEED_BASE_URL', value: process.env.SEED_BASE_URL,
   hint: '(沙箱 http://127.0.0.1:4310 / 本机库 http://127.0.0.1:4128 —— 端口会骗人,跑起来看它自报的库路径)' })
-const TOKEN = process.env.OWNER_TOKEN || process.env.OWNER_DEMO_TOKEN || 'owner-demo-token'
+const TOKEN = process.env.OWNER_TOKEN || process.env.OWNER_DEMO_TOKEN || readOwnerToken() || 'owner-demo-token'
 const EXTRA = process.argv.includes('--extra') // 跳过幂等检查,再补一条完整闭环
 const TENANTS = process.argv.slice(2).filter((a) => a !== '--extra').length
   ? process.argv.slice(2).filter((a) => a !== '--extra')

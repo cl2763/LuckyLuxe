@@ -18,6 +18,8 @@
    ⚠️ standalone:bash apps/api/run-all-tests.sh card-refund */
 import { assertTestTarget } from './test-guard.mjs'
 import { DatabaseSync } from 'node:sqlite'
+/* 07f §五 批量切:token 改成问 helper 要(试点形状,见 owner-token.mjs) */
+const { requireOwnerToken } = await import('./owner-token.mjs')
 
 /* D132 口径④(店主 04d §一):顾客侧公开路由**必须带门店标识**,不再回落旗舰店。
    夹具同批补头 —— 补的是「请求带不带 x-tenant-id」,判据一个字没放宽。
@@ -25,7 +27,7 @@ import { DatabaseSync } from 'node:sqlite'
 const TENANT_HEADER = process.env.TEST_TENANT_ID || 'lucky-luxe'
 const BASE_URL = process.env.TEST_BASE_URL || 'http://127.0.0.1:4128'
 await assertTestTarget(BASE_URL)
-const TOKEN = process.env.TEST_ADMIN_TOKEN || 'owner-demo-token'
+const TOKEN = process.env.TEST_ADMIN_TOKEN || requireOwnerToken()
 const RUN = Date.now().toString(36)
 
 let checks = 0

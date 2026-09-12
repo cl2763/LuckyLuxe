@@ -6,7 +6,7 @@ import { readFileSync } from 'node:fs'
 
 const BASE_URL = process.env.TEST_BASE_URL || 'http://127.0.0.1:4128'
 await assertTestTarget(BASE_URL)
-const PLATFORM = process.env.TEST_ADMIN_TOKEN || 'owner-demo-token'
+const PLATFORM = process.env.TEST_ADMIN_TOKEN || requireOwnerToken()
 const RUN = Date.now().toString(36)
 
 let checks = 0
@@ -26,6 +26,8 @@ async function request(path, options = {}, token = PLATFORM, extra = {}) {
   return { status: r.status, data }
 }
 const { DatabaseSync } = await import('node:sqlite')
+/* 07f §五 批量切:token 改成问 helper 要(试点形状,见 owner-token.mjs) */
+const { requireOwnerToken } = await import('./owner-token.mjs')
 const db = new DatabaseSync(process.env.TEST_DB_PATH || (() => { throw new Error('需要 TEST_DB_PATH') })())
 
 /* ===== 夹具:临时店 + 一条 mock 会话 + 一张报价单 ===== */

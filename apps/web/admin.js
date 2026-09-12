@@ -2154,13 +2154,13 @@ function renderAttendanceBoard() {
         rest: zh ? '休息' : 'Rest',
         none: zh ? '未上班' : 'Not in'
       })[s] || s
-      const stateColor = { working: 'var(--good)', overtime: '#b0483c', done: '#8a8578', rest: '#a89d8c', none: '#a89d8c' }  // J-54:working 语义=「在岗/正常」→ --good(压 --paper 浅 5.05/深 9.66);另四个现量见 07d 回执 §三,等店主拍语义
+      const stateColor = { working: 'var(--good)', overtime: 'var(--bad)', done: 'var(--flat)', rest: 'var(--flat)', none: '' }  // 07f 裁#67/#68 定案:在岗=正常 --good(5.05/9.66)· 超时=异常 --bad 压 --badbg(4.69/5.84)· 已下班/休息=静默 --flat(5.57/6.68)· **未排班不出徽标**(它是「空」不是状态)
       const fmtMin = (m) => m >= 60 ? `${Math.floor(m / 60)}h${m % 60 ? `${m % 60}m` : ''}` : `${m}m`
       const rowHtml = (r) => `
         <div class="finance-rule-row${r.state === 'none' || r.state === 'rest' ? ' disabled' : ''}"${r.state === 'overtime' ? ' style="background:var(--badbg);border-radius:8px"' : ''}>
           <span>
             <strong>${escapeHtml(r.name)}</strong>${r.title ? ` <span class="subtle">${escapeHtml(r.title)}</span>` : ''}
-            · <span style="font-weight:700;color:${stateColor[r.state] || '#8a8578'}">${stateText(r.state)}</span>
+            ${stateColor[r.state] ? `· <span style="font-weight:700;color:${stateColor[r.state]}">${stateText(r.state)}</span>` : ''}
             ${r.clockIn ? ` · ${r.clockIn}${r.clockOut ? `–${r.clockOut}` : ''}` : ''}
             ${r.workedMin ? ` · ${zh ? '已工作' : 'worked'} ${fmtMin(r.workedMin)}` : ''}
             ${r.overtimeMin > 0 ? ` · <strong style="color:var(--bad)">${zh ? '加班' : 'OT'} ${fmtMin(r.overtimeMin)}</strong>` : ''}

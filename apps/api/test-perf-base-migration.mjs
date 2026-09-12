@@ -16,11 +16,13 @@ import { mkdtempSync, rmSync } from 'node:fs'
 import { join, dirname } from 'node:path'
 import { tmpdir } from 'node:os'
 import { fileURLToPath } from 'node:url'
+/* 07f §五 批量切:token 改成问 helper 要(试点形状,见 owner-token.mjs) */
+const { requireOwnerToken } = await import('./owner-token.mjs')
 
 const here = dirname(fileURLToPath(import.meta.url))
 const PORT = process.env.PERF_BASE_TEST_PORT || '4178'
 const BASE = `http://127.0.0.1:${PORT}`
-const PLATFORM = 'owner-demo-token'
+const PLATFORM = requireOwnerToken()
 const RUN = Date.now().toString(36)
 const DATA_DIR = mkdtempSync(join(tmpdir(), 'll-ci-data.perfbase-'))
 const DB_PATH = join(DATA_DIR, 'lucky-luxe.sqlite')

@@ -22,10 +22,12 @@ import { DatabaseSync } from 'node:sqlite'
 import { dirname, join } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { assertTestTarget } from './test-guard.mjs'
+/* 07f §五 批量切:token 改成问 helper 要(试点形状,见 owner-token.mjs) */
+const { requireOwnerToken } = await import('./owner-token.mjs')
 
 const BASE_URL = process.env.TEST_BASE_URL || 'http://127.0.0.1:4128'
 await assertTestTarget(BASE_URL)                    // 套件永远不许写真库
-const PLATFORM = process.env.TEST_ADMIN_TOKEN || 'owner-demo-token'
+const PLATFORM = process.env.TEST_ADMIN_TOKEN || requireOwnerToken()
 const ROOT = join(dirname(fileURLToPath(import.meta.url)), '../..')
 const SEEDER = join(ROOT, 'tools/seed-demo-twin.mjs')
 const RUN_ID = Date.now().toString(36)

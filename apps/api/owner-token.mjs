@@ -88,3 +88,23 @@ export function publishOwnerToken({ scopeName = 'unknown', dataDir = '', token =
   if (!DEV_SCOPES.has(scopeName) || !dataDir || !token) return false
   try { writeFileSync(join(dataDir, OWNER_TOKEN_FILE), `${token}\n`, { mode: 0o600 }); return true } catch { return false }
 }
+
+/* ── `requireOwnerToken()`:拿不到就**明说**,不回空串(店主 07f §五 批量切用)──
+ *
+ * 为什么要有它:批量切的时候,call site 原来长这样 ——
+ *     const T = readOwnerToken() || 'owner-demo-token'
+ * 那个兜底看着稳妥,**实际上把字面量原样留在了 102 个文件里**,迁移棘轮一动不动。
+ * 兜底就是残留。去掉兜底,改由这里在拿不到时**抛一句人话**:
+ * 测试只在 ci/sandbox 跑,而服务在那两个库域**一定**会把 token 写进 DATA_DIR,
+ * 所以「拿不到」本身就是环境不对,该当场说清,而不是悄悄退回一个公开值继续跑。
+ */
+export function requireOwnerToken({ env = process.env, dataDir = '' } = {}) {
+  const t = readOwnerToken({ env, dataDir })
+  if (t) return t
+  throw new Error(
+    '拿不到 OWNER_TOKEN:环境变量没设,DATA_DIR 下也没有 ' + OWNER_TOKEN_FILE + '。\n'
+    + '  · 跑全量回归:由 run-all-tests.sh 起服务,它会在 ci 库域把 token 写进本轮 DATA_DIR;\n'
+    + '  · 单独跑一支:先起一台 ci/sandbox 库域的服务,并把同一个 DATA_DIR 传给这支测试;\n'
+    + '  · 打别的服务:显式给 OWNER_TOKEN=<那台的主令牌>。',
+  )
+}

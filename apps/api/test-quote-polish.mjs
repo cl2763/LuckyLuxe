@@ -5,8 +5,10 @@
 const BASE_URL = process.env.TEST_BASE_URL || 'http://127.0.0.1:4128'
 /* 测试护栏(裁 C):套件永远不许写进真库 —— 开跑前问服务器「你往哪个库写」 */
 import { assertTestTarget } from './test-guard.mjs'
+/* 07f §五 批量切:token 改成问 helper 要(试点形状,见 owner-token.mjs) */
+const { requireOwnerToken } = await import('./owner-token.mjs')
 await assertTestTarget(BASE_URL)
-const TOKEN = process.env.TEST_ADMIN_TOKEN || 'owner-demo-token'
+const TOKEN = process.env.TEST_ADMIN_TOKEN || requireOwnerToken()
 const RUN_ID = Date.now().toString(36)
 const IMAGE_A = 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAIAAAACCAQAAABp0P2WAAAADUlEQVR42mP8z8BQDwAFgwJ/lmVfWQAAAABJRU5ErkJggg=='
 

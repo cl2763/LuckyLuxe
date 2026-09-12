@@ -21,8 +21,10 @@ const ROOT = join(dirname(fileURLToPath(import.meta.url)), '../..')
 const BASE_URL = process.env.TEST_BASE_URL || 'http://127.0.0.1:4128'
 /* 测试护栏(裁 C):套件永远不许写进真库 —— 开跑前问服务器「你往哪个库写」 */
 import { assertTestTarget } from './test-guard.mjs'
+/* 07f §五 批量切:token 改成问 helper 要(试点形状,见 owner-token.mjs) */
+const { requireOwnerToken } = await import('./owner-token.mjs')
 await assertTestTarget(BASE_URL)
-const PLATFORM = process.env.TEST_ADMIN_TOKEN || 'owner-demo-token'
+const PLATFORM = process.env.TEST_ADMIN_TOKEN || requireOwnerToken()
 const ROUNDS = Number(process.env.SIGN_ROUNDS || 30)
 const RUN = Date.now().toString(36)
 

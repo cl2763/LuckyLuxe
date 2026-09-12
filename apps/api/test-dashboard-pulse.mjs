@@ -15,10 +15,12 @@
    三店各跑(05o §一⑥):加拿大档 / 境内档 / 北京档,重点看币种与「今天」。 */
 import { assertTestTarget } from './test-guard.mjs'
 import { periodRange, deltaOf, METRIC_KEYS, PERIODS } from './dashboard-pulse.mjs'
+/* 07f §五 批量切:token 改成问 helper 要(试点形状,见 owner-token.mjs) */
+const { requireOwnerToken } = await import('./owner-token.mjs')
 
 const BASE_URL = process.env.TEST_BASE_URL || 'http://127.0.0.1:4128'
 await assertTestTarget(BASE_URL)
-const PLATFORM = process.env.OWNER_TOKEN || 'owner-demo-token'
+const PLATFORM = process.env.OWNER_TOKEN || requireOwnerToken()
 const RUN = Date.now().toString(36)
 let n = 0
 const fails = []

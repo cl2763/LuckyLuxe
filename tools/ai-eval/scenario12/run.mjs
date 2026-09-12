@@ -5,6 +5,8 @@ import { MATRIX } from './matrix.mjs'
 import { writeFileSync } from 'node:fs'
 import { requireTarget } from '../../db-target.mjs'
 import { DatabaseSync } from 'node:sqlite'
+/* 07f §五 批量切:token 改成问 helper 要(试点形状,见 owner-token.mjs) */
+const { readOwnerToken } = await import('../apps/api/owner-token.mjs')
 
 /* 🔴 **不许有默认目标**(店主立:造景脚本不许有默认目标库)。
    这个跑机会**建预约、建报价单、改会话状态** —— 是不折不扣的造景脚本。
@@ -21,7 +23,7 @@ const DBP = process.env.AI12_DB
 const FLAG = process.env.AI12_FLAGSHIP || 'lucky-luxe'
 const MIRROR = process.env.AI12_MIRROR || 'jics-store'
 const RUN = process.env.AI12_RUN || Date.now().toString(36)
-const TOKEN = 'owner-demo-token'
+const TOKEN = readOwnerToken() || 'owner-demo-token'
 
 const hdr = (tid) => ({ 'content-type': 'application/json', authorization: `Bearer ${TOKEN}`, 'x-admin-tenant-id': tid, 'x-tenant-id': tid })
 /* 🔴 造景必须校验返回码(店主的静默失败器族):04d 现测栽了一跤 ——

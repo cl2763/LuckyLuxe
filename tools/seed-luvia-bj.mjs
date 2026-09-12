@@ -23,12 +23,14 @@
      BASE_URL=http://127.0.0.1:4310 OWNER_TOKEN=<主钥匙> node tools/seed-luvia-bj.mjs   # 沙箱
      BASE_URL=http://127.0.0.1:4128 OWNER_TOKEN=<主钥匙> node tools/seed-luvia-bj.mjs   # 本机库 */
 import { requireTarget, reportTarget, countRows } from './db-target.mjs'
+/* 07f §五 批量切:token 改成问 helper 要(试点形状,见 owner-token.mjs) */
+const { readOwnerToken } = await import('../apps/api/owner-token.mjs')
 
 const BASE_URL = String(requireTarget({
   envName: 'BASE_URL', value: process.env.BASE_URL,
   hint: '(沙箱 http://127.0.0.1:4310 / 本机库 http://127.0.0.1:4128;端口会骗人,以脚本自报的库路径为准)'
 })).replace(/\/$/, '')
-const OWNER_TOKEN = process.env.OWNER_TOKEN || 'owner-demo-token'
+const OWNER_TOKEN = process.env.OWNER_TOKEN || readOwnerToken() || 'owner-demo-token'
 
 const TENANT_ID = 'luvia-bj'
 const TENANT_NAME = 'LUVIA 半径美甲美睫 · 北京旗舰店'

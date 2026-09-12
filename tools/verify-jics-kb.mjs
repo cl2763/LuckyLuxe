@@ -1,5 +1,7 @@
 #!/usr/bin/env node
 import { requireTarget, reportTarget, resolveDbPath } from './db-target.mjs'
+/* 07f §五 批量切:token 改成问 helper 要(试点形状,见 owner-token.mjs) */
+const { readOwnerToken } = await import('../apps/api/owner-token.mjs')
 // 小婕体验店(jics-nail)配置与知识库隔离复验 —— 开 AI 之后必跑。
 //
 // 用法(本机):
@@ -17,7 +19,7 @@ import { requireTarget, reportTarget, resolveDbPath } from './db-target.mjs'
    有默认值 + 能指生产 = 打错一次就是生产事故。不显式指定一律拒绝跑。 */
 const BASE_URL = String(requireTarget({ envName: 'BASE_URL', value: process.env.BASE_URL,
   hint: '(沙箱 http://127.0.0.1:4310 / 本机库 http://127.0.0.1:4128;端口会骗人,以脚本自报的库路径为准)' })).replace(/\/$/, '')
-const OWNER_TOKEN = process.env.OWNER_TOKEN || 'owner-demo-token'
+const OWNER_TOKEN = process.env.OWNER_TOKEN || readOwnerToken() || 'owner-demo-token'
 const TENANT_ID = process.env.SEED_TENANT_ID || 'jics-nail'
 const EXPECT_PLAN = process.env.EXPECT_PLAN || 'studio'
 

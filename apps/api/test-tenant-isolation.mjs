@@ -8,9 +8,11 @@
 const URL_A = process.env.TEST_URL_A || 'http://127.0.0.1:4128'
 /* 测试护栏(裁 C):这套也打真实接口(建店/建单),同样不许指着真库跑 */
 import { assertTestTarget } from './test-guard.mjs'
+/* 07f §五 批量切:token 改成问 helper 要(试点形状,见 owner-token.mjs) */
+const { requireOwnerToken } = await import('./owner-token.mjs')
 await assertTestTarget(URL_A)
 const URL_B = process.env.TEST_URL_B || 'http://127.0.0.1:4131'
-const TOKEN = process.env.TEST_ADMIN_TOKEN || 'owner-demo-token'
+const TOKEN = process.env.TEST_ADMIN_TOKEN || requireOwnerToken()
 const RUN_ID = Date.now().toString(36)
 
 let checks = 0

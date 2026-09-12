@@ -305,7 +305,7 @@ curl -s -X POST -H "authorization: Bearer owner-demo-token" -H "content-type: ap
   -d '{}' http://127.0.0.1:4128/admin/demo/full-seed > /dev/null || true
 
 # 可用 CI_SUITES="a b c" 环境变量跑子集(调试用)
-DEFAULT_SUITES="customer-service-matrix working-memory business-hours intent-guards quote-polish silent-handoff human-handoff after-sales-handoff identity-links entitlements tenant-kb finance-core finance-goals stored-value schedule-week special-dates customer-profile staff-portal admin-accounts pricing-model membership-config customer-import tenant-hygiene tenant-timezone deposit-config message-templates settlement daily-close salary-v2 schedule-v2 finance-trend finance-lock perf-viz coupon-settle audit-fix scan-sign double-sheet auth-surface currency-scan settle-stress sign-stability noshow-aftersales demo-seed-guard card-refund amend-linkage ledger-guards backend-gate hero-slides cash-notes mini-money-inputs image-placeholder deposit-audit web-settlement cross-end-effect mini-account-adjust today-board dashboard-pulse dashboard-home hours-gate crossend-cta tab-colors color-usage token-entry danger-cmd notify-scheduler quote-state ui-spec observe-fixes file-ratchet delivery-evidence store-name correction-reason credential-scan exit-code db-target-guard empty-pill untouched-proof display-text tenant-ownership tenant-explicit identity-tenant version-fingerprint tenant-fill-trigger conversation-log ai-gate ai-safety-lines ai-fact-gate booking-intake turn-classify turn-answer ai-review quote-tenant conversation-tenant mini-ai-same-outlet platform-login mp-home-owner v4-five-fixes repeat-guard merge-window three-stores tier-label native-dialog demo-mark txn-rollback mp-placeholder-size mp-overlap mp-home-sections store-jury"
+DEFAULT_SUITES="customer-service-matrix working-memory business-hours intent-guards quote-polish silent-handoff human-handoff after-sales-handoff identity-links entitlements tenant-kb finance-core finance-goals stored-value schedule-week special-dates customer-profile staff-portal admin-accounts pricing-model membership-config customer-import tenant-hygiene tenant-timezone deposit-config message-templates settlement daily-close salary-v2 schedule-v2 finance-trend finance-lock perf-viz coupon-settle audit-fix scan-sign double-sheet auth-surface currency-scan settle-stress sign-stability noshow-aftersales demo-seed-guard card-refund amend-linkage ledger-guards backend-gate hero-slides cash-notes mini-money-inputs image-placeholder deposit-audit web-settlement cross-end-effect mini-account-adjust today-board dashboard-pulse dashboard-home hours-gate crossend-cta tab-colors color-usage token-entry danger-cmd notify-scheduler quote-state ui-spec observe-fixes file-ratchet delivery-evidence store-name correction-reason credential-scan exit-code demo-gate-coverage frontend-routes login-entries db-target-guard empty-pill untouched-proof display-text tenant-ownership tenant-explicit identity-tenant version-fingerprint tenant-fill-trigger conversation-log ai-gate ai-safety-lines ai-fact-gate booking-intake turn-classify turn-answer ai-review quote-tenant conversation-tenant mini-ai-same-outlet platform-login mp-home-owner v4-five-fixes repeat-guard merge-window three-stores tier-label native-dialog demo-mark txn-rollback mp-placeholder-size mp-overlap mp-home-sections store-jury"
 read -r -a SUITES <<< "${CI_SUITES:-$DEFAULT_SUITES}"
 
 # 🔴 断言基线(店主 02r 裁定一):每套跑完**就地数** `^ok ` 条数,不事后解析日志 ——
@@ -391,6 +391,52 @@ PORT=4131 DEFAULT_TENANT_ID=tenant-iso-b node local-server.mjs > /tmp/ll-ci-b.lo
 CI_PID_4131=$!
 wait_health 4131 "租户B"
 run_suite tenant-isolation env
+
+# ══ 🔴 演示门关掉那一档(店主 07g/夜10 段一①)══════════════════════════════
+# 立这一档的由来(D190):本机与沙箱都开着 ALLOW_DEMO_ADMIN_LOGIN=true,
+# **所有顾客端判据都站在一扇生产上不存在的门后面测** —— 所以一直是绿的,
+# 而生产上顾客一条能用的登录路都没有。绿得毫无道理。
+#
+# 这一档起一台**不设 ALLOW_DEMO_ADMIN_LOGIN** 的服务(= 生产口径),
+# 把顾客端相关判据在这一档下再跑一遍。**这一档现在就会红一片 —— 那是真相。**
+# 🔴 不许为了让它变绿去放松任何判据、改任何门槛(店主令里写死的)。
+#
+# 造病:把 false 从 DEMO_GATE_MODES 里去掉 → test-demo-gate-coverage 必须红在「少跑了一档」上。
+DEMO_GATE_MODES="${DEMO_GATE_MODES:-true false}"
+# 顾客端相关判据:这一档必须全部跑一遍(**只许变长**,少一条 test-demo-gate-coverage 红)
+DEMO_GATE_SUITES="auth-surface web-settlement cross-end-effect display-text tenant-ownership card-refund stored-value booking-intake"
+: > /tmp/ll-demo-gate-modes.txt
+echo "true" >> /tmp/ll-demo-gate-modes.txt
+if printf '%s' "$DEMO_GATE_MODES" | grep -q false; then
+  echo ""
+  echo "== 演示门关掉那一档(DEMO_LOGIN_ALLOWED=false · 生产口径)=="
+  wait_port_free 4132 "演示门关闭实例"
+  ( cd "$API_DIR" && nohup env -u ALLOW_DEMO_ADMIN_LOGIN PORT=4132 DATA_DIR="$DATA_DIR" \
+      node local-server.mjs > /tmp/ll-ci-4132.log 2>&1 & )
+  wait_health 4132 "演示门关闭实例"
+  GATE_OFF="$(curl -s --max-time 3 http://127.0.0.1:4132/health | node -e 'let s="";process.stdin.on("data",d=>s+=d).on("end",()=>{try{console.log(String(JSON.parse(s).guestIdUnsigned))}catch{console.log("?")}})')"
+  echo "   [自证] 4132 的 guestIdUnsigned=$GATE_OFF(应为 false —— 证明这一档真的关着门,不是白跑)"
+  if [ "$GATE_OFF" != "false" ]; then
+    echo "❌ 演示门关闭实例没关上门(guestIdUnsigned=$GATE_OFF)—— 这一档白跑了,按红报" >&2
+    DEMO_GATE_BAD=1
+  fi
+  DEMO_GATE_RED=0
+  for suite in $DEMO_GATE_SUITES; do
+    echo "== [门关] test-${suite} =="
+    if TEST_BASE_URL=http://127.0.0.1:4132 BASE_URL=http://127.0.0.1:4132 node "test-${suite}.mjs" > "$SUITE_OUT" 2>&1; then
+      echo "   ✅ [门关] ${suite}"
+    else
+      echo "   🔴 [门关] ${suite} —— 红,原文如下(照实报,不许为了绿去松门槛):"
+      tail -n 12 "$SUITE_OUT" | sed 's/^/      | /'
+      DEMO_GATE_RED=$(( DEMO_GATE_RED + 1 ))
+    fi
+  done
+  echo "false" >> /tmp/ll-demo-gate-modes.txt
+  echo ""
+  echo "   [门关档小结] ${#DEMO_GATE_SUITES} 条清单中红 ${DEMO_GATE_RED} 套 —— **这一档的红是真相,单独列,不并进主档**"
+  pkill -f "PORT=4132" 2>/dev/null || true
+  lsof -ti :4132 2>/dev/null | xargs kill 2>/dev/null || true
+fi
 
 echo ""
 # 🔴 断言基线判定(店主 02r 裁定一):降=红并指名哪一套;涨自动更新基线。

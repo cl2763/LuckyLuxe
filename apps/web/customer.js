@@ -49,6 +49,9 @@ const copy = {
     email: '邮箱',
     password: '密码',
     googleRegister: '使用 Google 登录',
+    guideTitle: '在微信里打开',
+    guideText: '顾客端的下单、卡包、订单在小程序里,扫下面的小程序码就能进。店铺、作品、价目在这里照常可以看。',
+    guideNoQr: '本店还没有配小程序码 —— 在微信里搜索店名也能找到。',
     continueGuest: '继续游客浏览',
     enter: '进入',
     home: '首页',
@@ -197,6 +200,9 @@ const copy = {
     email: 'Email',
     password: 'Password',
     googleRegister: 'Continue with Google',
+    guideTitle: 'Open in WeChat',
+    guideText: 'Booking, cards and orders live in the Mini Program. Scan the code below to enter. Store, works and pricing stay viewable here.',
+    guideNoQr: 'This store has no Mini Program code yet — search the store name in WeChat.',
     continueGuest: 'Continue as Guest',
     enter: 'Enter',
     home: 'Home',
@@ -648,10 +654,7 @@ async function request(path, options = {}) {
   const data = await response.json()
   if (!response.ok) {
     const authExpired = isAuthExpiredMessage(data.error?.message)
-    if (!skipAuthRefresh && authExpired && state.auth?.refreshToken) {
-      const refreshed = await refreshAuth()
-      if (refreshed) return request(path, { ...options, skipAuthRefresh: true })
-    }
+    if (authExpired) clearCustomerAuth()
     const error = new Error(data.error?.message || 'Request failed')
     if (authExpired) error.code = 'AUTH_EXPIRED'
     throw error
@@ -671,22 +674,35 @@ function clearCustomerAuth() {
   localStorage.removeItem('lucky-web-auth')
 }
 
-async function refreshAuth() {
-  try {
-    const data = await request('/auth/refresh', {
-      method: 'POST',
-      skipAuthRefresh: true,
-      body: JSON.stringify({ refreshToken: state.auth?.refreshToken })
-    })
-    state.user = data.user
-    state.auth = data.auth
-    writeTenantJson('lucky-web-user', state.user)
-    writeTenantJson('lucky-web-auth', state.auth)
-    return true
-  } catch {
-    clearCustomerAuth()
-    return false
-  }
+/* D190:`/auth/refresh` **后端从来没有过** —— 调它永远 404,而 404 会被当成
+   「刷新失败」再抛一次,顾客看到的是一句莫名其妙的错。
+   过渡期的正确行为是**直接按过期处理**(清掉本地态、回到登录区),不再打那条不存在的路。
+   目标态(微信/短信换 token)带自己的续期方式,到时候一起补。 */
+
+/* ── 过渡态登录区(D190 · 店主 07g 段三,夜10 已放行)────────────────────────
+ * 口径(店主原话,写进代码不只写进回执):
+ *   **没有入口不丢人,有入口但点不动才丢人。**
+ *
+ * 撤掉的两个入口,各自坏在哪(现查):
+ *   · 邮箱注册/登录 → 后端有这条路由,但生产口径下 **403 DEMO_LOGIN_DISABLED**(07c 落的闸,闸是对的);
+ *   · 使用 Google 登录 → 打的是 `/auth/google/start`,**后端从来没有过这条路由**(只有 /auth/google/demo)。
+ * 两个按钮在界面上站着,点下去一个 403 一个 404 —— 而十个私有页在生产上一个都进不去。
+ *
+ * 过渡期的做法:**换一张引导卡**「在微信里打开」+ 小程序码。
+ * 公开页(店铺/作品/价目)**照常可看,不要求登录**。
+ * 网页目标态(手机号 + 短信验证码)排在上线之后 —— 短信要单独申请,不拦上线。
+ */
+/* 小程序码:门店自己配的那张。没配就按《占位零回落律》出一句话,**不回落到别家的码**。 */
+function storeMiniQrImage() { return (state.store && (state.store.miniQrImage || state.store.mini_qr_image)) || '' }
+function miniGuideCard() {
+  const qr = storeMiniQrImage()
+  return `
+    <div class="auth-guide">
+      <h2>${t('guideTitle')}</h2>
+      <p>${t('guideText')}</p>
+      ${qr ? window.ImgPlaceholder.tag(qr, { className: 'mini-qr-img', alt: t('guideTitle') })
+    : `<p class="subtle">${t('guideNoQr')}</p>`}
+    </div>`
 }
 
 function privateViews() {
@@ -764,7 +780,6 @@ async function bootstrap() {
     return
   }
   await Promise.all([loadServices(), loadStores(), loadAddOns(), loadPortfolio()])
-  await handleAuthRedirect()
   if (state.user && !state.auth?.accessToken) {
     state.user = null
     localStorage.removeItem('lucky-web-user')
@@ -774,21 +789,8 @@ async function bootstrap() {
   await showApp()
 }
 
-async function handleAuthRedirect() {
-  const hash = new URLSearchParams(window.location.hash.replace(/^#/, ''))
-  const accessToken = hash.get('access_token')
-  const refreshToken = hash.get('refresh_token')
-  if (!accessToken) return
-  const data = await request('/auth/session', {
-    method: 'POST',
-    body: JSON.stringify({ accessToken, refreshToken })
-  })
-  state.user = data.user
-  state.auth = data.auth
-  writeTenantJson('lucky-web-user', state.user)
-  writeTenantJson('lucky-web-auth', state.auth)
-  history.replaceState(null, '', window.location.pathname)
-}
+/* D190:`/auth/session` 是 OAuth 回调的消费者,而 OAuth 那条路整条撤了(后端也没有这条路由)。
+   一起删 —— 留着就是又一条「调了后端没有」的路。 */
 
 async function handleStripeReturn() {
   const params = new URLSearchParams(window.location.search)
@@ -888,9 +890,7 @@ function bindGlobalEvents() {
   els.langZh.addEventListener('click', async () => switchLang('zh'))
   els.langEn.addEventListener('click', async () => switchLang('en'))
   els.tabs.forEach((tab) => tab.addEventListener('click', () => setView(tab.dataset.view)))
-  els.authView.addEventListener('submit', registerEmail)
   els.authView.addEventListener('click', (event) => {
-    if (event.target.closest('#googleRegister')) registerGoogle().catch((error) => toast(error.message))
     if (event.target.closest('#continueGuest')) {
       state.pendingAuth = null
       localStorage.removeItem('lucky-web-pending-auth')
@@ -931,26 +931,7 @@ function renderAuth() {
         <h1>${t('registerTitle')}</h1>
         <p>${t('registerText')}</p>
       </div>
-      <form class="auth-form" id="emailForm">
-        <label>
-          <span>${t('displayName')}</span>
-          <input name="displayName" autocomplete="name">
-        </label>
-        <label>
-          <span>${t('email')}</span>
-          <input name="email" type="email" autocomplete="email">
-        </label>
-        <label>
-          <span>${t('password')}</span>
-          <input name="password" type="password" value="" minlength="6" autocomplete="current-password">
-        </label>
-        <button class="primary full" data-auth-action="register" type="submit">${t('emailRegister')}</button>
-        <button class="ghost full" data-auth-action="login" type="submit">${t('emailLogin')}</button>
-      </form>
-      <button class="google-btn" id="googleRegister" type="button">
-        <span>G</span>
-        ${t('googleRegister')}
-      </button>
+      ${miniGuideCard()}
       <button class="ghost full" id="continueGuest" type="button">${t('continueGuest')}</button>
     </div>
     <div class="auth-visual">
@@ -959,33 +940,8 @@ function renderAuth() {
   `
 }
 
-async function registerEmail(event) {
-  event.preventDefault()
-  const form = new FormData(event.target)
-  const action = event.submitter?.dataset.authAction || 'register'
-  const data = await request(action === 'login' ? '/auth/email/login' : '/auth/email/register', {
-    method: 'POST',
-    body: JSON.stringify({
-      displayName: form.get('displayName'),
-      email: form.get('email'),
-      password: form.get('password')
-    })
-  })
-  if (data.needsEmailConfirmation) {
-    toast(t('confirmEmail'))
-    return
-  }
-  state.user = data.user
-  state.auth = data.auth
-  writeTenantJson('lucky-web-user', state.user)
-  writeTenantJson('lucky-web-auth', state.auth)
-  await showApp()
-}
-
-async function registerGoogle() {
-  const data = await request(`/auth/google/start?redirectTo=${encodeURIComponent(window.location.origin + window.location.pathname)}`)
-  window.location.href = data.url
-}
+/* D190:`/auth/google/start` **后端从来没有过**,这条前端调用删掉(`/auth/google/demo` 不动)。
+   删掉的是「调一条不存在的路由」这件事,不是删功能 —— 功能本来就不存在。 */
 
 async function showApp() {
   els.authView.classList.add('hidden')
