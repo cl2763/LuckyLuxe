@@ -266,6 +266,56 @@ check('④r 不变量:两把钥匙的闸**都来自 `secret-gate.mjs` 那一个�
 && /randomBytes\(/.test(otSrc) && !/devValue:\s*['"]/.test(otSrc),
 `ot=${/createSecretGate\(/.test(otSrc)} mt=${/createSecretGate\(/.test(mtSrc)} rnd=${/randomBytes\(/.test(otSrc)}`)
 
+/* ═══ ④s–④v `OWNER_TOKEN` 切测试的**试点**(店主 07e 裁 #64)═══
+   店主原话:「切之前先把那个 helper 写好并让**一套测试先用上**,证明形状可行,再批量切 ——
+   **不许九十个文件一次改完再跑,那样红起来分不清是谁的。**」
+   所以这几条验的是**试点这一条链**,不是「已经切完了」。 */
+const { publishOwnerToken: pubOT, readOwnerToken: readOT, OWNER_TOKEN_FILE: OTF } = await import('./owner-token.mjs')
+const { mkdtempSync: mkd2, existsSync: ex2 } = await import('node:fs')
+const { tmpdir: tmp2 } = await import('node:os')
+
+const otCi = mkd2(join(tmp2(), 'll-otpub-ci-'))
+const otLocal = mkd2(join(tmp2(), 'll-otpub-local-'))
+const wroteCi = pubOT({ scopeName: 'ci', dataDir: otCi, token: 'pilot-probe-value' })
+const wroteSand = pubOT({ scopeName: 'sandbox', dataDir: otCi, token: 'pilot-probe-value' })
+const wroteLocal = pubOT({ scopeName: 'local', dataDir: otLocal, token: 'pilot-probe-value' })
+const wroteProd = pubOT({ scopeName: 'production', dataDir: otLocal, token: 'pilot-probe-value' })
+check('④s 发布口**只在 ci/sandbox 落地**:两个库域写得进那个文件,'
+  + '`local`/`production` **一个字节都不落**(生产/本机不该有一个装着主令牌的文件躺在数据目录里)',
+wroteCi && wroteSand && !wroteLocal && !wroteProd && ex2(join(otCi, OTF)) && !ex2(join(otLocal, OTF)),
+`ci=${wroteCi} sandbox=${wroteSand} local=${wroteLocal} production=${wroteProd}`)
+
+check('④t helper 读的是**文件里的现值**,不是字面量 —— 文件一换它跟着变'
+  + '(这就是「闸接上去之后试点那一套一个字不用改」的依据)',
+readOT({ env: {}, dataDir: otCi }) === 'pilot-probe-value', readOT({ env: {}, dataDir: otCi }))
+
+const pilotSrc = readFileSync(join(ROOT, 'apps/api/test-admin-accounts.mjs'), 'utf8')
+check('④u 试点那一套(`test-admin-accounts`)**主来源是 helper**,不是照抄的字面量',
+  /readOwnerToken\(\)/.test(pilotSrc) && !/const OWNER = ['"]owner-demo-token['"]/.test(pilotSrc), '')
+
+/* ④v 迁移棘轮:还照抄字面量的文件数**只许降**。归零那天 = 批量切完那天,
+   那时把 ④s–④v 连同 `local-server.mjs:OWNER_TOKEN` 那条豁免一起删。 */
+/* 扫描面**递归**:`apps/api/tools/` 这类子目录里也有拿字面量的脚本,
+   不递归就是给它们留了一块盲区(判据三推论:覆盖面本身要有判据)。 */
+const walkMjs = (rel) => {
+  const out = []
+  for (const e of readdirSync(join(ROOT, rel), { withFileTypes: true })) {
+    if (e.name === 'node_modules' || e.name.startsWith('.')) continue
+    const p2 = `${rel}/${e.name}`
+    if (e.isDirectory()) out.push(...walkMjs(p2))
+    else if (e.name.endsWith('.mjs')) out.push(p2)
+  }
+  return out
+}
+const hcFiles = [...walkMjs('apps/api'), ...walkMjs('tools')]
+  .filter((f) => !/credential-scan|owner-token\.mjs|local-server\.mjs/.test(f))
+const hardcoders = hcFiles.filter((f) => { try { return readFileSync(join(ROOT, f), 'utf8').includes('owner-demo-token') } catch { return false } })
+const HARDCODER_CAP = 102
+check(`④v 迁移棘轮:还照抄 \`owner-demo-token\` 的测试/工具文件 ${hardcoders.length} 个 <= ${HARDCODER_CAP}(**只许降**)`
+  + ' —— 这个数归零的那一天,就是批量切完的那一天',
+hardcoders.length <= HARDCODER_CAP, `${hardcoders.length} 个`)
+console.log(`   [迁移进度] 还照抄字面量的 ${hardcoders.length} 个 · 试点已切 1 套(test-admin-accounts)`)
+
 console.log(`\n[凭据形态] tracked ${files.length} 个 · 命中 ${real.length} 处 · 白名单 ${Object.keys(ALLOW).length} 条`)
 
 /* ═══ ④ J-53:**密钥类常量不许回落到字面量**(店主 07c 裁 #54 立)═══

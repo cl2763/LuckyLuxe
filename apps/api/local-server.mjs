@@ -115,7 +115,7 @@ const APP_TIMEZONE = process.env.APP_TIMEZONE || 'America/Toronto'
 process.env.TZ = APP_TIMEZONE
 
 const __dirname = dirname(fileURLToPath(import.meta.url))
-const { legacyScope, scopeOf } = await import('./data-scope.mjs'); const { requireMiniTokenSecret, miniSecretIsExplicit } = await import('./mini-token-secret.mjs')
+const { legacyScope, scopeOf } = await import('./data-scope.mjs'); const { requireMiniTokenSecret, miniSecretIsExplicit } = await import('./mini-token-secret.mjs'); const { publishOwnerToken } = await import('./owner-token.mjs')
 const workspaceRoot = join(__dirname, '..', '..')
 const webRoot = join(workspaceRoot, 'apps', 'web')
 const assetRoot = join(workspaceRoot, 'miniprogram', 'assets')
@@ -158,7 +158,7 @@ const bookingState = createBookingState({
 const PORT = Number(process.env.PORT || 4000)
 // 主钥匙:新名 OWNER_TOKEN 优先,旧名 OWNER_DEMO_TOKEN 兼容(现网还在用旧名,先不破坏)。
 // 名字带 DEMO 容易让人低估它的权限——它是平台最高信任根。
-const OWNER_TOKEN = process.env.OWNER_TOKEN || process.env.OWNER_DEMO_TOKEN || 'owner-demo-token'
+const OWNER_TOKEN = process.env.OWNER_TOKEN || process.env.OWNER_DEMO_TOKEN || 'owner-demo-token'; publishOwnerToken({ scopeName: DATA_SCOPE_NAME, dataDir, token: OWNER_TOKEN })  // 07e 裁#64 试点:只在 ci/sandbox 把现用的那把写进本轮 DATA_DIR,取值一个字不动
 // 生产判定(Railway 会注入 RAILWAY_ENVIRONMENT):用于「日志里不许出现主钥匙」这类只在云端生效的收紧
 const IS_PRODUCTION = process.env.NODE_ENV === 'production' || Boolean(process.env.RAILWAY_ENVIRONMENT)
 /* 四之十红线(店主 08-23 重申,随真机调试联通件钉死):**演示白名单只在沙箱成立,生产结构性不成立**。

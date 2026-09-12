@@ -46,9 +46,19 @@ const PROBES = {
     try { ver = JSON.parse(readFileSync(join(p, 'package.json'), 'utf8')).version || '' } catch { /* 没有就算了 */ }
     return { ok: true, note: `在 · ${p}${ver ? ` · v${ver}` : ''}` }
   },
-  '微信开发者工具自动化端口': () => (portOpen(9420)
-    ? { ok: true, note: '9420 在听' }
-    : { ok: false, note: '**9420 没开** —— `cli auto --project miniprogram --auto-port 9420`' }),
+  /* 🔴 07e 现踩:**端口在听 ≠ 会话是活的**。
+     自动化会话僵死时 `lsof` 照样看得见 9420,而三支 mp 刀会各卡 61 秒然后「本轮未跑」——
+     我为此白跑了一整轮回归才发现。归族 J-37「在不在 ≠ 看得见」。
+     活会话对 HTTP 请求回 **426 Upgrade Required**(它要的是 WebSocket);
+     端口在听却连不上/不回 426 = 会话多半僵了,**照实说「可能僵死」并给重启命令**。 */
+  '微信开发者工具自动化端口': () => {
+    if (!portOpen(9420)) return { ok: false, note: '**9420 没开** —— `cli auto --project miniprogram --auto-port 9420`' }
+    let code = ''
+    try { code = execFileSync('bash', ['-c', 'curl -s -m 3 -o /dev/null -w "%{http_code}" http://127.0.0.1:9420/ 2>/dev/null'], { encoding: 'utf8' }).trim() } catch { code = '' }
+    if (code === '426') return { ok: true, note: '9420 在听,且会话有应答(HTTP 426 = 它要 WebSocket,正常)' }
+    return { ok: false, note: `**9420 在听但会话没应答(HTTP ${code || '无'})** —— 多半僵死了,`
+      + '重开:`/Applications/wechatwebdevtools.app/Contents/MacOS/cli auto --project <仓>/miniprogram --auto-port 9420`' }
+  },
   'Google Chrome': () => {
     const p = process.env.SHOT_CHROME || '/Applications/Google Chrome.app/Contents/MacOS/Google Chrome'
     return existsSync(p) ? { ok: true, note: `在 · ${p}` } : { ok: false, note: `找不到:${p}` }

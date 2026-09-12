@@ -25,7 +25,7 @@
 import { readFileSync, writeFileSync, existsSync } from 'node:fs'
 import { join } from 'node:path'
 import { randomBytes } from 'node:crypto'
-import { createSecretGate } from './secret-gate.mjs'
+import { createSecretGate, DEV_SCOPES } from './secret-gate.mjs'
 
 export const OWNER_TOKEN_FILE = '.owner-token'
 
@@ -66,4 +66,25 @@ export function readOwnerToken({ env = process.env, dataDir = '' } = {}) {
     try { if (existsSync(f)) return readFileSync(f, 'utf8').trim() } catch { /* 落空 */ }
   }
   return ''
+}
+
+/* ── 试点用的**发布口**(店主 07e 裁 #64:先让一套测试用上,证明形状可行,再批量切)──
+ *
+ * 关键在于**今天一个测试都不许红**。所以这一步**不动 `OWNER_TOKEN` 的取值** ——
+ * 服务照旧用它现在那个值,只是在 `ci`/`sandbox` 库域**把它写进那一轮的 DATA_DIR**,
+ * 让测试可以「**从哪拿**」而不是「照抄一串字面量」。
+ *
+ * 为什么这样就算证明了形状:
+ *   · 今天 —— 文件里是现在那个值,试点套件读它,通过;
+ *   · 切换那一批 —— 闸接上去之后文件里变成**每轮随机的**那一把,
+ *     **试点套件一个字都不用改**,照样通过。
+ *   这就是「helper + 文件 + 消费方」三件套端到端跑通了,
+ *   剩下的只是把另外那几十个文件从字面量换成 `readOwnerToken()`。
+ *
+ * ⚠️ **只在 ci/sandbox 写**:别的库域一个字节都不落地
+ *   (生产/本机不该有一个装着主令牌的文件躺在数据目录里)。
+ */
+export function publishOwnerToken({ scopeName = 'unknown', dataDir = '', token = '' } = {}) {
+  if (!DEV_SCOPES.has(scopeName) || !dataDir || !token) return false
+  try { writeFileSync(join(dataDir, OWNER_TOKEN_FILE), `${token}\n`, { mode: 0o600 }); return true } catch { return false }
 }

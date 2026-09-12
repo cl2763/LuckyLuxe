@@ -10,7 +10,14 @@ const BASE_URL = process.env.TEST_BASE_URL || 'http://127.0.0.1:4128'
 /* 测试护栏(裁 C):套件永远不许写进真库 —— 开跑前问服务器「你往哪个库写」 */
 import { assertTestTarget } from './test-guard.mjs'
 await assertTestTarget(BASE_URL)
-const OWNER = 'owner-demo-token'
+/* 🔴 07e 裁 #64 **试点**:这一套是第一个从「照抄字面量」改成「问 helper 要」的。
+   为什么先只切一套(店主原话):**不许九十个文件一次改完再跑,那样红起来分不清是谁的。**
+   形状:服务在 ci/sandbox 把现用的那把写进本轮 `DATA_DIR/.owner-token`,这里读它。
+   **今天**文件里是现在那个值,所以这一套照常过;
+   **切换那一批**闸接上去之后文件里变成每轮随机的那一把,**这一行一个字都不用改**。
+   这就是「证明形状可行」的意思。 */
+const { readOwnerToken } = await import('./owner-token.mjs')
+const OWNER = readOwnerToken() || 'owner-demo-token'   // 兜底只为「闸还没接上、文件还没落」的过渡期,切完即删
 const RUN_ID = Date.now().toString(36)
 
 let checks = 0
