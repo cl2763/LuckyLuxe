@@ -196,7 +196,7 @@ else say "回归不依赖演示种子" "🔴 run-all-tests.sh 里有 $SEEDREF �
 MPCOLOR=$(find miniprogram -name "*.wxss" ! -path "*/styles/tokens.wxss" ! -path "*/styles/tokens-component.wxss" ! -path "*/styles/fraunces-digits.wxss" -print0 \
   | xargs -0 grep -ohE "#[0-9a-fA-F]{3,8}\b|rgba?\([0-9 .,]+\)" | wc -l | tr -d ' ')
 # 06g §四② 把 33 条「写死金底 + 写死白字」+ 8 条同规则里的旧金换成令牌 → 2443 收到 2356。棘轮只许往下收。
-if [ "$MPCOLOR" -le 2353 ]; then say "小程序 wxss 写死色棘轮" "✅ $MPCOLOR ≤ 2353(只许降)"
+if [ "$MPCOLOR" -le 2353 ]; then say "小程序 wxss 写死色棘轮" "✅ $MPCOLOR ≤ 2353(只许降;07c 从 2356 降到 2353)"
 else say "小程序 wxss 写死色棘轮" "🔴 $MPCOLOR > 2353 —— 新写死了颜色,那一处的深色态就会漏白"; FAIL=1; fi
 
 # ⑩ #14(店主 05u 裁:「今天先加静态判据禁新写 + 交存量清单」)。
