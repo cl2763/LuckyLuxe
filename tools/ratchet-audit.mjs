@@ -203,4 +203,8 @@ if (OUT) {
   mkdirSync(dirname(OUT), { recursive: true }); writeFileSync(OUT, lines.join('\n'), 'utf8')
   console.log(`[表] → ${OUT}`)
 }
-process.exit(0)
+/* 🔴 这一行**曾经是 `process.exit(0)`** —— 段3 加完归因列之后,它把每一个
+   `process.exitCode = 1` 都抹平成 0:**红字照印,退出码照绿**。
+   造病刀第一轮就是被这个坑住的(「期望 red 实得 green」而屏幕上明明是红的)。
+   归族「静默失败器」:判据自己的红也得真红。 */
+process.exit(process.exitCode ? 1 : 0)
