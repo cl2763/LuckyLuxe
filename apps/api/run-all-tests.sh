@@ -181,6 +181,17 @@ finish() {
   [ -n "${WATCHDOG_PID:-}" ] && kill "$WATCHDOG_PID" 2>/dev/null
   rm -f "${CURRENT_SUITE_FILE:-}" 2>/dev/null
   cleanup; [ -n "${DATA_DIR:-}" ] && rm -rf "$DATA_DIR"; restore_local; restore_sandbox
+
+# 🔴 [收尾自证] 演示门那两档(店主 07g/夜10 段一①)——
+#    「少跑了一档」必须在**两档都跑完之后**核,不能放在主档的套件里:
+#    那样第一轮必红 → 套件退 1 → 回归中止 → 门关那一档永远跑不到 → 记录永远没有(我造过一次这个死锁)。
+GATE_RAN="$(tr '\n' ' ' < /tmp/ll-demo-gate-modes.txt 2>/dev/null || echo '')"
+if printf '%s' "$GATE_RAN" | grep -q true && printf '%s' "$GATE_RAN" | grep -q false; then
+  echo "   [收尾自证] 演示门两档都跑过了:[$GATE_RAN] ✔"
+else
+  echo "   🔴 [收尾自证] 演示门**少跑了一档**:实际跑过 [$GATE_RAN](两档都要在)" >&2
+  echo "      —— 这一轮不许说「全过」:顾客端判据可能又只在「门开着」那一档里绿过。" >&2
+fi
   restore_selfcheck
 }
 
