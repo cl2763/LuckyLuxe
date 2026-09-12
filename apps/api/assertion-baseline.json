@@ -113,7 +113,10 @@
     "color-usage": 31,
     "token-entry": 9,
     "danger-cmd": 8,
-    "exit-code": 8
+    "exit-code": 8,
+    "demo-gate-coverage": 5,
+    "frontend-routes": 6,
+    "login-entries": 4
   },
   "上次更新": "2026-09-02",
   "巨型文件历史最低": {
