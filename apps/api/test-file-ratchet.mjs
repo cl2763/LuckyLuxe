@@ -58,7 +58,7 @@ const RATCHET = {
   'apps/api/local-server.mjs': { cap: 18243, kind: PINNED, note: '巨型文件·店主 08-24 立棘轮 / 09-02 复核在案数一致' },
   'apps/web/admin.js': { cap: 8552, kind: PINNED, note: '巨型文件·店主 09-02 补批(01u 8521 → 02c 签署块 +28 → 02e 假图第八处 +3)' },
   'apps/web/party.js': { cap: 31, kind: NEWTHIN, note: '夜9 段4 立。初值 31 由本刀②造病验红那一版量得(J-43):加一行 → ② 当场红并报 32 > 31,删回 → 绿' },
-  'apps/web/customer.js': { cap: 2811, kind: FROZEN, note: '09-02 店主批准现状冻结;2811 行不是被认可的合理体量,是当天的事实' },
+  'apps/web/customer.js': { cap: 2799, kind: FROZEN, note: '09-02 店主批准现状冻结(当时 2811);夜9 段7 随实际收紧到 2799 —— 日1 `d04c1db` 把三个 party 出口搬进 party.js。冻结=不再涨,**不等于这个体量是对的**' },
   'miniprogram/pages/me/index.js': { cap: 638, kind: FROZEN, note: '09-02 店主批准现状冻结;超公约 600 上限 38 行,候拆' },
   'miniprogram/pages/merchant/settlement/index.js': { cap: 929, kind: FROZEN, note: '09-02 店主批准现状冻结;超公约 600 上限 329 行,候拆' },
   'miniprogram/pages/merchant/orders/index.js': { cap: 829, kind: FROZEN, note: '09-02 店主批准现状冻结;超公约 600 上限 229 行,候拆' },
