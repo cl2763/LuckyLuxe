@@ -693,7 +693,7 @@ function clearCustomerAuth() {
  * 网页目标态(手机号 + 短信验证码)排在上线之后 —— 短信要单独申请,不拦上线。
  */
 /* 小程序码:门店自己配的那张。没配就按《占位零回落律》出一句话,**不回落到别家的码**。 */
-function storeMiniQrImage() { return (state.store && (state.store.miniQrImage || state.store.mini_qr_image)) || '' }
+function storeMiniQrImage() { return partyField(state.store, 'miniQrImage') || partyField(state.store, 'mini_qr_image') }
 function miniGuideCard() {
   const qr = storeMiniQrImage()
   return `
