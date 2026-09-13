@@ -448,6 +448,14 @@ async function loginForCurrentStore(options = {}) {
   return data.user
 }
 
+/* 授权手机号 → 后端**真解密**并落库(店主 夜11 段 B1/B2)
+   `code` 必须**当场再取一次**:`session_key` 跟着每次 wx.login 变,拿旧的解不开。
+   服务端解密失败会回 400 —— 这里**不兜底**,让调用方如实报错(静默失败器族)。 */
+async function bindWechatPhone({ encryptedData, iv }) {
+  const code = await wxLoginCode()
+  return request('/auth/wechat/mini-phone', 'POST', { code, encryptedData, iv })
+}
+
 async function ensureLogin(options = {}) {
   const existing = getAuth()
   const fresh = Boolean(existing && existing.accessToken && (!existing.expiresAt || Date.now() < existing.expiresAt - 60 * 1000))
@@ -995,6 +1003,7 @@ module.exports = {
   sandboxLoginAs,
   normalizeImage,
   ensureLogin,
+  bindWechatPhone,
   loginWithWechat,
   isLoggedIn,
   getAuth,

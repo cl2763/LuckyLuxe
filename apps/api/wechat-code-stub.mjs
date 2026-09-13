@@ -25,9 +25,8 @@
  */
 import { createHash } from 'node:crypto'
 import { DEV_SCOPES } from './secret-gate.mjs'
-
-/* 真地址:**硬编,不可配置**。全仓直连 `sns/jscode2session` 只许这一处(判据⑤守着)。 */
-const WECHAT_JSCODE2SESSION_REAL = 'https://api.weixin.qq.com/sns/jscode2session'
+import { stubSessionKeyFor } from './wechat-phone.mjs'
+import { realJsCode2Session } from './wechat-jscode2session.mjs'   // 真那半摘出去了:本文件从此只有假的
 
 /* 替身识别前缀:夹具把「我要哪个 openid」写进 code 里,**不经环境变量**。
    · `stub:<openid>[:<unionid>]` —— 指定一个 openid(夹具要驱动严格认人四条时用)
@@ -49,12 +48,16 @@ export function stubJsCode2SessionResponse(code, scopeName) {
     return { errcode, errmsg: 'stub: invalid code' }
   }
   if (raw === 'stub-bad') return { session_key: 'stub', openid: '' }   /* 空 openid:响应校验该拒 */
+  /* 🔴 夜11 B1:`session_key` **也要给一把确定的** —— 手机号解密要用它,
+     替身给个假的等于「解密」那一步在回归里根本没被测到(又一个站在门后面的绿)。
+     由 openid 确定地推出来:同一个人两次登录拿到同一把。 */
   if (raw.startsWith('stub:')) {
     const [, openid = '', unionid = ''] = raw.split(':')
-    return { openid, unionid: unionid || undefined, session_key: 'stub-session' }
+    return { openid, unionid: unionid || undefined, session_key: stubSessionKeyFor(openid) }
   }
   const h = createHash('sha256').update(raw).digest('hex').slice(0, 16)
-  return { openid: `stub-openid-${h}`, session_key: 'stub-session' }
+  const oid = `stub-openid-${h}`
+  return { openid: oid, session_key: stubSessionKeyFor(oid) }
 }
 
 /**
@@ -66,8 +69,5 @@ export async function fetchJsCode2Session({ code, appid, secret, scopeName }) {
   if (isStubScope(scopeName)) {
     return { data: stubJsCode2SessionResponse(code, scopeName), viaStub: true }
   }
-  const params = new URLSearchParams({ appid, secret, js_code: code, grant_type: 'authorization_code' })
-  const response = await fetch(`${WECHAT_JSCODE2SESSION_REAL}?${params.toString()}`)
-  const data = await response.json().catch(() => ({}))
-  return { data, viaStub: false, ok: response.ok }
+  return realJsCode2Session({ code, appid, secret })
 }

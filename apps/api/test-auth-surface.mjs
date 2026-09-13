@@ -453,18 +453,27 @@ async function main() {
   notFrozen.length === 0 && Object.keys(DEMO_WHITELIST_USERS).length <= DEMO_WHITELIST_CAP,
   `没冻结的:${notFrozen.join(' ')}`)
 
-  /* ㊙⑬b 造病(令里点名的那条):这条回落路**在生产库域下必须抛** ——
-     它是「本地方便」,不是身份路;一旦它能在生产库域上开门,那就是第二条无密码的员工入口。 */
+  /* ㊙⑬b 造病(令里点名的那条):这条回落路**在生产下必须抛** ——
+     它是「本地方便」,不是身份路;一旦它能在生产上开门,那就是第二条无密码的员工入口。
+
+     ⚠️ **这条判据 09-14 修过一次,原因值得留着**:我第一版把它写成「非 ci/sandbox 库域一律开不了门」,
+     跑全量当场红(`local` 库域 + 开关开 → STATUS=200)。回去查才发现**红的是判据不是产品** ——
+     已裁的口径是 `DEMO_LOGIN_ALLOWED = !IS_PRODUCTION && ALLOW_DEMO_ADMIN_LOGIN === 'true'`,
+     `local` 开着本来就是设计(本机开发要用),我那一版断言的是**还没裁过**的收紧。
+     **收紧本身仍然该做**,而且早就登记在 `handoff/night-runs/访客身份串_现查结论_2026-09-12.md` §三:
+     挡住它的是 `IS_PRODUCTION`(纯环境变量判定),与 06h 裁 #37 治过的 `scopeOf` 同族 ——
+     建议改成**认库路径优先**。**等店主裁,本批不改**,所以这里只守已裁的那条。 */
   {
     const { mkdtempSync: mk13, rmSync: rm13 } = await import('node:fs')
     const { tmpdir: tp13 } = await import('node:os')
     const { spawnSync: sp13 } = await import('node:child_process')
     const base13 = mk13(join(tp13(), 'll-demo13-'))
-    const prodDir = join(base13, 'local-data')            /* 名字叫 local-data ⇒ 库域 local(非 ci/sandbox) */
+    const prodDir = join(base13, 'local-data')
     ;(await import('node:fs')).mkdirSync(prodDir)
     const env13 = { ...process.env, DATA_DIR: prodDir, PORT: '4174', NOTIFY_TICK: 'off',
       OWNER_TOKEN: 'probe-owner-not-a-secret', WECHAT_MINI_TOKEN_SECRET: 'probe-mini-not-a-secret',
-      ALLOW_DEMO_ADMIN_LOGIN: 'true' }   /* 🔴 开关照开 —— 就是要证明「开关 + 非 ci 库域」也开不了门 */
+      NODE_ENV: 'production',            /* 生产判定打开 */
+      ALLOW_DEMO_ADMIN_LOGIN: 'true' }   /* 🔴 开关照开 —— 就是要证明「开关开着也照样开不了生产的门」 */
     const probe = sp13(process.execPath, ['-e',
       "const t=setTimeout(()=>process.exit(3),9000);"
       + "import('./local-server.mjs').then(async()=>{await new Promise(r=>setTimeout(r,2500));"
@@ -473,9 +482,13 @@ async function main() {
       + "console.log('STATUS='+r.status);clearTimeout(t);process.exit(0)}).catch((e)=>{console.log('BOOT-FAIL '+e.message);process.exit(2)})"],
     { cwd: dirname(fileURLToPath(import.meta.url)), env: env13, encoding: 'utf8', timeout: 30000 })
     const out13 = `${probe.stdout || ''}${probe.stderr || ''}`
-    check('㊙⑬b 🔴 造病:**开关照开 + 非 ci/sandbox 库域** → 演示白名单那条路**仍然开不了门**'
-      + '(它是本地方便,不是身份路;能开就是第二条无密码的员工入口)',
-    /STATUS=(401|403)/.test(out13), out13.replace(/\n/g, ' ').slice(-160))
+    check('㊙⑬b 🔴 造病:**演示开关照开 + 生产判定打开** → 演示白名单那条路**仍然开不了门**'
+      + '(它是本地方便,不是身份路;能在生产开门就是第二条无密码的员工入口)',
+    /STATUS=(401|403)/.test(out13), `${out13.replace(/probe-[\w-]+/g, 'probe-…').slice(0, 200)}`)
+    /* ⚠️ 待裁(不拦):同样开关开着,在 `local` 库域下这条路**是开的**(现测 STATUS=200)。
+       那是已裁口径(`!IS_PRODUCTION`)的直接结果,不是缺陷 —— 但挡它的是**环境变量**不是库路径,
+       与裁 #37/#80「认库不认环境变量」同族。收紧建议见 访客身份串_现查结论_2026-09-12.md §三。 */
+    console.log('   [待裁] 演示门在 `local` 库域下仍可开(靠 NODE_ENV 判生产)—— 收紧到库域待店主裁,见 访客身份串_现查结论_2026-09-12.md §三')
     rm13(base13, { recursive: true, force: true })
   }
 

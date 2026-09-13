@@ -42,7 +42,12 @@ const SUITE_MIN = 8   /* 只许变长(判据三推论:覆盖面本身要有判�
             **且** 它真的起服务打接口(LIVE)
      纯静态判据只是**提到**那些字样(扫描类的刀),不取 token —— 具名排除,写理由。
    三个数分开报(J-48:**不许混进同一个数**):该跑 / 跑了 / 该跑没跑。 */
-const AUTH_PAT = /\/auth\/email\/(login|register)|demoLogin|demo-cust|customerToken|requireCustomer|\/my\//
+/* 🔴 09-14 补正门形态(夜11 段B):原来这串**只认演示/邮箱登录**那几种写法。
+   后果很反直觉 —— 我们正在做的事(裁 #60:把夹具一套套改成走微信正门)每推进一套,
+   那一套就从「该跑」名单里**掉出去一个**,覆盖数一路变小,而判据全程绿。
+   「判据的覆盖面本身要有判据」说的就是这个。补上 `/auth/wechat/mini-` 与 `ViaFrontDoor`
+   之后:该跑 12 → 13(新认出来的是 mini-phone),该跑没跑仍是 0。 */
+const AUTH_PAT = /\/auth\/email\/(login|register)|demoLogin|demo-cust|customerToken|requireCustomer|\/my\/|\/auth\/wechat\/mini-|ViaFrontDoor/
 const LIVE_PAT = /BASE_URL|TEST_BASE_URL|await fetch\(/
 /* 排除自己:本文件里就写着那些形态串(AUTH_PAT/LIVE_PAT 的字面量),不排掉会扫到自己 */
 const allSuites = readdirSync(join(ROOT, 'apps/api'))
@@ -90,6 +95,15 @@ const probeRan = ran.filter((n) => n !== 'auth-surface')
 const probeNotRun = shouldRun.filter((n) => !probeRan.includes(n))
 check('①d 造病:把 `auth-surface`(明明碰登录态)挪出名单 → 「该跑没跑」必须当场把它点出来',
   probeNotRun.includes('auth-surface'), JSON.stringify(probeNotRun))
+
+/* ①i 造病(09-14 立):**只走微信正门**的夹具必须被认成「该跑」——
+   这条是上面那个盲区的看守。构造一段只有正门形态的源码,机制必须认得出它。 */
+const frontDoorProbe = "const r = await fetch(`${BASE}/auth/wechat/mini-login`, { method: 'POST' })"
+const legacyProbe = "const r = await fetch(`${BASE}/health`)"
+check('①i 🔴 造病:一套**只走微信正门**(没有任何演示/邮箱登录形态)的夹具,机制必须认成「该跑」—— '
+  + '不认的话,「改走正门」这件事每做一套就悄悄少扫一套(旧口径 12 → 补上正门形态后 13)',
+  AUTH_PAT.test(frontDoorProbe) && LIVE_PAT.test(frontDoorProbe) && !AUTH_PAT.test(legacyProbe),
+  `正门=${AUTH_PAT.test(frontDoorProbe)} 反向(无登录形态)=${!AUTH_PAT.test(legacyProbe)}`)
 
 console.log(`   [多跑] 名单里但不在机制判据内的 ${extra.length} 套(多跑不算错,如实列):${extra.join(' ') || '无'}`)
 

@@ -44,9 +44,9 @@ const walk = (rel) => {
 }
 const srcFiles = [...walk('apps'), ...walk('tools')].filter((f) => !/test-wechat-stub/.test(f))
 const direct = srcFiles.filter((f) => readFileSync(join(ROOT, f), 'utf8').includes('sns/jscode2session'))
-check('⑤ 白名单式:全仓直连 `sns/jscode2session` **只许 1 处**(替身模块自己那一处),'
-  + '加第二处当场红 —— 证明没有第二条通往腾讯的路',
-direct.length === 1 && direct[0] === 'apps/api/wechat-code-stub.mjs', direct.join(' | '))
+check('⑤ 白名单式:全仓直连 `sns/jscode2session` **只许 1 处**(09-14 起是 `wechat-jscode2session.mjs` —— '
+  + '真那半从替身文件里摘出来了,名字不许骗人),加第二处当场红 —— 证明没有第二条通往腾讯的路',
+direct.length === 1 && direct[0] === 'apps/api/wechat-jscode2session.mjs', direct.join(' | '))
 
 /* ⑤b 自守:构造第二处,必须被认出来(零命中先证刀能咬) */
 const probe5 = ['a.mjs', 'b.mjs'].filter((f) => `fetch('https://api.weixin.qq.com/sns/jscode2session')`.includes('sns/jscode2session'))

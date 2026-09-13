@@ -15,6 +15,7 @@ import { enterMergeWindow, mergeWindowCapSeconds, mergeWindowSeconds, openMergeW
 import { merchantIdentity, runStoreRenameMigration, welcomeText } from './store-identity.mjs'
 import { nameToUsername, isValidUsername } from './pinyin-names.mjs'
 import { createDecipheriv, createHash, createHmac, randomUUID } from 'node:crypto'
+import { makeMiniToken } from './mini-token.mjs'
 import { copyFileSync, existsSync, mkdirSync, readdirSync, readFileSync, renameSync, statSync, unlinkSync, writeFileSync } from 'node:fs'
 import { basename, dirname, extname, join, normalize, resolve } from 'node:path'
 import { fileURLToPath } from 'node:url'
@@ -115,7 +116,7 @@ const APP_TIMEZONE = process.env.APP_TIMEZONE || 'America/Toronto'
 process.env.TZ = APP_TIMEZONE
 
 const __dirname = dirname(fileURLToPath(import.meta.url))
-const { legacyScope, scopeOf } = await import('./data-scope.mjs'); const { requireMiniTokenSecret, miniSecretIsExplicit } = await import('./mini-token-secret.mjs'); const { publishOwnerToken } = await import('./owner-token.mjs'); const { fetchJsCode2Session, isStubScope } = await import('./wechat-code-stub.mjs'); const { intakeCustomerForDirectBooking } = await import('./write-intake.mjs')
+const { legacyScope, scopeOf } = await import('./data-scope.mjs'); const { requireMiniTokenSecret, miniSecretIsExplicit } = await import('./mini-token-secret.mjs'); const { publishOwnerToken } = await import('./owner-token.mjs'); const { fetchJsCode2Session, isStubScope } = await import('./wechat-code-stub.mjs'); const { intakeCustomerForDirectBooking } = await import('./write-intake.mjs'); const { bindMiniPhone } = await import('./mini-phone.mjs')
 const workspaceRoot = join(__dirname, '..', '..')
 const webRoot = join(workspaceRoot, 'apps', 'web')
 const assetRoot = join(workspaceRoot, 'miniprogram', 'assets')
@@ -5868,32 +5869,7 @@ function randomId(prefix) {
 
 
 
-function base64UrlEncode(value) {
-  return Buffer.from(JSON.stringify(value)).toString('base64url')
-}
-
-function base64UrlDecode(value) {
-  return JSON.parse(Buffer.from(value, 'base64url').toString('utf8'))
-}
-
-function signMiniPayload(payload) {
-  return createHmac('sha256', WECHAT_MINI_TOKEN_SECRET)
-    .update(payload)
-    .digest('base64url')
-}
-
-function miniAuthFor(user, openid) {
-  const expiresAt = Date.now() + 7 * 24 * 60 * 60 * 1000
-  const payload = base64UrlEncode({ sub: user.id, openid, exp: expiresAt })
-  const signature = signMiniPayload(payload)
-  return {
-    accessToken: `mini.${payload}.${signature}`,
-    refreshToken: null,
-    expiresAt,
-    expiresIn: Math.round((expiresAt - Date.now()) / 1000),
-    tokenType: 'bearer'
-  }
-}
+const { base64UrlEncode, base64UrlDecode, signMiniPayload, miniAuthFor } = makeMiniToken(WECHAT_MINI_TOKEN_SECRET)   // 四件整段在 ./mini-token.mjs(裁#89 摘出去);验签那头留在本文件,理由见该模块头注
 
 function customerFromMiniToken(token) {
   if (!token || !token.startsWith('mini.')) return null
@@ -10802,6 +10778,7 @@ async function route(req, res) {
     return json(res, path.endsWith('register') ? 201 : 200, { user, auth: demoAuthFor(user.email || body.email), mode: 'demo' })
   }
   if (req.method === 'POST' && path === '/auth/wechat/mini-login') return json(res, 200, await signInWechatMiniUser(await readBody(req)))
+  if (req.method === 'POST' && path === '/auth/wechat/mini-phone') return json(res, 200, await bindMiniPhone({ body: await readBody(req), req, db, apiError, requireCustomer, fetchJsCode2Session: (await import('./wechat-code-stub.mjs')).fetchJsCode2Session, appid: WECHAT_MINI_APPID, secret: WECHAT_MINI_SECRET, scopeName: DATA_SCOPE_NAME }))   // 授权手机号:整段在 ./mini-phone.mjs(裁#89 摘出去)
   // 商家入驻申请(公开表单,无需登录):留资给平台客服联系
   if (req.method === 'POST' && path === '/merchant-leads') {
     const body = await readBody(req)

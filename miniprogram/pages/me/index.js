@@ -2,6 +2,7 @@ const storage = require('../../utils/storage')
 const { curOf, ensureCurrencyCached } = require('../../utils/storecurrency')
 const i18n = require('../../utils/i18n')
 const api = require('../../utils/api')
+const phoneAuth = require('../../utils/phone-auth')
 const tabbar = require('../../utils/tabbar')
 const DEFAULT_AVATAR = ''
 
@@ -134,7 +135,7 @@ Page({
       : this.guestMember(lang)
     if (isLoggedIn && !member.profileComplete) {
       member = Object.assign({}, member, {
-        nickname: member.nickname || member.id || member.memberCode || (lang === 'en' ? 'WeChat User' : '微信用户'),
+        nickname: member.nickname || (lang === 'en' ? 'WeChat User' : '微信用户'),   // 假数回落红线:没昵称就落「微信用户」,**不许回落到库 id / 会员码**(那是两个别的语义)
         avatarUrl: member.avatarUrl || DEFAULT_AVATAR
       })
     }
@@ -427,55 +428,7 @@ Page({
     this.openLoginPanel()
   },
 
-  loginWithPhone(event) {
-    this.debugAuth('loginWithPhone legacy handler', event && event.detail)
-    const detail = event && event.detail ? event.detail : {}
-    const errMsg = detail.errMsg || ''
-    const isPrivacyScopeMissing = detail.errno === 112 || errMsg.indexOf('api scope is not declared in the privacy agreement') >= 0
-    if (isPrivacyScopeMissing) {
-      this.debugAuth('phone authorization blocked by privacy scope declaration', detail)
-      this.setData({
-        'authProfile.phoneAuthorized': false,
-        'authProfile.phoneAuthFailed': true,
-        'authProfile.phoneMode': 'manual',
-        'authProfile.phoneMessage': this.data.lang === 'en'
-          ? 'WeChat phone authorization is blocked because the phone API is not declared in the Mini Program privacy agreement. Please use manual verification for now.'
-          : '微信后台隐私协议暂未声明手机号接口，请先使用手动手机号验证。后台配置完成后可使用微信一键授权。'
-      })
-      this.syncAuthReady()
-      return
-    }
-    if (errMsg && errMsg.indexOf('ok') < 0) {
-      this.setData({
-        'authProfile.phoneAuthorized': false,
-        'authProfile.phoneAuthFailed': true,
-        'authProfile.phoneMode': 'manual',
-        'authProfile.phoneMessage': this.data.lang === 'en'
-          ? 'WeChat phone authorization was cancelled. Please verify manually.'
-          : '微信手机号授权未完成，请使用手动验证。'
-      })
-      this.syncAuthReady()
-      return
-    }
-    const phoneCode = detail.code || ''
-    this.debugAuth('phone authorization returned code/encrypted data', {
-      code: phoneCode,
-      hasEncryptedData: Boolean(detail.encryptedData),
-      hasIv: Boolean(detail.iv)
-    })
-    this.setData({
-      'authProfile.phoneAuthorized': true,
-      'authProfile.phoneAuthFailed': false,
-      'authProfile.phoneMode': 'wechat',
-      'authProfile.phoneMessage': this.data.lang === 'en'
-        ? 'WeChat phone authorization returned a code. Backend binding is required before production.'
-        : '微信手机号授权已返回 code，正式上线前需要后端换取并绑定手机号。',
-      'authProfile.phoneCode': phoneCode,
-      'authProfile.manualPhoneVerified': false
-    })
-    this.syncAuthReady()
-    wx.showToast({ title: this.data.lang === 'en' ? 'Phone authorized' : '手机号已授权', icon: 'success' })
-  },
+  loginWithPhone(event) { return phoneAuth.handlePhoneAuthResult(this, event) },   // 整段在 utils/phone-auth.js(裁#89 摘出去)
 
   onPhoneAuthTap(event) {
     this.debugAuth('phone authorization button tap', event && event.detail)
