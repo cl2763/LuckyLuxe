@@ -115,7 +115,7 @@ const APP_TIMEZONE = process.env.APP_TIMEZONE || 'America/Toronto'
 process.env.TZ = APP_TIMEZONE
 
 const __dirname = dirname(fileURLToPath(import.meta.url))
-const { legacyScope, scopeOf } = await import('./data-scope.mjs'); const { requireMiniTokenSecret, miniSecretIsExplicit } = await import('./mini-token-secret.mjs'); const { publishOwnerToken } = await import('./owner-token.mjs'); const { fetchJsCode2Session, isStubScope } = await import('./wechat-code-stub.mjs')
+const { legacyScope, scopeOf } = await import('./data-scope.mjs'); const { requireMiniTokenSecret, miniSecretIsExplicit } = await import('./mini-token-secret.mjs'); const { publishOwnerToken } = await import('./owner-token.mjs'); const { fetchJsCode2Session, isStubScope } = await import('./wechat-code-stub.mjs'); const { intakeCustomerForDirectBooking } = await import('./write-intake.mjs')
 const workspaceRoot = join(__dirname, '..', '..')
 const webRoot = join(workspaceRoot, 'apps', 'web')
 const assetRoot = join(workspaceRoot, 'miniprogram', 'assets')
@@ -168,7 +168,7 @@ const IS_PRODUCTION = process.env.NODE_ENV === 'production' || Boolean(process.e
 const DEMO_LOGIN_ALLOWED = !IS_PRODUCTION && process.env.ALLOW_DEMO_ADMIN_LOGIN === 'true'
 // 多租户:请求级租户上下文。商家端 /admin 进入时按登录账号的租户 enterWith;
 // 顾客/公开路径不设上下文 → 回退默认租户(行为不变)。所有用 currentTenantId() 的模块自动按租户走。
-const DEFAULT_TENANT_ID = process.env.DEFAULT_TENANT_ID || 'lucky-luxe'; const NO_PHONE_TAG = '无手机号'; const newCustPhone = (b) => String(b.phone || b.newCustomerPhone || '').trim()  // 裁#84:缺号建档要带标记(后台看得见);两个字段名都认——传错名字不该变成「悄悄没有手机号」
+const DEFAULT_TENANT_ID = process.env.DEFAULT_TENANT_ID || 'lucky-luxe'
 const tenantContext = new AsyncLocalStorage()
 function currentTenantId() {
   const store = tenantContext.getStore()
@@ -14550,14 +14550,8 @@ async function route(req, res) {
     // 换代批顺带修(2026-08-12):建档若发生在排单校验之前,时段冲突/休息日被拒时会留下
     // 重名空档案——店台连试几个时段就造一堆孤儿档(演示2 阵容造数时当场抓获,一次留 3 个)。
     // 排单失败=整体失败:新建的档案随之回滚删除(该档案此刻不可能有任何关联数据)。
-    const newName = String(body.newCustomerName || '').trim()
     let createdUserId = ''
-    if (!userId && newName) {
-      const uid = randomId('user')
-      db.prepare('INSERT INTO users (id, display_name, phone, tenant_id, tags_json) VALUES (?, ?, NULLIF(?, \'\'), ?, ?)').run(uid, newName.slice(0, 40), newCustPhone(body), tid, newCustPhone(body) ? '[]' : JSON.stringify([NO_PHONE_TAG]))  // 🔴 裁#84:缺号**不许静默建档** —— D190 把手机号定成身份锚之后,没号的档案就是一个永远认不出来的人(两端对不上号,也进不了撞车队列:它不撞车,它根本不存在于身份体系里)。现场排单确实可能还没问到号,所以不拒绝,而是**落标记**让后台看得见;「静默」这一项没得选
-      userId = uid
-      createdUserId = uid
-    }
+    ;({ userId, createdUserId } = intakeCustomerForDirectBooking(db, { body, tenantId: tid, userId, randomId, apiError, scopeName: DATA_SCOPE_NAME }))   // 裁#84/#88/#89:认字段(ci 档拒未知字段)→ 没有就建 → 缺号落「无手机号」标记。整段在 ./write-intake.mjs
     if (!userId) throw apiError(400, 'BAD_REQUEST', '请选择或新建顾客。')
     const storeId = body.storeId || defaultStoreId()
     /* 补录小合同(01v):backfill=true 走事后补记 —— 归属日由 backfillPlanFor 判(合同二),

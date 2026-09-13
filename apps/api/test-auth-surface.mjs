@@ -431,6 +431,54 @@ async function main() {
     okRes.status !== 401, String(okRes.status))
 
 
+  /* ═══ ㊙⑬ 裁 #86:员工登录的**第二条路**(演示白名单回落)══════════════
+     `/admin/auth/login` 有两条路:
+       ① 真账号(`local-server.mjs:10847-10867`)—— 查 `admin_accounts` → 校验密码 → 签发,**不被演示门挡**;
+       ② **演示白名单回落**(`:10869-10871`)—— 门关时抛「账号不存在」。
+     店主 07k §五:**身份不许有回落**(与 J-53「密钥不许有回落」同一条道理)。
+     分岔:没人用就删;**有人用就具名冻结 + 造病**。现查**有人用**,所以走第二格。 */
+  const DEMO_WHITELIST_USERS = {
+    'test-staff-portal.mjs': '员工端三套之一,日班令2 段D 要转 loginStaffViaFrontDoor();转完这一条删',
+    'test-notify-scheduler.mjs': '同上,排在员工端那一批里一起转',
+    'test-admin-accounts.mjs': '它测的就是「老板发账号」这件事本身,演示邮箱是它的被测对象之一;转法要单独想',
+  }
+  const DEMO_WHITELIST_CAP = 3   /* 只许变短:归零那天这条回落路就该删掉 */
+  const usersNow = readdirSync(dirname(fileURLToPath(import.meta.url)))
+    .filter((b) => /^test-.*\.mjs$/.test(b) && b !== 'test-auth-surface.mjs')
+    .filter((b) => /staff@luckyluxeatelier\.com|employee@luckyluxeatelier\.com/.test(
+      readFileSync(join(dirname(fileURLToPath(import.meta.url)), b), 'utf8')))
+  const notFrozen = usersNow.filter((b) => !DEMO_WHITELIST_USERS[b])
+  check(`㊙⑬ 裁#86:演示白名单回落路现在还有 ${usersNow.length} 套在用,逐个具名冻结`
+    + `(<= ${DEMO_WHITELIST_CAP},**只许变短**;归零那天这条回落路就删)`,
+  notFrozen.length === 0 && Object.keys(DEMO_WHITELIST_USERS).length <= DEMO_WHITELIST_CAP,
+  `没冻结的:${notFrozen.join(' ')}`)
+
+  /* ㊙⑬b 造病(令里点名的那条):这条回落路**在生产库域下必须抛** ——
+     它是「本地方便」,不是身份路;一旦它能在生产库域上开门,那就是第二条无密码的员工入口。 */
+  {
+    const { mkdtempSync: mk13, rmSync: rm13 } = await import('node:fs')
+    const { tmpdir: tp13 } = await import('node:os')
+    const { spawnSync: sp13 } = await import('node:child_process')
+    const base13 = mk13(join(tp13(), 'll-demo13-'))
+    const prodDir = join(base13, 'local-data')            /* 名字叫 local-data ⇒ 库域 local(非 ci/sandbox) */
+    ;(await import('node:fs')).mkdirSync(prodDir)
+    const env13 = { ...process.env, DATA_DIR: prodDir, PORT: '4174', NOTIFY_TICK: 'off',
+      OWNER_TOKEN: 'probe-owner-not-a-secret', WECHAT_MINI_TOKEN_SECRET: 'probe-mini-not-a-secret',
+      ALLOW_DEMO_ADMIN_LOGIN: 'true' }   /* 🔴 开关照开 —— 就是要证明「开关 + 非 ci 库域」也开不了门 */
+    const probe = sp13(process.execPath, ['-e',
+      "const t=setTimeout(()=>process.exit(3),9000);"
+      + "import('./local-server.mjs').then(async()=>{await new Promise(r=>setTimeout(r,2500));"
+      + "const r=await fetch('http://127.0.0.1:4174/admin/auth/login',{method:'POST',headers:{'content-type':'application/json'},"
+      + "body:JSON.stringify({email:'staff@luckyluxeatelier.com',password:'LuckyluxeStaff0312'})});"
+      + "console.log('STATUS='+r.status);clearTimeout(t);process.exit(0)}).catch((e)=>{console.log('BOOT-FAIL '+e.message);process.exit(2)})"],
+    { cwd: dirname(fileURLToPath(import.meta.url)), env: env13, encoding: 'utf8', timeout: 30000 })
+    const out13 = `${probe.stdout || ''}${probe.stderr || ''}`
+    check('㊙⑬b 🔴 造病:**开关照开 + 非 ci/sandbox 库域** → 演示白名单那条路**仍然开不了门**'
+      + '(它是本地方便,不是身份路;能开就是第二条无密码的员工入口)',
+    /STATUS=(401|403)/.test(out13), out13.replace(/\n/g, ' ').slice(-160))
+    rm13(base13, { recursive: true, force: true })
+  }
+
   console.log(`\n门禁全量扫描通过:${checks} 项断言全绿`)
 }
 

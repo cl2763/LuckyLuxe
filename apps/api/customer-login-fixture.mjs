@@ -86,7 +86,7 @@ export async function createAndLoginCustomerViaFrontDoor({ base, tenantId, owner
     mk = await fetch(`${base}/admin/bookings/direct`, {
       method: 'POST',
       headers: H,
-      body: JSON.stringify({ newCustomerName: name, newCustomerPhone: phone, phone, serviceId, technicianId, date: usedDate, time }),
+      body: JSON.stringify({ newCustomerName: name, phone, serviceId, technicianId, date: usedDate, time }),
     })
     mkBody = await mk.json().catch(() => ({}))
     if (mkBody?.error?.code !== 'REST_DAY') break

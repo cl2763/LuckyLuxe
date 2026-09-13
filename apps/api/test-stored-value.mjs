@@ -62,7 +62,7 @@ async function main() {
     let light = null
     for (let n = 1; n <= 10; n += 1) {
       const d = new Date(Date.now() + n * 86400000).toLocaleDateString('en-CA', { timeZone: 'America/Toronto' })
-      light = await request('/admin/bookings/direct', { method: 'POST', body: JSON.stringify({ newCustomerName: `储值测试-${RUN_ID}`, newCustomerPhone: svPhone, phone: svPhone, serviceId: svSvc, technicianId: svTech, date: d, time: '10:00' }) })
+      light = await request('/admin/bookings/direct', { method: 'POST', body: JSON.stringify({ newCustomerName: `储值测试-${RUN_ID}`, phone: svPhone, serviceId: svSvc, technicianId: svTech, date: d, time: '10:00' }) })
       if (light.data?.error?.code !== 'REST_DAY') break   /* 新库有休息日:自己挑营业日,别红在「今天不上班」上 */
     }
     userId = light.data?.booking?.user?.id || light.data?.booking?.userId || ''
