@@ -168,7 +168,7 @@ const IS_PRODUCTION = process.env.NODE_ENV === 'production' || Boolean(process.e
 const DEMO_LOGIN_ALLOWED = !IS_PRODUCTION && process.env.ALLOW_DEMO_ADMIN_LOGIN === 'true'
 // 多租户:请求级租户上下文。商家端 /admin 进入时按登录账号的租户 enterWith;
 // 顾客/公开路径不设上下文 → 回退默认租户(行为不变)。所有用 currentTenantId() 的模块自动按租户走。
-const DEFAULT_TENANT_ID = process.env.DEFAULT_TENANT_ID || 'lucky-luxe'
+const DEFAULT_TENANT_ID = process.env.DEFAULT_TENANT_ID || 'lucky-luxe'; const NO_PHONE_TAG = '无手机号'; const newCustPhone = (b) => String(b.phone || b.newCustomerPhone || '').trim()  // 裁#84:缺号建档要带标记(后台看得见);两个字段名都认——传错名字不该变成「悄悄没有手机号」
 const tenantContext = new AsyncLocalStorage()
 function currentTenantId() {
   const store = tenantContext.getStore()
@@ -14554,7 +14554,7 @@ async function route(req, res) {
     let createdUserId = ''
     if (!userId && newName) {
       const uid = randomId('user')
-      db.prepare('INSERT INTO users (id, display_name, phone, tenant_id) VALUES (?, ?, NULLIF(?, \'\'), ?)').run(uid, newName.slice(0, 40), String(body.phone || '').trim(), tid)
+      db.prepare('INSERT INTO users (id, display_name, phone, tenant_id, tags_json) VALUES (?, ?, NULLIF(?, \'\'), ?, ?)').run(uid, newName.slice(0, 40), newCustPhone(body), tid, newCustPhone(body) ? '[]' : JSON.stringify([NO_PHONE_TAG]))  // 🔴 裁#84:缺号**不许静默建档** —— D190 把手机号定成身份锚之后,没号的档案就是一个永远认不出来的人(两端对不上号,也进不了撞车队列:它不撞车,它根本不存在于身份体系里)。现场排单确实可能还没问到号,所以不拒绝,而是**落标记**让后台看得见;「静默」这一项没得选
       userId = uid
       createdUserId = uid
     }

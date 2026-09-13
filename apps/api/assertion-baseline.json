@@ -15,7 +15,7 @@
     "tenant-kb": 23,
     "finance-core": 14,
     "finance-goals": 18,
-    "stored-value": 16,
+    "stored-value": 18,
     "schedule-week": 15,
     "special-dates": 14,
     "customer-profile": 9,
@@ -114,10 +114,11 @@
     "token-entry": 9,
     "danger-cmd": 8,
     "exit-code": 8,
-    "demo-gate-coverage": 9,
+    "demo-gate-coverage": 13,
     "frontend-routes": 6,
     "login-entries": 4,
-    "wechat-stub": 10
+    "wechat-stub": 10,
+    "fixture-front-door": 5
   },
   "上次更新": "2026-09-02",
   "巨型文件历史最低": {

@@ -80,6 +80,30 @@ async function main() {
     check('绑定**真发生一次**:同号从正门登录,严格认人把轻档案认成同一个人(不再直连库贴 openid)',
       bound.user?.id === userId, `轻档案=${userId} 认成=${bound.user?.id} status=${bound.status}`)
 
+    /* 🔴 裁 #87:**拦住了要断言,放行了也要断言。**
+       只断言「未绑定拦得住」,和一个**永远拦所有人**的实现在码上长得一模一样 ——
+       与 J-59(只断言正面那一半和后门长得一样)同一条道理,推广到状态机。
+       ⚠️ 在**另一个隔离的顾客**身上验:头一版直接拿主角充了 500,余额一动,
+       后面所有数额断言全塌 —— 反面断言不该扰动主流程。 */
+    {
+      const svTech2 = (await request('/admin/technicians', { method: 'POST', body: JSON.stringify({ name: `反面技师${RUN_ID}`, isActive: true }) })).data?.technician?.id
+      const p2 = `137${String(Date.now()).slice(-8)}`
+      let l2 = null
+      for (let n = 1; n <= 10; n += 1) {
+        const d = new Date(Date.now() + n * 86400000).toLocaleDateString('en-CA', { timeZone: 'America/Toronto' })
+        l2 = await request('/admin/bookings/direct', { method: 'POST', body: JSON.stringify({ newCustomerName: `反面样例-${RUN_ID}`, phone: p2, serviceId: svSvc, technicianId: svTech2, date: d, time: '11:30' }) })
+        if (l2.data?.error?.code !== 'REST_DAY') break
+      }
+      const u2 = l2.data?.booking?.user?.id || ''
+      check('D25 反面·前置:隔离顾客建出来了(建不出来下面那条不算验过)', Boolean(u2), JSON.stringify(l2.data).slice(0, 140))
+      await loginCustomerViaFrontDoor({ base: BASE_URL, tenantId: TENANT_HEADER, openid: `stub-openid-sv2-${RUN_ID}`, phone: p2 })
+      const d25Allowed = await request('/admin/stored-value/recharge', {
+        method: 'POST', body: JSON.stringify({ userId: u2, amountCents: 50000, payChannel: 'wechat' })
+      })
+      check('D25 反面:**绑定之后就能充了**(不是永远拦所有人)—— 在隔离顾客身上验,不扰动主流程',
+        d25Allowed.status === 201, `${d25Allowed.status} ${JSON.stringify(d25Allowed.data).slice(0, 120)}`)
+    }
+
     // 1. 充值:余额上升,但不产生收入流水
     const incomeBefore = (await request('/admin/finance/transactions')).data.summary.incomeCents
     const recharged = await request('/admin/stored-value/recharge', {

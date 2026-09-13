@@ -93,6 +93,54 @@ check('①d 造病:把 `auth-surface`(明明碰登录态)挪出名单 → 「该
 
 console.log(`   [多跑] 名单里但不在机制判据内的 ${extra.length} 套(多跑不算错,如实列):${extra.join(' ') || '无'}`)
 
+/* ═══ 🔴 裁 #85:「夹具只留一条路」**不许靠红来发现** ═══
+   店主点破的:第 7 套走着旧路,**而且门关档里不会红** —— 靠「门关档会红」来发现旧路,
+   是一把**只能抓到一半**的刀(抓不到那些不在名单里、或压根不取 token 的)。
+   所以改成**白名单式**:算出来,不等它红。
+
+   ⚠️ 口径要认「**真的调它**」,不认「提及」——
+   `login-entries` 把 `/auth/email/register` 当**数据**写在它的入口映射表里(那正是它的工作:
+   枚举登录入口并检查每个通不通);`customer-profile`/`stored-value` 里那一处是**我自己的注释**。
+   我上一轮报的「7 套」就是按「文件里出现这个串」数的 —— **那个数的口径本身就松**。 */
+const OLD_DOOR_CALL = /(?:request|jreq|fetch|api)\w*\(\s*[`'"][^`'"]*\/auth\/email\/(register|login)/
+/* 排除自己:①h 的探针字符串里就写着那一行真调用的样子 */
+const suiteFiles = readdirSync(join(ROOT, 'apps/api')).filter((b) => /^test-.*\.mjs$/.test(b) && b !== 'test-demo-gate-coverage.mjs')
+const callsOldDoor = suiteFiles.filter((b) => readFileSync(join(ROOT, 'apps/api', b), 'utf8').split('\n')
+  .some((ln) => !/^\s*(\/\/|\*|\/\*)/.test(ln) && OLD_DOOR_CALL.test(ln))).map((b) => b.replace(/^test-|\.mjs$/g, ''))
+
+/* 具名冻结(J-51):还没转正门的,逐条列名。**只许变短** —— 转一套删一条,归零即清账。 */
+const OLD_DOOR_FROZEN = {
+  'booking-intake': '未转:日班令2 段A 剩余,排队中',
+  'card-refund': '未转:它还要按裁 #83 三条硬条件重排(开关是被测对象那一格),连同一起做',
+  'deposit-config': '未转:日班令2 段A 剩余,排队中',
+  'identity-links': '未转:日班令2 段A 剩余,排队中',
+  'schedule-v2': '未转:它是员工端那三套之一,连同员工正门夹具一起转',
+}
+const OLD_DOOR_CAP = 5
+const oldDoorBad = callsOldDoor.filter((n) => !OLD_DOOR_FROZEN[n])
+check(`①e 🔴 白名单式(不靠红发现):**真调用**旧路(\`/auth/email/register|login\`)的套件 ${callsOldDoor.length} 个,`
+  + `逐个落进具名冻结;新出现一个当场红点名`,
+oldDoorBad.length === 0, oldDoorBad.join(' '))
+check(`①f 冻结清单**只许变短**:${Object.keys(OLD_DOOR_FROZEN).length} 条 <= ${OLD_DOOR_CAP};`
+  + '每条写明为什么还没转 —— 归零那天就是「夹具只留一条路」真做到那天',
+  Object.keys(OLD_DOOR_FROZEN).length <= OLD_DOOR_CAP
+  && Object.values(OLD_DOOR_FROZEN).every((v) => String(v).length > 6), '')
+
+/* ①g 夹具建顾客的出口:全仓只许 1 处 */
+const fixtureExits = readdirSync(join(ROOT, 'apps/api'))
+  .filter((b) => b.endsWith('.mjs'))
+  .filter((b) => /export (async )?function loginCustomerViaFrontDoor/.test(readFileSync(join(ROOT, 'apps/api', b), 'utf8')))
+check(`①g 夹具建顾客的**出口全仓只许 1 处**(现测 ${fixtureExits.length}:${fixtureExits.join(' ')})`
+  + ' —— 两处出口就是两条路,分叉会藏在参数顺序里(07d 栽过)',
+fixtureExits.length === 1, fixtureExits.join(' '))
+
+/* ①h 自守:构造一行「真调用旧路」,必须被认出来;构造一行「只是提及」,不许被认出来 */
+const probeCall = "  const reg = await request('/auth/email/register', { method: 'POST' })"
+const probeMention = "  /* 原来用 /auth/email/register —— 已换正门 */"
+check('①h 自守:**真调用**那一行必须被认出来,**注释里提及**那一行不许被认出来'
+  + '(认调用不认提及 —— 否则我自己的注释会把判据顶红)',
+OLD_DOOR_CALL.test(probeCall) && !OLD_DOOR_CALL.test(probeMention), '')
+
 check('① 回归脚本声明了**演示门关掉**那一档(`DEMO_GATE_MODES` 里有 `false`)—— '
   + '去掉它就是「少跑了一档」,这一条当场红',
 /\bfalse\b/.test(modes), `现读 DEMO_GATE_MODES="${modes}"`)
