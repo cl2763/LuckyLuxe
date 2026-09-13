@@ -35,12 +35,13 @@ async function request(path, options = {}) {
 
 async function main() {
   // 建测试会员
-  const registered = await request('/auth/email/register', {
-    method: 'POST',
-    body: JSON.stringify({ email: `profile-test-${RUN_ID}@example.com`, displayName: `运营字段测试-${RUN_ID}` })
-  })
-  const userId = registered.data?.user?.id || registered.data?.id
-  check('test member created', Boolean(userId))
+/* 🔴 日班令2 段A:夹具建顾客**换正门**。原来用 `/auth/email/register` —— 那条路生产上 403,
+   门一关就断,而且它让主档一直在测一条**生产上不存在的路**(店主 07i §五)。
+   现在走 `/auth/wechat/mini-login` 正门:响应校验 → 严格认人四条 → 真签发。 */
+const { loginCustomerViaFrontDoor } = await import('./customer-login-fixture.mjs')
+  const cust__fd = await loginCustomerViaFrontDoor({ base: BASE_URL, tenantId: TENANT_HEADER, openid: `stub-openid-profile-${RUN_ID}`, displayName: `运营字段测试-${RUN_ID}` })
+  const userId = cust__fd.user?.id
+  check('test member created(**从正门登录**,两档同一条路)', Boolean(userId), JSON.stringify(cust__fd.body).slice(0, 140))
 
   // 1. 写入标签/备注/生日
   const saved = await request(`/admin/customers/${userId}/profile`, {

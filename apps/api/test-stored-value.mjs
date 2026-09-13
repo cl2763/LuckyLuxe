@@ -44,26 +44,41 @@ async function main() {
   let userId = ''
   try {
     // 建一个专用测试会员
-    const registered = await request('/auth/email/register', {
-      method: 'POST',
-      body: JSON.stringify({ email: `sv-test-${RUN_ID}@example.com`, displayName: `储值测试-${RUN_ID}` })
-    })
-    userId = registered.data?.user?.id || registered.data?.id
-    check('test member created', Boolean(userId))
+    /* 🔴 日班令2 段A:夹具建顾客**换正门**(原来用 `/auth/email/register`,那条路生产上 403)。
 
-    /* D25(《财务总逻辑》3-1b,2026-08-12):未绑定档案不可充值 ——
-       先拿新号顺手断言拦截,再直连库绑上微信(同 noshow 套件 ⑥/⑮ 先例)让后续流程走通。 */
+       ⚠️ 换正门顺带暴露一件事,记下来:**正门进来的顾客是「已绑定」的**(mini-login 本身就是绑微信那一步)。
+       所以下面 D25 那条「**未**绑定不可充值」不能拿正门顾客测 —— 前提不成立。
+       正确排法就是**产品真实那条路**,而且比原来测得多:
+         ① 商家建**轻档案**(有名字有手机号,**没绑微信**)→ 拿它断言 D25 拦得住;
+         ② 顾客用**同一手机号**从正门登录 → 严格认人四条把两者认成同一个人(绑定在这里真发生);
+         ③ 后面照跑。
+       原来那一步是 `UPDATE users SET wechat_open_id` **直连库贴**的 —— 那是绕过绑定逻辑。 */
+    const { loginCustomerViaFrontDoor } = await import('./customer-login-fixture.mjs')
+    const svPhone = `138${String(Date.now()).slice(-8)}`
+    const svTech = (await request('/admin/technicians', { method: 'POST', body: JSON.stringify({ name: `储值技师${RUN_ID}`, isActive: true }) })).data?.technician?.id
+    const svCat = ((await request('/admin/pricing/categories')).data.categories || [])[0]?.id
+    const svSvc = (await request('/admin/services', { method: 'POST', body: JSON.stringify({ type: 'NAIL', nameZh: `储值项目${RUN_ID}`, nameEn: 'sv', priceCents: 12000, durationMin: 60, categoryId: svCat, isActive: true }) })).data?.service?.id
+    const svDate = new Date(Date.now() + 86400000).toLocaleDateString('en-CA', { timeZone: 'America/Toronto' })
+    let light = null
+    for (let n = 1; n <= 10; n += 1) {
+      const d = new Date(Date.now() + n * 86400000).toLocaleDateString('en-CA', { timeZone: 'America/Toronto' })
+      light = await request('/admin/bookings/direct', { method: 'POST', body: JSON.stringify({ newCustomerName: `储值测试-${RUN_ID}`, newCustomerPhone: svPhone, phone: svPhone, serviceId: svSvc, technicianId: svTech, date: d, time: '10:00' }) })
+      if (light.data?.error?.code !== 'REST_DAY') break   /* 新库有休息日:自己挑营业日,别红在「今天不上班」上 */
+    }
+    userId = light.data?.booking?.user?.id || light.data?.booking?.userId || ''
+    check('test member created(商家建**轻档案**,还没绑微信)', Boolean(userId), JSON.stringify(light.data).slice(0, 140))
+
     const d25Blocked = await request('/admin/stored-value/recharge', {
       method: 'POST', body: JSON.stringify({ userId, amount: 500, payChannel: 'wechat' })
     })
-    check('D25 未绑定充值=400 UNBOUND_NO_RECHARGE', d25Blocked.status === 400 && d25Blocked.data?.error?.code === 'UNBOUND_NO_RECHARGE', JSON.stringify(d25Blocked.data).slice(0, 120))
-    if (!process.env.TEST_DB_PATH) throw new Error('D25 后本套件需要 TEST_DB_PATH 直连库绑定 fixture')
-    {
-      const { DatabaseSync } = await import('node:sqlite')
-      const bindDb = new DatabaseSync(process.env.TEST_DB_PATH)
-      bindDb.prepare('UPDATE users SET wechat_open_id = ? WHERE id = ?').run(`wx-svtest-${RUN_ID}`, userId)
-      bindDb.close()
-    }
+    check('D25 未绑定充值=400 UNBOUND_NO_RECHARGE', d25Blocked.status === 400 && d25Blocked.data?.error?.code === 'UNBOUND_NO_RECHARGE', JSON.stringify(d25Blocked.data).slice(0, 160))
+
+    /* ⚠️ 这里用**简单出口**(只登录),不用那个「建+登」的组合出口 ——
+       轻档案上面已经建过了,再建一条同号的就是**两条**,严格认人四条那条「唯一一条」会当场判撞车、不认。
+       我头一版就是这么栽的(status 400、认成 undefined),记在这里。 */
+    const bound = await loginCustomerViaFrontDoor({ base: BASE_URL, tenantId: TENANT_HEADER, openid: `stub-openid-sv-${RUN_ID}`, phone: svPhone })
+    check('绑定**真发生一次**:同号从正门登录,严格认人把轻档案认成同一个人(不再直连库贴 openid)',
+      bound.user?.id === userId, `轻档案=${userId} 认成=${bound.user?.id} status=${bound.status}`)
 
     // 1. 充值:余额上升,但不产生收入流水
     const incomeBefore = (await request('/admin/finance/transactions')).data.summary.incomeCents
