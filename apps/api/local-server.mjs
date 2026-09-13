@@ -115,7 +115,7 @@ const APP_TIMEZONE = process.env.APP_TIMEZONE || 'America/Toronto'
 process.env.TZ = APP_TIMEZONE
 
 const __dirname = dirname(fileURLToPath(import.meta.url))
-const { legacyScope, scopeOf } = await import('./data-scope.mjs'); const { requireMiniTokenSecret, miniSecretIsExplicit } = await import('./mini-token-secret.mjs'); const { publishOwnerToken } = await import('./owner-token.mjs')
+const { legacyScope, scopeOf } = await import('./data-scope.mjs'); const { requireMiniTokenSecret, miniSecretIsExplicit } = await import('./mini-token-secret.mjs'); const { publishOwnerToken } = await import('./owner-token.mjs'); const { fetchJsCode2Session, isStubScope } = await import('./wechat-code-stub.mjs')
 const workspaceRoot = join(__dirname, '..', '..')
 const webRoot = join(workspaceRoot, 'apps', 'web')
 const assetRoot = join(workspaceRoot, 'miniprogram', 'assets')
@@ -5654,20 +5654,20 @@ async function signInWechatMiniUser(body) {
     const serializedDemo = serializeUser(demoUser, demoTenant)
     return { user: serializedDemo, auth: miniAuthFor(serializedDemo, `demo-openid-${demoUser.id}`), mode: 'demo-mini' }
   }
-  if (!WECHAT_MINI_APPID || !WECHAT_MINI_SECRET) {
+  /* 🔴 裁 #80:「问腾讯这个 code 是谁」这一跳在 ci/sandbox 走**替身**(`./wechat-code-stub.mjs`)。
+     替身由**库域**选,**不由环境变量选** —— 没有开关,就没有被拨错的开关(店主 07i §二)。
+     被替的**只有这一跳**;下面每一步照旧真跑:响应校验 → 严格认人四条 → 真签发。
+     ci/sandbox 走替身时不需要微信凭据(它压根不出网),所以那道 503 只对真地址那条路成立。 */
+  const viaStubScope = isStubScope(DATA_SCOPE_NAME)
+  if (!viaStubScope && (!WECHAT_MINI_APPID || !WECHAT_MINI_SECRET)) {
     throw apiError(503, 'WECHAT_MINI_NOT_CONFIGURED', 'WeChat Mini Program credentials are not configured on the server.')
   }
   const code = String(body.code || '').trim()
   if (!code) throw apiError(400, 'BAD_REQUEST', 'wx.login code is required.')
-  const params = new URLSearchParams({
-    appid: WECHAT_MINI_APPID,
-    secret: WECHAT_MINI_SECRET,
-    js_code: code,
-    grant_type: 'authorization_code'
-  })
-  const response = await fetch(`https://api.weixin.qq.com/sns/jscode2session?${params.toString()}`)
-  const data = await response.json()
-  if (!response.ok || data.errcode || !data.openid) {
+  const hop = await fetchJsCode2Session({ code, appid: WECHAT_MINI_APPID, secret: WECHAT_MINI_SECRET, scopeName: DATA_SCOPE_NAME })
+  const data = hop.data || {}
+  /* 响应校验照旧真跑:错误码 / 空 openid / 畸形 —— 一律拒,**不许当成功继续走** */
+  if (hop.ok === false || data.errcode || !data.openid) {
     throw apiError(401, 'WECHAT_LOGIN_FAILED', data.errmsg || 'WeChat mini login failed.')
   }
   const incomingDisplayName = String(body.displayName || '').trim()

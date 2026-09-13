@@ -67,9 +67,15 @@ const today = new Date().toLocaleDateString('en-CA', { timeZone: 'America/Toront
 const seedBk = await request('/admin/bookings/direct', { method: 'POST', body: JSON.stringify({ newCustomerName: `退卡顾客${RUN}`, serviceId, technicianId, date: today, time: '10:00' }) }, TOKEN, H)
 const userId = seedBk.data.booking?.user?.id || seedBk.data.booking?.userId || ''
 db.prepare('UPDATE users SET wechat_open_id = ? WHERE id = ?').run(`n5-openid-${RUN}`, userId)
-const cust = await request('/auth/wechat/mini-login', { method: 'POST', body: JSON.stringify({ demoLogin: true, asUserId: userId, tenantId: tid }) }, null, H)
-const custToken = cust.data.auth?.accessToken
-check('夹具:顾客建档 + 贴 openid + 按人登录', Boolean(userId) && Boolean(custToken), JSON.stringify(cust.data).slice(0, 140))
+/* 🔴 07i §五:夹具建顾客**只留一条路 —— 正门**,两档都走它。
+   原来这里用的是 `demoLogin: true`(演示捷径,生产上不存在)——
+   门一关它就拿不到 token,而更要紧的是:主档因此一直在测一条不存在的路。
+   现在按上面刚贴的那个 openid 从 `/auth/wechat/mini-login` 正门登录,
+   token 是真签发的(见 customer-login-fixture.mjs 抬头)。 */
+const { loginCustomerViaFrontDoor } = await import('./customer-login-fixture.mjs')
+const cust = await loginCustomerViaFrontDoor({ base: BASE_URL, tenantId: tid, openid: `n5-openid-${RUN}` })
+const custToken = cust.accessToken
+check('夹具:顾客建档 + 贴 openid + **从正门登录**(两档同一条路)', Boolean(userId) && Boolean(custToken), JSON.stringify(cust.body).slice(0, 140))
 const rc = await request('/admin/stored-value/recharge', { method: 'POST', body: JSON.stringify({ userId, amountCents: 100000, bonusCents: 10000, payChannel: 'cash', note: '退卡夹具' }) }, TOKEN, H)
 check('夹具:充值 1,000 + 赠送 100 成功', rc.status === 201, JSON.stringify(rc.data).slice(0, 120))
 

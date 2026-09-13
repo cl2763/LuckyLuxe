@@ -69,6 +69,12 @@ const GLOBALS = new Set([
   'String', 'Number', 'Boolean', 'Array', 'Object', 'Error', 'RegExp', 'JSON', 'Set', 'Map',
   'Math', 'Date', 'Promise', 'parseInt', 'parseFloat', 'isNaN', 'require', 'console', 'process',
   'decodeURIComponent', 'encodeURIComponent', 'decodeURI', 'encodeURI', 'structuredClone', 'BigInt', 'Symbol',
+  /* 🔴 07i 补:这几个是 **Node 18+ 的真全局**,名单里漏了。
+     漏掉真全局 = **误报**,而这份文件抬头自己写着「噪音淹掉信号,比不扫还坏」——
+     所以补齐是修正误报,不是放宽判据(补进来的每一个都要真的是全局,不许拿它当豁免口)。
+     现测:`node -p "typeof fetch"` → function。 */
+  'fetch', 'URL', 'URLSearchParams', 'AbortController', 'Buffer',
+  'setTimeout', 'clearTimeout', 'setInterval', 'clearInterval', 'TextEncoder', 'TextDecoder',
 ])
 
 /* 🔴 适用面:**刚搬出来的小模块**。
