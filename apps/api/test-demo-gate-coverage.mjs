@@ -15,7 +15,7 @@
  *   ② **运行时**:回归跑完会写下它**实际跑过哪几档**;两档都在才算数。
  *      (只验声明 = 验中间产物;只验运行时 = 没跑过的时候看不出是漏了还是没跑。两层都要。)
  */
-import { readFileSync, existsSync } from 'node:fs'
+import { readFileSync, existsSync, readdirSync } from 'node:fs'
 import { join } from 'node:path'
 import { fileURLToPath } from 'node:url'
 
@@ -32,6 +32,66 @@ const runner = readFileSync(join(ROOT, 'apps/api/run-all-tests.sh'), 'utf8')
 const modes = (runner.match(/DEMO_GATE_MODES="\$\{DEMO_GATE_MODES:-([^"}]+)\}"/) || [])[1] || ''
 const suites = ((runner.match(/DEMO_GATE_SUITES="([^"]+)"/) || [])[1] || '').trim().split(/\s+/).filter(Boolean)
 const SUITE_MIN = 8   /* 只许变长(判据三推论:覆盖面本身要有判据) */
+
+/* ═══ 🔴 裁 #72:门关档**只跑 8 套 = 「不是绿,是没扫」** ═══
+   令里写的是「顾客端相关判据在这一档下**必须全部跑一遍**」—— 8/115 不是「全部」。
+   店主的话:**这 8 套之外的那些,在生产口径下是「没跑」,不是「没红」。**
+
+   所以「该跑哪些」**不许我手列**,要由判据**按机制算**(J-51:选择口径要具名冻结):
+     该跑 = 源码里出现顾客侧取/用 token 的形态(AUTH)
+            **且** 它真的起服务打接口(LIVE)
+     纯静态判据只是**提到**那些字样(扫描类的刀),不取 token —— 具名排除,写理由。
+   三个数分开报(J-48:**不许混进同一个数**):该跑 / 跑了 / 该跑没跑。 */
+const AUTH_PAT = /\/auth\/email\/(login|register)|demoLogin|demo-cust|customerToken|requireCustomer|\/my\//
+const LIVE_PAT = /BASE_URL|TEST_BASE_URL|await fetch\(/
+/* 排除自己:本文件里就写着那些形态串(AUTH_PAT/LIVE_PAT 的字面量),不排掉会扫到自己 */
+const allSuites = readdirSync(join(ROOT, 'apps/api'))
+  .filter((b) => /^test-.*\.mjs$/.test(b) && b !== 'test-demo-gate-coverage.mjs')
+const nameOf = (b) => b.replace(/^test-|\.mjs$/g, '')
+const SHOULD = []
+const STATIC_ONLY = []
+for (const b of allSuites) {
+  const src = readFileSync(join(ROOT, 'apps/api', b), 'utf8')
+  if (!AUTH_PAT.test(src)) continue
+  ;(LIVE_PAT.test(src) ? SHOULD : STATIC_ONLY).push(nameOf(b))
+}
+/* 具名排除:每一条写清**为什么它不该进这一档**。
+   「它压根不碰顾客登录态/不取 token」是理由;「跑起来太慢」不是(店主 07h 明令)。 */
+const GATE_EXCLUDE = {
+  'credential-scan': '纯静态判据:扫源码里的凭据形态,**不起服务、不取 token**;它提到那些字样是因为它在扫它们',
+  'frontend-routes': '纯静态判据:前端路径 vs 后端路由对表,**不起服务**',
+  'login-entries': '纯静态判据:读 customer.js 的登录区源码,**不起服务**',
+  'demo-mark': '纯静态判据:扫演示数据标记,**不起服务、不取 token**',
+}
+const GATE_EXCLUDE_CAP = 4   /* 只许变短(J-51) */
+
+const shouldRun = SHOULD.filter((n) => !GATE_EXCLUDE[n])
+const ran = suites
+const didRun = shouldRun.filter((n) => ran.includes(n))
+const notRun = shouldRun.filter((n) => !ran.includes(n))
+const extra = ran.filter((n) => !shouldRun.includes(n))
+
+check(`①a 🔴 底数闭合(J-48,三个数分开):**该跑 ${shouldRun.length} 套 · 跑了 ${didRun.length} 套 · 该跑没跑 ${notRun.length} 套**`
+  + ` —— 没跑的是「没扫」,不是「没红」${notRun.length ? `:${notRun.join(' ')}` : ''}`,
+notRun.length === 0, notRun.join(' '))
+
+check(`①b 选择口径**具名冻结**:纯静态、不取 token 的 ${Object.keys(GATE_EXCLUDE).length} 套逐条写了理由`
+  + `(<= ${GATE_EXCLUDE_CAP},只许变短);「跑起来太慢」不算理由`,
+  Object.keys(GATE_EXCLUDE).length <= GATE_EXCLUDE_CAP
+  && Object.values(GATE_EXCLUDE).every((v) => /不起服务|不取 token/.test(v) && String(v).length > 15),
+  Object.keys(GATE_EXCLUDE).join(' '))
+
+check(`①c 反向守:机制算出来的「碰登录态」共 ${SHOULD.length + STATIC_ONLY.length} 套(其中纯静态 ${STATIC_ONLY.length})`
+  + ' —— 算成 0 说明口径瞎了,这条判据在空转(J-58)',
+(SHOULD.length + STATIC_ONLY.length) >= 10, `${SHOULD.length}/${STATIC_ONLY.length}`)
+
+/* ①d 造病(店主点名):把一套明明碰登录态的挪出名单 → 必须红在「该跑没跑」上 */
+const probeRan = ran.filter((n) => n !== 'auth-surface')
+const probeNotRun = shouldRun.filter((n) => !probeRan.includes(n))
+check('①d 造病:把 `auth-surface`(明明碰登录态)挪出名单 → 「该跑没跑」必须当场把它点出来',
+  probeNotRun.includes('auth-surface'), JSON.stringify(probeNotRun))
+
+console.log(`   [多跑] 名单里但不在机制判据内的 ${extra.length} 套(多跑不算错,如实列):${extra.join(' ') || '无'}`)
 
 check('① 回归脚本声明了**演示门关掉**那一档(`DEMO_GATE_MODES` 里有 `false`)—— '
   + '去掉它就是「少跑了一档」,这一条当场红',

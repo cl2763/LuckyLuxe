@@ -415,7 +415,9 @@ run_suite tenant-isolation env
 # 造病:把 false 从 DEMO_GATE_MODES 里去掉 → test-demo-gate-coverage 必须红在「少跑了一档」上。
 DEMO_GATE_MODES="${DEMO_GATE_MODES:-true false}"
 # 顾客端相关判据:这一档必须全部跑一遍(**只许变长**,少一条 test-demo-gate-coverage 红)
-DEMO_GATE_SUITES="auth-surface web-settlement cross-end-effect display-text tenant-ownership card-refund stored-value booking-intake"
+# 🔴 裁 #72:名单不许我手挑 —— `test-demo-gate-coverage ①a` 按机制算出「该跑」并逐个对,
+#    少一套就红在「该跑没跑」上(造病已验)。这里列的是**该跑的全部 11 套 + 多跑的 4 套**。
+DEMO_GATE_SUITES="auth-surface booking-intake card-refund customer-profile deposit-config identity-links mini-ai-same-outlet noshow-aftersales schedule-v2 staff-portal stored-value web-settlement cross-end-effect display-text tenant-ownership"
 : > /tmp/ll-demo-gate-modes.txt
 echo "true" >> /tmp/ll-demo-gate-modes.txt
 if printf '%s' "$DEMO_GATE_MODES" | grep -q false; then
