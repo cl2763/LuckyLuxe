@@ -215,7 +215,8 @@ async function knife({ ep, suite, file, needle, claimPat, nth = null }) {
     if (notRun.length > 12) console.log(`     …另 ${notRun.length - 12} 条`)
   }
   if (claimGreens.length) {
-    console.log('   [仍绿点名](声称成功、造病之后照样绿 —— 这些才是要找的东西):')
+    console.log('   [仍绿点名](形状上「声称成功」且造病后仍绿 —— **要人读一眼**:')
+    console.log('     与被砍的那条写**无关**的断言,绿是对的,不是发现;有关却绿的才是。')
     for (const g of claimGreens.slice(0, 12)) console.log(`     · ${g.slice(0, 120)}`)
     if (claimGreens.length > 12) console.log(`     …另 ${claimGreens.length - 12} 条`)
   }
