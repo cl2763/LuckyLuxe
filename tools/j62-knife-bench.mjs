@@ -175,8 +175,22 @@ async function knife({ ep, suite, file, needle, claimPat, nth = null }) {
   const out = run1.out
   const failed = run1.failed
   restore()
-  /* ③ 记**是哪一条**红的 */
+  /* ③ 记**是哪一条**红的 —— 并按店主 07r §二 固定输出「红 N / 仍绿 M / 仍绿点名」
+     **造病的产出不是「红了没有」,是「哪几条活下来了」。**
+     07m 那次的形状就是这个:套件红了,但红的是隔壁那条幂等,「声称成功」那条原样活下来。 */
   const reds = (out.match(/^(?:not ok \d+ - |✗ |❌ )(.+)$/gm) || []).map((x) => x.replace(/^(not ok \d+ - |✗ |❌ )/, '').slice(0, 110))
+  const greens = (out.match(/^ok \d+ - (.+)$/gm) || []).map((x) => x.replace(/^ok \d+ - /, ''))
+  /* 「声称成功」的断言:名字里说了成了,或条件在看 2xx —— 与静态筛同一把尺子 */
+  const CLAIMS = /成功|已保存|已提交|已发送|已核销|已到账|已确认|已绑定|已更新|写进|落库|创建|生成|新增|入库|真的是|跟过去|查库|对得上|留痕|释放/
+  const claimGreens = greens.filter((g) => CLAIMS.test(g))
+  const survived = claimPat ? claimGreens.filter((g) => !claimPat.test(g)) : claimGreens
+  console.log(`   [刀账] 这一刀:红 ${reds.length} 条 · 仍绿 ${greens.length} 条`
+    + ` · 其中**声称成功却仍绿** ${claimGreens.length} 条`)
+  if (claimGreens.length) {
+    console.log('   [仍绿点名](声称成功、造病之后照样绿 —— 这些才是要找的东西):')
+    for (const g of claimGreens.slice(0, 12)) console.log(`     · ${g.slice(0, 120)}`)
+    if (claimGreens.length > 12) console.log(`     …另 ${claimGreens.length - 12} 条`)
+  }
   const bootBroke = run1.bootBroke || /在 \d+s 内未就绪|BOOT-FAIL|Cannot find module/.test(out)
   if (bootBroke) {
     console.log('   🔴 服务没起来 —— 红的不是判据,**不算验过**')
@@ -211,7 +225,8 @@ async function knife({ ep, suite, file, needle, claimPat, nth = null }) {
     }
   } else if (claimReds.length) {
     console.log(`   ✅ 红了,而且红的就是那条:${claimReds[0]}`)
-    rows.push({ ep, suite, needle, verdict: `✅ 红,**红的就是声称成功那条**:\`${claimReds[0]}\`` })
+    rows.push({ ep, suite, needle, verdict: `✅ 红,**红的就是声称成功那条**:\`${claimReds[0]}\``,
+      账: `红 ${reds.length} / 仍绿 ${greens.length}(其中声称成功却仍绿 ${claimGreens.length})`, 仍绿: claimGreens })
   } else {
     console.log(`   ⚠️ 套件红了,但红的不是「声称成功」那条:${reds[0] || '(没抓到红行)'}`)
     rows.push({ ep, suite, needle, verdict: `⚠️ **套件红了但红的是隔壁** —— \`${reds[0] || '没抓到红行'}\`;声称成功那条**仍绿**` })
@@ -273,6 +288,15 @@ if (ownerBefore.p4128 !== ownerAfter.p4128 || ownerBefore.p4310 !== ownerAfter.p
 }
 
 console.log('\n════ 造病表 ════\n')
-console.log('| 口 | 判据套件 | 注掉的那条落库 | 造病结果 |')
-console.log('|---|---|---|---|')
-for (const r of rows) console.log(`| \`${r.ep}\` | \`${r.suite}\` | \`${r.needle.slice(0, 46)}…\` | ${r.verdict} |`)
+console.log('| 口 | 判据套件 | 注掉的那条落库 | 造病结果 | 刀账(红/仍绿/声称成功却仍绿)|')
+console.log('|---|---|---|---|---|')
+for (const r of rows) console.log(`| \`${r.ep}\` | \`${r.suite}\` | \`${r.needle.slice(0, 40)}…\` | ${r.verdict} | ${r.账 || '—'} |`)
+const anySurvived = rows.filter((r) => (r.仍绿 || []).length)
+if (anySurvived.length) {
+  console.log('\n### 🔴 仍绿点名(**造病的产出不是「红了没有」,是「哪几条活下来了」**)\n')
+  for (const r of anySurvived) {
+    console.log(`**${r.ep}** —— ${r.仍绿.length} 条声称成功却仍绿:`)
+    for (const g of r.仍绿.slice(0, 12)) console.log(`- ${g.slice(0, 140)}`)
+    console.log('')
+  }
+}
