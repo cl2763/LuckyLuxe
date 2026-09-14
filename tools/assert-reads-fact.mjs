@@ -105,21 +105,61 @@ for (const b of files) {
   }
 }
 
+/* 🔴 按**口**聚类(店主 07q §三 / 07m §三):**造病的单位是「落库那一行」,不是「断言」。**
+   237 条 A 类逐条造 237 次病跑不完;但它们落在**多少个口**上,一个口造一次就够。
+   聚类的键:这条断言前面**最近一次改动型调用**打的那条路径。 */
+const CALLP = /(?:request|fetch|apiFetch|adminPost|adminPut|adminDel)\s*\(\s*[`'"]([^`'"]*\/[^`'"]*)/
+function endpointOf(file, line) {
+  const src = readFileSync(join(API, file.split('/').pop()), 'utf8').split('\n')
+  for (let i = line - 1; i >= Math.max(0, line - 30); i -= 1) {
+    const m = CALLP.exec(src[i] || '')
+    if (!m) continue
+    const seg = (src[i] || '') + (src[i + 1] || '')
+    if (!MUTATES.test(seg) && !MUTATES.test(src[i] || '')) continue
+    return m[1].replace(/\$\{[^}]*\}/g, ':x').replace(/\?.*$/, '').replace(/\/+$/, '')
+  }
+  /* 找不到带路径的改动型调用 → 归到「追不到口」,单列,不混进有口的那堆 */
+  return ''
+}
+
 const A = rows.filter((r) => r.cls === 'A')
 const B = rows.filter((r) => r.cls === 'B')
 const R = rows.filter((r) => r.cls === '拒')
+/* 按口聚类:每个口一次造病,就能覆盖挂在它上面的所有 A 类断言 */
+const byEndpoint = {}
+for (const a of A) {
+  const ep = endpointOf(a.file, a.line) || '(追不到口)'
+  ;(byEndpoint[ep] ||= []).push(a)
+}
+const eps = Object.entries(byEndpoint).sort((x, y) => y[1].length - x[1].length)
+const MONEY = /充值|到账|退款|退卡|结算|支付|收款|付款|储值|券|次卡|核销|提成|工资|定金|冲销|作废|金额|settle|refund|recharge|payment|coupon|timecard|finance/i
+const CUST = /^\/(my|bookings|payments|auth|services|stores|add-ons|store)\b/
+
 if (process.argv.includes('--json')) {
-  console.log(JSON.stringify({ 总条数: rows.length, A: A.length, B: B.length, 拒: R.length, 明细: rows }, null, 2))
+  console.log(JSON.stringify({ 总条数: rows.length, A: A.length, B: B.length, 拒: R.length,
+    口数: eps.length, 按口: eps.map(([ep, v]) => ({ 口: ep, 条数: v.length })), 明细: rows }, null, 2))
 } else {
   console.log(`# J-62 第二款 · 第一遍静态筛\n`)
   console.log(`扫了 ${files.length} 个套件。断言「写成功」的 **${rows.length - R.length}** 条(另 ${R.length} 条验的是「该拒」,不在本刀范围):`)
   console.log(`  · **A 类(嫌疑名单)**:只读这一次调用的返回体 —— **${A.length} 条**`)
   console.log(`  · B 类:从事实那头读回来了 —— ${B.length} 条(${[...new Set(B.map((b) => b.why))].join(' / ')})`)
   console.log(`\n⚠️ 静态筛只缩小范围,**不能替代造病** —— 判别式只有一个:注掉落库,它红不红。`)
-  const by = {}
-  for (const a of A) (by[a.file] ||= []).push(a)
-  console.log(`\n## A 类按套件(前 15)\n`)
-  for (const [f, v] of Object.entries(by).sort((x, y) => y[1].length - x[1].length).slice(0, 15)) {
-    console.log(`- \`${f}\` —— ${v.length} 条`)
+  const withEp = eps.filter(([ep]) => ep !== '(追不到口)')
+  const noEp = byEndpoint['(追不到口)'] || []
+  console.log(`\n## 🔴 按**口**聚类(造病的单位是「落库那一行」,不是「断言」)\n`)
+  console.log(`| | 数 |\n|---|---|`)
+  console.log(`| A 类断言 | ${A.length} 条 |`)
+  console.log(`| **它们落在多少个口上** | **${withEp.length} 个** |`)
+  console.log(`| 追不到口的断言 | ${noEp.length} 条(单列,不混进上面那堆)|`)
+  console.log(`| 其中 **涉钱的口** | ${withEp.filter(([ep, v]) => MONEY.test(ep) || v.some((a) => MONEY.test(a.name))).length} 个 |`)
+  console.log(`| 其中 **顾客能走的口** | ${withEp.filter(([ep]) => CUST.test(ep)).length} 个 |`)
+  console.log(`\n> **一个口造一次病就够** —— 237 条不用造 237 次,造 ${withEp.length} 次。\n`)
+  console.log(`## 涉钱的口(优先造病)\n`)
+  for (const [ep, v] of withEp.filter(([e, vv]) => MONEY.test(e) || vv.some((a) => MONEY.test(a.name))).slice(0, 25)) {
+    console.log(`- \`${ep}\` —— 挂着 ${v.length} 条 A 类断言`)
+  }
+  console.log(`\n## 顾客能走的口(次优先)\n`)
+  for (const [ep, v] of withEp.filter(([e]) => CUST.test(e)).slice(0, 25)) {
+    console.log(`- \`${ep}\` —— 挂着 ${v.length} 条`)
   }
 }

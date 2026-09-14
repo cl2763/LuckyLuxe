@@ -247,6 +247,13 @@ const TARGETS = [
     file: 'apps/api/local-server.mjs',
     needle: "db.prepare(`INSERT INTO coupon_grants (id, tenant_id, coupon_id, user_id, code, status, expires_at, created_at, grant_source)",
     nth: 0, claimPat: /㋛2/ },
+  /* 🔴 07q §四③:A 类 246 条按**口**聚类后是 **83 个口** —— 一个口造一次就够。
+     涉钱那 35 个里挂着最多断言的是 `/settlements/:code/sign`(20 条),先造它。
+     用 `customer-paths`:那套件里 ㋚5a 真走了「开单 + 顾客签字」这条路。 */
+  { ep: '/settlements/:code/sign · 签署落库(涉钱,挂 20 条 A 类)', suite: 'customer-paths',
+    file: 'apps/api/local-server.mjs',
+    needle: "db.prepare(\"UPDATE settlements SET status = 'signed', signature_data = ?, signed_at = ?",
+    claimPat: /㋚5a|㋚5 / },
 ]
 /* 🔴 裁 #98 自证:造病**前后**各量一次店主那两台。动过就是台子越界。 */
 assertCleanTree()
