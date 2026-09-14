@@ -154,6 +154,26 @@ async function runSuiteIsolated(suite) {
 async function knife({ ep, suite, file, needle, claimPat, nth = null }) {
   const abs = join(ROOT, file)
   console.log(`\n══ 造病:${ep} ══`)
+  /* 🔴 夜12 段C · **「没跑到」必须单列** —— J-57 在造病台上的复现
+   *
+   * 案由(07r 现测):`scan-sign` 是 fail-fast(`check()` 里直接 `throw`)——
+   * 无刀 53 条,造病后**停在第 44 条,后面 9 条根本没跑到**,
+   * 而那 9 条里正有「签完另一入口变已签只读」这种**和被砍的落库直接相关**的。
+   * **不能说它们守住了,也不能说没守住 —— 它们没跑。**
+   *
+   * 全仓 62/128 套是 fail-fast,今夜改不完。但**「没跑到」这个数不用改它们也能精确算**:
+   *   先跑一遍**无刀基线**拿到断言名单 → 造病后再跑一遍 →
+   *   **没跑到 = 基线里有、造病那轮里一次都没出现(既没 ok 也没 not ok)的那些。**
+   * 这比改 62 个文件稳,而且**它本身就是要报的那个数**。
+   *
+   * ⚠️ **基线必须在落刀之前跑** —— 第一版我把它放在落刀之后,于是「基线」其实是第二次带刀跑,
+   * 43 == 43、**「没跑到」漂亮地报 0**。又一次「看起来很干净的 0」(J-58④⑤ 同族)。
+   * 现在它排在备份之前,**刀还没碰过源码**。 */
+  const baseRun = await runSuiteIsolated(suite)
+  const nameOf = (l) => l.replace(/^(?:not )?ok \d+ - /, '').trim()
+  const baseNames = (baseRun.out.match(/^(?:not )?ok \d+ - .+$/gm) || []).map(nameOf)
+
+
   execFileSync('bash', [join(ROOT, 'tools/knife-backup.sh'), 'save', file], { cwd: ROOT, stdio: 'ignore' })
   const restore = () => execFileSync('bash', [join(ROOT, 'tools/knife-backup.sh'), 'restore', file], { cwd: ROOT, stdio: 'ignore' })
   const src = readFileSync(abs, 'utf8')
@@ -171,21 +191,6 @@ async function knife({ ep, suite, file, needle, claimPat, nth = null }) {
     restore(); return
   }
   console.log(`   [刀] 已注掉 ${file} 里那条落库(整条,语法已过)`)
-  /* 🔴 夜12 段C · **「没跑到」必须单列** —— J-57 在造病台上的复现
-   *
-   * 案由(07r 现测):`scan-sign` 是 fail-fast(`check()` 里直接 `throw`)——
-   * 无刀 53 条,造病后**停在第 44 条,后面 9 条根本没跑到**,
-   * 而那 9 条里正有「签完另一入口变已签只读」这种**和被砍的落库直接相关**的。
-   * **不能说它们守住了,也不能说没守住 —— 它们没跑。**
-   *
-   * 全仓 62/128 套是 fail-fast,今夜改不完。但**「没跑到」这个数不用改它们也能精确算**:
-   *   先跑一遍**无刀基线**拿到断言名单 → 造病后再跑一遍 →
-   *   **没跑到 = 基线里有、造病那轮里一次都没出现(既没 ok 也没 not ok)的那些。**
-   * 这比改 62 个文件稳,而且**它本身就是要报的那个数**。 */
-  const baseRun = await runSuiteIsolated(suite)
-  const nameOf = (l) => l.replace(/^(?:not )?ok \d+ - /, '').trim()
-  const baseNames = (baseRun.out.match(/^(?:not )?ok \d+ - .+$/gm) || []).map(nameOf)
-
   const run1 = await runSuiteIsolated(suite)
   const out = run1.out
   const failed = run1.failed
