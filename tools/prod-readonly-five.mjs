@@ -12,9 +12,14 @@
  *    理由:**一个写死的状态值配上一张没看过的状态表,就是又一次「按字面比,漂亮地报 0」。**
  */
 import { DatabaseSync } from 'node:sqlite'
+import { requireTarget } from './db-target.mjs'
 
-const DB = process.argv[2]
-if (!DB) { console.error('用法:node tools/prod-readonly-five.mjs <库文件绝对路径>'); process.exit(2) }
+/* 🔴 护栏:目标库**必须显式给,不许有默认值**(`db-target-guard ①c/①d` 当场咬住了,咬得对)。
+   有人会想「这是只读的,要什么护栏」—— 但那条律治的病根不是「会不会写坏」,
+   是**「有默认值,所以打错了不报错」**:只读打错库,报出来的数照样是错库的数,
+   而它会被当成生产的答案写进回执。**读错库和写错库,前者更难发现。** */
+const DB = requireTarget({ envName: '第 1 个参数 <库文件绝对路径>', value: process.argv[2],
+  hint: '(生产 /app/apps/api/local-data/lucky-luxe.sqlite · 本机 apps/api/local-data/…)' })
 const db = new DatabaseSync(DB, { readOnly: true })          // 🔴 引擎层只读
 const run = (sql) => db.prepare(sql).all()
 const show = (title, rows) => {
