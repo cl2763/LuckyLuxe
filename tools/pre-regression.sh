@@ -73,13 +73,20 @@ ratchet "admin.js" apps/web/admin.js "${RATCHET_ADMIN:-}"
 #     只要文件本批有未提交改动,一条命令就把本批的活儿抹了。08-30 栽过一次(自伤事故),
 #     09-08 又栽一次 —— **上一次没兜住是因为教训只写进了回执,没装成护栏**,这就是那条护栏。
 #     扫的是**会被执行的东西**(脚本与模块),不扫 handoff/ 文档:那里写的是案情,不是行为。
-KNIFE_BAD=$(grep -rln --include='*.sh' --include='*.mjs' --include='*.command' \
-              -e 'git checkout --' -e 'git restore' tools apps .command 2>/dev/null \
-            | grep -vE '^tools/(pre-regression|knife-backup)\.sh$' || true)
-#     白名单精确到文件、各写理由(不许按目录放行):
-#       tools/pre-regression.sh —— 本判据自己,检测词就写在这儿;
-#       tools/knife-backup.sh   —— 那条**合法路径**本身,它的说明必须点名被禁的命令,否则没人知道禁的是什么。
-if [ -z "$KNIFE_BAD" ]; then say "J-34 造病还原路径" "✅ 可执行件里零处 git checkout --/git restore"
+#     🔴 09-14(07q)从 grep 换成 tools/knife-restore-scan.mjs:原来那一行**认词不认执行** ——
+#     它咬住了 `j62-knife-bench.mjs` 里两处**提及**(一处注释案底、一处报错文案),
+#     也就是「把规矩解释清楚的那段话,自己把规矩顶红了」。
+#     新扫描器**剥注释 + 按位置判引号外**,只认真执行;`--probe` 自守证明它分得开真货与提及。
+#     (不能整段剥字符串:git 命令的参数本来就住在引号里,剥完就认不出真货 —— danger-cmd 那次先踩过。)
+KNIFE_PROBE=$(node tools/knife-restore-scan.mjs --probe 2>&1)
+KNIFE_BAD=$(node tools/knife-restore-scan.mjs 2>/dev/null || true)
+#     白名单精确到文件、各写理由(不许按目录放行),现在写在扫描器的 SELF 里:
+#       tools/knife-restore-scan.mjs —— 本判据自己,检测词就写在这儿;
+#       tools/pre-regression.sh      —— 调它的地方;
+#       tools/knife-backup.sh        —— 那条**合法路径**本身,它的说明必须点名被禁的命令。
+if ! printf '%s' "$KNIFE_PROBE" | grep -q '分得开'; then
+  say "J-34 造病还原路径" "🔴 扫描器自守没过($KNIFE_PROBE)—— 刀咬不动,它报的「零处」不算数"; FAIL=1
+elif [ -z "$KNIFE_BAD" ]; then say "J-34 造病还原路径" "✅ 可执行件里零处 git checkout --/git restore(自守:分得开真执行与提及)"
 else say "J-34 造病还原路径" "🔴 $(echo "$KNIFE_BAD" | tr '\n' ' ')—— 造病还原走 tools/knife-backup.sh"; FAIL=1; fi
 KNIFE_LEFT=$(find . -name '*.pre-k' -not -path './.git/*' -not -path './node_modules/*' 2>/dev/null || true)
 if [ -z "$KNIFE_LEFT" ]; then say "J-34 造病备份收尾" "✅ 没有残留的 .pre-k"
