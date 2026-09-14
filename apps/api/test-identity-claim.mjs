@@ -208,11 +208,41 @@ try {
       !/'email'/.test(sqlNow) && !/'google'/.test(sqlNow) && !/'account'/.test(sqlNow)
       && /'phone'/.test(sqlNow),
       sqlNow.replace(/\s+/g, ' '))
-    check('㋙2b2 ⬜ **行为层这一格够不着,如实登记(不是验过了)**:'
-      + '要压住分类表,需要一个「有非微信登录身份 + 手机号 + 没绑微信」的档案,'
-      + '而本仓**没有正门造得出它**(邮箱注册不收手机号;顾客编辑口只收 tags/notes/birthday)。'
-      + '此条为**缺口登记**,不算验证 —— 补法:给顾客编辑口加手机号字段(要店主裁),或等有了新入口再补',
-      true, '缺口已登记:行为层未覆盖 provider 分类的 email/google/account 三格')
+    /* ══ ㋙2c 裁 #100(店主 07o §三)· **「正门造不出来」有两种,先分清是哪一种** ══
+       - **一种是缺口**:这个状态**该能产生**,但正门没给路 → 补造法;
+       - **一种是保证**:这个状态**本来就不该出现** → **不补造法,把「不该有」写成判据。**
+       这一格是**后者**:生产上顾客只有微信一条路(邮箱 403 / Google 路由不存在 /
+       网页过渡态的死按钮撤了),所以「有 email / google 登录身份的顾客」**本来就不该存在**。
+       **我们不是要造出那个状态,是要保证它永远不出现。**
+       ⬜ 那个行为层格子**就此销号** —— 不是够不着,是不该有;改由下面这条守着。 */
+    const badRows = all(`SELECT provider, COUNT(*) n FROM user_identities
+      WHERE provider IN ('email', 'google') GROUP BY provider`)
+    const realBad = badRows.reduce((a, r) => a + Number(r.n || 0), 0)
+    /* 🔴 防空转(J-58 第四款 / 判据空转当红处理):
+       新库里本来就一行 email 身份都没有 —— 那这条断言随便写都绿。
+       所以**先证明这条查询咬得动**。
+       ⚠️ 怎么造这一行,试过两种,过程记着:
+         ①走 `/auth/email/register` 正门造 —— **不行**:`demo-gate-coverage ①e/①f` 立刻咬住
+           「又多一套在用旧路」,而那张冻结清单的上限是 5、只许变短。**为了证一条判据去顶另一条棘轮,不划算。**
+         ②直连真库插一行 —— **也不行**:J-60 的「直连库贴」棘轮会跟着涨。
+       ③现在的做法:**在内存库里**照抄同一张表、种一行,拿同一条 SQL 跑一遍。
+         它证的正是「这条查询认得出 email 身份」,而**一行都不碰真库,也不碰任何棘轮**。 */
+    const mem = new DatabaseSync(':memory:')
+    mem.exec("CREATE TABLE user_identities (id TEXT, user_id TEXT, provider TEXT)")
+    const memQ = () => mem.prepare("SELECT COUNT(*) n FROM user_identities WHERE provider IN ('email','google')").get().n
+    const memBefore = memQ()
+    mem.prepare("INSERT INTO user_identities (id, user_id, provider) VALUES ('x','u','email')").run()
+    const memAfter = memQ()
+    mem.close()
+    check('㋙2c0 🔴 先证刀咬得动:同一条查询,在**内存库**里种一行 `email` 身份 '
+      + `→ 它真的数到了(${memBefore} → ${memAfter})。不先证这一步,下面那条「0 条」随便写都绿;`
+      + '而且这么证**一行都不碰真库、不顶任何棘轮**',
+      memBefore === 0 && memAfter === 1, `内存库 ${memBefore} → ${memAfter}`)
+
+    check('㋙2c 🔴 裁#100:顾客身份**只许有微信一条路** —— `user_identities` 里'
+      + `不许出现 \`email\` / \`google\` 的行 —— 现测 **${realBad}** 条。`
+      + '这不是「缺口没补」,是**「不该有」被写成了判据**(裁 #100:保证,不是缺口)',
+      realBad === 0, `逐 provider:${JSON.stringify(badRows)}`)
 
     /* ── ㋙3 同号多条:照旧不认,进撞车队列 ── */
     const P3 = '13700007002'

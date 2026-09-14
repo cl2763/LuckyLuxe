@@ -45,7 +45,16 @@ const files = [
 
 const hits = []
 for (const f of files) {
-  readFileSync(join(ROOT, f), 'utf8').split('\n').forEach((ln, i) => {
+  const whole = readFileSync(join(ROOT, f), 'utf8')
+  /* 🔴 09-14(07o)按机制收窄:**内存库不算「直连库贴」**。
+     `new DatabaseSync(':memory:')` 开的是一张临时表,谁也测不到它 ——
+     判据拿它证明「自己那条 SQL 咬得动」时,插的不是被测的库。
+     现踩:`test-identity-claim` 为了证裁 #100 那条查询咬得动,在内存库里种了一行 email 身份,
+     被这把刀数成了第 10 处冻结,把「只许变短」的棘轮顶破了。
+     **判据自己的探针不是被测对象**(J-61②),而这里认的是**句柄**不是文件名,比整文件排除更准。 */
+  const memVars = new Set([...whole.matchAll(/(?:const|let|var)\s+(\w+)\s*=\s*new DatabaseSync\(\s*['"]:memory:['"]/g)].map((m) => m[1]))
+  whole.split('\n').forEach((ln, i) => {
+    if ([...memVars].some((v) => new RegExp(`\\b${v}\\s*\\.(prepare|exec)\\(`).test(ln))) return
     if (/^\s*(\/\/|\*|\/\*)/.test(ln)) return      /* 注释里提到不算(我自己的注释就写着这句) */
     if (!EXEC.test(ln)) return                      /* 要真的在执行 SQL,不是把它当字符串 */
     const m = ln.match(/(?:INSERT INTO|UPDATE|DELETE FROM)\s+([a-z_]+)/i)

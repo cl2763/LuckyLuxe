@@ -91,8 +91,33 @@ function knife({ ep, suite, file, needle, claimPat, nth = null }) {
   }
   const claimReds = reds.filter((r) => claimPat.test(r))
   if (!failed) {
-    console.log('   🔴 仍绿 —— 这条口的判据验的是回执不是事实')
-    rows.push({ ep, suite, needle, verdict: '🔴 **仍绿** —— 验的是回执不是事实' })
+    /* ④ J-58 第四款:不红先证咬到 —— 把同一处换成**必然会红**的形态(直接抛),
+       它要是也不红,说明这条路径压根没被执行到。 */
+    console.log('   ⟳ 不红 —— 按 J-58 第四款先证「刀咬到了没有」:同一处换成必然会红的形态再跑一次')
+    const src2 = readFileSync(abs, 'utf8')
+    const cut2 = cutStatement(src2, needle, nth)
+    let reached = null
+    if (!cut2.err) {
+      execFileSync('bash', [join(ROOT, 'tools/knife-backup.sh'), 'save', file], { cwd: ROOT, stdio: 'ignore' })
+      writeFileSync(abs, `${src2.slice(0, cut2.start)}    throw new Error('J58-4 必然红:这条路径被执行到了')\n${src2.slice(cut2.end + 1)}`)
+      try { execFileSync('node', ['--check', abs], { stdio: 'ignore' }) } catch { /* 语法不过就当探不到 */ }
+      try {
+        execSync(`PRE_REGRESSION=skip CI_SUITES="${suite}" bash apps/api/run-all-tests.sh`,
+          { cwd: ROOT, encoding: 'utf8', stdio: ['ignore', 'pipe', 'pipe'], timeout: 15 * 60e3 })
+        reached = false
+      } catch { reached = true }
+      execFileSync('bash', [join(ROOT, 'tools/knife-backup.sh'), 'restore', file], { cwd: ROOT, stdio: 'ignore' })
+    }
+    if (reached === false) {
+      console.log('   🔴 **刀没咬到** —— 换成必然会红的形态也没红,说明这条路径压根没被执行到。**不算守住**')
+      rows.push({ ep, suite, needle, verdict: '🔴 **刀没咬到**(换成必然会红的形态也不红 ⇒ 这条路径没被执行到)—— 不算守住' })
+    } else if (reached === true) {
+      console.log('   🔴 仍绿 —— 路径**确实被执行到了**(必然红那一刀红了),所以这条判据验的是回执不是事实')
+      rows.push({ ep, suite, needle, verdict: '🔴 **仍绿**(已证刀咬到:必然红那一刀红了)—— 验的是回执不是事实' })
+    } else {
+      console.log('   ⚠️ 不红,但必然红那一刀也落不下去 —— 判不了,不算验过')
+      rows.push({ ep, suite, needle, verdict: '⚠️ 不红且证不了咬没咬到 —— **不算验过**' })
+    }
   } else if (claimReds.length) {
     console.log(`   ✅ 红了,而且红的就是那条:${claimReds[0]}`)
     rows.push({ ep, suite, needle, verdict: `✅ 红,**红的就是声称成功那条**:\`${claimReds[0]}\`` })
@@ -104,24 +129,25 @@ function knife({ ep, suite, file, needle, claimPat, nth = null }) {
 
 const ONLY = process.env.KNIFE_ONLY || ""
 const TARGETS = [
-  /* 07l 清单里「涉钱」与「顾客能看见」两条线上、**有判据**的那些口。
-     `nth` 是「这个串在文件里的第几处」—— 台子默认**拒绝**在不唯一的串上落刀(落偏了红的就不是判据),
-     所以同名语句必须指名道姓。 */
-  /* 头像有**两条写口**:新客走 INSERT,老客走 UPDATE。㋐16 用的是新 openid ⇒ INSERT 那条。
-     第一版刀砍的是 UPDATE,㋐16 当然照样绿 —— **刀砍在没人走的那条路上,等于没砍**。 */
-  { ep: '头像落库·新客 INSERT(顾客·裁#94)', suite: 'mini-phone', file: 'apps/api/local-server.mjs',
-    needle: "INSERT INTO users (id, display_name, phone, wechat_open_id, tenant_id, avatar_url)", claimPat: /㋐16/ },
-  { ep: '/auth/wechat/mini-phone(顾客·授权手机号)', suite: 'mini-phone', file: 'apps/api/mini-phone.mjs',
-    needle: "db.prepare('UPDATE users SET phone = ?, tags_json = ? WHERE id = ?')", claimPat: /㋐6|㋐7|真的是那个号/ },
-  { ep: '/bookings/:id/cancel · 释放时段(顾客·07m §四②)', suite: 'booking-cancel', file: 'apps/api/local-server.mjs',
-    /* cancelBooking 那一处:`DELETE FROM booking_slots` 全仓 4 处,靠**下一行**把它认出来 */
-    needle: "db.prepare('DELETE FROM booking_slots WHERE booking_id = ?').run(id)\n    db.prepare(\"UPDATE bookings SET status = 'CANCELLED'", claimPat: /㋘2|时段释放/ },
-  { ep: '/bookings/:id/cancel · 状态历史(技师那头)', suite: 'booking-cancel', file: 'apps/api/local-server.mjs',
-    /* 全仓 2 处(:6412 cancelBooking / :15704 商家侧),取第 0 处 = 顾客那条口 */
-    needle: "randomId('hist'), id, booking.status, 'CANCELLED', body.reason", nth: 0, claimPat: /㋘4|技师那边/ },
-  { ep: '/my/stored-value/confirm(顾客·涉钱)', suite: 'noshow-aftersales', file: 'apps/api/local-server.mjs',
-    needle: "db.prepare('UPDATE stored_value_transactions SET customer_confirmed_at = ? WHERE id = ? AND customer_confirmed_at IS NULL')",
-    claimPat: /确认成功/ },
+  /* 07o §二:支付两条 + 卡包 + 积分 —— 「一次都没被夹具走过」那 8 条里最急的四条 */
+  { ep: '/payments/mock/confirm · 支付落库(顾客·涉钱)', suite: 'customer-paths', file: 'apps/api/local-server.mjs',
+    needle: "db.prepare(\"UPDATE payments SET status = 'PAID', transaction_id = ?, updated_at = ? WHERE booking_id = ? AND provider = 'MOCK'\")",
+    claimPat: /㋚1 |payments 从/ },
+  { ep: '/payments/mock/confirm · 预约转 CONFIRMED', suite: 'customer-paths', file: 'apps/api/local-server.mjs',
+    needle: "db.prepare(\"UPDATE bookings SET status = 'CONFIRMED', updated_at = ? WHERE id = ?\").run(now, bookingId)",
+    claimPat: /㋚1 |㋚2 / },
+  /* 全仓 4 处 `INSERT INTO coupon_grants`:0=积分换券 · **1=商家发券(㋚3 走的就是这一处)** · 2=批量发 · 3=结算送 */
+  { ep: '/my/coupons · 卡包(顾客直接看)', suite: 'customer-paths', file: 'apps/api/local-server.mjs',
+    needle: "db.prepare(`INSERT INTO coupon_grants (id, tenant_id, coupon_id, user_id, code, status, expires_at, created_at, grant_source)",
+    nth: 1, claimPat: /㋚3/ },
+  /* ⚠️ §八.5 的回放**没做成**,如实记着(停线:同一处连改三次不对就停,写清试了哪三种)
+     ④ 那一支**只在套件保持绿时**才说话,所以回放要一把「落在套件走不到的地方、且不把套件弄红」的刀。
+     三次都没找到:
+       ① 积分换券那条写 + `customer-paths` → 套件因别的原因红了;
+       ② 平台导入那条身份写 + `mini-phone`   → 套件红(常驻的那 4 套里有人走导入);
+       ③ 同上 + `wechat-stub`                → 一样红。
+     **结论:④ 的代码装上了,但没有观察到它真的触发 —— 按 ④ 自己的规矩,不算验过。**
+     下批换法:给台子加一个「不跑套件、只跑单条断言」的模式,才好构造保持绿的场景。 */
 ]
 for (const t of TARGETS) { if (ONLY && !t.ep.includes(ONLY)) continue; await knife(t) }
 

@@ -59,9 +59,25 @@ for (const f of files) {
   let src = ''
   try { src = readFileSync(join(ROOT, f), 'utf8') } catch { continue }
   src.split('\n').forEach((ln, i) => {
+    /* 🔴 09-14 补一层(J-61:数的是**执行**,不是**提及**):
+       现踩:`tools/mp-automator-up.sh` 里一句 `echo "…不用 pkill…"` 被当成「执行了 pkill」,①② 当场红。
+       那句 echo 一个进程都不杀,**它说的恰恰是「这里不用 pkill」** ——
+       判据认词不认执行,就会专门惩罚把话说清楚的那个人(同族:J-49 认标记不认措辞)。
+       ⚠️ 第一版我是**把字符串整段剥掉**再判 —— 那更糟:`pkill -f "local-server.mjs"` 的
+       **模式串本身就住在引号里**,剥完 ② 就报「模式串太泛」,把三条真护栏全判红了。
+       所以改成**按位置**判:只有落在引号**外面**的 `pkill` 才算在执行。 */
     const code = ln.replace(/#.*$/, '')          /* shell 注释 */
       .replace(/\/\/.*$/, '').replace(/\/\*[\s\S]*?\*\//g, '')
-    if (!/\b(pkill|killall)\b/.test(code)) return
+    const inQuote = (str, at) => {
+      let q = null
+      for (let k = 0; k < at; k += 1) {
+        const c = str[k]
+        if (q) { if (c === q && str[k - 1] !== '\\') q = null } else if (c === '"' || c === "'") q = c
+      }
+      return Boolean(q)
+    }
+    const execHit = [...code.matchAll(/\b(pkill|killall)\b/g)].some((m) => !inQuote(code, m.index))
+    if (!execHit) return
     hits.push({ f, line: i + 1, text: ln.trim().slice(0, 90), code })
   })
 }
