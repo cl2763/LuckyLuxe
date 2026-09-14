@@ -15,6 +15,7 @@
 import { readFileSync, readdirSync } from 'node:fs'
 import { join } from 'node:path'
 import { fileURLToPath } from 'node:url'
+import { probe } from './scanner-probe.mjs'
 
 const ROOT = join(fileURLToPath(new URL('.', import.meta.url)), '..')
 /* J-61②:刀默认排除判据自身与夹具,具名 */
@@ -41,7 +42,12 @@ const paths = new Map()
 for (const f of CUSTOMER_FILES) {
   const src = readFileSync(join(ROOT, f), 'utf8').replace(/\/\*[\s\S]*?\*\//g, '').replace(/^\s*\/\/.*$/gm, '')
   for (const m of src.matchAll(/(?:request|apiFetch|fetch)\(\s*[`'"]([^`'"]*\/[^`'"]*)[`'"]/g)) {
-    let p = m[1].replace(/\$\{[^}]*\}/g, ':x').replace(/\?.*$/, '').replace(/\/+$/, '')
+    /* 🔴 09-14(夜12 段D)· probe 第一次跑就咬到的真缺陷:
+       `fetch(`${BASE}/bookings`)` 这种**前缀是 base URL 变量**的调用,原来整类漏掉 ——
+       先把 `${...}` 换成 `:x` 之后,串变成 `:x/bookings`,`startsWith('/')` 就把它筛掉了。
+       **于是「顾客能走的路」那个数是偏少的,而它长得跟一个完整的数一模一样。**
+       改法:**开头那个 `${...}` 当成 base,直接去掉**;路径中间的 `${...}` 仍然换成 `:x`。 */
+    let p = m[1].replace(/^\$\{[^}]*\}/, '').replace(/\$\{[^}]*\}/g, ':x').replace(/\?.*$/, '').replace(/\/+$/, '')
     if (!p.startsWith('/')) continue
     if (/^\/(assets|static)\//.test(p)) continue
     if (!paths.has(p)) paths.set(p, new Set())
@@ -77,4 +83,21 @@ if (process.argv.includes('--json')) { console.log(JSON.stringify(rows, null, 2)
   for (const r of never) console.log(`| \`${r.files[0]}\`${r.files.length > 1 ? ` 等 ${r.files.length} 处` : ''} | \`${r.path}\` | 🔴 **没有** |`)
   console.log(`\n## 走过的(${rows.length - never.length} 条)\n`)
   for (const r of rows.filter((x) => x.walked)) console.log(`- \`${r.path}\``)
+}
+
+
+/* J-58⑤ 自守:核心判定是「这一行里有没有顾客真调的后端路径」 */
+if (process.argv.includes('--probe')) {
+  /* 判定要**和刀正文同一把尺子**(J-39):照抄正文那几步,不另写一份 */
+  const hit = (s) => [...String(s).matchAll(/(?:request|apiFetch|fetch)\(\s*[`'"]([^`'"]*\/[^`'"]*)[`'"]/g)]
+    .some((m) => {
+      const p = m[1].replace(/^\$\{[^}]*\}/, '').replace(/\$\{[^}]*\}/g, ':x').replace(/\?.*$/, '').replace(/\/+$/, '')
+      return p.startsWith('/') && !/^\/(assets|static)\//.test(p)
+    })
+  probe('customer-paths-scan', [
+    { 样本: "request('/my/coupons')", 该命中: true },
+    { 样本: "await fetch(`${BASE}/bookings`)", 该命中: true },
+    { 样本: "request('/assets/images/a.png')", 该命中: false },
+    { 样本: "const x = '/my/coupons'", 该命中: false },
+  ], hit)
 }

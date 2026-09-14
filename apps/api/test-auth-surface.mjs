@@ -362,6 +362,22 @@ async function main() {
     (reqCust.match(/customerFromMiniToken|demoEmailFromToken/g) || []).length === 2
     && /UNAUTHORIZED/.test(reqCust))
   const HEALTHSRC = readFileSync(join(HERE, 'health-report.mjs'), 'utf8')
+  /* ══ ㊙⑭ 夜12 段A1 · **`/health` 要能说出自己在用哪份库** ══
+     案由(D192):生产库 mtime 停在 8/27、`/health` 却是 200、又没有 WAL ——
+     **当时没有任何办法从产品自己这里问出「你到底在读写哪个文件」**,只能 ssh 进容器翻 `/proc/<pid>/fd`。
+     那是诊断,不是产品能力。现在 `/health` 自报三格,**每一格都必须是现量的**(J-52)。 */
+  const dbFacts = (HEALTHSRC.match(/const dbFileFacts = \(\(\) => \{[\s\S]*?\n  \}\)\(\)/) || [''])[0]
+  check('㊙⑭ J-52:`/health` 的库身份三格(路径 / 大小+mtime / 行数)**都是现量的** —— '
+    + '`statSync` 真读文件、行数真查库;**取不到一律 `null`,不许兜成看着像真话的默认值**',
+    /statSync\(path\)/.test(dbFacts) && /countRows\('users'\)/.test(dbFacts) && /countRows\('bookings'\)/.test(dbFacts)
+    && /size = null/.test(dbFacts) && /mtime = null/.test(dbFacts),
+    dbFacts.replace(/\s+/g, ' ').slice(0, 200))
+  check('㊙⑭b 🔴 反向守:三格里**不许出现写死的字面量** —— '
+    + '写死一个 path/size/行数,这一格就变回 `guestIdUnsigned` 当年那种「从来没量过任何东西」的常量',
+    !/path:\s*['"`]\//.test(dbFacts) && !/size:\s*\d/.test(dbFacts)
+    && !/users:\s*\d/.test(dbFacts) && !/bookings:\s*\d/.test(dbFacts),
+    dbFacts.replace(/\s+/g, ' ').slice(0, 200))
+
   check('㊙⑥ J-52:`/health` 的 guestIdUnsigned 是**量出来的**,读口里不许有写死的常量',
     !/guestIdUnsigned:\s*(true|false)\b/.test(HEALTHSRC) && /const guestIdUnsigned = /.test(HEALTHSRC),
     (HEALTHSRC.match(/guestIdUnsigned[^\n]*/g) || []).slice(0, 2).join(' | '))

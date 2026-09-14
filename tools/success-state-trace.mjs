@@ -13,6 +13,7 @@ import { readFileSync, readdirSync } from 'node:fs'
 import { join } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { execSync } from 'node:child_process'
+import { probe } from './scanner-probe.mjs'
 
 const ROOT = join(fileURLToPath(new URL('.', import.meta.url)), '..')
 const raw = JSON.parse(execSync('node tools/success-state-scan.mjs --json', { cwd: ROOT, encoding: 'utf8', maxBuffer: 64e6 }))
@@ -106,4 +107,13 @@ if (process.argv.includes('--json')) {
   console.log(`  顾客能看见 ${n((r) => r.custVisible)} · 涉及钱 ${n((r) => r.money)} · 两者都是 ${n((r) => r.custVisible && r.money)}`)
   console.log(`  追得到后端口 ${n((r) => r.path)} · 追不到(纯前端/纯展示)${n((r) => !r.path)}`)
   console.log(`  🔴 有回执但**判据没碰过那个口** ${n((r) => r.path && !r.judged)} 处`)
+}
+
+
+/* J-58⑤ 自守:这把刀的核心判定是 `judged(path)`(某条口有没有被夹具真调过) */
+if (process.argv.includes('--probe')) {
+  probe('success-state-trace', [
+    { 样本: '/my/coupons', 该命中: true },          // 仓里确实有套件调它
+    { 样本: '/definitely/not/a/real/route/xyz', 该命中: false },
+  ], (p) => judged(p))
 }

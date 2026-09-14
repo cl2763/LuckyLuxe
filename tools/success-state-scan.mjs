@@ -12,6 +12,7 @@
 import { readFileSync, readdirSync, statSync } from 'node:fs'
 import { join, relative } from 'node:path'
 import { fileURLToPath } from 'node:url'
+import { probe } from './scanner-probe.mjs'
 
 const ROOT = join(fileURLToPath(new URL('.', import.meta.url)), '..')
 
@@ -90,4 +91,16 @@ if (process.argv.includes('--json')) {
     for (const h of v) console.log(`- \`${h.file}:${h.line}\` [${h.shape}] ${h.text}`)
     console.log('')
   }
+}
+
+
+/* J-58⑤ 自守:核心判定是 SHAPES 那几条形态 */
+if (process.argv.includes('--probe')) {
+  const hit = (s) => SHAPES.some((sh) => { sh.re.lastIndex = 0; return sh.re.test(String(s)) })
+  probe('success-state-scan', [
+    { 样本: "wx.showToast({ title: '已保存', icon: 'success' })", 该命中: true },
+    { 样本: "toast('保存成功')", 该命中: true },
+    { 样本: "const n = list.length", 该命中: false },
+    { 样本: "// 这里以前弹过「已保存」", 该命中: false },
+  ], hit)
 }

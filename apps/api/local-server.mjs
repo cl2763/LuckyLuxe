@@ -18,6 +18,7 @@ import { createDecipheriv, createHash, createHmac, randomUUID } from 'node:crypt
 import { makeMiniToken } from './mini-token.mjs'
 import { notBoundByLoginIdentitySql, makeUnionIdResolver } from './identity-kinds.mjs'   // 🔴 D191:第三条「没绑过微信」只改这一条,整段分类在该模块
 import { filterCouponsForCustomer, KNOWN_COUPON_STATUSES, isKnownCouponStatus } from './coupon-status.mjs'
+import { createPointsLedger } from './points-ledger.mjs'
 import { addUserColumns, USER_OP_COLUMNS } from './user-columns.mjs'
 import { copyFileSync, existsSync, mkdirSync, readdirSync, readFileSync, renameSync, statSync, unlinkSync, writeFileSync } from 'node:fs'
 import { basename, dirname, extname, join, normalize, resolve } from 'node:path'
@@ -5930,34 +5931,12 @@ function validateBookingInput(body) {
    硬守恒不变量(三次补拍):积分余额永远 ≤ 累计消费——余额只可能少不可能多,
    违反=数据坏账,直接抛错拒绝出账(与四条金额恒等式同一待遇)。
    赚分行单源:余额 / 积分页明细 / 积分历史三处全从 pointsEarnRows 出。 ===== */
-function pointsEarnRows(userId, tenantId = currentTenantId()) {
-  // LEFT JOIN:分组结算的「朋友单」没有 bookingId,内联会把它们漏出赚分行,
-  // 累计获得就对不上累计消费(卡主口径:st.user_id 记的是买单人)
-  return db.prepare(`SELECT st.id AS ref, st.signed_at AS at, st.subtotal_cents AS cents, sv.name_zh AS sname
-    FROM settlements st LEFT JOIN bookings b ON b.id = st.booking_id
-    LEFT JOIN services sv ON sv.id = b.service_id
-    WHERE st.user_id = ? AND st.tenant_id = ? AND st.status = 'signed'`)
-    .all(userId, tenantId)
-    .map((r) => ({ refId: r.ref, at: r.at, points: Math.floor((r.cents || 0) / 100), title: `到店消费 · ${r.sname || '服务'}` }))
-}
-function earnedPoints(userId, tenantId = currentTenantId()) {
-  return pointsEarnRows(userId, tenantId).reduce((sum, r) => sum + r.points, 0)
-}
-// 已兑换(正数显示):台账负行绝对值合计;冲正/钳位调整是正行,不算「兑换」
-function redeemedPoints(userId, tenantId = currentTenantId()) {
-  const row = db.prepare('SELECT COALESCE(SUM(CASE WHEN amount < 0 THEN -amount ELSE 0 END), 0) AS s FROM points_transactions WHERE user_id = ? AND tenant_id = ?').get(userId, tenantId)
-  return row.s || 0
-}
-function pointsLedgerSum(userId, tenantId = currentTenantId()) {
-  return db.prepare('SELECT COALESCE(SUM(amount), 0) AS s FROM points_transactions WHERE user_id = ? AND tenant_id = ?').get(userId, tenantId).s
-}
-function pointsBalance(userId, tenantId = currentTenantId()) {
-  const earned = earnedPoints(userId, tenantId)
-  const balance = earned + pointsLedgerSum(userId, tenantId)
-  // 硬守恒(店主三次补拍):余额 ≤ 累计获得(≡累计消费)。多出来=有人凭空造分,拒绝出账。
-  if (balance > earned) throw apiError(500, 'POINTS_INVARIANT_VIOLATION', `积分守恒被破坏:余额 ${balance} > 累计获得 ${earned}(user=${userId})`)
-  return balance
-}
+const pointsLedger = createPointsLedger({ db, apiError })   // 积分域五件整段在 ./points-ledger.mjs(裁#89 摘出去)
+const pointsEarnRows = (u, t = currentTenantId()) => pointsLedger.pointsEarnRows(u, t)
+const earnedPoints = (u, t = currentTenantId()) => pointsLedger.earnedPoints(u, t)
+const redeemedPoints = (u, t = currentTenantId()) => pointsLedger.redeemedPoints(u, t)
+const pointsLedgerSum = (u, t = currentTenantId()) => pointsLedger.pointsLedgerSum(u, t)
+const pointsBalance = (u, t = currentTenantId()) => pointsLedger.pointsBalance(u, t)
 /* 🔴 积分入口提示句唯一出口(店主 08-23 裁:不加第二个入口,黑卡「积分」那格下加一行小字)。
    判定与积分页里每件奖品的 canRedeem **同一套**(上架 + 有库存 + 积分够 + 没超每人限兑),
    所以「可兑 2 件」永远等于页内那 2 件,不会出现"提示说有、点进去没有"。
@@ -10687,7 +10666,8 @@ async function route(req, res) {
        每一格为什么在那儿,写在那个文件的抬头。 */
     return json(res, 200, healthReport(req, {
       rasterBackend, tenantFallbackTally, getAiUsage, mergeWindowSeconds, mergeWindowCapSeconds, openMergeWindows,
-      dataDir, dbConcurrency, replyLength, appVersion, tenantNullRows, dataScope: DATA_SCOPE, dataScopeName: DATA_SCOPE_NAME, iso, demoLoginAllowed: DEMO_LOGIN_ALLOWED, miniSecretExplicit: miniSecretIsExplicit(),
+      dataDir, countRows: (t) => db.prepare(`SELECT COUNT(*) n FROM ${t === 'users' ? 'users' : 'bookings'}`).get().n,   // 段A1:行数现量,不是写死的
+      dbConcurrency, replyLength, appVersion, tenantNullRows, dataScope: DATA_SCOPE, dataScopeName: DATA_SCOPE_NAME, iso, demoLoginAllowed: DEMO_LOGIN_ALLOWED, miniSecretExplicit: miniSecretIsExplicit(),
     }))
   }
   if (req.method === 'GET' && path === '/wechat/customer-service/webhook') {

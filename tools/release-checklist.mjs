@@ -18,6 +18,21 @@
  */
 import { writeFileSync, readFileSync, readdirSync, existsSync, statSync } from 'node:fs'
 import { execFileSync } from 'node:child_process'
+import { probe } from './scanner-probe.mjs'
+/* J-58⑤ 自守:这把刀读 `/health` 的每一格生成上线清单;核心判定是「某一格是不是真话」。
+   现踩案底(夜9):`guestIdUnsigned` 那一格曾是**写死的 `true`**,清单第 4 行因此一直是假红 ——
+   所以 probe 验的是:**给它一格 `null`(没量到)要认出来,给它 boolean 才算量到**。 */
+const measured = (v) => typeof v === 'boolean'
+if (process.argv.includes('--probe')) {
+  probe('release-checklist', [
+    { 样本: false, 该命中: true },
+    { 样本: true, 该命中: true },
+    { 样本: null, 该命中: false },
+    { 样本: undefined, 该命中: false },
+  ], measured)
+  process.exit(process.exitCode || 0)
+}
+
 
 const OUT = process.argv.includes('--out') ? process.argv[process.argv.indexOf('--out') + 1] : 'handoff/上线批清单_最新.md'
 const git = (...a) => { try { return execFileSync('git', a, { encoding: 'utf8' }).trim() } catch { return '(取不到)' } }

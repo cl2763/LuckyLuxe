@@ -19,6 +19,7 @@
      所以这一格 = `demoLoginAllowed` 本身 —— **同一处真相,不在这里另抄一份判断**。
 
    所以这里**只出事实,不出配置值与密钥**。 */
+import { statSync } from 'node:fs'
 import { join } from 'node:path'
 
 const LOOPBACK = /^(127\.0\.0\.1|::1|::ffff:127\.0\.0\.1)$/
@@ -27,6 +28,7 @@ export function healthReport(req, deps) {
   const {
     rasterBackend, tenantFallbackTally, getAiUsage, mergeWindowSeconds, mergeWindowCapSeconds, openMergeWindows,
     dataDir, dbConcurrency, replyLength, appVersion, tenantNullRows, dataScope, dataScopeName, iso,
+    countRows,
     demoLoginAllowed,
     miniSecretExplicit,
   } = deps
@@ -37,6 +39,18 @@ export function healthReport(req, deps) {
   /* J-53(07c 裁 #54):顾客令牌签名密钥**是不是显式配的**。同样是量出来的,取不到报 null。
      ⚠️ 只回 boolean —— 密钥本身、连它的长度都不许出现在任何输出里。 */
   const miniSecretSet = typeof miniSecretExplicit === 'boolean' ? miniSecretExplicit : null
+  /* 三格现量:路径 / 大小+mtime / 行数。任何一格取不到 → null,不兜默认值 */
+  const dbFileFacts = (() => {
+    const path = join(dataDir, 'lucky-luxe.sqlite')
+    let size = null
+    let mtime = null
+    try { const st = statSync(path); size = st.size; mtime = st.mtime.toISOString() } catch { /* 没量到就是 null */ }
+    let users = null
+    let bookings = null
+    try { users = countRows ? countRows('users') : null } catch { /* 同上 */ }
+    try { bookings = countRows ? countRows('bookings') : null } catch { /* 同上 */ }
+    return { path, size, mtime, users, bookings }
+  })()
   return {
     ok: true,
     service: 'lucky-luxe-api-local',
@@ -49,7 +63,16 @@ export function healthReport(req, deps) {
     mergeWindowsOpen: openMergeWindows(),
     guestIdUnsigned,
     miniSecretSet,
-    ...(LOOPBACK.test(String(req.socket?.remoteAddress || '')) ? { dataFile: join(dataDir, 'lucky-luxe.sqlite') } : {}),
+    /* 🔴 夜12 段A1 · **让服务自己说它在用哪份库**(立案 D192 的治法)
+       案由:生产库文件 mtime 停在 8/27、线上 /health 却是 200、又没有 WAL ——
+       **我们当时没有任何办法从产品自己这里问出「你到底在读写哪个文件」。**
+       只能 ssh 进容器翻 `/proc/<pid>/fd`。那是诊断,不是产品能力。
+       现在 `/health` 自己报三格,**每一格都是现量的**(J-52:读口里写死常量 = 没量):
+         · 库文件绝对路径 · 它的大小与 mtime · users/bookings 行数
+       取不到一律报 `null`(「这一格没量到」),**不许兜成看着像真话的默认值**。
+       ⚠️ 仍然只对 loopback 下发 —— 路径与行数不该对公网讲。
+          容器内 `curl 127.0.0.1:$PORT/health` 拿得到,这正是诊断要用的姿势。 */
+    ...(LOOPBACK.test(String(req.socket?.remoteAddress || '')) ? { dataFile: dbFileFacts.path, dbFile: dbFileFacts } : {}),
     dbConcurrency,
     replyLength: replyLength.snapshot(),
     adminBuild: appVersion.servedAdminBuild(),

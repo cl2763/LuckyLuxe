@@ -14,6 +14,7 @@
    判据自己先得跑得起来 —— 这也是「判据也是代码」的一层。 */
 import { readdirSync, readFileSync, existsSync, statSync } from 'node:fs'
 import { join } from 'node:path'
+import { probe } from './scanner-probe.mjs'
 
 const DIR = 'handoff'
 const SUB = join(DIR, 'ai-eval-results')
@@ -63,3 +64,15 @@ if (ghosts.length) {
   process.exit(1)
 }
 console.log(`✅ 最近 ${recent.length} 份回执共引用 ${cited} 处评测明细,文件都在`)
+
+
+/* J-58⑤ 自守:核心判定是「这段文字里引没引评测明细文件名」 */
+if (process.argv.includes('--probe')) {
+  const cite = (t) => [...String(t).matchAll(/(?:handoff\/)?ai-eval-results\/([A-Za-z0-9_\u4e00-\u9fa5.-]+)/g)].length > 0
+    || [...String(t).matchAll(/`(\d{2}[a-z]_[A-Za-z0-9_\u4e00-\u9fa5.-]+\.(?:json|jsonl|md))`/g)].length > 0
+  probe('eval-citation-check', [
+    { 样本: '明细见 handoff/ai-eval-results/07a_matrix.json', 该命中: true },
+    { 样本: '明细见 `05p_matrix.jsonl`', 该命中: true },
+    { 样本: '这一批没有引用任何评测明细', 该命中: false },
+  ], cite)
+}

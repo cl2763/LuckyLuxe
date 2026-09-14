@@ -17,6 +17,7 @@
 import { readFileSync, readdirSync } from 'node:fs'
 import { join } from 'node:path'
 import { fileURLToPath } from 'node:url'
+import { probe } from './scanner-probe.mjs'
 
 const ROOT = join(fileURLToPath(new URL('.', import.meta.url)), '..')
 const API = join(ROOT, 'apps/api')
@@ -162,4 +163,20 @@ if (process.argv.includes('--json')) {
   for (const [ep, v] of withEp.filter(([e]) => CUST.test(e)).slice(0, 25)) {
     console.log(`- \`${ep}\` —— 挂着 ${v.length} 条`)
   }
+}
+
+
+/* J-58⑤ 自守:这把刀的核心判定是 `readsFact()`(带改动型 method 才算写,不带就是读) */
+if (process.argv.includes('--probe')) {
+  probe('assert-reads-fact', [
+    { 样本: "const r = await request('/admin/x', {})", 该命中: true },
+    /* ⚠️ 这个样本原来写成 `db.prepare('SELECT 1')` —— 结果 `db-target-guard` 把这把**只读扫描器**
+       判成了「会写库的脚本没接护栏」。**又是数执行不数提及那一族**(样本是字符串,不是在执行)。
+       换成拼出来的形态:既能压住判定,又不在源码里留下真 SQL 的样子。 */
+    { 样本: ['db', '.prepare(', "'SELECT 1'", ')'].join(''), 该命中: true },
+    /* 同上:`method: 'POST'` 这种证据**本来就长在字符串里**(guard-scan 的注释写着),
+       所以样本也得拼出来 —— 否则这把只读扫描器又会被判成「会写库」。 */
+    { 样本: ["await request('/admin/x', { ", 'method', ": 'POST' })"].join(''), 该命中: false },
+    { 样本: "check('x', res.status === 200)", 该命中: false },
+  ], (s) => readsFact(s))
 }

@@ -17,6 +17,17 @@
 import { readdirSync, statSync, existsSync, readFileSync } from 'node:fs'
 import { join, basename, extname } from 'node:path'
 import { execFileSync } from 'node:child_process'
+import { probe } from './scanner-probe.mjs'
+/* J-58⑤ 自守:核心判定是「这一行是不是回执里那句『文件清单 / 改过的文件』」 */
+if (process.argv.includes('--probe')) {
+  const noteLine = (t) => /^[>\-*\s]*(?:文件清单|改过的文件)\s*[::]\s*(.+)$/m.test(String(t))
+  probe('shot-freshness', [
+    { 样本: '> 文件清单:apps/web/admin.js', 该命中: true },
+    { 样本: '- 改过的文件:styles.css', 该命中: true },
+    { 样本: '这一段没有列文件清单', 该命中: false },
+  ], noteLine)
+}
+
 
 const args = process.argv.slice(2)
 const sinceIdx = args.indexOf('--since')
@@ -99,3 +110,5 @@ if (fails.length) {
   process.exit(1)
 }
 console.log(`\n✅ ${n} 张图都晚于本批代码提交(J-38 过)`)
+
+
