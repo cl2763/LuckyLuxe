@@ -16,6 +16,7 @@
  *   对  账:node tools/batch-snapshot.mjs --check <快照.json>
  */
 import { readFileSync, writeFileSync } from 'node:fs'
+import { createHash } from 'node:crypto'
 import { execFileSync, execSync } from 'node:child_process'
 import { join } from 'node:path'
 import { fileURLToPath } from 'node:url'
@@ -50,13 +51,24 @@ const METRICS = {
   'customer.js 行数': { how: '同上', at: (sha) => linesAt(sha, 'apps/web/customer.js') },
 }
 
+/* 🔴 裁 #97(店主 07n §二)· **尺子变过,用它量的数一律作废重量**
+ *
+ * 案由(07m 现踩):我在同一段里发现这把尺子给 `wc -l` 多加了 `+1`、**改掉了**,
+ * 却没有回头重量用那把坏尺子得出的结论 —— 于是「17,708」那个数留在回执里,
+ * 而它旁边那句「两个都是抄的」是**坏尺子产出的结论**。
+ * 修掉 `+1` 后重量,真值是 17,707 —— **我原本写的那个数本来是对的。**
+ *
+ * 所以快照里记下**尺子自己的指纹**。对账时指纹对不上 = 尺子换过了,
+ * 这份快照的数**不算数,要重量**(J-56 用在自己身上)。 */
+const RULER_FP = createHash('sha256').update(readFileSync(fileURLToPath(import.meta.url), 'utf8')).digest('hex').slice(0, 12)
+
 const args = process.argv.slice(2)
 const checkAt = args.indexOf('--check')
 
 if (checkAt < 0) {
   const out = args[0] || 'handoff/night-runs/开批快照.json'
   const sha = git('rev-parse', 'HEAD')
-  const snap = { sha, short: sha.slice(0, 7), 打于: new Date().toISOString(), 数: {} }
+  const snap = { sha, short: sha.slice(0, 7), 打于: new Date().toISOString(), 尺子指纹: RULER_FP, 数: {} }
   for (const [k, v] of Object.entries(METRICS)) snap.数[k] = { 值: v.at(sha), 怎么来的: v.how }
   writeFileSync(join(ROOT, out), `${JSON.stringify(snap, null, 2)}\n`)
   console.log(`✅ 开批快照(**现测**,不是抄的)→ ${out}\n   HEAD ${snap.short}`)
@@ -68,6 +80,14 @@ if (checkAt < 0) {
     const snap = JSON.parse(readFileSync(join(ROOT, f), 'utf8'))
     console.log(`════ J-63 开批快照对账 ════\n  快照 ${f}\n  它声称是在 \`${snap.short}\` 那一刻量的 —— **回到那个 sha 重新量一遍**\n`)
     let bad = 0
+    /* 裁 #97:尺子换过就不许拿旧数交差 */
+    if (snap.尺子指纹 && snap.尺子指纹 !== RULER_FP) {
+      console.log(`  🔴 **尺子变过了**(快照记的是 ${snap.尺子指纹},现在是 ${RULER_FP})——`)
+      console.log('     用旧尺子量出来的数**一律作废重量**,不许拿它交差(裁 #97)。下面这一遍是用新尺子重量的。')
+      bad += 1
+    } else if (!snap.尺子指纹) {
+      console.log('  ⚠️ 这份快照没记尺子指纹(裁 #97 之前打的)—— 没法判断尺子有没有换过')
+    }
     for (const [k, v] of Object.entries(METRICS)) {
       const said = snap.数?.[k]?.值
       if (said === undefined) { console.log(`  ⚠️ ${k}:快照里没有这一项`); continue }

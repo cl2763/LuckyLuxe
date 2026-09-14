@@ -16,6 +16,7 @@ import { merchantIdentity, runStoreRenameMigration, welcomeText } from './store-
 import { nameToUsername, isValidUsername } from './pinyin-names.mjs'
 import { createDecipheriv, createHash, createHmac, randomUUID } from 'node:crypto'
 import { makeMiniToken } from './mini-token.mjs'
+import { notBoundByLoginIdentitySql, makeUnionIdResolver } from './identity-kinds.mjs'   // 🔴 D191:第三条「没绑过微信」只改这一条,整段分类在该模块
 import { addUserColumns, USER_OP_COLUMNS } from './user-columns.mjs'
 import { copyFileSync, existsSync, mkdirSync, readdirSync, readFileSync, renameSync, statSync, unlinkSync, writeFileSync } from 'node:fs'
 import { basename, dirname, extname, join, normalize, resolve } from 'node:path'
@@ -5191,15 +5192,8 @@ function resolveUserByIdentity(provider, providerUserId, tenantId = currentTenan
   `).get(provider, providerUserId, tenantId) || null
 }
 
-function resolveUserByUnionId(unionId, tenantId = currentTenantId()) {
-  if (!unionId) return null
-  return db.prepare(`
-    SELECT users.* FROM user_identities
-    JOIN users ON users.id = user_identities.user_id
-    WHERE user_identities.union_id = ? AND users.tenant_id = ?
-    ORDER BY user_identities.created_at ASC
-  `).get(unionId, tenantId) || null
-}
+const unionIdResolver = makeUnionIdResolver(db)   // 整段在 ./identity-kinds.mjs(裁#89 摘出去,认人同域)
+function resolveUserByUnionId(unionId, tenantId = currentTenantId()) { return unionIdResolver(unionId, tenantId) }
 
 /* upsertUserIdentity 搬去 `./user-identity.mjs`(D130 同域;逻辑一个字没改)——
    定义提到 5448 行之前,因为 createTenantProfile 那一行要把它当值传进去(函数提升没了就 TDZ)。 */
@@ -5693,7 +5687,7 @@ async function signInWechatMiniUser(body) {
       SELECT u.* FROM users u
       WHERE u.tenant_id = ? AND u.phone = ?
         AND (u.wechat_open_id IS NULL OR u.wechat_open_id = '')
-        AND NOT EXISTS (SELECT 1 FROM user_identities i WHERE i.user_id = u.id)
+        AND ${notBoundByLoginIdentitySql('u')}
     `).all(loginTenantEarly, phone)
     if (candidates.length === 1) claimed = candidates[0]
   }

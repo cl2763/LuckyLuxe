@@ -316,7 +316,7 @@ curl -s -X POST -H "authorization: Bearer owner-demo-token" -H "content-type: ap
   -d '{}' http://127.0.0.1:4128/admin/demo/full-seed > /dev/null || true
 
 # 可用 CI_SUITES="a b c" 环境变量跑子集(调试用)
-DEFAULT_SUITES="customer-service-matrix working-memory business-hours intent-guards quote-polish silent-handoff human-handoff after-sales-handoff identity-links entitlements tenant-kb finance-core finance-goals stored-value schedule-week special-dates customer-profile staff-portal admin-accounts pricing-model membership-config customer-import tenant-hygiene tenant-timezone deposit-config message-templates settlement daily-close salary-v2 schedule-v2 finance-trend finance-lock perf-viz coupon-settle audit-fix scan-sign double-sheet auth-surface currency-scan settle-stress sign-stability noshow-aftersales demo-seed-guard card-refund amend-linkage ledger-guards backend-gate hero-slides cash-notes mini-money-inputs image-placeholder deposit-audit web-settlement cross-end-effect mini-account-adjust today-board dashboard-pulse dashboard-home hours-gate crossend-cta tab-colors color-usage token-entry danger-cmd notify-scheduler quote-state ui-spec observe-fixes file-ratchet delivery-evidence store-name correction-reason credential-scan exit-code fixture-front-door wechat-stub mini-phone booking-cancel demo-gate-scope demo-gate-coverage frontend-routes login-entries db-target-guard empty-pill untouched-proof display-text tenant-ownership tenant-explicit identity-tenant version-fingerprint tenant-fill-trigger conversation-log ai-gate ai-safety-lines ai-fact-gate booking-intake turn-classify turn-answer ai-review quote-tenant conversation-tenant mini-ai-same-outlet platform-login mp-home-owner v4-five-fixes repeat-guard merge-window three-stores tier-label native-dialog demo-mark txn-rollback store-jury"
+DEFAULT_SUITES="customer-service-matrix working-memory business-hours intent-guards quote-polish silent-handoff human-handoff after-sales-handoff identity-links entitlements tenant-kb finance-core finance-goals stored-value schedule-week special-dates customer-profile staff-portal admin-accounts pricing-model membership-config customer-import tenant-hygiene tenant-timezone deposit-config message-templates settlement daily-close salary-v2 schedule-v2 finance-trend finance-lock perf-viz coupon-settle audit-fix scan-sign double-sheet auth-surface currency-scan settle-stress sign-stability noshow-aftersales demo-seed-guard card-refund amend-linkage ledger-guards backend-gate hero-slides cash-notes mini-money-inputs image-placeholder deposit-audit web-settlement cross-end-effect mini-account-adjust today-board dashboard-pulse dashboard-home hours-gate crossend-cta tab-colors color-usage token-entry danger-cmd notify-scheduler quote-state ui-spec observe-fixes file-ratchet delivery-evidence store-name correction-reason credential-scan exit-code fixture-front-door wechat-stub mini-phone booking-cancel identity-claim demo-gate-scope demo-gate-coverage frontend-routes login-entries db-target-guard empty-pill untouched-proof display-text tenant-ownership tenant-explicit identity-tenant version-fingerprint tenant-fill-trigger conversation-log ai-gate ai-safety-lines ai-fact-gate booking-intake turn-classify turn-answer ai-review quote-tenant conversation-tenant mini-ai-same-outlet platform-login mp-home-owner v4-five-fixes repeat-guard merge-window three-stores tier-label native-dialog demo-mark txn-rollback store-jury"
 read -r -a SUITES <<< "${CI_SUITES:-$DEFAULT_SUITES}"
 
 # 🔴 断言基线(店主 02r 裁定一):每套跑完**就地数** `^ok ` 条数,不事后解析日志 ——
@@ -417,7 +417,7 @@ DEMO_GATE_MODES="${DEMO_GATE_MODES:-true false}"
 # 顾客端相关判据:这一档必须全部跑一遍(**只许变长**,少一条 test-demo-gate-coverage 红)
 # 🔴 裁 #72:名单不许我手挑 —— `test-demo-gate-coverage ①a` 按机制算出「该跑」并逐个对,
 #    少一套就红在「该跑没跑」上(造病已验)。这里列的是**该跑的全部 11 套 + 多跑的 4 套**。
-DEMO_GATE_SUITES="auth-surface backend-gate booking-intake card-refund customer-profile deposit-config identity-links mini-ai-same-outlet noshow-aftersales schedule-v2 staff-portal stored-value wechat-stub mini-phone booking-cancel web-settlement cross-end-effect display-text tenant-ownership"
+DEMO_GATE_SUITES="auth-surface backend-gate booking-intake card-refund customer-profile deposit-config identity-links mini-ai-same-outlet noshow-aftersales schedule-v2 staff-portal stored-value wechat-stub mini-phone booking-cancel identity-claim identity-claim web-settlement cross-end-effect display-text tenant-ownership"
 : > /tmp/ll-demo-gate-modes.txt
 echo "true" >> /tmp/ll-demo-gate-modes.txt
 if printf '%s' "$DEMO_GATE_MODES" | grep -q false; then
@@ -467,6 +467,8 @@ fi
 #   · 为什么不选 ③(判成只能真机跑):它在本机开发者工具开着时**是跑得通的**,判死不实事求是。
 # **期限**:下一批(07m)把「先证死再拉起 9420」写进 `tools/` 的一个脚本,让这一档能自愈;
 #   自愈做不到就升级成 ③(具名冻结 + 写明谁在真机上跑)。**跑的人:Code。**
+# 裁 #91 的期限件(07n §七⑦ 交付):开跑前**先证死再拉起再证活**,不靠人记得手动开工具
+bash tools/mp-automator-up.sh || echo "   ⚠️ 自愈没成 —— 下面这一档会空转,按红处理(不是通过)"
 MP_LANE_SUITES="mp-placeholder-size mp-overlap mp-home-sections"
 MP_LANE_N=$(printf '%s' "$MP_LANE_SUITES" | wc -w | tr -d ' ')
 echo ""
