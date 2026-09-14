@@ -93,7 +93,13 @@ for (const f of CAND) {
      刀数到的是注释里那句案底「原来这里是 `process.env.X || '默认'`」。
      判据不许被自己的案底注释误报:**剥掉注释再判**(与 02q 那次「白名单理由被自己数进去」同族)。 */
   const src = raw.replace(/\/\*[\s\S]*?\*\//g, (m) => m.replace(/[^\n]/g, ' ')).replace(/^[^\S\n]*(\/\/|#).*$/gm, '')
-  if (!WRITES.test(src)) continue
+  /* 🔴 09-14(07m)统一尺子(J-39):这一层原来用的是**裸** `WRITES.test(src)`,
+     而 ④b 用的是会**剥掉正则/字符串字面量**的 `isRealWriter()` —— 同一个问题两把尺子。
+     后果现测:两把新工具(`tools/assert-reads-fact.mjs` / `tools/j62-knife-bench.mjs`)
+     把 `method: 'POST'` 这类形态写在**正则字面量**里当判据用,自己一行库都不碰,
+     却被这一层判成「会写库的脚本没接护栏」。**假阳会逼人去改代码躲判据**(J-49②),
+     所以治的是尺子不是被测对象。 */
+  if (!isRealWriter(src)) continue
   const hasDefault = DEFAULTS.filter((d) => d.rx.test(src)).map((d) => d.name)
   writers.push({ file: f, hasDefault, guarded: /requireTarget/.test(src) })
 }

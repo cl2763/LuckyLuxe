@@ -98,3 +98,23 @@ export async function createAndLoginCustomerViaFrontDoor({ base, tenantId, owner
   const login = await loginCustomerViaFrontDoor({ base, tenantId, openid: `stub-openid-${userId}`, phone })
   return { ok: login.ok && login.user?.id === userId, status: login.status, userId, claimedId: login.user?.id, accessToken: login.accessToken, body: login.body, usedDate }
 }
+
+/* 🔴 J-60 转正门的**共用出口**(店主 07m §七,2026-09-14)
+ *
+ * 「这个顾客绑了微信」这个状态,原来 32 处夹具里有一大半是**直连库贴**出来的:
+ *   `db.prepare('UPDATE users SET wechat_open_id = ? WHERE id = ?')`
+ * 真顾客不是这么绑上的。她是拿**自己的手机号**从 `/auth/wechat/mini-login` 进来,
+ * 服务端那条**严格认人四条**(本店 + 号完全一致 + 没绑过微信 + **唯一一条**)
+ * 把那条轻档案认领走并绑上 —— 贴出来的那个绑**没走过这条路**,
+ * 于是认人那一段在这些套件里从来没被跑到过。
+ *
+ * ⚠️ 用它的前提:那条轻档案**建的时候要带手机号**。没号就认不了(那是设计,不是缺陷)。
+ */
+export async function bindWechatViaFrontDoor({ base, tenantId, userId, phone, tag }) {
+  const r = await loginCustomerViaFrontDoor({ base, tenantId, openid: `stub-openid-${tag}`, phone })
+  if (!r.ok || r.user?.id !== userId) {
+    throw new Error(`[J-60] 正门绑微信没成(${tag}):status=${r.status} 认成了 ${r.user?.id || '(新建)'} 期望 ${userId}`
+      + ' —— 严格认人四条没认上,查:这条轻档案有没有手机号 / 是不是同一家店 / 号是不是撞了第二条')
+  }
+  return r
+}

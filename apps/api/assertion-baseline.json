@@ -116,13 +116,14 @@
     "login-entries": 4,
     "wechat-stub": 10,
     "fixture-front-door": 5,
-    "mini-phone": 18,
-    "demo-gate-scope": 8
+    "mini-phone": 21,
+    "demo-gate-scope": 8,
+    "booking-cancel": 12
   },
   "上次更新": "2026-09-02",
   "巨型文件历史最低": {
     "说明": "棘轮双基线(店主 09-08 裁,05r 补三):预检取 min(上一提交行数, 这里记的历史最低)。只许写小不许写大 —— 写大预检自己红。治的是「红着提交一次,下一次基线跟着抬」那个口子。",
-    "apps/api/local-server.mjs": 17664,
+    "apps/api/local-server.mjs": 17656,
     "apps/web/admin.js": 7928
   },
   "小程序档_移出主档_2026-09-14": {

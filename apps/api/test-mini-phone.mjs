@@ -252,6 +252,35 @@ try {
       resCross.status === 403 && rowCross.phone === '13900007777',
       `status=${resCross.status} 我的号变成了=${rowCross.phone}`)
 
+    /* ══ ㋐16 裁#94(07m §四①)· 头像必须**真落库** ══
+       原来:顾客选了头像 → 看到「资料已保存」的绿勾 → 而 `avatarUrl` 后端零出现、表里没这一列,
+       只写进了那台手机的 `wx.setStorageSync`。同一次保存里 `display_name` 是真存了的 ——
+       **做了一半,回执给全了**,J-62 最坏的一种(半真的回执比全假的更难发现)。
+       本条按 **J-62 第二款**写:**查库**,不看返回体;注掉落库这条必须红。 */
+    const AV = 'https://thirdwx.qlogo.cn/mmopen/vi_32/stub-avatar-abc/132'
+    const oidAv = `stub-openid-avatar-${Date.now()}`
+    const avRes = await fetch(`${BASE}/auth/wechat/mini-login`, { method: 'POST', headers: H,
+      body: JSON.stringify({ code: `stub:${oidAv}`, tenantId: 'lucky-luxe', displayName: '头像判据·甲', avatarUrl: AV }) })
+    const avBody = await avRes.json().catch(() => ({}))
+    const avUid = avBody?.user?.id || ''
+    const dbAv = new DatabaseSync(dbPath)
+    const rowAv = dbAv.prepare('SELECT avatar_url FROM users WHERE id = ?').get(avUid) || {}
+    dbAv.close()
+    check('㋐16 🔴 裁#94:顾客设头像 → **查库** `users.avatar_url` 真的是那一张 —— '
+      + '不看响应(响应是处理函数自己拼的,落不落库都长一样)。'
+      + '同一次保存里名字早就真存了,唯独头像只在那台手机的缓存里,而绿勾照打',
+      rowAv.avatar_url === AV, `库里=${JSON.stringify(rowAv.avatar_url)} 期望=${AV}`)
+    check('㋐16b 下发面闭合:登录返回里 `user.avatarUrl` 就是库里那一张 —— '
+      + '光落库不下发,小程序照样看不见(位面要对:加字段必须回到顾客那一层验)',
+      avBody?.user?.avatarUrl === AV, `下发=${JSON.stringify(avBody?.user?.avatarUrl)}`)
+    /* ㋐16c 占位零回落律:没传过头像的人,下发的必须是**空**,不许拿别人的顶 */
+    const oidNo = `stub-openid-noavatar-${Date.now()}`
+    const noBody = await (await fetch(`${BASE}/auth/wechat/mini-login`, { method: 'POST', headers: H,
+      body: JSON.stringify({ code: `stub:${oidNo}`, tenantId: 'lucky-luxe', displayName: '头像判据·乙' }) })).json().catch(() => ({}))
+    check('㋐16c 🔴 占位零回落律:**没传过头像**的顾客,下发的是空串(前端出占位)—— '
+      + '不许回落到平台示例头像,也不许拿别人那张顶',
+      noBody?.user?.avatarUrl === '', `下发=${JSON.stringify(noBody?.user?.avatarUrl)}`)
+
     /* ㋐9 未登录 */
     const resAnon = await fetch(`${BASE}/auth/wechat/mini-phone`,
       { method: 'POST', headers: H, body: JSON.stringify({ code: `stub:${oidBad}`, ...pGood }) })

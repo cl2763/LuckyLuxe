@@ -120,7 +120,12 @@ export function scanWriteSites(ROOT) {
     let raw = ''
     try { raw = readFileSync(join(ROOT, f), 'utf8') } catch { continue }
     const src = bare(raw)
-    if (!WRITES.test(src)) continue
+    /* 🔴 09-14(07m)统一尺子(J-39):这里原来用**裸** `WRITES.test(src)`,
+       而判据 ④b 用的是会**剥掉正则/字符串字面量**的 `isRealWriter()`。
+       同一个问题三处(生成器 / ①c / ④b)两把尺子 —— 于是清单把「把 SQL 形态写在正则里当判据用」
+       的工具列成了「会写库」,④b 再回头咬清单,**两边都对,账永远对不上**。
+       现在三处都用 `isRealWriter`。 */
+    if (!isRealWriter(src)) continue
     const http = /method:\s*['"](POST|PUT|PATCH|DELETE)['"]|fetch\(/.test(src)
     const direct = /DatabaseSync/.test(src)
     const txn = /BEGIN IMMEDIATE|BEGIN TRANSACTION/.test(src)

@@ -28,8 +28,16 @@ const check = (name, cond, detail = '') => {
 
 const IDTBL = /^(users|user_identities|admin_accounts|identity_merge_queue)$/
 const EXEC = /\.(prepare|exec)\(\s*[`'"]/
-/* 判据自己排除:它们把这些 SQL 串当**探针/报文**写在源码里,不是真在执行(自扫这一族已踩过多次) */
-const SELF = /test-tenant-explicit|test-demo-gate-coverage|test-fixture-front-door/
+/* 判据自己排除:它们把这些 SQL 串当**探针/报文**写在源码里,不是真在执行(自扫这一族已踩过多次)
+   🔴 J-61②(刀默认排除判据自身 + 判据的夹具,**并且具名**)—— 逐个写明为什么:
+     · `test-tenant-explicit`     判据:把 SQL 当报文比对
+     · `test-demo-gate-coverage`  判据:形态串里带着这些字样
+     · `test-fixture-front-door`  本判据自己
+     · `tools/j62-knife-bench`    **09-14 新增**:J-62 第二款的造病台,
+       它把 `db.prepare('UPDATE users SET phone …')` 当成**要去搜的那根针**存着,
+       自己一行 SQL 都不执行。不排掉它,J-60 的冻结数会因为「我写了一把新刀」而 9 → 10 ——
+       那就是拿 J-60 的棘轮去惩罚 J-62 的落地(J-57:判据不许互相噎死)。 */
+const SELF = /test-tenant-explicit|test-demo-gate-coverage|test-fixture-front-door|j62-knife-bench/
 const files = [
   ...readdirSync(join(ROOT, 'apps/api')).filter((b) => /^test-.*\.mjs$/.test(b)).map((b) => `apps/api/${b}`),
   ...readdirSync(join(ROOT, 'tools')).filter((b) => b.endsWith('.mjs')).map((b) => `tools/${b}`),

@@ -1,0 +1,35 @@
+{
+  "sha": "e3e428ac227c3bebb271661586f0f6fc67384ee2",
+  "short": "e3e428a",
+  "打于": "2026-09-14T06:46:14.045Z",
+  "数": {
+    "领先 origin/main": {
+      "值": 305,
+      "怎么来的": "git rev-list --count origin/main..<sha>"
+    },
+    "主档套件数": {
+      "值": 116,
+      "怎么来的": "run-all-tests.sh 的 DEFAULT_SUITES 词数 + 固定 4 套"
+    },
+    "门关档套件数": {
+      "值": 17,
+      "怎么来的": "run-all-tests.sh 的 DEMO_GATE_SUITES 词数"
+    },
+    "断言在册合计": {
+      "值": 3977,
+      "怎么来的": "assertion-baseline.json 的 suites 各值求和"
+    },
+    "local-server.mjs 行数": {
+      "值": 17664,
+      "怎么来的": "git show <sha>:文件 | 数行"
+    },
+    "admin.js 行数": {
+      "值": 7928,
+      "怎么来的": "同上"
+    },
+    "customer.js 行数": {
+      "值": 2755,
+      "怎么来的": "同上"
+    }
+  }
+}

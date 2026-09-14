@@ -26,6 +26,7 @@ const { requireOwnerToken } = await import('./owner-token.mjs')
    per-call 的 headers 仍然后到先得(跨租户用例照旧覆盖它)。 */
 const TENANT_HEADER = process.env.TEST_TENANT_ID || 'lucky-luxe'
 const BASE_URL = process.env.TEST_BASE_URL || 'http://127.0.0.1:4128'
+const { bindWechatViaFrontDoor } = await import('./customer-login-fixture.mjs')   // J-60 共用出口
 await assertTestTarget(BASE_URL)
 const TOKEN = process.env.TEST_ADMIN_TOKEN || requireOwnerToken()
 const RUN = Date.now().toString(36)
@@ -64,16 +65,19 @@ const svc0 = await request('/admin/services', { method: 'POST', body: JSON.strin
 const serviceId = svc0.data.service.id
 const technicianId = tech0.data.technician.id
 const today = new Date().toLocaleDateString('en-CA', { timeZone: 'America/Toronto' })
-const seedBk = await request('/admin/bookings/direct', { method: 'POST', body: JSON.stringify({ newCustomerName: `退卡顾客${RUN}`, serviceId, technicianId, date: today, time: '10:00' }) }, TOKEN, H)
+const seedBk = await request('/admin/bookings/direct', { method: 'POST', body: JSON.stringify({ newCustomerName: `退卡顾客${RUN}`, phone: `1390${RUN.slice(-7)}`, serviceId, technicianId, date: today, time: '10:00' }) }, TOKEN, H)
 const userId = seedBk.data.booking?.user?.id || seedBk.data.booking?.userId || ''
-db.prepare('UPDATE users SET wechat_open_id = ? WHERE id = ?').run(`n5-openid-${RUN}`, userId)
+const custLogin = await bindWechatViaFrontDoor({ base: BASE_URL, tenantId: tid, userId, phone: `1390${RUN.slice(-7)}`, tag: `n5-${RUN}` })   // J-60:走正门,不直连贴
 /* 🔴 07i §五:夹具建顾客**只留一条路 —— 正门**,两档都走它。
    原来这里用的是 `demoLogin: true`(演示捷径,生产上不存在)——
    门一关它就拿不到 token,而更要紧的是:主档因此一直在测一条不存在的路。
    现在按上面刚贴的那个 openid 从 `/auth/wechat/mini-login` 正门登录,
    token 是真签发的(见 customer-login-fixture.mjs 抬头)。 */
-const { loginCustomerViaFrontDoor } = await import('./customer-login-fixture.mjs')
-const cust = await loginCustomerViaFrontDoor({ base: BASE_URL, tenantId: tid, openid: `n5-openid-${RUN}` })
+/* 🔴 09-14(07m §七)再收一次:上面那一步**已经从正门登录过一次**了(绑微信就是靠它绑上的),
+   这里原来又用「刚贴进去的那个 openid」登录第二回 —— 贴没了之后那个 openid 不存在,
+   第二回登录会**另开一个人**,于是「顾客端流水」当然是空的。
+   一次登录一个身份:**复用第一次的 token**,不要为了拿 token 再登一次。 */
+const cust = custLogin
 const custToken = cust.accessToken
 check('夹具:顾客建档 + 贴 openid + **从正门登录**(两档同一条路)', Boolean(userId) && Boolean(custToken), JSON.stringify(cust.body).slice(0, 140))
 const rc = await request('/admin/stored-value/recharge', { method: 'POST', body: JSON.stringify({ userId, amountCents: 100000, bonusCents: 10000, payChannel: 'cash', note: '退卡夹具' }) }, TOKEN, H)
@@ -349,9 +353,9 @@ check('⑩-2 🔴 行为必须不同:keep=仍是会员 / drop=余额归零即失
   const bTech = (await request('/admin/technicians', { method: 'POST', body: JSON.stringify({ name: `技师${RUN}`, isActive: true }) }, TOKEN, BH)).data.technician.id
   const bCat = ((await request('/admin/pricing/categories', {}, TOKEN, BH)).data.categories || [])[0]?.id
   const bSvc = (await request('/admin/services', { method: 'POST', body: JSON.stringify({ type: 'NAIL', nameZh: `项目${RUN}`, nameEn: 'x', priceCents: 18000, baseDurationMin: 60, categoryId: bCat }) }, TOKEN, BH)).data.service.id
-  const bBk = await request('/admin/bookings/direct', { method: 'POST', body: JSON.stringify({ newCustomerName: `赠送顾客${RUN}`, serviceId: bSvc, technicianId: bTech, date: today, time: '10:00' }) }, TOKEN, BH)
+  const bBk = await request('/admin/bookings/direct', { method: 'POST', body: JSON.stringify({ newCustomerName: `赠送顾客${RUN}`, phone: `1391${RUN.slice(-7)}`, serviceId: bSvc, technicianId: bTech, date: today, time: '10:00' }) }, TOKEN, BH)
   const bUser = bBk.data.booking.user.id
-  db.prepare('UPDATE users SET wechat_open_id = ? WHERE id = ?').run(`n5b-openid-${RUN}`, bUser)
+  await bindWechatViaFrontDoor({ base: BASE_URL, tenantId: bId, userId: bUser, phone: `1391${RUN.slice(-7)}`, tag: `n5b-${RUN}` })   // J-60
   // 充 1000 送 100(图 v1.1 举的就是这个例子)
   await request('/admin/stored-value/recharge', { method: 'POST', body: JSON.stringify({ userId: bUser, amountCents: 100000, bonusCents: 10000, payChannel: 'cash' }) }, TOKEN, BH)
 
@@ -704,12 +708,12 @@ check('⑩-2 🔴 行为必须不同:keep=仍是会员 / drop=余额归零即失
   // 撞档就换时段(别的夹具占了);这不是被测行为,别让它把断言弄红
   let mixBk = { status: 0, data: {} }
   for (const hh of ['19', '07', '22', '23', '12']) {
-    mixBk = await request('/admin/bookings/direct', { method: 'POST', body: JSON.stringify({ newCustomerName: `混合拆客${RUN}`, serviceId, technicianId, date: today, time: `${hh}:00` }) }, TOKEN, H)
+    mixBk = await request('/admin/bookings/direct', { method: 'POST', body: JSON.stringify({ newCustomerName: `混合拆客${RUN}`, phone: `1392${RUN.slice(-7)}`, serviceId, technicianId, date: today, time: `${hh}:00` }) }, TOKEN, H)
     if (mixBk.data?.booking?.user?.id) break
   }
   const mixUser = mixBk.data?.booking?.user?.id
   if (mixUser) {
-    db.prepare('UPDATE users SET wechat_open_id = ? WHERE id = ?').run(`n5-mix-${RUN}`, mixUser)
+    await bindWechatViaFrontDoor({ base: BASE_URL, tenantId: tid, userId: mixUser, phone: `1392${RUN.slice(-7)}`, tag: `n5mix-${RUN}` })   // J-60
     await request('/admin/stored-value/recharge', { method: 'POST', body: JSON.stringify({ userId: mixUser, amountCents: 85000, bonusCents: 10000, payChannel: 'cash', note: '混合拆夹具' }) }, TOKEN, H)
     const mf = (await request(`/admin/account-adjust/facts?userId=${mixUser}`, {}, TOKEN, H)).data.facts
     check('混合拆-0 前置:实付可退 850 · 赠送 100 · 余额 950(两边都不为 0 才切得出刀口)',

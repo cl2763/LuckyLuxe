@@ -16,6 +16,7 @@ import { merchantIdentity, runStoreRenameMigration, welcomeText } from './store-
 import { nameToUsername, isValidUsername } from './pinyin-names.mjs'
 import { createDecipheriv, createHash, createHmac, randomUUID } from 'node:crypto'
 import { makeMiniToken } from './mini-token.mjs'
+import { addUserColumns, USER_OP_COLUMNS } from './user-columns.mjs'
 import { copyFileSync, existsSync, mkdirSync, readdirSync, readFileSync, renameSync, statSync, unlinkSync, writeFileSync } from 'node:fs'
 import { basename, dirname, extname, join, normalize, resolve } from 'node:path'
 import { fileURLToPath } from 'node:url'
@@ -5427,6 +5428,7 @@ function serializeUser(user, tenantId = DEFAULT_TENANT_ID) {
     email: user.email,
     provider: user.google_id ? 'google' : user.wechat_open_id ? 'wechat' : 'email',
     profileComplete: !isGenericDisplayName(user.display_name, user.id),
+    avatarUrl: user.avatar_url || '',   // 裁#94:没传过就是空 → 前端出占位(占位零回落律),**绝不拿别人的图顶**
     memberLevel: membership.memberLevel,
     memberTier: membership.memberTier,
     growthValue: membership.growthValue,
@@ -5671,7 +5673,7 @@ async function signInWechatMiniUser(body) {
   if (hop.ok === false || data.errcode || !data.openid) {
     throw apiError(401, 'WECHAT_LOGIN_FAILED', data.errmsg || 'WeChat mini login failed.')
   }
-  const incomingDisplayName = String(body.displayName || '').trim()
+  const incomingDisplayName = String(body.displayName || '').trim(); const incomingAvatarUrl = String(body.avatarUrl || '').trim().slice(0, 2048)   // 裁#94:头像跟着一起落库
   const phone = String(body.phone || '').trim()
   /* 会员=用户×店:这一整段的身份匹配都按**进的是哪家店**来找;
      找不到就在这家店新建一行(同一个微信在每家店各一份档案,互不相干)。 */
@@ -5702,11 +5704,11 @@ async function signInWechatMiniUser(body) {
   if (!user) {
     const id = randomId('user')
     const displayName = isGenericDisplayName(incomingDisplayName, id) ? displayNameForUserId(id) : incomingDisplayName
-    db.prepare('INSERT INTO users (id, display_name, phone, wechat_open_id, tenant_id) VALUES (?, ?, NULLIF(?, \'\'), ?, ?)').run(id, displayName, phone, data.openid, loginTenantEarly)
+    db.prepare('INSERT INTO users (id, display_name, phone, wechat_open_id, tenant_id, avatar_url) VALUES (?, ?, NULLIF(?, \'\'), ?, ?, ?)').run(id, displayName, phone, data.openid, loginTenantEarly, incomingAvatarUrl)
     user = db.prepare('SELECT * FROM users WHERE id = ?').get(id)
   } else {
     const nextDisplayName = isGenericDisplayName(incomingDisplayName, user.id) ? user.display_name : incomingDisplayName
-    db.prepare('UPDATE users SET display_name = ?, phone = COALESCE(NULLIF(?, \'\'), phone), wechat_open_id = COALESCE(wechat_open_id, ?) WHERE id = ?').run(nextDisplayName, phone, data.openid, user.id)
+    db.prepare('UPDATE users SET display_name = ?, phone = COALESCE(NULLIF(?, \'\'), phone), wechat_open_id = COALESCE(wechat_open_id, ?), avatar_url = COALESCE(NULLIF(?, \'\'), avatar_url) WHERE id = ?').run(nextDisplayName, phone, data.openid, incomingAvatarUrl, user.id)
     user = db.prepare('SELECT * FROM users WHERE id = ?').get(user.id)
   }
   upsertUserIdentity({
@@ -16745,17 +16747,7 @@ db.exec(`
 db.exec(`UPDATE services SET image_url = REPLACE(image_url, '.png', '.jpg')
   WHERE image_url LIKE '/assets/images/%.png' AND image_url NOT LIKE '%brand-logo%'`)
 // ===== 客户运营字段(标签/备注/生日,美业刚需:过敏史、偏好、生日营销) =====
-for (const sql of [
-  "ALTER TABLE users ADD COLUMN tags_json TEXT NOT NULL DEFAULT '[]'",
-  'ALTER TABLE users ADD COLUMN notes TEXT',
-  'ALTER TABLE users ADD COLUMN birthday TEXT'
-]) {
-  try {
-    db.exec(sql)
-  } catch (error) {
-    if (!String(error.message || '').includes('duplicate column')) throw error
-  }
-}
+addUserColumns(db, USER_OP_COLUMNS)   // 登记与施工都在 ./user-columns.mjs(裁#89 摘出去;含裁#94 的 avatar_url)
 // ===== 财务账本防篡改(只追加 + 哈希链)=====
 try {
   db.exec('ALTER TABLE finance_transactions ADD COLUMN prev_hash TEXT')

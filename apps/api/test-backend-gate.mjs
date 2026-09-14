@@ -18,6 +18,7 @@ import { DatabaseSync } from 'node:sqlite'
 const { requireOwnerToken } = await import('./owner-token.mjs')
 
 const BASE_URL = process.env.TEST_BASE_URL || 'http://127.0.0.1:4128'
+const { bindWechatViaFrontDoor } = await import('./customer-login-fixture.mjs')   // J-60 共用出口
 await assertTestTarget(BASE_URL)
 const PLATFORM = process.env.TEST_ADMIN_TOKEN || requireOwnerToken()
 const RUN = Date.now().toString(36)
@@ -47,11 +48,12 @@ const technicianId = (await request('/admin/technicians', { method: 'POST', body
 const catId = ((await request('/admin/pricing/categories', {}, PLATFORM, H)).data.categories || [])[0]?.id
 const serviceId = (await request('/admin/services', { method: 'POST', body: JSON.stringify({ type: 'NAIL', nameZh: `闸门项目${RUN}`, nameEn: 'x', priceCents: 19800, baseDurationMin: 60, categoryId: catId }) }, PLATFORM, H)).data.service.id
 const today = new Date().toLocaleDateString('en-CA', { timeZone: 'America/Toronto' })
-const bk = await request('/admin/bookings/direct', { method: 'POST', body: JSON.stringify({ newCustomerName: `闸门客${RUN}`, serviceId, technicianId, date: today, time: '10:00' }) }, PLATFORM, H)
+const bk = await request('/admin/bookings/direct', { method: 'POST', body: JSON.stringify({ newCustomerName: `闸门客${RUN}`, phone: `1393${RUN.slice(-7)}`, serviceId, technicianId, date: today, time: '10:00' }) }, PLATFORM, H)
 const userId = bk.data?.booking?.user?.id || ''
-// D25 闸:未绑定微信的轻档案不可充值 —— 夹具直连库贴一个 openid,免得反向守撞在这上面
-const db = new DatabaseSync(process.env.TEST_DB_PATH || '')
-db.prepare('UPDATE users SET wechat_open_id = ? WHERE id = ?').run(`bg-openid-${RUN}`, userId)
+/* D25 闸:未绑定微信的轻档案不可充值。原来这里**直连库贴**一个 openid ——
+   J-60(07m §七)转正门:拿同一个手机号走 `/auth/wechat/mini-login`,
+   让**严格认人四条**自己把这条轻档案认领走并绑上(真顾客就是这么绑的)。 */
+await bindWechatViaFrontDoor({ base: BASE_URL, tenantId: tid, userId, phone: `1393${RUN.slice(-7)}`, tag: `bg-${RUN}` })
 check('前置:店/技师/项目/顾客都建好了(顾客已绑定,充值闸不挡反向守)', Boolean(technicianId && serviceId && userId))
 
 /* 一条 A 级 = 一次「绕过前端」+ 一次「合法参数」。
