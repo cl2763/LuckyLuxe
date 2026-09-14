@@ -57,6 +57,35 @@ function cutStatement(src, needle, nth = null) {
   return { start, end: j }
 }
 
+/* 🔴 裁 #99(店主 07o §五)· **造病期间,工作区里不许有未提交的真改动**
+ *
+ * 案由:07m 我用了一次 `git checkout --` 还原 —— 那是 J-34 明令禁入变异流程的命令。
+ * **根子不在「手滑」**:造病台在动源码,而我**同时还有未提交的真改动**(J-60 转的那 5 处)
+ * 在同一个工作区里 —— **还原的时候就分不开了**,所以我伸手去拿了那把禁用的刀。
+ *
+ * 所以:**开跑前检查工作区干净,不干净就拒绝开跑并说明原因。**
+ * 台子只许还原**它自己动过**的东西;要造病,先提交或先 stash。
+ *
+ * ⚠️ 例外只有一个:`KNIFE_ALLOW_DIRTY=1` —— 它**不是后门**,是给「我就想看一眼」留的口,
+ * 而且**会在输出里大声说出来**,回执里赖不掉。
+ */
+function assertCleanTree() {
+  const out = execFileSync('git', ['status', '--porcelain'], { cwd: ROOT, encoding: 'utf8', maxBuffer: 64e6 })
+  const dirty = out.split('\n').map((l) => l.trim()).filter(Boolean)
+  if (!dirty.length) { console.log('[裁#99 自证] 工作区干净 —— 台子还原的时候不会和别的改动搅在一起'); return }
+  if (process.env.KNIFE_ALLOW_DIRTY === '1') {
+    console.log(`⚠️ [裁#99] 工作区有 ${dirty.length} 处未提交改动,但 KNIFE_ALLOW_DIRTY=1 强开了 ——`)
+    console.log('   **这一轮造病的还原不保证干净**,回执里必须写明这一行。')
+    for (const d of dirty.slice(0, 8)) console.log(`     ${d}`)
+    return
+  }
+  console.error(`\n🔴 **拒绝开跑**:工作区有 ${dirty.length} 处未提交改动(裁 #99)。`)
+  console.error('   台子要动源码再还原,**和你没提交的改动搅在一起就分不开了** —— 07m 那次 `git checkout --` 就是这么来的。')
+  console.error('   先 `git commit` 或 `git stash`,再来造病。硬要跑:`KNIFE_ALLOW_DIRTY=1`(会在输出里大声说出来)。')
+  for (const d of dirty.slice(0, 8)) console.error(`     ${d}`)
+  process.exit(2)
+}
+
 /* 🔴 裁 #98(店主 07o §四 / 07p §七④)· **造病台不许借 4128 / 4310**
  *
  * 根子不在「忘了拉回来」,在于台子一开始就不该碰那两台:
@@ -220,6 +249,7 @@ const TARGETS = [
     nth: 0, claimPat: /㋛2/ },
 ]
 /* 🔴 裁 #98 自证:造病**前后**各量一次店主那两台。动过就是台子越界。 */
+assertCleanTree()
 const ownerBefore = await ownerPortsAlive()
 console.log(`[裁#98 自证·开跑前] 4128=${ownerBefore.p4128 ? '200' : '✗'} · 4310=${ownerBefore.p4310 ? '200' : '✗'}`)
 for (const t of TARGETS) { if (ONLY && !t.ep.includes(ONLY)) continue; await knife(t) }
