@@ -67,8 +67,13 @@ const GATE_EXCLUDE = {
   'frontend-routes': '纯静态判据:前端路径 vs 后端路由对表,**不起服务**',
   'login-entries': '纯静态判据:读 customer.js 的登录区源码,**不起服务**',
   'demo-mark': '纯静态判据:扫演示数据标记,**不起服务、不取 token**',
+  /* 🔴 09-14(店主 07p §四 明令:「玩具套件本身要具名冻结」)——
+     `test-knife-selfcheck` **不是产品判据,是造病台的夹具**:两条断言,一条必然绿、
+     一条**故意只验回执**(标本)。它存在的唯一目的是让 J-58 第四款那一支能被看见触发。
+     把它算进门关档等于拿夹具去量产品(J-61②:刀默认排除判据自身与夹具)。 */
+  'knife-selfcheck': '造病台的**玩具夹具**(店主 07p §四 明令具名冻结):两条断言,其中一条是故意写坏的标本,不是产品判据',
 }
-const GATE_EXCLUDE_CAP = 4   /* 只许变短(J-51) */
+const GATE_EXCLUDE_CAP = 5   /* 4 → 5:店主 07p §四**明令**把玩具套件具名冻结(有批,不是我自己抬)。仍然只许变短(J-51) */
 
 const shouldRun = SHOULD.filter((n) => !GATE_EXCLUDE[n])
 const ran = suites
@@ -88,14 +93,31 @@ check(`①a0 🔴 「该跑」底数上账(J-50 第二款):现算 ${shouldRun.le
   + '(后者恰好发生在我们做对事情的时候:改走正门改得越多,扫得越少)',
   shouldRun.length >= SHOULD_RUN_FLOOR, `现算=${shouldRun.join(' ')}`)
 
+/* 🔴 09-14(07p §六)· **名单里不许有重名**
+   案由:07n 那次我用脚本往 `DEMO_GATE_SUITES` 里插 `identity-claim`,替换匹配到两个锚点,
+   **插进去两遍** —— 于是门关档每轮把同一套跑了两次,而「19 → 21」看起来像加了两套。
+   店主问「另一套是哪来的」时,我第一次答成「+1」、第二次答成「两套」,**两次都错**,
+   直到把链条逐版 diff 才看见是重名。
+   **数「几套」的时候,重名会让这个数说谎** —— 归族 J-48 底数闭合(量过的个数 vs 去重个数要分开报)。 */
+const dupNames = suites.filter((n, i) => suites.indexOf(n) !== i)
+check(`①a-1 🔴 门关档名单**零重名**:现列 ${suites.length} 条 · 去重后 ${new Set(suites).size} 条 —— `
+  + '重名不会让任何判据变红,但它让「几套」这个数说谎(同一套跑两遍,报表上多算一套)',
+  dupNames.length === 0, `重名的:${[...new Set(dupNames)].join(' / ') || '(无)'}`)
+
 check(`①a 🔴 底数闭合(J-48,三个数分开):**该跑 ${shouldRun.length} 套 · 跑了 ${didRun.length} 套 · 该跑没跑 ${notRun.length} 套**`
   + ` —— 没跑的是「没扫」,不是「没红」${notRun.length ? `:${notRun.join(' ')}` : ''}`,
 notRun.length === 0, notRun.join(' '))
 
 check(`①b 选择口径**具名冻结**:纯静态、不取 token 的 ${Object.keys(GATE_EXCLUDE).length} 套逐条写了理由`
   + `(<= ${GATE_EXCLUDE_CAP},只许变短);「跑起来太慢」不算理由`,
+  /* 🔴 09-14(07p):冻结现在有**两类**理由,各自有各自的必填措辞 ——
+     ①**纯静态**:不起服务 / 不取 token(原来只有这一类);
+     ②**判据夹具**:它不是产品判据,是刀自己的夹具(J-61②)。
+     不许有第三类,也不许只写「跑起来太慢」—— 那不是理由。
+     **两类都要写满措辞**,所以这一条没被放松,是把类别写明了。 */
   Object.keys(GATE_EXCLUDE).length <= GATE_EXCLUDE_CAP
-  && Object.values(GATE_EXCLUDE).every((v) => /不起服务|不取 token/.test(v) && String(v).length > 15),
+  && Object.values(GATE_EXCLUDE).every((v) => (/不起服务|不取 token/.test(v) || /夹具/.test(v)) && String(v).length > 15)
+  && !Object.values(GATE_EXCLUDE).some((v) => /太慢|慢/.test(v)),
   Object.keys(GATE_EXCLUDE).join(' '))
 
 check(`①c 反向守:机制算出来的「碰登录态」共 ${SHOULD.length + STATIC_ONLY.length} 套(其中纯静态 ${STATIC_ONLY.length})`

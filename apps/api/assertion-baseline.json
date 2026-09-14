@@ -111,7 +111,7 @@
     "token-entry": 9,
     "danger-cmd": 8,
     "exit-code": 8,
-    "demo-gate-coverage": 15,
+    "demo-gate-coverage": 16,
     "frontend-routes": 6,
     "login-entries": 4,
     "wechat-stub": 10,
@@ -120,7 +120,7 @@
     "demo-gate-scope": 8,
     "booking-cancel": 12,
     "identity-claim": 13,
-    "customer-paths": 9
+    "customer-paths": 11
   },
   "上次更新": "2026-09-02",
   "巨型文件历史最低": {

@@ -14,8 +14,11 @@
  *   ③ 记**是哪一条**红的 —— 套件红了但没有一条「声称成功」的断言红,
  *      那还是**仍绿**(07l 那一刀就是被隔壁的幂等撞红的)。
  */
-import { readFileSync, writeFileSync } from 'node:fs'
+import { readFileSync, writeFileSync, mkdtempSync, rmSync } from 'node:fs'
+import { tmpdir } from 'node:os'
+import { spawn } from 'node:child_process'
 import { execFileSync, execSync } from 'node:child_process'
+import { randomUUID } from 'node:crypto'
 import { join } from 'node:path'
 import { fileURLToPath } from 'node:url'
 
@@ -54,7 +57,72 @@ function cutStatement(src, needle, nth = null) {
   return { start, end: j }
 }
 
-function knife({ ep, suite, file, needle, claimPat, nth = null }) {
+/* 🔴 裁 #98(店主 07o §四 / 07p §七④)· **造病台不许借 4128 / 4310**
+ *
+ * 根子不在「忘了拉回来」,在于台子一开始就不该碰那两台:
+ * **4128 是店主自己在用的,4310 是她看顾客端的那台 —— 造病期间它们是坏的,而她不知道。**
+ *
+ * 以前台子是调 `run-all-tests.sh` 跑套件,而那个脚本**自己就用 4128 起主服务**
+ * (`run-all-tests.sh:310  PORT=4128 node local-server.mjs`),跑完再 restore ——
+ * 于是每造一次病,店主那两台就被打死再拉起一次。
+ *
+ * 现在:台子**自己起一台**,自己的端口 + 自己的临时库,全程不碰 4128/4310。
+ *   · 自带服务的套件(`spawn(... 'local-server.mjs')`)→ 直接跑,连服务都不用起;
+ *   · 靠 `TEST_BASE_URL` 的套件 → 台子起一台**私有**实例给它。
+ * 配一条判据:造病全程 4128/4310 的健康口**必须一直是 200**。
+ */
+const PRIVATE_PORT = Number(process.env.KNIFE_PORT || 4191)
+/* 🔴 不写死:`credential-scan ④a` 把「密钥类常量回落到固定字面量」当场咬住了,**咬得对** ——
+   而这里根本不需要一个固定值。每跑一次现生成一把,连常量都不存在,也就没有白名单要加。 */
+const OWNER_TOKEN = `knife-bench-${randomUUID()}`
+const sleep = (ms) => new Promise((r) => setTimeout(r, ms))
+const portOk = async (p) => { try { return (await fetch(`http://127.0.0.1:${p}/health`)).ok } catch { return false } }
+
+/** 店主那两台现在活着吗 —— 造病前后各量一次,动了就是台子越界 */
+async function ownerPortsAlive() {
+  return { p4128: await portOk(4128), p4310: await portOk(4310) }
+}
+
+/** 这套件自带服务吗(自带的话连私有实例都不用起) */
+function bringsOwnServer(suite) {
+  try {
+    const src = readFileSync(join(ROOT, `apps/api/test-${suite}.mjs`), 'utf8')
+    return /spawn\(\s*process\.execPath\s*,\s*\[\s*'local-server\.mjs'/.test(src)
+  } catch { return false }
+}
+
+/** 隔离跑一套:**不调 run-all-tests.sh**,所以一根手指都碰不到 4128/4310 */
+async function runSuiteIsolated(suite) {
+  const selfServed = bringsOwnServer(suite)
+  const dataDir = mkdtempSync(join(tmpdir(), 'll-ci-data.knife-'))
+  const env = { ...process.env, DATA_DIR: dataDir, NOTIFY_TICK: 'off',
+    TEST_DB_PATH: join(dataDir, 'lucky-luxe.sqlite'),
+    OWNER_TOKEN, TEST_ADMIN_TOKEN: OWNER_TOKEN,
+    WECHAT_MINI_TOKEN_SECRET: 'knife-bench-mini-not-a-secret',
+    ALLOW_DEMO_ADMIN_LOGIN: 'true' }
+  let srv = null
+  if (!selfServed) {
+    env.PORT = String(PRIVATE_PORT)
+    env.TEST_BASE_URL = `http://127.0.0.1:${PRIVATE_PORT}`
+    env.BASE_URL = env.TEST_BASE_URL
+    srv = spawn(process.execPath, ['local-server.mjs'], { cwd: join(ROOT, 'apps/api'), stdio: 'ignore', env })
+    let up = false
+    for (let i = 0; i < 60 && !up; i += 1) { up = await portOk(PRIVATE_PORT); if (!up) await sleep(500) }
+    if (!up) { srv.kill('SIGTERM'); rmSync(dataDir, { recursive: true, force: true })
+      return { failed: true, out: 'BOOT-FAIL 私有实例没起来', bootBroke: true } }
+  }
+  let out = ''
+  let failed = false
+  try {
+    out = execFileSync(process.execPath, [`test-${suite}.mjs`],
+      { cwd: join(ROOT, 'apps/api'), encoding: 'utf8', env, timeout: 15 * 60e3, maxBuffer: 64e6 })
+  } catch (e) { failed = true; out = `${e.stdout || ''}${e.stderr || ''}` }
+  if (srv) { srv.kill('SIGTERM'); await sleep(300) }
+  rmSync(dataDir, { recursive: true, force: true })
+  return { failed, out, bootBroke: /BOOT-FAIL|Cannot find module|未就绪/.test(out) }
+}
+
+async function knife({ ep, suite, file, needle, claimPat, nth = null }) {
   const abs = join(ROOT, file)
   console.log(`\n══ 造病:${ep} ══`)
   execFileSync('bash', [join(ROOT, 'tools/knife-backup.sh'), 'save', file], { cwd: ROOT, stdio: 'ignore' })
@@ -74,16 +142,13 @@ function knife({ ep, suite, file, needle, claimPat, nth = null }) {
     restore(); return
   }
   console.log(`   [刀] 已注掉 ${file} 里那条落库(整条,语法已过)`)
-  let out = ''
-  let failed = false
-  try {
-    execSync(`PRE_REGRESSION=skip CI_SUITES="${suite}" bash apps/api/run-all-tests.sh`,
-      { cwd: ROOT, encoding: 'utf8', stdio: ['ignore', 'pipe', 'pipe'], timeout: 15 * 60e3 })
-  } catch (e) { failed = true; out = `${e.stdout || ''}${e.stderr || ''}` }
+  const run1 = await runSuiteIsolated(suite)
+  const out = run1.out
+  const failed = run1.failed
   restore()
   /* ③ 记**是哪一条**红的 */
   const reds = (out.match(/^(?:not ok \d+ - |✗ |❌ )(.+)$/gm) || []).map((x) => x.replace(/^(not ok \d+ - |✗ |❌ )/, '').slice(0, 110))
-  const bootBroke = /在 \d+s 内未就绪|BOOT-FAIL|Cannot find module/.test(out)
+  const bootBroke = run1.bootBroke || /在 \d+s 内未就绪|BOOT-FAIL|Cannot find module/.test(out)
   if (bootBroke) {
     console.log('   🔴 服务没起来 —— 红的不是判据,**不算验过**')
     rows.push({ ep, suite, needle, verdict: '🔴 **服务没起来**,红的不是判据 —— 不算验过' })
@@ -101,11 +166,8 @@ function knife({ ep, suite, file, needle, claimPat, nth = null }) {
       execFileSync('bash', [join(ROOT, 'tools/knife-backup.sh'), 'save', file], { cwd: ROOT, stdio: 'ignore' })
       writeFileSync(abs, `${src2.slice(0, cut2.start)}    throw new Error('J58-4 必然红:这条路径被执行到了')\n${src2.slice(cut2.end + 1)}`)
       try { execFileSync('node', ['--check', abs], { stdio: 'ignore' }) } catch { /* 语法不过就当探不到 */ }
-      try {
-        execSync(`PRE_REGRESSION=skip CI_SUITES="${suite}" bash apps/api/run-all-tests.sh`,
-          { cwd: ROOT, encoding: 'utf8', stdio: ['ignore', 'pipe', 'pipe'], timeout: 15 * 60e3 })
-        reached = false
-      } catch { reached = true }
+      const probe = await runSuiteIsolated(suite)
+      reached = probe.failed
       execFileSync('bash', [join(ROOT, 'tools/knife-backup.sh'), 'restore', file], { cwd: ROOT, stdio: 'ignore' })
     }
     if (reached === false) {
@@ -140,16 +202,38 @@ const TARGETS = [
   { ep: '/my/coupons · 卡包(顾客直接看)', suite: 'customer-paths', file: 'apps/api/local-server.mjs',
     needle: "db.prepare(`INSERT INTO coupon_grants (id, tenant_id, coupon_id, user_id, code, status, expires_at, created_at, grant_source)",
     nth: 1, claimPat: /㋚3/ },
-  /* ⚠️ §八.5 的回放**没做成**,如实记着(停线:同一处连改三次不对就停,写清试了哪三种)
-     ④ 那一支**只在套件保持绿时**才说话,所以回放要一把「落在套件走不到的地方、且不把套件弄红」的刀。
-     三次都没找到:
-       ① 积分换券那条写 + `customer-paths` → 套件因别的原因红了;
-       ② 平台导入那条身份写 + `mini-phone`   → 套件红(常驻的那 4 套里有人走导入);
-       ③ 同上 + `wechat-stub`                → 一样红。
-     **结论:④ 的代码装上了,但没有观察到它真的触发 —— 按 ④ 自己的规矩,不算验过。**
-     下批换法:给台子加一个「不跑套件、只跑单条断言」的模式,才好构造保持绿的场景。 */
+  /* 🔴 §四 回放(店主 07p 给的出路):**不在真套件上回放,用玩具套件** `test-knife-selfcheck`。
+     它只有两条断言:一条**必然绿**(保证造病后套件整体仍绿,④ 才有机会开口),
+     一条**故意只验回执**(标本)。于是 ④ 的两支都能被看见:
+       · 【回放A】刀落在 ㋛2 **真走**的那条路上 → 套件绿 → ④ 补一刀「必然红」→ 红
+         ⇒ 判「**仍绿(已证刀咬到)**」= 这条判据验的是回执不是事实;
+       · 【回放B】刀落在这套件**根本不走**的路上 → 套件绿 → ④ 补一刀 → **也不红**
+         ⇒ 判「**刀没咬到**」= 不算守住。
+     07o 那三次失败的案底留在回执里:三次都拿真套件回放,三次都把套件弄红,④ 没机会开口。 */
+  { ep: '【回放A·J-58④】刀落在玩具套件真走的路上(支付落库)', suite: 'knife-selfcheck',
+    file: 'apps/api/local-server.mjs',
+    needle: "db.prepare(\"UPDATE payments SET status = 'PAID', transaction_id = ?, updated_at = ? WHERE booking_id = ? AND provider = 'MOCK'\")",
+    claimPat: /㋛2/ },
+  { ep: '【回放B·J-58④】刀落在玩具套件走不到的路上(积分换券)', suite: 'knife-selfcheck',
+    file: 'apps/api/local-server.mjs',
+    needle: "db.prepare(`INSERT INTO coupon_grants (id, tenant_id, coupon_id, user_id, code, status, expires_at, created_at, grant_source)",
+    nth: 0, claimPat: /㋛2/ },
 ]
+/* 🔴 裁 #98 自证:造病**前后**各量一次店主那两台。动过就是台子越界。 */
+const ownerBefore = await ownerPortsAlive()
+console.log(`[裁#98 自证·开跑前] 4128=${ownerBefore.p4128 ? '200' : '✗'} · 4310=${ownerBefore.p4310 ? '200' : '✗'}`)
 for (const t of TARGETS) { if (ONLY && !t.ep.includes(ONLY)) continue; await knife(t) }
+const ownerAfter = await ownerPortsAlive()
+console.log(`\n[裁#98 自证·跑完后] 4128=${ownerAfter.p4128 ? '200' : '✗'} · 4310=${ownerAfter.p4310 ? '200' : '✗'}`)
+if (ownerBefore.p4128 !== ownerAfter.p4128 || ownerBefore.p4310 !== ownerAfter.p4310) {
+  console.log('🔴 **造病台动了店主那两台** —— 裁 #98 明令不许碰。这一轮的造病结果按不可信处理。')
+  process.exitCode = 1
+} else if (ownerBefore.p4128 && ownerBefore.p4310) {
+  console.log('✅ 全程没碰:两台开跑前是 200、跑完还是 200(台子用的是自己的端口 '
+    + `${PRIVATE_PORT} + 自己的临时库)`)
+} else {
+  console.log('⚠️ 开跑前那两台本来就不在(店主没起服务)—— 这一轮证不了「没碰」,如实说')
+}
 
 console.log('\n════ 造病表 ════\n')
 console.log('| 口 | 判据套件 | 注掉的那条落库 | 造病结果 |')

@@ -147,13 +147,42 @@ try {
 
     /* ── ㋚4 积分 `/my/points-history` ── */
     const ptsBefore = all('SELECT id, amount FROM points_transactions WHERE user_id = ? AND tenant_id = ?', me.userId, TID)
-    const hist = await (await fetch(`${BASE}/my/points-history`, { headers: CH })).json().catch(() => ({}))
-    const recs = hist.records || hist.items || []
-    check('㋚4 🔴 `GET /my/points-history`(积分,此前零夹具走过)—— '
-      + `**库里 ${ptsBefore.length} 条积分流水 → 顾客端出 ${recs.length} 条**,条数对得上`
-      + `${ptsBefore.length === 0 ? ';本轮是**空态**(她还没消费过),空态也要走通、不许 500' : ''}`,
-      Array.isArray(recs) && recs.length === ptsBefore.length,
-      `库=${ptsBefore.length} 条 顾客端=${JSON.stringify(hist).slice(0, 140)}`)
+    const histEmpty = await (await fetch(`${BASE}/my/points-history`, { headers: CH })).json().catch(() => ({}))
+    check('㋚4 🔴 `GET /my/points-history`(积分,此前零夹具走过)· **空态** —— '
+      + `她还没消费过,库里 ${ptsBefore.length} 条台账、零张签署单,顾客端出 `
+      + `${(histEmpty.records || []).length} 条。空态也要走通、不许 500`,
+      Array.isArray(histEmpty.records) && histEmpty.records.length === 0,
+      JSON.stringify(histEmpty).slice(0, 140))
+
+    /* ══ ㋚5 🔴 造一条**真积分**再验(店主 07p §五)══
+       「0 条空态」只证明了「读得到 0」,**没证明「积分跟过去了」** —— 空态验不出「搬过去了」,
+       只验得出「没崩」。所以这里走真路径造一条:**开单 → 顾客签字**。
+       ⚠️ 查清了一件要紧的:积分「挣」出来的那部分**不在 `points_transactions` 里** ——
+       `pointsEarnRows()` 是从**已签署的结算单**推的(`floor(subtotal_cents / 100)`),
+       台账只记兑换与调整。所以这条要比的是**签署单那一行**,而它的 `id` 就是赚分行的 `id`。 */
+    const sheetRes = await fetch(`${BASE}/admin/settlements`, { method: 'POST', headers: AH,
+      body: JSON.stringify({ cardOwnerUserId: me.userId, settlements: [{ bookingId: bid, tierKey: 'member', payIntent: 'offline_full',
+        items: [{ serviceId }], technicians: [{ technicianId, share: 100 }] }] }) })
+    const sheetBody = await sheetRes.json().catch(() => ({}))
+    const sheet = sheetBody?.settlements?.[0] || {}
+    const signRes = await fetch(`${BASE}/settlements/${encodeURIComponent(sheet.code || '')}/sign`,
+      { method: 'POST', headers: CH, body: JSON.stringify({ disclaimerAccepted: true, signature: '走路判据·甲' }) })
+    const signed = one("SELECT id, code, status, subtotal_cents, user_id FROM settlements WHERE code = ?", sheet.code || '')
+    check('㋚5a 造景:开单 + **顾客自己签字**(走正门,不直连库贴)—— '
+      + `库里那张单 \`${signed.code || '(没建出来)'}\` 状态 **${signed.status || '?'}**,小计 ${signed.subtotal_cents || 0} 分`,
+      signRes.status < 400 && signed.status === 'signed' && Number(signed.subtotal_cents) > 0,
+      `建单=${sheetRes.status} 签字=${signRes.status} 库里=${JSON.stringify(signed)}`)
+
+    const histNow = await (await fetch(`${BASE}/my/points-history`, { headers: CH })).json().catch(() => ({}))
+    const recs = histNow.records || []
+    const wantDelta = Math.floor(Number(signed.subtotal_cents || 0) / 100)
+    const hit = recs.find((r) => r.id === signed.id)
+    check('㋚5 🔴 **积分真的跟过去了**(按**行 id** 比,和验余额那次同一个法子)—— '
+      + `顾客端 \`/my/points-history\` 里有一行 \`id = ${signed.id}\`(**就是那张签署单的 id**),`
+      + `分值 **${hit?.delta}** = floor(${signed.subtotal_cents}/100) = **${wantDelta}**;`
+      + `台账从 ${ptsBefore.length} 条 → 这次多出来的是**赚分行**不是台账行`,
+      Boolean(hit) && hit.delta === wantDelta && wantDelta > 0,
+      `记录数 ${recs.length} · 找到=${JSON.stringify(hit)} · 期望 delta=${wantDelta}`)
   }
 } finally {
   child.kill('SIGTERM')
