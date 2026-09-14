@@ -76,6 +76,16 @@ const didRun = shouldRun.filter((n) => ran.includes(n))
 const notRun = shouldRun.filter((n) => !ran.includes(n))
 const extra = ran.filter((n) => !shouldRun.includes(n))
 
+/* ══ J-50 第二款(店主 07l §三):「该跑」这个数**也要上账,只许有解释地变** ══
+   它是**算出来的**,所以它变小时看起来像好事(名单短了=没那么多要做了)。
+   09-14 现撞的那次:形态串不认微信正门 → 每把一套夹具改成走正门,「该跑」就掉一个,而全程绿。
+   下限写死在这里,少了当场红,**要降必须在提交信息里带 `棘轮归因:` 并改这个数**。 */
+const SHOULD_RUN_FLOOR = 13   /* 09-14(07l)从 12 抬到 13:补上正门形态后新认出 mini-phone */
+check(`①a0 🔴 「该跑」底数上账(J-50 第二款):现算 ${shouldRun.length} 套 ≥ 下限 ${SHOULD_RUN_FLOOR} —— `
+  + '这个数**只许有解释地变**;少了要么是真的少了,要么是**被测对象换了形态而这串形态没跟上**'
+  + '(后者恰好发生在我们做对事情的时候:改走正门改得越多,扫得越少)',
+  shouldRun.length >= SHOULD_RUN_FLOOR, `现算=${shouldRun.join(' ')}`)
+
 check(`①a 🔴 底数闭合(J-48,三个数分开):**该跑 ${shouldRun.length} 套 · 跑了 ${didRun.length} 套 · 该跑没跑 ${notRun.length} 套**`
   + ` —— 没跑的是「没扫」,不是「没红」${notRun.length ? `:${notRun.join(' ')}` : ''}`,
 notRun.length === 0, notRun.join(' '))

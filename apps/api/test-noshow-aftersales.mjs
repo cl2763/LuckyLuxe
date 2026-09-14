@@ -2871,13 +2871,19 @@ const main = async () => {
       check('㋎ 真机件①:devhost 由一键脚本写入(换网络不改代码)',
         readFileSync(join(ROOT42, 'miniprogram/utils/devhost.js'), 'utf8').includes('lanHost')
         && readFileSync(join(ROOT42, '更新真机调试地址.command'), 'utf8').includes('ipconfig getifaddr'))
-      /* 四之十:白名单不能只靠"云端别设那个变量" —— 生产进程里这个开关必须恒 false */
-      check('㋎ 真机件②:演示白名单生产结构性不成立(DEMO_LOGIN_ALLOWED = !IS_PRODUCTION && env)',
-        /const DEMO_LOGIN_ALLOWED = !IS_PRODUCTION && process\.env\.ALLOW_DEMO_ADMIN_LOGIN === 'true'/.test(srvLan)
+      /* 四之十:白名单不能只靠"云端别设那个变量" —— 生产进程里这个开关必须恒 false
+         🔴 09-14(裁 #90)重锚:闸从「!IS_PRODUCTION && env」改成**两个判据任一成立就关**
+            (环境变量说是生产 **或** 库域不是 ci/sandbox)。旧写法的字面量被这一改顶红了 ——
+            **红得对**:判据锚的是实现形状,形状变了就该回来看一眼是变严了还是变松了。
+            现测是变严:原来 `NODE_ENV` 漏设 + 连着生产库 → 门开;现在关。
+            所以这里不是"把判据改成能过",是**把它重锚到更严的那个形状上**,
+            并且下面第二条从「裸读只许 1 处」收紧成「本文件裸读**零处**」。 */
+      check('㋎ 真机件②:演示白名单生产结构性不成立(裁#90:闸走 `demoLoginAllowed()` 唯一出口)',
+        /const DEMO_LOGIN_ALLOWED = demoLoginAllowed\(/.test(srvLan)
         && !/process\.env\.ALLOW_DEMO_ADMIN_LOGIN === 'true'[\s\S]{0,40}body\.demoLogin/.test(srvLan))
-      check('㋎ 真机件②:演示登录/注册/种子全走同一判据(裸读环境变量零残留)',
+      check('㋎ 真机件②:演示登录/注册/种子全走同一判据(裁#90 后**本文件裸读环境变量零处** —— 比原来的「只许 1 处」更严)',
         (srvLan.match(/DEMO_LOGIN_ALLOWED/g) || []).length >= 7
-        && (srvLan.match(/process\.env\.ALLOW_DEMO_ADMIN_LOGIN/g) || []).length === 1)
+        && (srvLan.match(/process\.env\.ALLOW_DEMO_ADMIN_LOGIN/g) || []).length === 0)
       check('㋍ D68③ 网页端共用模块(admin+customer 同一份:两页都加载、admin 不再 window.open 单张)',
         svWeb.includes('openSnapViewer') && svWeb.includes('data-snap-prev') && svWeb.includes('touchend')
         && readFileSync(join(ROOT42, 'apps/web/admin.html'), 'utf8').includes('snapshot-viewer.js')

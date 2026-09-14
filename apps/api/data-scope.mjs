@@ -50,3 +50,34 @@ export function legacyScope(dataDir, env = process.env) {
   if (env.LL_TEST_DATA === '1' && name === 'unknown') return 'test'
   return 'live'
 }
+
+/* ══ 裁 #90(店主 07l §二,2026-09-14):判「这是不是真环境」**只许这一个出口** ══
+ *
+ * 以前这件事在仓里有**两个判法**,而且可以分叉:
+ *   · `local-server.mjs` 的 `IS_PRODUCTION` —— 纯环境变量
+ *   · 本文件的 `scopeOf()`                  —— 路径在前(裁 #37 治过)
+ * 最坏的那个分叉是**真实存在的部署事故**:
+ *   **部署时 `NODE_ENV` 没设 → `IS_PRODUCTION` 为 false → 演示门开着 → 而它连的是生产库。**
+ * `scopeOf` 看的是库路径,这个组合它认得出来。
+ *
+ * 🔴 **但店主定的是「或」不是「换」**:不许把 `IS_PRODUCTION` 换成库域判断 ——
+ * 换掉有可能在某个组合下(`IS_PRODUCTION=true` 而库域被判成 sandbox)**把门打开**,那是把闸放松。
+ * 正确形状是**两个判据任一成立就关**:
+ *
+ *     演示门开 ⇔ (不是 IS_PRODUCTION) 且 (库域 ∈ {ci, sandbox})
+ *
+ * 这个形状**只会更严,永远不会更松**。合「失败朝安全那边」。
+ */
+export const DEMO_OK_SCOPES = new Set(['ci', 'sandbox'])
+
+/** 环境变量那一路的生产判定(两个判据里的第一个) */
+export function isProductionEnv(env = process.env) {
+  return env.NODE_ENV === 'production' || Boolean(env.RAILWAY_ENVIRONMENT)
+}
+
+/** 演示门唯一出口:**两个判据任一说「这是真的」就关**。 */
+export function demoLoginAllowed({ dataDir = '', env = process.env } = {}) {
+  if (isProductionEnv(env)) return false                    // ① 环境变量说是生产 → 关
+  if (!DEMO_OK_SCOPES.has(scopeOf(dataDir, env))) return false  // ② 库域不是 ci/sandbox → 关
+  return env.ALLOW_DEMO_ADMIN_LOGIN === 'true'              // 两关都过了,才看那个开关
+}

@@ -343,7 +343,15 @@ async function main() {
        ② 不签名的演示令牌:**只能**在 `DEMO_LOGIN_ALLOWED` 下可达;
        ③ `/health` 那一格是**现测**,不是常量(J-52)。 */
   const SRV = readFileSync(join(HERE, 'local-server.mjs'), 'utf8')
-  const miniFn = (SRV.match(/function customerFromMiniToken\(token\)[\s\S]*?\n\}/) || [''])[0]
+  /* 🔴 09-14(07l)重锚:`customerFromMiniToken` 已从 `local-server.mjs` 搬进 `mini-token.mjs`
+     (裁 #89 摘出去)。**搬走而不重锚 = J-58 判据空转** —— 原来那句 match 会抠到空字符串,
+     `/…/.test('')` 恒 false,三条会红;但如果当初写成 `||` 兜个默认值,就会**静默变绿**。
+     所以这里不只是换个文件名:下面 ㊙①b 是**反向守**,证明真读到了函数体(不是空转)。 */
+  const MINITOKEN = readFileSync(join(HERE, 'mini-token.mjs'), 'utf8')
+  const miniFn = (MINITOKEN.match(/const customerFromMiniToken = \(token\) => \{[\s\S]*?\n  \}/) || [''])[0]
+  check('㊙①b 反向守:上面那段函数体**真的抠到了**(长度 > 300 且含 openid 查询)—— '
+    + '搬文件之后判据最容易变成「抠了个空字符串,三条恒红或恒绿」(J-58)',
+    miniFn.length > 300 && /wechat_open_id/.test(miniFn), `抠到 ${miniFn.length} 字符`)
   check('㊙① 签名路:验签不过当场 401', /signMiniPayload\(payload\)\s*!==\s*signature/.test(miniFn) && /401/.test(miniFn))
   check('㊙② 签名路:过期当场 401', /data\.exp|Date\.now\(\)\s*>\s*Number\(data\.exp\)/.test(miniFn))
   check('㊙③ 签名路:还要 openid 对得上(光有签名不够)', /wechat_open_id\s*=\s*\?/.test(miniFn))

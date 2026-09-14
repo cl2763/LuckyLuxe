@@ -13,10 +13,13 @@
  */
 const api = require('./api')
 
-/** 「只问一次」的判条件:**这家店的档案上有没有号**。有号 → 永远不再问。 */
-function needsPhone(member) {
-  return !String((member && (member.phone || member.phoneNumber)) || '').trim()
-}
+/* 🔴 裁 #92(店主 07l §五,2026-09-14):**这里原来自己判过一次「要不要问手机号」,已撤。**
+   两份条件会分叉,而分叉的两种后果都不会红:
+     · 前端判松了 → 顾客**每次都被要求授权**(而且每次收 0.03);
+     · 前端判严了 → **该问的时候没问**,这个人永远没有手机号。
+   两边各自「按自己那份」都是对的,所以谁也不报错。
+   **后端是真相源**:登录返回里带 `needPhone`,前端照着做,不许自己算。
+   判据 `test-mini-phone.mjs ㋐12/㋐12b` 守着「全仓只许 1 处」,前端自己再加一份当场红。 */
 
 function setPhoneState(page, patch) {
   const next = {}
@@ -71,4 +74,4 @@ async function handlePhoneAuthResult(page, event) {
       : '微信这次只返回了 code，换取手机号需要正式的微信凭据；请先使用手动验证。' })
 }
 
-module.exports = { handlePhoneAuthResult, needsPhone }
+module.exports = { handlePhoneAuthResult }

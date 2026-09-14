@@ -22,7 +22,7 @@
  *   ㋐10 「只问一次」的判条件:`needsPhone()` **只看这家店的档案上有没有号**
  *   ㋐11 白名单式反向守:产品代码里**不许有**「解密失败就当没号」的兜底写法
  */
-import { readFileSync, mkdtempSync, rmSync } from 'node:fs'
+import { readFileSync, readdirSync, mkdtempSync, rmSync } from 'node:fs'
 import { join } from 'node:path'
 import { tmpdir } from 'node:os'
 import { fileURLToPath } from 'node:url'
@@ -117,15 +117,46 @@ const meJs = readFileSync(join(ROOT, 'miniprogram/pages/me/index.js'), 'utf8')
 const meWxml = readFileSync(join(ROOT, 'miniprogram/pages/me/index.wxml'), 'utf8')
 const paJs = readFileSync(join(ROOT, 'miniprogram/utils/phone-auth.js'), 'utf8')
 
-/* ㋐12 两端「只问一次」的判条件必须**判出同一个结果**(不比文本,比行为 —— J-61) */
-const { needsPhone: needsPhoneMp } = await import('../../miniprogram/utils/phone-auth.js').catch(() => ({ needsPhone: null }))
-const samples = [{ phone: '' }, { phone: '  ' }, {}, { phone: '13800001234' }, { phone: '0' }, { phone: null }]
-const beVerdict = samples.map((m) => needsPhone(m))
-const mpVerdict = needsPhoneMp ? samples.map((m) => needsPhoneMp(m)) : null
-check('㋐12 「只问一次」的判条件在**两端判出同一个结果**(拿 6 组样本各跑一遍,比的是结果不是文本)'
-  + ' —— 两端各写一份逻辑,已登记**分叉债**,这条判据是它的看守',
-  Boolean(mpVerdict) && JSON.stringify(beVerdict) === JSON.stringify(mpVerdict),
-  `后端=${JSON.stringify(beVerdict)} 小程序=${JSON.stringify(mpVerdict)}`)
+/* ㋐12 裁 #92:「要不要问手机号」全仓**只许 1 处**(后端是真相源)
+   原来两端各写一份,㋐12 那时比的是「两份判出同一个结果」——那只是给分叉装了个警报,
+   不是把分叉去掉。店主 07l §五 定了:**前端不许自己判,问后端要。**
+   两份条件分叉的后果两种都不会红:前端判松 → 顾客每次都被要授权(还每次收 0.03);
+   前端判严 → 该问的时候没问,这个人永远没有手机号。 */
+const walkAll = (rel, out = []) => {
+  for (const e of readdirSync(join(ROOT, rel), { withFileTypes: true })) {
+    if (e.name === 'node_modules' || e.name.startsWith('.')) continue
+    const p2 = `${rel}/${e.name}`
+    if (e.isDirectory()) walkAll(p2, out)
+    else if (/\.(mjs|js)$/.test(e.name)) out.push(p2)
+  }
+  return out
+}
+/* J-61②:排除判据自身与夹具,具名 */
+const PHONE_SELF = ['apps/api/test-mini-phone.mjs']
+/* 判条件的**形态**:拿手机号有没有值来决定要不要问 */
+const NEEDS_PAT = /needsPhone|needPhone/
+const phoneDeciders = [...walkAll('apps/api'), ...walkAll('apps/web'), ...walkAll('miniprogram')]
+  .filter((f) => !PHONE_SELF.includes(f) && !/\/test-/.test(f))
+  .filter((f) => {
+    const src = readFileSync(join(ROOT, f), 'utf8').replace(/\/\*[\s\S]*?\*\//g, '').replace(/^\s*\/\/.*$/gm, '')
+    return /function\s+needsPhone|needsPhone\s*=\s*\(/.test(src)   /* **定义**才算一处,用它不算 */
+  })
+check('㋐12 🔴 裁#92 白名单式:全仓**定义**「要不要问手机号」的地方只许 1 处 —— '
+  + '`apps/api/mini-phone.mjs`(后端是真相源)。前端自己再写一份当场红',
+  phoneDeciders.length === 1 && phoneDeciders[0] === 'apps/api/mini-phone.mjs', phoneDeciders.join(' | '))
+
+/* ㋐12b 效果面:后端真的把这个答案下发了(不下发,前端就没得照做)*/
+const srvSrc = readFileSync(join(ROOT, 'apps/api/local-server.mjs'), 'utf8')
+check('㋐12b 反向守:后端登录返回里**真的带**了 `needPhone`(唯一真相源必须发得出来,'
+  + '否则前端只能自己算,分叉又回来了)',
+  /needPhone:\s*needsPhone\(/.test(srvSrc), '')
+
+/* ㋐12c 前端确实照着做:小程序侧零定义 */
+const mpPhone = readFileSync(join(ROOT, 'miniprogram/utils/phone-auth.js'), 'utf8')
+  .replace(/\/\*[\s\S]*?\*\//g, '').replace(/^\s*\/\/.*$/gm, '')
+check('㋐12c 小程序侧**零定义**(它只用后端下发的那个答案)—— J-61:数定义不数提及,'
+  + '注释里说明为什么撤掉的那段不算',
+  !/function\s+needsPhone/.test(mpPhone), '')
 
 /* ㋐13 「跳过」不许拦路 */
 const pendingBlock = /wx:if="\{\{!member\.profileComplete\}\}"[\s\S]{0,600}?profile-pending-desc/.test(meWxml)

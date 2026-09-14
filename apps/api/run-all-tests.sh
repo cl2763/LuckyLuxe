@@ -316,7 +316,7 @@ curl -s -X POST -H "authorization: Bearer owner-demo-token" -H "content-type: ap
   -d '{}' http://127.0.0.1:4128/admin/demo/full-seed > /dev/null || true
 
 # 可用 CI_SUITES="a b c" 环境变量跑子集(调试用)
-DEFAULT_SUITES="customer-service-matrix working-memory business-hours intent-guards quote-polish silent-handoff human-handoff after-sales-handoff identity-links entitlements tenant-kb finance-core finance-goals stored-value schedule-week special-dates customer-profile staff-portal admin-accounts pricing-model membership-config customer-import tenant-hygiene tenant-timezone deposit-config message-templates settlement daily-close salary-v2 schedule-v2 finance-trend finance-lock perf-viz coupon-settle audit-fix scan-sign double-sheet auth-surface currency-scan settle-stress sign-stability noshow-aftersales demo-seed-guard card-refund amend-linkage ledger-guards backend-gate hero-slides cash-notes mini-money-inputs image-placeholder deposit-audit web-settlement cross-end-effect mini-account-adjust today-board dashboard-pulse dashboard-home hours-gate crossend-cta tab-colors color-usage token-entry danger-cmd notify-scheduler quote-state ui-spec observe-fixes file-ratchet delivery-evidence store-name correction-reason credential-scan exit-code fixture-front-door wechat-stub mini-phone demo-gate-coverage frontend-routes login-entries db-target-guard empty-pill untouched-proof display-text tenant-ownership tenant-explicit identity-tenant version-fingerprint tenant-fill-trigger conversation-log ai-gate ai-safety-lines ai-fact-gate booking-intake turn-classify turn-answer ai-review quote-tenant conversation-tenant mini-ai-same-outlet platform-login mp-home-owner v4-five-fixes repeat-guard merge-window three-stores tier-label native-dialog demo-mark txn-rollback mp-placeholder-size mp-overlap mp-home-sections store-jury"
+DEFAULT_SUITES="customer-service-matrix working-memory business-hours intent-guards quote-polish silent-handoff human-handoff after-sales-handoff identity-links entitlements tenant-kb finance-core finance-goals stored-value schedule-week special-dates customer-profile staff-portal admin-accounts pricing-model membership-config customer-import tenant-hygiene tenant-timezone deposit-config message-templates settlement daily-close salary-v2 schedule-v2 finance-trend finance-lock perf-viz coupon-settle audit-fix scan-sign double-sheet auth-surface currency-scan settle-stress sign-stability noshow-aftersales demo-seed-guard card-refund amend-linkage ledger-guards backend-gate hero-slides cash-notes mini-money-inputs image-placeholder deposit-audit web-settlement cross-end-effect mini-account-adjust today-board dashboard-pulse dashboard-home hours-gate crossend-cta tab-colors color-usage token-entry danger-cmd notify-scheduler quote-state ui-spec observe-fixes file-ratchet delivery-evidence store-name correction-reason credential-scan exit-code fixture-front-door wechat-stub mini-phone demo-gate-scope demo-gate-coverage frontend-routes login-entries db-target-guard empty-pill untouched-proof display-text tenant-ownership tenant-explicit identity-tenant version-fingerprint tenant-fill-trigger conversation-log ai-gate ai-safety-lines ai-fact-gate booking-intake turn-classify turn-answer ai-review quote-tenant conversation-tenant mini-ai-same-outlet platform-login mp-home-owner v4-five-fixes repeat-guard merge-window three-stores tier-label native-dialog demo-mark txn-rollback store-jury"
 read -r -a SUITES <<< "${CI_SUITES:-$DEFAULT_SUITES}"
 
 # 🔴 断言基线(店主 02r 裁定一):每套跑完**就地数** `^ok ` 条数,不事后解析日志 ——
@@ -446,11 +446,43 @@ if printf '%s' "$DEMO_GATE_MODES" | grep -q false; then
   done
   echo "false" >> /tmp/ll-demo-gate-modes.txt
   echo ""
-  echo "   [门关档小结] ${#DEMO_GATE_SUITES} 条清单中红 ${DEMO_GATE_RED} 套 —— **这一档的红是真相,单独列,不并进主档**"
+  # 🔴 09-14(07l)治:原来写的是 `${#DEMO_GATE_SUITES}` —— 那是**字符串长度**,不是套数,
+  #    所以这一行一直在报「247 条清单」。247 是那串名字的字符数。**报出来的数必须是量出来的那个数。**
+  DEMO_GATE_N=$(printf '%s' "$DEMO_GATE_SUITES" | wc -w | tr -d ' ')
+  echo "   [门关档小结] ${DEMO_GATE_N} 套清单中红 ${DEMO_GATE_RED} 套 —— **这一档的红是真相,单独列,不并进主档**"
   # 🔴 这里**不用 pkill**:危险命令白名单上限 4、只减不增(要增先报店主),
   #    而按端口收本来就更准 —— 只打监听 4132 的那一个,不靠模式串去猜。
   lsof -ti :4132 2>/dev/null | xargs kill 2>/dev/null || true
 fi
+
+# ══ 小程序自动化那一档(裁 #91,店主 07l §四 · 2026-09-14 选的是**第 ② 条**)══
+#
+# 这三把刀靠微信开发者工具的自动化端口驱动,而那个会话**不是这个脚本能保证活着的东西**:
+# 它要 GUI、要人先把工具打开,而且被上一轮的超时打死之后不会自己回来。
+# 现测两种长相,都不好:①各 61s 超时 →「未跑」豁免;②端口不可达 → 1s 跑完打 0 条断言。
+# 后者更阴 —— 它**混进「在场」**,让「断言零缩水」以为是我删了断言。
+#
+# 店主给的三选一里选 **② 单独成一档**:单独跑、单独报数,**既不混进在场也不混进未跑**。
+#   · 为什么不选 ①(加超时预算):问题不是慢,是**会话得先活着**,给多少时间都一样;
+#   · 为什么不选 ③(判成只能真机跑):它在本机开发者工具开着时**是跑得通的**,判死不实事求是。
+# **期限**:下一批(07m)把「先证死再拉起 9420」写进 `tools/` 的一个脚本,让这一档能自愈;
+#   自愈做不到就升级成 ③(具名冻结 + 写明谁在真机上跑)。**跑的人:Code。**
+MP_LANE_SUITES="mp-placeholder-size mp-overlap mp-home-sections"
+MP_LANE_N=$(printf '%s' "$MP_LANE_SUITES" | wc -w | tr -d ' ')
+echo ""
+echo "== 小程序自动化那一档(裁#91:单独跑、单独报数)=="
+MP_LANE_RED=0; MP_LANE_SKIP=0
+for suite in $MP_LANE_SUITES; do
+  if MP_AUTOMATOR="${MP_AUTOMATOR:-}" node "test-${suite}.mjs" > "$SUITE_OUT" 2>&1; then
+    if grep -qE '^ok ' "$SUITE_OUT"; then echo "   ✅ [小程序档] ${suite}"
+    else echo "   ⏳ [小程序档] ${suite} —— **跑了但一条断言都没打出来**(多半是 9420 会话不在)"; MP_LANE_SKIP=$(( MP_LANE_SKIP + 1 )); fi
+  else
+    echo "   🔴 [小程序档] ${suite} —— 红,原文如下:"; tail -n 8 "$SUITE_OUT" | sed 's/^/      | /'
+    MP_LANE_RED=$(( MP_LANE_RED + 1 ))
+  fi
+done
+echo "   [小程序档小结] ${MP_LANE_N} 套 · 红 ${MP_LANE_RED} 套 · **空转(会话不在)${MP_LANE_SKIP} 套**"
+echo "   —— 空转不是通过。这一档**不并进主档**,也不占「未跑豁免」的名额。"
 
 echo ""
 # 🔴 断言基线判定(店主 02r 裁定一):降=红并指名哪一套;涨自动更新基线。

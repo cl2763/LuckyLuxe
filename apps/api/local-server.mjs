@@ -116,7 +116,7 @@ const APP_TIMEZONE = process.env.APP_TIMEZONE || 'America/Toronto'
 process.env.TZ = APP_TIMEZONE
 
 const __dirname = dirname(fileURLToPath(import.meta.url))
-const { legacyScope, scopeOf } = await import('./data-scope.mjs'); const { requireMiniTokenSecret, miniSecretIsExplicit } = await import('./mini-token-secret.mjs'); const { publishOwnerToken } = await import('./owner-token.mjs'); const { fetchJsCode2Session, isStubScope } = await import('./wechat-code-stub.mjs'); const { intakeCustomerForDirectBooking } = await import('./write-intake.mjs'); const { bindMiniPhone } = await import('./mini-phone.mjs')
+const { legacyScope, scopeOf, isProductionEnv, demoLoginAllowed } = await import('./data-scope.mjs'); const { requireMiniTokenSecret, miniSecretIsExplicit } = await import('./mini-token-secret.mjs'); const { publishOwnerToken } = await import('./owner-token.mjs'); const { fetchJsCode2Session, isStubScope } = await import('./wechat-code-stub.mjs'); const { intakeCustomerForDirectBooking } = await import('./write-intake.mjs'); const { bindMiniPhone, needsPhone } = await import('./mini-phone.mjs')
 const workspaceRoot = join(__dirname, '..', '..')
 const webRoot = join(workspaceRoot, 'apps', 'web')
 const assetRoot = join(workspaceRoot, 'miniprogram', 'assets')
@@ -161,12 +161,12 @@ const PORT = Number(process.env.PORT || 4000)
 // 名字带 DEMO 容易让人低估它的权限——它是平台最高信任根。
 const OWNER_TOKEN = process.env.OWNER_TOKEN || process.env.OWNER_DEMO_TOKEN || 'owner-demo-token'; publishOwnerToken({ scopeName: DATA_SCOPE_NAME, dataDir, token: OWNER_TOKEN })  // 07e 裁#64 试点:只在 ci/sandbox 把现用的那把写进本轮 DATA_DIR,取值一个字不动
 // 生产判定(Railway 会注入 RAILWAY_ENVIRONMENT):用于「日志里不许出现主钥匙」这类只在云端生效的收紧
-const IS_PRODUCTION = process.env.NODE_ENV === 'production' || Boolean(process.env.RAILWAY_ENVIRONMENT)
+const IS_PRODUCTION = isProductionEnv()   // 裁#90 第4条:判「这是不是真环境」全仓只许一个出口(./data-scope.mjs),不许在这里再判一遍
 /* 四之十红线(店主 08-23 重申,随真机调试联通件钉死):**演示白名单只在沙箱成立,生产结构性不成立**。
    以前只靠"云端别设 ALLOW_DEMO_ADMIN_LOGIN 这个变量"——那是配置纪律,配错一次就是任何人
    拿邮箱+任意密码进真库。现在生产进程里这个开关**恒 false**:即使误设环境变量也开不了,
    演示登录/演示注册/演示种子数据全走这一个判据。生产也绝不建测试账号(测试档案只在沙箱库)。 */
-const DEMO_LOGIN_ALLOWED = !IS_PRODUCTION && process.env.ALLOW_DEMO_ADMIN_LOGIN === 'true'
+const DEMO_LOGIN_ALLOWED = demoLoginAllowed({ dataDir })   // 裁#90:改「或」不改「换」——环境变量说是生产 **或** 库域不是 ci/sandbox,任一成立就关;整段在 ./data-scope.mjs
 // 多租户:请求级租户上下文。商家端 /admin 进入时按登录账号的租户 enterWith;
 // 顾客/公开路径不设上下文 → 回退默认租户(行为不变)。所有用 currentTenantId() 的模块自动按租户走。
 const DEFAULT_TENANT_ID = process.env.DEFAULT_TENANT_ID || 'lucky-luxe'
@@ -5729,6 +5729,7 @@ async function signInWechatMiniUser(body) {
   return {
     user: serialized,
     auth: miniAuthFor(serialized, data.openid),
+    needPhone: needsPhone(user),   // 裁#92:「要不要问手机号」**只有后端判**,前端照着做(唯一出口在 ./mini-phone.mjs)
     mode: 'wechat-mini'
   }
 }
@@ -5869,22 +5870,7 @@ function randomId(prefix) {
 
 
 
-const { base64UrlEncode, base64UrlDecode, signMiniPayload, miniAuthFor } = makeMiniToken(WECHAT_MINI_TOKEN_SECRET)   // 四件整段在 ./mini-token.mjs(裁#89 摘出去);验签那头留在本文件,理由见该模块头注
-
-function customerFromMiniToken(token) {
-  if (!token || !token.startsWith('mini.')) return null
-  const [, payload, signature] = token.split('.')
-  if (!payload || !signature || signMiniPayload(payload) !== signature) throw apiError(401, 'UNAUTHORIZED', 'Invalid mini program session.')
-  const data = base64UrlDecode(payload)
-  if (!data.exp || Date.now() > Number(data.exp)) throw apiError(401, 'UNAUTHORIZED', 'Mini program session expired.')
-  let user = db.prepare('SELECT * FROM users WHERE id = ? AND wechat_open_id = ?').get(data.sub, data.openid)
-  // 演示登录旁路:demo-openid 无真实 openid,仅在演示开关下按用户 id 回退(生产不触发)
-  if (!user && DEMO_LOGIN_ALLOWED && String(data.openid || '').startsWith('demo-openid-')) {
-    user = db.prepare('SELECT * FROM users WHERE id = ?').get(data.sub)
-  }
-  if (!user) throw apiError(401, 'UNAUTHORIZED', 'Mini program user was not found.')
-  return serializeUser(user)
-}
+const { base64UrlEncode, base64UrlDecode, signMiniPayload, miniAuthFor, customerFromMiniToken } = makeMiniToken(WECHAT_MINI_TOKEN_SECRET, { db, apiError, serializeUser, demoAllowed: () => DEMO_LOGIN_ALLOWED })   // 四件整段在 ./mini-token.mjs(裁#89 摘出去);验签那头留在本文件,理由见该模块头注
 
 function iso(date) {
   return date.toISOString()

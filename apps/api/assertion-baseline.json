@@ -39,7 +39,7 @@
     "audit-fix": 90,
     "scan-sign": 53,
     "double-sheet": 54,
-    "auth-surface": 49,
+    "auth-surface": 50,
     "currency-scan": 6,
     "settle-stress": 6,
     "sign-stability": 6,
@@ -102,9 +102,6 @@
     "native-dialog": 7,
     "demo-mark": 10,
     "txn-rollback": 4,
-    "mp-placeholder-size": 3,
-    "mp-overlap": 4,
-    "mp-home-sections": 9,
     "store-jury": 5,
     "auto-return": 7,
     "schema-consistency": 4,
@@ -114,17 +111,25 @@
     "token-entry": 9,
     "danger-cmd": 8,
     "exit-code": 8,
-    "demo-gate-coverage": 14,
+    "demo-gate-coverage": 15,
     "frontend-routes": 6,
     "login-entries": 4,
     "wechat-stub": 10,
     "fixture-front-door": 5,
-    "mini-phone": 16
+    "mini-phone": 18,
+    "demo-gate-scope": 8
   },
   "上次更新": "2026-09-02",
   "巨型文件历史最低": {
     "说明": "棘轮双基线(店主 09-08 裁,05r 补三):预检取 min(上一提交行数, 这里记的历史最低)。只许写小不许写大 —— 写大预检自己红。治的是「红着提交一次,下一次基线跟着抬」那个口子。",
-    "apps/api/local-server.mjs": 17678,
+    "apps/api/local-server.mjs": 17664,
     "apps/web/admin.js": 7928
+  },
+  "小程序档_移出主档_2026-09-14": {
+    "说明": "裁#91(店主 07l §四)选②:这三把刀移到**小程序自动化独立档**,单独跑单独报数。基线从主档移出。",
+    "归因": "J-50 第二款 —— 底数变小的第 4 种:**被测对象搬到另一档**(不是少了、不是判据放松、不是形态没跟上)",
+    "移出的": "mp-placeholder-size=3 · mp-overlap=4 · mp-home-sections=9",
+    "移出合计": 16,
+    "期限": "07m 让这一档能自愈(先证死再拉起 9420);做不到就升级成「只能真机跑」+具名冻结"
   }
 }
