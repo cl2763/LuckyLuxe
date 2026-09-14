@@ -17,6 +17,7 @@ import { nameToUsername, isValidUsername } from './pinyin-names.mjs'
 import { createDecipheriv, createHash, createHmac, randomUUID } from 'node:crypto'
 import { makeMiniToken } from './mini-token.mjs'
 import { notBoundByLoginIdentitySql, makeUnionIdResolver } from './identity-kinds.mjs'   // 🔴 D191:第三条「没绑过微信」只改这一条,整段分类在该模块
+import { filterCouponsForCustomer, KNOWN_COUPON_STATUSES, isKnownCouponStatus } from './coupon-status.mjs'
 import { addUserColumns, USER_OP_COLUMNS } from './user-columns.mjs'
 import { copyFileSync, existsSync, mkdirSync, readdirSync, readFileSync, renameSync, statSync, unlinkSync, writeFileSync } from 'node:fs'
 import { basename, dirname, extname, join, normalize, resolve } from 'node:path'
@@ -11202,7 +11203,7 @@ async function route(req, res) {
       FROM coupon_grants g JOIN coupons c ON c.id = g.coupon_id
       WHERE g.user_id = ? AND g.tenant_id = ? ORDER BY g.created_at DESC`).all(customer.id, tid)
     return json(res, 200, {
-      coupons: rows.map((r) => ({
+      coupons: filterCouponsForCustomer(rows).rows.map((r) => ({   // 段B:只下发产品认识的状态,不认识的不许原样透出(整段在 ./coupon-status.mjs)
         id: r.id, code: r.code, status: r.status, name: r.name,
         discountType: r.discount_type, amountCents: r.amount_cents, percentOff: r.percent_off, minSpendCents: r.min_spend_cents,
         expiresAt: r.expires_at, usedAt: r.used_at

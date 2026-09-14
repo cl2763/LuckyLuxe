@@ -1,0 +1,36 @@
+{
+  "sha": "dc1fbb8e13ed064769112ed23207955d4a16efac",
+  "short": "dc1fbb8",
+  "打于": "2026-09-14T17:15:48.075Z",
+  "尺子指纹": "e2ef4074eef4",
+  "数": {
+    "领先 origin/main": {
+      "值": 321,
+      "怎么来的": "git rev-list --count origin/main..<sha>"
+    },
+    "主档套件数": {
+      "值": 119,
+      "怎么来的": "run-all-tests.sh 的 DEFAULT_SUITES 词数 + 固定 4 套"
+    },
+    "门关档套件数": {
+      "值": 21,
+      "怎么来的": "run-all-tests.sh 的 DEMO_GATE_SUITES 词数"
+    },
+    "断言在册合计": {
+      "值": 4017,
+      "怎么来的": "assertion-baseline.json 的 suites 各值求和"
+    },
+    "local-server.mjs 行数": {
+      "值": 17650,
+      "怎么来的": "git show <sha>:文件 | 数行"
+    },
+    "admin.js 行数": {
+      "值": 7928,
+      "怎么来的": "同上"
+    },
+    "customer.js 行数": {
+      "值": 2755,
+      "怎么来的": "同上"
+    }
+  }
+}

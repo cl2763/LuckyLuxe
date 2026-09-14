@@ -171,6 +171,21 @@ async function knife({ ep, suite, file, needle, claimPat, nth = null }) {
     restore(); return
   }
   console.log(`   [刀] 已注掉 ${file} 里那条落库(整条,语法已过)`)
+  /* 🔴 夜12 段C · **「没跑到」必须单列** —— J-57 在造病台上的复现
+   *
+   * 案由(07r 现测):`scan-sign` 是 fail-fast(`check()` 里直接 `throw`)——
+   * 无刀 53 条,造病后**停在第 44 条,后面 9 条根本没跑到**,
+   * 而那 9 条里正有「签完另一入口变已签只读」这种**和被砍的落库直接相关**的。
+   * **不能说它们守住了,也不能说没守住 —— 它们没跑。**
+   *
+   * 全仓 62/128 套是 fail-fast,今夜改不完。但**「没跑到」这个数不用改它们也能精确算**:
+   *   先跑一遍**无刀基线**拿到断言名单 → 造病后再跑一遍 →
+   *   **没跑到 = 基线里有、造病那轮里一次都没出现(既没 ok 也没 not ok)的那些。**
+   * 这比改 62 个文件稳,而且**它本身就是要报的那个数**。 */
+  const baseRun = await runSuiteIsolated(suite)
+  const nameOf = (l) => l.replace(/^(?:not )?ok \d+ - /, '').trim()
+  const baseNames = (baseRun.out.match(/^(?:not )?ok \d+ - .+$/gm) || []).map(nameOf)
+
   const run1 = await runSuiteIsolated(suite)
   const out = run1.out
   const failed = run1.failed
@@ -184,8 +199,16 @@ async function knife({ ep, suite, file, needle, claimPat, nth = null }) {
   const CLAIMS = /成功|已保存|已提交|已发送|已核销|已到账|已确认|已绑定|已更新|写进|落库|创建|生成|新增|入库|真的是|跟过去|查库|对得上|留痕|释放/
   const claimGreens = greens.filter((g) => CLAIMS.test(g))
   const survived = claimPat ? claimGreens.filter((g) => !claimPat.test(g)) : claimGreens
-  console.log(`   [刀账] 这一刀:红 ${reds.length} 条 · 仍绿 ${greens.length} 条`
-    + ` · 其中**声称成功却仍绿** ${claimGreens.length} 条`)
+  const ranNames = new Set([...(out.match(/^(?:not )?ok \d+ - .+$/gm) || []).map(nameOf)])
+  const notRun = baseNames.filter((n) => !ranNames.has(n))
+  console.log(`   [刀账·四个数] 红 ${reds.length} · 仍绿 ${greens.length}`
+    + ` · 其中**声称成功却仍绿** ${claimGreens.length} · **没跑到 ${notRun.length}**`
+    + `(无刀基线 ${baseNames.length} 条)`)
+  if (notRun.length) {
+    console.log('   [没跑到点名](套件在半路 throw 断了,这些**既不是守住也不是没守住,是没跑**):')
+    for (const n of notRun.slice(0, 12)) console.log(`     ○ ${n.slice(0, 120)}`)
+    if (notRun.length > 12) console.log(`     …另 ${notRun.length - 12} 条`)
+  }
   if (claimGreens.length) {
     console.log('   [仍绿点名](声称成功、造病之后照样绿 —— 这些才是要找的东西):')
     for (const g of claimGreens.slice(0, 12)) console.log(`     · ${g.slice(0, 120)}`)
@@ -218,7 +241,7 @@ async function knife({ ep, suite, file, needle, claimPat, nth = null }) {
       rows.push({ ep, suite, needle, verdict: '🔴 **刀没咬到**(换成必然会红的形态也不红 ⇒ 这条路径没被执行到)—— 不算守住' })
     } else if (reached === true) {
       console.log('   🔴 仍绿 —— 路径**确实被执行到了**(必然红那一刀红了),所以这条判据验的是回执不是事实')
-      rows.push({ ep, suite, needle, verdict: '🔴 **仍绿**(已证刀咬到:必然红那一刀红了)—— 验的是回执不是事实' })
+      rows.push({ ep, suite, needle, verdict: '🔴 **仍绿**(已证刀咬到:必然红那一刀红了)—— 验的是回执不是事实', 账: `红 ${reds.length} / 仍绿 ${greens.length} / 声称成功却仍绿 ${claimGreens.length} / **没跑到 ${notRun.length}**`, 仍绿: claimGreens, 没跑到: notRun })
     } else {
       console.log('   ⚠️ 不红,但必然红那一刀也落不下去 —— 判不了,不算验过')
       rows.push({ ep, suite, needle, verdict: '⚠️ 不红且证不了咬没咬到 —— **不算验过**' })
@@ -226,10 +249,11 @@ async function knife({ ep, suite, file, needle, claimPat, nth = null }) {
   } else if (claimReds.length) {
     console.log(`   ✅ 红了,而且红的就是那条:${claimReds[0]}`)
     rows.push({ ep, suite, needle, verdict: `✅ 红,**红的就是声称成功那条**:\`${claimReds[0]}\``,
-      账: `红 ${reds.length} / 仍绿 ${greens.length}(其中声称成功却仍绿 ${claimGreens.length})`, 仍绿: claimGreens })
+      账: `红 ${reds.length} / 仍绿 ${greens.length} / 声称成功却仍绿 ${claimGreens.length} / **没跑到 ${notRun.length}**`,
+      仍绿: claimGreens, 没跑到: notRun })
   } else {
     console.log(`   ⚠️ 套件红了,但红的不是「声称成功」那条:${reds[0] || '(没抓到红行)'}`)
-    rows.push({ ep, suite, needle, verdict: `⚠️ **套件红了但红的是隔壁** —— \`${reds[0] || '没抓到红行'}\`;声称成功那条**仍绿**` })
+    rows.push({ ep, suite, needle, verdict: `⚠️ **套件红了但红的是隔壁** —— \`${reds[0] || '没抓到红行'}\`;声称成功那条**仍绿**`, 账: `红 ${reds.length} / 仍绿 ${greens.length} / 声称成功却仍绿 ${claimGreens.length} / **没跑到 ${notRun.length}**`, 仍绿: claimGreens, 没跑到: notRun })
   }
 }
 
