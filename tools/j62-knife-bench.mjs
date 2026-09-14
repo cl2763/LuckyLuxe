@@ -265,7 +265,11 @@ const TARGETS = [
   /* 🔴 07q §四③:A 类 246 条按**口**聚类后是 **83 个口** —— 一个口造一次就够。
      涉钱那 35 个里挂着最多断言的是 `/settlements/:code/sign`(20 条),先造它。
      用 `customer-paths`:那套件里 ㋚5a 真走了「开单 + 顾客签字」这条路。 */
-  { ep: '/settlements/:code/sign · 签署落库(涉钱,挂 20 条 A 类)', suite: 'customer-paths',
+  /* ⚠️ 靶子与套件要配对:第一次我拿 `customer-paths` 跑签署口的刀 —— 它只有 2 条断言碰那个口,
+     于是「仍绿 3 条」点的是**支付和卡包**,跟被砍的口毫无关系,**是噪音不是发现**。
+     那 20 条 A 类挂在别的套件上;签署口该跑的是 `scan-sign`(它就是测签字那一套)。
+     **「仍绿点名」只在跑了「拥有这个口的断言」的套件时才作数** —— 别的套件的绿不说明任何事。 */
+  { ep: '/settlements/:code/sign · 签署落库(涉钱,挂 20 条 A 类)', suite: 'scan-sign',
     file: 'apps/api/local-server.mjs',
     needle: "db.prepare(\"UPDATE settlements SET status = 'signed', signature_data = ?, signed_at = ?",
     claimPat: /㋚5a|㋚5 / },
