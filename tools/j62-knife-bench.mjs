@@ -18,6 +18,7 @@ import { readFileSync, writeFileSync, mkdtempSync, rmSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { spawn } from 'node:child_process'
 import { execFileSync, execSync } from 'node:child_process'
+import { checkCalls, readSetOf, writeSetOf } from './readset.mjs'
 import { randomUUID } from 'node:crypto'
 import { join } from 'node:path'
 import { fileURLToPath } from 'node:url'
@@ -223,15 +224,58 @@ async function knife({ ep, suite, file, needle, claimPat, nth = null }) {
    *
    * 现在:**所有非红逐条落格,不做任何预过滤**;
    * 落完**自己加一遍**,加不上底数就拒绝出结论(J-66 第二款:报数的人自己加,不等别人加)。 */
-  const claimGreens = greens
-  /* 🔴 裁 #102(店主 07s §五)· **「仍绿」要拆两类,不然下次会把噪音当发现**
-   *   · **仍绿-无关**:本来就不在这一刀的作用面上 —— 绿是对的,不用管;
-   *   · 🔴 **仍绿-该咬没咬**:**本该被这一刀咬到却没红** —— **这才是发现**。
-   * 案底:签署口那一刀的 4 条「声称成功却仍绿」**全是绑定/徽标**,跟被砍的落库无关;
-   * 而真正该咬到的三条在「没跑到」里 —— 混成一个数就读不出这件事。
-   * 分法:`claimPat` 就是「这一刀该咬到谁」的口径,命中它的算**该咬**,其余算无关。 */
-  const shouldBite = claimPat ? claimGreens.filter((g) => claimPat.test(g)) : []
-  const unrelated = claimPat ? claimGreens.filter((g) => !claimPat.test(g)) : claimGreens
+  /* 🔴 J-61 第三款(店主 07x §一)· **台子不许按判据的名字给判据分类。**
+   *
+   * 案由(店主原话):「名字是人写的,行为是代码干的。**按名字分类的台子,分出来的格子是
+   * 文本的格子,不是事实的格子。**」
+   * `㋚8 定金守恒` 把全套都演了一遍:
+   *   · 按名字 → 该咬(名字里有「定金守恒」,刀砍的是签字落库,听起来相关);
+   *   · 按它读的表 → **它真的读 `settlements`**(`local-server.mjs:7567`
+   *     `SELECT code FROM settlements WHERE id = ?`,由 `readset --probe` 咬出来)。
+   *   名字给的答案和事实给的答案是**两个不同的答案**,而且**我 07w 手查那次也答错了**。
+   *
+   * 现在的尺子:**刀的写集 ∩ 判据的读集**。
+   *   写集 = 被砍那条语句写了哪几张表;
+   *   读集 = 这条断言那一段源码碰到的表(suite 里的直接 SQL + 打的 HTTP 路径
+   *          解析到 handler 体、再跟进一层本地函数)。
+   *   两层都取不到 → **说不清**,单列,**不许扫进「无关」**(店主 07w §一 停线)。 */
+  const suiteSrc = readFileSync(join(ROOT, 'apps/api', `test-${suite}.mjs`), 'utf8')
+  const serverSrcForRead = readFileSync(join(ROOT, 'apps/api/local-server.mjs'), 'utf8')
+  const cutText = src.slice(cut.start, cut.end + 1)
+  const wset = writeSetOf(cutText)
+  const calls = checkCalls(suiteSrc)
+  /* 断言 i ↔ 源码里第 i 个 check( 调用。**认标记不认措辞**(J-49):
+     取渲染名开头那个标记(㋚6 / ㊙⑩ / ⑤0 …),它必须出现在那一段源码里;
+     对不上就判**说不清**,不许猜。 */
+  const markOf = (n) => (String(n).match(/^\s*([^\s:,]{1,8})/) || [, ''])[1]
+  const blockFor = (idx) => {
+    if (idx < 0 || idx >= calls.length) return null
+    const from = idx === 0 ? 0 : calls[idx - 1].end
+    return suiteSrc.slice(from, calls[idx].end)
+  }
+  const outNames = (out.match(/^(?:not )?ok \d+ - .+$/gm) || []).map((l) => l.replace(/^(?:not )?ok \d+ - /, '').trim())
+  const idxOfName = new Map()
+  outNames.forEach((n, k) => { if (!idxOfName.has(n)) idxOfName.set(n, k) })
+  const classify = (name) => {
+    const k = idxOfName.get(name)
+    const blk = blockFor(k ?? -1)
+    if (blk == null) return { grade: '说不清', why: `源码里对不到第 ${(k ?? -1) + 1} 个 check( 调用` }
+    const mark = markOf(name)
+    if (mark && !blk.includes(mark)) return { grade: '说不清', why: `标记 \`${mark}\` 不在第 ${k + 1} 段源码里(名次对不上,不许猜)` }
+    const rs = readSetOf(blk, serverSrcForRead)
+    const inter = [...rs.tables].filter((t) => wset.has(t))
+    if (inter.length) return { grade: '该咬没咬', why: `读集 ∩ 写集 = {${inter.join(',')}}`, rs }
+    if (!rs.known) return { grade: '说不清', why: `读集取不到(路径 ${rs.unresolved.join(' ') || '无'} 解析不到 handler)`, rs }
+    return { grade: '无关', why: `读集 {${[...rs.tables].slice(0, 6).join(',') || '—'}} ∩ 写集 {${[...wset].join(',')}} = ∅`, rs }
+  }
+  const unrelated = [], shouldBite = [], unclear = []
+  for (const g of greens) {
+    const c = classify(g)
+    const row = { 名: g, 理由: c.why }
+    if (c.grade === '该咬没咬') shouldBite.push(row)
+    else if (c.grade === '说不清') unclear.push(row)
+    else unrelated.push(row)
+  }
   /* 🔴 按**条数与位置**算,不按名字 —— 归一化那一版还是不准:
      断言名里常写着运行期实测值(`状态 signed` vs `pending_sign`),归一归不干净。
      而 fail-fast 套件被刀断掉时,跑的是**前缀** —— 所以
@@ -240,19 +284,38 @@ async function knife({ ep, suite, file, needle, claimPat, nth = null }) {
   const ranCount = reds.length + greens.length
   const notRun = baseNames.slice(ranCount)
   /* J-66 第二款:四格 + 没跑到必须等于底数,自己加一遍 */
-  const sum = reds.length + unrelated.length + shouldBite.length + notRun.length
+  const sum = reds.length + unrelated.length + shouldBite.length + unclear.length + notRun.length
   const closes = sum === baseNames.length
   if (!closes) {
-    console.log(`   🔴 **四格加不上底数**:红 ${reds.length} + 无关 ${unrelated.length}`
-      + ` + 该咬没咬 ${shouldBite.length} + 没跑到 ${notRun.length} = ${sum},而底数 ${baseNames.length}。`)
+    console.log(`   🔴 **五格加不上底数**:红 ${reds.length} + 无关 ${unrelated.length}`
+      + ` + 该咬没咬 ${shouldBite.length} + 说不清 ${unclear.length} + 没跑到 ${notRun.length} = ${sum},而底数 ${baseNames.length}。`)
     console.log('   **J-66:加不上底数就不许往下说任何结论** —— 未归类的余数默认按最坏那一格计。')
   }
-  console.log(`   [刀账·四个数] 红 ${reds.length} · **仍绿-无关 ${unrelated.length}**`
-    + ` · 🔴 **仍绿-该咬没咬 ${shouldBite.length}** · **没跑到 ${notRun.length}**`
+  console.log(`   [刀账·五个数] 红 ${reds.length} · **仍绿-无关 ${unrelated.length}**`
+    + ` · 🔴 **仍绿-该咬没咬 ${shouldBite.length}** · **说不清 ${unclear.length}** · **没跑到 ${notRun.length}**`
     + ` —— 合计 ${sum} ${closes ? '≡' : '≠'} 底数 ${baseNames.length} ${closes ? '✅ 闭合(J-66)' : '🔴 **不闭合**'}`)
+  /* 🔴 J-66 第四款(店主 07x §二)· **红那一格也要点名。**
+   * 案由:夜12 签署口造病报「红 1」,看着像守住了 —— 实际红的是隔壁那条并发幂等**撞上的**,
+   * 跟「签字成没成」毫无关系。**「有 N 条红了」和「该红的那条红了」是两件事,而前者长得更让人放心。**
+   * 停线:「造病台报出『红 N』而 N 条没有名字,这份报告不算交。」 */
+  console.log(`   [刀的写集] {${[...wset].join(',') || '—'}} ←—— 被砍那条语句写的表`)
+  if (reds.length) {
+    console.log('   🔴 [红点名](逐条给因果链:刀写了 X,这条判据读 X,所以它红):')
+    for (const r of reds) {
+      const c = classify(r)
+      console.log(`     ✗ ${r.slice(0, 120)}`)
+      console.log(`        ↳ 因果链:${c.why}${c.grade === '该咬没咬' ? '  ✅ **链是通的**' : c.grade === '说不清' ? '  ⚠️ **链说不清**' : '  🔴 **链断了 —— 这条红跟本次造病没有读写交集,疑似撞上的**'}`)
+    }
+  } else {
+    console.log('   🔴 红 0 条 —— **没有一条判据被这一刀咬到**')
+  }
+  if (unclear.length) {
+    console.log('   ⚠️ [说不清](**单列,不许扫进「无关」** —— 店主 07w §一 停线):')
+    for (const g of unclear.slice(0, 12)) console.log(`     ? ${g.名.slice(0, 110)}\n        ↳ ${g.理由}`)
+  } else console.log('   [说不清] 0 条')
   if (shouldBite.length) {
     console.log('   🔴 [仍绿-该咬没咬](**这才是发现** —— 本该被这一刀咬到却照样绿):')
-    for (const g of shouldBite.slice(0, 12)) console.log(`     ✗ ${g.slice(0, 130)}`)
+    for (const g of shouldBite.slice(0, 12)) console.log(`     ✗ ${g.名.slice(0, 120)}\n        ↳ ${g.理由}`)
   } else console.log('   [仍绿-该咬没咬] 0 条')
   if (notRun.length) {
     console.log('   [没跑到点名](套件在半路 throw 断了,这些**既不是守住也不是没守住,是没跑**):')
@@ -261,7 +324,7 @@ async function knife({ ep, suite, file, needle, claimPat, nth = null }) {
   }
   if (unrelated.length) {
     console.log(`   [仍绿-无关] ${unrelated.length} 条(不在这一刀的作用面上,绿是对的):`)
-    for (const g of unrelated.slice(0, 6)) console.log(`     · ${g.slice(0, 110)}`)
+    for (const g of unrelated.slice(0, 6)) console.log(`     · ${g.名.slice(0, 100)}\n        ↳ ${g.理由}`)
     if (unrelated.length > 6) console.log(`     …另 ${unrelated.length - 6} 条`)
   }
   const bootBroke = run1.bootBroke || /在 \d+s 内未就绪|BOOT-FAIL|Cannot find module/.test(out)
@@ -270,7 +333,10 @@ async function knife({ ep, suite, file, needle, claimPat, nth = null }) {
     rows.push({ ep, suite, needle, verdict: '🔴 **服务没起来**,红的不是判据 —— 不算验过' })
     return
   }
-  const claimReds = reds.filter((r) => claimPat.test(r))
+  /* 🔴 J-61③:连「红的是不是该红的那条」也不许按名字判 ——
+     按**因果链**判:这条红的判据,它的读集里有没有刀写的那张表。 */
+  const claimReds = reds.filter((r) => classify(r).grade === '该咬没咬')
+  const strayReds = reds.filter((r) => classify(r).grade !== '该咬没咬')
   if (!failed) {
     /* ④ J-58 第四款:不红先证咬到 —— 把同一处换成**必然会红**的形态(直接抛),
        它要是也不红,说明这条路径压根没被执行到。 */
@@ -291,19 +357,20 @@ async function knife({ ep, suite, file, needle, claimPat, nth = null }) {
       rows.push({ ep, suite, needle, verdict: '🔴 **刀没咬到**(换成必然会红的形态也不红 ⇒ 这条路径没被执行到)—— 不算守住' })
     } else if (reached === true) {
       console.log('   🔴 仍绿 —— 路径**确实被执行到了**(必然红那一刀红了),所以这条判据验的是回执不是事实')
-      rows.push({ ep, suite, needle, verdict: '🔴 **仍绿**(已证刀咬到:必然红那一刀红了)—— 验的是回执不是事实', 账: `红 ${reds.length} / 仍绿-无关 ${unrelated.length} / **仍绿-该咬没咬 ${shouldBite.length}** / 没跑到 ${notRun.length}`, 仍绿: shouldBite, 没跑到: notRun })
+      rows.push({ ep, suite, needle, verdict: '🔴 **仍绿**(已证刀咬到:必然红那一刀红了)—— 验的是回执不是事实', 账: `红 ${reds.length} / 仍绿-无关 ${unrelated.length} / **仍绿-该咬没咬 ${shouldBite.length}** / 说不清 ${unclear.length} / 没跑到 ${notRun.length}`, 仍绿: shouldBite, 没跑到: notRun })
     } else {
       console.log('   ⚠️ 不红,但必然红那一刀也落不下去 —— 判不了,不算验过')
       rows.push({ ep, suite, needle, verdict: '⚠️ 不红且证不了咬没咬到 —— **不算验过**' })
     }
   } else if (claimReds.length) {
-    console.log(`   ✅ 红了,而且红的就是那条:${claimReds[0]}`)
+    console.log(`   ✅ 红了,而且**因果链是通的**(读集里有刀写的那张表):${claimReds[0]}`)
+    if (strayReds.length) console.log(`   ⚠️ 另有 ${strayReds.length} 条红是撞上的(与本刀无读写交集),已在红点名里各自标了「链断了」`)
     rows.push({ ep, suite, needle, verdict: `✅ 红,**红的就是声称成功那条**:\`${claimReds[0]}\``,
-      账: `红 ${reds.length} / 仍绿-无关 ${unrelated.length} / **仍绿-该咬没咬 ${shouldBite.length}** / 没跑到 ${notRun.length}`,
+      账: `红 ${reds.length} / 仍绿-无关 ${unrelated.length} / **仍绿-该咬没咬 ${shouldBite.length}** / 说不清 ${unclear.length} / 没跑到 ${notRun.length}`,
       仍绿: shouldBite, 没跑到: notRun })
   } else {
-    console.log(`   ⚠️ 套件红了,但红的不是「声称成功」那条:${reds[0] || '(没抓到红行)'}`)
-    rows.push({ ep, suite, needle, verdict: `⚠️ **套件红了但红的是隔壁** —— \`${reds[0] || '没抓到红行'}\`;声称成功那条**仍绿**`, 账: `红 ${reds.length} / 仍绿-无关 ${unrelated.length} / **仍绿-该咬没咬 ${shouldBite.length}** / 没跑到 ${notRun.length}`, 仍绿: shouldBite, 没跑到: notRun })
+    console.log(`   ⚠️ 套件红了,但**没有一条红的与这一刀有读写交集** —— 红的是撞上的:${strayReds[0] || '(没抓到红行)'}`)
+    rows.push({ ep, suite, needle, verdict: `⚠️ **套件红了但红的是隔壁** —— \`${reds[0] || '没抓到红行'}\`;声称成功那条**仍绿**`, 账: `红 ${reds.length} / 仍绿-无关 ${unrelated.length} / **仍绿-该咬没咬 ${shouldBite.length}** / 说不清 ${unclear.length} / 没跑到 ${notRun.length}`, 仍绿: shouldBite, 没跑到: notRun })
   }
 }
 
