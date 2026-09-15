@@ -226,6 +226,16 @@ async function knife({ ep, suite, file, needle, claimPat, nth = null, lane = {} 
      **造病的产出不是「红了没有」,是「哪几条活下来了」。**
      07m 那次的形状就是这个:套件红了,但红的是隔壁那条幂等,「声称成功」那条原样活下来。 */
   const reds = (out.match(/^(?:not ok \d+ - |✗ |❌ )(.+)$/gm) || []).map((x) => x.replace(/^(not ok \d+ - |✗ |❌ )/, ''))
+  /* 🔴 **fail-fast 套件红起来不打 `not ok`** —— 它直接 `throw`,名字出现在 stderr 的
+   *   `Error: <断言名>: <实测>` 那一行。上一版只认 `not ok`,于是
+   *   `card-refund` 被刀咬红时台子报「**红 0**」,而那条真红的断言被算进了「没跑到」。
+   *   「红 0 + 没跑到 4」和「它守住了」在数字上分不出来 —— 又一个**看起来很干净的 0**。
+   *   案底:本批 `生产闸-3` 的突变自检,刀落下去它确实红了、也确实报出了自己的名字,
+   *   而台子的账面上是 0。**报数的工具自己漏了一格,报出来的就是假的。** */
+  for (const m of out.matchAll(/^Error: (.+)$/gm)) {
+    const nm = m[1].trim()
+    if (nm && !reds.some((r) => r.startsWith(nm.slice(0, 20)))) reds.push(nm)
+  }
   const greens = (out.match(/^ok \d+ - (.+)$/gm) || []).map((x) => x.replace(/^ok \d+ - /, ''))
   /* 「声称成功」的断言:名字里说了成了,或条件在看 2xx —— 与静态筛同一把尺子 */
   const CLAIMS = /成功|已保存|已提交|已发送|已核销|已到账|已确认|已绑定|已更新|写进|落库|创建|生成|新增|入库|真的是|跟过去|查库|对得上|留痕|释放/
@@ -317,6 +327,8 @@ async function knife({ ep, suite, file, needle, claimPat, nth = null, lane = {} 
      **没跑到 = 基线条数 − 本轮跑出来的条数**,名单取基线里那个下标之后的部分。
      这个算法不受「名字里有什么」影响,也就不会再把跑过的算成没跑。 */
   const ranCount = reds.length + greens.length
+  /* fail-fast 那条红断言在基线里排在「没跑到」的头一个位置,已经计进红了 —— 
+     这里按**条数**切,它自然不会再被数第二遍(合计仍 ≡ 底数)。 */
   const notRun = baseNames.slice(ranCount)
   /* J-66 第二款:四格 + 没跑到必须等于底数,自己加一遍 */
   const sum = reds.length + unrelated.length + shouldBite.length + unclear.length + notRun.length
