@@ -117,7 +117,14 @@ async function ownerPortsAlive() {
 function bringsOwnServer(suite) {
   try {
     const src = readFileSync(join(ROOT, `apps/api/test-${suite}.mjs`), 'utf8')
-    return /spawn\(\s*process\.execPath\s*,\s*\[\s*'local-server\.mjs'/.test(src)
+    /* 🔴 「自带服务」≠「起过服务」。
+     *   `card-refund` **两样都干**:主体走外部 `BASE_URL`,末尾另起一个生产口径实例做闸检。
+     *   上一版只看「有没有 spawn」,把它误判成自带服务 → 台子不给它设私有端口 →
+     *   它回落到默认 4128,**当场被测试护栏拦下**(护栏做对了,是判据错了)。
+     *   改判据:**自带服务 ⇔ 起了服务 且 不读外部 BASE_URL**。 */
+    const spawnsOwn = /spawn\(\s*process\.execPath\s*,\s*\[\s*'local-server\.mjs'/.test(src)
+    const needsBase = /process\.env\.(TEST_)?BASE_URL/.test(src)
+    return spawnsOwn && !needsBase
   } catch { return false }
 }
 
