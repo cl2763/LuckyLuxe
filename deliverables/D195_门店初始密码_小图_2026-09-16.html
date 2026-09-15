@@ -1,0 +1,104 @@
+<title>D195 门店初始密码</title>
+<style>
+  :root{--bg:#faf8f6;--ink:#1d1b19;--sub:#6b6560;--line:#e5ded7;--card:#fff;--accent:#8c6a4f;--warn:#b4432c;--ok:#3d7a53}
+  :root:not([data-theme="light"]){}
+  @media (prefers-color-scheme:dark){:root:not([data-theme="light"]){--bg:#17150f;--ink:#f2ece4;--sub:#a49a90;--line:#332e28;--card:#201c16;--accent:#c9a884;--warn:#e08a74;--ok:#79b894}}
+  :root[data-theme="dark"]{--bg:#17150f;--ink:#f2ece4;--sub:#a49a90;--line:#332e28;--card:#201c16;--accent:#c9a884;--warn:#e08a74;--ok:#79b894}
+  body{background:var(--bg);color:var(--ink);font:16px/1.7 -apple-system,"PingFang SC","Helvetica Neue",sans-serif;margin:0;padding:32px 20px 72px}
+  .wrap{max-width:860px;margin:0 auto}
+  h1{font-size:26px;margin:0 0 6px;letter-spacing:-.01em}
+  .lede{color:var(--sub);margin:0 0 28px}
+  h2{font-size:17px;margin:34px 0 12px;padding-bottom:7px;border-bottom:1px solid var(--line)}
+  .screen{background:var(--card);border:1px solid var(--line);border-radius:14px;padding:20px 22px;margin:14px 0}
+  .screen .cap{font-size:12px;color:var(--sub);letter-spacing:.08em;text-transform:uppercase;margin-bottom:12px}
+  .row{display:flex;justify-content:space-between;align-items:center;gap:14px;padding:11px 0;border-bottom:1px solid var(--line)}
+  .row:last-child{border-bottom:0}
+  .k{color:var(--sub);font-size:14px}
+  .pw{font-family:ui-monospace,SFMono-Regular,Menlo,monospace;font-size:19px;letter-spacing:.06em;background:rgba(140,106,79,.1);padding:7px 13px;border-radius:8px;border:1px dashed var(--accent)}
+  .btn{display:inline-block;background:var(--accent);color:#fff;border-radius:9px;padding:8px 15px;font-size:14px;white-space:nowrap}
+  .btn.ghost{background:transparent;color:var(--accent);border:1px solid var(--accent)}
+  .note{font-size:14px;color:var(--sub);margin-top:10px}
+  .warn{color:var(--warn);font-weight:600}
+  .ok{color:var(--ok);font-weight:600}
+  ol,ul{padding-left:22px}
+  li{margin:7px 0}
+  table{width:100%;border-collapse:collapse;font-size:14px;margin-top:8px;display:block;overflow-x:auto;white-space:nowrap}
+  th,td{text-align:left;padding:9px 12px;border-bottom:1px solid var(--line)}
+  th{color:var(--sub);font-weight:600}
+  .q{background:rgba(180,67,44,.08);border-left:3px solid var(--warn);padding:13px 16px;border-radius:0 9px 9px 0;margin:16px 0}
+  .after{opacity:.55}
+</style>
+<div class="wrap">
+<h1>门店初始密码:怎么发下去、怎么重置</h1>
+<p class="lede">D195 最小版 · 给店主点头用 · 2026-09-16<br>
+您的原话:「密码我希望系统能自动生成,初始配置店铺的时候我从平台后台把它粘给老板;他之后忘了,我在平台上重置一次,再把新的给他。」——<b>这个设计是对的,下面是它做出来长什么样。</b></p>
+
+<h2>屏 1 · 建店之后,这一屏只出现一次</h2>
+<div class="screen">
+  <div class="cap">平台后台 › 新建门店 › 完成</div>
+  <div class="row"><span class="k">门店</span><span>小婕美甲(jics)</span></div>
+  <div class="row"><span class="k">老板账号</span><span>boss</span></div>
+  <div class="row"><span class="k">初始密码</span><span class="pw">k7Rm-9pXt-4Wqz</span><span class="btn">复制</span></div>
+  <div class="note"><span class="warn">⚠️ 这一屏关掉就再也看不到这串密码了。</span>系统只存它的哈希,不存原文。忘了就点「重置」再生成一串新的。</div>
+</div>
+<div class="screen after">
+  <div class="cap">刷新之后 · 同一个位置</div>
+  <div class="row"><span class="k">初始密码</span><span class="k">—— 已隐藏(只在生成的那一刻显示一次)</span><span class="btn ghost">重置密码</span></div>
+</div>
+
+<div class="q">
+<b>这一条最要紧,请您特别看一眼:</b><br>
+您说「从平台后台把它粘给老板」,听起来像<b>随时都能进后台看到每家店的密码</b>。
+<b>不能那样做。</b>如果那个页面随时能看到所有店的密码,它就变成了<b>一份所有商家密码的明文清单</b> —— 那一页一旦泄露,所有店一起完蛋。<br>
+所以改成:<b>只有生成的那一刻能看到,刷新就没了;要就重置一次。</b>对您的实际操作几乎没影响(您本来也是生成完当场就粘走)。
+</div>
+
+<h2>屏 2 · 老板忘了密码,您在平台上重置</h2>
+<div class="screen">
+  <div class="cap">平台后台 › 门店 › 小婕美甲 › 重置老板密码</div>
+  <div class="row"><span class="k">手打完整店名确认</span><span class="pw" style="font-size:15px">小婕美甲</span></div>
+  <div class="row"><span class="k">重置原因(必填)</span><span class="k">老板忘记密码,微信里要求重置</span></div>
+  <div class="row"><span class="k">新的一次性密码</span><span class="pw">t3Yb-6Ndh-2Lkw</span><span class="btn">复制</span></div>
+  <div class="note">重置之后:<b>旧密码当场失效 · 老板那边所有已登录的会话被踢掉 · 这次重置写进运维日志(谁、什么时候、哪家店、什么原因)。</b></div>
+</div>
+
+<h2>屏 3 · 老板第一次登录,必须改成自己的</h2>
+<div class="screen">
+  <div class="cap">商家端 › 首次登录</div>
+  <div class="row"><span class="k">当前密码</span><span class="k">(粘贴您发给他的那一串)</span></div>
+  <div class="row"><span class="k">设置新密码</span><span class="k">他自己想一个</span></div>
+  <div class="note"><span class="ok">✅ 改完的那一刻,您发给他的那一串<b>立刻作废</b>。</span>就算微信聊天记录里还留着,也已经打不开了。</div>
+</div>
+
+<h2>五条规矩(做出来就按这个,不改口径)</h2>
+<table>
+<tr><th>#</th><th>规矩</th><th>为什么</th></tr>
+<tr><td>1</td><td>建店时系统生成,平台后台<b>显示一次 · 一键复制</b></td><td>人想的密码会重复用、会很短,而且「谁想的」会变成责任不清</td></tr>
+<tr><td>2</td><td><b>只存哈希,不存原文</b>;那一栏显示的是「刚生成的这一次」,不是从库里读出来的</td><td>否则平台后台 = 一份所有商家密码的明文清单</td></tr>
+<tr><td>3</td><td><b>首次登录强制改密</b>,改完初始密码当场作废</td><td>您发出去的那一串只活到他第一次登录</td></tr>
+<tr><td>4</td><td>初始密码 <b>7 天有效</b>,到期自动作废,要就重置</td><td>不然一家从没登录过的店,会永远挂着一把有效的口令</td></tr>
+<tr><td>5</td><td>每次生成 / 重置都<b>留痕</b>(谁、何时、哪家店、什么原因)</td><td>这是平台方能进商家后台的唯一合法路径 —— 留痕既保护商家,也保护您自己</td></tr>
+</table>
+
+<h2>密码长什么样</h2>
+<p><b>12 位,分三段,去掉容易看错的字符</b>(去掉 <code>0 O</code>、<code>1 l I</code>)。例:<span class="pw">k7Rm-9pXt-4Wqz</span><br>
+分段是为了<b>在微信里念得出来、也粘得准</b>;去混淆字符是为了老板照着打不会打错。</p>
+
+<h2>唯一一个真风险,以及为什么它不要紧</h2>
+<p>您会用<b>微信把初始密码发给老板</b> —— 那是明文过微信,这一点没办法完全消除。<br>
+<b>但第 3、4 条正好把它兜住了</b>:那串密码<b>只能用一次</b>,而且<b>七天就过期</b>。所以即使微信记录一直留着,那把密码早就是死的了。</p>
+
+<h2>分两步做</h2>
+<ol>
+<li><b>最小版(上线前做)</b>:生成 + 只显示一次 + 重置按钮 + 留痕 + 12 位去混淆。<br><span class="note">因为这是您给两家店开门要走的路。</span></li>
+<li><b>完整版(上线后)</b>:七天自动作废 · 批量建店 · 短信/邮件直接下发(不用您转手)。</li>
+</ol>
+
+<div class="q">
+<b>顺带更正我自己写错的一句话。</b>上线清单第 6 条我原来写的是「两家真店密码<b>由店主亲手设</b>」——
+「亲手设」听起来像<b>您要自己想一个密码</b>,而我的本意是「由您走后台那条唯一合法路径产生,不由我们代设」。<b>您今天的问题正是被这句话引偏的。</b>
+已改写成:<b>「两家真店的初始密码由店主在平台后台生成并下发;密码不经过 Cowork、不经过 Code、不进任何文件。」</b>
+</div>
+
+<p class="note">这张是<b>合同图</b>:点头之后,做出来必须跟它一模一样,差一处算缺陷。有哪一屏不对、或者您想要别的做法,直接说。</p>
+</div>
