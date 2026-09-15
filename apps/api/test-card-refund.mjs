@@ -785,15 +785,11 @@ check('⑩-2 🔴 行为必须不同:keep=仍是会员 / drop=余额归零即失
   }
   const up = await wait()
   try {
-    check('生产闸-0 生产模式实例起得来(判据要真调用,不是读代码)', up)
-    const loginRes = await fetch(`http://127.0.0.1:${port}/auth/email/login`, {
-      method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ email: 'probe@example.com', password: 'x' })
-    })
-    const loginBody = await loginRes.json().catch(() => ({}))
-    check('生产闸-1 🔴 生产口径下邮箱登录 = 403 DEMO_LOGIN_DISABLED(且 ALLOW_DEMO_ADMIN_LOGIN=true 也打不开)',
-      loginRes.status === 403 && loginBody?.error?.code === 'DEMO_LOGIN_DISABLED', `${loginRes.status} ${JSON.stringify(loginBody).slice(0, 120)}`)
-    const forged = await fetch(`http://127.0.0.1:${port}/my/stored-value`, { headers: { authorization: 'Bearer demo-customer:probe%40example.com' } })
-    check('生产闸-2 🔴 伪造 demo-customer 令牌在生产口径下 = 401(顾客侧与商家侧同一把闸)', forged.status === 401, String(forged.status))
+    /* 🔴 顺序:本档那两条排在**最前面**。
+     *   案由(突变自检现测):把生产闸那句 403 注掉去考本批新写的 `生产闸-3`,
+     *   结果 `生产闸-1` 先 fail-fast 抛掉,`生产闸-3` **根本没跑到** ——
+     *   「刀没落到它头上」和「它守住了」在输出上长得一模一样(J-57 / 没跑到)。
+     *   把它提到最前,这一支才考得了。 */
     /* 🔴 J-57(判据不许互相噎死)· 店主 07x §八 判 (a) 本批修。
      *
      * 案由:这一条原来死写「本机 BASE 上邮箱登录必须 200」。
@@ -819,6 +815,15 @@ check('⑩-2 🔴 行为必须不同:keep=仍是会员 / drop=余额归零即失
         localStill.status === 403 && localStill?.data?.error?.code === 'DEMO_LOGIN_DISABLED',
         `${localStill.status} ${JSON.stringify(localStill.data || {}).slice(0, 120)}`)
     }
+    check('生产闸-0 生产模式实例起得来(判据要真调用,不是读代码)', up)
+    const loginRes = await fetch(`http://127.0.0.1:${port}/auth/email/login`, {
+      method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ email: 'probe@example.com', password: 'x' })
+    })
+    const loginBody = await loginRes.json().catch(() => ({}))
+    check('生产闸-1 🔴 生产口径下邮箱登录 = 403 DEMO_LOGIN_DISABLED(且 ALLOW_DEMO_ADMIN_LOGIN=true 也打不开)',
+      loginRes.status === 403 && loginBody?.error?.code === 'DEMO_LOGIN_DISABLED', `${loginRes.status} ${JSON.stringify(loginBody).slice(0, 120)}`)
+    const forged = await fetch(`http://127.0.0.1:${port}/my/stored-value`, { headers: { authorization: 'Bearer demo-customer:probe%40example.com' } })
+    check('生产闸-2 🔴 伪造 demo-customer 令牌在生产口径下 = 401(顾客侧与商家侧同一把闸)', forged.status === 401, String(forged.status))
   } finally {
     child.kill()
     try { rmSync(dir, { recursive: true, force: true }) } catch { /* 清不掉不影响断言 */ }
