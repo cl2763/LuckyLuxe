@@ -93,9 +93,20 @@ async function main() {
   check('① 默认无迟到宽限、改期 24h、保留 0 次',
     c.cancelPolicy.lateArrivalGraceMin === null && c.cancelPolicy.rescheduleNoticeHours === 24 && c.cancelPolicy.depositRetainTimes === 0)
 
-  const reg = await request('/auth/email/register', { method: 'POST', body: JSON.stringify({ email: `dep-${RUN_ID}@example.com`, displayName: `定金客${RUN_ID}` }) }, null)
-  const userToken = reg.data?.auth?.accessToken
-  check('演示顾客登录可用', Boolean(userToken), JSON.stringify(reg.data).slice(0, 160))
+  /* 🔴 07y §八(a):夹具从**演示邮箱注册**换成**正门**(J-60①)。
+   *   案由:这一套在**门关档**(`DEMO_LOGIN_ALLOWED=false`)红了十几批 ——
+   *   而门关档正是**把演示登录关掉**的那一档:夹具走的是本档明令关掉的那扇门,
+   *   于是它红的从来不是被测的那件事,是「造不出景」。
+   *   正门 = 商家建轻档案(带手机号)→ 顾客拿同一个号从 `/auth/wechat/mini-login` 进来
+   *   → 严格认人四条把两者认成同一个人。**顺带把认人那条正向路也真跑了一遍。**
+   */
+  const { createAndLoginCustomerViaFrontDoor } = await import('./customer-login-fixture.mjs')
+  const fd = await createAndLoginCustomerViaFrontDoor({ base: BASE_URL, tenantId: shopA.tenantId,
+    ownerToken: shopA.token, name: `定金客${RUN_ID}`, phone: `1380000${String(Date.now()).slice(-4)}`,
+    serviceId: shopA.serviceId, technicianId: shopA.techId, date: dateStr(10), time: '17:00' })
+  const userToken = fd.accessToken
+  check('顾客从**正门**登录(轻档案带号 → 微信登录 → 严格认人四条认领;不走演示邮箱注册)',
+    Boolean(userToken), `${fd.status} ${JSON.stringify(fd.body || {}).slice(0, 160)}`)
 
   const b1 = await customerBook(shopA, { date: dateStr(3), time: '11:00', userToken })
   check('默认配置下顾客下单成功', b1.status === 201, JSON.stringify(b1.data).slice(0, 220))

@@ -795,14 +795,23 @@ const jreq = async (path, opts = {}, token = null, extraHeaders = {}) => {
       body: JSON.stringify({ type: 'NAIL', nameZh: `并发项目${RUN}`, nameEn: 'item', priceCents: 40000, depositCents: 5000, baseDurationMin: 60, isActive: true }) })
     techId = tech.data?.technician?.id || ''
     serviceId = svc.data?.service?.id || ''
-    /* 注册口要 `displayName`(不是 name),且**必须带 `x-tenant-id`** ——
-       顾客侧一律要带,不回落默认门店(现测回的就是 `TENANT_REQUIRED`)。 */
-    const reg = await jreq('/auth/email/register', { method: 'POST',
-      body: JSON.stringify({ email: `bkc-${RUN}@example.com`, displayName: `并发客${RUN}` }) }, null, { 'x-tenant-id': id })
-    userToken = reg.data?.auth?.accessToken || ''
+    /* 🔴 07y §八(a):夹具从**演示邮箱注册**换成**正门**(J-60①)。
+     *   案由:这一套在**门关档**(`DEMO_LOGIN_ALLOWED=false`)红了十几批 ——
+     *   而门关档正是**把演示登录关掉**的那一档:夹具走的是本档明令关掉的那扇门,
+     *   于是它红的从来不是被测的那件事,是「造不出景」。
+     *   正门 = 商家建轻档案(带手机号)→ 顾客拿同一个号从 `/auth/wechat/mini-login` 进来
+     *   → 严格认人四条把两者认成同一个人。**顺带把认人那条正向路也真跑了一遍。**
+     */
+    const { createAndLoginCustomerViaFrontDoor } = await import('./customer-login-fixture.mjs')
+    const fdDate = new Date(Date.now() + 9 * 86400000).toLocaleDateString('en-CA', { timeZone: 'America/Toronto' })
+    const fd = await createAndLoginCustomerViaFrontDoor({ base: BASE_URL, tenantId: id,
+      ownerToken: process.env.OWNER_TOKEN || 'owner-demo-token', name: `并发客${RUN}`,
+      phone: `1370000${String(Date.now()).slice(-4)}`, serviceId, technicianId: techId, date: fdDate, time: '17:00' })
+    userToken = fd.accessToken || ''
     fixtureOk = Boolean(techId && serviceId && userToken)
   }
-  check('⑤0 造景:并发店(营业时间/技师/项目/顾客)齐 —— 造不出来按红', fixtureOk,
+  check('⑤0 造景:并发店(营业时间/技师/项目/顾客)齐 —— 造不出来按红。**顾客走正门**(J-60①:'
+    + '轻档案带号 → 微信登录 → 严格认人四条认领),不走演示邮箱注册', fixtureOk,
     `tech=${techId} svc=${serviceId} token=${userToken ? 'ok' : '空'}`)
 
   if (fixtureOk) {
