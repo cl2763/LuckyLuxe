@@ -67,7 +67,7 @@ const canConvert = hits.filter((h) => h.frontDoorCan)
 const mustFreeze = hits.filter((h) => !h.frontDoorCan)
 
 /* 欠账棘轮:**只许降**。归零那天 = 夹具全部走正门那天。 */
-const CONVERT_DEBT_CAP = 32
+const CONVERT_DEBT_CAP = 28   // 07z:34 → 28(booking-intake / deposit-config / auth-surface / identity-links 四套夹具改走正门;棘轮跟着降)
 check(`① 欠账棘轮:夹具直连库贴、而**正门产生得了**的 ${canConvert.length} 处 <= ${CONVERT_DEBT_CAP}(只许降)`
   + ' —— 归零那天就是「夹具不再翻墙」真做到那天',
 canConvert.length <= CONVERT_DEBT_CAP, `${canConvert.length} 处 · ${new Set(canConvert.map((h) => h.f)).size} 个文件`)
@@ -94,6 +94,7 @@ bite(probeReal) && !bite(probeCmt), '')
 check(`⑤ 反向守:扫描面 ${files.length} 个文件 >= 150;算成 0 说明口径瞎了(J-58)`,
   files.length >= 150 && hits.length > 0, `${files.length} 个文件 / ${hits.length} 处`)
 
+if (process.env.J60_LIST) for (const h of hits) console.log(`   · ${h.f}:${h.line || '?'} ${String(h.text || '').slice(0,90)}`)
 console.log(`\n[J-60 底数] 总 ${hits.length} 处 · 能改走正门 ${canConvert.length} · 具名冻结 ${mustFreeze.length}`
   + ` · 涉 ${new Set(hits.map((h) => h.f)).size} 个文件`)
 if (fails.length) { console.error(`\n❌ test-fixture-front-door ${fails.length}/${checks} 项未过`); process.exit(1) }

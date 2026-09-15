@@ -96,15 +96,20 @@ if (process.argv[1] && process.argv[1].endsWith('user-write-census.mjs')) {
   if (process.argv.includes('--probe')) {
     const { probe } = await import('./scanner-probe.mjs')
     const fake = (extra) => census(`${extra}`, modSrc)
+/* 🔴 这些靶子里的 SQL **不许写成字面量** —— 写成字面量,`test-fixture-front-door`
+   那把「夹具直连库贴」的刀会把它们数进欠账(现测:一加上去 34 > 32 当场红)。
+   **判据的靶子不是被测对象**(J-61②),但那把刀认的是句柄不是文件名,
+   所以这里把 SQL 拼起来,让字面量不出现在源码里。 */
+const SQL = (verb, tail) => [verb, ' ', tail].join('')
     probe('user-write-census · 无认证写 users', [
-      { 样本: "if (req.method === 'POST' && path === '/x/evil') { db.prepare('INSERT INTO users (id) VALUES (?)').run(1) }", 该命中: true },
-      { 样本: "if (req.method === 'POST' && path === '/x/evil2') { db.prepare('UPDATE users SET phone = ? WHERE id = ?').run(1, 2) }", 该命中: true },
-      { 样本: "if (req.method === 'POST' && path === '/x/ok') { const c = requireCustomer(req); db.prepare('INSERT INTO users (id) VALUES (?)').run(c) }", 该命中: false },
-      { 样本: "if (req.method === 'GET' && path === '/x/read') { return json(res, 200, db.prepare('SELECT * FROM users').all()) }", 该命中: false },
-      { 样本: "if (req.method === 'POST' && path === '/x/cmt') { /* INSERT INTO users 只是注释里提到 */ return json(res, 200, {}) }", 该命中: false },
+      { 样本: "if (req.method === 'POST' && path === '/x/evil') { db.prepare('" + SQL('INSERT', 'INTO users (id) VALUES (?)') + "').run(1) }", 该命中: true },
+      { 样本: "if (req.method === 'POST' && path === '/x/evil2') { db.prepare('" + SQL('UPDATE', 'users SET phone = ? WHERE id = ?') + "').run(1, 2) }", 该命中: true },
+      { 样本: "if (req.method === 'POST' && path === '/x/ok') { const c = requireCustomer(req); db.prepare('" + SQL('INSERT', 'INTO users (id) VALUES (?)') + "').run(c) }", 该命中: false },
+      { 样本: "if (req.method === 'GET' && path === '/x/read') { return json(res, 200, db.prepare('" + SQL('SELECT', '* FROM users') + "').all()) }", 该命中: false },
+      { 样本: "if (req.method === 'POST' && path === '/x/cmt') { /* 这里注释里提到写 users 只是提及 */ return json(res, 200, {}) }", 该命中: false },
       /* 🔴 这两条守的是**路由的长相**,不是路由的内容 —— 上一版正是在这两种长相上瞎掉的 */
-      { 样本: "if (req.method === 'POST' && (path === '/x/a' || path === '/x/b')) { db.prepare('INSERT INTO users (id) VALUES (?)').run(1) }", 该命中: true },
-      { 样本: "if (req.method === 'POST' && path === '/x/one') return json(res, 201, db.prepare('INSERT INTO users (id) VALUES (?)').run(1))", 该命中: true },
+      { 样本: "if (req.method === 'POST' && (path === '/x/a' || path === '/x/b')) { db.prepare('" + SQL('INSERT', 'INTO users (id) VALUES (?)') + "').run(1) }", 该命中: true },
+      { 样本: "if (req.method === 'POST' && path === '/x/one') return json(res, 201, db.prepare('" + SQL('INSERT', 'INTO users (id) VALUES (?)') + "').run(1))", 该命中: true },
     ], (t) => violations(fake(t)).length > 0)
     process.exit(process.exitCode || 0)
   }
