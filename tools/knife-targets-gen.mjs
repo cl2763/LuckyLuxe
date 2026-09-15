@@ -10,10 +10,13 @@
 import { readFileSync } from 'node:fs'
 import { join, dirname } from 'node:path'
 import { fileURLToPath } from 'node:url'
-import { handlerBody, stripComments, followCalls, defBodyOf } from './readset.mjs'
+import { handlerBody, stripComments, followCalls, defBodyOf, serverSources } from './readset.mjs'
 
 const ROOT = join(dirname(fileURLToPath(import.meta.url)), '..')
-const serverSrc = readFileSync(join(ROOT, 'apps/api/local-server.mjs'), 'utf8')
+/* 🔴 被测源码不止 `local-server.mjs` —— 现测 4 个口「解析不到 handler」,
+   因为那几条路由住在**搬出去的模块**里(公约①:新功能一律新模块)。
+   用 `serverSources()` 把 apps/api 下全部非测试模块拼起来(与 readset 同一把尺子,J-39)。 */
+const serverSrc = serverSources(join(ROOT, 'apps/api'))
 const WRITE = /db\.prepare\(\s*(`[^`]*`|'[^']*'|"[^"]*")\s*\)/g
 const MUTATING = /^\s*(?:INSERT|UPDATE|DELETE)\b/i
 
@@ -41,22 +44,37 @@ export function proposeTarget(ep, suites) {
   }
   /* ② 没有就**跟进一层**它调用的本地函数 —— 落库那一行常常在 `createSettlementGroup()` 这种里面。
      跟进用的是 `readset` 那一套(同一把尺子,J-39),不另写一份解析。 */
-  const CALL = /(?:^|[^\w.$])([a-zA-Z_][a-zA-Z0-9_]*)\s*\(/g
-  let c
+  const SKIP = ['if', 'for', 'while', 'return', 'json', 'String', 'Number', 'JSON', 'apiError',
+    'readBody', 'catch', 'switch', 'typeof', 'await', 'Object', 'Array', 'Math', 'Date', 'Set', 'Map',
+    'console', 'parseInt', 'parseFloat', 'Boolean', 'Promise']
+  const callsOf = (txt) => {
+    const out = []
+    const re = /(?:^|[^\w.$])([a-zA-Z_][a-zA-Z0-9_]*)\s*\(/g
+    let c
+    while ((c = re.exec(txt))) if (!SKIP.includes(c[1]) && !out.includes(c[1])) out.push(c[1])
+    return out
+  }
+  /* 跟到**两层**:落库那一行常常在 `createSettlementGroup()` → 再下一层 里。
+     方向保守(J-68):跟得越深越容易找到靶子;**找不到就单列,宁可单列不许猜**。 */
   const tried = []
-  while ((c = CALL.exec(code))) {
-    const fn = c[1]
-    if (['if', 'for', 'while', 'return', 'json', 'String', 'Number', 'JSON', 'apiError', 'readBody', 'catch', 'switch', 'typeof', 'await'].includes(fn)) continue
-    if (tried.includes(fn)) continue
+  for (const fn of callsOf(code)) {
     tried.push(fn)
     const def = defBodyOf(serverSrc, fn)
     if (!def) continue
     const w = firstWrite(stripComments(def))
-    if (!w) continue
-    return { ep, suite: suites[0], file: 'apps/api/local-server.mjs', 层: `跟进一层 ${fn}()`,
+    if (w) return { ep, suite: suites[0], file: 'apps/api/local-server.mjs', 层: `跟进一层 ${fn}()`,
       needle: `db.prepare(${w.quote}${w.lit.slice(0, 46)}`, sql: w.lit.slice(0, 80) }
+    for (const fn2 of callsOf(stripComments(def))) {
+      if (tried.includes(fn2)) continue
+      tried.push(fn2)
+      const def2 = defBodyOf(serverSrc, fn2)
+      if (!def2) continue
+      const w2 = firstWrite(stripComments(def2))
+      if (w2) return { ep, suite: suites[0], file: 'apps/api/local-server.mjs', 层: `跟进两层 ${fn}() → ${fn2}()`,
+        needle: `db.prepare(${w2.quote}${w2.lit.slice(0, 46)}`, sql: w2.lit.slice(0, 80) }
+    }
   }
-  return { ep, err: `handler 体内与跟进一层(试了 ${tried.length} 个函数)都没找到写库语句 —— 单列,不猜` }
+  return { ep, err: `handler 体内 + 跟进两层(试了 ${tried.length} 个函数)都没找到写库语句 —— 单列,不猜` }
 }
 
 if (process.argv[1] && process.argv[1].endsWith('knife-targets-gen.mjs')) {
