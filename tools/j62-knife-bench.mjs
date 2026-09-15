@@ -19,6 +19,7 @@ import { tmpdir } from 'node:os'
 import { spawn } from 'node:child_process'
 import { execFileSync, execSync } from 'node:child_process'
 import { checkCalls, readSetOf, writeSetOf, serverSources } from './readset.mjs'
+import { assertClosure, assertRedsNamed } from './bench-selfguard.mjs'
 import { randomUUID } from 'node:crypto'
 import { join } from 'node:path'
 import { fileURLToPath } from 'node:url'
@@ -333,11 +334,9 @@ async function knife({ ep, suite, file, needle, claimPat, nth = null, lane = {} 
   /* J-66 第二款:四格 + 没跑到必须等于底数,自己加一遍 */
   const sum = reds.length + unrelated.length + shouldBite.length + unclear.length + notRun.length
   const closes = sum === baseNames.length
-  if (!closes) {
-    console.log(`   🔴 **五格加不上底数**:红 ${reds.length} + 无关 ${unrelated.length}`
-      + ` + 该咬没咬 ${shouldBite.length} + 说不清 ${unclear.length} + 没跑到 ${notRun.length} = ${sum},而底数 ${baseNames.length}。`)
-    console.log('   **J-66:加不上底数就不许往下说任何结论** —— 未归类的余数默认按最坏那一格计。')
-  }
+  /* 🔴 自守一(店主 07y §八):**加不上底数就报错退出**,不是打一行红字然后照常往下说结论。 */
+  assertClosure({ reds: reds.length, unrelated: unrelated.length, shouldBite: shouldBite.length,
+    unclear: unclear.length, notRun: notRun.length, base: baseNames.length })
   console.log(`   [刀账·五个数] 红 ${reds.length} · **仍绿-无关 ${unrelated.length}**`
     + ` · 🔴 **仍绿-该咬没咬 ${shouldBite.length}** · **说不清 ${unclear.length}** · **没跑到 ${notRun.length}**`
     + ` —— 合计 ${sum} ${closes ? '≡' : '≠'} 底数 ${baseNames.length} ${closes ? '✅ 闭合(J-66)' : '🔴 **不闭合**'}`)
@@ -346,9 +345,11 @@ async function knife({ ep, suite, file, needle, claimPat, nth = null, lane = {} 
    * 跟「签字成没成」毫无关系。**「有 N 条红了」和「该红的那条红了」是两件事,而前者长得更让人放心。**
    * 停线:「造病台报出『红 N』而 N 条没有名字,这份报告不算交。」 */
   console.log(`   [刀的写集] {${[...wset].join(',') || '—'}} ←—— 被砍那条语句写的表`)
+  let namedOut = ''
   if (reds.length) {
     console.log('   🔴 [红点名](逐条给因果链:刀写了 X,这条判据读 X,所以它红):')
     for (const r of reds) {
+      namedOut += `${r}\n`
       const c = classify(r)
       console.log(`     ✗ ${r.slice(0, 120)}`)
       console.log(`        ↳ 因果链:${c.why}${c.grade === '该咬没咬' ? '  ✅ **链是通的**' : c.grade === '说不清' ? '  ⚠️ **链说不清**' : '  🔴 **链断了 —— 这条红跟本次造病没有读写交集,疑似撞上的**'}`)
@@ -356,6 +357,8 @@ async function knife({ ep, suite, file, needle, claimPat, nth = null, lane = {} 
   } else {
     console.log('   🔴 红 0 条 —— **没有一条判据被这一刀咬到**')
   }
+  /* 🔴 自守二(店主 07y §八):判了几条红,报告里就得有几个名字。 */
+  assertRedsNamed(reds, namedOut)
   if (unclear.length) {
     console.log('   ⚠️ [说不清](**单列,不许扫进「无关」** —— 店主 07w §一 停线):')
     for (const g of unclear.slice(0, 12)) console.log(`     ? ${g.名.slice(0, 110)}\n        ↳ ${g.理由}`)

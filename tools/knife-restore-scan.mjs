@@ -74,15 +74,18 @@ for (const f of files) {
 }
 
 if (process.argv.includes('--probe')) {
-  /* 自守:构造两种形态,证明这把刀**认得出真货、认不出提及** */
-  const real = "  git checkout -- apps/web/admin.js"
-  const mention = `  console.error('别用 git checkout -- 还原')`
-  const comment = '  // 07m 那次用了 git checkout -- 还原'
+  /* 自守:证明这把刀**认得出真执行、认不出提及**。
+     🔴 07y 改:原来是手写的三行 console.log —— 它**不打「该中/不该中」两个数**,
+     于是「probe 两面」这条自守判据看不见它(判据三:白名单式,判据自己也要落进白名单)。
+     改用共用出口 `scanner-probe.mjs`(代码结构公约④:同一件事已有出口就接上去)。 */
+  const { probe } = await import('./scanner-probe.mjs')
   const bites = (l) => { const c = l.replace(/^\s*(#|\/\/|\*|\/\*).*$/, ''); const re = new RegExp(BAD.source, 'g'); let m
     while ((m = re.exec(c))) { if (!inQuote(c, m.index)) return true } return false }
-  const ok = bites(real) && !bites(mention) && !bites(comment)
-  console.log(`[自守] 真执行=${bites(real)} · 文案里提及=${bites(mention)} · 注释里提及=${bites(comment)} → ${ok ? '✅ 分得开' : '🔴 分不开'}`)
-  process.exitCode = ok ? 0 : 1
+  probe('knife-restore-scan · 还原写法', [
+    { 样本: '  git checkout -- apps/web/admin.js', 该命中: true },
+    { 样本: "  console.error('别用 git checkout -- 还原')", 该命中: false },
+    { 样本: '  // 07m 那次用了 git checkout -- 还原', 该命中: false },
+  ], bites)
 } else if (hits.length) {
   console.log(hits.join('\n'))
   process.exitCode = 1

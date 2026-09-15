@@ -26,10 +26,24 @@ export function probe(name, cases, decide) {
     return { ...c, got, err, 对: err ? false : got === c.该命中 }
   })
   const ok = results.every((r) => r.对)
+  const should = results.filter((r) => r.该命中).length
+  const shouldNot = results.length - should
   console.log(`[自守·${name}]`)
   for (const r of results) {
     console.log(`  ${r.对 ? '✅' : '🔴'} 该${r.该命中 ? '命中' : '不命中'} → 实际${r.err ? `抛错(${r.err})` : (r.got ? '命中' : '不命中')}`
       + `   样本:${String(r.样本).replace(/\s+/g, ' ').slice(0, 64)}`)
+  }
+  /* 🔴 **J-58 第六款(店主 07x §四立)· probe 靶子必须两面,而且两个数都要报出来。**
+   * 款文:「只种必中样本是不够的 —— 一把『什么都咬』的刀,probe 一定过,而它报的 0 一样不可信。」
+   * 案底(07x 现测):读集尺子把跟进层数放开后,`/my/points-history` 的读集涨到 **36 张表**
+   * (几乎全库 schema)——**四条正面靶子全过**,只有那条反面靶子红。
+   * 没有反面靶子,这把「什么都咬」的尺子会一路绿着用下去。
+   * 所以:**两个数一起打**,少一面直接判废。 */
+  console.log(`  该中 ${should} 个 · 不该中 ${shouldNot} 个 · 判错 ${results.filter((r) => !r.对).length} 个`)
+  if (!should || !shouldNot) {
+    console.log('  → 🔴 **靶子只有一面 —— 这把刀报的数不许用**(J-58⑥)')
+    process.exitCode = 1
+    return false
   }
   console.log(ok ? '  → ✅ 分得开(这把刀报的数才算数)' : '  → 🔴 **分不开 —— 这把刀此刻报的一切 0 全部作废**(J-58⑤)')
   process.exitCode = ok ? 0 : 1
