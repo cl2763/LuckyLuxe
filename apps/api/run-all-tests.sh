@@ -468,7 +468,18 @@ fi
 # **期限**:下一批(07m)把「先证死再拉起 9420」写进 `tools/` 的一个脚本,让这一档能自愈;
 #   自愈做不到就升级成 ③(具名冻结 + 写明谁在真机上跑)。**跑的人:Code。**
 # 裁 #91 的期限件(07n §七⑦ 交付):开跑前**先证死再拉起再证活**,不靠人记得手动开工具
-bash tools/mp-automator-up.sh || echo "   ⚠️ 自愈没成 —— 下面这一档会空转,按红处理(不是通过)"
+# 🔴 07x 现测:这一行写的是**相对路径**,而脚本开头已经 `cd "$(dirname "$0")"`(= apps/api),
+#   于是它找的是 `apps/api/tools/mp-automator-up.sh` —— **那个文件不存在**,
+#   `bash` 报 "No such file or directory",再被 `||` 吞成一句「自愈没成」。
+#   结果:自愈脚本从 07n 装上那天起**一次都没被执行过**,而这一档的红一直被当成「会话不在」。
+#   这是静默失败器族的又一案(`||` 兜底把「文件找不到」和「自愈失败」说成了同一句话)。
+#   改法两条:①走绝对路径 ②**把两件事分开报** —— 脚本不在是缺陷,会话不在是环境。
+MP_HEAL="$API_DIR/../../tools/mp-automator-up.sh"
+if [ ! -f "$MP_HEAL" ]; then
+  echo "   🔴 自愈脚本找不到:$MP_HEAL —— **这是缺陷,不是「会话不在」**"
+else
+  bash "$MP_HEAL" || echo "   ⚠️ 自愈没成(脚本跑了但没把会话拉起来)—— 下面这一档会空转,按红处理(不是通过)"
+fi
 MP_LANE_SUITES="mp-placeholder-size mp-overlap mp-home-sections"
 MP_LANE_N=$(printf '%s' "$MP_LANE_SUITES" | wc -w | tr -d ' ')
 echo ""
