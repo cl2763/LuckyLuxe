@@ -39,6 +39,20 @@ const bare = (t) => t.replace(/\/\*[\s\S]*?\*\//g, (m) => m.replace(/[^\n]/g, ' 
 const WEB = ['apps/web/customer.js', 'apps/web/customer.html']
 const SIGNUP = /创建账号|新建账号|立即注册|去注册|注册账号|Create\s+(an\s+)?[Aa]ccount|Sign\s*up|signup/
 
+/* 🔴 J-58①⑤(店主 07w §五)· **「全站 0 处」本身就是一个零命中结论,先证刀咬得到再信它。**
+   probe 靶子:两个**必然命中**(中英各一)+ 两个**形似而非**(注释里的案底 / 普通代码)。
+   probe 不红之前,「全站 0 处」这句话不许写进任何报告。 */
+if (process.argv.includes('--probe')) {
+  const { probe } = await import('../../tools/scanner-probe.mjs')
+  probe('web-not-signup · SIGNUP 扫描', [
+    { 样本: '<button id="doSignup">创建账号</button>', 该命中: true },
+    { 样本: '<a href="/signup">Create Account</a>', 该命中: true },
+    { 样本: '/* 案底:这一屏原来叫「创建账号」 */', 该命中: false },   // 剥注释后不该命中
+    { 样本: 'const registeredCount = 3', 该命中: false },
+  ], (t) => { const b = bare(String(t)); return b.split('\n').some((ln) => SIGNUP.test(ln)) })
+  process.exit(process.exitCode || 0)
+}
+
 const hits = []
 for (const f of WEB) {
   let src = ''

@@ -358,7 +358,14 @@ const TARGETS = [
   { ep: '/settlements/:code/sign · 签署落库(涉钱;三条该咬的判据已搬进 customer-paths)', suite: 'customer-paths',
     file: 'apps/api/local-server.mjs',
     needle: "db.prepare(\"UPDATE settlements SET status = 'signed', signature_data = ?, signed_at = ?",
-    claimPat: /㋚5a|㋚5 |㋚6|㋚7|㋚8/ },
+    /* 🔴 `㋚8 定金守恒` **不在这一刀的「该咬」里**,而且这是查过的,不是猜的:
+       `auditDepositConservation()` 只读 `deposit_disposals / deposit_receipts / deposit_retains /
+       finance_transactions` —— **一个字都不碰 `settlements`**。
+       签字那一行写不写库,它读的四张表一张都不变 ⇒ 它绿是对的。
+       **可反驳**:指出它其实读了 `settlements`,这条判定立刻推翻。
+       ⚠️ 连带更正(J-55):07s §七③ 把「定金守恒」列为签署口三条该咬的判据之一,
+       而它**结构上不可能咬到签字落库** ⇒ **签署口实际是 ㋚6/㋚7 两条在守,不是三条。** */
+    claimPat: /㋚5a|㋚5 |㋚6|㋚7/ },
 ]
 /* 🔴 裁 #98 自证:造病**前后**各量一次店主那两台。动过就是台子越界。 */
 assertCleanTree()
