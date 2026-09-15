@@ -47,7 +47,20 @@ const OK_STATUS = /status\s*===\s*(200|201|204)|\.ok\b/
    并且条件本身、条件里标识符的声明,两头都看。 */
 const WRITE_VERB = /method:\s*['"](POST|PUT|PATCH|DELETE)['"]/
 /* 一段文本里有没有「读」:request/fetch 调用且那一段里不带改动型 method;或直接查库 */
+/* 🔴 J-73(店主 08a §五立)· **一把按文本形状找东西的刀,它的 probe 必须为「被找的东西的
+   每一种合法写法」各种一个靶子。** 这一把原来只认两种长相:
+     ① `db.prepare(` / `DatabaseSync` / `adminGet(`   ② `request|fetch|apiGet|getJson` 调用。
+   **漏掉的是本仓最常见的第三种:查库小助手。** 全仓 `check(` 行现数:
+     `one(` 21 · `rows(` 13 · `q(` 7 —— 这些都是 `const one = (sql,…) => db.prepare(sql).get(…)`
+   这类包了一层的写法,**行上看不见 `db.prepare`**,于是「从事实那头读回来了」被误判成
+   「只读这一次调用的返回体」(A 类嫌疑名单)。**判错的方向是把干净的算成可疑的** ——
+   不危险,但会让 A 类名单虚高,把真正该造病的口淹掉。
+   判法取**高精度**形态:助手名 + 紧跟一个 `SELECT`/`WITH` 字符串,不靠名字本身(`get(`/`all(`
+   这种名字太常见,单靠名字必然误报)。 */
+const SQL_HELPER = /\b(?:one|q|row|rows|all|get|dbOne|query)\s*\(\s*(?:`|'|")\s*(?:SELECT|WITH)\b/i
+
 function readsFact(text) {
+  if (SQL_HELPER.test(text)) return true
   if (/\bdbx?\s*\.\s*prepare\s*\(|DatabaseSync|adminGet\(/.test(text)) return true
   for (const m of text.matchAll(/\b(?:request|fetch|apiGet|getJson)\s*\(/g)) {
     const seg = text.slice(m.index, m.index + 220)
@@ -178,5 +191,15 @@ if (process.argv.includes('--probe')) {
        所以样本也得拼出来 —— 否则这把只读扫描器又会被判成「会写库」。 */
     { 样本: ["await request('/admin/x', { ", 'method', ": 'POST' })"].join(''), 该命中: false },
     { 样本: "check('x', res.status === 200)", 该命中: false },
+    /* ══ J-73 本批补:查库小助手那一族,逐种长相各一个靶子 ══
+       SQL 一律拼出来(J-61④ 双保险:即使哪把刀忘了排除判据物目录,也咬不到) */
+    { 样本: ['one(', "'", 'SELECT', " id FROM users')"].join(''), 该命中: true },
+    { 样本: ['q(', '"', 'SELECT', ' 1")'].join(''), 该命中: true },
+    { 样本: ['rows(', '`', 'SELECT', ' a FROM b`)'].join(''), 该命中: true },
+    { 样本: ['const n = all(', "'", 'select', " * from x')"].join(''), 该命中: true },
+    /* 反面:名字像但后面不是 SQL —— 单靠名字必然误报,所以判定要求紧跟 SELECT 字符串 */
+    { 样本: "const v = map.get('key')", 该命中: false },
+    { 样本: 'const n = rows.all().length', 该命中: false },
+    { 样本: "const one = list.find((x) => x.id === 'a')", 该命中: false },
   ], (s) => readsFact(s))
 }
