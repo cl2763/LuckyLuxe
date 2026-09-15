@@ -50,7 +50,13 @@ const hits = []
 const filesAll = files.slice()
 for (const f of files.filter((x) => isProbeMaterial(x))) void f
 for (const f of files.filter((x) => !isProbeMaterial(x))) {
+  /* 🔴 夜13 §五 现修:原来只按**行首**认注释(`//` / `*` / `/*`),
+     而 `/* … *\/` 块注释里**不以 `*` 开头的续行**认不出来 —— 现测就被咬了一次:
+     我写的那条 J-60 说明注释里引了一句 `db.prepare('UPDATE users SET wechat_open_id …')`,
+     它落在块注释的第二行、行首是反引号,于是被数成了第 24 处「直连库贴」。
+     **判据的说明文字把判据自己顶红**,和 J-61④ 是同一族。先整块剥掉块注释再按行看。 */
   const whole = readFileSync(join(ROOT, f), 'utf8')
+    .replace(/\/\*[\s\S]*?\*\//g, (m) => m.replace(/[^\n]/g, ' '))
   /* 🔴 09-14(07o)按机制收窄:**内存库不算「直连库贴」**。
      `new DatabaseSync(':memory:')` 开的是一张临时表,谁也测不到它 ——
      判据拿它证明「自己那条 SQL 咬得动」时,插的不是被测的库。
@@ -72,7 +78,7 @@ const canConvert = hits.filter((h) => h.frontDoorCan)
 const mustFreeze = hits.filter((h) => !h.frontDoorCan)
 
 /* 欠账棘轮:**只许降**。归零那天 = 夹具全部走正门那天。 */
-const CONVERT_DEBT_CAP = 28   // 07z:34 → 28(booking-intake / deposit-config / auth-surface / identity-links 四套夹具改走正门;棘轮跟着降)
+const CONVERT_DEBT_CAP = 23   // 夜13 §五:28 → 23(mini-account-adjust 五处直连绑微信改走正门);07z 曾误记 34→28,真值见 07z 回执更正(booking-intake / deposit-config / auth-surface / identity-links 四套夹具改走正门;棘轮跟着降)
 check(`① 欠账棘轮:夹具直连库贴、而**正门产生得了**的 ${canConvert.length} 处 <= ${CONVERT_DEBT_CAP}(只许降)`
   + ' —— 归零那天就是「夹具不再翻墙」真做到那天',
 canConvert.length <= CONVERT_DEBT_CAP, `${canConvert.length} 处 · ${new Set(canConvert.map((h) => h.f)).size} 个文件`)
@@ -91,10 +97,13 @@ hits.length === canConvert.length + mustFreeze.length, `${hits.length} ≠ ${can
 /* ④ 自守:构造一行真的直连库贴,必须被咬到;注释里提到那一行不许被咬到 */
 const probeReal = "      db.prepare('UPDATE users SET wechat_open_id = ? WHERE id = ?').run(a, b)"
 const probeCmt = "   /* 原来那一步是 db.prepare('UPDATE users SET wechat_open_id') 直连库贴的 */"
+/* 🔴 夜13 §五 补的第三个靶子:**块注释的续行**(行首不是 `*`)——
+   这一条是现测被咬出来的那种长相,只有行首判法认不出它(J-73:一种长相守不住别的长相) */
+const probeCmtCont = "/* 说明:\n   `db.prepare('UPDATE users SET wechat_open_id = ? WHERE id = ?')` 那一步\n*/"
 const bite = (ln) => !/^\s*(\/\/|\*|\/\*)/.test(ln) && EXEC.test(ln) && IDTBL.test((ln.match(/(?:INSERT INTO|UPDATE|DELETE FROM)\s+([a-z_]+)/i) || [])[1] || '')
 check('④ 自守:**真的在执行**那一行必须被咬到;**注释里提到**那一行不许被咬到'
   + '(认执行不认提及 —— 否则这条律的说明文字自己会把判据顶红)',
-bite(probeReal) && !bite(probeCmt), '')
+bite(probeReal) && !bite(probeCmt) && !bite(probeCmtCont), `real=${bite(probeReal)} cmt=${bite(probeCmt)} cmtCont=${bite(probeCmtCont)}`)
 
 check(`⑤ 反向守:扫描面 ${files.length} 个文件 >= 150;算成 0 说明口径瞎了(J-58)`,
   files.length >= 150 && hits.length > 0, `${files.length} 个文件 / ${hits.length} 处`)

@@ -109,9 +109,16 @@ if ((await request('/platform/tenants', { method: 'POST', body: JSON.stringify({
 const H = { 'x-admin-tenant-id': tid, 'x-tenant-id': tid }
 const imp = (await request(`/platform/tenants/${tid}/import/customers`, { method: 'POST', body: JSON.stringify({ dryRun: false, rows: [{ name: `退卡客${RUN}`, phone: `137${RUN.slice(-8)}` }] }) })).data
 const userId = imp.users[0].userId
+/* 🔴 J-60 第一款(夜13 §五 降账 5 处)· 这五处原来是**直连库贴微信绑定**:
+   `db.prepare('UPDATE users SET wechat_open_id = ? WHERE id = ?')` ——
+   真顾客不是这么绑上的。她拿**自己的手机号**从 `/auth/wechat/mini-login` 进来,
+   服务端那条**严格认人四条**(本店 + 号完全一致 + 没绑过微信 + 唯一一条)把轻档案认领并绑上。
+   贴出来的那个绑**没走过这条路**,于是认人那一段在这一套里从来没被跑到过。
+   这五条导入行本来就带手机号,所以五处一次全换。 */
+const { bindWechatViaFrontDoor } = await import('./customer-login-fixture.mjs')
 const { DatabaseSync } = await import('node:sqlite')
 const db = new DatabaseSync(process.env.TEST_DB_PATH || (() => { throw new Error('需要 TEST_DB_PATH') })())
-db.prepare('UPDATE users SET wechat_open_id = ? WHERE id = ?').run(`maa-${RUN}`, userId)
+await bindWechatViaFrontDoor({ base: BASE_URL, tenantId: tid, userId, phone: `137${RUN.slice(-8)}`, tag: `maa-${RUN}` })
 check('② 前置:顾客建好并绑定', (await request('/admin/stored-value/recharge', { method: 'POST', body: JSON.stringify({ userId, amountCents: 100000, bonusCents: 10000, payChannel: 'cash', note: '夹具:充1000送100' }) }, PLATFORM, H)).status === 201)
 
 const facts1 = (await request(`/admin/account-adjust/facts?userId=${userId}`, {}, PLATFORM, H)).data.facts
@@ -155,7 +162,7 @@ if (staffLg?.auth) {
   const today = (await request('/admin/store-clock', {}, PLATFORM, H)).data.today
   const imp2 = (await request(`/platform/tenants/${tid}/import/customers`, { method: 'POST', body: JSON.stringify({ dryRun: false, rows: [{ name: `冲销客${RUN}`, phone: `136${RUN.slice(-8)}` }] }) })).data
   const u2 = imp2.users[0].userId
-  db.prepare('UPDATE users SET wechat_open_id = ? WHERE id = ?').run(`rev-${RUN}`, u2)
+  await bindWechatViaFrontDoor({ base: BASE_URL, tenantId: tid, userId: u2, phone: `136${RUN.slice(-8)}`, tag: `rev-${RUN}` })
   check('④ 夹具:错记一笔 充500赠50(现金)', (await request('/admin/stored-value/recharge', { method: 'POST', body: JSON.stringify({ userId: u2, amountCents: 50000, bonusCents: 5000, payChannel: 'cash' }) }, PLATFORM, H)).status === 201)
   const f0 = (await request(`/admin/account-adjust/facts?userId=${u2}`, {}, PLATFORM, H)).data.facts
   check('④ 冲销前四数:实付 500 / 赠送 50 / 余额 550', f0.paidCents === 50000 && f0.bonusCents === 5000 && f0.balanceCents === 55000, JSON.stringify(f0).slice(0, 100))
@@ -197,7 +204,7 @@ if (staffLg?.auth) {
   /* 裁定A(08-30f):前置闸=双水位证明 —— 实付余额≥该笔实付 且 赠送余额≥该笔赠送 */
   const imp3 = (await request(`/platform/tenants/${tid}/import/customers`, { method: 'POST', body: JSON.stringify({ dryRun: false, rows: [{ name: `动过钱客${RUN}`, phone: `135${RUN.slice(-8)}` }] }) })).data
   const u3 = imp3.users[0].userId
-  db.prepare('UPDATE users SET wechat_open_id = ? WHERE id = ?').run(`rev3-${RUN}`, u3)
+  await bindWechatViaFrontDoor({ base: BASE_URL, tenantId: tid, userId: u3, phone: `135${RUN.slice(-8)}`, tag: `rev3-${RUN}` })
   await request('/admin/stored-value/recharge', { method: 'POST', body: JSON.stringify({ userId: u3, amountCents: 30000, payChannel: 'cash' }) }, PLATFORM, H)
   const tx3 = (await request(`/admin/stored-value/txns?month=${today.slice(0, 7)}`, {}, PLATFORM, H)).data.txns.find((t) => t.userId === u3 && t.type === 'recharge')
   await request('/admin/stored-value/refund', { method: 'POST', body: JSON.stringify({ userId: u3, amountCents: 1000, payChannel: 'cash', reason: '动一分钱', requestId: `rv3-${RUN}` }) }, PLATFORM, H)
@@ -208,7 +215,7 @@ if (staffLg?.auth) {
   /* 裁定A 放宽生效证明:旧保守闸会拒(之后动过钱),双水位闸放行(两侧仍各自足额) */
   const imp4 = (await request(`/platform/tenants/${tid}/import/customers`, { method: 'POST', body: JSON.stringify({ dryRun: false, rows: [{ name: `放宽客${RUN}`, phone: `134${RUN.slice(-8)}` }] }) })).data
   const u4 = imp4.users[0].userId
-  db.prepare('UPDATE users SET wechat_open_id = ? WHERE id = ?').run(`rev4-${RUN}`, u4)
+  await bindWechatViaFrontDoor({ base: BASE_URL, tenantId: tid, userId: u4, phone: `134${RUN.slice(-8)}`, tag: `rev4-${RUN}` })
   await request('/admin/stored-value/recharge', { method: 'POST', body: JSON.stringify({ userId: u4, amountCents: 10000, bonusCents: 5000, payChannel: 'cash' }) }, PLATFORM, H)
   const tx4 = (await request(`/admin/stored-value/txns?month=${today.slice(0, 7)}`, {}, PLATFORM, H)).data.txns.find((t) => t.userId === u4 && t.type === 'recharge')
   await request('/admin/stored-value/recharge', { method: 'POST', body: JSON.stringify({ userId: u4, amountCents: 20000, payChannel: 'cash' }) }, PLATFORM, H)
@@ -220,7 +227,7 @@ if (staffLg?.auth) {
   /* 裁定A 判据刀②的常驻形:构造「总余额足、赠送侧不足」——只验总余额的闸会放行=打负(变异刀①打这里) */
   const imp5 = (await request(`/platform/tenants/${tid}/import/customers`, { method: 'POST', body: JSON.stringify({ dryRun: false, rows: [{ name: `侧亏客${RUN}`, phone: `133${RUN.slice(-8)}` }] }) })).data
   const u5 = imp5.users[0].userId
-  db.prepare('UPDATE users SET wechat_open_id = ? WHERE id = ?').run(`rev5-${RUN}`, u5)
+  await bindWechatViaFrontDoor({ base: BASE_URL, tenantId: tid, userId: u5, phone: `133${RUN.slice(-8)}`, tag: `rev5-${RUN}` })
   await request('/admin/stored-value/recharge', { method: 'POST', body: JSON.stringify({ userId: u5, amountCents: 10000, bonusCents: 10000, payChannel: 'cash' }) }, PLATFORM, H)
   const tx5 = (await request(`/admin/stored-value/txns?month=${today.slice(0, 7)}`, {}, PLATFORM, H)).data.txns.find((t) => t.userId === u5 && t.type === 'recharge')
   await request('/admin/stored-value/recharge', { method: 'POST', body: JSON.stringify({ userId: u5, amountCents: 50000, payChannel: 'cash' }) }, PLATFORM, H)
