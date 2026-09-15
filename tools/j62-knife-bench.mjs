@@ -489,6 +489,10 @@ const TARGETS = [
     file: 'apps/api/local-server.mjs', needle: "UPDATE settlement_technicians SET share_pct = ?, share_cents = ?", claimPat: /分配|业绩/ },
   { ep: '/admin/stored-value/recharge · 充值落库(9 条)', suite: 'noshow-aftersales',
     file: 'apps/api/stored-value.mjs', needle: 'INSERT INTO stored_value_transactions (id, tenant_id, user_id, type', claimPat: /充值|储值|余额/ },
+  { ep: '/admin/finance/transactions · 账本落库(8 条)', suite: 'cash-notes',
+    file: 'apps/api/finance-ledger.mjs', needle: 'INSERT INTO finance_transactions', claimPat: /账本|流水|记一笔/ },
+  { ep: '/settlements/:code/claim · 扫码认领落库(3 条)', suite: 'scan-sign',
+    file: 'apps/api/local-server.mjs', needle: 'UPDATE users SET wechat_open_id = COALESCE(wechat_open_id, ?)', claimPat: /认领|绑定|claim/ },
   { ep: '/admin/daily-close · 日结确认落库(4 条)', suite: 'daily-close',
     file: 'apps/api/local-server.mjs', needle: "UPDATE daily_closes SET status = 'confirmed'", claimPat: /日结|确认/ },
   /* 🔴「没跑到」这个计数自己也要证咬得到(J-58⑤):
