@@ -18,7 +18,7 @@ import { readFileSync, writeFileSync, mkdtempSync, rmSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { spawn } from 'node:child_process'
 import { execFileSync, execSync } from 'node:child_process'
-import { checkCalls, readSetOf, writeSetOf } from './readset.mjs'
+import { checkCalls, readSetOf, writeSetOf, serverSources } from './readset.mjs'
 import { randomUUID } from 'node:crypto'
 import { join } from 'node:path'
 import { fileURLToPath } from 'node:url'
@@ -240,7 +240,7 @@ async function knife({ ep, suite, file, needle, claimPat, nth = null }) {
    *          解析到 handler 体、再跟进一层本地函数)。
    *   两层都取不到 → **说不清**,单列,**不许扫进「无关」**(店主 07w §一 停线)。 */
   const suiteSrc = readFileSync(join(ROOT, 'apps/api', `test-${suite}.mjs`), 'utf8')
-  const serverSrcForRead = readFileSync(join(ROOT, 'apps/api/local-server.mjs'), 'utf8')
+  const serverSrcForRead = serverSources(join(ROOT, 'apps/api'))
   const cutText = src.slice(cut.start, cut.end + 1)
   const wset = writeSetOf(cutText)
   const calls = checkCalls(suiteSrc)

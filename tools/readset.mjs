@@ -19,7 +19,8 @@
  * 🔴 取不到读集的,一律报 **说不清**,单列 ——
  *   店主 07w §一:「**不许为了让四格加得起来,把说不清的一律扫进「无关」**」。
  */
-import { readFileSync } from 'node:fs'
+import { readFileSync, readdirSync } from 'node:fs'
+import { join } from 'node:path'
 
 /* ── 字符串/注释感知的括号匹配:从 openIdx(那个 `(`)走到配对的 `)` ── */
 export function matchParen(src, openIdx) {
@@ -189,6 +190,19 @@ export function readSetOf(blockSrc, serverSrc) {
   return { tables, paths, unresolved, why, known }
 }
 
+/* 🔴 被测源码不止 `local-server.mjs` 一个文件。
+ *  案由(现测):`㋚5 积分真的跟过去了` 走 `/my/points-history`,而那条 handler 里的
+ *  `pointsEarnRows()` 住在 **`points-ledger.mjs`**(代码结构公约:边改边拆搬出去的)。
+ *  只读单文件 → 跟进一层跟了个空 → 读集缺 `settlements` → 因果链被误判成「撞上的」。
+ *  **判据自己漏了一层,报出来的结论就是反的。**(J-56 尺子漏层结论连坐)
+ *  所以:把 `apps/api` 下**全部非测试 .mjs** 拼起来当被测源码。
+ *  方向上是保守的 —— 读集只会变大,结论只会更容易落进「该咬」那一格(J-66 第三款:
+ *  未归类的余数按最坏那一格计)。 */
+export function serverSources(apiDir) {
+  const names = readdirSync(apiDir).filter((f) => f.endsWith('.mjs') && !f.startsWith('test-'))
+  return names.map((f) => readFileSync(join(apiDir, f), 'utf8')).join('\n/* ── 文件边界 ── */\n')
+}
+
 export function writeSetOf(cutText) {
   const s = new Set()
   let m
@@ -199,7 +213,7 @@ export function writeSetOf(cutText) {
 
 /* ── 自证:两面靶子(J-58 第六款)── */
 if (process.argv[1] && process.argv[1].endsWith('readset.mjs') && process.argv.includes('--probe')) {
-  const serverSrc = readFileSync(new URL('../apps/api/local-server.mjs', import.meta.url), 'utf8')
+  const serverSrc = serverSources(new URL('../apps/api/', import.meta.url).pathname)
   const cases = [
     { 名: '直接 SQL 读 settlements', 块: "one('SELECT status FROM settlements WHERE code = ?', c)", 该含: 'settlements', 该中: true },
     /* 🔴 J-55 更正(07x 现测):07w §一 我写的是「`auditDepositConservation()` **一个字都不碰
