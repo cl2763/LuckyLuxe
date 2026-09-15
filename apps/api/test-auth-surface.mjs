@@ -445,8 +445,27 @@ async function main() {
   const { resolveMiniTokenSecret } = await import('./mini-token-secret.mjs')
   const liveScope = await fetch(`${BASE_URL}/health`).then((r) => r.json()).then((h) => h.dataScopeName || 'unknown').catch(() => 'unknown')
   const liveSecret = resolveMiniTokenSecret({ scopeName: liveScope }).secret
+  /* 🔴 07y §八(a):这里原来钉死 `demo-cust-06` / `demo-openid-06` —— **演示种子里的那个人**。
+   *   在**门关档**(演示登录关掉那一档)里,那个人身上没有 `wechat_open_id`,
+   *   于是「合法签发的令牌」照样 401,这条正向守连红了十几批 ——
+   *   而红的不是被测的那件事,是**夹具依赖了本档明令关掉的那条路**(J-60①)。
+   *   改法:顾客**自己从正门进来**(商家建带号轻档案 → 微信登录 → 严格认人四条认领),
+   *   拿她**真实的 id 与 openid** 去签。两档都造得出,而且顺带真跑了一遍认人。 */
+  const { createAndLoginCustomerViaFrontDoor } = await import('./customer-login-fixture.mjs')
+  const AH2 = { 'content-type': 'application/json', 'x-admin-tenant-id': 'lucky-luxe',
+    authorization: `Bearer ${process.env.OWNER_TOKEN || 'owner-demo-token'}` }
+  const svcList = await (await fetch(`${BASE_URL}/admin/services`, { headers: AH2 })).json().catch(() => ({}))
+  const techList = await (await fetch(`${BASE_URL}/admin/technicians`, { headers: AH2 })).json().catch(() => ({}))
+  const svcRow = { id: (svcList.services || []).find((x) => x.isActive !== false)?.id || '' }
+  const techRow = { id: (techList.technicians || []).find((x) => x.isActive !== false)?.id || '' }
+  const fdPhone = `1390000${String(Date.now()).slice(-4)}`
+  const fd = await createAndLoginCustomerViaFrontDoor({ base: BASE_URL, tenantId: 'lucky-luxe',
+    ownerToken: process.env.OWNER_TOKEN || 'owner-demo-token', name: '正向守顾客',
+    phone: fdPhone, serviceId: svcRow.id || '', technicianId: techRow.id || '', time: '16:30' })
+  check('㊙⑩a 前置:正向守那个顾客**从正门造出来**(造不出来下一条不算验过,J-58④)',
+    Boolean(fd.ok && fd.userId), `${fd.status} ${JSON.stringify(fd.body || {}).slice(0, 140)}`)
   const okTok = (() => {
-    const payload = Buffer.from(JSON.stringify({ sub: 'demo-cust-06', openid: 'demo-openid-06', exp: Date.now() + 60000 })).toString('base64url')
+    const payload = Buffer.from(JSON.stringify({ sub: fd.userId || '', openid: `stub-openid-${fd.userId || ''}`, exp: Date.now() + 60000 })).toString('base64url')
     const sig = createHmac('sha256', liveSecret).update(payload).digest('base64url')
     return `mini.${payload}.${sig}`
   })()
