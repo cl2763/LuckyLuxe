@@ -149,24 +149,105 @@ export function braceBody(src, fromIdx) {
   return null
 }
 
-/* 跟进一层:handler 体里调用的本地 function,把它们的函数体也算进读集 */
-export function followOneLevel(serverSrc, body) {
-  const called = new Set()
+/* 取一个名字的**定义体**。两种长相都要认:
+ *   ① `function NAME (…) { … }`           → 花括号配对
+ *   ② `const NAME = (…) => …`             → **箭头常量,没有花括号**
+ * 🔴 案由(现测):`pointsEarnRows` 是 `points-ledger.mjs` 里
+ *   `const pointsEarnRows = (userId, tenantId) => db.prepare(`SELECT … FROM settlements st …`)`
+ *   —— 上一版只认 ①,于是跟进一层又跟了个空,`㋚5` 的因果链仍被误判成「撞上的」。
+ *   **一次漏层修不干净,就还会以同样的形状再来一遍。** */
+export function defBodyOf(src, name) {
+  /* 🔴 **同名定义可能不止一处** —— 拿第一处就会踩转发壳:
+   *   `local-server.mjs` 里 `const pointsEarnRows = (u,t) => pointsLedger.pointsEarnRows(u,t)`(壳),
+   *   `points-ledger.mjs` 里 `const pointsEarnRows = (userId, tenantId) => db.prepare(\`… FROM settlements …\`)`(真身)。
+   *   只取第一处 = 只拿到壳,读集永远缺那张表。**所以全取,拼起来。**(封顶 4 处,防同名泛滥) */
+  const bodies = []
+  const reF = new RegExp(`function\\s+${name}\\s*\\(`, 'g')
   let m
-  const CALL = /\b([a-zA-Z_][a-zA-Z0-9_]*)\s*\(/g
-  while ((m = CALL.exec(body))) called.add(m[1])
-  let extra = ''
+  while ((m = reF.exec(src)) && bodies.length < 4) { const b = braceBody(src, m.index); if (b) bodies.push(b) }
+  const reC = new RegExp(`(?:const|let|var)\\s+${name}\\s*=`, 'g')
+  while ((m = reC.exec(src)) && bodies.length < 4) bodies.push(src.slice(m.index, exprEnd(src, m.index)))
+  return bodies.length ? bodies.join('\n') : null
+}
+
+
+/* 从 fromIdx 起,走到**表达式语句结束**:深度归零处的换行(字符串/模板/注释感知)。
+ * 这比「定长窗口」准 —— 窗口会漏进隔壁定义,那正是本模块 probe 第一轮咬出来的毛病。 */
+export function exprEnd(src, fromIdx) {
+  let i = fromIdx, depth = 0, q = '', inLine = false, inBlock = false
+  while (i < src.length) {
+    const ch = src[i], n = src[i + 1]
+    if (inLine) { if (ch === '\n') { inLine = false; if (depth <= 0 && i > fromIdx + 8) return i } i++; continue }
+    if (inBlock) { if (ch === '*' && n === '/') { inBlock = false; i++ } i++; continue }
+    if (q) { if (ch === '\\') { i += 2; continue } if (ch === q) q = ''; i++; continue }
+    if (ch === '/' && n === '/') { inLine = true; i += 2; continue }
+    if (ch === '/' && n === '*') { inBlock = true; i += 2; continue }
+    if (ch === "'" || ch === '"' || ch === '`') { q = ch; i++; continue }
+    if ('([{'.includes(ch)) depth++
+    else if (')]}'.includes(ch)) depth--
+    else if (ch === '\n' && depth <= 0 && i > fromIdx + 8) return i
+    i++
+  }
+  return src.length
+}
+
+/* 跟进被调用的本地定义 —— **一层,外加一条「转发壳」例外**。
+ *
+ * 🔴 两轮现测把边界钉死了(都是 `readset --probe` 自己咬出来的):
+ *   ① **只跟一层不够**:`/my/points-history` 调 `pointsEarnRows()`,而 `local-server.mjs` 里
+ *      那个只是转发壳 `const pointsEarnRows = (u, t) => pointsLedger.pointsEarnRows(u, t)`,
+ *      真正读 `settlements` 的实现在 `points-ledger.mjs` 的第二层。
+ *   ② **无脑跟两层更糟**:深度 2 一开,`/my/coupons` 的读集从 2 张涨到 8 张、
+ *      `/my/points-history` 涨到 **36 张**(几乎是全库 schema)——
+ *      **一把「什么都咬」的尺子,正面靶子照样全过**,而它报的分类全是废数。
+ *      这正是 J-58 第六款要的那一面:**没有反面靶子,这个毛病看不出来。**
+ *
+ * 所以规则收成一条:**跟一层;那一层若是「转发壳」(自身零 SQL 且短),再多跟一层。**
+ * 转发壳没有自己的读集,跟进它不会放大;有 SQL 的函数就此打住,不再向下蔓延。 */
+export function followCalls(serverSrc, body) {
+  const seen = new Set()
   const names = []
-  for (const fn of called) {
-    const def = new RegExp(`function\\s+${fn}\\s*\\(`).exec(serverSrc)
+  let extra = ''
+  /* 🔴 `.map(` / `.all(` / `.split(` **不是本地函数调用** —— 上一版没排除点号,
+   *   于是 `map` / `all` 被拿去全仓找同名 `const`,找到的是别人家的 `db.prepare(...)`,
+   *   读集当场从 1 张涨到 **36 张**(几乎全库 schema)。
+   *   同样是「尺子什么都咬」那个毛病的第三种长相 —— 还是反面靶子咬出来的。
+   *   例外:**转发壳**那一层允许带点号(`pointsLedger.pointsEarnRows(u, t)` 就是这样),
+   *   壳体极短,放行的面很窄。 */
+  const callsIn = (txt, allowMethod = false) => {
+    const out = []
+    const CALL = /(^|[^\w.$])([a-zA-Z_][a-zA-Z0-9_]*)\s*\(/g
+    const ANY = /([a-zA-Z_][a-zA-Z0-9_]*)\s*\(/g
+    const re = allowMethod ? ANY : CALL
+    let m
+    re.lastIndex = 0
+    while ((m = re.exec(txt))) { const fn = allowMethod ? m[1] : m[2]; if (!SKIP_CALLS.has(fn)) out.push(fn) }
+    return out
+  }
+  for (const fn of callsIn(body)) {
+    if (seen.has(fn)) continue
+    seen.add(fn)
+    const def = defBodyOf(serverSrc, fn)
     if (!def) continue
-    const body2 = braceBody(serverSrc, def.index)
-    if (!body2) continue
-    extra += body2
+    extra += def
     names.push(fn)
+    /* 转发壳例外:自己一张表都不读,而且短 —— 那它的读集在下一层 */
+    if (tablesIn(def).size === 0 && def.length < 220) {
+      for (const fn2 of callsIn(def, true)) {
+        if (seen.has(fn2)) continue
+        seen.add(fn2)
+        const def2 = defBodyOf(serverSrc, fn2)
+        if (def2) extra += def2
+      }
+    }
   }
   return { extra, names }
 }
+const SKIP_CALLS = new Set(['if', 'for', 'while', 'switch', 'catch', 'return', 'function', 'typeof',
+  'String', 'Number', 'Boolean', 'Array', 'Object', 'JSON', 'Math', 'Date', 'Set', 'Map', 'Promise',
+  'json', 'require', 'import', 'console', 'parseInt', 'parseFloat', 'await'])
+
+
 
 /* ── 对外主函数:给一段判据源码算读集 ── */
 export function readSetOf(blockSrc, serverSrc) {
@@ -180,11 +261,11 @@ export function readSetOf(blockSrc, serverSrc) {
     if (!body) { unresolved.push(p); continue }
     const own = tablesIn(body)
     for (const t of own) tables.add(t)
-    const { extra, names } = followOneLevel(serverSrc, body)
+    const { extra, names } = followCalls(serverSrc, body)
     const deep = tablesIn(extra)
     for (const t of deep) tables.add(t)
     why.push(`${p} → handler 读 {${[...own].join(',') || '—'}}`
-      + (names.length ? ` · 跟进一层 ${names.slice(0, 4).join('/')}{${[...deep].slice(0, 8).join(',')}}` : ''))
+      + (names.length ? ` · 跟进 ${names.slice(0, 4).join('/')}{${[...deep].slice(0, 8).join(',')}}` : ''))
   }
   const known = tables.size > 0 || (paths.length > 0 && unresolved.length === 0)
   return { tables, paths, unresolved, why, known }
@@ -225,6 +306,9 @@ if (process.argv[1] && process.argv[1].endsWith('readset.mjs') && process.argv.i
     { 名: '走 /admin/finance/deposit-conservation(跟进一层进 auditDepositConservation)', 块: "await fetch(`${BASE}/admin/finance/deposit-conservation`)", 该含: 'settlements', 该中: true },
     /* 这条靶子专门守「带 ${} 的模板路径认不认得出」—— ㋚7 的因果链就卡在这里 */
     { 名: '模板路径 /admin/settlements/${id}/sign-token(㋚7 那条)', 块: 'await fetch(`${BASE}/admin/settlements/${sheetId}/sign-token`)', 该含: 'settlements', 该中: true },
+    /* 这条守「转发壳」:handler 调的 pointsEarnRows 在 local-server 里只是个壳,
+       真身在 points-ledger.mjs。壳穿不过去 → ㋚5 的因果链被误判成「撞上的」 */
+    { 名: '转发壳 /my/points-history → points-ledger.pointsEarnRows', 块: 'await fetch(`${BASE}/my/points-history`)', 该含: 'settlements', 该中: true },
     { 名: '走 /my/coupons', 块: "await fetch(`${BASE}/my/coupons`)", 该含: 'settlements', 该中: false },
     { 名: '名字里写着 settlements 但不读它(形似而非)', 块: "check('结算单相关:定金守恒 settlements 三个字在名字里', ok)", 该含: 'settlements', 该中: false },
   ]
