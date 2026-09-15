@@ -794,8 +794,31 @@ check('⑩-2 🔴 行为必须不同:keep=仍是会员 / drop=余额归零即失
       loginRes.status === 403 && loginBody?.error?.code === 'DEMO_LOGIN_DISABLED', `${loginRes.status} ${JSON.stringify(loginBody).slice(0, 120)}`)
     const forged = await fetch(`http://127.0.0.1:${port}/my/stored-value`, { headers: { authorization: 'Bearer demo-customer:probe%40example.com' } })
     check('生产闸-2 🔴 伪造 demo-customer 令牌在生产口径下 = 401(顾客侧与商家侧同一把闸)', forged.status === 401, String(forged.status))
+    /* 🔴 J-57(判据不许互相噎死)· 店主 07x §八 判 (a) 本批修。
+     *
+     * 案由:这一条原来死写「本机 BASE 上邮箱登录必须 200」。
+     * 而**门关档**(`DEMO_LOGIN_ALLOWED=false`)跑的就是同一个 BASE ——
+     * 于是它在那一档**必然红**,而红的原因不是被测代码坏了,是**这条判据和那一档的前提冲突**。
+     * 它从日2 一直红到 09-15,红了十几批,**没有任何一批是因为产品出了问题**。
+     *
+     * 改法**不是放松**,是让它**两档各守各的那一句**:
+     *   · 门开着(`guestIdUnsigned === true`)→ 邮箱登录必须 **200**(走查台没被锁死);
+     *   · 门关着(`guestIdUnsigned === false`)→ 邮箱登录必须 **403 DEMO_LOGIN_DISABLED**(这一档本来就该拒)。
+     * 两档**都要断言**,没有「跳过」那一支 —— 判据五(断言增量律)禁止被条件块静默跳过。
+     * 档次是**从被测进程的 `/health` 现读**的,不看环境变量(J-64:认库不认环境变量同族)。 */
+    const gateProbe = await request('/health', {}, null)
+    const gateOpen = gateProbe?.data?.guestIdUnsigned
+    check('生产闸-3a 先取本档门的状态(取不到就红 —— 取不到就没法判下一条该守哪句)',
+      gateOpen === true || gateOpen === false, `guestIdUnsigned=${JSON.stringify(gateOpen)} status=${gateProbe.status}`)
     const localStill = await request('/auth/email/login', { method: 'POST', body: JSON.stringify({ email: `walk-probe-${RUN}@n5.local`, password: 'x' }) }, null)
-    check('生产闸-3 反例:沙箱/本地照旧可用(别把走查台也锁死了)', localStill.status === 200, String(localStill.status))
+    if (gateOpen === true) {
+      check('生产闸-3 门开着这一档:沙箱/本地邮箱登录照旧可用(别把走查台也锁死了)',
+        localStill.status === 200, String(localStill.status))
+    } else {
+      check('生产闸-3 🔴 门关着这一档:同一条口必须 403 DEMO_LOGIN_DISABLED(生产口径,顾客端只能微信登录)',
+        localStill.status === 403 && localStill?.data?.error?.code === 'DEMO_LOGIN_DISABLED',
+        `${localStill.status} ${JSON.stringify(localStill.data || {}).slice(0, 120)}`)
+    }
   } finally {
     child.kill()
     try { rmSync(dir, { recursive: true, force: true }) } catch { /* 清不掉不影响断言 */ }
