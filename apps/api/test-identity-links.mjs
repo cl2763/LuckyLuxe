@@ -35,39 +35,82 @@ async function request(path, options = {}) {
 }
 
 async function main() {
-  // 1. email 注册 → identity 记录存在且带租户
-  const email = `identity-test-${RUN_ID}@example.com`
-  const register = await request('/auth/email/register', {
-    method: 'POST',
-    body: JSON.stringify({ email, displayName: 'Identity Test' })
-  })
-  const userId = register.data?.user?.id || register.data?.id
-  check('email register returns user id', Boolean(userId), JSON.stringify(register.data).slice(0, 200))
+  /* 🔴 07y §八:这一套原来**只有门开着那一档跑得通** —— 它的题目就是
+   *   「email / google 演示身份写不写得进 `user_identities`」,而门关档正是把演示登录关掉那一档。
+   *   所以它不是 A 族(夹具走错门),是 **B 族:判据与本档前提冲突**(我 07x 归错了族,在此更正)。
+   *   改法与 `card-refund 生产闸-3` 同一形态(J-57):**两档各守各的那一句,两支都断言**,
+   *   而且**两档都要守住这一套真正的题目 —— 身份写没写进 `user_identities`** ——
+   *   只是各走各那一档**真有**的那扇门:门开着走演示身份,门关着走正门(微信认领)。
+   *   档次从 `/health` **现读**,不看环境变量(J-64 同族)。 */
+  const healthRes = await request('/health')
+  const gateOpen = healthRes.data?.guestIdUnsigned
+  check('①0 先取本档门的状态(取不到就红 —— 取不到就没法判下一条该守哪句)',
+    gateOpen === true || gateOpen === false, `guestIdUnsigned=${JSON.stringify(gateOpen)}`)
 
-  let identities = await request(`/admin/users/${encodeURIComponent(userId)}/identities`)
-  check('identities endpoint returns 200', identities.status === 200)
-  const emailIdentity = (identities.data.identities || []).find((item) => item.provider === 'email')
-  check('email identity linked', emailIdentity?.externalId === email, JSON.stringify(identities.data.identities))
-  check('identity carries tenant id', emailIdentity?.tenantId === 'lucky-luxe', emailIdentity?.tenantId)
+  let userId = ''
+  if (gateOpen) {
+    // ── 门开着:演示身份那条路(原判据原样保留)──
+    const email = `identity-test-${RUN_ID}@example.com`
+    const register = await request('/auth/email/register', {
+      method: 'POST',
+      body: JSON.stringify({ email, displayName: 'Identity Test' })
+    })
+    userId = register.data?.user?.id || register.data?.id
+    check('email register returns user id', Boolean(userId), JSON.stringify(register.data).slice(0, 200))
 
-  // 2. 重复注册同一 email → 不产生重复身份
-  await request('/auth/email/register', { method: 'POST', body: JSON.stringify({ email }) })
-  identities = await request(`/admin/users/${encodeURIComponent(userId)}/identities`)
-  const emailCount = (identities.data.identities || []).filter((item) => item.provider === 'email').length
-  check('repeat login does not duplicate identity', emailCount === 1, String(emailCount))
+    let identities = await request(`/admin/users/${encodeURIComponent(userId)}/identities`)
+    check('identities endpoint returns 200', identities.status === 200)
+    const emailIdentity = (identities.data.identities || []).find((item) => item.provider === 'email')
+    check('email identity linked', emailIdentity?.externalId === email, JSON.stringify(identities.data.identities))
+    check('identity carries tenant id', emailIdentity?.tenantId === TENANT_HEADER, emailIdentity?.tenantId)
 
-  // 3. google demo 用户 → google identity
-  const googleEmail = `identity-google-${RUN_ID}@example.com`
-  const google = await request('/auth/google/demo', {
-    method: 'POST',
-    body: JSON.stringify({ email: googleEmail, displayName: 'Google Identity Test' })
-  })
-  const googleUserId = google.data?.user?.id || google.data?.id
-  check('google demo returns user id', Boolean(googleUserId), JSON.stringify(google.data).slice(0, 200))
-  identities = await request(`/admin/users/${encodeURIComponent(googleUserId)}/identities`)
-  check('google identity linked', (identities.data.identities || []).some((item) => item.provider === 'google'), JSON.stringify(identities.data.identities))
+    await request('/auth/email/register', { method: 'POST', body: JSON.stringify({ email }) })
+    identities = await request(`/admin/users/${encodeURIComponent(userId)}/identities`)
+    const emailCount = (identities.data.identities || []).filter((item) => item.provider === 'email').length
+    check('repeat login does not duplicate identity', emailCount === 1, String(emailCount))
 
-  // 4. 不存在的用户 → 404;缺少 owner 权限保护逻辑存在(用坏 token 应 401)
+    const googleEmail = `identity-google-${RUN_ID}@example.com`
+    const google = await request('/auth/google/demo', {
+      method: 'POST',
+      body: JSON.stringify({ email: googleEmail, displayName: 'Google Identity Test' })
+    })
+    const googleUserId = google.data?.user?.id || google.data?.id
+    check('google demo returns user id', Boolean(googleUserId), JSON.stringify(google.data).slice(0, 200))
+    identities = await request(`/admin/users/${encodeURIComponent(googleUserId)}/identities`)
+    check('google identity linked', (identities.data.identities || []).some((item) => item.provider === 'google'), JSON.stringify(identities.data.identities))
+  } else {
+    // ── 门关着:演示那两条路必须被拒,身份改由**正门**写进去 ──
+    const reg = await request('/auth/email/register', { method: 'POST', body: JSON.stringify({ email: `blocked-${RUN_ID}@example.com` }) })
+    check('②a 🔴 门关着这一档:`/auth/email/register` 必须 403 DEMO_LOGIN_DISABLED',
+      reg.status === 403 && reg.data?.error?.code === 'DEMO_LOGIN_DISABLED', `${reg.status} ${JSON.stringify(reg.data).slice(0, 140)}`)
+    const goo = await request('/auth/google/demo', { method: 'POST', body: JSON.stringify({ email: `blocked-g-${RUN_ID}@example.com` }) })
+    check('②b 🔴 同一档:`/auth/google/demo` 也必须被拒(读写两道闸:两条演示路各验一次)',
+      goo.status >= 400, `${goo.status} ${JSON.stringify(goo.data).slice(0, 140)}`)
+
+    /* 门关着也要守住这一套的题目:身份到底写没写进去 —— 走本档真有的那扇门(正门认领) */
+    const { createAndLoginCustomerViaFrontDoor } = await import('./customer-login-fixture.mjs')
+    const svcList = await request('/admin/services')
+    const techList = await request('/admin/technicians')
+    const fd = await createAndLoginCustomerViaFrontDoor({ base: BASE_URL, tenantId: TENANT_HEADER,
+      ownerToken: TOKEN, name: `身份正门客${RUN_ID}`, phone: `1350000${String(Date.now()).slice(-4)}`,
+      serviceId: (svcList.data?.services || []).find((x) => x.isActive !== false)?.id || '',
+      technicianId: (techList.data?.technicians || []).find((x) => x.isActive !== false)?.id || '' })
+    userId = fd.userId || ''
+    check('②c 前置:顾客从**正门**造出来(造不出来下面几条不算验过,J-58④)', Boolean(fd.ok && userId),
+      `${fd.status} ${JSON.stringify(fd.body || {}).slice(0, 140)}`)
+    const identities = await request(`/admin/users/${encodeURIComponent(userId)}/identities`)
+    check('identities endpoint returns 200', identities.status === 200)
+    const rows = identities.data.identities || []
+    check('②d 🔴 正门进来的顾客,身份**真的写进 user_identities**(这一套的题目,两档都要守)',
+      rows.length >= 1, JSON.stringify(rows).slice(0, 200))
+    check('②e 身份带 tenant id(跨租户红线:身份不许无主)',
+      rows.every((r) => r.tenantId === TENANT_HEADER), JSON.stringify(rows.map((r) => r.tenantId)))
+    const dup = await request(`/admin/users/${encodeURIComponent(userId)}/identities`)
+    check('②f 重复取不产生重复身份(与门开档 `repeat login does not duplicate identity` 同一件事)',
+      (dup.data.identities || []).length === rows.length, `${rows.length} vs ${(dup.data.identities || []).length}`)
+  }
+
+  // 4. 不存在的用户 → 404;缺少 owner 权限保护逻辑存在(用坏 token 应 401)—— 两档都跑
   const missing = await request('/admin/users/no-such-user/identities')
   check('unknown user returns 404', missing.status === 404, String(missing.status))
   const unauthorized = await fetch(`${BASE_URL}/admin/users/${encodeURIComponent(userId)}/identities`, {
