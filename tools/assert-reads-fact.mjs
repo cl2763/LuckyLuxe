@@ -122,14 +122,23 @@ for (const b of files) {
 /* 🔴 按**口**聚类(店主 07q §三 / 07m §三):**造病的单位是「落库那一行」,不是「断言」。**
    237 条 A 类逐条造 237 次病跑不完;但它们落在**多少个口**上,一个口造一次就够。
    聚类的键:这条断言前面**最近一次改动型调用**打的那条路径。 */
-const CALLP = /(?:request|fetch|apiFetch|adminPost|adminPut|adminDel)\s*\(\s*[`'"]([^`'"]*\/[^`'"]*)/
+/* 🔴 J-73(店主 08a §五立)· 夜13 §四 现数:全仓 test-*.mjs 里带路径字符串的调用,
+   包装器名的分布是 `request` 2026 · **`req` 55** · **`api` 55** · **`jreq` 6** · `adminGet` 2 · `fetch` 1 · `adminPost` 1。
+   这条正则原来只认 6 个名字,**`req` / `api` / `jreq` 三族(116 处)一个都不认** ——
+   于是挂在那些调用后面的断言全部落进「追不到口」。
+   而「追不到口」**不等于「不涉钱」,等于「不知道涉不涉钱」**(J-66③ 按最坏那格对待)。
+   现测那 11 条里有 5 条其实是涉钱口(`/bookings` · `/admin/membership/members` ·
+   `/admin/finance/transactions` ×2 · `/admin/daily-close`)—— **它们此前一直不在造病名单上。** */
+const CALLP = /(?:request|req|jreq|fetch|apiFetch|api|adminPost|adminPut|adminDel|adminGet)\s*\(\s*[`'"]([^`'"]*\/[^`'"]*)/
 function endpointOf(file, line) {
   const src = readFileSync(join(API, file.split('/').pop()), 'utf8').split('\n')
   for (let i = line - 1; i >= Math.max(0, line - 30); i -= 1) {
     const m = CALLP.exec(src[i] || '')
     if (!m) continue
-    const seg = (src[i] || '') + (src[i + 1] || '')
-    if (!MUTATES.test(seg) && !MUTATES.test(src[i] || '')) continue
+    /* 🔴 `method: 'POST'` 常常在**第三、四行**上(多行调用),原来只看两行 —— 看不到就归成「追不到口」。
+       窗口放到 5 行,方向是**让更多断言归到口上**(J-68:误差往「更容易被造病」那边倒)。 */
+    const seg = src.slice(i, i + 5).join('\n')
+    if (!MUTATES.test(seg)) continue
     return m[1].replace(/\$\{[^}]*\}/g, ':x').replace(/\?.*$/, '').replace(/\/+$/, '')
   }
   /* 找不到带路径的改动型调用 → 归到「追不到口」,单列,不混进有口的那堆 */
@@ -143,6 +152,7 @@ const R = rows.filter((r) => r.cls === '拒')
 const byEndpoint = {}
 for (const a of A) {
   const ep = endpointOf(a.file, a.line) || '(追不到口)'
+  a.ep = ep                       // 夜13 §四:明细里带上口,否则「追不到口」那几条没法逐条归口
   ;(byEndpoint[ep] ||= []).push(a)
 }
 const eps = Object.entries(byEndpoint).sort((x, y) => y[1].length - x[1].length)
