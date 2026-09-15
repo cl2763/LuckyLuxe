@@ -470,6 +470,21 @@ const GATE_OFF_TARGET = {
 const ONLY = process.env.KNIFE_ONLY || ""
 const TARGETS = [
   GATE_OFF_TARGET,
+  /* ══ 夜13 §四 · 涉钱口破坏测试(按挂着的 A 类断言条数排优先)══
+   * 靶子是**人读代码定的**,不是生成器出的 —— 生成器连改三次仍停在 7/29 且引入两处错归,
+   * 已按停线停在那一件并进待裁队列(夜13 §五「名单之外一律挂起这一件、继续这一班」)。
+   * **定错靶子不会蒙混过去**:造病台自带 J-58④「换成必然会红的形态再跑一次」,
+   * 刀没咬到会当场报「刀没咬到 —— 不算守住」。 */
+  { ep: '/admin/settlements · 建单落库(17 条 A 类挂在这口上)', suite: 'noshow-aftersales',
+    file: 'apps/api/local-server.mjs', needle: 'INSERT INTO settlement_groups (id, tenant_id, booking_id', claimPat: /建单|settlement/ },
+  { ep: '/admin/settlements/:id/amend · 更正落库(9 条)', suite: 'amend-linkage',
+    file: 'apps/api/local-server.mjs', needle: 'INSERT INTO settlement_amendments (id, tenant_id, settlement_id', claimPat: /更正|amend/ },
+  { ep: '/admin/settlements/:id/allocate · 业绩分配落库(9 条)', suite: 'audit-fix',
+    file: 'apps/api/local-server.mjs', needle: "UPDATE settlement_technicians SET share_pct = ?, share_cents = ?", claimPat: /分配|业绩/ },
+  { ep: '/admin/stored-value/recharge · 充值落库(9 条)', suite: 'noshow-aftersales',
+    file: 'apps/api/stored-value.mjs', needle: 'INSERT INTO stored_value_transactions (id, tenant_id, user_id, type', claimPat: /充值|储值|余额/ },
+  { ep: '/admin/daily-close · 日结确认落库(4 条)', suite: 'daily-close',
+    file: 'apps/api/local-server.mjs', needle: "UPDATE daily_closes SET status = 'confirmed'", claimPat: /日结|确认/ },
   /* 🔴「没跑到」这个计数自己也要证咬得到(J-58⑤):
      `customer-paths` 不是 fail-fast,所以它那一刀「没跑到 0」是对的 ——
      但**一个恒为 0 的数和一个坏掉的数长得一模一样**。
