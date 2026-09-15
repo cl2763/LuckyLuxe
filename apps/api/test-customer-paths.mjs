@@ -183,6 +183,36 @@ try {
       + `台账从 ${ptsBefore.length} 条 → 这次多出来的是**赚分行**不是台账行`,
       Boolean(hit) && hit.delta === wantDelta && wantDelta > 0,
       `记录数 ${recs.length} · 找到=${JSON.stringify(hit)} · 期望 delta=${wantDelta}`)
+
+    /* ══ ㋚6/㋚7/㋚8 · 🔴 签署口三条判据,**从 fail-fast 后面救出来**(店主 07s §七③ / 07v ①)══
+     *
+     * 案由(夜12 段C 现测):把「签字落库」整条注掉,`scan-sign` 里
+     * **没有任何一条说「签字成功了」的断言变红** —— 红的是并发那条,**撞上的**。
+     * 而真正该咬到的三条恰恰**全在「没跑到」的 10 条里**:`scan-sign` 是 fail-fast,
+     * 半路 `throw` 就断了,它们根本没机会说话。
+     * 店主的定性:**「签署结算单就是顾客确认自己花了多少钱」，这条路上的判据是空的。**
+     *
+     * 所以搬到这里 —— 本套件**不 fail-fast**(check 记账继续),刀落下去它们跑得到。
+     * 三条都按 J-62 第二款写:**从事实那头读回来**,不看这一次调用的返回体。 */
+    const sheetId = one('SELECT id FROM settlements WHERE code = ?', sheet.code || '').id || ''
+    const ro = await (await fetch(`${BASE}/settlements/${encodeURIComponent(sheet.code || '')}`, { headers: CH })).json().catch(() => ({}))
+    check('㋚6 🔴 签完**另一入口变已签只读** —— 从别的口再取这张单,它说自己是 `signed`。'
+      + '这一条此前在 `scan-sign` 的 fail-fast 后面,刀落下去根本跑不到',
+      ro?.settlement?.status === 'signed',
+      `另一入口拿到的 status=${ro?.settlement?.status} · 库里=${one('SELECT status FROM settlements WHERE code = ?', sheet.code || '').status}`)
+
+    const qrAgain = await fetch(`${BASE}/admin/settlements/${encodeURIComponent(sheetId)}/sign-token`,
+      { method: 'POST', headers: AH, body: '{}' })
+    const qrBody = await qrAgain.json().catch(() => ({}))
+    check('㋚7 🔴 **已签的单不再出新码** —— 再要一次签字码必须 400 `ALREADY_SIGNED`。'
+      + '出得来就等于同一张单能被签第二次',
+      qrAgain.status === 400 && qrBody?.error?.code === 'ALREADY_SIGNED',
+      `status=${qrAgain.status} code=${qrBody?.error?.code}`)
+
+    const cons = await (await fetch(`${BASE}/admin/finance/deposit-conservation`, { headers: AH })).json().catch(() => ({}))
+    check('㋚8 🔴 **财务红线:整条链跑完,定金守恒仍 ok** —— '
+      + '这一条是钱的总账,它红意味着定金在某一步对不上',
+      cons?.ok === true, JSON.stringify(cons?.broken || cons).slice(0, 180))
   }
 } finally {
   child.kill('SIGTERM')

@@ -203,22 +203,32 @@ async function knife({ ep, suite, file, needle, claimPat, nth = null }) {
   /* 「声称成功」的断言:名字里说了成了,或条件在看 2xx —— 与静态筛同一把尺子 */
   const CLAIMS = /成功|已保存|已提交|已发送|已核销|已到账|已确认|已绑定|已更新|写进|落库|创建|生成|新增|入库|真的是|跟过去|查库|对得上|留痕|释放/
   const claimGreens = greens.filter((g) => CLAIMS.test(g))
-  const survived = claimPat ? claimGreens.filter((g) => !claimPat.test(g)) : claimGreens
+  /* 🔴 裁 #102(店主 07s §五)· **「仍绿」要拆两类,不然下次会把噪音当发现**
+   *   · **仍绿-无关**:本来就不在这一刀的作用面上 —— 绿是对的,不用管;
+   *   · 🔴 **仍绿-该咬没咬**:**本该被这一刀咬到却没红** —— **这才是发现**。
+   * 案底:签署口那一刀的 4 条「声称成功却仍绿」**全是绑定/徽标**,跟被砍的落库无关;
+   * 而真正该咬到的三条在「没跑到」里 —— 混成一个数就读不出这件事。
+   * 分法:`claimPat` 就是「这一刀该咬到谁」的口径,命中它的算**该咬**,其余算无关。 */
+  const shouldBite = claimPat ? claimGreens.filter((g) => claimPat.test(g)) : []
+  const unrelated = claimPat ? claimGreens.filter((g) => !claimPat.test(g)) : claimGreens
   const ranNames = new Set([...(out.match(/^(?:not )?ok \d+ - .+$/gm) || []).map(nameOf)])
   const notRun = baseNames.filter((n) => !ranNames.has(n))
-  console.log(`   [刀账·四个数] 红 ${reds.length} · 仍绿 ${greens.length}`
-    + ` · 其中**声称成功却仍绿** ${claimGreens.length} · **没跑到 ${notRun.length}**`
-    + `(无刀基线 ${baseNames.length} 条)`)
+  console.log(`   [刀账·四个数] 红 ${reds.length} · **仍绿-无关 ${unrelated.length}**`
+    + ` · 🔴 **仍绿-该咬没咬 ${shouldBite.length}** · **没跑到 ${notRun.length}**`
+    + `(无刀基线 ${baseNames.length} 条 · 仍绿合计 ${greens.length})`)
+  if (shouldBite.length) {
+    console.log('   🔴 [仍绿-该咬没咬](**这才是发现** —— 本该被这一刀咬到却照样绿):')
+    for (const g of shouldBite.slice(0, 12)) console.log(`     ✗ ${g.slice(0, 130)}`)
+  } else console.log('   [仍绿-该咬没咬] 0 条')
   if (notRun.length) {
     console.log('   [没跑到点名](套件在半路 throw 断了,这些**既不是守住也不是没守住,是没跑**):')
     for (const n of notRun.slice(0, 12)) console.log(`     ○ ${n.slice(0, 120)}`)
     if (notRun.length > 12) console.log(`     …另 ${notRun.length - 12} 条`)
   }
-  if (claimGreens.length) {
-    console.log('   [仍绿点名](形状上「声称成功」且造病后仍绿 —— **要人读一眼**:')
-    console.log('     与被砍的那条写**无关**的断言,绿是对的,不是发现;有关却绿的才是。')
-    for (const g of claimGreens.slice(0, 12)) console.log(`     · ${g.slice(0, 120)}`)
-    if (claimGreens.length > 12) console.log(`     …另 ${claimGreens.length - 12} 条`)
+  if (unrelated.length) {
+    console.log(`   [仍绿-无关] ${unrelated.length} 条(不在这一刀的作用面上,绿是对的):`)
+    for (const g of unrelated.slice(0, 6)) console.log(`     · ${g.slice(0, 110)}`)
+    if (unrelated.length > 6) console.log(`     …另 ${unrelated.length - 6} 条`)
   }
   const bootBroke = run1.bootBroke || /在 \d+s 内未就绪|BOOT-FAIL|Cannot find module/.test(out)
   if (bootBroke) {
@@ -247,7 +257,7 @@ async function knife({ ep, suite, file, needle, claimPat, nth = null }) {
       rows.push({ ep, suite, needle, verdict: '🔴 **刀没咬到**(换成必然会红的形态也不红 ⇒ 这条路径没被执行到)—— 不算守住' })
     } else if (reached === true) {
       console.log('   🔴 仍绿 —— 路径**确实被执行到了**(必然红那一刀红了),所以这条判据验的是回执不是事实')
-      rows.push({ ep, suite, needle, verdict: '🔴 **仍绿**(已证刀咬到:必然红那一刀红了)—— 验的是回执不是事实', 账: `红 ${reds.length} / 仍绿 ${greens.length} / 声称成功却仍绿 ${claimGreens.length} / **没跑到 ${notRun.length}**`, 仍绿: claimGreens, 没跑到: notRun })
+      rows.push({ ep, suite, needle, verdict: '🔴 **仍绿**(已证刀咬到:必然红那一刀红了)—— 验的是回执不是事实', 账: `红 ${reds.length} / 仍绿-无关 ${unrelated.length} / **仍绿-该咬没咬 ${shouldBite.length}** / 没跑到 ${notRun.length}`, 仍绿: shouldBite, 没跑到: notRun })
     } else {
       console.log('   ⚠️ 不红,但必然红那一刀也落不下去 —— 判不了,不算验过')
       rows.push({ ep, suite, needle, verdict: '⚠️ 不红且证不了咬没咬到 —— **不算验过**' })
@@ -255,11 +265,11 @@ async function knife({ ep, suite, file, needle, claimPat, nth = null }) {
   } else if (claimReds.length) {
     console.log(`   ✅ 红了,而且红的就是那条:${claimReds[0]}`)
     rows.push({ ep, suite, needle, verdict: `✅ 红,**红的就是声称成功那条**:\`${claimReds[0]}\``,
-      账: `红 ${reds.length} / 仍绿 ${greens.length} / 声称成功却仍绿 ${claimGreens.length} / **没跑到 ${notRun.length}**`,
-      仍绿: claimGreens, 没跑到: notRun })
+      账: `红 ${reds.length} / 仍绿-无关 ${unrelated.length} / **仍绿-该咬没咬 ${shouldBite.length}** / 没跑到 ${notRun.length}`,
+      仍绿: shouldBite, 没跑到: notRun })
   } else {
     console.log(`   ⚠️ 套件红了,但红的不是「声称成功」那条:${reds[0] || '(没抓到红行)'}`)
-    rows.push({ ep, suite, needle, verdict: `⚠️ **套件红了但红的是隔壁** —— \`${reds[0] || '没抓到红行'}\`;声称成功那条**仍绿**`, 账: `红 ${reds.length} / 仍绿 ${greens.length} / 声称成功却仍绿 ${claimGreens.length} / **没跑到 ${notRun.length}**`, 仍绿: claimGreens, 没跑到: notRun })
+    rows.push({ ep, suite, needle, verdict: `⚠️ **套件红了但红的是隔壁** —— \`${reds[0] || '没抓到红行'}\`;声称成功那条**仍绿**`, 账: `红 ${reds.length} / 仍绿-无关 ${unrelated.length} / **仍绿-该咬没咬 ${shouldBite.length}** / 没跑到 ${notRun.length}`, 仍绿: shouldBite, 没跑到: notRun })
   }
 }
 
@@ -299,10 +309,13 @@ const TARGETS = [
      于是「仍绿 3 条」点的是**支付和卡包**,跟被砍的口毫无关系,**是噪音不是发现**。
      那 20 条 A 类挂在别的套件上;签署口该跑的是 `scan-sign`(它就是测签字那一套)。
      **「仍绿点名」只在跑了「拥有这个口的断言」的套件时才作数** —— 别的套件的绿不说明任何事。 */
-  { ep: '/settlements/:code/sign · 签署落库(涉钱,挂 20 条 A 类)', suite: 'scan-sign',
+  /* 🔴 07v ① · 靶子改跑 `customer-paths`:那三条「该咬」的判据(签完变只读 / 不再出新码 / 定金守恒)
+     已经从 `scan-sign` 的 fail-fast 后面搬过来了,刀落下去跑得到。
+     `claimPat` 就是「这一刀该咬到谁」的口径 —— 命中它的算**该咬**,其余算**无关**(裁 #102)。 */
+  { ep: '/settlements/:code/sign · 签署落库(涉钱;三条该咬的判据已搬进 customer-paths)', suite: 'customer-paths',
     file: 'apps/api/local-server.mjs',
     needle: "db.prepare(\"UPDATE settlements SET status = 'signed', signature_data = ?, signed_at = ?",
-    claimPat: /㋚5a|㋚5 / },
+    claimPat: /㋚5a|㋚5 |㋚6|㋚7|㋚8/ },
 ]
 /* 🔴 裁 #98 自证:造病**前后**各量一次店主那两台。动过就是台子越界。 */
 assertCleanTree()
