@@ -223,8 +223,13 @@ async function knife({ ep, suite, file, needle, claimPat, nth = null }) {
    * 分法:`claimPat` 就是「这一刀该咬到谁」的口径,命中它的算**该咬**,其余算无关。 */
   const shouldBite = claimPat ? claimGreens.filter((g) => claimPat.test(g)) : []
   const unrelated = claimPat ? claimGreens.filter((g) => !claimPat.test(g)) : claimGreens
-  const ranNorm = new Set([...(out.match(/^(?:not )?ok \d+ - .+$/gm) || []).map(nameOf).map(normName)])
-  const notRun = baseNames.filter((n, i) => !ranNorm.has(baseNorm[i]))
+  /* 🔴 按**条数与位置**算,不按名字 —— 归一化那一版还是不准:
+     断言名里常写着运行期实测值(`状态 signed` vs `pending_sign`),归一归不干净。
+     而 fail-fast 套件被刀断掉时,跑的是**前缀** —— 所以
+     **没跑到 = 基线条数 − 本轮跑出来的条数**,名单取基线里那个下标之后的部分。
+     这个算法不受「名字里有什么」影响,也就不会再把跑过的算成没跑。 */
+  const ranCount = reds.length + greens.length
+  const notRun = baseNames.slice(ranCount)
   console.log(`   [刀账·四个数] 红 ${reds.length} · **仍绿-无关 ${unrelated.length}**`
     + ` · 🔴 **仍绿-该咬没咬 ${shouldBite.length}** · **没跑到 ${notRun.length}**`
     + `(无刀基线 ${baseNames.length} 条 · 仍绿合计 ${greens.length})`)
