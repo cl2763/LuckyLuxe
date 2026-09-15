@@ -39,7 +39,7 @@
     "audit-fix": 90,
     "scan-sign": 53,
     "double-sheet": 54,
-    "auth-surface": 52,
+    "auth-surface": 53,
     "currency-scan": 6,
     "settle-stress": 6,
     "sign-stability": 6,

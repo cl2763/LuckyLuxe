@@ -81,22 +81,35 @@ export async function createAndLoginCustomerViaFrontDoor({ base, tenantId, owner
   let mk = null
   let mkBody = {}
   let usedDate = ''
-  for (let n = 1; n <= 10; n += 1) {
+  let usedTime = ''
+  /* 🔴 07y:原来只对 `REST_DAY` 换日子。现测 `auth-surface` 在**已有真实预约的库**上
+   *   撞的是 `SLOT_UNAVAILABLE`(那位技师这个时段被占,而项目要 120 分钟)——
+   *   夹具于是红在「这个钟点有人了」上,而不是红在被测的那件事上。
+   *   **夹具的噪音会被当成被测对象的信号**(判据律:别让噪音淹信号)。
+   *   改成:日子 × 钟点两层都退让,两种「换个时间就行」的错都退让。
+   *   调用方钉死 `date`/`time` 的,只在没钉死的那一维上退让。 */
+  const TIMES = ['10:30', '13:00', '15:30', '18:00', '11:45', '16:45']
+  const RETRY = new Set(['REST_DAY', 'SLOT_UNAVAILABLE', 'OUTSIDE_BUSINESS_HOURS'])
+  outer:
+  for (let n = 1; n <= 14; n += 1) {
     usedDate = date || dayOf(n)
-    mk = await fetch(`${base}/admin/bookings/direct`, {
-      method: 'POST',
-      headers: H,
-      body: JSON.stringify({ newCustomerName: name, phone, serviceId, technicianId, date: usedDate, time }),
-    })
-    mkBody = await mk.json().catch(() => ({}))
-    if (mkBody?.error?.code !== 'REST_DAY') break
-    if (date) break                       // 调用方钉死了日期就不替它换
+    for (const t of (time ? [time, ...TIMES.filter((x) => x !== time)] : TIMES)) {
+      usedTime = t
+      mk = await fetch(`${base}/admin/bookings/direct`, {
+        method: 'POST',
+        headers: H,
+        body: JSON.stringify({ newCustomerName: name, phone, serviceId, technicianId, date: usedDate, time: usedTime }),
+      })
+      mkBody = await mk.json().catch(() => ({}))
+      if (!RETRY.has(mkBody?.error?.code)) break outer
+    }
+    if (date) break                       // 调用方钉死了日期就不替它换日子(钟点已经退让过了)
   }
   const userId = mkBody?.booking?.user?.id || mkBody?.booking?.userId || ''
-  if (!userId) return { ok: false, status: mk ? mk.status : 0, body: mkBody, usedDate }
+  if (!userId) return { ok: false, status: mk ? mk.status : 0, body: mkBody, usedDate, usedTime }
   /* 用**同一个手机号**从正门登录 —— 严格认人那条正向路在这里被真跑一遍 */
   const login = await loginCustomerViaFrontDoor({ base, tenantId, openid: `stub-openid-${userId}`, phone })
-  return { ok: login.ok && login.user?.id === userId, status: login.status, userId, claimedId: login.user?.id, accessToken: login.accessToken, body: login.body, usedDate }
+  return { ok: login.ok && login.user?.id === userId, status: login.status, userId, claimedId: login.user?.id, accessToken: login.accessToken, body: login.body, usedDate, usedTime }
 }
 
 /* 🔴 J-60 转正门的**共用出口**(店主 07m §七,2026-09-14)
