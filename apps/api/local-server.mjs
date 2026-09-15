@@ -5732,21 +5732,8 @@ async function signInWechatMiniUser(body) {
   }
 }
 
-function registerGoogleDemoUser(body) {
-  const email = String(body.email || 'google.demo@luckyluxe.local').trim().toLowerCase()
-  const displayName = String(body.displayName || 'Google Member').trim()
-  const googleId = `demo-google-${email}`
-  const existing = db.prepare('SELECT * FROM users WHERE google_id = ? OR email = ?').get(googleId, email)
-  if (existing) {
-    upsertUserIdentity({ userId: existing.id, provider: 'google', providerUserId: googleId, email })
-    return serializeUser(existing)
-  }
-  const id = randomId('user')
-  db.prepare('INSERT INTO users (id, display_name, email, google_id, tenant_id) VALUES (?, ?, ?, ?, ?)').run(id, displayName, email, googleId, validTenantId(body.tenantId))   // D128:与邮箱登录同口径,注册在哪家店就建在哪家店
-  upsertUserIdentity({ userId: id, provider: 'google', providerUserId: googleId, email })
-  return serializeUser(db.prepare('SELECT * FROM users WHERE id = ?').get(id))
-}
-
+/* 🔴 D194 / 裁 #107:`registerGoogleDemoUser()` 连同 `/auth/google/demo` 一起删了。
+   它是那条路唯一的调用方(全仓现扫);留着函数等于留着半条路。 */
 /* ===== P0.9 按店时区(2026-08-07,审计 B-1)=====
    以前这里写死 America/Toronto,于是所有商家的「今天/本月/日期分桶」都按多伦多算。
    小婕店在中国:北京 8/8 08:00 = 多伦多 8/7 20:00,她早上看到的「今日预约」是多伦多的昨天。
@@ -10758,7 +10745,10 @@ async function route(req, res) {
       String(body.city || '').slice(0, 40), String(body.note || '').slice(0, 300), now, now)
     return json(res, 201, { ok: true })
   }
-  if (req.method === 'POST' && path === '/auth/google/demo') return json(res, 201, { user: registerGoogleDemoUser(await readBody(req)) })
+  /* 🔴 D194 · 裁 #107:`POST /auth/google/demo` **已删**(不是加门)——
+     它一行无门禁,四档全 201 建人(含两种生产口径),还能在 body 里指名别人家的店。
+     为什么删不加门、四档现测数、全仓零调用证据:handoff/night-runs/07z回执_2026-09-16.md §一。
+     守它不回来:`test-user-write-auth`(J-71,全站不存在「无认证写 users」的路)。 */
   // 数据迁移入口:双重开关(ALLOW_DB_IMPORT 环境变量,迁移完立即关) + 强 token + 确认头 + 文件魔数校验
   if (req.method === 'POST' && path === '/admin/ops/import-db') {
     if (process.env.ALLOW_DB_IMPORT !== 'true') throw apiError(403, 'FORBIDDEN', 'DB import is disabled.')

@@ -69,22 +69,20 @@ async function main() {
     const emailCount = (identities.data.identities || []).filter((item) => item.provider === 'email').length
     check('repeat login does not duplicate identity', emailCount === 1, String(emailCount))
 
-    const googleEmail = `identity-google-${RUN_ID}@example.com`
-    const google = await request('/auth/google/demo', {
-      method: 'POST',
-      body: JSON.stringify({ email: googleEmail, displayName: 'Google Identity Test' })
-    })
-    const googleUserId = google.data?.user?.id || google.data?.id
-    check('google demo returns user id', Boolean(googleUserId), JSON.stringify(google.data).slice(0, 200))
-    identities = await request(`/admin/users/${encodeURIComponent(googleUserId)}/identities`)
-    check('google identity linked', (identities.data.identities || []).some((item) => item.provider === 'google'), JSON.stringify(identities.data.identities))
+    /* 🔴 D194 / 裁 #107:`/auth/google/demo` **已删**(删路不加门)。
+       原来这里有三条 google 演示身份断言 —— 那条路不存在了,断言跟着走。
+       它不许换成「它存在时须合规」(裁 #104),**只许断言它不存在** —— 那一条在
+       `test-user-write-auth ④`,两档共用同一条,不在这里各写一份。 */
   } else {
     // ── 门关着:演示那两条路必须被拒,身份改由**正门**写进去 ──
     const reg = await request('/auth/email/register', { method: 'POST', body: JSON.stringify({ email: `blocked-${RUN_ID}@example.com` }) })
     check('②a 🔴 门关着这一档:`/auth/email/register` 必须 403 DEMO_LOGIN_DISABLED',
       reg.status === 403 && reg.data?.error?.code === 'DEMO_LOGIN_DISABLED', `${reg.status} ${JSON.stringify(reg.data).slice(0, 140)}`)
+    /* 🔴 D194 收口(裁 #107):这条路**已删**,所以断言从「必须被拒」改成「打不到」。
+       这两句不是一回事 —— 「被拒」意味着路还在、门关着(缺口形态);
+       「打不到」意味着路不存在(保证形态)。案底就是它自己:它的兄弟加了门,它没加。 */
     const goo = await request('/auth/google/demo', { method: 'POST', body: JSON.stringify({ email: `blocked-g-${RUN_ID}@example.com` }) })
-    check('②b 🔴 同一档:`/auth/google/demo` 也必须被拒(读写两道闸:两条演示路各验一次)',
+    check('②b 🔴 `/auth/google/demo` **已删**:打过去必须不是 2xx(D194,裁 #107 删路不加门)',
       goo.status >= 400, `${goo.status} ${JSON.stringify(goo.data).slice(0, 140)}`)
 
     /* 门关着也要守住这一套的题目:身份到底写没写进去 —— 走本档真有的那扇门(正门认领) */

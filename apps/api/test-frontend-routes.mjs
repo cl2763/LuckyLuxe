@@ -117,9 +117,12 @@ for (const m of "  const d = await request(`/auth/google/start?redirectTo=${x}`,
 check('③b 自守:**模板串**写法里的路径前缀必须认得出来 —— 立这条判据的那一行就是模板串',
   tplProbe.length === 1 && tplProbe[0] === '/auth/google/start', JSON.stringify(tplProbe))
 
-/* ④ 反向守:后端真有的那条 `/auth/google/demo` 不许被误报 */
-check('④ 反向守:后端真有的 `/auth/google/demo` 不许被算成「缺」(否则白名单会被误报塞满)',
-  backendHas('/auth/google/demo'), '')
+/* ④ 反向守:拿一条**后端真有的**路当反向锚,它不许被算成「缺」。
+   🔴 J-58③(锚不许选在本次改动会抹掉的字面量):这里原来锚的是 `/auth/google/demo` ——
+   而 07z 按裁 #107 **把那条路删了**,锚当场随之消失。换成 `/auth/wechat/mini-login`:
+   它是顾客登录的正门,**删它等于产品没有登录**,不会被顺手删掉。 */
+check('④ 反向守:后端真有的 `/auth/wechat/mini-login` 不许被算成「缺」(否则白名单会被误报塞满)',
+  backendHas('/auth/wechat/mini-login'), '')
 
 /* ⑤ 覆盖面反向守:扫描面不许缩水 */
 check(`⑤ 反向守:扫描面 前端 ${webFiles.length + mpFiles.length} 个 js >= 60 · 后端 ${backend.size} 条 >= 150`,

@@ -56,10 +56,8 @@ results.emailAuth = await post('/auth/email/register', {
   email: `e2e-${stamp}@luckyluxe.demo`,
   password: `Lucky${stamp}!`
 })
-results.googleAuth = await post('/auth/google/demo', {
-  displayName: 'Google E2E',
-  email: `google-${stamp}@luckyluxe.demo`
-})
+/* D194 / 裁 #107:`/auth/google/demo` 已删(无门禁、四档全建人)—— 这一项随之取消 */
+results.googleAuth = { skipped: 'route deleted (D194)' }
 results.services = await get('/services?type=nail&lang=en')
 results.stores = await get('/stores')
 results.availability = await get(
