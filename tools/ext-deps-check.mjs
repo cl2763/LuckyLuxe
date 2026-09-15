@@ -38,13 +38,25 @@ const portOpen = (p) => { try { execFileSync('bash', ['-c', `lsof -ti :${p}`], {
 /* 每条怎么查 —— 按清单里的名字对上(名字改了这里就查不到,④ 会红) */
 const PROBES = {
   'miniprogram-automator': () => {
-    const p = process.env.MP_AUTOMATOR || ''
+    let p = process.env.MP_AUTOMATOR || ''
     if (p === 'skip') return { ok: false, note: '显式 MP_AUTOMATOR=skip(回执须写原因)' }
-    if (!p) return { ok: false, note: '**MP_AUTOMATOR 没设** —— 三把小程序刀会按红处理' }
+    /* 🔴 夜13 兜底现查:小程序档「红 3」挂了十几批,而**模块一直在、工具一直在、9420 会话一直是活的** ——
+     *   差的只是**这个环境变量没设**。我此前在几份回执里写的是
+     *   「MP_AUTOMATOR 没设(仓外模块没装)」—— **括号里那半句是错的**,模块装着,
+     *   在 `外部件清单.md §二` 写死的那个路径上。**我是照着这条提示语抄的,没去现查。**(J-63①:量的还是抄的)
+     *
+     *   治法:变量没设时,**照清单里那个路径自己找一次**;找到就用,并且**大声说是自己找到的**;
+     *   真的不在才红。这不是放松 —— 找不到照样红,只是不再把「变量没设」说成「模块没装」。 */
+    let autofound = false
+    if (!p) {
+      const guess = join(process.env.HOME || '', 'll-mp-tools/node_modules/miniprogram-automator')
+      if (existsSync(guess)) { p = guess; autofound = true }
+    }
+    if (!p) return { ok: false, note: '**MP_AUTOMATOR 没设,清单里那个路径上也没有** —— 三把小程序刀会按红处理' }
     if (!existsSync(p)) return { ok: false, note: `MP_AUTOMATOR 指的路径不存在:${p}` }
     let ver = ''
     try { ver = JSON.parse(readFileSync(join(p, 'package.json'), 'utf8')).version || '' } catch { /* 没有就算了 */ }
-    return { ok: true, note: `在 · ${p}${ver ? ` · v${ver}` : ''}` }
+    return { ok: true, note: `在 · ${p}${ver ? ` · v${ver}` : ''}${autofound ? ' · ⚠️ **MP_AUTOMATOR 没设,是按外部件清单里的路径自己找到的**(要跑那三把刀,记得把它传给 run-all-tests.sh)' : ''}` }
   },
   /* 🔴 07e 现踩:**端口在听 ≠ 会话是活的**。
      自动化会话僵死时 `lsof` 照样看得见 9420,而三支 mp 刀会各卡 61 秒然后「本轮未跑」——

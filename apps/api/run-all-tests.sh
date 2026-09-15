@@ -480,6 +480,14 @@ if [ ! -f "$MP_HEAL" ]; then
 else
   bash "$MP_HEAL" || echo "   ⚠️ 自愈没成(脚本跑了但没把会话拉起来)—— 下面这一档会空转,按红处理(不是通过)"
 fi
+# 🔴 夜13 兜底现查:这一档「红 3」挂了十几批,而**模块一直在、工具一直在、9420 会话一直是活的** ——
+#   差的只是 `MP_AUTOMATOR` 这个环境变量没设,而我一直照着提示语把它写成「仓外模块没装」。
+#   变量没设时,照 `handoff/外部件清单.md §二` 写死的那个路径自己找一次;找到就用、并且说出来;
+#   真不在才照旧按红处理(**不是放松**:找不到还是红)。
+if [ -z "${MP_AUTOMATOR:-}" ] && [ -d "$HOME/ll-mp-tools/node_modules/miniprogram-automator" ]; then
+  export MP_AUTOMATOR="$HOME/ll-mp-tools/node_modules/miniprogram-automator"
+  echo "   [自找] MP_AUTOMATOR 没设 —— 按外部件清单的路径找到了:$MP_AUTOMATOR"
+fi
 MP_LANE_SUITES="mp-placeholder-size mp-overlap mp-home-sections"
 MP_LANE_N=$(printf '%s' "$MP_LANE_SUITES" | wc -w | tr -d ' ')
 echo ""
