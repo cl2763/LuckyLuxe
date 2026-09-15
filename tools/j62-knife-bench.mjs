@@ -493,7 +493,9 @@ const TARGETS = [
      人工复核过 needle 的唯一性再挂上来 —— 生成器降级为「候选提示」,不作准。 */
   { ep: '/admin/settlements/:id/void · 作废落库(5 条)', suite: 'double-sheet',
     file: 'apps/api/local-server.mjs', needle: "UPDATE settlements SET status = 'voided'", claimPat: /作废|void|撤/ },
-  { ep: '/admin/coupon-grants/custom · 发券落库(4 条)', suite: 'coupon-settle',
+  /* 这一句全仓三处(:11348 / :12448 / **:12667**),台子按 J-58 拒绝在不唯一的地方落刀 ——
+     **拒得对**。`/admin/coupon-grants/custom` 那条口在 :12641,它体内那一处是第 **3** 处(nth=2)。 */
+  { ep: '/admin/coupon-grants/custom · 发券落库(4 条)', suite: 'coupon-settle', nth: 2,
     file: 'apps/api/local-server.mjs', needle: 'UPDATE coupons SET issued_qty = issued_qty + 1', claimPat: /发券|券/ },
   { ep: '/admin/finance/compensation · 薪酬落库(1 条)', suite: 'finance-goals',
     file: 'apps/api/local-server.mjs', needle: 'INSERT INTO staff_compensation (technician_id, tenant_id', claimPat: /薪酬|提成|工资/ },
