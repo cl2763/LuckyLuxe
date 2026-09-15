@@ -41,9 +41,11 @@ function statNum(value) {
 
 const copy = {
   zh: {
-    registerTitle: '创建账号',
-    registerText: '你可以先以游客身份浏览。预约、购物车结算和会员档案需要登录。',
-    emailRegister: '创建账号',
+    /* 裁 #103:这两条与它的全部理由在 ./customer-auth-copy.js(摘出去,裁#89)。
+       ⚠️ 取不到就用内置兜底 —— 判据 ㉜「顶层加载不炸」当场咬过一次:
+       直接 `...window.CustomerAuthCopy.zh` 会在那个文件没先加载时炸掉整页。
+       **一个只在加载顺序对的时候才不炸的页面,换个人改 html 就炸给顾客看。** */
+    ...((window.CustomerAuthCopy || {}).zh || { registerTitle: '用微信登录', registerText: '在店里消费过?用微信扫一下下面的码。' }),
     emailLogin: '邮箱登录',
     displayName: '姓名',
     email: '邮箱',
@@ -173,7 +175,7 @@ const copy = {
     noSlots: '当天暂无可预约时间',
     created: '已加入购物车',
     paidDone: '定金已支付，预约已确认',
-    needLogin: '请先完成注册/登录后继续',
+    needLogin: '请先登录后继续',   // 裁#103:不许出现「注册」
     confirmEmail: '请检查邮箱完成验证，然后再登录。',
     paymentRedirect: '正在跳转到 Stripe 测试支付...',
     sessionExpired: '登录已过期，请重新登录后继续支付。',
@@ -192,9 +194,7 @@ const copy = {
     aiQuickPolicy: '取消改期规则？'
   },
   en: {
-    registerTitle: 'Create your account',
-    registerText: 'You can browse as a guest. Booking, checkout, and member pages require sign-in.',
-    emailRegister: 'Create Account',
+    ...((window.CustomerAuthCopy || {}).en || { registerTitle: 'Sign in with WeChat', registerText: 'Been to the salon? Scan the code below with WeChat.' }),
     emailLogin: 'Email Login',
     displayName: 'Name',
     email: 'Email',
@@ -324,7 +324,7 @@ const copy = {
     noSlots: 'No available times',
     created: 'Added to cart',
     paidDone: 'Deposit paid. Booking confirmed.',
-    needLogin: 'Please register or sign in to continue',
+    needLogin: 'Please sign in to continue',   // 裁#103
     confirmEmail: 'Please verify your email, then sign in.',
     paymentRedirect: 'Redirecting to Stripe test payment...',
     sessionExpired: 'Your session expired. Please sign in again to continue payment.',
