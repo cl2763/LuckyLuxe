@@ -21,6 +21,14 @@ const ROOT = join(fileURLToPath(new URL('.', import.meta.url)), '..')
 /* J-61②:刀默认排除判据自身与夹具,具名 */
 const SELF = ['tools/customer-paths-scan.mjs']
 
+/* 🔴 J-73(店主 08a §五立)· **靶子只有一种长相,刀就只守得住一种长相。**
+   这一把原来只认三个包装器:`request` / `apiFetch` / `fetch`。
+   顾客端那 56 个文件**现数**一遍,带路径字符串的调用是这么分布的:
+     `request` 66 · **`adminRequest` 11** · **`api.adminPost` 6** · **`api.adminGet` 5** · `fetch` 5 · **`pub` 2**
+   —— **24 个调用在扫描面之外**,其中 `pub()` 正是 `miniprogram/pages/bind/index.js` 里
+   打 `/bind-tokens/…/confirm` 的那个(**绑定流程,D191 同族**)。
+   这把刀出的那张「顾客能按的入口」表,**此前漏掉的正是这一族**。
+   (店主 08a 兜底队列第 5 条「路径总数 40 已知偏少」问的就是这个数。) */
 const walk = (rel, out = []) => {
   for (const e of readdirSync(join(ROOT, rel), { withFileTypes: true })) {
     if (e.name === 'node_modules' || e.name.startsWith('.')) continue
@@ -41,7 +49,7 @@ const CUSTOMER_FILES = [
 const paths = new Map()
 for (const f of CUSTOMER_FILES) {
   const src = readFileSync(join(ROOT, f), 'utf8').replace(/\/\*[\s\S]*?\*\//g, '').replace(/^\s*\/\/.*$/gm, '')
-  for (const m of src.matchAll(/(?:request|apiFetch|fetch)\(\s*[`'"]([^`'"]*\/[^`'"]*)[`'"]/g)) {
+  for (const m of src.matchAll(/(?:request|apiFetch|fetch|adminRequest|adminGet|adminPost|adminPut|adminDel|api\.\w+|pub)\(\s*[`'"]([^`'"]*\/[^`'"]*)[`'"]/g)) {
     /* 🔴 09-14(夜12 段D)· probe 第一次跑就咬到的真缺陷:
        `fetch(`${BASE}/bookings`)` 这种**前缀是 base URL 变量**的调用,原来整类漏掉 ——
        先把 `${...}` 换成 `:x` 之后,串变成 `:x/bookings`,`startsWith('/')` 就把它筛掉了。
@@ -89,15 +97,23 @@ if (process.argv.includes('--json')) { console.log(JSON.stringify(rows, null, 2)
 /* J-58⑤ 自守:核心判定是「这一行里有没有顾客真调的后端路径」 */
 if (process.argv.includes('--probe')) {
   /* 判定要**和刀正文同一把尺子**(J-39):照抄正文那几步,不另写一份 */
-  const hit = (s) => [...String(s).matchAll(/(?:request|apiFetch|fetch)\(\s*[`'"]([^`'"]*\/[^`'"]*)[`'"]/g)]
+  const hit = (s) => [...String(s).matchAll(/(?:request|apiFetch|fetch|adminRequest|adminGet|adminPost|adminPut|adminDel|api\.\w+|pub)\(\s*[`'"]([^`'"]*\/[^`'"]*)[`'"]/g)]
     .some((m) => {
       const p = m[1].replace(/^\$\{[^}]*\}/, '').replace(/\$\{[^}]*\}/g, ':x').replace(/\?.*$/, '').replace(/\/+$/, '')
       return p.startsWith('/') && !/^\/(assets|static)\//.test(p)
     })
-  probe('customer-paths-scan', [
+  probe('customer-paths-scan(J-73:每种包装器各一个靶子)', [
+    /* ① 裸 request · ② 模板串 fetch —— 原有两种 */
     { 样本: "request('/my/coupons')", 该命中: true },
     { 样本: "await fetch(`${BASE}/bookings`)", 该命中: true },
-    { 样本: "request('/assets/images/a.png')", 该命中: false },
-    { 样本: "const x = '/my/coupons'", 该命中: false },
+    /* ③④⑤ 本批补:顾客端真在用、而此前不在扫描面上的三族 */
+    { 样本: "adminRequest('/admin/settlements', 'POST', {})", 该命中: true },
+    { 样本: "api.adminGet('/admin/day-close')", 该命中: true },
+    { 样本: "await pub(`/bind-tokens/${encodeURIComponent(t)}/confirm`, 'POST', {})", 该命中: true },
+    /* ══ 反面 ══ */
+    { 样本: "request('/assets/images/a.png')", 该命中: false },   // 静态资源不是接口
+    { 样本: "const x = '/my/coupons'", 该命中: false },           // 光有字符串不算调用
+    { 样本: "nav.to('/pages/home/index')", 该命中: false },       // 🔴 页面跳转不是接口调用
+    { 样本: "wx.navigateTo({ url: '/pages/me/index' })", 该命中: false },
   ], hit)
 }
