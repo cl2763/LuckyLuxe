@@ -102,8 +102,20 @@ async function main() {
   // ---- ③ 排班时段约束可预约时段 ----
   await set({ date: day, shift: 'pm' }) // 14:30–19:00
   // 顾客侧下单(老板直接排单会放宽时段限制,验不到这条规则)
-  const reg = await request('/auth/email/register', { method: 'POST', body: JSON.stringify({ email: `sc-${RUN_ID}@example.com`, displayName: `排班客${RUN_ID}` }) }, null)
-  const userToken = reg.data?.auth?.accessToken
+  /* 🔴 J-60①(夜13 兜底队列第 4 项)· 夹具从**演示邮箱注册**换成**正门**。
+     案由:这一套在门关档红了十几批,而门关档正是把演示登录关掉那一档 ——
+     夹具走的是本档明令关掉的那扇门,红的从来不是被测的那件事,是「造不出景」。
+     正门 = 商家建带号轻档案 → 顾客拿同一个号微信登录 → 严格认人四条认领。
+     ⚠️ 这一步会顺带**建一张单**,所以钉在 `day + 30` 的 10:30,离被测那天(`day`)远远的,
+     免得它自己占掉 15:00 那个时段把下面的断言搅了(夹具的噪音不许淹掉信号)。 */
+  const { createAndLoginCustomerViaFrontDoor } = await import('./customer-login-fixture.mjs')
+  const fd = await createAndLoginCustomerViaFrontDoor({
+    base: BASE_URL, tenantId: shop.tenantId, ownerToken: shop.token,
+    name: `排班客${RUN_ID}`, phone: `132${RUN_ID.slice(-8)}`,
+    serviceId: svc.id, technicianId: tech.id, date: addDays(day, 30), time: '10:30' })
+  check('③0 前置:顾客从**正门**登录(造不出来下面几条不算验过,J-58④)', Boolean(fd.ok && fd.accessToken),
+    `${fd.status} ${JSON.stringify(fd.body || {}).slice(0, 140)}`)
+  const userToken = fd.accessToken
   const book = (time) => request('/bookings', {
     method: 'POST',
     body: JSON.stringify({ storeId: `store-${shop.tenantId}`, serviceId: svc.id, technicianId: tech.id, date: day, time, addOns: [] })
