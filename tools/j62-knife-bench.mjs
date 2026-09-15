@@ -122,7 +122,7 @@ function bringsOwnServer(suite) {
 }
 
 /** 隔离跑一套:**不调 run-all-tests.sh**,所以一根手指都碰不到 4128/4310 */
-async function runSuiteIsolated(suite) {
+async function runSuiteIsolated(suite, opts = {}) {
   const selfServed = bringsOwnServer(suite)
   const dataDir = mkdtempSync(join(tmpdir(), 'll-ci-data.knife-'))
   const env = { ...process.env, DATA_DIR: dataDir, NOTIFY_TICK: 'off',
@@ -130,6 +130,13 @@ async function runSuiteIsolated(suite) {
     OWNER_TOKEN, TEST_ADMIN_TOKEN: OWNER_TOKEN,
     WECHAT_MINI_TOKEN_SECRET: 'knife-bench-mini-not-a-secret',
     ALLOW_DEMO_ADMIN_LOGIN: 'true' }
+  /* 🔴 **按档造病**(店主 07x·突变自检条)。
+   * 案由:`card-refund 生产闸-3` 这一批改成了「门开守一句、门关守另一句」,
+   * 而门关那一支**只在 `DEMO_LOGIN_ALLOWED=false` 那一档才执行** ——
+   * 造病台原来只跑门开那一档,**那一支的刀根本落不到它身上**。
+   * 「新判据必须自己先挨一刀」,那就得让台子能把档次也造出来。
+   * 关门的做法与 `run-all-tests.sh` 同一把尺子:**把变量拿掉**(不是设成 'false')。 */
+  if (opts.gateOff) delete env.ALLOW_DEMO_ADMIN_LOGIN
   let srv = null
   if (!selfServed) {
     env.PORT = String(PRIVATE_PORT)
@@ -152,7 +159,7 @@ async function runSuiteIsolated(suite) {
   return { failed, out, bootBroke: /BOOT-FAIL|Cannot find module|未就绪/.test(out) }
 }
 
-async function knife({ ep, suite, file, needle, claimPat, nth = null }) {
+async function knife({ ep, suite, file, needle, claimPat, nth = null, lane = {} }) {
   const abs = join(ROOT, file)
   console.log(`\n══ 造病:${ep} ══`)
   /* 🔴 夜12 段C · **「没跑到」必须单列** —— J-57 在造病台上的复现
@@ -170,7 +177,7 @@ async function knife({ ep, suite, file, needle, claimPat, nth = null }) {
    * ⚠️ **基线必须在落刀之前跑** —— 第一版我把它放在落刀之后,于是「基线」其实是第二次带刀跑,
    * 43 == 43、**「没跑到」漂亮地报 0**。又一次「看起来很干净的 0」(J-58④⑤ 同族)。
    * 现在它排在备份之前,**刀还没碰过源码**。 */
-  const baseRun = await runSuiteIsolated(suite)
+  const baseRun = await runSuiteIsolated(suite, lane)
   /* 🔴 名字要**归一**再比 —— 现踩:`㋚5a … 库里那张单 LU-20260915-967Z …` 两轮单号不同,
      名字对不上就被当成「没跑到」,于是「没跑到 4」里混进了明明跑过还红了的那几条。
      **一个把运行期数值写进名字的断言,会让按名字做的差集说谎。**
@@ -204,7 +211,7 @@ async function knife({ ep, suite, file, needle, claimPat, nth = null }) {
     restore(); return
   }
   console.log(`   [刀] 已注掉 ${file} 里那条落库(整条,语法已过)`)
-  const run1 = await runSuiteIsolated(suite)
+  const run1 = await runSuiteIsolated(suite, lane)
   const out = run1.out
   const failed = run1.failed
   restore()
@@ -369,7 +376,7 @@ async function knife({ ep, suite, file, needle, claimPat, nth = null }) {
       execFileSync('bash', [join(ROOT, 'tools/knife-backup.sh'), 'save', file], { cwd: ROOT, stdio: 'ignore' })
       writeFileSync(abs, `${src2.slice(0, cut2.start)}    throw new Error('J58-4 必然红:这条路径被执行到了')\n${src2.slice(cut2.end + 1)}`)
       try { execFileSync('node', ['--check', abs], { stdio: 'ignore' }) } catch { /* 语法不过就当探不到 */ }
-      const probe = await runSuiteIsolated(suite)
+      const probe = await runSuiteIsolated(suite, lane)
       reached = probe.failed
       execFileSync('bash', [join(ROOT, 'tools/knife-backup.sh'), 'restore', file], { cwd: ROOT, stdio: 'ignore' })
     }
@@ -395,8 +402,19 @@ async function knife({ ep, suite, file, needle, claimPat, nth = null }) {
   }
 }
 
+/* 🔴 本批新立/翻面的判据自己先挨一刀(突变自检条,店主 08-28 立 · 07x 重申):
+ *   `card-refund 生产闸-3` 门关那一支断言「同一条口必须 403 DEMO_LOGIN_DISABLED」。
+ *   刀:把生产闸那句 `throw apiError(403, 'DEMO_LOGIN_DISABLED', …)` 整条注掉 →
+ *   门关档下邮箱登录会照常放行 → **这一支必须红,而且红的因果链要通**。 */
+const GATE_OFF_TARGET = {
+  ep: '【突变自检·门关档】/auth/email/login 生产闸(本批新写的那一支判据自己挨一刀)',
+  suite: 'card-refund', file: 'apps/api/local-server.mjs',
+  needle: "throw apiError(403, 'DEMO_LOGIN_DISABLED'",
+  lane: { gateOff: true }, claimPat: /生产闸/ }
+
 const ONLY = process.env.KNIFE_ONLY || ""
 const TARGETS = [
+  GATE_OFF_TARGET,
   /* 🔴「没跑到」这个计数自己也要证咬得到(J-58⑤):
      `customer-paths` 不是 fail-fast,所以它那一刀「没跑到 0」是对的 ——
      但**一个恒为 0 的数和一个坏掉的数长得一模一样**。
