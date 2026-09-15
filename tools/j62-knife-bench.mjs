@@ -292,6 +292,15 @@ async function knife({ ep, suite, file, needle, claimPat, nth = null }) {
 
 const ONLY = process.env.KNIFE_ONLY || ""
 const TARGETS = [
+  /* 🔴「没跑到」这个计数自己也要证咬得到(J-58⑤):
+     `customer-paths` 不是 fail-fast,所以它那一刀「没跑到 0」是对的 ——
+     但**一个恒为 0 的数和一个坏掉的数长得一模一样**。
+     所以留这一把落在 `scan-sign`(fail-fast)上:它必须报出**非 0 的没跑到**。 */
+  { ep: '【自守·没跑到计数】同一刀落在 fail-fast 套件上(scan-sign)', suite: 'scan-sign',
+    file: 'apps/api/local-server.mjs',
+    needle: "db.prepare(\"UPDATE settlements SET status = 'signed', signature_data = ?, signed_at = ?",
+    claimPat: /签完|不再出新码|定金守恒/ },
+
   /* 07o §二:支付两条 + 卡包 + 积分 —— 「一次都没被夹具走过」那 8 条里最急的四条 */
   { ep: '/payments/mock/confirm · 支付落库(顾客·涉钱)', suite: 'customer-paths', file: 'apps/api/local-server.mjs',
     needle: "db.prepare(\"UPDATE payments SET status = 'PAID', transaction_id = ?, updated_at = ? WHERE booking_id = ? AND provider = 'MOCK'\")",
