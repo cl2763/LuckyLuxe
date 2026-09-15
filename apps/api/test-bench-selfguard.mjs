@@ -11,6 +11,8 @@ import { execFileSync } from 'node:child_process'
 import { fileURLToPath } from 'node:url'
 import { dirname, join } from 'node:path'
 import { assertClosure, assertRedsNamed, checkShellText, scanMergedFallback, probeInventory, MERGED_FALLBACK_ALLOW } from '../../tools/bench-selfguard.mjs'
+import { isProbeMaterial, PROBE_DIR, SAMPLES } from '../../tools/probe-samples/index.mjs'
+import { readFileSync as rfs, readdirSync as rds } from 'node:fs'
 
 const ROOT = join(dirname(fileURLToPath(import.meta.url)), '../..')
 let n = 0
@@ -74,6 +76,31 @@ check(`④b 🔴 每把刀都**打出两个数**且两面非零 —— ${bothSid
   oneSided.length === 0, oneSided.slice(0, 4).join(' | '))
 /* ④c:这一条守「判据本身的覆盖面」(判据三推论)—— 刀的把数只许涨不许缩 */
 check(`④c 刀的把数 ≥ 11(现为 ${probes.length};缩水立刻红 —— 判据的覆盖面本身要有判据)`, probes.length >= 11)
+
+/* ══ 自守五 · J-61④ 判据物归位:排除必须**两面都断言** ══
+ * 🔴 立此条的理由:一条「这个目录不扫」的排除,**单面看永远是绿的** ——
+ *   它既可能是「排除生效了」,也可能是「这把刀压根没在扫」。两者从数字上分不出来。
+ *   所以:①判据物目录里的东西**不许被数** ②**同一个样本**放在普通路径里**必须被数**。
+ *   缺第二面,这个排除就是给判据挖的一个没人看得见的洞。 */
+check(`⑤a 判据物目录具名:\`${PROBE_DIR}\`(不许按模式放行)`, PROBE_DIR === 'tools/probe-samples')
+check('⑤b 目录内的路径判成判据物', isProbeMaterial(`${PROBE_DIR}/index.mjs`) && isProbeMaterial(PROBE_DIR))
+check('⑤c 🔴 反向守:普通路径**不许**被判成判据物(否则这条排除会把全仓一起放行)',
+  !isProbeMaterial('apps/api/test-user-write-auth.mjs') && !isProbeMaterial('tools/readset.mjs')
+  && !isProbeMaterial('tools/probe-samples-not-really.mjs'),
+  'probe-samples-not-really 前缀撞名也不许放行')
+/* ⑤d/⑤e 行为层两面:同一个样本,一处在判据物目录、一处在普通路径 —— 结果必须相反 */
+const { census, violations } = await import('../../tools/user-write-census.mjs')
+const { serverSources } = await import('../../tools/readset.mjs')
+const modSrc2 = serverSources(join(ROOT, 'apps/api'))
+check('⑤d 🔴 行为层反向守:那个样本放在**普通路径**的源码里,必须被数中('
+  + '不中说明这把刀在空守,那这条排除也就无从谈起)',
+  violations(census(SAMPLES.knifeEvil, modSrc2)).length === 1)
+const probeDirFiles = rds(join(ROOT, PROBE_DIR)).filter((f) => f.endsWith('.mjs'))
+check(`⑤e 🔴 行为层正向守:判据物目录里那 ${probeDirFiles.length} 个文件,**没有一个**被「夹具直连库贴」那把刀数进欠账`,
+  (() => {
+    const src = probeDirFiles.map((f) => rfs(join(ROOT, PROBE_DIR, f), 'utf8')).join('\n')
+    return !/db\.prepare\(\s*['"`](INSERT|UPDATE|DELETE)/i.test(src)
+  })(), '判据物里出现了字面量写库语句 —— 双保险的第二层破了')
 
 console.log(`\n1..${n}`)
 if (fails.length) { console.log(`\n🔴 ${fails.length} 条没过:`); for (const f of fails) console.log(`   - ${f}`); process.exitCode = 1 }

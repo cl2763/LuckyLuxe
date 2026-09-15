@@ -13,6 +13,7 @@ import { readFileSync } from 'node:fs'
 import { fileURLToPath } from 'node:url'
 import { dirname, join } from 'node:path'
 import { census, violations, NO_AUTH_USER_WRITE_ALLOW } from '../../tools/user-write-census.mjs'
+import { SAMPLES, PROBE_DIR } from '../../tools/probe-samples/index.mjs'
 import { serverSources } from '../../tools/readset.mjs'
 
 const ROOT = join(dirname(fileURLToPath(import.meta.url)), '../..')
@@ -51,15 +52,14 @@ check('④b `registerGoogleDemoUser()` 也不存在(留着函数 = 留着半条�
   !/function registerGoogleDemoUser/.test(serverSrc), '函数还在')
 
 /* ⑤ 造病:加一条无认证写 users 的路 → ① 必须红(两面靶子,与扫描器共用同一个判定) */
-/* SQL 拼起来,不写字面量 —— 否则 `test-fixture-front-door` 会把这几条靶子数进「夹具直连库贴」欠账 */
-const SQL = (verb, tail) => [verb, ' ', tail].join('')
-const evil = `if (req.method === 'POST' && path === '/j71/evil') { db.prepare('${SQL('INSERT', 'INTO users (id) VALUES (?)')}').run(1) }`
+/* 🔴 J-61④:造病物住在 `tools/probe-samples/`(PROBE_DIR),不写在判据文件里 */
+const evil = SAMPLES.knifeEvil
 check('⑤a 🔴 造病:塞一条无认证写 `users` 的路 → ① 必须咬中(不咬中说明这一套在空守)',
   violations(census(`${serverSrc}\n${evil}`, modSrc)).length === 1)
-const good = `if (req.method === 'POST' && path === '/j71/ok') { const c = requireCustomer(req); db.prepare('${SQL('INSERT', 'INTO users (id) VALUES (?)')}').run(c) }`
+const good = SAMPLES.knifeGood
 check('⑤b 反向守:同一条路**先认人**就不许被咬中(否则这条判据会把正确写法一起判红)',
   violations(census(`${serverSrc}\n${good}`, modSrc)).length === 0)
-const readOnly = `if (req.method === 'GET' && path === '/j71/read') { return json(res, 200, db.prepare('${SQL('SELECT', '* FROM users')}').all()) }`
+const readOnly = SAMPLES.knifeReadOnly
 check('⑤c 反向守:只读 `users` 不算(这一套断的是**写**,不是读)',
   violations(census(`${serverSrc}\n${readOnly}`, modSrc)).length === 0)
 

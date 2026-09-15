@@ -38,13 +38,18 @@ const EXEC = /\.(prepare|exec)\(\s*[`'"]/
        自己一行 SQL 都不执行。不排掉它,J-60 的冻结数会因为「我写了一把新刀」而 9 → 10 ——
        那就是拿 J-60 的棘轮去惩罚 J-62 的落地(J-57:判据不许互相噎死)。 */
 const SELF = /test-tenant-explicit|test-demo-gate-coverage|test-fixture-front-door|j62-knife-bench/
+/* 🔴 J-61④(夜13 §二)· 判据物归位:`tools/probe-samples/` 里住的是**靶子**,不是夹具 —— 具名排除。
+   两面断言在 `test-bench-selfguard ⑤`:①这个目录里的样本不许被数 ②同一样本在普通路径里必须被数。 */
+const { isProbeMaterial } = await import('../../tools/probe-samples/index.mjs')
 const files = [
   ...readdirSync(join(ROOT, 'apps/api')).filter((b) => /^test-.*\.mjs$/.test(b)).map((b) => `apps/api/${b}`),
   ...readdirSync(join(ROOT, 'tools')).filter((b) => b.endsWith('.mjs')).map((b) => `tools/${b}`),
 ].filter((f) => !SELF.test(f))
 
 const hits = []
-for (const f of files) {
+const filesAll = files.slice()
+for (const f of files.filter((x) => isProbeMaterial(x))) void f
+for (const f of files.filter((x) => !isProbeMaterial(x))) {
   const whole = readFileSync(join(ROOT, f), 'utf8')
   /* 🔴 09-14(07o)按机制收窄:**内存库不算「直连库贴」**。
      `new DatabaseSync(':memory:')` 开的是一张临时表,谁也测不到它 ——

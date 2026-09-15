@@ -83,6 +83,8 @@ try {
   }
   /* J-61②:刀默认排除**判据自身与判据的夹具**,并具名 */
   const SELF = ['apps/api/test-demo-gate-scope.mjs']
+  /* 🔴 J-61④:判据物归位 —— `tools/probe-samples/` 具名排除(两面断言在 test-bench-selfguard ⑤)*/
+  const { isProbeMaterial } = await import('../../tools/probe-samples/index.mjs')
   const PROD_PAT = /NODE_ENV\s*===\s*['"]production['"]|RAILWAY_ENVIRONMENT/
   /* 🔴 08a §九 判**误咬** · 剥的是「提及」,留的是「执行」(J-61①)
    *
@@ -103,7 +105,7 @@ try {
       (lit) => (/NODE_ENV|RAILWAY_ENVIRONMENT/.test(lit) ? "''" : lit))
   }
   const sites = [...walk('apps'), ...walk('tools')]
-    .filter((f) => !SELF.includes(f) && !/\/test-/.test(f))
+    .filter((f) => !SELF.includes(f) && !/\/test-/.test(f) && !isProbeMaterial(f))
     .filter((f) => {
       return PROD_PAT.test(scrub(readFileSync(join(ROOT, f), 'utf8')))
     })
