@@ -21,10 +21,15 @@ import { probe } from './scanner-probe.mjs'
 /* J-58⑤ 自守:核心判定是「这一行是不是回执里那句『文件清单 / 改过的文件』」 */
 if (process.argv.includes('--probe')) {
   const noteLine = (t) => /^[>\-*\s]*(?:文件清单|改过的文件)\s*[::]\s*(.+)$/m.test(String(t))
-  probe('shot-freshness', [
+  /* 🔴 J-73:这一句在回执里出现过的长相不止两种 —— 引用块 / 列表项 / **加粗** /
+     裸行 / 全角冒号 / 半角冒号。少认一种,那份回执就被当成「没列文件清单」。 */
+  probe('shot-freshness(J-73:逐种长相)', [
     { 样本: '> 文件清单:apps/web/admin.js', 该命中: true },
     { 样本: '- 改过的文件:styles.css', 该命中: true },
+    { 样本: '文件清单: apps/web/customer.js', 该命中: true },
+    { 样本: '* 改过的文件:apps/api/local-server.mjs', 该命中: true },
     { 样本: '这一段没有列文件清单', 该命中: false },
+    { 样本: '文件清单这件事我们下次再说', 该命中: false },
   ], noteLine)
   /* 🔴 07y 现测:这里原来**没有收口** —— probe 打完之后,脚本照常往下跑整套扫描,
      把 `--probe` 当成文件路径,打出 `not ok - 找不到 --probe` / `not ok - 一张图都没找到`,

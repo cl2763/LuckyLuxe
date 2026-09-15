@@ -70,9 +70,15 @@ console.log(`✅ 最近 ${recent.length} 份回执共引用 ${cited} 处评测�
 if (process.argv.includes('--probe')) {
   const cite = (t) => [...String(t).matchAll(/(?:handoff\/)?ai-eval-results\/([A-Za-z0-9_\u4e00-\u9fa5.-]+)/g)].length > 0
     || [...String(t).matchAll(/`(\d{2}[a-z]_[A-Za-z0-9_\u4e00-\u9fa5.-]+\.(?:json|jsonl|md))`/g)].length > 0
-  probe('eval-citation-check', [
+  /* 🔴 J-73:回执里引用评测明细的写法不止两种 —— 裸路径 / 反引号文件名 /
+     **markdown 链接** / 反引号包着的整条路径 / 行内出现在句中。 */
+  probe('eval-citation-check(J-73:逐种长相)', [
     { 样本: '明细见 handoff/ai-eval-results/07a_matrix.json', 该命中: true },
     { 样本: '明细见 `05p_matrix.jsonl`', 该命中: true },
+    { 样本: '明细见 [矩阵](handoff/ai-eval-results/07c_matrix.json)', 该命中: true },
+    { 样本: '明细见 `handoff/ai-eval-results/07d_matrix.jsonl`', 该命中: true },
+    { 样本: '(ai-eval-results/06h_matrix.json 里逐条)', 该命中: true },
     { 样本: '这一批没有引用任何评测明细', 该命中: false },
+    { 样本: '评测结果写在正文里,没有单独的明细文件', 该命中: false },
   ], cite)
 }

@@ -81,10 +81,17 @@ if (process.argv.includes('--probe')) {
   const { probe } = await import('./scanner-probe.mjs')
   const bites = (l) => { const c = l.replace(/^\s*(#|\/\/|\*|\/\*).*$/, ''); const re = new RegExp(BAD.source, 'g'); let m
     while ((m = re.exec(c))) { if (!inQuote(c, m.index)) return true } return false }
-  probe('knife-restore-scan · 还原写法', [
+  /* 🔴 J-73(店主 08a §五立)· 靶子要为**每一种合法写法**各种一个。
+     这一把要认的「还原」至少有四种长相:`git checkout --` · `git restore` ·
+     带多空格的 · 带路径参数的;反面三种:字符串里提及 / 行注释里提及 / 块注释续行里提及。 */
+  probe('knife-restore-scan · 还原写法(J-73:逐种长相)', [
     { 样本: '  git checkout -- apps/web/admin.js', 该命中: true },
+    { 样本: '  git   checkout   --   apps/web/admin.js', 该命中: true },
+    { 样本: '  git restore apps/web/admin.js', 该命中: true },
+    { 样本: '  git restore --staged --worktree apps/api/local-server.mjs', 该命中: true },
     { 样本: "  console.error('别用 git checkout -- 还原')", 该命中: false },
     { 样本: '  // 07m 那次用了 git checkout -- 还原', 该命中: false },
+    { 样本: '  * 案底:那一次用了 git restore 还原', 该命中: false },
   ], bites)
 } else if (hits.length) {
   console.log(hits.join('\n'))
