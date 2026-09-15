@@ -18,7 +18,7 @@ import { readFileSync, writeFileSync, mkdtempSync, rmSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { spawn } from 'node:child_process'
 import { execFileSync, execSync } from 'node:child_process'
-import { checkCalls, readSetOf, writeSetOf, serverSources } from './readset.mjs'
+import { checkCalls, readSetOf, writeSetOf, serverSources, columnVerdict, handlerBody, followCalls } from './readset.mjs'
 import { assertClosure, assertRedsNamed } from './bench-selfguard.mjs'
 import { randomUUID } from 'node:crypto'
 import { join } from 'node:path'
@@ -322,6 +322,35 @@ async function knife({ ep, suite, file, needle, claimPat, nth = null, lane = {} 
     else if (c.grade === '说不清') unclear.push(row)
     else unrelated.push(row)
   }
+  /* ══ 裁 #106(店主 07y §四)· **表级做底数,列级只许往保守那边移** ══
+   *  ① 表级已判「该咬」的,逐条上列级复核;
+   *  ② **只许从「该咬没咬」移到「无关」,不许反向** —— 方向锁死在对自己不利那一边(J-68);
+   *  ③ 列读不出(`SELECT *`/动态列名/跟进不到底)→ 留在最坏那格(J-66③);
+   *  ④ 移出的每一条**必须点名是哪张表的哪两列**;
+   *  ⑤ **三个数一起报**:表级该咬 N → 列级移出 M → 剩余 N−M。 */
+  const tableLevelShouldBite = shouldBite.length
+  const movedByColumn = []
+  for (let i = shouldBite.length - 1; i >= 0; i -= 1) {
+    const row = shouldBite[i]
+    const { k } = locate(row.名)
+    const blk = blockFor(k)
+    if (blk == null) continue
+    const rs = readSetOf(blk, serverSrcForRead)
+    const table = [...rs.tables].find((t) => wset.has(t))
+    if (!table) continue
+    /* 判据侧要看的源码 = 这一段 + 它打到的 handler(含跟进) */
+    let deep = ''
+    for (const pth of rs.paths) {
+      const body = handlerBody(serverSrcForRead, pth)
+      if (body) deep += body + followCalls(serverSrcForRead, body).extra
+    }
+    const v = columnVerdict({ blockSrc: blk, serverSrc: deep, cutText, table })
+    if (v.move) {
+      movedByColumn.push({ ...row, 列级: v.why })
+      unrelated.push({ 名: row.名, 理由: `【列级移出】${v.why}` })
+      shouldBite.splice(i, 1)
+    } else row.列级 = v.why
+  }
   /* 🔴 按**条数与位置**算,不按名字 —— 归一化那一版还是不准:
      断言名里常写着运行期实测值(`状态 signed` vs `pending_sign`),归一归不干净。
      而 fail-fast 套件被刀断掉时,跑的是**前缀** —— 所以
@@ -345,6 +374,10 @@ async function knife({ ep, suite, file, needle, claimPat, nth = null, lane = {} 
    * 跟「签字成没成」毫无关系。**「有 N 条红了」和「该红的那条红了」是两件事,而前者长得更让人放心。**
    * 停线:「造病台报出『红 N』而 N 条没有名字,这份报告不算交。」 */
   console.log(`   [刀的写集] {${[...wset].join(',') || '—'}} ←—— 被砍那条语句写的表`)
+  /* 裁 #106 第 5 条:三个数一起给,不许只给最后一个 */
+  console.log(`   [裁#106 两级三数] **表级该咬 ${tableLevelShouldBite} → 列级移出 ${movedByColumn.length} → 剩余 ${shouldBite.length}**`
+    + `(方向锁死:只许从该咬移到无关,不许反向)`)
+  for (const mv of movedByColumn) console.log(`     ↗ 移出:${mv.名.slice(0, 80)}\n        ↳ ${mv.列级}`)
   let namedOut = ''
   if (reds.length) {
     console.log('   🔴 [红点名](逐条给因果链:刀写了 X,这条判据读 X,所以它红):')

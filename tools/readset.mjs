@@ -314,6 +314,77 @@ export function writeSetOf(cutText) {
 }
 
 /* ── 自证:两面靶子(J-58 第六款)── */
+/* ══ 裁 #106(店主 07y §四)· 列级读写集 —— **表级做底数,列级只许往保守那边移** ══
+ *
+ * 款文五条,这里落三条机械的:
+ *   ① **表级是底数**:表相交先进「该咬」候选池(保守、不会漏);
+ *   ② **列级是说明**:只有在列级现查出「列不相交」时,才许把一条移出候选池,
+ *      且**必须点名是哪张表的哪两列**(案底 `㋚8`:读 `settlements.code` / 写 `settlements.status`);
+ *   ③ 🔴 **方向锁死**:列级只许把一条从「该咬没咬」移到「无关」,**不许反向**。
+ *      理由:列级分析本身会漏(`SELECT *`、动态列名、ORM 生成),
+ *      锁死方向后,它的漏只会让结果**更保守**,不会让结果**更好看**(J-68)。
+ *   ④ 读不出列的(`SELECT *` / 动态列名 / 跟进不到底)→ 一律 **说不清**,按该咬对待(J-66③)。
+ */
+const STAR = '*'
+
+/** 某段文本里,对表 T 读了哪些列。取不到 / 有 `SELECT *` → 回 `'*'`(说不清)。 */
+export function readColumnsOf(text, table) {
+  const src = stripComments(String(text))
+  const cols = new Set()
+  let sawAny = false
+  const re = new RegExp(`SELECT\\s+([\\s\\S]{1,400}?)\\s+FROM\\s+${table}\\b`, 'gi')
+  let m
+  while ((m = re.exec(src))) {
+    sawAny = true
+    const list = m[1]
+    if (/\*/.test(list)) return STAR
+    for (const piece of list.split(',')) {
+      const c = piece.trim().replace(/^[a-z_]+\./i, '').split(/\s+AS\s+|\s+/i)[0]
+      if (/^[a-z_][a-z0-9_]*$/i.test(c)) cols.add(c.toLowerCase())
+    }
+  }
+  /* WHERE / ON 里点名的列也是读 */
+  const reW = new RegExp(`FROM\\s+${table}\\b([\\s\\S]{0,300})`, 'gi')
+  while ((m = reW.exec(src))) {
+    for (const w of m[1].matchAll(/\b(?:WHERE|AND|OR|ON)\s+(?:[a-z_]+\.)?([a-z_][a-z0-9_]*)\s*(?:=|<|>|IN|IS|LIKE)/gi)) cols.add(w[1].toLowerCase())
+  }
+  if (!sawAny) return STAR
+  return cols
+}
+
+/** 被砍那条语句对表 T 写了哪些列。取不到 → `'*'`。 */
+export function writeColumnsOf(cutText, table) {
+  const src = String(cutText)
+  const m = new RegExp(`UPDATE\\s+${table}\\s+SET\\s+([\\s\\S]{1,400}?)(?:\\s+WHERE\\b|$)`, 'i').exec(src)
+  if (m) {
+    const cols = new Set()
+    for (const piece of m[1].split(',')) {
+      const c = piece.trim().split(/\s*=/)[0].replace(/^[a-z_]+\./i, '')
+      if (/^[a-z_][a-z0-9_]*$/i.test(c)) cols.add(c.toLowerCase())
+    }
+    return cols.size ? cols : STAR
+  }
+  const ins = new RegExp(`INSERT\\s+(?:OR\\s+\\w+\\s+)?INTO\\s+${table}\\s*\\(([^)]{1,400})\\)`, 'i').exec(src)
+  if (ins) {
+    const cols = new Set(ins[1].split(',').map((x) => x.trim().toLowerCase()).filter((x) => /^[a-z_][a-z0-9_]*$/.test(x)))
+    return cols.size ? cols : STAR
+  }
+  return STAR   // DELETE / 动态列名 / 认不出 → 说不清
+}
+
+/** 裁 #106 主函数:表级已判「该咬」的一条,列级能不能把它移出去。
+ *  回 { move: true, why } 才许移;其余一律留在最坏那格。 */
+export function columnVerdict({ blockSrc, serverSrc, cutText, table }) {
+  const rd = readColumnsOf(`${blockSrc}\n${serverSrc}`, table)
+  const wr = writeColumnsOf(cutText, table)
+  if (rd === STAR) return { move: false, why: `列级读不出(\`SELECT *\`/动态列名/跟进不到底)—— 按 J-66③ 留在该咬` }
+  if (wr === STAR) return { move: false, why: '列级写不出(DELETE/动态列名)—— 留在该咬' }
+  const inter = [...rd].filter((c) => wr.has(c))
+  if (inter.length) return { move: false, why: `列相交 {${inter.join(',')}} —— 确是该咬` }
+  return { move: true,
+    why: `读 \`${table}.{${[...rd].slice(0, 6).join(',')}}\` / 写 \`${table}.{${[...wr].slice(0, 6).join(',')}}\` —— **表相交、列不相交**` }
+}
+
 if (process.argv[1] && process.argv[1].endsWith('readset.mjs') && process.argv.includes('--probe')) {
   const serverSrc = serverSources(new URL('../apps/api/', import.meta.url).pathname)
   const cases = [
@@ -342,6 +413,27 @@ if (process.argv[1] && process.argv[1].endsWith('readset.mjs') && process.argv.i
     if (!ok) bad++
     console.log(`  ${ok ? '✅' : '🔴'} ${c.名} · 含 ${c.该含}=${hit}(该 ${c.该中})· 读集 {${[...rs.tables].slice(0, 8).join(',')}}`)
   }
+  /* 裁 #106 列级:两面靶子 —— 「表相交列不相交」该移出;「列也相交」不许移出;「读不出列」不许移出 */
+  const CUT = "db.prepare(\"UPDATE settlements SET status = 'signed', signed_at = ? WHERE id = ?\")"
+  const colCases = [
+    { 名: '读 code / 写 status —— 表相交列不相交', 体: "db.prepare('SELECT code FROM settlements WHERE id = ?')", 该移: true },
+    { 名: '读 status / 写 status —— 列也相交', 体: "db.prepare('SELECT status FROM settlements WHERE id = ?')", 该移: false },
+    { 名: 'SELECT * —— 列读不出,按 J-66③ 留最坏那格', 体: "db.prepare('SELECT * FROM settlements WHERE id = ?')", 该移: false },
+    { 名: '压根没有 SQL —— 读不出,留最坏那格', 体: 'await fetch(`${BASE}/x`)', 该移: false },
+  ]
+  let colBad = 0
+  console.log('— 裁#106 列级 probe(两面靶子)—')
+  for (const c of colCases) {
+    const v = columnVerdict({ blockSrc: c.体, serverSrc: '', cutText: CUT, table: 'settlements' })
+    const ok = v.move === c.该移
+    if (!ok) colBad += 1
+    console.log(`  ${ok ? '✅' : '🔴'} ${c.名} · 移出=${v.move}(该 ${c.该移})· ${v.why}`)
+  }
+  const colShould = colCases.filter((c) => c.该移).length
+  console.log(`  该中 ${colShould} 个 · 不该中 ${colCases.length - colShould} 个 · 判错 ${colBad} 个`)
+  if (!colShould || colShould === colCases.length) { console.log('  🔴 **靶子只有一面**(J-58⑥)'); process.exit(1) }
+  if (colBad) { console.log('  🔴 列级分不开'); process.exit(1) }
+  console.log('  ✅ 列级分得开')
   const should = cases.filter((c) => c.该中).length
   const shouldNot = cases.length - should
   console.log(`  该中 ${should} 个 · 不该中 ${shouldNot} 个 · 判错 ${bad} 个`)
@@ -349,3 +441,4 @@ if (process.argv[1] && process.argv[1].endsWith('readset.mjs') && process.argv.i
   console.log(bad ? '  🔴 分不开' : '  ✅ 分得开(两面都现测出数)')
   process.exit(bad ? 1 : 0)
 }
+
