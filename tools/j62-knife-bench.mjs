@@ -211,7 +211,7 @@ async function knife({ ep, suite, file, needle, claimPat, nth = null }) {
   /* ③ 记**是哪一条**红的 —— 并按店主 07r §二 固定输出「红 N / 仍绿 M / 仍绿点名」
      **造病的产出不是「红了没有」,是「哪几条活下来了」。**
      07m 那次的形状就是这个:套件红了,但红的是隔壁那条幂等,「声称成功」那条原样活下来。 */
-  const reds = (out.match(/^(?:not ok \d+ - |✗ |❌ )(.+)$/gm) || []).map((x) => x.replace(/^(not ok \d+ - |✗ |❌ )/, '').slice(0, 110))
+  const reds = (out.match(/^(?:not ok \d+ - |✗ |❌ )(.+)$/gm) || []).map((x) => x.replace(/^(not ok \d+ - |✗ |❌ )/, ''))
   const greens = (out.match(/^ok \d+ - (.+)$/gm) || []).map((x) => x.replace(/^ok \d+ - /, ''))
   /* 「声称成功」的断言:名字里说了成了,或条件在看 2xx —— 与静态筛同一把尺子 */
   const CLAIMS = /成功|已保存|已提交|已发送|已核销|已到账|已确认|已绑定|已更新|写进|落库|创建|生成|新增|入库|真的是|跟过去|查库|对得上|留痕|释放/
@@ -256,15 +256,36 @@ async function knife({ ep, suite, file, needle, claimPat, nth = null }) {
   const outNames = (out.match(/^(?:not )?ok \d+ - .+$/gm) || []).map((l) => l.replace(/^(?:not )?ok \d+ - /, '').trim())
   const idxOfName = new Map()
   outNames.forEach((n, k) => { if (!idxOfName.has(n)) idxOfName.set(n, k) })
-  const classify = (name) => {
+  /* 🔴 **定位 ≠ 分类**。J-61③ 禁的是「按名字给判据**分类**」;
+   *   这里是拿名字去**找它自己那段源码**(身份识别),找到之后分类只看读写集。
+   *   定位法:用渲染名的前缀在各 check( 段里找**唯一命中**,命中不唯一/没命中再退回名次法,
+   *   两条都不成 → **说不清**,不许猜。
+   *   案由:按名次定位在有循环的套件上必然错位(`scan-sign` 一个 check( 发 N 条断言)。 */
+  const locate = (name) => {
+    for (const len of [28, 20, 14, 10]) {
+      const probe = String(name).slice(0, len).trim()
+      if (probe.length < 4) continue
+      const hits = []
+      for (let k = 0; k < calls.length; k++) {
+        const b = suiteSrc.slice(calls[k].start, calls[k].end)
+        if (b.includes(probe)) hits.push(k)
+      }
+      if (hits.length === 1) return { k: hits[0], how: `字面唯一命中(前 ${len} 字)` }
+    }
     const k = idxOfName.get(name)
-    const blk = blockFor(k ?? -1)
-    if (blk == null) return { grade: '说不清', why: `源码里对不到第 ${(k ?? -1) + 1} 个 check( 调用` }
+    if (k == null) return { k: -1, how: '' }
+    const blk = blockFor(k)
     const mark = markOf(name)
-    if (mark && !blk.includes(mark)) return { grade: '说不清', why: `标记 \`${mark}\` 不在第 ${k + 1} 段源码里(名次对不上,不许猜)` }
+    if (blk && mark && blk.includes(mark)) return { k, how: `名次法(第 ${k + 1} 条,标记 \`${mark}\` 对得上)` }
+    return { k: -1, how: '' }
+  }
+  const classify = (name) => {
+    const { k, how } = locate(name)
+    const blk = blockFor(k)
+    if (blk == null) return { grade: '说不清', why: '源码里定位不到这条断言(字面不唯一且名次对不上)—— **不许猜**' }
     const rs = readSetOf(blk, serverSrcForRead)
     const inter = [...rs.tables].filter((t) => wset.has(t))
-    if (inter.length) return { grade: '该咬没咬', why: `读集 ∩ 写集 = {${inter.join(',')}}`, rs }
+    if (inter.length) return { grade: '该咬没咬', why: `读集 ∩ 写集 = {${inter.join(',')}}(定位:${how})`, rs }
     if (!rs.known) return { grade: '说不清', why: `读集取不到(路径 ${rs.unresolved.join(' ') || '无'} 解析不到 handler)`, rs }
     return { grade: '无关', why: `读集 {${[...rs.tables].slice(0, 6).join(',') || '—'}} ∩ 写集 {${[...wset].join(',')}} = ∅`, rs }
   }
@@ -460,7 +481,7 @@ if (anySurvived.length) {
   console.log('\n### 🔴 仍绿点名(**造病的产出不是「红了没有」,是「哪几条活下来了」**)\n')
   for (const r of anySurvived) {
     console.log(`**${r.ep}** —— ${r.仍绿.length} 条声称成功却仍绿:`)
-    for (const g of r.仍绿.slice(0, 12)) console.log(`- ${g.slice(0, 140)}`)
+    for (const g of r.仍绿.slice(0, 12)) console.log(`- ${String(g && g.名 || g).slice(0, 140)}\n  ↳ ${String(g && g.理由 || '')}`)
     console.log('')
   }
 }

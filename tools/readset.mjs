@@ -61,8 +61,13 @@ export function checkCalls(src, fnName = 'check') {
 }
 
 const SQL_TABLE = /\b(?:FROM|JOIN|INTO|UPDATE)\s+([a-z_][a-z0-9_]*)/gi
-/* 路径字面量:`'/x/y'` / "..." / `` `${BASE}/x/y` `` —— 取以 / 开头的那一段 */
-const PATH_LIT = /['"`][^'"`\n]*?(\/(?:admin\/|my\/|auth\/|settlements|bookings|payments|customers|stores|health)[a-z0-9/_-]*)/gi
+/* 路径字面量。**要认带 ${} 的模板**:
+ * `${BASE}/admin/settlements/${id}/sign-token` 里真正的路由是
+ * `/admin/settlements/<通配>/sign-token`,而服务端那条写的是
+ * `path.startsWith('/admin/settlements/') && path.endsWith('/sign-token')`。
+ * 🔴 案由:上一版的正则遇到 `${` 就断,只取到 `/admin/settlements/` —— 于是 ㋚7 的因果链
+ *   报「解析不到 handler」。**取不到就说不清,而说不清多一条,能用的结论就少一条。** */
+const LIT = /(['"`])((?:\\.|\$\{[^}]*\}|(?!\1)[^\\])*?)\1/gs
 
 export function tablesIn(text) {
   const s = new Set()
@@ -75,26 +80,41 @@ export function tablesIn(text) {
 export function pathsIn(text) {
   const s = new Set()
   let m
-  PATH_LIT.lastIndex = 0
-  while ((m = PATH_LIT.exec(text))) s.add(m[1])
+  LIT.lastIndex = 0
+  while ((m = LIT.exec(text))) {
+    const raw = m[2].replace(/\$\{[^}]*\}/g, '\u0001')   // 插值先换成哨兵
+    const i = raw.indexOf('/')
+    if (i < 0) continue
+    let p = raw.slice(i).split(/[?#\s]/)[0]
+    p = p.split('\u0001').join('*').replace(/\*+/g, '*')
+    if (!/^\/(admin|my|auth|settlements|bookings|payments|customers|stores|health|platform|staff)\b/.test(p)) continue
+    p = p.replace(/\/+$/, '')
+    if (p.length > 1) s.add(p)
+  }
   return s
 }
+
 
 /* ── 把一条路径解析到 server 源码里那个 handler 体 ──
  *  路由长相:`if (req.method === 'GET' && path === '/admin/x') {` 或 `path.startsWith('/admin/bookings/')`
  *  取到的 handler 体再**跟进一层**本地函数调用。 */
 export function handlerBody(serverSrc, p) {
-  const segs = p.split('/').filter(Boolean)
   const cands = []
-  // 精确
-  for (const q of [`path === '${p}'`, `path === "${p}"`]) {
-    const i = serverSrc.indexOf(q)
-    if (i >= 0) cands.push(i)
+  if (!p.includes('*')) {
+    for (const q of ["path === '" + p + "'", 'path === "' + p + '"']) {
+      const i = serverSrc.indexOf(q)
+      if (i >= 0) cands.push(i)
+    }
   }
-  // 前缀/后缀式(带 :id 的那种):用首段 + 末段去找 startsWith/endsWith 对
-  if (!cands.length && segs.length >= 2) {
-    const head = `/${segs[0]}/`, tail = `/${segs[segs.length - 1]}`
-    const re = new RegExp(`path\\.startsWith\\('${head.replace(/[/]/g, '\\/')}'\\)[^\\n]*endsWith\\('${tail.replace(/[/]/g, '\\/')}'\\)`)
+  if (!cands.length) {
+    /* 带通配的:`*` 前那一段当 head、`*` 后那一段当 tail,去找 startsWith/endsWith 那一对。 */
+    const star = p.indexOf('*')
+    const head = star >= 0 ? p.slice(0, star) : p + '/'
+    const tail = star >= 0 ? p.slice(p.lastIndexOf('*') + 1) : ''
+    const esc = (x) => x.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
+    const re = tail
+      ? new RegExp("path\\.startsWith\\(['\"]" + esc(head) + "['\"]\\)[^\\n]*?endsWith\\(['\"]" + esc(tail) + "['\"]\\)")
+      : new RegExp("path\\.startsWith\\(['\"]" + esc(head) + "['\"]\\)")
     const m = re.exec(serverSrc)
     if (m) cands.push(m.index)
   }
@@ -189,6 +209,8 @@ if (process.argv[1] && process.argv[1].endsWith('readset.mjs') && process.argv.i
      *   我当时写的可反驳条件是「指出它其实读了 settlements,这条判定立刻推翻」——**现在被推翻了**。
      *   所以这条靶子的正确期望是 **该中**;它同时证明「跟进一层」那一层真的在跟。 */
     { 名: '走 /admin/finance/deposit-conservation(跟进一层进 auditDepositConservation)', 块: "await fetch(`${BASE}/admin/finance/deposit-conservation`)", 该含: 'settlements', 该中: true },
+    /* 这条靶子专门守「带 ${} 的模板路径认不认得出」—— ㋚7 的因果链就卡在这里 */
+    { 名: '模板路径 /admin/settlements/${id}/sign-token(㋚7 那条)', 块: 'await fetch(`${BASE}/admin/settlements/${sheetId}/sign-token`)', 该含: 'settlements', 该中: true },
     { 名: '走 /my/coupons', 块: "await fetch(`${BASE}/my/coupons`)", 该含: 'settlements', 该中: false },
     { 名: '名字里写着 settlements 但不读它(形似而非)', 块: "check('结算单相关:定金守恒 settlements 三个字在名字里', ok)", 该含: 'settlements', 该中: false },
   ]
