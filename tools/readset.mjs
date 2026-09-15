@@ -250,7 +250,28 @@ const SKIP_CALLS = new Set(['if', 'for', 'while', 'switch', 'catch', 'return', '
 
 
 /* ── 对外主函数:给一段判据源码算读集 ── */
+/* 🔴 **注释不是行为。** 抽读集前先把注释剥掉 ——
+ *  `test-customer-paths.mjs` 的文件头注释里列着 `POST /payments/…`、`settlements` 这些字,
+ *  而第一条断言(`前置:实例起得来`)那一段正好从文件头开始 ——
+ *  于是一条「服务起没起来」的判据被算成读了 `settlements`,判进「该咬没咬」。
+ *  **按注释里的字给判据分类,和按名字给判据分类是同一个毛病**(J-61③)。 */
+export function stripComments(src) {
+  let out = '', i = 0, q = '', inLine = false, inBlock = false
+  while (i < src.length) {
+    const c = src[i], n = src[i + 1]
+    if (inLine) { if (c === '\n') { inLine = false; out += c } i++; continue }
+    if (inBlock) { if (c === '*' && n === '/') { inBlock = false; i += 2; continue } i++; continue }
+    if (q) { out += c; if (c === '\\') { out += src[i + 1] || ''; i += 2; continue } if (c === q) q = ''; i++; continue }
+    if (c === '/' && n === '/') { inLine = true; i += 2; continue }
+    if (c === '/' && n === '*') { inBlock = true; i += 2; continue }
+    if (c === "'" || c === '"' || c === '`') { q = c }
+    out += c; i++
+  }
+  return out
+}
+
 export function readSetOf(blockSrc, serverSrc) {
+  blockSrc = stripComments(blockSrc)
   const why = []
   const tables = new Set()
   for (const t of tablesIn(blockSrc)) { tables.add(t); why.push(`suite 里直接 SQL:${t}`) }
