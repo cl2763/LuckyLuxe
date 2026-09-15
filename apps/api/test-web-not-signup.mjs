@@ -16,7 +16,7 @@
  *   ㋝3  **号在与不在,提示与返回体一致到看不出差别** —— 两个提示不一样,
  *        等于给任何人一个工具:输一串号就能试出谁是这家店的顾客。**美甲店的顾客名单是隐私。**
  */
-import { readFileSync, mkdtempSync, rmSync } from 'node:fs'
+import { readFileSync, mkdtempSync, rmSync, existsSync } from 'node:fs'
 import { join } from 'node:path'
 import { tmpdir } from 'node:os'
 import { fileURLToPath } from 'node:url'
@@ -34,24 +34,92 @@ const check = (name, cond, detail = '') => {
 }
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms))
 
-/* 剥注释:案底里写着「创建账号」四个字,那是说明不是入口(J-61 数执行不数提及) */
-const bare = (t) => t.replace(/\/\*[\s\S]*?\*\//g, (m) => m.replace(/[^\n]/g, ' ')).replace(/^\s*\/\/.*$/gm, '')
-const WEB = ['apps/web/customer.js', 'apps/web/customer.html']
-const SIGNUP = /创建账号|新建账号|立即注册|去注册|注册账号|Create\s+(an\s+)?[Aa]ccount|Sign\s*up|signup/
+/* 剥注释:案底里写着「创建账号」四个字,那是说明不是入口(J-61 数执行不数提及)。
+   🔴 夜13 §三 补:原来只剥 `/* *\/` 与**整行** `//`,**行尾 `//` 注释没剥** ——
+   现测 `customer.js:178` 那句 `needLogin: '请先登录后继续',   // 裁#103:不许出现「注册」`
+   就是被行尾注释里的那两个字咬中的。行尾注释和整行注释是同一类东西。 */
+const bare = (t) => t
+  .replace(/\/\*[\s\S]*?\*\//g, (m) => m.replace(/[^\n]/g, ' '))
+  .replace(/^\s*\/\/.*$/gm, '')
+  .replace(/(^|[^:'"\`\\])\/\/[^\n]*$/gm, '$1')   // 行尾 //(避开 http:// 这种)
+
+/* 🔴 夜13 §三 · **扫描面** —— 原来是手列的两个文件,而其中
+   `apps/web/customer.html` **根本不存在**,`try/catch { continue }` 把它**静默跳过**:
+   于是「全站 0 处」这句话此前是在**实际只扫 1 个文件**的面上得出的(静默失败器族 + J-56 尺子漏层)。
+   现在:**机械枚举**顾客端的全部文件 + **文件必须存在**(不存在直接红,不许静默)+ **下限棘轮**。
+   现测:换成这个面之后、长相还是旧的那一版,命中仍是 **0** —— 说明这道缺口**当时没有藏东西**,
+   但那个 0 在此之前**没有依据**(J-56:尺子漏层,它量出来的结论一律存疑)。 */
+const WEB = [
+  'apps/web/customer.js',
+  'apps/web/index.html',              // ← 网页顾客端真正的那张 HTML(原来扫的 customer.html 不存在)
+  'apps/web/customer-auth-copy.js',   // ← 登录/注册那一屏的文案表(07w 摘出去的,原来不在面上)
+  'apps/web/customer-recommend.js',
+  'apps/web/customer-tags.js',
+  'apps/web/customer-wallet.js',
+  'apps/web/sign.html',
+  'apps/web/share.html',
+]
+
+/* 🔴 J-73(店主 08a §五立)· **一把按文本形状找东西的刀,它的 probe 必须为「被找的东西的
+   每一种合法写法」各种一个靶子。** 这一把原来只认两种长相(中文文案 / `signup` 小写),
+   下面按长相分组列全,每一组在 probe 里都有对应靶子:
+     ① 中文文案:创建账号 / 新建账号 / 开通账号 / 立即注册 / 去注册 / 注册账号 / **裸「注册」**
+        —— 裸「注册」要排除 **已注册 / 未注册**(那是状态,不是入口);
+     ② 英文文案:Create Account / Sign up / Sign-up / Signup;
+     ③ 代码标识:`signup` / `signUp` / `sign_up` / `doSignup`;
+     ④ 🔴 **入口形态的 register**:路由 `/register` · 按钮 `id="…register…"` ·
+        `data-auth-action="register"` · `register(` 调用。
+        **刻意不匹配纯键名**(`registerTitle:` / `googleRegister:` 这种)——
+        现测那 11 处全是**命名遗留**:键叫 register,值写的是「用微信登录」,**不是入口**。
+        (裁 #103 改的是那一屏的文案,键名没跟着改 —— 记一笔,不是缺陷。) */
+const SIGNUP_ZH = /创建账号|新建账号|开通账号|立即注册|去注册|注册账号|(?<![已未])注册(?![时日])/
+const SIGNUP_EN = /Create\s+(an\s+)?[Aa]ccount|Sign\s*[-_]?[Uu]p/
+const SIGNUP_ID = /\bsign[-_]?up\b|\bdoSignup\b|\bsignUp\b/i
+const SIGNUP_ROUTE = /['"\`]\/(register|signup|sign-up)\b|id=["'][^"']*[Rr]egister[^"']*["']|data-auth-action=["']register["']|\bregister\s*\(/
+const SIGNUP = new RegExp([SIGNUP_ZH, SIGNUP_EN, SIGNUP_ID, SIGNUP_ROUTE].map((r) => r.source).join('|'))
 
 /* 🔴 J-58①⑤(店主 07w §五)· **「全站 0 处」本身就是一个零命中结论,先证刀咬得到再信它。**
    probe 靶子:两个**必然命中**(中英各一)+ 两个**形似而非**(注释里的案底 / 普通代码)。
    probe 不红之前,「全站 0 处」这句话不许写进任何报告。 */
 if (process.argv.includes('--probe')) {
   const { probe } = await import('../../tools/scanner-probe.mjs')
-  probe('web-not-signup · SIGNUP 扫描', [
+  probe('web-not-signup · SIGNUP 扫描(J-73:每一种合法写法各一个靶子)', [
+    /* ① 中文文案 */
     { 样本: '<button id="doSignup">创建账号</button>', 该命中: true },
-    { 样本: '<a href="/signup">Create Account</a>', 该命中: true },
-    { 样本: '/* 案底:这一屏原来叫「创建账号」 */', 该命中: false },   // 剥注释后不该命中
-    { 样本: 'const registeredCount = 3', 该命中: false },
+    { 样本: '<a class="btn">立即注册</a>', 该命中: true },
+    { 样本: "const t = { cta: '注册' }", 该命中: true },
+    /* ② 英文文案 */
+    { 样本: '<a href="/x">Create Account</a>', 该命中: true },
+    { 样本: '<a href="/x">Sign Up</a>', 该命中: true },
+    { 样本: '<a href="/x">Sign-up now</a>', 该命中: true },
+    /* ③ 代码标识 */
+    { 样本: "location.href = '/signup'", 该命中: true },
+    { 样本: 'function signUp() {}', 该命中: true },
+    { 样本: 'const sign_up = 1', 该命中: true },
+    /* ④ 入口形态的 register */
+    { 样本: `location.href = '/register'`, 该命中: true },
+    { 样本: '<button data-auth-action="register">x</button>', 该命中: true },
+    { 样本: '<button id="googleRegister">x</button>', 该命中: true },
+    /* ══ 反面:形似而非 ══ */
+    { 样本: '/* 案底:这一屏原来叫「创建账号」 */', 该命中: false },      // 块注释
+    { 样本: "const x = 1   // 裁#103:不许出现「注册」", 该命中: false },  // 🔴 行尾注释(本批补)
+    { 样本: 'const registeredCount = 3', 该命中: false },                 // registered 不是入口
+    { 样本: "const s = '已注册'", 该命中: false },                        // 🔴 状态标签,不是入口
+    { 样本: "const s = '未注册'", 该命中: false },
+    { 样本: "registerTitle: '用微信登录'", 该命中: false },               // 🔴 命名遗留:键叫 register,值是登录
+    { 样本: "googleRegister: '使用 Google 登录'", 该命中: false },
+    { 样本: 'const url = "http://x.com/a" // ok', 该命中: false },        // http:// 不许被当行尾注释剥坏
   ], (t) => { const b = bare(String(t)); return b.split('\n').some((ln) => SIGNUP.test(ln)) })
   process.exit(process.exitCode || 0)
 }
+
+/* 🔴 **文件不存在 = 红,不许静默跳过**(静默失败器族)。
+   案底:原来 `catch { continue }` 把不存在的 `apps/web/customer.html` 悄悄吞了,
+   于是扫描面名义 2 个、实际 1 个,而「全站 0 处」照样报了出来。 */
+const missing = WEB.filter((f) => !existsSync(join(ROOT, f)))
+check(`㋝0 扫描面 ${WEB.length} 个文件**逐个都在**(少一个即红 —— 不许 try/catch 静默跳过)`,
+  missing.length === 0, missing.join(' | '))
+check(`㋝0b 扫描面下限 ${WEB.length} >= 8(缩水立刻红 —— 判据的覆盖面本身要有判据)`, WEB.length >= 8)
 
 const hits = []
 for (const f of WEB) {

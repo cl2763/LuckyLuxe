@@ -122,9 +122,9 @@
     "identity-claim": 13,
     "customer-paths": 14,
     "coupon-status": 6,
-    "web-not-signup": 7,
+    "web-not-signup": 9,
     "import-phone-guard": 5,
-    "bench-selfguard": 13,
+    "bench-selfguard": 18,
     "user-write-auth": 11
   },
   "上次更新": "2026-09-02",
