@@ -85,28 +85,34 @@ async function main() {
     check('②b 🔴 `/auth/google/demo` **已删**:打过去必须不是 2xx(D194,裁 #107 删路不加门)',
       goo.status >= 400, `${goo.status} ${JSON.stringify(goo.data).slice(0, 140)}`)
 
-    /* 门关着也要守住这一套的题目:身份到底写没写进去 —— 走本档真有的那扇门(正门认领) */
-    const { createAndLoginCustomerViaFrontDoor } = await import('./customer-login-fixture.mjs')
-    const svcList = await request('/admin/services')
-    const techList = await request('/admin/technicians')
-    const fd = await createAndLoginCustomerViaFrontDoor({ base: BASE_URL, tenantId: TENANT_HEADER,
-      ownerToken: TOKEN, name: `身份正门客${RUN_ID}`, phone: `1350000${String(Date.now()).slice(-4)}`,
-      serviceId: (svcList.data?.services || []).find((x) => x.isActive !== false)?.id || '',
-      technicianId: (techList.data?.technicians || []).find((x) => x.isActive !== false)?.id || '' })
-    userId = fd.userId || ''
-    check('②c 前置:顾客从**正门**造出来(造不出来下面几条不算验过,J-58④)', Boolean(fd.ok && userId),
-      `${fd.status} ${JSON.stringify(fd.body || {}).slice(0, 140)}`)
-    const identities = await request(`/admin/users/${encodeURIComponent(userId)}/identities`)
-    check('identities endpoint returns 200', identities.status === 200)
-    const rows = identities.data.identities || []
-    check('②d 🔴 正门进来的顾客,身份**真的写进 user_identities**(这一套的题目,两档都要守)',
-      rows.length >= 1, JSON.stringify(rows).slice(0, 200))
-    check('②e 身份带 tenant id(跨租户红线:身份不许无主)',
-      rows.every((r) => r.tenantId === TENANT_HEADER), JSON.stringify(rows.map((r) => r.tenantId)))
-    const dup = await request(`/admin/users/${encodeURIComponent(userId)}/identities`)
-    check('②f 重复取不产生重复身份(与门开档 `repeat login does not duplicate identity` 同一件事)',
-      (dup.data.identities || []).length === rows.length, `${rows.length} vs ${(dup.data.identities || []).length}`)
   }
+
+  /* 🔴 **两档都跑这一段**(07z 改):这一套的题目是「身份写没写进 `user_identities`」,
+     不是「演示登录能不能用」。原来只在门关档跑正门那一段 —— 而门开档那边随着
+     `/auth/google/demo` 被删(裁 #107)少了 3 条断言,**断言零缩水当场红**。
+     正确的补法不是把删掉的那 3 条找回来(那条路没了),
+     是**把同一个题目改由一条还活着的路来守,而且两档都守** ——
+     覆盖面不但没缩,还从「一档」变成「两档」。 */
+  const { createAndLoginCustomerViaFrontDoor } = await import('./customer-login-fixture.mjs')
+  const svcList = await request('/admin/services')
+  const techList = await request('/admin/technicians')
+  const fd = await createAndLoginCustomerViaFrontDoor({ base: BASE_URL, tenantId: TENANT_HEADER,
+    ownerToken: TOKEN, name: `身份正门客${RUN_ID}`, phone: `1350000${String(Date.now()).slice(-4)}`,
+    serviceId: (svcList.data?.services || []).find((x) => x.isActive !== false)?.id || '',
+    technicianId: (techList.data?.technicians || []).find((x) => x.isActive !== false)?.id || '' })
+  userId = fd.userId || ''
+  check('②c 前置:顾客从**正门**造出来(造不出来下面几条不算验过,J-58④)', Boolean(fd.ok && userId),
+    `${fd.status} ${JSON.stringify(fd.body || {}).slice(0, 140)}`)
+  const identities = await request(`/admin/users/${encodeURIComponent(userId)}/identities`)
+  check('identities endpoint returns 200', identities.status === 200)
+  const rows = identities.data.identities || []
+  check('②d 🔴 正门进来的顾客,身份**真的写进 user_identities**(这一套的题目,两档都要守)',
+    rows.length >= 1, JSON.stringify(rows).slice(0, 200))
+  check('②e 身份带 tenant id(跨租户红线:身份不许无主)',
+    rows.every((r) => r.tenantId === TENANT_HEADER), JSON.stringify(rows.map((r) => r.tenantId)))
+  const dup = await request(`/admin/users/${encodeURIComponent(userId)}/identities`)
+  check('②f 重复取不产生重复身份(与门开档 `repeat login does not duplicate identity` 同一件事)',
+    (dup.data.identities || []).length === rows.length, `${rows.length} vs ${(dup.data.identities || []).length}`)
 
   // 4. 不存在的用户 → 404;缺少 owner 权限保护逻辑存在(用坏 token 应 401)—— 两档都跑
   const missing = await request('/admin/users/no-such-user/identities')
