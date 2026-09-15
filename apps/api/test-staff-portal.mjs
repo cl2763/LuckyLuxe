@@ -38,12 +38,27 @@ function futureDate(days) {
 
 async function main() {
   // staff 登录拿 token
-  const login = await request('/admin/auth/login', {
-    method: 'POST',
-    body: JSON.stringify({ email: 'staff@luckyluxeatelier.com', password: 'LuckyluxeStaff0312' })
-  })
-  const STAFF = login.data?.auth?.accessToken
-  check('staff login works', Boolean(STAFF), JSON.stringify(login.data).slice(0, 120))
+  /* 🔴 J-60①(夜13 兜底队列第 4 项)· 夹具从**演示白名单邮箱**换成**员工端自己的正门**。
+   *
+   * 案由:原来登的是 `staff@luckyluxeatelier.com` —— 那是**演示白名单里的邮箱**,
+   * 不是 `admin_accounts` 里的真账号(`customer-login-fixture.mjs` 的现查三问写得很清楚)。
+   * 于是**门关档**(把演示登录关掉那一档)下它必然「账号不存在」,红了十几批,
+   * **而红的从来不是被测的那件事,是夹具走了本档明令关掉的那扇门。**
+   *
+   * 正门 = 老板口 `POST /admin/staff-accounts` 建号(它自己发一次性初始密码)→ 用它登录。
+   * 顺带把**员工账号签发**这条路也真跑了一遍 —— 比原来的演示白名单测得多。
+   * ⚠️ 初始密码不打印、不回给调用方(J-53:密钥不进任何输出)。 */
+  const { loginStaffViaFrontDoor } = await import('./customer-login-fixture.mjs')
+  /* 用店里**现成那位**技师 —— 换成新造的会没有他名下的历史单,下游「员工有带客订单」那条当场塌。
+     两档共用一个库带来的 409,由 `loginStaffViaFrontDoor` 内部走**重置一次性密码**那条正门化解。 */
+  const techList = await request('/admin/technicians')
+  const techId = (techList.data?.technicians || []).find((t) => t.isActive !== false)?.id || ''
+  check('staff 前置:本店有可用技师(没有技师就发不出员工账号 —— 造不出景要红,不许当过了)',
+    Boolean(techId), JSON.stringify(techList.data || {}).slice(0, 120))
+  const fd = await loginStaffViaFrontDoor({ base: BASE_URL, tenantId: 'lucky-luxe', ownerToken: OWNER, technicianId: techId })
+  const STAFF = fd.accessToken
+  check('staff login works(走正门:老板建号 → 用一次性初始密码登录)', Boolean(STAFF),
+    `${fd.status} ${JSON.stringify(fd.body || {}).slice(0, 120)}`)
   const myTechId = (await request('/admin/technicians', {}, STAFF)).data.technicians[0]?.id
   check('staff bound to one technician', Boolean(myTechId))
 

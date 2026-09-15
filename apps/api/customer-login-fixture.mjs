@@ -51,8 +51,22 @@ export async function loginCustomerViaFrontDoor({ base, tenantId, openid, phone 
  */
 export async function loginStaffViaFrontDoor({ base, tenantId, ownerToken, technicianId }) {
   const H = { 'content-type': 'application/json', 'x-admin-tenant-id': tenantId, authorization: `Bearer ${ownerToken}` }
-  const made = await fetch(`${base}/admin/staff-accounts`, { method: 'POST', headers: H, body: JSON.stringify({ technicianId }) })
-  const acc = await made.json().catch(() => ({}))
+  let made = await fetch(`${base}/admin/staff-accounts`, { method: 'POST', headers: H, body: JSON.stringify({ technicianId }) })
+  let acc = await made.json().catch(() => ({}))
+  /* 🔴 **幂等**(夜13 兜底,《幂等判据律》同族)· 这位技师**已经有账号**时,建号会 409 DUPLICATE。
+     案由(现测):主档与门关档**跑在同一个库上** —— 主档先建了,门关档再建就撞。
+     那不是产品问题,是夹具不幂等。
+     治法**不是换个技师**(换了就没有他名下的历史单,下游断言跟着塌),
+     是走产品自己那条**重置一次性密码**的路:`POST /admin/staff-accounts/:id/reset-password`。
+     ⚠️ 它带 `role = 'staff'` 过滤,**动不到老板账号**(脚本红线第 1 条)。 */
+  if (made.status === 409) {
+    const list = await fetch(`${base}/admin/staff-accounts`, { headers: H })
+    const rows = (await list.json().catch(() => ({}))).accounts || []
+    const mine = rows.find((r) => r.technicianId === technicianId)
+    if (!mine) return { ok: false, status: 409, body: { err: '409 但列表里找不到这位技师的账号 —— 说不清,不猜', rows: rows.length } }
+    made = await fetch(`${base}/admin/staff-accounts/${encodeURIComponent(mine.id)}/reset-password`, { method: 'POST', headers: H, body: '{}' })
+    acc = await made.json().catch(() => ({}))
+  }
   if (!acc.username || !acc.initialPassword) return { ok: false, status: made.status, body: acc }
   const res = await fetch(`${base}/admin/auth/login`, {
     method: 'POST',
