@@ -42,7 +42,13 @@ function cutStatement(src, needle, nth = null) {
   const total = src.split(needle).length - 1
   if (total > 1 && nth === null) return { err: `不唯一(${total} 处),要指名第几处才许落刀` }
   const start = src.lastIndexOf('\n', i) + 1
-  let j = i
+  /* 🔴 夜13 §四 现修:括号要从**语句开头**配,不能从 needle 落点配。
+     案由:靶子写成 `INSERT INTO settlement_groups (id, tenant_id, …` 时,needle 落在
+     模板串中段,配括号从那里起 —— 先数到的是 `(id, tenant_id, …)` 这一对,
+     到它闭合就以为语句结束,**把后半个模板串留在原地** → 切完语法不过,台子报「刀落偏」。
+     从 `start` 起配,第一对括号就是 `db.prepare(` 的那一对,整条链才吃得完。
+     对原有靶子(needle 本来就在语句开头)行为不变 —— 已用签署口那把刀现证。 */
+  let j = start
   for (;;) {
     let d = 0, seen = false
     for (; j < src.length; j += 1) {
