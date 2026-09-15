@@ -99,7 +99,8 @@ bite(probeReal) && !bite(probeCmt), '')
 check(`⑤ 反向守:扫描面 ${files.length} 个文件 >= 150;算成 0 说明口径瞎了(J-58)`,
   files.length >= 150 && hits.length > 0, `${files.length} 个文件 / ${hits.length} 处`)
 
-if (process.env.J60_LIST) for (const h of hits) console.log(`   · ${h.f}:${h.line || '?'} ${String(h.text || '').slice(0,90)}`)
+if (process.env.J60_LIST === 'freeze') { console.log('\n[具名冻结逐条]'); for (const h of mustFreeze) console.log(`   ❄ ${h.f}:${h.line || '?'}  ${String(h.why || h.text || '').slice(0, 96)}`) }
+if (process.env.J60_LIST === '1') for (const h of hits) console.log(`   · ${h.f}:${h.line || '?'} ${String(h.text || '').slice(0,90)}`)
 console.log(`\n[J-60 底数] 总 ${hits.length} 处 · 能改走正门 ${canConvert.length} · 具名冻结 ${mustFreeze.length}`
   + ` · 涉 ${new Set(hits.map((h) => h.f)).size} 个文件`)
 if (fails.length) { console.error(`\n❌ test-fixture-front-door ${fails.length}/${checks} 项未过`); process.exit(1) }
