@@ -84,11 +84,28 @@ try {
   /* J-61②:刀默认排除**判据自身与判据的夹具**,并具名 */
   const SELF = ['apps/api/test-demo-gate-scope.mjs']
   const PROD_PAT = /NODE_ENV\s*===\s*['"]production['"]|RAILWAY_ENVIRONMENT/
+  /* 🔴 08a §九 判**误咬** · 剥的是「提及」,留的是「执行」(J-61①)
+   *
+   * 案由:07z 我在 `user-write-census.mjs` 的白名单**理由文字**里写了这两个变量名 ——
+   * 那是一句**说明**,不是一处判定。而这把刀当时只剥注释、**不剥字符串**,
+   * 于是它把一句文字数成了「第二处判真环境的地方」,把 07z 逼着去改**本来正确的文字**。
+   * **拿产品(或文档)去迁就一把有假阳的刀,方向和裁 #88 是同一个。**
+   *
+   * 剥法要保守(J-68:误差只许往「更容易红」那边倒):
+   *   · 只剥**含这两个变量名的字符串**(`'production'` 这种不含名字的字符串原样留着,
+   *     否则 `NODE_ENV === 'production'` 这条真判定会被剥没);
+   *   · 文件里一旦出现**动态取环境变量**(`process.env[`),整份**不剥** ——
+   *     那时候字符串里的名字可能真的是键,宁可误报也不漏报。 */
+  const scrub = (src) => {
+    const noComment = src.replace(/\/\*[\s\S]*?\*\//g, '').replace(/^\s*\/\/.*$/gm, '')
+    if (/process\.env\s*\[/.test(noComment)) return noComment          // 动态取键 → 不剥,宁可误报
+    return noComment.replace(/'(?:[^'\\]|\\.)*'|"(?:[^"\\]|\\.)*"|`(?:[^`\\]|\\.)*`/g,
+      (lit) => (/NODE_ENV|RAILWAY_ENVIRONMENT/.test(lit) ? "''" : lit))
+  }
   const sites = [...walk('apps'), ...walk('tools')]
     .filter((f) => !SELF.includes(f) && !/\/test-/.test(f))
     .filter((f) => {
-      const src = readFileSync(join(ROOT, f), 'utf8').replace(/\/\*[\s\S]*?\*\//g, '').replace(/^\s*\/\/.*$/gm, '')
-      return PROD_PAT.test(src)   /* 去掉注释再看:J-61 数的是**执行**,不是**提及** */
+      return PROD_PAT.test(scrub(readFileSync(join(ROOT, f), 'utf8')))
     })
   check('④ 🔴 白名单式:全仓判「这是不是真环境」的地方**只许 1 处**'
     + '(`apps/api/data-scope.mjs` 的 `isProductionEnv`)—— 不许 `IS_PRODUCTION` 和 `scopeOf` 各判各的。'
@@ -100,10 +117,24 @@ try {
   check('④b 自守:构造一处新的真环境判定,这条扫描**必须**认得出它', probe.length === 2, '')
 
   /* ④c 反向守:注释里提一句不算数(J-61 数执行不数提及) */
-  const commentOnly = PROD_PAT.test('// 这里以前用 NODE_ENV === "production" 判过'.replace(/^\s*\/\/.*$/gm, ''))
+  const commentOnly = PROD_PAT.test(scrub('// 这里以前用 NODE_ENV === "production" 判过'))
   check('④c 反向守:只在**注释**里提到 `NODE_ENV === \'production\'` 的文件不算一处出口 '
     + '(J-61:数的是执行,不是提及)——不然写篇注释就能把这条判据顶红',
     commentOnly === false, '')
+
+  /* ④d 反向守(08a §九 新补):**字符串里的提及**也不算一处出口 —— 注释与字符串同族 */
+  const inString = PROD_PAT.test(scrub("const 理由 = '门关 / NODE_ENV=production / RAILWAY_ENVIRONMENT=production 三档一律 403'"))
+  check('④d 反向守:只在**字符串**里提到这两个变量名不算一处出口('
+    + '案底:07z 白名单的理由文字被数成第二处,逼着去改本来正确的文字 —— 裁 #88 同族)',
+    inString === false, '')
+  /* ④e 正向守:真判定照样要中(证明 ④d 那一剥没把刀剥瞎 —— 判据律:剥完要能证明它还在咬) */
+  const realOne = PROD_PAT.test(scrub("if (process.env.NODE_ENV === 'production') { lock() }"))
+  const realTwo = PROD_PAT.test(scrub("if (process.env.RAILWAY_ENVIRONMENT) { lock() }"))
+  check('④e 正向守:两种**真判定**剥完照样中(剥字符串不许把刀剥瞎)', realOne && realTwo, `${realOne} ${realTwo}`)
+  /* ④f 保守守:文件里有**动态取键**时整份不剥 —— 那时字符串里的名字可能真是键,宁可误报不许漏报(J-68) */
+  const dynamic = PROD_PAT.test(scrub("const k = 'RAILWAY_ENVIRONMENT'\nif (process.env[k]) { lock() }"))
+  check('④f 保守守:文件里出现 `process.env[` 动态取键时**整份不剥**(宁可误报,不许漏报 —— J-68 误差只许往保守那边倒)',
+    dynamic === true, String(dynamic))
 } finally {
   rmSync(base, { recursive: true, force: true })
   rmSync(ciLike, { recursive: true, force: true })

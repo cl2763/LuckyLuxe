@@ -73,7 +73,7 @@ export const NO_AUTH_USER_WRITE_ALLOW = [
    *   所以这里写的理由必须回答另一个问题:**没有任何凭据的人,能不能靠它写出一行 `users`?**
    *   理由要**可反驳**,不许写「这条是登录所以没事」。 */
   { method: 'POST', path: '/auth/email/register',
-    理由: '演示门 `DEMO_LOGIN_ALLOWED` 关死。四档现测(07y):门关那一档 + 两种生产口径那两档,一律 403 `DEMO_LOGIN_DISABLED`,`users` 一行没动。可反驳:举出一档它 2xx。(此处刻意不写那两个环境变量名 —— `test-demo-gate-scope ④` 要求判「是不是真环境」全仓只许一处,判据的说明文字也算数)' },
+    理由: '演示门 `DEMO_LOGIN_ALLOWED` 关死。四档现测(07y):门关 / NODE_ENV=production / RAILWAY_ENVIRONMENT=production 三档一律 403 `DEMO_LOGIN_DISABLED`,`users` 一行没动。可反驳:举出一档它 2xx。' },
   { method: 'POST', path: '/auth/email/login',
     理由: '同上,与 register 同一条 `if (!DEMO_LOGIN_ALLOWED) throw 403`。' },
   { method: 'POST', path: '/auth/wechat/mini-login',
