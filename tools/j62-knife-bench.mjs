@@ -214,7 +214,16 @@ async function knife({ ep, suite, file, needle, claimPat, nth = null }) {
   const greens = (out.match(/^ok \d+ - (.+)$/gm) || []).map((x) => x.replace(/^ok \d+ - /, ''))
   /* 「声称成功」的断言:名字里说了成了,或条件在看 2xx —— 与静态筛同一把尺子 */
   const CLAIMS = /成功|已保存|已提交|已发送|已核销|已到账|已确认|已绑定|已更新|写进|落库|创建|生成|新增|入库|真的是|跟过去|查库|对得上|留痕|释放/
-  const claimGreens = greens.filter((g) => CLAIMS.test(g))
+  /* 🔴 J-66(店主 07w §二)· **分类里报出来的 0,只有当其余各格加起来等于底数时才成立。**
+   *
+   * 案由:上一版先用 `CLAIMS` 过滤一道,只对「名字里说了成了」的绿分类 ——
+   * 于是基线 14 条里 **7 条一格都没落**,而「该咬没咬 0」这个结论**没有依据**:
+   * 那 7 条里只要有一条本该咬住,这个 0 就是假的。**而它恰恰是四个数里唯一一个能让人放心的数。**
+   * 现测确认真出了事:`㋚8 定金守恒` 名字里没有 CLAIMS 关键词,**被静默丢出分类**。
+   *
+   * 现在:**所有非红逐条落格,不做任何预过滤**;
+   * 落完**自己加一遍**,加不上底数就拒绝出结论(J-66 第二款:报数的人自己加,不等别人加)。 */
+  const claimGreens = greens
   /* 🔴 裁 #102(店主 07s §五)· **「仍绿」要拆两类,不然下次会把噪音当发现**
    *   · **仍绿-无关**:本来就不在这一刀的作用面上 —— 绿是对的,不用管;
    *   · 🔴 **仍绿-该咬没咬**:**本该被这一刀咬到却没红** —— **这才是发现**。
@@ -230,9 +239,17 @@ async function knife({ ep, suite, file, needle, claimPat, nth = null }) {
      这个算法不受「名字里有什么」影响,也就不会再把跑过的算成没跑。 */
   const ranCount = reds.length + greens.length
   const notRun = baseNames.slice(ranCount)
+  /* J-66 第二款:四格 + 没跑到必须等于底数,自己加一遍 */
+  const sum = reds.length + unrelated.length + shouldBite.length + notRun.length
+  const closes = sum === baseNames.length
+  if (!closes) {
+    console.log(`   🔴 **四格加不上底数**:红 ${reds.length} + 无关 ${unrelated.length}`
+      + ` + 该咬没咬 ${shouldBite.length} + 没跑到 ${notRun.length} = ${sum},而底数 ${baseNames.length}。`)
+    console.log('   **J-66:加不上底数就不许往下说任何结论** —— 未归类的余数默认按最坏那一格计。')
+  }
   console.log(`   [刀账·四个数] 红 ${reds.length} · **仍绿-无关 ${unrelated.length}**`
     + ` · 🔴 **仍绿-该咬没咬 ${shouldBite.length}** · **没跑到 ${notRun.length}**`
-    + `(无刀基线 ${baseNames.length} 条 · 仍绿合计 ${greens.length})`)
+    + ` —— 合计 ${sum} ${closes ? '≡' : '≠'} 底数 ${baseNames.length} ${closes ? '✅ 闭合(J-66)' : '🔴 **不闭合**'}`)
   if (shouldBite.length) {
     console.log('   🔴 [仍绿-该咬没咬](**这才是发现** —— 本该被这一刀咬到却照样绿):')
     for (const g of shouldBite.slice(0, 12)) console.log(`     ✗ ${g.slice(0, 130)}`)
