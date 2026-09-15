@@ -59,7 +59,18 @@ const judged = (path) => {
     .replace(/\$\{[^}]*\}/g, SENT)
     .replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
     .split(SENT).join('[^`\'"]*')
-  const re = new RegExp(pat)
+  /* 🔴 夜13 §三 · **没有边界锚 = 前缀冒认**(J-73 补靶子时当场量出来的)。
+     原来 `new RegExp(pat)` 不带任何边界,于是 `/my/cou` 也会在
+     `/my/coupons` 那一行上命中 —— **现测 `/my/cou` `/booking` `/my/points` 全报 true**。
+     后果是**假阴**:一条从没被判据碰过的口,只要它是某条被测路径的前缀,就被算成「碰过了」,
+     于是它**根本不会出现在清单上**。这把刀自己的注释里写着:
+     **「假阴比假阳更危险:假阳会被我逐条核掉,假阴根本不会出现在清单上。」**
+     锚法:后面紧跟的字符不许是路径字符(字母/数字/`_`/`-`/`/`)—— 引号、`?`、`` ` ``、空白都算到头。 */
+  /* 左边也要锚:路径**必须是一个字符串的开头**(前面是引号/反引号,或 `${…}` 的右花括号)。
+     不锚左边的话,英文散文里的 `intake/booking context` 也会让 `/booking` 报中 ——
+     现测就是这一句把靶子咬红的(`test-silent-handoff.mjs:115` 的断言文案)。
+     **数调用不数提及**(J-61①),这把刀自己的注释里就写着这条。 */
+  const re = new RegExp(`(?:[\`'"}])${pat}(?![\\w\\-/])`)
   return testFiles.some((l) => re.test(l) && !/^\s*(\/\/|\*|\/\*)/.test(l))
 }
 
@@ -112,8 +123,23 @@ if (process.argv.includes('--json')) {
 
 /* J-58⑤ 自守:这把刀的核心判定是 `judged(path)`(某条口有没有被夹具真调过) */
 if (process.argv.includes('--probe')) {
-  probe('success-state-trace', [
-    { 样本: '/my/coupons', 该命中: true },          // 仓里确实有套件调它
+  /* 🔴 J-73(店主 08a §五立)· **靶子要为「被找的东西的每一种合法写法」各种一个。**
+     这一把原来只有两个靶子(一真一假)—— **正面只有「裸路径」这一种长相**,
+     而 `judged()` 实际要处理的至少有四种:裸路径 / 带 `${…}` 插值 / 带 query / 注释行里的提及。
+     **只种一种长相,probe 全绿只证明它认得那一种长相。** */
+  probe('success-state-trace(J-73:逐种长相各一个靶子)', [
+    /* ① 裸路径 */
+    { 样本: '/my/coupons', 该命中: true },
+    /* ② 带 `${…}` 插值(第一版在这里数过一片假阴,注释里记着)*/
+    { 样本: '/bookings/${encodeURIComponent(id)}/cancel', 该命中: true },
+    /* ③ 带 query(judged 会先把 `?` 之后砍掉)*/
+    { 样本: '/my/coupons?status=active', 该命中: true },
+    /* ══ 反面 ══ */
     { 样本: '/definitely/not/a/real/route/xyz', 该命中: false },
+    /* ④ 🔴 前缀冒认:**短的那条不许借长的那条的光**。
+       这两个靶子是真有区分度的 —— 现测 `/my/cou` 在补锚之前**报 true**(它蹭的是 `/my/coupons`)。 */
+    { 样本: '/my/cou', 该命中: false },
+    { 样本: '/booking', 该命中: false },
+    { 样本: '/my/coupons-definitely-not-real', 该命中: false },
   ], (p) => judged(p))
 }
