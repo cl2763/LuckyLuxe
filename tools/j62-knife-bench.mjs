@@ -170,8 +170,20 @@ async function knife({ ep, suite, file, needle, claimPat, nth = null }) {
    * 43 == 43、**「没跑到」漂亮地报 0**。又一次「看起来很干净的 0」(J-58④⑤ 同族)。
    * 现在它排在备份之前,**刀还没碰过源码**。 */
   const baseRun = await runSuiteIsolated(suite)
+  /* 🔴 名字要**归一**再比 —— 现踩:`㋚5a … 库里那张单 LU-20260915-967Z …` 两轮单号不同,
+     名字对不上就被当成「没跑到」,于是「没跑到 4」里混进了明明跑过还红了的那几条。
+     **一个把运行期数值写进名字的断言,会让按名字做的差集说谎。**
+     归一:去掉单号/id/数字/时刻这类每轮都变的部分,只留判据本身那句话。 */
   const nameOf = (l) => l.replace(/^(?:not )?ok \d+ - /, '').trim()
+  const normName = (n) => String(n)
+    .replace(/\b[A-Z]{2}-\d{8}-[A-Z0-9]{3,}\b/g, '<单号>')
+    .replace(/\b[a-z]+_[a-z0-9]{6,}_[a-z0-9]{4,}\b/g, '<id>')
+    .replace(/\d{4}-\d{2}-\d{2}T[\d:.]+Z?/g, '<时刻>')
+    .replace(/\d+/g, '<数>')
+    .replace(/\s+/g, ' ')
+    .slice(0, 90)
   const baseNames = (baseRun.out.match(/^(?:not )?ok \d+ - .+$/gm) || []).map(nameOf)
+  const baseNorm = baseNames.map(normName)
 
 
   execFileSync('bash', [join(ROOT, 'tools/knife-backup.sh'), 'save', file], { cwd: ROOT, stdio: 'ignore' })
@@ -211,8 +223,8 @@ async function knife({ ep, suite, file, needle, claimPat, nth = null }) {
    * 分法:`claimPat` 就是「这一刀该咬到谁」的口径,命中它的算**该咬**,其余算无关。 */
   const shouldBite = claimPat ? claimGreens.filter((g) => claimPat.test(g)) : []
   const unrelated = claimPat ? claimGreens.filter((g) => !claimPat.test(g)) : claimGreens
-  const ranNames = new Set([...(out.match(/^(?:not )?ok \d+ - .+$/gm) || []).map(nameOf)])
-  const notRun = baseNames.filter((n) => !ranNames.has(n))
+  const ranNorm = new Set([...(out.match(/^(?:not )?ok \d+ - .+$/gm) || []).map(nameOf).map(normName)])
+  const notRun = baseNames.filter((n, i) => !ranNorm.has(baseNorm[i]))
   console.log(`   [刀账·四个数] 红 ${reds.length} · **仍绿-无关 ${unrelated.length}**`
     + ` · 🔴 **仍绿-该咬没咬 ${shouldBite.length}** · **没跑到 ${notRun.length}**`
     + `(无刀基线 ${baseNames.length} 条 · 仍绿合计 ${greens.length})`)
