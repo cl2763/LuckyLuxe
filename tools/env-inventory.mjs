@@ -50,35 +50,47 @@ const stripLineComment = (line) => {
   return line
 }
 
-/** 这一行里,这个名字后面紧跟着兜底吗(`|| …` / `?? …` / 解构默认) */
-const hasFallback = (line, name) => {
-  const re = new RegExp(`(?:process\\.env|\\benv)(?:\\.${name}|\\[\\s*['"\`]${name}['"\`]\\s*\\])\\s*(?:\\|\\||\\?\\?)`)
-  if (re.test(line)) return true
-  return new RegExp(`\\b${name}\\s*=\\s*['"\`\\d]`).test(line) && /=\s*process\.env/.test(line)
+/** 这一行里,这个名字后面紧跟着什么样的兜底。
+ *  🔴 **「兜底成空」不是默认值** —— `|| ''` / `|| null` / `|| undefined` / `|| 0` 的意思是
+ *  「没配就拿不到东西」,那一段功能**照样是死的**,只是不报错。
+ *  把它算成「可选」是**把「没配就不工作」说成了「没配也没关系」** ——
+ *  而这份清单正是给店主核 Railway 用的,错在这一格,她会以为那几个微信/企微变量可以不设。
+ *  所以分三种:`none`(没兜底)· `empty`(兜底成空)· `real`(兜底成一个能用的默认值)。 */
+const fallbackKind = (line, name) => {
+  const re = new RegExp(`(?:process\\.env|\\benv)(?:\\.${name}|\\[\\s*['"\`]${name}['"\`]\\s*\\])\\s*(?:\\|\\||\\?\\?)\\s*(.{0,24})`)
+  const m = re.exec(line)
+  if (!m) {
+    const d = new RegExp(`\\b${name}\\s*=\\s*(['"\`][^'"\`]*['"\`]|\\d+)`).exec(line)
+    if (d && /=\s*process\.env/.test(line)) return /^(''|""|``|0)$/.test(d[1]) ? 'empty' : 'real'
+    return 'none'
+  }
+  const tail = m[1].trim()
+  return /^(''|""|``|null\b|undefined\b|0\b|\[\]|\{\})/.test(tail) ? 'empty' : 'real'
 }
 
 export function scanFile(src, rel) {
   const lines = src.split('\n')
   const out = { names: new Map(), dynamic: [] }
   const add = (name, i, line, fb) => {
-    if (!out.names.has(name)) out.names.set(name, { 出现: [], 全有兜底: true })
+    if (!out.names.has(name)) out.names.set(name, { 出现: [], 全有真兜底: true, 有空兜底: false })
     const rec = out.names.get(name)
     rec.出现.push({ 文件: rel, 行: i + 1, 兜底: fb, 文: line.trim().slice(0, 100) })
-    if (!fb) rec.全有兜底 = false
+    if (fb !== 'real') rec.全有真兜底 = false
+    if (fb === 'empty') rec.有空兜底 = true
   }
   lines.forEach((raw, i) => {
     const line = stripLineComment(raw)
     for (const re of [DOT, BRACKET]) {
       re.lastIndex = 0
       let m
-      while ((m = re.exec(line))) { if (!inQuote(line, m.index)) add(m[1], i, line, hasFallback(line, m[1])) }
+      while ((m = re.exec(line))) { if (!inQuote(line, m.index)) add(m[1], i, line, fallbackKind(line, m[1])) }
     }
     DESTRUCT.lastIndex = 0
     let d
     while ((d = DESTRUCT.exec(line))) {
       for (const piece of d[1].split(',')) {
         const n = piece.trim().split(':')[0].split('=')[0].trim()
-        if (new RegExp(`^${NAME}$`).test(n)) add(n, i, line, /=/.test(piece.split(':').pop() || ''))
+        if (new RegExp(`^${NAME}$`).test(n)) add(n, i, line, /=/.test(piece.split(':').pop() || '') ? 'real' : 'none')
       }
     }
     DYNAMIC.lastIndex = 0
@@ -117,10 +129,11 @@ export function inventory(root, files) {
     try { src = readFileSync(join(root, f), 'utf8') } catch { return { err: `读不了 ${f}` } }
     const r = scanFile(src, f)
     for (const [n, rec] of r.names) {
-      if (!all.has(n)) all.set(n, { 出现: [], 全有兜底: true })
+      if (!all.has(n)) all.set(n, { 出现: [], 全有真兜底: true, 有空兜底: false })
       const a = all.get(n)
       a.出现.push(...rec.出现)
-      if (!rec.全有兜底) a.全有兜底 = false
+      if (!rec.全有真兜底) a.全有真兜底 = false
+      if (rec.有空兜底) a.有空兜底 = true
     }
     dynamic.push(...r.dynamic)
   }
@@ -163,9 +176,11 @@ export function classify(name, rec, fatal) {
   if (fatal.has(name)) return { 格: '启动必需', 依据: '走 secret-gate 那道闸:取不到 → `process.exit(1)`(J-53 fail closed)' }
   const must = MUST_BE_UNSET.find((x) => x.name === name)
   if (must) return { 格: '🔴 必须未设', 依据: must.设了会怎样 }
-  if (rec.全有兜底) return { 格: '可选', 依据: `每一处读它都带兜底(${rec.出现.length} 处)` }
-  const noFb = rec.出现.filter((o) => !o.兜底)
-  return { 格: '功能必需', 依据: `有 ${noFb.length} 处读它**不带兜底**(首处 ${noFb[0].文件}:${noFb[0].行}),不设则那一段拿到 undefined` }
+  if (rec.全有真兜底) return { 格: '可选', 依据: `每一处读它都兜底成**一个能用的默认值**(${rec.出现.length} 处)` }
+  const empty = rec.出现.filter((o) => o.兜底 === 'empty')
+  const none = rec.出现.filter((o) => o.兜底 === 'none')
+  if (none.length) return { 格: '功能必需', 依据: `有 ${none.length} 处**不带兜底**(首处 ${none[0].文件}:${none[0].行}),不设则那一段拿到 undefined` }
+  return { 格: '功能必需', 依据: `每一处都兜底成**空**(${empty.length} 处,首处 ${empty[0].文件}:${empty[0].行})—— **不报错,但那一段功能是死的**` }
 }
 
 /* ══ probe(J-73:六种写法各一个靶子,两面)══ */
