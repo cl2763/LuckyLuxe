@@ -127,7 +127,12 @@ for (const f of WEB) {
   try { src = bare(readFileSync(join(ROOT, f), 'utf8')) } catch { continue }
   src.split('\n').forEach((ln, i) => { if (SIGNUP.test(ln)) hits.push(`${f}:${i + 1} ${ln.trim().slice(0, 70)}`) })
 }
-check('㋝1 🔴 网页顾客端**「注册 / 创建账号」类入口 0 处**(剥注释后现扫)—— '
+/* 🔴 J-65 第三款(店主 09a §四立)· **一个 0 不带「扫了几个文件」,和一个没有依据的 0 是一回事。**
+   案底就是这一条:扫描面里原来有个**不存在的文件**(`apps/web/customer.html`),
+   `try/catch` 静默跳过 —— **那个「0 处」是在只扫 1 个文件的面上得出的**,而它报的是 0。
+   所以这个数从此**跟扫描面一起出现**,不许单独出现。 */
+const SCANNED = WEB.filter((f) => existsSync(join(ROOT, f))).length
+check(`㋝1 🔴 网页顾客端**「注册 / 创建账号」类入口 0 处**(剥注释后现扫;**这次扫了 ${SCANNED} / ${WEB.length} 个文件**)—— `
   + '一个都不许有:它不会带来一个新顾客,只会制造重复档案',
   hits.length === 0, hits.join(' | '))
 check('㋝1b 自守:这把扫描**认得出**真入口(零命中先证刀能咬,J-58⑤)',
