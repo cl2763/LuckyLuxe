@@ -121,9 +121,17 @@ const srvRaw = readFileSync(join(ROOT, 'apps/api/local-server.mjs'), 'utf8')
 check('⑤ 🔴 重建型迁移**开机路径也必须先备份库文件** —— '
   + '04f-2 那次重建 31 张表一个备份都没留;事务回滚只保得住「迁移失败」,'
   + '保不住「迁移成功但迁错了」',
-  /export function backupBeforeRebuild/.test(dropSrc)
+  /* 🔴 09n:锚改了一次,记下为什么(J-58③:锚不许选在正当重构会抹掉的字面量上)。
+     原来锚的是 `export function backupBeforeRebuild` 这个**字面形式**;
+     09n 件 A 把实现收进唯一出口 `./db-backup-core.mjs`,这里改成**转出**,
+     字面没了 —— 判据当场红,而能力不但没丢,还从 cp 变成了 VACUUM INTO。
+     新锚锚在**能力**上:①这个模块确实对外给出 backupBeforeRebuild(哪种写法都行)
+     ②调用处带 dbPath ③启动日志打得出来 ④🔴 **它最终走的是 VACUUM INTO,不是 cp**。 */
+  /export\s+(?:function\s+backupBeforeRebuild|\{[^}]*\bbackupBeforeRebuild\b[^}]*\}\s+from)/.test(dropSrc)
   && /backupBeforeRebuild\(\{[\s\S]{0,200}?dbPath/.test(srvRaw)
-  && /重建前已备份/.test(srvRaw), '')
+  && /重建前已备份/.test(srvRaw)
+  && /VACUUM INTO/.test(readFileSync(join(ROOT, 'apps/api/db-backup-core.mjs'), 'utf8'))
+  && !/copyFileSync/.test(readFileSync(join(ROOT, 'apps/api/db-backup-core.mjs'), 'utf8')), '')
 
 /* ⑤b 行为层:临时库造一张带 DEFAULT 的表 → 起服后必须留下备份且大小等于起服前 —— 见回执现测。
    这里守的是「备份那一行不许被摘掉」的静态形制;行为层由回执的起服冒烟给证据。 */
