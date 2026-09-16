@@ -8,7 +8,8 @@
    用法(手动,不进 CI):node apps/api/sandbox-mirror-jury.mjs
    幂等:重跑=再次置换(先删镜像租户旧行再拷),行数以源为准,一分不多。 */
 import { DatabaseSync } from 'node:sqlite'
-import { copyFileSync, existsSync } from 'node:fs'
+import { existsSync } from 'node:fs'
+import { backupDb } from './db-backup-core.mjs'   // 备份唯一出口(VACUUM INTO + 当场验)
 import { dirname, join } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { requireTarget } from '../../tools/db-target.mjs'
@@ -29,7 +30,7 @@ if (!SANDBOX.includes('sandbox-data')) { console.error('❌ 目标不是沙箱�
 
 const stamp = new Date().toISOString().replace(/[:.]/g, '-').slice(0, 19)
 const snap = SANDBOX.replace('.sqlite', `.pre-mirror-${stamp}.sqlite`)
-copyFileSync(SANDBOX, snap)
+backupDb(SANDBOX, snap)   // 09n 件A L2:沙箱库也是 WAL,cp 出来的快照可能是废的 —— 走同一个出口
 console.log('① 沙箱快照:', snap)
 
 const db = new DatabaseSync(SANDBOX)

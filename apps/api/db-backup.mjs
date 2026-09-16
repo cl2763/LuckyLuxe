@@ -16,7 +16,8 @@
      ⓓ 清理按**格式**分类,不按 tag:凡不符合日备格式的快照一律归"按需"这一类 ——
         照 tag 写清理规则,换个 tag 就又漏一遍;
      ⓔ 预检**通过时也报**剩余/总量,不能只在拒绝时说话 —— 否则没人知道离红线还有多远。 */
-import { copyFileSync, mkdirSync, existsSync, statSync, statfsSync, readdirSync, unlinkSync } from 'node:fs'
+import { mkdirSync, existsSync, statSync, statfsSync, readdirSync, unlinkSync } from 'node:fs'
+import { backupDb } from './db-backup-core.mjs'   // 09n 件A:备份只走 VACUUM INTO,不许 cp
 import { join } from 'node:path'
 
 export const DAILY_RE = /^lucky-luxe-\d{4}-\d{2}-\d{2}\.sqlite$/   // 日备:lucky-luxe-YYYY-MM-DD.sqlite
@@ -72,8 +73,14 @@ export function snapshotDb({ dbPath, backupDir, tag = '备份前', stamp, keep =
     for (let n = 2; existsSync(path) && n <= 20; n += 1) path = join(backupDir, `lucky-luxe-${at}-${n}-${tag}.sqlite`)
     if (existsSync(path)) throw new Error(`备份文件名连撞 20 次(同一秒跑了太多遍):${path}`)
   }
-  copyFileSync(dbPath, path)
-  const size = statSync(path).size
+  /* 🔴 09n 件 A · 同类扫尽(L2):这里原来是 `copyFileSync(dbPath, path)` —— **cp,而库是 WAL**。
+   * 而这个出口**同时是按需快照和生产每日自动备份的唯一出口**(见文件末尾 `dailyBackup`)——
+   * 也就是说:**店主真正依赖的那张网,一直是用 cp 织的。**
+   * 09n 件 A 只点了开机迁移那一处,L2 扫下来这一处更要紧:那一处一年触发一次,这一处**每天跑**。
+   * 换成 `VACUUM INTO` + 当场打开验一次(唯一实现在 `./db-backup-core.mjs`)。
+   * ⚠️ 空间预检、命名、撞名加序号、按需清理那几段**一个字没动** —— 只换「怎么拷」这一步。 */
+  const r = backupDb(dbPath, path)
+  const size = r.bytes
   if (!size) throw new Error(`备份出来是个空文件,已中止:${path}`)
 
   const pruned = daily ? [] : pruneOnDemand(backupDir, keep)        // ⓐ 只清按需那一类,日备归日备

@@ -39,13 +39,14 @@ export function snapshot4(db, names) {
    事务回滚只保得住「迁移失败」,**保不住「迁移成功但迁错了」**。
    所以凡 DROP/CREATE 重建表的迁移,**开机路径也要先复制库文件**;
    没有要处置的表时不备份(空操作不留垃圾)。 */
-export function backupBeforeRebuild({ copyFileSync, dbPath, tag }) {
-  if (!dbPath) return ''
-  const stamp = new Date().toISOString().replace(/[:.]/g, '-')
-  const to = `${dbPath}.pre-${tag}-${stamp}`
-  copyFileSync(dbPath, to)
-  return to
-}
+/* 🔴 09n 件 A:这里原来是 `copyFileSync(dbPath, to)` —— **cp,而库是 WAL**。
+   它跑在开机重建之前,是那次重建**唯一的安全网**,而这张网拷出来的可能是半个库。
+   更难看的是:`tools/db-backup.mjs` 的注释里早就写着「**全仓凡备份一次库文件都该调它,
+   不许再 copyFileSync**」—— **正确出口一直在,而开机链走的是另一条。**
+   (一件事两处真相,又一案。)
+   现在转指唯一实现 `./db-backup-core.mjs`(`VACUUM INTO` + 当场打开验一次)。 */
+export { backupBeforeRebuild } from './db-backup-core.mjs'
+
 
 /* 只摘 `tenant_id` 那一列的 DEFAULT,别的列的默认值一个不碰 */
 export const stripTenantDefault = (sql) => sql.replace(

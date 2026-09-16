@@ -17032,7 +17032,7 @@ function migratePerfBaseToSubtotal() {
      · 而「我的」页读的又是 B 店口径的聚合 —— 半串半不串,最难查的那种。
    这里把两张表的唯一约束重建成**带租户**的复合唯一。SQLite 不能改列约束,只能重建表;
    幂等:只有检测到旧的全局 UNIQUE 才重建,重跑一分不动。 */
-rebuildTenantScopedUnique(db)
+rebuildTenantScopedUnique(db, { dbPath: join(dataDir, 'lucky-luxe.sqlite') })   // 09n 件B-3:DROP 之前先 VACUUM INTO 备份
 // 复合唯一索引(新库/老库同一条路;NULL 不参与唯一,轻档案没 openid 不受影响)
 try {
   db.exec(`
@@ -17522,7 +17522,7 @@ try {
   if (pending.length) {
     /* 🔴 04g §二:重建型迁移**开机路径也必须先复制库文件** —— 事务回滚只保得住
        「迁移失败」,保不住「迁移成功但迁错了」。备份路径打进启动日志。 */
-    const backup = backupBeforeRebuild({ copyFileSync, dbPath: join(dataDir, 'lucky-luxe.sqlite'), tag: 'dropdefault' })
+    const backup = backupBeforeRebuild({ dbPath: join(dataDir, 'lucky-luxe.sqlite'), tag: 'dropdefault' })   // 09n 件A:VACUUM INTO,不再 cp
     console.log(`[migrate] 重建前已备份:${backup}`)
     db2.exec('PRAGMA foreign_keys=OFF'); db2.exec('BEGIN IMMEDIATE')
     try {

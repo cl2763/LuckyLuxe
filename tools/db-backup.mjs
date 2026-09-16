@@ -14,23 +14,12 @@
  * 用法:DBB_SRC=<库绝对路径> DBB_OUT=<备份文件绝对路径> node tools/db-backup.mjs
  */
 import { DatabaseSync } from 'node:sqlite'
-import { statSync } from 'node:fs'
 import { requireTarget } from './db-target.mjs'
 
-/* 给别的脚本用的函数版(05p 段 4「备份刀指向统一」):
-   全仓凡「备份一次库文件」都该调它,**不许再 `copyFileSync`** ——
-   开了 WAL 之后,`cp` 拷出来的是半个库,而且**看起来是成功的**(exit 0、大小正常),
-   直到真去读它才知道是废的。这里 `VACUUM INTO` + 当场打开验一次。 */
-export function backupDb(src, out) {
-  const db = new DatabaseSync(src, { readOnly: true })
-  db.prepare('VACUUM INTO ?').run(out)
-  db.close()
-  const check = new DatabaseSync(out, { readOnly: true })
-  const tables = check.prepare("SELECT COUNT(*) AS n FROM sqlite_master WHERE type='table'").get()?.n || 0
-  check.close()
-  if (!tables) throw new Error(`备份写出来了但读不到表:${out}`)
-  return { out, bytes: statSync(out).size, tables }
-}
+/* 🔴 **实现搬到 `apps/api/db-backup-core.mjs` 了**(09n 件 A):
+   开机迁移在生产容器里要用它,而生产代码不该去 import `tools/`。
+   这里只做**转出**,保持老调用方不用改 —— **唯一出口仍只有一个。** */
+export { backupDb } from '../apps/api/db-backup-core.mjs'
 
 /* 下面是命令行入口;被 import 时不跑(没给 DBB_SRC 就直接返回)。 */
 if (!process.env.DBB_SRC && !process.env.DBB_OUT) { /* 作为模块被引入 */ } else {
