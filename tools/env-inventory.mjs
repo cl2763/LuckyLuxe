@@ -1,0 +1,223 @@
+/* 环境变量清单 —— **从代码里量,不碰 Railway**(店主 09f)
+ *
+ * 分工写死(边界令②):**Code 量「代码要什么」,店主核「Railway 上有什么」,两边对。**
+ * 🔴 本刀**只报名字与它的判定依据,永远不读、不打印、不拷贝任何值**(09f 停线)。
+ *
+ * ── 为什么要这把刀 ──
+ * 此前给店主的清单是**从台账里抄的名字**。两天内已经因为「抄来的不是量出来的」记过两笔
+ * (批了一条跑不动的查询 · 写了个宽八倍的指纹)。**这一份必须是量出来的。**
+ *
+ * ── J-73:读环境变量的写法不止一种,每一种都要有靶子 ──
+ *   ① `process.env.FOO`          ② `process.env['FOO']` / `["FOO"]` / 反引号
+ *   ③ `const { FOO } = process.env`(含重命名 `{ FOO: x }`)
+ *   ④ `process.env[变量]` —— **动态取键,抠不出名字** → 单列「说不清」,点名到行(J-66③ 按最坏那格)
+ *   ⑤ 带默认值:`process.env.FOO || 'x'` / `?? 'x'` / 解构默认 `{ FOO = 'x' }`
+ *   ⑥ 别名:`const env = process.env` 之后的 `env.FOO`
+ *
+ * ── J-65③:每个数都要带扫描面 ──
+ *   报「这次扫了几个文件 / 下限几个」,对不上就红。
+ */
+import { readFileSync, readdirSync, statSync } from 'node:fs'
+import { join, relative } from 'node:path'
+
+const NAME = '[A-Z][A-Z0-9_]*'
+const DOT = new RegExp(`(?:process\\.env|\\benv)\\.(${NAME})`, 'g')
+const BRACKET = new RegExp(`(?:process\\.env|\\benv)\\[\\s*['"\`](${NAME})['"\`]\\s*\\]`, 'g')
+const DYNAMIC = /(?:process\.env|\benv)\[\s*(?!['"`])([^\]]{1,40})\]/g
+const DESTRUCT = /(?:const|let|var)\s*\{([^}]*)\}\s*=\s*process\.env/g
+
+/* 🔴 J-61①(数执行不数提及)· **`process.env` 这几个字出现在字符串里,不算读环境变量。**
+ *   案底:probe 第一轮就咬红了 —— `const i = 'process.env.FOO_I'` 被数成一个变量。
+ *   判法按**位置**:看 `process.env` 那个词本身在不在引号里;
+ *   ⚠️ 不能整行剥字符串 —— `process.env['FOO_B']` 的名字**本来就长在字符串里**,剥了就漏。
+ */
+function inQuote(line, idx) {
+  let q = ''
+  for (let i = 0; i < idx; i += 1) {
+    const c = line[i]
+    if (c === '\\') { i += 1; continue }
+    if (q) { if (c === q) q = '' } else if (c === "'" || c === '"' || c === '`') q = c
+  }
+  return Boolean(q)
+}
+/* 行注释也不算(块注释由调用方剥) */
+const stripLineComment = (line) => {
+  /* 🔴 要找的是**第一个不在引号里**的 `//`,不是第一个 `//` ——
+     `const n = "http://x" // …` 那一行,第一个 `//` 长在字符串里(probe 当场咬红)。 */
+  for (let i = line.indexOf('//'); i >= 0; i = line.indexOf('//', i + 1)) {
+    if (!inQuote(line, i)) return line.slice(0, i)
+  }
+  return line
+}
+
+/** 这一行里,这个名字后面紧跟着兜底吗(`|| …` / `?? …` / 解构默认) */
+const hasFallback = (line, name) => {
+  const re = new RegExp(`(?:process\\.env|\\benv)(?:\\.${name}|\\[\\s*['"\`]${name}['"\`]\\s*\\])\\s*(?:\\|\\||\\?\\?)`)
+  if (re.test(line)) return true
+  return new RegExp(`\\b${name}\\s*=\\s*['"\`\\d]`).test(line) && /=\s*process\.env/.test(line)
+}
+
+export function scanFile(src, rel) {
+  const lines = src.split('\n')
+  const out = { names: new Map(), dynamic: [] }
+  const add = (name, i, line, fb) => {
+    if (!out.names.has(name)) out.names.set(name, { 出现: [], 全有兜底: true })
+    const rec = out.names.get(name)
+    rec.出现.push({ 文件: rel, 行: i + 1, 兜底: fb, 文: line.trim().slice(0, 100) })
+    if (!fb) rec.全有兜底 = false
+  }
+  lines.forEach((raw, i) => {
+    const line = stripLineComment(raw)
+    for (const re of [DOT, BRACKET]) {
+      re.lastIndex = 0
+      let m
+      while ((m = re.exec(line))) { if (!inQuote(line, m.index)) add(m[1], i, line, hasFallback(line, m[1])) }
+    }
+    DESTRUCT.lastIndex = 0
+    let d
+    while ((d = DESTRUCT.exec(line))) {
+      for (const piece of d[1].split(',')) {
+        const n = piece.trim().split(':')[0].split('=')[0].trim()
+        if (new RegExp(`^${NAME}$`).test(n)) add(n, i, line, /=/.test(piece.split(':').pop() || ''))
+      }
+    }
+    DYNAMIC.lastIndex = 0
+    let dy
+    while ((dy = DYNAMIC.exec(line))) if (!inQuote(line, dy.index)) out.dynamic.push({ 文件: rel, 行: i + 1, 键: dy[1].trim(), 文: line.trim().slice(0, 100) })
+  })
+  return out
+}
+
+const walk = (root, rel, out = [], pred = () => true) => {
+  let es = []
+  try { es = readdirSync(join(root, rel), { withFileTypes: true }) } catch { return out }
+  for (const e of es) {
+    if (e.name === 'node_modules' || e.name.startsWith('.')) continue
+    const p = rel ? `${rel}/${e.name}` : e.name
+    if (e.isDirectory()) walk(root, p, out, pred)
+    else if (pred(p)) out.push(p)
+  }
+  return out
+}
+
+/** 生产运行面 = `apps/api` 下**非测试**的 .mjs(线上跑的就是这些) */
+export const prodFiles = (root) => walk(root, 'apps/api', [], (p) => /\.mjs$/.test(p) && !/\/test-/.test(p))
+/** 全仓面 = 再加上 tools / 根脚本 —— 它们**不在生产上跑**,单独一栏 */
+export const otherFiles = (root) => [
+  ...walk(root, 'tools', [], (p) => /\.(mjs|cjs|sh)$/.test(p)),
+  ...walk(root, 'apps/web', [], (p) => /\.js$/.test(p)),
+  ...walk(root, '', [], (p) => /^[^/]+\.command$/.test(p)),
+]
+
+export function inventory(root, files) {
+  const all = new Map()
+  const dynamic = []
+  for (const f of files) {
+    let src = ''
+    try { src = readFileSync(join(root, f), 'utf8') } catch { return { err: `读不了 ${f}` } }
+    const r = scanFile(src, f)
+    for (const [n, rec] of r.names) {
+      if (!all.has(n)) all.set(n, { 出现: [], 全有兜底: true })
+      const a = all.get(n)
+      a.出现.push(...rec.出现)
+      if (!rec.全有兜底) a.全有兜底 = false
+    }
+    dynamic.push(...r.dynamic)
+  }
+  return { all, dynamic, 扫了: files.length }
+}
+
+/* ══ 分类 ══
+ * 🔴 **不许猜。** 每一格都要有机械依据;依据取不到的一律进「说不清」。
+ */
+
+/** ① 启动必需:这把钥匙走的是 `secret-gate` 那道闸 —— 取不到就 `process.exit(1)`(J-53 fail closed)。
+ *  名字不是我列的,是**从那两个闸自己的 `envNames` 里读出来的**(同一把尺子,J-39)。 */
+export async function startupFatalNames(root) {
+  const names = new Set()
+  const mods = ['apps/api/mini-token-secret.mjs', 'apps/api/owner-token.mjs']
+  for (const f of mods) {
+    const src = readFileSync(join(root, f), 'utf8')
+    for (const m of src.matchAll(/envNames:\s*\[([^\]]*)\]|EXPLICIT_ENV_NAMES\s*=\s*\[([^\]]*)\]/g)) {
+      for (const p of String(m[1] || m[2] || '').split(',')) {
+        const n = p.trim().replace(/^['"`]|['"`]$/g, '')
+        if (/^[A-Z][A-Z0-9_]*$/.test(n)) names.add(n)
+      }
+    }
+  }
+  return names
+}
+
+/* ② 🔴 **必须未设** —— 设了就是洞。具名清单,每条给**代码位置 + 设了会发生什么**。
+ *    只许变短;要进新成员必须店主点头。 */
+export const MUST_BE_UNSET = [
+  { name: 'ALLOW_DEMO_ADMIN_LOGIN', where: 'apps/api/data-scope.mjs:82',
+    设了会怎样: '它是演示门的第三道条件(前两道是「环境变量说是生产」与「库域不是 ci/sandbox」)。'
+      + '在生产上这两道会先把门关死,所以单设它打不开门;**但在任何被判成 ci/sandbox 的实例上,设它 = 邮箱登录不校验密码即可登入**。'
+      + '生产上一律不设 —— 它没有任何正当用途。' },
+  { name: 'DEMO_LOGIN', where: '(历史名,现仓已无引用)', 设了会怎样: '旧口径遗留;现在的门只认上面那个,设它无效。留在册里是为了「它要是回来了得有人看见」。' },
+]
+
+/* ③ 判一个名字属于哪一格(返回带依据) */
+export function classify(name, rec, fatal) {
+  if (fatal.has(name)) return { 格: '启动必需', 依据: '走 secret-gate 那道闸:取不到 → `process.exit(1)`(J-53 fail closed)' }
+  const must = MUST_BE_UNSET.find((x) => x.name === name)
+  if (must) return { 格: '🔴 必须未设', 依据: must.设了会怎样 }
+  if (rec.全有兜底) return { 格: '可选', 依据: `每一处读它都带兜底(${rec.出现.length} 处)` }
+  const noFb = rec.出现.filter((o) => !o.兜底)
+  return { 格: '功能必需', 依据: `有 ${noFb.length} 处读它**不带兜底**(首处 ${noFb[0].文件}:${noFb[0].行}),不设则那一段拿到 undefined` }
+}
+
+/* ══ probe(J-73:六种写法各一个靶子,两面)══ */
+if (process.argv[1] && process.argv[1].endsWith('env-inventory.mjs')) {
+  const ROOT = new URL('..', import.meta.url).pathname.replace(/\/$/, '')
+  if (process.argv.includes('--probe')) {
+    const { probe } = await import('./scanner-probe.mjs')
+    const names = (t) => [...scanFile(String(t), 'x.mjs').names.keys()]
+    const ok = probe('env-inventory · 读环境变量的六种写法', [
+      { 样本: 'const a = process.env.FOO_A', 该命中: true },
+      { 样本: "const b = process.env['FOO_B']", 该命中: true },
+      { 样本: 'const c = process.env[`FOO_C`]', 该命中: true },
+      { 样本: 'const { FOO_D } = process.env', 该命中: true },
+      { 样本: 'const { FOO_E: renamed } = process.env', 该命中: true },
+      { 样本: "const f = process.env.FOO_F || 'x'", 该命中: true },
+      { 样本: 'const g = env.FOO_G', 该命中: true },
+      /* ══ 反面:形似而非 ══ */
+      { 样本: 'const h = obj.FOO_H', 该命中: false },          // 不是 env 上的
+      { 样本: "const i = 'process.env.FOO_I'", 该命中: false }, // 字符串里提到(J-61:数执行不数提及)
+      { 样本: 'const j = process.environment.FOO_J', 该命中: false },
+      { 样本: 'const k = process.env[dynamicKey]', 该命中: false }, // 动态取键抠不出名字 → 进说不清那一格,不算命中
+      { 样本: 'const m = 1   // 以前这里读过 process.env.FOO_M', 该命中: false }, // 🔴 行尾注释里提及
+      { 样本: 'const n = "http://x" // process.env.FOO_N', 该命中: false },       // 注释判定不许被 // 前的字符串骗了
+    ], (t) => names(t).length > 0)
+    /* 动态取键要**单独证明它被抓进「说不清」那一格**,不是被漏掉 */
+    const dyn = scanFile('const k = process.env[dynamicKey]', 'x.mjs').dynamic
+    console.log(`  [说不清那一格] 动态取键现测抓到 ${dyn.length} 处 —— ${dyn.length === 1 ? '✅ 没被漏掉' : '🔴 漏了'}`)
+    process.exit(ok && dyn.length === 1 ? 0 : 1)
+  }
+  const prod = prodFiles(ROOT)
+  const other = otherFiles(ROOT)
+  const P = inventory(ROOT, prod)
+  const O = inventory(ROOT, other)
+  const fatal = await startupFatalNames(ROOT)
+  console.log(`# 环境变量清单(从代码里量)\n`)
+  console.log(`> 🔴 **扫描面**(J-65③):生产运行面 **${P.扫了}** 个文件(\`apps/api\` 下非测试 .mjs)`
+    + ` · 其余面 **${O.扫了}** 个(tools / apps/web / 根脚本 —— **不在生产上跑**)`)
+  console.log(`> 生产运行面上的变量名 **${P.all.size}** 个 · 动态取键 **${P.dynamic.length}** 处\n`)
+  const rows = [...P.all.entries()].map(([n, rec]) => ({ n, rec, ...classify(n, rec, fatal) }))
+  const order = { '启动必需': 0, '🔴 必须未设': 1, '功能必需': 2, '可选': 3 }
+  rows.sort((a, b) => order[a.格] - order[b.格] || a.n.localeCompare(b.n))
+  console.log('| 变量名 | 格 | 依据 | 首处代码位置 | 生产面出现 |')
+  console.log('|---|---|---|---|---|')
+  for (const r of rows) {
+    console.log(`| \`${r.n}\` | ${r.格} | ${r.依据.slice(0, 150)} | \`${r.rec.出现[0].文件}:${r.rec.出现[0].行}\` | ${r.rec.出现.length} 处 |`)
+  }
+  console.log(`\n## 🔴 说不清(动态取键,抠不出名字)—— ${P.dynamic.length} 处,按 J-66③ 当最坏那格`)
+  for (const d of P.dynamic) console.log(`- \`${d.文件}:${d.行}\` 键是 \`${d.键}\` —— ${d.文}`)
+  const byBox = {}
+  for (const r of rows) byBox[r.格] = (byBox[r.格] || 0) + 1
+  const sum = Object.values(byBox).reduce((a, b) => a + b, 0)
+  console.log(`\n## 底数闭合(J-48)`)
+  console.log(Object.entries(byBox).map(([k, v]) => `${k} ${v}`).join(' · ')
+    + ` · 说不清 ${P.dynamic.length} —— 四格合计 ${sum} ≡ 变量名 ${P.all.size} ${sum === P.all.size ? '✅' : '🔴'}`)
+}
