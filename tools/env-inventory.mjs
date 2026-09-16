@@ -65,7 +65,19 @@ const fallbackKind = (line, name) => {
     return 'none'
   }
   const tail = m[1].trim()
+  /* 🔴 **兜底到另一个环境变量 = 别名对,不是「有默认值」。**
+   *   案底(现测):`process.env.WECHAT_MINI_APPID || process.env.WX_MINI_APPID || ''`
+   *   —— 前者被判成「可选」、后者被判成「功能必需」,**同一件事被拆进两格**。
+   *   店主拿着这张表去核 Railway,会以为前者可以不设。 */
+  if (/^(?:process\.env|\benv)\./.test(tail)) return 'alias'
   return /^(''|""|``|null\b|undefined\b|0\b|\[\]|\{\})/.test(tail) ? 'empty' : 'real'
+}
+
+/** 这一行里,`name` 兜底到了哪个别名(取不到回空串) */
+export function aliasOf(line, name) {
+  const m = new RegExp(
+    `(?:process\\.env|\\benv)(?:\\.${name}|\\[\\s*['"\`]${name}['"\`]\\s*\\])\\s*(?:\\|\\||\\?\\?)\\s*(?:process\\.env|env)\\.([A-Z][A-Z0-9_]*)`).exec(line)
+  return m ? m[1] : ''
 }
 
 /* 🔴 **比较式使用不是「必需」** —— `process.env.X === 'keyword' ? a : b` 这种,
@@ -81,6 +93,7 @@ export function scanFile(src, rel) {
     if (!out.names.has(name)) out.names.set(name, { 出现: [], 全有真兜底: true, 有空兜底: false })
     const rec = out.names.get(name)
     rec.出现.push({ 文件: rel, 行: i + 1, 兜底: fb, 文: line.trim().slice(0, 100) })
+    if (fb === 'alias') { rec.别名 = rec.别名 || aliasOf(line, name) }
     if (fb !== 'real' && fb !== 'compare') rec.全有真兜底 = false
     if (fb === 'empty') rec.有空兜底 = true
   }
@@ -157,6 +170,7 @@ export function inventory(root, files) {
       a.出现.push(...rec.出现)
       if (!rec.全有真兜底) a.全有真兜底 = false
       if (rec.有空兜底) a.有空兜底 = true
+      if (rec.别名 && !a.别名) a.别名 = rec.别名
     }
     dynamic.push(...r.dynamic)
   }
@@ -206,6 +220,8 @@ export function classify(name, rec, fatal) {
         ? `每一处都是**比较式使用**(${cmp} 处)—— 不设只是走另一支,没有东西会坏`
         : `每一处读它都兜底成**一个能用的默认值**或比较式使用(${rec.出现.length} 处)` }
   }
+  if (rec.别名) return { 格: '功能必需',
+    依据: `它与 \`${rec.别名}\` 是**别名对**(读不到就读那个,两个都没有才是空)—— **两个设一个即可,但不能都不设**` }
   const empty = rec.出现.filter((o) => o.兜底 === 'empty')
   const none = rec.出现.filter((o) => o.兜底 === 'none')
   if (none.length) return { 格: '功能必需', 依据: `有 ${none.length} 处**不带兜底**(首处 ${none[0].文件}:${none[0].行}),不设则那一段拿到 undefined` }
