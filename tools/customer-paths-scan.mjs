@@ -55,12 +55,29 @@ for (const f of CUSTOMER_FILES) {
        先把 `${...}` 换成 `:x` 之后,串变成 `:x/bookings`,`startsWith('/')` 就把它筛掉了。
        **于是「顾客能走的路」那个数是偏少的,而它长得跟一个完整的数一模一样。**
        改法:**开头那个 `${...}` 当成 base,直接去掉**;路径中间的 `${...}` 仍然换成 `:x`。 */
-    let p = m[1].replace(/^\$\{[^}]*\}/, '').replace(/\$\{[^}]*\}/g, ':x').replace(/\?.*$/, '').replace(/\/+$/, '')
+    let p = normPath(m[1])
     if (!p.startsWith('/')) continue
     if (/^\/(assets|static)\//.test(p)) continue
     if (!paths.has(p)) paths.set(p, new Set())
     paths.get(p).add(f)
   }
+}
+
+/* 🔴 J-73 / J-58⑨(09d)· **嵌套模板串**这一种长相,抠出来的路径是坏的。
+ *   案底(09d §六 追问时当场量出来):`miniprogram/utils/api.js:797`
+ *     `request(\`/store/deposit-policy${qs ? \`?${qs}\` : ''}\`)`
+ *   —— 捕获正则遇到**里层那个反引号**就收工,抠到的是 `/store/deposit-policy${qs `,
+ *   于是这条**明明被 `test-deposit-config` 走过**的路,被报成「一次都没走过」。
+ *   **方向是假阳(把走过的报成没走过)** —— 不危险,但它让「没走过 4 条」这个数是错的,真值是 3。
+ *   改法:归一化到最后,若串里还留着没闭合的 `${`,**就地截断** —— 后面那截本来就是动态的。 */
+function normPath(raw) {
+  let p = String(raw)
+    .replace(/^\$\{[^}]*\}/, '')        // 开头那个 ${BASE} 当 base,去掉
+    .replace(/\$\{[^}]*\}/g, ':x')      // 中间闭合的插值 → 通配
+    .replace(/\?.*$/, '')               // query 砍掉
+  const dangling = p.indexOf('${')       // 还留着的 = 嵌套模板把它截断了
+  if (dangling >= 0) p = p.slice(0, dangling)
+  return p.replace(/\/+$/, '')
 }
 
 /* ── 夹具面:全仓 test-*.mjs 真调过哪些路径 ── */
@@ -99,7 +116,7 @@ if (process.argv.includes('--probe')) {
   /* 判定要**和刀正文同一把尺子**(J-39):照抄正文那几步,不另写一份 */
   const hit = (s) => [...String(s).matchAll(/(?:request|apiFetch|fetch|adminRequest|adminGet|adminPost|adminPut|adminDel|api\.\w+|pub)\(\s*[`'"]([^`'"]*\/[^`'"]*)[`'"]/g)]
     .some((m) => {
-      const p = m[1].replace(/^\$\{[^}]*\}/, '').replace(/\$\{[^}]*\}/g, ':x').replace(/\?.*$/, '').replace(/\/+$/, '')
+      const p = normPath(m[1])
       return p.startsWith('/') && !/^\/(assets|static)\//.test(p)
     })
   probe('customer-paths-scan(J-73:每种包装器各一个靶子)', [
@@ -110,6 +127,8 @@ if (process.argv.includes('--probe')) {
     { 样本: "adminRequest('/admin/settlements', 'POST', {})", 该命中: true },
     { 样本: "api.adminGet('/admin/day-close')", 该命中: true },
     { 样本: "await pub(`/bind-tokens/${encodeURIComponent(t)}/confirm`, 'POST', {})", 该命中: true },
+    /* ⑥ 🔴 嵌套模板串(里层还有一对反引号)—— 这一种长相抠出来的路径原来是坏的 */
+    { 样本: "request(`/store/deposit-policy${qs ? `?${qs}` : ''}`)", 该命中: true },
     /* ══ 反面 ══ */
     { 样本: "request('/assets/images/a.png')", 该命中: false },   // 静态资源不是接口
     { 样本: "const x = '/my/coupons'", 该命中: false },           // 光有字符串不算调用
