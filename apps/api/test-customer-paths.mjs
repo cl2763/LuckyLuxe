@@ -173,6 +173,25 @@ try {
       signRes.status < 400 && signed.status === 'signed' && Number(signed.subtotal_cents) > 0,
       `建单=${sheetRes.status} 签字=${signRes.status} 库里=${JSON.stringify(signed)}`)
 
+    /* 🔴 D196-① · 建单那条落库,此前**没有一条判据从库那头读回来**(09a 执行单 #2 现测:
+     *   `noshow-aftersales` 677 条断言里,**自己写 SQL 去读 `settlement_groups` 的 0 条**;
+     *   26 条只是「路过」—— 它们打的接口在 handler 里碰到那张表,但断言本身一个字都没读它。
+     *   造病现证:把 `INSERT INTO settlement_groups` 整条注掉 → **759 条断言一条没红**,
+     *   而 J-58④ 已证刀咬到(换成必然会红的形态,红了)。
+     *
+     *   所以这一条按 J-62 第二款写:**不看建单那次调用的返回体,直接去 `settlement_groups` 里把行捞回来**,
+     *   并且比**它和这张单的关系**(组 id 对得上、租户对得上、挂的是同一张预约)。 */
+    const grp = one('SELECT id, tenant_id, card_owner_user_id, status FROM settlement_groups WHERE id = ?', sheetBody?.groupId || sheet.groupId || '')
+    /* ⚠️ 关系比在 `settlements.group_id` 上,不比 `settlement_groups.booking_id` ——
+       现测:这一单的组行 `booking_id` 是 **null**(预约挂在腿上,不挂在组上)。
+       **第一版我比错了列,判据当场红** —— 红得对,是我把关系想当然了。 */
+    const legGroup = one('SELECT group_id, booking_id FROM settlements WHERE code = ?', sheet.code || '')
+    check('㋚5b 🔴 **D196-①:建单那一行真的写进 `settlement_groups` 了**(从库那头读回来,不看返回体)—— '
+      + `组 \`${grp.id || '(没捞到)'}\` · 租户 ${grp.tenant_id || '?'} · 卡主 ${grp.card_owner_user_id || '?'} · 腿挂的组 ${legGroup.group_id || '?'}`,
+      Boolean(grp.id) && grp.tenant_id === TID && grp.card_owner_user_id === me.userId
+      && legGroup.group_id === grp.id && legGroup.booking_id === bid,
+      `groupId=${sheetBody?.groupId || sheet.groupId || '(接口没给)'} 组=${JSON.stringify(grp)} 腿=${JSON.stringify(legGroup)} 期望租户=${TID} 期望卡主=${me.userId} 期望预约=${bid}`)
+
     const histNow = await (await fetch(`${BASE}/my/points-history`, { headers: CH })).json().catch(() => ({}))
     const recs = histNow.records || []
     const wantDelta = Math.floor(Number(signed.subtotal_cents || 0) / 100)
