@@ -175,6 +175,27 @@ async function main() {
   check('S4 沙盒演示旁路生效(没配微信密钥也能跑通)', claim.data.sandbox === true, String(claim.data.sandbox))
   check('S4 绑定同时给出专属会员码', claim.data.memberCode === memberCode, JSON.stringify({ a: claim.data.memberCode, b: memberCode }))
   check('S4 确认卡显示的是**这张单挂着的档案**的名字', claim.data.customerName === '王小雅', claim.data.customerName)
+  /* 🔴 D196-② · 认领那条落库,此前**没有一条判据从库那头读回来**(09a 执行单 #2 现测:
+   *   `scan-sign` 54 条断言里,**自己写 SQL 去读 `users` 的 0 条**;23 条只是「路过」。
+   *   造病现证:把 `UPDATE users SET wechat_open_id = COALESCE(…)` 整条注掉 →
+   *   **53 条断言一条没红**,而 J-58④ 已证刀咬到。
+   *   上面那几条 S4 验的全是 `claim.data.*` —— **那是回执,不是事实**(J-62②)。
+   *   这一条直接去 `users` 把那一行捞回来看 openid 到底绑上没有。 */
+  {
+    const { DatabaseSync: DBS } = await import('node:sqlite')
+    const dbp = process.env.TEST_DB_PATH || ''
+    const rdb = dbp ? new DBS(dbp, { readOnly: true }) : null
+    /* ⚠️ `claim` 的回执里**没有 userId** —— 第一版我去取它,取到 undefined,判据当场红。
+       红得对:**回执里没有的东西,不能假设它有**。改成从**这张单挂着的档案**顺藤摸过去:
+       `settlements.code → user_id → users.wechat_open_id`,三步全走库,一步都不看回执。 */
+    const stl = rdb ? rdb.prepare('SELECT user_id FROM settlements WHERE code = ?').get(sheet1.code) : null
+    const row = rdb && stl ? rdb.prepare('SELECT id, wechat_open_id FROM users WHERE id = ?').get(stl.user_id) : null
+    check('S4b 🔴 **D196-②:openid 真的绑进 `users` 那一行了**(从库那头读回来,不看 claim 的回执)—— '
+      + `库里 openid ${row && row.wechat_open_id ? '有' : '**没有**'}`,
+      Boolean(rdb) && Boolean(row) && Boolean(row.wechat_open_id),
+      `TEST_DB_PATH=${dbp ? '有' : '🔴没有(这条就没验成)'} 单=${sheet1.code} 单挂的档案=${stl ? stl.user_id : '(没捞到)'} 库里=${JSON.stringify(row)}`)
+    if (rdb) rdb.close()
+  }
   // 幂等:再点一次不产生第二条身份
   const claimAgain = await request(`/settlements/${sheet1.code}/claim`, { method: 'POST', body: JSON.stringify({}) }, null)
   check('S4 幂等:重复绑定不报错也不重复绑', claimAgain.data.bound === true && claimAgain.data.alreadyBound === true, JSON.stringify(claimAgain.data).slice(0, 160))

@@ -138,6 +138,23 @@ async function main() {
     method: 'POST', body: JSON.stringify({ userId: cardOwner, mode: 'template', couponId: c300.id, reason: '充值¥1000档' })
   }, shop.token)
   check('⓪ 同一入口可发现有券模板', byTemplate.status === 201 && byTemplate.data.granted.grantKind === 'template', JSON.stringify(byTemplate.data))
+  /* 🔴 D196-③ · 发券那条落库(`UPDATE coupons SET issued_qty = issued_qty + 1`),
+   *   此前**没有一条判据从库那头读回来**(09a 执行单 #2 现测:`coupon-settle` 71 条断言里,
+   *   **自己写 SQL 去读 `coupons` 的 0 条**;14 条只是「路过」)。
+   *   造病现证:整条注掉 → **86 条断言一条没红**,而 J-58④ 已证刀咬到。
+   *   上面那两条 ⓪ 验的是 `granted.grantKind` —— **那是回执**。
+   *   这一条去 `coupons` 把发放计数捞回来比。 */
+  {
+    const { DatabaseSync: DBS } = await import('node:sqlite')
+    const dbp = process.env.TEST_DB_PATH || ''
+    const rdb = dbp ? new DBS(dbp, { readOnly: true }) : null
+    const q = rdb ? rdb.prepare('SELECT issued_qty FROM coupons WHERE id = ?').get(c300.id) : null
+    check('⓪b 🔴 **D196-③:模板券发出去之后,`coupons.issued_qty` 真的加上去了**(从库那头读回来,不看回执)—— '
+      + `现值 ${q ? q.issued_qty : '(没捞到)'}`,
+      Boolean(rdb) && Boolean(q) && Number(q.issued_qty) >= 1,
+      `TEST_DB_PATH=${dbp ? '有' : '🔴没有(这条就没验成)'} couponId=${c300.id} 库里=${JSON.stringify(q)}`)
+    if (rdb) rdb.close()
+  }
   // 门槛高的那张也发一张(用来验「未满 ¥500」的置灰原因)
   await request('/admin/coupon-grants/custom', { method: 'POST', body: JSON.stringify({ userId: cardOwner, mode: 'template', couponId: c500.id, reason: '活动' }) }, shop.token)
   // 仅美睫大类的券(验大类不匹配的置灰原因)
