@@ -404,7 +404,11 @@ async function knife({ ep, suite, file, needle, claimPat, nth = null, lane = {} 
   } else console.log('   [说不清] 0 条')
   if (shouldBite.length) {
     console.log('   🔴 [仍绿-该咬没咬](**这才是发现** —— 本该被这一刀咬到却照样绿):')
-    for (const g of shouldBite.slice(0, 12)) console.log(`     ✗ ${g.名.slice(0, 120)}\n        ↳ ${g.理由}`)
+    /* 夜13 之后:`KNIFE_FULL=1` 时**全列**,不截断 —— 09a 执行单 #2 要逐条给因果链,
+       截到 12 条就没法说「这 26 条为什么没红」。 */
+    const lim = process.env.KNIFE_FULL ? shouldBite.length : 12
+    for (const g of shouldBite.slice(0, lim)) console.log(`     ✗ ${g.名.slice(0, 120)}\n        ↳ ${g.理由}`)
+    if (shouldBite.length > lim) console.log(`     …另 ${shouldBite.length - lim} 条(KNIFE_FULL=1 全列)`)
   } else console.log('   [仍绿-该咬没咬] 0 条')
   if (notRun.length) {
     console.log('   [没跑到点名](套件在半路 throw 断了,这些**既不是守住也不是没守住,是没跑**):')
