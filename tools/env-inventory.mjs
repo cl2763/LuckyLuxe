@@ -184,19 +184,37 @@ export function inventory(root, files) {
 /** ① 启动必需:这把钥匙走的是 `secret-gate` 那道闸 —— 取不到就 `process.exit(1)`(J-53 fail closed)。
  *  名字不是我列的,是**从那两个闸自己的 `envNames` 里读出来的**(同一把尺子,J-39)。 */
 export async function startupFatalNames(root) {
+  /* 🔴 **名字表在,不等于那道闸被接上了。**(09h 现测,我的第一版就错在这)
+   *   `owner-token.mjs` 有 `ownerTokenGate` 和 `envNames: ['OWNER_TOKEN','OWNER_DEMO_TOKEN']`,
+   *   看起来和 `mini-token-secret.mjs` 一模一样 —— 但 **`requireOwnerToken` 全仓只有测试套件在调**,
+   *   `local-server.mjs:166` 走的是自己的 `|| 'owner-demo-token'` 字面量回落链。
+   *   于是我把 `OWNER_TOKEN` 归成「启动必需」,而现测**不设它照样起得来**。
+   *   **两格是反的**:真正不设就起不来的是 mini-token-secret 那一族(生产口径现证拒绝启动)。
+   *
+   *   判据改成**要看接线**:那道闸的 `require*` 必须**真的被入口调用**,它守的名字才算启动必需。
+   *   归族:J-62「界面说成了 ≠ 真的成了」的配置版 —— **闸写好了 ≠ 闸接上了**。 */
+  const entry = readFileSync(join(root, 'apps/api/local-server.mjs'), 'utf8')
   const names = new Set()
+  const unwired = []
   const mods = ['apps/api/mini-token-secret.mjs', 'apps/api/owner-token.mjs']
   for (const f of mods) {
     const src = readFileSync(join(root, f), 'utf8')
+    const req = [...src.matchAll(/export function (require[A-Za-z0-9_]*)/g)].map((m) => m[1])
+    const wired = req.some((fn) => new RegExp(`\\b${fn}\\s*\\(`).test(entry))
+    const found = []
     for (const m of src.matchAll(/envNames:\s*\[([^\]]*)\]|EXPLICIT_ENV_NAMES\s*=\s*\[([^\]]*)\]/g)) {
-      for (const p of String(m[1] || m[2] || '').split(',')) {
-        const n = p.trim().replace(/^['"`]|['"`]$/g, '')
-        if (/^[A-Z][A-Z0-9_]*$/.test(n)) names.add(n)
+      for (const pI of String(m[1] || m[2] || '').split(',')) {
+        const n = pI.trim().replace(/^['"`]|['"`]$/g, '')
+        if (/^[A-Z][A-Z0-9_]*$/.test(n)) found.push(n)
       }
     }
+    if (wired) for (const n of found) names.add(n)
+    else unwired.push({ 模块: f, 闸: req.join('/') || '(没有 require*)', 它想守的: found })
   }
+  names.unwired = unwired
   return names
 }
+
 
 /* ② 🔴 **必须未设** —— 设了就是洞。具名清单,每条给**代码位置 + 设了会发生什么**。
  *    只许变短;要进新成员必须店主点头。 */
@@ -210,7 +228,10 @@ export const MUST_BE_UNSET = [
 
 /* ③ 判一个名字属于哪一格(返回带依据) */
 export function classify(name, rec, fatal) {
-  if (fatal.has(name)) return { 格: '启动必需', 依据: '走 secret-gate 那道闸:取不到 → `process.exit(1)`(J-53 fail closed)' }
+  if (fatal.has(name)) return { 格: '启动必需',
+    依据: '走 secret-gate 那道闸**而且主进程真的接上了**(`local-server.mjs:396 requireMiniTokenSecret`):'
+      + '生产口径下取不到 → `process.exit(1)`(J-53 fail closed;已行为层现证)'
+      + (rec.只经动态取键 ? ' ⚠️ 它**只经动态取键**被读到,名字取自闸的名字表 `EXPLICIT_ENV_NAMES`' : '') }
   const must = MUST_BE_UNSET.find((x) => x.name === name)
   if (must) return { 格: '🔴 必须未设', 依据: must.设了会怎样 }
   if (rec.全有真兜底) {
@@ -226,6 +247,27 @@ export function classify(name, rec, fatal) {
   const none = rec.出现.filter((o) => o.兜底 === 'none')
   if (none.length) return { 格: '功能必需', 依据: `有 ${none.length} 处**不带兜底**(首处 ${none[0].文件}:${none[0].行}),不设则那一段拿到 undefined` }
   return { 格: '功能必需', 依据: `每一处都兜底成**空**(${empty.length} 处,首处 ${empty[0].文件}:${empty[0].行})—— **不报错,但那一段功能是死的**` }
+}
+
+/** 🔴 **报表与判据必须用同一把尺子**(J-39)。
+ *  第一版报表里做了「把只经动态取键读到的启动必需名字并进来」这一步,**而常驻判据没做** ——
+ *  于是判据数出来「启动必需 0」,报表数出来「2」。**同一件事两个数,那就是两把尺子。** */
+export async function fullInventory(root) {
+  const P = inventory(root, prodFiles(root))
+  const fatal = await startupFatalNames(root)
+  for (const n of fatal) {
+    if (!P.all.has(n)) {
+      P.all.set(n, { 出现: [{ 文件: 'apps/api/mini-token-secret.mjs', 行: 46, 兜底: 'none', 文: 'EXPLICIT_ENV_NAMES(闸的名字表)' }],
+        全有真兜底: false, 有空兜底: false, 只经动态取键: true })
+    }
+  }
+  const boxes = {}
+  const rows = [...P.all.entries()].map(([n, rec]) => {
+    const c = classify(n, rec, fatal)
+    boxes[c.格] = (boxes[c.格] || 0) + 1
+    return { n, rec, ...c }
+  })
+  return { P, fatal, rows, boxes }
 }
 
 /* ══ probe(J-73:六种写法各一个靶子,两面)══ */
@@ -257,14 +299,14 @@ if (process.argv[1] && process.argv[1].endsWith('env-inventory.mjs')) {
   }
   const prod = prodFiles(ROOT)
   const other = otherFiles(ROOT)
-  const P = inventory(ROOT, prod)
   const O = inventory(ROOT, other)
-  const fatal = await startupFatalNames(ROOT)
+  const { P, fatal, rows: allRows } = await fullInventory(ROOT)
   console.log(`# 环境变量清单(从代码里量)\n`)
   console.log(`> 🔴 **扫描面**(J-65③):生产运行面 **${P.扫了}** 个模块(**从 \`local-server.mjs\` 顺 import 可达**,不是「apps/api 下全部」)`
     + ` · 其余面 **${O.扫了}** 个(tools / apps/web / 根脚本 —— **不在生产上跑**)`)
   console.log(`> 生产运行面上的变量名 **${P.all.size}** 个 · 动态取键 **${P.dynamic.length}** 处\n`)
-  const rows = [...P.all.entries()].map(([n, rec]) => ({ n, rec, ...classify(n, rec, fatal) }))
+  const rows = allRows
+
   const order = { '启动必需': 0, '🔴 必须未设': 1, '功能必需': 2, '可选': 3 }
   rows.sort((a, b) => order[a.格] - order[b.格] || a.n.localeCompare(b.n))
   console.log('| 变量名 | 格 | 依据 | 首处代码位置 | 生产面出现 |')

@@ -4,7 +4,7 @@
  */
 import { fileURLToPath } from 'node:url'
 import { dirname, join } from 'node:path'
-import { inventory, prodFiles, otherFiles, startupFatalNames, classify, MUST_BE_UNSET } from '../../tools/env-inventory.mjs'
+import { fullInventory, prodFiles, otherFiles, MUST_BE_UNSET } from '../../tools/env-inventory.mjs'
 
 const ROOT = join(dirname(fileURLToPath(import.meta.url)), '../..')
 let n = 0
@@ -15,10 +15,9 @@ const check = (name, cond, detail = '') => {
   else { console.log(`not ok ${n} - ${name} :: ${detail}`); fails.push(name) }
 }
 
-const P = inventory(ROOT, prodFiles(ROOT))
-const fatal = await startupFatalNames(ROOT)
-const boxes = {}
-for (const [name, rec] of P.all) { const c = classify(name, rec, fatal); boxes[c.格] = (boxes[c.格] || 0) + 1 }
+/* 🔴 与报表同一把尺子(J-39):两边都走 `fullInventory` —— 第一版报表并了「只经动态取键读到的」,
+   判据没并,于是同一件事一个报 2 一个报 0。 */
+const { P, fatal, boxes } = await fullInventory(ROOT)
 const sum = Object.values(boxes).reduce((a, b) => a + b, 0)
 
 check(`① 🔴 扫描面:从 local-server.mjs 顺 import 可达 ${prodFiles(ROOT).length} 个模块 >= 110(缩水立刻红 —— J-65③:一个数不带扫描面等于没有依据)`,
@@ -36,6 +35,11 @@ check(`⑤ 说不清(动态取键)${P.dynamic.length} 处 <= 3,逐处点名到�
 const { scanFile } = await import('../../tools/env-inventory.mjs')
 check('⑥ 自守:构造一行新读法必须被数到(数不到说明这把刀是废的)',
   scanFile("const x = process.env.A_BRAND_NEW_VAR_FOR_PROBE", 'x.mjs').names.has('A_BRAND_NEW_VAR_FOR_PROBE'))
+/* ⑦ 🔴 09h 现查登记:`owner-token.mjs` 那道闸**写好了但主进程没接** ——
+   判据把这件事钉住:名单只许变短(接上了就该从这张表里消失)。 */
+check(`⑦ 🔴 「闸写好了但没接上」现为 ${(fatal.unwired || []).length} 处 <= 1(只许变短;`
+  + `现册:${(fatal.unwired || []).map((u) => u.模块.split('/').pop()).join(',') || '无'})`,
+  (fatal.unwired || []).length <= 1, JSON.stringify(fatal.unwired || []))
 check('⑥b 反向守:字符串里提到的不算(J-61 数执行不数提及)',
   !scanFile("const y = 'process.env.MENTIONED_ONLY'", 'x.mjs').names.has('MENTIONED_ONLY'))
 
