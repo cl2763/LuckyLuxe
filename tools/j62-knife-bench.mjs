@@ -485,6 +485,10 @@ const TARGETS = [
    * 已按停线停在那一件并进待裁队列(夜13 §五「名单之外一律挂起这一件、继续这一班」)。
    * **定错靶子不会蒙混过去**:造病台自带 J-58④「换成必然会红的形态再跑一次」,
    * 刀没咬到会当场报「刀没咬到 —— 不算守住」。 */
+  /* 🔴 D196-① 判据自证(09a 执行单 #3 · J-37⑤):同一把刀,换到**补了新判据的那一套**上跑。
+     补之前:`noshow-aftersales` 759 条零红。补之后这一刀必须红在 `㋚5b` 上。 */
+  { ep: '/admin/settlements · 建单落库(D196-① 判据自证)', suite: 'customer-paths',
+    file: 'apps/api/local-server.mjs', needle: 'INSERT INTO settlement_groups (id, tenant_id, booking_id', claimPat: /㋚5b|settlement_groups/ },
   { ep: '/admin/settlements · 建单落库(17 条 A 类挂在这口上)', suite: 'noshow-aftersales',
     file: 'apps/api/local-server.mjs', needle: 'INSERT INTO settlement_groups (id, tenant_id, booking_id', claimPat: /建单|settlement/ },
   { ep: '/admin/settlements/:id/amend · 更正落库(9 条)', suite: 'amend-linkage',
