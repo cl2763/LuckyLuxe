@@ -68,6 +68,12 @@ const fallbackKind = (line, name) => {
   return /^(''|""|``|null\b|undefined\b|0\b|\[\]|\{\})/.test(tail) ? 'empty' : 'real'
 }
 
+/* 🔴 **比较式使用不是「必需」** —— `process.env.X === 'keyword' ? a : b` 这种,
+ *   不设它只是走另一支,**没有任何东西会坏**。把它算成「功能必需」,
+ *   会让店主以为 Railway 上少了它就出事。(现测这一类有 AI_GATE / AI_REQUIRE_REAL / AI_ENABLE_THINKING 等) */
+const isCompare = (line, name) => new RegExp(
+  `(?:process\\.env|\\benv)(?:\\.${name}|\\[\\s*['"\`]${name}['"\`]\\s*\\])\\s*(?:===|!==|==|!=)`).test(line)
+
 export function scanFile(src, rel) {
   const lines = src.split('\n')
   const out = { names: new Map(), dynamic: [] }
@@ -75,7 +81,7 @@ export function scanFile(src, rel) {
     if (!out.names.has(name)) out.names.set(name, { 出现: [], 全有真兜底: true, 有空兜底: false })
     const rec = out.names.get(name)
     rec.出现.push({ 文件: rel, 行: i + 1, 兜底: fb, 文: line.trim().slice(0, 100) })
-    if (fb !== 'real') rec.全有真兜底 = false
+    if (fb !== 'real' && fb !== 'compare') rec.全有真兜底 = false
     if (fb === 'empty') rec.有空兜底 = true
   }
   lines.forEach((raw, i) => {
@@ -83,7 +89,7 @@ export function scanFile(src, rel) {
     for (const re of [DOT, BRACKET]) {
       re.lastIndex = 0
       let m
-      while ((m = re.exec(line))) { if (!inQuote(line, m.index)) add(m[1], i, line, fallbackKind(line, m[1])) }
+      while ((m = re.exec(line))) { if (!inQuote(line, m.index)) add(m[1], i, line, isCompare(line, m[1]) ? 'compare' : fallbackKind(line, m[1])) }
     }
     DESTRUCT.lastIndex = 0
     let d
@@ -112,8 +118,25 @@ const walk = (root, rel, out = [], pred = () => true) => {
   return out
 }
 
-/** 生产运行面 = `apps/api` 下**非测试**的 .mjs(线上跑的就是这些) */
-export const prodFiles = (root) => walk(root, 'apps/api', [], (p) => /\.mjs$/.test(p) && !/\/test-/.test(p))
+/** 🔴 生产运行面 = **从 `local-server.mjs` 顺着 import 走得到的那些模块**,不是「apps/api 下非测试的全部」。
+ *  案底(现测):`apps/api/e2e-stress-test.mjs` 是压测脚本,**线上根本不跑它**,
+ *  而它读的 `API_BASE` 被算进了「生产功能必需」—— 那会让店主去 Railway 上找一个根本不需要的变量。
+ *  改成**按可达性算**:从入口出发,`import`/`await import` 逐层跟,跟到不动为止。 */
+export function prodFiles(root) {
+  const seen = new Set()
+  const queue = ['apps/api/local-server.mjs']
+  while (queue.length) {
+    const f = queue.shift()
+    if (seen.has(f)) continue
+    let src = ''
+    try { src = readFileSync(join(root, f), 'utf8') } catch { continue }
+    seen.add(f)
+    for (const m of src.matchAll(/(?:from|import\()\s*['"`](\.\/[^'"`]+\.mjs)['"`]/g)) {
+      queue.push(`apps/api/${m[1].replace(/^\.\//, '')}`)
+    }
+  }
+  return [...seen].sort()
+}
 /** 全仓面 = 再加上 tools / 根脚本 —— 它们**不在生产上跑**,单独一栏 */
 export const otherFiles = (root) => [
   ...walk(root, 'tools', [], (p) => /\.(mjs|cjs|sh)$/.test(p)),
@@ -176,7 +199,13 @@ export function classify(name, rec, fatal) {
   if (fatal.has(name)) return { 格: '启动必需', 依据: '走 secret-gate 那道闸:取不到 → `process.exit(1)`(J-53 fail closed)' }
   const must = MUST_BE_UNSET.find((x) => x.name === name)
   if (must) return { 格: '🔴 必须未设', 依据: must.设了会怎样 }
-  if (rec.全有真兜底) return { 格: '可选', 依据: `每一处读它都兜底成**一个能用的默认值**(${rec.出现.length} 处)` }
+  if (rec.全有真兜底) {
+    const cmp = rec.出现.filter((o) => o.兜底 === 'compare').length
+    return { 格: '可选',
+      依据: cmp === rec.出现.length
+        ? `每一处都是**比较式使用**(${cmp} 处)—— 不设只是走另一支,没有东西会坏`
+        : `每一处读它都兜底成**一个能用的默认值**或比较式使用(${rec.出现.length} 处)` }
+  }
   const empty = rec.出现.filter((o) => o.兜底 === 'empty')
   const none = rec.出现.filter((o) => o.兜底 === 'none')
   if (none.length) return { 格: '功能必需', 依据: `有 ${none.length} 处**不带兜底**(首处 ${none[0].文件}:${none[0].行}),不设则那一段拿到 undefined` }
@@ -216,7 +245,7 @@ if (process.argv[1] && process.argv[1].endsWith('env-inventory.mjs')) {
   const O = inventory(ROOT, other)
   const fatal = await startupFatalNames(ROOT)
   console.log(`# 环境变量清单(从代码里量)\n`)
-  console.log(`> 🔴 **扫描面**(J-65③):生产运行面 **${P.扫了}** 个文件(\`apps/api\` 下非测试 .mjs)`
+  console.log(`> 🔴 **扫描面**(J-65③):生产运行面 **${P.扫了}** 个模块(**从 \`local-server.mjs\` 顺 import 可达**,不是「apps/api 下全部」)`
     + ` · 其余面 **${O.扫了}** 个(tools / apps/web / 根脚本 —— **不在生产上跑**)`)
   console.log(`> 生产运行面上的变量名 **${P.all.size}** 个 · 动态取键 **${P.dynamic.length}** 处\n`)
   const rows = [...P.all.entries()].map(([n, rec]) => ({ n, rec, ...classify(n, rec, fatal) }))
