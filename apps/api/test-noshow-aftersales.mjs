@@ -3129,18 +3129,14 @@ const main = async () => {
         else check('㋟③ (跳过)夹具里没有售后中的单', true)
       }
 
-      /* 顺手件(D73 同族,低一级):演示档案退役迁移原来每次启动按 display_name LIKE '%演示%' 重扫全表 */
-      // 判据跟着被测物走:这段同批搬到 legacy-demo-retire.mjs 了
-      const retireMod = readFileSync(join(ROOT42, 'apps/api/legacy-demo-retire.mjs'), 'utf8')
-      /* 🔴 09r §三:与 ㋜③ 同一处改动、同一类锚 —— 锚在 `isProduction: IS_PRODUCTION` 这个
-         **被本次改动抹掉的字面量**上(J-58③)。
-         🔴 而且这一条是我 L2 没扫干净漏掉的第二处:修 ㋜③ 时我没有机械搜一遍同类,
-         结果让全量替我找到了它。**「改一个字面量」永远是一类,不是一处。** */
-      check('㋟⑤ 演示档案退役迁移改一次性 —— 且守卫是裁#90 的「或」,不是单靠环境变量',
-        retireMod.includes("const DEMO_RETIRE_KEY = 'demo_retire_backfill_v1'")
-        && retireMod.includes('if (!demoRetireDone && !isProduction) try {')
-        && srv.includes('retireLegacyDemoArchives({ db, iso, isProduction: TREAT_AS_REAL })')
-        && /export function treatAsReal/.test(readFileSync(join(ROOT42, 'apps/api/data-scope.mjs'), 'utf8')))
+      /* 🔴 D204 销号(店主 09t §三 批:**销号 = 删码,不是关开关**)。
+         这两条一次性迁移**整段删了**,连同 `apps/api/legacy-demo-retire.mjs` 整个文件。
+         按裁#104(「必须不存在」的合同只断言不存在)重写:不再验「它有没有被正确地关着」,
+         而是验**它已经不在了** —— 留着函数 = 留着半条路(裁#107,D194 那次的原话)。 */
+      check('㋟⑤ 🔴 旧口径演示档案退役迁移**全站不存在**(文件、函数、调用点、import 一处不留)',
+        !existsSync(join(ROOT42, 'apps/api/legacy-demo-retire.mjs'))
+        && !/retireLegacyDemoArchives\s*\(/.test(srv)
+        && !/from '\.\/legacy-demo-retire\.mjs'/.test(srv))
 
       /* ===== 🔴 ㋦ 分类唯一真相律(店主 2026-08-25 立,长期规矩)=====
          结构是**两级不是两套**:上层=大类字典(平台三类是默认起点,商家可细分);
@@ -3798,40 +3794,40 @@ const main = async () => {
         check('㋜① 建店归属零名字判据:不看 id 前缀,改看平台后台显式勾选(isDemo)',
           kindLine.includes('body.isDemo === true') && !kindLine.includes('startsWith')
           && platformHtml.includes('id="mIsDemo"'))
-        check('㋜② 回填改一次性迁移:不再挂每次启动,跑过记一笔(tenant_kind_backfill_v1)',
-          guardsD73.includes('export function backfillTenantKindOnce') && guardsD73.includes("tenant_kind_backfill_v1")
-          && !/export function backfillTenantKind\b/.test(guardsD73))
-        /* 🔴 09r §三:这条原来锚的是 `isProduction: IS_PRODUCTION` —— 一个**被本次改动抹掉的字面量**
-           (J-58③:反向锚不许落在自己会抹掉的字面量上)。
-           改动本身是**收紧**:那两条会改真库内容的迁移,不再只靠一个环境变量挡,
-           换成裁#90 的「或」(环境变量 **或** 库域,任一说「这是真的」就跳过)。
-           所以锚也跟着收紧 —— 不是换一个同样松的字面量,而是要求
-           ①调用处用的是 `TREAT_AS_REAL` ②`TREAT_AS_REAL` 真的是那个「或」。 */
-        const scopeSrc = readFileSync(join(ROOT, 'apps/api/data-scope.mjs'), 'utf8')
-        check('㋜③ 生产 scope 禁止启动期改 kind —— 且守卫是裁#90 的「或」,不是单靠环境变量',
-          guardsD73.includes("if (isProduction) return { skipped: 'production'")
-          && srv.includes('isProduction: TREAT_AS_REAL')
-          && /export function treatAsReal/.test(scopeSrc)
+        /* 🔴 D204 销号(09t §三 批)。原来这里有四条(㋜②③④⑤)在验「这条回填迁移
+           有没有被正确地关着、会不会只跑一次」。**迁移整段删了,那四条的被测物不存在了。**
+           按裁#104 重写成两条「必须不存在」,外加一条把**判法本身**钉死的反向守 ——
+           因为真正要防的不是「这一个函数」,是「按 id 前缀认身份」这类写法再长出来。 */
+        check('㋜② 🔴 D73 归属回填迁移**全站不存在**(函数、前缀表、标记键、调用点,一处不留)',
+          !/export function backfillTenantKindOnce/.test(guardsD73)
+          && !/LEGACY_TEST_PREFIX\s*=/.test(guardsD73)
+          && !/export const TENANT_KIND_BACKFILL_KEY/.test(guardsD73)
+          && !/backfillTenantKindOnce\s*\(/.test(srv))
+        check('㋜③ 🔴 反向守(这一条才是长期那把):全仓不许再出现「按 id 前缀猜租户归属」的写法',
+          !/split\('-'\)\[0\][^\n]{0,80}(kind|demo|test)/i.test(guardsD73 + srv),
+          '出现了「取 id 第一段再判 kind/demo/test」的形状 —— 那正是 D73 废掉的判法')
+        check('㋜④ 🔴 建店归属只有一条路:平台后台显式勾选(删掉迁移之后,这是唯一决定 kind 的地方)',
+          kindLine.includes('body.isDemo === true') && !kindLine.includes('startsWith'))
+        /* 🔴 按名字断言「不存在」有个缺口:有人换个函数名、写同样的事、**用同一个标记键**,
+           ㋜② 照样绿。所以补一条**按机制**的:那两个标记键,全仓不许再有人往 `tenant_settings` 里写。
+           (这一条是我自己要加的 —— 它捕的是「同一条迁移换个马甲回来」,㋜②③ 都捕不到。
+            顺带把 D204 删掉的那一条断言补回来,但**不是为了凑数**:不补它这个缺口就一直开着。) */
+        const apiSrcs = readdirSync(join(ROOT42, 'apps/api')).filter((f) => f.endsWith('.mjs') && !f.startsWith('test-'))
+          .map((f) => readFileSync(join(ROOT42, 'apps/api', f), 'utf8')).join('\n')
+        const keyWriters = ['tenant_kind_backfill_v1', 'demo_retire_backfill_v1']
+          .filter((k) => new RegExp(`['\"\`]${k}['\"\`]`).test(apiSrcs.replace(/\/\*[\s\S]*?\*\//g, '').replace(/^\s*\/\/.*$/gm, '')))
+        check(`㋜⑥ 🔴 换马甲也不行:那两个一次性迁移的标记键,产品代码里(剥掉注释后)现扫 ${keyWriters.length} 处`,
+          keyWriters.length === 0, `还有人在用:${keyWriters.join(' · ')}`)
+        /* 🔴 这一条**不许跟着迁移一起删**(09t §〇.2:「本批最值钱的一行」)——
+           它守的不是那两条迁移,是**那个「或」的第二个判据不许被"简化"成一个在生产上判反的写法**。
+           迁移没了,`treatAsReal` 还在,而且还挡着别的东西;这把刀继续盯着它。 */
+        const scopeSrc = readFileSync(join(ROOT42, 'apps/api/data-scope.mjs'), 'utf8')
+        check('㋜⑤ 🔴 `treatAsReal` 是裁#90 的「或」,且第二个判据不许写成 `=== \'production\'`',
+          /export function treatAsReal/.test(scopeSrc)
           && /if \(isProductionEnv\(env\)\) return true/.test(scopeSrc)
-          && /if \(!DEV_SCOPES\.has\(scopeOf\(dataDir, env\)\)\) return true/.test(scopeSrc))
-        check('㋜③b 🔴 反向守:那个「或」的第二个判据不许写成 `=== \'production\'`(生产被判成 local,那样写等于没加)',
-          !/scopeOf\([^)]*\)\s*===\s*'production'/.test(scopeSrc))
-        /* 会红的断言(判据自证):真调用 —— 传 isProduction 必须一行都不动;
-           前缀命中的租户在**非生产**下才归 test,而且只归一次(第二次调用为 already-done)。 */
-        const { backfillTenantKindOnce } = await import(new URL('../../apps/api/ledger-guards.mjs', import.meta.url))
-        const probe = new DatabaseSync(':memory:')
-        probe.exec("CREATE TABLE tenants (id TEXT PRIMARY KEY, kind TEXT NOT NULL DEFAULT 'real')")
-        probe.exec("CREATE TABLE tenant_settings (tenant_id TEXT, key TEXT, value TEXT, updated_at TEXT, PRIMARY KEY (tenant_id, key))")
-        probe.exec("INSERT INTO tenants (id) VALUES ('p12-realshop'), ('demo-x'), ('lucky-luxe')")
-        const prod = backfillTenantKindOnce(probe, { isProduction: true })
-        const kindOf = (id) => probe.prepare('SELECT kind FROM tenants WHERE id = ?').get(id).kind
-        check('㋜④ 会红的断言:生产上跑回填=一行不动(真商户 id 撞上套件前缀也不会被改成 test)',
-          prod.skipped === 'production' && kindOf('p12-realshop') === 'real' && kindOf('demo-x') === 'real')
-        const dev1 = backfillTenantKindOnce(probe, { isProduction: false, markDone: (k) => probe.prepare("INSERT INTO tenant_settings (tenant_id, key, value, updated_at) VALUES ('__system__', ?, '1', '') ").run(k) })
-        const dev2 = backfillTenantKindOnce(probe, { isProduction: false })
-        check('㋜⑤ 非生产只跑一次:第二次调用直接 already-done(不再每次启动扫全表)',
-          dev1.skipped === '' && dev2.skipped === 'already-done' && kindOf('lucky-luxe') === 'real')
-        probe.close()
+          && /if \(!DEV_SCOPES\.has\(scopeOf\(dataDir, env\)\)\) return true/.test(scopeSrc)
+          && !/scopeOf\([^)]*\)\s*===\s*'production'/.test(scopeSrc),
+          '生产库路径以 local-data 收尾、scopeOf 返回 local —— 写成 === \'production\' 在生产上永远不成立,等于没加')
       }
 
       /* ===== ㋚ D71 零编造(店主 08-24 立案)=====

@@ -54,7 +54,7 @@ import { createAppVersion } from './app-version.mjs'   // 04f-3 三端版本指�
 import { createKbRoutes } from './kb-routes.mjs'   // 知识库路由(D134 现修那一批搬出,公约②)
 import { createBusinessHoursRoutes } from './business-hours-routes.mjs'   // 营业时间两条路由(强制设置批边改边拆)
 import { createOrderBadges, bookingSourceText, bookingStatusText } from './order-badges.mjs'
-import { installLedgerGuards, backfillTenantKindOnce, LEDGER_TRIGGER_NAMES } from './ledger-guards.mjs'
+import { installLedgerGuards, LEDGER_TRIGGER_NAMES } from './ledger-guards.mjs'
 import { backfillIdentities, createIdentityUpsert } from './user-identity.mjs'
 import { createReminderTasks } from './reminder-tasks.mjs'   // D131 提醒任务域(公约②:边改边拆)
 import { createWecomRouting, ensureWecomRoutingSchema } from './wecom-routing.mjs'   // D132 会话归店(公约①:新功能新模块)
@@ -101,7 +101,6 @@ import { createMembershipConfig } from './membership-config.mjs'      // 会员�
 import { createImportCustomers } from './import-customers.mjs'        // 平台代商家导入老顾客(公约②)
 import { snapshotDb, dailyBackup } from './db-backup.mjs'             // 库快照唯一出口(按需 + 日备同一处)
 import { createStaticServe } from './static-serve.mjs'                // 静态文件服务(公约②)
-import { retireLegacyDemoArchives } from './legacy-demo-retire.mjs'   // 旧口径演示档案退役(一次性)
 import { createMemberCode } from './member-code.mjs'                  // 会员码域(公约②)
 import { createStoreDirectory } from './store-directory.mjs'          // 门店列表三个一(公约①)
 import { createPricingCategories } from './pricing-categories.mjs'    // 大类字典 CRUD(两条线共用)
@@ -16756,16 +16755,8 @@ ensureHeroSlidesSchema(db)   // D78:建表后立刻 PRAGMA 逐列自证(静默�
 ensureCashNotesSchema(db)    // D79:同上
 // 🔴 D76 可见性列(与账本归属解耦):建列 + 演示店默认不上架,实现在 ./tenant-visibility.mjs
 ensureListedColumn(db)
-/* D73(店主 08-24):归属回填改**一次性迁移** —— 跑过一次记一笔,以后启动不再扫;
-   生产库一律不跑(那边的归属只能由平台后台显式设置,不许靠名字猜)。 */
-{
-  const r = backfillTenantKindOnce(db, {
-    isProduction: TREAT_AS_REAL,   // 09r §三:环境变量 或 库域,任一说「这是真的」就跳过
-    markDone: (key) => db.prepare("INSERT INTO tenant_settings (tenant_id, key, value, updated_at) VALUES ('__system__', ?, ?, ?) ON CONFLICT(tenant_id, key) DO UPDATE SET value = excluded.value, updated_at = excluded.updated_at")
-      .run(key, iso(new Date()), iso(new Date()))
-  })
-  if (!r.skipped && (r.demo || r.test)) console.log(`[migrate] D73 归属回填一次性完成:demo ${r.demo} / test ${r.test}`)
-}
+/* 🔴 D204 销号(09t §三 批):D73 归属回填那条一次性迁移**已整段删除**,理由写在 ./ledger-guards.mjs。
+   建店 kind 由平台后台 `isDemo` 显式勾选决定,不再有任何按 id 前缀猜归属的代码。 */
 // installLedgerGuards 挪到所有建表跑完之后(全新库这里还没有 settlements 表,装到一半会崩)
 
 /* 统一身份回填 —— D130 起搬去 `./user-identity.mjs`(店主 04a §二)。
@@ -17491,8 +17482,9 @@ try {
 // 演示阵容换代(店主 2026-08-12 拍板):旧口径时代演示档案全部退役 —— 打标记不删
 // (历史单据织在日结与收入历史里,账本只追加)。圈定=id demo-% / 名含「演示」/「店主验签」,
 // 只动两家真实店;幂等:已有标记跳过。
-/* 旧口径演示档案退役(一次性迁移)已搬出到 ./legacy-demo-retire.mjs(公约②,2026-08-25) */
-retireLegacyDemoArchives({ db, iso, isProduction: TREAT_AS_REAL })   // 09r §三:同上
+/* 🔴 D204 销号(09t §三 批):旧口径演示档案退役那条一次性迁移**已整段删除**(连同 ./legacy-demo-retire.mjs 整个文件)。
+   它当初按 `display_name LIKE '%演示%'` 给两家真店的顾客打退役标 —— **靠名字认身份**,
+   08-12 就误伤过一次。存量已打完(生产现测 8 行、本机 10 行,全都已带标签),任务结束。 */
 
 // 改判① 钳位扫描:历史混合口径重算后 已兑换>新累计获得 的档案,补记正向调整行至 0
 // (账本只追加;不造负数不硬掰)。幂等:钳后余额=0,重跑扫不到负数即无操作。

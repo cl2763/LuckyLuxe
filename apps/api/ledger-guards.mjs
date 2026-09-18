@@ -122,29 +122,29 @@ export function installLedgerGuards(db) {
 
    这份前缀表只在**那一次迁移**里用过(存量 80 个空壳是按套件前缀建的,店主逐行核过),
    之后永久退役 —— 留在这里是为了让迁移可复核,不是给运行期用的。 */
-const LEGACY_TEST_PREFIX = ['nsas', 'dbl', 'p2dc', 'p2sc', 'p2sal', 'p2ft', 'p12', 'p25', 'r3s', 'r2s', 'authx', 'diag', 'p0hy', 'p2fl']
-const LEGACY_DEMO_IDS = ['demo-ai', 'demo-basic', 'hoptest-demo2']
-const KIND_BACKFILL_KEY = 'tenant_kind_backfill_v1'
-
-/* 一次性迁移:跑过一次就在 tenant_settings 里记一笔,以后启动不再扫。
-   生产(scope='live' 且 IS_PRODUCTION)一律不跑 —— 生产库里的归属只能由平台后台显式设置。 */
-export function backfillTenantKindOnce(db, { isProduction = false, markDone } = {}) {
-  if (isProduction) return { skipped: 'production', demo: 0, test: 0 }
-  const done = db.prepare("SELECT value FROM tenant_settings WHERE tenant_id = '__system__' AND key = ?").get(KIND_BACKFILL_KEY)
-  if (done) return { skipped: 'already-done', demo: 0, test: 0 }
-  const rows = db.prepare("SELECT id, kind FROM tenants WHERE COALESCE(kind, 'real') = 'real'").all()
-  let demo = 0
-  let test = 0
-  for (const r of rows) {
-    const head = String(r.id).split('-')[0]
-    if (LEGACY_DEMO_IDS.includes(r.id) || String(r.id).startsWith('demo-')) {
-      db.prepare("UPDATE tenants SET kind = 'demo' WHERE id = ?").run(r.id); demo += 1
-    } else if (LEGACY_TEST_PREFIX.includes(head) || r.id === 'tenant-iso-b') {
-      db.prepare("UPDATE tenants SET kind = 'test' WHERE id = ?").run(r.id); test += 1
-    }
-  }
-  if (typeof markDone === 'function') markDone(KIND_BACKFILL_KEY)
-  return { skipped: '', demo, test }
-}
-
-export const TENANT_KIND_BACKFILL_KEY = KIND_BACKFILL_KEY
+/* 🔴 D204 销号(店主 09t §三 批:**销号 = 删码,不是关开关**,裁#107 同一精神)
+ *
+ * 这里原来有 `backfillTenantKindOnce` + 那张 `LEGACY_TEST_PREFIX` 前缀表。**整段删掉。**
+ *
+ * **它当初是为了修什么**(09t §三 要求写清,否则将来有人发现少了一步会重新写一个一模一样的):
+ *   D72 给 `tenants` 加了 `kind` 列(real / demo / test)。**加列那一刻,存量 80 多家店全是 `real`** ——
+ *   其中大部分是历次回归套件建出来的空壳店(id 按套件名起头:`nsas-` `p12-` `authx-` …)
+ *   与两家早期演示店(`demo-ai` / `demo-basic`)。这条迁移就是**给那一批存量补上正确的 kind**,
+ *   靠的是「id 前缀」——**因为当时除了 id 没有别的线索可用**。
+ *
+ * **为什么现在不需要了**:
+ *   ① 存量已经补完 —— 本机库现测标记 `tenant_kind_backfill_v1` 已在,跑过了;
+ *   ② **生产库根本不需要它** —— 09t 现查那 6 家店,`kind` 本来就是建店时显式设的;
+ *   ③ **新建的店不走它** —— D73 之后建店 kind 由平台后台 `isDemo` 显式勾选决定(`local-server.mjs` 那一行),
+ *      沙箱与回归临时库每次新建,也都走同一条显式路径;
+ *   ④ **判法本身违反 D73**(演示店走显式勾选,不再看 id 前缀)。
+ *
+ * 🔴 **一句必须留在案底里的话**(09t §五 要求原样进台账):
+ *   **`jics-nail`(小婕真店)与 `jics-store`(沙箱镜像)的 head 都是 `jics`。
+ *     今天 `jics` 不在那张前缀表里所以不会撞 —— 但那是运气,不是设计。
+ *     明天有人往前缀表里加一个 `jics` 就撞了。**
+ *   这正是「按 id 前缀认身份」这类判法该被删掉、而不是被小心使用的理由。
+ *
+ * **删之前量过的杀伤力**(09t §五 批准的只读盘点,生产库现测):
+ *   若今天让它跑,6 家店里 **2 家会被改判**(`demo-ai` / `demo-basic`,real → demo),
+ *   **两家真店 `lucky-luxe` 与 `jics-nail` 不变**。三栏闭合 2 + 2 + 2 = 6 ✅ */
