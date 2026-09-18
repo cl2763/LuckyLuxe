@@ -25,7 +25,12 @@ fi
 # 三问,一问一答,**每一问都要能单独说出为什么红**。
 # ⚠️ 这里不许用 `node - … <<NODE`:脚本本身和 /health 的正文会抢同一个 stdin。
 # 把判据写进一个临时 .mjs,正文从 argv 传进去,两者各走各的。
-CHK="$(mktemp /tmp/ll-verify-restored.XXXXXX.mjs)"
+# 🔴 GNU mktemp 要求 X 在模板**结尾**(要后缀得用 --suffix);macOS 的 BSD mktemp 不挑。
+# 我第一版写成 `…XXXXXX.mjs`,**在 mac 上跑得好好的,到 ubuntu 上直接报错** ——
+# 而 CI 就是 ubuntu。这一条是今晚 CI 红之后逐行看出来的(日志要 admin 才看得到,看不到)。
+# 改成两步:先建无后缀临时文件,再改名带上 .mjs(两边都吃)。
+CHK="$(mktemp /tmp/ll-verify-restored.XXXXXX)"
+mv "$CHK" "$CHK.mjs" && CHK="$CHK.mjs"
 trap 'rm -f "$CHK"' EXIT
 cat > "$CHK" <<'NODE'
 const [port, root, s] = process.argv.slice(2)

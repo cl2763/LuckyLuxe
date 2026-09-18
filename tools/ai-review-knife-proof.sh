@@ -12,8 +12,8 @@ cd "$(dirname "$0")/.."
 PORT=${KNIFE_PORT:-4399}
 SRC=apps/api/ai-review-routes.mjs
 SRV=apps/api/local-server.mjs
-BAK=$(mktemp /tmp/ai-review.bak.XXXXXX.mjs)
-BAK2=$(mktemp /tmp/ll-srv.bak.XXXXXX.mjs)
+BAK=$(mktemp /tmp/ai-review.bak.XXXXXX); mv "$BAK" "$BAK.mjs"; BAK="$BAK.mjs"   # GNU mktemp 要 X 在结尾
+BAK2=$(mktemp /tmp/ll-srv.bak.XXXXXX); mv "$BAK2" "$BAK2.mjs"; BAK2="$BAK2.mjs"   # 同上
 cp "$SRC" "$BAK"; cp "$SRV" "$BAK2"
 DATA_DIR=${KNIFE_DATA_DIR:-}
 LOG=/tmp/knife-server-$PORT.log

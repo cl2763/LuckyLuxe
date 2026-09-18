@@ -17,7 +17,7 @@ set -uo pipefail
 cd "$(dirname "$0")/.."
 PORT=${KNIFE_PORT:-4399}
 SRC=apps/api/booking-intake.mjs
-BAK=$(mktemp /tmp/booking-intake.bak.XXXXXX.mjs)
+BAK=$(mktemp /tmp/booking-intake.bak.XXXXXX); mv "$BAK" "$BAK.mjs"; BAK="$BAK.mjs"   # GNU mktemp 要 X 在结尾
 cp "$SRC" "$BAK"
 DATA_DIR=${KNIFE_DATA_DIR:-}
 LOG=/tmp/knife-server-$PORT.log

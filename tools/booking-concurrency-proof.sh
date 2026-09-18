@@ -21,7 +21,7 @@ PA=${PORT_A:-4401}
 PB=${PORT_B:-4402}
 DATA_DIR=${KNIFE_DATA_DIR:?用法: KNIFE_DATA_DIR=/tmp/ll-ci-data.XXXX bash tools/booking-concurrency-proof.sh}
 SRV=apps/api/local-server.mjs
-BAK=$(mktemp /tmp/ll-conc.bak.XXXXXX.mjs); cp "$SRV" "$BAK"
+BAK=$(mktemp /tmp/ll-conc.bak.XXXXXX); mv "$BAK" "$BAK.mjs"; BAK="$BAK.mjs"; cp "$SRV" "$BAK"   # GNU mktemp 要 X 在结尾
 cleanup() { cp "$BAK" "$SRV"; stop 4401; stop 4402; rm -f "$BAK"; }
 trap cleanup EXIT
 
