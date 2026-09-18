@@ -23,19 +23,50 @@ fi
 # 以后这一声由脚本喊,不靠人盯。
 # 超时自杀,并打印**当时哪一套在跑、跑了多久**(判据红的时候必须能指认现场)。
 # 可配 REGRESSION_WATCHDOG_SECONDS;0 = 关掉(只给「我就是要跑很久」那种情况)。
-WATCHDOG_S=${REGRESSION_WATCHDOG_SECONDS:-300}
+# ══ 🔴 J-87(店主 09p 立)· 阈值随被测对象的规模一起重估,或者改成相对值 ══
+# 案由:300 秒是 **47 套时代**定的(那时整跑 31 秒,基线"约 2 分钟")。
+# 从那天起加了 87 个套件文件、三档 154 次执行 —— **阈值一动没动**,
+# 于是它从某一天起就不再表示它当初表示的意思了。**店主裁:选 (甲) 相对值。**
+#
+# 算法:三档套数 × 每套预算 + 固定开销(起停服务、预检、两次换库)。
+# 每套预算取 4 秒(现测主档 127 套 127 秒 ≈ 1 秒/套,留 4 倍余量),固定开销 120 秒。
+# 校准:现测整跑基线 ≈ 350 秒(主档 149 + 门关档 ~150 + 小程序档 ~50),算出来 155×4+120 = **740 秒 ≈ 2.1 倍**。
+# 与它取代的那个数**同一个比例**(300s 对当年 120s 基线 = 2.5 倍)—— 换的是「随规模走」,不是「放宽」。
+# 🔴 **套数随数上报** —— 阈值是怎么来的必须写在屏幕上,否则下次又没人知道它该不该改。
 CURRENT_SUITE_FILE="$(mktemp /tmp/ll-ci-current.XXXXXX)"
+WATCHDOG_PER_SUITE_S=${REGRESSION_PER_SUITE_BUDGET_S:-4}
+WATCHDOG_FIXED_S=${REGRESSION_FIXED_OVERHEAD_S:-120}
+# 三档清单定义在下面几百行处,而看门狗必须**从最早**就开始计时(预检与起服务也算整跑)——
+# 所以在这里直接从本脚本源码里把三份清单数出来。数的是**清单本身**,不是 test-*.mjs 文件数:
+# 文件多了但没进清单的不会跑,拿文件数当基数会把阈值算大(朝松的那边错,J-68 不许)。
+__wd_count() { sed -n "s/^$1=\"\(.*\)\"$/\1/p" "${BASH_SOURCE[0]}" | head -1 | wc -w | tr -d ' '; }
+WATCHDOG_MAIN_N=$(( $(__wd_count DEFAULT_SUITES) + 4 ))   # +4 = auto-return/schema-consistency/perf-base-migration/tenant-isolation 四个单独 run_suite
+WATCHDOG_GATE_N=$(__wd_count DEMO_GATE_SUITES)
+WATCHDOG_MP_N=$(__wd_count MP_LANE_SUITES)
+WATCHDOG_TOTAL_N=$(( WATCHDOG_MAIN_N + WATCHDOG_GATE_N + WATCHDOG_MP_N ))
+# 数不出来就**不许静默回落成一个好看的数**(静默失败器族):回落到 0 会让阈值只剩固定开销 → 立刻红,朝严那边错。
+WATCHDOG_S=${REGRESSION_WATCHDOG_SECONDS:-$(( WATCHDOG_TOTAL_N * WATCHDOG_PER_SUITE_S + WATCHDOG_FIXED_S ))}
 if [ "$WATCHDOG_S" -gt 0 ]; then
+  echo "   [看门狗] ${WATCHDOG_TOTAL_N} 套(主 ${WATCHDOG_MAIN_N} + 门关 ${WATCHDOG_GATE_N} + 小程序 ${WATCHDOG_MP_N})"\
+" × ${WATCHDOG_PER_SUITE_S}s + ${WATCHDOG_FIXED_S}s 固定开销 = **${WATCHDOG_S}s**"\
+"${REGRESSION_WATCHDOG_SECONDS:+ (被 REGRESSION_WATCHDOG_SECONDS 覆盖成 ${REGRESSION_WATCHDOG_SECONDS}s)}"
   (
     sleep "$WATCHDOG_S"
     # 还活着 = 超时了。把现场打出来再送它上路。
     if kill -0 $$ 2>/dev/null; then
       echo "" >&2
-      echo "🔴 看门狗:整跑超过 ${WATCHDOG_S} 秒(基线约 2 分钟)—— 自杀,免得像 D151 那次跑 22 分钟没人知道。" >&2
+      echo "🔴 看门狗:整跑超过 ${WATCHDOG_S} 秒 —— 自杀,免得像 D151 那次跑 22 分钟没人知道。" >&2
+      if [ -n "${REGRESSION_WATCHDOG_SECONDS:-}" ]; then
+        # J-63:量出来的还是抄进来的,得说清。被显式指定时**不许说「算出来的」**。
+        echo "   这个数是 REGRESSION_WATCHDOG_SECONDS 显式指定的,不是按套数算的(按套数算是 $(( WATCHDOG_TOTAL_N * WATCHDOG_PER_SUITE_S + WATCHDOG_FIXED_S ))s)。" >&2
+      else
+        echo "   这个数是算出来的,不是拍的:${WATCHDOG_TOTAL_N} 套 × ${WATCHDOG_PER_SUITE_S}s + ${WATCHDOG_FIXED_S}s 固定开销。" >&2
+      fi
       NOW_RUNNING="$(cat "$CURRENT_SUITE_FILE" 2>/dev/null)"
       echo "   当时在跑:${NOW_RUNNING:-(还没跑到套件,卡在预检或起服务那一段)}" >&2
       echo "   常见原因:某个改动让每条 AI 进线都要等(合并窗那一类),或某个套件在等一个永远不来的东西。" >&2
-      echo "   要放宽:REGRESSION_WATCHDOG_SECONDS=900 bash apps/api/run-all-tests.sh" >&2
+      echo "   🔴 **先别放宽** —— 阈值已经按套数算过了,超它说明是真慢,不是阈值小。" >&2
+      echo "      真要放宽(只给「我就是要跑很久」那种):REGRESSION_WATCHDOG_SECONDS=<秒> bash apps/api/run-all-tests.sh" >&2
       # 🔴 只 TERM 父进程,让它的 EXIT/TERM 陷阱把 4128/4310 还回去(脚本红线②)。
       #    踩过两次才写对:
       #    ① 直接 `kill -9` —— 陷阱根本不跑,两个端口都留在死的状态;
@@ -65,6 +96,7 @@ env_clean() { local a=(); for v in $REGRESSION_ONLY_ENV; do a+=(-u "$v"); done; 
 
 cd "$(dirname "$0")"
 API_DIR="$(pwd)"   # 绝对路径:restore_local 结束时要用,那时 cwd 可能已经变了
+REPO_ROOT="$(cd "$API_DIR/../.." && pwd)"   # 09p §五②:还回去要验「在哪棵树上」,这是那个期望值
 
 # ══ 预检先跑(店主 05o 裁 §三 之一)══
 # 05n 那一批跑了 5 次全量,其中 **3 次红是可预判的**(护栏清单没重生成 / 棘轮超 /
@@ -125,7 +157,19 @@ restore_local() {
   bash "$API_DIR/../../tools/start-local.sh" --bg
   for _ in $(seq 1 20); do
     # 认库不认端口:必须是**本机库**那台起来了才算还回去了
-    local_is_owners && { echo "== 已把店主的本地服务(4128)重新拉起来(库:$(local_health_field 4128 dataFile))=="; return 0; }
+    # 🔴 09p §五②(店主批,立为常驻):**一个 200 只证明有东西在应答,不证明应答的是哪个版本。**
+    # 案底就在本批:我在 285b20d 的工作树里跑了一次那一版的回归,它的 restore 从**它自己那棵树**
+    # 把 4128 拉了起来 —— 200、屏幕写着「已还回去」,**里面是三周前的 app**。
+    # `local_is_owners` 只认「库对不对」,认不出「代码是哪一版、在哪棵树上」。
+    if local_is_owners; then
+      if bash "$API_DIR/../../tools/verify-restored.sh" 4128 "$REPO_ROOT" > /dev/null 2>&1; then
+        echo "== 已把店主的本地服务(4128)重新拉起来(库:$(local_health_field 4128 dataFile))=="
+        return 0
+      fi
+      echo "!! 4128 起来了、库也对,但**版本指纹对不上** —— 按「没还回去」处理:" >&2
+      bash "$API_DIR/../../tools/verify-restored.sh" 4128 "$REPO_ROOT" >&2 || true
+      return 1
+    fi
     sleep 0.5
   done
   # 🔴 裁 #58④②:原因不许再埋在 /tmp 里 —— 屏幕上只说「没拉回来」,没人会去翻那个文件。
@@ -171,7 +215,16 @@ restore_sandbox() {
   ( cd "$API_DIR" && nohup env $(env_clean) PORT=4310 DATA_DIR="$SANDBOX_DATA_DIR" ALLOW_DEMO_ADMIN_LOGIN=true \
       AI_GATE="${SANDBOX_AI_GATE:-}" node ${SB_NODE_ARGS[@]+"${SB_NODE_ARGS[@]}"} local-server.mjs > /tmp/ll-sandbox-restored.log 2>&1 & )
   for _ in $(seq 1 20); do
-    curl -sf -o /dev/null --max-time 2 "http://127.0.0.1:4310/health" && { echo "== 已把沙箱(4310)重新拉起来 =="; return 0; }
+    # 🔴 09p §五②:沙箱同样不许只看 200 —— 它也可能被另一棵树的代码占着(而且沙箱是拿来演示的,
+    # 「演示的时候跑的是三周前的 app」比本机更难发现)。
+    if curl -sf -o /dev/null --max-time 2 "http://127.0.0.1:4310/health"; then
+      if bash "$API_DIR/../../tools/verify-restored.sh" 4310 "$REPO_ROOT" > /dev/null 2>&1; then
+        echo "== 已把沙箱(4310)重新拉起来 =="; return 0
+      fi
+      echo "!! 4310 答 200 了,但**版本指纹对不上** —— 按「没拉回来」处理:" >&2
+      bash "$API_DIR/../../tools/verify-restored.sh" 4310 "$REPO_ROOT" >&2 || true
+      return 1
+    fi
     sleep 0.5
   done
   echo "!! 沙箱 4310 没拉回来,演示/走查前请手动拉起" >&2
@@ -316,7 +369,7 @@ curl -s -X POST -H "authorization: Bearer owner-demo-token" -H "content-type: ap
   -d '{}' http://127.0.0.1:4128/admin/demo/full-seed > /dev/null || true
 
 # 可用 CI_SUITES="a b c" 环境变量跑子集(调试用)
-DEFAULT_SUITES="customer-service-matrix working-memory business-hours intent-guards quote-polish silent-handoff human-handoff after-sales-handoff identity-links entitlements tenant-kb finance-core finance-goals stored-value schedule-week special-dates customer-profile staff-portal admin-accounts pricing-model membership-config customer-import tenant-hygiene tenant-timezone deposit-config message-templates settlement daily-close salary-v2 schedule-v2 finance-trend finance-lock perf-viz coupon-settle audit-fix scan-sign double-sheet auth-surface currency-scan settle-stress sign-stability noshow-aftersales demo-seed-guard card-refund amend-linkage ledger-guards backend-gate hero-slides cash-notes mini-money-inputs image-placeholder deposit-audit web-settlement cross-end-effect mini-account-adjust today-board dashboard-pulse dashboard-home hours-gate crossend-cta tab-colors color-usage token-entry danger-cmd notify-scheduler quote-state ui-spec observe-fixes file-ratchet delivery-evidence store-name correction-reason credential-scan exit-code fixture-front-door wechat-stub mini-phone booking-cancel identity-claim customer-paths coupon-status web-not-signup import-phone-guard bench-selfguard user-write-auth env-inventory backup-wal secret-output demo-gate-scope demo-gate-coverage frontend-routes login-entries db-target-guard empty-pill untouched-proof display-text tenant-ownership tenant-explicit identity-tenant version-fingerprint tenant-fill-trigger conversation-log ai-gate ai-safety-lines ai-fact-gate booking-intake turn-classify turn-answer ai-review quote-tenant conversation-tenant mini-ai-same-outlet platform-login mp-home-owner v4-five-fixes repeat-guard merge-window three-stores tier-label native-dialog demo-mark txn-rollback store-jury"
+DEFAULT_SUITES="customer-service-matrix working-memory business-hours intent-guards quote-polish silent-handoff human-handoff after-sales-handoff identity-links entitlements tenant-kb finance-core finance-goals stored-value schedule-week special-dates customer-profile staff-portal admin-accounts pricing-model membership-config customer-import tenant-hygiene tenant-timezone deposit-config message-templates settlement daily-close salary-v2 schedule-v2 finance-trend finance-lock perf-viz coupon-settle audit-fix scan-sign double-sheet auth-surface currency-scan settle-stress sign-stability noshow-aftersales demo-seed-guard card-refund amend-linkage ledger-guards backend-gate hero-slides cash-notes mini-money-inputs image-placeholder deposit-audit web-settlement cross-end-effect mini-account-adjust today-board dashboard-pulse dashboard-home hours-gate crossend-cta tab-colors color-usage token-entry danger-cmd notify-scheduler quote-state ui-spec observe-fixes file-ratchet delivery-evidence store-name correction-reason credential-scan exit-code fixture-front-door wechat-stub mini-phone booking-cancel identity-claim customer-paths coupon-status web-not-signup import-phone-guard bench-selfguard user-write-auth env-inventory backup-wal secret-output restore-fingerprint demo-gate-scope demo-gate-coverage frontend-routes login-entries db-target-guard empty-pill untouched-proof display-text tenant-ownership tenant-explicit identity-tenant version-fingerprint tenant-fill-trigger conversation-log ai-gate ai-safety-lines ai-fact-gate booking-intake turn-classify turn-answer ai-review quote-tenant conversation-tenant mini-ai-same-outlet platform-login mp-home-owner v4-five-fixes repeat-guard merge-window three-stores tier-label native-dialog demo-mark txn-rollback store-jury"
 read -r -a SUITES <<< "${CI_SUITES:-$DEFAULT_SUITES}"
 
 # 🔴 断言基线(店主 02r 裁定一):每套跑完**就地数** `^ok ` 条数,不事后解析日志 ——
@@ -427,6 +480,7 @@ if printf '%s' "$DEMO_GATE_MODES" | grep -q false; then
   ( cd "$API_DIR" && nohup env -u ALLOW_DEMO_ADMIN_LOGIN PORT=4132 DATA_DIR="$DATA_DIR" \
       node local-server.mjs > /tmp/ll-ci-4132.log 2>&1 & )
   wait_health 4132 "演示门关闭实例"
+  printf '[门关档] 起 4132 实例与自证(第 %s 秒)' "$SECONDS" > "$CURRENT_SUITE_FILE" 2>/dev/null || true
   GATE_OFF="$(curl -s --max-time 3 http://127.0.0.1:4132/health | node -e 'let s="";process.stdin.on("data",d=>s+=d).on("end",()=>{try{console.log(String(JSON.parse(s).guestIdUnsigned))}catch{console.log("?")}})')"
   echo "   [自证] 4132 的 guestIdUnsigned=$GATE_OFF(应为 false —— 证明这一档真的关着门,不是白跑)"
   if [ "$GATE_OFF" != "false" ]; then
@@ -435,6 +489,12 @@ if printf '%s' "$DEMO_GATE_MODES" | grep -q false; then
   fi
   DEMO_GATE_RED=0
   for suite in $DEMO_GATE_SUITES; do
+    # 🔴 J-86(店主 09p 立)· 一个恒成立的报错信息,比没有报错信息更坏。
+    # 案由:`CURRENT_SUITE_FILE` **只有 run_suite 写**,而 `run_suite tenant-isolation` 是全文件
+    # 最后一次调用 —— 于是主档跑完之后无论死在哪儿,看门狗都会说「当时在跑:tenant-isolation」。
+    # **恒成立。** 两次独立跑,同一个名字、同一个「第 149 秒」,而那一套实测只跑 1 秒。
+    # 「没有信息,人会去找;一个恒定的假名字,人会照着它去找,而且会找两次、三次。」
+    printf '[门关档] %s(第 %s 秒起跑)' "$suite" "$SECONDS" > "$CURRENT_SUITE_FILE" 2>/dev/null || true
     echo "== [门关] test-${suite} =="
     if TEST_BASE_URL=http://127.0.0.1:4132 BASE_URL=http://127.0.0.1:4132 node "test-${suite}.mjs" > "$SUITE_OUT" 2>&1; then
       echo "   ✅ [门关] ${suite}"
@@ -505,6 +565,7 @@ MP_LANE_N=$(printf '%s' "$MP_LANE_SUITES" | wc -w | tr -d ' ')
 echo ""
 echo "== 小程序自动化那一档(裁#91:单独跑、单独报数)=="
 MP_LANE_RED=0; MP_LANE_SKIP=0
+printf '[小程序档] 探 9420 会话(第 %s 秒)' "$SECONDS" > "$CURRENT_SUITE_FILE" 2>/dev/null || true
 if [ -z "$MP_ALIVE" ]; then
   echo "   🔴 9420 自动化会话**不是活的**(没有应答 426)—— 这三把刀**本轮不跑**,按红报。"
   echo "      这不是「刀红了」,是「会话不在」。拉起来:bash tools/mp-automator-up.sh"
@@ -512,7 +573,34 @@ if [ -z "$MP_ALIVE" ]; then
   MP_LANE_SUITES=""
 fi
 for suite in $MP_LANE_SUITES; do
-  if MP_AUTOMATOR="${MP_AUTOMATOR:-}" node "test-${suite}.mjs" > "$SUITE_OUT" 2>&1; then
+  printf '[小程序档] %s(第 %s 秒起跑)' "$suite" "$SECONDS" > "$CURRENT_SUITE_FILE" 2>/dev/null || true   # J-86 同上
+  # ══ 🔴 09p 现场抓到的第三件(与 J-86 那件**同一个根**:两档不走 run_suite,就拿不到 run_suite 的本事)══
+  # 现测:`ps` 里躺着 6 个 `test-mp-placeholder-size.mjs`,最老的一个**跑了 5 小时 21 分**,
+  # 它们的父进程是 6 轮早就该死掉的 `run-all-tests.sh`(最老那个 15:41 起,活了 5 小时 24 分)。
+  #
+  # 为什么看门狗没能把它们送走 —— **看门狗打印了,但没杀成**:
+  #   `kill -TERM $$` 只是把陷阱**挂起**,bash 要等**当前那条前台命令返回**才会跑陷阱;
+  #   而这里那条前台命令是 `node test-mp-*.mjs`,**它永远不返回**。
+  #   ⇒ 屏幕上看见「看门狗自杀」,进程表里它还活着,而且抱着 9420 会话不放。
+  #   ⇒ 下一轮再来,又多一个 —— 6 个抢同一个 DevTools 会话,后来的必然也卡住。
+  # D167 早就定过「mp-* 各带 60 秒单套超时」,**但那段超时写在 `run_suite` 里,而这一档不走 run_suite**。
+  # 同一个结构性洞的第三处:能力长在 run_suite 上,另外两档一个都没继承。
+  : > "$SUITE_OUT"
+  # ⚠️ **不套子 shell**:`( … ) &` 拿到的 `$!` 是子 shell 的号,杀它 node 可能活下来 ——
+  # 而「node 活下来抱着 9420 会话」正是这一段要治的病。直接后台起 node,`$!` 就是 node 本身,
+  # 于是**一枪就够,不需要 `pkill`**(危险命令白名单上限 4、只减不增,新增要先报店主 —— 本批不增)。
+  MP_AUTOMATOR="${MP_AUTOMATOR:-}" node "test-${suite}.mjs" > "$SUITE_OUT" 2>&1 &
+  __mp_pid=$!
+  __mp_waited=0
+  while kill -0 "$__mp_pid" 2>/dev/null && [ "$__mp_waited" -lt "$SUITE_TIMEOUT_S" ]; do sleep 1; __mp_waited=$(( __mp_waited + 1 )); done
+  if kill -0 "$__mp_pid" 2>/dev/null; then
+    kill -9 "$__mp_pid" 2>/dev/null || true
+    wait "$__mp_pid" 2>/dev/null || true
+    echo "   ⏳ [小程序档] ${suite} 超过 ${SUITE_TIMEOUT_S} 秒没结束 —— **本轮未跑**(多半是 9420 会话僵死),整轮继续。"
+    MP_LANE_SKIP=$(( MP_LANE_SKIP + 1 ))
+    continue
+  fi
+  if wait "$__mp_pid" 2>/dev/null; then
     if grep -qE '^ok ' "$SUITE_OUT"; then echo "   ✅ [小程序档] ${suite}"
     else echo "   ⏳ [小程序档] ${suite} —— **跑了但一条断言都没打出来**(多半是 9420 会话不在)"; MP_LANE_SKIP=$(( MP_LANE_SKIP + 1 )); fi
   else

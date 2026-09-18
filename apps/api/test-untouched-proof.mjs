@@ -199,6 +199,19 @@ const claimLinesOf = (src) => src.split('\n').filter((ln) => {
   if (!SAYS.test(ln)) return false
   if (DENY.test(ln) && /未动\s*的?\s*对照|不是一次声称|假红|误判/.test(ln)) return false
   for (const m of ln.matchAll(/(生产库|本机库|沙箱库)\s*(?:·\s*)?未动/g)) {
+    /* 🔴 09p 补一层(J-73:同一件事的每一种合法写法都要覆盖到)——**被「」引起来的是转述,不是声称**。
+     * 案底:09p 那份**上游令**里写「…回执写「本机库未动」没对照表,逼你逐表对,才发现确实不是未动」——
+     * 那是 Cowork 在**复述我上一批的错**,而这把刀把它算成了一次新声称,存量 34 → 35 当场红。
+     * 而那份令是**别人的产出,我不许改**(J-55②),于是这条红没有任何合法的修法,除非补这一层。
+     * 与本文件上面那条同族、同一个病、**换了一种拼法**:
+     *   上一次是「否认」(「这句话我不能说」),DENY_NEAR 收了;
+     *   这一次是「引述」(「」里包着),DENY_NEAR 认不出来。
+     * 判的是**结构**(有没有被引号包住),不是措辞 —— 措辞可以换,引号包没包住是客观的。
+     * ⚠️ 不怕被拿来躲判据:真正的安全保证行写的是 `**生产库未动 · 本机库未动**`(粗体),
+     *   谁把自己的安全保证改写成「本机库未动」来躲,那是 J-49 第二款那条明令禁止的事,
+     *   而且 ③g 那把刀就盯着「真声称不许被吞」。 */
+    const quoted = ln[m.index - 1] === '「' && ln[m.index + m[0].length] === '」'
+    if (quoted) continue
     const win = ln.slice(Math.max(0, m.index - 14), m.index + m[0].length + 14)
     if (!DENY_NEAR.test(win)) return true      /* 这一处是**真在声称** */
   }
@@ -271,6 +284,17 @@ check('③d 造病二:写了标记、但对照表文件**不存在** → 必须�
 check('③e 🔴 反向守:像夜 8 那样**否认**自己能说这句话的 —— **不许红**(J-49 的由来)',
   claimLinesOf(C_DENY).length === 0,
   `现测把它当成了 ${claimLinesOf(C_DENY).length} 条声称`)
+/* ── 09p 补的这一层,自己先挨三刀(突变自检条;缺一刀都不算验过)── */
+const C_QUOTED = '另一条:**回执写「本机库未动」没对照表,逼你逐表对,才发现确实不是未动**(心跳)。'
+check('③m 🔴 引述不算声称:「本机库未动」被引号包住 → 0 条',
+  claimLinesOf(C_QUOTED).length === 0, `现测算成了 ${claimLinesOf(C_QUOTED).length} 条`)
+check('③n 🔴 **证明是引号在起作用**:同一句去掉那对引号 → 必须重新被算成 1 条',
+  claimLinesOf(C_QUOTED.replace('「本机库未动」', '本机库未动')).length === 1,
+  `现测 ${claimLinesOf(C_QUOTED.replace('「本机库未动」', '本机库未动')).length} 条 —— 不是 1 就说明放走它的不是引号,是别的东西`)
+check('③o 反向守:真安全保证行(粗体、不带引号)照样算 1 条,不许被这一层吞掉',
+  claimLinesOf('**安全保证**:**生产库未动 · 本机库未动**。').length === 1,
+  `现测 ${claimLinesOf('**安全保证**:**生产库未动 · 本机库未动**。').length} 条`)
+
 /* ③f 反向守的反向守:别把 DENY 写得太宽,把真声称也一并放走了 */
 check('③f 反向守的反向守:一句**平铺直叙的真声称**不许被「否认」那条规则吞掉',
   claimLinesOf('生产库未动 · 本机库未动。').length === 1)
