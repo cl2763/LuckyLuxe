@@ -17528,7 +17528,7 @@ try {
     try {
       const r = dropTenantDefaults(db2)
       db2.exec('COMMIT')
-      console.log(`[migrate] 去掉 tenant_id 列默认值:${r.done} 张表(触发器 ${r.triggers} 条原样装回)`)
+      console.log(`[migrate] 去掉 tenant_id 列默认值:${r.done} 张表(触发器 ${r.triggers} 条原样装回,**逐名比对通过** ${r.triggerNamesMatched} 条)`)
     } catch (error) {
       try { db2.exec('ROLLBACK') } catch { /* 已不在事务里 */ }
       console.warn(`[migrate] 去 tenant_id 默认值失败,**已整批回滚**(老库原样保留):${error.message}`)

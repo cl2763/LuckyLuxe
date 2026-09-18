@@ -70,8 +70,15 @@ export function dropTenantDefaults(db, { failAt = 0 } = {}) {
   const tighten = new Set(tenantNullableTargets(db).map((r) => r.t))
   const names = [...new Set([...tenantDefaultTargets(db).map((r) => r.t), ...tighten])]
   if (!names.length) return { done: 0, triggers: 0 }
+  /* 🔴 09n 件 C-5(店主问:「触发器 9 条原样装回 —— 装回之后逐条比过名字了吗?」)
+   * 老实答:**原来只数了条数,没比名字。** 而**条数对不等于名字对** ——
+   * 重建那一段里任何一处把触发器 SQL 改了名(或漏装一条、多装一条),条数照样能对上。
+   * 归族:「数量凑巧对上」那一类假绿。
+   * 现在:摘之前记下**名字集合**,装回之后逐名比;对不上**直接抛** ——
+   * 这一段包在 `BEGIN IMMEDIATE` 里,抛出去就整批回滚,老库原样保留。 */
   const allTriggers = all("SELECT sql FROM sqlite_master WHERE type='trigger' AND sql IS NOT NULL").map((r) => r.sql)
-  for (const r of all("SELECT name FROM sqlite_master WHERE type='trigger'")) db.exec(`DROP TRIGGER IF EXISTS "${r.name}"`)
+  const beforeNames = all("SELECT name FROM sqlite_master WHERE type='trigger'").map((r) => r.name).sort()
+  for (const n of beforeNames) db.exec(`DROP TRIGGER IF EXISTS "${n}"`)
   let done = 0
   for (const t of names) {
     done += 1
@@ -96,5 +103,12 @@ export function dropTenantDefaults(db, { failAt = 0 } = {}) {
     for (const sql of idxSql) db.exec(sql)
   }
   for (const sql of allTriggers) db.exec(sql)
-  return { done, triggers: allTriggers.length }
+  /* 🔴 逐名比,不比条数 */
+  const afterNames = all("SELECT name FROM sqlite_master WHERE type='trigger'").map((r) => r.name).sort()
+  const missing = beforeNames.filter((n) => !afterNames.includes(n))
+  const extra = afterNames.filter((n) => !beforeNames.includes(n))
+  if (missing.length || extra.length) {
+    throw new Error(`触发器装回之后逐名对不上,拒绝提交(整批回滚):少了 [${missing.join(', ')}] · 多了 [${extra.join(', ')}]`)
+  }
+  return { done, triggers: allTriggers.length, triggerNamesMatched: beforeNames.length }
 }

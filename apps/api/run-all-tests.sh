@@ -488,11 +488,29 @@ if [ -z "${MP_AUTOMATOR:-}" ] && [ -d "$HOME/ll-mp-tools/node_modules/miniprogra
   export MP_AUTOMATOR="$HOME/ll-mp-tools/node_modules/miniprogram-automator"
   echo "   [自找] MP_AUTOMATOR 没设 —— 按外部件清单的路径找到了:$MP_AUTOMATOR"
 fi
+# 🔴 09n 现踩(我自己引入的回归,记在这里):夜13 加了「自找 MP_AUTOMATOR」之后,
+#   **模块找得到、而 9420 会话是死的**这一档,从「快速失败」变成了「干等」——
+#   三把刀各等 61 秒,整跑先撞 300 秒看门狗,放宽到 900 秒**照样跑不完**。
+#   「找得到模块」和「会话活着」是两件事(J-37③:端口在听 ≠ 会话是活的)。
+#   所以开跑前**先探会话**:活着(应答 426)才跑;不活就**立刻按红报,不跑**——
+#   这比等 3 分钟再红既快又更诚实:它报的是「会话不在」,不是「刀红了」。
+MP_ALIVE=""
+if [ -n "${MP_AUTOMATOR:-}" ]; then
+  if [ "$(curl -s -o /dev/null -w '%{http_code}' --max-time 5 http://127.0.0.1:${MP_AUTO_PORT:-9420} 2>/dev/null)" = "426" ]; then
+    MP_ALIVE=yes
+  fi
+fi
 MP_LANE_SUITES="mp-placeholder-size mp-overlap mp-home-sections"
 MP_LANE_N=$(printf '%s' "$MP_LANE_SUITES" | wc -w | tr -d ' ')
 echo ""
 echo "== 小程序自动化那一档(裁#91:单独跑、单独报数)=="
 MP_LANE_RED=0; MP_LANE_SKIP=0
+if [ -z "$MP_ALIVE" ]; then
+  echo "   🔴 9420 自动化会话**不是活的**(没有应答 426)—— 这三把刀**本轮不跑**,按红报。"
+  echo "      这不是「刀红了」,是「会话不在」。拉起来:bash tools/mp-automator-up.sh"
+  MP_LANE_RED=$MP_LANE_N
+  MP_LANE_SUITES=""
+fi
 for suite in $MP_LANE_SUITES; do
   if MP_AUTOMATOR="${MP_AUTOMATOR:-}" node "test-${suite}.mjs" > "$SUITE_OUT" 2>&1; then
     if grep -qE '^ok ' "$SUITE_OUT"; then echo "   ✅ [小程序档] ${suite}"

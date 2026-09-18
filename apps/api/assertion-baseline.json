@@ -126,7 +126,8 @@
     "import-phone-guard": 5,
     "bench-selfguard": 18,
     "user-write-auth": 11,
-    "env-inventory": 9
+    "env-inventory": 9,
+    "backup-wal": 10
   },
   "上次更新": "2026-09-02",
   "巨型文件历史最低": {
