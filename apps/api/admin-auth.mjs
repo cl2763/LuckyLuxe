@@ -16,10 +16,21 @@ export function createAdminAuth({ db, randomId, iso, createHash, defaultTenantId
     db.prepare(`INSERT INTO admin_accounts (id, username, display_name, role, technician_id, password_hash, must_change_password, status, created_at, updated_at, tenant_id)
       VALUES (?, 'boss', '老板', 'owner', NULL, ?, 1, 'active', ?, ?, ?)`)
       .run(randomId('acct'), adminPasswordHash('boss', initialPassword), iso(new Date()), iso(new Date()), defaultTenantId)
+    /* 🔴 D203 同类(09o §一 L2 扫尽扫出来的第二处):这里原来**既写文件、又把明文口令打进 console**。
+       文件是设计好的交付口(gitignore、改密后自动删);**那行 console 是多出来的一份**,
+       而它在生产上会进 Railway 部署日志 —— 留存、删不掉。J-53:密钥不进任何输出。
+       改法不是「两个都去掉」:去掉文件就没人拿得到口令了。**留文件、去日志。**
+       于是文件从「备份的一份」变成**唯一那一份** —— 所以它写不进去不能再静默吞掉。 */
+    let delivered = false
     try {
       writeFileSync(file, `老板主账号(首次登录后必须改密码,改完本文件自动删除)\n用户名: boss\n初始密码: ${initialPassword}\n`)
-    } catch { /* 写不进就只打日志 */ }
-    console.log(`[账号] 老板主账号已创建 用户名: boss 初始密码: ${initialPassword} (也写入 local-data/初始老板账号.txt)`)
+      delivered = true
+    } catch (e) {
+      /* 🔴 不许回落成「打日志顶上」—— 那正是要去掉的那条路。只说失败,不说值。 */
+      console.error(`[账号] 🔴 老板主账号已建,但初始口令**没能落盘**(${e.message})。`
+        + '口令不会打印到日志(D203),所以这一把**已经取不到了** —— 请走平台后台「重置老板密码」重发一次。')
+    }
+    if (delivered) console.log('[账号] 老板主账号已创建 用户名: boss —— 初始口令已写入 local-data/初始老板账号.txt(不打印;首登改密后该文件自动删除)')
     return file
   }
 

@@ -6656,7 +6656,7 @@ const { adminPasswordHash, randomPassword, issueAdminSession, adminFromSessionTo
   db, randomId, iso, createHash, defaultTenantId: DEFAULT_TENANT_ID
 })
 const platformAuth = createPlatformAuth({ db, randomId, iso, createHash })
-platformAuth.bootstrapAndReport(console)   // D149 自举第一个平台账号;一次性密码只打进启动日志,由人抄进本地文件
+platformAuth.bootstrapAndReport(console)   // D149 自举第一个平台账号。🔴 D203:一次性口令**不再打进启动日志**(Railway 部署日志留存、删不掉,而它是平台级凭据)
 const platformSessions = createPlatformSessions({
   db, randomId, iso, sha256: (v) => createHash('sha256').update(String(v)).digest('hex')
 })

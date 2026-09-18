@@ -141,16 +141,57 @@ export function createPlatformAuth({ db, randomId, iso, createHash }) {
     return false
   }
 
-  /** 开机自举 + 把一次性密码打给人看。**只打日志、不写任何文件** ——
-   *  它要落的那份 `handoff/本地自查账号.txt` 是 gitignore 的本地件,由人抄进去;
-   *  脚本自己去写它,等于多一处存密码的地方(而且那一处还会被别的批次覆盖)。
+  /** 开机自举。**口令一个字符都不进日志。**
+   *
+   *  🔴 D203(店主 09o 裁,硬挡推):这里原来把一次性口令**明文打进启动日志**。
+   *  本机看着没事,**生产不是** —— Railway 的部署日志是留存的、面板上看得到、**事后删不掉**。
+   *  而它是**平台级**凭据:一把钥匙,所有店。不可逆 + 平台级 + 这次推夹带进来的,三条占全。
+   *  J-53:密钥不进任何输出 —— **包括「只打给人看一眼」这种输出**,因为日志不是「一眼」。
+   *
+   *  于是口令现在**没有任何出口**。这是有意的,不是漏掉的:
+   *  口令有没有出口,取决于这个账号到底用不用(店主 09o §一 的甲/乙二选一),
+   *  而那一问要等「平台后台现在走哪条鉴权」答完才定。**在那之前,宁可没人登得上,也不许留在日志里。**
+   *  (乙)一旦定下,走的是环境变量那条:店主亲手生成与灌入,代码不生成、不打印、不拷贝,
+   *  读不到就拒绝启动、不回落成空 —— 与 `WECHAT_MINI_TOKEN_SECRET` 同族。
+   *
    *  幂等按「建过没有」判(幂等判据律):建过就一个字不动,重启一百次也不会换密码。 */
   function bootstrapAndReport(logger = console) {
+    /* 🔴 D203 · 甲支(店主 09o §一 预裁:「(甲) 这个账号现在没用 → 那就别在这次推里建它」)。
+     *
+     * 现查的证据(09m 问 3,见 09o 回执 §一):平台后台三条门
+     *   ① `Bearer OWNER_TOKEN`(`local-server.mjs:12713`)
+     *   ② `platformAuth.fromSession`(`:12714`)—— 要 `platform_accounts` 里有行
+     *   ③ 「记住这台电脑」的 cookie(`:12715`)—— **只能由②换来**(`:13046` 现证)
+     * 而**生产库 `platform_accounts` 现在是 0 行** ⇒ ②③ 在线上都无人可用 ⇒ 今天走的就是 ①。
+     * **⇒ 甲成立:这个账号现在没用。**
+     *
+     * 于是自举**默认关掉**,而不是「生产关、别处开」:
+     * `scopeOf()` 在生产上返回的是 `'local'`(生产库路径正好以 `local-data` 结尾),
+     * 拿它判生产会判反;拿 `NODE_ENV/RAILWAY_ENVIRONMENT` 判则是**漏判即建号**——
+     * 朝不安全那边失败(J-68:尺子错要错在保守那一侧)。
+     * 默认关 = 漏判也只是「没建」,**没有任何一条路会因此凭空生出一把取不到口令的平台钥匙**。
+     *
+     * 要开:显式 `PLATFORM_ADMIN_BOOTSTRAP=1`(判据②层就是这么开的)。
+     * 乙支真要落地时,连着 D149 密码登录一起设计:口令从环境变量来、店主亲手灌,
+     * 代码不生成不打印不拷贝,读不到就拒绝启动。 */
+    if (String(process.env.PLATFORM_ADMIN_BOOTSTRAP || '') !== '1') {
+      logger.log('[platform] 自举平台账号:**本次未建**(D203 甲支,默认关)。'
+        + '平台后台现走 OWNER_TOKEN;要建请显式设 PLATFORM_ADMIN_BOOTSTRAP=1。')
+      return { created: false, username: 'platform-admin', initialPassword: null }
+    }
     try {
       const boot = bootstrapPlatformAdmin('platform-admin')
-      if (boot.created) logger.log(`[platform] 已建平台账号 ${boot.username},一次性密码:${boot.initialPassword}(首登强制改密;请抄进 handoff/本地自查账号.txt)`)
-      return boot
+      /* 🔴 只报「建了没有」,不报口令。**连长度、前缀、哈希都不报** ——
+         那些都是「拿值去猜值」的入口,而这一行的唯一职责是让人知道这件事发生过。 */
+      if (boot.created) {
+        logger.log(`[platform] 已建平台账号 ${boot.username}(首登强制改密)。`
+          + '🔴 一次性口令**未输出、也未落盘** —— D203:平台级凭据不进任何留存的地方。')
+      }
+      /* 口令不往外交:调用方拿到的 initialPassword 一律是 null,免得它在别处又被打一遍。 */
+      return { ...boot, initialPassword: null }
     } catch (e) {
+      /* 🔴 拒绝分支同样不许念钥匙:只交 message,且 message 里不会有值
+         —— INSERT 进去的是 hash,不是明文(见 bootstrapPlatformAdmin)。 */
       logger.error('[platform] 自举平台账号失败(不阻塞启动):', e.message)
       return { created: false, username: 'platform-admin', initialPassword: null }
     }
