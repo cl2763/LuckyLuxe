@@ -120,7 +120,7 @@ const APP_TIMEZONE = process.env.APP_TIMEZONE || 'America/Toronto'
 process.env.TZ = APP_TIMEZONE
 
 const __dirname = dirname(fileURLToPath(import.meta.url))
-const { legacyScope, scopeOf, isProductionEnv, demoLoginAllowed } = await import('./data-scope.mjs'); const { requireMiniTokenSecret, miniSecretIsExplicit } = await import('./mini-token-secret.mjs'); const { publishOwnerToken } = await import('./owner-token.mjs'); const { fetchJsCode2Session, isStubScope } = await import('./wechat-code-stub.mjs'); const { intakeCustomerForDirectBooking } = await import('./write-intake.mjs'); const { bindMiniPhone, needsPhone } = await import('./mini-phone.mjs')
+const { legacyScope, scopeOf, isProductionEnv, demoLoginAllowed, treatAsReal } = await import('./data-scope.mjs'); const { requireMiniTokenSecret, miniSecretIsExplicit } = await import('./mini-token-secret.mjs'); const { publishOwnerToken } = await import('./owner-token.mjs'); const { fetchJsCode2Session, isStubScope } = await import('./wechat-code-stub.mjs'); const { intakeCustomerForDirectBooking } = await import('./write-intake.mjs'); const { bindMiniPhone, needsPhone } = await import('./mini-phone.mjs')
 const workspaceRoot = join(__dirname, '..', '..')
 const webRoot = join(workspaceRoot, 'apps', 'web')
 const assetRoot = join(workspaceRoot, 'miniprogram', 'assets')
@@ -165,7 +165,7 @@ const PORT = Number(process.env.PORT || 4000)
 // 名字带 DEMO 容易让人低估它的权限——它是平台最高信任根。
 const OWNER_TOKEN = process.env.OWNER_TOKEN || process.env.OWNER_DEMO_TOKEN || 'owner-demo-token'; publishOwnerToken({ scopeName: DATA_SCOPE_NAME, dataDir, token: OWNER_TOKEN })  // 07e 裁#64 试点:只在 ci/sandbox 把现用的那把写进本轮 DATA_DIR,取值一个字不动
 // 生产判定(Railway 会注入 RAILWAY_ENVIRONMENT):用于「日志里不许出现主钥匙」这类只在云端生效的收紧
-const IS_PRODUCTION = isProductionEnv()   // 裁#90 第4条:判「这是不是真环境」全仓只许一个出口(./data-scope.mjs),不许在这里再判一遍
+const IS_PRODUCTION = isProductionEnv(); const TREAT_AS_REAL = treatAsReal({ dataDir })   // 裁#90④:判「这是不是真环境」全仓只此一个出口(./data-scope.mjs)。TREAT_AS_REAL 是**更严的那一个**(09r §三,理由写在 data-scope.mjs),只给会改真库内容的那两条迁移用
 /* 四之十红线(店主 08-23 重申,随真机调试联通件钉死):**演示白名单只在沙箱成立,生产结构性不成立**。
    以前只靠"云端别设 ALLOW_DEMO_ADMIN_LOGIN 这个变量"——那是配置纪律,配错一次就是任何人
    拿邮箱+任意密码进真库。现在生产进程里这个开关**恒 false**:即使误设环境变量也开不了,
@@ -16760,7 +16760,7 @@ ensureListedColumn(db)
    生产库一律不跑(那边的归属只能由平台后台显式设置,不许靠名字猜)。 */
 {
   const r = backfillTenantKindOnce(db, {
-    isProduction: IS_PRODUCTION,
+    isProduction: TREAT_AS_REAL,   // 09r §三:环境变量 或 库域,任一说「这是真的」就跳过
     markDone: (key) => db.prepare("INSERT INTO tenant_settings (tenant_id, key, value, updated_at) VALUES ('__system__', ?, ?, ?) ON CONFLICT(tenant_id, key) DO UPDATE SET value = excluded.value, updated_at = excluded.updated_at")
       .run(key, iso(new Date()), iso(new Date()))
   })
@@ -17492,7 +17492,7 @@ try {
 // (历史单据织在日结与收入历史里,账本只追加)。圈定=id demo-% / 名含「演示」/「店主验签」,
 // 只动两家真实店;幂等:已有标记跳过。
 /* 旧口径演示档案退役(一次性迁移)已搬出到 ./legacy-demo-retire.mjs(公约②,2026-08-25) */
-retireLegacyDemoArchives({ db, iso, isProduction: IS_PRODUCTION })
+retireLegacyDemoArchives({ db, iso, isProduction: TREAT_AS_REAL })   // 09r §三:同上
 
 // 改判① 钳位扫描:历史混合口径重算后 已兑换>新累计获得 的档案,补记正向调整行至 0
 // (账本只追加;不造负数不硬掰)。幂等:钳后余额=0,重跑扫不到负数即无操作。

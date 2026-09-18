@@ -339,6 +339,15 @@ done
 if [ -z "$NONSUITE_HITS" ]; then say "死判据都在全量跑得到的套件里" "✅ 非全量套件里没有「死判据」字样"
 else say "死判据住在跑不到的套件里" "⚠️ 提醒(不拦):$NONSUITE_HITS —— 全量那边也得有一份,否则等于没立"; fi
 
+# ⑨ 🔴 未入册的新文件(店主 09r 批次现场加)。
+#    `test-db-target-guard ⑤` 早就守着这一条:没 `git add` 的新文件**对每一把护栏刀都是隐形的**。
+#    但它住在全量里 —— 我 09p / 09q / 09r **连着三批**都是等整跑六分钟才被它咬到,
+#    而这件事 **6 秒就能知道**。判据没问题,问题是它站的位置太靠后。
+#    这一条**拦**(FAIL 置位):隐形文件会让后面所有扫描面结论都不作数,不是提醒级。
+UNTRACKED=$(cd "$(dirname "$0")/.." && git ls-files --others --exclude-standard -- 'tools/*.mjs' 'tools/*.sh' 'apps/api/*.mjs' 'apps/api/*.sh' 2>/dev/null | tr '\n' ' ')
+if [ -z "$UNTRACKED" ]; then say "新文件都已入册" "✅ tools/ 与 apps/api/ 下没有未 git add 的 .mjs/.sh"
+else say "有未入册的新文件" "🔴 $UNTRACKED—— 先 git add(没入册的文件对每一把护栏刀都是隐形的)"; FAIL=1; fi
+
 echo ""
 if [ "$FAIL" = "1" ]; then echo "❌ 预检红 —— **先修这些再起全量**(它们不用等 15 分钟就知道)"; exit 1; fi
 echo "✅ 预检全绿,可以起全量"

@@ -3132,10 +3132,15 @@ const main = async () => {
       /* 顺手件(D73 同族,低一级):演示档案退役迁移原来每次启动按 display_name LIKE '%演示%' 重扫全表 */
       // 判据跟着被测物走:这段同批搬到 legacy-demo-retire.mjs 了
       const retireMod = readFileSync(join(ROOT42, 'apps/api/legacy-demo-retire.mjs'), 'utf8')
-      check('㋟⑤ 演示档案退役迁移改一次性(不再挂启动路径,生产不跑)',
+      /* 🔴 09r §三:与 ㋜③ 同一处改动、同一类锚 —— 锚在 `isProduction: IS_PRODUCTION` 这个
+         **被本次改动抹掉的字面量**上(J-58③)。
+         🔴 而且这一条是我 L2 没扫干净漏掉的第二处:修 ㋜③ 时我没有机械搜一遍同类,
+         结果让全量替我找到了它。**「改一个字面量」永远是一类,不是一处。** */
+      check('㋟⑤ 演示档案退役迁移改一次性 —— 且守卫是裁#90 的「或」,不是单靠环境变量',
         retireMod.includes("const DEMO_RETIRE_KEY = 'demo_retire_backfill_v1'")
         && retireMod.includes('if (!demoRetireDone && !isProduction) try {')
-        && srv.includes('retireLegacyDemoArchives({ db, iso, isProduction: IS_PRODUCTION })'))
+        && srv.includes('retireLegacyDemoArchives({ db, iso, isProduction: TREAT_AS_REAL })')
+        && /export function treatAsReal/.test(readFileSync(join(ROOT42, 'apps/api/data-scope.mjs'), 'utf8')))
 
       /* ===== 🔴 ㋦ 分类唯一真相律(店主 2026-08-25 立,长期规矩)=====
          结构是**两级不是两套**:上层=大类字典(平台三类是默认起点,商家可细分);
@@ -3796,8 +3801,21 @@ const main = async () => {
         check('㋜② 回填改一次性迁移:不再挂每次启动,跑过记一笔(tenant_kind_backfill_v1)',
           guardsD73.includes('export function backfillTenantKindOnce') && guardsD73.includes("tenant_kind_backfill_v1")
           && !/export function backfillTenantKind\b/.test(guardsD73))
-        check('㋜③ 生产 scope 禁止启动期改 kind(生产归属只能平台后台显式设置)',
-          guardsD73.includes("if (isProduction) return { skipped: 'production'") && srv.includes('isProduction: IS_PRODUCTION'))
+        /* 🔴 09r §三:这条原来锚的是 `isProduction: IS_PRODUCTION` —— 一个**被本次改动抹掉的字面量**
+           (J-58③:反向锚不许落在自己会抹掉的字面量上)。
+           改动本身是**收紧**:那两条会改真库内容的迁移,不再只靠一个环境变量挡,
+           换成裁#90 的「或」(环境变量 **或** 库域,任一说「这是真的」就跳过)。
+           所以锚也跟着收紧 —— 不是换一个同样松的字面量,而是要求
+           ①调用处用的是 `TREAT_AS_REAL` ②`TREAT_AS_REAL` 真的是那个「或」。 */
+        const scopeSrc = readFileSync(join(ROOT, 'apps/api/data-scope.mjs'), 'utf8')
+        check('㋜③ 生产 scope 禁止启动期改 kind —— 且守卫是裁#90 的「或」,不是单靠环境变量',
+          guardsD73.includes("if (isProduction) return { skipped: 'production'")
+          && srv.includes('isProduction: TREAT_AS_REAL')
+          && /export function treatAsReal/.test(scopeSrc)
+          && /if \(isProductionEnv\(env\)\) return true/.test(scopeSrc)
+          && /if \(!DEV_SCOPES\.has\(scopeOf\(dataDir, env\)\)\) return true/.test(scopeSrc))
+        check('㋜③b 🔴 反向守:那个「或」的第二个判据不许写成 `=== \'production\'`(生产被判成 local,那样写等于没加)',
+          !/scopeOf\([^)]*\)\s*===\s*'production'/.test(scopeSrc))
         /* 会红的断言(判据自证):真调用 —— 传 isProduction 必须一行都不动;
            前缀命中的租户在**非生产**下才归 test,而且只归一次(第二次调用为 already-done)。 */
         const { backfillTenantKindOnce } = await import(new URL('../../apps/api/ledger-guards.mjs', import.meta.url))

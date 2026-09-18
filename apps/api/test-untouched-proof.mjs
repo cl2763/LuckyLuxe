@@ -98,8 +98,26 @@ if (!existsSync(SB)) {
 
 /* ③ 回执自证(白名单式):凡写了「未动」的交付文档,同一份文档里必须有对照表。
    扫的是"谁说了未动",不是"我记得哪几篇写过" —— 新写的回执自动进扫描面。 */
-const docs = execFileSync('git', ['-c', 'core.quotepath=false', 'ls-files', '-z', 'handoff'], { cwd: ROOT, encoding: 'utf8' })
+/* ══ 🔴 J-90(店主 09q 立 · 09r §五 批根治)· 判据的扫描面里,不许包含另一方的产出 ══
+ *
+ * 案底:09p 那份**上游令**里,Cowork **引用我上一批的话**(「…回执写「本机库未动」没对照表…」),
+ * 被这把刀算成了我的一次**新声称**,存量 34 → 35 当场红。
+ * 🔴 **而那份令是别人的产出,我不许改(J-55②)** —— 这条红没有任何合法的修法。
+ * 09p 我打了一层「被「」引起来的算转述」的补丁,**那是治症状**;这里是治根。
+ *
+ * 台账 / 令 / 合同图 = Cowork 的产出;回执 / 报告 / 代码 / 判据 = Code 的产出。
+ * **一把刀如果会把对方的文字算进自己的底数,那它的底数从一开始就不是它自己的。**
+ *
+ * ⚠️ 排除按**文件名家族**做,而文件名不是机制 —— 所以配三道锁:
+ *   ① 排除掉的份数上棘轮(只许变少),悄悄扩大排除面立刻红;
+ *   ② 每一份被排除的,文件名**必须真的以那两个前缀开头**(不许长出通配符);
+ *   ③ 两面刀:令形状里的声称**不算**;回执形状里的声称**照样算 1**。
+ * 09p 那层「引述不算」**留着当第二道**(店主 09r §五:不撤)。 */
+const UPSTREAM_PREFIX = ['handoff/小批', 'handoff/夜班令']   // Cowork 发来的两个家族
+const allDocs = execFileSync('git', ['-c', 'core.quotepath=false', 'ls-files', '-z', 'handoff'], { cwd: ROOT, encoding: 'utf8' })
   .split('\0').filter((f) => f.endsWith('.md'))
+const upstream = allDocs.filter((f) => UPSTREAM_PREFIX.some((p) => f.startsWith(p)))
+const docs = allDocs.filter((f) => !upstream.includes(f))
 /* 「说了未动」的形态:「〈库名〉未动」。四库四名 —— 生产库/本机库/沙箱库/回归临时库 */
 const SAYS = /(生产库|本机库|沙箱库)\s*(?:·\s*)?未动/
 /* 🔴 J-49(店主 07a §六 立)· **声称要靠标记,不靠措辞** ——
@@ -167,12 +185,13 @@ const PROOF_FROZEN = new Set([
   "handoff/回执05r补三_D155小程序AI同一出口_2026-09-08.md",
   "handoff/回执05r补二_D156顶栏显当前店名_2026-09-08.md",
   "handoff/回执05r补四_段7部分交付_D151合并窗_2026-09-08.md",
-  "handoff/夜班令9_八小时_上线硬门槛先查后做_2026-09-11.md",
-  "handoff/小批05i_05h验收_J-23未动与对照表矛盾_D140币种一处真相现修_放行③实现_2026-09-05.md",
-  "handoff/小批07b_豁免要具名_棘轮降了也要举证_2026-09-12.md",
   "handoff/店主拍板台账.md"
 ])
-const PROOF_FROZEN_CAP = 38   /* 只许变短(J-43:这个数由已验红的这一版判据量出) */
+/* 🔴 09r §五:扫描面收窄到「Code 自己的产出」之后,原名单里 3 条上游令
+   (夜班令9 / 小批05i / 小批07b)**已经不在扫描面上了** —— 留着就是死条目,
+   而死条目等于「下次有人往那个名字里塞点什么,自动被放行」。
+   按裁#105(抽取必须把棘轮降下来、不许留余量):38 → 35,一条余量不留。 */
+const PROOF_FROZEN_CAP = 35
 /* 一份文档里「真的在作声称」的行 —— 否认/引述的那些不算 */
 /* 🔴 否认必须**挨着那句话**,不能是这一行里随便哪儿的一个「不」。
    现测栽了一次:`安全保证:生产库未动 · 本机库未动。未推 main。**做完不说可以关帐**。`——
@@ -267,6 +286,32 @@ check('③b 🔴 零命中先证刀能咬:「写了未动**没标记**」必须�
 const C_CLAIM_NOMARK = '本批交付完成。**本机库未动**,沙箱库只有心跳。'
 const C_MARK_DEAD = '本机库未动。未动对照:handoff/night-runs/这份根本不存在.md'
 const C_DENY = '但「本机库未动」这句话这一夜**我不能说**,因为它确实多了 4 行心跳。照实写。'
+/* ══ 09r §五 · 收窄扫描面的三道锁 ══ */
+/* 🔴 这一格我第一版写错了,原样记在这:我写的是「排除掉的份数 ≤ 122,只许变少」,
+   **而上游每发一份令,这个数就 +1** —— 一条注定每批都红的棘轮,比没有还坏(它会训练人忽略红)。
+   更坏的是:**我在它上面的注释里已经写明了「这个数会随上游发令而自然增长」,然后还是写了 `≤`。**
+   **文档里认出的问题,没有走进代码。**
+
+   改成**闭合**而不是**上限**(J-66):排除面 + 被测面 ≡ 全量,少一份多一份都red。
+   闭合守的是「这个划分没有被悄悄改过」,而「不许把令以外的东西划进排除面」由 ③q 逐个核名字守。
+   两条合起来,才是这个划分真正的护栏 —— **而且它们都不随发令次数漂移。** */
+check(`③p 🔴 划分闭合:排除面 ${upstream.length} + 被测面 ${docs.length} = ${upstream.length + docs.length} ≡ 全量 ${allDocs.length}`,
+  upstream.length + docs.length === allDocs.length,
+  `${upstream.length} + ${docs.length} = ${upstream.length + docs.length} ≠ ${allDocs.length}`)
+check(`③q 🔴 每一份被排除的都真的以那两个前缀开头(不许长出通配符):${upstream.length} 篇逐个核过`,
+  upstream.every((f) => UPSTREAM_PREFIX.some((x) => f.startsWith(x))),
+  upstream.filter((f) => !UPSTREAM_PREFIX.some((x) => f.startsWith(x))).join(' | '))
+check(`③r 扫描面不许空:被测面 ${docs.length} 篇(收窄前 ${allDocs.length})`,
+  docs.length >= 300, `只剩 ${docs.length} 篇 —— 收窄过头等于判据空转`)
+/* ③s/③t · 两面刀:令形状里的声称**不算**;回执形状里的同一句**照样算 1**。
+   这两条一起才证明「放走它的是文件名家族,不是那句话本身」。 */
+const CLAIM_LINE = '**安全保证**:**生产库未动 · 本机库未动**。'
+check('③s 🔴 造病:同一句话放进「令」形状的路径 → 不进底数',
+  ['handoff/小批09z_测试_2026-09-18.md'].filter((f) => !UPSTREAM_PREFIX.some((x) => f.startsWith(x))).length === 0)
+check('③t 🔴 反面靶子:同一句话放进「回执」形状的路径 → **必须**进底数,并且真被认成 1 条声称',
+  ['handoff/night-runs/09z回执_2026-09-18.md'].filter((f) => !UPSTREAM_PREFIX.some((x) => f.startsWith(x))).length === 1
+  && claimLinesOf(CLAIM_LINE).length === 1)
+
 check(`③j J-51:豁免是**具名清单**,只许变短 —— 现册 ${PROOF_FROZEN.size} 篇 ≤ ${PROOF_FROZEN_CAP}`,
   PROOF_FROZEN.size <= PROOF_FROZEN_CAP, String(PROOF_FROZEN.size))
 check('③k J-51 反向守:**新文件走不进豁免** —— 名单里没有的,写多少个「逐表零差异 / db-snapshot」都不算举证',

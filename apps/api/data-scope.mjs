@@ -19,6 +19,11 @@
  *   `LL_TEST_DATA=1` 仍然保留(有人手工建临时库跑),但**它只能把 ci 认出来,不能把 local/sandbox 变成可写**。
  */
 import { basename, resolve } from 'node:path'
+/* 「哪些库域算开发档」**全仓只有一处定义**(`secret-gate.mjs:17`),这里引它,不另写一份。
+   secret-gate 自己不 import 任何东西,不会绕成环。
+   ⚠️ 登记一处存量重复:下面的 `DEMO_OK_SCOPES` 与它是同一个集合(都是 {ci, sandbox}),
+   合并是对的,但那会动演示门,**不在本批范围**,留给后续批。 */
+import { DEV_SCOPES } from './secret-gate.mjs'
 
 /** 回归临时库:`/tmp/ll-ci-data.XXXXXX` 这一种(run-all-tests.sh 建的) */
 export function isCiDataDir(dataDir) {
@@ -73,6 +78,36 @@ export const DEMO_OK_SCOPES = new Set(['ci', 'sandbox'])
 /** 环境变量那一路的生产判定(两个判据里的第一个) */
 export function isProductionEnv(env = process.env) {
   return env.NODE_ENV === 'production' || Boolean(env.RAILWAY_ENVIRONMENT)
+}
+
+/* ══ 🔴 `treatAsReal()` —— 裁#90 的「或」用在「要不要动真库」上(店主 09r §三 批)══
+ *
+ * 立件:两条**一次性迁移**(`backfillTenantKindOnce` / `retireLegacyDemoArchives`)
+ * 此前只靠 `IS_PRODUCTION` 这一个纯环境变量挡着,而它们**会改生产库里 `tenants.kind`
+ * 与 `users.tags_json` 的内容**(不是加行,是改内容)。
+ * 变量漏设一次,它们就会按 **id 前缀 / 名字含「演示」** 去改判真店 ——
+ * 而那正是 **D73 已经废弃的判法**(演示店走显式勾选,不再看 id 前缀),
+ * 并且现成的靶子就有:**`jics-nail`(小婕真店)与 `jics-store`(沙箱镜像)前缀相同。**
+ *
+ * 形状与 `demoLoginAllowed` 一模一样,**两个判据任一说「这是真的」就当真环境办**,
+ * 只会更严、不会更松:
+ *
+ *     当真环境办 ⇔ (环境变量说是生产) 或 (库域不是 ci/sandbox)
+ *
+ * 🔴 第二个判据**必须**写成 `!DEV_SCOPES.has(...)`,**不许写 `=== 'production'`** ——
+ * 生产库路径以 `local-data` 收尾,`scopeOf()` 在生产上返回的是 `'local'`(09p §一 现查),
+ * 拿 `=== 'production'` 判**在生产上永远不成立,等于没加**。
+ *
+ * 代价(店主 09r 明确接受):**本机库也会被判成真环境**,那两条迁移以后在本机也不跑。
+ * 理由是「那两条的判法本身就是错的,让它跳过正是我们要的」。
+ * 沙箱(`sandbox`)与回归临时库(`ci`)不受影响。
+ *
+ * @returns {boolean} true = 按真环境办(该跳过的就跳过)
+ */
+export function treatAsReal({ dataDir = '', env = process.env } = {}) {
+  if (isProductionEnv(env)) return true                       // ① 环境变量说是生产
+  if (!DEV_SCOPES.has(scopeOf(dataDir, env))) return true      // ② 库域不是开发档
+  return false
 }
 
 /** 演示门唯一出口:**两个判据任一说「这是真的」就关**。 */
