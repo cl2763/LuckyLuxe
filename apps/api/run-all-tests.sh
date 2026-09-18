@@ -608,7 +608,13 @@ for suite in $MP_LANE_SUITES; do
     MP_LANE_RED=$(( MP_LANE_RED + 1 ))
   fi
 done
-echo "   [小程序档小结] ${MP_LANE_N} 套 · 红 ${MP_LANE_RED} 套 · **空转(会话不在)${MP_LANE_SKIP} 套**"
+# 🔴 09q §一(店主裁):「红 0」不许出现在一个从来没跑起来的档上 —— 那正是 J-65③ 那种 0。
+# 四格必须加起来等于底数(J-66):真跑起来 + 绿 + 红 + 被超时切掉 ≡ 套数。
+# 「9420 答 426」只证明端口有人应答,**automator 连不连得上是另一回事** —— 426 是必要条件,不是充分条件。
+MP_LANE_RAN=$(( MP_LANE_N - MP_LANE_SKIP ))
+MP_LANE_GREEN=$(( MP_LANE_RAN - MP_LANE_RED ))
+echo "   [小程序档小结] ${MP_LANE_N} 套 —— **真跑起来 ${MP_LANE_RAN} · 绿 ${MP_LANE_GREEN} · 红 ${MP_LANE_RED} · 被超时切掉 ${MP_LANE_SKIP}**"
+echo "      四格闭合:${MP_LANE_RAN}(其中绿 ${MP_LANE_GREEN} + 红 ${MP_LANE_RED}) + 切掉 ${MP_LANE_SKIP} = ${MP_LANE_N} 套 ✅ **空转不计入绿**"
 echo "   —— 空转不是通过。这一档**不并进主档**,也不占「未跑豁免」的名额。"
 
 echo ""
