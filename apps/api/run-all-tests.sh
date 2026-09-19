@@ -414,7 +414,24 @@ run_suite() {   # $1=套件名 $2..=node 前缀环境(可空)
       cat "$SUITE_OUT"
       ;;
     *)
-      "$@" node "test-${name}.mjs" 2>&1 | tee "$SUITE_OUT"
+      # 🔴 09x §一(店主批 (乙)):套件拿不到夹具时用 **退出码 77** 说「未跑」——
+      # **「未跑」不等于「通过」**(J-58①),也不等于「红」。三者必须分得开。
+      # 这里不能再用 `| tee`:`set -e` 下要先接住退出码再决定怎么办,管道会把它吃掉。
+      : > "$SUITE_OUT"
+      set +e
+      "$@" node "test-${name}.mjs" > "$SUITE_OUT" 2>&1
+      local rc=$?
+      set -e
+      cat "$SUITE_OUT"
+      if [ "$rc" = "77" ]; then
+        echo "⏳ test-${name} —— **本轮未跑**:$(grep -m1 '^\[未跑\]' "$SUITE_OUT" 2>/dev/null | sed 's/^\[未跑\] *//' || echo '拿不到夹具')"
+        echo "$name" >> "$NOT_RUN_FILE"
+        local dt77=$(( SECONDS - t0 ))
+        printf '%s\t%s\n' "$name" "$dt77" >> "$TIMING"
+        echo "   ⏱ test-${name} ${dt77}s(未跑)"
+        return 0   # 🔴 不写 TALLY —— 未跑的套件不许进断言基线,否则就成了「悄悄少几条」
+      fi
+      [ "$rc" = "0" ] || return "$rc"
       ;;
   esac
   local dt=$(( SECONDS - t0 ))
@@ -669,4 +686,21 @@ else
   echo "🧹 收摊自证:本机没有残留的跑机/造病进程(J-33)"
 fi
 
-echo "✅ 全部 $(( $(echo $DEFAULT_SUITES | wc -w) + 4 )) 个套件通过(清单 $(echo $DEFAULT_SUITES | wc -w) + auto-return/schema-consistency/perf-base-migration/tenant-isolation)"
+# ══ 🔴 J-98(店主 09x 立)· 「未跑」必须被计数、被逐名点出、并设一个只许降的上限 ══
+# 款文:一个判据拿不到夹具时允许说「未跑」——「未跑」不等于「通过」,这是对的(J-58①)。
+# **但不计数的「未跑」,是「假绿」的慢动作版**:每一次多一套都有正当理由,
+# 而没有任何一步看起来像在放水。今天是 3 套;没有棘轮,半年后它会是 30 套。
+# 🔴 上限只许降不许涨 —— 涨了当场红。(丙) 落地那天这个数降到 0,这件事才算结案。
+NOT_RUN_CAP=${REGRESSION_NOT_RUN_CAP:-3}
+NOT_RUN_N=$(grep -c . "$NOT_RUN_FILE" 2>/dev/null || echo 0)
+NOT_RUN_LIST=$(tr '\n' ' ' < "$NOT_RUN_FILE" 2>/dev/null | sed 's/ *$//')
+if [ "${NOT_RUN_N:-0}" -gt 0 ]; then
+  echo "⏳ 未跑 ${NOT_RUN_N} 套(拿不到夹具):${NOT_RUN_LIST}"
+else
+  echo "⏳ 未跑 0 套 —— 本轮每一套都真跑起来了"
+fi
+if [ "${NOT_RUN_N:-0}" -gt "$NOT_RUN_CAP" ]; then
+  echo "🔴 未跑套数 ${NOT_RUN_N} > 上限 ${NOT_RUN_CAP} —— **只许降不许涨**(J-98)。多出来的是谁:${NOT_RUN_LIST}" >&2
+  exit 1
+fi
+echo "✅ 全部 $(( $(echo $DEFAULT_SUITES | wc -w) + 4 )) 个套件通过(清单 $(echo $DEFAULT_SUITES | wc -w) + auto-return/schema-consistency/perf-base-migration/tenant-isolation)· 其中未跑 ${NOT_RUN_N} 套"

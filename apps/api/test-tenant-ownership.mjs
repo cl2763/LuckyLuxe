@@ -66,6 +66,15 @@ const readGate = /google_id FROM users WHERE id = \? AND tenant_id = \?'\)\.get\
 check('①b 读口闸在:serializeBooking 按 `users.tenant_id = bookings.tenant_id` 取顾客,'
   + '连不上不下发 user 对象(这一道才是真正堵住已演示泄露的那道)', readGate, '没找到带 row.tenant_id 的取顾客语句')
 
+/* 🔴 09x §一(店主批 (乙))· 从这里往下,②③ 两层**既要活沙箱、又要直接开沙箱库文件**
+   (`:70` 开库造景 · `:86` 打 4310)。CI 上两样都没有 ⇒ 造不出阳性 ⇒
+   ③c 会如实报「没造出阳性 —— 这一条不算验过」并判红。
+   **判据没错,错的是它站的位置。** 按 09x:报「未跑」不报「红」,并由 run-all-tests.sh
+   计数 + 逐名 + 对上限棘轮(今天 3,(丙) 让 CI 起沙箱之后降到 0)。
+   🔴 整套 77 退出(连①静态层也不跑):断言基线按套计数,半跑 = 悄悄少几条,比不跑更坏。 */
+const { requireSandboxOrSkip } = await import('./sandbox-required.mjs')
+await requireSandboxOrSkip({ needDb: true, why: '②③ 两层要开沙箱库造景并打 4310' })
+
 /* ═══ ② 已知阳性:库里的串味行(先证刀有东西可咬)═══ */
 const SB = join(ROOT, 'apps/api/sandbox-data/lucky-luxe.sqlite')
 let dirty = []
