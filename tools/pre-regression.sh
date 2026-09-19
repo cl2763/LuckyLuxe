@@ -26,9 +26,16 @@ echo "════ 预检(不起服务)════"
 # 这比「会让 CI 红」更坏:**它在 CI 上永远通过**,而它长在一条安全护栏上(J-53②:
 # 兜底成空不产生能工作的默认值,只产生一个不报错的失败)。
 # 改法:两边都能跑(`md5sum` 优先、回落 `md5 -q`),🔴 **两个都没有就当场红,不许回落成 none**。
+# 🔴 **比的时候要剥掉那一行「生成于提交 <sha>」** ——
+# 那一行记的是「生成它的那次 HEAD」,而清单一旦被提交,HEAD 就变了 ⇒
+# **committed 版与「在当前 HEAD 上重生成的版」永远不可能逐字节相等。**
+# 我第一版没剥就把它从「警告」升成「红」,**那会让 CI 永远红** ——
+# 比它取代的那个「Linux 上永远绿」更坏(那至少还能跑)。
+# 一个永远满足不了的判据 = 一个永远响的报警器,与 J-86(恒成立的假报错)同族。
+# **要比的是清单的内容,不是它的生成戳。**
 _md5of() {
-  if command -v md5sum >/dev/null 2>&1; then md5sum "$1" | cut -d' ' -f1
-  elif command -v md5 >/dev/null 2>&1; then md5 -q "$1"
+  if command -v md5sum >/dev/null 2>&1; then grep -v '^> 生成于提交' "$1" | md5sum | cut -d' ' -f1
+  elif command -v md5 >/dev/null 2>&1; then grep -v '^> 生成于提交' "$1" | md5 -q
   else echo "__NO_MD5_TOOL__"; fi
 }
 BEFORE=$(_md5of "handoff/写库脚本护栏三列清单.md")
