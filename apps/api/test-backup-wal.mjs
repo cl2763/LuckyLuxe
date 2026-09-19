@@ -7,7 +7,7 @@
  *      正确出口一直在,真正在跑的那条却是另一条。**一件事两处真相。**
  * 这一套把「备份语境里不许出现 cp」钉死,并**现证 cp 真的会拷出废文件**(J-58⑥ 两面)。
  */
-import { readFileSync, readdirSync, copyFileSync, mkdtempSync, statSync } from 'node:fs'
+import { readFileSync, readdirSync, copyFileSync, mkdtempSync, statSync, writeFileSync } from 'node:fs'
 import { DatabaseSync } from 'node:sqlite'
 import { join, dirname } from 'node:path'
 import { tmpdir } from 'node:os'
@@ -146,6 +146,43 @@ check('④e 🔴 造病:一行「cp 一个 sqlite」必须被咬中',
   copiesSqlite(['copyFileSync', '(dbPath, out)'].join(''), 'const out = "x.sqlite"'))
 check('④f 反向守:cp 一个非库文件不许被咬中(否则会把正常拷贝一起判红)',
   !copiesSqlite(['copyFileSync', '(logoPng, distPng)'].join(''), 'const distPng = "logo.png"'))
+
+/* ── ⑤ 🔴 D202 白名单那一处的附加条件(店主 09w §六 裁)──────────────────
+ * 裁词:那一处跑在接口线程、导入事务之前,而 `VACUUM INTO` 要独占读锁,当场会打架 ⇒ **批准保留 cp**。
+ * **但加一条**:那份快照生成之后,**必须能被打开并逐表读出行数;读不出来当场红。**
+ * 理由(D202 全案的教训):**一个还原不了的快照,和没有快照是一回事。**
+ *
+ * 这一条**按机制验,不按写法验**:照那一处的做法(cp 一个活库)真做一次,然后打开数行。
+ * 🔴 不是"看看代码里有没有写 open" —— 那又回到「验回执」那一族了(J-62②)。 */
+const d5 = mkdtempSync(join(tmpdir(), 'll-impsnap-'))
+const live5 = join(d5, 'live.sqlite')
+{
+  const w = new DatabaseSync(live5)
+  w.exec('CREATE TABLE a (id INTEGER PRIMARY KEY, v TEXT)')
+  w.exec('CREATE TABLE b (id INTEGER PRIMARY KEY)')
+  for (let i = 0; i < 300; i += 1) w.prepare('INSERT INTO a (v) VALUES (?)').run('x' + i)
+  w.close()
+}
+const snap5 = join(d5, 'lucky-luxe.pre-import-999.sqlite')
+copyFileSync(live5, snap5)          // ← 与 local-server.mjs 那一处同一种做法
+let snapTables = -1
+let snapRows = -1
+try {
+  const r5 = new DatabaseSync(snap5, { readOnly: true })
+  snapTables = r5.prepare("SELECT COUNT(*) AS n FROM sqlite_master WHERE type='table'").get().n
+  snapRows = r5.prepare('SELECT COUNT(*) AS n FROM a').get().n
+  r5.close()
+} catch (e) { snapTables = -1; snapRows = `打不开:${e.message}` }
+check(`⑤a 🔴 D202 白名单那一处:快照生成后**必须打得开并逐表读得出行数**(现测 ${snapTables} 张表 · a=${snapRows})`,
+  snapTables >= 2 && snapRows === 300,
+  '一个还原不了的快照,和没有快照是一回事 —— 这正是 D202 全案的教训')
+check('⑤b 🔴 反向守:把快照截断成废文件 → 这一条必须红(否则它只是在走过场)',
+  (() => {
+    const bad = join(d5, 'broken.sqlite')
+    writeFileSync(bad, 'not a database at all')
+    try { const x = new DatabaseSync(bad, { readOnly: true }); x.prepare('SELECT COUNT(*) FROM a').get(); x.close(); return false }
+    catch { return true }
+  })())
 
 console.log(`\n1..${n}`)
 if (fails.length) { console.log(`\n🔴 ${fails.length} 条没过`); process.exitCode = 1 }
