@@ -20,12 +20,6 @@ import { fileURLToPath } from 'node:url'
 import { REASON_TEXT } from './correction-reason.mjs'
 
 const ROOT = join(fileURLToPath(new URL('.', import.meta.url)), '..', '..')
-
-/* 🔴 09x §一(店主批 (乙))· 这一套的**行为层只打沙箱 4310**(03e 结构闸)——
-   拿不到沙箱就造不出阳性,按 J-58① 不许当通过,按 09x 报「未跑」不报「红」。
-   整套 77 退出(不半跑):断言基线按套计数,半跑会变成「悄悄少几条」,那比不跑更坏。 */
-const { requireSandboxOrSkip } = await import('./sandbox-required.mjs')
-await requireSandboxOrSkip({ why: '本套行为层的断言全部打 4310' })
 let checks = 0
 const fails = []
 const check = (name, cond, detail = '') => {

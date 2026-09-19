@@ -66,17 +66,10 @@ const readGate = /google_id FROM users WHERE id = \? AND tenant_id = \?'\)\.get\
 check('①b 读口闸在:serializeBooking 按 `users.tenant_id = bookings.tenant_id` 取顾客,'
   + '连不上不下发 user 对象(这一道才是真正堵住已演示泄露的那道)', readGate, '没找到带 row.tenant_id 的取顾客语句')
 
-/* 🔴 09x §一(店主批 (乙))· 从这里往下,②③ 两层**既要活沙箱、又要直接开沙箱库文件**
-   (`:70` 开库造景 · `:86` 打 4310)。CI 上两样都没有 ⇒ 造不出阳性 ⇒
-   ③c 会如实报「没造出阳性 —— 这一条不算验过」并判红。
-   **判据没错,错的是它站的位置。** 按 09x:报「未跑」不报「红」,并由 run-all-tests.sh
-   计数 + 逐名 + 对上限棘轮(今天 3,(丙) 让 CI 起沙箱之后降到 0)。
-   🔴 整套 77 退出(连①静态层也不跑):断言基线按套计数,半跑 = 悄悄少几条,比不跑更坏。 */
-const { requireSandboxOrSkip } = await import('./sandbox-required.mjs')
-await requireSandboxOrSkip({ needDb: true, why: '②③ 两层要开沙箱库造景并打 4310' })
-
 /* ═══ ② 已知阳性:库里的串味行(先证刀有东西可咬)═══ */
-const SB = join(ROOT, 'apps/api/sandbox-data/lucky-luxe.sqlite')
+/* 🔴 路径做成可覆盖 —— **硬写死的路径没法造病**(预检那把刀与 09m 学的同一条)。
+   日常一个字不用改;造病时指到一个空库,就能验「造不出阳性会不会真报未跑」。 */
+const SB = process.env.SANDBOX_DB_PROBE || join(ROOT, 'apps/api/sandbox-data/lucky-luxe.sqlite')
 let dirty = []
 try {
   const db = new DatabaseSync(SB, { readOnly: true })
@@ -99,6 +92,21 @@ if (!sb.ok) {
   const A = 'lucky-luxe'
   const B = 'jics-nail'
   const bUser = pick('SELECT id, display_name FROM users WHERE tenant_id = ? LIMIT 1', B)
+  /* 🔴 09x §一(店主批 (乙))· **夹具造不出来 ≠ 没守住,也 ≠ 通过 —— 是「本轮未跑」。**
+   * 案由:CI 上 `ensureSandbox()` **起得来**沙箱(`sb.ok` 为真),但那个沙箱是**空库** ——
+   * 没有 B 店顾客,也没有 A 店的样本单 ⇒ ③a/③b/③c 三条**都造不出阳性**。
+   * 它们原来按**红**报。判据的话是对的(J-58①:造不出阳性不许说验过),
+   * **但「没考」不该占「守不住」那一格** —— 挤在一起,红就不再指向产品。
+   * 按 09x (乙):报**未跑**(77),由 run-all-tests.sh 计数 + 逐名 + 对上限棘轮(今天 3,(丙) 后降 0)。
+   * 🔴 检查要放在**用它之前**:放在 ③c 里就太晚了,③a 先一步按红退出(第一版我就放错了位置)。 */
+  const aSample = pick('SELECT id FROM bookings WHERE tenant_id = ? AND user_id IS NOT NULL LIMIT 1', A)
+  if (!bUser?.id || !aSample?.id) {
+    db.close()
+    console.log(`[未跑] 沙箱库里造不出阳性:B 店(${B})顾客=${bUser?.id ? '有' : '没有'} · A 店(${A})样本单=${aSample?.id ? '有' : '没有'}`)
+    console.log('        ③a/③b/③c 三条都要这两样才验得成(跨店建单要 B 店顾客;③c 还要一张 A 店单来造串味)。')
+    console.log('        按 J-58① 不许当通过;按 09x (乙) 报「未跑」不报「红」——「没考」与「守不住」不许挤在同一格。')
+    process.exit(77)
+  }
   const aUser = pick('SELECT id FROM users WHERE tenant_id = ? LIMIT 1', A)
   const svc = pick('SELECT id FROM services WHERE tenant_id = ? AND is_active = 1 LIMIT 1', A)
   const tech = pick('SELECT id FROM technicians WHERE tenant_id = ? LIMIT 1', A)
@@ -150,6 +158,21 @@ if (!sb.ok) {
      造的是我自己指定的那一行,不碰真账;还原后回读确认。 */
   const w = new DatabaseSync(SB)
   const victim = w.prepare('SELECT id, user_id FROM bookings WHERE tenant_id = ? AND user_id IS NOT NULL LIMIT 1').get(A)
+  /* 🔴 09x §一(店主批 (乙))· **造不出阳性 ≠ 没守住,也 ≠ 通过 —— 它是「本轮未跑」。**
+   * 案由:CI 上 `ensureSandbox()` **起得来沙箱**(所以 `sb.ok` 是真),但那个沙箱是**空库** ——
+   * 没有 A 店的单、也没有 B 店的顾客 ⇒ `victim`/`bUser` 取不到 ⇒ 造不出那一行串味 ⇒
+   * 这一条原来按**红**报(「没造出阳性 —— 这一条不算验过」)。
+   * **判据的话是对的(J-58①),但「没验成」不该占「红」那一格** ——
+   * 红的意思是「守不住」,而这里是「没考」。两件事混在一格里,红就不再指向产品。
+   * 按 09x (乙):报**未跑**(退出码 77),由 run-all-tests.sh **计数 + 逐名 + 对上限棘轮**。
+   * 🔴 **本机有沙箱数据时照旧真跑真绿** —— 这一支只在夹具造不出来时才走。 */
+  if (!victim || !bUser?.id) {
+    w.close()
+    console.log(`[未跑] 沙箱库里造不出阳性:A 店(${A})的样本单=${victim ? '有' : '没有'} · B 店(${B})顾客=${bUser?.id ? '有' : '没有'}`)
+    console.log('        ③c 要把一张 A 店单的 user_id 临时指到 B 店顾客身上才验得成;两样缺一就造不出那一行串味。')
+    console.log('        按 J-58① 不许当通过;按店主 09x (乙) 报「未跑」不报「红」——「没考」与「守不住」不许挤在同一格。')
+    process.exit(77)
+  }
   let leaked = []
   let injected = false
   if (victim && bUser?.id) {
