@@ -22,8 +22,22 @@ jobs:
       # CI 也装 = 让「快照必须是 PNG」这条断言在 Linux 上真的跑到(与生产同构)。
       - name: Install SVG rasterizer (librsvg + CJK fonts)
         run: sudo apt-get update && sudo apt-get install -y --no-install-recommends librsvg2-bin fonts-noto-cjk
+      # 🔴 09v §二(店主批):**照脚本自己注释里写的跑法来** ——
+      # `run-all-tests.sh:8-18` 有一条判据:标准输出是管道就 `exit 2`
+      # (案由:它起的后台服务会攥着管道写端,那头永远等不到 EOF,看着像卡死)。
+      # 而 Actions 的 `run:` 给的正是管道 ⇒ 这一步一进来就秒退 ⇒ job failure。
+      # 🔴 这是 J-92 的实例,还跨了两个文件:**脚本注释里写明了正确跑法,而这里没照着做**,
+      # 而且这条判据是店主 05w 亲立的 —— 它可能一直在把 CI 打红,只是 CI 24 天没跑过,没人知道。
+      # 三处不许省:`set +e`(不然重定向那行红了就直接退,cat 不到)·
+      # `cat` 在 `exit` 之前 · `exit $rc` 保留真实退出码不许吞。
+      # 顺带把日志直接打进 Actions 输出 —— 以后不用 admin 权限去下载 job log。
       - name: Run all regression suites
-        run: bash apps/api/run-all-tests.sh
+        run: |
+          set +e
+          bash apps/api/run-all-tests.sh > ci.log 2>&1
+          rc=$?
+          cat ci.log
+          exit $rc
 
   # deploy:
   #   needs: test

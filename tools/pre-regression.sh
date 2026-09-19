@@ -20,11 +20,25 @@ say() { printf '  %-34s %s\n' "$1" "$2"; }
 echo "════ 预检(不起服务)════"
 
 # ① 护栏清单
-BEFORE=$(md5 -q "handoff/写库脚本护栏三列清单.md" 2>/dev/null || echo none)
+# 🔴 09v §三(1)(Cowork 读仓库读出来的,店主批修):这里原来两行都是 `md5 -q`(macOS 专用),
+# **Linux 上根本没有 `md5` 这个命令,只有 `md5sum`** ⇒ 两次都报错 ⇒ 被 `2>/dev/null` 吞掉
+# ⇒ **两边一起回落成 `none`** ⇒ `BEFORE = AFTER` ⇒ **在 CI 上永远报「✅ 已是最新」。**
+# 这比「会让 CI 红」更坏:**它在 CI 上永远通过**,而它长在一条安全护栏上(J-53②:
+# 兜底成空不产生能工作的默认值,只产生一个不报错的失败)。
+# 改法:两边都能跑(`md5sum` 优先、回落 `md5 -q`),🔴 **两个都没有就当场红,不许回落成 none**。
+_md5of() {
+  if command -v md5sum >/dev/null 2>&1; then md5sum "$1" | cut -d' ' -f1
+  elif command -v md5 >/dev/null 2>&1; then md5 -q "$1"
+  else echo "__NO_MD5_TOOL__"; fi
+}
+BEFORE=$(_md5of "handoff/写库脚本护栏三列清单.md")
 node tools/gen-guard-checklist.mjs --write >/dev/null 2>&1
-AFTER=$(md5 -q "handoff/写库脚本护栏三列清单.md" 2>/dev/null || echo none)
-if [ "$BEFORE" = "$AFTER" ]; then say "护栏三列清单" "✅ 已是最新"
-else say "护栏三列清单" "⚠️ 刚重生成过(记得 git add;这是 05n 三次红里的一次)"; fi
+AFTER=$(_md5of "handoff/写库脚本护栏三列清单.md")
+if [ "$BEFORE" = "__NO_MD5_TOOL__" ] || [ "$AFTER" = "__NO_MD5_TOOL__" ]; then
+  # 🔴 取不到摘要工具 = 这一条判据**没验成**,不是「通过」。按红处理,不许静默。
+  say "护栏三列清单" "🔴 这台机器上既没有 md5sum 也没有 md5 —— **这一条没验成**,不许当通过"; FAIL=1
+elif [ "$BEFORE" = "$AFTER" ]; then say "护栏三列清单" "✅ 已是最新(摘要:${BEFORE:0:12})"
+else say "护栏三列清单" "🔴 清单过期,刚重生成过(记得 git add;这是 05n 三次红里的一次):${BEFORE:0:8} → ${AFTER:0:8}"; FAIL=1; fi
 
 # ② 棘轮:两个巨型文件只许降不许升 —— **双基线**(店主 09-08 裁,05r 补三)
 # 一开始基线写死在这里,结果停在 17751/8550 而实际早降到 17745/8457:**不会收紧的棘轮**,
