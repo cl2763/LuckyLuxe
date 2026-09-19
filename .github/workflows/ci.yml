@@ -31,7 +31,22 @@ jobs:
       # 三处不许省:`set +e`(不然重定向那行红了就直接退,cat 不到)·
       # `cat` 在 `exit` 之前 · `exit $rc` 保留真实退出码不许吞。
       # 顺带把日志直接打进 Actions 输出 —— 以后不用 admin 权限去下载 job log。
+      # 🔴 夜班令15 §二「(丙)」:给沙箱种上那四套判据要的夹具。
+      # CI 上 `apps/api/sandbox-data/` 不存在(gitignore),`ensureSandbox()` 起的是**空库** ——
+      # 沙箱服务是好的,缺的是**夹具数据**。四套(correction-reason / tenant-ownership /
+      # tier-label / demo-mark)因此造不出阳性,按 J-58① 只能红。
+      # 🔴 种的是 `$RUNNER_TEMP` 下的**临时目录**,而且**以 sandbox-data 收尾** ——
+      # 「只种临时 DATA_DIR」与种子自带的「只许沙箱」两条护栏同时成立,一个字都不用改。
+      # 🔴 `ALLOW_DEMO_ADMIN_LOGIN` **只在这一步与下一步存在**(由 start-sandbox.sh 自己设),
+      # 它是 CI 的库域(`ci` ∈ DEV_SCOPES),不是生产。
+      - name: Seed sandbox fixtures (CI only)
+        env:
+          SANDBOX_DATA_DIR: ${{ runner.temp }}/ll-ci-sandbox/sandbox-data
+        run: bash tools/ci-seed-sandbox.sh
+
       - name: Run all regression suites
+        env:
+          SANDBOX_DATA_DIR: ${{ runner.temp }}/ll-ci-sandbox/sandbox-data
         run: |
           set +e
           bash apps/api/run-all-tests.sh > ci.log 2>&1
@@ -50,7 +65,8 @@ jobs:
             # 🔴 第一版是盲取末 80 行 —— 现测被 GitHub 的注解长度上限**截断在中间**,
             # 恰好没看到失败那几行(与 09w 说的「只显示前 10 条」同一族毛病:**取错了那一段**)。
             # 改成**先取要害、再取末尾**:红行优先,其余用末 25 行补上下文。
-            { echo '--- 红行(^not ok / ❌ / 未过) ---'
+            { echo "--- 夜15 §一 那一问的字面答案:ci.log 里「拉不起来」出现 $(grep -c '拉不起来' ci.log || echo 0) 次 ---"
+              echo '--- 红行(^not ok / ❌ / 未过) ---'
               grep -nE '^not ok|❌|项未过|没过' ci.log | tail -n 15
               echo '--- 末 25 行 ---'
               tail -n 25 ci.log

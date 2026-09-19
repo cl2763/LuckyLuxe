@@ -691,7 +691,11 @@ fi
 # **但不计数的「未跑」,是「假绿」的慢动作版**:每一次多一套都有正当理由,
 # 而没有任何一步看起来像在放水。今天是 3 套;没有棘轮,半年后它会是 30 套。
 # 🔴 上限只许降不许涨 —— 涨了当场红。(丙) 落地那天这个数降到 0,这件事才算结案。
-NOT_RUN_CAP=${REGRESSION_NOT_RUN_CAP:-3}
+# 🔴 夜班令15 §二.2:(丙) 落地 ⇒ **上限 3 → 0**(棘轮只许降,这是降)。
+# 意思是:**从现在起,任何一套「拿不到夹具就未跑」都当场红** —— 因为 CI 上夹具由
+# `tools/ci-seed-sandbox.sh` 种好了,再出现「未跑」就说明种子坏了或判据依赖变了,
+# 那是要人看的事,不是可以攒着的额度。
+NOT_RUN_CAP=${REGRESSION_NOT_RUN_CAP:-0}
 NOT_RUN_N=$(grep -c . "$NOT_RUN_FILE" 2>/dev/null || echo 0)
 NOT_RUN_LIST=$(tr '\n' ' ' < "$NOT_RUN_FILE" 2>/dev/null | sed 's/ *$//')
 if [ "${NOT_RUN_N:-0}" -gt 0 ]; then

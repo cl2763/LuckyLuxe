@@ -102,7 +102,9 @@ console.log(`   [盖章形态] ${tracked.filter((f) => !NO_MARK[f]).map((f) => `
 /* ⑤ 🔴 行为层:真跑一次造景,那条查询必须把它整批捞出来 —— 判据原文就是这句 */
 const { ensureSandbox } = await import('./test-need-sandbox.mjs')
 const sb = await ensureSandbox({ label: '[demo-mark]' })
-const SB = join(ROOT, 'apps/api/sandbox-data/lucky-luxe.sqlite')
+/* 🔴 同上:走唯一出口,CI 上跟着 SANDBOX_DATA_DIR 走 */
+const { SANDBOX_DB_PATH } = await import('./test-need-sandbox.mjs')
+const SB = SANDBOX_DB_PATH
 if (!sb.ok) {
   console.log('   ⚠️ 沙箱不可用 —— **行为层这一刀本轮未跑**(不静默跳过,如实说)')
 } else {

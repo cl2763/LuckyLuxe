@@ -69,7 +69,10 @@ check('①b 读口闸在:serializeBooking 按 `users.tenant_id = bookings.tenant
 /* ═══ ② 已知阳性:库里的串味行(先证刀有东西可咬)═══ */
 /* 🔴 路径做成可覆盖 —— **硬写死的路径没法造病**(预检那把刀与 09m 学的同一条)。
    日常一个字不用改;造病时指到一个空库,就能验「造不出阳性会不会真报未跑」。 */
-const SB = process.env.SANDBOX_DB_PROBE || join(ROOT, 'apps/api/sandbox-data/lucky-luxe.sqlite')
+/* 🔴 走 `test-need-sandbox.mjs` 的唯一出口 —— 不再各写一条硬路径(公约④:一件事一处真相)。
+   夜15 (丙):CI 上把 `SANDBOX_DATA_DIR` 指到临时目录,这里自动跟着走。 */
+const { SANDBOX_DB_PATH } = await import('./test-need-sandbox.mjs')
+const SB = process.env.SANDBOX_DB_PROBE || SANDBOX_DB_PATH
 let dirty = []
 try {
   const db = new DatabaseSync(SB, { readOnly: true })

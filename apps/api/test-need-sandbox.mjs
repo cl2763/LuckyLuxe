@@ -7,6 +7,15 @@
    加载的还是旧模块 —— 刀收紧后第一次真咬,咬到的正是「改了没重启」。
    这是「改了没编译 / 加了没进库」的第三形态,同族一并管住:
    比较 4310 进程启动时刻与 apps/api/*.mjs 的最大 mtime,旧进程**出声红**,不是跳过。 */
+/* 沙箱数据目录与库文件路径的**唯一出口** —— 各套件不许再各写一条硬路径。 */
+export const SANDBOX_DATA_DIR = process.env.SANDBOX_DATA_DIR || 'sandbox-data'
+export const SANDBOX_DB_PATH = (() => {
+  const { isAbsolute, join } = { isAbsolute: (p) => p.startsWith('/'), join: (...a) => a.join('/') }
+  return isAbsolute(SANDBOX_DATA_DIR)
+    ? join(SANDBOX_DATA_DIR, 'lucky-luxe.sqlite')
+    : join(process.cwd(), SANDBOX_DATA_DIR, 'lucky-luxe.sqlite')
+})()
+
 async function assertServerNewerThanSource(label) {
   const { execFileSync } = await import('node:child_process')
   const { readdirSync, statSync } = await import('node:fs')
@@ -65,7 +74,10 @@ export async function ensureSandbox({ label = '' } = {}) {
     return { ok: fresh, started: false, stale: !fresh }
   }
   const { spawn } = await import('node:child_process')
-  spawn('bash', ['start-sandbox.sh', 'sandbox-data'], { cwd: process.cwd(), detached: true, stdio: 'ignore' }).unref()
+  /* 🔴 夜15 (丙):沙箱位置做成可配 —— CI 上要把它指到**临时目录**(而且那个目录名以
+     `sandbox-data` 收尾,这样种子自带的「只许沙箱」护栏一个字都不用改)。
+     日常不设这个变量,行为与以前**完全一样**。 */
+  spawn('bash', ['start-sandbox.sh', SANDBOX_DATA_DIR], { cwd: process.cwd(), detached: true, stdio: 'ignore' }).unref()
   for (let i = 0; i < 12; i += 1) {
     await new Promise((r) => setTimeout(r, 2000))
     if (await up()) return { ok: true, started: true }
