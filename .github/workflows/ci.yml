@@ -37,6 +37,19 @@ jobs:
           bash apps/api/run-all-tests.sh > ci.log 2>&1
           rc=$?
           cat ci.log
+          # 🔴 09w §二(乙)(店主批,原定推后;第三次红之后它成了唯一拿得到原因的路,提前做):
+          # 失败时把日志末尾**合成一条** `::error::` 注解 —— **注解是匿名可读的**
+          # (`/check-runs/<id>/annotations`),而 `/logs` 要 admin(403)。
+          # 🔴 两处照 09w 写死,不许省:
+          #   ① **合成一条**,用 `%0A` 当换行 —— GitHub 每个 step 只显示**前 10 条** error 注解,
+          #      一行一条的结果是看到中间几行、恰恰不是最后几行(这一条 09w 明确点过)。
+          #   ② **不加 `bash -x`** —— 它能解决「set -euo pipefail 静默退出看不到行号」,
+          #      但注解是匿名可读的,`-x` 会把每条命令连同展开后的变量打出来,
+          #      等于「门守住了,却在拒绝的时候把钥匙念了一遍」。要加得先扫一遍会不会展开凭据,单独报批。
+          if [ "$rc" != "0" ]; then
+            MSG=$(tail -n 80 ci.log | sed 's/%/%25/g; s/\r/ /g' | awk '{printf "%s%%0A", $0}')
+            echo "::error title=run-all-tests.sh 末 80 行::${MSG}"
+          fi
           exit $rc
 
   # deploy:
