@@ -246,31 +246,32 @@ else say "UTC 日期前缀判天棘轮(#14)" "🔴 $UTCDAY > 12 —— 又有人
 #    所以预检这里做一件它做得到的事:**红榜抬头记的界面文件指纹 ≠ 现在的指纹 = 全扫没重跑** → 红。
 #    (06a 改:原来比 mtime —— 还原备份、git checkout 都会把 mtime 改新而内容没变,误红过一次。
 #     现在比**内容 sha**:锚在内容上,不锚在代理指标上,同族 J-38/J-39。)
-# 🔴 06e:红榜文件名带日期,写死一个名字下一批就指到旧文件上(这次就红在这)。
-#    改成**取最新那一份**并把用的是哪一份打印出来 —— 宁可啰嗦,也不要静默比错文件。
-RED_LIST=$(ls -t handoff/night-runs/对比度红榜_*后台*.md handoff/night-runs/对比度红榜_修后_*.md 2>/dev/null | head -1)
-if [ -n "$RED_LIST" ]; then
-  WANT_SHA=$(grep -oE '界面文件内容指纹 `[0-9a-f]+`' "$RED_LIST" | grep -oE '[0-9a-f]{6,}' | head -1)
-  NOW_SHA=$(cat apps/web/styles.css apps/web/admin.html apps/web/admin.js | shasum -a 256 | cut -c1-12)
-  if [ -z "$WANT_SHA" ]; then say "红榜没记界面指纹" "🔴 $(basename "$RED_LIST") 抬头里没有指纹那一行 —— 重跑 tools/contrast-sweep.mjs"; FAIL=1
-  elif [ "$WANT_SHA" = "$NOW_SHA" ]; then say "对比度全扫跟得上样式" "✅ 指纹一致($NOW_SHA)· 用的是 $(basename "$RED_LIST")"
-  else say "对比度全扫过期了" "🔴 $(basename "$RED_LIST") 记的是 $WANT_SHA,现在是 $NOW_SHA —— 样式改过了,重跑再交"; FAIL=1; fi
-else say "对比度红榜在不在" "🔴 找不到 $RED_LIST"; FAIL=1; fi
+# 🔴🔴 J-97(店主 09w 立)· **`ls -t` / mtime 不是「新旧」的证据。**
+#    干净 checkout 上所有文件的 mtime 都等于签出那一刻,彼此相等 ⇒ **`ls -t | head -1` 挑中谁是任意的**。
+#    这就是 CI 红的真根因(Cowork 在一台真 Linux 上做干净 clone 复现量出来的):
+#      干净 clone 挑中 `对比度红榜_修后_2026-09-09.md`(记 57a36354a321)→ 与现算 c3df1fc7ecf7 不符 → FAIL=1
+#      店主 Mac 上 mtime 恰好等于生成顺序 → 挑中 09-13 那份 → 一致 → 绿
+#    **同一把尺子,两台机器两个答案** —— 这正是 J-95 说的那件事的具体机理。
+#
+#    改法:**不再「挑一份 × 看它过没过期」,改成按内容问真正要问的那个问题** ——
+#      「**这套界面,有没有任何一份红榜扫过?**」
+#    顺带修好一个更早的毛病:老写法挑错了就冤枉人;新写法问的才是这道闸真正想问的事。
+NOW_SHA=$(cat apps/web/styles.css apps/web/admin.html apps/web/admin.js | shasum -a 256 | cut -c1-12)
+RED_HIT=$(grep -l "界面文件内容指纹 \`$NOW_SHA\`" handoff/night-runs/对比度红榜_*.md 2>/dev/null | head -1)
+if [ -n "$RED_HIT" ]; then say "对比度全扫跟得上样式" "✅ 指纹 $NOW_SHA 有红榜扫过 · 用的是 $(basename "$RED_HIT")"
+else say "对比度全扫过期了" "🔴 现在这套界面($NOW_SHA)**没有任何一份红榜扫过** —— 重跑 tools/contrast-sweep.mjs"; FAIL=1; fi
 
 # ⑪b D188 ③(06h §六)· **运行判据也要跟着界面走**。它同样要开 Chrome + 活服务,进不了全量;
 #     所以照 ⑪ 那把的做法:报告抬头记的八个界面文件的内容指纹 ≠ 现在的 = 没重跑 → 红。
 #     ⚠️ 这一条防的正是「统一入口挂上了,但后来谁改了页面而没重量」——
 #     静态判据在全量里守着「文件里有没有那一行」,这一条守着「浏览器里真取得到没有」。
-D188_RPT=$(ls -t handoff/night-runs/D188运行判据_*.md 2>/dev/null | head -1)
-if [ -n "$D188_RPT" ]; then
-  WANT8=$(grep -oE '界面文件内容指纹 `[0-9a-f]+`' "$D188_RPT" | grep -oE '[0-9a-f]{6,}' | head -1)
-  NOW8=$(cat apps/web/design-tokens.css apps/web/styles.css apps/web/admin.html apps/web/index.html \
-              apps/web/platform.html apps/web/sign.html apps/web/share.html apps/web/wechat-simulator.html \
-         | shasum -a 256 | cut -c1-12)
-  if [ -z "$WANT8" ]; then say "D188 运行判据没记指纹" "🔴 $(basename "$D188_RPT") 抬头没有指纹那一行 —— 重跑 tools/token-runtime-probe.mjs"; FAIL=1
-  elif [ "$WANT8" = "$NOW8" ]; then say "D188 运行判据跟得上界面" "✅ 指纹一致($NOW8)· 用的是 $(basename "$D188_RPT")"
-  else say "D188 运行判据过期了" "🔴 $(basename "$D188_RPT") 记的是 $WANT8,现在是 $NOW8 —— 页面改过了,重跑再交"; FAIL=1; fi
-else say "D188 运行判据报告在不在" "🔴 找不到 handoff/night-runs/D188运行判据_*.md —— 跑一次 tools/token-runtime-probe.mjs"; FAIL=1; fi
+# 🔴 J-97 同款改法(这一处与 ⑪ 是同一个病的第二例 —— 一个 `ls -t` 是一处,两个是一类)
+NOW8=$(cat apps/web/design-tokens.css apps/web/styles.css apps/web/admin.html apps/web/index.html \
+            apps/web/platform.html apps/web/sign.html apps/web/share.html apps/web/wechat-simulator.html \
+       | shasum -a 256 | cut -c1-12)
+D188_HIT=$(grep -l "界面文件内容指纹 \`$NOW8\`" handoff/night-runs/D188运行判据_*.md 2>/dev/null | head -1)
+if [ -n "$D188_HIT" ]; then say "D188 运行判据跟得上界面" "✅ 指纹 $NOW8 有报告量过 · 用的是 $(basename "$D188_HIT")"
+else say "D188 运行判据过期了" "🔴 现在这八个界面文件($NOW8)**没有任何一份运行判据报告量过** —— 跑一次 tools/token-runtime-probe.mjs"; FAIL=1; fi
 
 # ⑪c J-43(店主 06h 裁 #38)· **棘轮初值必须由「已经造病验过红」的那一版判据产出**。
 #     这里只做机械对账并**提醒,不拦**:git blame 取「这个数写于哪次提交」,
