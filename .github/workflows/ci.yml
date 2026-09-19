@@ -47,8 +47,16 @@ jobs:
           #      但注解是匿名可读的,`-x` 会把每条命令连同展开后的变量打出来,
           #      等于「门守住了,却在拒绝的时候把钥匙念了一遍」。要加得先扫一遍会不会展开凭据,单独报批。
           if [ "$rc" != "0" ]; then
-            MSG=$(tail -n 80 ci.log | sed 's/%/%25/g; s/\r/ /g' | awk '{printf "%s%%0A", $0}')
-            echo "::error title=run-all-tests.sh 末 80 行::${MSG}"
+            # 🔴 第一版是盲取末 80 行 —— 现测被 GitHub 的注解长度上限**截断在中间**,
+            # 恰好没看到失败那几行(与 09w 说的「只显示前 10 条」同一族毛病:**取错了那一段**)。
+            # 改成**先取要害、再取末尾**:红行优先,其余用末 25 行补上下文。
+            { echo '--- 红行(^not ok / ❌ / 未过) ---'
+              grep -nE '^not ok|❌|项未过|没过' ci.log | tail -n 15
+              echo '--- 末 25 行 ---'
+              tail -n 25 ci.log
+            } > fail.txt
+            MSG=$(sed 's/%/%25/g; s/\r/ /g' fail.txt | awk '{printf "%s%%0A", $0}')
+            echo "::error title=CI 失败要害::${MSG}"
           fi
           exit $rc
 
