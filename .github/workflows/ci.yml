@@ -42,7 +42,8 @@ jobs:
       - name: Seed sandbox fixtures (CI only)
         env:
           SANDBOX_DATA_DIR: ${{ runner.temp }}/ll-ci-sandbox/sandbox-data
-        run: bash tools/ci-seed-sandbox.sh
+          SEED_BASE_URL: http://127.0.0.1:4310
+        run: node tools/ci-seed-sandbox.mjs
 
       - name: Run all regression suites
         env:
