@@ -111,6 +111,31 @@ check('④c 🔴 反向守:同样大小的文件塞进**分包**里,① 不许�
 check('④d 收尾自证:造病文件一个都没留下',
   !existsSync(probe) && subRoots.every((r) => !existsSync(join(MP, r, '__size_probe__.bin'))))
 
+/* ══ ⑤ 上传前置闸(夜16-续 §二.1):跑 `cli upload` 之前,连的必须是生产 ══
+ * 🔴 J-92:`api.js:6` 的注释写着「上传前务必改 false」,而**代码里没有任何东西拦它** ——
+ * 那句提醒就是在给这个问题背书。夜16 我真传了一次连着本机沙箱的开发版。
+ * 现在它是一道闸:`tools/mp-upload-guard.mjs`(唯一出口,判据与 shell 包装共用同一个函数)。 */
+const { checkUploadReady, API_REL } = await import('../../tools/mp-upload-guard.mjs')
+check('⑤a 闸在:`tools/mp-upload-guard.mjs` 与 `tools/mp-upload.sh` 都在,后者可执行',
+  existsSync(join(ROOT, 'tools/mp-upload-guard.mjs')) && existsSync(join(ROOT, 'tools/mp-upload.sh'))
+  && Boolean(statSync(join(ROOT, 'tools/mp-upload.sh')).mode & 0o111))
+check('⑤b 🔴 接上了:那个包装**先调闸再 upload**(写了不接 = 09h 栽过的同一个坑)',
+  (() => { const sh = readFileSync(join(ROOT, 'tools/mp-upload.sh'), 'utf8')
+    return sh.indexOf('mp-upload-guard.mjs') < sh.indexOf('upload --project') && /exit 1/.test(sh) })())
+check('⑤c 🔴 造病:`USE_LOCAL_SANDBOX = true` → **必须拒**,而且点名是哪个文件',
+  (() => { const r = checkUploadReady('const USE_LOCAL_SANDBOX = true // x')
+    return r.ok === false && r.value === 'true' && r.reason.includes(API_REL) })())
+check('⑤d 🔴 反向守:改成 `false` → **必须放行**(只会红不会绿的闸,和没有闸一样)',
+  checkUploadReady('const USE_LOCAL_SANDBOX = false // x').ok === true)
+check('⑤e 🔴 读不到那一行也必须拒(读不到 ≠ 没问题 —— 静默失败器族)',
+  checkUploadReady('const SOMETHING_ELSE = 1').ok === false)
+check(`⑤f 现状如实报:那个开关现在是 \`${checkUploadReady(readFileSync(join(ROOT, API_REL), 'utf8')).value}\`（今晚不改它——夜16-续 §二.1:不提审就不挡今晚）`,
+  ['true', 'false'].includes(String(checkUploadReady(readFileSync(join(ROOT, API_REL), 'utf8')).value)))
+
+/* ══ ⑥ 分包白名单:`ai-chat` 由店主明写留主包(夜16-续 §二.7)══ */
+check('⑥ 🔴 `ai-chat` 留主包(店主 夜16-续 §二.7 明写,免得下次再有人犹豫)',
+  mainPages.has('pages/ai-chat/index'), '它跑进分包了')
+
 console.log(`\n[D208 主包体积] 代理量 ${(mainBytes / 1024).toFixed(1)} KB / 棘轮 ${(MAIN_CAP / 1024).toFixed(0)} KB · `
   + `上次真实打包 ${(REAL.mainBytes / 1024).toFixed(0)} KB(${REAL.at} ${REAL.by})· 黄线 ${WARN / 1024} · 闸 ${GATE / 1024}`)
 if (fails.length) { console.error(`\n❌ test-mp-package-size ${fails.length}/${checks} 项未过`); process.exit(1) }

@@ -11898,7 +11898,7 @@ async function route(req, res) {
         Math.max(0, Math.round(Number(t.perfTargetCents) || 0)),
         Math.max(0, Math.round(Number(t.cardTargetCents) || 0)),
         Math.max(0, Math.round(Number(t.orderTarget) || 0)),
-        adminSession.email || 'owner', now)
+        actorOf(adminSession), now)
     }
     const rows = db.prepare('SELECT * FROM perf_targets WHERE tenant_id = ? AND month = ?').all(tid, month)
     return json(res, 200, { month, saved: rows.length })
@@ -13407,7 +13407,7 @@ async function route(req, res) {
         ON CONFLICT(technician_id, date) DO UPDATE SET is_working = 0`).run(row.technician_id, row.date)
     }
     db.prepare("UPDATE schedule_change_requests SET status = ?, resolution = ?, resolved_at = ?, resolved_by = ? WHERE id = ?")
-      .run(action === 'reject' ? 'rejected' : 'approved', action, iso(new Date()), adminSession.email || 'owner', row.id)
+      .run(action === 'reject' ? 'rejected' : 'approved', action, iso(new Date()), actorOf(adminSession), row.id)
     return json(res, 200, { request: db.prepare('SELECT * FROM schedule_change_requests WHERE id = ?').get(row.id) })
   }
   // 员工自查:预计本月薪酬(底薪+提成×本月完成业绩;以老板月结确认为准,不需要财务钥匙)
@@ -14132,7 +14132,7 @@ async function route(req, res) {
         Math.max(0, Math.round(Number(body.baseSalaryCents ?? Number(body.baseSalary || 0) * 100))),
         Math.min(0.9, Math.max(0, Number(body.commissionRate || 0))),
         body.active === undefined ? 1 : Number(Boolean(body.active)),
-        adminSession.email || 'owner',
+        actorOf(adminSession),
         iso(new Date())
       )
     }
@@ -14173,7 +14173,7 @@ async function route(req, res) {
         payChannel: 'unknown',
         occurredOn: localParts(new Date()).date,
         note: `${month} 工资结算：${draft.technicianName}（底薪 ${cadFromCentsText(draft.baseSalaryCents)} + 提成 ${cadFromCentsText(draft.commissionCents)}）`,
-        createdBy: adminSession.email || 'owner'
+        createdBy: actorOf(adminSession)
       })
     }
     return json(res, 201, { settled: drafts.length, drafts: payrollDraftsForMonth(month) })
@@ -15220,7 +15220,7 @@ async function route(req, res) {
       booking,
       technicianId: String(body.technicianId || '').trim() || booking.technician_id || '',
       payChannel: String(body.payChannel || 'offline'),
-      actor: adminSession.email || adminSession.role || 'admin'
+      actor: actorOf(adminSession)
     })
     return json(res, out.created ? 201 : 200, {
       ...out,
@@ -15239,7 +15239,7 @@ async function route(req, res) {
     const booking = db.prepare('SELECT * FROM bookings WHERE id = ? AND tenant_id = ?').get(id, currentTenantId())
     if (!booking) throw apiError(404, 'NOT_FOUND', '找不到这张预约。')
     const body = await readBody(req)
-    const out = disposeNoShowDeposit({ booking, action: String(body.action || ''), note: body.note, actor: adminSession.email || 'owner' })
+    const out = disposeNoShowDeposit({ booking, action: String(body.action || ''), note: body.note, actor: actorOf(adminSession) })
     return json(res, 201, {
       disposal: out.disposal,
       retain: out.retain,
@@ -15255,7 +15255,7 @@ async function route(req, res) {
     const booking = db.prepare('SELECT * FROM bookings WHERE id = ? AND tenant_id = ?').get(id, currentTenantId())
     if (!booking) throw apiError(404, 'NOT_FOUND', '找不到这张预约。')
     const body = await readBody(req)
-    return json(res, 200, revokeNoShowDisposal({ booking, reason: body.reason, actor: adminSession.email || 'owner' }))
+    return json(res, 200, revokeNoShowDisposal({ booking, reason: body.reason, actor: actorOf(adminSession) }))
   }
   // 误标撤销:写一行 revoke 留痕,原记录不删不改
   if (req.method === 'POST' && path.startsWith('/admin/bookings/') && path.endsWith('/deposit-receipt/revoke')) {
@@ -15264,7 +15264,7 @@ async function route(req, res) {
     const booking = db.prepare('SELECT * FROM bookings WHERE id = ? AND tenant_id = ?').get(id, currentTenantId())
     if (!booking) throw apiError(404, 'NOT_FOUND', '找不到这张预约。')
     const body = await readBody(req)
-    return json(res, 200, revokeDepositReceipt({ booking, reason: body.reason, actor: adminSession.email || 'owner' }))
+    return json(res, 200, revokeDepositReceipt({ booking, reason: body.reason, actor: actorOf(adminSession) }))
   }
   /* 屏 S1:按手机号找档案(命中即带出,不建重复档案 —— 规则①)。
      只在**本店**找;唯一命中才认,多条命中当没命中(歧义不猜人 —— 规则⓪)。 */
@@ -15441,7 +15441,7 @@ async function route(req, res) {
     const row = db.prepare('SELECT * FROM settlements WHERE id = ? AND tenant_id = ?').get(id, currentTenantId())
     if (!row) throw apiError(404, 'NOT_FOUND', '找不到这张服务单。')
     if (row.status === 'signed') throw apiError(400, 'ALREADY_SIGNED', '这张单已经签过了。')
-    const { token, expiresAt } = issueSignToken(row, { actor: adminSession.email || 'staff' })
+    const { token, expiresAt } = issueSignToken(row, { actor: actorOf(adminSession) })
     const bound = isUserBound(row.user_id)
     return json(res, 200, {
       token, expiresAt, url: signTokenUrl(token),
@@ -15501,7 +15501,7 @@ async function route(req, res) {
         occurredOn: stl && stl.signed_at ? localParts(new Date(stl.signed_at)).date : todayOf(tenantId),
         bookingId: b.bookingId,
         note: '守恒回填·修复前签署',
-        createdBy: adminSession.email || 'owner'
+        createdBy: actorOf(adminSession)
       })
       repaired.push({ settlementCode: b.settlementCode, amountCents: missing })
     }

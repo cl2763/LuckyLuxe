@@ -426,7 +426,11 @@ check('⑬h 🔴 拿不到就**整块不出现**,不留空壳说「还没有签�
    🔴 这条棘轮的意义:**不许一边修一边又写出新的**。下一批把 32 再往下压。 */
 const MONEY_CTX = /settlement|payment|finance|stored_value|salary|payroll|coupon|points|deposit|refund|cash_note|timecard|recharge|daily_close|amend|reversal|perf_|compensation/i
 const ACTOR_EXPR = /adminSession\??\.(?:email|username|displayName|name|id)\b[^,;)\n]*/g
-const J105_CAP = 12   /* 10c 底数 40 → 第一批 −8 → 第二批 −10 → 第三批 −10 ⇒ 12。只许降 */
+/* 🔴 剩下的 2 处是什么,写清楚,免得下一个人以为是漏的:
+     `local-server.mjs:15640` actorEmail · `:15656` reverseBookingIncome(…, '…||admin')
+     —— 它们的参数名叫 `actorEmail`,改成 `actorOf` 会让名字与内容对不上(J-94:名字要对得上里面装的东西),
+     要一起改参数名,那是**一次口径改动**,不在「第四批 ≤10 处」的授权范围里(J-107)。**留给店主裁。** */
+const J105_CAP = 2    /* 40 → −8 → −10 → −10 → −10 ⇒ 2。只许降 */
 const j105 = (() => {
   const out = []
   for (const f of readdirSync(join(ROOT, 'apps/api')).filter((x) => x.endsWith('.mjs') && !x.startsWith('test-'))) {
@@ -442,7 +446,7 @@ const j105 = (() => {
   }
   return out
 })()
-check(`J-105d 🔴 乙档「涉钱落角色词」剩 ${j105.length} 处 ≤ 棘轮 ${J105_CAP}(**只许降**;40 → −8 → −10 → −10)`,
+check(`J-105d 🔴 乙档「涉钱落角色词」剩 ${j105.length} 处 ≤ 棘轮 ${J105_CAP}(**只许降**;40 → −8 → −10 → −10 → −10)`,
   j105.length <= J105_CAP, j105.slice(0, 6).join(' | '))
 /* 🔴 夜16 现场改:这一条原来断言 `local-server` **恰好 4 处** `actorOf` ——
    那是数一个**快照**,不是数一个**性质**。第二批又修好 10 处,它就红了:
@@ -450,7 +454,7 @@ check(`J-105d 🔴 乙档「涉钱落角色词」剩 ${j105.length} 处 ≤ 棘�
    改成两段:①第一批那两个小文件仍是精确数(它们只有那几处,数得准)
    ②`local-server` 用**只许涨的下限** —— 覆盖面只许变大,缩水立刻红。
    (同族:J-105d 那把「剩余只许降」——一个盯剩余、一个盯已修,两头夹住。) */
-const LS_ACTOR_FLOOR = 24   /* 第一批 4 → 第二批 +10 → 第三批 +10 ⇒ 24。**只许涨** */
+const LS_ACTOR_FLOOR = 34   /* 4 → +10 → +10 → +10 ⇒ 34。**只许涨** */
 const lsActor = (codeOnly(readFileSync(join(ROOT, 'apps/api/local-server.mjs'), 'utf8')).match(/actorOf\(adminSession\)/g) || []).length
 check(`J-105e 🔴 第一批两个小文件精确:退款 3 · 冲销 1;\`local-server\` 现 ${lsActor} 处 ≥ 下限 ${LS_ACTOR_FLOOR}(**只许涨**)`,
   (codeOnly(readFileSync(join(ROOT, 'apps/api/refund-routes.mjs'), 'utf8')).match(/actorOf\(adminSession\)/g) || []).length === 3
