@@ -218,11 +218,17 @@ restore_sandbox() {
     # 🔴 09p §五②:沙箱同样不许只看 200 —— 它也可能被另一棵树的代码占着(而且沙箱是拿来演示的,
     # 「演示的时候跑的是三周前的 app」比本机更难发现)。
     if curl -sf -o /dev/null --max-time 2 "http://127.0.0.1:4310/health"; then
-      if bash "$API_DIR/../../tools/verify-restored.sh" 4310 "$REPO_ROOT" > /dev/null 2>&1; then
+      # 🔴 夜15 (丙) 现场踩到的:CI 上沙箱**故意**住在临时目录($RUNNER_TEMP/…/sandbox-data),
+      # 而这道指纹原来一律拿 $REPO_ROOT 去比 ⇒ 在 CI 上必然对不上 ⇒ restore_sandbox 回 1
+      # ⇒ `set -e` 让整轮在「最慢 5 套」之后无声退 1。**判据没错,期望值取错了。**
+      # 设了 SANDBOX_DATA_DIR 就拿它当期望;没设照旧用仓根(本机行为一个字不变)。
+      SB_EXPECT="${SANDBOX_DATA_DIR:+$(cd "$SANDBOX_DATA_DIR/.." 2>/dev/null && pwd)}"
+      SB_EXPECT="${SB_EXPECT:-$REPO_ROOT}"
+      if bash "$API_DIR/../../tools/verify-restored.sh" 4310 "$SB_EXPECT" > /dev/null 2>&1; then
         echo "== 已把沙箱(4310)重新拉起来 =="; return 0
       fi
       echo "!! 4310 答 200 了,但**版本指纹对不上** —— 按「没拉回来」处理:" >&2
-      bash "$API_DIR/../../tools/verify-restored.sh" 4310 "$REPO_ROOT" >&2 || true
+      bash "$API_DIR/../../tools/verify-restored.sh" 4310 "$SB_EXPECT" >&2 || true
       return 1
     fi
     sleep 0.5
