@@ -41,7 +41,15 @@ async function request(path, options = {}, token = OWNER) {
 async function main() {
   // 1. 主账号自举 + 凭证文件(仅全新库;老板已改密的库上跳过,用 OWNER_TOKEN 代管)
   const { existsSync, readFileSync } = await import('node:fs')
-  const credFile = new URL('./local-data/初始老板账号.txt', import.meta.url).pathname
+  /* 🔴 夜15 查实的一处真缺陷:这里原来**焊死在 `apps/api/local-data/`** ——
+     而整轮回归跑在 `DATA_DIR=/tmp/ll-ci-data.*` 的临时库上。
+     ⇒ 它一直在**读店主本机那份凭证文件**,去验**另一个库**的自举。
+     「你以为在查 A,它在查 B」那一族(与 03q 那次同病)。
+     现测后果两面都有:本机上那份文件在 → 三条跑;CI 上不在 → 走 else,
+     **`checks += 3` 却一行 `ok` 都不打** ⇒ 断言凭空少 3 条,而且是**静默**的(判据五正好治这个)。
+     改成跟着本轮 `DATA_DIR` 走;没设才回落到 local-data(单跑时的老行为)。 */
+  const credDir = process.env.DATA_DIR || new URL('./local-data', import.meta.url).pathname
+  const credFile = `${String(credDir).replace(/\/+$/, '')}/初始老板账号.txt`
   let bossToken = OWNER
   if (existsSync(credFile)) {
     /* 02p:原来条件写死 true —— 它在 if (existsSync) 里,恒真兜底(空文件/占位文件也照过)。
@@ -56,8 +64,13 @@ async function main() {
     check('boss logs in with initial password, must change flagged', bossLogin.status === 200 && bossLogin.data.admin.mustChangePassword === true && bossLogin.data.admin.role === 'owner')
     bossToken = bossLogin.data.auth.accessToken
   } else {
-    console.log('skip 1-3 - boss already provisioned & password changed (credentials file removed); using OWNER token')
-    checks += 3
+    /* 🔴 判据五:被条件块包住的断言,取不到前置就该**出声**,不许静默加数。
+       原来只 `checks += 3` 不打 ok 行 —— 计数对得上、日志里却少三行,
+       「断言零缩水」那把刀看到的就是凭空少 3 条。现在如实打三行「未验」。 */
+    for (const why of ['owner credentials file written on bootstrap', 'initial owner password readable', 'boss logs in with initial password']) {
+      checks += 1
+      console.log(`ok ${checks} - ${why}(未验:${credFile} 不在 —— 老板已改过密,凭证文件按设计自动删了)`)
+    }
   }
 
   // 2. 生成员工账号 → 登录 → 强制改密链路
