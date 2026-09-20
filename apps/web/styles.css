@@ -7935,3 +7935,49 @@ section.card > .section-row:first-child { margin-top: 0; }
 .dh-fs .fs-dots i.on { opacity: .9; }
 .dh-fs .fs-exit { margin-top: 26px; font-size: 15px; opacity: .45; }
 @media (prefers-reduced-motion: reduce) { .dh-fs .fs-wrap { transition: none; } .dh-fs .fs-wrap.fs-saver { transform: none; } }
+
+/* ═══ 签署文件留档(10b)· 合同图 v2 ═══════════════════════════════
+   🔴 颜色一律走既有 token,不新造色(配色批的棘轮盯着 styles.css 的写死色)。
+   🔴 圆角一律取**形制集** {999px, 8px, 50%, 0} —— 第一版我随手写了 4/6/9/10/14px 七种,
+   `test-ui-spec` ① 当场红(容器侧 65 > 58)。二形法不是审美偏好,是**一眼认得出是同一个系统**。 */
+.signed-docs-empty{border:1px dashed var(--line);border-radius:8px;padding:18px 12px;text-align:center;color:var(--sub);font-size:.9rem;margin-bottom:10px}
+.signed-docs-list{display:flex;flex-direction:column;gap:2px;margin-bottom:10px}
+.signed-doc-row{display:flex;align-items:center;gap:10px;width:100%;padding:8px 4px;border:0;border-top:1px solid var(--line);background:none;color:inherit;text-align:left;cursor:pointer}
+.signed-doc-row:first-child{border-top:0}
+.signed-doc-row.is-voided .signed-doc-title{color:var(--sub)}
+.signed-doc-row.is-voided .signed-doc-thumb{opacity:.5}
+.signed-doc-thumb{width:34px;height:44px;flex:none;border:1px solid var(--line);border-radius:8px;background:var(--card);position:relative;overflow:hidden}
+.signed-doc-thumb::before{content:"";position:absolute;inset:6px 5px auto 5px;height:2px;background:var(--line);box-shadow:0 5px 0 var(--line),0 10px 0 var(--line),0 15px 0 var(--line)}
+.signed-doc-text{flex:1;min-width:0;display:flex;flex-direction:column}
+.signed-doc-title{font-size:.9rem;font-weight:600}
+.signed-doc-meta{font-size:.76rem;color:var(--sub)}
+.signed-doc-pill{font-size:.7rem;font-weight:700;border-radius:999px;padding:2px 9px;white-space:nowrap}
+.signed-doc-pill.is-ok{background:var(--goodbg,var(--wall));color:var(--good,var(--ink))}
+.signed-doc-pill.is-voided{background:var(--wall);color:var(--sub)}
+.signed-type-list{display:flex;flex-direction:column;gap:8px;margin:8px 0}
+.signed-type{display:flex;justify-content:space-between;align-items:center;gap:10px;border:1px solid var(--line);border-radius:8px;padding:11px 12px;cursor:pointer;font-size:.9rem}
+.signed-type.is-on{border-color:var(--brand,var(--acc));background:var(--wall)}
+/* 🔴 浏览器实拍才看见:原生 radio 不限尺寸会被全局 input 样式撑成一个大圆饼。
+   合同图上是 15px 的小圆点(`.opt .k`),按图钉死。 */
+.signed-type input[type=radio]{width:15px;height:15px;flex:none;margin:0;accent-color:var(--brand,var(--acc))}
+.signed-visible-row input[type=checkbox]{width:15px;height:15px;flex:none;margin:0}
+.signed-title-row,.signed-visible-row{display:flex;align-items:center;gap:8px;font-size:.86rem;margin:8px 0}
+.signed-title-row input{flex:1}
+.signed-shots{display:flex;flex-wrap:wrap;gap:8px;margin:10px 0;min-height:8px}
+.signed-shot{position:relative;width:76px}
+.signed-shot img{width:76px;height:96px;object-fit:cover;border-radius:8px;border:1px solid var(--line);display:block}
+.signed-shot b{display:block;font-size:.68rem;color:var(--sub);text-align:center;font-weight:600}
+.signed-shot.is-add{width:76px;height:96px;border:1px dashed var(--line);border-radius:8px;display:flex;align-items:center;justify-content:center;font-size:.72rem;color:var(--sub)}
+.signed-pages{display:flex;flex-direction:column;gap:8px;max-height:44vh;overflow-y:auto;margin-bottom:10px}
+.signed-pages img{width:100%;border:1px solid var(--line);border-radius:8px}
+.signed-kv{display:flex;justify-content:space-between;font-size:.84rem;padding:4px 0;border-bottom:1px solid var(--line)}
+.signed-kv span:first-child{color:var(--sub)}
+.signed-kv .is-ok{color:var(--good,var(--ink));font-weight:700}
+.signed-kv .is-voided{color:var(--sub);font-weight:700}
+.modal-backdrop{position:fixed;inset:0;background:rgba(0,0,0,.45);display:flex;align-items:center;justify-content:center;padding:16px;z-index:90}
+.modal-card{background:var(--card);border:1px solid var(--line);border-radius:8px;padding:18px;max-width:420px;width:100%;max-height:88vh;overflow-y:auto}
+.modal-head{display:flex;justify-content:space-between;align-items:center;gap:10px;margin-bottom:6px}
+.modal-head h3{margin:0;font-size:1.02rem}
+.modal-actions{display:flex;gap:8px;margin:10px 0}
+.btn-like{flex:1;text-align:center;background:var(--brand,var(--acc));color:var(--card);border-radius:999px;padding:9px 0;font-size:.88rem;font-weight:700;cursor:pointer}
+.btn-like.ghost{background:transparent;border:1px solid var(--line);color:var(--ink);font-weight:500}

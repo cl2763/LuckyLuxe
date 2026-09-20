@@ -44,7 +44,9 @@ const RESET_TABLES = [
   'service_notes', 'attendance_records', 'quote_requests'
 ]
 
-export function createDemoReset({ db, apiError, randomId, iso, copyFileSync, dbPath, backupDir, mkdirSync, existsSync }) {
+/* 🔴 10a:形参里原本还有个 `copyFileSync` —— **死参**,函数体里一次都没用(早改走 `snapshotDb` 了)。
+   留着它会让下一个人以为这里还在 cp 一个库,而 ④ 那把刀也因此一直把本文件算成命中。摘掉。 */
+export function createDemoReset({ db, apiError, randomId, iso, dbPath, backupDir, mkdirSync, existsSync }) {
   /* 🔴 D73 留的洞(2026-08-25 铺设时撞到):归属只能在**建店那一刻**定,
      已经建好的店没有任何入口能改 —— 于是「小婕的店(演示)」这种**名字是演示、归属是 real** 的店
      既不能铺演示数据、也不能重置,而我写在错误提示里的那句"归属只能在平台后台显式设置"当时是句空话。

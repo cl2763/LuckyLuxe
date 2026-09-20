@@ -21,6 +21,49 @@
     </view>
   </view>
 
+  <!-- 签署文件留档(10b 第一步 · 合同图 v2 屏1 两态)。🔴 句子全来自后端,这儿一句都没拼。 -->
+  <view class="sdoc">
+    <view class="sdoc-hd">
+      <text class="sdoc-t">签署文件</text>
+      <text class="sdoc-more" wx:if="{{docs.length}}">{{docsMoreText}} ›</text>
+    </view>
+    <view class="sdoc-empty" wx:if="{{!docs.length}}">{{docsEmptyText}}\n{{docsEmptyHint}}</view>
+    <view class="sdoc-row {{item.status === 'voided' ? 'is-voided' : ''}}" wx:for="{{docs}}" wx:key="id" bindtap="openDoc" data-id="{{item.id}}">
+      <view class="sdoc-th"></view>
+      <view class="sdoc-tx">
+        <view class="sdoc-nm">{{item.title}}</view>
+        <view class="sdoc-mt">{{item.profileMetaText}}</view>
+      </view>
+      <!-- 🔴 空徽章律:边框小标签绑单个 {{}} 必须带 wx:if —— 值为空时**整个徽章不出现**,
+           而不是留一个空的描边框(那看起来像「有个状态但没显示出来」)。判据 test-empty-pill ① 盯着。 -->
+      <text wx:if="{{item.statusText}}" class="sdoc-pill {{item.status === 'voided' ? 'v' : 'ok'}}">{{item.statusText}}</text>
+    </view>
+    <button class="sdoc-add" bindtap="openUpload">+ 上传文件</button>
+  </view>
+
+  <!-- 屏2 + 屏3:先定类型,再拍 -->
+  <view class="sdoc-mask" wx:if="{{uploading}}" bindtap="closeUpload"></view>
+  <view class="sdoc-sheet" wx:if="{{uploading}}">
+    <view class="sdoc-sheet-hd"><text>上传签署文件</text><text class="sdoc-cancel" bindtap="closeUpload">取消</text></view>
+    <view class="sdoc-ask">这是哪一份?</view>
+    <view class="sdoc-opt {{pickedType === item.key ? 'on' : ''}}" wx:for="{{docTypes}}" wx:key="key" bindtap="pickType" data-key="{{item.key}}">
+      <text>{{item.label}}</text><view class="sdoc-k"></view>
+    </view>
+    <input class="sdoc-title" wx:if="{{pickedType === 'other'}}" maxlength="60" placeholder="自己写个名字" value="{{pickedTitle}}" bindinput="onTitle" />
+    <view class="sdoc-vis"><switch checked="{{pickedVisible}}" bindchange="onVisible" /><text>给顾客看</text></view>
+    <view class="sdoc-shots">
+      <!-- 🔴 占位零回落律(B 类:有数据才渲染)。字段级守卫 `wx:if="{{im}}"` 照抄本页小记图片那一行 ——
+           没有它,一个读失败的空串会渲成一个灰方块,看起来像「有图但坏了」。判据 test-image-placeholder ② 盯着。 -->
+      <block wx:for="{{shots}}" wx:for-item="im" wx:key="*this" wx:for-index="i">
+        <image wx:if="{{im}}" class="sdoc-shot" src="{{im}}" mode="aspectFill" bindtap="redoShot" data-i="{{i}}" />
+      </block>
+      <view class="sdoc-shot add" bindtap="addShots">{{shots.length ? '+ 加一页' : '拍照 / 相册'}}</view>
+    </view>
+    <view class="sdoc-hint">多页的价格表可以连着拍,存成同一份。</view>
+    <button class="sdoc-save" disabled="{{!shots.length}}" bindtap="saveDoc">存进{{customerName}}的档案</button>
+  </view>
+
+
   <view class="tlhead"><text>服务记录时间线</text><text class="add" bindtap="addNote">+ 写小记</text></view>
   <view wx:if="{{!notes.length && !loading}}" class="empty">还没有服务小记,做完顾客随手记一条吧</view>
   <view class="titem" wx:for="{{notes}}" wx:key="id">

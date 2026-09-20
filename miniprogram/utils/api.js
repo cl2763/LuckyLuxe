@@ -881,6 +881,20 @@ function saveServiceNote(data) {
 function getCustomerNotes(userId) {
   return adminRequest(`/admin/customers/${encodeURIComponent(userId)}/notes`)
 }
+/* 签署文件留档(10b 第一步 · 商家端)。🔴 与网页商家端同一批口,**同一份数据两端渲染**。
+   所有**句子**都从后端带下来(statusText / profileMetaText / emptyText …),页面零拼串。 */
+function getSignedDocs(userId) {
+  return adminRequest(`/admin/customers/${encodeURIComponent(userId)}/signed-docs`)
+}
+function createSignedDoc(userId, data) {
+  return adminRequest(`/admin/customers/${encodeURIComponent(userId)}/signed-docs`, 'POST', data)
+}
+function getSignedDoc(docId) {
+  return adminRequest(`/admin/signed-docs/${encodeURIComponent(docId)}`)
+}
+function voidSignedDoc(docId, reason) {
+  return adminRequest(`/admin/signed-docs/${encodeURIComponent(docId)}/void`, 'POST', { reason })
+}
 // 角色缓存(登录/adminMe 后写入),供页面同步判断
 function getCachedRole() { return wx.getStorageSync('lucky_admin_role') || '' }
 function isOwner() { return getCachedRole() === 'owner' }
@@ -1042,6 +1056,7 @@ module.exports = {
   adminPatch,
   saveServiceNote,
   getCustomerNotes,
+  getSignedDocs, createSignedDoc, getSignedDoc, voidSignedDoc,
   adminRequest,
   getCachedRole,
   isOwner,

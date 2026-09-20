@@ -20,7 +20,7 @@ import { notBoundByLoginIdentitySql, makeUnionIdResolver } from './identity-kind
 import { filterCouponsForCustomer, KNOWN_COUPON_STATUSES, isKnownCouponStatus } from './coupon-status.mjs'
 import { createPointsLedger } from './points-ledger.mjs'
 import { addUserColumns, USER_OP_COLUMNS } from './user-columns.mjs'
-import { copyFileSync, existsSync, mkdirSync, readdirSync, readFileSync, renameSync, statSync, unlinkSync, writeFileSync } from 'node:fs'
+import { existsSync, mkdirSync, readdirSync, readFileSync, renameSync, statSync, unlinkSync, writeFileSync } from 'node:fs'
 import { basename, dirname, extname, join, normalize, resolve } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import os from 'node:os'   // 真机调试:开发机局域网 IP 探测(启动日志给手机用的地址)
@@ -33,6 +33,8 @@ import { tenantDefaultTargets, tenantNullableTargets, dropTenantDefaults, backup
 import { rebuildTenantScopedUnique } from './schema-unique-rebuild.mjs'   // 唯一约束按租户重建(公约②)   // D126/D131 去列默认值(公约①)
 import { installTenantFillTriggers } from './tenant-fill-triggers.mjs'   // D137 落值触发器(公约②)
 import { ensureConversationLog, logConversationMessage, transcriptFromLog, migrateTranscriptsIntoLog, redactConversation } from './conversation-log.mjs'   // ⓪ 对话全录(大批05 §〇)
+import { createCos } from './cos-upload.mjs'
+import { createSignedDocs } from './signed-docs.mjs'   // 签署文件留档(10b,公约①)
 import { createConversationRoutes } from './conversation-routes.mjs'   // ⓪b 脱敏正门(大批05 §〇b,公约①)
 import { compactIntentText } from './intent-text.mjs'   // 意图文本归一,全仓唯一一份(05d)
 import { resolveSafetyLine, hasSpecialManualHandoffIntent, needsHumanInScope } from './ai-safety-lines.mjs'   // 安全四线闸(05d 两破口;判定与出句都在模块里)
@@ -99,7 +101,7 @@ import { createAssetFingerprint } from './asset-fingerprint.mjs'      // 前端�
 import { createStoredValue } from './stored-value.mjs'                // 储值域(写流水/算余额/分桶/类型文案)
 import { createMembershipConfig } from './membership-config.mjs'      // 会员制度域(资格判定 + 退卡后是否保留会员)
 import { createImportCustomers } from './import-customers.mjs'        // 平台代商家导入老顾客(公约②)
-import { snapshotDb, dailyBackup } from './db-backup.mjs'             // 库快照唯一出口(按需 + 日备同一处)
+import { snapshotDb, dailyBackup, backupDb } from './db-backup.mjs'             // 库快照唯一出口(按需 + 日备同一处)
 import { createStaticServe } from './static-serve.mjs'                // 静态文件服务(公约②)
 import { createMemberCode } from './member-code.mjs'                  // 会员码域(公约②)
 import { createStoreDirectory } from './store-directory.mjs'          // 门店列表三个一(公约①)
@@ -129,13 +131,13 @@ const dataDir = process.env.DATA_DIR ? resolve(process.env.DATA_DIR) : join(__di
 const DATA_SCOPE = legacyScope(dataDir); const DATA_SCOPE_NAME = scopeOf(dataDir)
 mkdirSync(dataDir, { recursive: true })
 
-// 数据迁移:发现待导入文件时,先给现库留底份,再原子替换(配合 /admin/ops/import-db)
+/* 数据迁移:发现待导入文件时,先给现库留底份,再原子替换(配合 /admin/ops/import-db)
+ * 🔴 D202-b(10a):原是 `copyFileSync`,而 WAL 库上 cp 主文件拷出来是 `no such table` 的废文件;
+ * 09x 那条豁免的理由把位置说错了(这段在开机时跑,连接都还没建),四档现测均不打架 ⇒ 改走 `backupDb`。*/
 const pendingImportPath = join(dataDir, 'lucky-luxe.sqlite.pending')
 if (existsSync(pendingImportPath)) {
   const mainDbPath = join(dataDir, 'lucky-luxe.sqlite')
-  if (existsSync(mainDbPath)) {
-    copyFileSync(mainDbPath, join(dataDir, `lucky-luxe.pre-import-${Date.now()}.sqlite`))
-  }
+  if (existsSync(mainDbPath)) backupDb(mainDbPath, join(dataDir, `lucky-luxe.pre-import-${Date.now()}.sqlite`))
   renameSync(pendingImportPath, mainDbPath)
   console.log('[import] 已应用待导入数据库(原库已留底份 lucky-luxe.pre-import-*.sqlite)')
 }
@@ -4250,7 +4252,7 @@ function normalizeQuoteRequestInput(body = {}, customer = null) {
 }
 
 const demoResetApi = createDemoReset({
-  db, apiError, randomId, iso, copyFileSync, mkdirSync, existsSync,
+  db, apiError, randomId, iso, mkdirSync, existsSync,
   dbPath: join(dataDir, 'lucky-luxe.sqlite'), backupDir: join(dataDir, 'backups')
 })
 const demoFactsApi = createDemoFacts({ db, apiError, isDemoTenant, protectedRealTenants: PROTECTED_REAL_TENANTS })
@@ -9859,90 +9861,12 @@ function staffPerformanceView(techId, month, tenantId) {
   return view
 }
 
-/* ===== 对象存储(腾讯云 COS)最小上传封装(2026-08-08)=====
-   零依赖,只用 node:crypto 做 COS v5 签名。密钥只从 env 读,不写代码、不进仓库、不打印日志
-   (沿用主钥匙那次的纪律)。没配或上传失败一律返回 null,由调用方降级 —— 不因存储故障拦流程。
-   环境变量:COS_SECRET_ID / COS_SECRET_KEY / COS_REGION / COS_BUCKET */
-const COS = {
-  secretId: process.env.COS_SECRET_ID || '',
-  secretKey: process.env.COS_SECRET_KEY || '',
-  region: process.env.COS_REGION || '',
-  bucket: process.env.COS_BUCKET || ''
-}
-function cosConfigured() {
-  return Boolean(COS.secretId && COS.secretKey && COS.region && COS.bucket)
-}
-
-function cosAuthorization({ method, key, headers, now = Math.floor(Date.now() / 1000) }) {
-  const keyTime = `${now - 60};${now + 900}`
-  const signKey = createHmac('sha1', COS.secretKey).update(keyTime).digest('hex')
-  const headerKeys = Object.keys(headers).map((k) => k.toLowerCase()).sort()
-  const headerString = headerKeys.map((k) => `${encodeURIComponent(k)}=${encodeURIComponent(String(headers[Object.keys(headers).find((x) => x.toLowerCase() === k)]))}`).join('&')
-  const httpString = `${method.toLowerCase()}\n${key}\n\n${headerString}\n`
-  const stringToSign = `sha1\n${keyTime}\n${createHash('sha1').update(httpString).digest('hex')}\n`
-  const signature = createHmac('sha1', signKey).update(stringToSign).digest('hex')
-  return [
-    'q-sign-algorithm=sha1',
-    `q-ak=${COS.secretId}`,
-    `q-sign-time=${keyTime}`,
-    `q-key-time=${keyTime}`,
-    `q-header-list=${headerKeys.join(';')}`,
-    'q-url-param-list=',
-    `q-signature=${signature}`
-  ].join('&')
-}
-
-/* 沙盒隔离(店主 2026-08-08 裁决,根因固化不靠自觉):
-   非生产环境**一律不往真实 COS 传**,即使 env 里配了钥匙 —— 快照直接走 inline。
-   本地铺演示数据那次,快照真的传进了生产桶;靠「记得摘环境变量」是防不住的,
-   所以判断放在代码里。只有显式 COS_SMOKE=1 才放行,专供冒烟脚本用。 */
-function cosUploadAllowed() {
-  if (!cosConfigured()) return false
-  if (process.env.COS_SMOKE === '1') return true
-  return IS_PRODUCTION
-}
-
-async function cosDeleteObject(objectKey) {
-  if (!cosConfigured()) return { ok: false, reason: 'COS 未配置' }
-  const key = objectKey.startsWith('/') ? objectKey : `/${objectKey}`
-  const host = `${COS.bucket}.cos.${COS.region}.myqcloud.com`
-  const headers = { host }
-  try {
-    const response = await fetch(`https://${host}${key}`, {
-      method: 'DELETE',
-      headers: { ...headers, authorization: cosAuthorization({ method: 'DELETE', key, headers }) },
-      signal: AbortSignal.timeout(15000)
-    })
-    // COS 删不存在的对象也回 204,幂等
-    return { ok: response.status === 204 || response.ok, status: response.status, url: `https://${host}${key}` }
-  } catch (error) {
-    return { ok: false, reason: error.message }
-  }
-}
-
-async function cosPutObject(objectKey, body, contentType = 'application/octet-stream') {
-  if (!cosUploadAllowed()) return null
-  const key = objectKey.startsWith('/') ? objectKey : `/${objectKey}`
-  const host = `${COS.bucket}.cos.${COS.region}.myqcloud.com`
-  const payload = Buffer.isBuffer(body) ? body : Buffer.from(String(body), 'utf8')
-  const headers = { host, 'content-type': contentType, 'content-length': String(payload.length) }
-  try {
-    const response = await fetch(`https://${host}${key}`, {
-      method: 'PUT',
-      headers: { ...headers, authorization: cosAuthorization({ method: 'PUT', key, headers }) },
-      body: payload,
-      signal: AbortSignal.timeout(15000)
-    })
-    if (!response.ok) {
-      console.error(`[cos] 上传失败 ${response.status}(已降级,不影响业务)`)
-      return null
-    }
-    return `https://${host}${key}`
-  } catch (error) {
-    console.error(`[cos] 上传异常: ${error.message}(已降级,不影响业务)`)
-    return null
-  }
-}
+/* 对象存储那一族已搬到 `./cos-upload.mjs`(10b,公约②「边改边拆」;(甲) 抽取抵掉本批新增的分发行) */
+/* 🔴 这里原来只解构了 `cosPutObject` —— 而 `/admin/store-clock` 的自检块(本文件 14373 行)
+   还在用 `cosConfigured()` / `cosUploadAllowed()`。搬出去时我**没做血缘清单**(波及面回归律①),
+   于是那条接口当场 500 `cosConfigured is not defined`。**全量回归咬出来的,不是我自己想起来的。**
+   改法:把用到的三个一起解构;判据 `test-signed-docs` ⑪ 盯着「搬出去的名字,调用方一个都不许掉队」。 */
+const { cosPutObject, cosConfigured, cosUploadAllowed } = createCos({ isProduction: IS_PRODUCTION })
 
 /* ===== 已签结算单快照(2026-08-08 店主拍板口径)=====
    顾客点确认的那一刻,把整张结算单连同笔迹渲染成一张 SVG —— 这就是唯一签署凭证。
@@ -10376,6 +10300,7 @@ function serializeSettlement(row, { includeSignature = false } = {}) {
   }
 }
 
+const signedDocs = createSignedDocs({ db, iso, randomId, apiError, json, readBody, currentTenantId, cosPutObject })
 const conversationRoutes = createConversationRoutes({
   db, iso, randomId, apiError, json, readBody, currentTenantId,
   conversationRow: wecomRouting.conversationRow, redactConversation,
@@ -11573,6 +11498,7 @@ async function route(req, res) {
   /* ⓪b 脱敏正门搬到 `conversation-routes.mjs`(公约①);这里只把路由让给它。
      返回 false = 它不认这条路,继续往下匹配,不吞别人的路由。 */
   if (await conversationRoutes.handle(req, res, path, adminSession)) return
+  if (await signedDocs.handle(req, res, path, adminSession)) return    // 签署文件留档(10b);不认这条路就回 false,不吞别人的路由
   const manualReplyMatch = path.match(/^\/admin\/wechat\/conversations\/(.+)\/manual-reply$/)
   if (req.method === 'POST' && manualReplyMatch) {
     return json(res, 201, await appendManualWecomReply(decodeURIComponent(manualReplyMatch[1]), await readBody(req), adminSession))

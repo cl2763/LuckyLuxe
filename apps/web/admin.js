@@ -1,6 +1,6 @@
 // 构建号:每次交付递增。侧栏可见,排查"改了没生效"时先对版本。
 // 兜底用(服务端会注入 window.LL_BUILD = 资源内容指纹,页面优先显示那个)
-const ADMIN_BUILD = '20260909b-contrast'
+const ADMIN_BUILD = '20260920a-signed'
 let pricingState = { module: 'storefront', tab: 'items', categories: [], items: [], rules: {}, editing: null, preview: null, storefrontPicker: false }
 console.log(`[admin] build ${ADMIN_BUILD}`)
 
@@ -4407,6 +4407,13 @@ function renderCustomerDetail() {
           <button class="primary slim" data-customer-profile-save="${escapeHtml(customer.id)}" type="button">${owner.lang === 'zh' ? '保存运营信息' : 'Save'}</button>
         </div>
       </section>
+      <section class="customer-records card" id="signedDocsSection">
+        <div class="section-row compact-row">
+          <div><p class="eyebrow">签署文件</p><h2>线下签完的纸,拍照存这儿</h2></div>
+          <span class="subtle" id="signedDocsMore"></span>
+        </div>
+        <div id="signedDocsBody"><p class="subtle">加载签署文件…</p></div>
+      </section>
       <section class="customer-records card" id="customerNotesSection">
         <div class="section-row compact-row">
           <div>
@@ -4430,51 +4437,9 @@ function renderCustomerDetail() {
       </section>
     </section>
   `
-  loadCustomerNotes(customer.id)
+  loadCustomerNotes(customer.id); renderSignedDocsBlock(customer.id, customerName(customer))   // 签署文件留档(10b);实现在 customer-docs.js
 }
 
-// 2026-08-02 服务小记+画像(只读;与小程序画像页同一 /admin/customers/:id/notes 口径)
-function loadCustomerNotes(customerId) {
-  if (!document.querySelector('#customerNotesBody')) return
-  const zh = owner.lang === 'zh'
-  request(`/admin/customers/${customerId}/notes`)
-    .then((data) => {
-      const target = document.querySelector('#customerNotesBody')
-      if (!target || owner.selectedCustomerId !== customerId) return // 用户已切走,丢弃
-      const p = data.profile || {}
-      const tag = (text, danger) => `<span class="customer-tag"${danger ? ' style="background:var(--bad);color:var(--heroink);font-weight:700"' : ''}>${escapeHtml(text)}</span>`
-      const groups = [
-        [zh ? '⚠ 安全' : '⚠ Safety', p.safetyFlags || [], true],
-        [zh ? '款式' : 'Styles', p.styles || [], false],
-        [zh ? '偏好' : 'Prefers', p.preferences || [], false],
-        [zh ? '性格' : 'Personality', p.personality || [], false],
-        [zh ? '同行' : 'Companions', p.companions || [], false]
-      ].filter((g) => g[1].length)
-      const stats = []
-      if (p.visitCount) stats.push(`${zh ? '到店' : 'visits'} ${p.visitCount}${zh ? ' 次' : ''}`)
-      if (p.avgIntervalDays) stats.push(`${zh ? '平均间隔' : 'avg interval'} ${p.avgIntervalDays}${zh ? ' 天' : 'd'}`)
-      if (p.topService) stats.push(`${zh ? '常做' : 'top'} ${escapeHtml(p.topService)}`)
-      const notes = data.notes || []
-      target.innerHTML = `
-        ${groups.length
-          ? `<div class="customer-tags" style="flex-wrap:wrap;gap:6px;margin-bottom:6px">${groups.map(([label, items, danger]) =>
-              `<span class="subtle" style="margin:0 2px 0 6px${danger ? ';color:var(--bad);font-weight:700' : ''}">${label}</span>${items.map((x) => tag(x, danger)).join('')}`).join('')}</div>`
-          : `<p class="subtle">${zh ? '还没有画像标签。技师写服务小记(小程序或网页「我的客人」)后,画像会自动生成。' : 'No profile yet — technicians add service notes (mini app, or "My Customers" on web) when completing orders.'}</p>`}
-        ${stats.length ? `<p class="subtle">${stats.join(' · ')}</p>` : ''}
-        ${notes.length ? notes.map((n) => `
-          <div class="finance-rule-row" style="align-items:flex-start">
-            <span>
-              <strong>${escapeHtml(n.date || '')}</strong> · ${escapeHtml(n.serviceName || '-')}${n.technicianName ? ` · ${escapeHtml(n.technicianName)}` : ''}
-              <br><span>${escapeHtml(n.rawText || '')}</span>
-            </span>
-          </div>`).join('') : `<p class="subtle">${zh ? '暂无服务小记。' : 'No notes yet.'}</p>`}
-      `
-    })
-    .catch((error) => {
-      const target = document.querySelector('#customerNotesBody')
-      if (target) target.innerHTML = `<p class="subtle">${escapeHtml(error.message || '加载失败')}</p>`
-    })
-}
 
 // 2026-08-02 S层沉睡客一键 AI 召回话术(POST /admin/ai/recall-copy;AI 失败后端自动落模板)
 async function generateRecallCopy(customerId, btn) {

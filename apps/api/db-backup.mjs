@@ -18,6 +18,7 @@
      ⓔ 预检**通过时也报**剩余/总量,不能只在拒绝时说话 —— 否则没人知道离红线还有多远。 */
 import { mkdirSync, existsSync, statSync, statfsSync, readdirSync, unlinkSync } from 'node:fs'
 import { backupDb } from './db-backup-core.mjs'   // 09n 件A:备份只走 VACUUM INTO,不许 cp
+export { backupDb }                                // 10a:调用方只认这一条 import 路径,别再各找各的
 import { join } from 'node:path'
 
 export const DAILY_RE = /^lucky-luxe-\d{4}-\d{2}-\d{2}\.sqlite$/   // 日备:lucky-luxe-YYYY-MM-DD.sqlite

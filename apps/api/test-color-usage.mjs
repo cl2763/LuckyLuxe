@@ -379,7 +379,14 @@ check(`⑥ 规矩丙:${goldRules.length} 条画金底的规则,每条要么自�
 /* 🔴 棘轮初值我先写成 3 —— **那是拿一把坏了的判据量出来的**(模板串里的 `\b` 让「写死的金底」
    整支落在扫描面外)。刀 HH 咬出那个 bug 之后重量:**16**。
    记一笔:**判据坏了,棘轮跟着坏**,而坏成「更小的数」时看起来还像是收得更紧 —— 更隐蔽。 */
-const NO_TEXT_CAP = 16   /* 06g 棘轮初值(判据修好后重量);**只许降** */
+/* 🔴 10b:16 → 17。**这是一次「抬」,不是一次「降」,所以必须具名并让店主看见** ——
+   这条判据自己的措辞就是「新加一条金底色块**要让店主看见**」,它给的机制就是这个。
+   新增的那一条:`miniprogram/…/customer-profile/index.wxss` 的 `.sdoc-opt.on .sdoc-k`
+   —— 签署文件选类型时那个**选中的小圆点**,金底、里面一个字都没有。
+   **它是合同图 v2 照搬来的**(图上写的就是 `.opt.on .k{background:var(--brandd);box-shadow:inset 0 0 0 3px var(--card)}`),
+   不是我发挥的,也躲不掉:换成别的颜色就与图不符。
+   裁#89 三支里走的是「说明」这一支,已写进 10b 回执「要你裁的」第一条。 */
+const NO_TEXT_CAP = 17
 check(`⑥b 丙筐「金底上没有字」${goldNoText} 条 ≤ 棘轮 ${NO_TEXT_CAP}(只许降;新加一条金底色块要让店主看见)`,
   goldNoText <= NO_TEXT_CAP, `${goldNoText} > ${NO_TEXT_CAP}`)
 check(`⑥d 三筐穷尽:甲/乙筐 ${goldBad.length} 红 + 过了的 ${goldRules.length - goldBad.length - goldNoText} + 丙筐 ${goldNoText} = 全部 ${goldRules.length} 条`,

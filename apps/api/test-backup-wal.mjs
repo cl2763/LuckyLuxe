@@ -11,7 +11,12 @@ import { readFileSync, readdirSync, copyFileSync, mkdtempSync, statSync, writeFi
 import { DatabaseSync } from 'node:sqlite'
 import { join, dirname } from 'node:path'
 import { tmpdir } from 'node:os'
-import { fileURLToPath } from 'node:url'
+import { spawnSync } from 'node:child_process'
+/* 🔴 10b:三个临时目录前缀从 `wal-proof-` / `ll-impsnap-` / `ll-cli-smoke-` 改成 `ll-ci-data.*`。
+   前两个**早就在**,只是本文件原先没有 `spawn`,`test-credential-scan` ④h 的过滤条件
+   (「提到 local-server.mjs **且** 有 spawn」)够不着它 —— 我为 ⑥ 加了 `spawnSync`,把它们一起晒了出来。
+   这不是误报要豁免,是**扫描面变宽后看见了存量**。三个一起改名,判据一个字没动。 */
+import { fileURLToPath, pathToFileURL } from 'node:url'
 import { backupDb } from './db-backup-core.mjs'
 
 const ROOT = join(dirname(fileURLToPath(import.meta.url)), '../..')
@@ -24,7 +29,7 @@ const check = (name, cond, detail = '') => {
 }
 
 /* ① 行为层两面:WAL 里压着已提交数据时,cp 出来的是废的,VACUUM INTO 出来的是对的 */
-const d0 = mkdtempSync(join(tmpdir(), 'wal-proof-'))
+const d0 = mkdtempSync(join(tmpdir(), 'll-ci-data.walproof-'))
 const src = join(d0, 't.sqlite')
 const db = new DatabaseSync(src)
 db.exec('PRAGMA journal_mode=WAL'); db.exec('CREATE TABLE t (id INTEGER)')
@@ -52,15 +57,21 @@ for (const f of files) {
     if (BACKUP_CTX.test(near) || BACKUP_CTX.test(ln)) hits.push(`apps/api/${f}:${i + 1} ${ln.trim().slice(0, 80)}`)
   })
 }
-export const CP_BACKUP_ALLOW = [
-  { at: 'apps/api/local-server.mjs', why: '导入前快照 `lucky-luxe.pre-import-*`:它跑在**接口线程里、导入事务之前**,而 VACUUM INTO 要独占读锁 —— 09n 未点名,单独登记等店主裁' },
-  /* demo-reset 那条同样是残留(④d 咬出),已删:它走 snapshotDb,不 cp */
-]
+/* 🔴 10a · D202-b:**这张白名单清空了,而且上限从 ≤1 拧到 ===0**(裁#105:抽取要压低棘轮,不留余量)。
+ * 最后那一条是 `local-server.mjs` 的导入前快照,09x 批过豁免,理由是我给的
+ * 「跑在接口线程里、导入事务之前,而 VACUUM INTO 要独占读锁」。
+ * **那句话把位置说错了**(J-84 先定位再归因):那段在模块顶层、开机时跑,
+ * 下面 `new DatabaseSync` 还没执行 —— 此刻进程里一个库连接都没有,没东西可抢。
+ * 四档现测:①真实位置 ✅4ms ②WAL+握着写事务 ✅6ms ③delete+握着写事务 ✅2ms
+ * ⇒ **那个前提从来没成立过,不是「条件变了才到期」**(比 J-104 的说法更难看,如实记)。
+ * ④而 WAL 库上 cp 主文件,读出来是 `no such table` —— 留的底份是个废文件。
+ * 已换成唯一出口 `backupDb`。**以后要再往这张表里加一条,先回答:为什么不能用 VACUUM INTO。** */
+export const CP_BACKUP_ALLOW = []
 const outside = hits.filter((h) => !CP_BACKUP_ALLOW.some((a) => h.startsWith(a.at)))
 check(`②a 🔴 备份语境里 \`copyFileSync\` 现扫 **${outside.length} 处**(扫了 ${files.length} 个非测试模块;白名单 ${CP_BACKUP_ALLOW.length} 条各有理由)`,
   outside.length === 0, outside.join(' | '))
-check(`②b 白名单只许变短(现 ${CP_BACKUP_ALLOW.length} ≤ 1,每条写明为什么)`,
-  CP_BACKUP_ALLOW.length <= 1 && CP_BACKUP_ALLOW.every((a) => String(a.why).length > 20))
+check(`②b 🔴 白名单**清零并锁死**(现 ${CP_BACKUP_ALLOW.length} === 0;10a 之前是 1)`,
+  CP_BACKUP_ALLOW.length === 0 && CP_BACKUP_ALLOW.every((a) => String(a.why).length > 20))
 /* ②c 自守:塞一行备份语境的 cp,必须被咬到(零命中不算通过 —— J-58①) */
 const probe = ['const backupPath = x', ['copyFileSync', '(dbPath, backupPath)'].join('')].join('\n')
 const probeHit = probe.split('\n').some((ln, i) => /\bcopyFileSync\s*\(/.test(ln) && BACKUP_CTX.test(probe))
@@ -126,18 +137,18 @@ for (const rel of allFiles) {
   })
 }
 /** 🔴 白名单:每条写明为什么这一处 cp 一个 sqlite 可以。**只许变短。** */
-const SQLITE_CP_ALLOW = new Map([
-  ['apps/api/local-server.mjs', '导入前快照:跑在接口线程里、导入事务之前,而 VACUUM INTO 要独占读锁 —— 09n 未点名,登记等裁'],
-  /* 🔴 `apps/api/demo-reset.mjs` 那条**已由 ④d 咬出是残留**并删除:
-     它早就改走 `snapshotDb`(备份唯一出口)了,只剩一个没人调的 `copyFileSync` 形参。
-     白名单留着一条没有对应命中的条目 = 下次有人真在那儿 cp 一个库时自动被放行。
-     ⚠️ 顺带登记(本批没动):`demo-reset.mjs:47` 那个 `copyFileSync` 形参是死参,
-     `local-server.mjs:4254` 还在往里传 —— 留着会让下一个人以为这里还在 cp。 */
-])
+/* 🔴 10a · D202-b:**这张白名单也清零了**(上一条是 `local-server.mjs` 的导入前快照,理由见 ② 那一段)。
+   连同登记在案的两笔残留一起清:`demo-reset.mjs` 形参里那个死参 `copyFileSync` 已摘掉,
+   `local-server.mjs` 也不再往里传 —— 于是本文件从 ④ 的命中面上真正消失,不是靠放行消失的。 */
+const SQLITE_CP_ALLOW = new Map([])
 const badCopies = sqliteCopies.filter((h) => !SQLITE_CP_ALLOW.has(h.rel))
 check(`④b 🔴 全仓「cp 一个 sqlite」现扫 **${sqliteCopies.length}** 处,全部落进白名单(白名单 ${SQLITE_CP_ALLOW.size} 条)`,
   badCopies.length === 0, badCopies.map((h) => `${h.rel}:${h.line} ${h.text}`).join(' | '))
-check(`④c 白名单只许变短(现 ${SQLITE_CP_ALLOW.size} ≤ 1)`, SQLITE_CP_ALLOW.size <= 2)
+/* 🔴 10a:这一条原来**标签写「≤ 1」、代码写 `<= 2`** —— 判据自己在说谎,
+   而说谎的方向恰好是放松的那一边。现在两边都是 0,并且标签由同一个字面量渲染。 */
+const CP_ALLOW_CAP = 0
+check(`④c 🔴 白名单**清零并锁死**(现 ${SQLITE_CP_ALLOW.size} === ${CP_ALLOW_CAP};10a 之前是 1,而上限当时写的是 2)`,
+  SQLITE_CP_ALLOW.size === CP_ALLOW_CAP)
 check('④d 白名单零残留:每条都对应一个现存命中',
   [...SQLITE_CP_ALLOW.keys()].every((k) => sqliteCopies.some((h) => h.rel === k)),
   `这些白名单条目已无对应命中:${[...SQLITE_CP_ALLOW.keys()].filter((k) => !sqliteCopies.some((h) => h.rel === k)).join(', ')}`)
@@ -154,7 +165,7 @@ check('④f 反向守:cp 一个非库文件不许被咬中(否则会把正常拷
  *
  * 这一条**按机制验,不按写法验**:照那一处的做法(cp 一个活库)真做一次,然后打开数行。
  * 🔴 不是"看看代码里有没有写 open" —— 那又回到「验回执」那一族了(J-62②)。 */
-const d5 = mkdtempSync(join(tmpdir(), 'll-impsnap-'))
+const d5 = mkdtempSync(join(tmpdir(), 'll-ci-data.impsnap-'))
 const live5 = join(d5, 'live.sqlite')
 {
   const w = new DatabaseSync(live5)
@@ -183,6 +194,67 @@ check('⑤b 🔴 反向守:把快照截断成废文件 → 这一条必须红(�
     try { const x = new DatabaseSync(bad, { readOnly: true }); x.prepare('SELECT COUNT(*) FROM a').get(); x.close(); return false }
     catch { return true }
   })())
+
+/* ── ⑥ 备份那条命令行真跑得起来吗(10a 现场立,复发登记的永久护栏)────────────
+ * 🔴 案底:10a 补拍生产备份,照 runbook 敲 `DBB_SRC=… DBB_OUT=… node tools/db-backup.mjs`,
+ * **在生产容器里当场崩** —— `ReferenceError: statSync is not defined`。
+ * 根因有两层:② CLI 自己手抄了一遍 VACUUM+验(而文件顶上就 export 着 `backupDb`),
+ * ① 抄本漏了一个 import。**①是②的必然结果。**
+ *
+ * 为什么这条护栏必须「真跑」:那个 ReferenceError 在**最后一行**才炸,
+ * 而 VACUUM 早就做完了 —— 于是它是最坏的那种坏:**事情做成了,命令报失败。**
+ * `node --check` 看不见它(语法是合法的),import 一下也看不见(没给 env 就走模块分支)。
+ * ⑥c 专门把这件事证出来:**同一份坏副本,便宜判据绿,真跑红。**(判据四:同一把刀要分得出谁在守)
+ */
+const d6 = mkdtempSync(join(tmpdir(), 'll-ci-data.clismoke-'))
+const srcDb = join(d6, 'src.sqlite')
+{ const x = new DatabaseSync(srcDb); x.exec('CREATE TABLE a(id INTEGER); INSERT INTO a VALUES (1),(2)'); x.close() }
+const CLI = join(ROOT, 'tools/db-backup.mjs')
+const runCli = (script, out) => {
+  const r = spawnSync(process.execPath, ['--experimental-sqlite', script], {
+    encoding: 'utf8', env: { ...process.env, DBB_SRC: srcDb, DBB_OUT: out },
+  })
+  return { code: r.status, out: r.stdout || '', err: r.stderr || '' }
+}
+const good = runCli(CLI, join(d6, 'good.sqlite'))
+check('⑥a `tools/db-backup.mjs` 这条命令行**真跑一次**:退出码 0(不是 --check 绿,是真跑绿)',
+  good.code === 0, `退出码 ${good.code} :: ${(good.err || good.out).trim().split('\n').slice(-2).join(' / ')}`)
+check('⑥b 它真把库备出来了:输出 JSON 里报了表数,而且备份件打得开、数得出行',
+  (() => {
+    try {
+      const j = JSON.parse(good.out.trim().split('\n').pop())
+      if (!j.表 || j.已验证可打开 !== true) return false
+      const x = new DatabaseSync(j.备份, { readOnly: true })
+      const cnt = x.prepare('SELECT COUNT(*) AS n FROM a').get()?.n; x.close()
+      return cnt === 2
+    } catch { return false }
+  })(), good.out.trim().slice(0, 160))
+
+/* 把 10a 那个病**原样注回**一份临时副本,证明这把刀咬得动(J-91:夹具先证明自己能揭发) */
+const brokenCli = join(d6, 'db-backup-broken.mjs')
+/* 🔴 副本住在临时目录,它那两条相对 import 解析不到 —— 第一版就是这么红的:
+   **刀确实红了,但红的原因跟我瞄的那个病无关**(同族:test-restore-fingerprint ③a 那次)。
+   所以先把相对路径改成绝对 file:// 再注病,保证它只可能因为 statSync 而红。 */
+writeFileSync(brokenCli, readFileSync(CLI, 'utf8')
+  .replace(/from '\.\/db-target\.mjs'/, `from '${pathToFileURL(join(ROOT, 'tools/db-target.mjs')).href}'`)
+  .replace(/from '\.\.\/apps\/api\/db-backup-core\.mjs'/, `from '${pathToFileURL(join(ROOT, 'apps/api/db-backup-core.mjs')).href}'`)
+  .replace(
+    /console\.log\(JSON\.stringify\(\{ 源库.*$/m,
+    'console.log(JSON.stringify({ 源库: SRC, 备份: r.out, 字节: statSync(OUT).size, 表: r.tables }, null, 0))'))
+const broken = runCli(brokenCli, join(d6, 'broken-out.sqlite'))
+check('⑥c 🔴 反向守:把「用了没 import 的 statSync」原样注回去 → **真跑必须红**',
+  broken.code !== 0 && /statSync is not defined/.test(broken.err),
+  `退出码 ${broken.code} :: ${broken.err.trim().split('\n')[0] || '(没报 ReferenceError)'}`)
+check('⑥d 🔴 而同一份坏副本 `node --check` **照样绿** —— 所以这条只能靠真跑守,便宜判据是瞎的',
+  spawnSync(process.execPath, ['--check', brokenCli], { encoding: 'utf8' }).status === 0)
+/* 🔴 第一版我写的是「全文不许出现 VACUUM INTO 字面量」,结果被自己那句行尾注释
+   `// VACUUM INTO + 当场打开验一次,都在出口里` 判红 —— **那把尺子数的是「提及」,该数「执行」**(J-61①)。
+   改成盯**执行形**:`prepare('VACUUM INTO…')`。注释里怎么写都不算,真去跑它才算。 */
+check('⑥e 🔴 唯一出口:CLI 不许再**执行**一遍 VACUUM(`prepare(\'VACUUM INTO\')` 零处),只许调 `backupDb`',
+  !/prepare\(\s*[`'"]\s*VACUUM INTO/i.test(readFileSync(CLI, 'utf8')) && /backupDb\(/.test(readFileSync(CLI, 'utf8')),
+  '还搜得到 prepare("VACUUM INTO…"),说明抄本还在')
+check('⑥f 🔴 反向守:把执行形注回去,⑥e 那把尺子必须咬得中(J-91 夹具先证明自己能揭发)',
+  /prepare\(\s*[`'"]\s*VACUUM INTO/i.test("const x = db.prepare('VACUUM INTO ?').run(out)"))
 
 console.log(`\n1..${n}`)
 if (fails.length) { console.log(`\n🔴 ${fails.length} 条没过`); process.exitCode = 1 }

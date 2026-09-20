@@ -31,3 +31,49 @@
 /* 小记图片(08-30f) */
 .nimgs { display: flex; flex-wrap: wrap; gap: 10rpx; margin-top: 10rpx; }
 .nimg { width: 120rpx; height: 120rpx; border-radius: 8rpx; }
+
+/* ═══ 签署文件留档(10b 第一步)· 合同图 v2 ═══════════════════
+   🔴 币种红线不涉(没有钱)。
+   🔴 颜色**一律裸 `var(--x)`,一个字面色都不许有**。
+   第一版我给每个变量都配了 hex 兜底,预检当场红:小程序写死色棘轮 2384 > 2350。
+   **兜底值也是写死色,深色态照样会漏白**;现扫全仓既有 wxss,带 fallback 的是 0 处 —— 我是唯一一个。
+   遮罩那一层同理:既有写法都是裸 rgba,但棘轮只许降不许升(裁#89 不许为新功能抬),
+   所以改成 **`background:var(--hero);opacity:.45`** —— 零字面色,不动令牌文件,也不加例外。 */
+.sdoc{margin:24rpx 24rpx 0;padding:24rpx;border-radius:12rpx;background:var(--card);border:1rpx solid var(--line)}
+.sdoc-hd{display:flex;justify-content:space-between;align-items:center;margin-bottom:12rpx}
+.sdoc-t{font-size:28rpx;font-weight:700}
+.sdoc-more{font-size:24rpx;color:var(--brandd)}
+.sdoc-empty{border:1rpx dashed var(--line);border-radius:12rpx;padding:32rpx 20rpx;text-align:center;color:var(--sub);font-size:24rpx;white-space:pre-line}
+.sdoc-row{display:flex;align-items:center;gap:18rpx;padding:16rpx 0;border-top:1rpx solid var(--line)}
+.sdoc-row:first-of-type{border-top:0}
+.sdoc-row.is-voided .sdoc-nm{color:var(--sub)}
+.sdoc-row.is-voided .sdoc-th{opacity:.5}
+.sdoc-th{width:60rpx;height:78rpx;flex:none;border:1rpx solid var(--line);border-radius:12rpx;background:var(--wall)}
+.sdoc-tx{flex:1;min-width:0}
+.sdoc-nm{font-size:26rpx;font-weight:600}
+.sdoc-mt{font-size:22rpx;color:var(--sub)}
+.sdoc-pill{font-size:20rpx;font-weight:700;border-radius:999rpx;padding:2rpx 14rpx}
+.sdoc-pill.ok{background:var(--goodbg);color:var(--good)}
+.sdoc-pill.v{background:var(--wall);color:var(--sub)}
+.sdoc-add{margin-top:16rpx;font-size:26rpx;background:transparent;border:1rpx solid var(--line);border-radius:999rpx;color:var(--ink)}
+.sdoc-mask{position:fixed;inset:0;background:var(--hero);opacity:.45;z-index:80}
+.sdoc-sheet{position:fixed;left:0;right:0;bottom:0;z-index:81;background:var(--card);border-radius:12rpx 12rpx 0 0;padding:28rpx 28rpx calc(28rpx + env(safe-area-inset-bottom));max-height:86vh;overflow-y:auto}
+.sdoc-sheet-hd{display:flex;justify-content:space-between;align-items:center;font-size:30rpx;font-weight:700;margin-bottom:10rpx}
+.sdoc-cancel{font-size:26rpx;font-weight:400;color:var(--sub)}
+.sdoc-ask{font-size:24rpx;color:var(--sub);margin-bottom:12rpx}
+.sdoc-opt{display:flex;justify-content:space-between;align-items:center;border:1rpx solid var(--line);border-radius:12rpx;padding:22rpx 24rpx;margin-bottom:14rpx;font-size:26rpx}
+.sdoc-opt.on{border-color:var(--brandd);background:var(--wall)}
+.sdoc-k{width:30rpx;height:30rpx;border-radius:50%;border:2rpx solid var(--line);flex:none}
+.sdoc-opt.on .sdoc-k{border-color:var(--brandd);background:var(--brandd);box-shadow:inset 0 0 0 6rpx var(--card)}
+.sdoc-title{border:1rpx solid var(--line);border-radius:12rpx;padding:18rpx 20rpx;font-size:26rpx;margin-bottom:14rpx}
+.sdoc-vis{display:flex;align-items:center;gap:14rpx;font-size:24rpx;color:var(--sub);margin-bottom:14rpx}
+.sdoc-shots{display:flex;flex-wrap:wrap;gap:14rpx;margin-bottom:10rpx}
+.sdoc-shot{width:150rpx;height:190rpx;border-radius:12rpx;border:1rpx solid var(--line)}
+.sdoc-shot.add{display:flex;align-items:center;justify-content:center;border-style:dashed;font-size:22rpx;color:var(--sub);text-align:center}
+.sdoc-hint{font-size:22rpx;color:var(--sub);margin-bottom:18rpx}
+/* 🔴 规矩丙(test-color-usage ⑥):画金底的规则必须自己写 `color: var(--hero)`。
+   我第一版写的是 `var(--card)` —— 浅色档下它恰好也是白的,**看起来对,规矩上不对**;
+   深色档 `--card` 变成近黑,金底上就成了深字压深底。判据咬出来的,不是我看出来的。
+   ⚠️ 顺带:这条注释第一版里我写了那个色号的十六进制,**wxss 写死色棘轮连注释一起数**(2351 > 2350)。
+   它数得对 —— 注释里的色号照样会被下一个人抄进代码。所以这儿一个色号都不写。 */
+.sdoc-save{font-size:28rpx;font-weight:700;border-radius:999rpx;background:var(--brand);color:var(--hero)}
