@@ -116,4 +116,36 @@ check('③b 🔴 **员工**续费 → 403',
 const ok3 = await req('/admin/subscription/renew', { method: 'POST', body: JSON.stringify({ period: 'month' }) }, TOKEN, A.H)
 check('③c 🟢 **阳性对照**:老板续费必须成', [200, 201].includes(ok3.status), JSON.stringify(ok3.data).slice(0, 160))
 
-console.log(`\n✅ 涉钱口破坏测试 ${checks} 条全过(本轮覆盖 3 条口;名单 41 条,未覆盖 14 → ${14 - 3} 条待办)`)
+
+/* ══ 四、POST /admin/points-prizes —— 上架积分兑换品(积分=负债,定错价等于多送) ══ */
+check('④a 🔴 未登录上架 → 拒',
+  [401, 403].includes((await req('/admin/points-prizes', { method: 'POST', body: JSON.stringify({ couponId, costPoints: 100 }) }, null, A.H)).status))
+check('④b 🔴 **员工**上架 → 403(员工能定兑换价 = 员工能决定送多少)',
+  (await req('/admin/points-prizes', { method: 'POST', body: JSON.stringify({ couponId, costPoints: 100 }) }, staffA, A.H)).status === 403)
+check('④c 🔴 **跨店**:拿 A 店的券 id 从 B 店上架 → 404(券不属于那家店)',
+  (await req('/admin/points-prizes', { method: 'POST', body: JSON.stringify({ couponId, costPoints: 100 }) }, TOKEN, B.H)).status === 404)
+const ok4 = await req('/admin/points-prizes', { method: 'POST', body: JSON.stringify({ couponId, costPoints: 100 }) }, TOKEN, A.H)
+check('④d 🟢 **阳性对照**:老板在本店上架必须成', [200, 201].includes(ok4.status), JSON.stringify(ok4.data).slice(0, 140))
+
+/* ══ 五、POST /admin/points-mall/revoke —— 撤销一次积分兑换(退回积分 = 动负债) ══ */
+check('⑤a 🔴 未登录撤销 → 拒',
+  [401, 403].includes((await req('/admin/points-mall/revoke', { method: 'POST', body: JSON.stringify({ code: `X${RUN}` }) }, null, A.H)).status))
+check('⑤b 🔴 **员工**撤销 → 403',
+  (await req('/admin/points-mall/revoke', { method: 'POST', body: JSON.stringify({ code: `X${RUN}` }) }, staffA, A.H)).status === 403)
+check('⑤c 🔴 券码为空 → 400(不许把空码当通配 —— 通配一次就是把全店兑换都退了)',
+  (await req('/admin/points-mall/revoke', { method: 'POST', body: JSON.stringify({ code: '  ' }) }, TOKEN, A.H)).status === 400)
+check('⑤d 🟢 **阳性对照**:老板拿一个不存在的码 → 是 404 不是 403,证明前面那几个 403 真是权限判的、不是这口不存在',
+  (await req('/admin/points-mall/revoke', { method: 'POST', body: JSON.stringify({ code: `NOPE${RUN}` }) }, TOKEN, A.H)).status === 404)
+
+/* ══ 六、POST /admin/subscription/ai-trial · PATCH /admin/subscription/auto-renew ══ */
+check('⑥a 🔴 未登录申请试用 → 拒',
+  [401, 403].includes((await req('/admin/subscription/ai-trial', { method: 'POST', body: JSON.stringify({}) }, null, B.H)).status))
+check('⑥b 🔴 **员工**申请试用 → 403', (await req('/admin/subscription/ai-trial', { method: 'POST', body: JSON.stringify({}) }, staffA, A.H)).status === 403)
+check('⑥c 🔴 未登录改自动续费 → 拒',
+  [401, 403].includes((await req('/admin/subscription/auto-renew', { method: 'PATCH', body: JSON.stringify({ enabled: true }) }, null, A.H)).status))
+check('⑥d 🔴 **员工**改自动续费 → 403(员工能打开自动续费 = 员工能让店里一直被扣钱)',
+  (await req('/admin/subscription/auto-renew', { method: 'PATCH', body: JSON.stringify({ enabled: true }) }, staffA, A.H)).status === 403)
+const ok6 = await req('/admin/subscription/auto-renew', { method: 'PATCH', body: JSON.stringify({ enabled: true }) }, TOKEN, A.H)
+check('⑥e 🟢 **阳性对照**:老板改自动续费必须成', [200, 201].includes(ok6.status), JSON.stringify(ok6.data).slice(0, 140))
+
+console.log(`\n✅ 涉钱口破坏测试 ${checks} 条全过(本轮覆盖 7 条口;名单 41 条,未覆盖 14 → ${14 - 7} 条待办)`)
