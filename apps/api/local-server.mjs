@@ -11805,7 +11805,7 @@ async function route(req, res) {
     const row = db.prepare('SELECT id FROM settlements WHERE id = ? AND tenant_id = ?').get(id, currentTenantId())
     if (!row) throw apiError(404, 'NOT_FOUND', '找不到这张服务单。')
     const body = await readBody(req)
-    return json(res, 200, setSettlementCoupon(id, String(body.grantId || ''), { by: 'staff', actor: adminSession.email || 'staff' }))
+    return json(res, 200, setSettlementCoupon(id, String(body.grantId || ''), { by: 'staff', actor: actorOf(adminSession) }))
   }
   if (req.method === 'POST' && path.startsWith('/admin/settlements/') && path.endsWith('/amend')) {
     if (adminSession.role !== 'owner') throw apiError(403, 'FORBIDDEN', '只有老板可以更正已签单据。')
@@ -12459,7 +12459,7 @@ async function route(req, res) {
     try {
       db.prepare("UPDATE coupon_grants SET status = 'revoked' WHERE id = ?").run(grant.id)
       db.prepare('INSERT INTO points_transactions (id, tenant_id, user_id, type, amount, ref_id, note, created_by, created_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)')
-        .run(randomId('pts'), currentTenantId(), grant.user_id, 'reversal', Math.abs(redeemTxn.amount), grant.id, '撤销兑换 · 积分退回', adminSession.email || 'owner', iso(new Date()))
+        .run(randomId('pts'), currentTenantId(), grant.user_id, 'reversal', Math.abs(redeemTxn.amount), grant.id, '撤销兑换 · 积分退回', actorOf(adminSession), iso(new Date()))
       // 库存回补:兑换流水 note 末尾带 #prizeId;解析失败只跳过回补(积分退回不受影响)
       const pid = String(redeemTxn.note || '').includes('#') ? String(redeemTxn.note).split('#').pop().trim() : ''
       if (pid && db.prepare('SELECT 1 FROM points_prizes WHERE id = ?').get(pid)) {
@@ -12606,8 +12606,8 @@ async function route(req, res) {
     const code = `LL-${Math.random().toString(36).slice(2, 6).toUpperCase()}-${Math.random().toString(36).slice(2, 6).toUpperCase()}`
     db.prepare(`INSERT INTO coupon_grants (id, tenant_id, coupon_id, user_id, code, status, expires_at, created_at,
       grant_kind, granted_by, grant_reason) VALUES (?, ?, ?, ?, ?, 'active', ?, ?, ?, ?, ?)`)
-      .run(grantId, tid, couponId, user.id, code, expiresAt, now, grantKind, adminSession.email || 'owner', reason.slice(0, 200))
-    logCouponGrant({ tenantId: tid, grantId, action: 'granted', detail: `发给 ${user.display_name || user.id}。原因:${reason.slice(0, 120)}`, actor: adminSession.email || 'owner' })
+      .run(grantId, tid, couponId, user.id, code, expiresAt, now, grantKind, actorOf(adminSession), reason.slice(0, 200))
+    logCouponGrant({ tenantId: tid, grantId, action: 'granted', detail: `发给 ${user.display_name || user.id}。原因:${reason.slice(0, 120)}`, actor: actorOf(adminSession) })
     const fresh = db.prepare('SELECT * FROM coupons WHERE id = ?').get(couponId)
     return json(res, 201, {
       granted: {
@@ -12628,7 +12628,7 @@ async function route(req, res) {
     if (!reason) throw apiError(400, 'REASON_REQUIRED', '作废原因必填。')
     const now = iso(new Date())
     db.prepare("UPDATE coupon_grants SET status = 'revoked', revoked_at = ?, revoke_reason = ? WHERE id = ?").run(now, reason.slice(0, 200), grantId)
-    logCouponGrant({ tenantId: tid, grantId, action: 'revoked', detail: reason.slice(0, 120), actor: adminSession.email || 'owner' })
+    logCouponGrant({ tenantId: tid, grantId, action: 'revoked', detail: reason.slice(0, 120), actor: actorOf(adminSession) })
     return json(res, 200, { ok: true, revokedAt: now })
   }
   // ===== 平台超管端(platform.html):仅 OWNER_TOKEN 主钥匙可用 =====
@@ -14047,7 +14047,7 @@ async function route(req, res) {
       ON CONFLICT(tenant_id) DO UPDATE SET target_mode = excluded.target_mode, month_target_cents = excluded.month_target_cents,
         year_target_cents = excluded.year_target_cents, variable_cost_rate = excluded.variable_cost_rate,
         updated_by = excluded.updated_by, updated_at = excluded.updated_at
-    `).run(currentTenantId(), mode, monthTargetCents, yearTargetCents, rate, adminSession.email || 'owner', iso(new Date()))
+    `).run(currentTenantId(), mode, monthTargetCents, yearTargetCents, rate, actorOf(adminSession), iso(new Date()))
     return json(res, 200, { targets: getFinanceTargets(currentTenantId()), progress: computeFinanceProgress(localParts(new Date()).date.slice(0, 7)) })
   }
   // P2.4 财务趋势(收入/支出/净利/单量/客单/充值/耗卡 + 目标 + 达标)
@@ -14235,7 +14235,7 @@ async function route(req, res) {
     db.prepare(`
       INSERT INTO finance_recurring_rules (id, tenant_id, name, category, tags, amount_cents, cadence, day_of_month, active, created_by, created_at, updated_at)
       VALUES (?, ?, ?, ?, ?, ?, 'monthly', ?, 1, ?, ?, ?)
-    `).run(id, currentTenantId(), name, category, String(body.tags || ''), amountCents, dayOfMonth, adminSession.email || 'owner', iso(new Date()), iso(new Date()))
+    `).run(id, currentTenantId(), name, category, String(body.tags || ''), amountCents, dayOfMonth, actorOf(adminSession), iso(new Date()), iso(new Date()))
     const generated = materializeRecurringTransactions()
     return json(res, 201, { rule: { id, name, category, amountCents, dayOfMonth }, generated })
   }
@@ -14865,7 +14865,7 @@ async function route(req, res) {
       if (est.noPlan) return // 未配方案的不入表(锁定前试算页会提示去配置)
       db.prepare(`INSERT INTO salary_payrolls (id, tenant_id, month, technician_id, technician_name, breakdown_json, total_cents, locked_at, locked_by)
         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`)
-        .run(randomId('payroll'), tid, month, t.id, t.name, JSON.stringify(est), est.totalCents || 0, now, adminSession.email || 'owner')
+        .run(randomId('payroll'), tid, month, t.id, t.name, JSON.stringify(est), est.totalCents || 0, now, actorOf(adminSession))
       total += est.totalCents || 0; count += 1
     })
     if (!count) throw apiError(400, 'BAD_REQUEST', '没有可锁定的记录:先给员工配置薪资方案。')
@@ -14904,10 +14904,10 @@ async function route(req, res) {
           type: 'expense', source: 'payroll', category: '工资',
           tags: r.id, amountCents: r.total_cents, payChannel: 'manual',
           occurredOn: today, note: `${month} 工资 · ${r.technician_name || r.technician_id}(明细见工资表)`,
-          createdBy: adminSession.email || 'owner'
+          createdBy: actorOf(adminSession)
         })
         db.prepare('UPDATE salary_payrolls SET paid_at = ?, paid_by = ?, txn_id = ? WHERE id = ?')
-          .run(now, adminSession.email || 'owner', txn.id, r.id)
+          .run(now, actorOf(adminSession), txn.id, r.id)
       }
       db.exec('COMMIT')
     } catch (error) { db.exec('ROLLBACK'); throw error }

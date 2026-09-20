@@ -131,7 +131,8 @@
     "secret-output": 15,
     "restore-fingerprint": 10,
     "signed-docs": 100,
-    "mp-package-size": 12
+    "mp-package-size": 12,
+    "tenant-parent-scan": 8
   },
   "上次更新": "2026-09-02",
   "巨型文件历史最低": {
