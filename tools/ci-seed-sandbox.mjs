@@ -61,7 +61,10 @@ if (await sh('node', ['tools/seed-demo-rich.mjs'], { SEED_DB: DB })) { console.e
 console.log('③ 建 B 店(jics-nail)+ 一个顾客 —— 🔴 走正门(J-60),用产品自己的平台口')
 const { requireOwnerToken } = await import(join(ROOT, 'apps/api/owner-token.mjs'))
 const TOK = requireOwnerToken({ dataDir: SB_DIR })
-const H = { 'content-type': 'application/json', authorization: `Bearer ${TOK}` }
+/* 🔴 造景全族的规矩:走 HTTP 就必须发 `x-demo-seed` —— 种出来的行要能被认出是造的,
+   否则它们在库里与真顾客长得一模一样(《假数回落红线》那一族)。
+   `test-demo-mark ④` 白名单式扫这一条,当场点名过我这支。**咬得对。** */
+const H = { 'content-type': 'application/json', 'x-demo-seed': 'ci-seed-sandbox', authorization: `Bearer ${TOK}` }
 let r = await fetch(`${BASE}/platform/tenants`, { method: 'POST', headers: H, body: JSON.stringify({ id: 'jics-nail', name: "Jie's Nail 小婕", plan: 'chain', currency: 'CNY', timezone: 'Asia/Shanghai' }) })
 if (![200, 201, 409].includes(r.status)) { console.error(`🔴 建租户失败 ${r.status} ${(await r.text()).slice(0, 200)}`); process.exit(1) }
 console.log(`   建租户 → ${r.status}`)
