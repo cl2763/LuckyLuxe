@@ -19,9 +19,10 @@ const copy = {
       statusAfterSales: '售后',
       statusPendingPayment: '待支付',
       all: '全部',
-      /* 🔴 10f:平台不代收,顾客端不许说「已支付」。⚠️ 这个键现扫**零调用方**(活的是 paidDeposit),
-         但按 J-107「一条法只授权它明写的那件事」——10f 授权的是改措辞,不是删键。死键单独登记。 */
-      paid: '门店已确认收款',
+      /* 🔴 夜16 §三.3 授权删掉了那个零调用方的 `paid` 键(10f 只授权改措辞,所以那一批只改没删)。
+         删之前按 J-96 校过尺子:拿 `paidDeposit` / `statusCompleted` / `statusPendingPayment`
+         三个**已知在用**的键喂同一把尺子,三个都找得到 ⇒ `paid` 那个 0 才算数。
+         (第一版尺子被 shell 引号打坏,对 `paidDeposit` 也回 0 —— 阳性对照当场抓住了它。) */
       none: '无'
     },
     en: {
@@ -41,7 +42,6 @@ const copy = {
       statusAfterSales: 'After-sales',
       statusPendingPayment: 'To Pay',
       all: 'All',
-      paid: 'Confirmed by store',
       none: 'None'
     }
   },

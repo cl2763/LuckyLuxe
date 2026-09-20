@@ -426,7 +426,7 @@ check('⑬h 🔴 拿不到就**整块不出现**,不留空壳说「还没有签�
    🔴 这条棘轮的意义:**不许一边修一边又写出新的**。下一批把 32 再往下压。 */
 const MONEY_CTX = /settlement|payment|finance|stored_value|salary|payroll|coupon|points|deposit|refund|cash_note|timecard|recharge|daily_close|amend|reversal|perf_|compensation/i
 const ACTOR_EXPR = /adminSession\??\.(?:email|username|displayName|name|id)\b[^,;)\n]*/g
-const J105_CAP = 32
+const J105_CAP = 22   /* 10c 底数 40 → 10e 第一批 −8 → 夜16 第二批 −10 ⇒ 22。只许降 */
 const j105 = (() => {
   const out = []
   for (const f of readdirSync(join(ROOT, 'apps/api')).filter((x) => x.endsWith('.mjs') && !x.startsWith('test-'))) {
@@ -442,12 +442,20 @@ const j105 = (() => {
   }
   return out
 })()
-check(`J-105d 🔴 乙档「涉钱落角色词」剩 ${j105.length} 处 ≤ 棘轮 ${J105_CAP}(**只许降**;10c 底数 40 → 10e 第一批修 8)`,
+check(`J-105d 🔴 乙档「涉钱落角色词」剩 ${j105.length} 处 ≤ 棘轮 ${J105_CAP}(**只许降**;40 → 第一批 −8 → 第二批 −10)`,
   j105.length <= J105_CAP, j105.slice(0, 6).join(' | '))
-check('J-105e 🔴 第一批那 8 处确实改完了(退款 3 · 冲销 1 · 日结 3 · 储值 1),而且都走唯一出口',
+/* 🔴 夜16 现场改:这一条原来断言 `local-server` **恰好 4 处** `actorOf` ——
+   那是数一个**快照**,不是数一个**性质**。第二批又修好 10 处,它就红了:
+   **「我修得更多」把判据顶红,说明判据写错了方向。**
+   改成两段:①第一批那两个小文件仍是精确数(它们只有那几处,数得准)
+   ②`local-server` 用**只许涨的下限** —— 覆盖面只许变大,缩水立刻红。
+   (同族:J-105d 那把「剩余只许降」——一个盯剩余、一个盯已修,两头夹住。) */
+const LS_ACTOR_FLOOR = 14   /* 10e 第一批 4 → 夜16 第二批 +10 ⇒ 14。**只许涨** */
+const lsActor = (codeOnly(readFileSync(join(ROOT, 'apps/api/local-server.mjs'), 'utf8')).match(/actorOf\(adminSession\)/g) || []).length
+check(`J-105e 🔴 第一批两个小文件精确:退款 3 · 冲销 1;\`local-server\` 现 ${lsActor} 处 ≥ 下限 ${LS_ACTOR_FLOOR}(**只许涨**)`,
   (codeOnly(readFileSync(join(ROOT, 'apps/api/refund-routes.mjs'), 'utf8')).match(/actorOf\(adminSession\)/g) || []).length === 3
   && /makeActorOf\(\{ apiError \}\)\(adminSession\)/.test(codeOnly(readFileSync(join(ROOT, 'apps/api/finance-reverse.mjs'), 'utf8')))
-  && (codeOnly(readFileSync(join(ROOT, 'apps/api/local-server.mjs'), 'utf8')).match(/actorOf\(adminSession\)/g) || []).length === 4)
+  && lsActor >= LS_ACTOR_FLOOR, `local-server ${lsActor} < ${LS_ACTOR_FLOOR}`)
 check('J-105f 🔴 反向守:这把尺子咬得动 —— 喂它一行「涉钱 + 角色词兜底」必须中',
   (() => { const probe = "      createdBy: adminSession.email || 'owner'   // INSERT INTO finance_transactions"
     return (probe.match(ACTOR_EXPR) || []).length === 1 && MONEY_CTX.test(probe) })())

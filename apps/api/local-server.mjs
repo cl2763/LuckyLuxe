@@ -8345,7 +8345,7 @@ function createSettlementGroup(body = {}, adminSession = {}) {
     }
     db.prepare(`INSERT INTO settlement_groups (id, tenant_id, booking_id, card_owner_user_id, status, created_by, created_at, updated_at)
       VALUES (?, ?, ?, ?, 'pending_sign', ?, ?, ?)`)
-      .run(groupId, tenantId, body.bookingId || instantBookingId || null, cardOwnerUserId, adminSession.email || 'staff', now, now)
+      .run(groupId, tenantId, body.bookingId || instantBookingId || null, cardOwnerUserId, actorOf(adminSession), now, now)
 
     const grantsUsedInGroup = new Set()
     const timecardsUsedInGroup = new Set()
@@ -8408,7 +8408,7 @@ function createSettlementGroup(body = {}, adminSession = {}) {
         VALUES (?, ?, ?, ?, ?, ?, ?, ?, 'pending_sign', ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'pending', ?, ?, ?)`)
         .run(id, tenantId, groupId, sheet.bookingId || body.bookingId || instantBookingId || null, cardOwnerUserId,
           String(sheet.servedPersonName || '').slice(0, 40) || null, isProxy ? 1 : 0, settlementCode(tenantId),
-          computed.tierKey, sheet.tierChangedFrom || null, sheet.tierChangedFrom ? (adminSession.email || 'staff') : null, sheet.tierChangedFrom ? now : null,
+          computed.tierKey, sheet.tierChangedFrom || null, sheet.tierChangedFrom ? (actorOf(adminSession)) : null, sheet.tierChangedFrom ? now : null,
           computed.listTotalCents, computed.subtotalCents, computed.depositDeductCents, computed.discountTotalCents, computed.totalCents,
           computed.coupon ? computed.coupon.grantId : null, computed.coupon ? computed.coupon.couponId : null,
           computed.coupon ? computed.coupon.name : null, computed.couponDiscountCents,
@@ -8416,7 +8416,7 @@ function createSettlementGroup(body = {}, adminSession = {}) {
           computed.timecard ? computed.timecard.id : null, computed.timecard ? computed.timecard.nth : null,
           computed.purchase ? JSON.stringify(computed.purchase) : null,
           computed.recharge ? JSON.stringify(computed.recharge) : null,
-          computed.payment.plan, adminSession.email || 'staff', now, now)
+          computed.payment.plan, actorOf(adminSession), now, now)
         /* D121:结算单的演示标记**从它挂的那张预约继承** —— 单据必属某预约,
            预约是造景造的,它就是造景造的。这样即使调用方忘了带 `x-demo-seed` 也漏不掉;
            真实预约下的单 demo_seed 恒为 NULL(fail-closed 朝真实那一侧)。 */
@@ -8738,7 +8738,7 @@ function amendSettlement(settlementId, body = {}, adminSession = {}) {
     db.prepare(`INSERT INTO settlement_amendments (id, tenant_id, settlement_id, before_json, after_json, reason, amount_delta_cents, auto_balance_adjust_cents, amended_by, amended_at, created_at)
       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`)
       .run(randomId('samd'), tenantId, row.id, JSON.stringify(before), JSON.stringify({ totalCents: newTotal, reason: body.reason || '', couponReleased: releaseCoupon, timecardReleased: releaseTimecard, perfMode, serviceDay }),
-        String(body.reason || '').slice(0, 300), delta, autoAdjust, adminSession.email || 'owner', now, now)
+        String(body.reason || '').slice(0, 300), delta, autoAdjust, actorOf(adminSession), now, now)
     /* 账本差额行:落在**更正当天**(账本只追加、不回溯);类目与渠道跟这张单最大的那条收入腿走,
        找不到腿(理论上不该有)就单列「服务收入-更正」,**钱绝不能凭空消失在中间**。 */
     if (delta !== 0) {
@@ -8751,7 +8751,7 @@ function amendSettlement(settlementId, body = {}, adminSession = {}) {
         amountCents: delta, payChannel: leg ? leg.pay_channel : (storedPaid > 0 ? 'stored_value' : 'offline'),
         occurredOn: todayOf(tenantId), bookingId: row.booking_id || null,
         note: `金额更正 · 服务单 ${row.code} · ${formatMoneyCents(prevTotal, tenantId, 'auto')}→${formatMoneyCents(newTotal, tenantId, 'auto')} · ${String(body.reason || '').slice(0, 60)}`,
-        createdBy: adminSession.email || 'owner'
+        createdBy: actorOf(adminSession)
       })
     }
     if (tcRelease) {
@@ -8760,14 +8760,14 @@ function amendSettlement(settlementId, body = {}, adminSession = {}) {
       if (tcRelease.pointsBack > 0) {
         db.prepare('INSERT INTO points_transactions (id, tenant_id, user_id, type, amount, ref_id, note, created_by, created_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)')
           .run(randomId('pts'), tenantId, row.user_id, 'adjust', -tcRelease.pointsBack, row.id,
-            `售后返还次卡次数,回冲当次积分 · 服务单 ${row.code} · ${tcRelease.cardName}`, adminSession.email || 'owner', now)
+            `售后返还次卡次数,回冲当次积分 · 服务单 ${row.code} · ${tcRelease.cardName}`, actorOf(adminSession), now)
       }
       if (tcRelease.unitCents > 0) {
         const orig = db.prepare("SELECT id FROM finance_transactions WHERE tenant_id = ? AND category = '服务收入-次卡核销' AND tags = ? AND amount_cents > 0 LIMIT 1").get(tenantId, row.code)
         insertFinanceTransaction({
           type: 'income', source: 'settlement', category: '服务收入-次卡核销', tags: row.code,
           amountCents: -tcRelease.unitCents, payChannel: 'times_card', occurredOn: todayOf(tenantId),
-          note: `红字冲销 · 售后返还次卡次数 · 服务单 ${row.code}`, createdBy: adminSession.email || 'owner',
+          note: `红字冲销 · 售后返还次卡次数 · 服务单 ${row.code}`, createdBy: actorOf(adminSession),
           reversalOf: orig ? orig.id : null, tenantId
         })
       }
@@ -8776,7 +8776,7 @@ function amendSettlement(settlementId, body = {}, adminSession = {}) {
       db.prepare("UPDATE coupon_grants SET status = 'active', used_at = NULL, settlement_id = NULL, settlement_code = NULL WHERE id = ?").run(couponGrant.id)
       logCouponGrant({
         tenantId, grantId: couponGrant.id, action: 'released', settlementCode: row.code,
-        detail: `因金额更正退回券包。原因:${String(body.reason || '').slice(0, 120)}`, actor: adminSession.email || 'owner'
+        detail: `因金额更正退回券包。原因:${String(body.reason || '').slice(0, 120)}`, actor: actorOf(adminSession)
       })
     }
     if (autoAdjust !== 0) {
@@ -9527,7 +9527,7 @@ function allocateSettlementPerf(settlementId, input = {}, adminSession = {}) {
     for (const t of techs) {
       const s = byId[t.technician_id]
       db.prepare('UPDATE settlement_technicians SET share_pct = ?, share_cents = ?, allocated_by = ?, allocated_at = ? WHERE id = ?')
-        .run(s.pct, s.cents, adminSession.email || 'owner', now, t.id)
+        .run(s.pct, s.cents, actorOf(adminSession), now, t.id)
     }
     db.prepare('UPDATE settlements SET perf_alloc_status = ?, updated_at = ? WHERE id = ?').run('allocated', now, settlementId)
     /* ㋉ D59 双技师随单充值(店主拍案二 08-22):签字时归属=空(进「未分配」),
@@ -11783,7 +11783,7 @@ async function route(req, res) {
       if (row.coupon_grant_id) {
         logCouponGrant({
           tenantId: row.tenant_id, grantId: row.coupon_grant_id, action: 'released', settlementCode: row.code,
-          detail: '服务单撤回改单,券放回券包', actor: adminSession.email || 'staff'
+          detail: '服务单撤回改单,券放回券包', actor: actorOf(adminSession)
         })
       }
       db.prepare("UPDATE settlements SET status = 'voided', coupon_grant_id = NULL, coupon_id = NULL, coupon_name = NULL, coupon_discount_cents = 0, updated_at = ? WHERE id = ?").run(now, id)
