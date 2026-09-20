@@ -9,11 +9,14 @@
    比较 4310 进程启动时刻与 apps/api/*.mjs 的最大 mtime,旧进程**出声红**,不是跳过。 */
 /* 沙箱数据目录与库文件路径的**唯一出口** —— 各套件不许再各写一条硬路径。 */
 export const SANDBOX_DATA_DIR = process.env.SANDBOX_DATA_DIR || 'sandbox-data'
+/* 🔴 相对路径要相对 **`apps/api`**,不是相对 `process.cwd()` ——
+   整轮回归里 cwd 是 `apps/api`,可单独跑一把刀时 cwd 常是仓根,
+   拿 cwd 拼出来的路径当场打不开(`test-demo-mark` 单跑现场炸过,就是我这一版写的)。
+   锚在**本文件所在目录**上,cwd 是什么都不影响。 */
 export const SANDBOX_DB_PATH = (() => {
-  const { isAbsolute, join } = { isAbsolute: (p) => p.startsWith('/'), join: (...a) => a.join('/') }
-  return isAbsolute(SANDBOX_DATA_DIR)
-    ? join(SANDBOX_DATA_DIR, 'lucky-luxe.sqlite')
-    : join(process.cwd(), SANDBOX_DATA_DIR, 'lucky-luxe.sqlite')
+  const here = new URL('.', import.meta.url).pathname
+  const dir = SANDBOX_DATA_DIR.startsWith('/') ? SANDBOX_DATA_DIR : `${here}${SANDBOX_DATA_DIR}`
+  return `${dir.replace(/\/+$/, '')}/lucky-luxe.sqlite`
 })()
 
 async function assertServerNewerThanSource(label) {
