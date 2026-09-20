@@ -8,7 +8,10 @@
    路由一搬出去就等于**从扫描面里消失**,而套件照样全绿 —— 那是最坏的一种"绿"。
    所以同批把扫描器改成读 local-server.mjs + 全部 `*-routes.mjs`,并加了一条**路由条数下限**断言:
    下次再有人把路由搬走却忘了让扫描器跟上,条数掉下来立刻红。 */
+import { makeActorOf } from './actor-name.mjs'   // J-105 唯一出口
+
 export function createRefundRoutes({ apiError, json, readBody, refundApi, staffScope, usableTimecardsOf, svReversal }) {
+  const actorOf = makeActorOf({ apiError })
   async function route(req, res, ctx) {
     const { path, query, adminSession, requireRefundRight } = ctx
     /* 裁定2(08-30d 准开口):错记充值整笔冲销 —— 合同五条见 ./stored-value-reversal.mjs。
@@ -19,7 +22,7 @@ export function createRefundRoutes({ apiError, json, readBody, refundApi, staffS
       const r = svReversal.reverseRechargeTxn({
         txnId: decodeURIComponent(svRevMatch[1]),
         tenantId: ctx.tenantId,
-        operator: adminSession.email || adminSession.username || 'owner',
+        operator: actorOf(adminSession),   // J-105 第一批:退款落对账,留痕必须是一个人
         reason: (await readBody(req)).reason   // D122:事由必填,后端硬拦
       })
       json(res, 201, r)
@@ -45,7 +48,7 @@ export function createRefundRoutes({ apiError, json, readBody, refundApi, staffS
         userId: String(b.userId || '').trim(),
         amountCents: b.amountCents ?? (b.amount === undefined ? undefined : Number(b.amount) * 100),
         payChannel: b.payChannel, reason: b.reason, requestId: b.requestId,
-        operator: adminSession.email || adminSession.username || adminSession.role || 'owner'
+        operator: actorOf(adminSession)
       }))
       return true
     }
@@ -79,7 +82,7 @@ export function createRefundRoutes({ apiError, json, readBody, refundApi, staffS
         cardId: tcRefundMatch[1], times: b.times,
         amountCents: b.amountCents ?? (b.amount === undefined ? undefined : Number(b.amount) * 100),
         payChannel: b.payChannel, reason: b.reason,
-        operator: adminSession.email || adminSession.username || adminSession.role || 'owner'
+        operator: actorOf(adminSession)
       }))
       return true
     }

@@ -421,4 +421,35 @@ check('⑬g 🔴 网页那一侧照抄了 D77 那条「换店就当没登录」�
 check('⑬h 🔴 拿不到就**整块不出现**,不留空壳说「还没有签署文件」(那会让人以为店里没存)',
   /host\.remove\(\)/.test(webCust) && /ready: false/.test(mpCustJs))
 
+/* ══ J-105 棘轮(10e §四.2):乙档「涉钱却落角色词」的剩余处数 **只许降** ══
+   10c 普查底数 40 处 · 10e 第一批修 8 处(退款 3 · 冲销 1 · 日结 3 · 储值 1)⇒ 32。
+   🔴 这条棘轮的意义:**不许一边修一边又写出新的**。下一批把 32 再往下压。 */
+const MONEY_CTX = /settlement|payment|finance|stored_value|salary|payroll|coupon|points|deposit|refund|cash_note|timecard|recharge|daily_close|amend|reversal|perf_|compensation/i
+const ACTOR_EXPR = /adminSession\??\.(?:email|username|displayName|name|id)\b[^,;)\n]*/g
+const J105_CAP = 32
+const j105 = (() => {
+  const out = []
+  for (const f of readdirSync(join(ROOT, 'apps/api')).filter((x) => x.endsWith('.mjs') && !x.startsWith('test-'))) {
+    const lines = readFileSync(join(ROOT, 'apps/api', f), 'utf8').split('\n')
+    lines.forEach((ln, i) => {
+      if (/^\s*(\/\/|\*|\/\*)/.test(ln)) return
+      for (const e of (ln.match(ACTOR_EXPR) || [])) {
+        const lits = [...e.replace(/\s+/g, '').matchAll(/\|\|\s*'([^']*)'/g)].map((m) => m[1])
+        if (!lits.length || lits.some((l) => l === '')) continue          // 甲档另计
+        if (MONEY_CTX.test(lines.slice(Math.max(0, i - 10), i + 6).join('\n'))) out.push(`${f}:${i + 1}`)
+      }
+    })
+  }
+  return out
+})()
+check(`J-105d 🔴 乙档「涉钱落角色词」剩 ${j105.length} 处 ≤ 棘轮 ${J105_CAP}(**只许降**;10c 底数 40 → 10e 第一批修 8)`,
+  j105.length <= J105_CAP, j105.slice(0, 6).join(' | '))
+check('J-105e 🔴 第一批那 8 处确实改完了(退款 3 · 冲销 1 · 日结 3 · 储值 1),而且都走唯一出口',
+  (codeOnly(readFileSync(join(ROOT, 'apps/api/refund-routes.mjs'), 'utf8')).match(/actorOf\(adminSession\)/g) || []).length === 3
+  && /makeActorOf\(\{ apiError \}\)\(adminSession\)/.test(codeOnly(readFileSync(join(ROOT, 'apps/api/finance-reverse.mjs'), 'utf8')))
+  && (codeOnly(readFileSync(join(ROOT, 'apps/api/local-server.mjs'), 'utf8')).match(/actorOf\(adminSession\)/g) || []).length === 4)
+check('J-105f 🔴 反向守:这把尺子咬得动 —— 喂它一行「涉钱 + 角色词兜底」必须中',
+  (() => { const probe = "      createdBy: adminSession.email || 'owner'   // INSERT INTO finance_transactions"
+    return (probe.match(ACTOR_EXPR) || []).length === 1 && MONEY_CTX.test(probe) })())
+
 console.log(`\n✅ 签署文件留档 ${checks} 条全过`)

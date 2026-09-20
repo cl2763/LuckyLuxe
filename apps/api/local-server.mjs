@@ -34,7 +34,7 @@ import { rebuildTenantScopedUnique } from './schema-unique-rebuild.mjs'   // 唯
 import { installTenantFillTriggers } from './tenant-fill-triggers.mjs'   // D137 落值触发器(公约②)
 import { ensureConversationLog, logConversationMessage, transcriptFromLog, migrateTranscriptsIntoLog, redactConversation } from './conversation-log.mjs'   // ⓪ 对话全录(大批05 §〇)
 import { createCos } from './cos-upload.mjs'
-import { createSignedDocs } from './signed-docs.mjs'   // 签署文件留档(10b,公约①)
+import { createSignedDocs } from './signed-docs.mjs'; import { makeActorOf } from './actor-name.mjs'   // 签署文件留档(10b)· J-105 留痕唯一出口(10e,并进本行:巨型文件净 0)
 import { createConversationRoutes } from './conversation-routes.mjs'   // ⓪b 脱敏正门(大批05 §〇b,公约①)
 import { compactIntentText } from './intent-text.mjs'   // 意图文本归一,全仓唯一一份(05d)
 import { resolveSafetyLine, hasSpecialManualHandoffIntent, needsHumanInScope } from './ai-safety-lines.mjs'   // 安全四线闸(05d 两破口;判定与出句都在模块里)
@@ -9584,12 +9584,12 @@ function confirmDailyClose(date, adminSession = {}) {
   try {
     if (existing) {
       db.prepare("UPDATE daily_closes SET status = 'confirmed', order_count = ?, revenue_cents = ?, confirmed_by = ?, confirmed_at = ?, updated_at = ? WHERE id = ?")
-        .run(view.orderCount, view.revenueCents, adminSession.email || 'owner', now, now, closeId)
+        .run(view.orderCount, view.revenueCents, actorOf(adminSession), now, now, closeId)
       db.prepare('DELETE FROM daily_close_lines WHERE tenant_id = ? AND close_id = ?').run(tenantId, closeId)
     } else {
       db.prepare(`INSERT INTO daily_closes (id, tenant_id, date, status, order_count, revenue_cents, confirmed_by, confirmed_at, created_at, updated_at)
         VALUES (?, ?, ?, 'confirmed', ?, ?, ?, ?, ?, ?)`)
-        .run(closeId, tenantId, date, view.orderCount, view.revenueCents, adminSession.email || 'owner', now, now, now)
+        .run(closeId, tenantId, date, view.orderCount, view.revenueCents, actorOf(adminSession), now, now, now)
     }
     const lineStmt = db.prepare(`INSERT INTO daily_close_lines
       (id, tenant_id, close_id, date, technician_id, order_count, perf_cents, card_used_cents, recharge_first_cents, recharge_renew_cents, created_at)
@@ -9616,7 +9616,7 @@ function reopenDailyClose(date, reason, adminSession = {}) {
   if (!text) throw apiError(400, 'REASON_REQUIRED', '重开日结要写原因(会留痕)。')
   const now = iso(new Date())
   db.prepare("UPDATE daily_closes SET status = 'reopened', reopened_by = ?, reopened_at = ?, reopen_reason = ?, reopen_count = reopen_count + 1, updated_at = ? WHERE id = ?")
-    .run(adminSession.email || 'owner', now, text.slice(0, 300), now, row.id)
+    .run(actorOf(adminSession), now, text.slice(0, 300), now, row.id)
   return { reopened: true, ...dailyCloseView(date, tenantId) }
 }
 
@@ -10300,7 +10300,7 @@ function serializeSettlement(row, { includeSignature = false } = {}) {
   }
 }
 
-const signedDocs = createSignedDocs({ db, iso, randomId, apiError, json, readBody, currentTenantId, cosPutObject, requireCustomer, resolveTenant })
+const actorOf = makeActorOf({ apiError }); const signedDocs = createSignedDocs({ db, iso, randomId, apiError, json, readBody, currentTenantId, cosPutObject, requireCustomer, resolveTenant })
 const conversationRoutes = createConversationRoutes({
   db, iso, randomId, apiError, json, readBody, currentTenantId,
   conversationRow: wecomRouting.conversationRow, redactConversation,
@@ -13658,7 +13658,7 @@ async function route(req, res) {
        第二行要是挂了(触发器 ABORT、磁盘满、进程被杀),顾客钱收了、赠送没到账,
        而且账面上看不出少了什么。按《动钱多步写律》包成一个事务:要么两行都在,要么一行都没有。 */
     const bonusCents = Math.max(0, Math.round(Number(body.bonusCents || 0)))
-    const svOperator = adminSession.email || adminSession.username || adminSession.role || 'owner'
+    const svOperator = actorOf(adminSession)   // J-105 第一批:储值操作人
     db.exec('BEGIN IMMEDIATE')
     try {
       insertStoredValueTransaction({

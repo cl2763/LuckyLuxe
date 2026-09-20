@@ -130,7 +130,7 @@
     "backup-wal": 24,
     "secret-output": 15,
     "restore-fingerprint": 10,
-    "signed-docs": 97
+    "signed-docs": 100
   },
   "上次更新": "2026-09-02",
   "巨型文件历史最低": {

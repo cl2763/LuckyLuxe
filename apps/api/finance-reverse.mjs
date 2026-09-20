@@ -7,6 +7,7 @@
    判词是 Code 自己那句、店主收作 D122 判词的话:
    「同一件事 —— 纠错要说明白为什么 —— 在两个口子上,一个收了一个没收。」 */
 import { requireReason, withReason } from './correction-reason.mjs'
+import { makeActorOf } from './actor-name.mjs'   // J-105 留痕唯一出口
 
 export async function reverseFinanceTxn({ txnId, body, adminSession, db, tenantId, apiError, insertFinanceTransaction, serializeFinanceTransaction, occurredOn }) {
   if (adminSession.role !== 'owner') throw apiError(403, 'FORBIDDEN', 'Owner permission is required.')
@@ -29,7 +30,7 @@ export async function reverseFinanceTxn({ txnId, body, adminSession, db, tenantI
     note: withReason(`冲销：${original.note || original.id}`, reason),
     bookingId: original.booking_id,
     reversalOf: original.id,
-    createdBy: adminSession.email || 'owner'
+    createdBy: makeActorOf({ apiError })(adminSession)   // 🔴 J-105 第一批:冲销落账本,留痕必须是一个人
   })
   return { transaction: serializeFinanceTransaction(row) }
 }

@@ -19,9 +19,16 @@
  * 静默失败器族(判据一):`|| ''` 会把「记不下」悄悄变成「记了个空的」,而那比不记更坏 ——
  * 因为那一栏看起来是填过的。
  */
+/* 🔴 优先级是 `email → username → displayName/name`,**顺序不许改**。
+   案底(10e,全量回归当场咬出):我第一版写成 `displayName` 优先,
+   于是员工代充的 `stored_value_transactions.created_by` 从账号名变成了显示名,
+   `test-staff-portal ⑭` 当场红(`技代充mua0st0p` vs `mua0st0p`)。
+   **那不是修缺陷,那是改口径** —— 全仓 70 处既有写法都是 `adminSession.email || …`,
+   这个出口的职责是**把落空/落角色词的那一段补上**,不是重排已经对的那一段。
+   (纪律:修复会改业务口径的,先改文档、先问;这一处我没改口径,是改回去。) */
 export function makeActorOf({ apiError }) {
   return function actorOf(sess) {
-    const name = String(sess?.displayName || sess?.name || sess?.email || sess?.username || '').trim()
+    const name = String(sess?.email || sess?.username || sess?.displayName || sess?.name || '').trim()
     if (name) return name
     if (sess?.provider === 'demo-token') return '平台主钥匙'
     const id = String(sess?.id || sess?.technicianId || '').trim()
