@@ -62,9 +62,13 @@
 .sdoc-cancel{font-size:26rpx;font-weight:400;color:var(--sub)}
 .sdoc-ask{font-size:24rpx;color:var(--sub);margin-bottom:12rpx}
 .sdoc-opt{display:flex;justify-content:space-between;align-items:center;border:1rpx solid var(--line);border-radius:12rpx;padding:22rpx 24rpx;margin-bottom:14rpx;font-size:26rpx}
-.sdoc-opt.on{border-color:var(--brandd);background:var(--wall)}
+.sdoc-opt.on{border-color:var(--accd);background:var(--wall)}
 .sdoc-k{width:30rpx;height:30rpx;border-radius:50%;border:2rpx solid var(--line);flex:none}
-.sdoc-opt.on .sdoc-k{border-color:var(--brandd);background:var(--brandd);box-shadow:inset 0 0 0 6rpx var(--card)}
+/* 🔴 图 v2.1(10c §一②):选中点由品牌金 `--brandd` 改主色墨绿 `--accd`。
+   Cowork 原话:「那个金色选中点是我画的,而图的作者是我 —— 所以要改的是图,不是棘轮。」
+   三个理由:①墨绿是双档主色,不靠金色在深色档上撑 ②棘轮不动(16=16),判据一个字不改
+   ③**金色在这套里是装饰色,「选中」是状态,状态该用主色**。 */
+.sdoc-opt.on .sdoc-k{border-color:var(--accd);background:var(--accd);box-shadow:inset 0 0 0 6rpx var(--card)}
 .sdoc-title{border:1rpx solid var(--line);border-radius:12rpx;padding:18rpx 20rpx;font-size:26rpx;margin-bottom:14rpx}
 .sdoc-vis{display:flex;align-items:center;gap:14rpx;font-size:24rpx;color:var(--sub);margin-bottom:14rpx}
 .sdoc-shots{display:flex;flex-wrap:wrap;gap:14rpx;margin-bottom:10rpx}

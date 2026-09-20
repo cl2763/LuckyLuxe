@@ -54,24 +54,10 @@ export function createCos({ isProduction }) {
     return isProduction
   }
 
-  async function cosDeleteObject(objectKey) {
-    if (!cosConfigured()) return { ok: false, reason: 'COS 未配置' }
-    const key = objectKey.startsWith('/') ? objectKey : `/${objectKey}`
-    const host = `${COS.bucket}.cos.${COS.region}.myqcloud.com`
-    const headers = { host }
-    try {
-      const response = await fetch(`https://${host}${key}`, {
-        method: 'DELETE',
-        headers: { ...headers, authorization: cosAuthorization({ method: 'DELETE', key, headers }) },
-        signal: AbortSignal.timeout(15000)
-      })
-      // COS 删不存在的对象也回 204,幂等
-      return { ok: response.status === 204 || response.ok, status: response.status, url: `https://${host}${key}` }
-    } catch (error) {
-      return { ok: false, reason: error.message }
-    }
-  }
-
+  /* 🔴 10c §一③:`cosDeleteObject` **已删**(店主裁)。它全仓零调用方,理由三条:
+     ①死码不白占棘轮 ②**少一个将来会被误用的删除口** —— 而签署留档这一整件的主题就是「不许删」
+     ③J-102:没人跑的东西坏了也没人知道,一个零调用方的删除函数正是那种东西。
+     要用的那天从 git 历史取回来(本次删除见提交 10c),一条命令的事。 */
   async function cosPutObject(objectKey, body, contentType = 'application/octet-stream') {
     if (!cosUploadAllowed()) return null
     const key = objectKey.startsWith('/') ? objectKey : `/${objectKey}`
@@ -95,5 +81,5 @@ export function createCos({ isProduction }) {
       return null
     }
   }
-  return { COS, cosConfigured, cosAuthorization, cosUploadAllowed, cosDeleteObject, cosPutObject }
+  return { COS, cosConfigured, cosAuthorization, cosUploadAllowed, cosPutObject }
 }

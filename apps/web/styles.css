@@ -7956,10 +7956,11 @@ section.card > .section-row:first-child { margin-top: 0; }
 .signed-doc-pill.is-voided{background:var(--wall);color:var(--sub)}
 .signed-type-list{display:flex;flex-direction:column;gap:8px;margin:8px 0}
 .signed-type{display:flex;justify-content:space-between;align-items:center;gap:10px;border:1px solid var(--line);border-radius:8px;padding:11px 12px;cursor:pointer;font-size:.9rem}
-.signed-type.is-on{border-color:var(--brand,var(--acc));background:var(--wall)}
+/* 🔴 图 v2.1(10c §一②):选中态用主色,不用品牌金 —— 与小程序端同一个样子 */
+.signed-type.is-on{border-color:var(--accd,var(--acc));background:var(--wall)}
 /* 🔴 浏览器实拍才看见:原生 radio 不限尺寸会被全局 input 样式撑成一个大圆饼。
    合同图上是 15px 的小圆点(`.opt .k`),按图钉死。 */
-.signed-type input[type=radio]{width:15px;height:15px;flex:none;margin:0;accent-color:var(--brand,var(--acc))}
+.signed-type input[type=radio]{width:15px;height:15px;flex:none;margin:0;accent-color:var(--accd,var(--acc))}
 .signed-visible-row input[type=checkbox]{width:15px;height:15px;flex:none;margin:0}
 .signed-title-row,.signed-visible-row{display:flex;align-items:center;gap:8px;font-size:.86rem;margin:8px 0}
 .signed-title-row input{flex:1}
