@@ -70,7 +70,9 @@ export function ensureSignedDocsSchema(db) {
     BEGIN SELECT RAISE(ABORT, '签字凭证的页不许删,只能把整份作废'); END`)
 }
 
-export function createSignedDocs({ db, iso, randomId, apiError, json, readBody, currentTenantId, cosPutObject }) {
+import { makeActorOf } from './actor-name.mjs'
+
+export function createSignedDocs({ db, iso, randomId, apiError, json, readBody, currentTenantId, cosPutObject, requireCustomer, resolveTenant }) {
   ensureSignedDocsSchema(db)
 
   const tid = () => currentTenantId()
@@ -81,21 +83,9 @@ export function createSignedDocs({ db, iso, randomId, apiError, json, readBody, 
     const d = String(isoStr || '')
     return { date: d.slice(0, 10), md: `${d.slice(5, 7)}-${d.slice(8, 10)}`, hm: d.slice(11, 16) }
   }
-  /* 🔴 判据一(静默失败器族):留痕里的「谁」**不许用 `|| ''` 兜底**。
-     案底:判据 ④c 当场咬出 `voided_by` 是**空串** —— 因为 `OWNER_TOKEN` 那条路
-     `requireAdmin` 回的是 `{ role:'owner', provider:'demo-token', technicianId:null, tenantId }`,
-     **一个身份字段都不带**。而口径②要的是「作废要留谁、什么时候」,
-     留个空串等于**留痕看起来做了,其实没记下是谁** —— 正是假绿的本体。
-     所以:说得出是谁就写谁;主钥匙那条路明写「平台主钥匙」(它是一条真实且可审计的路);
-     **连这都说不出来就报错,不许静默写空。** */
-  function actorOf(sess) {
-    const name = String(sess?.displayName || sess?.name || sess?.email || sess?.username || '').trim()
-    if (name) return name
-    if (sess?.provider === 'demo-token') return '平台主钥匙'
-    const id = String(sess?.id || sess?.technicianId || '').trim()
-    if (id) return id
-    throw apiError(500, 'ACTOR_UNKNOWN', '记不下是谁操作的 —— 签字凭证这一步不许在无名状态下发生。')
-  }
+  /* 🔴 J-105(10d):`actorOf` 原来写在本文件里,现在抽成共用出口 `./actor-name.mjs` ——
+     10d 要把现金手记那两处也改过去,再留一份在这儿就是「一件事两处真相」。案底全文在那个文件抬头。 */
+  const actorOf = makeActorOf({ apiError })
   const titleOf = (row) => (row.doc_type === 'other' ? (row.title || '其他') : DOC_TYPES[row.doc_type]?.label || row.doc_type)
 
   function shape(row) {
@@ -154,8 +144,62 @@ export function createSignedDocs({ db, iso, randomId, apiError, json, readBody, 
     return { storage: url ? 'cos' : 'inline', url, inline: url ? null : String(dataUrl), mime, bytes: buf.length }
   }
 
+  /* ══ 第二步 · 顾客端只读(图 v2 第 5 屏,10d §二 批准开工)══════════════
+   * 🔴 这一屏的全部价值在于它能当证据,所以每一条「不能做什么」都写死在代码里:
+   *   · **只看自己的** —— 同一家店 + 本人,**两个条件都判**,不是判一个
+   *   · **不能传** —— 顾客端一个写口都不开(下面只有 GET)
+   *   · **不能删 / 不能作废** —— 连口都没有,不是「有口但拒绝」
+   *   · **作废掉的不显示** —— `status='active'` 写进 SQL
+   *   · **`other` 默认不给看** —— `customer_visible=1` 写进 SQL(建的时候就落好了)
+   * 🔴 还有一条不在图上但必须守:**顾客形状不许把商家那一侧的字段带出去**
+   *   (`created_by` / `voided_by` / `void_reason` / `customer_visible` 一个都不出现)——
+   *   顾客要看的是「我签过什么」,不是「店里谁经手的、为什么作废」。 */
+  function customerShape(row) {
+    const t = fmt(row.created_at)
+    return {
+      id: row.id, docType: row.doc_type, title: titleOf(row),
+      pageCount: row.page_count, pageCountText: `${row.page_count} 页`,
+      signedAtText: `${t.date} 签署`,
+      createdAt: row.created_at,
+    }
+  }
+  async function handleCustomer(req, res, path) {
+    let m = path.match(/^\/my\/signed-docs$/)
+    if (m && req.method === 'GET') {
+      const customer = requireCustomer(req)                 // ← 条件一:本人
+      const tid = resolveTenant(req)                        // ← 条件二:同一家店(顾客侧闸,不回落)
+      const rows = db.prepare(`SELECT * FROM signed_docs
+        WHERE user_id = ? AND tenant_id = ? AND status = 'active' AND customer_visible = 1
+        ORDER BY created_at DESC`).all(customer.id, tid)
+      return json(res, 200, {
+        docs: rows.map(customerShape),
+        emptyText: '还没有签署文件',
+        emptyHint: '在店里签过的文件,店员上传后会出现在这里',
+        blockTitle: '我签署过的文件',
+        readOnlyNote: '这些是店里存档的原件,只能查看',
+      }), true
+    }
+    m = path.match(/^\/my\/signed-docs\/([^/]+)\/pages\/(\d+)$/)
+    if (m && req.method === 'GET') {
+      const customer = requireCustomer(req)
+      const tid = resolveTenant(req)
+      /* 🔴 取页也要把四个条件全带上 —— 拿到一个 docId 不等于有权看它的页。
+         这是《读写两道闸律》的同族:列表收了,取页那条路也得自己收一遍。 */
+      const doc = db.prepare(`SELECT id FROM signed_docs
+        WHERE id = ? AND user_id = ? AND tenant_id = ? AND status = 'active' AND customer_visible = 1`)
+        .get(decodeURIComponent(m[1]), customer.id, tid)
+      if (!doc) throw apiError(404, 'NOT_FOUND', '没有这份文件。')
+      const page = db.prepare('SELECT page_no AS pageNo, storage, url, inline_data AS data, mime FROM signed_doc_pages WHERE doc_id = ? AND tenant_id = ? AND page_no = ?')
+        .get(doc.id, tid, Number(m[2]))
+      if (!page) throw apiError(404, 'NOT_FOUND', '没有这一页。')
+      return json(res, 200, page), true
+    }
+    return false
+  }
+
   async function handle(req, res, path, adminSession) {
     const now = () => iso(new Date())
+    if (path.startsWith('/my/signed-docs')) return handleCustomer(req, res, path)
 
     /* 5.1 建一份 ──────────────────────────────────────────────── */
     let m = path.match(/^\/admin\/customers\/([^/]+)\/signed-docs$/)

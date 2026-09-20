@@ -493,7 +493,7 @@ DEMO_GATE_MODES="${DEMO_GATE_MODES:-true false}"
 # 顾客端相关判据:这一档必须全部跑一遍(**只许变长**,少一条 test-demo-gate-coverage 红)
 # 🔴 裁 #72:名单不许我手挑 —— `test-demo-gate-coverage ①a` 按机制算出「该跑」并逐个对,
 #    少一套就红在「该跑没跑」上(造病已验)。这里列的是**该跑的全部 11 套 + 多跑的 4 套**。
-DEMO_GATE_SUITES="auth-surface backend-gate booking-intake card-refund customer-profile deposit-config identity-links mini-ai-same-outlet noshow-aftersales schedule-v2 staff-portal stored-value wechat-stub mini-phone booking-cancel identity-claim customer-paths coupon-status web-not-signup import-phone-guard web-settlement cross-end-effect display-text tenant-ownership mini-account-adjust"
+DEMO_GATE_SUITES="signed-docs auth-surface backend-gate booking-intake card-refund customer-profile deposit-config identity-links mini-ai-same-outlet noshow-aftersales schedule-v2 staff-portal stored-value wechat-stub mini-phone booking-cancel identity-claim customer-paths coupon-status web-not-signup import-phone-guard web-settlement cross-end-effect display-text tenant-ownership mini-account-adjust"
 : > /tmp/ll-demo-gate-modes.txt
 echo "true" >> /tmp/ll-demo-gate-modes.txt
 if printf '%s' "$DEMO_GATE_MODES" | grep -q false; then

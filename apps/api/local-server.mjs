@@ -10300,7 +10300,7 @@ function serializeSettlement(row, { includeSignature = false } = {}) {
   }
 }
 
-const signedDocs = createSignedDocs({ db, iso, randomId, apiError, json, readBody, currentTenantId, cosPutObject })
+const signedDocs = createSignedDocs({ db, iso, randomId, apiError, json, readBody, currentTenantId, cosPutObject, requireCustomer, resolveTenant })
 const conversationRoutes = createConversationRoutes({
   db, iso, randomId, apiError, json, readBody, currentTenantId,
   conversationRow: wecomRouting.conversationRow, redactConversation,

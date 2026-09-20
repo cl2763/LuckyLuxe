@@ -1,6 +1,7 @@
 {
   "navigationBarTitleText": "我的",
   "usingComponents": {
-    "img-placeholder": "../../components/img-placeholder/index"
+    "img-placeholder": "../../components/img-placeholder/index",
+    "signed-docs-mine": "../../components/signed-docs-mine/index"
   }
 }

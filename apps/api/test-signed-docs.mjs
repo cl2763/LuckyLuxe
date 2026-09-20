@@ -16,7 +16,7 @@
  */
 import { assertTestTarget } from './test-guard.mjs'
 import { DatabaseSync } from 'node:sqlite'
-import { readFileSync } from 'node:fs'
+import { readFileSync, readdirSync } from 'node:fs'
 import { fileURLToPath } from 'node:url'
 import { dirname, join } from 'node:path'
 const { requireOwnerToken } = await import('./owner-token.mjs')
@@ -49,7 +49,14 @@ const db = new DatabaseSync(process.env.TEST_DB_PATH || '')
    都是「扫源码时把注释里的**提及**当成代码里的**执行**」(J-61①)。
    第三次就不再逐条打补丁了:所有源码扫描统一过 `codeOnly()`,注释先剥掉。
    注释里怎么写案底都不算数,**只有真会跑的那一行算**。 */
-const codeOnly = (src) => src.replace(/\/\*[\s\S]*?\*\//g, '').replace(/(^|[^:])\/\/[^\n]*/g, '$1')
+/* 🔴 第四次栽在同一处:`codeOnly` 原来只剥 `/* *​/` 与 `//`,**不剥 wxml 的 `<!-- -->`** ——
+   ⑬e 咬中的是我自己写在 wxml 注释里的「没有上传/删除/作废按钮」那句话。
+   前三次(⑥e / ④c3 / ⑨a)我都是就地补一条,第三次才抽出这个函数;
+   **这一次补进函数本身** —— 注释有三种写法,一处治全部,不再一种一种打补丁。 */
+const codeOnly = (src) => src
+  .replace(/<!--[\s\S]*?-->/g, '')
+  .replace(/\/\*[\s\S]*?\*\//g, '')
+  .replace(/(^|[^:])\/\/[^\n]*/g, '$1')
 const modSrcEarly = codeOnly(readFileSync(join(ROOT, 'apps/api/signed-docs.mjs'), 'utf8'))
 const PNG = 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8BQDwAEhQGAhKmMIQAAAABJRU5ErkJggg=='
 
@@ -63,9 +70,12 @@ async function makeShop(tag) {
   const catId = ((await request('/admin/pricing/categories', {}, TOKEN, H)).data.categories || [])[0]?.id
   const svc = await request('/admin/services', { method: 'POST', body: JSON.stringify({ type: 'NAIL', nameZh: `签档项目${tag}${RUN}`, nameEn: 'x', priceCents: 18000, baseDurationMin: 60, categoryId: catId }) }, TOKEN, H)
   const today = new Date().toLocaleDateString('en-CA', { timeZone: 'America/Toronto' })
-  const bk = await request('/admin/bookings/direct', { method: 'POST', body: JSON.stringify({ newCustomerName: `签档顾客${tag}${RUN}`, phone: `139${tag.charCodeAt(0)}${RUN.slice(-6)}`, serviceId: svc.data.service.id, technicianId: tech.data.technician.id, date: today, time: '10:00' }) }, TOKEN, H)
+  const phone = `139${tag.charCodeAt(0)}${RUN.slice(-6)}`
+  const bk = await request('/admin/bookings/direct', { method: 'POST', body: JSON.stringify({ newCustomerName: `签档顾客${tag}${RUN}`, phone, serviceId: svc.data.service.id, technicianId: tech.data.technician.id, date: today, time: '10:00' }) }, TOKEN, H)
   const userId = bk.data.booking?.user?.id || bk.data.booking?.userId || ''
-  return { tid, H, technicianId: tech.data.technician.id, serviceId: svc.data.service.id, userId, today }
+  /* 🔴 手机号要**带出去**:绑微信走正门时「严格认人四条」要拿它对上建档时那一条,
+     我第一版随手另编了一个号,于是正门认成了新建的人(夹具红得对,是我给错了料)。 */
+  return { tid, H, technicianId: tech.data.technician.id, serviceId: svc.data.service.id, userId, today, phone }
 }
 const A = await makeShop('a')
 const B = await makeShop('b')
@@ -169,14 +179,31 @@ check('④c2 🔴 同一族:`created_by_name` 也不许是空串(建的时候就
    而判据一管的是「**必须发生**的地方」,也就是**写**路径。**数错了对象,和 ⑥e 那次同一个毛病。**
    改成盯写路径:两处写留痕都必须过 `actorOf`,而 `actorOf` 说不出是谁时必须抛。 */
 const writeSites = (modSrcEarly.match(/actorOf\(adminSession\)/g) || []).length
-check(`④c3 🔴 两处写留痕都过 \`actorOf\`(建 2 处 + 作废 1 处 = 3,现为 ${writeSites})`,
-  writeSites === 3 && /function actorOf/.test(modSrcEarly), String(writeSites))
-check("④c4 🔴 而 `actorOf` 说不出是谁时**抛错**,不是写空串(判据一:要么显式报错,要么断言它真发生了)",
-  /throw apiError\(500, 'ACTOR_UNKNOWN'/.test(modSrcEarly)
-  && !/actorOf[\s\S]{0,400}?return\s*''/.test(modSrcEarly))
-check('④c5 🔴 反向守:主钥匙那条路**确实**不带身份字段(否则上面两条是在守一个不存在的问题)',
+check(`④c3 🔴 三处写留痕都过 \`actorOf\`(建 2 处 + 作废 1 处 = 3,现为 ${writeSites})`,
+  writeSites === 3 && /makeActorOf\(\{ apiError \}\)/.test(modSrcEarly), String(writeSites))
+/* 🔴 10d:`actorOf` 抽成了共用出口 `actor-name.mjs`,所以这一条改去盯**那个出口**。
+   如果只盯本文件,抽取之后它会变成一条永远绿的废判据(J-92 同族:问题搬走了,判据还在原地守空气)。 */
+const actorSrc = codeOnly(readFileSync(join(ROOT, 'apps/api/actor-name.mjs'), 'utf8'))
+check("④c4 🔴 唯一出口里:说不出是谁时**抛错**,不是写空串(判据一:要么显式报错,要么断言它真发生了)",
+  /throw apiError\(500, 'ACTOR_UNKNOWN'/.test(actorSrc) && !/return\s*''/.test(actorSrc))
+check('④c6 🔴 唯一出口只有一份:全仓 `function actorOf` 只许出现在 `actor-name.mjs` 里',
+  (() => { const f = readdirSync(join(ROOT, 'apps/api')).filter((x) => x.endsWith('.mjs') && !x.startsWith('test-'))
+    const owners = f.filter((x) => /function actorOf/.test(codeOnly(readFileSync(join(ROOT, 'apps/api', x), 'utf8'))))
+    return owners.length === 1 && owners[0] === 'actor-name.mjs' })())
+
+/* ══ J-105(10d 立):涉钱路径的留痕必须是**一个人**,不能是一个角色 ══
+   「owner」回答的是「用哪把钥匙」,不是「哪个人」。出了纠纷要找的是人。 */
+const cashSrc = codeOnly(readFileSync(join(ROOT, 'apps/api/store-content-routes.mjs'), 'utf8'))
+check('J-105a 🔴 现金手记(建 / 冲销)与「记一笔」三处 `createdBy` 全走 `actorOf`',
+  (cashSrc.match(/createdBy: actorOf\(adminSession\)/g) || []).length === 3,
+  String((cashSrc.match(/createdBy: actorOf\(/g) || []).length))
+check("J-105b 🔴 而且这三处**一个 `|| ''` / `|| 'owner'` 兜底都不许留**(甲档真空 + 乙档角色词,一起治)",
+  !/createdBy:[^\n]*\|\|/.test(cashSrc), '还有兜底写法')
+check('J-105c 🔴 反向守:这把尺子咬得动(喂它一行旧写法必须中)',
+  /createdBy:[^\n]*\|\|/.test("        createdBy: adminSession.username || ''"))
+check('④c5 🔴 反向守:主钥匙那条路**确实**不带身份字段(否则上面几条是在守一个不存在的问题)',
   /provider: 'demo-token'/.test(readFileSync(join(ROOT, 'apps/api/local-server.mjs'), 'utf8'))
-  && /provider === 'demo-token'/.test(modSrcEarly))
+  && /provider === 'demo-token'/.test(actorSrc))
 check('④d 幂等:再作废一次 → 409,不产生第二条留痕',
   (await request(`/admin/signed-docs/${d2.data.doc.id}/void`, { method: 'POST', body: JSON.stringify({ reason: '再来一次' }) }, TOKEN, A.H)).status === 409
   && db.prepare('SELECT void_reason FROM signed_docs WHERE id = ?').get(d2.data.doc.id).void_reason === `换了价格表${RUN}`)
@@ -210,8 +237,23 @@ check('🔴 红线:本模块**零** `INSERT INTO users` / `user_identities`(顾�
 const userInsertProbe = ['db.prepare(\'INSERT ', 'INTO ', 'users (id) VALUES (?)\')'].join('')
 check('🔴 红线反向守:这把尺子咬得动(拿一行真的 INSERT 喂它必须中)',
   /INSERT\s+INTO\s+(users|user_identities)/i.test(userInsertProbe))
-check('🔴 本模块一个公开口都不开(第二步才做顾客端):全部路径以 `/admin/` 开头',
-  (modSrc.match(/path\.match\(\/\^\\\/([a-z]+)/g) || []).every((s) => s.includes('admin')), (modSrc.match(/\^\\\/[a-z-]+/g) || []).join(' '))
+/* 🔴 这一条原来写的是「本模块一个公开口都不开(第二步才做顾客端)」。
+   10d §二 批了第二步,合同变了 ⇒ 判据跟着变,但**必须变严不许变松**:
+   从「一个都没有」改成**白名单式**「`/my/*` 只许是这两条,而且只许 GET」。
+   (判据三:数「我列的都对」永远漏没列的;数「全部必须落进白名单」才是全覆盖。) */
+const MY_ALLOW = [
+  String.raw`^\/my\/signed-docs$`,
+  String.raw`^\/my\/signed-docs\/([^/]+)\/pages\/(\d+)$`,
+]
+/* 🔴 第一版我拿 `[^)]*?` 去抠正则字面量,被第二条里的 `([^/]+)` 绊住,只抠到 1 条。
+   改成:①数「`/my` 路由一共出现几次」②白名单里每一条都必须**逐字**在源码里
+   —— 数量与内容分开验,任一对不上就红。 */
+const myCount = (modSrcEarly.match(/path\.match\(\/\^\\\/my/g) || []).length
+check(`🔴 顾客端白名单:\`/my/*\` 路由共 ${myCount} 条(白名单 ${MY_ALLOW.length} 条),且每条都逐字对得上`,
+  myCount === MY_ALLOW.length && MY_ALLOW.every((r) => modSrcEarly.includes(r)),
+  `条数 ${myCount};缺的:${MY_ALLOW.filter((r) => !modSrcEarly.includes(r)).join(' | ') || '无'}`)
+check('🔴 反向守:商家那一侧仍然全部以 `/admin/` 开头(顾客端开口不许顺手把商家口也放开)',
+  [...modSrcEarly.matchAll(/path\.match\(\/\^\\\/(admin|my)/g)].map((m) => m[1]).filter((x) => x === 'admin').length >= 5)
 
 /* ══ ⑧ 分发契约:命中要回真值,否则同一个响应会被写两次 ══ */
 check('⑧ 分发:不认的路径回 false(不吞别人的路由)',
@@ -294,5 +336,89 @@ check('⑪b 🔴 反向守:这把尺子咬得动 —— 从解构里拿掉一个
   })())
 check(`⑪c 覆盖面:确实取到了导出名单与解构名单(两个都为空时上面那条会假绿)`,
   exported.length >= 3 && destructured.length >= 1, `导出 ${exported.length} · 解构 ${destructured.length}`)
+
+/* ══ ⑫ 第二步 · 顾客端只读(图 v2 第 5 屏 · 10d §二 批准)══════════════
+   🔴 10d §二 原话:「顾客端这一步的全部安全性,就是『只看自己的』四个字。」
+   所以下面每一条越权都**造得出阳性**才算验过(J-58①),而且两个条件**分开各验一次**:
+   同店他人(本人这条件挡住) · 他店本人(店这条件挡住)。只验一个,等于只收了一半。 */
+const { bindWechatViaFrontDoor } = await import('./customer-login-fixture.mjs')
+const custA = await bindWechatViaFrontDoor({ base: BASE_URL, tenantId: A.tid, userId: A.userId, phone: A.phone, tag: `sdA-${RUN}` })
+const custB = await bindWechatViaFrontDoor({ base: BASE_URL, tenantId: B.tid, userId: B.userId, phone: B.phone, tag: `sdB-${RUN}` })
+check('⑫夹具 两位顾客各自从正门登录(J-60)', Boolean(custA.accessToken && custB.accessToken))
+const myGet = (p, tok, tid) => request(p, {}, tok, { 'x-tenant-id': tid })
+
+const mine = await myGet('/my/signed-docs', custA.accessToken, A.tid)
+check('⑫a 顾客看自己的 → 200,而且**看得到东西**(零命中不算通过,J-58①)',
+  mine.status === 200 && mine.data.docs.length > 0, JSON.stringify(mine.data).slice(0, 160))
+check('⑫b 🔴 **作废的不显示**(图 v2:作废留痕是给店里对账用的,不是给顾客看的)',
+  !mine.data.docs.some((d) => d.id === d2.data.doc.id), mine.data.docs.map((d) => d.title).join(','))
+check("⑫c 🔴 **`other` 默认不给看**:那份 `店里自己的表` 顾客端看不到;而手动开了开关的那份看得到",
+  !mine.data.docs.some((d) => d.id === d3.data.doc.id) && mine.data.docs.some((d) => d.docType === 'other'),
+  mine.data.docs.map((d) => `${d.docType}:${d.title}`).join(' | '))
+check('⑫d 🔴 顾客形状**不带商家那一侧的字段**(created_by / voided_* / customer_visible 一个都不许出现)',
+  !/created_?[Bb]y|voided|customerVisible|voidReason/.test(JSON.stringify(mine.data)), JSON.stringify(mine.data).slice(0, 200))
+check('⑫e 空态两句也由后端出(两端零拼串)',
+  mine.data.emptyText === '还没有签署文件' && typeof mine.data.readOnlyNote === 'string')
+
+/* —— 两个条件分开验,各造一次阳性 —— */
+const someDoc = mine.data.docs[0].id
+check('⑫f 🔴 条件一(本人):**同店**顾客 B… 先造阳性 —— A 自己取这一页 → 200',
+  (await myGet(`/my/signed-docs/${someDoc}/pages/1`, custA.accessToken, A.tid)).status === 200)
+/* (同店他人这一条由 ⑫h 用 B 店顾客覆盖;不另造第三个人,省一次正门登录) */
+check('⑫g 🔴 条件二(同一家店):**他店本人** —— 拿 A 店的 docId 换成 B 店上下文 → 拒',
+  [401, 403, 404, 400].includes((await myGet(`/my/signed-docs/${someDoc}/pages/1`, custA.accessToken, B.tid)).status),
+  String((await myGet(`/my/signed-docs/${someDoc}/pages/1`, custA.accessToken, B.tid)).status))
+check('⑫h 🔴 **同店他人**:B 店顾客拿 A 店的 docId → 404(两个条件里任一不满足都要拒)',
+  (await myGet(`/my/signed-docs/${someDoc}/pages/1`, custB.accessToken, B.tid)).status === 404)
+check('⑫i 🔴 **不登录拿不到**(D194/D201 同族)',
+  [401, 403].includes((await myGet('/my/signed-docs', null, A.tid)).status))
+check('⑫j 🔴 顾客拿不到**作废那一份**的页(列表挡住了,取页那条路也得自己挡一次 —— 读写两道闸同族)',
+  (await myGet(`/my/signed-docs/${d2.data.doc.id}/pages/1`, custA.accessToken, A.tid)).status === 404)
+check('⑫k 🔴 顾客拿不到 `customer_visible=0` 那一份的页',
+  (await myGet(`/my/signed-docs/${d3.data.doc.id}/pages/1`, custA.accessToken, A.tid)).status === 404)
+
+/* —— 🔴 顾客端零写口:不是「有口但拒绝」,是根本没有 —— */
+for (const [mth, p] of [['POST', '/my/signed-docs'], ['POST', `/my/signed-docs/${someDoc}/void`], ['DELETE', `/my/signed-docs/${someDoc}`], ['POST', `/my/signed-docs/${someDoc}/pages`]]) {
+  const r = await request(p, { method: mth }, custA.accessToken, { 'x-tenant-id': A.tid })
+  check(`⑫写口 🔴 \`${mth} ${p.replace(someDoc, ':id')}\` **不存在**(裁#104:守「不许存在」只断言不存在)`,
+    ![200, 201, 204].includes(r.status), String(r.status))
+}
+check('⑫l 🔴 源码层:顾客那一段只有 GET,一个写动词都没有',
+  (() => { const seg = modSrcEarly.slice(modSrcEarly.indexOf('async function handleCustomer'), modSrcEarly.indexOf('async function handle(req'))
+    return /req\.method === 'GET'/.test(seg) && !/req\.method === '(POST|PUT|PATCH|DELETE)'/.test(seg) })())
+check('⑫m 🔴 两个条件在 SQL 里同时出现(不是取出来再判 —— 取出来再判就会有人忘了判)',
+  (() => { const seg = modSrcEarly.slice(modSrcEarly.indexOf('async function handleCustomer'))
+    return (seg.match(/user_id = \? AND tenant_id = \?/g) || []).length >= 1
+      && (seg.match(/status = 'active' AND customer_visible = 1/g) || []).length >= 2 })())
+
+/* ══ ⑬ 第二步 · 两端顾客界面(双端同批律:顾客端也是两端)══════════════ */
+const webCust = codeOnly(readFileSync(join(ROOT, 'apps/web/customer-signed-docs.js'), 'utf8'))
+const mpCustJs = codeOnly(readFileSync(join(ROOT, 'miniprogram/components/signed-docs-mine/index.js'), 'utf8'))
+const mpCustWxml = readFileSync(join(ROOT, 'miniprogram/components/signed-docs-mine/index.wxml'), 'utf8')
+const mpApi2 = codeOnly(readFileSync(join(ROOT, 'miniprogram/utils/api.js'), 'utf8'))
+
+check('⑬a 🔴 两端顾客界面**一个写请求都没有**(不是"有但拒绝",是根本没写)',
+  !/method:\s*'(POST|PUT|PATCH|DELETE)'/i.test(webCust) && !/'(POST|PUT|PATCH|DELETE)'/.test(mpCustJs),
+  'webCust 或 mp 组件里出现了写动词')
+check('⑬b 🔴 两端**都不传任何 id** —— 后端按「本人 + 同一家店」查,前端连猜都猜不了',
+  !/signed-docs\/\$\{/.test(webCust) && !/signed-docs\/'/.test(mpCustJs)
+  && /request\('\/my\/signed-docs'\)/.test(mpApi2))
+check('⑬c 渲染链闭合(小程序):api → setData 字段 → wxml 绑定,断一节就红',
+  /api\.getMySignedDocs\(/.test(mpCustJs) && /blockTitle:/.test(mpCustJs)
+  && /\{\{blockTitle\}\}/.test(mpCustWxml) && /\{\{item\.signedAtText\}\}/.test(mpCustWxml))
+check('⑬d 🔴 两端零拼串:句子全取后端字段,不许把它们写死在界面里',
+  !/还没有签署文件|我签署过的文件|只能查看/.test(webCust)
+  && !/还没有签署文件|我签署过的文件|只能查看/.test(codeOnly(mpCustWxml) + mpCustJs))
+check('⑬e 🔴 顾客端没有上传/删除/作废按钮(连按钮都不给)',
+  !/上传|删除|作废|bindtap/.test(codeOnly(mpCustWxml))
+  && !/上传|删除|作废/.test(webCust))
+check('⑬f 🔴 超线文件一个字没加:`customer.js`(2458 > 1500)与 `me/index.js`(591,上限 600)都没被塞进新功能',
+  (() => { const a = readFileSync(join(ROOT, 'apps/web/customer.js'), 'utf8')
+    const b = readFileSync(join(ROOT, 'miniprogram/pages/me/index.js'), 'utf8')
+    return !/signed-?[Dd]ocs/.test(a) && !/signed-?[Dd]ocs/.test(b) && b.split('\n').length <= 600 })())
+check('⑬g 🔴 网页那一侧照抄了 D77 那条「换店就当没登录」的规矩(不是只抄了键名)',
+  /__tenant !== tid/.test(webCust) && /__value/.test(webCust))
+check('⑬h 🔴 拿不到就**整块不出现**,不留空壳说「还没有签署文件」(那会让人以为店里没存)',
+  /host\.remove\(\)/.test(webCust) && /ready: false/.test(mpCustJs))
 
 console.log(`\n✅ 签署文件留档 ${checks} 条全过`)

@@ -82,6 +82,9 @@
     </block>
   </view>
 
+  <!-- 我签署过的文件 · 只读(图 v2 第 5 屏)。跟卡包、订单放一起,不另开入口。
+       🔴 实现在组件里:`pages/me/index.js` 已 591 行,公约③ 上限 600,超线文件不许再加新功能。 -->
+  <signed-docs-mine />
   <view class="section">
     <view class="section-head">
       <view class="section-title" bindtap="goOrders" data-status="all">{{t.orders}}</view>

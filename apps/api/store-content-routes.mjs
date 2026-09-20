@@ -7,8 +7,15 @@
    🔴 搬家的代价同样自己付:门禁扫描器(test-auth-surface)扫的是
    local-server.mjs + 全部 `*-routes.mjs`,本文件天生在扫描面里,
    并且那条**路由条数下限**断言会因为多了这几条而抬高 —— 谁再把它搬走、扫描面缩水,当场红。 */
+/* 🔴 J-105(10d):留痕里的「谁」走唯一出口 `./actor-name.mjs`。
+   本文件三处涉钱写入(记一笔 · 现金手记 · 现金手记冲销)全部改走它 ——
+   两处原来是 `|| ''`(甲档真空),一处是 `|| 'owner'`(乙档角色词)。
+   公约④:`actorOf` 我 10b 在 `signed-docs.mjs` 里写过一份,这次**抽成共用出口**,不并排再写第二份。 */
+import { makeActorOf } from './actor-name.mjs'
+
 export function createStoreContentRoutes({ apiError, json, readBody, heroSlidesApi, cashNotesApi, constants, localParts, tenantTimezone, currentTenantId, HERO_SLIDE_MAX, insertFinanceTransaction, serializeFinanceTransaction }) {
   const { CASH_NOTE_KINDS, CASH_NOTE_KIND_LABELS } = constants
+  const actorOf = makeActorOf({ apiError })
   async function route(req, res, ctx) {
     const { path, query, adminSession } = ctx
     /* 手工「记一笔」写口(08-29 从 local-server.mjs 搬来,同批加付款方式闸)。
@@ -34,7 +41,7 @@ export function createStoreContentRoutes({ apiError, json, readBody, heroSlidesA
         payChannel: String(body.payChannel || 'unknown'),
         occurredOn,
         note: String(body.note || ''),
-        createdBy: adminSession.email || 'owner'
+        createdBy: actorOf(adminSession)   // J-105:涉钱路径的留痕必须是一个人,不是一个角色
       })
       json(res, 201, { transaction: serializeFinanceTransaction(row) })
       return true
@@ -65,14 +72,15 @@ export function createStoreContentRoutes({ apiError, json, readBody, heroSlidesA
       const note = cashNotesApi.addCashNote({
         date: String(body.date || day), kind: String(body.kind || ''),
         amountCents: Math.round(Number(body.amountCents)), note: body.note,
-        createdBy: adminSession.username || adminSession.displayName || ''
+        createdBy: actorOf(adminSession)   // 🔴 J-105 甲档:原来是 `|| ''`,抽屉里钞票动了却记不下是谁
       })
       json(res, 201, { note })
       return true
     }
     if (req.method === 'POST' && noteId && path.endsWith('/reverse')) {
       const body = await readBody(req)
-      json(res, 201, { note: cashNotesApi.reverseCashNote(noteId, { createdBy: adminSession.username || '', note: body.note, reason: body.reason }) })
+      /* 🔴 J-105 甲档:冲销同病(原来是 `adminSession.username || ''`),同改 */
+      json(res, 201, { note: cashNotesApi.reverseCashNote(noteId, { createdBy: actorOf(adminSession), note: body.note, reason: body.reason }) })
       return true
     }
   }

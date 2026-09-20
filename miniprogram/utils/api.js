@@ -895,6 +895,10 @@ function getSignedDoc(docId) {
 function voidSignedDoc(docId, reason) {
   return adminRequest(`/admin/signed-docs/${encodeURIComponent(docId)}/void`, 'POST', { reason })
 }
+/* 顾客端只读:我签署过的文件(图 v2 第 5 屏)。🔴 **只有 GET,没有任何写口** ——
+   顾客不能传、不能删、不能作废,所以这一族只此一个函数。
+   不传任何 id:后端按「本人 + 同一家店」两个条件查,前端连猜都猜不了。 */
+function getMySignedDocs() { return request('/my/signed-docs') }
 // 角色缓存(登录/adminMe 后写入),供页面同步判断
 function getCachedRole() { return wx.getStorageSync('lucky_admin_role') || '' }
 function isOwner() { return getCachedRole() === 'owner' }
@@ -1057,6 +1061,7 @@ module.exports = {
   saveServiceNote,
   getCustomerNotes,
   getSignedDocs, createSignedDoc, getSignedDoc, voidSignedDoc,
+  getMySignedDocs,
   adminRequest,
   getCachedRole,
   isOwner,

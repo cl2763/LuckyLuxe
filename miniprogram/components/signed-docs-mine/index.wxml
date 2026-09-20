@@ -1,0 +1,13 @@
+<!-- 🔴 只读:没有任何 bindtap 写动作,没有上传/删除/作废按钮 —— 连按钮都不给(图 v2 定死) -->
+<view class="sdm" wx:if="{{ready}}">
+  <view class="sdm-hd">{{blockTitle}}</view>
+  <view class="sdm-empty" wx:if="{{!docs.length}}">{{emptyText}}\n{{emptyHint}}</view>
+  <view class="sdm-row" wx:for="{{docs}}" wx:key="id">
+    <view class="sdm-th"></view>
+    <view class="sdm-tx">
+      <view class="sdm-nm">{{item.title}}</view>
+      <view class="sdm-mt">{{item.signedAtText}} · {{item.pageCountText}}</view>
+    </view>
+  </view>
+  <view class="sdm-note" wx:if="{{docs.length}}">{{readOnlyNote}}</view>
+</view>
