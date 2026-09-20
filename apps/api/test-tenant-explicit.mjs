@@ -145,7 +145,13 @@ check('①e 🔴 零命中先证刀能咬(user_identities 版):金丝雀正反�
    其中两处是红线(`quote_requests` 4984 / `reminder_tasks` 4974)——它们卡在
    AI 报价状态机的正路上:单落错店 → 本店状态机永远找不到自己刚建的单,
    而旗舰店报价台列得出别店的报价。行为面由 `test-quote-tenant` 在**非默认租户**里走一遍。 */
-const DBP = process.env.TEST_DB_PATH || join(ROOT, 'apps/api/sandbox-data/lucky-luxe.sqlite')
+/* 🔴 走 `test-need-sandbox.mjs` 的唯一出口(公约④:一件事一处真相)。
+   夜15 (丙):CI 上 `SANDBOX_DATA_DIR` 指到临时目录,这里自动跟着走;
+   本机不设那个变量时,取值与以前**一模一样**。
+   🔴 这是 L2 第二轮才扫出来的一批 —— 第一轮我只改了两个文件,而同类共 4 个。
+   **「改一处硬路径」永远是一类,不是一处**(J-78②)。 */
+const { SANDBOX_DB_PATH } = await import('./test-need-sandbox.mjs')
+const DBP = process.env.TEST_DB_PATH || SANDBOX_DB_PATH
 let famTables = []
 let famDefaults = []
 let famNullable = []

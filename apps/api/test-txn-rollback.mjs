@@ -64,7 +64,13 @@ check('①b `installLedgerGuards` 的 24 条 DDL 包在事务里 —— '
   /db\.exec\('BEGIN IMMEDIATE'\)/.test(lg) && /db\.exec\('ROLLBACK'\)/.test(lg), '')
 
 /* ═══ ② 🔴 行为层:造中间步失败 → 零行落地 → 再跑真路径 ═══ */
-const SB = join(ROOT, 'apps/api/sandbox-data/lucky-luxe.sqlite')
+/* 🔴 走 `test-need-sandbox.mjs` 的唯一出口(公约④:一件事一处真相)。
+   夜15 (丙):CI 上 `SANDBOX_DATA_DIR` 指到临时目录,这里自动跟着走;
+   本机不设那个变量时,取值与以前**一模一样**。
+   🔴 这是 L2 第二轮才扫出来的一批 —— 第一轮我只改了两个文件,而同类共 4 个。
+   **「改一处硬路径」永远是一类,不是一处**(J-78②)。 */
+const { SANDBOX_DB_PATH } = await import('./test-need-sandbox.mjs')
+const SB = SANDBOX_DB_PATH
 if (!existsSync(SB)) {
   console.log('   ⚠️ 沙箱库不在 —— **行为层本轮未跑**(不静默跳过,如实说)')
 } else {

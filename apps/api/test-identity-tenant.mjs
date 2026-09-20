@@ -48,7 +48,13 @@ check('② 🔴 零命中先证刀能咬:历史坏版(既不写列名也不 SELE
     .filter((m) => !/\btenant_id\b/.test(m[1]) || !/\btenant_id\b/.test(m[2])).length === 1, '')
 
 /* ═══ 行为层:在库的临时副本上跑 ═══ */
-const SRC = process.env.TEST_DB_PATH || join(ROOT, 'apps/api/sandbox-data/lucky-luxe.sqlite')
+/* 🔴 走 `test-need-sandbox.mjs` 的唯一出口(公约④:一件事一处真相)。
+   夜15 (丙):CI 上 `SANDBOX_DATA_DIR` 指到临时目录,这里自动跟着走;
+   本机不设那个变量时,取值与以前**一模一样**。
+   🔴 这是 L2 第二轮才扫出来的一批 —— 第一轮我只改了两个文件,而同类共 4 个。
+   **「改一处硬路径」永远是一类,不是一处**(J-78②)。 */
+const { SANDBOX_DB_PATH } = await import('./test-need-sandbox.mjs')
+const SRC = process.env.TEST_DB_PATH || SANDBOX_DB_PATH
 if (!existsSync(SRC)) {
   console.log(`   ⚠️ 拿不到库(${SRC})—— **行为层本轮未跑**(不静默跳过,如实说)`)
   check('③ 前置:行为层要有一份库才能跑 —— 拿不到就红,不许静默跳过(断言增量律)', false, SRC)
