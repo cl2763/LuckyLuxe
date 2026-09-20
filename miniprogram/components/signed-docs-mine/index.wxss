@@ -4,7 +4,12 @@
 .sdm-empty{border:1rpx dashed var(--line);border-radius:12rpx;padding:32rpx 20rpx;text-align:center;color:var(--sub);font-size:24rpx;white-space:pre-line}
 .sdm-row{display:flex;align-items:center;gap:18rpx;padding:16rpx 0;border-top:1rpx solid var(--line)}
 .sdm-row:first-of-type{border-top:0}
-.sdm-th{width:60rpx;height:78rpx;flex:none;border:1rpx solid var(--line);border-radius:12rpx;background:var(--wall)}
+/* 🔴 合同图 v2 的 `.th` 是**画了横线的文件图标**(`::before` 那几条线),不是一个空方块。
+   网页端有,小程序端第一版漏了 —— 实拍出来是个空米色块,像「图没加载出来」。
+   WXSS 里用渐变画线比 `::before + box-shadow` 稳;颜色只用 token(写死色棘轮盯着)。
+   ⚠️ 它是**图标不是图片位**:文件的真页在详情里看,这儿从来不打算放照片,
+   所以不走占位出口(占位零回落律的第三态:不该有图 ⇒ 不出现图片位)。 */
+.sdm-th{width:60rpx;height:78rpx;flex:none;border:1rpx solid var(--line);border-radius:12rpx;background:var(--wall);background-image:repeating-linear-gradient(var(--line) 0 2rpx, transparent 2rpx 14rpx);background-size:70% 100%;background-position:center;background-repeat:no-repeat}
 .sdm-tx{flex:1;min-width:0}
 .sdm-nm{font-size:26rpx;font-weight:600}
 .sdm-mt{font-size:22rpx;color:var(--sub)}

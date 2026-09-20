@@ -149,7 +149,9 @@ window.CustomerCopyFactory = ({ moneyY }) => ({
     completeFlow: '完整预约流程',
     noSlots: '当天暂无可预约时间',
     created: '已加入购物车',
-    paidDone: '定金已支付，预约已确认',
+    /* 🔴 10f「平台记账,不代收」:平台没收到钱,顾客端就不能替钱说话。
+       「已支付」的意思是「平台收到了」——而平台没有。说的只能是门店确认了。 */
+    paidDone: '门店已确认收到定金，预约已确认',
     needLogin: '请先登录后继续',   // 裁#103:不许出现「注册」
     confirmEmail: '请检查邮箱完成验证，然后再登录。',
     paymentRedirect: '正在跳转到 Stripe 测试支付...',
@@ -298,7 +300,7 @@ window.CustomerCopyFactory = ({ moneyY }) => ({
     completeFlow: 'Full booking flow',
     noSlots: 'No available times',
     created: 'Added to cart',
-    paidDone: 'Deposit paid. Booking confirmed.',
+    paidDone: 'The store has confirmed your deposit. Booking confirmed.',
     needLogin: 'Please sign in to continue',   // 裁#103
     confirmEmail: 'Please verify your email, then sign in.',
     paymentRedirect: 'Redirecting to Stripe test payment...',

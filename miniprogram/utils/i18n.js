@@ -19,7 +19,9 @@ const copy = {
       statusAfterSales: '售后',
       statusPendingPayment: '待支付',
       all: '全部',
-      paid: '已支付',
+      /* 🔴 10f:平台不代收,顾客端不许说「已支付」。⚠️ 这个键现扫**零调用方**(活的是 paidDeposit),
+         但按 J-107「一条法只授权它明写的那件事」——10f 授权的是改措辞,不是删键。死键单独登记。 */
+      paid: '门店已确认收款',
       none: '无'
     },
     en: {
@@ -39,7 +41,7 @@ const copy = {
       statusAfterSales: 'After-sales',
       statusPendingPayment: 'To Pay',
       all: 'All',
-      paid: 'Paid',
+      paid: 'Confirmed by store',
       none: 'None'
     }
   },

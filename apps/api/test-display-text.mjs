@@ -187,6 +187,42 @@ check('病三③ 服务端那四行不许再把 undefined 漏给前端(技师/�
 check('病三④ 🔴 反向守:一句直取写法必须被咬中(否则「零处」是空转)',
   /\.(technician|store)\.[a-zA-Z_]+/.test('<p>${order.technician.name}</p>'))
 
+/* ══ 病四(10f 立):**平台记账,不代收** ⇒ 顾客端不许替钱说话 ══════════
+ * 店主 09-21 口述、Cowork 落成口径:**钱不经过平台。** 商家用什么收是商家的事,
+ * 平台只记「收了多少 · 走哪个渠道 · 谁收的」。
+ * 🔴 所以顾客端**不许写「已支付 / 已付款」** —— 那句话的意思是「平台收到了」,而平台没有。
+ *   要写的是「门店已确认收款」这一类:说的是门店确认了,**这是真的**。
+ * 现状(10g 现测,如实记):
+ *   · `apps/web/customer.js:1574` 订单状态句早就是后端唯一出口 `order?.statusText || ''`
+ *     —— **10f 要的「两端共用词典」08-25(A2)已经做过了**,这一刀不重做,只守住别倒回去;
+ *   · 活的违规只有一处:`customer-copy.js` 的 `paidDone`(付完定金的 toast),已改;
+ *   · `miniprogram/utils/i18n.js` 的 `paid` 现扫**零调用方**(活的是 `paidDeposit`),
+ *     按 J-107 只改措辞不删键,死键另账登记。
+ * 判据数**执行不数提及**:注释先剥掉(前四批在这上头栽过四次)。 */
+const PAY_BAN = /已支付|已付款/
+const stripComments = (src) => src
+  .replace(/<!--[\s\S]*?-->/g, '').replace(/\/\*[\s\S]*?\*\//g, '').replace(/(^|[^:])\/\/[^\n]*/g, '$1')
+const CUSTOMER_FACING = [
+  'apps/web/customer.js', 'apps/web/customer-copy.js', 'apps/web/customer-auth-copy.js',
+  'apps/web/customer-signed-docs.js', 'miniprogram/utils/i18n.js',
+]
+const payBad = []
+for (const rel of CUSTOMER_FACING) {
+  let src = ''
+  try { src = stripComments(readFileSync(join(ROOT, rel), 'utf8')) } catch { continue }
+  src.split('\n').forEach((ln, i) => { if (PAY_BAN.test(ln)) payBad.push(`${rel}:${i + 1} ${ln.trim().slice(0, 60)}`) })
+}
+check(`病四① 🔴 顾客可见面(${CUSTOMER_FACING.length} 个文件)**零**「已支付 / 已付款」:现 ${payBad.length} 处`,
+  payBad.length === 0, payBad.join(' | '))
+check('病四② 🔴 反向守:塞一句「已支付」进去必须被咬中(否则那个零是空转)',
+  PAY_BAN.test("    paidDone: '定金已支付，预约已确认',"))
+check('病四③ 🔴 反向守:注释里提到「已支付」**不许**被咬中(数执行不数提及 —— 本文件自己的说明就写着这四个字)',
+  !PAY_BAN.test(stripComments("  /* 这里原来写的是「已支付」,10f 改了 */\n  const x = 1")))
+check('病四④ 覆盖面:这几个文件真读到了(读不到就成了「零处」空转,J-58①)',
+  CUSTOMER_FACING.every((rel) => { try { return readFileSync(join(ROOT, rel), 'utf8').length > 200 } catch { return false } }))
+check('病四⑤ 🔴 订单状态句仍是后端唯一出口(A2 那条不许倒回去:前端零回落、不本地编)',
+  /order\?\.statusText \|\| ''/.test(readFileSync(join(ROOT, 'apps/web/customer.js'), 'utf8')))
+
 console.log(`\n[说法唯一出口] 源文件 ${CODE.length} 个 · 等级大写键在册 ${Object.keys(KEY_ALLOW).length} · 横幅自拼 ${selfMade.length}`)
 if (fails.length) { console.error(`\n❌ test-display-text ${fails.length}/${checks} 项未过`); process.exit(1) }
 console.log(`\n✅ test-display-text 通过 ${checks} 项`)

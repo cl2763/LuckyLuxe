@@ -48,7 +48,8 @@
 .sdoc-row:first-of-type{border-top:0}
 .sdoc-row.is-voided .sdoc-nm{color:var(--sub)}
 .sdoc-row.is-voided .sdoc-th{opacity:.5}
-.sdoc-th{width:60rpx;height:78rpx;flex:none;border:1rpx solid var(--line);border-radius:12rpx;background:var(--wall)}
+/* 同上:合同图的缩略图是文件图标(横线),不是空方块。商家端同改。 */
+.sdoc-th{width:60rpx;height:78rpx;flex:none;border:1rpx solid var(--line);border-radius:12rpx;background:var(--wall);background-image:repeating-linear-gradient(var(--line) 0 2rpx, transparent 2rpx 14rpx);background-size:70% 100%;background-position:center;background-repeat:no-repeat}
 .sdoc-tx{flex:1;min-width:0}
 .sdoc-nm{font-size:26rpx;font-weight:600}
 .sdoc-mt{font-size:22rpx;color:var(--sub)}
