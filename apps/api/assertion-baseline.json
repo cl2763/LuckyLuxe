@@ -133,7 +133,8 @@
     "signed-docs": 100,
     "mp-package-size": 19,
     "tenant-parent-scan": 8,
-    "money-endpoint-abuse": 29
+    "money-endpoint-abuse": 29,
+    "cert-expiry": 9
   },
   "上次更新": "2026-09-02",
   "巨型文件历史最低": {

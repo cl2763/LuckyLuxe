@@ -1,7 +1,7 @@
 
 // ===== 联调开关(店主用)=====
 // true  = 连你 Mac 本地沙盘(模拟数据,随便测,不影响线上;开发者工具模拟器用 127.0.0.1 即可)
-// false = 连线上生产(www.luckyluxeatelier.com,真实数据)
+// false = 连线上生产(**境内代理** api.jingshengyouji.com → Railway,真实数据)
 // ⚠️ 正式上传/发布前,务必把这里改回 false!
 const USE_LOCAL_SANDBOX = true // 2026-08-23 体验版 1.2.0 已传(境内号 wx247cd8ad9907430d,连生产);本地开发沙盘;上传前务必改 false
 /* 本地沙盘地址(真机调试联通件,店主 08-23 立):
@@ -21,7 +21,13 @@ function isDevtools() {
   } catch (e) { return false }   // 拿不到就按真机走(真机连回环必死,回环连不上还能报错自证)
 }
 const LOCAL_API = isDevtools() ? LOCAL_LOOPBACK : `http://${devhost.lanHost}:${LOCAL_PORT}`
-const API_BASE = USE_LOCAL_SANDBOX ? LOCAL_API : 'https://www.luckyluxeatelier.com'
+/* 🔴 11f §二.4:正式环境改走**境内代理**,不再直连境外域名。
+   `api.jingshengyouji.com` → 北京那台轻量服务器的 nginx → Railway 后端。
+   验过的四条:官网没掉线 · /health 的 commit 与 Railway 一致(ed93184)· 真 Let's Encrypt 证书 ·
+   /platform 与 /sandbox 转不过去(404)。
+   🔴 还差一条我验不了的:**境内实访** —— 要店主或小婕用手机流量打开一次。
+   ⚠️ 这个域名同时是**小程序 request 合法域名**要填的那一个(微信后台一个月只能改 5 次,填前先确认通了)。 */
+const API_BASE = USE_LOCAL_SANDBOX ? LOCAL_API : 'https://api.jingshengyouji.com'
 const DEMO_USER_ID = 'user-demo'
 /* 🔴 D19(店主 2026-08-11 拍板,《财务总逻辑》v1.5.1):storeId 必须来自当前门店上下文。
    以前这里写死 `const STORE_ID = 'store-ontario-01'`(旗舰店)——非旗舰商家的顾客
