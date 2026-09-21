@@ -4,6 +4,7 @@
 // false = 连线上生产(**境内代理** api.jingshengyouji.com → Railway,真实数据)
 // ⚠️ 正式上传/发布前,务必把这里改回 false!
 const USE_LOCAL_SANDBOX = true // 2026-08-23 体验版 1.2.0 已传(境内号 wx247cd8ad9907430d,连生产);本地开发沙盘;上传前务必改 false
+const { realValue } = require('./placeholder-words.js')   // 11j 判据 A:占位词表两端同源(见该文件抬头)
 /* 本地沙盘地址(真机调试联通件,店主 08-23 立):
    - 开发者工具模拟器 = 跑在 Mac 上,127.0.0.1 就是 Mac,直连即可;
    - **真机调试/预览 = 跑在手机上,127.0.0.1 指的是手机自己**,永远连不到 Mac ——
@@ -321,10 +322,17 @@ function toMiniStore(store) {
        而旁边「导航·复制」「一键拨打」照样挂着,点了什么也不发生(死口)。
        店主 02y 新律「不可用即不呈现,呈现即说明」:值没有 → **整块动作不出现**。
        这里保留原样空串,由页面按空态决定出不出那一行(缺席可见律:该没有的就整块没有)。 */
-    address: store.address || '',
-    phone: store.phone || '',
-    addressText: store.address || '门店地址待补充',   // 只作展示句,不驱动动作
-    phoneText: store.phone || '门店电话待补充',
+    /* 🔴 11j 判据 A(店主 2026-09-22):种子占位值(`Address TBD` / `Phone TBD` 等)**不是数据**。
+       原来这里是 `store.address || ''` —— `'Address TBD'` 是 truthy,于是:
+         ① 它被原样印给顾客(home / store-location / checkout / booking-done / order-detail 五处);
+         ② 更坏的是 `wx:if="{{store.address}}"` 成立,**`bindtap` 跟着挂上** ——
+            顾客点「导航·复制」,复制到的是 `Address TBD`。**那正是 D108 修掉的那种死口,被占位值复活了。**
+       现在先过 `realValue()`:占位值收成空串 → `wx:if` 落空 → 走 addressText 那句如实说明,且不挂 bindtap。
+       `order.store` 也走这个函数(下面 `toMiniBooking`),所以六个出口一次修完 —— 这就是改唯一出口的理由。 */
+    address: realValue(store.address),
+    phone: realValue(store.phone),
+    addressText: realValue(store.address) || '门店地址待补充',   // 只作展示句,不驱动动作
+    phoneText: realValue(store.phone) || '门店电话待补充',
     businessHours: store.businessHours || store.business_hours || '',
     hours: store.hours || [],
     todayHours: store.todayHours || null,

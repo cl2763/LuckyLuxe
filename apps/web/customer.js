@@ -936,7 +936,7 @@ async function openStoreSwitcher() {
       ${shops.map((shop) => `
         <button class="store-switch-row ${shop.tenantId === TENANT_ID ? 'current' : ''}" data-switch-tenant="${shop.tenantId}" type="button">
           <strong>${shop.storeName || shop.name}${shop.joined ? `<em class="store-joined-tag">${state.lang === 'en' ? 'Member' : '会员'}</em>` : ''}</strong>
-          ${shop.address ? `<span>${shop.address}</span>` : ''}
+          ${window.LLPlaceholder.realValue(shop.address) ? `<span>${shop.address}</span>` : ''}
           ${shop.tenantId === TENANT_ID ? `<em>${state.lang === 'en' ? 'Current' : '当前门店'}</em>` : ''}
         </button>`).join('')}
     </div>`
@@ -964,9 +964,9 @@ function storeHoursSummary(store) {
   const closedText = closed.length ? (state.lang === 'en' ? ` · Closed ${closed.join('/')}` : ` · ${closed.join('/')}休`) : ''
   return `${time}${closedText}`
 }
+// 占位值不算数据(11j 判据 B):词表与理由都在 placeholder-words.js,这里只接出口
 function storeContactLine(store) {
-  // 种子占位值(Address TBD/Phone TBD)不算数据:显示给顾客=假信息;店主在门店设置填真值后自动出现
-  const real = (v) => (v && !/TBD/i.test(String(v)) ? v : '')
+  const real = (v) => window.LLPlaceholder.realValue(v)
   return [real(store.address), real(store.phone)].filter(Boolean).join(' · ')
 }
 
@@ -1775,7 +1775,7 @@ function renderBookingDoneWeb() {
           <p><span>${escapeHtml(c.orderNo)}</span><strong>${escapeHtml(o.publicCode || o.id)}</strong></p>
           <p><span>${escapeHtml(c.service)}</span><strong>${escapeHtml(o.service?.name || '—')}</strong></p>
           <p><span>${escapeHtml(c.arrival)}</span><strong>${escapeHtml(`${o.appointmentDate || ''} ${o.appointmentTime || ''}`.trim() || '—')}</strong></p>
-          <p><span>${escapeHtml(c.address)}</span><strong>${escapeHtml(o.store?.address || '—')}</strong></p>
+          <p><span>${escapeHtml(c.address)}</span><strong>${escapeHtml(window.LLPlaceholder.realValue(o.store?.address) || '—')}</strong></p>
           <p><span>${escapeHtml(c.paidDeposit)}</span><strong class="price">${escapeHtml(depositText(o.depositCents))}</strong></p>
         </div>`).join('')}
       <div class="row" style="gap:10px;margin-top:12px">
@@ -1810,7 +1810,7 @@ function renderOrderDetailWeb() {
           <p><span>${t('duration')}</span><strong>${order.totalDurationMin}${t('minutes')}</strong></p>
           <p><span>${t('technician')}</span><strong>${partyName(order.technician)}</strong></p>
           <p><span>${t('store')}</span><strong>${partyName(order.store)}</strong></p>
-          ${partyField(order.store, 'address') && !/TBD/i.test(partyField(order.store, 'address')) ? `<p><span>${t('address')}</span><strong>${partyField(order.store, 'address')}</strong></p>` : ''}
+          ${window.LLPlaceholder.realValue(partyField(order.store, 'address')) ? `<p><span>${t('address')}</span><strong>${partyField(order.store, 'address')}</strong></p>` : ''}
           <p><span>${t('remark')}</span><strong>${order.notes || t('none')}</strong></p>
         </div>
       </section>
