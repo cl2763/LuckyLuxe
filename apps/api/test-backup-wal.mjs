@@ -7,7 +7,7 @@
  *      正确出口一直在,真正在跑的那条却是另一条。**一件事两处真相。**
  * 这一套把「备份语境里不许出现 cp」钉死,并**现证 cp 真的会拷出废文件**(J-58⑥ 两面)。
  */
-import { readFileSync, readdirSync, copyFileSync, mkdtempSync, statSync, writeFileSync } from 'node:fs'
+import { readFileSync, readdirSync, copyFileSync, mkdtempSync, statSync, writeFileSync, existsSync } from 'node:fs'
 import { DatabaseSync } from 'node:sqlite'
 import { join, dirname } from 'node:path'
 import { tmpdir } from 'node:os'
@@ -255,6 +255,42 @@ check('⑥e 🔴 唯一出口:CLI 不许再**执行**一遍 VACUUM(`prepare(\'VA
   '还搜得到 prepare("VACUUM INTO…"),说明抄本还在')
 check('⑥f 🔴 反向守:把执行形注回去,⑥e 那把尺子必须咬得中(J-91 夹具先证明自己能揭发)',
   /prepare\(\s*[`'"]\s*VACUUM INTO/i.test("const x = db.prepare('VACUUM INTO ?').run(out)"))
+
+/* ══ ⑦ 备份文件名必须说真话(11a §〇.2)══════════════════════════════
+ * 🔴 案底:`生产库_夜16推前_20260922T0000Z.sqlite` 实际拍于 `2026-09-20T19:32:34Z` —— **差近 29 小时**。
+ * 根在 Cowork 的令文件名按「店主要睡了所以算明天」写日期(她记第 39 笔),我照着它命名。
+ * **一个会被用来挑还原目标的名字,不许是推出来的。**
+ * 唯一出口:`tools/backup-name-check.mjs`(判据与将来的备份脚本共用同一个函数)。
+ */
+const bn = await import('../../tools/backup-name-check.mjs')
+const T0 = Date.UTC(2026, 8, 21, 8, 22, 51)
+check('⑦a 🔴 造病:名字写错两天 → 必须判「在说谎」',
+  bn.nameTellsTruth('生产库_x_20260922T0000Z.sqlite', T0).ok === false)
+check('⑦b 🔴 反向守:名字准(差 10 秒)→ 必须放行(只会红不会绿的判据 = 没有判据)',
+  bn.nameTellsTruth('生产库_x_20260921T082241Z.sqlite', T0).ok === true)
+check('⑦c 名字只给到分钟(HHMM)也算数,但那一分钟必须对',
+  bn.nameTellsTruth('生产库_x_20260921T0822Z.sqlite', T0).ok === true
+  && bn.nameTellsTruth('生产库_x_20260921T0900Z.sqlite', T0).ok === false)
+check('⑦d 🔴 名字里没有时间戳 → 也判不过(没有时间戳就无法自证,不是「没问题」)',
+  bn.nameTellsTruth('生产库_随便起的名.sqlite', T0).ok === false)
+check("⑦e 🔴 第一版我只认 6 位 HHMMSS,把 `T0600Z` 读成 `000000` —— 现在 4 位也认得出",
+  bn.nameTimestamp('x_20260921T0600Z.sqlite').kind === 'HHMM'
+  && bn.nameTimestamp('x_20260921T060000Z.sqlite').kind === 'HHMMSS')
+check(`⑦f 🔴 历史豁免只许变短(现 ${bn.LEGACY_LYING_NAMES.length} ≤ 6);**今后新产生的备份一律不许进这张表**`,
+  bn.LEGACY_LYING_NAMES.length <= 6)
+
+/* ⑦g:本机真有 `backups/` 就逐份验;CI 上那个目录 gitignored 不存在 —— **明说没验成,不算绿**(J-98) */
+const BK = join(ROOT, 'backups')
+if (!existsSync(BK)) {
+  check('⑦g ⬜ 本机没有 `backups/`(CI 上它 gitignored)—— **这一条没验成**,只验了上面那把尺子本身', true,
+    '明说:不是「验过没问题」')
+} else {
+  const files = readdirSync(BK).filter((f) => f.endsWith('.sqlite'))
+  const liars = files.filter((f) => !bn.nameTellsTruth(f, statSync(join(BK, f)).mtimeMs).ok
+    && !bn.LEGACY_LYING_NAMES.includes(f))
+  check(`⑦g 🔴 \`backups/\` 现有 ${files.length} 份;**豁免之外名字说谎的 = ${liars.length}**(必须 0)`,
+    liars.length === 0, liars.join(' | '))
+}
 
 console.log(`\n1..${n}`)
 if (fails.length) { console.log(`\n🔴 ${fails.length} 条没过`); process.exitCode = 1 }

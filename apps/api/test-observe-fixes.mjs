@@ -52,8 +52,18 @@ async function main() {
   /* ===== D97:行为闭环 —— 完成单无小记=待写;写(挂单)后消行 ===== */
   const uniq = Date.now().toString(36)
   const svc = (await request('/admin/pricing/items')).data.items.filter((i) => (i.itemKind || 'main') === 'main')[0]
+  /* 🔴 11a 现场修(**同族第五处**,前四处都是「夹具把一个别人也会抢的东西写死了」):
+     原来取的是 `technicians[0]` —— **一个共享资源**。全量里它前面还跑着
+     danger-cmd / notify-scheduler / quote-state / ui-spec,同一台服务器同一个库,
+     谁先把第一位技师那个时段占了,这里就 `SLOT_UNAVAILABLE`。
+     🔴 **而它在 `ed93184`(当时 132/132 全绿那个提交)上也红** —— 说明不是哪次改动弄坏的,
+     是**日期走到了会撞的那一天**:夹具找「第一个营业日」会漂,而 `09:00` 写死不漂。
+     归族 J-97(参照系随环境变,判据把参照系写死了)。
+     改法:**给这条夹具一个自己的技师**,把共享资源变成独占资源 —— 不是把时间往后挪一小时
+     (那只是把下一次撞车推迟)。 */
+  const ownTech = await request('/admin/technicians', { method: 'POST', body: JSON.stringify({ name: `观走查专用${uniq}`, isActive: true }) })
   const techR = (await request('/admin/technicians')).data
-  const tech = (techR.technicians || techR)[0]
+  const tech = ownTech.data?.technician || (techR.technicians || techR)[0]
   /* 🔴 又一处「夹具日写死」(同族第四处;前三处 05o-2 修过)。
      原来固定用「今天」建单 —— 而夹具店周一休息,**每逢周一跑回归这一条必红**,
      报的还是完全正确的「本日为休息日」。改成:今天不营业就往后找第一个营业日。

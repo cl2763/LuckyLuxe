@@ -127,7 +127,7 @@
     "bench-selfguard": 18,
     "user-write-auth": 11,
     "env-inventory": 9,
-    "backup-wal": 24,
+    "backup-wal": 31,
     "secret-output": 15,
     "restore-fingerprint": 10,
     "signed-docs": 100,
