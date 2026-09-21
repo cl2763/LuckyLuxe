@@ -375,7 +375,7 @@ curl -s -X POST -H "authorization: Bearer owner-demo-token" -H "content-type: ap
   -d '{}' http://127.0.0.1:4128/admin/demo/full-seed > /dev/null || true
 
 # 可用 CI_SUITES="a b c" 环境变量跑子集(调试用)
-DEFAULT_SUITES="customer-service-matrix working-memory business-hours intent-guards quote-polish silent-handoff human-handoff after-sales-handoff identity-links entitlements tenant-kb finance-core finance-goals stored-value schedule-week special-dates customer-profile staff-portal admin-accounts pricing-model membership-config customer-import tenant-hygiene tenant-timezone deposit-config message-templates settlement daily-close salary-v2 schedule-v2 finance-trend finance-lock perf-viz coupon-settle audit-fix scan-sign double-sheet auth-surface currency-scan settle-stress sign-stability noshow-aftersales demo-seed-guard card-refund amend-linkage ledger-guards backend-gate hero-slides cash-notes mini-money-inputs image-placeholder deposit-audit web-settlement cross-end-effect mini-account-adjust today-board dashboard-pulse dashboard-home hours-gate crossend-cta tab-colors color-usage token-entry danger-cmd notify-scheduler quote-state ui-spec observe-fixes file-ratchet delivery-evidence store-name correction-reason credential-scan exit-code fixture-front-door wechat-stub mini-phone booking-cancel identity-claim customer-paths coupon-status web-not-signup import-phone-guard bench-selfguard user-write-auth env-inventory backup-wal secret-output restore-fingerprint demo-gate-scope demo-gate-coverage frontend-routes login-entries db-target-guard empty-pill untouched-proof display-text tenant-ownership tenant-explicit identity-tenant version-fingerprint tenant-fill-trigger conversation-log ai-gate ai-safety-lines ai-fact-gate booking-intake turn-classify turn-answer ai-review quote-tenant conversation-tenant mini-ai-same-outlet platform-login mp-home-owner v4-five-fixes repeat-guard merge-window three-stores tier-label native-dialog demo-mark txn-rollback store-jury signed-docs mp-package-size tenant-parent-scan money-endpoint-abuse cert-expiry"
+DEFAULT_SUITES="customer-service-matrix working-memory business-hours intent-guards quote-polish silent-handoff human-handoff after-sales-handoff identity-links entitlements tenant-kb finance-core finance-goals stored-value schedule-week special-dates customer-profile staff-portal admin-accounts pricing-model membership-config customer-import tenant-hygiene tenant-timezone deposit-config message-templates settlement daily-close salary-v2 schedule-v2 finance-trend finance-lock perf-viz coupon-settle audit-fix scan-sign double-sheet auth-surface currency-scan settle-stress sign-stability noshow-aftersales demo-seed-guard card-refund amend-linkage ledger-guards backend-gate hero-slides cash-notes mini-money-inputs image-placeholder deposit-audit web-settlement cross-end-effect mini-account-adjust today-board dashboard-pulse dashboard-home hours-gate crossend-cta tab-colors color-usage token-entry danger-cmd notify-scheduler quote-state ui-spec observe-fixes file-ratchet delivery-evidence store-name correction-reason credential-scan exit-code fixture-front-door wechat-stub mini-phone booking-cancel identity-claim customer-paths coupon-status web-not-signup import-phone-guard bench-selfguard user-write-auth env-inventory backup-wal secret-output restore-fingerprint demo-gate-scope demo-gate-coverage frontend-routes login-entries db-target-guard empty-pill untouched-proof display-text tenant-ownership tenant-explicit identity-tenant version-fingerprint tenant-fill-trigger conversation-log ai-gate ai-safety-lines ai-fact-gate booking-intake turn-classify turn-answer ai-review quote-tenant conversation-tenant mini-ai-same-outlet platform-login mp-home-owner v4-five-fixes repeat-guard merge-window three-stores tier-label native-dialog demo-mark txn-rollback store-jury signed-docs mp-package-size tenant-parent-scan money-endpoint-abuse cert-expiry cross-tenant-isolation"
 read -r -a SUITES <<< "${CI_SUITES:-$DEFAULT_SUITES}"
 
 # 🔴 断言基线(店主 02r 裁定一):每套跑完**就地数** `^ok ` 条数,不事后解析日志 ——
@@ -493,7 +493,7 @@ DEMO_GATE_MODES="${DEMO_GATE_MODES:-true false}"
 # 顾客端相关判据:这一档必须全部跑一遍(**只许变长**,少一条 test-demo-gate-coverage 红)
 # 🔴 裁 #72:名单不许我手挑 —— `test-demo-gate-coverage ①a` 按机制算出「该跑」并逐个对,
 #    少一套就红在「该跑没跑」上(造病已验)。这里列的是**该跑的全部 11 套 + 多跑的 4 套**。
-DEMO_GATE_SUITES="signed-docs auth-surface backend-gate booking-intake card-refund customer-profile deposit-config identity-links mini-ai-same-outlet noshow-aftersales schedule-v2 staff-portal stored-value wechat-stub mini-phone booking-cancel identity-claim customer-paths coupon-status web-not-signup import-phone-guard web-settlement cross-end-effect display-text tenant-ownership mini-account-adjust"
+DEMO_GATE_SUITES="cross-tenant-isolation signed-docs auth-surface backend-gate booking-intake card-refund customer-profile deposit-config identity-links mini-ai-same-outlet noshow-aftersales schedule-v2 staff-portal stored-value wechat-stub mini-phone booking-cancel identity-claim customer-paths coupon-status web-not-signup import-phone-guard web-settlement cross-end-effect display-text tenant-ownership mini-account-adjust"
 : > /tmp/ll-demo-gate-modes.txt
 echo "true" >> /tmp/ll-demo-gate-modes.txt
 if printf '%s' "$DEMO_GATE_MODES" | grep -q false; then
@@ -702,7 +702,14 @@ fi
 # `tools/ci-seed-sandbox.sh` 种好了,再出现「未跑」就说明种子坏了或判据依赖变了,
 # 那是要人看的事,不是可以攒着的额度。
 NOT_RUN_CAP=${REGRESSION_NOT_RUN_CAP:-0}
-NOT_RUN_N=$(grep -c . "$NOT_RUN_FILE" 2>/dev/null || echo 0)
+# 🔴 不许写成 `grep -c . f || echo 0`:空文件时 grep 打印 "0" 且退出码 1,`||` 再补一个 "0",
+#    变量变成两行 "0\n0",下面的 `[ -gt ]` 直接报 integer expression expected —— 闸在报错,不在判。
+#    (2026-09-22 复现实测:N>0 时 grep 退出 0、`||` 不触发,红那条路是通的;只有 N=0 会变成 "0\n0",
+#     比较退出码 2、靠「比较出错 ⇒ if 为假」碰巧落到绿分支 —— 结论对,但那是碰巧对的,
+#     而且每一次全绿跑都在刷两行 integer expression expected。判据出错不许当没看见。)
+NOT_RUN_N=$(grep -c . "$NOT_RUN_FILE" 2>/dev/null || true)
+NOT_RUN_N=$(printf '%s' "${NOT_RUN_N:-0}" | tr -dc '0-9')
+NOT_RUN_N=${NOT_RUN_N:-0}
 NOT_RUN_LIST=$(tr '\n' ' ' < "$NOT_RUN_FILE" 2>/dev/null | sed 's/ *$//')
 if [ "${NOT_RUN_N:-0}" -gt 0 ]; then
   echo "⏳ 未跑 ${NOT_RUN_N} 套(拿不到夹具):${NOT_RUN_LIST}"

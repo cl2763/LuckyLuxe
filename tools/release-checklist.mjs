@@ -145,6 +145,25 @@ const rows = [
   ['13', '`styles.css` 写死色', `现测 **${styleLits}** 处${AT}`, '同上', '🟡 长期'],
   ['14', '两页「钉浅色」的钉子', '`platform.html` / `sign.html` 各一颗 `data-theme="light"`(判据锁死只许 2 颗)',
     'D188 整页双档化时拆掉', '🟡 D188'],
+  /* 🔴 11i §一:店主原话「一定要确保租户不要篡位,会员档案不要串味,**这是最严重的**」。
+     这一条进推前清单,是因为它是这个产品最贵的一条护栏 —— 推之前必须看见它是绿的。 */
+  ['16', '🔴 **跨店隔离总验**', (() => {
+    const f = 'apps/api/test-cross-tenant-isolation.mjs'
+    if (!existsSync(f)) return '🔴 **套件不在**'
+    const src = readFileSync(f, 'utf8')
+    const n = (src.match(/^\s*check\(/gm) || []).length
+    const pos = (src.match(/阳性对照/g) || []).length
+    const inReg = readFileSync('apps/api/run-all-tests.sh', 'utf8').includes('cross-tenant-isolation')
+    /* 判据五(计数即证):源码里的 `check(` 调用点会比实跑条数少 —— ⑤ 组是一个 check( 在 for 里跑三遍。
+       差额别在这里猜(第一版拿正则去认 for 块,嵌套的 `]` 直接把它骗了,算出来跟静态数一样,
+       等于这行字什么也没证明)。改成**读套件自己声明的那个数** —— 套件里有 EXPECTED_CHECKS,
+       跑的时候它自己对,对不上就红。这里只负责把它显示出来,并守住「这个声明还在」。 */
+    const m = src.match(/const EXPECTED_CHECKS = (\d+)/)
+    const declared = m ? Number(m[1]) : null
+    if (declared === null) return `🔴 **套件没有声明 EXPECTED_CHECKS** —— 条数没人守(判据五)`
+    return `套件在 · 实跑 ${declared} 条(套件自己守住这个数,对不上就红)· 源码 ${n} 个 check( 调用点 · 其中 ${pos} 处写明阳性对照 · 进回归=${inReg ? '是' : '🔴 否'}`
+  })(),
+    '推之前它必须绿。**每一条「拒」都要有阳性对照** —— 没有阳性对照的「拒」不算数(J-58①)', '🔴 每批'],
   ['15', '登录态那几页的覆盖', '**夜8 已补齐 13/13,没扫 0**(06i 时是 11/13:`结算页` 卡在夹具把 technician 塞成 null、`门店信息` 的到达 marker 写错 —— 两处都是夹具/判据自己的毛病,不是产品缺东西)',
     '这一条已经清了;下一步是把那 13 页的乙档欠账收掉(见第 11 行)', '✅ 已清(夜8)'],
 ]
