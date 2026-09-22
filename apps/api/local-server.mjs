@@ -46,6 +46,7 @@ import { createWecomRecord } from './wecom-record.mjs'
 import { createAiRetouchGate } from './ai-retouch-gate.mjs'
 import { createPlatformTenantConfig } from './platform-tenant-config.mjs'
 import { createTenantPublicUrl } from './tenant-public-url.mjs'
+import { createOnboardingSteps } from './onboarding-steps.mjs'
 import { createBookingGuards } from './booking-guards.mjs'
 import { createBookingIntake, hasBookingSignal, parseDate as parseBookingDate } from './booking-intake.mjs'
 import { humanDate } from './date-human.mjs'
@@ -6671,6 +6672,7 @@ const { storedValueBalanceCents, insertStoredValueTransaction, storedValueOvervi
 const { MEMBER_QUALIFY_MODES, DEFAULT_MEMBERSHIP_CONFIG, getMembershipConfig, setMembershipConfig, customerTotalSpendCents, isMemberOf } = createMembershipConfig({
   db, iso, currentTenantId, storedValueBalanceDetail: (u, t) => storedValueBalanceDetail(u, t)
 , apiError })
+const onboardingSteps = createOnboardingSteps({ db, json, apiError, localParts, localDateTime, iso })   // D197 第一段:五步灯(灯与句子都在后端出)
 const platformTenantConfig = createPlatformTenantConfig({ db, json, apiError, readBody, wecomRouting, aiRetouchGate, getMembershipConfig, setMembershipConfig, MEMBER_QUALIFY_MODES })
 const staffScope = createStaffScope({
   db, apiError, currentTenantId, bookingStatusText,
@@ -12644,14 +12646,7 @@ async function route(req, res) {
     return platformSessions.verify({ cookieHeader: req.headers.cookie, userAgent: req.headers['user-agent'] })
   }
   const isHttps = () => String(req.headers['x-forwarded-proto'] || '').split(',')[0].trim() === 'https'   // set-cookie 的 Secure 位
-  if (req.method === 'GET' && path === '/platform/overview') {
-    if (!isPlatform()) throw apiError(401, 'UNAUTHORIZED', 'Platform token required.')
-    const monthStart = `${localParts(new Date()).date.slice(0, 7)}-01`
-    const monthBookings = db.prepare('SELECT COUNT(*) AS n FROM bookings WHERE appointment_start >= ?').get(iso(localDateTime(monthStart, '00:00'))).n
-    const pendingConfig = db.prepare(`SELECT t.id, t.name FROM tenants t WHERE t.status = 'active'
-      AND NOT EXISTS (SELECT 1 FROM services s WHERE s.tenant_id = t.id AND s.is_active = 1)`).all()
-    return json(res, 200, { monthBookings, pendingConfig: pendingConfig.map((r) => ({ id: r.id, name: r.name })) })
-  }
+  { const hit = await onboardingSteps.overviewRoute({ req, res, path, isPlatform }); if (hit) return hit }   // 平台概览整条口住在 onboarding-steps.mjs(公约②)
   // ===== 平台端·套餐计费(2026-08-03):档位/到期/订单/申请 一站管理;「标记已收款」=线下收款的正式路径 =====
   if (req.method === 'GET' && path === '/platform/billing') {
     if (!isPlatform()) throw apiError(401, 'UNAUTHORIZED', 'Platform token required.')

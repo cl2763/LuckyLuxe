@@ -129,6 +129,13 @@
         <div class="met"><div class="l">本月平台订单</div><div class="v" id="mMonth">-</div><div class="s">全部商家合计</div></div>
         <div class="met"><div class="l">待配置商家</div><div class="v" id="mPending">-</div><div class="s">缺价目表</div></div>
       </div>
+      <!-- 🔴 D197 第一段(店主 11s补 §〇:「我看不出商家配置到哪一环」):
+           五步状态栏。**灯与句子全部由后端出,这里零判断、零拼串**(和 aiLabel 同款)——
+           否则「怎么算配好了」会在两端各写一份,迟早分叉。
+           第五盏「上线检查」恒灰:提审清单只活在文档里,没有机器可读的来源,
+           **没有数据源的灯不许亮**(亮绿是撒谎,亮红是冤枉)。 -->
+      <div class="card"><h2>配置进度<small class="muted" style="font-weight:400;margin-left:8px">每家真店配到哪一环</small></h2>
+        <div id="progressList"><div class="muted">载入中…</div></div></div>
       <div class="card"><h2>待办</h2><div id="todoList"><div class="muted">暂无待办</div></div></div>
       <div class="card">
         <h2>商家速览</h2>
@@ -634,6 +641,20 @@ async function loadOverview(){
     $('mLeads').textContent=newLeads.length
     $('mMonth').textContent=ov.monthBookings
     $('mPending').textContent=(ov.pendingConfig||[]).length
+    // D197:配置进度。state/label/note/summary 全是后端给的,这里只贴
+    const DOT={done:'#26794c',pending:'#b0946880',blocked:'#b3413a',unavailable:'#c9c2b8'}
+    $('progressList').innerHTML=(ov.progress||[]).length?(ov.progress||[]).map(p=>`
+      <div class="todo-item" style="flex-direction:column;align-items:stretch;gap:6px">
+        <div style="display:flex;justify-content:space-between;align-items:center">
+          <b>${esc(p.name)}</b>
+          <span class="muted">${p.doneCount}/${p.totalCount} 环</span>
+        </div>
+        <div style="display:flex;gap:6px;flex-wrap:wrap">
+          ${(p.steps||[]).map(st=>`<span title="${esc(st.note)}" style="display:inline-flex;align-items:center;gap:4px;padding:2px 8px;border-radius:999px;background:#0000000a;font-size:12px">
+            <i style="width:8px;height:8px;border-radius:50%;background:${DOT[st.state]||'#ccc'};display:inline-block"></i>${esc(st.label)}</span>`).join('')}
+        </div>
+        <div class="muted" style="font-size:12px">${esc(p.summary)}</div>
+      </div>`).join(''):'<div class="muted">还没有真店</div>'
     // 待办
     const todos=[]
     newLeads.slice(0,3).forEach(l=>todos.push(`<div class="todo-item"><span>📥 新线索「${esc(l.shopName)}」${l.contactName?'('+esc(l.contactName)+')':''} 待联系</span><button class="sm p" onclick="nav('leads')">去处理</button></div>`))

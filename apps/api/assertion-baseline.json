@@ -140,7 +140,8 @@
     "tenant-create-front-door": 46,
     "ai-retouch-gate": 26,
     "platform-bootstrap": 24,
-    "service-import-tiers": 25
+    "service-import-tiers": 25,
+    "onboarding-steps": 21
   },
   "上次更新": "2026-09-02",
   "巨型文件历史最低": {

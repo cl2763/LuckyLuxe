@@ -17,7 +17,20 @@ import { SAMPLES, PROBE_DIR } from '../../tools/probe-samples/index.mjs'
 import { serverSources } from '../../tools/readset.mjs'
 
 const ROOT = join(dirname(fileURLToPath(import.meta.url)), '../..')
-const serverSrc = readFileSync(join(ROOT, 'apps/api/local-server.mjs'), 'utf8')
+/* 🔴 扫描面跟着被测物走(㋙D 同族纪律):按《代码结构公约》②「边改边拆」,
+   平台端那几条口陆续搬进了独立模块(`platform-tenant-config` / `onboarding-steps` /
+   `import-services` / `dashboard-pulse`)。这一套原来只读 `local-server.mjs` ——
+   **路由搬出去一条,它就少扫一条,而下限那条判据会因此红**。
+   红是对的(它正是为此设的),但**该改的是扫描面,不是把下限调低**。
+   下限一个字没动:240。 */
+const ROUTE_FILES = [
+  'apps/api/local-server.mjs',
+  'apps/api/platform-tenant-config.mjs',
+  'apps/api/onboarding-steps.mjs',
+  'apps/api/import-services.mjs',
+  'apps/api/dashboard-pulse.mjs',
+]
+const serverSrc = ROUTE_FILES.map((f) => readFileSync(join(ROOT, f), 'utf8')).join('\n')
 const modSrc = serverSources(join(ROOT, 'apps/api'))
 let n = 0
 const fails = []
