@@ -157,7 +157,69 @@ check('④c 🔴 **回落仍在**:不传时区 → 不是 Asia/Shanghai(先要�
     (srv.match(/Math\.max\(Date\.now\(\), tenant\?\.plan_expires_at \? new Date\(tenant\.plan_expires_at\)\.getTime\(\) : 0\)/g) || []).length >= 2)
 }
 
-const EXPECTED_CHECKS = 35
+/* ══ ⑥ 对外域名按租户出(店主 11p §三)══
+ *
+ * `APP_PUBLIC_URL` 原来是**一个全局常量**:所有店的推荐/签署/绑定链接都用它。
+ * 两家真店要落在两个域上(境内已备案的 app 子域 / 境外原域),一个常量表达不了 ——
+ * **小婕的顾客会收到一条境外域名的签署链接,而系统不会有任何报错。**
+ * 🔴 三处链接全走 `publicAppUrl()` 这一个出口,判据钉住「没有谁再直接读那个常量」。 */
+{
+  const srv2 = codeOnly(read('apps/api/local-server.mjs'))
+  const mod = read('apps/api/tenant-public-url.mjs')
+  check('⑥a 唯一出口件在,两个域各有名字(别处引名字,不引字面量)',
+    /export const DOMAIN_CN = 'https:\/\/app\.jingshengyouji\.com'/.test(mod)
+    && /export const DOMAIN_INTL = 'https:\/\/www\.luckyluxeatelier\.com'/.test(mod))
+  /* 🔴 三处用处逐个钉 —— 漏一处就是「有一条链接还用着全局常量」,而那一条不会报错 */
+  for (const [re, label] of [
+    [/referralUrl: `\$\{publicAppUrl\(tenantId\)\}\/\?ref=/, '推荐链接 /?ref=(且把 tenantId 传了进去)'],
+    [/return `\$\{publicAppUrl\(\)\}\/sign\?t=/, '签署链接 /sign?t='],
+    [/url: `\$\{publicAppUrl\(\)\}\/bind\?t=/, '绑定链接 /bind?t='],
+  ]) check(`⑥b 走唯一出口:${label}`, re.test(srv2), label)
+  /* 🔴 全仓零残留:除了定义那一行与两个 fallback,不许谁再直接读 APP_PUBLIC_URL 去拼链接 */
+  const raw = (srv2.match(/\$\{APP_PUBLIC_URL\}/g) || []).length
+  check('⑥c 🔴 **零残留**:没有任何一处再用 `${APP_PUBLIC_URL}` 直接拼链接', raw === 0, String(raw))
+
+  /* ══ 行为层:两家店各建一个,各签一条链接,域名必须对得上 ══ */
+  const cn = `dom-cn-${Date.now().toString(36)}`
+  const intl = `dom-intl-${Date.now().toString(36)}`
+  const x = `dom-x-${Date.now().toString(36)}`
+  const mk = (id, cur, tz, extra = {}) => req('/platform/tenants', {
+    method: 'POST',
+    body: JSON.stringify({ name: `域名验店 ${id}`, id, plan: 'free', initialTerm: 'trial30', currency: cur, timezone: tz, ...extra }),
+  })
+  check('⑥d 夹具:三家店建成', (await mk(cn, 'CNY', 'Asia/Shanghai')).status === 201
+    && (await mk(intl, 'CAD', 'America/Toronto')).status === 201
+    && (await mk(x, 'CNY', 'Asia/Shanghai', { publicDomain: 'intl' })).status === 201)
+  /* 🔴 推荐链接住在 `serializeUser` 里,而**只有顾客自己读自己那条口会走它**
+     (`/admin/customers` 走的是另一份投影,没有 referralUrl —— 我第一版取错了口,夹具自证当场红)。
+     所以走顾客正门登录再读 `/users/:id`(J-60:夹具走正门),
+     用真实端到端路径取值 —— 模块函数对了不等于链接上的域名对了。 */
+  const { loginCustomerViaFrontDoor } = await import('./customer-login-fixture.mjs')
+  const refOf = async (tid) => {
+    /* 登录响应本身就带 `user`(已经过 `serializeUser`)—— 少一次请求,也少一处会取错的字段名。
+       ⚠️ 字段叫 `accessToken` 不是 `token`:我第一版写了 `who.token`,取到 undefined,夹具自证当场红。 */
+    const who = await loginCustomerViaFrontDoor({ base: BASE, tenantId: tid, openid: `domprobe-${tid}` })
+    if (!who.ok || !who.user) return `(登录失败 ${who.status} ${JSON.stringify(who.body).slice(0, 90)})`
+    return String(who.user.referralUrl || '')
+  }
+  const cnUrl = await refOf(cn)
+  const intlUrl = await refOf(intl)
+  const xUrl = await refOf(x)
+  /* 取不到就红,不静默跳过(判据五:被条件块包住的断言,取不到前置就红) */
+  check('⑥e 夹具有效:三家店都取到了推荐链接(取不到就没法验域名)',
+    Boolean(cnUrl && intlUrl && xUrl), JSON.stringify({ cnUrl, intlUrl, xUrl }))
+  check('⑥f 🔴 **境内店(CNY,没显式选)⇒ app.jingshengyouji.com**',
+    cnUrl.startsWith('https://app.jingshengyouji.com'), cnUrl)
+  check('⑥g 🟢 **阳性对照**:境外店(CAD)**不是**那个域 —— 证明 ⑥f 不是「所有店都返回同一个域」',
+    Boolean(intlUrl) && !intlUrl.startsWith('https://app.jingshengyouji.com'), intlUrl)
+  check('⑥h 🔴 显式选覆盖币种推断:CNY 的店选了境外 ⇒ 拿到境外域',
+    xUrl.startsWith('https://www.luckyluxeatelier.com'), xUrl)
+  check('⑥i 平台建店表单有「对外域名」下拉,且 POST 真带上了',
+    read('apps/web/platform.html').includes('id="mDomain"')
+    && /publicDomain:\$\('mDomain'\)\.value/.test(codeOnly(read('apps/web/platform.html'))))
+}
+
+const EXPECTED_CHECKS = 46
 if (checks !== EXPECTED_CHECKS) {
   console.error(`not ok - 🔴 断言条数对不上:实跑 ${checks} 条,应为 ${EXPECTED_CHECKS} 条(判据五)。`)
   process.exit(1)

@@ -55,15 +55,54 @@ export function createPlatformAuth({ db, randomId, iso, createHash }) {
 
   /** 自举第一个平台账号。**幂等按「建过没有」判**(幂等判据律:不看密码还对不对)。
    *  @returns {{ created: boolean, username: string, initialPassword: string|null }} */
-  function bootstrapPlatformAdmin(username = 'platform-admin') {
+  /* 🔴 交付纪律 8:列一律走 try/catch ALTER —— 只写进 CREATE TABLE 等于只对全新库生效,
+     老库(含生产)不会跟上,而这一列正是「重置只生效一次」的判据地基。 */
+  try { db.exec('ALTER TABLE platform_accounts ADD COLUMN reset_marker TEXT') } catch (e) { /* 已有 */ }
+
+  /* 🔴 口令由调用方传进来(乙支:来自环境变量,店主亲手灌)。
+     **这里不再 `randomPassword()`** —— 不生成,就没有「一次性口令」这个需要找地方放的东西。
+     幂等按「建过没有」判(幂等判据律):建过就一个字不动,重启一百次也不换密码。 */
+  function bootstrapPlatformAdmin(username = 'platform-admin', initialPassword = '') {
     const had = db.prepare('SELECT id FROM platform_accounts WHERE username = ?').get(username)
     if (had) return { created: false, username, initialPassword: null }
-    const initialPassword = randomPassword()
+    if (!initialPassword) return { created: false, username, initialPassword: null, reason: 'no-password' }
     const now = iso(new Date())
     db.prepare(`INSERT INTO platform_accounts (id, username, display_name, password_hash, must_change_password, status, created_at, updated_at)
       VALUES (?, ?, '平台运营', ?, 1, 'active', ?, ?)`)
       .run(randomId('pacct'), username, hash(username, initialPassword), now, now)
     return { created: true, username, initialPassword }
+  }
+
+  /* ══ 🔴 「以后忘了密码怎么办」(店主 11p §二)—— 同一条路加一把 ══
+   *
+   * `PLATFORM_ADMIN_RESET=1` + 新口令 ⇒ 重写哈希、首登强制改密、**作废它所有会话**。
+   *
+   * 🔴 幂等按「**做过没有**」判,不按「现在是什么」判(幂等判据律,店主 08-25 立):
+   *    把新口令的 sha256 记进 `reset_marker`,同一个值第二次启动**不再生效** ——
+   *    否则店主忘了把 `RESET=1` 删掉,以后每次重启都会把她**自己改过的新密码**打回那一串,
+   *    而她完全看不出为什么密码老是变回去。
+   * 🔴 记的是 **sha256(值)**,不是值本身:它只用来回答「这次和上次是不是同一串」,
+   *    永远不需要读回原文。(值、长度、前缀一律不出现在任何输出里。) */
+  function resetPlatformAdmin(username, newPassword, logger = console) {
+    const row = db.prepare('SELECT * FROM platform_accounts WHERE username = ?').get(username)
+    if (!row) {
+      logger.log(`[platform] 重置平台账号:**该账号不存在,未动**(要新建请用 PLATFORM_ADMIN_BOOTSTRAP=1)。`)
+      return { created: false, username, initialPassword: null }
+    }
+    const marker = createHash('sha256').update(String(newPassword)).digest('hex')
+    if (row.reset_marker === marker) {
+      logger.log('[platform] 重置平台账号:**同一个口令已经生效过,本次不动**(幂等)。'
+        + '要再重置请换一串新的;用完记得把 PLATFORM_ADMIN_RESET 删掉。')
+      return { created: false, username, initialPassword: null, alreadyApplied: true }
+    }
+    const now = iso(new Date())
+    db.prepare('UPDATE platform_accounts SET password_hash = ?, must_change_password = 1, reset_marker = ?, updated_at = ? WHERE id = ?')
+      .run(hash(username, newPassword), marker, now, row.id)
+    /* 旧会话一律作废 —— 重置的意义就是「之前登着的那些不算数了」 */
+    const gone = db.prepare('DELETE FROM platform_auth_sessions WHERE account_id = ?').run(row.id)
+    logger.log(`[platform] 已重置平台账号 ${username}(首登强制改密,吊销旧会话 ${gone.changes} 个)。`
+      + '🔴 口令**未输出、也未落盘** —— 它只存在于你设的那个环境变量里。')
+    return { created: false, username, initialPassword: null, reset: true, revokedSessions: gone.changes }
   }
 
   /** 用户名 + 密码换一张会话。密码不对一律 401,**不告诉对方错在用户名还是密码**。 */
@@ -174,13 +213,36 @@ export function createPlatformAuth({ db, randomId, iso, createHash }) {
      * 要开:显式 `PLATFORM_ADMIN_BOOTSTRAP=1`(判据②层就是这么开的)。
      * 乙支真要落地时,连着 D149 密码登录一起设计:口令从环境变量来、店主亲手灌,
      * 代码不生成不打印不拷贝,读不到就拒绝启动。 */
-    if (String(process.env.PLATFORM_ADMIN_BOOTSTRAP || '') !== '1') {
-      logger.log('[platform] 自举平台账号:**本次未建**(D203 甲支,默认关)。'
-        + '平台后台现走 OWNER_TOKEN;要建请显式设 PLATFORM_ADMIN_BOOTSTRAP=1。')
+    /* ══ 🔴 乙支落地(店主 11p §二 选的那一支,2026-09-23)══
+     *
+     * 店主原话:「平台控制台账号密码我找不到了,给我重置,我登不进去。」
+     * 现查:**生产库 `platform_accounts` = 0 行** —— 所以这不是「重置」,是**这个账号从来没存在过**。
+     * D203 当时把自举默认关了,理由是一次性口令会进 Railway 部署日志且删不掉,
+     * 并明写「(乙)一旦定下,走环境变量那条:店主亲手生成与灌入,代码不生成、不打印、不拷贝」。
+     * **今天这句话就是选了乙。**
+     *
+     * 🔴 与 `WECHAT_MINI_TOKEN_SECRET` 同族的三条,一条不减:
+     *   ① 口令**只从环境变量来** —— 代码不 `randomPassword()`,不生成就没有「一次性口令」这个东西;
+     *   ② **不许回落**:开关开着但没给口令 ⇒ **不建**,不是「那就随机一个」(那等于回到 D203 之前);
+     *   ③ 日志只说「建了 / 没建 / 为什么没建」,**值、长度、前缀、哈希一律不出现**。 */
+    const BOOT = String(process.env.PLATFORM_ADMIN_BOOTSTRAP || '') === '1'
+    const RESET = String(process.env.PLATFORM_ADMIN_RESET || '') === '1'
+    const PW = String(process.env.PLATFORM_ADMIN_INITIAL_PASSWORD || '')
+    if (!BOOT && !RESET) {
+      logger.log('[platform] 自举平台账号:**本次未建**(默认关)。'
+        + '要建请显式设 PLATFORM_ADMIN_BOOTSTRAP=1 与 PLATFORM_ADMIN_INITIAL_PASSWORD=<你自己生成的一串>。')
+      return { created: false, username: 'platform-admin', initialPassword: null }
+    }
+    if (!PW) {
+      /* 🔴 这一句是乙支的核心:**开关开着、口令没给 ⇒ 什么也不做。**
+         不回落成随机口令 —— 随机口令要么进日志(D203 那个病),要么没人拿得到(等于没建)。 */
+      logger.log('[platform] 自举/重置平台账号:**缺初始口令,未建也未改**。'
+        + '请设 PLATFORM_ADMIN_INITIAL_PASSWORD 后重启(代码不会替你生成一个)。')
       return { created: false, username: 'platform-admin', initialPassword: null }
     }
     try {
-      const boot = bootstrapPlatformAdmin('platform-admin')
+      if (RESET) return resetPlatformAdmin('platform-admin', PW, logger)
+      const boot = bootstrapPlatformAdmin('platform-admin', PW)
       /* 🔴 只报「建了没有」,不报口令。**连长度、前缀、哈希都不报** ——
          那些都是「拿值去猜值」的入口,而这一行的唯一职责是让人知道这件事发生过。 */
       if (boot.created) {

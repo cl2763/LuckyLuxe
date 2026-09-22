@@ -151,6 +151,9 @@
                   让点的人选一次,比让系统猜一次便宜一万倍。 -->
           <select id="mCurrency"><option value="" selected>币种(必选)</option><option value="CNY">CNY 人民币 ¥</option><option value="CAD">CAD 加元 $</option></select>
           <select id="mTz"><option value="" selected>时区(必选)</option><option value="Asia/Shanghai">Asia/Shanghai(北京)</option><option value="America/Toronto">America/Toronto(多伦多)</option></select>
+          <!-- 🔴 11p §三:对外域名按店走。推荐链接/签署链接/绑定链接三处都用它。
+               留空=按币种推(CNY⇒境内),所以这一个**可以不选**;要例外才显式选。 -->
+          <select id="mDomain"><option value="" selected>对外域名(默认跟币种)</option><option value="cn">境内 app.jingshengyouji.com</option><option value="intl">境外 www.luckyluxeatelier.com</option></select>
           <input id="mCity" placeholder="地址(选填)" style="width:200px">
           <input id="mPhone" placeholder="门店电话(选填)" style="width:140px">
           <select id="mPlan"><option value="free">免费版 ¥0</option><option value="single" selected>单店版 ¥1,380/年</option><option value="studio">工作室版 ¥2,980/年</option><option value="chain">连锁版 ¥6,800/年起</option><option value="custom">定制版(面议)</option></select>
@@ -711,10 +714,10 @@ async function createTenant(){
   try{
     const isDemo=$('mIsDemo').checked
     if(isDemo&&!confirm('确认建成【演示店】?\n它的账本不受"只追加"保护(可整体重置),对外不能拿它说"账本不可篡改"。')){return}
-    const d=await api('/platform/tenants',{method:'POST',body:JSON.stringify({name,city:$('mCity').value.trim(),phone:$('mPhone').value.trim(),currency,timezone,plan:$('mPlan').value,initialTerm:$('mTerm').value,id:$('mId').value.trim(),isDemo})})
+    const d=await api('/platform/tenants',{method:'POST',body:JSON.stringify({name,city:$('mCity').value.trim(),phone:$('mPhone').value.trim(),currency,timezone,publicDomain:$('mDomain').value,plan:$('mPlan').value,initialTerm:$('mTerm').value,id:$('mId').value.trim(),isDemo})})
     $('credBox').classList.remove('hidden')
     $('credBox').innerHTML=`✅ <b>${esc(d.tenant.name)}</b>(${esc(d.tenant.id)})已创建,订阅到期日 <b>${esc(String(d.tenant.planExpiresAt||'').slice(0,10))}</b>(套餐计费页可改)<br>老板账号:<b>${esc(d.owner.username)}</b> 初始密码:<b>${esc(d.owner.initialPassword)}</b>(只显示一次;商家控制台开放前账号暂不可登录)<br>店码 scene:<b>${esc(d.shopEntry.scene)}</b> · <a href="javascript:void(0)" onclick="goConfig('${esc(d.tenant.id)}')">→ 去替商家配置资料</a>`
-    $('mName').value=$('mCity').value=$('mPhone').value=$('mId').value='';$('mCurrency').value=$('mTz').value='';$('mIsDemo').checked=false
+    $('mName').value=$('mCity').value=$('mPhone').value=$('mId').value='';$('mCurrency').value=$('mTz').value=$('mDomain').value='';$('mIsDemo').checked=false
     loadTenants()
   }catch(e){toast(e.message)}
 }

@@ -45,6 +45,7 @@ import { createAiReviewRoutes } from './ai-review-routes.mjs'
 import { createWecomRecord } from './wecom-record.mjs'
 import { createAiRetouchGate } from './ai-retouch-gate.mjs'
 import { createPlatformTenantConfig } from './platform-tenant-config.mjs'
+import { createTenantPublicUrl } from './tenant-public-url.mjs'
 import { createBookingGuards } from './booking-guards.mjs'
 import { createBookingIntake, hasBookingSignal, parseDate as parseBookingDate } from './booking-intake.mjs'
 import { humanDate } from './date-human.mjs'
@@ -1423,17 +1424,15 @@ function parseJson2(value) {
   }
 }
 
-function publicAppUrl() {
-  return APP_PUBLIC_URL || 'https://www.luckyluxeatelier.com'
-}
+/* 🔴 11p §三:对外域名按租户出;三处链接全走这一个出口(理由与取值顺序见 tenant-public-url.mjs) */
+const tenantPublicUrl = createTenantPublicUrl({
+  db, currentTenantId, fallbackUrl: () => APP_PUBLIC_URL,
+  localUrl: () => (process.env.APP_PUBLIC_URL || `http://127.0.0.1:${PORT}`),
+})
 
-function customerAppUrl() {
-  return (process.env.APP_PUBLIC_URL || `http://127.0.0.1:${PORT}`).replace(/\/$/, '')
-}
-
-function wechatWebhookUrl() {
-  return `${publicAppUrl()}/wechat/customer-service/webhook`
-}
+const publicAppUrl = (tenantId) => tenantPublicUrl.publicUrlOf(tenantId)
+const customerAppUrl = () => tenantPublicUrl.customerUrl()
+const wechatWebhookUrl = () => tenantPublicUrl.wechatWebhookUrl()
 
 function sha1Signature(parts = []) {
   return createHash('sha1')
@@ -5463,7 +5462,7 @@ function serializeUser(user, tenantId = DEFAULT_TENANT_ID) {
     visits: visitDaysCount(user.id, tenantId), // 裁A:三读方唯一出口(stats.visits 旧口径=COMPLETED 单数,售后单漏计)
     memberCode,
     referralCode: memberCode.replace('LL-', 'REF-'),
-    referralUrl: `${APP_PUBLIC_URL}/?ref=${encodeURIComponent(memberCode.replace('LL-', 'REF-'))}`
+    referralUrl: `${publicAppUrl(tenantId)}/?ref=${encodeURIComponent(memberCode.replace('LL-', 'REF-'))}`   // 11p §三:这里手上就有 tenantId,必须传——不传会落回 currentTenantId(),而登录那一刻它未必是这家店
   }
 }
 
@@ -10045,7 +10044,7 @@ function activeSignToken(settlementId) {
 }
 
 function signTokenUrl(token) {
-  return `${APP_PUBLIC_URL}/sign?t=${encodeURIComponent(token)}`
+  return `${publicAppUrl()}/sign?t=${encodeURIComponent(token)}`
 }
 
 /* 屏 S3 状态行(规则④):等待顾客进入 → 顾客核对中 → 已签署。
@@ -12896,6 +12895,7 @@ async function route(req, res) {
     db.prepare('INSERT INTO stores (id, name, name_en, address, phone, timezone, currency, is_active, tenant_id) VALUES (?, ?, ?, ?, ?, ?, ?, 1, ?)')
       .run(`store-${id}`, name.slice(0, 60), String(body.nameEn || '').slice(0, 60) || null, String(body.city || '').slice(0, 80), String(body.phone || '').slice(0, 30),
         String(body.timezone || APP_TIMEZONE).slice(0, 64), String(body.currency || 'CAD').toUpperCase().slice(0, 6), id)
+    if (body.publicDomain) tenantPublicUrl.setDomainChoice(id, body.publicDomain)   // 11p §三:不选就按币种推,理由见 tenant-public-url.mjs
     // 分类唯一真相律③:建店即落平台三大类(起点,不是上限;商家可再细分)
     try { pricingCategoryApi.seedDefaults(id, platformCategories()) } catch (e) { console.warn('[建店] 默认大类铺设失败(不阻塞):', e.message) }
     invalidateTenantTimezone(id)
@@ -15273,7 +15273,7 @@ async function route(req, res) {
       VALUES (?, ?, ?, 'active', ?, ?, ?)`).run(token, currentTenantId(), uid, expiresAt, adminSession.email || adminSession.role || 'admin', now)
     return json(res, 201, {
       token, expiresAt,
-      url: `${APP_PUBLIC_URL}/bind?t=${encodeURIComponent(token)}`,
+      url: `${publicAppUrl()}/bind?t=${encodeURIComponent(token)}`,
       pagePath: `/pages/bind/index?token=${encodeURIComponent(token)}`,
       displayName: u.display_name || '顾客',
       hint: '请顾客扫码完成绑定——只绑定,不会进入签署、看不到结算单'

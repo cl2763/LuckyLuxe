@@ -137,13 +137,14 @@
     "cert-expiry": 9,
     "cross-tenant-isolation": 23,
     "store-placeholder": 55,
-    "tenant-create-front-door": 35,
-    "ai-retouch-gate": 26
+    "tenant-create-front-door": 46,
+    "ai-retouch-gate": 26,
+    "platform-bootstrap": 24
   },
   "上次更新": "2026-09-02",
   "巨型文件历史最低": {
     "说明": "棘轮双基线(店主 09-08 裁,05r 补三):预检取 min(上一提交行数, 这里记的历史最低)。只许写小不许写大 —— 写大预检自己红。治的是「红着提交一次,下一次基线跟着抬」那个口子。",
-    "apps/api/local-server.mjs": 17539,
+    "apps/api/local-server.mjs": 17527,
     "apps/web/admin.js": 7893
   },
   "小程序档_移出主档_2026-09-14": {

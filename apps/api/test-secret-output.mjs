@@ -150,7 +150,12 @@ const bootLog = await new Promise((resolve) => {
     /* 🔴 `PLATFORM_ADMIN_BOOTSTRAP=1` 是**故意打开**的:D203 甲支之后自举默认关,
        而这一层要验的正是「**真建一次**的时候口令进不进日志」。
        不打开的话 ②b 那个 0 就是「这条路没跑」,不是「跑了没泄漏」—— J-58①。 */
-    env: { ...process.env, DATA_DIR: dir, PORT: '4139', PLATFORM_ADMIN_BOOTSTRAP: '1' },
+    /* 🔴 11p 乙支之后:自举**还要一个口令**才会建(开关开着但没给口令 ⇒ 不建,不回落成随机口令)。
+       这一套要的是「真建出来了,再验日志里没有口令形状的串」——
+       所以这里给一串**明显的测试口令**;②b 扫的就是它会不会漏出来。
+       (口令只活在这个子进程的环境变量里,不落盘、不进仓库。) */
+    env: { ...process.env, DATA_DIR: dir, PORT: '4139', PLATFORM_ADMIN_BOOTSTRAP: '1',
+      PLATFORM_ADMIN_INITIAL_PASSWORD: 'TESTONLY-secret-output-probe-0001' },
     stdio: ['ignore', 'pipe', 'pipe'],
   })
   let buf = ''
