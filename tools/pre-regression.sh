@@ -78,8 +78,38 @@ ratchet() {   # $1=中文名 $2=文件 $3=覆盖值
 #    **而我提交后没有再跑一次预检**,于是它一路带到 CI 才红。
 #    🔴 教训:**降了行数的那一批,提交之后要再跑一次预检** —— 因为这条判据的输入里有「上一提交」,
 #       它在提交那一刻会变。判据没坏,是我把它跑在了输入变化之前。
+  # 🔴🔴 复发登记(2026-09-23,同一条 CI 红了两次)· 装护栏,不再只写教训
+  #
+  # 第一次:11o 把 17527 降到 17526,提交后没重跑预检 ⇒ CI 红。我把教训写进了上面那段注释。
+  # 第二次:11t 把 17526 降到 17521,**同一个漏法,同一天** —— 注释挡不住任何事。
+  #   《复发登记》那条律说得很直白:**如果下次还能靠同样的疏忽再来一遍,说明护栏没装上,不许结案。**
+  #
+  # 根治:**「历史最低 > 上一提交」这件事,预检自己把它写下去。**
+  #   那是**降**,而这条律本来就明写「只许写小」—— 降是合法的,没有任何理由要人手动做一遍。
+  #   写大仍然当场红(下面那一支),所以放宽的口子一个没开。
+  #
+  # 🔴 第一版护栏我写成了「见 floor > head 就自动改小」—— **那把「写大当场红」那条判据吃掉了**:
+  #    造病把历史最低偷偷写成 99999(放宽),它自动改回来然后放行,**红没了**。
+  #    (反向守当场把我自己抓住:装护栏的那一刻顺手拆了另一道闸。)
+  # 正解:分清两种「floor > head」——
+  #    ① **行数降了**(head 比上次提交小,而 floor 停在上次的值)⇒ 跟降,合法;
+  #    ② **有人把 floor 写大了**(floor 比**已提交的那一版 floor** 还大)⇒ 放宽,当场红。
+  #    判据就是:拿 `git show HEAD:` 里那个 floor 当参照 —— 它是**上一次被审过的值**。
   if [ "$floor_n" != "?" ] && [ "$head_n" != "?" ] && [ "$floor_n" -gt "$head_n" ]; then
-    say "$1" "🔴 历史最低 $floor_n > 上一提交 $head_n —— 历史最低只许写小不许写大"; FAIL=1; return
+    committed_floor=$(git show HEAD:apps/api/assertion-baseline.json 2>/dev/null \
+      | node -e 'let s="";process.stdin.on("data",d=>s+=d).on("end",()=>{try{const v=(JSON.parse(s)["巨型文件历史最低"]||{})[process.argv[1]];console.log(Number.isInteger(v)?v:"")}catch{console.log("")}})' "$2")
+    if [ -n "$committed_floor" ] && [ "$floor_n" -gt "$committed_floor" ] 2>/dev/null; then
+      say "$1" "🔴 历史最低被写大了($committed_floor → $floor_n)—— 只许写小不许写大"; FAIL=1; return
+    fi
+    node -e '
+      const fs=require("fs"), p="apps/api/assertion-baseline.json";
+      const d=JSON.parse(fs.readFileSync(p,"utf8"));
+      const k="巨型文件历史最低", f=process.argv[1], v=Number(process.argv[2]);
+      if (!d[k] || !Number.isInteger(d[k][f]) || v >= d[k][f]) process.exit(3);   // 只许写小
+      d[k][f]=v; fs.writeFileSync(p, JSON.stringify(d,null,2)+"\n");
+    ' "$2" "$head_n" 2>/dev/null \
+      && { say "$1" "🟢 历史最低自动跟降 $floor_n → $head_n(行数降了,跟降合法;写大仍然当场红)"; floor_n="$head_n"; base=$(( now < head_n ? base : head_n )); } \
+      || { say "$1" "🔴 历史最低 $floor_n > 上一提交 $head_n,而且自动跟降失败 —— 手改 assertion-baseline.json"; FAIL=1; return; }
   fi
   if [ "$now" -le "$base" ]; then say "$1" "✅ $now ≤ $base(上一提交 $head_n · 历史最低 $floor_n)"
   else say "$1" "🔴 $now > $base(涨了 $((now-base)) 行;上一提交 $head_n · 历史最低 $floor_n)"; FAIL=1; fi
