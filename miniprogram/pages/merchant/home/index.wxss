@@ -184,3 +184,13 @@ page{background:var(--paper)}
 .clock-err{margin-top:18rpx;font-size:24rpx;color:var(--bad);line-height:1.5}
 .clock-badge{margin-left:auto;font-size:22rpx;color:var(--good)}
 .clock-out{margin-top:10rpx;font-size:24rpx;color:var(--brandd)}
+
+/* 🔴 11m §三:AI 修图 soon 态 —— 淡一档 + 一个小标签。
+   用的是既有的中性标签对 `--flat` / `--flatbg`(tokens.wxss 里深浅两档都定义了)。
+   ⚠️ 我第一版写的是 `--chip-bg` / `--chip-fg` —— **那两个令牌根本不存在**,
+      等于编了两个名字,比写死颜色更坏(写死色至少还看得见,不存在的令牌是静默失效)。 */
+.dh-todo.soon { opacity: .55; }
+.dh-todo-badge {
+  margin-left: 8rpx; padding: 2rpx 10rpx; border-radius: 999rpx;
+  font-size: 20rpx; background: var(--flatbg); color: var(--flat);
+}

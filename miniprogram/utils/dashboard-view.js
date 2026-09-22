@@ -221,7 +221,10 @@ function buildOwnerHome({ pulse, now, todo, period, nowHM, storeMoney, moneyFor,
     /* 月目标:**门店没设就整块不出现**。现在全仓没有这个配置项 —— 所以恒不出现,
        而不是编一个百分比出来(D154 在网页端已经这么定了,两端同口径)。 */
     goal: null,
-    todos: items.map((x) => ({ ...x, label: TODO_LABEL[x.key] || x.key, urgent: URGENT.includes(x.key) })),
+    /* 🔴 11m §三:AI 修图那张卡的 label/badge/hint **后端已经出好了**(soon 态的每个字都在那边),
+       这里不许再拼一遍 —— `x.label ||` 那一段就是「后端给了就用后端的」。
+       `soon` 的卡不算 urgent(它不是催人的事),也不进 todoEmpty 的计数口径外。 */
+    todos: items.map((x) => ({ ...x, label: x.label || TODO_LABEL[x.key] || x.key, urgent: URGENT.includes(x.key) })),
     todoEmpty: items.length === 0,
     locked: Boolean(pulse && pulse.locked),
   }

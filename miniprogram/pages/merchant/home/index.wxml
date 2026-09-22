@@ -91,10 +91,14 @@
       <view class="dh-card" data-dh-todo>
         <view class="dh-h">今日要处理<text class="dh-h-sub">按急缓排</text></view>
         <view wx:if="{{dh.todoEmpty}}" class="dh-empty">今天没有要处理的</view>
-        <view wx:for="{{dh.todos}}" wx:key="key" class="dh-todo {{item.urgent?'urgent':''}}"
-              data-urgent="{{item.urgent?1:0}}" data-k="{{item.key}}" bindtap="goTodo">
-          <view class="dh-todo-l">{{item.label}}</view>
-          <view class="dh-todo-n">{{item.n}}</view>
+        <!-- 🔴 11m §三:`soon` 态那张(现在只有 AI 修图)—— 淡态 + 标签,点击只 toast 不跳页。
+             句子全部来自后端(label/badge/hint),这里零拼串。
+             `on` 态本批不写渲染:流程没做出来,写了就是假入口。 -->
+        <view wx:for="{{dh.todos}}" wx:key="key" class="dh-todo {{item.urgent?'urgent':''}} {{item.soon?'soon':''}}"
+              data-urgent="{{item.urgent?1:0}}" data-k="{{item.key}}" data-soon="{{item.soon?1:0}}"
+              data-hint="{{item.hint}}" bindtap="goTodo">
+          <view class="dh-todo-l">{{item.label}}<text wx:if="{{item.badge}}" class="dh-todo-badge">{{item.badge}}</text></view>
+          <view wx:if="{{!item.soon}}" class="dh-todo-n">{{item.n}}</view>
         </view>
       </view>
     </block>
@@ -143,6 +147,20 @@
     <!-- 「我的今日台面」卡退役(图 §二):并进上面三个小数里「今日单数」那一格的实时副行 -->
     <!-- 今日要处理(图 §二:员工端**只有两项来源** —— 待写小记 / 我的调休申请状态) -->
     <view class="sec">今日要处理</view>
+    <!-- 🔴 11m §三:AI 修图那张卡**两种视角都出**(店主批:技师也看得到)。
+         员工端这一段是 rowcard 结构,和老板端那个 dh-todo 不是一套,所以单独渲染一次;
+         但**句子仍然来自同一份后端数据**(aiRetouch.label/badge/hint),没有第二处文案。
+         `soon` 点击只 toast,不展开也不跳页。 -->
+    <view wx:if="{{aiRetouch}}" class="rowcard">
+      <view class="rowhead {{aiRetouch.soon?'soon':''}}" data-soon="{{aiRetouch.soon?1:0}}"
+            data-hint="{{aiRetouch.hint}}" bindtap="goTodo">
+        <view class="rowico">✨</view>
+        <view class="rowt">
+          <view class="rowname">{{aiRetouch.label}}<text wx:if="{{aiRetouch.badge}}" class="dh-todo-badge">{{aiRetouch.badge}}</text></view>
+          <view class="rowhint">{{aiRetouch.hint}}</view>
+        </view>
+      </view>
+    </view>
     <view class="rowcard">
       <view class="rowhead" data-k="notes" bindtap="toggle">
         <view class="rowico warn">📝</view>

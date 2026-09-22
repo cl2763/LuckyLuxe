@@ -137,7 +137,8 @@
     "cert-expiry": 9,
     "cross-tenant-isolation": 23,
     "store-placeholder": 55,
-    "tenant-create-front-door": 27
+    "tenant-create-front-door": 35,
+    "ai-retouch-gate": 26
   },
   "上次更新": "2026-09-02",
   "巨型文件历史最低": {

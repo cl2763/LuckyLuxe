@@ -43,6 +43,8 @@ import { createAvailability } from './availability.mjs'
 import { createBookingDraftsModule } from './booking-drafts.mjs'
 import { createAiReviewRoutes } from './ai-review-routes.mjs'
 import { createWecomRecord } from './wecom-record.mjs'
+import { createAiRetouchGate } from './ai-retouch-gate.mjs'
+import { createPlatformTenantConfig } from './platform-tenant-config.mjs'
 import { createBookingGuards } from './booking-guards.mjs'
 import { createBookingIntake, hasBookingSignal, parseDate as parseBookingDate } from './booking-intake.mjs'
 import { humanDate } from './date-human.mjs'
@@ -3301,6 +3303,9 @@ function appendQuoteUnavailableSlotAssistantReply(quote, slot = {}, error = {}, 
    `getAvailability` 传的是**真**查询口(和 `/availability` 同一个函数),不是复刻一份。 */
 /* 进线落库与欢迎语(公约② 边改边拆:④ 打标动的就是这块)。
    晚绑定的几个(const,声明在本行之后)包一层箭头,免得 TDZ —— ③ 那批栽过一次。 */
+/* AI 修图入口三态的闸(11m §三):建在这里,和别的 create* 件一排 */
+const aiRetouchGate = createAiRetouchGate({ db, apiError, currentTenantId })
+
 const { recordWecomConversation, shouldSendNewCustomerWelcome, newCustomerWelcome,
   returningCustomerWelcome, shouldSendReturningCustomerWelcome } = createWecomRecord({
   db, iso, randomId, currentTenantId, parseJson, logConversationMessage,
@@ -6669,6 +6674,7 @@ const { storedValueBalanceCents, insertStoredValueTransaction, storedValueOvervi
 const { MEMBER_QUALIFY_MODES, DEFAULT_MEMBERSHIP_CONFIG, getMembershipConfig, setMembershipConfig, customerTotalSpendCents, isMemberOf } = createMembershipConfig({
   db, iso, currentTenantId, storedValueBalanceDetail: (u, t) => storedValueBalanceDetail(u, t)
 , apiError })
+const platformTenantConfig = createPlatformTenantConfig({ db, json, apiError, readBody, wecomRouting, aiRetouchGate, getMembershipConfig, setMembershipConfig, MEMBER_QUALIFY_MODES })
 const staffScope = createStaffScope({
   db, apiError, currentTenantId, bookingStatusText,
   memberCodeForUserId: (id) => memberCodeForUserId(id),
@@ -6743,7 +6749,7 @@ const scheduleBoard = createScheduleBoard({
   specialDateFor, hoursUnsetOfStore, getService, isGenericDisplayName, memberCodeForUserId, apiError, readBody,
   backfillPlanFor
 })
-const dashboardPulse = createDashboardPulse({ db, currentTenantId, todayOf, tenantCurrencyCodeOrNull, currencyDisplayOf, financeLocked: (tid) => financeLockEnabled(tid), todayBoardOf: (tid, date) => scheduleBoard.dayCounts(tid, date), storeClosedOn: (tid, date) => { try { return isClosedDay(defaultStoreId(), date) } catch { return false } }, storeClockText: (tid) => localParts(new Date(), tenantTimezone(tid)).time })   /* 主页大屏三接口(图 v3.1 §四);口径两问答案在模块抬头;「此刻」与台面同一条规则 */
+const dashboardPulse = createDashboardPulse({ db, currentTenantId, todayOf, tenantCurrencyCodeOrNull, currencyDisplayOf, financeLocked: (tid) => financeLockEnabled(tid), todayBoardOf: (tid, date) => scheduleBoard.dayCounts(tid, date), storeClosedOn: (tid, date) => { try { return isClosedDay(defaultStoreId(), date) } catch { return false } }, storeClockText: (tid) => localParts(new Date(), tenantTimezone(tid)).time, aiRetouchCard: (tid) => aiRetouchGate.card(tid) })   /* 主页大屏三接口(图 v3.1 §四);口径两问答案在模块抬头;「此刻」与台面同一条规则 */
 const notifyScheduler = createNotifyScheduler({
   db, randomId, iso, apiError, json, readBody, parseJson: parseJson2, localParts, tenantTimezone,
   DEFAULT_TENANT_ID, dataScope: DATA_SCOPE
@@ -12908,21 +12914,11 @@ async function route(req, res) {
     })
   }
   // 平台端代填门店的企微客服账号(D132 口径③;商户自己填不来时由平台代设)
-  if (path.startsWith('/platform/tenants/') && path.endsWith('/wecom-kfid') && (req.method === 'GET' || req.method === 'PUT')) {
-    if (!isPlatform()) throw apiError(401, 'UNAUTHORIZED', 'Platform token required.')
-    const id = path.split('/')[3]
-    if (!db.prepare('SELECT id FROM tenants WHERE id = ?').get(id)) throw apiError(404, 'NOT_FOUND', 'Tenant not found.')
-    if (req.method === 'GET') {
-      const row = db.prepare("SELECT value FROM tenant_settings WHERE tenant_id = ? AND key = 'wecom_open_kfid'").get(id)
-      return json(res, 200, { tenantId: id, openKfid: row?.value || '' })
-    }
-    const value = String((await readBody(req)).openKfid || '').trim().slice(0, 120)
-    if (value) {
-      const owner = wecomRouting.tenantForOpenKfid(value)
-      if (owner && owner !== id) throw apiError(409, 'KFID_TAKEN', '这个企微客服账号已经绑在另一家门店上了。')
-    }
-    wecomRouting.setOpenKfidMapping(id, value)
-    return json(res, 200, { tenantId: id, openKfid: value })
+  /* 平台端·每店配置三条口(企微客服号 / AI 修图三态 / 会员配置)已整块搬进 `platform-tenant-config.mjs`
+     (公约②「边改边拆」:动哪个领域就把该领域搬出去;J-107:逐字搬,行为不变)。 */
+  {
+    const hit = await platformTenantConfig.route({ req, res, path, isPlatform })
+    if (hit) return hit
   }
   if (req.method === 'POST' && path.startsWith('/platform/tenants/') && path.endsWith('/toggle')) {
     if (!isPlatform()) throw apiError(401, 'UNAUTHORIZED', 'Platform token required.')
@@ -12935,16 +12931,8 @@ async function route(req, res) {
     return json(res, 200, { tenant: { id, status: next } })
   }
   // 平台端·会员政策(2026-08-08 从商家侧收回):资格模式 / 门槛 / 有效期 / 等级体系
-  if (path.startsWith('/platform/tenants/') && path.endsWith('/membership-config') && (req.method === 'GET' || req.method === 'PUT')) {
-    if (!isPlatform()) throw apiError(401, 'UNAUTHORIZED', 'Platform token required.')
-    const tenantId = path.split('/')[3]
-    if (!db.prepare('SELECT id FROM tenants WHERE id = ?').get(tenantId)) throw apiError(404, 'NOT_FOUND', 'Tenant not found.')
-    if (req.method === 'GET') {
-      return json(res, 200, { tenantId, config: getMembershipConfig(tenantId), qualifyModes: MEMBER_QUALIFY_MODES })
-    }
-    const body = await readBody(req)
-    return json(res, 200, { tenantId, config: setMembershipConfig(tenantId, body.config && typeof body.config === 'object' ? body.config : body) })
-  }
+  /* 🔴 AI 修图入口三态(店主 11m §三 批):平台后台控,每店一个值。
+     `on` 这一档现在会 409 —— 流程未上线,拨到 on 商家点进去是空页面(那是假入口)。 */
   /* ---- 平台端·顾客批量导入(从美团/大众/老系统迁过来的顾客与期初余额)----
      dryRun 只出报告不写库;执行时以手机号为主键去重,期初余额记 legacy 桶(不进本店财务收入)。 */
   /* 🔴 分类唯一真相律④(店主 2026-08-25):平台代商家导入价目表,受同一条律管 ——

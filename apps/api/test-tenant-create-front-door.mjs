@@ -129,7 +129,35 @@ check('④c 🔴 **回落仍在**:不传时区 → 不是 Asia/Shanghai(先要�
   Boolean(st2) && typeof st2.timezone === 'string' && st2.timezone !== 'Asia/Shanghai',
   JSON.stringify({ 有没有这家店: Boolean(st2), tz: st2?.timezone }))
 
-const EXPECTED_CHECKS = 27
+/* ══ ⑤ 北京店「永久」走现成的路,不新加开关(店主 11m §二)══
+ *
+ * 店主答「不要到期日,做成永久的」。**路已经有**:
+ *   建店(默认年付)→ 平台后台套餐计费页把日期框清空 → `planExpiresAt: null` → `plan_expires_at = NULL` → 永久。
+ * 🔴 11m 要求逐处确认 **NULL 被当「不过期」而不是「已过期」** —— 全仓现扫 11 处,这里把关键那几处钉住。
+ *    哪天有人把某一处改成「NULL 当过期」,内部店第二天就会被停掉,而没有任何断言会红。 */
+{
+  const srv = codeOnly(read('apps/api/local-server.mjs'))
+  const plat = read('apps/web/platform.html')
+  const adm = codeOnly(read('apps/web/admin.js'))
+  check('⑤a 🔴 `planExpired` 判据:NULL ⇒ 不过期(`Boolean(planExpiresAt && …)`)',
+    /planExpired = Boolean\(planExpiresAt && /.test(srv))
+  check('⑤b 🔴 `/admin/subscription`:没有到期日 ⇒ `status = .unlimited.`,不是 suspended',
+    /\} else \{\s*status = 'unlimited'/.test(srv))
+  check('⑤c 🔴 平台列表:没有到期日 ⇒ 显示「长期授权」,不是「已到期」',
+    /t\.planExpiresAt\?\(days<=0\?[\s\S]{0,140}?:'<span class="muted">长期授权<\/span>'/.test(plat), '')
+  check('⑤d 🔴 商家后台:没有到期日 ⇒「长期有效」', /'长期有效' : 'No expiry'/.test(adm))
+  check('⑤e 🔴 `daysLeft`:没有到期日 ⇒ null(不是负数)',
+    /daysLeft: t\.plan_expires_at \? [^:]+: null/.test(srv))
+  check('⑤f 🔴 **清空到期日这条路已经有**:平台 billing 口收 `planExpiresAt: null/""` ⇒ `plan_expires_at = NULL`',
+    /body\.planExpiresAt === null \|\| body\.planExpiresAt === ''\) \{ updates\.push\('plan_expires_at = NULL'\)/.test(srv))
+  check('⑤g 🔴 界面入口在:套餐计费页那个日期框清空就走这条路(不用新加按钮)',
+    /onchange="setExpiry\('\$\{esc\(t\.id\)\}',this\.value\)"/.test(plat)
+    && /planExpiresAt:date\|\|null/.test(plat))
+  check('⑤h 🟢 反向守:续费按「今天与旧到期日的较大者」起算 —— 永久店(NULL)续费从今天起,不是从 1970',
+    (srv.match(/Math\.max\(Date\.now\(\), tenant\?\.plan_expires_at \? new Date\(tenant\.plan_expires_at\)\.getTime\(\) : 0\)/g) || []).length >= 2)
+}
+
+const EXPECTED_CHECKS = 35
 if (checks !== EXPECTED_CHECKS) {
   console.error(`not ok - 🔴 断言条数对不上:实跑 ${checks} 条,应为 ${EXPECTED_CHECKS} 条(判据五)。`)
   process.exit(1)

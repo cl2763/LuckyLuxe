@@ -12,6 +12,7 @@ const HINT_KEY = 'll-dh-carousel-hint'   // 「自动轮播中」那句提示,�
 
 Page({
   data: {
+    aiRetouch: null,   // 11m §三:AI 修图卡(off 态后端不返回 ⇒ 恒 null ⇒ 整块不出现)
     greeting: '嗨,老板 👋',
     roleLabel: '老板',
     isOwner: true,
@@ -94,6 +95,11 @@ Page({
       /* 币种红线:钱怎么写全由 `dashboard-view` 按**本次下发的** currencyDisplay 决定,
          这一页一个格式化动作都不做(storeMoney 只作它拿不到下发时的兜底)。 */
       const dh = buildOwnerHome({ pulse, now, todo, period, nowHM: hm, storeMoney, headKey: this.data.dhMetric })
+      /* 🔴 11m §三:AI 修图那张卡**两种视角都出**。老板端走 dh.todos 里那一项;
+         员工端是另一套 rowcard 结构,所以单独取出来 setData ——
+         **但取的是同一份后端数据**(todo.items 里 key==='aiRetouch' 那一条),没有第二处文案。
+         off 态后端根本不返回这一条 ⇒ 这里是 null ⇒ wxml 的 wx:if 落空 ⇒ 整块不出现。 */
+      const aiRetouch = ((todo && todo.items) || []).find((x) => x && x.key === 'aiRetouch') || null
       /* 折线在小程序里画成一排小竖条(没有 svg):把值归一到 0–100 的高度。
          全 0 的那一支上面已经把 spark 清空了,所以这里不会出现「一排贴地的条」。 */
       const max = Math.max(1, ...(dh.spark || []).map((x) => Math.abs(Number(x) || 0)))
@@ -119,7 +125,7 @@ Page({
       this._pulse = pulse; this._now = now; this._todo = todo
       /* D182:数据到手就重画折线(切维度、轮播、重取都会走到这儿) */
       this._spark = dh.spark || []
-      this.setData({ dh, dhState: 'ready', dhClosed: Boolean(now && now.closed) }, () => this.drawSpark())
+      this.setData({ dh, aiRetouch, dhState: 'ready', dhClosed: Boolean(now && now.closed) }, () => this.drawSpark())
       this.scheduleRotate()
     } catch (e) {
       /* 取数失败:**整块换一句话,不显示旧数、不显示 0**(图 §六) */
@@ -350,6 +356,13 @@ Page({
   onUnload() { this.clearRotate() },
 
   goTodo(e) {
+    /* 🔴 11m §三:`soon` 那一档**点击只 toast,不跳页** —— 流程没做出来,
+       跳过去就是一个空页面,那正是「摆着又不响」的第三种(D108 那条律修掉的东西)。
+       提示语来自后端 `hint`,这里不写死。 */
+    if (Number(e.currentTarget.dataset.soon) === 1) {
+      wx.showToast({ title: e.currentTarget.dataset.hint || '还没开放', icon: 'none' })
+      return
+    }
     const k = e.currentTarget.dataset.k
     const to = { aiHandoff: '/pages/merchant/conversation/index', quotePending: '/pages/merchant/quote-calc/index',
       notePending: '/pages/merchant/orders/index', shiftApproval: '/pages/merchant/schedule-day/index',

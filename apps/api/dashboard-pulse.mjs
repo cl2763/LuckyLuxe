@@ -72,7 +72,7 @@ export function deltaOf(value, prev) {
 export function createDashboardPulse(deps) {
   const {
     db, currentTenantId, todayOf, tenantCurrencyCodeOrNull, currencyDisplayOf, financeLocked,
-    todayBoardOf, storeClosedOn, storeClockText,
+    todayBoardOf, storeClosedOn, storeClockText, aiRetouchCard,
   } = deps
   for (const [name, fn] of Object.entries(deps)) {
     if (name !== 'db' && typeof fn !== 'function') throw new Error(`createDashboardPulse 缺依赖或类型不对:${name}`)
@@ -246,6 +246,20 @@ export function createDashboardPulse(deps) {
     return {
       asOf: new Date().toISOString(),
       items: [
+        /* 🔴 AI 修图入口(店主 11m §三 批:放「今日要处理」第一张)—— 三态由平台后台控。
+           `off` ⇒ 这里返回 null,下面 `.filter(Boolean)` 掉,**整张卡不存在**(不是灰着);
+           `soon` ⇒ 淡态 + 「敬请期待」,`to` 为空 ⇒ 点击不跳页,只 toast;
+           `on`  ⇒ 真入口 —— **现在谁也拨不到 on**(平台口 409),所以这一档的渲染本批不写:
+                   写了就是假入口(「不可用即不呈现,呈现即说明」)。
+           句子(label/badge/hint)在后端出,前端零拼串 —— 改文案不用两端发版。 */
+        (() => {
+          const card = aiRetouchCard ? aiRetouchCard(tid) : null
+          if (!card) return null
+          return {
+            key: 'aiRetouch', n: 0, to: card.tappable ? 'ai-retouch' : '', available: true,
+            soon: card.state === 'soon', label: card.label, badge: card.badge, hint: card.hint,
+          }
+        })(),
         /* 🔴 口径(店主 05r §一 末裁):**待人工只数 `needs_human`**。
            `human_active` 是同事已经在接了 —— 那不是「待处理」,把它算进来等于让老板
            在首页看见一个自己已经在做的事。 */
@@ -259,7 +273,7 @@ export function createDashboardPulse(deps) {
           one("SELECT COUNT(*) AS n FROM bookings WHERE tenant_id = ? AND status = 'COMPLETED' AND substr(appointment_start,1,10) = ?", yday) > 0
           && one("SELECT COUNT(*) AS n FROM daily_closes WHERE tenant_id = ? AND date = ? AND status = 'confirmed'", yday) === 0 ? 1 : 0
         ), 'daily-close'),
-      ],
+      ].filter(Boolean),
     }
   }
 

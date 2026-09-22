@@ -3757,8 +3757,14 @@ const main = async () => {
           && /membership-config`,\{method:'PUT'/.test(platformHtml2))
         check('㋝乙② 选项来自后端下发的 qualifyModes,前端不自己维护第二份清单',
           platformHtml2.includes('(mb&&mb.qualifyModes)||[]') && !/const MB_MODES=\[/.test(platformHtml2))
+        /* 🔴 判据的扫描面要跟着被测物走(㋙D 同族纪律):
+           11m 那一批按《代码结构公约》②「边改边拆」把平台端每店配置三条口
+           (wecom-kfid / ai-retouch / membership-config)整块搬进了 `platform-tenant-config.mjs`。
+           这条判据原来只读 `local-server.mjs`,搬完之后它扫到的是空 —— **不是路由没了,是尺子没跟上**。
+           所以把两份源拼起来扫;断言本身一个字没松:**仍然是「全仓只有一条,GET+PUT 同一处」**。 */
+        const srvAll = srv + readFileSync(join(ROOT42, 'apps/api/platform-tenant-config.mjs'), 'utf8')
         check('㋝乙③ 不新建后端路由:membership-config 仍是唯一那条(GET+PUT 同一处)',
-          (srv.match(/\/membership-config'\)/g) || []).length <= 1 && srv.includes("path.endsWith('/membership-config') && (req.method === 'GET' || req.method === 'PUT')"))
+          (srvAll.match(/\/membership-config'\)/g) || []).length <= 1 && srvAll.includes("path.endsWith('/membership-config') && (req.method === 'GET' || req.method === 'PUT')"))
 
         // 丙线:微信业务域名校验文件通道
         // contentType 随静态服务域搬到 static-serve.mjs;判据跟着被测物走(㋙D 同族纪律)
