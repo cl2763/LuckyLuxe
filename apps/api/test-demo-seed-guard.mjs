@@ -374,4 +374,51 @@ const realBefore = await statsOf('lucky-luxe')
   check('铺设脚本零直连库(代码行判据)', !/DatabaseSync|node:sqlite/.test(src), src.split('\n').filter((l) => /DatabaseSync/.test(l)).join(' | '))
 }
 
+/* ══ 🔴 J-114(店主 11k §二.1 立)· 造演示环境 ≠ 开一家真店 ══
+ *
+ * 店主的话:种子脚本的本分是**把空环境填满到能演示**;开真店的本分是**把骨架立起来等真人填**。
+ * **前者以「有东西可看」为成功,后者以「一个假的都没有」为成功 —— 目标正相反。**
+ * 推论:任何脚本只要会凭空造出**人**(顾客/技师)或**钱**(单/储值/积分/券),
+ * **就永远不许对生产跑,一次都不许**,不管当时理由多充分。
+ *
+ * ⚠️ **这条判据第一版是错的,记在这里免得下一个人照抄**:
+ *    我一开始只扫 `INSERT INTO users` 这类 SQL —— 而 `seed-luvia-bj.mjs` **走的是正门(HTTP 接口)**,
+ *    于是它报「造人 0」,**而那支正是店主点名会塞 `13900000001` 这种假顾客的脚本**。
+ *    判据在缺陷存在时报了绿。**造人造钱的口不只有 SQL,还有正门那些口** —— 两半都要扫。 */
+{
+  const SEED_DIRS = [['tools', (f) => /seed/.test(f) && f.endsWith('.mjs')],
+                     ['apps/api', (f) => /seed/.test(f) && f.endsWith('.mjs') && !f.startsWith('test-')]]
+  const seeds = SEED_DIRS.flatMap(([d, keep]) => readdirSync(join(ROOT, d)).filter(keep).map((f) => `${d}/${f}`))
+  const codeOf = (f) => readFileSync(join(ROOT, f), 'utf8')
+    .replace(/\/\*[\s\S]*?\*\//g, '').replace(/(^|[^:])\/\/.*$/gm, '$1')
+  // 两半:直连 SQL 的 INSERT,和走正门那些会建人/建钱的口
+  const SQL_PEOPLE = /INSERT[^;]{0,80}INTO\s+(users|technicians|user_identities)\b/i
+  const SQL_MONEY = /INSERT[^;]{0,80}INTO\s+(bookings|settlements|stored_value\w*|points\w*|coupon\w*|finance_transactions|payments|timecards?)\b/i
+  const HTTP_PEOPLE = /import\/customers|['"`]\/admin\/technicians/i
+  const HTTP_MONEY = /['"`]\/admin\/bookings(\/direct)?['"`]|['"`]\/admin\/settlements|['"`]\/admin\/coupons|stored-value|\/recharge|\/points/i
+  const BANNER = '此脚本永不对生产跑'
+  const dangerous = []
+  const safe = []
+  for (const f of seeds) {
+    const c = codeOf(f)
+    const bad = SQL_PEOPLE.test(c) || SQL_MONEY.test(c) || HTTP_PEOPLE.test(c) || HTTP_MONEY.test(c)
+    ;(bad ? dangerous : safe).push(f)
+  }
+  check(`J-114① 种子脚本现扫 ${seeds.length} 支 >= 下限 14(目录被漏掉或脚本被搬走立刻红)`,
+    seeds.length >= 14, String(seeds.length))
+  const missing = dangerous.filter((f) => !readFileSync(join(ROOT, f), 'utf8').includes(BANNER))
+  check(`J-114② 🔴 会造人或造钱的 ${dangerous.length} 支,**每一支文件头都写死「${BANNER}」**`,
+    missing.length === 0, missing.join(' | '))
+  /* 🟢 反向守:一把「对谁都盖章」的分类器,等于没分类 —— 它会把不造人不造钱的也标上,
+     于是这条规矩变成一句人人都贴的口号,没人再看它。 */
+  const overStamped = safe.filter((f) => readFileSync(join(ROOT, f), 'utf8').includes(BANNER))
+  check(`J-114③ 🟢 **反向守**:不造人不造钱的 ${safe.length} 支一支都没被误盖章(${safe.map((f) => f.split('/').pop()).join(' ')})`,
+    overStamped.length === 0, overStamped.join(' | '))
+  check('J-114④ 🔴 分类器两半都在:只扫 SQL 会漏掉走正门的那些(seed-luvia-bj 就是这么漏的)',
+    HTTP_PEOPLE.test('await api(`/platform/tenants/x/import/customers`)') && SQL_PEOPLE.test('INSERT INTO users (a) VALUES (1)'))
+  check('J-114⑤ 🔴 具名钉住:`seed-luvia-bj.mjs` 必须被判成「会造人」并盖了章 —— 它是立这条法的那一支',
+    dangerous.includes('tools/seed-luvia-bj.mjs')
+    && readFileSync(join(ROOT, 'tools/seed-luvia-bj.mjs'), 'utf8').includes(BANNER))
+}
+
 console.log(`\n全部通过 (${checks} 项)`)

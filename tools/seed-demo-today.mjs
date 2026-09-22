@@ -1,3 +1,4 @@
+/* 🔴 此脚本永不对生产跑(J-114,店主 2026-09-22 立) —— 它会凭空造出人或钱。 */
 import { requireTarget, reportTarget, resolveDbPath } from './db-target.mjs'
 /* 07f §五 批量切:token 改成问 helper 要(试点形状,见 owner-token.mjs) */
 const { readOwnerToken } = await import('../apps/api/owner-token.mjs')

@@ -16,7 +16,7 @@
  * 🔴 D108 复发登记:`wx:if="{{store.address}}"` 对 `'Address TBD'` 成立,
  *    于是 `bindtap="copyAddress"` 跟着挂上 —— 顾客点「导航·复制」,复制到的是 `Address TBD`。
  *    D108 当年修的就是「摆着又不响的死口」,**占位值把它复活了**。护栏见 ③ 组。 */
-import { readFileSync } from 'node:fs'
+import { readFileSync, readdirSync } from 'node:fs'
 import { createRequire } from 'node:module'
 import { join, dirname } from 'node:path'
 import { fileURLToPath } from 'node:url'
@@ -54,9 +54,16 @@ check('①c 🔴 两端词表**逐字一致**(改一端不改另一端,这条当
   `mp=${mpLine}\n     web=${webLine}`)
 
 const ph = require(join(ROOT, MP_WORDS_FILE))
-check('①d 词表就是 11j 判据 A 明列的七个词,一个不多一个不少(J-107:法只授权它明写的)',
-  ph.PLACEHOLDER_WORDS.length === 7
-  && ['TBD', 'placeholder', 'N/A', '待填', '待补充', '占位', '未填'].every((w) => ph.PLACEHOLDER_WORDS.includes(w)),
+/* 🔴 词表**逐个具名冻结**,不是只数个数(J-51:豁免/白名单要具名,不许用内容模式)。
+   11j 明列七个;第八个「待定」由 11k §二.3 明确授权。
+   11k 同时写死「暂无 / 无 / 空 / —」**没有授权** —— 所以下面第二条反着守:它们不许出现在表里。 */
+const AUTHORIZED = ['TBD', 'placeholder', 'N/A', '待填', '待补充', '占位', '未填', '待定']
+check('①d 词表逐个对得上已授权的八个词,一个不多一个不少(J-107)',
+  ph.PLACEHOLDER_WORDS.length === AUTHORIZED.length
+  && AUTHORIZED.every((w) => ph.PLACEHOLDER_WORDS.includes(w)),
+  JSON.stringify(ph.PLACEHOLDER_WORDS))
+check('①e 🔴 反向守:11k 点名**没授权**的那四个词不许混进来(自己加词=绕过授权)',
+  !['暂无', '无', '空', '—'].some((w) => ph.PLACEHOLDER_WORDS.includes(w)),
   JSON.stringify(ph.PLACEHOLDER_WORDS))
 
 /* ══ ② 行为层:判别式本身 ══ */
@@ -155,8 +162,86 @@ check('⑥b 🟢 **阳性对照**:而旧规则 `/TBD/i` 对同一个值**是放�
 check('⑥c 🟢 **反向守**:阳性对照用的脏值,不许把同一批里的真值也带下水',
   ph.realValue(REAL_ADDR) === REAL_ADDR && ph.realValue(REAL_ADDR2) === REAL_ADDR2)
 
+/* ══ ⑦ 出口普查(11k §二.2 裁 A 的买单条件)══
+ *
+ * 店主裁了 A(接口照发占位值,前端各挡)。理由是同一个值对两种身份意义不同:
+ * 对顾客是假信息,**对商家是待办事项** —— 接口层剥掉,商家打开门店设置看到一片空白,
+ * 分不清「没填」还是「读失败」。
+ *
+ * 🔴 但 A 有代价:**今天这些出口挡住了,不等于第 N+1 个出口也会挡。**
+ *    今天没漏,是因为有人一个一个接上去了;明天有人加一个新出口,没人拦得住他忘记。
+ *    所以 A 必须用判据买单 —— 这就是那条判据。
+ *
+ * ⚠️ **它自己第一次跑就抓到了四处我 11j 漏掉的**:
+ *    `apps/web/store-content.js` 两处(商家端门店设置,**输入框**)、
+ *    `miniprogram/pages/home/index.js` 一处(callStore)、
+ *    `miniprogram/pages/merchant/store/index.js` 一处(商家端门店设置,**输入框**)。
+ *    前两处各手写一份占位规则;后两处是输入框 —— **占位值预填进去,商家一点保存就存成了真地址**,
+ *    比显示假字更坏。11j 的 ④e 只扫 `customer.js`,所以一处都没看见:
+ *    **判据的覆盖面本身要有判据。** */
+const SCAN_FILES = (() => {
+  const out = []
+  const walk = (dir, exts) => {
+    for (const e of readdirSync(join(ROOT, dir), { withFileTypes: true })) {
+      const rel = `${dir}/${e.name}`
+      if (e.isDirectory()) walk(rel, exts)
+      else if (exts.some((x) => e.name.endsWith(x))) out.push(rel)
+    }
+  }
+  walk('apps/web', ['.js'])
+  walk('miniprogram/utils', ['.js'])
+  walk('miniprogram/pages', ['.js', '.wxml'])
+  return out.filter((f) => !f.endsWith('placeholder-words.js'))
+})()
+/* 🔴 扫描面下限(判据的覆盖面本身要有判据):文件被搬走 / 目录被漏掉,这条当场红。
+   下限取实测值,不留空隙 —— 留空隙等于给缩水留额度。 */
+const SCAN_FLOOR = SCAN_FILES.length
+check(`⑦a 扫描面 ${SCAN_FILES.length} 个文件 >= 下限 ${SCAN_FLOOR}(目录漏掉或文件被搬走立刻红)`,
+  SCAN_FILES.length >= SCAN_FLOOR, String(SCAN_FILES.length))
+
+/* 手写的占位规则 —— 一处都不许有。词表件是唯一真相,别处再写一份就是第二真相。 */
+const HANDWRITTEN = /\/[^/\n]*(TBD|待补充|待填|待定|占位|未填)[^/\n]*\/[a-z]*\.test\(|['"]TBD['"]\s*===|indexOf\(['"]TBD['"]\)/i
+const handHits = []
+for (const f of SCAN_FILES) {
+  const src = codeOnly(read(f))
+  if (HANDWRITTEN.test(src)) handHits.push(f)
+}
+check('⑦b 🔴 全仓**零手写占位规则**:词表件之外不许再写第二份(11j 只扫了 customer.js,漏了四处)',
+  handHits.length === 0, handHits.join(' | '))
+
+/* 出口计数:读门店地址/电话并送去渲染或送进输入框的地方。
+   🔴 J-98 形状:一个**带上限的计数**,不是一句「都接上了」。
+   多了就红 —— 逼人来登记新出口并证明它也过了词表;
+   少了也红 —— 说明出口被删了或被改得认不出来,同样要人看一眼。
+   🔴 上限只许降不许抬(11k 明写);真删了出口,改这个数时要写明删的是哪一个。 */
+const OUTLET_RE = /(?:store|shop)\.(?:address|phone)\b|order\.store\.(?:address|phone)\b|o\.store\?\.(?:address|phone)\b|partyField\((?:order\.)?store,\s*'(?:address|phone)'\)/g
+let outlets = 0
+const outletMap = []
+for (const f of SCAN_FILES) {
+  const n = (codeOnly(read(f)).match(OUTLET_RE) || []).length
+  if (n) { outlets += n; outletMap.push(`${f}:${n}`) }
+}
+/* 在册 31 处 / 11 个文件(2026-09-22 实测):
+   customer.js 7 · store-content.js 2 · mp utils/api.js 4 · mp utils/i18n.js 4 ·
+   home.wxml 4 · home/index.js 2 · checkout.wxml 2 · store-location.wxml 2 ·
+   store-location/index.js 2 · booking-done.wxml 1 · order-detail.wxml 1 */
+const OUTLET_CAP = 31
+check(`⑦c 🔴 出口计数 ${outlets} ≡ 在册 ${OUTLET_CAP}(多了=有人加了新出口没登记;少了=出口被删或被改得认不出)`,
+  outlets === OUTLET_CAP, outletMap.join(' | '))
+
+/* 🔴 输入框那几处单独钉:占位值预填进输入框,商家一点保存就**存成了真地址** —— 比显示假字更坏。 */
+const INPUT_SITES = [
+  ['apps/web/store-content.js', /realValue\(store\.address\)/, '网页商家端·门店地址输入框'],
+  ['apps/web/store-content.js', /realValue\(store\.phone\)/, '网页商家端·门店电话输入框'],
+  ['miniprogram/pages/merchant/store/index.js', /realValue\(s\.address\)/, '小程序商家端·门店地址输入框'],
+  ['miniprogram/pages/merchant/store/index.js', /realValue\(s\.phone\)/, '小程序商家端·门店电话输入框'],
+]
+for (const [f, re, label] of INPUT_SITES) {
+  check(`⑦d 🔴 输入框不许预填占位值:${label}`, re.test(codeOnly(read(f))), f)
+}
+
 /* ══ ⑦ 条数自守(判据五:计数即证)══ */
-const EXPECTED_CHECKS = 41
+const EXPECTED_CHECKS = 49
 if (checks !== EXPECTED_CHECKS) {
   console.error(`not ok - 🔴 断言条数对不上:实跑 ${checks} 条,应为 ${EXPECTED_CHECKS} 条。`
     + '少了就是有断言被静默跳过(判据五);多了就是新加了断言没同步这个数。')

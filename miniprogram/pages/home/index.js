@@ -1,4 +1,5 @@
 const { curOf, ensureCurrencyCached } = require('../../utils/storecurrency')
+const { isPlaceholderValue } = require('../../utils/placeholder-words.js')   // 11k:占位词表唯一出口
 const i18n = require('../../utils/i18n')
 const api = require('../../utils/api')
 const storage = require('../../utils/storage')
@@ -91,7 +92,8 @@ Page({
 
   callStore() {
     const phone = String((this.data.store || {}).phone || '')
-    if (!phone || /待补充|TBD/i.test(phone)) {
+    // 11k 出口普查抓到的第 13 处:原来手写 `/待补充|TBD/i`,是这条规则的第三份拷贝
+    if (isPlaceholderValue(phone)) {
       wx.showToast({ title: this.data.lang === 'en' ? 'Phone not set yet' : '门店电话待补充', icon: 'none' })
       return
     }

@@ -1,4 +1,5 @@
 const api = require('../../../utils/api')
+const { realValue } = require('../../../utils/placeholder-words.js')   // 11k:占位词表唯一出口
 
 Page({
   data: {
@@ -55,7 +56,9 @@ Page({
         text: d.isClosed ? '休息' : `${d.openTime}-${d.closeTime}`,
         note: d.note || ''
       }))
-      this.setData({ storeId: s.id, name: s.name || '', address: s.address || '', phone: s.phone || '', hours, specials, loading: false })
+      /* 🔴 11k 出口普查抓到的第 14 处:这是**编辑表单**,读的是后台原始值(不过 toMiniStore)。
+         占位值预填进输入框,商家一点保存就把「Address TBD」存成了真地址 —— 与网页 store-content.js 同病。 */
+      this.setData({ storeId: s.id, name: s.name || '', address: realValue(s.address), phone: realValue(s.phone), hours, specials, loading: false })
     } catch (e) { this.setData({ loading: false }); wx.showToast({ title: '加载失败', icon: 'none' }) }
   },
 

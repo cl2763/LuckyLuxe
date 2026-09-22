@@ -48,14 +48,17 @@ function renderStoreProfile() {
     body.innerHTML = ''
     return
   }
-  const addressUsable = store.address && !/tbd/i.test(store.address) ? store.address : ''
+  /* 🔴 11k 出口普查抓到的第 11、12 处:这两行原来各手写一份 `/tbd/i` —— 只认三个字母。
+     而这里是**输入框**:「待补充」这类值会被预填进去,商家一点保存就**存成了真地址**。
+     换成两端同源的词表出口(placeholder-words.js),admin.html 里已排在本文件之前加载。 */
+  const addressUsable = window.LLPlaceholder.realValue(store.address)
   summary.textContent = addressUsable || (owner.lang === 'zh' ? '⚠ 地址未设置' : '⚠ Address not set')
   summary.classList.toggle('plan-expired', !addressUsable)
   body.innerHTML = `
     <div class="kb-facts-grid">
       <label><span>${owner.lang === 'zh' ? '门店名称' : 'Store name'}</span><input id="storeProfileName" value="${escapeHtml(store.name || '')}"></label>
       <label><span>${owner.lang === 'zh' ? '门店地址' : 'Address'}</span><input id="storeProfileAddress" value="${escapeHtml(addressUsable)}"></label>
-      <label><span>${owner.lang === 'zh' ? '联系电话' : 'Phone'}</span><input id="storeProfilePhone" value="${escapeHtml(store.phone && !/tbd/i.test(store.phone) ? store.phone : '')}"></label>
+      <label><span>${owner.lang === 'zh' ? '联系电话' : 'Phone'}</span><input id="storeProfilePhone" value="${escapeHtml(window.LLPlaceholder.realValue(store.phone))}"></label>
     </div>
     <button class="primary slim" data-store-profile-save type="button">${owner.lang === 'zh' ? '保存门店信息' : 'Save store info'}</button>
     <p class="subtle">${owner.lang === 'zh' ? '保存后同步到订单系统和 AI 知识库——顾客问路、预约确认、AI 回答三处永远一致。' : 'Saved info syncs to bookings and the AI knowledge base so all three stay consistent.'}</p>

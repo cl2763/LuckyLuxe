@@ -44,7 +44,7 @@
     "settle-stress": 6,
     "sign-stability": 6,
     "noshow-aftersales": 760,
-    "demo-seed-guard": 76,
+    "demo-seed-guard": 81,
     "card-refund": 128,
     "amend-linkage": 34,
     "ledger-guards": 67,
@@ -136,7 +136,7 @@
     "money-endpoint-abuse": 29,
     "cert-expiry": 9,
     "cross-tenant-isolation": 23,
-    "store-placeholder": 41
+    "store-placeholder": 49
   },
   "上次更新": "2026-09-02",
   "巨型文件历史最低": {
