@@ -24,6 +24,12 @@ const PORT = 9337
       商家后台要老板密码 —— **密码不许经过我**,所以那一处改用「只读接口 + 页面片段」的方式在回执里交代,
       不硬凑一张截不到的图(J-83:证不出来就说证不出来)。 */
 const SHOTS = [
+  { file: '11t_北京国贸店_价目页.png', batch: '11t §一',
+    url: 'https://app.jingshengyouji.com/?store=luvia-bj',
+    what: '北京国贸店导完 28 行之后,顾客端价目页长什么样(境内域,CNY 计价)',
+    prep: '', settle: 7000, visible: '.hero, .home, main',
+    probe: "document.body.innerText.replace(/\\s+/g,' ').slice(0,300)" },
+
   { file: '11l_D210_平台新建商家.png', batch: '11l D210',
     url: `${BASE}/platform`,
     what: '新建商家那一屏:币种/时区/电话/地址四个框,币种与时区必选无默认',
