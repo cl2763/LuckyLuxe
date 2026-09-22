@@ -110,7 +110,19 @@ export function createServiceImport({ db, apiError, randomId, iso, categoryList,
       report.ok.push({
         line, name, nameEn: at('nameEn') || name, categoryId: cat.id, categoryName: cat.name,
         type: (['NAIL', 'LASH', 'CARE', 'OTHER'].includes(at('type').toUpperCase()) ? at('type').toUpperCase() : guessType(cat)),
-        priceCents, depositCents: yuanToCents(at('deposit')), durationMin: Math.max(0, Math.round(Number(at('duration')) || 60)),
+        priceCents,
+        depositCents: yuanToCents(at('deposit')),
+        /* 🔴 静默失败器族(`|| 默认值`):原来写的是 `Number(at('duration')) || 60` ——
+           **`0` 是假值,会被 `||` 吞掉换成 60**,于是「填了 0」和「没填」变成同一件事。
+           11r 明写「足部加收 时长 0、加价 100」(它是整单加收,不占时段),
+           而试跑显示它落成了 60 —— **一个填了的值被判据默默改掉了**。
+           改法:先看这一格**是不是空的**,空才给默认;填了什么就是什么,包括 0。 */
+        durationMin: (() => {
+          const raw = at('duration')
+          if (raw === '') return 60                       // 真没填 ⇒ 默认 60
+          const n = Number(raw)
+          return Number.isFinite(n) ? Math.max(0, Math.round(n)) : 60   // 填了但不是数 ⇒ 也按没填
+        })(),
         sortOrder: Math.round(Number(at('sort')) || 0),
         shareCents, memberCents, courseCents, courseTimes,
         /* 加做项永不见客(规则①):`item_kind='addon'` 且不上门店页 */

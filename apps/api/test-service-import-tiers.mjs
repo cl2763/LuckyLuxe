@@ -107,7 +107,39 @@ const after = (await (await fetch(`${BASE}/admin/pricing/items`, { headers: H })
 check('⑤a 夹具有效:价目列表读得到(读不到的话下面那条相等是「没测到」)', before >= 0, String(before))
 check('⑤b 🔴 **试跑不落库**:跑完项目数一个没变', before === after, `${before} → ${after}`)
 
-const EXPECTED_CHECKS = 19
+/* ══ ⑥ 🔴 时长 0 不许被 `||` 吞掉(2026-09-23 实战抓到,静默失败器族)══
+ *
+ * 原来写的是 `Number(at('duration')) || 60` —— **`0` 是假值**,于是
+ * 「填了 0」和「没填」在代码眼里是同一件事,`0` 被默默换成 60。
+ * 案发现场:北京店那份 CSV 里「足部美甲加收」时长写的就是 **0**
+ * (11r 明写「足部加收 时长 0、加价 100」—— 它是整单加收,不占时段),
+ * 而试跑报告显示它是 60。**一个店主填了的值,被判据默默改掉了。**
+ * 🔴 而这种错**不会让任何断言变红** —— 它只会让排班里凭空多出一个小时。 */
+{
+  const zero = await dry([['美甲', '零时长项', '100', '', '', '', '', '是']], ['大类', '项目名', '价格', '分享价', '会员价', '疗程价', '疗程次数', '加做项', '时长'])
+  check('⑥a 夹具:这一行本身是可导的(不然下面那条 0 是「没测到」)',
+    (zero.data?.report?.ok || []).length === 1, JSON.stringify(zero.data?.report))
+  const withZero = await dry([['美甲', '零时长项', '100', '', '', '', '', '是', '0']], ['大类', '项目名', '价格', '分享价', '会员价', '疗程价', '疗程次数', '加做项', '时长'])
+  check('⑥b 🔴 **时长填 0 ⇒ 落 0**(不是被 `||` 吞成 60)',
+    withZero.data?.report?.ok?.[0]?.durationMin === 0, String(withZero.data?.report?.ok?.[0]?.durationMin))
+  const empty = await dry([['美甲', '空时长项', '100', '', '', '', '', '否', '']], ['大类', '项目名', '价格', '分享价', '会员价', '疗程价', '疗程次数', '加做项', '时长'])
+  check('⑥c 🟢 **反向守**:时长真没填 ⇒ 仍然给默认 60(不是把 0 和空一起改成 0)',
+    empty.data?.report?.ok?.[0]?.durationMin === 60, String(empty.data?.report?.ok?.[0]?.durationMin))
+  const real = await dry([['美甲', '八十分钟项', '100', '', '', '', '', '否', '80']], ['大类', '项目名', '价格', '分享价', '会员价', '疗程价', '疗程次数', '加做项', '时长'])
+  check('⑥d 🟢 **反向守**:填了别的数照样是那个数(证明 ⑥b 不是「一律落 0」)',
+    real.data?.report?.ok?.[0]?.durationMin === 80, String(real.data?.report?.ok?.[0]?.durationMin))
+  const junk = await dry([['美甲', '乱时长项', '100', '', '', '', '', '否', 'abc']], ['大类', '项目名', '价格', '分享价', '会员价', '疗程价', '疗程次数', '加做项', '时长'])
+  check('⑥e 填了但不是数 ⇒ 按没填处理(60),不落 NaN',
+    junk.data?.report?.ok?.[0]?.durationMin === 60, String(junk.data?.report?.ok?.[0]?.durationMin))
+  /* 🔴 用 `codeOnly` 剥注释:第一版直接扫全文,咬到的是**我自己注释里引用的那句原文** ——
+     「数提及而不是数执行」,本仓栽过五次的同一个坑,这是第六次。 */
+  const src2 = codeOnly(read('apps/api/import-services.mjs'))
+  check('⑥f 🔴 代码里不许再出现 `Number(at(.duration.)) || ` 那种写法(静默失败器族)',
+    !/Number\(at\('duration'\)\)\s*\|\|/.test(src2),
+    (src2.match(/.{0,40}at\('duration'\).{0,30}/g) || []).join(' | '))
+}
+
+const EXPECTED_CHECKS = 25
 if (checks !== EXPECTED_CHECKS) {
   console.error(`not ok - 🔴 断言条数对不上:实跑 ${checks} 条,应为 ${EXPECTED_CHECKS} 条(判据五)。`)
   process.exit(1)
