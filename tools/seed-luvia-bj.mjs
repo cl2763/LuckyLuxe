@@ -24,6 +24,8 @@
      BASE_URL=http://127.0.0.1:4310 OWNER_TOKEN=<主钥匙> node tools/seed-luvia-bj.mjs   # 沙箱
      BASE_URL=http://127.0.0.1:4128 OWNER_TOKEN=<主钥匙> node tools/seed-luvia-bj.mjs   # 本机库 */
 import { requireTarget, reportTarget, countRows } from './db-target.mjs'
+
+import { assertNotProductionByBaseUrl } from './never-on-production.mjs'
 /* 07f §五 批量切:token 改成问 helper 要(试点形状,见 owner-token.mjs) */
 const { readOwnerToken } = await import('../apps/api/owner-token.mjs')
 
@@ -31,6 +33,10 @@ const BASE_URL = String(requireTarget({
   envName: 'BASE_URL', value: process.env.BASE_URL,
   hint: '(沙箱 http://127.0.0.1:4310 / 本机库 http://127.0.0.1:4128;端口会骗人,以脚本自报的库路径为准)'
 })).replace(/\/$/, '')
+/* 🔴 J-114 运行时闸(11l §四)· 接的是上面 requireTarget **已经验过的那个值**,
+   不自己再读一次 env —— `test-db-target-guard` ①d 按**解析点**判:
+   每多一处裸 `process.env.<目标>` 就是一个没被守住的解析点,而那正是 03q 那次「本机库又被写了」的通道。 */
+await assertNotProductionByBaseUrl(BASE_URL)
 const OWNER_TOKEN = process.env.OWNER_TOKEN || readOwnerToken() || 'owner-demo-token'
 
 const TENANT_ID = 'luvia-bj'

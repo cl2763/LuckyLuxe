@@ -476,13 +476,25 @@ function localizeAddOns(addOns, lang = getLang()) {
   }))
 }
 
+/* 🔴 D211(店主 11l §四 裁,2026-09-22):这里原来有一行
+     `description: 'A refined nail and lash atelier. Store details are placeholders in this demo.'`
+   —— **写死的一句英文,发给所有租户**,而且原文里还写着 `in this demo`。
+   它真会被印出来:`pages/store-location/index.wxml:13` 有 `{{store.description}}`。
+
+   这是《假数回落红线》第 1 条:顾客看得见的字段拿不到真值就显示「—」或如实说明,
+   **一律不许回落到别的东西** —— 编一句通用的顶上,比空着更坏:顾客以为那是这家店的介绍。
+
+   现测:`stores` 表**没有 description / description_en 列**(列只有
+   id,name,address,phone,timezone,currency,is_active,tenant_id,name_en)。
+   按 11l:**只删那句写死的,不加列**(加列是新需求,单独提)。
+   ⇒ 店有英文介绍就用店的(现在没有这个字段,所以透传原值=undefined),
+     **没有就不出这一行**(wxml 那边 `{{store.description}}` 渲染空串,整块不出现)。 */
 function localizeStore(store, lang = getLang()) {
   if (lang === 'zh') return store
   return Object.assign({}, store, {
     address: store.address === '门店地址待补充' ? 'Store address pending' : store.address,
     phone: store.phone === '门店电话待补充' ? 'Store phone pending' : store.phone,
-    businessHours: store.businessHours === '营业时间待补充' ? 'Business hours pending' : store.businessHours,
-    description: 'A refined nail and lash atelier. Store details are placeholders in this demo.'
+    businessHours: store.businessHours === '营业时间待补充' ? 'Business hours pending' : store.businessHours
   })
 }
 

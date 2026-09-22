@@ -143,7 +143,16 @@
         <h2>新建商家</h2>
         <div class="row">
           <input id="mName" placeholder="商家名称(必填)" style="width:190px">
-          <input id="mCity" placeholder="城市(选填)" style="width:130px">
+          <!-- 🔴 D210(店主 11l 裁):这一屏原来只发 name/city/plan/initialTerm/id/isDemo —— **不发币种、时区、电话**。
+               正门缺这两样时默认 `currency='CAD'` / `timezone=APP_TIMEZONE`(local-server.mjs:12896),
+               于是在这里点一家北京店,建出来是 **CAD 计价、多伦多时区**。
+               小婕店之所以是对的,是因为 seed-jics-nail.mjs 走正门时**脚本自己带了** —— 界面从来没带过。
+               🔴 币种与时区**没有默认值,必选**:默认值就是这条缺陷的来源;
+                  让点的人选一次,比让系统猜一次便宜一万倍。 -->
+          <select id="mCurrency"><option value="" selected>币种(必选)</option><option value="CNY">CNY 人民币 ¥</option><option value="CAD">CAD 加元 $</option></select>
+          <select id="mTz"><option value="" selected>时区(必选)</option><option value="Asia/Shanghai">Asia/Shanghai(北京)</option><option value="America/Toronto">America/Toronto(多伦多)</option></select>
+          <input id="mCity" placeholder="地址(选填)" style="width:200px">
+          <input id="mPhone" placeholder="门店电话(选填)" style="width:140px">
           <select id="mPlan"><option value="free">免费版 ¥0</option><option value="single" selected>单店版 ¥1,380/年</option><option value="studio">工作室版 ¥2,980/年</option><option value="chain">连锁版 ¥6,800/年起</option><option value="custom">定制版(面议)</option></select>
           <select id="mTerm"><option value="year" selected>首期:年付(到期=今天+1年)</option><option value="month">首期:月付(+1月)</option><option value="trial30">试用 30 天(交付调试期)</option></select>
           <input id="mId" placeholder="租户id(选填)" style="width:160px">
@@ -695,13 +704,17 @@ async function resetOwnerPw(id){
 async function toggleTenant(id){if(!confirm('确认切换营业状态?停用后顾客端将无法进入该店。'))return;try{await api('/platform/tenants/'+id+'/toggle',{method:'POST',body:'{}'});toast('已切换');loadTenants()}catch(e){toast(e.message)}}
 async function createTenant(){
   const name=$('mName').value.trim();if(!name){toast('商家名称必填');return}
+  /* 🔴 D210:币种/时区**必选**,前端先拦一道(体验);后端是不是最终闸另裁(等天亮)。
+     不许给它们默认值 —— 默认值正是这条缺陷的来源。 */
+  const currency=$('mCurrency').value;if(!currency){toast('币种必选 —— 不选会按 CAD 建,北京店会变成加元计价');return}
+  const timezone=$('mTz').value;if(!timezone){toast('时区必选 —— 不选会按多伦多时区建');return}
   try{
     const isDemo=$('mIsDemo').checked
     if(isDemo&&!confirm('确认建成【演示店】?\n它的账本不受"只追加"保护(可整体重置),对外不能拿它说"账本不可篡改"。')){return}
-    const d=await api('/platform/tenants',{method:'POST',body:JSON.stringify({name,city:$('mCity').value.trim(),plan:$('mPlan').value,initialTerm:$('mTerm').value,id:$('mId').value.trim(),isDemo})})
+    const d=await api('/platform/tenants',{method:'POST',body:JSON.stringify({name,city:$('mCity').value.trim(),phone:$('mPhone').value.trim(),currency,timezone,plan:$('mPlan').value,initialTerm:$('mTerm').value,id:$('mId').value.trim(),isDemo})})
     $('credBox').classList.remove('hidden')
     $('credBox').innerHTML=`✅ <b>${esc(d.tenant.name)}</b>(${esc(d.tenant.id)})已创建,订阅到期日 <b>${esc(String(d.tenant.planExpiresAt||'').slice(0,10))}</b>(套餐计费页可改)<br>老板账号:<b>${esc(d.owner.username)}</b> 初始密码:<b>${esc(d.owner.initialPassword)}</b>(只显示一次;商家控制台开放前账号暂不可登录)<br>店码 scene:<b>${esc(d.shopEntry.scene)}</b> · <a href="javascript:void(0)" onclick="goConfig('${esc(d.tenant.id)}')">→ 去替商家配置资料</a>`
-    $('mName').value=$('mCity').value=$('mId').value='';$('mIsDemo').checked=false
+    $('mName').value=$('mCity').value=$('mPhone').value=$('mId').value='';$('mCurrency').value=$('mTz').value='';$('mIsDemo').checked=false
     loadTenants()
   }catch(e){toast(e.message)}
 }

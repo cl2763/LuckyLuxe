@@ -35,6 +35,8 @@ import { requireTarget, requireSandbox, reportTarget, countRows } from './db-tar
 import { backupDb } from './db-backup.mjs'
 import { createFinanceLedger } from '../apps/api/finance-ledger.mjs'
 
+import { assertNotProductionByPath } from './never-on-production.mjs'
+
 const SEED = 'rich-v1'
 const DRY = process.argv.includes('--dry')
 
@@ -43,6 +45,10 @@ const DB_PATH = requireTarget({
   value: process.env.SEED_DB,
   hint: '(只许沙箱:…/apps/api/sandbox-data/lucky-luxe.sqlite)',
 })
+/* 🔴 J-114 运行时闸(11l §四)· 接的是上面 requireTarget **已经验过的那个值**,
+   不自己再读一次 env —— `test-db-target-guard` ①d 按**解析点**判:
+   每多一处裸 `process.env.<目标>` 就是一个没被守住的解析点,而那正是 03q 那次「本机库又被写了」的通道。 */
+assertNotProductionByPath(DB_PATH)
 /* 🔴 自己拒绝跑在别的库上 —— **闸在 `db-target.mjs` 里**(唯一出口)。
    为什么不在这儿写那句路径判断:护栏扫描器会把它读成「硬编码目标」并当场红,
    而它其实是**拦截用的字面量**,不是要写的库(现测栽过一次:`test-db-target-guard ①d` 点名两行)。

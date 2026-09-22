@@ -24,6 +24,8 @@ import { dirname, join } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { requireTarget, reportTarget, resolveDbPath } from './db-target.mjs'
 
+import { assertNotProductionByBaseUrl } from './never-on-production.mjs'
+
 const ROOT = join(dirname(fileURLToPath(import.meta.url)), '..')
 /* 🔴 03b/03e 裁定二:**造景/写库脚本不许有默认目标库**。
    原来这里是 `process.env.SEED_BASE_URL || 'http://127.0.0.1:4310'` —— 打错了不报错,02x 就是这么把 148 行
@@ -61,6 +63,16 @@ if (!IS_LOCAL && !PRODUCTION_SEED) {
   refuse('第①条:演示铺设默认只给本机沙箱用。要对着生产跑,必须在命令行显式打出 --production-seed(不是环境变量、不是默认值)。')
 }
 if (PRODUCTION_SEED && !TARGET_TENANT) refuse('第①条:--production-seed 必须同时指定 --tenant <租户id>(一次只铺一家,不许一把梭)。')
+
+/* 🔴 J-114 运行时闸(11l §四)放在**生产例外七条之后**:
+   七条问的是「你有没有显式打出 --production-seed / --tenant / --confirm-name」,
+   这一条问的是「你指的那个库到底是哪一档」—— 两个不同的问题,都要问,
+   而**更具体的那道先说话**(七条的措辞是套件断言的对象,也是人看得懂的那一句)。
+   读的是上面 requireTarget 验过的 `BASE`,不再裸读 env(①d 按解析点判)。 */
+await assertNotProductionByBaseUrl(BASE)
+
+
+
 /* 第④条的前半截放在这里:**没打店名连门都进不来**。
    放这儿是因为目标店可能还不存在(要现建),那种情况下没有"已有店名"可比,
    但确认这一步一样不许省 —— 打出来的名字就是要建的店名。 */

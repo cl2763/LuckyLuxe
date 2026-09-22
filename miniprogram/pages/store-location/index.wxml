@@ -10,7 +10,8 @@
 
   <view class="store-card card">
     <view class="store-name">{{store.storeName}}</view>
-    <view class="store-desc">{{store.description}}</view>
+    <!-- D211:没有店介绍就整块不出现(缺席可见律:该没有的就整块没有,不编一句顶上) -->
+    <view class="store-desc" wx:if="{{store.description}}">{{store.description}}</view>
     <view class="info-row">
       <text>{{t.address}}</text>
       <text>{{store.address}}</text>

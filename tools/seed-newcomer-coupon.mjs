@@ -15,7 +15,13 @@
 import { DatabaseSync } from 'node:sqlite'
 import { requireTarget, reportTarget } from './db-target.mjs'
 
+import { assertNotProductionByPath } from './never-on-production.mjs'
+
 const DB = requireTarget({ envName: 'SEED_DB=<库文件绝对路径>', value: process.env.SEED_DB, hint: '(沙箱 apps/api/sandbox-data/…)' })
+/* 🔴 J-114 运行时闸(11l §四)· 接的是上面 requireTarget **已经验过的那个值**,
+   不自己再读一次 env —— `test-db-target-guard` ①d 按**解析点**判:
+   每多一处裸 `process.env.<目标>` 就是一个没被守住的解析点,而那正是 03q 那次「本机库又被写了」的通道。 */
+assertNotProductionByPath(DB)
 const TENANT = requireTarget({ envName: 'SEED_TENANT', value: process.env.SEED_TENANT, hint: '(例 luvia-bj)' })
 const NAME = process.env.SEED_COUPON_NAME || '新客首单立减 50'
 

@@ -21,12 +21,18 @@ import { fileURLToPath } from 'node:url'
 import { DatabaseSync } from 'node:sqlite'
 import { requireTarget, requireSandbox, resolveDbPath } from './db-target.mjs'
 
+import { assertNotProductionByPath } from './never-on-production.mjs'
+
 const ROOT = join(dirname(fileURLToPath(import.meta.url)), '..')
 const SB_DIR = requireTarget({
   envName: 'SANDBOX_DATA_DIR=<临时沙箱数据目录,必须以 sandbox-data 收尾>',
   value: process.env.SANDBOX_DATA_DIR,
   hint: '(CI 上用 $RUNNER_TEMP/ll-ci-sandbox/sandbox-data;本机不要指向仓内 sandbox-data)',
 })
+/* 🔴 J-114 运行时闸(11l §四)· 接的是上面 requireTarget **已经验过的那个值**,
+   不自己再读一次 env —— `test-db-target-guard` ①d 按**解析点**判:
+   每多一处裸 `process.env.<目标>` 就是一个没被守住的解析点,而那正是 03q 那次「本机库又被写了」的通道。 */
+assertNotProductionByPath(SB_DIR)
 const BASE = requireTarget({
   envName: 'SEED_BASE_URL=<沙箱基址>',
   value: process.env.SEED_BASE_URL,

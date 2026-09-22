@@ -16,7 +16,7 @@
      rm -rf /tmp/ll-sg && mkdir /tmp/ll-sg
      DATA_DIR=/tmp/ll-sg PORT=4301 node local-server.mjs &
      TEST_BASE_URL=http://127.0.0.1:4301 node apps/api/test-demo-seed-guard.mjs */
-import { execFile, execFileSync } from 'node:child_process'
+import { execFile, execFileSync, spawnSync } from 'node:child_process'
 import { readFileSync, readdirSync, copyFileSync, existsSync, unlinkSync } from 'node:fs'
 import { DatabaseSync } from 'node:sqlite'
 import { dirname, join } from 'node:path'
@@ -419,6 +419,61 @@ const realBefore = await statsOf('lucky-luxe')
   check('J-114⑤ 🔴 具名钉住:`seed-luvia-bj.mjs` 必须被判成「会造人」并盖了章 —— 它是立这条法的那一支',
     dangerous.includes('tools/seed-luvia-bj.mjs')
     && readFileSync(join(ROOT, 'tools/seed-luvia-bj.mjs'), 'utf8').includes(BANNER))
+}
+
+/* ══ 🔴 J-114 运行时闸(店主 11l §四)· 文件头只给人看,这一段验的是它跑起来真拦 ══
+ *
+ * 11k 我只给那 10 支写死了文件头。店主当场指出:**文件头是给人看的,脚本跑起来不会拦。**
+ * 本批补 `tools/never-on-production.mjs`,判断**接现成的 `data-scope.mjs` 的 `scopeOf()`**(11l:不许另造一套)。
+ * 🔴 **白名单式**:只有 `ci` 与 `sandbox` 放行,`local` / `production` / `unknown` 一律拒 ——
+ *    黑名单(「不是 production 就放行」)在路径判不出来时会默默放行,那正是这条闸要防的。
+ * 🔴 **10 支逐个验,不许验 1 支推 10 支**(11l 明写)。 */
+{
+  const GUARD = 'tools/never-on-production.mjs'
+  check('J-114⑥ 运行时闸件在', existsSync(join(ROOT, GUARD)), GUARD)
+  const guardSrc = readFileSync(join(ROOT, GUARD), 'utf8')
+  check('J-114⑦ 🔴 判断接的是现成的 `data-scope.mjs`(11l:不许另造一套判断)',
+    /from '\.\.\/apps\/api\/data-scope\.mjs'/.test(guardSrc))
+  check('J-114⑧ 🔴 **白名单式**:只放行 ci / sandbox —— 不是「不是 production 就放行」',
+    /const ALLOWED = \['ci', 'sandbox'\]/.test(guardSrc), (guardSrc.match(/const ALLOWED = .*/) || [''])[0])
+
+  const DANGEROUS = [
+    ['tools/ci-seed-sandbox.mjs', 'SANDBOX_DATA_DIR', 'path'],
+    ['tools/seed-demo-rich.mjs', 'SEED_DB', 'path'],
+    ['tools/seed-newcomer-coupon.mjs', 'SEED_DB', 'path'],
+    ['tools/seed-bigdemo.mjs', 'SEED_BASE_URL', 'url'],
+    ['tools/seed-customer-doc-scene.mjs', 'SEED_BASE_URL', 'url'],
+    ['tools/seed-demo-coupons.mjs', 'SEED_BASE_URL', 'url'],
+    ['tools/seed-demo-today.mjs', 'SEED_BASE_URL', 'url'],
+    ['tools/seed-demo-twin.mjs', 'SEED_BASE_URL', 'url'],
+    ['tools/seed-selfcheck-data.mjs', 'SEED_BASE_URL', 'url'],
+    ['tools/seed-luvia-bj.mjs', 'BASE_URL', 'url'],
+  ]
+  check(`J-114⑨ 会造人造钱的清单仍是 ${DANGEROUS.length} 支(和 J-114② 数的那一批对得上)`,
+    DANGEROUS.length === 10)
+  /* 🔴 行为层:逐支真跑一遍,指向「本机库」或「打不通的服务」—— 必须非 0 退出且打出 J-114 那句。
+     静态扫「有没有 import 那个闸」证不了它真拦得住(判据律:读代码的判据在缺陷存在时照样绿)。 */
+  const LOCAL_DIR = join(ROOT, 'apps/api/local-data')
+  for (const [f, envName, kind] of DANGEROUS) {
+    const target = kind === 'path'
+      ? (f.includes('ci-seed-sandbox') ? LOCAL_DIR : join(LOCAL_DIR, 'lucky-luxe.sqlite'))
+      : 'http://127.0.0.1:59999'
+    const r = spawnSync(process.execPath, [join(ROOT, f)], {
+      cwd: ROOT, encoding: 'utf8', env: { ...process.env, [envName]: target },
+    })
+    const said = String(r.stderr || '').includes('J-114:此脚本永不对生产跑')
+    check(`J-114⑩ 🔴 ${f.split('/').pop()} 指向${kind === 'path' ? '本机库' : '判不出库域的服务'} → 拒跑`,
+      r.status !== 0 && said, `status=${r.status} said=${said} ${String(r.stderr || '').slice(0, 90)}`)
+  }
+  /* 🟢 反向守:一把「对谁都拒」的闸等于把沙箱也锁死,那样没人会留着它。 */
+  const probe = (p) => spawnSync(process.execPath,
+    ['-e', `import(${JSON.stringify(join(ROOT, GUARD))}).then(m=>m.assertNotProductionByPath(process.argv[1]))`, p],
+    { cwd: ROOT, encoding: 'utf8' }).status
+  check('J-114⑪ 🟢 **反向守**:指向沙箱库 → 放行(不是把所有人都拦死)',
+    probe(join(ROOT, 'apps/api/sandbox-data')) === 0, String(probe(join(ROOT, 'apps/api/sandbox-data'))))
+  check('J-114⑫ 🟢 **反向守**:指向回归临时库 → 放行', probe('/tmp/ll-ci-data.probe') === 0)
+  check('J-114⑬ 🔴 指向生产那个路径 → 拒', probe('/app/apps/api/local-data') === 2)
+  check('J-114⑭ 🔴 路径判不出来(unknown)→ **也拒**(判不出不等于安全)', probe('/whatever') === 2)
 }
 
 console.log(`\n全部通过 (${checks} 项)`)

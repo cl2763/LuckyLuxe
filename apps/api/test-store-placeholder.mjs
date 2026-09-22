@@ -162,6 +162,34 @@ check('⑥b 🟢 **阳性对照**:而旧规则 `/TBD/i` 对同一个值**是放�
 check('⑥c 🟢 **反向守**:阳性对照用的脏值,不许把同一批里的真值也带下水',
   ph.realValue(REAL_ADDR) === REAL_ADDR && ph.realValue(REAL_ADDR2) === REAL_ADDR2)
 
+/* ══ ⑧ D211(店主 11l §四 裁)· 店介绍不许编一句通用的顶上 ══
+ *
+ * `i18n.js` 的 `localizeStore` 原来写死一行英文店介绍**发给所有租户**,原文里还带 `in this demo`,
+ * 而 `pages/store-location/index.wxml:13` 真会把它印出来。
+ * 这是《假数回落红线》第 1 条:拿不到真值就如实说明,**不许回落到别的东西** ——
+ * 编一句通用的顶上比空着更坏:顾客以为那是这家店的介绍。 */
+{
+  const i18nSrc = codeOnly(read('miniprogram/utils/i18n.js'))
+  check('⑧a 🔴 `localizeStore` 里不再写死任何店介绍(全仓零残留)',
+    !/A refined nail and lash atelier|in this demo/i.test(i18nSrc),
+    (i18nSrc.match(/.{0,50}(A refined|in this demo).{0,40}/i) || []).join(' | '))
+  check('⑧b 🔴 英文档不再凭空造 description —— 那一行整个不在了',
+    !/description:\s*'/.test((i18nSrc.match(/function localizeStore[\s\S]*?\n\}/) || [''])[0]))
+  /* 🟢 反向守:别把 address/phone/businessHours 那三条如实说明也一起删了 —— 它们是**翻译**不是编造 */
+  const fn = (i18nSrc.match(/function localizeStore[\s\S]*?\n\}/) || [''])[0]
+  check('⑧c 🟢 **反向守**:三条如实说明的翻译还在(那是翻译,不是编造)',
+    /Store address pending/.test(fn) && /Store phone pending/.test(fn) && /Business hours pending/.test(fn))
+  check('⑧d 出口改成「有才渲染」:没有店介绍时整块不出现(缺席可见律)',
+    /wx:if="\{\{store\.description\}\}"/.test(read('miniprogram/pages/store-location/index.wxml')))
+  /* 行为层:真跑一遍 localizeStore,英文档必须拿不到 description */
+  const i18n = require(join(ROOT, 'miniprogram/utils/i18n.js'))
+  check('⑧e 🔴 **行为层**:英文档 localizeStore 返回的 description 是 undefined(不是那句写死的)',
+    i18n.localizeStore({ name: 'X', address: 'a', phone: 'p' }, 'en').description === undefined,
+    String(i18n.localizeStore({ name: 'X' }, 'en').description))
+  check('⑧f 🟢 **反向守**:店真有介绍时照样透传(不是把所有店的介绍都抹了)',
+    i18n.localizeStore({ description: '我们家的介绍' }, 'zh').description === '我们家的介绍')
+}
+
 /* ══ ⑦ 出口普查(11k §二.2 裁 A 的买单条件)══
  *
  * 店主裁了 A(接口照发占位值,前端各挡)。理由是同一个值对两种身份意义不同:
@@ -241,7 +269,7 @@ for (const [f, re, label] of INPUT_SITES) {
 }
 
 /* ══ ⑦ 条数自守(判据五:计数即证)══ */
-const EXPECTED_CHECKS = 49
+const EXPECTED_CHECKS = 55
 if (checks !== EXPECTED_CHECKS) {
   console.error(`not ok - 🔴 断言条数对不上:实跑 ${checks} 条,应为 ${EXPECTED_CHECKS} 条。`
     + '少了就是有断言被静默跳过(判据五);多了就是新加了断言没同步这个数。')
