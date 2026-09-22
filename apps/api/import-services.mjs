@@ -23,7 +23,16 @@ const HEAD = {
   price: ['价格', '价钱', '售价', 'price'],
   deposit: ['定金', 'deposit'],
   duration: ['时长', '分钟', 'duration', 'durationmin'],
-  sort: ['排序', 'sort', 'sortorder']
+  sort: ['排序', 'sort', 'sortorder'],
+  /* 🔴 D212(店主 11o 裁,2026-09-23):模板原来只认**一个**「价格」,
+     而项目本身早就有四档价(`service_prices.tier_key` = list/share/member/course)。
+     价目表上每项三个价(原价/分享价/会员价),模板吃不下 —— 印刷稿抄进来就丢两档。
+     五列**都可空**:空的就只写 list 那一档,老模板照样能用(行为向后兼容)。 */
+  sharePrice: ['分享价', 'shareprice', '分享'],
+  memberPrice: ['会员价', 'memberprice', '会员'],
+  coursePrice: ['疗程价', 'courseprice', '疗程'],
+  courseTimes: ['疗程次数', 'coursetimes', '次数'],
+  addon: ['加做项', 'addon', '加项']
 }
 
 const norm = (s) => String(s ?? '').trim().toLowerCase().replace(/\s|_|-/g, '')
@@ -45,7 +54,7 @@ const yuanToCents = (v) => {
   return Number.isFinite(n) ? Math.round(n * 100) : 0
 }
 
-export function createServiceImport({ db, apiError, randomId, iso, categoryList }) {
+export function createServiceImport({ db, apiError, randomId, iso, categoryList, json, readBody }) {
   /* 试跑:逐行判,产出**能一眼看出哪几行缺大类**的报告。 */
   function dryRun(tenantId, { headers = [], rows = [] } = {}) {
     const cols = mapHeaders(headers)
@@ -78,11 +87,34 @@ export function createServiceImport({ db, apiError, randomId, iso, categoryList 
       }
       const priceCents = yuanToCents(at('price'))
       if (!priceCents) { report.blocked.push({ line, name, reason: '缺价格或价格不是数字', kind: 'NO_PRICE' }); return }
+      /* D212:三档价。空 ⇒ 不写那一档(不是写 0 —— 0 是「免费」,空是「没这一档」)。 */
+      const shareCents = yuanToCents(at('sharePrice'))
+      const memberCents = yuanToCents(at('memberPrice'))
+      const courseCents = yuanToCents(at('coursePrice'))
+      const courseTimes = Math.max(0, Math.round(Number(at('courseTimes')) || 0))
+      /* 🔴 倒挂报红(11o 点名):价目表的常识是 原价 ≥ 分享价 ≥ 会员价。
+         倒挂**多半是抄串了行**,而不是店家真想这么定价 —— 所以整批退回让人看一眼,
+         比默默导进去、等顾客按会员价买到比原价还贵的东西强。 */
+      const ladder = []
+      if (shareCents && shareCents > priceCents) ladder.push(`分享价 ¥${shareCents / 100} > 原价 ¥${priceCents / 100}`)
+      if (memberCents && memberCents > priceCents) ladder.push(`会员价 ¥${memberCents / 100} > 原价 ¥${priceCents / 100}`)
+      if (memberCents && shareCents && memberCents > shareCents) ladder.push(`会员价 ¥${memberCents / 100} > 分享价 ¥${shareCents / 100}`)
+      if (ladder.length) {
+        report.blocked.push({ line, name, reason: `🔴 三档价倒挂:${ladder.join(';')} —— 多半是抄串了行`, kind: 'PRICE_LADDER' })
+        return
+      }
+      if (courseTimes && !courseCents) {
+        report.blocked.push({ line, name, reason: '🔴 写了疗程次数却没有疗程价', kind: 'COURSE_HALF' })
+        return
+      }
       report.ok.push({
         line, name, nameEn: at('nameEn') || name, categoryId: cat.id, categoryName: cat.name,
         type: (['NAIL', 'LASH', 'CARE', 'OTHER'].includes(at('type').toUpperCase()) ? at('type').toUpperCase() : guessType(cat)),
         priceCents, depositCents: yuanToCents(at('deposit')), durationMin: Math.max(0, Math.round(Number(at('duration')) || 60)),
-        sortOrder: Math.round(Number(at('sort')) || 0)
+        sortOrder: Math.round(Number(at('sort')) || 0),
+        shareCents, memberCents, courseCents, courseTimes,
+        /* 加做项永不见客(规则①):`item_kind='addon'` 且不上门店页 */
+        isAddon: /^(是|y|yes|true|1)$/i.test(at('addon'))
       })
     })
     report.willImport = report.blocked.length ? 0 : report.ok.length
@@ -116,9 +148,18 @@ export function createServiceImport({ db, apiError, randomId, iso, categoryList 
         db.prepare(`INSERT INTO services (id, tenant_id, type, category, name_zh, name_en,
           description_zh, description_en, image_url, price_cents, deposit_cents,
           base_duration_min, sort_order, is_active, storefront, is_timecard, item_kind, category_id, process_json, notice_json)
-          VALUES (?, ?, ?, '', ?, ?, '', '', '', ?, ?, ?, ?, 1, 1, 0, 'main', ?, '[]', '[]')`)
+          VALUES (?, ?, ?, '', ?, ?, '', '', '', ?, ?, ?, ?, 1, ?, 0, ?, ?, '[]', '[]')`)
           .run(id, tenantId, r.type, r.name.slice(0, 60), r.nameEn.slice(0, 80), r.priceCents, r.depositCents,
-            r.durationMin, r.sortOrder, r.categoryId)
+            r.durationMin, r.sortOrder, r.isAddon ? 0 : 1, r.isAddon ? 'addon' : 'main', r.categoryId)
+        /* D212:四档价落 `service_prices`。list 一定写(它就是 services.price_cents 那一档);
+           其余三档**有值才写** —— 没写的那一档在读的时候会回落到 list,那是既有口径。 */
+        const priceRow = (tier, cents, times = 0) => db.prepare(
+          'INSERT INTO service_prices (id, tenant_id, service_id, tier_key, price_cents, course_times) VALUES (?, ?, ?, ?, ?, ?)'
+        ).run(randomId('sp'), tenantId, id, tier, cents, times)
+        priceRow('list', r.priceCents)
+        if (r.shareCents) priceRow('share', r.shareCents)
+        if (r.memberCents) priceRow('member', r.memberCents)
+        if (r.courseCents) priceRow('course', r.courseCents, r.courseTimes)
         created += 1
       }
       db.exec('COMMIT')
@@ -129,5 +170,20 @@ export function createServiceImport({ db, apiError, randomId, iso, categoryList 
     return { created, report }
   }
 
-  return { dryRun, execute }
+  /* 🔴 D214(店主 11o 裁,2026-09-23):商家后台自己导价目表 —— 整条口住在这里。
+     店主原话:「以后这种操作我要能在商家配置后台自己做。」
+     现在唯一的「上传导入」是知识库 FAQ 那条,价目表只能平台代导(`/platform/tenants/:id/import/services`)。
+     🔴 **复用同一个 dryRun/execute,不另写一份解析** —— 两份解析必然分叉(一件事两处真相),
+        而这一份管的是钱(价目表),分叉了就是两个价。
+     权限:只有老板;员工 403。试跑不落库,执行才落。 */
+  async function ownerRoute({ req, res, path, adminSession, tenantId }) {
+    if (req.method !== 'POST' || path !== '/admin/services/import') return null
+    if (adminSession?.role !== 'owner') throw apiError(403, 'FORBIDDEN', '仅老板可导入价目表。')
+    const body = await readBody(req)
+    const out = body.dryRun === false ? execute(tenantId, body) : { report: dryRun(tenantId, body) }
+    json(res, 200, out)
+    return { handled: true }
+  }
+
+  return { dryRun, execute, ownerRoute }
 }

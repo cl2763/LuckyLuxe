@@ -1430,9 +1430,7 @@ const tenantPublicUrl = createTenantPublicUrl({
   localUrl: () => (process.env.APP_PUBLIC_URL || `http://127.0.0.1:${PORT}`),
 })
 
-const publicAppUrl = (tenantId) => tenantPublicUrl.publicUrlOf(tenantId)
-const customerAppUrl = () => tenantPublicUrl.customerUrl()
-const wechatWebhookUrl = () => tenantPublicUrl.wechatWebhookUrl()
+const publicAppUrl = (tenantId) => tenantPublicUrl.publicUrlOf(tenantId); const customerAppUrl = () => tenantPublicUrl.customerUrl(); const wechatWebhookUrl = () => tenantPublicUrl.wechatWebhookUrl()
 
 function sha1Signature(parts = []) {
   return createHash('sha1')
@@ -5097,7 +5095,7 @@ const { pricingCategories, serializePricingCategory, serializePricingItem, prici
   categoryNameOf: (row) => categoryNameOf(row), timecardUnitCents: (row, n) => timecardUnitCents(row, n),
   servicePriceMap: (id) => servicePriceMap(id), startingPriceCentsOf: (id, base) => startingPriceCentsOf(id, base)
 })
-const serviceImportApi = createServiceImport({ db, apiError, randomId, iso, categoryList: (tid) => pricingCategories(tid) })
+const serviceImportApi = createServiceImport({ db, apiError, randomId, iso, categoryList: (tid) => pricingCategories(tid), json, readBody })
 const pricingCategoryApi = createPricingCategories({ db, apiError, randomId, iso, serialize: (r) => serializePricingCategory(r), listOf: (tid) => pricingCategories(tid) })
 
 function membershipForSpend(totalSpentCents = 0, tenantId = currentTenantId()) {
@@ -12058,6 +12056,7 @@ async function route(req, res) {
     if (req.method === 'PATCH' && catId) return json(res, 200, { category: pricingCategoryApi.patch(tid, catId, await readBody(req)) })
     if (req.method === 'DELETE' && catId) return json(res, 200, pricingCategoryApi.remove(tid, catId))
   }
+  { const hit = await serviceImportApi.ownerRoute({ req, res, path, adminSession, tenantId: currentTenantId() }); if (hit) return hit }   // D214 商家自导价目表,整条口住在 import-services.mjs
   if (path === '/admin/pricing/items' || path.startsWith('/admin/pricing/items/')) {
     const tid = currentTenantId()
     const itemId = path.split('/')[4] || null
