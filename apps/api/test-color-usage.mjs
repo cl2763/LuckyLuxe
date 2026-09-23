@@ -484,8 +484,29 @@ check('⑦ 判据锚规矩不锚数字:本判据文件里零个调色板色值�
   }
   const ratio = (a, b) => { const [x, y] = [lumOf(a), lumOf(b)].sort((p, q) => q - p); return (x + 0.05) / (y + 0.05) }
 
-  const bgRe = new RegExp(`background(?:-color)?\\s*:\\s*var\\(--(${FLIP.join('|')})\\)`)
-  const fgRe = new RegExp(`\\bcolor\\s*:\\s*var\\(--(${FIXED.join('|')})\\)`)
+  /* 🔴 别名盲区(12m 现查补上):styles.css 里还有一层别名 `--black: var(--hero)` 这种。
+     只认 design-tokens.css 里那批名字,写成别名的一律看不见 —— 判据的覆盖面有个洞。
+     现读现解一层(不写死名单),并在 ⑨b 里对别名条数自证:解不完就红。 */
+  const aliasSrc = styleFiles.map((f) => read(f)).join('\n')
+  const ALIAS = {}
+  for (const m of aliasSrc.matchAll(/--([a-z0-9-]+)\s*:\s*var\(--([a-z0-9-]+)\)/g)) ALIAS[m[1]] = m[2]
+  const resolve = (name) => {
+    let n = name
+    for (let i = 0; i < 5 && ALIAS[n]; i++) n = ALIAS[n]     // 至多解 5 层,防环
+    return n
+  }
+  const aliasOf = (kind) => Object.keys(ALIAS).filter((a) => (kind === 'flip' ? FLIP : FIXED).includes(resolve(a)))
+  const FLIP_ALL = [...FLIP, ...aliasOf('flip')]
+  const FIXED_ALL = [...FIXED, ...aliasOf('fixed')]
+  const unresolved = Object.keys(ALIAS).filter((a) => !FLIP_ALL.includes(a) && !FIXED_ALL.includes(a))
+  check(`⑨a2 别名全解开:${Object.keys(ALIAS).length} 个别名(${Object.keys(ALIAS).join(' ')})逐个落进翻转/不翻两类`,
+    unresolved.length === 0, `解不开的:${unresolved.join(' ')}`)
+
+  /* 底色的取值池:翻转的直接名 + 解到翻转令牌的别名。字色池同理取不翻的那一边。 */
+  const bgRe = new RegExp(`background(?:-color)?\\s*:\\s*var\\(--(${FLIP_ALL.join('|')})\\)`)
+  const fgRe = new RegExp(`\\bcolor\\s*:\\s*var\\(--(${FIXED_ALL.join('|')})\\)`)
+  const tokL = (n) => TL[resolve(n)]
+  const tokD = (n) => TD[resolve(n)]
   const bad = []
   let ruleCount = 0
   for (const f of styleFiles) {
@@ -495,7 +516,7 @@ check('⑦ 判据锚规矩不锚数字:本判据文件里零个调色板色值�
       ruleCount++
       const bg = m[2].match(bgRe); const fg = m[2].match(fgRe)
       if (!bg || !fg) continue
-      const rl = ratio(TL[bg[1]], TL[fg[1]]); const rd = ratio(TD[bg[1]], TD[fg[1]])
+      const rl = ratio(tokL(bg[1]), tokL(fg[1])); const rd = ratio(tokD(bg[1]), tokD(fg[1]))
       if (rl < 3 || rd < 3) {
         const line = src.slice(0, m.index).split('\n').length
         bad.push(`${f}:${line} ${m[1].trim().split('\n').pop().slice(0, 30)} bg=--${bg[1]} fg=--${fg[1]} 浅${rl.toFixed(2)} 深${rd.toFixed(2)}`)

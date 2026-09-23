@@ -59,12 +59,21 @@ const isBlackOn = (rule) => new RegExp(`background:\\s*(${BLACK_MINI}|${BLACK_MI
     const at = css.indexOf(`${sel} {`) >= 0 ? css.indexOf(`${sel} {`) : css.indexOf(`${sel}{`)
     const rule = at >= 0 ? css.slice(at, css.indexOf('}', at)) : ''
     /* 小程序侧同病同治:黑在 background、白在 color(色序反了=红);--ink 与 --black 同为墨黑 */
-    /* 🔴 05z 之后白字写成了令牌 `var(--heroink)`(压在深面上的字色,浅深两档都是浅的)——
-       原来这条判据锚死 `color:#fff` 这个**字面量**,令牌化当场把它咬红。
-       判据不许锚在会变的字面量上:白字认「#fff 或 --heroink」两种写法,
-       它们是同一个语义(深面上的浅字),值也几乎相同(#fff / #f5efe3)。 */
+    /* ══ 这条判据自己的案底,留着,因为它正是 12m 那个缺陷的来源 ══
+       05z:白字令牌化成 `var(--heroink)`,判据原来锚死字面量 `color:#fff`,当场咬红。
+       当时的改法是**把 --heroink 认进合法白字**,理由写的是「深面上的浅字,两档都是浅的」。
+       🔴 那一步只看了**字**,没看**底**:
+         · `--black`(= --hero 的别名)两档都是深的 → 配 --heroink 没问题
+         · `--ink` **会翻转**,深色档翻成浅奶白 → 配 --heroink 只剩 1.07:1,字等于隐形
+       店主 12m §一-3 亲眼撞见的就是后者(登录页角色页签)。
+       **判据不许锚在会变的字面量上是对的;但也不许因为「换成令牌了」就不管它渲染出来是什么。**
+
+       现在白字认三种写法:`#fff` / `var(--heroink)` / `var(--paper)`。
+       这条只管**色序对不对**(黑在底、白在字);**渲染出来够不够看**由
+       `test-color-usage ⑨c` 按两档实算对比度守(它解令牌别名,甲档必须为 0)。
+       两条分工写在这里,免得下次又有人为了让这条不红而去放宽它。 */
     check(`六 网页「${sel}」选中=黑底白字`,
-      at >= 0 && /background:\s*var\(--(black|ink)\)/.test(rule) && /color:\s*(#fff|var\(--heroink\))/.test(rule),
+      at >= 0 && /background:\s*var\(--(black|ink)\)/.test(rule) && /color:\s*(#fff|var\(--heroink\)|var\(--paper\))/.test(rule),
       rule.slice(0, 110) || '选择器消失')
   }
 }
