@@ -363,7 +363,7 @@ const realBefore = await statsOf('lucky-luxe')
   const EXPECT_PROTECTED = {
     'lucky-luxe': '店主本店(真店,硬锁)',
     'jics-nail': '小婕的店(真店,09-25 真交付)',
-    'luvia-bj': 'LUVIA 北京国贸店(真店,店主 12l补 加进硬锁)',
+    'luvia-bj': '北京国贸店(真店,店主 12l补 加进硬锁)',
     'demo-ai': '平台演示店(对外展示,清理脚本不许删)',
     'demo-basic': '平台演示店(同上)',
     'hoptest-demo2': '长期演示租户',

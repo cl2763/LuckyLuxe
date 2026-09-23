@@ -13,7 +13,7 @@ const throws = (fn, code, m) => {
   catch (e) { const good = e.statusCode === code; good ? pass++ : fail++; console.log(`  ${good ? '✅' : '🔴'} ${m}(得 ${e.statusCode} ${e.kind})`) }
 }
 console.log('\n── 刀一:永久店续费必须拒 ──')
-throws(() => assertRenewable({ name: 'LUVIA 半径', plan_expires_at: null }, apiError), 409, '对 NULL 店续费 → 409')
+throws(() => assertRenewable({ name: '永久店夹具', plan_expires_at: null }, apiError), 409, '对 NULL 店续费 → 409')
 ok((() => { try { assertRenewable({ name: 'x', plan_expires_at: '2027-01-01' }, apiError); return true } catch { return false } })(),
    '反向守:有到期日的店续费 → 放行(闸不是全挡)')
 
