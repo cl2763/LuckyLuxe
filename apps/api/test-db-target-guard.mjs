@@ -338,9 +338,37 @@ const IGNORED_OK = {
   /* 目前为空 —— 我们自己的 .mjs/.sh 一个都不该被 ignore。
      要加必须写清「为什么这个脚本必须待在仓外」并报批。 */
 }
-const ignoredScripts = execFileSync('git', ['-c', 'core.quotepath=false', 'ls-files', '-z', '--others', '--ignored', '--exclude-standard'],
-  { cwd: ROOT, encoding: 'utf8' }).split('\0')
-  .filter((f) => /^(tools|apps\/api)\/.*\.(mjs|sh)$/.test(f) && !/(^|\/)node_modules\//.test(f) && !IGNORED_OK[f])
+/* 🔴 12m 两处现修,都是「我自己加 .gitignore 引出来的」——
+
+   ① **ENOBUFS**:`tools/segment/venv`(1.1 GB)进了 .gitignore 之后,
+      被忽略文件从几十个涨到 **36,417** 个,默认 1 MB 缓冲当场撑爆,整套件崩。
+      不用 `--directory` 折目录 —— 那会把目录**里面**的 .mjs 一起藏掉,正是这条判据要防的事。
+      改法:用 pathspec 让 git 只走这条判据关心的那四类路径(现测与「全量再过滤」逐条一致),
+      再加 64 MB maxBuffer 兜底。**覆盖面一个字没减**。
+
+   ② **第三方 venv 里的 .mjs/.sh**:torch 的 htm.mjs / preact.mjs、tqdm 的 completion.sh。
+      这条判据本来就硬排除了 `node_modules/` —— Python 的 venv 对 Python 就是 node_modules 对 Node,
+      同一类目录级第三方产物(判据抬头原话:「例外要写理由(目录级的第三方产物,不是我们自己的脚本)」)。
+      所以按**同一条机械规则**扩,不是开个新口子。
+      🔴 配反向守:凡被 venv 规则放掉的路径,其 venv 目录下必须真有 `pyvenv.cfg`
+      —— 不然随便建个叫 venv 的目录就能把自己的写库脚本藏进来。 */
+const THIRD_PARTY_DIR = /(^|\/)(node_modules|venv|venv312|\.venv)\//
+const PATHSPEC = ['tools', 'apps/api'].flatMap((d) => [`:(glob)${d}/**/*.mjs`, `:(glob)${d}/**/*.sh`, `:(glob)${d}/*.mjs`, `:(glob)${d}/*.sh`])
+const ignoredRaw = execFileSync('git', ['-c', 'core.quotepath=false', 'ls-files', '-z', '--others', '--ignored', '--exclude-standard', ...PATHSPEC],
+  { cwd: ROOT, encoding: 'utf8', maxBuffer: 64 * 1024 * 1024 }).split('\0').filter(Boolean)
+const thirdParty = ignoredRaw.filter((f) => THIRD_PARTY_DIR.test(f))
+/* 反向守:被「第三方目录」放掉的,必须真的住在一个货真价实的 Python venv / node_modules 里 */
+const fakeThirdParty = thirdParty.filter((f) => {
+  const m = f.match(/^(.*?\/(?:node_modules|venv|venv312|\.venv))\//)
+  if (!m) return true
+  if (/node_modules$/.test(m[1])) return false                      // node_modules 沿用原有口径
+  return !existsSync(join(ROOT, m[1], 'pyvenv.cfg'))                // venv 必须有 pyvenv.cfg 为证
+})
+check(`⑤b2 🔴 反向守:被「第三方目录」放掉的 ${thirdParty.length} 个脚本,都真住在货真价实的依赖目录里`
+  + '(venv 必须有 pyvenv.cfg 为证 —— 否则随手建个叫 venv 的目录就能把自己的写库脚本藏进来)',
+fakeThirdParty.length === 0, fakeThirdParty.join(' | '))
+const ignoredScripts = ignoredRaw
+  .filter((f) => /^(tools|apps\/api)\/.*\.(mjs|sh)$/.test(f) && !THIRD_PARTY_DIR.test(f) && !IGNORED_OK[f])
 check('⑤b 🔴 不许有**被 .gitignore 挡住**的 tools/**.mjs|sh 与 apps/api/**.mjs|sh —— '
   + '⑤ 用 `--others --exclude-standard`,往 .gitignore 加一行就能让一个写库脚本'
   + '对 ⑤ 和三条护栏刀同时消失,而它照样跑得起来、照样写得了生产'
