@@ -449,6 +449,65 @@ const hexInSelf = SELF.split('\n')
 check('⑦ 判据锚规矩不锚数字:本判据文件里零个调色板色值字面量(比值一律从令牌文件现读现算)',
   hexInSelf.length === 0, hexInSelf.join(' || '))
 
+/* ═══ ⑨ 翻转底配不翻字(店主 12m §一-3 亲报登录页页签,L2 扫出同类共 3 处)═══
+ *
+ * 类定义**按机制不按长相**:design-tokens.css 里绝大多数令牌两档各有一套值(随主题翻转),
+ * 但现测**只有 --heroink / --herolive 两个两档同值**(不翻)。
+ * 于是「背景取会翻转的令牌 + 前景取不翻转的令牌」必然在某一档撞成同色:
+ *   · --ink 配 --heroink:浅 14.26 ✅ / 深 **1.07** 🔴(深色档 --ink 翻成浅奶白,与 --heroink 几乎同色)
+ *   · --card 配 --heroink:深 13.64 ✅ / 浅 **1.15** 🔴
+ * 甲档门槛沿用 contrast-sweep 的口径:< 3:1 = 「看不见」,必须清零。
+ *
+ * 🔴 **剥注释再扫**:删掉的声明会留在注释里,连注释一起数会让「已修好」永远报红
+ *    —— 同族教训见 test-prod-ro-gate 的反向守。
+ * 不翻转令牌的名单**现读现算**,不抄进判据(一件事一处真相);名单变了这条自动跟着变。 */
+{
+  const tokenSrc = read('apps/web/design-tokens.css')
+  const i0 = tokenSrc.indexOf(':root{')
+  const i1 = tokenSrc.indexOf('@media', i0)
+  const d0 = tokenSrc.indexOf(':root[data-theme="dark"]', i0)
+  if (i0 < 0 || i1 < 0 || d0 < 0) throw new Error(`⑨ 令牌块切不出来(i0=${i0} i1=${i1} d0=${d0})—— 前置没了就红,不许静默跳过`)
+  const parseTok = (t) => Object.fromEntries([...t.matchAll(/--([a-z0-9]+)\s*:\s*(#[0-9a-fA-F]{3,6})\b/g)]
+    .map((m) => [m[1], m[2].length === 4 ? '#' + [...m[2].slice(1)].map((c) => c + c).join('') : m[2]]))
+  const TL = parseTok(tokenSrc.slice(i0, i1))
+  const TD = { ...TL, ...parseTok(tokenSrc.slice(d0)) }
+  if (Object.keys(TL).length < 20) throw new Error(`⑨ 只解析出 ${Object.keys(TL).length} 个令牌 —— 判据无效`)
+  const FIXED = Object.keys(TL).filter((k) => TD[k] === TL[k])          // 不翻转的
+  const FLIP = Object.keys(TL).filter((k) => TD[k] !== TL[k])           // 会翻转的
+  check(`⑨a 不翻转令牌现读:${FIXED.length} 个(${FIXED.join(' ')})· 会翻转 ${FLIP.length} 个`,
+    FIXED.length > 0 && FLIP.length >= 20, `fixed=${FIXED.length} flip=${FLIP.length}`)
+
+  const lumOf = (h) => {
+    const c = [1, 3, 5].map((i) => parseInt(h.slice(i, i + 2), 16) / 255)
+      .map((v) => (v <= 0.03928 ? v / 12.92 : Math.pow((v + 0.055) / 1.055, 2.4)))
+    return 0.2126 * c[0] + 0.7152 * c[1] + 0.0722 * c[2]
+  }
+  const ratio = (a, b) => { const [x, y] = [lumOf(a), lumOf(b)].sort((p, q) => q - p); return (x + 0.05) / (y + 0.05) }
+
+  const bgRe = new RegExp(`background(?:-color)?\\s*:\\s*var\\(--(${FLIP.join('|')})\\)`)
+  const fgRe = new RegExp(`\\bcolor\\s*:\\s*var\\(--(${FIXED.join('|')})\\)`)
+  const bad = []
+  let ruleCount = 0
+  for (const f of styleFiles) {
+    const raw = read(f)
+    const src = raw.replace(/\/\*[\s\S]*?\*\//g, (m) => m.replace(/[^\n]/g, ' '))   // 剥注释、保行号
+    for (const m of src.matchAll(/([^{}]+)\{([^{}]*)\}/g)) {
+      ruleCount++
+      const bg = m[2].match(bgRe); const fg = m[2].match(fgRe)
+      if (!bg || !fg) continue
+      const rl = ratio(TL[bg[1]], TL[fg[1]]); const rd = ratio(TD[bg[1]], TD[fg[1]])
+      if (rl < 3 || rd < 3) {
+        const line = src.slice(0, m.index).split('\n').length
+        bad.push(`${f}:${line} ${m[1].trim().split('\n').pop().slice(0, 30)} bg=--${bg[1]} fg=--${fg[1]} 浅${rl.toFixed(2)} 深${rd.toFixed(2)}`)
+      }
+    }
+  }
+  check(`⑨b 扫描面自证:${styleFiles.length} 个皮文件 / ${ruleCount} 条规则(面缩水立刻红)`,
+    styleFiles.length >= 3 && ruleCount >= 2000, `files=${styleFiles.length} rules=${ruleCount}`)
+  check(`⑨c 翻转底配不翻字零甲档:两档任一 < 3:1 即红(现测 ${bad.length} 处)`,
+    bad.length === 0, bad.join(' || '))
+}
+
 console.log(`\n[配色用法] 主按钮 浅 ${lightBtn}:1 / 深 ${darkBtn}:1 · --brand 当字色 ${brandAsText.length} 处 · --done/--next 当字色 ${blockOnly.length} 处`)
 if (fails.length) { console.error(`\n❌ test-color-usage ${fails.length}/${n} 项未过`); process.exit(1) }
 console.log(`\n✅ test-color-usage 通过 ${n} 项`)

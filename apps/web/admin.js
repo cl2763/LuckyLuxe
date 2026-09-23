@@ -1,6 +1,6 @@
 // 构建号:每次交付递增。侧栏可见,排查"改了没生效"时先对版本。
 // 兜底用(服务端会注入 window.LL_BUILD = 资源内容指纹,页面优先显示那个)
-const ADMIN_BUILD = '20260922a-placeholder'
+const ADMIN_BUILD = '20260924a-12m'
 let pricingState = { module: 'storefront', tab: 'items', categories: [], items: [], rules: {}, editing: null, preview: null, storefrontPicker: false }
 console.log(`[admin] build ${ADMIN_BUILD}`)
 
@@ -642,6 +642,26 @@ async function loadAll() {
 }
 
 // 登录页双入口:老板/员工两个 tab,提示语和找回路径分开写(防呆)
+/* 注册按钮的可见性(店主 12m §一-4;J-112 第二款:后端挡了一层不算,前端也要收)
+   后端 10835 已经 403「注册已停用」,但按钮在生产登录页照样显示 —— 商家看见一个必然失败的口。
+   🔴 **三态,默认关**:null=还没问到 / false=生产 → 都藏;只有明确 true 才显。
+      /health 打不通就停在 null,按「生产上不许出现注册字样」的要求 fail-closed
+      (J-119:这条回落有依据 —— 12m §一-4 原话「生产上不许出现「注册」字样」)。 */
+let registrationAllowed = null
+
+async function probeRegistrationAllowed() {
+  try {
+    const res = await fetch('/health', { headers: { Accept: 'application/json' } })   // 同源,admin.js 全仓都是裸路径(request() 也是)
+    if (!res.ok) throw new Error(`health ${res.status}`)
+    const data = await res.json()
+    registrationAllowed = data?.demoLoginAllowed === true
+  } catch (error) {
+    registrationAllowed = null           // 问不到 = 当生产,藏
+    console.warn('[admin] /health 问不到,注册按钮按生产处理(藏)', error?.message || error)
+  }
+  applyLoginRoleUi()
+}
+
 function applyLoginRoleUi() {
   const zh = owner.lang === 'zh'
   const role = owner.loginRole || 'owner'
@@ -656,7 +676,7 @@ function applyLoginRoleUi() {
   els.ownerEmailLabel.textContent = zh ? '账号(用户名或邮箱)' : 'Account (username or email)'
   const rememberLabel = document.querySelector('#loginRememberLabel')
   if (rememberLabel) rememberLabel.textContent = zh ? '保持登录 30 天' : 'Keep me signed in for 30 days'
-  els.ownerRegisterButton.classList.toggle('hidden', role !== 'owner')
+  els.ownerRegisterButton.classList.toggle('hidden', role !== 'owner' || registrationAllowed !== true)
 }
 
 async function ownerLogin(event) {
@@ -6271,6 +6291,7 @@ async function initAdmin() {
      店主完全没办法知道自己在看哪一版(她连撞两轮"功能没生效",根因就是旧缓存)。 */
   if (versionTag) versionTag.textContent = `v${window.LL_BUILD || ADMIN_BUILD}`
   applyLanguage()
+  probeRegistrationAllowed()   // 不 await:登录页先按「藏」渲染,问到了再放出来(fail-closed)
   setLocked(true)
   if (!owner.auth?.accessToken) return
   try {

@@ -62,6 +62,12 @@ export function healthReport(req, deps) {
     mergeWindowCapSeconds: mergeWindowCapSeconds(),
     mergeWindowsOpen: openMergeWindows(),
     guestIdUnsigned,
+    /* `demoLoginAllowed` —— 自己一格,不让别人借 `guestIdUnsigned` 顶(12m §一-4)。
+       两者当下同值(上面那段写明了为什么),但它们回答的是**两个问题**:
+       前者「还认不认非服务端签发的身份」,后者「注册/演示登录这条口开不开」。
+       网页登录页靠这一格决定注册按钮显不显 —— 借别人的字段用,就是《假数回落红线》第 1 条
+       禁的「拿另一个语义的字段顶上」;哪天两者分家,按钮会跟着一个不相干的判断跑。 */
+    demoLoginAllowed: typeof demoLoginAllowed === 'boolean' ? demoLoginAllowed : null,
     miniSecretSet,
     /* 🔴 夜12 段A1 · **让服务自己说它在用哪份库**(立案 D192 的治法)
        案由:生产库文件 mtime 停在 8/27、线上 /health 却是 200、又没有 WAL ——

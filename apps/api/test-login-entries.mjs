@@ -98,6 +98,43 @@ check('③ 自守:两个死按钮各自的坏法必须被分得出来 —— 邮
 check(`④ 反向守:登录区那一段取到了 ${authBlock.length} 字符(>=200);取空了这条判据就是空转`,
   authBlock.length >= 200, `${authBlock.length}`)
 
+/* ══ ⑤ 商家端登录页:同一条法的另一侧(店主 12m §一-4)══
+ *
+ * D190 守的是**顾客端**;商家端 `admin.html` 的「Register Owner」按钮是同一个病的另一侧:
+ * 后端 local-server.mjs 那条 `/admin/auth/register` 在 DEMO_LOGIN_ALLOWED=false 时 403,
+ * 而按钮在生产登录页照样亮着 —— 商家点下去必然失败。
+ * J-112 第二款:挡了后端一层不算,**前端这一侧也要收**,两侧各写一条。
+ *
+ * 判的是**可见性条件**,不是「按钮存不存在」—— 沙箱 demo 模式下它仍该在。 */
+const adminJs = readFileSync(join(ROOT, 'apps/web/admin.js'), 'utf8')
+const adminHtml = readFileSync(join(ROOT, 'apps/web/admin.html'), 'utf8')
+
+check('⑤a 反向守:admin.html 里确实还有这个按钮(按钮没了这条就是空转)',
+  /id="ownerRegisterButton"/.test(adminHtml), '')
+
+const visLine = (adminJs.match(/els\.ownerRegisterButton\.classList\.toggle\([^\n]*\)/) || [''])[0]
+check('⑤b 可见性只取到一处(多处各写一套 = 迟早有一处漏改)',
+  (adminJs.match(/els\.ownerRegisterButton\.classList\.toggle/g) || []).length === 1, visLine)
+check('⑤c 可见性条件里必须带上「注册是否开放」,不能只看角色',
+  /registrationAllowed/.test(visLine), visLine || '(取不到那一行)')
+check('⑤d 三态 fail-closed:写成 `!== true`,null(还没问到)与 false 都藏',
+  /registrationAllowed\s*!==\s*true/.test(visLine), visLine)
+
+const probeFn = (() => {
+  const i = adminJs.indexOf('async function probeRegistrationAllowed')
+  if (i < 0) return ''
+  const j = adminJs.indexOf('\n}', i)
+  return adminJs.slice(i, j > 0 ? j : i + 1200)
+})()
+check(`⑤e 反向守:探测函数取到了 ${probeFn.length} 字符(取空了后面三条全是空转)`,
+  probeFn.length >= 200, String(probeFn.length))
+check('⑤f 探测读的是 /health 的 demoLoginAllowed(后端 10587 现有出口,不新开一个)',
+  /'\/health'/.test(probeFn) && /demoLoginAllowed/.test(probeFn), probeFn.slice(0, 80))
+check('⑤g 探测失败不许静默放行:catch 里把状态留在 null(静默失败器族)',
+  /catch[\s\S]*registrationAllowed\s*=\s*null/.test(probeFn), '')
+check('⑤h 后端那一侧仍在挡(两侧各一条,J-112 第二款)',
+  /DEMO_LOGIN_ALLOWED\)\s*throw apiError\(403[^\n]*注册已停用/.test(api), '')
+
 console.log(`\n[底数闭合] 登记的登录入口 ${Object.keys(ENTRY_ROUTES).length} 个 · 现存 ${present.length} 个`
   + ` · 走不通 ${broken.length} 个 · 具名豁免(不算入口)${Object.keys(NOT_ENTRY).length} 个`)
 if (fails.length) { console.error(`\n❌ test-login-entries ${fails.length}/${checks} 项未过`); process.exit(1) }

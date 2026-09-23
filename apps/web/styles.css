@@ -2611,9 +2611,13 @@ textarea:focus {
   align-items: center;
 }
 
+/* 🔴 背景用会翻转的令牌 + 前景用**不翻转**的 --heroink = 深色档必然看不见。
+   全仓只有 --heroink / --herolive 两个令牌不随主题翻转(design-tokens.css 现测),
+   所以「bg: var(--ink|--paper|--card|--wall)」配「color: var(--heroink)」就是这一类。
+   现测:--ink 配 --heroink 深色档 1.07:1(甲档「看不见」);改 --paper 后浅 15.39 / 深 14.78。 */
 .active-pill {
   background: var(--ink);
-  color: var(--heroink);
+  color: var(--paper);
 }
 
 .upload-inline {
@@ -4161,7 +4165,10 @@ textarea:focus {
   border: 1px solid var(--line);
   border-radius: 50%;
   background: var(--card);
-  color: var(--heroink);
+  /* 这里原先写 color: var(--heroink),注释说「未选中时奶白字压白卡=看不见,那是它要的效果」——
+     但 customer.js:1303 未选中时内容是空字符串,**根本没有字**;选中时由 .check.checked 覆盖色。
+     所以那是条死声明,且踩「翻转底 + 不翻转字」那一类(深色档反而会把勾显出来)。
+     删掉:两个状态的渲染结果一模一样,同时免掉判据的永久例外。 */
   font-weight: 850;
 }
 
@@ -7217,7 +7224,9 @@ section.card > .section-row:first-child { margin-top: 0; }
   cursor: pointer;
   transition: all .15s ease;
 }
-.login-role-tab.active { background: var(--ink); color: var(--heroink); border-color: var(--ink); }
+/* 同上一类(店主 12m §一-3 亲报):深色档下 --ink 与 --heroink 都是浅色,1.07:1,
+   登录页那两个角色页签选中态的字等于隐形。--paper 与 --ink 永远同步翻转,所以两档都够。 */
+.login-role-tab.active { background: var(--ink); color: var(--paper); border-color: var(--ink); }
 .login-remember-row { font-size: .85rem; color: var(--muted); }
 .force-pass-overlay { position: fixed; inset: 0; z-index: 300; background: rgba(45, 40, 38, .45); display: grid; place-items: center; }
 .force-pass-overlay .fin-lock-card { background: var(--card); }

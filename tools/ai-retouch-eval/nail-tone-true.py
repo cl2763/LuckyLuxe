@@ -97,6 +97,7 @@ json.dump({'门槛': {'Y': YT, 'C': CT, '纯黑_Y上限': BY, '纯黑_C上限': 
            '口径': METRIC,
            '口径说明': '每片去掉 Y > p85 的像素(高光)后取中位数;整张 = 各片中位数的中位数。旧均值并排保留,不删(12n补二 §一)。',
            '同套甲判据': '见 同套甲对照表.json;红着就不算定案',
+           '张数': len(rows), '片数': sum(r['片数'] for r in rows),
            '标注等级': 'sampling(采样级)—— 椭圆+内收,够算 Y/C,不够训练分割(12n补 §三)',
            '行': rows}, open(out, 'w'), ensure_ascii=False, indent=1)
 print(f'\n门槛(读自 nail-tier.json):浅 Y>={YT} · 深鲜明 C>={CT} · 纯黑 Y<={BY} 且 C<{BC}')
@@ -106,7 +107,9 @@ for r in rows:
     print(f'{r["f"]:26s} {r["片数"]:>3d} {str(r["甲面Y"]):>6s} {str(r["甲面C"]):>6s} | '
           f'{str(r.get("甲面Y_旧均值")):>7s} {str(r.get("甲面C_旧均值")):>7s} {r["甲色档"]:>10s}   {r.get("人眼档") or ""}')
 from collections import Counter
-print('\n分布:', dict(Counter(r['甲色档'] for r in rows)))
+# 🔴 片数一律由机器报,不许手写(12n补四 §二:回执里 151 是我手敲的,机器数是 154,差 3 片)
+print(f"\n规模:{len(rows)} 张 · {sum(r['片数'] for r in rows)} 片")
+print('分布:', dict(Counter(r['甲色档'] for r in rows)))
 
 # 🔴 硬判据(店主 2026-09-24 立):同一套甲的远景与近景必须判成同一档。
 #    判成两档 = 判法本身有毛病,不是某个门槛的问题。这条不随门槛变动而失效。
