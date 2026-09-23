@@ -17,6 +17,9 @@
  * 正门缺这两样就默认 `CAD` / `APP_TIMEZONE` ⇒ **在这一屏点一家北京店,建出来是加元计价、多伦多时区**。
  * 小婕店之所以对,是 `seed-jics-nail.mjs` 走正门时**脚本自己带了** —— 界面从来没带过。 */
 import { readFileSync } from 'node:fs'
+/* 🔴 判据锚需求不锚写法(J-119,店主 12m裁三):到期日这一族**直接 import 唯一出口调函数**,
+   不再在 local-server.mjs / platform.html 的源码上跑正则 —— 实现一搬家,那种判据全散。 */
+import { expiryLabel, daysLeftOf, parseExpiryWrite } from './plan-expiry.mjs'
 import { join, dirname } from 'node:path'
 import { fileURLToPath } from 'node:url'
 
@@ -50,9 +53,18 @@ const js = codeOnly(html)
 for (const [id, label] of [['mCurrency', '币种'], ['mTz', '时区'], ['mPhone', '门店电话'], ['mCity', '地址']]) {
   check(`①a 新建商家那一屏有「${label}」这个框(id=${id})`, html.includes(`id="${id}"`), id)
 }
-check('①b 🔴 POST body 真的带上了 currency / timezone / phone —— 框在但不发,等于没做',
-  /body:JSON\.stringify\(\{name,\s*city:[^}]*phone:[^}]*currency,\s*timezone/.test(js),
-  (js.match(/body:JSON\.stringify\(\{name[^}]*\}/) || ['(没找到那一行)'])[0].slice(0, 160))
+/* 🔴 重锚(12m裁三):旧版一条正则要求 `phone:` 到 `currency,` 之间不出现 `}` ——
+   D216 第二电话加了 `...(PHONE2_READY?{phone2:…}:{})` 展开项,里面带 `}`,正则当场跨不过去而红,
+   **而三个字段一个没少**。判据不许锚在「字段之间碰巧没有花括号」这种写法上(J-119)。
+   改成:把建店那一段 POST body 抠出来,**逐个字段查在不在**,并报出缺了哪个。 */
+/* 🔴 不去匹配「那一对花括号」—— `...(PHONE2_READY?{phone2:…}:{})` 里就有 `})`,
+   非贪婪会停在那儿,又是一次「锚在碰巧的写法上」。改成:从标记起取定长窗口。 */
+const bodyAt = js.indexOf('body:JSON.stringify({name')
+const bodySeg = bodyAt < 0 ? '' : js.slice(bodyAt, bodyAt + 420)
+const missingFields = ['currency', 'timezone', 'phone:', 'city:'].filter((k) => !bodySeg.includes(k))
+check(`①b 🔴 建店 POST body 真的带上 currency / timezone / phone / city —— 框在但不发,等于没做(缺 ${missingFields.length} 个)`,
+  bodySeg.length > 40 && missingFields.length === 0,
+  missingFields.length ? `缺:${missingFields.join(' ')} · 取到的那一段:${bodySeg.slice(0, 120)}` : '')
 /* 🔴 币种/时区**不许有默认值**(11l 明写):默认值就是这条缺陷的来源。
    判法是看那两个 select 的第一项 value 是不是空 —— 空=必选,非空=又有默认了。 */
 for (const id of ['mCurrency', 'mTz']) {
@@ -143,16 +155,53 @@ check('④c 🔴 **回落仍在**:不传时区 → 不是 Asia/Shanghai(先要�
     /planExpired = Boolean\(planExpiresAt && /.test(srv))
   check('⑤b 🔴 `/admin/subscription`:没有到期日 ⇒ `status = .unlimited.`,不是 suspended',
     /\} else \{\s*status = 'unlimited'/.test(srv))
-  check('⑤c 🔴 平台列表:没有到期日 ⇒ 显示「长期授权」,不是「已到期」',
-    /t\.planExpiresAt\?\(days<=0\?[\s\S]{0,140}?:'<span class="muted">长期授权<\/span>'/.test(plat), '')
   check('⑤d 🔴 商家后台:没有到期日 ⇒「长期有效」', /'长期有效' : 'No expiry'/.test(adm))
-  check('⑤e 🔴 `daysLeft`:没有到期日 ⇒ null(不是负数)',
-    /daysLeft: t\.plan_expires_at \? [^:]+: null/.test(srv))
-  check('⑤f 🔴 **清空到期日这条路已经有**:平台 billing 口收 `planExpiresAt: null/""` ⇒ `plan_expires_at = NULL`',
-    /body\.planExpiresAt === null \|\| body\.planExpiresAt === ''\) \{ updates\.push\('plan_expires_at = NULL'\)/.test(srv))
-  check('⑤g 🔴 界面入口在:套餐计费页那个日期框清空就走这条路(不用新加按钮)',
-    /onchange="setExpiry\('\$\{esc\(t\.id\)\}',this\.value\)"/.test(plat)
-    && /planExpiresAt:date\|\|null/.test(plat))
+
+  /* ══ ⑤c / ⑤e / ⑤f / ⑤g:2026-09-24 重写(店主 12m裁三)══
+   * 旧版这四条全是**在源码上跑正则**。D217 把到期日的实现收进 `plan-expiry.mjs` 唯一出口之后,
+   * 四条全红 —— 而行为一个字没坏(当时现核:currency/timezone 照发、daysLeft 照回 null)。
+   * **判据锚在「代码碰巧这么写」上,一重构就散**(J-119)。
+   * 改法:直接 import 那个唯一出口**调函数断言结果**;文案与 400 口径都从回值上验。
+   *
+   * 🔴 口径同时换代(店主 12l补):
+   *   旧:`planExpiresAt: null / ""` ⇒ 写 NULL ⇒ 永久
+   *   新:**只有 `perpetual === true` 才写 NULL**;`null` / `""` / `0` / `false` 一律 **400**。
+   *   理由:「留空=永久」意味着表单少填一格、前端漏传一个字段,
+   *   都会**悄悄把一家店改成永久店**,而页面上什么也不说。 */
+  const apiErrorStub = (code, key, msg) => Object.assign(new Error(msg), { statusCode: code, code: key })
+
+  const lblPerpetual = expiryLabel({ plan_expires_at: null })
+  const lblExpired = expiryLabel({ plan_expires_at: '2020-01-01T00:00:00.000Z' })
+  check(`⑤c 🔴 没有到期日 ⇒ 说「长期」,不是「已到期」(现值「${lblPerpetual.text}」· 过期店「${lblExpired.text}」)`,
+    lblPerpetual.kind === 'perpetual' && lblPerpetual.text === '长期' && lblExpired.kind === 'expired',
+    JSON.stringify({ lblPerpetual, lblExpired }))
+
+  const dlPerpetual = daysLeftOf({ plan_expires_at: null })
+  const dlExpired = daysLeftOf({ plan_expires_at: '2020-01-01T00:00:00.000Z' })
+  check(`⑤e 🔴 daysLeft:没有到期日 ⇒ null(不是负数);已过期 ⇒ 负数(现值 ${dlPerpetual} / ${dlExpired})`,
+    dlPerpetual === null && typeof dlExpired === 'number' && dlExpired < 0,
+    JSON.stringify({ dlPerpetual, dlExpired }))
+
+  const wrote = (body) => { try { return { ok: true, r: parseExpiryWrite(body, apiErrorStub, null) } }
+                            catch (e) { return { ok: false, code: e.statusCode } } }
+  const blank = [null, '', '   ', 0, false].map((v) => wrote({ planExpiresAt: v }))
+  check(`⑤f 🔴 **留空不再等于永久**:planExpiresAt 为 null/""/空白/0/false ⇒ 一律 400(12l补 新口径,现测 ${blank.filter((x) => !x.ok && x.code === 400).length}/5)`,
+    blank.every((x) => !x.ok && x.code === 400), JSON.stringify(blank))
+
+  const viaPerpetual = wrote({ perpetual: true })
+  const notTrue = [false, 'true', 1, null].map((v) => wrote({ perpetual: v }))
+  check('⑤g 🔴 设永久只走显式入口:`perpetual: true` ⇒ 写 NULL;非 true(含字符串 "true")⇒ 400',
+    viaPerpetual.ok && viaPerpetual.r && viaPerpetual.r.sql === 'plan_expires_at = NULL' && viaPerpetual.r.arg === undefined
+    && notTrue.every((x) => !x.ok && x.code === 400),
+    JSON.stringify({ viaPerpetual, notTrue }))
+
+  check('⑤g2 反向守:平台后台**界面上**真有「设永久」这个显式入口,且它发 perpetual:true(光有后端口、界面点不到 = D190 那条法)',
+    /perpetual:\s*true/.test(plat) && /setPerpetual/.test(plat), '')
+
+  const okDate = wrote({ planExpiresAt: '2027-03-01' })
+  const okIso = wrote({ planExpiresAt: '2027-03-01T23:59:00.000Z' })
+  check('⑤i 反向守:正常日期(YYYY-MM-DD 与完整 ISO)照样写得进去 —— 不许把这条收成「什么都不许写」',
+    okDate.ok && okDate.r && okDate.r.sql === 'plan_expires_at = ?' && okIso.ok, JSON.stringify({ okDate, okIso }))
   check('⑤h 🟢 反向守:续费按「今天与旧到期日的较大者」起算 —— 永久店(NULL)续费从今天起,不是从 1970',
     (srv.match(/Math\.max\(Date\.now\(\), tenant\?\.plan_expires_at \? new Date\(tenant\.plan_expires_at\)\.getTime\(\) : 0\)/g) || []).length >= 2)
 }
@@ -219,7 +268,12 @@ check('④c 🔴 **回落仍在**:不传时区 → 不是 Asia/Shanghai(先要�
     && /publicDomain:\$\('mDomain'\)\.value/.test(codeOnly(read('apps/web/platform.html'))))
 }
 
-const EXPECTED_CHECKS = 46
+/* 46 → 48(2026-09-24,12m裁三):⑤ 那族从「在源码上跑正则」改成「import 唯一出口调函数」时,
+   新增两条**反向守**,差额有名有姓:
+     ⑤g2 界面上真有「设永久」这个显式入口(光有后端口、界面点不到 = D190 那条法)
+     ⑤i  正常日期照样写得进去(防把 ⑤f 收成「什么都不许写」)
+   其余四条(①b/⑤c/⑤e/⑤f/⑤g)是重锚,不增不减。 */
+const EXPECTED_CHECKS = 48
 if (checks !== EXPECTED_CHECKS) {
   console.error(`not ok - 🔴 断言条数对不上:实跑 ${checks} 条,应为 ${EXPECTED_CHECKS} 条(判据五)。`)
   process.exit(1)
