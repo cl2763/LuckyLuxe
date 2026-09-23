@@ -70,4 +70,8 @@ handoff/night-runs/.env.relay
 tools/segment/venv/
 tools/segment/venv312/
 tools/segment/weights/
-tools/segment/annotations/
+# 12n补四 §四:标注夹整体挡住 → 只放行标注 json 与两份说明;裁片/、自核图/ 继续挡着
+tools/segment/annotations/*
+!tools/segment/annotations/[0-9]*.json
+!tools/segment/annotations/_标注集清单.md
+!tools/segment/annotations/_补标挑图理由_*.md
