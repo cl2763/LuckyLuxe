@@ -64,3 +64,10 @@ handoff/本地自查账号.txt
 .playwright-browsers/
 handoff/night-runs/.env.relay
 *.pre-k
+
+# 分割探路环境与权重(12a/12g,店主 2026-09-24):1.6 GB,绝不入库。
+# venv 可按 tools/segment/README 重建;权重是第三方模型文件(许可证存 LICENSES/,单独入库)。
+tools/segment/venv/
+tools/segment/venv312/
+tools/segment/weights/
+tools/segment/annotations/

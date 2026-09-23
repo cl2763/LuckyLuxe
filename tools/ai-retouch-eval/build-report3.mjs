@@ -122,3 +122,10 @@ ${['A', 'B', 'C'].map((b) => `<details${b === 'C' ? '' : ' open'}><summary style
 `
 writeFileSync(OUT, html)
 console.log(`  对比包3:${OUT}\n  探针 ${rows.length} 行`)
+
+/* 12k §三 —— 对比包没有反馈按钮和导出按钮的,视为未交付。
+   统一从 feedback-embed.mjs 这一个出口嵌,不许每个 build-report 各写一套。 */
+import { fbScript as __fbScript } from './feedback-embed.mjs'
+import { appendFileSync as __fbAppend } from 'node:fs'
+__fbAppend(OUT, __fbScript())
+console.log('  已嵌入可点反馈组件(12k)')
