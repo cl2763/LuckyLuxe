@@ -4,7 +4,13 @@
  */
 import { readFileSync } from 'node:fs'
 let pass=0, fail=0
-const ok=(c,m)=>{c?(pass++,console.log('  ✅ '+m)):(fail++,console.log('  🔴 '+m))}
+/* 🔴 输出格式改成 TAP 的 `ok N - …`(店主 12m裁四批,2026-09-24)。
+   原来打 `  ✅ …`,而 test-assertion-baseline 那把尺子**只数 `^ok ` 行** ——
+   于是这一套的断言对基线完全隐形:少几条、整套空转,棘轮都不会红。
+   **不加进「零断言白名单」**:那等于拿白名单吸收判据缺陷(J-49),
+   断言内容一个字没动,只换打印形状。 */
+let n=0
+const ok=(c,m)=>{n++;c?(pass++,console.log(`ok ${n} - ${m}`)):(fail++,console.log(`not ok ${n} - ${m}`))}
 const html = readFileSync(new URL('../web/platform.html', import.meta.url), 'utf8')
 const srv  = readFileSync(new URL('./local-server.mjs', import.meta.url), 'utf8')
 

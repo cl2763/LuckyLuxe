@@ -7,10 +7,19 @@
 import { isPerpetual, daysLeftOf, expiryLabel, assertRenewable, parseExpiryWrite, expiryFromTerm, INITIAL_TERMS, parseInitialTerm } from './plan-expiry.mjs'
 let pass = 0, fail = 0
 const apiError = (code, kind, msg) => Object.assign(new Error(msg), { statusCode: code, kind })
-const ok = (c, m) => { if (c) { pass++; console.log('  ✅ ' + m) } else { fail++; console.log('  🔴 ' + m) } }
+/* 🔴 输出格式改成 TAP 的 `ok N - …`(店主 12m裁四批,2026-09-24)。
+   原来打 `  ✅ …`,而 test-assertion-baseline 那把尺子**只数 `^ok ` 行** ——
+   于是这一套的断言对基线完全隐形:少几条、整套空转,棘轮都不会红。
+   **不加进「零断言白名单」**:那等于拿白名单吸收判据缺陷(J-49),
+   断言内容一个字没动,只换打印形状。 */
+let n = 0
+const ok = (c, m) => { n++; if (c) { pass++; console.log(`ok ${n} - ${m}`) } else { fail++; console.log(`not ok ${n} - ${m}`) } }
 const throws = (fn, code, m) => {
-  try { fn(); fail++; console.log(`  🔴 ${m} —— 没抛`) }
-  catch (e) { const good = e.statusCode === code; good ? pass++ : fail++; console.log(`  ${good ? '✅' : '🔴'} ${m}(得 ${e.statusCode} ${e.kind})`) }
+  /* 🔴 第二个打印口也要数进去:改格式那一版只动了 ok(),这里 14 条照样对基线隐形 ——
+     「改一处漏一处」,和这一批要治的病是同一个。 */
+  try { fn(); n++; fail++; console.log(`not ok ${n} - ${m} —— 没抛`) }
+  catch (e) { const good = e.statusCode === code; n++; good ? pass++ : fail++
+    console.log(`${good ? 'ok' : 'not ok'} ${n} - ${m}(得 ${e.statusCode} ${e.kind})`) }
 }
 console.log('\n── 刀一:永久店续费必须拒 ──')
 throws(() => assertRenewable({ name: '永久店夹具', plan_expires_at: null }, apiError), 409, '对 NULL 店续费 → 409')
