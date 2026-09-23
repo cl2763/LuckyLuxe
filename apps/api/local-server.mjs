@@ -67,7 +67,8 @@ import { createWecomRouting, ensureWecomRoutingSchema } from './wecom-routing.mj
 import { createWecomConversation } from './wecom-conversation.mjs'   // D132 会话读写域(公约②:边改边拆)
 import { createTenantGate } from './tenant-gate.mjs'   // D132 口径④ 顾客侧租户闸(公约②)   // D130 身份归属(公约②:边改边拆)
 import { createQuoteSerialize } from './quote-serialize.mjs'          // AI 报价域序列化(公约②)
-import { createDemoReset, isDemoTenant, PROTECTED_REAL_TENANTS } from './demo-reset.mjs'   // 演示店归属判据/黑名单/重置唯一入口(公约①)
+import { createDemoReset, isDemoTenant, PROTECTED_REAL_TENANTS } from './demo-reset.mjs'
+import { isPerpetual, daysLeftOf, assertRenewable, parseExpiryWrite, expiryFromTerm, INITIAL_TERMS } from './plan-expiry.mjs'   // 到期日口径唯一出口(D217/12l补)   // 演示店归属判据/黑名单/重置唯一入口(公约①)
 import { demoSeedTag, ensureDemoMarkColumns } from './demo-mark.mjs'   // D121:演示标记唯一出口
 import { createKbMatch, mergedKbAnswer } from './kb-match.mjs'                        // 知识库匹配两个口
 import { createTurnAnswer } from './turn-answer.mjs'                  // D145 后半:先答再问,答从数据来
@@ -6756,7 +6757,7 @@ const notifyScheduler = createNotifyScheduler({
 const platformOps = createPlatformOps({
   db, apiError, randomId, iso, snapshotDb, financeSessions, adminPasswordHash, randomPassword,
   dbPath: join(dataDir, 'lucky-luxe.sqlite'), backupDir: join(dataDir, 'backups')
-})
+, lampsOf: (tid) => onboardingSteps.lampsOf(tid)})
 
 function financePasswordHash(password) {
   return createHash('sha256').update(`finance:${currentTenantId()}:${String(password)}`).digest('hex')
@@ -12660,7 +12661,7 @@ async function route(req, res) {
         status: t.status,
         planExpiresAt: t.plan_expires_at,
         autoRenew: Boolean(t.auto_renew),
-        daysLeft: t.plan_expires_at ? Math.ceil((new Date(t.plan_expires_at).getTime() - now) / 86400000) : null,
+        daysLeft: daysLeftOf(t, now),   // 永久 ⇒ null(plan-expiry.mjs)
         ai: {
           source: ai.trialPending && ai.source === 'none' ? 'pending' : ai.source,
           enabled: ai.enabled,       // 2026-08-07:平台页此前只给 source,判断「到底开没开」要靠猜
@@ -12695,12 +12696,8 @@ async function route(req, res) {
       if (!db.prepare('SELECT 1 FROM plans WHERE id = ?').get(String(body.plan))) throw apiError(400, 'BAD_REQUEST', '未知档位。')
       updates.push('plan = ?'); args.push(String(body.plan))
     }
-    if (body.planExpiresAt !== undefined) {
-      // null=长期授权;YYYY-MM-DD 存为当日门店时区 23:59
-      if (body.planExpiresAt === null || body.planExpiresAt === '') { updates.push('plan_expires_at = NULL') }
-      else if (/^\d{4}-\d{2}-\d{2}$/.test(String(body.planExpiresAt))) { updates.push('plan_expires_at = ?'); args.push(iso(localDateTime(String(body.planExpiresAt), '23:59'))) }
-      else throw apiError(400, 'BAD_REQUEST', '到期日格式应为 YYYY-MM-DD 或 null。')
-    }
+    { const w = parseExpiryWrite(body, apiError, (v) => iso(localDateTime(v, '23:59')))   // 到期日唯一写口
+      if (w) { updates.push(w.sql); if (w.arg !== undefined) args.push(w.arg) } }
     if (body.autoRenew !== undefined) { updates.push('auto_renew = ?'); args.push(body.autoRenew ? 1 : 0) }
     if (!updates.length) throw apiError(400, 'BAD_REQUEST', '没有要修改的内容。')
     updates.push('updated_at = ?'); args.push(iso(new Date()), tid)
@@ -12824,6 +12821,7 @@ async function route(req, res) {
       return json(res, 200, { ok: true, aiExpiresAt: aiIso })
     }
     const tenant = db.prepare('SELECT * FROM tenants WHERE id = ?').get(order.tenant_id)
+    if (tenant) assertRenewable(tenant, apiError)   // 🔴 永久店不许续费(plan-expiry.mjs)
     const base = new Date(Math.max(Date.now(), tenant?.plan_expires_at ? new Date(tenant.plan_expires_at).getTime() : 0))
     const next = new Date(base)
     if (order.period === 'month') next.setMonth(next.getMonth() + 1)
@@ -12869,12 +12867,9 @@ async function route(req, res) {
     if (db.prepare('SELECT id FROM tenants WHERE id = ?').get(id)) throw apiError(409, 'DUPLICATE', `租户 id ${id} 已存在。`)
     const plan = ['free', 'single', 'studio', 'chain', 'custom'].includes(body.plan) ? body.plan : 'single'
     // 首期订阅(2026-08-03 店主定):除内部旗舰店外,所有商家都有到期日——建店即设,默认年付;试用30天用于交付调试期
-    const initialTerm = ['trial30', 'month', 'year'].includes(body.initialTerm) ? body.initialTerm : 'year'
-    const expiry = new Date()
-    if (initialTerm === 'trial30') expiry.setDate(expiry.getDate() + 30)
-    else if (initialTerm === 'month') expiry.setMonth(expiry.getMonth() + 1)
-    else expiry.setFullYear(expiry.getFullYear() + 1)
-    const planExpiresAt = iso(expiry)
+    /* 首期 → 到期日走 plan-expiry.mjs 的唯一出口(含 'forever' ⇒ NULL) */
+    const initialTerm = INITIAL_TERMS.includes(body.initialTerm) ? body.initialTerm : 'year'
+    const planExpiresAt = expiryFromTerm(initialTerm, iso)
     /* 🔴 D73(店主 08-24 裁,改 D72 的做法):**归属不许再看 id 前缀。**
        原来写的是 `id.startsWith('demo-') ? 'demo' : 'real'` —— 那意味着以后在生产开的演示店
        (都叫 demo-*)一建出来就**不受禁删禁改律**,而演示店恰恰是准商户唯一亲眼看到的那家。
@@ -12886,6 +12881,12 @@ async function route(req, res) {
     // D76:演示店建出来就不在选店页(可见性独立于账本归属)
     const tenantListed = tenantKind === 'demo' ? 0 : 1
     db.prepare("INSERT INTO tenants (id, name, plan, status, plan_expires_at, kind, listed) VALUES (?, ?, ?, 'active', ?, ?, ?)").run(id, name.slice(0, 60), plan, planExpiresAt, tenantKind, tenantListed)
+    /* 🔴 D216:收到 phone2 但 `stores` 还没这一列 ⇒ **报错,不许悄悄丢掉**(店主 09-24 裁)。
+       「前端发了、后端默默扔掉」是最坏的一种失败:填的人以为存上了。 */
+    if (body.phone2 !== undefined && String(body.phone2).trim()) {
+      const hasCol = db.prepare("SELECT COUNT(*) n FROM pragma_table_info('stores') WHERE name = 'phone2'").get().n > 0
+      if (!hasCol) throw apiError(400, 'PHONE2_COLUMN_MISSING', '这个库的 stores 表还没有 phone2 列(D216 加列未执行),第二电话暂时存不下 —— 请先执行加列。')
+    }
     db.prepare('INSERT INTO stores (id, name, name_en, address, phone, timezone, currency, is_active, tenant_id) VALUES (?, ?, ?, ?, ?, ?, ?, 1, ?)')
       .run(`store-${id}`, name.slice(0, 60), String(body.nameEn || '').slice(0, 60) || null, String(body.city || '').slice(0, 80), String(body.phone || '').slice(0, 30),
         String(body.timezone || APP_TIMEZONE).slice(0, 64), String(body.currency || 'CAD').toUpperCase().slice(0, 6), id)
@@ -13999,6 +14000,7 @@ async function route(req, res) {
       return json(res, 200, { ok: true, aiExpiresAt: aiIso })
     }
     const tenant = db.prepare('SELECT * FROM tenants WHERE id = ?').get(tid)
+    if (tenant) assertRenewable(tenant, apiError)   // 🔴 同上,两条路都收
     // 顺延规则:以「原到期日」和「今天」的较晚者为基准,+1月/+1年——临期或宽限期内续费都不吃亏
     const base = new Date(Math.max(Date.now(), tenant?.plan_expires_at ? new Date(tenant.plan_expires_at).getTime() : 0))
     const next = new Date(base)
@@ -14259,10 +14261,8 @@ async function route(req, res) {
       updates.push('plan = ?')
       args.push(plan.id)
     }
-    if (body.planExpiresAt !== undefined) {
-      updates.push('plan_expires_at = ?')
-      args.push(body.planExpiresAt ? String(body.planExpiresAt) : null)
-    }
+    { const w = parseExpiryWrite(body, apiError)   // 到期日唯一写口
+      if (w) { updates.push(w.sql); if (w.arg !== undefined) args.push(w.arg) } }
     if (!updates.length) throw apiError(400, 'BAD_REQUEST', 'Nothing to update.')
     updates.push('updated_at = ?')
     args.push(iso(new Date()), currentTenantId())

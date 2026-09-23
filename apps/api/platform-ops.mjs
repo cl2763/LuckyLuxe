@@ -3,7 +3,7 @@
    这一族原本散在 local-server.mjs 的路由里:重置财务密码、按需备份、逐店五项、运维日志。
    共同点是**平台侧动商家的东西,每一次都要留痕** —— 收成一处,以后加动作只在这里加,
    不会再出现"某个平台动作忘了写日志"。路由那边只剩门禁 + 分发。 */
-export function createPlatformOps({ db, apiError, randomId, iso, snapshotDb, dbPath, backupDir, financeSessions, adminPasswordHash, randomPassword }) {
+export function createPlatformOps({ db, apiError, randomId, iso, snapshotDb, dbPath, backupDir, financeSessions, adminPasswordHash, randomPassword, lampsOf }) {
   const now = () => iso(new Date())
   function writeLog(tenantId, action, detail, operator = 'platform') {
     db.prepare('INSERT INTO platform_ops_log (id, tenant_id, action, detail, operator, created_at) VALUES (?, ?, ?, ?, ?, ?)')
@@ -140,13 +140,43 @@ export function createPlatformOps({ db, apiError, randomId, iso, snapshotDb, dbP
               ELSE 0 END) AS ai_on
       FROM tenants t ORDER BY t.rowid ASC
     `).all(monthStartIso)
-    return rows.map((r) => ({
-      id: r.id, name: r.name, plan: r.plan, status: r.status, kind: r.kind || 'real', listed: r.listed === 1,
-      planExpiresAt: r.plan_expires_at, storeCount: r.store_count, bookingCount: r.booking_count,
-      monthBookingCount: r.month_booking_count, ownerUsername: r.owner_username || '',
-      aiEnabled: r.ai_on === 1,
-      aiLabel: r.ai_on === 1 ? 'AI 包:已开通' : 'AI 包:未开通'   // 后端出句,前端零判断
-    }))
+    const now = Date.now()
+    return rows.map((r) => {
+      /* 🔴 D217:名称格那三个小字**都从现成出口取,不新拼**(12l补 点名):
+           城市 = 第一家门店的 city · 币种 = 门店的 currency · 域 = 按 tenant-public-url 的境内/境外判定。 */
+      /* 🔴 `stores` **没有 city 列**(实测:id/name/address/phone/timezone/currency/is_active/tenant_id/name_en)。
+         上一版写 `SELECT city, …` 被 try/catch 吞成 null —— 三小字全空、域全判成境外,
+         而页面照样渲染。**静默失败器族**:`catch { return null }` 把「字段不存在」变成了「没数据」。
+         城市从 timezone 推(时区是建店必填,且本来就决定了境内/境外)。 */
+      const st = db.prepare('SELECT timezone, currency FROM stores WHERE tenant_id = ? ORDER BY rowid LIMIT 1').get(r.id) || null
+      const CITY = { 'Asia/Shanghai': '北京', 'America/Toronto': '多伦多' }
+      const city = st?.timezone ? (CITY[st.timezone] || String(st.timezone).split('/').pop().replace(/_/g, ' ')) : ''
+      const dom = (() => {
+        const v = db.prepare("SELECT value FROM tenant_settings WHERE tenant_id = ? AND key = 'public_domain'").get(r.id)?.value
+        if (v === 'cn') return '境内域'
+        if (v === 'intl') return '境外域'
+        if (!st) return ''                                  // 没门店就别瞎猜,留空
+        return String(st.currency || '').toUpperCase() === 'CNY' ? '境内域' : '境外域'   // 与 tenant-public-url 同口径:按币种回落
+      })()
+      /* 🔴 五盏灯走 onboarding-steps 的**薄包装**,不在这里重写任何一步判断 */
+      /* 🔴 不吞异常:灯算失败必须炸出来。
+         `catch { return null }` 会把「算灯出错」吞成「这家店没灯」——
+         页面上就是一格空白,跟「确实没配」长得一模一样,看不出是失败。
+         与上面 stores 那处同病(同一文件里我刚修完一处又留了一处,店主点出来的)。 */
+      const ob = lampsOf ? lampsOf(r.id) : null
+      return {
+        id: r.id, name: r.name, plan: r.plan, status: r.status, kind: r.kind || 'real', listed: r.listed === 1,
+        planExpiresAt: r.plan_expires_at,
+        /* 永久 ⇒ null(与 plan-expiry.mjs 同口径;前端据此显「长期」) */
+        daysLeft: r.plan_expires_at ? Math.ceil((new Date(r.plan_expires_at).getTime() - now) / 86400000) : null,
+        city, cityLabel: city, currency: st?.currency || '', domainLabel: dom,
+        storeCount: r.store_count, bookingCount: r.booking_count,
+        monthBookingCount: r.month_booking_count, ownerUsername: r.owner_username || '',
+        aiEnabled: r.ai_on === 1,
+        aiLabel: r.ai_on === 1 ? 'AI 包:已开通' : 'AI 包:未开通',   // 后端出句,前端零判断
+        onboarding: ob ? { steps: ob.hints, summary: ob.summary, doneCount: ob.doneCount, totalCount: ob.totalCount } : null,
+      }
+    })
   }
 
   const recentLogs = () => db.prepare('SELECT * FROM platform_ops_log ORDER BY created_at DESC, rowid DESC LIMIT 100').all()

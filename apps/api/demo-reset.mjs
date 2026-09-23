@@ -25,7 +25,10 @@ export const DEMO_KIND = 'demo'
 /* 🔴 D75 第二道锁:真店黑名单**硬编码在服务端**(与 tools/clean-test-tenants.mjs 的 PROTECTED 同款)。
    为什么要有第二道:第一道(从未有过收入)依赖统计口径,口径哪天改了它就可能失效;
    这一条不依赖任何统计,店主的两家真店永远改不成演示店。两条锁互不依赖,单独命中即拦死。 */
-export const PROTECTED_REAL_TENANTS = ['lucky-luxe', 'jics-nail']
+/* 🔴 第二道锁 · 真店黑名单(12l补:加 luvia-bj)。店主 09-24 抓出的洞:
+   北京国贸店不在名单里,可以被转成样板店,转完「重置演示数据」就对一家有真实价目的店放行。
+   ⚠️ 这只是第二道锁。判「是不是样板店」读的是 tenants.kind(isDemoTenant),不读这张名单。 */
+export const PROTECTED_REAL_TENANTS = ['lucky-luxe', 'jics-nail', 'luvia-bj']
 export function isDemoTenant(tenant) {
   return String(tenant?.kind || 'real') === DEMO_KIND
 }
@@ -85,6 +88,31 @@ export function createDemoReset({ db, apiError, randomId, iso, dbPath, backupDir
         `「${tenant.name}」(${tenantId})在真店黑名单里,任何情况下都不允许改成演示店。`)
     }
 
+    /* 🔒 第三道锁 · **空店门**(12l补 店主裁):
+       不能写成「所有真店一律锁死」—— 「转为样板店」是清单第 10 项里的**正门操作**,
+       全锁死那个按钮就永远失败。改成:只有**确实是空店**才允许转,四条全满足,差一条就拒。 */
+    if (kind === 'demo') {
+      const blockers = []
+      const bookings = countOf('bookings', tenantId)
+      const customers = countOf('users', tenantId)
+      const signed = countOf('signed_docs', tenantId)
+      if (bookings) blockers.push(`${bookings} 个预约`)
+      if (customers) blockers.push(`${customers} 位顾客`)
+      if (signed) blockers.push(`${signed} 份签署件`)
+      const ownerRow = db.prepare("SELECT must_change_password FROM admin_accounts WHERE tenant_id = ? AND role = 'owner' LIMIT 1").get(tenantId)
+      /* 🔴 没有老板账号 ⇒ **拦住**,不是放行(店主 09-24 抓出:注释写「不放行」,代码却是
+         `if (ownerRow && …)` —— ownerRow 为 null 时一条拦截都不加,等于放行,注释与代码相反)。
+         正门建店一定带老板账号;没有就是异常数据,朝「拦住」那一侧失败。 */
+      if (!ownerRow || ownerRow.must_change_password !== 1) {
+        blockers.push(ownerRow ? '老板已首登改过密(说明已在用)' : '没有老板账号(异常数据)')
+      }
+      if (blockers.length) {
+        throw apiError(403, 'TENANT_NOT_EMPTY',
+          `「${tenant.name}」有真实数据,不能转成样板店 —— ${blockers.join(' · ')}。`
+          + '只有全新的空店(0 单、0 顾客、0 签署件、老板还没首登改密)才允许转。')
+      }
+    }
+
     const why = String(reason || '').trim()
     if (!why) throw apiError(400, 'REASON_REQUIRED', '改归属必须写一句原因(会写进平台运维日志)。')
     const now = iso(new Date())
@@ -97,7 +125,11 @@ export function createDemoReset({ db, apiError, randomId, iso, dbPath, backupDir
   }
 
   const countOf = (table, tenantId) => {
-    try { return db.prepare(`SELECT COUNT(*) n FROM ${table} WHERE tenant_id = ?`).get(tenantId).n } catch (e) { return 0 }
+    /* 🔴 不吞异常(D229 判别标准:吞掉之后接口会不会看起来一切正常?会 ⇒ 必须改)。
+       原来 `catch (e) { return 0 }` —— 表名写错/查询出错就返回 0,
+       而 0 在空店门那里的含义是**「这家店是空的」**,等于**直接放行**。
+       安全判据建在吞异常上,是这一批里最危险的一处。 */
+    return db.prepare(`SELECT COUNT(*) n FROM ${table} WHERE tenant_id = ?`).get(tenantId).n
   }
 
   /* 重置前快照:留痕里要写"删之前有多少",不然事后没法判断这次重置删掉了什么。 */

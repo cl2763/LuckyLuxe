@@ -35,7 +35,7 @@
   .navbtn .badge{margin-left:auto;font-size:10px;background:#fff4e6;color:var(--warn);border:1px solid #f0d9b8;border-radius:10px;padding:1px 7px}
   .navbtn .fut{margin-left:auto;font-size:9.5px;color:#c0b5a8;border:1px solid var(--line);border-radius:8px;padding:1px 6px}
   .side .foot{margin-top:20px;padding:0 10px}
-  .main{flex:1;padding:24px 30px;max-width:1040px}
+  .main{flex:1;padding:24px 30px;max-width:min(100%,1600px)}
   h1{font-size:20px;font-weight:650;color:#5c4630;margin-bottom:16px}
   h2{font-size:14.5px;margin-bottom:12px}
   .card{background:#fff;border:1px solid var(--line);border-radius:14px;padding:16px;margin-bottom:16px}
@@ -77,6 +77,33 @@
   .todo-item{display:flex;align-items:center;justify-content:space-between;padding:9px 4px;border-bottom:1px solid var(--soft);font-size:13px}
   .todo-item:last-child{border-bottom:none}
   .ni{width:15px;height:15px;fill:none;stroke:currentColor;stroke-width:1.8;stroke-linecap:round;stroke-linejoin:round;flex:none}
+  /* D217 合同图 图一 */
+  .demoRow{background:#fbf7ef}
+  td.ops{white-space:nowrap}
+  td.ops .sm{margin-right:4px}
+  .lamps{display:inline-flex;gap:3px}
+  .lamp{width:9px;height:9px;border-radius:50%;display:inline-block;cursor:pointer}
+  .lamp.done{background:#2d7a52}.lamp.pending,.lamp.blocked{background:#b3413a}.lamp.unavailable{background:#c9c2b8}
+  .moreWrap{position:relative;display:inline-block}
+  .moreMenu{position:absolute;right:0;top:100%;z-index:20;background:#fff;border:1px solid #e6e0d8;border-radius:8px;padding:6px;box-shadow:0 6px 18px rgba(0,0,0,.08);display:flex;flex-direction:column;gap:4px;min-width:150px}
+  /* 🔴 `.hidden{display:none}` 定义在本规则之前,同特异性下**后者胜**,
+     于是「有 hidden 类但照样显示」—— 六个菜单全展开把版面撑乱。
+     加一条更具体的规则把它压回去(不用 !important,用特异性)。 */
+  .moreMenu.hidden{display:none}
+  /* D217 图一:新建商家表单「两行各五格、等宽网格」(合同图第 20 项) */
+  /* 🔴 合同图第 20 项「两行各五格等宽网格」数的是**十个输入控件**
+     (名称/币种/时区/对外域名/地址 · 门店电话/第二电话/套餐/首期/租户id),
+     勾选框与创建按钮是**操作区**,不占那十格 —— 它们单独一行跨满,不挤进网格。
+     店主 12o 看图指出「还是 7+3」,改成 5+5 之后操作区自然落到第三行。 */
+  .mkGrid{display:grid;grid-template-columns:repeat(5,1fr);gap:10px;align-items:center}
+  .mkGrid > input,.mkGrid > select{width:100%!important;min-width:0}
+  .mkGrid .mkOps{grid-column:1 / -1;display:flex;align-items:center;gap:16px;margin-top:2px}
+  .mkGrid .mkOps label{white-space:normal}
+  .mkGrid .mkOps button{margin-left:auto}
+  /* 明知必败的按钮不许亮着(店主 12o):黑名单三家的「转为样板店」置灰 */
+  .moreMenu .sm[disabled]{opacity:.45;cursor:not-allowed}
+  .moreMenu .sm{margin:0;text-align:left}
+  .moreMenu .sm.d{color:#b3413a}
 </style>
 </head>
 <body>
@@ -148,7 +175,7 @@
       <h1>商家管理</h1>
       <div class="card">
         <h2>新建商家</h2>
-        <div class="row">
+        <div class="mkGrid">
           <input id="mName" placeholder="商家名称(必填)" style="width:190px">
           <!-- 🔴 D210(店主 11l 裁):这一屏原来只发 name/city/plan/initialTerm/id/isDemo —— **不发币种、时区、电话**。
                正门缺这两样时默认 `currency='CAD'` / `timezone=APP_TIMEZONE`(local-server.mjs:12896),
@@ -163,21 +190,30 @@
           <select id="mDomain"><option value="" selected>对外域名(默认跟币种)</option><option value="cn">境内 app.jingshengyouji.com</option><option value="intl">境外 www.luckyluxeatelier.com</option></select>
           <input id="mCity" placeholder="地址(选填)" style="width:200px">
           <input id="mPhone" placeholder="门店电话(选填)" style="width:140px">
+          <!-- 🔴 D216 第二电话。⚠️ 生产 `stores` 还**没有 phone2 列**(ALTER 预批件待批),
+               所以后端拿到也存不下 —— 这一格先做出来,列加上之前填了不会生效,
+               placeholder 里如实写明,不让人以为填了就有。 -->
+          <!-- 🔴 D216:生产 `stores` 还没有 phone2 列(ALTER 预批件已批,随推 main 执行)。
+               **加列之前这一格灰掉、且不发** —— 能填但存不下,是「填了没反应」那种最坏的形态。
+               加完列把 PHONE2_READY 改 true 即可放开,这一处是唯一开关。 -->
+          <input id="mPhone2" placeholder="第二电话(生产加列后开放)" style="width:170px" disabled
+                 title="生产库还没有这一列,加列后自动开放 —— 现在填了也存不下,所以先锁住">
           <select id="mPlan"><option value="free">免费版 ¥0</option><option value="single" selected>单店版 ¥1,380/年</option><option value="studio">工作室版 ¥2,980/年</option><option value="chain">连锁版 ¥6,800/年起</option><option value="custom">定制版(面议)</option></select>
-          <select id="mTerm"><option value="year" selected>首期:年付(到期=今天+1年)</option><option value="month">首期:月付(+1月)</option><option value="trial30">试用 30 天(交付调试期)</option></select>
+          <select id="mTerm"><option value="year" selected>首期:年付(到期=今天+1年)</option><option value="month">首期:月付(+1月)</option><option value="trial30">试用 30 天(交付调试期)</option><option value="forever">永久(买断 / 内部店)</option></select>
           <input id="mId" placeholder="租户id(选填)" style="width:160px">
           <!-- D73(店主 08-24):演示店归属改**显式勾选**,不再看 id 前缀。
                勾了=这家店的账本可以整体重置(演示需要);不勾=真商户,账本受禁删禁改律保护。 -->
-          <label style="display:inline-flex;align-items:center;gap:6px;white-space:nowrap">
-            <input id="mIsDemo" type="checkbox"> 这是演示店(账本可重置,不受只追加律保护)
+          <div class="mkOps"><label style="display:inline-flex;align-items:center;gap:6px;white-space:nowrap">
+            <input id="mIsDemo" type="checkbox"> 这是样板店(账本可重置,不受只追加律保护)
           </label>
-          <button class="p" onclick="createTenant()">创建(建店 + 老板账号)</button>
+          <button class="p" onclick="createTenant()">创建(建店 + 老板账号)</button></div>
         </div>
         <div id="credBox" class="cred hidden"></div>
       </div>
       <div class="card">
         <table>
-          <thead><tr><th>租户</th><th>名称</th><th>套餐</th><th>AI 包</th><th>状态</th><th>门店</th><th>本月/累计订单</th><th>老板账号</th><th>归属</th><th>操作</th></tr></thead>
+          <!-- 🔴 D217 合同图 图一 + 11u §〇.2:列顺序定死。图上「去掉门店数」那句作废(店主 09-23 拍板保留)。 -->
+          <thead><tr><th>租户</th><th>名称</th><th>归属</th><th>套餐 · 到期</th><th>AI 包</th><th>配置进度</th><th>门店</th><th>本月 / 累计单</th><th>老板账号</th><th>操作</th></tr></thead>
           <tbody id="tenantRows"></tbody>
         </table>
         <p class="muted" style="margin-top:8px">停用后:顾客端立即进不了该店;老板账号在多商户控制台开放前统一暂不可登录。</p>
@@ -431,6 +467,13 @@
    所以这里**不再把令牌写进 localStorage**;旧版本存过的,进来先清掉。 */
 try { localStorage.removeItem('ll-platform-token') } catch (e) {}
 let TOKEN = ''
+/* 🔴 后端 demo-reset.mjs 的 PROTECTED_REAL_TENANTS 的**镜像**,只为把明知必败的按钮置灰(店主 12o)。
+   真正的闸在后端,前端置灰只是不让人白点一次。两边不一致时以后端为准。 */
+const PROTECTED_REAL = ['lucky-luxe', 'jics-nail', 'luvia-bj']
+/* 🔴 D216 第二电话的唯一开关:生产 `stores` 加了 phone2 列之后改 true。
+   false 时那一格 disabled 且**不进请求体** —— 后端收到这个字段会 400,
+   这样「前端发了后端丢」不可能再悄悄发生。 */
+const PHONE2_READY = false
 let PW1 = ''   // 首登改密时要用的「旧密码」,只在内存里活这一次
 const $ = (id) => document.getElementById(id)
 const WK = ['周日','周一','周二','周三','周四','周五','周六']
@@ -508,7 +551,8 @@ async function loadBilling(){
     const planOpts=(cur)=>BILLPLANS.map(p=>`<option value="${esc(p.id)}" ${p.id===cur?'selected':''}>${esc(p.name)}${p.pricing?(p.pricing.yearCents?` ${moneyY(p.pricing.yearCents)}/年`:' ¥0'):'(面议)'}</option>`).join('')
     $('billRows').innerHTML=(d.tenants||[]).map(t=>{
       const days=t.daysLeft
-      const left=t.planExpiresAt?(days<=0?`<span class="tag off">已到期 ${-days} 天</span>`:days<=7?`<span class="tag off">剩 ${days} 天</span>`:`剩 ${days} 天`):'<span class="muted">长期授权</span>'
+      /* 永久 ⇒「长期」标签(与 plan-expiry.mjs 的 expiryLabel 同词;后端 daysLeft 对永久返回 null) */
+      const left=t.planExpiresAt?(days<=0?`<span class="tag off">已到期 ${-days} 天</span>`:days<=7?`<span class="tag off">剩 ${days} 天</span>`:`剩 ${days} 天`):'<span class="tag on">长期</span>'
       const ai=t.ai||{}
       const aiText={plan:'<span class="tag on">套餐已含</span>',paid:'<span class="tag on">已订阅</span>',trial:'<span class="tag on">试用中</span>',pending:'<span class="tag off">待开通(有申请)</span>',none:'<span class="muted">未开通</span>'}[ai.source]||'<span class="muted">未开通</span>'
       const aiExp=ai.expiresAt&&ai.source!=='plan'?`<br><span class="muted">至 ${esc(String(ai.expiresAt).slice(0,10))}${ai.daysLeft!=null?(ai.daysLeft<=0?' · 已过期':' · 剩 '+ai.daysLeft+' 天'):''}</span>`:''
@@ -520,23 +564,36 @@ async function loadBilling(){
       return `<tr>
       <td><b>${esc(t.name)}</b><br><span class="muted">t=${esc(t.id)}</span></td>
       <td><select onchange="setPlan('${esc(t.id)}',this.value)">${planOpts(t.plan)}</select></td>
-      <td><input type="date" value="${t.planExpiresAt?esc(String(t.planExpiresAt).slice(0,10)):''}" onchange="setExpiry('${esc(t.id)}',this.value)" style="width:140px"></td>
+      <td><input type="date" value="${t.planExpiresAt?esc(String(t.planExpiresAt).slice(0,10)):''}" onchange="setExpiry('${esc(t.id)}',this.value)" style="width:140px" title="${t.planExpiresAt?'':'这家是长期店。填一个日期就是取消长期。'}">${t.planExpiresAt?'':'<br><span class="muted" style="font-size:11px">长期 · 填日期即取消</span>'}</td>
       <td>${left}</td>
       <td>${aiText}${aiExp}${aiUse}${aiBtns}</td>
       <td><span class="tag ${t.autoRenew?'on':'off'}">${t.autoRenew?'开':'关'}</span></td>
-      <td class="row"><button class="sm" onclick="extend('${esc(t.id)}','month')">+1月</button><button class="sm" onclick="extend('${esc(t.id)}','year')">+1年</button><button class="sm" onclick="setExpiry('${esc(t.id)}','')">设为长期</button></td>
+      <td class="row"><button class="sm" onclick="extend('${esc(t.id)}','month')">+1月</button><button class="sm" onclick="extend('${esc(t.id)}','year')">+1年</button>${t.planExpiresAt?`<button class="sm" onclick="setPerpetual('${esc(t.id)}')">设为长期</button>`:'<span class="tag on">长期</span>'}</td>
     </tr>`}).join('')
     this._billTenants=d.tenants||[]
   }catch(e){toast(e.message)}
 }
 async function setPlan(id,plan){try{await api('/platform/tenants/'+id+'/billing',{method:'POST',body:JSON.stringify({plan})});toast('档位已更新,功能开关即时生效');loadBilling()}catch(e){toast(e.message)}}
+/* 🔴 D217/12l补:「设永久」和「设日期」拆成两条,不再拿空串表达永久。
+   后端已收紧:只有 perpetual:true 才写 NULL,空串/0/false 一律 400。
+   清空日期框**不再等于设永久** —— 那正是「误设永久」那条洞。 */
 async function setExpiry(id,date){
-  if(date===''&&!confirm('设为长期授权(不再到期)?一般只用于内部/旗舰店。'))return
-  try{await api('/platform/tenants/'+id+'/billing',{method:'POST',body:JSON.stringify({planExpiresAt:date||null})});toast(date?('到期日已设为 '+date):'已设为长期授权');loadBilling()}catch(e){toast(e.message)}
+  if(!date){toast('要设为长期请点「设为长期」按钮;日期框留空不会有任何改动。');loadBilling();return}
+  try{await api('/platform/tenants/'+id+'/billing',{method:'POST',body:JSON.stringify({planExpiresAt:date})});toast('到期日已设为 '+date);loadBilling()}catch(e){toast(e.message)}
+}
+async function setPerpetual(id){
+  if(!confirm('设为长期授权(不再到期)?一般只用于内部/旗舰店。\n设成长期后不能续费,要续费得先在日期框里填一个到期日。'))return
+  try{await api('/platform/tenants/'+id+'/billing',{method:'POST',body:JSON.stringify({perpetual:true})});toast('已设为长期授权');loadBilling()}catch(e){toast(e.message)}
 }
 async function extend(id,period){
   // 手工顺延(不走订单,适合口头约定/赠送):按 max(原到期日,今天)+周期
   const t=(this._billTenants||[]).find(x=>x.id===id)
+  /* 🔴 D217/12l补(店主 J-118 扫出):永久店必须在**发请求之前**拦住。
+     这条路算出一个日期后 POST 的是**合法的 planExpiresAt** ——
+     后端只看到「填了个日期」,分不出这是「顺延」还是「取消永久」,
+     `assertRenewable` 那道闸在 mark-paid 路径上,不在这条路上,所以后端挡不住。
+     结果会是:永久店点一下 +1月,悄悄变成一个月后到期。 */
+  if(t&&!t.planExpiresAt){toast('这家是永久店,先在日期框填一个到期日再顺延。');return}
   const base=t&&t.planExpiresAt?new Date(Math.max(Date.now(),new Date(t.planExpiresAt).getTime())):new Date()
   const next=new Date(base);if(period==='month')next.setMonth(next.getMonth()+1);else next.setFullYear(next.getFullYear()+1)
   const dateStr=next.toISOString().slice(0,10)
@@ -677,19 +734,62 @@ function aiTag(t){
 }
 async function loadTenants(){
   const d=await api('/platform/tenants');TENANTS=d.tenants||[]
-  $('tenantRows').innerHTML=TENANTS.map(t=>`<tr>
-    <td class="muted">${esc(t.id)}</td><td><b>${esc(t.name)}</b></td><td>${esc(t.plan)}</td>
-    <!-- 🔴 05t 段 6:AI 包状态格(D147 的 UI 那一半)。句子由后端出(见 aiTag 上面那段说明)。 -->
-    <td>${aiTag(t)}</td>
-    <td><span class="tag ${t.status==='active'?'on':'off'}">${t.status==='active'?'营业中':'已停用'}</span></td>
-    <td>${t.storeCount}</td><td>${t.monthBookingCount??'-'} / ${t.bookingCount}</td><td>${esc(t.ownerUsername)||'-'}</td>
-    <!-- D73/B线:归属列 —— 它决定这家店的账本受不受只追加律保护,必须一眼看得见 -->
-    <td><span class="tag ${t.kind==='demo'?'off':(t.kind==='test'?'off':'on')}">${t.kind==='demo'?'演示店':(t.kind==='test'?'测试':'真实商户')}</span>
-      <!-- D76:可见性是**另一件事**(顾客选店页出不出现),与账本归属解耦,两列分开看 -->
+  $('tenantRows').innerHTML=TENANTS.map(t=>{
+    const isDemo=t.kind==='demo'
+    /* 🔴 样板店判定读 **tenants.kind 标记**,不读 id 前缀、不读写死名单(12l补)。
+       常量 PROTECTED_REAL_TENANTS 只是后端「不许转成样板店」的第二道锁,不参与这里的判定。 */
+    const perp=!t.planExpiresAt
+    const expiry=perp?'<span class="tag on">长期</span>'
+      :(t.daysLeft!=null&&t.daysLeft<=0?`<span class="tag off">已到期</span>`
+        :`<span class="muted">${esc(String(t.planExpiresAt).slice(0,10))}</span>`)
+    /* 配置进度:五盏灯 + 后端出的那一句(D197 onboarding-steps.mjs,不另写判断) */
+    const steps=t.onboarding&&t.onboarding.steps||null
+    const lamps=isDemo?'<span class="muted">— 样板店不计</span>'
+      :steps?`<span class="lamps">${steps.map((x,i)=>`<i class="lamp ${x.state}" title="${esc(x.title||'')}:${esc(x.note||'')}" onclick="goConfig('${esc(t.id)}','${esc(x.key)}')"></i>`).join('')}</span><br><span class="muted" style="font-size:11px">${esc(t.onboarding.summary||'')}</span>`
+      :'<span class="muted">—</span>'
+    /* 操作列:恰 3 个常用 + 1 个「更多」(合同图 图一)。真店第三个是「设为永久」,样板店换「重置演示数据」。 */
+    const third=isDemo
+      ? `<button class="sm" onclick="resetDemoData('${esc(t.id)}')">重置演示数据</button>`
+      : (perp?'<span class="tag on">长期</span>':`<button class="sm" onclick="setPerpetualFromList('${esc(t.id)}')">设为永久</button>`)
+    const more=`<span class="moreWrap"><button class="sm" onclick="toggleMore('${esc(t.id)}')">更多 ▾</button>
+      <span class="moreMenu hidden" id="more-${esc(t.id)}">
+        <button class="sm" onclick="toggleListed('${esc(t.id)}',${t.listed?'false':'true'})">${t.listed?'从选店页隐藏':'放回选店页'}</button>
+        ${(!isDemo&&PROTECTED_REAL.includes(t.id))
+          ? `<button class="sm" disabled title="真店受保护 —— 这家在黑名单里,任何情况下都不允许转成样板店">转为样板店</button>`
+          : `<button class="sm" onclick="switchKind('${esc(t.id)}','${isDemo?'real':'demo'}')">${isDemo?'转为真实商户':'转为样板店'}</button>`}
+        <button class="sm" onclick="goConfig('${esc(t.id)}','wecom')">企微客服号</button>
+        <button class="sm d" onclick="toggleTenant('${esc(t.id)}')">${t.status==='active'?'停用':'启用'}</button>
+      </span></span>`
+    return `<tr class="${isDemo?'demoRow':''}">
+    <td class="muted">${esc(t.id)}</td>
+    <td><b>${esc(t.name)}</b><br><span class="muted" style="font-size:11px">${esc(t.cityLabel||t.city||'')}${t.currency?' · '+esc(t.currency):''}${t.domainLabel?' · '+esc(t.domainLabel):''}</span></td>
+    <td><span class="tag ${isDemo?'off':'on'}">${isDemo?'样板店 · 展示/测试用':(t.kind==='test'?'测试':'真实商户')}</span>
       <span class="tag ${t.listed?'on':'off'}" title="顾客选店页是否出现">${t.listed?'选店页可见':'选店页隐藏'}</span></td>
-    <td class="row"><button class="sm" onclick="goConfig('${esc(t.id)}')">配置</button>${t.id==='lucky-luxe'?'<span class="muted">默认店</span>':`<button class="sm ${t.status==='active'?'d':'p'}" onclick="toggleTenant('${esc(t.id)}')">${t.status==='active'?'停用':'启用'}</button>`}${t.kind==='test'?'':`<button class="sm" onclick="switchKind('${esc(t.id)}','${t.kind==='demo'?'real':'demo'}')">${t.kind==='demo'?'转为真实商户':'转为演示店'}</button>`}<button class="sm" onclick="toggleListed('${esc(t.id)}',${t.listed?'false':'true'})">${t.listed?'从选店页隐藏':'放回选店页'}</button><button class="sm d" onclick="resetOwnerPw('${esc(t.id)}')">重置老板密码</button></td>
-  </tr>`).join('')
+    <td>${esc(t.plan)}<br>${expiry}</td>
+    <td>${aiTag(t)}</td>
+    <td>${lamps}</td>
+    <td>${t.storeCount}</td>
+    <td>${t.monthBookingCount??'-'} / ${t.bookingCount}</td>
+    <td>${esc(t.ownerUsername)||'-'}</td>
+    <td class="ops"><button class="sm" onclick="goConfig('${esc(t.id)}')">配置</button><button class="sm d" onclick="resetOwnerPw('${esc(t.id)}')">重置老板密码</button>${third}${more}</td>
+  </tr>`}).join('')
   return TENANTS
+}
+function toggleMore(id){const m=$('more-'+id);if(!m)return
+  document.querySelectorAll('.moreMenu').forEach(x=>{if(x!==m)x.classList.add('hidden')})
+  m.classList.toggle('hidden')}
+async function setPerpetualFromList(id){
+  const t=TENANTS.find(x=>x.id===id)||{}
+  if(!confirm(`把「${t.name||id}」设为永久(不再到期)?\n\n设成永久后不能续费/顺延,要续费得先在「套餐计费」页填一个到期日。`))return
+  try{await api('/platform/tenants/'+id+'/billing',{method:'POST',body:JSON.stringify({perpetual:true})});toast('已设为永久');loadTenants()}catch(e){toast(e.message)}
+}
+async function resetDemoData(id){
+  const t=TENANTS.find(x=>x.id===id)||{}
+  const name=prompt(`重置「${t.name||id}」的演示数据。\n\n这会清掉这家店的账本(预约/结算/流水),**不可撤销**。\n请手打完整店名确认:`)
+  if(name===null)return
+  const reason=prompt('写一句原因(会写进平台运维日志):')
+  if(!reason||!reason.trim()){toast('原因必填');return}
+  try{await api(`/platform/tenants/${id}/demo-reset`,{method:'POST',body:JSON.stringify({confirmName:name,reason:reason.trim()})});toast('演示数据已重置');loadTenants()}catch(e){toast(e.message)}
 }
 /* 改归属:这一步改的是"这家店的账本受不受只追加律保护",所以要说清后果 + 必填原因 + 落 ops-log。 */
 async function switchKind(id,to){
@@ -735,10 +835,10 @@ async function createTenant(){
   try{
     const isDemo=$('mIsDemo').checked
     if(isDemo&&!confirm('确认建成【演示店】?\n它的账本不受"只追加"保护(可整体重置),对外不能拿它说"账本不可篡改"。')){return}
-    const d=await api('/platform/tenants',{method:'POST',body:JSON.stringify({name,city:$('mCity').value.trim(),phone:$('mPhone').value.trim(),currency,timezone,publicDomain:$('mDomain').value,plan:$('mPlan').value,initialTerm:$('mTerm').value,id:$('mId').value.trim(),isDemo})})
+    const d=await api('/platform/tenants',{method:'POST',body:JSON.stringify({name,city:$('mCity').value.trim(),phone:$('mPhone').value.trim(),...(PHONE2_READY?{phone2:$('mPhone2').value.trim()}:{}),currency,timezone,publicDomain:$('mDomain').value,plan:$('mPlan').value,initialTerm:$('mTerm').value,id:$('mId').value.trim(),isDemo})})
     $('credBox').classList.remove('hidden')
     $('credBox').innerHTML=`✅ <b>${esc(d.tenant.name)}</b>(${esc(d.tenant.id)})已创建,订阅到期日 <b>${esc(String(d.tenant.planExpiresAt||'').slice(0,10))}</b>(套餐计费页可改)<br>老板账号:<b>${esc(d.owner.username)}</b> 初始密码:<b>${esc(d.owner.initialPassword)}</b>(只显示一次;商家控制台开放前账号暂不可登录)<br>店码 scene:<b>${esc(d.shopEntry.scene)}</b> · <a href="javascript:void(0)" onclick="goConfig('${esc(d.tenant.id)}')">→ 去替商家配置资料</a>`
-    $('mName').value=$('mCity').value=$('mPhone').value=$('mId').value='';$('mCurrency').value=$('mTz').value=$('mDomain').value='';$('mIsDemo').checked=false
+    $('mName').value=$('mCity').value=$('mPhone').value=$('mPhone2').value=$('mId').value='';$('mCurrency').value=$('mTz').value=$('mDomain').value='';$('mIsDemo').checked=false
     loadTenants()
   }catch(e){toast(e.message)}
 }

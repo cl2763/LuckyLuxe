@@ -119,5 +119,22 @@ export function createOnboardingSteps(deps) {
     return null
   }
 
-  return { stepsOf, overviewRoute, STEP_KEYS, STEP_STATES }
+  /* 🔴 D217 · 列表用的**薄包装**(12l补三条件之一):
+     它**不重写任何一步判断** —— 调同一个 stepsOf() 拿全量,再压成「灯色数组 + 那一句」。
+     动的只是出口形状,不是判断本身。配套判据逐店比对:
+       汇总的每盏灯色 ≡ 全量 steps[i].state,那一句 ≡ 全量的 summary。
+     第五盏恒灰的规则**原样继承**,这里不碰(它由 stepLaunch() 定)。 */
+  function lampsOf(tenantId) {
+    const full = stepsOf(tenantId)
+    return {
+      lamps: full.steps.map((x) => x.state),
+      summary: full.summary,
+      doneCount: full.doneCount,
+      totalCount: full.totalCount,
+      /* 灯要能点:带上 key 与那一步自己的说明,悬停能看见缺什么 */
+      hints: full.steps.map((x) => ({ key: x.key, title: x.label, note: x.note, state: x.state })),
+    }
+  }
+
+  return { stepsOf, lampsOf, overviewRoute, STEP_KEYS, STEP_STATES }
 }
