@@ -116,7 +116,14 @@ async function main() {
     check('expired plan disables plan features', expiredPlan.data.entitlements?.features?.ai_customer_service?.source === 'plan_expired')
     const planBlockedChat = await chat(`ent-planexp-${RUN_ID}`, '你好')
     check('expired plan blocks AI chat', planBlockedChat.data?.entitlementBlocked === true, JSON.stringify(planBlockedChat.data).slice(0, 150))
-    const restoredPlan = await request('/admin/tenant/plan', { method: 'PUT', body: JSON.stringify({ planExpiresAt: null }) })
+    /* 🔴 口径换过一次(店主 12l补,2026-09-24):设永久**必须明确勾选** `perpetual: true`;
+       `planExpiresAt: null`(以及空串 / 0 / false)一律 400。
+       立这条的原因:原来「留空 = 永久」,那么表单少填一格、前端漏传一个字段,
+       都会**悄悄把一家店改成永久店**,而页面上什么也不说。
+       所以这里换成新契约,并**顺手守住旧写法真的被拒** —— 不然改了口径没人知道它到底收没收。 */
+    const nullRejected = await request('/admin/tenant/plan', { method: 'PUT', body: JSON.stringify({ planExpiresAt: null }) })
+    check('设永久不许靠留空:planExpiresAt=null → 400(12l补 新口径)', nullRejected.status === 400, `status=${nullRejected.status}`)
+    const restoredPlan = await request('/admin/tenant/plan', { method: 'PUT', body: JSON.stringify({ perpetual: true }) })
     check('restore no-expiry re-enables features', restoredPlan.data.entitlements?.features?.ai_customer_service?.enabled === true)
 
     // 6. 续费/升级申请入口

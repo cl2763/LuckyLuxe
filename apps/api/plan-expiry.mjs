@@ -50,7 +50,17 @@ export function parseExpiryWrite(body, apiError, toIso) {
   if (body.planExpiresAt === undefined) return null
   const v = String(body.planExpiresAt ?? '').trim()
   if (!v) throw apiError(400, 'BAD_REQUEST', '要设永久请明确勾选(perpetual: true);到期日不许留空。')
-  if (!/^\d{4}-\d{2}-\d{2}$/.test(v)) throw apiError(400, 'BAD_REQUEST', '到期日格式应为 YYYY-MM-DD。')
+  /* 🔴 12m 自纠(J-118):D217 那一版只认 `YYYY-MM-DD`,把这条写口的契约悄悄收窄了 ——
+     而店主 12l补 裁的是「只有 perpetual===true 才写 NULL」,**从没说过要限死日期格式**。
+     后果:`/admin/tenant/plan` 传完整 ISO 时刻的老调用点全部 400(test-entitlements 当场红)。
+     这是「收紧入口契约却没普查调用点」的案底。两种都收,写 NULL 那条收紧照旧。
+     判据(J-119):这条放宽有依据 —— 收窄那一条没有任何需求撑着,是我自己加的。 */
+  const DATE_ONLY = /^\d{4}-\d{2}-\d{2}$/
+  const FULL_ISO = /^\d{4}-\d{2}-\d{2}[T ]\d{2}:\d{2}(:\d{2}(\.\d{1,3})?)?(Z|[+-]\d{2}:?\d{2})?$/
+  if (!DATE_ONLY.test(v) && !FULL_ISO.test(v)) {
+    throw apiError(400, 'BAD_REQUEST', '到期日格式应为 YYYY-MM-DD 或完整 ISO 时刻。')
+  }
+  if (FULL_ISO.test(v)) return { sql: 'plan_expires_at = ?', arg: v }   // 已经是时刻,不再过 toIso(那是给纯日期补 23:59 用的)
   return { sql: 'plan_expires_at = ?', arg: toIso ? toIso(v) : v }
 }
 
