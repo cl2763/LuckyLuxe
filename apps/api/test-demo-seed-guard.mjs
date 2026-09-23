@@ -355,9 +355,26 @@ const realBefore = await statsOf('lucky-luxe')
   }
   check('真店黑名单全仓只有一处定义(第二份名单=0)', dupes.length === 0, dupes.join(' | '))
   const cleaner = await import('../../tools/clean-test-tenants.mjs')
-  check('清理脚本的保留名单由唯一出口派生(真调用取值)',
-    ['lucky-luxe', 'jics-nail'].every((t) => cleaner.PROTECTED_IDS.has(t)) && cleaner.PROTECTED_IDS.size === 5,
-    [...cleaner.PROTECTED_IDS].join(' / '))
+  /* 🔴 从「数个数」改成「逐名对账」(12m,店主 12l补 把 luvia-bj 加进硬锁,5 → 6)。
+     原判据只守 size===5:名单换了一个成员而个数不变,它一样绿 ——
+     「数量凑巧对上」正是突变自检条说的那种看着在守其实没守。
+     逐名对账两向都守:少了谁、多了谁,都会被点名报出来。
+     每个成员为什么在名单里,写在下面这张表上,新增成员必须同时补一行理由。 */
+  const EXPECT_PROTECTED = {
+    'lucky-luxe': '店主本店(真店,硬锁)',
+    'jics-nail': '小婕的店(真店,09-25 真交付)',
+    'luvia-bj': 'LUVIA 北京国贸店(真店,店主 12l补 加进硬锁)',
+    'demo-ai': '平台演示店(对外展示,清理脚本不许删)',
+    'demo-basic': '平台演示店(同上)',
+    'hoptest-demo2': '长期演示租户',
+  }
+  const got = [...cleaner.PROTECTED_IDS].sort()
+  const want = Object.keys(EXPECT_PROTECTED).sort()
+  const missing = want.filter((t) => !cleaner.PROTECTED_IDS.has(t))
+  const extra = got.filter((t) => !(t in EXPECT_PROTECTED))
+  check('清理脚本的保留名单由唯一出口派生,且**逐名**对得上(少一个/多一个都点名)',
+    missing.length === 0 && extra.length === 0,
+    `少:${missing.join(' ') || '无'} · 多:${extra.join(' ') || '无'} · 现有:${got.join(' / ')}`)
   const auditSrc = readFileSync(join(ROOT, 'tools/audit-test-tenants.mjs'), 'utf8')
   check('清点脚本同样 import 那一份,不本地抄',
     /import \{ PROTECTED_REAL_TENANTS \} from '\.\.\/apps\/api\/demo-reset\.mjs'/.test(auditSrc)
