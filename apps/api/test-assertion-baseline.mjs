@@ -26,7 +26,7 @@
    子集跑(`CI_SUITES=...`)自动降级为**对照模式**:只比在场的套件、不做套件数反向守、**绝不写基线**,
    并把"这是子集、没做哪一项"明明白白打出来(不是静默跳过 —— 静默失败器族)。 */
 
-import { readFileSync, writeFileSync, existsSync } from 'node:fs'
+import { readFileSync, writeFileSync, existsSync, readdirSync } from 'node:fs'
 import { join } from 'node:path'
 import { fileURLToPath } from 'node:url'
 
@@ -110,6 +110,49 @@ if (partial) {
     `在场 ${Object.keys(now).length} + 未跑 ${notRun.size} vs 期望 ${expectSuites}`)
   check(`③b 未跑豁免有上限:${notRun.size} 套 ≤ 3(防止有人拿超时把套件一个个消音)`,
     notRun.size <= 3, [...notRun].join(' '))
+}
+
+/* ⑥ 孤儿套件(12m 现扫抓出:D217 五套件写完了、一条清单也没进 = 永远不跑)
+
+   ③ 守的是「在场 = 清单」,但**磁盘上有文件却从没进过清单的,永远不在场** ——
+   在场数与清单数照样相等,③ 全绿。这正是判据三说的黑名单病:数「我列的都对」,
+   漏掉「没列的」。所以 ⑥ 反过来数:**磁盘每个 test-*.mjs 必须落进白名单**,
+   要么在三份清单/单独 run_suite 里,要么是被别的套件 import 的辅助件(有引用即算数)。
+   新写的套件忘了进清单,这里自动红。 */
+{
+  const SH = join(HERE, 'run-all-tests.sh')
+  const sh = readFileSync(SH, 'utf8')
+  const listed = new Set()
+  for (const k of ['DEFAULT_SUITES', 'DEMO_GATE_SUITES', 'MP_LANE_SUITES']) {
+    const m = sh.match(new RegExp('^' + k + '="([^"]*)"', 'm'))
+    if (!m) throw new Error(`⑥ 取不到 ${k} —— 判据的前置没了就报错,不许静默跳过(判据五)`)
+    for (const x of m[1].split(/\s+/)) if (x) listed.add(x)
+  }
+  for (const m of sh.matchAll(/^\s*run_suite\s+"?([a-z0-9-]+)/gm)) listed.add(m[1])
+
+  const files = readdirSync(HERE).filter((f) => /^test-.+\.mjs$/.test(f))
+  if (files.length < 100) throw new Error(`⑥ 只扫到 ${files.length} 个 test 文件,不像全仓 —— 覆盖面缩水先红(判据三推论)`)
+  // 全仓源码读一遍(含 tools/),用于判「是不是被 import 的辅助件」
+  const TOOLS = join(HERE, '..', '..', 'tools')
+  const corpus = [
+    ...files.map((f) => readFileSync(join(HERE, f), 'utf8')),
+    ...(existsSync(TOOLS) ? readdirSync(TOOLS).filter((f) => f.endsWith('.mjs') || f.endsWith('.sh'))
+        .map((f) => readFileSync(join(TOOLS, f), 'utf8')) : []),
+  ]
+  const orphans = []
+  for (const f of files) {
+    const name = f.slice(5, -4)
+    if (listed.has(name)) continue
+    // 辅助件豁免:被**别的**源文件按整名引用(词界收紧,防 demo-gate 误配 demo-gate-scope)。
+    // 🔴 不拿 run-all-tests.sh 的全文 includes 当豁免 —— 它注释里提到名字就放行 = fail-open。
+    //    真正的「脚本在跑它」只有 listed(三份清单 + run_suite)算数。
+    const re = new RegExp('test-' + name.replace(/[-]/g, '\\-') + '(?![a-z0-9-])')
+    const self = readFileSync(join(HERE, f), 'utf8')
+    const referenced = corpus.some((src) => src !== self && re.test(src))
+    if (!referenced) orphans.push(name)
+  }
+  check(`⑥ 零孤儿套件:${files.length} 个 test 文件全部落进清单或被引用(写了判据却没进清单 = 从来没跑过)`,
+    orphans.length === 0, orphans.length ? `孤儿 ${orphans.length} 个:${orphans.join(' ')}` : '')
 }
 
 /* ④⑤ 零断言套件(播种当天现扫发现的):这四套用**自有输出格式**打结果
