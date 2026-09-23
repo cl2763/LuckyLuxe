@@ -108,32 +108,40 @@ check(`④ 反向守:登录区那一段取到了 ${authBlock.length} 字符(>=20
  * 判的是**可见性条件**,不是「按钮存不存在」—— 沙箱 demo 模式下它仍该在。 */
 const adminJs = readFileSync(join(ROOT, 'apps/web/admin.js'), 'utf8')
 const adminHtml = readFileSync(join(ROOT, 'apps/web/admin.html'), 'utf8')
+const gateJsRaw = readFileSync(join(ROOT, 'apps/web/register-gate.js'), 'utf8')
+/* 🔴 剥注释是默认动作,不是想起来才做。本批同一个病踩了三次:
+   反向守扫 `railway ssh` 扫到注释、对比度扫扫到刚删掉的声明、这里扫到注释里那句「不写 ?.」。
+   判据数的是**执行的代码**,不是**提到过的字**(J-61 同族)。行号保留,报位置才准。 */
+const stripComments = (src) => src
+  .replace(/\/\*[\s\S]*?\*\//g, (m) => m.replace(/[^\n]/g, ' '))
+  .replace(/^\s*\/\/.*$/gm, '')
+const gateJs = stripComments(gateJsRaw)
 
 check('⑤a 反向守:admin.html 里确实还有这个按钮(按钮没了这条就是空转)',
   /id="ownerRegisterButton"/.test(adminHtml), '')
+check('⑤b 门模块真的被页面加载了(模块在仓里但没挂进 HTML = 等于不存在)',
+  /register-gate\.js/.test(adminHtml), '')
 
 const visLine = (adminJs.match(/els\.ownerRegisterButton\.classList\.toggle\([^\n]*\)/) || [''])[0]
-check('⑤b 可见性只取到一处(多处各写一套 = 迟早有一处漏改)',
+check('⑤c 可见性只取到一处(多处各写一套 = 迟早有一处漏改)',
   (adminJs.match(/els\.ownerRegisterButton\.classList\.toggle/g) || []).length === 1, visLine)
-check('⑤c 可见性条件里必须带上「注册是否开放」,不能只看角色',
-  /registrationAllowed/.test(visLine), visLine || '(取不到那一行)')
-check('⑤d 三态 fail-closed:写成 `!== true`,null(还没问到)与 false 都藏',
-  /registrationAllowed\s*!==\s*true/.test(visLine), visLine)
+check('⑤d 可见性走门模块唯一出口,admin.js 里零分支',
+  /RegisterGate\.shouldHide/.test(visLine) && !/demoLoginAllowed|registrationAllowed/.test(visLine), visLine || '(取不到那一行)')
 
-const probeFn = (() => {
-  const i = adminJs.indexOf('async function probeRegistrationAllowed')
-  if (i < 0) return ''
-  const j = adminJs.indexOf('\n}', i)
-  return adminJs.slice(i, j > 0 ? j : i + 1200)
-})()
-check(`⑤e 反向守:探测函数取到了 ${probeFn.length} 字符(取空了后面三条全是空转)`,
-  probeFn.length >= 200, String(probeFn.length))
-check('⑤f 探测读的是 /health 的 demoLoginAllowed(后端 10587 现有出口,不新开一个)',
-  /'\/health'/.test(probeFn) && /demoLoginAllowed/.test(probeFn), probeFn.slice(0, 80))
-check('⑤g 探测失败不许静默放行:catch 里把状态留在 null(静默失败器族)',
-  /catch[\s\S]*registrationAllowed\s*=\s*null/.test(probeFn), '')
-check('⑤h 后端那一侧仍在挡(两侧各一条,J-112 第二款)',
+check(`⑤e 反向守:门模块取到了 ${gateJsRaw.length} 字符(取空了后面几条全是空转)`,
+  gateJsRaw.length >= 500, String(gateJsRaw.length))
+check('⑤f 三态 fail-closed:写成 `allowed !== true`,null(还没问到)与 false 都藏',
+  /allowed\s*!==\s*true/.test(gateJs), '')
+check('⑤g 读的是 /health 的 demoLoginAllowed 自己那一格(不借 guestIdUnsigned 的语义)',
+  /'\/health'/.test(gateJs) && /demoLoginAllowed/.test(gateJs) && !/guestIdUnsigned/.test(gateJs), '')
+check('⑤h 探测失败不许静默放行:catch 里把状态留在 null(静默失败器族)',
+  /catch[\s\S]{0,200}allowed\s*=\s*null/.test(gateJs), '')
+check('⑤i 重渲染不许用 `?.`:找不到重画函数要喊出来,不是悄悄一直藏着(静默失败器族)',
+  !/window\.applyLoginRoleUi\?\./.test(gateJs) && /console\.error\(/.test(gateJs), '')
+check('⑤j 后端那一侧仍在挡(两侧各一条,J-112 第二款)',
   /DEMO_LOGIN_ALLOWED\)\s*throw apiError\(403[^\n]*注册已停用/.test(api), '')
+check('⑤k /health 真的出这一格(前端读的字段后端不出 = 永远 fail-closed;L1 咬出来过一次)',
+  /demoLoginAllowed:/.test(readFileSync(join(ROOT, 'apps/api/health-report.mjs'), 'utf8')), '')
 
 console.log(`\n[底数闭合] 登记的登录入口 ${Object.keys(ENTRY_ROUTES).length} 个 · 现存 ${present.length} 个`
   + ` · 走不通 ${broken.length} 个 · 具名豁免(不算入口)${Object.keys(NOT_ENTRY).length} 个`)
