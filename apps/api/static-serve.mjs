@@ -5,6 +5,7 @@
 /* transformHtml:发 HTML 的那一刻过一道(2026-08-27 给前端资源打内容指纹用)。
    放在这里而不是各调用点 —— 页面有好几个入口,漏一个就等于那一页永远吃旧缓存。 */
 import { ensureTokenLink } from './web-head.mjs'
+import { writeHttpBody } from './http-body.mjs'
 
 export function createStaticServe({ existsSync, statSync, readFileSync, join, normalize, extname, transformHtml = null }) {
   function contentType(filePath) {
@@ -40,10 +41,10 @@ export function createStaticServe({ existsSync, statSync, readFileSync, join, no
     const filePath = existsSync(candidate) && statSync(candidate).isFile() ? candidate : join(baseDir, fallback)
     if (!existsSync(filePath)) return false
     const type = contentType(filePath)
-    res.writeHead(200, {
+    const headers = {
       'content-type': type,
       ...(type.startsWith('text/') || type.includes('javascript') ? { 'cache-control': 'no-store' } : {})
-    })
+    }
     if (type.startsWith('text/html')) {
       /* 🔴 D188 ①(店主 06b §三 / 06h §六):**令牌引用的统一入口就在这一行**。
          页面有六个入口(/、/admin、/platform、/share、/sign、/wechat-simulator),
@@ -52,10 +53,10 @@ export function createStaticServe({ existsSync, statSync, readFileSync, join, no
          真触发了会在服务日志里点名是哪一页,那是缺陷不是常态。 */
       const raw = readFileSync(filePath, 'utf8')
       const guarded = ensureTokenLink(raw, { file: filePath, log: console.warn }).html
-      res.end(transformHtml ? transformHtml(guarded, { baseDir, filePath }) : guarded)
+      writeHttpBody(res, 200, headers, transformHtml ? transformHtml(guarded, { baseDir, filePath }) : guarded)
       return true
     }
-    res.end(readFileSync(filePath))
+    writeHttpBody(res, 200, headers, readFileSync(filePath))
     return true
   }
 
