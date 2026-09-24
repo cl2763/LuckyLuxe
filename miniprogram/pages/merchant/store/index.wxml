@@ -13,7 +13,7 @@
     <view class="gtitle">营业时间</view>
     <view class="card">
       <!-- 裁定2 收敛:与强制页同一份组件(改口=常驻入口,合同六) -->
-      <hours-form initial="{{hours}}" txt="{{hoursTxt}}" saving="{{hoursSaving}}" save-label="保存营业时间" bind:save="onHoursSave" />
+      <hours-form initial="{{hours}}" txt="{{hoursTxt}}" saving="{{hoursSaving}}" save-label="{{hoursTxt.settingsSave}}" save-error="{{hoursSaveError}}" bind:save="onHoursSave" />
     </view>
 
     <view class="gtitle">特殊日期(节假日/临时)</view>

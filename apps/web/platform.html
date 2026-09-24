@@ -108,6 +108,8 @@
   .moreMenu .sm{margin:0;text-align:left}
   .moreMenu .sm.d{color:#b3413a}
 </style>
+<link rel="stylesheet" href="/web/hours-setup.css?v=20260924-hours-batch">
+<script src="/web/hours-setup.js?v=20260924-hours-batch"></script>
 </head>
 <body>
 
@@ -323,8 +325,7 @@
 
       <div id="tab-hours" class="card hidden" style="max-width:600px">
         <h2>营业时间</h2>
-        <table><thead><tr><th>星期</th><th>营业</th><th>开门</th><th>关门</th></tr></thead><tbody id="hourRows"></tbody></table>
-        <div style="margin-top:12px"><button class="p" onclick="saveHours()">保存营业时间</button></div>
+        <div id="platformHoursEditor"></div>
       </div>
 
       <div id="tab-services" class="card hidden">
@@ -952,7 +953,7 @@ async function loadConfig(){
     renderConfigSteps()
     tab(CFG_TAB)
     $('stName').value=st.store?st.store.name:'';$('stAddr').value=st.store?st.store.address:'';$('stPhone').value=st.store?st.store.phone:''
-    renderHours(hr.hours||[]);renderServices(sv.services||[]);renderTechs(tc.technicians||[]);renderKb(kb);renderMembership(mb);renderCats(ct)
+    renderHours(hr.hours||[],hr.hoursGateText);renderServices(sv.services||[]);renderTechs(tc.technicians||[]);renderKb(kb);renderMembership(mb);renderCats(ct)
   }catch(e){if(seq===CFG_SEQ)toast('配置读取失败：'+e.message)}
 }
 let SERVICE_IMPORT=null
@@ -1056,16 +1057,17 @@ async function delCat(id,name,used){
 }
 
 async function saveStore(){const tid=CFG_T;try{await api(`/platform/tenants/${tid}/store`,{method:'PUT',body:JSON.stringify({name:$('stName').value,address:$('stAddr').value,phone:$('stPhone').value})});await loadTenants();$('cfgTenant').querySelectorAll('option').forEach(o=>{const t=TENANTS.find(t=>t.id===o.value);if(t)o.textContent=t.name+'('+t.id+')'});toast('门店信息已保存并同步 AI')}catch(e){toast(e.message)}}
-function renderHours(hours){
-  const map={};hours.forEach(h=>map[h.weekday]=h)
-  $('hourRows').innerHTML=[1,2,3,4,5,6,0].map(w=>{const h=map[w]||{isClosed:w===1,openTime:'10:00',closeTime:'19:00'};return `<tr data-w="${w}">
-    <td>${WK[w]}</td><td><input type="checkbox" class="hopen" ${h.isClosed?'':'checked'}></td>
-    <td><input type="time" class="hstart" value="${h.openTime||'10:00'}" style="width:112px"></td>
-    <td><input type="time" class="hend" value="${h.closeTime||'19:00'}" style="width:112px"></td></tr>`}).join('')
-}
-async function saveHours(){
-  const hours=[...document.querySelectorAll('#hourRows tr')].map(tr=>({weekday:Number(tr.dataset.w),isClosed:!tr.querySelector('.hopen').checked,openTime:tr.querySelector('.hstart').value||'10:00',closeTime:tr.querySelector('.hend').value||'19:00'}))
-  try{await api(`/platform/tenants/${CFG_T}/business-hours`,{method:'PUT',body:JSON.stringify({hours})});toast('营业时间已保存')}catch(e){toast(e.message)}
+function renderHours(hours,txt){
+  const tid=CFG_T,seq=CFG_SEQ
+  window.HoursSetup.mountSettings($('platformHoursEditor'),{
+    storeId:tid,rows:hours,txt:txt||{},reset:true,escapeHtml:esc,
+    saveHours:values=>api(`/platform/tenants/${tid}/business-hours`,{method:'PUT',body:JSON.stringify({hours:values})}),
+    afterSave:async()=>{
+      const fresh=await api(`/platform/tenants/${tid}/business-hours`)
+      if(tid!==CFG_T||seq!==CFG_SEQ)return
+      renderHours(fresh.hours||[],fresh.hoursGateText);toast('营业时间已保存')
+    }
+  })
 }
 function renderServices(list){
   $('svcRows').innerHTML=list.map(s=>`<tr>

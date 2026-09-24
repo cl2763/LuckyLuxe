@@ -1,12 +1,24 @@
-.hf-day { display: flex; align-items: center; gap: 16rpx; padding: 18rpx 0; border-bottom: 2rpx dashed #e2e0d8; }
-.hf-sw { transform: scale(.8); }
-.hf-dn { width: 4.4em; font-size: 28rpx; }
-.hf-tm { margin-left: auto; font-size: 26rpx; background: #f1efe9; border-radius: 8rpx; padding: 6rpx 16rpx; color: #6b6f66; }
-.hf-tm.set { margin-left: auto; background: #eef4f2; color: #20211f; }
+.hf { color: var(--ink); }
+.hf-day { display: flex; align-items: center; gap: 12rpx; padding: 18rpx 0; border-bottom: 2rpx dashed var(--line); }
+.hf-sw { transform: scale(.8); flex-shrink: 0; }
+.hf-dn { width: 2.4em; font-size: 28rpx; flex-shrink: 0; }
+.hf-tm { margin-left: auto; font-size: 26rpx; border-radius: 12rpx; padding: 10rpx 12rpx; color: var(--sub); }
+.hf-tm.set { background: var(--card); border: 2rpx solid var(--line); color: var(--ink); }
 .hf-tm.set + .hf-dash + .hf-tm.set { margin-left: 0; }
-.hf-dash { color: #6b6f66; }
-.hf-tm.ph { margin-left: auto; }
-.hf-save { margin-top: 36rpx; text-align: center; border-radius: 12rpx; padding: 22rpx 0; font-size: 30rpx; font-weight: 700; }
-.hf-save.go { background: #0e6e62; color: #fff; }
-.hf-save.dis { background: #f1efe9; color: #6b6f66; }
-.hf-note { text-align: center; font-size: 24rpx; color: #b45309; margin-top: 12rpx; }
+.hf-dash { color: var(--sub); }
+.hf-save { width: 100%; display: block; box-sizing: border-box; margin-top: 32rpx; text-align: center; border-radius: 12rpx; padding: 20rpx 0; font-size: 30rpx; font-weight: 700; line-height: 1.5; }
+.hf-save.go { background: var(--acc); color: var(--card); }
+.hf-save.dis { background: var(--wall); color: var(--sub); }
+.hf-note { text-align: center; font-size: 24rpx; color: var(--brandd); margin-top: 12rpx; }
+.hf-bulk { border: 2rpx solid var(--brand); background: var(--tagmbg); border-radius: 12rpx; padding: 24rpx; margin: 24rpx 0 16rpx; }
+.hf-bulk-title { font-size: 26rpx; font-weight: 650; }
+.hf-bulk-times { display: flex; gap: 12rpx; align-items: center; margin: 16rpx 0; }
+.hf-bulk-time { flex: 1; min-width: 0; background: var(--card); border: 2rpx solid var(--line); padding: 16rpx 12rpx; border-radius: 12rpx; font-size: 26rpx; }
+.hf-bulk-actions { display: flex; gap: 12rpx; align-items: stretch; flex-wrap: wrap; }
+.hf-scope { flex: 1; min-width: 230rpx; background: var(--card); padding: 16rpx 10rpx; border: 2rpx solid var(--line); border-radius: 12rpx; font-size: 24rpx; }
+.hf-apply { margin: 0; padding: 16rpx 14rpx; background: var(--acc); color: var(--card); line-height: 1.5; font-size: 24rpx; border-radius: 12rpx; }
+.hf-bulk-hint { font-size: 22rpx; color: var(--brandd); line-height: 1.55; margin-top: 14rpx; }
+.hf-feedback { display: flex; gap: 12rpx; align-items: center; font-size: 24rpx; min-height: 46rpx; color: var(--brandd); }
+.hf-feedback.is-error { color: var(--bad); }
+.hf-undo { margin: 0 0 0 auto; flex-shrink: 0; padding: 4rpx; text-decoration: underline; background: transparent; color: inherit; font-size: 24rpx; line-height: 1.5; }
+.hf button::after { border: 0; }

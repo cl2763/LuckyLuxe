@@ -2,7 +2,7 @@
 <view class="wrap {{themeClass}}" wx:if="{{isOwner}}">
   <view class="title">{{txt.ownerTitle}}</view>
   <view class="hint">{{txt.ownerHint}}</view>
-  <hours-form initial="{{null}}" txt="{{txt}}" saving="{{saving}}" bind:save="onSave" />
+  <hours-form initial="{{null}}" txt="{{txt}}" saving="{{saving}}" save-error="{{saveError}}" bind:save="onSave" />
 </view>
 <view class="wrap wall {{themeClass}}" wx:else>
   <view class="emoji">🕘</view>
