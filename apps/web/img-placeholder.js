@@ -19,8 +19,9 @@ window.ImgPlaceholder = (function () {
     .replace(/>/g, '&gt;').replace(/"/g, '&quot;').replace(/'/g, '&#39;')
 
   /* 有图出 <img>,没图出占位块。className 原样带过去,布局与原来一致(占位不许把版面挤歪)。 */
-  function tag(src, { className = '', alt = '', text = '', zh = true } = {}) {
+  function tag(src, { className = '', alt = '', text = '', zh = true, imageView, profile = 'card' } = {}) {
     const s = String(src || '').trim()
+    if (s && imageView && window.ImageFraming) return window.ImageFraming.image(s, imageView, profile, className, alt)
     if (s) return `<img class="${esc(className)}" src="${esc(s)}" alt="${esc(alt)}">`
     const label = text || (zh ? '还没有图片' : 'No image yet')
     return `<div class="${esc(className)} img-placeholder" role="img" aria-label="${esc(label)}">`

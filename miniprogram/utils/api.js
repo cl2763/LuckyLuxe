@@ -282,7 +282,7 @@ function toMiniService(service) {
     duration: service.durationMin,
     suitableFor: service.suitableFor || '',
     imageLabel: `${service.type} · ${service.category}`,
-    image: normalizeImage(service.imageUrl),
+    image: normalizeImage(service.imageUrl), imageView: service.imageView || {},
     process: service.process || [],
     notice: service.notice || [],
     requiresManualQuote: service.requiresManualQuote,

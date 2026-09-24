@@ -1606,7 +1606,7 @@ button {
   box-shadow: 0 0 0 2px rgba(200, 164, 126, 0.22);
 }
 
-.service-card img,
+.service-card :is(img, .image-frame),
 .visual-hero img,
 .booking-image {
   width: 100%;
@@ -1615,7 +1615,7 @@ button {
   background: var(--soft);
 }
 
-.service-card img {
+.service-card :is(img, .image-frame) {
   height: 112px;
   border-radius: 8px;
 }
@@ -2930,7 +2930,7 @@ textarea:focus {
   gap: 10px;
 }
 
-.service-image-field img {
+.service-image-field :is(img, .image-frame) {
   width: min(320px, 100%);
   aspect-ratio: 16 / 9;
   border: 1px solid var(--line);
@@ -3512,7 +3512,7 @@ textarea:focus {
 .store-card-wide img,
 .recommend-card img,
 .detail-visual-web,
-.reference-grid-web img,
+.reference-grid-web :is(img, .image-frame),
 .cart-card-web img,
 .checkout-item-web img,
 .recent-card-web img,
@@ -3886,7 +3886,7 @@ textarea:focus {
   grid-template-columns: 168px 1fr;
 }
 
-.web-service-card img {
+.web-service-card :is(img, .image-frame) {
   height: 150px;
 }
 
@@ -3979,7 +3979,7 @@ textarea:focus {
   gap: 12px;
 }
 
-.reference-grid-web img {
+.reference-grid-web :is(img, .image-frame) {
   height: 220px;
   border-radius: 8px;
 }
@@ -5515,7 +5515,7 @@ textarea:focus {
     padding: 10px;
   }
 
-  .web-service-card img {
+  .web-service-card :is(img, .image-frame) {
     height: 120px;
   }
 
@@ -5563,7 +5563,7 @@ textarea:focus {
     font-size: 16px;
   }
 
-  .reference-grid-web img {
+  .reference-grid-web :is(img, .image-frame) {
     height: 180px;
   }
 
@@ -5652,7 +5652,7 @@ textarea:focus {
     grid-template-columns: 96px 1fr;
   }
 
-  .web-service-card img {
+  .web-service-card :is(img, .image-frame) {
     height: 104px;
   }
 

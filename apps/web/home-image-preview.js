@@ -1,0 +1,15 @@
+window.HomeImagePreview = (() => {
+  const esc=v=>window.ImageFraming.esc(v)
+  function hero({name,slides,index=0,book='立即预约',member='会员档案'}){
+    index=slides.length?index%slides.length:0
+    return `<section class="web-hero${slides.length?'':' no-carousel'}"><div class="web-hero-copy"><h1 data-fit-store-name tabindex="0">${esc(name)}</h1><div class="hero-actions"><button class="primary" data-go-services="nail" type="button">${esc(book)}</button><button class="ghost" data-view-target="me" type="button">${esc(member)}</button></div></div>${slides.length?`<div class="hero-carousel" aria-label="${esc(name)}"><div class="hero-slide-track">${slides.map((s,i)=>window.ImageFraming.image(s.image,s.imageView,'hero',`hero-slide ${i===index?'active':''}`,s.label||'')).join('')}${slides[index].label?`<div class="hero-slide-caption">${esc(slides[index].label)}</div>`:''}</div>${slides.length>1?`<button class="hero-carousel-btn prev" data-hero-slide-prev type="button" aria-label="Previous">‹</button><button class="hero-carousel-btn next" data-hero-slide-next type="button" aria-label="Next">›</button><div class="hero-carousel-dots">${slides.map((s,i)=>`<button class="${i===index?'active':''}" data-hero-slide="${i}" type="button" aria-label="${i+1} / ${slides.length}"></button>`).join('')}</div><span class="hero-image-count">${index+1} / ${slides.length}</span>`:''}</div>`:''}</section>`
+  }
+  function open(data){
+    const zh=data.zh,dialog=document.createElement('dialog');dialog.className='image-preview-dialog'
+    dialog.innerHTML=`<div class="image-editor-head"><h2>${zh?'顾客首页预览':'Customer home preview'}</h2><button class="ghost" data-close>×</button></div><div class="image-profile-tabs"><select aria-label="${zh?'内容版本':'Content version'}" data-preview-source><option value="draft">${zh?'当前草稿（尚未发布）':'Draft (not published)'}</option><option value="saved">${zh?'已保存内容':'Saved content'}</option></select><select aria-label="${zh?'展示位置':'Display surface'}" data-preview-device><option value="desktop">${zh?'电脑网页':'Desktop web'}</option><option value="mobile">${zh?'手机网页':'Mobile web'}</option><option value="mini">${zh?'小程序首页画框':'Mini home frame'}</option></select></div><p class="subtle">${zh?'网页预览复用顾客首页组件；切换图片可检查每一张。小程序画框供配置取景，正式效果以小程序为准。':'Web preview uses the customer home component. Mini frame is a framing preview; verify in the mini program.'}</p><div class="home-preview-scroll"><iframe title="${zh?'顾客首页预览':'Customer home preview'}" src="/web/home-image-preview.html"></iframe></div>`
+    document.body.append(dialog);const iframe=dialog.querySelector('iframe')
+    const send=()=>{const device=dialog.querySelector('[data-preview-device]').value;iframe.style.width=(device==='desktop'?1240:375)+'px';iframe.contentWindow.postMessage({type:'youji-home-preview',name:data.name,slides:data[dialog.querySelector('[data-preview-source]').value],device,zh},location.origin)}
+    iframe.onload=send;dialog.querySelectorAll('select').forEach(el=>el.onchange=send);dialog.querySelector('[data-close]').onclick=()=>dialog.close();dialog.onclose=()=>dialog.remove();dialog.showModal()
+  }
+  return {hero,open}
+})()

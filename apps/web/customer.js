@@ -711,7 +711,7 @@ function heroSlides() {
   const rows = Array.isArray(state.heroSlides) ? state.heroSlides : []
   // 文案跟着语言走:后端把中英两份都下发了,切语言不用重新取一次接口
   return rows.map((row) => ({
-    image: row.image,
+    image: row.image, imageView: row.imageView || {},
     label: state.lang === 'en' ? (row.labelEn || row.labelZh || '') : (row.labelZh || row.labelEn || '')
   }))
 }
@@ -722,35 +722,7 @@ function renderHome() {
   const activeSlide = slides.length ? ((state.heroSlide % slides.length) + slides.length) % slides.length : 0
   state.heroSlide = activeSlide
   els.screen.innerHTML = `
-    <section class="web-hero${slides.length ? '' : ' no-carousel'}">
-      <div class="web-hero-copy">
-        <h1>${brandName()}</h1>
-        <div class="hero-actions">
-          <button class="primary" data-go-services="nail" type="button">${t('bookNow')}</button>
-          <button class="ghost" data-view-target="me" type="button">${t('quickMember')}</button>
-        </div>
-      </div>
-      ${slides.length ? `
-      <div class="hero-carousel" aria-label="${brandName()}">
-        <div class="hero-slide-track">
-          ${slides.map((slide, index) => `
-            ${slide.image ? `<img class="hero-slide ${index === activeSlide ? 'active' : ''}" src="${slide.image || ''}" alt="${escapeHtml(slide.label || '')}">` : ''}
-          `).join('')}
-          ${/* 🔴 店主 08-28(六)实测:面板里写的文案顾客端看不到。查明=**渲染在别处** ——
-                label 原来只落在 alt / aria-label(无障碍属性,屏幕上看不见)。
-                写死数组年代那样没问题,但它现在是**商家可编辑字段**:能编辑就说明商家预期它会显示。
-                现在压在图上;没写文案的图不出这条(空文案不出空条)。 */''}
-          ${slides[activeSlide] && slides[activeSlide].label
-            ? `<div class="hero-slide-caption">${escapeHtml(slides[activeSlide].label)}</div>` : ''}
-        </div>
-        ${slides.length > 1 ? `
-        <button class="hero-carousel-btn prev" data-hero-slide-prev type="button" aria-label="Previous">‹</button>
-        <button class="hero-carousel-btn next" data-hero-slide-next type="button" aria-label="Next">›</button>
-        <div class="hero-carousel-dots">
-          ${slides.map((slide, index) => `<button class="${index === activeSlide ? 'active' : ''}" data-hero-slide="${index}" type="button" aria-label="${escapeHtml(slide.label || '')}"></button>`).join('')}
-        </div>` : ''}
-      </div>` : ''}
-    </section>
+    ${window.HomeImagePreview.hero({name:brandName(),slides,index:activeSlide,book:t('bookNow'),member:t('quickMember')})}
     <section class="home-actions section">
       <div class="service-shortcut-row">
         <button class="quick-item card" data-go-services="nail" type="button"><span class="quick-icon">N</span><span>${t('quickNail')}</span></button>
@@ -1051,7 +1023,7 @@ function renderServices() {
 function renderServiceCard(service) {
   return `
     <button class="service-card web-service-card" data-service-id="${service.id}" type="button">
-      ${window.ImgPlaceholder.tag(service.imageUrl, { alt: service.name, zh: state.lang !== 'en' })}
+      ${window.ImgPlaceholder.tag(service.imageUrl, { imageView: service.imageView, alt: service.name, zh: state.lang !== 'en' })}
       <span>
         ${service.category ? `<span class="eyebrow">${service.category}</span>` : ''}
         <h2>${service.name}</h2>
@@ -1073,7 +1045,7 @@ function renderDetail() {
   els.screen.innerHTML = `
     <section class="detail-web">
       <button class="ghost back-btn" data-view-target="services" type="button">← ${t('services')}</button>
-      ${window.ImgPlaceholder.tag(service.imageUrl, { className: 'detail-visual-web', alt: service.name, zh: state.lang !== 'en' })}
+      ${window.ImgPlaceholder.tag(service.imageUrl, { imageView: service.imageView, profile: 'detail', className: 'detail-visual-web', alt: service.name, zh: state.lang !== 'en' })}
       <div class="detail-main card">
         <h1>${service.name}</h1>
         <p>${service.description}</p>
@@ -1098,8 +1070,8 @@ function renderDetail() {
       <section class="section">
         <div class="section-row"><h2>${t('reference')}</h2><span class="subtle">Preview</span></div>
         <div class="reference-grid-web">
-          ${window.ImgPlaceholder.tag(service.imageUrl, { alt: service.name, zh: state.lang !== 'en' })}
-          ${window.ImgPlaceholder.tag(service.imageUrl, { alt: service.name, zh: state.lang !== 'en' })}
+          ${window.ImgPlaceholder.tag(service.imageUrl, { imageView: service.imageView, profile: 'detail', alt: service.name, zh: state.lang !== 'en' })}
+          ${window.ImgPlaceholder.tag(service.imageUrl, { imageView: service.imageView, profile: 'detail', alt: service.name, zh: state.lang !== 'en' })}
         </div>
       </section>
       <div class="bottom-action-web">
@@ -1160,7 +1132,7 @@ function renderBookingForm() {
     <section class="booking-flow">
       <button class="ghost back-btn" data-view-target="detail" type="button">← ${service.name}</button>
       <div class="booking-service card">
-        ${window.ImgPlaceholder.tag(service.imageUrl, { className: 'mini-visual-web', alt: service.name, zh: state.lang !== 'en' })}
+        ${window.ImgPlaceholder.tag(service.imageUrl, { imageView: service.imageView, className: 'mini-visual-web', alt: service.name, zh: state.lang !== 'en' })}
         <div>
           <h2>${service.name}</h2>
           <p>${service.durationMin}${t('minutes')} · ${t('deposit')} ${money(service.depositCents)}</p>
@@ -1301,7 +1273,7 @@ function renderCartItem(item) {
         ${userWaivesDeposit() ? `<p class="subtle">${state.lang === 'zh' ? '会员等级已减免预约定金' : 'Member tier deposit waiver applied'}</p>` : ''}
         ${item.referenceImages?.length ? `<div class="cart-reference-row">${item.referenceImages.map((image, index) => image ? `<img src="${image}" alt="${t('reference')} ${index + 1}">` : '').join('')}</div>` : ''}
       </div>
-      ${window.ImgPlaceholder.tag(item.service.imageUrl, { alt: item.service.name, zh: state.lang !== 'en' })}
+      ${window.ImgPlaceholder.tag(item.service.imageUrl, { imageView: item.service.imageView, alt: item.service.name, zh: state.lang !== 'en' })}
       <button class="ghost" data-remove-cart="${item.id}" type="button">Remove</button>
     </article>
   `

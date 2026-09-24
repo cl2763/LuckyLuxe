@@ -84,122 +84,49 @@ async function saveStoreProfile() {
   toast(owner.lang === 'zh' ? '门店信息已保存并同步到 AI 知识库' : 'Store info saved and synced')
 }
 
-/* ===== D78 · 顾客首页轮播(商家自管) =====
-   数据只有一处真相:后端 /admin/hero-slides(读)与同一条路由的 PUT(写),
-   顾客端读的是公开 /stores 的同一份数据 —— 前端零写死、零回落。 */
-
-let heroSlidesDraft = null      // 草稿:改了还没保存的那份;null = 还没从后端取过
-
-async function loadHeroSlides() {
-  const data = await request('/admin/hero-slides')
-  heroSlidesDraft = (data.slides || []).map((slide) => ({
-    image: slide.image, labelZh: slide.labelZh || '', labelEn: slide.labelEn || '', isActive: slide.isActive !== false
-  }))
-  return heroSlidesDraft
+/* Approved v1: drafts are never called live; reads and writes are serialized per session. */
+let heroSlidesDraft=null
+let heroSession='',heroGeneration=0,heroSaved=[],heroPublicCount=null,heroBusy='',heroMessage='',heroError=false,heroDirty=false
+const heroKey=()=>String(owner.tenantPlan?.tenantId||'')+'|'+ownerBearer()
+const heroCurrent=(key,g)=>key===heroKey()&&key===heroSession&&g===heroGeneration
+const heroCopy=slides=>(slides||[]).map(s=>({image:s.image,labelZh:s.labelZh||'',labelEn:s.labelEn||'',isActive:s.isActive!==false,imageView:window.ImageFraming.clone(s.imageView)}))
+function heroChanged(){heroDirty=true;heroMessage=owner.lang==='zh'?'有修改待保存，顾客暂时看不到':'Unsaved changes are not visible to customers';heroError=false;heroStatus()}
+function heroStatus(){const summary=document.querySelector('#heroSlidesSummary'),status=document.querySelector('[data-hero-status]');const zh=owner.lang==='zh';if(summary)summary.textContent=zh?`已保存 ${heroSaved.length} 张 / 顾客当前 ${heroPublicCount===null?'待核对':heroPublicCount+' 张'} / 草稿 ${heroSlidesDraft?.length||0} 张${heroDirty?' · 待保存':''}`:`Saved ${heroSaved.length} / Public ${heroPublicCount??'checking'} / Draft ${heroSlidesDraft?.length||0}${heroDirty?' · Unsaved':''}`;if(status){status.textContent=heroMessage;status.classList.toggle('is-error',heroError)}}
+async function heroReadPublic(){const data=await request('/stores',{public:true,headers:{'x-tenant-id':owner.tenantPlan.tenantId}});return data.heroSlides||[]}
+async function loadHeroSlides(){
+  const key=heroSession,g=heroGeneration;heroBusy='load'
+  try{const data=await request('/admin/hero-slides');if(!heroCurrent(key,g))return;heroSaved=heroCopy(data.slides);heroSlidesDraft=heroCopy(data.slides);const pub=await heroReadPublic();if(!heroCurrent(key,g))return;heroPublicCount=pub.length;heroMessage=owner.lang==='zh'?'已读取保存内容；改完请保存到顾客首页':'Loaded saved images. Save changes to publish.';heroError=false}
+  catch(e){if(!heroCurrent(key,g))return;heroMessage=e.message;heroError=true}
+  finally{if(heroCurrent(key,g)){heroBusy='';renderHeroSlidesPanel()}}
 }
-
-function renderHeroSlidesPanel() {
-  const body = document.querySelector('#heroSlidesBody')
-  const summary = document.querySelector('#heroSlidesSummary')
-  if (!body || !summary) return
-  if (heroSlidesDraft === null) {
-    // 首次进设置页:先取一次,取回来再画(取数失败照实说,不画一个空面板骗人)
-    loadHeroSlides().then(renderHeroSlidesPanel).catch(() => {
-      summary.textContent = owner.lang === 'zh' ? '读取失败' : 'Load failed'
-      body.innerHTML = `<div class="empty-state small-empty">${owner.lang === 'zh' ? '轮播图读取失败,刷新页面重试。' : 'Failed to load carousel.'}</div>`
-    })
-    summary.textContent = owner.lang === 'zh' ? '读取中…' : 'Loading…'
-    return
+function renderHeroSlidesPanel(){
+  const body=document.querySelector('#heroSlidesBody');if(!body)return
+  const key=heroKey();if(key!==heroSession){heroSession=key;heroGeneration++;heroSlidesDraft=null;heroSaved=[];heroPublicCount=null;heroBusy='';heroMessage='';heroError=false;heroDirty=false}
+  const zh=owner.lang==='zh'
+  if(heroSlidesDraft===null){body.innerHTML=`<p role="status">${escapeHtml(heroMessage||(zh?'正在读取轮播图…':'Loading images…'))}</p>${heroError?`<button class="ghost" data-hero-retry>${zh?'重新读取':'Retry'}</button>`:''}`;body.querySelector('[data-hero-retry]')?.addEventListener('click',loadHeroSlides);if(!heroBusy&&!heroError)loadHeroSlides();heroStatus();return}
+  body.innerHTML=`<div class="image-panel-heading"><div><h3>${zh?'顾客首页轮播图':'Customer home carousel'}</h3><p class="subtle">${zh?'最多 6 张，按顺序展示。上传后可拖拽调整显示范围。':'Up to 6 images in order. Drag to adjust the visible area.'}</p></div><button class="ghost" type="button" data-hero-preview ${heroBusy?'disabled':''}>${zh?'预览顾客首页':'Preview customer home'}</button></div><fieldset class="hero-edit-fields" ${heroBusy?'disabled':''}>${heroSlidesDraft.length?heroSlidesDraft.map((slide,i)=>`<article class="hero-slide-admin-row card"><div class="hero-image-preview">${window.ImageFraming.image(slide.image,slide.imageView,'desktop','','')}</div><div class="hero-slide-fields"><strong>${zh?'第':'Image '}${i+1}${zh?' 张':''} · ${slide.isActive?(zh?'启用':'Enabled'):(zh?'已隐藏':'Hidden')}</strong><button class="ghost slim" type="button" data-hero-crop="${i}">${zh?'调整显示范围':'Adjust visible area'}</button><label>${zh?'中文文案（可选）':'Chinese caption (optional)'}<input maxlength="40" data-hero-label-zh="${i}" value="${escapeHtml(slide.labelZh)}"></label><label>${zh?'英文文案（可选）':'English caption (optional)'}<input maxlength="40" data-hero-label-en="${i}" value="${escapeHtml(slide.labelEn)}"></label><div class="hero-row-actions"><button class="ghost slim" type="button" data-hero-up="${i}" ${i===0?'disabled':''}>${zh?'上移':'Up'}</button><button class="ghost slim" type="button" data-hero-down="${i}" ${i===heroSlidesDraft.length-1?'disabled':''}>${zh?'下移':'Down'}</button><button class="ghost slim" type="button" data-hero-toggle="${i}">${slide.isActive?(zh?'隐藏':'Hide'):(zh?'启用':'Show')}</button><button class="ghost slim" type="button" data-hero-remove="${i}">${zh?'删除':'Remove'}</button></div></div></article>`).join(''):`<p class="subtle">${zh?'还没有轮播图。上传本店照片后保存，顾客才能看到。':'No carousel images yet. Upload your store photos and save.'}</p>`}<label class="hero-upload-label">${zh?'添加照片':'Add photos'}<input id="heroSlideFile" type="file" accept="image/*" multiple ${heroSlidesDraft.length>=6?'disabled':''}></label><small>${zh?'原图最多 30MB；大图自动压缩，完整画面保留。':'Originals up to 30MB; large images are resized without cropping.'}</small></fieldset><div class="hero-save-bar"><p data-hero-status role="status"></p><button class="primary" type="button" data-hero-save ${heroBusy?'disabled':''}>${heroBusy?(zh?(heroBusy==='read'?'正在读取照片…':'正在保存并核对…'):'Working…'):(zh?'保存到顾客首页':'Save to customer home')}</button></div>`
+  heroStatus();bindHeroSlidesPanel(body)
+}
+function bindHeroSlidesPanel(body){
+  const key=heroSession,g=heroGeneration,valid=()=>heroCurrent(key,g)
+  for(const action of ['up','down','toggle','remove'])body.querySelectorAll(`[data-hero-${action}]`).forEach(btn=>btn.onclick=()=>{if(!valid()||heroBusy)return;const i=Number(btn.dataset['hero'+action[0].toUpperCase()+action.slice(1)]);if(action==='remove')heroSlidesDraft.splice(i,1);else if(action==='toggle')heroSlidesDraft[i].isActive=!heroSlidesDraft[i].isActive;else{const j=i+(action==='up'?-1:1);[heroSlidesDraft[i],heroSlidesDraft[j]]=[heroSlidesDraft[j],heroSlidesDraft[i]]}heroChanged();renderHeroSlidesPanel()})
+  for(const lang of ['Zh','En'])body.querySelectorAll(`[data-hero-label-${lang.toLowerCase()}]`).forEach(input=>input.oninput=()=>{if(!valid())return;heroSlidesDraft[Number(input.dataset['heroLabel'+lang])]['label'+lang]=input.value;heroChanged()})
+  body.querySelectorAll('[data-hero-crop]').forEach(btn=>btn.onclick=()=>{const s=heroSlidesDraft[Number(btn.dataset.heroCrop)];window.ImageFraming.edit({src:s.image,views:s.imageView,zh:owner.lang==='zh',onApply:v=>{if(!valid())return;s.imageView=v;heroChanged();renderHeroSlidesPanel()}})})
+  body.querySelector('[data-hero-preview]').onclick=()=>window.HomeImagePreview.open({name:owner.businessHoursStores?.[0]?.name||'',draft:heroCopy(heroSlidesDraft),saved:heroCopy(heroSaved),zh:owner.lang==='zh'})
+  body.querySelector('#heroSlideFile').onchange=async event=>{
+    const picked=Array.from(event.target.files||[]);if(!picked.length||!valid()||heroBusy)return
+    if(heroSlidesDraft.length+picked.length>6){heroMessage=owner.lang==='zh'?'最多 6 张：本次未添加，请减少选择数量。':'Up to 6 images. No images added; select fewer.';heroError=true;heroStatus();event.target.value='';return}
+    heroBusy='read';heroMessage=owner.lang==='zh'?`正在读取 ${picked.length} 张照片，请稍候…`:`Reading ${picked.length} images…`;renderHeroSlidesPanel()
+    const results=await Promise.allSettled(picked.map(f=>window.ImageFraming.read(f)))
+    if(!valid())return
+    const failed=results.map((r,i)=>r.status==='rejected'?`${picked[i].name}: ${r.reason.message}`:'').filter(Boolean)
+    heroBusy='';if(failed.length){heroError=true;heroMessage=(owner.lang==='zh'?'本批未添加，原草稿已保留：':'Batch not added; draft kept: ')+failed.join(' / ')}else{heroSlidesDraft.push(...results.map(r=>({image:r.value,labelZh:'',labelEn:'',isActive:true,imageView:{}})));heroChanged()}renderHeroSlidesPanel()
   }
-  const zh = owner.lang === 'zh'
-  const activeCount = heroSlidesDraft.filter((slide) => slide.isActive).length
-  summary.textContent = heroSlidesDraft.length
-    ? (zh ? `${activeCount} 张展示中 / 共 ${heroSlidesDraft.length} 张` : `${activeCount} live / ${heroSlidesDraft.length} total`)
-    : (zh ? '未设置(顾客首页不出轮播)' : 'Not set (no carousel shown)')
-  body.innerHTML = `
-    <p class="subtle">${zh
-      ? '这些图显示在顾客首页最上方的轮播里。<strong>一张都不放也可以</strong>——那样顾客端就只出店卡,不会显示别家店的图。最多 6 张。'
-      : 'These images show in the carousel on the customer home page. Leaving it empty is fine — customers then see the store card only. Up to 6.'}</p>
-    <div class="hero-slide-admin-list">
-      ${heroSlidesDraft.map((slide, index) => `
-        <div class="hero-slide-admin-row card">
-          <img src="${slide.image}" alt="${escapeHtml(slide.labelZh || '')}">
-          <div class="kb-facts-grid">
-            <label><span>${zh ? '文案(中)' : 'Label (zh)'}</span><input data-hero-label-zh="${index}" value="${escapeHtml(slide.labelZh)}" maxlength="40"></label>
-            <label><span>${zh ? '文案(英)' : 'Label (en)'}</span><input data-hero-label-en="${index}" value="${escapeHtml(slide.labelEn)}" maxlength="40"></label>
-          </div>
-          <div class="hero-slide-admin-actions">
-            <button class="ghost slim" data-hero-up="${index}" type="button" ${index === 0 ? 'disabled' : ''}>↑</button>
-            <button class="ghost slim" data-hero-down="${index}" type="button" ${index === heroSlidesDraft.length - 1 ? 'disabled' : ''}>↓</button>
-            <button class="ghost slim" data-hero-toggle="${index}" type="button">${slide.isActive ? (zh ? '展示中' : 'Live') : (zh ? '已停用' : 'Hidden')}</button>
-            <button class="ghost slim" data-hero-remove="${index}" type="button">${zh ? '删除' : 'Remove'}</button>
-          </div>
-        </div>`).join('')}
-    </div>
-    ${heroSlidesDraft.length ? '' : `<div class="empty-state small-empty">${zh ? '还没有轮播图。' : 'No carousel images yet.'}</div>`}
-    <div class="hero-slide-admin-footer">
-      <label class="ghost slim hero-slide-upload">${zh ? '添加图片' : 'Add image'}
-        <input type="file" accept="image/*" multiple id="heroSlideFile" hidden>
-      </label>
-      <button class="primary slim" data-hero-save type="button">${zh ? '保存轮播图' : 'Save carousel'}</button>
-    </div>
-  `
-  bindHeroSlidesPanel(body)
+  body.querySelector('[data-hero-save]').onclick=async()=>{
+    if(!valid()||heroBusy)return;const snapshot=heroCopy(heroSlidesDraft);heroBusy='save';heroMessage=owner.lang==='zh'?'正在保存并核对顾客首页…':'Saving and checking customer home…';heroError=false;renderHeroSlidesPanel()
+    try{await request('/admin/hero-slides', { method: 'PUT',body:JSON.stringify({slides:snapshot})});if(!valid())return;const saved=await request('/admin/hero-slides');if(!valid())return;const pub=await heroReadPublic();if(!valid())return;const active=snapshot.filter(s=>s.isActive);if(JSON.stringify(heroCopy(saved.slides))!==JSON.stringify(snapshot)||pub.length!==active.length||pub.some((s,i)=>s.image!==active[i].image||JSON.stringify(s.imageView)!==JSON.stringify(active[i].imageView)))throw Error(owner.lang==='zh'?'保存读回不一致，请重试核对':'Saved/public data mismatch; retry');heroSaved=heroCopy(saved.slides);heroSlidesDraft=heroCopy(saved.slides);heroPublicCount=pub.length;heroDirty=false;heroMessage=owner.lang==='zh'?`保存成功，顾客首页当前展示 ${pub.length} 张。`:`Saved. Customer home now shows ${pub.length} images.`}
+    catch(e){if(!valid())return;heroError=true;heroMessage=e.message+(owner.lang==='zh'?'；草稿已保留，请重试。':'; draft kept. Please retry.')}
+    finally{if(valid()){heroBusy='';renderHeroSlidesPanel()}}
+  }
 }
-
-function bindHeroSlidesPanel(body) {
-  const rerender = () => renderHeroSlidesPanel()
-  body.querySelectorAll('[data-hero-up]').forEach((btn) => btn.addEventListener('click', () => {
-    const i = Number(btn.dataset.heroUp)
-    ;[heroSlidesDraft[i - 1], heroSlidesDraft[i]] = [heroSlidesDraft[i], heroSlidesDraft[i - 1]]
-    rerender()
-  }))
-  body.querySelectorAll('[data-hero-down]').forEach((btn) => btn.addEventListener('click', () => {
-    const i = Number(btn.dataset.heroDown)
-    ;[heroSlidesDraft[i + 1], heroSlidesDraft[i]] = [heroSlidesDraft[i], heroSlidesDraft[i + 1]]
-    rerender()
-  }))
-  body.querySelectorAll('[data-hero-toggle]').forEach((btn) => btn.addEventListener('click', () => {
-    const i = Number(btn.dataset.heroToggle)
-    heroSlidesDraft[i].isActive = !heroSlidesDraft[i].isActive
-    rerender()
-  }))
-  body.querySelectorAll('[data-hero-remove]').forEach((btn) => btn.addEventListener('click', () => {
-    heroSlidesDraft.splice(Number(btn.dataset.heroRemove), 1)
-    rerender()
-  }))
-  /* 文案改动**边输边存进草稿**,不重画 —— 重画会打断输入(店主 08-27 立的「输入过程中不许重画」同族)。 */
-  body.querySelectorAll('[data-hero-label-zh]').forEach((input) => input.addEventListener('input', () => {
-    heroSlidesDraft[Number(input.dataset.heroLabelZh)].labelZh = input.value
-  }))
-  body.querySelectorAll('[data-hero-label-en]').forEach((input) => input.addEventListener('input', () => {
-    heroSlidesDraft[Number(input.dataset.heroLabelEn)].labelEn = input.value
-  }))
-  const file = body.querySelector('#heroSlideFile')
-  if (file) file.addEventListener('change', () => {
-    const picked = Array.from(file.files || [])
-    file.value = ''
-    picked.forEach((f) => {
-      const reader = new FileReader()
-      reader.onload = () => {
-        heroSlidesDraft.push({ image: String(reader.result || ''), labelZh: '', labelEn: '', isActive: true })
-        rerender()
-      }
-      reader.readAsDataURL(f)
-    })
-  })
-  const save = body.querySelector('[data-hero-save]')
-  if (save) save.addEventListener('click', async () => {
-    try {
-      const data = await request('/admin/hero-slides', { method: 'PUT', body: JSON.stringify({ slides: heroSlidesDraft }) })
-      heroSlidesDraft = (data.slides || []).map((slide) => ({
-        image: slide.image, labelZh: slide.labelZh || '', labelEn: slide.labelEn || '', isActive: slide.isActive !== false
-      }))
-      renderHeroSlidesPanel()
-      toast(owner.lang === 'zh' ? '轮播图已保存,顾客端刷新即可看到' : 'Carousel saved')
-    } catch (error) {
-      // 后端才是最终闸:它拒了就照它的话说,不在前端另编一套理由
-      toast((error && error.message) || (owner.lang === 'zh' ? '保存失败' : 'Save failed'))
-    }
-  })
-}
+addEventListener('beforeunload',e=>{if(heroDirty||heroBusy==='read'||heroBusy==='save'){e.preventDefault();e.returnValue=''}})

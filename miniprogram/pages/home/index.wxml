@@ -1,4 +1,5 @@
 <view class="page home-page {{themeClass}}">
+  <text class="store-name-measure" aria-hidden="true">{{storeNameMeasure}}</text>
   <!-- D17 失败态:接口挂了如实说,不拿假数据糊住(书面标准代图)。
        ⚠️ 与正文**互斥**(wx:else),不是叠在正文上方 —— 2026-08-11 停服实测发现:
        只加 wx:if 不排除正文,失败态下面还渲染出一整个残缺骨架(缓存门店名 +
@@ -28,11 +29,11 @@
     <view class="shop-card card home-section-container">
       <!-- D78 零回落:这家店没配轮播 → 整块不渲染,只出店卡(不拿别家店的图顶上) -->
       <swiper wx:if="{{heroSlides.length}}" class="shop-card-swiper" indicator-dots="{{heroSlides.length > 1}}" circular autoplay="{{heroSlides.length > 1}}" interval="4600" current="{{activeHero}}" bindchange="onHeroChange">
-        <block wx:for="{{heroSlides}}" wx:key="image">
+        <block wx:for="{{heroSlides}}" wx:key="id">
           <swiper-item>
             <!-- 退回一(店主 02f):裸 <image src> 字段为空=空白框,踩中占位律后半句「也不许什么都不显示」。
          B 类豁免只判外层数组空不空,数组有三条、每条图都空照样渲三个空框 → 收窄到**字段级**。 -->
-            <img-placeholder class="shop-card-visual" src="{{item.image}}" img-class="shop-card-visual"></img-placeholder>
+            <img-placeholder class="shop-card-visual" profile="mini" src="{{item.image}}" image-view="{{item.imageView}}" img-class="shop-card-visual"></img-placeholder>
             <!-- 08-28(六):文案原来只在网页的 alt 里、小程序根本没渲染 —— 商家在面板写的字要看得见 -->
             <text class="shop-card-caption" wx:if="{{item.label}}">{{item.label}}</text>
           </swiper-item>
@@ -40,7 +41,9 @@
       </swiper>
       <view class="shop-card-info">
         <view class="shop-card-title">
-          <text class="shop-card-name">{{shopName || store.storeName}}</text>
+          <text class="shop-card-name" style="font-size:{{storeNameSize || 48}}rpx" bindtap="showFullStoreName">{{shopName || store.storeName}}</text>
+        </view>
+        <view class="shop-card-title">
           <text wx:if="{{hasHours}}" class="shop-status {{openNow ? 'open' : 'closed'}}">● {{openNow ? (lang === 'en' ? 'Open' : '营业中') : (lang === 'en' ? 'Closed' : '休息中')}}</text>
           <text class="shop-card-switch" bindtap="switchShop">{{lang === 'en' ? 'Switch shop ›' : '扫码/切换门店 ›'}}</text>
         </view>
@@ -104,7 +107,7 @@
     <view class="recommend-grid">
       <block wx:for="{{recommendedNail}}" wx:key="_id">
         <view class="recommend-card card" bindtap="goDetail" data-id="{{item._id}}">
-          <img-placeholder class="recommend-visual" src="{{item.image}}" img-class="recommend-visual"></img-placeholder>
+          <img-placeholder class="recommend-visual" src="{{item.image}}" image-view="{{item.imageView}}" img-class="recommend-visual"></img-placeholder>
           <view class="recommend-name">{{item.name}}</view>
           <view class="recommend-meta">
             <text class="price">{{cur.p}}{{cur.s}}{{item.price}}</text>
@@ -123,7 +126,7 @@
     <view class="recommend-grid">
       <block wx:for="{{recommendedLash}}" wx:key="_id">
         <view class="recommend-card card" bindtap="goDetail" data-id="{{item._id}}">
-          <img-placeholder class="recommend-visual" src="{{item.image}}" img-class="recommend-visual"></img-placeholder>
+          <img-placeholder class="recommend-visual" src="{{item.image}}" image-view="{{item.imageView}}" img-class="recommend-visual"></img-placeholder>
           <view class="recommend-name">{{item.name}}</view>
           <view class="recommend-meta">
             <text class="price">{{cur.p}}{{cur.s}}{{item.price}}</text>
@@ -149,7 +152,7 @@
     <view wx:else class="recommend-grid">
       <block wx:for="{{fallbackServices}}" wx:key="_id">
         <view class="recommend-card card fallback-card" bindtap="goDetail" data-id="{{item._id}}">
-          <img-placeholder class="recommend-visual" src="{{item.image}}" img-class="recommend-visual"></img-placeholder>
+          <img-placeholder class="recommend-visual" src="{{item.image}}" image-view="{{item.imageView}}" img-class="recommend-visual"></img-placeholder>
           <view class="recommend-name">{{item.name}}</view>
           <view class="recommend-meta">
             <text class="price">{{cur.p}}{{cur.s}}{{item.price}}</text>

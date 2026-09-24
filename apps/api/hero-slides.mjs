@@ -1,3 +1,4 @@
+import { imageView, storedImageView } from './image-view.mjs'
 /* 顾客首页轮播图 · 按租户出数据(D78,店主 2026-08-28 立案)。
 
    🔴 病根:三张轮播原来是**前端写死的数组,两端各写一份**
@@ -38,8 +39,9 @@ export function ensureHeroSlidesSchema(db) {
       created_at TEXT NOT NULL,
       updated_at TEXT NOT NULL
     )`)
+  if (!db.prepare('PRAGMA table_info(hero_slides)').all().some(c => c.name === 'image_view_json')) db.exec("ALTER TABLE hero_slides ADD COLUMN image_view_json TEXT NOT NULL DEFAULT '{}'")
   db.exec('CREATE INDEX IF NOT EXISTS idx_hero_slides_tenant ON hero_slides (tenant_id, sort_order)')
-  const need = ['id', 'tenant_id', 'image', 'label_zh', 'label_en', 'sort_order', 'is_active', 'created_at', 'updated_at']
+  const need = ['id', 'tenant_id', 'image', 'label_zh', 'label_en', 'sort_order', 'is_active', 'created_at', 'updated_at', 'image_view_json']
   const have = db.prepare('PRAGMA table_info(hero_slides)').all().map((c) => c.name)
   const missing = need.filter((c) => !have.includes(c))
   if (missing.length) {
@@ -56,6 +58,7 @@ export function createHeroSlides({ db, apiError, iso, randomId, currentTenantId 
       throw apiError(400, 'BAD_REQUEST', `轮播最多 ${HERO_SLIDE_MAX} 张(再多顾客也划不到)。`)
     }
     slides.forEach((slide, index) => {
+      imageView(slide?.imageView, message => apiError(400, 'BAD_REQUEST', message))
       const image = String(slide?.image || '').trim()
       if (!image) throw apiError(400, 'BAD_REQUEST', `第 ${index + 1} 张没有图片。`)
       const okScheme = image.startsWith('data:image/') || image.startsWith('/assets/') || image.startsWith('https://')
@@ -82,7 +85,8 @@ export function createHeroSlides({ db, apiError, iso, randomId, currentTenantId 
   function publicHeroSlides(tenantId, lang = 'zh') {
     return db.prepare('SELECT * FROM hero_slides WHERE tenant_id = ? AND is_active = 1 ORDER BY sort_order ASC, created_at ASC')
       .all(tenantId).map((row) => ({
-        image: row.image,
+        id: row.id, image: row.image,
+        imageView: storedImageView(row.image_view_json),
         label: lang === 'en' ? (row.label_en || row.label_zh || '') : (row.label_zh || row.label_en || ''),
         labelZh: row.label_zh || '',
         labelEn: row.label_en || ''
@@ -98,12 +102,12 @@ export function createHeroSlides({ db, apiError, iso, randomId, currentTenantId 
     try {
       db.prepare('DELETE FROM hero_slides WHERE tenant_id = ?').run(tenantId)
       const insert = db.prepare(`INSERT INTO hero_slides
-        (id, tenant_id, image, label_zh, label_en, sort_order, is_active, created_at, updated_at)
-        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`)
+        (id, tenant_id, image, label_zh, label_en, sort_order, is_active, created_at, updated_at, image_view_json)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`)
       slides.forEach((slide, index) => {
         insert.run(randomId('hero'), tenantId, String(slide.image).trim(),
           String(slide.labelZh || '').trim(), String(slide.labelEn || '').trim(),
-          index, slide.isActive === false ? 0 : 1, now, now)
+          index, slide.isActive === false ? 0 : 1, now, now, JSON.stringify(imageView(slide.imageView)))
       })
       db.exec('COMMIT')
     } catch (error) {
@@ -117,6 +121,7 @@ export function createHeroSlides({ db, apiError, iso, randomId, currentTenantId 
     return {
       id: row.id,
       image: row.image,
+        imageView: storedImageView(row.image_view_json),
       labelZh: row.label_zh || '',
       labelEn: row.label_en || '',
       sortOrder: row.sort_order,

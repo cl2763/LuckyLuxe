@@ -1,3 +1,4 @@
+const imageViewCore = require('../../utils/image-view-core')
 /* 图片占位组件(店主 2026-08-28 六立律)。
    小程序这一侧的唯一出口 —— 43 个图片位如果每处各写一套占位,三个月后就有三种长相。 */
 Component({
@@ -14,6 +15,23 @@ Component({
     src: { type: String, value: '' },
     mode: { type: String, value: 'aspectFill' },
     imgClass: { type: String, value: '' },
-    text: { type: String, value: '' }
+    text: { type: String, value: '' },
+    imageView: { type: Object, value: null },
+    profile: { type: String, value: 'card' }
+  },
+  data: { frameStyle: '' },
+  observers: { 'imageView, profile, src': function () { this._frameImage() } },
+  lifetimes: { ready() { this._frameImage() } },
+  pageLifetimes: { resize() { this._frameImage() } },
+  methods: {
+    imageLoaded(e) { this._natural={width:e.detail.width,height:e.detail.height};this._frameImage() },
+    _frameImage() {
+      if (!this._natural || !this.data.imageView) return
+      this.createSelectorQuery().select('.ph-frame').boundingClientRect(r => {
+        if (!r || !r.width || !r.height) return
+        const g=imageViewCore.geometry(this._natural.width,this._natural.height,r.width,r.height,this.data.imageView[this.data.profile])
+        this.setData({frameStyle:`width:${g.width}px;height:${g.height}px;left:${g.left}px;top:${g.top}px;`})
+      }).exec()
+    }
   }
 })
