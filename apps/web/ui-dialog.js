@@ -52,7 +52,7 @@ window.UIDialog = (() => {
     const { hint = '', value = '', placeholder = '', okText = '确定', cancelText = '取消' } = o
     return new Promise((resolve) => {
       const m = mount(`${head(title, hint)}
-        <input class="ui-dialog-input" type="text" value="${esc(value)}" placeholder="${esc(placeholder)}" style="width:100%">
+        <input class="ui-dialog-input" type="${o.inputType === 'password' ? 'password' : 'text'}" value="${esc(value)}" placeholder="${esc(placeholder)}" style="width:100%">
         <div class="section-row" style="justify-content:flex-end;gap:8px;margin-top:12px">
           <button class="ghost slim" data-uid="cancel" type="button">${esc(cancelText)}</button>
           <button class="primary slim" data-uid="ok" type="button">${esc(okText)}</button>
@@ -94,5 +94,14 @@ window.UIDialog = (() => {
     })
   }
 
-  return { text, confirm, alert }
+  function escapeHtml(value = '') {
+    return String(value)
+      .replaceAll('&', '&amp;')
+      .replaceAll('<', '&lt;')
+      .replaceAll('>', '&gt;')
+      .replaceAll('"', '&quot;')
+      .replaceAll("'", '&#039;')
+  }
+
+  return { text, confirm, alert, escapeHtml }
 })()

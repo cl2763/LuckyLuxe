@@ -84,7 +84,7 @@ check('②c 小程序冲销也取事由(showModal editable),不是发了才被�
   /editable: true/.test(mp) && /reason/.test(mp), '')
 
 /* ③ 行为层:不带事由必须 400 —— 只打沙箱 4310(店主 03e 结构闸) */
-const SANDBOX = 'http://127.0.0.1:4310'
+const {SANDBOX_URL:SANDBOX}=await import('./test-need-sandbox.mjs')
 /* 🔴 03f 病三:原来这里手搓了一段 fetch /health —— 而 02p 早把沙箱前置抽成了唯一出口。
    每把刀自定义自己的跳过语义,正是当初抽出口要防的事。换用共用件。 */
 const { ensureSandbox } = await import('./test-need-sandbox.mjs')

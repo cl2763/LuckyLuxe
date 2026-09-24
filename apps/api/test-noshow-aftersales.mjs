@@ -18,6 +18,7 @@
      DATA_DIR=/tmp/ll-x PORT=4300 node local-server.mjs &
      TEST_BASE_URL=http://127.0.0.1:4300 TEST_DB_PATH=/tmp/ll-x/lucky-luxe.sqlite node 本文件
    (2026-08-11 有人少了 TEST_BASE_URL,在真库建了 nsas-a-msok023f 测试租户,已停用挂账。) */
+import {loginCustomerViaFrontDoor} from './customer-login-fixture.mjs'
 import zlib97 from 'node:zlib'
 import { readFileSync, readdirSync, statSync, existsSync } from 'node:fs'
 import { execFileSync } from 'node:child_process'
@@ -54,6 +55,24 @@ async function request(path, options = {}, token = PLATFORM, extraHeaders = {}) 
   try { data = text ? JSON.parse(text) : null } catch { data = { raw: text } }
   return { status: response.status, data }
 }
+
+// 业务夹具使用真实签发会话，演示入口只在专门验证演示闸时调用。
+const defaultCustomers = new Map()
+let phoneSequence=0
+const fixturePhone=()=>`139${String(Date.now()).slice(-5)}${String(++phoneSequence).padStart(3,'0')}`
+async function fixtureLogin(tenantId,userId) {
+  const db=new DatabaseSync(process.env.TEST_DB_PATH,{readOnly:true})
+  const row=userId ? db.prepare('SELECT * FROM users WHERE id=? AND tenant_id=?').get(userId,tenantId) : null
+  db.close()
+  if(userId&&!row)throw Error('顾客登录夹具不在本店')
+  const openid=row?.wechat_open_id || (row ? `nsas-${row.id}` : (defaultCustomers.get(tenantId)||`nsas-default-${tenantId}-${RUN_ID}`))
+  if(!userId)defaultCustomers.set(tenantId,openid)
+  if(row&&!row.wechat_open_id&&!row.phone)throw Error('顾客夹具缺手机号 '+userId)
+  const r=await loginCustomerViaFrontDoor({base:BASE_URL,tenantId,openid,phone:row?.phone||''})
+  if(!r.ok||(userId&&r.user?.id!==userId))throw Error('顾客正门登录未认到原档案 '+userId)
+  return {status:r.status,data:r.body}
+}
+const demoEnabled=(await request('/health',{},null)).data.guestIdUnsigned===true
 
 async function newShop(label) {
   const id = `nsas-${label}-${RUN_ID}`
@@ -102,7 +121,7 @@ function dateStr(offsetDays = 0) {
 async function directBooking(shop, { name, time, techId }) {
   const r = await request('/admin/bookings/direct', {
     method: 'POST',
-    body: JSON.stringify({ serviceId: shop.serviceId, technicianId: techId || shop.tech1, date: dateStr(1), time, newCustomerName: name })
+    body: JSON.stringify({ serviceId: shop.serviceId, technicianId: techId || shop.tech1, date: dateStr(1), time, newCustomerName: name, phone:fixturePhone() })
   }, shop.token)
   if (r.status !== 200 && r.status !== 201) throw new Error(`直接排单失败: ${JSON.stringify(r.data)}`)
   return r.data.booking
@@ -115,6 +134,18 @@ async function financeRows(shop) {
 
 const main = async () => {
   const shop = await newShop('a')
+  // 签署夹具走商家出短时链接，再由持链接顾客确认；两档同一路径。
+  const signTokens = new Map()
+  async function signFixture(path, options, _unused, headers) {
+    const code = decodeURIComponent(path.split('/')[2])
+    if (!signTokens.has(code)) {
+      const sheet = (await request(`/settlements/${encodeURIComponent(code)}`, {}, PLATFORM, {...headers,'x-admin-tenant-id':headers['x-tenant-id']})).data.settlement
+      const issued = await request(`/admin/settlements/${sheet.id}/sign-token`, {method:'POST',body:'{}'}, PLATFORM, {...headers,'x-admin-tenant-id':headers['x-tenant-id']})
+      if (issued.status !== 200) throw new Error(`签署夹具出链接失败: ${issued.status}`)
+      signTokens.set(code, issued.data.token)
+    }
+    return request(path, {...options,body:JSON.stringify({...JSON.parse(options.body),signerConfirmed:true})}, null, {...headers,'x-settlement-token':signTokens.get(code)})
+  }
 
   // ===== ① A⓪/A⑤:没收取记录、没爽约,处置都得被拒 =====
   const b1 = await directBooking(shop, { name: `王小雅${RUN_ID}`, time: '10:00' })
@@ -204,7 +235,7 @@ const main = async () => {
   const b5 = await directBooking(shop, { name: `售后客${RUN_ID}`, time: '16:00', techId: shop.tech1 })
   /* B9(批③首件):未签署单不能转售后——夹具按新口径先开单签署再转(闸本身 ㋈ 有专测) */
   const sB5 = await request('/admin/settlements', { method: 'POST', body: JSON.stringify({ userId: b5.userId || b5.user_id || (b5.user && b5.user.id), settlements: [{ payIntent: 'offline_full', bookingId: b5.id, items: [{ serviceId: shop.serviceId, qty: 1 }], technicians: [{ technicianId: shop.tech1, role: 'main', itemNos: [1] }], servedPersonName: '' }] }) }, shop.token)
-  await request(`/settlements/${encodeURIComponent(sB5.data.settlements[0].code)}/sign`, { method: 'POST', body: JSON.stringify({ signature: '⑦夹具签', disclaimerAccepted: true }) }, null, { 'x-tenant-id': shop.tenantId })
+  await signFixture(`/settlements/${encodeURIComponent(sB5.data.settlements[0].code)}/sign`, { method: 'POST', body: JSON.stringify({ signature: '⑦夹具签', disclaimerAccepted: true }) }, null, { 'x-tenant-id': shop.tenantId })
   await request(`/admin/bookings/${b5.id}/status`, { method: 'PATCH', body: JSON.stringify({ status: 'AFTER_SALES' }) }, shop.token)
   /* 裁 B(店主 08-24):三步链(写进展/标记已解决/关闭)已收掉 —— 判据跟着被测物走:
      权限红线(别的技师碰不了别人的单)与"不许无痕迹变绿"(结果必填)原样保住,
@@ -397,8 +428,9 @@ const main = async () => {
       const card = await request(`/bind-tokens/${mint.data.token}`, {}, null)
       check('⑯ 确认卡只有称呼/店名,无单无金额字段', card.status === 200 && card.data.displayName && card.data.alreadyBound === false
         && !JSON.stringify(card.data).match(/totalCents|amountCents|settlement/), JSON.stringify(card.data).slice(0, 160))
-      const cfm = await request(`/bind-tokens/${mint.data.token}/confirm`, { method: 'POST', body: JSON.stringify({ openid: `wx-fresh-${RUN_ID}` }) }, null)
-      check('⑯ 新 openid 确认=绑定成功', cfm.status === 200 && cfm.data.bound === true && !cfm.data.conflict, JSON.stringify(cfm.data).slice(0, 120))
+      const bindLogin=await fixtureLogin(shop.tenantId,nbId)
+      const cfm = await request(`/bind-tokens/${mint.data.token}/confirm`, { method: 'POST', body: JSON.stringify({openid:`nsas-${nbId}`}) }, bindLogin.data.auth.accessToken, {'x-tenant-id':shop.tenantId})
+      check('⑯ 微信验证认领后确认绑定成功', cfm.status === 200 && cfm.data.bound === true && !cfm.data.conflict, JSON.stringify(cfm.data).slice(0, 120))
       r = await request('/admin/stored-value/recharge', { method: 'POST', body: JSON.stringify({ userId: nbId, amountCents: 1000, payChannel: 'manual', note: '绑定后解锁验证' }) }, staffToken)
       check('⑯ 绑定后充值解锁=201(D25 闭环)', r.status === 201)
       const again = await request(`/admin/customers/${nbId}/bind-token`, { method: 'POST', body: '{}' }, shop.token)
@@ -408,7 +440,7 @@ const main = async () => {
       // 冲突路:同一个 openid 再绑本店另一档案 → 不覆盖,进合并队列
       const nb2 = await directBooking(shop, { name: `冲突客${RUN_ID}`, time: '22:15', techId: shop.tech2 })
       const mint2 = await request(`/admin/customers/${nb2.user.id}/bind-token`, { method: 'POST', body: '{}' }, shop.token)
-      const cfm2 = await request(`/bind-tokens/${mint2.data.token}/confirm`, { method: 'POST', body: JSON.stringify({ openid: `wx-fresh-${RUN_ID}` }) }, null)
+      const cfm2 = await request(`/bind-tokens/${mint2.data.token}/confirm`, { method: 'POST', body: JSON.stringify({openid:`nsas-${nbId}`}) }, bindLogin.data.auth.accessToken, {'x-tenant-id':shop.tenantId})
       check('⑯ 同 openid 绑本店另一档案=冲突进合并队列不覆盖(S4 规则⑤同构)', cfm2.status === 200 && cfm2.data.conflict === true && cfm2.data.mergeQueued === true, JSON.stringify(cfm2.data).slice(0, 120))
     }
 
@@ -559,7 +591,7 @@ const main = async () => {
       //    积分列表必须能加总出余额(D36 三账不齐的闭环断言)。
       {
         // 新口径侧:测试店 demo 顾客,明天的单(永远 ≥ 切换时点),结算 qty2+自选 1234 分币
-        const pm = await request('/auth/wechat/mini-login', { method: 'POST', body: JSON.stringify({ demoLogin: true, tenantId: shop.tenantId }) }, null, { 'x-tenant-id': shop.tenantId })
+        const pm = await fixtureLogin(shop.tenantId)
         const ptok = pm.data.auth.accessToken
         const puid = pm.data.user.id
         const mall0 = await request('/my/points-mall', {}, ptok, { 'x-tenant-id': shop.tenantId })
@@ -575,7 +607,7 @@ const main = async () => {
         check('㉔ 前提:档位小计 ≠ 预约标价(否则新旧口径无法区分)', pst.subtotalCents !== listPrice, `subtotal=${pst.subtotalCents} list=${listPrice}`)
         const midBal = (await request('/my/points-mall', {}, ptok, { 'x-tenant-id': shop.tenantId })).data.balance || 0
         check('㉔ 未签不产生积分(积分随签署,不随开单)', midBal === bal0, `${bal0}→${midBal}`)
-        const sg = await request(`/settlements/${encodeURIComponent(pst.code)}/sign`, { method: 'POST', body: JSON.stringify({ signature: '积分口径B验签', disclaimerAccepted: true }) }, null, { 'x-tenant-id': shop.tenantId })
+        const sg = await signFixture(`/settlements/${encodeURIComponent(pst.code)}/sign`, { method: 'POST', body: JSON.stringify({ signature: '积分口径B验签', disclaimerAccepted: true }) }, null, { 'x-tenant-id': shop.tenantId })
         check('㉔ 签署成功', sg.status === 200, JSON.stringify(sg.data).slice(0, 120))
         const mall1 = await request('/my/points-mall', {}, ptok, { 'x-tenant-id': shop.tenantId })
         const bal1 = mall1.data.balance || 0
@@ -618,7 +650,7 @@ const main = async () => {
 
         // ㉕ 拍板②(2026-08-12):等级单源=租户配置。lucky-luxe 迁移开分级(原全局梯子入配置);
         //    未配置租户(本测试店)=不分级 → 称谓「会员」+空梯子(三减法的服务端根)。
-        const luckyU = (await request('/auth/wechat/mini-login', { method: 'POST', body: JSON.stringify({ demoLogin: true, tenantId: 'lucky-luxe' }) }, null, { 'x-tenant-id': 'lucky-luxe' })).data.user
+        const luckyU = (await fixtureLogin('lucky-luxe')).data.user
         check('㉕ lucky-luxe 分级开启且梯子来自租户配置(4 档)', luckyU.membershipTiersEnabled === true && (luckyU.memberTiers || []).length === 4 && luckyU.memberLevel !== '会员', `${luckyU.memberLevel}/${(luckyU.memberTiers || []).length}`)
         // D41 后口径:不分级店称谓两态 —— 充值过=会员 / 未充值=顾客(该 demo 户只消费未充值 → 顾客)
         check('㉕ 未配置租户=不分级:空梯子+称谓按充值史两态', pm.data.user.membershipTiersEnabled === false && (pm.data.user.memberTiers || []).length === 0 && pm.data.user.memberLevel === (pm.data.user.isMember ? '会员' : '顾客'), `${pm.data.user.memberLevel}/${pm.data.user.isMember}`)
@@ -649,8 +681,10 @@ const main = async () => {
           dbR.prepare("UPDATE users SET tags_json = ? WHERE id = ?").run(JSON.stringify(['退役·旧口径演示档案']), rt.user.id)
           dbR.prepare("UPDATE users SET display_name = ? WHERE display_name = ?").run('演示2-CI样本', `退役样本${RUN_ID}2`)
           dbR.close()
+          if(demoEnabled){
           const who = (await request('/auth/wechat/mini-login', { method: 'POST', body: JSON.stringify({ demoLogin: true, tenantId: shop.tenantId }) }, null, { 'x-tenant-id': shop.tenantId })).data.user
           check('㉗ demoLogin 不选退役档案且演示2优先', who.id !== rt.user.id && who.displayName === '演示2-CI样本', `选中 ${who.displayName}`)
+          }else check('㉗ 演示门关时不得冒用退役或演示顾客',(await request('/auth/wechat/mini-login',{method:'POST',body:JSON.stringify({demoLogin:true,tenantId:shop.tenantId})},null,{'x-tenant-id':shop.tenantId})).status===400)
         } else check('㉗ (跳过)无 TEST_DB_PATH', true)
         // 孤儿档案:占一个时段,再用新客名撞同一时段 → 排单失败,档案不得留下
         const occupied = await request('/admin/bookings/direct', { method: 'POST', body: JSON.stringify({ serviceId: shop.serviceId, technicianId: shop.tech1, date: dateStr(4), time: '07:00', newCustomerName: `孤儿探针占位${RUN_ID}` }) }, shop.token)
@@ -663,7 +697,7 @@ const main = async () => {
 
       // ㉘ 补强批(2026-08-12):①demo_identity 指定样板户优先于「演示2 前缀+单量」;
       //    ②asUserId 按人登录只认本店非退役档案(跨店/退役=404);③名册路由 ALLOW 闸门内可用
-      if (process.env.TEST_DB_PATH) {
+      if (process.env.TEST_DB_PATH && demoEnabled) {
         const dbI = new DatabaseSync(process.env.TEST_DB_PATH)
         const desig = (await request('/admin/customers', {}, shop.token)).data.customers.find((c) => !String(c.displayName || '').startsWith('演示2-'))
         dbI.prepare(`INSERT INTO tenant_settings (tenant_id, key, value, updated_at) VALUES (?, 'demo_identity', ?, ?)
@@ -678,12 +712,15 @@ const main = async () => {
         check('㉘ asUserId 跨店=404(不借别店身份)', asCross.status === 404, String(asCross.status))
         const roster2 = await request(`/sandbox/demo-roster`, {}, null, { 'x-tenant-id': shop.tenantId })
         check('㉘ 沙盒名册路由可用(ALLOW 闸门内)', roster2.status === 200 && Array.isArray(roster2.data.roster), String(roster2.status))
-      } else check('㉘ (跳过)无 TEST_DB_PATH', true)
+      } else {
+        for(const body of [{demoLogin:true,tenantId:shop.tenantId},{demoLogin:true,tenantId:shop.tenantId,asUserId:nbCustSaved.id},{demoLogin:true,tenantId:'lucky-luxe',asUserId:nbCustSaved.id}])check('㉘ 演示门关后拒绝指定身份',(await request('/auth/wechat/mini-login',{method:'POST',body:JSON.stringify(body)},null,{'x-tenant-id':body.tenantId})).status===400)
+        check('㉘ 演示门关后名册不可用',(await request('/sandbox/demo-roster',{},null,{'x-tenant-id':shop.tenantId})).status===404)
+      }
 
       // ㉙ D41(2026-08-12):不分级店会员资格=充值即会员(含迁移期初),消费不算;
       //    未充值=「顾客」;充值那一刻翻转「会员」;分级店(lucky)梯子称谓不受影响
       if (process.env.TEST_DB_PATH) {
-        const g1 = (await request('/auth/wechat/mini-login', { method: 'POST', body: JSON.stringify({ demoLogin: true, tenantId: shop.tenantId, asUserId: nbCustSaved.id }) }, null, { 'x-tenant-id': shop.tenantId })).data.user
+        const g1 = (await fixtureLogin(shop.tenantId, nbCustSaved.id)).data.user
         check('㉙ D41 未充值(只消费过)=顾客,无会员标', g1.memberLevel === '顾客' && g1.isMember === false && g1.memberTier === 'guest', `${g1.memberLevel}/${g1.isMember}`)
         check('㉙ memberPerks 通道下发(商家自定义会员权益,S9 填内容)', Array.isArray(g1.memberPerks), typeof g1.memberPerks)
         const dbM = new DatabaseSync(process.env.TEST_DB_PATH)
@@ -691,12 +728,12 @@ const main = async () => {
         dbM.close()
         const rc9 = await request('/admin/stored-value/recharge', { method: 'POST', body: JSON.stringify({ userId: nbCustSaved.id, amountCents: 5000, payChannel: 'cash', note: '㉙ D41 翻转 fixture' }) }, shop.token)
         check('㉙ 翻转 fixture 充值成功', rc9.status === 200 || rc9.status === 201, JSON.stringify(rc9.data).slice(0, 100))
-        const g2 = (await request('/auth/wechat/mini-login', { method: 'POST', body: JSON.stringify({ demoLogin: true, tenantId: shop.tenantId, asUserId: nbCustSaved.id }) }, null, { 'x-tenant-id': shop.tenantId })).data.user
+        const g2 = (await fixtureLogin(shop.tenantId, nbCustSaved.id)).data.user
         check('㉙ 充值那一刻翻转=会员', g2.memberLevel === '会员' && g2.isMember === true && g2.memberTier === 'member', `${g2.memberLevel}/${g2.isMember}`)
         const list9 = (await request('/admin/customers', {}, shop.token)).data.customers
         const row9 = list9.find((c) => c.id === nbCustSaved.id)
         check('㉙ 商家端列表同口径(memberTier=member)', row9 && row9.memberTier === 'member' && row9.isMember === true, JSON.stringify(row9 && row9.memberTier))
-        const luckyU9 = (await request('/auth/wechat/mini-login', { method: 'POST', body: JSON.stringify({ demoLogin: true, tenantId: 'lucky-luxe' }) }, null, { 'x-tenant-id': 'lucky-luxe' })).data.user
+        const luckyU9 = (await fixtureLogin('lucky-luxe')).data.user
         check('㉙ 分级店称谓不受影响(仍走梯子标签)', luckyU9.memberLevel !== '顾客' && luckyU9.memberLevel !== '会员', luckyU9.memberLevel)
       } else check('㉙ (跳过)无 TEST_DB_PATH', true)
 
@@ -1057,16 +1094,16 @@ const main = async () => {
           const shB = sB.data.settlements[0]
           // 签 A:扣次+确认收入
           const led1 = (await financeRows(shop)).length
-          const sgA = await request(`/settlements/${encodeURIComponent(shA.code)}/sign`, { method: 'POST', body: JSON.stringify({ signature: '次卡核销验签A', disclaimerAccepted: true }) }, null, { 'x-tenant-id': shop.tenantId })
+          const sgA = await signFixture(`/settlements/${encodeURIComponent(shA.code)}/sign`, { method: 'POST', body: JSON.stringify({ signature: '次卡核销验签A', disclaimerAccepted: true }) }, null, { 'x-tenant-id': shop.tenantId })
           check('㊻ 签 A 成:卡扣至 3/3', sgA.status === 200 && dbx.prepare("SELECT used_times FROM member_timecards WHERE id = 'tc_race'").get().used_times === 3, JSON.stringify(sgA.data).slice(0, 80))
           const tcIncome = (await financeRows(shop)).filter((x) => x.category === '服务收入-次卡核销')
           check('㊻ 核销确认收入单列:服务收入-次卡核销 18000(payChannel=times_card 不混现金)', tcIncome.length === 1 && (tcIncome[0].amountCents ?? tcIncome[0].amount_cents) === 18000 && (tcIncome[0].payChannel ?? tcIncome[0].pay_channel) === 'times_card', JSON.stringify(tcIncome))
           // 并发闸(乐观锁):签 B 必拦=409 TIMECARD_RACE
-          const sgB = await request(`/settlements/${encodeURIComponent(shB.code)}/sign`, { method: 'POST', body: JSON.stringify({ signature: '次卡核销验签B', disclaimerAccepted: true }) }, null, { 'x-tenant-id': shop.tenantId })
+          const sgB = await signFixture(`/settlements/${encodeURIComponent(shB.code)}/sign`, { method: 'POST', body: JSON.stringify({ signature: '次卡核销验签B', disclaimerAccepted: true }) }, null, { 'x-tenant-id': shop.tenantId })
           check('㊻ 并发闸:两单抢末次,后签=409 TIMECARD_RACE(不是串行防重)', sgB.status === 409 && sgB.data.error.code === 'TIMECARD_RACE', JSON.stringify(sgB.data).slice(0, 140))
           check('㊻ 并发闸:卡不超扣(仍 3/3)', dbx.prepare("SELECT used_times FROM member_timecards WHERE id = 'tc_race'").get().used_times === 3)
           // 幂等闸(与乐观锁分立):A 重签=ALREADY_SIGNED,不重扣不重入账
-          const sgA2 = await request(`/settlements/${encodeURIComponent(shA.code)}/sign`, { method: 'POST', body: JSON.stringify({ signature: '双击重试', disclaimerAccepted: true }) }, null, { 'x-tenant-id': shop.tenantId })
+          const sgA2 = await signFixture(`/settlements/${encodeURIComponent(shA.code)}/sign`, { method: 'POST', body: JSON.stringify({ signature: '双击重试', disclaimerAccepted: true }) }, null, { 'x-tenant-id': shop.tenantId })
           check('㊻ 幂等闸:已签单重签=400 ALREADY_SIGNED(双击/重试只扣一次)', sgA2.status === 400 && sgA2.data.error.code === 'ALREADY_SIGNED', JSON.stringify(sgA2.data).slice(0, 100))
           check('㊻ 幂等闸:重签零副作用(卡 3/3+次卡收入行仍 1 条)', dbx.prepare("SELECT used_times FROM member_timecards WHERE id = 'tc_race'").get().used_times === 3 && (await financeRows(shop)).filter((x) => x.category === '服务收入-次卡核销').length === 1)
           // 出路(预嘱①):被拦的 B 不是死胡同——撤回 → 重开(改支付构成=线下)→ 签成
@@ -1074,7 +1111,7 @@ const main = async () => {
           check('㊻ 出路①:被拦单可撤回', vB.status === 200, JSON.stringify(vB.data).slice(0, 80))
           const sC = await request('/admin/settlements', { method: 'POST', body: JSON.stringify({ userId: uid, settlements: [{ payIntent: 'offline_full', items: [{ serviceId: shop.serviceId, qty: 1 }], technicians: tech, servedPersonName: '' }] }) }, shop.token)
           const shC = sC.data.settlements[0]
-          const sgC = await request(`/settlements/${encodeURIComponent(shC.code)}/sign`, { method: 'POST', body: JSON.stringify({ signature: '改线下重签', disclaimerAccepted: true }) }, null, { 'x-tenant-id': shop.tenantId })
+          const sgC = await signFixture(`/settlements/${encodeURIComponent(shC.code)}/sign`, { method: 'POST', body: JSON.stringify({ signature: '改线下重签', disclaimerAccepted: true }) }, null, { 'x-tenant-id': shop.tenantId })
           check('㊻ 出路②:改支付构成(线下)重开可签成,不废单收场', sgC.status === 200, JSON.stringify(sgC.data).slice(0, 80))
           check('㊻ 账面守恒:led 增量=次卡核销 1 行(A)+C 单相应行,B 零账目', (await financeRows(shop)).length >= led1 + 1)
           // D53 回归形:非旗舰租户签**储值腿**的单,「服务收入-耗卡」必须落本租户账(修前=记到旗舰店,本断言 0 行红)
@@ -1082,7 +1119,7 @@ const main = async () => {
           const shD = sD.data.settlements[0]
           const svLegD = (shD.payments || []).find((p) => p.leg === 'stored_value')
           check('㊻ D53 前提:D 单带储值腿(bkCust 余额 120 可烧)', Boolean(svLegD) && svLegD.amountCents > 0, JSON.stringify(shD.payments))
-          const sgD = await request(`/settlements/${encodeURIComponent(shD.code)}/sign`, { method: 'POST', body: JSON.stringify({ signature: 'D53验签', disclaimerAccepted: true }) }, null, { 'x-tenant-id': shop.tenantId })
+          const sgD = await signFixture(`/settlements/${encodeURIComponent(shD.code)}/sign`, { method: 'POST', body: JSON.stringify({ signature: 'D53验签', disclaimerAccepted: true }) }, null, { 'x-tenant-id': shop.tenantId })
           const skRows = (await financeRows(shop)).filter((x) => x.category === '服务收入-耗卡' && x.tags === shD.code)
           check('㊻ D53 修:耗卡收入落本租户账(签署页公开路由必须显式带租户)', sgD.status === 200 && skRows.length === 1 && (skRows[0].amountCents ?? skRows[0].amount_cents) === svLegD.amountCents, JSON.stringify({ sign: sgD.status, rows: skRows }))
           // ===== ㊽ B2-8 售后返还次数+回冲(贴更正机制,涉钱零新径) =====
@@ -1149,7 +1186,7 @@ const main = async () => {
             const dualTech = [{ technicianId: shop.tech1, role: 'main', itemNos: [] }, { technicianId: shop.tech2, role: 'assist', itemNos: [] }]
             const sE = await request('/admin/settlements', { method: 'POST', body: JSON.stringify({ userId: uid, settlements: [{ payIntent: 'offline_full', timecardId: 'tc_dual', timecardServiceId: shop.serviceId, items: [], technicians: dualTech, servedPersonName: '' }] }) }, shop.token)
             const shE = sE.data.settlements[0]
-            const sgE = await request(`/settlements/${encodeURIComponent(shE.code)}/sign`, { method: 'POST', body: JSON.stringify({ signature: '双技师核销验签', disclaimerAccepted: true }) }, null, { 'x-tenant-id': shop.tenantId })
+            const sgE = await signFixture(`/settlements/${encodeURIComponent(shE.code)}/sign`, { method: 'POST', body: JSON.stringify({ signature: '双技师核销验签', disclaimerAccepted: true }) }, null, { 'x-tenant-id': shop.tenantId })
             check('㊾补 前提:双技师核销单签成(卡 1/3)', sgE.status === 200 && dbx.prepare("SELECT used_times FROM member_timecards WHERE id = 'tc_dual'").get().used_times === 1)
             const relE = await request(`/admin/settlements/${shE.id}/amend`, { method: 'POST', body: JSON.stringify({ reason: '双技师未分配返还', releaseTimecard: true }) }, shop.token)
             check('㊾补 未分配即返还:更正成+次数已回(1→0)', relE.status === 200 && dbx.prepare("SELECT used_times FROM member_timecards WHERE id = 'tc_dual'").get().used_times === 0)
@@ -1184,7 +1221,7 @@ const main = async () => {
             check('㊿ 财务红线:perfBase=18000(售卡 54000 不进业绩/积分基数)', shP.perfBaseCents === 18000, `perfBase=${shP.perfBaseCents}`)
             check('㊿ 留痕:核销行「第 1/3 次(守护(3次卡) · 现场购卡)」', (shP.items || []).some((i) => i.name && i.name.includes('第 1/3 次') && i.name.includes('现场购卡')), JSON.stringify((shP.items || []).map((i) => i.name)))
             // 签署:建卡 used=1+核销确认收入 18000
-            const sgP = await request(`/settlements/${encodeURIComponent(shP.code)}/sign`, { method: 'POST', body: JSON.stringify({ signature: '现场购卡验签', disclaimerAccepted: true }) }, null, { 'x-tenant-id': shop.tenantId })
+            const sgP = await signFixture(`/settlements/${encodeURIComponent(shP.code)}/sign`, { method: 'POST', body: JSON.stringify({ signature: '现场购卡验签', disclaimerAccepted: true }) }, null, { 'x-tenant-id': shop.tenantId })
             const newCard = dbx.prepare("SELECT * FROM member_timecards WHERE source_settlement_id = ?").get(shP.id)
             check('㊿ 签字建卡:守护(3次卡) used=1/3+快照齐+溯源单号', sgP.status === 200 && newCard && newCard.used_times === 1 && newCard.total_times === 3 && newCard.price_cents === 54000 && newCard.name === '守护(3次卡)', JSON.stringify(newCard))
             const purIncome = (await financeRows(shop)).filter((x) => x.category === '服务收入-次卡核销' && x.tags === shP.code)
@@ -1247,16 +1284,16 @@ const main = async () => {
               const dcB = (await request('/admin/daily-close', {}, shop.token)).data.dailyClose
               const rcBefore = ((dcB.technicians || []).find((t) => t.technicianId === shop.tech1) || {}).rechargeTotalCents || 0
               // 签署:充值行先入账再烧储值(needStored=B0+20000 > 现余额 B0——充后口径不拦)
-              const sgR = await request(`/settlements/${encodeURIComponent(shR.code)}/sign`, { method: 'POST', body: JSON.stringify({ signature: '随单充值验签', disclaimerAccepted: true }) }, null, { 'x-tenant-id': shop.tenantId })
+              const sgR = await signFixture(`/settlements/${encodeURIComponent(shR.code)}/sign`, { method: 'POST', body: JSON.stringify({ signature: '随单充值验签', disclaimerAccepted: true }) }, null, { 'x-tenant-id': shop.tenantId })
               check('㋀ 签署成功(储值烧到充进来的钱:充后口径不 INSUFFICIENT)', sgR.status === 200, JSON.stringify(sgR.data).slice(0, 120))
               const svRows = dbx.prepare('SELECT type, amount_cents, pay_channel, technician_id, note FROM stored_value_transactions WHERE tenant_id = ? AND user_id = ? AND note LIKE ? ORDER BY rowid').all(shop.tenantId, uid, `%${shR.code}%`)
               check('㋀ sv 三行:recharge+30000(经手=tech1)/bonus+6000(marketing)/consume −(B0+20000)', svRows.some((r) => r.type === 'recharge' && r.amount_cents === 30000 && r.technician_id === shop.tech1) && svRows.some((r) => r.type === 'bonus' && r.amount_cents === 6000 && r.pay_channel === 'marketing') && svRows.some((r) => r.type === 'consume' && r.amount_cents === -bigCents), JSON.stringify(svRows))
               check('㋀ 签后余额=16000(B0+36000−烧)', svSum() === 16000, `bal=${svSum()}`)
-              const serR = (await request(`/settlements/${encodeURIComponent(shR.code)}`, {}, null, { 'x-tenant-id': shop.tenantId })).data.settlement
+              const serR = (await request(`/settlements/${encodeURIComponent(shR.code)}`, {}, shop.token, { 'x-tenant-id': shop.tenantId })).data.settlement
               check('㋀ 充后余额签字时冻结=16000(快照句「签字时」)', serR.recharge && serR.recharge.frozen === true && serR.recharge.afterBalanceCents === 16000 && (serR.recharge.lines || []).some((l) => l.key === 'after' && l.label.includes('签字时')), JSON.stringify(serR.recharge))
               // 幂等双闸:重签 400,sv 行数不变(充值不重复入账)
               const svN = svRows.length
-              const sg2 = await request(`/settlements/${encodeURIComponent(shR.code)}/sign`, { method: 'POST', body: JSON.stringify({ signature: '重签', disclaimerAccepted: true }) }, null, { 'x-tenant-id': shop.tenantId })
+              const sg2 = await signFixture(`/settlements/${encodeURIComponent(shR.code)}/sign`, { method: 'POST', body: JSON.stringify({ signature: '重签', disclaimerAccepted: true }) }, null, { 'x-tenant-id': shop.tenantId })
               check('㋀ 幂等:重签=400 且 sv 行数不变(充值只入账一次)', sg2.status === 400 && dbx.prepare('SELECT COUNT(*) AS n FROM stored_value_transactions WHERE tenant_id = ? AND user_id = ? AND note LIKE ?').get(shop.tenantId, uid, `%${shR.code}%`).n === svN, JSON.stringify(sg2.data).slice(0, 80))
               // 财务红线:充值本体不写收入行;耗卡收入=烧掉的储值(含赠部分兑现=负债转收入,既有口径)
               const finR = (await financeRows(shop)).filter((x) => x.tags === shR.code)
@@ -1291,7 +1328,7 @@ const main = async () => {
 
               /* ===== ㋁ B3-3/4 代充回执确认钮:即时到账+回执待确认+幂等+越权+随签自动确认 ===== */
               {
-                const cm = await request('/auth/wechat/mini-login', { method: 'POST', body: JSON.stringify({ demoLogin: true, tenantId: shop.tenantId }) }, null, { 'x-tenant-id': shop.tenantId })
+                const cm = await fixtureLogin(shop.tenantId)
                 const ctok = cm.data.auth.accessToken
                 const cuid = cm.data.user.id
                 const balBefore = dbx.prepare('SELECT COALESCE(SUM(amount_cents),0) AS b FROM stored_value_transactions WHERE tenant_id = ? AND user_id = ?').get(shop.tenantId, cuid).b
@@ -1375,7 +1412,7 @@ const main = async () => {
 
               /* ===== ㋃ D57/D58 待签单再入口+日结确认独立(店主 08-21 尾清) ===== */
               {
-                const cm2 = await request('/auth/wechat/mini-login', { method: 'POST', body: JSON.stringify({ demoLogin: true, tenantId: shop.tenantId }) }, null, { 'x-tenant-id': shop.tenantId })
+                const cm2 = await fixtureLogin(shop.tenantId)
                 const ctok2 = cm2.data.auth.accessToken
                 const cuid2 = cm2.data.user.id
                 const plainSheet = { payIntent: 'offline_full', items: [{ serviceId: shop.serviceId, qty: 1 }], technicians: tech, servedPersonName: '' }
@@ -1394,7 +1431,7 @@ const main = async () => {
                 check('㋃ D57 顾客侧列全部未签单(2 张,不止最新)+签署页直达 code', ps1.length === 2 && ps1.every((p) => p.code && p.cashDueText && p.at), JSON.stringify(ps1))
                 check('㋃ 越权:别人的未签单不可见(uid 那张不在列)', !ps1.some((p) => p.code === shU3.code), JSON.stringify(ps1.map((p) => p.code)))
                 // 签一张→剩 1;撤一张→剩 0(status 驱动,零状态维护)
-                const sg1 = await request(`/settlements/${encodeURIComponent(shU1.code)}/sign`, { method: 'POST', body: JSON.stringify({ signature: '㋃ 待签再入口验签', disclaimerAccepted: true }) }, null, { 'x-tenant-id': shop.tenantId })
+                const sg1 = await signFixture(`/settlements/${encodeURIComponent(shU1.code)}/sign`, { method: 'POST', body: JSON.stringify({ signature: '㋃ 待签再入口验签', disclaimerAccepted: true }) }, null, { 'x-tenant-id': shop.tenantId })
                 check('㋃ 前提:签掉第一张', sg1.status === 200, JSON.stringify(sg1.data).slice(0, 80))
                 await request(`/admin/settlements/${shU2.id}/void`, { method: 'POST', body: JSON.stringify({ reason: '㋃ 撤回清场' }) }, shop.token)
                 const ps2 = (await request('/my/pending-sign', {}, ctok2, { 'x-tenant-id': shop.tenantId })).data.pendingSign
@@ -1406,7 +1443,7 @@ const main = async () => {
                   check('㋃ 前提:确认日结(此刻 shU3 仍未签,不挡)', cf.status === 200, JSON.stringify(cf.data).slice(0, 80))
                   const dcMid = (await request('/admin/daily-close', {}, shop.token)).data.dailyClose
                   check('㋃ D58 已确认+挂着未签单=不标过期(未签不进账,快照本就齐)', dcMid.staleClose === false, JSON.stringify({ stale: dcMid.staleClose }))
-                  const sg3 = await request(`/settlements/${encodeURIComponent(shU3.code)}/sign`, { method: 'POST', body: JSON.stringify({ signature: '㋃ 确认后补签', disclaimerAccepted: true }) }, null, { 'x-tenant-id': shop.tenantId })
+                  const sg3 = await signFixture(`/settlements/${encodeURIComponent(shU3.code)}/sign`, { method: 'POST', body: JSON.stringify({ signature: '㋃ 确认后补签', disclaimerAccepted: true }) }, null, { 'x-tenant-id': shop.tenantId })
                   check('㋃ 前提:确认后补签落账', sg3.status === 200, JSON.stringify(sg3.data).slice(0, 80))
                   const dc3 = (await request('/admin/daily-close', {}, shop.token)).data.dailyClose
                   check('㋃ R1 不减防:补签落账即标过期逼重开(快照对账抓 drift)', dc3.staleClose === true && (dc3.blockers || []).some((b) => b.code === 'STALE_CLOSE'), JSON.stringify({ stale: dc3.staleClose, blockers: (dc3.blockers || []).map((b) => b.code) }))
@@ -1419,7 +1456,7 @@ const main = async () => {
 
               /* ===== ㋄ D60 金额出口同源(店主 08-22:868/1020/1408 三数对账后修) ===== */
               {
-                const cm3 = await request('/auth/wechat/mini-login', { method: 'POST', body: JSON.stringify({ demoLogin: true, tenantId: shop.tenantId }) }, null, { 'x-tenant-id': shop.tenantId })
+                const cm3 = await fixtureLogin(shop.tenantId)
                 const cuid3 = cm3.data.user.id
                 const bal0 = dbx.prepare('SELECT COALESCE(SUM(amount_cents),0) AS b FROM stored_value_transactions WHERE tenant_id = ? AND user_id = ?').get(shop.tenantId, cuid3).b
                 const pkR3 = (await request('/admin/recharge-packages', {}, staffToken)).data.packages.find((p) => p.name === '充300赠60')
@@ -1466,8 +1503,8 @@ const main = async () => {
                 const tw = sT.data.settlements
                 const twStored = tw.flatMap((s) => s.payments).filter((p) => p.leg === 'stored_value' || p.leg === 'migrate_stored').reduce((n, p) => n + p.amountCents, 0)
                 check('㋄ D60 双单共享余额顺序消耗(Σstored ≤ 余额,不再双份烧)', twStored <= balNow && twStored > 0, JSON.stringify({ twStored, balNow }))
-                const tg1 = await request(`/settlements/${encodeURIComponent(tw[0].code)}/sign`, { method: 'POST', body: JSON.stringify({ signature: '㋄ 双单A', disclaimerAccepted: true }) }, null, { 'x-tenant-id': shop.tenantId })
-                const tg2 = await request(`/settlements/${encodeURIComponent(tw[1].code)}/sign`, { method: 'POST', body: JSON.stringify({ signature: '㋄ 双单B', disclaimerAccepted: true }) }, null, { 'x-tenant-id': shop.tenantId })
+                const tg1 = await signFixture(`/settlements/${encodeURIComponent(tw[0].code)}/sign`, { method: 'POST', body: JSON.stringify({ signature: '㋄ 双单A', disclaimerAccepted: true }) }, null, { 'x-tenant-id': shop.tenantId })
+                const tg2 = await signFixture(`/settlements/${encodeURIComponent(tw[1].code)}/sign`, { method: 'POST', body: JSON.stringify({ signature: '㋄ 双单B', disclaimerAccepted: true }) }, null, { 'x-tenant-id': shop.tenantId })
                 const balEnd = dbx.prepare('SELECT COALESCE(SUM(amount_cents),0) AS b FROM stored_value_transactions WHERE tenant_id = ? AND user_id = ?').get(shop.tenantId, cuid3).b
                 check('㋄ D60 两张顺序签署都成+余额不透支(≥0)', tg1.status === 200 && tg2.status === 200 && balEnd >= 0, JSON.stringify({ a: tg1.status, b: tg2.status, balEnd }))
 
@@ -1491,14 +1528,14 @@ const main = async () => {
                   check('㋅ 余额未用句(待签单):「该客有储值余额 X,本单未使用」', /该客有储值余额 .*本单未使用/.test(shN.storedUnusedNotice || ''), JSON.stringify(shN.storedUnusedNotice))
                   const pcN = (await request(`/admin/settlements/${shN.id}/preview-card`, {}, shop.token)).data.card
                   check('㋅ 余额未用句(组卡同句)', /该客有储值余额 .*本单未使用/.test(pcN.storedUnusedNotice || ''), JSON.stringify(pcN.storedUnusedNotice))
-                  const sgN = await request(`/settlements/${encodeURIComponent(shN.code)}/sign`, { method: 'POST', body: JSON.stringify({ signature: '㋅ 未用储值签', disclaimerAccepted: true }) }, null, { 'x-tenant-id': shop.tenantId })
-                  const serN = (await request(`/settlements/${encodeURIComponent(shN.code)}`, {}, null, { 'x-tenant-id': shop.tenantId })).data.settlement
+                  const sgN = await signFixture(`/settlements/${encodeURIComponent(shN.code)}/sign`, { method: 'POST', body: JSON.stringify({ signature: '㋅ 未用储值签', disclaimerAccepted: true }) }, null, { 'x-tenant-id': shop.tenantId })
+                  const serN = (await request(`/settlements/${encodeURIComponent(shN.code)}`, {}, shop.token, { 'x-tenant-id': shop.tenantId })).data.settlement
                   check('㋅ 已签单不出句(历史单不随活余额漂)', sgN.status === 200 && !serN.storedUnusedNotice, JSON.stringify(serN.storedUnusedNotice))
                 }
 
                 /* ===== ㋈ 批③首件:顾客售后发起线+连签流+归属瀑布(图 §二§三+拍板①②③) ===== */
                 {
-                  const cm9 = await request('/auth/wechat/mini-login', { method: 'POST', body: JSON.stringify({ demoLogin: true, tenantId: shop.tenantId }) }, null, { 'x-tenant-id': shop.tenantId })
+                  const cm9 = await fixtureLogin(shop.tenantId)
                   const ctok9 = cm9.data.auth.accessToken
                   const cuid9 = cm9.data.user.id
                   const pkR9 = (await request('/admin/recharge-packages', {}, staffToken)).data.packages.find((p) => p.name === '充300赠60')
@@ -1512,13 +1549,13 @@ const main = async () => {
                   // 挂单开一张并签(D61 接续字段一并核)
                   const sD61 = await request('/admin/settlements', { method: 'POST', body: JSON.stringify({ userId: cuid9, settlements: [{ payIntent: 'offline_full', bookingId: bk9.id, items: [{ serviceId: shop.serviceId, qty: 1 }], technicians: tech, servedPersonName: '' }, { payIntent: 'offline_full', items: [{ serviceId: shop.serviceId, qty: 1 }], technicians: tech, servedPersonName: '' }] }) }, shop.token)
                   const [d61a, d61b] = sD61.data.settlements
-                  const sg61 = (await request(`/settlements/${encodeURIComponent(d61a.code)}/sign`, { method: 'POST', body: JSON.stringify({ signature: '连签A', disclaimerAccepted: true }) }, null, { 'x-tenant-id': shop.tenantId })).data
-                  const ser61 = (await request(`/settlements/${encodeURIComponent(d61a.code)}`, {}, null, { 'x-tenant-id': shop.tenantId })).data.settlement
+                  const sg61 = (await signFixture(`/settlements/${encodeURIComponent(d61a.code)}/sign`, { method: 'POST', body: JSON.stringify({ signature: '连签A', disclaimerAccepted: true }) }, null, { 'x-tenant-id': shop.tenantId })).data
+                  const ser61 = (await request(`/settlements/${encodeURIComponent(d61a.code)}`, {}, shop.token, { 'x-tenant-id': shop.tenantId })).data.settlement
                   check('㋈ D61 签完带出下一张(groupPendingCount=1+nextCode)', ser61.groupPendingCount === 1 && ser61.groupNextPendingCode === d61b.code, JSON.stringify({ n: ser61.groupPendingCount, c: ser61.groupNextPendingCode }))
                   const st61 = (await request(`/admin/settlements/${d61a.id}/sign-state`, {}, shop.token)).data
                   check('㋈ D61 商家出码接续(sign-state 带 nextPendingId)', st61.state === 'signed' && st61.nextPendingId === d61b.id, JSON.stringify(st61))
-                  await request(`/settlements/${encodeURIComponent(d61b.code)}/sign`, { method: 'POST', body: JSON.stringify({ signature: '连签B', disclaimerAccepted: true }) }, null, { 'x-tenant-id': shop.tenantId })
-                  const ser61b = (await request(`/settlements/${encodeURIComponent(d61b.code)}`, {}, null, { 'x-tenant-id': shop.tenantId })).data.settlement
+                  await signFixture(`/settlements/${encodeURIComponent(d61b.code)}/sign`, { method: 'POST', body: JSON.stringify({ signature: '连签B', disclaimerAccepted: true }) }, null, { 'x-tenant-id': shop.tenantId })
+                  const ser61b = (await request(`/settlements/${encodeURIComponent(d61b.code)}`, {}, shop.token, { 'x-tenant-id': shop.tenantId })).data.settlement
                   check('㋈ D61 全签完=0(接续钮消失,回台面)', ser61b.groupPendingCount === 0, JSON.stringify({ n: ser61b.groupPendingCount }))
                   // 签署完成 → booking COMPLETED → afterSalesAction='start'
                   const bks = (await request('/bookings', {}, ctok9, { 'x-tenant-id': shop.tenantId })).data.bookings
@@ -1532,7 +1569,7 @@ const main = async () => {
                   const again = await request(`/my/bookings/${bk9.id}/after-sales`, { method: 'POST', body: JSON.stringify({ description: '再来一条' }) }, ctok9, { 'x-tenant-id': shop.tenantId })
                   check('㋈ B5 一单一条进行中(再发起=409)', again.status === 409 && again.data.error.code === 'AFTER_SALES_IN_PROGRESS', JSON.stringify(again.data).slice(0, 100))
                   // 越权+异常输入
-                  const cmX = await request('/auth/wechat/mini-login', { method: 'POST', body: JSON.stringify({ demoLogin: true, tenantId: shop.tenantId, asUserId: uid }) }, null, { 'x-tenant-id': shop.tenantId })
+                  const cmX = await fixtureLogin(shop.tenantId, uid)
                   const other = await request(`/my/bookings/${bk9.id}/after-sales/withdraw`, { method: 'POST', body: '{}' }, cmX.data.auth.accessToken, { 'x-tenant-id': shop.tenantId })
                   check('㋈ 越权:别人撤不了我的售后(404)', other.status === 404, `${other.status}`)
                   const empty = await request(`/my/bookings/${bk9.id}/after-sales`, { method: 'POST', body: JSON.stringify({ description: '   ' }) }, ctok9, { 'x-tenant-id': shop.tenantId })
@@ -1568,7 +1605,7 @@ const main = async () => {
                   const cuidK = bkK.userId || bkK.user_id || (bkK.user && bkK.user.id)
                   // D25 闸:未绑微信的轻档案不可充值——夹具直贴 openid 当已绑(绑定流程 ⑯ 有专测,这里不是被测物)
                   dbx.prepare('UPDATE users SET wechat_open_id = ? WHERE id = ?').run(`wx-3p-${RUN_ID}`, cuidK)
-                  const cmK = await request('/auth/wechat/mini-login', { method: 'POST', body: JSON.stringify({ demoLogin: true, tenantId: shop.tenantId, asUserId: cuidK }) }, null, { 'x-tenant-id': shop.tenantId })
+                  const cmK = await fixtureLogin(shop.tenantId, cuidK)
                   const ctokK = cmK.data.auth.accessToken
                   const pkRK = (await request('/admin/recharge-packages', {}, staffToken)).data.packages.find((p) => p.name === '充300赠60')
                   /* --- C5:实付现金≠结算合计的单(余额 100 抵一半)→ 列表句必须是现金数 --- */
@@ -1576,7 +1613,7 @@ const main = async () => {
                   await request(`/admin/bookings/${bkK.id}/status`, { method: 'PATCH', body: JSON.stringify({ status: 'COMPLETED' }) }, shop.token)
                   const sK = await request('/admin/settlements', { method: 'POST', body: JSON.stringify({ userId: cuidK, settlements: [{ payIntent: 'balance_plus_offline', bookingId: bkK.id, items: [{ serviceId: shop.serviceId, qty: 1 }], technicians: tech, servedPersonName: '' }] }) }, shop.token)
                   const shK = sK.data.settlements[0]
-                  await request(`/settlements/${encodeURIComponent(shK.code)}/sign`, { method: 'POST', body: JSON.stringify({ signature: '㋉ C5 签', disclaimerAccepted: true }) }, null, { 'x-tenant-id': shop.tenantId })
+                  await signFixture(`/settlements/${encodeURIComponent(shK.code)}/sign`, { method: 'POST', body: JSON.stringify({ signature: '㋉ C5 签', disclaimerAccepted: true }) }, null, { 'x-tenant-id': shop.tenantId })
                   const offK = dbx.prepare("SELECT COALESCE(SUM(amount_cents),0) AS n FROM settlement_payments WHERE settlement_id = ? AND leg = 'offline'").get(shK.id).n
                   const totK = dbx.prepare('SELECT total_cents FROM settlements WHERE id = ?').get(shK.id).total_cents
                   const num = (t) => Math.round(Number(String(t).replace(/[^\d.]/g, '')) * 100)
@@ -1594,7 +1631,7 @@ const main = async () => {
                   await request(`/admin/bookings/${bkT.id}/status`, { method: 'PATCH', body: JSON.stringify({ status: 'COMPLETED' }) }, shop.token)
                   const sT2 = await request('/admin/settlements', { method: 'POST', body: JSON.stringify({ userId: cuidK, settlements: [{ payIntent: 'offline_full', bookingId: bkT.id, items: [{ serviceId: shop.serviceId, qty: 1 }], customItems: [{ name: '定制加项', amountCents: 5000 }], technicians: tech, servedPersonName: '' }] }) }, shop.token)
                   const shT2 = sT2.data.settlements[0]
-                  await request(`/settlements/${encodeURIComponent(shT2.code)}/sign`, { method: 'POST', body: JSON.stringify({ signature: '㋉ D1 签', disclaimerAccepted: true }) }, null, { 'x-tenant-id': shop.tenantId })
+                  await signFixture(`/settlements/${encodeURIComponent(shT2.code)}/sign`, { method: 'POST', body: JSON.stringify({ signature: '㋉ D1 签', disclaimerAccepted: true }) }, null, { 'x-tenant-id': shop.tenantId })
                   const bkTL = (await request('/bookings', {}, ctokK, { 'x-tenant-id': shop.tenantId })).data.bookings.find((b) => b.id === bkT.id)
                   check('㋉ D1修订 加项/自选行不计:单张单(项目+加项)标题=空串(只显服务名)', (bkTL.listTitleText || '') === '', JSON.stringify(bkTL.listTitleText))
                   /* --- D1 购卡计入 N:核销行+现场购卡=「服务名 等2项」(拍板例句原型) --- */
@@ -1602,7 +1639,7 @@ const main = async () => {
                   await request(`/admin/bookings/${bkP.id}/status`, { method: 'PATCH', body: JSON.stringify({ status: 'COMPLETED' }) }, shop.token)
                   const sP2 = await request('/admin/settlements', { method: 'POST', body: JSON.stringify({ userId: cuidK, settlements: [{ payIntent: 'offline_full', bookingId: bkP.id, purchasePackageId: pk.id, timecardServiceId: shop.serviceId, items: [], technicians: tech, servedPersonName: '' }] }) }, shop.token)
                   const shP2 = sP2.data.settlements[0]
-                  await request(`/settlements/${encodeURIComponent(shP2.code)}/sign`, { method: 'POST', body: JSON.stringify({ signature: '㋉ 购卡签', disclaimerAccepted: true }) }, null, { 'x-tenant-id': shop.tenantId })
+                  await signFixture(`/settlements/${encodeURIComponent(shP2.code)}/sign`, { method: 'POST', body: JSON.stringify({ signature: '㋉ 购卡签', disclaimerAccepted: true }) }, null, { 'x-tenant-id': shop.tenantId })
                   const bkPL = (await request('/bookings', {}, ctokK, { 'x-tenant-id': shop.tenantId })).data.bookings.find((b) => b.id === bkP.id)
                   check('㋉→㋌ D1修订 购卡+核销=一个主项目(购卡不计)=不出「等N项」', (bkPL.listTitleText || '') === '', JSON.stringify(bkPL.listTitleText))
                   /* --- D1修订+D66 途中修:双服务一预约两张(店主实开形态)——标题=组张数,金额=Σ本预约全部已签单 --- */
@@ -1613,7 +1650,7 @@ const main = async () => {
                     { payIntent: 'offline_full', items: [{ serviceId: shop.serviceId, qty: 1 }], customItems: [{ name: '双单加项', amountCents: 3000 }], technicians: tech, servedPersonName: '' }
                   ] }) }, shop.token)
                   const [gA, gB] = sG.data.settlements
-                  for (const x of [gA, gB]) await request(`/settlements/${encodeURIComponent(x.code)}/sign`, { method: 'POST', body: JSON.stringify({ signature: '㋉ 双单签', disclaimerAccepted: true }) }, null, { 'x-tenant-id': shop.tenantId })
+                  for (const x of [gA, gB]) await signFixture(`/settlements/${encodeURIComponent(x.code)}/sign`, { method: 'POST', body: JSON.stringify({ signature: '㋉ 双单签', disclaimerAccepted: true }) }, null, { 'x-tenant-id': shop.tenantId })
                   const offG = dbx.prepare("SELECT COALESCE(SUM(p.amount_cents),0) AS n FROM settlement_payments p JOIN settlements s ON s.id = p.settlement_id WHERE s.booking_id = ? AND s.status = 'signed' AND p.leg = 'offline'").get(bkG.id).n
                   const gFirst = dbx.prepare('SELECT name_snapshot FROM settlement_items WHERE settlement_id = ? ORDER BY item_no ASC').get(gA.id).name_snapshot
                   const bkGL = (await request('/bookings', {}, ctokK, { 'x-tenant-id': shop.tenantId })).data.bookings.find((b) => b.id === bkG.id)
@@ -1624,7 +1661,7 @@ const main = async () => {
                   /* --- D59 案二提示句:待分配单含未归属充值=行上明说;分配后行消失 --- */
                   const s59c = await request('/admin/settlements', { method: 'POST', body: JSON.stringify({ userId: cuidK, settlements: [{ payIntent: 'offline_full', items: [{ serviceId: shop.serviceId, qty: 1 }], technicians: [{ technicianId: shop.tech1, role: 'main', itemNos: [1] }, { technicianId: shop.tech2, role: 'assist', itemNos: [] }], servedPersonName: '', rechargePackageId: pkRK.id }] }) }, shop.token)
                   const sh59c = s59c.data.settlements[0]
-                  await request(`/settlements/${encodeURIComponent(sh59c.code)}/sign`, { method: 'POST', body: JSON.stringify({ signature: '㋉ 提示句签', disclaimerAccepted: true }) }, null, { 'x-tenant-id': shop.tenantId })
+                  await signFixture(`/settlements/${encodeURIComponent(sh59c.code)}/sign`, { method: 'POST', body: JSON.stringify({ signature: '㋉ 提示句签', disclaimerAccepted: true }) }, null, { 'x-tenant-id': shop.tenantId })
                   const dcHint = (await request(`/admin/daily-close?date=${dateStr(0)}`, {}, shop.token)).data.dailyClose
                   const pRow = (dcHint.pendingAllocation || []).find((x) => x.settlementId === sh59c.id)
                   check('㋉ D59 提示句:待分配行「本单含未归属充值 X,分配业绩时一并核定归属」', pRow && /本单含未归属充值 .*一并核定归属/.test(pRow.rechargeUnassignedText || ''), JSON.stringify(pRow && pRow.rechargeUnassignedText))
@@ -1634,7 +1671,7 @@ const main = async () => {
                   /* --- D59 案二:双技师+随单充值 → 签字=未分配;日结分配 70/30 → 归份额最高者;台账+快照同刀 --- */
                   const s59 = await request('/admin/settlements', { method: 'POST', body: JSON.stringify({ userId: cuidK, settlements: [{ payIntent: 'offline_full', items: [{ serviceId: shop.serviceId, qty: 1 }], technicians: [{ technicianId: shop.tech1, role: 'main', itemNos: [1] }, { technicianId: shop.tech2, role: 'assist', itemNos: [] }], servedPersonName: '', rechargePackageId: pkRK.id }] }) }, shop.token)
                   const sh59 = s59.data.settlements[0]
-                  await request(`/settlements/${encodeURIComponent(sh59.code)}/sign`, { method: 'POST', body: JSON.stringify({ signature: '㋉ D59 签', disclaimerAccepted: true }) }, null, { 'x-tenant-id': shop.tenantId })
+                  await signFixture(`/settlements/${encodeURIComponent(sh59.code)}/sign`, { method: 'POST', body: JSON.stringify({ signature: '㋉ D59 签', disclaimerAccepted: true }) }, null, { 'x-tenant-id': shop.tenantId })
                   const svOf = () => dbx.prepare("SELECT technician_id, type FROM stored_value_transactions WHERE tenant_id = ? AND user_id = ? AND type IN ('recharge','bonus') AND note LIKE ?").all(shop.tenantId, cuidK, `%服务单 ${sh59.code}%`)
                   check('㋉ D59 签字时=未分配(充值行+赠送行 technician_id 皆空)', svOf().length === 2 && svOf().every((r) => r.technician_id === null), JSON.stringify(svOf()))
                   const alBad = await request(`/admin/settlements/${sh59.id}/allocate`, { method: 'POST', body: JSON.stringify({ shares: [{ technicianId: shop.tech1, pct: 70 }, { technicianId: shop.tech2, pct: 30 }], rechargeTechnicianId: 'tech-悬空' }) }, shop.token)
@@ -1656,7 +1693,7 @@ const main = async () => {
                   /* 显式点名口:第二张双技师充值单,店长点名 30% 技乙 → 归技乙(显式优先于份额) */
                   const s59b = await request('/admin/settlements', { method: 'POST', body: JSON.stringify({ userId: cuidK, settlements: [{ payIntent: 'offline_full', items: [{ serviceId: shop.serviceId, qty: 1 }], technicians: [{ technicianId: shop.tech1, role: 'main', itemNos: [1] }, { technicianId: shop.tech2, role: 'assist', itemNos: [] }], servedPersonName: '', rechargePackageId: pkRK.id }] }) }, shop.token)
                   const sh59b = s59b.data.settlements[0]
-                  await request(`/settlements/${encodeURIComponent(sh59b.code)}/sign`, { method: 'POST', body: JSON.stringify({ signature: '㋉ D59b 签', disclaimerAccepted: true }) }, null, { 'x-tenant-id': shop.tenantId })
+                  await signFixture(`/settlements/${encodeURIComponent(sh59b.code)}/sign`, { method: 'POST', body: JSON.stringify({ signature: '㋉ D59b 签', disclaimerAccepted: true }) }, null, { 'x-tenant-id': shop.tenantId })
                   await request(`/admin/settlements/${sh59b.id}/allocate`, { method: 'POST', body: JSON.stringify({ shares: [{ technicianId: shop.tech1, pct: 70 }, { technicianId: shop.tech2, pct: 30 }], rechargeTechnicianId: shop.tech2 }) }, shop.token)
                   const sv59b = dbx.prepare("SELECT technician_id FROM stored_value_transactions WHERE tenant_id = ? AND user_id = ? AND type = 'recharge' AND note LIKE ?").get(shop.tenantId, cuidK, `%服务单 ${sh59b.code}%`)
                   check('㋉ D59 店长显式点名优先于份额(点 30% 技乙=归技乙)', sv59b.technician_id === shop.tech2, JSON.stringify(sv59b))
@@ -1673,11 +1710,11 @@ const main = async () => {
                     const bkP = (await request('/admin/bookings/direct', { method: 'POST', body: JSON.stringify({ newCustomerName: `㋕积分客${RUN_ID}`, serviceId: shop.serviceId, technicianId: shop.tech1, date: dateStr(0), time: '05:00' }) }, shop.token)).data.booking
                     const uidP = bkP.userId || bkP.user_id || (bkP.user && bkP.user.id)
                     dbx.prepare('UPDATE users SET wechat_open_id = ? WHERE id = ?').run(`wx-pts-${RUN_ID}`, uidP)
-                    const tokP = async () => (await request('/auth/wechat/mini-login', { method: 'POST', body: JSON.stringify({ demoLogin: true, tenantId: shop.tenantId, asUserId: uidP }) }, null, { 'x-tenant-id': shop.tenantId })).data
+                    const tokP = async () => (await fixtureLogin(shop.tenantId, uidP)).data
                     // 先赚分:签一单(服务价 200 → 200 分)
                     await request(`/admin/bookings/${bkP.id}/status`, { method: 'PATCH', body: JSON.stringify({ status: 'COMPLETED' }) }, shop.token)
                     const shP = (await request('/admin/settlements', { method: 'POST', body: JSON.stringify({ userId: uidP, settlements: [{ bookingId: bkP.id, payIntent: 'offline_full', items: [{ serviceId: shop.serviceId, qty: 1 }], technicians: [{ technicianId: shop.tech1, role: 'main', itemNos: [1] }] }] }) }, shop.token)).data.settlements[0]
-                    await request(`/settlements/${encodeURIComponent(shP.code)}/sign`, { method: 'POST', body: JSON.stringify({ signature: '㋕ 签', disclaimerAccepted: true }) }, null, { 'x-tenant-id': shop.tenantId })
+                    await signFixture(`/settlements/${encodeURIComponent(shP.code)}/sign`, { method: 'POST', body: JSON.stringify({ signature: '㋕ 签', disclaimerAccepted: true }) }, null, { 'x-tenant-id': shop.tenantId })
                     const me0 = (await tokP()).user
                     check('㋕ 没上架奖品时不出提示行(永久律:没有就不显示,不猜)', me0.redeemablePrizeText === '', JSON.stringify(me0.redeemablePrizeText))
                     // ④ 商家上架两件:一件兑得起(100 分),一件兑不起(99999 分)
@@ -1799,7 +1836,7 @@ const main = async () => {
                     const sh1Res = await request('/admin/settlements', { method: 'POST', body: JSON.stringify({ userId: b1.userId || b1.user_id || (b1.user && b1.user.id), settlements: [{ bookingId: b1.id, payIntent: 'offline_full', items: [{ serviceId: shop.serviceId, qty: 1 }], technicians: [{ technicianId: shop.tech2, role: 'main', itemNos: [1] }] }] }) }, shop.token)
                     if (!sh1Res.data || !sh1Res.data.settlements) throw new Error(`㋘ 开单失败(${sh1Res.status}):${JSON.stringify(sh1Res.data).slice(0, 160)}`)
                     const sh1 = sh1Res.data.settlements[0]
-                    await request(`/settlements/${encodeURIComponent(sh1.code)}/sign`, { method: 'POST', body: JSON.stringify({ signature: '㋘ 签', disclaimerAccepted: true }) }, null, { 'x-tenant-id': shop.tenantId })
+                    await signFixture(`/settlements/${encodeURIComponent(sh1.code)}/sign`, { method: 'POST', body: JSON.stringify({ signature: '㋘ 签', disclaimerAccepted: true }) }, null, { 'x-tenant-id': shop.tenantId })
                     const after1 = await load(b1.id)
                     const inc1 = incomeOf(b1.id)
                     check('㋘② 签署即入账即完成(不点任何按钮):状态 COMPLETED + 恰好一条收入行',
@@ -1833,7 +1870,7 @@ const main = async () => {
                     const sh2Res = await request('/admin/settlements', { method: 'POST', body: JSON.stringify({ userId: uid2, settlements: [{ bookingId: b2.id, payIntent: 'offline_full', items: [{ serviceId: shop.serviceId, qty: 1 }], technicians: [{ technicianId: shop.tech2, role: 'main', itemNos: [1] }], rechargePackageId: pkR ? pkR.id : undefined }] }) }, shop.token)
                     if (!sh2Res.data || !sh2Res.data.settlements) throw new Error(`㋘ 充值单开单失败(${sh2Res.status}):${JSON.stringify(sh2Res.data).slice(0, 160)}`)
                     const sh2 = sh2Res.data.settlements[0]
-                    await request(`/settlements/${encodeURIComponent(sh2.code)}/sign`, { method: 'POST', body: JSON.stringify({ signature: '㋘ 充值签', disclaimerAccepted: true }) }, null, { 'x-tenant-id': shop.tenantId })
+                    await signFixture(`/settlements/${encodeURIComponent(sh2.code)}/sign`, { method: 'POST', body: JSON.stringify({ signature: '㋘ 充值签', disclaimerAccepted: true }) }, null, { 'x-tenant-id': shop.tenantId })
                     const inc2 = incomeOf(b2.id)
                     const svcPrice = dbx.prepare('SELECT price_cents FROM services WHERE id = ?').get(shop.serviceId).price_cents
                     check('㋘ 账本红线:随单充值不算服务收入(签署入账只记服务那部分现金)',
@@ -1844,7 +1881,7 @@ const main = async () => {
                     // A① 爽约前置:已完成的单不许再标爽约(原来任何状态都能标一次,标完主状态被改写、收入被冲销)
                     const bA = await mk('㋙爽约', 13)
                     const shA = await request('/admin/settlements', { method: 'POST', body: JSON.stringify({ userId: bA.userId || bA.user_id || (bA.user && bA.user.id), settlements: [{ bookingId: bA.id, payIntent: 'offline_full', items: [{ serviceId: shop.serviceId, qty: 1 }], technicians: [{ technicianId: shop.tech1, role: 'main', itemNos: [1] }] }] }) }, shop.token)
-                    await request(`/settlements/${encodeURIComponent(shA.data.settlements[0].code)}/sign`, { method: 'POST', body: JSON.stringify({ signature: '㋙签', disclaimerAccepted: true }) }, null, { 'x-tenant-id': shop.tenantId })
+                    await signFixture(`/settlements/${encodeURIComponent(shA.data.settlements[0].code)}/sign`, { method: 'POST', body: JSON.stringify({ signature: '㋙签', disclaimerAccepted: true }) }, null, { 'x-tenant-id': shop.tenantId })
                     const incA0 = incomeOf(bA.id).reduce((n, r) => n + r.amount_cents, 0)
                     const nsBad = await request(`/admin/bookings/${bA.id}/no-show`, { method: 'POST', body: JSON.stringify({ reason: '试试已完成的单能不能标爽约' }) }, shop.token)
                     check('㋙A① 已完成单标爽约=409(状态机挡;原来能标,标完收入被冲销)', nsBad.status === 409, `status=${nsBad.status}`)
@@ -1865,7 +1902,7 @@ const main = async () => {
                     // B① 结束售后:空结果打不通(必填),填了才落 after_sales_events(留痕跟着出口走)
                     const bC = await mk('㋙售后', 16)
                     const shC = await request('/admin/settlements', { method: 'POST', body: JSON.stringify({ userId: bC.userId || bC.user_id || (bC.user && bC.user.id), settlements: [{ bookingId: bC.id, payIntent: 'offline_full', items: [{ serviceId: shop.serviceId, qty: 1 }], technicians: [{ technicianId: shop.tech1, role: 'main', itemNos: [1] }] }] }) }, shop.token)
-                    await request(`/settlements/${encodeURIComponent(shC.data.settlements[0].code)}/sign`, { method: 'POST', body: JSON.stringify({ signature: '㋙售后签', disclaimerAccepted: true }) }, null, { 'x-tenant-id': shop.tenantId })
+                    await signFixture(`/settlements/${encodeURIComponent(shC.data.settlements[0].code)}/sign`, { method: 'POST', body: JSON.stringify({ signature: '㋙售后签', disclaimerAccepted: true }) }, null, { 'x-tenant-id': shop.tenantId })
                     await request(`/admin/bookings/${bC.id}/status`, { method: 'PATCH', body: JSON.stringify({ action: 'openAfterSales', note: '㋙ 掉钻' }) }, shop.token)
                     const evBefore = dbx.prepare("SELECT COUNT(*) n FROM after_sales_events WHERE booking_id = ?").get(bC.id).n
                     const endEmpty = await request(`/admin/bookings/${bC.id}/status`, { method: 'PATCH', body: JSON.stringify({ action: 'endAfterSales', note: '' }) }, shop.token)
@@ -1891,7 +1928,7 @@ const main = async () => {
                   {
                     const shopB = await newShop('x')
                     const openId = `demo-openid-cross-${RUN_ID}`
-                    const loginAt = async (sp) => (await request('/auth/wechat/mini-login', { method: 'POST', body: JSON.stringify({ demoLogin: true, tenantId: sp.tenantId, asUserId: null }) }, null, { 'x-tenant-id': sp.tenantId }))
+                    const loginAt = async (sp) => (await fixtureLogin(sp.tenantId))
                     // 两店各建一位顾客并贴同一个 openid(真实路径=扫签署码授权,这里直贴身份字段)
                     const mkCust = async (sp, nm) => {
                       const bkRes = await request('/admin/bookings/direct', { method: 'POST', body: JSON.stringify({ newCustomerName: nm, serviceId: sp.serviceId, technicianId: sp.tech1, date: dateStr(0), time: '07:30' }) }, sp.token)
@@ -1910,7 +1947,7 @@ const main = async () => {
                     const signOne = async (sp, uid, bookingId) => {
                       await request(`/admin/bookings/${bookingId}/status`, { method: 'PATCH', body: JSON.stringify({ status: 'COMPLETED' }) }, sp.token)
                       const sh = (await request('/admin/settlements', { method: 'POST', body: JSON.stringify({ userId: uid, settlements: [{ bookingId, payIntent: 'offline_full', items: [{ serviceId: sp.serviceId, qty: 1 }], technicians: [{ technicianId: sp.tech1, role: 'main', itemNos: [1] }] }] }) }, sp.token)).data.settlements[0]
-                      await request(`/settlements/${encodeURIComponent(sh.code)}/sign`, { method: 'POST', body: JSON.stringify({ signature: '㋔ 签', disclaimerAccepted: true }) }, null, { 'x-tenant-id': sp.tenantId })
+                      await signFixture(`/settlements/${encodeURIComponent(sh.code)}/sign`, { method: 'POST', body: JSON.stringify({ signature: '㋔ 签', disclaimerAccepted: true }) }, null, { 'x-tenant-id': sp.tenantId })
                       return sh
                     }
                     await request('/admin/stored-value/recharge', { method: 'POST', body: JSON.stringify({ userId: A.uid, amountCents: 50000, payChannel: 'cash', note: '㋔ A 店储值' }) }, shop.token)
@@ -1923,13 +1960,13 @@ const main = async () => {
                     await signOne(shop, A.uid, A.bookingId)
                     await signOne(shopB, B.uid, B.bookingId)
                     // 顾客端按店读:两套 token(各自店签的),逐项比对
-                    const tokA = (await request('/auth/wechat/mini-login', { method: 'POST', body: JSON.stringify({ demoLogin: true, tenantId: shop.tenantId, asUserId: A.uid }) }, null, { 'x-tenant-id': shop.tenantId })).data.auth.accessToken
-                    const tokB = (await request('/auth/wechat/mini-login', { method: 'POST', body: JSON.stringify({ demoLogin: true, tenantId: shopB.tenantId, asUserId: B.uid }) }, null, { 'x-tenant-id': shopB.tenantId })).data.auth.accessToken
+                    const tokA = (await fixtureLogin(shop.tenantId, A.uid)).data.auth.accessToken
+                    const tokB = (await fixtureLogin(shopB.tenantId, B.uid)).data.auth.accessToken
                     const readAll = async (sp, tok) => ({
                       pack: (await request('/my/card-pack', {}, tok, { 'x-tenant-id': sp.tenantId })).data.cardPack,
                       sv: (await request('/my/stored-value', {}, tok, { 'x-tenant-id': sp.tenantId })).data,
                       orders: (await request('/bookings', {}, tok, { 'x-tenant-id': sp.tenantId })).data.bookings,
-                      me: (await request('/auth/wechat/mini-login', { method: 'POST', body: JSON.stringify({ demoLogin: true, tenantId: sp.tenantId, asUserId: sp === shop ? A.uid : B.uid }) }, null, { 'x-tenant-id': sp.tenantId })).data.user
+                      me: (await fixtureLogin(sp.tenantId, sp === shop ? A.uid : B.uid)).data.user
                     })
                     const rA = await readAll(shop, tokA)
                     const rB = await readAll(shopB, tokB)
@@ -1971,12 +2008,13 @@ const main = async () => {
                      ②没有签署单的单子不许出现「已结清」这类完成态金额句;
                      ③一笔消费一旦"已结清",订单卡/累计消费/成长值/积分/到店次数**五个读方同时算数**。 */
                   {
-                    const bkQ1 = (await request('/admin/bookings/direct', { method: 'POST', body: JSON.stringify({ newCustomerName: `㋑回落客${RUN_ID}`, serviceId: shop.serviceId, technicianId: shop.tech1, date: dateStr(0), time: '08:05' }) }, shop.token)).data.booking
+                    const qTech=(await request('/admin/technicians',{method:'POST',body:JSON.stringify({name:`金额读方专用${RUN_ID}`,isActive:true})},shop.token)).data.technician
+                    const bkQ1 = (await request('/admin/bookings/direct', { method: 'POST', body: JSON.stringify({ newCustomerName: `㋑回落客${RUN_ID}`, serviceId: shop.serviceId, technicianId: qTech.id, date: dateStr(0), time: '08:05' }) }, shop.token)).data.booking
                     const cuidQ = bkQ1.userId || bkQ1.user_id || (bkQ1.user && bkQ1.user.id)
                     dbx.prepare('UPDATE users SET wechat_open_id = ? WHERE id = ?').run(`wx-q-${RUN_ID}`, cuidQ)
-                    const ctokQ = (await request('/auth/wechat/mini-login', { method: 'POST', body: JSON.stringify({ demoLogin: true, tenantId: shop.tenantId, asUserId: cuidQ }) }, null, { 'x-tenant-id': shop.tenantId })).data.auth.accessToken
+                    const ctokQ = (await fixtureLogin(shop.tenantId, cuidQ)).data.auth.accessToken
                     const cardsQ = async () => (await request('/bookings', {}, ctokQ, { 'x-tenant-id': shop.tenantId })).data.bookings
-                    const meQ = async () => (await request('/auth/wechat/mini-login', { method: 'POST', body: JSON.stringify({ demoLogin: true, tenantId: shop.tenantId, asUserId: cuidQ }) }, null, { 'x-tenant-id': shop.tenantId })).data.user
+                    const meQ = async () => (await fixtureLogin(shop.tenantId, cuidQ)).data.user
                     // ① 完成 + 完全没开单 → 如实说,不许「已结清」
                     await request(`/admin/bookings/${bkQ1.id}/status`, { method: 'PATCH', body: JSON.stringify({ status: 'COMPLETED' }) }, shop.token)
                     const q1 = (await cardsQ()).find((b) => b.id === bkQ1.id)
@@ -1986,11 +2024,11 @@ const main = async () => {
                     check('㋑ 五读方一致(没单时):累计消费/积分/成长值全 0,订单卡也不说收过钱',
                       m0.totalSpentCents === 0 && m0.points === 0 && m0.growthValue === 0, JSON.stringify({ t: m0.totalSpentCents, p: m0.points, g: m0.growthValue }))
                     // ② 完成 + 开了单还没签 → 「服务确认单待签字」(与①两件事,不许说同一句)
-                    const sQ = (await request('/admin/settlements', { method: 'POST', body: JSON.stringify({ userId: cuidQ, settlements: [{ payIntent: 'offline_full', bookingId: bkQ1.id, items: [{ serviceId: shop.serviceId, qty: 1 }], technicians: tech, servedPersonName: '' }] }) }, shop.token)).data.settlements[0]
+                    const sQ = (await request('/admin/settlements', { method: 'POST', body: JSON.stringify({ userId: cuidQ, settlements: [{ payIntent: 'offline_full', bookingId: bkQ1.id, items: [{ serviceId: shop.serviceId, qty: 1 }], technicians: [{technicianId:qTech.id,role:'main',itemNos:[1]}], servedPersonName: '' }] }) }, shop.token)).data.settlements[0]
                     const q2 = (await cardsQ()).find((b) => b.id === bkQ1.id)
                     check('㋑ 未签单≠没开单:完成+待签=「服务确认单待签字」', q2.listAmountText === '服务确认单待签字', JSON.stringify(q2.listAmountText))
                     // ③ 签了 → 「已结清 ¥X」+ 五读方同时算数(同源断言常驻)
-                    await request(`/settlements/${encodeURIComponent(sQ.code)}/sign`, { method: 'POST', body: JSON.stringify({ signature: '㋑ 签', disclaimerAccepted: true }) }, null, { 'x-tenant-id': shop.tenantId })
+                    await signFixture(`/settlements/${encodeURIComponent(sQ.code)}/sign`, { method: 'POST', body: JSON.stringify({ signature: '㋑ 签', disclaimerAccepted: true }) }, null, { 'x-tenant-id': shop.tenantId })
                     const q3 = (await cardsQ()).find((b) => b.id === bkQ1.id)
                     const m1 = await meQ()
                     const subQ = dbx.prepare('SELECT subtotal_cents FROM settlements WHERE id = ?').get(sQ.id).subtotal_cents
@@ -2001,7 +2039,7 @@ const main = async () => {
                       m1.totalSpentCents === subQ && m1.points === Math.floor(subQ / 100) && m1.growthValue === subQ / 100 && m1.visits >= 1,
                       JSON.stringify({ spent: m1.totalSpentCents, sub: subQ, points: m1.points, growth: m1.growthValue, visits: m1.visits }))
                     // ④ 取消单:金额句同样后端给(不许前端拿标价拼)
-                    const bkQ2 = (await request('/admin/bookings/direct', { method: 'POST', body: JSON.stringify({ userId: cuidQ, serviceId: shop.serviceId, technicianId: shop.tech1, date: dateStr(1), time: '08:35' }) }, shop.token)).data.booking
+                    const bkQ2 = (await request('/admin/bookings/direct', { method: 'POST', body: JSON.stringify({ userId: cuidQ, serviceId: shop.serviceId, technicianId: qTech.id, date: dateStr(1), time: '08:35' }) }, shop.token)).data.booking
                     await request(`/admin/bookings/${bkQ2.id}/status`, { method: 'PATCH', body: JSON.stringify({ status: 'CANCELLED', note: '㋑ 取消' }) }, shop.token)
                     const q4 = (await cardsQ()).find((b) => b.id === bkQ2.id)
                     check('㋑ 取消单金额句后端唯一(「总价 ¥X」,前端零拼串)', /^总价 /.test(q4.listAmountText || ''), JSON.stringify(q4.listAmountText))
@@ -2039,7 +2077,7 @@ const main = async () => {
                   check('㋋ 裁B 写方:无预约开单=自动挂即时预约(bookingId 非空)', Boolean(shNB.bookingId), JSON.stringify(shNB.bookingId))
                   const bkNB = dbx.prepare('SELECT status, source_channel, user_id FROM bookings WHERE id = ?').get(shNB.bookingId)
                   check('㋋ 裁B 即时预约=COMPLETED+settlement_instant+归卡主', bkNB && bkNB.status === 'COMPLETED' && bkNB.source_channel === 'settlement_instant' && bkNB.user_id === cuidK, JSON.stringify(bkNB))
-                  await request(`/settlements/${encodeURIComponent(shNB.code)}/sign`, { method: 'POST', body: JSON.stringify({ signature: '㋋ 即时签', disclaimerAccepted: true }) }, null, { 'x-tenant-id': shop.tenantId })
+                  await signFixture(`/settlements/${encodeURIComponent(shNB.code)}/sign`, { method: 'POST', body: JSON.stringify({ signature: '㋋ 即时签', disclaimerAccepted: true }) }, null, { 'x-tenant-id': shop.tenantId })
                   const bkNBL = (await request('/bookings', {}, ctokK, { 'x-tenant-id': shop.tenantId })).data.bookings.find((b) => b.id === shNB.bookingId)
                   check('㋋ 裁B 顾客订单列表见即时单(已结清句在)', bkNBL && /^已结清 /.test(bkNBL.listAmountText || ''), JSON.stringify(bkNBL && bkNBL.listAmountText))
                   /* 同源断言常驻:全库零无挂靠(每签署组必有预约) */
@@ -2051,12 +2089,12 @@ const main = async () => {
                   dbx.prepare('UPDATE users SET wechat_open_id = ? WHERE id = ?').run(`wx-va-${RUN_ID}`, cuidV)
                   await request(`/admin/bookings/${bkV1.id}/status`, { method: 'PATCH', body: JSON.stringify({ status: 'COMPLETED' }) }, shop.token)
                   const sV = await request('/admin/settlements', { method: 'POST', body: JSON.stringify({ userId: cuidV, settlements: [{ payIntent: 'offline_full', bookingId: bkV1.id, items: [{ serviceId: shop.serviceId, qty: 1 }], technicians: tech, servedPersonName: '' }] }) }, shop.token)
-                  await request(`/settlements/${encodeURIComponent(sV.data.settlements[0].code)}/sign`, { method: 'POST', body: JSON.stringify({ signature: '㋋ 裁A签', disclaimerAccepted: true }) }, null, { 'x-tenant-id': shop.tenantId })
+                  await signFixture(`/settlements/${encodeURIComponent(sV.data.settlements[0].code)}/sign`, { method: 'POST', body: JSON.stringify({ signature: '㋋ 裁A签', disclaimerAccepted: true }) }, null, { 'x-tenant-id': shop.tenantId })
                   const bkV2 = (await request('/admin/bookings/direct', { method: 'POST', body: JSON.stringify({ userId: cuidV, serviceId: shop.serviceId, technicianId: shop.tech2, date: dateStr(2), time: '14:31' }) }, shop.token)).data.booking
                   await request(`/admin/bookings/${bkV2.id}/status`, { method: 'PATCH', body: JSON.stringify({ status: 'COMPLETED' }) }, shop.token)
                   const bkV3 = (await request('/admin/bookings/direct', { method: 'POST', body: JSON.stringify({ userId: cuidV, serviceId: shop.serviceId, technicianId: shop.tech2, date: dateStr(3), time: '14:31' }) }, shop.token)).data.booking
                   await request(`/admin/bookings/${bkV3.id}/status`, { method: 'PATCH', body: JSON.stringify({ status: 'CANCELLED' }) }, shop.token)
-                  const meV = (await request('/auth/wechat/mini-login', { method: 'POST', body: JSON.stringify({ demoLogin: true, tenantId: shop.tenantId, asUserId: cuidV }) }, null, { 'x-tenant-id': shop.tenantId })).data.user
+                  const meV = (await fixtureLogin(shop.tenantId, cuidV)).data.user
                   const listV = ((await request('/admin/customers', {}, shop.token)).data.customers || []).find((c) => c.id === cuidV)
                   const profV = (await request(`/admin/customers/${cuidV}/notes`, {}, shop.token)).data.profile
                   check('㋋ 裁A 三读方同数=2(签署组+完成预约同日=1;后日完成+1;取消不算)', meV.visits === 2 && listV && listV.visitCount === 2 && profV && profV.visitCount === 2, JSON.stringify({ me: meV.visits, list: listV && listV.visitCount, prof: profV && profV.visitCount }))
@@ -2080,7 +2118,7 @@ const main = async () => {
                   check('㋌ D68 N=主项目数(自选加项不进 N):汇总行=(2)、标题=等2项', pmt.mainItemCount === 2 && /等2项$/.test(bkGD.listTitleText || ''), JSON.stringify({ n: pmt.mainItemCount, t: bkGD.listTitleText }))
                   check('㋌ D68 文案:详情汇总行「到店服务项目(N)」不出「组/张」内部话术', pmt.groupCashLabel === '到店服务项目(2)' && !/组|张/.test(pmt.groupCashLabel), JSON.stringify(pmt.groupCashLabel))
                   check('㋌ D68 文案:逐张行=「服务确认单 n/N · 状态」(「第 n/N 张」销案)', (pmt.sheets || []).every((x) => /^服务确认单 \d+\/\d+ · /.test(x.label || '')) && !(pmt.sheets || []).some((x) => /第 \d+\/\d+ 张/.test(x.label || '')), JSON.stringify((pmt.sheets || []).map((x) => x.label)))
-                  check('㋌ D68② 原件图源:已签署张带 snapshotUrl(悬浮查看器图源),未签署张为空', (pmt.sheets || []).every((x) => (x.status === 'signed' || x.status === 'amended') ? /\/snapshot$/.test(x.snapshotUrl || '') : !x.snapshotUrl), JSON.stringify((pmt.sheets || []).map((x) => x.snapshotUrl)))
+                  check('㋌ D68② 原件图源:已签署张带 snapshotUrl(悬浮查看器图源),未签署张为空', (pmt.sheets || []).every((x) => (x.status === 'signed' || x.status === 'amended') ? /\/snapshot\?view=/.test(x.snapshotUrl || '') : !x.snapshotUrl), JSON.stringify((pmt.sheets || []).map((x) => x.snapshotUrl)))
                   const pcK = (await request(`/admin/settlements/${gA.id}/preview-card`, {}, shop.token)).data.card
                   check('㋌ D68 文案:组卡汇总行同句「到店服务项目(2)」+组说明不出「整组单据(共 N 张)」', pcK.totals.dueLabel === '到店服务项目(2)' && /份服务确认单/.test(pcK.groupNote || '') && !/整组单据/.test(pcK.groupNote || ''), JSON.stringify({ d: pcK.totals.dueLabel, g: pcK.groupNote }))
                   // 单张组:不出汇总行(N=1 没有「等N项」也没有汇总行)
@@ -2093,23 +2131,23 @@ const main = async () => {
                   const snapByCode = (await request(`/admin/settlements/${encodeURIComponent(gB.code)}/snapshots`, {}, shop.token)).data
                   check('㋍ D68③ 商家口 /snapshots:id 与 code 都能点,份数=该组签署单张数(同源)', snapById.total === grpCountDb && snapByCode.total === grpCountDb && grpCountDb === 2, JSON.stringify({ byId: snapById.total, byCode: snapByCode.total, db: grpCountDb }))
                   check('㋍ D68③ 商家口份数≡顾客端 payment.sheets 份数(任一入口取到的原件份数相同)', snapById.total === (pmt.sheets || []).length, JSON.stringify({ admin: snapById.total, customer: (pmt.sheets || []).length }))
-                  check('㋍ D68③ 逐份句与图源同一出口(label/snapshotUrl 与顾客端逐字一致)', snapById.sheets.every((sh, i) => sh.label === pmt.sheets[i].label && sh.snapshotUrl === pmt.sheets[i].snapshotUrl), JSON.stringify(snapById.sheets.map((x) => x.label)))
+                  check('㋍ D68③ 逐份句与图源同一出口(label/snapshotUrl 与顾客端逐字一致)', snapById.sheets.every((sh, i) => sh.label === pmt.sheets[i].label && new URL(sh.snapshotUrl,BASE_URL).pathname === new URL(pmt.sheets[i].snapshotUrl,BASE_URL).pathname), JSON.stringify(snapById.sheets.map((x) => x.label)))
                   check('㋍ D68③ 点哪一份就从哪一份开(startIndex 落在被点那份上)', snapByCode.startIndex === 1 && snapById.startIndex === 0, JSON.stringify({ a: snapById.startIndex, b: snapByCode.startIndex }))
                   // 越权面:另一家店的老板 token 拿本店单 → 租户闸门按会话租户查,查无此单
                   const otherShop = await newShop(`x68${RUN_ID.slice(-3)}`)
                   /* ===== ㋏ 真机 SVG 空白件(店主 08-23 实测):图源换 PNG,契约与份数不动 ===== */
-                  const snapRes = await fetch(`${BASE_URL}/settlements/${encodeURIComponent(gA.code)}/snapshot`)
+                  const snapRes = await fetch(BASE_URL+snapById.sheets.find(sh=>sh.code===gA.code || new URL(sh.snapshotUrl,BASE_URL).pathname.includes(encodeURIComponent(gA.code))).snapshotUrl)
                   const snapBuf = Buffer.from(await snapRes.arrayBuffer())
                   const isPng = snapBuf.length > 24 && snapBuf.subarray(0, 8).equals(Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]))
                   const pngW = isPng ? snapBuf.readUInt32BE(16) : 0
                   const pngH = isPng ? snapBuf.readUInt32BE(20) : 0
                   check('㋏ 快照接口 Content-Type=image/png(真机 <image> 认的格式)', String(snapRes.headers.get('content-type') || '').includes('image/png'), String(snapRes.headers.get('content-type')))
                   check('㋏ 快照 PNG 尺寸>0 且是真实单据比例(非空图、非正方形留白)', isPng && pngW >= 720 && pngH > 100 && pngH < pngW, JSON.stringify({ w: pngW, h: pngH, bytes: snapBuf.length }))
-                  const snapRes2 = await fetch(`${BASE_URL}/settlements/${encodeURIComponent(gA.code)}/snapshot`)
+                  const snapRes2 = await fetch(BASE_URL+snapById.sheets.find(sh=>sh.code===gA.code || new URL(sh.snapshotUrl,BASE_URL).pathname.includes(encodeURIComponent(gA.code))).snapshotUrl)
                   const snapBuf2 = Buffer.from(await snapRes2.arrayBuffer())
                   check('㋏ 二次取图=同一张(落盘缓存,签署凭证转一次永久复用)', snapBuf2.length === snapBuf.length && snapBuf2.subarray(0, 64).equals(snapBuf.subarray(0, 64)), JSON.stringify({ a: snapBuf.length, b: snapBuf2.length }))
                   const snapAfterPng = (await request(`/admin/settlements/${gA.id}/snapshots`, {}, shop.token)).data
-                  check('㋏ 换图源不动契约:每组份数与逐份句原样(snapshotUrl 路径不变)', snapAfterPng.total === grpCountDb && snapAfterPng.sheets.every((sh, i) => sh.label === pmt.sheets[i].label && sh.snapshotUrl === pmt.sheets[i].snapshotUrl), JSON.stringify(snapAfterPng.sheets.map((x) => x.snapshotUrl)))
+                  check('㋏ 换图源不动契约:每组份数与逐份句原样(snapshotUrl 路径不变)', snapAfterPng.total === grpCountDb && snapAfterPng.sheets.every((sh, i) => sh.label === pmt.sheets[i].label && new URL(sh.snapshotUrl,BASE_URL).pathname === new URL(pmt.sheets[i].snapshotUrl,BASE_URL).pathname), JSON.stringify(snapAfterPng.sheets.map((x) => x.snapshotUrl)))
                   /* ===== ㋐ 批③次段(卡包+商城,店主 08-23 开工令):三读方同数/来源小字/门槛句复用/角标同源/支付红线 ===== */
                   {
                     // 夹具:给 cuidK 一张次卡(买的)+一张券(店家赠)+余额已有
@@ -2130,7 +2168,7 @@ const main = async () => {
                     check('㋐ 连带裁 积分兑换券仍在券类里(不是第四类),只是小字=「积分兑换」', packPts.coupons.some((c) => c.sourceLabel === '积分兑换') && packPts.coupons.length === pack.coupons.length, JSON.stringify(packPts.coupons.map((c) => c.sourceLabel)))
                     /* 补件③:门槛句复用唯一出口 couponSubtitle(与选券面板同一句,逐字一致) */
                     const shCp = (await request('/admin/settlements', { method: 'POST', body: JSON.stringify({ userId: cuidK, settlements: [{ payIntent: 'offline_full', items: [{ serviceId: shop.serviceId, qty: 1 }], technicians: tech, servedPersonName: '' }] }) }, shop.token)).data.settlements[0]
-                    const panel = (await request(`/settlements/${encodeURIComponent(shCp.code)}`, {}, null, { 'x-tenant-id': shop.tenantId })).data.coupons
+                    const panel = (await request(`/settlements/${encodeURIComponent(shCp.code)}`, {}, shop.token, { 'x-tenant-id': shop.tenantId })).data.coupons
                     const panelOne = (panel.options || []).find((o) => o.name === '卡包券')
                     const packOne = packPts.coupons.find((c) => c.name === '卡包券')
                     check('㋐ 补件③ 门槛句唯一出口:卡包句 ≡ 选券面板句(逐字一致,不另写文案)', panelOne && packOne && panelOne.subtitle === packOne.subtitle, JSON.stringify({ panel: panelOne && panelOne.subtitle, pack: packOne && packOne.subtitle }))
@@ -2160,7 +2198,7 @@ const main = async () => {
                        只是没有总页可比了 —— 判据跟着被测物走,改成**黑卡三格的数字 ≡ 各自明细页**。 */
                     const packNow = (await request('/my/card-pack', {}, ctokK, { 'x-tenant-id': shop.tenantId })).data.cardPack
                     const mallPts = (await request('/my/points-mall', {}, ctokK, { 'x-tenant-id': shop.tenantId })).data
-                    const meNow = (await request('/auth/wechat/mini-login', { method: 'POST', body: JSON.stringify({ demoLogin: true, tenantId: shop.tenantId, asUserId: cuidK }) }, null, { 'x-tenant-id': shop.tenantId })).data.user
+                    const meNow = (await fixtureLogin(shop.tenantId, cuidK)).data.user
                     check('㋐ 资产收敛后:卡包角标 ≡ 卡包页内可用张数(一个数两处用)',
                       packNow.badgeCount === (packNow.timecards.filter((t) => t.redeemable !== false).length + packNow.coupons.length),
                       JSON.stringify({ badge: packNow.badgeCount, t: packNow.timecards.length, c: packNow.coupons.length }))
@@ -2179,7 +2217,7 @@ const main = async () => {
                     const bkE8 = (await request('/admin/bookings/direct', { method: 'POST', body: JSON.stringify({ newCustomerName: `㋐空态客${RUN_ID}`, serviceId: shop.serviceId, technicianId: shop.tech2, date: dateStr(3), time: '10:07' }) }, shop.token)).data.booking
                     const uidE8 = bkE8.userId || bkE8.user_id || (bkE8.user && bkE8.user.id)
                     dbx.prepare('UPDATE users SET wechat_open_id = ? WHERE id = ?').run(`wx-e8-${RUN_ID}`, uidE8)
-                    const freshCust = await request('/auth/wechat/mini-login', { method: 'POST', body: JSON.stringify({ demoLogin: true, tenantId: shop.tenantId, asUserId: uidE8 }) }, null, { 'x-tenant-id': shop.tenantId })
+                    const freshCust = await fixtureLogin(shop.tenantId, uidE8)
                     const emptyPack = (await request('/my/card-pack', {}, freshCust.data.auth.accessToken, { 'x-tenant-id': shop.tenantId })).data.cardPack
                     check('㋐ E8 空态:新档案三类全空=空态句在场且角标 0', emptyPack.badgeCount === 0 && emptyPack.emptyText === '还没有卡券' && emptyPack.stored.balanceCents === 0, JSON.stringify({ b: emptyPack.badgeCount, e: emptyPack.emptyText, s: emptyPack.stored.balanceCents }))
                     const badMall = await request('/my/mall?packageId=不存在的套餐', {}, null, { 'x-tenant-id': shop.tenantId })
@@ -2188,7 +2226,7 @@ const main = async () => {
                     const mallSec = (await request('/my/mall', {}, null, { 'x-tenant-id': shop.tenantId })).data
                     check('㋐ 裁定② 商城归一:次卡挂在服务大类分区下,不单开商城', (mallSec.sections || []).some((x) => x.kind === 'timecard') && (mallSec.sections || []).some((x) => x.kind === 'recharge') && mallSec.items.every((i) => i.section), JSON.stringify(mallSec.sections))
                     check('㋐ 裁定② 充值套餐与次卡同屏可比(同一 items 一次给全)+ 顶部筛选后端给', mallSec.items.some((i) => i.sectionKind === 'recharge') && mallSec.items.some((i) => i.sectionKind === 'timecard') && (mallSec.filters || []).length === 3, JSON.stringify(mallSec.filters))
-                  const otherCust = await request('/auth/wechat/mini-login', { method: 'POST', body: JSON.stringify({ demoLogin: true, tenantId: shop.tenantId }) }, null, { 'x-tenant-id': shop.tenantId })
+                  const otherCust = await fixtureLogin(shop.tenantId)
                     const packOther = await request('/my/card-pack', {}, otherCust.data.auth.accessToken, { 'x-tenant-id': shop.tenantId })
                     check('㋐ 越权:别人 token 读到的是他自己的卡包(拿不到本人卡券)', !(packOther.data.cardPack.coupons || []).some((c) => c.name === '卡包券'), JSON.stringify((packOther.data.cardPack.coupons || []).map((c) => c.name)))
                   }
@@ -2291,7 +2329,8 @@ const main = async () => {
 
                 /* ===== ㋅ D62 搜索大小写不敏感(后端行为面;前端四处=wiring) ===== */
                 {
-                  const bMary = await directBooking(shop, { name: `MARY-D62-${RUN_ID}`, time: '18:45' })
+                  const searchTech=(await request('/admin/technicians',{method:'POST',body:JSON.stringify({name:`搜索专用${RUN_ID}`,isActive:true})},shop.token)).data.technician
+                  const bMary = await directBooking(shop, { name: `MARY-D62-${RUN_ID}`, time: '18:45', techId:searchTech.id })
                   const hitLower = (await request(`/admin/customers?q=mary-d62`, {}, shop.token)).data.customers || []
                   const hitTrim = (await request(`/admin/customers?q=${encodeURIComponent('  MARY-d62 ')}`, {}, shop.token)).data.customers || []
                   check('㋅ D62 后端:小写搜到大写存档+trim', Boolean(bMary && bMary.id) && hitLower.some((c) => (c.displayName || '').startsWith('MARY-D62-')) && hitTrim.some((c) => (c.displayName || '').startsWith('MARY-D62-')), JSON.stringify({ lower: hitLower.length, trim: hitTrim.length }))
@@ -2458,7 +2497,7 @@ const main = async () => {
       check('㋋ wiring 裁A/E 三读方同一出口(visitDaysCount 三处调用)', (srvAll.match(/visitDaysCount\(/g) || []).length >= 4)
       /* ===== ㋌ D68 wiring:①替换式导航不压栈 ②悬浮查看器双端 ③用户可见文案零「组/张」内部话术 ===== */
       const signHtml68 = readFileSync(join(ROOT42, 'apps/web/sign.html'), 'utf8')
-      check('㋌ D68① 连签=替换式导航(location.replace;续签不再用压栈的 <a href>)', signHtml68.includes("location.replace('/sign/") && !/<a href="\/sign\/\$\{encodeURIComponent\(s\.groupNextPendingCode\)/.test(signHtml68))
+      check('㋌ D68① 连签=替换式导航(location.replace;续签不再用压栈的 <a href>)', signHtml68.includes("location.replace(") && signHtml68.includes("nextSignUrl || '/sign/'") && !/<a href="\/sign\/\$\{encodeURIComponent\(s\.groupNextPendingCode\)/.test(signHtml68))
       const odWx3 = readFileSync(join(ROOT42, 'miniprogram/pages/order-detail/index.wxml'), 'utf8')
       const odJs3 = readFileSync(join(ROOT42, 'miniprogram/pages/order-detail/index.js'), 'utf8')
       check('㋌→㋍ D68② 悬浮查看器(小程序:顾客端详情挂共用组件+openViewer;原件不再跳页压栈)', odWx3.includes('<snapshot-viewer') && odJs3.includes('openViewer') && !odWx3.includes('goSheetSnapshot'))
@@ -3114,7 +3153,7 @@ const main = async () => {
           check(`㋟③ ${label}:两端 key 数组逐项相同,且=合同预期 ${JSON.stringify(expectKeys)}`,
             same && JSON.stringify(w) === JSON.stringify(expectKeys), JSON.stringify({ web: w, mini: m }))
         }
-        const custTok = (await request('/auth/wechat/mini-login', { method: 'POST', body: JSON.stringify({ demoLogin: true, tenantId: shop.tenantId, asUserId: null }) }, null, { 'x-tenant-id': shop.tenantId })).data?.auth?.accessToken
+        const custTok = (await fixtureLogin(shop.tenantId)).data?.auth?.accessToken
         const myBookings = async () => (await request('/bookings', {}, custTok, { 'x-tenant-id': shop.tenantId })).data.bookings || []
         // 未签署:直接建一张给这位顾客的单
         const rows0 = await myBookings()
@@ -3212,6 +3251,9 @@ const main = async () => {
         check('㋦⑪ 空分组名不回落到已退役的自由文本列(库里还留着「法式系列」也不许拿来顶)',
           legacy && legacy.category !== '法式系列',
           catDb.prepare('SELECT category c FROM services WHERE id = ?').get(legacyId)?.c)
+        // 只清掉本段故意造的历史脏分类，下一档仍要做全库一致性检查。
+        catDb.prepare('DELETE FROM services WHERE id = ? AND tenant_id = ?').run(legacyId, shop.tenantId)
+
 
         // 建店默认三大类
         check('㋦⑧ 建店即落平台三大类(起点不是上限,商家可再细分)',

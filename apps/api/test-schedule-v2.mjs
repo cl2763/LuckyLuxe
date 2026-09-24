@@ -111,7 +111,7 @@ async function main() {
   const { createAndLoginCustomerViaFrontDoor } = await import('./customer-login-fixture.mjs')
   const fd = await createAndLoginCustomerViaFrontDoor({
     base: BASE_URL, tenantId: shop.tenantId, ownerToken: shop.token,
-    name: `排班客${RUN_ID}`, phone: `132${RUN_ID.slice(-8)}`,
+    name: `排班客${RUN_ID}`, phone: `132${String(parseInt(RUN_ID,36)).slice(-8)}`,
     serviceId: svc.id, technicianId: tech.id, date: addDays(day, 30), time: '10:30' })
   check('③0 前置:顾客从**正门**登录(造不出来下面几条不算验过,J-58④)', Boolean(fd.ok && fd.accessToken),
     `${fd.status} ${JSON.stringify(fd.body || {}).slice(0, 140)}`)

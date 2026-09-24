@@ -72,10 +72,20 @@ const TOK = requireOwnerToken({ dataDir: SB_DIR })
    否则它们在库里与真顾客长得一模一样(《假数回落红线》那一族)。
    `test-demo-mark ④` 白名单式扫这一条,当场点名过我这支。**咬得对。** */
 const H = { 'content-type': 'application/json', 'x-demo-seed': 'ci-seed-sandbox', authorization: `Bearer ${TOK}` }
-let r = await fetch(`${BASE}/platform/tenants`, { method: 'POST', headers: H, body: JSON.stringify({ id: 'jics-nail', name: "Jie's Nail 小婕", plan: 'chain', currency: 'CNY', timezone: 'Asia/Shanghai' }) })
-if (![200, 201, 409].includes(r.status)) { console.error(`🔴 建租户失败 ${r.status} ${(await r.text()).slice(0, 200)}`); process.exit(1) }
-console.log(`   建租户 → ${r.status}`)
-r = await fetch(`${BASE}/platform/tenants/jics-nail/import/customers`, { method: 'POST', headers: H, body: JSON.stringify({ dryRun: false, rows: [{ displayName: 'CI 夹具顾客', phone: '13900000001' }] }) })
+for (const tenant of [
+  {id: 'jics-nail', name: "Jie's Nail 小婕"},
+  {id: 'demo-lucky-luxe', name: 'CI 会员等级检查店', kind: 'demo'},
+]) {
+  const created = await fetch(`${BASE}/platform/tenants`, { method: 'POST', headers: H, body: JSON.stringify({ ...tenant, plan: 'chain', currency: 'CNY', timezone: 'Asia/Shanghai' }) })
+  if (![200, 201, 409].includes(created.status)) { console.error(`🔴 建租户 ${tenant.id} 失败 ${created.status}`); process.exit(1) }
+  console.log(`   建租户 ${tenant.id} → ${created.status}`)
+  if (tenant.kind === 'demo') {
+    const tagged = await fetch(`${BASE}/platform/tenants/${tenant.id}/kind`, {method:'PATCH', headers:H,
+      body:JSON.stringify({kind:'demo', reason:'CI 临时夹具：会员等级校验'})})
+    if (!tagged.ok) {console.error(`🔴 标记演示夹具失败 ${tagged.status}`); process.exit(1)}
+  }
+}
+let r = await fetch(`${BASE}/platform/tenants/jics-nail/import/customers`, { method: 'POST', headers: H, body: JSON.stringify({ dryRun: false, rows: [{ displayName: 'CI 夹具顾客', phone: '13900000001' }] }) })
 if (!r.ok) { console.error(`🔴 导顾客失败 ${r.status} ${(await r.text()).slice(0, 200)}`); process.exit(1) }
 console.log(`   导顾客 → ${r.status}`)
 
@@ -86,7 +96,8 @@ const n = (s) => { try { return d.prepare(s).get().n } catch { return -1 } }
 const b = n("SELECT COUNT(*) n FROM users WHERE tenant_id='jics-nail'")
 const a = n("SELECT COUNT(*) n FROM bookings WHERE tenant_id='lucky-luxe' AND user_id IS NOT NULL")
 const m = n('SELECT COUNT(*) n FROM bookings WHERE demo_seed IS NOT NULL')
+const tierTenant = n("SELECT COUNT(*) n FROM tenants WHERE id='demo-lucky-luxe' AND kind='demo' AND status='active'")
 d.close()
-console.log(`   B店顾客=${b} · A店样本单=${a} · demo_seed=${m}`)
-if (b < 1 || a < 1 || m < 1) { console.error('🔴 夹具没齐 —— 四套判据照样造不出阳性,不许假装种好了'); process.exit(1) }
-console.log('   ✅ 三样夹具都在')
+console.log(`   B店顾客=${b} · A店样本单=${a} · demo_seed=${m} · 会员等级检查店=${tierTenant}`)
+if (b < 1 || a < 1 || m < 1 || tierTenant !== 1) { console.error('🔴 夹具没齐 —— 四套判据照样造不出阳性,不许假装种好了'); process.exit(1) }
+console.log('   ✅ 四样夹具都在')

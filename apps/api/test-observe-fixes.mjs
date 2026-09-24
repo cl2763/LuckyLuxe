@@ -131,7 +131,7 @@ async function main() {
     const past = new Date(Date.now() - 7 * 86400000).toISOString().slice(0, 10)
     const p1 = await request('/admin/bookings/direct', { method: 'POST', body: JSON.stringify({ newCustomerName: `D88过去${uniq}`, serviceId: svc.id, technicianId: t2.id, date: past, time: '11:00' }) })
     if (p1.status === 201) {
-      const p2 = await request('/admin/bookings/direct', { method: 'POST', body: JSON.stringify({ newCustomerName: `D88过去b${uniq}`, serviceId: svc.id, technicianId: t2.id, date: past, time: '10:00' }) })
+      const p2 = await request('/admin/bookings/direct', { method: 'POST', body: JSON.stringify({ newCustomerName: `D88过去b${uniq}`, serviceId: svc.id, technicianId: t2.id, date: past, time: '11:00' }) })
       check('🔴 D88 裁①过去优先:过去+撞位只报「已过去」,一句一因不拼两因', p2.status === 409 && /已经过去/.test(p2.data.error.message) && !/重叠/.test(p2.data.error.message), JSON.stringify(p2.data).slice(0, 120))
       check('D88 补录能力在:过去营业日空档直排 201(老板补录路径,后端不拦)', p1.status === 201)
     } else {
@@ -291,15 +291,19 @@ async function main() {
     const sdE = (await request(`/admin/schedule-day?date=${e2eDay}`)).data
     // 同上:裁定已下,补录不过休息日闸,这条钱链照跑
     if (sdE.backfill && sdE.backfill.closed && !sdE.hoursUnset && !sdE.isClosed) {
+      // 该链独占技师，避免与本套前半段 16:00 预约重叠（旧半小时格检查漏掉了 16:20）。
+      const chainTechRes=await request('/admin/technicians',{method:'POST',body:JSON.stringify({name:`补录链专用${uniq}`,isActive:true})})
+      const chainTech=chainTechRes.data.technician
+      check('补录钱链独占技师创建成功',chainTechRes.status===201&&Boolean(chainTech?.id))
       // ② 补录 → 落今天
-      const bfRes = await request('/admin/bookings/direct', { method: 'POST', body: JSON.stringify({ backfill: true, newCustomerName: `链验客${uniq}`, serviceId: svc.id, technicianId: tech.id, date: e2eDay, time: '16:20' }) })
+      const bfRes = await request('/admin/bookings/direct', { method: 'POST', body: JSON.stringify({ backfill: true, newCustomerName: `链验客${uniq}`, serviceId: svc.id, technicianId: chainTech.id, date: e2eDay, time: '16:20' }) })
       check('🔴 裁② 链①补录落今天(不落已日结的原日)', bfRes.status === 201 && bfRes.data.booking.appointmentDate === todayE,
         JSON.stringify({ got: bfRes.data.booking && bfRes.data.booking.appointmentDate, want: todayE, err: bfRes.data.error }))
       if (bfRes.status === 201) {
         const bid = bfRes.data.booking.id
         const uidE = bfRes.data.booking.userId || (bfRes.data.booking.user && bfRes.data.booking.user.id)
         // ③ 开单 + 签字入账
-        const sheet = await request('/admin/settlements', { method: 'POST', body: JSON.stringify({ userId: uidE, settlements: [{ bookingId: bid, payIntent: 'offline_full', items: [{ serviceId: svc.id, qty: 1 }], technicians: [{ technicianId: tech.id, role: 'main', itemNos: [1] }] }] }) })
+        const sheet = await request('/admin/settlements', { method: 'POST', body: JSON.stringify({ userId: uidE, settlements: [{ bookingId: bid, payIntent: 'offline_full', items: [{ serviceId: svc.id, qty: 1 }], technicians: [{ technicianId: chainTech.id, role: 'main', itemNos: [1] }] }] }) })
         check('裁② 链②补录单能开单(与普通单同路)', sheet.status === 200 || sheet.status === 201, JSON.stringify(sheet.data).slice(0, 140))
         /* 判据自身的静默失败器(01w 自查咬出):原先 sid 取错字段名 → if(sid) 整块被跳过,
            钱的链一条没跑而套件仍绿(数字对不上才发现)。改:取真字段 + **取不到就红**,不许静默跳。 */
@@ -317,7 +321,7 @@ async function main() {
             `${dcBefore.orderCount} → ${dcAfter.orderCount}`)
           const mine = (dcAfter.settlements || []).some((x) => x.bookingId === bid || (x.bookings || []).some((y) => y.id === bid))
           check('裁② 链④这单出现在今天日结的结算列表里(能被店主看见)', mine || dcAfter.orderCount > dcBefore.orderCount)
-          const techLine = (dcAfter.technicians || []).find((t2) => t2.technicianId === tech.id || t2.id === tech.id)
+          const techLine = (dcAfter.technicians || []).find((t2) => t2.technicianId === chainTech.id || t2.id === chainTech.id)
           check('🔴 裁② 链④业绩归**做这单的技师**(今天这条业绩行里)', Boolean(techLine && (techLine.perfCents || 0) > 0),
             JSON.stringify(techLine || (dcAfter.technicians || []).slice(0, 2)).slice(0, 160))
           check('裁② 链④抽屉数在场且自洽(现金口径块整块下发)', Boolean(dcAfter.cashDrawer && typeof dcAfter.cashDrawer.storefrontCents === 'number'))

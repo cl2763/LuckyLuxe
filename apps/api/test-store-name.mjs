@@ -270,6 +270,12 @@ if (!onTestTarget || !existsSync(DB)) {
     const marker = `店名分叉刀-${process.pid}`
     live.prepare('UPDATE stores SET name = ? WHERE tenant_id = ? AND is_active = 1').run(marker, target.tenantId)
     const after = await meOf(target.tenantId)
+    for (const [path, key] of [['/shops?include=demo', 'shops'], ['/platform/tenants', 'tenants'], ['/platform/billing', 'tenants']]) {
+      const response = await fetch(`${BASE_URL}${path}`, { headers: { authorization: `Bearer ${TOKEN}`, 'x-tenant-id': target.tenantId } })
+      const payload = await response.json()
+      const found = (payload[key] || []).find((r) => (r.tenantId || r.id) === target.tenantId)
+      check(`D233 分叉刀 ${path} 必须显示修改后的门店名`, response.ok && found && found.name === marker, JSON.stringify(found && { id: found.id, name: found.name }))
+    }
     live.prepare('UPDATE stores SET name = ? WHERE tenant_id = ? AND is_active = 1').run(target.storeName, target.tenantId)
     const restored = await meOf(target.tenantId)
     check('④h 🔴 分叉守:只改 `stores.name` → `storeName` 跟着变、`tenantName` 不动(证明读的是 stores 那一列,不是两列碰巧一样)',

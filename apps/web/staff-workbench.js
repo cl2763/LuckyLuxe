@@ -12,6 +12,8 @@ window.StaffWorkbench = (function () {
   let st = { perf: null, cats: [], items: [], catId: '', tierKey: 'list', picked: {}, view: null, deps: null, mount: null, salMonth: '', sal: undefined }
 
   async function render(mount, deps) {
+    const scope=deps.owner.auth?.accessToken || deps.owner.token || ''
+    if(st.scope!==scope)st={scope,perf:null,cats:[],items:[],catId:'',tierKey:'list',picked:{},view:null,salMonth:'',sal:undefined}
     st.deps = deps; st.mount = mount
     const { request, escapeHtml } = deps
     if (!st.perf) {
@@ -22,12 +24,14 @@ window.StaffWorkbench = (function () {
           request('/admin/pricing/items'),
           request('/admin/service-notes/pending?days=7').catch(() => ({ items: [] }))
         ])
+        if(st.scope!==scope)return
         st.pendingNotes = pend.items || []
         st.perf = perf.performance
         st.cats = (cats.categories || []).filter((c) => c.isBookable !== false)
         st.items = (items.items || []).filter((i) => i.isActive !== false)
         st.catId = (st.cats[0] || {}).id || ''
       } catch (e) {
+        if(st.scope!==scope)return
         mount.innerHTML = `<div class="empty-state"><strong>${escapeHtml(e.message || '工作台加载失败')}</strong></div>`
         return
       }
@@ -114,12 +118,14 @@ window.StaffWorkbench = (function () {
   }
 
   async function loadSalary() {
+    const state=st, month=st.salMonth
     const { request } = st.deps
     try {
       const r = await request(`/admin/salary/my-estimate${st.salMonth ? `?month=${st.salMonth}` : ''}`)
+      if(st!==state||st.salMonth!==month)return
       st.sal = (r.estimate && !r.estimate.noPlan) ? r.estimate : null
       st.salNote = ''
-    } catch (e) { st.sal = null; st.salNote = (e && e.message) || '' }
+    } catch (e) { if(st!==state||st.salMonth!==month)return; st.sal = null; st.salNote = (e && e.message) || '' }
     paint()
   }
 
@@ -155,6 +161,7 @@ window.StaffWorkbench = (function () {
   }
 
   async function preview() {
+    const state=st, revision=st.previewRevision=(st.previewRevision||0)+1
     const { request, toast } = st.deps
     const ids = Object.keys(st.picked)
     if (!ids.length) { st.view = null; paint(); return }
@@ -163,6 +170,7 @@ window.StaffWorkbench = (function () {
         method: 'POST',
         body: JSON.stringify({ tierKey: st.tierKey, items: ids.map((id) => ({ serviceId: id, qty: 1 })), depositApplied: false, payIntent: 'offline_full' })
       })
+      if(st!==state||st.previewRevision!==revision)return
       const s = r.settlement || {}
       st.view = {
         subtotal: s.subtotalText || st.deps.money(s.subtotalCents || 0),
@@ -170,7 +178,7 @@ window.StaffWorkbench = (function () {
         breakdown: (s.lines || []).map((l) => l.name).join(' + ')
       }
       paint()
-    } catch (e) { toast(e.message || '试算失败') }
+    } catch (e) { if(st===state&&st.previewRevision===revision)toast(e.message || '试算失败') }
   }
 
   return { render }

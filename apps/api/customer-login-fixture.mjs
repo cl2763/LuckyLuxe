@@ -26,7 +26,7 @@ export async function loginCustomerViaFrontDoor({ base, tenantId, openid, phone 
     method: 'POST',
     headers: { 'content-type': 'application/json', 'x-tenant-id': tenantId },
     /* code 里带上要哪个 openid —— **写在请求里,不经环境变量**(裁 #80:没有开关) */
-    body: JSON.stringify({ code: `stub:${openid}`, tenantId, phone, displayName }),
+    body: JSON.stringify({ code: `stub:${openid}`, tenantId, phone, ...(phone ? {phoneCode: `stub-phone:${openid}:${phone}`} : {}), displayName }),
   })
   const body = await res.json().catch(() => ({}))
   return { ok: res.ok, status: res.status, user: body.user, accessToken: body?.auth?.accessToken, body }

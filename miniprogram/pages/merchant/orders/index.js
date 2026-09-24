@@ -1,4 +1,5 @@
 const api = require('../../../utils/api')
+const rescheduleMixin = require('../../../utils/order-actions')
 const { storeToday, refreshStoreClock, storeMoney } = require('../../../utils/storeclock')
 // 屏 1:日结就长在今日台面下面(设计图把它画在技师网格正下方),渲染与逻辑走同一份 mixin
 const { dailyCloseData, dailyCloseMixin } = require('../../../utils/dailyclose')
@@ -219,6 +220,7 @@ Page(Object.assign({
      需要填字的两个动作(发起售后=问题描述、结束售后=处理结果)用可输入弹层收,
      **必填**:空串不发请求(后端也再挡一道,裁 B)。 */
   runBookingAction(ctx, key, label) {
+    if (key === 'reschedule') return this.openReschedule(ctx.id)
     if (key === 'noShow') return this.markNoShow(ctx)
     if (key === 'disposeDeposit') return this.openDisposal(ctx.id)
     const send = async (note) => {
@@ -357,12 +359,12 @@ Page(Object.assign({
       return
     }
     const code = typeof sheet === 'string' ? sheet : (sheet && sheet.code)
-    wx.navigateTo({ url: `/pages/sign/index?code=${encodeURIComponent(code)}` })
+    wx.navigateTo({ url: `/pages/sign/index?merchant=1&code=${encodeURIComponent(code)}` })
   },
   /* 🔴 D10 修复(店主 2026-08-10 开检):这里原来写着
        `if (pending.length === 1) { this.openSign(pending[0].code); return }`
      —— 只要恰好有一张待签单,商家点「查看结算单」就**直接跳进顾客端的签署页**
-     (`/pages/sign/index?code=`,顾客看到的「确认本人并绑定」那一屏)。
+     (`/pages/sign/index?merchant=1&code=`,顾客看到的「确认本人并绑定」那一屏)。
      店主想「看单」,拿到的是顾客的身份绑定界面,这就是她报的入口串页。
 
      改法:**「查看」永远只是看**,列清有哪几张、各是什么状态(顺带满足 D7「点名到单」);
@@ -526,9 +528,11 @@ Page(Object.assign({
 }); return
     }
     // 屏 0:纯文字按钮,不带 emoji;完成由顾客签署驱动,面板里不再有「标记完成」
-    this.settlementsOf(b.id).then((sheets) => {
+    this.settlementsOf(b.id).then(async (sheets) => {
       const pending = sheets.filter((x) => x.status === 'pending_sign')
       const items = []; const actions = []
+      const full=((await api.adminGet('/admin/bookings')).bookings||[]).find(x=>x.id===b.id)
+      if(full?.allowedActions?.some(x=>x.key==='reschedule')){items.push('改期');actions.push('reschedule')}
       if (b.state !== 'active') { items.push('确认到店(开始服务)'); actions.push('arrive') }
       if (b.state === 'active') { items.push('改回未到店'); actions.push('unarrive') }
       if (b.state !== 'done') {
@@ -555,18 +559,6 @@ Page(Object.assign({
     })
   },
   // 网格面板的按钮走这里(与列表面板共用同一张弹层)
-  tapGridAct(o) {
-    const b = this._panelCtx
-    const sheets = this._panelSheets || []
-    if (o.act === 'arrive') this.setArrival(b.id, true)
-    else if (o.act === 'unarrive') this.setArrival(b.id, false)
-    else if (o.act === 'settle') this.goSettle(b)
-    else if (o.act === 'preview') this.openPreview((sheets.find((x) => x.status !== 'voided') || {}).id)
-    else if (o.act === 'sheets') this.showSheets(sheets)
-    else if (o.act === 'note') this.goNote(b)
-    else if (o.act === 'void') this.voidSheets(sheets.filter((x) => x.status === 'pending_sign'), b)
-    else if (o.act === 'paid') this.markDepositPaid(b)
-  },
 
   /* 标记已收定金(拍板 A · 《财务记账总逻辑》v1.1 §五)。
      金额由后端按本店 deposit_config 算,这里只显示;标记那一刻只记定金预收(负债),
@@ -826,4 +818,4 @@ Page(Object.assign({
       this.loadDayView(this.data.selDate)
     } catch (err) { this._directBusy = false; wx.showToast({ title: (err && err.message) || '排单失败', icon: 'none' }) }
   }
-}, dailyCloseMixin))
+}, dailyCloseMixin, rescheduleMixin))

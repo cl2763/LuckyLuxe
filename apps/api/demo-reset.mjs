@@ -1,3 +1,4 @@
+import { merchantIdentity } from './store-identity.mjs'
 import { snapshotDb } from './db-backup.mjs'   // 备份唯一出口(与生产铺设线共用)
 
 /* 演示店账本重置 —— **唯一入口**(店主 2026-08-25 裁定六条)。
@@ -150,8 +151,9 @@ export function createDemoReset({ db, apiError, randomId, iso, dbPath, backupDir
       throw apiError(403, 'NOT_DEMO_TENANT', `「${tenant.name}」不是演示店(kind=${tenant.kind}),不允许重置账本。演示店归属只能在平台后台显式设置。`)
     }
     // ③ 手打完整店名才放行(不许勾选框)
-    if (String(confirmName || '').trim() !== String(tenant.name || '').trim()) {
-      throw apiError(400, 'CONFIRM_NAME_MISMATCH', `二次确认没通过:请**手打完整店名**「${tenant.name}」。它删的是账本。`)
+    const storeName = merchantIdentity(db, tenantId).storeName.trim()
+    if (!storeName || String(confirmName || '').trim() !== storeName) {
+      throw apiError(400, 'CONFIRM_NAME_MISMATCH', `二次确认没通过:请**手打完整店名**「${storeName}」。它删的是账本。`)
     }
     // ⑤ 原因必填
     const why = String(reason || '').trim()

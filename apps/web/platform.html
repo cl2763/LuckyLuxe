@@ -81,6 +81,9 @@
   .demoRow{background:#fbf7ef}
   td.ops{white-space:nowrap}
   td.ops .sm{margin-right:4px}
+  #page-config .card{max-width:900px!important}
+  .ui-dialog-overlay{position:fixed;inset:0;background:#0005;z-index:1000;display:flex;align-items:center;justify-content:center;padding:20px}.ui-dialog-panel{width:440px;max-width:100%;margin:0}.ui-dialog-panel .section-row{display:flex;gap:8px;justify-content:flex-end}.ui-dialog-panel h2{width:100%;white-space:pre-line}.ui-dialog-panel .primary{background:var(--brand);color:var(--hero)}.ui-dialog-panel input{margin-top:10px}
+  .configSteps{max-width:900px;display:flex;gap:8px;flex-wrap:wrap;margin:16px 0}.configSteps button{flex:1;min-width:120px;text-align:left}
   .lamps{display:inline-flex;gap:3px}
   .lamp{width:9px;height:9px;border-radius:50%;display:inline-block;cursor:pointer}
   .lamp.done{background:#2d7a52}.lamp.pending,.lamp.blocked{background:#b3413a}.lamp.unavailable{background:#c9c2b8}
@@ -216,7 +219,7 @@
           <thead><tr><th>租户</th><th>名称</th><th>归属</th><th>套餐 · 到期</th><th>AI 包</th><th>配置进度</th><th>门店</th><th>本月 / 累计单</th><th>老板账号</th><th>操作</th></tr></thead>
           <tbody id="tenantRows"></tbody>
         </table>
-        <p class="muted" style="margin-top:8px">停用后:顾客端立即进不了该店;老板账号在多商户控制台开放前统一暂不可登录。</p>
+        <p class="muted" style="margin-top:8px">停用后:顾客端立即进不了该店;老板登录权限随店铺状态校验。</p>
       </div>
     </section>
 
@@ -228,6 +231,7 @@
         <select id="cfgTenant" onchange="loadConfig()" style="min-width:230px"></select>
         <span class="muted">改动即时生效到顾客端与 AI 客服</span>
       </div>
+      <div id="configSteps" class="configSteps"></div>
       <div class="tabs">
         <button class="tab on" data-tab="store" onclick="tab('store')">门店信息</button>
         <button class="tab" data-tab="hours" onclick="tab('hours')">营业时间</button>
@@ -240,7 +244,25 @@
         <!-- S13②(店主 2026-08-25):大类字典管理 —— 以前加/改大类只能动数据库。
              商家只读是既定口径(v1.4)不变,写口在平台这条线上。 -->
         <button class="tab" data-tab="cats" onclick="tab('cats')">大类字典</button>
+        <button class="tab" data-tab="wecom" onclick="tab('wecom')">企微客服号</button>
+        <button class="tab" data-tab="serviceImport" onclick="tab('serviceImport')">价目表导入</button>
       </div>
+
+      <div id="tab-wecom" class="card hidden">
+        <h2>企微客服号</h2><p class="muted">填写分配给本店的客服账号。保存绑定不代表消息通道已经验收通过。</p>
+        <input id="cfgKfid" placeholder="本店企微客服账号" style="width:100%"><button class="p" onclick="saveConfigKfid()">保存客服号</button>
+      </div>
+      <div id="tab-serviceImport" class="card hidden">
+        <h2>价目表导入</h2><p class="muted">先试跑核对，再确认导入当前门店。有错误时整批不导入。</p>
+        <p class="muted">表头：大类、项目名、价格、分享价、会员价、时长；金额单位为本店货币元。</p>
+        <input type="file" accept=".csv,.tsv,.txt" onchange="loadServiceImportFile(event)">
+        <textarea id="svcImportText" rows="8" style="width:100%;margin:12px 0" placeholder="粘贴带表头的 CSV 或从表格复制" oninput="invalidateServiceImport()"></textarea>
+        <button class="p" onclick="previewServiceImport()">试跑并查看报告</button>
+        <button id="svcImportExecute" disabled onclick="executeServiceImport()">确认导入</button>
+        <div id="svcImportReport" style="margin-top:14px"></div>
+      </div>
+      <div id="tab-owner" class="card hidden"><h2>老板账号</h2><p id="cfgOwner"></p><button onclick="resetOwnerPw(CFG_T)">重置老板密码</button></div>
+      <div id="tab-launch" class="card hidden"><h2>上线检查</h2><p>提审清单尚未接入系统。请按本轮验收报告确认，配置灯不能代替验收。</p></div>
 
       <div id="tab-store" class="card" style="max-width:600px">
         <h2>门店信息(保存后同步 AI 口径)</h2>
@@ -259,7 +281,7 @@
         </div>
         <div class="row" style="margin-bottom:10px" id="mbThresholdRow">
           <label style="width:96px">消费门槛</label>
-          <input id="mbQualifyValue" type="number" min="0" step="1" style="flex:1" placeholder="元(累计消费满多少算会员)">
+          <input id="mbQualifyValue" type="number" min="0" step="0.01" style="flex:1" placeholder="本店币种(累计消费满多少算会员)">
         </div>
         <div class="row" style="margin-bottom:10px">
           <label style="width:96px">有效期</label>
@@ -279,7 +301,7 @@
           <label style="display:inline-flex;align-items:center;gap:6px"><input id="mbTiersEnabled" type="checkbox" onchange="mbToggle()"> 开启等级体系(银卡/金卡/铂金…)</label>
         </div>
         <div id="mbTierBox" class="hidden">
-          <table><thead><tr><th>等级 key</th><th>显示名</th><th>累计消费满(元)</th><th>免定金</th><th></th></tr></thead><tbody id="mbTierRows"></tbody></table>
+          <table><thead><tr><th>等级 key</th><th>显示名</th><th>累计消费满(门店币种)</th><th>免定金</th><th></th></tr></thead><tbody id="mbTierRows"></tbody></table>
           <div style="margin-top:8px"><button class="sm" onclick="mbAddTier()">+ 加一档</button></div>
         </div>
         <div style="margin-top:14px"><button class="p" onclick="saveMembership()">保存会员制度</button></div>
@@ -337,10 +359,7 @@
             <label style="width:72px">品牌名</label><input id="kbBrand" style="width:200px">
             <label style="width:72px;text-align:right">客服名</label><input id="kbAssistant" style="width:200px">
           </div>
-          <div class="row" style="margin-bottom:12px">
-            <label style="width:72px">定金金额</label><input id="kbDeposit" style="width:200px" placeholder="如 50">
-            <label style="width:72px;text-align:right">币种</label><input id="kbCurrency" style="width:200px" placeholder="如 CAD">
-          </div>
+          <p class="muted">定金请在商家后台「门店设置 → 定金规则」修改；币种沿用本店设置，不在知识库另填。</p>
           <button class="p" onclick="saveFacts()">保存品牌事实</button>
           <p class="muted" style="margin-top:8px">地址/电话在「门店信息」保存时自动同步进 AI。</p>
         </div>
@@ -409,7 +428,7 @@
       <h1>顾客导入</h1>
       <div class="selbar">
         <span class="muted">导入到商家:</span>
-        <select id="impTenant" style="min-width:230px"></select>
+        <select id="impTenant" onchange="invalidateCustomerImport()" style="min-width:230px"></select>
         <span class="muted">期初余额记「历史桶」,不进商家财务收入</span>
       </div>
       <div class="card">
@@ -419,7 +438,7 @@
           <input type="file" id="impFile" accept=".csv,.txt" onchange="loadImportFile(event)">
           <button class="sm" onclick="fillImportSample()">填个示例看看格式</button>
         </div>
-        <textarea id="impCsv" style="min-height:150px;font-family:ui-monospace,Menlo,monospace;font-size:12.5px" placeholder="姓名,手机号,余额,累计消费&#10;林小雅,13800001111,1280,5600"></textarea>
+        <textarea id="impCsv" oninput="invalidateCustomerImport()" style="min-height:150px;font-family:ui-monospace,Menlo,monospace;font-size:12.5px" placeholder="姓名,手机号,余额,累计消费&#10;林小雅,13800001111,1280,5600"></textarea>
         <div class="row" style="margin-top:10px">
           <button class="p" onclick="runImportDry()">2. 试跑(不写库,只出报告)</button>
           <span class="muted" id="impParsed"></span>
@@ -452,7 +471,7 @@
           <thead><tr><th>店铺</th><th>联系人</th><th>手机号</th><th>微信号</th><th>类型/城市</th><th>状态</th><th>备注</th><th>操作</th></tr></thead>
           <tbody id="leadRows"></tbody>
         </table>
-        <p class="muted" style="margin-top:8px">「转入驻→建店」会预填店名/城市跳到"新建商家",建完请回来把线索标为已入驻。</p>
+        <p class="muted" style="margin-top:8px">「转入驻→建店」会预填店名/城市跳到"新建商家",建店成功后自动标为已入驻；建店失败不会改变线索状态。</p>
       </div>
     </section>
   </main>
@@ -460,6 +479,7 @@
 
 <div id="toast" class="toast"></div>
 
+<script src="/web/ui-dialog.js?v=20260924-platform"></script>
 <script>
 /* 🔴 店主 08-25 裁定:平台后台**不改成密码登录**(那把钥匙的强度来自"长、随机、不在库里",
    而且密码框会被浏览器记住并跨设备同步 = 平台钥匙散出去)。改的是"不用每次掏":
@@ -478,6 +498,7 @@ let PW1 = ''   // 首登改密时要用的「旧密码」,只在内存里活这�
 const $ = (id) => document.getElementById(id)
 const WK = ['周日','周一','周二','周三','周四','周五','周六']
 function toast(m){const t=$('toast');t.textContent=m;t.classList.add('show');setTimeout(()=>t.classList.remove('show'),2200)}
+const jsArg=v=>esc(JSON.stringify(String(v??'')))
 function esc(s){return String(s??'').replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]))}
 async function api(p,o={}){const r=await fetch(p,{...o,credentials:'same-origin',headers:{'content-type':'application/json',...(TOKEN?{authorization:'Bearer '+TOKEN}:{}),...(o.headers||{})}});const d=await r.json().catch(()=>null);if(!r.ok)throw new Error((d&&d.error&&d.error.message)||('HTTP '+r.status));return d}
 async function login(){
@@ -497,18 +518,18 @@ async function login(){
 /* 首登强制改密:不改就进不去(平台侧和商家侧同一条规矩) */
 async function forceChangePassword(username){
   for(;;){
-    const np=prompt('首次登录请设置新密码(至少 8 位):')
+    const np=await UIDialog.text('首次登录请设置新密码(至少 8 位):',{inputType:'password'})
     if(np===null){ TOKEN=''; throw new Error('首次登录必须改密码') }
     try{
       await api('/platform/auth/change-password',{method:'POST',body:JSON.stringify({username,oldPassword:$('pfPass').dataset.first||PW1,newPassword:np})})
       const r=await api('/platform/auth/login',{method:'POST',body:JSON.stringify({username,password:np})})
       TOKEN=r.session.token; toast('密码已更新'); return
-    }catch(e){ alert('改密失败:'+e.message) }
+    }catch(e){ await UIDialog.alert('改密失败:'+e.message) }
   }
 }
-function logout(){ TOKEN=''; location.reload() }
+async function logout(){try{await api('/platform/auth/logout',{method:'POST'});TOKEN='';PW1='';location.reload()}catch(e){toast('退出失败：'+e.message)}}
 async function revokeAllDevices(){
-  if(!confirm('吊销所有已记住的设备?(下次都要重新贴令牌)'))return
+  if(!await UIDialog.confirm('吊销所有已记住的设备?(下次都要重新登录)'))return
   try{const r=await api('/platform/session/revoke-all',{method:'POST'});toast('已吊销 '+r.revoked+' 台设备');setTimeout(()=>location.reload(),800)}catch(e){toast('吊销失败:'+e.message)}
 }
 /* 开屏:先问一句"这台电脑记住过吗" —— 记住过就直接进,不再要令牌 */
@@ -527,6 +548,12 @@ let TENANTS=[], LEADS=[], BILLPLANS=[]
 
 // ===== 套餐计费(2026-08-03)=====
 function moneyY(c){return '¥'+Math.round((c||0)/100).toString().replace(/\B(?=(\d{3})+(?!\d))/g,',')}
+function storeDate(instant,timezone){
+  if(!instant||!timezone)return ''
+  const parts=new Intl.DateTimeFormat('en-CA',{timeZone:timezone,year:'numeric',month:'2-digit',day:'2-digit'}).formatToParts(new Date(instant))
+  const get=k=>parts.find(p=>p.type===k).value
+  return `${get('year')}-${get('month')}-${get('day')}`
+}
 async function loadBilling(){
   try{
     const d=await api('/platform/billing')
@@ -534,7 +561,7 @@ async function loadBilling(){
     const planName=(id)=>{const p=BILLPLANS.find(x=>x.id===id);return p?p.name:id}
     // 待处理:续费订单 + 档位变更申请
     const todos=[]
-    ;(d.pendingOrders||[]).forEach(o=>todos.push(`<div class="todo-item"><span>💰 「${esc(o.tenantName)}」提交续费订单:${esc(planName(o.plan))} · ${o.period==='month'?'月付':'年付'} · <b>${moneyY(o.amountCents)}</b> · ${esc(String(o.createdAt).slice(0,10))}</span><button class="sm p" onclick="markPaid('${esc(o.id)}','${esc(o.tenantName)}',${o.amountCents})">已收款,顺延</button></div>`))
+    ;(d.pendingOrders||[]).forEach(o=>todos.push(`<div class="todo-item"><span>💰 「${esc(o.tenantName)}」提交续费订单:${esc(planName(o.plan))} · ${o.period==='month'?'月付':'年付'} · <b>${moneyY(o.amountCents)}</b> · ${esc(String(o.createdAt).slice(0,10))}</span><button class="sm p" onclick="markPaid('${esc(o.id)}',${jsArg(o.tenantName)},${o.amountCents})">已收款,顺延</button></div>`))
     ;(d.planRequests||[]).forEach(r=>{
       if(r.requestType==='ai_trial'){
         // AI 智能包试用申请:商家端点「申请」只到这里,需运营联系商家、配置话术与知识库后再点开通
@@ -554,17 +581,17 @@ async function loadBilling(){
       /* 永久 ⇒「长期」标签(与 plan-expiry.mjs 的 expiryLabel 同词;后端 daysLeft 对永久返回 null) */
       const left=t.planExpiresAt?(days<=0?`<span class="tag off">已到期 ${-days} 天</span>`:days<=7?`<span class="tag off">剩 ${days} 天</span>`:`剩 ${days} 天`):'<span class="tag on">长期</span>'
       const ai=t.ai||{}
-      const aiText={plan:'<span class="tag on">套餐已含</span>',paid:'<span class="tag on">已订阅</span>',trial:'<span class="tag on">试用中</span>',pending:'<span class="tag off">待开通(有申请)</span>',none:'<span class="muted">未开通</span>'}[ai.source]||'<span class="muted">未开通</span>'
-      const aiExp=ai.expiresAt&&ai.source!=='plan'?`<br><span class="muted">至 ${esc(String(ai.expiresAt).slice(0,10))}${ai.daysLeft!=null?(ai.daysLeft<=0?' · 已过期':' · 剩 '+ai.daysLeft+' 天'):''}</span>`:''
+      const aiText=typeof ai.enabled==='boolean'&&ai.label?`<span class="tag ${ai.enabled?'on':'off'}">${esc(ai.label)}</span>`:'<span class="muted">— 状态未返回</span>'
+      const aiExp=ai.expiresAt&&ai.source!=='plan'?`<br><span class="muted">至 ${esc(storeDate(ai.expiresAt,t.timezone))}${ai.daysLeft!=null?(ai.daysLeft<=0?' · 已过期':' · 剩 '+ai.daysLeft+' 天'):''}</span>`:''
       // 本月用量:快用完(≥80%)标红,好提前联系加量或谈升级
       const u=ai.usage||{}
       const pct=u.quota?Math.round((u.used/u.quota)*100):0
       const aiUse=(ai.source==='none')?'':`<br><span class="${pct>=80?'tag off':'muted'}">本月 ${u.used||0}/${u.quota||0} 次${pct>=80?` · ${pct}%`:''}${u.bonus?` (含加量 ${u.bonus})`:''}</span>`
-      const aiBtns=ai.source==='plan'?`<div class="row" style="margin-top:4px"><button class="sm" onclick="setAi('${esc(t.id)}','add_quota')">加量</button></div>`:`<div class="row" style="margin-top:4px">${ai.trialAvailable?`<button class="sm" onclick="setAi('${esc(t.id)}','grant_trial')">开通试用</button>`:''}<button class="sm" onclick="setAi('${esc(t.id)}','extend','month')">+1月</button><button class="sm" onclick="setAi('${esc(t.id)}','extend','year')">+1年</button><button class="sm" onclick="setAi('${esc(t.id)}','add_quota')">加量</button>${ai.source==='none'?'':`<button class="sm d" onclick="setAi('${esc(t.id)}','revoke')">关闭</button>`}</div>`
+      const aiBtns=`<div class="row" style="margin-top:4px"><button class="sm" onclick="setAi('${esc(t.id)}','set_enabled',${!ai.enabled})">${ai.enabled?'关闭':'开启'} AI</button>${ai.trialAvailable?`<button class="sm" onclick="setAi('${esc(t.id)}','grant_trial')">开通试用</button>`:''}<button class="sm" onclick="setAi('${esc(t.id)}','extend','month')">+1月</button><button class="sm" onclick="setAi('${esc(t.id)}','extend','year')">+1年</button><button class="sm" onclick="setAi('${esc(t.id)}','add_quota')">加量</button></div>${ai.manualOverride?'<small>手动开关优先于套餐与续期</small>':''}`
       return `<tr>
       <td><b>${esc(t.name)}</b><br><span class="muted">t=${esc(t.id)}</span></td>
       <td><select onchange="setPlan('${esc(t.id)}',this.value)">${planOpts(t.plan)}</select></td>
-      <td><input type="date" value="${t.planExpiresAt?esc(String(t.planExpiresAt).slice(0,10)):''}" onchange="setExpiry('${esc(t.id)}',this.value)" style="width:140px" title="${t.planExpiresAt?'':'这家是长期店。填一个日期就是取消长期。'}">${t.planExpiresAt?'':'<br><span class="muted" style="font-size:11px">长期 · 填日期即取消</span>'}</td>
+      <td><input type="date" value="${t.planExpiresAt?esc(storeDate(t.planExpiresAt,t.timezone)):''}" onchange="setExpiry('${esc(t.id)}',this.value)" style="width:140px" title="${t.planExpiresAt?'':'这家是长期店。填一个日期就是取消长期。'}">${t.planExpiresAt?'':'<br><span class="muted" style="font-size:11px">长期 · 填日期即取消</span>'}</td>
       <td>${left}</td>
       <td>${aiText}${aiExp}${aiUse}${aiBtns}</td>
       <td><span class="tag ${t.autoRenew?'on':'off'}">${t.autoRenew?'开':'关'}</span></td>
@@ -582,7 +609,7 @@ async function setExpiry(id,date){
   try{await api('/platform/tenants/'+id+'/billing',{method:'POST',body:JSON.stringify({planExpiresAt:date})});toast('到期日已设为 '+date);loadBilling()}catch(e){toast(e.message)}
 }
 async function setPerpetual(id){
-  if(!confirm('设为长期授权(不再到期)?一般只用于内部/旗舰店。\n设成长期后不能续费,要续费得先在日期框里填一个到期日。'))return
+  if(!await UIDialog.confirm('设为长期授权(不再到期)?一般只用于内部/旗舰店。\n设成长期后不能续费,要续费得先在日期框里填一个到期日。'))return
   try{await api('/platform/tenants/'+id+'/billing',{method:'POST',body:JSON.stringify({perpetual:true})});toast('已设为长期授权');loadBilling()}catch(e){toast(e.message)}
 }
 async function extend(id,period){
@@ -594,29 +621,44 @@ async function extend(id,period){
      `assertRenewable` 那道闸在 mark-paid 路径上,不在这条路上,所以后端挡不住。
      结果会是:永久店点一下 +1月,悄悄变成一个月后到期。 */
   if(t&&!t.planExpiresAt){toast('这家是永久店,先在日期框填一个到期日再顺延。');return}
-  const base=t&&t.planExpiresAt?new Date(Math.max(Date.now(),new Date(t.planExpiresAt).getTime())):new Date()
-  const next=new Date(base);if(period==='month')next.setMonth(next.getMonth()+1);else next.setFullYear(next.getFullYear()+1)
+  if(!t?.timezone){toast('缺少门店时区，请先完成门店配置。');return}
+  const base=storeDate(Math.max(Date.now(),new Date(t.planExpiresAt).getTime()),t.timezone)
+  const [year,month,day]=base.split('-').map(Number)
+  const next=new Date(Date.UTC(year,month-1+(period==='month'?1:12),1))
+  const last=new Date(Date.UTC(next.getUTCFullYear(),next.getUTCMonth()+1,0)).getUTCDate()
+  next.setUTCDate(Math.min(day,last))
   const dateStr=next.toISOString().slice(0,10)
-  if(!confirm(`顺延到 ${dateStr}?(赠送/口头约定用;正式收款请走商家提交的订单点"已收款")`))return
+  if(!await UIDialog.confirm(`顺延到 ${dateStr}?(赠送/口头约定用;正式收款请走商家提交的订单点"已收款")`))return
   try{await api('/platform/tenants/'+id+'/billing',{method:'POST',body:JSON.stringify({planExpiresAt:dateStr})});toast('已顺延到 '+dateStr);loadBilling()}catch(e){toast(e.message)}
 }
 async function markPaid(orderId,name,cents){
-  if(!confirm(`确认已收到「${name}」的 ${moneyY(cents)}?标记后到期日自动顺延,不可撤销。`))return
+  if(!await UIDialog.confirm(`确认已收到「${name}」的 ${moneyY(cents)}?标记后到期日自动顺延,不可撤销。`))return
   try{const r=await api('/platform/subscription-orders/'+orderId+'/mark-paid',{method:'POST',body:'{}'});toast('已入账,有效期至 '+String(r.expiresAt||r.aiExpiresAt||'').slice(0,10));loadBilling()}catch(e){toast(e.message)}
 }
 async function resolveReq(id,status,kind){
   // AI 试用申请走「发放权益」分支(不动基础档位);其余按目标档位改档
   if(kind==='ai_trial'){
-    if(status==='DONE'&&!confirm('确认已联系商家并配置好 AI(项目/价格/话术/知识库)?点确定即为该商家开通 3 个月免费试用。'))return
-    if(status==='REJECTED'&&!confirm('拒绝这条试用申请?商家端会恢复为「可申请试用」。'))return
-  }else if(status==='DONE'&&!confirm('标记完成将同步把该商家档位改为目标档位(到期日不变),确认?'))return
+    if(status==='DONE'&&!await UIDialog.confirm('确认已联系商家并配置好 AI(项目/价格/话术/知识库)?点确定即为该商家开通 3 个月免费试用。'))return
+    if(status==='REJECTED'&&!await UIDialog.confirm('拒绝这条试用申请?商家端会恢复为「可申请试用」。'))return
+  }else if(status==='DONE'&&!await UIDialog.confirm('标记完成将同步把该商家档位改为目标档位(到期日不变),确认?'))return
   try{const r=await api('/platform/plan-requests/'+id+'/resolve',{method:'POST',body:JSON.stringify({status})});toast(status!=='DONE'?'已拒绝':(r.aiExpiresAt?'AI 试用已开通,有效期至 '+String(r.aiExpiresAt).slice(0,10):'已完成并改档'));loadBilling()}catch(e){toast(e.message)}
 }
 // 平台侧直接调 AI 智能包:发放试用 / 顺延 / 关闭
 async function setAi(id,action,period){
+  if(action==='set_enabled'||action==='revoke'){
+    const enabled=action==='revoke'?false:period===true
+    if(!enabled&&!await UIDialog.confirm('关闭后该店小程序/网页 AI 功能立即不可用，确认关闭？'))return
+    const reason=await UIDialog.text('填写'+(enabled?'开启':'关闭')+' AI 的原因（保留操作记录）')
+    if(reason===null)return
+    if(!reason.trim()){toast('原因必填');return}
+    let expiresAt=null
+    if(enabled){const date=await UIDialog.text('到期日（YYYY-MM-DD），留空为长期：','');if(date===null)return;if(date.trim()){if(!/^\d{4}-\d{2}-\d{2}$/.test(date.trim())){toast('日期格式应为 YYYY-MM-DD');return}expiresAt=date.trim()+'T23:59:59+08:00'}}
+    try{await api('/platform/tenants/'+id+'/ai-addon',{method:'POST',body:JSON.stringify({action:'set_enabled',enabled,expiresAt,reason:reason.trim()})});toast(enabled?'AI 已开启':'AI 已关闭');await Promise.all([loadTenants(),loadBilling()])}catch(e){toast(e.message)}
+    return
+  }
   // 加量:只给本月多批一些次数,不动套餐也不动加购包,下月自动归零
   if(action==='add_quota'){
-    const v=prompt('本月临时加多少次 AI 调用?(只对当月有效,下月自动归零)','1000')
+    const v=await UIDialog.text('本月临时加多少次 AI 调用?(只对当月有效,下月自动归零)','1000')
     if(v===null)return
     const amount=Math.round(Number(v))
     if(!amount||amount<1){toast('请输入正整数');return}
@@ -624,7 +666,7 @@ async function setAi(id,action,period){
     return
   }
   const txt={grant_trial:'为该商家开通 3 个月 AI 免费试用?(会占用该店唯一一次试用名额)',extend:`AI 智能包顺延 ${period==='month'?'1 个月':'1 年'}?`,revoke:'关闭该商家的 AI 智能包?关闭后小程序/网页端 AI 功能立即不可用。'}[action]
-  if(!confirm(txt))return
+  if(!await UIDialog.confirm(txt))return
   try{const r=await api('/platform/tenants/'+id+'/ai-addon',{method:'POST',body:JSON.stringify({action,period})});toast(action==='revoke'?'已关闭 AI 智能包':'AI 有效期至 '+String(r.expiresAt||'').slice(0,10));loadBilling()}catch(e){toast(e.message)}
 }
 
@@ -670,20 +712,20 @@ async function kbpAdd(){
 }
 async function kbpEdit(id){
   const e=PKB.find(x=>x.id===id);if(!e)return
-  const content=prompt(e.kind==='rule'?'规则正文：':'回答口径：',e.content);if(content===null)return
+  const content=await UIDialog.text(e.kind==='rule'?'规则正文：':'回答口径：',e.content);if(content===null)return
   const body={content}
-  if(e.kind==='qa'){const q=prompt('顾客问法：',e.question);if(q===null)return;body.question=q}
+  if(e.kind==='qa'){const q=await UIDialog.text('顾客问法：',e.question);if(q===null)return;body.question=q}
   try{await api('/platform/kb/'+encodeURIComponent(id),{method:'PATCH',body:JSON.stringify(body)});toast('已保存');loadPlatformKb()}catch(err){toast(err.message)}
 }
 async function kbpToggle(id,enabled){
   try{await api('/platform/kb/'+encodeURIComponent(id),{method:'PATCH',body:JSON.stringify({enabled:Boolean(enabled)})});loadPlatformKb()}catch(e){toast(e.message)}
 }
 async function kbpDel(id){
-  if(!confirm('删除这条通用知识？所有商家的 AI 都会立即不再读到它。'))return
+  if(!await UIDialog.confirm('删除这条通用知识？所有商家的 AI 都会立即不再读到它。'))return
   try{await api('/platform/kb/'+encodeURIComponent(id),{method:'DELETE'});toast('已删除');loadPlatformKb()}catch(e){toast(e.message)}
 }
 async function kbpReset(){
-  if(!confirm('恢复出厂内容？会清空当前平台层的全部条目，用随代码发布的初始版本重建。你手工加的内容会丢失，不可撤销。'))return
+  if(!await UIDialog.confirm('恢复出厂内容？会清空当前平台层的全部条目，用随代码发布的初始版本重建。你手工加的内容会丢失，不可撤销。'))return
   try{const r=await api('/platform/kb/reset',{method:'POST',body:'{}'});toast(`已恢复 ${r.count} 条`);loadPlatformKb()}catch(e){toast(e.message)}
 }
 
@@ -741,7 +783,7 @@ async function loadTenants(){
     const perp=!t.planExpiresAt
     const expiry=perp?'<span class="tag on">长期</span>'
       :(t.daysLeft!=null&&t.daysLeft<=0?`<span class="tag off">已到期</span>`
-        :`<span class="muted">${esc(String(t.planExpiresAt).slice(0,10))}</span>`)
+        :`<span class="muted">${esc(storeDate(t.planExpiresAt,t.timezone))}</span>`)
     /* 配置进度:五盏灯 + 后端出的那一句(D197 onboarding-steps.mjs,不另写判断) */
     const steps=t.onboarding&&t.onboarding.steps||null
     const lamps=isDemo?'<span class="muted">— 样板店不计</span>'
@@ -762,17 +804,18 @@ async function loadTenants(){
       </span></span>`
     return `<tr class="${isDemo?'demoRow':''}">
     <td class="muted">${esc(t.id)}</td>
-    <td><b>${esc(t.name)}</b><br><span class="muted" style="font-size:11px">${esc(t.cityLabel||t.city||'')}${t.currency?' · '+esc(t.currency):''}${t.domainLabel?' · '+esc(t.domainLabel):''}</span></td>
+    <td><b>${esc(t.name)}</b>${t.tenantName?`<br><small class="muted">入驻名：${esc(t.tenantName)}</small>`:''}<br><span class="muted" style="font-size:11px">${esc(t.cityLabel||t.city||'')}${t.currency?' · '+esc(t.currency):''}${t.domainLabel?' · '+esc(t.domainLabel):''}</span></td>
     <td><span class="tag ${isDemo?'off':'on'}">${isDemo?'样板店 · 展示/测试用':(t.kind==='test'?'测试':'真实商户')}</span>
       <span class="tag ${t.listed?'on':'off'}" title="顾客选店页是否出现">${t.listed?'选店页可见':'选店页隐藏'}</span></td>
     <td>${esc(t.plan)}<br>${expiry}</td>
-    <td>${aiTag(t)}</td>
+    <td>${aiTag(t)}<br><button class="sm" onclick="setAi('${esc(t.id)}','set_enabled',${!t.aiEnabled})">${t.aiEnabled?'关闭':'开启'} AI</button></td>
     <td>${lamps}</td>
     <td>${t.storeCount}</td>
     <td>${t.monthBookingCount??'-'} / ${t.bookingCount}</td>
     <td>${esc(t.ownerUsername)||'-'}</td>
     <td class="ops"><button class="sm" onclick="goConfig('${esc(t.id)}')">配置</button><button class="sm d" onclick="resetOwnerPw('${esc(t.id)}')">重置老板密码</button>${third}${more}</td>
   </tr>`}).join('')
+  renderConfigSteps()
   return TENANTS
 }
 function toggleMore(id){const m=$('more-'+id);if(!m)return
@@ -780,14 +823,14 @@ function toggleMore(id){const m=$('more-'+id);if(!m)return
   m.classList.toggle('hidden')}
 async function setPerpetualFromList(id){
   const t=TENANTS.find(x=>x.id===id)||{}
-  if(!confirm(`把「${t.name||id}」设为永久(不再到期)?\n\n设成永久后不能续费/顺延,要续费得先在「套餐计费」页填一个到期日。`))return
+  if(!await UIDialog.confirm(`把「${t.name||id}」设为永久(不再到期)?\n\n设成永久后不能续费/顺延,要续费得先在「套餐计费」页填一个到期日。`))return
   try{await api('/platform/tenants/'+id+'/billing',{method:'POST',body:JSON.stringify({perpetual:true})});toast('已设为永久');loadTenants()}catch(e){toast(e.message)}
 }
 async function resetDemoData(id){
   const t=TENANTS.find(x=>x.id===id)||{}
-  const name=prompt(`重置「${t.name||id}」的演示数据。\n\n这会清掉这家店的账本(预约/结算/流水),**不可撤销**。\n请手打完整店名确认:`)
+  const name=await UIDialog.text(`重置「${t.name||id}」的演示数据。\n\n这会清掉这家店的账本(预约/结算/流水),**不可撤销**。\n请手打完整店名确认:`)
   if(name===null)return
-  const reason=prompt('写一句原因(会写进平台运维日志):')
+  const reason=await UIDialog.text('写一句原因(会写进平台运维日志):')
   if(!reason||!reason.trim()){toast('原因必填');return}
   try{await api(`/platform/tenants/${id}/demo-reset`,{method:'POST',body:JSON.stringify({confirmName:name,reason:reason.trim()})});toast('演示数据已重置');loadTenants()}catch(e){toast(e.message)}
 }
@@ -797,16 +840,16 @@ async function switchKind(id,to){
   const warn = to==='demo'
     ? `确认把「${t.name||id}」转为【演示店】?\n\n它的账本从此**不受只追加律保护**(可被一键重置),\n对外不能拿它说"账本不可篡改"。`
     : `确认把「${t.name||id}」转为【真实商户】?\n\n它的账本从此受只追加律保护(删/改都会被数据库拦下)。`
-  if(!confirm(warn))return
-  const reason=prompt('写一句原因(会写进平台运维日志):')
+  if(!await UIDialog.confirm(warn))return
+  const reason=await UIDialog.text('写一句原因(会写进平台运维日志):')
   if(!reason||!reason.trim()){toast('原因必填');return}
   try{await api(`/platform/tenants/${id}/kind`,{method:'PATCH',body:JSON.stringify({kind:to,reason:reason.trim()})});toast('归属已改,已记进运维日志');loadTenants()}catch(e){toast(e.message)}
 }
 /* D76:只改"顾客选店页出不出现",不碰账本、不碰归属。 */
 async function toggleListed(id,to){
   const t=TENANTS.find(x=>x.id===id)||{}
-  if(!confirm(`把「${t.name||id}」${to?'放回':'从'}顾客选店页${to?'':'隐藏'}?\n\n只改展示,账本与归属一律不动。`))return
-  const reason=prompt('写一句原因(会写进平台运维日志):')
+  if(!await UIDialog.confirm(`把「${t.name||id}」${to?'放回':'从'}顾客选店页${to?'':'隐藏'}?\n\n只改展示,账本与归属一律不动。`))return
+  const reason=await UIDialog.text('写一句原因(会写进平台运维日志):')
   if(!reason||!reason.trim()){toast('原因必填');return}
   try{await api(`/platform/tenants/${id}/listed`,{method:'PATCH',body:JSON.stringify({listed:to,reason:reason.trim()})});toast('可见性已改');loadTenants()}catch(e){toast(e.message)}
 }
@@ -815,17 +858,17 @@ async function toggleListed(id,to){
    新密码只在这一次弹出来 —— 页面不留、不进日志正文。 */
 async function resetOwnerPw(id){
   const t=TENANTS.find(x=>x.id===id)||{}
-  const typed=prompt(`重置「${t.name||id}」的**老板账号**密码。\n\n请一字不差手打这家店的完整名称以确认:`)
+  const typed=await UIDialog.text(`重置「${t.name||id}」的**老板账号**密码。\n\n请一字不差手打这家店的完整名称以确认:`)
   if(typed===null)return
-  const reason=prompt('写一句原因(会写进平台运维日志,例如:商家来电报忘记密码,已核身份):')
+  const reason=await UIDialog.text('写一句原因(会写进平台运维日志,例如:商家来电报忘记密码,已核身份):')
   if(!reason||!reason.trim()){toast('原因必填');return}
   try{
     const r=await api(`/platform/tenants/${id}/owner-password/reset`,{method:'POST',body:JSON.stringify({confirmName:typed,reason:reason.trim()})})
-    alert(`已重置。\n\n账号:${r.username}\n一次性新密码:${r.initialPassword}\n\n这串只显示这一次,请立刻交给商家;\n对方首次登录会被强制改密。原有登录会话已全部吊销(${r.revokedSessions} 个)。`)
+    await UIDialog.alert(`已重置。\n\n账号:${r.username}\n一次性新密码:${r.initialPassword}\n\n这串只显示这一次,请立刻交给商家;\n对方首次登录会被强制改密。原有登录会话已全部吊销(${r.revokedSessions} 个)。`)
     loadTenants()
   }catch(e){toast(e.message)}
 }
-async function toggleTenant(id){if(!confirm('确认切换营业状态?停用后顾客端将无法进入该店。'))return;try{await api('/platform/tenants/'+id+'/toggle',{method:'POST',body:'{}'});toast('已切换');loadTenants()}catch(e){toast(e.message)}}
+async function toggleTenant(id){if(!await UIDialog.confirm('确认切换营业状态?停用后顾客端将无法进入该店。'))return;try{await api('/platform/tenants/'+id+'/toggle',{method:'POST',body:'{}'});toast('已切换');loadTenants()}catch(e){toast(e.message)}}
 async function createTenant(){
   const name=$('mName').value.trim();if(!name){toast('商家名称必填');return}
   /* 🔴 D210:币种/时区**必选**,前端先拦一道(体验);后端是不是最终闸另裁(等天亮)。
@@ -834,13 +877,14 @@ async function createTenant(){
   const timezone=$('mTz').value;if(!timezone){toast('时区必选 —— 不选会按多伦多时区建');return}
   try{
     const isDemo=$('mIsDemo').checked
-    if(isDemo&&!confirm('确认建成【演示店】?\n它的账本不受"只追加"保护(可整体重置),对外不能拿它说"账本不可篡改"。')){return}
+    if(isDemo&&!await UIDialog.confirm('确认建成【演示店】?\n它的账本不受"只追加"保护(可整体重置),对外不能拿它说"账本不可篡改"。')){return}
     const d=await api('/platform/tenants',{method:'POST',body:JSON.stringify({name,city:$('mCity').value.trim(),phone:$('mPhone').value.trim(),...(PHONE2_READY?{phone2:$('mPhone2').value.trim()}:{}),currency,timezone,publicDomain:$('mDomain').value,plan:$('mPlan').value,initialTerm:$('mTerm').value,id:$('mId').value.trim(),isDemo})})
     $('credBox').classList.remove('hidden')
-    $('credBox').innerHTML=`✅ <b>${esc(d.tenant.name)}</b>(${esc(d.tenant.id)})已创建,订阅到期日 <b>${esc(String(d.tenant.planExpiresAt||'').slice(0,10))}</b>(套餐计费页可改)<br>老板账号:<b>${esc(d.owner.username)}</b> 初始密码:<b>${esc(d.owner.initialPassword)}</b>(只显示一次;商家控制台开放前账号暂不可登录)<br>店码 scene:<b>${esc(d.shopEntry.scene)}</b> · <a href="javascript:void(0)" onclick="goConfig('${esc(d.tenant.id)}')">→ 去替商家配置资料</a>`
+    $('credBox').innerHTML=`✅ <b>${esc(d.tenant.name)}</b>(${esc(d.tenant.id)})已创建,订阅到期日 <b>${esc(String(d.tenant.planExpiresAt||'').slice(0,10))}</b>(套餐计费页可改)<br>老板账号:<b>${esc(d.owner.username)}</b> 初始密码:<b>${esc(d.owner.initialPassword)}</b>(只显示一次;老板首次登录须修改初始密码)<br>店码 scene:<b>${esc(d.shopEntry.scene)}</b> · <a href="javascript:void(0)" onclick="goConfig('${esc(d.tenant.id)}')">→ 去替商家配置资料</a>`
     $('mName').value=$('mCity').value=$('mPhone').value=$('mPhone2').value=$('mId').value='';$('mCurrency').value=$('mTz').value=$('mDomain').value='';$('mIsDemo').checked=false
-    loadTenants()
-  }catch(e){toast(e.message)}
+    await loadTenants()
+    return d.tenant
+  }catch(e){toast(e.message);return null}
 }
 
 // ===== 线索 =====
@@ -851,8 +895,8 @@ async function loadLeads(){
   $('leadBadge').textContent=newCount;$('leadBadge').classList.toggle('hidden',!newCount)
   $('leadRows').innerHTML=LEADS.map(l=>{const s=LS[l.status]||[l.status,'n'];return `<tr>
     <td><b>${esc(l.shopName)}</b></td><td>${esc(l.contactName)||'-'}</td>
-    <td>${esc(l.phone)||'-'}${l.phone?` <button class="sm" onclick="copyTxt('${esc(l.phone)}')">复制</button>`:''}</td>
-    <td>${esc(l.wechatId)||'-'}${l.wechatId?` <button class="sm" onclick="copyTxt('${esc(l.wechatId)}')">复制</button>`:''}</td>
+    <td>${esc(l.phone)||'-'}${l.phone?` <button class="sm" onclick="copyTxt(${jsArg(l.phone)})">复制</button>`:''}</td>
+    <td>${esc(l.wechatId)||'-'}${l.wechatId?` <button class="sm" onclick="copyTxt(${jsArg(l.wechatId)})">复制</button>`:''}</td>
     <td class="muted">${esc(l.shopType)}${l.city?' · '+esc(l.city):''}</td>
     <td><span class="tag ${s[1]}">${s[0]}</span></td><td class="muted">${esc(l.note)||''}</td>
     <td class="row">
@@ -862,7 +906,7 @@ async function loadLeads(){
     </td></tr>`}).join('')||'<tr><td colspan="8" class="muted">暂无线索</td></tr>'
   return LEADS
 }
-function copyTxt(t){navigator.clipboard&&navigator.clipboard.writeText(t).then(()=>toast('已复制'))}
+async function copyTxt(t){try{if(!navigator.clipboard)throw new Error('浏览器不支持复制，请手动选择文本');await navigator.clipboard.writeText(t);toast('已复制')}catch(e){toast('复制失败：'+e.message)}}
 async function leadStatus(id,st){try{await api('/platform/leads/'+id,{method:'PATCH',body:JSON.stringify({status:st})});toast('已更新');loadLeads()}catch(e){toast(e.message)}}
 function leadToMerchant(id){
   const l=LEADS.find(x=>x.id===id);if(!l)return
@@ -874,31 +918,62 @@ function leadToMerchant(id){
 }
 // 建店成功时若有待转线索,自动标已入驻
 const _origCreate=createTenant
-createTenant=async function(){await _origCreate();if(window._pendingLead){try{await api('/platform/leads/'+window._pendingLead,{method:'PATCH',body:JSON.stringify({status:'onboarded'})});window._pendingLead=null;loadLeads();toast('线索已标记为已入驻')}catch(e){}}}
+createTenant=async function(){const lead=window._pendingLead;const created=await _origCreate();if(!created||!lead)return;try{await api('/platform/leads/'+lead,{method:'PATCH',body:JSON.stringify({status:'onboarded'})});if(window._pendingLead===lead)window._pendingLead=null;await loadLeads();toast('建店成功，线索已标记为已入驻')}catch(e){toast('店已建好，但线索状态更新失败：'+e.message)}}
 
 // ===== 商家配置 =====
-let CFG_T=''
-function goConfig(tid){CFG_T=tid;nav('config')}
+let CFG_T='', CFG_TAB='store', CFG_SEQ=0
+function renderConfigSteps(){$('configSteps').innerHTML=(TENANTS.find(t=>t.id===CFG_T)?.onboarding?.steps||[]).map(x=>`<button onclick="tab('${esc(({pricing:'services'}[x.key]||x.key))}')"><b>${esc(x.title)}</b><br><small>${esc(x.note)}</small></button>`).join('')}
+function goConfig(tid,target='store'){CFG_T=tid;CFG_TAB=({pricing:'services'}[target]||target);nav('config')}
 function initConfig(){
   const sel=$('cfgTenant')
   sel.innerHTML=TENANTS.map(t=>`<option value="${esc(t.id)}" ${t.id===CFG_T?'selected':''}>${esc(t.name)}(${esc(t.id)})</option>`).join('')
   if(!CFG_T&&TENANTS.length)CFG_T=TENANTS[0].id
   loadConfig()
 }
-function tab(t){document.querySelectorAll('.tab').forEach(b=>b.classList.toggle('on',b.dataset.tab===t));['store','hours','services','techs','kb','member','cats'].forEach(x=>$('tab-'+x).classList.toggle('hidden',x!==t))}
+function tab(t){CFG_TAB=t;document.querySelectorAll('.tab').forEach(b=>b.classList.toggle('on',b.dataset.tab===t));['store','hours','services','techs','kb','member','cats','wecom','serviceImport','owner','launch'].forEach(x=>$('tab-'+x).classList.toggle('hidden',x!==t))}
 async function loadConfig(){
   CFG_T=$('cfgTenant').value||CFG_T
   if(!CFG_T)return
+  const tid=CFG_T,seq=++CFG_SEQ
+  invalidateServiceImport();$('svcImportText').value='';$('svcImportReport').textContent=''
+  document.querySelectorAll('#page-config input,#page-config textarea,#page-config button,#page-config select:not(#cfgTenant)').forEach(x=>x.disabled=true)
   try{
-    const [st,hr,sv,tc,kb,mb,ct]=await Promise.all([
+    const [st,hr,sv,tc,kb,mb,ct,wc]=await Promise.all([
       api(`/platform/tenants/${CFG_T}/store`),api(`/platform/tenants/${CFG_T}/business-hours`),
       api(`/platform/tenants/${CFG_T}/services`),api(`/platform/tenants/${CFG_T}/technicians`),api(`/platform/tenants/${CFG_T}/kb`),
       api(`/platform/tenants/${CFG_T}/membership-config`),
-      api(`/platform/tenants/${CFG_T}/categories`)
+      api(`/platform/tenants/${CFG_T}/categories`),api(`/platform/tenants/${CFG_T}/wecom-kfid`)
     ])
+    if(seq!==CFG_SEQ||tid!==CFG_T)return
+    document.querySelectorAll('#page-config input,#page-config textarea,#page-config button,#page-config select:not(#cfgTenant)').forEach(x=>x.disabled=false)
+    $('svcImportExecute').disabled=true;$('cfgKfid').value=wc.openKfid||''
+    const tenant=TENANTS.find(t=>t.id===tid)||{}
+    $('cfgOwner').textContent=tenant.ownerUsername||'尚未创建老板账号'
+    renderConfigSteps()
+    tab(CFG_TAB)
     $('stName').value=st.store?st.store.name:'';$('stAddr').value=st.store?st.store.address:'';$('stPhone').value=st.store?st.store.phone:''
     renderHours(hr.hours||[]);renderServices(sv.services||[]);renderTechs(tc.technicians||[]);renderKb(kb);renderMembership(mb);renderCats(ct)
+  }catch(e){if(seq===CFG_SEQ)toast('配置读取失败：'+e.message)}
+}
+let SERVICE_IMPORT=null
+function invalidateServiceImport(){SERVICE_IMPORT=null;$('svcImportExecute').disabled=true}
+async function saveConfigKfid(){const tid=CFG_T;try{await api(`/platform/tenants/${tid}/wecom-kfid`,{method:'PUT',body:JSON.stringify({openKfid:$('cfgKfid').value})});toast('客服号已保存');await loadTenants();if(CFG_T===tid)await loadConfig()}catch(e){toast(e.message)}}
+async function loadServiceImportFile(ev){const file=ev.target.files&&ev.target.files[0];if(!file)return;try{const text=await file.text();$('svcImportText').value=text;invalidateServiceImport()}catch(e){toast('文件读取失败：'+e.message)}}
+async function previewServiceImport(){
+  invalidateServiceImport();const tid=CFG_T,text=$('svcImportText').value.trim(),lines=text.split(/\r?\n/).filter(l=>l.trim())
+  if(lines.length<2){toast('至少需要表头和一行价目');return}
+  const body={headers:splitCsvLine(lines[0]),rows:lines.slice(1).map(splitCsvLine),dryRun:true}
+  try{const d=await api(`/platform/tenants/${tid}/import/services`,{method:'POST',body:JSON.stringify(body)});if(tid!==CFG_T||text!==$('svcImportText').value.trim())return
+    const r=d.report;$('svcImportReport').innerHTML=`<p>共 ${r.rowCount} 行，可导入 ${r.ok.length} 行，退回 ${r.blocked.length} 行</p>`+r.blocked.map(x=>`<p>第 ${x.line} 行 ${esc(x.name)}：${esc(x.reason)}</p>`).join('')+r.ok.map(x=>`<p>✓ ${esc(x.name)} · ${esc(x.categoryName||'')} · ${x.durationMin} 分钟</p>`).join('')
+    if(!r.blocked.length&&r.ok.length){SERVICE_IMPORT={tid,text,body};$('svcImportExecute').disabled=false}
   }catch(e){toast(e.message)}
+}
+async function executeServiceImport(){
+  const job=SERVICE_IMPORT;if(!job||job.tid!==CFG_T||job.text!==$('svcImportText').value.trim()){invalidateServiceImport();toast('内容或门店已变化，请重新试跑');return}
+  if(!await UIDialog.confirm('确认将试跑通过的价目导入当前门店？'))return
+  if(SERVICE_IMPORT!==job||job.tid!==CFG_T||job.text!==$('svcImportText').value.trim()){toast('门店或内容已变化，请重新试跑');return}
+  invalidateServiceImport()
+  try{const d=await api(`/platform/tenants/${job.tid}/import/services`,{method:'POST',body:JSON.stringify({...job.body,dryRun:false})});if(job.tid===CFG_T){$('svcImportReport').textContent=`导入完成：${d.created||0} 项`;const sv=await api(`/platform/tenants/${job.tid}/services`);if(job.tid===CFG_T)renderServices(sv.services||[])}await loadTenants();toast('价目导入完成')}catch(e){toast(e.message)}
 }
 /* ===== 会员制度(D74,店主 08-25 立【设置唯一编辑处律】)=====
    规则谁定,编辑处就在谁那儿:会员资格与等级是平台定的 → 只有这里能改,商家端只读。
@@ -911,11 +986,11 @@ function renderMembership(mb){
   $('mbQualify').innerHTML=modes.map(m=>`<option value="${esc(m)}">${esc(MB_MODE_TEXT[m]||m)}</option>`).join('')
   $('mbQualify').value=cfg.memberQualify||modes[0]||''
   // 分↔元只在这一层换算,存的一律是分(后端字段是 qualifyValueCents)
-  $('mbQualifyValue').value=cfg.qualifyValueCents?Math.round(cfg.qualifyValueCents/100):''
+  $('mbQualifyValue').value=cfg.qualifyValueCents?cfg.qualifyValueCents/100:''
   $('mbExpireDays').value=cfg.expireDays==null?'':cfg.expireDays
   $('mbTiersEnabled').checked=Boolean(cfg.tiersEnabled)
   $('mbKeepAfterRefund').value=cfg.keepMemberAfterRefund||'keep'
-  MB_TIERS=Array.isArray(cfg.tiers)?cfg.tiers.map(t=>({key:t.key||'',label:t.label||'',minSpend:Math.round((t.minSpendCents||0)/100),depositWaived:Boolean(t.depositWaived)})):[]
+  MB_TIERS=Array.isArray(cfg.tiers)?cfg.tiers.map(t=>({key:t.key||'',label:t.label||'',minSpend:(t.minSpendCents||0)/100,depositWaived:Boolean(t.depositWaived)})):[]
   mbToggle();mbRenderTiers()
 }
 function mbToggle(){
@@ -933,6 +1008,7 @@ function mbRenderTiers(){
 }
 function mbAddTier(){MB_TIERS.push({key:'',label:'',minSpend:0,depositWaived:false});mbRenderTiers()}
 async function saveMembership(){
+  const tid=CFG_T
   const tiersEnabled=$('mbTiersEnabled').checked
   if(tiersEnabled&&MB_TIERS.some(t=>!String(t.key).trim()||!String(t.label).trim())){toast('等级的 key 与显示名都必填');return}
   const config={
@@ -944,8 +1020,9 @@ async function saveMembership(){
     tiers:tiersEnabled?MB_TIERS.map(t=>({key:String(t.key).trim(),label:String(t.label).trim(),minSpendCents:Math.max(0,Math.round((Number(t.minSpend)||0)*100)),depositWaived:Boolean(t.depositWaived)})):[]
   }
   try{
-    const d=await api(`/platform/tenants/${CFG_T}/membership-config`,{method:'PUT',body:JSON.stringify({config})})
-    renderMembership({config:d.config,qualifyModes:(await api(`/platform/tenants/${CFG_T}/membership-config`)).qualifyModes})
+    const d=await api(`/platform/tenants/${tid}/membership-config`,{method:'PUT',body:JSON.stringify({config})})
+    const latest=await api(`/platform/tenants/${tid}/membership-config`)
+    if(CFG_T===tid)renderMembership({config:d.config,qualifyModes:latest.qualifyModes})
     toast('会员制度已保存,商家端只读块即时跟着变')
   }catch(e){toast(e.message)}
 }
@@ -961,7 +1038,7 @@ function renderCats(d){
     <td><input value="${esc(c.name)}" style="width:150px" onchange="patchCat('${esc(c.id)}',{name:this.value})"></td>
     <td><input type="checkbox" ${c.isBookable?'checked':''} onchange="patchCat('${esc(c.id)}',{isBookable:this.checked})"></td>
     <td>${c.itemCount??0}</td>
-    <td><button class="sm d" onclick="delCat('${esc(c.id)}','${esc(c.name)}',${c.itemCount||0})">删除</button></td>
+    <td><button class="sm d" onclick="delCat('${esc(c.id)}',${jsArg(c.name)},${c.itemCount||0})">删除</button></td>
   </tr>`).join(''):`<tr><td colspan="6" class="muted">这家店还没有大类 —— 新增一个,商家后台的「上架服务」才分得了组。</td></tr>`
 }
 async function addCat(){
@@ -974,11 +1051,11 @@ async function patchCat(id,patch){
 }
 async function delCat(id,name,used){
   if(used>0){toast(`「${name}」下面还有 ${used} 个项目,先把项目移走再删`);return}
-  if(!confirm(`确认删除大类「${name}」?商家后台的分组会少这一组。`))return
+  if(!await UIDialog.confirm(`确认删除大类「${name}」?商家后台的分组会少这一组。`))return
   try{await api(`/platform/tenants/${CFG_T}/categories/${id}`,{method:'DELETE'});toast('已删除');loadConfig()}catch(e){toast(e.message)}
 }
 
-async function saveStore(){try{await api(`/platform/tenants/${CFG_T}/store`,{method:'PUT',body:JSON.stringify({name:$('stName').value,address:$('stAddr').value,phone:$('stPhone').value})});toast('门店信息已保存并同步 AI')}catch(e){toast(e.message)}}
+async function saveStore(){const tid=CFG_T;try{await api(`/platform/tenants/${tid}/store`,{method:'PUT',body:JSON.stringify({name:$('stName').value,address:$('stAddr').value,phone:$('stPhone').value})});await loadTenants();$('cfgTenant').querySelectorAll('option').forEach(o=>{const t=TENANTS.find(t=>t.id===o.value);if(t)o.textContent=t.name+'('+t.id+')'});toast('门店信息已保存并同步 AI')}catch(e){toast(e.message)}}
 function renderHours(hours){
   const map={};hours.forEach(h=>map[h.weekday]=h)
   $('hourRows').innerHTML=[1,2,3,4,5,6,0].map(w=>{const h=map[w]||{isClosed:w===1,openTime:'10:00',closeTime:'19:00'};return `<tr data-w="${w}">
@@ -992,7 +1069,7 @@ async function saveHours(){
 }
 function renderServices(list){
   $('svcRows').innerHTML=list.map(s=>`<tr>
-    <td><b>${esc(s.nameZh)}</b></td><td>${s.type==='nail'?'美甲':'美睫'}</td><td>${s.priceCents/100}</td><td>${s.durationMin}min</td>
+    <td><b>${esc(s.nameZh)}</b></td><td>${esc(({nail:'美甲',lash:'美睫',care:'护理',other:'其他'}[String(s.type).toLowerCase()]||s.type))}</td><td>${s.priceCents/100}</td><td>${s.durationMin}min</td>
     <td><span class="tag ${s.isActive?'on':'off'}">${s.isActive?'在售':'下架'}</span></td>
     <td class="row"><button class="sm" onclick="editPrice('${esc(s.id)}',${s.priceCents})">改价</button><button class="sm ${s.isActive?'d':'p'}" onclick="toggleSvc('${esc(s.id)}',${s.isActive})">${s.isActive?'下架':'上架'}</button></td>
   </tr>`).join('')||'<tr><td colspan="6" class="muted">还没有服务,替商家把价目表加上吧</td></tr>'
@@ -1003,7 +1080,7 @@ async function addService(){
   try{await api(`/platform/tenants/${CFG_T}/services`,{method:'POST',body:JSON.stringify({type:$('svcType').value,nameZh:name,nameEn:name,priceCents:Math.round(price*100),baseDurationMin:Number($('svcDur').value)||90,category:$('svcCat').value.trim()||undefined})});toast('已添加');$('svcName').value=$('svcPrice').value=$('svcDur').value=$('svcCat').value='';loadConfig()}catch(e){toast(e.message)}
 }
 async function editPrice(id,cents){
-  const v=prompt('新价格(加元)',String(cents/100));if(v===null)return
+  const v=await UIDialog.text('新价格（'+(TENANTS.find(t=>t.id===CFG_T)?.currency||'门店币种')+'）',String(cents/100));if(v===null)return
   const p=Number(v);if(!p||p<=0){toast('价格无效');return}
   try{await api(`/platform/tenants/${CFG_T}/services/${id}`,{method:'PATCH',body:JSON.stringify({priceCents:Math.round(p*100)})});toast('已改价');loadConfig()}catch(e){toast(e.message)}
 }
@@ -1022,25 +1099,27 @@ async function addTech(){
 async function toggleTech(id,active){try{await api(`/platform/tenants/${CFG_T}/technicians/${id}`,{method:'PATCH',body:JSON.stringify({isActive:!active})});loadConfig()}catch(e){toast(e.message)}}
 function renderKb(kb){
   const f=kb.facts||{}
-  $('kbBrand').value=f.brandName||'';$('kbAssistant').value=f.assistantName||'';$('kbDeposit').value=f.depositAmount||'';$('kbCurrency').value=f.currency||''
+  $('kbBrand').value=f.brandName||'';$('kbAssistant').value=f.assistantName||''
   $('kbRows').innerHTML=(kb.entries||[]).map(e=>`<tr>
     <td><div class="kbq">${esc(e.question)}</div><div class="kba">${esc(e.answerZh)}</div></td>
     <td><span class="tag ${e.enabled?'on':'off'}">${e.enabled?'启用':'停用'}</span></td>
     <td class="row"><button class="sm" onclick="toggleEntry('${esc(e.id)}',${e.enabled})">${e.enabled?'停用':'启用'}</button><button class="sm d" onclick="delEntry('${esc(e.id)}')">删除</button></td>
   </tr>`).join('')||'<tr><td colspan="3" class="muted">还没有问答条目;把商家常被问的问题录进来,AI 客服会优先用它回答</td></tr>'
 }
-async function saveFacts(){try{await api(`/platform/tenants/${CFG_T}/kb`,{method:'PUT',body:JSON.stringify({facts:{brandName:$('kbBrand').value,assistantName:$('kbAssistant').value,depositAmount:$('kbDeposit').value,currency:$('kbCurrency').value}})});toast('品牌事实已保存')}catch(e){toast(e.message)}}
+async function saveFacts(){try{await api(`/platform/tenants/${CFG_T}/kb`,{method:'PUT',body:JSON.stringify({facts:{brandName:$('kbBrand').value,assistantName:$('kbAssistant').value}})});toast('品牌事实已保存')}catch(e){toast(e.message)}}
 async function addEntry(){
   const q=$('kbQ').value.trim(),a=$('kbA').value.trim();if(!q||!a){toast('问题与答案必填');return}
   try{await api(`/platform/tenants/${CFG_T}/kb`,{method:'POST',body:JSON.stringify({question:q,answerZh:a,keywords:$('kbKw').value.trim()})});toast('已添加');$('kbQ').value=$('kbA').value=$('kbKw').value='';loadConfig()}catch(e){toast(e.message)}
 }
 async function toggleEntry(id,en){try{await api(`/platform/tenants/${CFG_T}/kb/${id}`,{method:'PATCH',body:JSON.stringify({enabled:!en})});loadConfig()}catch(e){toast(e.message)}}
-async function delEntry(id){if(!confirm('删除该问答?'))return;try{await api(`/platform/tenants/${CFG_T}/kb/${id}`,{method:'DELETE'});loadConfig()}catch(e){toast(e.message)}}
+async function delEntry(id){if(!await UIDialog.confirm('删除该问答?'))return;try{await api(`/platform/tenants/${CFG_T}/kb/${id}`,{method:'DELETE'});loadConfig()}catch(e){toast(e.message)}}
 
 // ===== 顾客导入(2026-08-06 P0)=====
 // 手机号是去重主键;期初余额写 legacy 桶(migrate_opening 流水,只追加),不进商家财务收入。
-let IMP_ROWS=[], IMP_REPORT=null
+let IMP_ROWS=[], IMP_REPORT=null, IMP_REVIEW=null
+function invalidateCustomerImport(){IMP_REPORT=null;IMP_REVIEW=null;$('impConfirm').checked=false;$('impReportCard').classList.add('hidden')}
 function initImport(){
+  invalidateCustomerImport()
   const sel=$('impTenant')
   sel.innerHTML=TENANTS.map(t=>`<option value="${esc(t.id)}">${esc(t.name)}(${esc(t.id)})</option>`).join('')
   $('impReportCard').classList.add('hidden'); $('impResultCard').classList.add('hidden')
@@ -1074,6 +1153,7 @@ function splitCsvLine(line){
   return out.map(v=>v.trim())
 }
 function parseImportCsv(){
+  invalidateCustomerImport()
   const text=$('impCsv').value.replace(/\r\n/g,'\n').trim()
   IMP_ROWS=[]
   if(!text){$('impParsed').textContent='';return}
@@ -1083,7 +1163,7 @@ function parseImportCsv(){
   const idx={}
   IMP_FIELDS.forEach(([key,re])=>{ const i=header.findIndex(h=>re.test(h)); if(i>=0)idx[key]=i })
   if(idx.phone===undefined){$('impParsed').textContent='⚠ 表头里找不到「手机号」列,无法去重';return}
-  const money=(v)=>{const n=Number(String(v||'').replace(/[^\d.]/g,''));return Number.isFinite(n)?Math.round(n*100):0}
+  const money=(v)=>{const raw=String(v||'').trim().replace(/[¥￥$,，\s]/g,'');if(!raw)return 0;const n=Number(raw);if(!/^\d+(?:\.\d{1,2})?$/.test(raw)||!Number.isFinite(n))throw new Error('金额须为非负数，最多两位小数');return Math.round(n*100)}
   for(const line of lines.slice(1)){
     const cells=splitCsvLine(line)
     const pick=(k)=>idx[k]===undefined?'':(cells[idx[k]]||'')
@@ -1095,14 +1175,15 @@ function parseImportCsv(){
   }
   $('impParsed').textContent=`已解析 ${IMP_ROWS.length} 行`
 }
-function moneyC(c){return '¥'+((c||0)/100).toFixed(2)}
+function moneyC(c,tid=$('impTenant').value){const currency=TENANTS.find(t=>t.id===tid)?.currency;return (currency?currency+' ':'')+((c||0)/100).toFixed(2)}
 async function runImportDry(){
-  parseImportCsv()
+  try{parseImportCsv()}catch(e){toast(e.message);return}
   if(!IMP_ROWS.length){toast('没有解析到数据行');return}
-  const tid=$('impTenant').value
+  const tid=$('impTenant').value,csv=$('impCsv').value,rows=IMP_ROWS.slice()
   try{
-    const r=await api(`/platform/tenants/${tid}/import/customers`,{method:'POST',body:JSON.stringify({rows:IMP_ROWS,dryRun:true})})
-    IMP_REPORT=r
+    const r=await api(`/platform/tenants/${tid}/import/customers`,{method:'POST',body:JSON.stringify({rows,dryRun:true})})
+    if(tid!==$('impTenant').value||csv!==$('impCsv').value)return
+    IMP_REPORT=r;IMP_REVIEW={tid,csv,rows}
     $('impReport').innerHTML=`
       <div class="row" style="gap:22px;margin-bottom:10px">
         <div><div class="muted">新建顾客</div><b style="font-size:20px">${r.toCreate}</b></div>
@@ -1122,13 +1203,16 @@ async function runImportDry(){
   }catch(e){toast(e.message)}
 }
 async function runImportExec(){
-  if(!IMP_REPORT){toast('先试跑一次');return}
+  if(!IMP_REPORT||!IMP_REVIEW||IMP_REVIEW.tid!==$('impTenant').value||IMP_REVIEW.csv!==$('impCsv').value){invalidateCustomerImport();toast('门店或内容已变化，请重新试跑');return}
   if(!$('impConfirm').checked){toast('请先勾选「商家已书面确认期初余额总额」');return}
-  const tid=$('impTenant').value
-  if(!confirm(`确认把 ${IMP_REPORT.toCreate} 个新顾客 + ${IMP_REPORT.toUpdate} 个已有顾客写入「${tid}」,期初余额合计 ${moneyC(IMP_REPORT.balanceSumCents)}?`))return
+  const tid=$('impTenant').value,reviewed=IMP_REVIEW,report=IMP_REPORT
+  if(!await UIDialog.confirm(`确认把 ${IMP_REPORT.toCreate} 个新顾客 + ${IMP_REPORT.toUpdate} 个已有顾客写入「${tid}」,期初余额合计 ${moneyC(IMP_REPORT.balanceSumCents)}?`))return
+  if(IMP_REVIEW!==reviewed||tid!==$('impTenant').value||reviewed.csv!==$('impCsv').value){toast('门店或内容已变化，请重新试跑');return}
+  invalidateCustomerImport()
   try{
-    const r=await api(`/platform/tenants/${tid}/import/customers`,{method:'POST',body:JSON.stringify({rows:IMP_ROWS,dryRun:false,confirmBalanceCents:IMP_REPORT.balanceSumCents})})
-    $('impResult').innerHTML=`<p>新建 <b>${r.created}</b> 人 · 更新 <b>${r.updated}</b> 人 · 期初余额写入 <b>${moneyC(r.openingWrittenCents)}</b>(历史桶,不计入商家收入)${r.conflicts.length?` · 冲突 <b style="color:var(--danger)">${r.conflicts.length}</b> 条未写入`:''}</p>`
+    const r=await api(`/platform/tenants/${tid}/import/customers`,{method:'POST',body:JSON.stringify({rows:reviewed.rows,dryRun:false,confirmBalanceCents:report.balanceSumCents})})
+    if(tid!==$('impTenant').value){toast('原选门店导入完成，请切回查看');return}
+    $('impResult').innerHTML=`<p>新建 <b>${r.created}</b> 人 · 更新 <b>${r.updated}</b> 人 · 期初余额写入 <b>${moneyC(r.openingWrittenCents,tid)}</b>(历史桶,不计入商家收入)${r.conflicts.length?` · 冲突 <b style="color:var(--danger)">${r.conflicts.length}</b> 条未写入`:''}</p>`
     $('impResultCard').classList.remove('hidden')
     toast('导入完成')
   }catch(e){toast(e.message)}

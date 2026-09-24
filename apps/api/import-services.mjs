@@ -50,8 +50,11 @@ export function mapHeaders(headers = []) {
 }
 
 const yuanToCents = (v) => {
-  const n = Number(String(v ?? '').replace(/[^\d.]/g, ''))
-  return Number.isFinite(n) ? Math.round(n * 100) : 0
+  const raw=String(v??'').trim().replace(/[¥￥$,，\s]/g,'')
+  if(!raw)return 0
+  if(!/^\d+(?:\.\d{1,2})?$/.test(raw))return NaN
+  const amount=Math.round(Number(raw)*100)
+  return Number.isSafeInteger(amount)?amount:NaN
 }
 
 export function createServiceImport({ db, apiError, randomId, iso, categoryList, json, readBody }) {
@@ -84,6 +87,9 @@ export function createServiceImport({ db, apiError, randomId, iso, categoryList,
       if (!cat) {
         report.blocked.push({ line, name, reason: `🔴 大类「${catRaw}」不在本店大类字典里(现有:${cats.map((c) => c.name).join('/') || '一个都没有'})`, kind: 'UNKNOWN_CATEGORY' })
         return
+      }
+      if(['price','sharePrice','memberPrice','coursePrice','deposit'].some(k=>!Number.isFinite(yuanToCents(at(k))))) {
+        report.blocked.push({line,name,reason:'金额须为非负数且最多两位小数，请核对本行价格和定金',kind:'INVALID_MONEY'});return
       }
       const priceCents = yuanToCents(at('price'))
       if (!priceCents) { report.blocked.push({ line, name, reason: '缺价格或价格不是数字', kind: 'NO_PRICE' }); return }

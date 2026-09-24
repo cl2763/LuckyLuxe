@@ -4,21 +4,21 @@
 import { readFileSync } from 'node:fs'
 const html = readFileSync(new URL('../web/platform.html', import.meta.url), 'utf8')
 const grab = (name) => {
-  const i = html.indexOf(`async function ${name}(`)
+  const i = html.indexOf(`function ${name}(`)
   if (i < 0) throw new Error(`找不到 ${name}`)
   let d = 0, j = html.indexOf('{', i)
   for (let k = j; k < html.length; k++) { if (html[k] === '{') d++; else if (html[k] === '}') { d--; if (!d) { j = k; break } } }
-  return html.slice(i, j + 1)
+  return (html.slice(i-6,i)==='async '?'async ':'')+html.slice(i, j + 1)
 }
 let calls = [], toasts = [], confirmRet = true
 const ctx = {
   api: async (u, o) => { calls.push({ u, body: JSON.parse(o.body) }); return {} },
-  toast: (m) => toasts.push(m), confirm: () => confirmRet, loadBilling: () => {},
+  toast: (m) => toasts.push(m), UIDialog: {confirm:async()=>confirmRet}, loadBilling: () => {},
   _billTenants: [{ id: 'perp', name: '永久店', planExpiresAt: null },
-                 { id: 'norm', name: '普通店', planExpiresAt: '2027-03-01T23:59:00.000Z' }],
+                 { id: 'norm', name: '普通店', timezone:'UTC', planExpiresAt: '2027-03-01T23:59:00.000Z' }],
 }
 const fns = {}
-for (const n of ['extend', 'setExpiry', 'setPerpetual']) {
+for (const n of ['storeDate', 'extend', 'setExpiry', 'setPerpetual']) {
   fns[n] = new Function('ctx', `with(ctx){ ${grab(n)}; return ${n} }`)(ctx)
   ctx[n] = fns[n]
 }
@@ -54,5 +54,10 @@ console.log('\n── setPerpetual:只传 perpetual:true ──')
 reset(); await fns.setPerpetual.call(ctx, 'norm')
 ok(calls.length === 1 && calls[0].body.perpetual === true && calls[0].body.planExpiresAt === undefined,
    '只传 perpetual:true,不带空串')
+
+reset(); ctx._billTenants.push({id:'toronto',timezone:'America/Toronto',planExpiresAt:'2030-11-01T03:59:00.000Z'})
+await fns.extend.call(ctx,'toronto','month')
+ok(calls[0]?.body?.planExpiresAt==='2030-11-30','多伦多10月31日顺延一月夹到11月30日，不随UTC偏移')
+ok(fns.storeDate('2030-10-08T03:59:00.000Z','America/Toronto')==='2030-10-07','授权日期回显按门店时区')
 console.log(`\n  ${pass} 过 · ${fail} 红`)
-process.exit(fail ? 1 : 0)
+process.exitCode=fail?1:0

@@ -42,7 +42,17 @@ const sleep = (ms) => new Promise((r) => setTimeout(r, ms))
 
 const { stubSessionKeyFor, encryptPhonePayloadForStub, decryptWechatPhone } = await import('./wechat-phone.mjs')
 const { stubJsCode2SessionResponse } = await import('./wechat-code-stub.mjs')
-const { needsPhone } = await import('./mini-phone.mjs')
+const { needsPhone, resolveLoginPhone } = await import('./mini-phone.mjs')
+
+const phoneOptions = {body:{phone:'13800001234'},scopeName:'production',appid:'test-app',openid:'test-user',apiError:(status,code,message)=>Object.assign(new Error(message),{status,code})}
+check('生产登录不以明文手机号认领已有顾客',await resolveLoginPhone(phoneOptions)==='')
+const verifiedOptions={...phoneOptions,body:{phone:'13900000000',phoneCode:'one-use'},fetchPhone:async()=>({ok:true,data:{phone_info:{purePhoneNumber:'13800001234',watermark:{appid:'test-app'}}}})}
+check('微信验证号码覆盖客户端伪造号码',await resolveLoginPhone(verifiedOptions)==='13800001234')
+let wrongApp=false,failedPhone=false
+try{await resolveLoginPhone({...verifiedOptions,appid:'other-app'})}catch(e){wrongApp=e.code==='WECHAT_APPID_MISMATCH'}
+try{await resolveLoginPhone({...verifiedOptions,fetchPhone:async()=>({ok:true,data:{errcode:40029}})})}catch(e){failedPhone=e.code==='WECHAT_PHONE_FAILED'}
+check('其他小程序手机号凭据被拒',wrongApp)
+check('失效授权不降级成明文手机号',failedPhone)
 
 /* ── ㋐1 替身的 key 必须是确定的 ── */
 const k1 = stubJsCode2SessionResponse('stub:zhen-a', 'ci').session_key
@@ -282,6 +292,18 @@ try {
       noBody?.user?.avatarUrl === '', `下发=${JSON.stringify(noBody?.user?.avatarUrl)}`)
 
     /* ㋐9 未登录 */
+    const codeGood = await bindPhone(tokBad, { phoneCode: `stub-phone:${oidBad}:13800004567` })
+    const codeData = await codeGood.json()
+    check('D228 手机号组件 code 新路绑定成功', codeGood.status === 200 && codeData.phone === '13800004567' && codeData.needPhone === false)
+    const newRead = await (await login(oidBad)).json()
+    check('D228 新路落库且再次登录不再问号', phoneInDb(uidBad).phone === '13800004567' && newRead.user.phone === '13800004567' && newRead.needPhone === false)
+    const codeBad = await bindPhone(tokBad, { phoneCode: 'stub-phone-error:40001' })
+    check('D228 腾讯错误必须拒绝，不能伪装成功', codeBad.status === 400)
+    const codeCross = await bindPhone(tokBad, { phoneCode: `stub-phone:${oidOther}:13800009999` })
+    check('D228 手机号凭证与当前微信身份不匹配必须拒绝', codeCross.status === 400)
+    const afterBad = await (await login(oidBad)).json()
+    check('D228 两种失败均不覆盖已绑定手机号', afterBad.user.phone === '13800004567')
+
     const resAnon = await fetch(`${BASE}/auth/wechat/mini-phone`,
       { method: 'POST', headers: H, body: JSON.stringify({ code: `stub:${oidBad}`, ...pGood }) })
     check('㋐9 未登录 → 401(绑号写的是自己的档案,不许匿名写)', resAnon.status === 401, `status=${resAnon.status}`)

@@ -1,3 +1,4 @@
+import { merchantIdentity } from './store-identity.mjs'
 /* D197 第一段 · 新店配置进度五步灯(店主 11s补 §二.3 · 11t §三,2026-09-23)
  *
  * ══ 案由 ══
@@ -113,8 +114,8 @@ export function createOnboardingSteps(deps) {
       /* D197 第一段:概览原来只看「有没有价目表」一件事,现在连五步进度一起下发。
          收的是「不是演示店」而非 kind='real' —— 测试库建的店 kind='test',写死 real 会整批漏掉(理由见 onboarding-steps.mjs)。 */
       const progress = db.prepare("SELECT id, name FROM tenants WHERE status = 'active' AND COALESCE(kind,'real') <> 'demo'").all()
-        .map((t) => ({ id: t.id, name: t.name, ...stepsOf(t.id) }))
-      return j(res, 200, { monthBookings, pendingConfig: pendingConfig.map((r) => ({ id: r.id, name: r.name })), progress })
+        .map((t) => ({ id: t.id, name: merchantIdentity(db, t.id).storeName, ...stepsOf(t.id) }))
+      return j(res, 200, { monthBookings, pendingConfig: pendingConfig.map((r) => ({ id: r.id, name: merchantIdentity(db, r.id).storeName })), progress })
     }
     return null
   }

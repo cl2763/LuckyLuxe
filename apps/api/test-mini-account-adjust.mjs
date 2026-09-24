@@ -107,7 +107,7 @@ check('① 黄条句后端给(bonusWarning),前端不自己算赠送', aa.includ
 const tid = `maa-${RUN}`
 if ((await request('/platform/tenants', { method: 'POST', body: JSON.stringify({ id: tid, name: `小程序退卡店${RUN}`, plan: 'chain' }) })).status !== 201) throw new Error('建店失败')
 const H = { 'x-admin-tenant-id': tid, 'x-tenant-id': tid }
-const imp = (await request(`/platform/tenants/${tid}/import/customers`, { method: 'POST', body: JSON.stringify({ dryRun: false, rows: [{ name: `退卡客${RUN}`, phone: `137${RUN.slice(-8)}` }] }) })).data
+const imp = (await request(`/platform/tenants/${tid}/import/customers`, { method: 'POST', body: JSON.stringify({ dryRun: false, rows: [{ name: `退卡客${RUN}`, phone: `137${String(parseInt(RUN,36)).slice(-8)}` }] }) })).data
 const userId = imp.users[0].userId
 /* 🔴 J-60 第一款(夜13 §五 降账 5 处)· 这五处原来是**直连库贴微信绑定**:
    `db.prepare('UPDATE users SET wechat_open_id = ? WHERE id = ?')` ——
@@ -118,7 +118,7 @@ const userId = imp.users[0].userId
 const { bindWechatViaFrontDoor } = await import('./customer-login-fixture.mjs')
 const { DatabaseSync } = await import('node:sqlite')
 const db = new DatabaseSync(process.env.TEST_DB_PATH || (() => { throw new Error('需要 TEST_DB_PATH') })())
-await bindWechatViaFrontDoor({ base: BASE_URL, tenantId: tid, userId, phone: `137${RUN.slice(-8)}`, tag: `maa-${RUN}` })
+await bindWechatViaFrontDoor({ base: BASE_URL, tenantId: tid, userId, phone: `137${String(parseInt(RUN,36)).slice(-8)}`, tag: `maa-${RUN}` })
 check('② 前置:顾客建好并绑定', (await request('/admin/stored-value/recharge', { method: 'POST', body: JSON.stringify({ userId, amountCents: 100000, bonusCents: 10000, payChannel: 'cash', note: '夹具:充1000送100' }) }, PLATFORM, H)).status === 201)
 
 const facts1 = (await request(`/admin/account-adjust/facts?userId=${userId}`, {}, PLATFORM, H)).data.facts
@@ -160,9 +160,9 @@ if (staffLg?.auth) {
 /* ===== ④ 裁定2(店主 08-30d 准开口):储值行冲销 · 合同五条逐条验 ===== */
 {
   const today = (await request('/admin/store-clock', {}, PLATFORM, H)).data.today
-  const imp2 = (await request(`/platform/tenants/${tid}/import/customers`, { method: 'POST', body: JSON.stringify({ dryRun: false, rows: [{ name: `冲销客${RUN}`, phone: `136${RUN.slice(-8)}` }] }) })).data
+  const imp2 = (await request(`/platform/tenants/${tid}/import/customers`, { method: 'POST', body: JSON.stringify({ dryRun: false, rows: [{ name: `冲销客${RUN}`, phone: `136${String(parseInt(RUN,36)).slice(-8)}` }] }) })).data
   const u2 = imp2.users[0].userId
-  await bindWechatViaFrontDoor({ base: BASE_URL, tenantId: tid, userId: u2, phone: `136${RUN.slice(-8)}`, tag: `rev-${RUN}` })
+  await bindWechatViaFrontDoor({ base: BASE_URL, tenantId: tid, userId: u2, phone: `136${String(parseInt(RUN,36)).slice(-8)}`, tag: `rev-${RUN}` })
   check('④ 夹具:错记一笔 充500赠50(现金)', (await request('/admin/stored-value/recharge', { method: 'POST', body: JSON.stringify({ userId: u2, amountCents: 50000, bonusCents: 5000, payChannel: 'cash' }) }, PLATFORM, H)).status === 201)
   const f0 = (await request(`/admin/account-adjust/facts?userId=${u2}`, {}, PLATFORM, H)).data.facts
   check('④ 冲销前四数:实付 500 / 赠送 50 / 余额 550', f0.paidCents === 50000 && f0.bonusCents === 5000 && f0.balanceCents === 55000, JSON.stringify(f0).slice(0, 100))
@@ -202,9 +202,9 @@ if (staffLg?.auth) {
   check('④ 幂等:再冲同一笔 → 400 ALREADY_REVERSED', (await request(`/admin/stored-value/txns/${rcRow.id}/reverse`, { method: 'POST', body: JSON.stringify({ reason: 'CI 夹具:冲销口径回归' }) }, PLATFORM, H)).data?.error?.code === 'ALREADY_REVERSED')
 
   /* 裁定A(08-30f):前置闸=双水位证明 —— 实付余额≥该笔实付 且 赠送余额≥该笔赠送 */
-  const imp3 = (await request(`/platform/tenants/${tid}/import/customers`, { method: 'POST', body: JSON.stringify({ dryRun: false, rows: [{ name: `动过钱客${RUN}`, phone: `135${RUN.slice(-8)}` }] }) })).data
+  const imp3 = (await request(`/platform/tenants/${tid}/import/customers`, { method: 'POST', body: JSON.stringify({ dryRun: false, rows: [{ name: `动过钱客${RUN}`, phone: `135${String(parseInt(RUN,36)).slice(-8)}` }] }) })).data
   const u3 = imp3.users[0].userId
-  await bindWechatViaFrontDoor({ base: BASE_URL, tenantId: tid, userId: u3, phone: `135${RUN.slice(-8)}`, tag: `rev3-${RUN}` })
+  await bindWechatViaFrontDoor({ base: BASE_URL, tenantId: tid, userId: u3, phone: `135${String(parseInt(RUN,36)).slice(-8)}`, tag: `rev3-${RUN}` })
   await request('/admin/stored-value/recharge', { method: 'POST', body: JSON.stringify({ userId: u3, amountCents: 30000, payChannel: 'cash' }) }, PLATFORM, H)
   const tx3 = (await request(`/admin/stored-value/txns?month=${today.slice(0, 7)}`, {}, PLATFORM, H)).data.txns.find((t) => t.userId === u3 && t.type === 'recharge')
   await request('/admin/stored-value/refund', { method: 'POST', body: JSON.stringify({ userId: u3, amountCents: 1000, payChannel: 'cash', reason: '动一分钱', requestId: `rv3-${RUN}` }) }, PLATFORM, H)
@@ -213,9 +213,9 @@ if (staffLg?.auth) {
     gate.status === 400 && gate.data?.error?.message === '余额已不足以证明这笔未消费,请走退卡。', JSON.stringify(gate.data).slice(0, 120))
 
   /* 裁定A 放宽生效证明:旧保守闸会拒(之后动过钱),双水位闸放行(两侧仍各自足额) */
-  const imp4 = (await request(`/platform/tenants/${tid}/import/customers`, { method: 'POST', body: JSON.stringify({ dryRun: false, rows: [{ name: `放宽客${RUN}`, phone: `134${RUN.slice(-8)}` }] }) })).data
+  const imp4 = (await request(`/platform/tenants/${tid}/import/customers`, { method: 'POST', body: JSON.stringify({ dryRun: false, rows: [{ name: `放宽客${RUN}`, phone: `134${String(parseInt(RUN,36)).slice(-8)}` }] }) })).data
   const u4 = imp4.users[0].userId
-  await bindWechatViaFrontDoor({ base: BASE_URL, tenantId: tid, userId: u4, phone: `134${RUN.slice(-8)}`, tag: `rev4-${RUN}` })
+  await bindWechatViaFrontDoor({ base: BASE_URL, tenantId: tid, userId: u4, phone: `134${String(parseInt(RUN,36)).slice(-8)}`, tag: `rev4-${RUN}` })
   await request('/admin/stored-value/recharge', { method: 'POST', body: JSON.stringify({ userId: u4, amountCents: 10000, bonusCents: 5000, payChannel: 'cash' }) }, PLATFORM, H)
   const tx4 = (await request(`/admin/stored-value/txns?month=${today.slice(0, 7)}`, {}, PLATFORM, H)).data.txns.find((t) => t.userId === u4 && t.type === 'recharge')
   await request('/admin/stored-value/recharge', { method: 'POST', body: JSON.stringify({ userId: u4, amountCents: 20000, payChannel: 'cash' }) }, PLATFORM, H)
@@ -225,9 +225,9 @@ if (staffLg?.auth) {
     relax.status === 201 && relax.data.reversedAmountCents === 10000 && relax.data.reversedBonusCents === 5000, JSON.stringify(relax.data).slice(0, 120))
 
   /* 裁定A 判据刀②的常驻形:构造「总余额足、赠送侧不足」——只验总余额的闸会放行=打负(变异刀①打这里) */
-  const imp5 = (await request(`/platform/tenants/${tid}/import/customers`, { method: 'POST', body: JSON.stringify({ dryRun: false, rows: [{ name: `侧亏客${RUN}`, phone: `133${RUN.slice(-8)}` }] }) })).data
+  const imp5 = (await request(`/platform/tenants/${tid}/import/customers`, { method: 'POST', body: JSON.stringify({ dryRun: false, rows: [{ name: `侧亏客${RUN}`, phone: `133${String(parseInt(RUN,36)).slice(-8)}` }] }) })).data
   const u5 = imp5.users[0].userId
-  await bindWechatViaFrontDoor({ base: BASE_URL, tenantId: tid, userId: u5, phone: `133${RUN.slice(-8)}`, tag: `rev5-${RUN}` })
+  await bindWechatViaFrontDoor({ base: BASE_URL, tenantId: tid, userId: u5, phone: `133${String(parseInt(RUN,36)).slice(-8)}`, tag: `rev5-${RUN}` })
   await request('/admin/stored-value/recharge', { method: 'POST', body: JSON.stringify({ userId: u5, amountCents: 10000, bonusCents: 10000, payChannel: 'cash' }) }, PLATFORM, H)
   const tx5 = (await request(`/admin/stored-value/txns?month=${today.slice(0, 7)}`, {}, PLATFORM, H)).data.txns.find((t) => t.userId === u5 && t.type === 'recharge')
   await request('/admin/stored-value/recharge', { method: 'POST', body: JSON.stringify({ userId: u5, amountCents: 50000, payChannel: 'cash' }) }, PLATFORM, H)

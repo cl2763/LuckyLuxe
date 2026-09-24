@@ -1,3 +1,8 @@
+import {writeServiceNote} from './service-note-write.mjs'
+import { createSettlementReadAccess } from './settlement-read-access.mjs'
+import { createSettlementAccess } from './settlement-access.mjs'
+import { moveBooking, rescheduleUseCount } from './booking-reschedule.mjs'
+import { readAiManualOverride, writeAiManualOverride } from './ai-manual-override.mjs'
   /* D127 闸:比的是这张单要写进去的那个租户(非 currentTenantId);「还没归属」与「属于别家」是两个状态,只拒后者。见 ./tenant-profile.mjs */
 import { createServer } from 'node:http'
 import { AsyncLocalStorage } from 'node:async_hooks'
@@ -126,7 +131,7 @@ const APP_TIMEZONE = process.env.APP_TIMEZONE || 'America/Toronto'
 process.env.TZ = APP_TIMEZONE
 
 const __dirname = dirname(fileURLToPath(import.meta.url))
-const { legacyScope, scopeOf, isProductionEnv, demoLoginAllowed, treatAsReal } = await import('./data-scope.mjs'); const { requireMiniTokenSecret, miniSecretIsExplicit } = await import('./mini-token-secret.mjs'); const { publishOwnerToken } = await import('./owner-token.mjs'); const { fetchJsCode2Session, isStubScope } = await import('./wechat-code-stub.mjs'); const { intakeCustomerForDirectBooking } = await import('./write-intake.mjs'); const { bindMiniPhone, needsPhone } = await import('./mini-phone.mjs')
+const { legacyScope, scopeOf, isProductionEnv, demoLoginAllowed, treatAsReal } = await import('./data-scope.mjs'); const { requireMiniTokenSecret, miniSecretIsExplicit } = await import('./mini-token-secret.mjs'); const { publishOwnerToken } = await import('./owner-token.mjs'); const { fetchJsCode2Session, isStubScope } = await import('./wechat-code-stub.mjs'); const { intakeCustomerForDirectBooking } = await import('./write-intake.mjs'); const { bindMiniPhone, needsPhone, resolveLoginPhone } = await import('./mini-phone.mjs')
 const workspaceRoot = join(__dirname, '..', '..')
 const webRoot = join(workspaceRoot, 'apps', 'web')
 const assetRoot = join(workspaceRoot, 'miniprogram', 'assets')
@@ -178,7 +183,7 @@ const IS_PRODUCTION = isProductionEnv(); const TREAT_AS_REAL = treatAsReal({ dat
    演示登录/演示注册/演示种子数据全走这一个判据。生产也绝不建测试账号(测试档案只在沙箱库)。 */
 const DEMO_LOGIN_ALLOWED = demoLoginAllowed({ dataDir })   // 裁#90:改「或」不改「换」——环境变量说是生产 **或** 库域不是 ci/sandbox,任一成立就关;整段在 ./data-scope.mjs
 // 多租户:请求级租户上下文。商家端 /admin 进入时按登录账号的租户 enterWith;
-// 顾客/公开路径不设上下文 → 回退默认租户(行为不变)。所有用 currentTenantId() 的模块自动按租户走。
+// 商家按登录会话、顾客按校验通过的进店标识设置上下文；时区与规则均按本店计算。
 const DEFAULT_TENANT_ID = process.env.DEFAULT_TENANT_ID || 'lucky-luxe'
 const tenantContext = new AsyncLocalStorage()
 function currentTenantId() {
@@ -189,7 +194,7 @@ function currentTenantId() {
 /* 顾客侧租户闸(D132 口径④)搬去 `./tenant-gate.mjs`(公约②:动哪个领域就把该领域搬出去)。
    `validTenantId` 仍可回落(后台/平台也在用);**不许回落的是 `resolveTenant` 那一层**(顾客侧)。 */
 const { validTenantId, resolveTenant, tenantFallbackTally } =
-  createTenantGate({ db, apiError, defaultTenantId: DEFAULT_TENANT_ID })
+  createTenantGate({ db, apiError, defaultTenantId: DEFAULT_TENANT_ID, onResolved: tenantId => tenantContext.enterWith({ tenantId }) })
 
 // 套餐与功能开关（留接口纪律 #7）：套餐默认值 + 商户覆盖项（试用/加购）合并。
 function getEntitlements(tenantId = DEFAULT_TENANT_ID) {
@@ -217,6 +222,8 @@ function getEntitlements(tenantId = DEFAULT_TENANT_ID) {
       expiresAt: row.expires_at || null
     }
   }
+  const aiManual = readAiManualOverride(db, tenantId)
+  if (aiManual) features.ai_customer_service = aiManual
   const latestPlanRequest = db.prepare(`
     SELECT target_plan AS targetPlan, request_type AS requestType, status, created_at AS createdAt
     FROM plan_change_requests WHERE tenant_id = ? ORDER BY created_at DESC, rowid DESC LIMIT 1
@@ -329,11 +336,13 @@ function aiAddonState(tenantId) {
   // 2026-08-07:有权限行但没有到期日 = 长期开通(体验店/内部店),既不是试用也不是付费订阅
   const isUnlimited = Boolean(row) && !row.expires_at && Boolean(row.enabled)
   return {
-    enabled: Boolean(f?.enabled),
+    enabled: hasAi(tenantId),
+    label: hasAi(tenantId) ? 'AI 包:已开通' : 'AI 包:未开通',
+    manualOverride: f?.source === 'manual',
     includedInPlan: f?.source === 'plan',
     unlimited: isUnlimited,
-    source: f?.source === 'plan' ? 'plan' : (row ? (isUnlimited ? 'unlimited' : (isPaid ? 'paid' : 'trial')) : 'none'),
-    expiresAt: row?.expires_at || null,
+    source: f?.source === 'manual' ? 'manual' : (!f?.enabled ? (f?.expiresAt && new Date(f.expiresAt).getTime() <= Date.now() ? 'expired' : 'none') : (f?.source === 'plan' ? 'plan' : (isUnlimited ? 'unlimited' : (isPaid ? 'paid' : 'trial')))),
+    expiresAt: f?.expiresAt || null,
     trialAvailable: !trialRow && !pendingTrial && f?.source !== 'plan',
     trialPending: Boolean(pendingTrial),
     trialPendingAt: pendingTrial?.createdAt || null,
@@ -1350,7 +1359,12 @@ function requireAdmin(req) {
   if (auth === `Bearer ${OWNER_TOKEN}`) {
     // 平台主钥匙可显式指定要操作哪个租户(平台侧运维脚本用:体验店种子注入、代商家配价目表)。
     // 不带这个头时行为与以前完全一致(=默认租户),所以对现有调用零影响;主钥匙本来就是最高信任根。
-    const asTenant = validTenantId(req.headers['x-admin-tenant-id'] || '')
+    const adminTarget = String(req.headers['x-admin-tenant-id'] || '').trim()
+    const publicTarget = String(req.headers['x-tenant-id'] || '').trim()
+    if (adminTarget && publicTarget && adminTarget !== publicTarget) throw apiError(400, 'TENANT_REQUIRED', '两个门店标识不一致。')
+    const rawTarget = adminTarget || publicTarget
+    if (rawTarget && !db.prepare("SELECT 1 FROM tenants WHERE id=? AND status='active'").get(rawTarget)) throw apiError(400, 'TENANT_REQUIRED', '目标门店无效，不能回落默认店。')
+    const asTenant = rawTarget || DEFAULT_TENANT_ID
     return { role: 'owner', provider: 'demo-token', technicianId: null, tenantId: asTenant }
   }
   const token = auth.startsWith('Bearer ') ? auth.slice(7) : ''
@@ -5207,8 +5221,8 @@ function resolveUserByUnionId(unionId, tenantId = currentTenantId()) { return un
 
 function serializeBooking(row, lang = 'zh') {
   const service = row.service_id ? getService(row.service_id) : null
-  const startLocal = localParts(row.appointment_start)
-  const endLocal = localParts(row.appointment_end)
+  const startLocal = localParts(row.appointment_start, tenantTimezone(row.tenant_id))
+  const endLocal = localParts(row.appointment_end, tenantTimezone(row.tenant_id))
   /* D127 第二道闸:读口不能指望写口(存量脏行是既成事实)——按 bookings.tenant_id 连,连不上不下发 user 对象。见 ./tenant-profile.mjs */
   const user = row.user_id ? db.prepare('SELECT id, display_name, phone, email, wechat_open_id, google_id FROM users WHERE id = ? AND tenant_id = ?').get(row.user_id, row.tenant_id) : null
   return {
@@ -5355,7 +5369,7 @@ function groupSheetLinks(groupId, tenantId = currentTenantId()) {
     label: rows.length > 1 ? `服务确认单 ${i + 1}/${rows.length} · ${sheetStatusText(g.status)}` : `服务确认单 · ${sheetStatusText(g.status)}`,
     signedAt: g.signed_at,
     // 未签署份没有快照(点了走签字动线,不是看原件)
-    snapshotUrl: (g.status === 'signed' || g.status === 'amended') ? `/settlements/${encodeURIComponent(g.code)}/snapshot` : ''
+    snapshotUrl: (g.status === 'signed' || g.status === 'amended') ? settlementRead.url(g.code) : ''
   }))
 }
 
@@ -5675,7 +5689,7 @@ async function signInWechatMiniUser(body) {
     throw apiError(401, 'WECHAT_LOGIN_FAILED', data.errmsg || 'WeChat mini login failed.')
   }
   const incomingDisplayName = String(body.displayName || '').trim(); const incomingAvatarUrl = String(body.avatarUrl || '').trim().slice(0, 2048)   // 裁#94:头像跟着一起落库
-  const phone = String(body.phone || '').trim()
+  const phone = await resolveLoginPhone({ body, openid: data.openid, appid: WECHAT_MINI_APPID, secret: WECHAT_MINI_SECRET, scopeName: DATA_SCOPE_NAME, apiError })
   /* 会员=用户×店:这一整段的身份匹配都按**进的是哪家店**来找;
      找不到就在这家店新建一行(同一个微信在每家店各一份档案,互不相干)。 */
   const loginTenantEarly = validTenantId(body.tenantId)
@@ -5846,8 +5860,10 @@ function buildSlotStarts(start, durationMin) {
 }
 
 function totalDuration(type, baseDurationMin, bookingAddOns = []) {
-  if (type === 'LASH') return 120
-  return Math.max(120, baseDurationMin) + bookingAddOns.reduce((total, item) => total + Number(item.durationMin || 0), 0)
+  const base = Number(baseDurationMin)
+  const additions = bookingAddOns.map(item => Number(item.durationMin || 0))
+  if (!Number.isInteger(base) || base <= 0 || additions.some(n => !Number.isInteger(n) || n < 0)) throw apiError(400, 'INVALID_DURATION', '服务时长必须为正整数，加项时长不能为负数。')
+  return base + additions.reduce((total, n) => total + n, 0)
 }
 
 function publicCode() {
@@ -6233,11 +6249,13 @@ function createBooking(body, opts = {}) {
   /* 「未付定金」标只在本店真的收定金时才打 —— 没配定金规则(或金额算下来是 0)的店
      不该出现「标记已收定金」按钮(拍板 A 的 corner case 之一)。 */
   const directDepositCents = depositConfig.enabled ? depositAmountForService(service, depositConfig, bookingTenantId) : 0
-  const directUnpaid = opts.adminDirect && !opts.depositPaid && directDepositCents > 0 ? 1 : 0
   const retainCoverCents = retain ? Math.min(retain.amount_cents, Math.max(0, depositRequiredCents - depositWaivedCents)) : 0
-  const depositCents = opts.adminDirect ? 0 : Math.max(0, depositRequiredCents - depositWaivedCents - retainCoverCents)
-  const status = opts.adminDirect ? 'CONFIRMED' : (depositCents > 0 ? 'PENDING_PAYMENT' : 'CONFIRMED')
-  const paymentExpiresAt = (!opts.adminDirect && depositCents > 0) ? iso(addMinutes(new Date(), HOLD_MINUTES)) : null
+  const outstandingDepositCents = opts.adminDirect ? 0 : Math.max(0, depositRequiredCents - depositWaivedCents - retainCoverCents)
+  // 10f / P0：平台记账不代收。要求定金不等于已经收取，预约不等待未接通的支付。
+  const depositCents = opts.adminDirect ? 0 : retainCoverCents
+  const directUnpaid = opts.adminDirect ? (!opts.depositPaid && directDepositCents > 0 ? 1 : 0) : (outstandingDepositCents > 0 ? 1 : 0)
+  const status = 'CONFIRMED'
+  const paymentExpiresAt = null
   const waiveReason = depositWaivedCents > 0
     ? `${serializedUser.memberLevel} member deposit waived`
     : (retainCoverCents > 0 ? '上一次合规改期保留的定金已抵扣' : null)
@@ -6263,7 +6281,8 @@ function createBooking(body, opts = {}) {
     const taken = db.prepare(
       `SELECT starts_at FROM booking_slots WHERE technician_id = ? AND starts_at IN (${wanted.map(() => '?').join(',')})`
     ).all(input.technicianId, ...wanted)
-    if (taken.length) throw slotTakenError(input, opts, durationMin)
+    const overlaps = db.prepare('SELECT 1 FROM bookings b WHERE b.technician_id=? AND b.appointment_start<? AND b.appointment_end>? AND EXISTS (SELECT 1 FROM booking_slots bs WHERE bs.booking_id=b.id) LIMIT 1').get(input.technicianId,iso(end),iso(start))
+    if (taken.length || overlaps) throw slotTakenError(input, opts, durationMin)
     db.prepare(`
       INSERT INTO bookings
       (id, tenant_id, public_code, user_id, store_id, technician_id, service_id, status, appointment_start, appointment_end, addons_json, reference_images_json, source_channel, notes, service_price_cents, deposit_cents, deposit_required_cents, deposit_waived_cents, deposit_waive_reason, member_level_at_booking, final_due_cents, total_duration_min, payment_expires_at, direct_deposit_unpaid, created_at, updated_at, demo_seed)
@@ -6273,9 +6292,23 @@ function createBooking(body, opts = {}) {
     const slotStmt = db.prepare('INSERT INTO booking_slots (id, booking_id, technician_id, starts_at) VALUES (?, ?, ?, ?)')
     for (const slot of slots) slotStmt.run(randomId('slot'), bookingId, input.technicianId, iso(slot))
 
-    db.prepare('INSERT INTO payments (id, booking_id, provider, status, amount_cents, currency, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?)').run(randomId('pay'), bookingId, 'MOCK', depositCents > 0 ? 'REQUIRES_PAYMENT' : 'PAID', depositCents, tenantCurrencyCode(input.tenantId || DEFAULT_TENANT_ID), now, now)
-    db.prepare('INSERT INTO booking_status_history (id, booking_id, to_status, note, created_at) VALUES (?, ?, ?, ?, ?)').run(randomId('hist'), bookingId, status, depositCents > 0 ? 'Booking hold created pending deposit payment.' : 'Booking confirmed with member deposit waiver.', now)
-    if (retain && retainCoverCents > 0) consumeDepositRetain(retain.id, bookingId)
+    db.prepare('INSERT INTO payments (id, booking_id, provider, status, amount_cents, currency, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?)').run(randomId('pay'), bookingId, 'OFFLINE', directUnpaid ? 'REQUIRES_PAYMENT' : 'NOT_REQUIRED', opts.adminDirect ? (directUnpaid ? directDepositCents : 0) : outstandingDepositCents, tenantCurrencyCode(input.tenantId || DEFAULT_TENANT_ID), now, now)
+    db.prepare('INSERT INTO booking_status_history (id, booking_id, to_status, note, created_at) VALUES (?, ?, ?, ?, ?)').run(randomId('hist'), bookingId, status, directUnpaid ? 'Booking confirmed; deposit to be collected by the store.' : 'Booking confirmed; no outstanding deposit.', now)
+    if (retain && retainCoverCents > 0) {
+      const sourceReceipts = activeDepositReceipts(retain.source_booking_id, bookingTenantId).filter(r => !r.settled_settlement_id)
+      if (sourceReceipts.reduce((sum,r)=>sum+r.amount_cents,0) !== retain.amount_cents) throw apiError(409,'DEPOSIT_RECONCILIATION_REQUIRED','保留定金与实收记录不一致，请联系门店核对后再预约。')
+      db.prepare(`INSERT INTO deposit_receipts (id, tenant_id, booking_id, user_id, kind, amount_cents, pay_channel, reason, actor, created_at) VALUES (?, ?, ?, ?, 'receipt', ?, 'retain_carry', ?, 'system', ?)` ).run(randomId('dep'), bookingTenantId, bookingId, input.userId, retainCoverCents, `改期保留定金带出 · ${retain.id}`, now)
+      // 同一笔负债迁移到新预约：追加原收取的冲销留痕，不能两张预约各算一次。
+      for (const source of sourceReceipts) {
+        db.prepare(`INSERT INTO deposit_receipts (id, tenant_id, booking_id, user_id, kind, amount_cents, revoke_of, reason, actor, created_at) VALUES (?, ?, ?, ?, 'revoke', ?, ?, ?, 'system', ?)` ).run(randomId('dep'), bookingTenantId, retain.source_booking_id, input.userId, source.amount_cents, source.id, `改期定金转入预约 ${bookingId}（非退款）`, now)
+      }
+      consumeDepositRetain(retain.id, bookingId)
+      const remainder = retain.amount_cents - retainCoverCents
+      if (remainder > 0) {
+        db.prepare(`INSERT INTO deposit_receipts (id,tenant_id,booking_id,user_id,kind,amount_cents,pay_channel,reason,actor,created_at) VALUES (?,?,?,?,'receipt',?,'retain_carry',?,'system',?)`).run(randomId('dep'),bookingTenantId,retain.source_booking_id,input.userId,remainder,`改期定金部分抵扣，余额继续保留 · ${retain.id}`,now)
+        issueDepositRetain({tenantId:bookingTenantId,userId:input.userId,bookingId:retain.source_booking_id,amountCents:remainder,timesUsed:retain.times_used})
+      }
+    }
     if (input.bookingDraftId) {
       db.prepare("UPDATE booking_drafts SET status = 'BOOKING_CREATED', booking_id = ?, updated_at = ? WHERE id = ?")
         .run(bookingId, now, input.bookingDraftId)
@@ -6322,32 +6355,6 @@ function createBooking(body, opts = {}) {
 
   /* P3 事件钩:通知失败不许拦单(可用性>通知),但也不吞 —— 落日志有名有姓 */
   try { notifyScheduler.onBookingEvent({ event: 'created', bookingId }) } catch (error) { console.error('[notify] created 钩失败:', error.message) }
-
-  return serializeBooking(db.prepare('SELECT * FROM bookings WHERE id = ?').get(bookingId))
-}
-
-function confirmMockPayment(body) {
-  expireOldHolds()
-  const bookingId = body.bookingId
-  if (!bookingId) throw apiError(400, 'BAD_REQUEST', 'bookingId is required.')
-  const booking = db.prepare('SELECT * FROM bookings WHERE id = ?').get(bookingId)
-  if (!booking) throw apiError(404, 'NOT_FOUND', 'Booking not found.')
-  if (booking.status !== 'PENDING_PAYMENT') throw apiError(400, 'BAD_REQUEST', 'Only pending bookings can be paid.')
-  if (booking.payment_expires_at < iso(new Date())) throw apiError(400, 'BAD_REQUEST', 'Payment hold has expired.')
-
-  const now = iso(new Date())
-  db.exec('BEGIN IMMEDIATE')
-  try {
-    db.prepare("UPDATE payments SET status = 'PAID', transaction_id = ?, updated_at = ? WHERE booking_id = ? AND provider = 'MOCK'").run(`mock_${Date.now()}`, now, bookingId)
-    db.prepare("UPDATE bookings SET status = 'CONFIRMED', updated_at = ? WHERE id = ?").run(now, bookingId)
-    db.prepare("UPDATE booking_drafts SET status = 'PAID', updated_at = ? WHERE booking_id = ?").run(now, bookingId)
-    db.prepare("UPDATE quote_requests SET status = 'CLOSED', updated_at = ? WHERE draft_booking_id = ?").run(now, bookingId)
-    db.prepare('INSERT INTO booking_status_history (id, booking_id, from_status, to_status, note, created_at) VALUES (?, ?, ?, ?, ?, ?)').run(randomId('hist'), bookingId, 'PENDING_PAYMENT', 'CONFIRMED', 'Mock deposit payment confirmed.', now)
-    db.exec('COMMIT')
-  } catch (error) {
-    db.exec('ROLLBACK')
-    throw error
-  }
 
   return serializeBooking(db.prepare('SELECT * FROM bookings WHERE id = ?').get(bookingId))
 }
@@ -6757,7 +6764,7 @@ const notifyScheduler = createNotifyScheduler({
 const platformOps = createPlatformOps({
   db, apiError, randomId, iso, snapshotDb, financeSessions, adminPasswordHash, randomPassword,
   dbPath: join(dataDir, 'lucky-luxe.sqlite'), backupDir: join(dataDir, 'backups')
-, lampsOf: (tid) => onboardingSteps.lampsOf(tid)})
+, lampsOf: (tid) => onboardingSteps.lampsOf(tid), aiStateOf: aiAddonState})
 
 function financePasswordHash(password) {
   return createHash('sha256').update(`finance:${currentTenantId()}:${String(password)}`).digest('hex')
@@ -7159,8 +7166,8 @@ function setDepositConfig(tenantId, input = {}) {
 }
 
 // 线上支付通道是否已接通。没通之前任何对外文案都不许出现「在线支付定金」——
-// 通道接通后把 ONLINE_PAYMENT_READY 打开,文案自动切换,不用再改代码。
-const ONLINE_PAYMENT_READY = process.env.ONLINE_PAYMENT_READY === 'true'
+// 尚无真实支付提供方与验签回调；环境变量不能把占位实现宣称为接通。
+const ONLINE_PAYMENT_READY = false
 
 function depositPolicyText(config, tenantId = currentTenantId(), lang = 'zh') {
   if (config.displayMode === 'custom') {
@@ -7326,8 +7333,8 @@ function markDepositReceived({ booking, technicianId = '', payChannel = 'offline
       VALUES (?, ?, ?, ?, 'receipt', ?, NULLIF(?, ''), ?, ?, ?)`)
       .run(id, tenantId, booking.id, booking.user_id || null, amountCents, technicianId, payChannel, actor, now)
     // 预约上同步落金额并摘掉「未付定金」标 —— 结算时 computeSettlement 就能按它抵扣
-    db.prepare('UPDATE bookings SET deposit_cents = ?, direct_deposit_unpaid = 0, updated_at = ? WHERE id = ? AND tenant_id = ?')
-      .run(amountCents, now, booking.id, tenantId)
+    db.prepare('UPDATE bookings SET deposit_cents = ?, final_due_cents = MAX(0, service_price_cents - ?), direct_deposit_unpaid = 0, updated_at = ? WHERE id = ? AND tenant_id = ?')
+      .run(amountCents, amountCents, now, booking.id, tenantId)
     db.exec('COMMIT')
   } catch (error) { db.exec('ROLLBACK'); throw error }
   return { receipt: serializeDepositReceipt(db.prepare('SELECT * FROM deposit_receipts WHERE id = ?').get(id)), created: true }
@@ -7347,7 +7354,7 @@ function revokeDepositReceipt({ booking, reason = '', actor = 'admin' }) {
     db.prepare(`INSERT INTO deposit_receipts (id, tenant_id, booking_id, user_id, kind, amount_cents, revoke_of, reason, actor, created_at)
       VALUES (?, ?, ?, ?, 'revoke', ?, ?, ?, ?, ?)`)
       .run(id, tenantId, booking.id, booking.user_id || null, target.amount_cents, target.id, String(reason || '').slice(0, 200), actor, now)
-    db.prepare('UPDATE bookings SET deposit_cents = 0, direct_deposit_unpaid = 1, updated_at = ? WHERE id = ? AND tenant_id = ?')
+    db.prepare('UPDATE bookings SET deposit_cents = 0, final_due_cents = service_price_cents, direct_deposit_unpaid = 1, updated_at = ? WHERE id = ? AND tenant_id = ?')
       .run(now, booking.id, tenantId)
     db.exec('COMMIT')
   } catch (error) { db.exec('ROLLBACK'); throw error }
@@ -8671,7 +8678,7 @@ async function signSettlement(row, { signature, signedBy = '', strokes = [] }) {
   const fresh = db.prepare('SELECT * FROM settlements WHERE id = ?').get(row.id)
   return {
     settlement: serializeSettlement(fresh),
-    snapshot: { storage: fresh.snapshot_storage, url: fresh.snapshot_url, at: fresh.snapshot_at, bytes: snapshotSvg.length },
+    snapshot: { storage: fresh.snapshot_storage, url: settlementRead.url(fresh.code), at: fresh.snapshot_at, bytes: snapshotSvg.length },
     storedDeductedCents: needStored,
     groupAllSigned: db.prepare("SELECT COUNT(*) AS n FROM settlements WHERE group_id = ? AND status <> 'signed'").get(row.group_id).n === 0
   }
@@ -9975,8 +9982,8 @@ function renderSettlementSnapshotSvg(settlement, { strokes = [], signedAt = '' }
 <rect width="${W}" height="${H}" fill="#ffffff"/>
 <text x="40" y="60" class="store">${escapeXml(s.storeName)}</text>
 <text x="40" y="86" class="s">订单编号 ${escapeXml(s.code)}</text>
-<text x="40" y="106" class="s">${escapeXml(`${s.appointmentAt ? String(s.appointmentAt).slice(0, 16).replace('T', ' ') : ''}${s.servedPersonName ? ` · 被服务者：${s.servedPersonName}` : ''}`)}</text>
-<text x="40" y="126" class="s">签署时间 ${escapeXml(String(signedAt).slice(0, 19).replace('T', ' '))}</text>
+<text x="40" y="106" class="s">${escapeXml(`${s.appointmentAtText || ''}${s.servedPersonName ? ` · 被服务者：${s.servedPersonName}` : ''}`)}</text>
+<text x="40" y="126" class="s">签署时间 ${escapeXml(s.signedAtText || settlementStamp(signedAt, s.tenantId))}</text>
 <text x="${W - 200}" y="56" class="s">顾客签名：</text>
 <g transform="translate(${W - 200},64)">
   <rect width="160" height="90" fill="none" stroke="#e7ddd4" stroke-dasharray="3 3"/>
@@ -10023,7 +10030,7 @@ function customerBindShape(row) {
     customerBound: bound,
     // 绑定后徽标消失 → 后端直接给空串,前端 wx:if 一挂就没了
     bindBadgeText: bound ? '' : '新客 · 未绑定',
-    bindHintText: bound ? '' : '签字时请顾客扫码——签字与绑定小程序一步完成,账单自动存入她的小程序',
+    bindHintText: bound ? '' : '请将签署链接交给顾客核对；网页签字不自动绑定微信，绑定需真实授权。',
     memberCode: row.user_id ? memberCodeForUserId(row.user_id) : ''
   }
 }
@@ -10033,7 +10040,7 @@ function issueSignToken(settlement, { actor = 'admin', ttlHours = 24 } = {}) {
   const tenantId = settlement.tenant_id
   const now = new Date()
   db.prepare("UPDATE settlement_sign_tokens SET status = 'superseded' WHERE settlement_id = ? AND status = 'active'").run(settlement.id)
-  const token = `sg${randomId('').replace(/^_/, '')}${Math.random().toString(36).slice(2, 8)}`
+  const token = `sg_${randomUUID().replaceAll('-', '')}${randomUUID().replaceAll('-', '')}`
   const expiresAt = iso(new Date(now.getTime() + ttlHours * 3_600_000))
   db.prepare(`INSERT INTO settlement_sign_tokens (token, tenant_id, settlement_id, status, expires_at, created_by, created_at)
     VALUES (?, ?, ?, 'active', ?, ?, ?)`).run(token, tenantId, settlement.id, expiresAt, actor, iso(now))
@@ -10045,7 +10052,8 @@ function activeSignToken(settlementId) {
 }
 
 function signTokenUrl(token) {
-  return `${publicAppUrl()}/sign?t=${encodeURIComponent(token)}`
+  const tid=db.prepare('SELECT tenant_id FROM settlement_sign_tokens WHERE token=?').get(token)?.tenant_id
+  return `${publicAppUrl(tid)}/sign?t=${encodeURIComponent(token)}`
 }
 
 /* 屏 S3 状态行(规则④):等待顾客进入 → 顾客核对中 → 已签署。
@@ -10143,6 +10151,12 @@ function amendmentShape(row) {
   }
 }
 
+function settlementStamp(at, tenantId) {
+  if (!at) return ''
+  const p = localParts(new Date(at), tenantTimezone(tenantId))
+  return `${p.date} ${p.time.slice(0, 5)}`
+}
+
 function serializeSettlement(row, { includeSignature = false } = {}) {
   const items = db.prepare('SELECT * FROM settlement_items WHERE settlement_id = ? ORDER BY item_no ASC').all(row.id)
   const techs = db.prepare('SELECT st.*, t.name AS tech_name FROM settlement_technicians st LEFT JOIN technicians t ON t.id = st.technician_id WHERE st.settlement_id = ?').all(row.id)
@@ -10164,6 +10178,7 @@ function serializeSettlement(row, { includeSignature = false } = {}) {
     storeName: store?.name || '',
     storeAddress: store?.address || '',
     appointmentAt: booking?.appointment_start || null,
+    appointmentAtText: settlementStamp(booking?.appointment_start, row.tenant_id),
     currency: tenantCurrencyCodeOrNull(row.tenant_id),
     currencyDisplay: currencyDisplayOf(tenantCurrencyCodeOrNull(row.tenant_id)),
     servedPersonName: row.served_person_name || '',
@@ -10174,6 +10189,7 @@ function serializeSettlement(row, { includeSignature = false } = {}) {
     ...customerBindShape(row),
     /* 已签单右上角要显示**真实笔迹**(店主 2026-08-10)。早期单只存了姓名文本,
        快照只追加不可改 —— 前端据此决定是贴笔迹还是标「早期单 · 仅存文本」。 */
+    signatureUrl: row.snapshot_at ? settlementRead.url(row.code,'signature.png') : '',
     snapshotHasInk: Boolean(row.snapshot_inline
       ? /<path[^>]*d="M/.test(row.snapshot_inline)
       : row.snapshot_url),
@@ -10200,10 +10216,11 @@ function serializeSettlement(row, { includeSignature = false } = {}) {
     } : null,
     payIntent: row.pay_intent,
     signedAt: row.signed_at,
+    signedAtText: settlementStamp(row.signed_at, row.tenant_id),
     signatureName: row.signature_data ? (includeSignature ? row.signature_data : '(已签)') : null,
     disclaimerAccepted: Boolean(row.disclaimer_accepted),
     aftersalesStatus: row.aftersales_status || null,
-    snapshot: row.snapshot_at ? { storage: row.snapshot_storage, url: row.snapshot_url, at: row.snapshot_at } : null,
+    snapshot: row.snapshot_at ? { storage: row.snapshot_storage, url: settlementRead.url(row.code), at: row.snapshot_at } : null,
     perfAllocStatus: row.perf_alloc_status,
     items: items.map((i) => ({
       itemNo: i.item_no, kind: i.kind, serviceId: i.service_id, name: i.name_snapshot,
@@ -10312,6 +10329,9 @@ const conversationRoutes = createConversationRoutes({
   conversationRow: wecomRouting.conversationRow, redactConversation,
 })
 
+const settlementAccess = createSettlementAccess({db,apiError,requireCustomer,demoAllowed:()=>DEMO_LOGIN_ALLOWED})
+const settlementRead = createSettlementReadAccess({secret:WECHAT_MINI_TOKEN_SECRET,apiError,requireAdmin,writeAccess:settlementAccess,demoAllowed:()=>DEMO_LOGIN_ALLOWED})
+
 async function route(req, res) {
   if (req.method === 'OPTIONS') return json(res, 204, {})
   const url = new URL(req.url, `http://${req.headers.host}`)
@@ -10368,11 +10388,28 @@ async function route(req, res) {
       text: { zh: depositPolicyText(config, tid, 'zh'), en: depositPolicyText(config, tid, 'en') }
     })
   }
+  if(req.method==='GET'&&path.startsWith('/my/settlements/')&&path.endsWith('/document-link')){
+    const customer=requireCustomer(req),code=decodeURIComponent(path.split('/')[3]||'')
+    const row=db.prepare('SELECT * FROM settlements WHERE code=? AND user_id=?').get(code,customer.id)
+    if(!row||!row.snapshot_at)throw apiError(404,'NOT_FOUND','找不到本人的已签凭证。')
+    return json(res,200,{url:settlementRead.url(row.code)},{'cache-control':'no-store'})
+  }
+  if(req.method==='POST'&&path.startsWith('/my/settlements/')&&path.endsWith('/sign-link')){
+    const customer=requireCustomer(req)
+    const code=decodeURIComponent(path.split('/')[3]||'')
+    const row=db.prepare('SELECT * FROM settlements WHERE code=? AND user_id=?').get(code,customer.id)
+    if(!row)throw apiError(404,'NOT_FOUND','找不到本人的服务单。')
+    if(row.status!=='pending_sign')throw apiError(409,'SETTLEMENT_NOT_PENDING','这张单当前无需签署。')
+    const link=issueSignToken(row,{actor:'customer:'+customer.id})
+    return json(res,200,{url:signTokenUrl(link.token),expiresAt:link.expiresAt},{'cache-control':'no-store'})
+  }
   // 顾客签署页(小程序 / 网页同构):凭单号只读,不需要登录
   if (req.method === 'GET' && path.startsWith('/settlements/') && !path.startsWith('/settlements/by-token/') && !path.endsWith('/sign') && !path.endsWith('/snapshot') && !path.endsWith('/signature.svg') && !path.endsWith('/signature.png')) {
     const code = decodeURIComponent(path.split('/')[2] || '')
     const row = db.prepare('SELECT * FROM settlements WHERE code = ?').get(code)
     if (!row) throw apiError(404, 'NOT_FOUND', '找不到这张服务单。')
+    settlementRead.authorize(req,row,query)
+    res.setHeader('cache-control','no-store')
     const config = getDepositConfig(row.tenant_id)
     return json(res, 200, {
       settlement: serializeSettlement(row),
@@ -10391,6 +10428,7 @@ async function route(req, res) {
     const row = db.prepare('SELECT * FROM settlements WHERE code = ?').get(code)
     if (!row) throw apiError(404, 'NOT_FOUND', '找不到这张服务单。')
     const body = await readBody(req)
+    settlementAccess.authorize(req,row)
     return json(res, 200, setSettlementCoupon(row.id, String(body.grantId || ''), { by: 'customer' }))
   }
   // 签署快照(唯一凭证):COS 存的直接 302 过去,inline 的直接吐 SVG
@@ -10402,6 +10440,7 @@ async function route(req, res) {
     const code = decodeURIComponent(path.split('/')[2] || '')
     const row = db.prepare('SELECT * FROM settlements WHERE code = ?').get(code)
     if (!row) throw apiError(404, 'NOT_FOUND', '找不到这张服务单。')
+    settlementRead.authorize(req,row,query)
     const svg = row.snapshot_inline || ''
     const paths = [...svg.matchAll(/<path[^>]*d="([^"]+)"[^>]*>/g)].map((m) => m[1])
     const nums = paths.join(' ').match(/-?\d+(?:\.\d+)?/g)
@@ -10424,12 +10463,12 @@ async function route(req, res) {
          改走 ink-raster:纯 JS 画折线,天然透明,且不再依赖 librsvg 装没装。 */
       const png = inkToPng(paths, { x0, y0, w, h, width: Math.max(240, Math.round(w) * 3), strokeWidth: 2, color: '#241f1d' })
       if (png) {
-        res.writeHead(200, { 'content-type': 'image/png', 'content-length': png.length, 'cache-control': 'public, max-age=31536000, immutable' })
+        res.writeHead(200, { 'content-type': 'image/png', 'content-length': png.length, 'cache-control': 'private, no-store' })
         res.end(png)
         return
       }
     }
-    res.writeHead(200, { 'content-type': 'image/svg+xml; charset=utf-8', 'cache-control': 'public, max-age=31536000, immutable' })
+    res.writeHead(200, { 'content-type': 'image/svg+xml; charset=utf-8', 'cache-control': 'private, no-store' })
     res.end(out)
     return
   }
@@ -10441,6 +10480,7 @@ async function route(req, res) {
     const code = decodeURIComponent(path.split('/')[2] || '')
     const row = db.prepare('SELECT * FROM settlements WHERE code = ?').get(code)
     if (!row || !row.snapshot_at) throw apiError(404, 'NOT_FOUND', '这张单还没有签署快照。')
+    settlementRead.authorize(req,row,query)
     const svg = row.snapshot_inline || (row.snapshot_url ? await fetchSnapshotSvg(row.snapshot_url) : '')
     // ?format=svg:留一个看原文的口(对账/排查/回归断言用;默认一律 PNG)
     if (String(query.format || '') === 'svg' && svg) {
@@ -10450,13 +10490,8 @@ async function route(req, res) {
     }
     const png = svg ? snapshotPngFor(row.code, svg) : null
     if (png) {
-      res.writeHead(200, { 'content-type': 'image/png', 'content-length': png.length, 'cache-control': 'public, max-age=31536000, immutable' })
+      res.writeHead(200, { 'content-type': 'image/png', 'content-length': png.length, 'cache-control': 'private, no-store' })
       res.end(png)
-      return
-    }
-    if (row.snapshot_url) {   // 转不出来又是外链存储:照旧跳外链(网页仍看得到)
-      res.writeHead(302, { location: row.snapshot_url })
-      res.end()
       return
     }
     res.writeHead(200, { 'content-type': 'image/svg+xml; charset=utf-8', 'cache-control': 'no-store' })
@@ -10474,11 +10509,16 @@ async function route(req, res) {
     if (String(tk.expires_at) < iso(new Date())) throw apiError(410, 'SIGN_TOKEN_EXPIRED', '这张签署码已过期,请让店员重新出示二维码。')
     const row = db.prepare('SELECT * FROM settlements WHERE id = ?').get(tk.settlement_id)
     if (!row) throw apiError(404, 'NOT_FOUND', '找不到这张服务单。')
+    settlementAccess.tokenRow(token,row)
     if (!tk.viewed_at) db.prepare('UPDATE settlement_sign_tokens SET viewed_at = ? WHERE token = ?').run(iso(new Date()), token)
-    return json(res, 200, { code: row.code, settlement: serializeSettlement(row) })
+    let nextSignUrl=''
+    if(row.status==='signed'&&row.group_id){
+      const next=db.prepare("SELECT * FROM settlements WHERE group_id=? AND tenant_id=? AND user_id=? AND status='pending_sign' ORDER BY rowid LIMIT 1").get(row.group_id,row.tenant_id,row.user_id)
+      if(next){let nextToken=activeSignToken(next.id);if(!nextToken||new Date(nextToken.expires_at).getTime()<=Date.now())nextToken=issueSignToken(next,{actor:'group-continuation'});nextSignUrl=signTokenUrl(nextToken.token)}
+    }
+    return json(res, 200, { code: row.code, settlement: serializeSettlement(row),nextSignUrl },{'cache-control':'no-store'})
   }
-  /* 屏 S4「是我本人,绑定并继续」。沙盒(没配微信密钥)走演示旁路:
-     用一个稳定的伪 openid,把整条链路跑通,不真调微信授权(规则⑤ 末句)。 */
+  /* 微信绑定只信已验证会话；仅明确开启演示闸的隔离环境允许演示身份。 */
   /* ===== 绑定码(图 v2.3 规则⑦,公开路由:顾客扫码进来,无商家会话) =====
      GET  /bind-tokens/:token         → 本人确认卡数据(只有档案称呼/店名,无单无金额)
      POST /bind-tokens/:token/confirm → 绑定(复用 S4 claimUserByOpenId:冲突进合并队列不覆盖) */
@@ -10505,13 +10545,8 @@ async function route(req, res) {
     if (!tk || (tk.status !== 'active' && tk.status !== 'used')) throw apiError(404, 'NOT_FOUND', '这枚绑定码已失效,请店员重新出示。')
     if (tk.status === 'active' && tk.expires_at && tk.expires_at < iso(new Date())) throw apiError(410, 'EXPIRED', '这枚绑定码已过期,请店员重新出示。')
     const body = await readBody(req)
-    const sandbox = !process.env.WECHAT_APP_SECRET
-    let openid = String(body.openid || '').trim()
-    if (!openid) {
-      if (!sandbox) throw apiError(400, 'BAD_REQUEST', '缺少微信授权信息。')
-      openid = `demo-openid-${tk.user_id}` // 沙盒旁路:同一档案恒同假 openid(与签署 claim 同法,幂等)
-    }
-    const out = claimUserByOpenId({ tenantId: tk.tenant_id, userId: tk.user_id, providerUserId: openid, unionId: String(body.unionid || '') })
+    const {sandbox,openid,unionId}=settlementAccess.claimIdentity(req,body,tk.tenant_id,tk.user_id)
+    const out = claimUserByOpenId({ tenantId: tk.tenant_id, userId: tk.user_id, providerUserId: openid, unionId })
     if (out.bound && tk.status === 'active') {
       db.prepare("UPDATE archive_bind_tokens SET status = 'used', used_at = ? WHERE token = ?").run(iso(new Date()), token)
     }
@@ -10522,15 +10557,11 @@ async function route(req, res) {
     const row = db.prepare('SELECT * FROM settlements WHERE code = ?').get(code)
     if (!row) throw apiError(404, 'NOT_FOUND', '找不到这张服务单。')
     const body = await readBody(req)
-    const sandbox = !process.env.WECHAT_APP_SECRET
-    let openid = String(body.openid || '').trim()
-    if (!openid) {
-      if (!sandbox) throw apiError(400, 'BAD_REQUEST', '缺少微信授权信息。')
-      openid = `demo-openid-${row.user_id}` // 沙盒演示旁路:同一档案每次都是同一个假 openid,幂等
-    }
+    if(!DEMO_LOGIN_ALLOWED)settlementAccess.tokenRow(req.headers['x-settlement-token'],row)
+    const {sandbox,openid,unionId}=settlementAccess.claimIdentity(req,body,row.tenant_id,row.user_id)
     const out = claimUserByOpenId({
       tenantId: row.tenant_id, userId: row.user_id,
-      providerUserId: openid, unionId: String(body.unionid || ''), settlementCode: row.code
+      providerUserId: openid, unionId, settlementCode: row.code
     })
     /* 可选手机号一键授权:只做**一致性校验** —— 不一致仅提示,不拦签字、不改档案(S4-06)。 */
     let phoneCheck = null
@@ -10558,10 +10589,8 @@ async function route(req, res) {
     const user = db.prepare('SELECT * FROM users WHERE id = ?').get(userIdFromMemberCode(mc))
     if (!user) throw apiError(404, 'BAD_MEMBER_CODE', '这个会员码无效。')
     const body = await readBody(req)
-    const sandbox = !process.env.WECHAT_APP_SECRET
-    const openid = String(body.openid || '').trim() || (sandbox ? `demo-openid-${user.id}` : '')
-    if (!openid) throw apiError(400, 'BAD_REQUEST', '缺少微信授权信息。')
-    const out = claimUserByOpenId({ tenantId: user.tenant_id, userId: user.id, providerUserId: openid, unionId: String(body.unionid || '') })
+    const {sandbox,openid,unionId}=settlementAccess.claimIdentity(req,body,user.tenant_id,user.id)
+    const out = claimUserByOpenId({ tenantId: user.tenant_id, userId: user.id, providerUserId: openid, unionId })
     return json(res, 200, { ...out, sandbox, customerName: user.display_name || '' })
   }
   if (req.method === 'POST' && path.startsWith('/settlements/') && path.endsWith('/sign')) {
@@ -10570,6 +10599,7 @@ async function route(req, res) {
     if (!row) throw apiError(404, 'NOT_FOUND', '找不到这张服务单。')
     if (row.status === 'signed') throw apiError(400, 'ALREADY_SIGNED', '这张单已经签过了。')
     const body = await readBody(req)
+    settlementAccess.authorize(req,row,{signing:true,body})
     if (body.disclaimerAccepted !== true) throw apiError(400, 'DISCLAIMER_REQUIRED', '请先勾选确认声明再签字。')
     const signature = String(body.signature || '').trim()
     if (!signature) throw apiError(400, 'SIGNATURE_REQUIRED', '请签名后再确认。')
@@ -11306,21 +11336,9 @@ async function route(req, res) {
         .map((booking) => serializeBooking(booking, query.lang || 'zh'))
     })
   }
-  if (req.method === 'POST' && path === '/payments/mock/confirm') {
-    // 安全:必须登录,且只能为自己的订单确认支付(此前无鉴权,可标记他人订单已付)。正式上线由微信支付回调(服务端验签)取代。
-    const customer = requireCustomer(req)
-    const body = await readBody(req)
-    const target = db.prepare('SELECT user_id FROM bookings WHERE id = ?').get(body.bookingId)
-    if (!target) throw apiError(404, 'NOT_FOUND', 'Booking not found.')
-    if (target.user_id !== customer.id) throw apiError(403, 'FORBIDDEN', 'You can only pay for your own booking.')
-    return json(res, 200, { booking: confirmMockPayment(body) })
-  }
-  if (req.method === 'POST' && path === '/payments/stripe/create-checkout') {
-    const body = await readBody(req)
-    return json(res, 200, { provider: 'mock-stripe', booking: confirmMockPayment(body), bookingId: body.bookingId })
-  }
-  if (req.method === 'POST' && path === '/payments/stripe/confirm-session') {
-    return json(res, 200, { provider: 'mock-stripe', booking: confirmMockPayment(await readBody(req)) })
+  if (req.method === 'POST' && ['/payments/mock/confirm', '/payments/stripe/create-checkout', '/payments/stripe/confirm-session'].includes(path)) {
+    requireCustomer(req)
+    throw apiError(410, 'PAYMENT_CHANNEL_OFFLINE', '线上支付未接通，请由门店实际收取并登记；模拟支付入口已停用。')
   }
   if (req.method === 'GET' && path.startsWith('/bookings/')) {
     const id = path.split('/')[2]
@@ -11589,6 +11607,7 @@ async function route(req, res) {
     return json(res, 200, {
       bookings: rows.map((booking) => {
         const serialized = serializeBooking(booking)
+        serialized.allowedActions = bookingState.allowedActions(booking, {actor:'merchant',role:adminSession.role})
         const care = booking.user_id ? careStmt.get(booking.user_id) : null
         serialized.customerCare = {
           tags: care ? (parseJson(care.tags_json) || []) : [],
@@ -12656,14 +12675,17 @@ async function route(req, res) {
       const ai = aiAddonState(t.id) // AI 智能包状态与基础套餐分开看:套餐自带 / 试用中 / 已订阅 / 待开通 / 未开通
       return {
         id: t.id,
-        name: t.name,
+        name: merchantIdentity(db, t.id).storeName,
         plan: t.plan,
         status: t.status,
         planExpiresAt: t.plan_expires_at,
+        timezone: tenantTimezone(t.id),
         autoRenew: Boolean(t.auto_renew),
         daysLeft: daysLeftOf(t, now),   // 永久 ⇒ null(plan-expiry.mjs)
         ai: {
           source: ai.trialPending && ai.source === 'none' ? 'pending' : ai.source,
+          label: ai.label,
+          manualOverride: ai.manualOverride,
           enabled: ai.enabled,       // 2026-08-07:平台页此前只给 source,判断「到底开没开」要靠猜
           unlimited: ai.unlimited,   // 长期开通(无到期日)
           expiresAt: ai.expiresAt,
@@ -12674,13 +12696,13 @@ async function route(req, res) {
       }
     })
     const pendingOrders = db.prepare("SELECT o.*, t.name AS tenant_name FROM subscription_orders o JOIN tenants t ON t.id = o.tenant_id WHERE o.status = 'pending' ORDER BY o.created_at DESC").all()
-      .map((o) => ({ id: o.id, tenantId: o.tenant_id, tenantName: o.tenant_name, plan: o.plan, period: o.period, amountCents: o.amount_cents, createdAt: o.created_at }))
+      .map((o) => ({ id: o.id, tenantId: o.tenant_id, tenantName: merchantIdentity(db, o.tenant_id).storeName, plan: o.plan, period: o.period, amountCents: o.amount_cents, createdAt: o.created_at }))
     // 待处理申请:带上联系方式(门店电话 / 老板账号),AI 试用申请需要运营主动联系商家配置
     const planRequests = db.prepare(`SELECT r.*, t.name AS tenant_name,
         (SELECT s.phone FROM stores s WHERE s.tenant_id = r.tenant_id AND s.is_active = 1 AND s.phone IS NOT NULL AND s.phone <> '' LIMIT 1) AS store_phone,
         (SELECT a.username FROM admin_accounts a WHERE a.tenant_id = r.tenant_id AND a.role = 'owner' LIMIT 1) AS owner_username
       FROM plan_change_requests r JOIN tenants t ON t.id = r.tenant_id WHERE r.status = 'PENDING' ORDER BY r.created_at DESC`).all()
-      .map((r) => ({ id: r.id, tenantId: r.tenant_id, tenantName: r.tenant_name, currentPlan: r.current_plan, targetPlan: r.target_plan, requestType: r.request_type, note: r.note || '', createdAt: r.created_at, createdBy: r.created_by || '', storePhone: r.store_phone || '', ownerUsername: r.owner_username || '' }))
+      .map((r) => ({ id: r.id, tenantId: r.tenant_id, tenantName: merchantIdentity(db, r.tenant_id).storeName, currentPlan: r.current_plan, targetPlan: r.target_plan, requestType: r.request_type, note: r.note || '', createdAt: r.created_at, createdBy: r.created_by || '', storePhone: r.store_phone || '', ownerUsername: r.owner_username || '' }))
     const plans = db.prepare('SELECT id, name_zh FROM plans ORDER BY sort_order').all()
       .map((p) => ({ id: p.id, name: p.name_zh, pricing: PLAN_PRICING[p.id] || null, fit: PLAN_FIT[p.id] || '' }))
     return json(res, 200, { tenants, pendingOrders, planRequests, plans })
@@ -12778,6 +12800,10 @@ async function route(req, res) {
     if (!db.prepare('SELECT 1 FROM tenants WHERE id = ?').get(tid)) throw apiError(404, 'NOT_FOUND', '租户不存在。')
     const body = await readBody(req)
     const action = String(body.action || '')
+    if (action === 'set_enabled' || action === 'revoke') {
+      writeAiManualOverride({ db, tenantId: tid, body: action === 'revoke' ? { ...body, enabled: false } : body, operator: platformAuth.fromSession(String(req.headers.authorization || '').replace(/^Bearer /,''))?.username || (isPlatformKey(req) ? 'platform-key' : 'platform-remembered-device'), apiError, writeLog: platformOps.writeLog })
+      return json(res, 200, { ok: true, ai: aiAddonState(tid) })
+    }
     if (action === 'grant_trial') {
       const untilIso = grantAiTrial(tid)
       return json(res, 200, { ok: true, expiresAt: untilIso, ai: aiAddonState(tid) })
@@ -12791,10 +12817,6 @@ async function route(req, res) {
       }
       const untilIso = extendAiAddon(tid, body.period === 'month' ? 'month' : 'year')
       return json(res, 200, { ok: true, expiresAt: untilIso, ai: aiAddonState(tid) })
-    }
-    if (action === 'revoke') {
-      db.prepare('DELETE FROM tenant_entitlements WHERE tenant_id = ? AND feature = ?').run(tid, AI_ADDON.feature)
-      return json(res, 200, { ok: true, ai: aiAddonState(tid) })
     }
     if (action === 'add_quota') {
       // 本月临时加量:不动套餐、不动加购包,只给这一个月多批一些(写 ai_usage.bonus)
@@ -12955,6 +12977,11 @@ async function route(req, res) {
     if (b.remember === false) return json(res, 200, { remembered: false })
     const sess = platformSessions.issue({ userAgent: req.headers['user-agent'], days: 30, secure: isHttps() })
     return json(res, 200, { remembered: true, expiresAt: sess.expiresAt }, { 'set-cookie': sess.cookie })
+  }
+  if (req.method === 'POST' && path === '/platform/auth/logout') {
+    platformAuth.logout(String(req.headers.authorization || '').replace(/^Bearer /, ''))
+    platformSessions.revokeCurrent(req.headers.cookie)
+    return json(res, 200, { ok: true }, { 'set-cookie': platformSessions.clearCookie() })
   }
   if (req.method === 'GET' && path === '/platform/session') return json(res, 200, { active: isPlatform(), devices: isPlatform() ? platformSessions.list().length : 0 })
   if (req.method === 'POST' && path === '/platform/session/revoke-all') {
@@ -13438,7 +13465,7 @@ async function route(req, res) {
   if (req.method === 'PATCH' && path.startsWith('/admin/customers/') && path.endsWith('/profile')) {
     if (adminSession.role !== 'owner') throw apiError(403, 'FORBIDDEN', 'Owner permission is required.')
     const userId = path.split('/')[3]
-    const current = db.prepare('SELECT * FROM users WHERE id = ?').get(userId)
+    const current = db.prepare('SELECT * FROM users WHERE id = ? AND tenant_id = ?').get(userId, currentTenantId())
     if (!current) throw apiError(404, 'NOT_FOUND', 'Customer not found.')
     const body = await readBody(req)
     const tags = body.tags === undefined
@@ -14423,52 +14450,9 @@ async function route(req, res) {
   // 服务小记(P0-②):写小记(原文 → AI 结构化 → 存);员工/老板均可写。
   if (req.method === 'POST' && path === '/admin/service-notes') {
     const body = await readBody(req)
-    const rawText = String(body.rawText || '').trim()
-    if (!rawText) throw apiError(400, 'BAD_REQUEST', '小记内容不能为空。')
-    let userId = String(body.userId || '').trim()
-    const booking = body.bookingId ? db.prepare('SELECT * FROM bookings WHERE id = ? AND tenant_id = ?').get(body.bookingId, currentTenantId()) : null
-    if (booking) { assertStaffCanAccessBooking(adminSession, booking); userId = userId || booking.user_id }
-    if (!userId) throw apiError(400, 'BAD_REQUEST', '缺少顾客。')
-    /* 🔴 08-27 补的越权闸:不带 bookingId 时,这条口原来**谁的顾客都能写** ——
-       读那一侧(GET /admin/customers/:id/notes)早就限死"只看自己服务过的",写这一侧漏了同一刀。
-       员工写别人的顾客一律 404(与读口同一措辞:那个人对他不该存在)。 */
-    if (!booking && adminSession.role !== 'owner') {
-      const mine = db.prepare('SELECT 1 AS hit FROM bookings WHERE tenant_id = ? AND technician_id = ? AND user_id = ? LIMIT 1')
-        .get(currentTenantId(), adminSession.technicianId || '', userId)
-      if (!mine) throw apiError(404, 'NOT_FOUND', '没有这位顾客的记录。')
-    }
-    const svc = booking && booking.service_id ? getService(booking.service_id) : null
-    const tech = booking && booking.technician_id ? db.prepare('SELECT name FROM technicians WHERE id = ? AND tenant_id = ?').get(booking.technician_id, booking.tenant_id) : null
-    const u = db.prepare('SELECT display_name FROM users WHERE id = ?').get(userId)
-    // AI 结构化(失败自动 fallback,不阻塞保存)。未开通 AI 智能包时**跳过 AI、照常保存原文**——
-    // 小记本身是客户档案的地基,不能因为没买 AI 就写不了;只是不再自动拆成 款式/性格/偏好/同行/安全项。
-    const emptyStructured = () => ({ summary: rawText.slice(0, 60), safetyFlags: [], styles: [], personality: [], preferences: [], companions: [], other: [] })
-    let structured = emptyStructured()
-    const aiStructured = hasAi()
-    if (aiStructured) {
-      countAiUsage()
-      try {
-        const aiRes = await createServiceNoteInsights({ rawText, serviceName: svc ? svc.name_zh : (body.serviceName || ''), customerName: u ? u.display_name : '' })
-        structured = (aiRes && aiRes.data) ? aiRes.data : aiRes // 拆 aiJson 的 {data} 外壳
-      } catch (e) { structured = emptyStructured() }
-    }
-    /* 小记图片(08-30f 合同):≤9 张,只收 data:image/(图库同款通道);随小记只追加,不可删改。
-       后端终闸:超 9 或非图形 → 400(前端拦只算体验) */
-    const images = Array.isArray(body.images) ? body.images : []
-    if (images.length > 9) throw apiError(400, 'BAD_REQUEST', '单条小记最多 9 张图片。')
-    if (images.some((im) => typeof im !== 'string' || !im.startsWith('data:image/'))) {
-      throw apiError(400, 'BAD_REQUEST', '图片格式不对(只收拍照/相册上传的图)。')
-    }
-    const id = randomId('snote')
-    db.prepare(`INSERT INTO service_notes (id, tenant_id, user_id, booking_id, technician_id, technician_name, service_name, raw_text, structured_json, created_by, created_at, images_json)
-      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`).run(
-      id, currentTenantId(), userId, booking ? booking.id : null,
-      booking ? booking.technician_id : (body.technicianId || null),
-      (tech && tech.name) || body.technicianName || (adminSession.email || ''),
-      svc ? svc.name_zh : (body.serviceName || ''),
-      rawText, JSON.stringify(structured || {}), adminSession.email || 'admin', iso(new Date()),
-      images.length ? JSON.stringify(images) : null)
-    return json(res, 201, { note: { id, rawText, structured, images, createdAt: iso(new Date()) } })
+    const out = await writeServiceNote({body,adminSession,db,apiError,currentTenantId,
+      assertStaffCanAccessBooking,getService,hasAi,countAiUsage,createServiceNoteInsights,randomId,iso})
+    return json(res, 201, out)
   }
   // 顾客画像 + 小记时间线
   if (req.method === 'GET' && path.match(/^\/admin\/customers\/[^/]+\/notes$/)) {
@@ -15282,7 +15266,7 @@ async function route(req, res) {
       id: u.id, displayName: u.display_name || '', phone: u.phone || '',
       phoneMasked: maskPhone(u.phone), bound: isUserBound(u.id), memberCode: memberCodeForUserId(u.id),
       badgeText: isUserBound(u.id) ? '' : '新客 · 未绑定',
-      hintText: isUserBound(u.id) ? '' : '签字时请顾客扫码——签字与绑定小程序一步完成,账单自动存入她的小程序'
+      hintText: isUserBound(u.id) ? '' : '请将签署链接交给顾客核对；网页签字不自动绑定微信，绑定需真实授权。'
     })
     if (userId) {
       const u = db.prepare('SELECT id, display_name, phone, tenant_id FROM users WHERE id = ?').get(userId)
@@ -15312,6 +15296,7 @@ async function route(req, res) {
     const tid = currentTenantId()
     const row = db.prepare('SELECT * FROM settlements WHERE tenant_id = ? AND (id = ? OR code = ?)').get(tid, key, key)
     if (!row) throw apiError(404, 'NOT_FOUND', '找不到这张结算单。')
+    settlementAccess.assertStaff(adminSession,row)
     const sheets = groupSheetLinks(row.group_id, tid)
     return json(res, 200, {
       sheets,
@@ -15419,28 +15404,31 @@ async function route(req, res) {
   }
   if (req.method === 'POST' && path.startsWith('/admin/settlements/') && path.endsWith('/sign-token')) {
     if (adminSession.role !== 'owner' && adminSession.role !== 'staff') throw apiError(403, 'FORBIDDEN', '需要员工或老板权限。')
-    const id = path.split('/')[3]
-    const row = db.prepare('SELECT * FROM settlements WHERE id = ? AND tenant_id = ?').get(id, currentTenantId())
+    const id = decodeURIComponent(path.split('/')[3])
+    const row = db.prepare('SELECT * FROM settlements WHERE (id = ? OR code = ?) AND tenant_id = ?').get(id, id, currentTenantId())
     if (!row) throw apiError(404, 'NOT_FOUND', '找不到这张服务单。')
     if (row.status === 'signed') throw apiError(400, 'ALREADY_SIGNED', '这张单已经签过了。')
+    if(row.status!=='pending_sign')throw apiError(409,'SETTLEMENT_NOT_PENDING','这张单已撤回，不能继续送签。')
+    settlementAccess.assertStaff(adminSession,row)
     const { token, expiresAt } = issueSignToken(row, { actor: actorOf(adminSession) })
     const bound = isUserBound(row.user_id)
     return json(res, 200, {
       token, expiresAt, url: signTokenUrl(token),
       settlement: serializeSettlement(row),
-      pushedToMiniApp: bound,
+      pushedToMiniApp: false,
       customerBound: bound,
       /* D9 规则⑤:未绑定客推送不出去,这句话要如实说 —— 店员点了「推送签署」,
          看到的不能是一片空白,而是"为什么推不了、该走哪条路"。 */
-      pushedText: bound ? '✓ 已推送到顾客小程序' : '该顾客未绑微信,无法推送 —— 请顾客扫码签署',
+      pushedText: bound ? '已生成签署链接；请交给顾客打开，尚未发送微信通知。' : '该顾客未绑微信，无法推送；可使用签署链接核对并签字。',
       ...signStateOf(row)
-    })
+    },{'cache-control':'no-store'})
   }
   // 屏 S3 状态行轮询:等待进入 → 顾客核对中 → 已签署(前端据此自动关闭弹层)
   if (req.method === 'GET' && path.startsWith('/admin/settlements/') && path.endsWith('/sign-state')) {
     const id = path.split('/')[3]
     const row = db.prepare('SELECT * FROM settlements WHERE id = ? AND tenant_id = ?').get(id, currentTenantId())
     if (!row) throw apiError(404, 'NOT_FOUND', '找不到这张服务单。')
+    settlementAccess.assertStaff(adminSession,row)
     const tk = activeSignToken(row.id)
     return json(res, 200, { ...signStateOf(row), expiresAt: tk ? tk.expires_at : null, expired: Boolean(tk && String(tk.expires_at) < iso(new Date())) })
   }
@@ -15556,15 +15544,22 @@ async function route(req, res) {
     assertStaffCanAccessBooking(adminSession, booking)
     if (!['PENDING_PAYMENT', 'CONFIRMED'].includes(booking.status)) throw apiError(400, 'BAD_REQUEST', '该订单当前状态不能改期。')
     const body = await readBody(req)
+    bookingState.assertTransition(booking, 'reschedule', { actor:'merchant',role:adminSession.role,apiError })
+    if (body.date !== undefined || body.time !== undefined) {
+      const reschedule=moveBooking({db,booking,body,apiError,validateBookingInput,assertBookable,buildSlotStarts,iso,randomId,localParts,getDepositConfig,activeDepositReceipts,actor:actorOf(adminSession)})
+      if(!reschedule.unchanged)try{notifyScheduler.onBookingEvent({event:'rescheduled',bookingId:id})}catch(e){console.error('[notify] rescheduled:',e.message)}
+      return json(res,200,{booking:serializeBooking(db.prepare('SELECT * FROM bookings WHERE id=?').get(id)),reschedule})
+    }
     const tid = booking.tenant_id || currentTenantId()
     const config = getDepositConfig(tid)
     const cp = config.cancelPolicy
     const hoursBefore = (new Date(booking.appointment_start).getTime() - Date.now()) / 3_600_000
     const compliant = cp.rescheduleNoticeHours === null || hoursBefore >= cp.rescheduleNoticeHours
     // 同一笔定金被保留过几次:看它上一张凭据的计数
-    const priorRetain = db.prepare("SELECT MAX(times_used) AS n FROM deposit_retains WHERE tenant_id = ? AND source_booking_id = ?").get(tid, booking.id)?.n || 0
+    const priorRetain = rescheduleUseCount(db, booking)
     const nextTimes = priorRetain + 1
     const canRetain = compliant && booking.deposit_cents > 0 && nextTimes <= (cp.depositRetainTimes || 0)
+    if (canRetain && activeDepositReceipts(id,tid).filter(r=>!r.settled_settlement_id).reduce((sum,r)=>sum+r.amount_cents,0)!==booking.deposit_cents) throw apiError(409,'DEPOSIT_RECONCILIATION_REQUIRED','定金金额与实收记录不一致，请先核对收款。')
     let retain = null
     const now = iso(new Date())
     db.exec('BEGIN IMMEDIATE')

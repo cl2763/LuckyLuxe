@@ -39,7 +39,7 @@ export function welcomeText({ brand = '', lang = 'zh' } = {}) {
     · `storeName` = `stores.name` —— 商家在门店设置改店名(`PUT /admin/store-info`)改的就是它;
     · `tenantName` = `tenants.name` —— 商户名,建店时写下,**之后没人再动**。
     所以商家侧任何地方显示 `tenantName`,显示的都是**改名之前那个旧名字**
-    (网页顶栏与小程序商家端两处以前正是如此)。平台侧看商户,用 `tenantName` 是对的。
+    (网页顶栏与小程序商家端两处以前正是如此)。12t补起平台展示也用 storeName；tenantName 仅保留为入驻记录，不再作为显示店名。
 
     取不到就给空串,由渲染侧出「—」——**不许回落到商户名或人名**(零回落红线)。
     `storeId` 一并给出:D84 强制设置旗标也认这家店,免得同一个「当前门店」在两处各查一次。 */

@@ -88,7 +88,7 @@ const sb = await ensureSandbox({ label: '[tenant-ownership]' })
 if (!sb.ok) {
   console.log('   ⚠️ 沙箱不可用 —— **行为层三条本轮未跑**(不静默跳过,如实说)')
 } else {
-  const SANDBOX = 'http://127.0.0.1:4310'
+  const {SANDBOX_URL:SANDBOX}=await import('./test-need-sandbox.mjs')
   const H = (t) => ({ authorization: 'Bearer owner-demo-token', 'x-admin-tenant-id': t, 'content-type': 'application/json' })
   const db = new DatabaseSync(SB, { readOnly: true })
   const pick = (sql, ...a) => db.prepare(sql).get(...a)
@@ -112,14 +112,27 @@ if (!sb.ok) {
   }
   const aUser = pick('SELECT id FROM users WHERE tenant_id = ? LIMIT 1', A)
   const svc = pick('SELECT id FROM services WHERE tenant_id = ? AND is_active = 1 LIMIT 1', A)
-  const tech = pick('SELECT id FROM technicians WHERE tenant_id = ? LIMIT 1', A)
+  const tech = pick('SELECT id, store_id FROM technicians WHERE tenant_id = ? AND is_active = 1 LIMIT 1', A)
   db.close()
 
-  const mkBooking = async (uid, time) => {
+  // 归属检查使用真实可约时段；固定周一会被正常的休息日规则拦下。
+  // 不修改店铺营业规则，也不把 REST_DAY 当作建单成功。
+  const slots = []
+  for (let offset = 0; offset < 7 && !slots.length; offset++) {
+    const date = new Date(Date.UTC(2030, 9, 7 + offset)).toISOString().slice(0, 10)
+    const q = new URLSearchParams({storeId: tech?.store_id || '', serviceId: svc?.id || '', technicianId: tech?.id || '', date})
+    const r = await fetch(`${SANDBOX}/availability?${q}`, {headers: {...H(A), 'x-tenant-id': A}})
+    const available = await r.json()
+    if (!r.ok) throw new Error(`读取归属检查时段失败:${r.status}`)
+    for (const row of available.slots || []) if (row.technician?.id === tech?.id) {
+      for (const time of row.slots || []) slots.push({date, time})
+    }
+  }
+  const mkBooking = async (uid, slot) => {
     const r = await fetch(`${SANDBOX}/admin/bookings/direct`, {
       method: 'POST',
       headers: H(A),
-      body: JSON.stringify({ userId: uid, serviceId: svc?.id, technicianId: tech?.id, date: '2026-09-10', time, durationMin: 60 }),
+      body: JSON.stringify({ userId: uid, serviceId: svc?.id, technicianId: tech?.id, date: slot.date, time: slot.time, durationMin: 60 }),
     }).catch(() => null)
     if (!r) return { status: 0, code: '(请求失败)', id: '' }
     const j = await r.json().catch(() => ({}))
@@ -127,10 +140,10 @@ if (!sb.ok) {
   }
 
   /* ③a A 店拿 B 店顾客建单 → 必 4xx */
-  const cross = await mkBooking(bUser?.id, '14:00')
+  const cross = await mkBooking(bUser?.id, slots[0] || {date: '2030-10-07', time: '14:00'})
   check(`③ 行为层·跨店建单被拒:A 店(${A})拿 B 店(${B})顾客「${bUser?.display_name}」建单 → `
     + `必须 4xx(实测 ${cross.status} ${cross.code})`,
-  cross.status >= 400 && cross.status < 500, JSON.stringify(cross))
+  cross.status >= 400 && cross.status < 500 && cross.code === 'USER_TENANT_MISMATCH', JSON.stringify(cross))
 
   /* ③b 反向守:本店顾客必须建得成(不是见谁都拒)—— 造完当场删,不留脏数据。
      🔴 首跑撞 409 SLOT_UNAVAILABLE:那个时段夹具里已有单。
@@ -138,10 +151,9 @@ if (!sb.ok) {
      判据不该因为夹具里恰好有单就红。改成换时段重试;仍然坚持「必须真建成」,
      不降格成「只要不是所有权错就算过」——那样就验不出写口真能放行本店顾客了。 */
   let same = { status: 0, code: '(没试)', id: '' }
-  const slots = ['15:00', '15:30', '16:00', '16:30', '17:00', '17:30']
   for (const t of slots) {
     same = await mkBooking(aUser?.id, t)
-    if (same.status !== 409) { console.log(`   [反向守] 用 ${t} 这个时段(前面的撞排期,与所有权无关)`); break }
+    if (same.status !== 409) { console.log(`   [反向守] 用 ${t.date} ${t.time} 这个时段(前面的撞排期,与所有权无关)`); break }
   }
   check('③b 反向守:同样的请求换成**本店**顾客必须建得成 —— 一把见谁都拒的闸,'
     + `跟没有闸一样守不住任何东西(实测 ${same.status} ${same.code || 'OK'})`,

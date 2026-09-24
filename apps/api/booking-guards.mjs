@@ -27,7 +27,7 @@ export function createBookingGuards(deps) {
     `).get(input.technicianId, input.storeId, input.serviceId)
     if (!technician) throw apiError(404, 'NOT_FOUND', '该技师不在本店或不做这项服务。')
 
-    const weekday = localDateTime(input.date, '12:00').getDay()
+    const weekday = new Date(input.date + 'T12:00:00Z').getUTCDay()
     const hours = db.prepare('SELECT * FROM business_hours WHERE store_id = ? AND weekday = ?').get(input.storeId, weekday)
     // 特殊日期优先于每周固定模式(节假日休息/调整时段)
     const special = specialDateFor(input.storeId, input.date)
@@ -45,7 +45,7 @@ export function createBookingGuards(deps) {
     const closeTime = schedule?.end_time || baseClose
     if (!opts.adminDirect && (!openTime || !closeTime)) throw apiError(400, 'BAD_REQUEST', '该日期门店休息。')
     // 老板直接排单可覆盖时长(这次多做/少做);普通预约按服务标准时长
-    const durationMin = (opts.adminDirect && input.durationMin) ? input.durationMin : totalDuration(service.type, service.base_duration_min, input.addOns)
+    const durationMin = ((opts.adminDirect || opts.preserveDuration) && input.durationMin) ? input.durationMin : totalDuration(service.type, service.base_duration_min, input.addOns)
     const startMinutes = minutesFromTime(input.time)
     const endMinutes = startMinutes + durationMin
     if (!opts.adminDirect && (startMinutes < minutesFromTime(openTime) || endMinutes > minutesFromTime(closeTime))) {

@@ -1,9 +1,10 @@
+import { merchantIdentity } from './store-identity.mjs'
 /* 平台运维域(店主 2026-08-25「乙线开锁」这一批边改边拆,公约②)。
 
    这一族原本散在 local-server.mjs 的路由里:重置财务密码、按需备份、逐店五项、运维日志。
    共同点是**平台侧动商家的东西,每一次都要留痕** —— 收成一处,以后加动作只在这里加,
    不会再出现"某个平台动作忘了写日志"。路由那边只剩门禁 + 分发。 */
-export function createPlatformOps({ db, apiError, randomId, iso, snapshotDb, dbPath, backupDir, financeSessions, adminPasswordHash, randomPassword, lampsOf }) {
+export function createPlatformOps({ db, apiError, randomId, iso, snapshotDb, dbPath, backupDir, financeSessions, adminPasswordHash, randomPassword, lampsOf, aiStateOf }) {
   const now = () => iso(new Date())
   function writeLog(tenantId, action, detail, operator = 'platform') {
     db.prepare('INSERT INTO platform_ops_log (id, tenant_id, action, detail, operator, created_at) VALUES (?, ?, ?, ?, ?, ?)')
@@ -99,8 +100,9 @@ export function createPlatformOps({ db, apiError, randomId, iso, snapshotDb, dbP
        ⑤ 旧会话一并吊销 —— 不然拿着旧 token 的人还在里面,重置等于没重置 */
   function resetOwnerPassword({ tenantId, confirmName, reason, operator = 'platform' }) {
     const t = db.prepare('SELECT id, name FROM tenants WHERE id = ?').get(tenantId)
+    if (t) t.name = merchantIdentity(db, tenantId).storeName
     if (!t) throw apiError(404, 'NOT_FOUND', 'Tenant not found.')
-    if (String(confirmName || '').trim() !== String(t.name || '').trim()) {
+    if (!String(t.name || '').trim() || String(confirmName || '').trim() !== String(t.name || '').trim()) {
       throw apiError(400, 'CONFIRM_NAME_MISMATCH', `二次确认没通过 —— 请一字不差手打这家店的完整名称「${t.name}」。`)
     }
     const why = String(reason || '').trim()
@@ -129,15 +131,7 @@ export function createPlatformOps({ db, apiError, randomId, iso, snapshotDb, dbP
         (SELECT COUNT(*) FROM stores s WHERE s.tenant_id = t.id AND s.is_active = 1) AS store_count,
         (SELECT COUNT(*) FROM bookings b WHERE b.tenant_id = t.id) AS booking_count,
         (SELECT COUNT(*) FROM bookings b WHERE b.tenant_id = t.id AND b.appointment_start >= ?) AS month_booking_count,
-        (SELECT username FROM admin_accounts a WHERE a.tenant_id = t.id AND a.role = 'owner' LIMIT 1) AS owner_username,
-        /* 🔴 D147:每家店的 AI 包开没开,**平台这一屏就得看得见**。
-           案底:北京新店建出来 AI 一句不答,而这张表上什么异样都没有 ——
-           「哪家店的 AI 是哑的」以前只能一家一家进去试。
-           口径:套餐自带(chain/custom)算开;单独授权行 enabled=1 也算开。 */
-        (CASE WHEN t.plan IN ('chain', 'custom') THEN 1
-              WHEN EXISTS (SELECT 1 FROM tenant_entitlements e
-                           WHERE e.tenant_id = t.id AND e.feature = 'ai_customer_service' AND e.enabled = 1) THEN 1
-              ELSE 0 END) AS ai_on
+        (SELECT username FROM admin_accounts a WHERE a.tenant_id = t.id AND a.role = 'owner' LIMIT 1) AS owner_username
       FROM tenants t ORDER BY t.rowid ASC
     `).all(monthStartIso)
     const now = Date.now()
@@ -164,16 +158,17 @@ export function createPlatformOps({ db, apiError, randomId, iso, snapshotDb, dbP
          页面上就是一格空白,跟「确实没配」长得一模一样,看不出是失败。
          与上面 stores 那处同病(同一文件里我刚修完一处又留了一处,店主点出来的)。 */
       const ob = lampsOf ? lampsOf(r.id) : null
+      const ai = aiStateOf(r.id)
       return {
-        id: r.id, name: r.name, plan: r.plan, status: r.status, kind: r.kind || 'real', listed: r.listed === 1,
+        id: r.id, name: merchantIdentity(db, r.id).storeName, tenantName: r.name, plan: r.plan, status: r.status, kind: r.kind || 'real', listed: r.listed === 1,
         planExpiresAt: r.plan_expires_at,
         /* 永久 ⇒ null(与 plan-expiry.mjs 同口径;前端据此显「长期」) */
         daysLeft: r.plan_expires_at ? Math.ceil((new Date(r.plan_expires_at).getTime() - now) / 86400000) : null,
-        city, cityLabel: city, currency: st?.currency || '', domainLabel: dom,
+        city, cityLabel: city, timezone: st?.timezone || null, currency: st?.currency || '', domainLabel: dom,
         storeCount: r.store_count, bookingCount: r.booking_count,
         monthBookingCount: r.month_booking_count, ownerUsername: r.owner_username || '',
-        aiEnabled: r.ai_on === 1,
-        aiLabel: r.ai_on === 1 ? 'AI 包:已开通' : 'AI 包:未开通',   // 后端出句,前端零判断
+        aiEnabled: ai.enabled,
+        aiLabel: ai.label,   // 后端出句,前端零判断
         onboarding: ob ? { steps: ob.hints, summary: ob.summary, doneCount: ob.doneCount, totalCount: ob.totalCount } : null,
       }
     })

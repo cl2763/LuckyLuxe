@@ -496,18 +496,11 @@ async function bootstrap() {
    一起删 —— 留着就是又一条「调了后端没有」的路。 */
 
 async function handleStripeReturn() {
-  const params = new URLSearchParams(window.location.search)
-  if (params.get('payment') !== 'success' || !params.get('session_id')) return
-  const data = await request('/payments/stripe/confirm-session', {
-    method: 'POST',
-    body: JSON.stringify({ sessionId: params.get('session_id') })
-  })
-  state.orders = [data.booking, ...state.orders.filter((order) => order.id !== data.booking.id)]
-  writeTenantJson('lucky-web-orders', state.orders)
-  localStorage.removeItem('lucky-web-pending-checkout')
-  toast(t('paidDone'))
-  state.view = 'me'
-  history.replaceState(null, '', window.location.pathname)
+  const params=new URLSearchParams(window.location.search)
+  if(!params.has('payment'))return
+  params.delete('payment');params.delete('session_id')
+  history.replaceState(null,'',location.pathname+(params.toString()?'?'+params:''))
+  toast(state.lang==='en'?'Please confirm any payment with the store.':'请向门店核对实际收款，网页不会自动确认支付。')
 }
 
 async function handleBookingDraftParam() {
@@ -1389,21 +1382,7 @@ async function submitPayment() {
         bookingDraftId: item.bookingDraftId || item.draftId || null
       })
     })
-    if (bookingData.booking.status !== 'PENDING_PAYMENT' || bookingData.booking.depositCents <= 0) {
-      completed.push(bookingData.booking)
-      continue
-    }
-    const checkout = await request('/payments/stripe/create-checkout', {
-      method: 'POST',
-      body: JSON.stringify({ bookingId: bookingData.booking.id })
-    })
-    if (checkout.checkoutUrl) {
-      writeTenantJson('lucky-web-pending-checkout', { bookingId: bookingData.booking.id, cartItemId: item.id })
-      toast(t('paymentRedirect'))
-      window.location.href = checkout.checkoutUrl
-      return
-    }
-    completed.push(checkout.booking)
+    completed.push(bookingData.booking)
   }
   const selectedIds = new Set(selected.map((item) => item.id))
   state.cart = state.cart.filter((item) => !selectedIds.has(item.id))

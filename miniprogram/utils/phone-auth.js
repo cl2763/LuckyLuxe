@@ -9,7 +9,7 @@
  * ══ 微信给的其实是两样东西,能用的只有一样 ══
  *   · `encryptedData` + `iv` —— 老路。用 `session_key` 解,**我们自己算得出来**,已接(`/auth/wechat/mini-phone`)。
  *   · `code`              —— 新路。要拿 `access_token` 去问腾讯换,**需要真 appid/secret 且要出网**。
- * 本地/回归里换不到真的 `access_token`,所以新路**停在这一步,如实告诉顾客**,不假装成功。
+ * D228 新路交后端换取；回归只替微信网络跳，绑定与错误处理仍真实执行。
  */
 const api = require('./api')
 
@@ -48,10 +48,10 @@ async function handlePhoneAuthResult(page, event) {
     return
   }
 
-  /* 老路:能自己解 —— 走后端真解密,**成功才说成功** */
-  if (detail.encryptedData && detail.iv) {
+  /* 新旧路都由后端确认绑定成功，前端才显示绿勾。 */
+  if (detail.code || (detail.encryptedData && detail.iv)) {
     try {
-      const bound = await api.bindWechatPhone({ encryptedData: detail.encryptedData, iv: detail.iv })
+      const bound = await api.bindWechatPhone(detail.code ? { phoneCode: detail.code } : { encryptedData: detail.encryptedData, iv: detail.iv })
       setPhoneState(page, { phoneAuthorized: true, phoneAuthFailed: false, phoneMode: 'wechat',
         phoneCode: '', manualPhoneVerified: false,
         phoneMessage: en ? `Phone bound: ${bound.phone}` : `手机号已绑定：${bound.phone}` })
@@ -67,11 +67,11 @@ async function handlePhoneAuthResult(page, event) {
     }
   }
 
-  /* 新路(只有 code):要真 appid/secret 去腾讯换,**这里换不到** —— 照实说,不打绿勾 */
+  /* 微信没有返回可用的凭证，不能伪装授权成功。 */
   setPhoneState(page, { phoneAuthorized: false, phoneAuthFailed: false, phoneMode: 'manual',
     phoneCode: detail.code || '', manualPhoneVerified: false,
-    phoneMessage: en ? 'WeChat returned a phone code. Binding needs the production WeChat credentials; please verify manually for now.'
-      : '微信这次只返回了 code，换取手机号需要正式的微信凭据；请先使用手动验证。' })
+    phoneMessage: en ? 'No phone authorization credential was returned. Please try again.'
+      : '未收到微信手机号授权凭证，请重新授权。' })
 }
 
 module.exports = { handlePhoneAuthResult }

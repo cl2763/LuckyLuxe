@@ -1,6 +1,7 @@
 <!DOCTYPE html>
 <html lang="zh" data-theme="light">
 <head>
+<meta name="referrer" content="no-referrer">
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
 <title>服务确认单</title>
@@ -136,6 +137,7 @@
 </div>
 <div class="toast" id="toast"></div>
 
+<script src="/web/sign-entry.js"></script>
 <script>
 // 金额一律取后端返回值。这里只有一个 money() 负责「分 → 显示」,没有任何业务计算。
 // 金额格式由后端下发的 currencyDisplay 决定(CNY→¥358,CAD→CAD $50.00),前端不做任何换算
@@ -154,6 +156,8 @@ function toast(msg) { const t = document.getElementById('toast'); t.textContent 
    两个门打开的是同一张签署页、同一张单;先签为准。 */
 const qs = new URLSearchParams(location.search)
 const signToken = qs.get('t') || ''
+const signHeaders = () => ({'content-type':'application/json',...(signToken?{'x-settlement-token':signToken}:{})})
+let nextSignUrl = ''
 let code = decodeURIComponent(location.pathname.replace(/^\/sign\/?/, '') || qs.get('code') || '')
 let data = null
 let claimDone = false      // 屏 S4:本人确认绑定完成没有
@@ -162,15 +166,21 @@ let hasInk = false
 let strokes = []   // 笔迹点阵,按签名板坐标系;签署时随请求提交,由服务端渲进快照 SVG
 
 async function load() {
-  if (!code && signToken) {
+  if(!signToken&&code){
+    try{location.replace(await window.resolveSignEntry(code,qs.get('actor')==='merchant'))}
+    catch(e){document.getElementById('boot').textContent=e.message}
+    return
+  }
+  if (signToken) {
     // 扫码进来:凭一次性签署码换单号;换到的同时后端会把状态行推成「顾客核对中」
     const r = await fetch(`/settlements/by-token/${encodeURIComponent(signToken)}`)
     const b = await r.json()
     if (!r.ok) { document.getElementById('boot').textContent = b?.error?.message || '这个签署码无效'; return }
     code = b.code
+    nextSignUrl = b.nextSignUrl || ''
   }
   if (!code) { document.getElementById('boot').textContent = '缺少服务单号'; return }
-  const res = await fetch(`/settlements/${encodeURIComponent(code)}`)
+  const res = await fetch(`/settlements/${encodeURIComponent(code)}`,{headers:signHeaders()})
   const body = await res.json()
   if (!res.ok) { document.getElementById('boot').textContent = body?.error?.message || '找不到这张服务单'; return }
   data = body
@@ -187,7 +197,7 @@ function signSlotHtml(s) {
   if (s.status !== 'signed') return '（签署后显示于此）'
   if (s.snapshot && s.snapshotHasInk) {
     // 真机 SVG 空白件同刀:笔迹图也走 PNG(三端同一格式,不留两套)
-    return `<img class="ink" src="/settlements/${encodeURIComponent(s.code)}/signature.png" alt="顾客签名" loading="lazy">`
+    return `<img class="ink" src="${esc(s.signatureUrl)}" alt="顾客签名" loading="lazy">`
   }
   return `${esc(s.signatureName || '（已签）')}<span class="ink-note">早期单 · 仅存文本</span>`
 }
@@ -201,7 +211,7 @@ function render() {
   /* 屏 S4:只对**未绑定**顾客显示的签字前置卡(规则⑤)。
      绑定 = openid 绑到这张单挂着的档案 —— 单挂谁,建单时就定死,与微信注册手机号无关。
      已绑定顾客直接看到账单,这张卡整块不渲染。 */
-  const needClaim = !signed && s.customerBound === false && !claimDone
+  const needClaim = !signToken && !signed && s.customerBound === false && !claimDone
   document.getElementById('wrap').innerHTML = `
     <div class="topbar">
       <h1>服务确认单</h1>
@@ -217,6 +227,7 @@ function render() {
       <div id="claimNote"></div>
       <div class="alt">不是本人（代付/代签不适用，须本人签字）→ 店员设备当面手签</div>
     </div>` : ''}
+    ${!signed && signToken ? `<label class="disc"><input id="signerConfirmed" type="checkbox"><span>我是${esc(s.cardOwnerName || '本单顾客')}，已核对这是本人的服务单。签字不会自动绑定微信。</span></label>` : ''}
     <div class="doc">
       <div class="sign-slot">
         <div class="lab">顾客签名：</div>
@@ -225,7 +236,7 @@ function render() {
       <div class="doc-head">
         <div class="store">${esc(s.storeName)}</div>
         <div class="meta">订单编号 ${esc(s.code)}</div>
-        <div class="meta">${s.appointmentAt ? esc(String(s.appointmentAt).slice(0, 16).replace('T', ' ')) : ''}${s.servedPersonName ? ` · 被服务者：${esc(s.servedPersonName)}` : ''}</div>
+        <div class="meta">${esc(s.appointmentAtText || '')}${s.servedPersonName ? ` · 被服务者：${esc(s.servedPersonName)}` : ''}</div>
       </div>
 
       <div class="sec">
@@ -267,10 +278,10 @@ function render() {
     ${amendCardHtml(s)}
     ${couponCardHtml()}
 
-    ${signed ? `<div class="done">✓ 本单已于 ${esc(String(s.signedAt).slice(0, 16).replace('T', ' '))} 签署完成${s.snapshot ? `<div style="margin-top:10px;font-weight:500"><a href="/settlements/${encodeURIComponent(s.code)}/snapshot" target="_blank">查看签署单</a></div>` : ''}${s.groupPendingCount > 0 ? `
+    ${signed ? `<div class="done">✓ 本单已于 ${esc(s.signedAtText || '')} 签署完成${s.snapshot ? `<div style="margin-top:10px;font-weight:500"><a href="${esc(s.snapshot.url)}" target="_blank">查看签署单</a></div>` : ''}${s.groupPendingCount > 0 ? `
       <div style="margin-top:16px;color:#8a5a2b;font-weight:600">还有 ${s.groupPendingCount} 份服务确认单待签</div>
       <!-- D68①(店主 08-23):连签用**替换式导航**——location.replace 不压栈,签完 N 份不用按 N 次返回 -->
-      <button type="button" onclick="location.replace('/sign/${encodeURIComponent(s.groupNextPendingCode)}')" style="display:block;width:100%;margin-top:10px;background:#2d2826;color:#fff;border:0;border-radius:12px;padding:14px;text-align:center;font-weight:800;font-size:15px">继续签下一份 →</button>` : ''}</div>` : `
+      <button type="button" onclick="location.replace('${esc(nextSignUrl || '/sign/'+encodeURIComponent(s.groupNextPendingCode))}')" style="display:block;width:100%;margin-top:10px;background:#2d2826;color:#fff;border:0;border-radius:12px;padding:14px;text-align:center;font-weight:800;font-size:15px">继续签下一份 →</button>` : ''}</div>` : `
     <label class="disc">
       <input type="checkbox" id="disc">
       <span>${esc(data.disclaimer)}</span>
@@ -401,7 +412,7 @@ async function applyCoupon(grantId) {
   try {
     const res = await fetch(`/settlements/${encodeURIComponent(code)}/coupon`, {
       method: 'POST',
-      headers: { 'content-type': 'application/json' },
+      headers: signHeaders(),
       body: JSON.stringify({ grantId })
     })
     const body = await res.json()
@@ -480,6 +491,7 @@ function initPad() {
     ctx.clearRect(0, 0, canvas.width, canvas.height); hasInk = false; strokes = []; sync()
   })
   document.getElementById('disc').addEventListener('change', sync)
+  document.getElementById('signerConfirmed')?.addEventListener('change',sync)
   sync()
 }
 
@@ -492,6 +504,7 @@ function missingStep() {
   /* 🔴 R3 之二:没确认本人时,整块是锁着的(S4),可提示语却写「请勾选上方的确认声明」——
      而那个勾选框**本身也是禁用的**。店主照着提示去点,点不动,按钮也点不动,
      于是就是「确认签字用不了」。缺哪一步就说哪一步:锁着的时候先说"确认本人"。 */
+  if(signToken&&!document.getElementById('signerConfirmed')?.checked)return {key:'signerConfirmed',text:'请先核对并确认这是本人的服务单。'}
   if (document.getElementById('claimBtn')) {
     return { key: 'claim', text: '还差一步:请先点上方的「是我本人，绑定并继续」' }
   }
@@ -521,7 +534,7 @@ async function doClaim() {
   btn.disabled = true; btn.textContent = '绑定中…'
   try {
     const res = await fetch(`/settlements/${encodeURIComponent(code)}/claim`, {
-      method: 'POST', headers: { 'content-type': 'application/json' },
+      method: 'POST', headers: signHeaders(),
       body: JSON.stringify(authPhone ? { phone: authPhone } : {})
     })
     const body = await res.json()
@@ -552,7 +565,7 @@ document.getElementById('signBtn').addEventListener('click', async () => {
   const miss = missingStep()
   if (miss) {
     toast(miss.text)
-    const el = document.getElementById(miss.key === 'claim' ? 'claimBtn' : (miss.key === 'disc' ? 'disc' : 'pad'))
+    const el = document.getElementById(miss.key === 'claim' ? 'claimBtn' : (miss.key === 'disc' ? 'disc' : miss.key === 'signerConfirmed' ? 'signerConfirmed' : 'pad'))
     if (el) {
       const box = miss.key === 'disc' ? el.closest('.disc') : (miss.key === 'claim' ? (el.closest('.claim') || el) : el)
       if (box) box.scrollIntoView({ behavior: 'smooth', block: 'center' })
@@ -564,9 +577,10 @@ document.getElementById('signBtn').addEventListener('click', async () => {
   try {
     const res = await fetch(`/settlements/${encodeURIComponent(code)}/sign`, {
       method: 'POST',
-      headers: { 'content-type': 'application/json' },
+      headers: signHeaders(),
       body: JSON.stringify({
         disclaimerAccepted: document.getElementById('disc').checked,
+        signerConfirmed: Boolean(document.getElementById('signerConfirmed')?.checked),
         // 笔迹点阵交给服务端渲进快照 SVG(唯一凭证);姓名文本继续保留供检索
         strokes,
         signature: data.settlement.servedPersonName || '顾客本人',
