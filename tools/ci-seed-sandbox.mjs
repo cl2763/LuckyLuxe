@@ -79,6 +79,11 @@ for (const tenant of [
   const created = await fetch(`${BASE}/platform/tenants`, { method: 'POST', headers: H, body: JSON.stringify({ ...tenant, plan: 'chain', currency: 'CNY', timezone: 'Asia/Shanghai' }) })
   if (![200, 201, 409].includes(created.status)) { console.error(`🔴 建租户 ${tenant.id} 失败 ${created.status}`); process.exit(1) }
   console.log(`   建租户 ${tenant.id} → ${created.status}`)
+  if (tenant.kind === 'demo') {
+    const tagged = await fetch(`${BASE}/platform/tenants/${tenant.id}/kind`, {method:'PATCH', headers:H,
+      body:JSON.stringify({kind:'demo', reason:'CI 临时夹具：会员等级校验'})})
+    if (!tagged.ok) {console.error(`🔴 标记演示夹具失败 ${tagged.status}`); process.exit(1)}
+  }
 }
 let r = await fetch(`${BASE}/platform/tenants/jics-nail/import/customers`, { method: 'POST', headers: H, body: JSON.stringify({ dryRun: false, rows: [{ displayName: 'CI 夹具顾客', phone: '13900000001' }] }) })
 if (!r.ok) { console.error(`🔴 导顾客失败 ${r.status} ${(await r.text()).slice(0, 200)}`); process.exit(1) }
