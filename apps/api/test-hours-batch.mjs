@@ -35,10 +35,10 @@ check('open-only without open days rejected',()=>assert(none.data.error))
 const english=component(null,HOURS_GATE_TEXT.en);Object.assign(english.data,{batchStart:'10:00',batchEnd:'18:00'});english.applyBatch()
 check('English labels and feedback',()=>{assert.equal(english.data.days[0].name,'Mon');assert(english.data.message.includes('7 days'))})
 // Both backend entry points must reject malformed batches without partial writes.
-const base=process.env.TEST_BASE_URL
-if (!base) throw Error('TEST_BASE_URL required')
+const base=process.env.TEST_BASE_URL || 'http://127.0.0.1:4128'
 await assertTestTarget(base)
-const token=process.env.TEST_ADMIN_TOKEN
+const { requireOwnerToken } = await import('./owner-token.mjs')
+const token=process.env.TEST_ADMIN_TOKEN || requireOwnerToken()
 async function req(path,body,method=body?'PUT':'GET',tid='lucky-luxe'){
  const r=await fetch(base+path,{method,headers:{authorization:'Bearer '+token,'content-type':'application/json','x-admin-tenant-id':tid,'x-tenant-id':tid},body:body?JSON.stringify(body):undefined});return {status:r.status,data:await r.json()}
 }
