@@ -303,14 +303,7 @@ function dollarsToCents(value) {
   return Math.round(Number(value || 0) * 100)
 }
 
-function escapeHtml(value = '') {
-  return String(value)
-    .replaceAll('&', '&amp;')
-    .replaceAll('<', '&lt;')
-    .replaceAll('>', '&gt;')
-    .replaceAll('"', '&quot;')
-    .replaceAll("'", '&#039;')
-}
+const escapeHtml = window.UIDialog.escapeHtml
 
 function technicianColor(id = '') {
   const palette = [
