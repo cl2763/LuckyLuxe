@@ -3,7 +3,7 @@ const { realValue } = require('../../../utils/placeholder-words.js')   // 11k:�
 
 Page({
   data: {
-    storeId: '', name: '', address: '', phone: '',
+    storeId: '', name: '', address: '', phone: '', hoursSaving: false, hoursSaveError: '', hoursTxt: {},
     hours: [], // [{weekday,label,isClosed,openTime,closeTime}]
     specials: [],
     onlineDeposit: true,
@@ -25,7 +25,7 @@ Page({
     } catch (err) { wx.showToast({ title: (err && err.message) || '保存失败', icon: 'none' }); this.loadDuty() }
   },
 
-  async onShow() { if (!(await api.guardOwner())) return; this.setData({ hoursTxt: api.hoursGateText() }); this.load(); this.loadRules(); this.loadDuty() },
+  async onShow() { if (!(await api.guardOwner())) return; this.setData({ hoursTxt: (wx.getStorageSync('lucky_lang') === 'en' ? api.hoursGateText().en : api.hoursGateText()) || api.hoursGateText() }); this.load(); this.loadRules(); this.loadDuty() },
 
   async loadRules() {
     try {
@@ -83,13 +83,16 @@ Page({
   /* 裁定2:营业时间保存走组件 save 事件(七天整份;A2 后端终闸兜底) */
   async onHoursSave(e) {
     if (this.data.hoursSaving) return
-    this.setData({ hoursSaving: true })
+    this.setData({ hoursSaving: true, hoursSaveError: '' })
     try {
       await api.adminRequest('/admin/business-hours', 'PUT', { storeId: this.data.storeId, hours: e.detail.hours })
+      const r = await api.adminGet('/admin/business-hours')
+      const store = (r.stores || []).find(s => s.id === this.data.storeId)
+      if (!store) throw new Error('营业时间读取失败')
+      this.setData({ hours: store.hours || [], hoursSaving: false })
       wx.showToast({ title: '营业时间已保存', icon: 'none' })
-      this.setData({ hoursSaving: false }); this.load()
     } catch (err) {
-      this.setData({ hoursSaving: false })
+      this.setData({ hoursSaving: false, hoursSaveError: this.data.hoursTxt.failed || '保存失败' })
       wx.showToast({ title: (err && err.message) || '保存失败', icon: 'none' })
     }
   },

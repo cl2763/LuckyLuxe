@@ -1,3 +1,4 @@
+import { validateBusinessHours, writeBusinessHours } from './business-hours-write.mjs'
 import { writeHttpBody } from './http-body.mjs'
 import {writeServiceNote} from './service-note-write.mjs'
 import { createSettlementReadAccess } from './settlement-read-access.mjs'
@@ -13111,21 +13112,14 @@ async function route(req, res) {
     if (section === 'business-hours') {
       const store = tenantStore()
       if (!store) throw apiError(404, 'NOT_FOUND', 'Store not found for tenant.')
-      if (req.method === 'GET') return json(res, 200, { hours: getBusinessHoursRows(store.id).map(serializeBusinessHour) })
+      if (req.method === 'GET') return json(res, 200, { hours: getBusinessHoursRows(store.id).map(serializeBusinessHour), hoursGateText: HOURS_GATE_TEXT })
       if (req.method === 'PUT') {
         const body = await readBody(req)
         const entries = Array.isArray(body.hours) ? body.hours : []
-        if (!entries.length) throw apiError(400, 'BAD_REQUEST', 'hours array is required.')
-        const tp2 = /^([01]\d|2[0-3]):[0-5]\d$/
-        for (const e of entries) {
-          if (!e.isClosed && (!tp2.test(e.openTime || '') || !tp2.test(e.closeTime || ''))) throw apiError(400, 'BAD_REQUEST', 'openTime/closeTime must be HH:MM.')
-        }
+        validateBusinessHours(entries, apiError)
         if (!hoursSavable(entries, getBusinessHoursRows(store.id))) throw apiError(400, 'HOURS_ALL_CLOSED', HOURS_GATE_TEXT.saveDisabledNote + '。')
-        const stmt = db.prepare(`INSERT INTO business_hours (store_id, weekday, open_time, close_time, is_closed, updated_at, updated_by)
-          VALUES (?, ?, ?, ?, ?, ?, 'platform')
-          ON CONFLICT(store_id, weekday) DO UPDATE SET open_time = excluded.open_time, close_time = excluded.close_time, is_closed = excluded.is_closed, updated_at = excluded.updated_at, updated_by = 'platform'`)
-        for (const e of entries) stmt.run(store.id, Number(e.weekday), e.isClosed ? '00:00' : e.openTime, e.isClosed ? '00:00' : e.closeTime, e.isClosed ? 1 : 0, iso(new Date()))
-        return json(res, 200, { hours: getBusinessHoursRows(store.id).map(serializeBusinessHour) })
+        writeBusinessHours(db, store.id, entries, 'platform', iso(new Date()))
+        return json(res, 200, { hours: getBusinessHoursRows(store.id).map(serializeBusinessHour), hoursGateText: HOURS_GATE_TEXT })
       }
     }
 

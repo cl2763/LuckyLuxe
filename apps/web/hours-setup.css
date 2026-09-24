@@ -1,0 +1,44 @@
+#hoursSetupWall { position: fixed; inset: 0; z-index: 200; background: var(--bg); display: flex; align-items: flex-start; justify-content: center; overflow: auto; padding: 24px 0; }
+.hsw-box { width: min(440px, 92vw); margin: auto 0; flex-shrink: 0; background: var(--card); border: 1px solid var(--line); border-radius: 14px; padding: 26px 24px; }
+.hsw-title { font-size: 20px; font-weight: 700; margin-bottom: 2px; }
+.hsw-hint { font-size: 13px; color: var(--muted); margin-bottom: 14px; }
+.hsw-day { display: flex; align-items: center; gap: 10px; padding: 8px 0; border-bottom: 1px dashed var(--line); }.hsw-sw { width: 34px; height: 20px; border-radius: 999px; border: none; background: var(--line); position: relative; cursor: pointer; flex-shrink: 0; }
+.hsw-sw::after { content: ""; position: absolute; width: 16px; height: 16px; border-radius: 50%; background: var(--card); top: 2px; left: 2px; transition: left .15s; }
+.hsw-sw.on { background: var(--hero2); }
+.hsw-sw.on::after { left: 16px; }
+.hsw-dn { width: 2.4em; font-size: 14px; }
+.hsw-times { margin-left: auto; display: flex; align-items: center; gap: 4px; font-size: 13px; }
+.hsw-times input { border: 1px solid var(--line); border-radius: 6px; padding: 3px 6px; font-size: 13px; }
+.hsw-ph { margin-left: auto; font-size: 12px; color: var(--muted); background: var(--wall); border-radius: 4px; padding: 2px 8px; }
+.hsw-save { width: 100%; margin-top: 16px; border: none; border-radius: 8px; padding: 11px 0; font-size: 15px; font-weight: 700; cursor: pointer; }
+.hsw-save.go { background: var(--hero2); color: var(--heroink); }
+.hsw-save.dis { background: var(--wall); color: var(--muted); cursor: not-allowed; }
+.hsw-note { text-align: center; font-size: 12px; color: var(--brandd); margin-top: 6px; }
+.hsw-staff { text-align: center; padding: 46px 24px; }
+.hsw-emoji { font-size: 34px; margin-bottom: 8px; }
+
+.hsw-settings { max-width: 440px; }
+.hsw-bulk { background: var(--tagmbg); border: 1px solid var(--brand); border-radius: 9px; padding: 13px; margin: 14px 0 8px; }
+.hsw-bulk-title { font-size: 13px; font-weight: 650; }
+.hsw-bulk-times, .hsw-bulk-actions { display: flex; align-items: center; gap: 7px; margin-top: 8px; }
+.hsw-bulk-times input { min-width: 0; width: 0; flex: 1; }
+.hsw-bulk-actions select { min-width: 0; flex: 1; font-size: 12px; }
+.hsw-bulk-actions button { background: var(--brand); color: var(--hero); border: 1px solid var(--brand); white-space: nowrap; font-size: 12px; font-weight: 600; }
+.hsw-bulk input, .hsw-bulk select, .hsw-bulk button { padding: 8px 6px; border-radius: 6px; }
+.hsw-bulk input, .hsw-bulk select { border: 1px solid var(--line); background: var(--card); color: var(--ink); font: inherit; font-size: 13px; }
+.hsw-bulk-hint { font-size: 11px; color: var(--brandd); line-height: 1.55; margin: 7px 0 0; }
+.hsw-feedback { display: flex; gap: 6px; align-items: center; font-size: 12px; min-height: 23px; margin: 10px 0; color: var(--brandd); }
+.hsw-feedback.is-error { color: var(--bad); }
+.hsw-feedback button { margin-left: auto; flex: none; border: 0; background: none; text-decoration: underline; color: inherit; padding: 2px; font-size: 12px; }
+.hsw-times input { width: 104px; min-width: 0; padding: 8px 5px; background: var(--card); color: var(--ink); }
+.hsw-day { min-height: 52px; padding: 9px 0; }
+.hsw-dn { flex-shrink: 0; }
+.hsw-box button:focus-visible, .hsw-settings button:focus-visible { outline: 2px solid var(--brand); outline-offset: 2px; }
+.hsw-box button:disabled, .hsw-settings button:disabled { cursor: not-allowed; }
+@media (max-width: 500px) { .hsw-times input { width: 88px; } .hsw-box { padding: 20px 16px; } .hsw-bulk-actions { flex-wrap: wrap; } .hsw-bulk-actions select { width: 100%; flex-basis: 100%; } .hsw-bulk-actions button { width: 100%; } }
+.hsw-times input, .hsw-bulk-times input { min-height: 0; height: 40px; }
+
+/* The thumb must remain visible on the dark surface as well. */
+.hsw-sw::after { background: var(--ink); }
+.hsw-sw.on::after { background: var(--heroink); }
+.hsw-sw.on { outline: 1px solid var(--muted); }

@@ -1,0 +1,6 @@
+{
+  "suites": 151,
+  "checks": 5357,
+  "failures": [],
+  "fixtureNote": "全量临时库缺少 tenant-ownership 与 tier-label 阳性夹具；按 CI 沙箱夹具补齐后四套复跑均通过。原始失败日志保留。"
+}

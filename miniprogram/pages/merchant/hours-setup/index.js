@@ -7,26 +7,26 @@ const api = require('../../../utils/api')
 const nav = require('../../../utils/nav')
 
 Page({
-  data: { isOwner: true, txt: {}, saving: false },
+  data: { isOwner: true, txt: {}, saving: false, saveError: '' },
 
   onShow() {
     if (!api.guardMerchant()) return
     /* 已设置的店误入本页(直链)→ 送回首页,本页只服务未设置态 */
     if (wx.getStorageSync('lucky_hours_unset') !== '1') { nav.relaunch('/pages/merchant/home/index'); return }
-    this.setData({ isOwner: api.isOwner(), txt: api.hoursGateText() })
+    this.setData({ isOwner: api.isOwner(), txt: (wx.getStorageSync('lucky_lang') === 'en' ? api.hoursGateText().en : api.hoursGateText()) || api.hoursGateText() })
   },
 
   async onSave(e) {
     if (this.data.saving) return
-    this.setData({ saving: true })
+    this.setData({ saving: true, saveError: '' })
     try {
       /* 七天整份提交;A2「至少一天营业」的最终闸在后端 PUT 里 */
       await api.adminPut('/admin/business-hours', { hours: e.detail.hours })
-      await api.adminMe().catch(() => {})   // 刷新旗标缓存(A5:设完立即生效)
+      await api.adminMe()   // 刷新旗标缓存(A5:设完立即生效)
       wx.setStorageSync('lucky_hours_unset', '')
       nav.relaunch('/pages/merchant/orders/index')
     } catch (err) {
-      this.setData({ saving: false })
+      this.setData({ saving: false, saveError: this.data.txt.failed || '保存失败' })
       wx.showToast({ title: (err && err.message) || '保存失败', icon: 'none' })
     }
   }

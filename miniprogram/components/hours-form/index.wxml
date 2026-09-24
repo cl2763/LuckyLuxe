@@ -1,15 +1,23 @@
-<!-- 图 v1.1 屏①同形:七行开关 + 时间 picker + 灰钮注(文案=后端 hoursGateText,零拼串) -->
 <view class="hf">
+  <view class="hf-bulk">
+    <view class="hf-bulk-title">{{txt.batchTitle}}</view>
+    <view class="hf-bulk-times">
+      <picker class="hf-bulk-time" mode="time" value="{{batchStart}}" disabled="{{saving}}" bindchange="pickBatchStart">{{batchStart || txt.timePlaceholder}}</picker><text>–</text>
+      <picker class="hf-bulk-time" mode="time" value="{{batchEnd}}" disabled="{{saving}}" bindchange="pickBatchEnd">{{batchEnd || txt.timePlaceholder}}</picker>
+    </view>
+    <view class="hf-bulk-actions"><picker class="hf-scope" range="{{scopeLabels}}" value="{{scopeIndex}}" disabled="{{saving}}" bindchange="pickScope">{{scopeLabels[scopeIndex]}} ▾</picker><button class="hf-apply" disabled="{{saving}}" bindtap="applyBatch">{{scopeIndex === 0 ? txt.applyAll : txt.applyOpen}}</button></view>
+    <view class="hf-bulk-hint">{{scopeIndex === 0 ? txt.hintAll : txt.hintOpen}}<view>{{txt.hintDraft}}</view></view>
+  </view>
+  <view class="hf-feedback {{error ? 'is-error' : ''}}"><text>{{saving ? txt.saving : (message || txt.untouched)}}</text><button wx:if="{{canUndo}}" class="hf-undo" disabled="{{saving}}" bindtap="undoBatch">{{txt.undo}}</button></view>
   <view class="hf-day" wx:for="{{days}}" wx:key="weekday" wx:for-item="d" wx:for-index="i">
-    <switch class="hf-sw" checked="{{d.open}}" data-i="{{i}}" bindchange="toggleDay" color="#0e6e62" />
+    <switch class="hf-sw" checked="{{d.open}}" disabled="{{saving}}" data-i="{{i}}" bindchange="toggleDay" color="#0e6e62" />
     <text class="hf-dn">{{d.name}}</text>
     <block wx:if="{{d.open}}">
-      <picker class="hf-tm set" mode="time" value="{{d.openTime}}" data-i="{{i}}" bindchange="pickOpen">{{d.openTime || txt.timePlaceholder}}</picker>
-      <text class="hf-dash">–</text>
-      <picker class="hf-tm set" mode="time" value="{{d.closeTime}}" data-i="{{i}}" bindchange="pickClose">{{d.closeTime || txt.timePlaceholder}}</picker>
+      <picker class="hf-tm set" mode="time" value="{{d.openTime}}" disabled="{{saving}}" data-i="{{i}}" bindchange="pickOpen">{{d.openTime || txt.timePlaceholder}}</picker><text class="hf-dash">–</text>
+      <picker class="hf-tm set" mode="time" value="{{d.closeTime}}" disabled="{{saving}}" data-i="{{i}}" bindchange="pickClose">{{d.closeTime || txt.timePlaceholder}}</picker>
     </block>
-    <text class="hf-tm ph" wx:else>{{txt.timePlaceholder}}</text>
+    <text class="hf-tm ph" wx:else>{{txt.closed || txt.timePlaceholder}}</text>
   </view>
-  <view class="hf-save {{anyOpen && !saving ? 'go' : 'dis'}}" bindtap="save">{{saving ? '保存中…' : (saveLabel || txt.saveButton)}}</view>
+  <button class="hf-save {{canSave && !saving ? 'go' : 'dis'}}" disabled="{{!canSave || saving}}" bindtap="save">{{saving ? txt.saving : (saveLabel || txt.saveButton)}}</button>
   <view class="hf-note" wx:if="{{!anyOpen}}">{{txt.saveDisabledNote}}</view>
 </view>

@@ -53,9 +53,17 @@ try{
  await shot('platform-service-import');
  const untouchedHoursB=JSON.stringify((await api('/platform/tenants/ui-b/business-hours')).data.hours);
  await click("button[data-tab='hours']");
- for(const w of [0,1,2,3,4,5,6]){if(!await ev(`document.querySelector('#hourRows tr[data-w="${w}"] .hopen').checked`))await click(`#hourRows tr[data-w="${w}"] .hopen`);await fill(`#hourRows tr[data-w="${w}"] .hstart`,'08:00');await fill(`#hourRows tr[data-w="${w}"] .hend`,'22:00')}
- await click("button[onclick='saveHours()']");await wait('营业保存',"document.querySelector('#toast').textContent.includes('营业时间已保存')");
+ await fill('#platformHoursEditor [data-hsw-batch="start"]','08:00');await fill('#platformHoursEditor [data-hsw-batch="end"]','22:00');await click('#platformHoursEditor [data-hsw-apply]');
+ check('批量应用只改草稿，保存前后台仍未配置',(await api('/platform/tenants/ui-a/business-hours')).data.hours.length===0);
+ await click('#platformHoursEditor [data-hsw-save]');await wait('营业保存',"document.querySelector('#toast').textContent.includes('营业时间已保存')");
  check('网页营业时间保存七天读回且不串店',(await api('/platform/tenants/ui-a/business-hours')).data.hours.every(h=>h.openTime==='08:00'&&h.closeTime==='22:00'&&!h.isClosed)&&JSON.stringify((await api('/platform/tenants/ui-b/business-hours')).data.hours)===untouchedHoursB);
+ for(let round=1;round<=5;round++){
+  await fill('#cfgTenant','ui-b');await wait('乙店营业时间空态',"document.querySelector('#stName').value==='网页测试乙店'&&!document.querySelector('#stName').disabled");
+  check('平台第'+round+'次换店无遗留草稿',await ev("document.querySelectorAll('#platformHoursEditor [data-hsw-open]').length===0"));
+  await fill('#cfgTenant','ui-a');await wait('甲店营业时间读回',"document.querySelector('#stName').value==='网页测试甲店·新店名'&&!document.querySelector('#stName').disabled");
+  await fill('#platformHoursEditor [data-hsw-batch="start"]','09:00');await fill('#platformHoursEditor [data-hsw-batch="end"]','17:00');await click('#platformHoursEditor [data-hsw-apply]');await click('#platformHoursEditor [data-hsw-undo]');
+  check('平台第'+round+'次批量撤销恢复本店已存七天',await ev("document.querySelectorAll('#platformHoursEditor [data-hsw-open]').length===7&&[...document.querySelectorAll('#platformHoursEditor [data-hsw-open]')].every(e=>e.value==='08:00')"));
+ }
  await click("button[data-tab='techs']");await fill('#techName','网页验收技师');await fill('#techTitle','验收专用');await click("button[onclick='addTech()']");await wait('新增技师读回',"document.querySelector('#techRows').innerText.includes('网页验收技师')&&!document.querySelector('#techName').disabled");
  await click('#techRows button');await wait('技师停用读回',"document.querySelector('#techRows button').innerText==='启用'&&!document.querySelector('#techName').disabled");check('网页停用技师真实生效',(await api('/platform/tenants/ui-a/technicians')).data.technicians[0].is_active===0);
  await click('#techRows button');await wait('技师恢复',"document.querySelector('#techRows button').innerText==='停用'&&!document.querySelector('#techName').disabled");
