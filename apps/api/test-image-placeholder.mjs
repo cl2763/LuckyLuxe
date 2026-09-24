@@ -98,7 +98,7 @@ const UI_ASSET_ALLOW = {
   'miniprogram/pages/home/index.wxml|youji-logo': '顶栏品牌位',
   'miniprogram/pages/me/index.wxml|c-': '「我的」页入口图标 —— **5 行**一组(c-gift / c-message / c-ticket / c-store / c-crown);02g 复核:理由与实际赦免的 5 行一一对上',
   'miniprogram/pages/merchant-login/index.wxml|eye': '密码显隐图标',
-  'miniprogram/components/img-placeholder/index.wxml|{{src}}': '占位组件自己那一行 —— 它就是出口本身',
+  'miniprogram/components/img-placeholder/index.wxml|{{src}}': '占位组件自身两行：带范围与旧图分支互斥，两个都由 src 非空守卫',
   'apps/web/img-placeholder.js|<img': '网页占位出口自己那 2 行 —— 它就是出口本身(02g 复核:2 行都是出口)',
   'apps/web/sign.html|signature': '服务确认单上的**签字笔迹** —— 有单必有笔迹,不是商家上传的内容图',
   'apps/web/snapshot-viewer.js|items[i].url': '快照查看器:进得来就一定有快照(调用方已判空)',

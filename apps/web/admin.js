@@ -1,6 +1,6 @@
 // 构建号:每次交付递增。侧栏可见,排查"改了没生效"时先对版本。
 // 兜底用(服务端会注入 window.LL_BUILD = 资源内容指纹,页面优先显示那个)
-const ADMIN_BUILD = '20260924-hours-batch'
+const ADMIN_BUILD = '20260924-image-framing'
 let pricingState = { module: 'storefront', tab: 'items', categories: [], items: [], rules: {}, editing: null, preview: null, storefrontPicker: false }
 console.log(`[admin] build ${ADMIN_BUILD}`)
 
@@ -3867,7 +3867,7 @@ function editorFromService(service) {
     descriptionZh: service.descriptionZh || '',
     descriptionEn: service.descriptionEn || '',
     /* 裁2(02c):取不到不许编一张图顶上 —— 空值交给渲染层的占位出口(占位零回落律) */
-    imageUrl: service.imageUrl || '',
+    imageUrl: service.imageUrl || '', imageView: service.imageView || {},
     price: cents(service.priceCents),
     deposit: cents(service.depositCents),
     duration: String(service.durationMin || 120),
@@ -3908,13 +3908,7 @@ function renderServiceEditor() {
       </div>
       <label><span>${t('descriptionZh')}</span><textarea name="descriptionZh" rows="2">${escapeHtml(service.descriptionZh)}</textarea></label>
       <label><span>${t('descriptionEn')}</span><textarea name="descriptionEn" rows="2">${escapeHtml(service.descriptionEn)}</textarea></label>
-      <label class="service-image-field">
-        <span>${t('imageUrl')}</span>
-        ${window.ImgPlaceholder.tag(service.imageUrl, { alt: t('imageUrl'), zh: owner.lang === 'zh' })}
-        <input name="imageUrl" type="hidden" value="${escapeHtml(service.imageUrl)}">
-        <input name="imageFile" type="file" accept="image/*">
-        <small>${t('uploadImage')}</small>
-      </label>
+      ${window.ServiceImageEditor.field(service, owner.lang === 'zh')}
       <div class="form-grid">
         <label><span>${t('priceCad')}</span><input name="price" inputmode="decimal" value="${escapeHtml(service.price)}"></label>
         <label><span>${t('depositCad')}</span><input name="deposit" inputmode="decimal" value="${escapeHtml(service.deposit)}"></label>
@@ -4822,8 +4816,7 @@ async function saveService(id) {
 async function saveServiceEditor(event) {
   event.preventDefault()
   const form = new FormData(event.target)
-  const imageFile = form.get('imageFile')
-  const imageUrl = imageFile && imageFile.size ? await readCompressedImage(imageFile) : form.get('imageUrl')
+  if (event.target.dataset.imageReading) throw Error('图片正在读取，请稍候'); const imageUrl = form.get('imageUrl')
   const body = {
     type: form.get('type'),
     // 分类唯一真相律:只送 categoryId,自由文本 category 不再送(后端也不再接受)
@@ -4832,7 +4825,7 @@ async function saveServiceEditor(event) {
     nameEn: form.get('nameEn'),
     descriptionZh: form.get('descriptionZh'),
     descriptionEn: form.get('descriptionEn'),
-    imageUrl,
+    imageUrl, imageView: JSON.parse(form.get('imageView') || '{}'),
     priceCents: dollarsToCents(form.get('price')),
     depositCents: dollarsToCents(form.get('deposit')),
     baseDurationMin: Number(form.get('duration')),
@@ -6211,11 +6204,7 @@ els.serviceEditor.addEventListener('click', (event) => {
 els.serviceEditor.addEventListener('change', (event) => {
   const input = event.target.closest('input[name="imageFile"]')
   if (!input || !input.files?.[0]) return
-  readCompressedImage(input.files[0]).then((image) => {
-    const form = input.closest('form')
-    form.querySelector('input[name="imageUrl"]').value = image
-    form.querySelector('.service-image-field img').src = image
-  }).catch((error) => toast(error.message))
+  window.ServiceImageEditor.upload(input).catch((error) => toast(error.message))
 })
 els.serviceEditor.addEventListener('submit', (event) => {
   if (!event.target.matches('#serviceEditorForm')) return

@@ -9,7 +9,7 @@
          生产在墙内可能慢,那时换 ② 而不是换字体。**这一行与合同图第 2 行是同一行。** -->
     <!-- 境内网络不能让外部字体阻塞业务；字体未就绪时使用既有本机字体回退。 -->
     <link rel="stylesheet" media="print" onload="this.media='all'" onerror="this.remove()" href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,500;9..144,700&family=Noto+Serif+SC:wght@600;700&family=Noto+Sans+SC:wght@400;500;700&display=swap">
-    <link rel="stylesheet" href="/web/styles.css?v=20260924-hours-batch">
+    <link rel="stylesheet" href="/web/styles.css?v=20260924-image-framing">
     <!-- 设计令牌排在 styles.css **之后**:令牌是唯一真相,谁在后面谁说了算。
          `--ink/--line/--paper/--card` 四个原来在 styles.css 里也有一份(值略有出入),
          已从那边删掉 —— 一个令牌只许有一处定义。 -->
@@ -333,7 +333,8 @@
       .cpn-hit .subtle{margin-left:auto}
     </style>
   <link rel="stylesheet" href="/web/hours-setup.css?v=20260924-hours-batch">
-</head>
+  <link rel="stylesheet" href="/web/image-framing.css?v=20260924-images">
+  </head>
   <body>
     <main class="shell admin-shell">
       <header class="topbar">
@@ -1051,7 +1052,11 @@
     <!-- D183 明暗双模式:**排在所有脚本最前** —— 它进来就把 data-theme 套上,
          晚一步页面就会先闪一下浅色再变深。 -->
     <script src="/web/theme-switch.js?v=20260909b-contrast"></script>
-    <script src="/web/img-placeholder.js?v=20260828b-ph"></script>
+    <script src="/web/image-view-core.js?v=20260924-images"></script>
+    <script src="/web/image-framing.js?v=20260924-images"></script>
+    <script src="/web/home-image-preview.js?v=20260924-images"></script>
+    <script src="/web/service-image-editor.js?v=20260924-images"></script>
+    <script src="/web/img-placeholder.js?v=20260924-images"></script>
     <script src="/web/hours-setup.js?v=20260924-hours-batch"></script>
     <script src="/web/notify-settings.js?v=20260901t-obs01"></script>
     <script src="/web/attendance-wifi.js?v=20260901t-obs01"></script>
@@ -1068,7 +1073,7 @@
     <script src="/web/settlement-web.js?v=20260924c-20260901t-obs01"></script>
     <script src="/web/finance-entry-form.js?v=20260829a-ch"></script>
     <script src="/web/placeholder-words.js?v=20260922a-ph"></script>
-    <script src="/web/store-content.js?v=20260828a-d78"></script>
+    <script src="/web/store-content.js?v=20260924-images"></script>
     <script src="/web/ai-desk.js?v=20260825e-w2"></script>
     <script src="/web/finance-trend.js?v=20260825e-w2"></script>
     <script src="/web/service-catalog.js?v=20260825e-w2"></script>
@@ -1087,6 +1092,6 @@
     <script src="/web/dashboard-fullscreen.js?v=20260909b-contrast"></script>
     <script src="/web/dashboard-home.js?v=20260909b-contrast"></script>
     <script src="/web/register-gate.js?v=20260924a-12m"></script>
-    <script src="/web/admin.js?v=20260924-hours-batch"></script>
+    <script src="/web/admin.js?v=20260924-image-framing"></script>
   </body>
 </html>

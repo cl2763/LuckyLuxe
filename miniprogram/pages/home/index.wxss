@@ -102,13 +102,17 @@
 }
 
 .shop-card-name {
-  font-size: 40rpx;
+  font-size: 48rpx;
   font-weight: 850;
   color:var(--ink);
   letter-spacing: 1rpx;
   overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
+  display: -webkit-box;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
+  word-break: break-all;
+  line-height: 1.35;
+  width: 100%;
 }
 
 .shop-status {
@@ -496,3 +500,5 @@
 /* D108:值没有时那一行只说明、不可点 —— 视觉上也要弱下去 */
 .shop-card-row.muted { color:var(--sub); }
 .shop-card-row.muted .shop-row-text { color:var(--sub); }
+
+.store-name-measure { position:fixed;left:-10000rpx;top:0;white-space:nowrap;font-size:48rpx;font-weight:850;letter-spacing:1rpx;visibility:hidden; }

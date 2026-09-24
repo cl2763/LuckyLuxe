@@ -1,3 +1,4 @@
+const storeNameFit = require('../../utils/store-name-fit')
 const { curOf, ensureCurrencyCached } = require('../../utils/storecurrency')
 const { isPlaceholderValue } = require('../../utils/placeholder-words.js')   // 11k:占位词表唯一出口
 const i18n = require('../../utils/i18n')
@@ -141,8 +142,11 @@ Page({
        ⚠️ 第三种情况必须分开:**一个服务都没有时不给入口卡** ——
        那正是店主点破的「点进去空空如也」,入口卡等于把空推给下一页。那时如实说一句。 */
     const allSvc = i18n.localizeServices([...nailServices, ...lashServices], lang)
-    this.setData({ fallbackServices: allSvc.slice(0, 4) })
+    this.setData({ fallbackServices: allSvc.slice(0, 4) }, () => storeNameFit.fit(this))
   },
+
+  showFullStoreName() { storeNameFit.show(this) },
+  onResize() { storeNameFit.fit(this) },
 
   switchLanguage(event) {
     const lang = event.currentTarget.dataset.lang

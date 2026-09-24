@@ -1,3 +1,4 @@
+import { ensureServiceImageViewSchema, storedImageView, serviceImageFields } from './image-view.mjs'
 import { validateBusinessHours, writeBusinessHours } from './business-hours-write.mjs'
 import { writeHttpBody } from './http-body.mjs'
 import {writeServiceNote} from './service-note-write.mjs'
@@ -4928,12 +4929,7 @@ function serviceIdFrom(body) {
     .replace(/[^a-z0-9]+/g, '-')
     .replace(/^-+|-+$/g, '')
     .slice(0, 42) || `service-${Date.now()}`
-  /* 🔴 后缀只有毫秒会撞:同一毫秒里建两个同名同类的服务 → `UNIQUE constraint failed: services.id`。
-     05n 现场撞到过一次(`test-settlement` 整套红,重跑就绿)——**偶发红比真红更坏**,
-     它让每一次「全绿」都要打个问号。加一段随机把碰撞概率压掉。 */
-  /* ⚠️ 头一版我只加了 3 位随机(36³=46,656),自己验算 5000 次就撞了 81 个 ——
-     生日碰撞,3 位根本不够。用 `randomUUID` 取 8 位:36^8 量级,同毫秒万次也不撞。
-     (差点把一个仍会撞的「修复」当成修好了 —— 所以每个修复都要自己先验一遍。) */
+  // Random suffix prevents same-millisecond service IDs colliding.
   const stamp = `${Date.now().toString(36)}${randomUUID().replace(/-/g, '').slice(0, 8)}`
   return `${String(body.type || 'NAIL').toLowerCase()}-${source}-${stamp}`
 }
@@ -4952,6 +4948,7 @@ function servicePayload(body, current = {}) {
     nameEn: body.nameEn ?? current.name_en ?? '',
     descriptionZh: body.descriptionZh ?? current.description_zh ?? '',
     descriptionEn: body.descriptionEn ?? current.description_en ?? '',
+    imageViewJson: serviceImageFields(body, current, message => apiError(400, 'BAD_REQUEST', message)),
     imageUrl: body.imageUrl ?? current.image_url ?? '',   // 占位零回落:没传图就是没有,不塞本店那张(理由见 ./image-placeholder.mjs)
     priceCents: Number(body.priceCents ?? current.price_cents ?? 0),
     depositCents: Number(body.depositCents ?? current.deposit_cents ?? 5000),
@@ -5041,7 +5038,7 @@ function serializeService(row, lang = 'zh') {
     description: lang === 'en' ? row.description_en : row.description_zh,
     descriptionZh: row.description_zh,
     descriptionEn: row.description_en,
-    imageUrl: contentImage(row.image_url),   // 平台自带资产=没人上传过 → 回空,两端出占位
+    imageView: storedImageView(row.image_view_json), imageUrl: contentImage(row.image_url),   // 平台自带资产=没人上传过 → 回空,两端出占位
     price: cents(row.price_cents),
     priceCents: row.price_cents,
     // S1:顾客橱窗展示价=最低可用价档+「起」(前端只拼字不算数)
@@ -11760,8 +11757,8 @@ async function route(req, res) {
     assertCategoryOk(payload.categoryId, currentTenantId())   // 分类唯一真相律③:上架项目必须挂大类
     const id = serviceIdFrom(payload)
     db.prepare(`INSERT INTO services
-      (id, tenant_id, type, category, category_id, name_zh, name_en, description_zh, description_en, image_url, price_cents, deposit_cents, base_duration_min, sort_order, is_active, process_json, notice_json, storefront, is_timecard)
-      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`).run(id, currentTenantId(), payload.type, payload.category, payload.categoryId, payload.nameZh, payload.nameEn, payload.descriptionZh, payload.descriptionEn, payload.imageUrl, payload.priceCents, payload.depositCents, payload.baseDurationMin, payload.sortOrder, payload.isActive, JSON.stringify(payload.processJson), JSON.stringify(payload.noticeJson), 1, 0)
+      (id, tenant_id, type, category, category_id, name_zh, name_en, description_zh, description_en, image_url, image_view_json, price_cents, deposit_cents, base_duration_min, sort_order, is_active, process_json, notice_json, storefront, is_timecard)
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`).run(id, currentTenantId(), payload.type, payload.category, payload.categoryId, payload.nameZh, payload.nameEn, payload.descriptionZh, payload.descriptionEn, payload.imageUrl, payload.imageViewJson, payload.priceCents, payload.depositCents, payload.baseDurationMin, payload.sortOrder, payload.isActive, JSON.stringify(payload.processJson), JSON.stringify(payload.noticeJson), 1, 0)
     // 2026-08-06:老「服务管理」页也走多价位模型的 list 档,保证 price_cents 与 service_prices(list) 永不漂移
     upsertServicePrice(currentTenantId(), id, 'list', payload.priceCents)
     const assign = db.prepare('INSERT OR IGNORE INTO technician_services (technician_id, service_id) VALUES (?, ?)')
@@ -11787,9 +11784,9 @@ async function route(req, res) {
     assertServicePriceOk(payload)                              // 08-28 A5:改价这条路同样兜底(建/改两口都过闸)
     assertCategoryOk(payload.categoryId, currentTenantId())   // 分类唯一真相律③
     db.prepare(`UPDATE services SET
-      type = ?, category = ?, category_id = ?, name_zh = ?, name_en = ?, description_zh = ?, description_en = ?, image_url = ?,
+      type = ?, category = ?, category_id = ?, name_zh = ?, name_en = ?, description_zh = ?, description_en = ?, image_url = ?, image_view_json = ?,
       price_cents = ?, deposit_cents = ?, base_duration_min = ?, is_active = ?, sort_order = ?, process_json = ?, notice_json = ?
-      WHERE id = ?`).run(payload.type, payload.category, payload.categoryId, payload.nameZh, payload.nameEn, payload.descriptionZh, payload.descriptionEn, payload.imageUrl, payload.priceCents, payload.depositCents, payload.baseDurationMin, payload.isActive, payload.sortOrder, JSON.stringify(payload.processJson), JSON.stringify(payload.noticeJson), id)
+      WHERE id = ?`).run(payload.type, payload.category, payload.categoryId, payload.nameZh, payload.nameEn, payload.descriptionZh, payload.descriptionEn, payload.imageUrl, payload.imageViewJson, payload.priceCents, payload.depositCents, payload.baseDurationMin, payload.isActive, payload.sortOrder, JSON.stringify(payload.processJson), JSON.stringify(payload.noticeJson), id)
     upsertServicePrice(currentTenantId(), id, 'list', payload.priceCents) // 同上:改价即同步 list 档
     return json(res, 200, { service: serializeService(getService(id)) })
   }
@@ -13143,9 +13140,9 @@ async function route(req, res) {
         }
         assertCategoryOk(payload.categoryId, tenantId)
         const id = serviceIdFrom(payload)
-        db.prepare(`INSERT INTO services (id, tenant_id, type, category, category_id, name_zh, name_en, description_zh, description_en, image_url, price_cents, deposit_cents, base_duration_min, sort_order, is_active, process_json, notice_json, storefront, is_timecard)
-          VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`)
-          .run(id, tenantId, payload.type, payload.category, payload.categoryId, payload.nameZh, payload.nameEn, payload.descriptionZh, payload.descriptionEn, payload.imageUrl, payload.priceCents, payload.depositCents, payload.baseDurationMin, payload.sortOrder, payload.isActive, JSON.stringify(payload.processJson), JSON.stringify(payload.noticeJson), 1, 0)
+        db.prepare(`INSERT INTO services (id, tenant_id, type, category, category_id, name_zh, name_en, description_zh, description_en, image_url, image_view_json, price_cents, deposit_cents, base_duration_min, sort_order, is_active, process_json, notice_json, storefront, is_timecard)
+          VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`)
+          .run(id, tenantId, payload.type, payload.category, payload.categoryId, payload.nameZh, payload.nameEn, payload.descriptionZh, payload.descriptionEn, payload.imageUrl, payload.imageViewJson, payload.priceCents, payload.depositCents, payload.baseDurationMin, payload.sortOrder, payload.isActive, JSON.stringify(payload.processJson), JSON.stringify(payload.noticeJson), 1, 0)
         upsertServicePrice(tenantId, id, 'list', payload.priceCents) // 与多价位模型的 list 档双写
         // 该租户在职技师自动可做新服务(与商家端一致)
         const assign = db.prepare('INSERT OR IGNORE INTO technician_services (technician_id, service_id) VALUES (?, ?)')
@@ -13157,8 +13154,8 @@ async function route(req, res) {
         if (!cur) throw apiError(404, 'NOT_FOUND', 'Service not found in tenant.')
         const payload = servicePayload(await readBody(req), cur)
         assertServicePriceOk(payload)                          // 08-28 A5:第三条改价路径,同一把闸
-        db.prepare(`UPDATE services SET type = ?, category = ?, name_zh = ?, name_en = ?, description_zh = ?, description_en = ?, image_url = ?, price_cents = ?, deposit_cents = ?, base_duration_min = ?, is_active = ?, sort_order = ?, process_json = ?, notice_json = ? WHERE id = ?`)
-          .run(payload.type, payload.category, payload.nameZh, payload.nameEn, payload.descriptionZh, payload.descriptionEn, payload.imageUrl, payload.priceCents, payload.depositCents, payload.baseDurationMin, payload.isActive, payload.sortOrder, JSON.stringify(payload.processJson), JSON.stringify(payload.noticeJson), subId)
+        db.prepare(`UPDATE services SET type = ?, category = ?, name_zh = ?, name_en = ?, description_zh = ?, description_en = ?, image_url = ?, image_view_json = ?, price_cents = ?, deposit_cents = ?, base_duration_min = ?, is_active = ?, sort_order = ?, process_json = ?, notice_json = ? WHERE id = ?`)
+          .run(payload.type, payload.category, payload.nameZh, payload.nameEn, payload.descriptionZh, payload.descriptionEn, payload.imageUrl, payload.imageViewJson, payload.priceCents, payload.depositCents, payload.baseDurationMin, payload.isActive, payload.sortOrder, JSON.stringify(payload.processJson), JSON.stringify(payload.noticeJson), subId)
         upsertServicePrice(tenantId, subId, 'list', payload.priceCents) // 同上
         return json(res, 200, { service: serializeService(getService(subId)) })
       }
@@ -16648,6 +16645,7 @@ try {
 }
 // N-5 退卡口的建表与建列(拆账两列 / 幂等单号 / 次卡已退次数 / 次卡退款表)全在 ./account-refund-schema.mjs
 ensureRefundSchema(db)
+ensureServiceImageViewSchema(db)
 ensureHeroSlidesSchema(db)   // D78:建表后立刻 PRAGMA 逐列自证(静默失败器族)
 ensureCashNotesSchema(db)    // D79:同上
 // 🔴 D76 可见性列(与账本归属解耦):建列 + 演示店默认不上架,实现在 ./tenant-visibility.mjs
