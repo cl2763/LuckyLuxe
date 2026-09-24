@@ -1,3 +1,4 @@
+import { writeHttpBody } from './http-body.mjs'
 import {writeServiceNote} from './service-note-write.mjs'
 import { createSettlementReadAccess } from './settlement-read-access.mjs'
 import { createSettlementAccess } from './settlement-access.mjs'
@@ -1305,13 +1306,12 @@ function seedDatabase() {
 
 function json(res, statusCode, body, extraHeaders) {
   // extraHeaders 是 2026-08-25 加的可选参数(平台会话要下 Set-Cookie);不传时行为一字未变
-  res.writeHead(statusCode, Object.assign({
+  writeHttpBody(res, statusCode, Object.assign({
     'content-type': 'application/json; charset=utf-8',
     'access-control-allow-origin': '*',
     'access-control-allow-methods': 'GET,POST,PATCH,PUT,DELETE,OPTIONS',
     'access-control-allow-headers': 'content-type,authorization'
-  }, extraHeaders || {}))
-  res.end(JSON.stringify(body))
+  }, extraHeaders || {}), JSON.stringify(body))
 }
 
 /* ===== 静态文件服务已搬出到 ./static-serve.mjs(公约②,2026-08-25)===== */

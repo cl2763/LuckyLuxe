@@ -168,7 +168,7 @@ try{
  signedDb.close();await shot('customer-signed');
  await wait('已签笔迹正常显示',"document.querySelector('img.ink')?.naturalWidth>0");
  check('已签凭证和签名图片都用限时只读地址',await ev("document.querySelector('img.ink').src.includes('view=')&&document.querySelector('.done a').href.includes('view=')"));
- await send('Page.navigate',{url:base+'/admin'});await wait('回商家订单入口',"document.querySelector('#sidebarBookings')?.offsetParent!==null");await click('#sidebarBookings');await click('#allTab');
+ await send('Page.navigate',{url:base+'/admin'});await wait('回商家订单入口',"document.querySelector('#sidebarBookings')?.offsetParent!=null");await click('#sidebarBookings');await click('#allTab');
  await fill('#filterDate',direct.appointmentDate);await wait('商家读回已签完成',`document.querySelector("#bk-${direct.id} .status")?.innerText==='已完成'`);check('网页商家返回后可见原单已完成',true);await shot('merchant-after-sign');
 
 
@@ -179,10 +179,10 @@ try{
  await ev(`localStorage.setItem('lucky-web-tenant','ui-a');localStorage.setItem('lucky-web-auth',JSON.stringify({__tenant:'ui-a',__value:${JSON.stringify(customer.auth)}}))`);
  await send('Page.navigate',{url:base+'/sign/'+cs.code});await wait('顾客旧入口',"document.querySelector('#signerConfirmed')");check('网页顾客旧入口用本人会话成功换链接',await ev("location.search.includes('t=')"));
  const staff=(await adminApi('/admin/staff-accounts',{technicianId:tech.id})).data;
- await send('Page.navigate',{url:base+'/admin'});await wait('商家退出按钮',"document.querySelector('#ownerLogout')?.offsetParent!==null");await click('#ownerLogout');await wait('员工登录表单',"document.querySelector('#ownerLoginForm')?.offsetParent!==null");await click('#loginTabStaff');
+ await send('Page.navigate',{url:base+'/admin'});await wait('商家退出按钮',"document.querySelector('#ownerLogout')?.offsetParent!=null");await click('#ownerLogout');await wait('员工登录表单',"document.querySelector('#ownerLoginForm')?.offsetParent!=null");await click('#loginTabStaff');
  await fill('#ownerLoginForm input[name=email]',staff.username);await fill('#ownerLoginForm input[name=password]',staff.initialPassword);await click('#ownerLoginButton');
  await wait('员工首登改密',"document.querySelector('#forceOldPass')");await fill('#forceOldPass',staff.initialPassword);await fill('#forceNewPass','P0-staff-password-test');await fill('#forceNewPass2','P0-staff-password-test');await click('[data-force-pass-submit]');
- await wait('员工菜单',"document.querySelector('#sidebarMyCustomers')?.offsetParent!==null&&!document.querySelector('#forceOldPass')");
+ await wait('员工菜单',"document.querySelector('#sidebarMyCustomers')?.offsetParent!=null&&!document.querySelector('#forceOldPass')");
  check('员工真实登录改密后隐藏老板财务与配置入口',await ev("['#sidebarFinance','#sidebarStoreSettings','#sidebarMembership'].every(s=>document.querySelector(s).offsetParent===null)"));
  await click('#sidebarMyCustomers');await wait('员工已服务客档',`document.querySelector('[data-my-customer="${direct.user.id}"]')`);await click(`[data-my-customer="${direct.user.id}"]`);await wait('服务小记表单',"document.querySelector('#myNoteBody')");
  check('员工能打开自己服务的顾客，客档无充值退卡按钮',await ev("document.querySelector('#myCustomersPage').innerText.includes('网页完整建档排单客')&&![...document.querySelectorAll('#myCustomersPage button')].some(b=>/充值|退卡|改余额/.test(b.innerText))"));
