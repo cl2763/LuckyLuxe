@@ -82,8 +82,14 @@ if (!onTest) {
   await assertTestTarget(BASE_URL)
   const DB = process.env.TEST_DB_PATH
   const db = new DatabaseSync(DB, { readOnly: true })
-  const tenants = db.prepare(`SELECT t.id FROM tenants t JOIN stores s ON s.tenant_id = t.id AND s.is_active = 1
-    ORDER BY t.id LIMIT 3`).all().map((r) => r.id)
+  // 本套件自建三家已开通 AI 的店，不能随机抽中其他套件故意关闭 AI 的夹具。
+  const fixtureTag=Date.now().toString(36),tenants=[]
+  for(let i=0;i<3;i++){
+    const id=`ai-same-${fixtureTag}-${i}`
+    const r=await fetch(`${BASE_URL}/platform/tenants`,{method:'POST',headers:{authorization:`Bearer ${TOKEN}`,'content-type':'application/json'},body:JSON.stringify({id,name:id,plan:'chain',currency:'CNY',timezone:'Asia/Shanghai'})})
+    if(r.status!==201)throw new Error('AI 同出口夹具建店失败')
+    tenants.push(id)
+  }
   /* 🔴 执行随机段(J-31):会话 id 里必须带这一跑独有的串,
      否则两跑之间会接上同一通对话,答案跟着上下文变,「同答」就成了随机数。 */
   const RUN = `d155-${Date.now().toString(36)}`

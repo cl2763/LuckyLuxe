@@ -66,7 +66,7 @@ const sb = await ensureSandbox({ label: '[tier-label]' })
 if (!sb.ok) {
   console.log('   ⚠️ 沙箱不可用 —— **行为层两条本轮未跑**(不静默跳过,如实说)')
 } else {
-  const SANDBOX = 'http://127.0.0.1:4310'
+  const {SANDBOX_URL:SANDBOX}=await import('./test-need-sandbox.mjs')
   /* 用**演示店**做现测(账本现测关门闸之外的配置口,且演示店本就可重置);
      造完当场还原(夹具收尾:判据不收尾就变成非幂等)。 */
   const TID = 'demo-lucky-luxe'

@@ -65,9 +65,9 @@ const svc0 = await request('/admin/services', { method: 'POST', body: JSON.strin
 const serviceId = svc0.data.service.id
 const technicianId = tech0.data.technician.id
 const today = new Date().toLocaleDateString('en-CA', { timeZone: 'America/Toronto' })
-const seedBk = await request('/admin/bookings/direct', { method: 'POST', body: JSON.stringify({ newCustomerName: `退卡顾客${RUN}`, phone: `1390${RUN.slice(-7)}`, serviceId, technicianId, date: today, time: '10:00' }) }, TOKEN, H)
+const seedBk = await request('/admin/bookings/direct', { method: 'POST', body: JSON.stringify({ newCustomerName: `退卡顾客${RUN}`, phone: `1390${String(parseInt(RUN,36)).slice(-7)}`, serviceId, technicianId, date: today, time: '10:00' }) }, TOKEN, H)
 const userId = seedBk.data.booking?.user?.id || seedBk.data.booking?.userId || ''
-const custLogin = await bindWechatViaFrontDoor({ base: BASE_URL, tenantId: tid, userId, phone: `1390${RUN.slice(-7)}`, tag: `n5-${RUN}` })   // J-60:走正门,不直连贴
+const custLogin = await bindWechatViaFrontDoor({ base: BASE_URL, tenantId: tid, userId, phone: `1390${String(parseInt(RUN,36)).slice(-7)}`, tag: `n5-${RUN}` })   // J-60:走正门,不直连贴
 /* 🔴 07i §五:夹具建顾客**只留一条路 —— 正门**,两档都走它。
    原来这里用的是 `demoLogin: true`(演示捷径,生产上不存在)——
    门一关它就拿不到 token,而更要紧的是:主档因此一直在测一条不存在的路。
@@ -207,9 +207,10 @@ check('⑦-2 留痕行自证「不进收入」', rf.incomeImpactCents === 0 && /
   await request(`/admin/bookings/${payBk.data.booking.id}/status`, { method: 'PATCH', body: JSON.stringify({ status: 'COMPLETED' }) }, TOKEN, H)
   const paySheet = await request('/admin/settlements', { method: 'POST', body: JSON.stringify({ userId, settlements: [{ bookingId: payBk.data.booking.id, payIntent: 'offline_full', items: [{ serviceId, qty: 1 }], technicians: [{ technicianId, role: 'main', itemNos: [1] }] }] }) }, TOKEN, H)
   check('⑦-15 前置:单开出来了', paySheet.status === 201 && Boolean(paySheet.data.settlements?.[0]?.code), JSON.stringify(paySheet.data).slice(0, 140))
-  await fetch(`${BASE_URL}/settlements/${encodeURIComponent(paySheet.data.settlements[0].code)}/sign`, {
-    method: 'POST', headers: { 'content-type': 'application/json', 'x-tenant-id': tid }, body: JSON.stringify({ signature: '演示', disclaimerAccepted: true })
+  const paySigned = await fetch(`${BASE_URL}/settlements/${encodeURIComponent(paySheet.data.settlements[0].code)}/sign`, {
+    method: 'POST', headers: { 'content-type': 'application/json', 'x-tenant-id': tid, authorization: `Bearer ${custToken}` }, body: JSON.stringify({ signature: '隔离测试顾客', disclaimerAccepted: true })
   })
+  check('到店支付单通过本人会话真实签署成功', paySigned.status === 200)
   const withTakeIn = (await request(`/admin/daily-close?date=${today}`, {}, TOKEN, H)).data.dailyClose.cashDrawer
   check('⑦-15 🔴 收现与退款都不为 0 时,应有数 == 收现 − 退款(两边都证)',
     withTakeIn.storefrontCents > 0 && withTakeIn.refundOutCents > 0
@@ -292,9 +293,10 @@ if (bk.status === 201 || bk.status === 200) {
      所以反向守要签完再数 —— 只看"开单成功"证不到"次数真的少了一次"。 */
   const liveCode = okUse.data?.settlements?.[0]?.code
   if (liveCode) {
-    await fetch(`${BASE_URL}/settlements/${encodeURIComponent(liveCode)}/sign`, {
-      method: 'POST', headers: { 'content-type': 'application/json', 'x-tenant-id': tid }, body: JSON.stringify({ signature: '演示', disclaimerAccepted: true })
+    const liveSigned = await fetch(`${BASE_URL}/settlements/${encodeURIComponent(liveCode)}/sign`, {
+      method: 'POST', headers: { 'content-type': 'application/json', 'x-tenant-id': tid, authorization: `Bearer ${custToken}` }, body: JSON.stringify({ signature: '隔离测试顾客', disclaimerAccepted: true })
     })
+    check('退次后的核销单通过本人会话真实签署成功', liveSigned.status === 200)
   }
   const afterUsed = db.prepare('SELECT used_times FROM member_timecards WHERE id = ?').get(liveCard).used_times
   check('⑨-c 反向守:退了一半的卡照样核销得动,签完剩余真的少一次(不是"一律拒"混过去的绿)',
@@ -353,9 +355,9 @@ check('⑩-2 🔴 行为必须不同:keep=仍是会员 / drop=余额归零即失
   const bTech = (await request('/admin/technicians', { method: 'POST', body: JSON.stringify({ name: `技师${RUN}`, isActive: true }) }, TOKEN, BH)).data.technician.id
   const bCat = ((await request('/admin/pricing/categories', {}, TOKEN, BH)).data.categories || [])[0]?.id
   const bSvc = (await request('/admin/services', { method: 'POST', body: JSON.stringify({ type: 'NAIL', nameZh: `项目${RUN}`, nameEn: 'x', priceCents: 18000, baseDurationMin: 60, categoryId: bCat }) }, TOKEN, BH)).data.service.id
-  const bBk = await request('/admin/bookings/direct', { method: 'POST', body: JSON.stringify({ newCustomerName: `赠送顾客${RUN}`, phone: `1391${RUN.slice(-7)}`, serviceId: bSvc, technicianId: bTech, date: today, time: '10:00' }) }, TOKEN, BH)
+  const bBk = await request('/admin/bookings/direct', { method: 'POST', body: JSON.stringify({ newCustomerName: `赠送顾客${RUN}`, phone: `1391${String(parseInt(RUN,36)).slice(-7)}`, serviceId: bSvc, technicianId: bTech, date: today, time: '10:00' }) }, TOKEN, BH)
   const bUser = bBk.data.booking.user.id
-  await bindWechatViaFrontDoor({ base: BASE_URL, tenantId: bId, userId: bUser, phone: `1391${RUN.slice(-7)}`, tag: `n5b-${RUN}` })   // J-60
+  await bindWechatViaFrontDoor({ base: BASE_URL, tenantId: bId, userId: bUser, phone: `1391${String(parseInt(RUN,36)).slice(-7)}`, tag: `n5b-${RUN}` })   // J-60
   // 充 1000 送 100(图 v1.1 举的就是这个例子)
   await request('/admin/stored-value/recharge', { method: 'POST', body: JSON.stringify({ userId: bUser, amountCents: 100000, bonusCents: 10000, payChannel: 'cash' }) }, TOKEN, BH)
 
@@ -708,12 +710,12 @@ check('⑩-2 🔴 行为必须不同:keep=仍是会员 / drop=余额归零即失
   // 撞档就换时段(别的夹具占了);这不是被测行为,别让它把断言弄红
   let mixBk = { status: 0, data: {} }
   for (const hh of ['19', '07', '22', '23', '12']) {
-    mixBk = await request('/admin/bookings/direct', { method: 'POST', body: JSON.stringify({ newCustomerName: `混合拆客${RUN}`, phone: `1392${RUN.slice(-7)}`, serviceId, technicianId, date: today, time: `${hh}:00` }) }, TOKEN, H)
+    mixBk = await request('/admin/bookings/direct', { method: 'POST', body: JSON.stringify({ newCustomerName: `混合拆客${RUN}`, phone: `1392${String(parseInt(RUN,36)).slice(-7)}`, serviceId, technicianId, date: today, time: `${hh}:00` }) }, TOKEN, H)
     if (mixBk.data?.booking?.user?.id) break
   }
   const mixUser = mixBk.data?.booking?.user?.id
   if (mixUser) {
-    await bindWechatViaFrontDoor({ base: BASE_URL, tenantId: tid, userId: mixUser, phone: `1392${RUN.slice(-7)}`, tag: `n5mix-${RUN}` })   // J-60
+    await bindWechatViaFrontDoor({ base: BASE_URL, tenantId: tid, userId: mixUser, phone: `1392${String(parseInt(RUN,36)).slice(-7)}`, tag: `n5mix-${RUN}` })   // J-60
     await request('/admin/stored-value/recharge', { method: 'POST', body: JSON.stringify({ userId: mixUser, amountCents: 85000, bonusCents: 10000, payChannel: 'cash', note: '混合拆夹具' }) }, TOKEN, H)
     const mf = (await request(`/admin/account-adjust/facts?userId=${mixUser}`, {}, TOKEN, H)).data.facts
     check('混合拆-0 前置:实付可退 850 · 赠送 100 · 余额 950(两边都不为 0 才切得出刀口)',

@@ -15,7 +15,7 @@
    它现在数的是**被拒的次数**,摆在 `/health.tenantFallback` 上让判据读得到:
    回归跑完三个 CI 服务进程都必须是 0/0。**读 health 不读日志** —— 日志会被下一次跑覆盖。 */
 
-export function createTenantGate({ db, apiError, defaultTenantId }) {
+export function createTenantGate({ db, apiError, defaultTenantId, onResolved = () => {} }) {
   const tally = { missing: 0, invalid: 0 }
 
   /* 校验租户 id(存在且启用)。**这一层仍然可以回落** —— 它被后台/平台侧也用着;
@@ -47,6 +47,7 @@ export function createTenantGate({ db, apiError, defaultTenantId }) {
       console.warn(`[tenant-fallback] kind=invalid raw=${raw.slice(0, 40)} path=${(req && req.url || '').split('?')[0]}`)
       throw apiError(400, 'TENANT_REQUIRED', '门店标识无效。')
     }
+    onResolved(resolved) // 校验通过后绑定本请求的门店上下文，公开预约也按该店时区与规则计算。
     return resolved
   }
 

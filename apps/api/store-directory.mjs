@@ -66,9 +66,9 @@ export function createStoreDirectory({ db }) {
       JOIN stores s ON s.tenant_id = t.id AND s.is_active = 1
       WHERE t.status = 'active' AND (t.listed = 1 OR ? = 1)
       GROUP BY t.id
-      ORDER BY t.name ASC
+      ORDER BY s.name ASC
     `).all(includeDemo ? 1 : 0).map((r) => ({
-      tenantId: r.id, name: r.tenant_name || r.store_name, storeName: r.store_name,
+      tenantId: r.id, name: r.store_name, storeName: r.store_name,
       address: r.address || '', phone: r.phone || '', isDemo: r.kind === 'demo', kind: r.kind || 'real',
       listed: r.listed === 1
     }))

@@ -35,6 +35,10 @@ export const BOOKING_ACTIONS = {
     to: 'CANCELLED',
     blockedWhenAfterSalesOpen: true
   },
+  reschedule: {
+    label: '改期', actors: ['merchant'], from: ['PENDING_PAYMENT','CONFIRMED'],
+    to: null, ownerOnly: true, blockedWhenAfterSalesOpen: true
+  },
   confirmArrival: {
     label: '确认到店',
     actors: ['merchant'],

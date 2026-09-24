@@ -111,7 +111,7 @@ async function main() {
   const b1 = await customerBook(shopA, { date: dateStr(3), time: '11:00', userToken })
   check('默认配置下顾客下单成功', b1.status === 201, JSON.stringify(b1.data).slice(0, 220))
   check('① 默认定金 = 项目自身的 5000(与改造前写死的 5000 一致)',
-    b1.data.booking.depositRequiredCents === 5000 && b1.data.booking.depositCents === 5000,
+    b1.data.booking.depositRequiredCents === 5000 && b1.data.booking.depositCents === 0 && b1.data.booking.depositState === 'unpaid',
     JSON.stringify({ req: b1.data.booking.depositRequiredCents, dep: b1.data.booking.depositCents }))
 
   // ---- ⑥ enabled=false → 零定金 ----
@@ -150,14 +150,15 @@ async function main() {
   // ---- ④ 合规改期 → 定金保留一次;第二次不保留 ----
   await setConfig(shopA, { mode: 'fixed', fixedAmountCents: 10000, cancelPolicy: { lateArrivalGraceMin: null, rescheduleNoticeHours: 24, depositRetainTimes: 1, refundable: false } })
   const r1 = await customerBook(shopA, { date: dateStr(7), time: '13:00', userToken })
-  check('④ 造一笔 7 天后的单', r1.status === 201 && r1.data.booking.depositCents === 10000, JSON.stringify(r1.data.booking).slice(0, 200))
+  check('④ 造一笔 7 天后的未收定金单', r1.status === 201 && r1.data.booking.depositCents === 0, JSON.stringify(r1.data.booking).slice(0, 200))
+  await request(`/admin/bookings/${r1.data.booking.id}/deposit-receipt`, { method: 'POST', body: JSON.stringify({ payChannel: 'cash' }) }, shopA.token)
   const resched1 = await request(`/admin/bookings/${r1.data.booking.id}/reschedule`, { method: 'POST', body: JSON.stringify({ reason: '顾客改期' }) }, shopA.token)
   check('④ 合规改期:定金保留(第 1 次)', resched1.data.reschedule.compliant === true && resched1.data.reschedule.depositRetained === true
     && resched1.data.reschedule.retainTimesUsed === 1 && resched1.data.reschedule.forfeitedDepositCents === 0,
     JSON.stringify(resched1.data.reschedule))
 
   const r2 = await customerBook(shopA, { date: dateStr(8), time: '13:00', userToken })
-  check('④ 下一次预约自动用掉保留的定金(本次应付 0)', r2.data.booking.depositCents === 0 && r2.data.booking.depositRequiredCents === 10000,
+  check('④ 下一次预约自动用掉保留的定金(本次应付 0)', r2.data.booking.depositCents === 10000 && r2.data.booking.depositRequiredCents === 10000 && r2.data.booking.depositState === 'received',
     JSON.stringify(r2.data.booking).slice(0, 220))
 
   const resched2 = await request(`/admin/bookings/${r2.data.booking.id}/reschedule`, { method: 'POST', body: JSON.stringify({ reason: '再次改期' }) }, shopA.token)

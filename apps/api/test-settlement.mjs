@@ -201,7 +201,7 @@ async function main() {
      「配了就上传」只在生产(或显式 COS_SMOKE=1 的冒烟)成立 —— 本地铺演示数据那次
      把快照传进了真实生产桶,就是因为当时只看 cosConfigured。 */
   check('沙盒里签署一律 inline,不碰真实对象存储',
-    signed.data.snapshot.storage === 'inline' && !signed.data.snapshot.url,
+    signed.data.snapshot.storage === 'inline' && signed.data.snapshot.url.startsWith('/settlements/') && signed.data.snapshot.url.includes('?view='),
     JSON.stringify(signed.data.snapshot))
   /* 真机 SVG 空白件(店主 08-23):快照出图改 PNG(真机 <image> 不认带文字的 SVG)——
      图源变、内容不变:内容层断言改盯**快照 SVG 原文**(引擎产物,serializeSettlement 同源),
@@ -256,7 +256,7 @@ async function main() {
     method: 'POST', body: JSON.stringify({ disclaimerAccepted: true, signature: '沙盒客' })
   }, null)
   check('沙盒隔离:签署产生的快照是 inline,没有 COS 地址',
-    sandboxSigned.data.settlement.snapshot.storage === 'inline' && !sandboxSigned.data.settlement.snapshot.url,
+    sandboxSigned.data.settlement.snapshot.storage === 'inline' && sandboxSigned.data.settlement.snapshot.url.startsWith('/settlements/') && sandboxSigned.data.settlement.snapshot.url.includes('?view='),
     JSON.stringify(sandboxSigned.data.settlement.snapshot))
   // 真机 SVG 空白件后:出图是 PNG,原文口 ?format=svg 仍在(两个都要能取回来)
   const sandboxPng = await fetch(`${BASE_URL}/settlements/${sandboxCode}/snapshot`)

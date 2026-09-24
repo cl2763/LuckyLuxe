@@ -282,7 +282,7 @@ async function main() {
 
   await request(`/admin/quote-requests/${quote.id}/draft`, {
     method: 'POST',
-    body: JSON.stringify({ date: '2026-07-02', time: '14:00' })
+    body: JSON.stringify({ date: new Date(Date.now()+30*86400000).toISOString().slice(0,10), time: '14:00' })
   })
   conversation = await conversationByExternalId(customer)
   assert(/预约草稿|booking draft|draft/i.test(transcriptText(conversation)), 'confirmed quote with date/time should create and send booking draft link')

@@ -148,11 +148,8 @@ Page({
     try {
       for (let index = 0; index < this.data.items.length; index += 1) {
         const created = await api.createBooking(this.data.items[index], this.data.remark)
-        // 沙盘联调:线上支付未接通,后端 mock 支付口只在本地生效;生产接微信支付后替换
-        const paid = created && created.id && created.status === 'PENDING_PAYMENT' && created.depositCents > 0
-          ? await api.confirmMockPayment(created.id)
-          : created
-        backendBookings.push(paid)
+        // 预约与收款分别确认；到店收取不能自动调用模拟支付。
+        backendBookings.push(created)
       }
     } catch (error) {
       if (error.code === 'AUTH_REQUIRED') {

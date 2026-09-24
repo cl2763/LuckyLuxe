@@ -70,7 +70,7 @@ async function makeShop(tag) {
   const catId = ((await request('/admin/pricing/categories', {}, TOKEN, H)).data.categories || [])[0]?.id
   const svc = await request('/admin/services', { method: 'POST', body: JSON.stringify({ type: 'NAIL', nameZh: `签档项目${tag}${RUN}`, nameEn: 'x', priceCents: 18000, baseDurationMin: 60, categoryId: catId }) }, TOKEN, H)
   const today = new Date().toLocaleDateString('en-CA', { timeZone: 'America/Toronto' })
-  const phone = `139${tag.charCodeAt(0)}${RUN.slice(-6)}`
+  const phone = `139${tag.charCodeAt(0)}${String(parseInt(RUN,36)).slice(-6)}`
   const bk = await request('/admin/bookings/direct', { method: 'POST', body: JSON.stringify({ newCustomerName: `签档顾客${tag}${RUN}`, phone, serviceId: svc.data.service.id, technicianId: tech.data.technician.id, date: today, time: '10:00' }) }, TOKEN, H)
   const userId = bk.data.booking?.user?.id || bk.data.booking?.userId || ''
   /* 🔴 手机号要**带出去**:绑微信走正门时「严格认人四条」要拿它对上建档时那一条,

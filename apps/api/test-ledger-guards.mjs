@@ -399,4 +399,11 @@ await lawPair('⑪储值流水禁改', 'stored_value_no_update',
     db.prepare('SELECT COUNT(*) n FROM settlements WHERE id = ? AND perf_base_cents <> subtotal_cents').get(sid).n === 0)
 }
 
+// 护栏测试曾故意造正积分与 9999 篡改值；按追加账本规则对冲本套夹具，避免污染下一档全库守恒检查。
+for (const tid of [REAL, TEST]) {
+  const total=db.prepare('SELECT COALESCE(SUM(amount),0) n FROM points_transactions WHERE tenant_id=? AND user_id=?').get(tid,'u-lg').n
+  if(total)db.prepare(`INSERT INTO points_transactions (id,tenant_id,user_id,type,amount,note,created_at) VALUES (?,?,?,'adjust',?,?,?)`).run(`lg-clean-${tid}`,tid,'u-lg',-total,'测试造病后对冲',iso())
+  check('积分造病夹具对冲后净额归零 '+tid,db.prepare('SELECT COALESCE(SUM(amount),0) n FROM points_transactions WHERE tenant_id=? AND user_id=?').get(tid,'u-lg').n===0)
+}
+
 console.log(`\n账本十二条豁免族审计 + 事务扫通过:${checks} 项断言全绿`)

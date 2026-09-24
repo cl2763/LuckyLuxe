@@ -833,13 +833,13 @@ Page({
   },
   handSign() {
     if (this.data.qr && this.data.qr.unbound) {
-      wx.showToast({ title: '新客需扫码签署(扫码即自动建立绑定)', icon: 'none' })
+      wx.showToast({ title: '请出示签署链接供顾客核对签字', icon: 'none' })
       return
     }
     clearTimeout(this._qrTimer)
     const code = this.data.qr.code
     this.setData({ qr: null })
-    wx.navigateTo({ url: `/pages/sign/index?code=${encodeURIComponent(code)}` })
+    wx.navigateTo({ url: `/pages/sign/index?merchant=1&code=${encodeURIComponent(code)}` })
   },
   onUnload() { clearTimeout(this._qrTimer); clearTimeout(this._bindTimer) },
 
@@ -882,7 +882,7 @@ Page({
      真码上线后打开/复制两钮随占位一起撤(发版清单)。 */
   openQrLink() {
     if (!this.data.qr) return
-    wx.navigateTo({ url: `/pages/sign/index?code=${encodeURIComponent(this.data.qr.code)}` })
+    wx.navigateTo({ url: `/pages/sign/index?merchant=1&code=${encodeURIComponent(this.data.qr.code)}` })
   },
   // D26:绑定码「打开链接」 —— 沙盒直落本人确认卡(与真码扫后同一落点)
   openBindLink() {

@@ -57,6 +57,11 @@ export function createPlatformSessions({ db, randomId, iso, sha256 }) {
     return true
   }
 
+  function revokeCurrent(cookieHeader) {
+    const id = parseCookies(cookieHeader)[COOKIE]
+    return id ? db.prepare('DELETE FROM platform_sessions WHERE id = ?').run(id).changes : 0
+  }
+
   function revokeAll() {
     const n = db.prepare('SELECT COUNT(*) n FROM platform_sessions').get().n
     db.exec('DELETE FROM platform_sessions')
@@ -66,5 +71,5 @@ export function createPlatformSessions({ db, randomId, iso, sha256 }) {
   const list = () => db.prepare('SELECT id, created_at, expires_at, last_seen_at FROM platform_sessions ORDER BY created_at DESC').all()
   const clearCookie = () => `${COOKIE}=; HttpOnly; Path=/; Max-Age=0; SameSite=Strict`
 
-  return { issue, verify, revokeAll, list, clearCookie, COOKIE }
+  return { issue, verify, revokeCurrent, revokeAll, list, clearCookie, COOKIE }
 }

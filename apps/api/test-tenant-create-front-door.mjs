@@ -221,7 +221,7 @@ check('④c 🔴 **回落仍在**:不传时区 → 不是 Asia/Shanghai(先要�
   /* 🔴 三处用处逐个钉 —— 漏一处就是「有一条链接还用着全局常量」,而那一条不会报错 */
   for (const [re, label] of [
     [/referralUrl: `\$\{publicAppUrl\(tenantId\)\}\/\?ref=/, '推荐链接 /?ref=(且把 tenantId 传了进去)'],
-    [/return `\$\{publicAppUrl\(\)\}\/sign\?t=/, '签署链接 /sign?t='],
+    [/return `\$\{publicAppUrl\(tid\)\}\/sign\?t=/, '签署链接 /sign?t='],
     [/url: `\$\{publicAppUrl\(\)\}\/bind\?t=/, '绑定链接 /bind?t='],
   ]) check(`⑥b 走唯一出口:${label}`, re.test(srv2), label)
   /* 🔴 全仓零残留:除了定义那一行与两个 fallback,不许谁再直接读 APP_PUBLIC_URL 去拼链接 */

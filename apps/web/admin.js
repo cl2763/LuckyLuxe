@@ -1,6 +1,6 @@
 // 构建号:每次交付递增。侧栏可见,排查"改了没生效"时先对版本。
 // 兜底用(服务端会注入 window.LL_BUILD = 资源内容指纹,页面优先显示那个)
-const ADMIN_BUILD = '20260924a-12m'
+const ADMIN_BUILD = '20260924d-web-ready'
 let pricingState = { module: 'storefront', tab: 'items', categories: [], items: [], rules: {}, editing: null, preview: null, storefrontPicker: false }
 console.log(`[admin] build ${ADMIN_BUILD}`)
 
@@ -1711,7 +1711,7 @@ function renderDailyClose() {
     ${(v.unsignedList || []).length ? `
     <div class="dc-warnbar" style="background:var(--badbg);border-color:var(--line)">
       <strong>${zh ? `未签署 ${v.unsignedList.length} 单(不计入本日账,点开签署页可重推)` : `${v.unsignedList.length} unsigned`}</strong>
-      ${v.unsignedList.map((u) => `<div style="margin-top:4px"><a href="/sign/${encodeURIComponent(u.code)}" target="_blank">${escapeHtml(`${u.timeText} ${u.customerName} · ${u.code}`)} ›</a></div>`).join('')}
+      ${v.unsignedList.map((u) => `<div style="margin-top:4px"><a href="/sign/${encodeURIComponent(u.code)}?actor=merchant" target="_blank">${escapeHtml(`${u.timeText} ${u.customerName} · ${u.code}`)} ›</a></div>`).join('')}
     </div>` : ''}
     ${(v.blockers || []).map((b) => `<div class="dc-warnbar">${escapeHtml(b.message)}</div>`).join('')}
     ${confirmed ? '' : `<button class="primary full" id="dcConfirm" type="button" ${v.canConfirm ? '' : 'disabled'}>
@@ -6005,6 +6005,7 @@ els.bookingList.addEventListener('click', async (event) => {
      「结束售后」要填处理结果(顾客端要看这句),走既有弹层;其余动作直接提交。 */
   const action = button.dataset.bookingAction
   if (!action) return
+  if (action === 'reschedule') return openRescheduleBooking(button.dataset.booking)
   if (action === 'cancel') {
     const booking = owner.bookings.find((item) => item.id === button.dataset.booking)
     const label = booking ? `${booking.appointmentDate} ${booking.appointmentTime} ${booking.service?.name || ''}` : ''
@@ -6555,7 +6556,7 @@ function openFormModal({ title, hint, fields, saveText, onSave }) {
           ? `<label class="fm-check"><input type="checkbox" data-fm-field="${f.key}" ${f.value ? 'checked' : ''}> ${escapeHtml(f.label)}</label>`
           : f.type === 'select'
             ? `<label><span>${escapeHtml(f.label)}</span><select data-fm-field="${f.key}">${(f.options || []).map(([v, l]) => `<option value="${escapeHtml(String(v))}" ${String(v) === String(f.value ?? '') ? 'selected' : ''}>${escapeHtml(l)}</option>`).join('')}</select></label>`
-            : `<label><span>${escapeHtml(f.label)}</span><input data-fm-field="${f.key}" type="${f.type === 'number' ? 'number' : 'text'}" ${f.type === 'number' ? 'step="0.01" min="0"' : ''} value="${escapeHtml(String(f.value ?? ''))}" placeholder="${escapeHtml(f.placeholder || '')}"></label>`}</span>`).join('')}
+            : `<label><span>${escapeHtml(f.label)}</span><input data-fm-field="${f.key}" type="${['number','date','time'].includes(f.type) ? f.type : 'text'}" ${f.type === 'number' ? 'step="0.01" min="0"' : ''} value="${escapeHtml(String(f.value ?? ''))}" placeholder="${escapeHtml(f.placeholder || '')}"></label>`}</span>`).join('')}
       </div>
       ${fields.some((f) => f.hint) ? fields.filter((f) => f.hint).map((f) => `<p class="subtle" style="margin:6px 0 0${f.danger ? ';color:var(--bad);font-weight:700' : ''}">· ${escapeHtml(f.label)}:${escapeHtml(f.hint)}</p>`).join('') : ''}
       <div class="action-row" style="margin-top:14px">

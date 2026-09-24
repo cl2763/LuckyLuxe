@@ -13,6 +13,8 @@
  * 就是一个后台永远认不出来的人。宁可让她再点一次,也不许静默生出一个空号档案。
  */
 import { decryptWechatPhone } from './wechat-phone.mjs'
+import { fetchPhoneByCode } from './wechat-phone-code.mjs'
+import { DEV_SCOPES } from './secret-gate.mjs'
 
 /** 缺号标记:与 `write-intake.mjs` 同一个词,补上号就摘掉 */
 export const NO_PHONE_TAG = '无手机号'
@@ -30,6 +32,25 @@ function dropNoPhoneTag(tagsJson) {
   return JSON.stringify(tags.filter((t) => String(t) !== NO_PHONE_TAG))
 }
 
+// 登录认领与补号共用同一微信验证；客户端自填 phone 不能证明号码所有权。
+async function verifiedPhone({ body, openid, appid, secret, scopeName, apiError, fetchPhone = fetchPhoneByCode }) {
+  let hop
+  try { hop = await fetchPhone({ code: String(body.phoneCode).trim(), openid, appid, secret, scopeName }) }
+  catch { throw apiError(502, 'WECHAT_PHONE_UNAVAILABLE', '微信手机号授权暂不可用，请重试。') }
+  const info = hop?.data?.phone_info
+  if (!hop?.ok || hop.data.errcode || !info || !/^\d{6,15}$/.test(info.purePhoneNumber || '')) {
+    throw apiError(400, 'WECHAT_PHONE_FAILED', '手机号授权失败，请重新点击授权。')
+  }
+  if (info.watermark?.appid !== appid) throw apiError(403, 'WECHAT_APPID_MISMATCH', '手机号授权不属于当前小程序。')
+  return info.purePhoneNumber
+}
+
+export async function resolveLoginPhone(options) {
+  if (String(options.body.phoneCode || '').trim()) return verifiedPhone(options)
+  // 老回归夹具仅在明确隔离的 CI / 沙箱中兼容。生产只信微信授权凭证。
+  return DEV_SCOPES.has(options.scopeName) ? String(options.body.phone || '').trim() : ''
+}
+
 /**
  * `POST /auth/wechat/mini-phone`
  * 入参:`{ code, encryptedData, iv }`(`code` 是**当场新取**的 wx.login code)
@@ -37,6 +58,14 @@ function dropNoPhoneTag(tagsJson) {
 export async function bindMiniPhone({ body = {}, req, db, apiError, requireCustomer,
   fetchJsCode2Session, appid, secret, scopeName }) {
   const customer = requireCustomer(req)                       // 没登录不许绑号
+  if (String(body.phoneCode || '').trim()) {
+    const row = db.prepare('SELECT id, tags_json, wechat_open_id FROM users WHERE id = ?').get(customer.id)
+    if (!row || !row.wechat_open_id) throw apiError(403, 'WECHAT_LOGIN_REQUIRED', '请先用微信登录后再授权手机号。')
+    const phone = await verifiedPhone({ body, openid: row.wechat_open_id, appid, secret, scopeName, apiError })
+    db.prepare('UPDATE users SET phone = ?, tags_json = ? WHERE id = ?')
+      .run(phone, dropNoPhoneTag(row.tags_json), customer.id)
+    return { ok: true, phone, needPhone: false }
+  }
   const code = String(body.code || '').trim()
   const encryptedData = String(body.encryptedData || '').trim()
   const iv = String(body.iv || '').trim()

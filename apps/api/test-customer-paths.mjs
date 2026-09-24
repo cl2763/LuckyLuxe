@@ -68,67 +68,30 @@ try {
       `${me.status} ${JSON.stringify(me.body).slice(0, 120)}`)
     const CH = { 'content-type': 'application/json', 'x-tenant-id': TID, authorization: `Bearer ${me.accessToken}` }
 
-    /* ── 造一张 PENDING_PAYMENT 的单:顾客自己下单 + 本店要定金 ── */
+    // P0：未接支付时创建已确认、未收定金的预约；旧模拟支付三口都必须拒绝且不改账。
     await fetch(`${BASE}/admin/deposit-config`, { method: 'PUT', headers: AH,
-      body: JSON.stringify({ enabled: true, mode: 'fixed', fixedAmountCents: 5000, fallbackAmountCents: 5000 }) })
-    const cfgNow = await (await fetch(`${BASE}/admin/deposit-config`, { headers: AH })).json().catch(() => ({}))
-    check('㋚0a 造景前置:本店**真的开了定金**(不开的话顾客下单直接 CONFIRMED,'
-      + '支付那两条路根本走不到 —— 那就不是「守住了」,是「没走到」,J-58 第四款)',
-      Boolean(cfgNow?.config?.enabled), JSON.stringify(cfgNow?.config || {}).slice(0, 140))
-    const dayOf = (n) => new Date(Date.now() + n * 86400000).toLocaleDateString('en-CA', { timeZone: 'America/Toronto' })
-    const storeId = one('SELECT id FROM stores WHERE tenant_id = ? LIMIT 1', TID).id || ''
+      body: JSON.stringify({ enabled: true, mode: 'fixed', fixedAmountCents: 5000, memberWaive: 'none' }) })
+    const storeId = one('SELECT id FROM stores WHERE tenant_id = ? LIMIT 1', TID).id
     let bid = ''
-    for (let n = 1; n <= 10 && !bid; n += 1) {
+    for (let n = 1; n <= 10 && !bid; n++) {
+      const date = new Date(Date.now() + n * 86400000).toLocaleDateString('en-CA', { timeZone: 'America/Toronto' })
       const mk = await fetch(`${BASE}/bookings`, { method: 'POST', headers: CH,
-        body: JSON.stringify({ storeId, serviceId, technicianId, date: dayOf(n), time: '15:00', tenantId: TID }) })
-      const mb = await mk.json().catch(() => ({}))
-      const cand = mb?.booking?.id || ''
-      if (cand && one('SELECT status FROM bookings WHERE id = ?', cand).status === 'PENDING_PAYMENT') bid = cand
+        body: JSON.stringify({ storeId, serviceId, technicianId, date, time: '15:00', tenantId: TID }) })
+      bid = (await mk.json()).booking?.id || ''
     }
-    check('㋚0 造景:顾客自己下出一张**待付定金**的单(`PENDING_PAYMENT`)—— '
-      + '造不出这个状态,支付那两条就没得走(造景律:谁出走查单谁先把景造好)',
-      Boolean(bid) && one('SELECT status FROM bookings WHERE id = ?', bid).status === 'PENDING_PAYMENT',
-      `bookingId=${bid} 状态=${one('SELECT status FROM bookings WHERE id = ?', bid).status}`)
-
-    if (bid) {
-      /* ── ㋚1 `/payments/mock/confirm` ── */
-      const payBefore = one("SELECT status, transaction_id FROM payments WHERE booking_id = ? AND provider = 'MOCK'", bid)
-      const r1 = await fetch(`${BASE}/payments/mock/confirm`, { method: 'POST', headers: CH, body: JSON.stringify({ bookingId: bid }) })
-      const payAfter = one("SELECT status, transaction_id FROM payments WHERE booking_id = ? AND provider = 'MOCK'", bid)
-      const bkAfter = one('SELECT status FROM bookings WHERE id = ?', bid)
-      const hist = all("SELECT note FROM booking_status_history WHERE booking_id = ? AND to_status = 'CONFIRMED'", bid)
-      check('㋚1 🔴 `POST /payments/mock/confirm`(**涉钱,此前零夹具走过**)—— '
-        + `**查库**:payments 从 ${payBefore.status || '(无)'} → **${payAfter.status}** 且拿到流水号 · `
-        + `预约 → **${bkAfter.status}** · 状态历史留痕 ${hist.length} 行。不看返回体`,
-        r1.status === 200 && payAfter.status === 'PAID' && String(payAfter.transaction_id || '').startsWith('mock_')
-        && bkAfter.status === 'CONFIRMED' && hist.length === 1,
-        `接口=${r1.status} 支付=${payAfter.status}/${payAfter.transaction_id} 预约=${bkAfter.status} 留痕=${hist.length}`)
-
-      /* ㋚1b 幂等:付过的单再付一次 → 拒,且库里一分不动 */
-      const again = await fetch(`${BASE}/payments/mock/confirm`, { method: 'POST', headers: CH, body: JSON.stringify({ bookingId: bid }) })
-      const payAgain = one("SELECT status, transaction_id FROM payments WHERE booking_id = ? AND provider = 'MOCK'", bid)
-      const histAgain = all("SELECT note FROM booking_status_history WHERE booking_id = ? AND to_status = 'CONFIRMED'", bid)
-      check('㋚1b 🔴 幂等:付过的单**再付一次 → 拒**,且库里流水号与状态历史**一分不动** —— '
-        + '重复确认一笔定金比拒绝一次贵得多',
-        again.status >= 400 && payAgain.transaction_id === payAfter.transaction_id && histAgain.length === 1,
-        `再付=${again.status} 流水号${payAgain.transaction_id === payAfter.transaction_id ? '没变' : '变了'} 留痕=${histAgain.length}`)
-
-      /* ── ㋚2 `/payments/stripe/confirm-session` ── */
-      let bid2 = ''
-      for (let n = 1; n <= 10 && !bid2; n += 1) {
-        const mk = await fetch(`${BASE}/bookings`, { method: 'POST', headers: CH,
-          body: JSON.stringify({ storeId, serviceId, technicianId, date: dayOf(n), time: '16:00', tenantId: TID }) })
-        const cand = (await mk.json().catch(() => ({})))?.booking?.id || ''
-        if (cand && one('SELECT status FROM bookings WHERE id = ?', cand).status === 'PENDING_PAYMENT') bid2 = cand
-      }
-      const r2 = await fetch(`${BASE}/payments/stripe/confirm-session`, { method: 'POST', headers: CH, body: JSON.stringify({ bookingId: bid2 }) })
-      const bk2 = one('SELECT status FROM bookings WHERE id = ?', bid2)
-      const pay2 = one("SELECT status FROM payments WHERE booking_id = ? AND provider = 'MOCK'", bid2)
-      check('㋚2 🔴 `POST /payments/stripe/confirm-session`(**涉钱,此前零夹具走过**)—— '
-        + `**查库**:预约 → **${bk2.status}** · 支付 → **${pay2.status}**`,
-        Boolean(bid2) && r2.status === 200 && bk2.status === 'CONFIRMED' && pay2.status === 'PAID',
-        `bookingId=${bid2} 接口=${r2.status} 预约=${bk2.status} 支付=${pay2.status}`)
+    const created = one('SELECT status, deposit_cents, direct_deposit_unpaid, payment_expires_at FROM bookings WHERE id=?', bid)
+    check('㋚0 未接支付：顾客预约确认、未收定金、无支付超时',
+      Boolean(bid) && created.status === 'CONFIRMED' && created.deposit_cents === 0 && created.direct_deposit_unpaid === 1 && created.payment_expires_at === null,
+      JSON.stringify(created))
+    const fingerprint = () => JSON.stringify({ booking: one('SELECT * FROM bookings WHERE id=?', bid),
+      payments: all('SELECT * FROM payments WHERE booking_id=?', bid), receipts: all('SELECT * FROM deposit_receipts WHERE booking_id=?', bid) })
+    const original = fingerprint()
+    for (const path of ['/payments/mock/confirm', '/payments/stripe/create-checkout', '/payments/stripe/confirm-session']) {
+      const res = await fetch(BASE + path, { method: 'POST', headers: CH, body: JSON.stringify({ bookingId: bid }) })
+      check('旧支付入口必须明确停用且不改账：' + path, res.status === 410 && fingerprint() === original, String(res.status))
     }
+    const again = await fetch(BASE + '/payments/mock/confirm', { method: 'POST', headers: CH, body: JSON.stringify({ bookingId: bid }) })
+    check('重复模拟支付请求不能改账', again.status === 410 && fingerprint() === original)
 
     /* ── ㋚3 卡包 `/my/coupons` ── */
     const cp = await (await fetch(`${BASE}/admin/coupons`, { method: 'POST', headers: AH,

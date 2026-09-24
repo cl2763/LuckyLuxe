@@ -64,7 +64,11 @@ export function assertReadOnlySql(sql, label = 'SQL') {
 }
 
 /* 闸三:命令形状白名单 —— 拼好的远端命令必须逐字长这样 */
-export const SHAPE = /^node --experimental-sqlite -e 'eval\(Buffer\.from\(process\.argv\[1\],"base64"\)\.toString\(\)\)' [A-Za-z0-9+/=]+$/
+/* 🔴 `--no-warnings`(12t 现修):远端 node 的 ExperimentalWarning 走 stderr,
+   而 `railway ssh` 把 stdout/stderr **混在同一个 PTY 流**里 —— 警告会插进 JSON 中间,
+   把返回体切坏(现测:85 KB 的 dump 在第 2291 行被一行警告劈开)。
+   在远端关掉警告是根治;在本地 grep 掉那一行是治标,而且会连 JSON 一起删。 */
+export const SHAPE = /^node --no-warnings --experimental-sqlite -e 'eval\(Buffer\.from\(process\.argv\[1\],"base64"\)\.toString\(\)\)' [A-Za-z0-9+/=]+$/
 
 export function buildPayload(queries) {
   const pairs = Object.entries(queries)
@@ -83,7 +87,7 @@ export function buildCommand(queries, rawInput) {
   const hit = scanBanned(rawInput ?? JSON.stringify(queries))
   if (hit) throw new Error(`[闸一] 输入里出现「${hit}」—— 这把闸只走 SELECT,不接受命令。拒。`)
   const b64 = Buffer.from(buildPayload(queries), 'utf8').toString('base64')
-  const cmd = `node --experimental-sqlite -e 'eval(Buffer.from(process.argv[1],"base64").toString())' ${b64}`
+  const cmd = `node --no-warnings --experimental-sqlite -e 'eval(Buffer.from(process.argv[1],"base64").toString())' ${b64}`
   const hit2 = scanBanned(cmd)
   if (hit2) throw new Error(`[闸三] 拼好的命令里出现「${hit2}」—— 拒。`)
   if (!SHAPE.test(cmd)) throw new Error('[闸三] 拼好的命令不符合白名单形状 —— 拒(形状白名单,判据三)。')

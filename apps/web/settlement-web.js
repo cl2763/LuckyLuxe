@@ -29,7 +29,7 @@ window.SettlementWeb = (function () {
     applyFootSurcharge: false, applyTipReuse: false,
     bind: null, couponPanel: false,
     rvDraft: null, rvPanel: null,
-    preview: null, view: null, pendingSheets: []
+    preview: null, view: null, pendingSheets: [], signLink: null
   }
 
   function newGroup(tierDefault, firstCat) {
@@ -105,7 +105,7 @@ window.SettlementWeb = (function () {
       bookingId: ctx.bookingId || '', userId: ctx.userId || '', customerName: ctx.customerName || '',
       groups: [], couponGrantId: '', couponOptions: [], couponUsableCount: 0,
       payMenu: { useBalance: true, recharge: false }, applyFootSurcharge: false, applyTipReuse: false,
-      bind: null, couponPanel: false, rvDraft: null, rvPanel: null, preview: null, view: null, pendingSheets: []
+      bind: null, couponPanel: false, rvDraft: null, rvPanel: null, preview: null, view: null, pendingSheets: [], signLink: null
     })
     state._deps = deps
     try {
@@ -197,9 +197,10 @@ window.SettlementWeb = (function () {
           <button class="ghost slim" data-sw-close type="button">返回订单</button>
         </div>
         ${state.pendingSheets.length ? `
-          <div class="sw-pending">该预约已有待签单 ${state.pendingSheets.length} 张 —— 顾客侧签署中;要改单先撤回。
-            ${state.pendingSheets.map(function (sheet) { return `<div class="sw-pending-row"><code>${escapeHtml(sheet.code)}</code> 待签</div>` }).join('')}
+          <div class="sw-pending">该预约已有待签单 ${state.pendingSheets.length} 张 —— 等待顾客核对签署；要改单先撤回。
+            ${state.pendingSheets.map(function (sheet) { return `<div class="sw-pending-row"><code>${escapeHtml(sheet.code)}</code> 待签 <button type="button" class="ghost slim" data-sw-sign-link="${escapeHtml(sheet.id)}">生成顾客签署链接</button></div>` }).join('')}
           </div>` : ''}
+        ${state.signLink ? `<div class="sw-card"><b>顾客签署链接</b><p>${escapeHtml(state.signLink.note)}</p><input class="sw-in full" data-sw-sign-url readonly value="${escapeHtml(state.signLink.url)}"><button class="ghost slim" data-sw-sign-copy type="button">复制链接</button> <a data-sw-sign-open href="${escapeHtml(state.signLink.url)}" target="_blank" rel="noopener noreferrer">打开签署页</a><p class="sw-mut">请交给本单顾客核对并签字。重新生成会使旧链接失效。</p></div>` : ''}
         ${state.groups.map(function (g, gi) { return renderGroup(g, gi, escapeHtml) }).join('')}
         <button class="sw-addmain" data-sw-add-group type="button">＋ 添加第二个服务项目</button>
 
@@ -470,7 +471,13 @@ window.SettlementWeb = (function () {
     const { toast } = state._deps
     const on = function (sel, fn) { mount.querySelectorAll(sel).forEach(function (el) { el.addEventListener('click', function (e2) { fn(el, e2) }) }) }
     mount.querySelector('[data-sw-close]')?.addEventListener('click', close)
-    on('[data-sw-add-group]', function () {
+    on('[data-sw-sign-link]',async function(el){
+      if(el.disabled)return;el.disabled=true
+      try{const r=await state._deps.request('/admin/settlements/'+encodeURIComponent(el.dataset.swSignLink)+'/sign-token',{method:'POST',body:'{}'});state.signLink={url:r.url,note:r.pushedText};render()}
+      catch(e){toast(e.message||'签署链接生成失败');el.disabled=false}
+    })
+    on('[data-sw-sign-copy]',async function(){try{await navigator.clipboard.writeText(state.signLink.url);toast('链接已复制，请交给本单顾客')}catch(e){toast('复制未完成，请长按链接手动复制')}})
+    on('[data-sw-add-group]' , function () {
       state.groups.push(newGroup(state.groups[0]?.tierDefault || 'list', (state.cats[0] || {}).id || ''))
       render(); schedulePreview()
     })

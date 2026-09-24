@@ -14,6 +14,7 @@
 import { readFileSync } from 'node:fs'
 import { join, dirname } from 'node:path'
 import { fileURLToPath } from 'node:url'
+import {loginStaffViaFrontDoor} from './customer-login-fixture.mjs'
 
 const ROOT = join(dirname(fileURLToPath(import.meta.url)), '../..')
 const BASE = process.env.TEST_BASE_URL || process.env.BASE_URL || 'http://127.0.0.1:4128'
@@ -92,8 +93,13 @@ check('④b 🔴 **复用同一个 dryRun/execute**,没有第二份解析', oneD
 check('④c 平台那条老口还在(两条口共用一份解析,不是把老口搬走了)',
   /path\.endsWith\('\/import\/services'\)/.test(srv))
 
-const staff = await post('/admin/auth/login', { username: 'avalin', password: 'nope' })
-check('④d 夹具:员工登录这条路在(下面那条 403 才有意义)', staff.status === 401 || staff.status === 200, String(staff.status))
+const staffTid='import-staff-'+Date.now().toString(36)
+await post('/platform/tenants',{id:staffTid,name:'导入权限验收店',plan:'chain',currency:'CNY',timezone:'Asia/Shanghai'})
+const staffTech=(await post(`/platform/tenants/${staffTid}/technicians`,{name:'导入权限技师'})).data.technician
+const staff=await loginStaffViaFrontDoor({base:BASE,tenantId:staffTid,ownerToken:TOKEN,technicianId:staffTech.id})
+check('④d 夹具:真实员工账号登录成功',staff.ok&&Boolean(staff.accessToken),String(staff.status))
+const forbidden=await fetch(`${BASE}/admin/services/import`,{method:'POST',headers:{'content-type':'application/json',authorization:'Bearer '+staff.accessToken,'x-tenant-id':staffTid},body:JSON.stringify({headers:HEAD5,rows:[],dryRun:true})})
+check('④d2 已登录员工也不能导入价目',forbidden.status===403,String(forbidden.status))
 /* 用「没有 owner 身份」的请求打那条口:平台令牌走的是 isPlatform,不是 adminSession.role */
 const noAuth = await fetch(`${BASE}/admin/services/import`, {
   method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ headers: HEAD5, rows: [] }),
@@ -139,7 +145,7 @@ check('⑤b 🔴 **试跑不落库**:跑完项目数一个没变', before === af
     (src2.match(/.{0,40}at\('duration'\).{0,30}/g) || []).join(' | '))
 }
 
-const EXPECTED_CHECKS = 25
+const EXPECTED_CHECKS = 26
 if (checks !== EXPECTED_CHECKS) {
   console.error(`not ok - 🔴 断言条数对不上:实跑 ${checks} 条,应为 ${EXPECTED_CHECKS} 条(判据五)。`)
   process.exit(1)

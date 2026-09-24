@@ -128,7 +128,7 @@ async function main() {
     })
   }, shop.token)).data.settlements[0]
   check('S2 未绑定 → 徽标文案由后端下发', sheet1.bindBadgeText === '新客 · 未绑定', JSON.stringify(sheet1.bindBadgeText))
-  check('S2 提示行也是后端下发', sheet1.bindHintText.includes('扫码'), sheet1.bindHintText)
+  check('S2 后端提示签署链接且不误报自动微信绑定', /签署链接/.test(sheet1.bindHintText) && /不自动绑定微信/.test(sheet1.bindHintText), sheet1.bindHintText)
   check('S2 顾客行手机号脱敏', sheet1.customerPhoneMasked === `${phone.slice(0, 3)}****${phone.slice(-4)}`, sheet1.customerPhoneMasked)
 
   // S2 徽标也能按 userId 单独拿(小程序结算页就用这条,不为一个徽标再开接口)
@@ -208,7 +208,7 @@ async function main() {
     JSON.stringify(uidAfter.data.hit).slice(0, 160))
   // 已绑定顾客再出码 → 顶部多一行「已推送到顾客小程序」(S3-06)
   const qrBound = await request(`/admin/settlements/${sheet1.id}/sign-token`, { method: 'POST', body: JSON.stringify({}) }, shop.token)
-  check('S3 已绑定顾客:顶部多「✓ 已推送到顾客小程序」', qrBound.data.pushedText === '✓ 已推送到顾客小程序', qrBound.data.pushedText)
+  check('S3 未实际发送通知时不得声称已推送', qrBound.data.pushedToMiniApp === false && qrBound.data.pushedText.includes('尚未发送微信通知'), qrBound.data.pushedText)
 
   /* S4-06 手机号一键授权 = **只校验**,不一致仅提示,不拦签字、不改档案 */
   const bk2 = (await request('/admin/bookings/direct', {

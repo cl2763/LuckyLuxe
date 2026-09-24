@@ -339,6 +339,16 @@
     <view class="ds-confirm" bindtap="submitDirect">建单，进入今日台面</view>
   </view>
 
+  <view wx:if="{{rescheduleSheet}}" class="actmask" bindtap="closeReschedule"></view>
+  <view wx:if="{{rescheduleSheet}}" class="actpanel">
+    <view class="actt">预约改期 · 按门店当地时间</view>
+    <picker mode="date" value="{{rescheduleSheet.date}}" bindchange="changeRescheduleDate"><view class="actb">新日期：{{rescheduleSheet.date}}</view></picker>
+    <picker mode="time" value="{{rescheduleSheet.time}}" bindchange="changeRescheduleTime"><view class="actb">新时间：{{rescheduleSheet.time}}</view></picker>
+    <view class="actb">保留原服务、技师、价格；定金按本店保留规则校验，失败时原预约不变。</view>
+    <button class="actb" loading="{{rescheduleBusy}}" disabled="{{rescheduleBusy}}" bindtap="submitReschedule">确认改期</button>
+    <view class="actclose" bindtap="closeReschedule">取消</view>
+  </view>
+
   <merchant-tabbar wx:if="{{!directSheet}}" active="orders"></merchant-tabbar>
 
   <!-- 屏 0 操作面板:顶部订单摘要 + 按钮 + 关闭(图上就是这张卡,不是系统列表) -->

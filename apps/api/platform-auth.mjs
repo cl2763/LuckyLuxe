@@ -132,6 +132,8 @@ export function createPlatformAuth({ db, randomId, iso, createHash }) {
     return { username: row.username, displayName: row.display_name, mustChangePassword: row.must_change_password === 1 }
   }
 
+  function logout(token) { return db.prepare('DELETE FROM platform_auth_sessions WHERE token = ?').run(String(token || '')).changes }
+
   /** 改密(首登强制改密走的也是这条)。改完**把这个人的旧会话全吊销**。 */
   function changePassword(username, oldPassword, newPassword) {
     const row = db.prepare("SELECT * FROM platform_accounts WHERE username = ? AND status = 'active'").get(String(username || '').trim())
@@ -259,5 +261,5 @@ export function createPlatformAuth({ db, randomId, iso, createHash }) {
     }
   }
 
-  return { bootstrapPlatformAdmin, bootstrapAndReport, login, fromSession, changePassword, hash, handle }
+  return { bootstrapPlatformAdmin, bootstrapAndReport, login, fromSession, changePassword, logout, hash, handle }
 }

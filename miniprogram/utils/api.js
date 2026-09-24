@@ -465,7 +465,8 @@ async function loginForCurrentStore(options = {}) {
 /* 授权手机号 → 后端**真解密**并落库(店主 夜11 段 B1/B2)
    `code` 必须**当场再取一次**:`session_key` 跟着每次 wx.login 变,拿旧的解不开。
    服务端解密失败会回 400 —— 这里**不兜底**,让调用方如实报错(静默失败器族)。 */
-async function bindWechatPhone({ encryptedData, iv }) {
+async function bindWechatPhone({ encryptedData, iv, phoneCode }) {
+  if (phoneCode) return request('/auth/wechat/mini-phone', 'POST', { phoneCode })
   const code = await wxLoginCode()
   return request('/auth/wechat/mini-phone', 'POST', { code, encryptedData, iv })
 }
@@ -731,12 +732,6 @@ async function createBooking(cartItem, remark) {
     bookingDraftId: cartItem.bookingDraftId || appointment.bookingDraftId || cartItem.draftId || ''
   })
   if (!data.booking) throw new Error('预约创建失败，请稍后重试')
-  return data.booking
-}
-
-async function confirmMockPayment(bookingId) {
-  await ensureLogin()
-  const data = await request('/payments/mock/confirm', 'POST', { bookingId })
   return data.booking
 }
 
@@ -1024,7 +1019,11 @@ async function getAdminDashboardData() {
    开一个**窄出口**而不是把 raw `request` 暴露给所有页面 —— 出口越窄,波及面越小。 */
 function getHealth() { return request('/health', 'GET') }
 
+function getSignLink(code) { return request('/my/settlements/'+encodeURIComponent(code)+'/sign-link','POST',{}) }
+
 module.exports = {
+  getSignLink,
+  getDocumentLink: code => request('/my/settlements/'+encodeURIComponent(code)+'/document-link'),
   getHealth,
   getHeroSlides,
   API_BASE,
@@ -1100,7 +1099,6 @@ module.exports = {
   getTechnicians,
   getAvailability,
   createBooking,
-  confirmMockPayment,
   getBookings,
   getStoreCurrency,
   toMiniBooking,   // 导出只为回归断言:这层是白名单,漏字段=页面整块不渲染(见 test-double-sheet)

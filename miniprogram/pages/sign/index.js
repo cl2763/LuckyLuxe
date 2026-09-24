@@ -3,14 +3,14 @@
    签名板、选券面板、金额、快照都只有一套代码,不会出现「网页改了小程序没跟上」。
 
    沙箱验证:开发者工具勾「不校验合法域名」即可;
-   正式发版前要把 API_BASE 的域名加进小程序后台的 **业务域名(web-view)** 白名单
+   正式发版前核对后端签署链接的门店域名，以及快照的 API_BASE 域名，均须加入业务域名白名单
    —— 已记进 handoff/小程序发版清单.md。 */
 const api = require('../../utils/api')
 
 Page({
   data: { url: '', code: '' },
 
-  onLoad(q) {
+  async onLoad(q) {
     const code = decodeURIComponent(q.code || q.snapshot || '')
     if (!code) { wx.showToast({ title: '缺少服务单号', icon: 'none' }); return }
     /* 店主 2026-08-10 拍板:所有「查看签署单」入口点了**直接出快照本体**,
@@ -18,12 +18,14 @@ Page({
        同一个 web-view 壳子,只是换个地址 —— 不为它单开一个页面。 */
     const isSnap = Boolean(q.snapshot)
     // 单号进 URL 前先编码,别让特殊字符把链接拼坏
-    this.setData({
-      code,
-      url: isSnap
-        ? `${api.API_BASE}/settlements/${encodeURIComponent(code)}/snapshot`
-        : `${api.API_BASE}/sign/${encodeURIComponent(code)}`
-    })
+    try {
+      const target=isSnap ? await api.getDocumentLink(code) : q.merchant==='1' ? await api.adminPost('/admin/settlements/'+encodeURIComponent(code)+'/sign-token',{}) : await api.getSignLink(code)
+      // 仅短时单据链接进入 web-view，不传播顾客长期登录令牌。
+      this.setData({code,url:target.url.startsWith('/') ? api.API_BASE+target.url : api.SANDBOX ? api.API_BASE+target.url.replace(/^https?:\/\/[^/]+/, '') : target.url})
+    } catch(e) {
+      wx.showModal({title:'暂时无法打开',content:e.message||'请刷新订单后重试',showCancel:false,fail:()=>wx.showToast({title:'签署页暂时打不开，请重试',icon:'none'})})
+      return
+    }
     wx.setNavigationBarTitle({ title: isSnap ? '签署单凭证' : '服务确认单' })
   },
 

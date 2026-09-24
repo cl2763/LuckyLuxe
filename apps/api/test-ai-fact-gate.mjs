@@ -37,6 +37,15 @@ const api = async (p, tid, o = {}) => {
 const chat = (tid, ext, message) => api('/admin/wechat/mock-chat-message', tid,
   { method: 'POST', body: JSON.stringify({ externalUserId: ext, message }) })
 
+// 两个真实存在的独立租户；未知租户必须拒绝，不能借默认店来冒充隔离通过。
+const FACT_TENANTS = [`fact-cad-${RUN}`, `fact-cny-${RUN}`]
+for (const [i, tid] of FACT_TENANTS.entries()) {
+  const created = await api('/platform/tenants', null, {method:'POST',body:JSON.stringify({id:tid,name:tid,plan:'chain',currency:i?'CNY':'CAD',timezone:i?'Asia/Shanghai':'America/Toronto'})})
+  if (!created?.tenant) throw new Error('事实闸租户夹具创建失败')
+  const configured=await api('/admin/deposit-config',tid,{method:'PUT',body:JSON.stringify({enabled:true,mode:'fixed',fixedAmountCents:i?6000:5000,fallbackAmountCents:i?6000:5000,deductible:!i,cancelPolicy:{lateForfeitPct:i?0:50,noShowForfeitPct:100}})})
+  if(configured?.error) throw new Error('事实闸定金夹具配置失败')
+}
+
 /* ── 夹具:拿真店数据造槽,不自己编 ────────────────────────── */
 const SLOTS = collectFactSlots(
   { depositAmount: 50, priceList: [{ price: 'CAD $168', deposit: 'CAD $50' }, { price: 'CAD $88' }] },
@@ -76,7 +85,7 @@ check('①c 拦下之后出的是「我帮您问一下」+ 转人工(3b),不是�
    04e 那份逐项对照写明「留作闭环批『事实只从店数据取』判据的锚,
    锚三项:金额 / 可否抵扣 / 三档退款比例」。这里就按三项逐项验,
    而且**两店各验一遍** —— D136 的要害正是两店配置相反。 */
-for (const tid of ['lucky-luxe', 'jics-store']) {
+for (const tid of FACT_TENANTS) {
   const cfg = await api('/admin/deposit-config', tid)
   const c = cfg?.config || cfg || {}
   const d = await chat(tid, `fact-dep-${RUN}-${tid}`, '定金要多少?能退吗?')
@@ -212,7 +221,7 @@ check('⑤b J-20 四个口全关:商家写口 0 · 平台写口 0 · 种子 0 ·
   }))
 
 /* 行为层:改配置 → AI 说新数;写知识库那个键 → 400。两店各跑一遍。 */
-for (const tid of ['lucky-luxe', 'jics-store']) {
+for (const tid of FACT_TENANTS) {
   const before = await api('/admin/deposit-config', tid)
   const cfg0 = before?.config || before || {}
   const NEW = 7700
@@ -268,7 +277,7 @@ check('⑥b D140 读侧零兜底:`tenantCurrencyCode` **函数体内**不许出�
   !/tenant_kb_facts/.test(curFnBody) && !/'CAD'/.test(curFnBody), curFnBody.slice(0, 220))
 
 /* 行为:写知识库 currency → 400 指路;两店各跑 */
-for (const tid of ['lucky-luxe', 'jics-store']) {
+for (const tid of FACT_TENANTS) {
   const put = await api('/admin/kb/facts', tid, { method: 'PUT', body: JSON.stringify({ facts: { currency: 'USD' } }) })
   check(`⑥c D140 行为·${tid}:写知识库 currency → 拒绝并指到「门店设置 → 币种」`,
     put?.error?.code === 'UNKNOWN_KB_KEY' && /门店设置|币种/.test(put.error.message || ''),
@@ -276,7 +285,7 @@ for (const tid of ['lucky-luxe', 'jics-store']) {
 }
 
 /* ── 判据⑦ 废弃键读口过滤(05i §三):库不动,但页面上不许再出现 ── */
-for (const tid of ['lucky-luxe', 'jics-store']) {
+for (const tid of FACT_TENANTS) {
   const kb = await api('/admin/kb', tid)
   const f = kb?.facts || {}
   const lf = kb?.liveFacts || {}

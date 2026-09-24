@@ -110,3 +110,11 @@ function renderStaffTodayTimeline() {
         </div>`).join('') : ''}
     </section>`
 }
+
+function openRescheduleBooking(id) {
+  const b=owner.bookings.find(x=>x.id===id)
+  if(!b)return
+  openFormModal({title:'预约改期',hint:'按门店当地时间选择新时段。保留原服务、技师和价格；如不符合定金保留规则，系统会说明原因，原预约不会改变。',
+    fields:[{key:'date',label:'新日期',type:'date',value:b.appointmentDate},{key:'time',label:'新时间',type:'time',value:b.appointmentTime},{key:'reason',label:'改期原因（选填）',value:''}],saveText:'确认改期',
+    onSave:async v=>{await request(`/admin/bookings/${encodeURIComponent(id)}/reschedule`,{method:'POST',body:JSON.stringify({...v,expectedStart:b.appointmentStart})});const d=await request('/admin/bookings');owner.bookings=d.bookings;toast('预约已改期');render()}})
+}

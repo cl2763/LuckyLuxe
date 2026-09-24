@@ -147,6 +147,27 @@ async function main() {
   check('门店时区值非法时回落进程时区,不报错', bad.status === 200 && bad.data.today === expectTor, JSON.stringify(bad.data))
   await request(`/platform/tenants/${tor.tenantId}/store`, { method: 'PUT', body: JSON.stringify({ timezone: 'America/Toronto' }) })
 
+  // P0 四端实走复发：顾客请求没有商家会话，不能沿用进程默认时区。
+  const store = (await request('/admin/business-hours', {}, sh.token)).data.stores[0]
+  await request('/admin/business-hours', { method: 'PUT', body: JSON.stringify({ storeId: store.id, hours: Array.from({length:7}, (_,weekday)=>({weekday,openTime:'10:00',closeTime:'19:00',isClosed:false})) }) }, sh.token)
+  const pubHeaders = { 'x-tenant-id': sh.tenantId }
+  const login = await request('/auth/wechat/mini-login', { method: 'POST', headers: pubHeaders, body: JSON.stringify({ code: `stub:p0-tz-${RUN_ID}`, tenantId: sh.tenantId }) }, null)
+  check('顾客独立微信登录成功', login.status === 200 && Boolean(login.data.auth?.accessToken))
+  const tomorrow = new Date(Date.now()+86400000).toISOString().slice(0,10)
+  const body = { storeId:store.id, serviceId:svc.data.service.id, technicianId:tech.data.technician.id, date:tomorrow,time:'10:00' }
+  const booked = await request('/bookings', { method:'POST',headers:pubHeaders,body:JSON.stringify(body) },login.data.auth.accessToken)
+  check('顾客上海店 10:00 下单成功',booked.status===201,JSON.stringify(booked.data).slice(0,160))
+  check('顾客单存储的 UTC 对应上海 10:00',booked.data.booking.appointmentStart===`${tomorrow}T02:00:00.000Z`,booked.data.booking.appointmentStart)
+  const mine=(await request('/bookings',{headers:pubHeaders},login.data.auth.accessToken)).data.bookings.find(b=>b.id===booked.data.booking.id)
+  const admin=(await request('/admin/bookings',{},sh.token)).data.bookings.find(b=>b.id===booked.data.booking.id)
+  check('顾客与商家读到同一天同一个 10:00',mine.appointmentDate===tomorrow && admin.appointmentDate===tomorrow && mine.appointmentTime==='10:00' && admin.appointmentTime==='10:00')
+  const slots=(await request(`/availability?storeId=${store.id}&serviceId=${svc.data.service.id}&technicianId=${tech.data.technician.id}&date=${tomorrow}`,{headers:pubHeaders},null)).data.slots[0].slots
+  check('下单后公开可约时段同样排除已占的 10:00',!slots.includes('10:00'))
+  const conflict=await request('/admin/bookings/direct',{method:'POST',body:JSON.stringify({...body,newCustomerName:`冲突客${RUN_ID}`})},sh.token)
+  check('另一端商家代录同一时段必须被冲突闸拦截',conflict.status===409,JSON.stringify(conflict.data))
+  const outside=await request('/bookings',{method:'POST',headers:pubHeaders,body:JSON.stringify({...body,time:'23:00'})},login.data.auth.accessToken)
+  check('顾客不能预约营业时间以外',outside.status===400)
+
   console.log(`\n按店时区回归通过:${checks} 项断言全绿`)
 }
 
