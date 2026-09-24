@@ -3251,6 +3251,9 @@ const main = async () => {
         check('㋦⑪ 空分组名不回落到已退役的自由文本列(库里还留着「法式系列」也不许拿来顶)',
           legacy && legacy.category !== '法式系列',
           catDb.prepare('SELECT category c FROM services WHERE id = ?').get(legacyId)?.c)
+        // 只清掉本段故意造的历史脏分类，下一档仍要做全库一致性检查。
+        catDb.prepare('DELETE FROM services WHERE id = ? AND tenant_id = ?').run(legacyId, shop.tenantId)
+
 
         // 建店默认三大类
         check('㋦⑧ 建店即落平台三大类(起点不是上限,商家可再细分)',

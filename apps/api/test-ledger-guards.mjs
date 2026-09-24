@@ -15,13 +15,21 @@
 
    ⚠️ standalone:CI_SUITES="ledger-guards" bash apps/api/run-all-tests.sh */
 import { assertTestTarget } from './test-guard.mjs'
-import { DatabaseSync } from 'node:sqlite'
+import { DatabaseSync, backup } from 'node:sqlite'
+import { mkdtempSync, rmSync } from 'node:fs'
+import { join as probeJoin } from 'node:path'
 import { LEDGER_TRIGGER_NAMES } from './ledger-guards.mjs'
 
 const BASE_URL = process.env.TEST_BASE_URL || 'http://127.0.0.1:4128'
 await assertTestTarget(BASE_URL)
 const RUN = Date.now().toString(36)
-const db = new DatabaseSync(process.env.TEST_DB_PATH || '')
+// 护栏造病只操作测试库的独立副本；错误积分与孤立单据不会进入后续业务套件。
+const source = new DatabaseSync(process.env.TEST_DB_PATH || '', {readOnly:true})
+const probeDir = mkdtempSync('/tmp/ll-ci-data.ledger-probes-')
+const probePath = probeJoin(probeDir, 'ledger.sqlite')
+await backup(source, probePath)
+source.close()
+const db = new DatabaseSync(probePath)
 
 let checks = 0
 function check(name, cond, detail = '') {
@@ -399,11 +407,7 @@ await lawPair('⑪储值流水禁改', 'stored_value_no_update',
     db.prepare('SELECT COUNT(*) n FROM settlements WHERE id = ? AND perf_base_cents <> subtotal_cents').get(sid).n === 0)
 }
 
-// 护栏测试曾故意造正积分与 9999 篡改值；按追加账本规则对冲本套夹具，避免污染下一档全库守恒检查。
-for (const tid of [REAL, TEST]) {
-  const total=db.prepare('SELECT COALESCE(SUM(amount),0) n FROM points_transactions WHERE tenant_id=? AND user_id=?').get(tid,'u-lg').n
-  if(total)db.prepare(`INSERT INTO points_transactions (id,tenant_id,user_id,type,amount,note,created_at) VALUES (?,?,?,'adjust',?,?,?)`).run(`lg-clean-${tid}`,tid,'u-lg',-total,'测试造病后对冲',iso())
-  check('积分造病夹具对冲后净额归零 '+tid,db.prepare('SELECT COALESCE(SUM(amount),0) n FROM points_transactions WHERE tenant_id=? AND user_id=?').get(tid,'u-lg').n===0)
-}
+db.close()
+rmSync(probeDir, {recursive:true,force:true})
 
 console.log(`\n账本十二条豁免族审计 + 事务扫通过:${checks} 项断言全绿`)
