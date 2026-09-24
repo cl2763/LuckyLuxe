@@ -7,7 +7,8 @@
     <!-- 🔴 D168 段 3(店主 05t):字体三件套按合同图那一行原样引 —— 方案 ①(Google Fonts 链接),
          今天先保证「看得见」;方案 ②(自托管 woff2 放 apps/web/fonts/)已写进上线批清单,
          生产在墙内可能慢,那时换 ② 而不是换字体。**这一行与合同图第 2 行是同一行。** -->
-    <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,500;9..144,700&family=Noto+Serif+SC:wght@600;700&family=Noto+Sans+SC:wght@400;500;700&display=swap">
+    <!-- 境内网络不能让外部字体阻塞业务；字体未就绪时使用既有本机字体回退。 -->
+    <link rel="stylesheet" media="print" onload="this.media='all'" onerror="this.remove()" href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,500;9..144,700&family=Noto+Serif+SC:wght@600;700&family=Noto+Sans+SC:wght@400;500;700&display=swap">
     <link rel="stylesheet" href="/web/styles.css?v=20260924d-web-ready">
     <!-- 设计令牌排在 styles.css **之后**:令牌是唯一真相,谁在后面谁说了算。
          `--ink/--line/--paper/--card` 四个原来在 styles.css 里也有一份(值略有出入),

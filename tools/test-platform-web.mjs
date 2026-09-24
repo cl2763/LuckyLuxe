@@ -9,7 +9,7 @@ const owner='p0-ui-owner-test-only',initial='p0-ui-initial-test-only',password=r
 const fd=openSync(dir+'/server.log','w');
 const server=spawn(process.execPath,['local-server.mjs'],{cwd:root+'/apps/api',env:{PATH:process.env.PATH,HOME:process.env.HOME,DATA_DIR:dir,HOST:'127.0.0.1',PORT:String(port),OWNER_TOKEN:owner,ALLOW_DEMO_ADMIN_LOGIN:'false',WECHAT_APP_SECRET:'configured-test-placeholder',WECHAT_MINI_TOKEN_SECRET:'p0-ui-mini-test-only',NOTIFY_TICK:'off',PLATFORM_ADMIN_BOOTSTRAP:'1',PLATFORM_ADMIN_INITIAL_PASSWORD:initial},stdio:['ignore',fd,fd]});
 const accounts={};
-let chrome,ws,dialogTimer,handlingDialog=false,n=0;const failures=[],dialogs=[],errors=[];
+let chrome,ws,dialogTimer,handlingDialog=false,n=0,heldFonts=0;const failures=[],dialogs=[],errors=[];
 const sleep=ms=>new Promise(r=>setTimeout(r,ms));
 function check(name,ok,detail=''){n++;console.log(`${ok?'ok':'not ok'} ${n} - ${name}${!ok?' :: '+detail:''}`);if(!ok)failures.push(name)}
 async function api(path,body,method=body?'POST':'GET'){const r=await fetch(base+path,{method,headers:{authorization:'Bearer '+owner,'content-type':'application/json'},body:body?JSON.stringify(body):undefined});return {status:r.status,data:await r.json()}}
@@ -26,8 +26,9 @@ try{
  chrome=spawn('/Applications/Google Chrome.app/Contents/MacOS/Google Chrome',[`--remote-debugging-port=${cp}`,`--user-data-dir=${profile}`,'--headless=new','--no-first-run','--no-default-browser-check','--window-size=1440,1000','about:blank'],{stdio:'ignore'});
  let target;for(let i=0;i<80;i++){try{target=(await fetch(`http://127.0.0.1:${cp}/json/list`).then(r=>r.json())).find(x=>x.type==='page');if(target)break}catch{}await sleep(100)}
  ws=new WebSocket(target.webSocketDebuggerUrl);await new Promise((r,j)=>{ws.onopen=r;ws.onerror=j});
- ws.onmessage=e=>{const m=JSON.parse(e.data);if(m.id){const p=pending.get(m.id);if(p){clearTimeout(p.timer);pending.delete(m.id);m.error?p.reject(Error(m.error.message)):p.resolve(m.result)}}else if(m.method==='Page.javascriptDialogOpening'){const answer=dialogs.shift();if(answer===undefined){errors.push('未预期弹窗:'+m.params.message);send('Page.handleJavaScriptDialog',{accept:false}).catch(()=>{})}else{send('Page.handleJavaScriptDialog',{accept:answer!==null,...(typeof answer==='string'?{promptText:answer}:{})}).catch(x=>errors.push(x.message))}}else if(m.method==='Runtime.exceptionThrown'){errors.push(m.params.exceptionDetails.exception?.description||m.params.exceptionDetails.text)}};
+ ws.onmessage=e=>{const m=JSON.parse(e.data);if(m.id){const p=pending.get(m.id);if(p){clearTimeout(p.timer);pending.delete(m.id);m.error?p.reject(Error(m.error.message)):p.resolve(m.result)}}else if(m.method==='Fetch.requestPaused'){heldFonts++ /* 故意不回复：模拟字体站持续不可达，而非立即报错。 */}else if(m.method==='Page.javascriptDialogOpening'){const answer=dialogs.shift();if(answer===undefined){errors.push('未预期弹窗:'+m.params.message);send('Page.handleJavaScriptDialog',{accept:false}).catch(()=>{})}else{send('Page.handleJavaScriptDialog',{accept:answer!==null,...(typeof answer==='string'?{promptText:answer}:{})}).catch(x=>errors.push(x.message))}}else if(m.method==='Runtime.exceptionThrown'){errors.push(m.params.exceptionDetails.exception?.description||m.params.exceptionDetails.text)}};
  dialogTimer=setInterval(async()=>{if(handlingDialog||!ws||ws.readyState!==1)return;handlingDialog=true;try{const kind=await ev("(()=>{const d=document.querySelector('.ui-dialog-overlay');return d?(d.querySelector('input')?'text':'confirm'):null})()");if(kind&&dialogs.length){const answer=dialogs.shift();if(kind==='text'&&answer!==null)await fill('.ui-dialog-input',String(answer));await click(answer===null?'.ui-dialog-overlay [data-uid=cancel]':'.ui-dialog-overlay [data-uid=ok]')}}catch(e){errors.push(e.message)}finally{handlingDialog=false}},100);
+ await send('Fetch.enable',{patterns:[{urlPattern:'https://fonts.googleapis.com/*',requestStage:'Request'}]});
  await send('Page.enable');await send('Runtime.enable');await send('Emulation.setDeviceMetricsOverride',{width:1440,height:1000,deviceScaleFactor:1,mobile:false});
  await send('Page.navigate',{url:base+'/platform'});await wait('登录表单',"document.querySelector('#pfUser')");
  await fill('#pfUser','platform-admin');await fill('#pfPass',initial);dialogs.push(password);await click('#loginWrap button');await wait('首登改密后首页',"!document.querySelector('#app').classList.contains('hidden') && document.querySelector('#quickRows').innerText.includes('网页测试甲店')");
@@ -121,7 +122,7 @@ try{
  await send('Page.navigate',{url:base+'/admin'});await wait('商家登录',"document.querySelector('#ownerLoginForm')");
  await fill('#ownerLoginForm input[name=email]',accounts['ui-a'].username);await fill('#ownerLoginForm input[name=password]',accounts['ui-a'].initialPassword);await click('#ownerLoginButton');
  await wait('商家首登改密',"document.querySelector('#forceOldPass')");await fill('#forceOldPass',accounts['ui-a'].initialPassword);await fill('#forceNewPass','P0-merchant-changed-only');await fill('#forceNewPass2','P0-merchant-changed-only');await click('[data-force-pass-submit]');
- await wait('商家首页',"document.querySelector('#sidebarBookings').offsetParent!==null&&!document.querySelector('#forceOldPass')");check('平台配置的店铺可通过真实商家账号进入网页',true);
+ await wait('商家首页',"document.querySelector('#sidebarBookings').offsetParent!==null&&!document.querySelector('#forceOldPass')");check('平台配置的店铺可通过真实商家账号进入网页',true);check('境外字体持续不返回也不阻塞商家业务',heldFonts>0);
  await click('#sidebarBookings');await click('#allTab');await fill('#filterDate','2030-10-07');
  const moveSelector=`[data-booking="${booking.id}"][data-booking-action="reschedule"]`;
  await wait('订单改期按钮',`document.querySelector(${JSON.stringify(moveSelector)})`);
