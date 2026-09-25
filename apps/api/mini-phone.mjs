@@ -56,12 +56,13 @@ export async function resolveLoginPhone(options) {
  * 入参:`{ code, encryptedData, iv }`(`code` 是**当场新取**的 wx.login code)
  */
 export async function bindMiniPhone({ body = {}, req, db, apiError, requireCustomer,
-  fetchJsCode2Session, appid, secret, scopeName }) {
+  fetchJsCode2Session, appid, secret, scopeName, completePhone }) {
   const customer = requireCustomer(req)                       // 没登录不许绑号
   if (String(body.phoneCode || '').trim()) {
     const row = db.prepare('SELECT id, tags_json, wechat_open_id FROM users WHERE id = ?').get(customer.id)
     if (!row || !row.wechat_open_id) throw apiError(403, 'WECHAT_LOGIN_REQUIRED', '请先用微信登录后再授权手机号。')
     const phone = await verifiedPhone({ body, openid: row.wechat_open_id, appid, secret, scopeName, apiError })
+    if (completePhone) return completePhone(customer.id, phone)
     db.prepare('UPDATE users SET phone = ?, tags_json = ? WHERE id = ?')
       .run(phone, dropNoPhoneTag(row.tags_json), customer.id)
     return { ok: true, phone, needPhone: false }
@@ -94,6 +95,7 @@ export async function bindMiniPhone({ body = {}, req, db, apiError, requireCusto
     throw apiError(400, 'WECHAT_PHONE_DECRYPT_FAILED', `手机号解密失败,请重试。(${e && e.message})`)
   }
 
+  if (completePhone) return completePhone(customer.id, decoded.phoneNumber)
   db.prepare('UPDATE users SET phone = ?, tags_json = ? WHERE id = ?')
     .run(decoded.phoneNumber, dropNoPhoneTag(row.tags_json), customer.id)
   return { ok: true, phone: decoded.phoneNumber, needPhone: false }

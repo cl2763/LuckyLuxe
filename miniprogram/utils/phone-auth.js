@@ -61,7 +61,7 @@ async function handlePhoneAuthResult(page, event) {
       /* 🔴 解密/绑定失败**不许当成功**(静默失败器族):绿勾一打,顾客以为存住了,
          而后台永远认不出这个人。如实报错,让她再点一次。 */
       setPhoneState(page, { phoneAuthorized: false, phoneAuthFailed: true, phoneMode: 'manual',
-        phoneMessage: en ? 'Phone binding failed, please try again or verify manually.' : '手机号绑定失败，请重试或改用手动验证。' })
+        phoneMessage: (e && e.message) || (en ? 'Phone binding failed, please try again.' : '手机号绑定失败，请重试。') })
       wx.showToast({ title: en ? 'Binding failed' : '绑定失败', icon: 'none' })
       return
     }

@@ -1,3 +1,4 @@
+import { availability } from './schedule-availability.mjs'
 /* 排班域(schedule-week 周网格 / schedule-day 台面日视图)—— 2026-08-30h 从 local-server.mjs 搬出。
    公约②边改边拆 + 棘轮抵扣批(把 +14/+17/+23 的账抵回来)。
    **纯迁移零行为变化**:两段路由体逐字照搬,只把依赖改成注入;搬前后接口响应逐字节对比过
@@ -178,7 +179,7 @@ export function createScheduleBoard(deps) {
       // 只显示在岗技师 + 今天有单的技师(避免停用测试技师塞满表头)
       const technicians = allTechs
         .filter((t) => t.is_active || bookingCount[t.id])
-        .map((t) => ({ id: t.id, name: t.name, title: t.title, isActive: Boolean(t.is_active), bookingCount: bookingCount[t.id] || 0 }))
+        .map((t) => ({ id: t.id, name: t.name, title: t.title, isActive: Boolean(t.is_active), bookingCount: bookingCount[t.id] || 0, ...availability({active:t.is_active,schedule:db.prepare('SELECT * FROM technician_schedules WHERE technician_id=? AND date=?').get(t.id,date),openTime,closeTime,isClosed,date,today:nowParts.date,now:nowParts.time,bookings:bookings.filter(b=>b.technicianId===t.id)}) }))
       const activeCount = bookings.filter((b) => b.arrivalState === 'active').length
       const pendingCount = bookings.filter((b) => b.arrivalState === 'pending').length
       /* 值日(31l 合同二/四/六):开关关=响应整块不出现(零渲染);开=名单+空态句后端出(两端同句) */

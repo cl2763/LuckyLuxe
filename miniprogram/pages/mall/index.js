@@ -2,6 +2,7 @@
    §十-2 支付过渡红线:未接通=「到店购买」,点了只同屏出一句话说明,**不跳转/不弹层/不建单**,也不出现任何「已付款」类字样;
    句子全后端唯一(buyButtonText/offlineNote),前端不 if/else 拼两套话。 */
 const api = require('../../utils/api')
+const { money, refreshStoreCurrency } = require('../../utils/storecurrency')
 
 Page({
   data: { loading: true, mall: null, error: '', noteFor: '', filter: 'all' },
@@ -13,7 +14,9 @@ Page({
 
   async load() {
     try {
+      await refreshStoreCurrency().catch(() => {})
       const r = await api.getMall()
+      r.items = (r.items || []).map((it) => ({ ...it, giftItems: (it.giftItems || []).map((g) => ({ ...g, unitValueText: money(g.unitValueCents, 2) })) }))
       this.setData({ loading: false, mall: r, error: '' })
     } catch (e) {
       this.setData({ loading: false, mall: null, error: (e && e.message) || '商城加载失败' })

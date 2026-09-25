@@ -13,3 +13,7 @@
 .ml-filter{padding:10rpx 26rpx;border-radius:999rpx;background:var(--card);color:var(--ink);font-size:24rpx}
 .ml-filter.on{background:var(--hero);color:var(--heroink);font-weight:600}
 .ml-sec{font-size:26rpx;color:var(--ink);margin:16rpx 4rpx 10rpx}
+
+.gift-list{border-top:1rpx solid var(--line);padding-top:18rpx;margin-top:18rpx;min-width:0;width:100%;color:var(--ink)}.gift-title{font-size:25rpx;font-weight:700}.gift-line{display:flex;justify-content:space-between;gap:12rpx;flex-wrap:wrap;margin-top:10rpx;font-size:24rpx;line-height:1.5;word-break:break-all}.gift-unit,.gift-note{color:var(--sub);font-size:22rpx}.gift-note{margin-top:12rpx;line-height:1.6}
+
+.mall-page{background:var(--paper);min-height:100vh;box-sizing:border-box}.ml-top{gap:14rpx;flex-wrap:wrap}.ml-title{min-width:0;overflow-wrap:break-word}.ml-filters{flex-wrap:wrap}

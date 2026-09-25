@@ -50,6 +50,8 @@ function vm(u, TH) {
 }
 
 Page({
+  createCustomer(){if(this.data.isOwner)this.selectComponent("#customerCreate").open()},
+  async customerCreated(e){await this.load();wx.navigateTo({url:"/pages/merchant/customer/index?id="+encodeURIComponent(e.detail.customer.id)})},
   data: {
     all: [], list: [], kw: '', filter: 'all', sort: 'spend',
     filters: ['all', 'a', 'b', 'n', 's'],

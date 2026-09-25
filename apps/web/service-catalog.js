@@ -53,7 +53,7 @@ function renderServices() {
         <button class="ghost slim" data-storefront-collapse type="button">${zh ? '收起' : 'Close'}</button>
       </div>
     </div>` : `
-    <div class="service-admin-row" data-storefront-new role="button" style="border:1.5px dashed #d8cfc6;border-radius:12px;justify-content:center;cursor:pointer;color:#8c8279">
+    <div class="service-admin-row" data-storefront-new role="button" style="border:1.5px dashed var(--line);border-radius:12px;justify-content:center;cursor:pointer;color:var(--muted)">
       ＋ ${zh ? '新建上架服务（从结算单目录选项目关联，或全新创建）' : 'New storefront service (link a catalog item, or create new)'}
     </div>`
   /* 🔴 S13①(店主 2026-08-25):模块① 列表**按大类分组**显示 —— 原来一排平铺,店主说"很乱"。

@@ -1,3 +1,4 @@
+const rechargeCents=raw=>{const s=String(raw??'').trim();return !s?0:/^\d+(?:\.\d{1,2})?$/.test(s)?Math.round(Number(s)*100):NaN}
 /* 客户档案 →「账户调整」(店主 08-30c 裁定·入口总收敛:凡针对特定顾客、改其账户余额的动作
    —— 充值 / 赠送 / 退卡 / 冲销 —— 唯一 UI 入口就是本页,两端同此)。
 
@@ -61,7 +62,7 @@ Page({
         facts: f.facts,
         cards: (pack.timecards || []).filter((c) => c.remaining > 0),
         bound: lk && lk.hit ? lk.hit.bound !== false : true,
-        rvPkgs: pkgs.packages || [],
+        rvPkgs: (pkgs.packages || []).map((p) => ({ ...p, giftItems: (p.giftItems || []).map((g) => ({ ...g, unitValueText: storeMoney(g.unitValueCents, 2) })) })),
         techNames: ['店里直收'].concat(roster.map((t) => t.name)),
         techIds: [''].concat(roster.map((t) => t.id))
       })
@@ -89,25 +90,26 @@ Page({
     })
     this.rvText()
   },
-  onRvAmount(e) { this.data.rvAmount = e.detail.value; this.data.rvPkgId = ''; this.rvTextSoon() },
-  onRvBonus(e) { this.data.rvBonus = e.detail.value; this.data.rvPkgId = ''; this.rvTextSoon() },
+  onRvAmount(e) { this.setData({ rvAmount: e.detail.value, rvPkgId: '' }); this.rvTextSoon() },
+  onRvBonus(e) { this.setData({ rvBonus: e.detail.value, rvPkgId: '' }); this.rvTextSoon() },
   onRvChannel(e) { this.setData({ rvChannelIdx: Number(e.detail.value) || 0 }) },
   onTech(e) { this.setData({ techIdx: Number(e.detail.value) || 0 }) },
   rvTextSoon() { clearTimeout(this._rt); this._rt = setTimeout(() => this.rvText(), 250) },
   rvText() {
-    const cents = Math.round(Number(String(this.data.rvAmount || '').replace(/[^\d.]/g, '')) * 100) || 0
+    const cents = rechargeCents(this.data.rvAmount)
     this.setData({ rvAmountText: cents > 0 ? ` ${storeMoney(cents, 2)}` : '' })
   },
 
   async submitRecharge() {
-    const cents = Math.round(Number(String(this.data.rvAmount || '').replace(/[^\d.]/g, '')) * 100) || 0
-    const bonus = Math.round(Number(String(this.data.rvBonus || '').replace(/[^\d.]/g, '')) * 100) || 0
-    if (cents <= 0) { wx.showToast({ title: '充值金额要大于 0(赠送随充值一起记)', icon: 'none' }); return }
+    const cents = rechargeCents(this.data.rvAmount)
+    const bonus = rechargeCents(this.data.rvBonus)
+    if (!(cents > 0)) { wx.showToast({ title: '充值金额要大于 0(赠送随充值一起记)', icon: 'none' }); return }
+    if(!Number.isSafeInteger(bonus)||bonus<0||bonus>100000000||cents>100000000){wx.showToast({title:'金额无效，最多两位小数且不超过100万',icon:'none'});return}
     if (this.data.busy) return
     this.setData({ busy: true })
     try {
       await api.adminPost('/admin/stored-value/recharge', {
-        userId: this.data.userId, amountCents: cents, bonusCents: bonus,
+        userId: this.data.userId, amountCents: cents, bonusCents: bonus, packageId: this.data.rvPkgId || undefined,
         payChannel: this.data.rvChannels[this.data.rvChannelIdx].id,
         technicianId: this.data.techIds[this.data.techIdx] || undefined
       })

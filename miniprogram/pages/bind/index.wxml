@@ -25,5 +25,6 @@
   <view wx:if="{{state === 'error'}}" class="card">
     <view class="title">无法完成绑定</view>
     <view class="safe warn">{{errText}}</view>
+    <view wx:if="{{canRetry}}" class="btn" bindtap="confirm">已确认过？验证微信并恢复绑定结果</view>
   </view>
 </view>

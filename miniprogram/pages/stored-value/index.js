@@ -1,5 +1,5 @@
 const api = require('../../utils/api')
-const { curOf, ensureCurrencyCached, money, moneyFromYuan } = require('../../utils/storecurrency')
+const { curOf, ensureCurrencyCached, refreshStoreCurrency, money, moneyFromYuan } = require('../../utils/storecurrency')
 
 /* 🔴 N-5(店主 08-25):类型文案改**后端下发**(txn.typeText)。
    原来这儿存着一份本地词典 —— 后端加一个类型(比如退卡 refund),这边不跟,
@@ -8,10 +8,10 @@ const { curOf, ensureCurrencyCached, money, moneyFromYuan } = require('../../uti
 const CH_LABEL = { manual: '门店补录', wechat: '微信支付', stored_value: '门店核销', cash: '现金', card: '银行卡', alipay: '支付宝', marketing: '营销赠送', unknown: '' }
 
 Page({
-  data: { balance: 0, level: '', packages: [], txns: [], pendingConfirm: [], loading: true, isDemo: false },
+  data: { balance: 0, balanceText: '', level: '', packages: [], txns: [], pendingConfirm: [], loading: true, isDemo: false },
 
   async onShow() {
-    ensureCurrencyCached()
+    await refreshStoreCurrency().catch(() => ensureCurrencyCached())
     this.setData({ cur: curOf() })   // 币种跟门店走,不写死币符
 
     await api.refreshMember()
@@ -32,6 +32,7 @@ Page({
         date: String(t.createdAt || '').slice(0, 10) + (CH_LABEL[t.payChannel] ? ' · ' + CH_LABEL[t.payChannel] : ''),
         delta: (t.amountCents >= 0 ? '+' : '-') + money(Math.abs(t.amountCents)),
         up: t.amountCents >= 0,
+        giftItems: (t.giftItems || []).map((g) => ({ ...g, unitValueText: money(g.unitValueCents, 2) })),
         needsConfirm: Boolean(t.needsConfirm)
       }))
       /* B3-3/4 代充回执:门店代充的到账回执(金额/渠道/时间戳,余额=顶部大数)。
@@ -41,10 +42,11 @@ Page({
         amount: money(t.amountCents),
         channel: CH_LABEL[t.payChannel] || t.payChannel || '门店',
         at: String(t.createdAt || '').slice(0, 16).replace('T', ' '),
+        giftItems: (t.giftItems || []).map((g) => ({ ...g, unitValueText: money(g.unitValueCents, 2) })),
         note: t.note || ''
       }))
-      this.setData({ balance: Math.round((r.balanceCents || 0) / 100) })
-    } catch (e) { this.setData({ balance: m.balance || 0 }) }
+      this.setData({ balance: (r.balanceCents || 0) / 100, balanceText: money(r.balanceCents || 0, 2) })
+    } catch (e) { this.setData({ balance: m.balance || 0, balanceText: moneyFromYuan(m.balance || 0, 2) }) }
     /* 03u:样例块只在演示店出 —— 标志来自公开 /stores 的 isDemo(判据落在 tenants.kind) */
     const isDemo = wx.getStorageSync('lucky_store_demo') === true
     this.setData({ level: m.memberLevel || '', packages, txns, pendingConfirm, loading: false, isDemo })

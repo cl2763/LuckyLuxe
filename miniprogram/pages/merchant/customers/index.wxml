@@ -12,6 +12,8 @@
     <view class="tcard s {{filter==='s'?'sel':''}}" data-t="s" bindtap="pickTier"><view class="tn">{{counts.s}}</view><view class="tt">沉睡 S</view><view class="td">超60天没来</view></view>
   </view>
 
+  <button wx:if="{{isOwner}}" class="new-customer-btn" bindtap="createCustomer">＋ 新建顾客</button>
+  <customer-create id="customerCreate" theme-class="{{themeClass}}" bind:saved="customerCreated" />
   <view class="srch"><input class="inp" placeholder="搜姓名 / 手机号" placeholder-class="ph" value="{{kw}}" bindinput="onKw" /></view>
 
   <scroll-view scroll-x class="chips">

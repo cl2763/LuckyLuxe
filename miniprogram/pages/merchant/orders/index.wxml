@@ -48,19 +48,19 @@
           </view>
         </view>
         <scroll-view scroll-x class="dv-right" show-scrollbar="{{false}}">
-          <view class="dv-rin" style="width:{{dv.colW*dv.cols.length}}rpx">
+          <view class="dv-rin" style="width:{{dv.totalWidth}}rpx">
             <view class="dv-heads">
-              <view wx:for="{{dv.cols}}" wx:key="id" class="dv-th {{item.id===myTechId?'mine':''}}" style="width:{{dv.colW}}rpx">
+              <view wx:for="{{dv.cols}}" wx:key="id" class="dv-th {{item.id===myTechId?'mine':''}}" style="width:{{item.width}}rpx">
                 <view class="dv-nm">{{item.name}}<text wx:if="{{item.id===myTechId}}" class="dv-me">我</text></view>
                 <view class="dv-rl">{{item.role}}</view>
                 <view class="dv-st {{item.busy?'busy':'free'}}">{{item.busy?'忙':'空'}}</view>
               </view>
             </view>
             <view class="dv-cols" style="height:{{dv.gridH}}rpx">
-              <view wx:for="{{dv.cols}}" wx:key="id" wx:for-item="col" class="dv-col {{col.id===myTechId?'mine':''}}" style="width:{{dv.colW}}rpx">
+              <view wx:for="{{dv.cols}}" wx:key="id" wx:for-item="col" class="dv-col {{col.id===myTechId?'mine':''}}" style="width:{{col.width}}rpx">
                 <view wx:for="{{dv.hours}}" wx:key="label" wx:for-item="hl" class="dv-line {{hl.off ? 'off' : ''}}"></view>
                 <view wx:for="{{col.frees}}" wx:key="startTime" wx:for-item="f" class="dv-blk free" style="top:{{f.top}}rpx;height:{{f.height}}rpx" data-tech="{{col.id}}" data-time="{{f.startTime}}" data-end="{{f.endTime}}" bindtap="tapFree"><text>{{dv.backfill ? dv.backfill.label : '+ 直接排单'}}</text></view>
-                <view wx:for="{{col.blocks}}" wx:key="id" wx:for-item="b" class="dv-blk {{b.cls}}" style="top:{{b.top}}rpx;height:{{b.height}}rpx" data-id="{{b.id}}" bindtap="tapBlock">
+                <view wx:for="{{col.blocks}}" wx:key="id" wx:for-item="b" class="dv-blk {{b.cls}}" style="top:{{b.top}}rpx;height:{{b.height}}rpx;left:{{b.left}}rpx;width:{{b.width}}rpx;right:auto" data-id="{{b.id}}" bindtap="tapBlock">
                   <view class="dv-bt"><text wx:if="{{b.stateGlyph}}" class="dv-sdot {{b.state}}">{{b.stateGlyph}}</text>{{b.startTime}}–{{b.endTime}}</view>
                   <view class="dv-bn">{{b.customerName}}</view>
                   <view class="dv-bs">{{b.serviceName}}</view>
@@ -295,7 +295,7 @@
            合并为:一框受控即搜 + 无匹配一键建档(不弹确认) + 扫会员码原样。 -->
       <view class="ds-k">顾客 <text class="ds-ksub">老顾客扫会员码直接带出</text><text class="ds-scan ds-scan-r" bindtap="scanMemberCode">扫会员码</text></view>
       <input class="ds-inp" placeholder="姓名或手机号，输入即搜；新客直接输" value="{{custQuery}}" bindinput="onCustSearch" />
-      <view wx:if="{{selectedCustName}}" class="ds-picked">已选:{{selectedCustName}} <text class="ds-clear" bindtap="clearCust">✕</text></view>
+      <view wx:if="{{selectedCustName}}" class="ds-picked">已选:{{selectedCustName}} {{selectedCustPhoneMasked}} <text class="ds-clear" bindtap="clearCust">✕</text></view>
       <view wx:if="{{custMatches.length}}" class="ds-matches">
         <view wx:for="{{custMatches}}" wx:key="id" class="ds-match" data-id="{{item.id}}" bindtap="pickCust">
           <text class="ds-mn">{{item.name}}</text><text class="ds-mp">{{item.phoneMasked}}{{item.phoneMasked && item.visits ? ' · ' : ''}}{{item.visits ? '到店' + item.visits + '次' : ''}}</text>
@@ -308,7 +308,8 @@
         <text>{{custQuery ? '没找到?为「' + custQuery + '」新建轻档案' : '不留名?新建「未命名顾客」轻档案'}}</text>
         <text class="ds-newbtn">＋建档并排单</text>
       </view>
-      <view class="ds-warn">不填手机号也能建单;身份绑定不依赖手机号(靠签署码/会员码),手机号只用于找档案和联系</view>
+      <block wx:if="{{!selectedCustId}}"><view class="ds-k">联系方式 <text class="ds-ksub">选填</text></view><input class="ds-inp" maxlength="32" value="{{directContact}}" placeholder="知道联系方式可填写，也可以留空" bindinput="onDirectContact" /></block>
+      <view class="ds-warn">不填电话也能建单；顾客之后在自己的微信中确认指定档案，普通会员码仅用于查找。</view>
 
       <view class="ds-k">时段 · 开始时间</view>
       <view class="ds-timerow">

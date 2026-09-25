@@ -39,10 +39,10 @@ Page({
   async load() {
     try {
       const card = await pub(`/bind-tokens/${encodeURIComponent(this.data.token)}`)
-      if (card.alreadyBound) { this.setData({ state: 'already', card }); return }
+      if (card.alreadyBound) { this.setData({ state: 'confirm', card }); return }
       this.setData({ state: 'confirm', card })
     } catch (e) {
-      this.setData({ state: 'error', errText: (e && e.message) || '这枚绑定码已失效,请店员重新出示。' })
+      this.setData({ state: 'error', canRetry: true, errText: (e && e.message) || '这枚绑定码已失效,请店员重新出示。' })
     }
   },
 
@@ -50,13 +50,14 @@ Page({
     if (this._busy) return
     this._busy = true
     try {
-      /* 真机:wx.login 换 code,后端配了微信凭证时应传 openid 链路(与签署 claim 同法);
-         沙盒:后端旁路会用该档案的恒定假 openid,幂等。 */
-      const out = await pub(`/bind-tokens/${encodeURIComponent(this.data.token)}/confirm`, 'POST', {})
+      // 先验证微信，再认领本人确认的档案；不先创建第二份空档案。
+      const code = await new Promise((resolve,reject) => wx.login({success:r => r.code ? resolve(r.code) : reject(new Error('微信登录失败')),fail:reject}))
+      const out = await pub(`/bind-tokens/${encodeURIComponent(this.data.token)}/confirm`, 'POST', {code})
       if (out.conflict) {
         this.setData({ state: 'error', errText: '这个微信已绑定本店另一份档案 —— 已记录待店员处理,请将手机交还技师。' })
         return
       }
+      api.acceptCustomerSession(out)
       this.setData({ state: 'done', memberCode: out.memberCode || '' })
     } catch (e) {
       wx.showToast({ title: (e && e.message) || '绑定失败,请重试', icon: 'none' })

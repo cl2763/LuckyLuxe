@@ -1877,6 +1877,7 @@ function renderMallWeb() {
           ${it.unitText ? `<p class="subtle">${escapeHtml(it.unitText)}</p>` : ''}
           ${it.projectGroupText ? `<p class="subtle">${zh ? '适用项目组:' : 'Scope: '}${escapeHtml(it.projectGroupText)}</p>` : ''}
           ${it.validText ? `<p class="subtle">${escapeHtml(it.validText)}</p>` : ''}
+          ${window.CustomerWallet.renderGifts(it.giftItems, { zh, escapeHtml, money })}
           <p style="margin-top:10px"><button class="primary" data-mall-buy="${escapeHtml(it.id)}" type="button" style="width:100%">${escapeHtml(it.buyButtonText)}</button></p>
           ${state.mallNoteFor === it.id ? `<p class="subtle">${escapeHtml(it.offlineNote)}</p>` : ''}
         </div>`).join('')}`).join('')}

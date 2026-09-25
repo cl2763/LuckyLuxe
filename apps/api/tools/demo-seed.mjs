@@ -613,18 +613,8 @@ function seedTenant(cfg) {
         created_at: now, updated_at: now
       }))
     }
-    custIds.slice(0, 8).forEach((c, i) => {
-      insertRow('points_transactions', {
-        id: uid(`${tenantId}-pt`), tenant_id: tenantId, user_id: c.id, type: 'adjust',
-        amount: 120 + i * 40, note: '开业活动赠送积分', created_by: 'demo-seed',
-        created_at: at(dayOffset(-(30 + i)), '10:00')
-      }, false)
-      if (i < 3) insertRow('points_transactions', {
-        id: uid(`${tenantId}-pt`), tenant_id: tenantId, user_id: c.id, type: 'redeem',
-        amount: -200, note: `积分兑换 新客体验券 #${tenantId}-prize-1`, created_by: 'demo-seed',
-        created_at: at(dayOffset(-(8 + i)), '14:00')
-      }, false)
-    })
+    // 积分只由已签结算赚取；旧版直接赠分会违反守恒并阻断会员排单。
+    // 此离线种子不生成积分交易，积分演示需使用真实结算/兑换流程。
 
     // ── 作品图库:挑 4 单标记为已授权展示 ──
     // 图片用内联 SVG data-uri(几百字节),不走 base64 照片,避免把生产库撑大;演示时视觉上是 4 张美甲色卡。

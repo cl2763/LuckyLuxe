@@ -78,8 +78,10 @@ check('夹具:A 店员工令牌', Boolean(staffA))
 const cp = await req('/admin/coupons', { method: 'POST', body: JSON.stringify({ name: `破坏券${RUN}`, discountType: 'amount', amountCents: 5000, validDays: 30 }) }, TOKEN, A.H)
 check('①夹具 A 店建了一张券', cp.status === 201 || cp.status === 200, JSON.stringify(cp.data).slice(0, 120))
 const couponId = cp.data.coupon?.id || cp.data.id
-const bk = await req('/admin/bookings/direct', { method: 'POST', body: JSON.stringify({ newCustomerName: `券客${RUN}`, phone: `133${RUN.slice(-7)}`, serviceId: (await req('/admin/services', { method: 'POST', body: JSON.stringify({ type: 'NAIL', nameZh: `项目${RUN}`, nameEn: 'x', priceCents: 10000, baseDurationMin: 60, categoryId: ((await req('/admin/pricing/categories', {}, TOKEN, A.H)).data.categories || [])[0]?.id }) }, TOKEN, A.H)).data.service.id, technicianId: A.technicianId, date: new Date().toLocaleDateString('en-CA', { timeZone: 'America/Toronto' }), time: '10:00' }) }, TOKEN, A.H)
-const userId = bk.data.booking?.user?.id || bk.data.booking?.userId
+// Coupon abuse needs a customer, not a time-sensitive booking. Use the new owner intake route.
+const createdCustomer=await req('/admin/customers',{method:'POST',body:JSON.stringify({displayName:`券客${RUN}`,phone:`133${String(Date.now()).slice(-8)}`,requestId:`coupon_customer_${RUN}`})},TOKEN,A.H)
+check('①夹具 本店独立建档成功',createdCustomer.status===201,JSON.stringify(createdCustomer.data))
+const userId=createdCustomer.data.customer.id
 /* 🔴 走 `mode:'template'`(用刚建的那张券模板发),不是自定义金额那一支 —— 第一版没给 mode,
      被当成自定义券而金额为 0,夹具当场红。**夹具红得对,是我没读清那条口的参数。** */
 const grant = await req('/admin/coupon-grants/custom', { method: 'POST', body: JSON.stringify({ mode: 'template', userId, couponId, reason: `破坏测试${RUN}`, validDays: 30 }) }, TOKEN, A.H)

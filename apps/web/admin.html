@@ -9,7 +9,7 @@
          生产在墙内可能慢,那时换 ② 而不是换字体。**这一行与合同图第 2 行是同一行。** -->
     <!-- 境内网络不能让外部字体阻塞业务；字体未就绪时使用既有本机字体回退。 -->
     <link rel="stylesheet" media="print" onload="this.media='all'" onerror="this.remove()" href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,500;9..144,700&family=Noto+Serif+SC:wght@600;700&family=Noto+Sans+SC:wght@400;500;700&display=swap">
-    <link rel="stylesheet" href="/web/styles.css?v=20260924-image-framing">
+    <link rel="stylesheet" href="/web/styles.css?v=20260926-first-use">
     <!-- 设计令牌排在 styles.css **之后**:令牌是唯一真相,谁在后面谁说了算。
          `--ink/--line/--paper/--card` 四个原来在 styles.css 里也有一份(值略有出入),
          已从那边删掉 —— 一个令牌只许有一处定义。 -->
@@ -334,6 +334,8 @@
     </style>
   <link rel="stylesheet" href="/web/hours-setup.css?v=20260924-hours-batch">
   <link rel="stylesheet" href="/web/image-framing.css?v=20260924-images">
+  <link rel="stylesheet" href="/web/customer-create.css?v=20260926">
+  <link rel="stylesheet" href="/web/schedule-editor.css?v=20260926">
   </head>
   <body>
     <main class="shell admin-shell">
@@ -499,6 +501,7 @@
                   <p class="subtle" id="staffAccountsHint">员工登录账号:生成 / 重置密码 / 停用启用。初始密码只显示一次。</p>
                 </div>
               </div>
+              <button class="ghost slim" id="addTechnicianButton" type="button">＋ 添加技师</button>
               <div id="staffAccountsBody"></div>
             </section>
             <section class="admin-card" data-staff-panel="schedule">
@@ -544,8 +547,6 @@
                     <button type="button" data-rank-period="day">本日</button>
                     <button type="button" data-rank-period="month" class="on">本月</button>
                   </span>
-                  <button class="ghost slim" id="salaryPlanButton" type="button">薪资方案</button>
-                  <button class="ghost slim" id="addTechnicianButton" type="button">＋ 添加技师</button>
                 </div>
               </div>
               <div id="perfRankBody"></div>
@@ -721,15 +722,16 @@
                 <h1 id="customersTitle">Customer Profiles</h1>
               </div>
               <div class="customer-toolbar">
+                <button class="primary slim" id="createCustomerButton" type="button">＋ 新建顾客</button>
                 <input class="customer-search" id="customerSearch" placeholder="搜姓名 / 手机 / 会员码…">
-                <details class="filter-dropdown">
-                  <summary id="customerFilterSummary">筛选</summary>
+                <label class="customer-sort">
+                  <span id="customerFilterSummary">排序</span>
                   <select id="customerSort">
                     <option value="alpha">A-Z</option>
                     <option value="visits">Visits</option>
                     <option value="recent">Recent visit</option>
                   </select>
-                </details>
+                </label>
               </div>
             </div>
             <div class="admin-list" id="customerList"></div>
@@ -1069,7 +1071,7 @@
     <script src="/web/service-note-modal.js?v=20260901t-obs01"></script>
     <script src="/web/duty-setting.js?v=20260901t-obs01"></script>
     <script src="/web/quote-settings.js?v=20260901t-obs01"></script>
-    <script src="/web/today-board.js?v=20260901t-obs01"></script>
+    <script src="/web/today-board.js?v=20260926-first-use"></script>
     <script src="/web/settlement-web.js?v=20260924c-20260901t-obs01"></script>
     <script src="/web/finance-entry-form.js?v=20260829a-ch"></script>
     <script src="/web/placeholder-words.js?v=20260922a-ph"></script>
@@ -1078,11 +1080,11 @@
     <script src="/web/finance-trend.js?v=20260825e-w2"></script>
     <script src="/web/service-catalog.js?v=20260825e-w2"></script>
     <script src="/web/order-state.js?v=20260924-p0-reschedule"></script>
-    <script src="/web/money-input.js?v=20260827a-n5v12"></script>
+    <script src="/web/money-input.js?v=20260926-first-use"></script>
     <script src="/web/my-customers.js?v=20260827a-n5v12"></script>
     <script src="/web/customer-tags.js?v=20260827a-n5v12"></script>
     <script src="/web/daily-close-rows.js?v=20260827a-n5v12"></script>
-    <script src="/web/account-adjust.js?v=20260901t-obs01"></script>
+    <script src="/web/account-adjust.js?v=20260926-first-use"></script>
     <script src="/web/snapshot-viewer.js?v=20260825e-w2"></script>
     <script src="/web/ui-dialog.js?v=20260924d-web-ready"></script>
     <script src="/web/correction-reason.js?v=20260902e-d122"></script>
@@ -1092,6 +1094,10 @@
     <script src="/web/dashboard-fullscreen.js?v=20260909b-contrast"></script>
     <script src="/web/dashboard-home.js?v=20260909b-contrast"></script>
     <script src="/web/register-gate.js?v=20260924a-12m"></script>
-    <script src="/web/admin.js?v=20260924-image-framing"></script>
+    <script src="/web/schedule-editor.js?v=20260926"></script>
+    <script src="/web/form-modal.js?v=20260926"></script>
+    <script src="/web/gift-editor.js?v=20260926"></script>
+    <script src="/web/customer-create.js?v=20260926"></script>
+    <script src="/web/admin.js?v=20260926-first-use"></script>
   </body>
 </html>

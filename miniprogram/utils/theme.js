@@ -21,7 +21,7 @@ const MODES = ['system', 'light', 'dark']
  *    `tools/mp-theme-proof.mjs` 有一条判据现读 wxss 逐字比对 —— 对不上就红(一件事一处真相)。 */
 const CHROME = {
   light: { backgroundColor: '#faf8f3', frontColor: '#000000' },   // --paper(浅)
-  dark: { backgroundColor: '#191b19', frontColor: '#ffffff' },    // --paper(深)
+  dark: { backgroundColor: '#1a1512', frontColor: '#ffffff' },    // --paper(深)
 }
 
 function currentTheme() {

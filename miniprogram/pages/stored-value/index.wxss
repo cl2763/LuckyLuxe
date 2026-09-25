@@ -1,31 +1,35 @@
-page{background:#fbf8f5}
+.pg{background:var(--paper);min-height:100vh;box-sizing:border-box}
 .pg{padding:22rpx 26rpx 60rpx}
-.hero{background:#2d2826;border-radius:18rpx;padding:30rpx 26rpx;color:#fff}
+.hero{background:var(--hero);border-radius:18rpx;padding:30rpx 26rpx;color:var(--heroink)}
 .row{display:flex;justify-content:space-between;align-items:center}
 .hl{font-size:23rpx;color:#d8c6b3}
 .lv{font-size:20rpx;color:#e7c9a4;background:#c8a47e22;border:1rpx solid #c8a47e44;border-radius:40rpx;padding:2rpx 14rpx}
 .hv{font-size:58rpx;font-weight:700;color:#e7c9a4;margin:10rpx 0 14rpx}
 .charge{text-align:center;background:var(--brand);color:var(--hero);border-radius:12rpx;padding:18rpx 0;font-size:25rpx}
-.t2{font-size:25rpx;font-weight:600;color:#2d2826;margin:20rpx 4rpx 12rpx}
+.t2{font-size:25rpx;font-weight:600;color:var(--ink);margin:20rpx 4rpx 12rpx}
 .demo{font-size:19rpx;color:#b5731f;background:#fff4e6;border:1rpx solid #f0d9b8;border-radius:20rpx;padding:1rpx 12rpx;margin-left:8rpx;font-weight:400}
-.card{background:#fff;border:1rpx solid #e7ddd4;border-radius:16rpx;padding:18rpx;margin-bottom:12rpx}
+.card{background:var(--card);border:1rpx solid var(--line);border-radius:16rpx;padding:18rpx;margin-bottom:12rpx}
 .sp{display:flex;justify-content:space-between;align-items:center}
-.pn{font-size:25rpx;font-weight:600;color:#2d2826}
-.ps{font-size:21rpx;color:#8c8279;margin-top:5rpx}
+.pn{font-size:25rpx;font-weight:600;color:var(--ink)}
+.ps{font-size:21rpx;color:var(--sub);margin-top:5rpx}
 .buy{font-size:23rpx;color:var(--hero);background:var(--brand);border-radius:40rpx;padding:8rpx 24rpx}
-.list{background:#fff;border:1rpx solid #e7ddd4;border-radius:16rpx;overflow:hidden}
-.li{display:flex;align-items:center;justify-content:space-between;padding:20rpx 22rpx;border-bottom:1rpx solid #f1e7df}
+.list{background:var(--card);border:1rpx solid var(--line);border-radius:16rpx;overflow:hidden}
+.li{display:flex;align-items:center;justify-content:space-between;padding:20rpx 22rpx;border-bottom:1rpx solid var(--line)}
 .li:last-child{border-bottom:none}
 .li-main{flex:1;min-width:0}
-.li-t{font-size:25rpx;color:#2d2826}
-.li-d{font-size:21rpx;color:#8c8279;margin-top:5rpx}
+.li-t{font-size:25rpx;color:var(--ink)}
+.li-d{font-size:21rpx;color:var(--sub);margin-top:5rpx}
 .li-v{font-size:25rpx;font-weight:600}
-.li-v.up{color:#47735f}
-.li-v.down{color:#a34c48}
-.empty{background:#fff;border:1rpx solid #e7ddd4;border-radius:16rpx;padding:40rpx 30rpx;text-align:center;color:#b6a99b;font-size:22rpx;line-height:1.6}
-.note{font-size:21rpx;color:#b6a99b;line-height:1.6;margin-top:18rpx}
+.li-v.up{color:var(--good)}
+.li-v.down{color:var(--bad)}
+.empty{background:var(--card);border:1rpx solid var(--line);border-radius:16rpx;padding:40rpx 30rpx;text-align:center;color:var(--sub);font-size:22rpx;line-height:1.6}
+.note{font-size:21rpx;color:var(--sub);line-height:1.6;margin-top:18rpx}
 
 /* B3-3/4 代充回执卡:待确认标 + 回执卡两栏 */
-.rc{display:flex;justify-content:space-between;align-items:center;gap:16rpx;border:1rpx solid #efd9c8;background:#fdf8f2}
+.rc{display:flex;justify-content:space-between;align-items:center;gap:16rpx;border:1rpx solid var(--line);background:var(--card)}
 .rc-l{flex:1;min-width:0}
-.li-unconfirmed{margin-left:8rpx;padding:2rpx 10rpx;border-radius:8rpx;background:#fbeeec;color:#a8574e;font-size:18rpx}
+.li-unconfirmed{margin-left:8rpx;padding:2rpx 10rpx;border-radius:8rpx;background:var(--badbg);color:var(--bad);font-size:18rpx}
+
+.gift-list{border-top:1rpx solid var(--line);padding-top:18rpx;margin-top:18rpx;min-width:0;width:100%;color:var(--ink)}.gift-title{font-size:25rpx;font-weight:700}.gift-line{display:flex;justify-content:space-between;gap:12rpx;flex-wrap:wrap;margin-top:10rpx;font-size:24rpx;line-height:1.5;word-break:break-all}.gift-unit,.gift-note{color:var(--sub);font-size:22rpx}.gift-note{margin-top:12rpx;line-height:1.6}
+
+.li{gap:18rpx;align-items:flex-start}.li-v{flex:none;white-space:nowrap}.rc{flex-wrap:wrap}.rc-l{flex-basis:100%}.buy{margin-left:auto}.li-t{overflow-wrap:break-word}

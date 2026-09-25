@@ -19,6 +19,11 @@
       <view wx:if="{{it.unitText}}" class="ml-sub">{{it.unitText}}</view>
       <view wx:if="{{it.projectGroupText}}" class="ml-sub">适用项目组:{{it.projectGroupText}}</view>
       <view wx:if="{{it.validText}}" class="ml-sub">{{it.validText}}</view>
+      <view wx:if="{{it.giftItems.length}}" class="gift-list">
+        <view class="gift-title">赠送物品</view>
+        <view class="gift-line" wx:for="{{it.giftItems}}" wx:for-item="gift" wx:key="index"><text>{{gift.name}} × {{gift.quantity}}</text><text class="gift-unit">单件价值 {{gift.unitValueText}}</text></view>
+        <view class="gift-note">物品领取请联系门店，此清单不代表已领取。</view>
+      </view>
       <view class="ml-buy" data-id="{{it.id}}" bindtap="tapBuy">{{it.buyButtonText}}</view>
       <!-- 过渡期说明句:租户中立,不枚举支付方式(补件①) -->
       <view wx:if="{{noteFor === it.id}}" class="ml-note">{{it.offlineNote}}</view>

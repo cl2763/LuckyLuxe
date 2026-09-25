@@ -5,6 +5,10 @@
    而网页顾客端此前**没有储值流水页**(只有会员卡上一个余额数字),
    所以这里补一张轻页:余额 + 最近流水。类型文案一律用后端下发的 `typeText`,前端零词典。 */
 window.CustomerWallet = (function () {
+  function renderGifts(items, { zh, escapeHtml, money }) {
+    if (!Array.isArray(items) || !items.length) return ''
+    return `<div class="gift-list" style="margin:14px 0;padding:14px 0;border-top:1px solid var(--line);min-width:0"><strong>${zh ? '赠送物品' : 'Included gifts'}</strong>${items.map((g) => `<div style="display:flex;justify-content:space-between;gap:12px;flex-wrap:wrap;margin-top:8px"><span style="overflow-wrap:anywhere">${escapeHtml(g.name)} × ${Number(g.quantity)}</span><span class="subtle">${zh ? '单件价值' : 'Unit value'} ${escapeHtml(money(g.unitValueCents, 2))}</span></div>`).join('')}<div class="subtle" style="margin-top:10px;line-height:1.6">${zh ? '物品领取请联系门店，此清单不代表已领取。' : 'Contact the store to collect. This list does not confirm collection.'}</div></div>`
+  }
   function renderCardPack({ state, els, zh, escapeHtml, render, loadCardPack }) {
     const pack = state.cardPack
     if (!pack) {
@@ -59,10 +63,11 @@ window.CustomerWallet = (function () {
             ${/* 负数:负号在最前、币符跟在后面(不能让负号跑到币符后头);币符本身由 money() 按门店币种给 */''}
             <p><span><strong>${escapeHtml(t.typeText || t.type)}</strong></span><strong class="price">${t.amountCents < 0 ? '−' : '+'}${money(Math.abs(t.amountCents))}</strong></p>
             <p class="subtle">${escapeHtml(String(t.createdAt || '').slice(0, 16).replace('T', ' '))}${t.note ? ` · ${escapeHtml(t.note)}` : ''}</p>
+            ${renderGifts(t.giftItems, { zh, escapeHtml, money })}
           </div>`).join('')
         : `<div class="empty-state tall"><strong>${zh ? '还没有储值记录' : 'No activity yet'}</strong></div>`}
       </section>`
   }
 
-  return { renderCardPack, renderStoredValue }
+  return { renderCardPack, renderStoredValue, renderGifts }
 })()

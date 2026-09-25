@@ -26,7 +26,7 @@
 .hsw-bulk-actions button { background: var(--brand); color: var(--hero); border: 1px solid var(--brand); white-space: nowrap; font-size: 12px; font-weight: 600; }
 .hsw-bulk input, .hsw-bulk select, .hsw-bulk button { padding: 8px 6px; border-radius: 6px; }
 .hsw-bulk input, .hsw-bulk select { border: 1px solid var(--line); background: var(--card); color: var(--ink); font: inherit; font-size: 13px; }
-.hsw-bulk-hint { font-size: 11px; color: var(--brandd); line-height: 1.55; margin: 7px 0 0; }
+.hsw-bulk-hint { font-size: 11px; color: var(--sub); line-height: 1.55; margin: 7px 0 0; }
 .hsw-feedback { display: flex; gap: 6px; align-items: center; font-size: 12px; min-height: 23px; margin: 10px 0; color: var(--brandd); }
 .hsw-feedback.is-error { color: var(--bad); }
 .hsw-feedback button { margin-left: auto; flex: none; border: 0; background: none; text-decoration: underline; color: inherit; padding: 2px; font-size: 12px; }

@@ -1,6 +1,6 @@
 // 构建号:每次交付递增。侧栏可见,排查"改了没生效"时先对版本。
 // 兜底用(服务端会注入 window.LL_BUILD = 资源内容指纹,页面优先显示那个)
-const ADMIN_BUILD = '20260924-image-framing'
+const ADMIN_BUILD = '20260926-first-use'
 let pricingState = { module: 'storefront', tab: 'items', categories: [], items: [], rules: {}, editing: null, preview: null, storefrontPicker: false }
 console.log(`[admin] build ${ADMIN_BUILD}`)
 
@@ -395,6 +395,7 @@ async function request(path, options = {}) {
     }
     const err = new Error(data.error?.message || `请求失败（HTTP ${response.status}）`)
     err.code = data.error?.code
+    err.details = data.error?.details
     throw err
   }
   return data
@@ -516,7 +517,7 @@ function applyLanguage() {
   els.bookingsTitle.textContent = t('bookings')
   els.bookingsSubtitle.textContent = t('bookingsSubtitle')
   els.customersTitle.textContent = t('customers')
-  els.customerFilterSummary.textContent = t('filter')
+  els.customerFilterSummary.textContent = owner.lang === 'zh' ? '排序' : 'Sort'
   els.aiGalleryEyebrow.textContent = t('aiDailyBrief')
   els.aiGalleryTitle.textContent = t('aiGallery')
   els.aiGallerySubtitle.textContent = t('aiGallerySubtitle')
@@ -1702,7 +1703,7 @@ function renderDailyClose() {
     </div>
 
     ${(v.unsignedList || []).length ? `
-    <div class="dc-warnbar" style="background:var(--badbg);border-color:var(--line)">
+    <div class="dc-warnbar unsigned" style="background:var(--badbg);border-color:var(--line)">
       <strong>${zh ? `未签署 ${v.unsignedList.length} 单(不计入本日账,点开签署页可重推)` : `${v.unsignedList.length} unsigned`}</strong>
       ${v.unsignedList.map((u) => `<div style="margin-top:4px"><a href="/sign/${encodeURIComponent(u.code)}?actor=merchant" target="_blank">${escapeHtml(`${u.timeText} ${u.customerName} · ${u.code}`)} ›</a></div>`).join('')}
     </div>` : ''}
@@ -3986,9 +3987,12 @@ function renderScheduleWeek() {
         : `<strong>${zh ? '休' : 'Off'}</strong>${bookings ? `<small class="swg-warn">⚠ ${bookings} ${zh ? '单已约' : 'booked'}</small>` : ''}`
       return isOwnerRole()
         ? `<button class="${classes}" data-swg-tech="${escapeHtml(tech.id)}" data-swg-date="${day.date}" type="button">${body}</button>`
-        : `<button class="${classes}" data-swg-request-date="${day.date}" type="button" title="${zh ? '点击发起排班申请' : 'Request a change'}">${body}</button>`
+        : tech.id === owner.auth?.admin?.technicianId
+          ? `<button class="${classes}" data-swg-request-date="${day.date}" type="button" title="${zh ? '申请调整我的排班' : 'Request my shift change'}">${body}</button>`
+          : `<div class="${classes}" aria-label="${escapeHtml(tech.name)} · ${day.date} · ${zh ? '只读' : 'Read only'}">${body}</div>`
     }).join('')}
   </div>`).join('')
+  if (!isOwnerRole()) els.scheduleGridHint.textContent = zh ? '团队排班只读；仅可点击自己的格子申请调整，老板批准后生效。' : 'Team shifts are read-only. Request changes only for your own shifts.'
   els.scheduleWeekGrid.innerHTML = header + (rows || `<div class="empty-state small-empty">${zh ? '暂无在职技师' : 'No active technicians'}</div>`) + renderScheduleRequestsPanel()
 }
 
@@ -4047,7 +4051,8 @@ async function submitScheduleRequest(date) {
 
 async function resolveScheduleRequest(id, action) {
   const zh = owner.lang === 'zh'
-  await request(`/admin/schedule-requests/${id}/${action}`, { method: 'POST' })
+  const result = await request(`/admin/schedule-requests/${id}/${action}`, { method: 'POST' })
+  if (result.conflicts?.length) await window.UIDialog.alert('已保存，但有预约落在休息时段', {hint:result.conflicts.map(c=>`${c.date} ${c.startTime} ${c.customerName}`).join('；')})
   toast(zh ? (action === 'reject' ? '已拒绝' : action === 'set-off' ? '已批准,当天已设为休息' : '已标记处理') : 'Done')
   const data = await request('/admin/schedule-requests')
   owner.scheduleRequests = data.requests
@@ -4063,39 +4068,7 @@ async function toggleScheduleCell(techId, date) {
     await loadScheduleWeek(owner.scheduleWeekFrom)
     return
   }
-  const state = scheduleCellState(techId, day)
-  const bookings = (week.bookingCounts || []).find((row) => row.technicianId === techId && row.date === date)?.count || 0
-  if (state.working && bookings > 0) {
-    const ok = await window.UIDialog.confirm(zh
-      ? `该技师当天已有 ${bookings} 个预约,确定改成休息吗?已有预约不会自动取消,需要另行联系顾客。`
-      : `This technician has ${bookings} booking(s) that day. Mark as off anyway? Existing bookings are not cancelled automatically.`)
-    if (!ok) return
-  }
-  const nextWorking = !state.working
-  const startTime = els.scheduleStart?.value || day.openTime
-  const endTime = els.scheduleEnd?.value || day.closeTime
-  // 乐观更新:格子立刻翻转,失败回滚
-  const overrides = week.schedules || (week.schedules = [])
-  const existing = overrides.find((row) => row.technicianId === techId && row.date === date)
-  const backup = existing ? { ...existing } : null
-  if (existing) Object.assign(existing, { isWorking: nextWorking, startTime, endTime })
-  else overrides.push({ technicianId: techId, date, isWorking: nextWorking, startTime, endTime })
-  renderScheduleWeek()
-  try {
-    await request(`/admin/technicians/${techId}/schedule`, {
-      method: 'PATCH',
-      body: JSON.stringify({ date, startTime, endTime, isWorking: nextWorking })
-    })
-    toast(zh
-      ? (nextWorking ? `${date.slice(5)} 已排班 ${startTime}–${endTime}` : `${date.slice(5)} 已改为休息`)
-      : (nextWorking ? `Scheduled ${startTime}–${endTime}` : 'Marked off'))
-    await loadScheduleWeek(owner.scheduleWeekFrom)
-  } catch (error) {
-    if (backup) Object.assign(existing, backup)
-    else overrides.splice(overrides.findIndex((row) => row.technicianId === techId && row.date === date), 1)
-    renderScheduleWeek()
-    throw error
-  }
+  return window.ScheduleEditor.open({request,lang:owner.lang,day,technician:week.technicians.find(t=>t.id===techId),state:scheduleCellState(techId,day),onSaved:()=>loadScheduleWeek(owner.scheduleWeekFrom)})
 }
 
 async function applyWeekPatternForward() {
@@ -4115,6 +4088,7 @@ async function applyWeekPatternForward() {
     }
   }
   const result = await request('/admin/schedule-batch', { method: 'POST', body: JSON.stringify({ entries }) })
+  if (result.conflicts?.length || result.warnings?.length) await window.UIDialog.alert('排班已保存，请核对冲突与营业时间', {hint:[...(result.conflicts||[]).map(c=>`${c.date} ${c.startTime} ${c.customerName}`),...(result.warnings||[]).map(w=>`${w.date} ${w.message}`)].join('；')})
   toast(zh ? `已应用到未来 4 周(${result.applied} 条)` : `Applied to next 4 weeks (${result.applied} entries)`)
 }
 
@@ -5495,11 +5469,11 @@ els.schedulePage.addEventListener('click', async (event) => {
   if (event.target.closest('#afternoonStartBtn')) {
     /* 清单#10(08-31):上下午分界编辑接回网页 —— 读写与小程序同一条 /admin/schedule-settings(两端写口本就同为 schedule-batch,分叉只剩这项配置面) */
     request('/admin/schedule-settings').then(async (cur) => {
-      const v = await window.UIDialog.text('上下午分界(HH:MM,小程序按日排班的半天块按它切):', cur.afternoonStart || '14:30')
+      const v = await window.UIDialog.text('上下午分界(HH:MM，只影响之后选择，已有排班不改写):', cur.afternoonStart || '14:30')
       if (v === null) return
       if (!/^\d{2}:\d{2}$/.test(v.trim())) { toast('格式应为 HH:MM,如 14:30'); return }
       request('/admin/schedule-settings', { method: 'PUT', body: JSON.stringify({ afternoonStart: v.trim() }) })
-        .then(() => toast('已保存,两端同时生效')).catch((error) => toast(error.message))
+        .then(() => toast('分界已保存，已有排班未改动')).catch((error) => toast(error.message))
     }).catch((error) => toast(error.message))
     return
   }
@@ -6525,64 +6499,13 @@ function renderTimecardSettings() {
 /* D50(店主 08-17 返工令):页内表单弹层 —— 替代 window.prompt 系统黑框链。
    单弹层多字段一次填完;Esc/遮罩/取消可关;保存走异步 onSave,失败 toast 不关层。
    fields: [{ key, label, type: 'text'|'number'|'select'|'checkbox', value, placeholder, options: [[v,label]], hint }] */
-function openFormModal({ title, hint, fields, saveText, onSave }) {
-  document.querySelector('.form-modal-overlay')?.remove()
-  const overlay = document.createElement('div')
-  overlay.className = 'store-switch-overlay form-modal-overlay'
-  overlay.innerHTML = `
-    <div class="store-switch-panel card form-modal-panel">
-      <div class="section-row"><h2>${escapeHtml(title || '')}</h2><button class="ghost slim" data-fm-close type="button">✕</button></div>
-      ${hint ? `<p class="subtle" style="margin:4px 0 10px">${hint}</p>` : ''}
-      <div class="kb-facts-grid">
-        ${fields.map((f) => `<span data-fm-wrap="${f.key}" style="display:contents">${f.type === 'checkbox'
-          ? `<label class="fm-check"><input type="checkbox" data-fm-field="${f.key}" ${f.value ? 'checked' : ''}> ${escapeHtml(f.label)}</label>`
-          : f.type === 'select'
-            ? `<label><span>${escapeHtml(f.label)}</span><select data-fm-field="${f.key}">${(f.options || []).map(([v, l]) => `<option value="${escapeHtml(String(v))}" ${String(v) === String(f.value ?? '') ? 'selected' : ''}>${escapeHtml(l)}</option>`).join('')}</select></label>`
-            : `<label><span>${escapeHtml(f.label)}</span><input data-fm-field="${f.key}" type="${['number','date','time'].includes(f.type) ? f.type : 'text'}" ${f.type === 'number' ? 'step="0.01" min="0"' : ''} value="${escapeHtml(String(f.value ?? ''))}" placeholder="${escapeHtml(f.placeholder || '')}"></label>`}</span>`).join('')}
-      </div>
-      ${fields.some((f) => f.hint) ? fields.filter((f) => f.hint).map((f) => `<p class="subtle" style="margin:6px 0 0${f.danger ? ';color:var(--bad);font-weight:700' : ''}">· ${escapeHtml(f.label)}:${escapeHtml(f.hint)}</p>`).join('') : ''}
-      <div class="action-row" style="margin-top:14px">
-        <button class="primary slim" data-fm-save type="button">${escapeHtml(saveText || '保存')}</button>
-        <button class="ghost slim" data-fm-cancel type="button">取消</button>
-      </div>
-    </div>`
-  // showIf 动态显隐:值变化只切 display,不重建 DOM(输入不丢);D50-c② 两态切换靠它
-  const readValues = () => {
-    const values = {}
-    for (const f of fields) {
-      const el = overlay.querySelector(`[data-fm-field="${f.key}"]`)
-      values[f.key] = f.type === 'checkbox' ? el.checked : el.value
-    }
-    return values
-  }
-  const applyVisibility = () => {
-    const values = readValues()
-    for (const f of fields) {
-      if (!f.showIf) continue
-      const wrap = overlay.querySelector(`[data-fm-wrap="${f.key}"]`)
-      if (wrap) wrap.style.display = f.showIf(values) ? 'contents' : 'none'
-    }
-  }
-  overlay.addEventListener('change', applyVisibility)
-  overlay.addEventListener('input', applyVisibility)
-  const close = () => { overlay.remove(); document.removeEventListener('keydown', onKey) }
-  const onKey = (e) => { if (e.key === 'Escape') close() }
-  document.addEventListener('keydown', onKey)
-  overlay.addEventListener('click', async (e) => {
-    if (e.target === overlay || e.target.closest('[data-fm-close]') || e.target.closest('[data-fm-cancel]')) { close(); return }
-    if (e.target.closest('[data-fm-save]')) {
-      try { if (await onSave(readValues()) !== false) close() } catch (error) { toast(error.message) }
-    }
-  })
-  document.body.appendChild(overlay)
-  applyVisibility()
-  overlay.querySelector('input,select')?.focus()
-}
+function openFormModal(options) { return window.FormModal.open(options,{escapeHtml,toast}) }
 
 async function savePackage(kind, existing) {
   // D50:prompt 链 → 页内表单弹层(单弹层多字段)
   kind = kind || (existing && existing.kind) || 'recharge'
   const isTimes = kind === 'times'
+  let giftEditor
   /* 裁决(店主 08-20):关联项目组禁自由文本——下拉单选(现有二级分类+不限)。
      存量自由文本匹配不上=选项标 ⚠ 红提示商家改选,不静默改数据。 */
   let groupOptions = [['', '不限(不限制项目组)']]
@@ -6597,11 +6520,12 @@ async function savePackage(kind, existing) {
     }
   }
   openFormModal({
+    mountContent:overlay=>{if(!isTimes){const host=document.createElement("div");overlay.querySelector(".action-row").before(host);giftEditor=window.GiftEditor.mount(host,existing?.giftItems||[],mMoney(0).replace(/[0-9.,\s]/g,""))}},
     title: existing ? `编辑${isTimes ? '次卡' : '充值套餐'}` : `新建${isTimes ? '次卡' : '充值套餐'}`,
     hint: isTimes ? '售卡=预收负债不计积分;核销按折算单价确认收入(批②)。' : '赠送=营销让利:入储值负债、单独列示,不算实收/业绩/积分。',
     fields: [
       { key: 'name', label: '名称', type: 'text', value: existing ? existing.name : '', placeholder: isTimes ? '如 美甲单色 5 次卡' : '如 充500赠50' },
-      { key: 'price', label: '售价', type: 'number', value: existing ? existing.priceCents / 100 : '' },
+      { key: 'price', label: isTimes ? '售价' : '充值金额', type: 'number', value: existing ? existing.priceCents / 100 : '' },
       ...(isTimes ? [
         { key: 'times', label: '总次数', type: 'number', value: existing ? existing.timesCount : 5 },
         { key: 'projectGroup', label: '关联项目组', type: 'select', value: existing ? existing.projectGroup || '' : '', options: groupOptions, hint: legacyGroupBad ? '⚠ 原项目组的分类已不存在,请改选后保存(不会自动改动已售卡)' : '核销时从组内选具体项目;选「不限」=全部项目可核销', danger: legacyGroupBad },
@@ -6621,6 +6545,7 @@ async function savePackage(kind, existing) {
         body.validDays = v.validDays ? Math.round(Number(v.validDays) || 0) : null
       } else {
         body.bonusCents = mCents(v.bonus || 0)
+        body.giftItems = giftEditor.read()
       }
       if (existing) await request(`/admin/packages/${existing.id}`, { method: 'PATCH', body: JSON.stringify(body) })
       else await request('/admin/packages', { method: 'POST', body: JSON.stringify(body) })
@@ -7874,3 +7799,5 @@ if (els.storeSettingsPage) {
     } catch (error) { toast(error.message) }
   })
 }
+
+document.querySelector('#createCustomerButton').addEventListener('click', () => { if (isOwnerRole()) window.CustomerCreate.open({request,onSaved:async(c)=>{await loadAll();owner.selectedCustomerId=c.id;renderCustomers();toast('顾客档案已就绪')}}) })
