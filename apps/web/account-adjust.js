@@ -408,7 +408,7 @@ window.AccountAdjust = (function () {
     open({
       userId: uid,
       name: deps.customerName(c),
-      meta: `${deps.owner.lang === 'zh' ? '到店' : 'Visits'} ${c.visitCount || 0}${c.lastVisitAt ? ` · ${deps.dateOnly(c.lastVisitAt)}` : ''}`,
+      meta: `${deps.owner.lang === 'zh' ? '到店' : 'Visits'} ${c.visitCount || 0}${c.lastVisitAt ? ` · ${deps.dateOnly(c.lastVisitDate || c.lastVisitAt)}` : ''}`,
       request: deps.request, money: deps.money, toast: deps.toast, escapeHtml: deps.escapeHtml,
       zh: deps.owner.lang === 'zh',
       bookings: deps.owner.bookings || [], technicians: deps.owner.technicians || [],

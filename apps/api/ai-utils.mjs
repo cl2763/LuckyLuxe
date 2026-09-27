@@ -793,7 +793,7 @@ export async function extractKbEntriesFromDocument({ content = '', filename = ''
   })
 }
 
-export async function createSocialCopy({ lang = 'zh', image = '', booking = {}, platform = 'xiaohongshu', audience = 'customer', avoidCaptions = [], variantSeed = '' }) {
+export async function createSocialCopy({ lang = 'zh', image = '', booking = {}, brandName = '', platform = 'xiaohongshu', audience = 'customer', avoidCaptions = [], variantSeed = '' }) {
   const schema = {
     platform: 'string',
     styleTags: ['string'],
@@ -806,7 +806,7 @@ export async function createSocialCopy({ lang = 'zh', image = '', booking = {}, 
     altTextEn: 'string'
   }
   return aiJson({
-    system: 'You create tasteful bilingual social media copy for a nail and lash atelier. Adapt tone to each platform: RED should be experience-led and searchable, Douyin should be short with a strong hook, Instagram should be polished and visual-first. Avoid medical claims and exaggerated promises. Never repeat prior captions. Customer-facing copy should feel easy to share; staff-facing copy should help technicians or owners post efficiently.',
+    system: 'You create tasteful bilingual social media copy for a nail and lash atelier. Adapt tone to each platform: RED should be experience-led and searchable, Douyin should be short with a strong hook, Instagram should be polished and visual-first. Meituan / Dianping should be a factual merchant work showcase, never a fabricated first-person customer review or rating. Use only the supplied store and city; never invent a location. Avoid medical claims and exaggerated promises. Never repeat prior captions. Customer-facing copy should feel easy to share; staff-facing copy should help technicians or owners post efficiently.',
     user: `Create ${platform} copy for this finished work. Audience: ${audience}. Unique request seed: ${variantSeed || Date.now()}.\nAvoid reusing these prior captions or title angles:\n${jsonBlock((avoidCaptions || []).slice(-12))}\nBooking:\n${jsonBlock(booking)}\n${imageHints(image ? [image] : [])}`,
     schema,
     images: image ? [image] : [],
@@ -824,27 +824,34 @@ export async function createSocialCopy({ lang = 'zh', image = '', booking = {}, 
       const techName = booking?.technician?.name || booking?.technicianName || ''
       const date = booking?.appointmentDate || ''
       const variants = {
+        meituan: [{
+          titleZh: `${brandName ? brandName + ' · ' : ''}${serviceName}作品展示`,
+          captionZh: `服务项目：${serviceName}\n${techName ? '服务技师：' + techName + '\n' : ''}\n款式细节以作品图为准，项目与预约时间可咨询门店。`,
+          titleEn: `${serviceName} | Work showcase`,
+          captionEn: `Service: ${serviceName}\n${techName ? 'Technician: ' + techName + '\n' : ''}\nView the work photos for details. Contact the studio for services and appointment availability.`,
+          hashtags: []
+        }],
         xiaohongshu: [
           {
             titleZh: `${serviceName}｜温柔高级感可以直接抄作业`,
             captionZh: `这组作品重点是干净、耐看，细节不会抢日常穿搭。\n\n${audience === 'staff' ? `${techName} 完成于 ${date || '本次预约'}，发布时可以强调“自然高级、可日常复制”。` : '喜欢精致但不夸张的客人可以先收藏，预约时直接给技师看。'}\n\n到店会根据肤色、手型或眼型再微调。`,
             titleEn: `${serviceName} | Soft Luxe Reference`,
             captionEn: `Clean, wearable, and softly detailed. Save this ${brandTxt} look as a reference for your next appointment.`,
-            hashtags: tags(['#多伦多美甲', '#美睫分享', '#小红书美甲', '#温柔高级感', brandTag])
+            hashtags: tags(['#美甲作品', '#美睫分享', '#小红书美甲', '#温柔高级感', brandTag])
           },
           {
             titleZh: `${serviceName}｜低调但很显精致`,
             captionZh: `这类效果最适合想要“看起来很干净，但近看有细节”的客人。\n\n${audience === 'staff' ? '发帖时可以把重点放在质感、留档图和适合人群，减少夸张承诺。' : '如果你平时穿搭偏简约，这组会很适合做长期参考。'}\n\n收藏后下次预约直接带图沟通。`,
             titleEn: `${serviceName} | Quiet Detail`,
             captionEn: 'A refined look with quiet detail. Easy to wear, easy to save, and easy to personalize in studio.',
-            hashtags: tags(['#美甲灵感', '#多伦多美睫', '#通勤美甲', brandTag, '#自然高级'])
+            hashtags: tags(['#美甲灵感', '#美睫作品', '#通勤美甲', brandTag, '#自然高级'])
           },
           {
             titleZh: `${serviceName}｜本次完工留档`,
             captionZh: `完成后越看越耐看的一组。\n\n${audience === 'staff' ? `建议 ${techName} 发布时搭配细节图，突出款式层次和到店调整空间。` : '适合第一次尝试轻奢自然风格、又不想太高调的客人。'}\n\n预约时可以带参考图，我们会根据实际状态调整。`,
             titleEn: `${serviceName} | Finished Archive`,
             captionEn: 'A finished archive with soft detail and a balanced everyday look. Bring it in as a reference and we can tailor the details.',
-            hashtags: tags([brandTag, '#小红书美甲', '#美甲参考', '#轻奢感', '#TorontoBeauty'])
+            hashtags: tags([brandTag, '#小红书美甲', '#美甲参考', '#轻奢感', '#BeautyArchive'])
           }
         ],
         douyin: [
@@ -867,7 +874,7 @@ export async function createSocialCopy({ lang = 'zh', image = '', booking = {}, 
             captionZh: `${audience === 'staff' ? '发布时建议把第一秒放在完工主图，文案保持短、干净、直接。' : '想要干净耐看的效果，可以从这一组开始参考。'}\n\n到店后可按个人状态微调。`,
             titleEn: `${serviceName} | Clean First Look`,
             captionEn: 'A clean first look with soft polish. Simple, refined, and ready to save.',
-            hashtags: tags(['#美甲款式', '#美睫日记', '#干净感', brandTag, '#TorontoSalon'])
+            hashtags: tags(['#美甲款式', '#美睫日记', '#干净感', brandTag, '#SalonWork'])
           }
         ],
         instagram: [
@@ -876,21 +883,21 @@ export async function createSocialCopy({ lang = 'zh', image = '', booking = {}, 
             captionZh: `Soft, clean, and refined from every angle.\n\n${audience === 'staff' ? '可搭配 carousel 发布，第一张主图，后面放细节图。' : '适合日常，也适合镜头记录的一组完工作品。'}`,
             titleEn: `${serviceName} | ${brandTxt} Archive`,
             captionEn: `Soft, clean, and refined from every angle. A polished ${brandTxt} finish made for everyday wear and a beautiful close-up.`,
-            hashtags: tags([brandTag, '#nailarchive', '#lashstudio', '#torontobeauty', '#softluxury'])
+            hashtags: tags([brandTag, '#nailarchive', '#lashstudio', '#beautywork', '#softluxury'])
           },
           {
             titleZh: `${serviceName}｜Soft Detail`,
             captionZh: `Clean lines, soft mood, polished finish.\n\n${audience === 'staff' ? 'Instagram 文案可突出作品质感和技师审美。' : 'A quiet kind of beauty for your next save.'}`,
             titleEn: `${serviceName} | Soft Detail`,
             captionEn: 'Clean lines, soft mood, polished finish. A quiet kind of beauty for your next save.',
-            hashtags: tags([brandTag, '#torontonails', '#lashartist', '#beautyarchive', '#minimalbeauty'])
+            hashtags: tags([brandTag, '#nailwork', '#lashartist', '#beautyarchive', '#minimalbeauty'])
           },
           {
             titleZh: `${serviceName}｜Artist Pick`,
             captionZh: `${techName} 的本次作品留档。\n\n${audience === 'staff' ? '适合放进技师作品集，作为同风格客户的预约参考。' : 'Save this artist pick for your next ${brandTxt} visit.'}`,
             titleEn: `${serviceName} | Artist Pick`,
             captionEn: `${techName}'s finished archive. Save this artist pick for your next ${brandTxt} visit.`,
-            hashtags: tags([brandTag, '#artistpick', '#nailinspo', '#lashinspo', '#torontobeauty'])
+            hashtags: tags([brandTag, '#artistpick', '#nailinspo', '#lashinspo', '#beautywork'])
           }
         ]
       }

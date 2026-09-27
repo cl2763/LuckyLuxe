@@ -208,7 +208,7 @@ function customerVisibleWorkImages(order) {
 function platformUrl(platform) {
   return {
     xiaohongshu: 'https://www.xiaohongshu.com/',
-    douyin: 'https://www.douyin.com/',
+    douyin: 'https://www.douyin.com/', meituan: 'https://www.meituan.com/',
     instagram: 'https://www.instagram.com/'
   }[platform] || 'https://www.xiaohongshu.com/'
 }
@@ -217,7 +217,7 @@ function shareUrlForOrder(orderId, imageIndex = 0, platform = state.sharePlatfor
   const url = new URL('/web/share.html', window.location.origin)
   url.searchParams.set('bookingId', orderId)
   url.searchParams.set('image', String(imageIndex))
-  url.searchParams.set('platform', platform)
+  url.searchParams.set('platform', platform); url.searchParams.set('store', TENANT_ID); url.searchParams.set('audience', 'customer')
   return url.toString()
 }
 
@@ -1674,7 +1674,7 @@ function renderCustomerSharePanel(order, images) {
   if (state.shareOrderId !== order.id) return ''
   const platforms = [
     ['xiaohongshu', state.lang === 'zh' ? '小红书' : 'Xiaohongshu'],
-    ['douyin', state.lang === 'zh' ? '抖音' : 'Douyin'],
+    ['douyin', state.lang === 'zh' ? '抖音' : 'Douyin'], ['meituan', state.lang === 'zh' ? '美团／大众点评' : 'Meituan / Dianping'],
     ['instagram', 'Instagram']
   ]
   const shareCopy = customerShareCopy(order)

@@ -1,3 +1,4 @@
+import { bookingVisitAtSql } from './customer-facts.mjs'
 /* 主页大屏三接口(合同 = `handoff/商家端主页重画_两端设计图_2026-09-03.html` v3.1 §四)
 
    ══ 动手前那两问,现测答完了(09-08,沙箱库现查;不猜)══
@@ -71,7 +72,7 @@ export function deltaOf(value, prev) {
 
 export function createDashboardPulse(deps) {
   const {
-    db, currentTenantId, todayOf, tenantCurrencyCodeOrNull, currencyDisplayOf, financeLocked,
+    db, currentTenantId, tenantTimezone, todayOf, tenantCurrencyCodeOrNull, currencyDisplayOf, financeLocked,
     todayBoardOf, storeClosedOn, storeClockText, aiRetouchCard,
   } = deps
   for (const [name, fn] of Object.entries(deps)) {
@@ -84,6 +85,19 @@ export function createDashboardPulse(deps) {
      静默失败器族的反面:它不是悄悄跳过,是当场炸;但同样是「把必须发生的事排早了」。 */
   const stmts = new Map()
   const P = (sql) => { if (!stmts.has(sql)) stmts.set(sql, db.prepare(sql)); return stmts.get(sql) }
+
+  // ISO timestamps and SQLite CURRENT_TIMESTAMP are instants. Bucket in the
+  // store's IANA zone, including DST; never take the UTC date prefix.
+  const dateFormatters = new Map()
+  db.function('dashboard_store_day', (tid, timestamp) => {
+    if (!timestamp) return null
+    const raw = String(timestamp)
+    const at = new Date(/^\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2}$/.test(raw) ? raw.replace(' ', 'T') + 'Z' : raw)
+    if (!Number.isFinite(at.getTime())) return null
+    const tz = tenantTimezone(tid)
+    if (!dateFormatters.has(tz)) dateFormatters.set(tz, new Intl.DateTimeFormat('en-CA', { timeZone: tz, year: 'numeric', month: '2-digit', day: '2-digit' }))
+    return dateFormatters.get(tz).format(at)
+  })
 
   /* ── 逐日取数:已日结取快照,未日结实时算(图 §四 口径答①)────── */
   const closedRevenue = () => P(
@@ -107,10 +121,11 @@ export function createDashboardPulse(deps) {
     WHERE tenant_id = ? AND occurred_on >= ? AND occurred_on <= ? AND type = 'income'
       AND COALESCE(pay_channel, '') NOT IN ('stored_value', 'times_card')`)
   const cashRecharge = () => P(`SELECT COALESCE(SUM(amount_cents), 0) AS c FROM stored_value_transactions
-    WHERE tenant_id = ? AND type IN ('recharge') AND substr(created_at, 1, 10) >= ? AND substr(created_at, 1, 10) <= ?`)
+    WHERE tenant_id = ? AND type IN ('recharge') AND dashboard_store_day(tenant_id, created_at) >= ? AND dashboard_store_day(tenant_id, created_at) <= ?`)
   const cashCardBuy = () => P(`SELECT COALESCE(SUM(price_cents), 0) AS c FROM member_timecards
-    WHERE tenant_id = ? AND substr(created_at, 1, 10) >= ? AND substr(created_at, 1, 10) <= ?`)
-  const cashOn = (tid, from, to) => cashLedger().get(tid, from, to).c + cashRecharge().get(tid, from, to).c + cashCardBuy().get(tid, from, to).c
+    WHERE tenant_id = ? AND dashboard_store_day(tenant_id, created_at) >= ? AND dashboard_store_day(tenant_id, created_at) <= ?`)
+  const cashParts = (tid, from, to) => ({ ledgerCents: cashLedger().get(tid, from, to).c, rechargeCents: cashRecharge().get(tid, from, to).c, timecardPurchaseCents: cashCardBuy().get(tid, from, to).c })
+  const cashOn = (tid, from, to) => Object.values(cashParts(tid, from, to)).reduce((sum, cents) => sum + cents, 0)
 
   /* 总卡耗:储值消耗金额 + 次卡核销次数(**钱与次两个数**,次不折钱) */
   const cardMoney = () => P(`SELECT COALESCE(SUM(amount_cents), 0) AS c FROM finance_transactions
@@ -121,21 +136,21 @@ export function createDashboardPulse(deps) {
   /* 新增持卡:当期**首次**开卡的顾客,按顾客去重(首充或首张次卡落在当期) */
   const newCardCount = () => P(`SELECT COUNT(*) AS n FROM (
       SELECT user_id, MIN(first_at) AS first_at FROM (
-        SELECT user_id, MIN(substr(created_at, 1, 10)) AS first_at FROM stored_value_transactions
+        SELECT user_id, MIN(dashboard_store_day(tenant_id, created_at)) AS first_at FROM stored_value_transactions
           WHERE tenant_id = ? AND type = 'recharge' GROUP BY user_id
         UNION ALL
-        SELECT user_id, MIN(substr(created_at, 1, 10)) AS first_at FROM member_timecards
+        SELECT user_id, MIN(dashboard_store_day(tenant_id, created_at)) AS first_at FROM member_timecards
           WHERE tenant_id = ? GROUP BY user_id
       ) GROUP BY user_id
     ) WHERE first_at >= ? AND first_at <= ?`)
 
-  /* 到店人次:当期到达「已到店 / 已完成」的预约,按单去重(台面同一状态机) */
+  /* 到店人次:真实 arrived_at 或已完成事实，按单去重；普通预约不是到店。 */
   const visitsCount = () => P(`SELECT COUNT(*) AS n FROM bookings
-    WHERE tenant_id = ? AND substr(appointment_start, 1, 10) >= ? AND substr(appointment_start, 1, 10) <= ?
-      AND status IN ('ARRIVED', 'COMPLETED')`)
+    WHERE tenant_id = ? AND dashboard_store_day(tenant_id, ${bookingVisitAtSql()}) >= ?
+      AND dashboard_store_day(tenant_id, ${bookingVisitAtSql()}) <= ?`)
   /* 今日预约:所有**未取消**的预约数 */
   const bookingsCount = () => P(`SELECT COUNT(*) AS n FROM bookings
-    WHERE tenant_id = ? AND substr(appointment_start, 1, 10) >= ? AND substr(appointment_start, 1, 10) <= ?
+    WHERE tenant_id = ? AND dashboard_store_day(tenant_id, appointment_start) >= ? AND dashboard_store_day(tenant_id, appointment_start) <= ?
       AND status NOT IN ('CANCELLED', 'NO_SHOW')`)
 
   function metricsFor(tid, r) {
@@ -171,7 +186,7 @@ export function createDashboardPulse(deps) {
 
     return [
       { key: 'revenue', value: rev, unit: 'money', ...deltaOf(rev, revPrev), spark: sparkRev },
-      { key: 'cash', value: cash, unit: 'money', ...deltaOf(cash, cashPrev), spark: spark((a, b) => cashOn(tid, a, b <= r.to ? b : r.to)) },
+      { key: 'cash', value: cash, breakdown: cashParts(tid, r.from, r.to), unit: 'money', ...deltaOf(cash, cashPrev), spark: spark((a, b) => cashOn(tid, a, b <= r.to ? b : r.to)) },
       { key: 'cardUse', value: cardM, unit: 'money', extra: { times: cardT, timesUnit: '次' }, ...deltaOf(cardM, cardMoney().get(tid, r.prevFrom, r.prevTo).c), spark: spark((a, b) => cardMoney().get(tid, a, b).c) },
       { key: 'newCard', value: nCard, unit: 'people', ...deltaOf(nCard, nCardPrev), spark: spark((a, b) => newCardCount().get(tid, tid, a, b).n) },
       { key: 'visits', value: vis, unit: 'people', ...deltaOf(vis, visPrev), spark: spark((a, b) => visitsCount().get(tid, a, b).n) },
@@ -200,8 +215,10 @@ export function createDashboardPulse(deps) {
        不是「有键但值为空」—— 前端隐藏挡不住任何人直接调接口。 */
     if (role !== 'owner') return base
     const metrics = metricsFor(tid, r)
-    /* 财务锁开着时**不下发 value**(图 §七 第 9 条):遮的是数,不是整块 */
-    return { ...base, metrics: locked ? metrics.map(({ value, spark, ...rest }) => ({ ...rest, locked: true })) : metrics }
+    /* Locked overview is a schema allowlist, not a blacklist of known amounts.
+       prev + deltaAbs reconstructs value; percentage/spark/extra/new fields can
+       disclose financial activity too. Keep only card identity and display unit. */
+    return { ...base, metrics: locked ? metrics.map(({ key, unit }) => ({ key, unit, locked: true })) : metrics }
   }
 
   /* now:与今日台面**同源**,不另算(图 §四) */
@@ -265,12 +282,12 @@ export function createDashboardPulse(deps) {
            在首页看见一个自己已经在做的事。 */
         item('aiHandoff', 'wechat_conversations', () => one("SELECT COUNT(*) AS n FROM wechat_conversations WHERE tenant_id = ? AND status = 'needs_human'"), 'ai-desk'),
         item('quotePending', 'quote_requests', () => one("SELECT COUNT(*) AS n FROM quote_requests WHERE tenant_id = ? AND status = 'PENDING_STAFF'"), 'quote'),
-        item('notePending', 'service_notes', () => one("SELECT COUNT(*) AS n FROM bookings WHERE tenant_id = ? AND status = 'COMPLETED' AND substr(appointment_start,1,10) = ? AND id NOT IN (SELECT booking_id FROM service_notes WHERE booking_id IS NOT NULL)", today), 'notes'),
+        item('notePending', 'service_notes', () => one("SELECT COUNT(*) AS n FROM bookings WHERE tenant_id = ? AND status = 'COMPLETED' AND dashboard_store_day(tenant_id, appointment_start) = ? AND id NOT IN (SELECT booking_id FROM service_notes WHERE booking_id IS NOT NULL)", today), 'notes'),
         item('shiftApproval', 'shift_requests', () => one("SELECT COUNT(*) AS n FROM shift_requests WHERE tenant_id = ? AND status = 'pending'"), 'schedule'),
         /* 昨天有已完成的单、却没有一张 confirmed 的日结 → 待日结 1 天。
            **「有单」这一半不能省**:店休那天没单,不该在首页催老板去日结。 */
         item('dailyClose', 'daily_closes', () => (
-          one("SELECT COUNT(*) AS n FROM bookings WHERE tenant_id = ? AND status = 'COMPLETED' AND substr(appointment_start,1,10) = ?", yday) > 0
+          one("SELECT COUNT(*) AS n FROM bookings WHERE tenant_id = ? AND status = 'COMPLETED' AND dashboard_store_day(tenant_id, appointment_start) = ?", yday) > 0
           && one("SELECT COUNT(*) AS n FROM daily_closes WHERE tenant_id = ? AND date = ? AND status = 'confirmed'", yday) === 0 ? 1 : 0
         ), 'daily-close'),
       ].filter(Boolean),
@@ -303,6 +320,9 @@ export function createDashboardPulse(deps) {
   }
   /** 首页那一句。**只回今天的** —— 昨天那句今天不算数(隔夜还挂着等于说谎)。 */
   function aiLine({ tenantId = currentTenantId() } = {}) {
+    // Free-form daily brief may embed revenue/profit figures. A locked overview
+    // cannot return the underlying sentence while only masking metric tiles.
+    if (financeLocked(tenantId)) return { line: null }
     const row = db.prepare('SELECT value FROM tenant_settings WHERE tenant_id = ? AND key = ?').get(tenantId, AI_LINE_KEY)
     let v = null
     try { v = row ? JSON.parse(row.value) : null } catch { v = null }

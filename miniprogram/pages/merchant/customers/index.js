@@ -98,7 +98,7 @@ Page({
         const mine = (r.customers || []).map((u) => ({
           id: u.id, name: u.displayName || '顾客', av: (u.displayName || '客')[0],
           phone: u.phoneMasked || '', visits: u.visitCount || 0,
-          last: u.lastVisitAt ? String(u.lastVisitAt).slice(0, 10) : '—',
+          last: u.lastVisitDate || (u.lastVisitAt ? String(u.lastVisitAt).slice(0, 10) : '—'),
           tags: u.tags || [], memberCode: u.memberCode || ''
         }))
         this.setData({

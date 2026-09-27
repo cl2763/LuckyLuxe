@@ -26,7 +26,7 @@ window.DashboardHome = (function () {
     { key: 'year', zh: '本年', en: 'This year', prevZh: '比去年', prevEn: 'vs last year' },
   ]
   const LABEL = {
-    revenue: ['营业收入 · 服务 + 耗卡 + 产品', 'Revenue'], cash: ['现金业绩 · 实收', 'Cash received'],
+    revenue: ['营业收入 · 服务 + 耗卡 + 产品', 'Revenue'], cash: ['实收款 · 含充值／购卡', 'Receipts · includes top-ups/cards'],
     cardUse: ['总卡耗', 'Card used'], newCard: ['新增持卡', 'New cards'],
     visits: ['到店人次', 'Visits'], bookings: ['今日预约', 'Bookings'],
   }
@@ -58,7 +58,7 @@ window.DashboardHome = (function () {
   /* 金额:**一个币符都不许写在这里**(币种红线)。全仓出口是 admin.js 的 money(),注入进来。 */
   function moneyOf(cents, cur) {
     if (cents === undefined || cents === null || !cur) return '—'
-    return st.deps.money(cents)
+    return st.deps.money(cents, Number(cents) % 100 ? 2 : 0)
   }
   /* 🔴 大数那一处:**币种只出一遍**(店主 05r 补一 现看:大数整串带币码、旁边再挂一个小字币码 = 出两遍,还没千分位)。
      图上是「小字币码 + 2,486」——所以大数只摆**数字**(带千分位),币码单独作小字。
@@ -67,7 +67,7 @@ window.DashboardHome = (function () {
     if (!m) return '—'
     if (m.locked) return '🔒'
     if (m.value === undefined || m.value === null || !cur) return '—'
-    const p = st.deps.moneyParts(m.value)
+    const p = st.deps.moneyParts(m.value, Number(m.value) % 100 ? 2 : 0)
     /* 币码在**前**、小字;数字在后、大字 —— 图上就是这么摆的(「小字币码 + 2,486」) */
     return `<small class="dh-cur" data-dh-cur>${esc(p.prefix)}${esc(p.symbol)}</small>${esc(p.amount)}`
   }
@@ -181,6 +181,7 @@ window.DashboardHome = (function () {
           ${tiles.map((m) => `<div class="dh-tile" data-dh-metric="${m.key}">
               <span class="dh-tile-k">${label(m.key)}</span>
               <strong class="dh-tile-v" data-dh-roll-key="${m.key}" data-dh-roll="${m.unit === 'money' ? 'money' : 'count'}" data-dh-roll-to="${m.value !== undefined && m.value !== null ? String(m.value) : ''}">${valueText(m, cur)}</strong>
+              ${m.key === 'cash' && !m.locked && m.breakdown ? `<span class="dh-tile-x" data-dh-cash-detail>${zh() ? '营业收款' : 'Sales receipts'} ${esc(moneyOf(m.breakdown.ledgerCents, cur))} · ${zh() ? '充值' : 'Top-ups'} ${esc(moneyOf(m.breakdown.rechargeCents, cur))} · ${zh() ? '购卡' : 'Card purchases'} ${esc(moneyOf(m.breakdown.timecardPurchaseCents, cur))}</span>` : ''}
               ${m.key === 'cardUse' ? `<span class="dh-tile-x" data-dh-times>${m.extra && m.extra.times ? `${zh() ? '次卡' : 'Card'} ${m.extra.times} ${esc((m.extra && m.extra.timesUnit) || '次')}` : '—'}</span>` : ''}
               ${deltaText(m)}
             </div>`).join('')}
@@ -268,7 +269,7 @@ window.DashboardHome = (function () {
       const cur = (st.pulse || {}).currency
       const fmt = (v) => {
         if (el.dataset.dhRoll !== 'money') return String(Math.round(v))
-        const q = st.deps.moneyParts(Math.round(v))
+        const q = st.deps.moneyParts(Math.round(v), Number(to) % 100 ? 2 : 0)
         return `<small class="dh-cur" data-dh-cur>${esc(q.prefix)}${esc(q.symbol)}</small>${esc(q.amount)}`
       }
       if (Number.isFinite(to)) st.rolled[key] = to
@@ -330,7 +331,7 @@ window.DashboardHome = (function () {
         st.deps.request('/admin/dashboard/ai-line').catch(() => null),
       ])
       st.pulse = p; st.now = nw; st.todo = td
-      st.aiLine = (al && al.line) || (st.deps.readAiLine && st.deps.readAiLine()) || null
+      st.aiLine = p.locked ? null : ((al && al.line) || null)
       st.phase = 'ready'
     } catch (e) {
       /* 失败态**不显示旧数、不显示 0**(图 §六):先把手上的数清掉再画 */

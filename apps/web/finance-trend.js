@@ -9,12 +9,12 @@ function renderFinanceTrend() {
   const zh = owner.lang === 'zh'
   const t = financeTrendState.data
   const hasTarget = Boolean(t.monthTargetCents)
-  const max = Math.max(1, ...t.points.map((p) => Math.max(p.revenueCents, p.expenseCents, hasTarget ? t.monthTargetCents : 0)))
+  const max = Math.max(1, ...t.points.map((p) => Math.max(p.revenueCents, p.expenseCents, p.netCents, hasTarget ? t.monthTargetCents : 0)))
   const H = 150
   const px = (cents) => Math.round(Math.max(0, cents) / max * H)
   /* 净赚折线**和柱子共用同一根纵轴**(设计图第二条取舍:不做左右双轴,
      两根轴的比例是随便定的,等于凭空造一个「相关性」)。负数压到零轴上。 */
-  const netY = (cents) => Math.max(4, Math.min(H, H - px(cents)))
+  const netY = (cents) => Math.max(0, Math.min(H, H - px(cents)))
 
   const rangeBtn = (key, label) => `<button class="ghost slim${financeTrendState.range === key ? ' active' : ''}" data-trend-range="${key}" type="button">${label}</button>`
   const tableBtn = (k) => `<button class="ghost slim trend-tv" data-trend-tv="${k}" type="button">${trendTableView[k] ? (zh ? '图表视图' : 'Chart') : (zh ? '表格视图' : 'Table')}</button>`
@@ -29,15 +29,14 @@ function renderFinanceTrend() {
           <td>${!hasTarget ? '—' : (p.hitTarget ? `<span class="dc-badge ok">${zh ? '达标' : 'Hit'}</span>` : trendMoney(t.monthTargetCents))}</td>
         </tr>`).join('')}
       </table>`
-    : `<div class="trend-chart" style="position:relative">
-        ${hasTarget ? `<div class="trend-targetline" style="bottom:${px(t.monthTargetCents) + 20}px"><span>${zh ? '月营收目标' : 'Target'} ${trendMoney(t.monthTargetCents)}</span></div>` : ''}
+    : `<div class="trend-chart-scroll"><div class="trend-chart" style="--trend-count:${t.points.length};position:relative">
+        ${hasTarget ? `<div class="trend-targetline" style="bottom:${px(t.monthTargetCents) + 42}px"><span>${zh ? '月营收目标' : 'Target'} ${trendMoney(t.monthTargetCents)}</span></div>` : ''}
         ${/* 🔴 S6②(店主 08-25):顶部主图表**加悬停显示金额** —— 原来只有 title(浏览器自带气泡,
               要停一秒才出、样式不可控)。现在鼠标移到这根柱子上,收入/支出/净赚三行直接浮出来。
               title 保留:键盘/读屏用户与不支持 hover 的触屏还靠它。 */''}
         ${t.points.map((p) => `
-          <div class="trend-bar">
+          <div class="trend-bar" tabindex="0" data-trend-tip="${escapeHtml(`${p.label} · ${zh ? '收入' : 'Rev'} ${trendMoney(p.revenueCents)} · ${zh ? '支出' : 'Exp'} ${trendMoney(p.expenseCents)} · ${zh ? '净赚' : 'Net'} ${trendMoney(p.netCents)}`)}">
             <div class="stack">
-              <div class="trend-hover">${escapeHtml(p.label)} · ${zh ? '收入' : 'Rev'} ${trendMoney(p.revenueCents)} · ${zh ? '支出' : 'Exp'} ${trendMoney(p.expenseCents)} · ${zh ? '净赚' : 'Net'} ${trendMoney(p.netCents)}</div>
               <div class="b${hasTarget && p.hitTarget ? ' hit' : ''}${p.partial ? ' partial' : ''}" style="height:${px(p.revenueCents)}px" title="${zh ? '收入' : 'Revenue'} ${trendMoney(p.revenueCents)}"></div>
               <div class="b exp${p.partial ? ' partial' : ''}" style="height:${px(p.expenseCents)}px" title="${zh ? '支出' : 'Expense'} ${trendMoney(p.expenseCents)}"></div>
             </div>
@@ -47,7 +46,7 @@ function renderFinanceTrend() {
           <polyline points="${t.points.map((p, i) => `${i * 100 + 50},${netY(p.netCents)}`).join(' ')}" fill="none" stroke="#2f7d5c" stroke-width="3" vector-effect="non-scaling-stroke"/>
           ${t.points.map((p, i) => `<circle cx="${i * 100 + 50}" cy="${netY(p.netCents)}" r="4" fill="#2f7d5c"/>`).join('')}
         </svg>
-      </div>
+      </div></div>
       <div class="trend-legend">
         <span><i style="background:#c8a47e"></i>${zh ? '收入' : 'Revenue'}</span>
         ${hasTarget ? `<span><i style="background:#2f7d5c"></i>${zh ? '达标月' : 'Hit'}</span>` : ''}
@@ -115,9 +114,11 @@ function renderFinanceTrend() {
         acc += x.v
         return `${x.color} ${from.toFixed(2)}% ${(acc / sum * 100).toFixed(2)}%`
       }).join(', ')
+      const amount = moneyParts(sum, 2)
+      const amountSize = Math.min(15, Math.max(8, 98 / ((amount.symbol + amount.amount).length * .65)))
       return `<div class="mix-donut-wrap">
         <div class="mix-donut" style="background:conic-gradient(${stops})" role="img"
-             aria-label="${zh ? '服务内容占比' : 'Service mix'}"><div class="mix-donut-hole"><b>${trendMoney(sum)}</b><span>${zh ? '合计' : 'Total'}</span></div></div>
+             aria-label="${zh ? '服务内容占比' : 'Service mix'}"><div class="mix-donut-hole" aria-label="${escapeHtml(trendMoney(sum))}"><span class="mix-currency">${escapeHtml(amount.code)}</span><b style="font-size:${amountSize}px">${escapeHtml(amount.symbol + amount.amount)}</b><span>${zh ? '合计' : 'Total'}</span></div></div>
         <div class="mix-donut-legend">
           ${parts.map((x) => `<div class="mix-legend-row"><i style="background:${x.color}"></i>
             <span class="nm">${escapeHtml(x.c)}</span>
@@ -152,6 +153,8 @@ function renderFinanceTrend() {
     <div class="section-row compact-row"><h3 class="trend-h">${zh ? '收入构成变化 · 近 6 个完整月' : 'Income mix'}</h3>${tableBtn('mix')}</div>
     ${mixBlock}`
 
+  bindFinanceTrendTips(body)
+
   body.querySelectorAll('[data-trend-tv]').forEach((b) => b.addEventListener('click', () => {
     const k = b.dataset.trendTv
     trendTableView[k] = !trendTableView[k]
@@ -167,3 +170,29 @@ function renderFinanceTrend() {
 }
 
 // 导出 CSV:图没法复制,表格能 —— 发给会计或自己核账用(设计图第三条取舍)
+
+// Render outside the horizontally scrolling plot so the first/last bars cannot clip it.
+function bindFinanceTrendTips(body) {
+  let tip = document.querySelector('#financeTrendTip')
+  if (!tip) { tip = document.createElement('div'); tip.id = 'financeTrendTip'; tip.className = 'trend-hover'; tip.setAttribute('role', 'tooltip'); document.body.append(tip) }
+  tip.hidden = true
+  const hide = () => { tip.hidden = true }
+  const show = bar => {
+    tip.textContent = bar.dataset.trendTip; tip.hidden = false
+    tip.style.width = ''; tip.style.left = '0px'; tip.style.top = '0px'
+    const r = bar.getBoundingClientRect(), box = tip.getBoundingClientRect()
+    tip.style.width = `${box.width}px`
+    tip.style.left = `${Math.max(8, Math.min(innerWidth - box.width - 8, r.x + r.width / 2 - box.width / 2))}px`
+    tip.style.top = `${Math.max(8, Math.min(innerHeight - box.height - 8, r.top - box.height - 8))}px`
+  }
+  for (const bar of body.querySelectorAll('[data-trend-tip]')) {
+    bar.setAttribute('aria-label', bar.dataset.trendTip); bar.setAttribute('aria-describedby', tip.id)
+    bar.addEventListener('mouseenter', () => show(bar)); bar.addEventListener('mousemove', () => show(bar)); bar.addEventListener('mouseleave', hide)
+    bar.addEventListener('focus', () => show(bar)); bar.addEventListener('blur', hide)
+    bar.addEventListener('click', () => show(bar)); bar.addEventListener('keydown', e => { if (e.key === 'Escape') hide() })
+  }
+  // Property listeners avoid accumulating handlers after each financial-tab refresh.
+  if (window.financeTrendTipCleanup) window.financeTrendTipCleanup()
+  window.addEventListener('scroll', hide, true); window.addEventListener('resize', hide)
+  window.financeTrendTipCleanup = () => { window.removeEventListener('scroll', hide, true); window.removeEventListener('resize', hide) }
+}

@@ -1,6 +1,6 @@
 // 构建号:每次交付递增。侧栏可见,排查"改了没生效"时先对版本。
 // 兜底用(服务端会注入 window.LL_BUILD = 资源内容指纹,页面优先显示那个)
-const ADMIN_BUILD = '20260926-first-use'
+const ADMIN_BUILD = '20260928-review2'
 let pricingState = { module: 'storefront', tab: 'items', categories: [], items: [], rules: {}, editing: null, preview: null, storefrontPicker: false }
 console.log(`[admin] build ${ADMIN_BUILD}`)
 
@@ -1026,7 +1026,6 @@ function renderDashboard() {
     boardDeps: () => ({ request, escapeHtml, toast, storeToday, openBooking: (id) => jumpToBooking(id),
       refreshBookings: async () => { try { const d = await request('/admin/bookings'); owner.bookings = d.bookings || owner.bookings } catch { /* 列表口失败不拦排单 */ } },
       followBooking: (id) => jumpToBooking(id) }),
-    readAiLine: () => owner.dashAiLine || null,
 
     isZh: owner.lang === 'zh',
     goto: (to) => { const page = { 'ai-desk': 'wechatMock', quote: 'wechatMock', notes: 'customers', schedule: 'schedule', 'daily-close': 'finance', finance: 'finance', customers: 'customers', board: 'schedule' }[to]; if (page) { owner.adminPage = page; if (page === 'finance') loadFinancePage().catch(() => {}); render() } },   /* D179:四小牌/此刻格的落点也走这一处 */
@@ -3493,7 +3492,7 @@ function renderCustomerMini(customer) {
       <span class="mini-avatar">${customerName(customer).slice(0, 1).toUpperCase()}</span>
       <span>
         <strong>${escapeHtml(customerName(customer))}</strong>
-        <small>${t('visits')} ${customer.visitCount || 0} · ${t('lastVisit')} ${dateOnly(customer.lastVisitAt)}</small>
+        <small>${t('visits')} ${customer.visitCount || 0} · ${t('lastVisit')} ${dateOnly(customer.lastVisitDate || customer.lastVisitAt)}</small>
         <small>${escapeHtml(customer.email || '-')}</small>
       </span>
     </button>
@@ -4285,7 +4284,7 @@ function renderCustomers() {
       </div>
       <div class="customer-stats">
         <span>${t('visits')} <strong>${customer.visitCount || 0}</strong></span>
-        <span>${t('lastVisit')} <strong>${dateOnly(customer.lastVisitAt)}</strong></span>
+        <span>${t('lastVisit')} <strong>${dateOnly(customer.lastVisitDate || customer.lastVisitAt)}</strong></span>
         <span>${t('totalSpent')} <strong>${money(customer.totalSpentCents || 0)}</strong></span>
         ${customer.storedValueBalanceCents > 0 ? `<span>${owner.lang === 'zh' ? '储值余额' : 'Stored value'} <strong>${money(customer.storedValueBalanceCents)}</strong></span>` : ''}
       </div>
@@ -4336,7 +4335,7 @@ function renderCustomerDetail() {
         </div>
         <div class="customer-stats">
           <span>${t('visits')} <strong>${customer.visitCount || 0}</strong></span>
-          <span>${t('lastVisit')} <strong>${dateOnly(customer.lastVisitAt)}</strong></span>
+          <span>${t('lastVisit')} <strong>${dateOnly(customer.lastVisitDate || customer.lastVisitAt)}</strong></span>
           <span>${t('totalSpent')} <strong>${money(customer.totalSpentCents || 0)}</strong></span>
           <span>${owner.lang === 'zh' ? '储值余额' : 'Stored value'} <strong>${money(customer.storedValueBalanceCents || 0)}</strong></span>
         </div>
@@ -4502,7 +4501,7 @@ function renderAiGallery() {
 
 function galleryStatus(group) {
   if (owner.aiLoading.startsWith(`social:${group.booking.id}:`)) return { className: 'processing', label: t('aiStatusProcessing') }
-  const hasCopy = ['xiaohongshu', 'douyin', 'instagram'].some((platform) => owner.aiResults[socialKey(group.booking.id, 0, platform)])
+  const hasCopy = ['xiaohongshu', 'douyin', 'meituan', 'instagram'].some((platform) => owner.aiResults[socialKey(group.booking.id, 0, platform)])
   if (group.booking.galleryStatus === 'approved') return { className: 'ready', label: t('lockedGallery') }
   if (group.booking.status === 'COMPLETED') return { className: 'review', label: t('aiStatusReview') }
   if (hasCopy) return { className: 'review', label: t('aiStatusReview') }
@@ -4564,7 +4563,7 @@ function renderGalleryDetail(group) {
           <h3>${t('aiSocialCopy')}</h3>
         </div>
         <div class="gallery-platform-list">
-          ${['xiaohongshu', 'douyin', 'instagram'].map((platform) => `
+          ${['xiaohongshu', 'douyin', 'meituan', 'instagram'].map((platform) => `
             <div class="gallery-platform-row">
               <button class="ghost slim ${owner.galleryPlatform === platform ? 'active-pill' : ''}" data-gallery-platform="${platform}" data-gallery-platform-booking="${booking.id}" type="button">${t(platform)}</button>
               <a class="ghost slim share-link-button" href="${escapeHtml(shareUrlFor(booking.id, 0, platform))}" target="_blank" rel="noreferrer">${t('shareLink')}</a>
@@ -4637,7 +4636,7 @@ function resolveSocialCopy(booking, index, platform) {
 }
 
 function shareUrlFor(bookingId, index, platform) {
-  return `${window.location.origin}/web/share.html?bookingId=${encodeURIComponent(bookingId)}&image=${encodeURIComponent(index)}&platform=${encodeURIComponent(platform)}`
+  return `${window.location.origin}/web/share.html?bookingId=${encodeURIComponent(bookingId)}&image=${encodeURIComponent(index)}&platform=${encodeURIComponent(platform)}&store=${encodeURIComponent(owner.auth?.admin?.tenantId || '')}&audience=staff`
 }
 
 function renderSocialCopy(copy, key = '') {

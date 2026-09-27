@@ -2,7 +2,7 @@ const api = require('../../../utils/api')
 
 const PLATFORMS = [
   { k: 'xiaohongshu', label: '小红书' },
-  { k: 'douyin', label: '抖音' }
+  { k: 'douyin', label: '抖音' }, { k: 'meituan', label: '美团／大众点评' }, { k: 'instagram', label: 'Instagram' }
 ]
 
 Page({
@@ -27,21 +27,22 @@ Page({
   async loadWorks() {
     try {
       const r = await api.adminGet('/admin/bookings')
-      const bks = (r.bookings || []).filter((b) => b.status === 'COMPLETED')
+      const bks = (r.bookings || []).filter((b) => b.status === 'COMPLETED' && b.galleryStatus === 'approved' && b.approvedWorkImages?.length)
       // 优先有已审核作品图的
       bks.sort((a, b) => (b.approvedWorkImages || []).length - (a.approvedWorkImages || []).length)
       const works = bks.slice(0, 8).map((b) => ({
         bookingId: b.id,
         label: `${(b.user && b.user.display_name) || '顾客'} · ${(b.service && b.service.name) || '服务'} · ${b.appointmentDate || ''}`,
-        image: (b.approvedWorkImages || [])[0] || (b.workImages || [])[0] || ''
+        image: (b.approvedWorkImages || [])[0] || ''
       }))
       this.setData({ works })
     } catch (e) { /* ignore */ }
   },
 
-  onPlatform(e) { this.setData({ pIdx: Number(e.currentTarget.dataset.i), result: null, avoid: [] }) },
+  onPlatform(e) { if (this.data.loading) { wx.showToast({ title: '正在生成，请稍候再切换', icon: 'none' }); return }; this.setData({ pIdx: Number(e.currentTarget.dataset.i), result: null, avoid: [] }) },
 
   pickWork() {
+    if (this.data.loading) return
     const works = this.data.works
     if (!works.length) { wx.showToast({ title: '暂无完工作品', icon: 'none' }); return }
     wx.showActionSheet({
@@ -55,10 +56,10 @@ Page({
     if (!this.data.picked) { wx.showToast({ title: '先选一组作品', icon: 'none' }); return }
     this.setData({ loading: true })
     try {
-      const resp = await api.adminPost('/admin/ai/social-copy', {
+      const resp = await api.adminPost('/share/social-copy', {
         lang: 'zh',
         bookingId: this.data.picked.bookingId,
-        image: this.data.picked.image,
+        imageIndex: 0,
         platform: this.data.platforms[this.data.pIdx].k,
         audience: 'staff',
         avoidCaptions: this.data.avoid.slice(-12),

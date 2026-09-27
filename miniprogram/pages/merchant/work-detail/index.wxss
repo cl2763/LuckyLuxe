@@ -20,3 +20,6 @@ page{background:#fbf8f5}
 .b{flex:1;text-align:center;font-size:25rpx;color:#8c8279;background:#fff;border:1rpx solid #e7ddd4;border-radius:14rpx;padding:22rpx 0}
 .b.p{background:var(--brand);color:var(--hero);border-color:var(--brand)}
 .note{font-size:21rpx;color:#b6a99b;line-height:1.6;margin-top:20rpx}
+
+/* Four platforms remain readable on narrow screens. */
+.seg{flex-wrap:wrap;gap:8rpx;border-radius:18rpx}.seg .s{flex:1 1 42%;white-space:normal}

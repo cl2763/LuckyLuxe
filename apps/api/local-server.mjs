@@ -1,3 +1,6 @@
+import { bookingPublicCode } from './booking-code.mjs'
+import { createWorkShare } from './work-share.mjs'
+import { customerSpendCents, lastCustomerVisitAt, bindingBadgeText } from './customer-facts.mjs'
 import { specialDateInput } from './schedule-input.mjs'
 import { ensureGiftSchema, normalizeGiftItems, readGiftItems, giftSnapshotOfPackage } from './gifts.mjs'
 import { createPackageWrite } from './package-write.mjs'
@@ -5164,9 +5167,7 @@ function membershipForSpend(totalSpentCents = 0, tenantId = currentTenantId()) {
    此前实现按 COMPLETED 预约标价加总(店主观察处显示还错成了储值净额形状);
    更正链语义:原单 voided/amended 不计,新签单计 —— 与积分新口径同一条查询形状。 */
 function customerSignedSubtotalCents(userId, tenantId = currentTenantId()) {
-  if (!userId) return 0
-  return db.prepare("SELECT COALESCE(SUM(subtotal_cents), 0) AS s FROM settlements WHERE user_id = ? AND tenant_id = ? AND status = 'signed'")
-    .get(userId, tenantId).s || 0
+  return customerSpendCents(db, userId, tenantId)
 }
 
 /* 裁A(店主 08-22,D66 五裁):到店次数唯一定义=**有消费(已签署组)或已完成预约的自然日数**
@@ -5177,11 +5178,12 @@ function visitDaysCount(userId, tenantId = currentTenantId()) {
   if (!userId) return 0
   const tz = tenantTimezone(tenantId)
   const days = new Set()
+  const today = localParts(new Date().toISOString(), tz).date
   for (const r of db.prepare("SELECT * FROM settlements WHERE user_id = ? AND tenant_id = ? AND status IN ('signed', 'amended')").all(userId, tenantId)) {
     const d = settlementServiceDate(r, tenantId)
-    if (d) days.add(d)
+    if (d && d <= today) days.add(d)
   }
-  for (const r of db.prepare("SELECT appointment_start FROM bookings WHERE user_id = ? AND tenant_id = ? AND status = 'COMPLETED'").all(userId, tenantId)) {
+  for (const r of db.prepare("SELECT appointment_start FROM bookings WHERE user_id = ? AND tenant_id = ? AND status = 'COMPLETED' AND julianday(appointment_start) <= julianday(?)").all(userId, tenantId, new Date().toISOString())) {
     days.add(localParts(r.appointment_start, tz).date)
   }
   return days.size
@@ -5872,7 +5874,7 @@ function totalDuration(type, baseDurationMin, bookingAddOns = []) {
 }
 
 function publicCode() {
-  return `LL${Date.now().toString().slice(-8)}${Math.floor(Math.random() * 90 + 10)}`
+  return bookingPublicCode(db)
 }
 
 function randomId(prefix) {
@@ -6425,8 +6427,6 @@ function getAdminCustomers() {
       u.birthday,
       NULL AS created_at,
       COUNT(b.id) AS visit_count,
-      MAX(b.appointment_start) AS last_visit_at,
-      (SELECT COALESCE(SUM(s2.subtotal_cents), 0) FROM settlements s2 WHERE s2.user_id = u.id AND s2.tenant_id = '${esc}' AND s2.status = 'signed') AS total_spent_cents, -- D38:累计消费=Σ已签档位小计,与顾客端同基数
       COALESCE(SUM(CASE WHEN b.status = 'COMPLETED' THEN 1 ELSE 0 END), 0) AS completed_count,
       MIN(CASE WHEN b.status = 'COMPLETED' THEN b.appointment_start END) AS first_visit_at,
       MAX(CASE WHEN b.status = 'COMPLETED' THEN b.appointment_start END) AS last_completed_at
@@ -6435,15 +6435,19 @@ function getAdminCustomers() {
     ${activityFilter}
     GROUP BY u.id
     ORDER BY LOWER(u.display_name) ASC
-  `).all(tid).map((row) => ({
+  `).all(tid).map((row) => {
+    const lastVisitAt = lastCustomerVisitAt(db, row.id, tid)
+    const totalSpentCents = customerSpendCents(db, row.id, tid)
+    return ({
     id: row.id,
     displayName: row.display_name,
     phone: row.phone,
     email: row.email,
     createdAt: row.created_at,
     visitCount: visitDaysCount(row.id, tid), // 裁A/裁D:与顾客端同一出口(旧=COUNT 全部预约,取消也算到店)
-    lastVisitAt: row.last_visit_at,
-    totalSpentCents: row.total_spent_cents,
+    lastVisitAt,
+    lastVisitDate: lastVisitAt ? localParts(new Date(lastVisitAt), tenantTimezone(tid)).date : null,
+    totalSpentCents,
     // RFM 分层用(按完成单口径)
     completedCount: row.completed_count || 0,
     firstVisitAt: row.first_visit_at || null,
@@ -6456,11 +6460,12 @@ function getAdminCustomers() {
     // 等级单源(F3)+D41:分级店按租户梯子;不分级店=充值即会员(member/guest),消费不算
     isMember: isMemberOf(row.id, tid),
     memberTier: (() => {
-      const ms = membershipForSpend(row.total_spent_cents || 0, tid)
+      const ms = membershipForSpend(totalSpentCents, tid)
       if (ms.memberTiers.length) return ms.memberTier
       return isMemberOf(row.id, tid) ? 'member' : 'guest'
     })()
-  }))
+    })
+  })
 }
 
 function buildCustomerServiceContext(req, lang = 'zh') {
@@ -6761,7 +6766,7 @@ const scheduleBoard = createScheduleBoard({
   specialDateFor, hoursUnsetOfStore, getService, isGenericDisplayName, memberCodeForUserId, apiError, readBody,
   backfillPlanFor
 })
-const dashboardPulse = createDashboardPulse({ db, currentTenantId, todayOf, tenantCurrencyCodeOrNull, currencyDisplayOf, financeLocked: (tid) => financeLockEnabled(tid), todayBoardOf: (tid, date) => scheduleBoard.dayCounts(tid, date), storeClosedOn: (tid, date) => { try { return isClosedDay(defaultStoreId(), date) } catch { return false } }, storeClockText: (tid) => localParts(new Date(), tenantTimezone(tid)).time, aiRetouchCard: (tid) => aiRetouchGate.card(tid) })   /* 主页大屏三接口(图 v3.1 §四);口径两问答案在模块抬头;「此刻」与台面同一条规则 */
+const dashboardPulse = createDashboardPulse({ db, currentTenantId, tenantTimezone, todayOf, tenantCurrencyCodeOrNull, currencyDisplayOf, financeLocked: (tid) => financeLockEnabled(tid), todayBoardOf: (tid, date) => scheduleBoard.dayCounts(tid, date), storeClosedOn: (tid, date) => { try { return isClosedDay(defaultStoreId(), date) } catch { return false } }, storeClockText: (tid) => localParts(new Date(), tenantTimezone(tid)).time, aiRetouchCard: (tid) => aiRetouchGate.card(tid) })   /* 主页大屏三接口(图 v3.1 §四);口径两问答案在模块抬头;「此刻」与台面同一条规则 */
 const notifyScheduler = createNotifyScheduler({
   db, randomId, iso, apiError, json, readBody, parseJson: parseJson2, localParts, tenantTimezone,
   DEFAULT_TENANT_ID, dataScope: DATA_SCOPE
@@ -9970,7 +9975,7 @@ function customerBindShape(row) {
     customerPhoneMasked: maskPhone(user && user.phone),
     customerBound: bound,
     // 绑定后徽标消失 → 后端直接给空串,前端 wx:if 一挂就没了
-    bindBadgeText: bound ? '' : '新客 · 未绑定',
+    bindBadgeText: bindingBadgeText(bound),
     bindHintText: bound ? '' : '请将签署链接交给顾客核对；网页签字不自动绑定微信，绑定需真实授权。',
     memberCode: row.user_id ? memberCodeForUserId(row.user_id) : ''
   }
@@ -11298,11 +11303,16 @@ async function route(req, res) {
     requireCustomer(req)
     throw apiError(410, 'PAYMENT_CHANNEL_OFFLINE', '线上支付未接通，请由门店实际收取并登记；模拟支付入口已停用。')
   }
+  if ((req.method === 'GET' && path.startsWith('/share/bookings/')) || (req.method === 'POST' && path === '/share/social-copy')) {
+    const share = createWorkShare({ db, resolveTenant, tenantContext, requireAdmin, requireCustomer, assertStaffCanAccessBooking, serializeBooking, requireAi, countAiUsage, createSocialCopy, apiError })
+    const result = req.method === 'GET' ? { booking: share.read(req, query, decodeURIComponent(path.slice('/share/bookings/'.length)), query.lang).booking } : await share.generate(req, query, await readBody(req))
+    return json(res, 200, result)
+  }
   if (req.method === 'GET' && path.startsWith('/bookings/')) {
     const id = path.split('/')[2]
-    const booking = db.prepare('SELECT * FROM bookings WHERE id = ?').get(id)
-    if (!booking) throw apiError(404, 'NOT_FOUND', 'Booking not found.')
-    return json(res, 200, { booking: serializeBooking(booking, query.lang || 'zh') })
+    const share = createWorkShare({ db, resolveTenant, tenantContext, requireAdmin, requireCustomer, assertStaffCanAccessBooking, serializeBooking, requireAi, countAiUsage, createSocialCopy, apiError })
+    const { row } = share.authorize(req, query, id)
+    return json(res, 200, { booking: serializeBooking(row, query.lang || 'zh') })
   }
   if (req.method === 'POST' && path.startsWith('/bookings/') && path.endsWith('/cancel')) {
     // 安全:必须登录,且只能取消自己的订单(此前无鉴权,可取消任意订单)
@@ -11332,7 +11342,7 @@ async function route(req, res) {
     const row = body.bookingId ? db.prepare('SELECT * FROM bookings WHERE id = ?').get(body.bookingId) : null
     const booking = row ? serializeBooking(row, body.lang || 'zh') : body.booking
     countAiUsage()
-    return json(res, 200, { copy: await createSocialCopy({ lang: body.lang || 'zh', image: body.image || '', booking, platform: body.platform || 'xiaohongshu', audience: body.audience || 'customer', avoidCaptions: body.avoidCaptions || [], variantSeed: body.variantSeed || '' }) })
+    return json(res, 200, { copy: await createSocialCopy({ lang: body.lang || 'zh', image: body.image || '', booking, brandName: tenantKbFacts(currentTenantId()).brandName || '', platform: body.platform || 'xiaohongshu', audience: body.audience || 'customer', avoidCaptions: body.avoidCaptions || [], variantSeed: body.variantSeed || '' }) })
   }
   if (req.method === 'POST' && path === '/ai/customer-service') {
     /* 🔴 D155(店主 09-08:「小程序接入外部 API 时,要就像网页一样」)——**同一个出口**。
@@ -11628,6 +11638,7 @@ async function route(req, res) {
           phoneMasked: maskPhone(c.phone),
           visitCount: c.visitCount,
           lastVisitAt: c.lastVisitAt,
+          lastVisitDate: c.lastVisitDate,
           tags: c.tags,
           memberCode: c.memberCode,
           scope: 'mine'
@@ -11703,7 +11714,7 @@ async function route(req, res) {
     if (row) assertStaffCanAccessBooking(adminSession, row)
     const booking = row ? serializeBooking(row, body.lang || 'zh') : body.booking
     countAiUsage()
-    return json(res, 200, { copy: await createSocialCopy({ lang: body.lang || 'zh', image: body.image || '', booking, platform: body.platform || 'xiaohongshu', audience: body.audience || 'staff', avoidCaptions: body.avoidCaptions || [], variantSeed: body.variantSeed || '' }) })
+    return json(res, 200, { copy: await createSocialCopy({ lang: body.lang || 'zh', image: body.image || '', booking, brandName: tenantKbFacts(currentTenantId()).brandName || '', platform: body.platform || 'xiaohongshu', audience: body.audience || 'staff', avoidCaptions: body.avoidCaptions || [], variantSeed: body.variantSeed || '' }) })
   }
   if (req.method === 'GET' && path === '/admin/services') {
     if (adminSession.role !== 'owner') throw apiError(403, 'FORBIDDEN', 'Owner permission is required.')
@@ -15047,7 +15058,7 @@ async function route(req, res) {
     const shapeHit = (u) => ({
       id: u.id, displayName: u.display_name || '', ...(adminSession.role === 'owner' ? {phone:u.phone||''} : {}),
       phoneMasked: maskPhone(u.phone), bound: isUserBound(u.id), memberCode: memberCodeForUserId(u.id),
-      badgeText: isUserBound(u.id) ? '' : '新客 · 未绑定',
+      badgeText: bindingBadgeText(isUserBound(u.id)),
       hintText: isUserBound(u.id) ? '' : '请将签署链接交给顾客核对；网页签字不自动绑定微信，绑定需真实授权。'
     })
     if (userId) {

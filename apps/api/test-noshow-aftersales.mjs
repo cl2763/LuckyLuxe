@@ -3306,8 +3306,9 @@ const main = async () => {
           trendJs.includes('mix-donut') && trendJs.includes('conic-gradient') && trendJs.includes('还没有服务收入')
           && !/function renderFinanceTrend/.test(admJs))
         check('㋥S6② 顶部主图表加悬停显示金额(收入/支出/净赚三项)',
-          trendJs.includes('class="trend-hover"') && /trend-hover[\s\S]{0,200}净赚/.test(trendJs)
-          && readFileSync(join(ROOT42, 'apps/web/styles.css'), 'utf8').includes('.trend-bar:hover .trend-hover')
+          trendJs.includes('data-trend-tip=') && trendJs.includes('净赚')
+          && trendJs.includes('document.body.append(tip)') && trendJs.includes('innerWidth - box.width - 8') && trendJs.includes('innerHeight - box.height - 8')
+          && readFileSync(join(ROOT42, 'apps/web/styles.css'), 'utf8').includes('.trend-hover{position:fixed')
           && admHtml.indexOf('/web/finance-trend.js') < admHtml.indexOf('/web/admin.js'))
 
         // S13:模块①按大类分组 + 平台侧大类字典

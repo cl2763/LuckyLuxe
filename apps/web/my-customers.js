@@ -24,7 +24,7 @@ window.MyCustomers = (function () {
             </div>
             <div class="customer-stats">
               <span>${zh ? '服务次数' : 'Visits'} <strong>${c.visits}</strong></span>
-              <span>${zh ? '最近' : 'Last'} <strong>${escapeHtml(dateOnly(c.lastVisitAt))}</strong></span>
+              <span>${zh ? '最近' : 'Last'} <strong>${escapeHtml(dateOnly(c.lastVisitDate || c.lastVisitAt))}</strong></span>
             </div>
           </article>`).join('')
         : `<div class="empty-state"><strong>${zh ? '还没有服务过的客人' : 'No clients yet'}</strong></div>`}`

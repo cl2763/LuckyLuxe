@@ -15,6 +15,7 @@ const { requireOwnerToken } = await import('./owner-token.mjs')
 await assertTestTarget(BASE_URL)
 const PLATFORM = process.env.TEST_ADMIN_TOKEN || requireOwnerToken()
 const RUN = Date.now().toString(36)
+const PHONE_SUFFIX = String(Date.now()).slice(-4) // numeric and stable across the fixture
 // 四之五:日期问后端要门店时区的今天,不用测试机本地日期(白天绿半夜红的根源)
 let STORE_TODAY = ''
 const todayStr = () => STORE_TODAY || new Date().toLocaleDateString('en-CA')
@@ -79,7 +80,7 @@ async function main() {
   }, shop.token)
 
   /* ---- S1 现场排单:姓名+手机号建轻档案(规则①)---- */
-  const phone = `1380013${RUN.slice(-4)}`
+  const phone = `1380013${PHONE_SUFFIX}`
   const bk1 = await request('/admin/bookings/direct', {
     method: 'POST',
     body: JSON.stringify({ newCustomerName: '王小雅', phone, serviceId: svc.id, technicianId: tech.id, date: todayStr(), time: '10:10', durationMin: 60, depositPaid: false })
@@ -94,13 +95,13 @@ async function main() {
   check('S1 带出的档案标着「未绑定」', lookup.data.hit.bound === false, String(lookup.data.hit.bound))
   /* 「绑定」只认**微信**。顾客导入会给档案写一条 provider='phone' 的身份行,
      那只是留了手机号 —— 曾把轻档案误判成已绑定,S2 徽标一直不出现(并排核验查出来的)。 */
-  const impPhone = `1330013${RUN.slice(-4)}`
+  const impPhone = `1330013${PHONE_SUFFIX}`
   const impUid = (await request(`/platform/tenants/${shop.tenantId}/import/customers`, {
     method: 'POST', body: JSON.stringify({ dryRun: false, rows: [{ name: '导入客', phone: impPhone, balanceCents: 0 }] })
   })).data.users[0].userId
   const impHit = await request(`/admin/customers/lookup?userId=${encodeURIComponent(impUid)}`, {}, shop.token)
   check('S2 只留了手机号(provider=phone)**不算**已绑定,徽标照出',
-    impHit.data.hit.bound === false && impHit.data.hit.badgeText === '新客 · 未绑定',
+    impHit.data.hit.bound === false && impHit.data.hit.badgeText === '未绑定微信',
     JSON.stringify(impHit.data.hit).slice(0, 200))
   const memberCode = lookup.data.hit.memberCode
   check('S1 轻档案也有专属会员码(规则⑥ 认领码)', /^LL-[A-Z0-9]{8}$/.test(memberCode), memberCode)
@@ -127,13 +128,13 @@ async function main() {
       settlements: [{ bookingId: bk1.data.booking.id, tierKey: 'member', payIntent: 'offline_full', items: [{ serviceId: svc.id }], technicians: [{ technicianId: tech.id, role: 'main', itemNos: [1] }] }]
     })
   }, shop.token)).data.settlements[0]
-  check('S2 未绑定 → 徽标文案由后端下发', sheet1.bindBadgeText === '新客 · 未绑定', JSON.stringify(sheet1.bindBadgeText))
+  check('S2 未绑定 → 徽标文案由后端下发', sheet1.bindBadgeText === '未绑定微信', JSON.stringify(sheet1.bindBadgeText))
   check('S2 后端提示签署链接且不误报自动微信绑定', /签署链接/.test(sheet1.bindHintText) && /不自动绑定微信/.test(sheet1.bindHintText), sheet1.bindHintText)
   check('S2 顾客行手机号脱敏', sheet1.customerPhoneMasked === `${phone.slice(0, 3)}****${phone.slice(-4)}`, sheet1.customerPhoneMasked)
 
   // S2 徽标也能按 userId 单独拿(小程序结算页就用这条,不为一个徽标再开接口)
   const byUid = await request(`/admin/customers/lookup?userId=${encodeURIComponent(xiaoya)}`, {}, shop.token)
-  check('S2 按 userId 拿徽标状态', byUid.data.hit && byUid.data.via === 'user_id' && byUid.data.hit.badgeText === '新客 · 未绑定',
+  check('S2 按 userId 拿徽标状态', byUid.data.hit && byUid.data.via === 'user_id' && byUid.data.hit.badgeText === '未绑定微信',
     JSON.stringify(byUid.data).slice(0, 200))
   check('S2 徽标接口也给脱敏手机号', byUid.data.hit.phoneMasked === `${phone.slice(0, 3)}****${phone.slice(-4)}`, byUid.data.hit.phoneMasked)
   const uidCross = await request(`/admin/customers/lookup?userId=${encodeURIComponent(xiaoya)}`, {}, other.token)
@@ -213,7 +214,7 @@ async function main() {
   /* S4-06 手机号一键授权 = **只校验**,不一致仅提示,不拦签字、不改档案 */
   const bk2 = (await request('/admin/bookings/direct', {
     method: 'POST',
-    body: JSON.stringify({ newCustomerName: '李小满', phone: `1390013${RUN.slice(-4)}`, serviceId: svc.id, technicianId: tech.id, date: todayStr(), time: '11:20', durationMin: 60, depositPaid: false })
+    body: JSON.stringify({ newCustomerName: '李小满', phone: `1390013${PHONE_SUFFIX}`, serviceId: svc.id, technicianId: tech.id, date: todayStr(), time: '11:20', durationMin: 60, depositPaid: false })
   }, shop.token)).data.booking
   const sheet2 = (await request('/admin/settlements', {
     method: 'POST',
@@ -228,14 +229,14 @@ async function main() {
   check('S4 手机号不一致:照样绑定成功(不拦)', mismatch.data.bound === true, JSON.stringify(mismatch.data).slice(0, 160))
   check('S4 手机号不一致:只提示不改档案', mismatch.data.phoneCheck && mismatch.data.phoneCheck.matched === false && mismatch.data.phoneCheck.note.includes('不影响签字'),
     JSON.stringify(mismatch.data.phoneCheck))
-  const filed = (await request(`/admin/customers/lookup?phone=${encodeURIComponent(`1390013${RUN.slice(-4)}`)}`, {}, shop.token)).data
+  const filed = (await request(`/admin/customers/lookup?phone=${encodeURIComponent(`1390013${PHONE_SUFFIX}`)}`, {}, shop.token)).data
   check('S4 档案上的手机号一个字没被改', filed.hit && filed.hit.id === uidOf(bk2), JSON.stringify(filed).slice(0, 160))
 
   /* corner case:未绑定顾客**扫到别人单的码** —— 确认卡显示的是那张单单主的名字,
      单→档案不受影响(规则⓪:身份由码决定,不由扫码的人决定) */
   const bk3 = (await request('/admin/bookings/direct', {
     method: 'POST',
-    body: JSON.stringify({ newCustomerName: '张三', phone: `1370013${RUN.slice(-4)}`, serviceId: svc.id, technicianId: tech.id, date: todayStr(), time: '12:30', durationMin: 60, depositPaid: false })
+    body: JSON.stringify({ newCustomerName: '张三', phone: `1370013${PHONE_SUFFIX}`, serviceId: svc.id, technicianId: tech.id, date: todayStr(), time: '12:30', durationMin: 60, depositPaid: false })
   }, shop.token)).data.booking
   const sheet3 = (await request('/admin/settlements', {
     method: 'POST',
@@ -254,7 +255,7 @@ async function main() {
   await request(`/settlements/${sheet3.code}/claim`, { method: 'POST', body: JSON.stringify({ openid: conflictOpenId }) }, null)
   const bk4 = (await request('/admin/bookings/direct', {
     method: 'POST',
-    body: JSON.stringify({ newCustomerName: '李四', phone: `1360013${RUN.slice(-4)}`, serviceId: svc.id, technicianId: tech.id, date: todayStr(), time: '13:40', durationMin: 60, depositPaid: false })
+    body: JSON.stringify({ newCustomerName: '李四', phone: `1360013${PHONE_SUFFIX}`, serviceId: svc.id, technicianId: tech.id, date: todayStr(), time: '13:40', durationMin: 60, depositPaid: false })
   }, shop.token)).data.booking
   const sheet4 = (await request('/admin/settlements', {
     method: 'POST',
@@ -286,7 +287,7 @@ async function main() {
      另一端再点 = 已签只读(规则⑧ 先签为准) */
   const bk5 = (await request('/admin/bookings/direct', {
     method: 'POST',
-    body: JSON.stringify({ newCustomerName: '双门测试', phone: `1350013${RUN.slice(-4)}`, serviceId: svc.id, technicianId: tech.id, date: todayStr(), time: '14:50', durationMin: 60, depositPaid: false })
+    body: JSON.stringify({ newCustomerName: '双门测试', phone: `1350013${PHONE_SUFFIX}`, serviceId: svc.id, technicianId: tech.id, date: todayStr(), time: '14:50', durationMin: 60, depositPaid: false })
   }, shop.token)).data.booking
   const sheet5 = (await request('/admin/settlements', {
     method: 'POST',

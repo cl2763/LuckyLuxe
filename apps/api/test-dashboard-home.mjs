@@ -36,8 +36,9 @@ check('①c 失败时先把手上的数清掉再画(不显示旧数,图 §六)',
   /st\.pulse = null; st\.now = null; st\.todo = null/.test(home))
 
 /* ② 金额:一个币符都不许写在页面里(币种红线;`test-currency-scan` 也扫,这里守的是「有没有走那个出口」) */
+// Review2: retain cents for non-integer amounts; still use the shared currency formatter.
 check('② 金额只走注入进来的 `money()` 出口,页面里零币符',
-  home.includes('st.deps.money(cents)') && !/[¥￥]|CAD|US \$/.test(home.replace(/\/\*[\s\S]*?\*\//g, '')),
+  home.includes('st.deps.money(cents, Number(cents) % 100 ? 2 : 0)') && !/[¥￥]|CAD|US \$/.test(home.replace(/\/\*[\s\S]*?\*\//g, '')),
   '页面里出现了币符或没走 money()')
 check('②b 拿不到币种就出「—」,不出裸数字(D140 fail-closed)',
   /!cur\) return '—'/.test(home))
@@ -129,7 +130,7 @@ check('⑨b 首页三块旧节点都不再渲染:metricGrid 清空 + aiBriefPane
 check('⑨c 宿主从三列图表网格改回块流(否则新页面会被塞进旧网格的三个格子里)',
   readFileSync(join(ROOT, 'apps/web/styles.css'), 'utf8').includes('#dashboardCharts.dashboard-chart-grid { display: block; }'))
 check('⑨d <900px 退化竖排(窄屏一张截图为证)',
-  /@media \(max-width: 900px\)[\s\S]{0,200}?grid-template-columns: 1fr/.test(readFileSync(join(ROOT, 'apps/web/styles.css'), 'utf8')))
+  /@media \(max-width: 900px\)[\s\S]{0,200}?grid-template-columns: (?:1fr|minmax\(0, 1fr\))/.test(readFileSync(join(ROOT, 'apps/web/styles.css'), 'utf8')))
 
 /* ══ 05r 补一 ①:六张截图**在不在仓里**(店主 09-08 三条现修之第一条)══
    案由:D154 回执写「交了两张截图」,`git show --stat` 与整仓找图**一张都没有** ——
@@ -184,7 +185,7 @@ check('⑪c 映射表只剩一份:admin.js 从 money-format 取,不再自己写�
   /CURRENCY_DISPLAY = window\.MoneyFormat\.CURRENCY_DISPLAY/.test(admin)
   && (admin.match(/CNY: \{/g) || []).length === 0)
 check('⑪d 🔴 首页大数**不自己拼币符**:走 moneyParts,币码单独一个小字节点',
-  /st\.deps\.moneyParts\(m\.value\)/.test(home) && /data-dh-cur>\$\{esc\(p\.prefix\)\}\$\{esc\(p\.symbol\)\}<\/small>\$\{esc\(p\.amount\)\}/.test(home))
+  /st\.deps\.moneyParts\(m\.value, Number\(m\.value\) % 100 \? 2 : 0\)/.test(home) && /data-dh-cur>\$\{esc\(p\.prefix\)\}\$\{esc\(p\.symbol\)\}<\/small>\$\{esc\(p\.amount\)\}/.test(home))
 
 /* ══ D168 段 3 · 皮按图原样搬(店主 05t)══
    这一组守的是**「皮在不在」**,不守「皮好不好看」——好不好看由并排截图背书。

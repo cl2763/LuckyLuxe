@@ -129,7 +129,7 @@ Page({
       }
     })
   },
-  closeSheet() { this.setData({ sheet: null, conflicts: [], warnings: [], saving: false, requests: [], requestSheet: null, requestNote: '', requestError: '', requestSaving: false }) },
+  closeSheet() { if (this.data.saving) return; this.setData({ sheet: null, conflicts: [], warnings: [], saving: false, requests: [], requestSheet: null, requestNote: '', requestError: '', requestSaving: false }) },
   pickKind(e) { this.setData({ 'sheet.kind': e.currentTarget.dataset.k }) },
   onStart(e) { this.setData({ 'sheet.start': e.detail.value }) },
   onEnd(e) { this.setData({ 'sheet.end': e.detail.value }) },
