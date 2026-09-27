@@ -51,7 +51,9 @@ try{
  await waitForDemoServer({server,base,dbPath});
  const seeded=spawnSync(process.execPath,[resolve(root,'apps/api/tools/demo-seed.mjs'),'--reset','--catalog-only','--tenant=demo-ai','--db='+dbPath],{cwd:root,encoding:'utf8'});writeFileSync(resolve(dir,'catalog-build.log'),seeded.stdout+seeded.stderr);if(seeded.status)throw new Error('Catalog seed failed');
  // Only a new catalog was inserted. No legacy ledger is generated or deleted.
- const db=new DatabaseSync(dbPath);db.exec('BEGIN IMMEDIATE');
+ const db=new DatabaseSync(dbPath);let customers,services,techs;
+ try {
+ db.exec('BEGIN IMMEDIATE');
  db.prepare("UPDATE stores SET name='星野美甲 · 账证一致演示店',timezone='Asia/Shanghai',currency='CNY' WHERE tenant_id=?").run(tid);
  db.prepare("UPDATE tenants SET name='星野美甲（模拟演示）',kind='demo' WHERE id=?").run(tid);
  db.prepare("UPDATE users SET display_name=replace(replace(display_name,'книга','思彤'),'корица','欣妍')||'（演示）',tags_json='[]',notes='本地模拟数据，非真实顾客与交易' WHERE tenant_id=?").run(tid);
@@ -60,8 +62,9 @@ try{
  db.prepare("UPDATE membership_packages SET kind='recharge' WHERE tenant_id=? AND kind='stored_value'").run(tid);
  db.prepare("UPDATE business_hours SET is_closed=0 WHERE store_id=?").run(tid+'-store');
  db.prepare("DELETE FROM technician_schedules WHERE technician_id LIKE ?").run(tid+'-%');
- const customers=db.prepare('SELECT id FROM users WHERE tenant_id=? ORDER BY rowid').all(tid),services=db.prepare('SELECT id FROM services WHERE tenant_id=? ORDER BY rowid').all(tid),techs=db.prepare('SELECT id FROM technicians WHERE tenant_id=? ORDER BY rowid').all(tid);
- db.exec('COMMIT');db.close();
+ customers=db.prepare('SELECT id FROM users WHERE tenant_id=? ORDER BY rowid').all(tid);services=db.prepare('SELECT id FROM services WHERE tenant_id=? ORDER BY rowid').all(tid);techs=db.prepare('SELECT id FROM technicians WHERE tenant_id=? ORDER BY rowid').all(tid);
+ db.exec('COMMIT');
+ } catch(error) {try{db.exec('ROLLBACK')}catch{/* BEGIN may itself have failed. */}throw error} finally {db.close()}
  const dates=[];for(let month=6;month>=0;month--){for(const day of [4,11,18,25]){const dt=new Date(anchor+'T00:00:00Z');dt.setUTCDate(1);dt.setUTCMonth(dt.getUTCMonth()-month);dt.setUTCDate(day);const ds=dt.toISOString().slice(0,10);if(ds<anchor)dates.push(ds);}}
  let count=0;const charged=new Set();
  for(const date of dates){
