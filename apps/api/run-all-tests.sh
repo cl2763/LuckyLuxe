@@ -493,7 +493,7 @@ DEMO_GATE_MODES="${DEMO_GATE_MODES:-true false}"
 # 顾客端相关判据:这一档必须全部跑一遍(**只许变长**,少一条 test-demo-gate-coverage 红)
 # 🔴 裁 #72:名单不许我手挑 —— `test-demo-gate-coverage ①a` 按机制算出「该跑」并逐个对,
 #    少一套就红在「该跑没跑」上(造病已验)。这里列的是**该跑的全部 11 套 + 多跑的 4 套**。
-DEMO_GATE_SUITES="web-sign-access p0-booking-integrity cross-tenant-isolation store-placeholder tenant-create-front-door ai-retouch-gate platform-bootstrap service-import-tiers onboarding-steps signed-docs auth-surface backend-gate booking-intake card-refund customer-profile deposit-config identity-links mini-ai-same-outlet noshow-aftersales schedule-v2 staff-portal stored-value wechat-stub mini-phone booking-cancel identity-claim customer-paths coupon-status web-not-signup import-phone-guard web-settlement cross-end-effect display-text tenant-ownership mini-account-adjust tenant-timezone"
+DEMO_GATE_SUITES="customer-facts-http first-use-binding first-use-features web-sign-access p0-booking-integrity cross-tenant-isolation store-placeholder tenant-create-front-door ai-retouch-gate platform-bootstrap service-import-tiers onboarding-steps signed-docs auth-surface backend-gate booking-intake card-refund customer-profile deposit-config identity-links mini-ai-same-outlet noshow-aftersales schedule-v2 staff-portal stored-value wechat-stub mini-phone booking-cancel identity-claim customer-paths coupon-status web-not-signup import-phone-guard web-settlement cross-end-effect display-text tenant-ownership mini-account-adjust tenant-timezone"
 : > /tmp/ll-demo-gate-modes.txt
 echo "true" >> /tmp/ll-demo-gate-modes.txt
 if printf '%s' "$DEMO_GATE_MODES" | grep -q false; then
