@@ -89,7 +89,7 @@ export function createDashboardPulse(deps) {
   // ISO timestamps and SQLite CURRENT_TIMESTAMP are instants. Bucket in the
   // store's IANA zone, including DST; never take the UTC date prefix.
   const dateFormatters = new Map()
-  db.function('dashboard_store_day', (tid, timestamp) => {
+  const storeDay = (tid, timestamp) => {
     if (!timestamp) return null
     const raw = String(timestamp)
     const at = new Date(/^\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2}$/.test(raw) ? raw.replace(' ', 'T') + 'Z' : raw)
@@ -97,7 +97,16 @@ export function createDashboardPulse(deps) {
     const tz = tenantTimezone(tid)
     if (!dateFormatters.has(tz)) dateFormatters.set(tz, new Intl.DateTimeFormat('en-CA', { timeZone: tz, year: 'numeric', month: '2-digit', day: '2-digit' }))
     return dateFormatters.get(tz).format(at)
-  })
+  }
+  const inRange = (tid, at, from, to) => {
+    const day = storeDay(tid, at)
+    return day !== null && day >= from && day <= to
+  }
+  // Node 22.11 (production) has no DatabaseSync.function. Keep timezone
+  // conversion in JavaScript, with tenant filtering in every SQL query.
+  const datedSum = (rows, tid, from, to) => rows.reduce((n, row) =>
+    n + (inRange(tid, row.at, from, to) ? row.c : 0), 0)
+  const datedCount = (rows, tid, from, to) => rows.filter(row => inRange(tid, row.at, from, to)).length
 
   /* ── 逐日取数:已日结取快照,未日结实时算(图 §四 口径答①)────── */
   const closedRevenue = () => P(
@@ -120,11 +129,14 @@ export function createDashboardPulse(deps) {
   const cashLedger = () => P(`SELECT COALESCE(SUM(amount_cents), 0) AS c FROM finance_transactions
     WHERE tenant_id = ? AND occurred_on >= ? AND occurred_on <= ? AND type = 'income'
       AND COALESCE(pay_channel, '') NOT IN ('stored_value', 'times_card')`)
-  const cashRecharge = () => P(`SELECT COALESCE(SUM(amount_cents), 0) AS c FROM stored_value_transactions
-    WHERE tenant_id = ? AND type IN ('recharge') AND dashboard_store_day(tenant_id, created_at) >= ? AND dashboard_store_day(tenant_id, created_at) <= ?`)
-  const cashCardBuy = () => P(`SELECT COALESCE(SUM(price_cents), 0) AS c FROM member_timecards
-    WHERE tenant_id = ? AND dashboard_store_day(tenant_id, created_at) >= ? AND dashboard_store_day(tenant_id, created_at) <= ?`)
-  const cashParts = (tid, from, to) => ({ ledgerCents: cashLedger().get(tid, from, to).c, rechargeCents: cashRecharge().get(tid, from, to).c, timecardPurchaseCents: cashCardBuy().get(tid, from, to).c })
+  const cashRecharge = () => P(`SELECT amount_cents AS c, created_at AS at FROM stored_value_transactions
+    WHERE tenant_id = ? AND type = 'recharge'`)
+  const cashCardBuy = () => P(`SELECT price_cents AS c, created_at AS at FROM member_timecards WHERE tenant_id = ?`)
+  const cashParts = (tid, from, to) => ({
+    ledgerCents: cashLedger().get(tid, from, to).c,
+    rechargeCents: datedSum(cashRecharge().all(tid), tid, from, to),
+    timecardPurchaseCents: datedSum(cashCardBuy().all(tid), tid, from, to),
+  })
   const cashOn = (tid, from, to) => Object.values(cashParts(tid, from, to)).reduce((sum, cents) => sum + cents, 0)
 
   /* 总卡耗:储值消耗金额 + 次卡核销次数(**钱与次两个数**,次不折钱) */
@@ -134,24 +146,29 @@ export function createDashboardPulse(deps) {
     WHERE tenant_id = ? AND occurred_on >= ? AND occurred_on <= ? AND pay_channel = 'times_card'`)
 
   /* 新增持卡:当期**首次**开卡的顾客,按顾客去重(首充或首张次卡落在当期) */
-  const newCardCount = () => P(`SELECT COUNT(*) AS n FROM (
-      SELECT user_id, MIN(first_at) AS first_at FROM (
-        SELECT user_id, MIN(dashboard_store_day(tenant_id, created_at)) AS first_at FROM stored_value_transactions
-          WHERE tenant_id = ? AND type = 'recharge' GROUP BY user_id
-        UNION ALL
-        SELECT user_id, MIN(dashboard_store_day(tenant_id, created_at)) AS first_at FROM member_timecards
-          WHERE tenant_id = ? GROUP BY user_id
-      ) GROUP BY user_id
-    ) WHERE first_at >= ? AND first_at <= ?`)
+  const cardStarts = () => P(`SELECT user_id, created_at AS at FROM stored_value_transactions
+    WHERE tenant_id = ? AND type = 'recharge'
+    UNION ALL SELECT user_id, created_at AS at FROM member_timecards WHERE tenant_id = ?`)
+  const newCardCount = (tid, from, to) => {
+    const firstDays = new Map()
+    for (const row of cardStarts().all(tid, tid)) {
+      const day = storeDay(tid, row.at)
+      if (day !== null && (!firstDays.has(row.user_id) || day < firstDays.get(row.user_id))) firstDays.set(row.user_id, day)
+    }
+    return [...firstDays.values()].filter(day => day >= from && day <= to).length
+  }
 
   /* 到店人次:真实 arrived_at 或已完成事实，按单去重；普通预约不是到店。 */
-  const visitsCount = () => P(`SELECT COUNT(*) AS n FROM bookings
-    WHERE tenant_id = ? AND dashboard_store_day(tenant_id, ${bookingVisitAtSql()}) >= ?
-      AND dashboard_store_day(tenant_id, ${bookingVisitAtSql()}) <= ?`)
+  const visitRows = () => P(`SELECT ${bookingVisitAtSql()} AS at FROM bookings WHERE tenant_id = ?`)
+  const visitsCount = (tid, from, to) => datedCount(visitRows().all(tid), tid, from, to)
   /* 今日预约:所有**未取消**的预约数 */
-  const bookingsCount = () => P(`SELECT COUNT(*) AS n FROM bookings
-    WHERE tenant_id = ? AND dashboard_store_day(tenant_id, appointment_start) >= ? AND dashboard_store_day(tenant_id, appointment_start) <= ?
-      AND status NOT IN ('CANCELLED', 'NO_SHOW')`)
+  const bookingRows = () => P(`SELECT appointment_start AS at FROM bookings
+    WHERE tenant_id = ? AND status NOT IN ('CANCELLED', 'NO_SHOW')`)
+  const bookingsCount = (tid, from, to) => datedCount(bookingRows().all(tid), tid, from, to)
+  const completedCount = (tid, day, withoutNotes = false) => datedCount(P(`SELECT appointment_start AS at
+    FROM bookings WHERE tenant_id = ? AND status = 'COMPLETED'
+    ${withoutNotes ? 'AND id NOT IN (SELECT booking_id FROM service_notes WHERE booking_id IS NOT NULL)' : ''}`)
+    .all(tid), tid, day, day)
 
   function metricsFor(tid, r) {
     const rev = sumDays(tid, r.from, r.to, (t, d) => revenueOn(t, d).cents)
@@ -160,12 +177,12 @@ export function createDashboardPulse(deps) {
     const cashPrev = cashOn(tid, r.prevFrom, r.prevTo)
     const cardM = cardMoney().get(tid, r.from, r.to).c
     const cardT = cardTimes().get(tid, r.from, r.to).n
-    const nCard = newCardCount().get(tid, tid, r.from, r.to).n
-    const nCardPrev = newCardCount().get(tid, tid, r.prevFrom, r.prevTo).n
-    const vis = visitsCount().get(tid, r.from, r.to).n
-    const visPrev = visitsCount().get(tid, r.prevFrom, r.prevTo).n
-    const bk = bookingsCount().get(tid, r.from, r.to).n
-    const bkPrev = bookingsCount().get(tid, r.prevFrom, r.prevTo).n
+    const nCard = newCardCount(tid, r.from, r.to)
+    const nCardPrev = newCardCount(tid, r.prevFrom, r.prevTo)
+    const vis = visitsCount(tid, r.from, r.to)
+    const visPrev = visitsCount(tid, r.prevFrom, r.prevTo)
+    const bk = bookingsCount(tid, r.from, r.to)
+    const bkPrev = bookingsCount(tid, r.prevFrom, r.prevTo)
 
     /* spark:往回数 sparkN 个点。today/week 按天,month/year 按月。 */
     const spark = (fn) => {
@@ -188,9 +205,9 @@ export function createDashboardPulse(deps) {
       { key: 'revenue', value: rev, unit: 'money', ...deltaOf(rev, revPrev), spark: sparkRev },
       { key: 'cash', value: cash, breakdown: cashParts(tid, r.from, r.to), unit: 'money', ...deltaOf(cash, cashPrev), spark: spark((a, b) => cashOn(tid, a, b <= r.to ? b : r.to)) },
       { key: 'cardUse', value: cardM, unit: 'money', extra: { times: cardT, timesUnit: '次' }, ...deltaOf(cardM, cardMoney().get(tid, r.prevFrom, r.prevTo).c), spark: spark((a, b) => cardMoney().get(tid, a, b).c) },
-      { key: 'newCard', value: nCard, unit: 'people', ...deltaOf(nCard, nCardPrev), spark: spark((a, b) => newCardCount().get(tid, tid, a, b).n) },
-      { key: 'visits', value: vis, unit: 'people', ...deltaOf(vis, visPrev), spark: spark((a, b) => visitsCount().get(tid, a, b).n) },
-      { key: 'bookings', value: bk, unit: 'count', ...deltaOf(bk, bkPrev), spark: spark((a, b) => bookingsCount().get(tid, a, b).n) },
+      { key: 'newCard', value: nCard, unit: 'people', ...deltaOf(nCard, nCardPrev), spark: spark((a, b) => newCardCount(tid, a, b)) },
+      { key: 'visits', value: vis, unit: 'people', ...deltaOf(vis, visPrev), spark: spark((a, b) => visitsCount(tid, a, b)) },
+      { key: 'bookings', value: bk, unit: 'count', ...deltaOf(bk, bkPrev), spark: spark((a, b) => bookingsCount(tid, a, b)) },
     ]
   }
 
@@ -282,12 +299,12 @@ export function createDashboardPulse(deps) {
            在首页看见一个自己已经在做的事。 */
         item('aiHandoff', 'wechat_conversations', () => one("SELECT COUNT(*) AS n FROM wechat_conversations WHERE tenant_id = ? AND status = 'needs_human'"), 'ai-desk'),
         item('quotePending', 'quote_requests', () => one("SELECT COUNT(*) AS n FROM quote_requests WHERE tenant_id = ? AND status = 'PENDING_STAFF'"), 'quote'),
-        item('notePending', 'service_notes', () => one("SELECT COUNT(*) AS n FROM bookings WHERE tenant_id = ? AND status = 'COMPLETED' AND dashboard_store_day(tenant_id, appointment_start) = ? AND id NOT IN (SELECT booking_id FROM service_notes WHERE booking_id IS NOT NULL)", today), 'notes'),
+        item('notePending', 'service_notes', () => completedCount(tid, today, true), 'notes'),
         item('shiftApproval', 'shift_requests', () => one("SELECT COUNT(*) AS n FROM shift_requests WHERE tenant_id = ? AND status = 'pending'"), 'schedule'),
         /* 昨天有已完成的单、却没有一张 confirmed 的日结 → 待日结 1 天。
            **「有单」这一半不能省**:店休那天没单,不该在首页催老板去日结。 */
         item('dailyClose', 'daily_closes', () => (
-          one("SELECT COUNT(*) AS n FROM bookings WHERE tenant_id = ? AND status = 'COMPLETED' AND dashboard_store_day(tenant_id, appointment_start) = ?", yday) > 0
+          completedCount(tid, yday) > 0
           && one("SELECT COUNT(*) AS n FROM daily_closes WHERE tenant_id = ? AND date = ? AND status = 'confirmed'", yday) === 0 ? 1 : 0
         ), 'daily-close'),
       ].filter(Boolean),
