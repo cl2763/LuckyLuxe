@@ -9,7 +9,7 @@ window.GiftEditor = (() => {
     function add(g = {}) {
       if (rows.children.length >= 20) return
       const row = document.createElement('div'); row.className = 'gift-editor-row'
-      row.innerHTML = `<input data-gift-name aria-label="赠品名称" maxlength="80" placeholder="物品名称" value="${esc(g.name || '')}"><input data-gift-quantity aria-label="赠品数量" type="number" min="1" max="999" step="1" value="${esc(g.quantity ?? 1)}"><input data-gift-value aria-label="赠品单件价值" type="number" min="0" max="1000000" step="0.01" placeholder="价值" value="${g.unitValueCents === undefined ? '' : esc(g.unitValueCents / 100)}"><button class="ghost" type="button" data-gift-remove aria-label="删除赠品">×</button>`
+      row.innerHTML = `<input data-gift-name aria-label="赠品名称" maxlength="80" placeholder="物品名称" value="${esc(g.name || '')}"><input data-gift-quantity aria-label="赠品数量" type="number" min="1" max="999" step="1" value="${esc(g.quantity ?? 1)}"><input data-gift-value data-money data-money-strict aria-label="赠品单件价值" type="text" inputmode="decimal" autocomplete="off" placeholder="价值" value="${g.unitValueCents === undefined ? '' : esc(g.unitValueCents / 100)}"><button class="ghost" type="button" data-gift-remove aria-label="删除赠品">×</button>`
       rows.appendChild(row); section.querySelector('[data-gift-add]').disabled = rows.children.length >= 20
     }
     initial.forEach(add)

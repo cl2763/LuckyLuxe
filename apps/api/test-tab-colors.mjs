@@ -19,7 +19,9 @@ const BLACK_MINI = '#2d2826'
 const BLACK_MINI_ALT = '#2d2a26'   // account-adjust 沿用的墨色(同族深墨,肉眼同色;两值都算黑)
 /* 刀4 咬出的判据洞:只查两色都在 —— 白底黑字同样含这两色。改按**属性归位**判:
    黑必须在 background 上、白必须在 color 上,色序反了=白pill回潮=红 */
-const isBlackOn = (rule) => new RegExp(`background:\\s*(${BLACK_MINI}|${BLACK_MINI_ALT})`).test(rule) && /color:\s*#fff/.test(rule)
+// Paired hero/heroink tokens preserve the same foreground/background direction in both themes.
+// test-color-usage resolves actual token colors and checks contrast, including mini styles.
+const isBlackOn = (rule) => (new RegExp(`background:\\s*(${BLACK_MINI}|${BLACK_MINI_ALT})`).test(rule) && /color:\s*#fff/.test(rule)) || (/background:\s*var\(--hero\)/.test(rule) && /color:\s*var\(--heroink\)/.test(rule))
 
 /* 小程序端:每个页签组的「选中」规则钉黑白 */
 {
@@ -48,7 +50,7 @@ const isBlackOn = (rule) => new RegExp(`background:\\s*(${BLACK_MINI}|${BLACK_MI
   const ghostAt = cust.indexOf('.hbtn.ghost{')
   const ghostRule = ghostAt >= 0 ? cust.slice(ghostAt, cust.indexOf('}', ghostAt)) : ''
   check('🔴 六 客户档案 2×2:hbtn.ghost 与 hbtn 同色(黑底白字)—— 两黑两白不许回潮',
-    ghostAt < 0 || (ghostRule.includes(BLACK_MINI) && ghostRule.includes('#fff')), ghostRule.slice(0, 90))
+    ghostAt < 0 || isBlackOn(ghostRule), ghostRule.slice(0, 90))
 }
 
 /* 网页端:tab 族选中态逐条钉 var(--black)+白字 */
