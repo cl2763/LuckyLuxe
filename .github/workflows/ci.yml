@@ -9,6 +9,19 @@ on:
     branches: [main]
 
 jobs:
+  production-runtime:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22.11.0'
+      - name: Verify exact production runtime and store timezone calculations
+        run: |
+          node --experimental-sqlite apps/api/test-customer-facts-timezone.mjs
+          node --experimental-sqlite apps/api/test-customer-facts-mutations.mjs
+          node --experimental-sqlite tools/test-production-runtime.mjs
   test:
     runs-on: ubuntu-latest
     timeout-minutes: 15
