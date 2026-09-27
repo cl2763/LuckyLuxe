@@ -3,6 +3,20 @@ import {openSync,writeFileSync,closeSync,unlinkSync} from 'node:fs';
 import {join,resolve} from 'node:path';
 import {tmpdir} from 'node:os';
 import {createConnection} from 'node:net';
+import {requireTarget,requireSandbox} from '../../../tools/db-target.mjs';
+
+// Resolve the two generator targets together; health checks below verify the child
+// still owns this exact database before every write. Product servers never use it.
+export function resolveDemoTargets(target, portValue=4368){
+ const explicit=requireTarget({envName:'--dir',value:target,hint:'explicit absolute NEW demo directory'});
+ if(!explicit.startsWith('/'))throw new Error('--dir must be an absolute NEW directory');
+ const dir=resolve(explicit),dataDir=resolve(dir,'sandbox-data');
+ const dbPath=requireSandbox(resolve(dataDir,'lucky-luxe.sqlite'),'consistent-demo');
+ const port=Number(portValue);
+ if(!Number.isInteger(port)||port<1024||port>65535||[4128,4310,4360].includes(port))throw new Error('Dedicated port required; existing user servers forbidden');
+ return {dir,dataDir,dbPath,port,base:`http://127.0.0.1:${port}`,markerPath:resolve(dir,'consistent-demo.json')};
+}
+
 export function lockDemoPort(port){
  const path=join(tmpdir(),`youji-consistent-demo-port-${port}.lock`);
  let fd;try{fd=openSync(path,'wx',0o600);}catch(e){if(e.code==='EEXIST')throw new Error(`Demo generation port ${port} is locked; another generator may be running. Do not reuse it.`);throw e;}
