@@ -40,5 +40,5 @@
 .conf .cr{font-size:21rpx;color:var(--sub);margin-top:6rpx}
 .sheet .save{margin-top:22rpx;background:var(--hero);color:var(--heroink);text-align:center;padding:26rpx;border-radius:16rpx;font-size:29rpx;font-weight:800}
 
-.request-list{background:var(--card);border:1rpx solid var(--line);border-radius:16rpx;padding:20rpx;margin-top:20rpx;color:var(--ink)}
+.request-list{background:var(--card);border:1rpx solid var(--line);border-radius:12rpx;padding:20rpx;margin-top:20rpx;color:var(--ink)}
 .request-list .sh{font-size:28rpx;font-weight:800}.request-row{padding:18rpx 0;border-bottom:1rpx solid var(--line);font-size:24rpx;word-break:break-all}.request-row:last-child{border-bottom:0}.request-note{box-sizing:border-box;width:100%;height:190rpx;margin-top:20rpx;padding:18rpx;border:1rpx solid var(--line);border-radius:12rpx;background:var(--wall);color:var(--ink);font-size:26rpx}.request-error{font-size:24rpx;color:var(--bad);margin-top:14rpx;line-height:1.7}.sheet{max-height:85vh;overflow:auto;box-sizing:border-box;padding-bottom:calc(40rpx + env(safe-area-inset-bottom))}.sheet .cancel{background:var(--wall);color:var(--ink);font-size:26rpx;border:1rpx solid var(--line);margin-top:16rpx}.sheet .save{line-height:1.5}.sheet button::after{border:0}

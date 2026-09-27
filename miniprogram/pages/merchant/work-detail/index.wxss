@@ -22,4 +22,4 @@ page{background:#fbf8f5}
 .note{font-size:21rpx;color:#b6a99b;line-height:1.6;margin-top:20rpx}
 
 /* Four platforms remain readable on narrow screens. */
-.seg{flex-wrap:wrap;gap:8rpx;border-radius:18rpx}.seg .s{flex:1 1 42%;white-space:normal}
+.seg{flex-wrap:wrap;gap:8rpx;border-radius:999rpx}.seg .s{flex:1 1 42%;white-space:normal}

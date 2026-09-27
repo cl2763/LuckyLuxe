@@ -1,4 +1,5 @@
 const api = require('../../../utils/api')
+const nav = require('../../../utils/nav')
 const { storeMoney } = require('../../../utils/storeclock')
 
 function money(c) { return storeMoney(c, 0) } // 门店币种,不写死 $
@@ -51,7 +52,7 @@ function vm(u, TH) {
 
 Page({
   createCustomer(){if(this.data.isOwner)this.selectComponent("#customerCreate").open()},
-  async customerCreated(e){await this.load();wx.navigateTo({url:"/pages/merchant/customer/index?id="+encodeURIComponent(e.detail.customer.id)})},
+  async customerCreated(e){await this.load();nav.to("/pages/merchant/customer/index?id="+encodeURIComponent(e.detail.customer.id))},
   data: {
     all: [], list: [], kw: '', filter: 'all', sort: 'spend',
     filters: ['all', 'a', 'b', 'n', 's'],

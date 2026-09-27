@@ -2083,21 +2083,23 @@ const main = async () => {
                   /* 同源断言常驻:全库零无挂靠(每签署组必有预约) */
                   const orphanN = dbx.prepare("SELECT COUNT(*) AS n FROM settlements WHERE booking_id IS NULL AND status <> 'voided'").get().n
                   check('㋋ 同源常驻:全库零无挂靠结算单(每组必有预约)', orphanN === 0, `orphans=${orphanN}`)
-                  /* 裁A 三读方同数:新档案=今日签署组+今日完成预约(同日=1)+后日完成预约(+1)+取消单(不算) */
+                  /* 裁A 三读方同数:新档案=今日签署组+今日完成预约(同日=1)+前日完成预约(+1)+未来单/取消单(不算) */
                   const bkV1 = (await request('/admin/bookings/direct', { method: 'POST', body: JSON.stringify({ newCustomerName: `㋋裁A客${RUN_ID}`, serviceId: shop.serviceId, technicianId: shop.tech2, date: dateStr(0), time: '23:31' }) }, shop.token)).data.booking
                   const cuidV = bkV1.userId || bkV1.user_id || (bkV1.user && bkV1.user.id)
                   dbx.prepare('UPDATE users SET wechat_open_id = ? WHERE id = ?').run(`wx-va-${RUN_ID}`, cuidV)
                   await request(`/admin/bookings/${bkV1.id}/status`, { method: 'PATCH', body: JSON.stringify({ status: 'COMPLETED' }) }, shop.token)
                   const sV = await request('/admin/settlements', { method: 'POST', body: JSON.stringify({ userId: cuidV, settlements: [{ payIntent: 'offline_full', bookingId: bkV1.id, items: [{ serviceId: shop.serviceId, qty: 1 }], technicians: tech, servedPersonName: '' }] }) }, shop.token)
                   await signFixture(`/settlements/${encodeURIComponent(sV.data.settlements[0].code)}/sign`, { method: 'POST', body: JSON.stringify({ signature: '㋋ 裁A签', disclaimerAccepted: true }) }, null, { 'x-tenant-id': shop.tenantId })
-                  const bkV2 = (await request('/admin/bookings/direct', { method: 'POST', body: JSON.stringify({ userId: cuidV, serviceId: shop.serviceId, technicianId: shop.tech2, date: dateStr(2), time: '14:31' }) }, shop.token)).data.booking
+                  const bkV2 = (await request('/admin/bookings/direct', { method: 'POST', body: JSON.stringify({ userId: cuidV, serviceId: shop.serviceId, technicianId: shop.tech2, date: dateStr(-2), time: '14:31' }) }, shop.token)).data.booking
                   await request(`/admin/bookings/${bkV2.id}/status`, { method: 'PATCH', body: JSON.stringify({ status: 'COMPLETED' }) }, shop.token)
+                  const bkFuture = (await request('/admin/bookings/direct', { method: 'POST', body: JSON.stringify({ userId: cuidV, serviceId: shop.serviceId, technicianId: shop.tech2, date: dateStr(2), time: '14:31' }) }, shop.token)).data.booking
+                  await request(`/admin/bookings/${bkFuture.id}/status`, { method: 'PATCH', body: JSON.stringify({ status: 'COMPLETED' }) }, shop.token)
                   const bkV3 = (await request('/admin/bookings/direct', { method: 'POST', body: JSON.stringify({ userId: cuidV, serviceId: shop.serviceId, technicianId: shop.tech2, date: dateStr(3), time: '14:31' }) }, shop.token)).data.booking
                   await request(`/admin/bookings/${bkV3.id}/status`, { method: 'PATCH', body: JSON.stringify({ status: 'CANCELLED' }) }, shop.token)
                   const meV = (await fixtureLogin(shop.tenantId, cuidV)).data.user
                   const listV = ((await request('/admin/customers', {}, shop.token)).data.customers || []).find((c) => c.id === cuidV)
                   const profV = (await request(`/admin/customers/${cuidV}/notes`, {}, shop.token)).data.profile
-                  check('㋋ 裁A 三读方同数=2(签署组+完成预约同日=1;后日完成+1;取消不算)', meV.visits === 2 && listV && listV.visitCount === 2 && profV && profV.visitCount === 2, JSON.stringify({ me: meV.visits, list: listV && listV.visitCount, prof: profV && profV.visitCount }))
+                  check('㋋ 裁A 三读方同数=2(签署组+完成预约同日=1;前日完成+1;未来和取消不算)', meV.visits === 2 && listV && listV.visitCount === 2 && profV && profV.visitCount === 2, JSON.stringify({ me: meV.visits, list: listV && listV.visitCount, prof: profV && profV.visitCount }))
                   /* 裁C:售后单带徽标上日历(bkK=售后态) */
                   const dayV = (await request(`/admin/schedule-day?date=${dateStr(0)}`, {}, shop.token)).data
                   const rowAS = (dayV.bookings || []).find((b) => b.id === bkK.id)
@@ -2352,7 +2354,13 @@ const main = async () => {
       const memberSeg = adminJs.slice(adminJs.indexOf('function renderMemberTabs'), adminJs.indexOf('// 发券表单是每次重画的'))
       const memberHits = (memberSeg.match(/window\.(prompt|confirm|alert)\(/g) || []).length
       check('㊶ D50 会员与营销页原生弹窗=0(全部页内表单弹层)', memberHits === 0, `hits=${memberHits}`)
-      check('㊶ D50 弹层组件在场(openFormModal:Esc/遮罩/保存取消)', adminJs.includes('function openFormModal') && adminJs.includes("e.key === 'Escape'"))
+      const formModalJs = readFileSync(join(ROOT41, 'apps/web/form-modal.js'), 'utf8')
+      const adminHtml = readFileSync(join(ROOT41, 'apps/web/admin.html'), 'utf8')
+      check('㊶ D50 弹层组件接通且先于 admin 加载(Esc/遮罩/保存取消)',
+        adminJs.includes('function openFormModal') && adminJs.includes('window.FormModal.open')
+        && adminHtml.indexOf('/web/form-modal.js') >= 0 && adminHtml.indexOf('/web/form-modal.js') < adminHtml.indexOf('/web/admin.js?')
+        && formModalJs.includes("e.key === 'Escape'") && formModalJs.includes('e.target === overlay')
+        && formModalJs.includes('data-fm-save') && formModalJs.includes('data-fm-cancel'))
       const PROMPT_BASELINE = 19 // 服务与价目页 5 处提前修(店主 08-21 亲撞拍板:新增/改名/删大类+删项目全换弹层)24→19;此前 A5 退役 27→24;其余存量按 Cowork 归批清单分批收敛,只减不增
       const total = (adminJs.match(/window\.(prompt|confirm|alert)\(/g) || []).length
       check(`㊶ D50 admin.js 原生弹窗总数 ≤ 基线 ${PROMPT_BASELINE}(新增代码禁 prompt/confirm/alert)`, total <= PROMPT_BASELINE, `当前 ${total}`)
@@ -2395,7 +2403,7 @@ const main = async () => {
       check('㊷ D51 旧「售后=需关注」错误映射已清(店主找不到售后单的根因)', !adminJs.includes("AFTER_SALES: t('activeAttention')"))
       check('㊷ D51 需关注含售后中+列表卡徽标渲染在场', orderStateJs.includes('isAfterSalesOpen(booking)') && adminJs.includes('order-badge badge-'))
       check('㊷ v1.2 五页签:积分商城独立第④签(mall 页签+容器+切换逻辑)', adminHtml.includes('data-member-tab="mall"') && adminHtml.includes('id="mtabMall"') && adminJs.includes("tab === 'mall'"))
-      check('㊷ 弹层勾选框与文字同一行(fm-check 横排,组件级)', adminJs.includes('class="fm-check"') && /label\.fm-check\{[^}]*flex-direction:row/.test(css))
+      check('㊷ 弹层勾选框与文字同一行(fm-check 横排,组件级)', readFileSync(join(ROOT42, 'apps/web/form-modal.js'), 'utf8').includes('class="fm-check"') && /label\.fm-check\{[^}]*flex-direction:row/.test(css))
       // ㊸ D52(店主 08-20):订单列表日期组倒序=最近优先,双端同口径(小程序 orders 本来就是倒序,网页对齐)
       const miniOrders = readFileSync(join(ROOT42, 'miniprogram/pages/merchant/orders/index.js'), 'utf8')
       check('㊸ D52 网页全部预约日期组倒序(最近日期优先)', /Object\.keys\(grouped\)\.sort\(\(a, b\) => b\.localeCompare\(a\)\)/.test(adminJs) && !/Object\.keys\(grouped\)\.sort\(\)\.map/.test(adminJs))
@@ -2444,7 +2452,7 @@ const main = async () => {
       const membJs = readFileSync(join(ROOT42, 'miniprogram/pages/merchant/member/index.js'), 'utf8')
       const wbJs = readFileSync(join(ROOT42, 'miniprogram/pages/merchant/workbench/index.js'), 'utf8')
       check('㋅ D62 前端三搜索口大小写不敏感(客户/工作台/开单找客;代充口已随死口删除)',
-        custJs.includes('.trim().toLowerCase()') && wbJs.includes(".trim().toLowerCase()") && miniOrders.includes('q.toLowerCase()'))
+        custJs.includes('.trim().toLowerCase()') && wbJs.includes(".trim().toLowerCase()") && miniOrders.includes("require('../../../utils/customer-intake')") && readFileSync(join(ROOT42, 'miniprogram/utils/customer-intake.js'), 'utf8').includes('q.toLowerCase()'))
       check('㋅ D62 反向守:会员页搜索口确已死净(死而复生要带 toLowerCase 回来重新入册)', !membJs.includes('onRvSearch'))
       // ㋆ D64 wiring:payIntent 映射意愿唯一(不勾储值=offline_full,挂充不强制)+储值行显隐含挂充+组卡 cover 行+出码 n/N+预告句
       check('㋆ D64 前端映射意愿唯一+储值行显隐含挂充', settleJs.includes("if (!m.useBalance) return 'offline_full'") && settleWxml.includes('view.hasBalance || view.hasRecharge'))
@@ -3282,9 +3290,10 @@ const main = async () => {
           admHtml.includes('data-staff-panel="performance" id="perfTargetsCard"')
           && admHtml.indexOf('id="perfRankCard"') < admHtml.indexOf('id="perfTargetsCard"')
           && !/data-staff-tab="targets"/.test(admHtml))
-        check('㋥S4③ 重复的「本月趋势」卡已删,但它头上的两个入口没跟着丢(删块不许删入口)',
-          !/id="technicianPerformance"/.test(admHtml)
-          && admHtml.includes('id="addTechnicianButton"') && admHtml.includes('id="salaryPlanButton"'))
+        check('㋥S4③ 09-24 店主确认：排行卡删除重复入口，薪资页签和账号管理的添加技师保留',
+          !/id="technicianPerformance"/.test(admHtml) && !admHtml.includes('id="salaryPlanButton"')
+          && admHtml.includes('id="staffTabSalary"') && admHtml.includes('id="addTechnicianButton"')
+          && !admHtml.slice(admHtml.indexOf('id="perfRankCard"'), admHtml.indexOf('id="perfTargetsCard"')).includes('id="addTechnicianButton"'))
 
         // S5-a:通用设置五块 + 财务密码只剩一处 + S5-b 未做入口
         check('㋥S5① 通用设置页在场,五块齐(语言/币种/我的密码/昵称头像/财务密码)',

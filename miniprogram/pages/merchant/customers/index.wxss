@@ -13,11 +13,11 @@ page{background:var(--paper)}
 .av{width:64rpx;height:64rpx;border-radius:50%;background:var(--wall);color:var(--brandd);display:flex;align-items:center;justify-content:center;font-weight:600;font-size:26rpx;flex:0 0 auto}
 .cmain{flex:1;min-width:0}
 .cname{font-size:27rpx;font-weight:600;color:var(--ink)}
-.tier{font-size:20rpx;color:var(--sub);background:var(--paper);border:1rpx solid var(--line);border-radius:40rpx;padding:2rpx 12rpx;margin-left:6rpx}
+.tier{font-size:20rpx;color:var(--sub);background:var(--paper);border:1rpx solid var(--line);border-radius:999rpx;padding:2rpx 12rpx;margin-left:6rpx}
 .tier.hi{color:var(--brandd);background:var(--wall)}
 .cmeta{font-size:22rpx;color:var(--sub);margin-top:6rpx}
 .ctags{margin-top:8rpx}
-.tg{font-size:20rpx;color:var(--brandd);background:var(--wall);border-radius:40rpx;padding:2rpx 12rpx;margin-right:8rpx}
+.tg{font-size:20rpx;color:var(--brandd);background:var(--wall);border-radius:999rpx;padding:2rpx 12rpx;margin-right:8rpx}
 .chev{color:var(--sub);font-size:34rpx;flex:0 0 auto}
 
 /* ===== RFM 分层 ===== */
@@ -74,4 +74,4 @@ page{background:var(--paper)}
 /* 图 A①-2:客户档案上的爽约留存定金 */
 .cretain{margin-top:6rpx;font-size:21rpx;color:var(--tagw);background:var(--tagwbg);border:1rpx solid var(--line);border-radius:8rpx;padding:4rpx 12rpx;display:inline-block}
 
-.new-customer-btn{margin:0 0 20rpx auto;font-size:26rpx;line-height:1.6;padding:16rpx 24rpx;width:max-content;max-width:100%;border-radius:40rpx;background:var(--brand);color:var(--hero)}
+.new-customer-btn{margin:0 0 20rpx auto;font-size:26rpx;line-height:1.6;padding:16rpx 24rpx;width:max-content;max-width:100%;border-radius:999rpx;background:var(--brand);color:var(--hero)}
