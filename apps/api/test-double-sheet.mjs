@@ -84,7 +84,7 @@ async function main() {
   }, shop.token)
   const cust = uidOf((await request('/admin/bookings/direct', {
     method: 'POST',
-    body: JSON.stringify({ newCustomerName: '双单客', phone: `1381${RUN.slice(-7)}`, serviceId: svc.id, technicianId: techA.id, date: todayStr(), time: '09:10', durationMin: 60, depositPaid: false })
+    body: JSON.stringify({ newCustomerName: '双单客', phone: `1381${String(parseInt(RUN,36)).slice(-7)}`, serviceId: svc.id, technicianId: techA.id, date: todayStr(), time: '09:10', durationMin: 60, depositPaid: false })
   }, shop.token)).data.booking)
 
   const mkBooking = async (time, tech) => (await request('/admin/bookings/direct', {
