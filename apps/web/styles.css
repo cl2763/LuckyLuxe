@@ -1748,7 +1748,7 @@ label span,
   font-weight: 800;
 }
 
-input,
+input:not([type="checkbox"]):not([type="radio"]),
 select,
 textarea {
   width: 100%;
@@ -2060,10 +2060,14 @@ textarea:focus {
 .admin-page,
 .admin-dashboard-page {
   display: grid;
+  min-width: 0;
+  grid-template-columns: minmax(0, 1fr);
   gap: 18px;
 }
 
 .admin-sidebar {
+  min-width: 0;
+  max-width: 100%;
   position: sticky;
   top: 24px;
   display: grid;
@@ -5212,7 +5216,7 @@ textarea:focus {
   }
 
   .admin-app {
-    grid-template-columns: 1fr;
+    grid-template-columns: minmax(0, 1fr);
   }
 
   .admin-sidebar {
@@ -6769,7 +6773,7 @@ textarea:focus {
 .fin-tab-content { min-width: 0; }
 .fin-tab-content > .admin-card { margin-top: 0 !important; }
 @media (max-width: 900px) {
-  .fin-layout-grid { grid-template-columns: 1fr; }
+  .fin-layout-grid { grid-template-columns: minmax(0, 1fr); }
   .fin-nav { flex-direction: row; flex-wrap: wrap; position: static; }
 }
 
@@ -6796,6 +6800,11 @@ textarea:focus {
 .fin-mini-btn {
   white-space: nowrap;
   flex: 0 0 auto;
+}
+@media (max-width: 600px) {
+  #financePage > .section-row { flex-wrap: wrap; gap: 12px; }
+  #financePage .fin-title-row { flex-wrap: wrap; }
+  #financePage .section-row > #financeMonth { max-width: 100%; }
 }
 
 /* ===== 评审P0批:今日待办 / 搜索 / 会员徽章 ===== */
@@ -6946,7 +6955,7 @@ textarea:focus {
 .swg-cell.is-today { box-shadow: 0 0 0 1px var(--brandd); }
 .swg-cell:hover { border-color: var(--brandd); }
 div.swg-cell { cursor: default; }
-.swg-count { font-size: .68rem; color: var(--brandd); }
+.swg-count { font-size: .68rem; color: var(--muted); }
 .swg-warn { font-size: .68rem; color: var(--brandd); }
 
 .tech-manage-row { display: flex; gap: 8px; margin-top: 8px; }
@@ -7080,7 +7089,6 @@ button.dashboard-chart-card:hover { transform: translateY(-2px); box-shadow: 0 1
   padding: 10px 12px 4px;
   font-size: .68rem;
   color: var(--muted);
-  opacity: .8;
   user-select: all;
 }
 
@@ -7358,8 +7366,8 @@ section.card > .section-row:first-child { margin-top: 0; }
 /* S6①(2026-08-25):服务内容占比 = 圆环图。百分比与金额写在图例上,不靠悬停猜。 */
 .mix-donut-wrap{display:flex;gap:18px;align-items:center;flex-wrap:wrap;padding:6px 0}
 .mix-donut{position:relative;width:168px;height:168px;border-radius:50%;flex:0 0 auto}
-.mix-donut-hole{position:absolute;inset:26px;background: var(--card);border-radius:50%;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:2px}
-.mix-donut-hole b{font-size:15px;color: var(--ink)}
+.mix-donut-hole{position:absolute;inset:26px;background: var(--card);border-radius:50%;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:2px;text-align:center;padding:8px;box-sizing:border-box}
+.mix-donut-hole b{font-size:15px;color:var(--ink);white-space:nowrap;line-height:1.4;font-variant-numeric:tabular-nums;max-width:100%}
 .mix-donut-hole span{font-size:11.5px;color: var(--ink)}
 .mix-donut-legend{flex:1;min-width:220px;display:flex;flex-direction:column;gap:6px}
 .mix-legend-row{display:flex;align-items:center;gap:8px;font-size:13px}
@@ -7370,8 +7378,9 @@ section.card > .section-row:first-child { margin-top: 0; }
 /* S6②:主图表柱子悬停显示金额(浮层跟着柱子走,不用把数字常年挤在图上) */
 .trend-bar .stack{position:relative}
 .trend-bar .b{position:relative}
-.trend-hover{position:absolute;left:50%;transform:translateX(-50%);bottom:calc(100% + 6px);white-space:nowrap;background: var(--hero);color: var(--heroink);font-size:11.5px;padding:4px 8px;border-radius:6px;opacity:0;pointer-events:none;transition:opacity .12s;z-index:5}
-.trend-bar:hover .trend-hover{opacity:1}
+.trend-hover{position:fixed;max-width:min(440px,calc(100vw - 16px));box-sizing:border-box;white-space:normal;overflow-wrap:anywhere;background:var(--hero);color:var(--heroink);font-size:12px;line-height:1.65;padding:8px 12px;border:1px solid var(--line);border-radius:8px;pointer-events:none;z-index:350;box-shadow:0 6px 24px rgba(0,0,0,.2)}
+.trend-hover[hidden]{display:none}
+.trend-bar:focus-visible{outline:2px solid var(--brand);outline-offset:2px}
 
 /* S13①(2026-08-25):模块① 上架服务按大类分组 —— 组头一行,组内还是原来的行 */
 .svc-group{margin-bottom:14px}
@@ -7575,7 +7584,7 @@ section.card > .section-row:first-child { margin-top: 0; }
 #bookingsPage.settle-open > :not(#settlementComposer) { display: none; }
 
 /* 今天台面(小程序今日台面同款,2026-08-30):技师×时间网格 */
-#todayBoard { display: block; }
+.today-board { display: block; }
 .tb-datebar { display: flex; align-items: center; gap: 12px; margin-bottom: 10px; }
 .tb-nav { width: 32px; height: 32px; border: 1px solid var(--line); border-radius: 8px; background: var(--card); cursor: pointer; font-size: 16px; }
 .tb-date { font-size: 16px; font-weight: 700; }
@@ -7588,7 +7597,7 @@ section.card > .section-row:first-child { margin-top: 0; }
 .tb-closed { padding: 24px; text-align: center; color: var(--muted); border: 1px dashed var(--line); border-radius: 10px; }
 .tb-grid { display: flex; border: 1px solid var(--line); border-radius: 10px; overflow: hidden; background: var(--card); }
 .tb-left { flex: none; width: 52px; border-right: 1px solid var(--line); }
-.tb-corner { height: 56px; border-bottom: 1px solid var(--line); }
+.tb-corner { height: 82px; border-bottom: 1px solid var(--line); }
 .tb-gutter { position: relative; }
 .tb-hr { height: 48px; font-size: 11px; color: var(--muted); padding: 2px 6px; box-sizing: border-box; }
 .tb-hr.off { background: rgba(0,0,0,.03); }
@@ -7599,13 +7608,13 @@ section.card > .section-row:first-child { margin-top: 0; }
    最后一张卡不贴着边(贴边看着就像被切了一半)。 */
 .tb-right { overflow-x: auto; flex: 1; position: relative; }
 .tb-rin { min-width: max-content; padding-right: 8px; }
-.tb-more { position: absolute; right: 0; top: 56px; bottom: 0; width: 44px; pointer-events: none;
+.tb-more { position: absolute; right: 0; top: 82px; bottom: 0; width: 44px; pointer-events: none;
   background: linear-gradient(to right, transparent, var(--card)); display: flex; align-items: center; justify-content: flex-end; }
 .tb-more span { font-size: 11px; color: var(--muted); writing-mode: vertical-rl; padding: 0 2px; }
 .tb-heads { display: flex; border-bottom: 1px solid var(--line); }
-.tb-th { width: 150px; flex: none; padding: 6px 10px; height: 56px; box-sizing: border-box; border-right: 1px solid rgba(0,0,0,.04); }
-.tb-nm { font-weight: 600; font-size: 14px; }
-.tb-rl { font-size: 11px; color: var(--muted); }
+.tb-th { width: 150px; flex: none; padding: 8px 10px; height: 82px; box-sizing: border-box; border-right: 1px solid rgba(0,0,0,.04); }
+.tb-nm { font-weight: 600; font-size: 14px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.tb-rl { font-size: 11px; color: var(--muted); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .tb-st { display: inline-block; font-size: 11px; border-radius: 8px; padding: 0 8px; margin-top: 2px; }
 .tb-st.busy { background: rgba(192,57,43,.1); color: var(--bad); }
 .tb-st.free { background: rgba(29,122,79,.1); color: var(--good); }
@@ -7626,7 +7635,7 @@ section.card > .section-row:first-child { margin-top: 0; }
 .tb-blk.foot { background: var(--wall); }
 .tb-blk.lash { background: var(--tagwbg); }
 .tb-blk.care { background: var(--wall); }
-.tb-blk.pending { opacity: .55; }
+.tb-blk.pending { border: 1px dashed var(--brandd); }
 /* 🔴 D172(夜班令6 段 3):台面那四个品类色是**浅色系的**,深底上一放就是四块高亮补丁
    —— 店主那张深色截图里「浅色台面卡」说的就是它。深色下换成同色相的暗版 + 浅字。
    为什么不直接令牌化:这四个是**品类色**(手/足/睫/护理),浅深两套本来就该各调一次,
@@ -7649,10 +7658,11 @@ section.card > .section-row:first-child { margin-top: 0; }
 .tb-bs { color: var(--ink); }
 .tb-sdot { font-style: normal; margin-right: 3px; }
 .tb-sdot.active { color: var(--good); }
-.tb-sdot.done { color: var(--brandd); }
+.tb-sdot.done { color: var(--tagw); }
+.dc-warnbar.unsigned, .dc-warnbar.unsigned a { color: var(--bad); }
 .tb-tag { font-style: normal; font-size: 10px; border-radius: 6px; padding: 0 5px; margin-right: 3px; }
 .tb-tag.as-blue { background: var(--tagwbg); color: var(--tagw); }
-.tb-tag.owner { background: var(--tagmbg); color: var(--brandd); }
+.tb-tag.owner { background: var(--tagmbg); color: var(--tagm); }
 .tb-tag.zhi { background: var(--wall); color: #6b4d8f; }
 .tb-tag.xin { background: var(--wall); color: var(--good); }
 .tb-unpaid { font-style: normal; font-size: 10px; color: var(--bad); }
@@ -7756,10 +7766,12 @@ section.card > .section-row:first-child { margin-top: 0; }
 
 /* ===== 员工工作台(staff-workbench.js;08-31 清单#1+#3)===== */
 .swb { display: flex; flex-direction: column; gap: 14px; }
-.swb-card h3 { margin-bottom: 8px; }
+.swb-card { padding: 20px; min-width: 0; }
+.swb-card h3 { margin: 0 0 12px; }
+.swb-card > :last-child { margin-bottom: 0; }
 .swb-week { display: grid; grid-template-columns: repeat(auto-fill, minmax(120px, 1fr)); gap: 8px; }
 .swb-day { border: 1px solid var(--line); border-radius: 8px; padding: 6px 10px; display: flex; flex-direction: column; font-size: 13px; }
-.swb-day.off { opacity: .55; }
+.swb-day.off { color: var(--muted); background: var(--wall); }
 .swb-tiers, .swb-cats { display: flex; gap: 6px; flex-wrap: wrap; margin-bottom: 8px; }
 .swb-items { display: grid; grid-template-columns: repeat(auto-fill, minmax(180px, 1fr)); gap: 6px; margin-bottom: 10px; }
 .swb-item { font-size: 13px; display: flex; align-items: center; gap: 6px; }
@@ -7927,7 +7939,7 @@ section.card > .section-row:first-child { margin-top: 0; }
 
 .dh-bottom { display: grid; grid-template-columns: minmax(0, 1.6fr) minmax(0, 1fr); gap: 12px; align-items: start; }
 @media (max-width: 900px) {
-  .dh-hero, .dh-bottom { grid-template-columns: 1fr; }
+  .dh-hero, .dh-bottom { grid-template-columns: minmax(0, 1fr); }
   .dh-tiles { grid-template-columns: repeat(2, minmax(0, 1fr)); }
 }
 
@@ -7993,10 +8005,27 @@ section.card > .section-row:first-child { margin-top: 0; }
 .modal-head{display:flex;justify-content:space-between;align-items:center;gap:10px;margin-bottom:6px}
 .modal-head h3{margin:0;font-size:1.02rem}
 .modal-actions{display:flex;gap:8px;margin:10px 0}
-.btn-like{flex:1;text-align:center;background:var(--brand,var(--acc));color:var(--card);border-radius:999px;padding:9px 0;font-size:.88rem;font-weight:700;cursor:pointer}
+.btn-like{flex:1;text-align:center;background:var(--brand);color:var(--hero);border-radius:999px;padding:9px 0;font-size:.88rem;font-weight:700;cursor:pointer}
 .btn-like.ghost{background:transparent;border:1px solid var(--line);color:var(--ink);font-weight:500}
 
 /* 顾客端「我签署过的文件」· 只读(图 v2 第 5 屏)。圆角取形制集,颜色全走 token。 */
 .signed-docs-mine{display:flex;flex-direction:column;gap:2px;margin-bottom:8px}
 .signed-doc-mine{display:flex;align-items:center;gap:10px;padding:8px 4px;border-top:1px solid var(--line)}
 .signed-doc-mine:first-child{border-top:0}
+
+/* 原生离散控件不继承文本输入尺寸；覆盖旧局部宽高规则的最小尺寸和内边距。 */
+input[type="checkbox"], input[type="radio"] {
+  width: 18px; height: 18px; min-width: 18px; min-height: 18px;
+  padding: 0; margin: 0; flex: 0 0 18px; accent-color: var(--brandd);
+}
+.sw-sec.dep { display: flex; align-items: flex-start; gap: 10px; line-height: 1.6; }
+.sw-sec.dep input { margin-top: 3px; }
+.swb-item { padding: 6px 0; min-width: 0; }
+.swb-item .subtle { white-space: nowrap; }
+.customer-sort { display: flex; align-items: center; gap: 8px; white-space: nowrap; }
+.customer-sort select { width: auto; min-width: 130px; }
+:root { color-scheme: light; }
+@media (prefers-color-scheme: dark) { :root:not([data-theme="light"]) { color-scheme: dark; } }
+:root[data-theme="dark"] { color-scheme: dark; }
+
+.dh-card, .today-board, .tb-right { min-width: 0; }

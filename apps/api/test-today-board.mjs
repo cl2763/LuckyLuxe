@@ -7,6 +7,7 @@
    ⚠️ standalone:CI_SUITES="today-board" bash apps/api/run-all-tests.sh */
 import { assertTestTarget } from './test-guard.mjs'
 import { readFileSync } from 'node:fs'
+import { availability } from './schedule-availability.mjs'
 import { DUTY_NOTE } from './schedule-board.mjs'
 /* 07f §五 批量切:token 改成问 helper 要(试点形状,见 owner-token.mjs) */
 const { requireOwnerToken } = await import('./owner-token.mjs')
@@ -66,11 +67,12 @@ check('🔴 ① 骨同源:网页台面调同一条 /admin/schedule-day(与小程
 
 /* ===== ② 几何口径同参(与小程序 loadDayView 逐条对) ===== */
 const miniOrders = stripJs(readFileSync(new URL('../../miniprogram/pages/merchant/orders/index.js', import.meta.url), 'utf8'))
-/* 计数而非 includes(突变自检抓的:两处阈值只改坏一处,includes 照样真)——
-   空档阈值在"块间"与"收尾"各一处,两端都必须恰好 2 处 >= 30。 */
-check('② 空档 ≥30 分钟才显示(两端同参,块间+收尾**两处都数**)',
-  (tbCode.match(/>= 30/g) || []).length === 2 && (miniOrders.match(/>= 30/g) || []).length === 2,
-  `web=${(tbCode.match(/>= 30/g) || []).length} mini=${(miniOrders.match(/>= 30/g) || []).length}`)
+// Thresholds now live in the backend once; both clients consume exactly those intervals.
+const windowOf=(bookings,now='08:00')=>availability({active:true,schedule:null,openTime:'08:00',closeTime:'10:00',isClosed:false,date:'2030-10-08',today:'2030-10-08',now,bookings})
+check('② 两端只消费服务端空档',tbCode.includes('t.freeSlots')&&miniOrders.includes('t.freeSlots')&&!tbCode.includes('const frees = [];')&&!miniOrders.includes('const frees = [];'))
+check('② 块间和收尾均排除29分钟、保留30分钟',
+  JSON.stringify(windowOf([{startTime:'08:29',endTime:'09:31'}]).freeSlots)==='[]'&&
+  JSON.stringify(windowOf([{startTime:'08:30',endTime:'09:30'}]).freeSlots)===JSON.stringify([{startTime:'08:00',endTime:'08:30'},{startTime:'09:30',endTime:'10:00'}]))
 check('② 网格范围 = 营业时段 ∪ 当天全部预约(店主 08-09 口径,两端同式)',
   ['Math.min(openMin', 'Math.max(closeMin'].every((k) => tbCode.includes(k) && miniOrders.includes(k)))
 check('② 营业时段外整点行淡色(off 标记同式)',
@@ -117,11 +119,8 @@ check('⑤ 营业时段字段在(网格范围口径的输入)', 'openTime' in da
     /^\d{2}:\d{2}$/.test(day.data.storeNow || '') && day.data.storeToday === today,
     JSON.stringify({ now: day.data.storeNow, td: day.data.storeToday }))
   /* 乙案(店主 08-30g 裁):绿区从「门店现在这一分钟」起,不对齐半点 —— 裁剪式换串重钉 */
-  const clip = 'r.storeNow ? toMin(r.storeNow) : -1'
   const miniOrders2 = stripJs(readFileSync(new URL('../../miniprogram/pages/merchant/orders/index.js', import.meta.url), 'utf8'))
-  check('🔴 D88+乙案 双端同刀:裁过去空档的裁剪式两端逐字同串(各恰 1 处,起点=现在这一分钟)',
-    (tbCode.match(/r\.storeNow \? toMin\(r\.storeNow\) : -1/g) || []).length === 1
-    && (miniOrders2.match(/r\.storeNow \? toMin\(r\.storeNow\) : -1/g) || []).length === 1, clip)
+  check('🔴 D88+乙案 服务端裁空档到现在这一分钟，不对齐半点',windowOf([],'08:17').freeSlots[0].startTime==='08:17'&&windowOf([],'09:31').freeSlots.length===0)
   check('🔴 乙案 反向守:半点对齐式(ceil/30*30)两端零残留(改回对齐即红)',
     (tbCode.match(/Math\.ceil\(toMin\(r\.storeNow\) \/ 30\) \* 30/g) || []).length === 0
     && (miniOrders2.match(/Math\.ceil\(toMin\(r\.storeNow\) \/ 30\) \* 30/g) || []).length === 0)

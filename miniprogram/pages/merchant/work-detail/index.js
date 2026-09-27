@@ -1,6 +1,6 @@
 const api = require('../../../utils/api')
 
-const PLATFORMS = [{ k: 'xiaohongshu', label: '小红书' }, { k: 'douyin', label: '抖音' }]
+const PLATFORMS = [{ k: 'xiaohongshu', label: '小红书' }, { k: 'douyin', label: '抖音' }, { k: 'meituan', label: '美团／大众点评' }, { k: 'instagram', label: 'Instagram' }]
 
 Page({
   // 门禁:未登录/会话失效不渲染空壳,直接回登录页(店主 2026-08-09 红线)
@@ -35,7 +35,7 @@ Page({
       const r = await api.adminGet('/admin/bookings')
       const b = (r.bookings || []).find((x) => x.id === this.id)
       if (!b) { wx.showToast({ title: '未找到作品', icon: 'none' }); return }
-      const imgs = (b.approvedWorkImages && b.approvedWorkImages.length) ? b.approvedWorkImages : (b.workImages || [])
+      const imgs = b.galleryStatus === 'approved' ? (b.approvedWorkImages || []) : []
       this.setData({
         id: b.id, images: imgs, curImg: imgs[0] || '',
         service: (b.service && b.service.name) || '服务',
@@ -44,16 +44,17 @@ Page({
     } catch (e) { wx.showToast({ title: '加载失败', icon: 'none' }) }
   },
 
-  pickImg(e) { this.setData({ curImg: e.currentTarget.dataset.img }) },
+  pickImg(e) { if (this.data.loading) return; this.setData({ curImg: e.currentTarget.dataset.img, result: null, avoid: [] }) },
   previewCur() { if (this.data.curImg) wx.previewImage({ current: this.data.curImg, urls: this.data.images }) },
-  onPlatform(e) { this.setData({ pIdx: Number(e.currentTarget.dataset.i), result: null, avoid: [] }) },
+  onPlatform(e) { if (this.data.loading) { wx.showToast({ title: '正在生成，请稍候再切换', icon: 'none' }); return }; this.setData({ pIdx: Number(e.currentTarget.dataset.i), result: null, avoid: [] }) },
 
   async generate() {
     if (this.data.loading) return
+    if (!this.data.curImg) { wx.showToast({ title: '作品图审核通过后才能生成文案', icon: 'none' }); return }
     this.setData({ loading: true })
     try {
-      const resp = await api.adminPost('/admin/ai/social-copy', {
-        lang: 'zh', bookingId: this.data.id, image: this.data.curImg,
+      const resp = await api.adminPost('/share/social-copy', {
+        lang: 'zh', bookingId: this.data.id, imageIndex: Math.max(0, this.data.images.indexOf(this.data.curImg)),
         platform: this.data.platforms[this.data.pIdx].k, audience: 'customer',
         avoidCaptions: this.data.avoid.slice(-12), variantSeed: String(Date.now())
       })

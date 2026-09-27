@@ -163,6 +163,7 @@ const NOT_MONEY_NUMBER = {
   'pages/merchant/coupon-edit/index.wxml:validDays': '有效天数 —— 计数',
   'pages/merchant/coupon-edit/index.wxml:totalQty': '发放总量 —— 计数',
   'pages/merchant/service-edit/index.wxml:duration': '服务时长(分钟)—— 计数',
+  'pages/merchant/package-edit/index.wxml:item.quantity': '2026-09-26 已确认赠品数量字段，整数计件；单件价值另用 digit，白名单 13→14。',
   'pages/merchant/package-edit/index.wxml:times': '次卡包含次数 —— 计数',
   'pages/merchant/staff/index.wxml:sheet.orders': '单数目标 —— 计数',
   'pages/merchant/orders/index.wxml:shares[p.id + \'|\' + t.id]': '分成百分比 —— 百分数不是金额',
@@ -172,7 +173,7 @@ const NOT_MONEY_NUMBER = {
   'pages/merchant/notify-settings/index.wxml:r.revisitDays': '回访间隔(天)—— 计数;P3 件3 新增',
   'pages/merchant/notify-settings/index.wxml:r.advanceDays': '临期提醒提前天数 —— 计数;P3 件3 新增'
 }
-const NUMBER_CAP = 13
+const NUMBER_CAP = 14
 const numberInputs = allTags.filter((t) => t.type === 'number').map((t) => `${t.page}:${t.valueExpr}`)
 const notWhitelisted = numberInputs.filter((k) => !(k in NOT_MONEY_NUMBER))
 check(`③ 白名单式:全仓 ${numberInputs.length} 个 type="number" 逐个落在「不是金额」白名单里(新来的自动红)`,

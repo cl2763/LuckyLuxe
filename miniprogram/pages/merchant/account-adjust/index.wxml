@@ -33,6 +33,12 @@
         <view class="chip {{rvPkgId === p.id ? 'on' : ''}}" wx:for="{{rvPkgs}}" wx:for-item="p" wx:key="id" data-id="{{p.id}}" bindtap="pickPkg">{{p.label}}</view>
       </view>
     </view>
+    <block wx:for="{{rvPkgs}}" wx:for-item="pkg" wx:key="id">
+      <view wx:if="{{rvPkgId === pkg.id && pkg.giftItems.length}}" class="fldem">
+        <view>套餐赠送物品</view><view wx:for="{{pkg.giftItems}}" wx:for-item="gift" wx:key="index">{{gift.name}} × {{gift.quantity}} · 单件价值 {{gift.unitValueText}}</view>
+        <view>价值不计入储值余额；清单不代表已领取。修改金额后改为手动充值，不含套餐赠品。</view>
+      </view>
+    </block>
     <view class="fld">
       <text class="fldl">充值金额</text>
       <input class="in" type="digit" placeholder="0.00" value="{{rvAmount}}" bindinput="onRvAmount" />

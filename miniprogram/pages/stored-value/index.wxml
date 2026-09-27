@@ -1,7 +1,7 @@
 <view class="pg {{themeClass}}">
   <view class="hero">
     <view class="row"><text class="hl">储值余额</text><text class="lv" wx:if="{{level}}">{{level}}</text></view>
-    <view class="hv">{{cur.p}}{{cur.s}}{{balance}}</view>
+    <view class="hv">{{balanceText}}</view>
     <!-- B1-1(店主拍板):储值卡页=充值套餐唯一出口;补件①:按钮不枚举支付方式(租户中立) -->
     <view class="charge" bindtap="goMall">去充值 ›</view>
   </view>
@@ -13,7 +13,11 @@
       <view class="rc-l">
         <view class="pn">门店已为你充值 {{item.amount}}</view>
         <view class="ps">{{item.at}}{{item.channel ? ' · ' + item.channel : ''}}{{item.note ? ' · ' + item.note : ''}}</view>
-        <view class="ps">当前余额见顶部;如金额有出入请联系门店。</view>
+        <view class="ps">当前余额见顶部;如金额有出入请联系门店。</view><view wx:if="{{item.giftItems.length}}" class="gift-list">
+        <view class="gift-title">赠送物品</view>
+        <view class="gift-line" wx:for="{{item.giftItems}}" wx:for-item="gift" wx:key="index"><text>{{gift.name}} × {{gift.quantity}}</text><text class="gift-unit">单件价值 {{gift.unitValueText}}</text></view>
+        <view class="gift-note">物品领取请联系门店，此清单不代表已领取。</view>
+      </view>
       </view>
       <view class="buy" data-id="{{item.id}}" bindtap="confirmRecharge">确认到账</view>
     </view>
@@ -33,7 +37,11 @@
   <view class="t2">收支明细</view>
   <view wx:if="{{txns.length}}" class="list">
     <view class="li" wx:for="{{txns}}" wx:key="id">
-      <view class="li-main"><view class="li-t">{{item.title}}<text wx:if="{{item.needsConfirm}}" class="li-unconfirmed">待确认</text></view><view class="li-d">{{item.date}}</view></view>
+      <view class="li-main"><view class="li-t">{{item.title}}<text wx:if="{{item.needsConfirm}}" class="li-unconfirmed">待确认</text></view><view class="li-d">{{item.date}}</view><view wx:if="{{item.giftItems.length}}" class="gift-list">
+        <view class="gift-title">赠送物品</view>
+        <view class="gift-line" wx:for="{{item.giftItems}}" wx:for-item="gift" wx:key="index"><text>{{gift.name}} × {{gift.quantity}}</text><text class="gift-unit">单件价值 {{gift.unitValueText}}</text></view>
+        <view class="gift-note">物品领取请联系门店，此清单不代表已领取。</view>
+      </view></view>
       <text class="li-v {{item.up ? 'up' : 'down'}}">{{item.delta}}</text>
     </view>
   </view>

@@ -1,71 +1,24 @@
 <!doctype html>
 <html lang="zh-CN">
 <head>
-  <meta charset="utf-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>作品留档</title>
-  <!-- 🔴 夜7 段2 现测出来的事故:`styles.css` 在 05z 那一轮令牌化之后,
-       整份都在用 `var(--paper/--ink/--card/--line/--sub)` —— 而**这一页从来没引过令牌文件**,
-       于是那些 var() 全是空的:顾客端底色透明、字色回落成纯黑,整页塌掉。
-       令牌必须排在 styles.css **前面**(后者靠它取值)。 -->
-  <link rel="stylesheet" href="/web/design-tokens.css?v=20260610-member-code-fix6">
-  <link rel="stylesheet" href="/web/styles.css?v=20260610-member-code-fix6">
+  <meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+  <title>作品分享</title>
+  <link rel="stylesheet" href="/web/design-tokens.css?v=20260926-review2">
+  <link rel="stylesheet" href="/web/styles.css?v=20260928-review2">
+  <link rel="stylesheet" href="/web/share.css?v=20260928-review2">
+  <script src="/web/theme-switch.js?v=20260926-review2"></script>
 </head>
-<body>
-  <main class="share-shell">
-    <header class="share-header">
-      <div class="brand">
-        <span class="brand-mark">LL</span>
-        <span>
-          <strong id="shareBrand"></strong>
-          <small>Nail & Lash Atelier</small>
-        </span>
-      </div>
-      <div class="language-toggle">
-        <button class="active" id="shareZh" type="button">中文</button>
-        <button id="shareEn" type="button">EN</button>
-      </div>
-    </header>
-
-    <section class="share-card card">
-      <p class="eyebrow" id="shareEyebrow">作品分享</p>
-      <h1 id="shareTitle">作品留档</h1>
-      <p class="subtle" id="shareSubtitle">选择平台，复制文案后即可发布。</p>
-
-      <!-- 退回三(02f):专用空态节点 + 图区最小容器 —— 不整块重写 innerHTML(会抹掉标题/平台选择器,
-           且把 els.mainImage 的引用打空,中英切换再渲染就落到已移除的节点上,与 01t 弹层那族同雷)。 -->
-      <p class="subtle hidden" id="shareEmptyNote"></p>
-      <div class="share-photo-layout" id="shareImageArea">
-        <div class="share-main-photo">
-          <!-- 退回二同刀:html 里这张写死的平台示例图也拔掉,src 由真数据填 -->
-          <img id="shareMainImage" alt="">
-        </div>
-        <div class="share-photo-strip" id="sharePhotoStrip"></div>
-      </div>
-
-      <div class="share-original-grid" id="shareOriginalGrid"></div>
-    </section>
-
-    <section class="share-card card">
-      <div class="section-row compact-row">
-        <div>
-          <p class="eyebrow" id="platformEyebrow">发布平台</p>
-          <h2 id="platformTitle">平台文案</h2>
-        </div>
-        <select id="platformSelect">
-          <option value="xiaohongshu">小红书</option>
-          <option value="douyin">抖音</option>
-          <option value="instagram">Instagram</option>
-        </select>
-      </div>
-      <div class="ai-copy-box share-copy-box" id="shareCopyBox"></div>
-      <div class="share-actions">
-        <button class="primary slim" id="copyShareCaption" type="button">复制文案</button>
-        <a class="ghost slim" id="openPlatform" href="https://www.xiaohongshu.com/" target="_blank" rel="noreferrer">打开平台</a>
-      </div>
-    </section>
-  </main>
-  <div class="toast" id="shareToast"></div>
-  <script src="/web/share.js?v=20260610-member-code-fix6"></script>
-</body>
-</html>
+<body class="work-share-page">
+<main class="work-share-shell">
+  <div class="work-share-language"><button id="shareZh" type="button">中文</button><button id="shareEn" type="button">EN</button></div>
+  <article class="work-share-card">
+    <header class="work-share-head"><div><p class="work-share-tag" id="shareEyebrow">作品分享</p><h1 id="shareTitle">作品分享</h1><p id="shareSubtitle"></p></div><a class="work-share-button" id="shareReturn" href="/">返回订单</a></header>
+    <section id="shareNotice" class="work-share-notice" role="status" aria-live="polite"><h2 id="noticeTitle">正在加载作品…</h2><p id="noticeText"></p><a id="shareLogin" class="work-share-button" href="/" hidden>前往登录</a></section>
+    <div class="work-share-content" id="shareContent" hidden>
+      <section class="work-share-preview"><div class="work-share-photo"><img id="shareMainImage" alt="本单已审核作品"></div><div class="work-share-thumbs" id="sharePhotoStrip"></div><p class="work-share-under" id="sharePhotoNote">点击缩略图切换预览；保留图片原始比例。</p></section>
+      <section class="work-share-editor"><h2 id="platformTitle">发布平台</h2><div class="work-share-platforms" id="platforms" role="group" aria-label="发布平台"><button data-platform="xiaohongshu">小红书</button><button data-platform="douyin">抖音</button><button data-platform="meituan">美团／大众点评</button><button data-platform="instagram">Instagram</button></div><label for="shareCopyBox" id="shareCopyLabel">分享文案 · 可修改</label><textarea id="shareCopyBox" rows="8"></textarea><p id="shareCopyStatus" class="work-share-status" role="status" aria-live="polite"></p><div class="work-share-actions"><button class="work-share-primary" id="copyShareCaption" disabled>复制文案</button><a class="work-share-button" id="openPlatform" target="_blank" rel="noopener noreferrer">打开小红书</a><a class="work-share-button" id="openDianping" href="https://www.dianping.com/" target="_blank" rel="noopener noreferrer" hidden>打开大众点评</a><button id="retryCopy" hidden>重新生成</button></div><p class="work-share-under" id="shareActionNote">复制后前往平台，选择作品图并发布。</p></section>
+    </div>
+  </article>
+</main><div class="toast" id="shareToast" role="status" aria-live="polite"></div>
+<script src="/web/share.js?v=20260926-review2"></script>
+</body></html>

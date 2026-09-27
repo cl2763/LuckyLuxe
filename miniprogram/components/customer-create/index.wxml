@@ -1,0 +1,12 @@
+<view wx:if="{{shown}}" class="cc-mask theme-root {{themeClass}}" catchtap="close">
+  <view class="cc-panel" catchtap="stop">
+    <view class="cc-title">新建顾客</view>
+    <view class="cc-label">顾客姓名 <text class="cc-required">必填</text></view><input class="cc-input" maxlength="40" value="{{name}}" bindinput="nameInput" placeholder="顾客姓名" />
+    <view class="cc-label">联系方式 <text class="cc-required">选填</text></view><input class="cc-input" maxlength="32" value="{{phone}}" bindinput="phoneInput" placeholder="手机号／联系电话" />
+    <view class="cc-note">没留电话也可建档。后续出示绑定码，由顾客在自己的微信中确认本人。</view>
+    <view class="cc-error">{{error}}</view>
+    <button class="cc-button" wx:for="{{candidates}}" wx:key="id" data-id="{{item.id}}" bindtap="useExisting">使用已有档案：{{item.displayName}} · {{item.phoneMasked}}</button>
+    <button class="cc-button" wx:if="{{candidates.length}}" bindtap="duplicate">同号不同人，仍新建档案</button>
+    <view class="cc-actions"><button class="cc-button" disabled="{{busy}}" bindtap="close">取消</button><button class="cc-button cc-save" loading="{{busy}}" disabled="{{busy}}" bindtap="save">保存档案</button></view>
+  </view>
+</view>

@@ -36,7 +36,7 @@ page{background:var(--card)}
 /* 老板看板 */
 .boardhead{display:flex;justify-content:space-between;align-items:center;margin-bottom:18rpx}
 .bh-t{font-size:30rpx;font-weight:800;color:var(--ink)}
-.bh-wifi{font-size:21rpx;color:var(--brandd);font-weight:700}.wifibtn {background:linear-gradient(135deg,#c8a47e,#b5885d);border-radius:999rpx;padding:20rpx 24rpx;margin-bottom:18rpx;box-shadow:0 6rpx 16rpx rgba(181,136,93,.25)}
+.bh-wifi{font-size:21rpx;color:var(--brandd);font-weight:700}.wifibtn {color:var(--hero);background:linear-gradient(135deg,#c8a47e,#b5885d);border-radius:999rpx;padding:20rpx 24rpx;margin-bottom:18rpx;box-shadow:0 6rpx 16rpx rgba(181,136,93,.25)}
 .wifibtn:active{opacity:.85}
 .wb-l{font-size:27rpx;font-weight:800;color:var(--heroink)}
 .wb-d{font-size:20rpx;color:var(--heroink);margin-top:4rpx}

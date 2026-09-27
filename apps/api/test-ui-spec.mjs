@@ -93,5 +93,7 @@ check('⑧ 开关 .ui-sw=hsw-sw 同一条规则别名且胶囊(开关单一真�
 const duty = readFileSync(join(ROOT, 'apps/web/duty-setting.js'), 'utf8')
 check('⑨ D98 值日行=ui-sw 行右开关(不再是 checkbox 巨方框)', duty.includes('class="ui-sw ${on ? \'on\' : \'\'}"') && !duty.includes('type="checkbox"'))
 const ordersWxss = readFileSync(join(ROOT, 'miniprogram/pages/merchant/orders/index.wxss'), 'utf8')
-check('⑩ D94 小程序值日 chips=胶囊+选中黑白', ordersWxss.includes('border-radius: 999rpx') && ordersWxss.includes('.dv-duty-chip.on { background: #1f1b16;'))
+// Selected controls use the paired theme colors so dark mode retains contrast.
+const dutyOn = ordersWxss.match(/\.dv-duty-chip\.on\s*\{([^}]+)\}/)?.[1] || ''
+check('⑩ D94 小程序值日 chips=胶囊+成对主题色', /\.dv-duty-chip\s*\{[^}]*border-radius:\s*999rpx/.test(ordersWxss) && /background:\s*var\(--hero\)/.test(dutyOn) && /color:\s*var\(--heroink\)/.test(dutyOn))
 console.log(`[ui-spec] all ${checks} checks passed`)

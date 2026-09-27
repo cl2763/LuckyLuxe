@@ -14,6 +14,8 @@
    空档块「+ 直接排单」· 订单块(时间/顾客/服务 + 状态点 ●/✓ + 徽标)· 图例两行。
    「待日结」pill 直达财务日结页(小程序是同屏下半块;网页日结住财务页 —— 一次点击到达,动作数同)。 */
 window.TodayBoard = (function () {
+ function createBoard() {
+  let root=null, generation=0
   const PX_PER_HOUR = 48                       // 小程序 96rpx/h ≈ 48px/h,同一比例
   const WK = ['日', '一', '二', '三', '四', '五', '六']
   const toMin = (t) => { const [h, m] = String(t || '0:0').split(':').map(Number); return h * 60 + (m || 0) }
@@ -23,15 +25,20 @@ window.TodayBoard = (function () {
   let stateT = { date: '', dv: null, deps: null, free: null }   // free = 空档直排面板 { techId, time, q, hits, userId, name, newName, serviceId }
 
   async function load(date, deps) {
+    const sequence=++generation
     stateT.deps = deps
     stateT.date = date
     const { request, toast } = deps
     try {
       const r = await request(`/admin/schedule-day?date=${date}`)
       /* D97(01t):待写小记数与台面同批拉(既有口 /admin/service-notes/pending) */
-      try { stateT.pendingNotes = (await request(`/admin/service-notes/pending?date=${date}`)).items || [] } catch { stateT.pendingNotes = [] }
+      let pendingNotes = []
+      try { pendingNotes = (await request(`/admin/service-notes/pending?date=${date}`)).items || [] } catch {}
+      if(sequence!==generation)return
+      stateT.pendingNotes = pendingNotes
       stateT.dv = assemble(date, r, deps)
     } catch (e) {
+      if(sequence!==generation)return
       stateT.dv = null
       toast((e && e.message) || '加载今日台面失败')
     }
@@ -100,19 +107,8 @@ window.TodayBoard = (function () {
           depositUnpaid: b.depositUnpaid, afterSalesTag: b.afterSalesTag || ''
         }
       })
-      /* D88(08-30c)+ 乙案(店主 08-30g 裁):过去的时段不出「+直接排单」——今天的空档起点
-         截到「门店现在这一分钟」,不再对齐下一个半点(随点随排);
-         「现在」只认后端 storeNow(门店时区),不裸 new Date 推 */
-      const minStart = date === r.storeToday && r.storeNow ? toMin(r.storeNow) : -1
-      const frees = []; let cursor = openMin
-      list.forEach((b) => {
-        const s = toMin(b.startTime)
-        const from = Math.max(cursor, minStart)
-        if (s - from >= 30) { frees.push({ startTime: m2t(from), endTime: m2t(s), top: Math.round((from - openMin) / 60 * PX_PER_HOUR), height: Math.round((s - from) / 60 * PX_PER_HOUR) }); freeTotal += (s - from) }
-        cursor = Math.max(cursor, toMin(b.endTime))
-      })
-      const tailFrom = Math.max(cursor, minStart)
-      if (closeMin - tailFrom >= 30) { frees.push({ startTime: m2t(tailFrom), endTime: m2t(closeMin), top: Math.round((tailFrom - openMin) / 60 * PX_PER_HOUR), height: Math.round((closeMin - tailFrom) / 60 * PX_PER_HOUR) }); freeTotal += (closeMin - tailFrom) }
+      // Empty slots are authoritative backend intervals clipped to the technician's shift.
+      const frees=(t.freeSlots||[]).map(f=>{const start=toMin(f.startTime),end=toMin(f.endTime);freeTotal+=end-start;return {...f,top:Math.round((start-openMin)/60*PX_PER_HOUR),height:Math.round((end-start)/60*PX_PER_HOUR)}})
       /* 🔴 分栏之后还有一条要管:**列宽**。现测(北京店灌满数据后)一位技师有 6 张交叠单,
          六条泳道挤在 150px 里,每条只剩 20 多像素 —— 不重叠了,但字被压成一条竖线,
          「不重叠」与「看得清」是两件事,只做前一件等于把病换了个长相。
@@ -130,7 +126,7 @@ window.TodayBoard = (function () {
       hoursUnset: Boolean(r.hoursUnset),   // D84 三态:未设置 ≠ 休息
       isClosed: r.isClosed, specialNote: r.specialNote || '',
       gridH, hours, cols,
-      total: (r.bookings || []).length, working: cols.length,
+      total: (r.bookings || []).length, working: (r.technicians||[]).filter(t=>t.isWorking).length,
       freeHours: Math.round(freeTotal / 60 * 10) / 10, activeCount: r.activeCount || 0,
       duty: r.duty || null,  // 31l 值日:开关关=后端整块不下发=零渲染
       backfill: r.backfill || null   // 补录小合同(01v):过去日后端才下发;今天/未来整块不出现
@@ -138,7 +134,7 @@ window.TodayBoard = (function () {
   }
 
   function render() {
-    const mount = document.querySelector('#todayBoard')
+    const mount = root
     if (!mount) return
     const { escapeHtml, pendingCloseCount } = stateT.deps
     const dv = stateT.dv
@@ -271,6 +267,7 @@ window.TodayBoard = (function () {
         <input class="sw-in" type="time" data-tbf-time value="${escapeHtml(f.timeSel || f.time)}" min="${escapeHtml(f.time)}" ${f.end ? `max="${escapeHtml(f.end)}"` : ""}>
         <div class="sw-sec">顾客(搜现有,或直接填新客姓名)</div>
         <input class="sw-in full" data-tbf-q placeholder="搜姓名 / 手机号,或直接填新客姓名" value="${escapeHtml(f.q || '')}">
+        ${f.userId ? `<p class="subtle">已选：${escapeHtml(f.name || f.q)} · ${escapeHtml(f.phoneMasked || '未留联系方式')} <button class="ghost slim" data-tbf-clear type="button">重新选择</button>` : `<label class="sw-sec">联系方式 <span class="subtle">选填</span><input class="sw-in full" type="tel" maxlength="32" data-tbf-phone placeholder="知道联系方式可填写，也可以留空" value="${escapeHtml(f.phone || '')}"></label>`}
         ${(f.hits || []).map(function (h) { return `<button class="sw-cpn ${f.userId === h.id ? 'on' : ''}" data-tbf-pick="${escapeHtml(h.id)}" data-name="${escapeHtml(h.displayName)}" type="button"><span class="l"><span class="n">${escapeHtml(h.displayName)}</span><span class="s">${escapeHtml(h.phoneMasked || '')}</span></span></button>` }).join('')}
         ${f.userId ? `<p class="sw-grppicked">已选:${escapeHtml(f.name)}(再点搜索结果可换)</p>` : (f.q ? `<p class="sw-hint-line">没选中现有顾客时,「${escapeHtml(f.q)}」将按**新客**建档排单</p>` : '')}
         <div class="sw-sec">服务项目(大类 → 小类,与结算目录同源)</div>
@@ -330,21 +327,24 @@ window.TodayBoard = (function () {
     })
     mount.querySelector('[data-tbf-q]')?.addEventListener('input', function (e2) {
       const f = stateT.free
-      f.q = e2.target.value; f.userId = ''
+      f.q = e2.target.value; f.userId = ''; f.phoneMasked = ''; f.hits = []
       clearTimeout(stateT._ft)
       stateT._ft = setTimeout(async function () {
         const q = f.q.trim()
         if (!q) { f.hits = []; render(); return }
         const r = await deps.request(`/admin/customers?q=${encodeURIComponent(q)}`).catch(function () { return { customers: [] } })
-        f.hits = (r.customers || []).slice(0, 5).map(function (c) { return { id: c.id, displayName: c.displayName, phoneMasked: c.phoneMasked || '' } })
+        if (stateT.free !== f || f.q.trim() !== q || f.userId) return
+        f.hits = (r.customers || []).slice(0, 5).map(function (c) { return { id: c.id, displayName: c.displayName, phoneMasked: c.phoneMasked || String(c.phone || '').replace(/(.{3}).*(.{4})/, '$1****$2') } })
         render()
         const box = mount.ownerDocument.querySelector('[data-tbf-q]')
         if (box) { box.focus(); box.setSelectionRange(box.value.length, box.value.length) }
       }, 300)
     })
     mount.querySelectorAll('[data-tbf-pick]').forEach(function (el) {
-      el.addEventListener('click', function () { stateT.free.userId = el.dataset.tbfPick; stateT.free.name = el.dataset.name; render() })
+      el.addEventListener('click', function () { stateT.free.userId = el.dataset.tbfPick; stateT.free.name = el.dataset.name; stateT.free.q = el.dataset.name; stateT.free.phoneMasked = (stateT.free.hits || []).find(h => h.id === el.dataset.tbfPick)?.phoneMasked || ''; stateT.free.hits = []; stateT.free.phone = ''; render() })
     })
+    mount.querySelector('[data-tbf-phone]')?.addEventListener('input', e => { stateT.free.phone = e.target.value })
+    mount.querySelector('[data-tbf-clear]')?.addEventListener('click', () => { Object.assign(stateT.free, {userId:'',name:'',q:'',phone:'',phoneMasked:'',hits:[]}); render() })
     mount.querySelectorAll('[data-tbf-cat]').forEach(function (el) {
       el.addEventListener('click', function () {
         const f = stateT.free
@@ -386,7 +386,7 @@ window.TodayBoard = (function () {
         const body = { serviceId: f.serviceId, technicianId: f.techId, date: stateT.date, time: f.timeSel || f.time, durationMin: f.durationMin, depositPaid: f.deposit === true }
         if (stateT.dv && stateT.dv.backfill) body.backfill = true   // 合同一:过去日走补录口(同一条路由)
         if (f.userId) body.userId = f.userId
-        else body.newCustomerName = f.q.trim()
+        else { body.newCustomerName = f.q.trim(); body.phone = (f.phone || '').trim() }
         const created = await deps.request('/admin/bookings/direct', { method: 'POST', body: JSON.stringify(body) })
         f.busy = false
         stateT.free = null
@@ -414,7 +414,8 @@ window.TodayBoard = (function () {
   /* 接线收在模块里(棘轮:admin.js 只留 4 行转发):容器 + 缺省 deps 一次装配。
      「待日结」不重复出 pill —— 订单页顶的直达条(dcJumpBar)本来就在;空档点排=本端直排面板(renderFreePanel)。 */
   function mountInto(listEl, deps) {
-    listEl.innerHTML = '<div id="todayBoard"></div>'
+    listEl.innerHTML = '<div class="today-board"></div>'
+    root=listEl.firstElementChild
     load(deps.storeToday(), Object.assign({
       pendingCloseCount: 0,
       goHoursSetup: function () {
@@ -445,5 +446,7 @@ window.TodayBoard = (function () {
     }, deps))
   }
 
-  return { load, render, mountInto, _state: stateT }
+  return { load, render, mountInto }
+ }
+ return { mountInto(listEl,deps){const board=createBoard();board.mountInto(listEl,deps);return board} }
 })()

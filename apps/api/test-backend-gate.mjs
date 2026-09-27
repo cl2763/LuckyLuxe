@@ -87,8 +87,8 @@ await gate('A3 券面额 ≤ 0',
 
 // A4 套餐售价/次数(前端拦「请输入售价 / 请输入次数」)
 await gate('A4 套餐售价 ≤ 0',
-  { path: '/admin/packages', body: { name: `闸门套餐${RUN}`, kind: 'stored', priceCents: 0 } },
-  { path: '/admin/packages', body: { name: `闸门套餐良${RUN}`, kind: 'stored', priceCents: 100000 } })
+  { path: '/admin/packages', body: { name: `闸门套餐${RUN}`, kind: 'recharge', priceCents: 0 } },
+  { path: '/admin/packages', body: { name: `闸门套餐良${RUN}`, kind: 'recharge', priceCents: 100000 } })
 
 // A5 服务价格(前端拦「请输入有效价格」)
 await gate('A5 服务价格为负',

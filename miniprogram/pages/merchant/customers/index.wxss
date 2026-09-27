@@ -1,27 +1,27 @@
-page{background:#fbf8f5}
+page{background:var(--paper)}
 .page{padding:20rpx 26rpx 60rpx}
-.srch{background:#fff;border:1rpx solid #e7ddd4;border-radius:14rpx;padding:0 20rpx;height:76rpx;display:flex;align-items:center;margin-bottom:14rpx}
-.inp{flex:1;font-size:26rpx;color:#2d2826}
-.ph{color:#b6a99b}
-.chips{white-space:nowrap;margin-bottom:12rpx}.chip {display:inline-block;font-size:22rpx;color:#8c8279;background:#fff;border:1rpx solid #e7ddd4;border-radius:999rpx;padding:8rpx 20rpx;margin-right:12rpx}
-.chip.on{background:#f1e7df;color:#9b7655;border-color:#c8a47e}
-.sortbar{font-size:22rpx;color:#8c8279;margin-bottom:14rpx}
-.sopt{margin-left:14rpx;color:#8c8279}
-.sopt.on{color:#9b7655;font-weight:600}
-.empty{text-align:center;color:#8c8279;font-size:24rpx;padding:60rpx 0}
-.cust{display:flex;align-items:center;gap:14rpx;background:#fff;border:1rpx solid #e7ddd4;border-radius:16rpx;padding:16rpx 16rpx;margin-bottom:12rpx}
-.av{width:64rpx;height:64rpx;border-radius:50%;background:#f1e7df;color:#9b7655;display:flex;align-items:center;justify-content:center;font-weight:600;font-size:26rpx;flex:0 0 auto}
+.srch{background:var(--card);border:1rpx solid var(--line);border-radius:14rpx;padding:0 20rpx;height:76rpx;display:flex;align-items:center;margin-bottom:14rpx}
+.inp{flex:1;font-size:26rpx;color:var(--ink)}
+.ph{color:var(--sub)}
+.chips{white-space:nowrap;margin-bottom:12rpx}.chip {display:inline-block;font-size:22rpx;color:var(--sub);background:var(--card);border:1rpx solid var(--line);border-radius:999rpx;padding:8rpx 20rpx;margin-right:12rpx}
+.chip.on{background:var(--wall);color:var(--brandd);border-color:var(--brand)}
+.sortbar{font-size:22rpx;color:var(--sub);margin-bottom:14rpx}
+.sopt{margin-left:14rpx;color:var(--sub)}
+.sopt.on{color:var(--brandd);font-weight:600}
+.empty{text-align:center;color:var(--sub);font-size:24rpx;padding:60rpx 0}
+.cust{display:flex;align-items:center;gap:14rpx;background:var(--card);border:1rpx solid var(--line);border-radius:16rpx;padding:16rpx 16rpx;margin-bottom:12rpx}
+.av{width:64rpx;height:64rpx;border-radius:50%;background:var(--wall);color:var(--brandd);display:flex;align-items:center;justify-content:center;font-weight:600;font-size:26rpx;flex:0 0 auto}
 .cmain{flex:1;min-width:0}
-.cname{font-size:27rpx;font-weight:600;color:#2d2826}
-.tier{font-size:20rpx;color:#8c8279;background:#fbf8f5;border:1rpx solid #e7ddd4;border-radius:40rpx;padding:2rpx 12rpx;margin-left:6rpx}
-.tier.hi{color:#9b7655;background:#f1e7df}
-.cmeta{font-size:22rpx;color:#8c8279;margin-top:6rpx}
+.cname{font-size:27rpx;font-weight:600;color:var(--ink)}
+.tier{font-size:20rpx;color:var(--sub);background:var(--paper);border:1rpx solid var(--line);border-radius:999rpx;padding:2rpx 12rpx;margin-left:6rpx}
+.tier.hi{color:var(--brandd);background:var(--wall)}
+.cmeta{font-size:22rpx;color:var(--sub);margin-top:6rpx}
 .ctags{margin-top:8rpx}
-.tg{font-size:20rpx;color:#9b7655;background:#f1e7df;border-radius:40rpx;padding:2rpx 12rpx;margin-right:8rpx}
-.chev{color:#c7b9ab;font-size:34rpx;flex:0 0 auto}
+.tg{font-size:20rpx;color:var(--brandd);background:var(--wall);border-radius:999rpx;padding:2rpx 12rpx;margin-right:8rpx}
+.chev{color:var(--sub);font-size:34rpx;flex:0 0 auto}
 
 /* ===== RFM 分层 ===== */
-.sec{font-size:22rpx;color:#9a8c7c;font-weight:700;margin:4rpx 2rpx 12rpx}
+.sec{font-size:22rpx;color:var(--sub);font-weight:700;margin:4rpx 2rpx 12rpx}
 /* 真机 WebView 对 calc+rpx 支持不稳,用百分比+space-between 保证 2×2 */
 .tiers{display:flex;flex-wrap:wrap;justify-content:space-between;margin-bottom:6rpx}
 .tcard{width:48.5%;margin-bottom:12rpx;border-radius:20rpx;padding:20rpx 22rpx;color:#fff;position:relative;box-sizing:border-box}
@@ -41,35 +41,37 @@ page{background:#fbf8f5}
 .tbadge.s{background:var(--flatbg);color:var(--flat)}
 .ops{display:flex;gap:12rpx;margin-bottom:10rpx}
 .op{flex:1;text-align:center;font-size:24rpx;font-weight:700;border-radius:14rpx;padding:18rpx 0}
-.op.o1{background:#fff;border:1rpx solid #e7ddd4;color:#5c4630}
-.op.o2{background:linear-gradient(135deg,#2d2826,#463d34);color:#e8c9a0}
+.op.o1{background:var(--card);border:1rpx solid var(--line);color:var(--ink)}
+.op.o2{background:var(--hero);color:var(--heroink)}
 .op.dim{opacity:.6}
-.opshint{font-size:19rpx;color:#a5674c;margin-bottom:12rpx;line-height:1.5}
+.opshint{font-size:19rpx;color:var(--sub);margin-bottom:12rpx;line-height:1.5}
 .cm{flex:none;text-align:right}
-.cm .m1{font-size:26rpx;font-weight:800;color:#241f1d}
-.cm .m2{font-size:18rpx;color:#9a8c7c;margin-top:2rpx}
+.cm .m1{font-size:26rpx;font-weight:800;color:var(--ink)}
+.cm .m2{font-size:18rpx;color:var(--sub);margin-top:2rpx}
 .sechead{display:flex;justify-content:space-between;align-items:center;margin:4rpx 2rpx 12rpx}
 .sechead .sec{margin:0}
-.rulebtn{font-size:22rpx;color:#b5885d;font-weight:700;background:#fff;border:1rpx solid #e7ddd4;border-radius:999rpx;padding:6rpx 18rpx}
+.rulebtn{font-size:22rpx;color:var(--brandd);font-weight:700;background:var(--card);border:1rpx solid var(--line);border-radius:999rpx;padding:6rpx 18rpx}
 
 /* 规则/发券弹层 */
 .mask{position:fixed;left:0;top:0;right:0;bottom:0;background:rgba(36,26,18,.45);z-index:1999}
-.rsheet{position:fixed;left:0;right:0;bottom:0;background:#fff;border-radius:24rpx 24rpx 0 0;padding:28rpx 28rpx calc(28rpx + env(safe-area-inset-bottom));z-index:2000;max-height:75vh;overflow-y:auto}
-.rs-t{font-size:30rpx;font-weight:800;color:#241f1d;margin-bottom:6rpx}
-.rs-k{font-size:22rpx;color:#9a8c7c;font-weight:700;margin:18rpx 0 8rpx}
-.rs-row{display:flex;align-items:center;gap:14rpx;background:#fbf8f5;border:1rpx solid #eadfd7;border-radius:12rpx;padding:14rpx 18rpx;margin-bottom:10rpx}
-.rl{font-size:25rpx;color:#241f1d;font-weight:600}
-.rn{flex:1;height:56rpx;line-height:56rpx;background:#fff;border:1rpx solid #eadfd7;border-radius:10rpx;text-align:center;font-size:27rpx;font-weight:800;color:#b5885d}
-.ru{font-size:23rpx;color:#9a8c7c;flex:none}
-.rs-note{font-size:20rpx;color:#9a8c7c;text-align:center;margin-top:10rpx;line-height:1.5}
-.rs-save{margin-top:20rpx;background:#2d2826;color:#fff;text-align:center;padding:24rpx;border-radius:14rpx;font-size:28rpx;font-weight:800}
-.cp-row{display:flex;align-items:center;justify-content:space-between;border:1rpx solid #eadfd7;border-radius:14rpx;padding:20rpx;margin-bottom:12rpx}
-.cp-n{font-size:27rpx;font-weight:700;color:#241f1d}
-.cp-d{font-size:21rpx;color:#9a8c7c;margin-top:3rpx}
+.rsheet{position:fixed;left:0;right:0;bottom:0;background:var(--card);border-radius:24rpx 24rpx 0 0;padding:28rpx 28rpx calc(28rpx + env(safe-area-inset-bottom));z-index:2000;max-height:75vh;overflow-y:auto}
+.rs-t{font-size:30rpx;font-weight:800;color:var(--ink);margin-bottom:6rpx}
+.rs-k{font-size:22rpx;color:var(--sub);font-weight:700;margin:18rpx 0 8rpx}
+.rs-row{display:flex;align-items:center;gap:14rpx;background:var(--paper);border:1rpx solid var(--line);border-radius:12rpx;padding:14rpx 18rpx;margin-bottom:10rpx}
+.rl{font-size:25rpx;color:var(--ink);font-weight:600}
+.rn{flex:1;height:56rpx;line-height:56rpx;background:var(--card);border:1rpx solid var(--line);border-radius:10rpx;text-align:center;font-size:27rpx;font-weight:800;color:var(--brandd)}
+.ru{font-size:23rpx;color:var(--sub);flex:none}
+.rs-note{font-size:20rpx;color:var(--sub);text-align:center;margin-top:10rpx;line-height:1.5}
+.rs-save{margin-top:20rpx;background:var(--hero);color:var(--heroink);text-align:center;padding:24rpx;border-radius:14rpx;font-size:28rpx;font-weight:800}
+.cp-row{display:flex;align-items:center;justify-content:space-between;border:1rpx solid var(--line);border-radius:14rpx;padding:20rpx;margin-bottom:12rpx}
+.cp-n{font-size:27rpx;font-weight:700;color:var(--ink)}
+.cp-d{font-size:21rpx;color:var(--sub);margin-top:3rpx}
 .cp-go{font-size:24rpx;font-weight:800;color:var(--hero);background:var(--brand);border-radius:999rpx;padding:10rpx 26rpx}
 
 /* 拍板②:员工受限视图的说明条 */
-.staffnote{margin:16rpx 24rpx 0;font-size:22rpx;color:#8a5a2b;background:#fdf3ec;border-radius:10rpx;padding:12rpx 16rpx}
+.staffnote{margin:16rpx 24rpx 0;font-size:22rpx;color:var(--tagm);background:var(--tagmbg);border-radius:10rpx;padding:12rpx 16rpx}
 
 /* 图 A①-2:客户档案上的爽约留存定金 */
-.cretain{margin-top:6rpx;font-size:21rpx;color:#5b7a99;background:#edf2f7;border:1rpx solid #cfdcea;border-radius:8rpx;padding:4rpx 12rpx;display:inline-block}
+.cretain{margin-top:6rpx;font-size:21rpx;color:var(--tagw);background:var(--tagwbg);border:1rpx solid var(--line);border-radius:8rpx;padding:4rpx 12rpx;display:inline-block}
+
+.new-customer-btn{margin:0 0 20rpx auto;font-size:26rpx;line-height:1.6;padding:16rpx 24rpx;width:max-content;max-width:100%;border-radius:999rpx;background:var(--brand);color:var(--hero)}

@@ -1,5 +1,6 @@
 #!/usr/bin/env node
-// 有迹 · 演示店种子脚本(生产可跑)
+// 有迹 · 旧版页面造景脚本（不用于金额/账证验收）
+// 完整一致演示请用 tools/consistent-demo.mjs；--catalog-only 只铺目录与账号，不铺交易。
 //
 // 用途:在生产库里造两家**纯演示**门店,给店主对外演示用,与真实商户数据完全隔离。
 //   demo-ai     「星野美甲(AI版)」   —— AI 全开:智能客服/日报/召回话术/参考图报价/小记结构化
@@ -86,7 +87,13 @@ function columnsOf(table) {
 function hasTable(table) {
   return Boolean(db.prepare("SELECT name FROM sqlite_master WHERE type='table' AND name = ?").get(table))
 }
+const catalogExcluded = new Set(['bookings', 'booking_status_history', 'booking_images',
+  'service_notes', 'finance_transactions', 'stored_value_transactions', 'coupon_grants',
+  'points_transactions', 'finance_recurring_rules', 'salary_adjusts', 'attendance_records',
+  'staff_nudges', 'schedule_change_requests'])
 function insertRow(table, data, replace = true) {
+  if (flag('catalog-only') && catalogExcluded.has(table)) return
+
   const cols = columnsOf(table)
   const names = cols.map((c) => c.name)
   const row = {}
@@ -613,18 +620,8 @@ function seedTenant(cfg) {
         created_at: now, updated_at: now
       }))
     }
-    custIds.slice(0, 8).forEach((c, i) => {
-      insertRow('points_transactions', {
-        id: uid(`${tenantId}-pt`), tenant_id: tenantId, user_id: c.id, type: 'adjust',
-        amount: 120 + i * 40, note: '开业活动赠送积分', created_by: 'demo-seed',
-        created_at: at(dayOffset(-(30 + i)), '10:00')
-      }, false)
-      if (i < 3) insertRow('points_transactions', {
-        id: uid(`${tenantId}-pt`), tenant_id: tenantId, user_id: c.id, type: 'redeem',
-        amount: -200, note: `积分兑换 新客体验券 #${tenantId}-prize-1`, created_by: 'demo-seed',
-        created_at: at(dayOffset(-(8 + i)), '14:00')
-      }, false)
-    })
+    // 积分只由已签结算赚取；旧版直接赠分会违反守恒并阻断会员排单。
+    // 此离线种子不生成积分交易，积分演示需使用真实结算/兑换流程。
 
     // ── 作品图库:挑 4 单标记为已授权展示 ──
     // 图片用内联 SVG data-uri(几百字节),不走 base64 照片,避免把生产库撑大;演示时视觉上是 4 张美甲色卡。

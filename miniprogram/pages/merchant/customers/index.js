@@ -1,4 +1,5 @@
 const api = require('../../../utils/api')
+const nav = require('../../../utils/nav')
 const { storeMoney } = require('../../../utils/storeclock')
 
 function money(c) { return storeMoney(c, 0) } // 门店币种,不写死 $
@@ -50,6 +51,8 @@ function vm(u, TH) {
 }
 
 Page({
+  createCustomer(){if(this.data.isOwner)this.selectComponent("#customerCreate").open()},
+  async customerCreated(e){await this.load();nav.to("/pages/merchant/customer/index?id="+encodeURIComponent(e.detail.customer.id))},
   data: {
     all: [], list: [], kw: '', filter: 'all', sort: 'spend',
     filters: ['all', 'a', 'b', 'n', 's'],
@@ -96,7 +99,7 @@ Page({
         const mine = (r.customers || []).map((u) => ({
           id: u.id, name: u.displayName || '顾客', av: (u.displayName || '客')[0],
           phone: u.phoneMasked || '', visits: u.visitCount || 0,
-          last: u.lastVisitAt ? String(u.lastVisitAt).slice(0, 10) : '—',
+          last: u.lastVisitDate || (u.lastVisitAt ? String(u.lastVisitAt).slice(0, 10) : '—'),
           tags: u.tags || [], memberCode: u.memberCode || ''
         }))
         this.setData({

@@ -27,6 +27,7 @@
  * 为什么两档不同:生产上真拒绝可能把老客户端弄崩;
  * 但**开发期一声不吭地忽略,等于把每一个拼写错误都变成一次静默的数据丢失**。
  */
+import { validateCustomerInput } from './customer-input.mjs'
 import { DEV_SCOPES } from './secret-gate.mjs'
 
 /** 缺手机号时打的标记 —— 后台的顾客标签里看得见 */
@@ -77,7 +78,7 @@ export function guardUnknownFields({ body = {}, allowed = [], scopeName = 'unkno
 export function insertNewCustomer(db, { id, displayName, body, tenantId }) {
   const nf = newCustomerFields(body)
   db.prepare('INSERT INTO users (id, display_name, phone, tenant_id, tags_json) VALUES (?, ?, NULLIF(?, \'\'), ?, ?)')
-    .run(id, String(displayName || '').slice(0, 40), nf.phone, tenantId, nf.tagsJson)
+    .run(id, [...String(displayName || '')].slice(0, 40).join(''), nf.phone, tenantId, nf.tagsJson)
   return nf
 }
 
@@ -90,7 +91,8 @@ export function intakeCustomerForDirectBooking(db, { body, tenantId, userId, ran
   guardUnknownFields({ body, allowed: DIRECT_BOOKING_FIELDS, scopeName, where: 'POST /admin/bookings/direct', apiError })
   const newName = String(body.newCustomerName || '').trim()
   if (userId || !newName) return { userId, createdUserId: '' }
+  const input = validateCustomerInput({displayName:newName,phone:body.phone},apiError)
   const id = randomId('user')
-  insertNewCustomer(db, { id, displayName: newName, body, tenantId })
+  insertNewCustomer(db, { id, displayName: input.displayName, body:input, tenantId })
   return { userId: id, createdUserId: id }
 }

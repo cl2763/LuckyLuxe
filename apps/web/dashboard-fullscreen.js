@@ -21,7 +21,7 @@ window.DashboardFullscreen = (function () {
   /* 顾客可能看到 → 这两个默认藏起来。开关打开了才显示。 */
   const CUSTOMER_SENSITIVE = ['cash', 'newCard']
   const ORDER = ['revenue', 'cash', 'cardUse', 'newCard', 'visits', 'bookings']
-  const LABEL = { revenue: '今日营业收入', cash: '现金业绩', cardUse: '总卡耗', newCard: '新增持卡', visits: '到店人次', bookings: '今日预约' }
+  const LABEL = { revenue: '今日营业收入', cash: '实收款（含充值/购卡）', cardUse: '总卡耗', newCard: '新增持卡', visits: '到店人次', bookings: '今日预约' }
 
   const st = { host: null, deps: null, timers: [], idx: 0, data: null, lastAct: 0, showMoney: false }
   const esc = (s) => (st.deps && st.deps.escapeHtml ? st.deps.escapeHtml(s) : String(s ?? ''))

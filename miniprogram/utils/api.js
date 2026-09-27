@@ -466,9 +466,10 @@ async function loginForCurrentStore(options = {}) {
    `code` 必须**当场再取一次**:`session_key` 跟着每次 wx.login 变,拿旧的解不开。
    服务端解密失败会回 400 —— 这里**不兜底**,让调用方如实报错(静默失败器族)。 */
 async function bindWechatPhone({ encryptedData, iv, phoneCode }) {
-  if (phoneCode) return request('/auth/wechat/mini-phone', 'POST', { phoneCode })
-  const code = await wxLoginCode()
-  return request('/auth/wechat/mini-phone', 'POST', { code, encryptedData, iv })
+  const payload = phoneCode ? {phoneCode} : {code:await wxLoginCode(),encryptedData,iv}
+  const out = await request('/auth/wechat/mini-phone', 'POST', payload)
+  if (out.auth) acceptCustomerSession(out)
+  return out
 }
 
 async function ensureLogin(options = {}) {
@@ -1021,7 +1022,16 @@ function getHealth() { return request('/health', 'GET') }
 
 function getSignLink(code) { return request('/my/settlements/'+encodeURIComponent(code)+'/sign-link','POST',{}) }
 
+function acceptCustomerSession(out) {
+  if (!out?.tenantId || !out?.auth?.accessToken || !out?.user?.id) throw new Error('绑定会话不完整，请重试')
+  if (currentTenant() !== out.tenantId) onStoreSwitched()
+  wx.setStorageSync('lucky_tenant', out.tenantId)
+  setAuth(Object.assign({}, out.auth, {user:out.user, tenantId:out.tenantId}))
+  wx.setStorageSync('lucky_member', Object.assign(miniMember(out.user), {_tenant:out.tenantId}))
+}
+
 module.exports = {
+  acceptCustomerSession,
   getSignLink,
   getDocumentLink: code => request('/my/settlements/'+encodeURIComponent(code)+'/document-link'),
   getHealth,

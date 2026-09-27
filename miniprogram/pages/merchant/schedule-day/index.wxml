@@ -29,9 +29,24 @@
         </view>
       </scroll-view>
     </view>
-    <view class="tip">点任意胶囊改这一天该技师的时段。半天胶囊半填色;排班时段直接决定顾客能约的时间。</view>
+    <view class="tip">{{readOnly ? '点自己的排班申请休假或调整时段，老板处理后生效。' : '点任意胶囊改这一天该技师的时段。半天胶囊半填色；排班时段直接决定顾客能约的时间。'}}</view>
   </block>
 
+  <view wx:if="{{readOnly && !loading}}" class="request-list">
+    <view class="sh">我的排班申请</view>
+    <view wx:if="{{!myTechId}}" class="tip">账号尚未关联技师，请联系老板处理。</view>
+    <view wx:elif="{{!requests.length}}" class="tip">暂无申请记录。</view>
+    <view wx:for="{{requests}}" wx:key="id" class="request-row"><view>{{item.date}} · {{item.statusLabel}}</view><view class="tip">{{item.note}}</view></view>
+  </view>
+  <view wx:if="{{requestSheet}}" class="mask" bindtap="closeRequest"></view>
+  <view wx:if="{{requestSheet}}" class="sheet">
+    <view class="sh">申请调整我的排班 · {{requestSheet.date}}</view>
+    <view class="tip">写明希望调整的时段或休假原因。这里只提交申请，不直接改变排班。</view>
+    <textarea class="request-note" maxlength="300" value="{{requestNote}}" bindinput="onRequestNote" placeholder="例如：希望休息一天，或改为 12:00–18:00" disabled="{{requestSaving}}" />
+    <view wx:if="{{requestError}}" class="request-error">{{requestError}}</view>
+    <button class="save" bindtap="submitRequest" loading="{{requestSaving}}" disabled="{{requestSaving}}">提交申请</button>
+    <button class="cancel" bindtap="closeRequest" disabled="{{requestSaving}}">取消</button>
+  </view>
   <!-- 屏 4a-2 时段编辑弹层 -->
   <view wx:if="{{sheet}}" class="mask" bindtap="closeSheet"></view>
   <view wx:if="{{sheet}}" class="sheet">
@@ -48,14 +63,17 @@
       <text class="dash">–</text>
       <picker mode="time" value="{{sheet.end}}" bindchange="onEnd"><view class="tp">{{sheet.end}}</view></picker>
     </view>
+    <view class="tip" wx:if="{{sheet.isClosed}}">当天店休；自定义排班不会修改营业设置。</view>
+    <view class="tip">分界只用于新选择；保存后的具体时段不会跟随分界改变。</view>
     <view class="rep" bindtap="toggleRepeat">
       <view class="box {{sheet.repeat ? 'on' : ''}}">{{sheet.repeat ? '✓' : ''}}</view>
-      <text>应用到之后每个周{{sheet.weekday}}(共 8 周)</text>
+      <text>应用到之后每个周{{sheet.weekday}}（再加 8 周）</text>
     </view>
     <view wx:if="{{conflicts.length}}" class="conf">
       <view class="ct">这么排会有 {{conflicts.length}} 单落在时段外(已保存,自己决定要不要改预约):</view>
-      <view class="cr" wx:for="{{conflicts}}" wx:key="bookingId">{{item.startTime}}–{{item.endTime}} {{item.customerName}} · {{item.serviceName}}</view>
+      <view class="cr" wx:for="{{conflicts}}" wx:key="bookingId">{{item.date}} {{item.startTime}}–{{item.endTime}} {{item.customerName}} · {{item.serviceName}}</view>
     </view>
-    <view class="save" bindtap="saveShift">保存</view>
+    <view wx:for="{{warnings}}" wx:key="date" class="request-error">{{item.date}} {{item.message}}</view>
+    <button class="save" bindtap="saveShift" loading="{{saving}}" disabled="{{saving}}">保存</button>
   </view>
 </view>

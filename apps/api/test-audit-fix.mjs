@@ -548,7 +548,7 @@ async function main() {
   check('F3 员工账号可登录', Boolean(walkinToken), JSON.stringify(walkinLogin).slice(0, 160))
   const staffBook = await request('/admin/bookings/direct', {
     method: 'POST',
-    body: JSON.stringify({ newCustomerName: `散客${RUN_ID}`, phone: `1372${RUN_ID.slice(-7)}`, serviceId: svcA.id, technicianId: techA.id, date: todayStr(), time: '20:40', durationMin: 60, depositPaid: false })
+    body: JSON.stringify({ newCustomerName: `散客${RUN_ID}`, phone: `1372${String(parseInt(RUN_ID,36)).slice(-7)}`, serviceId: svcA.id, technicianId: techA.id, date: todayStr(), time: '20:40', durationMin: 60, depositPaid: false })
   }, walkinToken)
   check('F3 技师能给自己现场排单(散客即时预约)', staffBook.status === 201, JSON.stringify(staffBook.data).slice(0, 200))
   check('F3 现场建档 = 轻档案(有顾客 id,后面才结算得了)', Boolean(staffBook.data.booking.userId || staffBook.data.booking.user), JSON.stringify(staffBook.data.booking).slice(0, 160))

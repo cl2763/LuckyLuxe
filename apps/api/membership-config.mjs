@@ -1,3 +1,4 @@
+import { customerSpendCents } from './customer-facts.mjs'
 /* 会员制度域(2026-08-25 从 local-server.mjs 搬出,公约②)。
 
    本批(N-5 退卡口)往这儿加了一项配置:**退卡/余额清零后还算不算会员**。
@@ -69,11 +70,7 @@ export function createMembershipConfig({ db, iso, currentTenantId, storedValueBa
   }
 
   function customerTotalSpendCents(userId, tenantId = currentTenantId(), sinceIso = null) {
-    const booked = sinceIso
-      ? db.prepare("SELECT COALESCE(SUM(final_due_cents), 0) AS spent FROM bookings WHERE tenant_id = ? AND user_id = ? AND status = 'COMPLETED' AND appointment_start >= ?").get(tenantId, userId, sinceIso)
-      : db.prepare("SELECT COALESCE(SUM(final_due_cents), 0) AS spent FROM bookings WHERE tenant_id = ? AND user_id = ? AND status = 'COMPLETED'").get(tenantId, userId)
-    const legacy = sinceIso ? 0 : (db.prepare('SELECT legacy_total_spend_cents AS c FROM users WHERE id = ?').get(userId)?.c || 0)
-    return (booked?.spent || 0) + legacy
+    return customerSpendCents(db, userId, tenantId, sinceIso)
   }
 
   /* 梯子档位归一化 · 唯一出口(D129,店主 03s §一 裁:**显示 label,永远不显示 key**)。

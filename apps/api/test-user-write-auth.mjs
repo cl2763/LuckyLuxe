@@ -23,16 +23,9 @@ const ROOT = join(dirname(fileURLToPath(import.meta.url)), '../..')
    **路由搬出去一条,它就少扫一条,而下限那条判据会因此红**。
    红是对的(它正是为此设的),但**该改的是扫描面,不是把下限调低**。
    下限一个字没动:240。 */
-const ROUTE_FILES = [
-  'apps/api/local-server.mjs',
-  'apps/api/platform-auth.mjs', // 密码登录/改密实际路由同样纳入普查，不降低路由数门槛
-  'apps/api/platform-tenant-config.mjs',
-  'apps/api/onboarding-steps.mjs',
-  'apps/api/import-services.mjs',
-  'apps/api/dashboard-pulse.mjs',
-]
-const serverSrc = ROUTE_FILES.map((f) => readFileSync(join(ROOT, f), 'utf8')).join('\n')
+// Read every server module so extracting a route cannot silently remove it from the census.
 const modSrc = serverSources(join(ROOT, 'apps/api'))
+const serverSrc = modSrc
 let n = 0
 const fails = []
 const check = (name, cond, detail = '') => {

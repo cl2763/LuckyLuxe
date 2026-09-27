@@ -272,6 +272,7 @@ function render() {
         ${s.recharge.lines.map((rl) => `
           <div class="row"><span>${esc(rl.label)}</span><span class="amt">${esc(rl.amountText)}</span></div>`).join('')}
         ${s.recharge.groupForecastText ? `<div class="meta">${esc(s.recharge.groupForecastText)}</div>` : ''}
+        ${(s.recharge.giftItems || []).length ? `<div style="margin-top:16px;border-top:1px solid var(--line,#e7ddd4);padding-top:12px"><b>赠送物品</b>${s.recharge.giftItems.map((g) => `<div class="row" style="flex-wrap:wrap;gap:8px;margin-top:8px"><span style="overflow-wrap:anywhere">${esc(g.name)} × ${Number(g.quantity)}</span><span class="meta">单件价值 ${esc(money(g.unitValueCents))}</span></div>`).join('')}<div class="meta" style="margin-top:10px">物品领取请联系门店，此清单不代表已领取。价值不计入储值余额。</div></div>` : ''}
       </div>` : ''}
       ${s.storedUnusedNotice ? `<div class="sec"><div class="meta" style="color:#8a3a33">${esc(s.storedUnusedNotice)}</div></div>` : ''}
     </div>

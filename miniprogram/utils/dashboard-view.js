@@ -33,7 +33,7 @@ const CAROUSEL = ['revenue', 'cash', 'cardUse', 'newCard', 'visits']
 const MONEY_KEYS = ['revenue', 'cash', 'cardUse']
 const LABELS = {
   revenue: '营业收入 · 服务 + 耗卡 + 产品',
-  cash: '现金业绩',
+  cash: '实收款（含充值/购卡）',
   cardUse: '总卡耗',
   newCard: '新增持卡',
   visits: '到店人次',

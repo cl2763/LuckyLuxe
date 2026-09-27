@@ -113,6 +113,10 @@ const db = new DatabaseSync(process.env.TEST_DB_PATH || (() => { throw new Error
   const shift = await request(`/admin/technicians/${tech.id}/schedule`, { method: 'PATCH', body: JSON.stringify({ date: today2, shift: 'full' }) }, PLATFORM, HU)
   check('零回落:未设置店按「全天班」排班 → 400 HOURS_UNSET 明确拒绝,不编 10:00-19:00',
     shift.status === 400 && shift.data?.error?.code === 'HOURS_UNSET', JSON.stringify(shift.data).slice(0, 140))
+  const off = await request(`/admin/technicians/${tech.id}/schedule`, { method: 'PATCH', body: JSON.stringify({ date: today2, shift: 'off' }) }, PLATFORM, HU)
+  check('未设置营业时间仍能明确标休息：仅存午夜占位，不生成工作时段', off.status === 200 && off.data.schedule.is_working === 0 && off.data.schedule.start_time === '00:00' && off.data.schedule.end_time === '00:00')
+  const afterOff = await request(`/availability?storeId=${sid}&serviceId=${svc.id}&date=${today2}`, {}, null, { 'x-tenant-id': tU })
+  check('休息占位不会开放顾客预约', afterOff.status === 200 && (afterOff.data.slots || []).length === 0)
 }
 
 /* ===== A3 全库零回落 · 白名单机械扫(判据三律·三:不数「我改过的」,数「全仓必须落白名单」) ===== */
@@ -120,10 +124,12 @@ const db = new DatabaseSync(process.env.TEST_DB_PATH || (() => { throw new Error
   const apiDir = new URL('.', import.meta.url)
   const files = readdirSync(apiDir).filter((f) => f.endsWith('.mjs') && !f.startsWith('test-'))
   const ALLOW = {
+    'schedule-write.mjs': { max: 1, marker: 'Inactive ranges are storage-only',
+      reason: '明确休息行的 NOT NULL 存储占位 00:00；isWorking=false，以下行为断言确保不开放预约' },
     /* 白名单式(判据三律·三):按文件钉条数+验存在性标记,新增/挪窝即红 */
     'local-server.mjs': { max: 1, marker: '打卡域成文口径',
       reason: '打卡域「规定下班」成文口径(注释:排班>门店>19:00);读口带 is_closed=0 闸,非门店营业时间读口回落' }
-  }   /* 08-30c 裁定3:supabase 停用件已尸清,白名单随尸减一(棘轮只减)—— 现仅打卡域 1 条 */
+  }   /* 08-30c 裁定3:supabase 停用件已尸清,白名单随尸减一(棘轮只减)—— 打卡域 1 条；09-28 加休息行存储占位 1 条，行为验证不可约 */
   const hits = []
   for (const f of files) {
     const src = stripJs(readFileSync(new URL(f, import.meta.url), 'utf8'))

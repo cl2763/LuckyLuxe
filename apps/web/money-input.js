@@ -25,6 +25,7 @@ window.MoneyInput = (function () {
     return Number.isFinite(n) ? n.toFixed(2) : ''
   }
 
+  const strictCentsOf = raw => { const value=String(raw??'').trim(); return !value?0:/^\d+(?:\.\d{1,2})?$/.test(value)?Math.round(Number(value)*100):NaN }
   const centsOf = (raw) => Math.round(Number(sanitize(raw) || 0) * 100)
 
   /* 生成一个钱输入框。**不给 type=number** —— 那对箭头就是从它来的。 */
@@ -38,6 +39,7 @@ window.MoneyInput = (function () {
   document.addEventListener('input', (e) => {
     const el = e.target
     if (!el || !el.matches || !el.matches('[data-money]')) return
+    if (el.hasAttribute('data-money-strict')) return
     const before = el.value
     const after = sanitize(before)
     if (after !== before) {
@@ -50,9 +52,10 @@ window.MoneyInput = (function () {
   document.addEventListener('blur', (e) => {
     const el = e.target
     if (!el || !el.matches || !el.matches('[data-money]')) return
+    if (el.hasAttribute('data-money-strict')) { const cents=strictCentsOf(el.value); if(el.value.trim() && Number.isSafeInteger(cents))el.value=(cents/100).toFixed(2); return }
     const v = normalize(el.value)
     if (v !== el.value) el.value = v
   }, true)
 
-  return { sanitize, normalize, centsOf, field }
+  return { sanitize, normalize, centsOf, strictCentsOf, field }
 })()

@@ -86,8 +86,9 @@ window.AccountAdjust = (function () {
       ${stateA.bound ? '' : `<div class="aa-warn">${zh ? '该档案未绑定微信 —— 请先让顾客扫码绑定(会员码/签署码)再充值。' : 'Customer not bound yet.'}</div>`}
       ${stateA.rvPkgs.length ? `<label class="aa-field"><span>${zh ? '按套餐(可选,点选自动填金额与赠送)' : 'Package (optional)'}</span>
         <div class="aa-sub">${stateA.rvPkgs.map((p) => `<button class="aa-sub-btn${stateA.rvPkgId === p.id ? ' on' : ''}" data-aa-pkg="${escapeHtml(p.id)}" type="button">${escapeHtml(p.label)}</button>`).join('')}</div></label>` : ''}
-      <label class="aa-field"><span>${zh ? '充值金额' : 'Amount'}</span>${window.MoneyInput.field({ id: 'aaRvAmount', value: escapeHtml(String(stateA.rvAmount || '')) })}</label>
-      <label class="aa-field"><span>${zh ? '赠送(可空)' : 'Bonus (optional)'}</span>${window.MoneyInput.field({ id: 'aaRvBonus', value: escapeHtml(String(stateA.rvBonus || '')) })}</label>
+      ${(() => { const gifts = (stateA.rvPkgs.find((p) => p.id === stateA.rvPkgId) || {}).giftItems || []; return gifts.length ? `<div class="aa-hint" data-aa-gifts><strong>${zh ? '套餐赠送物品' : 'Package gifts'}</strong>${gifts.map((g) => `<div style="overflow-wrap:anywhere">${escapeHtml(g.name)} × ${Number(g.quantity)} · ${zh ? '单件价值' : 'Unit value'} ${escapeHtml(ctx.money(g.unitValueCents, 2))}</div>`).join('')}<div>${zh ? '价值不计入储值余额；清单不代表已领取。修改金额后将改为手动充值，不含套餐赠品。' : 'Not added to balance or marked collected. Editing amounts switches to a manual recharge without package gifts.'}</div></div>` : '' })()}
+      <label class="aa-field"><span>${zh ? '充值金额' : 'Amount'}</span>${window.MoneyInput.field({ id: 'aaRvAmount', value: escapeHtml(String(stateA.rvAmount || '')), extra:'data-money-strict' })}</label>
+      <label class="aa-field"><span>${zh ? '赠送(可空)' : 'Bonus (optional)'}</span>${window.MoneyInput.field({ id: 'aaRvBonus', value: escapeHtml(String(stateA.rvBonus || '')), extra:'data-money-strict' })}</label>
       <label class="aa-field"><span>${zh ? '付款方式' : 'Channel'}</span>
         <select id="aaRvChannel">
           <option value="cash">${zh ? '现金' : 'Cash'}</option>
@@ -224,6 +225,7 @@ window.AccountAdjust = (function () {
 
   async function onClick(event) {
     const { request, toast, zh } = ctx
+    if (stateA.busy) return
     if (event.target.closest('[data-aa-close]') || event.target === el()) { close(); return }
     const tab = event.target.closest('[data-aa-tab]')
     if (tab) {
@@ -258,15 +260,17 @@ window.AccountAdjust = (function () {
       mount(); return
     }
     if (event.target.closest('[data-aa-rv-submit]')) {
-      const cents = window.MoneyInput.centsOf(stateA.rvAmount)
-      const bonus = window.MoneyInput.centsOf(stateA.rvBonus)
+      const cents = window.MoneyInput.strictCentsOf(stateA.rvAmount)
+      const bonus = window.MoneyInput.strictCentsOf(stateA.rvBonus)
       if (!(cents > 0)) { toast(zh ? '充值金额要大于 0(赠送随充值一起记)' : 'Amount required'); return }
+      if (!Number.isSafeInteger(bonus) || bonus < 0 || bonus > 100000000 || cents > 100000000) { toast('金额格式不正确，最多两位小数且不超过 100 万。'); return }
+      const payChannel=document.querySelector('#aaRvChannel')?.value || 'unknown'
+      const technicianId=document.querySelector('#aaRvTech')?.value || undefined
       stateA.busy = true; mount()
       try {
         await request('/admin/stored-value/recharge', { method: 'POST', body: JSON.stringify({
-          userId: stateA.userId, amountCents: cents, bonusCents: bonus,
-          payChannel: document.querySelector('#aaRvChannel')?.value || 'unknown',
-          ...(document.querySelector('#aaRvTech')?.value ? { technicianId: document.querySelector('#aaRvTech').value } : {})
+          userId: stateA.userId, amountCents: cents, bonusCents: bonus, packageId: stateA.rvPkgId || undefined,
+          payChannel, technicianId
         }) })
         toast(zh ? `已到账 ${ctx.money(cents)}${bonus ? ` 赠 ${ctx.money(bonus)}` : ''}` : 'Recharged')
         stateA.busy = false; stateA.rvAmount = ''; stateA.rvBonus = ''; stateA.rvPkgId = ''
@@ -385,9 +389,9 @@ window.AccountAdjust = (function () {
     } else if (e.target.id === 'aaCardAmount') {
       stateA.cardAmount = e.target.value
     } else if (e.target.id === 'aaRvAmount') {
-      stateA.rvAmount = e.target.value; stateA.rvPkgId = ''
+      stateA.rvAmount = e.target.value; stateA.rvPkgId = ''; document.querySelector('[data-aa-gifts]')?.remove(); document.querySelectorAll('[data-aa-pkg].on').forEach((b) => b.classList.remove('on'))
     } else if (e.target.id === 'aaRvBonus') {
-      stateA.rvBonus = e.target.value; stateA.rvPkgId = ''
+      stateA.rvBonus = e.target.value; stateA.rvPkgId = ''; document.querySelector('[data-aa-gifts]')?.remove(); document.querySelectorAll('[data-aa-pkg].on').forEach((b) => b.classList.remove('on'))
     }
   })
 
@@ -404,7 +408,7 @@ window.AccountAdjust = (function () {
     open({
       userId: uid,
       name: deps.customerName(c),
-      meta: `${deps.owner.lang === 'zh' ? '到店' : 'Visits'} ${c.visitCount || 0}${c.lastVisitAt ? ` · ${deps.dateOnly(c.lastVisitAt)}` : ''}`,
+      meta: `${deps.owner.lang === 'zh' ? '到店' : 'Visits'} ${c.visitCount || 0}${c.lastVisitAt ? ` · ${deps.dateOnly(c.lastVisitDate || c.lastVisitAt)}` : ''}`,
       request: deps.request, money: deps.money, toast: deps.toast, escapeHtml: deps.escapeHtml,
       zh: deps.owner.lang === 'zh',
       bookings: deps.owner.bookings || [], technicians: deps.owner.technicians || [],

@@ -1,3 +1,5 @@
+const bookingLanes = require('../../../utils/booking-lanes')
+const customerIntake = require('../../../utils/customer-intake')
 const api = require('../../../utils/api')
 const rescheduleMixin = require('../../../utils/order-actions')
 const { storeToday, refreshStoreClock, storeMoney } = require('../../../utils/storeclock')
@@ -92,7 +94,7 @@ Page(Object.assign({
     directCats: [], directCatId: '',   // D24:排单选择器两级(大类→小类),同源结算主项目目录
     // 顾客区 · D9 根治(图 v1.1):一框即搜 + 无匹配一键建档 + 扫会员码。
     // 「新客·输手机号」页签连同 dsTab/dsName/dsPhone/dsHitText/dsHitId 整体删除(不是隐藏)。
-    directCustomers: [], custQuery: '', custMatches: [], selectedCustId: '', selectedCustName: '',
+    directContact:'', selectedCustPhoneMasked:'', directCustomers: [], custQuery: '', custMatches: [], selectedCustId: '', selectedCustName: '',
     pendingNewName: '', pendingNewPhone: '',   // 点了「＋建档并排单」待建的轻档案(建档发生在建单那一刻,既有闭环)
     depositCfg: { enabled: false, amountText: '' },
     myTechId: '', // 员工登录时高亮自己那列
@@ -460,10 +462,13 @@ Page(Object.assign({
       let freeTotal = 0
       const cols = (r.technicians || []).map((t) => {
         const list = (byTech[t.id] || []).slice().sort((a, b) => toMin(a.startTime) - toMin(b.startTime))
-        const blocks = list.map((b) => {
+        const arranged = bookingLanes(list)
+        const width = Math.max(190, ...arranged.map(b => b.lanes * 190))
+        const blocks = arranged.map((b) => {
           const s = toMin(b.startTime); const e = Math.max(s + 20, toMin(b.endTime))
           const group = b.group || typeCls(b.serviceType); const state = b.arrivalState || 'pending'
           return {
+            left: b.lane * width / b.lanes + 6, width: width / b.lanes - 12,
             id: b.id, userId: b.userId || '', cls: `${group} ${state}`, state,
             stateGlyph: state === 'active' ? '●' : (state === 'done' ? '✓' : ''),
             top: Math.round((s - openMin) / 60 * PX_PER_HOUR), height: Math.max(34, Math.round((e - s) / 60 * PX_PER_HOUR)),
@@ -476,12 +481,8 @@ Page(Object.assign({
         /* D88(08-30c 与网页同刀)+ 乙案(店主 08-30g 裁):过去的时段不出「+直接排单」——
            今天的空档起点截到 storeNow(后端门店时区句)这一分钟,不再对齐半点(随点随排),
            不裸 new Date 推 */
-        const minStart = date === r.storeToday && r.storeNow ? toMin(r.storeNow) : -1
-        const frees = []; let cursor = openMin
-        list.forEach((b) => { const s = toMin(b.startTime); const from = Math.max(cursor, minStart); if (s - from >= 30) { frees.push({ startTime: m2t(from), endTime: m2t(s), top: Math.round((from - openMin) / 60 * PX_PER_HOUR), height: Math.round((s - from) / 60 * PX_PER_HOUR) }); freeTotal += (s - from) } cursor = Math.max(cursor, toMin(b.endTime)) })
-        const tailFrom = Math.max(cursor, minStart)
-        if (closeMin - tailFrom >= 30) { frees.push({ startTime: m2t(tailFrom), endTime: m2t(closeMin), top: Math.round((tailFrom - openMin) / 60 * PX_PER_HOUR), height: Math.round((closeMin - tailFrom) / 60 * PX_PER_HOUR) }); freeTotal += (closeMin - tailFrom) }
-        return { id: t.id, name: t.name, role: t.title || '', busy: t.bookingCount > 0, count: t.bookingCount, blocks, frees }
+          const frees=(t.freeSlots||[]).map(f=>{const start=toMin(f.startTime),end=toMin(f.endTime);freeTotal+=end-start;return Object.assign({},f,{top:Math.round((start-openMin)/60*PX_PER_HOUR),height:Math.round((end-start)/60*PX_PER_HOUR)})})
+        return { id: t.id, name: t.name, role: t.title || '', busy: t.bookingCount > 0, count: t.bookingCount, width, blocks, frees }
       })
       const d = new Date(`${date}T00:00:00`)
       this.setData({
@@ -493,7 +494,7 @@ Page(Object.assign({
           todayTag: date === todayStr() ? '今天' : '',
           hoursUnset: Boolean(r.hoursUnset),   // D84 三态:未设置 ≠ 休息(空态说真话)
           isClosed: r.isClosed, specialNote: r.specialNote || '', openTime: r.openTime, closeTime: r.closeTime,
-          gridH, colW: 190, hours, total: (r.bookings || []).length, working: cols.length,
+          gridH, totalWidth: cols.reduce((sum,col) => sum + col.width, 0), colW: 190, hours, total: (r.bookings || []).length, working: (r.technicians||[]).filter(t=>t.isWorking).length,
           freeHours: Math.round(freeTotal / 60 * 10) / 10, activeCount: r.activeCount || 0, cols,
           duty: r.duty || null,  // 31l 值日:开关关=后端不下发=零渲染
           backfill: r.backfill || null   // 补录小合同(01v):过去日后端才下发;今天/未来整块不出现
@@ -641,7 +642,7 @@ Page(Object.assign({
       directCats: cats, directCatId: firstCat.id || '',
       directServices: services, directServiceId: first.id || '', directDurationMin: dur0,
       directEndTime: this.calcDirectEnd(time, dur0), directDurH: Math.round(dur0 / 6) / 10,
-      directCustomers: customers, custQuery: '', custMatches: [], selectedCustId: '', selectedCustName: '', directDeposit: false,
+      directContact:'', selectedCustPhoneMasked:'', directCustomers: customers, custQuery: '', custMatches: [], selectedCustId: '', selectedCustName: '', directDeposit: false,
       pendingNewName: '', pendingNewPhone: ''
     })
     this.loadDepositCfg()
@@ -702,7 +703,7 @@ Page(Object.assign({
     try {
       const hit = (await api.adminGet(`/admin/customers/lookup?memberCode=${encodeURIComponent(mc)}`)).hit
       if (!hit) { wx.showToast({ title: '这个会员码查不到本店档案', icon: 'none' }); return }
-      this.setData({ selectedCustId: hit.id, selectedCustName: hit.displayName, custQuery: hit.displayName, custMatches: [], pendingNewName: '', pendingNewPhone: '' })
+      this.setData({ selectedCustId: hit.id, selectedCustPhoneMasked:hit.phoneMasked||'', directContact:'', selectedCustName: hit.displayName, custQuery: hit.displayName, custMatches: [], pendingNewName: '', pendingNewPhone: '' })
       wx.showToast({ title: `已带出 ${hit.displayName}`, icon: 'none' })
     } catch (e) { wx.showToast({ title: '会员码解析失败', icon: 'none' }) }
   },
@@ -738,35 +739,7 @@ Page(Object.assign({
     })
   },
   // 顾客搜索(D9 根治后的唯一入口):姓名/手机号模糊匹配,命中最多 5 条(图规则①)
-  onCustSearch(e) {
-    const q = (e.detail.value || '').trim()
-    const ql = q.toLowerCase() // D62:大小写不敏感(全仓搜索口同刀)
-    const matches = ql ? this.data.directCustomers.filter((c) => (c.name || '').toLowerCase().indexOf(ql) >= 0 || (c.phone || '').indexOf(q) >= 0).slice(0, 5) : []
-    // 输入过程中不许改写内容:回写原样,trim 只用于匹配(同 member 那一处)
-    this.setData({ custQuery: String(e.detail.value || ''), custMatches: matches, selectedCustId: '', selectedCustName: '', pendingNewName: '', pendingNewPhone: '' })
-  },
-  pickCust(e) {
-    const id = e.currentTarget.dataset.id
-    const c = this.data.directCustomers.find((x) => x.id === id)
-    if (c) this.setData({ selectedCustId: c.id, selectedCustName: c.name, custQuery: c.name, custMatches: [], pendingNewName: '', pendingNewPhone: '' })
-  },
-  /* 「＋建档并排单」(图规则②,店主拍板一步到位不弹确认):
-     ≥7 位纯数字 → 当手机号存(姓名记「未命名」);否则当姓名存(手机号空);
-     空输入 → 「未命名顾客」。都可在档案里后补;真正的建档发生在建单那一刻(既有闭环零新口径)。 */
-  pickNewCust() {
-    const q = (this.data.custQuery || '').trim()
-    const digits = q.replace(/\D/g, '')
-    const isPhone = /^\d{7,}$/.test(digits) && digits.length === q.replace(/\s/g, '').length
-    const name = isPhone ? '未命名' : (q || '未命名顾客')
-    this.setData({
-      pendingNewName: name,
-      pendingNewPhone: isPhone ? digits : '',
-      selectedCustId: '',
-      selectedCustName: `${name}${isPhone ? `(${digits})` : ''} · 新建轻档案`,
-      custMatches: []
-    })
-  },
-  clearCust() { this.setData({ selectedCustId: '', selectedCustName: '', custQuery: '', custMatches: [], pendingNewName: '', pendingNewPhone: '' }) },
+  ...customerIntake,
   onDirectTime(e) {
     const t = e.detail.value
     const { directGapStart: gs, directGapEnd: ge } = this.data
@@ -800,6 +773,7 @@ Page(Object.assign({
       else body.newCustomerName = q
     }
     else { wx.showToast({ title: '选择或输入顾客', icon: 'none' }); return }
+    if (!body.userId && d.directContact.trim()) body.phone = d.directContact.trim()
     if (!d.directServiceId) { wx.showToast({ title: '选个服务', icon: 'none' }); return }
     if (!/^\d{2}:\d{2}$/.test(d.directTime)) { wx.showToast({ title: '选个时段', icon: 'none' }); return }
     if (this._directBusy) return   // D88:双击双 POST 拦(第一发在途第二发不出手)

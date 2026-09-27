@@ -1,5 +1,6 @@
 <view class="page {{themeClass}}">
-  <image class="hero" src="{{curImg}}" mode="aspectFill" bindtap="previewCur" />
+  <view wx:if="{{!curImg}}" class="note">这一单还没有审核通过的作品图，请返回订单添加或审核。</view>
+  <image wx:if="{{curImg}}" class="hero" src="{{curImg}}" mode="aspectFit" bindtap="previewCur" />
   <scroll-view wx:if="{{images.length>1}}" class="strip" scroll-x>
     <image wx:for="{{images}}" wx:key="*this" wx:if="{{item}}" class="sthumb {{curImg===item?'on':''}}" src="{{item}}" mode="aspectFill" data-img="{{item}}" bindtap="pickImg" />
   </scroll-view>
@@ -9,7 +10,7 @@
     <text class="s {{pIdx===index?'on':''}}" wx:for="{{platforms}}" wx:key="k" data-i="{{index}}" bindtap="onPlatform">{{item.label}}</text>
   </view>
 
-  <view wx:if="{{aiEnabled}}" class="gen {{loading?'off':''}}" bindtap="generate">{{loading?'生成中…':(result?'换一版文案':'生成 AI 文案')}}</view>
+  <view wx:if="{{aiEnabled && curImg}}" class="gen {{loading?'off':''}}" bindtap="generate">{{loading?'生成中…':(result?'换一版文案':'生成 AI 文案')}}</view>
 
   <block wx:if="{{result}}">
     <view class="card">
@@ -24,5 +25,5 @@
     </view>
   </block>
 
-  <view class="note">生成后「复制文案 + 保存图片」,在微信一起发给顾客,让顾客/自己去小红书、抖音发布。不满意点「换一版文案」。</view>
+  <view class="note">生成后「复制文案 + 保存图片」,在微信一起发给顾客,让顾客/自己去小红书、抖音、美团／大众点评、Instagram 发布。不满意点「换一版文案」。</view>
 </view>
