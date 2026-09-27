@@ -335,7 +335,7 @@
 .home-page .section {
   width: 100%;
   max-width: 100%;
-  margin-top: 28rpx;
+  margin-top: 34rpx;
   box-sizing: border-box;
 }
 
@@ -381,7 +381,7 @@
   display: block;
   width: 100%;
   min-width: 0;
-  padding: 14rpx;
+  padding: 18rpx;
   text-align: left;
   box-sizing: border-box;
 }
@@ -394,7 +394,7 @@
 }
 
 .recommend-name {
-  margin-top: 18rpx;
+  margin-top: 20rpx;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
