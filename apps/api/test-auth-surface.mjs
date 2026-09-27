@@ -283,11 +283,12 @@ async function main() {
     phoneMasked: '**已脱敏**的手机号(后端 maskPhone),用来对人不用来联系',
     visitCount: '到店次数 = 服务频次,不是钱',
     lastVisitAt: '最近到店时间,判断该不该回访',
+    lastVisitDate: '同一次到店按门店时区投影的日历日期；修复跨时区日期显示，不含任何财务信息',
     tags: '偏好/安全项标签(过敏、忌讳),上钟前必看',
     memberCode: '会员码 = 身份标识,不含余额',
     scope: '这批数据的口径标记(mine),前端据此渲染"只看我的"'
   }
-  const ALLOW_CAP = 8   // 🔴 棘轮:只许减不许增。要加一项,先报 Cowork 批,并把这个数一起改
+  const ALLOW_CAP = 9   // 2026-09-28 已批准的日期口径修复：仅新增 lastVisitAt 的店内日历投影，财务字段仍全部禁止
   const staffKeys = [...new Set(staffList.flatMap((c) => Object.keys(c)))]
   const ownerKeys = [...new Set(ownerList.flatMap((c) => Object.keys(c)))]
   const notAllowed = staffKeys.filter((k) => !(k in STAFF_FIELD_ALLOW))
@@ -295,6 +296,7 @@ async function main() {
     notAllowed.length === 0, `不在白名单里的:${notAllowed.join(', ')}`)
   check(`白名单防线②:条目数上棘轮 ≤ ${ALLOW_CAP}(只许减不许增;想增先报 Cowork)`,
     Object.keys(STAFF_FIELD_ALLOW).length <= ALLOW_CAP, String(Object.keys(STAFF_FIELD_ALLOW).length))
+  check('员工新增日期字段仅为日历日期或空值', staffList.every(c => c.lastVisitDate === null || /^\d{4}-\d{2}-\d{2}$/.test(c.lastVisitDate)))
   const stale = Object.keys(STAFF_FIELD_ALLOW).filter((k) => !staffKeys.includes(k))
   check('白名单防线③:白名单里每一项都还真的在响应里(删了字段却留着豁免 = 偷偷放宽)',
     stale.length === 0 || staffList.length === 0, `响应里已经没有的豁免项:${stale.join(', ')}`)
