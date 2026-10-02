@@ -124,6 +124,7 @@ import { createAssetFingerprint } from './asset-fingerprint.mjs'      // 前端�
 import { createStoredValue } from './stored-value.mjs'                // 储值域(写流水/算余额/分桶/类型文案)
 import { createMembershipConfig } from './membership-config.mjs'      // 会员制度域(资格判定 + 退卡后是否保留会员)
 import { createImportCustomers } from './import-customers.mjs'        // 平台代商家导入老顾客(公约②)
+import { createMigrationCenter } from './migration-center.mjs'        // 多平台顾客迁移:预检/审计/截止时间/增量续导
 import { snapshotDb, dailyBackup, backupDb } from './db-backup.mjs'             // 库快照唯一出口(按需 + 日备同一处)
 import { createStaticServe } from './static-serve.mjs'                // 静态文件服务(公约②)
 import { createMemberCode } from './member-code.mjs'                  // 会员码域(公约②)
@@ -6674,6 +6675,7 @@ function computeFinanceProgress(month) {
 // ===== 财务密码门禁：进入财务数据前的第二道锁 =====
 const financeSessions = new Map()
 const { importTenantCustomers } = createImportCustomers({ db, apiError, randomId, iso })
+const migrationCenter = createMigrationCenter({ db, apiError, randomId, iso, createHash, importTenantCustomers, normalizePhone: (v) => String(v || '').replace(/[\s\-()（）]/g, '').trim().slice(0, 30) })
 const { adminPasswordHash, randomPassword, issueAdminSession, adminFromSessionToken, bootstrapOwnerAccount, demoAuthFor, demoEmailFromToken } = createAdminAuth({
   db, randomId, iso, createHash, defaultTenantId: DEFAULT_TENANT_ID
 })
@@ -12880,13 +12882,7 @@ async function route(req, res) {
     if (body.dryRun === false) return json(res, 200, serviceImportApi.execute(tenantId, body))
     return json(res, 200, { report: serviceImportApi.dryRun(tenantId, body) })
   }
-  if (req.method === 'POST' && path.startsWith('/platform/tenants/') && path.endsWith('/import/customers')) {
-    if (!isPlatform()) throw apiError(401, 'UNAUTHORIZED', 'Platform token required.')
-    const tenantId = path.split('/')[3]
-    if (!db.prepare('SELECT id FROM tenants WHERE id = ?').get(tenantId)) throw apiError(404, 'NOT_FOUND', 'Tenant not found.')
-    const body = await readBody(req)
-    return json(res, 200, importTenantCustomers(tenantId, body))
-  }
+  if (await migrationCenter.route({ req, res, path, isPlatform, readBody, json })) return
   // ---- 平台端·商家配置(替商家配好入驻资料):门店/营业时间/服务价目/技师/AI知识库 ----
   if (await platformAuth.handle(req, res, path, { readBody, json, apiError })) return   // D149 登录/改密/我是谁全在 platform-auth.mjs
   if (req.method === 'POST' && path === '/platform/session') {
@@ -16087,6 +16083,8 @@ try {
 } catch (error) {
   if (!String(error.message || '').includes('duplicate column')) throw error
 }
+// 依赖 users / service_notes / stored_value_transactions，放在这些表和迁移列全部就绪之后。
+migrationCenter.ensureSchema()
 
 /* ===== 结算单用券(2026-08-09,设计图《结算单用券》v3)=====
    coupons / coupon_grants 是 P0 就有的老表 —— 新列一律走 try/catch ALTER,
