@@ -38,6 +38,19 @@ export function createMigrationCenter({ db, apiError, randomId, iso, createHash,
 
   function ensureSchema() {
     db.exec(`
+      CREATE TABLE IF NOT EXISTS migration_pending_balances (
+        id TEXT PRIMARY KEY,
+        tenant_id TEXT NOT NULL,
+        user_id TEXT NOT NULL,
+        batch_id TEXT NOT NULL,
+        source_system TEXT NOT NULL,
+        source_record_id TEXT NOT NULL,
+        snapshot_amount_cents INTEGER NOT NULL CHECK(snapshot_amount_cents >= 0),
+        data_cutoff_at TEXT NOT NULL,
+        status TEXT NOT NULL DEFAULT 'pending',
+        created_at TEXT NOT NULL,
+        UNIQUE(tenant_id, source_system, source_record_id)
+      );
       CREATE TABLE IF NOT EXISTS migration_batches (
         id TEXT PRIMARY KEY,
         tenant_id TEXT NOT NULL,
@@ -181,6 +194,8 @@ export function createMigrationCenter({ db, apiError, randomId, iso, createHash,
       conflicts: [],
       skipped: [],
       openingBalanceCents: 0,
+      balancePolicy: 'pending_confirmation',
+      pendingBalanceCents: 0,
       detailCounts: { transactions: 0, serviceNotes: 0, cards: 0, gifts: 0, attachments: 0 },
       sourceDetailCounts: { transactions: 0, serviceNotes: 0, cards: 0, gifts: 0, attachments: 0 },
       preservedFieldNames: new Set(),
@@ -248,6 +263,7 @@ export function createMigrationCenter({ db, apiError, randomId, iso, createHash,
       const balanceCents = link ? 0 : asCents(mapped.balanceCents)
       const totalSpendCents = asCents(mapped.totalSpendCents)
       report.openingBalanceCents += balanceCents
+      report.pendingBalanceCents += balanceCents
       if (existing) report.toUpdate += 1
       else report.toCreate += 1
       actions.push({
@@ -277,11 +293,13 @@ export function createMigrationCenter({ db, apiError, randomId, iso, createHash,
     if (Math.round(Number(body.confirmImportCount)) !== report.importCount || Math.round(Number(body.confirmExcludedCount)) !== report.excludedCount) {
       throw apiError(400, 'COUNT_CONFIRM_MISMATCH', '导入/排除人数与预检结果不一致。')
     }
+    if (body.confirmPendingOnly !== true) throw apiError(400, 'PENDING_POLICY_CONFIRM_REQUIRED', '旧余额将暂存为待核对，不立即可用。请刷新导入页并重新确认。')
     const now = iso(new Date())
     const batchId = randomId('migration')
     let created = 0
     let updated = 0
     let openingWrittenCents = 0
+    let pendingWrittenCents = 0
     let notesWritten = 0
     let transactionsWritten = 0
     let assetsWritten = 0
@@ -322,12 +340,13 @@ export function createMigrationCenter({ db, apiError, randomId, iso, createHash,
               JSON.stringify(mergedTags), action.note, action.birthday, action.totalSpendCents, tenantId, userId)
           updated += 1
         }
+        // 旧系统总余额只暂存；后续确认必须对齐逐卡与已入账金额，不能在导入时直接变成可用余额。
         if (action.balanceCents > 0) {
-          db.prepare(`INSERT INTO stored_value_transactions (id, tenant_id, user_id, type, amount_cents, pay_channel, note, created_by, created_at, bucket)
-            VALUES (?, ?, ?, 'migrate_opening', ?, 'migration', ?, 'platform-migration-center', ?, 'legacy')`).run(
-              randomId('sv'), tenantId, userId, action.balanceCents,
-              `${pkg.sourceSystem} 截止 ${pkg.dataCutoffAt} 的迁移期初余额（源会员 ${action.sourceRecordId}）`, now)
-          openingWrittenCents += action.balanceCents
+          db.prepare(`INSERT INTO migration_pending_balances
+            (id, tenant_id, user_id, batch_id, source_system, source_record_id, snapshot_amount_cents, data_cutoff_at, created_at)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`).run(randomId('migbalance'), tenantId, userId, batchId,
+              pkg.sourceSystem, action.sourceRecordId, action.balanceCents, pkg.dataCutoffAt, now)
+          pendingWrittenCents += action.balanceCents
         }
         const existingLink = db.prepare(`SELECT id, opening_balance_applied_cents FROM customer_migration_links
           WHERE tenant_id = ? AND source_system = ? AND source_record_id = ?`).get(tenantId, pkg.sourceSystem, action.sourceRecordId)
@@ -336,7 +355,7 @@ export function createMigrationCenter({ db, apiError, randomId, iso, createHash,
         } else {
           db.prepare(`INSERT INTO customer_migration_links (id, tenant_id, source_system, source_record_id, user_id, opening_balance_applied_cents,
             first_batch_id, last_batch_id, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`).run(
-              randomId('miglink'), tenantId, pkg.sourceSystem, action.sourceRecordId, userId, action.balanceCents, batchId, batchId, now, now)
+              randomId('miglink'), tenantId, pkg.sourceSystem, action.sourceRecordId, userId, 0, batchId, batchId, now, now)
         }
         db.prepare(`INSERT INTO customer_migration_records (id, batch_id, tenant_id, source_record_id, user_id, status, exclusion_reason,
           mapped_json, source_json, details_json, review_json, created_at) VALUES (?, ?, ?, ?, ?, 'imported', NULL, ?, ?, ?, ?, ?)`).run(
@@ -385,7 +404,7 @@ export function createMigrationCenter({ db, apiError, randomId, iso, createHash,
           }
         }
       }
-      const result = { batchId, created, updated, excluded: report.excludedCount, openingWrittenCents, notesWritten, transactionsWritten, assetsWritten }
+      const result = { batchId, created, updated, excluded: report.excludedCount, openingWrittenCents, pendingWrittenCents, balancePolicy: 'pending_confirmation', notesWritten, transactionsWritten, assetsWritten }
       db.prepare('UPDATE migration_batches SET result_json = ? WHERE id = ?').run(JSON.stringify(result), batchId)
       db.exec('COMMIT')
       return { dryRun: false, tenantId, report, result }

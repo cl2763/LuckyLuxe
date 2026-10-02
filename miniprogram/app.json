@@ -74,6 +74,14 @@
         "content/index",
         "store/index"
       ]
+    },
+    {
+      "root": "pages/pose",
+      "pages": [
+        "list/index",
+        "detail/index",
+        "retouch/index"
+      ]
     }
   ],
   "window": {

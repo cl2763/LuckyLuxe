@@ -31,3 +31,5 @@ page{background:#fbf8f5}
 .b{flex:1;text-align:center;font-size:24rpx;border-radius:12rpx;padding:16rpx 0;background:#fbf8f5;border:1rpx solid #e7ddd4;color:#8c8279}
 .b.p{background:var(--brand);color:var(--hero);border-color:var(--brand)}
 .note{font-size:21rpx;color:#b6a99b;line-height:1.6;margin-top:18rpx}
+
+.creation-tools{margin-bottom:32rpx}.creation-title{font-size:42rpx;font-family:'Songti SC',serif;color:var(--ink);margin:16rpx 0 24rpx;font-weight:600}.creation-card{padding:26rpx;border:1rpx solid var(--line);border-radius:22rpx;background:var(--card);margin-bottom:18rpx}.creation-name{font-size:32rpx;font-weight:600;color:var(--ink)}.creation-copy{font-size:25rpx;line-height:1.7;color:var(--sub);margin:12rpx 0 20rpx}.creation-button{font-size:26rpx;line-height:1.5;padding:20rpx;border-radius:40rpx;color:var(--ink);background:var(--paper);border:1rpx solid var(--line)}.creation-button::after{border:none}.creation-button.primary{background:var(--brand);color:var(--hero);border-color:var(--brand)}

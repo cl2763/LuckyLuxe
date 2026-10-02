@@ -54,14 +54,19 @@ check('被排除会员的明细只计入源包总数，不计入待导入数', p
 const db = new DatabaseSync(DB_PATH)
 check('预检完全零写入', db.prepare('SELECT COUNT(*) n FROM migration_batches WHERE tenant_id=?').get(tenantId).n === 0 && db.prepare('SELECT COUNT(*) n FROM users WHERE tenant_id=?').get(tenantId).n === 0)
 
-const mismatch = await req(`${basePath}/execute`, { method: 'POST', body: JSON.stringify({ package: pkg, confirmPackageHash: 'wrong', confirmOpeningBalanceCents: 12345, confirmImportCount: 2, confirmExcludedCount: 1 }) })
+const mismatch = await req(`${basePath}/execute`, { method: 'POST', body: JSON.stringify({ package: pkg, confirmPendingOnly: true, confirmPackageHash: 'wrong', confirmOpeningBalanceCents: 12345, confirmImportCount: 2, confirmExcludedCount: 1 }) })
 check('文件哈希不一致拒绝执行', mismatch.status === 400 && mismatch.data.error.code === 'PACKAGE_CONFIRM_MISMATCH', JSON.stringify(mismatch.data))
 
-const run = await req(`${basePath}/execute`, { method: 'POST', body: JSON.stringify({ package: pkg, confirmPackageHash: preview.data.report.packageHash, confirmOpeningBalanceCents: 12345, confirmImportCount: 2, confirmExcludedCount: 1 }) })
+const staleClient = await req(`${basePath}/execute`, { method: 'POST', body: JSON.stringify({ package: pkg, confirmPackageHash: preview.data.report.packageHash, confirmOpeningBalanceCents: 12345, confirmImportCount: 2, confirmExcludedCount: 1 }) })
+check('旧客户端未确认暂存政策时拒绝执行', staleClient.status === 400 && staleClient.data.error.code === 'PENDING_POLICY_CONFIRM_REQUIRED')
+
+const run = await req(`${basePath}/execute`, { method: 'POST', body: JSON.stringify({ package: pkg, confirmPendingOnly: true, confirmPackageHash: preview.data.report.packageHash, confirmOpeningBalanceCents: 12345, confirmImportCount: 2, confirmExcludedCount: 1 }) })
 check('正式迁移成功', run.status === 200 && run.data.result.created === 2 && run.data.result.excluded === 1, JSON.stringify(run.data))
 check('无手机号会员通过源平台身份导入', db.prepare("SELECT COUNT(*) n FROM user_identities WHERE tenant_id=? AND provider='legacy:meiwen' AND provider_user_id='mw-2'").get(tenantId).n === 1)
 check('负累计消费不进入业务负数', db.prepare("SELECT legacy_total_spend_cents n FROM users WHERE tenant_id=? AND display_name='无手机号会员'").get(tenantId).n === 0)
-check('期初余额只在 legacy 桶写一笔', db.prepare("SELECT COUNT(*) n, SUM(amount_cents) s FROM stored_value_transactions WHERE tenant_id=? AND type='migrate_opening' AND bucket='legacy'").get(tenantId).n === 1 && db.prepare("SELECT SUM(amount_cents) s FROM stored_value_transactions WHERE tenant_id=? AND type='migrate_opening'").get(tenantId).s === 12345)
+check('旧余额仅暂存，不生成可用期初余额流水', db.prepare("SELECT COUNT(*) n FROM stored_value_transactions WHERE tenant_id=? AND type='migrate_opening'").get(tenantId).n === 0 && db.prepare('SELECT SUM(snapshot_amount_cents) s FROM migration_pending_balances WHERE tenant_id=? AND status=?').get(tenantId,'pending').s === 12345)
+check('回执明确区分已写余额和待核对金额', run.data.result.openingWrittenCents === 0 && run.data.result.pendingWrittenCents === 12345)
+check('来源关联未标记为已入账', db.prepare('SELECT SUM(opening_balance_applied_cents) s FROM customer_migration_links WHERE tenant_id=?').get(tenantId).s === 0)
 check('消费记录只进旧档案且未造结算单', db.prepare('SELECT COUNT(*) n FROM customer_legacy_transactions WHERE tenant_id=?').get(tenantId).n === 1 && db.prepare('SELECT COUNT(*) n FROM settlements WHERE tenant_id=?').get(tenantId).n === 0)
 check('卡和赠品只进旧资产档案', db.prepare('SELECT COUNT(*) n FROM customer_legacy_assets WHERE tenant_id=?').get(tenantId).n === 2)
 check('服务小记进入商家内部小记', db.prepare("SELECT COUNT(*) n FROM service_notes WHERE tenant_id=? AND raw_text='内部服务小记'").get(tenantId).n === 1)

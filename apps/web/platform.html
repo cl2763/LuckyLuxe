@@ -434,7 +434,7 @@
       </div>
       <div class="card">
         <h2>标准迁移包（推荐）</h2>
-        <p class="muted" style="margin-bottom:10px">适用于美问及以后接入的其他平台。先上传商家最终确认的 JSON，平台只做预检；人数、排除名单、期初余额和数据截止时间都确认后才允许正式导入。</p>
+        <p class="muted" style="margin-bottom:10px">适用于美问及以后接入的其他平台。先上传商家最终确认的 JSON，平台只做预检；人数、排除名单、待核对旧余额和数据截止时间都确认后才允许导入。旧余额仅暂存，商家核对启用前不可消费。</p>
         <div class="row" style="align-items:center">
           <input type="file" id="migFile" accept=".json,application/json" onchange="loadMigrationPackage(event)">
           <span class="muted" id="migLoaded">尚未选择文件</span>
@@ -450,7 +450,7 @@
         <div class="cred" style="margin-top:12px">
           <label class="row" style="gap:8px;align-items:flex-start">
             <input type="checkbox" id="migConfirm" style="width:16px;height:16px;margin-top:3px">
-            <span id="migConfirmText">已核对人数、排除名单、期初余额和数据截止时间</span>
+            <span id="migConfirmText">已核对人数、排除名单、截止时间，并确认旧余额仅暂存待核对</span>
           </label>
         </div>
         <div class="row" style="margin-top:12px">
@@ -1180,7 +1180,7 @@ function fmtTimestamp(value){
 }
 function migrationReportHtml(r){
   const blocked=(r.blockingReasons||[])
-  const direct='姓名、手机号、生日、标签、期初余额、历史累计消费'
+  const direct='姓名、手机号、生日、标签、历史累计消费；旧余额仅暂存待核对'
   const preserved=(r.preservedFieldNames||[]).join('、')||'无'
   return `
     <div class="row" style="gap:22px;margin-bottom:12px;flex-wrap:wrap">
@@ -1188,7 +1188,7 @@ function migrationReportHtml(r){
       <div><div class="muted">更新已有</div><b style="font-size:20px">${r.toUpdate}</b></div>
       <div><div class="muted">商家排除</div><b style="font-size:20px">${r.excludedCount}</b></div>
       <div><div class="muted">冲突 / 无效</div><b style="font-size:20px;color:${r.conflicts.length||r.skipped.length?'var(--danger)':'inherit'}">${r.conflicts.length+r.skipped.length}</b></div>
-      <div><div class="muted">期初余额</div><b style="font-size:20px;color:var(--brandd)">${moneyC(r.openingBalanceCents)}</b></div>
+      <div><div class="muted">待核对旧余额</div><b style="font-size:20px;color:var(--brandd)">${moneyC(r.openingBalanceCents)}</b></div>
     </div>
     <table><tbody>
       <tr><th style="width:180px">源平台</th><td>${esc(r.sourceSystem)}</td></tr>
@@ -1213,7 +1213,7 @@ async function runMigrationPreview(){
     if(tid!==$('impTenant').value||pkg!==MIG_PACKAGE||fileKey!==MIG_FILE_KEY)return
     MIG_PREVIEW={tid,pkg,fileKey,report:data.report}
     $('migReport').innerHTML=migrationReportHtml(data.report)
-    $('migConfirmText').textContent=`我已核对：导入 ${data.report.importCount} 位、排除 ${data.report.excludedCount} 位、期初余额 ${moneyC(data.report.openingBalanceCents)}、数据截止 ${data.report.dataCutoffAt}`
+    $('migConfirmText').textContent=`我已核对：导入 ${data.report.importCount} 位、排除 ${data.report.excludedCount} 位、待核对旧余额 ${moneyC(data.report.openingBalanceCents)}、数据截止 ${data.report.dataCutoffAt}`
     $('migConfirm').checked=false
     $('migExecuteBtn').disabled=Boolean(data.report.blockingReasons.length)
     $('migReportCard').classList.remove('hidden')
@@ -1233,14 +1233,14 @@ async function runMigrationExecute(){
   if(!current||current.tid!==$('impTenant').value||current.pkg!==MIG_PACKAGE||current.fileKey!==MIG_FILE_KEY){invalidateMigrationPackage();toast('门店或文件已变化，请重新预检');return}
   if(current.report.blockingReasons.length){toast('预检仍有阻塞项，不能执行');return}
   if(!$('migConfirm').checked){toast('请先勾选最终核对项');return}
-  if(!await UIDialog.confirm(`确认向「${current.tid}」导入 ${current.report.importCount} 位会员，排除 ${current.report.excludedCount} 位，期初余额 ${moneyC(current.report.openingBalanceCents)}？`))return
+  if(!await UIDialog.confirm(`确认向「${current.tid}」导入 ${current.report.importCount} 位会员，排除 ${current.report.excludedCount} 位，待核对旧余额 ${moneyC(current.report.openingBalanceCents)}？`))return
   try{
     const data=await api(`/platform/tenants/${current.tid}/migrations/execute`,{method:'POST',body:JSON.stringify({
-      package:current.pkg,confirmPackageHash:current.report.packageHash,confirmOpeningBalanceCents:current.report.openingBalanceCents,
+      package:current.pkg,confirmPendingOnly:true,confirmPackageHash:current.report.packageHash,confirmOpeningBalanceCents:current.report.openingBalanceCents,
       confirmImportCount:current.report.importCount,confirmExcludedCount:current.report.excludedCount
     })})
     const x=data.result
-    $('migResult').innerHTML=`<p>批次 <code>${esc(x.batchId)}</code> 已完成：新建 <b>${x.created}</b> · 更新 <b>${x.updated}</b> · 排除留档 <b>${x.excluded}</b> · 期初余额 <b>${moneyC(x.openingWrittenCents)}</b> · 消费档案 ${x.transactionsWritten} · 服务小记 ${x.notesWritten} · 卡/赠品/附件档案 ${x.assetsWritten}</p><p class="muted">本批业务数据截止：${fmtTimestamp(data.report.dataCutoffAt)}。下次增量包必须晚于此时间。</p>`
+    $('migResult').innerHTML=`<p>批次 <code>${esc(x.batchId)}</code> 已完成：新建 <b>${x.created}</b> · 更新 <b>${x.updated}</b> · 排除留档 <b>${x.excluded}</b> · 待核对旧余额 <b>${moneyC(x.pendingWrittenCents ?? 0)}</b> · 消费档案 ${x.transactionsWritten} · 服务小记 ${x.notesWritten} · 卡/赠品/附件档案 ${x.assetsWritten}</p><p class="muted">旧余额尚不可使用，需另行核对启用。导入不产生充值收入。 本批业务数据截止：${fmtTimestamp(data.report.dataCutoffAt)}。下次增量包必须晚于此时间。</p>`
     $('migResultCard').classList.remove('hidden');toast('迁移导入完成');loadMigrationHistory()
     MIG_PREVIEW=null;$('migReportCard').classList.add('hidden')
   }catch(e){toast(e.message)}
@@ -1251,7 +1251,7 @@ async function loadMigrationHistory(){
   try{
     const data=await api(`/platform/tenants/${tid}/migrations`)
     if(tid!==$('impTenant').value)return
-    $('migHistory').innerHTML=data.batches.length?`<table><thead><tr><th>源平台</th><th>数据截止</th><th>导出时间</th><th>导入 / 排除</th><th>期初余额</th><th>执行时间</th></tr></thead><tbody>${data.batches.map(b=>`<tr><td>${esc(b.source_system)}</td><td><b>${esc(b.data_cutoff_at)}</b></td><td>${esc(b.source_exported_at)}</td><td>${b.import_count} / ${b.excluded_count}</td><td>${moneyC(b.opening_balance_cents,tid)}</td><td>${esc(b.executed_at)}</td></tr>`).join('')}</tbody></table>`:'尚无已执行迁移批次。'
+    $('migHistory').innerHTML=data.batches.length?`<table><thead><tr><th>源平台</th><th>数据截止</th><th>导出时间</th><th>导入 / 排除</th><th>待核对旧余额</th><th>执行时间</th></tr></thead><tbody>${data.batches.map(b=>`<tr><td>${esc(b.source_system)}</td><td><b>${esc(b.data_cutoff_at)}</b></td><td>${esc(b.source_exported_at)}</td><td>${b.import_count} / ${b.excluded_count}</td><td>${moneyC(b.opening_balance_cents,tid)}</td><td>${esc(b.executed_at)}</td></tr>`).join('')}</tbody></table>`:'尚无已执行迁移批次。'
   }catch(e){$('migHistory').textContent=e.message}
 }
 
