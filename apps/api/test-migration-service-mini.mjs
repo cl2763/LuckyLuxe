@@ -9,7 +9,7 @@ vm.runInNewContext(src,{require:p=>p.endsWith('/api')?api:{storeMoney:String},wx
 page.setData=function(d){Object.assign(this.data,d)};page.onLoad({userId:'u',assetId:'a'});page.visible=true
 return{page,posts,info,setTenant:v=>tid=v,setConfirm:v=>confirm=v,setReject:v=>reject=v}}
 function ready(p){p.setData({title:'护理赠卡',quantity:'2',unitValue:'10.50',reason:'核对记录',serviceIndex:1,agreements:{noExpiry:true,serviceGiftConfirmed:true,noCashBalance:true,oneUsePerService:true,rulesConfirmed:true,sourceUseStopped:true}})}
-let n=0;async function check(name,f){await f();console.log('PASS',++n,name)}
+let n=0;async function check(name,f){await f();console.log('ok',++n,name)}
 await check('unconfirmed gift and unmapped service cannot submit',async()=>{const {page,posts}=setup();await page.load();assert.equal(Object.keys(page.data.agreements).length,0);ready(page);page.setData({serviceIndex:0});await page.save();assert.equal(posts.length,0)})
 await check('fractional counts rejected; zero count accepted as exhausted',async()=>{const {page,posts}=setup();await page.load();ready(page);page.setData({quantity:'1.5'});await page.save();assert.equal(posts.length,0);page.setData({quantity:'0'});await page.save();assert.equal(posts[0].body.quantity,0)})
 await check('cancel writes nothing',async()=>{const {page,posts,setConfirm}=setup();await page.load();ready(page);setConfirm(false);await page.save();assert.equal(posts.length,0);assert.equal(page.data.saving,false)})

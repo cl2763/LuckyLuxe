@@ -8,7 +8,7 @@ const root=path.resolve(import.meta.dirname,'../../miniprogram/pages/pose')
 const catalog=require(path.join(root,'catalog.js'))
 const draft=require(path.join(root,'draft.js'))
 let count=0
-function check(label,fn){fn();count++;console.log('PASS',label)}
+function check(label,fn){fn();count++;console.log('ok',label)}
 check('33 unique cards with complete guidance and local assets',()=>{assert.equal(catalog.cards.length,33);assert.equal(new Set(catalog.cards.map(c=>c.id)).size,33);for(const c of catalog.cards){for(const k of ['pose','cam','light','bg','avoid','length','shot','style'])assert.ok(c[k]);assert.ok(fs.existsSync(path.join(root,'assets',c.id+'.jpg')))}})
 check('all filter combinations return cards consistent with the documented fallback',()=>{for(const length of catalog.values('length'))for(const shot of catalog.values('shot'))for(const style of catalog.values('style')){const f={length,shot,style};const match=(c,k)=>f[k]==='不限'||c[k]===f[k];const exact=catalog.cards.filter(c=>match(c,'length')&&match(c,'shot')&&match(c,'style'));const relaxed=catalog.cards.filter(c=>match(c,'length')&&match(c,'shot'));const expected=exact.length?exact:relaxed.length?relaxed:catalog.cards.filter(c=>match(c,'shot'));const result=catalog.filterCards(f);assert.equal(result.count,expected.length);assert.deepEqual(new Set(result.groups.flatMap(g=>g.cards.map(c=>c.id))),new Set(expected.map(c=>c.id)));if(!exact.length)assert.ok(result.message)}})
 check('unknown card does not resolve to another card',()=>assert.equal(catalog.find('../A1'),undefined))

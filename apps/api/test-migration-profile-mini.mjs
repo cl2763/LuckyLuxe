@@ -12,7 +12,7 @@ function setup(){
 }
 const response={profile:{acquisitionSource:'old',originalJoinedDate:''},records:[],transactions:[],assets:[],pendingBalances:[],hasMore:false}
 let count=0
-async function check(name,fn){await fn();console.log('PASS',++count,name)}
+async function check(name,fn){await fn();console.log('ok',++count,name)}
 await check('late page response cannot replace newer page',async()=>{const {page,pending}=setup();const a=page.load(0),b=page.load(1);pending[1].resolve(response);await b;pending[0].resolve({...response,profile:{acquisitionSource:'stale'}});await a;assert.equal(page.data.page,1);assert.equal(page.data.profile.acquisitionSource,'old')})
 await check('tenant switch drops in-flight private data and blocks saves',async()=>{const {page,pending,tenant}=setup();const a=page.load(0);tenant('B');pending[0].resolve(response);await a;assert.equal(page.data.profile.acquisitionSource,'');await page.save();assert.equal(pending.length,1);await page.load(0);assert.equal(page.data.rows.length,0);assert.ok(page.data.error.includes('门店'))})
 await check('pagination preserves unsaved fields',async()=>{const {page,pending}=setup();page.source({detail:{value:'draft'}});const a=page.load(1);pending[0].resolve(response);await a;assert.equal(page.data.profile.acquisitionSource,'draft')})

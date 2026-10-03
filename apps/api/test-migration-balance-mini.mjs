@@ -11,7 +11,7 @@ function setup(){
  return{page,posts,messages,info,setTenant:v=>tid=v,setConfirm:v=>confirm=v,setReject:v=>rejectPost=v}
 }
 const ready=page=>{page.setData({paid:'80.00',bonus:'20.00',evidence:'商家已核对'});for(const key of ['noReliableCardBreakdown','unrestricted','noExpiry','sourceUseStopped'])page.toggleCheck({currentTarget:{dataset:{key}}})}
-let n=0;async function check(name,fn){await fn();console.log('PASS',++n,name)}
+let n=0;async function check(name,fn){await fn();console.log('ok',++n,name)}
 await check('no rule is preselected and incomplete rules cannot submit',async()=>{const {page,posts}=setup();await page.load();assert.equal(page.data.confirmed.length,0);page.setData({paid:'80',bonus:'20',evidence:'test'});await page.save();assert.equal(posts.length,0)})
 await check('invalid money and unknown split cannot submit',async()=>{for(const paid of ['','-1','1.111','1e3']){const {page,posts}=setup();await page.load();ready(page);page.setData({paid});await page.save();assert.equal(posts.length,0)}})
 await check('confirmation cancel writes nothing',async()=>{const {page,posts,setConfirm}=setup();await page.load();ready(page);setConfirm(false);await page.save();assert.equal(posts.length,0);assert.equal(page.data.saving,false)})

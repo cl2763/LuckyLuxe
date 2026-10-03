@@ -15,7 +15,7 @@ db.exec(`CREATE TABLE tenants(id TEXT PRIMARY KEY,currency TEXT);INSERT INTO ten
 createMigrationCenter({...common,normalizePhone:s=>s}).ensureSchema()
 const service=createMigrationBalanceActivation(common);service.ensureSchema()
 let n=0
-const check=(name,fn)=>{fn();console.log('PASS',++n,name)}
+const check=(name,fn)=>{fn();console.log('ok',++n,name)}
 const cutoff='2020-01-01T00:00:00Z'
 function seed(id,amount=10000){
  db.prepare('INSERT INTO users VALUES(?,?)').run(id,'A')
@@ -42,6 +42,6 @@ check('cross-tenant and wrong customer cannot preview or activate',()=>{const b=
 check('failure at audit insert rolls back both ledger and source status',()=>{const b=seed('rollback');db.exec("CREATE TRIGGER inject_failure BEFORE INSERT ON migration_balance_activations WHEN NEW.user_id='rollback' BEGIN SELECT RAISE(ABORT,'injected');END;");assert.throws(()=>activate('rollback',b));assert.equal(db.prepare("SELECT count(*) n FROM stored_value_transactions WHERE user_id='rollback'").get().n,0);assert.equal(service.preview('A','rollback','rollback').status,'pending');db.exec('DROP TRIGGER inject_failure')})
 check('refund facts retain principal/bonus distinction',()=>{const b=seed('refund');activate('refund',b);const refund=createAccountRefund({...common,formatMoneyCents:c=>String(c)});const f=refund.refundFacts('refund','A');assert.equal(f.paidCents,8000);assert.equal(f.bonusCents,2000);assert.equal(f.paidRefundableCents,8000)})
 check('schema repeat startup preserves activation audit',()=>{service.ensureSchema();assert.equal(service.preview('A','a','a').confirmation.id,result.id)})
-for(const role of ['staff','finance','customer']) { await assert.rejects(()=>service.route({req:{method:'GET'},path:'/admin/customers/a/migration-balances/a',adminSession:{role}}),e=>e.status===403);console.log('PASS',++n,role+' cannot inspect or enable migrated balance') }
+for(const role of ['staff','finance','customer']) { await assert.rejects(()=>service.route({req:{method:'GET'},path:'/admin/customers/a/migration-balances/a',adminSession:{role}}),e=>e.status===403);console.log('ok',++n,role+' cannot inspect or enable migrated balance') }
 console.log(n+' migration activation checks passed')
 db.close()

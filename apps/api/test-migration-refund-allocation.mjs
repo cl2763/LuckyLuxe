@@ -11,7 +11,7 @@ CREATE TRIGGER no_update BEFORE UPDATE ON stored_value_transactions BEGIN SELECT
 CREATE TRIGGER no_delete BEFORE DELETE ON stored_value_transactions BEGIN SELECT RAISE(ABORT,'immutable');END;`)
 const common={db,apiError:(status,code,message)=>Object.assign(new Error(message),{status,code}),randomId:p=>p+randomUUID(),iso:d=>d.toISOString(),currentTenantId:()=> 'A',formatMoneyCents:c=>String(c)}
 const value=createStoredValue(common),refund=createAccountRefund({...common,...value})
-let n=0;const check=(name,fn)=>{fn();console.log('PASS',++n,name)}
+let n=0;const check=(name,fn)=>{fn();console.log('ok',++n,name)}
 const doRefund=(amount,requestId)=>refund.refundStoredValue({userId:'u',amountCents:amount,reason:'synthetic migration regression',operator:'ownerA',requestId,tenantId:'A'})
 check('legacy-only refund reduces legacy while normal stays zero',()=>{doRefund(3000,'first');assert.deepEqual(value.storedValueBalanceDetail('u','A'),{totalCents:7000,legacyCents:7000,normalCents:0})})
 check('new recharge remains normal and does not resurrect refunded legacy',()=>{value.insertStoredValueTransaction({userId:'u',type:'recharge',amountCents:5000});assert.deepEqual(value.storedValueBalanceDetail('u','A'),{totalCents:12000,legacyCents:7000,normalCents:5000})})

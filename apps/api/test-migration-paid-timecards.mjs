@@ -17,7 +17,7 @@ db.exec(`CREATE TABLE tenants(id TEXT PRIMARY KEY,currency TEXT);INSERT INTO ten
 createMigrationCenter({...common,normalizePhone:s=>s}).ensureSchema()
 const service=createMigrationBalanceActivation(common);service.ensureSchema()
 let n=0
-const check=(name,fn)=>{fn();console.log('PASS',++n,name)}
+const check=(name,fn)=>{fn();console.log('ok',++n,name)}
 const cutoff='2020-01-01T00:00:00Z'
 function seed(id,amount=10000){
  db.prepare('INSERT INTO users VALUES(?,?)').run(id,'A')
@@ -50,5 +50,5 @@ check('退款受对应次数原本金上限约束',()=>assert.throws(()=>refund.
 check('退款重复请求不重复扣次数或写账',()=>{assert.equal(refund.refundTimecard(r).remainingTimes,8);assert.equal(refund.refundTimecard(r).duplicate,true);assert.equal(db.prepare('SELECT count(*) n FROM timecard_refunds').get().n,1);assert.throws(()=>refund.refundTimecard({...r,times:1}),e=>e.code==='REQUEST_CONFLICT')})
 check('退款回执失败则次数和退款流水一并回滚',()=>{db.exec("CREATE TRIGGER fail_refund BEFORE INSERT ON migration_timecard_refund_receipts BEGIN SELECT RAISE(ABORT,'injected');END");assert.throws(()=>refund.refundTimecard({...r,requestId:'refund_paid_2'}));assert.equal(refund.timecardRefundFacts(r.cardId).remainingTimes,8);assert.equal(db.prepare('SELECT count(*) n FROM timecard_refunds').get().n,1)})
 check('重复启动保留来源回执',()=>{paid.ensureSchema();assert.equal(act('paid',b).id,receipt.id)})
-for(const role of ['staff','finance','customer']){await assert.rejects(()=>paid.route({req:{method:'POST'},path:'/admin/customers/paid/migration-balances/paid/activate-timecards',adminSession:{role}}),e=>e.status===403);console.log('PASS',++n,role+' denied')}
+for(const role of ['staff','finance','customer']){await assert.rejects(()=>paid.route({req:{method:'POST'},path:'/admin/customers/paid/migration-balances/paid/activate-timecards',adminSession:{role}}),e=>e.status===403);console.log('ok',++n,role+' denied')}
 console.log(n+' paid timecard checks passed');db.close()
