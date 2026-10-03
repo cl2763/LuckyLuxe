@@ -14,6 +14,7 @@ function lastText(iso) { if (!iso) return '—'; const d = Math.floor((Date.now(
 Page({
   data: { c: null, orders: [], ordersLoaded: false },
   onLoad(q) { this.id = decodeURIComponent((q && q.id) || '') },
+  migrationArchive() { require('../../../utils/nav').to('/pages/merchant/migration-archive/index?userId='+encodeURIComponent(this.id)) },
   writeNote() {
     const nm = (this.data.c && this.data.c.name) || '顾客'
     wx.navigateTo({ url: `/pages/merchant/service-note/index?userId=${encodeURIComponent(this.id)}&name=${encodeURIComponent(nm)}` })

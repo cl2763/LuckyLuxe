@@ -1,0 +1,2 @@
+@import "../migration-balance/index.wxss";
+.operations{display:flex;gap:16rpx;flex-wrap:wrap}.selected{border-color:var(--brand);font-weight:bold}.receipt{padding:24rpx;line-height:1.7;border:1rpx solid var(--brand);border-radius:16rpx;margin-bottom:24rpx}

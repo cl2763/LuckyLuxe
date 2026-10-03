@@ -39,6 +39,7 @@ async function request(path, options = {}) {
     ...options,
     headers: {
       'content-type': 'application/json',
+      'x-tenant-id': process.env.TEST_TENANT_ID || 'lucky-luxe',
       authorization: `Bearer ${TOKEN}`,
       ...(options.headers || {})
     }
@@ -280,10 +281,24 @@ async function main() {
   assert(specialQuote, 'special arrangement should create a human task')
   assert(specialQuote.styleElements?.quoteIntake?.trigger === 'special_manual_review', `special arrangement trigger should be special_manual_review, got ${specialQuote.styleElements?.quoteIntake?.trigger}`)
 
-  await request(`/admin/quote-requests/${quote.id}/draft`, {
+  // 正向草稿测试从真实可约接口选时段，避免固定 +30 天落到店休。
+  // 明确传门店/服务/技师，仍走生产的时间与占位校验，不绕过预约规则。
+  const draftStore = (await request('/admin/business-hours')).stores[0]
+  const draftService = (await request('/admin/services')).services.find(item => item.type.toUpperCase() === 'NAIL' && item.isActive !== false)
+  assert(draftStore && draftService, 'draft fixture has an active store and nail service')
+  let draftSlot = null
+  for (let offset = 1; offset <= 21 && !draftSlot; offset += 1) {
+    const date = new Intl.DateTimeFormat('en-CA', { timeZone: 'America/Toronto', year: 'numeric', month: '2-digit', day: '2-digit' }).format(new Date(Date.now() + offset * 86400000))
+    const available = await request(`/availability?${new URLSearchParams({ storeId: draftStore.id, serviceId: draftService.id, date })}`)
+    const group = available.slots.find(item => item.slots.length)
+    if (group) draftSlot = { storeId: draftStore.id, serviceId: draftService.id, technicianId: group.technician.id, date, time: group.slots[0] }
+  }
+  assert(draftSlot, 'draft fixture finds a genuinely available future slot')
+  const draftedQuote = await request(`/admin/quote-requests/${quote.id}/draft`, {
     method: 'POST',
-    body: JSON.stringify({ date: new Date(Date.now()+30*86400000).toISOString().slice(0,10), time: '14:00' })
+    body: JSON.stringify(draftSlot)
   })
+  assert(draftedQuote.quoteRequest.bookingDraft.date === draftSlot.date && draftedQuote.quoteRequest.bookingDraft.time === draftSlot.time, 'created draft retains the explicitly selected available date and time')
   conversation = await conversationByExternalId(customer)
   assert(/预约草稿|booking draft|draft/i.test(transcriptText(conversation)), 'confirmed quote with date/time should create and send booking draft link')
 

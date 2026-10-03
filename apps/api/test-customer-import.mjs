@@ -1,6 +1,6 @@
 // P0 平台顾客导入回归(2026-08-06):
 // 1. dryRun 只出报告、零写库
-// 2. 执行后:期初余额进 legacy 桶、is_migrated=1、历史累计消费进 legacy_total_spend_cents
+// 2. 旧入口禁止执行；标准迁移包先暂存余额，保留历史消费与迁移标记
 // 3. 手机号去重(文件内重复 + 库里已存在)
 // 4. 同手机号但姓名不同 = 冲突,进报告且不写库
 // 5. 期初余额不进财务账本(只是负债,不是本店收入)
@@ -67,19 +67,22 @@ async function main() {
 
   // ---- 2. 确认金额对不上 → 拒绝 ----
   const wrongConfirm = await request(importPath, { method: 'POST', body: JSON.stringify({ rows, dryRun: false, confirmBalanceCents: 999 }) })
-  check('期初余额确认数对不上 → 400 拒绝', wrongConfirm.status === 400 && wrongConfirm.data.error.code === 'BALANCE_CONFIRM_MISMATCH', JSON.stringify(wrongConfirm.data))
+  check('旧入口即使带确认金额也禁止执行', wrongConfirm.status === 409 && wrongConfirm.data.error.code === 'LEGACY_IMPORT_DISABLED', JSON.stringify(wrongConfirm.data))
   const stillEmpty = await request('/admin/membership/members', {}, shop.token)
   check('被拒后仍然零写库', stillEmpty.data.members.length === 0)
 
-  // ---- 3. 执行导入 ----
-  const run = await request(importPath, { method: 'POST', body: JSON.stringify({ rows, dryRun: false, confirmBalanceCents: 128000 }) })
-  check('执行导入成功', run.status === 200 && run.data.dryRun === false, JSON.stringify(run.data))
-  check('新建 2 人、期初写入 1280 元', run.data.created === 2 && run.data.openingWrittenCents === 128000, JSON.stringify(run.data))
-
+  // ---- 3. 旧入口不能写；标准迁移包只建档并暂存权益 ----
+  const retired = await request(importPath, { method: 'POST', body: JSON.stringify({ rows, dryRun: false, confirmBalanceCents: 128000 }) })
+  check('旧执行入口返回明确退役错误', retired.status === 409 && retired.data.error?.code === 'LEGACY_IMPORT_DISABLED')
+  const pkg = { packageType: 'youji-customer-migration-v1', schemaVersion: 1, sourceSystem: 'customer-import-fixture', sourceExportedAt: '2020-01-01T00:00:00Z', dataCutoffAt: '2020-01-01T00:00:00Z', sourceTimezone: 'Asia/Shanghai', merchantConfirmedAt: '2020-01-02T00:00:00Z', mode: 'initial', records: rows.slice(0, 2).map((mapped, i) => ({ sourceRecordId: `customer-${i}`, mapped, source: {}, details: { cards: [], gifts: [], transactions: [], serviceNotes: [], attachments: [] }, review: {} })) }
+  const migrationPath = `/platform/tenants/${shop.tenantId}/migrations`
+  const preview = await request(migrationPath + '/preview', { method: 'POST', body: JSON.stringify({ package: pkg }) })
+  const run = await request(migrationPath + '/execute', { method: 'POST', body: JSON.stringify({ package: pkg, confirmPendingOnly: true, confirmPackageHash: preview.data.report?.packageHash, confirmOpeningBalanceCents: 128000, confirmImportCount: 2, confirmExcludedCount: 0 }) })
+  check('标准迁移包执行成功', run.status === 200 && run.data.result?.created === 2, JSON.stringify(run.data))
   const members = await request('/admin/membership/members', {}, shop.token)
   check('库里正好 2 个顾客(手机号去重生效)', members.data.members.length === 2, JSON.stringify(members.data.members))
   const lin = members.data.members.find((m) => m.name === '林小雅')
-  check('期初余额进 legacy 桶,normal 桶为 0', lin.legacyBalanceCents === 128000 && lin.normalBalanceCents === 0 && lin.balanceCents === 128000, JSON.stringify(lin))
+  check('待核对余额不进入任何可用余额桶', lin.legacyBalanceCents === 0 && lin.normalBalanceCents === 0 && lin.balanceCents === 0, JSON.stringify(lin))
   check('is_migrated 标记为已迁移', lin.isMigrated === true)
   check('历史累计消费只进 legacy_total_spend(计入会员判定口径)', lin.totalSpendCents === 560000, String(lin.totalSpendCents))
   check('迁移期初不算本系统首充', lin.isFirstRecharge === true)
@@ -114,11 +117,11 @@ async function main() {
       ]
     })
   })
-  check('二次执行:1 更新 0 新建', secondRun.data.updated === 1 && secondRun.data.created === 0, JSON.stringify(secondRun.data))
+  check('二次旧入口执行仍然拒绝，不改已有档案', secondRun.status === 409 && secondRun.data.error?.code === 'LEGACY_IMPORT_DISABLED', JSON.stringify(secondRun.data))
   const after = await request('/admin/membership/members', {}, shop.token)
   check('冲突行没被写进去(仍然 2 个顾客)', after.data.members.length === 2, JSON.stringify(after.data.members.map((m) => m.name)))
   const linAfter = after.data.members.find((m) => m.name === '林小雅')
-  check('更新只抬高历史累计消费,不重复写期初余额', linAfter.totalSpendCents === 700000 && linAfter.legacyBalanceCents === 128000, JSON.stringify(linAfter))
+  check('被拒执行不会改历史消费或重复写余额', linAfter.totalSpendCents === 560000 && linAfter.legacyBalanceCents === 0, JSON.stringify(linAfter))
   const wang = after.data.members.find((m) => m.name === '王梦琪')
   check('冲突顾客的余额没被改动', wang.balanceCents === 0, JSON.stringify(wang))
 

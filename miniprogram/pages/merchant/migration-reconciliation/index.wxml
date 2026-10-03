@@ -1,0 +1,60 @@
+<view class="page {{themeClass}}">
+<view class="title">旧卡与总余额对平预览</view>
+<view class="hint">先计算差额；符合规则后，商家可另行确认启用。未知卡项保持待核对。</view>
+<view wx:if="{{loading}}">读取中…</view>
+<view wx:if="{{error}}" class="error">{{error}}</view>
+<block wx:if="{{info && !loading && !receipt}}">
+<view class="card">原总额 {{amountText}} · {{info.currency}}<view wx:if="{{info.alreadyPosted}}" class="hint">已有旧余额入账，分卡不能重复加钱。</view>
+</view>
+<view class="card" wx:for="{{cards}}" wx:key="id">
+<view class="title">{{item.title || '未命名旧卡'}}</view>
+<picker range="{{kinds}}" value="{{item.kindIndex}}" data-index="{{index}}" data-key="kindIndex" bindchange="input">
+<view class="input">{{kinds[item.kindIndex]}}</view>
+</picker>
+<block wx:if="{{item.kindIndex>0}}">
+<label>剩余本金（{{info.currency}}）</label>
+<input type="digit" value="{{item.paid}}" data-index="{{index}}" data-key="paid" bindinput="input"/>
+<label>剩余赠送金（无则填 0）</label>
+<input type="digit" value="{{item.bonus}}" data-index="{{index}}" data-key="bonus" bindinput="input"/>
+<block wx:if="{{item.kindIndex===1}}">
+<label>剩余次数</label>
+<input type="number" value="{{item.times}}" data-index="{{index}}" data-key="times" bindinput="input"/>
+<label>指定服务</label>
+<picker range="{{services}}" range-key="nameZh" value="{{item.serviceIndex}}" data-index="{{index}}" data-key="serviceIndex" bindchange="input">
+<view class="input">{{services[item.serviceIndex].nameZh}}</view>
+</picker>
+</block>
+<label>到期日期</label>
+<picker mode="date" value="{{item.expiresOn}}" data-index="{{index}}" data-key="expiresOn" bindchange="input">
+<view class="input">{{item.expiresOn || '选择日期'}}</view>
+</picker>
+<button wx:if="{{item.expiresOn}}" data-index="{{index}}" bindtap="clearDate">清空日期</button>
+<button class="check" data-index="{{index}}" bindtap="expiry">
+<text class="check-box">{{item.noExpiry?'✓':''}}</text>明确无期限</button>
+</block>
+</view>
+<view wx:if="{{!cards.length}}" class="hint">此来源没有可核对的分卡资料。</view>
+<button wx:else class="primary" disabled="{{saving}}" bindtap="calculate">{{saving?'计算中…':'计算差额（不启用）'}}</button>
+<view wx:if="{{result}}" class="card">
+<view class="title">{{result.balanced?'金额已对平':'尚未对平'}}</view>
+<view>本金 {{result.paidText}} · 赠送 {{result.bonusText}}</view>
+<view>总额减分卡合计：{{result.differenceText}}</view>
+<view wx:for="{{result.issues}}" wx:key="*this" class="hint">{{item}}</view>
+<view class="hint">{{result.message}}</view>
+</view>
+</block>
+<view wx:if="{{result.eligible}}" class="card">
+<view class="title">确认启用迁入次数卡</view>
+<view class="hint">仅支持纯本金、每次金额相同的次数卡。指定服务与原期限保留；不增加储值余额，不立即核销。</view>
+<label>核对依据（必填）</label>
+<textarea value="{{evidence}}" bindinput="evidenceInput" maxlength="1000" disabled="{{saving}}"/>
+<button class="check" data-key="sourceUseStopped" bindtap="agree" disabled="{{saving}}"><text class="check-box">{{agreements.sourceUseStopped?'✓':''}}</text> 已核对截至此刻的变动，旧系统已停止使用</button>
+<button class="check" data-key="allBalanceAllocated" bindtap="agree" disabled="{{saving}}"><text class="check-box">{{agreements.allBalanceAllocated?'✓':''}}</text> 全部旧余额已分配到这些卡，不再另加储值</button>
+<button class="check" data-key="equalPerUsePrincipal" bindtap="agree" disabled="{{saving}}"><text class="check-box">{{agreements.equalPerUsePrincipal?'✓':''}}</text> 每卡按相同本金扣次，服务与期限均已核对</button>
+<button class="primary" bindtap="activate" disabled="{{saving}}">{{saving?'确认中…':'确认启用，不立即核销'}}</button>
+</view>
+<view wx:if="{{receipt}}" class="card">
+<view class="title">次数卡已启用</view>
+<view>共 {{receipt.cards.length}} 张。未增加储值余额，未产生营业收入；剩余次数请到会员卡包查看。</view>
+</view>
+</view>

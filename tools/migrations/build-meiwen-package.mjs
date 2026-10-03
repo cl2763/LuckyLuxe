@@ -3,6 +3,7 @@
    原始商家记录只读；输出路径由调用方指定，真实数据文件不得提交 Git。 */
 import { readFileSync, writeFileSync, chmodSync } from 'node:fs'
 import { createHash } from 'node:crypto'
+import { migrationProfileFields } from './profile-fields.mjs'
 
 const args = process.argv.slice(2)
 const arg = (name) => { const i = args.indexOf(name); return i >= 0 ? args[i + 1] : '' }
@@ -41,6 +42,7 @@ const records = raw.members.map((member) => {
     excluded,
     exclusionReason: excluded ? `商家最终核对备注：${text(review.note)}` : '',
     mapped: {
+      ...migrationProfileFields(p),
       name: text(p['会员名称']),
       phone: text(p['手机号']),
       birthday: text(p['生日']),

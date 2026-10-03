@@ -1,3 +1,4 @@
+import { pendingCustomerFixture } from './test-migration-fixture.mjs'
 /* 订单管理「今天」界面重做(2026-08-30,小程序今日台面屏=合同)。
 
    判据(处方与开单件同):①骨同源:网页调**同一条** /admin/schedule-day(不许另起数据口)
@@ -135,8 +136,7 @@ check('⑤ 营业时段字段在(网格范围口径的输入)', 'openTime' in da
   /* 行为:409 两句两因 —— 补录过去单(放行)后再撞同位=「已经过去」;未来重叠=「重叠」 */
   const svcD = (await request('/admin/services', { method: 'POST', body: JSON.stringify({ type: 'NAIL', nameZh: `D88测${RUN}`, nameEn: 'd', priceCents: 9900, baseDurationMin: 60, categoryId: catId }) }, PLATFORM, H)).data.service
   const techD = (await request('/admin/technicians', { method: 'POST', body: JSON.stringify({ name: `D88技${RUN}`, isActive: true }) }, PLATFORM, H)).data.technician
-  const impD = (await request(`/platform/tenants/${tid}/import/customers`, { method: 'POST', body: JSON.stringify({ dryRun: false, rows: [{ name: `D88客${RUN}`, phone: `137${RUN.slice(-8)}` }] }) })).data
-  const uD = impD.users[0].userId
+  const [uD] = await pendingCustomerFixture(request, tid, [{ name: `测试顾客${RUN}`, phone: '13812345678' }])
   const past = await request('/admin/bookings/direct', { method: 'POST', body: JSON.stringify({ userId: uD, serviceId: svcD.id, technicianId: techD.id, date: today, time: '00:00', durationMin: 30 }) }, PLATFORM, H)
   check('D88 行为:老板补录过去时段放行(00:00,补录=合法)', past.status === 201, String(past.status))
   const pastAgain = await request('/admin/bookings/direct', { method: 'POST', body: JSON.stringify({ userId: uD, serviceId: svcD.id, technicianId: techD.id, date: today, time: '00:00', durationMin: 30 }) }, PLATFORM, H)

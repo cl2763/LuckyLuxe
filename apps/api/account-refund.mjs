@@ -19,7 +19,7 @@
    仅老板(或被授予财务权限的账号),且**必须过已有那道财务密码门**(不新造门);
    员工端连按钮都不渲染(不是点了报错),接口层再拦一道 403。
    门禁本身在 local-server 的 requireRefundRight 里(它要拿 adminSession 与 req)。 */
-export function createAccountRefund({ db, apiError, iso, randomId, currentTenantId, insertStoredValueTransaction, storedValueBalanceCents, formatMoneyCents, storeDateOf }) {
+export function createAccountRefund({ db, apiError, iso, randomId, currentTenantId, insertStoredValueTransaction, storedValueBalanceCents, storedValueBalanceDetail, formatMoneyCents, storeDateOf }) {
   const now = () => iso(new Date())
 
   /* 退卡屏上那四个参考数(图 §二:少一个商家心里没底,多一个就成了替他算)。
@@ -120,12 +120,13 @@ export function createAccountRefund({ db, apiError, iso, randomId, currentTenant
     const bonusPart = amount - paidPart
     /* 一次 INSERT 写全 —— **不许写完再 UPDATE**:账本只许追加,那道触发器会打回来
        (08-26 沙箱真点撞到过:测试库租户被豁免,所以只有真店口径上才现形)。 */
+    const legacyRefundCents = Math.min(amount, Math.max(0, storedValueBalanceDetail(userId, tenantId).legacyCents))
     const txn = insertStoredValueTransaction({
       userId, type: 'refund', amountCents: -Math.abs(amount),
       payChannel: String(payChannel || 'cash'),
       note: `退卡 · ${why}`.slice(0, 200),
       createdBy: operator || 'owner', tenantId,
-      paidPartCents: paidPart, bonusPartCents: bonusPart, requestId: rid || null
+      paidPartCents: paidPart, bonusPartCents: bonusPart, requestId: rid || null, legacyRefundCents
     })
     const after = storedValueBalanceCents(userId, tenantId)
     return {
@@ -155,26 +156,46 @@ export function createAccountRefund({ db, apiError, iso, randomId, currentTenant
     }
   }
 
-  function refundTimecard({ cardId, times, amountCents, payChannel, reason, operator, tenantId = currentTenantId() }) {
+  function refundTimecard({ cardId, times, amountCents, payChannel, reason, operator, requestId, tenantId = currentTenantId() }) {
+    const migratedPaid=db.prepare("SELECT quantity,unit_value_cents FROM migration_asset_activations WHERE id=? AND tenant_id=? AND kind='paid_service'").get(cardId,tenantId)
+    const refundPayload=JSON.stringify({cardId,times:Number(times),amountCents,payChannel:String(payChannel||'cash'),reason:String(reason||'').trim()})
+    if(migratedPaid){
+      if(!/^[a-zA-Z0-9_-]{8,80}$/.test(requestId||''))throw apiError(400,'REQUEST_ID_REQUIRED','请刷新页面重新发起迁入次卡退款。')
+      const receipt=db.prepare('SELECT payload_json,result_json FROM migration_timecard_refund_receipts WHERE tenant_id=? AND request_id=?').get(tenantId,requestId)
+      if(receipt){if(receipt.payload_json!==refundPayload)throw apiError(409,'REQUEST_CONFLICT','同一退款请求的内容已经变化。');return {...JSON.parse(receipt.result_json),duplicate:true}}
+    }
     const facts = timecardRefundFacts(cardId, tenantId)
-    const n = Math.round(Number(times) || 0)
-    if (!Number.isFinite(n) || n <= 0) throw apiError(400, 'BAD_REQUEST', '退卡次数必须大于 0。')
+    const n = Number(times)
+    if (!Number.isSafeInteger(n) || n <= 0) throw apiError(400, 'BAD_REQUEST', '退卡次数必须是大于 0 的整数。')
     if (n > facts.remainingTimes) {
       throw apiError(400, 'REFUND_EXCEEDS_TIMES', `退 ${n} 次超过剩余 ${facts.remainingTimes} 次。`)
     }
     const why = String(reason || '').trim()
     if (!why) throw apiError(400, 'REASON_REQUIRED', '退卡原因必填。')
     const amount = assertAmount(amountCents, '次卡退款金额')
+    if(migratedPaid && amount>migratedPaid.unit_value_cents*n)throw apiError(400,'REFUND_EXCEEDS_SOURCE_PRINCIPAL','本次退款不能超过所退次数对应的原本金。')
+    const legacyGift=db.prepare("SELECT 1 FROM migration_asset_activations WHERE id=? AND tenant_id=? AND kind='service'").get(cardId,tenantId)
+    if(legacyGift && amount!==0) throw apiError(400,'GIFT_HAS_NO_CASH','迁入服务赠卡没有可退现金；已核销次数的退回请关联原服务单。')
     /* 🔴 2026-08-27 事务扫查出来的:扣次数与写退款记录原来是**两步裸写,中间没有事务**。
        坏的方向特别难看:次数先扣掉了、退款记录没写进去 —— 顾客的次数没了,
        系统里却查不到"退给过她钱",事后谁也说不清。按《动钱多步写律》包进一个事务。 */
     db.exec('BEGIN IMMEDIATE')
     try {
-      db.prepare('UPDATE member_timecards SET refunded_times = COALESCE(refunded_times, 0) + ? WHERE id = ? AND tenant_id = ?')
-        .run(n, cardId, tenantId)
+      if(migratedPaid){
+        const receipt=db.prepare('SELECT payload_json,result_json FROM migration_timecard_refund_receipts WHERE tenant_id=? AND request_id=?').get(tenantId,requestId)
+        if(receipt){if(receipt.payload_json!==refundPayload)throw apiError(409,'REQUEST_CONFLICT','退款请求内容变化。');db.exec('COMMIT');return {...JSON.parse(receipt.result_json),duplicate:true}}
+      }
+      const deducted = db.prepare('UPDATE member_timecards SET refunded_times = COALESCE(refunded_times, 0) + ? WHERE id = ? AND tenant_id = ? AND total_times - used_times - COALESCE(refunded_times, 0) >= ?')
+        .run(n, cardId, tenantId, n)
+      if (!deducted.changes) throw apiError(409, 'TIMECARD_RACE', '次卡剩余次数已变化，请重新核对后退卡。')
       db.prepare(`INSERT INTO timecard_refunds (id, tenant_id, card_id, user_id, times, amount_cents, pay_channel, reason, created_by, created_at)
         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`)
         .run(randomId('tcr'), tenantId, cardId, facts.userId, n, amount, String(payChannel || 'cash'), why.slice(0, 200), operator || 'owner', now())
+      if(migratedPaid){
+        const after=timecardRefundFacts(cardId,tenantId)
+        const result={cardId,userId:facts.userId,refundedTimes:n,refundedCents:amount,remainingTimes:after.remainingTimes,voided:after.remainingTimes===0,incomeImpactCents:0,facts:after}
+        db.prepare('INSERT INTO migration_timecard_refund_receipts(tenant_id,request_id,payload_json,result_json,created_at) VALUES(?,?,?,?,?)').run(tenantId,requestId,refundPayload,JSON.stringify(result),now())
+      }
       db.exec('COMMIT')
     } catch (error) {
       db.exec('ROLLBACK')

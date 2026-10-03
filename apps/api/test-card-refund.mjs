@@ -236,6 +236,8 @@ check('⑧-1 次卡参考数:卡名/购卡价/已核销/剩余', cf.totalTimes =
 check('⑧-2 折算单价只给参考(180/次),那句话后端给', cf.unitCents === 18000 && /仅供参考,退款金额由你填/.test(cf.hint), cf.hint)
 const tooMany = await request(`/admin/timecards/${cardId}/refund`, { method: 'POST', body: JSON.stringify({ times: 7, amountCents: 1000, reason: '超了' }) }, TOKEN, H)
 check('⑧-3 退 7 次 > 剩 6 次 = 拒', tooMany.status === 400 && tooMany.data.error?.code === 'REFUND_EXCEEDS_TIMES', JSON.stringify(tooMany.data).slice(0, 120))
+const fractionalRefund=await request(`/admin/timecards/${cardId}/refund`, { method:'POST',body:JSON.stringify({times:1.5,amountCents:100,reason:'非法小数次数'})},TOKEN,H)
+check('次卡退次拒绝小数而非四舍五入',fractionalRefund.status===400)
 const tcNoReason = await request(`/admin/timecards/${cardId}/refund`, { method: 'POST', body: JSON.stringify({ times: 1, amountCents: 100 }) }, TOKEN, H)
 check('⑧-4 次卡退款原因必填', tcNoReason.status === 400 && tcNoReason.data.error?.code === 'REASON_REQUIRED', `${tcNoReason.status}`)
 const tcOk = await request(`/admin/timecards/${cardId}/refund`, { method: 'POST', body: JSON.stringify({ times: 6, amountCents: 108000, payChannel: 'cash', reason: '顾客要求全退' }) }, TOKEN, H)
@@ -285,6 +287,17 @@ if (bk.status === 201 || bk.status === 200) {
     `退卡 ${rDead.status} · 核销 ${direct.status} ${JSON.stringify(direct.data).slice(0, 100)}`)
   check('⑨-b2 退干净的卡在"可核销卡"列表里也不出现(选卡那一层就没得选)',
     !((await request(`/admin/customers/${userId}/timecards`, {}, TOKEN, H)).data.timecards || []).some((c) => c.id === deadCard && (c.remainingTimes ?? 1) > 0))
+  const racedCard = mk(0, 1, 1000)
+  const pendingUse = await request('/admin/settlements', { method: 'POST', body: JSON.stringify({ userId, settlements: [{ payIntent: 'offline_full', items: [{ serviceId, qty: 1 }], timecardId: racedCard, timecardServiceId: serviceId, technicians: [{ technicianId, role: 'main', itemNos: [1] }] }] }) }, TOKEN, H)
+  const racedCode=pendingUse.data?.settlements?.[0]?.code
+  check('先开单但未签署的次卡仍未扣次',Boolean(racedCode)&&db.prepare('SELECT used_times FROM member_timecards WHERE id=?').get(racedCard).used_times===0)
+  const racedRefund=await request(`/admin/timecards/${racedCard}/refund`,{method:'POST',body:JSON.stringify({times:1,amountCents:1000,payChannel:'cash',reason:'签字前退还剩余次数'})},TOKEN,H)
+  check('签署之前可以退掉剩余次数',racedRefund.status===201||racedRefund.status===200)
+  const financeCountBefore=db.prepare('SELECT COUNT(*) n FROM finance_transactions WHERE tenant_id=?').get(tid).n
+  const racedSign=await fetch(`${BASE_URL}/settlements/${encodeURIComponent(racedCode)}/sign`,{method:'POST',headers:{'content-type':'application/json','x-tenant-id':tid,authorization:`Bearer ${custToken}`},body:JSON.stringify({signature:'隔离测试顾客',disclaimerAccepted:true})})
+  const racedResult=await racedSign.json()
+  check('开单后退完卡，签署必须拒绝不能透支次数',racedSign.status===409&&/TIMECARD_USED_UP/.test(JSON.stringify(racedResult)),JSON.stringify(racedResult).slice(0,300))
+  check('拒签保留待签单且不落收入、不增加使用次数',db.prepare('SELECT status FROM settlements WHERE code=?').get(racedCode).status==='pending_sign'&&db.prepare('SELECT used_times FROM member_timecards WHERE id=?').get(racedCard).used_times===0&&db.prepare('SELECT COUNT(*) n FROM finance_transactions WHERE tenant_id=?').get(tid).n===financeCountBefore)
   const liveCard = mk(2, 10, 200000)
   await request(`/admin/timecards/${liveCard}/refund`, { method: 'POST', body: JSON.stringify({ times: 4, amountCents: 80000, payChannel: 'cash', reason: '退一半' }) }, TOKEN, H)
   const beforeUsed = db.prepare('SELECT used_times FROM member_timecards WHERE id = ?').get(liveCard).used_times
@@ -302,6 +315,42 @@ if (bk.status === 201 || bk.status === 200) {
   check('⑨-c 反向守:退了一半的卡照样核销得动,签完剩余真的少一次(不是"一律拒"混过去的绿)',
     (okUse.status === 201 || okUse.status === 200) && afterUsed === beforeUsed + 1,
     `${okUse.status} · used ${beforeUsed}→${afterUsed} · code ${liveCode || '无'}`)
+}
+
+// Migrated free-service right: source -> confirmation -> exact-service sign -> linked return.
+{
+ const assetId='service-gift-'+RUN
+ db.prepare(`INSERT INTO customer_legacy_assets(id,tenant_id,user_id,batch_id,source_system,source_record_id,source_item_id,asset_kind,title,raw_json,created_at) VALUES(?,?,?,'synthetic-batch','test',?,?, 'gift','护理服务赠卡','{"remaining":2}',?)`).run(assetId,tid,userId,userId,assetId,new Date().toISOString())
+ const path=`/admin/customers/${userId}/migration-gifts/${assetId}`
+ const pendingPack=await request('/my/card-pack',{},custToken,H)
+ check('本人卡包展示旧权益待确认且不可直接核销',pendingPack.status===200&&pendingPack.data.cardPack.migration.hasPending&&pendingPack.data.cardPack.migration.redeemable===false)
+ check('待确认信息不泄露原始资料或商家依据',Object.keys(pendingPack.data.cardPack.migration).sort().join(',')==='hasPending,message,redeemable,status,title')
+ const view=await request(path,{},TOKEN,H)
+ const body={requestId:'service_activate_'+RUN,confirmVersion:view.data.version,title:'护理服务赠卡',quantity:2,unitValueCents:1000,noExpiry:true,serviceGiftConfirmed:true,noCashBalance:true,oneUsePerService:true,sourceUseStopped:true,rulesConfirmed:true,serviceId,reason:'隔离测试确认独立赠卡，无余额，不重复启用'}
+ const activate=await request(path+'/activate-service',{method:'POST',body:JSON.stringify(body)},TOKEN,H)
+ check('服务赠卡确认启用两次',activate.status===200&&activate.data.remaining===2,JSON.stringify(activate.data))
+ const card=activate.data.grantId
+ const activePack=await request('/my/card-pack',{},custToken,H)
+ check('赠卡启用后同一来源不再显示待确认',activePack.status===200&&!activePack.data.cardPack.migration.hasPending)
+ const pack=(await request(`/admin/customers/${userId}/timecards`,{},TOKEN,H)).data.timecards.find(c=>c.id===card)
+ check('双端同源卡包携带具体服务限制且现金价值为零',pack?.allowedServiceIds?.[0]===serviceId&&pack.priceCents===0,JSON.stringify(pack))
+ const cash=await request(`/admin/timecards/${card}/refund`,{method:'POST',body:JSON.stringify({times:1,amountCents:1,reason:'不能兑换现金'})},TOKEN,H)
+ check('服务赠卡不能退成现金',cash.status===400&&cash.data.error.code==='GIFT_HAS_NO_CASH')
+ const otherService=await request('/admin/services',{method:'POST',body:JSON.stringify({type:'NAIL',nameZh:'赠卡不可用项目'+RUN,nameEn:'other',priceCents:2000,baseDurationMin:30,categoryId:catId})},TOKEN,H)
+ const wrong=await request('/admin/settlements',{method:'POST',body:JSON.stringify({userId,settlements:[{payIntent:'offline_full',items:[],timecardId:card,timecardServiceId:otherService.data.service.id,technicians:[{technicianId,role:'main',itemNos:[1]}]}]})},TOKEN,H)
+ check('同分类的其他服务也不能使用指定赠卡',wrong.status===400&&wrong.data.error.code==='TIMECARD_SERVICE_NOT_ALLOWED',JSON.stringify(wrong.data))
+ const draft=await request('/admin/settlements',{method:'POST',body:JSON.stringify({userId,settlements:[{payIntent:'offline_full',items:[],timecardId:card,timecardServiceId:serviceId,technicians:[{technicianId,role:'main',itemNos:[1]}]}]})},TOKEN,H)
+ check('服务赠卡可通过正常结算建单',draft.status===201||draft.status===200,JSON.stringify(draft.data).slice(0,500))
+ const sheet=draft.data.settlements[0]
+ const incomeBefore=db.prepare('SELECT COUNT(*) n FROM finance_transactions WHERE tenant_id=?').get(tid).n
+ const signed=await fetch(`${BASE_URL}/settlements/${encodeURIComponent(sheet.code)}/sign`,{method:'POST',headers:{'content-type':'application/json','x-tenant-id':tid,authorization:`Bearer ${custToken}`},body:JSON.stringify({signature:'隔离测试顾客',disclaimerAccepted:true})})
+ const signedBody=await signed.json()
+ check('服务赠卡签署只扣一次，不产生虚假收入',signed.status===200&&db.prepare('SELECT used_times FROM member_timecards WHERE id=?').get(card).used_times===1&&db.prepare('SELECT COUNT(*) n FROM finance_transactions WHERE tenant_id=?').get(tid).n===incomeBefore,JSON.stringify(signedBody).slice(0,200))
+ const release=await request(`/admin/settlements/${sheet.id}/amend`,{method:'POST',body:JSON.stringify({totalCents:0,releaseTimecard:true,reason:'隔离测试售后退回原服务次数'})},TOKEN,H)
+ check('售后按原服务单恢复赠卡次数',release.status===200&&db.prepare('SELECT used_times FROM member_timecards WHERE id=?').get(card).used_times===0,JSON.stringify(release.data).slice(0,300))
+ const twice=await request(`/admin/settlements/${sheet.id}/amend`,{method:'POST',body:JSON.stringify({totalCents:0,releaseTimecard:true,reason:'重复退回测试'})},TOKEN,H)
+ check('同一单不能重复恢复次数',twice.status===409&&db.prepare('SELECT used_times FROM member_timecards WHERE id=?').get(card).used_times===0)
+ check('核销与退回不改原始来源记录',db.prepare('SELECT raw_json FROM customer_legacy_assets WHERE id=?').get(assetId).raw_json==='{"remaining":2}')
 }
 
 // ===== 十、退卡后还算不算会员:两种配置各跑一遍,行为必须不同 =====
@@ -768,7 +817,7 @@ check('⑩-2 🔴 行为必须不同:keep=仍是会员 / drop=余额归零即失
   const here = d3(f3(import.meta.url))
   const dir = mkdtempSync(j3(tmpdir(), 'll-prodgate-'))
   const port = 4406
-  const child = spawn(process.execPath, ['local-server.mjs'], {
+  const child = spawn(process.execPath, ['--experimental-sqlite', 'local-server.mjs'], {
     cwd: here, stdio: 'ignore',
     /* 🔴 07c 裁 #54(J-53)之后这台起不来了:它是**生产库域**,而顾客令牌签名密钥
        「没显式设就拒绝启动」。这不是判据变娇气,**正是它该拦的那件事** ——
@@ -831,6 +880,30 @@ check('⑩-2 🔴 行为必须不同:keep=仍是会员 / drop=余额归零即失
     child.kill()
     try { rmSync(dir, { recursive: true, force: true }) } catch { /* 清不掉不影响断言 */ }
   }
+}
+
+// Paid migrated card uses the production settlement/sign/refund routes against a synthetic registry entry.
+{
+ const card='paid-migration-'+RUN,asset='paid-asset-'+RUN,now=new Date().toISOString()
+ db.prepare(`INSERT INTO migration_asset_activations(id,tenant_id,user_id,asset_id,kind,source_version,title,specification,quantity,unit_value_cents,review_json,actor,created_at) VALUES(?,?,?,?,'paid_service','test','迁入付费次卡','',2,1000,?,'test-owner',?)`).run(card,tid,userId,asset,JSON.stringify({serviceId}),now)
+ db.prepare(`INSERT INTO member_timecards(id,tenant_id,user_id,name,total_times,used_times,price_cents,created_at,card_source) VALUES(?,?,?,'迁入付费次卡',2,0,2000,?,'migration')`).run(card,tid,userId,now)
+ const pack=(await request(`/admin/customers/${userId}/timecards`,{},TOKEN,H)).data.timecards.find(c=>c.id===card)
+ check('迁入付费卡保留本金与指定服务限制',pack?.priceCents===2000&&pack.allowedServiceIds?.[0]===serviceId)
+ const draft=await request('/admin/settlements',{method:'POST',body:JSON.stringify({userId,settlements:[{payIntent:'offline_full',items:[],timecardId:card,timecardServiceId:serviceId,technicians:[{technicianId,role:'main',itemNos:[1]}]}]})},TOKEN,H)
+ check('迁入付费卡可正常创建服务结算',draft.status===201||draft.status===200,JSON.stringify(draft.data).slice(0,200))
+ const sheet=draft.data.settlements[0],before=db.prepare('SELECT COALESCE(SUM(amount_cents),0) n FROM finance_transactions WHERE tenant_id=?').get(tid).n
+ const signed=await fetch(`${BASE_URL}/settlements/${encodeURIComponent(sheet.code)}/sign`,{method:'POST',headers:{'content-type':'application/json','x-tenant-id':tid,authorization:`Bearer ${custToken}`},body:JSON.stringify({signature:'隔离测试顾客',disclaimerAccepted:true})})
+ check('实际签署扣一次并按每次本金确认卡耗收入',signed.status===200&&db.prepare('SELECT used_times FROM member_timecards WHERE id=?').get(card).used_times===1&&db.prepare('SELECT COALESCE(SUM(amount_cents),0) n FROM finance_transactions WHERE tenant_id=?').get(tid).n===before+1000)
+ const refundBody={times:1,amountCents:1000,reason:'退剩余本金',requestId:'paid_refund_'+RUN}
+ const refund=await request(`/admin/timecards/${card}/refund`,{method:'POST',body:JSON.stringify(refundBody)},TOKEN,H)
+ const replay=await request(`/admin/timecards/${card}/refund`,{method:'POST',body:JSON.stringify(refundBody)},TOKEN,H)
+ check('迁入付费卡退款重试只扣一次且归零',refund.status===201&&refund.data.remainingTimes===0&&replay.status===201&&replay.data.duplicate===true,JSON.stringify(refund.data))
+ check('退款不改此前已确认收入',db.prepare('SELECT COALESCE(SUM(amount_cents),0) n FROM finance_transactions WHERE tenant_id=?').get(tid).n===before+1000)
+ const release=await request(`/admin/settlements/${sheet.id}/amend`,{method:'POST',body:JSON.stringify({totalCents:0,releaseTimecard:true,reason:'原单服务撤销，恢复原卡次数'})},TOKEN,H)
+ check('付费迁入卡按原单退回恢复一次并冲销原卡耗收入',release.status===200&&db.prepare('SELECT used_times FROM member_timecards WHERE id=?').get(card).used_times===0&&db.prepare('SELECT COALESCE(SUM(amount_cents),0) n FROM finance_transactions WHERE tenant_id=?').get(tid).n===before,JSON.stringify(release.data).slice(0,200))
+ const twice=await request(`/admin/settlements/${sheet.id}/amend`,{method:'POST',body:JSON.stringify({totalCents:0,releaseTimecard:true,reason:'重复退回'})},TOKEN,H)
+ check('付费迁入卡原单退回不能重复恢复次数',twice.status===409&&db.prepare('SELECT used_times FROM member_timecards WHERE id=?').get(card).used_times===0)
+
 }
 
 db.close()

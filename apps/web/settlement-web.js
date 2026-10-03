@@ -371,6 +371,7 @@ window.SettlementWeb = (function () {
             const catNameOf = function (cid) { return ((state.cats.find(function (c2) { return c2.id === cid }) || {}).name) || '' }
             const svcs = state.items.filter(function (i) { return (i.itemKind || 'main') === 'main' })
               .filter(function (i) { return !groupName || catNameOf(i.categoryId) === groupName })
+              .filter(function (i) { return !card2?.allowedServiceIds || card2.allowedServiceIds.includes(i.id) })
             const tcName = card2 ? (card2.name || '') : (pkg2 ? (pkg2.name || '') : '')
             const mainName = tcMode === 'redeem' ? `次卡核销 · ${tcName}` : `现场购卡 · ${tcName}(当场核销第 1 次)`
             return `<div class="sw-sec">本次核销项目(${tcMode === 'purchase' ? '新卡' : '卡'}关联组内选)</div>

@@ -19,8 +19,14 @@ try {
  const svc=(await req('/platform/tenants/'+tid+'/services',{body:{type:'NAIL',nameZh:'核验服务',nameEn:'Check',priceCents:28800,baseDurationMin:60}})).data.service
  const login=await req('/auth/wechat/mini-login',{token:null,body:{tenantId:tid,code:'stub:facts-http-customer',phoneCode:'stub-phone:facts-http-customer:13811112222'}})
  assert.equal(login.status,200);const uid=login.data.user.id,token=login.data.auth.accessToken
- const legacy=await req('/platform/tenants/'+tid+'/import/customers',{body:{dryRun:false,rows:[{phone:'13811112222',totalSpendCents:5000}]}})
- assert.equal(legacy.status,200);assert.equal(legacy.data.users[0].userId,uid)
+ // Use the supported pending-only migration entry; the retired CSV writer must stay closed.
+ const pkg={packageType:'youji-customer-migration-v1',schemaVersion:1,sourceSystem:'facts-fixture',sourceExportedAt:'2020-01-01T00:00:00Z',dataCutoffAt:'2020-01-01T00:00:00Z',sourceTimezone:'Asia/Shanghai',merchantConfirmedAt:'2020-01-02T00:00:00Z',mode:'initial',records:[{sourceRecordId:'facts-1',mapped:{name:login.data.user.displayName||'',phone:'13811112222',totalSpendCents:5000,balanceCents:0},source:{},details:{cards:[],gifts:[],transactions:[],serviceNotes:[],attachments:[]},review:{}}]}
+ const migrationPath='/platform/tenants/'+tid+'/migrations'
+ const preview=await req(migrationPath+'/preview',{body:{package:pkg}})
+ assert.equal(preview.status,200)
+ const legacy=await req(migrationPath+'/execute',{body:{package:pkg,confirmPendingOnly:true,confirmPackageHash:preview.data.report.packageHash,confirmOpeningBalanceCents:0,confirmImportCount:1,confirmExcludedCount:0}})
+ assert.equal(legacy.status,200,JSON.stringify(legacy.data))
+ assert.equal(db.prepare('SELECT user_id FROM customer_migration_links WHERE tenant_id=? AND source_record_id=?').get(tid,'facts-1').user_id,uid)
  const make=await req('/admin/settlements',{body:{userId:uid,settlements:[{payIntent:'offline_full',items:[{serviceId:svc.id,qty:1}],technicians:[{technicianId:tech.id,role:'main',itemNos:[1]}]}]}})
  assert.equal(make.status,201);const sheet=make.data.settlements[0]
  const signed=await req('/settlements/'+sheet.code+'/sign',{token,body:{signerConfirmed:true,disclaimerAccepted:true,signature:'核验本人',strokes:[[{x:1,y:1},{x:22,y:30},{x:10,y:40}]]}})
@@ -55,8 +61,10 @@ try {
  check('客户列表同时下发店内日历日期',()=>assert.equal(listed.lastVisitDate,new Intl.DateTimeFormat('en-CA',{timeZone:'Asia/Shanghai'}).format(new Date(knownAt))))
  check('会员门槛与可见累计消费一致',()=>assert.equal(member.isMember,true))
  // Import an old, unbound member through the actual merchant migration route.
- const unbound=await req('/platform/tenants/'+tid+'/import/customers',{body:{dryRun:false,rows:[{name:'未绑定老会员',phone:'13811114444',totalSpendCents:33800}]}})
- assert.equal(unbound.status,200);const unboundId=unbound.data.users[0].userId
+ const unboundPkg={...pkg,sourceSystem:'facts-unbound',records:[{...pkg.records[0],sourceRecordId:'unbound-1',mapped:{name:'未绑定老会员',phone:'13811114444',totalSpendCents:33800,balanceCents:0}}]}
+ const up=await req(migrationPath+'/preview',{body:{package:unboundPkg}});assert.equal(up.status,200)
+ const unbound=await req(migrationPath+'/execute',{body:{package:unboundPkg,confirmPendingOnly:true,confirmPackageHash:up.data.report.packageHash,confirmOpeningBalanceCents:0,confirmImportCount:1,confirmExcludedCount:0}})
+ assert.equal(unbound.status,200);const unboundId=db.prepare('SELECT user_id FROM customer_migration_links WHERE tenant_id=? AND source_record_id=?').get(tid,'unbound-1').user_id
  const lookup=(await req('/admin/customers/lookup?userId='+unboundId)).data.hit
  check('老会员未绑定只标微信状态，不会误称新客',()=>{assert.equal(lookup.bound,false);assert.equal(lookup.badgeText,'未绑定微信')})
  const draft=await req('/admin/settlements',{body:{userId:unboundId,settlements:[{payIntent:'offline_full',items:[{serviceId:svc.id,qty:1}],technicians:[{technicianId:tech.id,role:'main',itemNos:[1]}]}]}})

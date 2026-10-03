@@ -464,7 +464,7 @@
         <div id="migHistory" class="muted">选择商家后显示。</div>
       </div>
       <details class="card" open>
-        <summary style="cursor:pointer;font-weight:700">基础 CSV 导入（仅 8 个常用字段）</summary>
+        <summary style="cursor:pointer;font-weight:700">旧 CSV 格式试跑（不可执行导入）</summary>
         <div style="height:12px"></div>
       <div class="card">
         <h2>1. 粘贴或上传 CSV</h2>
@@ -482,16 +482,7 @@
       <div class="card hidden" id="impReportCard">
         <h2>3. 试跑报告</h2>
         <div id="impReport"></div>
-        <div class="cred" style="margin-top:12px">
-          <label class="row" style="gap:8px;align-items:flex-start">
-            <input type="checkbox" id="impConfirm" style="width:16px;height:16px;margin-top:3px">
-            <span id="impConfirmText">商家已书面确认期初余额总额</span>
-          </label>
-        </div>
-        <div class="row" style="margin-top:12px">
-          <button class="p" onclick="runImportExec()">4. 确认执行导入</button>
-          <span class="muted">执行后期初余额以 migrate_opening 流水写入(只追加,不可改);冲突行不会写入。</span>
-        </div>
+        <p class="muted" style="margin-top:12px">此入口只检查格式，不写入顾客或余额。正式迁移请使用上方标准迁移包；旧余额与权益先暂存待核对。</p>
       </div>
       <div class="card hidden" id="impResultCard">
         <h2>执行结果</h2>
@@ -1258,7 +1249,7 @@ async function loadMigrationHistory(){
 // ===== 基础 CSV 顾客导入(2026-08-06 P0)=====
 // 手机号是去重主键;期初余额写 legacy 桶(migrate_opening 流水,只追加),不进商家财务收入。
 let IMP_ROWS=[], IMP_REPORT=null, IMP_REVIEW=null
-function invalidateCustomerImport(){IMP_REPORT=null;IMP_REVIEW=null;$('impConfirm').checked=false;$('impReportCard').classList.add('hidden')}
+function invalidateCustomerImport(){IMP_REPORT=null;IMP_REVIEW=null;if($('impConfirm'))$('impConfirm').checked=false;$('impReportCard').classList.add('hidden')}
 function initImport(){
   invalidateCustomerImport()
   invalidateMigrationPackage()
@@ -1339,25 +1330,8 @@ async function runImportDry(){
         ${r.conflicts.map(c=>`<tr><td>${c.line}</td><td>${esc(c.phone)}</td><td>${esc(c.existingName)}</td><td>${esc(c.incomingName)}</td><td class="muted">${esc(c.reason)}</td></tr>`).join('')}
       </tbody></table>`:''}
       ${r.skipped.length?`<p class="muted" style="margin-top:8px">跳过:${r.skipped.map(s=>`第 ${s.line} 行(${esc(s.reason)})`).join('、')}</p>`:''}`
-    $('impConfirmText').textContent=`商家已书面确认期初余额总额 ${moneyC(r.balanceSumCents)}`
-    $('impConfirm').checked=false
     $('impReportCard').classList.remove('hidden')
     $('impResultCard').classList.add('hidden')
-  }catch(e){toast(e.message)}
-}
-async function runImportExec(){
-  if(!IMP_REPORT||!IMP_REVIEW||IMP_REVIEW.tid!==$('impTenant').value||IMP_REVIEW.csv!==$('impCsv').value){invalidateCustomerImport();toast('门店或内容已变化，请重新试跑');return}
-  if(!$('impConfirm').checked){toast('请先勾选「商家已书面确认期初余额总额」');return}
-  const tid=$('impTenant').value,reviewed=IMP_REVIEW,report=IMP_REPORT
-  if(!await UIDialog.confirm(`确认把 ${IMP_REPORT.toCreate} 个新顾客 + ${IMP_REPORT.toUpdate} 个已有顾客写入「${tid}」,期初余额合计 ${moneyC(IMP_REPORT.balanceSumCents)}?`))return
-  if(IMP_REVIEW!==reviewed||tid!==$('impTenant').value||reviewed.csv!==$('impCsv').value){toast('门店或内容已变化，请重新试跑');return}
-  invalidateCustomerImport()
-  try{
-    const r=await api(`/platform/tenants/${tid}/import/customers`,{method:'POST',body:JSON.stringify({rows:reviewed.rows,dryRun:false,confirmBalanceCents:report.balanceSumCents})})
-    if(tid!==$('impTenant').value){toast('原选门店导入完成，请切回查看');return}
-    $('impResult').innerHTML=`<p>新建 <b>${r.created}</b> 人 · 更新 <b>${r.updated}</b> 人 · 期初余额写入 <b>${moneyC(r.openingWrittenCents,tid)}</b>(历史桶,不计入商家收入)${r.conflicts.length?` · 冲突 <b style="color:var(--danger)">${r.conflicts.length}</b> 条未写入`:''}</p>`
-    $('impResultCard').classList.remove('hidden')
-    toast('导入完成')
   }catch(e){toast(e.message)}
 }
 

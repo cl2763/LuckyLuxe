@@ -217,7 +217,7 @@ Page({
       const groupName = card ? card.projectGroup : (pkg ? pkg.projectGroup : null)
       g.tcServices = (card || pkg)
         ? all.filter((i) => (i.itemKind || 'main') === 'main')
-          .filter((i) => !groupName || this.catNameOf(i.categoryId) === groupName)
+          .filter((i) => (!groupName || this.catNameOf(i.categoryId) === groupName) && (!card || !card.allowedServiceIds || card.allowedServiceIds.includes(i.id)))
           .map((i) => ({ id: i.id, name: i.nameZh, on: g.timecardServiceId === i.id }))
         : []
       g.tcName = card ? card.name : (pkg ? pkg.name : '')

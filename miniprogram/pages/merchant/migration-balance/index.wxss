@@ -1,0 +1,5 @@
+@import "../migration-archive/index.wxss";
+textarea{width:100%;min-height:160rpx;padding:20rpx;border:1rpx solid var(--line);border-radius:14rpx;background:var(--paper);color:var(--ink);font-size:27rpx}.check{display:flex;align-items:flex-start;gap:14rpx;line-height:1.7;margin-top:24rpx}.check{border:none;text-align:left;background:transparent;padding:0;border-radius:0}.check-box{flex-shrink:0;display:block;width:38rpx;height:38rpx;line-height:34rpx;text-align:center;border:2rpx solid var(--brand);color:var(--ink);background:var(--paper);border-radius:8rpx;font-size:28rpx}.hint{white-space:pre-wrap;overflow-wrap:anywhere}
+
+/* 核对确认行占满卡片，避免原生按钮默认宽度把长文案挤到中央。 */
+.page button.check{width:100%;max-width:none;box-sizing:border-box;margin-left:0;margin-right:0;justify-content:flex-start;font-weight:400}.check-box{box-sizing:border-box}.page textarea{height:160rpx;box-sizing:border-box}.page button.primary{width:100%;box-sizing:border-box}

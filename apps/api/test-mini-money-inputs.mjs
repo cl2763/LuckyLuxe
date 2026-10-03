@@ -158,6 +158,9 @@ check('反向守:handler 都找得到(找不到就等于没验,不许当成通�
    小程序 `type="digit"` = 带小数点的数字键盘(金额用);`type="number"` = 整数键盘(计数/百分比用)。
    凡 `type="number"` 必须落进「不是金额」白名单,每项一行理由;条目数上棘轮,只许减。 */
 const NOT_MONEY_NUMBER = {
+  'pages/merchant/migration-gift/index.wxml:quantity': '合同迁移赠品核销数量，整数；不是金额。',
+  'pages/merchant/migration-service/index.wxml:quantity': '合同迁移赠送服务次数，整数；不是金额。',
+  'pages/merchant/migration-reconciliation/index.wxml:item.times': '合同迁入付费卡剩余次数，整数；本金与赠送金另用digit。',
   'pages/merchant-apply/index.wxml:phone': '手机号 —— 是号码不是金额,整数键盘正好',
   'pages/merchant/coupon-edit/index.wxml:percent': '折扣百分比 —— 整数,不需要小数点',
   'pages/merchant/coupon-edit/index.wxml:validDays': '有效天数 —— 计数',
@@ -173,7 +176,7 @@ const NOT_MONEY_NUMBER = {
   'pages/merchant/notify-settings/index.wxml:r.revisitDays': '回访间隔(天)—— 计数;P3 件3 新增',
   'pages/merchant/notify-settings/index.wxml:r.advanceDays': '临期提醒提前天数 —— 计数;P3 件3 新增'
 }
-const NUMBER_CAP = 14
+const NUMBER_CAP = 17 // 已批准迁移合同新增三个整数计数字段，14→17
 const numberInputs = allTags.filter((t) => t.type === 'number').map((t) => `${t.page}:${t.valueExpr}`)
 const notWhitelisted = numberInputs.filter((k) => !(k in NOT_MONEY_NUMBER))
 check(`③ 白名单式:全仓 ${numberInputs.length} 个 type="number" 逐个落在「不是金额」白名单里(新来的自动红)`,

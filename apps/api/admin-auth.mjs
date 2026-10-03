@@ -27,7 +27,7 @@ export function createAdminAuth({ db, randomId, iso, createHash, defaultTenantId
       delivered = true
     } catch (e) {
       /* 🔴 不许回落成「打日志顶上」—— 那正是要去掉的那条路。只说失败,不说值。 */
-      console.error(`[账号] 🔴 老板主账号已建,但初始口令**没能落盘**(${e.message})。`
+      console.error(`[账号] 🔴 老板主账号已建,但初始口令**没能落盘**(${e.code || 'WRITE_FAILED'})。`
         + '口令不会打印到日志(D203),所以这一把**已经取不到了** —— 请走平台后台「重置老板密码」重发一次。')
     }
     if (delivered) console.log('[账号] 老板主账号已创建 用户名: boss —— 初始口令已写入 local-data/初始老板账号.txt(不打印;首登改密后该文件自动删除)')

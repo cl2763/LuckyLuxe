@@ -68,11 +68,23 @@ check('② 网页按钮必胶囊:能点的一律 999px(硬零;新面长歪即红
 
 /* ③④ 小程序两层 */
 const wxss = globSync('miniprogram/**/*.wxss', { cwd: ROOT }).map((f) => [f, readFileSync(join(ROOT, f), 'utf8')])
+// 2026-10-02 已批准的新合同采用圆角图片卡和方形确认框；只允许这些具名选择器及精确半径。
+// 不扩大旧页面的形制集，也不提高存量上限。其余按钮仍守胶囊规则。
+const contractRadii = new Map()
+for (const page of ['list','detail','retouch']) {
+  for (const [selector,radius] of Object.entries({'.hint':'18rpx','.card':'22rpx','.thumb':'12rpx','.hero-image':'20rpx','.detail':'20rpx','.photo':'16rpx'})) contractRadii.set(`miniprogram/pages/pose/${page}/index.wxss|${selector}`,radius)
+}
+for (const [file,selector,radius] of [
+  ['migration-archive','.card','22rpx'],['migration-archive','input,.input','14rpx'],
+  ['migration-balance','textarea','14rpx'],['migration-balance','.check-box','8rpx'],
+  ['migration-gift','.receipt','16rpx']
+]) contractRadii.set(`miniprogram/pages/merchant/${file}/index.wxss|${selector}`,radius)
 const offSpecMini = []; const notPillMini = []
 let legacyHitMini = 0
 for (const [f, css] of wxss) {
   for (const [sel, v] of rules(css)) {
     const c = clean(sel)
+    if (contractRadii.get(`${f}|${c}`) === v) continue
     const base = c.split(/\s+/).pop().split(':')[0]
     if (LEGACY_MINI.has(base)) { legacyHitMini += 1; continue }
     if (!SPEC_MINI.has(v) && !v.includes(' ')) offSpecMini.push(`${f.split('/').slice(-2)[0]}/${c.slice(0, 30)} → ${v}`)

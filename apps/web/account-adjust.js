@@ -197,7 +197,7 @@ window.AccountAdjust = (function () {
     const c = stateA.cards.find((x) => x.id === stateA.cardId)
     if (!c) return ''
     const unit = c.totalTimes > 0 ? Math.round(c.priceCents / c.totalTimes) : 0
-    const times = Math.round(Number(stateA.times || 0))
+    const times = Number(stateA.times || 0)
     const left = Math.max(0, c.remaining - (Number.isFinite(times) ? times : 0))
     return `
       <div class="aa-facts">
@@ -324,13 +324,15 @@ window.AccountAdjust = (function () {
       return
     }
     if (event.target.closest('[data-aa-card-submit]')) {
-      const times = Math.round(Number(stateA.times || 0))
+      const times = Number(stateA.times || 0)
       const amount = window.MoneyInput.centsOf(stateA.cardAmount)
       const reason = String(document.querySelector('#aaReason')?.value || '').trim()
       if (!reason) { toast(zh ? '退卡原因必填' : 'Reason required'); return }
       stateA.busy = true; mount()
       try {
-        const r = await request(`/admin/timecards/${encodeURIComponent(stateA.cardId)}/refund`, { method: 'POST', body: JSON.stringify({ times, amountCents: amount, reason, payChannel: 'cash' }) })
+        const fingerprint=JSON.stringify({cardId:stateA.cardId,times,amount,reason})
+        if(!stateA.cardRefundAttempt||stateA.cardRefundAttempt.fingerprint!==fingerprint)stateA.cardRefundAttempt={fingerprint,id:crypto.randomUUID()}
+        const r = await request(`/admin/timecards/${encodeURIComponent(stateA.cardId)}/refund`, { method: 'POST', body: JSON.stringify({ times, amountCents: amount, reason, payChannel: 'cash', requestId:stateA.cardRefundAttempt.id }) })
         toast(zh ? `已退 ${r.refundedTimes} 次${r.voided ? '(卡作废)' : ''}` : 'Refunded')
         close(); ctx.onDone({ refunded: true })
       } catch (e) { stateA.busy = false; mount(); toast(e.message) }
@@ -348,7 +350,7 @@ window.AccountAdjust = (function () {
     const zh = ctx.zh
     if (stateA.cardId) {
       const c = stateA.cards.find((x) => x.id === stateA.cardId)
-      const times = Math.round(Number(stateA.times || 0))
+      const times = Number(stateA.times || 0)
       const left = c ? Math.max(0, c.remaining - (Number.isFinite(times) ? times : 0)) : 0
       const tot = o.querySelector('.aa-calc .tot span:last-child')
       if (tot) tot.textContent = `${left} ${zh ? '次' : ''}${left === 0 ? (zh ? '(卡作废)' : ' (void)') : ''}`

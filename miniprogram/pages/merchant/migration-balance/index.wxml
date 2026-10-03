@@ -1,0 +1,27 @@
+<view class="page {{themeClass}}">
+ <view class="title">核对迁移储值账户</view>
+ <view wx:if="{{loading}}" class="hint">正在读取最新资料…</view>
+ <view wx:if="{{error}}" class="error">{{error}}</view>
+ <button wx:if="{{!info && !loading}}" bindtap="load">重新读取</button>
+ <block wx:if="{{info}}">
+  <view class="card"><view>原快照 {{info.snapshotText}}</view><view class="hint">币种 {{info.currency}}
+最新资料截止 {{info.dataCutoffAt}}
+来源 {{info.sourceSystem}} · {{info.sourceRecordId}}</view></view>
+  <view wx:if="{{info.confirmation}}" class="card"><view>已核对{{info.confirmation.status==='exhausted'?'为耗尽':info.confirmation.mode==='paid_timecards'?'并分配为次数卡':'并启用'}}</view><view>本金 {{info.paidText}} · 赠送金 {{info.bonusText}}</view><view class="hint">确认时间 {{info.confirmation.activatedAt}}
+原资料保留，启用未产生营收。{{info.confirmation.mode==='paid_timecards'?'未增加储值余额，请到会员卡包查看剩余次数。':'当前可用金额请到会员账户查看。'}}</view></view>
+  <view wx:else class="card">
+   <view class="hint">本入口仅支持无可靠分卡余额、无期限、无项目或扣减限制的汇总余额。其他旧卡继续待核对。</view>
+   <label>核对后剩余本金（{{info.currency}}）</label><input type="digit" value="{{paid}}" data-key="paid" bindinput="input" disabled="{{saving}}" placeholder="请填写，未知不能按零启用"/>
+   <label>核对后剩余赠送金（{{info.currency}}，无则填 0）</label><input type="digit" value="{{bonus}}" data-key="bonus" bindinput="input" disabled="{{saving}}"/>
+   <label>核对依据（必填）</label><textarea value="{{evidence}}" data-key="evidence" bindinput="input" maxlength="1000" disabled="{{saving}}" placeholder="例如：核对截止后的消费、充值和退款"/>
+   <label>与原快照不同的原因（有差额必填）</label><textarea value="{{differenceReason}}" data-key="differenceReason" bindinput="input" maxlength="1000" disabled="{{saving}}"/>
+   <view>
+    <button class="check" data-key="noReliableCardBreakdown" bindtap="toggleCheck" disabled="{{saving}}"><text class="check-box">{{agreements.noReliableCardBreakdown?'✓':''}}</text><text>只有可靠总额，无可靠分卡余额；旧卡不另行重复加钱</text></button>
+    <button class="check" data-key="unrestricted" bindtap="toggleCheck" disabled="{{saving}}"><text class="check-box">{{agreements.unrestricted?'✓':''}}</text><text>已核对所有原卡规则，本余额无项目或扣减限制</text></button>
+    <button class="check" data-key="noExpiry" bindtap="toggleCheck" disabled="{{saving}}"><text class="check-box">{{agreements.noExpiry?'✓':''}}</text><text>已核对本余额没有有效期限制</text></button>
+    <button class="check" data-key="sourceUseStopped" bindtap="toggleCheck" disabled="{{saving}}"><text class="check-box">{{agreements.sourceUseStopped?'✓':''}}</text><text>已核对截至本次确认的变动，旧系统已停止使用本余额</text></button>
+   </view>
+   <button class="primary" bindtap="save" disabled="{{saving || loading}}">{{saving?'确认中…':'确认启用，不立即核销'}}</button>
+  </view>
+ </block>
+</view>

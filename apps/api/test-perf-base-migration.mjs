@@ -98,10 +98,9 @@ async function main() {
   }, token)).data.item
   await req('/admin/deposit-config', { method: 'PUT', body: JSON.stringify({ config: { enabled: true, deductible: true, mode: 'fixed', fixedAmountCents: 5000 } }) }, token)
 
-  const imp = await req(`/platform/tenants/${tenantId}/import/customers`, {
-    method: 'POST', body: JSON.stringify({ dryRun: false, rows: [{ name: `客${RUN}`, phone: `1390${RUN.slice(-7)}`, balanceCents: 0 }] })
-  })
-  const user = imp.data.users[0].userId
+  const customer = await req('/admin/customers', {method:'POST',body:JSON.stringify({displayName:`客${RUN}`,phone:'13812345678',requestId:`perf-${RUN}`})}, token)
+  check('商家建档夹具成功', customer.status===201, JSON.stringify(customer.data))
+  const user = customer.data.customer.id
   const techA = (await req(`/platform/tenants/${tenantId}/technicians`, { method: 'POST', body: JSON.stringify({ name: `甲${RUN}` }) })).data.technician
   const techB = (await req(`/platform/tenants/${tenantId}/technicians`, { method: 'POST', body: JSON.stringify({ name: `乙${RUN}` }) })).data.technician
 

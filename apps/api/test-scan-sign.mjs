@@ -1,3 +1,4 @@
+import { pendingCustomerFixture } from './test-migration-fixture.mjs'
 /* 扫码签闭环回归(2026-08-09)——《扫码签闭环_UI设计图_2026-08-09.html》v2 四屏 + 规则⓪–⑧。
 
    核心口径:身份靠**两把确定性钥匙**,不靠手机号猜人 ——
@@ -96,9 +97,7 @@ async function main() {
   /* 「绑定」只认**微信**。顾客导入会给档案写一条 provider='phone' 的身份行,
      那只是留了手机号 —— 曾把轻档案误判成已绑定,S2 徽标一直不出现(并排核验查出来的)。 */
   const impPhone = `1330013${PHONE_SUFFIX}`
-  const impUid = (await request(`/platform/tenants/${shop.tenantId}/import/customers`, {
-    method: 'POST', body: JSON.stringify({ dryRun: false, rows: [{ name: '导入客', phone: impPhone, balanceCents: 0 }] })
-  })).data.users[0].userId
+  const [impUid] = await pendingCustomerFixture(request, shop.tenantId, [{ name: '导入客', phone: impPhone }])
   const impHit = await request(`/admin/customers/lookup?userId=${encodeURIComponent(impUid)}`, {}, shop.token)
   check('S2 只留了手机号(provider=phone)**不算**已绑定,徽标照出',
     impHit.data.hit.bound === false && impHit.data.hit.badgeText === '未绑定微信',

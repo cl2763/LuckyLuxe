@@ -20,6 +20,7 @@ window.CustomerWallet = (function () {
       <section class="view-web">
         <button class="ghost back-btn" data-me-target="me" type="button">← ${zh ? '我的' : 'Me'}</button>
         <h1>${zh ? '卡包' : 'Card pack'}</h1>
+        ${pack.migration?.hasPending ? `<div class="info-card-web card"><strong>${escapeHtml(pack.migration.title)}</strong><p class="subtle">${escapeHtml(pack.migration.message)}</p></div>` : ''}
         ${pack.emptyText ? `<div class="empty-state tall"><strong>${escapeHtml(pack.emptyText)}</strong>
           <button class="primary" data-me-target="mall" type="button">${zh ? '去看看充值套餐' : 'See packages'}</button></div>` : ''}
         ${pack.timecards.length ? `<div class="section-row compact"><h2>${zh ? '次卡' : 'Passes'}</h2><button class="section-note-btn" data-mall-focus="timecard" type="button">${zh ? '去商城 ›' : 'Shop ›'}</button></div>

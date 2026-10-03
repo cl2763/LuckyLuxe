@@ -1,3 +1,4 @@
+import { validateMigrationProfile } from './customer-migration-profile.mjs'
 /* 顾客迁移中心 v1
    - 只把语义明确的主档/期初余额/历史累计消费写入现行业务字段。
    - 老平台订单、卡、赠品与原始字段进入只读迁移档案，不参与本系统财务、业绩或权益计算。
@@ -212,6 +213,7 @@ export function createMigrationCenter({ db, apiError, randomId, iso, createHash,
     const phones = new Map()
     const actions = []
     pkg.records.forEach((raw, index) => {
+      validateMigrationProfile(raw?.mapped || {}, apiError)
       const sourceRecordId = asText(raw?.sourceRecordId, 160)
       const mapped = raw?.mapped && typeof raw.mapped === 'object' ? raw.mapped : {}
       const source = raw?.source && typeof raw.source === 'object' ? raw.source : {}
@@ -340,6 +342,12 @@ export function createMigrationCenter({ db, apiError, randomId, iso, createHash,
               JSON.stringify(mergedTags), action.note, action.birthday, action.totalSpendCents, tenantId, userId)
           updated += 1
         }
+        const profileFields = validateMigrationProfile({
+          acquisitionSource: action.mapped.acquisitionSource,
+          originalJoinedDate: action.mapped.originalJoinedDate
+        }, apiError)
+        if (profileFields.acquisitionSource !== undefined) db.prepare("UPDATE users SET acquisition_source=? WHERE id=? AND tenant_id=? AND acquisition_source=''").run(profileFields.acquisitionSource,userId,tenantId)
+        if (profileFields.originalJoinedDate !== undefined) db.prepare("UPDATE users SET original_joined_date=? WHERE id=? AND tenant_id=? AND original_joined_date=''").run(profileFields.originalJoinedDate,userId,tenantId)
         // 旧系统总余额只暂存；后续确认必须对齐逐卡与已入账金额，不能在导入时直接变成可用余额。
         if (action.balanceCents > 0) {
           db.prepare(`INSERT INTO migration_pending_balances
@@ -433,7 +441,9 @@ export function createMigrationCenter({ db, apiError, randomId, iso, createHash,
     const tenantId = (legacyMatch || migrationMatch)[1]
     if (!db.prepare('SELECT id FROM tenants WHERE id = ?').get(tenantId)) throw apiError(404, 'NOT_FOUND', 'Tenant not found.')
     if (legacyMatch && req.method === 'POST') {
-      json(res, 200, importTenantCustomers(tenantId, await readBody(req)))
+      const body = await readBody(req)
+      if (body.dryRun !== true) throw apiError(409, 'LEGACY_IMPORT_DISABLED', '旧 CSV 入口仅供格式试跑，不能执行导入。请使用标准迁移包，旧余额与权益先暂存待核对。')
+      json(res, 200, importTenantCustomers(tenantId, body))
       return true
     }
     if (migrationMatch && req.method === 'GET' && !migrationMatch[2]) {

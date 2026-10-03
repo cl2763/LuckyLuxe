@@ -99,18 +99,13 @@ async function main() {
   await request('/admin/deposit-config', { method: 'PUT', body: JSON.stringify({ config: { enabled: true, deductible: true, mode: 'fixed', fixedAmountCents: 10000 } }) }, shop.token)
 
   // ---- 顾客(卡主 + 朋友)----
-  const imp = await request(`/platform/tenants/${shop.tenantId}/import/customers`, {
-    method: 'POST',
-    body: JSON.stringify({
-      dryRun: false,
-      rows: [
-        { name: `小红${RUN_ID}`, phone: `1386${RUN_ID.slice(-7)}`, balanceCents: 0 },
-        { name: `阿雅${RUN_ID}`, phone: `1387${RUN_ID.slice(-7)}`, balanceCents: 0 }
-      ]
-    })
-  })
-  const cardOwner = imp.data.users[0].userId
-  const friend = imp.data.users[1].userId
+  const customers = []
+  for (const [i, displayName] of [`小红${RUN_ID}`, `阿雅${RUN_ID}`].entries()) {
+    const made = await request('/admin/customers', { method: 'POST', body: JSON.stringify({ displayName, phone: `1381234567${i}`, requestId: `coupon-${RUN_ID}-${i}` }) }, shop.token)
+    check('商家正常建档成功', made.status === 201, JSON.stringify(made.data))
+    customers.push(made.data.customer.id)
+  }
+  const [cardOwner, friend] = customers
   check('两位顾客建档', Boolean(cardOwner && friend))
   const techA = (await request(`/platform/tenants/${shop.tenantId}/technicians`, { method: 'POST', body: JSON.stringify({ name: `小婕${RUN_ID}` }) })).data.technician
   const techB = (await request(`/platform/tenants/${shop.tenantId}/technicians`, { method: 'POST', body: JSON.stringify({ name: `翠花${RUN_ID}` }) })).data.technician
