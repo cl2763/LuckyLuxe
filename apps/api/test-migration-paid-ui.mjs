@@ -2,7 +2,7 @@ import vm from 'node:vm'
 import fs from 'node:fs'
 import assert from 'node:assert/strict'
 const mini=fs.readFileSync(new URL('../../miniprogram/pages/merchant/migration-reconciliation/index.js',import.meta.url),'utf8')
-const web=fs.readFileSync(new URL('../../apps/web/admin.js',import.meta.url),'utf8').split('async function previewCardReconciliation(pendingId) {')[1].split('async function reviewMigrationBalance')[0]
+const web=fs.readFileSync(new URL('../../apps/web/customer-migration-ui.js',import.meta.url),'utf8').split('async function previewCardReconciliation(pendingId) {')[1].split('async function reviewMigrationBalance')[0]
 let n=0;async function check(name,f){await f();console.log('PASS',++n,name)}
 // VM 只运行 JS，不能发现 WXML 闭合错误；对新增迁移页补结构检查。
 await check('migration templates have balanced tags and keep confirmation inside themed page', () => {
