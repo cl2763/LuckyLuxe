@@ -85,9 +85,22 @@ for (const tenant of [
     if (!tagged.ok) {console.error(`🔴 标记演示夹具失败 ${tagged.status}`); process.exit(1)}
   }
 }
-let r = await fetch(`${BASE}/platform/tenants/jics-nail/import/customers`, { method: 'POST', headers: H, body: JSON.stringify({ dryRun: false, rows: [{ displayName: 'CI 夹具顾客', phone: '13900000001' }] }) })
-if (!r.ok) { console.error(`🔴 导顾客失败 ${r.status} ${(await r.text()).slice(0, 200)}`); process.exit(1) }
-console.log(`   导顾客 → ${r.status}`)
+// The retired CSV execution endpoint intentionally rejects writes. CI follows the
+// same pending-only standard package as production; this fixture grants no assets.
+const pkg = {packageType:'youji-customer-migration-v1',schemaVersion:1,sourceSystem:'ci-sandbox-customer',
+  sourceExportedAt:'2020-01-01T00:00:00Z',dataCutoffAt:'2020-01-01T00:00:00Z',sourceTimezone:'Asia/Shanghai',
+  merchantConfirmedAt:'2020-01-02T00:00:00Z',mode:'initial',records:[{sourceRecordId:'ci-customer',
+    mapped:{displayName:'CI 夹具顾客',phone:'13900000001'},source:{},
+    details:{cards:[],gifts:[],transactions:[],serviceNotes:[],attachments:[]},review:{}}]}
+const migrationPath = `${BASE}/platform/tenants/jics-nail/migrations`
+const preview = await fetch(migrationPath+'/preview',{method:'POST',headers:H,body:JSON.stringify({package:pkg})})
+if (!preview.ok) {console.error(`🔴 顾客夹具预检失败 ${preview.status}`);process.exit(1)}
+const {report} = await preview.json()
+const r = await fetch(migrationPath+'/execute',{method:'POST',headers:H,body:JSON.stringify({package:pkg,
+  confirmPendingOnly:true,confirmPackageHash:report.packageHash,confirmOpeningBalanceCents:0,
+  confirmImportCount:1,confirmExcludedCount:0})})
+if (!r.ok) {console.error(`🔴 顾客夹具执行失败 ${r.status}`);process.exit(1)}
+console.log(`   标准包建顾客（不授予权益）→ ${r.status}`)
 
 console.log('④ 🔴 逐项验夹具真的在 —— 不验就等于没种')
 if (!existsSync(DB)) { console.error(`🔴 库文件不在:${DB}`); process.exit(1) }
