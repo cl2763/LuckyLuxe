@@ -411,7 +411,7 @@ const realBefore = await statsOf('lucky-luxe')
   // 两半:直连 SQL 的 INSERT,和走正门那些会建人/建钱的口
   const SQL_PEOPLE = /INSERT[^;]{0,80}INTO\s+(users|technicians|user_identities)\b/i
   const SQL_MONEY = /INSERT[^;]{0,80}INTO\s+(bookings|settlements|stored_value\w*|points\w*|coupon\w*|finance_transactions|payments|timecards?)\b/i
-  const HTTP_PEOPLE = /import\/customers|['"`]\/admin\/technicians/i
+  const HTTP_PEOPLE = /import\/customers|\/migrations(?:[/'"`])|['"`]\/admin\/(?:technicians|customers)/i
   const HTTP_MONEY = /['"`]\/admin\/bookings(\/direct)?['"`]|['"`]\/admin\/settlements|['"`]\/admin\/coupons|stored-value|\/recharge|\/points/i
   const BANNER = '此脚本永不对生产跑'
   const dangerous = []
@@ -433,6 +433,10 @@ const realBefore = await statsOf('lucky-luxe')
     overStamped.length === 0, overStamped.join(' | '))
   check('J-114④ 🔴 分类器两半都在:只扫 SQL 会漏掉走正门的那些(seed-luvia-bj 就是这么漏的)',
     HTTP_PEOPLE.test('await api(`/platform/tenants/x/import/customers`)') && SQL_PEOPLE.test('INSERT INTO users (a) VALUES (1)'))
+  check('J-114④b 新迁移包及正常顾客建档也属于造人入口',
+    HTTP_PEOPLE.test('const path = `/platform/tenants/x/migrations`')
+    && HTTP_PEOPLE.test('await api(`/admin/customers`)')
+    && dangerous.includes('tools/ci-seed-sandbox.mjs'))
   check('J-114⑤ 🔴 具名钉住:`seed-luvia-bj.mjs` 必须被判成「会造人」并盖了章 —— 它是立这条法的那一支',
     dangerous.includes('tools/seed-luvia-bj.mjs')
     && readFileSync(join(ROOT, 'tools/seed-luvia-bj.mjs'), 'utf8').includes(BANNER))
