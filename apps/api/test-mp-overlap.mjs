@@ -70,7 +70,7 @@ const boxes = async (pg, sel) => {
 }
 const show = (arr) => (arr.length ? arr.map((b) => `${b.top}→${b.bottom}`).join(',') : '不存在')
 
-const IMG = 'https://images.unsplash.com/photo-1522337360788-8b13dee7a37e?w=400'
+const IMG = '/assets/icons/tab-home.png' // Local fixture: geometry must not depend on an external image host.
 const proof = []
 
 async function measure(label, img) {
@@ -108,7 +108,7 @@ async function measure(label, img) {
   const name = await boxes(pg, '.recommend-name')
   const meta = await boxes(pg, '.recommend-meta')
   const titles = await boxes(pg, '.section-title')
-  const phImg = (await pg.$$('.ph-img').catch(() => [])).length
+  const phImg = (await pg.$$('.ph-img').catch(() => [])).length + (await pg.$$('.ph-framed-img').catch(() => [])).length
   const phBox = (await pg.$$('.ph-box').catch(() => [])).length
 
   proof.push({
@@ -141,7 +141,7 @@ check(`① 造态自证:两态各造 2+2 张卡(美甲被测+陪衬 · 美睫两
 
 /* ② 互斥自证:两态渲染确实不同 —— 否则"间隙全等"可能只是 setData 没作用到渲染层
    (店主口诀:两个本该不同的数完全相同,永远先查测量、再信结论) */
-check('② 互斥自证:有图态只有 .ph-img、占位态只有 .ph-box(证明量的是两个真不同的态)',
+check('② 互斥自证:有图态为普通/裁切图片、占位态只有 .ph-box(证明量的是两个真不同的态)',
   proof[0]?.phImg >= 1 && proof[0]?.phBox === 0 && proof[1]?.phBox >= 1 && proof[1]?.phImg === 0,
   JSON.stringify(proof.map((p) => ({ label: p.label, phImg: p.phImg, phBox: p.phBox }))))
 

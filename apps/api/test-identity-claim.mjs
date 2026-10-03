@@ -19,6 +19,7 @@
  *   ㋙5  白名单式:全仓出现过的 provider **逐个**必须在分类表里,新来的当场红
  *   ㋙6  认不出来的 provider → **挡住**(失败朝安全那边)
  */
+import { pendingCustomerFixture } from './test-migration-fixture.mjs'
 import { mkdtempSync, rmSync, readFileSync, readdirSync } from 'node:fs'
 import { join } from 'node:path'
 import { tmpdir } from 'node:os'
@@ -106,6 +107,9 @@ const dbPath = join(dir, 'lucky-luxe.sqlite')
 const one = (sql, ...a) => { const d = new DatabaseSync(dbPath); const r = d.prepare(sql).get(...a); d.close(); return r || {} }
 const all = (sql, ...a) => { const d = new DatabaseSync(dbPath); const r = d.prepare(sql).all(...a); d.close(); return r }
 const AH = { 'content-type': 'application/json', 'x-admin-tenant-id': TID, authorization: `Bearer ${OWNER}` }
+const migrationRequest = async (path, options={}) => {const r=await fetch(BASE+path,{...options,headers:AH});return {status:r.status,data:await r.json()}}
+const migrate = rows => pendingCustomerFixture(migrationRequest,TID,rows,{baseUrl:BASE,dbPath:join(dir,'lucky-luxe.sqlite')})
+
 const CH = { 'content-type': 'application/json', 'x-tenant-id': TID }
 const scan = (phone, openid, extra = {}) => fetch(`${BASE}/auth/wechat/mini-login`, { method: 'POST', headers: CH,
   body: JSON.stringify({ code: `stub:${openid}`, tenantId: TID, phone, displayName: '微信用户', ...extra }) })
@@ -125,12 +129,13 @@ try {
        因为 D25 闸挡着:**没绑微信的轻档案不许充值**。
        用错了路子,验的就不是她真实的样子(造景律)。 */
     const row0 = { name: '老顾客·王', phone: PHONE, totalSpendCents: 588000, balanceCents: 55000 }
-    const dry = await (await fetch(`${BASE}/platform/tenants/${TID}/import/customers`, { method: 'POST', headers: AH,
-      body: JSON.stringify({ dryRun: true, rows: [row0] }) })).json().catch(() => ({}))
-    const sum = Number(dry?.report?.balanceSumCents ?? dry?.balanceSumCents ?? 0)
-    const imp = await (await fetch(`${BASE}/platform/tenants/${TID}/import/customers`, { method: 'POST', headers: AH,
-      body: JSON.stringify({ dryRun: false, rows: [row0], confirmBalanceCents: sum }) })).json().catch(() => ({}))
-    const oldId = imp?.users?.[0]?.userId || ''
+    const [oldId] = await migrate([row0])
+    const pending = all('SELECT id FROM migration_pending_balances WHERE tenant_id=? AND user_id=?',TID,oldId)[0]
+    const path = `/admin/customers/${oldId}/migration-balances/${pending.id}`
+    const review = await migrationRequest(path)
+    const enabled = await migrationRequest(path+'/activate',{method:'POST',body:JSON.stringify({requestId:'identity-claim-opening',confirmVersion:review.data.version,paidCents:55000,bonusCents:0,currency:review.data.currency,mode:'unrestricted_aggregate',noReliableCardBreakdown:true,unrestricted:true,noExpiry:true,sourceUseStopped:true,cutoverAt:'2020-01-02T00:00:00Z',evidence:'测试商家已核对并停止原系统余额使用'})})
+    check('商家确认后启用期初余额',enabled.status===200,JSON.stringify(enabled.data))
+    const sum = 55000
     const idRows = all('SELECT provider FROM user_identities WHERE user_id = ?', oldId).map((r) => r.provider)
     check('㋙1a 夹具就是**真实形态**:平台导入建出的档案,名下**真的有** `provider=\'phone\'` 那一行,'
       + '而且**期初余额真的进了 legacy 桶** —— 不先证明这两样在,下面那条「认到了」'
@@ -179,9 +184,7 @@ try {
 
     /* ── ㋙2 已经绑过微信的:不许被手机号认领走 ── */
     const P2 = '13700006001'
-    const impB = await (await fetch(`${BASE}/platform/tenants/${TID}/import/customers`, { method: 'POST', headers: AH,
-      body: JSON.stringify({ dryRun: false, rows: [{ name: '已绑客·李', phone: P2 }] }) })).json().catch(() => ({}))
-    const bId = impB?.users?.[0]?.userId || ''
+    const [bId] = await migrate([{name:'已绑客·李',phone:P2}])
     await scan(P2, 'stub-openid-libound')                     /* 她先自己绑了微信 */
     const other = await scan(P2, 'stub-openid-someone-else')  /* 另一个微信号拿同一个手机号来 */
     const otherBody = await other.json().catch(() => ({}))
@@ -249,8 +252,7 @@ try {
     /* 撞车局要**两条同号档案**。导入那条口按手机号去重(同号第二次是 update 不是 create),
        所以第二条走**另一条正门**:`/admin/bookings/direct` 建轻档案(店里电话预约的新客就是这么来的)。
        两条都是真业务路径 —— J-60:造状态要走产生这个状态的那条路。 */
-    await fetch(`${BASE}/platform/tenants/${TID}/import/customers`, { method: 'POST', headers: AH,
-      body: JSON.stringify({ dryRun: false, rows: [{ name: `撞车甲${Date.now()}`, phone: P3 }] }) })
+    await migrate([{name:`撞车甲${Date.now()}`,phone:P3}])
     const svcList = await (await fetch(`${BASE}/admin/services`, { headers: AH })).json().catch(() => ({}))
     const techList = await (await fetch(`${BASE}/admin/technicians`, { headers: AH })).json().catch(() => ({}))
     const sid = (svcList.services || svcList.items || [])[0]?.id || ''

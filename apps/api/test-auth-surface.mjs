@@ -1,3 +1,4 @@
+import { pendingCustomerFixture } from './test-migration-fixture.mjs'
 /* 商家接口门禁全量扫描(店主 2026-08-09 红线级指令)。
 
    不靠"我记得都加了",而是**从源码里把所有 /admin/* 路由抠出来逐个打一遍**:
@@ -251,12 +252,7 @@ async function main() {
   const fxSvc = mustOk(await request('/admin/pricing/items', {
     method: 'POST', body: JSON.stringify({ nameZh: `范围款${RUN}`, type: 'NAIL', categoryId: fxCat.id, itemKind: 'main', listPriceCents: 10000, memberPriceCents: 10000 })
   }, shop.token), '建服务项目').item
-  const imp2 = mustOk(await request(`/platform/tenants/${shop.tenantId}/import/customers`, {
-    method: 'POST',
-    body: JSON.stringify({ dryRun: false, rows: [{ name: `我的客${RUN}`, phone: `1385${RUN.slice(-7)}` }, { name: `别人客${RUN}`, phone: `1386${RUN.slice(-7)}` }] })
-  }, PLATFORM), '导入两位顾客')
-  const mineUser = imp2.users[0].userId
-  const otherUser = imp2.users[1].userId
+  const [mineUser, otherUser] = await pendingCustomerFixture((path, options) => request(path, options, PLATFORM), shop.tenantId, [{ name: `我的客${RUN}`, phone: '13812345678' }, { name: `别人客${RUN}`, phone: '13912345678' }])
   const svcDate = mustOk(await request('/admin/store-clock', {}, shop.token), '取门店今天').today
   mustOk(await request('/admin/bookings/direct', {
     method: 'POST', body: JSON.stringify({ userId: mineUser, serviceId: fxSvc.id, technicianId: tech.id, date: svcDate, time: '10:05', durationMin: 60, depositPaid: false })

@@ -95,10 +95,9 @@ async function main() {
   check('③ 幂等:重复保存组名不变', reread.addonGroup === '延长类', reread.addonGroup)
 
   // ---- 顾客 / 技师 ----
-  const imp = await request(`/platform/tenants/${shop.tenantId}/import/customers`, {
-    method: 'POST', body: JSON.stringify({ dryRun: false, rows: [{ name: `客${RUN_ID}`, phone: `1391${RUN_ID.slice(-7)}`, balanceCents: 0 }] })
-  })
-  const user = imp.data.users[0].userId
+  const createdCustomer = await request('/admin/customers', { method: 'POST', body: JSON.stringify({ displayName: `顾客${RUN_ID}`, phone: '13812345678', requestId: `customer-${RUN_ID}` }) }, shop.token)
+  check('商家正常建档成功', createdCustomer.status === 201, JSON.stringify(createdCustomer.data))
+  const user = createdCustomer.data.customer.id
   /* D25(3-1b,2026-08-12):导入客=phone 身份非绑定,充值会被拦 —— fixture 直连库绑上微信(同 noshow ⑮ 先例) */
   {
     const { DatabaseSync } = await import('node:sqlite')

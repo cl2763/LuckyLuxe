@@ -1,0 +1,19 @@
+<view class="page {{themeClass}}">
+<view class="title">旧实物赠品</view><view class="hint">服务次数卡需按服务卡核对，不能在这里领取。</view>
+<view wx:if="{{receipt}}" class="receipt">{{receipt}}</view><view wx:if="{{error}}" class="error">{{error}}<button bindtap="load" disabled="{{saving}}">重新读取</button></view><view wx:if="{{loading}}">读取中…</view>
+<block wx:if="{{info && !loading}}"><view class="card"><view>原始资料 · {{info.sourceTitle}}</view><text class="raw" selectable>{{sourceText}}</text><view class="hint">来源截止 {{info.cutoff || '未提供'}}，原始记录保持只读。</view></view>
+<view wx:if="{{info.grant.kind==='service'}}" class="card">已启用为服务赠卡，剩余 {{info.grant.remaining}} 次。请在服务结算中选卡核销，退回关联原服务单。</view><view wx:else class="card"><block wx:if="{{!info.grant}}">
+<label>实物名称</label><input value="{{title}}" data-key="title" bindinput="input" maxlength="120"/>
+<label>规格（选填）</label><input value="{{specification}}" data-key="specification" bindinput="input" maxlength="200"/>
+<label>单件价值（本店币种，未知不可按 0 启用）</label><input type="digit" value="{{unitValue}}" data-key="unitValue" bindinput="input"/>
+<label>有效期</label><picker mode="date" value="{{expiresOn}}" data-key="expiresOn" bindchange="input"><view class="input">{{expiresOn || '选择到期日'}}</view></picker><button wx:if="{{expiresOn}}" bindtap="clearExpiry">清空日期</button>
+<button class="check" data-key="noExpiry" bindtap="check"><text class="check-box">{{agreements.noExpiry?'✓':''}}</text>原权益明确无期限</button>
+<button class="check" data-key="physicalGoodsConfirmed" bindtap="check"><text class="check-box">{{agreements.physicalGoodsConfirmed?'✓':''}}</text>确认是实物赠品，不是服务卡或现金</button>
+<button class="check" data-key="rulesConfirmed" bindtap="check"><text class="check-box">{{agreements.rulesConfirmed?'✓':''}}</text>件数、规格和期限已核对，原规则能完整承接</button>
+<button class="check" data-key="sourceUseStopped" bindtap="check"><text class="check-box">{{agreements.sourceUseStopped?'✓':''}}</text>已核对后续领取记录，原系统不再重复领取</button>
+</block><block wx:else><view class="title">{{info.grant.title}}</view><view>{{info.grant.specification}}</view><view>剩余 {{info.grant.remaining}} 件 · 单件价值 {{valueText}}</view><view class="hint">{{info.grant.expiresOn || '无期限'}}{{info.grant.status==='expired'?' · 已过期，不能领取':''}}</view>
+<view class="operations"><button wx:if="{{info.grant.status==='available'}}" class="{{operation==='claim'?'selected':''}}" data-kind="claim" bindtap="operation">领取</button><button wx:if="{{claims.length}}" class="{{operation==='return'?'selected':''}}" data-kind="return" bindtap="operation">退回</button></view>
+<picker wx:if="{{operation==='return' && claims.length}}" range="{{claims}}" range-key="label" value="{{claimIndex}}" bindchange="claim"><view class="input">{{claims[claimIndex].label}}</view></picker></block>
+<label>{{!info.grant?'核对剩余件数（耗尽填 0）':operation==='claim'?'领取件数':'退回件数'}}</label><input type="number" value="{{quantity}}" data-key="quantity" bindinput="input"/>
+<label>{{!info.grant?'核对依据':operation==='claim'?'顾客确认收货依据':'退回依据'}}</label><textarea value="{{reason}}" data-key="reason" bindinput="input" maxlength="1000"/>
+<button class="primary" disabled="{{saving || (info.grant && info.grant.status!=='available' && !claims.length)}}" bindtap="save">{{saving?'处理中…':!info.grant?'确认启用':operation==='claim'?'确认领取':'确认退回'}}</button><view class="hint">退回只恢复原赠品件数，不延长有效期，不计入现金或营业收入。</view></view></block></view>

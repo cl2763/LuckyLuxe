@@ -8,6 +8,16 @@ import { normalizeGiftItems, ensureGiftSchema } from './gifts.mjs'
    所以充值与退卡都**不进财务账本**;进账本的是耗卡那一刻确认的收入。 */
 export function createStoredValue({ db, randomId, iso, currentTenantId, localParts, memberCodeForUserId, depositLiabilityCents }) {
   ensureGiftSchema(db)
+  // A refund remains one ledger row; this append-only allocation preserves its
+  // legacy/normal split without rewriting any historical ledger fields.
+  db.exec(`CREATE TABLE IF NOT EXISTS stored_value_refund_allocations (
+    txn_id TEXT PRIMARY KEY, tenant_id TEXT NOT NULL, user_id TEXT NOT NULL,
+    legacy_cents INTEGER NOT NULL CHECK(legacy_cents > 0)
+  );
+  CREATE TRIGGER IF NOT EXISTS sv_refund_allocation_no_update BEFORE UPDATE ON stored_value_refund_allocations
+    BEGIN SELECT RAISE(ABORT,'refund allocation is append-only');END;
+  CREATE TRIGGER IF NOT EXISTS sv_refund_allocation_no_delete BEFORE DELETE ON stored_value_refund_allocations
+    BEGIN SELECT RAISE(ABORT,'refund allocation is append-only');END;`)
   function storedValueBalanceCents(userId, tenantId = currentTenantId()) {
     return db.prepare('SELECT COALESCE(SUM(amount_cents), 0) AS balance FROM stored_value_transactions WHERE tenant_id = ? AND user_id = ?')
       .get(tenantId, userId).balance
@@ -17,17 +27,23 @@ export function createStoredValue({ db, randomId, iso, currentTenantId, localPar
      08-26 沙箱真点撞出来的:先 INSERT 再 UPDATE 会被账本触发器打回
      (stored value ledger is append-only)—— 那道触发器是对的,只追加不许改。
      测试库的租户 kind='test' 被豁免,所以套件当时没红:**只有在真店口径上真点才撞得出**。 */
-  function insertStoredValueTransaction({ userId, type, amountCents, payChannel = 'unknown', note = '', createdBy = 'system', createdAt = null, tenantId = currentTenantId(), technicianId = null, customerConfirmedAt = null, paidPartCents = null, bonusPartCents = null, requestId = null, reversalOf = null, giftItems = [] }) {
+  function insertStoredValueTransaction({ userId, type, amountCents, payChannel = 'unknown', note = '', createdBy = 'system', createdAt = null, tenantId = currentTenantId(), technicianId = null, customerConfirmedAt = null, paidPartCents = null, bonusPartCents = null, requestId = null, reversalOf = null, giftItems = [], legacyRefundCents = 0 }) {
     const id = randomId('sv')
     // N-5:refund(退卡)与 consume 同族都是负数;两者的区别在**收入**上,不在符号上
     // 裁定2(08-30d):reversal=红字反向,符号由调用方给(冲充值=负,原样透传)
     const signed = type === 'recharge' ? Math.abs(amountCents)
       : (type === 'consume' || type === 'refund' ? -Math.abs(amountCents) : Math.round(amountCents))
+    if (!Number.isSafeInteger(legacyRefundCents) || legacyRefundCents < 0 || legacyRefundCents > Math.abs(signed) || (legacyRefundCents && type !== 'refund')) throw new Error('Invalid legacy refund allocation')
+    db.exec('SAVEPOINT stored_value_insert')
+    try {
     db.prepare(`
       INSERT INTO stored_value_transactions (id, tenant_id, user_id, type, amount_cents, pay_channel, note, created_by, created_at, technician_id, customer_confirmed_at, paid_part_cents, bonus_part_cents, request_id, reversal_of, gift_items_json)
       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
     `).run(id, tenantId, userId, type, signed, payChannel, note, createdBy, createdAt || iso(new Date()), technicianId || null, customerConfirmedAt || null, paidPartCents, bonusPartCents, requestId, reversalOf, JSON.stringify(type === 'recharge' ? normalizeGiftItems(giftItems) : []))
+    if (legacyRefundCents) db.prepare('INSERT INTO stored_value_refund_allocations(txn_id,tenant_id,user_id,legacy_cents) VALUES(?,?,?,?)').run(id,tenantId,userId,legacyRefundCents)
+    db.exec('RELEASE stored_value_insert')
     return db.prepare('SELECT * FROM stored_value_transactions WHERE id = ?').get(id)
+    } catch (error) { db.exec('ROLLBACK TO stored_value_insert'); db.exec('RELEASE stored_value_insert'); throw error }
   }
 
   function storedValueOverview() {
@@ -89,7 +105,8 @@ export function createStoredValue({ db, randomId, iso, currentTenantId, localPar
         COALESCE(SUM(CASE WHEN bucket = 'legacy' THEN amount_cents ELSE 0 END), 0) AS legacy
       FROM stored_value_transactions WHERE tenant_id = ? AND user_id = ?`).get(tenantId, userId)
     const totalCents = row.total || 0
-    const legacyCents = row.legacy || 0
+    const legacyRefunds = db.prepare('SELECT COALESCE(SUM(legacy_cents),0) n FROM stored_value_refund_allocations WHERE tenant_id=? AND user_id=?').get(tenantId,userId).n
+    const legacyCents = (row.legacy || 0) - legacyRefunds
     return { totalCents, legacyCents, normalCents: totalCents - legacyCents }
   }
 

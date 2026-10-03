@@ -125,10 +125,9 @@ async function main() {
     method: 'POST',
     body: JSON.stringify({ nameZh: `款式${RUN_ID}`, type: 'NAIL', categoryId: cat.id, itemKind: 'main', listPriceCents: 1200000, memberPriceCents: 1200000, baseDurationMin: 60 })
   }, shop.token)).data.item
-  const imp = await request(`/platform/tenants/${shop.tenantId}/import/customers`, {
-    method: 'POST', body: JSON.stringify({ dryRun: false, rows: [{ name: `顾客${RUN_ID}`, phone: `1383${RUN_ID.slice(-7)}` }] })
-  })
-  const cust = imp.data.users[0].userId
+  const createdCustomer = await request('/admin/customers', { method: 'POST', body: JSON.stringify({ displayName: `顾客${RUN_ID}`, phone: '13812345678', requestId: `customer-${RUN_ID}` }) }, shop.token)
+  check('商家正常建档成功', createdCustomer.status === 201, JSON.stringify(createdCustomer.data))
+  const cust = createdCustomer.data.customer.id
   /* D25(3-1b,2026-08-12):导入客=phone 身份非绑定,充值会被拦 —— fixture 直连库绑上微信(同 noshow ⑮ 先例) */
   {
     const { DatabaseSync } = await import('node:sqlite')

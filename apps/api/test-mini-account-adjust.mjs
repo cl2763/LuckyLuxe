@@ -107,8 +107,10 @@ check('① 黄条句后端给(bonusWarning),前端不自己算赠送', aa.includ
 const tid = `maa-${RUN}`
 if ((await request('/platform/tenants', { method: 'POST', body: JSON.stringify({ id: tid, name: `小程序退卡店${RUN}`, plan: 'chain' }) })).status !== 201) throw new Error('建店失败')
 const H = { 'x-admin-tenant-id': tid, 'x-tenant-id': tid }
-const imp = (await request(`/platform/tenants/${tid}/import/customers`, { method: 'POST', body: JSON.stringify({ dryRun: false, rows: [{ name: `退卡客${RUN}`, phone: `137${String(parseInt(RUN,36)).slice(-8)}` }] }) })).data
-const userId = imp.users[0].userId
+// 本套件验证账户调整，使用正常老板建档；不依赖已关闭的旧CSV执行入口。
+const created = await request('/admin/customers', { method: 'POST', body: JSON.stringify({ displayName: `退卡客${RUN}`, phone: `137${String(parseInt(RUN,36)).slice(-8)}`, requestId: `maa_create_${RUN}` }) }, PLATFORM, H)
+check('② 正常建档入口创建隔离顾客', created.status === 201, JSON.stringify(created.data))
+const userId = created.data.customer.id
 /* 🔴 J-60 第一款(夜13 §五 降账 5 处)· 这五处原来是**直连库贴微信绑定**:
    `db.prepare('UPDATE users SET wechat_open_id = ? WHERE id = ?')` ——
    真顾客不是这么绑上的。她拿**自己的手机号**从 `/auth/wechat/mini-login` 进来,
@@ -160,8 +162,9 @@ if (staffLg?.auth) {
 /* ===== ④ 裁定2(店主 08-30d 准开口):储值行冲销 · 合同五条逐条验 ===== */
 {
   const today = (await request('/admin/store-clock', {}, PLATFORM, H)).data.today
-  const imp2 = (await request(`/platform/tenants/${tid}/import/customers`, { method: 'POST', body: JSON.stringify({ dryRun: false, rows: [{ name: `冲销客${RUN}`, phone: `136${String(parseInt(RUN,36)).slice(-8)}` }] }) })).data
-  const u2 = imp2.users[0].userId
+  const made2 = await request('/admin/customers', { method: 'POST', body: JSON.stringify({ displayName: `冲销客${RUN}`, phone: `136${String(parseInt(RUN,36)).slice(-8)}`, requestId: `maa_create_2_${RUN}` }) }, PLATFORM, H)
+  check('账户调整隔离顾客 2 正常建档', made2.status===201, JSON.stringify(made2.data))
+  const u2 = made2.data.customer.id
   await bindWechatViaFrontDoor({ base: BASE_URL, tenantId: tid, userId: u2, phone: `136${String(parseInt(RUN,36)).slice(-8)}`, tag: `rev-${RUN}` })
   check('④ 夹具:错记一笔 充500赠50(现金)', (await request('/admin/stored-value/recharge', { method: 'POST', body: JSON.stringify({ userId: u2, amountCents: 50000, bonusCents: 5000, payChannel: 'cash' }) }, PLATFORM, H)).status === 201)
   const f0 = (await request(`/admin/account-adjust/facts?userId=${u2}`, {}, PLATFORM, H)).data.facts
@@ -202,8 +205,9 @@ if (staffLg?.auth) {
   check('④ 幂等:再冲同一笔 → 400 ALREADY_REVERSED', (await request(`/admin/stored-value/txns/${rcRow.id}/reverse`, { method: 'POST', body: JSON.stringify({ reason: 'CI 夹具:冲销口径回归' }) }, PLATFORM, H)).data?.error?.code === 'ALREADY_REVERSED')
 
   /* 裁定A(08-30f):前置闸=双水位证明 —— 实付余额≥该笔实付 且 赠送余额≥该笔赠送 */
-  const imp3 = (await request(`/platform/tenants/${tid}/import/customers`, { method: 'POST', body: JSON.stringify({ dryRun: false, rows: [{ name: `动过钱客${RUN}`, phone: `135${String(parseInt(RUN,36)).slice(-8)}` }] }) })).data
-  const u3 = imp3.users[0].userId
+  const made3 = await request('/admin/customers', { method: 'POST', body: JSON.stringify({ displayName: `动过钱客${RUN}`, phone: `135${String(parseInt(RUN,36)).slice(-8)}`, requestId: `maa_create_3_${RUN}` }) }, PLATFORM, H)
+  check('账户调整隔离顾客 3 正常建档', made3.status===201, JSON.stringify(made3.data))
+  const u3 = made3.data.customer.id
   await bindWechatViaFrontDoor({ base: BASE_URL, tenantId: tid, userId: u3, phone: `135${String(parseInt(RUN,36)).slice(-8)}`, tag: `rev3-${RUN}` })
   await request('/admin/stored-value/recharge', { method: 'POST', body: JSON.stringify({ userId: u3, amountCents: 30000, payChannel: 'cash' }) }, PLATFORM, H)
   const tx3 = (await request(`/admin/stored-value/txns?month=${today.slice(0, 7)}`, {}, PLATFORM, H)).data.txns.find((t) => t.userId === u3 && t.type === 'recharge')
@@ -213,8 +217,9 @@ if (staffLg?.auth) {
     gate.status === 400 && gate.data?.error?.message === '余额已不足以证明这笔未消费,请走退卡。', JSON.stringify(gate.data).slice(0, 120))
 
   /* 裁定A 放宽生效证明:旧保守闸会拒(之后动过钱),双水位闸放行(两侧仍各自足额) */
-  const imp4 = (await request(`/platform/tenants/${tid}/import/customers`, { method: 'POST', body: JSON.stringify({ dryRun: false, rows: [{ name: `放宽客${RUN}`, phone: `134${String(parseInt(RUN,36)).slice(-8)}` }] }) })).data
-  const u4 = imp4.users[0].userId
+  const made4 = await request('/admin/customers', { method: 'POST', body: JSON.stringify({ displayName: `放宽客${RUN}`, phone: `134${String(parseInt(RUN,36)).slice(-8)}`, requestId: `maa_create_4_${RUN}` }) }, PLATFORM, H)
+  check('账户调整隔离顾客 4 正常建档', made4.status===201, JSON.stringify(made4.data))
+  const u4 = made4.data.customer.id
   await bindWechatViaFrontDoor({ base: BASE_URL, tenantId: tid, userId: u4, phone: `134${String(parseInt(RUN,36)).slice(-8)}`, tag: `rev4-${RUN}` })
   await request('/admin/stored-value/recharge', { method: 'POST', body: JSON.stringify({ userId: u4, amountCents: 10000, bonusCents: 5000, payChannel: 'cash' }) }, PLATFORM, H)
   const tx4 = (await request(`/admin/stored-value/txns?month=${today.slice(0, 7)}`, {}, PLATFORM, H)).data.txns.find((t) => t.userId === u4 && t.type === 'recharge')
@@ -225,8 +230,9 @@ if (staffLg?.auth) {
     relax.status === 201 && relax.data.reversedAmountCents === 10000 && relax.data.reversedBonusCents === 5000, JSON.stringify(relax.data).slice(0, 120))
 
   /* 裁定A 判据刀②的常驻形:构造「总余额足、赠送侧不足」——只验总余额的闸会放行=打负(变异刀①打这里) */
-  const imp5 = (await request(`/platform/tenants/${tid}/import/customers`, { method: 'POST', body: JSON.stringify({ dryRun: false, rows: [{ name: `侧亏客${RUN}`, phone: `133${String(parseInt(RUN,36)).slice(-8)}` }] }) })).data
-  const u5 = imp5.users[0].userId
+  const made5 = await request('/admin/customers', { method: 'POST', body: JSON.stringify({ displayName: `侧亏客${RUN}`, phone: `133${String(parseInt(RUN,36)).slice(-8)}`, requestId: `maa_create_5_${RUN}` }) }, PLATFORM, H)
+  check('账户调整隔离顾客 5 正常建档', made5.status===201, JSON.stringify(made5.data))
+  const u5 = made5.data.customer.id
   await bindWechatViaFrontDoor({ base: BASE_URL, tenantId: tid, userId: u5, phone: `133${String(parseInt(RUN,36)).slice(-8)}`, tag: `rev5-${RUN}` })
   await request('/admin/stored-value/recharge', { method: 'POST', body: JSON.stringify({ userId: u5, amountCents: 10000, bonusCents: 10000, payChannel: 'cash' }) }, PLATFORM, H)
   const tx5 = (await request(`/admin/stored-value/txns?month=${today.slice(0, 7)}`, {}, PLATFORM, H)).data.txns.find((t) => t.userId === u5 && t.type === 'recharge')

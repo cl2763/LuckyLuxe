@@ -13,6 +13,7 @@
  *   ㋞3  反向守:**有号的行照常导进去**(不是「谁来都挡」)
  *   ㋞4  底数闭合:收到的行数 = 导进去的 + 被挡的(J-48,不许有行凭空消失)
  */
+import { pendingCustomerFixture } from './test-migration-fixture.mjs'
 import { mkdtempSync, rmSync } from 'node:fs'
 import { join } from 'node:path'
 import { tmpdir } from 'node:os'
@@ -70,8 +71,11 @@ try {
       JSON.stringify(skipped).slice(0, 200))
 
     const sum = Number(rep.balanceSumCents ?? 0)
-    await fetch(`${BASE}/platform/tenants/${TID}/import/customers`, { method: 'POST', headers: AH,
-      body: JSON.stringify({ dryRun: false, rows, confirmBalanceCents: sum }) })
+    const retired = await fetch(`${BASE}/platform/tenants/${TID}/import/customers`, {method:'POST',headers:AH,body:JSON.stringify({dryRun:false,rows,confirmBalanceCents:sum})})
+    check('旧CSV写口关闭，不能绕过正式迁移核对', retired.status===409)
+    const request = async (path,options={})=>{const r=await fetch(BASE+path,{...options,headers:AH});return {status:r.status,data:await r.json()}}
+    // Legacy preflight has explicitly rejected the missing-phone row; import only its reviewed valid row.
+    await pendingCustomerFixture(request,TID,[rows[0]],{baseUrl:BASE,dbPath:join(dir,'lucky-luxe.sqlite')})
 
     const gotYes = one('SELECT id, phone FROM users WHERE display_name = ? AND tenant_id = ?', 有号, TID)
     const gotNo = one('SELECT id FROM users WHERE display_name = ? AND tenant_id = ?', 没号, TID)

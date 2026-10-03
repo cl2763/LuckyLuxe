@@ -2,6 +2,7 @@
   <view wx:if="{{loading}}" class="empty">加载中…</view>
   <view wx:elif="{{error}}" class="empty">{{error}}</view>
   <block wx:elif="{{pack}}">
+    <view wx:if="{{pack.migration.hasPending}}" class="cp-card card"><view class="cp-name">{{pack.migration.title}}</view><view class="cp-sub">{{pack.migration.message}}</view></view>
     <!-- A2-6 空态:三类都空=一句话+去看充值套餐(不放例句、不放假数据) -->
     <view wx:if="{{pack.emptyText}}" class="empty-state">
       <view class="empty-t">{{pack.emptyText}}</view>

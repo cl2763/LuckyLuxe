@@ -1,6 +1,6 @@
 import{mkdtempSync,openSync,closeSync,rmSync,writeFileSync}from'node:fs';import{spawn}from'node:child_process';import{fileURLToPath}from'node:url';import{DatabaseSync}from'node:sqlite';
 const dir=mkdtempSync('/tmp/ll-ci-data.first-use-features-'),port=4363,base=`http://127.0.0.1:${port}`,owner='isolated-first-use-only',fd=openSync(dir+'/server.log','w'),checks=[];
-const server=spawn(process.execPath,['local-server.mjs'],{cwd:fileURLToPath(new URL('.',import.meta.url)),env:{PATH:process.env.PATH,HOME:process.env.HOME,DATA_DIR:dir,PORT:String(port),HOST:'127.0.0.1',OWNER_TOKEN:owner,WECHAT_MINI_TOKEN_SECRET:'binding-isolated-test-only',WECHAT_APP_SECRET:'configured-test-only',ALLOW_DEMO_ADMIN_LOGIN:'false',NOTIFY_TICK:'off'},stdio:['ignore',fd,fd]});let db;
+const server=spawn(process.execPath,['--experimental-sqlite','local-server.mjs'],{cwd:fileURLToPath(new URL('.',import.meta.url)),env:{PATH:process.env.PATH,HOME:process.env.HOME,DATA_DIR:dir,PORT:String(port),HOST:'127.0.0.1',OWNER_TOKEN:owner,WECHAT_MINI_TOKEN_SECRET:'binding-isolated-test-only',WECHAT_APP_SECRET:'configured-test-only',ALLOW_DEMO_ADMIN_LOGIN:'false',NOTIFY_TICK:'off'},stdio:['ignore',fd,fd]});let db;
 const check=(name,ok,detail)=>{checks.push({name,ok,detail});console.log((ok?'ok ':'FAIL ')+name+(ok?'':' '+JSON.stringify(detail)))};
 async function req(path,{body,token=owner,tid='first-use-a',method=body?'POST':'GET'}={}){const r=await fetch(base+path,{method,headers:{'content-type':'application/json','x-admin-tenant-id':tid,'x-tenant-id':tid,...(token?{authorization:'Bearer '+token}:{})},body:body?JSON.stringify(body):undefined});return{status:r.status,data:await r.json()}}
 const publicPost=(path,body)=>req(path,{body,token:null});
@@ -71,4 +71,13 @@ try{
  const request=await req('/admin/schedule-requests',{token:staff.auth.accessToken,body:{date:'2030-10-09',note:'申请休息'}});check('员工本人申请',request.status===201);
  check('重复申请拒绝',(await req('/admin/schedule-requests',{token:staff.auth.accessToken,body:{date:'2030-10-09',note:'再次'}})).status===409);
  check('老板批准休息',(await req('/admin/schedule-requests/'+request.data.request.id+'/set-off',{body:{}})).status===200);
+ const profilePath='/admin/customers/'+uid+'/migration-profile',archivePath='/admin/customers/'+uid+'/migration-archive';
+ check('正式来源字段接口保存成功',(await req(profilePath,{method:'PATCH',body:{acquisitionSource:'朋友介绍',originalJoinedDate:'2020-02-29'}})).status===200);
+ check('部分更新保留原建档日期',(await req(profilePath,{method:'PATCH',body:{acquisitionSource:'美团'}})).data.profile.originalJoinedDate==='2020-02-29');
+ check('原资料页面空态可读取',(await req(archivePath)).status===200);
+ check('员工不能看原始迁移资料',(await req(archivePath,{token:staff.auth.accessToken})).status===403);
+ check('跨店不能看原始迁移资料',(await req(archivePath,{tid:'first-use-b'})).status===404);
+ check('跨店不能更改来源',(await req(profilePath,{tid:'first-use-b',method:'PATCH',body:{acquisitionSource:'wrong'}})).status===404);
+ check('非法日期不改已有日期',(await req(profilePath,{method:'PATCH',body:{originalJoinedDate:'2023-02-29'}})).status===400&&(await req(profilePath)).data.profile.originalJoinedDate==='2020-02-29');
+
 }catch(e){check('完整执行',false,e.stack)}finally{db?.close();server.kill('SIGTERM');await new Promise(r=>server.exitCode!==null?r():server.once('exit',r));closeSync(fd);writeFileSync('/tmp/first-use-features-result.json',JSON.stringify(checks,null,2));if(checks.every(c=>c.ok))rmSync(dir,{recursive:true,force:true});else console.log('现场保留 '+dir)}process.exitCode=checks.some(c=>!c.ok)?1:0;

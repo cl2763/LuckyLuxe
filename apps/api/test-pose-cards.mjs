@@ -1,0 +1,25 @@
+import assert from 'node:assert/strict'
+import { createRequire } from 'node:module'
+import fs from 'node:fs'
+import vm from 'node:vm'
+import path from 'node:path'
+const require=createRequire(import.meta.url)
+const root=path.resolve(import.meta.dirname,'../../miniprogram/pages/pose')
+const catalog=require(path.join(root,'catalog.js'))
+const draft=require(path.join(root,'draft.js'))
+let count=0
+function check(label,fn){fn();count++;console.log('ok',label)}
+check('33 unique cards with complete guidance and local assets',()=>{assert.equal(catalog.cards.length,33);assert.equal(new Set(catalog.cards.map(c=>c.id)).size,33);for(const c of catalog.cards){for(const k of ['pose','cam','light','bg','avoid','length','shot','style'])assert.ok(c[k]);assert.ok(fs.existsSync(path.join(root,'assets',c.id+'.jpg')))}})
+check('all filter combinations return cards consistent with the documented fallback',()=>{for(const length of catalog.values('length'))for(const shot of catalog.values('shot'))for(const style of catalog.values('style')){const f={length,shot,style};const match=(c,k)=>f[k]==='不限'||c[k]===f[k];const exact=catalog.cards.filter(c=>match(c,'length')&&match(c,'shot')&&match(c,'style'));const relaxed=catalog.cards.filter(c=>match(c,'length')&&match(c,'shot'));const expected=exact.length?exact:relaxed.length?relaxed:catalog.cards.filter(c=>match(c,'shot'));const result=catalog.filterCards(f);assert.equal(result.count,expected.length);assert.deepEqual(new Set(result.groups.flatMap(g=>g.cards.map(c=>c.id))),new Set(expected.map(c=>c.id)));if(!exact.length)assert.ok(result.message)}})
+check('unknown card does not resolve to another card',()=>assert.equal(catalog.find('../A1'),undefined))
+check('photo handoff caps 4 images and is single-use',()=>{draft.put('A','A1',['1','2','3','4','5']);assert.equal(draft.take('A').files.length,4);assert.equal(draft.take('A'),null)})
+check('switching tenant cannot expose previous selected photos',()=>{draft.put('A','A1',['private']);assert.equal(draft.take('B'),null);assert.equal(draft.take('A'),null)})
+check('stale photo handoff expires',()=>{const now=Date.now;try{Date.now=()=>0;draft.put('A','A1',['1']);Date.now=()=>600001;assert.equal(draft.take('A'),null)}finally{Date.now=now}})
+function loadPage(name){let page;const events=[];const access={tenant:()=>tenant,guard:()=>allowed};let tenant='A',allowed=true;const wx={chooseMedia:o=>{events.push(o)},previewImage:o=>events.push(o)};const context={Page:p=>page=p,wx,require:p=>p==='../access'?access:p==='../draft'?draft:p.includes('/nav')?{to:url=>events.push(url)}:require(path.resolve(root,name,p)),Date};vm.runInNewContext(fs.readFileSync(path.join(root,name,'index.js'),'utf8'),context);page.data=JSON.parse(JSON.stringify(page.data));page.setData=function(d){Object.assign(this.data,d)};return {page,events,setTenant:t=>tenant=t,setAllowed:a=>allowed=a}}
+check('retouch page stays local; tenant switch clears photos',()=>{const {page,setTenant}=loadPage('retouch');draft.put('A','A1',['private']);page.onLoad();assert.equal(page.data.files[0],'private');setTenant('B');page.onShow();assert.equal(page.data.files.length,0);assert.equal(page.data.sourceCardId,'')})
+check('retouch picker rejects results after tenant switch',()=>{const {page,events,setTenant}=loadPage('retouch');page.onLoad();page.choose();setTenant('B');events[0].success({tempFiles:[{tempFilePath:'private'}]});assert.equal(page.data.files.length,0)})
+check('cancel is quiet, permission denial is actionable, no model submission exists',()=>{const {page,events}=loadPage('retouch');page.onLoad();page.choose();events[0].fail({errMsg:'chooseMedia:fail cancel'});assert.equal(page.data.error,'');events[0].complete();page.choose();events[1].fail({errMsg:'auth deny'});assert.ok(page.data.error.includes('权限'));assert.equal(page.submit,undefined)})
+check('unauthenticated action cannot open photo picker',()=>{const {page,events,setAllowed}=loadPage('retouch');setAllowed(false);page.choose();assert.equal(events.length,0)})
+check('camera handoff uses original images and preserves source card',()=>{const {page,events}=loadPage('detail');page.onLoad({id:'A1'});page.choose({currentTarget:{dataset:{source:'camera'}}});assert.equal(events[0].sizeType[0],'original');events[0].success({tempFiles:[{tempFilePath:'camera-photo'}]});assert.ok(events[1].includes('/pose/retouch'));assert.equal(draft.take('A').sourceCardId,'A1')})
+check('pose subpackage remains below 2MiB',()=>{const bytes=d=>fs.readdirSync(d,{withFileTypes:true}).reduce((n,e)=>n+(e.isDirectory()?bytes(path.join(d,e.name)):fs.statSync(path.join(d,e.name)).size),0);assert.ok(bytes(root)<2*1024*1024)})
+console.log(`${count} pose and handoff checks passed`)

@@ -4,7 +4,7 @@
   "projectname": "Lucky-Luxe-Demo",
   "appid": "wx247cd8ad9907430d",
   "setting": {
-    "urlCheck": false,
+    "urlCheck": true,
     "es6": true,
     "enhance": true,
     "postcss": true,

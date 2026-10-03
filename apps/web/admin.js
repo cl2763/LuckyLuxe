@@ -1,6 +1,6 @@
 // 构建号:每次交付递增。侧栏可见,排查"改了没生效"时先对版本。
 // 兜底用(服务端会注入 window.LL_BUILD = 资源内容指纹,页面优先显示那个)
-const ADMIN_BUILD = '20260928-review2'
+const ADMIN_BUILD = '20261003-migration-visual'
 let pricingState = { module: 'storefront', tab: 'items', categories: [], items: [], rules: {}, editing: null, preview: null, storefrontPicker: false }
 console.log(`[admin] build ${ADMIN_BUILD}`)
 
@@ -4293,26 +4293,6 @@ function renderCustomers() {
   `).join('')
 }
 
-async function saveCustomerProfile(customerId) {
-  const zh = owner.lang === 'zh'
-  const payload = {
-    tags: (document.querySelector('#customerTagsInput')?.value || '').split(/[,，、]/).map((tag) => tag.trim()).filter(Boolean),
-    notes: document.querySelector('#customerNotesInput')?.value || '',
-    birthday: (document.querySelector('#customerBirthdayInput')?.value || '').trim()
-  }
-  const result = await request(`/admin/customers/${customerId}/profile`, { method: 'PATCH', body: JSON.stringify(payload) })
-  const customer = owner.customers.find((item) => item.id === customerId)
-  if (customer) Object.assign(customer, result.customer)
-  toast(zh ? '运营信息已保存' : 'Saved')
-  renderCustomers()
-}
-
-function customerBookings(customerId) {
-  return owner.bookings
-    .filter((booking) => booking.user?.id === customerId)
-    .sort((a, b) => `${b.appointmentDate} ${b.appointmentTime}`.localeCompare(`${a.appointmentDate} ${a.appointmentTime}`))
-}
-
 function renderCustomerDetail() {
   const customer = owner.customers.find((item) => item.id === owner.selectedCustomerId)
   if (!customer) {
@@ -4367,6 +4347,15 @@ function renderCustomerDetail() {
           <button class="primary slim" data-customer-profile-save="${escapeHtml(customer.id)}" type="button">${owner.lang === 'zh' ? '保存运营信息' : 'Save'}</button>
         </div>
       </section>
+      <section class="customer-profile-edit card">
+        <h2>来源与建档日期</h2>
+        <div class="customer-profile-form">
+          <label><span>获客来源（选填）</span><input id="acquisitionSourceInput" maxlength="120" value="${escapeHtml(customer.acquisitionSource||'')}" placeholder="例如：朋友介绍、美团"></label>
+          <label><span>原建档日期（未知留空）</span><input id="originalJoinedDateInput" type="date" value="${escapeHtml(customer.originalJoinedDate||'')}"></label>
+          <button class="primary slim" type="button" data-migration-profile-save>保存来源与日期</button>
+        </div>
+      </section>
+      <section class="customer-records card"><h2>原系统资料与旧权益</h2><div id="migrationArchiveBody">正在读取历史资料…</div></section>
       <section class="customer-records card" id="signedDocsSection">
         <div class="section-row compact-row">
           <div><p class="eyebrow">签署文件</p><h2>线下签完的纸,拍照存这儿</h2></div>
@@ -4397,6 +4386,7 @@ function renderCustomerDetail() {
       </section>
     </section>
   `
+  loadMigrationArchive(customer.id)
   loadCustomerNotes(customer.id); renderSignedDocsBlock(customer.id, customerName(customer))   // 签署文件留档(10b);实现在 customer-docs.js
 }
 
@@ -6063,6 +6053,7 @@ els.customerList.addEventListener('click', (event) => {
     renderCustomers()
     return
   }
+  if (handleMigrationClick(event)) return
   const profileSave = event.target.closest('[data-customer-profile-save]')
   if (profileSave) {
     saveCustomerProfile(profileSave.dataset.customerProfileSave).catch((error) => toast(error.message))

@@ -1,12 +1,16 @@
 const api = require('../../../utils/api')
 
 Page({
-  data: { seg: 0, showcase: [], items: [], pendingUpload: 0, pendingPublish: 0, loading: true },
+  data: { canCreate: false, seg: 0, showcase: [], items: [], pendingUpload: 0, pendingPublish: 0, loading: true },
 
   async onShow() {
     if (!api.guardMerchant()) return // 门禁:未登录/会话失效不渲染空壳,直接回登录页
+    this.setData({ canCreate: ['owner','staff'].includes(api.getCachedRole()) })
     this.load()
   },
+
+  openPoses() { if (this.data.canCreate && api.guardMerchant()) require('../../../utils/nav').to('/pages/pose/list/index') },
+  openRetouch() { if (this.data.canCreate && api.guardMerchant()) require('../../../utils/nav').to('/pages/pose/retouch/index') },
 
   onSeg(e) { this.setData({ seg: Number(e.currentTarget.dataset.i) }) },
 

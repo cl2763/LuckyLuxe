@@ -24,6 +24,7 @@
     "pricing-model": 43,
     "membership-config": 31,
     "customer-import": 25,
+    "migration-center": 20,
     "tenant-hygiene": 25,
     "tenant-timezone": 32,
     "deposit-config": 36,
@@ -159,8 +160,8 @@
   "上次更新": "2026-09-02",
   "巨型文件历史最低": {
     "说明": "棘轮双基线(店主 09-08 裁,05r 补三):预检取 min(上一提交行数, 这里记的历史最低)。只许写小不许写大 —— 写大预检自己红。治的是「红着提交一次,下一次基线跟着抬」那个口子。",
-    "apps/api/local-server.mjs": 17510,
-    "apps/web/admin.js": 7887
+    "apps/api/local-server.mjs": 17313,
+    "apps/web/admin.js": 7793
   },
   "小程序档_移出主档_2026-09-14": {
     "说明": "裁#91(店主 07l §四)选②:这三把刀移到**小程序自动化独立档**,单独跑单独报数。基线从主档移出。",

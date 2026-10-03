@@ -79,7 +79,7 @@ export function createRefundRoutes({ apiError, json, readBody, refundApi, staffS
       requireRefundRight()
       const b = await readBody(req)
       json(res, 201, refundApi.refundTimecard({
-        cardId: tcRefundMatch[1], times: b.times,
+        cardId: tcRefundMatch[1], times: b.times, requestId: b.requestId,
         amountCents: b.amountCents ?? (b.amount === undefined ? undefined : Number(b.amount) * 100),
         payChannel: b.payChannel, reason: b.reason,
         operator: actorOf(adminSession)

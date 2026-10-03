@@ -8029,3 +8029,7 @@ input[type="checkbox"], input[type="radio"] {
 :root[data-theme="dark"] { color-scheme: dark; }
 
 .dh-card, .today-board, .tb-right { min-width: 0; }
+
+/* Migration review: retain visible actions while reviewing multiple source cards. */
+.form-modal-panel.migration-card-review{max-width:620px;max-height:85vh;max-height:85dvh}
+.migration-card-review>.action-row{position:sticky;bottom:-18px;background:var(--card);padding:12px 0 6px;z-index:1;border-top:1px solid var(--line)}

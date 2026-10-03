@@ -54,14 +54,23 @@ async function newTenant(label) {
   return { tenantId: created.data.tenant.id, token }
 }
 
-// 借「平台顾客导入」建顾客(不依赖小程序登录),返回 userId
+// 通过标准迁移包创建测试档案，余额先暂存；启用必须另走商家确认。
+const customerPending = new Map()
 async function makeCustomer(tenantId, name, extra = {}) {
-  const res = await request(`/platform/tenants/${tenantId}/import/customers`, {
-    method: 'POST',
-    body: JSON.stringify({ dryRun: false, rows: [{ name, phone: `139${Math.random().toString().slice(2, 10)}`, ...extra }] })
-  })
-  if (res.status !== 200 || !res.data.users?.length) throw new Error(`建顾客失败: ${JSON.stringify(res.data)}`)
-  const uid = res.data.users[0].userId
+  const sourceRecordId = `fixture-${Date.now()}-${Math.random().toString(36).slice(2)}`
+  const pkg = { packageType: 'youji-customer-migration-v1', schemaVersion: 1, sourceSystem: sourceRecordId, sourceExportedAt: '2020-01-01T00:00:00Z', dataCutoffAt: '2020-01-01T00:00:00Z', sourceTimezone: 'Asia/Shanghai', merchantConfirmedAt: '2020-01-02T00:00:00Z', mode: 'initial', records: [{ sourceRecordId, mapped: { name, phone: `139${Math.random().toString().slice(2, 10)}`, ...extra }, source: {}, details: { cards: [], gifts: [], transactions: [], serviceNotes: [], attachments: [] }, review: {} }] }
+  const path = `/platform/tenants/${tenantId}/migrations`
+  const preview = await request(path + '/preview', { method: 'POST', body: JSON.stringify({ package: pkg }) })
+  const res = await request(path + '/execute', { method: 'POST', body: JSON.stringify({ package: pkg, confirmPendingOnly: true, confirmPackageHash: preview.data.report?.packageHash, confirmOpeningBalanceCents: extra.balanceCents || 0, confirmImportCount: 1, confirmExcludedCount: 0 }) })
+  if (res.status !== 200) throw new Error(`建顾客失败: ${JSON.stringify(res.data)}`)
+  const { DatabaseSync } = await import('node:sqlite')
+  if (!process.env.TEST_DB_PATH) throw new Error('membership fixture requires isolated TEST_DB_PATH')
+  const fixtureDb = new DatabaseSync(process.env.TEST_DB_PATH)
+  const uid = fixtureDb.prepare('SELECT user_id FROM customer_migration_links WHERE tenant_id=? AND source_system=? AND source_record_id=?').get(tenantId, pkg.sourceSystem, sourceRecordId)?.user_id
+  const pending = fixtureDb.prepare('SELECT id FROM migration_pending_balances WHERE tenant_id=? AND user_id=?').get(tenantId, uid)
+  fixtureDb.close()
+  if (!uid) throw new Error('migration fixture did not create customer link')
+  customerPending.set(uid, pending?.id)
   /* D25(3-1b,2026-08-12):导入客非绑定,充值会被拦 —— fixture 统一直连库绑上微信(同 noshow ⑮ 先例)。
      会员资格判定与绑定无关,不影响本套件断言语义。 */
   if (process.env.TEST_DB_PATH) {
@@ -173,6 +182,13 @@ async function main() {
   // 迁移进来的期初余额:算会员(老店充过),但不占用「首充」资格
   const uMigrated = await makeCustomer(shop.tenantId, `迁移客${RUN_ID}`, { balanceCents: 88000 })
   await setConfigShop({ memberQualify: 'any_recharge' })
+  const pendingBefore = await request(`/admin/membership/members?userId=${uMigrated}`, {}, shop.token)
+  const beforeRow = pendingBefore.data.members.find(m => m.userId === uMigrated)
+  check('待核对的迁移余额不自动授予会员或可用余额', beforeRow?.isMember === false && !beforeRow?.legacyBalanceCents)
+  const activationPath = `/admin/customers/${uMigrated}/migration-balances/${customerPending.get(uMigrated)}`
+  const review = await request(activationPath, {}, shop.token)
+  const activated = await request(activationPath + '/activate', { method: 'POST', body: JSON.stringify({ requestId: `membership-${RUN_ID}`, confirmVersion: review.data.version, paidCents: 88000, bonusCents: 0, currency: review.data.currency, mode: 'unrestricted_aggregate', noReliableCardBreakdown: true, unrestricted: true, noExpiry: true, sourceUseStopped: true, cutoverAt: '2020-01-02T00:00:00Z', evidence: '测试商家已核对原系统余额并停止使用', differenceReason: '' }) }, shop.token)
+  check('商家确认后迁移余额才能启用', activated.status === 200, JSON.stringify(activated.data))
   const mig = await request(`/admin/membership/members?userId=${uMigrated}`, {}, shop.token)
   const migRow = mig.data.members.find((m) => m.userId === uMigrated)
   check('迁移客算会员(老店的充值)', migRow?.isMember === true, JSON.stringify(migRow))

@@ -3,7 +3,7 @@
 // true  = 连你 Mac 本地沙盘(模拟数据,随便测,不影响线上;开发者工具模拟器用 127.0.0.1 即可)
 // false = 连线上生产(**境内代理** api.jingshengyouji.com → Railway,真实数据)
 // ⚠️ 正式上传/发布前,务必把这里改回 false!
-const USE_LOCAL_SANDBOX = true // 2026-08-23 体验版 1.2.0 已传(境内号 wx247cd8ad9907430d,连生产);本地开发沙盘;上传前务必改 false
+const USE_LOCAL_SANDBOX = false // 2026-10-03 体验版候选：连接境内生产 API；本机验收使用隔离项目副本
 const { realValue } = require('./placeholder-words.js')   // 11j 判据 A:占位词表两端同源(见该文件抬头)
 /* 本地沙盘地址(真机调试联通件,店主 08-23 立):
    - 开发者工具模拟器 = 跑在 Mac 上,127.0.0.1 就是 Mac,直连即可;

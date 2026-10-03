@@ -1,3 +1,4 @@
+import { pendingCustomerFixture } from './test-migration-fixture.mjs'
 /* 网页开单(批次三 · 上线前必办)· 五条判据照店主指令原文落地。
 
    合同:把小程序「结算开单」整条流程搬到网页,**同一套后端路由,不许新造接口**;
@@ -48,8 +49,7 @@ const t2 = (await request('/admin/technicians', { method: 'POST', body: JSON.str
 const catId = ((await request('/admin/pricing/categories', {}, PLATFORM, H)).data.categories || [])[0].id
 const svcA = (await request('/admin/services', { method: 'POST', body: JSON.stringify({ type: 'NAIL', nameZh: `单色${RUN}`, nameEn: 'a', priceCents: 19800, baseDurationMin: 60, categoryId: catId }) }, PLATFORM, H)).data.service
 const svcB = (await request('/admin/services', { method: 'POST', body: JSON.stringify({ type: 'NAIL', nameZh: `猫眼${RUN}`, nameEn: 'b', priceCents: 25800, baseDurationMin: 90, categoryId: catId }) }, PLATFORM, H)).data.service
-const imp = (await request(`/platform/tenants/${tid}/import/customers`, { method: 'POST', body: JSON.stringify({ dryRun: false, rows: [{ name: `开单客${RUN}`, phone: `139${RUN.slice(-8)}` }] }) })).data
-const userId = imp.users[0].userId
+const [userId] = await pendingCustomerFixture(request, tid, [{ name: `测试顾客${RUN}`, phone: '13812345678' }])
 const today = (await request('/admin/store-clock', {}, PLATFORM, H)).data.today
 const mkBooking = async (time) => (await request('/admin/bookings/direct', { method: 'POST', body: JSON.stringify({ userId, serviceId: svcA.id, technicianId: t1.id, date: today, time, durationMin: 60 }) }, PLATFORM, H)).data.booking
 

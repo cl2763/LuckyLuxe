@@ -72,7 +72,20 @@
         "coupon-edit/index",
         "analytics/index",
         "content/index",
-        "store/index"
+        "store/index",
+        "migration-archive/index",
+        "migration-balance/index",
+        "migration-gift/index",
+        "migration-service/index",
+        "migration-reconciliation/index"
+      ]
+    },
+    {
+      "root": "pages/pose",
+      "pages": [
+        "list/index",
+        "detail/index",
+        "retouch/index"
       ]
     }
   ],

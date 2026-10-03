@@ -228,7 +228,7 @@ Page({
     if (!f) return
     if (this.data.cardId) {
       const c = this.data.card
-      const times = Math.round(Number(this.data.times || 0))
+      const times = Number(this.data.times || 0)
       const left = c ? Math.max(0, c.remaining - (Number.isFinite(times) ? times : 0)) : 0
       this.setData({ leftText: `${left} 次${left === 0 ? '(卡作废)' : ''}` })
       return
@@ -265,15 +265,17 @@ Page({
   },
 
   async submitCardRefund() {
-    const times = Math.round(Number(this.data.times || 0))
+    const times = Number(this.data.times || 0)
     const cents = Math.round(Number(String(this.data.cardAmount || '').replace(/[^\d.]/g, '')) * 100) || 0
     const reason = String(this.data.reason || '').trim()
     if (!reason) { wx.showToast({ title: '退卡原因必填', icon: 'none' }); return }
     if (this.data.busy) return
     this.setData({ busy: true })
     try {
+      const fingerprint=JSON.stringify({cardId:this.data.cardId,times,cents,reason})
+      if(!this.cardRefundAttempt||this.cardRefundAttempt.fingerprint!==fingerprint)this.cardRefundAttempt={fingerprint,id:'tcr_'+Date.now().toString(36)+'_'+Math.random().toString(36).slice(2)}
       const r = await api.adminPost(`/admin/timecards/${encodeURIComponent(this.data.cardId)}/refund`, {
-        times, amountCents: cents, reason, payChannel: 'cash'
+        times, amountCents: cents, reason, payChannel: 'cash', requestId:this.cardRefundAttempt.id
       })
       wx.showToast({ title: `已退 ${r.refundedTimes} 次${r.voided ? '(卡作废)' : ''}`, icon: 'none' })
       setTimeout(() => wx.navigateBack(), 900)

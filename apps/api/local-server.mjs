@@ -1,3 +1,7 @@
+import {createMemberTimecardView} from './member-timecard-view.mjs'
+import {createMigrationPaidTimecards} from './migration-paid-timecards.mjs'
+import { createMigrationCardReconciliation } from './migration-card-reconciliation.mjs'
+import { customerMigrationSummary } from './customer-migration-summary.mjs'
 import { bookingPublicCode } from './booking-code.mjs'
 import { createWorkShare } from './work-share.mjs'
 import { customerSpendCents, lastCustomerVisitAt, bindingBadgeText } from './customer-facts.mjs'
@@ -124,6 +128,10 @@ import { createAssetFingerprint } from './asset-fingerprint.mjs'      // 前端�
 import { createStoredValue } from './stored-value.mjs'                // 储值域(写流水/算余额/分桶/类型文案)
 import { createMembershipConfig } from './membership-config.mjs'      // 会员制度域(资格判定 + 退卡后是否保留会员)
 import { createImportCustomers } from './import-customers.mjs'        // 平台代商家导入老顾客(公约②)
+import { createMigrationGifts } from './migration-gifts.mjs'
+import { createMigrationBalanceActivation } from './migration-balance-activation.mjs'
+import { createCustomerMigrationProfile } from './customer-migration-profile.mjs'
+import { createMigrationCenter } from './migration-center.mjs'        // 多平台顾客迁移:预检/审计/截止时间/增量续导
 import { snapshotDb, dailyBackup, backupDb } from './db-backup.mjs'             // 库快照唯一出口(按需 + 日备同一处)
 import { createStaticServe } from './static-serve.mjs'                // 静态文件服务(公约②)
 import { createMemberCode } from './member-code.mjs'                  // 会员码域(公约②)
@@ -6455,6 +6463,8 @@ function getAdminCustomers() {
     tags: parseJson(row.tags_json) || [],
     notes: row.notes || '',
     birthday: row.birthday || '',
+    acquisitionSource: row.acquisition_source || '',
+    originalJoinedDate: row.original_joined_date || '',
     storedValueBalanceCents: storedValueBalanceCents(row.id),
     memberCode: memberCodeForUserId(row.id),
     // 等级单源(F3)+D41:分级店按租户梯子;不分级店=充值即会员(member/guest),消费不算
@@ -6674,6 +6684,12 @@ function computeFinanceProgress(month) {
 // ===== 财务密码门禁：进入财务数据前的第二道锁 =====
 const financeSessions = new Map()
 const { importTenantCustomers } = createImportCustomers({ db, apiError, randomId, iso })
+const migrationGifts = createMigrationGifts({db,apiError,randomId,iso,createHash,currentTenantId,todayOf})
+const migrationBalanceActivation = createMigrationBalanceActivation({db,apiError,randomId,iso,createHash,currentTenantId,tenantCurrencyCodeOrNull})
+const migrationPaidTimecards=createMigrationPaidTimecards({db,apiError,createHash,randomId,iso,currentTenantId,balanceSource:migrationBalanceActivation.source})
+const migrationCardReconciliation = createMigrationCardReconciliation({db,apiError,currentTenantId,balanceSource:migrationBalanceActivation.source})
+const migrationProfile = createCustomerMigrationProfile({ db, apiError, currentTenantId, iso })
+const migrationCenter = createMigrationCenter({ db, apiError, randomId, iso, createHash, importTenantCustomers, normalizePhone: (v) => String(v || '').replace(/[\s\-()（）]/g, '').trim().slice(0, 30) })
 const { adminPasswordHash, randomPassword, issueAdminSession, adminFromSessionToken, bootstrapOwnerAccount, demoAuthFor, demoEmailFromToken } = createAdminAuth({
   db, randomId, iso, createHash, defaultTenantId: DEFAULT_TENANT_ID
 })
@@ -6700,6 +6716,7 @@ const staffScope = createStaffScope({
 const refundApi = createAccountRefund({
   db, apiError, iso, randomId, currentTenantId,
   insertStoredValueTransaction: (a) => insertStoredValueTransaction(a),
+  storedValueBalanceDetail: (u,t) => storedValueBalanceDetail(u,t),
   storedValueBalanceCents: (u, t) => storedValueBalanceCents(u, t),
   formatMoneyCents: (c, t, m) => formatMoneyCents(c, t, m),
   storeDateOf: (at, tid) => localParts(new Date(at), tenantTimezone(tid)).date
@@ -7690,7 +7707,7 @@ function couponSubtitle(grant, tenantId) {
    次卡:买的=空串(现场购卡/商城购卡);店家赠的=「店家赠送」。
    句后端唯一,前端零拼话(空串=整行不渲染)。 */
 function sourceLabelOf(kind) {
-  const map = { points: '积分兑换', gift: '店家赠送', activity: '活动赠送', refund: '售后返还' }
+  const map = { points: '积分兑换', gift: '店家赠送', activity: '活动赠送', refund: '售后返还', migration: '原系统迁入' }
   return map[String(kind || '')] || ''
 }
 
@@ -8033,6 +8050,8 @@ function computeSettlement(input = {}) {
     const tcUnit = timecardUnitCents(tcCard, tcNth)
     const tcSvc = input.timecardServiceId ? getSvc(String(input.timecardServiceId)) : null
     if (!tcSvc) throw apiError(400, 'TIMECARD_SERVICE_REQUIRED', '请从次卡关联项目组内选择本次核销的项目。')
+    const migratedService = db.prepare("SELECT kind,review_json FROM migration_asset_activations WHERE id=? AND tenant_id=? AND kind IN ('service','paid_service')").get(tcCard.id,tenantId)
+    if(migratedService && JSON.parse(migratedService.review_json).serviceId!==tcSvc.id) throw apiError(400,'TIMECARD_SERVICE_NOT_ALLOWED','这张迁入次卡只能用于核对时指定的具体服务。')
     if (tcCard.project_group) {
       const catName = tcSvc.category_id
         ? String((db.prepare('SELECT name FROM service_categories WHERE id = ? AND tenant_id = ?').get(tcSvc.category_id, tenantId) || {}).name || '')
@@ -8554,9 +8573,20 @@ async function signSettlement(row, { signature, signedBy = '', strokes = [] }) {
     if (row.timecard_id) {
       const card = db.prepare('SELECT * FROM member_timecards WHERE id = ? AND tenant_id = ?').get(row.timecard_id, tenantId)
       if (!card) throw apiError(400, 'TIMECARD_UNUSABLE', '这张次卡已不存在——请回到服务单改支付构成再签(单据不作废)。')
+      const migratedService = db.prepare("SELECT kind,review_json FROM migration_asset_activations WHERE id=? AND tenant_id=? AND kind IN ('service','paid_service')").get(card.id,tenantId)
+      if(migratedService){
+        const item=db.prepare("SELECT service_id FROM settlement_items WHERE settlement_id=? AND kind='timecard'").get(row.id)
+        if(!item || item.service_id!==JSON.parse(migratedService.review_json).serviceId) throw apiError(409,'TIMECARD_SERVICE_NOT_ALLOWED','赠卡对应服务不一致，请重新核对结算单。')
+      }
       if (timecardExpired(card)) throw apiError(400, 'TIMECARD_EXPIRED', '这张次卡已过期——请回到服务单改支付构成再签(单据不作废)。')
-      const deduct = db.prepare('UPDATE member_timecards SET used_times = used_times + 1 WHERE id = ? AND used_times = ?')
-        .run(row.timecard_id, Number(row.timecard_nth) - 1)
+      // Draft validation is not enough: remaining rights can be refunded before signing.
+      if (card.user_id !== row.user_id) throw apiError(409, 'TIMECARD_NOT_OWNER', '次卡归属已变化，请重新核对本单顾客。')
+      // A draft records the expected use number. A later consumption invalidates it,
+      // even if that consumption also exhausts the card; refunds alone retain USED_UP.
+      if (card.used_times !== Number(row.timecard_nth) - 1) throw apiError(409, 'TIMECARD_RACE', '次卡在开单后已有新的核销，请返回服务单重新核对支付方式。')
+      if (timecardRemainingOf(card) <= 0) throw apiError(409, 'TIMECARD_USED_UP', '这张次卡的剩余次数已用完或已退，请返回服务单重新选择支付方式。')
+      const deduct = db.prepare('UPDATE member_timecards SET used_times = used_times + 1 WHERE id = ? AND tenant_id = ? AND user_id = ? AND used_times = ? AND total_times - used_times - COALESCE(refunded_times, 0) > 0')
+        .run(row.timecard_id, tenantId, row.user_id, Number(row.timecard_nth) - 1)
       if (!deduct.changes) {
         throw apiError(409, 'TIMECARD_RACE', '这张次卡的剩余次数刚被另一张单用掉——请回到服务单改支付构成再签(单据不作废)。')
       }
@@ -8565,7 +8595,7 @@ async function signSettlement(row, { signature, signedBy = '', strokes = [] }) {
         db.prepare("UPDATE settlement_payments SET status = 'paid' WHERE id = ?").run(tcLeg.id)
         // 规则⑦:核销=按折算单价确认收入(负债转收入),单列类目供日结;payChannel=times_card 不混现金实收。
         // tenantId 必传:签署页=公开路由没进租户闸门,不传会记到旗舰店账上(insertFinanceTransaction 注释点名的坑,套件 ㊻ 咬过一次)
-        insertFinanceTransaction({
+        if (!migratedService || migratedService.kind==='paid_service') insertFinanceTransaction({
           type: 'income', source: 'settlement', category: '服务收入-次卡核销', tags: row.code,
           amountCents: tcLeg.amount_cents, payChannel: 'times_card', occurredOn: todayOf(tenantId),
           note: `服务单 ${row.code} · ${tcLeg.note || '次卡核销'}`, createdBy: signedBy || 'customer_sign', tenantId
@@ -8764,14 +8794,17 @@ function amendSettlement(settlementId, body = {}, adminSession = {}) {
         String(body.reason || '').slice(0, 300), delta, autoAdjust, actorOf(adminSession), now, now)
     /* 账本差额行:落在**更正当天**(账本只追加、不回溯);类目与渠道跟这张单最大的那条收入腿走,
        找不到腿(理论上不该有)就单列「服务收入-更正」,**钱绝不能凭空消失在中间**。 */
-    if (delta !== 0) {
+    // The linked timecard reversal below already contributes -unitCents.
+    // Only book the remaining adjustment here, so combined ledger delta equals delta.
+    const financeDelta = delta + (tcRelease ? tcRelease.unitCents : 0)
+    if (financeDelta !== 0) {
       const leg = db.prepare(`SELECT id, category, pay_channel FROM finance_transactions
         WHERE tenant_id = ? AND tags = ? AND type = 'income' AND source = 'settlement' AND amount_cents > 0
         ORDER BY amount_cents DESC LIMIT 1`).get(tenantId, row.code)
       insertFinanceTransaction({
         tenantId, type: 'income', source: 'amendment', keepSign: true,
         category: leg ? leg.category : '服务收入-更正', tags: row.code,
-        amountCents: delta, payChannel: leg ? leg.pay_channel : (storedPaid > 0 ? 'stored_value' : 'offline'),
+        amountCents: financeDelta, payChannel: leg ? leg.pay_channel : (storedPaid > 0 ? 'stored_value' : 'offline'),
         occurredOn: todayOf(tenantId), bookingId: row.booking_id || null,
         note: `金额更正 · 服务单 ${row.code} · ${formatMoneyCents(prevTotal, tenantId, 'auto')}→${formatMoneyCents(newTotal, tenantId, 'auto')} · ${String(body.reason || '').slice(0, 60)}`,
         createdBy: actorOf(adminSession)
@@ -11615,6 +11648,11 @@ async function route(req, res) {
       })
     })
   }
+  if (await migrationGifts.route({req,res,path,adminSession,readBody,json})) return
+  if (await migrationPaidTimecards.route({req,res,path,adminSession,readBody,json})) return
+  if (await migrationCardReconciliation.route({req,res,path,adminSession,readBody,json})) return
+  if (await migrationBalanceActivation.route({req,res,path,adminSession,readBody,json})) return
+  if (await migrationProfile.route({req,res,path,query,adminSession,readBody,json})) return
   if (req.method === 'POST' && path === '/admin/customers') return json(res,201,createCustomer({body:await readBody(req),tenantId:currentTenantId(),role:adminSession.role}))
   if (req.method === 'GET' && path === '/admin/customers') {
     /* 拍板②(店主 2026-08-10):员工「我的客户」——
@@ -12880,13 +12918,7 @@ async function route(req, res) {
     if (body.dryRun === false) return json(res, 200, serviceImportApi.execute(tenantId, body))
     return json(res, 200, { report: serviceImportApi.dryRun(tenantId, body) })
   }
-  if (req.method === 'POST' && path.startsWith('/platform/tenants/') && path.endsWith('/import/customers')) {
-    if (!isPlatform()) throw apiError(401, 'UNAUTHORIZED', 'Platform token required.')
-    const tenantId = path.split('/')[3]
-    if (!db.prepare('SELECT id FROM tenants WHERE id = ?').get(tenantId)) throw apiError(404, 'NOT_FOUND', 'Tenant not found.')
-    const body = await readBody(req)
-    return json(res, 200, importTenantCustomers(tenantId, body))
-  }
+  if (await migrationCenter.route({ req, res, path, isPlatform, readBody, json })) return
   // ---- 平台端·商家配置(替商家配好入驻资料):门店/营业时间/服务价目/技师/AI知识库 ----
   if (await platformAuth.handle(req, res, path, { readBody, json, apiError })) return   // D149 登录/改密/我是谁全在 platform-auth.mjs
   if (req.method === 'POST' && path === '/platform/session') {
@@ -16087,6 +16119,12 @@ try {
 } catch (error) {
   if (!String(error.message || '').includes('duplicate column')) throw error
 }
+// 依赖 users / service_notes / stored_value_transactions，放在这些表和迁移列全部就绪之后。
+migrationCenter.ensureSchema()
+migrationProfile.ensureSchema()
+migrationBalanceActivation.ensureSchema()
+migrationGifts.ensureSchema()
+migrationPaidTimecards.ensureSchema()
 
 /* ===== 结算单用券(2026-08-09,设计图《结算单用券》v3)=====
    coupons / coupon_grants 是 P0 就有的老表 —— 新列一律走 try/catch ALTER,
@@ -16232,49 +16270,7 @@ function allowStoredPurchase(tenantId = currentTenantId()) {
 
 /* 裁决(店主 08-20):次卡「关联项目组」禁自由文本——新值必须是现有二级分类名(空串=不限)。
    只拦新写入;存量自由文本值不静默改(编辑页标红请商家改选)。 */
-/* ===== S2批② B①:次卡持有推导件(状态零列,全部现算)===== */
-/* 折算单价(规则⑦:核销按折算单价确认收入计积分/业绩)。
-   分币余数末次吃(测试标准点名的边界):第 nth 次(1 起)= 非末次 floor(price/total),末次吃余数。 */
-function timecardUnitCents(card, nth) {
-  const base = Math.floor(card.price_cents / card.total_times)
-  return nth >= card.total_times ? card.price_cents - base * (card.total_times - 1) : base
-}
-function timecardExpired(card) {
-  return Boolean(card.expires_at && String(card.expires_at).slice(0, 10) < todayOf(card.tenant_id))
-}
-/* 🔴 N-5:剩余次数**只有这一处算法** —— 总次 − 已核销 − **已退**。
-   退掉的次数必须从剩余里扣掉,否则退完还能核销 = 商家真金白银亏钱;
-   而退次又不能记进 used_times(那等于把「手动耗卡」从后门开回来),所以独立一列、一处减。 */
-function timecardRemainingOf(row) {
-  return row.total_times - row.used_times - (row.refunded_times || 0)
-}
-
-function serializeMemberTimecard(row) {
-  const remaining = timecardRemainingOf(row)
-  const expired = timecardExpired(row)
-  return {
-    id: row.id,
-    userId: row.user_id,
-    packageId: row.package_id || null,
-    name: row.name,
-    totalTimes: row.total_times,
-    usedTimes: row.used_times,
-    refundedTimes: row.refunded_times || 0,
-    remaining,
-    priceCents: row.price_cents,
-    nextUnitCents: remaining > 0 ? timecardUnitCents(row, row.used_times + 1) : 0,
-    projectGroup: row.project_group || '',
-    // 永久律(08-23):可核销项目**句**后端唯一——前端原来写 `projectGroup || '不限'`,
-    // 与商城的「不限项目」措辞分叉,同一事实两处两句话。
-    projectGroupText: row.project_group || '不限项目',
-    expiresAt: row.expires_at ? String(row.expires_at).slice(0, 10) : null,
-    expired,
-    redeemable: remaining > 0 && !expired,
-    // 卡片行文案后端给(三端同句,图 B1-4):名称 · 剩 n/N · 有效期;过期置灰由 expired 位驱动
-    label: `${row.name} · 剩 ${remaining}/${row.total_times}${row.expires_at ? ` · 至 ${String(row.expires_at).slice(0, 10)}` : ' · 长期有效'}`,
-    createdAt: row.created_at
-  }
-}
+const {timecardUnitCents,timecardExpired,timecardRemainingOf,serializeMemberTimecard}=createMemberTimecardView({db,todayOf})
 
 /* 可用次卡的**唯一出口**(补件②,店主 08-23):三读方——①顾客端卡包 ②商家端客户档案
    ③开单结算页「次卡」大类——全部调这一个函数,剩余次数与可核销判定不许各算一份。
@@ -16318,7 +16314,9 @@ function cardPackOf(userId, tenantId = currentTenantId()) {
     sourceLabel: sourceLabelOf(r.grant_source || 'gift')
   }))
   const balanceCents = storedValueBalanceCents(userId, tenantId)
+  const migration = customerMigrationSummary(db,tenantId,userId)
   return {
+    migration,
     timecards: cards,
     coupons,
     stored: {
@@ -16329,7 +16327,7 @@ function cardPackOf(userId, tenantId = currentTenantId()) {
     },
     // 补件④:角标 = 卡包页内可用张数(次卡 + 券),与页内逐张同一份数据算出来
     badgeCount: cards.length + coupons.length,
-    emptyText: (cards.length + coupons.length) === 0 && balanceCents === 0 ? '还没有卡券' : ''
+    emptyText: !migration.hasPending && (cards.length + coupons.length) === 0 && balanceCents === 0 ? '还没有卡券' : ''
   }
 }
 

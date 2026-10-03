@@ -81,11 +81,9 @@ async function main() {
   const techA = (await request(`/platform/tenants/${shop.tenantId}/technicians`, { method: 'POST', body: JSON.stringify({ name: `小婕${RUN_ID}` }) })).data.technician
   const techB = (await request(`/platform/tenants/${shop.tenantId}/technicians`, { method: 'POST', body: JSON.stringify({ name: `苏苏${RUN_ID}` }) })).data.technician
 
-  const imp = await request(`/platform/tenants/${shop.tenantId}/import/customers`, {
-    method: 'POST',
-    body: JSON.stringify({ dryRun: false, rows: [{ name: `小美${RUN_ID}`, phone: `1382${RUN_ID.slice(-7)}` }] })
-  })
-  const cust = imp.data.users[0].userId
+  const createdCustomer = await request('/admin/customers', { method: 'POST', body: JSON.stringify({ displayName: `顾客${RUN_ID}`, phone: '13812345678', requestId: `customer-${RUN_ID}` }) }, shop.token)
+  check('商家正常建档成功', createdCustomer.status === 201, JSON.stringify(createdCustomer.data))
+  const cust = createdCustomer.data.customer.id
   // Bind the imported archive through the same one-use code flow merchants use.
   const ticket = await request(`/admin/customers/${cust}/bind-token`, { method: 'POST', body: '{}' }, shop.token)
   const bound = await request(`/bind-tokens/${ticket.data.token}/confirm`, { method: 'POST', body: JSON.stringify({ code: 'stub:daily-close-' + cust }) }, null, { 'x-tenant-id': shop.tenantId })

@@ -91,10 +91,9 @@ async function main() {
     method: 'POST', body: JSON.stringify({ nameZh: `签字款${RUN}`, type: 'NAIL', categoryId: cat.id, itemKind: 'main', listPriceCents: 20000, memberPriceCents: 20000 })
   }, shop.token)).data.item
   const tech = (await request(`/platform/tenants/${shop.tenantId}/technicians`, { method: 'POST', body: JSON.stringify({ name: `技师${RUN}` }) })).data.technician
-  const imp = await request(`/platform/tenants/${shop.tenantId}/import/customers`, {
-    method: 'POST', body: JSON.stringify({ dryRun: false, rows: [{ name: `签字客${RUN}`, phone: `1383${RUN.slice(-7)}` }] })
-  })
-  const cust = imp.data.users[0].userId
+  const createdCustomer = await request('/admin/customers', { method: 'POST', body: JSON.stringify({ displayName: `顾客${RUN}`, phone: '13812345678', requestId: `customer-${RUN}` }) }, shop.token)
+  check('商家正常建档成功', createdCustomer.status === 201, JSON.stringify(createdCustomer.data))
+  const cust = createdCustomer.data.customer.id
 
   let firstTryFailures = 0
   for (let i = 0; i < ROUNDS; i += 1) {

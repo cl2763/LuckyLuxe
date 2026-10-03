@@ -135,12 +135,23 @@ async function main() {
   assertMoney('自选填写行', cu)
 
   // ---- 代付:一组多张单,卡主签字 ----
-  const imp = await request(`/platform/tenants/${shop.tenantId}/import/customers`, {
-    method: 'POST',
-    body: JSON.stringify({ dryRun: false, rows: [{ name: `小美${RUN_ID}`, phone: `1381${RUN_ID.slice(-7)}`, balanceCents: 18000 }] })
-  })
-  const cardOwner = imp.data.users[0].userId
-  check('卡主建档并有迁移余额 ¥180', imp.status === 200 && imp.data.openingWrittenCents === 18000)
+  const sourceRecordId = `settlement-${RUN_ID}`
+  const pkg = { packageType: 'youji-customer-migration-v1', schemaVersion: 1, sourceSystem: sourceRecordId, sourceExportedAt: '2020-01-01T00:00:00Z', dataCutoffAt: '2020-01-01T00:00:00Z', sourceTimezone: 'Asia/Shanghai', merchantConfirmedAt: '2020-01-02T00:00:00Z', mode: 'initial', records: [{ sourceRecordId, mapped: { name: `小美${RUN_ID}`, phone: '13812345678', balanceCents: 18000 }, source: {}, details: { cards: [], gifts: [], transactions: [], serviceNotes: [], attachments: [] }, review: {} }] }
+  const path = `/platform/tenants/${shop.tenantId}/migrations`
+  const preview = await request(path + '/preview', { method: 'POST', body: JSON.stringify({ package: pkg }) })
+  const imp = await request(path + '/execute', { method: 'POST', body: JSON.stringify({ package: pkg, confirmPendingOnly: true, confirmPackageHash: preview.data.report?.packageHash, confirmOpeningBalanceCents: 18000, confirmImportCount: 1, confirmExcludedCount: 0 }) })
+  check('卡主迁移先暂存', imp.status === 200, JSON.stringify(imp.data))
+  if (!process.env.TEST_DB_PATH) throw new Error('requires isolated TEST_DB_PATH')
+  const { DatabaseSync } = await import('node:sqlite')
+  const fixture = new DatabaseSync(process.env.TEST_DB_PATH, { readOnly: true })
+  const cardOwner = fixture.prepare('SELECT user_id FROM customer_migration_links WHERE tenant_id=? AND source_system=? AND source_record_id=?').get(shop.tenantId, sourceRecordId, sourceRecordId)?.user_id
+  const pending = fixture.prepare('SELECT id FROM migration_pending_balances WHERE tenant_id=? AND user_id=?').get(shop.tenantId, cardOwner)
+  fixture.close()
+  check('迁移档案和待核对余额存在', Boolean(cardOwner && pending?.id))
+  const activationPath = `/admin/customers/${cardOwner}/migration-balances/${pending.id}`
+  const review = await request(activationPath, {}, shop.token)
+  const activated = await request(activationPath + '/activate', { method: 'POST', body: JSON.stringify({ requestId: sourceRecordId, confirmVersion: review.data.version, paidCents: 18000, bonusCents: 0, currency: review.data.currency, mode: 'unrestricted_aggregate', noReliableCardBreakdown: true, unrestricted: true, noExpiry: true, sourceUseStopped: true, cutoverAt: '2020-01-02T00:00:00Z', evidence: '测试商家已核对原系统余额并停止使用', differenceReason: '' }) }, shop.token)
+  check('商家确认卡主迁移余额18000分', activated.status === 200, JSON.stringify(activated.data))
 
   const techA = (await request(`/platform/tenants/${shop.tenantId}/technicians`, { method: 'POST', body: JSON.stringify({ name: `小婕${RUN_ID}` }) })).data.technician
   const techB = (await request(`/platform/tenants/${shop.tenantId}/technicians`, { method: 'POST', body: JSON.stringify({ name: `苏苏${RUN_ID}` }) })).data.technician

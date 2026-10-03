@@ -28,6 +28,7 @@
     <view class="row-sb"><text class="ck">生日</text><text>{{c.birthday}}</text></view>
   </view>
 
+  <view class="card"><view class="hbtn" bindtap="migrationArchive">来源、原系统资料与旧权益 ›</view></view>
   <!-- 一套按钮规格(店主 08-30 点名):四个动作全部用 hbtn 同形制,不再一个长条一个陷进去 -->
   <view class="row2btn">
     <view class="hbtn" bindtap="writeNote">＋ 写服务小记</view>

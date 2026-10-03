@@ -1,3 +1,4 @@
+import { pendingCustomerFixture } from './test-migration-fixture.mjs'
 /* P3 通知调度器回归(店主 2026-08-30g 开工令件5)
    判据清单(指令原文):队列生成(各触发事由至少一形)/ 幂等(同事由重跑零重复)/
    隔离(A 店事件不进 B 店队列)/ 时区(门店时区唯一源)/ 失败必落 FAILED+原因(零吞)/
@@ -46,8 +47,8 @@ const HB = { 'x-admin-tenant-id': tB, 'x-tenant-id': tB }
 const catA = (await request('/admin/pricing/categories', { method: 'POST', body: JSON.stringify({ name: '美甲', isBookable: true }) }, PLATFORM, HA)).data.category.id
 const svcA = (await request('/admin/services', { method: 'POST', body: JSON.stringify({ type: 'NAIL', nameZh: `通知甲${RUN}`, nameEn: 'n', priceCents: 9900, baseDurationMin: 60, categoryId: catA }) }, PLATFORM, HA)).data.service.id
 const techA = (await request('/admin/technicians', { method: 'POST', body: JSON.stringify({ name: `通知技${RUN}`, isActive: true }) }, PLATFORM, HA)).data.technician.id
-const uA = (await request(`/platform/tenants/${tA}/import/customers`, { method: 'POST', body: JSON.stringify({ dryRun: false, rows: [{ name: `通知客A${RUN}`, phone: `137${RUN.slice(-8)}` }] }) })).data.users[0].userId
-const uB = (await request(`/platform/tenants/${tB}/import/customers`, { method: 'POST', body: JSON.stringify({ dryRun: false, rows: [{ name: `通知客B${RUN}`, phone: `138${RUN.slice(-8)}` }] }) })).data.users[0].userId
+const [uA] = await pendingCustomerFixture(request, tA, [{ name: `通知客A${RUN}`, phone: '13812345610' }])
+const [uB] = await pendingCustomerFixture(request, tB, [{ name: `通知客B${RUN}`, phone: '13812345611' }])
 const todayA = (await request('/admin/store-clock', {}, PLATFORM, HA)).data.today
 /* 排单一律用「门店明天」:今天 2x:30 的时段在深夜 CI 里会变成过去,提醒不排 → 断言误红 */
 const tmA = (() => { const d = new Date(`${todayA}T12:00:00Z`); d.setUTCDate(d.getUTCDate() + 1); return d.toISOString().slice(0, 10) })()
@@ -205,8 +206,8 @@ let bk1
   const fake = new Date(Date.now() + 2 * 86400000)
   fake.setUTCHours(2, 30, 0, 0)
   const shDate = fake.toISOString().slice(0, 10)         // 上海本地日 = UTC 日(10:30)
-  const uA2 = (await request(`/platform/tenants/${tA}/import/customers`, { method: 'POST', body: JSON.stringify({ dryRun: false, rows: [{ name: `时区客A2${RUN}`, phone: `135${RUN.slice(-8)}` }] }) })).data.users[0].userId
-  const uB2 = (await request(`/platform/tenants/${tB}/import/customers`, { method: 'POST', body: JSON.stringify({ dryRun: false, rows: [{ name: `时区客B2${RUN}`, phone: `136${RUN.slice(-8)}` }] }) })).data.users[0].userId
+  const [uA2] = await pendingCustomerFixture(request, tA, [{ name: `时区客A2${RUN}`, phone: '13812345612' }])
+  const [uB2] = await pendingCustomerFixture(request, tB, [{ name: `时区客B2${RUN}`, phone: '13812345613' }])
   await request(`/admin/customers/${uA2}/profile`, { method: 'PATCH', body: JSON.stringify({ birthday: shDate }) }, PLATFORM, HA)
   await request(`/admin/customers/${uB2}/profile`, { method: 'PATCH', body: JSON.stringify({ birthday: shDate }) }, PLATFORM, HB)
   await request('/admin/notify/rules', { method: 'PUT', body: JSON.stringify({ rules: [{ type: 'birthday', enabled: true }] }) }, PLATFORM, HB)
@@ -242,7 +243,7 @@ let bk1
   check('⑥b 夹具:新店 C 建店 201',
     (await request('/platform/tenants', { method: 'POST', body: JSON.stringify({ id: tC, name: `默认面店${RUN}`, plan: 'chain', timezone: 'America/Toronto' }) })).status === 201)
   const HC = { 'x-admin-tenant-id': tC, 'x-tenant-id': tC }
-  const uC = (await request(`/platform/tenants/${tC}/import/customers`, { method: 'POST', body: JSON.stringify({ dryRun: false, rows: [{ name: `默认面客${RUN}`, phone: `134${RUN.slice(-8)}` }] }) })).data.users[0].userId
+  const [uC] = await pendingCustomerFixture(request, tC, [{ name: `默认面客${RUN}`, phone: '13812345614' }])
   const todayC = (await request('/admin/store-clock', {}, PLATFORM, HC)).data.today
   await request(`/admin/customers/${uC}/profile`, { method: 'PATCH', body: JSON.stringify({ birthday: todayC }) }, PLATFORM, HC)
   db.prepare('DELETE FROM notify_scan_marks WHERE tenant_id = ?').run(tC)
