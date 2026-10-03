@@ -2,7 +2,7 @@
 import { DatabaseSync } from 'node:sqlite'
 import { randomUUID } from 'node:crypto'
 import { assertTestTarget } from './test-guard.mjs'
-export async function pendingCustomerFixture(request, tenantId, rows, { baseUrl = process.env.TEST_BASE_URL, dbPath = process.env.TEST_DB_PATH } = {}) {
+export async function pendingCustomerFixture(request, tenantId, rows, { baseUrl = process.env.TEST_BASE_URL || 'http://127.0.0.1:4128', dbPath = process.env.TEST_DB_PATH } = {}) {
   await assertTestTarget(baseUrl)
   if (!dbPath) throw new Error('Isolated TEST_DB_PATH required')
   const sourceSystem = 'fixture-' + randomUUID()
