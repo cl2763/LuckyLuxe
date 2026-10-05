@@ -9,11 +9,11 @@ page{background:var(--paper)}
 .dv-nav{width:44rpx;height:44rpx;border-radius:50%;background:var(--card);border:1rpx solid var(--line);display:flex;align-items:center;justify-content:center;color:var(--sub);font-size:26rpx}
 .dv-date{font-size:28rpx;font-weight:800;color:var(--ink)}
 .dv-today{margin-left:auto;font-size:22rpx;color:var(--brandd);border:1rpx solid var(--brand);border-radius:999rpx;padding:5rpx 18rpx}
-.dv-summary{display:flex;align-items:center;gap:12rpx;padding:6rpx 24rpx 12rpx}.dv-pill {font-size:22rpx;color:var(--ink);background:var(--card);border:1rpx solid var(--line);border-radius:999rpx;padding:6rpx 14rpx}
+.dv-summary{display:flex;align-items:stretch;flex-wrap:wrap;gap:8rpx;padding:6rpx 24rpx 12rpx}.dv-pill{display:flex;flex-direction:column;justify-content:center;align-items:center;min-width:104rpx;box-sizing:border-box;white-space:nowrap;font-size:19rpx;line-height:1.35;color:var(--sub);background:var(--card);border:1rpx solid var(--line);border-radius:999rpx;padding:8rpx 10rpx}.dv-pill .b{font-size:24rpx;color:var(--ink);margin-top:2rpx}
 .dv-pill .b{color:var(--ink);font-weight:800}
 .dv-pill.live{background:var(--goodbg);border-color:var(--line)}
 .dv-pill.live .b{color:var(--good)}
-.dv-share{margin-left:auto;font-size:22rpx;color:var(--brandd);font-weight:700}
+.dv-share{margin-left:auto;align-self:center;white-space:nowrap;font-size:22rpx;color:var(--brandd);font-weight:700;padding:10rpx 4rpx}
 .dv-closed{margin:20rpx 24rpx;padding:40rpx;text-align:center;color:var(--sub);font-size:26rpx;background:var(--card);border-radius:16rpx}
 
 .dv-grid{display:flex;margin:0 16rpx;background:var(--card);border:1rpx solid var(--line);border-radius:20rpx;overflow:hidden}
@@ -114,7 +114,7 @@ page{background:var(--paper)}
 .ds-mn{font-size:27rpx;color:var(--ink);font-weight:600}
 .ds-mp{font-size:22rpx;color:var(--sub)}
 /* D9 根治:.ds-newhint 已被 .ds-newrow 取代 */
-.ds-time{background:#fbf8f5;border:1rpx solid var(--line);border-radius:12rpx;padding:16rpx 18rpx;font-size:28rpx;color:var(--ink);display:flex;justify-content:space-between}
+.ds-time{background:var(--paper);border:1rpx solid var(--line);border-radius:12rpx;padding:16rpx 18rpx;font-size:28rpx;color:var(--ink);display:flex;justify-content:space-between}
 .ds-cal{color:var(--brandd)}
 .ds-endhint{margin-top:8rpx;font-size:22rpx;color:var(--sub)}
 .ds-endhint .b{color:var(--ink);font-weight:700}

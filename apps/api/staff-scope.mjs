@@ -74,7 +74,7 @@ export function createStaffScope({ db, apiError, currentTenantId, memberCodeForU
          时间走门店时区(裸 ISO 直渲会把多伦多下午 4 点显示成 UTC 晚上 8 点 —— 08-27 实拍就撞了)。 */
       bookings: bookings.map((b) => ({
         id: b.id, at: b.appointment_start, atText: storeTimeText(b.appointment_start),
-        statusText: bookingStatusText(b), serviceName: b.service_name || ''
+        statusText: bookingStatusText({ ...b, settlementSigned: Boolean(db.prepare("SELECT 1 FROM settlements WHERE booking_id = ? AND tenant_id = ? AND status IN ('signed','amended') LIMIT 1").get(b.id,currentTenantId())) }), serviceName: b.service_name || ''
       })),
       notes,
       preferences,

@@ -32,6 +32,11 @@ for (const d of [prodLike, sandboxLike]) mkdirSync(d, { recursive: true })
 const ON = { ALLOW_DEMO_ADMIN_LOGIN: 'true' }
 
 try {
+  const experience = { ...ON, RAILWAY_ENVIRONMENT: 'experience-id', RAILWAY_ENVIRONMENT_NAME: 'experience', NODE_ENV: 'production' }
+  check('专用 experience 环境且独立 sandbox 库允许演示登录', demoLoginAllowed({dataDir:sandboxLike,env:experience}) === true)
+  check('同一开关绝不放行生产库或 production 环境名',
+    demoLoginAllowed({dataDir:prodLike,env:experience}) === false
+    && demoLoginAllowed({dataDir:sandboxLike,env:{...experience,RAILWAY_ENVIRONMENT_NAME:'production'}}) === false)
   /* ── ① 店主点名的那个组合:`NODE_ENV` 没设 + 库域是生产库 → 门必须关 ── */
   knife('① NODE_ENV 不设 + 生产库路径(Volume 挂在 …/apps/api/local-data)+ 开关照开')
   const one = demoLoginAllowed({ dataDir: prodLike, env: { ...ON } })

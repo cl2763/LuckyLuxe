@@ -7,7 +7,6 @@
     </view>
     <view class="rolechip {{isOwner?'owner':''}}">{{roleLabel}}</view>
   </view>
-
   <!-- ============ 老板视角 · 业绩大屏(图 v3.2 §一,段 9)============
        三条接口与网页端**同一份数据**;这一页零计算、零拼串,句子都由 utils/dashboard-view.js 出。 -->
   <block wx:if="{{isOwner}}">
@@ -35,12 +34,12 @@
               bindtouchstart="swipeStart" bindtouchend="swipeEnd">
           <text class="dh-big-code" wx:if="{{dh.headParts.code}}">{{dh.headParts.code}}</text><text class="dh-big-num">{{dh.headParts.amount}}</text><text class="dh-big-cent" wx:if="{{dh.headParts.cents}}">{{dh.headParts.cents}}</text>
         </view>
-        <view wx:if="{{dh.headDelta}}" class="dh-delta {{dh.headDelta.tone}}" data-delta>{{dh.headDelta.arrow}} {{dh.headDelta.text}}</view>
+        <view class="dh-delta-row"><view wx:if="{{dh.headDelta}}" class="dh-delta {{dh.headDelta.tone}}" data-delta>{{dh.headDelta.arrow}} {{dh.headDelta.text}}</view></view>
         <!-- 🔴 D182(夜班令6 段 9):折线按图 —— **渐变填充 + 金色描边 + 末点圆环**。
              小程序 WXML 没有 SVG,所以用 `<canvas type="2d">` 画。
              柱形**保底不拆**:canvas 拿不到上下文(旧基础库/渲染异常)时回落到柱,
              页面上永远有一条走势可看(店主 05u 裁「柱形保底不许拆」)。 -->
-        <view wx:if="{{dh.spark.length}}" class="dh-spark" data-dh-spark>
+        <view class="dh-spark" data-dh-spark>
           <canvas wx:if="{{sparkCanvas}}" type="2d" id="dhSpark" class="dh-canvas" data-dh-canvas></canvas>
           <block wx:else>
             <view wx:for="{{dh.sparkBars}}" wx:key="i" class="dh-bar" style="height:{{item}}%"></view>
@@ -70,7 +69,10 @@
 
       <!-- AI 今日一句(只读已生成的,不为首页新起模型调用) -->
       <view class="dh-card dh-ai" wx:if="{{dh.aiLine}}" data-dh-ai-line>{{dh.aiLine}}</view>
-      <view class="dh-card dh-ai" wx:else data-dh-ai-none>今天还没有一句 —— 去「AI 日报」生成一次就有了</view>
+      <view class="dh-card dh-ai" wx:else data-dh-ai-none>
+        <view>{{briefLoading ? '正在生成今日简报…' : '今天还没有 AI 日报摘要'}}</view>
+        <view class="dh-go" wx:if="{{!briefLoading && aiEnabled}}" bindtap="generateBrief">生成 AI 日报 ›</view>
+      </view>
 
       <!-- 今日预约:此刻之后前 3 条 + 看全部 -->
       <view class="dh-card" data-dh-next3>
@@ -101,6 +103,8 @@
           <view wx:if="{{!item.soon}}" class="dh-todo-n">{{item.n}}</view>
         </view>
       </view>
+      <view class="sec">快捷功能</view>
+      <view class="retouch-shortcut" role="button" bindtap="openRetouch">AI 快速修图 <text>›</text></view>
     </block>
   </block>
 
@@ -136,7 +140,6 @@
       </view>
     </view>
 
-
     <!-- 老板站内提醒横幅 -->
     <view class="nudge" wx:for="{{nudges}}" wx:key="id">
       <text class="nudge-ico">📣</text>
@@ -147,20 +150,6 @@
     <!-- 「我的今日台面」卡退役(图 §二):并进上面三个小数里「今日单数」那一格的实时副行 -->
     <!-- 今日要处理(图 §二:员工端**只有两项来源** —— 待写小记 / 我的调休申请状态) -->
     <view class="sec">今日要处理</view>
-    <!-- 🔴 11m §三:AI 修图那张卡**两种视角都出**(店主批:技师也看得到)。
-         员工端这一段是 rowcard 结构,和老板端那个 dh-todo 不是一套,所以单独渲染一次;
-         但**句子仍然来自同一份后端数据**(aiRetouch.label/badge/hint),没有第二处文案。
-         `soon` 点击只 toast,不展开也不跳页。 -->
-    <view wx:if="{{aiRetouch}}" class="rowcard">
-      <view class="rowhead {{aiRetouch.soon?'soon':''}}" data-soon="{{aiRetouch.soon?1:0}}"
-            data-hint="{{aiRetouch.hint}}" bindtap="goTodo">
-        <view class="rowico">✨</view>
-        <view class="rowt">
-          <view class="rowname">{{aiRetouch.label}}<text wx:if="{{aiRetouch.badge}}" class="dh-todo-badge">{{aiRetouch.badge}}</text></view>
-          <view class="rowhint">{{aiRetouch.hint}}</view>
-        </view>
-      </view>
-    </view>
     <view class="rowcard">
       <view class="rowhead" data-k="notes" bindtap="toggle">
         <view class="rowico warn">📝</view>
@@ -185,6 +174,9 @@
         <view class="chev">›</view>
       </view>
     </view>
+
+    <view class="sec">快捷功能</view>
+    <view class="retouch-shortcut" role="button" bindtap="openRetouch">AI 快速修图 <text>›</text></view>
 
     <!-- 快捷格取消(图 §一/§二 都写了:底部导航四键还在,首页不再摆快捷格) -->
   </block>

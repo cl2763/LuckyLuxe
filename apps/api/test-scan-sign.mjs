@@ -1,4 +1,5 @@
 import { pendingCustomerFixture } from './test-migration-fixture.mjs'
+import { sceneForToken } from './wechat-mini-code.mjs'
 /* 扫码签闭环回归(2026-08-09)——《扫码签闭环_UI设计图_2026-08-09.html》v2 四屏 + 规则⓪–⑧。
 
    核心口径:身份靠**两把确定性钥匙**,不靠手机号猜人 ——
@@ -142,6 +143,10 @@ async function main() {
   /* ---- S3 二维码 + 状态行(规则④)---- */
   const qr = await request(`/admin/settlements/${sheet1.id}/sign-token`, { method: 'POST', body: JSON.stringify({}) }, shop.token)
   check('S3 推送签署出码', qr.status === 200 && qr.data.url.includes('/sign?t='), JSON.stringify(qr.data).slice(0, 160))
+  const firstScene = sceneForToken(qr.data.token)
+  const scanCard = await request(`/scan/${firstScene}`, {}, null)
+  check('微信小程序码别名指向唯一待签单', scanCard.status === 200 && scanCard.data.code === sheet1.code && scanCard.data.token === qr.data.token)
+  check('缺微信码配置时不伪造图片', (await request(`/mini-code/${firstScene}`, {}, null)).status === 503)
   /* 口径更新(店主 2026-08-11 图 v1.1 规则⑤,合同拍板):未绑定顾客推送不出去时
      不再静默(原断言=空串),必须如实说「无法推送,请扫码」—— 新客只有扫码一条签署路。
      旧断言随合同一起更新,不是为了绿而改。 */
@@ -166,12 +171,15 @@ async function main() {
   check('S3 可以重发签署码', qr2.data.token !== qr.data.token, JSON.stringify({ a: qr.data.token, b: qr2.data.token }))
   const oldTok = await request(`/settlements/by-token/${qr.data.token}`, {}, null)
   check('S3 边界:重发后旧码立刻失效(410)', oldTok.status === 410 && oldTok.data.error.code === 'SIGN_TOKEN_SUPERSEDED', JSON.stringify(oldTok.data).slice(0, 140))
+  check('旧小程序码别名也立刻失效', (await request(`/scan/${firstScene}`, {}, null)).status === 410)
   const badTok = await request('/settlements/by-token/sg-does-not-exist', {}, null)
   check('S3 异常输入:乱码签署码 404', badTok.status === 404, String(badTok.status))
 
   /* ---- S4 本人确认绑定(规则⑤)---- */
   const claim = await request(`/settlements/${sheet1.code}/claim`, { method: 'POST', body: JSON.stringify({}) }, null)
   check('S4 「是我本人」一次点击完成绑定', claim.status === 200 && claim.data.bound === true, JSON.stringify(claim.data).slice(0, 200))
+  const scanClaim = await request(`/scan/${sceneForToken(qr2.data.token)}/claim`, {method:'POST',body:JSON.stringify({code:`stub:demo-openid-${xiaoya}`})}, null)
+  check('扫码身份确认返回原档案会话，不新建顾客', scanClaim.status === 200 && scanClaim.data.bound && scanClaim.data.alreadyBound && scanClaim.data.user.id === xiaoya && !!scanClaim.data.auth?.accessToken)
   check('S4 沙盒演示旁路生效(没配微信密钥也能跑通)', claim.data.sandbox === true, String(claim.data.sandbox))
   check('S4 绑定同时给出专属会员码', claim.data.memberCode === memberCode, JSON.stringify({ a: claim.data.memberCode, b: memberCode }))
   check('S4 确认卡显示的是**这张单挂着的档案**的名字', claim.data.customerName === '王小雅', claim.data.customerName)

@@ -1,4 +1,5 @@
 const api = require('../../../utils/api')
+const nav = require('../../../utils/nav')
 const { storeMoney } = require('../../../utils/storeclock')
 /* 🔴 03r:原来键是**首字母大写**(Silver/Gold/…),而 `memberTier` 来自 AI 抽取的记忆,
    大小写随来源 —— `TIER['gold']` 取不到就兜底到 `u.memberTier`,**把原始枚举当中文名显示**。
@@ -26,6 +27,9 @@ Page({
   viewProfile() {
     const nm = (this.data.c && this.data.c.name) || '顾客'
     wx.navigateTo({ url: `/pages/merchant/customer-profile/index?userId=${encodeURIComponent(this.id)}&name=${encodeURIComponent(nm)}` })
+  },
+  openOrder(e) {
+    nav.to(`/pages/merchant/booking-detail/index?id=${encodeURIComponent(e.currentTarget.dataset.id)}`)
   },
   async onShow() { if (!(await api.guardOwner())) return; this.load() },
   async load() {
@@ -84,9 +88,9 @@ Page({
           service: (b.service && b.service.name) || '服务',
           date: b.appointmentDate || '',
           time: b.appointmentTime || '',
-          price: money(b.servicePriceCents),
-          statusLabel: STATUS[b.status] || b.status,
-          done: b.status === 'COMPLETED'
+          price: b.payment ? (b.payment.groupCashDueText || b.payment.flow?.cashDueText || money(b.servicePriceCents)) : `预约标价 ${money(b.servicePriceCents)}`,
+          statusLabel: b.status === 'COMPLETED' && !b.payment ? '服务结束 · 待结算' : (STATUS[b.status] || b.status),
+          done: b.status === 'COMPLETED' && Boolean(b.payment)
         }))
       this.setData({ orders, ordersLoaded: true })
     } catch (e) { this.setData({ ordersLoaded: true }) }

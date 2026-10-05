@@ -72,11 +72,12 @@
   <block wx:if="{{tab === 'targets'}}">
     <view class="card">
       <view class="cardhd">
-        <text class="ct">本月排行</text>
+        <text class="ct">业绩排行</text>
         <view class="seg">
           <view class="s {{metric === m.key ? 'on' : ''}}" wx:for="{{metrics}}" wx:for-item="m" wx:key="key" data-k="{{m.key}}" bindtap="pickMetric">{{m.label}}</view>
         </view>
       </view>
+      <picker class="rank-month" mode="date" fields="month" value="{{month}}" bindchange="pickRankingMonth"><view>{{month}}　⌄</view></picker>
       <view class="rank" wx:for="{{ranking}}" wx:key="name">
         <text class="no {{item.rank <= 2 ? 'top' : ''}}">{{item.rank}}</text>
         <text class="rn">{{item.name}}</text>

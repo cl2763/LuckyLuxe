@@ -90,15 +90,18 @@ const wxml = read('miniprogram/pages/merchant/home/index.wxml')
 check('④a 老板端那一列:`soon` 有淡态类,badge 渲染的是后端给的字段',
   /class="dh-todo \{\{item\.urgent[^"]*item\.soon\?'soon'/.test(wxml) && /\{\{item\.badge\}\}/.test(wxml), '')
 check('④b 老板端:`soon` 那张**不渲染数字**', /wx:if="\{\{!item\.soon\}\}" class="dh-todo-n"/.test(wxml))
-check('④c 🔴 **员工端也出这张卡**(店主批:技师看得到)', /wx:if="\{\{aiRetouch\}\}"/.test(wxml))
-check('④d 🔴 员工端渲染的是**同一份后端数据**(aiRetouch.label/badge/hint),没有第二处文案',
-  /\{\{aiRetouch\.label\}\}/.test(wxml) && /\{\{aiRetouch\.badge\}\}/.test(wxml) && /\{\{aiRetouch\.hint\}\}/.test(wxml))
+check('④c 快速修图在老板与员工首页底部快捷功能区,都指向同一入口',
+  (wxml.match(/class="retouch-shortcut" role="button" bindtap="openRetouch"/g) || []).length === 2 &&
+  wxml.indexOf('data-dh-todo') < wxml.indexOf('class="retouch-shortcut"') &&
+  wxml.lastIndexOf('data-staff-board') < wxml.lastIndexOf('class="retouch-shortcut"') &&
+  wxml.lastIndexOf('class="retouch-shortcut"') < wxml.indexOf('<!-- 快捷格取消'))
+check('④d 快速修图不重复占据员工任务卡位置', !/wx:if="\{\{aiRetouch\}\}"/.test(wxml))
 const pageJs = codeOnly(read('miniprogram/pages/merchant/home/index.js'))
 check('④e 🔴 点击分支:`soon` 只 toast,**在取 `k` 之前就 return**(不会走到跳页那一行)',
   /dataset\.soon\) === 1\)[\s\S]{0,180}?showToast[\s\S]{0,80}?return/.test(pageJs), '')
 check('④f toast 的话来自后端 `hint`,不是写死的一句', /dataset\.hint \|\|/.test(pageJs))
-check('④g 员工端那张卡的数据取自 `todo.items` 里 key==="aiRetouch" 那一条(同源)',
-  /x\.key === 'aiRetouch'/.test(pageJs))
+check('④g 快速修图从老板待办列表去重,保留原有后端开关逻辑',
+  /dh\.todos = \(dh\.todos \|\| \[\]\)\.filter\(\(x\) => x\.key !== 'aiRetouch'\)/.test(pageJs))
 
 /* ══ ⑤ `on` 态渲染本批不写 —— 写了就是假入口 ══ */
 check('⑤a 🔴 前端没有任何 `on` 态的跳页路径(流程没做出来,壳上不许有路)',

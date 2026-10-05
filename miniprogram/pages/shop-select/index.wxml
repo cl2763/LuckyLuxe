@@ -2,7 +2,7 @@
   <view class="head">
     <view class="ht" bindtap="tapTitle">选择要进入的门店</view>
     <view class="hd">扫店内小程序码可直接进店;也可在下方选择。</view>
-    <view class="demotip" wx:if="{{demoMode}}">演示模式已开启 · 列表含演示门店(顾客看不到)</view>
+    <view class="demotip" wx:if="{{demoMode}}">{{sandbox ? '体验数据 · 与正式商家数据隔离' : '演示模式已开启 · 列表含演示门店'}}</view>
   </view>
 
   <view class="scanbtn" bindtap="scan">扫码进店</view>

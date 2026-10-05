@@ -51,6 +51,7 @@ const BOOKING_STATUS_TEXT = {
 export function bookingStatusText(row) {
   // 合同⑤:售后是并行轨道 —— 轨道开着时,顾客看到的状态词是「售后」(与小程序分组口径一致)
   if (['pending', 'processing'].includes(row?.after_sales_status || '')) return '售后'
+  if (row?.status === 'COMPLETED' && row?.settlementSigned === false) return '服务结束 · 待结算'
   return BOOKING_STATUS_TEXT[row?.status] || ''   // 认不出来就空串,不编(零回落律)
 }
 

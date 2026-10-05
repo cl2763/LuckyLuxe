@@ -1,4 +1,4 @@
-page{background:#fbf8f5}
+page{background:var(--paper)}
 .page{padding:20rpx 26rpx 60rpx}
 .topbar{display:flex;justify-content:space-between;align-items:center;margin-bottom:16rpx}
 .h1{font-size:34rpx;font-weight:600;color:#2d2826}.addbtn {font-size:23rpx;color:var(--hero);background:var(--brand);border-radius:999rpx;padding:8rpx 20rpx}
@@ -30,6 +30,7 @@ page{background:#fbf8f5}
 .tabs .t.on{background:#2d2826;color:#fff}
 .cardhd{display:flex;align-items:center;justify-content:space-between;margin-bottom:12rpx}
 .cardhd .ct{font-size:28rpx;font-weight:800;color:#241f1d}
+.rank-month{display:inline-block;margin:2rpx 0 12rpx;padding:10rpx 18rpx;border:1rpx solid var(--line);border-radius:12rpx;color:var(--ink);font-size:24rpx;background:var(--card)}
 .seg{display:inline-flex;background:#f3ece2;border-radius:999rpx;padding:3rpx;gap:3rpx}
 .seg .s{font-size:23rpx;padding:8rpx 20rpx;border-radius:999rpx;color:#8c8279;font-weight:700}
 .seg .s.on{background:#2d2826;color:#fff}
@@ -56,7 +57,7 @@ page{background:#fbf8f5}
 .rowline .lb{flex:1;font-size:24rpx;color:#8c8279}
 .rowline .chev{color:#c3b7ab;font-size:30rpx}
 .hint{font-size:22rpx;color:#9a8c7c;line-height:1.7}
-.foot{margin-top:12rpx;font-size:21rpx;color:#b3a89c;line-height:1.7}
+.foot{margin-top:22rpx;padding-top:14rpx;border-top:1rpx solid var(--line);font-size:21rpx;color:var(--sub);line-height:1.7}
 
 .mask{position:fixed;inset:0;background:rgba(45,40,38,.45);z-index:20}
 .sheet{position:fixed;left:0;right:0;bottom:0;z-index:21;background:#fff;border-radius:26rpx 26rpx 0 0;padding:26rpx 28rpx 40rpx}

@@ -1,4 +1,4 @@
-page{background:#fbf8f5}
+page{background:var(--paper)}
 .page{padding:20rpx 26rpx 160rpx}
 .topbar{display:flex;justify-content:space-between;align-items:baseline;margin-bottom:14rpx}
 .h1{font-size:34rpx;font-weight:600;color:#2d2826}

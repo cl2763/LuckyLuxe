@@ -112,6 +112,11 @@ export function treatAsReal({ dataDir = '', env = process.env } = {}) {
 
 /** 演示门唯一出口:**两个判据任一说「这是真的」就关**。 */
 export function demoLoginAllowed({ dataDir = '', env = process.env } = {}) {
+  /* 专用体验环境使用独立 sandbox 卷；Railway 本身也设置 RAILWAY_ENVIRONMENT，
+     因此只能按明确的环境名、库域和开关三重限定放行。production 环境绝不走这里。 */
+  if (env.RAILWAY_ENVIRONMENT_NAME === 'experience'
+    && scopeOf(dataDir, env) === 'sandbox'
+    && env.ALLOW_DEMO_ADMIN_LOGIN === 'true') return true
   if (isProductionEnv(env)) return false                    // ① 环境变量说是生产 → 关
   if (!DEMO_OK_SCOPES.has(scopeOf(dataDir, env))) return false  // ② 库域不是 ci/sandbox → 关
   return env.ALLOW_DEMO_ADMIN_LOGIN === 'true'              // 两关都过了,才看那个开关

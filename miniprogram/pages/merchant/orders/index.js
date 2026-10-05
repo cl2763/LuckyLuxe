@@ -45,7 +45,10 @@ function vm(b) {
   const hasAs = Boolean(b.afterSalesStatus)
   /* 售后徽标的**字**由后端唯一持有(listBadgeText:售后中/售后已解决/售后已关闭),
      这里不再自己拼 —— 网页端早就读它,商家小程序自己写一份就是同事实两句话。 */
-  const s = hasAs ? { label: b.listBadgeText || '售后', cls: 'd' } : (STATUS_MAP[b.status] || { label: b.status || '-', cls: 'n' })
+  const s = hasAs ? { label: b.listBadgeText || '售后', cls: 'd' }
+    : (b.status === 'COMPLETED' && !b.payment
+      ? { label: '服务结束 · 待结算', cls: 'n' }
+      : (STATUS_MAP[b.status] || { label: b.status || '-', cls: 'n' }))
   const service = (b.service && b.service.name) || b.serviceName || '服务'
   const customer = b.customerName || b.userName || (b.customer && b.customer.name) || (b.user && b.user.displayName) || (b.user && b.user.display_name) || '顾客'
   const tech = b.technicianName || (b.technician && b.technician.name) || ''
@@ -134,7 +137,10 @@ Page(Object.assign({
   buildAll(raw) {
     const f = this.data.filter
     const target = (STATUS_MAP[f] || {}).label
-    const filtered = f === 'all' ? raw : raw.filter((b) => (STATUS_MAP[b.status] || {}).label === target)
+    const filtered = f === 'all' ? raw : raw.filter((b) => {
+      if (f === 'COMPLETED') return Boolean(b.payment) && (b.status === 'COMPLETED' || b.status === 'DONE')
+      return (STATUS_MAP[b.status] || {}).label === target
+    })
     const map = {}
     filtered.map(vm).forEach((v) => { (map[v.date] = map[v.date] || []).push(v) })
     const groups = Object.keys(map).sort((a, b) => b.localeCompare(a)).map((date) => ({
@@ -433,11 +439,13 @@ Page(Object.assign({
   // ===== 今日台面:技师维度日视图(自排班原样搬来) =====
   async loadDayView(date) {
     try {
-      const me = await api.adminMe().catch(() => ({ role: 'owner' }))
-      const r = await api.adminGet(`/admin/schedule-day?date=${date}`)
-      // D97(01t):待写小记数与台面同批拉(既有口;员工=只见自己的单,后端裁)
-      let pendingNotes = []
-      try { pendingNotes = (await api.adminGet(`/admin/service-notes/pending?date=${date}`)).items || [] } catch (e) { pendingNotes = [] }
+      // 三份互不依赖，真机请求并行；待写小记失败不阻断台面。
+      const [me, r, notes] = await Promise.all([
+        api.adminMe().catch(() => ({ role: 'owner' })),
+        api.adminGet(`/admin/schedule-day?date=${date}`),
+        api.adminGet(`/admin/service-notes/pending?date=${date}`).catch(() => ({ items: [] }))
+      ])
+      const pendingNotes = notes.items || []
       this.setData({ pendingNotes })
       /* 今日台面必须显示**当天全部预约**,含营业时段外的(店主 2026-08-09 拍板)。
          原来网格只画 开门→打烊 这一段,于是提早到店、加钟做到打烊后的单

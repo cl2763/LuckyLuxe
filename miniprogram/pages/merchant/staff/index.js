@@ -56,7 +56,7 @@ Page({
   async onShow() {
     if (!(await api.guardOwner())) return
     await refreshStoreClock().catch(() => {})
-    this.setData({ month: monthKey() })
+    this.setData({ month: storeToday().slice(0, 7) })
     this.load()
   },
 
@@ -68,12 +68,18 @@ Page({
     this.setData({ metric: e.currentTarget.dataset.k })
     this.loadRanking()
   },
+  pickRankingMonth(e) {
+    const month = String(e.detail.value || '')
+    if (!/^\d{4}-(0[1-9]|1[0-2])$/.test(month)) return
+    this.setData({ month })
+    Promise.all([this.loadRanking(), this.loadTargets()]).catch(() => wx.showToast({ title: '排行加载失败', icon: 'none' }))
+  },
 
   async load() {
     const tab = this.data.tab
     try {
       if (tab === 'schedule') await this.loadWeek(this.data.sc.from || storeToday())
-      else if (tab === 'targets') { await this.loadRanking(); await this.loadTargets() }
+      else if (tab === 'targets') await Promise.all([this.loadRanking(), this.loadTargets()])
       else if (tab === 'salary') await this.loadPlans()
       else if (tab === 'accounts') await this.loadAccounts()
     } catch (e) { wx.showToast({ title: (e && e.message) || '加载失败', icon: 'none' }) }
@@ -81,7 +87,7 @@ Page({
 
   // ===== 业绩目标板块 =====
   async loadRanking() {
-    const r = await api.adminGet(`/admin/perf-ranking?metric=${this.data.metric}&period=month`)
+    const r = await api.adminGet(`/admin/perf-ranking?metric=${this.data.metric}&period=month&date=${this.data.month}`)
     const d = displayOf(r.ranking)
     const m = (c) => formatMoney(c, d, d.trimZeroDecimals ? 0 : 2)
     this.setData({

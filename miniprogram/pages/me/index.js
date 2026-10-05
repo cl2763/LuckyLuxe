@@ -107,17 +107,24 @@ Page({
     i18n.applyTabBar(lang)
     storage.syncCartBadge()
     i18n.setTitle(i18n.pageCopy('me', lang).title)
-    let sourceOrders = []
+    let sourceOrders = [], ordersError = false
     const isLoggedIn = api.isLoggedIn()
     try {
       if (isLoggedIn) {
-        await api.refreshMember() // 多租户:按"当前进的店"刷新会员(积分/储值/等级每店独立)
-        member = wx.getStorageSync('lucky_member') || member
-        sourceOrders = await api.getBookings(lang)
-        if (sourceOrders.length) storage.setOrders(sourceOrders)
+        const [memberResult, bookingResult] = await Promise.allSettled([api.refreshMember(), api.getBookings(lang)])
+        if (memberResult.status === 'fulfilled') member = wx.getStorageSync('lucky_member') || member
+        if (bookingResult.status === 'fulfilled') {
+          sourceOrders = bookingResult.value
+          if (sourceOrders.length) storage.setOrders(sourceOrders)
+        } else {
+          ordersError = true
+          wx.showToast({ title: '订单暂时加载失败，请下拉重试', icon: 'none' })
+        }
+        if (memberResult.status === 'rejected' && !ordersError) wx.showToast({ title: '会员资料暂时加载失败', icon: 'none' })
       }
     } catch (error) {
-      sourceOrders = isLoggedIn ? storage.getOrders() : []
+      sourceOrders = []; ordersError = isLoggedIn
+      if (isLoggedIn) wx.showToast({ title: '订单暂时加载失败，请下拉重试', icon: 'none' })
     }
     const orders = sourceOrders.map((item) => {
       const service = item.service || (item.serviceInfo && { name: item.serviceInfo.serviceName, type: item.serviceInfo.serviceType, duration: item.serviceInfo.duration }) || {} // mock 清除:回落用下单时留档的 serviceInfo,不再查演示表
@@ -152,6 +159,7 @@ Page({
       isLoggedIn,
       growthPercent,
       recentOrders: orders.slice(0, 2),
+      ordersError,
       counts: {
         pending_service: orders.filter((item) => item.status === 'pending_service').length,
         completed: orders.filter((item) => item.status === 'completed').length,

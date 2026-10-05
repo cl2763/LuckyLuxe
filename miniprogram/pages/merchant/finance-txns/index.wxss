@@ -1,4 +1,4 @@
-page{background:#fbf8f5}
+page{background:var(--paper)}
 .page{padding:24rpx 26rpx 60rpx}
 .ps{font-size:22rpx;color:#8c8279;margin-bottom:16rpx}
 .mon{display:flex;align-items:center;justify-content:center;gap:26rpx;margin-bottom:16rpx}

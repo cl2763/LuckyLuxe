@@ -64,24 +64,38 @@ const boxes = async (pg, sel) => {
 }
 const IMG = 'https://images.unsplash.com/photo-1522337360788-8b13dee7a37e?w=400'
 const proof = []
+async function waitHomeReady(pg) {
+  // 首页先落推荐、再落兜底目录。等最后一次 setData 完成后才造态，
+  // 不能用固定 3 秒猜网络速度，否则迟到的正常响应会覆盖测试夹具。
+  for (let i = 0; i < 40; i += 1) {
+    const nail = (await pg.data('recommendedNail')) || []
+    const fallback = (await pg.data('fallbackServices')) || []
+    if (nail.length && fallback.length) return nail
+    await new Promise((r) => setTimeout(r, 300))
+  }
+  throw new Error('沙箱顾客首页在 12 秒内未完成推荐与服务目录加载')
+}
+async function setAndConfirm(pg, data, ready, label) {
+  // 真机模拟器可能在刚显示推荐后仍有上一轮请求返回；造态若被覆盖，
+  // 等它收尾后重施夹具。始终要求实读数据与夹具一致，不能把覆盖当通过。
+  for (let i = 0; i < 5; i += 1) {
+    await pg.setData(data)
+    await new Promise((r) => setTimeout(r, 1100))
+    if (await ready()) return
+  }
+  throw new Error(`${label}：页面持续重载，模拟状态无法稳定保留`)
+}
 
 /* 造 n 张美甲卡、美睫恒 0(界定:全页只留被测那一区的卡) */
 async function state(n) {
   await mp.reLaunch('/pages/home/index')
   let pg = await mp.currentPage()
-  await new Promise((r) => setTimeout(r, 3000))
-  let base = (await pg.data('recommendedNail')) || []
-  if (!base.length) {
-    await mp.reLaunch('/pages/home/index'); pg = await mp.currentPage()
-    await new Promise((r) => setTimeout(r, 3500)); base = (await pg.data('recommendedNail')) || []
-  }
-  if (!base.length) {
-    console.log('⚠️  [mp-home-sections] 首页推荐位 0 条 —— **这一刀本轮未跑**(造不出态)')
-    await mp.disconnect(); process.exit(0)
-  }
+  const base = await waitHomeReady(pg)
   const cards = Array.from({ length: n }, (_, i) => ({ ...base[0], _id: `fx-${i}`, name: `造态${i + 1}`, price: 100 + i * 30, duration: 60 + i * 15, image: i % 2 ? '' : IMG }))
-  await pg.setData({ recommendedNail: cards, recommendedLash: [] })
-  await new Promise((r) => setTimeout(r, 1100))
+  await setAndConfirm(pg, { recommendedNail: cards, recommendedLash: [] }, async () => {
+    const actual = (await pg.data('recommendedNail')) || []
+    return actual.length === n && ((await pg.data('recommendedLash')) || []).length === 0
+  }, `${n} 卡态`)
   const back = (await pg.data('recommendedNail')) || []
   const titles = await boxes(pg, '.section-title')
   /* 🔴 界定(量数带界定):兜底块「我们的服务」也用 .recommend-card ——
@@ -110,9 +124,14 @@ async function state(n) {
 async function stateNoService() {
   await mp.reLaunch('/pages/home/index')
   const pg = await mp.currentPage()
-  await new Promise((r) => setTimeout(r, 3000))
-  await pg.setData({ recommendedNail: [], recommendedLash: [], fallbackServices: [] })
-  await new Promise((r) => setTimeout(r, 1100))
+  await waitHomeReady(pg)
+  await setAndConfirm(pg, { recommendedNail: [], recommendedLash: [], fallbackServices: [] }, async () =>
+    ((await pg.data('recommendedNail')) || []).length === 0
+    && ((await pg.data('recommendedLash')) || []).length === 0
+    && ((await pg.data('fallbackServices')) || []).length === 0
+    && (await pg.$$('.recommend-card')).length === 0
+    && (await pg.$$('.fallback-empty')).length === 1,
+  '服务总数 0 态')
   const cnt = async (sel) => (await boxes(pg, sel))
   const note = await cnt('.fallback-empty')
   const el = await pg.$('.fallback-empty').catch(() => null)

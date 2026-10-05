@@ -1,4 +1,4 @@
-page{background:#fbf8f5}
+page{background:var(--paper)}
 .page{padding:24rpx 26rpx 60rpx}
 .empty{text-align:center;font-size:24rpx;color:#8c8279;padding:80rpx 0}
 .alertbar{background:#fdeeea;border:1rpx solid #f0c9bf;border-radius:16rpx;padding:16rpx 22rpx;font-size:23rpx;color:#c0392b;font-weight:700;margin-bottom:14rpx;line-height:1.5}

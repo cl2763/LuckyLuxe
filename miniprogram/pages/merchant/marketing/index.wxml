@@ -27,5 +27,17 @@
       <text class="arr">›</text>
     </view>
   </view>
-  <view class="note">沉睡卡与回访名单按门店真实数据实时统计;推送渠道(订阅消息/短信)接入后即可一键触达。</view>
+  <view wx:if="{{loading}}" class="note" role="status">正在加载本店名单…</view>
+  <view wx:if="{{loadError}}" class="note">{{loadError}} <text bindtap="load">重试 ›</text></view>
+  <view wx:if="{{panel==='sleep' && !loading}}" class="list-card">
+    <view class="lt">沉睡储值卡名单 · {{sleepN}} 人</view>
+    <view wx:if="{{!sleepers.length}}" class="list-empty">当前没有余额未动满 30 天的顾客</view>
+    <view class="list-row" wx:for="{{sleepers}}" wx:key="id" data-id="{{item.id}}" data-name="{{item.name}}" bindtap="openCustomer"><text>{{item.name}} ›</text><text class="ld">{{item.detail}}</text></view>
+  </view>
+  <view wx:if="{{panel==='revisit' && !loading}}" class="list-card">
+    <view class="lt">待回访名单 · {{revisitN}} 人</view>
+    <view wx:if="{{!revisits.length}}" class="list-empty">当前没有待发送的回访任务；可在通知设置查看回访规则</view>
+    <view class="list-row" wx:for="{{revisits}}" wx:key="id" data-id="{{item.userId}}" data-name="{{item.name}}" bindtap="openCustomer"><text>{{item.name}} ›</text><text class="ld">{{item.detail}}</text></view>
+  </view>
+  <view class="note">名单来自本店储值账户与回访任务；当前页仅供查看，未触发推送。</view>
 </view>

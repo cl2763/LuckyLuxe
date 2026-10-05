@@ -695,7 +695,7 @@ check('⑩-2 🔴 行为必须不同:keep=仍是会员 / drop=余额归零即失
        两处都是"前端拿字段自己拼"的老毛病 —— 收成后端出句:状态走全仓唯一出口 bookingStatusText,
        时间走门店时区。判据不看代码看**下发的值**:状态必须是中文、时间必须是门店当天。 */
     check('④-7c 🔴 状态词是中文、由后端出句(不许把 COMPLETED 直接甩给店员看)',
-      (det.data.bookings || []).every((b) => /^[一-龥]+$/.test(String(b.statusText || ''))
+      (det.data.bookings || []).every((b) => /^[一-龥 ·]+$/.test(String(b.statusText || ''))
         && !/[A-Z_]{3,}/.test(String(b.statusText || ''))),
       JSON.stringify((det.data.bookings || []).map((b) => b.statusText)))
     const storeToday = new Date().toLocaleDateString('en-CA', { timeZone: 'America/Toronto' })

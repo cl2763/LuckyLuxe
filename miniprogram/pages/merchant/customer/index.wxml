@@ -43,7 +43,7 @@
     <view class="ct">订单历史 <text class="cnt">{{orders.length}}</text></view>
     <view wx:if="{{!ordersLoaded}}" class="ohint">加载中…</view>
     <view wx:elif="{{!orders.length}}" class="ohint">暂无订单</view>
-    <view class="orow" wx:for="{{orders}}" wx:key="id">
+    <view class="orow" wx:for="{{orders}}" wx:key="id" data-id="{{item.id}}" bindtap="openOrder">
       <view class="oi">
         <view class="os">{{item.service}}</view>
         <view class="od">{{item.date}}{{item.time ? ' ' + item.time : ''}}</view>
@@ -52,6 +52,7 @@
         <text class="op">{{item.price}}</text>
         <text class="ost {{item.done ? 'done' : ''}}">{{item.statusLabel}}</text>
       </view>
+      <text class="order-chevron">›</text>
     </view>
   </view>
 </view>

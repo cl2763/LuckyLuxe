@@ -4,17 +4,20 @@ const { clearStoreCurrency } = require('../../utils/storecurrency')
 const DEMO_KEY = 'lucky_demo_mode'
 
 Page({
-  data: { shops: [], loading: true, demoMode: false },
+  data: { shops: [], loading: true, demoMode: Boolean(api.SANDBOX), sandbox: Boolean(api.SANDBOX) },
 
   onShow() {
-    this.setData({ demoMode: Boolean(wx.getStorageSync(DEMO_KEY)) })
+    this.setData({ demoMode: Boolean(api.SANDBOX) || Boolean(wx.getStorageSync(DEMO_KEY)) })
     this.load()
   },
 
   async load() {
     try {
       const r = await api.getShops(this.data.demoMode)
-      this.setData({ shops: r.shops || [], loading: false })
+      // 旧隔离演示库的基础店/空白店曾漏写 kind=demo；体验包只按明确的
+      // demo-* 租户 ID 展示，避免把正式 Luvia 门店带进体验列表。
+      const shops = (r.shops || []).filter((s) => !api.SANDBOX || /^demo-(?:ai|basic|empty)$/.test(s.tenantId || ''))
+      this.setData({ shops, loading: false })
     } catch (e) {
       this.setData({ loading: false })
       wx.showToast({ title: '加载门店失败', icon: 'none' })
@@ -23,6 +26,7 @@ Page({
 
   // 隐藏入口:连点标题 5 次开/关「演示模式」。开启后列表里才出现演示门店(顾客看不到)。
   tapTitle() {
+    if (api.SANDBOX) return
     const now = Date.now()
     if (!this._taps || now - this._lastTap > 1200) this._taps = 0
     this._taps += 1

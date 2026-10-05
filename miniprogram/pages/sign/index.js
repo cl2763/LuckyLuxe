@@ -6,11 +6,27 @@
    正式发版前核对后端签署链接的门店域名，以及快照的 API_BASE 域名，均须加入业务域名白名单
    —— 已记进 handoff/小程序发版清单.md。 */
 const api = require('../../utils/api')
+const requestLoading = require('../../utils/request-loading')
 
 Page({
   data: { url: '', code: '' },
 
   async onLoad(q) {
+    const scanToken = decodeURIComponent(q.token || '')
+    if (scanToken) {
+      try {
+        const target = await new Promise((resolve,reject) => wx.request({
+          url:`${api.API_BASE}/settlements/by-token/${encodeURIComponent(scanToken)}`,
+          complete: requestLoading.begin(),
+          success:r => r.statusCode >= 200 && r.statusCode < 300 ? resolve(r.data) : reject(r.data?.error || new Error('签署码已失效')),
+          fail:reject
+        }))
+        const url = api.SANDBOX ? `${api.API_BASE}/sign?t=${encodeURIComponent(scanToken)}` : target.url
+        this.setData({code:target.code,url})
+        wx.setNavigationBarTitle({title:'服务确认单'})
+      } catch(e) { wx.showModal({title:'暂时无法打开',content:e.message||'签署码已失效，请让店员重新出示。',showCancel:false,fail:()=>wx.showToast({title:'签署页暂时打不开，请重试',icon:'none'})}) }
+      return
+    }
     const code = decodeURIComponent(q.code || q.snapshot || '')
     if (!code) { wx.showToast({ title: '缺少服务单号', icon: 'none' }); return }
     /* 店主 2026-08-10 拍板:所有「查看签署单」入口点了**直接出快照本体**,

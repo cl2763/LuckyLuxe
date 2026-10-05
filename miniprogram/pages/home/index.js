@@ -24,10 +24,6 @@ Page({
     hasHours: false
   },
 
-  onLoad() {
-    this.refreshLanguage()
-  },
-
   onShow() {
     ensureCurrencyCached()
     this.setData({ cur: curOf() })   // 币种跟门店走,不写死币符
@@ -102,6 +98,7 @@ Page({
   },
 
   async refreshLanguage() {
+    const serial = this._refreshSerial = (this._refreshSerial || 0) + 1
     const lang = i18n.getLang()
     i18n.applyTabBar(lang)
     storage.syncCartBadge()
@@ -111,14 +108,18 @@ Page({
        悄悄回写死的演示服务/门店,顾客看到的是一整套不存在的东西。 */
     let nailServices, lashServices, stores, heroSlides
     try {
-      nailServices = await api.getServices('nail', lang)
-      lashServices = await api.getServices('lash', lang)
-      stores = await api.getStores()
-      heroSlides = await api.getHeroSlides(lang)  // D78:轮播按租户出(后端唯一出口;文案跟语言走)
+      ;[nailServices, lashServices, stores, heroSlides] = await Promise.all([
+        api.getServices('nail', lang),
+        api.getServices('lash', lang),
+        api.getStores(),
+        api.getHeroSlides(lang)  // D78:轮播按租户出(后端唯一出口;文案跟语言走)
+      ])
     } catch (e) {
+      if (serial !== this._refreshSerial) return
       this.setData({ lang, t: i18n.pageCopy('home', lang), loadFailed: true })
       return
     }
+    if (serial !== this._refreshSerial) return
     this.setData({ loadFailed: false })
     const storeRaw = stores[0] || {}
     const hoursInfo = this.todayHoursOf(storeRaw, lang)

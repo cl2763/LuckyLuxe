@@ -1,6 +1,7 @@
 <view class="page {{themeClass}}">
+  <view wx:if="{{unlocked===null}}" class="gate" role="status"><view class="gate-t">正在确认财务访问权限…</view><view class="gate-s">请稍候</view></view>
   <!-- 门禁:只在店铺开启了财务密码时出现;没开就直接进(默认关闭、商家自助) -->
-  <view wx:if="{{!unlocked}}" class="gate">
+  <view wx:elif="{{!unlocked}}" class="gate">
     <view class="gate-t">输入财务密码</view>
     <view class="gate-s">本店已开启财务密码保护</view>
     <input class="ginp" password placeholder="财务密码" placeholder-class="ph" value="{{pwd}}" bindinput="onPwd" />

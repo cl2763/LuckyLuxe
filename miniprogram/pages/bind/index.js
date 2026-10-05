@@ -3,6 +3,7 @@
    本页**看不到结算单与任何金额** —— 后端 /bind-tokens/:token 也只下发称呼/店名。
    沙盒期:开发者工具「带参编译」token 参数模拟扫码;真机扫真码那一下在发版清单里。 */
 const api = require('../../utils/api')
+const requestLoading = require('../../utils/request-loading')
 
 function pub(path, method, data) {
   return new Promise((resolve, reject) => {
@@ -10,6 +11,7 @@ function pub(path, method, data) {
       url: `${api.API_BASE}${path}`,
       method: method || 'GET',
       data,
+      complete: requestLoading.begin(),
       header: { 'content-type': 'application/json' },
       success(res) {
         if (res.statusCode >= 200 && res.statusCode < 300) resolve(res.data)

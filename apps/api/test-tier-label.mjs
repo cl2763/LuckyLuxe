@@ -67,9 +67,8 @@ if (!sb.ok) {
   console.log('   ⚠️ 沙箱不可用 —— **行为层两条本轮未跑**(不静默跳过,如实说)')
 } else {
   const {SANDBOX_URL:SANDBOX}=await import('./test-need-sandbox.mjs')
-  /* 用**演示店**做现测(账本现测关门闸之外的配置口,且演示店本就可重置);
-     造完当场还原(夹具收尾:判据不收尾就变成非幂等)。 */
-  const TID = 'demo-lucky-luxe'
+  /* 只对 ensureSandbox 核过的本机沙箱做现测,且造完当场还原配置。 */
+  const TID = 'lucky-luxe'
   const put = async (tiers) => {
     const r = await fetch(`${SANDBOX}/admin/membership/config`, {
       method: 'PUT',
@@ -99,12 +98,12 @@ if (!sb.ok) {
       headers: { authorization: 'Bearer owner-demo-token', 'x-admin-tenant-id': TID, 'content-type': 'application/json' },
       body: JSON.stringify({ config: before.config }),
     }).catch(() => null)
-    console.log('   [收尾] 演示店会员配置已还原成现测前的值')
+    console.log('   [收尾] 沙箱店会员配置已还原成现测前的值')
     /* 🔴 06a §六 查明并留痕:**值还原得回来,`updated_at` 还不回去** ——
        所以沙箱库的逐行指纹上,这一行会显示「旧行消失 1 行」。
        上一批我在回执里写「没有直接证据指到是哪一步写的」,答案就是这里。
        以后每跑一次都把这句打出来,回执照抄即可,不用再查一遍。 */
-    console.log('   [夹具动过] 沙箱库 · demo-lucky-luxe · tenant_settings/membership_config —— '
+    console.log(`   [夹具动过] 沙箱库 · ${TID} · tenant_settings/membership_config —— `
       + '值已还原,但 updated_at 会刷新;逐行指纹会把它记成「旧行消失 1 行」,这是**夹具动的**,不是业务写的。')
   }
 }

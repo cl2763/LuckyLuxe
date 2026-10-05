@@ -3,6 +3,7 @@
   "pages": [
     "pages/entry/index",
     "pages/sign/index",
+    "pages/scan-entry/index",
     "pages/bind/index",
     "pages/merchant-login/index",
     "pages/merchant-change-password/index",
@@ -46,6 +47,7 @@
         "finance-txns/index",
         "customers/index",
         "customer/index",
+        "booking-detail/index",
         "account-adjust/index",
         "hours-setup/index",
         "notify-settings/index",

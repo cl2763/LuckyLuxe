@@ -1,4 +1,4 @@
-page{background:#fbf8f5}
+page{background:var(--paper)}
 .page{padding:20rpx 26rpx 60rpx}
 .form{background:#fff;border:1rpx solid #e7ddd4;border-radius:18rpx;overflow:hidden}
 .frow{display:flex;align-items:center;padding:22rpx 24rpx;border-bottom:1rpx solid #f1e7df;gap:16rpx}

@@ -100,7 +100,9 @@ async function main() {
     const back = await request(`/admin/customers/${encodeURIComponent(myBk.user.id)}/notes`, {}, STAFF)
     const mine = (back.data.notes || []).find((n) => n.rawText === `图测小记-${RUN_ID}`)
     check('🔴 小记图片:限权读口回图(写的技师可见);无图小记 images=[](空态零占位)', 
-      mine && mine.images[0] === PX && (back.data.notes || []).every((n) => Array.isArray(n.images)), JSON.stringify(mine || {}).slice(0, 100))
+      mine && mine.images[0] === PX && (back.data.notes || []).every((n) => Array.isArray(n.images)),
+      JSON.stringify({ status: back.status, found: Boolean(mine), firstImageMatches: mine?.images?.[0] === PX,
+        imageCount: mine?.images?.length, allImagesAreArrays: (back.data.notes || []).every((n) => Array.isArray(n.images)) }))
     // 合同①终闸:>9 拒 / 非图拒(前端拦只算体验)
     const ten = await request('/admin/service-notes', { method: 'POST', body: JSON.stringify({ userId: myBk.user.id, bookingId: myBk.id, rawText: 'x', images: Array(10).fill(PX) }) }, STAFF)
     check('小记图片 终闸:第 10 张 → 400「最多 9 张」', ten.status === 400 && /9 张/.test(ten.data?.error?.message || ''))

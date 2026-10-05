@@ -1,0 +1,26 @@
+<view class="page {{themeClass}}">
+  <view wx:if="{{loading}}" class="notice">订单加载中…</view>
+  <view wx:elif="{{error}}" class="notice" bindtap="load">{{error}} · 点此重试</view>
+  <block wx:elif="{{booking}}">
+    <view class="card">
+      <view class="status">{{booking.status}}</view>
+      <view class="title">{{booking.service}}</view>
+      <view class="muted">{{booking.code}}</view>
+    </view>
+    <view class="card rows">
+      <view><text>顾客</text><text>{{booking.customer}}</text></view>
+      <view><text>预约时间</text><text>{{booking.date}} {{booking.time}}{{booking.end ? '–' + booking.end : ''}}</text></view>
+      <view wx:if="{{booking.technician}}"><text>技师</text><text>{{booking.technician}}</text></view>
+      <view wx:if="{{booking.source}}"><text>来源</text><text>{{booking.source}}</text></view>
+      <view wx:if="{{booking.notes}}"><text>备注</text><text>{{booking.notes}}</text></view>
+    </view>
+    <view class="card">
+      <view class="amount-label">{{booking.amountLabel}}</view>
+      <view class="amount">{{booking.amount}}</view>
+      <view wx:if="{{booking.signedAt}}" class="muted">签署时间 {{booking.signedAt}}</view>
+      <view wx:if="{{booking.settlementCode}}" class="button" bindtap="openDocument">查看签署原件 ›</view>
+      <view wx:else class="muted">本单尚无已签署结算单，不能计作完成结算。</view>
+    </view>
+  </block>
+</view>
+<snapshot-viewer open="{{snapViewer.open}}" items="{{snapViewer.items}}" index="{{snapViewer.index}}" bind:close="closeSnapViewer"></snapshot-viewer>

@@ -54,6 +54,7 @@
     </view>
   </block>
 
+  <view wx:elif="{{loadError}}" class="empty" bindtap="refresh">{{loadError}}</view>
   <view wx:else class="empty">
     <view class="empty-title">{{t.emptyTitle}}</view>
     <view>{{t.emptyText}}</view>

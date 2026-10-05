@@ -209,7 +209,7 @@ function seedTenant(cfg) {
     // 财务密码固定为 DEMO_FINANCE_PW,否则财务页进不去(演示时最尴尬的一环)。
     // 哈希算法必须与 local-server.mjs 的 financePasswordHash 一致:sha256("finance:<tenantId>:<password>")
     insertRow('tenants', {
-      id: tenantId, name: tenantName, status: 'active',
+      id: tenantId, name: tenantName, status: 'active', kind: 'demo', listed: 0,
       plan: withAi ? 'chain' : 'single',
       plan_expires_at: iso(new Date(Date.now() + 365 * 86400000)),
       finance_password_hash: createHash('sha256').update(`finance:${tenantId}:${DEMO_FINANCE_PW}`).digest('hex'),
