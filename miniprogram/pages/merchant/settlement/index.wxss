@@ -191,6 +191,7 @@
 .bindbar{margin-top:10rpx;padding:12rpx 16rpx;background:#fdf1e7;color:#b5541f;border-radius:12rpx;font-size:22rpx;display:flex;align-items:center;justify-content:space-between}.bindbtn {background:#2f2a22;color:#fff;border-radius:999rpx;padding:8rpx 20rpx;font-size:22rpx;margin-left:16rpx;flex-shrink:0}
 .qrbox{display:flex;justify-content:center;margin:20rpx 0}
 .qrph{width:280rpx;height:280rpx;border:2rpx dashed #c9c0af;border-radius:16rpx;display:flex;align-items:center;justify-content:center;color:#9a917f;font-size:22rpx;text-align:center;white-space:pre-line}
+.qrimg{width:300rpx;height:300rpx;display:block;border-radius:12rpx;background:#fff}
 .qbtns{display:flex;justify-content:center;margin:12rpx 0}.qbtn {background:#f4efe6;border-radius:999rpx;padding:14rpx 32rpx;font-size:24rpx;color:#2f2a22}
 
 /* 规则⑧:条目编号清单 + 技师数字排(原样恢复) */

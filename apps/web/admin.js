@@ -1,6 +1,6 @@
 // 构建号:每次交付递增。侧栏可见,排查"改了没生效"时先对版本。
 // 兜底用(服务端会注入 window.LL_BUILD = 资源内容指纹,页面优先显示那个)
-const ADMIN_BUILD = '20261003-migration-visual'
+const ADMIN_BUILD = '20261004-loading-navigation-logo'
 let pricingState = { module: 'storefront', tab: 'items', categories: [], items: [], rules: {}, editing: null, preview: null, storefrontPicker: false }
 console.log(`[admin] build ${ADMIN_BUILD}`)
 
@@ -344,6 +344,8 @@ function isOwnerRole() {
 }
 
 async function request(path, options = {}) {
+  const finishLoading = window.RequestIndicator?.begin() || (() => {})
+  try {
   const isPublic = Boolean(options.public)
   delete options.public
   const doFetch = (token) => {
@@ -399,6 +401,7 @@ async function request(path, options = {}) {
     throw err
   }
   return data
+  } finally { finishLoading() }
 }
 
 /* D156(店主 09-08 裁):顶栏第二行显**当前店名**。
@@ -1747,24 +1750,30 @@ async function renderDailyCloseJump() {
 }
 
 let financeTrendState = { granularity: 'month', range: '6m', data: null }
+let financeTrendSerial = 0
 
 /* 设计图的周期切换:近 6 个月 / 近 12 个月 / 今年 / 自定义。
    一次全给 —— 一个接口把 走势 / 相同天数三组对比 / 支出结构 / 收入构成 都返回,
    前端切周期只改一个参数,不各算各的。 */
 async function loadFinanceTrend(granularity, range) {
+  const serial = ++financeTrendSerial
   const r = range || financeTrendState.range || '6m'
   const body = document.querySelector('#financeTrendBody')
-  if (body) body.innerHTML = `<p class="subtle">${owner.lang === 'zh' ? '加载中…' : 'Loading…'}</p>`
+  // 保留整页和上一张图,只在图区标注正在更新,避免切范围时整页闪白。
+  if (body) { body.classList.add('trend-updating'); body.setAttribute('aria-busy', 'true') }
   let qs = `range=${encodeURIComponent(r)}`
   if (r === 'custom') {
     const from = await window.UIDialog.text(owner.lang === 'zh' ? '从哪个月开始?(格式 2026-01)' : 'From month (2026-01)', '')
-    if (!from || !/^\d{4}-\d{2}$/.test(from.trim())) return
+    if (!from || !/^\d{4}-\d{2}$/.test(from.trim())) { if (serial === financeTrendSerial) { body?.classList.remove('trend-updating'); body?.removeAttribute('aria-busy') } return }
     qs += `&from=${encodeURIComponent(from.trim())}`
   }
-  const data = await request(`/admin/finance/trend?${qs}`)
-  financeTrendState = { granularity: 'month', range: r, data: data.trend }
-  renderFinanceTrend()
-  loadCouponDiscounts().catch(() => { /* 券让利卡拉不到不拖垮趋势页 */ })
+  try {
+    const data = await request(`/admin/finance/trend?${qs}`)
+    if (serial !== financeTrendSerial) return
+    financeTrendState = { granularity: 'month', range: r, data: data.trend }
+    renderFinanceTrend()
+    loadCouponDiscounts().catch(() => { /* 券让利卡拉不到不拖垮趋势页 */ })
+  } finally { if (serial === financeTrendSerial) { body?.classList.remove('trend-updating'); body?.removeAttribute('aria-busy') } }
 }
 
 /* 月度券让利汇总(设计图 C3 末句)。口径 = 当月已签服务单上实际抵掉的券金额,
@@ -2222,63 +2231,6 @@ function applyStaffTab() {
 
 /* 财务密码门禁状态(商家自助,店主 2026-08-08 拍板):默认关闭,老板自己开/关/改密。 */
 let financeLockState = { enabled: undefined, configured: false }
-
-/* ===== P2.5 技师业绩可视化(设计图 V1,2026-08-08)=====
-   排行与目标进度都读 /admin/perf-ranking —— 后端那边与工资试算是同一个函数,
-   两处数字逐分一致(测试里有断言)。前端只负责画,条宽用后端给的 barPct。
-   设计图硬性要求:**金额在条外右列,进度条里不压任何文字**。 */
-let perfRankState = { metric: 'perf', period: 'month', data: null, loading: false }
-
-async function loadPerfRanking() {
-  perfRankState.loading = true
-  renderPerfRanking()
-  const res = await request(`/admin/perf-ranking?metric=${perfRankState.metric}&period=${perfRankState.period}`)
-  perfRankState.data = res.ranking
-  perfRankState.loading = false
-  renderPerfRanking()
-}
-
-function renderPerfRanking() {
-  const body = document.querySelector('#perfRankBody')
-  const prog = document.querySelector('#perfProgBody')
-  if (!body || !prog) return
-  const zh = owner.lang === 'zh'
-  document.querySelectorAll('#perfRankMetric [data-rank-metric]').forEach((b) => b.classList.toggle('on', b.dataset.rankMetric === perfRankState.metric))
-  document.querySelectorAll('#perfRankPeriod [data-rank-period]').forEach((b) => b.classList.toggle('on', b.dataset.rankPeriod === perfRankState.period))
-  if (perfRankState.loading) { body.innerHTML = `<p class="subtle">${zh ? '加载中…' : 'Loading…'}</p>`; return }
-  const d = perfRankState.data
-  if (!d) { body.innerHTML = ''; prog.innerHTML = ''; return }
-
-  const title = document.querySelector('#perfRankTitle')
-  if (title) title.textContent = `${zh ? '业绩排行' : 'Ranking'} · ${d.key}`
-  const valueText = (r) => (d.metric === 'orders'
-    ? `${r.orderCount} ${zh ? '单' : ''}`
-    : money(d.metric === 'recharge' ? r.rechargeCents : r.perfCents, 2))
-
-  body.innerHTML = d.ranking.length ? d.ranking.map((r) => `
-    <div class="rankrow">
-      <span class="no ${r.rank <= 2 ? 'top' : ''}">${r.rank}</span>
-      <span class="who">${escapeHtml(r.name)}<small>${escapeHtml(r.title || (zh ? '技师' : 'Tech'))} · ${r.orderCount} ${zh ? '单' : ''}</small></span>
-      <span class="barwrap"><i style="width:${r.barPct}%"></i></span>
-      <span class="amt">${valueText(r)}</span>
-      <span class="meta">${zh ? '卡耗' : 'Card'} ${money(r.cardUsedCents, 2)} · ${zh ? '冲卡' : 'Recharge'} ${money(r.rechargeCents, 2)}</span>
-    </div>`).join('') : `<p class="subtle">${zh ? '本店还没有已确认的日结,排行是空的。' : 'No confirmed daily closes yet.'}</p>`
-
-  // 目标进度只在月维度有意义;日维度后端不下发 target,这里整块提示一句
-  prog.innerHTML = d.period !== 'month'
-    ? `<p class="subtle">${zh ? '目标按月设置,切到「本月」看进度。' : 'Targets are monthly.'}</p>`
-    : (d.targets.length ? d.targets.map((t) => (t.target ? `
-      <div class="progrow">
-        <span class="nm">${escapeHtml(t.name)}</span>
-        <span class="pbar"><i class="${t.target.hit ? 'done' : ''}" style="width:${Math.min(100, t.target.pct)}%"></i></span>
-        <span class="pct"><b>${money(t.perfCents, 2)}</b> / ${money(t.target.perfTargetCents, 2)}</span>
-        <span class="pct">${t.target.hit ? `<span class="dc-badge ok">${zh ? '已达标' : 'Hit'}</span>` : `<b>${t.target.pct}%</b>`}</span>
-      </div>` : `
-      <div class="progrow">
-        <span class="nm">${escapeHtml(t.name)}</span>
-        <span class="tag-none" style="grid-column:span 3">${zh ? '未设目标 · 去「业绩目标」页签设置' : 'No target set'}</span>
-      </div>`)).join('') : '')
-}
 
 /* ===== P2.5 财务密码卡(设计图 V4)=====
    两态:未启用(默认)/ 已启用。开启要设新密码并确认两次;
@@ -4815,6 +4767,7 @@ async function generateDailyBrief() {
       body: JSON.stringify({ lang: owner.lang })
     })
     owner.aiBrief = data.brief
+    window.DashboardHome?.load().catch(() => {})
   } finally {
     owner.aiLoading = ''
     renderAiBrief()
@@ -4959,6 +4912,10 @@ els.adminLayout.addEventListener('click', (event) => {
     owner.adminPage = pageButton.dataset.adminPage
     if (owner.adminPage === 'bookings') { owner.adminView = 'today'; renderDailyCloseJump() }
     if (owner.adminPage === 'finance') loadFinancePage().catch((error) => toast(error.message))
+    if (owner.adminPage === 'schedule' && isOwnerRole()) {
+      loadPerfRanking().catch((error) => toast(error.message))
+      loadPerfTargets().catch((error) => toast(error.message))
+    }
     if (owner.adminPage === 'membership') loadMembershipPage().catch((error) => toast(error.message))
     if (owner.adminPage === 'pricing') loadPricingPage().catch((error) => toast(error.message))
     // 套餐与续费并入「门店设置 → 当前套餐」,进页时取一次订阅数据
@@ -5476,7 +5433,7 @@ els.schedulePage.addEventListener('click', async (event) => {
     applyStaffTab()
     if (owner.staffTab === 'performance' && isOwnerRole()) renderAttendanceBoard() // 切到业绩板块时拉最新考勤
     if (owner.staffTab === 'performance' && isOwnerRole()) loadPerfRanking().catch((error) => toast(error.message))
-    if (owner.staffTab === 'targets' && isOwnerRole()) loadPerfTargets().catch((error) => toast(error.message))
+    if (owner.staffTab === 'performance' && isOwnerRole()) loadPerfTargets().catch((error) => toast(error.message))
     if (owner.staffTab === 'salary' && isOwnerRole()) loadSalaryPlansPanel().catch((error) => toast(error.message))
     if (owner.staffTab === 'accounts' && isOwnerRole()) loadStaffAccountsPanel().catch((error) => toast(error.message))
     return
@@ -5713,22 +5670,7 @@ els.financePage.addEventListener('click', (event) => {
     }).catch((error) => toast(error.message))
     return
   }
-  /* D68③(店主 08-23 裁):商家端「查看签署单」= 与顾客端同一浮层查看器 ——
-     整组逐份(页码 n/N + 左右箭头 + 滑动),不再 window.open 只开这一张。
-     数据走 /admin/settlements/:key/snapshots(与顾客端 payment.sheets 同一出口)。 */
-  const dcSnapshot = event.target.closest('[data-dc-snapshot]')
-  if (dcSnapshot) {
-    event.preventDefault()
-    const code = dcSnapshot.dataset.dcSnapshot
-    request(`/admin/settlements/${encodeURIComponent(code)}/snapshots`)
-      .then((r) => {
-        const items = (r.sheets || []).filter((sh) => sh.snapshotUrl).map((sh) => ({ code: sh.code, label: sh.label, url: sh.snapshotUrl }))
-        if (!items.length) { toast(owner.lang === 'zh' ? '这单还没有签署快照' : 'No snapshot yet'); return }
-        openSnapViewer(items, Math.max(0, items.findIndex((it) => it.code === code)))
-      })
-      .catch((error) => toast(error.message || (owner.lang === 'zh' ? '打开签署单失败' : 'Failed to open')))
-    return
-  }
+  // 签署单点击由全页统一委托处理：订单详情和日结共用同一出口。
   // 屏 1b 金额更正 + 日结确认/重开:整族搬去 ./daily-close-rows.js(公约①②)
   if (window.DailyCloseRows.handleClick(event, {
     state: dailyCloseState, request, toast, renderDailyClose, loadDailyClose, yuanToCents, zh: owner.lang === 'zh'
@@ -5907,6 +5849,30 @@ els.businessHoursEditor.addEventListener('change', (event) => {
     document.querySelector('#specialDateClose')?.classList.toggle('hidden', !showHours)
     return
   }
+})
+// 订单详情在 bookingList，日结在 financePage；统一在捕获阶段接签署单入口，避免只绑定财务页。
+document.addEventListener('click', (event) => {
+  if (event.target.closest('[data-retry-perf-rank]')) { loadPerfRanking(); return }
+  const link = event.target.closest('[data-dc-snapshot]')
+  if (!link) return
+  event.preventDefault()
+  event.stopPropagation()
+  const code = link.dataset.dcSnapshot
+  if (!code) { toast('签署单编号缺失'); return }
+  request(`/admin/settlements/${encodeURIComponent(code)}/snapshots`)
+    .then((r) => {
+      const items = (r.sheets || []).filter((sh) => sh.snapshotUrl).map((sh) => ({ code: sh.code, label: sh.label, url: sh.snapshotUrl }))
+      if (!items.length) { toast(owner.lang === 'zh' ? '这单还没有签署快照' : 'No snapshot yet'); return }
+      openSnapViewer(items, Math.max(0, items.findIndex((it) => it.code === code)))
+    }).catch((error) => toast(error.message || (owner.lang === 'zh' ? '打开签署单失败' : 'Failed to open')))
+}, true)
+els.schedulePage.addEventListener('change', (event) => {
+  if (event.target.id !== 'perfRankMonth') return
+  const month = String(event.target.value || '')
+  if (!/^\d{4}-(0[1-9]|1[0-2])$/.test(month)) return
+  perfRankState.month = month
+  perfRankState.period = 'month'
+  loadPerfRanking().catch((error) => toast(error.message))
 })
 els.bookingList.addEventListener('click', async (event) => {
   if (event.target.closest('[data-close-booking-detail]')) {

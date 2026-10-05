@@ -92,19 +92,19 @@
     </view>
     <view class="order-entry card me-module-card">
       <view class="oe-item" bindtap="goOrders" data-status="pending_service">
-        <text>{{counts.pending_service}}</text>
+        <text>{{ordersError ? '—' : counts.pending_service}}</text>
         <text>{{t.statusPendingService}}</text>
       </view>
       <view class="oe-item" bindtap="goOrders" data-status="completed">
-        <text>{{counts.completed}}</text>
+        <text>{{ordersError ? '—' : counts.completed}}</text>
         <text>{{t.statusCompleted}}</text>
       </view>
       <view class="oe-item" bindtap="goOrders" data-status="cancelled">
-        <text>{{counts.cancelled}}</text>
+        <text>{{ordersError ? '—' : counts.cancelled}}</text>
         <text>{{t.statusCancelled}}</text>
       </view>
       <view class="oe-item" bindtap="goOrders" data-status="after_sales">
-        <text>{{counts.after_sales}}</text>
+        <text>{{ordersError ? '—' : counts.after_sales}}</text>
         <text>{{t.statusAfterSales}}</text>
       </view>
     </view>
@@ -137,7 +137,7 @@
         </block>
       </block>
       <view wx:else class="empty-protected card" bindtap="goOrders" data-status="all">
-        <text>{{lang === 'en' ? 'Sign in to view recent consumption.' : '登录后查看近期消费记录。'}}</text>
+        <text>{{ordersError ? '订单暂时加载失败，请点此重试。' : (isLoggedIn ? '还没有消费记录。' : (lang === 'en' ? 'Sign in to view recent consumption.' : '登录后查看近期消费记录。'))}}</text>
       </view>
     </view>
   </view>

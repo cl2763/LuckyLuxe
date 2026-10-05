@@ -1,4 +1,4 @@
-page{background:#fbf8f5}
+page{background:var(--paper)}
 .page{padding:24rpx 26rpx 60rpx}
 .monthbar{display:flex;align-items:center;justify-content:center;gap:26rpx}
 .marrow{width:56rpx;height:56rpx;border-radius:50%;background:#fff;border:1rpx solid #eadfd7;display:flex;align-items:center;justify-content:center;font-size:30rpx;color:#5c4630}

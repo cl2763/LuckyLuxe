@@ -1,4 +1,5 @@
 const api = require('../../../utils/api')
+const nav = require('../../../utils/nav')
 const { storeMoney } = require('../../../utils/storeclock')
 const { buildOwnerHome, clockGate, clockFailText, staffSmalls, STAFF_PERIODS } = require('../../../utils/dashboard-view')
 const { loadNumberFont } = require('../../../utils/numfont')   // D168 段 4:数字大字字体,拿不到就如实说
@@ -12,7 +13,6 @@ const HINT_KEY = 'll-dh-carousel-hint'   // 「自动轮播中」那句提示,�
 
 Page({
   data: {
-    aiRetouch: null,   // 11m §三:AI 修图卡(off 态后端不返回 ⇒ 恒 null ⇒ 整块不出现)
     greeting: '嗨,老板 👋',
     roleLabel: '老板',
     isOwner: true,
@@ -67,10 +67,11 @@ Page({
     /* D183:每次回到首页都按当下的偏好挂 class(在「我的」里改完回来就该是新的) */
     this.setData({ themeClass: themeClass(currentTheme()) })
     if (!api.guardMerchant()) return
-    if (this.data.isOwner) this.loadPulse(); else this.loadStaff()
     this.setData({ aiEnabled: api.merchantHasAi() })
     // 刷一次权限:没开通 AI 智能包就不显示 AI 每日总结 / 召回周报
     api.refreshMerchantAi().then((on) => this.setData({ aiEnabled: on }))
+    // 角色由 load() 核实后只拉一次对应大屏；旧逻辑按上次角色先拉一遍，
+    // 再在 load() 里重复拉，真机网络上会放大切页等待。
     this.load()
   },
 
@@ -95,11 +96,9 @@ Page({
       /* 币种红线:钱怎么写全由 `dashboard-view` 按**本次下发的** currencyDisplay 决定,
          这一页一个格式化动作都不做(storeMoney 只作它拿不到下发时的兜底)。 */
       const dh = buildOwnerHome({ pulse, now, todo, period, nowHM: hm, storeMoney, headKey: this.data.dhMetric })
-      /* 🔴 11m §三:AI 修图那张卡**两种视角都出**。老板端走 dh.todos 里那一项;
-         员工端是另一套 rowcard 结构,所以单独取出来 setData ——
-         **但取的是同一份后端数据**(todo.items 里 key==='aiRetouch' 那一条),没有第二处文案。
-         off 态后端根本不返回这一条 ⇒ 这里是 null ⇒ wxml 的 wx:if 落空 ⇒ 整块不出现。 */
-      const aiRetouch = ((todo && todo.items) || []).find((x) => x && x.key === 'aiRetouch') || null
+      /* 快速修图是大屏下方的独立按钮,不重复列作「今日要处理」。 */
+      dh.todos = (dh.todos || []).filter((x) => x.key !== 'aiRetouch')
+      dh.todoEmpty = dh.todos.length === 0
       /* 折线在小程序里画成一排小竖条(没有 svg):把值归一到 0–100 的高度。
          全 0 的那一支上面已经把 spark 清空了,所以这里不会出现「一排贴地的条」。 */
       const max = Math.max(1, ...(dh.spark || []).map((x) => Math.abs(Number(x) || 0)))
@@ -120,12 +119,13 @@ Page({
         status: b.statusText || '待到店',
       }))
       dh.nextHint = dh.next3.length ? '此刻之后的前 3 条' : ''
-      dh.aiLine = (ai && ai.line && ai.line.text) || ''
-      dh.aiAt = (ai && ai.line && ai.line.at) || ''
+      const latestAiLine = this._latestAiLine || (ai && ai.line) || null
+      dh.aiLine = (latestAiLine && latestAiLine.text) || ''
+      dh.aiAt = (latestAiLine && latestAiLine.at) || ''
       this._pulse = pulse; this._now = now; this._todo = todo
       /* D182:数据到手就重画折线(切维度、轮播、重取都会走到这儿) */
       this._spark = dh.spark || []
-      this.setData({ dh, aiRetouch, dhState: 'ready', dhClosed: Boolean(now && now.closed) }, () => this.drawSpark())
+      this.setData({ dh, dhState: 'ready', dhClosed: Boolean(now && now.closed) }, () => this.drawSpark())
       this.scheduleRotate()
     } catch (e) {
       /* 取数失败:**整块换一句话,不显示旧数、不显示 0**(图 §六) */
@@ -369,6 +369,26 @@ Page({
       dailyClose: '/pages/merchant/daily-close/index' }[k]
     if (to) wx.navigateTo({ url: to, fail: () => wx.showToast({ title: '这一项暂时打不开', icon: 'none' }) })
   },
+  openRetouch() { nav.to('/pages/pose/retouch/index') },
+  async generateBrief() {
+    if (this.data.briefLoading) return
+    this.setData({ briefLoading: true })
+    try {
+      const r = await api.adminPost('/admin/ai/daily-brief', {})
+      const data = (r && r.brief && r.brief.data) || {}
+      const ai = await api.adminGet('/admin/dashboard/ai-line').catch(() => null)
+      this._latestAiLine = (ai && ai.line) || null
+      const dh = this.data.dh
+      this.setData({
+        brief: data.headlineZh || '', briefActions: (data.actionsZh || []).slice(0, 3),
+        briefLoading: false,
+        ...(dh ? { dh: { ...dh, aiLine: (ai && ai.line && ai.line.text) || '', aiAt: (ai && ai.line && ai.line.at) || '' } } : {})
+      })
+    } catch (e) {
+      this.setData({ briefLoading: false })
+      wx.showToast({ title: (e && e.message) || 'AI 日报暂时生成失败', icon: 'none' })
+    }
+  },
 
   async load() {
     const d = new Date()
@@ -379,7 +399,7 @@ Page({
     try {
       const me = await api.adminMe()
       isOwner = me && me.role === 'owner'
-      if (isOwner) this.loadPulse(); else this.loadStaff()   // 角色拿到才知道该拉哪一份
+      if (isOwner) this.loadPulse(); else this.loadStaff()   // 首页只读已生成摘要；模型仅由“生成 AI 日报”按钮触发
       this.setData({
         isOwner,
         myTechId: (me && me.technicianId) || '',
@@ -388,7 +408,7 @@ Page({
         greeting: `嗨,${(me && me.displayName) || (isOwner ? '老板' : '伙伴')} 👋`,
         /* 图 §一 顶栏那一行:**店名 · 问候**。店名走 D156 定的 `storeName`(门店名,商家自己看的那个),
            取不到就只显示问候 —— 不回落到商户名,也不编一个店名(零回落)。 */
-        storeLine: [(me && me.storeName) || '', `${(me && me.displayName) || (isOwner ? '店主' : '伙伴')},${new Date().getHours() < 12 ? '早上好' : (new Date().getHours() < 18 ? '下午好' : '晚上好')}`].filter(Boolean).join(' · ')
+        storeLine: [(me && me.storeName) || '', `${(me && me.displayName) || (isOwner ? '店主' : '伙伴')}，${new Date().getHours() < 12 ? '早上好' : (new Date().getHours() < 18 ? '下午好' : '晚上好')}`].filter(Boolean).join(' · ')
       })
     } catch (e) { /* 未登录/超时:保持默认 */ }
 
@@ -472,15 +492,6 @@ Page({
       }).catch(() => { /* 静默 */ })
     }
 
-    // AI 总结(老板:一句摘要 + 行动建议;慢/失败时卡片仍在,用本地数据兜底)
-    if (isOwner) {
-      this.setData({ briefLoading: true })
-      try {
-        const r = await api.adminPost('/admin/ai/daily-brief', {})
-        const data = (r && r.brief && r.brief.data) || {}
-        this.setData({ brief: data.headlineZh || '', briefActions: (data.actionsZh || []).slice(0, 3), briefLoading: false })
-      } catch (e) { this.setData({ briefLoading: false }) }
-    }
   },
 
   // 员工:点掉提醒横幅(标已读)

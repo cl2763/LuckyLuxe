@@ -1,33 +1,34 @@
-page{background:#fbf8f5}
+page{background:var(--paper)}
 .page{padding:24rpx 26rpx 60rpx}
 .hero{display:flex;align-items:center;gap:16rpx;margin-bottom:18rpx}
-.av{width:96rpx;height:96rpx;border-radius:50%;background:#f1e7df;color:#9b7655;display:flex;align-items:center;justify-content:center;font-weight:600;font-size:40rpx;flex:0 0 auto}
-.hname{font-size:32rpx;font-weight:600;color:#2d2826}
-.tier{font-size:22rpx;color:#9b7655;background:#f1e7df;border-radius:40rpx;padding:2rpx 14rpx;margin-left:8rpx}
-.hsub{font-size:23rpx;color:#8c8279;margin-top:8rpx}
+.av{width:96rpx;height:96rpx;border-radius:50%;background:var(--wall);color:var(--brandd);display:flex;align-items:center;justify-content:center;font-weight:600;font-size:40rpx;flex:0 0 auto}
+.hname{font-size:32rpx;font-weight:600;color:var(--ink)}
+.tier{font-size:22rpx;color:var(--brandd);background:var(--wall);border-radius:40rpx;padding:2rpx 14rpx;margin-left:8rpx}
+.hsub{font-size:23rpx;color:var(--sub);margin-top:8rpx}
 .stats{display:flex;flex-wrap:wrap;justify-content:space-between;margin-bottom:2rpx}
-.st{width:48.5%;margin-bottom:14rpx;background:#f1e7df;border-radius:14rpx;padding:16rpx 18rpx;box-sizing:border-box}
-.sv{font-size:28rpx;font-weight:600;color:#2d2826}
-.sl{font-size:22rpx;color:#8c8279;margin-top:6rpx}
-.card{background:#fff;border:1rpx solid #e7ddd4;border-radius:14rpx;padding:16rpx 18rpx;margin-bottom:14rpx}
-.ct{font-size:24rpx;color:#8c8279;margin-bottom:10rpx}
+.st{width:48.5%;margin-bottom:14rpx;background:var(--wall);border-radius:14rpx;padding:16rpx 18rpx;box-sizing:border-box}
+.sv{font-size:28rpx;font-weight:600;color:var(--ink)}
+.sl{font-size:22rpx;color:var(--sub);margin-top:6rpx}
+.card{background:var(--card);border:1rpx solid var(--line);border-radius:14rpx;padding:16rpx 18rpx;margin-bottom:14rpx}
+.ct{font-size:24rpx;color:var(--sub);margin-bottom:10rpx}
 .tags{display:flex;flex-wrap:wrap;gap:10rpx}
-.tg{font-size:22rpx;color:#a34c48;background:#f3e1df;border-radius:40rpx;padding:4rpx 16rpx}
-.notes{font-size:25rpx;color:#5c4630;line-height:1.6}
-.row-sb{display:flex;justify-content:space-between;font-size:25rpx;color:#2d2826}
-.ck{color:#8c8279}.linkbtn {text-align:center;font-size:26rpx;color:#9b7655;background:#f1e7df;border:1rpx solid #e7ddd4;border-radius:999rpx;padding:18rpx;margin-top:6rpx}
-.cnt{color:#c8a47e;font-weight:600;margin-left:6rpx}
-.ohint{font-size:23rpx;color:#b6a99b;text-align:center;padding:16rpx 0}
-.orow{display:flex;align-items:center;justify-content:space-between;padding:16rpx 0;border-top:1rpx solid #f1e7df}
+.tg{font-size:22rpx;color:var(--bad);background:var(--badbg);border-radius:40rpx;padding:4rpx 16rpx}
+.notes{font-size:25rpx;color:var(--ink);line-height:1.6}
+.row-sb{display:flex;justify-content:space-between;font-size:25rpx;color:var(--ink)}
+.ck{color:var(--sub)}.linkbtn {text-align:center;font-size:26rpx;color:var(--brandd);background:var(--wall);border:1rpx solid var(--line);border-radius:999rpx;padding:18rpx;margin-top:6rpx}
+.cnt{color:var(--brand);font-weight:600;margin-left:6rpx}
+.ohint{font-size:23rpx;color:var(--sub);text-align:center;padding:16rpx 0}
+.orow{display:flex;align-items:center;justify-content:space-between;padding:16rpx 0;border-top:1rpx solid var(--line)}
 .orow:first-of-type{border-top:none}
 .oi{flex:1;min-width:0}
-.os{font-size:25rpx;color:#2d2826}
-.od{font-size:21rpx;color:#8c8279;margin-top:5rpx}
+.os{font-size:25rpx;color:var(--ink)}
+.od{font-size:21rpx;color:var(--sub);margin-top:5rpx}
 .or{text-align:right;flex:0 0 auto}
-.op{font-size:24rpx;color:#9b7655;font-weight:600;display:block}
-.ost{font-size:21rpx;color:#8c8279}
-.ost.done{color:#47735f}
+.op{font-size:24rpx;color:var(--brand);font-weight:600;display:block}
+.ost{font-size:21rpx;color:var(--sub)}
+.ost.done{color:var(--good)}
 
-.row2btn{display:flex;gap:14rpx;margin:16rpx 24rpx 0}.hbtn {flex:1;text-align:center;padding:22rpx;border-radius:999rpx;font-size:28rpx;font-weight:700;background:#2d2826;color:#fff}
+.row2btn{display:flex;gap:14rpx;margin:16rpx 8rpx 0}.row2btn+.card{margin-top:26rpx}.hbtn{flex:1;text-align:center;padding:22rpx;border-radius:999rpx;font-size:28rpx;font-weight:700;background:var(--hero);color:var(--heroink)}
+.order-chevron{font-size:30rpx;color:var(--sub);margin-left:12rpx}
 /* 六统一(08-30c):四个同排动作同一形制同一配色 —— 不许一组里两黑两白(店主原话) */
-.hbtn.ghost{background:#2d2826;color:#fff}
+.hbtn.ghost{background:var(--hero);color:var(--heroink)}

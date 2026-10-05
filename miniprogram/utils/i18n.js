@@ -14,6 +14,7 @@ const copy = {
       checkout: '去结算',
       save: '保存预约',
       statusPendingService: '待服务',
+      statusPendingSettlement: '服务结束 · 待结算',
       statusCompleted: '已完成',
       statusCancelled: '已取消',
       statusAfterSales: '售后',
@@ -37,6 +38,7 @@ const copy = {
       checkout: 'Checkout',
       save: 'Save',
       statusPendingService: 'Upcoming',
+      statusPendingSettlement: 'Service finished · awaiting settlement',
       statusCompleted: 'Completed',
       statusCancelled: 'Cancelled',
       statusAfterSales: 'After-sales',
@@ -443,6 +445,7 @@ function statusText(status, lang = getLang()) {
   const t = copy.common[lang]
   const map = {
     pending_service: t.statusPendingService,
+    pending_settlement: t.statusPendingSettlement,
     completed: t.statusCompleted,
     cancelled: t.statusCancelled,
     after_sales: t.statusAfterSales,

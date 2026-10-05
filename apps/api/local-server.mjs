@@ -143,6 +143,8 @@ import { createPricingSerialize } from './pricing-serialize.mjs'      // 价目�
 import { createBookingIncome } from './booking-income.mjs'  // 订单入账触点(同上)
 import { createBookingState, isAfterSalesOpen, shouldAutoComplete } from './booking-state.mjs'  // 订单状态机(D70 合同,唯一实现)   // 笔迹图:纯 JS 画折线,**透明底**(单据白纸走 svgToPng,两条路不混)
 import { writePointsPolicyMark } from './boot-marks.mjs'
+import { sceneForToken } from './wechat-mini-code.mjs'
+import { createScanEntryRoute, createSignTokenHelpers } from './scan-entry-route.mjs'
 import { analyzeReferenceImage, createBookingSummary, createCustomerInsight, createCustomerServiceReply, createDailyBrief, createRecallMessages, createServiceNoteInsights, createSocialCopy, extractKbEntriesFromDocument, getAiUsage, polishStaffQuoteReply } from './ai-utils.mjs'
 import { buildKnowledgeContext, loadCustomerServiceKnowledgeBase } from './kb-utils.mjs'
 
@@ -5240,6 +5242,8 @@ function serializeBooking(row, lang = 'zh') {
   const endLocal = localParts(row.appointment_end, tenantTimezone(row.tenant_id))
   /* D127 第二道闸:读口不能指望写口(存量脏行是既成事实)——按 bookings.tenant_id 连,连不上不下发 user 对象。见 ./tenant-profile.mjs */
   const user = row.user_id ? db.prepare('SELECT id, display_name, phone, email, wechat_open_id, google_id FROM users WHERE id = ? AND tenant_id = ?').get(row.user_id, row.tenant_id) : null
+  const signedSettlement = db.prepare("SELECT * FROM settlements WHERE booking_id = ? AND tenant_id = ? AND status IN ('signed', 'amended') ORDER BY signed_at DESC LIMIT 1").get(row.id,row.tenant_id)
+  row = { ...row, settlementSigned: Boolean(signedSettlement) }
   return {
     id: row.id,
     publicCode: row.public_code,
@@ -5299,7 +5303,7 @@ function serializeBooking(row, lang = 'zh') {
     depositState: (row.deposit_cents || 0) > 0 ? 'received' : (row.direct_deposit_unpaid ? 'unpaid' : 'none'),
     depositCents: row.deposit_cents || 0,
     payment: (() => {
-      const sRow = db.prepare("SELECT * FROM settlements WHERE booking_id = ? AND tenant_id = ? AND status IN ('signed', 'amended') ORDER BY signed_at DESC LIMIT 1").get(row.id, row.tenant_id)
+      const sRow = signedSettlement
       if (!sRow) return null
       const stored = Math.abs(db.prepare("SELECT COALESCE(SUM(amount_cents), 0) s FROM stored_value_transactions WHERE tenant_id = ? AND type = 'consume' AND note = ?").get(row.tenant_id, `服务单 ${sRow.code} 结算扣卡`).s || 0)
       /* 批③首件 A2/A6:详情页签署单卡=serializeSettlement flow 同一块(一条五步账,与签署页/快照同源);
@@ -10014,26 +10018,9 @@ function customerBindShape(row) {
   }
 }
 
-// 一次性签署码:一单只留一枚有效码,重发即作废旧的
-function issueSignToken(settlement, { actor = 'admin', ttlHours = 24 } = {}) {
-  const tenantId = settlement.tenant_id
-  const now = new Date()
-  db.prepare("UPDATE settlement_sign_tokens SET status = 'superseded' WHERE settlement_id = ? AND status = 'active'").run(settlement.id)
-  const token = `sg_${randomUUID().replaceAll('-', '')}${randomUUID().replaceAll('-', '')}`
-  const expiresAt = iso(new Date(now.getTime() + ttlHours * 3_600_000))
-  db.prepare(`INSERT INTO settlement_sign_tokens (token, tenant_id, settlement_id, status, expires_at, created_by, created_at)
-    VALUES (?, ?, ?, 'active', ?, ?, ?)`).run(token, tenantId, settlement.id, expiresAt, actor, iso(now))
-  return { token, expiresAt }
-}
-
-function activeSignToken(settlementId) {
-  return db.prepare("SELECT * FROM settlement_sign_tokens WHERE settlement_id = ? AND status = 'active' ORDER BY created_at DESC, rowid DESC LIMIT 1").get(settlementId) || null
-}
-
-function signTokenUrl(token) {
-  const tid=db.prepare('SELECT tenant_id FROM settlement_sign_tokens WHERE token=?').get(token)?.tenant_id
-  return `${publicAppUrl(tid)}/sign?t=${encodeURIComponent(token)}`
-}
+// 一次性签署码与体验服务链接的唯一出口。
+const { issueSignToken, activeSignToken, signTokenUrl } = createSignTokenHelpers({ db, iso, publicAppUrl,
+  scopeName: DATA_SCOPE_NAME, appPublicUrl: APP_PUBLIC_URL })
 
 /* 屏 S3 状态行(规则④):等待顾客进入 → 顾客核对中 → 已签署。
    「顾客核对中」= 有人拿这枚码打开过签署页(viewed_at 有值)。 */
@@ -10316,6 +10303,8 @@ const conversationRoutes = createConversationRoutes({
 const packageWrite=createPackageWrite({db,apiError,readBody,json,currentTenantId,randomId,assertPackageValueOk,assertProjectGroupValid,serializeMembershipPackage})
 const createCustomer = createCustomerCreator({db,apiError,randomId,maskPhone})
 const completeVerifiedPhone = createVerifiedPhoneCompletion({db,apiError,claim:claimUserByOpenId,serialize:serializeUser,auth:miniAuthFor,unboundSql:notBoundByLoginIdentitySql})
+const scanEntryRoute = createScanEntryRoute({db,apiError,json,readBody,fetchJsCode2Session,claimUserByOpenId,serializeUser,miniAuthFor,
+  appid:WECHAT_MINI_APPID,secret:WECHAT_MINI_SECRET,scopeName:DATA_SCOPE_NAME})
 const settlementAccess = createSettlementAccess({db,apiError,requireCustomer,demoAllowed:()=>DEMO_LOGIN_ALLOWED})
 const settlementRead = createSettlementReadAccess({secret:WECHAT_MINI_TOKEN_SECRET,apiError,requireAdmin,writeAccess:settlementAccess,demoAllowed:()=>DEMO_LOGIN_ALLOWED})
 
@@ -10486,6 +10475,7 @@ async function route(req, res) {
     return
   }
   // 卡主签字:签字那一刻即时扣卡(先烧迁移桶再烧新桶);签前二次校验余额,不足直接拦
+  if (await scanEntryRoute(req, res, path)) return
   /* 屏 S3 的二维码扫进来先落这里:凭一次性签署码换到单号(规则⓪ 第一把钥匙)。
      顺手把 viewed_at 打上 —— 商家端的状态行就从「等待进入」跳到「顾客核对中」(规则④)。 */
   if (req.method === 'GET' && path.startsWith('/settlements/by-token/')) {
@@ -10503,7 +10493,7 @@ async function route(req, res) {
       const next=db.prepare("SELECT * FROM settlements WHERE group_id=? AND tenant_id=? AND user_id=? AND status='pending_sign' ORDER BY rowid LIMIT 1").get(row.group_id,row.tenant_id,row.user_id)
       if(next){let nextToken=activeSignToken(next.id);if(!nextToken||new Date(nextToken.expires_at).getTime()<=Date.now())nextToken=issueSignToken(next,{actor:'group-continuation'});nextSignUrl=signTokenUrl(nextToken.token)}
     }
-    return json(res, 200, { code: row.code, settlement: serializeSettlement(row),nextSignUrl },{'cache-control':'no-store'})
+    return json(res, 200, { code: row.code, url: signTokenUrl(token), settlement: serializeSettlement(row),nextSignUrl },{'cache-control':'no-store'})
   }
   /* 微信绑定只信已验证会话；仅明确开启演示闸的隔离环境允许演示身份。 */
   /* ===== 绑定码(图 v2.3 规则⑦,公开路由:顾客扫码进来,无商家会话) =====
@@ -11136,13 +11126,15 @@ async function route(req, res) {
       }))
     })
   }
-  // 沙盒专用:当前店演示2阵容名册(顾客端「切换演示身份」入口数据源;生产 ALLOW_DEMO 关=404)
+  // 沙盒专用:当前店演示阵容名册(顾客端「切换演示身份」入口数据源;生产 ALLOW_DEMO 关=404)
   if (req.method === 'GET' && path === '/sandbox/demo-roster') {
     if (!DEMO_LOGIN_ALLOWED) throw apiError(404, 'NOT_FOUND', 'Not found.')
     const tid = resolveTenant(req, query)
     const roster = db.prepare(`SELECT id, display_name FROM users
-      WHERE tenant_id = ? AND display_name LIKE '演示2-%' AND tags_json NOT LIKE '%退役·旧口径演示档案%'
-      ORDER BY display_name ASC`).all(tid)
+      WHERE tenant_id = ? AND (display_name LIKE '演示2-%' OR (? IN ('demo-ai','demo-basic') AND id LIKE ?)
+        OR (? = 'demo-empty' AND display_name LIKE '演示新用户%'))
+        AND tags_json NOT LIKE '%退役·旧口径演示档案%'
+      ORDER BY display_name ASC LIMIT 24`).all(tid,tid,`${tid}-cust-%`,tid)
     return json(res, 200, { roster: roster.map((r) => ({ id: r.id, name: r.display_name })) })
   }
   /* ===== 批③首件 B7:顾客侧售后发起/撤回(定稿图 §二 A/B+拍板①②③;零新状态语义) =====
@@ -11647,6 +11639,12 @@ async function route(req, res) {
         return serialized
       })
     })
+  }
+  if (req.method === 'GET' && /^\/admin\/bookings\/[^/]+$/.test(path)) {
+    const id = decodeURIComponent(path.split('/')[3])
+    const row = db.prepare('SELECT * FROM bookings WHERE id=? AND tenant_id=?').get(id,currentTenantId())
+    if (!row || (adminSession.role === 'staff' && row.technician_id !== adminSession.technicianId)) throw apiError(404,'NOT_FOUND','找不到这张订单。')
+    return json(res,200,{booking:serializeBooking(row)})
   }
   if (await migrationGifts.route({req,res,path,adminSession,readBody,json})) return
   if (await migrationPaidTimecards.route({req,res,path,adminSession,readBody,json})) return
@@ -14295,7 +14293,7 @@ async function route(req, res) {
     const rows = db.prepare('SELECT * FROM service_notes WHERE user_id = ? AND tenant_id = ? ORDER BY created_at DESC').all(userId, tid)
     const notes = rows.map((r) => ({
       id: r.id, rawText: r.raw_text, structured: parseJson2(r.structured_json),
-      images: parseJson2(r.images_json) || [],   // 小记图片(08-30f):随小记,只到这条限权读口,顾客端零暴露
+      images: (() => { const value = parseJson2(r.images_json); return Array.isArray(value) ? value : [] })(),   // 旧记录可能不是数组,读口归一为空态
       serviceName: r.service_name, technicianName: r.technician_name,
       date: localParts(r.created_at).date, createdAt: r.created_at
     }))
@@ -15078,6 +15076,7 @@ async function route(req, res) {
       token, expiresAt,
       url: `${publicAppUrl()}/bind?t=${encodeURIComponent(token)}`,
       pagePath: `/pages/bind/index?token=${encodeURIComponent(token)}`,
+      miniCodePath: WECHAT_MINI_APPID && WECHAT_MINI_SECRET ? `/mini-code/${sceneForToken(token)}` : '',
       displayName: u.display_name || '顾客',
       hint: '请顾客扫码完成绑定——只绑定,不会进入签署、看不到结算单'
     })
@@ -15240,6 +15239,7 @@ async function route(req, res) {
     const bound = isUserBound(row.user_id)
     return json(res, 200, {
       token, expiresAt, url: signTokenUrl(token),
+      miniCodePath: WECHAT_MINI_APPID && WECHAT_MINI_SECRET ? `/mini-code/${sceneForToken(token)}` : '',
       settlement: serializeSettlement(row),
       pushedToMiniApp: false,
       customerBound: bound,

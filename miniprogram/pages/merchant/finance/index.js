@@ -15,7 +15,7 @@ Page({
   data: {
     snapViewer: { open: false, items: [], index: 0 },
     svTxns: [], svFilter: 'all', svRechargeTotal: '', svConsumeTotal: '',
-    unlocked: false,
+    unlocked: null, // 门禁状态未确认时先显示加载,避免未启用的店闪出密码页
     lockEnabled: false,
     configured: true,
     pwd: '',
@@ -31,9 +31,10 @@ Page({
   },
 
   async onShow() {
-    if (!(await api.guardOwner())) return
+    this.setData({ unlocked: null })
     // 门店币种要在渲染金额之前拿到,不然人民币店第一屏会显示成 $
-    await refreshStoreClock().catch(() => {})
+    const [allowed] = await Promise.all([api.guardOwner(), refreshStoreClock().catch(() => {})])
+    if (!allowed) return
     this.setData({ aiEnabled: api.merchantHasAi() })
     api.refreshMerchantAi().then((on) => this.setData({ aiEnabled: on }))
     this.init()
@@ -49,7 +50,7 @@ Page({
     try {
       const s = await api.adminGet('/admin/finance/lock-status')
       if (!s.enabled) { this.setData({ unlocked: true, lockEnabled: false }); this.loadData(); return }
-      this.setData({ lockEnabled: true, configured: !!s.configured })
+      this.setData({ unlocked: false, lockEnabled: true, configured: !!s.configured })
     } catch (e) {
       // 状态读不到时按「未开门禁」放行:门禁真开着的话后端照样会 403,拦得住
       this.setData({ unlocked: true, lockEnabled: false })
@@ -144,7 +145,7 @@ Page({
       this.roll({ todayCents: pr.todayRevenueCents || 0, revCents: rev, netCents: net })
       const s = sv.storedValue || {}
       const accts = (s.accounts || []).slice().sort((a, b) => (b.dormantDays || 0) - (a.dormantDays || 0))
-      const d = accts[0]
+      const d = accts.find((a) => a.balanceCents > 0 && a.dormantDays >= 30)
       this.setData({
         sv: {
           total: money(s.totalBalanceCents),

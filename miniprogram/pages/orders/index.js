@@ -19,7 +19,8 @@ Page({
     activeStatus: 'all',
     showTabs: true,
     orders: [],
-    pendingSign: []   // D57 待签署置顶卡
+    pendingSign: [], // D57 待签署置顶卡
+    loadError: ''
   },
 
   onLoad(options) {
@@ -69,8 +70,10 @@ Page({
     try {
       sourceOrders = await api.getBookings(lang)
       if (sourceOrders.length) storage.setOrders(sourceOrders)
+      this.setData({ loadError: '' })
     } catch (error) {
-      sourceOrders = storage.getOrders()
+      sourceOrders = []
+      this.setData({ loadError: '订单加载失败，请点击重试' })
     }
     /* D57(店主 08-21 批②尾清):待签单置顶卡——列出**全部**未签单(不止最新一张,
        即时开单没挂预约的也在);点卡直达签署页;签完/撤回自然消失。拉不到不挡订单列表。 */

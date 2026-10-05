@@ -1,4 +1,4 @@
-page{background:#fbf8f5}
+page{background:var(--paper)}
 .page{padding:24rpx 26rpx 60rpx}
 .pt{font-size:32rpx;font-weight:800;color:#241f1d}
 .ps{font-size:22rpx;color:#9a8c7c;margin-top:6rpx;line-height:1.5}.addbtn {margin:20rpx 0 16rpx;text-align:center;font-size:26rpx;color:#b5885d;font-weight:700;border:1rpx dashed #d9bf9f;border-radius:999rpx;padding:20rpx;background:#fff}

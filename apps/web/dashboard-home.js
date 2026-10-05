@@ -185,7 +185,6 @@ window.DashboardHome = (function () {
               ${m.key === 'cardUse' ? `<span class="dh-tile-x" data-dh-times>${m.extra && m.extra.times ? `${zh() ? '次卡' : 'Card'} ${m.extra.times} ${esc((m.extra && m.extra.timesUnit) || '次')}` : '—'}</span>` : ''}
               ${deltaText(m)}
             </div>`).join('')}
-          ${aiLine()}
         </div>
       </div>
     </section>`
@@ -201,7 +200,8 @@ window.DashboardHome = (function () {
         ${a.at ? `<span class="dh-ai-at">${esc(a.at)}</span>` : ''}</div>`
     }
     return `<div class="dh-ai" data-dh-ai-none>
-      <span class="dh-ai-at">${zh() ? '今天还没有一句 —— 去「AI 日报」生成一次就有了' : 'No line yet today'}</span></div>`
+      <span class="dh-ai-at">${zh() ? '今天还没有 AI 日报摘要' : 'No AI daily summary yet'}</span>
+      <button class="ghost slim" data-ai-brief type="button">${zh() ? '生成 AI 日报' : 'Generate AI daily brief'}</button></div>`
   }
 
   function todoBlock() {
@@ -222,8 +222,9 @@ window.DashboardHome = (function () {
     if (!st.host) return
     if (st.phase === 'loading') { st.host.innerHTML = skeleton(); return }
     if (st.phase === 'failed') { st.host.innerHTML = failed(); bind(); return }
-    /* AI 今日一句**画在英雄块右栏里**(图 §三),这里不再单独摆一块 */
+    /* 今日一句在大屏下方,入口指向已有的 AI 日报生成动作。 */
     st.host.innerHTML = `${hero()}
+      ${aiLine()}
       <div class="dh-bottom" data-dh-bottom>
         <section class="card dh-card dh-board" data-dh-board></section>
         ${todoBlock()}

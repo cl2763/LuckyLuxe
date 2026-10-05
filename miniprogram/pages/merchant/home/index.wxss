@@ -100,7 +100,9 @@ page{background:var(--paper)}
 .dh-retry{margin-top:14rpx;display:inline-block;padding:10rpx 22rpx;border:1rpx solid var(--line);border-radius:999rpx;font-size:24rpx;color:var(--sub)}
 
 /* 英雄块:深色底 + 金色数字 + 细网格(图 §一 那一整块) */
-.dh-hero{background:var(--hero);border-radius:12rpx;padding:24rpx;margin:0 0 20rpx}
+.dh-hero{background:var(--hero);border-radius:12rpx;padding:24rpx;margin:0 0 20rpx;box-sizing:border-box;min-height:560rpx}
+.retouch-shortcut{display:flex;align-items:center;justify-content:space-between;box-sizing:border-box;min-height:80rpx;background:var(--card);color:var(--ink);border:1rpx solid var(--line);border-radius:18rpx;padding:16rpx 28rpx;margin:0 0 20rpx;font-size:27rpx;font-weight:700}
+.retouch-shortcut text{font-size:36rpx;line-height:1;flex:none}
 .dh-periods{display:flex;gap:12rpx;margin-bottom:18rpx}
 .dh-period{padding:8rpx 22rpx;border:1rpx solid var(--herogrid);border-radius:999rpx;font-size:24rpx;color:var(--herosub)}
 .dh-period.on{background:var(--herogold);color:var(--hero);border-color:var(--herogold);font-weight:700}
@@ -115,6 +117,7 @@ page{background:var(--paper)}
 .dh-big-num{font-family:'FrauncesNum';font-size:62rpx;font-weight:700;letter-spacing:-0.01em}
 .dh-big-cent{font-family:'FrauncesNum';font-size:30rpx;font-weight:500;opacity:.75}
 .dh-delta{font-size:24rpx;margin-top:6rpx;display:inline-block;padding:2rpx 14rpx;border-radius:999rpx}
+.dh-delta-row{height:42rpx;overflow:hidden}
 .dh-delta.up{background:var(--goodbg);color:var(--good)}
 .dh-delta.down{background:var(--badbg);color:var(--bad)}
 .dh-delta.flat{background:var(--flatbg);color:var(--flat)}
@@ -154,8 +157,8 @@ page{background:var(--paper)}
 .dh-smalls{display:grid;grid-template-columns:repeat(5,1fr);gap:8rpx;margin-top:8rpx;padding-top:18rpx;border-top:1rpx solid var(--herogrid)}
 .dh-small{min-width:0;padding:12rpx 0;transition:opacity .3s}
 .dh-small.dim{opacity:.28}
-.dh-sl{font-size:20rpx;color:var(--herosub);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
-.dh-sv{font-family:'FrauncesNum';font-size:30rpx;font-weight:700;color:var(--heroink);margin-top:4rpx;font-variant-numeric:tabular-nums;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.dh-sl{font-size:20rpx;color:var(--herosub);line-height:26rpx;height:52rpx;overflow:hidden;overflow-wrap:anywhere}
+.dh-sv{font-family:'FrauncesNum';font-size:27rpx;font-weight:700;color:var(--heroink);margin-top:8rpx;font-variant-numeric:tabular-nums;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
 .dh-sub{font-size:19rpx;color:var(--herosub);margin-top:4rpx;display:flex;align-items:center;gap:4rpx;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
 .dh-dot{width:10rpx;height:10rpx;border-radius:50%;background:var(--herolive);display:inline-block}
 .dh-sd{font-size:19rpx;margin-top:2rpx;white-space:nowrap}

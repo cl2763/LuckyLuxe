@@ -5,6 +5,8 @@
 // ⚠️ 正式上传/发布前,务必把这里改回 false!
 const USE_LOCAL_SANDBOX = false // 2026-10-03 体验版候选：连接境内生产 API；本机验收使用隔离项目副本
 const { realValue } = require('./placeholder-words.js')   // 11j 判据 A:占位词表两端同源(见该文件抬头)
+const requestLoading = require('./request-loading')
+const beginRequestLoading = () => typeof requestLoading.begin === 'function' ? requestLoading.begin() : (() => {})
 /* 本地沙盘地址(真机调试联通件,店主 08-23 立):
    - 开发者工具模拟器 = 跑在 Mac 上,127.0.0.1 就是 Mac,直连即可;
    - **真机调试/预览 = 跑在手机上,127.0.0.1 指的是手机自己**,永远连不到 Mac ——
@@ -126,11 +128,13 @@ function getAdminAuth() {
 }
 
 function setAdminAuth(auth) {
+  adminMeCache = null
   wx.setStorageSync(ADMIN_AUTH_KEY, Object.assign({}, auth, { apiBase: API_BASE }))
   return auth
 }
 
 function clearAdminAuth() {
+  adminMeCache = null
   wx.removeStorageSync(ADMIN_AUTH_KEY)
 }
 
@@ -201,11 +205,13 @@ function request(path, method = 'GET', data, _retried) {
     const auth = getAuth()
     const header = { 'content-type': 'application/json', 'x-tenant-id': tid }
     if (auth && auth.accessToken) header.authorization = `Bearer ${auth.accessToken}`
+    const finish = beginRequestLoading()
     wx.request({
       url: `${API_BASE}${path}`,
       method,
       data,
       header,
+      complete: finish,
       success(res) {
         if (res.statusCode >= 200 && res.statusCode < 300) return resolve(res.data)
         const err = res.data && res.data.error ? res.data.error : new Error('API request failed')
@@ -234,11 +240,13 @@ function adminRequest(path, method = 'GET', data) {
     if (auth && auth.accessToken) header.authorization = `Bearer ${auth.accessToken}`
     const fk = wx.getStorageSync('lucky_finance_key')
     if (fk) header['x-finance-key'] = fk
+    const finish = beginRequestLoading()
     wx.request({
       url: `${API_BASE}${path}`,
       method,
       data,
       header,
+      complete: finish,
       success(res) {
         if (res.statusCode >= 200 && res.statusCode < 300) return resolve(res.data)
         // 把 HTTP 状态码带出去:调用方要能区分「没登录/没权限」和「网络不通」
@@ -391,7 +399,7 @@ function toMiniBooking(booking) {
     /* 🔴 D70 合同⑤(店主 08-24):**售后不改写主状态** —— 后端不再回 AFTER_SALES,
        售后中的单主状态就是 COMPLETED。列表「售后」分组因此必须改按售后字段筛,
        不然这个分组会永远是空的(网页端同刀,四之九)。 */
-    status: (booking.afterSalesStatus ? 'after_sales' : statusMap[booking.status]) || '',   // 未知状态不硬塞「待服务」(会把单错分到别的筛选组;徽标句读后端 statusText)
+    status: (booking.afterSalesStatus ? 'after_sales' : (booking.status === 'COMPLETED' && !booking.payment ? 'pending_settlement' : statusMap[booking.status])) || '',
     paymentStatus: booking.status === 'PENDING_PAYMENT' ? 'pending' : 'paid',
     backendBookingId: booking.id,
     /* 屏 D2/D3(2026-08-10 核验轮修复):这个映射是**白名单**,后端 customerOrderBadges()
@@ -835,6 +843,8 @@ async function myBalance() {
 function getSandboxRoster() { return request('/sandbox/demo-roster') }
 async function sandboxLoginAs(userId) {
   const data = await request('/auth/wechat/mini-login', 'POST', { demoLogin: true, tenantId: currentTenant(), asUserId: userId })
+  // 演示身份切换会换顾客；全局订单缓存若沿用，会把上一人的订单显示给下一人。
+  wx.removeStorageSync('lucky_orders')
   setAuth(Object.assign({}, data.auth, { user: data.user, tenantId: currentTenant() }))
   wx.setStorageSync('lucky_member', Object.assign(miniMember(data.user), { _tenant: currentTenant() }))
   return data.user
@@ -969,12 +979,17 @@ async function financeUnlock(password, confirmPassword) {
   return d
 }
 
-async function adminMe() {
+let adminMeCache = null
+async function adminMe(force = false) {
+  const auth = getAdminAuth()
+  const token = auth && (auth.accessToken || auth.token)
+  if (!force && adminMeCache && adminMeCache.token === token && Date.now() - adminMeCache.at < 5000) return adminMeCache.value
   const data = await adminRequest('/admin/auth/me')
   if (data && data.admin && data.admin.role) wx.setStorageSync('lucky_admin_role', data.admin.role)
   /* D84 强制设置(图 v1.0):未设置旗标+后端句随 me 缓存,守卫零请求即时拦 */
   wx.setStorageSync('lucky_hours_unset', data && data.hoursUnset ? '1' : '')
   if (data && data.hoursGateText) wx.setStorageSync('lucky_hours_gate', JSON.stringify(data.hoursGateText))
+  adminMeCache = { token, at: Date.now(), value: data.admin }
   return data.admin
 }
 

@@ -1,4 +1,4 @@
-page{background:#fbf8f5}
+page{background:var(--paper)}
 .page{padding:20rpx 26rpx 60rpx}
 .ai{font-size:22rpx;color:#5c4630;line-height:1.6;background:#f6efe8;border:1rpx solid #eaded2;border-radius:14rpx;padding:16rpx 18rpx;margin-bottom:18rpx}
 .form{background:#fff;border:1rpx solid #e7ddd4;border-radius:18rpx;overflow:hidden}

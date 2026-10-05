@@ -757,11 +757,11 @@ Page({
           settlementId: sheet.id,
           code: s.code || sheet.code,
           url: r.url,
+          miniCodeUrl: r.miniCodePath ? `${api.API_BASE}${r.miniCodePath}` : '',
+          codeError: false,
           pushedText: r.pushedText || '',
           unbound: r.customerBound === false,
-          /* D64+D65 表达:组内多张标「第 n/N 张」;头条=本单到店支付(五步⑤现金数,flow 块后端算),
-             不再用价值总额当头条 */
-          // D68 L2 文案扫尽:用户可见处不出现「第 n/N 张」内部话术
+          // 组内多张显示序号；头条用后端到店支付额，不用价值总额。
           amountText: `${(s.groupTotal || 1) > 1 ? `服务确认单 ${s.groupIndex}/${s.groupTotal} · ` : ''}本单到店支付 ${s.flow ? s.flow.cashDueText : m(s.totalCents)}`,
           breakdownText: s.depositDeductCents
             ? `档位小计 ${m(s.subtotalCents)} − 已付定金 ${m(s.depositDeductCents)}`
@@ -773,8 +773,7 @@ Page({
       this.pollQr()
     } catch (e) {
       wx.showToast({ title: (e && e.message) || '出码失败', icon: 'none' })
-      /* D27 家族(扫雷批⑥类):qrFor 模式 onLoad 即出码,失败若立刻 back 会撞进场转场 → 冻死。
-         等转场走完再退;非纯出码模式留在页面即可。 */
+      /* qrFor 模式出码失败时等转场结束再返回，避免页面冻结。 */
       if (this._qrOnly) setTimeout(() => wx.navigateBack(), 700)
     }
   },
@@ -850,7 +849,7 @@ Page({
     if (this.data.bind.bound) { wx.showToast({ title: '该档案已绑定,无需绑定码', icon: 'none' }); return }
     try {
       const r = await api.adminPost(`/admin/customers/${encodeURIComponent(this.data.userId)}/bind-token`, {})
-      this.setData({ bindQr: { url: r.url, pagePath: r.pagePath, displayName: r.displayName, hint: r.hint, state: 'waiting', stateText: '等待顾客扫码绑定…' } })
+      this.setData({ bindQr: { url: r.url, pagePath: r.pagePath, miniCodeUrl: r.miniCodePath ? `${api.API_BASE}${r.miniCodePath}` : '', codeError: false, displayName: r.displayName, hint: r.hint, state: 'waiting', stateText: '等待顾客扫码绑定…' } })
       this.pollBind()
     } catch (e) {
       wx.showToast({ title: (e && e.message) || '绑定码生成失败', icon: 'none' })
@@ -878,8 +877,9 @@ Page({
     }, 2000)
   },
   closeBindCode() { clearTimeout(this._bindTimer); this.setData({ bindQr: null }) },
-  /* D30:签署码「打开链接」—— 沙盒直落签署页(与真码扫后同一落点);
-     真码上线后打开/复制两钮随占位一起撤(发版清单)。 */
+  qrImageError() { this.setData({ 'qr.codeError': true }) },
+  bindQrImageError() { this.setData({ 'bindQr.codeError': true }) },
+  /* 沙盒打开签署页入口；正式验收以真机扫码为准。 */
   openQrLink() {
     if (!this.data.qr) return
     wx.navigateTo({ url: `/pages/sign/index?merchant=1&code=${encodeURIComponent(this.data.qr.code)}` })

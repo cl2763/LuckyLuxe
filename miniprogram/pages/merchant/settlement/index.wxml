@@ -286,8 +286,10 @@
   <view wx:if="{{bindQr}}" class="qsheet">
     <view class="qtitle">出示绑定码 · {{bindQr.displayName}}</view>
     <view class="qnewc">{{bindQr.hint}}</view>
-    <view class="qrbox"><view class="qrph">沙盒占位码
-(上线换 wxacode 真码)</view></view>
+    <view class="qrbox">
+      <image wx:if="{{bindQr.miniCodeUrl && !bindQr.codeError}}" class="qrimg" src="{{bindQr.miniCodeUrl}}" mode="aspectFit" binderror="bindQrImageError" />
+      <view wx:else class="qrph">绑定码暂不可用，请联系平台检查小程序码配置</view>
+    </view>
     <!-- 店主 2026-08-12 小改:链接文本删除,只留两钮(打开/复制) -->
     <view class="qbtns">
       <view class="qbtn dark" catchtap="openBindLink">打开链接</view>
@@ -305,8 +307,8 @@
     <view class="qnewc" wx:if="{{qr.unbound}}">新客 · 尚未绑定档案——请顾客扫码签署(扫码即自动建立绑定)</view>
     <view class="qpushed" wx:if="{{qr.pushedText}}">{{qr.pushedText}}</view>
     <view class="qcode">
-      <view class="qph">二维码</view>
-      <view class="qphs">沙盒占位 · 发版接微信小程序码后显示真码</view>
+      <image wx:if="{{qr.miniCodeUrl && !qr.codeError}}" class="qrimg" src="{{qr.miniCodeUrl}}" mode="aspectFit" binderror="qrImageError" />
+      <view wx:else class="qphs">签署码暂不可用，请联系平台检查小程序码配置</view>
     </view>
     <view class="qno">{{qr.code}}</view>
     <view class="qamt">{{qr.amountText}}</view>

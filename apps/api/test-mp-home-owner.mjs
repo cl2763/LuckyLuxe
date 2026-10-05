@@ -241,9 +241,9 @@ check('⑲ 员工首页待办里 0 个「打卡」节点(它只在那道门里)'
 const wxssD178 = readFileSync(join(ROOT, 'miniprogram/pages/merchant/home/index.wxss'), 'utf8')
 check('㉑ 五个小数**严格一行五列**(图 line 69;她截图里是两行 3+2)',
   /\.dh-smalls\{[^}]*grid-template-columns:repeat\(5,1fr\)/.test(wxssD178))
-check('㉑b 五个小数不许折行(长金额靠缩字号 + 省略号,不是换行)',
+check('㉑b 五列位置不变,标题可占两行且数值仍单行省略',
   /\.dh-sv\{[^}]*white-space:nowrap[^}]*text-overflow:ellipsis/.test(wxssD178)
-  && /\.dh-sl\{[^}]*white-space:nowrap/.test(wxssD178))
+  && /\.dh-sl\{[^}]*height:52rpx[^}]*overflow-wrap:anywhere/.test(wxssD178))
 check('㉑c 大数字**三段式**:币码 / 主数 / 分位,三个节点三个字号(图 line 51–52)',
   /dh-big-code/.test(wxml) && /dh-big-num/.test(wxml) && /dh-big-cent/.test(wxml)
   /* 字号那三条:D181 之后前面多了 `font-family:'FrauncesNum';`,所以不锚「规则开头就是 font-size」,

@@ -1,4 +1,4 @@
-page{background:#fbf8f5}
+page{background:var(--paper)}
 .page{padding:24rpx 26rpx 60rpx}
 .ps{font-size:22rpx;color:#8c8279;margin-bottom:18rpx;line-height:1.6}.seg {display:flex;background:#efe7dd;border-radius:999rpx;padding:5rpx;margin-bottom:20rpx}.seg-b {flex:1;text-align:center;font-size:27rpx;font-weight:700;padding:16rpx 0;border-radius:999rpx;color:#2d2826;background:#fff;border:1rpx solid #2d2826}
 .seg-b.on{background:#2d2826;color:#fff;border-color:#2d2826}
