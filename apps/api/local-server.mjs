@@ -10465,7 +10465,7 @@ async function route(req, res) {
     let nextSignUrl=''
     if(row.status==='signed'&&row.group_id){
       const next=db.prepare("SELECT * FROM settlements WHERE group_id=? AND tenant_id=? AND user_id=? AND status='pending_sign' ORDER BY rowid LIMIT 1").get(row.group_id,row.tenant_id,row.user_id)
-      if(next){let nextToken=activeSignToken(next.id);if(!nextToken||new Date(nextToken.expires_at).getTime()<=Date.now())nextToken=issueSignToken(next,{actor:'group-continuation'});nextSignUrl=signTokenUrl(nextToken.token)}
+      if(next){let nextToken=activeSignToken(next.id);if(!nextToken||new Date(nextToken.expires_at).getTime()<=Date.now())nextToken=issueSignToken(next,{actor:'group-continuation'});nextSignUrl=signTokenUrl(nextToken.token).replace(/^https?:\/\/[^/]+/,'')}
     }
     return json(res, 200, { code: row.code, url: signTokenUrl(token), settlement: serializeSettlement(row),nextSignUrl },{'cache-control':'no-store'})
   }

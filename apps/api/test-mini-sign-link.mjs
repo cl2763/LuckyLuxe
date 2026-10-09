@@ -16,6 +16,9 @@ function setup({sandbox=false,fail=false,scene='',base='http://127.0.0.1:4349',l
 let t=setup();await t.page.onLoad({code:'A%2F01'})
 check('小程序按本人单号换取短时链接',t.calls[0]==='A/01'&&t.page.data.url==='https://app.example.test/sign?t=short-lived-test-token&theme=dark')
 check('正式环境保留后端给出的门店域名',t.titles[0]?.title==='服务确认单'&&!t.page.data.url.includes('127.0.0.1'))
+for (const host of ['www.luckyluxeatelier.com','app.jingshengyouji.com']) {
+ t=setup({base:'https://api.jingshengyouji.com',link:'https://'+host+'/sign?t=short'});await t.page.onLoad({code:'A'});check('正式签署使用已验证业务域名 '+host,t.page.data.url==='https://api.jingshengyouji.com/sign?t=short&theme=dark')
+}
 t=setup({sandbox:true});await t.page.onLoad({code:'A'})
 check('沙箱只替换域名并保留签署凭据',t.page.data.url==='http://127.0.0.1:4349/sign?t=short-lived-test-token&theme=dark')
 t=setup({sandbox:true,base:'https://api.jingshengyouji.com/experience',link:'https://api.jingshengyouji.com/experience/sign?t=short-lived-test-token'});await t.page.onLoad({code:'A'})

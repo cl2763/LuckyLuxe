@@ -15,7 +15,8 @@ function signWebUrl(raw) {
   const plain = String(raw || '')
   const url = plain + (plain.includes('?') ? '&' : '?') + 'theme=' + theme.chromeOf().eff
   if (/^https?:\/\//i.test(url)) {
-    if (!api.SANDBOX) return url
+    const sameService = /^https:\/\/(?:www\.luckyluxeatelier\.com|app\.jingshengyouji\.com)(?:\/|$)/i.test(url) && api.API_BASE === 'https://api.jingshengyouji.com'
+    if (!api.SANDBOX && !sameService) return url
     const base = String(api.API_BASE).replace(/\/$/, '')
     const prefix = base.replace(/^https?:\/\/[^/]+/i, '')
     const targetPath = url.replace(/^https?:\/\/[^/]+/i, '')

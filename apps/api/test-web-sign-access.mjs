@@ -109,7 +109,8 @@ try{
  const firstLink=(await req(`/admin/settlements/${sheets[0].id}/sign-token`,{body:{}})).data.token
  check('连续签署第一单成功',(await req(`/settlements/${sheets[0].code}/sign`,{token:null,signToken:firstLink,body:signBody})).status===200)
  const continued=(await req('/settlements/by-token/'+firstLink,{token:null})).data
- const nextToken=new URL(continued.nextSignUrl).searchParams.get('t')
+ check('连续签署保留当前已验证业务域名',typeof continued.nextSignUrl==='string'&&continued.nextSignUrl.startsWith('/sign?')&&new URL(continued.nextSignUrl,base).origin===base)
+ const nextToken=new URL(continued.nextSignUrl,base).searchParams.get('t')
  const next=(await req('/settlements/by-token/'+nextToken,{token:null})).data
  check('第一单凭据只续到同顾客同组下一单',next.code===sheets[1].code)
  check('连续签署下一单成功',(await req(`/settlements/${next.code}/sign`,{token:null,signToken:nextToken,body:signBody})).status===200)

@@ -46,8 +46,7 @@ async function activeStoreId() {
 }
 const AUTH_KEY = 'lucky_mini_auth'
 const ADMIN_AUTH_KEY = 'lucky_admin_auth'
-/* F3 收敛(店主 2026-08-12 拍板②):等级梯子单源=后端下发 user.memberTiers(租户配置推导)。
-   本地梯子副本已删——四份实现之一;顾客看到的等级只能来自后端,前端不再自算。 */
+
 
 const localImageMap = {
   '/assets/images/nail-french.png': '/assets/images/nail-french.jpg',
