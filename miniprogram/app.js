@@ -94,9 +94,9 @@ App({
     }
   },
 
-  resolvePrivacyAuthorization() {
+  resolvePrivacyAuthorization(buttonId = 'lucky-luxe-login') {
     if (this.globalData.privacyResolve) {
-      this.globalData.privacyResolve({ event: 'agree', buttonId: 'lucky-luxe-login' })
+      this.globalData.privacyResolve({ event: 'agree', buttonId })
       this.globalData.privacyResolve = null
     }
     this.globalData.privacyReady = true

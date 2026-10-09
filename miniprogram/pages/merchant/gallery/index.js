@@ -1,7 +1,7 @@
 const api = require('../../../utils/api')
 
 Page({
-  data: { canCreate: false, seg: 0, showcase: [], items: [], pendingUpload: 0, pendingPublish: 0, loading: true },
+  data: { canCreate: false, seg: 0, showcase: [], items: [], pendingUpload: 0, pendingPublish: 0, loading: true, privacyPrompt: false, uploadId: '' },
 
   async onShow() {
     if (!api.guardMerchant()) return // 门禁:未登录/会话失效不渲染空壳,直接回登录页
@@ -61,11 +61,38 @@ Page({
 
   upload(e) {
     const id = e.currentTarget.dataset.id
+    if (!id) { wx.showToast({ title: '订单信息缺失，请刷新后重试', icon: 'none' }); return }
+    this.setData({ uploadId: id })
+    if (wx.getPrivacySetting) {
+      wx.getPrivacySetting({
+        success: (result) => {
+          if (result.needAuthorization) this.setData({ privacyPrompt: true })
+          else this.chooseWorkImages(id)
+        },
+        fail: () => this.chooseWorkImages(id)
+      })
+      return
+    }
+    this.chooseWorkImages(id)
+  },
+
+  onAgreePrivacyAuthorization() {
+    const app = typeof getApp === 'function' ? getApp() : null
+    if (app && app.resolvePrivacyAuthorization) app.resolvePrivacyAuthorization('gallery-privacy-agree')
+    const id = this.data.uploadId
+    this.setData({ privacyPrompt: false, uploadId: '' })
+    if (id) this.chooseWorkImages(id)
+  },
+
+  closePrivacyPrompt() { this.setData({ privacyPrompt: false, uploadId: '' }) },
+  openPrivacyPolicy() { require('../../../utils/nav').to('/pages/privacy/index') },
+
+  chooseWorkImages(id) {
     wx.chooseMedia({
       count: 6, mediaType: ['image'], sizeType: ['compressed'],
       success: (res) => {
         const paths = (res.tempFiles || []).map((f) => f.tempFilePath).filter(Boolean)
-        if (!paths.length) return
+        if (!paths.length) { wx.showToast({ title: '没有选到图片，请重试', icon: 'none' }); return }
         wx.showLoading({ title: '处理中…' })
         const fs = wx.getFileSystemManager()
         const toDataUrl = (p) => new Promise((resolve) => {
@@ -73,6 +100,7 @@ Page({
         })
         Promise.all(paths.map(toDataUrl)).then(async (urls) => {
           const imgs = urls.filter(Boolean)
+          if (!imgs.length) { wx.hideLoading(); wx.showToast({ title: '读取图片失败，请重试', icon: 'none' }); return }
           const item = this.data.items.find((x) => x.id === id)
           const merged = (item && item.state !== 'published' ? item.images : []).concat(imgs).slice(0, 6)
           try {
@@ -80,7 +108,11 @@ Page({
             wx.hideLoading(); wx.showToast({ title: '已添加作品图', icon: 'none' })
             this.load()
           } catch (err) { wx.hideLoading(); wx.showToast({ title: (err && err.message) || '上传失败', icon: 'none' }) }
-        })
+        }).catch((err) => { wx.hideLoading(); wx.showToast({ title: (err && err.message) || '处理图片失败', icon: 'none' }) })
+      },
+      fail: (err) => {
+        if (/cancel/i.test(String(err && err.errMsg))) return
+        wx.showToast({ title: '无法打开选图，请检查相册权限', icon: 'none' })
       }
     })
   },
