@@ -4,7 +4,7 @@ const { currentTheme, setTheme, themeClass } = require('../../../utils/theme')
 const THEME_LABEL = { system: '跟随系统', light: '浅色', dark: '深色' }
 
 Page({
-  data: { themeClass: '', themeLabel: '跟随系统', shopName: '', displayName: '', role: '', account: '', financeOn: false, financeLockEnabled: false, isOwnerRole: false, subText: '', subWarn: false },
+  data: { themeClass: '', themeLabel: '跟随系统', shopName: '', displayName: '', role: '', account: '', financeOn: false, financeLockEnabled: false, financeSettingsLoaded: false, isOwnerRole: false, subText: '', subWarn: false },
 
   onShow() {
     if (!api.guardMerchant()) return
@@ -29,10 +29,7 @@ Page({
   },
 
   async load() {
-    this.setData({ financeOn: !!(api.getFinanceKey && api.getFinanceKey()) })
-    api.adminGet('/admin/finance/lock-settings')
-      .then((st) => this.setData({ financeLockEnabled: !!st.enabled }))
-      .catch(() => {})
+    this.setData({ financeOn: !!(api.getFinanceKey && api.getFinanceKey()), financeSettingsLoaded: false })
     try {
       const m = await api.adminMe()
       const isOwner = m.role === 'owner' || m.role === 'boss'
@@ -50,6 +47,10 @@ Page({
       })
       // 套餐状态角标:临期/宽限醒目提示,长期有效不打扰
       if (isOwner) {
+        try {
+          const st = await api.adminGet('/admin/finance/lock-settings')
+          this.setData({ financeLockEnabled: !!st.enabled, financeSettingsLoaded: true })
+        } catch (e) { /* 保留未知状态，不能把读取失败显示成未启用。 */ }
         try {
           const s = await api.adminGet('/admin/subscription')
           if (s.status === 'expiring') this.setData({ subText: `${s.daysLeft} 天后到期`, subWarn: true })
@@ -93,9 +94,10 @@ Page({
      这里是小程序侧的开关:未启用 → 设一个新密码开启;已启用 → 改密或关闭,两者都要验当前密码。
      忘记密码走平台重置(与网页 V4 卡文案一致)。 */
   async finance() {
-    if (!this.data.isOwnerRole) { wx.navigateTo({ url: '/pages/merchant/finance/index' }); return }
-    let st = { enabled: false, configured: false }
-    try { st = await api.adminGet('/admin/finance/lock-settings') } catch (e) { /* 读不到按未启用处理 */ }
+    if (!this.data.isOwnerRole) { wx.showToast({ title: '仅老板可管理财务密码', icon: 'none' }); return }
+    let st
+    try { st = await api.adminGet('/admin/finance/lock-settings') }
+    catch (e) { wx.showToast({ title: '财务设置读取失败，请重试', icon: 'none' }); return }
     const items = st.enabled ? ['修改财务密码', '关闭财务密码', '进入财务页'] : ['启用财务密码', '进入财务页']
     wx.showActionSheet({
       itemList: items,
@@ -135,7 +137,7 @@ Page({
       try {
         await api.adminPut('/admin/finance/lock-settings', { enabled, currentPassword, newPassword })
         if (api.clearFinanceKey) api.clearFinanceKey()
-        this.setData({ financeOn: false, financeLockEnabled: enabled })
+        this.setData({ financeOn: false, financeLockEnabled: enabled, financeSettingsLoaded: true })
         wx.showToast({ title: enabled ? (needCurrent ? '密码已修改' : '已启用财务密码') : '已关闭财务密码', icon: 'none' })
       } catch (e) {
         wx.showToast({ title: (e && e.message) || '操作失败', icon: 'none' })

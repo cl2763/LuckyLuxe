@@ -1,0 +1,118 @@
+[
+  {
+    "bodyBg": "rgb(250, 248, 243)",
+    "brand": "#b09468",
+    "hero": "#2a2521",
+    "ink": "#241f1a",
+    "paper": "#faf8f3",
+    "path": "/",
+    "textLen": 319
+  },
+  {
+    "bodyBg": "rgb(250, 248, 243)",
+    "brand": "#b09468",
+    "hero": "#2a2521",
+    "ink": "#241f1a",
+    "paper": "#faf8f3",
+    "path": "/admin",
+    "textLen": 143,
+    "theme": "light"
+  },
+  {
+    "bodyBg": "rgb(250, 248, 243)",
+    "brand": "#b09468",
+    "hero": "#2a2521",
+    "ink": "#241f1a",
+    "paper": "#faf8f3",
+    "path": "/platform",
+    "textLen": 88,
+    "theme": "light"
+  },
+  {
+    "bodyBg": "rgb(250, 248, 243)",
+    "brand": "#b09468",
+    "hero": "#2a2521",
+    "ink": "#241f1a",
+    "paper": "#faf8f3",
+    "path": "/share",
+    "textLen": 50,
+    "theme": "light"
+  },
+  {
+    "bodyBg": "rgb(250, 248, 243)",
+    "brand": "#b09468",
+    "hero": "#2a2521",
+    "ink": "#241f1a",
+    "paper": "#faf8f3",
+    "path": "/wechat-simulator",
+    "textLen": 885
+  },
+  {
+    "bodyBg": "rgb(241, 238, 230)",
+    "brand": "#b09468",
+    "hero": "#2a2521",
+    "ink": "#241f1a",
+    "paper": "#faf8f3",
+    "path": "/sign/DE-20260404-APD7",
+    "textLen": 24,
+    "theme": "light"
+  },
+  {
+    "bodyBg": "rgb(250, 248, 243)",
+    "brand": "#b09468",
+    "hero": "#2a2521",
+    "ink": "#241f1a",
+    "paper": "#faf8f3",
+    "path": "/",
+    "textLen": 319
+  },
+  {
+    "bodyBg": "rgb(26, 21, 18)",
+    "brand": "#d3b483",
+    "hero": "#15130f",
+    "ink": "#f0e7da",
+    "paper": "#1a1512",
+    "path": "/admin",
+    "textLen": 170,
+    "theme": "dark"
+  },
+  {
+    "bodyBg": "rgb(250, 248, 243)",
+    "brand": "#b09468",
+    "hero": "#2a2521",
+    "ink": "#241f1a",
+    "paper": "#faf8f3",
+    "path": "/platform",
+    "textLen": 88,
+    "theme": "light"
+  },
+  {
+    "bodyBg": "rgb(26, 21, 18)",
+    "brand": "#d3b483",
+    "hero": "#15130f",
+    "ink": "#f0e7da",
+    "paper": "#1a1512",
+    "path": "/share",
+    "textLen": 50,
+    "theme": "dark"
+  },
+  {
+    "bodyBg": "rgb(250, 248, 243)",
+    "brand": "#b09468",
+    "hero": "#2a2521",
+    "ink": "#241f1a",
+    "paper": "#faf8f3",
+    "path": "/wechat-simulator",
+    "textLen": 885
+  },
+  {
+    "bodyBg": "rgb(34, 28, 23)",
+    "brand": "#d3b483",
+    "hero": "#15130f",
+    "ink": "#f0e7da",
+    "paper": "#1a1512",
+    "path": "/sign/DE-20260404-APD7",
+    "textLen": 24,
+    "theme": "dark"
+  }
+]

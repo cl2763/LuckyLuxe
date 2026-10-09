@@ -10,7 +10,6 @@ Page({
   },
 
   openPoses() { if (this.data.canCreate && api.guardMerchant()) require('../../../utils/nav').to('/pages/pose/list/index') },
-  openRetouch() { if (this.data.canCreate && api.guardMerchant()) require('../../../utils/nav').to('/pages/pose/retouch/index') },
 
   onSeg(e) { this.setData({ seg: Number(e.currentTarget.dataset.i) }) },
 

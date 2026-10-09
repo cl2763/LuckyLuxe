@@ -1,33 +1,33 @@
-page{background:#faf6f2}
+page{background:var(--paper)}
 .pg{padding:24rpx 24rpx 60rpx}
 
 /* 顶部一行:我的可用积分 + 次级入口「明细」(店主 08-24:商城页只留这一处余额) */
 .bal{display:flex;align-items:center;justify-content:space-between;padding:6rpx 4rpx 20rpx}
-.bal-l{color:#6b615b;font-size:26rpx;font-weight:600}
-.bal-v{color:#2d2826;font-size:40rpx;font-weight:850;margin-left:8rpx}
-.bal-r{color:#8a5a2b;font-size:24rpx;font-weight:700;padding:8rpx 4rpx}
+.bal-l{color:var(--sub);font-size:26rpx;font-weight:600}
+.bal-v{color:var(--ink);font-size:40rpx;font-weight:850;margin-left:8rpx}
+.bal-r{color:var(--brandd);font-size:24rpx;font-weight:700;padding:8rpx 4rpx}
 
 /* 明细(次级):点开才出,收起不占版面 */
 .hist{padding:20rpx 24rpx;margin-bottom:22rpx}
-.hrow{display:flex;justify-content:space-between;color:#6b615b;font-size:24rpx;padding:6rpx 0}
-.hsep{height:1rpx;background:#eee2d6;margin:12rpx 0}
+.hrow{display:flex;justify-content:space-between;color:var(--sub);font-size:24rpx;padding:6rpx 0}
+.hsep{height:1rpx;background:var(--wall);margin:12rpx 0}
 .list{}
-.li{display:flex;align-items:center;justify-content:space-between;padding:14rpx 0;border-bottom:1rpx solid #f2e8dd}
+.li{display:flex;align-items:center;justify-content:space-between;padding:14rpx 0;border-bottom:1rpx solid var(--line)}
 .li:last-child{border-bottom:0}
-.li-t{color:#342b28;font-size:25rpx;font-weight:650}
-.li-d{color:#a3968c;font-size:21rpx;margin-top:4rpx}
+.li-t{color:var(--ink);font-size:25rpx;font-weight:650}
+.li-d{color:var(--sub);font-size:21rpx;margin-top:4rpx}
 .li-v{font-size:26rpx;font-weight:800}
-.li-v.up{color:#2f7a52}
-.li-v.down{color:#8a5a2b}
+.li-v.up{color:var(--good)}
+.li-v.down{color:var(--brandd)}
 
 /* 主体:商品(奖品)卡 */
-.prize{display:flex;align-items:center;justify-content:space-between;gap:16rpx;background:#fff;border:1rpx solid #efe3d6;border-radius:20rpx;padding:22rpx 24rpx;margin-bottom:16rpx}
+.prize{display:flex;align-items:center;justify-content:space-between;gap:16rpx;background:var(--card);border:1rpx solid var(--line);border-radius:20rpx;padding:22rpx 24rpx;margin-bottom:16rpx}
 .pinfo{min-width:0}
-.pname{color:#2d2826;font-size:28rpx;font-weight:800}
-.pmeta{color:#9a8b80;font-size:22rpx;margin-top:6rpx}
+.pname{color:var(--ink);font-size:28rpx;font-weight:800}
+.pmeta{color:var(--sub);font-size:22rpx;margin-top:6rpx}
 .pbtn{flex:none;text-align:right}
-.pcost{color:#8a5a2b;font-size:26rpx;font-weight:800}
-.pgo{margin-top:10rpx;padding:10rpx 22rpx;border-radius:999rpx;background:#2d2826;color:#fff;font-size:23rpx;font-weight:700}
-.pgo.dis{background:#e6dbd0;color:#a3968c}
+.pcost{color:var(--brandd);font-size:26rpx;font-weight:800}
+.pgo{margin-top:10rpx;padding:10rpx 22rpx;border-radius:999rpx;background:var(--hero);color:var(--heroink);font-size:23rpx;font-weight:700}
+.pgo.dis{background:var(--wall);color:var(--sub)}
 
-.empty{color:#9a8b80;font-size:24rpx;text-align:center;padding:40rpx 0}
+.empty{color:var(--sub);font-size:24rpx;text-align:center;padding:40rpx 0}

@@ -11,18 +11,18 @@ page{background:var(--paper)}
 .hero{background:linear-gradient(135deg,var(--hero),var(--hero2));border-radius:24rpx;padding:26rpx 28rpx;margin-bottom:16rpx}
 .h-row{display:flex;justify-content:space-between;gap:12rpx}
 .h-item{flex:1;min-width:0}
-.h-l{font-size:21rpx;color:#d8c3a6}
-.h-n{font-size:36rpx;font-weight:700;color:#e8c9a0;margin-top:4rpx}
-.h-est{font-size:21rpx;color:#cbbfae;margin-top:12rpx}
-.rings{display:flex;justify-content:space-around;border-top:1rpx solid #5b4f42;margin-top:18rpx;padding-top:20rpx}
+.h-l{font-size:21rpx;color:var(--brandd)}
+.h-n{font-size:36rpx;font-weight:700;color:var(--brandd);margin-top:4rpx}
+.h-est{font-size:21rpx;color:var(--sub);margin-top:12rpx}
+.rings{display:flex;justify-content:space-around;border-top:1rpx solid var(--line);margin-top:18rpx;padding-top:20rpx}
 .ring{text-align:center;width:150rpx}
 .ring-c{width:118rpx;height:118rpx;border-radius:50%;margin:0 auto;display:flex;align-items:center;justify-content:center}
-.ring-i{width:90rpx;height:90rpx;border-radius:50%;background:#3a332c;display:flex;align-items:center;justify-content:center;font-size:24rpx;font-weight:700;color:#e8c9a0}
-.ring-i.done{color:#8fd0a8}
-.ring-l{font-size:21rpx;color:#d8c3a6;margin-top:8rpx}
-.ring-s{font-size:18rpx;color:#a89a88;margin-top:2rpx}
-.h-daily{font-size:21rpx;color:#cbbfae;margin-top:14rpx;text-align:center}
-.h-edit{color:#e8c9a0;text-decoration:underline}
+.ring-i{width:90rpx;height:90rpx;border-radius:50%;background:var(--hero);display:flex;align-items:center;justify-content:center;font-size:24rpx;font-weight:700;color:var(--herogold)}
+.ring-i.done{color:var(--good)}
+.ring-l{font-size:21rpx;color:var(--brandd);margin-top:8rpx}
+.ring-s{font-size:18rpx;color:var(--sub);margin-top:2rpx}
+.h-daily{font-size:21rpx;color:var(--sub);margin-top:14rpx;text-align:center}
+.h-edit{color:var(--brandd);text-decoration:underline}
 /* AI 智能总结 */
 .aibox{background:linear-gradient(135deg,var(--card),var(--wall));border:1rpx solid var(--line);border-radius:20rpx;padding:20rpx 24rpx;margin-bottom:16rpx}
 .ai-h{font-size:23rpx;font-weight:700;color:var(--brandd);margin-bottom:10rpx}

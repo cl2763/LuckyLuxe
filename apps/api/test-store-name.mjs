@@ -126,6 +126,25 @@ check('①c 反向守:扫描面没缩水(文件数下限 200;文件搬走导致"
 
 /* ===== ②③④ 全部从数据现取,零业务字面量 ===== */
 const DB = process.env.TEST_DB_PATH || join(ROOT, 'apps/api/local-data/lucky-luxe.sqlite')
+const BASE_URL = process.env.TEST_BASE_URL || 'http://127.0.0.1:4128'
+const TOKEN = process.env.OWNER_TOKEN || process.env.OWNER_DEMO_TOKEN || requireOwnerToken()
+if (process.env.TEST_DB_PATH && existsSync(DB) && await isTestTarget(BASE_URL)) {
+  await assertTestTarget(BASE_URL)
+  // 新鲜 CI 库不自动生成演示门店；本套件从平台正门补齐自己的隔离夹具。
+  // 不修改服务启动策略，也不依赖其他套件恰好先创建过门店。
+  if (process.env.TEST_DB_PATH) {
+    const inspect = new DatabaseSync(DB, { readOnly: true })
+    const count = Number(inspect.prepare('SELECT COUNT(*) AS n FROM tenants t JOIN stores s ON s.tenant_id=t.id AND s.is_active=1').get().n)
+    inspect.close()
+    for (let i = count; i < 3; i += 1) {
+      const made = await fetch(`${BASE_URL}/platform/tenants`, {
+        method: 'POST', headers: { authorization: `Bearer ${TOKEN}`, 'content-type': 'application/json' },
+        body: JSON.stringify({ id: `name-ci-${process.pid}-${i}`, name: `店名隔离夹具${i}`, plan: 'single', currency: 'CNY', timezone: 'Asia/Shanghai', city: `测试地址${i}` }),
+      })
+      if (made.status !== 201) throw new Error(`店名夹具创建失败: HTTP ${made.status}`)
+    }
+  }
+}
 if (!existsSync(DB)) {
   console.log(`⚠️  [store-name] 取不到库 ${DB} —— **②③④ 本轮未跑**(不是通过)`)
 } else {
@@ -223,8 +242,6 @@ check('④f2 小程序「我的」那行不再回落到人名/编出来的店铺
 
 /* ═══ ④g/④h 行为层:接口真的按店给出各自的名字 ═══
    现取,零业务字面量;跑不成就明说「本轮未跑」,不冒充通过(静默失败器族的反面)。 */
-const BASE_URL = process.env.TEST_BASE_URL || 'http://127.0.0.1:4128'
-const TOKEN = process.env.OWNER_TOKEN || process.env.OWNER_DEMO_TOKEN || requireOwnerToken()
 const meOf = async (tenantId) => fetch(`${BASE_URL}/admin/auth/me`, {
   headers: { authorization: `Bearer ${TOKEN}`, 'x-admin-tenant-id': tenantId },
 }).then((r) => (r.ok ? r.json() : null)).catch(() => null)

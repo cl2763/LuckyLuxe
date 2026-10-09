@@ -80,6 +80,19 @@ export function isProductionEnv(env = process.env) {
   return env.NODE_ENV === 'production' || Boolean(env.RAILWAY_ENVIRONMENT)
 }
 
+/** 体验部署的身份边界；在此集中读取 Railway 环境名。 */
+export function isExperienceEnv(env = process.env) {
+  return env.RAILWAY_ENVIRONMENT_NAME === 'experience'
+}
+
+/** QR target is independent of runtime hardening: Railway experience also runs NODE_ENV=production.
+ * Trial requires both an explicit experience deployment and its isolated sandbox volume.
+ * Never change production authentication/migration gates to select a QR target. */
+export function miniCodeScope(dataScope, env = process.env) {
+  if (isExperienceEnv(env) && dataScope === 'sandbox') return 'experience'
+  return isProductionEnv(env) ? 'production' : dataScope
+}
+
 /* ══ 🔴 `treatAsReal()` —— 裁#90 的「或」用在「要不要动真库」上(店主 09r §三 批)══
  *
  * 立件:两条**一次性迁移**(`backfillTenantKindOnce` / `retireLegacyDemoArchives`)
@@ -114,7 +127,7 @@ export function treatAsReal({ dataDir = '', env = process.env } = {}) {
 export function demoLoginAllowed({ dataDir = '', env = process.env } = {}) {
   /* 专用体验环境使用独立 sandbox 卷；Railway 本身也设置 RAILWAY_ENVIRONMENT，
      因此只能按明确的环境名、库域和开关三重限定放行。production 环境绝不走这里。 */
-  if (env.RAILWAY_ENVIRONMENT_NAME === 'experience'
+  if (isExperienceEnv(env)
     && scopeOf(dataDir, env) === 'sandbox'
     && env.ALLOW_DEMO_ADMIN_LOGIN === 'true') return true
   if (isProductionEnv(env)) return false                    // ① 环境变量说是生产 → 关

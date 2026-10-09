@@ -19,6 +19,7 @@ Page({
     activeStatus: 'all',
     showTabs: true,
     orders: [],
+    loading: true,
     pendingSign: [], // D57 待签署置顶卡
     loadError: ''
   },
@@ -49,10 +50,17 @@ Page({
 
   switchStatus(event) {
     this.setData({ activeStatus: event.currentTarget.dataset.status })
-    this.refresh()
+    this.filterOrders()
+  },
+
+  filterOrders() {
+    const all = this._orders || []
+    this.setData({ orders: this.data.activeStatus === 'all' ? all : all.filter(o => o.status === this.data.activeStatus) })
   },
 
   async refresh() {
+    const serial = this._serial = (this._serial || 0) + 1
+    this.setData({ loading: true, loadError: '' })
     const lang = i18n.getLang()
     const t = i18n.pageCopy('orders', lang)
     i18n.applyTabBar(lang)
@@ -62,13 +70,16 @@ Page({
         lang,
         t,
         tabs: tabs.map((item) => Object.assign({}, item, { label: t[item.labelKey] })),
-        orders: []
+        orders: [], pendingSign: [], loading: false
       })
+      this._orders = []
       return
     }
-    let sourceOrders = []
+    let sourceOrders = [], pendingSign = []
+    const pendingRequest = api.getMyPendingSign().then(r => r.pendingSign || []).catch(() => [])
     try {
-      sourceOrders = await api.getBookings(lang)
+      ;[sourceOrders, pendingSign] = await Promise.all([api.getBookings(lang), pendingRequest])
+      if (serial !== this._serial) return
       if (sourceOrders.length) storage.setOrders(sourceOrders)
       this.setData({ loadError: '' })
     } catch (error) {
@@ -77,8 +88,7 @@ Page({
     }
     /* D57(店主 08-21 批②尾清):待签单置顶卡——列出**全部**未签单(不止最新一张,
        即时开单没挂预约的也在);点卡直达签署页;签完/撤回自然消失。拉不到不挡订单列表。 */
-    let pendingSign = []
-    try { pendingSign = (await api.getMyPendingSign()).pendingSign || [] } catch (e) { /* 未登录/网络失败不挡列表 */ }
+    if (serial !== this._serial) return
     const orders = sourceOrders.map((item) => {
       const service = item.service || (item.serviceInfo && { name: item.serviceInfo.serviceName, type: item.serviceInfo.serviceType, duration: item.serviceInfo.duration }) || {} // mock 清除:同 me 页
       const localizedService = i18n.localizeService(service, lang)
@@ -89,7 +99,9 @@ Page({
         serviceImage: service.image || item.serviceImage || ''   // 裁定二同族:空值交渲染层占位,不回落环境照
       })
     })
+    this._orders = orders
     this.setData({
+      loading: false,
       lang,
       t,
       pendingSign,

@@ -16,13 +16,13 @@
     </view>
     <view wx:elif="{{dhState==='failed'}}" class="dh-card" data-dh-state="failed">
       <view class="dh-truth">业绩数据暂时取不到</view>
-      <view class="dh-retry" bindtap="loadPulse">下拉重试 · 或稍后再看</view>
+      <view class="dh-retry" hover-class="tap-feedback" bindtap="loadPulse">下拉重试 · 或稍后再看</view>
     </view>
     <block wx:else>
       <!-- 🔴 D168 段 4:整块改成**深色英雄块**(图 §一)。原来是白卡片黑字。 -->
       <view class="dh-hero" data-dh-state="ready" data-dh-hero>
         <view class="dh-periods" data-dh-periods>
-          <view wx:for="{{dh.periods}}" wx:key="key" class="dh-period {{item.on?'on':''}}"
+          <view wx:for="{{dh.periods}}" wx:key="key" class="dh-period {{item.on?'on':''}}" hover-class="tap-feedback"
                 data-p="{{item.key}}" bindtap="switchPeriod">{{item.label}}</view>
         </view>
         <view class="dh-eyebrow">{{dh.headLabel}}</view>
@@ -35,16 +35,17 @@
           <text class="dh-big-code" wx:if="{{dh.headParts.code}}">{{dh.headParts.code}}</text><text class="dh-big-num">{{dh.headParts.amount}}</text><text class="dh-big-cent" wx:if="{{dh.headParts.cents}}">{{dh.headParts.cents}}</text>
         </view>
         <view class="dh-delta-row"><view wx:if="{{dh.headDelta}}" class="dh-delta {{dh.headDelta.tone}}" data-delta>{{dh.headDelta.arrow}} {{dh.headDelta.text}}</view></view>
-        <!-- 🔴 D182(夜班令6 段 9):折线按图 —— **渐变填充 + 金色描边 + 末点圆环**。
-             小程序 WXML 没有 SVG,所以用 `<canvas type="2d">` 画。
-             柱形**保底不拆**:canvas 拿不到上下文(旧基础库/渲染异常)时回落到柱,
-             页面上永远有一条走势可看(店主 05u 裁「柱形保底不许拆」)。 -->
-        <view class="dh-spark" data-dh-spark>
-          <canvas wx:if="{{sparkCanvas}}" type="2d" id="dhSpark" class="dh-canvas" data-dh-canvas></canvas>
-          <block wx:else>
-            <view wx:for="{{dh.sparkBars}}" wx:key="i" class="dh-bar" style="height:{{item}}%"></view>
-          </block>
-        </view>
+        <view class="dh-trend-caption">{{dh.sparkCaption}}<text wx:if="{{dh.sparkWidth > 650}}"> · 左右滑动查看</text></view>
+        <scroll-view scroll-x class="dh-trend-scroll">
+          <view class="dh-trend-inner" style="width:{{dh.sparkWidth}}rpx">
+            <view class="dh-trend-values"><text wx:for="{{dh.sparkTicks}}" wx:key="tickId">{{item.value}}</text></view>
+            <view class="dh-spark" data-dh-spark>
+              <canvas wx:if="{{sparkCanvas}}" type="2d" id="dhSpark" class="dh-canvas" data-dh-canvas></canvas>
+              <block wx:else><view wx:for="{{dh.sparkBars}}" wx:key="i" class="dh-bar" style="height:{{item}}%"></view></block>
+            </view>
+            <view class="dh-trend-dates"><view class="dh-trend-tick" wx:for="{{dh.sparkTicks}}" wx:key="tickId"><text>{{item.label}}</text><text wx:if="{{item.labelEnd}}">–{{item.labelEnd}}</text></view></view>
+          </view>
+        </scroll-view>
         <!-- dots:5 个,点一下换指标;轮播 6 秒自己走一格(图 §一) -->
         <view class="dh-dots {{dhPaused?'paused':''}}" data-dh-dots data-dh-paused="{{dhPaused}}">
           <view wx:for="{{dh.dots}}" wx:key="key" class="dh-dot-i {{item.on?'on':''}}"
@@ -71,7 +72,7 @@
       <view class="dh-card dh-ai" wx:if="{{dh.aiLine}}" data-dh-ai-line>{{dh.aiLine}}</view>
       <view class="dh-card dh-ai" wx:else data-dh-ai-none>
         <view>{{briefLoading ? '正在生成今日简报…' : '今天还没有 AI 日报摘要'}}</view>
-        <view class="dh-go" wx:if="{{!briefLoading && aiEnabled}}" bindtap="generateBrief">生成 AI 日报 ›</view>
+        <view class="dh-go" hover-class="tap-feedback" wx:if="{{!briefLoading && aiEnabled}}" bindtap="generateBrief">生成 AI 日报 ›</view>
       </view>
 
       <!-- 今日预约:此刻之后前 3 条 + 看全部 -->
@@ -86,7 +87,7 @@
           </view>
           <view wx:if="{{!dh.next3.length}}" class="dh-empty">后面没有待到店的了</view>
         </block>
-        <view class="dh-go" bindtap="goOrders">看全部 ›</view>
+        <view class="dh-go" hover-class="tap-feedback" bindtap="goOrders">看全部 ›</view>
       </view>
 
       <!-- 今日要处理:0 不出现,全 0 换一句;顾客在等的两项标红排前 -->
@@ -104,7 +105,7 @@
         </view>
       </view>
       <view class="sec">快捷功能</view>
-      <view class="retouch-shortcut" role="button" bindtap="openRetouch">AI 快速修图 <text>›</text></view>
+      <view class="retouch-shortcut" role="button" hover-class="tap-feedback" bindtap="scanMemberCode">扫顾客会员码 <text>›</text></view>
     </block>
   </block>
 
@@ -114,7 +115,7 @@
     <!-- ① 没打卡:大屏位置只有一个钮 + 今天的班次一句 -->
     <view wx:if="{{gate.state==='gate'}}" class="dh-card clock-gate" data-clock-gate>
       <view class="clock-shift" data-clock-shift>{{shiftLine}}</view>
-      <view class="clock-btn" bindtap="clockIn" data-clock-in>上班打卡</view>
+      <view class="clock-btn" hover-class="tap-feedback" bindtap="clockIn" data-clock-in>上班打卡</view>
       <view class="clock-hint">打完卡,业绩大屏在这里出现</view>
       <!-- 打卡失败:钮不收起,底下说清原因,**不进大屏** -->
       <view wx:if="{{clockErr}}" class="clock-err" data-clock-err>{{clockErr}}</view>
@@ -176,7 +177,7 @@
     </view>
 
     <view class="sec">快捷功能</view>
-    <view class="retouch-shortcut" role="button" bindtap="openRetouch">AI 快速修图 <text>›</text></view>
+    <view class="retouch-shortcut" role="button" hover-class="tap-feedback" bindtap="scanMemberCode">扫顾客会员码 <text>›</text></view>
 
     <!-- 快捷格取消(图 §一/§二 都写了:底部导航四键还在,首页不再摆快捷格) -->
   </block>

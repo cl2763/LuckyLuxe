@@ -30,7 +30,9 @@
     "pages/sandbox-identity/index",
     "pages/card-pack/index",
     "pages/mall/index",
-    "pages/about/index"
+    "pages/about/index",
+    "pages/privacy/index",
+    "pages/booking-draft/index"
   ],
   "subPackages": [
     {
@@ -79,15 +81,15 @@
         "migration-balance/index",
         "migration-gift/index",
         "migration-service/index",
-        "migration-reconciliation/index"
+        "migration-reconciliation/index",
+        "booking-draft/index"
       ]
     },
     {
       "root": "pages/pose",
       "pages": [
         "list/index",
-        "detail/index",
-        "retouch/index"
+        "detail/index"
       ]
     }
   ],
@@ -123,7 +125,7 @@
     ]
   },
   "style": "v2",
-  "__usePrivacyCheck__": false,
+  "__usePrivacyCheck__": true,
   "sitemapLocation": "sitemap.json",
   "darkmode": true
 }

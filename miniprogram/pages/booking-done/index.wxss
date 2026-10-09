@@ -17,8 +17,8 @@
   display: flex;
   align-items: center;
   justify-content: center;
-  background: #c6a27e;
-  color: #fff;
+  background: var(--brand);
+  color: var(--hero);
   font-size: 58rpx;
   font-weight: 800;
 }
@@ -39,8 +39,8 @@
   justify-content: space-between;
   gap: 24rpx;
   padding: 20rpx 0;
-  border-bottom: 1rpx solid #f0e8e1;
-  color: #5e514b;
+  border-bottom: 1rpx solid var(--line);
+  color: var(--sub);
 }
 
 .summary-row:last-child {
@@ -50,7 +50,7 @@
 .summary-row text:last-child {
   max-width: 390rpx;
   text-align: right;
-  color: #3a2e2a;
+  color: var(--ink);
 }
 
 .success-actions {

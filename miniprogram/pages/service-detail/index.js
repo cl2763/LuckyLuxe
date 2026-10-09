@@ -6,29 +6,44 @@ const api = require('../../utils/api')
 Page({
   data: {
     service: null,
+    loading: true,
+    loadFailed: false,
+    missing: false,
     lang: 'zh',
     t: i18n.pageCopy('detail', 'zh')
   },
 
   onLoad(options) {
-    this.serviceId = options.id
-    this.refresh()
+    this.serviceId = options.id || ''
   },
 
   onShow() {
     ensureCurrencyCached()
     this.setData({ cur: curOf() })   // 币种跟门店走,不写死 ${curOf().p}${curOf().s}
 
-    if (this.serviceId) this.refresh()
+    this.refresh()
   },
 
   async refresh() {
+    if (this._loading) return this._loading
+    this._loading = this.loadService()
+    try { await this._loading } finally { this._loading = null }
+  },
+
+  async loadService() {
     const lang = i18n.getLang()
+    this.setData({ loading: true, loadFailed: false, missing: false, lang, t: i18n.pageCopy('detail', lang) })
     i18n.applyTabBar(lang)
-    const service = i18n.localizeService(await api.getService(this.serviceId, lang), lang)
+    let service
+    try {
+      const raw = this.serviceId ? await api.getService(this.serviceId, lang) : null
+      service = raw ? i18n.localizeService(raw, lang) : null
+    } catch (error) {
+      this.setData({ loading: false, loadFailed: true, service: null })
+      return
+    }
     if (!service) {
-      wx.showToast({ title: i18n.pageCopy('booking', lang).missing, icon: 'none' })
-      setTimeout(() => wx.navigateBack(), 600)
+      this.setData({ loading: false, missing: true, service: null })
       return
     }
     const isNail = service.type === 'nail'
@@ -43,10 +58,15 @@ Page({
       ? (service.priceExplanationEn || (isNail ? 'Displayed price is the base service price. Complex designs, extensions, removal, special materials, 3D charms, or heavy rhinestones require manual quotation.' : 'Lash services use fixed pricing. Selected add-ons will be shown before checkout and become the final quote.'))
       : (service.priceExplanationZh || (isNail ? '显示价格为基础服务价。复杂手绘、延长、卸甲、特殊材料、3D 装饰或大面积钻饰需要人工报价。' : '美睫款式为固定报价。加项会在结算前明确显示，确认后即为最终报价。'))
     wx.setNavigationBarTitle({ title: service.name })
-    this.setData({ service, lang, t: i18n.pageCopy('detail', lang) })
+    this.setData({ service, loading: false, lang, t: i18n.pageCopy('detail', lang) })
+  },
+
+  toServices() {
+    wx.switchTab({ url: '/pages/services/index', fail: () => wx.showToast({ title: '返回失败，请重试', icon: 'none' }) })
   },
 
   goBooking() {
+    if (!this.data.service) return
     wx.navigateTo({
       url: `/pages/booking/index?id=${this.data.service._id}`
     })
@@ -54,6 +74,7 @@ Page({
 
   addDraftToCart() {
     const service = this.data.service
+    if (!service) return
     storage.addCartItem({
       type: 'service',
       serviceId: service._id,

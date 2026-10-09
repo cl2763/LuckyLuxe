@@ -1,6 +1,6 @@
 // 2026-08-03 套餐与续费:档位与定价**以 Youji Pricing 定价页为唯一口径**(免费版/单店版/工作室版/连锁版/定制版),
 // 当前档位高亮,其他档位可「申请变更」(走 plan_change_requests,平台后台处理);续费按当前档位定价。
-// 自动续费 v1=意向+提醒;支付未配置时订单生成后走客服;本地沙盘 WXPAY_MOCK=1 可模拟支付。
+// 续费提醒 v1=申请+提醒;正式环境只记录平台核对的线下收款;沙盘 WXPAY_MOCK=1 可模拟。
 const api = require('../../../utils/api')
 
 function money(c) { return '¥' + Math.round((c || 0) / 100).toString().replace(/\B(?=(\d{3})+(?!\d))/g, ',') }
@@ -49,8 +49,8 @@ Page({
       const st = STATUS_TEXT[d.status] || STATUS_TEXT.active
       let alertText = ''
       if (d.status === 'expiring') alertText = `套餐还有 ${d.daysLeft} 天到期,续费后到期日顺延,不浪费一天`
-      if (d.status === 'grace') alertText = '套餐已到期,处于宽限期;续费即恢复,数据不会丢'
-      if (d.status === 'suspended') alertText = '套餐已停用,数据保留 90 天;续费即全量恢复'
+      if (d.status === 'grace') alertText = '套餐已到期,处于宽限期;请核对授权状态'
+      if (d.status === 'suspended') alertText = '套餐已停用，请核对授权状态'
       const req = d.latestPlanRequest
       const pendingReq = req && req.status === 'PENDING'
         ? `已提交${req.requestType === 'renew' ? '续费' : '档位变更'}申请(${fmtDate(req.createdAt)}),平台会尽快联系你`
@@ -87,7 +87,7 @@ Page({
           title: `${o.plan === 'ai_addon' ? 'AI 智能包' : ''}${o.period === 'month' ? '月付' : '年付'}${o.plan === 'ai_addon' ? '' : '续费'}`,
           date: fmtDate(o.paidAt || o.createdAt),
           amount: money(o.amountCents),
-          statusText: o.status === 'paid' ? '已支付' : '待支付',
+          statusText: o.status === 'paid' ? '已入账' : '待核对',
           pending: o.status !== 'paid'
         }))
       })
@@ -124,139 +124,4 @@ Page({
   },
 
   // 申请免费试用:不即时开通,生成申请落到平台后台,由我们联系商家配置后发放
-  aiTrial() {
-    const that = this
-    wx.showModal({
-      title: '申请 3 个月免费试用',
-      content: 'AI 智能包需要按你门店的项目、价格和话术做一次配置。提交申请后我们会尽快联系你,配置完成即开通,试用期 3 个月不收费。',
-      confirmText: '提交申请',
-      success: async (res) => {
-        if (!res.confirm) return
-        try {
-          await api.adminPost('/admin/subscription/ai-trial', {})
-          wx.showToast({ title: '申请已提交,我们会尽快联系你', icon: 'none', duration: 2500 })
-          that.load()
-        } catch (err) {
-          wx.showToast({ title: (err && err.message) || '提交失败', icon: 'none' })
-        }
-      },
-      fail: (e) => console.warn('[showModal fail]', e) // S组卫生批:fail=开发者域错误,console 留痕不弹 UI(toast 会撞转场,D27 家族)
-    })
-  },
-
-  async aiSubscribe(e) {
-    const period = e.currentTarget.dataset.p === 'month' ? 'month' : 'year'
-    const that = this
-    try {
-      const r = await api.adminPost('/admin/subscription/ai-subscribe', { period })
-      if (r.payment === 'mock') {
-        wx.showModal({
-          title: '模拟支付(沙盘)',
-          content: `模拟支付 ${money(r.order.amountCents)} 开通 AI 智能包?生产环境此处为微信支付。`,
-          confirmText: '模拟支付',
-          success: async (res) => {
-            if (!res.confirm) { that.load(); return }
-            try {
-              const p = await api.adminPost(`/admin/subscription/orders/${r.order.id}/mock-pay`, {})
-              wx.showToast({ title: `已开通至 ${fmtDate(p.aiExpiresAt)}`, icon: 'none', duration: 2500 })
-              that.load()
-            } catch (err) { wx.showToast({ title: (err && err.message) || '支付失败', icon: 'none' }) }
-          },
-          fail: (e) => console.warn('[showModal fail]', e) // S组卫生批:fail=开发者域错误,console 留痕不弹 UI(toast 会撞转场,D27 家族)
-        })
-      } else {
-        wx.showModal({
-          title: '订单已生成',
-          content: `AI 智能包订单 ${money(r.order.amountCents)} 已创建,平台确认收款后自动开通。请联系客服完成付款,订单号:${r.order.id.slice(-8)}。`,
-          showCancel: false,
-          fail: (e) => console.warn('[showModal fail]', e) // S组卫生批:fail=开发者域错误,console 留痕不弹 UI(toast 会撞转场,D27 家族)
-        })
-        this.load()
-      }
-    } catch (err) {
-      wx.showToast({ title: (err && err.message) || '下单失败', icon: 'none' })
-    }
-  },
-
-  setPeriod(e) {
-    const period = e.currentTarget.dataset.p
-    const p = this._prices
-    this.setData({ period, payText: p ? money(period === 'month' ? p.monthCents : p.yearCents) : '' })
-  },
-
-  async toggleAuto() {
-    const next = !this.data.autoRenew
-    try {
-      await api.adminRequest('/admin/subscription/auto-renew', 'PATCH', { enabled: next })
-      this.setData({ autoRenew: next })
-      wx.showToast({ title: next ? '已开启:到期前自动生成续费单并提醒' : '已关闭:到期仅提醒', icon: 'none' })
-    } catch (err) {
-      wx.showToast({ title: (err && err.message) || '操作失败', icon: 'none' })
-    }
-  },
-
-  reqChange(e) {
-    const { plan, name } = e.currentTarget.dataset
-    const that = this
-    wx.showModal({
-      title: '申请变更档位',
-      content: `申请把套餐变更为「${name}」?提交后平台会联系你确认功能与费用,确认前现有服务不受影响。`,
-      confirmText: '提交申请',
-      success: async (res) => {
-        if (!res.confirm) return
-        try {
-          await api.adminPost('/admin/tenant/plan/change-request', { targetPlan: plan, note: '小程序端申请' })
-          wx.showToast({ title: '已提交,平台会尽快联系你', icon: 'none', duration: 2200 })
-          that.load()
-        } catch (err) {
-          wx.showToast({ title: (err && err.message) || '提交失败', icon: 'none' })
-        }
-      },
-      fail: (e) => console.warn('[showModal fail]', e) // S组卫生批:fail=开发者域错误,console 留痕不弹 UI(toast 会撞转场,D27 家族)
-    })
-  },
-
-  async renew() {
-    if (this._paying) return
-    if (this.data.noPrice) {
-      wx.showModal({ title: '无需自助续费', content: '免费版永久免费;定制版为按需报价,续费请直接联系客服。', showCancel: false,
-  fail: (e) => console.warn('[showModal fail]', e) // S组卫生批:fail=开发者域错误,console 留痕不弹 UI(toast 会撞转场,D27 家族)
-})
-      return
-    }
-    this._paying = true
-    try {
-      const r = await api.adminPost('/admin/subscription/renew', { period: this.data.period })
-      if (r.payment === 'mock') {
-        const that = this
-        wx.showModal({
-          title: '模拟支付(沙盘)',
-          content: `模拟支付 ${money(r.order.amountCents)} 并顺延到期日?生产环境此处为微信支付。`,
-          confirmText: '模拟支付',
-          success: async (res) => {
-            if (!res.confirm) { that.load(); return }
-            try {
-              const p = await api.adminPost(`/admin/subscription/orders/${r.order.id}/mock-pay`, {})
-              wx.showToast({ title: `续费成功,有效期至 ${fmtDate(p.expiresAt)}`, icon: 'none', duration: 2500 })
-              that.load()
-            } catch (err) { wx.showToast({ title: (err && err.message) || '支付失败', icon: 'none' }) }
-          },
-          fail: (e) => console.warn('[showModal fail]', e) // S组卫生批:fail=开发者域错误,console 留痕不弹 UI(toast 会撞转场,D27 家族)
-        })
-      } else {
-        wx.showModal({
-          title: '订单已生成',
-          content: `续费订单 ${money(r.order.amountCents)} 已创建,平台确认收款后自动顺延到期日。请联系客服完成付款,订单号:${r.order.id.slice(-8)}。iPhone 如无法支付属苹果虚拟支付限制,同样走客服通道。`,
-          showCancel: false,
-          confirmText: '知道了',
-          fail: (e) => console.warn('[showModal fail]', e) // S组卫生批:fail=开发者域错误,console 留痕不弹 UI(toast 会撞转场,D27 家族)
-        })
-        this.load()
-      }
-    } catch (err) {
-      wx.showToast({ title: (err && err.message) || '下单失败', icon: 'none' })
-    } finally {
-      this._paying = false
-    }
-  }
 })

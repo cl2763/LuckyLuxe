@@ -31,6 +31,19 @@ window.SettlementWeb = (function () {
     rvDraft: null, rvPanel: null,
     preview: null, view: null, pendingSheets: [], signLink: null
   }
+  let signPollTimer = null
+  async function pollSignState() {
+    clearTimeout(signPollTimer)
+    if (!state.open || !state.pendingSheets.length) return
+    try {
+      const checks = await Promise.all(state.pendingSheets.map(sheet => state._deps.request(`/admin/settlements/${encodeURIComponent(sheet.id)}/sign-state`)))
+      if (!state.open) return
+      const remaining = state.pendingSheets.filter((sheet, i) => checks[i]?.state !== 'signed')
+      if (!remaining.length) { state._deps.toast('顾客已签署，全部完成'); close(); return }
+      if (remaining.length !== state.pendingSheets.length) { state.pendingSheets = remaining; state.signLink = null; render() }
+    } catch { /* 网络抖动时保留待签状态，下一轮重试 */ }
+    signPollTimer = setTimeout(pollSignState, 2500)
+  }
 
   function newGroup(tierDefault, firstCat) {
     return {
@@ -149,7 +162,7 @@ window.SettlementWeb = (function () {
       if (state.bookingId) {
         const r = await request(`/admin/settlements?bookingId=${encodeURIComponent(state.bookingId)}`).catch(function () { return null })
         const pending = ((r && r.settlements) || []).filter(function (x) { return x.status === 'pending_sign' })
-        if (pending.length) { state.pendingSheets = pending; render() }
+        if (pending.length) { state.pendingSheets = pending; render(); pollSignState() }
       }
     } catch (e) {
       toast((e && e.message) || '加载价目表失败')
@@ -158,7 +171,7 @@ window.SettlementWeb = (function () {
     }
   }
 
-  function close() { state.open = false; render(); if (state._deps && state._deps.onClose) state._deps.onClose() }
+  function close() { clearTimeout(signPollTimer); state.open = false; render(); if (state._deps && state._deps.onClose) state._deps.onClose() }
 
   /* ===== 渲染(块序照小程序屏序;金额句全部来自后端 preview) ===== */
   function render() {
@@ -198,7 +211,7 @@ window.SettlementWeb = (function () {
         </div>
         ${state.pendingSheets.length ? `
           <div class="sw-pending">该预约已有待签单 ${state.pendingSheets.length} 张 —— 等待顾客核对签署；要改单先撤回。
-            ${state.pendingSheets.map(function (sheet) { return `<div class="sw-pending-row"><code>${escapeHtml(sheet.code)}</code> 待签 <button type="button" class="ghost slim" data-sw-sign-link="${escapeHtml(sheet.id)}">生成顾客签署链接</button></div>` }).join('')}
+            ${state.pendingSheets.map(function (sheet) { return `<div class="sw-pending-row"><code>${escapeHtml(sheet.code)}</code> 待签 <span class="sw-mut">结算经手账号：${escapeHtml(sheet.operatorText || '历史未记录')}</span><button type="button" class="ghost slim" data-sw-sign-link="${escapeHtml(sheet.id)}">生成顾客签署链接</button></div>` }).join('')}
           </div>` : ''}
         ${state.signLink ? `<div class="sw-card"><b>顾客签署链接</b><p>${escapeHtml(state.signLink.note)}</p><input class="sw-in full" data-sw-sign-url readonly value="${escapeHtml(state.signLink.url)}"><button class="ghost slim" data-sw-sign-copy type="button">复制链接</button> <a data-sw-sign-open href="${escapeHtml(state.signLink.url)}" target="_blank" rel="noopener noreferrer">打开签署页</a><p class="sw-mut">请交给本单顾客核对并签字。重新生成会使旧链接失效。</p></div>` : ''}
         ${state.groups.map(function (g, gi) { return renderGroup(g, gi, escapeHtml) }).join('')}
@@ -745,6 +758,7 @@ window.SettlementWeb = (function () {
     try {
       const r = await request('/admin/settlements', { method: 'POST', body: JSON.stringify(buildBody(state)) })
       state.pendingSheets = r.settlements || []
+      pollSignState()
       toast(`待签结算单已生成(${state.pendingSheets.length} 张)—— 顾客侧签署,签字那一刻才记账`)
       /* D97(01t 设计回归恢复):结算完成 → 写小记环节(可跳过;跳过自动进「待写小记」清单) */
       if (window.ServiceNoteModal && state.userId) {

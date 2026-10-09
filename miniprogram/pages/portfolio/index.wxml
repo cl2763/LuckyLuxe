@@ -1,4 +1,7 @@
 <view class="page portfolio-page {{themeClass}}">
+  <view wx:if="{{loading}}" class="page-loading"><view class="loading-spinner"></view><text>{{lang === 'en' ? 'Loading work…' : '正在加载作品…'}}</text></view>
+  <view wx:elif="{{loadError}}" class="wall-empty" bindtap="refresh">{{loadError}}</view>
+  <block wx:else>
   <!-- 方案B(2026-07-20 店主定稿):技师头像条 + 动态品类筛选 + 全店作品墙 -->
 
   <!-- 技师头像条:第一格=全店,其余按作品数排序 -->
@@ -25,39 +28,32 @@
     </block>
   </scroll-view>
 
-  <!-- 作品墙:双列瀑布流,每卡带品类角标+技师+同款直达 -->
   <view wx:if="{{!empty}}" class="wall">
-    <view class="wall-col">
-      <block wx:for="{{col0}}" wx:key="id">
-        <view class="work-card">
-          <view class="work-visual-wrap" bindtap="onWork" data-id="{{item.id}}">
-            <image wx:if="{{item.image}}" class="work-visual" src="{{item.image}}" mode="widthFix"></image>
-            <text wx:if="{{item.catLabel}}" class="work-cat">{{item.catLabel}}</text>
-          </view>
-          <view class="work-meta">
-            <view class="work-tech-avatar">{{item.technician.name[0]}}</view>
-            <text class="work-tech-name">{{item.technician.name}}</text>
-            <text class="work-book" bindtap="bookStyle" data-id="{{item.id}}">{{lang === 'en' ? 'Book ›' : '同款 ›'}}</text>
-          </view>
-        </view>
-      </block>
-    </view>
-    <view class="wall-col">
-      <block wx:for="{{col1}}" wx:key="id">
-        <view class="work-card">
-          <view class="work-visual-wrap" bindtap="onWork" data-id="{{item.id}}">
-            <image wx:if="{{item.image}}" class="work-visual" src="{{item.image}}" mode="widthFix"></image>
-            <text wx:if="{{item.catLabel}}" class="work-cat">{{item.catLabel}}</text>
-          </view>
-          <view class="work-meta">
-            <view class="work-tech-avatar">{{item.technician.name[0]}}</view>
-            <text class="work-tech-name">{{item.technician.name}}</text>
-            <text class="work-book" bindtap="bookStyle" data-id="{{item.id}}">{{lang === 'en' ? 'Book ›' : '同款 ›'}}</text>
-          </view>
-        </view>
-      </block>
+    <view wx:for="{{albums}}" wx:key="id" wx:for-item="album" class="work-card">
+      <view class="work-visual-wrap" bindtap="onWork" data-id="{{album.current.id}}">
+        <image wx:if="{{album.current.image}}" class="work-visual" src="{{album.current.image}}" mode="aspectFill" />
+        <text wx:if="{{album.current.catLabel}}" class="work-cat">{{album.current.catLabel}}</text>
+        <button wx:if="{{album.works.length > 1}}" size="mini" class="photo-arrow photo-prev" disabled="{{album.offset === 0}}" catchtap="moveThumbnails" data-id="{{album.id}}" data-step="-1" aria-label="{{lang === 'en' ? 'Previous photo' : '上一张'}}">‹</button>
+        <button wx:if="{{album.works.length > 1}}" size="mini" class="photo-arrow photo-next" disabled="{{album.offset + 1 >= album.works.length}}" catchtap="moveThumbnails" data-id="{{album.id}}" data-step="1" aria-label="{{lang === 'en' ? 'Next photo' : '下一张'}}">›</button>
+        <text wx:if="{{album.works.length > 1}}" class="photo-count">{{album.offset + 1}} / {{album.works.length}}</text>
+      </view>
+      <view class="work-meta"><text class="work-tech-name">{{album.current.technician.name}}</text><text class="work-book" bindtap="bookStyle" data-id="{{album.current.id}}">{{lang === 'en' ? 'Book ›' : '同款 ›'}}</text></view>
     </view>
   </view>
 
   <view wx:if="{{empty}}" class="wall-empty">{{t.emptyText}}</view>
+  </block>
+  <view wx:if="{{preview}}" class="work-preview">
+    <button size="mini" class="preview-close" bindtap="closePreview">{{lang === 'en' ? 'Close' : '关闭'}}</button>
+    <movable-area class="preview-area">
+      <movable-view class="preview-mover" direction="all" scale scale-min="1" scale-max="4">
+        <image wx:if="{{preview.image}}" class="preview-image" src="{{preview.image}}" mode="aspectFit" bindload="previewLoaded" binderror="previewFailed" />
+      </movable-view>
+    </movable-area>
+    <view wx:if="{{previewLoading}}" class="preview-status page-loading"><view class="loading-spinner"></view><text>{{lang === 'en' ? 'Loading photo…' : '正在加载图片…'}}</text></view>
+    <button wx:if="{{previewError}}" class="preview-status" bindtap="retryPreview">{{lang === 'en' ? 'Photo failed. Retry' : '图片加载失败，重试'}}</button>
+    <button wx:if="{{previewTotal > 1}}" size="mini" class="photo-arrow photo-prev preview-arrow" disabled="{{previewIndex === 0}}" bindtap="movePreview" data-step="-1" aria-label="{{lang === 'en' ? 'Previous photo' : '上一张'}}">‹</button>
+    <button wx:if="{{previewTotal > 1}}" size="mini" class="photo-arrow photo-next preview-arrow" disabled="{{previewIndex + 1 >= previewTotal}}" bindtap="movePreview" data-step="1" aria-label="{{lang === 'en' ? 'Next photo' : '下一张'}}">›</button>
+    <view class="preview-caption">{{previewIndex + 1}} / {{previewTotal}} · {{preview.technician.name}} · {{lang === 'en' ? 'Pinch to zoom' : '双指缩放查看'}}</view>
+  </view>
 </view>

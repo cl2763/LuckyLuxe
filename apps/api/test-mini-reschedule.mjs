@@ -1,6 +1,6 @@
 import { readFileSync } from 'node:fs'
 import vm from 'node:vm'
-const source=readFileSync(new URL('../../miniprogram/utils/order-actions.js',import.meta.url),'utf8')
+const source=readFileSync(new URL('../../miniprogram/pages/merchant/order-actions.js',import.meta.url),'utf8')
 let calls=[],modals=[],reject=false,pending
 const api={adminGet:async()=>({bookings:[]}),adminPost:async(path,body)=>{calls.push({path,body});if(reject)throw Error('时段已被占用');if(pending)await pending}}
 const sandbox={module:{exports:{}},require:()=>api,wx:{showToast(){},showModal(o){modals.push(o)}},console}

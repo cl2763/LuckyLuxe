@@ -1,48 +1,51 @@
 page{background:var(--paper)}
 .page{padding:16rpx 26rpx 60rpx}
-.empty{text-align:center;color:#8c8279;font-size:24rpx;padding:80rpx 0}
-.gtitle{font-size:24rpx;color:#9b7655;font-weight:600;margin:22rpx 4rpx 12rpx}
-.card{background:#fff;border:1rpx solid #e7ddd4;border-radius:16rpx;overflow:hidden}
-.row{display:flex;align-items:center;padding:24rpx 22rpx;border-bottom:1rpx solid #f1e7df}
+.empty{text-align:center;color:var(--sub);font-size:24rpx;padding:80rpx 0}
+.gtitle{font-size:24rpx;color:var(--brandd);font-weight:600;margin:22rpx 4rpx 12rpx}
+.card{background:var(--card);border:1rpx solid var(--line);border-radius:16rpx;overflow:hidden}
+.row{display:flex;align-items:center;padding:24rpx 22rpx;border-bottom:1rpx solid var(--line)}
 .row:last-child{border-bottom:none}
-.k{font-size:25rpx;color:#8c8279;flex:0 0 120rpx}
-.v{flex:1;font-size:25rpx;color:#2d2826;text-align:right;margin-right:10rpx}
-.arr{color:#c8b8a8;font-size:30rpx}
-.hint{font-size:21rpx;color:#b6a99b;line-height:1.6;margin:10rpx 4rpx 0}
-.hrow{display:flex;align-items:center;padding:18rpx 22rpx;border-bottom:1rpx solid #f1e7df;gap:12rpx}
+.k{font-size:25rpx;color:var(--sub);flex:0 0 120rpx}
+.v{flex:1;font-size:25rpx;color:var(--ink);text-align:right;margin-right:10rpx}
+.arr{color:var(--sub);font-size:30rpx}
+.hint{font-size:21rpx;color:var(--sub);line-height:1.6;margin:10rpx 4rpx 0}
+.hrow{display:flex;align-items:center;padding:18rpx 22rpx;border-bottom:1rpx solid var(--line);gap:12rpx}
 .hrow:last-child{border-bottom:none}
-.day{font-size:25rpx;color:#2d2826;flex:0 0 90rpx}
+.day{font-size:25rpx;color:var(--ink);flex:0 0 90rpx}
 .tp{flex:0 0 auto}
-.tpv{font-size:24rpx;color:#9b7655;background:#fbf8f5;border:1rpx solid #e7ddd4;border-radius:10rpx;padding:6rpx 16rpx}
-.dash{color:#b6a99b}
-.rest{flex:1;font-size:24rpx;color:#b6a99b}
+.tpv{font-size:24rpx;color:var(--brandd);background:var(--paper);border:1rpx solid var(--line);border-radius:10rpx;padding:6rpx 16rpx}
+.dash{color:var(--sub)}
+.rest{flex:1;font-size:24rpx;color:var(--sub)}
 .sw{transform:scale(.72);margin-left:auto;flex:0 0 auto}
-.srow{display:flex;align-items:center;padding:20rpx 22rpx;border-bottom:1rpx solid #f1e7df}
+.srow{display:flex;align-items:center;padding:20rpx 22rpx;border-bottom:1rpx solid var(--line)}
 .sinfo{flex:1;min-width:0}
-.sdate{font-size:25rpx;color:#2d2826;font-weight:600}
-.stext{font-size:22rpx;color:#8c8279;margin-left:12rpx}
-.del{font-size:22rpx;color:#a34c48}
-.none{text-align:center;color:#b6a99b;font-size:22rpx;padding:24rpx 0}
-.add{text-align:center;color:#9b7655;font-size:24rpx;padding:22rpx 0;border-top:1rpx dashed #e7ddd4}
-.note{font-size:22rpx;color:#8c8279;line-height:1.6;padding:20rpx 22rpx}
+.sdate{font-size:25rpx;color:var(--ink);font-weight:600}
+.stext{font-size:22rpx;color:var(--sub);margin-left:12rpx}
+.del{font-size:22rpx;color:var(--bad)}
+.none{text-align:center;color:var(--sub);font-size:22rpx;padding:24rpx 0}
+.add{text-align:center;color:var(--brandd);font-size:24rpx;padding:22rpx 0;border-top:1rpx dashed var(--line)}
+.note{font-size:22rpx;color:var(--sub);line-height:1.6;padding:20rpx 22rpx}
 
 /* 预约规则:线上定金开关 */
 .rulerow{display:flex;align-items:center;gap:16rpx;padding:6rpx 0 14rpx}
 .ruleinfo{flex:1;min-width:0}
-.rulename{font-size:27rpx;font-weight:700;color:#2d2826;padding:20rpx 22rpx 4rpx}
-.ruledesc{font-size:21rpx;color:#8c8279;margin-top:4rpx;line-height:1.5;padding:0 22rpx}
-.rtog{width:88rpx;height:48rpx;border-radius:999rpx;background:#e5ddd3;position:relative;transition:.2s;flex:none}
+.rulename{font-size:27rpx;font-weight:700;color:var(--ink);padding:20rpx 22rpx 4rpx}
+.ruledesc{font-size:21rpx;color:var(--sub);margin-top:4rpx;line-height:1.5;padding:0 22rpx}
+.rtog{width:88rpx;height:48rpx;border-radius:999rpx;background:var(--wall);position:relative;transition:.2s;flex:none}
 .rtog .rdot{position:absolute;left:6rpx;top:6rpx;width:36rpx;height:36rpx;border-radius:50%;background:#fff;transition:.2s}
-.rtog.on{background:#1f7a4d}
+.rtog.on{background:var(--good)}
 .rtog.on .rdot{left:46rpx}
 
 /* 批④ S7:定金摘要逐行(7 项关键值)——只读展示,不做编辑器 */
 /* D99(01t):照本页 .row 行规格给呼吸(24rpx 行距 + 22rpx 左右),不再顶边挤行 */
-.drow{display:flex;align-items:flex-start;justify-content:space-between;gap:20rpx;padding:20rpx 22rpx;border-bottom:1rpx solid #f2ece5}
+.drow{display:flex;align-items:flex-start;justify-content:space-between;gap:20rpx;padding:20rpx 22rpx;border-bottom:1rpx solid var(--line)}
 .drow:last-of-type{border-bottom:0}
-.dk{color:#8a7f78;font-size:24rpx;flex:none}
-.dv{color:#2d2826;font-size:24rpx;font-weight:650;text-align:right}
+.dk{color:var(--sub);font-size:24rpx;flex:none}
+.dv{color:var(--ink);font-size:24rpx;font-weight:650;text-align:right}
 
 /* 31m:通知与回访入口行 */
 .navrow { display: flex; justify-content: space-between; align-items: center; padding: 22rpx 24rpx; font-size: 26rpx; }
-.navrow .arrow { color: #b3b3ae; font-size: 30rpx; }
+.navrow .arrow { color: var(--sub); font-size: 30rpx; }
+
+.store-code-card { padding:24rpx; }
+.store-code-image { width:430rpx; height:430rpx; max-width:100%; display:block; margin:24rpx auto; }

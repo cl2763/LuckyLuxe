@@ -1,19 +1,24 @@
 <view class="page {{themeClass}}">
   <view class="seg">
-    <view class="seg-i {{mode==='today'?'on':''}}" data-m="today" bindtap="switchMode">今日台面</view>
-    <view class="seg-i {{mode==='all'?'on':''}}" data-m="all" bindtap="switchMode">全部订单</view>
-    <view class="seg-i {{mode==='aftersales'?'on':''}}" data-m="aftersales" bindtap="switchMode">售后订单</view>
+    <view class="seg-i {{mode==='today'?'on':''}}" hover-class="tap-feedback" data-m="today" bindtap="switchMode">今日台面</view>
+    <view class="seg-i {{mode==='all'?'on':''}}" hover-class="tap-feedback" data-m="all" bindtap="switchMode">全部订单</view>
+    <view class="seg-i {{mode==='aftersales'?'on':''}}" hover-class="tap-feedback" data-m="aftersales" bindtap="switchMode">售后订单</view>
   </view>
 
+  <view class="draft-toolbar" wx:if="{{mode==='today'}}">
+    <button class="draft-entry" size="mini" hover-class="draft-entry-pressed" bindtap="createManualDraft"><text class="draft-plus">＋</text><text>预约草稿</text></button>
+    <text class="draft-hint">分享给顾客确认</text>
+  </view>
   <!-- ===== 今日台面:技师维度日视图 ===== -->
   <block wx:if="{{mode==='today'}}">
+    <view wx:if="{{dvLoading}}" class="dv-loading">正在更新台面与预约…</view>
     <view class="dv-datebar">
-      <view class="dv-nav" bindtap="dvPrev">‹</view>
+      <view class="dv-nav" hover-class="tap-feedback" bindtap="dvPrev">‹</view>
       <text class="dv-date">{{dv.dateText}}</text>
-      <view class="dv-nav" bindtap="dvNext">›</view>
+      <view class="dv-nav" hover-class="tap-feedback" bindtap="dvNext">›</view>
       <!-- D3/D4/D5(店主 2026-08-10 开检):当期就说「今天/本周」,非当期要说「返回今天/返回本周」——
        以前每一天都写着「今天」,翻到 8/03 那页按钮还叫「今天」,根本看不出自己在哪一天。 -->
-      <view class="dv-today {{dv.isToday ? 'cur' : ''}}" bindtap="dvToday">{{dv.isToday ? '今天' : '返回今天'}}</view>
+      <view class="dv-today {{dv.isToday ? 'cur' : ''}}" hover-class="tap-feedback" bindtap="dvToday">{{dv.isToday ? '今天' : '返回今天'}}</view>
     </view>
     <view class="dv-summary" wx:if="{{dv && !dv.isClosed}}">
       <view class="dv-pill"><text>今日订单</text><text class="b">{{dv.total}} 单</text></view>
@@ -51,7 +56,7 @@
           <view class="dv-rin" style="width:{{dv.totalWidth}}rpx">
             <view class="dv-heads">
               <view wx:for="{{dv.cols}}" wx:key="id" class="dv-th {{item.id===myTechId?'mine':''}}" style="width:{{item.width}}rpx">
-                <view class="dv-nm">{{item.name}}<text wx:if="{{item.id===myTechId}}" class="dv-me">我</text></view>
+                <view class="dv-nm">{{item.name}}<text wx:if="{{item.isDuty}}" class="dv-me">值日</text><text wx:if="{{item.id===myTechId}}" class="dv-me">我</text></view>
                 <view class="dv-rl">{{item.role}}</view>
                 <view class="dv-st {{item.busy?'busy':'free'}}">{{item.busy?'忙':'空'}}</view>
               </view>
@@ -59,8 +64,8 @@
             <view class="dv-cols" style="height:{{dv.gridH}}rpx">
               <view wx:for="{{dv.cols}}" wx:key="id" wx:for-item="col" class="dv-col {{col.id===myTechId?'mine':''}}" style="width:{{col.width}}rpx">
                 <view wx:for="{{dv.hours}}" wx:key="label" wx:for-item="hl" class="dv-line {{hl.off ? 'off' : ''}}"></view>
-                <view wx:for="{{col.frees}}" wx:key="startTime" wx:for-item="f" class="dv-blk free" style="top:{{f.top}}rpx;height:{{f.height}}rpx" data-tech="{{col.id}}" data-time="{{f.startTime}}" data-end="{{f.endTime}}" bindtap="tapFree"><text>{{dv.backfill ? dv.backfill.label : '+ 直接排单'}}</text></view>
-                <view wx:for="{{col.blocks}}" wx:key="id" wx:for-item="b" class="dv-blk {{b.cls}}" style="top:{{b.top}}rpx;height:{{b.height}}rpx;left:{{b.left}}rpx;width:{{b.width}}rpx;right:auto" data-id="{{b.id}}" bindtap="tapBlock">
+                <view wx:for="{{col.frees}}" wx:key="startTime" wx:for-item="f" class="dv-blk free" hover-class="tap-feedback" style="top:{{f.top}}rpx;height:{{f.height}}rpx" data-tech="{{col.id}}" data-time="{{f.startTime}}" data-end="{{f.endTime}}" bindtap="tapFree"><text>{{dv.backfill ? dv.backfill.label : '+ 直接排单'}}</text></view>
+                <view wx:for="{{col.blocks}}" wx:key="id" wx:for-item="b" class="dv-blk {{b.cls}}" hover-class="tap-feedback" style="top:{{b.top}}rpx;height:{{b.height}}rpx;left:{{b.left}}rpx;width:{{b.width}}rpx;right:auto" data-id="{{b.id}}" bindtap="tapBlock">
                   <view class="dv-bt"><text wx:if="{{b.stateGlyph}}" class="dv-sdot {{b.state}}">{{b.stateGlyph}}</text>{{b.startTime}}–{{b.endTime}}</view>
                   <view class="dv-bn">{{b.customerName}}</view>
                   <view class="dv-bs">{{b.serviceName}}</view>
@@ -78,7 +83,7 @@
       </view>
       <view class="dv-duty" wx:if="{{dv.duty}}">
       <text class="dv-duty-lab">值日</text>
-      <text wx:for="{{dv.cols}}" wx:for-item="c" wx:key="id" class="dv-duty-chip {{dv.duty.techIds.indexOf(c.id) > -1 ? 'on' : ''}} {{dv.duty.canEdit ? '' : 'ro'}}" data-id="{{c.id}}" bindtap="tapDuty">{{c.name}}</text>
+      <text wx:for="{{dv.cols}}" wx:for-item="c" wx:key="id" class="dv-duty-chip {{c.isDuty ? 'on' : ''}} {{dv.duty.canEdit ? '' : 'ro'}}" data-id="{{c.id}}" bindtap="tapDuty">{{c.name}}</text>
       <text wx:if="{{dv.duty.note}}" class="dv-duty-note">{{dv.duty.note}}</text>
       <!-- D105(店主 02x):非今天时就地给一枚「回到今天」,复用已有 dvToday,句子与网页同一份(后端出) -->
       <text wx:if="{{dv.duty.backToToday}}" class="dv-duty-back" bindtap="dvToday">{{dv.duty.backToToday.label}}</text>
@@ -111,7 +116,7 @@
               <text class="amt">{{p.total}}<text wx:if="{{p.couponNote}}" class="arr"> {{p.couponNote}}</text> <text class="arr">{{open[p.id] ? '收起 ∧' : '点开分配 ∨'}}</text></text>
             </view>
             <!-- D59 案二提示句:含未归属充值的待分配单,行上明说(句后端唯一) -->
-            <view wx:if="{{p.rechargeNote}}" class="dcsub" style="color:#8a3a33">{{p.rechargeNote}}</view>
+            <view wx:if="{{p.rechargeNote}}" class="dcsub" style="color:var(--bad)">{{p.rechargeNote}}</view>
             <block wx:if="{{open[p.id]}}">
               <view class="aline" wx:for="{{p.techs}}" wx:for-item="t" wx:key="id">
                 <text class="nm">{{t.name}}</text>
@@ -211,9 +216,8 @@
   <!-- ===== 售后订单 ===== -->
   <block wx:if="{{mode==='aftersales'}}">
     <view wx:if="{{!aftersalesList.length}}" class="empty">暂无售后订单</view>
-    <!-- 🔴 D12 修复:这一行原来**没有 bindtap**,所以员工点它没有任何反应(店主报的"点不进去")。
-         现在可进入可看:原因 + 处理情况**只读**。写入/完成态等 Cowork 出图,这里不做。 -->
-    <view class="orow" wx:for="{{aftersalesList}}" wx:key="id" data-id="{{item.id}}" bindtap="openAfterSales">
+    <!-- 售后行与全部订单共用操作入口和后端 allowedActions，不另建处理状态机。 -->
+    <view class="orow" wx:for="{{aftersalesList}}" wx:key="id" data-id="{{item.id}}" data-status="{{item.status}}" data-userid="{{item.userId}}" data-customer="{{item.customer}}" data-service="{{item.serviceName}}" data-serviceid="{{item.serviceId}}" data-tech="{{item.tech}}" bindtap="orderActions">
       <view class="otime">{{item.time}}</view>
       <view class="omain"><view class="oname">{{item.customer}}<text class="ostatus d">{{item.asStatusText || '售后'}}</text></view><view class="oline">{{item.line}}{{item.tech ? ' · ' + item.tech : ''}} · {{item.date}}</view></view>
       <text class="ochev">›</text>
@@ -254,7 +258,7 @@
     <!-- 裁 B(店主 08-24):三步链(写进展/标记已解决/关闭)收掉 —— 合同④ 售后中唯一动作是「结束售后」,
          它在订单操作面板里(由状态机给),点它必须填处理结果,那句就是这里显示的「处理结果」。
          这个面板从此只读:看原因、看时间线、看结果。 -->
-    <view wx:if="{{asPanel.canWrite}}" class="ds-hint">要结束这单售后:回订单列表点这张单 →「结束售后」,填一句处理结果(顾客端会看到这句)。</view>
+    <view class="as-actions"><button class="as-btn" bindtap="afterSalesOrderActions">订单操作</button></view>
   </view>
 
   <!-- ===== 爽约定金处置弹层(图 A-2,仅老板可见入口)===== -->
@@ -337,7 +341,7 @@
         <view class="ds-hint">选「已收」=走「标记已收定金」同一动作(记经手人、入定金预收);现场即时单通常不收</view>
       </block>
     </scroll-view>
-    <view class="ds-confirm" bindtap="submitDirect">建单，进入今日台面</view>
+    <view class="ds-confirm {{directSaving ? 'saving' : ''}}" bindtap="submitDirect">{{directSaving ? '正在排单，请稍候…' : '建单，进入今日台面'}}</view>
   </view>
 
   <view wx:if="{{rescheduleSheet}}" class="actmask" bindtap="closeReschedule"></view>
@@ -361,7 +365,7 @@
   </view>
 </view>
 
-<sheet-preview sheet-id="{{previewSheet}}" bind:close="closePreview" bind:viewsnapshot="onPreviewViewSnapshot" />
+<sheet-preview sheet-id="{{previewSheet || ''}}" bind:close="closePreview" bind:viewsnapshot="onPreviewViewSnapshot" />
 
 <!-- D68③:签署原件浮层查看器(全仓共用组件;数据走 /admin/settlements/:key/snapshots) -->
 <snapshot-viewer open="{{snapViewer.open}}" items="{{snapViewer.items}}" index="{{snapViewer.index}}" bind:close="closeSnapViewer"></snapshot-viewer>

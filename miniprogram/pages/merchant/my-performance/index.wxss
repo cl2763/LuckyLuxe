@@ -4,7 +4,7 @@
 .hero{background:linear-gradient(135deg,var(--hero),var(--hero2));color:var(--heroink);border-radius:22rpx;padding:26rpx 24rpx}
 .hero .sub{font-size:22rpx;opacity:.8;line-height:1.8}
 .hero .amt{font-size:64rpx;font-weight:850;letter-spacing:-1rpx;margin:4rpx 0}
-.hero .pbar{height:16rpx;background:rgba(255,255,255,.22);border-radius:999rpx;overflow:hidden;margin-top:16rpx}
+.hero .pbar{height:16rpx;background:var(--card);border-radius:999rpx;overflow:hidden;margin-top:16rpx}
 .hero .pbar .pfill{height:100%;background:var(--brand);border-radius:999rpx}
 .hero .goal{display:flex;justify-content:space-between;font-size:22rpx;color:var(--herogold);margin-top:10rpx}
 .hero .split{display:flex;gap:20rpx;font-size:22rpx;opacity:.85;margin-top:12rpx}
@@ -28,7 +28,7 @@
 .row .mut{color:var(--sub);font-weight:400}
 
 /* 售后业绩扣回显式行(裁③:负数+单号) */
-.deduct-row .neg{color:#b3423a;font-weight:700}
+.deduct-row .neg{color:var(--bad);font-weight:700}
 .deduct-row .c{color:var(--bad)}
 
 /* 清单#2:薪资估算卡(08-31) */

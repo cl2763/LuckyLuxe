@@ -4,6 +4,7 @@
    沙盒期:开发者工具「带参编译」token 参数模拟扫码;真机扫真码那一下在发版清单里。 */
 const api = require('../../utils/api')
 const requestLoading = require('../../utils/request-loading')
+const nav = require('../../utils/nav')
 
 function pub(path, method, data) {
   return new Promise((resolve, reject) => {
@@ -56,15 +57,18 @@ Page({
       const code = await new Promise((resolve,reject) => wx.login({success:r => r.code ? resolve(r.code) : reject(new Error('微信登录失败')),fail:reject}))
       const out = await pub(`/bind-tokens/${encodeURIComponent(this.data.token)}/confirm`, 'POST', {code})
       if (out.conflict) {
-        this.setData({ state: 'error', errText: '这个微信已绑定本店另一份档案 —— 已记录待店员处理,请将手机交还技师。' })
+        this.setData({ state: 'error', errText: '这个微信已绑定本店另一份档案。系统没有覆盖原档案，请联系门店核对。' })
         return
       }
       api.acceptCustomerSession(out)
       this.setData({ state: 'done', memberCode: out.memberCode || '' })
+      this._returnTimer = setTimeout(() => this.goMe(), 1500)
     } catch (e) {
       wx.showToast({ title: (e && e.message) || '绑定失败,请重试', icon: 'none' })
     } finally {
       this._busy = false
     }
-  }
+  },
+  onUnload() { clearTimeout(this._returnTimer) },
+  goMe() { clearTimeout(this._returnTimer); nav.tab('/pages/me/index') }
 })

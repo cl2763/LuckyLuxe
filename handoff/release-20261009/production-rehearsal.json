@@ -1,0 +1,35 @@
+{
+  "node": "v22.11.0",
+  "scope": "isolated production backup",
+  "baselineForeignKeyIssues": 9,
+  "cycles": [
+    {
+      "cycle": 1,
+      "health": true,
+      "node": "v22.11.0",
+      "tables": 108,
+      "originalRows": 11703,
+      "differences": [],
+      "objectChanges": [],
+      "integrity": "ok",
+      "foreignKeyIssues": 9,
+      "newForeignKeyIssues": 0,
+      "removedForeignKeyIssues": 0,
+      "repeatDifferences": []
+    },
+    {
+      "cycle": 2,
+      "health": true,
+      "node": "v22.11.0",
+      "tables": 108,
+      "originalRows": 11703,
+      "differences": [],
+      "objectChanges": [],
+      "integrity": "ok",
+      "foreignKeyIssues": 9,
+      "newForeignKeyIssues": 0,
+      "removedForeignKeyIssues": 0,
+      "repeatDifferences": []
+    }
+  ]
+}

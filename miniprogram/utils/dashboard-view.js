@@ -214,8 +214,19 @@ function buildOwnerHome({ pulse, now, todo, period, nowHM, storeMoney, moneyFor,
     headDelta: deltaOf(head, period),
     /* dots:5 个,选中的那个会移动(图 §一) */
     dots: CAROUSEL.map((k) => ({ key: k, on: k === hk })),
-    /* 全 0 不画折线(图 §六:无数据时不画,不是画一条贴地的线) */
-    spark: head && (head.spark || []).some((x) => Number(x) !== 0) ? head.spark : [],
+    // 每个点都有原始日期和对应数值。密集月份横向滚动，不以假数据补未来日期。
+    spark: head && !head.locked && (head.spark || []).some((v) => v > 0) ? head.spark : [],
+    sparkCaption: head && !head.locked ? (head.sparkRangeText || '') : '',
+    sparkWidth: Math.max(650, ((head && head.spark) || []).length * 92),
+    sparkTicks: head && !head.locked ? (head.spark || []).map((value, i) => ({
+      tickId: i, date: (head.sparkDates || [])[i] || '', label: ((head.sparkLabels || [])[i] || '').split('–')[0],
+      labelEnd: ((head.sparkLabels || [])[i] || '').split('–')[1] || '',
+      value: value == null ? '—' : head.unit === 'money' ? (() => {
+        const parts = makePartsFor(pulse.currencyDisplay, cur)
+        const q = parts && parts(value)
+        return q ? `${q.amount}${q.cents}` : '—'
+      })() : `${value}${head.unit === 'people' ? '人' : head.unit === 'count' ? '单' : ''}`,
+    })) : [],
     smalls,
     asOf: asOfText(pulse, nowHM),
     /* 月目标:**门店没设就整块不出现**。现在全仓没有这个配置项 —— 所以恒不出现,

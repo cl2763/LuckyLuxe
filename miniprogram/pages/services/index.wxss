@@ -1,5 +1,9 @@
 .services-page {
-  padding: 22rpx 0 180rpx;
+  height: 100vh;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  padding: 22rpx 0 calc(96rpx + env(safe-area-inset-bottom));
   overflow: hidden;
 }
 
@@ -35,7 +39,9 @@
   display: flex;
   gap: 16rpx;
   width: 100vw;
-  height: calc(100vh - 190rpx - env(safe-area-inset-bottom));
+  flex: 1;
+  height: auto;
+  min-height: 0;
   margin-top: 20rpx;
   overflow: hidden;
 }
@@ -87,8 +93,8 @@
 }
 
 .category-item.active {
-  background:var(--card);
-  color:var(--ink);
+  background:var(--hero);
+  color:var(--heroink);
   font-weight: 780;
 }
 

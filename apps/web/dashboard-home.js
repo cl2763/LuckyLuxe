@@ -86,32 +86,28 @@ window.DashboardHome = (function () {
     return `<span class="dh-delta ${up ? 'up' : 'down'}" data-delta="${m.deltaPct}">${up ? '▲' : '▼'} ${Math.abs(m.deltaPct)}% ${zh() ? pm.prevZh : pm.prevEn}</span>`
   }
 
-  /* 折线:点数 = spark 数组长度;**全 0 不画**(图 §六:无数据时折线不画)。
-     🔴 D168 段 3 第 5 条:图上这条线有**三件**,原来一件都没有 ——
-     ①`<defs><linearGradient>` 渐变填充(stop-opacity .35 → 0)②描边金色 ③**末点一个圆环**
-     (描边同底色,看起来像在深底上挖了个圈)。少一件就不是图上那条线。
-     图上还只有**一条线、没有图例**(§一 第 4 条),所以中间点不画圆点了。 */
-  function sparkSvg(spark) {
-    const pts = (spark || []).map((x) => Number(x) || 0)
-    if (!pts.length || pts.every((x) => x === 0)) return ''
-    const w = 220
-    const h = 44
-    const max = Math.max(...pts, 1)
-    const step = pts.length > 1 ? w / (pts.length - 1) : 0
-    const xy = pts.map((v, i) => [Math.round(i * step), Math.round(h - (v / max) * (h - 6) - 3)])
-    const d = xy.map(([x, y], i) => `${i ? 'L' : 'M'}${x} ${y}`).join(' ')
-    const last = xy[xy.length - 1]
-    /* 渐变 id 每次画都换一个:同页面里若出现第二条折线(全屏态),id 撞了会串色 */
-    const gid = `dh-sp-${st.period}`
-    return `<svg class="dh-spark" data-dh-spark viewBox="0 0 ${w} ${h}" width="${w}" height="${h}" aria-hidden="true">
-      <defs><linearGradient id="${gid}" x1="0" x2="0" y1="0" y2="1">
-        <stop offset="0" stop-color="var(--herogold)" stop-opacity=".35"/>
-        <stop offset="1" stop-color="var(--herogold)" stop-opacity="0"/>
-      </linearGradient></defs>
-      <path d="${d} L${last[0]} ${h} L${xy[0][0]} ${h} Z" fill="url(#${gid})" stroke="none"/>
-      <path d="${d}" fill="none" stroke="var(--herogold)" stroke-width="2" stroke-linejoin="round"/>
-      <circle cx="${last[0]}" cy="${last[1]}" r="3.5" fill="var(--herogold)" stroke="var(--hero)" stroke-width="2"/>
-    </svg>`
+  // 数值、日期与同一个接口点配对；月份点数多时横向滚动，不能挤到互相覆盖。
+  function sparkSvg(metric, cur) {
+    if (!metric || metric.locked) return ''
+    const pts = (metric.spark || []).map(x => x == null ? null : Number(x) || 0)
+    const labels = (zh() ? metric.sparkLabels : metric.sparkLabelsEn) || metric.sparkLabels || []
+    if (!pts.length || !pts.some(v => v > 0) || labels.length !== pts.length) return ''
+    const w = Math.max(420, pts.length * 64), h = 140, cell = w / pts.length
+    const min = Math.min(0, ...pts), max = Math.max(1, ...pts)
+    const xy = pts.map((v, i) => [(i + .5) * cell, 90 - (v - min) / (max - min) * 55])
+    const d = xy.map(([x,y],i) => pts[i] == null ? '' : `${i && pts[i-1] != null ? 'L':'M'}${x} ${y}`).join(' ')
+    const last = xy[xy.length - 1], gid = `dh-sp-${st.period}`
+    const cap = zh() ? metric.sparkRangeText : metric.sparkRangeTextEn
+    const pointValue = v => v == null ? '—' : metric.unit === 'money' ? st.deps.moneyParts(v, Number(v) % 100 ? 2 : 0).amount : String(v)
+    return `<div class="dh-trend" data-dh-spark-axis>
+      <p class="dh-trend-caption">${esc(cap || '')}${w > 420 ? (zh() ? ' · 左右滑动查看' : ' · Scroll for dates') : ''}</p>
+      <div class="dh-trend-scroll"><svg class="dh-spark" data-dh-spark viewBox="0 0 ${w} ${h}" style="width:${w}px" height="${h}" role="img" aria-label="${esc(label(metric.key))}">
+        <defs><linearGradient id="${gid}" x1="0" x2="0" y1="0" y2="1"><stop offset="0" stop-color="var(--herogold)" stop-opacity=".35"/><stop offset="1" stop-color="var(--herogold)" stop-opacity="0"/></linearGradient></defs>
+        ${pts.every(v=>v != null) ? `<path d="${d} L${last[0]} 94 L${xy[0][0]} 94 Z" fill="url(#${gid})"/>` : ''}
+        <path d="${d}" fill="none" stroke="var(--herogold)" stroke-width="2" stroke-linejoin="round"/>
+        ${xy.map(([x, y], i) => `<g><title>${esc((metric.sparkDates || [])[i] || labels[i])} · ${esc(metric.unit === 'money' ? moneyOf(pts[i], cur) : valueText({...metric,value:pts[i]},cur))}</title><text x="${x}" y="18" text-anchor="middle" fill="var(--heroink)" font-size="12">${esc(pointValue(pts[i]))}</text>${pts[i] == null ? '' : `<circle cx="${x}" cy="${y}" r="3" fill="var(--herogold)" stroke="var(--hero)"/>`}<text x="${x}" y="116" text-anchor="middle" fill="var(--herosub)" font-size="12">${String(labels[i]).split('–').map((part,line) => `<tspan x="${x}" dy="${line ? 16 : 0}">${line ? '–' : ''}${esc(part)}</tspan>`).join('')}</text></g>`).join('')}
+      </svg></div>
+    </div>`
   }
 
   const periodBar = () => `<div class="dh-periods" data-dh-periods>${PERIODS.map((p) => `
@@ -172,8 +168,9 @@ window.DashboardHome = (function () {
           <h2 class="dh-big" data-dh-metric="${head ? esc(head.key) : ''}" data-dh-roll-key="${head ? esc(head.key) : 'head'}" data-dh-roll="${head && head.unit === 'money' ? 'money' : 'count'}" data-dh-roll-to="${head && head.value !== undefined && head.value !== null ? String(head.value) : ''}">${head && head.unit === 'money' ? bigMoney(head, cur) : (head ? esc(valueText(head, cur)) : '—')}</h2>
           <div class="dh-row">
             ${head ? deltaText(head) : ''}
-            ${head ? sparkSvg(head.spark) : ''}
+
           </div>
+          ${head ? sparkSvg(head, cur) : ''}
           ${empty ? `<p class="dh-truth" data-dh-truth-empty>${zh() ? '今天还没有开单 · 暂无往日数据' : 'No orders yet today'}</p>` : ''}
           ${nowPart()}
         </div>

@@ -52,6 +52,7 @@ if (!sb.ok) { console.error('\n🔴 [mp-home-sections] 前置沙箱 4310 没起�
 
 const mp = await (automator.connect || automator.default.connect)
   .call(automator, { wsEndpoint: `ws://127.0.0.1:${PORT}`, timeout: 40000 })
+console.log(`   [自动化] 已连接 ${PORT}`)
 
 const boxes = async (pg, sel) => {
   const els = await pg.$$(sel).catch(() => [])
@@ -88,8 +89,11 @@ async function setAndConfirm(pg, data, ready, label) {
 
 /* 造 n 张美甲卡、美睫恒 0(界定:全页只留被测那一区的卡) */
 async function state(n) {
+  console.log(`   [自动化] 造态 ${n} 张：开始重进首页`)
   await mp.reLaunch('/pages/home/index')
+  console.log(`   [自动化] 造态 ${n} 张：已重进首页`)
   let pg = await mp.currentPage()
+  console.log(`   [自动化] 当前页面 ${pg?.path || '(未知)'}`)
   const base = await waitHomeReady(pg)
   const cards = Array.from({ length: n }, (_, i) => ({ ...base[0], _id: `fx-${i}`, name: `造态${i + 1}`, price: 100 + i * 30, duration: 60 + i * 15, image: i % 2 ? '' : IMG }))
   await setAndConfirm(pg, { recommendedNail: cards, recommendedLash: [] }, async () => {

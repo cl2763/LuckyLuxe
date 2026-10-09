@@ -11,7 +11,7 @@ CREATE TABLE settlements(id TEXT,user_id TEXT,tenant_id TEXT,booking_id TEXT,sta
 CREATE TABLE tenant_settings(tenant_id TEXT,key TEXT,value TEXT,updated_at TEXT);
 CREATE TABLE stored_value_transactions(tenant_id TEXT,user_id TEXT,type TEXT,amount_cents INTEGER,created_at TEXT);
 CREATE TABLE member_timecards(tenant_id TEXT,user_id TEXT,price_cents INTEGER,created_at TEXT);
-CREATE TABLE finance_transactions(tenant_id TEXT,occurred_on TEXT,type TEXT,amount_cents INTEGER,pay_channel TEXT);
+CREATE TABLE finance_transactions(tenant_id TEXT,occurred_on TEXT,type TEXT,amount_cents INTEGER,pay_channel TEXT,created_at TEXT);
 CREATE TABLE daily_closes(tenant_id TEXT,date TEXT,status TEXT,revenue_cents INTEGER);`)
 db.prepare('INSERT INTO users VALUES(?,?,?,?)').run('u','a',5000,'[]')
 const book=(id,status,at,tid='a',arrived=null)=>db.prepare('INSERT INTO bookings VALUES(?,?,?,?,?,?)').run(id,'u',tid,status,at,arrived)
@@ -75,7 +75,7 @@ check('现金来源拆分与总额精确相等',()=>{
 })
 // Counterexample: even with value hidden, old prev+deltaAbs reconstructs it.
 for(const [day,amount,channel] of [['2026-09-26',12345,'cash'],['2026-09-26',6789,'stored_value'],['2026-09-25',2468,'cash'],['2026-09-25',1357,'stored_value']]) {
- db.prepare('INSERT INTO finance_transactions VALUES(?,?,?,?,?)').run('cn',day,'income',amount,channel)
+ db.prepare('INSERT INTO finance_transactions VALUES(?,?,?,?,?,?)').run('cn',day,'income',amount,channel,day+'T12:00:00Z')
 }
 const beforeLock=pulse.pulse({tenantId:'cn'})
 check('反例夹具三个金额指标非零且能由旧差额字段还原',()=>{

@@ -92,19 +92,19 @@
     </view>
     <view class="order-entry card me-module-card">
       <view class="oe-item" bindtap="goOrders" data-status="pending_service">
-        <text>{{ordersError ? '—' : counts.pending_service}}</text>
+        <text>{{ordersLoading || ordersError ? '—' : counts.pending_service}}</text>
         <text>{{t.statusPendingService}}</text>
       </view>
       <view class="oe-item" bindtap="goOrders" data-status="completed">
-        <text>{{ordersError ? '—' : counts.completed}}</text>
+        <text>{{ordersLoading || ordersError ? '—' : counts.completed}}</text>
         <text>{{t.statusCompleted}}</text>
       </view>
       <view class="oe-item" bindtap="goOrders" data-status="cancelled">
-        <text>{{ordersError ? '—' : counts.cancelled}}</text>
+        <text>{{ordersLoading || ordersError ? '—' : counts.cancelled}}</text>
         <text>{{t.statusCancelled}}</text>
       </view>
       <view class="oe-item" bindtap="goOrders" data-status="after_sales">
-        <text>{{ordersError ? '—' : counts.after_sales}}</text>
+        <text>{{ordersLoading || ordersError ? '—' : counts.after_sales}}</text>
         <text>{{t.statusAfterSales}}</text>
       </view>
     </view>
@@ -113,12 +113,13 @@
   <view class="section">
     <view class="section-head">
       <view class="section-title" bindtap="goOrders" data-status="all">{{t.recent}}</view>
-      <view class="section-note" bindtap="goOrders" data-status="all">Records</view>
+      <view class="section-note" bindtap="goOrders" data-status="all">{{lang === 'en' ? 'Records' : '查看记录'}}</view>
     </view>
     <view class="recent-list">
-      <block wx:if="{{recentOrders.length}}">
+      <view wx:if="{{ordersLoading}}" class="page-loading"><view class="loading-spinner"></view><text>{{lang === 'en' ? 'Loading orders…' : '正在加载订单…'}}</text></view>
+      <block wx:elif="{{recentOrders.length}}">
         <block wx:for="{{recentOrders}}" wx:key="_id">
-          <view class="recent-card card me-module-card" bindtap="goOrderDetail" data-id="{{item._id}}">
+          <view class="recent-card card me-module-card" hover-class="tap-feedback" bindtap="goOrderDetail" data-id="{{item._id}}">
             <img-placeholder class="recent-image" src="{{item.serviceImage}}" img-class="recent-image"></img-placeholder>
             <view class="recent-info">
               <view class="recent-top">
@@ -151,21 +152,25 @@
            格子里的图标位**本身就是配图位** —— 将来换奖品缩略图只换图源、不动版。
            与黑卡「积分」格并存:唯一律约束的是页面与数据出口,不是入口数量(两处都进 pages/points,
            提示句同一个后端出口 redeemablePrizeText)。 -->
-      <view class="menu-card card" bindtap="goPoints">
+      <view class="menu-card card" hover-class="tap-feedback" bindtap="goPoints">
         <view class="menu-badge"><image class="menu-ic" src="/assets/icons/c-gift.png"></image></view>
         <view class="menu-title">积分商城<text wx:if="{{member.redeemablePrizeCount}}" class="menu-dot">{{member.redeemablePrizeCount}}</text></view>
       </view>
-      <view class="menu-card card" bindtap="goMessages">
+      <view class="menu-card card" hover-class="tap-feedback" bindtap="scanIncomingCode">
+        <view class="menu-badge"><view class="scan-mark">▦</view></view>
+        <view class="menu-title">扫码签署 / 绑定</view>
+      </view>
+      <view class="menu-card card" hover-class="tap-feedback" bindtap="goMessages">
         <view class="menu-badge"><image class="menu-ic" src="/assets/icons/c-message.png"></image></view>
         <view class="menu-title">{{lang === 'en' ? 'Messages' : '我的消息'}}</view>
       </view>
       <!-- 勘误④ 命名归一:同一类资产只留一个名字一个页——菜单这格与黑卡那格**同名同页**(卡包);
            「我的券包」入口与「我的资产」总页一并退休;角标与页内张数同源(0 不显示) -->
-      <view class="menu-card card" bindtap="goCardPack">
+      <view class="menu-card card" hover-class="tap-feedback" bindtap="goCardPack">
         <view class="menu-badge"><image class="menu-ic" src="/assets/icons/c-ticket.png"></image></view>
         <view class="menu-title">卡包<text wx:if="{{cardPackBadge}}" class="menu-dot">{{cardPackBadge}}</text></view>
       </view>
-      <view class="menu-card card" bindtap="goStore">
+      <view class="menu-card card" hover-class="tap-feedback" bindtap="goStore">
         <view class="menu-badge"><image class="menu-ic" src="/assets/icons/c-store.png"></image></view>
         <view class="menu-title">{{t.store}}</view>
       </view>
@@ -182,6 +187,22 @@
     <view class="auth-desc">{{lang === 'en' ? 'You can sign out for guest testing.' : '如需测试未登录状态，可在这里退出。'}}</view>
     <button class="account-btn danger" bindtap="logout">{{lang === 'en' ? 'Sign out' : '退出登录'}}</button>
   </view>
+
+  <view wx:if="{{memberQrVisible}}" class="member-qr-mask" bindtap="hideMemberCode">
+    <view class="member-qr-panel" catchtap="noop">
+      <view class="member-qr-title">{{lang === 'en' ? 'Member code' : '会员码'}}</view>
+      <image wx:if="{{!memberQrError}}" class="member-qr-image" src="{{memberQrUrl}}" mode="aspectFit" binderror="memberQrImageError"></image>
+      <view wx:else class="member-qr-error">二维码暂时无法生成，请让店员按会员号查询。</view>
+      <view class="member-qr-code">{{member.memberCode}}</view>
+      <view class="member-qr-hint">{{lang === 'en' ? 'Show this code to staff in store.' : '到店出示给店员核对档案'}}</view>
+      <button class="member-qr-close" bindtap="hideMemberCode">{{lang === 'en' ? 'Close' : '关闭'}}</button>
+    </view>
+  </view>
+
+  <navigator class="account-actions card" url="/pages/privacy/index" hover-class="tap-feedback">
+    <view class="auth-title">{{lang === 'en' ? 'Privacy and personal information' : '隐私与个人信息'}}</view>
+    <view class="auth-desc">{{lang === 'en' ? 'Policy, contact and personal information requests' : '政策、联系方式与个人信息申请'}}</view>
+  </navigator>
 
   <!-- 04f-3 三端版本指纹:入口挂在这里(只动 wxml —— `me/index.js` 638 行已超红线、现状冻结) -->
   <navigator class="account-actions card" url="/pages/about/index" hover-class="none">
@@ -222,13 +243,14 @@
       </view>
 
       <view class="auth-footer simple-login-footer">
-        <button wx:if="{{authModalMode === 'login'}}" class="privacy-check" open-type="agreePrivacyAuthorization" bindtap="onPrivacyTap" bindagreeprivacyauthorization="onAgreePrivacyAuthorization">
+        <button wx:if="{{authModalMode === 'login'}}" id="lucky-luxe-login" class="privacy-check" open-type="agreePrivacyAuthorization" bindtap="onPrivacyTap" bindagreeprivacyauthorization="onAgreePrivacyAuthorization">
           <view class="privacy-box {{authProfile.privacyChecked ? 'checked' : ''}}">{{authProfile.privacyChecked ? '✓' : ''}}</view>
           <view class="privacy-copy">
             <text class="privacy-main">{{lang === 'en' ? 'I have read and agree to the Youji privacy policy.' : '我已阅读并同意「有迹」隐私政策'}}</text>
-            <text class="privacy-sub">{{lang === 'en' ? 'Authorize WeChat login for member services.' : '授权使用微信登录会员服务'}}</text>
+            <text class="privacy-sub">{{lang === 'en' ? 'Authorize WeChat login for customer services.' : '授权使用微信登录顾客服务'}}</text>
           </view>
         </button>
+        <view class="privacy-policy-link" hover-class="tap-feedback" bindtap="openPrivacyPolicy">{{lang === 'en' ? 'Read privacy policy' : '查看隐私保护指引'}}</view>
         <button class="finish-button {{canFinishLogin ? '' : 'disabled'}}" disabled="{{!canFinishLogin}}" bindtap="finishLogin">
           {{authModalMode === 'profile' ? (lang === 'en' ? 'Save profile' : '保存资料') : (lang === 'en' ? 'WeChat one-tap login' : '微信一键登录')}}
         </button>

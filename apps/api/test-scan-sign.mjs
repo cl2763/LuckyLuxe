@@ -105,6 +105,10 @@ async function main() {
     JSON.stringify(impHit.data.hit).slice(0, 200))
   const memberCode = lookup.data.hit.memberCode
   check('S1 轻档案也有专属会员码(规则⑥ 认领码)', /^LL-[A-Z0-9]{8}$/.test(memberCode), memberCode)
+  const memberScene = `m${memberCode.slice(3)}`
+  const memberCard = await request(`/scan/${memberScene}`, {}, null)
+  check('顾客会员码小程序场景能解析为原档案的会员号', memberCard.status === 200 && memberCard.data.kind === 'member' && memberCard.data.memberCode === memberCode && memberCard.data.tenantId === shop.tenantId)
+  check('未配置小程序凭据时会员码不返回伪造图片', (await request(`/mini-code/${memberScene}`, {}, null)).status === 503)
 
   // S1-05 扫会员码 → 直接带出同一份档案
   const byMc = await request(`/admin/customers/lookup?memberCode=${encodeURIComponent(memberCode)}`, {}, shop.token)
@@ -119,6 +123,10 @@ async function main() {
     body: JSON.stringify({ newCustomerName: '无号新客', serviceId: svc.id, technicianId: tech.id, date: todayStr(), time: '16:10', durationMin: 60, depositPaid: false })
   }, shop.token)
   check('S1 空态:不填手机号也能建单(身份不依赖手机号)', bk0.status === 201 && Boolean(uidOf(bk0.data.booking)), String(bk0.status))
+  const freshId = uidOf(bk0.data.booking)
+  const freshCode = (await request(`/admin/customers/lookup?userId=${encodeURIComponent(freshId)}`, {}, shop.token)).data.hit.memberCode
+  const freshClaim = await request(`/scan/m${freshCode.slice(3)}/claim`, {method:'POST',body:JSON.stringify({code:`stub:ordinary-${RUN}`})}, null)
+  check('普通顾客无需充值即可扫会员码绑定原档案', freshClaim.status === 200 && freshClaim.data.bound && freshClaim.data.user.id === freshId && freshClaim.data.auth?.accessToken)
 
   /* ---- S2 结算页新客徽标(规则③:只看绑定状态,文案后端下发)---- */
   const sheet1 = (await request('/admin/settlements', {
@@ -180,6 +188,10 @@ async function main() {
   check('S4 「是我本人」一次点击完成绑定', claim.status === 200 && claim.data.bound === true, JSON.stringify(claim.data).slice(0, 200))
   const scanClaim = await request(`/scan/${sceneForToken(qr2.data.token)}/claim`, {method:'POST',body:JSON.stringify({code:`stub:demo-openid-${xiaoya}`})}, null)
   check('扫码身份确认返回原档案会话，不新建顾客', scanClaim.status === 200 && scanClaim.data.bound && scanClaim.data.alreadyBound && scanClaim.data.user.id === xiaoya && !!scanClaim.data.auth?.accessToken)
+  const revisit = await request(`/scan/${sceneForToken(qr2.data.token)}`, {}, scanClaim.data.auth.accessToken)
+  check('同一真实会话再次扫码直接进入签署,不重复本人确认', revisit.status === 200 && revisit.data.alreadyBound === true)
+  const wrongSession = await request(`/scan/${sceneForToken(qr2.data.token)}`, {}, freshClaim.data.auth.accessToken)
+  check('另一顾客会话不得跳过本人确认', wrongSession.status === 200 && wrongSession.data.alreadyBound === false)
   check('S4 沙盒演示旁路生效(没配微信密钥也能跑通)', claim.data.sandbox === true, String(claim.data.sandbox))
   check('S4 绑定同时给出专属会员码', claim.data.memberCode === memberCode, JSON.stringify({ a: claim.data.memberCode, b: memberCode }))
   check('S4 确认卡显示的是**这张单挂着的档案**的名字', claim.data.customerName === '王小雅', claim.data.customerName)

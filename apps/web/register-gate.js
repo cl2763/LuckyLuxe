@@ -24,7 +24,7 @@ window.RegisterGate = (function () {
 
   async function probe() {
     try {
-      const res = await fetch('/health', { headers: { Accept: 'application/json' } })   // 同源,与 admin.js 的 request() 一样用裸路径
+      const res = await fetch(window.WebScope?.path('/health') || '/health', { headers: { Accept: 'application/json' } })   // 同源,与 admin.js 的 request() 一样用裸路径
       if (!res.ok) throw new Error(`health ${res.status}`)
       const data = await res.json()
       allowed = data?.demoLoginAllowed === true

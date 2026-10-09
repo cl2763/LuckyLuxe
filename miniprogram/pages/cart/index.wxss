@@ -22,7 +22,7 @@
   flex: none;
   min-width: 0;
   min-height: 0;
-  border:1rpx solid #d8cabf;
+  border:1rpx solid var(--line);
   border-radius: 50%;
   display: flex;
   align-items: center;
@@ -47,8 +47,9 @@
 
 .cart-check.checked,
 .mini-check.checked {
-  border-color:#c6a27e;
-  background:#c6a27e;
+  border-color:var(--brand);
+  background:var(--brand);
+  color:var(--hero);
 }
 
 .cart-visual {

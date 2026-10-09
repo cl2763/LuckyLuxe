@@ -34,8 +34,8 @@ async function request(path, options = {}, token = OWNER) {
 
 async function main() {
   /* ===== D94:值日 tap 修死 + 静态链 ===== */
-  const ordJs = rf('miniprogram/pages/merchant/orders/index.js')
-  check('D94 值日 tap 调 loadDayView(this.load 不存在=点击即炸的根)', ordJs.includes('this.loadDayView(this.data.selDate)  // D94') && !/this\.load\(this\.data\.selDate\)/.test(ordJs))
+  const ordJs = rf('miniprogram/pages/merchant/orders/index.js') + rf('miniprogram/pages/merchant/duty-action.js')
+  check('D94 值日 tap 调 loadDayView(this.load 不存在=点击即炸的根)', ordJs.includes('await page.loadDayView(page.data.selDate)') && !/this\.load\(this\.data\.selDate\)/.test(ordJs))
   const dc = rf('miniprogram/utils/dailyclose.js')
   check('D94 snapViewer 初值住唯一真相(mixin dailyCloseData)且关闭不回 null', dc.includes('snapViewer: { open: false, items: [], index: 0 },') && dc.includes("this.setData({ snapViewer: { open: false, items: [], index: 0 } })"))
   check('D94 L2 零残留:全仓不再有 viewer 置 null 写法', !rf('miniprogram/pages/merchant/finance/index.js').includes('snapViewer: null') && !rf('miniprogram/pages/order-detail/index.js').includes('viewer: null'))
@@ -90,7 +90,7 @@ async function main() {
   check('D97 写完消行(挂单判定闭环)', !(p2.data.items || []).some((x) => x.bookingId === bid))
   /* 前端链:两端结算钩 + 台面 pill + 员工卡 + 订单卡补写口 */
   check('D97 网页结算完成钩(ServiceNoteModal.open 带 bookingId)', rf('apps/web/settlement-web.js').includes('window.ServiceNoteModal.open(state.userId, state.customerName'))
-  check('D97 小程序全签完弹「去写/跳过」', rf('miniprogram/pages/merchant/settlement/index.js').includes("title: '给这单写个服务小记?'"))
+  check('D97 小程序签完回今日台面，从待写清单补小记', rf('miniprogram/pages/merchant/settlement/index.js').includes("relaunch('/pages/merchant/orders/index')") && !rf('miniprogram/pages/merchant/settlement/index.js').includes("title: '给这单写个服务小记?'"))
   check('D97 台面 pill 双端(data-tb-notes / tapPendingNotes)', tb.includes('data-tb-notes') && ordJs.includes('tapPendingNotes()'))
   check('D97 员工工作台待写卡 + 网页订单卡补写口', rf('apps/web/staff-workbench.js').includes('data-swb-note="') && rf('apps/web/admin.js').includes('data-note-booking="${booking.id}"'))
   check('D97 弹层保存体带 bookingId', rf('apps/web/service-note-modal.js').includes('bookingId: st.bookingId || undefined'))
@@ -98,7 +98,7 @@ async function main() {
 
   /* ===== D98/D99(静态链;像素=自走查) ===== */
   check('D98 值日行=标准开关(ui-spec ⑤ 也守),说明句行内小字', rf('apps/web/duty-setting.js').includes('class="note"'))
-  check('D99 定金规则摘要行呼吸(20rpx 22rpx)', rf('miniprogram/pages/merchant/store/index.wxss').includes('padding:20rpx 22rpx;border-bottom:1rpx solid #f2ece5'))
+  check('D99 定金规则摘要行呼吸(20rpx 22rpx)', rf('miniprogram/pages/merchant/store/index.wxss').includes('padding:20rpx 22rpx;border-bottom:1rpx solid var(--line)'))
 
   /* ===== D101②:会话侧顾客卡六件双端 ===== */
   const desk = rf('apps/web/ai-desk.js')

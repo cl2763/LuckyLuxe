@@ -1,0 +1,10 @@
+<view class="page {{themeClass}}"><view class="card" wx:if="{{loading}}">正在加载门店服务…</view><view class="card" wx:else><view class="title">人工预约草稿</view><view class="hint">按顾客要求填写，分享后由顾客确认。草稿有效 30 分钟，不锁档期，不产生收款记录。</view>
+<text>门店</text><picker range="{{stores}}" range-key="name" value="{{oi}}" data-key="oi" bindchange="choose">{{stores[oi].name || '暂无门店'}}</picker>
+<text>服务</text><picker range="{{services}}" range-key="name" value="{{si}}" data-key="si" bindchange="choose">{{services[si].name || '暂无服务'}}</picker>
+<text>技师</text><picker range="{{technicians}}" range-key="name" value="{{ti}}" bindchange="chooseTech">{{technicians[ti].name || '没有可提供此服务的技师'}}</picker>
+<text>日期</text><picker mode="date" value="{{date}}" data-key="date" bindchange="input">{{date}}</picker>
+<text>时间</text><picker mode="time" value="{{time}}" data-key="time" bindchange="input">{{time || '选择顾客要求的时间'}}</picker>
+<text>顾客需求（选填）</text><textarea maxlength="1000" value="{{notes}}" data-key="notes" bindinput="input" placeholder="填写服务需求，不填写敏感个人资料"/>
+<button class="primary" loading="{{busy}}" disabled="{{busy || !time || !services.length || !technicians.length}}" bindtap="generate">生成预约草稿</button>
+</view><view wx:if="{{error}}" class="error">{{error}}<button class="secondary" bindtap="load">重新加载选项</button></view>
+<view wx:if="{{draft}}" class="card"><view class="title">等待顾客确认</view><view class="hint">{{draft.date}} {{draft.time}} · {{draft.service.name}} · {{draft.technician.name}}<view>转发卡片直接进入小程序；复制链接打开网页版。顾客确认前不是正式预约。</view></view><button class="primary" open-type="share">转发给顾客确认</button><button class="secondary" bindtap="copyLink">复制网页确认链接</button></view></view>

@@ -8,15 +8,20 @@ Page({
   onShow() {
     ensureCurrencyCached()
     this.setData({ cur: curOf() })   // 币种跟门店走,不写死币符
+    // 返回本页时重新读取状态机动作：签署后旧列表缓存仍是「待签」，会吞掉售后入口。
+    if (this._shownOnce && this._orderId) this.load(this._orderId)
+    this._shownOnce = true
   },
   data: {
     viewer: { open: false, items: [], index: 0 },
     order: null,
+    bottomInset: 0,
     lang: 'zh',
     t: i18n.pageCopy('orderDetail', 'zh')
   },
 
   onLoad(options) {
+    this._orderId = options.id
     this.load(options.id)
   },
 
@@ -29,15 +34,14 @@ Page({
       this.setData({ order: null, lang, t })
       return
     }
-    let order = storage.getOrder(id)
-    if (!order) {
-      try {
-        const bookings = await api.getBookings(lang)
-        storage.setOrders(bookings)
-        order = bookings.find((item) => item._id === id || item.orderNo === id)
-      } catch (error) {
-        order = null
-      }
+    let order = null
+    try {
+      const bookings = await api.getBookings(lang)
+      storage.setOrders(bookings)
+      order = bookings.find((item) => item._id === id || item.orderNo === id)
+    } catch (error) {
+      // 网络错误不能把过期缓存当作最新可操作状态显示。
+      wx.showToast({ title: '订单更新失败，请稍后重试', icon: 'none' })
     }
     if (order) {
       const service = order.service || (order.serviceInfo && { name: order.serviceInfo.serviceName, type: order.serviceInfo.serviceType, duration: order.serviceInfo.duration }) || {} // mock 清除
@@ -95,7 +99,16 @@ Page({
       order.payableAmount = order.payableAmount != null && order.payableAmount !== '' ? order.payableAmount : null
       order.finalDue = order.finalDue != null && order.finalDue !== '' ? order.finalDue : null
     }
-    this.setData({ order, lang, t })
+    this.setData({ order, lang, t, bottomInset: 0 }, () => this.measureBottomBar())
+  },
+  onResize() { this.measureBottomBar() },
+  measureBottomBar() {
+    if (!this.data.order?.actions?.length) { this.setData({ bottomInset: 0 }); return }
+    if (typeof wx.createSelectorQuery !== 'function') return
+    // 取实际底栏高度（含安全区、换行和字体缩放），避免固定留白再次遮住最后一行。
+    wx.createSelectorQuery().in(this).select('.bottom-bar').boundingClientRect((rect) => {
+      if (rect && this.data.order?.actions?.length) this.setData({ bottomInset: Math.ceil(rect.height) + 24 })
+    }).exec()
   },
 
   /* ===== 批③首件 屏B:售后发起(同屏展开,拍板①②③)+签署单原件入口 ===== */

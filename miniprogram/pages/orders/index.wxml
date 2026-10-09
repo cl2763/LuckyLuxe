@@ -6,7 +6,7 @@
   </scroll-view>
 
   <!-- D57 待签署置顶卡:全部未签单逐张列出(点卡直达签署页;签完自然消失) -->
-  <block wx:if="{{pendingSign.length}}">
+  <block wx:if="{{!loading && pendingSign.length}}">
     <view class="pending-sign-title">待你签字确认 · {{pendingSign.length}} 单</view>
     <view class="card pending-sign-card" wx:for="{{pendingSign}}" wx:key="code" bindtap="goSettlementDoc" data-code="{{item.code}}">
       <view class="ps-l">
@@ -17,7 +17,8 @@
     </view>
   </block>
 
-  <block wx:if="{{orders.length}}">
+  <view wx:if="{{loading}}" class="page-loading"><view class="loading-spinner"></view><text>{{lang === 'en' ? 'Loading orders…' : '正在加载订单…'}}</text></view>
+  <block wx:elif="{{orders.length}}">
     <view class="orders-list">
       <block wx:for="{{orders}}" wx:key="_id">
         <view class="order-card card" bindtap="goDetail" data-id="{{item._id}}">

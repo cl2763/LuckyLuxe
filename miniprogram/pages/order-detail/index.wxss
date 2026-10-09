@@ -7,11 +7,11 @@
   width: 100%;
   height: 260rpx;
   margin-top: 24rpx;
-  border-radius: 16rpx;
+  border-radius: 12rpx;
 }
 
 .status-line {
-  color: #c6a27e;
+  color: var(--brandd);
   font-size: 25rpx;
   font-weight: 700;
 }
@@ -31,8 +31,8 @@
   justify-content: space-between;
   gap: 24rpx;
   padding: 22rpx 0;
-  border-bottom: 1rpx solid #f0e8e1;
-  color: #5e514b;
+  border-bottom: 1rpx solid var(--line);
+  color: var(--sub);
 }
 
 .info-row:last-child {
@@ -42,7 +42,7 @@
 .info-row text:last-child {
   max-width: 420rpx;
   text-align: right;
-  color: #3a2e2a;
+  color: var(--ink);
 }
 
 .archive-card {
@@ -59,7 +59,7 @@
 .work-thumb {
   height: 168rpx;
   overflow: hidden;
-  border-radius: 14rpx;
+  border-radius: 12rpx;
 }
 
 .work-thumb image {
@@ -70,29 +70,30 @@
 
 .archive-empty {
   padding: 36rpx 0 16rpx;
-  color: #8a7f78;
+  color: var(--sub);
   font-size: 25rpx;
   font-weight: 600;
   text-align: center;
 }
 
-.strike{text-decoration:line-through;color:#b9b3a8}
+.strike{text-decoration:line-through;color:var(--sub)}
 
 /* 批③首件:签署单卡+售后区 */
-.info-row.hero{font-size:32rpx;font-weight:850;border-top:1rpx solid #f2ebe3;margin-top:8rpx;padding-top:14rpx}
-.info-row.hero .price{color:#9b7655}
-.as-link{margin-top:14rpx;text-align:center;font-size:24rpx;color:#9b7655;text-decoration:underline}.as-btn {background:#2d2826;color:#fff;text-align:center;padding:22rpx;border-radius:999rpx;font-size:28rpx;font-weight:800}
-.as-desc{width:100%;min-height:160rpx;background:#faf6f1;border:1rpx solid #ece2d6;border-radius:12rpx;padding:16rpx;font-size:26rpx;margin-top:16rpx;box-sizing:border-box}.as-submit {margin-top:14rpx;background:var(--brand);color:var(--hero);text-align:center;padding:20rpx;border-radius:999rpx;font-size:27rpx;font-weight:700}
-.as-submit.ing{background:#b3a89c}
-.as-note{margin-top:10rpx;font-size:21rpx;color:#9a8c7c;line-height:1.6}
+.info-row.hero{font-size:32rpx;font-weight:850;border-top:1rpx solid var(--line);margin-top:8rpx;padding-top:14rpx}
+.info-row.hero .price{color:var(--brandd)}
+.as-link{margin-top:14rpx;text-align:center;font-size:24rpx;color:var(--brandd);text-decoration:underline}.as-btn {background:var(--hero);color:var(--heroink);text-align:center;padding:22rpx;border-radius:999rpx;font-size:28rpx;font-weight:800}
+.as-desc{width:100%;min-height:160rpx;background:var(--wall);color:var(--ink);border:1rpx solid var(--line);border-radius:12rpx;padding:16rpx;font-size:26rpx;margin-top:16rpx;box-sizing:border-box}.as-submit {margin-top:14rpx;background:var(--brand);color:var(--hero);text-align:center;padding:20rpx;border-radius:999rpx;font-size:27rpx;font-weight:700}
+.as-submit.ing{background:var(--line)}
+.as-note{margin-top:10rpx;font-size:21rpx;color:var(--sub);line-height:1.6}
 .as-step{display:flex;gap:14rpx;padding:10rpx 0}
-.as-dot{width:22rpx;height:22rpx;border-radius:50%;background:#ded4ca;margin-top:8rpx;flex:none}
-.as-dot.on{background:#2f7d5c}
-.as-step-t{font-size:25rpx;color:#241f1d;line-height:1.5}
-.as-step-at{font-size:20rpx;color:#9a8c7c;margin-top:2rpx}
-.status.badge-signed{color:#2f7d5c}
-.status.badge-amended{color:#a8551f}
-.status.badge-aftersales{color:#a34c48}
+.as-dot{width:22rpx;height:22rpx;border-radius:50%;background:var(--line);margin-top:8rpx;flex:none}
+.as-dot.on{background:var(--good)}
+.as-step-t{font-size:25rpx;color:var(--ink);line-height:1.5}
+.as-step-at{font-size:20rpx;color:var(--sub);margin-top:2rpx}
+.status.badge-signed{color:var(--good)}
+.status.badge-amended{color:var(--brandd)}
+.status.badge-aftersales{color:var(--bad)}
 
 /* L3 裁:逐张卡右侧签署时间小字 */
-.info-row .muted{color:#9a8f86;font-size:22rpx}
+.info-row .muted{color:var(--sub);font-size:22rpx}
+.order-detail-page.has-bottom-actions{padding-bottom:calc(200rpx + env(safe-area-inset-bottom))}

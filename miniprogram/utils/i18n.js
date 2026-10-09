@@ -4,8 +4,8 @@ const copy = {
   common: {
     zh: {
       appName: '有迹',
-      nail: '美甲 Nail',
-      lash: '美睫 Lash',
+      nail: '美甲',
+      lash: '美睫',
       minutes: '分钟',
       deposit: '定金',
       servicePrice: '服务价',

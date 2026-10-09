@@ -12,6 +12,15 @@ Page({
     loading: true
   },
 
+  async showStoreCode() {
+    if (this.data.qrLoading) return
+    this.setData({ qrLoading:true, qrError:'', qrUrl:'' })
+    try { const code=await api.adminGet('/admin/store/mini-code'); this.setData({qrUrl:api.miniCodeUrl(code.path),qrTrial:api.miniCodeEnvironment() !== 'release'}) }
+    catch(e) { this.setData({qrLoading:false,qrError:e.message || '门店码获取失败，请重试'}) }
+  },
+  codeLoaded() { this.setData({qrLoading:false}) },
+  codeFailed() { this.setData({qrLoading:false,qrError:'门店码生成失败，请重试或联系平台核对微信配置'}) },
+  previewCode() { if(this.data.qrUrl && !this.data.qrError) wx.previewImage({urls:[this.data.qrUrl],fail:()=>wx.showToast({title:'二维码预览失败，请重试',icon:'none'})}) },
   goNotify() { wx.navigateTo({ url: '/pages/merchant/notify-settings/index' }) },
 
   /* 31l 值日表开关(与网页同口) */

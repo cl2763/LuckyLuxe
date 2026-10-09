@@ -10,4 +10,8 @@ node "$ROOT/tools/mp-upload-guard.mjs" || {
 }
 CLI="${WX_CLI:-/Applications/wechatwebdevtools.app/Contents/MacOS/cli}"
 [ -x "$CLI" ] || { echo "🔴 找不到微信开发者工具 cli:$CLI(可用 WX_CLI= 指定)" >&2; exit 1; }
+if [[ "$VER" != *-exp ]]; then
+  node "$ROOT/tools/mp-formal-build-guard.mjs" || exit 1
+fi
+node "$ROOT/tools/mp-package-build.mjs" || exit 1
 "$CLI" upload --project "$ROOT" --version "$VER" --desc "$DESC"

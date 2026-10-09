@@ -22,7 +22,7 @@
       <block wx:if="{{goal.has}}">
         <view class="rings">
           <view class="ring" wx:for="{{goal.rings}}" wx:key="label">
-            <view class="ring-c" style="background:conic-gradient({{item.done ? '#8fd0a8' : '#e8c9a0'}} {{item.animPct}}%, #5b4f42 0)">
+            <view class="ring-c" style="background:conic-gradient({{item.done ? 'var(--good)' : 'var(--brand)'}} {{item.animPct}}%, var(--wall) 0)">
               <view class="ring-i {{item.done ? 'done' : ''}}">{{item.pctText}}</view>
             </view>
             <view class="ring-l">{{item.label}}</view>

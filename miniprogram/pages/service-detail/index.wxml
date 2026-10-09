@@ -1,4 +1,10 @@
-<view wx:if="{{service}}" class="page detail-page {{themeClass}}">
+<view class="page detail-page {{themeClass}}">
+  <view wx:if="{{loading || loadFailed || missing}}" class="detail-state card">
+    <view class="detail-state-label">{{loading ? (lang === 'en' ? 'Loading service…' : '正在加载服务…') : (loadFailed ? (lang === 'en' ? 'Could not load service' : '服务加载失败') : (lang === 'en' ? 'Service unavailable' : '该服务已下架或不存在'))}}</view>
+    <button wx:if="{{loadFailed}}" class="btn btn-primary" bindtap="refresh">{{lang === 'en' ? 'Retry' : '重试'}}</button>
+    <button wx:if="{{!loading}}" class="btn btn-ghost" bindtap="toServices">{{lang === 'en' ? 'Back to services' : '返回服务列表'}}</button>
+  </view>
+  <block wx:if="{{service && !loading}}">
   <img-placeholder class="detail-visual" src="{{service.image}}" image-view="{{service.imageView}}" profile="detail" img-class="detail-visual"></img-placeholder>
 
   <view class="detail-main card">
@@ -49,7 +55,7 @@
   <view class="section">
     <view class="section-head">
       <view class="section-title">{{t.reference}}</view>
-      <view class="section-note">Placeholder</view>
+      <view class="section-note">{{lang === 'en' ? 'Service reference' : '服务参考'}}</view>
     </view>
     <view class="reference-grid">
       <img-placeholder class="reference-image" src="{{service.image}}" image-view="{{service.imageView}}" profile="detail" img-class="reference-image"></img-placeholder>
@@ -63,4 +69,5 @@
     <button class="btn btn-ghost bottom-fill" bindtap="addDraftToCart">{{t.addToCart}}</button>
     <button class="btn btn-primary bottom-fill" bindtap="goBooking">{{t.bookNow}}</button>
   </view>
+  </block>
 </view>

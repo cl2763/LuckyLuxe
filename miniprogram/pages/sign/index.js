@@ -7,6 +7,24 @@
    —— 已记进 handoff/小程序发版清单.md。 */
 const api = require('../../utils/api')
 const requestLoading = require('../../utils/request-loading')
+const theme = require('../../utils/theme')
+
+// An absolute signing link already contains its environment prefix. Rewriting
+// its host and then prepending API_BASE caused /experience/experience/sign.
+function signWebUrl(raw) {
+  const plain = String(raw || '')
+  const url = plain + (plain.includes('?') ? '&' : '?') + 'theme=' + theme.chromeOf().eff
+  if (/^https?:\/\//i.test(url)) {
+    const sameService = /^https:\/\/(?:www\.luckyluxeatelier\.com|app\.jingshengyouji\.com)(?:\/|$)/i.test(url) && api.API_BASE === 'https://api.jingshengyouji.com'
+    if (!api.SANDBOX && !sameService) return url
+    const base = String(api.API_BASE).replace(/\/$/, '')
+    const prefix = base.replace(/^https?:\/\/[^/]+/i, '')
+    const targetPath = url.replace(/^https?:\/\/[^/]+/i, '')
+    const path = prefix && (targetPath === prefix || targetPath.startsWith(prefix + '/')) ? targetPath.slice(prefix.length) : targetPath
+    return `${base}${path.startsWith('/') ? '' : '/'}${path}`
+  }
+  return `${api.API_BASE.replace(/\/$/, '')}/${url.replace(/^\/+/, '')}`
+}
 
 Page({
   data: { url: '', code: '' },
@@ -21,7 +39,7 @@ Page({
           success:r => r.statusCode >= 200 && r.statusCode < 300 ? resolve(r.data) : reject(r.data?.error || new Error('签署码已失效')),
           fail:reject
         }))
-        const url = api.SANDBOX ? `${api.API_BASE}/sign?t=${encodeURIComponent(scanToken)}` : target.url
+        const url = signWebUrl(target.url)
         this.setData({code:target.code,url})
         wx.setNavigationBarTitle({title:'服务确认单'})
       } catch(e) { wx.showModal({title:'暂时无法打开',content:e.message||'签署码已失效，请让店员重新出示。',showCancel:false,fail:()=>wx.showToast({title:'签署页暂时打不开，请重试',icon:'none'})}) }
@@ -36,8 +54,14 @@ Page({
     // 单号进 URL 前先编码,别让特殊字符把链接拼坏
     try {
       const target=isSnap ? await api.getDocumentLink(code) : q.merchant==='1' ? await api.adminPost('/admin/settlements/'+encodeURIComponent(code)+'/sign-token',{}) : await api.getSignLink(code)
+      // 顾客从自己的待签订单进入时，也先做微信本人确认；演示身份登录
+      // 只代表可浏览档案，并不等于该档案已经绑定真实微信。
+      if (!isSnap && q.merchant !== '1' && target.scene) {
+        wx.redirectTo({url:`/pages/scan-entry/index?scene=${encodeURIComponent(target.scene)}`})
+        return
+      }
       // 仅短时单据链接进入 web-view，不传播顾客长期登录令牌。
-      this.setData({code,url:target.url.startsWith('/') ? api.API_BASE+target.url : api.SANDBOX ? api.API_BASE+target.url.replace(/^https?:\/\/[^/]+/, '') : target.url})
+      this.setData({code,url:signWebUrl(target.url)})
     } catch(e) {
       wx.showModal({title:'暂时无法打开',content:e.message||'请刷新订单后重试',showCancel:false,fail:()=>wx.showToast({title:'签署页暂时打不开，请重试',icon:'none'})})
       return

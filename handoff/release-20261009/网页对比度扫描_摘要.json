@@ -1,0 +1,420 @@
+{
+  "scanRecords": 55,
+  "results": [
+    {
+      "theme": "dark",
+      "page": "订单管理",
+      "tab": null,
+      "scanned": 90,
+      "bad": []
+    },
+    {
+      "theme": "dark",
+      "page": "后台首页",
+      "tab": null,
+      "scanned": 92,
+      "bad": []
+    },
+    {
+      "theme": "dark",
+      "page": "财务",
+      "tab": null,
+      "scanned": 114,
+      "bad": []
+    },
+    {
+      "theme": "dark",
+      "page": "客户档案",
+      "tab": null,
+      "scanned": 150,
+      "bad": []
+    },
+    {
+      "theme": "dark",
+      "page": "员工管理",
+      "tab": null,
+      "scanned": 81,
+      "bad": []
+    },
+    {
+      "theme": "dark",
+      "page": "服务与价目",
+      "tab": null,
+      "scanned": 53,
+      "bad": []
+    },
+    {
+      "theme": "dark",
+      "page": "会员套餐/券",
+      "tab": null,
+      "scanned": 47,
+      "bad": []
+    },
+    {
+      "theme": "dark",
+      "page": "客服工作台 1",
+      "tab": null,
+      "scanned": 81,
+      "bad": []
+    },
+    {
+      "theme": "dark",
+      "page": "AI 图库",
+      "tab": null,
+      "scanned": 143,
+      "bad": []
+    },
+    {
+      "theme": "dark",
+      "page": "门店设置",
+      "tab": null,
+      "scanned": 287,
+      "bad": []
+    },
+    {
+      "theme": "dark",
+      "page": "通用设置",
+      "tab": null,
+      "scanned": 56,
+      "bad": []
+    },
+    {
+      "theme": "light",
+      "page": "后台首页",
+      "tab": null,
+      "scanned": 92,
+      "bad": []
+    },
+    {
+      "theme": "light",
+      "page": "订单管理",
+      "tab": null,
+      "scanned": 90,
+      "bad": []
+    },
+    {
+      "theme": "light",
+      "page": "财务",
+      "tab": null,
+      "scanned": 114,
+      "bad": []
+    },
+    {
+      "theme": "light",
+      "page": "客户档案",
+      "tab": null,
+      "scanned": 150,
+      "bad": []
+    },
+    {
+      "theme": "light",
+      "page": "员工管理",
+      "tab": null,
+      "scanned": 81,
+      "bad": []
+    },
+    {
+      "theme": "light",
+      "page": "服务与价目",
+      "tab": null,
+      "scanned": 53,
+      "bad": []
+    },
+    {
+      "theme": "light",
+      "page": "会员套餐/券",
+      "tab": null,
+      "scanned": 47,
+      "bad": []
+    },
+    {
+      "theme": "light",
+      "page": "客服工作台 1",
+      "tab": null,
+      "scanned": 81,
+      "bad": [
+        {
+          "bg": "rgb(42, 37, 33)",
+          "bgFrom": "div.wechat-timeline > div.wechat-bubble.customer",
+          "fg": "rgb(138, 111, 69)",
+          "need": 4.5,
+          "opacity": 0,
+          "ratio": 3.21,
+          "sel": "div.wechat-bubble > span",
+          "size": 12,
+          "text": "demo-ai-guest-2",
+          "tier": "B",
+          "weight": 900
+        }
+      ]
+    },
+    {
+      "theme": "light",
+      "page": "AI 图库",
+      "tab": null,
+      "scanned": 143,
+      "bad": []
+    },
+    {
+      "theme": "light",
+      "page": "门店设置",
+      "tab": null,
+      "scanned": 287,
+      "bad": []
+    },
+    {
+      "theme": "light",
+      "page": "通用设置",
+      "tab": null,
+      "scanned": 56,
+      "bad": []
+    },
+    {
+      "theme": "light",
+      "page": "财务",
+      "tab": "趋势",
+      "scanned": 114,
+      "bad": []
+    },
+    {
+      "theme": "light",
+      "page": "财务",
+      "tab": "记一笔",
+      "scanned": 62,
+      "bad": []
+    },
+    {
+      "theme": "light",
+      "page": "财务",
+      "tab": "储值卡",
+      "scanned": 73,
+      "bad": []
+    },
+    {
+      "theme": "light",
+      "page": "财务",
+      "tab": "日结",
+      "scanned": 86,
+      "bad": []
+    },
+    {
+      "theme": "light",
+      "page": "财务",
+      "tab": "员工工资",
+      "scanned": 83,
+      "bad": [
+        {
+          "bg": "rgb(216, 202, 180)",
+          "bgFrom": "#financePayrollBody > button.primary.slim",
+          "fg": "rgb(42, 37, 33)",
+          "need": 3,
+          "opacity": 0.5,
+          "ratio": 1.91,
+          "sel": "#financePayrollBody > button.primary.slim",
+          "size": 19,
+          "text": "③ 确认并锁定 2026-10 工资表(",
+          "tier": "B",
+          "weight": 850
+        }
+      ]
+    },
+    {
+      "theme": "light",
+      "page": "财务",
+      "tab": "流水",
+      "scanned": 68,
+      "bad": []
+    },
+    {
+      "theme": "light",
+      "page": "财务",
+      "tab": "财务设置",
+      "scanned": 70,
+      "bad": []
+    },
+    {
+      "theme": "light",
+      "page": "员工管理",
+      "tab": "技师业绩",
+      "scanned": 103,
+      "bad": []
+    },
+    {
+      "theme": "light",
+      "page": "员工管理",
+      "tab": "薪资方案",
+      "scanned": 37,
+      "bad": []
+    },
+    {
+      "theme": "light",
+      "page": "员工管理",
+      "tab": "技师排班",
+      "scanned": 63,
+      "bad": []
+    },
+    {
+      "theme": "light",
+      "page": "员工管理",
+      "tab": "账号管理",
+      "scanned": 39,
+      "bad": []
+    },
+    {
+      "theme": "light",
+      "page": "会员套餐/券",
+      "tab": "① 充值套餐",
+      "scanned": 47,
+      "bad": []
+    },
+    {
+      "theme": "light",
+      "page": "会员套餐/券",
+      "tab": "② 次卡",
+      "scanned": 36,
+      "bad": []
+    },
+    {
+      "theme": "light",
+      "page": "会员套餐/券",
+      "tab": "③ 优惠券",
+      "scanned": 68,
+      "bad": []
+    },
+    {
+      "theme": "light",
+      "page": "会员套餐/券",
+      "tab": "④ 积分商城",
+      "scanned": 47,
+      "bad": []
+    },
+    {
+      "theme": "light",
+      "page": "会员套餐/券",
+      "tab": "⑤ 会员体系（S9）",
+      "scanned": 31,
+      "bad": []
+    },
+    {
+      "theme": "light",
+      "page": "客服工作台修正后",
+      "tab": null,
+      "scanned": 81,
+      "bad": []
+    },
+    {
+      "theme": "dark",
+      "page": "财务",
+      "tab": "趋势",
+      "scanned": 114,
+      "bad": []
+    },
+    {
+      "theme": "dark",
+      "page": "财务",
+      "tab": "记一笔",
+      "scanned": 62,
+      "bad": []
+    },
+    {
+      "theme": "dark",
+      "page": "财务",
+      "tab": "储值卡",
+      "scanned": 73,
+      "bad": []
+    },
+    {
+      "theme": "dark",
+      "page": "财务",
+      "tab": "日结",
+      "scanned": 86,
+      "bad": []
+    },
+    {
+      "theme": "dark",
+      "page": "财务",
+      "tab": "员工工资",
+      "scanned": 83,
+      "bad": []
+    },
+    {
+      "theme": "dark",
+      "page": "财务",
+      "tab": "流水",
+      "scanned": 68,
+      "bad": []
+    },
+    {
+      "theme": "dark",
+      "page": "财务",
+      "tab": "财务设置",
+      "scanned": 70,
+      "bad": []
+    },
+    {
+      "theme": "dark",
+      "page": "员工管理",
+      "tab": "技师业绩",
+      "scanned": 103,
+      "bad": []
+    },
+    {
+      "theme": "dark",
+      "page": "员工管理",
+      "tab": "薪资方案",
+      "scanned": 37,
+      "bad": []
+    },
+    {
+      "theme": "dark",
+      "page": "员工管理",
+      "tab": "技师排班",
+      "scanned": 63,
+      "bad": []
+    },
+    {
+      "theme": "dark",
+      "page": "员工管理",
+      "tab": "账号管理",
+      "scanned": 39,
+      "bad": []
+    },
+    {
+      "theme": "dark",
+      "page": "会员套餐/券",
+      "tab": "① 充值套餐",
+      "scanned": 47,
+      "bad": []
+    },
+    {
+      "theme": "dark",
+      "page": "会员套餐/券",
+      "tab": "② 次卡",
+      "scanned": 36,
+      "bad": []
+    },
+    {
+      "theme": "dark",
+      "page": "会员套餐/券",
+      "tab": "③ 优惠券",
+      "scanned": 68,
+      "bad": []
+    },
+    {
+      "theme": "dark",
+      "page": "会员套餐/券",
+      "tab": "④ 积分商城",
+      "scanned": 47,
+      "bad": []
+    },
+    {
+      "theme": "dark",
+      "page": "会员套餐/券",
+      "tab": "⑤ 会员体系（S9）",
+      "scanned": 31,
+      "bad": []
+    }
+  ],
+  "scope": "隔离演示老板账号：11个主页面双主题及财务/员工/会员16个页内标签双主题。不是全角色全弹层检查。",
+  "exceptions": "浅色客服姓名已修正并补扫；禁用日结/工资确认按钮不按可操作文字判定。"
+}

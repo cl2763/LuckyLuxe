@@ -411,7 +411,7 @@ a {
 }
 
 .wechat-bubble.customer span {
-  color: var(--brandd);
+  color: var(--heroink);
 }
 
 .wechat-bubble.staff span {
@@ -1685,7 +1685,7 @@ button {
 }
 
 .price-boundary-box small {
-  color: var(--brandd);
+  color: var(--ink);
   font-weight: 850;
 }
 
@@ -3561,7 +3561,7 @@ textarea:focus {
   color: var(--heroink);
 }
 
-.web-tab span {
+.web-tab #cartBadge {
   display: inline-grid;
   min-width: 22px;
   height: 22px;
@@ -5374,7 +5374,6 @@ textarea:focus {
     flex-direction: column;
   }
 
-  .web-tabs,
   .metric-grid,
   .ai-gallery-grid,
   .dashboard-chart-grid,
@@ -7187,7 +7186,7 @@ section.card > .section-row:first-child { margin-top: 0; }
   background: var(--paper);
   margin-top: 8px;
 }
-.staff-timeline-row.is-done { opacity: .55; }
+.staff-timeline-row.is-done { opacity: 1; } /* 已完成用状态徽章表达，整行文字保持可读 */
 .stl-time { font-size: 1.05rem; }
 .stl-time small { display: block; color: var(--muted); font-weight: 500; }
 .stl-main { display: flex; flex-direction: column; gap: 2px; min-width: 0; }
@@ -7318,7 +7317,7 @@ section.card > .section-row:first-child { margin-top: 0; }
   transition: border-color .15s ease;
 }
 .staff-day-chip:hover { border-color: var(--brandd); }
-.staff-day-chip.chip-warn { background: var(--tagmbg); border-color: var(--brand); color: var(--brandd); font-weight: 600; }
+.staff-day-chip.chip-warn { background: var(--tagmbg); border-color: var(--brand); color: var(--ink); font-weight: 600; }
 
 /* F4: 技师卡管理按钮不再挤成竖排字 */
 .tech-manage-row { flex-wrap: wrap; align-items: center; }
@@ -7606,7 +7605,7 @@ section.card > .section-row:first-child { margin-top: 0; }
 .tb-date { font-size: 16px; font-weight: 700; }
 .tb-today { margin-left: auto; border: 1px solid var(--line); border-radius: 14px; padding: 4px 14px; background: var(--card); cursor: pointer; font-size: 13px; }
 .tb-today.cur { background: var(--hero); color: var(--heroink); border-color: var(--hero2); }
-.tb-summary { display: flex; gap: 10px; flex-wrap: wrap; margin-bottom: 12px; }.tb-pill { border: 1px solid var(--line); border-radius: 999px; padding: 4px 12px; font-size: 13px; background: var(--card); }
+.tb-summary { display: flex; gap: 10px; flex-wrap: wrap; margin-bottom: 12px; }.tb-pill { display:flex; flex:0 0 78px; flex-direction:column; justify-content:center; align-items:center; box-sizing:border-box; width:78px; height:78px; border:1px solid var(--line); border-radius: 999px; padding:6px; text-align:center; line-height:1.2; font-size:12px; background:var(--card); }
 .tb-pill b { font-weight: 700; }
 .tb-pill.live { color: var(--good); border-color: var(--hero2); }
 .tb-pill.hot { color: var(--brandd); border-color: var(--brand); cursor: pointer; }
@@ -7648,25 +7647,25 @@ section.card > .section-row:first-child { margin-top: 0; }
 .tb-blk.split .tb-bs, .tb-blk.split .tb-tags { display: none; }   /* 层级:时间 > 顾客名 > 项目;窄栏先舍项目与标签 */
 .tb-blk.free { background: rgba(29,122,79,.06); border: 1px dashed rgba(29,122,79,.4); color: var(--good); align-items: center; justify-content: center; }
 .tb-blk.hand { background: var(--tagmbg); }
-.tb-blk.foot { background: var(--wall); }
+.tb-blk.foot { background: var(--badbg); }
 .tb-blk.lash { background: var(--tagwbg); }
-.tb-blk.care { background: var(--wall); }
+.tb-blk.care { background: var(--goodbg); }
 .tb-blk.pending { border: 1px dashed var(--brandd); }
 /* 🔴 D172(夜班令6 段 3):台面那四个品类色是**浅色系的**,深底上一放就是四块高亮补丁
    —— 店主那张深色截图里「浅色台面卡」说的就是它。深色下换成同色相的暗版 + 浅字。
    为什么不直接令牌化:这四个是**品类色**(手/足/睫/护理),浅深两套本来就该各调一次,
    不是同一个语义的明暗两面。两套都写在这里,一处真相。 */
 @media (prefers-color-scheme: dark) {
-  :root:not([data-theme="light"]) .tb-blk.hand { background: var(--hero); color: var(--heroink); }
-  :root:not([data-theme="light"]) .tb-blk.foot { background: var(--hero); color: var(--heroink); }
-  :root:not([data-theme="light"]) .tb-blk.lash { background: var(--hero); color: var(--heroink); }
-  :root:not([data-theme="light"]) .tb-blk.care { background: var(--hero); color: var(--heroink); }
+  :root:not([data-theme="light"]) .tb-blk.hand { background: var(--tagmbg); color: var(--tagm); }
+  :root:not([data-theme="light"]) .tb-blk.foot { background: var(--badbg); color: var(--bad); }
+  :root:not([data-theme="light"]) .tb-blk.lash { background: var(--tagwbg); color: var(--tagw); }
+  :root:not([data-theme="light"]) .tb-blk.care { background: var(--goodbg); color: var(--good); }
   :root:not([data-theme="light"]) .tb-blk.free { background: rgba(111, 208, 160, .08); color: var(--good); }
 }
-:root[data-theme="dark"] .tb-blk.hand { background: var(--hero); color: var(--heroink); }
-:root[data-theme="dark"] .tb-blk.foot { background: var(--hero); color: var(--heroink); }
-:root[data-theme="dark"] .tb-blk.lash { background: var(--hero); color: var(--heroink); }
-:root[data-theme="dark"] .tb-blk.care { background: var(--hero); color: var(--heroink); }
+:root[data-theme="dark"] .tb-blk.hand { background: var(--tagmbg); color: var(--tagm); }
+:root[data-theme="dark"] .tb-blk.foot { background: var(--badbg); color: var(--bad); }
+:root[data-theme="dark"] .tb-blk.lash { background: var(--tagwbg); color: var(--tagw); }
+:root[data-theme="dark"] .tb-blk.care { background: var(--goodbg); color: var(--good); }
 :root[data-theme="dark"] .tb-blk.free { background: rgba(111, 208, 160, .08); color: var(--good); }
 .tb-blk.settled { outline: 2px solid #b08d57; }
 .tb-bt { font-weight: 600; }
@@ -7684,8 +7683,8 @@ section.card > .section-row:first-child { margin-top: 0; }
 .tb-unpaid { font-style: normal; font-size: 10px; color: var(--bad); }
 .tb-legend { font-size: 12px; color: var(--muted); margin-top: 8px; display: flex; gap: 14px; flex-wrap: wrap; align-items: center; }
 .tb-legend .lg { display: inline-block; width: 12px; height: 12px; border-radius: 3px; margin-right: 4px; vertical-align: -1px; }
-.tb-legend .lg.hand { background: var(--tagmbg); } .tb-legend .lg.foot { background: var(--wall); }
-.tb-legend .lg.lash { background: var(--tagwbg); } .tb-legend .lg.care { background: var(--wall); }
+.tb-legend .lg.hand { background: var(--tagmbg); } .tb-legend .lg.foot { background: var(--badbg); }
+.tb-legend .lg.lash { background: var(--tagwbg); } .tb-legend .lg.care { background: var(--goodbg); }
 .tb-legend .lg.free { background: rgba(29,122,79,.15); border: 1px dashed rgba(29,122,79,.4); }
 .tb-legend-hd { color: var(--muted); }
 .tb-setup-wall { border: 1px dashed var(--brand); border-radius: 10px; padding: 28px; text-align: center; display: grid; gap: 10px; justify-items: center; }
@@ -7835,7 +7834,7 @@ section.card > .section-row:first-child { margin-top: 0; }
 .duty-row .note { font-size: 12.5px; color: var(--muted); line-height: 1.6; }
 
 /* D97:台面待写小记 pill + 面板行 */
-.tb-pill.warn { background: var(--card); color: var(--brandd); border-color: var(--line); cursor: pointer; }
+.tb-pill.warn { background: var(--card); color: var(--ink); border-color: var(--line); cursor: pointer; }
 .tbn-row { display: flex; align-items: center; justify-content: space-between; gap: 10px; padding: 8px 0; border-bottom: 1px dashed var(--line); font-size: 13px; }
 
 /* D101② 会话侧顾客卡 kv 行 */
@@ -7848,6 +7847,8 @@ section.card > .section-row:first-child { margin-top: 0; }
 
 /* D107(02c 裁③):老板端订单详情「服务签署单」块 —— 与顾客端同源同形 */
 .sig-block .sig-row { display: flex; justify-content: space-between; gap: 12px; margin: 5px 0; font-size: 13px; }
+.booking-detail-panel .eyebrow { color: var(--ink); }
+.sig-block .sig-row a { color: var(--ink); text-decoration: underline; }
 .sig-block .sig-row.total { border-top: 1px solid var(--line); padding-top: 7px; font-size: 13.5px; }
 
 /* D105:值日块内就地「回到今天」*/
@@ -7904,7 +7905,10 @@ section.card > .section-row:first-child { margin-top: 0; }
 .dh-skeleton .dh-sk-line { height: 18px; margin: 10px 0; background: var(--herogrid); }
 
 /* 折线:描边金色 + 渐变填充(.35 → 0)+ 末点圆环 —— 三件缺一件都不是图上那条线 */
-.dh-spark { display: block; margin: 2px 0 6px; max-width: 100%; }
+.dh-trend { width:100%; margin:10px 0; min-width:0; }
+.dh-trend-caption { color:var(--herosub); font-size:12px; margin:0 0 6px; }
+.dh-trend-scroll { width:100%; overflow-x:auto; }
+.dh-spark { display:block; min-width:100%; max-width:none; font-variant-numeric:tabular-nums; }
 
 /* 轮播 dots:5 个,选中那个变成金色的胶囊 */
 /* 🔴 现测踩到:图上 dots 是 `<i>`,而这里得能点(轮播要能手动切),所以渲染的是 `<button>` ——
@@ -8049,3 +8053,37 @@ input[type="checkbox"], input[type="radio"] {
 /* Migration review: retain visible actions while reviewing multiple source cards. */
 .form-modal-panel.migration-card-review{max-width:620px;max-height:85vh;max-height:85dvh}
 .migration-card-review>.action-row{position:sticky;bottom:-18px;background:var(--card);padding:12px 0 6px;z-index:1;border-top:1px solid var(--line)}
+
+.tb-pill>span,.tb-pill>b{display:block;white-space:nowrap}
+
+.profile-avatar-edit { display:grid; gap:8px; cursor:pointer; position:relative; color:var(--heroink); }
+.profile-avatar-edit input { position:absolute; inset:0; width:100%; height:100%; opacity:0; cursor:pointer; }
+
+.customer-loading-spinner{display:block;width:24px;height:24px;border:3px solid var(--line);border-top-color:var(--text);border-radius:50%;animation:customer-loading-spin .8s linear infinite;margin:0 auto 12px}@keyframes customer-loading-spin{to{transform:rotate(360deg)}}
+
+.manual-draft-dialog{max-width:680px;width:calc(100% - 40px);max-height:85dvh;overflow:auto;background:var(--card);color:var(--ink);border:1px solid var(--line);padding:24px}.manual-draft-dialog::backdrop{background:rgba(0,0,0,.55)}.manual-draft-dialog p{line-height:1.6}.manual-draft-code{display:block;width:240px;height:240px;margin:20px auto}.manual-draft-dialog [role=status]{overflow-wrap:anywhere}
+
+/* Each card owns one approved service album. */
+.portfolio-tech-filter{display:flex;flex-wrap:wrap;gap:8px;margin:16px 0}
+.service-album-grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:16px;align-items:start}
+.service-album-card{min-width:0;overflow:hidden;border-radius:8px;background:var(--card)}
+.service-album-visual{position:relative;aspect-ratio:1/1.12}
+.service-album-open{display:block;width:100%;height:100%;min-height:0;padding:0;border:0;border-radius:0;background:transparent}
+.service-album-open img{display:block;width:100%;height:100%;object-fit:cover}
+.service-album-meta{display:flex;flex-wrap:wrap;gap:8px;justify-content:space-between;padding:12px;color:var(--ink);font-size:14px}
+.service-album-visual .portfolio-nav{position:absolute;top:50%;transform:translateY(-50%);z-index:2;width:36px;min-width:36px;max-width:36px;height:36px;min-height:36px;padding:0;margin:0;display:flex;align-items:center;justify-content:center;border-radius:50%;background:rgba(30,26,22,.42);color:var(--heroink);border:1px solid rgba(255,255,255,.3);font-size:28px;line-height:1}
+.portfolio-nav.prev{left:6px}.portfolio-nav.next{right:6px}.portfolio-nav:disabled{opacity:.3}
+.album-photo-count{position:absolute;bottom:8px;left:50%;transform:translateX(-50%);padding:2px 8px;border-radius:999px;background:rgba(30,26,22,.42);color:var(--heroink);font-size:12px;pointer-events:none}
+
+/* Manual draft: only the today board owns this compact action. */
+.manual-draft-toolbar{display:flex;align-items:center;flex-wrap:wrap;gap:12px;margin:16px 0}
+#manualDraftOrderEntry{display:inline-flex;align-items:center;justify-content:center;gap:8px;min-height:44px;width:auto;margin:0;padding:10px 18px;border:1px solid var(--line);border-radius:999px;background:var(--card);color:var(--ink);font-size:14px;line-height:1.4;font-weight:600}
+#manualDraftOrderEntry>span:first-child{color:var(--brandd);font-size:18px}
+.manual-draft-toolbar>[data-draft-hint]{font-size:13px}
+#manualDraftOrderEntry:hover{background:var(--wall)}
+#manualDraftOrderEntry:active{opacity:.76;transform:translateY(1px)}
+#manualDraftOrderEntry:focus-visible{outline:2px solid var(--brand);outline-offset:3px}
+.membership-summary-list{margin:20px 0;color:var(--ink)}
+.membership-summary-list>div{display:flex;justify-content:space-between;gap:24px;padding:16px 0;border-bottom:1px solid var(--line)}
+.membership-summary-list dt{color:var(--sub)}
+.membership-summary-list dd{margin:0;text-align:right;overflow-wrap:anywhere}

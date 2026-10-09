@@ -6,7 +6,7 @@ window.resolveSignEntry = async function(code,merchant) {
   const auth=merchant ? read(localStorage,'lucky-owner-auth')||read(sessionStorage,'lucky-owner-auth') : stored?.__tenant===tenant?stored.__value:null
   if(!auth?.accessToken)throw Error('请从已登录的订单进入，或向商家获取最新签署链接。')
   const path=merchant?`/admin/settlements/${encodeURIComponent(code)}/sign-token`:`/my/settlements/${encodeURIComponent(code)}/sign-link`
-  const response=await fetch(path,{method:'POST',headers:{'content-type':'application/json',authorization:'Bearer '+auth.accessToken,...(!merchant?{'x-tenant-id':tenant}:{})},body:'{}'})
+  const response=await fetch((window.signScopePath ? window.signScopePath(path) : path),{method:'POST',headers:{'content-type':'application/json',authorization:'Bearer '+auth.accessToken,...(!merchant?{'x-tenant-id':tenant}:{})},body:'{}'})
   const result=await response.json()
   if(!response.ok)throw Error(result.error?.message||'无法打开签署单，请返回订单重试。')
   const target=new URL(result.url,location.origin)

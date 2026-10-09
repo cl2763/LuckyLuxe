@@ -4,12 +4,14 @@ page{background:var(--paper)}
 .seg-i{flex:1;text-align:center;font-size:24rpx;padding:10rpx 0;border-radius:999rpx;color:var(--sub)}
 .seg-i.on{background:var(--hero);color:var(--heroink);font-weight:700}
 .empty{text-align:center;color:var(--sub);font-size:25rpx;padding:80rpx 0}
+.dv-loading{margin:8rpx 24rpx;padding:16rpx 22rpx;background:var(--card);border:1rpx solid var(--line);border-radius:14rpx;color:var(--ink);font-size:23rpx}
+.ds-confirm.saving{opacity:.72}
 /* ===== 技师维度日视图 ===== */
 .dv-datebar{display:flex;align-items:center;gap:14rpx;padding:8rpx 24rpx}
 .dv-nav{width:44rpx;height:44rpx;border-radius:50%;background:var(--card);border:1rpx solid var(--line);display:flex;align-items:center;justify-content:center;color:var(--sub);font-size:26rpx}
 .dv-date{font-size:28rpx;font-weight:800;color:var(--ink)}
 .dv-today{margin-left:auto;font-size:22rpx;color:var(--brandd);border:1rpx solid var(--brand);border-radius:999rpx;padding:5rpx 18rpx}
-.dv-summary{display:flex;align-items:stretch;flex-wrap:wrap;gap:8rpx;padding:6rpx 24rpx 12rpx}.dv-pill{display:flex;flex-direction:column;justify-content:center;align-items:center;min-width:104rpx;box-sizing:border-box;white-space:nowrap;font-size:19rpx;line-height:1.35;color:var(--sub);background:var(--card);border:1rpx solid var(--line);border-radius:999rpx;padding:8rpx 10rpx}.dv-pill .b{font-size:24rpx;color:var(--ink);margin-top:2rpx}
+.dv-summary{display:flex;align-items:stretch;flex-wrap:wrap;gap:8rpx;padding:6rpx 24rpx 12rpx}.dv-pill{display:flex;flex:0 0 126rpx;flex-direction:column;justify-content:center;align-items:center;width:126rpx;height:126rpx;box-sizing:border-box;text-align:center;font-size:19rpx;line-height:1.25;color:var(--sub);background:var(--card);border:1rpx solid var(--line);border-radius:50%;padding:8rpx}.dv-pill .b{font-size:24rpx;color:var(--ink);margin-top:2rpx}
 .dv-pill .b{color:var(--ink);font-weight:800}
 .dv-pill.live{background:var(--goodbg);border-color:var(--line)}
 .dv-pill.live .b{color:var(--good)}
@@ -44,22 +46,22 @@ page{background:var(--paper)}
 .dv-tag.xin{background:var(--brand);color:var(--hero)}
 /* ===== 色相=服务类型 × 状态=到店进度 ===== */
 /* 未到店(默认):淡色 + 虚线边 */
-.dv-blk.hand{background:var(--wall);color:var(--brandd);border:1rpx dashed rgba(122,90,46,.3)}
-.dv-blk.foot{background:var(--wall);color:var(--brandd);border:1rpx dashed rgba(138,80,48,.32)}
-.dv-blk.lash{background:var(--wall);color:var(--tagw);border:1rpx dashed rgba(91,67,112,.28)}
+.dv-blk.hand{background:var(--tagmbg);color:var(--tagm);border:1rpx dashed var(--tagm)}
+.dv-blk.foot{background:var(--badbg);color:var(--bad);border:1rpx dashed var(--bad)}
+.dv-blk.lash{background:var(--tagwbg);color:var(--tagw);border:1rpx dashed var(--tagw)}
 .dv-blk.care{background:var(--goodbg);color:var(--good);border:1rpx dashed rgba(63,107,82,.28)}
 /* 到店·进行中:满色点亮 + 绿框 + 左绿条 */
 .dv-blk.active{border:none;box-shadow:0 0 0 3rpx rgba(31,122,77,.5),0 3rpx 10rpx rgba(92,70,48,.16);padding-left:16rpx}
 .dv-blk.active::before{content:'';position:absolute;left:0;top:0;bottom:0;width:8rpx;background:var(--good);border-radius:12rpx 0 0 12rpx}
-.dv-blk.hand.active{background:var(--wall);color:var(--ink)}
-.dv-blk.foot.active{background:var(--wall);color:var(--brandd)}
-.dv-blk.lash.active{background:var(--wall);color:var(--ink)}
+.dv-blk.hand.active{background:var(--tagmbg);color:var(--tagm)}
+.dv-blk.foot.active{background:var(--badbg);color:var(--bad)}
+.dv-blk.lash.active{background:var(--tagwbg);color:var(--tagw)}
 /* J-54:语义=「进行中 / 选中」。不跟品类色走(那是身份),走「正常/进行」那一对。
    ⚠️ 注释里**不写色值** —— wxss 写死色那把尺子连注释一起数,写一个 hex 棘轮就涨一个(现测踩过)。
    换前只有 4.45(差 0.05 不到 AA);换 --good/--goodbg 后 浅 4.68 / 深 7.79,数在 07d 回执 §三 */
 .dv-blk.care.active{background:var(--goodbg);color:var(--good)}
-/* 已完成:灰掉 + 勾 */
-.dv-blk.done{background:var(--wall) !important;color:var(--sub) !important;border:1rpx solid var(--line)}
+/* 已完成保留项目色；实线边与勾表达状态，避免所有项目灰成同一种块。 */
+.dv-blk.done{border-style:solid;opacity:.82}
 /* 时间行到店小标 */
 .dv-sdot{display:inline-block;margin-right:4rpx;font-size:16rpx}
 .dv-sdot.active{color:var(--good);font-weight:800}
@@ -70,9 +72,9 @@ page{background:var(--paper)}
 .dv-legend.top{margin-top:48rpx;padding-top:20rpx;border-top:1rpx dashed var(--line)}
 .dv-legend-hd{width:100%;text-align:center;font-size:17rpx;color:var(--sub);margin-bottom:2rpx}
 .dv-legend .lg{display:inline-block;width:18rpx;height:18rpx;border-radius:4rpx;vertical-align:-2rpx;margin-right:5rpx}
-.dv-legend .lg.hand{background:var(--wall)}
-.dv-legend .lg.foot{background:var(--wall)}
-.dv-legend .lg.lash{background:var(--wall)}
+.dv-legend .lg.hand{background:var(--tagmbg)}
+.dv-legend .lg.foot{background:var(--badbg)}
+.dv-legend .lg.lash{background:var(--tagwbg)}
 .dv-legend .lg.care{background:var(--goodbg)}
 .dv-legend .lg.free{background:var(--wall);border:1rpx dashed var(--line)}
 .dv-tag.owner{background:var(--tagwbg);color:var(--tagw)}
@@ -87,7 +89,7 @@ page{background:var(--paper)}
 .fchip.on{background:var(--hero);color:var(--heroink);font-weight:700}
 .ogroup{margin:0 24rpx}
 .oghead{font-size:22rpx;color:var(--sub);margin:14rpx 0 6rpx}
-.orow{display:flex;align-items:center;gap:12rpx;background:var(--card);border-radius:14rpx;padding:14rpx 16rpx;margin:0 24rpx 10rpx;box-shadow:0 2rpx 8rpx rgba(92,70,48,.05)}
+.orow{display:flex;align-items:center;gap:12rpx;background:var(--card);border-radius:12rpx;padding:14rpx 16rpx;margin:0 24rpx 10rpx;box-shadow:0 2rpx 8rpx rgba(92,70,48,.05)}
 .ogroup .orow{margin:0 0 10rpx}
 .otime{font-size:24rpx;font-weight:800;color:var(--ink);width:80rpx;flex:none}
 .omain{flex:1;min-width:0}
@@ -214,7 +216,7 @@ page{background:var(--paper)}
 .ds-pick{flex:1}
 
 /* 营业时段外的整点行:沿用网格现有语言,只淡一档 + 底纹,不引入新设计 */
-.dv-hr.off{color:#c4b8ab}
+.dv-hr.off{color:var(--sub)}
 .dv-line.off{background:repeating-linear-gradient(45deg,rgba(154,140,124,.05) 0,rgba(154,140,124,.05) 6rpx,transparent 6rpx,transparent 14rpx)}
 
 /* 日结行主标识:时间打头(店主 2026-08-09 修订 v6);单号退到签署单弹窗/详情里 */
@@ -248,7 +250,7 @@ page{background:var(--paper)}
 .as-btn.ghost{background:var(--card);border:1rpx solid var(--line);color:var(--sub)}
 
 /* 图 A-2:爽约定金处置弹层的二选一卡 */
-.dp-opt{border:1rpx solid #e8e0d8;border-radius:14rpx;padding:16rpx 18rpx;margin:12rpx 0;background:var(--card)}
+.dp-opt{border:1rpx solid var(--line);border-radius:14rpx;padding:16rpx 18rpx;margin:12rpx 0;background:var(--card)}
 .dp-opt.on{border-color:var(--good);background:var(--goodbg)}
 .dp-t{font-size:26rpx;font-weight:700;color:var(--ink)}
 .dp-d{font-size:22rpx;color:var(--sub);margin-top:4rpx;line-height:1.5}
@@ -265,7 +267,7 @@ page{background:var(--paper)}
 .deduct-row.tap{padding:10rpx 0}
 
 /* D84 引导墙:未设置营业时间(≠休息,空态说真话) */
-.dv-setupwall { border: 2rpx dashed #b08d57; border-radius:14rpx; padding:40rpx 24rpx; text-align:center; margin:20rpx 0; }
+.dv-setupwall { border: 2rpx dashed var(--brand); border-radius:14rpx; padding:40rpx 24rpx; text-align:center; margin:20rpx 0; }
 .dv-sw-t { font-size:30rpx; font-weight:700; }
 .dv-sw-p { font-size:22rpx; color:var(--sub); margin:12rpx 0 20rpx; line-height:1.6; }.dv-sw-btn { display:inline-block; background:var(--hero); color:var(--heroink); border-radius:999rpx; padding:14rpx 40rpx; font-size:26rpx; }
 
@@ -273,13 +275,13 @@ page{background:var(--paper)}
 .dv-duty { display:flex; align-items:center; gap:14rpx; row-gap:12rpx; flex-wrap:wrap; margin:24rpx 0 8rpx; padding:16rpx 24rpx; border-top:1rpx dashed var(--line); font-size:24rpx; }
 .dv-duty-lab { font-weight:700; padding:4rpx 0; }
 /* D94 + UI规范:chips=胶囊 999rpx,选中=黑底白字(台面黑白规格),行距给呼吸(照图例区留白) */
-.dv-duty-chip { border: 2rpx solid #d9d9de; background:var(--card); color:var(--ink); border-radius:999rpx; padding:8rpx 24rpx; font-size:22rpx; line-height:1.4; }
+.dv-duty-chip { border: 2rpx solid var(--line); background:var(--card); color:var(--ink); border-radius:999rpx; padding:8rpx 24rpx; font-size:22rpx; line-height:1.4; }
 .dv-duty-chip.on { background:var(--hero); color:var(--heroink); border-color:var(--hero); font-weight:700; }
 .dv-duty-chip.ro { opacity:.7; }
 .dv-duty-note { width:100%; color:var(--sub); font-size:20rpx; }
 
 /* D97 待写小记 pill(warn 色与网页同语) */
-.dv-pill.warn{background:var(--wall);color:var(--brandd);border:1rpx solid var(--line)}
+.dv-pill.warn{background:var(--wall);color:var(--ink);border:1rpx solid var(--line)}
 
 /* 补录小合同(01v):弹窗里两句(提示 + 后端出的归属确认句) */
 .ds-bf{font-size:22rpx;color:var(--sub);line-height:1.6;padding:8rpx 24rpx}
@@ -291,3 +293,13 @@ page{background:var(--paper)}
   color:var(--brandd);
   text-decoration:underline;
 }
+
+/* 标签与数字各一行，状态只改语义颜色，不改圆形尺寸。 */
+.dv-pill>text{display:block;white-space:nowrap;flex:none}
+
+.draft-toolbar{display:flex;align-items:center;flex-wrap:wrap;gap:16rpx;margin:20rpx 24rpx}
+.page button.draft-entry{display:inline-flex;align-items:center;justify-content:center;gap:10rpx;width:auto;min-height:76rpx;margin:0;padding:0 24rpx;line-height:1.4;font-size:25rpx;font-weight:600;color:var(--ink);background:var(--card);border:1rpx solid var(--line);border-radius:999rpx}
+.draft-entry::after{border:0}
+.draft-plus{font-size:30rpx;color:var(--brandd)}
+.draft-hint{font-size:23rpx;color:var(--sub)}
+.page button.draft-entry-pressed{background:var(--wall);opacity:.76}

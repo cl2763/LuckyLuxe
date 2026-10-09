@@ -33,14 +33,14 @@
   padding: 0 26rpx;
   border-radius: 999rpx;
   align-items: center;
-  background: #fff;
-  color: #8a7f78;
+  background: var(--card);
+  color: var(--sub);
   font-size: 25rpx;
 }
 
 .tab.active {
-  background: #2b2b2b;
-  color: #fff;
+  background: var(--hero);
+  color: var(--heroink);
 }
 
 .order-card {
@@ -69,7 +69,7 @@
   flex: 1;
   min-width: 0;
   overflow: hidden;
-  color: #342b28;
+  color: var(--ink);
   font-size: 32rpx;
   font-weight: 850;
   text-overflow: ellipsis;
@@ -78,7 +78,7 @@
 
 .status {
   flex: none;
-  color: #c6a27e;
+  color: var(--brandd);
   font-size: 25rpx;
   font-weight: 780;
 }
@@ -105,20 +105,20 @@
   flex-direction: column;
   justify-content: center;
   gap: 10rpx;
-  color: #5e514b;
+  color: var(--sub);
   font-size: 25rpx;
   font-weight: 700;
 }
 
 .order-time {
-  color: #342b28;
+  color: var(--ink);
   font-size: 28rpx;
   font-weight: 830;
 }
 
 .empty-title {
   margin-bottom: 14rpx;
-  color: #3a2e2a;
+  color: var(--ink);
   font-size: 34rpx;
   font-weight: 750;
 }
@@ -129,25 +129,25 @@
 }
 
 /* 屏 D2 徽标三态(2026-08-10 批图):已签署绿 / 已更正暖橙 / 售后中蓝 */
-.status.badge-signed{color:#2f7d5c;background:#e3eee8}
-.status.badge-amended{color:#a8551f;background:#fdf3ec}
-.status.badge-aftersales{color:#2b6cb0;background:#e6effa}
+.status.badge-signed{color:var(--good);background:var(--goodbg)}
+.status.badge-amended{color:var(--brandd);background:var(--paper)}
+.status.badge-aftersales{color:var(--tagw);background:var(--tagwbg)}
 .status.badge-signed,.status.badge-amended,.status.badge-aftersales{border-radius:999rpx;padding:4rpx 16rpx;font-size:22rpx;font-weight:700}
 .order-info .note{font-size:22rpx;margin-top:4rpx}
 
 /* 屏 D3 售后进度卡:三步(发起 → 跟进中 → 结果)+ 单据页入口 */
-.as-card{margin-top:16rpx;padding-top:16rpx;border-top:1rpx dashed #e7ddd4}
+.as-card{margin-top:16rpx;padding-top:16rpx;border-top:1rpx dashed var(--line)}
 .as-step{display:flex;gap:16rpx;align-items:flex-start;padding:8rpx 0}
-.as-dot{width:16rpx;height:16rpx;border-radius:50%;background:#d8cec4;margin-top:10rpx;flex:none}
-.as-step.done .as-dot{background:#2b6cb0}
+.as-dot{width:16rpx;height:16rpx;border-radius:50%;background:var(--wall);margin-top:10rpx;flex:none}
+.as-step.done .as-dot{background:var(--tagw)}
 .as-body{flex:1;min-width:0}
-.as-l{font-size:24rpx;color:#241f1d}
-.as-t{font-size:21rpx;color:#9a8c7c;margin-top:2rpx}
-.as-link{margin-top:12rpx;font-size:24rpx;font-weight:700;color:#2b6cb0}
-.as-foot{margin-top:10rpx;font-size:20rpx;color:#9a8c7c;line-height:1.6}
+.as-l{font-size:24rpx;color:var(--ink)}
+.as-t{font-size:21rpx;color:var(--sub);margin-top:2rpx}
+.as-link{margin-top:12rpx;font-size:24rpx;font-weight:700;color:var(--tagw)}
+.as-foot{margin-top:10rpx;font-size:20rpx;color:var(--sub);line-height:1.6}
 
 /* D57 待签署置顶卡 */
-.pending-sign-title{font-size:26rpx;font-weight:700;color:#8a3a33;margin:16rpx 24rpx 8rpx}
-.pending-sign-card{display:flex;justify-content:space-between;align-items:center;margin:0 24rpx 12rpx;padding:20rpx;border:1rpx solid #ecd5d2;background:#fbf4f3}
-.ps-t{font-size:26rpx;font-weight:600;color:#2d2826}
-.ps-s{font-size:22rpx;color:#8c8279;margin-top:4rpx}.ps-btn {font-size:24rpx;color:var(--hero);background:var(--brand);border-radius:999rpx;padding:10rpx 24rpx;flex-shrink:0}
+.pending-sign-title{font-size:26rpx;font-weight:700;color:var(--bad);margin:16rpx 24rpx 8rpx}
+.pending-sign-card{display:flex;justify-content:space-between;align-items:center;margin:0 24rpx 12rpx;padding:20rpx;border:1rpx solid var(--line);background:var(--badbg)}
+.ps-t{font-size:26rpx;font-weight:600;color:var(--ink)}
+.ps-s{font-size:22rpx;color:var(--sub);margin-top:4rpx}.ps-btn {font-size:24rpx;color:var(--hero);background:var(--brand);border-radius:999rpx;padding:10rpx 24rpx;flex-shrink:0}

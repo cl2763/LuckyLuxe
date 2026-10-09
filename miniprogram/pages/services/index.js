@@ -13,8 +13,9 @@ Page({
     lang: 'zh',
     t: i18n.pageCopy('services', 'zh'),
     cats: [],          // 左栏=平台大类(空类不显示)
-    activeCat: '',     // 当前大类 key
+    activeCat: 'all',     // 当前大类 key
     serviceList: [],
+    loading: true,
     loadFailed: false
   },
 
@@ -41,13 +42,17 @@ Page({
   },
 
   async refresh() {
+    if (this._loading) return
+    this._loading = true
+    this.setData({ loading: true, loadFailed: false })
     const lang = i18n.getLang()
     let catalog
     try {
       catalog = await api.getServiceCatalog(lang)
     } catch (e) {
       // D17:接口挂了如实报,不回 mock
-      this.setData({ loadFailed: true, serviceList: [], cats: [] })
+      this.setData({ loading: false, loadFailed: true, serviceList: [], cats: [] })
+      this._loading = false
       return
     }
     this._services = catalog.services
@@ -57,15 +62,17 @@ Page({
     const cats = (catalog.platformCategories || [])
       .filter((cat) => catalog.services.some((svc) => keyOf(svc) === cat.key))
       .map((cat) => ({ key: cat.key, label: lang === 'en' ? cat.nameEn : cat.nameZh }))
+    cats.unshift({ key: 'all', label: lang === 'en' ? 'All services' : '全部服务' })
     let activeCat = this.data.activeCat
     if (!cats.some((c) => c.key === activeCat)) activeCat = (cats[0] || {}).key || ''
-    this.setData({ loadFailed: false, cats, activeCat, lang, t: i18n.pageCopy('services', lang) })
+    this.setData({ loading: false, loadFailed: false, cats, activeCat, lang, t: i18n.pageCopy('services', lang) })
     this.render()
+    this._loading = false
   },
 
   render() {
     const lang = this.data.lang
-    const filtered = (this._services || []).filter((svc) => this._keyOf(svc) === this.data.activeCat)
+    const filtered = (this._services || []).filter((svc) => this.data.activeCat === 'all' || this._keyOf(svc) === this.data.activeCat)
     const serviceList = i18n.localizeServices(filtered.slice().sort((a, b) => a.sort - b.sort), lang)
     this.setData({ serviceList })
   },

@@ -7,7 +7,7 @@ Page({
     segs: ['充值套餐', '会员次卡', '优惠券', '会员体系'],
     // 批④ S9:会员体系只读展示(行与说明句都读后端,与网页端/顾客端同一出口)
     msRows: [],
-    msHint: '',
+    msHint: '', msLoading: true, msError: '',
     recharges: [], timesCards: [], coupons: [],
     customers: [],
     // 屏 C3 自定义发放(小程序老板版)
@@ -20,8 +20,8 @@ Page({
   },
 
   async onShow() {
-    this.loadMembershipView()
     if (!(await api.guardOwner())) return
+    this.loadMembershipView()
     await ensureCurrencyCached().catch(() => {})
     this.loadAll()
   },
@@ -136,10 +136,15 @@ Page({
      /admin/membership/config(summaryRows / editHint),与网页商家端、与顾客端实际生效的规则同源。
      无等级店后端就不返等级结构,这里自然也不显示(与顾客端三减法一致)。 */
   async loadMembershipView() {
+    if (this._msPending) return
+    this._msPending = true
+    this.setData({ msLoading: true, msError: '' })
     try {
       const r = await api.adminGet('/admin/membership/config')
+      if (!r || !Array.isArray(r.summaryRows) || !r.summaryRows.length) throw new Error('会员规则读取失败，请重试')
       this.setData({ msRows: (r && r.summaryRows) || [], msHint: (r && r.editHint) || '' })
-    } catch (e) { this.setData({ msRows: [], msHint: '' }) }
+    } catch (e) { this.setData({ msRows: [], msHint: '', msError: '会员规则读取失败，请重试' }) }
+    finally { this._msPending = false; this.setData({ msLoading: false }) }
   },
 
   onSeg(e) { this.setData({ seg: Number(e.currentTarget.dataset.i) }) },

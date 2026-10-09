@@ -5,7 +5,6 @@ const api = require('../../utils/api')
 const phoneAuth = require('../../utils/phone-auth')
 const tabbar = require('../../utils/tabbar')
 const DEFAULT_AVATAR = ''
-
 Page({
   data: {
     member: {},
@@ -14,8 +13,12 @@ Page({
     lang: 'zh',
     t: i18n.pageCopy('me', 'zh'),
     isLoggedIn: false,
+    memberQrVisible: false,
+    memberQrUrl: '',
+    memberQrError: false,
     growthPercent: 0,
     recentOrders: [],
+    ordersLoading: true,
     authModalVisible: false,
     authModalMode: 'login',
     canFinishLogin: false,
@@ -42,7 +45,6 @@ Page({
       after_sales: 0
     }
   },
-
   guestMember(lang = 'zh') {
     return {
       nickname: lang === 'en' ? 'Guest' : '未登录',
@@ -63,7 +65,6 @@ Page({
       avatarUrl: DEFAULT_AVATAR
     }
   },
-
   emptyAuthProfile() {
     return {
       avatarUrl: '',
@@ -82,7 +83,6 @@ Page({
       privacyAuthorized: false
     }
   },
-
   debugAuth(label, payload) {
     if (payload === undefined) {
       console.log(`[LuckyLuxe][auth] ${label}`)
@@ -90,7 +90,6 @@ Page({
     }
     console.log(`[LuckyLuxe][auth] ${label}`, payload)
   },
-
   async onShow() {
     /* D33 单源:资产区余额实时后端,不吃 lucky_member 缓存 */
     if (api.isLoggedIn && api.isLoggedIn()) {
@@ -107,6 +106,7 @@ Page({
     i18n.applyTabBar(lang)
     storage.syncCartBadge()
     i18n.setTitle(i18n.pageCopy('me', lang).title)
+    this.setData({ ordersLoading: true })
     let sourceOrders = [], ordersError = false
     const isLoggedIn = api.isLoggedIn()
     try {
@@ -158,8 +158,9 @@ Page({
       t: i18n.pageCopy('me', lang),
       isLoggedIn,
       growthPercent,
-      recentOrders: orders.slice(0, 2),
+      recentOrders: require('../../utils/recent-orders').latest(orders),
       ordersError,
+      ordersLoading: false,
       counts: {
         pending_service: orders.filter((item) => item.status === 'pending_service').length,
         completed: orders.filter((item) => item.status === 'completed').length,
@@ -281,10 +282,9 @@ Page({
     this.syncAuthReady()
   },
 
-  togglePrivacy() {
-    this.debugAuth('privacy checkbox toggle', { next: !this.data.authProfile.privacyChecked })
-    this.setData({ 'authProfile.privacyChecked': !this.data.authProfile.privacyChecked })
-    this.syncAuthReady()
+  openPrivacyPolicy() {
+    if (!wx.openPrivacyContract) { wx.showToast({title:'请在微信小程序设置中查看隐私保护指引',icon:'none'}); return }
+    wx.openPrivacyContract({fail:()=>wx.showModal({title:'隐私指引暂时无法打开',content:'请稍后重试；未同意前不会继续授权登录。',showCancel:false,fail:()=>wx.showToast({title:'请稍后重试',icon:'none'})})})
   },
 
   onPrivacyTap(event) {
@@ -366,22 +366,7 @@ Page({
         nickname: profile.nickname
       })
       try {
-        if (profile.nickname) {
-          await api.loginWithWechat({
-            nickname: profile.nickname,
-            avatarUrl: '',
-            phoneCode: '',
-            phone: ''
-          })
-        }
-        const currentMember = wx.getStorageSync('lucky_member') || {}
-        wx.setStorageSync('lucky_member', Object.assign({}, currentMember, {
-          _tenant: api.currentTenantId(), // D40:快照带租户戳(租户唯一出口,不回落别家店)
-          nickname: profile.nickname || currentMember.nickname || (this.data.lang === 'en' ? 'WeChat User' : '微信用户'),
-          avatarUrl: profile.avatarUrl || currentMember.avatarUrl || DEFAULT_AVATAR,
-          profileComplete: true,
-          memberLevel: currentMember.memberLevel || '会员' // F3 单源:兜底不再写死梯子标签
-        }))
+        await api.updateProfile(profile)
         this.debugAuth('profile save success')
         wx.showToast({ title: this.data.lang === 'en' ? 'Profile saved' : '资料已保存', icon: 'success' })
         this.setData({ authModalVisible: false })
@@ -413,7 +398,7 @@ Page({
       const hasProfile = Boolean(profile.nickname || profile.avatarUrl)
       wx.setStorageSync('lucky_member', Object.assign({}, currentMember, {
         nickname: profile.nickname || currentMember.nickname || loginResult.id || loginResult.displayName || currentMember.memberCode || (this.data.lang === 'en' ? 'WeChat User' : '微信用户'),
-        avatarUrl: profile.avatarUrl || currentMember.avatarUrl || DEFAULT_AVATAR,
+        avatarUrl: currentMember.avatarUrl || DEFAULT_AVATAR,
         profileComplete: hasProfile || Boolean(currentMember.profileComplete),
         memberLevel: currentMember.memberLevel || '会员', // F3 单源:兜底不再写死梯子标签
         phoneAuthorized: false,
@@ -565,14 +550,15 @@ Page({
 
   showMemberCode() {
     if (!this.requireLogin()) return
-    wx.showModal({
-      title: this.data.lang === 'en' ? 'Member code' : '会员码',
-      content: `${this.data.member.memberCode || 'LL-F4ZY'}\n${this.data.lang === 'en' ? 'Show this code in store or share it as your referral code.' : '到店可出示此码，后续也可作为分享推荐码使用。'}`,
-      confirmText: this.data.lang === 'en' ? 'OK' : '知道了',
-      showCancel: false,
-      fail: (e) => console.warn('[showModal fail]', e) // S组卫生批:fail=开发者域错误,console 留痕不弹 UI(toast 会撞转场,D27 家族)
-    })
+    const code = String(this.data.member.memberCode || '').toUpperCase()
+    if (!/^LL-[A-Z0-9]{8}$/.test(code)) { wx.showToast({title:'会员码暂不可用，请刷新重试',icon:'none'}); return }
+    this.setData({ memberQrVisible:true, memberQrError:false,
+      memberQrUrl:api.miniCodeUrl(`/mini-code/m${code.slice(3)}`) })
   },
+  scanIncomingCode: require('../../utils/scan-actions').scanCustomerCode,
+  hideMemberCode() { this.setData({memberQrVisible:false}) },
+  noop() {},
+  memberQrImageError() { this.setData({memberQrError:true}) },
 
   goSandboxIdentity() { require('../../utils/nav').to('/pages/sandbox-identity/index') },
 

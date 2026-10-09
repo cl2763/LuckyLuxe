@@ -8,6 +8,10 @@ const tabbar = require('../../utils/tabbar')
 
 Page({
   data: {
+    loading: true,
+    loadFailed: false,
+    loadError: '',
+    diagnostic: '',
     lang: 'zh',
     t: i18n.pageCopy('home', 'zh'),
     store: {},   // D17:初始不塞 mock 门店,接口没回来就是空,不拿假门店占位
@@ -29,7 +33,7 @@ Page({
     this.setData({ cur: curOf() })   // 币种跟门店走,不写死币符
 
     // 多租户兜底:既没扫店码、也没进过任何店 → 引导选择门店
-    if (!api.hasTenant()) {
+    if (!api.hasTenant() || (api.EXPERIENCE && !api.EXPERIENCE_TENANTS.includes(api.currentTenantId()))) {
       wx.navigateTo({ url: '/pages/shop-select/index' })
       return
     }
@@ -106,21 +110,25 @@ Page({
     i18n.setTitle('有迹')
     /* 🔴 D17:接口挂了如实报失败态,不回 mock。以前这三条任何一条挂了都会
        悄悄回写死的演示服务/门店,顾客看到的是一整套不存在的东西。 */
+    this.setData({ loading: true, loadFailed: false, loadError: '' })
     let nailServices, lashServices, stores, heroSlides
     try {
-      ;[nailServices, lashServices, stores, heroSlides] = await Promise.all([
-        api.getServices('nail', lang),
-        api.getServices('lash', lang),
-        api.getStores(),
-        api.getHeroSlides(lang)  // D78:轮播按租户出(后端唯一出口;文案跟语言走)
+      ;[nailServices, stores, heroSlides] = await Promise.all([
+        api.getServiceCatalog(lang), api.getStores(), api.getHeroSlides(lang)
       ])
+      if (!stores || !stores.length) throw { code: 'STORE_EMPTY', requestPath: '/stores' }
+      const catalog = nailServices.services
+      nailServices = catalog.filter(item => item.type === 'nail')
+      lashServices = catalog.filter(item => item.type === 'lash')
+      this._catalog = catalog
     } catch (e) {
       if (serial !== this._refreshSerial) return
-      this.setData({ lang, t: i18n.pageCopy('home', lang), loadFailed: true })
+      this.setData({ diagnostic: [e.code || 'LOAD_ERROR', e.statusCode || '', e.requestPath || ''].filter(Boolean).join(' · ') })
+      this.setData({ lang, t: i18n.pageCopy('home', lang), loading: false, loadFailed: true, loadError: e.code === 'STORE_CHANGED' ? (lang === 'en' ? 'Store changed. Please retry.' : '门店已切换，请重试') : (e.code === 'TENANT_REQUIRED' || e.code === 'STORE_EMPTY' ? (lang === 'en' ? 'This store is unavailable. Please choose a store again.' : '当前门店不可用，请重新选择门店') : (lang === 'en' ? 'Could not load store. Please retry.' : '门店加载失败，请重试')) })
       return
     }
     if (serial !== this._refreshSerial) return
-    this.setData({ loadFailed: false })
+    this.setData({ loading: false, loadFailed: false })
     const storeRaw = stores[0] || {}
     const hoursInfo = this.todayHoursOf(storeRaw, lang)
     this.setData(Object.assign({}, hoursInfo, {
@@ -132,7 +140,7 @@ Page({
          首页看到的全是别人家的门店照。零回落:后端没给就是空数组,swiper 整块不渲染,只出店卡。 */
       heroSlides: heroSlides,
       technicianWorks: lang === 'en' ? 'Artist Work' : '技师作品',
-      portfolioIntro: lang === 'en' ? 'Browse approved finished work by each artist.' : '浏览每位技师已确认入库的真实作品。',
+      portfolioIntro: lang === 'en' ? 'View real work from this store' : '查看本店真实客作',
       recommendedNail: i18n.localizeServices(nailServices.filter((item) => item.isRecommended), lang),
       recommendedLash: i18n.localizeServices(lashServices.filter((item) => item.isRecommended), lang)
     }))
@@ -142,7 +150,7 @@ Page({
        接法(我判):**列服务目录前几项,标题中性「我们的服务」** —— 不承诺"人气",但顾客真能点进去下单。
        ⚠️ 第三种情况必须分开:**一个服务都没有时不给入口卡** ——
        那正是店主点破的「点进去空空如也」,入口卡等于把空推给下一页。那时如实说一句。 */
-    const allSvc = i18n.localizeServices([...nailServices, ...lashServices], lang)
+    const allSvc = i18n.localizeServices(this._catalog || [...nailServices, ...lashServices], lang)
     this.setData({ fallbackServices: allSvc.slice(0, 4) }, () => storeNameFit.fit(this))
   },
 
@@ -156,7 +164,7 @@ Page({
   },
 
   goServices(event) {
-    const type = event.currentTarget.dataset.type || 'nail'
+    const type = event.currentTarget.dataset.type || 'all'
     wx.setStorageSync('lucky_service_type', type)
     wx.switchTab({ url: '/pages/services/index' })
   },

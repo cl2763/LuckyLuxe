@@ -15,7 +15,7 @@ window.CustomerRecommend = (() => {
     if (!Array.isArray(items) || items.length < MIN_CARDS) return ''
     return `
     <section class="section">
-      <div class="section-row"><h2>${title}</h2><span class="subtle">${type}</span></div>
+      <div class="section-row"><h2>${title}</h2></div>
       <div class="recommend-strip">
         ${items.map((service) => `
           <button class="recommend-card card" data-service-id="${service.id}" type="button">

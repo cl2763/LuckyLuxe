@@ -17,7 +17,16 @@
   "compileType": "miniprogram",
   "simulatorPluginLibVersion": {},
   "packOptions": {
-    "ignore": [],
+    "ignore": [
+      {
+        "type": "file",
+        "value": "assets/images/brand-logo.png"
+      },
+      {
+        "type": "folder",
+        "value": "pages/pose/retouch"
+      }
+    ],
     "include": []
   },
   "appid": "wx247cd8ad9907430d",

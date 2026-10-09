@@ -40,7 +40,7 @@ export function createAiRetouchGate({ db, apiError, currentTenantId }) {
     }
     if (v === 'on' && !ON_READY) {
       throw apiError(409, 'AI_RETOUCH_NOT_READY',
-        '流程未上线:选图/预设/对比三步还没做出来,现在拨到 on 会让商家点进一个空页面。先用 soon。')
+        '流程未上线:选图/预设/对比三步还没做出来,现在拨到 on 会让商家点进一个空页面。完成验收后再开放。')
     }
     const now = new Date().toISOString()
     db.prepare(`INSERT INTO tenant_settings (tenant_id, key, value, updated_at) VALUES (?, ?, ?, ?)
@@ -52,7 +52,8 @@ export function createAiRetouchGate({ db, apiError, currentTenantId }) {
   /* 下发给两端的那一份 —— 文案也在这里出,前端零拼串(顾客/商家可见句唯一出口那条律) */
   function card(tenantId = currentTenantId()) {
     const state = get(tenantId)
-    if (state === 'off') return null
+    // 2026-10-08:未完成功能不向任何客户端提供入口；保留原设置，避免改写门店配置。
+    if (!ON_READY || state !== 'on') return null
     return {
       state,
       label: 'AI 修图',

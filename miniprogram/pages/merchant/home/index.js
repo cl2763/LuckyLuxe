@@ -73,6 +73,9 @@ Page({
     // 角色由 load() 核实后只拉一次对应大屏；旧逻辑按上次角色先拉一遍，
     // 再在 load() 里重复拉，真机网络上会放大切页等待。
     this.load()
+    this.refreshNudges()
+    clearInterval(this._nudgeTimer)
+    this._nudgeTimer = setInterval(() => this.refreshNudges(), 30000)
   },
 
   /* 业绩大屏:三条接口与网页端**同一份数据**(一份数据两端渲染律)。
@@ -284,8 +287,8 @@ Page({
      · 全 0 不画(图 §六)—— 上游 `buildOwnerHome` 已经把 spark 清空了,这里再守一次;
      · **拿不到上下文就落回柱形**(店主裁:柱形保底不许拆),并把 `sparkCanvas` 置 false。 */
   drawSpark() {
-    const pts = (this._spark || []).map((x) => Math.abs(Number(x) || 0))
-    if (!pts.length || !pts.some((v) => v > 0)) return          // 全 0 不画
+    const pts = (this._spark || []).map((x) => x == null ? null : Number(x) || 0)
+    if (!pts.length || !pts.some((v) => v > 0)) return
     const q = wx.createSelectorQuery().in(this)
     q.select('#dhSpark').fields({ node: true, size: true }).exec((res) => {
       const item = res && res[0]
@@ -300,29 +303,30 @@ Page({
       item.node.height = h * dpr
       ctx.scale(dpr, dpr)
       ctx.clearRect(0, 0, w, h)
-      const max = Math.max(...pts, 1)
-      const step = pts.length > 1 ? w / (pts.length - 1) : 0
-      const xy = pts.map((v, i) => [i * step, h - (v / max) * (h - 6) - 3])
+      const min = Math.min(0, ...pts)
+      const max = Math.max(1, ...pts)
+      const cell = w / pts.length
+      const xy = pts.map((v, i) => [(i + .5) * cell, h - ((v - min) / (max - min)) * (h - 6) - 3])
       /* ① 渐变填充 .35 → 0(图上那一层) */
       const g = ctx.createLinearGradient(0, 0, 0, h)
       g.addColorStop(0, 'rgba(217,185,126,0.35)')
       g.addColorStop(1, 'rgba(217,185,126,0)')
       ctx.beginPath()
-      xy.forEach(([x, y], i) => (i ? ctx.lineTo(x, y) : ctx.moveTo(x, y)))
+      xy.forEach(([x, y], i) => { if (pts[i] != null) (i && pts[i-1] != null ? ctx.lineTo(x, y) : ctx.moveTo(x, y)) })
       ctx.lineTo(xy[xy.length - 1][0], h)
       ctx.lineTo(xy[0][0], h)
       ctx.closePath()
       ctx.fillStyle = g
-      ctx.fill()
+      if (pts.every(v => v != null)) ctx.fill()
       /* ② 金色描边 */
       ctx.beginPath()
-      xy.forEach(([x, y], i) => (i ? ctx.lineTo(x, y) : ctx.moveTo(x, y)))
+      xy.forEach(([x, y], i) => { if (pts[i] != null) (i && pts[i-1] != null ? ctx.lineTo(x, y) : ctx.moveTo(x, y)) })
       ctx.strokeStyle = '#d9b97e'
       ctx.lineWidth = 2
       ctx.lineJoin = 'round'
       ctx.stroke()
       /* ③ 末点圆环(描边用英雄块底色,看起来像在深底上挖了个圈) */
-      const last = xy[xy.length - 1]
+      const last = xy[pts.map(v => v != null).lastIndexOf(true)]
       ctx.beginPath()
       ctx.arc(last[0] - 2, last[1], 3.5, 0, Math.PI * 2)
       ctx.fillStyle = '#d9b97e'
@@ -352,8 +356,17 @@ Page({
     try { wx.setStorageSync(HINT_KEY, 1) } catch (e) { /* 存不上就下次再提示一次,不影响功能 */ }
     setTimeout(() => this.setData({ dhHint: false }), 2200)
   },
-  onHide() { this.clearRotate() },
-  onUnload() { this.clearRotate() },
+  onHide() { this.clearRotate(); clearInterval(this._nudgeTimer) },
+  onUnload() { this.clearRotate(); clearInterval(this._nudgeTimer) },
+
+  async refreshNudges() {
+    const auth = api.getAdminAuth()
+    if (!auth || auth.admin?.role === 'owner' || this._nudgePending) return
+    this._nudgePending = true
+    try { const r = await api.adminGet('/admin/staff-nudges/mine'); if (api.getAdminAuth()?.accessToken === auth.accessToken) this.setData({ nudges: r.nudges || [] }) }
+    catch (e) { /* Existing messages remain visible until a successful refresh. */ }
+    finally { this._nudgePending = false }
+  },
 
   goTodo(e) {
     /* 🔴 11m §三:`soon` 那一档**点击只 toast,不跳页** —— 流程没做出来,
@@ -369,7 +382,7 @@ Page({
       dailyClose: '/pages/merchant/daily-close/index' }[k]
     if (to) wx.navigateTo({ url: to, fail: () => wx.showToast({ title: '这一项暂时打不开', icon: 'none' }) })
   },
-  openRetouch() { nav.to('/pages/pose/retouch/index') },
+  scanMemberCode: require('../../../utils/scan-actions').scanMerchantCode,
   async generateBrief() {
     if (this.data.briefLoading) return
     this.setData({ briefLoading: true })

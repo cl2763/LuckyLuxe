@@ -57,8 +57,8 @@ const state = {
   mall: null,
   mallNoteFor: '',
   mallFilter: 'all',
-  view: 'home',
-  type: 'nail',
+  view: new URLSearchParams(location.search).get('tab') === 'me' ? 'me' : 'home',
+  type: 'all',
   category: 'all',
   services: [],
   stores: [],
@@ -214,7 +214,7 @@ function platformUrl(platform) {
 }
 
 function shareUrlForOrder(orderId, imageIndex = 0, platform = state.sharePlatform) {
-  const url = new URL('/web/share.html', window.location.origin)
+  const url = new URL(window.WebScope?.path('/web/share.html') || '/web/share.html', window.location.origin)
   url.searchParams.set('bookingId', orderId)
   url.searchParams.set('image', String(imageIndex))
   url.searchParams.set('platform', platform); url.searchParams.set('store', TENANT_ID); url.searchParams.set('audience', 'customer')
@@ -298,7 +298,7 @@ function referralCodeFor(user) {
 }
 
 function referralUrlFor(user) {
-  return user?.referralUrl || `${window.location.origin}/?ref=${encodeURIComponent(referralCodeFor(user))}`
+  return user?.referralUrl || `${window.location.origin}${window.WebScope?.prefix || ''}/?ref=${encodeURIComponent(referralCodeFor(user))}`
 }
 
 function copyFingerprint(copyData) {
@@ -345,11 +345,11 @@ async function request(path, options = {}) {
   }
   const skipAuthRefresh = options.skipAuthRefresh
   delete options.skipAuthRefresh
-  const response = await fetch(path, {
+  const response = await fetch(window.WebScope?.path(path) || path, {
     headers: {
       'content-type': 'application/json',
       'x-tenant-id': TENANT_ID,
-      ...(state.auth?.accessToken ? { authorization: `Bearer ${state.auth.accessToken}` } : {}),
+      ...(state.auth?.accessToken && !['/shops','/stores','/services','/portfolio','/add-ons'].includes(path.split('?')[0]) ? { authorization: `Bearer ${state.auth.accessToken}` } : {}),
       ...(options.headers || {})
     },
     ...options
@@ -434,6 +434,7 @@ function setView(view) {
     return
   }
   state.view = view
+  if (['me', 'orders'].includes(view) && state.user) { state.ordersLoading = true; state.ordersError = '' }
   els.tabs.forEach((tab) => tab.classList.toggle('active', tab.dataset.view === view))
   render()
   if (['me', 'orders'].includes(view) && state.user) {
@@ -441,7 +442,7 @@ function setView(view) {
       .then(() => {
         if (state.view === view) render()
       })
-      .catch((error) => toast(error.message))
+      .catch((error) => { if (state.view === view) render(); toast(error.message) })
   }
 }
 
@@ -456,7 +457,7 @@ function visibleCategories() {
   return cats.filter((cat) => state.services.some((svc) => categoryKeyOf(svc) === cat.key))
 }
 function servicesByType() {
-  return state.services.filter((service) => categoryKeyOf(service) === state.type)
+  return state.services.filter((service) => state.type === 'all' || categoryKeyOf(service) === state.type)
 }
 
 function recommended(type) {
@@ -482,7 +483,9 @@ async function bootstrap() {
     openStoreSwitcher()
     return
   }
-  await Promise.all([loadServices(), loadStores(), loadAddOns(), loadPortfolio()])
+  renderBootstrapState(false)
+  try { await Promise.all([loadServices(), loadStores(), loadAddOns(), loadPortfolio()]) }
+  catch (error) { renderBootstrapState(true); toast(error.message); return }
   if (state.user && !state.auth?.accessToken) {
     state.user = null
     localStorage.removeItem('lucky-web-user')
@@ -490,6 +493,16 @@ async function bootstrap() {
   await handleStripeReturn()
   await handleBookingDraftParam()
   await showApp()
+  els.screen.setAttribute('aria-busy', 'false')
+}
+
+function renderBootstrapState(failed) {
+  const en = state.lang === 'en'
+  els.authView.classList.add('hidden')
+  els.appView.classList.remove('hidden')
+  els.screen.setAttribute('aria-busy', String(!failed))
+  els.screen.innerHTML = `<section class="section"><div class="empty-state tall card" role="status"><strong>${failed ? (en ? 'Could not load store' : '门店加载失败') : (en ? 'Loading store…' : '正在加载门店…')}</strong>${failed ? `<p>${en ? 'Check your connection and retry.' : '请检查网络后重试。'}</p><button class="primary" data-bootstrap-retry type="button">${en ? 'Retry' : '重试'}</button>` : ''}</div></section>`
+  els.screen.querySelector('[data-bootstrap-retry]')?.addEventListener('click', () => location.reload())
 }
 
 /* D190:`/auth/session` 是 OAuth 回调的消费者,而 OAuth 那条路整条撤了(后端也没有这条路由)。
@@ -517,6 +530,7 @@ async function handleBookingDraftParam() {
     const item = {
       id: `draft_${draft.id}`,
       bookingDraftId: draft.id,
+      storeId: draft.storeId,
       selected: true,
       service: draft.service,
       technician: draft.technician,
@@ -529,7 +543,7 @@ async function handleBookingDraftParam() {
       servicePriceCents: Number(draft.service.priceCents ?? draft.service.price_cents ?? 0),
       depositCents: Number(draft.service.depositCents ?? draft.service.deposit_cents ?? 5000)
     }
-    state.cart = [item, ...state.cart.filter((cartItem) => cartItem.bookingDraftId !== draft.id)]
+    state.cart = [item, ...state.cart.filter((cartItem) => cartItem.bookingDraftId !== draft.id).map(cartItem=>({...cartItem,selected:false}))]
     writeJson(`lucky-web-cart:${TENANT_ID}`, state.cart)
     state.view = 'checkout'
     toast(t('draftLoaded'))
@@ -573,16 +587,34 @@ async function loadPortfolio() {
   state.portfolios = data.portfolios || []
 }
 
+let userOrdersPending = null
 async function loadUserOrders() {
   if (!state.user) return
-  const data = await request(`/bookings?lang=${state.lang}`)
-  state.orders = data.bookings || []
-  writeTenantJson('lucky-web-orders', state.orders)
-  // C4(批③首件):网页顾客端待签单列表(D57 同构)——拉不到不挡订单列表
-  try { state.pendingSign = (await request('/my/pending-sign')).pendingSign || [] } catch { state.pendingSign = [] }
+  if (userOrdersPending) return userOrdersPending
+  const uid = state.user.id
+  state.ordersLoading = true; state.ordersError = ''
+  userOrdersPending = (async () => {
+    try {
+      const [data, pending] = await Promise.all([
+        request(`/bookings?lang=${state.lang}`),
+        request('/my/pending-sign').catch(() => ({ pendingSign: [] }))
+      ])
+      if (state.user?.id !== uid) return
+      state.orders = data.bookings || []
+      state.pendingSign = pending.pendingSign || []
+      writeTenantJson('lucky-web-orders', state.orders)
+    } catch (error) { state.ordersError = error.message; throw error }
+    finally { state.ordersLoading = false; userOrdersPending = null }
+  })()
+  return userOrdersPending
+}
+function customerLoadState(error = '', retry = 'orders') {
+  const en = state.lang === 'en'
+  return `<div class="empty-state tall card" role="status" aria-busy="${!error}">${error ? '' : '<span class="customer-loading-spinner" aria-hidden="true"></span>'}<strong>${error ? (en ? 'Could not load. Please retry.' : '加载失败，请重试。') : (en ? 'Loading…' : '正在加载…')}</strong>${error ? `<button class="primary" data-customer-retry="${retry}" type="button">${en ? 'Retry' : '重试'}</button>` : ''}</div>`
 }
 
 function bindGlobalEvents() {
+  window.LLCustomerProfile.bind({ request, toast, isEnglish: () => state.lang === 'en', onSaved: user => { state.user = user; writeTenantJson('lucky-web-user', user); renderMe() } })
   els.langZh.addEventListener('click', async () => switchLang('zh'))
   els.langEn.addEventListener('click', async () => switchLang('en'))
   els.tabs.forEach((tab) => tab.addEventListener('click', () => setView(tab.dataset.view)))
@@ -667,6 +699,11 @@ async function showApp() {
 }
 
 function render() {
+  document.querySelectorAll('[data-nav-label]').forEach(el => { el.textContent=t(el.dataset.navLabel) })
+  const ownerLink=document.querySelector('[data-owner-link]'),privacyLink=document.querySelector('[data-privacy-link]')
+  if(ownerLink)ownerLink.textContent=state.lang==='en'?'Merchant admin':'商家后台'
+  if(privacyLink)privacyLink.textContent=state.lang==='en'?'Privacy & personal information':'隐私与个人信息'
+
   els.cartBadge.textContent = state.cart.length
   els.tabs.forEach((tab) => tab.classList.toggle('active', tab.dataset.view === state.view))
   if (state.view !== 'home') stopHeroCarousel()
@@ -725,11 +762,11 @@ function renderHome() {
     ${window.HomeImagePreview.hero({name:brandName(),slides,index:activeSlide,book:t('bookNow'),member:t('quickMember')})}
     <section class="home-actions section">
       <div class="service-shortcut-row">
-        <button class="quick-item card" data-go-services="nail" type="button"><span class="quick-icon">N</span><span>${t('quickNail')}</span></button>
-        <button class="quick-item card" data-go-services="lash" type="button"><span class="quick-icon">L</span><span>${t('quickLash')}</span></button>
+        <button class="quick-item card" data-go-services="nail" type="button"><span class="quick-icon">${state.lang === 'en' ? 'N' : '甲'}</span><span>${t('quickNail')}</span></button>
+        <button class="quick-item card" data-go-services="lash" type="button"><span class="quick-icon">${state.lang === 'en' ? 'L' : '睫'}</span><span>${t('quickLash')}</span></button>
       </div>
       <button class="portfolio-wide-button card" data-view-target="portfolio" type="button">
-        <span class="quick-icon">P</span>
+        <span class="quick-icon">${state.lang === 'en' ? 'P' : '作'}</span>
         <span><strong>${t('technicianWorks')}</strong><small>${t('portfolioIntro')}</small></span>
         <span class="portfolio-arrow">→</span>
       </button>
@@ -884,8 +921,8 @@ function brandName() { return currentStore().name || '' }
 async function openStoreSwitcher() {
   let shops = []
   try {
-    const data = await request('/shops')
-    shops = data.shops || []
+    const data = await request(window.WebScope?.shopsPath || '/shops')
+    shops = window.WebScope?.filterShops(data.shops || []) || data.shops || []
   } catch (e) {
     toast(state.lang === 'en' ? 'Failed to load stores' : '加载门店失败')
     return
@@ -909,7 +946,7 @@ async function openStoreSwitcher() {
     const row = event.target.closest('[data-switch-tenant]')
     if (row) {
       const tid = row.dataset.switchTenant
-      if (tid && tid !== TENANT_ID) { window.location.href = `/?store=${encodeURIComponent(tid)}`; return }
+      if (tid && tid !== TENANT_ID) { window.location.href = `${window.WebScope?.prefix || ''}/?store=${encodeURIComponent(tid)}`; return }
       overlay.remove()
       return
     }
@@ -944,61 +981,13 @@ function portfolioImages() {
   })))
 }
 
-/* 🔴 占位零回落(店主 08-28 六立律)第三案 —— 这是本批最脏的一处:
-   原来「没有真实作品就编三位技师(Lina Zhou / Mia Chen / Ava Lin)+ 11 张**店主本店**的图」。
-   小婕店的顾客点开「技师作品」,看到的是别人家的作品和三个不存在的人。
-   《假数回落红线》第 1 条:拿不到真值就如实说,绝不拿别的顶上。
-   现在:有几个技师的作品就出几个,一个都没有 → 空态(下面 renderPortfolio 里那句)。 */
+// Only show this store’s real portfolios; an empty result stays empty.
 function effectivePortfolios() {
   return state.portfolios || []
 }
 
 function renderPortfolio() {
-  const portfolios = effectivePortfolios()
-  const selected = portfolios.find((portfolio) => portfolio.technician?.id === state.selectedPortfolioTechId)
-  els.screen.innerHTML = `
-    <section class="portfolio-page-web">
-      <button class="ghost back-btn" ${selected ? 'data-portfolio-back' : 'data-view-target="home"'} type="button">← ${selected ? t('technicianPortfolio') : t('home')}</button>
-      <div class="section-row">
-        <div>
-          <p class="eyebrow">${brandName()}</p>
-          <h1>${selected ? selected.technician?.name : t('technicianPortfolio')}</h1>
-          <span class="subtle">${selected ? selected.technician?.title : t('portfolioIntro')}</span>
-        </div>
-      </div>
-      ${!portfolios.length ? `
-        <div class="empty-state">
-          <strong>${state.lang === 'zh' ? '还没有作品' : 'No work yet'}</strong>
-          <p class="subtle">${state.lang === 'zh' ? '技师发布并经审核后,作品会出现在这里。' : 'Approved work will show up here.'}</p>
-        </div>` : ''}
-      ${selected ? `
-        <div class="technician-work-grid">
-          ${(selected.images || []).map((image, index) => `
-            <a href="${image}" target="_blank" rel="noreferrer">
-              ${image ? `<img src="${image}" alt="${selected.technician?.name || brandName()} ${index + 1}">` : ''}
-            </a>
-          `).join('')}
-        </div>
-      ` : portfolios.map((portfolio) => `
-        <section class="technician-portfolio-section card">
-          <div class="section-row compact-row">
-            <div>
-              <h2>${portfolio.technician?.name || brandName()}</h2>
-              <p>${portfolio.technician?.title || (state.lang === 'zh' ? '美甲 / 美睫技师' : 'Nail / Lash Artist')}</p>
-            </div>
-            <button class="ghost slim" data-portfolio-tech="${portfolio.technician?.id || ''}" type="button">${t('viewWork')}</button>
-          </div>
-          <div class="portfolio-preview-grid">
-            ${(portfolio.images || []).slice(0, 4).map((image, index) => `
-              <button class="portfolio-preview-card" data-portfolio-tech="${portfolio.technician?.id || ''}" type="button">
-                ${image ? `<img src="${image}" alt="${portfolio.technician?.name || brandName()} ${index + 1}">` : ''}
-              </button>
-            `).join('')}
-          </div>
-        </section>
-      `).join('')}
-    </section>
-  `
+  window.PortfolioNavigation.render({root:els.screen,portfolios:effectivePortfolios(),selectedPortfolioTechId:state.selectedPortfolioTechId,lang:state.lang,t,brandName})
 }
 
 function renderServices() {
@@ -1010,6 +999,7 @@ function renderServices() {
       </div>
       <div class="service-layout-web">
         <aside class="category-rail">
+          <button class="${state.type === 'all' ? 'active' : ''}" data-type="all" type="button">${state.lang === 'en' ? 'All services' : '全部服务'}</button>
           ${visibleCategories().map((cat) => `<button class="${state.type === cat.key ? 'active' : ''}" data-type="${cat.key}" type="button">${state.lang === 'en' ? cat.nameEn : cat.nameZh}</button>`).join('')}
         </aside>
         <div class="service-list-web">
@@ -1342,7 +1332,7 @@ async function submitPayment() {
       method: 'POST',
       body: JSON.stringify({
         userId: state.user.id,
-        storeId,
+        storeId: item.storeId || storeId,
         serviceId: item.service.id,
         technicianId: partyId(item.technician),
         date: item.date,
@@ -1391,7 +1381,7 @@ function renderMe() {
       <div class="member-card web-member-card">
         <div class="member-top">
           <div class="member-identity">
-            ${window.ImgPlaceholder.tag('', { className: 'avatar', alt: user.displayName, text: state.lang === 'en' ? 'No photo' : '没有头像', zh: state.lang !== 'en' })}
+            <label class="profile-avatar-edit">${window.ImgPlaceholder.tag(user.avatarUrl || '', { className: 'avatar', alt: user.displayName, text: state.lang === 'en' ? 'No photo' : '没有头像', zh: state.lang !== 'en' })}<small data-avatar-status>${state.lang === 'en' ? 'Change photo' : '更换头像'}</small><input data-profile-avatar type="file" accept="image/jpeg,image/png,image/webp" aria-label="${state.lang === 'en' ? 'Change photo' : '更换头像'}"></label>
             <div class="member-copy">
               <h1>${user.displayName}</h1>
               <div class="member-level-line">
@@ -1453,16 +1443,16 @@ function renderMe() {
       <section class="section">
         <div class="section-row"><h2>${t('orders')}</h2><button class="section-note-btn" data-order-filter="all" type="button">${t('all')}</button></div>
         <div class="order-entry card">
-          <button data-order-filter="CONFIRMED" type="button"><strong>${counts.pending}</strong><span>${t('paid')}</span></button>
-          <button data-order-filter="COMPLETED" type="button"><strong>${counts.completed}</strong><span>${t('completed')}</span></button>
-          <button data-order-filter="CANCELLED" type="button"><strong>${counts.cancelled}</strong><span>${t('cancelled')}</span></button>
-          <button data-order-filter="AFTER_SALES" type="button"><strong>${counts.afterSales}</strong><span>${t('afterSales')}</span></button>
+          <button data-order-filter="CONFIRMED" type="button"><strong>${state.ordersLoading ? '—' : counts.pending}</strong><span>${t('paid')}</span></button>
+          <button data-order-filter="COMPLETED" type="button"><strong>${state.ordersLoading ? '—' : counts.completed}</strong><span>${t('completed')}</span></button>
+          <button data-order-filter="CANCELLED" type="button"><strong>${state.ordersLoading ? '—' : counts.cancelled}</strong><span>${t('cancelled')}</span></button>
+          <button data-order-filter="AFTER_SALES" type="button"><strong>${state.ordersLoading ? '—' : counts.afterSales}</strong><span>${t('afterSales')}</span></button>
         </div>
       </section>
       <section class="section">
-        <div class="section-row"><h2>${t('recent')}</h2><span class="subtle">Records</span></div>
+        <div class="section-row"><h2>${t('recent')}</h2><span class="subtle">${state.lang === 'en' ? 'Records' : '查看记录'}</span></div>
         <div class="recent-list-web">
-          ${state.orders.length ? state.orders.map((order) => `
+          ${state.ordersLoading || state.ordersError ? customerLoadState(state.ordersError) : state.orders.length ? state.orders.slice().sort((a,b) => (Date.parse(b.updatedAt || b.createdAt) || 0) - (Date.parse(a.updatedAt || a.createdAt) || 0) || String(b.id).localeCompare(String(a.id))).slice(0,2).map((order) => `
             <button class="recent-card-web card" data-order-id="${order.id}" type="button">
               ${window.ImgPlaceholder.tag(order.status === 'COMPLETED' && customerVisibleWorkImages(order)[0] ? customerVisibleWorkImages(order)[0] : order.service.imageUrl, { alt: order.service.name, zh: state.lang !== 'en' })}
               <div>
@@ -1609,6 +1599,7 @@ function filteredOrders() {
 }
 
 function renderOrdersWeb() {
+  if (state.ordersLoading || state.ordersError) { els.screen.innerHTML = customerLoadState(state.ordersError); return }
   const tabs = [
     ['all', t('all')],
     ['CONFIRMED', t('paid')],
@@ -1627,7 +1618,7 @@ function renderOrdersWeb() {
       ${(state.pendingSign || []).length ? `
       <div class="section-row compact"><h2 style="color:#8a3a33;font-size:15px">${state.lang === 'zh' ? `待你签字确认 · ${state.pendingSign.length} 单` : `Awaiting your signature · ${state.pendingSign.length}`}</h2></div>
       ${state.pendingSign.map((p) => `
-        <a class="order-card-web card" style="display:flex;justify-content:space-between;align-items:center;text-decoration:none" href="/sign/${encodeURIComponent(p.code)}" target="_blank" rel="noreferrer">
+        <a class="order-card-web card" style="display:flex;justify-content:space-between;align-items:center;text-decoration:none" href="${window.WebScope?.prefix || ''}/sign/${encodeURIComponent(p.code)}" target="_blank" rel="noreferrer">
           <span><strong>${escapeHtml(state.lang === 'zh' ? '服务确认单 ' : 'Sheet ')}${escapeHtml(p.code)}</strong><br><small class="subtle">${escapeHtml(p.at)} · ${state.lang === 'zh' ? '到店支付' : 'Pay in store'} ${escapeHtml(p.cashDueText)}</small></span>
           <span class="primary button-link" style="padding:8px 16px;border-radius:10px">${state.lang === 'zh' ? '去签字 ›' : 'Sign ›'}</span>
         </a>`).join('')}` : ''}
@@ -1776,7 +1767,7 @@ function renderOrderDetailWeb() {
               <p style="border-top:1px solid #e7ddd4;padding-top:6px"><span><strong>${escapeHtml((sh.flow && sh.flow.heroLabel) || '')}</strong></span><strong class="price">${escapeHtml((sh.flow && sh.flow.cashDueText) || '')}</strong></p>
               <p>${sh.snapshotUrl
                 ? `<a href="#" data-snap-open="${escapeHtml(sh.code)}">${state.lang === 'zh' ? '查看原件 ›' : 'View ›'}</a>`
-                : `<a href="/sign/${encodeURIComponent(sh.code)}" target="_blank" rel="noreferrer">${state.lang === 'zh' ? '去签字 ›' : 'Sign ›'}</a>`}</p>`).join('')}
+                : `<a href="${window.WebScope?.prefix || ''}/sign/${encodeURIComponent(sh.code)}" target="_blank" rel="noreferrer">${state.lang === 'zh' ? '去签字 ›' : 'Sign ›'}</a>`}</p>`).join('')}
           ` : ''}
           ${order.payment && order.payment.flow && !((order.payment.sheets || []).length > 1) ? `
             ${order.payment.flow.lines.map((fl) => `<p><span>${escapeHtml(fl.label)}</span><strong>${escapeHtml(fl.amountText)}</strong></p>`).join('')}
@@ -1800,7 +1791,7 @@ function renderOrderDetailWeb() {
           <div class="customer-work-grid">
             ${workImages.map((image, index) => `
               <figure class="customer-work-item">
-                <a href="${image}" target="_blank" rel="noreferrer">${image ? `<img src="${image}" alt="${t('finalPhotos')} ${index + 1}">` : ''}</a>
+                <button type="button" class="portfolio-preview-card" data-portfolio-image="${index}">${image ? `<img src="${image}" alt="${t('finalPhotos')} ${index + 1}">` : ''}</a>
                 <a class="ghost mini-download" href="${image}" download="Lucky-Luxe-${order.publicCode || order.id}-${index + 1}.jpg">${t('downloadImage')}</a>
               </figure>
             `).join('')}
@@ -1858,8 +1849,8 @@ async function loadWallet() {
 function renderMallWeb() {
   const mall = state.mall
   if (!mall) {
-    els.screen.innerHTML = `<section class="view-web"><div class="empty-state tall"><strong>${state.lang === 'zh' ? '加载中…' : 'Loading…'}</strong></div></section>`
-    loadMall().then(() => { if (state.view === 'mall') render() })
+    els.screen.innerHTML = customerLoadState(state.mallError, 'mall')
+    if (!state.mallError) loadMall().then(() => { if (state.view === 'mall') render() })
     return
   }
   const zh = state.lang === 'zh'
@@ -1930,7 +1921,9 @@ async function loadCardPack() {
   try { state.cardPack = (await request('/my/card-pack')).cardPack } catch (error) { state.cardPack = null; toast(error.message) }
 }
 async function loadMall() {
-  try { state.mall = await request('/my/mall') } catch (error) { state.mall = null; toast(error.message) }
+  state.mallError = ''
+  try { state.mall = await request('/my/mall') }
+  catch (error) { state.mall = null; state.mallError = error.message; toast(error.message) }
 }
 
 /* 🔴 资产层收敛(店主 2026-08-25 拍板):网页收成与小程序同构 ——
@@ -2016,6 +2009,9 @@ function renderStoreWeb() {
    最后一个用它的「设置」卡已撤,函数不留(留着下次又会有人往里塞占位页)。 */
 
 async function handleScreenClick(event) {
+  const retryLoad = event.target.closest('[data-customer-retry]')
+  if (retryLoad) { if (retryLoad.dataset.customerRetry === 'mall') { state.mallError = ''; render() } else setView(state.view); return }
+
   const heroSlide = event.target.closest('[data-hero-slide]')
   if (heroSlide) {
     state.heroSlide = Number(heroSlide.dataset.heroSlide || 0)
@@ -2037,6 +2033,13 @@ async function handleScreenClick(event) {
   if (event.target.closest('[data-portfolio-back]')) {
     state.selectedPortfolioTechId = ''
     renderPortfolio()
+    return
+  }
+  const portfolioImage = event.target.closest('[data-portfolio-image]')
+  if (portfolioImage) {
+    const portfolio = effectivePortfolios().find((item) => item.technician?.id === (portfolioImage.dataset.photoTech || state.selectedPortfolioTechId))
+    const images = portfolio?.images || []
+    window.openSnapViewer(images.map((url, index) => ({ url, label: `${portfolio.technician?.name || brandName()} · ${index + 1}` })), Number(portfolioImage.dataset.portfolioImage))
     return
   }
   const portfolioTech = event.target.closest('[data-portfolio-tech]')

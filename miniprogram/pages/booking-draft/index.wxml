@@ -1,0 +1,16 @@
+<view class="page {{themeClass}}">
+<view class="card" wx:if="{{loading}}">正在加载预约草稿…</view>
+<view class="card" wx:elif="{{draft}}">
+<view class="title">{{done?'预约已确认':'确认预约内容'}}</view>
+<view class="row">门店<text>{{draft.store.name}}</text></view>
+<view class="row">服务<text>{{draft.service.name}}</text></view>
+<view class="row">技师<text>{{draft.technician.name}}</text></view>
+<view class="row">时间<text>{{draft.date}} {{draft.time}}</text></view>
+<view wx:if="{{draft.notes}}" class="hint">{{draft.notes}}</view>
+<view class="hint">收款在门店线下完成。草稿有效 30 分钟，不锁定档期；确认时重新检查。旧系统档案尚未绑定微信的顾客，请先让店员出示档案绑定码，避免新建另一份档案。</view>
+<button wx:if="{{!done}}" class="primary" loading="{{busy}}" disabled="{{busy || error}}" bindtap="confirm">登录并确认预约</button>
+<button wx:else class="primary" bindtap="orders">查看我的订单</button>
+<button class="secondary" bindtap="home">返回我的</button>
+</view>
+<view wx:if="{{error}}" class="error">{{error}}<button class="secondary" bindtap="load">重新加载</button></view>
+</view>

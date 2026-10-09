@@ -1,3 +1,4 @@
+import { intradaySeries } from './dashboard-intraday.mjs'
 import { bookingVisitAtSql } from './customer-facts.mjs'
 /* 主页大屏三接口(合同 = `handoff/商家端主页重画_两端设计图_2026-09-03.html` v3.1 §四)
 
@@ -40,6 +41,28 @@ const shiftDay = (iso, n) => {
 }
 const monthStart = (iso) => `${iso.slice(0, 7)}-01`
 const yearStart = (iso) => `${iso.slice(0, 4)}-01-01`
+
+// 点的日期与取数区间共用一份定义，不能把「本月」画成滚动十二个月。
+export function sparkBuckets(period, today) {
+  if (period === 'today') return Array.from({ length: 6 }, (_, i) => ({ from: today, to: today, label: `${String(i*4).padStart(2,'0')}:00–${String((i+1)*4).padStart(2,'0')}:00`, labelEn: `${String(i*4).padStart(2,'0')}:00–${String((i+1)*4).padStart(2,'0')}:00` }))
+  if (period === 'year') {
+    return Array.from({ length: Number(today.slice(5, 7)) }, (_, i) => {
+      const from = `${today.slice(0, 4)}-${String(i + 1).padStart(2, '0')}-01`
+      const next = new Date(`${from}T12:00:00Z`)
+      next.setUTCMonth(next.getUTCMonth() + 1)
+      const end = shiftDay(next.toISOString().slice(0, 10), -1)
+      return { from, to: end > today ? today : end, label: `${i + 1}月`, labelEn: from.slice(0, 7) }
+    })
+  }
+  const from = periodRange(period, today).from
+  const until = period === 'week' ? shiftDay(from, 6) : today
+  const out = []
+  for (let day = from; day <= until; day = shiftDay(day, 1)) {
+    const dow = new Date(`${day}T12:00:00Z`).getUTCDay()
+    out.push({ from: day, to: day, label: period === 'week' ? ['周日', '周一', '周二', '周三', '周四', '周五', '周六'][dow] : day.slice(5), labelEn: period === 'week' ? ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'][dow] : day.slice(5) })
+  }
+  return out
+}
 
 /* 当期与「上期同期至今」——上期取的是**同样长度、同样进度**的一段,
    不是整个上一期:比「上月同期至今」才有意义(图 §四 对比列)。 */
@@ -170,7 +193,7 @@ export function createDashboardPulse(deps) {
     ${withoutNotes ? 'AND id NOT IN (SELECT booking_id FROM service_notes WHERE booking_id IS NOT NULL)' : ''}`)
     .all(tid), tid, day, day)
 
-  function metricsFor(tid, r) {
+  function metricsFor(tid, r, period) {
     const rev = sumDays(tid, r.from, r.to, (t, d) => revenueOn(t, d).cents)
     const revPrev = sumDays(tid, r.prevFrom, r.prevTo, (t, d) => revenueOn(t, d).cents)
     const cash = cashOn(tid, r.from, r.to)
@@ -184,31 +207,31 @@ export function createDashboardPulse(deps) {
     const bk = bookingsCount(tid, r.from, r.to)
     const bkPrev = bookingsCount(tid, r.prevFrom, r.prevTo)
 
-    /* spark:往回数 sparkN 个点。today/week 按天,month/year 按月。 */
-    const spark = (fn) => {
-      const out = []
-      if (r.sparkN === 12) {
-        for (let i = 11; i >= 0; i -= 1) {
-          const m = new Date(`${r.to.slice(0, 7)}-01T12:00:00Z`)
-          m.setUTCMonth(m.getUTCMonth() - i)
-          const key = m.toISOString().slice(0, 7)
-          out.push(fn(`${key}-01`, `${key}-31`))
-        }
-      } else {
-        for (let i = 6; i >= 0; i -= 1) { const d = shiftDay(r.to, -i); out.push(fn(d, d)) }
-      }
-      return out
-    }
+    const buckets = sparkBuckets(period, r.to)
+    const hourly = period === 'today' ? intradaySeries({ db, tid, today:r.to, timeZone:tenantTimezone(tid) }) : null
+    const spark = (fn, future = false) => buckets.map(({ from, to }) => !future && from > r.to ? null : fn(from, to))
     const sparkRev = spark((a, b) => sumDays(tid, a, b <= r.to ? b : r.to, (t, d) => revenueOn(t, d).cents))
+    const sparkLabels = buckets.map(x => x.label)
+    const sparkMeta = {
+      sparkDates: buckets.map(x => x.from), sparkLabelsEn: buckets.map(x => x.labelEn),
+      sparkRangeText: period === 'today' ? '今日 · 按门店时间分时' : period === 'year' ? '本年 · 按月' : period === 'month' ? '本月 · 按日' : '本周 · 按日',
+      sparkRangeTextEn: period === 'today' ? 'Today · store local time' : period === 'year' ? 'This year · monthly' : period === 'month' ? 'This month · daily' : 'This week · daily',
+    }
 
     return [
-      { key: 'revenue', value: rev, unit: 'money', ...deltaOf(rev, revPrev), spark: sparkRev },
-      { key: 'cash', value: cash, breakdown: cashParts(tid, r.from, r.to), unit: 'money', ...deltaOf(cash, cashPrev), spark: spark((a, b) => cashOn(tid, a, b <= r.to ? b : r.to)) },
-      { key: 'cardUse', value: cardM, unit: 'money', extra: { times: cardT, timesUnit: '次' }, ...deltaOf(cardM, cardMoney().get(tid, r.prevFrom, r.prevTo).c), spark: spark((a, b) => cardMoney().get(tid, a, b).c) },
-      { key: 'newCard', value: nCard, unit: 'people', ...deltaOf(nCard, nCardPrev), spark: spark((a, b) => newCardCount(tid, a, b)) },
-      { key: 'visits', value: vis, unit: 'people', ...deltaOf(vis, visPrev), spark: spark((a, b) => visitsCount(tid, a, b)) },
-      { key: 'bookings', value: bk, unit: 'count', ...deltaOf(bk, bkPrev), spark: spark((a, b) => bookingsCount(tid, a, b)) },
-    ]
+      { key: 'revenue', value: rev, unit: 'money', ...deltaOf(rev, revPrev), spark: sparkRev, sparkLabels },
+      { key: 'cash', value: cash, breakdown: cashParts(tid, r.from, r.to), unit: 'money', ...deltaOf(cash, cashPrev), spark: spark((a, b) => cashOn(tid, a, b <= r.to ? b : r.to)), sparkLabels },
+      { key: 'cardUse', value: cardM, unit: 'money', extra: { times: cardT, timesUnit: '次' }, ...deltaOf(cardM, cardMoney().get(tid, r.prevFrom, r.prevTo).c), spark: spark((a, b) => cardMoney().get(tid, a, b).c), sparkLabels },
+      { key: 'newCard', value: nCard, unit: 'people', ...deltaOf(nCard, nCardPrev), spark: spark((a, b) => newCardCount(tid, a, b)), sparkLabels },
+      { key: 'visits', value: vis, unit: 'people', ...deltaOf(vis, visPrev), spark: spark((a, b) => visitsCount(tid, a, b)), sparkLabels },
+      { key: 'bookings', value: bk, unit: 'count', ...deltaOf(bk, bkPrev), spark: spark((a, b) => bookingsCount(tid, a, b), true), sparkLabels },
+    ].map(metric => {
+      const points = hourly ? hourly[metric.key] : metric.spark
+      const unallocated = hourly ? metric.value - points.reduce((n,v)=>n+(v || 0),0) : 0
+      return { ...metric, ...sparkMeta, spark:points, sparkUnallocated:unallocated,
+        sparkRangeText:sparkMeta.sparkRangeText + (hourly && ['revenue','cash','cardUse'].includes(metric.key) ? ' · 按记账时间' : '') + (unallocated ? ' · 部分历史记录无分时信息，合计以大屏为准' : ''),
+        sparkRangeTextEn:sparkMeta.sparkRangeTextEn + (unallocated ? ' · Some records have no time breakdown; total shown above' : '') }
+    })
   }
 
   function pulse({ tenantId = currentTenantId(), period = 'today', role = 'owner' } = {}) {
@@ -231,7 +254,7 @@ export function createDashboardPulse(deps) {
     /* 🔴 身份裁字段**在后端**(图 §四 口径答②):员工身份的响应体里根本没有 metrics 这个键,
        不是「有键但值为空」—— 前端隐藏挡不住任何人直接调接口。 */
     if (role !== 'owner') return base
-    const metrics = metricsFor(tid, r)
+    const metrics = metricsFor(tid, r, p)
     /* Locked overview is a schema allowlist, not a blacklist of known amounts.
        prev + deltaAbs reconstructs value; percentage/spark/extra/new fields can
        disclose financial activity too. Keep only card identity and display unit. */

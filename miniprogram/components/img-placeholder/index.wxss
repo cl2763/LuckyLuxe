@@ -15,7 +15,7 @@
   /* 宿主现在有确定高度了 → 两个分支都用 100% 撑满它,有图/占位同高(D120 判据要的就是这个相等) */
   width: 100%; height: 100%; min-height: 88rpx; box-sizing: border-box;
   background: repeating-linear-gradient(45deg, rgba(0,0,0,.02) 0 16rpx, rgba(0,0,0,.05) 16rpx 32rpx);
-  border: 1rpx dashed #ded7cf; color: #9a938c;
+  border: 1rpx dashed var(--line); color: var(--sub);
 }
 /* 相机图标:纯 CSS 画,免得又引一张图(引图=这块自己也可能变成"图没上传") */
 .ph-cam {

@@ -11,7 +11,8 @@
 
     <scroll-view class="service-list" scroll-y>
       <view class="service-list-inner">
-        <block wx:if="{{serviceList.length}}">
+        <view wx:if="{{loading}}" class="empty">{{lang === 'en' ? 'Loading services…' : '正在加载服务…'}}</view>
+        <block wx:elif="{{serviceList.length}}">
           <block wx:for="{{serviceList}}" wx:key="_id">
             <view class="service-card card" bindtap="goDetail" data-id="{{item._id}}">
               <img-placeholder class="service-visual" src="{{item.image}}" image-view="{{item.imageView}}" img-class="service-visual"></img-placeholder>
@@ -31,8 +32,8 @@
         </block>
         <!-- D17 失败态:接口挂了如实说,不拿假数据糊住(书面标准代图) -->
         <view wx:elif="{{loadFailed}}" class="empty failbox">
-          <view class="failmsg">加载失败，请检查网络后重试</view>
-          <view class="failbtn" bindtap="refresh">重试</view>
+          <view class="failmsg">{{lang === 'en' ? 'Could not load services. Check your connection and retry.' : '加载失败，请检查网络后重试'}}</view>
+          <view class="failbtn" bindtap="refresh">{{lang === 'en' ? 'Retry' : '重试'}}</view>
         </view>
         <view wx:else class="empty">{{t.empty}}</view>
       </view>
